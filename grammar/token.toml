@@ -1,0 +1,75 @@
+# not need to escape
+[space]
+blank_space = " "
+tab = "\t"
+
+[newline]
+newline = "\n"
+
+[comment]
+block_comment = "/*(.|\n)*?*/"
+line_comment = "//.*?\n"
+
+[operator]
+[operator.base]
+add = "+"
+sub = "-"
+multi = "*"
+and = "&"
+or = "|"
+not = "!"
+xnor = "^"
+bigger = ">"
+lesser = "<"
+div = "/"
+mod = "%"
+equal = "="
+[operator.extend]
+r_shift = ">>"
+l_shift = "<<"
+power = "**"
+bigger_equal = ">="
+lesser_equal = "<="
+is_equal = "=="
+not_equal = "!="
+add_equal = "+="
+sub_equal = "-="
+add_one = "++"
+sub_one = "--"
+
+[delimiter]
+comma = ","
+colon = ":"
+dot = "."
+
+[bracket]
+l_parentheses = "("
+r_parentheses = ")"
+l_square_bracket = "["
+r_square_bracket = "]"
+
+
+[keyword]
+if = "if"
+else = "else"
+for = "for"
+while = "while"
+break = "break"
+skip = "skip"
+import = "import"
+class = "class"
+logic_add = "and"
+logic_or = "or"
+logic_not = "not"
+
+[identifier]
+id = "[a-z_A-Z][a-z_A-Z0-9]*"
+
+
+[constant]
+logic_true = "True"
+logic_false = "False"
+
+[compiler]
+define = "#define"
+include = "#include"
