@@ -12,10 +12,3 @@ def override(func):
     # You can do some additional checks here if desired, but they would be
     # optional and not enforced by Python itself.
     return func
-
-
-def PI():
-    return 3.14
-
-
-print(PI)

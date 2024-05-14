@@ -24,9 +24,13 @@ lesser = "<"
 div = "/"
 mod = "%"
 equal = "="
+dot = "."
+comma = ","
+colon = ":"
 [operator.extend]
 r_shift = ">>"
 l_shift = "<<"
+point_to = "->"
 power = "**"
 bigger_equal = ">="
 lesser_equal = "<="
@@ -36,18 +40,15 @@ add_equal = "+="
 sub_equal = "-="
 add_one = "++"
 sub_one = "--"
-
-[delimiter]
-comma = ","
-colon = ":"
-dot = "."
+double_dot = ".."
 
 [bracket]
 l_parentheses = "("
 r_parentheses = ")"
 l_square_bracket = "["
 r_square_bracket = "]"
-
+l_curly_bracket = "{"
+r_curly_bracket = "}"
 
 [keyword]
 if = "if"
@@ -65,10 +66,12 @@ logic_not = "not"
 [identifier]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"
 
+[literal]
+string = "(\".*\")|('.*')"
+bool_false = "False"
+bool_true = "True"
+uint_number = "\\d+"
 
-[constant]
-logic_true = "True"
-logic_false = "False"
 
 [compiler]
 define = "#define"
