@@ -8,7 +8,11 @@ newline = "\n"
 
 [comment]
 block_comment = "/*(.|\n)*?*/"
+block_comment_start = "/*"
+block_comment_end = "*/"
 line_comment = "//.*?\n"
+line_comment_start = "//"
+line_comment_end = "\n"
 
 [operator]
 [operator.base]
