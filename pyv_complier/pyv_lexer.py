@@ -143,7 +143,6 @@ class Lexer(Tokenizer, TokenTypeMarker):
                 offset += 1
                 if extend_op in \
                         self.token_define["operator"]["extend"].values():
-                    print(extend_op)
                     current_token.set_content(extend_op)
                     text_idx += 1
                     offset += 1
@@ -221,34 +220,12 @@ class Lexer(Tokenizer, TokenTypeMarker):
 
             # in case current char is in string
             # "" string
-            if lex_text[text_idx] == '"':
+            if lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
+                end_char: str = lex_text[text_idx]
                 string_content: str = ""
                 string_content += lex_text[text_idx]
                 text_idx += 1
-                while lex_text[text_idx] != '"' and lex_text[text_idx] != "\n":
-                    string_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
-
-                string_content += lex_text[text_idx]
-                text_idx += 1
-
-                # set current token line info
-                current_token.set_content(string_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point+offset)
-
-                # reset line info
-                start_point += offset
-                yield current_token
-                continue
-
-            # '' string
-            if lex_text[text_idx] == "'":
-                string_content: str = ""
-                string_content += lex_text[text_idx]
-                text_idx += 1
-                while lex_text[text_idx] != "'" and lex_text[text_idx] != "\n":
+                while lex_text[text_idx] != end_char and lex_text[text_idx] != "\n":
                     string_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
@@ -300,9 +277,6 @@ if __name__ == "__main__":
     # load text
     with open(f"{__file__}") as f:
         lex_text = f.read()
-
-    # with open("./test/test_syntax.pyv") as f:
-    #     lex_text = f.read()
 
     terminal_columns = get_terminal_size().columns
     token_number = 0
