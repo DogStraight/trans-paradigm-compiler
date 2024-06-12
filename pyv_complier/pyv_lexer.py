@@ -1,8 +1,5 @@
 from abc import abstractmethod, ABC
-from os import get_terminal_size
 from toml import loads as toml_loads
-
-from pyv_decorator import override
 
 
 class Token:
@@ -14,7 +11,7 @@ class Token:
 
     def __init__(self) -> None:
         self.content = ""
-        self.type = 0
+        self.type = ""
         self.start: Token.Position = Token.Position()
         self.end: Token.Position = Token.Position()
 
@@ -33,7 +30,7 @@ class Token:
         self.end.line = end_line
         self.end.column = end_colum
 
-    def set_type(self, token_type: int) -> None:
+    def set_type(self, token_type: str) -> None:
         self.type = token_type
 
 
@@ -54,6 +51,8 @@ class Lexer(Tokenizer, TokenTypeMarker):
     token_define: dict = {}
 
     def __init__(self, token_define: dict):
+        self.indent_deep = 0
+        self.indent_level = 4
         self.token_define = token_define
         self.blank: list = \
             list(token_define["space"].values()) \
@@ -64,14 +63,18 @@ class Lexer(Tokenizer, TokenTypeMarker):
     def set_current_lex_file(self, file_name: str) -> None:
         self.current_lex_file = file_name
 
-    @override
     def tokenize(self, lex_text: str):
         lex_text_len: int = len(lex_text)
+
+        # token pos relative
         text_idx: int = 0
-        line_number: int = 0
+        line_number: int = 1
         start_point: int = 0
         offset: int = 0
+
+        # token container
         current_token: Token = Token()
+
         while text_idx < lex_text_len:
             # reset offset
             offset = 0
@@ -82,19 +85,23 @@ class Lexer(Tokenizer, TokenTypeMarker):
                 next_char = lex_text[text_idx + 1]
 
             # in case current char is an compiler instruction
-            if lex_text[text_idx] in "#":
+            if lex_text[text_idx] in \
+                    self.token_define["compiler"]["_preambles"]:
                 while lex_text[text_idx] not in self.newline:
                     text_idx += 1
                 line_number += 1
                 continue
 
-            # in case current char is a blank char
+            # in case current char is a newline char
             if lex_text[text_idx] in self.newline:
                 start_point += 1  # move on
+
                 # set current token line info
+                current_token.set_type("newline")
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
+
                 # reset line info
                 line_number += 1
                 text_idx += 1
@@ -105,9 +112,11 @@ class Lexer(Tokenizer, TokenTypeMarker):
             # in case current char is an bracket
             if lex_text[text_idx] in self.bracket:
                 # set current token line info
+                current_token.set_type("bracket")
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
+
                 # reset line info
                 text_idx += 1
                 start_point += 1
@@ -116,16 +125,18 @@ class Lexer(Tokenizer, TokenTypeMarker):
 
             # in case current char is an space
             if lex_text[text_idx] in self.token_define["space"].values():
+                space_content: str = ""
                 start_point += 1  # move on
                 while lex_text[text_idx] in \
                     self.token_define["space"].values() \
                         and text_idx + 1 < lex_text_len:
+                    space_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
-                offset -= 1  # expect current char
 
                 # set current token line info
-                current_token.set_content(" ")
+                current_token.set_type("space")
+                current_token.set_content(space_content)
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
 
@@ -134,22 +145,25 @@ class Lexer(Tokenizer, TokenTypeMarker):
                 yield current_token
                 continue
 
-            # in case current char is an operator
+            # in case current char is an op
             if lex_text[text_idx] \
-                    in self.token_define["operator"]["base"].values():
+                    in self.token_define["op"]["base"].values():
                 extend_op = f"{lex_text[text_idx]}{next_char}"
                 current_token.set_content(lex_text[text_idx])
+                current_token.set_type("op.base")
                 text_idx += 1
                 offset += 1
                 if extend_op in \
-                        self.token_define["operator"]["extend"].values():
+                        self.token_define["op"]["extend"].values():
                     current_token.set_content(extend_op)
+                    current_token.set_type("op.extend")
                     text_idx += 1
                     offset += 1
 
                 # set current token line info
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
+
                 # reset line info
                 start_point += offset
                 yield current_token
@@ -160,9 +174,7 @@ class Lexer(Tokenizer, TokenTypeMarker):
             if f"{lex_text[text_idx]}{next_char}" in "//":
                 while lex_text[text_idx] != "\n":
                     text_idx += 1
-
-                # reset line info
-                start_point = 1
+                    start_point += 1
                 continue
 
             # block comment
@@ -190,6 +202,7 @@ class Lexer(Tokenizer, TokenTypeMarker):
                     offset += 1
 
                 # set current token line info
+                current_token.set_type("id")
                 current_token.set_content(id_content)
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
@@ -209,6 +222,7 @@ class Lexer(Tokenizer, TokenTypeMarker):
                     offset += 1
 
                 # set current token line info
+                current_token.set_type("literal.number")
                 current_token.set_content(number_content)
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
@@ -219,21 +233,21 @@ class Lexer(Tokenizer, TokenTypeMarker):
                 continue
 
             # in case current char is in string
-            # "" string
             if lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
                 end_char: str = lex_text[text_idx]
                 string_content: str = ""
                 string_content += lex_text[text_idx]
                 text_idx += 1
-                while lex_text[text_idx] != end_char and lex_text[text_idx] != "\n":
+                while lex_text[text_idx] != end_char \
+                        and lex_text[text_idx] != "\n":
                     string_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
-
                 string_content += lex_text[text_idx]
                 text_idx += 1
 
                 # set current token line info
+                current_token.set_type("literal.string")
                 current_token.set_content(string_content)
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
@@ -244,6 +258,7 @@ class Lexer(Tokenizer, TokenTypeMarker):
                 continue
 
             # in case current char has nowhere to put
+            current_token.set_type("unrecognized")
             current_token.set_content(lex_text[text_idx])
             current_token.set_location(
                 line_number, start_point, line_number, start_point+offset)
@@ -253,9 +268,54 @@ class Lexer(Tokenizer, TokenTypeMarker):
             start_point += 1
             yield current_token
 
-    @override
-    def mark_type(self, tokenized_list: list) -> list:
-        pass
+    def mark_type(self, token: Token) -> Token:
+        match token.type:
+            # in case token type is space
+            case "space":
+                if len(token.content) % self.indent_level == 0:
+                    current_indent_deep = \
+                        len(token.content) / self.indent_level
+                    if current_indent_deep >= self.indent_deep:
+                        token.type += "." + "indent"
+                    else:
+                        token.type += "." + "dedent"
+                    self.indent_deep = current_indent_deep
+            # in case token type is id
+            case "id":
+                if token.content in self.token_define[token.type]["keyword"]:
+                    token.type += "." + "keyword" + "." + token.content
+                else:
+                    token.type += "." + "identifier"
+
+                # in extra case literal
+                if token.content == "True" or token.content == "False":
+                    token.type = "literal.bool_true" \
+                        if token.content == "True" else "literal.bool_false"
+
+            # in case token type is bracket
+            case "bracket":
+                for bracket_type in self.token_define["bracket"]:
+                    if token.content == \
+                            self.token_define["bracket"][bracket_type]:
+                        token.type += "." + bracket_type
+                        break
+
+            # in case token type is op
+            # base op
+            case "op.base":
+                for base_op_type in self.token_define["op"]["base"]:
+                    if token.content == \
+                            self.token_define["op"]["base"][base_op_type]:
+                        token.type += "." + base_op_type
+                        break
+            # extend op
+            case "op.extend":
+                for extend_op_type in self.token_define["op"]["extend"]:
+                    if token.content == \
+                            self.token_define["op"]["extend"][extend_op_type]:
+                        token.type += "." + extend_op_type
+                        break
+        return token
 
 
 def read_token_define(token_define_toml_file_path: str) -> dict:
@@ -274,24 +334,27 @@ if __name__ == "__main__":
     # instance lexer
     pyv_lexer = Lexer(token_define)
 
+    # instance argparse
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--file', type=str, nargs=1,
+                        help='lexer file input')
+    parser_args = parser.parse_args()
     # load text
-    with open(f"{__file__}") as f:
+    with open(f"{parser_args.file[0]}") as f:
         lex_text = f.read()
+    if len(lex_text) == 0:
+        print("file empty")
 
-    terminal_columns = get_terminal_size().columns
-    token_number = 0
     log_file = open("./test.token", "w")
-    max_token_len = 0
     for token in pyv_lexer.tokenize(lex_text=lex_text):
-        if len(token.content) > max_token_len:
-            max_token_len = len(token.content)
+        token = pyv_lexer.mark_type(token)
         if token.content == "\n":
             token.content = "\\n"
         print(
             f"c: {token.content:<20}",
             f"s: {token.start.line}:{token.start.column:<5}",
-            f"e: {token.end.line}:{token.end.column}",
+            f"e: {token.end.line}:{token.end.column:<5}",
+            f"t: {token.type}",
             file=log_file)
     log_file.close()
-    print(f"max_token_len : {max_token_len}")
-    print('",' in token_define["operator"]["extend"].values())
