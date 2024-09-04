@@ -1,1 +1,0 @@
-f"{token_number:>{terminal_columns-len(token)-60}}",

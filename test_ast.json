@@ -1,0 +1,70 @@
+{
+    "root": {
+        "file_name": "",
+        "time_scale_unit": "1ns",
+        "time_scale_accuracy": "1ps",
+        "body": {
+            "statement.class_define": {
+                "class_name": "ex_module_name",
+                "bases_list": [],
+                "body": {
+                    "port_list_input": {
+                        "node_name": "port_list_input",
+                        "port": [
+                            {
+                                "port_name": "clk",
+                                "port_type": "bit",
+                                "port_width": 1,
+                                "port_param": [
+                                    "1"
+                                ]
+                            },
+                            {
+                                "port_name": "rstn",
+                                "port_type": "bit",
+                                "port_width": 1,
+                                "port_param_dict": {
+                                    "witdh": "1"
+                                }
+                            }
+                        ]
+                    },
+                    "port_list_output": {
+                        "node_name": "port_list_output",
+                        "port": [
+                            {
+                                "port_name": "led",
+                                "port_type": "bit",
+                                "port_width": 1,
+                                "port_param": [],
+                                "port_default_value": "0"
+                            },
+                            {
+                                "port_name": "spi_data_rx",
+                                "port_type": "bit",
+                                "port_width": 1,
+                                "port_param": [
+                                    "8"
+                                ],
+                                "port_default_value": ""
+                            },
+                            {
+                                "port_name": "spi_data_rx_en",
+                                "port_type": "bit",
+                                "port_width": 1,
+                                "port_param": [
+                                    "1"
+                                ],
+                                "port_default_value": ""
+                            }
+                        ]
+                    },
+                    "statement.tag": {
+                        "tag_content": "\"led_logic\"",
+                        "tag_hash": "3be737d1fc8a731c475876ced2545bb083781b3824d50a19452f9b200ea76edd"
+                    }
+                }
+            }
+        }
+    }
+}

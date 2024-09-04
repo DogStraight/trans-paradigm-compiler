@@ -1,4 +1,3 @@
-# not need to escape
 [space]
 blank_space = " "
 tab = "\t"
@@ -7,15 +6,10 @@ tab = "\t"
 newline = "\n"
 
 [comment]
-block_comment = "/*(.|\n)*?*/"
-block_comment_start = "/*"
-block_comment_end = "*/"
-line_comment = "//.*?\n"
-line_comment_start = "//"
-line_comment_end = "\n"
+boundary = "#"
 
-[operator]
-[operator.base]
+[op]
+[op.base]
 add = "+"
 sub = "-"
 multi = "*"
@@ -31,7 +25,8 @@ equal = "="
 dot = "."
 comma = ","
 colon = ":"
-[operator.extend]
+at = "@"
+[op.extend]
 r_shift = ">>"
 l_shift = "<<"
 point_to = "->"
@@ -54,29 +49,51 @@ r_square_bracket = "]"
 l_curly_bracket = "{"
 r_curly_bracket = "}"
 
-[keyword]
+
+[id]
+[id.keyword]
+# al type
+al_ff = "al_ff"
+al_comb= "al_comb"
+# branch
 if = "if"
 else = "else"
+match = "match"
+case = "case"
+# import
+import = "import"
+from = "from"
+as = "as"
+# loop
 for = "for"
 while = "while"
 break = "break"
-skip = "skip"
-import = "import"
+continue = "continue"
+# class
+input = "input"
+output = "output"
+inout = "inout"
+interface = "interface"
 class = "class"
+# logic
 logic_add = "and"
 logic_or = "or"
 logic_not = "not"
+# tag
+tag = "tag"
+# process
+pass = "pass"
+# edge
+posedge= "posedge"
+negedge= "negedge"
 
-[identifier]
-id = "[a-z_A-Z][a-z_A-Z0-9]*"
+[id.identifier]
+identifier = "[a-z_A-Z][a-z_A-Z0-9]*"
 
 [literal]
 string = "(\".*\")|('.*')"
 bool_false = "False"
 bool_true = "True"
-uint_number = "\\d+"
+number = "\\d+"
+none="None"
 
-
-[compiler]
-define = "#define"
-include = "#include"
