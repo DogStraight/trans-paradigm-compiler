@@ -1,17 +1,17 @@
 class ex_module_name(None):
     input:
         clk: bit(1)
-        rstn: bit(witdh = 1)
+        rstn: bit(width = 1 + 1)
 
     output:
         led: bit = 0
-        spi_data_rx:bit(8)
-        spi_data_rx_en:bit(1)
+        spi_data_rx: bit(8)
+        spi_data_rx_en: bit(1)
 
     tag("led_logic")
-    al_ff(posedge clk):
-        if(!rstn):
-            led = 0
-        else:
-            led = !led
+    # al_ff(posedge clk):
+    #     if(!rstn):
+    #         led = 0
+    #     else:
+    #         led = !led
 

@@ -1,7 +1,6 @@
 
 from toml import loads as toml_loads
 from typing import Generator
-import logging
 
 
 class Token:
@@ -49,6 +48,9 @@ class Lexer:
             + list(token_define["newline"].values())
         self.bracket: list = list(self.token_define["bracket"].values())
         self.newline: list = list(self.token_define["newline"].values())
+        self.base_symbol: list = \
+            list(self.token_define["symbol"]["base"].values())
+
         self.previous_token_type: str = ""
 
     def set_current_lex_file(self, file_name: str) -> None:
@@ -57,6 +59,7 @@ class Lexer:
     # Generator[Token, None, None] no send method, no return value
     def tokenize(self, lex_text: str) -> Generator[Token, None, None]:
         lex_text_len: int = len(lex_text)
+        lex_text = lex_text + "\n"  # add a newline at the end
 
         # token pos relative
         text_idx: int = 0
@@ -129,19 +132,23 @@ class Lexer:
                 # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
+                if current_token.type == "space":
+                    continue
                 yield current_token
                 continue
 
-            # in case current char is an op
-            if lex_text[text_idx] in self.token_define["op"]["base"].values():
-                extend_op = f"{lex_text[text_idx]}{next_char}"
+            # in case current char is an symbol
+            if lex_text[text_idx] in\
+                    self.token_define["symbol"]["base"].values():
+                extend_symbol = f"{lex_text[text_idx]}{next_char}"
                 current_token.set_content(lex_text[text_idx])
-                current_token.set_type("op.base")
+                current_token.set_type("symbol.base")
                 text_idx += 1
                 offset += 1
-                if extend_op in self.token_define["op"]["extend"].values():
-                    current_token.set_content(extend_op)
-                    current_token.set_type("op.extend")
+                if extend_symbol in \
+                        self.token_define["symbol"]["extend"].values():
+                    current_token.set_content(extend_symbol)
+                    current_token.set_type("symbol.extend")
                     text_idx += 1
                     offset += 1
 
@@ -203,7 +210,8 @@ class Lexer:
             if lex_text[text_idx].isdigit():
                 number_content: str = ""
                 while lex_text[text_idx] not in self.blank\
-                        and lex_text[text_idx] not in self.bracket:
+                        and lex_text[text_idx] not in self.bracket\
+                        and lex_text[text_idx] not in self.base_symbol:
                     number_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
@@ -278,10 +286,15 @@ class Lexer:
                     self.indent_deep = current_indent_deep
             # in case token type is id
             case "id":
-                if token.content in self.token_define[token.type]["keyword"]:
-                    token.type += "." + "keyword" + "." + token.content
+                id_kw_set = self.token_define[token.type]["keyword"]
+                if token.content in id_kw_set["logic_add"] \
+                        or token.content in id_kw_set["logic_not"] \
+                        or token.content in id_kw_set["logic_or"]:
+                    token.type = "symbol.base" + ".logic_" + token.content
+                elif token.content in id_kw_set:
+                    token.type = "keyword" + "." + token.content
                 else:
-                    token.type += "." + "identifier"
+                    token.type = "id"
 
                 # in extra case literal
                 if token.content == "True" or token.content == "False":
@@ -299,27 +312,26 @@ class Lexer:
                         token.type += "." + bracket_type
                         break
 
-            # in case token type is op
-            # base op
-            case "op.base":
-                for base_op_type in self.token_define["op"]["base"]:
+            # in case token type is symbol
+            # base symbol
+            case "symbol.base":
+                for base_symbol in self.token_define["symbol"]["base"]:
                     if token.content == \
-                            self.token_define["op"]["base"][base_op_type]:
-                        token.type += "." + base_op_type
+                            self.token_define["symbol"]["base"][base_symbol]:
+                        token.type += "." + base_symbol
                         break
-            # extend op
-            case "op.extend":
-                for extend_op_type in self.token_define["op"]["extend"]:
+            # extend symbol
+            case "symbol.extend":
+                for ex_symbol in self.token_define["symbol"]["extend"]:
                     if token.content == \
-                            self.token_define["op"]["extend"][extend_op_type]:
-                        token.type += "." + extend_op_type
+                            self.token_define["symbol"]["extend"][ex_symbol]:
+                        token.type += "." + ex_symbol
                         break
 
             # in case token type is unrecognized
             case _:
                 # do not thing
                 ...
-        # refresh previous_token_type
         self.previous_token_type = token.type
         return token
 
@@ -332,9 +344,9 @@ class Lexer:
     pass
 
 
-def _lex_input(lexer: Lexer, input_string: str) -> Generator[Token, None, None]:
+def _lex_input(lexer: Lexer, input_str: str) -> Generator[Token, None, None]:
     # do not use this function, only for testing
-    return lexer.tokenize(input_string)
+    return lexer.tokenize(input_str)
 
 
 def _read_token_define(token_define: str) -> dict:
@@ -372,7 +384,7 @@ if __name__ == "__main__":
                         default="./grammar/module_define.pyv",
                         help='lexer file input')
     parser.add_argument('-o', '--output',
-                        type=str, nargs="?", default=None,
+                        type=str, nargs="?", default="test.token",
                         help='lexer result output file path')
     parser_args = parser.parse_args()
 
@@ -384,7 +396,7 @@ if __name__ == "__main__":
 
     # load text
     if lex_file is None:
-        exit
+        exit(1)
     with open(f"{lex_file}") as f:
         lex_text = f.read()
 

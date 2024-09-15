@@ -1,0 +1,6 @@
+is_accept_default_value = true
+
+[param_list.width]
+name = "width"
+type = "int"
+default = "1"

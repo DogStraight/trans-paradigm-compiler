@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 import hashlib
 
+from pyv_lexer import Token
+
 
 class Node(metaclass=ABCMeta):
     @abstractmethod
@@ -8,19 +10,63 @@ class Node(metaclass=ABCMeta):
         ...
 
 
+class CallableNode(Node):
+
+    def __init__(self):
+        self.node_name = "callable"
+        self.name: str = ""
+        self.params: list[str] = []
+
+    def dump(self) -> dict:
+        dump_dict: dict = {}
+        dump_dict["name"] = self.name
+        dump_dict["params"] = self.params
+        return {self.node_name: dump_dict}
+
+
 class ExpressionNode(Node):
     def __init__(self):
         self.node_name = "expression"
-        self.value = ""
-        self.body = []
+        self.type = ""
+        self.left_operand: Token | Node | None = None
+        # self.right_operand: Token | Node
+        # self.operator: Token
 
-    @abstractmethod
     def dump(self):
+        dump_dict: dict = {}
+
+        # dump left operand
+        if isinstance(self.left_operand, Token):
+            dump_dict["left_operand"] = {
+                "type": self.left_operand.type,
+                "content": self.left_operand.content}
+        elif self.left_operand is not None:
+            dump_dict["left_operand"] = self.left_operand.dump()
+
+        # dump operator
+        if hasattr(self, "operator"):
+            dump_dict["operator"] = self.operator.type
+
+        # dump right operand
+        if hasattr(self, "right_operand"):
+            if isinstance(self.right_operand, Token):
+                dump_dict["right_operand"] = {
+                    "type": self.right_operand.type,
+                    "content": self.right_operand.content}
+            elif self.right_operand is not None:
+                dump_dict["right_operand"] = self.right_operand.dump()
+
+        return {self.node_name: dump_dict}
         ...
 
-    @abstractmethod
-    def add_node(self, node):
-        ...
+    def add_operator(self, operator: Token):
+        self.operator = operator
+
+    def add_left_operand(self, operand: Node | Token):
+        self.left_operand = operand
+
+    def add_right_operand(self, operand: Node | Token):
+        self.right_operand = operand
 
 
 class StatementNode(Node):
@@ -55,33 +101,6 @@ class RootNode(Node):
         self.body.append(node)
 
 
-class VariableNode(ExpressionNode):
-    def __init__(self, var_id):
-        self.node_name = "variable"
-        self.var_id = var_id
-        self.var_scope = ""
-
-        # for gc flag
-        self.ctx_type = "store"
-    pass
-
-    def dump(self):
-        dump_dict: dict = {}
-        dump_dict["var_id"] = self.var_id
-        dump_dict["var_scope"] = self.var_scope
-        dump_dict["ctx_type"] = self.ctx_type
-        return {self.node_name: dump_dict}
-        ...
-
-    def add_node(self):
-        # do nothing it is the endmost node
-        ...
-
-    def set_var_scope(self, scope: str):
-        self.scope = scope
-        pass
-
-
 class ClassDefNode(StatementNode):
     def __init__(self):
         super().__init__()
@@ -91,7 +110,6 @@ class ClassDefNode(StatementNode):
         # update flags
         self.update_class_name: bool = False
         self.update_bases: bool = False
-        self.update_body: bool = False
 
     def dump(self) -> dict:
         dump_dict: dict = {}
@@ -113,13 +131,11 @@ class ClassDefNode(StatementNode):
 class PortListNode(Node):
     def __init__(self, list_type: str):
         self.node_name = "port_list" + f"_{list_type}"
-        self.port: list[tuple] = []
+        self.port: list = []
 
         # flag for update
-        self.update_port_name: bool = False
+        self.update_port_name: bool = True
         self.update_port_type: bool = False
-        self.update_port_param: bool = False
-        self.update_port_init_value: bool = False
 
         # temp store for port init value
         self.port_init_var: int = 0

@@ -8,8 +8,8 @@ newline = "\n"
 [comment]
 boundary = "#"
 
-[op]
-[op.base]
+[symbol]
+[symbol.base]
 add = "+"
 sub = "-"
 multi = "*"
@@ -26,7 +26,7 @@ dot = "."
 comma = ","
 colon = ":"
 at = "@"
-[op.extend]
+[symbol.extend]
 r_shift = ">>"
 l_shift = "<<"
 point_to = "->"
@@ -48,7 +48,8 @@ l_square_bracket = "["
 r_square_bracket = "]"
 l_curly_bracket = "{"
 r_curly_bracket = "}"
-
+l_angle_bracket = "<"
+r_angle_bracket = ">"
 
 [id]
 [id.keyword]
@@ -75,7 +76,7 @@ output = "output"
 inout = "inout"
 interface = "interface"
 class = "class"
-# logic
+# logic operator
 logic_add = "and"
 logic_or = "or"
 logic_not = "not"
@@ -87,8 +88,8 @@ pass = "pass"
 posedge= "posedge"
 negedge= "negedge"
 
-[id.identifier]
-identifier = "[a-z_A-Z][a-z_A-Z0-9]*"
+[id.id]
+id = "[a-z_A-Z][a-z_A-Z0-9]*"
 
 [literal]
 string = "(\".*\")|('.*')"
