@@ -9,9 +9,9 @@ class ex_module_name(None):
         spi_data_rx_en: bit(1)
 
     tag("led_logic")
-    # al_ff(posedge clk):
-    #     if(!rstn):
-    #         led = 0
-    #     else:
-    #         led = !led
+    al_ff(posedge clk):
+        if(!rstn):
+            led = 0
+        else:
+            led = !led
 

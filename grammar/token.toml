@@ -12,7 +12,7 @@ boundary = "#"
 [symbol.base]
 add = "+"
 sub = "-"
-multi = "*"
+multiple = "*"
 and = "&"
 or = "|"
 not = "!"
