@@ -1,10 +1,11 @@
-
-from toml import loads as toml_loads
 from typing import Generator
 
 
-class Token:
+from .pyv_utils import get_token_define
+from .pyv_err import LexingError
 
+
+class Token:
     class Position:
         def __init__(self):
             self.line = 0
@@ -22,24 +23,26 @@ class Token:
     def set_location(
         self,
         start_line: int,
-        start_colum: int,
+        start_column: int,
         end_line: int,
-        end_colum: int
+        end_column: int
     ) -> None:
         self.start.line = start_line
-        self.start.column = start_colum
+        self.start.column = start_column
         self.end.line = end_line
-        self.end.column = end_colum
+        self.end.column = end_column
 
     def set_type(self, token_type: str) -> None:
         self.type = token_type
 
 
 class Lexer:
-    current_lex_file: str = ""
     token_define: dict = {}
 
-    def __init__(self, token_define_dict: dict):
+    def __init__(
+        self,
+        token_define_dict: dict = get_token_define("grammar/token.toml")
+    ) -> None:
         self.indent_deep = 0
         self.indent_level = 4
         self.token_define = token_define_dict
@@ -53,8 +56,9 @@ class Lexer:
 
         self.previous_token_type: str = ""
 
-    def set_current_lex_file(self, file_name: str) -> None:
-        self.current_lex_file = file_name
+        # is output comments
+        self.output_comments = False
+        pass
 
     # Generator[Token, None, None] no send method, no return value
     def tokenize(self, lex_text: str) -> Generator[Token, None, None]:
@@ -79,7 +83,7 @@ class Lexer:
                 next_char = lex_text[text_idx + 1]
 
             # in case current char is a newline char
-            if lex_text[text_idx] in self.newline:
+            elif lex_text[text_idx] in self.newline:
                 start_point += 1  # move on
 
                 # set current token line info
@@ -97,7 +101,7 @@ class Lexer:
                 continue
 
             # in case current char is a bracket
-            if lex_text[text_idx] in self.bracket:
+            elif lex_text[text_idx] in self.bracket:
                 # set current token line info
                 current_token.set_type("bracket")
                 current_token.set_content(lex_text[text_idx])
@@ -112,7 +116,7 @@ class Lexer:
                 continue
 
             # in case current char is a space
-            if lex_text[text_idx] in self.token_define["space"].values():
+            elif lex_text[text_idx] in self.token_define["space"].values():
                 space_content: str = ""
                 start_point += 1  # move on
                 while lex_text[text_idx] in \
@@ -137,7 +141,7 @@ class Lexer:
                 continue
 
             # in case current char is a symbol
-            if lex_text[text_idx] in\
+            elif lex_text[text_idx] in\
                     self.token_define["symbol"]["base"].values():
                 extend_symbol = f"{lex_text[text_idx]}{next_char}"
                 current_token.set_content(lex_text[text_idx])
@@ -162,7 +166,7 @@ class Lexer:
                 continue
 
             # in case current char in comment
-            if lex_text[text_idx] in self.token_define["comment"]["boundary"]:
+            elif lex_text[text_idx] in self.token_define["comment"]["boundary"]:
                 comment_content: str = ""
                 while lex_text[text_idx] != "\n":
                     comment_content += lex_text[text_idx]
@@ -179,11 +183,12 @@ class Lexer:
                 # reset line info\
                 start_point += offset
                 current_token = self.refine_type(current_token)
-                yield current_token
+                if self.output_comments:
+                    yield current_token
                 continue
 
             # in case current char is an id
-            if lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
+            elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
                 id_content: str = lex_text[text_idx]
                 text_idx += 1
                 while lex_text[text_idx].isalpha() \
@@ -206,7 +211,7 @@ class Lexer:
                 continue
 
             # in case current char is a number
-            if lex_text[text_idx].isdigit():
+            elif lex_text[text_idx].isdigit():
                 number_content: str = ""
                 while lex_text[text_idx] not in self.blank\
                         and lex_text[text_idx] not in self.bracket\
@@ -228,7 +233,7 @@ class Lexer:
                 continue
 
             # in case current char is in string
-            if lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
+            elif lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
                 end_char: str = lex_text[text_idx]
                 string_content: str = ""
                 string_content += lex_text[text_idx]
@@ -254,16 +259,20 @@ class Lexer:
                 continue
 
             # in case current char has nowhere to put
-            current_token.set_type("unrecognized")
-            current_token.set_content(lex_text[text_idx])
-            current_token.set_location(
-                line_number, start_point, line_number, start_point+offset)
+            else:
+                current_token.set_type("unrecognized")
+                current_token.set_content(lex_text[text_idx])
+                current_token.set_location(
+                    line_number, start_point, line_number, start_point+offset)
+                raise LexingError(
+                    f"Unrecognized token: {current_token.content}")
 
             # reset line info
             text_idx += 1
             start_point += 1
             current_token = self.refine_type(current_token)
             yield current_token
+        pass
 
     # only use in method tokenize
     def refine_type(self, _token: Token) -> Token:
@@ -333,79 +342,3 @@ class Lexer:
                 ...
         self.previous_token_type = _token.type
         return _token
-
-    # gen original code from tokens
-    @staticmethod
-    def untokenize(token_generator: Generator[Token, None, None]) -> str:
-        untokenize_string: str = ""
-        for _token in token_generator:
-            untokenize_string += _token.content
-        return untokenize_string
-    pass
-
-
-def _lex_input(lexer: Lexer, input_str: str) -> Generator[Token, None, None]:
-    # do not use this function, only for testing
-    return lexer.tokenize(input_str)
-
-
-def _read_token_define(token_define: str) -> dict:
-    with open(token_define, 'r') as _f:
-        token_define = _f.read()
-    token_define_dict: dict = toml_loads(token_define)
-    return token_define_dict
-
-
-def _print_token_stream(token: Token, file=None):
-    if token.content == "\n":
-        token.content = "\\n"
-    start_loc = f"{token.start.line}:{token.start.column}"
-    end_loc = f"{token.end.line}:{token.end.column}"
-    print(
-        f"c: {token.content:<20}",  # just for good looking
-        f"s: {start_loc:<8}",  # these number has no meaning
-        f"e: {end_loc:<8}",
-        f"t: {token.type}",
-        file=file)
-
-
-if __name__ == "__main__":
-
-    # load token define from file
-    token_define = _read_token_define("grammar/token.toml")
-
-    # instance lexer
-    pyv_lexer = Lexer(token_define)
-
-    # instance argparse
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--file', type=str, nargs="?",
-                        default="./grammar/module_define.pyv",
-                        help='lexer file input')
-    parser.add_argument('-o', '--output',
-                        type=str, nargs="?", default="output/test.token",
-                        help='lexer result output file path')
-    parser_args = parser.parse_args()
-
-    # load args
-    lex_file = parser_args.file
-    out_file = None
-    if parser_args.output is not None:
-        out_file = open(parser_args.output, "w")
-
-    # load text
-    if lex_file is None:
-        exit(1)
-    with open(f"{lex_file}") as f:
-        lex_text = f.read()
-
-    # output lexer result
-    for token in pyv_lexer.tokenize(lex_text=lex_text):
-        _print_token_stream(token, out_file)
-
-    if out_file is not None:
-        out_file.close()
-
-    # print run done
-    print(f"run done,output file: {parser_args.output}")

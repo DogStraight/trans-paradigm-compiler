@@ -1,5 +1,5 @@
 # this is and extra function base on lexer
-from pyv_lexer import Lexer, _read_token_define
+from .pyv_lexer import Lexer, _read_token_define
 from os import path
 
 

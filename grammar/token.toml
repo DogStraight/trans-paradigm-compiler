@@ -70,12 +70,19 @@ for = "for"
 while = "while"
 break = "break"
 continue = "continue"
-# class
+
+# param
+param = "param"
+
+# port 
 input = "input"
 output = "output"
 inout = "inout"
 interface = "interface"
+
+# class
 class = "class"
+
 # logic operator
 logic_add = "and"
 logic_or = "or"

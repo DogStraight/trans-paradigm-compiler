@@ -1,12 +1,13 @@
 class ex_module_name(None):
     input:
-        clk: bit(1)
-        rstn: bit(width = 1 + 1)
+        clk: bit
+
+        rstn: bit # for reset
 
     output:
-        led: bit = 0
-        spi_data_rx: bit(8)
-        spi_data_rx_en: bit(1)
+        led: bit
+        spi_data_rx: bit
+        spi_data_rx_en: bit
 
     tag("led_logic")
     al_ff(posedge clk):

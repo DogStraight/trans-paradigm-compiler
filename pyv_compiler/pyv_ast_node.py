@@ -13,7 +13,8 @@ class Node(metaclass=ABCMeta):
 class AttributeNode(Node):
     def __init__(self):
         self.node_name = "attribute"
-        self.name: str = ""
+        self.name = None
+        self.type = "attribute_node"
 
     def dump(self) -> dict:
         dump_dict: dict = {}
@@ -27,8 +28,11 @@ class AttributeNode(Node):
 
         return {self.node_name: dump_dict}
 
-    def add_name(self, name: str) -> None:
-        self.name = name
+    def add_name(self, name: Token | Node) -> None:
+        if isinstance(name, Token):
+            self.name = name.content
+        else:
+            self.name = name
 
     def add_attr(self, attr: str) -> None:
         self.attr = attr
@@ -37,20 +41,20 @@ class AttributeNode(Node):
 class CallableNode(Node):
     def __init__(self):
         self.node_name = "callable"
+        self.type = "callable_node"
         self.name: str = ""
         self.args: list = []
         self.kwargs: dict = {}
-        self.return_type: str = ""
-        # flag
-        self.is_kwargs = False
 
     def dump(self) -> dict:
         dump_dict: dict = {}
         dump_dict["name"] = self.name
-        if self.is_kwargs:
-            dump_dict["kwargs"] = self.kwargs
-        else:
-            dump_dict["args"] = self.args
+        dump_dict["args"] = []
+        for arg in self.args:
+            dump_dict["args"].append(arg)
+        dump_dict["kwargs"] = {}
+        for key, value in self.kwargs.items():
+            dump_dict["kwargs"][key] = value
         return {self.node_name: dump_dict}
 
     def add_name(self, name: str) -> None:
@@ -62,13 +66,26 @@ class CallableNode(Node):
     def add_kwarg(self, key: str, value: str) -> None:
         self.kwargs[key] = value
 
+    def add_arguments(self, arg_string: str) -> None:
+        args = arg_string.split(",")
+        for arg in args:
+            if "=" in arg:
+                key, value = arg.split("=")
+                self.add_kwarg(key.strip(), value.strip())
+            else:
+                self.add_arg(arg.strip())
+
 
 class ExpressionNode(Node):
     def __init__(self):
         self.node_name = "expression"
+        self.type = "exp_node"
 
     def dump(self):
         dump_dict: dict = {}
+
+        if hasattr(self, "type"):
+            dump_dict["type"] = self.type
 
         # dump left operand
         if hasattr(self, "left_operand"):
@@ -94,17 +111,17 @@ class ExpressionNode(Node):
 
         return {self.node_name: dump_dict}
 
+    def add_left_operand(self, left_operand: Token | Node):
+        self.left_operand = left_operand
+
     def add_operator(self, operator: Token):
         self.operator = operator
 
-    def add_left_operand(self, operand: Node | Token):
-        self.left_operand = operand
-
-    def add_right_operand(self, operand: Node | Token):
-        self.right_operand = operand
+    def add_right_operand(self, right_operand: Token | Node):
+        self.right_operand = right_operand
 
     def set_type(self, type: str):
-        self.type = type
+        self.type += "."+type
 
 
 class StatementNode(Node):
@@ -167,40 +184,30 @@ class PortListNode(Node):
     def __init__(self, list_type: str):
         self.node_name = "port_list" + f"_{list_type}"
         self.port: list = []
-
-        # flag for update
-        self.update_port_name: bool = True
-        self.update_port_type: bool = False
-
-        # temp store for port init value
-        self.port_init_var: int = 0
-
-        # for param type
-        self.is_dict_param: bool = False
-        self.dict_param_name: str = ""
+        self.port_type: list = []
 
     def dump(self) -> dict:
         dump_dict: dict = {}
         dump_dict["node_name"] = self.node_name
         dump_dict["port"] = []
-        for port in self.port:
+        dump_dict["port_type"] = []
+        for port, prot_type in zip(self.port, self.port_type):
             dump_dict["port"].append(port)
+            dump_dict["port_type"].append(prot_type)
         return {self.node_name: dump_dict}
 
     def add_port(self, port: tuple):
         self.port.append(port)
         pass
 
+    def add_port_type(self, port_type: str):
+        self.port_type.append(port_type)
+
 
 class InterfaceNode(Node):
     def __init__(self):
         self.node_name = "interface"
         self.interface = []
-
-        # flag for update
-        self.update_if_name: bool = False
-        self.update_if_type: bool = False
-        self.update_if_param: bool = False
 
     def dump(self) -> dict:
         dump_dict: dict = {}
