@@ -1,6 +1,4 @@
 .vscode
 test
-log/*.log
-output
 */__pycache__
 __pycache__
