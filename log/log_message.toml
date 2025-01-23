@@ -1,9 +1,0 @@
-[lexer]
-unknown_token = "Unknown token '{token}' at line {line} column {column}"
-
-[parser]
-missing_comma = " Missing expected comma at line {line} column {column}"
-unknown_type = "Unknown type '{type}' at line {line} column {column}"
-unknown_exp = "Expression node find unknown type element :'{element}'"
-no_param_input = "'{type}' no parameter input at line {line} column {column}"
-no_match_bracket = "No matching closing bracket found at line {line} column {column}"

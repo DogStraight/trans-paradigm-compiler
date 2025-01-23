@@ -166,7 +166,8 @@ class Lexer:
                 continue
 
             # in case current char in comment
-            elif lex_text[text_idx] in self.token_define["comment"]["boundary"]:
+            elif lex_text[text_idx] in \
+                    self.token_define["comment"]["boundary"]:
                 comment_content: str = ""
                 while lex_text[text_idx] != "\n":
                     comment_content += lex_text[text_idx]
@@ -292,6 +293,9 @@ class Lexer:
                     else:
                         _token.type += "." + "dedent"
                     self.indent_deep = current_indent_deep
+                else:
+                    raise LexingError(
+                        f"Indentation error at: {_token.start.column}")
             # in case token type is id
             case "id":
                 id_kw_set = self.token_define[_token.type]["keyword"]

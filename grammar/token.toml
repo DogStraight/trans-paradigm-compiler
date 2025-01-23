@@ -55,7 +55,7 @@ r_angle_bracket = ">"
 [id.keyword]
 # al type
 al_ff = "al_ff"
-al_comb= "al_comb"
+al_comb = "al_comb"
 # branch
 if = "if"
 else = "else"
@@ -80,8 +80,8 @@ output = "output"
 inout = "inout"
 interface = "interface"
 
-# class
-class = "class"
+# module
+module = "module"
 
 # logic operator
 logic_add = "and"
@@ -92,8 +92,8 @@ tag = "tag"
 # process
 pass = "pass"
 # edge
-posedge= "posedge"
-negedge= "negedge"
+posedge = "posedge"
+negedge = "negedge"
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"
@@ -103,5 +103,9 @@ string = "(\".*\")|('.*')"
 bool_false = "False"
 bool_true = "True"
 number = "\\d+"
-none="None"
+none = "None"
 
+
+# set
+[set]
+unilateral_operator = ["!", "&", "|", "^", "~", "-"]

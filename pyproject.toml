@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "pyv-complier"
+name = "pyv_compiler"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
+authors = ["no authors"]
 readme = "README.md"
 
 [tool.poetry.dependencies]

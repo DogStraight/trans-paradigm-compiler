@@ -4,7 +4,3 @@ class LexingError(Exception):
 
 class BracketMismatchError(Exception):
     pass
-
-
-class ParsingError(Exception):
-    pass

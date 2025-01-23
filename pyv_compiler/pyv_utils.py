@@ -1,50 +1,10 @@
-import toml
-from os import walk
 from toml import loads as toml_loads
-
 from pyv_err import BracketMismatchError
-
-
-####################################
-# decorators
-####################################
-def unfinished_function(func):
-    def wrapper(*args, **kwargs):
-        print(f"Function {func.__name__} is not finished yet.")
-        return None
-    return wrapper
-
-
-def testing_function(func):
-    def wrapper(*args, **kwargs):
-        print(f"Testing function {func.__name__}...")
-        result = func(*args, **kwargs)
-        print(f"Test result: {result}")
-        return result
-    return wrapper
 
 
 ####################################
 # file read
 ####################################
-def get_op_precedence() -> dict:
-    with open("./grammar/operator_precedence.toml", "r") as _f:
-        file_content = _f.read()
-    return toml.loads(file_content)
-
-
-def get_builtin_types() -> list[str]:
-    _, types, _ = next(walk("./grammar/type"))
-    return types
-
-
-def get_type_info(type_name: str) -> dict:
-    with open(f"./grammar/type/{type_name}/type_{type_name}_info.toml", "r")\
-            as _f:
-        file_content = _f.read()
-    return toml.loads(file_content)
-
-
 def get_token_define(token_define: str) -> dict:
     with open(token_define, 'r') as _f:
         token_define = _f.read()
