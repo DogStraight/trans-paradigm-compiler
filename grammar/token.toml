@@ -25,6 +25,7 @@ equal = "="
 dot = "."
 comma = ","
 colon = ":"
+semicolon = ";"
 at = "@"
 [symbol.extend]
 r_shift = ">>"
@@ -105,7 +106,3 @@ bool_true = "True"
 number = "\\d+"
 none = "None"
 
-
-# set
-[set]
-unilateral_operator = ["!", "&", "|", "^", "~", "-"]

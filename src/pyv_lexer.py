@@ -1,8 +1,8 @@
 from typing import Generator
 
 
-from .pyv_utils import get_token_define
-from .pyv_err import LexingError
+from pyv_utils import get_token_define
+from pyv_err import IndentationError, UnexpectedTokenError
 
 
 class Token:
@@ -36,7 +36,7 @@ class Token:
         self.type = token_type
 
 
-class Lexer:
+class PyvLexer:
     token_define: dict = {}
 
     def __init__(
@@ -83,7 +83,7 @@ class Lexer:
                 next_char = lex_text[text_idx + 1]
 
             # in case current char is a newline char
-            elif lex_text[text_idx] in self.newline:
+            if lex_text[text_idx] in self.newline:
                 start_point += 1  # move on
 
                 # set current token line info
@@ -265,14 +265,12 @@ class Lexer:
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_location(
                     line_number, start_point, line_number, start_point+offset)
-                raise LexingError(
-                    f"Unrecognized token: {current_token.content}")
 
-            # reset line info
-            text_idx += 1
-            start_point += 1
-            current_token = self.refine_type(current_token)
-            yield current_token
+                # reset line info
+                text_idx += 1
+                start_point += 1
+                current_token = self.refine_type(current_token)
+                yield current_token
         pass
 
     # only use in method tokenize
@@ -294,7 +292,7 @@ class Lexer:
                         _token.type += "." + "dedent"
                     self.indent_deep = current_indent_deep
                 else:
-                    raise LexingError(
+                    raise IndentationError(
                         f"Indentation error at: {_token.start.column}")
             # in case token type is id
             case "id":
@@ -341,8 +339,15 @@ class Lexer:
                         break
 
             # in case token type is unrecognized
+            case "unrecognized":
+                raise UnexpectedTokenError(
+                    f"Unexpected token: {_token.content} "
+                    f"at: line: {_token.start.line}, "
+                    f"column: {_token.start.column}")
+
+            # case default
             case _:
-                # do not thing
+                # do nothing
                 ...
         self.previous_token_type = _token.type
         return _token
