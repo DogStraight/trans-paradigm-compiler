@@ -3,8 +3,8 @@ from pyv_lexer import PyvLexer
 
 def test_lexer():
     lexer = PyvLexer()
-    token_iter = lexer.tokenize("module adder(a, b, c);")
-    for token in token_iter:
+    token_generator = lexer.tokenize('hello')
+    for token in token_generator:
         print(token.type, token.content)
 
 
