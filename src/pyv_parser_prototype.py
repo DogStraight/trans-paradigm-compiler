@@ -169,15 +169,14 @@ class GrammarRuleChecker:
                         return False
                     idx += 1
                 case self.ExpressionMatchType.grammar_rule:
-                    is_match = False
                     for length in self.fix_grammar_length(match_target):
+                        assert isinstance(match_target, GrammarRule)
                         if self.special_grammar_check(
                             token_list[idx : idx + length], match_target
                         ):
                             idx += length
-                            is_match = True
                             break
-                    if not is_match:
+                    else:
                         return False
                 case self.ExpressionMatchType.branch:
                     pass
