@@ -1,0 +1,7 @@
+[Constant]
+keywords = [ "constant", "base",]
+production = [ "literal.number",]
+
+[Constant.node_info]
+name = "constant"
+content = "$1"

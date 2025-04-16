@@ -1,0 +1,7 @@
+[Variable]
+keywords = [ "variable", "base",]
+production = [ "id",]
+
+[Variable.node_info]
+name = "variable"
+content = "$1"

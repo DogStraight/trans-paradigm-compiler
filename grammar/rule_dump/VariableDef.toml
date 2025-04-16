@@ -1,0 +1,8 @@
+[VariableDef]
+keywords = [ "variable", "definition",]
+production = [ "id", "id", "symbol.base.equal", "GrammarRule(Constant)|GrammarRule(Variable)",]
+
+[VariableDef.node_info]
+name = "$1"
+var_type = "$2"
+init_value = "$4"

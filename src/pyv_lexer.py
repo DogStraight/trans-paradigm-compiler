@@ -1,39 +1,8 @@
 from typing import Generator
 
-
+from pyv_definition import Token
 from pyv_utils import get_token_define
 from pyv_err import IndentationError, UnexpectedTokenError
-
-
-class Token:
-    class Position:
-        def __init__(self):
-            self.line = 0
-            self.column = 0
-
-    def __init__(self) -> None:
-        self.content: str = ""
-        self.type: str = ""
-        self.start: Token.Position = Token.Position()
-        self.end: Token.Position = Token.Position()
-
-    def set_content(self, content: str) -> None:
-        self.content = content
-
-    def set_location(
-        self,
-        start_line: int,
-        start_column: int,
-        end_line: int,
-        end_column: int
-    ) -> None:
-        self.start.line = start_line
-        self.start.column = start_column
-        self.end.line = end_line
-        self.end.column = end_column
-
-    def set_type(self, token_type: str) -> None:
-        self.type = token_type
 
 
 class PyvLexer:
@@ -121,7 +90,7 @@ class PyvLexer:
                 start_point += 1  # move on
                 while lex_text[text_idx] in \
                     self.token_define["space"].values() \
-                        and text_idx + 1 < lex_text_len:
+                        and text_idx + 1 <= lex_text_len:
                     space_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
@@ -137,8 +106,6 @@ class PyvLexer:
                 current_token = self.refine_type(current_token)
                 if current_token.type == "space":
                     continue
-                yield current_token
-                continue
 
             # in case current char is a symbol
             elif lex_text[text_idx] in\

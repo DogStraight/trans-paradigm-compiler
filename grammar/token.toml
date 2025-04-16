@@ -26,6 +26,7 @@ dot = "."
 comma = ","
 colon = ":"
 semicolon = ";"
+question_mark = "?"
 at = "@"
 [symbol.extend]
 r_shift = ">>"

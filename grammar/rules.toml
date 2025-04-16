@@ -1,37 +1,47 @@
 [Constant]
 keywords = ["constant", "base"]
-productions = ["literal.number"]
+production = ["literal.number"]
 [Constant.node_info]
 name = "constant"
 content = "$1"
 
+
+[Operator]
+keywords = ["operator", "base"]
+production = [
+    "symbol.base.add|symbol.base.sub|symbol.base.multiple|symbol.base.div",
+]
+[Operator.node_info]
+name = "operation"
+operator = "$1"
+
+
+
 [Variable]
 keywords = ["variable", "base"]
-productions = ["id"]
+production = ["id"]
 [Variable.node_info]
-name = "variable"
-content = "$1"
+_do_not_declare_node = "True"
 
-[Operation]
-keywords = ["operation", "link"]
-productions = [
-    "symbol.base.add|sub|multiple|div",
-]
-[Operation.node_info]
-name="operation"
-left_node = "$0"
+
+[OperationExp]
+keywords = ["operation_expression"]
+production = ["GrammarRule(Operator)", "GrammarRule(Variable|Constant)"]
+[OperationExp.node_info]
+name = "operation_expression"
 operator = "$1"
-right = "$-1"
+operand = "$2"
+
 
 [VariableDef]
 keywords = ["variable", "definition"]
-productions = [
+production = [
     "id",
     "id",
     "symbol.base.equal",
-    "GrammarRule(Constant)|GrammarRule(Variable)",
+    "GrammarRule(Constant|Variable|Expression)",
 ]
-[VarDef.node_info]
+[VariableDef.node_info]
 name = "$1"
 var_type = "$2"
 init_value = "$4"

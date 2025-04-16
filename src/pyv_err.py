@@ -12,3 +12,11 @@ class IndentationError(Exception):
 
 class BracketMismatchError(Exception):
     pass
+
+
+class GrammarRuleNoFoundError(Exception):
+    pass
+
+
+class FullMatchFilterError(Exception):
+    pass
