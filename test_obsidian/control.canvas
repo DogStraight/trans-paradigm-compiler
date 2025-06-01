@@ -1,0 +1,21 @@
+{
+	"nodes":[
+		{"id":"f5f8e3c2e2494fe0","type":"group","x":-900,"y":-300,"width":1000,"height":660,"label":"模型"},
+		{"id":"978e78cda360bf0c","type":"group","x":-570,"y":-220,"width":300,"height":500,"label":"板"},
+		{"id":"72cb16c6451db04a","type":"text","text":"多路adc","x":-550,"y":-180,"width":250,"height":60},
+		{"id":"5c6fe21781bdaed2","type":"text","text":"多路复用器","x":-550,"y":-92,"width":250,"height":60},
+		{"id":"b689b3dbcd8d785b","type":"text","text":"电源芯片","x":-550,"y":-4,"width":250,"height":60},
+		{"id":"318a740b60045be5","type":"text","text":"通信接口","x":-550,"y":84,"width":250,"height":60},
+		{"id":"9f73e2dc0246bdf6","type":"text","text":"控制芯片(DSP)","x":-550,"y":170,"width":250,"height":60},
+		{"id":"36d258f93e796952","type":"text","text":"机器人","x":-880,"y":-230,"width":180,"height":50},
+		{"id":"3162bc9c21575beb","type":"text","text":"压力传感器","x":-80,"y":200,"width":160,"height":50},
+		{"id":"59305ec7d73533c3","type":"text","text":"缺件检测","x":-80,"y":-4,"width":160,"height":50},
+		{"id":"8678cdcbe15e6444","type":"text","text":"动作控制","x":-80,"y":-180,"width":160,"height":50}
+	],
+	"edges":[
+		{"id":"fbfab13493f24f46","fromNode":"978e78cda360bf0c","fromSide":"left","toNode":"36d258f93e796952","toSide":"bottom","label":"串口，spi，io"},
+		{"id":"18bb75444f711794","fromNode":"3162bc9c21575beb","fromSide":"left","toNode":"978e78cda360bf0c","toSide":"right","label":"adc"},
+		{"id":"1a7d4fb8df3c0100","fromNode":"978e78cda360bf0c","fromSide":"right","toNode":"8678cdcbe15e6444","toSide":"left","label":"io"},
+		{"id":"454ac469f80a612c","fromNode":"59305ec7d73533c3","fromSide":"left","toNode":"978e78cda360bf0c","toSide":"right","label":"io"}
+	]
+}

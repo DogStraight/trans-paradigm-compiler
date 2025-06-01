@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from toml import loads as toml_loads
 from pyv_err import BracketMismatchError
 from pyv_definition import GrammarRule
@@ -6,7 +8,9 @@ from pyv_definition import GrammarRule
 ####################################
 # file read
 ####################################
-def get_token_define(token_define: str) -> dict:
+def get_token_define(
+    token_define: str = str(Path(__file__).parent.parent / "grammar" / "token.toml"),
+) -> dict:
     with open(token_define, "r") as _f:
         token_define = _f.read()
     token_define_dict: dict = toml_loads(token_define)
@@ -65,14 +69,15 @@ class RecursionGuardManager:
                     self.call_stack[func_name] -= 1
                     if self.call_stack[func_name] == 0:
                         del self.call_stack[func_name]
+
             return inner
+
         return wrapper
 
 
 def load_rule(name, rule_content) -> GrammarRule:
     return GrammarRule(
         name=name,
-        keywords=rule_content["keywords"],
         production=rule_content["production"],
-        node_info=rule_content["node_info"],
+        node=rule_content["node"],
     )

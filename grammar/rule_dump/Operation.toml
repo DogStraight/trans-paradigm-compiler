@@ -1,9 +1,0 @@
-[Operation]
-keywords = [ "operation", "link",]
-production = [ "symbol.base.add|sub|multiple|div",]
-
-[Operation.node_info]
-name = "operation"
-left_node = "$0"
-operator = "$1"
-right = "$-1"

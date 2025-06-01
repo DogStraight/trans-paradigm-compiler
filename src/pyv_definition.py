@@ -4,9 +4,9 @@ class Token:
             self.line = 0
             self.column = 0
 
-    def __init__(self) -> None:
-        self.content: str = ""
-        self.type: str = ""
+    def __init__(self, content="", type="") -> None:
+        self.content: str = content
+        self.type: str = type
         self.start: Token.Position = Token.Position()
         self.end: Token.Position = Token.Position()
 
@@ -26,13 +26,16 @@ class Token:
 
 
 class Node:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, **kwargs) -> None:
         self.name = name
-        pass
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def dump(self) -> dict:
         dump_dict = {}
         for attr, value in self.__dict__.items():
+            if attr == 'name':
+                continue
             if isinstance(value, list):
                 dump_dict[attr] = [
                     item.dump() if isinstance(item, Node) else item for item in value
@@ -41,26 +44,31 @@ class Node:
                 dump_dict[attr] = value.dump() if isinstance(value, Node) else value
         return {self.name: dump_dict}
 
+    def __str__(self) -> str:
+        attrs = {k:v for k,v in self.__dict__.items() if k != 'name'}
+        return f"{self.name}({', '.join(f'{k}={v}' for k,v in attrs.items())})"
+
+    def __repr__(self) -> str:
+        attrs = {k:v for k,v in self.__dict__.items() if k != 'name'}
+        return f"<Node {self.name} {attrs}>"
+
 
 class GrammarRule:
     def __init__(
         self,
         name: str,
-        keywords: list[str],
         production: list[str],
-        node_info: dict,
+        node: dict,
     ) -> None:
         self.name = name
-        self.keywords = keywords
-        self.production:list[str] = production
-        self.node_info = node_info
+        self.production: list[str] = production
+        self.node = node
         pass
 
     def dump(self) -> dict:
         return {
             self.name: {
-                "keywords": self.keywords,
                 "production": self.production,
-                "node_info": self.node_info,
+                "node": self.node,
             }
         }

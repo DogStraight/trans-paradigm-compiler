@@ -59,7 +59,7 @@ right = "$2"
 [CompareExpr]
 production = [
     "@AddExpr",
-    "symbol.extend.is_equal|symbol.extend.not_equal|symbol.extend.bigger|symbol.extend.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
+    "symbol.extend.is_equal|symbol.extend.not_equal|symbol.base.bigger|symbol.base.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
     "@AddExpr",
 ]
 [CompareExpr.node]
@@ -84,7 +84,8 @@ expr = "$1"
 [Block]
 production = [
     "bracket.l_curly_bracket",
-    "[{@Statement}]",
+    "[{@BlockStatement}]",
+    "[@LastLineBlockStatement]",
     "bracket.r_curly_bracket",
 ]
 [Block.node]
@@ -92,10 +93,20 @@ statements = "$2"
 
 # Statement
 [Statement]
-production = ["@Expression|@VarDef|@IfStmt|@WhileStmt"]
+production = ["@VarDef|@IfStmt|@WhileStmt|@ForStmt|@BreakStmt|@ContinueStmt"]
 [Statement.node]
 stmt = "$1"
 
+[BlockStatement]
+production = ["@Statement", "newline|symbol.base.semicolon"]
+[BlockStatement.node]
+stmt = "$1"
+
+
+[LastLineBlockStatement]
+production = ["@Statement"]
+[LastLineBlockStatement.node]
+stmt = "$1"
 
 # If statement
 [IfStmt]
@@ -115,7 +126,7 @@ else_block = "$6"
 
 # Else statement
 [ElseStmt]
-production = ["keyword.else", "@Block"]
+production = ["keyword.else", "[@IfStmt]", "@Block"]
 [ElseStmt.node]
 block = "$2"
 
@@ -131,3 +142,46 @@ production = [
 [WhileStmt.node]
 condition = "$3"
 body = "$5"
+
+[ForStmt]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "[@VarDef]",
+    "symbol.base.semicolon",
+    "[@BoolExpr]",
+    "symbol.base.semicolon",
+    "[@Expression]",
+    "bracket.r_parentheses",
+    "@Block",
+]
+[ForStmt.node]
+init = "$3"
+condition = "$5"
+update = "$7"
+body = "$9"
+
+
+[CaseStmt]
+production = ["keyword.case", "@Expression", "symbol.base.colon", "@Block"]
+[CaseStmt.node]
+expr = "$2"
+statements = "$4"
+
+[DefaultStmt]
+production = [
+    "keyword.default",
+    "symbol.base.colon",
+    "[{@BlockStatement}]",
+    "[@LastLineBlockStatement]",
+]
+[DefaultStmt.node]
+statements = "$[3,4]"
+
+[BreakStmt]
+production = ["keyword.break", "symbol.base.semicolon"]
+[BreakStmt.node]
+
+[ContinueStmt]
+production = ["keyword.continue", "symbol.base.semicolon"]
+[ContinueStmt.node]
