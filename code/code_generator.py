@@ -1,8 +1,8 @@
-from pyv_definition import Node
+from define import Node
 from typing import List
 
 class CodeGenerator:
-    """编译器代码生成后端基础框架"""
+    """转译器代码生成后端基础框架"""
     
     def __init__(self):
         """初始化代码生成器"""

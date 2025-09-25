@@ -1,8 +1,18 @@
 from typing import Generator
+from toml import loads as toml_loads
+from copy import deepcopy
 
-from pyv_definition import Token
-from pyv_utils import get_token_define
-from pyv_err import IndentationError, UnexpectedTokenError
+from define import Token
+from define import FileManager
+from err import IndentationError, UnexpectedTokenError
+
+
+def get_token_define(
+    token_define: str = FileManager.token_define_file,
+) -> dict:
+    token_define = FileManager.read_file(token_define)
+    token_define_dict: dict = toml_loads(token_define)
+    return token_define_dict
 
 
 class PyvLexer:
@@ -342,6 +352,14 @@ class PyvLexer:
         self.previous_token_type = _token.type
         return _token
 
+    def return_token_list(self, input_str: str) -> list:
+        """返回Token列表"""
+        token_generator = self.tokenize(input_str)
+        token_list = []
+        for token in token_generator:
+            token_copy = deepcopy(token)
+            token_list.append(token_copy)
+        return token_list
 
 Lexer = PyvLexer
 
@@ -408,7 +426,7 @@ if __name__ == "__main__":
         [
             "keyword.if",
             "id",
-            "bracket.r_angle_bracket",
+            "symbol.base.bigger",
             "literal.number",
             "symbol.base.colon",
             "newline",
