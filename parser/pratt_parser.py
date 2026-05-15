@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+from typing import List, Tuple, Dict, Any
 from define import Node, Token
+
 from parser.utils import (
     is_number,
     is_string,
@@ -10,14 +12,21 @@ from parser.utils import (
 )
 
 
-def read_operator_defs(filename):
+class MockToken:
+    def __init__(self, content, typ):
+        self.content = content
+        self.type = typ
+
+
+# ========== 运算符定义加载 ==========
+def read_operator_defs(filename: str) -> List[Tuple[int, Dict[str, Any]]]:
     """
     从文件读取运算符定义。
     每行格式：{symbol:"+", arity:2, assoc:"left"}, {symbol:"-", arity:2, assoc:"left"}
     行号即优先级（数字越大优先级越高）。
     返回列表，每个元素为 (优先级, 属性字典)
     """
-    operators = []  # 列表元素为 (优先级, 属性字典)
+    operators = []
     with open(filename, "r") as f:
         line_no = 1
         for line in f:
@@ -32,17 +41,14 @@ def read_operator_defs(filename):
                 # 合并可能被逗号分隔的键值对（因为一个条目内有多个键值对）
                 item_str = parts[i].strip()
                 if item_str.startswith("{"):
-                    # 开始一个新的条目，收集直到匹配的 '}'
                     j = i
                     depth = 0
                     while j < len(parts):
                         seg = parts[j]
                         depth += seg.count("{") - seg.count("}")
                         if depth == 0 and j > i:
-                            # 找到闭合的 '}'
                             break
                         j += 1
-                    # 将 parts[i:j+1] 用逗号重新连接
                     full_item = ",".join(parts[i : j + 1])
                     i = j + 1
                 else:
@@ -52,14 +58,12 @@ def read_operator_defs(filename):
                 full_item = full_item.strip()
                 if not full_item.startswith("{") or not full_item.endswith("}"):
                     continue
-                # 去掉首尾大括号
                 inner = full_item[1:-1].strip()
                 if not inner:
                     continue
 
-                # 解析内部的键值对（键:值）
+                # 解析键值对
                 props = {}
-                # 手动分割，注意值可能包含引号或嵌套
                 pairs = []
                 current = []
                 in_quote = False
@@ -68,7 +72,6 @@ def read_operator_defs(filename):
                         in_quote = not in_quote
                         current.append(ch)
                     elif ch == "," and not in_quote:
-                        # 分割键值对
                         pair_str = "".join(current).strip()
                         if pair_str:
                             pairs.append(pair_str)
@@ -86,11 +89,9 @@ def read_operator_defs(filename):
                     key, val = pair.split(":", 1)
                     key = key.strip()
                     val = val.strip()
-                    # 去除值的引号（如果是字符串）
                     if val.startswith('"') and val.endswith('"'):
                         val = val[1:-1]
                     else:
-                        # 尝试转换为数字
                         try:
                             if "." in val:
                                 val = float(val)
@@ -104,36 +105,52 @@ def read_operator_defs(filename):
     return operators
 
 
-def build_priority_map(operator_defs):
-    """从运算符定义列表构建优先级字典 {符号: 优先级} 和属性字典 {符号: 属性}"""
-    priority = {}
-    attrs = {}
+def build_priority_maps(operator_defs):
+    prefix_priority = {}
+    prefix_attrs = {}
+    infix_priority = {}
+    infix_attrs = {}
+
     for prio, props in operator_defs:
         sym = props["symbol"]
-        priority[sym] = prio
-        attrs[sym] = props
-    return priority, attrs
+        arity = props.get("arity", 2)
+        if arity == 1 and "position" in props:
+            if props["position"] == "prefix":
+                prefix_priority[sym] = prio
+                prefix_attrs[sym] = props
+            elif props["position"] == "postfix":
+                # 后缀运算符放入中缀表
+                infix_priority[sym] = prio
+                infix_attrs[sym] = props
+        else:
+            infix_priority[sym] = prio
+            infix_attrs[sym] = props
+    return prefix_priority, prefix_attrs, infix_priority, infix_attrs
 
 
-def parse_expression(tokens: list[Token], idx, rbp, priority, attrs):
+# ========== pratt解析器 ==========
+def parse_expression(
+    tokens: List[Token],
+    idx: int,
+    rbp: int,
+    prefix_priority: Dict[str, int],
+    prefix_attrs: Dict[str, Any],
+    infix_priority: Dict[str, int],
+    infix_attrs: Dict[str, Any],
+) -> Tuple[Node, int]:
     """
     递归解析表达式，返回 (Node, 新索引)
-    - tokens: Token 列表
-    - idx: 当前索引
-    - rbp: 右绑定权
-    - priority: {符号: 优先级} 字典
-    - attrs: {符号: 属性字典} 字典
     """
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
-    token: Token = tokens[idx]
 
-    # ---------- 前缀（nud） ----------
+    token = tokens[idx]
+
+    # ---------- 前缀（nud）----------
     if is_number(token):
         node = Node("Number", value=int(token.content))
         idx += 1
     elif is_string(token):
-        # 字符串字面量，去除首尾引号
         s = token.content[1:-1] if len(token.content) >= 2 else token.content
         node = Node("String", value=s)
         idx += 1
@@ -145,41 +162,48 @@ def parse_expression(tokens: list[Token], idx, rbp, priority, attrs):
         idx += 1
     elif is_paren(token) and token.content == "(":
         idx += 1
-        node, idx = parse_expression(tokens, idx, 0, priority, attrs)
+        node, idx = parse_expression(
+            tokens, idx, 0, prefix_priority, prefix_attrs, infix_priority, infix_attrs
+        )
         if idx >= len(tokens) or not (
             is_paren(tokens[idx]) and tokens[idx].content == ")"
         ):
             raise ValueError("缺少右括号")
         idx += 1
-    elif is_operator(token) and token.content in attrs:
-        # 可能是一元前缀运算符
-        props = attrs[token.content]
+    elif is_operator(token) and token.content in prefix_attrs:
+        props = prefix_attrs[token.content]
+        # 处理一元前缀运算符
         if props.get("arity") == 1 and props.get("position") == "prefix":
             op = token.content
             idx += 1
-            # 递归解析右操作数（一元前缀的右绑定权可设为很高，或使用特殊值）
+            # 一元前缀的右绑定权设为很高（例如 100）
             right, idx = parse_expression(
-                tokens, idx, 100, priority, attrs
-            )  # 100 表示很高优先级
+                tokens,
+                idx,
+                100,
+                prefix_priority,
+                prefix_attrs,
+                infix_priority,
+                infix_attrs,
+            )
             node = Node("UnaryOp", op=op, operand=right, position="prefix")
         else:
-            raise ValueError("意外的前缀运算符: " + token.content)
+            # 后缀或未预期的，按普通前缀处理？这里报错
+            raise ValueError(f"不支持的前缀运算符: {token.content}")
     else:
-        raise ValueError(
-            "意外的 token: " + token.content + " (type: " + token.type + ")"
-        )
+        raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 
-    # ---------- 中缀（led） ----------
+    # ---------- 中缀（led）----------
     while idx < len(tokens):
         token = tokens[idx]
         if not is_operator(token):
             break
         op = token.content
-        if op not in attrs:
+        if op not in infix_attrs:
             break
-        props = attrs[op]
-        arity = props.get("arity", 2)  # 默认二元
-        lbp = priority.get(op, 0)
+        props = infix_attrs[op]
+        arity = props.get("arity", 2)
+        lbp = infix_priority.get(op, 0)
         if lbp <= rbp:
             break
 
@@ -187,38 +211,58 @@ def parse_expression(tokens: list[Token], idx, rbp, priority, attrs):
             # 一元后缀运算符
             idx += 1
             node = Node("UnaryOp", op=op, operand=node, position="postfix")
-            # 后缀通常优先级高，不递归右操作数，继续循环检查下一个运算符
+            # 后缀运算符优先级高，不递归右操作数，继续循环
             continue
         elif arity == 2:
-            # 二元运算符
             idx += 1
             assoc = props.get("assoc", "left")
             if assoc == "right":
                 right_node, idx = parse_expression(
-                    tokens, idx, lbp - 1, priority, attrs
+                    tokens,
+                    idx,
+                    lbp - 1,
+                    prefix_priority,
+                    prefix_attrs,
+                    infix_priority,
+                    infix_attrs,
                 )
             else:
-                right_node, idx = parse_expression(tokens, idx, lbp, priority, attrs)
+                right_node, idx = parse_expression(
+                    tokens,
+                    idx,
+                    lbp,
+                    prefix_priority,
+                    prefix_attrs,
+                    infix_priority,
+                    infix_attrs,
+                )
             node = Node("BinaryOp", op=op, left=node, right=right_node)
         elif arity == 3:
-            # 三元运算符（如 ? :）
-            # 假设第一个符号为 op，第二个符号由 props['second'] 指定
             second_sym = props.get("second")
             if not second_sym:
-                raise ValueError("三元运算符缺少第二个符号: " + op)
+                raise ValueError(f"三元运算符缺少第二个符号: {op}")
             idx += 1  # 消费第一个符号
-            # 解析中间操作数
             middle, idx = parse_expression(
-                tokens, idx, 0, priority, attrs
-            )  # 中间操作数优先级为0
-            # 检查第二个符号
+                tokens,
+                idx,
+                0,
+                prefix_priority,
+                prefix_attrs,
+                infix_priority,
+                infix_attrs,
+            )
             if idx >= len(tokens) or tokens[idx].content != second_sym:
-                raise ValueError("缺少三元运算符的第二个符号: " + second_sym)
-            idx += 1  # 消费第二个符号
-            # 解析右操作数
+                raise ValueError(f"缺少三元运算符的第二个符号: {second_sym}")
+            idx += 1
             right, idx = parse_expression(
-                tokens, idx, rbp, priority, attrs
-            )  # 使用当前 rbp
+                tokens,
+                idx,
+                rbp,
+                prefix_priority,
+                prefix_attrs,
+                infix_priority,
+                infix_attrs,
+            )
             node = Node(
                 "TernaryOp",
                 op1=op,
@@ -228,27 +272,31 @@ def parse_expression(tokens: list[Token], idx, rbp, priority, attrs):
                 third=right,
             )
         else:
-            raise ValueError("不支持的运算符元数: " + str(arity))
+            raise ValueError(f"不支持的运算符元数: {arity}")
+
     return node, idx
 
 
-def parse(tokens, operator_defs):
-    """解析 token 列表，返回 AST 根节点"""
-    priority, attrs = build_priority_map(operator_defs)
-    ast, idx = parse_expression(tokens, 0, 0, priority, attrs)
+def parse(tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]) -> Node:
+    """
+    解析 token 列表，返回 AST 根节点
+    """
+    prefix_priority, prefix_attrs, infix_priority, infix_attrs = build_priority_maps(
+        operator_defs
+    )
+    ast, idx = parse_expression(
+        tokens, 0, 0, prefix_priority, prefix_attrs, infix_priority, infix_attrs
+    )
     if idx != len(tokens):
         raise ValueError("解析后有多余的 token")
     return ast
 
 
-# ----------------------------------------------------------------------
-# 测试（修改以适配分层 token 类型）
-# ----------------------------------------------------------------------
+# ========== 测试 ==========
 def test():
     import tempfile
     import os
 
-    # 创建临时配置文件（包含一元、二元、三元运算符）
     config_content = """
 {symbol:"+", arity:2, assoc:"left"}
 {symbol:"-", arity:2, assoc:"left"}
@@ -257,6 +305,7 @@ def test():
 {symbol:"**", arity:2, assoc:"right"}
 {symbol:"!", arity:1, position:"postfix"}
 {symbol:"-", arity:1, position:"prefix"}
+{symbol:"+", arity:1, position:"prefix"}
 {symbol:"?", arity:3, second:":", assoc:"right"}
     """
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
@@ -268,12 +317,6 @@ def test():
         print("运算符定义 (优先级, 属性):")
         for prio, props in operator_defs:
             print("  ", prio, props)
-
-        # 模拟 Token 对象（包含 type 和 content）
-        class MockToken:
-            def __init__(self, content, typ):
-                self.content = content
-                self.type = typ
 
         def tok(content, typ):
             return MockToken(content, typ)
@@ -290,7 +333,7 @@ def test():
         # 测试 2: 一元后缀阶乘
         tokens2 = [
             tok("5", "literal.number"),
-            tok("!", "symbol.base.not"),  # 假设 ! 作为后缀一元
+            tok("!", "symbol.base.not"),
             tok("+", "symbol.base.add"),
             tok("3", "literal.number"),
         ]
@@ -310,10 +353,17 @@ def test():
             tok("**", "symbol.extend.power"),
             tok("2", "literal.number"),
         ]
+        # 测试 5: 一元正号（前缀）与二元加号同时存在
+        tokens5 = [
+            tok("+", "symbol.base.add"),
+            tok("3", "literal.number"),
+            tok("+", "symbol.base.add"),
+            tok("4", "literal.number"),
+        ]
 
-        for i, toks in enumerate([tokens1, tokens2, tokens3, tokens4], 1):
+        for i, toks in enumerate([tokens1, tokens2, tokens3, tokens4, tokens5], 1):
             try:
-                ast = parse(toks, operator_defs)
+                ast = parse(toks, operator_defs)  # type: ignore
                 print(f"\n测试 {i} AST:", ast.dump())
             except Exception as e:
                 print(f"\n测试 {i} 出错:", e)

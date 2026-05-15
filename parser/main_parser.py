@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 from define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
 from parser.feature_analyze import analyze_production_features, ProductionNode
 from parser.parser_context import ParseContext
-from parser.err import _SequenceMatchError, _BranchMatchError
+from err import _SequenceMatchError, _BranchMatchError
 import parser.pratt_parser as pratt_parser
 
 
@@ -29,9 +29,8 @@ class Parser:
         with open(self.debug_log_file, "w") as f:
             f.write("=== Parser Debug Log ===\n")
 
-        # Pratt 解析器集成
         self.operator_defs = self._load_operator_defs()
-        self.priority, self.attrs = pratt_parser.build_priority_map(self.operator_defs)
+
         self.pratt_rules = {
             "Expression",
             "AddExpr",
@@ -135,13 +134,23 @@ class Parser:
             self._log_state(f"未知节点类型: {node.type}")
             return None
 
-    def _try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> bool:
-        """尝试匹配规则的所有产生式"""
+    def _try_rule_productions(
+        self, context: ParseContext, rule: GrammarRule
+    ) -> Optional[Node]:
+        # Pratt 规则特殊处理：直接返回 Pratt 解析结果
         if rule.name in self.pratt_rules:
             return self._try_pratt_rule(context, rule)
 
         self._log_state(f"尝试匹配规则: {rule.name}")
+        # 设置当前规则，用于 _parse_normal 中的属性绑定
         context.update_current_rule(rule)
+
+        # 为当前规则创建新节点
+        rule_node = Node(rule.name)
+        old_node = context.current_node
+        context.update_current_node(rule_node)
+
+        all_matched_nodes = []
 
         for prod in rule.production:
             if not context.has_more_tokens():
@@ -152,50 +161,85 @@ class Parser:
                 continue
 
             snapshot = context.create_snapshot()
-            # 递归处理产生式树
             result_node = self._process_production_node(features, context)
             if result_node is None:
                 context.restore_snapshot(snapshot)
+                # 恢复父节点并清除 current_rule ？不必，因为会返回 None 并恢复快照，快照会恢复 current_rule
+                context.update_current_node(old_node)
                 self._log_state(f"产生式 {prod} 匹配失败")
-                return False
-            context.current_node.add_child(result_node)
+                return None
+            all_matched_nodes.append(result_node)
+
+        # 所有产生式匹配成功，将子节点添加到规则节点
+        for node in all_matched_nodes:
+            rule_node.add_child(node)
+
+        # 绑定属性（根据 rule.node 映射）
+        for attr_name, pos_str in rule.node.items():
+            try:
+                pos = int(pos_str.strip("$")) - 1
+                if 0 <= pos < len(all_matched_nodes):
+                    sub_node = all_matched_nodes[pos]
+                    # 提取属性值
+                    if (
+                        hasattr(sub_node, "value")
+                        and sub_node.name not in self.grammar_rules
+                    ):
+                        attr_value = sub_node.value
+                    else:
+                        attr_value = sub_node
+                    rule_node.add_attr(attr_name, attr_value)
+            except (ValueError, IndexError):
+                continue
 
         # 检查结束符
         if context.has_more_tokens():
             token = context.peek_token()
             if token and token.type not in rule.end_case:
-                return False
-        return True
+                context.update_current_node(old_node)
+                return None
 
-    def _try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> bool:
+        # 恢复父节点
+        context.update_current_node(old_node)
+        self._log_state(f"规则 {rule.name} 匹配成功")
+        return rule_node
+
+    def _try_pratt_rule(
+        self, context: ParseContext, rule: GrammarRule
+    ) -> Optional[Node]:
         self._log_state(f"使用 Pratt 解析器解析规则: {rule.name}")
+        # 对于 Pratt 规则，不需要设置 current_rule（因为不经过 _parse_normal）
         start_idx = context.token_pointer
-        tokens_slice = []
+        if not context.has_more_tokens():
+            self._log_state("Pratt 解析: 没有可用 token")
+            return None
+
+        expr_tokens = []
         ptr = start_idx
+        skip_types = {"newline", "comment"}
         while ptr < len(context.tokens):
             tok = context.tokens[ptr]
             if tok.type in rule.end_case:
                 break
-            tokens_slice.append(tok)
+            if tok.type in skip_types or tok.type.startswith("space"):
+                ptr += 1
+                continue
+            expr_tokens.append(tok)
             ptr += 1
-        if not tokens_slice:
+
+        if not expr_tokens:
             self._log_state("Pratt 解析: 没有可用于解析的 token")
-            return False
+            return None
 
         try:
-            ast_node = pratt_parser.parse(tokens_slice, self.operator_defs)
+            ast_node = pratt_parser.parse(expr_tokens, self.operator_defs)
         except Exception as e:
             self._log_state(f"Pratt 解析失败: {e}")
-            return False
+            return None
 
-        context.current_node.add_child(ast_node)
-        context.advance_token(len(tokens_slice))
-        peek_token = context.peek_token()
-        if not peek_token:
-            return False
-        if context.has_more_tokens() and peek_token.type in rule.end_case:
-            context.advance_token()
-        return True
+        context.token_pointer = ptr
+        self._log_state(f"Pratt 解析成功，消耗了 {ptr - start_idx} 个 token")
+        return ast_node
 
     def _parse_normal(self, token_type: str, context: ParseContext) -> Optional[Node]:
         self.parser_current_state = "normal"
@@ -245,25 +289,19 @@ class Parser:
             self._log_state(f"语法规则 {rule_name} 不存在")
             return None
 
-        # 创建代表该语法调用的新节点
         node = Node(rule_name)
-        old_node = context.current_node  # 保存父节点
+        old_node = context.current_node
+        snapshot = context.create_snapshot()
+        context.update_current_node(node)
 
-        with context:
-            # 在子规则解析期间，将当前节点切换为新节点
-            context.update_current_node(node)
-            target_rule = self.grammar_rules[rule_name]
+        target_rule = self.grammar_rules[rule_name]
+        if not self._try_rule_productions(context, target_rule):
+            context.restore_snapshot(snapshot)  # 失败时回滚
+            self._log_state(f"语法调用 @{rule_name} 匹配失败")
+            return None
 
-            if not self._try_rule_productions(context, target_rule):
-                self._log_state(f"语法调用 @{rule_name} 匹配失败")
-                # 失败时恢复父节点（快照恢复会同时恢复 token 指针和 current_node 快照，
-                # 但显式恢复更安全且便于理解）
-                context.update_current_node(old_node)
-                return None
-
-            # 匹配成功，恢复父节点
-            context.update_current_node(old_node)
-
+        # 成功：丢弃快照，恢复父节点引用
+        context.update_current_node(old_node)
         self._log_state(f"语法调用 @{rule_name} 解析成功")
         return node
 
@@ -369,20 +407,20 @@ class Parser:
     def parse(self, tokens: List[Token]) -> Optional[Node]:
         if not tokens:
             return None
-
         context = ParseContext(tokens, self.root_node)
         first_token = tokens[0]
-
         possible_rules = self._search_grammar_rule(first_token)
         if not possible_rules:
             self._log_state(f"无匹配的顶层规则 for token: {first_token.type}")
             return None
-
         for rule in possible_rules:
-            with context:
-                if self._try_rule_productions(context, rule):
-                    self._log_state(f"成功匹配顶层规则: {rule.name}")
-                    return context.root_node
-
+            snapshot = context.create_snapshot()
+            result_node = self._try_rule_productions(context, rule)
+            if result_node is not None:
+                self.root_node.add_child(result_node)
+                self._log_state(f"成功匹配顶层规则: {rule.name}")
+                return self.root_node
+            else:
+                context.restore_snapshot(snapshot)
         self._log_state("所有顶层规则匹配失败")
         return None

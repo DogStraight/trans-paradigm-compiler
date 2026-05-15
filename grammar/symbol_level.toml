@@ -107,34 +107,34 @@ symbol = "**"
 arity = 2
 assoc = "right"
 
-# 一元前缀运算符
-[[operator]]
-symbol = "+"
-arity = 1
-position = "prefix"
+# # 一元前缀运算符
+# [[operator]]
+# symbol = "+"
+# arity = 1
+# position = "prefix"
 
-[[operator]]
-symbol = "-"
-arity = 1
-position = "prefix"
+# [[operator]]
+# symbol = "-"
+# arity = 1
+# position = "prefix"
 
-[[operator]]
-symbol = "~"
-arity = 1
-position = "prefix"
+# [[operator]]
+# symbol = "~"
+# arity = 1
+# position = "prefix"
 
-[[operator]]
-symbol = "!"
-arity = 1
-position = "prefix"
+# [[operator]]
+# symbol = "!"
+# arity = 1
+# position = "prefix"
 
-# 一元后缀运算符
-[[operator]]
-symbol = "++"
-arity = 1
-position = "postfix"
+# # 一元后缀运算符
+# [[operator]]
+# symbol = "++"
+# arity = 1
+# position = "postfix"
 
-[[operator]]
-symbol = "--"
-arity = 1
-position = "postfix"
+# [[operator]]
+# symbol = "--"
+# arity = 1
+# position = "postfix"

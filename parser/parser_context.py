@@ -78,3 +78,12 @@ class ParseContext:
         """查看指定偏移的token（不移动指针）"""
         pos = self.token_pointer + offset
         return self.tokens[pos] if pos < len(self.tokens) else None
+
+    def check_end_case(self, end_case: list[str]) -> bool:
+        """检查当前 token 是否属于结束符集合（或已无更多 token）"""
+        if not self.has_more_tokens():
+            return True
+        next_token = self.peek_token()
+        if next_token is None:
+            return True
+        return next_token.type in end_case
