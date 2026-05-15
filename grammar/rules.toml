@@ -1,2 +1,86 @@
+[Constant]
+production = ["literal.number"]
+[Constant.node]
+value = "$1"
 
+[Variable]
+production = ["id"]
+[Variable.node]
+name = "$1"
 
+[VarDef]
+production = [
+    "id",
+    "symbol.base.colon",
+    "id",
+    "symbol.base.equal",
+    "@Expression",
+]
+[VarDef.node]
+name = "$1"
+type = "$3"
+value = "$5"
+
+# Parenthesized expressions
+[ParenthesizedExpr]
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+[ParenthesizedExpr.node]
+expr = "$2"
+
+# Primary expressions (atoms)
+[PrimaryExpr]
+production = ["@Constant|@Variable|@ParenthesizedExpr"]
+[PrimaryExpr.node]
+value = "$1"
+
+# 乘除运算符单元
+[MulOp]
+production = ["symbol.base.multiple|symbol.base.div"]
+[MulOp.node]
+op = "$1"
+
+# 乘除表达式
+[MulExpr]
+production = ["@PrimaryExpr", "(@MulOp,@PrimaryExpr)*"]
+[MulExpr.node]
+head = "$1" # 第一个PrimaryExpr
+tail = "$2" # 后续的 (操作符 操作数) 重复序列
+
+# 加减运算符单元
+[AddOp]
+production = ["symbol.base.add|symbol.base.sub"]
+[AddOp.node]
+op = "$1"
+
+# 加减表达式
+[AddExpr]
+production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
+[AddExpr.node]
+head = "$1" # 第一个MulExpr
+tail = "$2" # 后续的 (操作符 操作数) 重复序列
+
+# 比较表达式
+[CompareExpr]
+production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
+[CompareExpr.node]
+left = "$1"
+op_rhs = "$2" # 可选部分：操作符和右操作数
+
+[CmpOp]
+production = [
+    "symbol.extend.is_equal|symbol.extend.not_equal|symbol.base.bigger|symbol.base.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
+]
+[CmpOp.node]
+op = "$1"
+
+# 布尔表达式
+[BoolExpr]
+production = ["@CompareExpr|literal.bool_true|literal.bool_false"]
+[BoolExpr.node]
+value = "$1"
+
+# 顶层表达式
+[Expression]
+production = ["@AddExpr|@BoolExpr"]
+[Expression.node]
+expr = "$1"

@@ -1,7 +1,4 @@
-from typing import Generator
 from toml import loads as toml_loads
-from copy import deepcopy
-
 from define import Token
 from define import FileManager
 from err import IndentationError, UnexpectedTokenError
@@ -15,7 +12,22 @@ def get_token_define(
     return token_define_dict
 
 
-class PyvLexer:
+# 如果使能这个装饰器，则将返回的当前的token值的类型做一次简化，
+# 只保留最后一个字段，如 keyword.if -> if
+def simplify_output(is_simplify: bool):
+    def inner(func):
+        def wrapper(*args, **kwargs):
+            tokens: list[Token] = func(*args, **kwargs)
+            for token in tokens:
+                token.type = token.type.split(".")[-1] if is_simplify else token.type
+            return tokens
+
+        return wrapper
+
+    return inner
+
+
+class Lexer:
     token_define: dict = {}
 
     def __init__(self, token_define_dict: dict = get_token_define()) -> None:
@@ -38,8 +50,8 @@ class PyvLexer:
         self.output_comments = False
         pass
 
-    # Generator[Token, None, None] no send method, no return value
-    def tokenize(self, lex_text: str) -> Generator[Token, None, None]:
+    @simplify_output(False)
+    def tokenize(self, lex_text: str) -> list[Token]:
         lex_text_len: int = len(lex_text)
         lex_text = lex_text + "\n"  # add a newline at the end
 
@@ -48,10 +60,13 @@ class PyvLexer:
         line_number: int = 1
         start_point: int = 0
 
-        # token container
-        current_token: Token = Token()
+        # tokens
+        tokens = []
 
         while text_idx < lex_text_len:
+            # token container
+            current_token: Token = Token()
+
             # reset offset
             offset = 0
 
@@ -76,7 +91,7 @@ class PyvLexer:
                 text_idx += 1
                 start_point = 0
                 current_token = self.refine_type(current_token)
-                yield current_token
+                tokens.append(current_token)
                 continue
 
             # in case current char is a space
@@ -104,7 +119,7 @@ class PyvLexer:
                 if current_token.type == "space":
                     pass
                 else:
-                    yield current_token
+                    tokens.append(current_token)
                 continue
 
             # in case current char is a symbol
@@ -128,7 +143,7 @@ class PyvLexer:
                 # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
-                yield current_token
+                tokens.append(current_token)
                 continue
 
             # in case current char is a bracket
@@ -144,7 +159,7 @@ class PyvLexer:
                 text_idx += 1
                 start_point += 1
                 current_token = self.refine_type(current_token)
-                yield current_token
+                tokens.append(current_token)
                 continue
 
             # in case current char in comment
@@ -167,7 +182,7 @@ class PyvLexer:
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 if self.output_comments:
-                    yield current_token
+                    tokens.append(current_token)
                 continue
 
             # in case current char is an id
@@ -193,7 +208,7 @@ class PyvLexer:
                 # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
-                yield current_token
+                tokens.append(current_token)
                 continue
 
             # in case current char is a number
@@ -218,7 +233,7 @@ class PyvLexer:
                 # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
-                yield current_token
+                tokens.append(current_token)
                 continue
 
             # in case current char is in string
@@ -244,7 +259,7 @@ class PyvLexer:
                 # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
-                yield current_token
+                tokens.append(current_token)
                 continue
 
             # in case current char has nowhere to put
@@ -259,8 +274,8 @@ class PyvLexer:
                 text_idx += 1
                 start_point += 1
                 current_token = self.refine_type(current_token)
-                yield current_token
-        pass
+                tokens.append(current_token)
+        return tokens
 
     # only use in method tokenize
     def refine_type(self, _token: Token) -> Token:
@@ -352,32 +367,17 @@ class PyvLexer:
         self.previous_token_type = _token.type
         return _token
 
-    def return_token_list(self, input_str: str) -> list:
-        """返回Token列表"""
-        token_generator = self.tokenize(input_str)
-        token_list = []
-        for token in token_generator:
-            token_copy = deepcopy(token)
-            token_list.append(token_copy)
-        return token_list
 
-Lexer = PyvLexer
-
+# 这个测试适用于 simplify_output 装饰器参数为False的情况
 if __name__ == "__main__":
 
     def run_lexer_test(test_name, input_str, expected_types):
         """运行词法分析器测试"""
         print(f"\n=== {test_name} ===")
-        lexer = PyvLexer()
+        lexer = Lexer()
 
-        # 立即将生成器转换为列表备份
-        token_generator = lexer.tokenize(input_str)
-        tokens = []
-        import copy
-
-        for token in token_generator:
-            token_copy = copy.deepcopy(token)
-            tokens.append(token_copy)
+        # 直接获取token列表
+        tokens = lexer.tokenize(input_str)
 
         print(f"输入: {input_str}")
         print("Token分析结果:")

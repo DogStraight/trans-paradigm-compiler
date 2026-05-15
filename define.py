@@ -35,10 +35,9 @@ from typing import Union
 @dataclass
 class FileManager:
     _base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    rules_file: str = "/grammar/rules.toml"
-    token_define_file: str = "/grammar/token.toml"
-    lookup_file: str = "/grammar/production_lookup.toml"
-    test_lookup_file: str = "/grammar/test_production_lookup.toml"
+    rules_file: str = "pyv_compiler/grammar/rules.toml"
+    token_define_file: str = "pyv_compiler/grammar/token.toml"
+    lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:
@@ -48,7 +47,7 @@ class FileManager:
     @classmethod
     def read_file(cls, relative_path: str) -> str:
         """Read file content from relative path"""
-        with open(cls.get_full_path(relative_path), "r") as f:
+        with open(cls.get_full_path(relative_path), "r", encoding="utf-8") as f:
             return f.read()
 
     @classmethod
@@ -56,8 +55,6 @@ class FileManager:
         """Write content to file at relative path"""
         with open(cls.get_full_path(relative_path), "w") as f:
             if isinstance(content, dict):
-                import toml
-
                 toml.dump(content, f)
             else:
                 f.write(content)
@@ -74,15 +71,6 @@ class FileManager:
             rules_file = cls.rules_file
         rules_content = cls.read_file(rules_file)
         return toml.loads(rules_content)
-
-
-def load_rule(name, rule_content) -> GrammarRule:
-    return GrammarRule(
-        name=name,
-        production=rule_content["production"],
-        end_case=rule_content["end_case"],
-        node=rule_content["node"],
-    )
 
 
 from err import BracketMismatchError
@@ -154,12 +142,11 @@ class GrammarRulesRegister:
             rule: GrammarRule = GrammarRule(
                 rule_name,
                 rule_dict["production"],
-                rule_dict["end_case"],
+                rule_dict["end_case"] if "end_case" in rule_dict else ["newline"],
                 rule_dict["node"],
             )
             self.rules[rule_name] = rule
         return self.rules
-
 
 class Node:
     def __init__(self, name: str, **kwargs) -> None:
@@ -179,6 +166,25 @@ class Node:
             else:
                 dump_dict[attr] = value.dump() if isinstance(value, Node) else value
         return {self.name: dump_dict}
+
+    def inherit(self, node: "Node") -> None:
+        for attr, value in node.__dict__.items():
+            if attr == "name":
+                continue
+            if isinstance(value, list):
+                if not hasattr(self, attr):
+                    setattr(self, attr, [])
+                getattr(self, attr).extend(value)
+            else:
+                setattr(self, attr, value)
+
+    def add_child(self, child: "Node") -> None:
+        if not hasattr(self, "child"):
+            setattr(self, "child", [])
+        getattr(self, "child").append(child)
+
+    def add_attr(self, attr_name: str, attr_value) -> None:
+        setattr(self, attr_name, attr_value)
 
     def __str__(self) -> str:
         attrs = {k: v for k, v in self.__dict__.items() if k != "name"}
