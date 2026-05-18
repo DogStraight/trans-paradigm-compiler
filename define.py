@@ -148,6 +148,7 @@ class GrammarRulesRegister:
             self.rules[rule_name] = rule
         return self.rules
 
+
 class Node:
     def __init__(self, name: str, **kwargs) -> None:
         self.name = name
@@ -184,12 +185,14 @@ class Node:
         getattr(self, "child").append(child)
 
     def add_attr(self, attr_name: str, attr_value) -> None:
+        if attr_name == "name" and self.name != "root":
+            # 避免覆盖节点类型名，改用 identifier
+            attr_name = "identifier"
         setattr(self, attr_name, attr_value)
 
     def __str__(self) -> str:
         attrs = {k: v for k, v in self.__dict__.items() if k != "name"}
-        return f"{self.name}({', '.join(f'{k}={v}' for k,v in attrs.items())})"
+        return f'{self.name}({", ".join(f"{k}={v}" for k,v in attrs.items())})'
 
     def __repr__(self) -> str:
-        attrs = {k: v for k, v in self.__dict__.items() if k != "name"}
-        return f"<Node {self.name} {attrs}>"
+        return f'"{self.name}"'

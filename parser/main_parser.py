@@ -1,6 +1,6 @@
 import re
 import toml
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
 from parser.feature_analyze import analyze_production_features, ProductionNode
 from parser.parser_context import ParseContext
@@ -134,6 +134,26 @@ class Parser:
             self._log_state(f"未知节点类型: {node.type}")
             return None
 
+    def _flatten_node(self, node: Node) -> Any:
+        """
+        将叶子节点（token 节点或只有单个属性的节点）转换为基本类型。
+        """
+        # 如果是语法规则节点，保留原样（除非内联标记处理过）
+        if node.name in self.grammar_rules:
+            return node
+
+        # 获取除 name 和 child 外的所有属性
+        attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
+
+        # 如果只有一个属性且该属性是基本类型，返回该属性值
+        if len(attrs) == 1:
+            only_value = list(attrs.values())[0]
+            if not isinstance(only_value, (Node, list, dict)):
+                return only_value
+
+        # 否则返回原节点
+        return node
+
     def _try_rule_productions(
         self, context: ParseContext, rule: GrammarRule
     ) -> Optional[Node]:
@@ -170,24 +190,18 @@ class Parser:
                 return None
             all_matched_nodes.append(result_node)
 
-        # 所有产生式匹配成功，将子节点添加到规则节点
-        for node in all_matched_nodes:
-            rule_node.add_child(node)
-
         # 绑定属性（根据 rule.node 映射）
         for attr_name, pos_str in rule.node.items():
+            if not isinstance(pos_str, str):
+                continue
             try:
                 pos = int(pos_str.strip("$")) - 1
                 if 0 <= pos < len(all_matched_nodes):
                     sub_node = all_matched_nodes[pos]
-                    # 提取属性值
-                    if (
-                        hasattr(sub_node, "value")
-                        and sub_node.name not in self.grammar_rules
-                    ):
-                        attr_value = sub_node.value
-                    else:
-                        attr_value = sub_node
+                    # 压平节点
+                    attr_value = self._flatten_node(sub_node)
+                    if attr_name == "name":  # 避免覆盖节点类型名
+                        attr_name = "identifier"
                     rule_node.add_attr(attr_name, attr_value)
             except (ValueError, IndexError):
                 continue
@@ -282,28 +296,17 @@ class Parser:
     def _parse_grammar_call(
         self, rule_name: str, context: ParseContext
     ) -> Optional[Node]:
-        self.parser_current_state = "grammar_call"
-        self._log_state(f"解析语法调用: @{rule_name}")
-
-        if rule_name not in self.grammar_rules:
-            self._log_state(f"语法规则 {rule_name} 不存在")
-            return None
-
-        node = Node(rule_name)
         old_node = context.current_node
         snapshot = context.create_snapshot()
-        context.update_current_node(node)
 
         target_rule = self.grammar_rules[rule_name]
-        if not self._try_rule_productions(context, target_rule):
-            context.restore_snapshot(snapshot)  # 失败时回滚
-            self._log_state(f"语法调用 @{rule_name} 匹配失败")
+        result_node = self._try_rule_productions(context, target_rule)
+        if result_node is None:
+            context.restore_snapshot(snapshot)
             return None
 
-        # 成功：丢弃快照，恢复父节点引用
         context.update_current_node(old_node)
-        self._log_state(f"语法调用 @{rule_name} 解析成功")
-        return node
+        return result_node
 
     def _parse_sequence_nodes(
         self, child: List[ProductionNode], context: ParseContext
