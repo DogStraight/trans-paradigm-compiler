@@ -1,109 +1,120 @@
-from typing import Optional, Tuple
+# feature_analyze.py
+from typing import Optional, Tuple, Dict, Any
 import re
 
 
-class ProductionNode:
-    def __init__(self, type: str, value: str, child: list["ProductionNode"]) -> None:
-        self.type = type
-        self.value = value
-        self.child = child
-
-
-def analyze_production_features(production: str) -> Optional[ProductionNode]:
+def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
     """
-    分析产生式特征（返回树形结构），作为独立函数（staticmethod）
-
-    Args:
-        production: 产生式字符串
-
-    Returns:
-        ProductionNode: 产生式特征树的根节点（None表示空产生式）
+    分析产生式字符串，返回纯字典结构的中间 AST。
+    支持后缀操作符：
+        *  零次或多次 -> {"type": "repeat", "elem": ...}
+        +  一次或多次 -> {"type": "plus", "elem": ...}
+        ?  零次或一次 -> {"type": "optional", "elem": ...}
     """
+    placeholder_map: Dict[str, Optional[Dict[str, Any]]] = {}
 
-    def find_outermost_paren(s: str) -> Tuple[int, int] | None:
-        """找到最外层括号的起止索引（优先处理最外层）"""
+    def find_outermost_paren(s: str) -> Optional[Tuple[int, int]]:
         stack = []
-        outermost = None
-        for i, c in enumerate(s):
-            if c == "(":
+        for i, ch in enumerate(s):
+            if ch == "(":
                 stack.append(i)
-            elif c == ")" and stack:
+            elif ch == ")" and stack:
                 start = stack.pop()
-                if not stack:  # 栈空 = 最外层括号
-                    outermost = (start, i)
-        return outermost
+                if not stack:
+                    return (start, i)
+        return None
 
-    # 用于保存括号节点，避免重复构建
-    node_dict = {}
-
-    def build_tree(s: str) -> Optional[ProductionNode]:
-        """递归构建产生式特征树"""
+    def build_tree(s: str) -> Optional[Dict[str, Any]]:
         s = s.strip().replace(" ", "")
         if not s:
             return None
 
-        # 1. 优先处理最外层括号
+        # 1. 括号占位
         paren = find_outermost_paren(s)
         if paren:
-
             start, end = paren
-            before = s[:start].strip()  # 括号前的内容
-            inner = s[start + 1 : end].strip()  # 括号内的内容
-            after = s[end + 1 :].strip()  # 括号后的内容
-            inner_node = build_tree(inner)
-            # 生成稳定的 8 位十六进制 id（去符号并取低 32 位，然后零填充为8位小写 hex）
-            hex_id = f"{(abs(hash(inner)) & 0xFFFFFFFF):08x}"
-            node_dict[f"paren_{hex_id}"] = (inner_node, inner)
-            s = "".join([before, f"paren_{hex_id}", after])
-            return build_tree(s)
+            before = s[:start]
+            inner = s[start + 1 : end]
+            after = s[end + 1 :]
+            inner_ast = build_tree(inner)
+            placeholder = f"__paren_{len(placeholder_map)}__"
+            placeholder_map[placeholder] = inner_ast
+            new_s = before + placeholder + after
+            return build_tree(new_s)
 
-        # 匹配形如 "paren_0123abcd" 的键（8 位十六进制）
-        if re.match(r"^paren_[0-9a-f]{8}$", s):
-            return node_dict[s][0]
+        if s in placeholder_map:
+            return placeholder_map[s]
 
-        # 2. 处理序列（,）：分割后递归构建子节点
-        if "," in s:
-            parts = [p.strip() for p in s.split(",") if p.strip()]
-            child_nodes = [node for part in parts if (node := build_tree(part))]
-            return ProductionNode(type="sequence", value="", child=child_nodes)
-
-        # 3. 处理分支（|）：分割后递归构建子节点
+        # 2. 分支 '|'
         if "|" in s:
             parts = [p.strip() for p in s.split("|") if p.strip()]
-            child_nodes = [node for part in parts if (node := build_tree(part))]
-            return ProductionNode(type="branch", value="", child=child_nodes)
+            return {
+                "type": "choice",
+                "alternatives": [
+                    build_tree(p) for p in parts if build_tree(p) is not None
+                ],
+            }
 
-        # 4. 处理重复（*）：作用于整个前置单元
+        # 3. 序列 ','
+        if "," in s:
+            parts = [p.strip() for p in s.split(",") if p.strip()]
+            return {
+                "type": "seq",
+                "items": [build_tree(p) for p in parts if build_tree(p) is not None],
+            }
+
+        # 4. 后缀运算符（优先级最高）：'+', '*', '?'
+        if s.endswith("+"):
+            base = s[:-1].strip()
+            return {"type": "plus", "elem": build_tree(base)}
         if s.endswith("*"):
             base = s[:-1].strip()
-            base = base if base not in node_dict.keys() else node_dict[base][1]
-            base_node = build_tree(base)
-            return ProductionNode(
-                type="repeat", value=base, child=[base_node] if base_node else []
-            )
-
-        # 5. 处理可选（?）：作用于整个前置单元
+            return {"type": "repeat", "elem": build_tree(base)}
         if s.endswith("?"):
             base = s[:-1].strip()
-            base = base if base not in node_dict.keys() else node_dict[base][1]
-            base_node = build_tree(base)
-            return ProductionNode(
-                type="optional", value=base, child=[base_node] if base_node else []
-            )
+            return {"type": "optional", "elem": build_tree(base)}
 
-        # 6. 处理语法调用（@）：无子女，value存去掉@的名称
-        if s.startswith("@") and len(s) > 1 and s[1:].isalnum():
-            base = s[1:]
-            return ProductionNode(type="grammar_call", value=base, child=[])
+        # 5. 语法调用 '@Rule'
+        if (
+            s.startswith("@")
+            and len(s) > 1
+            and re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", s[1:])
+        ):
+            return {"type": "call", "name": s[1:]}
 
-        # 7. 普通token：无子女，value存token名称
+        # 6. 普通 token
         if re.match(r"^[a-zA-Z_\.]+$", s):
-            return ProductionNode(type="normal", value=s, child=[])
+            return {"type": "token", "value": s}
 
-        # 无效格式抛出异常
-        raise Exception(f"无效的产生式格式: {s}")
+        raise ValueError(f"无效的产生式片段: {s}")
 
     try:
         return build_tree(production)
     except Exception as e:
         raise Exception(f"分析产生式失败 {production}: {str(e)}")
+
+
+if __name__ == "__main__":
+    test_cases = [
+        "id",
+        "@Expression",
+        "symbol.base.colon",
+        "(@MulOp,@PrimaryExpr)*",
+        "literal.number|literal.string",
+        "(@VarDef|newline)*",
+        "(id , symbol.base.colon , id , symbol.base.equal , @Expression)?",
+        "id.keyword.if, @Expression, @Block",
+        "id+",
+        "(@Expr)+",
+        "(id , symbol.base.colon , @Type)+",
+        "literal+ | @FuncCall+",
+        "(@Stmt|newline)*",
+    ]
+    for prod in test_cases:
+        try:
+            ast = analyze_production_features(prod)
+            print(f"产生式: {prod}")
+            print(f"AST: {ast}")
+            print("-" * 60)
+        except Exception as e:
+            print(f"失败: {prod} -> {e}")

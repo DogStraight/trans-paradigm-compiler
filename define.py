@@ -135,6 +135,7 @@ class GrammarRule:
 class GrammarRulesRegister:
     def __init__(self):
         self.rules = {}
+        
 
     def rules_registration(self) -> dict[str, GrammarRule]:
         rules_dict = FileManager.load_rules()
@@ -152,6 +153,7 @@ class GrammarRulesRegister:
 class Node:
     def __init__(self, name: str, **kwargs) -> None:
         self.name = name
+        self.child = []
         for key, value in kwargs.items():
             setattr(self, key, value)
 

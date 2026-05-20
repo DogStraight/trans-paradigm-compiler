@@ -73,14 +73,47 @@ production = [
 [CmpOp.node]
 op = "$1"
 
-# 布尔表达式
-[BoolExpr]
-production = ["@CompareExpr|literal.bool_true|literal.bool_false"]
-[BoolExpr.node]
-value = "$1"
 
 # 顶层表达式
 [Expression]
 production = ["@AddExpr|@BoolExpr"]
 [Expression.node]
 expr = "$1"
+
+
+[LogicOp]
+production = [
+    "id.keyword.logic_add|id.keyword.logic_or|symbol.base.and|symbol.base.or",
+]
+[LogicOp.node]
+op = "$1"
+
+[BoolExpr]
+production = ["@CompareExpr", "(@LogicOp,@CompareExpr)*"]
+[BoolExpr.node]
+head = "$1"
+tail = "$2"
+
+
+[Program]
+production = ["(@VarDef|newline)*"]
+[Program.node]
+statements = "$1"
+
+
+[Arguments]
+production = ["@Expression", "(symbol.base.comma,@Expression)*"]
+[Arguments.node]
+first = "$1"
+rest = "$2"
+
+[Call]
+production = [
+    "id",
+    "bracket.l_parentheses",
+    "@Arguments?",
+    "bracket.r_parentheses",
+]
+[Call.node]
+name = "$1"
+args = "$3"

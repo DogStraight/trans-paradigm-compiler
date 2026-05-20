@@ -2,7 +2,7 @@ import re
 import toml
 from typing import Optional, List, Dict, Any
 from define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
-from parser.feature_analyze import analyze_production_features, ProductionNode
+from parser.feature_analyze import analyze_production_features
 from parser.parser_context import ParseContext
 from err import _SequenceMatchError, _BranchMatchError
 import parser.pratt_parser as pratt_parser
@@ -38,6 +38,10 @@ class Parser:
             "CompareExpr",
             "BoolExpr",
         }
+
+        self.statement_rule_names = [
+            name for name in self.grammar_rules if name not in self.pratt_rules
+        ]
 
     def _load_operator_defs(self) -> List[tuple]:
         path = FileManager.get_full_path("pyv_compiler/grammar/symbol_level.toml")
@@ -78,13 +82,13 @@ class Parser:
         return possible_rules if possible_rules else None
 
     def _features_can_start_with_token(
-        self, node: ProductionNode, token: Token, visited: set
+        self, node: dict, token: Token, visited: set
     ) -> bool:
-        """递归判断 ProductionNode 树是否可能以给定 token 开始"""
-        if node.type == "normal":
-            return node.value == token.type
-        elif node.type == "grammar_call":
-            rule_name = node.value
+        typ = node["type"]
+        if typ == "token":
+            return node["value"] == token.type
+        elif typ == "call":
+            rule_name = node["name"]
             if rule_name in visited:
                 return False
             if rule_name not in self.grammar_rules:
@@ -98,40 +102,57 @@ class Parser:
                 ):
                     return True
             return False
-        elif node.type == "sequence":
-            if not node.child:
+        elif typ == "seq":
+            items = node.get("items", [])
+            if not items:
                 return False
-            return self._features_can_start_with_token(node.child[0], token, visited)
-        elif node.type == "branch":
-            for child in node.child:
-                if self._features_can_start_with_token(child, token, visited):
+            return self._features_can_start_with_token(items[0], token, visited)
+        elif typ == "choice":
+            for alt in node.get("alternatives", []):
+                if self._features_can_start_with_token(alt, token, visited):
                     return True
             return False
-        elif node.type in ("repeat", "optional"):
-            if not node.child:
+        elif typ in ("repeat", "optional"):
+            elem = node.get("elem")
+            if elem is None:
                 return False
-            return self._features_can_start_with_token(node.child[0], token, visited)
+            return self._features_can_start_with_token(elem, token, visited)
         else:
             return False
 
+    def _get_candidate_rules(self, token: Token) -> List[GrammarRule]:
+        """根据 token 返回可能匹配的语句规则列表，顺序由 statement_rule_names 决定"""
+        possible = self._search_grammar_rule(token)
+        if not possible:
+            return []
+        # 构建名称到规则的映射
+        rule_map = {rule.name: rule for rule in possible}
+        # 按照 statement_rule_names 的顺序筛选出存在的规则
+        ordered = [
+            rule_map[name] for name in self.statement_rule_names if name in rule_map
+        ]
+        return ordered
+
     def _process_production_node(
-        self, node: ProductionNode, context: ParseContext
+        self, node: dict, context: ParseContext
     ) -> Optional[Node]:
-        """递归处理产生式树节点，返回解析后的 Node 或 None"""
-        if node.type == "normal":
-            return self._parse_normal(node.value, context)
-        elif node.type == "grammar_call":
-            return self._parse_grammar_call(node.value, context)
-        elif node.type == "sequence":
-            return self._parse_sequence_nodes(node.child, context)
-        elif node.type == "branch":
-            return self._parse_branch_nodes(node.child, context)
-        elif node.type == "repeat":
-            return self._parse_repeat_nodes(node.child, context)
-        elif node.type == "optional":
-            return self._parse_optional_nodes(node.child, context)
+        typ = node["type"]
+        if typ == "token":
+            return self._parse_normal(node["value"], context)
+        elif typ == "call":
+            return self._parse_grammar_call(node["name"], context)
+        elif typ == "seq":
+            return self._parse_sequence_items(node["items"], context)
+        elif typ == "choice":
+            return self._parse_choice_alternatives(node["alternatives"], context)
+        elif typ == "repeat":
+            return self._parse_repeat_elem(node["elem"], context)
+        elif typ == "optional":
+            return self._parse_optional_elem(node["elem"], context)
+        elif typ == "plus":  # 如果支持了 '+'
+            return self._parse_plus_elem(node["elem"], context)
         else:
-            self._log_state(f"未知节点类型: {node.type}")
+            self._log_state(f"未知节点类型: {typ}")
             return None
 
     def _flatten_node(self, node: Node) -> Any:
@@ -308,122 +329,149 @@ class Parser:
         context.update_current_node(old_node)
         return result_node
 
-    def _parse_sequence_nodes(
-        self, child: List[ProductionNode], context: ParseContext
+    def _parse_sequence_items(
+        self, items: List[dict], context: ParseContext
     ) -> Optional[Node]:
         self.parser_current_state = "sequence"
         self._log_state("解析序列节点")
-
         try:
             with context:
                 seq_node = Node("sequence")
-                for c in child:
-                    result = self._process_production_node(c, context)
+                for item in items:
+                    result = self._process_production_node(item, context)
                     if result is None:
                         raise _SequenceMatchError()
                     seq_node.add_child(result)
-                # 序列全部匹配成功
                 self._log_state("序列解析成功")
                 return seq_node
         except _SequenceMatchError:
-            # 异常触发回滚后，with 块已恢复快照，我们只需返回 None
             self._log_state("序列项匹配失败")
             return None
 
-    def _parse_branch_nodes(
-        self, child: List[ProductionNode], context: ParseContext
+    def _parse_choice_alternatives(
+        self, alternatives: List[dict], context: ParseContext
     ) -> Optional[Node]:
         self.parser_current_state = "branch"
         self._log_state("解析分支节点")
-
         original_pointer = context.token_pointer
-
-        for c in child:
-            # 每个分支独立尝试，失败则回滚，成功则提交
+        for alt in alternatives:
             try:
                 with context:
-                    # 注意：进入 with 前需重置指针（但 with 会保存当前状态快照）
-                    # 为了让每个分支从相同起点开始，需要手动重置指针
                     context.token_pointer = original_pointer
-                    result = self._process_production_node(c, context)
+                    result = self._process_production_node(alt, context)
                     if result is not None:
                         self._log_state("分支匹配成功")
                         return result
-                    # 匹配失败，抛异常触发回滚
                     raise _BranchMatchError()
             except _BranchMatchError:
-                # 自动回滚已完成，继续尝试下一个分支
                 continue
-
-        # 所有分支失败，确保指针回到原始位置（虽然回滚已做，但防御性重置）
         context.token_pointer = original_pointer
         self._log_state("所有分支匹配失败")
         return None
 
-    def _parse_repeat_nodes(
-        self, child: List[ProductionNode], context: ParseContext
-    ) -> Optional[Node]:
+    def _parse_repeat_elem(self, elem: dict, context: ParseContext) -> Optional[Node]:
         self.parser_current_state = "repeat"
         self._log_state("解析重复节点（零次或多次）")
-
-        if not child:
-            return Node("repeat")
-
-        c = child[0]
         repeat_node = Node("repeat")
-
         while True:
             with context:
-                result = self._process_production_node(c, context)
+                result = self._process_production_node(elem, context)
                 if result is None:
-                    # 匹配失败，with 自动回滚，跳出循环
                     break
                 repeat_node.add_child(result)
-                # 匹配成功，with 正常结束，提交本次匹配
-
-        # 零次或多次均成功
-        match_times = len(getattr(repeat_node, "child", []))
-        self._log_state(f"重复解析完成，匹配次数: {match_times}")
+        self._log_state(f"重复解析完成，匹配次数: {len(repeat_node.child)}")
         return repeat_node
 
-    def _parse_optional_nodes(
-        self, child: List[ProductionNode], context: ParseContext
-    ) -> Optional[Node]:
+    def _parse_optional_elem(self, elem: dict, context: ParseContext) -> Optional[Node]:
         self.parser_current_state = "optional"
         self._log_state("解析可选节点")
-
         optional_node = Node("optional")
-
-        if not child:
-            return optional_node
-
-        c = child[0]
         with context:
-            result = self._process_production_node(c, context)
+            result = self._process_production_node(elem, context)
             if result is not None:
                 optional_node.add_child(result)
-                # 匹配成功：with 块正常结束，提交更改（指针前进，节点添加）
-            # 匹配失败：with 块自动回滚，指针不动，不添加子节点
-
         return optional_node
+
+    def _parse_plus_elem(self, elem: dict, context: ParseContext) -> Optional[Node]:
+        self.parser_current_state = "repeat"  # 复用 repeat 状态
+        self._log_state("解析至少一次重复节点")
+        plus_node = Node("plus")
+        # 至少匹配一次
+        with context:
+            result = self._process_production_node(elem, context)
+            if result is None:
+                return None
+            plus_node.add_child(result)
+        # 继续匹配零次或多次
+        while True:
+            with context:
+                result = self._process_production_node(elem, context)
+                if result is None:
+                    break
+                plus_node.add_child(result)
+        return plus_node
+
+    def parse_sentence(self, context: ParseContext) -> Optional[Node]:
+        current = context.peek_token()
+        if not current:
+            return None
+
+        candidate_rules = self._get_candidate_rules(current)
+        for rule in candidate_rules:
+            snapshot = context.create_snapshot()
+            node = self._try_rule_productions(context, rule)
+            if node is not None:
+                # 匹配成功，返回节点
+                return node
+            else:
+                # 失败，回滚快照
+                context.restore_snapshot(snapshot)
+
+        return None
+
+    def parse_block(
+        self, context: ParseContext, end_tokens: set | None = None
+    ) -> Optional[Node]:
+        """
+        解析一个语句块，直到遇到 end_tokens 或 token 耗尽。
+        end_tokens: 表示块结束的 token 类型集合（如 {"newline", "r_curly_bracket"}），默认仅为文件结束。
+        返回一个 Node("Block")，其 child 包含所有成功解析的语句节点。
+        """
+        if end_tokens is None:
+            end_tokens = set()  # 默认仅遇到文件末尾结束
+
+        block_node = Node("Block")
+        skip_types = {"newline", "comment"}
+
+        while context.has_more_tokens():
+            current = context.peek_token()
+            if current and current.type in end_tokens:
+                # 遇到结束符，停止解析（但不消费该 token，由上层处理）
+                break
+
+            # 跳过空白/注释
+            if current and current.type in skip_types:
+                context.advance_token()
+                continue
+
+            # 尝试解析一条语句
+            stmt_node = self.parse_sentence(context)
+            if stmt_node is None:
+                # 无法解析任何语句，可能是语法错误
+                self._log_state(
+                    f"无法解析的 token: {current.content if current else 'EOF'}"
+                )
+                break
+            block_node.add_child(stmt_node)
+
+        return block_node
 
     def parse(self, tokens: List[Token]) -> Optional[Node]:
         if not tokens:
             return None
         context = ParseContext(tokens, self.root_node)
-        first_token = tokens[0]
-        possible_rules = self._search_grammar_rule(first_token)
-        if not possible_rules:
-            self._log_state(f"无匹配的顶层规则 for token: {first_token.type}")
-            return None
-        for rule in possible_rules:
-            snapshot = context.create_snapshot()
-            result_node = self._try_rule_productions(context, rule)
-            if result_node is not None:
-                self.root_node.add_child(result_node)
-                self._log_state(f"成功匹配顶层规则: {rule.name}")
-                return self.root_node
-            else:
-                context.restore_snapshot(snapshot)
-        self._log_state("所有顶层规则匹配失败")
+        block_node = self.parse_block(context)
+        if block_node and block_node.child:
+            self.root_node.add_child(block_node)
+            return self.root_node
         return None
