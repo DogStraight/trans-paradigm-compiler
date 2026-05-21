@@ -157,18 +157,27 @@ class Node:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def dump(self) -> dict:
-        dump_dict = {}
+    def dump(self):
+        # 收集除 name 和 child 外的所有属性
+        attrs = {k: v for k, v in self.__dict__.items() if k not in ("name", "child")}
+        has_children = hasattr(self, "child") and getattr(self, "child") is not None
+
+        # 如果没有任何属性且没有子节点，直接返回节点名称
+        if not attrs and not has_children:
+            return self.name
+
+        # 否则构建字典
+        result = {}
         for attr, value in self.__dict__.items():
             if attr == "name":
                 continue
             if isinstance(value, list):
-                dump_dict[attr] = [
+                result[attr] = [
                     item.dump() if isinstance(item, Node) else item for item in value
                 ]
             else:
-                dump_dict[attr] = value.dump() if isinstance(value, Node) else value
-        return {self.name: dump_dict}
+                result[attr] = value.dump() if isinstance(value, Node) else value
+        return {self.name: result}
 
     def inherit(self, node: "Node") -> None:
         for attr, value in node.__dict__.items():

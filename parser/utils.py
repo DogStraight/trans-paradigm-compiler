@@ -26,3 +26,7 @@ def is_operator(token: Token) -> bool:
 
 def is_paren(token: Token) -> bool:
     return token.type.startswith("bracket.")
+
+
+def is_none(token: Token) -> bool:
+    return token.type == "literal.none"

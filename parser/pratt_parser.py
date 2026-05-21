@@ -9,6 +9,7 @@ from parser.utils import (
     is_identifier,
     is_operator,
     is_paren,
+    is_none,
 )
 
 
@@ -149,7 +150,7 @@ def parse_expression(
     # ---------- 前缀（nud）----------
     if is_number(token):
         # 根据是否包含小数点决定转换为 int 还是 float
-        if '.' in token.content:
+        if "." in token.content:
             value = float(token.content)
         else:
             value = int(token.content)
@@ -195,6 +196,9 @@ def parse_expression(
         else:
             # 后缀或未预期的，按普通前缀处理？这里报错
             raise ValueError(f"不支持的前缀运算符: {token.content}")
+    elif is_none(token):
+        node = Node("NoneLiteral")
+        idx += 1
     else:
         raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 

@@ -111,7 +111,7 @@ elem_type = "$2"
 [ListLiteral]
 production = [
     "bracket.l_square_bracket",
-    "(@Expression,symbol.base.comma)*",
+    "(@Initializer,symbol.base.comma)*",
     "bracket.r_square_bracket",
 ]
 [ListLiteral.node]
