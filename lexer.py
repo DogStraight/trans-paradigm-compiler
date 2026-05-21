@@ -41,14 +41,38 @@ class Lexer:
         self.newline: list = list(self.token_define["newline"].values())
         self.base_symbol: list = list(self.token_define["symbol"]["base"].values())
 
-        # special case for number
-        self.base_symbol.remove(".")
+        self.alpha_tokens = []
+        self._build_alpha_tokens()
 
+        # special case for number,
+        self.base_symbol.remove(".")
         self.previous_token_type: str = ""
 
         # is output comments
         self.output_comments = False
         pass
+
+    def _build_alpha_tokens(self) -> None:
+        """构建字母形式 token 映射列表 (value, type)"""
+        self.alpha_tokens.clear()
+
+        # 1. symbol.base 和 symbol.extend
+        for cat in ("base", "extend"):
+            for sym_name, sym_value in self.token_define["symbol"][cat].items():
+                if isinstance(sym_value, str) and sym_value.isalpha():
+                    self.alpha_tokens.append((sym_value, f"symbol.{cat}.{sym_name}"))
+
+        # 2. bracket
+        for bracket_name, bracket_value in self.token_define["bracket"].items():
+            if isinstance(bracket_value, str) and bracket_value.isalpha():
+                self.alpha_tokens.append((bracket_value, f"bracket.{bracket_name}"))
+
+        # 3. literal 精确字面量（排除 string, number）
+        for lit_name, lit_value in self.token_define.get("literal", {}).items():
+            if lit_name in ("string", "number"):
+                continue
+            if isinstance(lit_value, str) and lit_value.isalpha():
+                self.alpha_tokens.append((lit_value, f"literal.{lit_name}"))
 
     @simplify_output(False)
     def tokenize(self, lex_text: str) -> list[Token]:
@@ -302,28 +326,21 @@ class Lexer:
                     )
             # in case token type is id
             case "id":
-                id_kw_set = self.token_define[_token.type]["keyword"]
-                if (
-                    _token.content == id_kw_set["logic_add"]
-                    or _token.content == id_kw_set["logic_not"]
-                    or _token.content == id_kw_set["logic_or"]
-                ):
-                    _token.type = "symbol.base" + ".logic_" + _token.content
-                elif _token.content in id_kw_set:
-                    _token.type = "keyword" + "." + _token.content
-                else:
-                    _token.type = "id"
+                # 1. 尝试匹配字母形式的 token（符号、括号、精确字面量）
+                matched = False
+                for value, typ in self.alpha_tokens:
+                    if _token.content == value:
+                        _token.type = typ
+                        matched = True
+                        break
 
-                # in extra case literal
-                if _token.content == "True" or _token.content == "False":
-                    _token.type = (
-                        "literal.bool_true"
-                        if _token.content == "True"
-                        else "literal.bool_false"
-                    )
-
-                if _token.content == "None":
-                    _token.type = "literal.none"
+                if not matched:
+                    # 2. 原有关键字检查
+                    id_kw_set = self.token_define[_token.type]["keyword"]
+                    if _token.content in id_kw_set:
+                        _token.type = "keyword." + _token.content
+                    else:
+                        _token.type = "id"
 
             # in case token type is bracket
             case "bracket":

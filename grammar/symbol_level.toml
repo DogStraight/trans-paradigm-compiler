@@ -12,6 +12,19 @@ arity = 3
 second = ":"
 assoc = "right"
 
+# 逻辑或（最低优先级）
+[[operator]]
+symbol = "or"
+arity = 2
+assoc = "left"
+
+# 逻辑与（高于 or，低于比较）
+[[operator]]
+symbol = "and"
+arity = 2
+assoc = "left"
+
+# 如果保留 C 风格逻辑运算符，它们应与 and/or 同级
 [[operator]]
 symbol = "||"
 arity = 2
@@ -22,21 +35,7 @@ symbol = "&&"
 arity = 2
 assoc = "left"
 
-[[operator]]
-symbol = "|"
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = "^"
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = "&"
-arity = 2
-assoc = "left"
-
+# 比较运算符
 [[operator]]
 symbol = "=="
 arity = 2
@@ -67,6 +66,25 @@ symbol = "<="
 arity = 2
 assoc = "left"
 
+# 位或
+[[operator]]
+symbol = "|"
+arity = 2
+assoc = "left"
+
+# 位异或
+[[operator]]
+symbol = "^"
+arity = 2
+assoc = "left"
+
+# 位与
+[[operator]]
+symbol = "&"
+arity = 2
+assoc = "left"
+
+# 移位
 [[operator]]
 symbol = "<<"
 arity = 2
@@ -77,6 +95,7 @@ symbol = ">>"
 arity = 2
 assoc = "left"
 
+# 加减
 [[operator]]
 symbol = "+"
 arity = 2
@@ -87,6 +106,7 @@ symbol = "-"
 arity = 2
 assoc = "left"
 
+# 乘除模
 [[operator]]
 symbol = "*"
 arity = 2
@@ -102,39 +122,45 @@ symbol = "%"
 arity = 2
 assoc = "left"
 
+# 幂（右结合）
 [[operator]]
 symbol = "**"
 arity = 2
 assoc = "right"
 
-# # 一元前缀运算符
-# [[operator]]
-# symbol = "+"
-# arity = 1
-# position = "prefix"
+# 一元前缀运算符（优先级高于所有二元运算符）
+[[operator]]
+symbol = "+"
+arity = 1
+position = "prefix"
 
-# [[operator]]
-# symbol = "-"
-# arity = 1
-# position = "prefix"
+[[operator]]
+symbol = "-"
+arity = 1
+position = "prefix"
 
-# [[operator]]
-# symbol = "~"
-# arity = 1
-# position = "prefix"
+[[operator]]
+symbol = "~"
+arity = 1
+position = "prefix"
 
-# [[operator]]
-# symbol = "!"
-# arity = 1
-# position = "prefix"
+[[operator]]
+symbol = "!"
+arity = 1
+position = "prefix"
 
-# # 一元后缀运算符
-# [[operator]]
-# symbol = "++"
-# arity = 1
-# position = "postfix"
+[[operator]]
+symbol = "not"
+arity = 1
+position = "prefix"
 
-# [[operator]]
-# symbol = "--"
-# arity = 1
-# position = "postfix"
+# 一元后缀运算符（最高优先级）
+[[operator]]
+symbol = "++"
+arity = 1
+position = "postfix"
+
+[[operator]]
+symbol = "--"
+arity = 1
+position = "postfix"

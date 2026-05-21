@@ -40,7 +40,9 @@ class Parser:
         }
 
         self.statement_rule_names = [
-            name for name in self.grammar_rules if name not in self.pratt_rules
+            name
+            for name, rule in self.grammar_rules.items()
+            if rule.end_case  # 只有定义了结束符的规则才作为语句
         ]
 
     def _load_operator_defs(self) -> List[tuple]:
@@ -156,23 +158,27 @@ class Parser:
             return None
 
     def _flatten_node(self, node: Node) -> Any:
-        """
-        将叶子节点（token 节点或只有单个属性的节点）转换为基本类型。
-        """
-        # 如果是语法规则节点，保留原样（除非内联标记处理过）
+        # 如果是内联规则节点，尝试提取其唯一有效属性
+        if node.name in self.grammar_rules and self.grammar_rules[node.name].inline:
+            # 获取除 name 和 child 外的所有属性
+            attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
+            if len(attrs) == 1:
+                # 只有一个属性，返回该属性值
+                return list(attrs.values())[0]
+            # 如果还有 child 且 child 只有一个子节点，可以递归内联（可选）
+            child = getattr(node, "child", None)
+            if isinstance(child, list) and len(child) == 1:
+                return self._flatten_node(child[0])
+            # 否则返回原节点
+            return node
+        # 原有的普通压平逻辑（针对 token 节点等）
         if node.name in self.grammar_rules:
             return node
-
-        # 获取除 name 和 child 外的所有属性
         attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
-
-        # 如果只有一个属性且该属性是基本类型，返回该属性值
         if len(attrs) == 1:
             only_value = list(attrs.values())[0]
             if not isinstance(only_value, (Node, list, dict)):
                 return only_value
-
-        # 否则返回原节点
         return node
 
     def _try_rule_productions(
@@ -221,14 +227,18 @@ class Parser:
                     sub_node = all_matched_nodes[pos]
                     # 压平节点
                     attr_value = self._flatten_node(sub_node)
-                    if attr_name == "name":  # 避免覆盖节点类型名
+                    # 特殊处理：如果 sub_node 是 list 节点，直接取其 items 属性
+                    if sub_node.name == "list":
+                        attr_value = sub_node.items
+                    # 也可以处理 repeat 节点为列表，但 repeat 保留原样
+                    if attr_name == "name":
                         attr_name = "identifier"
                     rule_node.add_attr(attr_name, attr_value)
             except (ValueError, IndexError):
                 continue
 
-        # 检查结束符
-        if context.has_more_tokens():
+        # 检查结束符（仅当规则定义了结束符且非空）
+        if rule.end_case and context.has_more_tokens():
             token = context.peek_token()
             if token and token.type not in rule.end_case:
                 context.update_current_node(old_node)
@@ -300,16 +310,10 @@ class Parser:
             return None
 
         node = Node(token_type)
-        assert context.current_rule is not None
-
-        node_pos = "$" + str(context.production_pointer + 1)
-        for key, value in context.current_rule.node.items():
-            if value == node_pos:
-                node.add_attr(key, current_token.content)
+        # 直接添加固定属性 value 存储 token 内容
+        node.add_attr("value", current_token.content)
 
         context.advance_token()
-        context.advance_production()
-        context.update_match_length(1)
 
         self._log_state(f"普通token {token_type} 解析成功")
         return node
@@ -327,7 +331,12 @@ class Parser:
             return None
 
         context.update_current_node(old_node)
-        return result_node
+
+        # 内联处理：如果规则标记为 inline，则直接返回子节点，不包装
+        if target_rule.inline:
+            return result_node
+        else:
+            return result_node
 
     def _parse_sequence_items(
         self, items: List[dict], context: ParseContext
@@ -370,17 +379,68 @@ class Parser:
         return None
 
     def _parse_repeat_elem(self, elem: dict, context: ParseContext) -> Optional[Node]:
-        self.parser_current_state = "repeat"
-        self._log_state("解析重复节点（零次或多次）")
-        repeat_node = Node("repeat")
-        while True:
+        """
+        解析重复节点，支持两种模式：
+        - 普通重复：elem 为任意节点，循环匹配，返回 Node('repeat', child=[...])
+        - 分隔列表：elem 是 seq，形如 [item, separator]，循环匹配 (item separator?)*，返回 Node('list', items=[...])
+        """
+        # 检测是否为分隔列表模式
+        is_separated = False
+        item_elem: dict = {}
+        sep_elem: dict = {}
+        if elem.get("type") == "seq":
+            items = elem.get("items", [])
+            if len(items) == 2:
+                # 假设第一个是元素节点，第二个是分隔符（token）
+                first = items[0]
+                second = items[1]
+                if second.get("type") == "token":  # 分隔符必须是 token
+                    is_separated = True
+                    item_elem: dict = first
+                    sep_elem = second
+
+        if is_separated:
+            self._log_state("解析分隔列表（零次或多次）")
+            collected = []
+            # 第一个元素（必须）
             with context:
-                result = self._process_production_node(elem, context)
-                if result is None:
+                first_node = self._process_production_node(item_elem, context)
+                if first_node is None:
+                    return Node("list", items=[])
+                collected.append(self._flatten_node(first_node))
+
+            # 循环匹配 (sep item)*，允许末尾逗号
+            while True:
+                snapshot = context.create_snapshot()
+                sep_node = self._process_production_node(sep_elem, context)
+                if sep_node is None:
+                    # 没有分隔符，正常结束
+                    context.restore_snapshot(snapshot)
                     break
-                repeat_node.add_child(result)
-        self._log_state(f"重复解析完成，匹配次数: {len(repeat_node.child)}")
-        return repeat_node
+                # 有分隔符，尝试匹配下一个 item
+                next_node = self._process_production_node(item_elem, context)
+                if next_node is None:
+                    # 分隔符后没有 item -> 末尾逗号，接受该分隔符（不回滚），结束循环
+                    break
+                # 成功匹配到 item，丢弃快照，继续循环
+                collected.append(self._flatten_node(next_node))
+            return Node("list", items=collected)
+
+        else:
+            # 普通重复模式
+            self.parser_current_state = "repeat"
+            self._log_state("解析重复节点（零次或多次）")
+            repeat_node = Node("repeat")
+            while True:
+                with context:
+                    result = self._process_production_node(elem, context)
+                    if result is None:
+                        break
+                    repeat_node.add_child(result)
+            self._log_state(
+                f"重复解析完成，匹配次数: {len(getattr(repeat_node, 'child', []))}"
+            )
+            return repeat_node
 
     def _parse_optional_elem(self, elem: dict, context: ParseContext) -> Optional[Node]:
         self.parser_current_state = "optional"
@@ -470,8 +530,22 @@ class Parser:
         if not tokens:
             return None
         context = ParseContext(tokens, self.root_node)
-        block_node = self.parse_block(context)
-        if block_node and block_node.child:
-            self.root_node.add_child(block_node)
-            return self.root_node
-        return None
+        skip_types = {"newline", "comment"}
+
+        while context.has_more_tokens():
+            current = context.peek_token()
+            # 跳过空白/注释
+            if current and current.type in skip_types:
+                context.advance_token()
+                continue
+
+            stmt_node = self.parse_sentence(context)
+            if stmt_node is None:
+                # 无法解析，可能是语法错误
+                self._log_state(
+                    f"无法解析的 token: {current.content if current else 'EOF'}"
+                )
+                break
+            self.root_node.add_child(stmt_node)
+
+        return self.root_node if getattr(self.root_node, "child", None) else None

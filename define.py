@@ -110,12 +110,13 @@ class GrammarRule:
         production: list[str],
         end_case: list[str],
         node: dict,
+        inline: bool = False,
     ) -> None:
         self.name = name
         self.production: list[str] = production
-        self.end_case: list[str] = end_case
+        self.end_case = end_case if end_case is not None else []  # 默认空列表
         self.node = node
-        pass
+        self.inline = inline
 
     def dump(self) -> dict:
         return {
@@ -135,7 +136,6 @@ class GrammarRule:
 class GrammarRulesRegister:
     def __init__(self):
         self.rules = {}
-        
 
     def rules_registration(self) -> dict[str, GrammarRule]:
         rules_dict = FileManager.load_rules()
@@ -143,8 +143,9 @@ class GrammarRulesRegister:
             rule: GrammarRule = GrammarRule(
                 rule_name,
                 rule_dict["production"],
-                rule_dict["end_case"] if "end_case" in rule_dict else ["newline"],
+                rule_dict.get("end_case", []),  # 不存在则为空列表
                 rule_dict["node"],
+                rule_dict.get("inline", False),  # 不存在则默认为False
             )
             self.rules[rule_name] = rule
         return self.rules
@@ -153,7 +154,6 @@ class GrammarRulesRegister:
 class Node:
     def __init__(self, name: str, **kwargs) -> None:
         self.name = name
-        self.child = []
         for key, value in kwargs.items():
             setattr(self, key, value)
 

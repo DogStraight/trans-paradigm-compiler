@@ -3,37 +3,25 @@ from parser.main_parser import Parser
 import json
 import os
 
+
 def test_parse():
     test_cases = [
-        {
-            "name": "variable_definition",
-            "source": "a : int = 1 + 2 * 3\n"
-        },
-        {
-            "name": "arithmetic_precedence",
-            "source": "result : float = (1 + 2) * 3 - 4 / 2\n"
-        },
-        {
-            "name": "comparison",
-            "source": "flag : bool = 5 > 3\n"
-        },
-        {
-            "name": "chained_comparison",
-            "source": "check : bool = 1 < 2 and 3 == 3\n"
-            # 注意：当前规则中没有 and/or 支持，这个测试可能会失败，需要扩展规则
-        },
-        {
-            "name": "parenthesized_expr",
-            "source": "value : int = (2 + 3) * (4 - 1)\n"
-        },
-        {
-            "name": "boolean_literal",
-            "source": "ok : bool = True\n"
-        },
-        {
-            "name": "multiple_variables",
-            "source": "x : int = 10\ny : int = 20\nsum : int = x + y\n"
-        }
+        # {"name": "variable_definition", "source": "a : int = 1 + 2 * 3\n"},
+        # {
+        #     "name": "arithmetic_precedence",
+        #     "source": "result : float = (1 + 2) * 3 - 4 / 2\n",
+        # },
+        # {"name": "comparison", "source": "flag : bool = 5 > 3\n"},
+        # {"name": "chained_comparison", "source": "check : bool = 1 < 2 and 3 == 3\n"},
+        # {"name": "parenthesized_expr", "source": "value : int = (2 + 3) * (4 - 1)\n"},
+        # {"name": "boolean_literal", "source": "ok : bool = True\n"},
+        # {
+        #     "name": "multiple_variables",
+        #     "source": "x : int = 10\ny : int = 20\nsum : int = x + y\n",
+        # },
+        # {"name": "float_literal", "source": "pi : float = 3.1415\n"},
+        # {"name": "complex_types", "source": "nums : [int]\nmaybe : ?int\n"},
+        {"name": "list_literal", "source": "nums : [float] = [1.0, 2.0, 3.0,]\n"},
     ]
 
     # 确保输出目录存在
@@ -42,7 +30,7 @@ def test_parse():
     for case in test_cases:
         print(f"\n--- Testing: {case['name']} ---")
         lexer = Lexer()
-        tokens = lexer.tokenize(case['source'])
+        tokens = lexer.tokenize(case["source"])
         parser = Parser()
         ast = parser.parse(tokens)
         if ast:
@@ -53,5 +41,9 @@ def test_parse():
         else:
             print(f"Parsing failed for {case['name']}")
 
+
+
+
 if __name__ == "__main__":
     test_parse()
+

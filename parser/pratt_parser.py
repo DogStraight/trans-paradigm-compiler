@@ -148,7 +148,12 @@ def parse_expression(
 
     # ---------- 前缀（nud）----------
     if is_number(token):
-        node = Node("Number", value=int(token.content))
+        # 根据是否包含小数点决定转换为 int 还是 float
+        if '.' in token.content:
+            value = float(token.content)
+        else:
+            value = int(token.content)
+        node = Node("Number", value=value)
         idx += 1
     elif is_string(token):
         s = token.content[1:-1] if len(token.content) >= 2 else token.content

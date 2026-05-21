@@ -43,6 +43,12 @@ add_one = "++"
 sub_one = "--"
 double_dot = ".."
 
+# logic operator
+logic_add = "and"
+logic_or = "or"
+logic_not = "not"
+
+
 [bracket]
 l_parentheses = "("
 r_parentheses = ")"
@@ -82,10 +88,7 @@ interface = "interface"
 # module
 module = "module"
 
-# logic operator
-logic_add = "and"
-logic_or = "or"
-logic_not = "not"
+
 # tag
 tag = "tag"
 # process
@@ -103,4 +106,5 @@ bool_false = "False"
 bool_true = "True"
 number = "\\d+"
 none = "None"
+
 

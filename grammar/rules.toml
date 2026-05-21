@@ -8,18 +8,6 @@ production = ["id"]
 [Variable.node]
 name = "$1"
 
-[VarDef]
-production = [
-    "id",
-    "symbol.base.colon",
-    "id",
-    "symbol.base.equal",
-    "@Expression",
-]
-[VarDef.node]
-name = "$1"
-type = "$3"
-value = "$5"
 
 # Parenthesized expressions
 [ParenthesizedExpr]
@@ -77,6 +65,7 @@ op = "$1"
 # 顶层表达式
 [Expression]
 production = ["@AddExpr|@BoolExpr"]
+end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
 [Expression.node]
 expr = "$1"
 
@@ -95,12 +84,6 @@ head = "$1"
 tail = "$2"
 
 
-[Program]
-production = ["(@VarDef|newline)*"]
-[Program.node]
-statements = "$1"
-
-
 [Arguments]
 production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 [Arguments.node]
@@ -117,3 +100,65 @@ production = [
 [Call.node]
 name = "$1"
 args = "$3"
+
+
+# 列表类型: [ Type ]
+[ListType]
+production = ["bracket.l_square_bracket", "@Type", "bracket.r_square_bracket"]
+[ListType.node]
+elem_type = "$2"
+
+[ListLiteral]
+production = [
+    "bracket.l_square_bracket",
+    "(@Expression,symbol.base.comma)*",
+    "bracket.r_square_bracket",
+]
+[ListLiteral.node]
+elements = "$2"
+
+[OptionalType]
+production = ["symbol.base.question_mark", "@Type"]
+[OptionalType.node]
+inner = "$2"
+
+[VarDecl]
+production = ["id", "symbol.base.colon", "@Type"]
+end_case = ["newline"]
+[VarDecl.node]
+name = "$1"
+type = "$3"
+
+
+[Initializer]
+production = ["@ListLiteral|@Call|@Expression"]
+inline = true
+[Initializer.node]
+value = "$1"
+
+[VarInit]
+production = [
+    "id",
+    "symbol.base.colon",
+    "@Type",
+    "symbol.base.equal",
+    "@Initializer",
+]
+end_case = ["newline"]
+[VarInit.node]
+name = "$1"
+type = "$3"
+value = "$5"
+
+# Type 作为顶层规则，可以是 id（基本类型）或 @ListType 或 @OptionalType
+[Type]
+production = ["id|@ListType|@OptionalType"]
+inline = true
+[Type.node]
+type_desc = "$1"
+
+
+[IdList]
+production = ["id+"] # 期望至少一个 id
+[IdList.node]
+items = "$1"
