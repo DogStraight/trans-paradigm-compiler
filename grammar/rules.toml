@@ -68,8 +68,13 @@ op = "$1"
 # 顶层表达式
 [Expression]
 production = ["@AddExpr|@BoolExpr"]
-end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
-pratt = true    
+end_case = [
+    "newline",
+    "symbol.base.comma",
+    "bracket.r_square_bracket",
+    "symbol.base.colon",
+]
+pratt = true
 [Expression.node]
 expr = "$1"
 
@@ -163,15 +168,16 @@ type_desc = "$1"
 
 
 [IdList]
-production = ["id+"] # 期望至少一个 id
+production = ["id+"]   # 期望至少一个 id
+end_case = ["newline"]
 [IdList.node]
 items = "$1"
 
 
 [Block]
 production = []
-end_case = ["space.dedent"]     # 缩进块的结束符
-block_start = "space.indent"    # 缩进块的开始符
+end_case = ["space.dedent"]  # 缩进块的结束符
+block_start = "space.indent" # 缩进块的开始符
 
 
 [IfStatement]
@@ -182,7 +188,7 @@ production = [
     "@Block",
     "@ElseBranch?",
 ]
-end_case = ["space.dedent"] # if 语句结束后需要缩进退格
+end_case = ["space.dedent", "newline"] # if 语句结束后需要缩进退格
 [IfStatement.node]
 condition = "$2"
 then_body = "$4"

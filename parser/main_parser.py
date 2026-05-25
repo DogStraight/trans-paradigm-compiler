@@ -24,7 +24,7 @@ class Parser:
         ]
         self.rule_selector = RuleSelector(self.grammar_rules, self.statement_rule_names)
 
-        self.skip_types = ["newline", "comment"]
+        self.skip_types = ["newline", "comment", "space.indent_keep"]
 
     def _log_state(self, action: str):
         with open(self.debug_log_file, "a", encoding="utf-8") as f:
@@ -186,6 +186,7 @@ class Parser:
         self._log_state(f"Pratt 解析成功，消耗了 {ptr - start_idx} 个 token")
         return ast_node
 
+    # 对应生成式的类型的处理方法
     def _parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
         token_type: str = node["token_type"]
         self._log_state(f"解析普通token: {token_type}")
@@ -268,6 +269,26 @@ class Parser:
         self._log_state("所有分支匹配失败")
         return None
 
+    # 辅助方法用于处理 repeat、optional、plus 的循环匹配逻辑
+    def _repeat_loop(
+        self,
+        elem: dict,
+        context: ParseContext,
+        min_count: int = 0,
+        max_count: Optional[int] = None,
+    ) -> Optional[List[Node]]:
+        """循环匹配 elem，返回压平后的节点列表；若少于 min_count 则返回 None。"""
+        nodes = []
+        while True:
+            with context:
+                result = self._process_production_node(elem, context)
+                if result is None:
+                    break
+                nodes.append(self._flatten_node(result))
+                if max_count is not None and len(nodes) >= max_count:
+                    break
+        return nodes if len(nodes) >= min_count else None
+
     def _parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
         elem = node["elem"]
         # 检测是否为分隔列表模式
@@ -321,30 +342,24 @@ class Parser:
     def _parse_optional(self, node: dict, context: ParseContext) -> Optional[Node]:
         elem = node["elem"]
         self._log_state("解析可选节点")
+        nodes = self._repeat_loop(elem, context, min_count=0, max_count=1)
         optional_node = Node("optional")
-        with context:
-            result = self._process_production_node(elem, context)
-            if result is not None:
-                optional_node.add_child(result)
+        if nodes:
+            optional_node.add_child(nodes[0])
         return optional_node
 
     def _parse_plus(self, node: dict, context: ParseContext) -> Optional[Node]:
         elem = node["elem"]
         self._log_state("解析至少一次重复节点")
+        nodes = self._repeat_loop(elem, context, min_count=1)
+        if nodes is None:
+            return None
         plus_node = Node("plus")
-        with context:
-            result = self._process_production_node(elem, context)
-            if result is None:
-                return None
-            plus_node.add_child(result)
-        while True:
-            with context:
-                result = self._process_production_node(elem, context)
-                if result is None:
-                    break
-                plus_node.add_child(result)
+        for child in nodes:
+            plus_node.add_child(child)
         return plus_node
 
+    # 解析器的主要输出方法 sentence
     def parse_sentence(self, context: ParseContext) -> Optional[Node]:
         """解析一条语句：根据当前 token 选择候选规则并尝试匹配。"""
         if not context.has_more_tokens():
@@ -369,6 +384,7 @@ class Parser:
         self._log_state(f"所有候选规则匹配失败: {current.type}")
         return None
 
+    # 解析器的主要输出方法 block
     def parse_block(
         self,
         context: ParseContext,
@@ -408,6 +424,7 @@ class Parser:
             block_node.add_child(stmt_node)
         return block_node
 
+    # 解析器的入口
     def parse(self, tokens: List[Token]) -> Optional[Node]:
         if not tokens:
             return None
