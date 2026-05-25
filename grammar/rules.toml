@@ -68,12 +68,7 @@ op = "$1"
 # 顶层表达式
 [Expression]
 production = ["@AddExpr|@BoolExpr"]
-end_case = [
-    "newline",
-    "symbol.base.comma",
-    "bracket.r_square_bracket",
-    "symbol.base.colon",
-]
+end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
 pratt = true
 [Expression.node]
 expr = "$1"

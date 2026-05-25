@@ -42,36 +42,35 @@ class Parser:
         return method(node, context)
 
     def _flatten_node(self, node: Node) -> Any:
-        # 如果是内联规则节点，尝试提取其内容
+        # 1. 内联规则节点：去掉外层包装，提取内容
         if node.name in self.grammar_rules and self.grammar_rules[node.name].inline:
-            # 获取除 name 和 child 外的所有属性
+            # 获取除 name 和 child 外的所有自定义属性
             attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
-
-            # 情况1：有且仅有一个自定义属性 -> 返回该属性的值
+            # 情况A：只有一个自定义属性 -> 返回该属性值（可能是基本类型、节点、列表等）
             if len(attrs) == 1:
                 return list(attrs.values())[0]
-
-            # 情况2：没有自定义属性，但有 child 列表 -> 返回展平后的 child 列表
-            # 安全访问 child 属性，避免类型检查器报错
+            # 情况B：没有自定义属性，但有 child 列表 -> 返回展平后的 child 列表（递归展平每个子节点）
             child = getattr(node, "child", None)
             if not attrs and isinstance(child, list):
-                # 递归展平每个子节点，然后返回列表
+                # 如果 child 只有一个元素，也可以考虑直接返回它？但按照要求，返回列表更通用
                 return [self._flatten_node(c) for c in child]
-
-            # 情况3：既有属性又有 child（少见）-> 如果 child 只有一个，递归展平该 child
-            child = getattr(node, "child", None)
-            if isinstance(child, list) and len(child) == 1:
-                return self._flatten_node(child[0])
-
-            # 其他情况：返回原节点
+            # 情况C：既没有自定义属性也没有 child -> 返回 None（空节点）
+            if not attrs and not child:
+                return None
+            # 其他情况（如既有属性又有 child）：返回原节点
             return node
 
-        # 非内联规则的普通压平逻辑（保持不变）
-        attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
-        if len(attrs) == 1:
-            only_value = list(attrs.values())[0]
-            if not isinstance(only_value, (Node, list, dict)):
-                return only_value
+        # 2. 普通 token 节点（不在 grammar_rules 中）：压平为基本值
+        if node.name not in self.grammar_rules:
+            attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
+            if len(attrs) == 1:
+                only_value = list(attrs.values())[0]
+                if not isinstance(only_value, (Node, list, dict)):
+                    return only_value
+            # 如果本身没有属性，则返回节点本身（例如 NoneLiteral 无属性）
+            return node
+
+        # 3. 普通语法规则节点（非内联）：保留原样
         return node
 
     def _try_rule_productions(
@@ -256,7 +255,10 @@ class Parser:
     def _parse_choice(self, node: dict, context: ParseContext) -> Optional[Node]:
         alternatives = node["alternatives"]
         self._log_state("解析分支节点")
+        original_pointer = context.token_pointer
         for alt in alternatives:
+            # 重置指针到分支开始前的位置
+            context.token_pointer = original_pointer
             try:
                 with context:
                     result = self._process_production_node(alt, context)
@@ -266,6 +268,7 @@ class Parser:
                     raise _BranchMatchError()
             except _BranchMatchError:
                 continue
+        context.token_pointer = original_pointer
         self._log_state("所有分支匹配失败")
         return None
 

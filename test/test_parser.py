@@ -15,12 +15,12 @@ def test_parse():
         # {"name": "chained_comparison", "source": "check : bool = 1 < 2 and 3 == 3\n"},
         # {"name": "parenthesized_expr", "source": "value : int = (2 + 3) * (4 - 1)\n"},
         # {"name": "boolean_literal", "source": "ok : bool = True\n"},
-        {
-            "name": "multiple_variables",
-            "source": "x : int = 10\ny : int = 20\nsum : int = x + y\n",
-        },
+        # {
+        #     "name": "multiple_variables",
+        #     "source": "x : int = 10\ny : int = 20\nsum : int = x + y\n",
+        # },
         # {"name": "float_literal", "source": "pi : float = 3.1415\n"},
-        # {"name": "complex_types", "source": "nums : [int]\nmaybe : ?int\n"},
+        {"name": "complex_types", "source": "nums : [int]\nmaybe : ?int\n"},
         # {"name": "list_literal", "source": "nums : [float] = [1.0, 2.0, 3.0,]\n"},
         # {"name": "nested_list", "source": "matrix : [[int]] = [[1, 2], [3, 4]]\n"},
         # {"name": "optional_in_list", "source": "opt_list : [?int] = [None, 5]\n"},
