@@ -30,6 +30,7 @@ op = "$1"
 # 乘除表达式
 [MulExpr]
 production = ["@PrimaryExpr", "(@MulOp,@PrimaryExpr)*"]
+pratt = true
 [MulExpr.node]
 head = "$1" # 第一个PrimaryExpr
 tail = "$2" # 后续的 (操作符 操作数) 重复序列
@@ -43,6 +44,7 @@ op = "$1"
 # 加减表达式
 [AddExpr]
 production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
+pratt = true
 [AddExpr.node]
 head = "$1" # 第一个MulExpr
 tail = "$2" # 后续的 (操作符 操作数) 重复序列
@@ -50,6 +52,7 @@ tail = "$2" # 后续的 (操作符 操作数) 重复序列
 # 比较表达式
 [CompareExpr]
 production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
+pratt = true
 [CompareExpr.node]
 left = "$1"
 op_rhs = "$2" # 可选部分：操作符和右操作数
@@ -66,6 +69,7 @@ op = "$1"
 [Expression]
 production = ["@AddExpr|@BoolExpr"]
 end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
+pratt = true    
 [Expression.node]
 expr = "$1"
 
@@ -162,3 +166,30 @@ type_desc = "$1"
 production = ["id+"] # 期望至少一个 id
 [IdList.node]
 items = "$1"
+
+
+[Block]
+production = []
+end_case = ["space.dedent"]     # 缩进块的结束符
+block_start = "space.indent"    # 缩进块的开始符
+
+
+[IfStatement]
+production = [
+    "id.keyword.if",
+    "@Expression",
+    "symbol.base.colon",
+    "@Block",
+    "@ElseBranch?",
+]
+end_case = ["space.dedent"] # if 语句结束后需要缩进退格
+[IfStatement.node]
+condition = "$2"
+then_body = "$4"
+else_body = "$5"
+
+[ElseBranch]
+production = ["id.keyword.else", "symbol.base.colon", "@Block"]
+inline = true
+[ElseBranch.node]
+body = "$3"

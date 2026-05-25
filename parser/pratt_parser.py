@@ -1,109 +1,28 @@
-# -*- coding: utf-8 -*-
+# parser/pratt_parser.py
+import toml
 from typing import List, Tuple, Dict, Any
-from define import Node, Token
-
-from parser.utils import (
-    is_number,
-    is_string,
-    is_bool,
-    is_identifier,
-    is_operator,
-    is_paren,
-    is_none,
-)
+from define import Node, Token, FileManager
 
 
-class MockToken:
-    def __init__(self, content, typ):
-        self.content = content
-        self.type = typ
-
-
-# ========== 运算符定义加载 ==========
-def read_operator_defs(filename: str) -> List[Tuple[int, Dict[str, Any]]]:
-    """
-    从文件读取运算符定义。
-    每行格式：{symbol:"+", arity:2, assoc:"left"}, {symbol:"-", arity:2, assoc:"left"}
-    行号即优先级（数字越大优先级越高）。
-    返回列表，每个元素为 (优先级, 属性字典)
-    """
-    operators = []
-    with open(filename, "r") as f:
-        line_no = 1
-        for line in f:
-            line = line.strip()
-            if not line:
-                line_no += 1
-                continue
-            # 按逗号分割每个条目
-            parts = line.split(",")
-            i = 0
-            while i < len(parts):
-                # 合并可能被逗号分隔的键值对（因为一个条目内有多个键值对）
-                item_str = parts[i].strip()
-                if item_str.startswith("{"):
-                    j = i
-                    depth = 0
-                    while j < len(parts):
-                        seg = parts[j]
-                        depth += seg.count("{") - seg.count("}")
-                        if depth == 0 and j > i:
-                            break
-                        j += 1
-                    full_item = ",".join(parts[i : j + 1])
-                    i = j + 1
-                else:
-                    full_item = item_str
-                    i += 1
-
-                full_item = full_item.strip()
-                if not full_item.startswith("{") or not full_item.endswith("}"):
-                    continue
-                inner = full_item[1:-1].strip()
-                if not inner:
-                    continue
-
-                # 解析键值对
-                props = {}
-                pairs = []
-                current = []
-                in_quote = False
-                for ch in inner:
-                    if ch == '"':
-                        in_quote = not in_quote
-                        current.append(ch)
-                    elif ch == "," and not in_quote:
-                        pair_str = "".join(current).strip()
-                        if pair_str:
-                            pairs.append(pair_str)
-                        current = []
-                    else:
-                        current.append(ch)
-                if current:
-                    pair_str = "".join(current).strip()
-                    if pair_str:
-                        pairs.append(pair_str)
-
-                for pair in pairs:
-                    if ":" not in pair:
-                        continue
-                    key, val = pair.split(":", 1)
-                    key = key.strip()
-                    val = val.strip()
-                    if val.startswith('"') and val.endswith('"'):
-                        val = val[1:-1]
-                    else:
-                        try:
-                            if "." in val:
-                                val = float(val)
-                            else:
-                                val = int(val)
-                        except:
-                            pass
-                    props[key] = val
-                if "symbol" in props:
-                    operators.append((line_no, props))
-    return operators
+def load_operator_defs() -> List[Tuple[int, dict]]:
+    """加载运算符优先级和结合性定义"""
+    path = FileManager.get_full_path(FileManager.symbol_level_file)
+    with open(path, "r", encoding="utf-8") as f:
+        data = toml.load(f)
+    operators = data.get("operator", [])
+    operator_defs = []
+    for idx, op in enumerate(operators, start=1):
+        props = {
+            "symbol": op["symbol"],
+            "arity": op["arity"],
+            "assoc": op.get("assoc", "left"),
+        }
+        if "position" in op:
+            props["position"] = op["position"]
+        if "second" in op:
+            props["second"] = op["second"]
+        operator_defs.append((idx, props))
+    return operator_defs
 
 
 def build_priority_maps(operator_defs):
@@ -301,85 +220,32 @@ def parse(tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]) 
     return ast
 
 
-# ========== 测试 ==========
-def test():
-    import tempfile
-    import os
-
-    config_content = """
-{symbol:"+", arity:2, assoc:"left"}
-{symbol:"-", arity:2, assoc:"left"}
-{symbol:"*", arity:2, assoc:"left"}
-{symbol:"/", arity:2, assoc:"left"}
-{symbol:"**", arity:2, assoc:"right"}
-{symbol:"!", arity:1, position:"postfix"}
-{symbol:"-", arity:1, position:"prefix"}
-{symbol:"+", arity:1, position:"prefix"}
-{symbol:"?", arity:3, second:":", assoc:"right"}
-    """
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
-        f.write(config_content.strip())
-        temp_filename = f.name
-
-    try:
-        operator_defs = read_operator_defs(temp_filename)
-        print("运算符定义 (优先级, 属性):")
-        for prio, props in operator_defs:
-            print("  ", prio, props)
-
-        def tok(content, typ):
-            return MockToken(content, typ)
-
-        # 测试 1: 一元前缀负号 + 二元运算
-        tokens1 = [
-            tok("-", "symbol.base.sub"),
-            tok("1", "literal.number"),
-            tok("+", "symbol.base.add"),
-            tok("2", "literal.number"),
-            tok("*", "symbol.base.multiple"),
-            tok("3", "literal.number"),
-        ]
-        # 测试 2: 一元后缀阶乘
-        tokens2 = [
-            tok("5", "literal.number"),
-            tok("!", "symbol.base.not"),
-            tok("+", "symbol.base.add"),
-            tok("3", "literal.number"),
-        ]
-        # 测试 3: 三元条件表达式
-        tokens3 = [
-            tok("1", "literal.number"),
-            tok("?", "symbol.base.question_mark"),
-            tok("2", "literal.number"),
-            tok(":", "symbol.base.colon"),
-            tok("3", "literal.number"),
-        ]
-        # 测试 4: 乘方右结合
-        tokens4 = [
-            tok("2", "literal.number"),
-            tok("**", "symbol.extend.power"),
-            tok("3", "literal.number"),
-            tok("**", "symbol.extend.power"),
-            tok("2", "literal.number"),
-        ]
-        # 测试 5: 一元正号（前缀）与二元加号同时存在
-        tokens5 = [
-            tok("+", "symbol.base.add"),
-            tok("3", "literal.number"),
-            tok("+", "symbol.base.add"),
-            tok("4", "literal.number"),
-        ]
-
-        for i, toks in enumerate([tokens1, tokens2, tokens3, tokens4, tokens5], 1):
-            try:
-                ast = parse(toks, operator_defs)  # type: ignore
-                print(f"\n测试 {i} AST:", ast.dump())
-            except Exception as e:
-                print(f"\n测试 {i} 出错:", e)
-
-    finally:
-        os.unlink(temp_filename)
+# ========== 辅助函数：判断 token 类型 ==========
+def is_number(token: Token) -> bool:
+    return token.type == "literal.number"
 
 
-if __name__ == "__main__":
-    test()
+def is_string(token: Token) -> bool:
+    return token.type == "literal.string"
+
+
+def is_bool(token: Token) -> bool:
+    return token.type in ("literal.bool_true", "literal.bool_false")
+
+
+def is_identifier(token: Token) -> bool:
+    return token.type == "id" or token.type.startswith("id.")
+
+
+def is_operator(token: Token) -> bool:
+    return token.type.startswith("symbol.base.") or token.type.startswith(
+        "symbol.extend."
+    )
+
+
+def is_paren(token: Token) -> bool:
+    return token.type.startswith("bracket.")
+
+
+def is_none(token: Token) -> bool:
+    return token.type == "literal.none"

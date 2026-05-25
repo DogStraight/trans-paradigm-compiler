@@ -1,6 +1,19 @@
-# feature_analyze.py
+# parser/feature_analyze.py
 from typing import Optional, Tuple, Dict, Any
 import re
+
+# 处理分支和序列的优先级顺序及对应的类型与字段名
+SEPARATOR_HANDLERS = [
+    ("|", "choice", "alternatives"),  # 分支优先级最高
+    (",", "seq", "items"),  # 序列次之
+]
+
+# 后缀运算符映射
+SUFFIX_MAP = {
+    "+": "plus",
+    "*": "repeat",
+    "?": "optional",
+}
 
 
 def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
@@ -45,36 +58,21 @@ def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
         if s in placeholder_map:
             return placeholder_map[s]
 
-        # 2. 分支 '|'
-        if "|" in s:
-            parts = [p.strip() for p in s.split("|") if p.strip()]
-            return {
-                "type": "choice",
-                "alternatives": [
-                    build_tree(p) for p in parts if build_tree(p) is not None
-                ],
-            }
+        for sep, typ, field in SEPARATOR_HANDLERS:
+            if sep in s:
+                parts = [p.strip() for p in s.split(sep) if p.strip()]
+                return {
+                    "type": typ,
+                    field: [build_tree(p) for p in parts if build_tree(p) is not None],
+                }
 
-        # 3. 序列 ','
-        if "," in s:
-            parts = [p.strip() for p in s.split(",") if p.strip()]
-            return {
-                "type": "seq",
-                "items": [build_tree(p) for p in parts if build_tree(p) is not None],
-            }
+        # 3. 后缀运算符（优先级最高）：'+', '*', '?'
+        for suffix, typ in SUFFIX_MAP.items():
+            if s.endswith(suffix):
+                base = s[:-1].strip()
+                return {"type": typ, "elem": build_tree(base)}
 
-        # 4. 后缀运算符（优先级最高）：'+', '*', '?'
-        if s.endswith("+"):
-            base = s[:-1].strip()
-            return {"type": "plus", "elem": build_tree(base)}
-        if s.endswith("*"):
-            base = s[:-1].strip()
-            return {"type": "repeat", "elem": build_tree(base)}
-        if s.endswith("?"):
-            base = s[:-1].strip()
-            return {"type": "optional", "elem": build_tree(base)}
-
-        # 5. 语法调用 '@Rule'
+        # 4. 语法调用 '@Rule'
         if (
             s.startswith("@")
             and len(s) > 1
@@ -82,9 +80,9 @@ def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
         ):
             return {"type": "call", "name": s[1:]}
 
-        # 6. 普通 token
+        # 5. 普通 token
         if re.match(r"^[a-zA-Z_\.]+$", s):
-            return {"type": "token", "value": s}
+            return {"type": "token", "token_type": s}
 
         raise ValueError(f"无效的产生式片段: {s}")
 

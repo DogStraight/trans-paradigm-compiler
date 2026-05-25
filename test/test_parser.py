@@ -1,5 +1,5 @@
 from lexer import Lexer
-from parser.main_parser import Parser
+from parser import Parser
 import json
 import os
 

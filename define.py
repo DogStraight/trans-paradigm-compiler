@@ -38,6 +38,8 @@ class FileManager:
     rules_file: str = "pyv_compiler/grammar/rules.toml"
     token_define_file: str = "pyv_compiler/grammar/token.toml"
     lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
+    symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"  # 新增
+    debug_log_file: str = "parser_debug.log"  # 新增
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:
@@ -104,19 +106,18 @@ def get_close_bracket_string(start_bracket: str, target_string: str) -> str:
 
 
 class GrammarRule:
-    def __init__(
-        self,
-        name: str,
-        production: list[str],
-        end_case: list[str],
-        node: dict,
-        inline: bool = False,
-    ) -> None:
+    def __init__(self, name: str, **kwargs):
         self.name = name
-        self.production: list[str] = production
-        self.end_case = end_case if end_case is not None else []  # 默认空列表
-        self.node = node
-        self.inline = inline
+        # 必填字段，如果缺失则设为空列表/空字典
+        self.production = kwargs.pop("production", [])
+        self.node = kwargs.pop("node", {})
+        # 可选字段，提供默认值
+        self.end_case = kwargs.pop("end_case", [])
+        self.inline = kwargs.pop("inline", False)
+        self.pratt = kwargs.pop("pratt", False)
+        # 剩余的所有未知属性也保存下来
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def dump(self) -> dict:
         return {
@@ -134,19 +135,14 @@ class GrammarRule:
 
 
 class GrammarRulesRegister:
-    def __init__(self):
-        self.rules = {}
+
+    def __init__(self) -> None:
+        self.rules: dict[str, GrammarRule] = {}
 
     def rules_registration(self) -> dict[str, GrammarRule]:
         rules_dict = FileManager.load_rules()
         for rule_name, rule_dict in rules_dict.items():
-            rule: GrammarRule = GrammarRule(
-                rule_name,
-                rule_dict["production"],
-                rule_dict.get("end_case", []),  # 不存在则为空列表
-                rule_dict["node"],
-                rule_dict.get("inline", False),  # 不存在则默认为False
-            )
+            rule = GrammarRule(rule_name, **rule_dict)  # 解包字典
             self.rules[rule_name] = rule
         return self.rules
 
