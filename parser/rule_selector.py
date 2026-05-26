@@ -1,5 +1,5 @@
 # parser/rule_selector.py
-from typing import List, Dict
+from typing import List, Dict, Optional
 from define import Token, GrammarRule
 from parser.feature_analyze import analyze_production_features
 
@@ -86,3 +86,20 @@ class RuleSelector:
             rule_map[name] for name in self.statement_rule_names if name in rule_map
         ]
         return ordered
+
+    def get_block_rule(self, start_token: str) -> Optional[str]:
+        for rule_name, rule in self.grammar_rules.items():
+            if getattr(rule, "block_start", None) == start_token:
+                return rule_name
+        return None
+
+
+if __name__ == "__main__":
+    from define import GrammarRulesRegister
+
+    rules_dict = (
+        GrammarRulesRegister().rules_registration()
+    )  # 得到 Dict[str, GrammarRule]
+    s = RuleSelector(rules_dict, [])
+    print(s.get_block_rule(""))  # 应该输出 "Root"
+    print(s.get_block_rule("space.indent"))  # 应该输出 "Block"

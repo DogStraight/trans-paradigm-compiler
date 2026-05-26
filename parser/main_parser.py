@@ -1,6 +1,6 @@
 # parser/main_parser.py
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
 from parser.feature_analyze import analyze_production_features
 from parser.parser_context import ParseContext
@@ -14,7 +14,6 @@ class Parser:
         self.grammar_rules: Dict[str, GrammarRule] = (
             GrammarRulesRegister().rules_registration()
         )
-        self.root_node = Node("root")
         self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
         self.operator_defs = pratt_parser.load_operator_defs()
         self.statement_rule_names = [
@@ -26,8 +25,10 @@ class Parser:
 
         self.skip_types = ["newline", "comment", "space.indent_keep"]
 
-    def _log_state(self, action: str):
-        with open(self.debug_log_file, "a", encoding="utf-8") as f:
+        self._log_state("Parser initialized", mode="w")
+
+    def _log_state(self, action: str, mode: str = "a") -> None:
+        with open(self.debug_log_file, mode, encoding="utf-8") as f:
             f.write(f"[{action}]\n")
 
     def _process_production_node(
@@ -41,38 +42,6 @@ class Parser:
             return None
         return method(node, context)
 
-    def _flatten_node(self, node: Node) -> Any:
-        # 1. 内联规则节点：去掉外层包装，提取内容
-        if node.name in self.grammar_rules and self.grammar_rules[node.name].inline:
-            # 获取除 name 和 child 外的所有自定义属性
-            attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
-            # 情况A：只有一个自定义属性 -> 返回该属性值（可能是基本类型、节点、列表等）
-            if len(attrs) == 1:
-                return list(attrs.values())[0]
-            # 情况B：没有自定义属性，但有 child 列表 -> 返回展平后的 child 列表（递归展平每个子节点）
-            child = getattr(node, "child", None)
-            if not attrs and isinstance(child, list):
-                # 如果 child 只有一个元素，也可以考虑直接返回它？但按照要求，返回列表更通用
-                return [self._flatten_node(c) for c in child]
-            # 情况C：既没有自定义属性也没有 child -> 返回 None（空节点）
-            if not attrs and not child:
-                return None
-            # 其他情况（如既有属性又有 child）：返回原节点
-            return node
-
-        # 2. 普通 token 节点（不在 grammar_rules 中）：压平为基本值
-        if node.name not in self.grammar_rules:
-            attrs = {k: v for k, v in vars(node).items() if k not in ("name", "child")}
-            if len(attrs) == 1:
-                only_value = list(attrs.values())[0]
-                if not isinstance(only_value, (Node, list, dict)):
-                    return only_value
-            # 如果本身没有属性，则返回节点本身（例如 NoneLiteral 无属性）
-            return node
-
-        # 3. 普通语法规则节点（非内联）：保留原样
-        return node
-
     def _try_rule_productions(
         self, context: ParseContext, rule: GrammarRule
     ) -> Optional[Node]:
@@ -80,12 +49,10 @@ class Parser:
         if rule.pratt:
             return self._try_pratt_rule(context, rule)
 
-        if "Block" in rule.name:
-            end_tokens = set(rule.end_case) if rule.end_case else set()
-            start_token = getattr(rule, "block_start", None)
-            return self.parse_block(
-                context, end_tokens=end_tokens, start_token=start_token
-            )
+        # 块规则：有非空 block_start 属性，调用 parse_block
+        block_start = getattr(rule, "block_start", None)
+        if block_start and isinstance(block_start, str) and block_start.strip():
+            return self.parse_block(context, start_token=block_start)
 
         self._log_state(f"尝试匹配规则: {rule.name}")
         # 设置当前规则，用于 _parse_token 中的属性绑定
@@ -110,13 +77,16 @@ class Parser:
             result_node = self._process_production_node(features, context)
             if result_node is None:
                 context.restore_snapshot(snapshot)
-                # 恢复父节点并清除 current_rule ？不必，因为会返回 None 并恢复快照，快照会恢复 current_rule
-                context.update_current_node(old_node)
+                # 恢复父节点
+                if old_node is None:
+                    context.current_node = None
+                else:
+                    context.update_current_node(old_node)
                 self._log_state(f"产生式 {prod} 匹配失败")
                 return None
             all_matched_nodes.append(result_node)
 
-        # 绑定属性（根据 rule.node 映射）
+        # 绑定属性
         for attr_name, pos_str in rule.node.items():
             if not isinstance(pos_str, str):
                 continue
@@ -124,15 +94,7 @@ class Parser:
                 pos = int(pos_str.strip("$")) - 1
                 if 0 <= pos < len(all_matched_nodes):
                     sub_node = all_matched_nodes[pos]
-                    # 压平节点
-                    attr_value = self._flatten_node(sub_node)
-                    # 特殊处理：如果 sub_node 是 list 节点，直接取其 items 属性
-                    if sub_node.name == "list":
-                        attr_value = sub_node.items
-                    # 也可以处理 repeat 节点为列表，但 repeat 保留原样
-                    if attr_name == "name":
-                        attr_name = "identifier"
-                    rule_node.add_attr(attr_name, attr_value)
+                    rule_node.add_attr(attr_name, sub_node)
             except (ValueError, IndexError):
                 continue
 
@@ -140,11 +102,17 @@ class Parser:
         if rule.end_case and context.has_more_tokens():
             token = context.peek_token()
             if token and token.type not in rule.end_case:
-                context.update_current_node(old_node)
+                if old_node is None:
+                    context.current_node = None
+                else:
+                    context.update_current_node(old_node)
                 return None
 
         # 恢复父节点
-        context.update_current_node(old_node)
+        if old_node is None:
+            context.current_node = None
+        else:
+            context.update_current_node(old_node)
         self._log_state(f"规则 {rule.name} 匹配成功")
         return rule_node
 
@@ -219,6 +187,7 @@ class Parser:
 
     def _parse_call(self, node: dict, context: ParseContext) -> Optional[Node]:
         rule_name = node["name"]
+        self._log_state(f"调用规则: {rule_name}")
         old_node = context.current_node
         snapshot = context.create_snapshot()
 
@@ -228,7 +197,10 @@ class Parser:
             context.restore_snapshot(snapshot)
             return None
 
-        context.update_current_node(old_node)
+        if old_node is None:
+            context.current_node = None
+        else:
+            context.update_current_node(old_node)
 
         if target_rule.inline:
             return result_node
@@ -287,7 +259,7 @@ class Parser:
                 result = self._process_production_node(elem, context)
                 if result is None:
                     break
-                nodes.append(self._flatten_node(result))
+                nodes.append(result)
                 if max_count is not None and len(nodes) >= max_count:
                     break
         return nodes if len(nodes) >= min_count else None
@@ -315,7 +287,7 @@ class Parser:
                 first_node = self._process_production_node(item_elem, context)
                 if first_node is None:
                     return Node("list", items=[])
-                collected.append(self._flatten_node(first_node))
+                collected.append(first_node)
 
             while True:
                 snapshot = context.create_snapshot()
@@ -326,7 +298,7 @@ class Parser:
                 next_node = self._process_production_node(item_elem, context)
                 if next_node is None:
                     break
-                collected.append(self._flatten_node(next_node))
+                collected.append(next_node)
             return Node("list", items=collected)
         else:
             self._log_state("解析重复节点（零次或多次）")
@@ -389,31 +361,62 @@ class Parser:
 
     # 解析器的主要输出方法 block
     def parse_block(
-        self,
-        context: ParseContext,
-        end_tokens: set | None = None,
-        start_token: str | None = None,
+        self, context: ParseContext, start_token: Optional[str] = None
     ) -> Optional[Node]:
         """
-        解析一个语句块，直到遇到 end_tokens 或 token 耗尽。
-        - end_tokens: 块结束的 token 类型集合。
-        - start_token: 块开始的 token 类型（如 "space.indent" 或 "bracket.l_curly_bracket"），如果提供则先消费它。
-        返回 Node("Block")，其 child 包含所有成功解析的语句节点。
+        解析一个代码块。
+
+        1. 根据起始符 start_token 查找匹配的块规则（block_start == start_token）
+        2. 使用匹配规则的名称作为块节点名称
+        3. 从匹配规则中提取结束符集合（block_end 和 end_case）
+        4. 消费起始符，循环解析句子直到遇到结束符，返回块节点
         """
+        # 1. 根据起始符获取块规则名称
+        self._log_state(
+            f"进入 parse_block, start_token={start_token}, 当前 token: {context.peek_token() if context.has_more_tokens() else 'EOF'}"
+        )
+        block_rule_name = (
+            self.rule_selector.get_block_rule(start_token)
+            if start_token is not None
+            else None
+        )
+        self._log_state(f"找到块规则: {block_rule_name}")
+        matched_rule = (
+            self.grammar_rules.get(block_rule_name) if block_rule_name else None
+        )
+
+        # 2. 确定块节点名称
+        if matched_rule is None:
+            self._log_state(f"未找到匹配的块规则: {start_token}")
+            return None
+        block_name = matched_rule.name
+
+        # 3. 确定结束符
+        end_token = getattr(matched_rule, "block_end", None)
+
+        # 4. 处理起始符（跳过分隔符、消费起始符）
         if start_token:
+            # 跳过空白、注释等
+            while context.has_more_tokens():
+                current = context.peek_token()
+                if current and current.type in self.skip_types:
+                    context.advance_token()
+                else:
+                    break
             current = context.peek_token()
             if not current or current.type != start_token:
                 self._log_state(f"期望块开始标记 {start_token}，未找到")
                 return None
             context.advance_token()  # 消费开始标记
 
-        if end_tokens is None:
-            end_tokens = set()
+        # 5. 创建块节点
+        block_node = Node(block_name)
 
-        block_node = Node("Block")
+        # 6. 循环解析句子直到遇到结束符或文件末尾
         while context.has_more_tokens():
             current = context.peek_token()
-            if current and current.type in end_tokens:
+            if current and current.type == end_token:
+                context.advance_token()  # 消费结束符
                 break
             if current and current.type in self.skip_types:
                 context.advance_token()
@@ -425,28 +428,12 @@ class Parser:
                 )
                 break
             block_node.add_child(stmt_node)
+
+        # 7. 返回块节点
         return block_node
 
     # 解析器的入口
     def parse(self, tokens: List[Token]) -> Optional[Node]:
-        if not tokens:
-            return None
-        context = ParseContext(tokens, self.root_node)
-
-        while context.has_more_tokens():
-            current = context.peek_token()
-            # 跳过空白/注释
-            if current and current.type in self.skip_types:
-                context.advance_token()
-                continue
-
-            stmt_node = self.parse_sentence(context)
-            if stmt_node is None:
-                # 无法解析，可能是语法错误
-                self._log_state(
-                    f"无法解析的 token: {current.content if current else 'EOF'}"
-                )
-                break
-            self.root_node.add_child(stmt_node)
-
-        return self.root_node if getattr(self.root_node, "child", None) else None
+        context = ParseContext(tokens)
+        block_node = self.parse_block(context, start_token="")
+        return block_node if block_node else None

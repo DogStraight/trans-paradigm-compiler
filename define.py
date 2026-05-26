@@ -39,7 +39,7 @@ class FileManager:
     token_define_file: str = "pyv_compiler/grammar/token.toml"
     lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
     symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"  # 新增
-    debug_log_file: str = "parser_debug.log"  # 新增
+    debug_log_file: str = "pyv_compiler/parser_debug.log"  # 新增
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:

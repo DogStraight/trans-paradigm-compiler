@@ -1,3 +1,30 @@
+# ===================================================================
+# 语法规则定义文件
+# ===================================================================
+# 本文件定义语言的语法规则，采用类 EBNF 格式。
+# 每个规则以 `[RuleName]` 开头，可包含以下字段：
+#   - production : 产生式列表，支持的元素：
+#         "token.type"      : 匹配特定 token 类型
+#         "@RuleName"       : 调用另一个规则
+#         "A|B|C"           : 选择（分支）
+#         "item*"           : 零次或多次重复
+#         "item+"           : 一次或多次重复
+#         "item?"           : 零次或一次可选
+#         "( ... )"         : 分组
+#         ","               : 序列分隔（用于列表等）
+#   - end_case   : 规则结束时应遇到的 token 类型列表（用于语句规则）
+#   - node       : 属性映射，格式 { "attr" = "$pos" }，表示将产生式中第 pos 个匹配结果绑定到节点属性 attr
+#   - inline     : true/false，内联规则，在解析时直接提取其内容（不创建节点）
+#   - pratt      : true/false，该规则是否由 Pratt 解析器处理（用于表达式）
+#   - block_start: 块开始的 token 类型（如 "space.indent"）
+#   - block_end  : 块结束的 token 类型（如 "space.dedent"）
+# ===================================================================
+
+
+# ============================================================================
+# 1. 字面量及原子表达式
+# ============================================================================
+
 [Constant]
 production = ["literal.number"]
 [Constant.node]
@@ -6,56 +33,32 @@ value = "$1"
 [Variable]
 production = ["id"]
 [Variable.node]
-name = "$1"
+identifier = "$1"
 
-
-# Parenthesized expressions
 [ParenthesizedExpr]
 production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
 [ParenthesizedExpr.node]
 expr = "$2"
 
-# Primary expressions (atoms)
 [PrimaryExpr]
 production = ["@Constant|@Variable|@ParenthesizedExpr"]
 [PrimaryExpr.node]
 value = "$1"
 
-# 乘除运算符单元
+
+# ============================================================================
+# 2. 运算符（单元）
+# ============================================================================
+
 [MulOp]
 production = ["symbol.base.multiple|symbol.base.div"]
 [MulOp.node]
 op = "$1"
 
-# 乘除表达式
-[MulExpr]
-production = ["@PrimaryExpr", "(@MulOp,@PrimaryExpr)*"]
-pratt = true
-[MulExpr.node]
-head = "$1" # 第一个PrimaryExpr
-tail = "$2" # 后续的 (操作符 操作数) 重复序列
-
-# 加减运算符单元
 [AddOp]
 production = ["symbol.base.add|symbol.base.sub"]
 [AddOp.node]
 op = "$1"
-
-# 加减表达式
-[AddExpr]
-production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
-pratt = true
-[AddExpr.node]
-head = "$1" # 第一个MulExpr
-tail = "$2" # 后续的 (操作符 操作数) 重复序列
-
-# 比较表达式
-[CompareExpr]
-production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
-pratt = true
-[CompareExpr.node]
-left = "$1"
-op_rhs = "$2" # 可选部分：操作符和右操作数
 
 [CmpOp]
 production = [
@@ -64,16 +67,6 @@ production = [
 [CmpOp.node]
 op = "$1"
 
-
-# 顶层表达式
-[Expression]
-production = ["@AddExpr|@BoolExpr"]
-end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
-pratt = true
-[Expression.node]
-expr = "$1"
-
-
 [LogicOp]
 production = [
     "id.keyword.logic_add|id.keyword.logic_or|symbol.base.and|symbol.base.or",
@@ -81,12 +74,56 @@ production = [
 [LogicOp.node]
 op = "$1"
 
+
+# ============================================================================
+# 3. 表达式（由 Pratt 解析器处理）
+# ============================================================================
+
+[MulExpr]
+production = ["@PrimaryExpr", "(@MulOp,@PrimaryExpr)*"]
+pratt = true
+[MulExpr.node]
+head = "$1"
+tail = "$2"
+
+[AddExpr]
+production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
+pratt = true
+[AddExpr.node]
+head = "$1"
+tail = "$2"
+
+[CompareExpr]
+production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
+pratt = true
+[CompareExpr.node]
+left = "$1"
+op_rhs = "$2"
+
 [BoolExpr]
 production = ["@CompareExpr", "(@LogicOp,@CompareExpr)*"]
 [BoolExpr.node]
 head = "$1"
 tail = "$2"
 
+[Expression]
+production = ["@AddExpr|@BoolExpr"]
+end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
+pratt = true
+[Expression.node]
+expr = "$1"
+
+[Condition]
+production = ["@CompareExpr|@BoolExpr"]
+end_case = ["symbol.base.colon"]
+pratt = true
+[Condition.node]
+expr = "$1"
+
+
+# ============================================================================
+# 4. 函数调用与参数
+# ============================================================================
 
 [Arguments]
 production = ["@Expression", "(symbol.base.comma,@Expression)*"]
@@ -102,15 +139,34 @@ production = [
     "bracket.r_parentheses",
 ]
 [Call.node]
-name = "$1"
+callable_name = "$1"
 args = "$3"
 
 
-# 列表类型: [ Type ]
+# ============================================================================
+# 5. 类型系统
+# ============================================================================
+
 [ListType]
 production = ["bracket.l_square_bracket", "@Type", "bracket.r_square_bracket"]
 [ListType.node]
 elem_type = "$2"
+
+[OptionalType]
+production = ["symbol.base.question_mark", "@Type"]
+[OptionalType.node]
+inner = "$2"
+
+[Type]
+production = ["id|@ListType|@OptionalType"]
+inline = true
+[Type.node]
+type_desc = "$1"
+
+
+# ============================================================================
+# 6. 字面量表达式（列表、初始化）
+# ============================================================================
 
 [ListLiteral]
 production = [
@@ -121,24 +177,23 @@ production = [
 [ListLiteral.node]
 elements = "$2"
 
-[OptionalType]
-production = ["symbol.base.question_mark", "@Type"]
-[OptionalType.node]
-inner = "$2"
-
-[VarDecl]
-production = ["id", "symbol.base.colon", "@Type"]
-end_case = ["newline"]
-[VarDecl.node]
-name = "$1"
-type = "$3"
-
-
 [Initializer]
 production = ["@ListLiteral|@Call|@Expression"]
 inline = true
 [Initializer.node]
 value = "$1"
+
+
+# ============================================================================
+# 7. 语句（Statements）
+# ============================================================================
+
+[VarDecl]
+production = ["id", "symbol.base.colon", "@Type"]
+end_case = ["newline"]
+[VarDecl.node]
+var_name = "$1"
+type = "$3"
 
 [VarInit]
 production = [
@@ -150,47 +205,57 @@ production = [
 ]
 end_case = ["newline"]
 [VarInit.node]
-name = "$1"
+var_name = "$1"
 type = "$3"
 value = "$5"
 
-# Type 作为顶层规则，可以是 id（基本类型）或 @ListType 或 @OptionalType
-[Type]
-production = ["id|@ListType|@OptionalType"]
-inline = true
-[Type.node]
-type_desc = "$1"
-
+[AssignStmt]
+production = ["id", "symbol.base.equal", "@Initializer"]
+end_case = ["newline"]
+[AssignStmt.node]
+var_name = "$1"
+value = "$3"
 
 [IdList]
-production = ["id+"]   # 期望至少一个 id
+production = ["id+"]
 end_case = ["newline"]
 [IdList.node]
 items = "$1"
 
 
-[Block]
-production = []
-end_case = ["space.dedent"]  # 缩进块的结束符
-block_start = "space.indent" # 缩进块的开始符
-
+# ============================================================================
+# 8. 控制流（if-else）
+# ============================================================================
 
 [IfStatement]
 production = [
-    "id.keyword.if",
-    "@Expression",
+    "keyword.if",
+    "@Condition",
     "symbol.base.colon",
     "@Block",
     "@ElseBranch?",
 ]
-end_case = ["space.dedent", "newline"] # if 语句结束后需要缩进退格
+end_case = ["newline"]
 [IfStatement.node]
 condition = "$2"
 then_body = "$4"
 else_body = "$5"
 
 [ElseBranch]
-production = ["id.keyword.else", "symbol.base.colon", "@Block"]
+production = ["keyword.else", "symbol.base.colon", "@Block"]
 inline = true
 [ElseBranch.node]
 body = "$3"
+
+
+# ============================================================================
+# 9. 块结构（缩进块、根块）
+# ============================================================================
+
+[Root]
+block_start = ""
+block_end = ""
+
+[Block]
+block_start = "space.indent"
+block_end = "space.dedent"

@@ -6,13 +6,12 @@ import copy
 class ParseContext:
     """解析上下文，管理解析过程中的所有状态"""
 
-    def __init__(self, tokens: list[Token], root_node: Node) -> None:
+    def __init__(self, tokens: list[Token]) -> None:
         self._snapshot_stack = []  # 添加快照栈
         self.tokens = tokens
-        self.root_node = root_node
         self.token_pointer = 0
-        self.current_node = root_node
         self.match_length = 0
+        self.current_node: Node | None = None
         self.current_rule: GrammarRule | None = None
         self.production_pointer = 0
         self.exc_type = None

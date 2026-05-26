@@ -1,10 +1,10 @@
 # symbol_level.toml
 # 运算符定义，优先级由数组顺序决定（从低到高）
 
-[[operator]]
-symbol = "="
-arity = 2
-assoc = "right"
+# [[operator]]
+# symbol = "="
+# arity = 2
+# assoc = "right"
 
 [[operator]]
 symbol = "?"

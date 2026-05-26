@@ -50,6 +50,9 @@ class Lexer:
 
         # is output comments
         self.output_comments = False
+
+        # new line start flag for indent handling
+        self.new_line_start = False
         pass
 
     def _build_alpha_tokens(self) -> None:
@@ -116,38 +119,74 @@ class Lexer:
                 start_point = 0
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
+                # mark new line start for next line
+                self.new_line_start = True
                 continue
 
             # in case current char is a space
             elif lex_text[text_idx] in self.token_define["space"].values():
                 space_content: str = ""
-                start_point += 1  # move on
+                start_col = start_point
                 while (
-                    lex_text[text_idx] in self.token_define["space"].values()
-                    and text_idx + 1 <= lex_text_len
+                    text_idx < lex_text_len
+                    and lex_text[text_idx] in self.token_define["space"].values()
                 ):
                     space_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
 
-                # set current token line info
-                current_token.set_type("space")
-                current_token.set_content(space_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
+                # handle indentation only when this line just started
+                if self.new_line_start:
+                    # empty line (only spaces followed by newline) -> ignore
+                    if text_idx < lex_text_len and lex_text[text_idx] in self.newline:
+                        # ignore spaces on empty line, do not change indent
+                        self.new_line_start = True  # keep flag for next line
+                    else:
+                        # calculate indent depth
+                        if len(space_content) % self.indent_level == 0:
+                            current_depth = len(space_content) // self.indent_level
+                        else:
+                            raise IndentationError(
+                                f"Indentation error at line {line_number}, column {start_col}"
+                            )
 
-                # reset line info
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                if current_token.type == "space":
-                    pass
-                else:
-                    tokens.append(current_token)
+                        if current_depth > self.indent_deep:
+                            # emit indent token
+                            indent_token = Token()
+                            indent_token.set_type("space.indent")
+                            indent_token.set_content(space_content)
+                            indent_token.set_location(
+                                line_number,
+                                start_col,
+                                line_number,
+                                start_col + len(space_content),
+                            )
+                            tokens.append(indent_token)
+                        elif current_depth < self.indent_deep:
+                            # emit one or more dedent tokens
+                            while self.indent_deep > current_depth:
+                                dedent_token = Token()
+                                dedent_token.set_type("space.dedent")
+                                dedent_token.set_content("")
+                                dedent_token.set_location(
+                                    line_number, start_col, line_number, start_col
+                                )
+                                tokens.append(dedent_token)
+                                self.indent_deep -= 1
+                        # if equal: nothing to emit
+                        self.indent_deep = current_depth
+                        self.new_line_start = False
+                # else: spaces inside a line -> ignore
+
+                # update start_point
+                start_point += len(space_content)
                 continue
 
             # in case current char is a symbol
             elif lex_text[text_idx] in self.token_define["symbol"]["base"].values():
+                # handle possible dedent before actual token
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
                 extend_symbol = f"{lex_text[text_idx]}{next_char}"
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_type("symbol.base")
@@ -172,6 +211,8 @@ class Lexer:
 
             # in case current char is a bracket
             elif lex_text[text_idx] in self.bracket:
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
                 # set current token line info
                 current_token.set_type("bracket")
                 current_token.set_content(lex_text[text_idx])
@@ -188,8 +229,13 @@ class Lexer:
 
             # in case current char in comment
             elif lex_text[text_idx] in self.token_define["comment"]["boundary"]:
+                # comments at beginning of line should not affect indentation
+                if self.new_line_start:
+                    # ignore indent for comment-only line
+                    self.new_line_start = False
+
                 comment_content: str = ""
-                while lex_text[text_idx] != "\n":
+                while text_idx < lex_text_len and lex_text[text_idx] != "\n":
                     comment_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
@@ -211,9 +257,11 @@ class Lexer:
 
             # in case current char is an id
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
                 id_content: str = lex_text[text_idx]
                 text_idx += 1
-                while (
+                while text_idx < lex_text_len and (
                     lex_text[text_idx].isalpha()
                     or lex_text[text_idx] == "_"
                     or lex_text[text_idx].isdigit()
@@ -237,9 +285,12 @@ class Lexer:
 
             # in case current char is a number
             elif lex_text[text_idx].isdigit():
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
                 number_content: str = ""
                 while (
-                    lex_text[text_idx] not in self.blank
+                    text_idx < lex_text_len
+                    and lex_text[text_idx] not in self.blank
                     and lex_text[text_idx] not in self.bracket
                     and lex_text[text_idx] not in self.base_symbol
                 ):
@@ -262,16 +313,23 @@ class Lexer:
 
             # in case current char is in string
             elif lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
                 end_char: str = lex_text[text_idx]
                 string_content: str = ""
                 string_content += lex_text[text_idx]
                 text_idx += 1
-                while lex_text[text_idx] != end_char and lex_text[text_idx] != "\n":
+                while (
+                    text_idx < lex_text_len
+                    and lex_text[text_idx] != end_char
+                    and lex_text[text_idx] != "\n"
+                ):
                     string_content += lex_text[text_idx]
                     text_idx += 1
                     offset += 1
-                string_content += lex_text[text_idx]
-                text_idx += 1
+                if text_idx < lex_text_len:
+                    string_content += lex_text[text_idx]
+                    text_idx += 1
 
                 # set current token line info
                 current_token.set_type("literal.string")
@@ -288,6 +346,8 @@ class Lexer:
 
             # in case current char has nowhere to put
             else:
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
                 current_token.set_type("unrecognized")
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_location(
@@ -301,29 +361,27 @@ class Lexer:
                 tokens.append(current_token)
         return tokens
 
+    def _emit_pending_dedent(self, tokens: list[Token], line: int, column: int) -> None:
+        """当新行没有前导空格时，输出所有待处理的 dedent 令牌"""
+        if self.new_line_start:
+            while self.indent_deep > 0:
+                dedent_token = Token()
+                dedent_token.set_type("space.dedent")
+                dedent_token.set_content("")
+                dedent_token.set_location(line, column, line, column)
+                tokens.append(dedent_token)
+                self.indent_deep -= 1
+            self.new_line_start = False
+
     # only use in method tokenize
     def refine_type(self, _token: Token) -> Token:
         # this method provide more refined token type #
         match _token.type:
-            # in case token type is space
+            # space indentation is already handled in tokenize loop
             case "space":
-                if self.previous_token_type != "newline":
-                    _token.type = "space"
-                elif len(_token.content) % self.indent_level == 0:
-                    current_indent_deep: int = int(
-                        len(_token.content) / self.indent_level
-                    )
-                    if current_indent_deep > self.indent_deep:
-                        _token.type += "." + "indent"
-                    elif current_indent_deep == self.indent_deep:
-                        _token.type += "." + "indent_keep"
-                    else:
-                        _token.type += "." + "dedent"
-                    self.indent_deep = current_indent_deep
-                else:
-                    raise IndentationError(
-                        f"Indentation error at: {_token.start.column}"
-                    )
+                # should not reach here normally, but keep for safety
+                _token.type = "space"
+
             # in case token type is id
             case "id":
                 # 1. 尝试匹配字母形式的 token（符号、括号、精确字面量）
