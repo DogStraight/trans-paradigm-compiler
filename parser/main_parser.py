@@ -108,6 +108,26 @@ class Parser:
                     context.update_current_node(old_node)
                 return None
 
+        # Inline 规则扁平化：只有一个属性映射时，直接返回被映射的子节点
+        if rule.inline and len(rule.node) == 1:
+            for attr_name, pos_str in rule.node.items():
+                if isinstance(pos_str, str):
+                    try:
+                        pos = int(pos_str.strip("$")) - 1
+                        if 0 <= pos < len(all_matched_nodes):
+                            inner = all_matched_nodes[pos]
+                            # 恢复父节点
+                            if old_node is None:
+                                context.current_node = None
+                            else:
+                                context.update_current_node(old_node)
+                            self._log_state(
+                                f"规则 {rule.name} 内联展开成功 -> {inner.name if hasattr(inner, 'name') else type(inner)}"
+                            )
+                            return inner
+                    except (ValueError, IndexError):
+                        pass
+
         # 恢复父节点
         if old_node is None:
             context.current_node = None
@@ -120,13 +140,14 @@ class Parser:
         self, context: ParseContext, rule: GrammarRule
     ) -> Optional[Node]:
         self._log_state(f"使用 Pratt 解析器解析规则: {rule.name}")
-        # 对于 Pratt 规则，不需要设置 current_rule（因为不经过 _parse_token）
         start_idx = context.token_pointer
         if not context.has_more_tokens():
             self._log_state("Pratt 解析: 没有可用 token")
             return None
 
+        # 收集表达式 token，同时记录每个 expr token 在 context 中的索引
         expr_tokens = []
+        expr_indices = []
         ptr = start_idx
         skip_types = {"newline", "comment"}
         while ptr < len(context.tokens):
@@ -137,6 +158,7 @@ class Parser:
                 ptr += 1
                 continue
             expr_tokens.append(tok)
+            expr_indices.append(ptr)
             ptr += 1
 
         if not expr_tokens:
@@ -144,13 +166,23 @@ class Parser:
             return None
 
         try:
-            ast_node = pratt_parser.parse(expr_tokens, self.operator_defs)
+            ast_node, consumed = pratt_parser.parse_with_count(
+                expr_tokens, self.operator_defs
+            )
         except Exception as e:
             self._log_state(f"Pratt 解析失败: {e}")
             return None
 
-        context.token_pointer = ptr
-        self._log_state(f"Pratt 解析成功，消耗了 {ptr - start_idx} 个 token")
+        if consumed == 0:
+            self._log_state("Pratt 解析: 未消费任何 token")
+            return None
+
+        # 将 Pratt 实际消费的 expr token 数量映射回 context 中的位置
+        last_consumed_idx = expr_indices[consumed - 1]
+        context.token_pointer = last_consumed_idx + 1
+        self._log_state(
+            f"Pratt 解析成功，消耗了 {consumed}/{len(expr_tokens)} 个 token"
+        )
         return ast_node
 
     # 对应生成式的类型的处理方法

@@ -215,9 +215,23 @@ def parse(tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]) 
     ast, idx = parse_expression(
         tokens, 0, 0, prefix_priority, prefix_attrs, infix_priority, infix_attrs
     )
-    if idx != len(tokens):
-        raise ValueError("解析后有多余的 token")
     return ast
+
+
+def parse_with_count(
+    tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]
+) -> tuple[Node, int]:
+    """
+    解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
+    不会因为剩余 token 而报错，由调用方决定如何处理剩余部分。
+    """
+    prefix_priority, prefix_attrs, infix_priority, infix_attrs = build_priority_maps(
+        operator_defs
+    )
+    ast, idx = parse_expression(
+        tokens, 0, 0, prefix_priority, prefix_attrs, infix_priority, infix_attrs
+    )
+    return ast, idx
 
 
 # ========== 辅助函数：判断 token 类型 ==========
@@ -230,7 +244,7 @@ def is_string(token: Token) -> bool:
 
 
 def is_bool(token: Token) -> bool:
-    return token.type in ("literal.bool_true", "literal.bool_false")
+    return token.type in ("literal.true", "literal.false", "literal.bool_true", "literal.bool_false")
 
 
 def is_identifier(token: Token) -> bool:
@@ -248,4 +262,4 @@ def is_paren(token: Token) -> bool:
 
 
 def is_none(token: Token) -> bool:
-    return token.type == "literal.none"
+    return token.type in ("literal.none",)

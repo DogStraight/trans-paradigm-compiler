@@ -41,8 +41,13 @@ production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
 expr = "$2"
 
 [PrimaryExpr]
-production = ["@Constant|@Variable|@ParenthesizedExpr"]
+production = ["@Constant|@Variable|@ParenthesizedExpr|@StringLiteral|@Call"]
 [PrimaryExpr.node]
+value = "$1"
+
+[StringLiteral]
+production = ["literal.string"]
+[StringLiteral.node]
 value = "$1"
 
 
@@ -105,20 +110,6 @@ production = ["@CompareExpr", "(@LogicOp,@CompareExpr)*"]
 [BoolExpr.node]
 head = "$1"
 tail = "$2"
-
-[Expression]
-production = ["@AddExpr|@BoolExpr"]
-end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
-pratt = true
-[Expression.node]
-expr = "$1"
-
-[Condition]
-production = ["@CompareExpr|@BoolExpr"]
-end_case = ["symbol.base.colon"]
-pratt = true
-[Condition.node]
-expr = "$1"
 
 
 # ============================================================================
@@ -222,9 +213,30 @@ end_case = ["newline"]
 [IdList.node]
 items = "$1"
 
+[CallStmt]
+production = ["@Call"]
+end_case = ["newline"]
+[CallStmt.node]
+call = "$1"
+
+[PassStmt]
+production = ["keyword.pass"]
+end_case = ["newline"]
+[PassStmt.node]
+
+[BreakStmt]
+production = ["keyword.break"]
+end_case = ["newline"]
+[BreakStmt.node]
+
+[ContinueStmt]
+production = ["keyword.continue"]
+end_case = ["newline"]
+[ContinueStmt.node]
+
 
 # ============================================================================
-# 8. 控制流（if-else）
+# 8. 控制流（if-else, while, for）
 # ============================================================================
 
 [IfStatement]
@@ -247,9 +259,51 @@ inline = true
 [ElseBranch.node]
 body = "$3"
 
+[WhileStatement]
+production = ["keyword.while", "@Condition", "symbol.base.colon", "@Block"]
+end_case = ["newline"]
+[WhileStatement.node]
+condition = "$2"
+body = "$4"
+
+[ForStatement]
+production = [
+    "keyword.for",
+    "id+",
+    "keyword.in",
+    "@Expression",
+    "symbol.base.colon",
+    "@Block",
+]
+end_case = ["newline"]
+[ForStatement.node]
+vars = "$2"
+iterable = "$4"
+body = "$6"
+
 
 # ============================================================================
-# 9. 块结构（缩进块、根块）
+# 9. 导入语句
+# ============================================================================
+
+[ImportStatement]
+production = ["keyword.import", "id", "(keyword.as,id)?"]
+end_case = ["newline"]
+[ImportStatement.node]
+module = "$2"
+alias = "$3"
+
+[FromImport]
+production = ["keyword.from", "id", "keyword.import", "id", "(keyword.as,id)?"]
+end_case = ["newline"]
+[FromImport.node]
+module = "$2"
+name = "$4"
+alias = "$5"
+
+
+# ============================================================================
+# 10. 块结构（缩进块、根块）
 # ============================================================================
 
 [Root]
@@ -259,3 +313,22 @@ block_end = ""
 [Block]
 block_start = "space.indent"
 block_end = "space.dedent"
+
+
+# ============================================================================
+# 11. 条件表达式（仅供 if/while 内部调用，不作为顶层语句）
+# ============================================================================
+
+[Condition]
+production = ["@CompareExpr|@BoolExpr"]
+end_case = ["symbol.base.colon"]
+pratt = true
+[Condition.node]
+expr = "$1"
+
+[Expression]
+production = ["@AddExpr|@BoolExpr"]
+end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
+pratt = true
+[Expression.node]
+expr = "$1"

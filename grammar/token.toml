@@ -75,6 +75,7 @@ for = "for"
 while = "while"
 break = "break"
 continue = "continue"
+in = "in"
 
 # param
 param = "param"
@@ -97,14 +98,16 @@ pass = "pass"
 posedge = "posedge"
 negedge = "negedge"
 
-[id.id]
-id = "[a-z_A-Z][a-z_A-Z0-9]*"
-
 [literal]
+true = "True"
+false = "False"
+none = "None"
 string = "(\".*\")|('.*')"
 bool_false = "False"
 bool_true = "True"
 number = "\\d+"
-none = "None"
+
+[id.id]
+id = "[a-z_A-Z][a-z_A-Z0-9]*"
 
 
