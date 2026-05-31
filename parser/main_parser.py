@@ -42,6 +42,34 @@ class Parser:
             return None
         return method(node, context)
 
+    def _try_inline_rule(
+        self,
+        rule: GrammarRule,
+        all_matched_nodes: List[Node],
+        old_node: Optional[Node],
+        context: ParseContext,
+    ) -> Optional[Node]:
+        """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。"""
+        if rule.inline and len(rule.node) == 1:
+            for _, pos_str in rule.node.items():
+                if isinstance(pos_str, str):
+                    try:
+                        pos = int(pos_str.strip("$")) - 1
+                        if 0 <= pos < len(all_matched_nodes):
+                            inner = all_matched_nodes[pos]
+                            # 恢复父节点
+                            if old_node is None:
+                                context.current_node = None
+                            else:
+                                context.update_current_node(old_node)
+                            self._log_state(
+                                f"规则 {rule.name} 内联展开成功 -> {inner.name if hasattr(inner, 'name') else type(inner)}"
+                            )
+                            return inner
+                    except (ValueError, IndexError):
+                        pass
+        return None
+
     def _try_rule_productions(
         self, context: ParseContext, rule: GrammarRule
     ) -> Optional[Node]:
@@ -109,24 +137,11 @@ class Parser:
                 return None
 
         # Inline 规则扁平化：只有一个属性映射时，直接返回被映射的子节点
-        if rule.inline and len(rule.node) == 1:
-            for attr_name, pos_str in rule.node.items():
-                if isinstance(pos_str, str):
-                    try:
-                        pos = int(pos_str.strip("$")) - 1
-                        if 0 <= pos < len(all_matched_nodes):
-                            inner = all_matched_nodes[pos]
-                            # 恢复父节点
-                            if old_node is None:
-                                context.current_node = None
-                            else:
-                                context.update_current_node(old_node)
-                            self._log_state(
-                                f"规则 {rule.name} 内联展开成功 -> {inner.name if hasattr(inner, 'name') else type(inner)}"
-                            )
-                            return inner
-                    except (ValueError, IndexError):
-                        pass
+        inline_result = self._try_inline_rule(
+            rule, all_matched_nodes, old_node, context
+        )
+        if inline_result is not None:
+            return inline_result
 
         # 恢复父节点
         if old_node is None:
