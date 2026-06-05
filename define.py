@@ -26,10 +26,9 @@ class Token:
 
 
 from dataclasses import dataclass
-import toml
+import tomllib
 import os
 from pathlib import Path
-from typing import Union
 
 
 @dataclass
@@ -38,8 +37,8 @@ class FileManager:
     rules_file: str = "pyv_compiler/grammar/rules.toml"
     token_define_file: str = "pyv_compiler/grammar/token.toml"
     lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
-    symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"  # 新增
-    debug_log_file: str = "pyv_compiler/parser_debug.log"  # 新增
+    symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"
+    debug_log_file: str = "pyv_compiler/parser_debug.log"
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:
@@ -53,13 +52,10 @@ class FileManager:
             return f.read()
 
     @classmethod
-    def write_file(cls, relative_path: str, content: Union[str, dict]) -> None:
+    def write_file(cls, relative_path: str, content: str) -> None:
         """Write content to file at relative path"""
-        with open(cls.get_full_path(relative_path), "w") as f:
-            if isinstance(content, dict):
-                toml.dump(content, f)
-            else:
-                f.write(content)
+        with open(cls.get_full_path(relative_path), "w", encoding="utf-8") as f:
+            f.write(content)
 
     @classmethod
     def exists(cls, relative_path: str) -> bool:
@@ -72,7 +68,7 @@ class FileManager:
         if rules_file == "":
             rules_file = cls.rules_file
         rules_content = cls.read_file(rules_file)
-        return toml.loads(rules_content)
+        return tomllib.loads(rules_content)
 
 
 from err import BracketMismatchError

@@ -1,5 +1,5 @@
 # lexer/lexer_utils.py
-from toml import loads as toml_loads
+import tomllib
 from define import FileManager
 
 
@@ -7,7 +7,7 @@ def get_token_define(
     token_define: str = FileManager.token_define_file,
 ) -> dict:
     token_define = FileManager.read_file(token_define)
-    token_define_dict: dict = toml_loads(token_define)
+    token_define_dict: dict = tomllib.loads(token_define)
     return token_define_dict
 
 

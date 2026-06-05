@@ -1,6 +1,6 @@
 from define import Node, FileManager
 from typing import List, Dict, Any, Optional
-import toml
+import tomllib
 import os
 import re
 
@@ -263,7 +263,7 @@ class CodeGenerator:
             with open(alt_path, "r", encoding="utf-8") as f:
                 rules_content = f.read()
 
-        data = toml.loads(rules_content)
+        data = tomllib.loads(rules_content)
 
         # 加载文件规则
         self._file_rules = data.pop("file_rules", [])

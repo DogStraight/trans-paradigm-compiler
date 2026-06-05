@@ -1,14 +1,13 @@
 # parser/pratt_parser.py
-import toml
+import tomllib
 from typing import List, Tuple, Dict, Any
 from define import Node, Token, FileManager
 
 
 def load_operator_defs() -> List[Tuple[int, dict]]:
     """加载运算符优先级和结合性定义"""
-    path = FileManager.get_full_path(FileManager.symbol_level_file)
-    with open(path, "r", encoding="utf-8") as f:
-        data = toml.load(f)
+    content = FileManager.read_file(FileManager.symbol_level_file)
+    data = tomllib.loads(content)
     operators = data.get("operator", [])
     operator_defs = []
     for idx, op in enumerate(operators, start=1):
