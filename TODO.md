@@ -12,7 +12,22 @@
 
 ## 语法分析器 (Parser)
 
-- [ ] 进行更多类型的语法解析和语法编写
-  - if block
-  - for block / while block
-  - func def / class def ...
+- [x] 基本表达式解析（算术、比较、逻辑、一元）
+- [x] if / while / for 控制流
+- [x] import / from import 导入语句
+- [x] 变量声明、赋值、类型系统（基础类型、列表、可选）
+- [x] 字面量（数字、字符串、布尔、None、列表）
+- [x] 函数调用
+- [ ] 函数定义 / 类定义
+- [ ] 模块定义（module / interface 等 HDL 结构）
+
+## 代码生成器 (CodeGenerator)
+
+- [x] 配置驱动：生成规则外部定义（`grammar/cg_rules.toml`）
+- [x] 访问者模式：`visit()` 按节点类型分派
+- [x] 模板引擎：支持 `{{path}}`、`{{#list}}`、`{{?cond}}` 语法
+- [x] 条件分支模板（match + case）
+- [x] 多文件输出（file_rules）
+- [x] 文本级优化（去多余空行）
+- [ ] 完善所有 AST 节点类型的生成模板
+- [ ] 实际运行验证生成结果的正确性
