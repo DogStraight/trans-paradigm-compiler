@@ -1,0 +1,17 @@
+# ============================================================================
+# 条件表达式（仅供 if/while 内部调用，不作为顶层语句）
+# ============================================================================
+
+[Condition]
+production = ["@CompareExpr|@BoolExpr"]
+end_case = ["symbol.base.colon"]
+pratt = true
+[Condition.node]
+expr = "$1"
+
+[Expression]
+production = ["@AddExpr|@BoolExpr"]
+end_case = ["newline", "symbol.base.comma", "bracket.r_square_bracket"]
+pratt = true
+[Expression.node]
+expr = "$1"

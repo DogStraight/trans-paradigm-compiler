@@ -1,0 +1,18 @@
+# ============================================================================
+# 导入语句
+# ============================================================================
+
+[ImportStatement]
+production = ["keyword.import", "id", "(keyword.as,id)?"]
+end_case = ["newline"]
+[ImportStatement.node]
+module = "$2"
+alias = "$3"
+
+[FromImport]
+production = ["keyword.from", "id", "keyword.import", "id", "(keyword.as,id)?"]
+end_case = ["newline"]
+[FromImport.node]
+module = "$2"
+name = "$4"
+alias = "$5"

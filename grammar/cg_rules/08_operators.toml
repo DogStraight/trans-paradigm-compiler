@@ -1,0 +1,16 @@
+# ============================================================================
+# 运算符表达式
+# ============================================================================
+
+[BinaryOp]
+template = "({{ left }} {{ op }} {{ right }})"
+
+[UnaryOp]
+match = "position"
+[[UnaryOp.case]]
+when = "prefix"
+template = "{{ op }}{{ operand }}"
+
+[[UnaryOp.case]]
+when = "postfix"
+template = "{{ operand }}{{ op }}"

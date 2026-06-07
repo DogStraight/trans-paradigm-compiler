@@ -29,15 +29,18 @@ from dataclasses import dataclass
 import tomllib
 import os
 from pathlib import Path
+from typing import List
 
 
 @dataclass
 class FileManager:
     _base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     rules_file: str = "pyv_compiler/grammar/rules.toml"
+    rules_dir: str = "pyv_compiler/grammar/rules"
     token_define_file: str = "pyv_compiler/grammar/token.toml"
     lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
     symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"
+    cg_rules_dir: str = "pyv_compiler/grammar/cg_rules"
     debug_log_file: str = "pyv_compiler/parser_debug.log"
 
     @classmethod
@@ -64,11 +67,40 @@ class FileManager:
 
     @classmethod
     def load_rules(cls, rules_file: str = "") -> dict:
-        """Load grammar rules from TOML file"""
+        """Load grammar rules from a single TOML file (legacy)"""
         if rules_file == "":
             rules_file = cls.rules_file
         rules_content = cls.read_file(rules_file)
         return tomllib.loads(rules_content)
+
+    @classmethod
+    def load_all_toml(cls, dir_relative_path: str) -> dict:
+        """
+        加载指定目录下所有 .toml 文件并合并为一个 dict。
+        文件按名称排序加载，同名 key 后者覆盖前者。
+        file_rules 列表特殊处理：所有文件中的 file_rules 会合并为一个列表。
+        以下划线 _ 开头的文件被跳过（可用于禁用或注释）。
+        如果目录不存在或为空，返回空 dict。
+        """
+        dir_path = cls.get_full_path(dir_relative_path)
+        merged: dict = {}
+        all_file_rules: list = []
+        if not os.path.isdir(dir_path):
+            return merged
+        for fname in sorted(os.listdir(dir_path)):
+            if not fname.endswith(".toml") or fname.startswith("_"):
+                continue
+            fpath = os.path.join(dir_path, fname)
+            with open(fpath, "r", encoding="utf-8") as f:
+                data = tomllib.loads(f.read())
+            # file_rules 特殊处理：跨文件合并
+            fr = data.pop("file_rules", None)
+            if fr:
+                all_file_rules.extend(fr)
+            merged.update(data)
+        if all_file_rules:
+            merged["file_rules"] = all_file_rules
+        return merged
 
 
 from err import BracketMismatchError
@@ -135,8 +167,18 @@ class GrammarRulesRegister:
     def __init__(self) -> None:
         self.rules: dict[str, GrammarRule] = {}
 
-    def rules_registration(self) -> dict[str, GrammarRule]:
-        rules_dict = FileManager.load_rules()
+    def rules_registration(self, rules_dir: str = "") -> dict[str, GrammarRule]:
+        """
+        加载语法规则：优先从目录加载所有 .toml 文件，
+        目录不存在或为空时回退到单文件 rules.toml。
+        :param rules_dir: 规则目录的相对路径
+        """
+        if rules_dir == "":
+            rules_dir = FileManager.rules_dir
+        rules_dict = FileManager.load_all_toml(rules_dir)
+        if not rules_dict:
+            # 回退：单文件加载
+            rules_dict = FileManager.load_rules()
         for rule_name, rule_dict in rules_dict.items():
             rule = GrammarRule(rule_name, **rule_dict)  # 解包字典
             self.rules[rule_name] = rule

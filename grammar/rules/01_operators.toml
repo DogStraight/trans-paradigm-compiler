@@ -1,0 +1,27 @@
+# ============================================================================
+# 运算符（单元）
+# ============================================================================
+
+[MulOp]
+production = ["symbol.base.multiple|symbol.base.div"]
+[MulOp.node]
+op = "$1"
+
+[AddOp]
+production = ["symbol.base.add|symbol.base.sub"]
+[AddOp.node]
+op = "$1"
+
+[CmpOp]
+production = [
+    "symbol.extend.is_equal|symbol.extend.not_equal|symbol.base.bigger|symbol.base.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
+]
+[CmpOp.node]
+op = "$1"
+
+[LogicOp]
+production = [
+    "id.keyword.logic_add|id.keyword.logic_or|symbol.base.and|symbol.base.or",
+]
+[LogicOp.node]
+op = "$1"

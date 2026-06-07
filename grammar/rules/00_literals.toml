@@ -1,0 +1,28 @@
+# ============================================================================
+# 字面量及原子表达式
+# ============================================================================
+
+[Constant]
+production = ["literal.number"]
+[Constant.node]
+value = "$1"
+
+[Variable]
+production = ["id"]
+[Variable.node]
+identifier = "$1"
+
+[ParenthesizedExpr]
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+[ParenthesizedExpr.node]
+expr = "$2"
+
+[PrimaryExpr]
+production = ["@Constant|@Variable|@ParenthesizedExpr|@StringLiteral|@Call"]
+[PrimaryExpr.node]
+value = "$1"
+
+[StringLiteral]
+production = ["literal.string"]
+[StringLiteral.node]
+value = "$1"

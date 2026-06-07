@@ -1,0 +1,30 @@
+# ============================================================================
+# 表达式（由 Pratt 解析器处理）
+# ============================================================================
+
+[MulExpr]
+production = ["@PrimaryExpr", "(@MulOp,@PrimaryExpr)*"]
+pratt = true
+[MulExpr.node]
+head = "$1"
+tail = "$2"
+
+[AddExpr]
+production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
+pratt = true
+[AddExpr.node]
+head = "$1"
+tail = "$2"
+
+[CompareExpr]
+production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
+pratt = true
+[CompareExpr.node]
+left = "$1"
+op_rhs = "$2"
+
+[BoolExpr]
+production = ["@CompareExpr", "(@LogicOp,@CompareExpr)*"]
+[BoolExpr.node]
+head = "$1"
+tail = "$2"

@@ -130,11 +130,26 @@ class Parser:
         if rule.end_case and context.has_more_tokens():
             token = context.peek_token()
             if token and token.type not in rule.end_case:
-                if old_node is None:
-                    context.current_node = None
-                else:
-                    context.update_current_node(old_node)
-                return None
+                # 如果规则包含 @Block（即规则引用中含有 block_start 属性），
+                # 则 Block 已提供清晰的边界，end_case 只作参考而非强制要求。
+                has_block = bool(
+                    getattr(rule, "block_start", None)
+                    and str(getattr(rule, "block_start", "")).strip()
+                )
+                if not has_block:
+                    # 检查当前规则是否引用了一个块规则
+                    for ref_name in rule.production:
+                        if isinstance(ref_name, str) and ref_name.startswith("@"):
+                            inner = self.grammar_rules.get(ref_name[1:])
+                            if inner and getattr(inner, "block_start", None):
+                                has_block = True
+                                break
+                if not has_block:
+                    if old_node is None:
+                        context.current_node = None
+                    else:
+                        context.update_current_node(old_node)
+                    return None
 
         # Inline 规则扁平化：只有一个属性映射时，直接返回被映射的子节点
         inline_result = self._try_inline_rule(

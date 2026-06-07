@@ -1,0 +1,20 @@
+# ============================================================================
+# 控制流
+# ============================================================================
+
+[IfStatement]
+template = """\tif {{ condition }}:
+{{ then_body }}{{?else_body}}
+{{ else_body }}{{/else_body}}"""
+
+[ElseBranch]
+template = """else:
+{{ body }}"""
+
+[WhileStatement]
+template = """\twhile {{ condition }}:
+{{ body }}"""
+
+[ForStatement]
+template = """\tfor {{ vars }} in {{ iterable }}:
+{{ body }}"""

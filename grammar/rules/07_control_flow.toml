@@ -1,0 +1,45 @@
+# ============================================================================
+# 控制流（if-else, while, for）
+# ============================================================================
+
+[IfStatement]
+production = [
+    "keyword.if",
+    "@Condition",
+    "symbol.base.colon",
+    "@Block",
+    "@ElseBranch?",
+]
+end_case = ["newline", "space.dedent"]
+[IfStatement.node]
+condition = "$2"
+then_body = "$4"
+else_body = "$5"
+
+[ElseBranch]
+production = ["keyword.else", "symbol.base.colon", "@Block"]
+inline = true
+[ElseBranch.node]
+body = "$3"
+
+[WhileStatement]
+production = ["keyword.while", "@Condition", "symbol.base.colon", "@Block"]
+end_case = ["newline", "space.dedent"]
+[WhileStatement.node]
+condition = "$2"
+body = "$4"
+
+[ForStatement]
+production = [
+    "keyword.for",
+    "id+",
+    "keyword.in",
+    "@Expression",
+    "symbol.base.colon",
+    "@Block",
+]
+end_case = ["newline", "space.dedent"]
+[ForStatement.node]
+vars = "$2"
+iterable = "$4"
+body = "$6"

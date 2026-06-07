@@ -1,0 +1,11 @@
+# PyV Source: Simple LED Blinker
+# 功能: 每计数到 1000 次翻转一次 LED
+
+counter: int = 0
+led: bool = False
+
+while True:
+    if counter == 1000:
+        led = not led
+        counter = 0
+    counter = counter + 1

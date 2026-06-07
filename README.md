@@ -29,10 +29,23 @@ pyv_compiler/
 ├── code_generator.py                  # 代码生成器（访问者模式 + 模板引擎）
 │
 ├── grammar/                           # 外部配置（核心）
-│   ├── token.toml                     # Token 定义：符号、关键字、字面量模式
-│   ├── rules.toml                     # 语法规则：类 EBNF 产生式
+│   ├── rules/                         # 语法规则模块（按功能拆分）
+│   │   ├── 00_literals.toml
+│   │   ├── 01_operators.toml
+│   │   ├── 02_expressions.toml
+│   │   ├── 06_statements.toml
+│   │   ├── 07_control_flow.toml
+│   │   └── ...
+│   ├── cg_rules/                      # 代码生成规则模块
+│   │   ├── 00_file_rules.toml
+│   │   ├── 01_blocks.toml
+│   │   ├── 02_variables.toml
+│   │   ├── 08_operators.toml
+│   │   └── ...
+│   ├── token.toml                     # Token 定义
+│   ├── rules.toml                     # 语法规则（旧单文件，回退用）
 │   ├── symbol_level.toml              # 运算符优先级与结合性
-│   └── cg_rules.toml                  # 代码生成规则：AST → 模板映射  ← 新增
+│   └── cg_rules.toml                  # 代码生成规则（旧单文件，回退用）
 │
 ├── lexer/                             # 词法分析器
 │   ├── __init__.py
@@ -131,6 +144,27 @@ string = "(\".*\")|('.*')"
 
 采用类 EBNF 格式定义产生式规则。支持以下语法元素：
 
+**模块化加载**：语法规则现在从 `grammar/rules/` 目录加载。目录下所有 `.toml` 文件按文件名排序后合并，同名规则后者覆盖前者。以下划线 `_` 开头的文件被跳过。你可以禁用某个模块（加 `_` 前缀）、新增模块（加新文件）、或覆盖规则（加同名的后加载文件）。
+
+`grammar/rules/` 目录内容示例：
+
+```
+grammar/rules/
+├── 00_literals.toml       # 字面量及原子表达式
+├── 01_operators.toml      # 运算符单元
+├── 02_expressions.toml    # 表达式（Pratt 解析）
+├── 03_calls.toml          # 函数调用
+├── 04_types.toml          # 类型系统
+├── 05_literals_expr.toml  # 字面量表达式
+├── 06_statements.toml     # 语句
+├── 07_control_flow.toml   # 控制流
+├── 08_imports.toml        # 导入语句
+├── 09_blocks.toml         # 块结构
+└── 10_conditions.toml     # 条件表达式
+```
+
+如果目录不存在或为空，自动回退到单文件 `rules.toml`。
+
 | 语法 | 含义 |
 |------|------|
 | `"token.type"` | 匹配特定 token 类型 |
@@ -174,7 +208,7 @@ position = "prefix"
 
 ### 4. 代码生成规则 (`grammar/cg_rules.toml`)
 
-定义 AST 节点到目标代码的映射模板。模板语法：
+定义 AST 节点到目标代码的映射模板。也支持**模块化加载**，从 `grammar/cg_rules/` 目录加载所有 `.toml` 文件。模板语法：
 
 | 语法 | 含义 |
 |------|------|

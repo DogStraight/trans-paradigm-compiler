@@ -32,7 +32,7 @@ class TemplateEngine:
         \s*
         ([\#\?\!/]?)        # 可选修饰符: #=遍历 ?=条件 !=取反 /=关闭
         \s*
-        ([a-zA-Z_][\w.]*)   # 路径: identifier(.identifier)*
+        ([a-zA-Z_][\w.]*|\.)   # 路径: identifier(.identifier)* 或 .
         \s*
         \}\}                # 闭标签
     """,
@@ -49,7 +49,10 @@ class TemplateEngine:
         """将模板字符串解析为 _TemplateToken 列表"""
         tokens = []
         pos = 0
-        for m in self._TOKEN_RE.finditer(text):
+        while True:
+            m = self._TOKEN_RE.search(text, pos)
+            if m is None:
+                break
             # 添加 m.start() 之前的普通文本
             if m.start() > pos:
                 tokens.append(_TemplateToken("text", text[pos : m.start()]))
@@ -237,13 +240,15 @@ class CodeGenerator:
     - 单文件实现：当前所有逻辑集中在一个文件中
     """
 
-    def __init__(self, rules_path: Optional[str] = None):
+    def __init__(self, rules_path: Optional[str] = None, rules_dir: Optional[str] = None):
         """
         初始化代码生成器
 
-        :param rules_path: CG 规则文件路径，默认使用 grammar/cg_rules.toml
+        :param rules_path: CG 规则单文件路径（回退用），默认 grammar/cg_rules.toml
+        :param rules_dir:  CG 规则目录，默认 grammar/cg_rules/
         """
         self._rules_path = rules_path or "pyv_compiler/grammar/cg_rules.toml"
+        self._rules_dir = rules_dir or FileManager.cg_rules_dir
         self._node_templates: Dict[str, TemplateEngine] = {}
         self._match_rules: Dict[str, dict] = {}
         self._file_rules: List[dict] = []
@@ -255,15 +260,18 @@ class CodeGenerator:
     # ---- 规则加载 ----
 
     def _load_rules(self) -> None:
-        """从 TOML 文件加载所有生成规则"""
-        try:
-            rules_content = FileManager.read_file(self._rules_path)
-        except FileNotFoundError:
-            alt_path = FileManager.get_full_path(self._rules_path)
-            with open(alt_path, "r", encoding="utf-8") as f:
-                rules_content = f.read()
-
-        data = tomllib.loads(rules_content)
+        """加载 CG 生成规则：优先从目录加载，回退到单文件"""
+        # 1) 尝试从目录加载所有 .toml 文件
+        data = FileManager.load_all_toml(self._rules_dir)
+        # 2) 目录为空时，回退到单文件
+        if not data:
+            try:
+                rules_content = FileManager.read_file(self._rules_path)
+            except FileNotFoundError:
+                alt_path = FileManager.get_full_path(self._rules_path)
+                with open(alt_path, "r", encoding="utf-8") as f:
+                    rules_content = f.read()
+            data = tomllib.loads(rules_content)
 
         # 加载文件规则
         self._file_rules = data.pop("file_rules", [])
@@ -298,7 +306,9 @@ class CodeGenerator:
 
     def visit(self, node: Any) -> str:
         """
-        访问者模式核心方法：根据节点类型分派到对应模板
+        访问者模式核心方法：根据节点类型分派到对应模板。
+        返回渲染后的文本，不直接写入输出缓冲区。
+        文件分发由 generate() 顶层处理。
 
         :param node: AST 节点（Node 对象或字符串）
         :return: 渲染后的文本
@@ -318,7 +328,7 @@ class CodeGenerator:
             if isinstance(children, list):
                 return "".join(self.visit(c) for c in children)
 
-        # 检测是否需要触发文件切换
+        # 检测是否需要触发文件切换（仅记录切换位置，不写入）
         self._check_file_rule(node, node_type)
 
         # 1. 优先尝试 match 规则（条件分支模板）
@@ -327,21 +337,15 @@ class CodeGenerator:
             attr_val = str(getattr(node, match_config["attr"], ""))
             case_engine = match_config["cases"].get(attr_val)
             if case_engine:
-                rendered = case_engine.render(node, self)
-                self._write(rendered)
-                return rendered
+                return case_engine.render(node, self)
 
         # 2. 尝试普通模板规则
         engine = self._node_templates.get(node_type)
         if engine is not None:
-            rendered = engine.render(node, self)
-            self._write(rendered)
-            return rendered
+            return engine.render(node, self)
 
         # 3. 通用 fallback
-        rendered = self._fallback_render(node)
-        self._write(rendered)
-        return rendered
+        return self._fallback_render(node)
 
     def _fallback_render(self, node: Node) -> str:
         """
@@ -404,15 +408,23 @@ class CodeGenerator:
         :param ast: 抽象语法树
         :return: Dict[str, str] = {文件名: 文件内容}
         """
+        # 先通过文件规则确定输出文件名和 header
         self._outputs = {}
         self._current_file = None
+        if self._file_rules:
+            # 主动触发 Root 的文件规则
+            self._check_file_rule(ast, "Root")
 
-        self.visit(ast)
+        # visit 返回完整渲染文本
+        rendered = self.visit(ast)
 
-        result = {}
-        for file_name, lines in self._outputs.items():
-            result[file_name] = "".join(lines)
-        return result
+        # 如果文件规则已创建，内容追加到对应文件；否则创建默认文件
+        if self._current_file and self._current_file in self._outputs:
+            self._outputs[self._current_file].append(rendered)
+        else:
+            self._outputs["output.v"] = [rendered]
+
+        return {fname: "".join(lines) for fname, lines in self._outputs.items()}
 
     def optimize(self, outputs: Dict[str, str]) -> Dict[str, str]:
         """
