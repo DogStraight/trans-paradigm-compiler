@@ -1,0 +1,37 @@
+# ============================================================================
+# Verilog 语法规则 — 端口与声明
+# ============================================================================
+
+[PortList]
+production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
+[PortList.node]
+first = "$1"
+rest = "$2"
+
+[PortDecl]
+production = ["keyword.input|keyword.output|keyword.inout", "@OptType?", "id"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline", "space.dedent"]
+[PortDecl.node]
+direction = "$1"
+port_type = "$2"
+port_name = "$3"
+
+[OptType]
+production = ["keyword.wire|keyword.reg"]
+inline = true
+[OptType.node]
+type_desc = "$1"
+
+[RegDecl]
+production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
+end_case = ["newline"]
+[RegDecl.node]
+reg_type = "$1"
+range = "$2"
+reg_name = "$3"
+
+[Range]
+production = ["bracket.l_square_bracket", "@Expression", "symbol.base.colon", "@Expression", "bracket.r_square_bracket"]
+[Range.node]
+msb = "$2"
+lsb = "$4"

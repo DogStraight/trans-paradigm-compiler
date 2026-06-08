@@ -1,0 +1,8 @@
+[AlwaysBlock]
+template = "\talways @({{ sensitivity }}) {{ body }}"
+
+[SensitivityList]
+template = "{{ first }}{{#rest}} or {{.}}{{/rest}}"
+
+[EdgeSense]
+template = "{{ edge }} {{ signal }}"

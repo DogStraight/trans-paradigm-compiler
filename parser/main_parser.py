@@ -96,6 +96,41 @@ class Parser:
         for prod in rule.production:
             if not context.has_more_tokens():
                 break
+            # 跳过空白、注释（保留 indent/dedent 供块检测）
+            while context.has_more_tokens():
+                cur = context.peek_token()
+                if cur and cur.type in self.skip_types:
+                    context.advance_token()
+                else:
+                    break
+            if not context.has_more_tokens():
+                break
+            # 如果是 @RuleName 引用且目标规则有 block_start，说明即将进入块，
+            # 此时不跳过 indent（让 parse_block 自己处理）。
+            if prod.startswith("@") and not prod.endswith("?"):
+                ref_name = prod[1:]
+                ref_rule = self.grammar_rules.get(ref_name)
+                if ref_rule and getattr(ref_rule, "block_start", None):
+                    pass  # 保持 indent 不跳过
+                else:
+                    # 非块规则引用：跳过 indent/dedent 格式化空格
+                    while context.has_more_tokens():
+                        cur = context.peek_token()
+                        if cur and cur.type in ("space.indent", "space.dedent"):
+                            context.advance_token()
+                        else:
+                            break
+            elif prod.endswith("?"):
+                # 可选引用：尝试跳过 indent
+                pass  # 不跳过，让可选匹配自己决定
+            else:
+                # 普通 token 匹配：跳过 indent/dedent
+                while context.has_more_tokens():
+                    cur = context.peek_token()
+                    if cur and cur.type in ("space.indent", "space.dedent"):
+                        context.advance_token()
+                    else:
+                        break
             self._log_state(f"处理产生式: {prod}")
             features = analyze_production_features(prod)
             if not features:

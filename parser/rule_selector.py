@@ -65,17 +65,18 @@ class RuleSelector:
                 return False
             return handler(node, visited)
 
-        # 收集可能匹配的规则
+        # 收集可能匹配的规则：只检查每个规则的第一条产生式
         possible_rules = []
         for rule in self.grammar_rules.values():
-            for prod in rule.production:
-                try:
-                    features = analyze_production_features(prod)
-                except Exception:
-                    continue
-                if features and can_start(features, set()):
-                    possible_rules.append(rule)
-                    break
+            if not rule.production:
+                continue
+            first_prod = rule.production[0]
+            try:
+                features = analyze_production_features(first_prod)
+            except Exception:
+                continue
+            if features and can_start(features, set()):
+                possible_rules.append(rule)
 
         # 按 statement_rule_names 顺序排序
         rule_map = {

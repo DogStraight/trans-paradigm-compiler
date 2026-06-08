@@ -150,6 +150,11 @@ arity = 1
 position = "prefix"
 
 [[operator]]
+symbol = "~"
+arity = 1
+position = "prefix"
+
+[[operator]]
 symbol = "not"
 arity = 1
 position = "prefix"

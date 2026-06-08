@@ -159,6 +159,29 @@ class Lexer:
                 start_point += len(space_content)
                 continue
 
+            # in case current chars is // comment (Verilog style)
+            elif (
+                lex_text[text_idx] == "/"
+                and next_char == "/"
+            ):
+                self._emit_pending_dedent(tokens, line_number, start_point)
+                if self.new_line_start:
+                    self.new_line_start = False
+                comment_content: str = ""
+                while text_idx < lex_text_len and lex_text[text_idx] != "\n":
+                    comment_content += lex_text[text_idx]
+                    text_idx += 1
+                    offset += 1
+                current_token.set_type("comment")
+                current_token.set_content(comment_content)
+                current_token.set_location(
+                    line_number, start_point, line_number, start_point + offset
+                )
+                current_token = self.refine_type(current_token)
+                tokens.append(current_token)
+                start_point += offset
+                continue
+
             # in case current char is a symbol
             elif lex_text[text_idx] in self.token_define["symbol"]["base"].values():
                 # handle possible dedent before actual token

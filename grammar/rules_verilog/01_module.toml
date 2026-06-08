@@ -1,0 +1,20 @@
+# ============================================================================
+# Verilog 语法规则 — 模块声明
+# ============================================================================
+
+[ModuleDecl]
+production = [
+    "keyword.module",
+    "id",
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@Block",
+    "keyword.endmodule",
+]
+end_case = ["keyword.endmodule"]
+[ModuleDecl.node]
+module_name = "$2"
+ports = "$4"
+body = "$7"

@@ -1,0 +1,56 @@
+# ============================================================================
+# Verilog 语法规则 — 语句
+# ============================================================================
+
+[Statement]
+production = ["@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock"]
+inline = true
+[Statement.node]
+stmt = "$1"
+
+[IfStatement]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Statement",
+    "@ElseChain?",
+]
+end_case = ["newline"]
+[IfStatement.node]
+condition = "$3"
+then_stmt = "$5"
+else_chain = "$6"
+
+[ElseChain]
+production = ["@ElseIf|@ElseBranch"]
+inline = true
+[ElseChain.node]
+branch = "$1"
+
+[ElseIf]
+production = ["keyword.else", "keyword.if", "bracket.l_parentheses", "@Expression", "bracket.r_parentheses", "@Statement", "@ElseChain?"]
+[ElseIf.node]
+condition = "$4"
+then_stmt = "$6"
+else_chain = "$7"
+
+[ElseBranch]
+production = ["keyword.else", "@Statement"]
+[ElseBranch.node]
+body = "$2"
+
+[NonBlockingAssign]
+production = ["id", "symbol.extend.lesser_equal", "@Expression", "symbol.base.semicolon"]
+end_case = ["newline"]
+[NonBlockingAssign.node]
+target = "$1"
+value = "$3"
+
+[BlockingAssign]
+production = ["id", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
+end_case = ["newline"]
+[BlockingAssign.node]
+target = "$1"
+value = "$3"

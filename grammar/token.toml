@@ -6,7 +6,7 @@ tab = "\t"
 newline = "\n"
 
 [comment]
-boundary = "#"
+boundary = "#/"
 
 [symbol]
 [symbol.base]
@@ -16,6 +16,7 @@ multiple = "*"
 and = "&"
 or = "|"
 not = "!"
+bit_not = "~"
 xnor = "^"
 bigger = ">"
 lesser = "<"
@@ -28,6 +29,7 @@ colon = ":"
 semicolon = ";"
 question_mark = "?"
 at = "@"
+single_quote = "'"
 [symbol.extend]
 r_shift = ">>"
 l_shift = "<<"
@@ -97,6 +99,14 @@ pass = "pass"
 # edge
 posedge = "posedge"
 negedge = "negedge"
+
+# verilog
+wire = "wire"
+reg = "reg"
+begin = "begin"
+end = "end"
+always = "always"
+endmodule = "endmodule"
 
 [literal]
 true = "True"

@@ -1,0 +1,17 @@
+# ============================================================================
+# Verilog 语法规则 — 顶层结构与块
+# ============================================================================
+
+[Root]
+block_start = ""
+block_end = ""
+
+[Block]
+block_start = "space.indent"
+block_end = "space.dedent"
+
+# Verilog 的 begin...end 块（相当于 C 的 { }）
+[BeginEnd]
+production = ["keyword.begin", "@Block", "keyword.end"]
+[BeginEnd.node]
+body = "$2"

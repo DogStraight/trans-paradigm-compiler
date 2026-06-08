@@ -1,0 +1,8 @@
+[Root]
+template = """{{#child}}{{.}}
+{{/child}}"""
+
+[Block]
+template = """{{#child}}
+\t{{.}}
+{{/child}}"""

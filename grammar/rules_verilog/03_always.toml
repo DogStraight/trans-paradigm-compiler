@@ -1,0 +1,29 @@
+# ============================================================================
+# Verilog 语法规则 — always 块与敏感列表
+# ============================================================================
+
+[AlwaysBlock]
+production = [
+    "keyword.always",
+    "symbol.base.at",
+    "bracket.l_parentheses",
+    "@SensitivityList",
+    "bracket.r_parentheses",
+    "@Statement",
+]
+end_case = ["newline"]
+[AlwaysBlock.node]
+sensitivity = "$4"
+body = "$6"
+
+[SensitivityList]
+production = ["@EdgeSense", "(symbol.extend.logic_or,@EdgeSense)*"]
+[SensitivityList.node]
+first = "$1"
+rest = "$2"
+
+[EdgeSense]
+production = ["keyword.posedge|keyword.negedge", "id"]
+[EdgeSense.node]
+edge = "$1"
+signal = "$2"

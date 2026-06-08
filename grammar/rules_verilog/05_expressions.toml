@@ -1,0 +1,90 @@
+# ============================================================================
+# Verilog 语法规则 — 表达式与字面量
+# ============================================================================
+
+# 位宽字面量: 32'd0, 1'b0, 8'ha3 等
+[BitWidthLiteral]
+production = ["literal.number", "symbol.base.single_quote", "id"]
+[BitWidthLiteral.node]
+width = "$1"
+value = "$3"
+
+[PrimaryExpr]
+production = ["@BitWidthLiteral|@Number|@Identifier|@ParenthesizedExpr"]
+inline = true
+[PrimaryExpr.node]
+value = "$1"
+
+[Number]
+production = ["literal.number"]
+[Number.node]
+value = "$1"
+
+[Identifier]
+production = ["id"]
+[Identifier.node]
+name = "$1"
+
+[ParenthesizedExpr]
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+[ParenthesizedExpr.node]
+expr = "$2"
+
+# 一元前缀运算符
+[UnaryExpr]
+production = ["symbol.base.not|symbol.base.bit_not", "@PrimaryExpr"]
+[UnaryExpr.node]
+op = "$1"
+operand = "$2"
+
+# 二元运算
+[MulExpr]
+production = ["@PrimaryExpr|@UnaryExpr", "(@MulOp,@PrimaryExpr|@UnaryExpr)*"]
+pratt = true
+[MulExpr.node]
+head = "$1"
+tail = "$2"
+
+[AddExpr]
+production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
+pratt = true
+[AddExpr.node]
+head = "$1"
+tail = "$2"
+
+[CompareExpr]
+production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
+pratt = true
+[CompareExpr.node]
+left = "$1"
+op_rhs = "$2"
+
+[Expression]
+production = ["@CompareExpr"]
+end_case = [
+    "symbol.base.colon",
+    "symbol.base.semicolon",
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "bracket.r_square_bracket",
+]
+pratt = true
+[Expression.node]
+expr = "$1"
+
+[MulOp]
+production = ["symbol.base.multiple|symbol.base.div|symbol.base.mod"]
+[MulOp.node]
+op = "$1"
+
+[AddOp]
+production = ["symbol.base.add|symbol.base.sub"]
+[AddOp.node]
+op = "$1"
+
+[CmpOp]
+production = [
+    "symbol.extend.is_equal|symbol.extend.not_equal|symbol.base.bigger|symbol.base.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
+]
+[CmpOp.node]
+op = "$1"

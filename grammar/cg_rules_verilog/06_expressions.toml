@@ -1,0 +1,35 @@
+[PrimaryExpr]
+template = "{{ value }}"
+
+[Number]
+template = "{{ value }}"
+
+[BitWidthLiteral]
+template = "{{ value }}"
+
+[Identifier]
+template = "{{ name }}"
+
+[ParenthesizedExpr]
+template = "({{ expr }})"
+
+[UnaryExpr]
+template = "{{ op }}{{ operand }}"
+
+[BinaryOp]
+template = "({{ left }} {{ op }} {{ right }})"
+
+[ComparisonExpr]
+template = "{{ left }} {{ op }} {{ right }}"
+
+[Expression]
+template = "{{ expr }}"
+
+[MulOp]
+template = "{{ op }}"
+
+[AddOp]
+template = "{{ op }}"
+
+[CmpOp]
+template = "{{ op }}"

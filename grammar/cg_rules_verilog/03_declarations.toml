@@ -1,0 +1,5 @@
+[RegDecl]
+template = "\treg{{#range}} [{{.}}]{{/range}} {{ reg_name }};"
+
+[Range]
+template = "{{ msb }}:{{ lsb }}"

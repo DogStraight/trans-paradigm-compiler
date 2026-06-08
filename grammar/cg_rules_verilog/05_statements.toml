@@ -1,0 +1,23 @@
+[Statement]
+template = "{{ stmt }}"
+
+[IfStatement]
+template = "\tif ({{ condition }}) {{ then_stmt }}{{?else_chain}} {{ else_chain }}{{/else_chain}}"
+
+[ElseChain]
+template = "{{ branch }}"
+
+[ElseIf]
+template = "else if ({{ condition }}) {{ then_stmt }}{{?else_chain}} {{ else_chain }}{{/else_chain}}"
+
+[ElseBranch]
+template = "else {{ body }}"
+
+[BeginEnd]
+template = "begin\n{{ body }}\nend"
+
+[NonBlockingAssign]
+template = "		{{ target }} <= {{ value }};"
+
+[BlockingAssign]
+template = "		{{ target }} = {{ value }};"

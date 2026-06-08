@@ -1,0 +1,15 @@
+[ModuleDecl]
+template = """module {{ module_name }} ({{#ports}}
+\t{{.}}{{/ports}}
+);
+{{ body }}
+endmodule"""
+
+[PortList]
+template = "{{ first }}{{#rest}}, {{.}}{{/rest}}"
+
+[PortDecl]
+template = "{{ direction }} {{#port_type}}{{.}} {{/port_type}}{{ port_name }}"
+
+[OptType]
+template = "{{ type_desc }}"
