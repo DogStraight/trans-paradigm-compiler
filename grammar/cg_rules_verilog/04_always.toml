@@ -2,7 +2,7 @@
 template = "\talways @({{ sensitivity }}) {{ body }}"
 
 [SensitivityList]
-template = "{{ first }}{{#rest}} or {{.}}{{/rest}}"
+template = "{{ first }} {{#rest}}{{.}}{{/rest}}"
 
 [EdgeSense]
 template = "{{ edge }} {{ signal }}"

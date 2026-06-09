@@ -2,6 +2,7 @@
 from define import Token
 from err import IndentationError, UnexpectedTokenError
 from .lexer_utils import get_token_define, simplify_output
+from .number_fsm import NumberFSM
 
 
 class Lexer:
@@ -16,13 +17,8 @@ class Lexer:
         )
         self.bracket: list = list(self.token_define["bracket"].values())
         self.newline: list = list(self.token_define["newline"].values())
-        self.base_symbol: list = list(self.token_define["symbol"]["base"].values())
-
         self.alpha_tokens = []
         self._build_alpha_tokens()
-
-        # special case for number,
-        self.base_symbol.remove(".")
         self.previous_token_type: str = ""
 
         # is output comments
@@ -287,16 +283,8 @@ class Lexer:
             elif lex_text[text_idx].isdigit():
                 self._emit_pending_dedent(tokens, line_number, start_point)
 
-                number_content: str = ""
-                while (
-                    text_idx < lex_text_len
-                    and lex_text[text_idx] not in self.blank
-                    and lex_text[text_idx] not in self.bracket
-                    and lex_text[text_idx] not in self.base_symbol
-                ):
-                    number_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
+                number_content, new_idx = NumberFSM.run(lex_text, text_idx)
+                offset = new_idx - text_idx
 
                 # set current token line info
                 current_token.set_type("literal.number")
@@ -306,6 +294,7 @@ class Lexer:
                 )
 
                 # reset line info
+                text_idx = new_idx
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)

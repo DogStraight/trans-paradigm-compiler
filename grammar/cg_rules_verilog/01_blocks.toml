@@ -3,6 +3,5 @@ template = """{{#child}}{{.}}
 {{/child}}"""
 
 [Block]
-template = """{{#child}}
-\t{{.}}
+template = """{{#child}}{{.}}
 {{/child}}"""

@@ -8,16 +8,16 @@ template = "{{ value }}"
 template = "{{ value }}"
 
 [Identifier]
-template = "{{ name }}"
+template = "{{ content }}"
 
 [ParenthesizedExpr]
 template = "({{ expr }})"
 
-[UnaryExpr]
+[UnaryOp]
 template = "{{ op }}{{ operand }}"
 
 [BinaryOp]
-template = "({{ left }} {{ op }} {{ right }})"
+template = "{{ left }} {{ op }} {{ right }}"
 
 [ComparisonExpr]
 template = "{{ left }} {{ op }} {{ right }}"

@@ -18,7 +18,7 @@ def _check_tokens(tokens, expected_types):
 def test_basic_tokens():
     """基础Token识别"""
     lexer = Lexer()
-    tokens = lexer.tokenize("a = 123 + 'test'")
+    tokens = lexer.tokenize('a = 123 + "test"')
     _check_tokens(tokens, [
         "id",
         "symbol.base.equal",
@@ -46,7 +46,7 @@ def test_boundary():
 def test_complex_scene():
     """复杂场景（关键字、缩进、括号）"""
     lexer = Lexer()
-    tokens = lexer.tokenize("if x > 0:\n    print('hello')")
+    tokens = lexer.tokenize('if x > 0:\n    print("hello")')
     _check_tokens(tokens, [
         "keyword.if",
         "id",
@@ -60,6 +60,26 @@ def test_complex_scene():
         "literal.string",
         "bracket.r_parentheses",
     ])
+
+
+def test_number_formats():
+    """FSM 驱动的数字字面量（各种格式）"""
+    lexer = Lexer()
+    test_cases = [
+        ("x = 0xFF",          ["id", "symbol.base.equal", "literal.number"]),
+        ("y = 0b1010",        ["id", "symbol.base.equal", "literal.number"]),
+        ("z = 0o755",         ["id", "symbol.base.equal", "literal.number"]),
+        ("a = 3.14",          ["id", "symbol.base.equal", "literal.number"]),
+        ("b = 1e10",          ["id", "symbol.base.equal", "literal.number"]),
+        ("c = 1_000_000",     ["id", "symbol.base.equal", "literal.number"]),
+        ("d = 1.5e-3",        ["id", "symbol.base.equal", "literal.number"]),
+        ("width = 32'd0",     ["id", "symbol.base.equal", "literal.number"]),
+        ("data = 8'ha3",      ["id", "symbol.base.equal", "literal.number"]),
+        ("flag = 1'b0",       ["id", "symbol.base.equal", "literal.number"]),
+    ]
+    for code, expected in test_cases:
+        tokens = lexer.tokenize(code)
+        _check_tokens(tokens, expected)
 
 
 def test_unrecognized_token():
@@ -77,6 +97,7 @@ def test_all():
     test_basic_tokens()
     test_boundary()
     test_complex_scene()
+    test_number_formats()
     test_unrecognized_token()
     print("所有 lexer 测试通过!")
 

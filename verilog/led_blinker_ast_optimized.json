@@ -1,0 +1,243 @@
+{
+  "Root": {
+    "child": [
+      {
+        "ModuleDecl": {
+          "module_name": "led_blinker",
+          "ports": {
+            "PortList": {
+              "first": {
+                "PortDecl": {
+                  "direction": "input",
+                  "port_type": "wire",
+                  "port_name": "clk"
+                }
+              },
+              "rest": [
+                [
+                  {
+                    "symbol.base.comma": {
+                      "value": ","
+                    }
+                  },
+                  {
+                    "PortDecl": {
+                      "direction": "input",
+                      "port_type": "wire",
+                      "port_name": "rst_n"
+                    }
+                  }
+                ],
+                [
+                  {
+                    "symbol.base.comma": {
+                      "value": ","
+                    }
+                  },
+                  {
+                    "PortDecl": {
+                      "direction": "output",
+                      "port_type": "reg",
+                      "port_name": "led"
+                    }
+                  }
+                ]
+              ]
+            }
+          },
+          "body": {
+            "Block": {
+              "child": [
+                {
+                  "RegDecl": {
+                    "reg_type": "reg",
+                    "range": "31:0",
+                    "reg_name": "counter"
+                  }
+                },
+                {
+                  "AlwaysBlock": {
+                    "sensitivity": {
+                      "SensitivityList": {
+                        "first": {
+                          "EdgeSense": {
+                            "edge": "posedge",
+                            "signal": "clk"
+                          }
+                        },
+                        "rest": [
+                          [
+                            {
+                              "symbol.extend.logic_or": {
+                                "value": "or"
+                              }
+                            },
+                            {
+                              "EdgeSense": {
+                                "edge": "negedge",
+                                "signal": "rst_n"
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    },
+                    "body": {
+                      "BeginEnd": {
+                        "body": {
+                          "Block": {
+                            "child": [
+                              {
+                                "IfStatement": {
+                                  "condition": {
+                                    "UnaryOp": {
+                                      "op": "!",
+                                      "operand": {
+                                        "Identifier": {
+                                          "content": "rst_n"
+                                        }
+                                      },
+                                      "position": "prefix"
+                                    }
+                                  },
+                                  "then_stmt": {
+                                    "BeginEnd": {
+                                      "body": {
+                                        "Block": {
+                                          "child": [
+                                            {
+                                              "NonBlockingAssign": {
+                                                "target": "counter",
+                                                "value": {
+                                                  "BitWidthLiteral": {
+                                                    "width": 32,
+                                                    "value": "32'd0"
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            {
+                                              "NonBlockingAssign": {
+                                                "target": "led",
+                                                "value": {
+                                                  "BitWidthLiteral": {
+                                                    "width": 1,
+                                                    "value": "1'b0"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "else_chain": {
+                                    "ElseIf": {
+                                      "condition": {
+                                        "BinaryOp": {
+                                          "op": "==",
+                                          "left": {
+                                            "Identifier": {
+                                              "content": "counter"
+                                            }
+                                          },
+                                          "right": {
+                                            "BitWidthLiteral": {
+                                              "width": 32,
+                                              "value": "32'd1000"
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "then_stmt": {
+                                        "BeginEnd": {
+                                          "body": {
+                                            "Block": {
+                                              "child": [
+                                                {
+                                                  "NonBlockingAssign": {
+                                                    "target": "counter",
+                                                    "value": {
+                                                      "BitWidthLiteral": {
+                                                        "width": 32,
+                                                        "value": "32'd0"
+                                                      }
+                                                    }
+                                                  }
+                                                },
+                                                {
+                                                  "NonBlockingAssign": {
+                                                    "target": "led",
+                                                    "value": {
+                                                      "UnaryOp": {
+                                                        "op": "~",
+                                                        "operand": {
+                                                          "Identifier": {
+                                                            "content": "led"
+                                                          }
+                                                        },
+                                                        "position": "prefix"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "else_chain": {
+                                        "ElseBranch": {
+                                          "body": {
+                                            "BeginEnd": {
+                                              "body": {
+                                                "Block": {
+                                                  "child": [
+                                                    {
+                                                      "NonBlockingAssign": {
+                                                        "target": "counter",
+                                                        "value": {
+                                                          "BinaryOp": {
+                                                            "op": "+",
+                                                            "left": {
+                                                              "Identifier": {
+                                                                "content": "counter"
+                                                              }
+                                                            },
+                                                            "right": {
+                                                              "BitWidthLiteral": {
+                                                                "width": 32,
+                                                                "value": "32'd1"
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

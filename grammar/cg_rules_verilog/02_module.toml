@@ -2,11 +2,11 @@
 template = """module {{ module_name }} ({{#ports}}
 \t{{.}}{{/ports}}
 );
-{{ body }}
+\t{{ body }}
 endmodule"""
 
 [PortList]
-template = "{{ first }}{{#rest}}, {{.}}{{/rest}}"
+template = "{{ first }}{{#rest}}{{.}}{{/rest}}"
 
 [PortDecl]
 template = "{{ direction }} {{#port_type}}{{.}} {{/port_type}}{{ port_name }}"
