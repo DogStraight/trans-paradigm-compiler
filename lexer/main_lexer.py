@@ -156,10 +156,7 @@ class Lexer:
                 continue
 
             # in case current chars is // comment (Verilog style)
-            elif (
-                lex_text[text_idx] == "/"
-                and next_char == "/"
-            ):
+            elif lex_text[text_idx] == "/" and next_char == "/":
                 self._emit_pending_dedent(tokens, line_number, start_point)
                 if self.new_line_start:
                     self.new_line_start = False
@@ -176,6 +173,25 @@ class Lexer:
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 start_point += offset
+                continue
+
+            # in case current char is unsized Verilog literal ('b1, 'd0, 'hFF, 'o7)
+            elif lex_text[text_idx] == "'" and next_char in "dDbBhHoO":
+                self._emit_pending_dedent(tokens, line_number, start_point)
+
+                number_content, new_idx = NumberFSM.run(lex_text, text_idx)
+                offset = new_idx - text_idx
+
+                current_token.set_type("literal.number")
+                current_token.set_content(number_content)
+                current_token.set_location(
+                    line_number, start_point, line_number, start_point + offset
+                )
+
+                text_idx = new_idx
+                start_point += offset
+                current_token = self.refine_type(current_token)
+                tokens.append(current_token)
                 continue
 
             # in case current char is a symbol
