@@ -2,14 +2,22 @@
 # Verilog 语法规则 — 端口与声明
 # ============================================================================
 
+
 [PortList]
-production = ["(@PortDecl,(symbol.base.comma,@PortDecl)*)"]
+production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
 [PortList.node]
-elements = "$1"
+first = "$1"
+rest = "$2"
+
 
 [PortDecl]
 production = ["keyword.input|keyword.output|keyword.inout", "@OptType?", "id"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline", "space.dedent"]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "newline",
+    "space.dedent",
+]
 [PortDecl.node]
 direction = "$1"
 port_type = "$2"
@@ -30,7 +38,13 @@ range = "$2"
 reg_name = "$3"
 
 [Range]
-production = ["bracket.l_square_bracket", "@Expression", "symbol.base.colon", "@Expression", "bracket.r_square_bracket"]
+production = [
+    "bracket.l_square_bracket",
+    "@Expression",
+    "symbol.base.colon",
+    "@Expression",
+    "bracket.r_square_bracket",
+]
 [Range.node]
 msb = "$2"
 lsb = "$4"

@@ -1,0 +1,98 @@
+{
+  "ModuleDecl": {
+    "module_name": "dff",
+    "params": [],
+    "ports": [
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "port_name": "clk"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "port_name": "rst_n"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "port_name": "d"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "port_name": "q"
+        }
+      }
+    ],
+    "body": [
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "EdgeSense": {
+                "edge": "posedge",
+                "signal": "clk"
+              }
+            },
+            {
+              "EdgeSense": {
+                "edge": "negedge",
+                "signal": "rst_n"
+              }
+            }
+          ],
+          "body": [
+            {
+              "IfStatement": {
+                "condition": {
+                  "UnaryOp": {
+                    "op": "!",
+                    "operand": {
+                      "Identifier": {
+                        "content": "rst_n"
+                      }
+                    },
+                    "position": "prefix"
+                  }
+                },
+                "then_stmt": {
+                  "NonBlockingAssign": {
+                    "target": "q",
+                    "value": {
+                      "BitWidthLiteral": {
+                        "width": 0,
+                        "value": "1'b0"
+                      }
+                    }
+                  }
+                },
+                "else_chain": [
+                  {
+                    "body": {
+                      "NonBlockingAssign": {
+                        "target": "q",
+                        "value": {
+                          "Identifier": {
+                            "content": "d"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

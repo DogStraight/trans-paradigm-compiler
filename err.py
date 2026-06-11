@@ -32,3 +32,9 @@ class _BranchMatchError(Exception):
     """分支匹配失败时抛出的内部异常，用于触发 with 块自动回滚"""
 
     pass
+
+
+class TemplateParseError(Exception):
+    """模板解析错误"""
+
+    pass

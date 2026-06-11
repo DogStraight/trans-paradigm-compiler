@@ -26,14 +26,20 @@ from parser import Parser
 from code_generator import CodeGenerator, CodeGenerator
 from define import GrammarRulesRegister
 from parser.rule_selector import RuleSelector
+from optimizer.ast_optimizer import optimize_ast, get_optimize_transforms
 from formatter import format_code
 import json
 import difflib
+import copy
 
 
 def main():
     # 支持命令行指定测试文件
-    test_name = "ref\\ref_led_blinker"  # 默认测试文件
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].replace("ref_", "").replace(".v", "")
+        test_name = f"ref\\ref_{arg}"
+    else:
+        test_name = "ref\\ref_led_blinker"  # 默认测试文件
 
     src_dir = os.path.dirname(os.path.abspath(__file__))
     ref_dir = os.path.join(src_dir, "ref")
@@ -88,21 +94,29 @@ def main():
         json.dump(ast.dump(), f, indent=2)
     print(f"📋 AST 已保存 ({os.path.getsize(ast_json)} bytes)")
 
-    # 4. 代码生成（使用 Verilog CG 规则）
+    # 4. AST 优化（深拷贝后优化，不影响原始 AST）
+    transforms = get_optimize_transforms()
+    ast_opt = optimize_ast(copy.deepcopy(ast), transforms)
+    ast_opt_json = ast_json.replace(".json", "_opt.json")
+    with open(ast_opt_json, "w", encoding="utf-8") as f:
+        json.dump(ast_opt.dump(), f, indent=2)
+    print(f"⚙️  AST 优化已保存 ({os.path.getsize(ast_opt_json)} bytes)")
+
+    # 5. 代码生成（使用优化后的 AST）
     cg = CodeGenerator(rules_dir="pyv_compiler/grammar/cg_rules_verilog")
-    outputs = cg.generate(ast)
+    outputs = cg.generate(ast_opt)
     outputs = cg.optimize(outputs)
 
     content = outputs.get("output.v", "")
 
-    # 4.5 格式化（缩进、块合并）
+    # 6. 格式化（缩进、块合并）
     content = format_code(content)
 
     with open(gen_file, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"✅ 已生成: {gen_file}")
 
-    # 5. 对比
+    # 7. 对比
     ref = source.splitlines(keepends=True)
     gen = content.splitlines(keepends=True)
     diff_lines = list(
@@ -118,7 +132,7 @@ def main():
     else:
         print("  ✨ 完全一致！")
 
-    # 6. 统计
+    # 8. 统计
     print(f"\n{'='*60}")
     print(f"  参考行数: {len(ref)}")
     print(f"  生成行数: {len(gen)}")

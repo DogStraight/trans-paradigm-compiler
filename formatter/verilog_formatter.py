@@ -23,7 +23,9 @@ class VerilogFormatter:
         formatted_always = self._format_always_blocks(always_blocks)
 
         return self._assemble(header, formatted_params, formatted_ports,
-                              formatted_decls, formatted_always)
+                              formatted_decls, formatted_always,
+                              has_params=param_items is not None)
+
 
     # ------------------------------------------------------------
     # 解析阶段
@@ -222,15 +224,15 @@ class VerilogFormatter:
                 while i < len(body_lines):
                     curr = body_lines[i].rstrip()
                     block_lines.append(curr)
-                    # 注意：这里对 begin/end 的简单计数，适应重建后的行
-                    if 'begin' in curr and 'end' not in curr:
-                        depth += 1
-                    if 'end' in curr:
-                        if depth == 0:
-                            i += 1
-                            break
-                        else:
-                            depth -= 1
+                    # 统计本行中 begin / end 作为独立单词的出现次数
+                    words = curr.split()
+                    begin_cnt = words.count('begin')
+                    end_cnt = words.count('end')
+                    depth += begin_cnt - end_cnt
+                    if depth <= 0:
+                        # 此 end 已闭合 always 块
+                        i += 1
+                        break
                     i += 1
                 always_blocks.append(block_lines)
             else:
@@ -330,6 +332,20 @@ class VerilogFormatter:
             if not line:
                 i += 1
                 continue
+
+            # 处理一行多个 end 的情况，如 "end     end"
+            # 递归拆分直到不剩多余内容
+            if line.startswith('end') and not line.startswith('endmodule'):
+                rest = line[3:].strip()
+                # 如果 end 后还有内容且不是 else，拆成多行
+                if rest and not rest.startswith('else'):
+                    indent_level -= 1
+                    indent_str = ' ' * self.indent * (indent_level + 1)
+                    out.append(indent_str + 'end')
+                    # 将剩余内容放回，重新处理（可能有多个 end）
+                    lines[i] = rest
+                    continue
+
             # 处理 end —— 先减缩进
             has_end = line.startswith('end') and not line.startswith('endmodule')
             if has_end:
@@ -356,11 +372,12 @@ class VerilogFormatter:
         words = s.split()
         return 'begin' in words
 
-    def _assemble(self, header, params, ports, decls, always_blocks):
+    def _assemble(self, header, params, ports, decls, always_blocks, has_params=False):
         lines = [header]
-        if params:
-            lines.extend(params)
-        lines.append(') (')
+        if has_params:
+            if params:
+                lines.extend(params)
+            lines.append(') (')
         if ports:
             lines.extend(ports)
         lines.append(');')

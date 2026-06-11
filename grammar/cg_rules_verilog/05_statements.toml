@@ -2,21 +2,24 @@
 template = "{{ stmt }}"
 
 [IfStatement]
-template = """\tif ({{ condition }}) {{ then_stmt }}{{?else_chain}}
-{{ else_chain }}{{/else_chain}}"""
+template = """\tif ({{ condition }}) begin
+{{ then_stmt }}\tend{{#else_chain}}
+{{?condition}} else if ({{ condition }}) begin
+{{ body }}\tend{{/condition}}{{!condition}} else begin
+{{ body }}\tend{{/condition}}{{/else_chain}}"""
 
 [ElseIf]
-template = """	else if ({{ condition }}) {{ then_stmt }}{{?else_chain}}
-{{ else_chain }}{{/else_chain}}"""
+template = """\telse if ({{ condition }}) begin
+{{ body }}\tend"""
 
 [ElseBranch]
-template = "	else {{ body }}"
+template = "\telse begin\n{{ body }}\tend"
 
 [BeginEnd]
 template = "begin\n{{ body }}\tend"
 
 [NonBlockingAssign]
-template = "		{{ target }} <= {{ value }};"
+template = "\t\t{{ target }} <= {{ value }};\n"
 
 [BlockingAssign]
-template = "		{{ target }} = {{ value }};"
+template = "\t\t{{ target }} = {{ value }};"

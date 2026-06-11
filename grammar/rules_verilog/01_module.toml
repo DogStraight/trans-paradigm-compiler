@@ -32,4 +32,4 @@ production = ["keyword.parameter", "id", "symbol.base.equal", "@Expression"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 [ParamDecl.node]
 param_name = "$2"
-default = "$4"
+value = "$4"

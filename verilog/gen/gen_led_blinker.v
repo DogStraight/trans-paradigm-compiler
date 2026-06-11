@@ -9,7 +9,7 @@ module led_blinker # (
 
     reg [31:0] counter;
 
-    always @(posedge clk or negedge rst_n ) begin
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             counter <= 32'd0;
             led <= 1'b0;

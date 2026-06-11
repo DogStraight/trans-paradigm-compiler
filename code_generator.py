@@ -5,10 +5,7 @@ import os
 import re
 
 
-class TemplateParseError(Exception):
-    """模板解析错误"""
-
-    pass
+from err import TemplateParseError
 
 
 class _TemplateToken:
@@ -23,37 +20,42 @@ class _TemplateToken:
 
 
 class TemplateEngine:
-    """模板引擎：将模板字符串解析为语法树，再绑定 AST 节点渲染为文本"""
+    """模板引擎：将模板字符串解析为语法树，再绑定 AST 节点渲染为文本，支持 @first/@last/@index 迭代控制"""
 
-    # 匹配 {{...}} 中的各种模式
     _TOKEN_RE = re.compile(
         r"""
         \{\{                # 开标签
         \s*
         ([\#\?\!/]?)        # 可选修饰符: #=遍历 ?=条件 !=取反 /=关闭
         \s*
-        ([a-zA-Z_][\w.]*|\.)   # 路径: identifier(.identifier)* 或 .
+        ([a-zA-Z_@][\w.]*|\.)   # 路径: identifier(.identifier)* 或 .，支持 @first/@last
         \s*
         \}\}                # 闭标签
     """,
         re.VERBOSE,
     )
 
+    class _IterItem:
+        """包装列表迭代元素，提供 @first/@last/@index 元数据"""
+
+        def __init__(self, value: Any, index: int, first: bool, last: bool):
+            self.value = value
+            self.index = index
+            self.first = first
+            self.last = last
+
     def __init__(self, template_str: str):
         self._template = template_str
         self._ast = self._parse(template_str)
 
     # ---- 解析 ----
-
     def _parse(self, text: str) -> list:
-        """将模板字符串解析为 _TemplateToken 列表"""
         tokens = []
         pos = 0
         while True:
             m = self._TOKEN_RE.search(text, pos)
             if m is None:
                 break
-            # 添加 m.start() 之前的普通文本
             if m.start() > pos:
                 tokens.append(_TemplateToken("text", text[pos : m.start()]))
             pos = m.end()
@@ -61,7 +63,6 @@ class TemplateEngine:
             modifier, path = m.group(1), m.group(2)
 
             if modifier == "#":
-                # 块开始: 递归解析到对应的 /path
                 end_tag = f"{{{{/{path}}}}}"
                 end_pos = text.find(end_tag, pos)
                 if end_pos == -1:
@@ -94,38 +95,33 @@ class TemplateEngine:
             elif modifier == "/":
                 raise TemplateParseError(f"意外的结束标签 {{{{/{path}}}}}")
             else:
-                # 简单替换
                 tokens.append(_TemplateToken("sub", path))
 
-        # 收尾文本
         if pos < len(text):
             tokens.append(_TemplateToken("text", text[pos:]))
-
         return tokens
 
     # ---- 渲染 ----
-
     def render(
         self, node: Any, visitor: "CodeGenerator", context_item: Any = None
     ) -> str:
-        """将模板绑定到 AST 节点进行渲染"""
         return self._render_tokens(self._ast, node, visitor, context_item)
 
     def _render_tokens(
         self, tokens: list, node: Any, visitor: "CodeGenerator", context_item: Any
     ) -> str:
-        """递归渲染 token 列表"""
         result = []
         for tok in tokens:
             if tok.type == "text":
                 result.append(tok.value)
 
             elif tok.type == "sub":
-                # 特殊处理 {{.}} 当前迭代项
                 if tok.value.strip() == ".":
                     resolved = self._resolve_dot(context_item, visitor)
                 else:
-                    resolved = self._resolve_path(node, tok.value, visitor)
+                    resolved = self._resolve_path(
+                        node, tok.value, visitor, context_item
+                    )
                 if resolved is not None:
                     if isinstance(resolved, list):
                         result.append("".join(str(r) for r in resolved))
@@ -133,61 +129,89 @@ class TemplateEngine:
                         result.append(str(resolved))
 
             elif tok.type == "block":
-                items = self._resolve_path(node, tok.value, visitor)
+                items = self._resolve_path(node, tok.value, visitor, context_item)
                 if isinstance(items, list):
-                    for item in items:
+                    # 包装为 _IterItem 列表，提供 @first/@last/@index
+                    wrapped = [
+                        self._IterItem(v, i, i == 0, i == len(items) - 1)
+                        for i, v in enumerate(items)
+                    ]
+                    for item in wrapped:
                         inner = self._render_tokens(tok.children, node, visitor, item)
                         result.append(inner)
                 elif items is not None:
                     # 单个非列表值也包装成列表遍历一次
-                    inner = self._render_tokens(tok.children, node, visitor, items)
+                    wrapped = self._IterItem(items, 0, True, True)
+                    inner = self._render_tokens(tok.children, node, visitor, wrapped)
                     result.append(inner)
 
             elif tok.type == "cond":
-                val = self._resolve_path(node, tok.value, visitor)
+                val = self._resolve_path(node, tok.value, visitor, context_item)
                 if self._is_truthy(val):
                     result.append(
-                        self._render_tokens(tok.children, node, visitor, None)
+                        self._render_tokens(tok.children, node, visitor, context_item)
                     )
 
             elif tok.type == "not":
-                val = self._resolve_path(node, tok.value, visitor)
+                val = self._resolve_path(node, tok.value, visitor, context_item)
                 if not self._is_truthy(val):
                     result.append(
-                        self._render_tokens(tok.children, node, visitor, None)
+                        self._render_tokens(tok.children, node, visitor, context_item)
                     )
 
         return "".join(result)
 
     # ---- 路径解析 ----
-
-    def _resolve_path(self, node: Any, path: str, visitor: "CodeGenerator") -> Any:
-        """沿点分路径解析属性，返回最终值"""
+    def _resolve_path(
+        self, node: Any, path: str, visitor: "CodeGenerator", context_item: Any
+    ) -> Any:
+        """沿点分路径解析属性，context_item 优先于 node（用于迭代元数据）"""
         parts = path.split(".")
-        current = node
+        # 如果路径以 @ 开头，从 context_item 解析特殊变量
+        if parts[0].startswith("@"):
+            if context_item is not None and isinstance(context_item, self._IterItem):
+                if parts[0] == "@first":
+                    return context_item.first
+                if parts[0] == "@last":
+                    return context_item.last
+                if parts[0] == "@index":
+                    return context_item.index
+            return None
+
+        # 正常路径：先从 context_item.value（如果有）开始，再回溯到 node
+        current = None
+        if context_item is not None and isinstance(context_item, self._IterItem):
+            current = context_item.value
+        else:
+            current = node
 
         for part in parts:
             if part == "":
                 return ""
+            if current is None:
+                return None
             if isinstance(current, Node):
                 current = getattr(current, part, None)
             elif isinstance(current, dict):
                 current = current.get(part)
             elif isinstance(current, list):
-                # 列表上取属性不太合理，返回空
-                return ""
+                # 列表上取属性不合理
+                return None
             else:
-                # 标量值没有子属性
-                return ""
+                # 标量值无子属性
+                return None
 
         return self._finalize_value(current, visitor)
 
     def _resolve_dot(self, context_item: Any, visitor: "CodeGenerator") -> Any:
         """处理 {{.}} 当前迭代项"""
+        if context_item is None:
+            return None
+        if isinstance(context_item, self._IterItem):
+            return self._finalize_value(context_item.value, visitor)
         return self._finalize_value(context_item, visitor)
 
     def _finalize_value(self, value: Any, visitor: "CodeGenerator") -> Any:
-        """对解析结果做最终处理：Node 递归 visit，列表递归处理"""
         if value is None:
             return None
         if isinstance(value, Node):
@@ -199,6 +223,8 @@ class TemplateEngine:
                     results.append(visitor.visit(item))
                 elif isinstance(item, str):
                     results.append(self._render_plain_string(item))
+                elif isinstance(item, dict):
+                    results.append(item)
                 else:
                     results.append(str(item))
             return results
@@ -208,12 +234,10 @@ class TemplateEngine:
 
     @staticmethod
     def _render_plain_string(text: str) -> str:
-        """渲染 AST 中的纯字符串节点（如 "PassStmt", "NoneLiteral"）"""
         return text
 
     @staticmethod
     def _is_truthy(val: Any) -> bool:
-        """判断值是否为真（用于条件模板）"""
         if val is None:
             return False
         if isinstance(val, str):
@@ -230,23 +254,11 @@ class TemplateEngine:
 
 
 class CodeGenerator:
-    """
-    配置驱动、基于访问者模式的代码生成器。
+    """配置驱动代码生成器"""
 
-    设计思路：
-    - 配置驱动：生成规则定义在外部 TOML 文件中，与解析器语法规则类似
-    - 访问者模式：visit() 根据 Node.name 分派到对应模板
-    - 多文件输出：file_rules 控制不同 AST 节点输出到不同文件
-    - 单文件实现：当前所有逻辑集中在一个文件中
-    """
-
-    def __init__(self, rules_path: Optional[str] = None, rules_dir: Optional[str] = None):
-        """
-        初始化代码生成器
-
-        :param rules_path: CG 规则单文件路径（回退用），默认 grammar/cg_rules.toml
-        :param rules_dir:  CG 规则目录，默认 grammar/cg_rules/
-        """
+    def __init__(
+        self, rules_path: Optional[str] = None, rules_dir: Optional[str] = None
+    ):
         self._rules_path = rules_path or "pyv_compiler/grammar/cg_rules.toml"
         self._rules_dir = rules_dir or FileManager.cg_rules_dir
         self._node_templates: Dict[str, TemplateEngine] = {}
@@ -254,16 +266,11 @@ class CodeGenerator:
         self._file_rules: List[dict] = []
         self._outputs: Dict[str, List[str]] = {}
         self._current_file: Optional[str] = None
-
         self._load_rules()
 
     # ---- 规则加载 ----
-
     def _load_rules(self) -> None:
-        """加载 CG 生成规则：优先从目录加载，回退到单文件"""
-        # 1) 尝试从目录加载所有 .toml 文件
         data = FileManager.load_all_toml(self._rules_dir)
-        # 2) 目录为空时，回退到单文件
         if not data:
             try:
                 rules_content = FileManager.read_file(self._rules_path)
@@ -273,14 +280,12 @@ class CodeGenerator:
                     rules_content = f.read()
             data = tomllib.loads(rules_content)
 
-        # 加载文件规则
         self._file_rules = data.pop("file_rules", [])
 
-        # 加载节点模板规则
         for node_type, config in data.items():
             if not isinstance(config, dict):
                 continue
-            if node_type.startswith("_"):  # 跳过注释段
+            if node_type.startswith("_"):
                 continue
 
             template_str = config.get("template")
@@ -303,35 +308,22 @@ class CodeGenerator:
                 }
 
     # ---- 访问者模式主入口 ----
-
     def visit(self, node: Any) -> str:
-        """
-        访问者模式核心方法：根据节点类型分派到对应模板。
-        返回渲染后的文本，不直接写入输出缓冲区。
-        文件分发由 generate() 顶层处理。
-
-        :param node: AST 节点（Node 对象或字符串）
-        :return: 渲染后的文本
-        """
-        # 处理纯字符串节点（如出现在 child 列表中的 "PassStmt"）
         if isinstance(node, str):
             return node
-
         if not isinstance(node, Node):
             return str(node)
 
         node_type = node.name
 
-        # 处理容器节点：optional/repeat/sequence 等有 child 列表但没模板的
+        # 容器节点兜底
         if node_type not in self._node_templates and node_type not in self._match_rules:
             children = getattr(node, "child", None)
             if isinstance(children, list):
                 return "".join(self.visit(c) for c in children)
 
-        # 检测是否需要触发文件切换（仅记录切换位置，不写入）
         self._check_file_rule(node, node_type)
 
-        # 1. 优先尝试 match 规则（条件分支模板）
         if node_type in self._match_rules:
             match_config = self._match_rules[node_type]
             attr_val = str(getattr(node, match_config["attr"], ""))
@@ -339,24 +331,18 @@ class CodeGenerator:
             if case_engine:
                 return case_engine.render(node, self)
 
-        # 2. 尝试普通模板规则
         engine = self._node_templates.get(node_type)
         if engine is not None:
             return engine.render(node, self)
 
-        # 3. 通用 fallback
         return self._fallback_render(node)
 
     def _fallback_render(self, node: Node) -> str:
-        """
-        通用兜底渲染：当没有匹配的模板规则时，尝试智能推断。
-        """
         parts = []
         children = getattr(node, "child", None)
         if isinstance(children, list):
             for child in children:
                 parts.append(self.visit(child))
-
         if not parts:
             val = getattr(node, "value", None)
             if val is not None:
@@ -366,19 +352,15 @@ class CodeGenerator:
             content = getattr(node, "content", None)
             if content is not None:
                 return str(content)
-
         return "".join(parts)
 
     # ---- 文件分发 ----
-
     def _check_file_rule(self, node: Node, node_type: str) -> None:
-        """检查是否匹配文件分发规则，匹配则切换当前输出文件。"""
         for rule in self._file_rules:
             if rule.get("node_type") == node_type:
                 file_name_tpl = rule.get("file_name", "output.v")
                 engine = TemplateEngine(file_name_tpl)
                 file_name = engine.render(node, self)
-
                 if file_name not in self._outputs:
                     self._outputs[file_name] = []
                     header_tpl = rule.get("header", "")
@@ -386,52 +368,30 @@ class CodeGenerator:
                         header_engine = TemplateEngine(header_tpl)
                         header_text = header_engine.render(node, self)
                         self._outputs[file_name].append(header_text)
-
                 self._current_file = file_name
                 break
 
     def _write(self, text: str) -> None:
-        """将文本写入当前输出文件缓冲区"""
         if self._current_file is None:
             self._current_file = "output.v"
             self._outputs[self._current_file] = []
-
         if text:
             self._outputs[self._current_file].append(text)
 
     # ---- 顶层接口 ----
-
     def generate(self, ast: Node) -> Dict[str, str]:
-        """
-        生成目标代码主入口
-
-        :param ast: 抽象语法树
-        :return: Dict[str, str] = {文件名: 文件内容}
-        """
-        # 先通过文件规则确定输出文件名和 header
         self._outputs = {}
         self._current_file = None
         if self._file_rules:
-            # 主动触发 Root 的文件规则
             self._check_file_rule(ast, "Root")
-
-        # visit 返回完整渲染文本
         rendered = self.visit(ast)
-
-        # 如果文件规则已创建，内容追加到对应文件；否则创建默认文件
         if self._current_file and self._current_file in self._outputs:
             self._outputs[self._current_file].append(rendered)
         else:
             self._outputs["output.v"] = [rendered]
-
         return {fname: "".join(lines) for fname, lines in self._outputs.items()}
 
     def optimize(self, outputs: Dict[str, str]) -> Dict[str, str]:
-        """
-        代码优化接口（文本级优化）
-        :param outputs: {文件名: 内容}
-        :return: 优化后的 {文件名: 内容}
-        """
         optimized = {}
         for file_name, content in outputs.items():
             lines = content.split("\n")
@@ -447,18 +407,10 @@ class CodeGenerator:
         return optimized
 
     def dump(self, outputs: Dict[str, str], output_dir: Optional[str] = None) -> None:
-        """
-        代码输出接口：将生成的文件写入磁盘
-
-        :param outputs: {文件名: 内容}
-        :param output_dir: 输出目录，默认使用项目根目录下的 output 文件夹
-        """
         if output_dir is None:
             base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             output_dir = os.path.join(base, "output")
-
         os.makedirs(output_dir, exist_ok=True)
-
         for file_name, content in outputs.items():
             file_path = os.path.join(output_dir, file_name)
             with open(file_path, "w", encoding="utf-8") as f:

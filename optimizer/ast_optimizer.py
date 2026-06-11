@@ -1,91 +1,65 @@
 """
-ast_optimizer.py - 规则式 AST 优化器（可扩展样本）
+ast_optimizer.py - 规则式 AST 优化器（无叶子值自动提取版本）
 
 设计说明：
-- 每条优化“变换”（transform）是一个独立函数，专注于一种模式转换。
-- 变换通过 @optimize 装饰器注册到全局注册表。
-- 优化器递归遍历 AST，按顺序应用所有注册的变换（或指定的变换列表）。
-- 变换名称、注册表变量均包含 "optimize"/"opt" 前缀，与语法规则/模板规则区分。
+- 每条优化“变换”是一个独立函数，专注于一种模式转换。
+- 变换通过 @optimize 装饰器注册，但推荐使用显式顺序控制。
+- 优化器递归遍历 AST，按顺序应用变换。
+- 本版本移除了 extract_leaf_value，避免了保护节点维护成本。
 """
 
 from typing import Any, List, Callable
-from define import Node  # 假设 AST 节点基类
+from define import Node
 
 # ---------- 优化变换注册机制 ----------
-_OPTIMIZE_TRANSFORMS: List[Callable] = []  # 存储已注册的变换函数（顺序 = 注册顺序）
+_OPTIMIZE_TRANSFORMS: List[Callable] = []
 
 
 def optimize(func: Callable) -> Callable:
-    """
-    装饰器：将一个函数注册为 AST 优化变换。
-    变换函数签名：def transform_name(node: Any) -> Any
-    - 输入：任意类型的节点（Node、列表、基本类型）
-    - 输出：转换后的节点（类型可能改变）
-    注意：变换只负责自己的模式转换，不应递归处理子节点（由优化器统一递归）。
-    """
     _OPTIMIZE_TRANSFORMS.append(func)
     return func
 
 
 def get_optimize_transforms() -> List[Callable]:
-    """返回所有已注册的优化变换（按注册顺序）"""
     return _OPTIMIZE_TRANSFORMS.copy()
 
 
 # ---------- 递归应用器 ----------
 def _apply_transforms_to_node(node: Any, transforms: List[Callable]) -> Any:
-    """
-    对单个节点应用变换列表（后序遍历：先子后父）。
-    返回转换后的节点。
-    """
-    # 1. 先递归处理子节点（如果是容器）
     if isinstance(node, Node):
         for attr_name, attr_value in node.__dict__.items():
             setattr(node, attr_name, _apply_transforms_to_node(attr_value, transforms))
     elif isinstance(node, list):
         return [_apply_transforms_to_node(item, transforms) for item in node]
-    # 基本类型（str/int/None）无需递归
 
-    # 2. 依次应用所有变换（每个变换都可能改变节点）
     result = node
     for transform_func in transforms:
         result = transform_func(result)
     return result
 
 
-def optimize_ast(ast: Any, transforms: List[Callable]) -> Any:
-    """
-    对外接口：优化 AST。
-    :param ast: 原始 AST（Node 树）
-    :param transforms: 可选，指定变换列表（默认使用所有已注册变换）
-    :return: 优化后的 AST
-    """
+def optimize_ast(ast: Any, transforms: List[Callable] | None = None) -> Any:
     if transforms is None:
         transforms = get_optimize_transforms()
     return _apply_transforms_to_node(ast, transforms)
 
 
-# ---------- 示例优化变换（可直接使用或作为模板） ----------
+# ========== 基础简化变换 ==========
+
+
 @optimize
 def flatten_optional(node: Any) -> Any:
-    """
-    变换1：展平 optional 节点。
-    AST 中 optional 结构：Node(name='optional', child=[实际节点])
-    优化后：直接返回 child[0]（若有），去除包装层。
-    """
     if isinstance(node, Node) and node.name == "optional":
         children = getattr(node, "child", [])
         if len(children) == 1:
             return children[0]
+        if len(children) == 0:
+            return []
     return node
 
 
 @optimize
 def extract_keyword_value(node: Any) -> Any:
-    """
-    变换2：提取 keyword.* 节点的 value。
-    例如：Node(name='keyword.input', value='input') -> 'input'
-    """
     if isinstance(node, Node) and node.name.startswith("keyword."):
         value = getattr(node, "value", None)
         return value if value is not None else ""
@@ -94,10 +68,6 @@ def extract_keyword_value(node: Any) -> Any:
 
 @optimize
 def extract_id_value(node: Any) -> Any:
-    """
-    变换3：提取 id 节点的 value。
-    例如：Node(name='id', value='clk') -> 'clk'
-    """
     if isinstance(node, Node) and node.name == "id":
         value = getattr(node, "value", None)
         return value if value is not None else ""
@@ -105,15 +75,59 @@ def extract_id_value(node: Any) -> Any:
 
 
 @optimize
+def flatten_repeat_sequence(node: Any) -> Any:
+    if isinstance(node, Node) and node.name in ("repeat", "sequence"):
+        children = getattr(node, "child", [])
+        return [
+            c
+            for c in children
+            if not (isinstance(c, Node) and c.name == "symbol.base.comma")
+        ]
+    return node
+
+
+@optimize
+def flatten_first_rest_list(node: Any) -> Any:
+    if not isinstance(node, Node):
+        return node
+
+    first = getattr(node, "first", None)
+    rest = getattr(node, "rest", None)
+    if first is None and rest is None:
+        return node
+
+    def _to_flat_list(item):
+        if item is None:
+            return []
+        if isinstance(item, list):
+            result = []
+            for sub in item:
+                result.extend(_to_flat_list(sub))
+            return result
+        if isinstance(item, Node):
+            if item.name == "symbol.base.comma":
+                return []
+            if item.name in ("symbol.extend.logic_or", "keyword.or"):
+                return []
+            if item.name in ("repeat", "sequence"):
+                children = getattr(item, "child", [])
+                return _to_flat_list(children)
+            return [item]
+        return [item]
+
+    result = []
+    if first is not None:
+        result.extend(_to_flat_list(first))
+    if rest is not None:
+        result.extend(_to_flat_list(rest))
+    return result if result else []
+
+
+@optimize
 def range_to_string(node: Any) -> Any:
-    """
-    变换4：将 Range 节点转换为 "msb:lsb" 字符串。
-    自动提取 Number/Identifier 节点的 value/content。
-    """
     if isinstance(node, Node) and node.name == "Range":
         msb = getattr(node, "msb", None)
         lsb = getattr(node, "lsb", None)
-        # 如果 msb/lsb 是 Node，提取其值
         if isinstance(msb, Node):
             msb = getattr(msb, "value", getattr(msb, "content", str(msb)))
         if isinstance(lsb, Node):
@@ -123,39 +137,133 @@ def range_to_string(node: Any) -> Any:
     return node
 
 
+# ========== 结构展平变换 ==========
+
+
 @optimize
-def flatten_repeat_sequence(node: Any) -> Any:
-    """
-    变换5：展平 repeat / sequence 节点。
-    repeat 结构：Node(name='repeat', child=[item1, item2, ...])
-    优化后：直接返回 child 列表，去掉包装节点。
-    """
-    if isinstance(node, Node) and node.name in ("repeat", "sequence"):
+def flatten_root(node: Any) -> Any:
+    if isinstance(node, Node) and node.name == "Root":
         children = getattr(node, "child", [])
+        if not children:
+            return []
+        if len(children) == 1:
+            return children[0]
         return children
     return node
 
 
-# ---------- 组合与调试示例 ----------
-if __name__ == "__main__":
-    print("已注册优化变换:", [f.__name__ for f in get_optimize_transforms()])
+@optimize
+def flatten_block(node: Any) -> Any:
+    if isinstance(node, Node) and node.name == "Block":
+        children = getattr(node, "child", [])
+        return children if isinstance(children, list) else []
+    return node
 
-    # 可以只应用部分变换（而不是全部）
-    custom_transforms = [flatten_optional, extract_id_value]
-    # optimized_ast = optimize_ast(original_ast, transforms=custom_transforms)
 
-    # 调试技巧：临时包装变换函数打印变化
-    def debug_transform(transform_func):
-        def wrapper(node):
-            old_repr = repr(node)[:80]
-            result = transform_func(node)
-            new_repr = repr(result)[:80]
-            if old_repr != new_repr:
-                print(f"[{transform_func.__name__}] {old_repr} -> {new_repr}")
+@optimize
+def flatten_begin_end(node: Any) -> Any:
+    if isinstance(node, Node) and node.name == "BeginEnd":
+        body = getattr(node, "body", None)
+        if body is None:
+            return []
+        if isinstance(body, Node) and body.name == "Block":
+            return getattr(body, "child", [])
+        return body
+    return node
+
+
+@optimize
+def normalize_else_chain(node: Any) -> Any:
+    """
+    统一 else_chain 的表示，递归展平嵌套的 ElseIf/ElseBranch 链。
+    将 IfStatement 的 else_chain 转换为一个平坦的字典列表。
+    """
+    if not isinstance(node, Node):
+        return node
+    if node.name != "IfStatement":
+        return node
+
+    else_chain = getattr(node, "else_chain", None)
+    if else_chain is None:
+        return node
+
+    def _flatten_body(body):
+        # 展平 BeginEnd/Block 节点为语句列表
+        if isinstance(body, Node):
+            if body.name == "BeginEnd":
+                b = getattr(body, "body", None)
+                if isinstance(b, Node) and b.name == "Block":
+                    return getattr(b, "child", [])
+                return b
+            if body.name == "Block":
+                return getattr(body, "child", [])
+        return body
+
+    def _flatten_else_chain(chain):
+        """递归展平 else_chain，返回字典列表"""
+        result = []
+        if chain is None:
             return result
+        # 处理列表或元组
+        if isinstance(chain, (list, tuple)):
+            for item in chain:
+                result.extend(_flatten_else_chain(item))
+            return result
+        # 处理单个 Node
+        if isinstance(chain, Node):
+            if chain.name == "ElseIf":
+                cond = getattr(chain, "condition", None)
+                stmt = getattr(chain, "then_stmt", None)
+                branch_dict = {"condition": cond, "body": _flatten_body(stmt)}
+                result.append(branch_dict)
+                # 递归处理内部 else_chain（可能有 ElseBranch 或更多 ElseIf）
+                inner_chain = getattr(chain, "else_chain", None)
+                result.extend(_flatten_else_chain(inner_chain))
+                return result
+            elif chain.name == "ElseBranch":
+                stmt = getattr(chain, "body", None)
+                branch_dict = {"body": _flatten_body(stmt)}
+                result.append(branch_dict)
+                return result
+            else:
+                # 未知节点，保留原样
+                result.append(chain)
+                return result
+        # 其他基本类型
+        return [chain]
 
-        return wrapper
+    normalized = _flatten_else_chain(else_chain)
+    if not normalized:
+        # 删除空 else_chain 属性
+        if hasattr(node, "else_chain"):
+            delattr(node, "else_chain")
+    else:
+        setattr(node, "else_chain", normalized)
+    return node
 
-    # 使用调试包装（注意：这不会影响原始注册，仅用于局部测试）
-    # debugged = debug_transform(flatten_optional)
-    # test_result = debugged(some_node)
+
+# ========== 显式控制优化顺序（无 extract_leaf_value） ==========
+
+
+def get_ordered_transforms() -> List[Callable]:
+    return [
+        flatten_optional,
+        extract_keyword_value,
+        extract_id_value,
+        flatten_repeat_sequence,
+        flatten_first_rest_list,
+        range_to_string,
+        flatten_root,
+        flatten_block,
+        flatten_begin_end,
+        normalize_else_chain,
+    ]
+
+
+def optimize_ast_ordered(ast: Any) -> Any:
+    return optimize_ast(ast, transforms=get_ordered_transforms())
+
+
+# ---------- 示例 ----------
+if __name__ == "__main__":
+    print("推荐优化顺序:", [f.__name__ for f in get_ordered_transforms()])

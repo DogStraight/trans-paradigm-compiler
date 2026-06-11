@@ -1,0 +1,288 @@
+{
+  "Root": {
+    "child": [
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "id": {
+              "value": "dff"
+            }
+          },
+          "params": "optional",
+          "ports": {
+            "optional": {
+              "child": [
+                {
+                  "PortList": {
+                    "first": {
+                      "PortDecl": {
+                        "direction": {
+                          "keyword.input": {
+                            "value": "input"
+                          }
+                        },
+                        "port_type": {
+                          "optional": {
+                            "child": [
+                              {
+                                "keyword.wire": {
+                                  "value": "wire"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "port_name": {
+                          "id": {
+                            "value": "clk"
+                          }
+                        }
+                      }
+                    },
+                    "rest": {
+                      "repeat": {
+                        "child": [
+                          {
+                            "sequence": {
+                              "child": [
+                                {
+                                  "symbol.base.comma": {
+                                    "value": ","
+                                  }
+                                },
+                                {
+                                  "PortDecl": {
+                                    "direction": {
+                                      "keyword.input": {
+                                        "value": "input"
+                                      }
+                                    },
+                                    "port_type": {
+                                      "optional": {
+                                        "child": [
+                                          {
+                                            "keyword.wire": {
+                                              "value": "wire"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "port_name": {
+                                      "id": {
+                                        "value": "rst_n"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "sequence": {
+                              "child": [
+                                {
+                                  "symbol.base.comma": {
+                                    "value": ","
+                                  }
+                                },
+                                {
+                                  "PortDecl": {
+                                    "direction": {
+                                      "keyword.input": {
+                                        "value": "input"
+                                      }
+                                    },
+                                    "port_type": {
+                                      "optional": {
+                                        "child": [
+                                          {
+                                            "keyword.wire": {
+                                              "value": "wire"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "port_name": {
+                                      "id": {
+                                        "value": "d"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "sequence": {
+                              "child": [
+                                {
+                                  "symbol.base.comma": {
+                                    "value": ","
+                                  }
+                                },
+                                {
+                                  "PortDecl": {
+                                    "direction": {
+                                      "keyword.output": {
+                                        "value": "output"
+                                      }
+                                    },
+                                    "port_type": {
+                                      "optional": {
+                                        "child": [
+                                          {
+                                            "keyword.reg": {
+                                              "value": "reg"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "port_name": {
+                                      "id": {
+                                        "value": "q"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "body": {
+            "Block": {
+              "child": [
+                {
+                  "AlwaysBlock": {
+                    "sensitivity": {
+                      "SensitivityList": {
+                        "first": {
+                          "EdgeSense": {
+                            "edge": {
+                              "keyword.posedge": {
+                                "value": "posedge"
+                              }
+                            },
+                            "signal": {
+                              "id": {
+                                "value": "clk"
+                              }
+                            }
+                          }
+                        },
+                        "rest": {
+                          "repeat": {
+                            "child": [
+                              {
+                                "sequence": {
+                                  "child": [
+                                    {
+                                      "symbol.extend.logic_or": {
+                                        "value": "or"
+                                      }
+                                    },
+                                    {
+                                      "EdgeSense": {
+                                        "edge": {
+                                          "keyword.negedge": {
+                                            "value": "negedge"
+                                          }
+                                        },
+                                        "signal": {
+                                          "id": {
+                                            "value": "rst_n"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "body": {
+                      "BeginEnd": {
+                        "body": {
+                          "Block": {
+                            "child": [
+                              {
+                                "IfStatement": {
+                                  "condition": {
+                                    "UnaryOp": {
+                                      "op": "!",
+                                      "operand": {
+                                        "Identifier": {
+                                          "content": "rst_n"
+                                        }
+                                      },
+                                      "position": "prefix"
+                                    }
+                                  },
+                                  "then_stmt": {
+                                    "NonBlockingAssign": {
+                                      "target": {
+                                        "id": {
+                                          "value": "q"
+                                        }
+                                      },
+                                      "value": {
+                                        "BitWidthLiteral": {
+                                          "width": 0,
+                                          "value": "1'b0"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "else_chain": {
+                                    "optional": {
+                                      "child": [
+                                        {
+                                          "ElseBranch": {
+                                            "body": {
+                                              "NonBlockingAssign": {
+                                                "target": {
+                                                  "id": {
+                                                    "value": "q"
+                                                  }
+                                                },
+                                                "value": {
+                                                  "Identifier": {
+                                                    "content": "d"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

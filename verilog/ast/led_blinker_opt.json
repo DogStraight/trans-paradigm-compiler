@@ -1,0 +1,192 @@
+{
+  "ModuleDecl": {
+    "module_name": "led_blinker",
+    "params": [
+      {
+        "ParamDecl": {
+          "param_name": "CLK_MHZ",
+          "value": {
+            "Number": {
+              "value": 100
+            }
+          }
+        }
+      },
+      {
+        "ParamDecl": {
+          "param_name": "MAX_CNT",
+          "value": {
+            "BitWidthLiteral": {
+              "width": 0,
+              "value": "32'd1000"
+            }
+          }
+        }
+      }
+    ],
+    "ports": [
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "port_name": "clk"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "port_name": "rst_n"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "port_name": "led"
+        }
+      }
+    ],
+    "body": [
+      {
+        "RegDecl": {
+          "reg_type": "reg",
+          "range": "31:0",
+          "reg_name": "counter"
+        }
+      },
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "EdgeSense": {
+                "edge": "posedge",
+                "signal": "clk"
+              }
+            },
+            {
+              "EdgeSense": {
+                "edge": "negedge",
+                "signal": "rst_n"
+              }
+            }
+          ],
+          "body": [
+            {
+              "IfStatement": {
+                "condition": {
+                  "UnaryOp": {
+                    "op": "!",
+                    "operand": {
+                      "Identifier": {
+                        "content": "rst_n"
+                      }
+                    },
+                    "position": "prefix"
+                  }
+                },
+                "then_stmt": [
+                  {
+                    "NonBlockingAssign": {
+                      "target": "counter",
+                      "value": {
+                        "BitWidthLiteral": {
+                          "width": 0,
+                          "value": "32'd0"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "NonBlockingAssign": {
+                      "target": "led",
+                      "value": {
+                        "BitWidthLiteral": {
+                          "width": 0,
+                          "value": "1'b0"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "else_chain": [
+                  {
+                    "condition": {
+                      "BinaryOp": {
+                        "op": "==",
+                        "left": {
+                          "Identifier": {
+                            "content": "counter"
+                          }
+                        },
+                        "right": {
+                          "Identifier": {
+                            "content": "MAX_CNT"
+                          }
+                        }
+                      }
+                    },
+                    "body": [
+                      {
+                        "NonBlockingAssign": {
+                          "target": "counter",
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "32'd0"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "NonBlockingAssign": {
+                          "target": "led",
+                          "value": {
+                            "UnaryOp": {
+                              "op": "~",
+                              "operand": {
+                                "Identifier": {
+                                  "content": "led"
+                                }
+                              },
+                              "position": "prefix"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "body": [
+                      {
+                        "NonBlockingAssign": {
+                          "target": "counter",
+                          "value": {
+                            "BinaryOp": {
+                              "op": "+",
+                              "left": {
+                                "Identifier": {
+                                  "content": "counter"
+                                }
+                              },
+                              "right": {
+                                "BitWidthLiteral": {
+                                  "width": 0,
+                                  "value": "32'd1"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

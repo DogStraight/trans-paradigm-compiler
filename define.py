@@ -191,6 +191,16 @@ class Node:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+    @staticmethod
+    def _dump_item(item):
+        if isinstance(item, Node):
+            return item.dump()
+        if isinstance(item, dict):
+            return {k: Node._dump_item(v) for k, v in item.items()}
+        if isinstance(item, list):
+            return [Node._dump_item(x) for x in item]
+        return item
+
     def dump(self):
         # 收集除 name 和 child 外的所有属性
         attrs = {k: v for k, v in self.__dict__.items() if k not in ("name", "child")}
@@ -206,9 +216,9 @@ class Node:
             if attr == "name":
                 continue
             if isinstance(value, list):
-                result[attr] = [
-                    item.dump() if isinstance(item, Node) else item for item in value
-                ]
+                result[attr] = [self._dump_item(item) for item in value]
+            elif isinstance(value, dict):
+                result[attr] = {k: self._dump_item(v) for k, v in value.items()}
             else:
                 result[attr] = value.dump() if isinstance(value, Node) else value
         return {self.name: result}

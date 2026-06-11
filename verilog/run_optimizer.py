@@ -1,5 +1,7 @@
 """Run optimizer and save optimized AST + generated output"""
+
 import sys, os, json, tempfile
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from define import Node, GrammarRulesRegister
@@ -10,8 +12,8 @@ from optimizer import optimize_ast, get_optimize_transforms
 from code_generator import CodeGenerator
 
 src_dir = os.path.dirname(os.path.abspath(__file__))
-src_file = os.path.join(src_dir, "led_blinker_ref.v")
-with open(src_file, 'r', encoding='utf-8') as f:
+src_file = os.path.join(src_dir, "ref", "ref_led_blinker.v")
+with open(src_file, "r", encoding="utf-8") as f:
     source = f.read()
 
 register = GrammarRulesRegister()
@@ -44,7 +46,7 @@ def safe_write(filepath, data):
     """原子写入：先写临时文件，成功后再替换"""
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(filepath), suffix=".tmp")
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(data)
         os.replace(tmp, filepath)
     except:
