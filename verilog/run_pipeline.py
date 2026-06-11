@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """
-PyV 编译器端到端测试：Verilog LED Blinker
-直接使用 led_blinker_ref.v 作为输入，用 Verilog 语法规则解析，
+PyV 编译器端到端测试
+直接使用 verilog/ref_*.v 作为输入，用 Verilog 语法规则解析，
 再用 Verilog CG 规则生成代码，并与参考文件对比。
+
+用法:
+    python run_pipeline.py                    # 默认 led_blinker_ref.v
+    python run_pipeline.py ref_counter        # 测试计数器
+    python run_pipeline.py ref_fsm            # 测试状态机
+    python run_pipeline.py ref_top            # 测试顶层模块
+    python run_pipeline.py ref_alu            # 测试 ALU
+    python run_pipeline.py ref_dff            # 测试 D 触发器
 """
 
 import sys, os
@@ -18,15 +26,32 @@ from parser import Parser
 from code_generator import CodeGenerator, CodeGenerator
 from define import GrammarRulesRegister
 from parser.rule_selector import RuleSelector
+from formatter import format_code
 import json
 import difflib
 
 
 def main():
+    # 支持命令行指定测试文件
+    test_name = "ref\\ref_led_blinker"  # 默认测试文件
+
     src_dir = os.path.dirname(os.path.abspath(__file__))
-    src_file = os.path.join(src_dir, "led_blinker_ref.v")
-    gen_file = os.path.join(src_dir, "led_blinker_gen.v")
-    ast_json = os.path.join(src_dir, "led_blinker_ast.json")
+    ref_dir = os.path.join(src_dir, "ref")
+    src_file = os.path.join(ref_dir, test_name + ".v")
+    if not os.path.exists(src_file):
+        src_file = os.path.join(src_dir, test_name + ".v")
+    if not os.path.exists(src_file):
+        print(f"❌ 找不到源文件: {src_file}")
+        sys.exit(1)
+
+    stem = os.path.splitext(os.path.basename(src_file))[0]
+
+    gen_dir = os.path.join(src_dir, "gen")
+    ast_dir = os.path.join(src_dir, "ast")
+    os.makedirs(gen_dir, exist_ok=True)
+    os.makedirs(ast_dir, exist_ok=True)
+    gen_file = os.path.join(gen_dir, "gen_" + stem.replace("ref_", "") + ".v")
+    ast_json = os.path.join(ast_dir, stem.replace("ref_", "") + ".json")
 
     # 1. 读取源文件
     with open(src_file, "r", encoding="utf-8") as f:
@@ -69,6 +94,10 @@ def main():
     outputs = cg.optimize(outputs)
 
     content = outputs.get("output.v", "")
+
+    # 4.5 格式化（缩进、块合并）
+    content = format_code(content)
+
     with open(gen_file, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"✅ 已生成: {gen_file}")

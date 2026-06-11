@@ -1,7 +1,10 @@
 // Reference: Simple LED Blinker in Verilog
 // 功能: 每计数到 1000 次翻转一次 LED
 
-module led_blinker (
+module led_blinker # (
+    parameter CLK_MHZ = 100,
+    parameter MAX_CNT = 32'd1000
+)(
     input  wire       clk,
     input  wire       rst_n,
     output reg        led
@@ -13,7 +16,7 @@ module led_blinker (
         if (!rst_n) begin
             counter <= 32'd0;
             led     <= 1'b0;
-        end else if (counter == 32'd1000) begin
+        end else if (counter == MAX_CNT) begin
             counter <= 32'd0;
             led     <= ~led;
         end else begin

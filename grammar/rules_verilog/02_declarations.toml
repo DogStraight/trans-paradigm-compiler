@@ -3,10 +3,9 @@
 # ============================================================================
 
 [PortList]
-production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
+production = ["(@PortDecl,(symbol.base.comma,@PortDecl)*)"]
 [PortList.node]
-first = "$1"
-rest = "$2"
+elements = "$1"
 
 [PortDecl]
 production = ["keyword.input|keyword.output|keyword.inout", "@OptType?", "id"]

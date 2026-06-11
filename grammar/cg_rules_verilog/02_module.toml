@@ -1,12 +1,19 @@
 [ModuleDecl]
-template = """module {{ module_name }} ({{#ports}}
-\t{{.}}{{/ports}}
+template = """module {{ module_name }}{{?params}} {{ params }}{{/params}} (
+    {{#ports}}
+    {{.}}{{/ports}}
 );
 \t{{ body }}
 endmodule"""
 
 [PortList]
-template = "{{ first }}{{#rest}}{{.}}{{/rest}}"
+template = "{{ elements }}"
+
+[ParameterList]
+template = "# ({{ first }}{{#rest}} {{.}}{{/rest}})"
+
+[ParamDecl]
+template = "parameter {{ param_name }} = {{ default }}"
 
 [PortDecl]
 template = "{{ direction }} {{#port_type}}{{.}} {{/port_type}}{{ port_name }}"

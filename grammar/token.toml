@@ -6,7 +6,7 @@ tab = "\t"
 newline = "\n"
 
 [comment]
-boundary = "#/"
+boundary = "/"
 
 [symbol]
 [symbol.base]
@@ -29,6 +29,7 @@ colon = ":"
 semicolon = ";"
 question_mark = "?"
 at = "@"
+pound = "#"
 single_quote = "'"
 [symbol.extend]
 r_shift = ">>"
@@ -81,6 +82,7 @@ in = "in"
 
 # param
 param = "param"
+parameter = "parameter"
 
 # port 
 input = "input"

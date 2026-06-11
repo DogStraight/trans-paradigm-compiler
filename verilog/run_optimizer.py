@@ -1,5 +1,5 @@
 """Run optimizer and save optimized AST + generated output"""
-import sys, os, json
+import sys, os, json, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from define import Node, GrammarRulesRegister
@@ -9,7 +9,8 @@ from parser.rule_selector import RuleSelector
 from optimizer import optimize_ast, get_optimize_transforms
 from code_generator import CodeGenerator
 
-src_file = os.path.join(os.path.dirname(__file__), "led_blinker_ref.v")
+src_dir = os.path.dirname(os.path.abspath(__file__))
+src_file = os.path.join(src_dir, "led_blinker_ref.v")
 with open(src_file, 'r', encoding='utf-8') as f:
     source = f.read()
 
@@ -25,29 +26,45 @@ ast = parser.parse(tokens)
 
 optimized = optimize_ast(ast, get_optimize_transforms())
 
+
 def serialize(obj):
     if isinstance(obj, Node):
         d = {}
         for a, v in obj.__dict__.items():
-            if a == "name": continue
+            if a == "name":
+                continue
             d[a] = serialize(v)
         return {obj.name: d}
     elif isinstance(obj, list):
         return [serialize(i) for i in obj]
     return obj
 
-opt_ast = os.path.join(os.path.dirname(__file__), "led_blinker_ast_optimized.json")
-with open(opt_ast, 'w', encoding='utf-8') as f:
-    json.dump(serialize(optimized), f, indent=2)
+
+def safe_write(filepath, data):
+    """原子写入：先写临时文件，成功后再替换"""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(filepath), suffix=".tmp")
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(data)
+        os.replace(tmp, filepath)
+    except:
+        os.unlink(tmp)
+        raise
+
+
+# 保存 AST
+serialized = serialize(optimized)
+opt_ast = os.path.join(src_dir, "ast", "led_blinker_ref_optimized.json")
+safe_write(opt_ast, json.dumps(serialized, indent=2))
 print(f"AST saved ({os.path.getsize(opt_ast)} bytes)")
 
+# 保存生成代码
 cg = CodeGenerator(rules_dir="pyv_compiler/grammar/cg_rules_verilog")
 out = cg.generate(optimized)
 out = cg.optimize(out)
 content = out.get("output.v", "")
 
-gen = os.path.join(os.path.dirname(__file__), "led_blinker_gen_opt.v")
-with open(gen, 'w', encoding='utf-8') as f:
-    f.write(content)
+gen = os.path.join(src_dir, "gen", "led_blinker_gen_opt.v")
+safe_write(gen, content)
 print(f"Output saved ({os.path.getsize(gen)} bytes)")
 print(content)

@@ -1,5 +1,6 @@
 # parser/main_parser.py
 import re
+import sys
 from typing import Optional, List, Dict
 from define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
 from parser.feature_analyze import analyze_production_features
@@ -30,6 +31,11 @@ class Parser:
     def _log_state(self, action: str, mode: str = "a") -> None:
         with open(self.debug_log_file, mode, encoding="utf-8") as f:
             f.write(f"[{action}]\n")
+
+    def _warn(self, message: str) -> None:
+        """输出解析警告到 stderr（同时写入 debug 日志）"""
+        self._log_state(f"警告: {message}")
+        print(f"⚠️ [解析器] {message}", file=sys.stderr)
 
     def _process_production_node(
         self, node: dict, context: ParseContext
@@ -236,6 +242,7 @@ class Parser:
             )
         except Exception as e:
             self._log_state(f"Pratt 解析失败: {e}")
+            self._warn(f"Pratt 表达式解析失败: {e}")
             return None
 
         if consumed == 0:
@@ -443,7 +450,7 @@ class Parser:
 
         candidates = self.rule_selector.get_candidate_rules(current)
         if not candidates:
-            self._log_state(f"没有匹配的语句规则: {current.type}")
+            self._warn(f"没有匹配的语句规则: '{current.content}' (type: {current.type})")
             return None
 
         for rule in candidates:
@@ -453,7 +460,7 @@ class Parser:
                 return node
             context.restore_snapshot(snapshot)
 
-        self._log_state(f"所有候选规则匹配失败: {current.type}")
+        self._warn(f"所有候选规则匹配失败: '{current.content}' (type: {current.type})")
         return None
 
     # 解析器的主要输出方法 block
@@ -520,8 +527,9 @@ class Parser:
                 continue
             stmt_node = self.parse_sentence(context)
             if stmt_node is None:
-                self._log_state(
-                    f"无法解析的 token: {current.content if current else 'EOF'}"
+                self._warn(
+                    f"无法解析的 token: '{current.content if current else 'EOF'}' "
+                    f"(type: {current.type if current else 'N/A'})"
                 )
                 break
             block_node.add_child(stmt_node)

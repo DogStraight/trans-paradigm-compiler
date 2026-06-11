@@ -8,32 +8,21 @@
               "value": "led_blinker"
             }
           },
-          "ports": {
+          "params": {
             "optional": {
               "child": [
                 {
-                  "PortList": {
+                  "ParameterList": {
                     "first": {
-                      "PortDecl": {
-                        "direction": {
-                          "keyword.input": {
-                            "value": "input"
-                          }
-                        },
-                        "port_type": {
-                          "optional": {
-                            "child": [
-                              {
-                                "keyword.wire": {
-                                  "value": "wire"
-                                }
-                              }
-                            ]
-                          }
-                        },
-                        "port_name": {
+                      "ParamDecl": {
+                        "param_name": {
                           "id": {
-                            "value": "clk"
+                            "value": "CLK_MHZ"
+                          }
+                        },
+                        "default": {
+                          "Number": {
+                            "value": 100
                           }
                         }
                       }
@@ -50,64 +39,137 @@
                                   }
                                 },
                                 {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "port_name": {
+                                  "ParamDecl": {
+                                    "param_name": {
                                       "id": {
-                                        "value": "rst_n"
+                                        "value": "MAX_CNT"
+                                      }
+                                    },
+                                    "default": {
+                                      "BitWidthLiteral": {
+                                        "width": 0,
+                                        "value": "32'd1000"
                                       }
                                     }
                                   }
                                 }
                               ]
                             }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "ports": {
+            "optional": {
+              "child": [
+                {
+                  "PortList": {
+                    "elements": {
+                      "sequence": {
+                        "child": [
+                          {
+                            "PortDecl": {
+                              "direction": {
+                                "keyword.input": {
+                                  "value": "input"
+                                }
+                              },
+                              "port_type": {
+                                "optional": {
+                                  "child": [
+                                    {
+                                      "keyword.wire": {
+                                        "value": "wire"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "port_name": {
+                                "id": {
+                                  "value": "clk"
+                                }
+                              }
+                            }
                           },
                           {
-                            "sequence": {
+                            "repeat": {
                               "child": [
                                 {
-                                  "symbol.base.comma": {
-                                    "value": ","
+                                  "sequence": {
+                                    "child": [
+                                      {
+                                        "symbol.base.comma": {
+                                          "value": ","
+                                        }
+                                      },
+                                      {
+                                        "PortDecl": {
+                                          "direction": {
+                                            "keyword.input": {
+                                              "value": "input"
+                                            }
+                                          },
+                                          "port_type": {
+                                            "optional": {
+                                              "child": [
+                                                {
+                                                  "keyword.wire": {
+                                                    "value": "wire"
+                                                  }
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "port_name": {
+                                            "id": {
+                                              "value": "rst_n"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
                                   }
                                 },
                                 {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
+                                  "sequence": {
+                                    "child": [
+                                      {
+                                        "symbol.base.comma": {
+                                          "value": ","
+                                        }
+                                      },
+                                      {
+                                        "PortDecl": {
+                                          "direction": {
+                                            "keyword.output": {
+                                              "value": "output"
+                                            }
+                                          },
+                                          "port_type": {
+                                            "optional": {
+                                              "child": [
+                                                {
+                                                  "keyword.reg": {
+                                                    "value": "reg"
+                                                  }
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "port_name": {
+                                            "id": {
+                                              "value": "led"
                                             }
                                           }
-                                        ]
+                                        }
                                       }
-                                    },
-                                    "port_name": {
-                                      "id": {
-                                        "value": "led"
-                                      }
-                                    }
+                                    ]
                                   }
                                 }
                               ]
@@ -241,7 +303,7 @@
                                                 },
                                                 "value": {
                                                   "BitWidthLiteral": {
-                                                    "width": 32,
+                                                    "width": 0,
                                                     "value": "32'd0"
                                                   }
                                                 }
@@ -256,7 +318,7 @@
                                                 },
                                                 "value": {
                                                   "BitWidthLiteral": {
-                                                    "width": 1,
+                                                    "width": 0,
                                                     "value": "1'b0"
                                                   }
                                                 }
@@ -281,9 +343,8 @@
                                                   }
                                                 },
                                                 "right": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 32,
-                                                    "value": "32'd1000"
+                                                  "Identifier": {
+                                                    "content": "MAX_CNT"
                                                   }
                                                 }
                                               }
@@ -302,7 +363,7 @@
                                                           },
                                                           "value": {
                                                             "BitWidthLiteral": {
-                                                              "width": 32,
+                                                              "width": 0,
                                                               "value": "32'd0"
                                                             }
                                                           }
@@ -360,7 +421,7 @@
                                                                         },
                                                                         "right": {
                                                                           "BitWidthLiteral": {
-                                                                            "width": 32,
+                                                                            "width": 0,
                                                                             "value": "32'd1"
                                                                           }
                                                                         }

@@ -70,21 +70,17 @@ def parse_expression(
         # 根据是否包含小数点决定转换为 int 还是 float
         if "." in token.content:
             value = float(token.content)
+            node = Node("Number", value=value)
+            idx += 1
         else:
-            value = int(token.content)
-        node = Node("Number", value=value)
-        idx += 1
-        # Verilog 位宽字面量: 32'd0, 1'b0, 8'ha3 等
-        if (
-            idx < len(tokens)
-            and tokens[idx].type == "symbol.base.single_quote"
-            and idx + 1 < len(tokens)
-            and tokens[idx + 1].type == "id"
-        ):
-            # 合并为 BitWidthLiteral
-            full_value = str(value) + "'" + tokens[idx + 1].content
-            node = Node("BitWidthLiteral", width=value, value=full_value)
-            idx += 2  # 跳过 ' 和 id
+            try:
+                value = int(token.content)
+                node = Node("Number", value=value)
+                idx += 1
+            except ValueError:
+                # Verilog 位宽字面量: 32'd0, 1'b0, 8'ha3（FSM 已合并为单 token）
+                node = Node("BitWidthLiteral", width=0, value=token.content)
+                idx += 1
     elif is_string(token):
         s = token.content[1:-1] if len(token.content) >= 2 else token.content
         node = Node("String", value=s)
