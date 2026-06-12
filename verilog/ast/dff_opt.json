@@ -7,6 +7,7 @@
         "PortDecl": {
           "direction": "input",
           "port_type": "wire",
+          "range": [],
           "port_name": "clk"
         }
       },
@@ -14,6 +15,7 @@
         "PortDecl": {
           "direction": "input",
           "port_type": "wire",
+          "range": [],
           "port_name": "rst_n"
         }
       },
@@ -21,6 +23,7 @@
         "PortDecl": {
           "direction": "input",
           "port_type": "wire",
+          "range": [],
           "port_name": "d"
         }
       },
@@ -28,6 +31,7 @@
         "PortDecl": {
           "direction": "output",
           "port_type": "reg",
+          "range": [],
           "port_name": "q"
         }
       }

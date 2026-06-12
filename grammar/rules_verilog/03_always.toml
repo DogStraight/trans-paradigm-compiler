@@ -17,7 +17,7 @@ sensitivity = "$4"
 body = "$6"
 
 [SensitivityList]
-production = ["@EdgeSense", "(symbol.extend.logic_or,@EdgeSense)*"]
+production = ["@EdgeSense|symbol.base.multiple", "(symbol.extend.logic_or,@EdgeSense)*"]
 [SensitivityList.node]
 first = "$1"
 rest = "$2"

@@ -2,24 +2,39 @@
 template = "{{ stmt }}"
 
 [IfStatement]
-template = """\tif ({{ condition }}) begin
-{{ then_stmt }}\tend{{#else_chain}}
+template = """    if ({{ condition }}) begin
+{{ then_stmt }}    end{{#else_chain}}
 {{?condition}} else if ({{ condition }}) begin
-{{ body }}\tend{{/condition}}{{!condition}} else begin
-{{ body }}\tend{{/condition}}{{/else_chain}}"""
+{{ body }}    end{{/condition}}{{!condition}} else begin
+{{ body }}    end{{/condition}}{{/else_chain}}"""
 
 [ElseIf]
-template = """\telse if ({{ condition }}) begin
-{{ body }}\tend"""
+template = """    else if ({{ condition }}) begin
+{{ body }}    end"""
 
 [ElseBranch]
-template = "\telse begin\n{{ body }}\tend"
+template = "    else begin\n{{ body }}    end"
+
+[ElseChain]
+template = "{{ branch }}"
 
 [BeginEnd]
-template = "begin\n{{ body }}\tend"
+template = "begin\n{{ body }}    end"
 
 [NonBlockingAssign]
-template = "\t\t{{ target }} <= {{ value }};\n"
+template = "{{ target }} <= {{ value }};\n"
 
 [BlockingAssign]
-template = "\t\t{{ target }} = {{ value }};"
+template = "{{ target }} = {{ value }};\n"
+
+[AssignStatement]
+template = "    assign {{ target }} = {{ value }};"
+
+[CaseStatement]
+template = "    case ({{ expr }}){{#items}}\n        {{.}}{{/items}}\n    endcase\n"
+
+[CaseItem]
+template = "{{ value }}: {{ stmt }}"
+
+[DefaultItem]
+template = "default: {{ stmt }}"

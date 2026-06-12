@@ -9,8 +9,34 @@ production = ["literal.number", "symbol.base.single_quote", "id"]
 width = "$1"
 value = "$3"
 
+[IndexedId]
+production = [
+    "id",
+    "bracket.l_square_bracket",
+    "@Expression",
+    "bracket.r_square_bracket",
+]
+[IndexedId.node]
+id_name = "$1"
+index = "$3"
+
+[ReplicateExpr]
+production = [
+    "bracket.l_curly_bracket",
+    "@Expression",
+    "bracket.l_curly_bracket",
+    "@Expression",
+    "bracket.r_curly_bracket",
+    "bracket.r_curly_bracket",
+]
+[ReplicateExpr.node]
+count = "$2"
+value = "$4"
+
 [PrimaryExpr]
-production = ["@BitWidthLiteral|@Number|@Identifier|@ParenthesizedExpr"]
+production = [
+    "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr",
+]
 inline = true
 [PrimaryExpr.node]
 value = "$1"
@@ -60,17 +86,28 @@ left = "$1"
 op_rhs = "$2"
 
 [Expression]
-production = ["@CompareExpr"]
+production = ["@LogicOrExpr"]
 end_case = [
     "symbol.base.colon",
     "symbol.base.semicolon",
     "symbol.base.comma",
-    "bracket.r_parentheses",
-    "bracket.r_square_bracket",
+    "keyword.endcase",
+    "keyword.begin",
 ]
 pratt = true
 [Expression.node]
 expr = "$1"
+
+[ConcatExpr]
+production = [
+    "bracket.l_curly_bracket",
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+    "bracket.r_curly_bracket",
+]
+[ConcatExpr.node]
+first = "$2"
+rest = "$3"
 
 [MulOp]
 production = ["symbol.base.multiple|symbol.base.div|symbol.base.mod"]
@@ -82,9 +119,33 @@ production = ["symbol.base.add|symbol.base.sub"]
 [AddOp.node]
 op = "$1"
 
+[LogicAndExpr]
+production = ["@CompareExpr", "(@LogicAndOp,@CompareExpr)*"]
+pratt = true
+[LogicAndExpr.node]
+head = "$1"
+tail = "$2"
+
+[LogicOrExpr]
+production = ["@LogicAndExpr", "(@LogicOrOp,@LogicAndExpr)*"]
+pratt = true
+[LogicOrExpr.node]
+head = "$1"
+tail = "$2"
+
 [CmpOp]
 production = [
     "symbol.extend.is_equal|symbol.extend.not_equal|symbol.base.bigger|symbol.base.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
 ]
 [CmpOp.node]
+op = "$1"
+
+[LogicAndOp]
+production = ["symbol.extend.logic_double_and"]
+[LogicAndOp.node]
+op = "$1"
+
+[LogicOrOp]
+production = ["symbol.extend.logic_double_or"]
+[LogicOrOp.node]
 op = "$1"

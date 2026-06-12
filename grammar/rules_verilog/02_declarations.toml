@@ -11,7 +11,7 @@ rest = "$2"
 
 
 [PortDecl]
-production = ["keyword.input|keyword.output|keyword.inout", "@OptType?", "id"]
+production = ["keyword.input|keyword.output|keyword.inout", "@OptType?", "@Range?", "id"]
 end_case = [
     "symbol.base.comma",
     "bracket.r_parentheses",
@@ -21,7 +21,16 @@ end_case = [
 [PortDecl.node]
 direction = "$1"
 port_type = "$2"
-port_name = "$3"
+range = "$3"
+port_name = "$4"
+
+[WireDecl]
+production = ["keyword.wire", "@Range?", "id", "symbol.base.semicolon"]
+end_case = ["newline"]
+[WireDecl.node]
+wire_type = "$1"
+range = "$2"
+wire_name = "$3"
 
 [OptType]
 production = ["keyword.wire|keyword.reg"]

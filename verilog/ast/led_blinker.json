@@ -87,6 +87,7 @@
                             ]
                           }
                         },
+                        "range": "optional",
                         "port_name": {
                           "id": {
                             "value": "clk"
@@ -123,6 +124,7 @@
                                         ]
                                       }
                                     },
+                                    "range": "optional",
                                     "port_name": {
                                       "id": {
                                         "value": "rst_n"
@@ -159,6 +161,7 @@
                                         ]
                                       }
                                     },
+                                    "range": "optional",
                                     "port_name": {
                                       "id": {
                                         "value": "led"

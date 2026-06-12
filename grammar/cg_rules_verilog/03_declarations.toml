@@ -1,5 +1,8 @@
+[WireDecl]
+template = "    wire{{?range}} [{{range}}]{{/range}} {{ wire_name }};"
+
 [RegDecl]
-template = "\treg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
+template = "    reg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
 
 [Range]
 template = "{{ msb }}:{{ lsb }}"

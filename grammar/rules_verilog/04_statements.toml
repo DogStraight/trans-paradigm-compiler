@@ -3,7 +3,7 @@
 # ============================================================================
 
 [Statement]
-production = ["@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock"]
+production = ["@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@CaseItem|@DefaultItem"]
 inline = true
 [Statement.node]
 stmt = "$1"
@@ -54,3 +54,36 @@ end_case = ["newline"]
 [BlockingAssign.node]
 target = "$1"
 value = "$3"
+
+[CaseStatement]
+production = ["keyword.case", "bracket.l_parentheses", "@Expression", "bracket.r_parentheses", "@CaseItemList", "keyword.endcase"]
+end_case = ["newline"]
+[CaseStatement.node]
+expr = "$3"
+items = "$5"
+
+[CaseItemList]
+production = ["@CaseItem|@DefaultItem", "(@CaseItem|@DefaultItem)*"]
+[CaseItemList.node]
+first = "$1"
+rest = "$2"
+
+[CaseItem]
+production = ["@Expression", "symbol.base.colon", "@Statement"]
+end_case = ["newline"]
+[CaseItem.node]
+value = "$1"
+stmt = "$3"
+
+[DefaultItem]
+production = ["keyword.default", "symbol.base.colon", "@Statement"]
+end_case = ["newline"]
+[DefaultItem.node]
+stmt = "$3"
+
+[AssignStatement]
+production = ["keyword.assign", "id", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
+end_case = ["newline"]
+[AssignStatement.node]
+target = "$2"
+value = "$4"

@@ -10,7 +10,7 @@ module counter # (
     reg [31:0] counter;
     reg [31:0] divider;
 
-    always @(posedge clk or negedge rst_n ) begin
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             counter <= 32'd0;
             divider <= 32'd0;

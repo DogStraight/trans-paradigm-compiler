@@ -214,7 +214,7 @@ class VerilogFormatter:
             if not line:
                 i += 1
                 continue
-            if line.startswith(('reg', 'wire')):
+            if line.startswith(('reg', 'wire', 'assign')):
                 declarations.append(line)
                 i += 1
             elif line.startswith('always'):
@@ -301,8 +301,12 @@ class VerilogFormatter:
             idx += 1
         width_part = ''
         if idx < len(parts) and parts[idx].startswith('['):
-            width_part = parts[idx]
+            width_parts = [parts[idx]]
             idx += 1
+            while idx < len(parts) and ']' not in width_parts[-1]:
+                width_parts.append(parts[idx])
+                idx += 1
+            width_part = ' '.join(width_parts)
         name_part = parts[idx] if idx < len(parts) else ''
         if name_part.endswith(','):
             name_part = name_part[:-1]
@@ -334,20 +338,22 @@ class VerilogFormatter:
                 continue
 
             # 处理一行多个 end 的情况，如 "end     end"
-            # 递归拆分直到不剩多余内容
-            if line.startswith('end') and not line.startswith('endmodule'):
+            # 只拆分真正的 end+end，不拆 endcase/endmodule 等复合词
+            if line == 'end' or line.startswith('end ') or line.startswith('end\t'):
                 rest = line[3:].strip()
-                # 如果 end 后还有内容且不是 else，拆成多行
                 if rest and not rest.startswith('else'):
                     indent_level -= 1
                     indent_str = ' ' * self.indent * (indent_level + 1)
                     out.append(indent_str + 'end')
-                    # 将剩余内容放回，重新处理（可能有多个 end）
                     lines[i] = rest
                     continue
 
-            # 处理 end —— 先减缩进
-            has_end = line.startswith('end') and not line.startswith('endmodule')
+            # 处理 end —— 只认单独的 end 单词（不拆 endcase/endmodule）
+            words = line.split()
+            has_endcase = 'endcase' in words
+            if has_endcase:
+                indent_level -= 1
+            has_end = 'end' in words and not line.startswith('endmodule')
             if has_end:
                 indent_level -= 1
             # 构造缩进行
@@ -362,6 +368,8 @@ class VerilogFormatter:
                 continue
             out.append(indent_str + line)
             if self._has_begin_word(line):
+                indent_level += 1
+            if 'case' in words:
                 indent_level += 1
             i += 1
         return out

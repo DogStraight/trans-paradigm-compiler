@@ -8,7 +8,6 @@ newline = "\n"
 [comment]
 boundary = "/"
 
-[symbol]
 [symbol.base]
 add = "+"
 sub = "-"
@@ -31,6 +30,7 @@ question_mark = "?"
 at = "@"
 pound = "#"
 single_quote = "'"
+
 [symbol.extend]
 r_shift = ">>"
 l_shift = "<<"
@@ -45,12 +45,13 @@ sub_equal = "-="
 add_one = "++"
 sub_one = "--"
 double_dot = ".."
+logic_double_and = "&&"
+logic_double_or = "||"
 
-# logic operator
+# Verilog 逻辑运算符（字母形式，会被 alpha_tokens 匹配）
 logic_add = "and"
 logic_or = "or"
 logic_not = "not"
-
 
 [bracket]
 l_parentheses = "("
@@ -62,64 +63,67 @@ r_curly_bracket = "}"
 
 [id]
 [id.keyword]
-# al type
+# 时序/组合逻辑
 al_ff = "al_ff"
 al_comb = "al_comb"
-# branch
+
+# 分支
 if = "if"
 else = "else"
 case = "case"
-# import
+
+# 导入
 import = "import"
 from = "from"
 as = "as"
-# loop
+
+# 循环
 for = "for"
 while = "while"
 break = "break"
 continue = "continue"
 in = "in"
 
-# param
+# 参数
 param = "param"
 parameter = "parameter"
 
-# port 
+# 端口
 input = "input"
 output = "output"
 inout = "inout"
 interface = "interface"
 
-# module
+# 模块
 module = "module"
 
-
-# tag
+# 标签
 tag = "tag"
-# process
+
+# 流程控制
 pass = "pass"
-# edge
+
+# 边沿
 posedge = "posedge"
 negedge = "negedge"
 
-# verilog
+# Verilog 关键字
 wire = "wire"
 reg = "reg"
 begin = "begin"
 end = "end"
 always = "always"
 endmodule = "endmodule"
+assign = "assign"
+endcase = "endcase"
+default = "default"
 
 [literal]
 true = "True"
 false = "False"
 none = "None"
 string = "(\".*\")|('.*')"
-bool_false = "False"
-bool_true = "True"
 number = "\\d+"
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"
-
-

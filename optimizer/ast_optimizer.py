@@ -1,3 +1,4 @@
+# /optimizer/ast_optimizer.py
 """
 ast_optimizer.py - 规则式 AST 优化器（无叶子值自动提取版本）
 
@@ -123,7 +124,7 @@ def flatten_first_rest_list(node: Any) -> Any:
     return result if result else []
 
 
-@optimize
+# @optimize 已禁用 — 由 CG 模板递归渲染
 def range_to_string(node: Any) -> Any:
     if isinstance(node, Node) and node.name == "Range":
         msb = getattr(node, "msb", None)
@@ -252,7 +253,6 @@ def get_ordered_transforms() -> List[Callable]:
         extract_id_value,
         flatten_repeat_sequence,
         flatten_first_rest_list,
-        range_to_string,
         flatten_root,
         flatten_block,
         flatten_begin_end,

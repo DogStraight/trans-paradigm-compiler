@@ -20,7 +20,7 @@
                             "value": "CLK_HZ"
                           }
                         },
-                        "default": {
+                        "value": {
                           "Number": {
                             "value": 50000000
                           }
@@ -45,7 +45,7 @@
                                         "value": "TARGET"
                                       }
                                     },
-                                    "default": {
+                                    "value": {
                                       "BitWidthLiteral": {
                                         "width": 0,
                                         "value": "32'd1000"
@@ -64,104 +64,117 @@
               ]
             }
           },
-          "first_port": {
-            "PortDecl": {
-              "direction": {
-                "keyword.input": {
-                  "value": "input"
-                }
-              },
-              "port_type": {
-                "optional": {
-                  "child": [
-                    {
-                      "keyword.wire": {
-                        "value": "wire"
-                      }
-                    }
-                  ]
-                }
-              },
-              "port_name": {
-                "id": {
-                  "value": "clk"
-                }
-              }
-            }
-          },
-          "rest_ports": {
-            "repeat": {
+          "ports": {
+            "optional": {
               "child": [
                 {
-                  "sequence": {
-                    "child": [
-                      {
-                        "symbol.base.comma": {
-                          "value": ","
+                  "PortList": {
+                    "first": {
+                      "PortDecl": {
+                        "direction": {
+                          "keyword.input": {
+                            "value": "input"
+                          }
+                        },
+                        "port_type": {
+                          "optional": {
+                            "child": [
+                              {
+                                "keyword.wire": {
+                                  "value": "wire"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "range": "optional",
+                        "port_name": {
+                          "id": {
+                            "value": "clk"
+                          }
                         }
-                      },
-                      {
-                        "PortDecl": {
-                          "direction": {
-                            "keyword.input": {
-                              "value": "input"
-                            }
-                          },
-                          "port_type": {
-                            "optional": {
+                      }
+                    },
+                    "rest": {
+                      "repeat": {
+                        "child": [
+                          {
+                            "sequence": {
                               "child": [
                                 {
-                                  "keyword.wire": {
-                                    "value": "wire"
+                                  "symbol.base.comma": {
+                                    "value": ","
+                                  }
+                                },
+                                {
+                                  "PortDecl": {
+                                    "direction": {
+                                      "keyword.input": {
+                                        "value": "input"
+                                      }
+                                    },
+                                    "port_type": {
+                                      "optional": {
+                                        "child": [
+                                          {
+                                            "keyword.wire": {
+                                              "value": "wire"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "range": "optional",
+                                    "port_name": {
+                                      "id": {
+                                        "value": "rst_n"
+                                      }
+                                    }
                                   }
                                 }
                               ]
                             }
                           },
-                          "port_name": {
-                            "id": {
-                              "value": "rst_n"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "sequence": {
-                    "child": [
-                      {
-                        "symbol.base.comma": {
-                          "value": ","
-                        }
-                      },
-                      {
-                        "PortDecl": {
-                          "direction": {
-                            "keyword.output": {
-                              "value": "output"
-                            }
-                          },
-                          "port_type": {
-                            "optional": {
+                          {
+                            "sequence": {
                               "child": [
                                 {
-                                  "keyword.reg": {
-                                    "value": "reg"
+                                  "symbol.base.comma": {
+                                    "value": ","
+                                  }
+                                },
+                                {
+                                  "PortDecl": {
+                                    "direction": {
+                                      "keyword.output": {
+                                        "value": "output"
+                                      }
+                                    },
+                                    "port_type": {
+                                      "optional": {
+                                        "child": [
+                                          {
+                                            "keyword.reg": {
+                                              "value": "reg"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "range": "optional",
+                                    "port_name": {
+                                      "id": {
+                                        "value": "led"
+                                      }
+                                    }
                                   }
                                 }
                               ]
                             }
-                          },
-                          "port_name": {
-                            "id": {
-                              "value": "led"
-                            }
                           }
-                        }
+                        ]
                       }
-                    ]
+                    }
                   }
                 }
               ]

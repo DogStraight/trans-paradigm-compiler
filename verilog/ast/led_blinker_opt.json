@@ -29,6 +29,7 @@
         "PortDecl": {
           "direction": "input",
           "port_type": "wire",
+          "range": [],
           "port_name": "clk"
         }
       },
@@ -36,6 +37,7 @@
         "PortDecl": {
           "direction": "input",
           "port_type": "wire",
+          "range": [],
           "port_name": "rst_n"
         }
       },
@@ -43,6 +45,7 @@
         "PortDecl": {
           "direction": "output",
           "port_type": "reg",
+          "range": [],
           "port_name": "led"
         }
       }
@@ -51,7 +54,20 @@
       {
         "RegDecl": {
           "reg_type": "reg",
-          "range": "31:0",
+          "range": {
+            "Range": {
+              "msb": {
+                "Number": {
+                  "value": 31
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
           "reg_name": "counter"
         }
       },

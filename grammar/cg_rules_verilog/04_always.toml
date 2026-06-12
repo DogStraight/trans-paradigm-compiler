@@ -1,5 +1,5 @@
 [AlwaysBlock]
-template = "\talways @({{#sensitivity}}{{.}}{{!@last}} or {{/@last}}{{/sensitivity}}) begin\n{{ body }}\tend"
+template = "    always @({{#sensitivity}}{{.}}{{!@last}} or {{/@last}}{{/sensitivity}}) begin\n{{ body }}    end"
 
 [SensitivityList]
 template = "{{ first }}{{#rest}} {{.}}{{/rest}}"

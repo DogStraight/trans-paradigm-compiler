@@ -10,6 +10,9 @@ template = "{{ value }}"
 [Identifier]
 template = "{{ content }}"
 
+[IndexedId]
+template = "{{ id_name }}[{{ index }}]"
+
 [ParenthesizedExpr]
 template = "({{ expr }})"
 
@@ -22,6 +25,12 @@ template = "{{ left }} {{ op }} {{ right }}"
 [ComparisonExpr]
 template = "{{ left }} {{ op }} {{ right }}"
 
+[ConcatExpr]
+template = "{{{#items}}{{.}}{{!@last}},{{/@last}}{{/items}}}"
+
+[ReplicateExpr]
+template = "{{{ count }}{{ value }}}"
+
 [Expression]
 template = "{{ expr }}"
 
@@ -33,3 +42,9 @@ template = "{{ op }}"
 
 [CmpOp]
 template = "{{ op }}"
+
+[LogicAndOp]
+template = " && "
+
+[LogicOrOp]
+template = " || "

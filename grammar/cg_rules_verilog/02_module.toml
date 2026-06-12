@@ -1,10 +1,10 @@
 [ModuleDecl]
 template = """module {{ module_name }}{{#params}}{{?@first}} #(
-{{/@first}}\t{{.}}{{!@last}},{{/@last}}{{?@last}}
+{{/@first}}    {{.}}{{!@last}},{{/@last}}{{?@last}}
 ){{/@last}}{{/params}} (
-{{#ports}}\t{{.}}{{!@last}},{{/@last}}
+{{#ports}}    {{.}}{{!@last}},{{/@last}}
 {{/ports}});
-{{#body}}\t{{.}}
+{{#body}}    {{.}}
 {{/body}}endmodule"""
 
 [ParameterList]
@@ -13,8 +13,12 @@ template = "# ({{ first }}{{#rest}} {{.}}{{/rest}})"
 [ParamDecl]
 template = "parameter {{ param_name }} = {{ value }}"
 
+[PortList]
+# PortList is flattened by optimizer; if not, iterate children
+template = "{{#first}}{{.}}{{/first}}{{#rest}} {{.}}{{/rest}}"
+
 [PortDecl]
-template = "{{ direction }} {{ port_type }} {{ port_name }}"
+template = "{{ direction }}{{?port_type}} {{ port_type }}{{/port_type}}{{?range}} [{{range}}]{{/range}} {{ port_name }}"
 
 [OptType]
 template = "{{ type_desc }}"
