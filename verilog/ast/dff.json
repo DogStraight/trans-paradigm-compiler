@@ -1,285 +1,99 @@
 {
-  "Root": {
-    "child": [
+  "ModuleDecl": {
+    "module_name": "dff",
+    "params": [],
+    "ports": [
       {
-        "ModuleDecl": {
-          "module_name": {
-            "id": {
-              "value": "dff"
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": [],
+          "port_name": "clk"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": [],
+          "port_name": "rst_n"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": [],
+          "port_name": "d"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "range": [],
+          "port_name": "q"
+        }
+      }
+    ],
+    "body": [
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "EdgeSense": {
+                "edge": "posedge",
+                "signal": "clk"
+              }
+            },
+            {
+              "EdgeSense": {
+                "edge": "negedge",
+                "signal": "rst_n"
+              }
             }
-          },
-          "params": "optional",
-          "ports": {
-            "optional": {
-              "child": [
-                {
-                  "PortList": {
-                    "first": {
-                      "PortDecl": {
-                        "direction": {
-                          "keyword.input": {
-                            "value": "input"
-                          }
-                        },
-                        "port_type": {
-                          "optional": {
-                            "child": [
-                              {
-                                "keyword.wire": {
-                                  "value": "wire"
-                                }
-                              }
-                            ]
-                          }
-                        },
-                        "range": "optional",
-                        "port_name": {
-                          "id": {
-                            "value": "clk"
-                          }
-                        }
-                      }
-                    },
-                    "rest": {
-                      "repeat": {
-                        "child": [
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "rst_n"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "d"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "q"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          }
-                        ]
-                      }
-                    }
-                  }
-                }
-              ]
-            }
-          },
+          ],
           "body": {
-            "Block": {
-              "child": [
+            "BeginEnd": {
+              "body": [
                 {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "EdgeSense": {
-                            "edge": {
-                              "keyword.posedge": {
-                                "value": "posedge"
-                              }
-                            },
-                            "signal": {
-                              "id": {
-                                "value": "clk"
-                              }
-                            }
+                  "IfStatement": {
+                    "condition": {
+                      "UnaryOp": {
+                        "op": "!",
+                        "operand": {
+                          "Identifier": {
+                            "content": "rst_n"
                           }
                         },
-                        "rest": {
-                          "repeat": {
-                            "child": [
-                              {
-                                "sequence": {
-                                  "child": [
-                                    {
-                                      "symbol.extend.logic_or": {
-                                        "value": "or"
-                                      }
-                                    },
-                                    {
-                                      "EdgeSense": {
-                                        "edge": {
-                                          "keyword.negedge": {
-                                            "value": "negedge"
-                                          }
-                                        },
-                                        "signal": {
-                                          "id": {
-                                            "value": "rst_n"
-                                          }
-                                        }
-                                      }
-                                    }
-                                  ]
-                                }
-                              }
-                            ]
+                        "position": "prefix"
+                      }
+                    },
+                    "then_stmt": {
+                      "NonBlockingAssign": {
+                        "target": "q",
+                        "value": {
+                          "BitWidthLiteral": {
+                            "width": 0,
+                            "value": "1'b0"
                           }
                         }
                       }
                     },
-                    "body": {
-                      "BeginEnd": {
+                    "else_chain": [
+                      {
                         "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "IfStatement": {
-                                  "condition": {
-                                    "UnaryOp": {
-                                      "op": "!",
-                                      "operand": {
-                                        "Identifier": {
-                                          "content": "rst_n"
-                                        }
-                                      },
-                                      "position": "prefix"
-                                    }
-                                  },
-                                  "then_stmt": {
-                                    "NonBlockingAssign": {
-                                      "target": {
-                                        "id": {
-                                          "value": "q"
-                                        }
-                                      },
-                                      "value": {
-                                        "BitWidthLiteral": {
-                                          "width": 0,
-                                          "value": "1'b0"
-                                        }
-                                      }
-                                    }
-                                  },
-                                  "else_chain": {
-                                    "optional": {
-                                      "child": [
-                                        {
-                                          "ElseBranch": {
-                                            "body": {
-                                              "NonBlockingAssign": {
-                                                "target": {
-                                                  "id": {
-                                                    "value": "q"
-                                                  }
-                                                },
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "d"
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      ]
-                                    }
-                                  }
-                                }
+                          "NonBlockingAssign": {
+                            "target": "q",
+                            "value": {
+                              "Identifier": {
+                                "content": "d"
                               }
-                            ]
+                            }
                           }
                         }
                       }
-                    }
+                    ]
                   }
                 }
               ]

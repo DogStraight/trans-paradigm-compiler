@@ -20,7 +20,7 @@ value = "$1"
 production = ["id"]
 template = "{{ content }}"
 [Identifier.node]
-name = "$1"
+content = "$1"
 
 [ParenthesizedExpr]
 production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
@@ -170,7 +170,4 @@ op = "$1"
 template = "{{ op }}{{ operand }}"
 
 [BinaryOp]
-template = "{{ left }} {{ op }} {{ right }}"
-
-[ComparisonExpr]
 template = "{{ left }} {{ op }} {{ right }}"

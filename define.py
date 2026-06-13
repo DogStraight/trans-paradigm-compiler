@@ -190,6 +190,8 @@ class GrammarRulesRegister:
 class Node:
     def __init__(self, name: str, **kwargs) -> None:
         self.name = name
+        self.start: "Token.Position | None" = None
+        self.end: "Token.Position | None" = None
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -204,9 +206,10 @@ class Node:
         return item
 
     def dump(self):
-        # 收集除 name 和 child 外的所有属性
-        attrs = {k: v for k, v in self.__dict__.items() if k not in ("name", "child")}
-        has_children = hasattr(self, "child") and getattr(self, "child") is not None
+        # 收集除 name, child, start, end 外的所有属性
+        skip = {"name", "sub_node", "start", "end", "symbol_ref"}
+        attrs = {k: v for k, v in self.__dict__.items() if k not in skip}
+        has_children = hasattr(self, "sub_node") and getattr(self, "sub_node") is not None
 
         # 如果没有任何属性且没有子节点，直接返回节点名称
         if not attrs and not has_children:
@@ -215,7 +218,7 @@ class Node:
         # 否则构建字典
         result = {}
         for attr, value in self.__dict__.items():
-            if attr == "name":
+            if attr in ("name", "start", "end", "symbol_ref"):
                 continue
             if isinstance(value, list):
                 result[attr] = [self._dump_item(item) for item in value]
@@ -236,15 +239,33 @@ class Node:
             else:
                 setattr(self, attr, value)
 
-    def add_child(self, child: "Node") -> None:
-        if not hasattr(self, "child"):
-            setattr(self, "child", [])
-        getattr(self, "child").append(child)
+    def add_sub_node(self, sub: "Node") -> None:
+        if not hasattr(self, "sub_node"):
+            setattr(self, "sub_node", [])
+        getattr(self, "sub_node").append(sub)
+
+    def iter_children(self):
+        """统一迭代所有子节点：child 列表 + 命名属性中的 Node / list[Node]"""
+        # 1. child 列表
+        for c in getattr(self, "sub_node", []):
+            if isinstance(c, Node):
+                yield c
+        # 2. 命名属性中的子节点
+        seen = set(id(c) for c in getattr(self, "sub_node", []))  # 防重复
+        for attr_name in vars(self):
+            if attr_name in ("name", "sub_node", "start", "end", "symbol_ref"):
+                continue
+            val = getattr(self, attr_name)
+            if isinstance(val, Node) and id(val) not in seen:
+                seen.add(id(val))
+                yield val
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, Node) and id(item) not in seen:
+                        seen.add(id(item))
+                        yield item
 
     def add_attr(self, attr_name: str, attr_value) -> None:
-        if attr_name == "name" and self.name != "root":
-            # 避免覆盖节点类型名，改用 identifier
-            attr_name = "identifier"
         setattr(self, attr_name, attr_value)
 
     def __str__(self) -> str:

@@ -12,9 +12,11 @@ import parser.pratt_parser as pratt_parser
 
 class Parser:
     def __init__(self) -> None:
-        self.grammar_rules: Dict[str, GrammarRule] = (
-            GrammarRulesRegister().rules_registration()
-        )
+        self.grammar_rules: Dict[str, GrammarRule] = {}
+        try:
+            self.grammar_rules = GrammarRulesRegister().rules_registration()
+        except FileNotFoundError:
+            pass  # 默认规则不存在，稍后由调用方设置
         self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
         self.operator_defs = pratt_parser.load_operator_defs()
         self.statement_rule_names = [
@@ -192,6 +194,11 @@ class Parser:
                         context.update_current_node(old_node)
                     return None
 
+        # 从子节点推导位置信息
+        if all_matched_nodes:
+            rule_node.start = all_matched_nodes[0].start
+            rule_node.end = all_matched_nodes[-1].end
+
         # Inline 规则扁平化：只有一个属性映射时，直接返回被映射的子节点
         inline_result = self._try_inline_rule(
             rule, all_matched_nodes, old_node, context
@@ -283,6 +290,8 @@ class Parser:
 
         parsed_node = Node(token_type)
         parsed_node.add_attr("value", current_token.content)
+        parsed_node.start = current_token.start
+        parsed_node.end = current_token.end
 
         context.advance_token()
 
@@ -321,7 +330,7 @@ class Parser:
                     result = self._process_production_node(item, context)
                     if result is None:
                         raise _SequenceMatchError()
-                    seq_node.add_child(result)
+                    seq_node.add_sub_node(result)
                 self._log_state("序列解析成功")
                 return seq_node
         except _SequenceMatchError:
@@ -412,9 +421,9 @@ class Parser:
                     result = self._process_production_node(elem, context)
                     if result is None:
                         break
-                    repeat_node.add_child(result)
+                    repeat_node.add_sub_node(result)
             self._log_state(
-                f"重复解析完成，匹配次数: {len(getattr(repeat_node, 'child', []))}"
+                f"重复解析完成，匹配次数: {len(getattr(repeat_node, 'sub_node', []))}"
             )
             return repeat_node
 
@@ -424,7 +433,7 @@ class Parser:
         nodes = self._repeat_loop(elem, context, min_count=0, max_count=1)
         optional_node = Node("optional")
         if nodes:
-            optional_node.add_child(nodes[0])
+            optional_node.add_sub_node(nodes[0])
         return optional_node
 
     def _parse_plus(self, node: dict, context: ParseContext) -> Optional[Node]:
@@ -435,7 +444,7 @@ class Parser:
             return None
         plus_node = Node("plus")
         for child in nodes:
-            plus_node.add_child(child)
+            plus_node.add_sub_node(child)
         return plus_node
 
     # 解析器的主要输出方法 sentence
@@ -532,7 +541,7 @@ class Parser:
                     f"(type: {current.type if current else 'N/A'})"
                 )
                 break
-            block_node.add_child(stmt_node)
+            block_node.add_sub_node(stmt_node)
 
         # 7. 返回块节点
         return block_node

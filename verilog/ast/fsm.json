@@ -1,1205 +1,744 @@
 {
-  "Root": {
-    "child": [
+  "ModuleDecl": {
+    "module_name": "traffic_light",
+    "params": [],
+    "ports": [
       {
-        "ModuleDecl": {
-          "module_name": {
-            "id": {
-              "value": "traffic_light"
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": [],
+          "port_name": "clk"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": [],
+          "port_name": "rst_n"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": [],
+          "port_name": "car_sensor"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "range": {
+            "Range": {
+              "msb": {
+                "Number": {
+                  "value": 1
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
             }
           },
-          "params": "optional",
-          "ports": {
-            "optional": {
-              "child": [
+          "port_name": "light"
+        }
+      }
+    ],
+    "body": [
+      {
+        "RegDecl": {
+          "reg_type": "reg",
+          "range": {
+            "Range": {
+              "msb": {
+                "Number": {
+                  "value": 1
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "reg_name": "state"
+        }
+      },
+      {
+        "RegDecl": {
+          "reg_type": "reg",
+          "range": {
+            "Range": {
+              "msb": {
+                "Number": {
+                  "value": 1
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "reg_name": "next_state"
+        }
+      },
+      {
+        "RegDecl": {
+          "reg_type": "reg",
+          "range": {
+            "Range": {
+              "msb": {
+                "Number": {
+                  "value": 31
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "reg_name": "timer"
+        }
+      },
+      {
+        "LocalParamDecl": {
+          "items": [
+            {
+              "LocalParamItem": {
+                "param_name": "IDLE",
+                "value": {
+                  "BitWidthLiteral": {
+                    "width": 0,
+                    "value": "2'd0"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "LocalParamDecl": {
+          "items": [
+            {
+              "LocalParamItem": {
+                "param_name": "GREEN",
+                "value": {
+                  "BitWidthLiteral": {
+                    "width": 0,
+                    "value": "2'd1"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "LocalParamDecl": {
+          "items": [
+            {
+              "LocalParamItem": {
+                "param_name": "YELLOW",
+                "value": {
+                  "BitWidthLiteral": {
+                    "width": 0,
+                    "value": "2'd2"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "LocalParamDecl": {
+          "items": [
+            {
+              "LocalParamItem": {
+                "param_name": "RED",
+                "value": {
+                  "BitWidthLiteral": {
+                    "width": 0,
+                    "value": "2'd3"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "EdgeSense": {
+                "edge": "posedge",
+                "signal": "clk"
+              }
+            },
+            {
+              "EdgeSense": {
+                "edge": "negedge",
+                "signal": "rst_n"
+              }
+            }
+          ],
+          "body": {
+            "BeginEnd": {
+              "body": [
                 {
-                  "PortList": {
-                    "first": {
-                      "PortDecl": {
-                        "direction": {
-                          "keyword.input": {
-                            "value": "input"
+                  "IfStatement": {
+                    "condition": {
+                      "UnaryOp": {
+                        "op": "!",
+                        "operand": {
+                          "Identifier": {
+                            "content": "rst_n"
                           }
                         },
-                        "port_type": {
-                          "optional": {
-                            "child": [
-                              {
-                                "keyword.wire": {
-                                  "value": "wire"
-                                }
-                              }
-                            ]
-                          }
-                        },
-                        "range": "optional",
-                        "port_name": {
-                          "id": {
-                            "value": "clk"
-                          }
-                        }
+                        "position": "prefix"
                       }
                     },
-                    "rest": {
-                      "repeat": {
-                        "child": [
+                    "then_stmt": {
+                      "BeginEnd": {
+                        "body": [
                           {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "rst_n"
-                                      }
-                                    }
-                                  }
+                            "NonBlockingAssign": {
+                              "target": "state",
+                              "value": {
+                                "Identifier": {
+                                  "content": "IDLE"
                                 }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "car_sensor"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "Range": {
-                                              "msb": {
-                                                "Number": {
-                                                  "value": 1
-                                                }
-                                              },
-                                              "lsb": {
-                                                "Number": {
-                                                  "value": 0
-                                                }
-                                              }
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "port_name": {
-                                      "id": {
-                                        "value": "light"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
+                              }
                             }
                           }
                         ]
                       }
-                    }
+                    },
+                    "else_chain": [
+                      {
+                        "body": {
+                          "BeginEnd": {
+                            "body": [
+                              {
+                                "NonBlockingAssign": {
+                                  "target": "state",
+                                  "value": {
+                                    "Identifier": {
+                                      "content": "next_state"
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
                   }
                 }
               ]
             }
-          },
+          }
+        }
+      },
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "symbol.base.multiple": {
+                "value": "*"
+              }
+            }
+          ],
           "body": {
-            "Block": {
-              "child": [
+            "BeginEnd": {
+              "body": [
                 {
-                  "RegDecl": {
-                    "reg_type": {
-                      "keyword.reg": {
-                        "value": "reg"
+                  "CaseStatement": {
+                    "expr": {
+                      "Identifier": {
+                        "content": "state"
                       }
                     },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "Number": {
-                                  "value": 1
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
-                                }
-                              }
+                    "items": [
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "IDLE"
                             }
-                          }
-                        ]
-                      }
-                    },
-                    "reg_name": {
-                      "id": {
-                        "value": "state"
-                      }
-                    }
-                  }
-                },
-                {
-                  "RegDecl": {
-                    "reg_type": {
-                      "keyword.reg": {
-                        "value": "reg"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "Number": {
-                                  "value": 1
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
-                                }
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    },
-                    "reg_name": {
-                      "id": {
-                        "value": "next_state"
-                      }
-                    }
-                  }
-                },
-                {
-                  "RegDecl": {
-                    "reg_type": {
-                      "keyword.reg": {
-                        "value": "reg"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "Number": {
-                                  "value": 31
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
-                                }
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    },
-                    "reg_name": {
-                      "id": {
-                        "value": "timer"
-                      }
-                    }
-                  }
-                },
-                {
-                  "LocalParamDecl": {
-                    "items": {
-                      "LocalParamItemList": {
-                        "first": {
-                          "LocalParamItem": {
-                            "param_name": {
-                              "id": {
-                                "value": "IDLE"
-                              }
-                            },
-                            "value": {
-                              "BitWidthLiteral": {
-                                "width": 0,
-                                "value": "2'd0"
-                              }
-                            }
-                          }
-                        },
-                        "rest": "repeat"
-                      }
-                    }
-                  }
-                },
-                {
-                  "LocalParamDecl": {
-                    "items": {
-                      "LocalParamItemList": {
-                        "first": {
-                          "LocalParamItem": {
-                            "param_name": {
-                              "id": {
-                                "value": "GREEN"
-                              }
-                            },
-                            "value": {
-                              "BitWidthLiteral": {
-                                "width": 0,
-                                "value": "2'd1"
-                              }
-                            }
-                          }
-                        },
-                        "rest": "repeat"
-                      }
-                    }
-                  }
-                },
-                {
-                  "LocalParamDecl": {
-                    "items": {
-                      "LocalParamItemList": {
-                        "first": {
-                          "LocalParamItem": {
-                            "param_name": {
-                              "id": {
-                                "value": "YELLOW"
-                              }
-                            },
-                            "value": {
-                              "BitWidthLiteral": {
-                                "width": 0,
-                                "value": "2'd2"
-                              }
-                            }
-                          }
-                        },
-                        "rest": "repeat"
-                      }
-                    }
-                  }
-                },
-                {
-                  "LocalParamDecl": {
-                    "items": {
-                      "LocalParamItemList": {
-                        "first": {
-                          "LocalParamItem": {
-                            "param_name": {
-                              "id": {
-                                "value": "RED"
-                              }
-                            },
-                            "value": {
-                              "BitWidthLiteral": {
-                                "width": 0,
-                                "value": "2'd3"
-                              }
-                            }
-                          }
-                        },
-                        "rest": "repeat"
-                      }
-                    }
-                  }
-                },
-                {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "EdgeSense": {
-                            "edge": {
-                              "keyword.posedge": {
-                                "value": "posedge"
-                              }
-                            },
-                            "signal": {
-                              "id": {
-                                "value": "clk"
-                              }
-                            }
-                          }
-                        },
-                        "rest": {
-                          "repeat": {
-                            "child": [
-                              {
-                                "sequence": {
-                                  "child": [
-                                    {
-                                      "symbol.extend.logic_or": {
-                                        "value": "or"
+                          },
+                          "stmt": {
+                            "BeginEnd": {
+                              "body": [
+                                {
+                                  "IfStatement": {
+                                    "condition": {
+                                      "Identifier": {
+                                        "content": "car_sensor"
                                       }
                                     },
-                                    {
-                                      "EdgeSense": {
-                                        "edge": {
-                                          "keyword.negedge": {
-                                            "value": "negedge"
+                                    "then_stmt": {
+                                      "BlockingAssign": {
+                                        "target": "next_state",
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "GREEN"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "else_chain": [
+                                      {
+                                        "body": {
+                                          "BlockingAssign": {
+                                            "target": "next_state",
+                                            "value": {
+                                              "Identifier": {
+                                                "content": "IDLE"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "GREEN"
+                            }
+                          },
+                          "stmt": {
+                            "BeginEnd": {
+                              "body": [
+                                {
+                                  "IfStatement": {
+                                    "condition": {
+                                      "BinaryOp": {
+                                        "op": "==",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "timer"
                                           }
                                         },
-                                        "signal": {
-                                          "id": {
-                                            "value": "rst_n"
+                                        "right": {
+                                          "BitWidthLiteral": {
+                                            "width": 0,
+                                            "value": "32'd50"
                                           }
                                         }
                                       }
-                                    }
-                                  ]
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    },
-                    "body": {
-                      "BeginEnd": {
-                        "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "IfStatement": {
-                                  "condition": {
-                                    "UnaryOp": {
-                                      "op": "!",
-                                      "operand": {
-                                        "Identifier": {
-                                          "content": "rst_n"
-                                        }
-                                      },
-                                      "position": "prefix"
-                                    }
-                                  },
-                                  "then_stmt": {
-                                    "BeginEnd": {
-                                      "body": {
-                                        "Block": {
-                                          "child": [
-                                            {
-                                              "NonBlockingAssign": {
-                                                "target": {
-                                                  "id": {
-                                                    "value": "state"
-                                                  }
-                                                },
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "IDLE"
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          ]
+                                    },
+                                    "then_stmt": {
+                                      "BlockingAssign": {
+                                        "target": "next_state",
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "YELLOW"
+                                          }
                                         }
                                       }
-                                    }
-                                  },
-                                  "else_chain": {
-                                    "optional": {
-                                      "child": [
-                                        {
-                                          "ElseBranch": {
-                                            "body": {
-                                              "BeginEnd": {
-                                                "body": {
-                                                  "Block": {
-                                                    "child": [
-                                                      {
-                                                        "NonBlockingAssign": {
-                                                          "target": {
-                                                            "id": {
-                                                              "value": "state"
-                                                            }
-                                                          },
-                                                          "value": {
-                                                            "Identifier": {
-                                                              "content": "next_state"
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    ]
-                                                  }
-                                                }
+                                    },
+                                    "else_chain": [
+                                      {
+                                        "body": {
+                                          "BlockingAssign": {
+                                            "target": "next_state",
+                                            "value": {
+                                              "Identifier": {
+                                                "content": "GREEN"
                                               }
                                             }
                                           }
                                         }
-                                      ]
-                                    }
+                                      }
+                                    ]
                                   }
                                 }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "YELLOW"
+                            }
+                          },
+                          "stmt": {
+                            "BeginEnd": {
+                              "body": [
+                                {
+                                  "IfStatement": {
+                                    "condition": {
+                                      "BinaryOp": {
+                                        "op": "==",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "timer"
+                                          }
+                                        },
+                                        "right": {
+                                          "BitWidthLiteral": {
+                                            "width": 0,
+                                            "value": "32'd5"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "then_stmt": {
+                                      "BlockingAssign": {
+                                        "target": "next_state",
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "RED"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "else_chain": [
+                                      {
+                                        "body": {
+                                          "BlockingAssign": {
+                                            "target": "next_state",
+                                            "value": {
+                                              "Identifier": {
+                                                "content": "YELLOW"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "RED"
+                            }
+                          },
+                          "stmt": {
+                            "BeginEnd": {
+                              "body": [
+                                {
+                                  "IfStatement": {
+                                    "condition": {
+                                      "BinaryOp": {
+                                        "op": "==",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "timer"
+                                          }
+                                        },
+                                        "right": {
+                                          "BitWidthLiteral": {
+                                            "width": 0,
+                                            "value": "32'd30"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "then_stmt": {
+                                      "BlockingAssign": {
+                                        "target": "next_state",
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "IDLE"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "else_chain": [
+                                      {
+                                        "body": {
+                                          "BlockingAssign": {
+                                            "target": "next_state",
+                                            "value": {
+                                              "Identifier": {
+                                                "content": "RED"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "DefaultItem": {
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "next_state",
+                              "value": {
+                                "Identifier": {
+                                  "content": "IDLE"
+                                }
                               }
-                            ]
+                            }
                           }
                         }
                       }
-                    }
+                    ]
                   }
-                },
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "EdgeSense": {
+                "edge": "posedge",
+                "signal": "clk"
+              }
+            },
+            {
+              "EdgeSense": {
+                "edge": "negedge",
+                "signal": "rst_n"
+              }
+            }
+          ],
+          "body": {
+            "BeginEnd": {
+              "body": [
                 {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "symbol.base.multiple": {
-                            "value": "*"
+                  "IfStatement": {
+                    "condition": {
+                      "UnaryOp": {
+                        "op": "!",
+                        "operand": {
+                          "Identifier": {
+                            "content": "rst_n"
                           }
                         },
-                        "rest": "repeat"
+                        "position": "prefix"
                       }
                     },
-                    "body": {
-                      "BeginEnd": {
-                        "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "CaseStatement": {
-                                  "expr": {
-                                    "Identifier": {
-                                      "content": "state"
-                                    }
-                                  },
-                                  "items": {
-                                    "CaseItemList": {
-                                      "first": {
-                                        "CaseItem": {
-                                          "value": {
-                                            "Identifier": {
-                                              "content": "IDLE"
-                                            }
-                                          },
-                                          "stmt": {
-                                            "BeginEnd": {
-                                              "body": {
-                                                "Block": {
-                                                  "child": [
-                                                    {
-                                                      "IfStatement": {
-                                                        "condition": {
-                                                          "Identifier": {
-                                                            "content": "car_sensor"
-                                                          }
-                                                        },
-                                                        "then_stmt": {
-                                                          "BlockingAssign": {
-                                                            "target": {
-                                                              "id": {
-                                                                "value": "next_state"
-                                                              }
-                                                            },
-                                                            "value": {
-                                                              "Identifier": {
-                                                                "content": "GREEN"
-                                                              }
-                                                            }
-                                                          }
-                                                        },
-                                                        "else_chain": {
-                                                          "optional": {
-                                                            "child": [
-                                                              {
-                                                                "ElseBranch": {
-                                                                  "body": {
-                                                                    "BlockingAssign": {
-                                                                      "target": {
-                                                                        "id": {
-                                                                          "value": "next_state"
-                                                                        }
-                                                                      },
-                                                                      "value": {
-                                                                        "Identifier": {
-                                                                          "content": "IDLE"
-                                                                        }
-                                                                      }
-                                                                    }
-                                                                  }
-                                                                }
-                                                              }
-                                                            ]
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  ]
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      },
-                                      "rest": {
-                                        "repeat": {
-                                          "child": [
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "GREEN"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BeginEnd": {
-                                                    "body": {
-                                                      "Block": {
-                                                        "child": [
-                                                          {
-                                                            "IfStatement": {
-                                                              "condition": {
-                                                                "BinaryOp": {
-                                                                  "op": "==",
-                                                                  "left": {
-                                                                    "Identifier": {
-                                                                      "content": "timer"
-                                                                    }
-                                                                  },
-                                                                  "right": {
-                                                                    "BitWidthLiteral": {
-                                                                      "width": 0,
-                                                                      "value": "32'd50"
-                                                                    }
-                                                                  }
-                                                                }
-                                                              },
-                                                              "then_stmt": {
-                                                                "BlockingAssign": {
-                                                                  "target": {
-                                                                    "id": {
-                                                                      "value": "next_state"
-                                                                    }
-                                                                  },
-                                                                  "value": {
-                                                                    "Identifier": {
-                                                                      "content": "YELLOW"
-                                                                    }
-                                                                  }
-                                                                }
-                                                              },
-                                                              "else_chain": {
-                                                                "optional": {
-                                                                  "child": [
-                                                                    {
-                                                                      "ElseBranch": {
-                                                                        "body": {
-                                                                          "BlockingAssign": {
-                                                                            "target": {
-                                                                              "id": {
-                                                                                "value": "next_state"
-                                                                              }
-                                                                            },
-                                                                            "value": {
-                                                                              "Identifier": {
-                                                                                "content": "GREEN"
-                                                                              }
-                                                                            }
-                                                                          }
-                                                                        }
-                                                                      }
-                                                                    }
-                                                                  ]
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        ]
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "YELLOW"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BeginEnd": {
-                                                    "body": {
-                                                      "Block": {
-                                                        "child": [
-                                                          {
-                                                            "IfStatement": {
-                                                              "condition": {
-                                                                "BinaryOp": {
-                                                                  "op": "==",
-                                                                  "left": {
-                                                                    "Identifier": {
-                                                                      "content": "timer"
-                                                                    }
-                                                                  },
-                                                                  "right": {
-                                                                    "BitWidthLiteral": {
-                                                                      "width": 0,
-                                                                      "value": "32'd5"
-                                                                    }
-                                                                  }
-                                                                }
-                                                              },
-                                                              "then_stmt": {
-                                                                "BlockingAssign": {
-                                                                  "target": {
-                                                                    "id": {
-                                                                      "value": "next_state"
-                                                                    }
-                                                                  },
-                                                                  "value": {
-                                                                    "Identifier": {
-                                                                      "content": "RED"
-                                                                    }
-                                                                  }
-                                                                }
-                                                              },
-                                                              "else_chain": {
-                                                                "optional": {
-                                                                  "child": [
-                                                                    {
-                                                                      "ElseBranch": {
-                                                                        "body": {
-                                                                          "BlockingAssign": {
-                                                                            "target": {
-                                                                              "id": {
-                                                                                "value": "next_state"
-                                                                              }
-                                                                            },
-                                                                            "value": {
-                                                                              "Identifier": {
-                                                                                "content": "YELLOW"
-                                                                              }
-                                                                            }
-                                                                          }
-                                                                        }
-                                                                      }
-                                                                    }
-                                                                  ]
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        ]
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "RED"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BeginEnd": {
-                                                    "body": {
-                                                      "Block": {
-                                                        "child": [
-                                                          {
-                                                            "IfStatement": {
-                                                              "condition": {
-                                                                "BinaryOp": {
-                                                                  "op": "==",
-                                                                  "left": {
-                                                                    "Identifier": {
-                                                                      "content": "timer"
-                                                                    }
-                                                                  },
-                                                                  "right": {
-                                                                    "BitWidthLiteral": {
-                                                                      "width": 0,
-                                                                      "value": "32'd30"
-                                                                    }
-                                                                  }
-                                                                }
-                                                              },
-                                                              "then_stmt": {
-                                                                "BlockingAssign": {
-                                                                  "target": {
-                                                                    "id": {
-                                                                      "value": "next_state"
-                                                                    }
-                                                                  },
-                                                                  "value": {
-                                                                    "Identifier": {
-                                                                      "content": "IDLE"
-                                                                    }
-                                                                  }
-                                                                }
-                                                              },
-                                                              "else_chain": {
-                                                                "optional": {
-                                                                  "child": [
-                                                                    {
-                                                                      "ElseBranch": {
-                                                                        "body": {
-                                                                          "BlockingAssign": {
-                                                                            "target": {
-                                                                              "id": {
-                                                                                "value": "next_state"
-                                                                              }
-                                                                            },
-                                                                            "value": {
-                                                                              "Identifier": {
-                                                                                "content": "RED"
-                                                                              }
-                                                                            }
-                                                                          }
-                                                                        }
-                                                                      }
-                                                                    }
-                                                                  ]
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        ]
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "DefaultItem": {
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "next_state"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "Identifier": {
-                                                        "content": "IDLE"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          ]
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            ]
+                    "then_stmt": {
+                      "NonBlockingAssign": {
+                        "target": "timer",
+                        "value": {
+                          "BitWidthLiteral": {
+                            "width": 0,
+                            "value": "32'd0"
                           }
                         }
                       }
-                    }
-                  }
-                },
-                {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "EdgeSense": {
-                            "edge": {
-                              "keyword.posedge": {
-                                "value": "posedge"
+                    },
+                    "else_chain": [
+                      {
+                        "condition": {
+                          "BinaryOp": {
+                            "op": "!=",
+                            "left": {
+                              "Identifier": {
+                                "content": "state"
                               }
                             },
-                            "signal": {
-                              "id": {
-                                "value": "clk"
+                            "right": {
+                              "Identifier": {
+                                "content": "next_state"
                               }
                             }
                           }
                         },
-                        "rest": {
-                          "repeat": {
-                            "child": [
-                              {
-                                "sequence": {
-                                  "child": [
-                                    {
-                                      "symbol.extend.logic_or": {
-                                        "value": "or"
-                                      }
-                                    },
-                                    {
-                                      "EdgeSense": {
-                                        "edge": {
-                                          "keyword.negedge": {
-                                            "value": "negedge"
-                                          }
-                                        },
-                                        "signal": {
-                                          "id": {
-                                            "value": "rst_n"
-                                          }
-                                        }
-                                      }
-                                    }
-                                  ]
-                                }
+                        "body": {
+                          "NonBlockingAssign": {
+                            "target": "timer",
+                            "value": {
+                              "BitWidthLiteral": {
+                                "width": 0,
+                                "value": "32'd0"
                               }
-                            ]
+                            }
                           }
                         }
-                      }
-                    },
-                    "body": {
-                      "BeginEnd": {
+                      },
+                      {
                         "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "IfStatement": {
-                                  "condition": {
-                                    "UnaryOp": {
-                                      "op": "!",
-                                      "operand": {
-                                        "Identifier": {
-                                          "content": "rst_n"
-                                        }
-                                      },
-                                      "position": "prefix"
-                                    }
-                                  },
-                                  "then_stmt": {
-                                    "NonBlockingAssign": {
-                                      "target": {
-                                        "id": {
-                                          "value": "timer"
-                                        }
-                                      },
-                                      "value": {
-                                        "BitWidthLiteral": {
-                                          "width": 0,
-                                          "value": "32'd0"
-                                        }
-                                      }
-                                    }
-                                  },
-                                  "else_chain": {
-                                    "optional": {
-                                      "child": [
-                                        {
-                                          "ElseIf": {
-                                            "condition": {
-                                              "BinaryOp": {
-                                                "op": "!=",
-                                                "left": {
-                                                  "Identifier": {
-                                                    "content": "state"
-                                                  }
-                                                },
-                                                "right": {
-                                                  "Identifier": {
-                                                    "content": "next_state"
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            "then_stmt": {
-                                              "NonBlockingAssign": {
-                                                "target": {
-                                                  "id": {
-                                                    "value": "timer"
-                                                  }
-                                                },
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "32'd0"
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            "else_chain": {
-                                              "optional": {
-                                                "child": [
-                                                  {
-                                                    "ElseBranch": {
-                                                      "body": {
-                                                        "NonBlockingAssign": {
-                                                          "target": {
-                                                            "id": {
-                                                              "value": "timer"
-                                                            }
-                                                          },
-                                                          "value": {
-                                                            "BinaryOp": {
-                                                              "op": "+",
-                                                              "left": {
-                                                                "Identifier": {
-                                                                  "content": "timer"
-                                                                }
-                                                              },
-                                                              "right": {
-                                                                "BitWidthLiteral": {
-                                                                  "width": 0,
-                                                                  "value": "32'd1"
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                ]
-                                              }
-                                            }
-                                          }
-                                        }
-                                      ]
-                                    }
+                          "NonBlockingAssign": {
+                            "target": "timer",
+                            "value": {
+                              "BinaryOp": {
+                                "op": "+",
+                                "left": {
+                                  "Identifier": {
+                                    "content": "timer"
+                                  }
+                                },
+                                "right": {
+                                  "BitWidthLiteral": {
+                                    "width": 0,
+                                    "value": "32'd1"
                                   }
                                 }
                               }
-                            ]
+                            }
                           }
                         }
                       }
-                    }
+                    ]
                   }
-                },
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "symbol.base.multiple": {
+                "value": "*"
+              }
+            }
+          ],
+          "body": {
+            "BeginEnd": {
+              "body": [
                 {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "symbol.base.multiple": {
-                            "value": "*"
-                          }
-                        },
-                        "rest": "repeat"
+                  "CaseStatement": {
+                    "expr": {
+                      "Identifier": {
+                        "content": "state"
                       }
                     },
-                    "body": {
-                      "BeginEnd": {
-                        "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "CaseStatement": {
-                                  "expr": {
-                                    "Identifier": {
-                                      "content": "state"
-                                    }
-                                  },
-                                  "items": {
-                                    "CaseItemList": {
-                                      "first": {
-                                        "CaseItem": {
-                                          "value": {
-                                            "Identifier": {
-                                              "content": "IDLE"
-                                            }
-                                          },
-                                          "stmt": {
-                                            "BlockingAssign": {
-                                              "target": {
-                                                "id": {
-                                                  "value": "light"
-                                                }
-                                              },
-                                              "value": {
-                                                "BitWidthLiteral": {
-                                                  "width": 0,
-                                                  "value": "2'd0"
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      },
-                                      "rest": {
-                                        "repeat": {
-                                          "child": [
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "GREEN"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "light"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "BitWidthLiteral": {
-                                                        "width": 0,
-                                                        "value": "2'd1"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "YELLOW"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "light"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "BitWidthLiteral": {
-                                                        "width": 0,
-                                                        "value": "2'd2"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "Identifier": {
-                                                    "content": "RED"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "light"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "BitWidthLiteral": {
-                                                        "width": 0,
-                                                        "value": "2'd3"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "DefaultItem": {
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "light"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "BitWidthLiteral": {
-                                                        "width": 0,
-                                                        "value": "2'd0"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          ]
-                                        }
-                                      }
-                                    }
-                                  }
+                    "items": [
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "IDLE"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "light",
+                              "value": {
+                                "BitWidthLiteral": {
+                                  "width": 0,
+                                  "value": "2'd0"
                                 }
                               }
-                            ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "GREEN"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "light",
+                              "value": {
+                                "BitWidthLiteral": {
+                                  "width": 0,
+                                  "value": "2'd1"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "YELLOW"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "light",
+                              "value": {
+                                "BitWidthLiteral": {
+                                  "width": 0,
+                                  "value": "2'd2"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "Identifier": {
+                              "content": "RED"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "light",
+                              "value": {
+                                "BitWidthLiteral": {
+                                  "width": 0,
+                                  "value": "2'd3"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "DefaultItem": {
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "light",
+                              "value": {
+                                "BitWidthLiteral": {
+                                  "width": 0,
+                                  "value": "2'd0"
+                                }
+                              }
+                            }
                           }
                         }
                       }
-                    }
+                    ]
                   }
                 }
               ]

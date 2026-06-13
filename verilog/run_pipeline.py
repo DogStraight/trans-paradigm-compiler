@@ -27,6 +27,7 @@ from code_generator import CodeGenerator, CodeGenerator
 from define import GrammarRulesRegister
 from parser.rule_selector import RuleSelector
 from optimizer.ast_optimizer import optimize_ast, get_optimize_transforms
+from analyzer import SemanticAnalyzer
 from formatter import format_code
 import json
 import difflib
@@ -54,10 +55,13 @@ def main():
 
     gen_dir = os.path.join(src_dir, "gen")
     ast_dir = os.path.join(src_dir, "ast")
+    sym_dir = os.path.join(src_dir, "symbols")
     os.makedirs(gen_dir, exist_ok=True)
     os.makedirs(ast_dir, exist_ok=True)
+    os.makedirs(sym_dir, exist_ok=True)
     gen_file = os.path.join(gen_dir, "gen_" + stem.replace("ref_", "") + ".v")
     ast_json = os.path.join(ast_dir, stem.replace("ref_", "") + ".json")
+    sym_json = os.path.join(sym_dir, stem.replace("ref_", "") + ".json")
 
     # 1. 读取源文件
     with open(src_file, "r", encoding="utf-8") as f:
@@ -84,39 +88,42 @@ def main():
         print("❌ 语法分析失败")
         return
 
-    children = getattr(ast, "child", [])
+    sub_nodes = getattr(ast, "sub_node", [])
     print(
-        f"🌳 AST 根节点: {[c.name if hasattr(c, 'name') else str(c) for c in children]}"
+        f"🌳 AST 根节点: {[c.name if hasattr(c, 'name') else str(c) for c in sub_nodes]}"
     )
 
-    # 保存 AST
+    # 4. AST 优化（深拷贝后优化，不影响原始 AST）
+    transforms = get_optimize_transforms()
+    ast = optimize_ast(copy.deepcopy(ast), transforms)
+
+    # 保存优化后的 AST（覆盖 ast_json）
     with open(ast_json, "w", encoding="utf-8") as f:
         json.dump(ast.dump(), f, indent=2)
     print(f"📋 AST 已保存 ({os.path.getsize(ast_json)} bytes)")
 
-    # 4. AST 优化（深拷贝后优化，不影响原始 AST）
-    transforms = get_optimize_transforms()
-    ast_opt = optimize_ast(copy.deepcopy(ast), transforms)
-    ast_opt_json = ast_json.replace(".json", "_opt.json")
-    with open(ast_opt_json, "w", encoding="utf-8") as f:
-        json.dump(ast_opt.dump(), f, indent=2)
-    print(f"⚙️  AST 优化已保存 ({os.path.getsize(ast_opt_json)} bytes)")
+    # 5. 语义分析（构建符号表，链接标识符到声明）
+    analyzer = SemanticAnalyzer(rules)
+    ast = analyzer.analyze(ast)
+    with open(sym_json, "w", encoding="utf-8") as f:
+        json.dump(analyzer.root_scope.to_dict(), f, indent=2)
+    print(f"🔗 符号表已保存 ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)")
 
-    # 5. 代码生成（使用优化后的 AST）
+    # 6. 代码生成（使用优化后的 AST）
     cg = CodeGenerator(rules_dir="pyv_compiler/grammar/rules_verilog")
-    outputs = cg.generate(ast_opt)
+    outputs = cg.generate(ast)
     outputs = cg.optimize(outputs)
 
     content = outputs.get("output.v", "")
 
-    # 6. 格式化（缩进、块合并）
+    # 7. 格式化（缩进、块合并）
     content = format_code(content)
 
     with open(gen_file, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"✅ 已生成: {gen_file}")
 
-    # 7. 对比
+    # 8. 对比
     ref = source.splitlines(keepends=True)
     gen = content.splitlines(keepends=True)
     diff_lines = list(

@@ -79,16 +79,22 @@ def is_none(token: Token) -> bool:
 
 
 # ========== 字面量解析辅助 ==========
+def _set_pos(node: Node, token: Token) -> Node:
+    """辅助：将 token 位置设到节点上"""
+    node.start = token.start
+    node.end = token.end
+    return node
+
 def parse_number_literal(token: Token) -> Node:
     """将数字 token 转换为 Number 或 BitWidthLiteral 节点"""
     content = token.content
     if "." in content:
-        return Node("Number", value=float(content))
+        return _set_pos(Node("Number", value=float(content)), token)
     try:
-        return Node("Number", value=int(content))
+        return _set_pos(Node("Number", value=int(content)), token)
     except ValueError:
         # Verilog 位宽字面量: 32'd0, 1'b0, 8'ha3
-        return Node("BitWidthLiteral", width=0, value=content)
+        return _set_pos(Node("BitWidthLiteral", width=0, value=content), token)
 
 
 def parse_brace_expr(
@@ -196,7 +202,10 @@ def parse_expression(
         ):
             raise ValueError("缺少右括号")
         cur_idx += 1
-        return Node("ParenthesizedExpr", expr=inner_node), cur_idx
+        pe = Node("ParenthesizedExpr", expr=inner_node)
+        pe.start = tokens[idx].start
+        pe.end = tokens[cur_idx - 1].end
+        return pe, cur_idx
 
     def handle_braces(tokens, cur_idx):
         # 花括号: { ... } 支持串联和复制模式
@@ -234,12 +243,16 @@ def parse_expression(
 
     def handle_bool(cur_idx):
         node = Node("Bool", value=(tokens[cur_idx].type == "literal.bool_true"))
+        node.start = tokens[cur_idx].start
+        node.end = tokens[cur_idx].end
         cur_idx += 1
         return node, cur_idx
 
     def handle_identifier(cur_idx):
         name = tokens[cur_idx].content
         node = Node("Identifier", content=name)
+        node.start = tokens[cur_idx].start
+        node.end = tokens[cur_idx].end
         cur_idx += 1
         # 处理 id[expr] 索引访问
         if (
@@ -288,7 +301,10 @@ def parse_expression(
                 max_infix_prio,
                 unary_prefix_rbp,
             )
-            return Node("UnaryOp", op=op, operand=right, position="prefix"), cur_idx
+            uo = Node("UnaryOp", op=op, operand=right, position="prefix")
+            uo.start = tokens[idx].start
+            uo.end = tokens[cur_idx - 1].end
+            return uo, cur_idx
         else:
             raise ValueError(f"不支持的前缀运算符: {tokens[cur_idx].content}")
 
@@ -356,6 +372,7 @@ def parse_expression(
         if arity == 1 and props.get("position") == "postfix":
             idx += 1
             node = Node("UnaryOp", op=op, operand=node, position="postfix")
+            node.end = tokens[idx - 1].end
             continue
         elif arity == 2:
             idx += 1
@@ -373,6 +390,8 @@ def parse_expression(
                 unary_prefix_rbp,
             )
             node = Node("BinaryOp", op=op, left=node, right=right_node)
+            node.start = getattr(node, "start", None)
+            node.end = tokens[idx - 1].end
         elif arity == 3:
             second_sym = props.get("second")
             if not second_sym:

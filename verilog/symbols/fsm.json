@@ -1,0 +1,80 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "symbols": [],
+  "children": [
+    {
+      "name": "traffic_light",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "clk",
+          "kind": "port",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "rst_n",
+          "kind": "port",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "car_sensor",
+          "kind": "port",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "light",
+          "kind": "port",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "state",
+          "kind": "reg",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "next_state",
+          "kind": "reg",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "timer",
+          "kind": "reg",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "IDLE",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "GREEN",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "YELLOW",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "RED",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        }
+      ],
+      "children": []
+    }
+  ]
+}

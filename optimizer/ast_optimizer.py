@@ -51,7 +51,7 @@ def optimize_ast(ast: Any, transforms: List[Callable] | None = None) -> Any:
 @optimize
 def flatten_optional(node: Any) -> Any:
     if isinstance(node, Node) and node.name == "optional":
-        children = getattr(node, "child", [])
+        children = getattr(node, "sub_node", [])
         if len(children) == 1:
             return children[0]
         if len(children) == 0:
@@ -78,7 +78,7 @@ def extract_id_value(node: Any) -> Any:
 @optimize
 def flatten_repeat_sequence(node: Any) -> Any:
     if isinstance(node, Node) and node.name in ("repeat", "sequence"):
-        children = getattr(node, "child", [])
+        children = getattr(node, "sub_node", [])
         return [
             c
             for c in children
@@ -111,7 +111,7 @@ def flatten_first_rest_list(node: Any) -> Any:
             if item.name in ("symbol.extend.logic_or", "keyword.or"):
                 return []
             if item.name in ("repeat", "sequence"):
-                children = getattr(item, "child", [])
+                children = getattr(item, "sub_node", [])
                 return _to_flat_list(children)
             return [item]
         return [item]
@@ -144,7 +144,7 @@ def range_to_string(node: Any) -> Any:
 @optimize
 def flatten_root(node: Any) -> Any:
     if isinstance(node, Node) and node.name == "Root":
-        children = getattr(node, "child", [])
+        children = getattr(node, "sub_node", [])
         if not children:
             return []
         if len(children) == 1:
@@ -156,7 +156,7 @@ def flatten_root(node: Any) -> Any:
 @optimize
 def flatten_block(node: Any) -> Any:
     if isinstance(node, Node) and node.name == "Block":
-        children = getattr(node, "child", [])
+        children = getattr(node, "sub_node", [])
         return children if isinstance(children, list) else []
     return node
 
@@ -185,7 +185,7 @@ def normalize_else_chain(node: Any) -> Any:
         # 展平 Block 节点为语句列表（BeginEnd 保留，由模板渲染）
         if isinstance(body, Node):
             if body.name == "Block":
-                return getattr(body, "child", [])
+                return getattr(body, "sub_node", [])
         return body
 
     def _flatten_else_chain(chain):

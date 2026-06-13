@@ -316,11 +316,11 @@ class CodeGenerator:
 
         node_type = node.name
 
-        # 容器节点兜底
+        # 容器节点兜底（通过统一的 iter_children 接口）
         if node_type not in self._node_templates and node_type not in self._match_rules:
-            children = getattr(node, "child", None)
-            if isinstance(children, list):
-                return "".join(self.visit(c) for c in children)
+            all_kids = list(node.iter_children())
+            if all_kids:
+                return "".join(self.visit(c) for c in all_kids)
 
         self._check_file_rule(node, node_type)
 
@@ -338,11 +338,7 @@ class CodeGenerator:
         return self._fallback_render(node)
 
     def _fallback_render(self, node: Node) -> str:
-        parts = []
-        children = getattr(node, "child", None)
-        if isinstance(children, list):
-            for child in children:
-                parts.append(self.visit(child))
+        parts = [self.visit(c) for c in node.iter_children()]
         if not parts:
             val = getattr(node, "value", None)
             if val is not None:

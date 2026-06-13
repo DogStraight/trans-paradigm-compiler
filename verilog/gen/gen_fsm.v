@@ -8,10 +8,10 @@ module traffic_light (
     reg [1:0] state;
     reg [1:0] next_state;
     reg [31:0] timer;
-    localparam IDLE = 2'd0,;
-    localparam GREEN = 2'd1,;
-    localparam YELLOW = 2'd2,;
-    localparam RED = 2'd3,;
+    localparam IDLE = 2'd0;
+    localparam GREEN = 2'd1;
+    localparam YELLOW = 2'd2;
+    localparam RED = 2'd3;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin

@@ -1,0 +1,38 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "symbols": [],
+  "children": [
+    {
+      "name": "dff",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "clk",
+          "kind": "port",
+          "scope": "dff",
+          "scope_kind": "module"
+        },
+        {
+          "name": "rst_n",
+          "kind": "port",
+          "scope": "dff",
+          "scope_kind": "module"
+        },
+        {
+          "name": "d",
+          "kind": "port",
+          "scope": "dff",
+          "scope_kind": "module"
+        },
+        {
+          "name": "q",
+          "kind": "port",
+          "scope": "dff",
+          "scope_kind": "module"
+        }
+      ],
+      "children": []
+    }
+  ]
+}

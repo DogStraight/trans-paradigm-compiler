@@ -22,6 +22,8 @@ end_case = [
     "newline",
     "space.dedent",
 ]
+symbol_kind = "port"
+symbol_name = "port_name"
 template = "{{ direction }}{{?port_type}} {{ port_type }}{{/port_type}}{{?range}} [{{range}}]{{/range}} {{ port_name }}"
 [PortDecl.node]
 direction = "$1"
@@ -52,6 +54,8 @@ lsb = "$4"
 [WireDecl]
 production = ["keyword.wire", "@Range?", "id", "symbol.base.semicolon"]
 end_case = ["newline"]
+symbol_kind = "wire"
+symbol_name = "wire_name"
 template = "    wire{{?range}} [{{range}}]{{/range}} {{ wire_name }};"
 [WireDecl.node]
 wire_type = "$1"
@@ -61,6 +65,8 @@ wire_name = "$3"
 [RegDecl]
 production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
 end_case = ["newline"]
+symbol_kind = "reg"
+symbol_name = "reg_name"
 template = "    reg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
 [RegDecl.node]
 reg_type = "$1"
@@ -74,7 +80,9 @@ production = [
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
-template = """    localparam {{#items}}{{?@first}}{{.}},{{/@first}}{{!@first}}
+symbol_kind = "localparam"
+symbol_name = "items"
+template = """    localparam {{#items}}{{?@first}}{{.}}{{!@last}},{{/@last}}{{/@first}}{{!@first}}
         {{.}}{{!@last}},{{/@last}}{{/@first}}{{/items}};"""
 [LocalParamDecl.node]
 items = "$2"

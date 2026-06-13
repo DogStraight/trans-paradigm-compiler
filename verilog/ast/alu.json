@@ -1,1053 +1,639 @@
 {
-  "Root": {
-    "child": [
+  "ModuleDecl": {
+    "module_name": "alu",
+    "params": [
       {
-        "ModuleDecl": {
-          "module_name": {
-            "id": {
-              "value": "alu"
+        "ParamDecl": {
+          "param_name": "W",
+          "value": {
+            "Number": {
+              "value": 8
             }
-          },
-          "params": {
-            "optional": {
-              "child": [
-                {
-                  "ParameterList": {
-                    "first": {
-                      "ParamDecl": {
-                        "param_name": {
-                          "id": {
-                            "value": "W"
-                          }
-                        },
-                        "value": {
-                          "Number": {
-                            "value": 8
-                          }
-                        }
-                      }
-                    },
-                    "rest": "repeat"
-                  }
-                }
-              ]
-            }
-          },
-          "ports": {
-            "optional": {
-              "child": [
-                {
-                  "PortList": {
-                    "first": {
-                      "PortDecl": {
-                        "direction": {
-                          "keyword.input": {
-                            "value": "input"
-                          }
-                        },
-                        "port_type": {
-                          "optional": {
-                            "child": [
-                              {
-                                "keyword.wire": {
-                                  "value": "wire"
-                                }
-                              }
-                            ]
-                          }
-                        },
-                        "range": {
-                          "optional": {
-                            "child": [
-                              {
-                                "Range": {
-                                  "msb": {
-                                    "BinaryOp": {
-                                      "op": "-",
-                                      "left": {
-                                        "Identifier": {
-                                          "content": "W"
-                                        }
-                                      },
-                                      "right": {
-                                        "Number": {
-                                          "value": 1
-                                        }
-                                      }
-                                    }
-                                  },
-                                  "lsb": {
-                                    "Number": {
-                                      "value": 0
-                                    }
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        },
-                        "port_name": {
-                          "id": {
-                            "value": "a"
-                          }
-                        }
-                      }
-                    },
-                    "rest": {
-                      "repeat": {
-                        "child": [
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "Range": {
-                                              "msb": {
-                                                "BinaryOp": {
-                                                  "op": "-",
-                                                  "left": {
-                                                    "Identifier": {
-                                                      "content": "W"
-                                                    }
-                                                  },
-                                                  "right": {
-                                                    "Number": {
-                                                      "value": 1
-                                                    }
-                                                  }
-                                                }
-                                              },
-                                              "lsb": {
-                                                "Number": {
-                                                  "value": 0
-                                                }
-                                              }
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "port_name": {
-                                      "id": {
-                                        "value": "b"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "Range": {
-                                              "msb": {
-                                                "Number": {
-                                                  "value": 2
-                                                }
-                                              },
-                                              "lsb": {
-                                                "Number": {
-                                                  "value": 0
-                                                }
-                                              }
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "port_name": {
-                                      "id": {
-                                        "value": "op"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "Range": {
-                                              "msb": {
-                                                "BinaryOp": {
-                                                  "op": "-",
-                                                  "left": {
-                                                    "Identifier": {
-                                                      "content": "W"
-                                                    }
-                                                  },
-                                                  "right": {
-                                                    "Number": {
-                                                      "value": 1
-                                                    }
-                                                  }
-                                                }
-                                              },
-                                              "lsb": {
-                                                "Number": {
-                                                  "value": 0
-                                                }
-                                              }
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "port_name": {
-                                      "id": {
-                                        "value": "result"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "zero"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "overflow"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          }
-                        ]
-                      }
+          }
+        }
+      }
+    ],
+    "ports": [
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
                     }
                   }
                 }
-              ]
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
             }
           },
+          "port_name": "a"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "port_name": "b"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "input",
+          "port_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "Number": {
+                  "value": 2
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "port_name": "op"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "port_name": "result"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "range": [],
+          "port_name": "zero"
+        }
+      },
+      {
+        "PortDecl": {
+          "direction": "output",
+          "port_type": "reg",
+          "range": [],
+          "port_name": "overflow"
+        }
+      }
+    ],
+    "body": [
+      {
+        "WireDecl": {
+          "wire_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "wire_name": "sum"
+        }
+      },
+      {
+        "WireDecl": {
+          "wire_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "wire_name": "diff"
+        }
+      },
+      {
+        "WireDecl": {
+          "wire_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "wire_name": "and_w"
+        }
+      },
+      {
+        "WireDecl": {
+          "wire_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "wire_name": "or_w"
+        }
+      },
+      {
+        "WireDecl": {
+          "wire_type": "wire",
+          "range": {
+            "Range": {
+              "msb": {
+                "BinaryOp": {
+                  "op": "-",
+                  "left": {
+                    "Identifier": {
+                      "content": "W"
+                    }
+                  },
+                  "right": {
+                    "Number": {
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              "lsb": {
+                "Number": {
+                  "value": 0
+                }
+              }
+            }
+          },
+          "wire_name": "xor_w"
+        }
+      },
+      {
+        "AssignStatement": {
+          "target": "sum",
+          "value": {
+            "BinaryOp": {
+              "op": "+",
+              "left": {
+                "Identifier": {
+                  "content": "a"
+                }
+              },
+              "right": {
+                "Identifier": {
+                  "content": "b"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "AssignStatement": {
+          "target": "diff",
+          "value": {
+            "BinaryOp": {
+              "op": "-",
+              "left": {
+                "Identifier": {
+                  "content": "a"
+                }
+              },
+              "right": {
+                "Identifier": {
+                  "content": "b"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "AssignStatement": {
+          "target": "and_w",
+          "value": {
+            "BinaryOp": {
+              "op": "&",
+              "left": {
+                "Identifier": {
+                  "content": "a"
+                }
+              },
+              "right": {
+                "Identifier": {
+                  "content": "b"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "AssignStatement": {
+          "target": "or_w",
+          "value": {
+            "BinaryOp": {
+              "op": "|",
+              "left": {
+                "Identifier": {
+                  "content": "a"
+                }
+              },
+              "right": {
+                "Identifier": {
+                  "content": "b"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "AssignStatement": {
+          "target": "xor_w",
+          "value": {
+            "BinaryOp": {
+              "op": "^",
+              "left": {
+                "Identifier": {
+                  "content": "a"
+                }
+              },
+              "right": {
+                "Identifier": {
+                  "content": "b"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "AlwaysBlock": {
+          "sensitivity": [
+            {
+              "symbol.base.multiple": {
+                "value": "*"
+              }
+            }
+          ],
           "body": {
-            "Block": {
-              "child": [
+            "BeginEnd": {
+              "body": [
                 {
-                  "WireDecl": {
-                    "wire_type": {
-                      "keyword.wire": {
-                        "value": "wire"
+                  "CaseStatement": {
+                    "expr": {
+                      "Identifier": {
+                        "content": "op"
                       }
                     },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "BinaryOp": {
-                                  "op": "-",
-                                  "left": {
-                                    "Identifier": {
-                                      "content": "W"
-                                    }
-                                  },
-                                  "right": {
-                                    "Number": {
-                                      "value": 1
-                                    }
-                                  }
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
+                    "items": [
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd0"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "sum"
                                 }
                               }
                             }
                           }
-                        ]
-                      }
-                    },
-                    "wire_name": {
-                      "id": {
-                        "value": "sum"
-                      }
-                    }
-                  }
-                },
-                {
-                  "WireDecl": {
-                    "wire_type": {
-                      "keyword.wire": {
-                        "value": "wire"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "BinaryOp": {
-                                  "op": "-",
-                                  "left": {
-                                    "Identifier": {
-                                      "content": "W"
-                                    }
-                                  },
-                                  "right": {
-                                    "Number": {
-                                      "value": 1
-                                    }
-                                  }
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd1"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "diff"
                                 }
                               }
                             }
                           }
-                        ]
-                      }
-                    },
-                    "wire_name": {
-                      "id": {
-                        "value": "diff"
-                      }
-                    }
-                  }
-                },
-                {
-                  "WireDecl": {
-                    "wire_type": {
-                      "keyword.wire": {
-                        "value": "wire"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "BinaryOp": {
-                                  "op": "-",
-                                  "left": {
-                                    "Identifier": {
-                                      "content": "W"
-                                    }
-                                  },
-                                  "right": {
-                                    "Number": {
-                                      "value": 1
-                                    }
-                                  }
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd2"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "and_w"
                                 }
                               }
                             }
                           }
-                        ]
-                      }
-                    },
-                    "wire_name": {
-                      "id": {
-                        "value": "and_w"
-                      }
-                    }
-                  }
-                },
-                {
-                  "WireDecl": {
-                    "wire_type": {
-                      "keyword.wire": {
-                        "value": "wire"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "BinaryOp": {
-                                  "op": "-",
-                                  "left": {
-                                    "Identifier": {
-                                      "content": "W"
-                                    }
-                                  },
-                                  "right": {
-                                    "Number": {
-                                      "value": 1
-                                    }
-                                  }
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd3"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "or_w"
                                 }
                               }
                             }
                           }
-                        ]
-                      }
-                    },
-                    "wire_name": {
-                      "id": {
-                        "value": "or_w"
-                      }
-                    }
-                  }
-                },
-                {
-                  "WireDecl": {
-                    "wire_type": {
-                      "keyword.wire": {
-                        "value": "wire"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "BinaryOp": {
-                                  "op": "-",
-                                  "left": {
-                                    "Identifier": {
-                                      "content": "W"
-                                    }
-                                  },
-                                  "right": {
-                                    "Number": {
-                                      "value": 1
-                                    }
-                                  }
-                                }
-                              },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd4"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "xor_w"
                                 }
                               }
                             }
                           }
-                        ]
-                      }
-                    },
-                    "wire_name": {
-                      "id": {
-                        "value": "xor_w"
-                      }
-                    }
-                  }
-                },
-                {
-                  "AssignStatement": {
-                    "target": {
-                      "id": {
-                        "value": "sum"
-                      }
-                    },
-                    "value": {
-                      "BinaryOp": {
-                        "op": "+",
-                        "left": {
-                          "Identifier": {
-                            "content": "a"
-                          }
-                        },
-                        "right": {
-                          "Identifier": {
-                            "content": "b"
-                          }
                         }
-                      }
-                    }
-                  }
-                },
-                {
-                  "AssignStatement": {
-                    "target": {
-                      "id": {
-                        "value": "diff"
-                      }
-                    },
-                    "value": {
-                      "BinaryOp": {
-                        "op": "-",
-                        "left": {
-                          "Identifier": {
-                            "content": "a"
-                          }
-                        },
-                        "right": {
-                          "Identifier": {
-                            "content": "b"
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "AssignStatement": {
-                    "target": {
-                      "id": {
-                        "value": "and_w"
-                      }
-                    },
-                    "value": {
-                      "BinaryOp": {
-                        "op": "&",
-                        "left": {
-                          "Identifier": {
-                            "content": "a"
-                          }
-                        },
-                        "right": {
-                          "Identifier": {
-                            "content": "b"
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "AssignStatement": {
-                    "target": {
-                      "id": {
-                        "value": "or_w"
-                      }
-                    },
-                    "value": {
-                      "BinaryOp": {
-                        "op": "|",
-                        "left": {
-                          "Identifier": {
-                            "content": "a"
-                          }
-                        },
-                        "right": {
-                          "Identifier": {
-                            "content": "b"
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "AssignStatement": {
-                    "target": {
-                      "id": {
-                        "value": "xor_w"
-                      }
-                    },
-                    "value": {
-                      "BinaryOp": {
-                        "op": "^",
-                        "left": {
-                          "Identifier": {
-                            "content": "a"
-                          }
-                        },
-                        "right": {
-                          "Identifier": {
-                            "content": "b"
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "symbol.base.multiple": {
-                            "value": "*"
-                          }
-                        },
-                        "rest": "repeat"
-                      }
-                    },
-                    "body": {
-                      "BeginEnd": {
-                        "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "CaseStatement": {
-                                  "expr": {
+                      },
+                      {
+                        "DefaultItem": {
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "ReplicateExpr": {
+                                  "count": {
                                     "Identifier": {
-                                      "content": "op"
-                                    }
-                                  },
-                                  "items": {
-                                    "CaseItemList": {
-                                      "first": {
-                                        "CaseItem": {
-                                          "value": {
-                                            "BitWidthLiteral": {
-                                              "width": 0,
-                                              "value": "3'd0"
-                                            }
-                                          },
-                                          "stmt": {
-                                            "BlockingAssign": {
-                                              "target": {
-                                                "id": {
-                                                  "value": "result"
-                                                }
-                                              },
-                                              "value": {
-                                                "Identifier": {
-                                                  "content": "sum"
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      },
-                                      "rest": {
-                                        "repeat": {
-                                          "child": [
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "3'd1"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "result"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "Identifier": {
-                                                        "content": "diff"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "3'd2"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "result"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "Identifier": {
-                                                        "content": "and_w"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "3'd3"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "result"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "Identifier": {
-                                                        "content": "or_w"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "CaseItem": {
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "3'd4"
-                                                  }
-                                                },
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "result"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "Identifier": {
-                                                        "content": "xor_w"
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "DefaultItem": {
-                                                "stmt": {
-                                                  "BlockingAssign": {
-                                                    "target": {
-                                                      "id": {
-                                                        "value": "result"
-                                                      }
-                                                    },
-                                                    "value": {
-                                                      "ReplicateExpr": {
-                                                        "count": {
-                                                          "Identifier": {
-                                                            "content": "W"
-                                                          }
-                                                        },
-                                                        "value": {
-                                                          "ConcatExpr": {
-                                                            "items": [
-                                                              {
-                                                                "BitWidthLiteral": {
-                                                                  "width": 0,
-                                                                  "value": "1'b0"
-                                                                }
-                                                              }
-                                                            ]
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          ]
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              },
-                              {
-                                "BlockingAssign": {
-                                  "target": {
-                                    "id": {
-                                      "value": "zero"
+                                      "content": "W"
                                     }
                                   },
                                   "value": {
-                                    "ParenthesizedExpr": {
-                                      "expr": {
-                                        "BinaryOp": {
-                                          "op": "==",
-                                          "left": {
-                                            "Identifier": {
-                                              "content": "result"
-                                            }
-                                          },
-                                          "right": {
-                                            "ReplicateExpr": {
-                                              "count": {
-                                                "Identifier": {
-                                                  "content": "W"
-                                                }
-                                              },
-                                              "value": {
-                                                "ConcatExpr": {
-                                                  "items": [
-                                                    {
-                                                      "BitWidthLiteral": {
-                                                        "width": 0,
-                                                        "value": "1'b0"
-                                                      }
-                                                    }
-                                                  ]
-                                                }
-                                              }
-                                            }
+                                    "ConcatExpr": {
+                                      "items": [
+                                        {
+                                          "BitWidthLiteral": {
+                                            "width": 0,
+                                            "value": "1'b0"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "BlockingAssign": {
+                    "target": "zero",
+                    "value": {
+                      "ParenthesizedExpr": {
+                        "expr": {
+                          "BinaryOp": {
+                            "op": "==",
+                            "left": {
+                              "Identifier": {
+                                "content": "result"
+                              }
+                            },
+                            "right": {
+                              "ReplicateExpr": {
+                                "count": {
+                                  "Identifier": {
+                                    "content": "W"
+                                  }
+                                },
+                                "value": {
+                                  "ConcatExpr": {
+                                    "items": [
+                                      {
+                                        "BitWidthLiteral": {
+                                          "width": 0,
+                                          "value": "1'b0"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "BlockingAssign": {
+                    "target": "overflow",
+                    "value": {
+                      "BinaryOp": {
+                        "op": "&&",
+                        "left": {
+                          "ParenthesizedExpr": {
+                            "expr": {
+                              "BinaryOp": {
+                                "op": "==",
+                                "left": {
+                                  "IndexedId": {
+                                    "id_name": "a",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
                                           }
                                         }
                                       }
                                     }
                                   }
-                                }
-                              },
-                              {
-                                "BlockingAssign": {
-                                  "target": {
-                                    "id": {
-                                      "value": "overflow"
-                                    }
-                                  },
-                                  "value": {
-                                    "BinaryOp": {
-                                      "op": "&&",
-                                      "left": {
-                                        "ParenthesizedExpr": {
-                                          "expr": {
-                                            "BinaryOp": {
-                                              "op": "==",
-                                              "left": {
-                                                "IndexedId": {
-                                                  "id_name": "a",
-                                                  "index": {
-                                                    "BinaryOp": {
-                                                      "op": "-",
-                                                      "left": {
-                                                        "Identifier": {
-                                                          "content": "W"
-                                                        }
-                                                      },
-                                                      "right": {
-                                                        "Number": {
-                                                          "value": 1
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              },
-                                              "right": {
-                                                "IndexedId": {
-                                                  "id_name": "b",
-                                                  "index": {
-                                                    "BinaryOp": {
-                                                      "op": "-",
-                                                      "left": {
-                                                        "Identifier": {
-                                                          "content": "W"
-                                                        }
-                                                      },
-                                                      "right": {
-                                                        "Number": {
-                                                          "value": 1
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
+                                },
+                                "right": {
+                                  "IndexedId": {
+                                    "id_name": "b",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
                                           }
-                                        }
-                                      },
-                                      "right": {
-                                        "ParenthesizedExpr": {
-                                          "expr": {
-                                            "BinaryOp": {
-                                              "op": "!=",
-                                              "left": {
-                                                "IndexedId": {
-                                                  "id_name": "result",
-                                                  "index": {
-                                                    "BinaryOp": {
-                                                      "op": "-",
-                                                      "left": {
-                                                        "Identifier": {
-                                                          "content": "W"
-                                                        }
-                                                      },
-                                                      "right": {
-                                                        "Number": {
-                                                          "value": 1
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              },
-                                              "right": {
-                                                "IndexedId": {
-                                                  "id_name": "a",
-                                                  "index": {
-                                                    "BinaryOp": {
-                                                      "op": "-",
-                                                      "left": {
-                                                        "Identifier": {
-                                                          "content": "W"
-                                                        }
-                                                      },
-                                                      "right": {
-                                                        "Number": {
-                                                          "value": 1
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
                                           }
                                         }
                                       }
@@ -1055,7 +641,56 @@
                                   }
                                 }
                               }
-                            ]
+                            }
+                          }
+                        },
+                        "right": {
+                          "ParenthesizedExpr": {
+                            "expr": {
+                              "BinaryOp": {
+                                "op": "!=",
+                                "left": {
+                                  "IndexedId": {
+                                    "id_name": "result",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "IndexedId": {
+                                    "id_name": "a",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
                           }
                         }
                       }

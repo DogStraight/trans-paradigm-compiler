@@ -15,6 +15,9 @@ production = [
     "keyword.endmodule",
 ]
 end_case = ["keyword.endmodule"]
+scope_open = true
+scope_name_attr = "module_name"
+scope_kind = "module"
 template = """module {{ module_name }}{{#params}}{{?@first}} #(
 {{/@first}}    {{.}}{{!@last}},{{/@last}}{{?@last}}
 ){{/@last}}{{/params}} (
@@ -45,6 +48,8 @@ rest = "$4"
 [ParamDecl]
 production = ["keyword.parameter", "id", "symbol.base.equal", "@Expression"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+symbol_kind = "parameter"
+symbol_name = "param_name"
 template = "parameter {{ param_name }} = {{ value }}"
 [ParamDecl.node]
 param_name = "$2"

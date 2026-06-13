@@ -1,103 +1,149 @@
-# PyV 编译器
+# PyV 编译器 → Verilog
 
-将 Python 子集转译为 V 硬件描述语言的编译器。
+配置驱动的 Verilog 编译框架，支持语法解析 → 语义分析 → 代码生成 → 格式化的完整流水线。
+设计为可扩展框架：切换目标语言只需更换 `rules_verilog/` 配置。
 
-## 项目概述
-
-PyV 是一个三段式编译器架构，从 Python 源代码出发，经过词法分析、语法分析、代码生成三个阶段，最终输出目标代码。
+## 流水线
 
 ```
-Python 源码  ──→  Lexer  ──→  Tokens  ──→  Parser  ──→  AST  ──→  CodeGenerator  ──→  目标代码
-                     词法分析           Token 流     语法分析     抽象语法树     代码生成         .v 文件
+Verilog 源码
+    │
+    ▼
+┌─────────────┐
+│    Lexer    │  词法分析 → Token 流（含行列位置）
+│  main_lexer │  基于 token.toml 配置
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Parser    │  语法分析 → AST
+│  pratt_parser│  Pratt 表达式解析 + 规则系统
+│  rule_selector│  语法规则由 rules_verilog/*.toml 定义
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Optimizer  │  AST 变换 → 简化 AST
+│ ast_optimizer│  展平 first/rest/Block/BeginEnd
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Semantic   │  符号表构建 → 带 symbol_ref 的 AST
+│  Analyzer   │  作用域管理 + 标识符解析
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│    Code     │  配置驱动 → Verilog 代码
+│  Generator  │  模板引擎 {{ }} / {{#}} / {{?}}
+│  (Visitor)  │  CG 模板与语法规则合并在同一文件
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Formatter  │  缩进对齐 → 格式化 Verilog
+│ verilog_    │  处理 begin/end/endcase 层级
+│ formatter   │
+└──────┬──────┘
+       │
+       ▼
+  gen/*.v  (生成代码)
 ```
-
-### 设计理念
-
-- **配置驱动**：词法规则 (`token.toml`)、语法规则 (`rules.toml`)、运算符优先级 (`symbol_level.toml`)、生成规则 (`cg_rules.toml`) 均在外部 TOML 文件中定义，无需修改核心代码即可扩展语言特性。
-- **Pratt 解析**：表达式解析采用 Pratt 解析算法，运算符优先级由 `symbol_level.toml` 的数组顺序决定，支持自定义结合性和前缀/后缀运算符。
-- **层次化规则匹配**：语法规则采用类 EBNF 格式，支持产生式序列、分支、重复、可选、分组等结构，通过特性分析 (`feature_analyze.py`) 预计算加速匹配。
-- **访问者模式生成**：代码生成器基于访问者模式，`visit()` 根据 AST 节点类型自动分派到对应模板，支持条件分支模板和多文件输出。
 
 ## 项目结构
 
 ```
 pyv_compiler/
-├── README.md                          # ← 本文件
-├── TODO.md                            # 开发计划
-├── define.py                          # 公共定义：Token, Node, GrammarRule, FileManager
-├── err.py                             # 异常定义
-├── code_generator.py                  # 代码生成器（访问者模式 + 模板引擎）
+├── README.md
+├── define.py                    # Token, Node, GrammarRule, FileManager
+├── err.py                       # 异常定义
+├── code_generator.py            # 代码生成器（模板引擎 + 访问者模式）
 │
-├── grammar/                           # 外部配置（核心）
-│   ├── rules/                         # 语法规则模块（按功能拆分）
-│   │   ├── 00_literals.toml
-│   │   ├── 01_operators.toml
-│   │   ├── 02_expressions.toml
-│   │   ├── 06_statements.toml
-│   │   ├── 07_control_flow.toml
-│   │   └── ...
-│   ├── cg_rules/                      # 代码生成规则模块
-│   │   ├── 00_file_rules.toml
-│   │   ├── 01_blocks.toml
-│   │   ├── 02_variables.toml
-│   │   ├── 08_operators.toml
-│   │   └── ...
-│   ├── token.toml                     # Token 定义
-│   ├── rules.toml                     # 语法规则（旧单文件，回退用）
-│   ├── symbol_level.toml              # 运算符优先级与结合性
-│   └── cg_rules.toml                  # 代码生成规则（旧单文件，回退用）
+├── grammar/                     # 外部配置（核心）
+│   ├── token.toml               # Token 定义
+│   ├── symbol_level.toml        # 运算符优先级与结合性
+│   └── rules_verilog/           # Verilog 语法 + 生成 + 语义规则（合一）
+│       ├── 00_blocks.toml       # Root / Block / BeginEnd
+│       ├── 01_module.toml       # ModuleDecl / ParameterList / ParamDecl
+│       ├── 02_declarations.toml # PortDecl / WireDecl / RegDecl / LocalParamDecl
+│       ├── 03_always.toml       # AlwaysBlock / SensitivityList / EdgeSense
+│       ├── 04_statements.toml   # If/Case/Assign/Blocking/NonBlocking
+│       └── 05_expressions.toml  # 字面量 / 运算符 / Pratt 节点
 │
-├── lexer/                             # 词法分析器
+├── lexer/                       # 词法分析器
 │   ├── __init__.py
-│   ├── main_lexer.py                  # 主词法分析器
-│   └── lexer_utils.py                 # 词法分析工具函数
+│   ├── main_lexer.py
+│   ├── lexer_utils.py
+│   └── number_fsm.py            # 数字字面量 FSM 解析
 │
-├── parser/                            # 语法分析器
+├── parser/                      # 语法分析器
 │   ├── __init__.py
-│   ├── main_parser.py                 # 主语法分析器
-│   ├── pratt_parser.py                # Pratt 表达式解析器
-│   ├── parser_context.py              # 解析上下文
-│   ├── rule_selector.py               # 规则选择器
-│   └── feature_analyze.py             # 产生式特性分析（预计算加速）
+│   ├── main_parser.py
+│   ├── pratt_parser.py          # Pratt 表达式解析
+│   ├── parser_context.py        # 解析上下文 + 回溯快照
+│   ├── rule_selector.py         # 规则选择器（token → 候选规则）
+│   └── feature_analyze.py       # 产生式预计算加速
 │
-├── temp/                              # 测试输出的 AST JSON（调试用）
-│   ├── ast_variable_definition.json
-│   ├── ast_if.json
-│   ├── ast_for.json
-│   └── ...
+├── optimizer/
+│   └── ast_optimizer.py         # AST 变换管道（展平/提取）
 │
-├── test/                              # 测试
-│   ├── test_lexer.py
-│   └── test_parser.py
+├── analyzer/                    # 语义分析
+│   ├── __init__.py
+│   ├── scope.py                 # Scope / Symbol / get_symbol_kinds
+│   └── semantic_analyzer.py     # 符号表构建 + 标识符解析
 │
-└── output/                            # 生成的目标代码（由 CG 自动创建）
-    └── output.v
+├── formatter/
+│   ├── __init__.py
+│   └── verilog_formatter.py     # Verilog 格式化（缩进/块合并）
+│
+├── scripts/
+│   └── gen_mermaid_fsm.py       # FSM 图生成
+│
+├── docs/
+│   └── fsm_diagram.md
+│
+└── verilog/                     # Verilog 编译测试
+    ├── run_pipeline.py          # 端到端流水线入口
+    ├── run_optimizer.py
+    ├── ref/                     # 参考源文件
+    │   ├── ref_alu.v
+    │   ├── ref_counter.v
+    │   ├── ref_fsm.v
+    │   └── ...
+    ├── gen/                     # 生成代码输出
+    ├── ast/                     # 优化后 AST JSON
+    └── symbols/                 # 符号表 JSON
 ```
 
-## 快速开始
+## 配置驱动的三条信息
 
-### 环境要求
+每条语法规则在 TOML 中包含三个维度的配置：
 
-- Python 3.11+（需内置 `tomllib`）
+```toml
+[RegDecl]
+# ── 语法
+production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
+end_case = ["newline"]
+# ── 生成
+template = "    reg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
+# ── 语义
+symbol_kind = "reg"
+symbol_name = "reg_name"
+```
 
-### 运行测试
+## 运行测试
 
 ```bash
-# 词法分析测试
-python test/test_lexer.py
+cd verilog
 
-# 语法分析测试（会在 temp/ 下生成 AST JSON）
-python test/test_parser.py
+# 端到端测试
+python run_pipeline.py ref_fsm
+python run_pipeline.py ref_alu
+python run_pipeline.py ref_counter
+
+# 输出对比（DIFF 行数 = 0 表示完全一致）
 ```
-
-### 代码生成示例
-
-```python
-from lexer import Lexer
-from parser import Parser
-from code_generator import CodeGenerator
-
-# 1. 词法分析
 lexer = Lexer()
 tokens = lexer.tokenize("""
 x: int = 10
