@@ -1,11 +1,11 @@
-from define import Node, FileManager
+from core.define import Node, FileManager
 from typing import List, Dict, Any, Optional
 import tomllib
 import os
 import re
 
 
-from err import TemplateParseError
+from core.err import TemplateParseError
 
 
 class _TemplateToken:

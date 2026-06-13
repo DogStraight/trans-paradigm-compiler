@@ -23,8 +23,8 @@ if project_root not in sys.path:
 
 from lexer import Lexer
 from parser import Parser
-from code_generator import CodeGenerator, CodeGenerator
-from define import GrammarRulesRegister
+from core.define import GrammarRulesRegister
+from generator.code_generator import CodeGenerator
 from parser.rule_selector import RuleSelector
 from optimizer.ast_optimizer import optimize_ast, get_optimize_transforms
 from analyzer import SemanticAnalyzer

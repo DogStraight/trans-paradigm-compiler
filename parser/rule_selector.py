@@ -1,6 +1,6 @@
 # parser/rule_selector.py
 from typing import List, Dict, Optional
-from define import Token, GrammarRule
+from core.define import Token, GrammarRule
 from parser.feature_analyze import analyze_production_features
 
 

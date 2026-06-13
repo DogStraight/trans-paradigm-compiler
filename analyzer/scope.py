@@ -1,7 +1,7 @@
 """Scope 作用域与 Symbol 符号表"""
 
 from typing import Optional, Dict, List
-from define import Node
+from core.define import Node
 
 
 def get_symbol_kinds(rules: dict) -> frozenset[str]:

@@ -1,7 +1,7 @@
 # parser/pratt_parser.py
 import tomllib
 from typing import List, Tuple, Dict, Any
-from define import Node, Token, FileManager
+from core.define import Node, Token, FileManager
 
 
 # ========== 运算符定义加载 ==========

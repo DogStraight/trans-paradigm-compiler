@@ -10,7 +10,7 @@ ast_optimizer.py - 规则式 AST 优化器（无叶子值自动提取版本）
 """
 
 from typing import Any, List, Callable
-from define import Node
+from core.define import Node
 
 # ---------- 优化变换注册机制 ----------
 _OPTIMIZE_TRANSFORMS: List[Callable] = []

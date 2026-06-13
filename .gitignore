@@ -1,5 +1,5 @@
-.vscode
-*/__pycache__
-__pycache__
 *.log
-temp/*
+.vscode
+__pycache__
+*/__pycache__
+parser_debug.log

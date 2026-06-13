@@ -7,7 +7,7 @@
 """
 
 from typing import Dict, List, Optional, Any
-from define import Node
+from core.define import Node
 from .scope import Scope, Symbol
 
 

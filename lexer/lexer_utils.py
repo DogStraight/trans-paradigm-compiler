@@ -1,6 +1,6 @@
 # lexer/lexer_utils.py
 import tomllib
-from define import FileManager
+from core.define import FileManager
 
 
 def get_token_define(

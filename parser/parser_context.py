@@ -1,5 +1,5 @@
 # parser/parser_context.py
-from define import Token, Node, GrammarRule
+from core.define import Token, Node, GrammarRule
 import copy
 
 

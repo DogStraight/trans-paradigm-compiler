@@ -2,10 +2,10 @@
 import re
 import sys
 from typing import Optional, List, Dict
-from define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
+from core.define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager
 from parser.feature_analyze import analyze_production_features
 from parser.parser_context import ParseContext
-from err import _SequenceMatchError, _BranchMatchError
+from core.err import _SequenceMatchError, _BranchMatchError
 from parser.rule_selector import RuleSelector
 import parser.pratt_parser as pratt_parser
 

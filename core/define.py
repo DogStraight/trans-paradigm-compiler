@@ -34,7 +34,7 @@ from typing import List
 
 @dataclass
 class FileManager:
-    _base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _base_dir: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     rules_file: str = "pyv_compiler/grammar/rules.toml"
     rules_dir: str = "pyv_compiler/grammar/rules"
     token_define_file: str = "pyv_compiler/grammar/token.toml"
@@ -103,7 +103,7 @@ class FileManager:
         return merged
 
 
-from err import BracketMismatchError
+from .err import BracketMismatchError
 
 
 def get_close_bracket_string(start_bracket: str, target_string: str) -> str:
