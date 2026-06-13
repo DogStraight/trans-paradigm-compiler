@@ -1,7 +1,0 @@
-[Root]
-template = """{{#child}}{{.}}
-{{/child}}"""
-
-[Block]
-template = """{{#child}}{{.}}
-{{/child}}"""

@@ -53,48 +53,52 @@
               }
             }
           ],
-          "body": [
-            {
-              "IfStatement": {
-                "condition": {
-                  "UnaryOp": {
-                    "op": "!",
-                    "operand": {
-                      "Identifier": {
-                        "content": "rst_n"
+          "body": {
+            "BeginEnd": {
+              "body": [
+                {
+                  "IfStatement": {
+                    "condition": {
+                      "UnaryOp": {
+                        "op": "!",
+                        "operand": {
+                          "Identifier": {
+                            "content": "rst_n"
+                          }
+                        },
+                        "position": "prefix"
                       }
                     },
-                    "position": "prefix"
-                  }
-                },
-                "then_stmt": {
-                  "NonBlockingAssign": {
-                    "target": "q",
-                    "value": {
-                      "BitWidthLiteral": {
-                        "width": 0,
-                        "value": "1'b0"
-                      }
-                    }
-                  }
-                },
-                "else_chain": [
-                  {
-                    "body": {
+                    "then_stmt": {
                       "NonBlockingAssign": {
                         "target": "q",
                         "value": {
-                          "Identifier": {
-                            "content": "d"
+                          "BitWidthLiteral": {
+                            "width": 0,
+                            "value": "1'b0"
                           }
                         }
                       }
-                    }
+                    },
+                    "else_chain": [
+                      {
+                        "body": {
+                          "NonBlockingAssign": {
+                            "target": "q",
+                            "value": {
+                              "Identifier": {
+                                "content": "d"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
-                ]
-              }
+                }
+              ]
             }
-          ]
+          }
         }
       }
     ]

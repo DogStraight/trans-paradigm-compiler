@@ -15,6 +15,14 @@ production = [
     "keyword.endmodule",
 ]
 end_case = ["keyword.endmodule"]
+template = """module {{ module_name }}{{#params}}{{?@first}} #(
+{{/@first}}    {{.}}{{!@last}},{{/@last}}{{?@last}}
+){{/@last}}{{/params}} (
+{{#ports}}    {{.}}{{!@last}},{{/@last}}
+{{/ports}});
+{{#body}}    {{.}}
+{{/body}}endmodule"""
+
 [ModuleDecl.node]
 module_name = "$2"
 params = "$3"
@@ -22,7 +30,14 @@ ports = "$5"
 body = "$8"
 
 [ParameterList]
-production = ["symbol.base.pound", "bracket.l_parentheses", "@ParamDecl", "(symbol.base.comma,@ParamDecl)*", "bracket.r_parentheses"]
+production = [
+    "symbol.base.pound",
+    "bracket.l_parentheses",
+    "@ParamDecl",
+    "(symbol.base.comma,@ParamDecl)*",
+    "bracket.r_parentheses",
+]
+template = "# ({{ first }}{{#rest}} {{.}}{{/rest}})"
 [ParameterList.node]
 first = "$3"
 rest = "$4"
@@ -30,6 +45,7 @@ rest = "$4"
 [ParamDecl]
 production = ["keyword.parameter", "id", "symbol.base.equal", "@Expression"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+template = "parameter {{ param_name }} = {{ value }}"
 [ParamDecl.node]
 param_name = "$2"
 value = "$4"

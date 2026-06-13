@@ -30,6 +30,7 @@ question_mark = "?"
 at = "@"
 pound = "#"
 single_quote = "'"
+dollar = "$"
 
 [symbol.extend]
 r_shift = ">>"
@@ -87,6 +88,7 @@ in = "in"
 # 参数
 param = "param"
 parameter = "parameter"
+localparam = "localparam"
 
 # 端口
 input = "input"

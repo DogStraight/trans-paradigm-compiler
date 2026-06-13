@@ -2,12 +2,31 @@
 # Verilog 语法规则 — 表达式与字面量
 # ============================================================================
 
-# 位宽字面量: 32'd0, 1'b0, 8'ha3 等
+# ---------- 基本原子 ----------
 [BitWidthLiteral]
 production = ["literal.number", "symbol.base.single_quote", "id"]
+template = "{{ value }}"
 [BitWidthLiteral.node]
 width = "$1"
 value = "$3"
+
+[Number]
+production = ["literal.number"]
+template = "{{ value }}"
+[Number.node]
+value = "$1"
+
+[Identifier]
+production = ["id"]
+template = "{{ content }}"
+[Identifier.node]
+name = "$1"
+
+[ParenthesizedExpr]
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+template = "({{ expr }})"
+[ParenthesizedExpr.node]
+expr = "$2"
 
 [IndexedId]
 production = [
@@ -16,9 +35,22 @@ production = [
     "@Expression",
     "bracket.r_square_bracket",
 ]
+template = "{{ id_name }}[{{ index }}]"
 [IndexedId.node]
 id_name = "$1"
 index = "$3"
+
+[ConcatExpr]
+production = [
+    "bracket.l_curly_bracket",
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+    "bracket.r_curly_bracket",
+]
+template = "{{{#items}}{{.}}{{!@last}},{{/@last}}{{/items}}}"
+[ConcatExpr.node]
+first = "$2"
+rest = "$3"
 
 [ReplicateExpr]
 production = [
@@ -29,41 +61,28 @@ production = [
     "bracket.r_curly_bracket",
     "bracket.r_curly_bracket",
 ]
+template = "{{{ count }}{{ value }}}"
 [ReplicateExpr.node]
 count = "$2"
 value = "$4"
 
+# ---------- 运算符优先级（自底向上）----------
 [PrimaryExpr]
 production = [
     "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr",
 ]
 inline = true
+template = "{{ value }}"
 [PrimaryExpr.node]
 value = "$1"
 
-[Number]
-production = ["literal.number"]
-[Number.node]
-value = "$1"
-
-[Identifier]
-production = ["id"]
-[Identifier.node]
-name = "$1"
-
-[ParenthesizedExpr]
-production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
-[ParenthesizedExpr.node]
-expr = "$2"
-
-# 一元前缀运算符
 [UnaryExpr]
 production = ["symbol.base.not|symbol.base.bit_not", "@PrimaryExpr"]
+pratt = true
 [UnaryExpr.node]
 op = "$1"
 operand = "$2"
 
-# 二元运算
 [MulExpr]
 production = ["@PrimaryExpr|@UnaryExpr", "(@MulOp,@PrimaryExpr|@UnaryExpr)*"]
 pratt = true
@@ -85,40 +104,6 @@ pratt = true
 left = "$1"
 op_rhs = "$2"
 
-[Expression]
-production = ["@LogicOrExpr"]
-end_case = [
-    "symbol.base.colon",
-    "symbol.base.semicolon",
-    "symbol.base.comma",
-    "keyword.endcase",
-    "keyword.begin",
-]
-pratt = true
-[Expression.node]
-expr = "$1"
-
-[ConcatExpr]
-production = [
-    "bracket.l_curly_bracket",
-    "@Expression",
-    "(symbol.base.comma,@Expression)*",
-    "bracket.r_curly_bracket",
-]
-[ConcatExpr.node]
-first = "$2"
-rest = "$3"
-
-[MulOp]
-production = ["symbol.base.multiple|symbol.base.div|symbol.base.mod"]
-[MulOp.node]
-op = "$1"
-
-[AddOp]
-production = ["symbol.base.add|symbol.base.sub"]
-[AddOp.node]
-op = "$1"
-
 [LogicAndExpr]
 production = ["@CompareExpr", "(@LogicAndOp,@CompareExpr)*"]
 pratt = true
@@ -133,9 +118,39 @@ pratt = true
 head = "$1"
 tail = "$2"
 
+[Expression]
+production = ["@LogicOrExpr"]
+end_case = [
+    "symbol.base.colon",
+    "symbol.base.semicolon",
+    "symbol.base.comma",
+    "keyword.endcase",
+    "keyword.begin",
+]
+pratt = true
+template = "{{ expr }}"
+[Expression.node]
+expr = "$1"
+
+# ---------- 运算符节点（用于代码生成）----------
+[MulOp]
+production = ["symbol.base.multiple|symbol.base.div|symbol.base.mod"]
+[MulOp.node]
+op = "$1"
+
+[AddOp]
+production = ["symbol.base.add|symbol.base.sub"]
+[AddOp.node]
+op = "$1"
+
 [CmpOp]
 production = [
-    "symbol.extend.is_equal|symbol.extend.not_equal|symbol.base.bigger|symbol.base.lesser|symbol.extend.bigger_equal|symbol.extend.lesser_equal",
+    "symbol.extend.is_equal",
+    "symbol.extend.not_equal",
+    "symbol.base.bigger",
+    "symbol.base.lesser",
+    "symbol.extend.bigger_equal",
+    "symbol.extend.lesser_equal",
 ]
 [CmpOp.node]
 op = "$1"
@@ -149,3 +164,13 @@ op = "$1"
 production = ["symbol.extend.logic_double_or"]
 [LogicOrOp.node]
 op = "$1"
+
+# ---------- Pratt 解析器产生的中间节点（无 production）----------
+[UnaryOp]
+template = "{{ op }}{{ operand }}"
+
+[BinaryOp]
+template = "{{ left }} {{ op }} {{ right }}"
+
+[ComparisonExpr]
+template = "{{ left }} {{ op }} {{ right }}"

@@ -103,7 +103,7 @@ def main():
     print(f"⚙️  AST 优化已保存 ({os.path.getsize(ast_opt_json)} bytes)")
 
     # 5. 代码生成（使用优化后的 AST）
-    cg = CodeGenerator(rules_dir="pyv_compiler/grammar/cg_rules_verilog")
+    cg = CodeGenerator(rules_dir="pyv_compiler/grammar/rules_verilog")
     outputs = cg.generate(ast_opt)
     outputs = cg.optimize(outputs)
 

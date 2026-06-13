@@ -15,14 +15,12 @@ module counter # (
             counter <= 32'd0;
             divider <= 32'd0;
             led <= 1'b0;
-        end
-        else begin
+        end else begin
             if (divider == TARGET) begin
                 divider <= 32'd0;
                 counter <= counter + 32'd1;
                 led <= ~led;
-            end
-            else begin
+            end else begin
                 divider <= divider + 32'd1;
             end
         end

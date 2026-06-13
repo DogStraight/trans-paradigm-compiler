@@ -18,12 +18,13 @@ class VerilogFormatter:
         header = self._format_header(name, param_items is not None)
         formatted_params = self._format_params(param_items) if param_items else []
         formatted_ports = self._format_ports(port_items) if port_items else []
-        declarations, always_blocks = self._split_body(body_lines)
+        declarations, other_lines, always_blocks = self._split_body(body_lines)
         formatted_decls = self._format_declarations(declarations)
+        formatted_other = self._format_other_lines(other_lines)
         formatted_always = self._format_always_blocks(always_blocks)
 
         return self._assemble(header, formatted_params, formatted_ports,
-                              formatted_decls, formatted_always,
+                              formatted_decls, formatted_other, formatted_always,
                               has_params=param_items is not None)
 
 
@@ -209,18 +210,20 @@ class VerilogFormatter:
         declarations = []
         always_blocks = []
         i = 0
+        other_lines = []
         while i < len(body_lines):
             line = body_lines[i].strip()
             if not line:
                 i += 1
                 continue
-            if line.startswith(('reg', 'wire', 'assign')):
+            if line.startswith(('reg', 'wire', 'assign', 'localparam')):
                 declarations.append(line)
                 i += 1
             elif line.startswith('always'):
                 # 收集整个 always 块（直到匹配的 end）
                 block_lines = []
                 depth = 0
+                first_line = True
                 while i < len(body_lines):
                     curr = body_lines[i].rstrip()
                     block_lines.append(curr)
@@ -229,16 +232,18 @@ class VerilogFormatter:
                     begin_cnt = words.count('begin')
                     end_cnt = words.count('end')
                     depth += begin_cnt - end_cnt
-                    if depth <= 0:
+                    if depth <= 0 and not first_line:
                         # 此 end 已闭合 always 块
                         i += 1
                         break
+                    first_line = False
                     i += 1
                 always_blocks.append(block_lines)
             else:
-                # 其他行（如注释）忽略
+                # 注释、空白等其他行保持原样
+                other_lines.append(body_lines[i].rstrip())
                 i += 1
-        return declarations, always_blocks
+        return declarations, other_lines, always_blocks
 
     # ------------------------------------------------------------
     # 格式化阶段
@@ -317,6 +322,12 @@ class VerilogFormatter:
             return []
         return [' ' * self.indent + line.strip() for line in decl_lines if line.strip()]
 
+    def _format_other_lines(self, other_lines):
+        """注释等行保持原样，仅去除多余首尾空白"""
+        if not other_lines:
+            return []
+        return [line.rstrip() for line in other_lines if line.strip()]
+
     def _format_always_blocks(self, blocks):
         if not blocks:
             return []
@@ -328,48 +339,111 @@ class VerilogFormatter:
     def _format_single_always(self, lines):
         out = []
         first = lines[0].strip()
-        out.append(' ' * self.indent + first)
         indent_level = 1  # always 内部缩进 1 层
+        indent_next_body = False  # if/else 无 begin 时，下一句需缩进
         i = 1
+
+        # 合并 always @(...) + begin → "always @(...) begin"
+        if i < len(lines) and lines[i].strip() == 'begin':
+            out.append(' ' * self.indent + first + ' begin')
+            i += 1
+        else:
+            out.append(' ' * self.indent + first)
+
         while i < len(lines):
             line = lines[i].strip()
             if not line:
                 i += 1
                 continue
 
-            # 处理一行多个 end 的情况，如 "end     end"
-            # 只拆分真正的 end+end，不拆 endcase/endmodule 等复合词
-            if line == 'end' or line.startswith('end ') or line.startswith('end\t'):
-                rest = line[3:].strip()
-                if rest and not rest.startswith('else'):
-                    indent_level -= 1
-                    indent_str = ' ' * self.indent * (indent_level + 1)
-                    out.append(indent_str + 'end')
-                    lines[i] = rest
-                    continue
-
-            # 处理 end —— 只认单独的 end 单词（不拆 endcase/endmodule）
             words = line.split()
+
+            # ---- 判断是否 if/else if/else 无 begin（单句体） ----
+            is_if_cond = ('if' in words and 'begin' not in words
+                          and 'end' not in words and 'endcase' not in words)
+            is_else_only = (words == ['else'] or (len(words) >= 1 and words[0] == 'else'
+                                                   and 'if' not in words
+                                                   and 'begin' not in words))
+            is_else_if = (len(words) >= 2 and words[0] == 'else' and words[1] == 'if')
+
+            # ---- 处理 end/endcase 减少缩进 ----
             has_endcase = 'endcase' in words
             if has_endcase:
                 indent_level -= 1
-            has_end = 'end' in words and not line.startswith('endmodule')
-            if has_end:
+            has_end_word = ('end' in words and 'endmodule' not in words
+                            and 'endcase' not in words)
+            if has_end_word:
                 indent_level -= 1
-            # 构造缩进行
-            indent_str = ' ' * self.indent * (indent_level + 1)
-            # 如果下一行是 begin 且当前行不是 end/begin，尝试合并到同一行
-            if (i + 1 < len(lines) and lines[i + 1].strip() == 'begin'
-                    and not has_end
-                    and not self._has_begin_word(line)):
-                out.append(indent_str + line + ' begin')
-                indent_level += 1
-                i += 2
+
+            # ---- 合并下一行逻辑 ----
+            merged = False
+            if i + 1 < len(lines):
+                nxt = lines[i + 1].strip()
+
+                # end + else/else if[ + begin] → "end else if (...) begin"
+                if has_end_word and nxt.startswith('else'):
+                    merged_line = line + ' ' + nxt
+                    i += 2
+                    has_new_begin = False
+                    if i < len(lines) and lines[i].strip() == 'begin':
+                        merged_line += ' begin'
+                        has_new_begin = True
+                        i += 1
+                    indent_str = ' ' * self.indent * (indent_level + 1)
+                    out.append(indent_str + merged_line)
+                    if has_new_begin:
+                        indent_level += 1
+                    merged = True
+                    continue
+
+                # end else + begin → "end else begin"
+                if has_end_word and 'else' in words and nxt == 'begin':
+                    indent_str = ' ' * self.indent * (indent_level + 1)
+                    out.append(indent_str + line + ' begin')
+                    indent_level += 1
+                    i += 2
+                    merged = True
+                    continue
+
+                # else/if(...)/case标签 + begin → "else begin" / "if (...) begin"
+                if nxt == 'begin' and not has_end_word:
+                    indent_str = ' ' * self.indent * (indent_level + 1)
+                    out.append(indent_str + line + ' begin')
+                    indent_level += 1
+                    i += 2
+                    merged = True
+                    continue
+
+            if merged:
+                indent_next_body = False
                 continue
-            out.append(indent_str + line)
-            if self._has_begin_word(line):
+
+            # ---- 应用 if/else 单句体缩进 ----
+            if indent_next_body and not has_end_word:
+                if is_else_only or is_else_if:
+                    # else/else if 与 if 同级，不额外缩进
+                    indent_str = ' ' * self.indent * (indent_level + 1)
+                    out.append(indent_str + line)
+                else:
+                    # 单句体（含嵌套 if）缩进 +1
+                    indent_level += 1
+                    indent_str = ' ' * self.indent * (indent_level + 1)
+                    out.append(indent_str + line)
+                    indent_level -= 1
+                indent_next_body = False
+            else:
+                # ---- 常规缩进输出 ----
+                indent_str = ' ' * self.indent * (indent_level + 1)
+                out.append(indent_str + line)
+                indent_next_body = False
+
+            # ---- 设置 if/else 无 begin 标记 ----
+            if is_if_cond or is_else_only:
+                indent_next_body = True
+
+            if self._has_begin_word(line) and not has_end_word:
                 indent_level += 1
-            if 'case' in words:
+            if 'case' in words and 'endcase' not in words:
                 indent_level += 1
             i += 1
         return out
@@ -380,7 +454,7 @@ class VerilogFormatter:
         words = s.split()
         return 'begin' in words
 
-    def _assemble(self, header, params, ports, decls, always_blocks, has_params=False):
+    def _assemble(self, header, params, ports, decls, other_lines, always_blocks, has_params=False):
         lines = [header]
         if has_params:
             if params:
@@ -390,13 +464,15 @@ class VerilogFormatter:
             lines.extend(ports)
         lines.append(');')
 
-        if self.section_gaps and (decls or always_blocks):
+        if self.section_gaps and (decls or other_lines or always_blocks):
             lines.append('')
         if decls:
             lines.extend(decls)
-            if self.section_gaps and always_blocks:
-                lines.append('')
+        if other_lines:
+            lines.extend(other_lines)
         if always_blocks:
+            if self.section_gaps:
+                lines.append('')
             if always_blocks and isinstance(always_blocks[0], str):
                 # 扁平列表（_format_always_blocks 返回格式）
                 lines.extend(always_blocks)

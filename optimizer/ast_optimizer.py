@@ -161,15 +161,8 @@ def flatten_block(node: Any) -> Any:
     return node
 
 
-@optimize
+# @optimize 已禁用 — BeginEnd 保留由模板渲染（用于 case item 内的 begin...end）
 def flatten_begin_end(node: Any) -> Any:
-    if isinstance(node, Node) and node.name == "BeginEnd":
-        body = getattr(node, "body", None)
-        if body is None:
-            return []
-        if isinstance(body, Node) and body.name == "Block":
-            return getattr(body, "child", [])
-        return body
     return node
 
 
@@ -189,13 +182,8 @@ def normalize_else_chain(node: Any) -> Any:
         return node
 
     def _flatten_body(body):
-        # 展平 BeginEnd/Block 节点为语句列表
+        # 展平 Block 节点为语句列表（BeginEnd 保留，由模板渲染）
         if isinstance(body, Node):
-            if body.name == "BeginEnd":
-                b = getattr(body, "body", None)
-                if isinstance(b, Node) and b.name == "Block":
-                    return getattr(b, "child", [])
-                return b
             if body.name == "Block":
                 return getattr(body, "child", [])
         return body

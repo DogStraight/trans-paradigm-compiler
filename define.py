@@ -180,6 +180,8 @@ class GrammarRulesRegister:
             # 回退：单文件加载
             rules_dict = FileManager.load_rules()
         for rule_name, rule_dict in rules_dict.items():
+            if rule_name == "file_rules":
+                continue
             rule = GrammarRule(rule_name, **rule_dict)  # 解包字典
             self.rules[rule_name] = rule
         return self.rules

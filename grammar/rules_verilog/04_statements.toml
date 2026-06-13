@@ -3,8 +3,11 @@
 # ============================================================================
 
 [Statement]
-production = ["@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@CaseItem|@DefaultItem"]
+production = [
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl",
+]
 inline = true
+template = "{{ stmt }}"
 [Statement.node]
 stmt = "$1"
 
@@ -18,6 +21,10 @@ production = [
     "@ElseChain?",
 ]
 end_case = ["newline"]
+template = """    if ({{ condition }})
+{{ then_stmt }}{{#else_chain}}{{?condition}} else if ({{ condition }})
+{{ body }}{{/condition}}{{!condition}} else
+{{ body }}{{/condition}}{{/else_chain}}"""
 [IfStatement.node]
 condition = "$3"
 then_stmt = "$5"
@@ -26,11 +33,22 @@ else_chain = "$6"
 [ElseChain]
 production = ["@ElseIf|@ElseBranch"]
 inline = true
+template = "{{ branch }}"
 [ElseChain.node]
 branch = "$1"
 
 [ElseIf]
-production = ["keyword.else", "keyword.if", "bracket.l_parentheses", "@Expression", "bracket.r_parentheses", "@Statement", "@ElseChain?"]
+production = [
+    "keyword.else",
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Statement",
+    "@ElseChain?",
+]
+template = """    else if ({{ condition }})
+{{ body }}"""
 [ElseIf.node]
 condition = "$4"
 then_stmt = "$6"
@@ -38,12 +56,19 @@ else_chain = "$7"
 
 [ElseBranch]
 production = ["keyword.else", "@Statement"]
+template = "    else\n{{ body }}"
 [ElseBranch.node]
 body = "$2"
 
 [NonBlockingAssign]
-production = ["id", "symbol.extend.lesser_equal", "@Expression", "symbol.base.semicolon"]
+production = [
+    "id",
+    "symbol.extend.lesser_equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
 end_case = ["newline"]
+template = "{{ target }} <= {{ value }};\n"
 [NonBlockingAssign.node]
 target = "$1"
 value = "$3"
@@ -51,13 +76,22 @@ value = "$3"
 [BlockingAssign]
 production = ["id", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
 end_case = ["newline"]
+template = "{{ target }} = {{ value }};\n"
 [BlockingAssign.node]
 target = "$1"
 value = "$3"
 
 [CaseStatement]
-production = ["keyword.case", "bracket.l_parentheses", "@Expression", "bracket.r_parentheses", "@CaseItemList", "keyword.endcase"]
+production = [
+    "keyword.case",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@CaseItemList",
+    "keyword.endcase",
+]
 end_case = ["newline"]
+template = "    case ({{ expr }}){{#items}}\n        {{.}}{{/items}}\n    endcase\n"
 [CaseStatement.node]
 expr = "$3"
 items = "$5"
@@ -71,6 +105,7 @@ rest = "$2"
 [CaseItem]
 production = ["@Expression", "symbol.base.colon", "@Statement"]
 end_case = ["newline"]
+template = "{{ value }}: {{ stmt }}"
 [CaseItem.node]
 value = "$1"
 stmt = "$3"
@@ -78,12 +113,20 @@ stmt = "$3"
 [DefaultItem]
 production = ["keyword.default", "symbol.base.colon", "@Statement"]
 end_case = ["newline"]
+template = "default: {{ stmt }}"
 [DefaultItem.node]
 stmt = "$3"
 
 [AssignStatement]
-production = ["keyword.assign", "id", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
+production = [
+    "keyword.assign",
+    "id",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
 end_case = ["newline"]
+template = "    assign {{ target }} = {{ value }};"
 [AssignStatement.node]
 target = "$2"
 value = "$4"

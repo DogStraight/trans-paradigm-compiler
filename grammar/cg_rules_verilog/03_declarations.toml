@@ -1,8 +1,0 @@
-[WireDecl]
-template = "    wire{{?range}} [{{range}}]{{/range}} {{ wire_name }};"
-
-[RegDecl]
-template = "    reg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
-
-[Range]
-template = "{{ msb }}:{{ lsb }}"

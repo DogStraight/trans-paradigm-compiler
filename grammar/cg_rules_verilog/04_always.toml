@@ -1,8 +1,0 @@
-[AlwaysBlock]
-template = "    always @({{#sensitivity}}{{.}}{{!@last}} or {{/@last}}{{/sensitivity}}) begin\n{{ body }}    end"
-
-[SensitivityList]
-template = "{{ first }}{{#rest}} {{.}}{{/rest}}"
-
-[EdgeSense]
-template = "{{ edge }} {{ signal }}"

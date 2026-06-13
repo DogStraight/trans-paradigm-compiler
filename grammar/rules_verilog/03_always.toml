@@ -12,18 +12,24 @@ production = [
     "@Statement",
 ]
 end_case = ["newline"]
+template = "    always @({{#sensitivity}}{{.}}{{!@last}} or {{/@last}}{{/sensitivity}})\n{{ body }}"
 [AlwaysBlock.node]
 sensitivity = "$4"
 body = "$6"
 
 [SensitivityList]
-production = ["@EdgeSense|symbol.base.multiple", "(symbol.extend.logic_or,@EdgeSense)*"]
+production = [
+    "@EdgeSense|symbol.base.multiple",
+    "(symbol.extend.logic_or,@EdgeSense)*",
+]
+template = "{{ first }}{{#rest}} {{.}}{{/rest}}"
 [SensitivityList.node]
 first = "$1"
 rest = "$2"
 
 [EdgeSense]
 production = ["keyword.posedge|keyword.negedge", "id"]
+template = "{{ edge }} {{ signal }}"
 [EdgeSense.node]
 edge = "$1"
 signal = "$2"

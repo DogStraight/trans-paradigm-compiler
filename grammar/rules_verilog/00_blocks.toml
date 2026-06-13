@@ -5,13 +5,38 @@
 [Root]
 block_start = ""
 block_end = ""
+template = """{{#child}}{{.}}
+{{/child}}"""
 
 [Block]
 block_start = "space.indent"
 block_end = "space.dedent"
+template = """{{#child}}{{.}}
+{{/child}}"""
 
-# Verilog 的 begin...end 块（相当于 C 的 { }）
 [BeginEnd]
 production = ["keyword.begin", "@Block", "keyword.end"]
+template = "begin\n{{ body }}    end\n"
 [BeginEnd.node]
 body = "$2"
+
+# 容器节点（仅用于代码生成中间表示）
+[optional]
+template = "{{#child}}{{.}}{{/child}}"
+
+[repeat]
+template = "{{#child}}{{.}}{{/child}}"
+
+[sequence]
+template = "{{#child}}{{.}} {{/child}}"
+
+[plus]
+template = "{{#child}}{{.}}{{/child}}"
+
+[list]
+template = "{{#child}}{{.}}{{/child}}"
+
+[[file_rules]]
+node_type = "Root"
+file_name = "output.v"
+header = "// Generated file, check before use\n\n"

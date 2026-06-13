@@ -405,235 +405,180 @@
               }
             }
           ],
-          "body": [
-            {
-              "CaseStatement": {
-                "expr": {
-                  "Identifier": {
-                    "content": "op"
-                  }
-                },
-                "items": [
-                  {
-                    "CaseItem": {
-                      "value": {
-                        "BitWidthLiteral": {
-                          "width": 0,
-                          "value": "3'd0"
-                        }
-                      },
-                      "stmt": {
-                        "BlockingAssign": {
-                          "target": "result",
-                          "value": {
-                            "Identifier": {
-                              "content": "sum"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "CaseItem": {
-                      "value": {
-                        "BitWidthLiteral": {
-                          "width": 0,
-                          "value": "3'd1"
-                        }
-                      },
-                      "stmt": {
-                        "BlockingAssign": {
-                          "target": "result",
-                          "value": {
-                            "Identifier": {
-                              "content": "diff"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "CaseItem": {
-                      "value": {
-                        "BitWidthLiteral": {
-                          "width": 0,
-                          "value": "3'd2"
-                        }
-                      },
-                      "stmt": {
-                        "BlockingAssign": {
-                          "target": "result",
-                          "value": {
-                            "Identifier": {
-                              "content": "and_w"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "CaseItem": {
-                      "value": {
-                        "BitWidthLiteral": {
-                          "width": 0,
-                          "value": "3'd3"
-                        }
-                      },
-                      "stmt": {
-                        "BlockingAssign": {
-                          "target": "result",
-                          "value": {
-                            "Identifier": {
-                              "content": "or_w"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "CaseItem": {
-                      "value": {
-                        "BitWidthLiteral": {
-                          "width": 0,
-                          "value": "3'd4"
-                        }
-                      },
-                      "stmt": {
-                        "BlockingAssign": {
-                          "target": "result",
-                          "value": {
-                            "Identifier": {
-                              "content": "xor_w"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "DefaultItem": {
-                      "stmt": {
-                        "BlockingAssign": {
-                          "target": "result",
-                          "value": {
-                            "ReplicateExpr": {
-                              "count": {
-                                "Identifier": {
-                                  "content": "W"
-                                }
-                              },
-                              "value": {
-                                "ConcatExpr": {
-                                  "items": [
-                                    {
-                                      "BitWidthLiteral": {
-                                        "width": 0,
-                                        "value": "1'b0"
-                                      }
-                                    }
-                                  ]
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "BlockingAssign": {
-                "target": "zero",
-                "value": {
-                  "ParenthesizedExpr": {
+          "body": {
+            "BeginEnd": {
+              "body": [
+                {
+                  "CaseStatement": {
                     "expr": {
-                      "BinaryOp": {
-                        "op": "==",
-                        "left": {
-                          "Identifier": {
-                            "content": "result"
-                          }
-                        },
-                        "right": {
-                          "ReplicateExpr": {
-                            "count": {
-                              "Identifier": {
-                                "content": "W"
+                      "Identifier": {
+                        "content": "op"
+                      }
+                    },
+                    "items": [
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd0"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "sum"
+                                }
                               }
-                            },
-                            "value": {
-                              "ConcatExpr": {
-                                "items": [
-                                  {
-                                    "BitWidthLiteral": {
-                                      "width": 0,
-                                      "value": "1'b0"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd1"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "diff"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd2"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "and_w"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd3"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "or_w"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "CaseItem": {
+                          "value": {
+                            "BitWidthLiteral": {
+                              "width": 0,
+                              "value": "3'd4"
+                            }
+                          },
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "Identifier": {
+                                  "content": "xor_w"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "DefaultItem": {
+                          "stmt": {
+                            "BlockingAssign": {
+                              "target": "result",
+                              "value": {
+                                "ReplicateExpr": {
+                                  "count": {
+                                    "Identifier": {
+                                      "content": "W"
+                                    }
+                                  },
+                                  "value": {
+                                    "ConcatExpr": {
+                                      "items": [
+                                        {
+                                          "BitWidthLiteral": {
+                                            "width": 0,
+                                            "value": "1'b0"
+                                          }
+                                        }
+                                      ]
                                     }
                                   }
-                                ]
+                                }
                               }
                             }
                           }
                         }
                       }
-                    }
+                    ]
                   }
-                }
-              }
-            },
-            {
-              "BlockingAssign": {
-                "target": "overflow",
-                "value": {
-                  "BinaryOp": {
-                    "op": "&&",
-                    "left": {
+                },
+                {
+                  "BlockingAssign": {
+                    "target": "zero",
+                    "value": {
                       "ParenthesizedExpr": {
                         "expr": {
                           "BinaryOp": {
                             "op": "==",
                             "left": {
-                              "IndexedId": {
-                                "id_name": "a",
-                                "index": {
-                                  "BinaryOp": {
-                                    "op": "-",
-                                    "left": {
-                                      "Identifier": {
-                                        "content": "W"
-                                      }
-                                    },
-                                    "right": {
-                                      "Number": {
-                                        "value": 1
-                                      }
-                                    }
-                                  }
-                                }
+                              "Identifier": {
+                                "content": "result"
                               }
                             },
                             "right": {
-                              "IndexedId": {
-                                "id_name": "b",
-                                "index": {
-                                  "BinaryOp": {
-                                    "op": "-",
-                                    "left": {
-                                      "Identifier": {
-                                        "content": "W"
+                              "ReplicateExpr": {
+                                "count": {
+                                  "Identifier": {
+                                    "content": "W"
+                                  }
+                                },
+                                "value": {
+                                  "ConcatExpr": {
+                                    "items": [
+                                      {
+                                        "BitWidthLiteral": {
+                                          "width": 0,
+                                          "value": "1'b0"
+                                        }
                                       }
-                                    },
-                                    "right": {
-                                      "Number": {
-                                        "value": 1
-                                      }
-                                    }
+                                    ]
                                   }
                                 }
                               }
@@ -641,46 +586,105 @@
                           }
                         }
                       }
-                    },
-                    "right": {
-                      "ParenthesizedExpr": {
-                        "expr": {
-                          "BinaryOp": {
-                            "op": "!=",
-                            "left": {
-                              "IndexedId": {
-                                "id_name": "result",
-                                "index": {
-                                  "BinaryOp": {
-                                    "op": "-",
-                                    "left": {
-                                      "Identifier": {
-                                        "content": "W"
+                    }
+                  }
+                },
+                {
+                  "BlockingAssign": {
+                    "target": "overflow",
+                    "value": {
+                      "BinaryOp": {
+                        "op": "&&",
+                        "left": {
+                          "ParenthesizedExpr": {
+                            "expr": {
+                              "BinaryOp": {
+                                "op": "==",
+                                "left": {
+                                  "IndexedId": {
+                                    "id_name": "a",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
+                                          }
+                                        }
                                       }
-                                    },
-                                    "right": {
-                                      "Number": {
-                                        "value": 1
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "IndexedId": {
+                                    "id_name": "b",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
+                                          }
+                                        }
                                       }
                                     }
                                   }
                                 }
                               }
-                            },
-                            "right": {
-                              "IndexedId": {
-                                "id_name": "a",
-                                "index": {
-                                  "BinaryOp": {
-                                    "op": "-",
-                                    "left": {
-                                      "Identifier": {
-                                        "content": "W"
+                            }
+                          }
+                        },
+                        "right": {
+                          "ParenthesizedExpr": {
+                            "expr": {
+                              "BinaryOp": {
+                                "op": "!=",
+                                "left": {
+                                  "IndexedId": {
+                                    "id_name": "result",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
+                                          }
+                                        }
                                       }
-                                    },
-                                    "right": {
-                                      "Number": {
-                                        "value": 1
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "IndexedId": {
+                                    "id_name": "a",
+                                    "index": {
+                                      "BinaryOp": {
+                                        "op": "-",
+                                        "left": {
+                                          "Identifier": {
+                                            "content": "W"
+                                          }
+                                        },
+                                        "right": {
+                                          "Number": {
+                                            "value": 1
+                                          }
+                                        }
                                       }
                                     }
                                   }
@@ -693,9 +697,9 @@
                     }
                   }
                 }
-              }
+              ]
             }
-          ]
+          }
         }
       }
     ]

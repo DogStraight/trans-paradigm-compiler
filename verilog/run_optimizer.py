@@ -61,7 +61,7 @@ safe_write(opt_ast, json.dumps(serialized, indent=2))
 print(f"AST saved ({os.path.getsize(opt_ast)} bytes)")
 
 # 保存生成代码
-cg = CodeGenerator(rules_dir="pyv_compiler/grammar/cg_rules_verilog")
+cg = CodeGenerator(rules_dir="pyv_compiler/grammar/rules_verilog")
 out = cg.generate(optimized)
 out = cg.optimize(out)
 content = out.get("output.v", "")
