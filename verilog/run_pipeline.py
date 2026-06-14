@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 PyV 编译器端到端测试
-直接使用 verilog/ref_*.v 作为输入，用 Verilog 语法规则解析，
-再用 Verilog CG 规则生成代码，并与参考文件对比。
+使用 verilog/ref_*.v 作为输入，用 Verilog 语法规则解析，
+再用 Renderer 生成代码，并与参考文件对比。
 
 用法:
     python run_pipeline.py                    # 默认 led_blinker_ref.v
@@ -24,14 +24,12 @@ if project_root not in sys.path:
 from lexer import Lexer
 from parser import Parser
 from core.define import GrammarRulesRegister
-from generator.code_generator import CodeGenerator
 from parser.rule_selector import RuleSelector
-from optimizer.ast_optimizer import optimize_ast, get_optimize_transforms
+from renderer.normalizer import normalize_ast
+from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
-from formatter import format_code
 import json
 import difflib
-import copy
 
 
 def main():
@@ -93,11 +91,10 @@ def main():
         f"🌳 AST 根节点: {[c.name if hasattr(c, 'name') else str(c) for c in sub_nodes]}"
     )
 
-    # 4. AST 优化（深拷贝后优化，不影响原始 AST）
-    transforms = get_optimize_transforms()
-    ast = optimize_ast(copy.deepcopy(ast), transforms)
+    # 4. AST 规范化（翻译 parser 内部构造为规范形式）
+    ast = normalize_ast(ast)
 
-    # 保存优化后的 AST（覆盖 ast_json）
+    # 保存规范化的 AST（覆盖 ast_json）
     with open(ast_json, "w", encoding="utf-8") as f:
         json.dump(ast.dump(), f, indent=2)
     print(f"📋 AST 已保存 ({os.path.getsize(ast_json)} bytes)")
@@ -105,25 +102,21 @@ def main():
     # 5. 语义分析（构建符号表，链接标识符到声明）
     analyzer = SemanticAnalyzer(rules)
     ast = analyzer.analyze(ast)
+    scope = analyzer.root_scope
+    assert scope is not None, "语义分析后 root_scope 不应为空"
     with open(sym_json, "w", encoding="utf-8") as f:
-        json.dump(analyzer.root_scope.to_dict(), f, indent=2)
+        json.dump(scope.to_dict(), f, indent=2)
     print(f"🔗 符号表已保存 ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)")
 
-    # 6. 代码生成（使用优化后的 AST）
-    cg = CodeGenerator(rules_dir="pyv_compiler/grammar/rules_verilog")
-    outputs = cg.generate(ast)
-    outputs = cg.optimize(outputs)
-
-    content = outputs.get("output.v", "")
-
-    # 7. 格式化（缩进、块合并）
-    content = format_code(content)
+    # 6. 代码生成（使用 Renderer）
+    renderer = Renderer(rules_dir="pyv_compiler/grammar/rules_verilog")
+    content = renderer.render(ast)
 
     with open(gen_file, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"✅ 已生成: {gen_file}")
 
-    # 8. 对比
+    # 7. 对比
     ref = source.splitlines(keepends=True)
     gen = content.splitlines(keepends=True)
     diff_lines = list(
@@ -139,7 +132,7 @@ def main():
     else:
         print("  ✨ 完全一致！")
 
-    # 8. 统计
+    # 7. 统计
     print(f"\n{'='*60}")
     print(f"  参考行数: {len(ref)}")
     print(f"  生成行数: {len(gen)}")

@@ -4,55 +4,56 @@
 
 # ---------- 基本原子 ----------
 [BitWidthLiteral]
+layout = { ref = "value" }
 production = ["literal.number", "symbol.base.single_quote", "id"]
-template = "{{ value }}"
 [BitWidthLiteral.node]
 width = "$1"
 value = "$3"
 
 [Number]
+layout = { ref = "value" }
 production = ["literal.number"]
-template = "{{ value }}"
 [Number.node]
 value = "$1"
 
 [Identifier]
+layout = { ref = "content" }
 production = ["id"]
-template = "{{ content }}"
 [Identifier.node]
 content = "$1"
 
 [ParenthesizedExpr]
+layout = { line = ["(", { ref = "expr" }, ")"] }
 production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
-template = "({{ expr }})"
 [ParenthesizedExpr.node]
 expr = "$2"
 
 [IndexedId]
+layout = { line = [{ ref = "id_name" }, "[", { ref = "index" }, "]"] }
 production = [
     "id",
     "bracket.l_square_bracket",
     "@Expression",
     "bracket.r_square_bracket",
 ]
-template = "{{ id_name }}[{{ index }}]"
 [IndexedId.node]
 id_name = "$1"
 index = "$3"
 
 [ConcatExpr]
+layout = { line = ["{", { join = "," }, "}"] }
 production = [
     "bracket.l_curly_bracket",
     "@Expression",
     "(symbol.base.comma,@Expression)*",
     "bracket.r_curly_bracket",
 ]
-template = "{{{#items}}{{.}}{{!@last}},{{/@last}}{{/items}}}"
 [ConcatExpr.node]
 first = "$2"
 rest = "$3"
 
 [ReplicateExpr]
+layout = { line = ["{", { ref = "count" }, { ref = "value" }, "}"] }
 production = [
     "bracket.l_curly_bracket",
     "@Expression",
@@ -61,18 +62,17 @@ production = [
     "bracket.r_curly_bracket",
     "bracket.r_curly_bracket",
 ]
-template = "{{{ count }}{{ value }}}"
 [ReplicateExpr.node]
 count = "$2"
 value = "$4"
 
 # ---------- 运算符优先级（自底向上）----------
 [PrimaryExpr]
+layout = { ref = "value" }
 production = [
     "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr",
 ]
 inline = true
-template = "{{ value }}"
 [PrimaryExpr.node]
 value = "$1"
 
@@ -128,7 +128,6 @@ end_case = [
     "keyword.begin",
 ]
 pratt = true
-template = "{{ expr }}"
 [Expression.node]
 expr = "$1"
 
@@ -167,7 +166,7 @@ op = "$1"
 
 # ---------- Pratt 解析器产生的中间节点（无 production）----------
 [UnaryOp]
-template = "{{ op }}{{ operand }}"
+layout = { line = [{ ref = "op" }, { ref = "operand" }] }
 
 [BinaryOp]
-template = "{{ left }} {{ op }} {{ right }}"
+layout = { line = [{ ref = "left" }, " ", { ref = "op" }, " ", { ref = "right" }] }

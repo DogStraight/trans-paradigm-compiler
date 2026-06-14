@@ -1,14 +1,4 @@
-module alu # (
-    parameter W = 8
-) (
-    input  wire [W - 1:0] a,
-    input  wire [W - 1:0] b,
-    input  wire [2:0]     op,
-    output reg  [W - 1:0] result,
-    output reg  zero,
-    output reg  overflow
-);
-
+module alu #(parameter W = 8) (input wire [W - 1:0] a, input wire [W - 1:0] b, input wire [2:0] op, output reg [W - 1:0] result, output reg zero, output reg overflow);
     wire [W - 1:0] sum;
     wire [W - 1:0] diff;
     wire [W - 1:0] and_w;
@@ -19,7 +9,6 @@ module alu # (
     assign and_w = a & b;
     assign or_w = a | b;
     assign xor_w = a ^ b;
-
     always @(*) begin
         case (op)
             3'd0: result = sum;
@@ -32,5 +21,4 @@ module alu # (
         zero = (result == {W{1'b0}});
         overflow = (a[W - 1] == b[W - 1]) && (result[W - 1] != a[W - 1]);
     end
-
 endmodule

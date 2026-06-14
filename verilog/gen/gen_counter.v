@@ -1,15 +1,6 @@
-module counter # (
-    parameter CLK_HZ = 50000000,
-    parameter TARGET = 32'd1000
-) (
-    input  wire clk,
-    input  wire rst_n,
-    output reg  led
-);
-
+module counter #(parameter CLK_HZ = 50000000, parameter TARGET = 32'd1000) (input wire clk, input wire rst_n, output reg led);
     reg [31:0] counter;
     reg [31:0] divider;
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             counter <= 32'd0;
@@ -25,5 +16,4 @@ module counter # (
             end
         end
     end
-
 endmodule

@@ -1,0 +1,50 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "symbols": [],
+  "children": [
+    {
+      "name": "led_blinker",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "CLK_MHZ",
+          "kind": "parameter",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        },
+        {
+          "name": "MAX_CNT",
+          "kind": "parameter",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        },
+        {
+          "name": "clk",
+          "kind": "port",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        },
+        {
+          "name": "rst_n",
+          "kind": "port",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        },
+        {
+          "name": "led",
+          "kind": "port",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        },
+        {
+          "name": "counter",
+          "kind": "reg",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        }
+      ],
+      "children": []
+    }
+  ]
+}

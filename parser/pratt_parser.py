@@ -107,7 +107,10 @@ def parse_brace_expr(
     max_infix_prio: int,
     unary_prefix_rbp: int,
 ) -> Tuple[Node, int]:
-    """解析花括号表达式 { ... }，支持串联和复制模式"""
+    """解析花括号表达式 { ... }，支持串联和复制模式
+
+ConcatExpr 使用 first/rest 结构（与 rules_verilog 语法规则一致），
+而不是硬编码 items 属性。"""
     idx += 1  # 跳过 '{'
     items = []
     is_replication = False
@@ -161,7 +164,19 @@ def parse_brace_expr(
         assert node is not None, "复制模式未生成节点"
         return node, idx
     else:
-        return Node("ConcatExpr", items=items), idx
+        # 使用 first/rest 结构（与语法规则一致）
+        if not items:
+            return Node("ConcatExpr", first=None, rest=None), idx
+        first = items[0]
+        if len(items) > 1:
+            rest_items = []
+            for item in items[1:]:
+                rest_items.append(Node("symbol.base.comma", value=","))
+                rest_items.append(item)
+            rest = Node("sequence", sub_node=rest_items)
+        else:
+            rest = None
+        return Node("ConcatExpr", first=first, rest=rest), idx
 
 
 # ========== Pratt 解析核心 ==========

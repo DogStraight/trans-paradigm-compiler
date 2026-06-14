@@ -3,6 +3,8 @@
 # ============================================================================
 
 [AlwaysBlock]
+body_role = "direct"
+layout = { line = ["always @(", { ref = "sensitivity" }, ") ", { ref = "body" }] }
 production = [
     "keyword.always",
     "symbol.base.at",
@@ -12,24 +14,23 @@ production = [
     "@Statement",
 ]
 end_case = ["newline"]
-template = "    always @({{#sensitivity}}{{.}}{{!@last}} or {{/@last}}{{/sensitivity}})\n{{ body }}"
 [AlwaysBlock.node]
 sensitivity = "$4"
 body = "$6"
 
 [SensitivityList]
+layout = { join = " or " }
 production = [
     "@EdgeSense|symbol.base.multiple",
     "(symbol.extend.logic_or,@EdgeSense)*",
 ]
-template = "{{ first }}{{#rest}} {{.}}{{/rest}}"
 [SensitivityList.node]
 first = "$1"
 rest = "$2"
 
 [EdgeSense]
+layout = { line = [{ ref = "edge" }, " ", { ref = "signal" }] }
 production = ["keyword.posedge|keyword.negedge", "id"]
-template = "{{ edge }} {{ signal }}"
 [EdgeSense.node]
 edge = "$1"
 signal = "$2"

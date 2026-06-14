@@ -24,6 +24,9 @@ class Token:
     def set_type(self, token_type: str) -> None:
         self.type = token_type
 
+    def __str__(self) -> str:
+        return self.content
+
 
 from dataclasses import dataclass
 import tomllib
@@ -190,6 +193,7 @@ class GrammarRulesRegister:
 class Node:
     def __init__(self, name: str, **kwargs) -> None:
         self.name = name
+        self.sub_node: list["Node"] = []
         self.start: "Token.Position | None" = None
         self.end: "Token.Position | None" = None
         for key, value in kwargs.items():
@@ -207,7 +211,7 @@ class Node:
 
     def dump(self):
         # 收集除 name, child, start, end 外的所有属性
-        skip = {"name", "sub_node", "start", "end", "symbol_ref"}
+        skip = {"name", "sub_node", "start", "end", "_symbol_ref"}
         attrs = {k: v for k, v in self.__dict__.items() if k not in skip}
         has_children = hasattr(self, "sub_node") and getattr(self, "sub_node") is not None
 
@@ -218,7 +222,7 @@ class Node:
         # 否则构建字典
         result = {}
         for attr, value in self.__dict__.items():
-            if attr in ("name", "start", "end", "symbol_ref"):
+            if attr in ("name", "start", "end", "_symbol_ref"):
                 continue
             if isinstance(value, list):
                 result[attr] = [self._dump_item(item) for item in value]
@@ -240,20 +244,14 @@ class Node:
                 setattr(self, attr, value)
 
     def add_sub_node(self, sub: "Node") -> None:
-        if not hasattr(self, "sub_node"):
-            setattr(self, "sub_node", [])
-        getattr(self, "sub_node").append(sub)
+        self.sub_node.append(sub)
 
     def iter_children(self):
-        """统一迭代所有子节点：child 列表 + 命名属性中的 Node / list[Node]"""
-        # 1. child 列表
-        for c in getattr(self, "sub_node", []):
-            if isinstance(c, Node):
-                yield c
-        # 2. 命名属性中的子节点
-        seen = set(id(c) for c in getattr(self, "sub_node", []))  # 防重复
+        """统一迭代所有子节点：sub_node + 命名属性中的 Node / list[Node]"""
+        seen = set(id(c) for c in self.sub_node)
+        yield from self.sub_node
         for attr_name in vars(self):
-            if attr_name in ("name", "sub_node", "start", "end", "symbol_ref"):
+            if attr_name in ("name", "sub_node", "start", "end", "_symbol_ref"):
                 continue
             val = getattr(self, attr_name)
             if isinstance(val, Node) and id(val) not in seen:

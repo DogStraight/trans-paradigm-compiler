@@ -1,543 +1,842 @@
 {
-  "ModuleDecl": {
-    "module_name": "alu",
-    "params": [
+  "Root": {
+    "sub_node": [
       {
-        "ParamDecl": {
-          "param_name": "W",
-          "value": {
-            "Number": {
-              "value": 8
-            }
-          }
-        }
-      }
-    ],
-    "ports": [
-      {
-        "PortDecl": {
-          "direction": "input",
-          "port_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "port_name": "a"
-        }
-      },
-      {
-        "PortDecl": {
-          "direction": "input",
-          "port_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "port_name": "b"
-        }
-      },
-      {
-        "PortDecl": {
-          "direction": "input",
-          "port_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "Number": {
-                  "value": 2
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "port_name": "op"
-        }
-      },
-      {
-        "PortDecl": {
-          "direction": "output",
-          "port_type": "reg",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "port_name": "result"
-        }
-      },
-      {
-        "PortDecl": {
-          "direction": "output",
-          "port_type": "reg",
-          "range": [],
-          "port_name": "zero"
-        }
-      },
-      {
-        "PortDecl": {
-          "direction": "output",
-          "port_type": "reg",
-          "range": [],
-          "port_name": "overflow"
-        }
-      }
-    ],
-    "body": [
-      {
-        "WireDecl": {
-          "wire_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "wire_name": "sum"
-        }
-      },
-      {
-        "WireDecl": {
-          "wire_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "wire_name": "diff"
-        }
-      },
-      {
-        "WireDecl": {
-          "wire_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "wire_name": "and_w"
-        }
-      },
-      {
-        "WireDecl": {
-          "wire_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "wire_name": "or_w"
-        }
-      },
-      {
-        "WireDecl": {
-          "wire_type": "wire",
-          "range": {
-            "Range": {
-              "msb": {
-                "BinaryOp": {
-                  "op": "-",
-                  "left": {
-                    "Identifier": {
-                      "content": "W"
-                    }
-                  },
-                  "right": {
-                    "Number": {
-                      "value": 1
-                    }
-                  }
-                }
-              },
-              "lsb": {
-                "Number": {
-                  "value": 0
-                }
-              }
-            }
-          },
-          "wire_name": "xor_w"
-        }
-      },
-      {
-        "AssignStatement": {
-          "target": "sum",
-          "value": {
-            "BinaryOp": {
-              "op": "+",
-              "left": {
-                "Identifier": {
-                  "content": "a"
-                }
-              },
-              "right": {
-                "Identifier": {
-                  "content": "b"
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "AssignStatement": {
-          "target": "diff",
-          "value": {
-            "BinaryOp": {
-              "op": "-",
-              "left": {
-                "Identifier": {
-                  "content": "a"
-                }
-              },
-              "right": {
-                "Identifier": {
-                  "content": "b"
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "AssignStatement": {
-          "target": "and_w",
-          "value": {
-            "BinaryOp": {
-              "op": "&",
-              "left": {
-                "Identifier": {
-                  "content": "a"
-                }
-              },
-              "right": {
-                "Identifier": {
-                  "content": "b"
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "AssignStatement": {
-          "target": "or_w",
-          "value": {
-            "BinaryOp": {
-              "op": "|",
-              "left": {
-                "Identifier": {
-                  "content": "a"
-                }
-              },
-              "right": {
-                "Identifier": {
-                  "content": "b"
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "AssignStatement": {
-          "target": "xor_w",
-          "value": {
-            "BinaryOp": {
-              "op": "^",
-              "left": {
-                "Identifier": {
-                  "content": "a"
-                }
-              },
-              "right": {
-                "Identifier": {
-                  "content": "b"
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "AlwaysBlock": {
-          "sensitivity": [
-            {
-              "symbol.base.multiple": {
-                "value": "*"
-              }
-            }
-          ],
-          "body": {
-            "BeginEnd": {
-              "body": [
+        "ModuleDecl": {
+          "sub_node": [],
+          "module_name": "alu",
+          "params": {
+            "ParameterList": {
+              "sub_node": [
                 {
-                  "CaseStatement": {
-                    "expr": {
-                      "Identifier": {
-                        "content": "op"
+                  "ParamDecl": {
+                    "sub_node": [],
+                    "param_name": "W",
+                    "value": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 8
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "ports": {
+            "PortList": {
+              "sub_node": [
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "input",
+                    "port_type": "wire",
+                    "range": {
+                      "Range": {
+                        "sub_node": [],
+                        "msb": {
+                          "BinaryOp": {
+                            "sub_node": [],
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "sub_node": [],
+                                "content": "W"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "sub_node": [],
+                                "value": 1
+                              }
+                            }
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 0
+                          }
+                        }
                       }
                     },
-                    "items": [
-                      {
-                        "CaseItem": {
-                          "value": {
-                            "BitWidthLiteral": {
-                              "width": 0,
-                              "value": "3'd0"
-                            }
-                          },
-                          "stmt": {
-                            "BlockingAssign": {
-                              "target": "result",
-                              "value": {
-                                "Identifier": {
-                                  "content": "sum"
-                                }
+                    "port_name": "a"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "input",
+                    "port_type": "wire",
+                    "range": {
+                      "Range": {
+                        "sub_node": [],
+                        "msb": {
+                          "BinaryOp": {
+                            "sub_node": [],
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "sub_node": [],
+                                "content": "W"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "sub_node": [],
+                                "value": 1
                               }
                             }
                           }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 0
+                          }
                         }
-                      },
-                      {
-                        "CaseItem": {
-                          "value": {
-                            "BitWidthLiteral": {
-                              "width": 0,
-                              "value": "3'd1"
-                            }
-                          },
-                          "stmt": {
-                            "BlockingAssign": {
-                              "target": "result",
-                              "value": {
-                                "Identifier": {
-                                  "content": "diff"
-                                }
+                      }
+                    },
+                    "port_name": "b"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "input",
+                    "port_type": "wire",
+                    "range": {
+                      "Range": {
+                        "sub_node": [],
+                        "msb": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 2
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 0
+                          }
+                        }
+                      }
+                    },
+                    "port_name": "op"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "output",
+                    "port_type": "reg",
+                    "range": {
+                      "Range": {
+                        "sub_node": [],
+                        "msb": {
+                          "BinaryOp": {
+                            "sub_node": [],
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "sub_node": [],
+                                "content": "W"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "sub_node": [],
+                                "value": 1
                               }
                             }
                           }
-                        }
-                      },
-                      {
-                        "CaseItem": {
-                          "value": {
-                            "BitWidthLiteral": {
-                              "width": 0,
-                              "value": "3'd2"
-                            }
-                          },
-                          "stmt": {
-                            "BlockingAssign": {
-                              "target": "result",
-                              "value": {
-                                "Identifier": {
-                                  "content": "and_w"
-                                }
-                              }
-                            }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 0
                           }
                         }
-                      },
-                      {
-                        "CaseItem": {
-                          "value": {
-                            "BitWidthLiteral": {
-                              "width": 0,
-                              "value": "3'd3"
-                            }
-                          },
-                          "stmt": {
-                            "BlockingAssign": {
-                              "target": "result",
-                              "value": {
-                                "Identifier": {
-                                  "content": "or_w"
-                                }
-                              }
-                            }
+                      }
+                    },
+                    "port_name": "result"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "output",
+                    "port_type": "reg",
+                    "port_name": "zero"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "output",
+                    "port_type": "reg",
+                    "port_name": "overflow"
+                  }
+                }
+              ]
+            }
+          },
+          "body": [
+            {
+              "WireDecl": {
+                "sub_node": [],
+                "wire_type": "wire",
+                "range": {
+                  "Range": {
+                    "sub_node": [],
+                    "msb": {
+                      "BinaryOp": {
+                        "sub_node": [],
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "sub_node": [],
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 1
                           }
                         }
-                      },
-                      {
-                        "CaseItem": {
-                          "value": {
-                            "BitWidthLiteral": {
-                              "width": 0,
-                              "value": "3'd4"
-                            }
-                          },
-                          "stmt": {
-                            "BlockingAssign": {
-                              "target": "result",
-                              "value": {
-                                "Identifier": {
-                                  "content": "xor_w"
-                                }
-                              }
-                            }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 0
+                      }
+                    }
+                  }
+                },
+                "wire_name": "sum"
+              }
+            },
+            {
+              "WireDecl": {
+                "sub_node": [],
+                "wire_type": "wire",
+                "range": {
+                  "Range": {
+                    "sub_node": [],
+                    "msb": {
+                      "BinaryOp": {
+                        "sub_node": [],
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "sub_node": [],
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 1
                           }
                         }
-                      },
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 0
+                      }
+                    }
+                  }
+                },
+                "wire_name": "diff"
+              }
+            },
+            {
+              "WireDecl": {
+                "sub_node": [],
+                "wire_type": "wire",
+                "range": {
+                  "Range": {
+                    "sub_node": [],
+                    "msb": {
+                      "BinaryOp": {
+                        "sub_node": [],
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "sub_node": [],
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 1
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 0
+                      }
+                    }
+                  }
+                },
+                "wire_name": "and_w"
+              }
+            },
+            {
+              "WireDecl": {
+                "sub_node": [],
+                "wire_type": "wire",
+                "range": {
+                  "Range": {
+                    "sub_node": [],
+                    "msb": {
+                      "BinaryOp": {
+                        "sub_node": [],
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "sub_node": [],
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 1
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 0
+                      }
+                    }
+                  }
+                },
+                "wire_name": "or_w"
+              }
+            },
+            {
+              "WireDecl": {
+                "sub_node": [],
+                "wire_type": "wire",
+                "range": {
+                  "Range": {
+                    "sub_node": [],
+                    "msb": {
+                      "BinaryOp": {
+                        "sub_node": [],
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "sub_node": [],
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "sub_node": [],
+                            "value": 1
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 0
+                      }
+                    }
+                  }
+                },
+                "wire_name": "xor_w"
+              }
+            },
+            {
+              "AssignStatement": {
+                "sub_node": [],
+                "target": "sum",
+                "value": {
+                  "BinaryOp": {
+                    "sub_node": [],
+                    "op": "+",
+                    "left": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "sub_node": [],
+                "target": "diff",
+                "value": {
+                  "BinaryOp": {
+                    "sub_node": [],
+                    "op": "-",
+                    "left": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "sub_node": [],
+                "target": "and_w",
+                "value": {
+                  "BinaryOp": {
+                    "sub_node": [],
+                    "op": "&",
+                    "left": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "sub_node": [],
+                "target": "or_w",
+                "value": {
+                  "BinaryOp": {
+                    "sub_node": [],
+                    "op": "|",
+                    "left": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "sub_node": [],
+                "target": "xor_w",
+                "value": {
+                  "BinaryOp": {
+                    "sub_node": [],
+                    "op": "^",
+                    "left": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "sub_node": [],
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AlwaysBlock": {
+                "sub_node": [],
+                "sensitivity": {
+                  "SensitivityList": {
+                    "sub_node": [
+                      "*"
+                    ]
+                  }
+                },
+                "body": {
+                  "BeginEnd": {
+                    "sub_node": [],
+                    "body": [
                       {
-                        "DefaultItem": {
-                          "stmt": {
-                            "BlockingAssign": {
-                              "target": "result",
-                              "value": {
-                                "ReplicateExpr": {
-                                  "count": {
-                                    "Identifier": {
-                                      "content": "W"
-                                    }
-                                  },
-                                  "value": {
-                                    "ConcatExpr": {
-                                      "items": [
-                                        {
-                                          "BitWidthLiteral": {
-                                            "width": 0,
-                                            "value": "1'b0"
+                        "CaseStatement": {
+                          "sub_node": [],
+                          "expr": {
+                            "Identifier": {
+                              "sub_node": [],
+                              "content": "op"
+                            }
+                          },
+                          "items": {
+                            "CaseItemList": {
+                              "sub_node": [
+                                {
+                                  "CaseItem": {
+                                    "sub_node": [],
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "3'd0"
+                                      }
+                                    },
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "result",
+                                        "value": {
+                                          "Identifier": {
+                                            "sub_node": [],
+                                            "content": "sum"
                                           }
                                         }
-                                      ]
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "sub_node": [],
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "3'd1"
+                                      }
+                                    },
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "result",
+                                        "value": {
+                                          "Identifier": {
+                                            "sub_node": [],
+                                            "content": "diff"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "sub_node": [],
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "3'd2"
+                                      }
+                                    },
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "result",
+                                        "value": {
+                                          "Identifier": {
+                                            "sub_node": [],
+                                            "content": "and_w"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "sub_node": [],
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "3'd3"
+                                      }
+                                    },
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "result",
+                                        "value": {
+                                          "Identifier": {
+                                            "sub_node": [],
+                                            "content": "or_w"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "sub_node": [],
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "3'd4"
+                                      }
+                                    },
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "result",
+                                        "value": {
+                                          "Identifier": {
+                                            "sub_node": [],
+                                            "content": "xor_w"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "DefaultItem": {
+                                    "sub_node": [],
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "result",
+                                        "value": {
+                                          "ReplicateExpr": {
+                                            "sub_node": [],
+                                            "count": {
+                                              "Identifier": {
+                                                "sub_node": [],
+                                                "content": "W"
+                                              }
+                                            },
+                                            "value": {
+                                              "ConcatExpr": {
+                                                "sub_node": [
+                                                  {
+                                                    "BitWidthLiteral": {
+                                                      "sub_node": [],
+                                                      "width": 0,
+                                                      "value": "1'b0"
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "BlockingAssign": {
+                          "sub_node": [],
+                          "target": "zero",
+                          "value": {
+                            "ParenthesizedExpr": {
+                              "sub_node": [],
+                              "expr": {
+                                "BinaryOp": {
+                                  "sub_node": [],
+                                  "op": "==",
+                                  "left": {
+                                    "Identifier": {
+                                      "sub_node": [],
+                                      "content": "result"
+                                    }
+                                  },
+                                  "right": {
+                                    "ReplicateExpr": {
+                                      "sub_node": [],
+                                      "count": {
+                                        "Identifier": {
+                                          "sub_node": [],
+                                          "content": "W"
+                                        }
+                                      },
+                                      "value": {
+                                        "ConcatExpr": {
+                                          "sub_node": [
+                                            {
+                                              "BitWidthLiteral": {
+                                                "sub_node": [],
+                                                "width": 0,
+                                                "value": "1'b0"
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "BlockingAssign": {
+                          "sub_node": [],
+                          "target": "overflow",
+                          "value": {
+                            "BinaryOp": {
+                              "sub_node": [],
+                              "op": "&&",
+                              "left": {
+                                "ParenthesizedExpr": {
+                                  "sub_node": [],
+                                  "expr": {
+                                    "BinaryOp": {
+                                      "sub_node": [],
+                                      "op": "==",
+                                      "left": {
+                                        "IndexedId": {
+                                          "sub_node": [],
+                                          "id_name": "a",
+                                          "index": {
+                                            "BinaryOp": {
+                                              "sub_node": [],
+                                              "op": "-",
+                                              "left": {
+                                                "Identifier": {
+                                                  "sub_node": [],
+                                                  "content": "W"
+                                                }
+                                              },
+                                              "right": {
+                                                "Number": {
+                                                  "sub_node": [],
+                                                  "value": 1
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "IndexedId": {
+                                          "sub_node": [],
+                                          "id_name": "b",
+                                          "index": {
+                                            "BinaryOp": {
+                                              "sub_node": [],
+                                              "op": "-",
+                                              "left": {
+                                                "Identifier": {
+                                                  "sub_node": [],
+                                                  "content": "W"
+                                                }
+                                              },
+                                              "right": {
+                                                "Number": {
+                                                  "sub_node": [],
+                                                  "value": 1
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "ParenthesizedExpr": {
+                                  "sub_node": [],
+                                  "expr": {
+                                    "BinaryOp": {
+                                      "sub_node": [],
+                                      "op": "!=",
+                                      "left": {
+                                        "IndexedId": {
+                                          "sub_node": [],
+                                          "id_name": "result",
+                                          "index": {
+                                            "BinaryOp": {
+                                              "sub_node": [],
+                                              "op": "-",
+                                              "left": {
+                                                "Identifier": {
+                                                  "sub_node": [],
+                                                  "content": "W"
+                                                }
+                                              },
+                                              "right": {
+                                                "Number": {
+                                                  "sub_node": [],
+                                                  "value": 1
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "IndexedId": {
+                                          "sub_node": [],
+                                          "id_name": "a",
+                                          "index": {
+                                            "BinaryOp": {
+                                              "sub_node": [],
+                                              "op": "-",
+                                              "left": {
+                                                "Identifier": {
+                                                  "sub_node": [],
+                                                  "content": "W"
+                                                }
+                                              },
+                                              "right": {
+                                                "Number": {
+                                                  "sub_node": [],
+                                                  "value": 1
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
                                     }
                                   }
                                 }
@@ -548,158 +847,10 @@
                       }
                     ]
                   }
-                },
-                {
-                  "BlockingAssign": {
-                    "target": "zero",
-                    "value": {
-                      "ParenthesizedExpr": {
-                        "expr": {
-                          "BinaryOp": {
-                            "op": "==",
-                            "left": {
-                              "Identifier": {
-                                "content": "result"
-                              }
-                            },
-                            "right": {
-                              "ReplicateExpr": {
-                                "count": {
-                                  "Identifier": {
-                                    "content": "W"
-                                  }
-                                },
-                                "value": {
-                                  "ConcatExpr": {
-                                    "items": [
-                                      {
-                                        "BitWidthLiteral": {
-                                          "width": 0,
-                                          "value": "1'b0"
-                                        }
-                                      }
-                                    ]
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "BlockingAssign": {
-                    "target": "overflow",
-                    "value": {
-                      "BinaryOp": {
-                        "op": "&&",
-                        "left": {
-                          "ParenthesizedExpr": {
-                            "expr": {
-                              "BinaryOp": {
-                                "op": "==",
-                                "left": {
-                                  "IndexedId": {
-                                    "id_name": "a",
-                                    "index": {
-                                      "BinaryOp": {
-                                        "op": "-",
-                                        "left": {
-                                          "Identifier": {
-                                            "content": "W"
-                                          }
-                                        },
-                                        "right": {
-                                          "Number": {
-                                            "value": 1
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                },
-                                "right": {
-                                  "IndexedId": {
-                                    "id_name": "b",
-                                    "index": {
-                                      "BinaryOp": {
-                                        "op": "-",
-                                        "left": {
-                                          "Identifier": {
-                                            "content": "W"
-                                          }
-                                        },
-                                        "right": {
-                                          "Number": {
-                                            "value": 1
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        },
-                        "right": {
-                          "ParenthesizedExpr": {
-                            "expr": {
-                              "BinaryOp": {
-                                "op": "!=",
-                                "left": {
-                                  "IndexedId": {
-                                    "id_name": "result",
-                                    "index": {
-                                      "BinaryOp": {
-                                        "op": "-",
-                                        "left": {
-                                          "Identifier": {
-                                            "content": "W"
-                                          }
-                                        },
-                                        "right": {
-                                          "Number": {
-                                            "value": 1
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                },
-                                "right": {
-                                  "IndexedId": {
-                                    "id_name": "a",
-                                    "index": {
-                                      "BinaryOp": {
-                                        "op": "-",
-                                        "left": {
-                                          "Identifier": {
-                                            "content": "W"
-                                          }
-                                        },
-                                        "right": {
-                                          "Number": {
-                                            "value": 1
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
                 }
-              ]
+              }
             }
-          }
+          ]
         }
       }
     ]

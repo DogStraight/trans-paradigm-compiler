@@ -3,13 +3,20 @@
 # ============================================================================
 
 [PortList]
+layout = { join = ", " }
 production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
-template = "{{#first}}{{.}}{{/first}}{{#rest}} {{.}}{{/rest}}"
+
+[repeat]
+layout = { join = "", items = "children" }
+
+[sequence]
+production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
 [PortList.node]
 first = "$1"
 rest = "$2"
 
 [PortDecl]
+layout = { line = [{ ref = "direction" }, { opt = { group = [" ", { ref = "port_type" }] } }, { opt = { group = [" [", { ref = "range" }, "]"] } }, " ", { ref = "port_name" }] }
 production = [
     "keyword.input|keyword.output|keyword.inout",
     "@OptType?",
@@ -24,7 +31,6 @@ end_case = [
 ]
 symbol_kind = "port"
 symbol_name = "port_name"
-template = "{{ direction }}{{?port_type}} {{ port_type }}{{/port_type}}{{?range}} [{{range}}]{{/range}} {{ port_name }}"
 [PortDecl.node]
 direction = "$1"
 port_type = "$2"
@@ -32,13 +38,14 @@ range = "$3"
 port_name = "$4"
 
 [OptType]
+layout = { ref = "type_desc" }
 production = ["keyword.wire|keyword.reg"]
 inline = true
-template = "{{ type_desc }}"
 [OptType.node]
 type_desc = "$1"
 
 [Range]
+layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
 production = [
     "bracket.l_square_bracket",
     "@Expression",
@@ -46,34 +53,34 @@ production = [
     "@Expression",
     "bracket.r_square_bracket",
 ]
-template = "{{ msb }}:{{ lsb }}"
 [Range.node]
 msb = "$2"
 lsb = "$4"
 
 [WireDecl]
+layout = { line = ["wire ", { opt = { group = ["[", { ref = "range" }, "]"] } }, " ", { ref = "wire_name" }, ";"] }
 production = ["keyword.wire", "@Range?", "id", "symbol.base.semicolon"]
 end_case = ["newline"]
 symbol_kind = "wire"
 symbol_name = "wire_name"
-template = "    wire{{?range}} [{{range}}]{{/range}} {{ wire_name }};"
 [WireDecl.node]
 wire_type = "$1"
 range = "$2"
 wire_name = "$3"
 
 [RegDecl]
+layout = { line = ["reg ", { opt = { group = ["[", { ref = "range" }, "]"] } }, " ", { ref = "reg_name" }, ";"] }
 production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
 end_case = ["newline"]
 symbol_kind = "reg"
 symbol_name = "reg_name"
-template = "    reg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
 [RegDecl.node]
 reg_type = "$1"
 range = "$2"
 reg_name = "$3"
 
 [LocalParamDecl]
+layout = { line = ["localparam ", { join = ",", items = "items" }, ";"] }
 production = [
     "keyword.localparam",
     "@LocalParamItemList",
@@ -82,20 +89,19 @@ production = [
 end_case = ["newline"]
 symbol_kind = "localparam"
 symbol_name = "items"
-template = """    localparam {{#items}}{{?@first}}{{.}}{{!@last}},{{/@last}}{{/@first}}{{!@first}}
-        {{.}}{{!@last}},{{/@last}}{{/@first}}{{/items}};"""
 [LocalParamDecl.node]
 items = "$2"
 
 [LocalParamItemList]
+layout = { join = "," }
 production = ["@LocalParamItem", "(symbol.base.comma,@LocalParamItem)*"]
 [LocalParamItemList.node]
 first = "$1"
 rest = "$2"
 
 [LocalParamItem]
+layout = { line = [{ ref = "param_name" }, " = ", { ref = "value" }] }
 production = ["id", "symbol.base.equal", "@Expression"]
-template = "{{ param_name }} = {{ value }}"
 [LocalParamItem.node]
 param_name = "$1"
 value = "$3"

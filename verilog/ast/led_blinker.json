@@ -1,62 +1,34 @@
 {
   "Root": {
-    "child": [
+    "sub_node": [
       {
         "ModuleDecl": {
-          "module_name": {
-            "id": {
-              "value": "led_blinker"
-            }
-          },
+          "sub_node": [],
+          "module_name": "led_blinker",
           "params": {
-            "optional": {
-              "child": [
+            "ParameterList": {
+              "sub_node": [
                 {
-                  "ParameterList": {
-                    "first": {
-                      "ParamDecl": {
-                        "param_name": {
-                          "id": {
-                            "value": "CLK_MHZ"
-                          }
-                        },
-                        "value": {
-                          "Number": {
-                            "value": 100
-                          }
-                        }
+                  "ParamDecl": {
+                    "sub_node": [],
+                    "param_name": "CLK_MHZ",
+                    "value": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 100
                       }
-                    },
-                    "rest": {
-                      "repeat": {
-                        "child": [
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "ParamDecl": {
-                                    "param_name": {
-                                      "id": {
-                                        "value": "MAX_CNT"
-                                      }
-                                    },
-                                    "value": {
-                                      "BitWidthLiteral": {
-                                        "width": 0,
-                                        "value": "32'd1000"
-                                      }
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          }
-                        ]
+                    }
+                  }
+                },
+                {
+                  "ParamDecl": {
+                    "sub_node": [],
+                    "param_name": "MAX_CNT",
+                    "value": {
+                      "BitWidthLiteral": {
+                        "sub_node": [],
+                        "width": 0,
+                        "value": "32'd1000"
                       }
                     }
                   }
@@ -65,69 +37,129 @@
             }
           },
           "ports": {
-            "optional": {
-              "child": [
+            "PortList": {
+              "sub_node": [
                 {
-                  "PortList": {
-                    "first": {
-                      "PortDecl": {
-                        "direction": {
-                          "keyword.input": {
-                            "value": "input"
-                          }
-                        },
-                        "port_type": {
-                          "optional": {
-                            "child": [
-                              {
-                                "keyword.wire": {
-                                  "value": "wire"
-                                }
-                              }
-                            ]
-                          }
-                        },
-                        "range": "optional",
-                        "port_name": {
-                          "id": {
-                            "value": "clk"
-                          }
-                        }
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "input",
+                    "port_type": "wire",
+                    "port_name": "clk"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "input",
+                    "port_type": "wire",
+                    "port_name": "rst_n"
+                  }
+                },
+                {
+                  "PortDecl": {
+                    "sub_node": [],
+                    "direction": "output",
+                    "port_type": "reg",
+                    "port_name": "led"
+                  }
+                }
+              ]
+            }
+          },
+          "body": [
+            {
+              "RegDecl": {
+                "sub_node": [],
+                "reg_type": "reg",
+                "range": {
+                  "Range": {
+                    "sub_node": [],
+                    "msb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 31
                       }
                     },
-                    "rest": {
-                      "repeat": {
-                        "child": [
-                          {
-                            "sequence": {
-                              "child": [
+                    "lsb": {
+                      "Number": {
+                        "sub_node": [],
+                        "value": 0
+                      }
+                    }
+                  }
+                },
+                "reg_name": "counter"
+              }
+            },
+            {
+              "AlwaysBlock": {
+                "sub_node": [],
+                "sensitivity": {
+                  "SensitivityList": {
+                    "sub_node": [
+                      {
+                        "EdgeSense": {
+                          "sub_node": [],
+                          "edge": "posedge",
+                          "signal": "clk"
+                        }
+                      },
+                      {
+                        "EdgeSense": {
+                          "sub_node": [],
+                          "edge": "negedge",
+                          "signal": "rst_n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "body": {
+                  "BeginEnd": {
+                    "sub_node": [],
+                    "body": [
+                      {
+                        "IfStatement": {
+                          "sub_node": [],
+                          "condition": {
+                            "UnaryOp": {
+                              "sub_node": [],
+                              "op": "!",
+                              "operand": {
+                                "Identifier": {
+                                  "sub_node": [],
+                                  "content": "rst_n"
+                                }
+                              },
+                              "position": "prefix"
+                            }
+                          },
+                          "then_stmt": {
+                            "BeginEnd": {
+                              "sub_node": [],
+                              "body": [
                                 {
-                                  "symbol.base.comma": {
-                                    "value": ","
+                                  "NonBlockingAssign": {
+                                    "sub_node": [],
+                                    "target": "counter",
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "32'd0"
+                                      }
+                                    }
                                   }
                                 },
                                 {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.input": {
-                                        "value": "input"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.wire": {
-                                              "value": "wire"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "rst_n"
+                                  "NonBlockingAssign": {
+                                    "sub_node": [],
+                                    "target": "led",
+                                    "value": {
+                                      "BitWidthLiteral": {
+                                        "sub_node": [],
+                                        "width": 0,
+                                        "value": "1'b0"
                                       }
                                     }
                                   }
@@ -135,305 +167,94 @@
                               ]
                             }
                           },
-                          {
-                            "sequence": {
-                              "child": [
-                                {
-                                  "symbol.base.comma": {
-                                    "value": ","
-                                  }
-                                },
-                                {
-                                  "PortDecl": {
-                                    "direction": {
-                                      "keyword.output": {
-                                        "value": "output"
-                                      }
-                                    },
-                                    "port_type": {
-                                      "optional": {
-                                        "child": [
-                                          {
-                                            "keyword.reg": {
-                                              "value": "reg"
-                                            }
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    "range": "optional",
-                                    "port_name": {
-                                      "id": {
-                                        "value": "led"
-                                      }
+                          "else_chain": {
+                            "ElseIf": {
+                              "sub_node": [],
+                              "condition": {
+                                "BinaryOp": {
+                                  "sub_node": [],
+                                  "op": "==",
+                                  "left": {
+                                    "Identifier": {
+                                      "sub_node": [],
+                                      "content": "counter"
+                                    }
+                                  },
+                                  "right": {
+                                    "Identifier": {
+                                      "sub_node": [],
+                                      "content": "MAX_CNT"
                                     }
                                   }
                                 }
-                              ]
-                            }
-                          }
-                        ]
-                      }
-                    }
-                  }
-                }
-              ]
-            }
-          },
-          "body": {
-            "Block": {
-              "child": [
-                {
-                  "RegDecl": {
-                    "reg_type": {
-                      "keyword.reg": {
-                        "value": "reg"
-                      }
-                    },
-                    "range": {
-                      "optional": {
-                        "child": [
-                          {
-                            "Range": {
-                              "msb": {
-                                "Number": {
-                                  "value": 31
-                                }
                               },
-                              "lsb": {
-                                "Number": {
-                                  "value": 0
-                                }
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    },
-                    "reg_name": {
-                      "id": {
-                        "value": "counter"
-                      }
-                    }
-                  }
-                },
-                {
-                  "AlwaysBlock": {
-                    "sensitivity": {
-                      "SensitivityList": {
-                        "first": {
-                          "EdgeSense": {
-                            "edge": {
-                              "keyword.posedge": {
-                                "value": "posedge"
-                              }
-                            },
-                            "signal": {
-                              "id": {
-                                "value": "clk"
-                              }
-                            }
-                          }
-                        },
-                        "rest": {
-                          "repeat": {
-                            "child": [
-                              {
-                                "sequence": {
-                                  "child": [
+                              "then_stmt": {
+                                "BeginEnd": {
+                                  "sub_node": [],
+                                  "body": [
                                     {
-                                      "symbol.extend.logic_or": {
-                                        "value": "or"
+                                      "NonBlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "counter",
+                                        "value": {
+                                          "BitWidthLiteral": {
+                                            "sub_node": [],
+                                            "width": 0,
+                                            "value": "32'd0"
+                                          }
+                                        }
                                       }
                                     },
                                     {
-                                      "EdgeSense": {
-                                        "edge": {
-                                          "keyword.negedge": {
-                                            "value": "negedge"
-                                          }
-                                        },
-                                        "signal": {
-                                          "id": {
-                                            "value": "rst_n"
+                                      "NonBlockingAssign": {
+                                        "sub_node": [],
+                                        "target": "led",
+                                        "value": {
+                                          "UnaryOp": {
+                                            "sub_node": [],
+                                            "op": "~",
+                                            "operand": {
+                                              "Identifier": {
+                                                "sub_node": [],
+                                                "content": "led"
+                                              }
+                                            },
+                                            "position": "prefix"
                                           }
                                         }
                                       }
                                     }
                                   ]
                                 }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    },
-                    "body": {
-                      "BeginEnd": {
-                        "body": {
-                          "Block": {
-                            "child": [
-                              {
-                                "IfStatement": {
-                                  "condition": {
-                                    "UnaryOp": {
-                                      "op": "!",
-                                      "operand": {
-                                        "Identifier": {
-                                          "content": "rst_n"
-                                        }
-                                      },
-                                      "position": "prefix"
-                                    }
-                                  },
-                                  "then_stmt": {
+                              },
+                              "else_chain": {
+                                "ElseBranch": {
+                                  "sub_node": [],
+                                  "body": {
                                     "BeginEnd": {
-                                      "body": {
-                                        "Block": {
-                                          "child": [
-                                            {
-                                              "NonBlockingAssign": {
-                                                "target": {
-                                                  "id": {
-                                                    "value": "counter"
-                                                  }
-                                                },
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "32'd0"
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            {
-                                              "NonBlockingAssign": {
-                                                "target": {
-                                                  "id": {
-                                                    "value": "led"
-                                                  }
-                                                },
-                                                "value": {
-                                                  "BitWidthLiteral": {
-                                                    "width": 0,
-                                                    "value": "1'b0"
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          ]
-                                        }
-                                      }
-                                    }
-                                  },
-                                  "else_chain": {
-                                    "optional": {
-                                      "child": [
+                                      "sub_node": [],
+                                      "body": [
                                         {
-                                          "ElseIf": {
-                                            "condition": {
+                                          "NonBlockingAssign": {
+                                            "sub_node": [],
+                                            "target": "counter",
+                                            "value": {
                                               "BinaryOp": {
-                                                "op": "==",
+                                                "sub_node": [],
+                                                "op": "+",
                                                 "left": {
                                                   "Identifier": {
+                                                    "sub_node": [],
                                                     "content": "counter"
                                                   }
                                                 },
                                                 "right": {
-                                                  "Identifier": {
-                                                    "content": "MAX_CNT"
+                                                  "BitWidthLiteral": {
+                                                    "sub_node": [],
+                                                    "width": 0,
+                                                    "value": "32'd1"
                                                   }
                                                 }
-                                              }
-                                            },
-                                            "then_stmt": {
-                                              "BeginEnd": {
-                                                "body": {
-                                                  "Block": {
-                                                    "child": [
-                                                      {
-                                                        "NonBlockingAssign": {
-                                                          "target": {
-                                                            "id": {
-                                                              "value": "counter"
-                                                            }
-                                                          },
-                                                          "value": {
-                                                            "BitWidthLiteral": {
-                                                              "width": 0,
-                                                              "value": "32'd0"
-                                                            }
-                                                          }
-                                                        }
-                                                      },
-                                                      {
-                                                        "NonBlockingAssign": {
-                                                          "target": {
-                                                            "id": {
-                                                              "value": "led"
-                                                            }
-                                                          },
-                                                          "value": {
-                                                            "UnaryOp": {
-                                                              "op": "~",
-                                                              "operand": {
-                                                                "Identifier": {
-                                                                  "content": "led"
-                                                                }
-                                                              },
-                                                              "position": "prefix"
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    ]
-                                                  }
-                                                }
-                                              }
-                                            },
-                                            "else_chain": {
-                                              "optional": {
-                                                "child": [
-                                                  {
-                                                    "ElseBranch": {
-                                                      "body": {
-                                                        "BeginEnd": {
-                                                          "body": {
-                                                            "Block": {
-                                                              "child": [
-                                                                {
-                                                                  "NonBlockingAssign": {
-                                                                    "target": {
-                                                                      "id": {
-                                                                        "value": "counter"
-                                                                      }
-                                                                    },
-                                                                    "value": {
-                                                                      "BinaryOp": {
-                                                                        "op": "+",
-                                                                        "left": {
-                                                                          "Identifier": {
-                                                                            "content": "counter"
-                                                                          }
-                                                                        },
-                                                                        "right": {
-                                                                          "BitWidthLiteral": {
-                                                                            "width": 0,
-                                                                            "value": "32'd1"
-                                                                          }
-                                                                        }
-                                                                      }
-                                                                    }
-                                                                  }
-                                                                }
-                                                              ]
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                ]
                                               }
                                             }
                                           }
@@ -443,16 +264,16 @@
                                   }
                                 }
                               }
-                            ]
+                            }
                           }
                         }
                       }
-                    }
+                    ]
                   }
                 }
-              ]
+              }
             }
-          }
+          ]
         }
       }
     ]

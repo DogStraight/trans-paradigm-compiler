@@ -2,7 +2,7 @@
 
 输入: optimizer 优化后的 AST
 输出:
-    1. 带 symbol_ref 链接的 AST（Identifier 节点附加 .symbol_ref 属性）
+    1. 带 _symbol_ref 链接的 AST（Identifier 节点附加 ._symbol_ref 属性）
     2. 符号表数据（Scope 树 + Symbol 列表）
 """
 
@@ -21,7 +21,7 @@ class SemanticAnalyzer:
         self._all_symbols: List[Symbol] = []
 
     def analyze(self, ast: Node) -> Node:
-        """对 AST 进行语义分析，返回附带了 symbol_ref 的 AST"""
+        """对 AST 进行语义分析，返回附带了 _symbol_ref 的 AST"""
         self._root_scope = Scope(name="<global>", kind="global")
         self._current_scope = self._root_scope
         self._all_symbols.clear()
@@ -152,6 +152,6 @@ class SemanticAnalyzer:
         sym = scope.resolve(name)
         if sym:
             # 在 Identifier 节点上附加符号引用
-            node.add_attr("symbol_ref", sym)
+            node.add_attr("_symbol_ref", sym)
 
     # ---- 子节点收集（已由 Node.iter_children() 替代）----

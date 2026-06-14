@@ -1,10 +1,4 @@
-module traffic_light (
-    input  wire clk,
-    input  wire rst_n,
-    input  wire car_sensor,
-    output reg  [1:0] light
-);
-
+module traffic_light (input wire clk, input wire rst_n, input wire car_sensor, output reg [1:0] light);
     reg [1:0] state;
     reg [1:0] next_state;
     reg [31:0] timer;
@@ -12,7 +6,6 @@ module traffic_light (
     localparam GREEN = 2'd1;
     localparam YELLOW = 2'd2;
     localparam RED = 2'd3;
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= IDLE;
@@ -23,39 +16,22 @@ module traffic_light (
     always @(*) begin
         case (state)
             IDLE: begin
-                if (car_sensor)
-                    next_state = GREEN;
-                else
-                    next_state = IDLE;
+                if (car_sensor) next_state = GREEN; else next_state = IDLE;
             end
             GREEN: begin
-                if (timer == 32'd50)
-                    next_state = YELLOW;
-                else
-                    next_state = GREEN;
+                if (timer == 32'd50) next_state = YELLOW; else next_state = GREEN;
             end
             YELLOW: begin
-                if (timer == 32'd5)
-                    next_state = RED;
-                else
-                    next_state = YELLOW;
+                if (timer == 32'd5) next_state = RED; else next_state = YELLOW;
             end
             RED: begin
-                if (timer == 32'd30)
-                    next_state = IDLE;
-                else
-                    next_state = RED;
+                if (timer == 32'd30) next_state = IDLE; else next_state = RED;
             end
             default: next_state = IDLE;
         endcase
     end
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            timer <= 32'd0;
-        else if (state != next_state)
-            timer <= 32'd0;
-        else
-            timer <= timer + 32'd1;
+        if (!rst_n) timer <= 32'd0; else if (state != next_state) timer <= 32'd0; else timer <= timer + 32'd1;
     end
     always @(*) begin
         case (state)
@@ -66,5 +42,4 @@ module traffic_light (
             default: light = 2'd0;
         endcase
     end
-
 endmodule

@@ -1,26 +1,14 @@
-module led_blinker # (
-    parameter CLK_MHZ = 100,
-    parameter MAX_CNT = 32'd1000
-) (
-    input  wire clk,
-    input  wire rst_n,
-    output reg  led
-);
-
+module led_blinker #(parameter CLK_MHZ = 100, parameter MAX_CNT = 32'd1000) (input wire clk, input wire rst_n, output reg led);
     reg [31:0] counter;
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             counter <= 32'd0;
             led <= 1'b0;
-        end
-        else if (counter == MAX_CNT) begin
+        end else if (counter == MAX_CNT) begin
             counter <= 32'd0;
             led <= ~led;
-        end
-        else begin
+        end else begin
             counter <= counter + 32'd1;
         end
     end
-
 endmodule
