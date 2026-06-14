@@ -48,6 +48,30 @@
           "kind": "reg",
           "scope": "traffic_light",
           "scope_kind": "module"
+        },
+        {
+          "name": "IDLE",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "GREEN",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "YELLOW",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
+        },
+        {
+          "name": "RED",
+          "kind": "localparam",
+          "scope": "traffic_light",
+          "scope_kind": "module"
         }
       ],
       "children": []

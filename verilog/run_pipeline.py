@@ -77,7 +77,8 @@ def main():
     parser = Parser()
     parser.grammar_rules = rules
     parser.statement_rule_names = [
-        name for name, rule in rules.items() if rule.end_case
+        name for name, rule in rules.items()
+        if rule.end_case and name != "Expression"
     ]
     parser.rule_selector = RuleSelector(rules, parser.statement_rule_names)
 

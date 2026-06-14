@@ -16,7 +16,20 @@ first = "$1"
 rest = "$2"
 
 [PortDecl]
-layout = { line = [{ ref = "direction" }, { opt = { group = [" ", { ref = "port_type" }] } }, { opt = { group = [" [", { ref = "range" }, "]"] } }, " ", { ref = "port_name" }] }
+layout = { line = [
+    { ref = "direction" },
+    { opt = { group = [
+        " ",
+        { ref = "port_type" },
+    ] } },
+    { opt = { group = [
+        " [",
+        { ref = "range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "port_name" },
+] }
 production = [
     "keyword.input|keyword.output|keyword.inout",
     "@OptType?",
@@ -58,7 +71,17 @@ msb = "$2"
 lsb = "$4"
 
 [WireDecl]
-layout = { line = ["wire ", { opt = { group = ["[", { ref = "range" }, "]"] } }, " ", { ref = "wire_name" }, ";"] }
+layout = { line = [
+    "wire ",
+    { opt = { group = [
+        "[",
+        { ref = "range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "wire_name" },
+    ";",
+] }
 production = ["keyword.wire", "@Range?", "id", "symbol.base.semicolon"]
 end_case = ["newline"]
 symbol_kind = "wire"
@@ -69,7 +92,17 @@ range = "$2"
 wire_name = "$3"
 
 [RegDecl]
-layout = { line = ["reg ", { opt = { group = ["[", { ref = "range" }, "]"] } }, " ", { ref = "reg_name" }, ";"] }
+layout = { line = [
+    "reg ",
+    { opt = { group = [
+        "[",
+        { ref = "range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "reg_name" },
+    ";",
+] }
 production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
 end_case = ["newline"]
 symbol_kind = "reg"
@@ -88,7 +121,7 @@ production = [
 ]
 end_case = ["newline"]
 symbol_kind = "localparam"
-symbol_name = "items"
+symbol_name = "items.sub_node.param_name"
 [LocalParamDecl.node]
 items = "$2"
 

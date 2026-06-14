@@ -15,6 +15,20 @@ import os
 from typing import Any, Optional
 from core.define import Node
 from .normalizer import normalize_ast
+from .doc import (
+    Doc,
+    Empty,
+    Text,
+    Line as SoftLine,
+    Break,
+    Concat,
+    Nest,
+    Union,
+    group,
+    flatten,
+    layout,
+    concat,
+)
 
 
 class Renderer:
@@ -102,51 +116,55 @@ class Renderer:
         node = normalize_ast(node, self._layouts, self._normalize_config)
         if not isinstance(node, Node):
             return str(node) if node else ""
-        return self._render_node(node, self._layouts.get(node.name, {}), indent)
+        doc = self._render_node(node, self._layouts.get(node.name, {}), indent)
+        return layout(doc, self._MAX_INLINE)
 
     # ---------------------------------------------------------------
     # 节点渲染
     # ---------------------------------------------------------------
-    def _render_node(self, node: Node, layout: dict, indent: int) -> str:
+    def _render_node(self, node: Node, layout: dict, indent: int) -> Doc:
         head_expr = layout.get("head") or layout.get("layout")
         body_cfg = layout.get("body")
         tail_expr = layout.get("tail")
 
-        open_line = self._eval(head_expr, node, indent) if head_expr else ""
-        body_lines: list[str] = []
+        head_doc = self._eval(head_expr, node, indent) if head_expr else None
+        body_docs: list[Doc] = []
         if body_cfg:
-            body_lines = self._render_body(node, indent + 1, body_cfg)
-        close_line = self._eval(tail_expr, node, indent) if tail_expr else ""
+            body_docs = self._render_body(node, indent + 1, body_cfg)
+        tail_doc = self._eval(tail_expr, node, indent) if tail_expr else None
 
-        prefix = self._INDENT_STR * indent
-        parts: list[str] = []
-        if open_line:
-            parts.append(prefix + open_line)
-        if body_lines:
-            parts.extend(body_lines)
-        if close_line:
-            parts.append(prefix + close_line)
+        prefix = Text(self._INDENT_STR * indent)
+        parts: list[Doc] = []
+        if head_doc is not None:
+            parts.append(Concat([prefix, head_doc]))
+        for bd in body_docs:
+            parts.append(Break())
+            parts.append(bd)
+        if tail_doc is not None:
+            parts.append(Break())
+            parts.append(Concat([prefix, tail_doc]))
         if parts:
-            return "\n".join(parts)
+            return Concat(parts)
         # 没有布局规则或布局为空时兜底
         return self._render_fallback(node, indent)
 
-    def _render_fallback(self, node: Node, indent: int) -> str:
+    def _render_fallback(self, node: Node, indent: int) -> Doc:
         """兜底渲染：无布局规则时的退化处理"""
-        return ""
+        return Empty()
 
     # ---------------------------------------------------------------
-    # DSL 求值器
+    # DSL 求值器 → Doc
     # ---------------------------------------------------------------
-    def _eval(self, expr: Any, node: Node, indent: int) -> str | None:
+    def _eval(self, expr: Any, node: Node, indent: int) -> Doc | None:
+        """将 TOML 布局表达式求值为 Doc"""
         if expr is None:
-            return ""
+            return None
 
         if isinstance(expr, str):
-            return expr
+            return Text(expr)
 
         if not isinstance(expr, dict):
-            return str(expr)
+            return Text(str(expr))
 
         # ---- ref ----
         if "ref" in expr:
@@ -157,63 +175,91 @@ class Renderer:
                 child_layout = self._layouts.get(child.name, {})
                 return self._render_inline(child, child_layout, indent)
             if isinstance(child, list):
-                lines = []
+                docs: list[Doc] = []
                 for item in child:
                     if isinstance(item, Node):
                         item_layout = self._layouts.get(item.name, {})
-                        r = self._render_inline(item, item_layout, indent)
+                        d = self._render_inline(item, item_layout, indent)
                     else:
-                        r = str(item)
-                    if r:
-                        lines.append(r)
-                return "\n".join(lines)
-            return str(child)
+                        d = Text(str(item))
+                    if not isinstance(d, Empty):
+                        docs.append(d)
+                return Concat(docs) if docs else None
+            return Text(str(child))
 
-        # ---- join ----
+        # ---- soft（软换行，Doc IR 的 Line）----
+        if "soft" in expr:
+            return SoftLine()
+
+        # ---- join（自动宽度感知：group + soft 分隔，支持 nest）----
         if "join" in expr:
-            sep = expr["join"]
+            sep_text = expr["join"].rstrip()
+            nest_level = expr.get("nest", 0)
             items = self._resolve_items(node, expr.get("items"))
-            rendered: list[str] = []
+            rendered: list[Doc] = []
             for item in items:
                 if isinstance(item, Node):
                     child_layout = self._layouts.get(item.name, {})
-                    r = self._render_inline(item, child_layout, indent)
+                    d = self._render_inline(item, child_layout, indent)
                 else:
-                    r = str(item)
-                if r:
-                    rendered.append(r)
-            return sep.join(rendered) if rendered else None
+                    d = Text(str(item))
+                if not isinstance(d, Empty):
+                    rendered.append(d)
+            if not rendered:
+                return None
+            # 用 sep + SoftLine 间隔，实现宽度感知折行
+            result: list[Doc] = []
+            for i, d in enumerate(rendered):
+                if i > 0:
+                    result.append(Text(sep_text))
+                    result.append(SoftLine())
+                result.append(d)
+            doc: Doc = group(Concat(result))
+            if nest_level:
+                doc = Nest(nest_level * len(self._INDENT_STR), doc)
+            return doc
 
-        # ---- group ----
+        # ---- group（Doc IR 的 group）----
         if "group" in expr:
-            parts: list[str] = []
+            parts: list[Doc] = []
             for e in expr["group"]:
-                p = self._eval(e, node, indent)
-                if p is None:
+                d = self._eval(e, node, indent)
+                if d is None:
                     return None  # ref 引用缺失，整个 group 无意义
-                if p != "":
-                    parts.append(p)
+                if not isinstance(d, Empty):
+                    parts.append(d)
             if not parts:
                 return None
+            return group(Concat(parts))
 
-            joined = "".join(parts)
-            if len(joined) < self._MAX_INLINE:
-                return joined
-            inner_indent = self._INDENT_STR * (indent + 1)
-            return "\n" + ("\n" + inner_indent).join(parts)
-
-        # ---- line ----
+        # ---- line（顺序拼接，支持 nest 和条件 soft）----
         if "line" in expr:
-            parts: list[str] = []
+            nest_level = expr.get("nest", 0)
+            parts: list[Doc] = []
+            had_content = False  # 上一个非 soft 元素是否产生了内容
             for e in expr["line"]:
-                p = self._eval(e, node, indent)
-                if p is not None:
-                    parts.append(p)
-            return "".join(parts)
+                if isinstance(e, dict) and e.get("soft"):
+                    if had_content:
+                        parts.append(SoftLine())
+                        had_content = False  # soft 重置，防止连续 soft
+                else:
+                    d = self._eval(e, node, indent)
+                    if d is not None:
+                        parts.append(d)
+                        had_content = True
+            if not parts:
+                return None
+            doc: Doc = Concat(parts)
+            if nest_level:
+                doc = Nest(nest_level * len(self._INDENT_STR), doc)
+            return doc
 
         # ---- indent ----
         if "indent" in expr:
-            return "\n".join(self._render_body(node, indent + 1))
+            body_docs = self._render_body(node, indent + 1)
+            if not body_docs:
+                return None
+            return Nest(len(self._INDENT_STR), Concat(body_docs))
 
         # ---- opt ----
         if "opt" in expr:
@@ -233,38 +279,40 @@ class Renderer:
                     refs.append(inner["items"])
                 for ref in refs:
                     if getattr(node, ref, None) is None:
-                        return ""
+                        return None
             result = self._eval(inner, node, indent)
-            return result if result else ""
+            return result if result is not None else None
 
-        return ""
+        return None
 
     # ---------------------------------------------------------------
     # 渲染变体
     # ---------------------------------------------------------------
-    def _render_inline(self, node: Node, layout: dict, indent: int) -> str:
+    def _render_inline(self, node: Node, layout: dict, indent: int) -> Doc:
         """内联渲染节点（用于 ref 在 line/group/join 中引用子节点时）"""
         head_expr = layout.get("head") or layout.get("layout")
         body_cfg = layout.get("body")
         tail_expr = layout.get("tail")
 
-        prefix = self._INDENT_STR * indent
+        prefix = Text(self._INDENT_STR * indent)
 
-        open_line = self._eval(head_expr, node, indent) if head_expr else ""
-        body_lines: list[str] = []
+        head_doc = self._eval(head_expr, node, indent) if head_expr else None
+        body_docs: list[Doc] = []
         if body_cfg:
-            body_lines = self._render_body(node, indent + 1)
-        close_line = self._eval(tail_expr, node, indent) if tail_expr else ""
+            body_docs = self._render_body(node, indent + 1, body_cfg)
+        tail_doc = self._eval(tail_expr, node, indent) if tail_expr else None
 
-        parts: list[str] = []
-        if open_line:
-            parts.append(open_line)
-        if body_lines:
-            parts.extend(body_lines)
-        if close_line:
-            parts.append(prefix + close_line)
+        parts: list[Doc] = []
+        if head_doc is not None:
+            parts.append(head_doc)
+        for bd in body_docs:
+            parts.append(Break())
+            parts.append(bd)
+        if tail_doc is not None:
+            parts.append(Break())
+            parts.append(Concat([prefix, tail_doc]))
         if parts:
-            return "\n".join(parts)
+            return Concat(parts)
         return self._render_fallback(node, indent)
 
     # ---------------------------------------------------------------
@@ -287,18 +335,32 @@ class Renderer:
 
     def _render_body(
         self, node: Node, indent: int, body_cfg: Optional[dict] = None
-    ) -> list[str]:
+    ) -> list[Doc]:
         """渲染节点主体：遍历子节点，每个缩进一行
 
         body_cfg 可指定 source 字段名（如 source = "items"），
-        从 node 的该属性获取子节点列表。
+        或 items 列表（如 items = ["then_stmt", "else_chain"]），
+        从 node 的对应属性获取子节点。
         """
         if body_cfg and isinstance(body_cfg, dict):
             source = body_cfg.get("source")
+            items_list = body_cfg.get("items")
         else:
             source = None
+            items_list = None
 
-        if source:
+        if items_list:
+            # 具名属性列表：按顺序从 node 提取子节点
+            children: list[Node] = []
+            for attr_name in items_list:
+                val = getattr(node, attr_name, None)
+                if val is None:
+                    continue
+                if isinstance(val, Node):
+                    children.append(val)
+                elif isinstance(val, list):
+                    children.extend(v for v in val if isinstance(v, Node))
+        elif source:
             container = getattr(node, source, None)
             if isinstance(container, Node):
                 children = getattr(container, self._children_field, [])
@@ -309,12 +371,15 @@ class Renderer:
         else:
             children = getattr(node, self._children_field, [])
 
-        lines: list[str] = []
-        for child in children:
-            if not isinstance(child, Node):
-                continue
+        docs: list[Doc] = []
+        children_list = [c for c in children if isinstance(c, Node)]
+        for i, child in enumerate(children_list):
             child_layout = self._layouts.get(child.name, {})
-            r = self._render_node(child, child_layout, indent)
-            if r:
-                lines.append(r)
-        return lines
+            d = self._render_node(child, child_layout, indent)
+            if not isinstance(d, Empty):
+                if body_cfg and isinstance(body_cfg, dict):
+                    sep = body_cfg.get("sep")
+                    if sep and i < len(children_list) - 1:
+                        d = Concat([d, Text(sep)])
+                docs.append(d)
+        return docs

@@ -1,7 +1,9 @@
 # PyV 编译器 → Verilog
 
-配置驱动的 Verilog 编译框架，支持语法解析 → 语义分析 → 代码生成 → 格式化的完整流水线。
-设计为可扩展框架：切换目标语言只需更换 `rules_verilog/` 配置。
+配置驱动的 Verilog 编译框架，支持词法分析 → 语法分析 → 语义分析 → 代码生成的完整流水线。
+**Renderer** 替代了传统的 CG（模板引擎）+ Formatter（行扫描）两步式架构，直接从 AST + 布局规则渲染为格式化文本。
+
+设计哲学：**本质硬编码保留在代码中，偶然硬编码全部配置化**。
 
 ## 流水线
 
@@ -23,133 +25,136 @@ Verilog 源码
        │
        ▼
 ┌─────────────┐
-│  Optimizer  │  AST 变换 → 简化 AST
-│ ast_optimizer│  展平 first/rest/Block/BeginEnd
+│  Normalizer │  AST 规范化 → 规范形式
+│  normalize_ │  消除 keyword./symbol./optional/repeat/
+│  ast()      │  sequence/Block，合并 first+rest
+│             │  配置驱动（normalize_config.toml）
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│  Semantic   │  符号表构建 → 带 symbol_ref 的 AST
+│  Semantic   │  符号表构建 → 带 _symbol_ref 的 AST
 │  Analyzer   │  作用域管理 + 标识符解析
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│    Code     │  配置驱动 → Verilog 代码
-│  Generator  │  模板引擎 {{ }} / {{#}} / {{?}}
-│  (Visitor)  │  CG 模板与语法规则合并在同一文件
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  Formatter  │  缩进对齐 → 格式化 Verilog
-│ verilog_    │  处理 begin/end/endcase 层级
-│ formatter   │
+│  Renderer   │  AST + 布局规则 → 格式化 Verilog 代码
+│  renderer.py│  7 个 DSL 原语：text/ref/join/group/
+│             │  line/indent/opt
+│             │  零语言特定代码，全部由 TOML 配置
 └──────┬──────┘
        │
        ▼
   gen/*.v  (生成代码)
 ```
 
+### Renderer DSL 原语
+
+| 原语 | 作用 | 示例 |
+|------|------|------|
+| `text` | 字面量文本 | `"module "`, `";"` |
+| `ref` | 引用子节点，递归渲染 | `{ ref = "port_name" }` |
+| `join` | 用分隔符连接多个项目 | `{ join = ", " }` |
+| `group` | 组（一行或折行） | `{ group = ["[", { ref = "range" }, "]"] }` |
+| `line` | 多个元素水平排列 | `{ line = ["if (", { ref = "condition" }, ")"] }` |
+| `indent` | 增加缩进级别 | `{ indent = true }` |
+| `opt` | 条件存在 | `{ opt = { ref = "range" } }` |
+
 ## 项目结构
 
 ```
 pyv_compiler/
+├── main.py                       # CLI 入口
 ├── README.md
-├── define.py                    # Token, Node, GrammarRule, FileManager
-├── err.py                       # 异常定义
-├── code_generator.py            # 代码生成器（模板引擎 + 访问者模式）
 │
-├── grammar/                     # 外部配置（核心）
-│   ├── token.toml               # Token 定义
-│   ├── symbol_level.toml        # 运算符优先级与结合性
-│   └── rules_verilog/           # Verilog 语法 + 生成 + 语义规则（合一）
-│       ├── 00_blocks.toml       # Root / Block / BeginEnd
-│       ├── 01_module.toml       # ModuleDecl / ParameterList / ParamDecl
-│       ├── 02_declarations.toml # PortDecl / WireDecl / RegDecl / LocalParamDecl
-│       ├── 03_always.toml       # AlwaysBlock / SensitivityList / EdgeSense
-│       ├── 04_statements.toml   # If/Case/Assign/Blocking/NonBlocking
-│       └── 05_expressions.toml  # 字面量 / 运算符 / Pratt 节点
+├── core/                         # 核心定义
+│   ├── define.py                 # Token, Node, GrammarRule, FileManager
+│   └── err.py                    # 异常定义
 │
-├── lexer/                       # 词法分析器
+├── grammar/                      # 外部配置（核心）
+│   ├── token.toml                # Token 定义
+│   ├── symbol_level.toml         # 运算符优先级与结合性
+│   └── rules_verilog/            # Verilog 语法 + 布局规则（合一）
+│       ├── 00_blocks.toml        # Root / Block / BeginEnd
+│       ├── 01_module.toml        # ModuleDecl / ParameterList / ParamDecl
+│       ├── 02_declarations.toml  # PortDecl / WireDecl / RegDecl / LocalParamDecl
+│       ├── 03_always.toml        # AlwaysBlock / SensitivityList / EdgeSense
+│       ├── 04_statements.toml    # If/Case/Assign/Blocking/NonBlocking
+│       ├── 05_expressions.toml   # 字面量 / 运算符 / Pratt 节点
+│       └── _formatter.toml       # 风格配置（缩进等）
+│
+├── lexer/                        # 词法分析器
 │   ├── __init__.py
 │   ├── main_lexer.py
 │   ├── lexer_utils.py
-│   └── number_fsm.py            # 数字字面量 FSM 解析
+│   └── number_fsm.py             # 数字字面量 FSM 解析
 │
-├── parser/                      # 语法分析器
+├── parser/                       # 语法分析器
 │   ├── __init__.py
 │   ├── main_parser.py
-│   ├── pratt_parser.py          # Pratt 表达式解析
-│   ├── parser_context.py        # 解析上下文 + 回溯快照
-│   ├── rule_selector.py         # 规则选择器（token → 候选规则）
-│   └── feature_analyze.py       # 产生式预计算加速
+│   ├── pratt_parser.py           # Pratt 表达式解析
+│   ├── parser_context.py         # 解析上下文 + 回溯快照
+│   ├── rule_selector.py          # 规则选择器（token → 候选规则）
+│   └── feature_analyze.py        # 产生式预计算加速
 │
-├── optimizer/
-│   └── ast_optimizer.py         # AST 变换管道（展平/提取）
-│
-├── analyzer/                    # 语义分析
+├── renderer/                     # 渲染器（替代旧 CG + Formatter）
 │   ├── __init__.py
-│   ├── scope.py                 # Scope / Symbol / get_symbol_kinds
-│   └── semantic_analyzer.py     # 符号表构建 + 标识符解析
+│   ├── renderer.py               # 7 DSL 原语的 AST→文本引擎
+│   ├── normalizer.py             # AST 规范化（配置驱动）
+│   ├── normalize_config.toml     # 规范化规则配置
+│   └── test_renderer.py          # 集成测试
 │
-├── formatter/
+├── analyzer/                     # 语义分析
 │   ├── __init__.py
-│   └── verilog_formatter.py     # Verilog 格式化（缩进/块合并）
+│   ├── scope.py                  # Scope / Symbol / get_symbol_kinds
+│   └── semantic_analyzer.py      # 符号表构建 + 标识符解析
+│
+├── verilog/                      # Verilog 端到端测试
+│   ├── run_pipeline.py           # 完整流水线（Lexer → Parser → Normalizer → Analyzer → Renderer）
+│   ├── ref/                      # 参考文件 (*.v)
+│   ├── gen/                      # 生成文件
+│   ├── ast/                      # AST JSON 输出
+│   └── symbols/                  # 符号表 JSON 输出
 │
 ├── scripts/
-│   └── gen_mermaid_fsm.py       # FSM 图生成
+│   └── gen_mermaid_fsm.py        # FSM 图生成辅助脚本
 │
-├── docs/
-│   └── fsm_diagram.md
-│
-└── verilog/                     # Verilog 编译测试
-    ├── run_pipeline.py          # 端到端流水线入口
-    ├── run_optimizer.py
-    ├── ref/                     # 参考源文件
-    │   ├── ref_alu.v
-    │   ├── ref_counter.v
-    │   ├── ref_fsm.v
-    │   └── ...
-    ├── gen/                     # 生成代码输出
-    ├── ast/                     # 优化后 AST JSON
-    └── symbols/                 # 符号表 JSON
+└── docs/
+    ├── renderer_design.md        # Renderer 设计方案
+    ├── ast_normalization.md      # AST 规范化规范
+    └── fsm_diagram.md            # 数字 FSM 状态图
 ```
 
-## 配置驱动的三条信息
+## 配置驱动设计
 
-每条语法规则在 TOML 中包含三个维度的配置：
+所有语言特定知识通过 TOML 配置管理，Python 代码不含任何语言特定的逻辑：
 
-```toml
-[RegDecl]
-# ── 语法
-production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
-end_case = ["newline"]
-# ── 生成
-template = "    reg{{?range}} [{{range}}]{{/range}} {{ reg_name }};"
-# ── 语义
-symbol_kind = "reg"
-symbol_name = "reg_name"
-```
+| 配置 | 用途 | 位置 |
+|------|------|------|
+| `token.toml` | 关键字、符号、括号、字面量定义 | `grammar/` |
+| `symbol_level.toml` | 运算符优先级与结合性 | `grammar/` |
+| `rules_verilog/*.toml` | 语法规则（production）+ 布局规则（layout） | `grammar/rules_verilog/` |
+| `normalize_config.toml` | AST 规范化规则（eliminate/flatten/merge） | `renderer/` |
+| `_formatter.toml` | 缩进、行宽等风格参数 | `grammar/rules_verilog/` |
 
-## 运行测试
+## 用法
 
 ```bash
-cd verilog
-
-# 端到端测试
-python run_pipeline.py ref_fsm
-python run_pipeline.py ref_alu
-python run_pipeline.py ref_counter
-
-# 输出对比（DIFF 行数 = 0 表示完全一致）
+# 运行端到端流水线
+python main.py pipeline                 # 默认 led_blinker
+python main.py pipeline ref_alu         # 测试 ALU
+python main.py pipeline ref_fsm         # 测试状态机
+python main.py pipeline ref_counter     # 测试计数器
+python main.py pipeline ref_dff         # 测试 D触发器
 ```
-lexer = Lexer()
-tokens = lexer.tokenize("""
-x: int = 10
-y: int = 20
-sum: int = x + y
-""")
+
+或直接使用 `verilog/run_pipeline.py`：
+
+```bash
+python verilog/run_pipeline.py          # 默认 led_blinker
+python verilog/run_pipeline.py ref_alu
+```
 
 # 2. 语法分析
 parser = Parser()

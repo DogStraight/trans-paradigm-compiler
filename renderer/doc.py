@@ -1,0 +1,263 @@
+"""
+doc.py — Doc IR (漂亮打印机中间表示)
+
+基于 Wadler "A prettier printer" (2003) / Leijen "Wadler-Lindig" 模型。
+
+Doc 是纯数据结构，不执行任何渲染逻辑。
+布局算法 `layout(doc, width)` 将 Doc 树渲染为字符串。
+"""
+
+from dataclasses import dataclass
+from typing import Optional
+
+
+# ============================================================================
+# Doc 类型
+# ============================================================================
+
+@dataclass
+class Doc:
+    """Doc 基类"""
+    pass
+
+
+@dataclass
+class Empty(Doc):
+    """无内容"""
+    pass
+
+
+@dataclass
+class Text(Doc):
+    """字面量文本"""
+    text: str
+
+
+@dataclass
+class Line(Doc):
+    """
+    软换行。
+    flat 模式 → 一个空格
+    broken 模式 → 换行 + 当前缩进
+    """
+    pass
+
+
+@dataclass
+class Break(Doc):
+    """
+    硬换行。
+    无论 flat/broken 都强制换行 + 当前缩进。
+    """
+    pass
+
+
+@dataclass
+class Concat(Doc):
+    """顺序拼接"""
+    docs: list[Doc]
+
+
+@dataclass
+class Nest(Doc):
+    """
+    缩进偏移。
+    对 Nest 内部的所有 Line/Break 产生的新行增加 indent 格缩进。
+    """
+    indent: int
+    doc: Doc
+
+
+@dataclass
+class Union(Doc):
+    """
+    二象性选择。
+    flat = 压成一行的版本
+    broken = 保留换行的版本
+    layout 算法选择能适应当前剩余宽度的版本。
+    """
+    flat: Doc
+    broken: Doc
+
+
+# ============================================================================
+# 辅助构造器
+# ============================================================================
+
+_EMPTY = Empty()
+
+
+def group(doc: Doc) -> Doc:
+    """创建 group：Union(flatten(doc), doc)"""
+    return Union(flat=flatten(doc), broken=doc)
+
+
+def flatten(doc: Doc) -> Doc:
+    """
+    将 doc 中的所有 Line 替换为 Text(" ")。
+    Union 取 flat 分支。
+    Break 保持不变（硬换行不被 flatten）。
+    """
+    match doc:
+        case Empty():
+            return doc
+        case Text(_):
+            return doc
+        case Line():
+            return Text(" ")
+        case Break():
+            return doc
+        case Concat(docs):
+            return Concat([flatten(d) for d in docs])
+        case Nest(i, d):
+            return Nest(i, flatten(d))
+        case Union(flat, _):
+            return flatten(flat)
+        case _:
+            return doc
+
+
+def concat(*docs: Doc) -> Doc:
+    """拼接多个 Doc，过滤掉 Empty"""
+    flat: list[Doc] = []
+    for d in docs:
+        if isinstance(d, Empty):
+            continue
+        if isinstance(d, Concat):
+            flat.extend(d.docs)
+        else:
+            flat.append(d)
+    if not flat:
+        return _EMPTY
+    if len(flat) == 1:
+        return flat[0]
+    return Concat(flat)
+
+
+def nest(indent: int, doc: Doc) -> Doc:
+    """缩进，嵌套空 Doc 时返回空"""
+    if isinstance(doc, Empty):
+        return doc
+    return Nest(indent, doc)
+
+
+def soft_line() -> Doc:
+    """等价于 Line()，语义更清晰"""
+    return Line()
+
+
+# ============================================================================
+# Layout 算法
+# ============================================================================
+
+def layout(doc: Doc, max_width: int = 80) -> str:
+    """
+    宽度感知的 Doc → 字符串渲染。
+
+    算法：best(w, k, doc)
+    w = 最大行宽
+    k = 当前缩进列
+    """
+    return _best(max_width, 0, doc)
+
+
+def _best(w: int, k: int, doc: Doc) -> str:
+    """核心布局函数：返回渲染后的字符串"""
+    match doc:
+        case Empty():
+            return ""
+
+        case Text(s):
+            return s
+
+        case Line():
+            return "\n" + " " * k
+
+        case Break():
+            return "\n" + " " * k
+
+        case Concat(docs):
+            result: list[str] = []
+            for d in docs:
+                s = _best(w, k, d)
+                result.append(s)
+            return "".join(result)
+
+        case Nest(i, d):
+            return _best(w, k + i, d)
+
+        case Union(flat, broken):
+            # 尝试 flat 版本
+            flat_s = _best(w, k, flat)
+            first_line = flat_s.split("\n")[0] if flat_s else ""
+            if len(first_line) <= w - k:
+                return flat_s
+            # flat 超宽，回退到 broken
+            return _best(w, k, broken)
+
+        case _:
+            return ""
+
+
+def _fits(w: int, doc: Doc) -> bool:
+    """
+    检查 doc 的 flat 版本是否能放入 w 列宽。
+    只检查第一行。
+    """
+    if w < 0:
+        return False
+    match doc:
+        case Empty():
+            return True
+        case Text(s):
+            return len(s) <= w
+        case Line():
+            return True  # 换行 = 当前行已结束
+        case Break():
+            return True
+        case Concat(docs):
+            col = 0
+            for d in docs:
+                if col > w:
+                    return False
+                match d:
+                    case Line():
+                        return True
+                    case Break():
+                        return True
+                    case Text(s):
+                        col += len(s)
+                        if col > w:
+                            return False
+                    case Nest(_, inner):
+                        # Nest 不影响 fits（缩进只影响后续行）
+                        if not _fits(w - col, inner):
+                            return False
+                        # 递归后不确定 col，用保守估算
+                        return True
+                    case Union(flat, _):
+                        if not _fits(w - col, flat):
+                            return False
+                        return True
+                    case Concat(inner_docs):
+                        for inner_d in inner_docs:
+                            if col > w:
+                                return False
+                            match inner_d:
+                                case Line() | Break():
+                                    return True
+                                case Text(s):
+                                    col += len(s)
+                                case _:
+                                    if not _fits(w - col, inner_d):
+                                        return False
+                                    return True
+                    case _:
+                        return True
+            return col <= w
+        case Nest(_, d):
+            return _fits(w, d)
+        case Union(flat, _):
+            return _fits(w, flat)
+        case _:
+            return True

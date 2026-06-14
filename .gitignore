@@ -1,5 +1,6 @@
 *.log
 .vscode
+verilog/*
 __pycache__
 */__pycache__
 parser_debug.log

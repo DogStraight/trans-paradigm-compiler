@@ -220,4 +220,21 @@ def _normalize(
                 except AttributeError:
                     pass
 
+    # 7. wrap_single_stmts → 将 if/else 中非 begin/end 的语句体包裹在 BeginEnd 中
+    if config.get("wrap_single_stmts", {}).get("enabled"):
+        attr_map = config["wrap_single_stmts"].get("attr_map", {})
+        if node.name in attr_map:
+            for attr_name in attr_map[node.name]:
+                body = getattr(node, attr_name, None)
+                if not isinstance(body, Node):
+                    continue
+                # 检查是否是 Statement 内含非 BeginEnd 的语句
+                inner = body
+                if body.name == "Statement":
+                    inner = getattr(body, "stmt", body)
+                if isinstance(inner, Node) and inner.name != "BeginEnd":
+                    be = Node("BeginEnd")
+                    be.sub_node.append(body)
+                    setattr(node, attr_name, be)
+
     return node
