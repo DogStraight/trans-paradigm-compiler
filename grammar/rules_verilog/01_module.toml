@@ -8,6 +8,7 @@ head = { line = [
     { ref = "module_name" },
     { opt = { group = [
         " #(",
+        { soft = true },
         { ref = "params" }, # 这里不再有额外的 soft
         { soft = true },    # 右括号前的软换行
         ")",

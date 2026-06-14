@@ -3,18 +3,15 @@
     "sub_node": [
       {
         "ModuleDecl": {
-          "sub_node": [],
           "module_name": "alu",
           "params": {
             "ParameterList": {
               "sub_node": [
                 {
                   "ParamDecl": {
-                    "sub_node": [],
                     "param_name": "W",
                     "value": {
                       "Number": {
-                        "sub_node": [],
                         "value": 8
                       }
                     }
@@ -28,25 +25,20 @@
               "sub_node": [
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "input",
                     "port_type": "wire",
                     "range": {
                       "Range": {
-                        "sub_node": [],
                         "msb": {
                           "BinaryOp": {
-                            "sub_node": [],
                             "op": "-",
                             "left": {
                               "Identifier": {
-                                "sub_node": [],
                                 "content": "W"
                               }
                             },
                             "right": {
                               "Number": {
-                                "sub_node": [],
                                 "value": 1
                               }
                             }
@@ -54,7 +46,6 @@
                         },
                         "lsb": {
                           "Number": {
-                            "sub_node": [],
                             "value": 0
                           }
                         }
@@ -65,25 +56,20 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "input",
                     "port_type": "wire",
                     "range": {
                       "Range": {
-                        "sub_node": [],
                         "msb": {
                           "BinaryOp": {
-                            "sub_node": [],
                             "op": "-",
                             "left": {
                               "Identifier": {
-                                "sub_node": [],
                                 "content": "W"
                               }
                             },
                             "right": {
                               "Number": {
-                                "sub_node": [],
                                 "value": 1
                               }
                             }
@@ -91,7 +77,6 @@
                         },
                         "lsb": {
                           "Number": {
-                            "sub_node": [],
                             "value": 0
                           }
                         }
@@ -102,21 +87,17 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "input",
                     "port_type": "wire",
                     "range": {
                       "Range": {
-                        "sub_node": [],
                         "msb": {
                           "Number": {
-                            "sub_node": [],
                             "value": 2
                           }
                         },
                         "lsb": {
                           "Number": {
-                            "sub_node": [],
                             "value": 0
                           }
                         }
@@ -127,25 +108,20 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "output",
                     "port_type": "reg",
                     "range": {
                       "Range": {
-                        "sub_node": [],
                         "msb": {
                           "BinaryOp": {
-                            "sub_node": [],
                             "op": "-",
                             "left": {
                               "Identifier": {
-                                "sub_node": [],
                                 "content": "W"
                               }
                             },
                             "right": {
                               "Number": {
-                                "sub_node": [],
                                 "value": 1
                               }
                             }
@@ -153,7 +129,6 @@
                         },
                         "lsb": {
                           "Number": {
-                            "sub_node": [],
                             "value": 0
                           }
                         }
@@ -164,7 +139,6 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "output",
                     "port_type": "reg",
                     "port_name": "zero"
@@ -172,7 +146,6 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "output",
                     "port_type": "reg",
                     "port_name": "overflow"
@@ -184,24 +157,19 @@
           "body": [
             {
               "WireDecl": {
-                "sub_node": [],
                 "wire_type": "wire",
                 "range": {
                   "Range": {
-                    "sub_node": [],
                     "msb": {
                       "BinaryOp": {
-                        "sub_node": [],
                         "op": "-",
                         "left": {
                           "Identifier": {
-                            "sub_node": [],
                             "content": "W"
                           }
                         },
                         "right": {
                           "Number": {
-                            "sub_node": [],
                             "value": 1
                           }
                         }
@@ -209,7 +177,6 @@
                     },
                     "lsb": {
                       "Number": {
-                        "sub_node": [],
                         "value": 0
                       }
                     }
@@ -220,24 +187,19 @@
             },
             {
               "WireDecl": {
-                "sub_node": [],
                 "wire_type": "wire",
                 "range": {
                   "Range": {
-                    "sub_node": [],
                     "msb": {
                       "BinaryOp": {
-                        "sub_node": [],
                         "op": "-",
                         "left": {
                           "Identifier": {
-                            "sub_node": [],
                             "content": "W"
                           }
                         },
                         "right": {
                           "Number": {
-                            "sub_node": [],
                             "value": 1
                           }
                         }
@@ -245,7 +207,6 @@
                     },
                     "lsb": {
                       "Number": {
-                        "sub_node": [],
                         "value": 0
                       }
                     }
@@ -256,24 +217,19 @@
             },
             {
               "WireDecl": {
-                "sub_node": [],
                 "wire_type": "wire",
                 "range": {
                   "Range": {
-                    "sub_node": [],
                     "msb": {
                       "BinaryOp": {
-                        "sub_node": [],
                         "op": "-",
                         "left": {
                           "Identifier": {
-                            "sub_node": [],
                             "content": "W"
                           }
                         },
                         "right": {
                           "Number": {
-                            "sub_node": [],
                             "value": 1
                           }
                         }
@@ -281,7 +237,6 @@
                     },
                     "lsb": {
                       "Number": {
-                        "sub_node": [],
                         "value": 0
                       }
                     }
@@ -292,24 +247,19 @@
             },
             {
               "WireDecl": {
-                "sub_node": [],
                 "wire_type": "wire",
                 "range": {
                   "Range": {
-                    "sub_node": [],
                     "msb": {
                       "BinaryOp": {
-                        "sub_node": [],
                         "op": "-",
                         "left": {
                           "Identifier": {
-                            "sub_node": [],
                             "content": "W"
                           }
                         },
                         "right": {
                           "Number": {
-                            "sub_node": [],
                             "value": 1
                           }
                         }
@@ -317,7 +267,6 @@
                     },
                     "lsb": {
                       "Number": {
-                        "sub_node": [],
                         "value": 0
                       }
                     }
@@ -328,24 +277,19 @@
             },
             {
               "WireDecl": {
-                "sub_node": [],
                 "wire_type": "wire",
                 "range": {
                   "Range": {
-                    "sub_node": [],
                     "msb": {
                       "BinaryOp": {
-                        "sub_node": [],
                         "op": "-",
                         "left": {
                           "Identifier": {
-                            "sub_node": [],
                             "content": "W"
                           }
                         },
                         "right": {
                           "Number": {
-                            "sub_node": [],
                             "value": 1
                           }
                         }
@@ -353,7 +297,6 @@
                     },
                     "lsb": {
                       "Number": {
-                        "sub_node": [],
                         "value": 0
                       }
                     }
@@ -364,21 +307,17 @@
             },
             {
               "AssignStatement": {
-                "sub_node": [],
                 "target": "sum",
                 "value": {
                   "BinaryOp": {
-                    "sub_node": [],
                     "op": "+",
                     "left": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "a"
                       }
                     },
                     "right": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "b"
                       }
                     }
@@ -388,21 +327,17 @@
             },
             {
               "AssignStatement": {
-                "sub_node": [],
                 "target": "diff",
                 "value": {
                   "BinaryOp": {
-                    "sub_node": [],
                     "op": "-",
                     "left": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "a"
                       }
                     },
                     "right": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "b"
                       }
                     }
@@ -412,21 +347,17 @@
             },
             {
               "AssignStatement": {
-                "sub_node": [],
                 "target": "and_w",
                 "value": {
                   "BinaryOp": {
-                    "sub_node": [],
                     "op": "&",
                     "left": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "a"
                       }
                     },
                     "right": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "b"
                       }
                     }
@@ -436,21 +367,17 @@
             },
             {
               "AssignStatement": {
-                "sub_node": [],
                 "target": "or_w",
                 "value": {
                   "BinaryOp": {
-                    "sub_node": [],
                     "op": "|",
                     "left": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "a"
                       }
                     },
                     "right": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "b"
                       }
                     }
@@ -460,21 +387,17 @@
             },
             {
               "AssignStatement": {
-                "sub_node": [],
                 "target": "xor_w",
                 "value": {
                   "BinaryOp": {
-                    "sub_node": [],
                     "op": "^",
                     "left": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "a"
                       }
                     },
                     "right": {
                       "Identifier": {
-                        "sub_node": [],
                         "content": "b"
                       }
                     }
@@ -484,7 +407,6 @@
             },
             {
               "AlwaysBlock": {
-                "sub_node": [],
                 "sensitivity": {
                   "SensitivityList": {
                     "sub_node": [
@@ -494,14 +416,11 @@
                 },
                 "body": {
                   "BeginEnd": {
-                    "sub_node": [],
                     "body": [
                       {
                         "CaseStatement": {
-                          "sub_node": [],
                           "expr": {
                             "Identifier": {
-                              "sub_node": [],
                               "content": "op"
                             }
                           },
@@ -510,21 +429,18 @@
                               "sub_node": [
                                 {
                                   "CaseItem": {
-                                    "sub_node": [],
                                     "value": {
                                       "BitWidthLiteral": {
-                                        "sub_node": [],
-                                        "width": 0,
-                                        "value": "3'd0"
+                                        "width": 3,
+                                        "base": "d",
+                                        "value": "0"
                                       }
                                     },
                                     "stmt": {
                                       "BlockingAssign": {
-                                        "sub_node": [],
                                         "target": "result",
                                         "value": {
                                           "Identifier": {
-                                            "sub_node": [],
                                             "content": "sum"
                                           }
                                         }
@@ -534,21 +450,18 @@
                                 },
                                 {
                                   "CaseItem": {
-                                    "sub_node": [],
                                     "value": {
                                       "BitWidthLiteral": {
-                                        "sub_node": [],
-                                        "width": 0,
-                                        "value": "3'd1"
+                                        "width": 3,
+                                        "base": "d",
+                                        "value": "1"
                                       }
                                     },
                                     "stmt": {
                                       "BlockingAssign": {
-                                        "sub_node": [],
                                         "target": "result",
                                         "value": {
                                           "Identifier": {
-                                            "sub_node": [],
                                             "content": "diff"
                                           }
                                         }
@@ -558,21 +471,18 @@
                                 },
                                 {
                                   "CaseItem": {
-                                    "sub_node": [],
                                     "value": {
                                       "BitWidthLiteral": {
-                                        "sub_node": [],
-                                        "width": 0,
-                                        "value": "3'd2"
+                                        "width": 3,
+                                        "base": "d",
+                                        "value": "2"
                                       }
                                     },
                                     "stmt": {
                                       "BlockingAssign": {
-                                        "sub_node": [],
                                         "target": "result",
                                         "value": {
                                           "Identifier": {
-                                            "sub_node": [],
                                             "content": "and_w"
                                           }
                                         }
@@ -582,21 +492,18 @@
                                 },
                                 {
                                   "CaseItem": {
-                                    "sub_node": [],
                                     "value": {
                                       "BitWidthLiteral": {
-                                        "sub_node": [],
-                                        "width": 0,
-                                        "value": "3'd3"
+                                        "width": 3,
+                                        "base": "d",
+                                        "value": "3"
                                       }
                                     },
                                     "stmt": {
                                       "BlockingAssign": {
-                                        "sub_node": [],
                                         "target": "result",
                                         "value": {
                                           "Identifier": {
-                                            "sub_node": [],
                                             "content": "or_w"
                                           }
                                         }
@@ -606,21 +513,18 @@
                                 },
                                 {
                                   "CaseItem": {
-                                    "sub_node": [],
                                     "value": {
                                       "BitWidthLiteral": {
-                                        "sub_node": [],
-                                        "width": 0,
-                                        "value": "3'd4"
+                                        "width": 3,
+                                        "base": "d",
+                                        "value": "4"
                                       }
                                     },
                                     "stmt": {
                                       "BlockingAssign": {
-                                        "sub_node": [],
                                         "target": "result",
                                         "value": {
                                           "Identifier": {
-                                            "sub_node": [],
                                             "content": "xor_w"
                                           }
                                         }
@@ -630,17 +534,13 @@
                                 },
                                 {
                                   "DefaultItem": {
-                                    "sub_node": [],
                                     "stmt": {
                                       "BlockingAssign": {
-                                        "sub_node": [],
                                         "target": "result",
                                         "value": {
                                           "ReplicateExpr": {
-                                            "sub_node": [],
                                             "count": {
                                               "Identifier": {
-                                                "sub_node": [],
                                                 "content": "W"
                                               }
                                             },
@@ -649,9 +549,9 @@
                                                 "sub_node": [
                                                   {
                                                     "BitWidthLiteral": {
-                                                      "sub_node": [],
-                                                      "width": 0,
-                                                      "value": "1'b0"
+                                                      "width": 1,
+                                                      "base": "b",
+                                                      "value": "0"
                                                     }
                                                   }
                                                 ]
@@ -670,27 +570,21 @@
                       },
                       {
                         "BlockingAssign": {
-                          "sub_node": [],
                           "target": "zero",
                           "value": {
                             "ParenthesizedExpr": {
-                              "sub_node": [],
                               "expr": {
                                 "BinaryOp": {
-                                  "sub_node": [],
                                   "op": "==",
                                   "left": {
                                     "Identifier": {
-                                      "sub_node": [],
                                       "content": "result"
                                     }
                                   },
                                   "right": {
                                     "ReplicateExpr": {
-                                      "sub_node": [],
                                       "count": {
                                         "Identifier": {
-                                          "sub_node": [],
                                           "content": "W"
                                         }
                                       },
@@ -699,9 +593,9 @@
                                           "sub_node": [
                                             {
                                               "BitWidthLiteral": {
-                                                "sub_node": [],
-                                                "width": 0,
-                                                "value": "1'b0"
+                                                "width": 1,
+                                                "base": "b",
+                                                "value": "0"
                                               }
                                             }
                                           ]
@@ -717,36 +611,28 @@
                       },
                       {
                         "BlockingAssign": {
-                          "sub_node": [],
                           "target": "overflow",
                           "value": {
                             "BinaryOp": {
-                              "sub_node": [],
                               "op": "&&",
                               "left": {
                                 "ParenthesizedExpr": {
-                                  "sub_node": [],
                                   "expr": {
                                     "BinaryOp": {
-                                      "sub_node": [],
                                       "op": "==",
                                       "left": {
                                         "IndexedId": {
-                                          "sub_node": [],
                                           "id_name": "a",
                                           "index": {
                                             "BinaryOp": {
-                                              "sub_node": [],
                                               "op": "-",
                                               "left": {
                                                 "Identifier": {
-                                                  "sub_node": [],
                                                   "content": "W"
                                                 }
                                               },
                                               "right": {
                                                 "Number": {
-                                                  "sub_node": [],
                                                   "value": 1
                                                 }
                                               }
@@ -756,21 +642,17 @@
                                       },
                                       "right": {
                                         "IndexedId": {
-                                          "sub_node": [],
                                           "id_name": "b",
                                           "index": {
                                             "BinaryOp": {
-                                              "sub_node": [],
                                               "op": "-",
                                               "left": {
                                                 "Identifier": {
-                                                  "sub_node": [],
                                                   "content": "W"
                                                 }
                                               },
                                               "right": {
                                                 "Number": {
-                                                  "sub_node": [],
                                                   "value": 1
                                                 }
                                               }
@@ -784,28 +666,22 @@
                               },
                               "right": {
                                 "ParenthesizedExpr": {
-                                  "sub_node": [],
                                   "expr": {
                                     "BinaryOp": {
-                                      "sub_node": [],
                                       "op": "!=",
                                       "left": {
                                         "IndexedId": {
-                                          "sub_node": [],
                                           "id_name": "result",
                                           "index": {
                                             "BinaryOp": {
-                                              "sub_node": [],
                                               "op": "-",
                                               "left": {
                                                 "Identifier": {
-                                                  "sub_node": [],
                                                   "content": "W"
                                                 }
                                               },
                                               "right": {
                                                 "Number": {
-                                                  "sub_node": [],
                                                   "value": 1
                                                 }
                                               }
@@ -815,21 +691,17 @@
                                       },
                                       "right": {
                                         "IndexedId": {
-                                          "sub_node": [],
                                           "id_name": "a",
                                           "index": {
                                             "BinaryOp": {
-                                              "sub_node": [],
                                               "op": "-",
                                               "left": {
                                                 "Identifier": {
-                                                  "sub_node": [],
                                                   "content": "W"
                                                 }
                                               },
                                               "right": {
                                                 "Number": {
-                                                  "sub_node": [],
                                                   "value": 1
                                                 }
                                               }

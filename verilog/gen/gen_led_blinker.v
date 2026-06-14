@@ -1,7 +1,4 @@
-module led_blinker #(
-    parameter CLK_MHZ = 100,
-    parameter MAX_CNT = 32'd1000
-)(
+module led_blinker(
     input wire clk,
     input wire rst_n,
     output reg led

@@ -189,6 +189,10 @@ class Renderer:
         if "soft" in expr:
             return SoftLine()
 
+        # ---- break（硬换行，Doc IR 的 Line）----
+        if "break" in expr:
+            return Break()
+
         # ---- join（自动宽度感知列表，支持 first_soft、prefix、suffix）----
         if "join" in expr:
             sep_text = expr["join"].rstrip()

@@ -3,14 +3,12 @@
     "sub_node": [
       {
         "ModuleDecl": {
-          "sub_node": [],
           "module_name": "dff",
           "ports": {
             "PortList": {
               "sub_node": [
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "input",
                     "port_type": "wire",
                     "port_name": "clk"
@@ -18,7 +16,6 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "input",
                     "port_type": "wire",
                     "port_name": "rst_n"
@@ -26,7 +23,6 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "input",
                     "port_type": "wire",
                     "port_name": "d"
@@ -34,7 +30,6 @@
                 },
                 {
                   "PortDecl": {
-                    "sub_node": [],
                     "direction": "output",
                     "port_type": "reg",
                     "port_name": "q"
@@ -46,20 +41,17 @@
           "body": [
             {
               "AlwaysBlock": {
-                "sub_node": [],
                 "sensitivity": {
                   "SensitivityList": {
                     "sub_node": [
                       {
                         "EdgeSense": {
-                          "sub_node": [],
                           "edge": "posedge",
                           "signal": "clk"
                         }
                       },
                       {
                         "EdgeSense": {
-                          "sub_node": [],
                           "edge": "negedge",
                           "signal": "rst_n"
                         }
@@ -69,18 +61,14 @@
                 },
                 "body": {
                   "BeginEnd": {
-                    "sub_node": [],
                     "body": [
                       {
                         "IfStatement": {
-                          "sub_node": [],
                           "condition": {
                             "UnaryOp": {
-                              "sub_node": [],
                               "op": "!",
                               "operand": {
                                 "Identifier": {
-                                  "sub_node": [],
                                   "content": "rst_n"
                                 }
                               },
@@ -89,27 +77,23 @@
                           },
                           "then_stmt": {
                             "NonBlockingAssign": {
-                              "sub_node": [],
                               "target": "q",
                               "value": {
                                 "BitWidthLiteral": {
-                                  "sub_node": [],
-                                  "width": 0,
-                                  "value": "1'b0"
+                                  "width": 1,
+                                  "base": "b",
+                                  "value": "0"
                                 }
                               }
                             }
                           },
                           "else_chain": {
                             "ElseBranch": {
-                              "sub_node": [],
                               "body": {
                                 "NonBlockingAssign": {
-                                  "sub_node": [],
                                   "target": "q",
                                   "value": {
                                     "Identifier": {
-                                      "sub_node": [],
                                       "content": "d"
                                     }
                                   }
