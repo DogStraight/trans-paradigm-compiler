@@ -46,7 +46,7 @@ class SemanticAnalyzer:
                 self._walk(item)
 
     def _walk_node(self, node: Node) -> None:
-        rule = self._rules.get(node.name)
+        rule = self._rules.get(node.node_name)
         scope = self._current_scope
         assert scope is not None, "analyze() must be called before walking"
 
@@ -54,7 +54,9 @@ class SemanticAnalyzer:
         if rule and getattr(rule, "scope_open", False):
             name_attr = getattr(rule, "scope_name_attr", None)
             scope_name = (
-                str(getattr(node, name_attr, node.name)) if name_attr else node.name
+                str(getattr(node, name_attr, node.node_name))
+                if name_attr
+                else node.node_name
             )
             kind = getattr(rule, "scope_kind", "block")
             new_scope = Scope(name=scope_name, kind=kind, parent=scope)
@@ -67,7 +69,7 @@ class SemanticAnalyzer:
             self._declare_from_node(node, rule, scope)
 
         # 3. 解析 Identifier 引用
-        if node.name == "Identifier":
+        if node.node_name == "Identifier":
             self._resolve_identifier(node, scope)
 
         # 4. 递归子节点（通过统一的 iter_children 接口）

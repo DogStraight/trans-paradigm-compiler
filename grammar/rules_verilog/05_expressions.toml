@@ -4,7 +4,14 @@
 
 # ---------- 基本原子 ----------
 [BitWidthLiteral]
-layout = { ref = "value" }
+layout = { line = [
+    { opt = { group = [
+        { ref = "width" },
+        "'",
+    ] } },
+    { ref = "base" },
+    { ref = "value" },
+] }
 production = ["literal.number", "symbol.base.single_quote", "id"]
 [BitWidthLiteral.node]
 width = "$1"
@@ -169,4 +176,10 @@ op = "$1"
 layout = { line = [{ ref = "op" }, { ref = "operand" }] }
 
 [BinaryOp]
-layout = { line = [{ ref = "left" }, " ", { ref = "op" }, " ", { ref = "right" }] }
+layout = { line = [
+    { ref = "left" },
+    " ",
+    { ref = "op" },
+    " ",
+    { ref = "right" },
+] }

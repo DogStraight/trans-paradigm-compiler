@@ -79,22 +79,39 @@ def is_none(token: Token) -> bool:
 
 
 # ========== 字面量解析辅助 ==========
-def _set_pos(node: Node, token: Token) -> Node:
-    """辅助：将 token 位置设到节点上"""
-    node.start = token.start
-    node.end = token.end
-    return node
-
 def parse_number_literal(token: Token) -> Node:
-    """将数字 token 转换为 Number 或 BitWidthLiteral 节点"""
     content = token.content
+    if "'" in content:
+        parts = content.split("'", 1)
+        width_part = parts[0].strip()
+        rest = parts[1] if len(parts) > 1 else ""
+        # 宽度部分可能为空（自动位宽）或数字
+        width = None
+        if width_part:
+            try:
+                width = int(width_part)
+            except ValueError:
+                # 非法宽度，按自动处理
+                width = None
+        if rest and rest[0] in ("b", "o", "d", "h"):
+            base = rest[0]
+            value = rest[1:] if len(rest) > 1 else ""
+            node = Node("BitWidthLiteral", width=width, base=base, value=value)
+            return node
+        # 格式错误：回退为普通数字
+        return Node("Number", value=content)
+    # 浮点数
     if "." in content:
-        return _set_pos(Node("Number", value=float(content)), token)
+        try:
+            return Node("Number", value=float(content))
+        except ValueError:
+            pass
+    # 普通整数
     try:
-        return _set_pos(Node("Number", value=int(content)), token)
+        return Node("Number", value=int(content))
     except ValueError:
-        # Verilog 位宽字面量: 32'd0, 1'b0, 8'ha3
-        return _set_pos(Node("BitWidthLiteral", width=0, value=content), token)
+        # 无法识别的字面量，作为字符串保留
+        return Node("Number", value=content)
 
 
 def parse_brace_expr(
@@ -107,10 +124,7 @@ def parse_brace_expr(
     max_infix_prio: int,
     unary_prefix_rbp: int,
 ) -> Tuple[Node, int]:
-    """解析花括号表达式 { ... }，支持串联和复制模式
-
-ConcatExpr 使用 first/rest 结构（与 rules_verilog 语法规则一致），
-而不是硬编码 items 属性。"""
+    """解析花括号表达式 { ... }，支持串联和复制模式"""
     idx += 1  # 跳过 '{'
     items = []
     is_replication = False
@@ -212,14 +226,14 @@ def parse_expression(
             max_infix_prio,
             unary_prefix_rbp,
         )
+        current_token: Token = tokens[cur_idx]
         if cur_idx >= len(tokens) or not (
-            is_paren(tokens[cur_idx]) and tokens[cur_idx].content == ")"
+            is_paren(current_token) and current_token.content == ")"
         ):
             raise ValueError("缺少右括号")
         cur_idx += 1
         pe = Node("ParenthesizedExpr", expr=inner_node)
-        pe.start = tokens[idx].start
-        pe.end = tokens[cur_idx - 1].end
+
         return pe, cur_idx
 
     def handle_braces(tokens, cur_idx):
@@ -258,16 +272,14 @@ def parse_expression(
 
     def handle_bool(cur_idx):
         node = Node("Bool", value=(tokens[cur_idx].type == "literal.bool_true"))
-        node.start = tokens[cur_idx].start
-        node.end = tokens[cur_idx].end
+
         cur_idx += 1
         return node, cur_idx
 
     def handle_identifier(cur_idx):
         name = tokens[cur_idx].content
         node = Node("Identifier", content=name)
-        node.start = tokens[cur_idx].start
-        node.end = tokens[cur_idx].end
+
         cur_idx += 1
         # 处理 id[expr] 索引访问
         if (
@@ -296,14 +308,16 @@ def parse_expression(
         return node, cur_idx
 
     def handle_bracket(cur_idx):
-        handler = bracket_handlers[tokens[cur_idx].content]
+        current_token: Token = tokens[cur_idx]
+        handler = bracket_handlers[current_token.content]
         node, new_idx = handler(tokens, cur_idx)
         return node, new_idx
 
     def handle_prefix_op(cur_idx):
-        props = prefix_attrs[tokens[cur_idx].content]
+        current_token: Token = tokens[cur_idx]
+        props = prefix_attrs[current_token.content]
         if props.get("arity") == 1 and props.get("position") == "prefix":
-            op = tokens[cur_idx].content
+            op = current_token.content
             cur_idx += 1
             right, cur_idx = parse_expression(
                 tokens,
@@ -317,8 +331,6 @@ def parse_expression(
                 unary_prefix_rbp,
             )
             uo = Node("UnaryOp", op=op, operand=right, position="prefix")
-            uo.start = tokens[idx].start
-            uo.end = tokens[cur_idx - 1].end
             return uo, cur_idx
         else:
             raise ValueError(f"不支持的前缀运算符: {tokens[cur_idx].content}")
@@ -328,35 +340,18 @@ def parse_expression(
         return Node("NoneLiteral"), cur_idx
 
     # 匹配条件与处理函数的映射（顺序重要）
-    def match_number(cur_idx):
-        return is_number(tokens[cur_idx])
-
-    def match_string(cur_idx):
-        return is_string(tokens[cur_idx])
-
-    def match_bool(cur_idx):
-        return is_bool(tokens[cur_idx])
-
-    def match_identifier(cur_idx):
-        return is_identifier(tokens[cur_idx])
-
-    def match_bracket(cur_idx):
-        return is_paren(tokens[cur_idx]) and tokens[cur_idx].content in bracket_handlers
-
-    def match_prefix_op(cur_idx):
-        return is_operator(tokens[cur_idx]) and tokens[cur_idx].content in prefix_attrs
-
-    def match_none(cur_idx):
-        return is_none(tokens[cur_idx])
-
     prefix_handlers = [
-        (match_number, handle_number),
-        (match_string, handle_string),
-        (match_bool, handle_bool),
-        (match_identifier, handle_identifier),
-        (match_bracket, handle_bracket),
-        (match_prefix_op, handle_prefix_op),
-        (match_none, handle_none),
+        (lambda idx: is_number(tokens[idx]), handle_number),
+        (lambda idx: is_string(tokens[idx]), handle_string),
+        (lambda idx: is_bool(tokens[idx]), handle_bool),
+        (lambda idx: is_identifier(tokens[idx]), handle_identifier),
+        (lambda idx: is_paren(tokens[idx]), handle_bracket),
+        (
+            lambda idx: is_operator(tokens[idx])
+            and tokens[idx].content in prefix_attrs,
+            handle_prefix_op,
+        ),
+        (lambda idx: is_none(tokens[idx]), handle_none),
     ]
 
     # 匹配并执行前缀处理
@@ -387,7 +382,6 @@ def parse_expression(
         if arity == 1 and props.get("position") == "postfix":
             idx += 1
             node = Node("UnaryOp", op=op, operand=node, position="postfix")
-            node.end = tokens[idx - 1].end
             continue
         elif arity == 2:
             idx += 1
@@ -405,8 +399,6 @@ def parse_expression(
                 unary_prefix_rbp,
             )
             node = Node("BinaryOp", op=op, left=node, right=right_node)
-            node.start = getattr(node, "start", None)
-            node.end = tokens[idx - 1].end
         elif arity == 3:
             second_sym = props.get("second")
             if not second_sym:

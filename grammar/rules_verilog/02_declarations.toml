@@ -3,7 +3,7 @@
 # ============================================================================
 
 [PortList]
-layout = { join = ", " }
+layout = { join = ", ", first_soft = true, nest = 1 }
 production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
 
 [repeat]

@@ -17,7 +17,8 @@ class Parser:
             self.grammar_rules = GrammarRulesRegister().rules_registration()
         except FileNotFoundError:
             pass  # 默认规则不存在，稍后由调用方设置
-        self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
+        if FileManager.debug_log_file is not None:
+            self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
         self.operator_defs = pratt_parser.load_operator_defs()
         self.statement_rule_names = [
             name
@@ -31,8 +32,9 @@ class Parser:
         self._log_state("Parser initialized", mode="w")
 
     def _log_state(self, action: str, mode: str = "a") -> None:
-        with open(self.debug_log_file, mode, encoding="utf-8") as f:
-            f.write(f"[{action}]\n")
+        if hasattr(self, "debug_log_file"):
+            with open(self.debug_log_file, mode, encoding="utf-8") as f:
+                f.write(f"[{action}]\n")
 
     def _warn(self, message: str) -> None:
         """输出解析警告到 stderr（同时写入 debug 日志）"""
@@ -58,24 +60,29 @@ class Parser:
         context: ParseContext,
     ) -> Optional[Node]:
         """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。"""
-        if rule.inline and len(rule.node) == 1:
-            for _, pos_str in rule.node.items():
-                if isinstance(pos_str, str):
-                    try:
-                        pos = int(pos_str.strip("$")) - 1
-                        if 0 <= pos < len(all_matched_nodes):
-                            inner = all_matched_nodes[pos]
-                            # 恢复父节点
-                            if old_node is None:
-                                context.current_node = None
-                            else:
-                                context.update_current_node(old_node)
-                            self._log_state(
-                                f"规则 {rule.name} 内联展开成功 -> {inner.name if hasattr(inner, 'name') else type(inner)}"
-                            )
-                            return inner
-                    except (ValueError, IndexError):
-                        pass
+        if not rule.inline or len(rule.node) != 1:
+            return None
+
+        for _, pos_str in rule.node.items():
+            if not isinstance(pos_str, str):
+                continue
+            try:
+                pos = int(pos_str.strip("$")) - 1
+                if not (0 <= pos < len(all_matched_nodes)):
+                    continue
+                inner = all_matched_nodes[pos]
+                # 恢复父节点
+                if old_node is None:
+                    context.current_node = None
+                else:
+                    context.update_current_node(old_node)
+                self._log_state(
+                    f"规则 {rule.name} 内联展开成功 -> {inner.node_name if hasattr(inner, 'node_name') else type(inner)}"
+                )
+                return inner
+            except (ValueError, IndexError):
+                continue
+
         return None
 
     def _try_rule_productions(
@@ -194,11 +201,6 @@ class Parser:
                         context.update_current_node(old_node)
                     return None
 
-        # 从子节点推导位置信息
-        if all_matched_nodes:
-            rule_node.start = all_matched_nodes[0].start
-            rule_node.end = all_matched_nodes[-1].end
-
         # Inline 规则扁平化：只有一个属性映射时，直接返回被映射的子节点
         inline_result = self._try_inline_rule(
             rule, all_matched_nodes, old_node, context
@@ -290,9 +292,6 @@ class Parser:
 
         parsed_node = Node(token_type)
         parsed_node.add_attr("value", current_token.content)
-        parsed_node.start = current_token.start
-        parsed_node.end = current_token.end
-
         context.advance_token()
 
         self._log_state(f"普通token {token_type} 解析成功")
@@ -330,6 +329,8 @@ class Parser:
                     result = self._process_production_node(item, context)
                     if result is None:
                         raise _SequenceMatchError()
+                    if isinstance(seq_node, str):
+                        raise _SequenceMatchError("序列节点未正确初始化为 Node 对象")
                     seq_node.add_sub_node(result)
                 self._log_state("序列解析成功")
                 return seq_node
@@ -459,7 +460,9 @@ class Parser:
 
         candidates = self.rule_selector.get_candidate_rules(current)
         if not candidates:
-            self._warn(f"没有匹配的语句规则: '{current.content}' (type: {current.type})")
+            self._warn(
+                f"没有匹配的语句规则: '{current.content}' (type: {current.type})"
+            )
             return None
 
         for rule in candidates:

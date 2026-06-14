@@ -1,25 +1,11 @@
 class Token:
-    class Position:
-        def __init__(self):
-            self.line = 0
-            self.column = 0
 
     def __init__(self, content="", type="") -> None:
         self.content: str = content
         self.type: str = type
-        self.start: Token.Position = Token.Position()
-        self.end: Token.Position = Token.Position()
 
     def set_content(self, content: str) -> None:
         self.content = content
-
-    def set_location(
-        self, start_line: int, start_column: int, end_line: int, end_column: int
-    ) -> None:
-        self.start.line = start_line
-        self.start.column = start_column
-        self.end.line = end_line
-        self.end.column = end_column
 
     def set_type(self, token_type: str) -> None:
         self.type = token_type
@@ -37,14 +23,17 @@ from typing import List
 
 @dataclass
 class FileManager:
-    _base_dir: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _base_dir: str = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
     rules_file: str = "pyv_compiler/grammar/rules.toml"
     rules_dir: str = "pyv_compiler/grammar/rules"
     token_define_file: str = "pyv_compiler/grammar/token.toml"
     lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
     symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"
     cg_rules_dir: str = "pyv_compiler/grammar/cg_rules"
-    debug_log_file: str = "pyv_compiler/parser_debug.log"
+    debug_log_file: str | None = "pyv_compiler/parser_debug.log"
+    # debug_log_file: str | None = None
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:
@@ -191,84 +180,86 @@ class GrammarRulesRegister:
 
 
 class Node:
-    def __init__(self, name: str, **kwargs) -> None:
-        self.name = name
-        self.sub_node: list["Node"] = []
-        self.start: "Token.Position | None" = None
-        self.end: "Token.Position | None" = None
+    def __init__(self, node_name: str, **kwargs) -> None:
+        self.node_name = node_name
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     @staticmethod
     def _dump_item(item):
+        # 递归处理 Node、dict、list，过滤 None 和空列表
         if isinstance(item, Node):
             return item.dump()
         if isinstance(item, dict):
-            return {k: Node._dump_item(v) for k, v in item.items()}
+            # 过滤掉值为 None 或空列表的键值对
+            filtered = {}
+            for k, v in item.items():
+                if v is None:
+                    continue
+                if isinstance(v, list) and len(v) == 0:
+                    continue
+                dumped_v = Node._dump_item(v)
+                if dumped_v is not None:
+                    filtered[k] = dumped_v
+            return filtered if filtered else None
         if isinstance(item, list):
-            return [Node._dump_item(x) for x in item]
+            # 过滤掉列表中的 None 和空列表项
+            filtered = [Node._dump_item(x) for x in item if x is not None]
+            filtered = [
+                x for x in filtered if x is not None
+            ]  # 二次过滤（以防 _dump_item 返回 None）
+            return filtered if filtered else None
+        # 基本类型直接返回
         return item
 
     def dump(self):
-        # 收集除 name, child, start, end 外的所有属性
-        skip = {"name", "sub_node", "start", "end", "_symbol_ref"}
-        attrs = {k: v for k, v in self.__dict__.items() if k not in skip}
-        has_children = hasattr(self, "sub_node") and getattr(self, "sub_node") is not None
-
-        # 如果没有任何属性且没有子节点，直接返回节点名称
-        if not attrs and not has_children:
-            return self.name
-
-        # 否则构建字典
         result = {}
         for attr, value in self.__dict__.items():
-            if attr in ("name", "start", "end", "_symbol_ref"):
+            # 跳过 node_name 字段（类型已由外层键隐含）
+            if attr == "node_name":
                 continue
-            if isinstance(value, list):
-                result[attr] = [self._dump_item(item) for item in value]
-            elif isinstance(value, dict):
-                result[attr] = {k: self._dump_item(v) for k, v in value.items()}
-            else:
-                result[attr] = value.dump() if isinstance(value, Node) else value
-        return {self.name: result}
-
-    def inherit(self, node: "Node") -> None:
-        for attr, value in node.__dict__.items():
-            if attr == "name":
+            # 跳过值为 None 或空列表的属性
+            if value is None:
                 continue
-            if isinstance(value, list):
-                if not hasattr(self, attr):
-                    setattr(self, attr, [])
-                getattr(self, attr).extend(value)
-            else:
-                setattr(self, attr, value)
+            if isinstance(value, list) and len(value) == 0:
+                continue
+            # 递归处理值
+            dumped = self._dump_item(value)
+            if dumped is not None:
+                result[attr] = dumped
+        # 外层键仍使用 node_name 提供类型信息
+        return {self.node_name: result}
 
     def add_sub_node(self, sub: "Node") -> None:
+        if not hasattr(self, "sub_node"):
+            self.sub_node = []
         self.sub_node.append(sub)
 
     def iter_children(self):
-        """统一迭代所有子节点：sub_node + 命名属性中的 Node / list[Node]"""
-        seen = set(id(c) for c in self.sub_node)
-        yield from self.sub_node
+        seen = set()
+        if hasattr(self, "sub_node"):
+            seen.update(id(c) for c in self.sub_node)
+            yield from self.sub_node
         for attr_name in vars(self):
-            if attr_name in ("name", "sub_node", "start", "end", "_symbol_ref"):
-                continue
             val = getattr(self, attr_name)
-            if isinstance(val, Node) and id(val) not in seen:
-                seen.add(id(val))
-                yield val
-            elif isinstance(val, list):
-                for item in val:
-                    if isinstance(item, Node) and id(item) not in seen:
-                        seen.add(id(item))
-                        yield item
+            if isinstance(val, Node):
+                if id(val) not in seen:
+                    seen.add(id(val))
+                    yield val
+                continue
+            if not isinstance(val, list):
+                continue
+            for item in val:
+                if isinstance(item, Node) and id(item) not in seen:
+                    seen.add(id(item))
+                    yield item
 
     def add_attr(self, attr_name: str, attr_value) -> None:
         setattr(self, attr_name, attr_value)
 
     def __str__(self) -> str:
-        attrs = {k: v for k, v in self.__dict__.items() if k != "name"}
-        return f'{self.name}({", ".join(f"{k}={v}" for k,v in attrs.items())})'
+        attrs = {k: v for k, v in self.__dict__.items()}
+        return f'{self.node_name}({", ".join(f"{k}={v}" for k,v in attrs.items())})'
 
     def __repr__(self) -> str:
-        return f'"{self.name}"'
+        return f'"{self.node_name}"'

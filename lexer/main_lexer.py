@@ -82,9 +82,6 @@ class Lexer:
                 # set current token line info
                 current_token.set_type("newline")
                 current_token.set_content(lex_text[text_idx])
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 # reset line info
                 line_number += 1
@@ -128,12 +125,7 @@ class Lexer:
                             indent_token = Token()
                             indent_token.set_type("space.indent")
                             indent_token.set_content(space_content)
-                            indent_token.set_location(
-                                line_number,
-                                start_col,
-                                line_number,
-                                start_col + len(space_content),
-                            )
+
                             tokens.append(indent_token)
                         elif current_depth < self.indent_deep:
                             # emit one or more dedent tokens
@@ -141,9 +133,7 @@ class Lexer:
                                 dedent_token = Token()
                                 dedent_token.set_type("space.dedent")
                                 dedent_token.set_content("")
-                                dedent_token.set_location(
-                                    line_number, start_col, line_number, start_col
-                                )
+
                                 tokens.append(dedent_token)
                                 self.indent_deep -= 1
                         # if equal: nothing to emit
@@ -157,7 +147,7 @@ class Lexer:
 
             # in case current chars is // comment (Verilog style)
             elif lex_text[text_idx] == "/" and next_char == "/":
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
                 if self.new_line_start:
                     self.new_line_start = False
                 comment_content: str = ""
@@ -167,9 +157,7 @@ class Lexer:
                     offset += 1
                 current_token.set_type("comment")
                 current_token.set_content(comment_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
+
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 start_point += offset
@@ -177,16 +165,13 @@ class Lexer:
 
             # in case current char is unsized Verilog literal ('b1, 'd0, 'hFF, 'o7)
             elif lex_text[text_idx] == "'" and next_char in "dDbBhHoO":
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 number_content, new_idx = NumberFSM.run(lex_text, text_idx)
                 offset = new_idx - text_idx
 
                 current_token.set_type("literal.number")
                 current_token.set_content(number_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 text_idx = new_idx
                 start_point += offset
@@ -197,7 +182,7 @@ class Lexer:
             # in case current char is a symbol
             elif lex_text[text_idx] in self.token_define["symbol"]["base"].values():
                 # handle possible dedent before actual token
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 extend_symbol = f"{lex_text[text_idx]}{next_char}"
                 current_token.set_content(lex_text[text_idx])
@@ -210,11 +195,6 @@ class Lexer:
                     text_idx += 1
                     offset += 1
 
-                # set current token line info
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
-
                 # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
@@ -223,14 +203,11 @@ class Lexer:
 
             # in case current char is a bracket
             elif lex_text[text_idx] in self.bracket:
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 # set current token line info
                 current_token.set_type("bracket")
                 current_token.set_content(lex_text[text_idx])
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 # reset line info
                 text_idx += 1
@@ -255,11 +232,6 @@ class Lexer:
                 current_token.set_type("comment")
                 current_token.set_content(comment_content)
 
-                # set current token line info
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
-
                 # reset line info\
                 start_point += offset
                 current_token = self.refine_type(current_token)
@@ -269,7 +241,7 @@ class Lexer:
 
             # in case current char is an id
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 id_content: str = lex_text[text_idx]
                 text_idx += 1
@@ -285,9 +257,6 @@ class Lexer:
                 # set current token line info
                 current_token.set_type("id")
                 current_token.set_content(id_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 # reset line info
                 start_point += offset
@@ -297,7 +266,7 @@ class Lexer:
 
             # in case current char is a number
             elif lex_text[text_idx].isdigit():
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 number_content, new_idx = NumberFSM.run(lex_text, text_idx)
                 offset = new_idx - text_idx
@@ -305,9 +274,6 @@ class Lexer:
                 # set current token line info
                 current_token.set_type("literal.number")
                 current_token.set_content(number_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 # reset line info
                 text_idx = new_idx
@@ -318,7 +284,7 @@ class Lexer:
 
             # in case current char is in string
             elif lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 end_char: str = lex_text[text_idx]
                 string_content: str = ""
@@ -339,9 +305,6 @@ class Lexer:
                 # set current token line info
                 current_token.set_type("literal.string")
                 current_token.set_content(string_content)
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 # reset line info
                 start_point += offset
@@ -351,13 +314,10 @@ class Lexer:
 
             # in case current char has nowhere to put
             else:
-                self._emit_pending_dedent(tokens, line_number, start_point)
+                self._emit_pending_dedent(tokens)
 
                 current_token.set_type("unrecognized")
                 current_token.set_content(lex_text[text_idx])
-                current_token.set_location(
-                    line_number, start_point, line_number, start_point + offset
-                )
 
                 # reset line info
                 text_idx += 1
@@ -366,14 +326,13 @@ class Lexer:
                 tokens.append(current_token)
         return tokens
 
-    def _emit_pending_dedent(self, tokens: list[Token], line: int, column: int) -> None:
+    def _emit_pending_dedent(self, tokens: list[Token]) -> None:
         """当新行没有前导空格时，输出所有待处理的 dedent 令牌"""
         if self.new_line_start:
             while self.indent_deep > 0:
                 dedent_token = Token()
                 dedent_token.set_type("space.dedent")
                 dedent_token.set_content("")
-                dedent_token.set_location(line, column, line, column)
                 tokens.append(dedent_token)
                 self.indent_deep -= 1
             self.new_line_start = False
@@ -434,11 +393,7 @@ class Lexer:
 
             # in case token type is unrecognized
             case "unrecognized":
-                raise UnexpectedTokenError(
-                    f"Unexpected token: {_token.content} "
-                    f"at: line: {_token.start.line}, "
-                    f"column: {_token.start.column}"
-                )
+                raise UnexpectedTokenError(f"Unexpected token: {_token.content} ")
 
             # case default
             case _:

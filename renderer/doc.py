@@ -8,7 +8,6 @@ Doc 是纯数据结构，不执行任何渲染逻辑。
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 # ============================================================================

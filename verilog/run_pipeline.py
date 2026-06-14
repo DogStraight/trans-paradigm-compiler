@@ -14,6 +14,7 @@ PyV 编译器端到端测试
 """
 
 import sys, os
+from core.define import Node
 
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
@@ -29,10 +30,9 @@ from renderer.normalizer import normalize_ast
 from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
 import json
-import difflib
 
 
-def main():
+def pipeline():
     # 支持命令行指定测试文件
     if len(sys.argv) > 1:
         arg = sys.argv[1].replace("ref_", "").replace(".v", "")
@@ -77,20 +77,14 @@ def main():
     parser = Parser()
     parser.grammar_rules = rules
     parser.statement_rule_names = [
-        name for name, rule in rules.items()
-        if rule.end_case and name != "Expression"
+        name for name, rule in rules.items() if rule.end_case and name != "Expression"
     ]
     parser.rule_selector = RuleSelector(rules, parser.statement_rule_names)
 
     ast = parser.parse(tokens)
-    if not ast:
+    if ast is None:
         print("❌ 语法分析失败")
         return
-
-    sub_nodes = getattr(ast, "sub_node", [])
-    print(
-        f"🌳 AST 根节点: {[c.name if hasattr(c, 'name') else str(c) for c in sub_nodes]}"
-    )
 
     # 4. AST 规范化（翻译 parser 内部构造为规范形式）
     ast = normalize_ast(ast)
@@ -101,45 +95,30 @@ def main():
     print(f"📋 AST 已保存 ({os.path.getsize(ast_json)} bytes)")
 
     # 5. 语义分析（构建符号表，链接标识符到声明）
-    analyzer = SemanticAnalyzer(rules)
-    ast = analyzer.analyze(ast)
-    scope = analyzer.root_scope
-    assert scope is not None, "语义分析后 root_scope 不应为空"
-    with open(sym_json, "w", encoding="utf-8") as f:
-        json.dump(scope.to_dict(), f, indent=2)
-    print(f"🔗 符号表已保存 ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)")
+    global analyzer_enable
+    if analyzer_enable:
+        analyzer = SemanticAnalyzer(rules)
+        ast = analyzer.analyze(ast)
+        scope = analyzer.root_scope
+        assert scope is not None, "语义分析后 root_scope 不应为空"
+        with open(sym_json, "w", encoding="utf-8") as f:
+            json.dump(scope.to_dict(), f, indent=2)
+        print(
+            f"🔗 符号表已保存 ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)"
+        )
 
     # 6. 代码生成（使用 Renderer）
-    renderer = Renderer(rules_dir="pyv_compiler/grammar/rules_verilog")
-    content = renderer.render(ast)
+    global renderer_enable
+    if renderer_enable:
+        renderer = Renderer(rules_dir="pyv_compiler/grammar/rules_verilog")
+        content = renderer.render(ast)
 
-    with open(gen_file, "w", encoding="utf-8") as f:
-        f.write(content)
-    print(f"✅ 已生成: {gen_file}")
-
-    # 7. 对比
-    ref = source.splitlines(keepends=True)
-    gen = content.splitlines(keepends=True)
-    diff_lines = list(
-        difflib.unified_diff(ref, gen, fromfile="ref.v", tofile="gen.v", n=2)
-    )
-
-    print(f"\n{'='*60}")
-    print("  DIFF (生成 vs 参考)")
-    print(f"{'='*60}")
-    if diff_lines:
-        for line in diff_lines:
-            print(line, end="")
-    else:
-        print("  ✨ 完全一致！")
-
-    # 7. 统计
-    print(f"\n{'='*60}")
-    print(f"  参考行数: {len(ref)}")
-    print(f"  生成行数: {len(gen)}")
-    print(f"  差异行数: {len(diff_lines)}")
-    print(f"{'='*60}")
+        with open(gen_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"✅ 已生成: {gen_file}")
 
 
 if __name__ == "__main__":
-    main()
+    analyzer_enable = True
+    renderer_enable = True
+    pipeline()

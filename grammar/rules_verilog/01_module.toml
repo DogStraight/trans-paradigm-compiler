@@ -3,9 +3,25 @@
 # ============================================================================
 
 [ModuleDecl]
-body_role = "flatten"
-head = { line = ["module ", { ref = "module_name" }, { ref = "params" }, " (", { ref = "ports" }, ");"] }
-body = { indent = true }
+head = { line = [
+    "module ",
+    { ref = "module_name" },
+    { opt = { group = [
+        " #(",
+        { ref = "params" }, # 这里不再有额外的 soft
+        { soft = true },    # 右括号前的软换行
+        ")",
+    ] } },
+    { opt = { group = [
+        "(",
+        { ref = "ports" }, # 同样没有额外 soft
+        { soft = true },   # 右括号前的软换行
+        ");",
+    ] } },
+] }
+
+
+body = { indent = true, source = "body" }
 tail = "endmodule"
 production = [
     "keyword.module",
@@ -30,7 +46,7 @@ ports = "$5"
 body = "$8"
 
 [ParameterList]
-layout = { line = [" #(", { join = ", " }, ")"] }
+layout = { join = ", ", first_soft = true, nest = 1 }
 production = [
     "symbol.base.pound",
     "bracket.l_parentheses",
@@ -43,7 +59,12 @@ first = "$3"
 rest = "$4"
 
 [ParamDecl]
-layout = { line = ["parameter ", { ref = "param_name" }, " = ", { ref = "value" }] }
+layout = { line = [
+    "parameter ",
+    { ref = "param_name" },
+    " = ",
+    { ref = "value" },
+] }
 production = ["keyword.parameter", "id", "symbol.base.equal", "@Expression"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 symbol_kind = "parameter"

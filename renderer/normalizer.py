@@ -92,18 +92,25 @@ def _normalize(
 
     # 1. 按名称前缀/精确名提取字面值
     for prefix in extract_prefixes:
-        if node.name.startswith(prefix):
-            return getattr(node, "value", node.name)
-    if node.name in extract_names:
-        return getattr(node, "value", node.name)
+        if node.node_name.startswith(prefix):
+            return getattr(node, "value", node.node_name)
+    if node.node_name in extract_names:
+        return getattr(node, "value", node.node_name)
 
     # 2. 消除包装节点（optional/repeat/sequence）
-    if node.name in eliminate_types:
-        if node.name == "optional":
-            if not node.sub_node:
+    if node.node_name in eliminate_types:
+        if node.node_name == "optional":
+            if (
+                not hasattr(node, children_field)
+                or getattr(node, children_field) is None
+            ):
                 return None
+            sublist = getattr(node, children_field)
+            if not sublist:
+                return None
+            # 可选节点只有一个子节点
             return _normalize(
-                node.sub_node[0],
+                sublist[0],
                 layouts,
                 config,
                 extract_prefixes,
@@ -116,34 +123,38 @@ def _normalize(
             )
         # repeat / sequence → 展平
         result = []
-        for child in node.sub_node:
-            normalized = _normalize(
-                child,
-                layouts,
-                config,
-                extract_prefixes,
-                extract_names,
-                eliminate_types,
-                merge_attrs,
-                flatten_types,
-                children_field,
-                body_field,
-            )
-            if normalized is not None:
-                if isinstance(normalized, list):
-                    result.extend(normalized)
-                else:
-                    result.append(normalized)
+        if hasattr(node, children_field) and getattr(node, children_field) is not None:
+            for child in getattr(node, children_field):
+                normalized = _normalize(
+                    child,
+                    layouts,
+                    config,
+                    extract_prefixes,
+                    extract_names,
+                    eliminate_types,
+                    merge_attrs,
+                    flatten_types,
+                    children_field,
+                    body_field,
+                )
+                if normalized is not None:
+                    if isinstance(normalized, list):
+                        result.extend(normalized)
+                    else:
+                        result.append(normalized)
         # sequence 中的分隔符（逗号等）已被 extract_value 提取为字符串，
         # 过滤掉非 Node 项，避免与 layout 的 join 分隔符冲突
-        if node.name == "sequence":
+        if node.node_name == "sequence":
             result = [x for x in result if isinstance(x, Node)]
         return result
 
     # 3. 展开透明容器（Block 等）
-    if node.name in flatten_types:
+    if node.node_name in flatten_types:
+        body = getattr(node, children_field, None)
+        if body is None:
+            return []
         return _normalize(
-            node.sub_node,
+            body,
             layouts,
             config,
             extract_prefixes,
@@ -156,7 +167,7 @@ def _normalize(
         )
 
     # 4. 普通节点：递归处理所有属性
-    CORE_ATTRS = frozenset({"name", "start", "end"})
+    CORE_ATTRS = frozenset({"node_name", "start", "end"})
     for attr_name in list(vars(node)):
         if attr_name in CORE_ATTRS or attr_name.startswith("_"):
             continue
@@ -182,10 +193,17 @@ def _normalize(
             setattr(node, attr_name, normalized)
 
     # 5. 合并命名属性到 children（first/rest 等）
+    # 注意：不要预先创建 children_field，只在有需要时创建
+    children = None
+    if hasattr(node, children_field):
+        children = getattr(node, children_field)
+
     for attr in merge_attrs:
         val = getattr(node, attr, None)
         if val is not None:
-            children = getattr(node, children_field, [])
+            if children is None:
+                children = []
+                setattr(node, children_field, children)
             if isinstance(val, list):
                 children.extend(val)
             else:
@@ -195,46 +213,62 @@ def _normalize(
             except AttributeError:
                 pass
 
-    # 6. body_role = "flatten" → body 内容展开到 sub_node
+    # 6. body_role = "flatten" → body 内容展开到 children_field
     if layouts:
-        role = layouts.get(node.name, {}).get("body_role")
+        role = layouts.get(node.node_name, {}).get("body_role")
         if role == "flatten":
             body = getattr(node, body_field, None)
-            if isinstance(body, list):
-                # body 已被归一化（Block 展平为列表）
-                getattr(node, children_field).extend(body)
-            elif isinstance(body, Node):
-                # 非 Block 类型的 body，取其子节点
-                for child in getattr(body, children_field, []):
-                    if isinstance(child, Node):
-                        getattr(node, children_field).append(child)
             if body is not None:
-                # 从 sub_node 中移除旧的 body 引用
-                setattr(
-                    node,
-                    children_field,
-                    [c for c in getattr(node, children_field) if c is not body],
-                )
+                if children is None:
+                    children = []
+                    setattr(node, children_field, children)
+                if isinstance(body, list):
+                    children.extend(body)
+                elif isinstance(body, Node):
+                    body_children = getattr(body, children_field, [])
+                    if isinstance(body_children, list):
+                        children.extend(body_children)
+                    else:
+                        children.append(body_children)
+                # 从 children 中移除旧的 body 引用
+                new_children = [c for c in children if c is not body]
+                if new_children:
+                    setattr(node, children_field, new_children)
+                else:
+                    # 如果清空了，删除该属性
+                    if hasattr(node, children_field):
+                        delattr(node, children_field)
                 try:
                     delattr(node, body_field)
                 except AttributeError:
                     pass
 
-    # 7. wrap_single_stmts → 将 if/else 中非 begin/end 的语句体包裹在 BeginEnd 中
+    # 7. 如果 children 存在但为空列表，则删除该属性
+    if hasattr(node, children_field):
+        children_val = getattr(node, children_field)
+        if children_val is not None and len(children_val) == 0:
+            delattr(node, children_field)
+
+    # 8. wrap_single_stmts → 将 if/else 中非 begin/end 的语句体包裹在 BeginEnd 中
     if config.get("wrap_single_stmts", {}).get("enabled"):
         attr_map = config["wrap_single_stmts"].get("attr_map", {})
-        if node.name in attr_map:
-            for attr_name in attr_map[node.name]:
+        if node.node_name in attr_map:
+            for attr_name in attr_map[node.node_name]:
                 body = getattr(node, attr_name, None)
                 if not isinstance(body, Node):
                     continue
-                # 检查是否是 Statement 内含非 BeginEnd 的语句
                 inner = body
-                if body.name == "Statement":
+                if body.node_name == "Statement":
                     inner = getattr(body, "stmt", body)
-                if isinstance(inner, Node) and inner.name != "BeginEnd":
+                if isinstance(inner, Node) and inner.node_name != "BeginEnd":
                     be = Node("BeginEnd")
-                    be.sub_node.append(body)
+                    # 确保 be 有 sub_node 列表
+                    if (
+                        not hasattr(be, children_field)
+                        or getattr(be, children_field) is None
+                    ):
+                        setattr(be, children_field, [])
+                    getattr(be, children_field).append(body)
                     setattr(node, attr_name, be)
 
     return node
