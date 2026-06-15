@@ -5,7 +5,7 @@ module dff (
     input  wire clk,
     input  wire rst_n,
     input  wire d,
-    output reg  q
+    output reg  q = 1'b0
 );
 
     always @(posedge clk or negedge rst_n) begin

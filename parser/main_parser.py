@@ -11,7 +11,7 @@ import parser.pratt_parser as pratt_parser
 
 
 class Parser:
-    def __init__(self) -> None:
+    def __init__(self, rules_dir: str | None = None) -> None:
         self.grammar_rules: Dict[str, GrammarRule] = {}
         try:
             self.grammar_rules = GrammarRulesRegister().rules_registration()
@@ -19,7 +19,7 @@ class Parser:
             pass  # 默认规则不存在，稍后由调用方设置
         if FileManager.debug_log_file is not None:
             self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
-        self.operator_defs = pratt_parser.load_operator_defs()
+        self.operator_defs = pratt_parser.load_operator_defs(rules_dir)
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()

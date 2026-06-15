@@ -119,14 +119,3 @@ endmodule = "endmodule"
 assign = "assign"
 endcase = "endcase"
 default = "default"
-default = "default"
-
-[literal]
-true = "True"
-false = "False"
-none = "None"
-string = "(\".*\")|('.*')"
-number = "\\d+"
-
-[id.id]
-id = "[a-z_A-Z][a-z_A-Z0-9]*"

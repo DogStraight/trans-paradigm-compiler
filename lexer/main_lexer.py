@@ -8,7 +8,17 @@ from .number_fsm import NumberFSM
 class Lexer:
     token_define: dict = {}
 
-    def __init__(self, token_define_dict: dict = get_token_define()) -> None:
+    def __init__(
+        self,
+        token_define_dict: dict | None = None,
+        rules_dir: str | None = None,
+    ) -> None:
+        if token_define_dict is None:
+            if rules_dir:
+                from .lexer_utils import get_token_define_from_dir
+                token_define_dict = get_token_define_from_dir(rules_dir)
+            else:
+                token_define_dict = get_token_define()
         self.indent_deep = 0
         self.indent_level = 4
         self.token_define = token_define_dict

@@ -7,7 +7,7 @@ module led_blinker # (
 )(
     input  wire       clk,
     input  wire       rst_n,
-    output reg        led
+    output reg        led = 1'b0
 );
 
     reg [31:0] counter;

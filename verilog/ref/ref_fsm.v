@@ -5,12 +5,12 @@ module traffic_light (
     input  wire       clk,
     input  wire       rst_n,
     input  wire       car_sensor,
-    output reg  [1:0] light
+    output reg  [1:0] light  = 2'b0
 );
 
     reg [1:0] state;
     reg [1:0] next_state;
-    reg [31:0] timer;
+    reg [31:0] timer = 32'd0;
 
     // 状态编码
     localparam IDLE    = 2'd0;

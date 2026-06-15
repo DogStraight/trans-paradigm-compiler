@@ -5,17 +5,23 @@
 [PortList]
 layout = { join = ", ", first_soft = true, nest = 1 }
 production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
-
-[repeat]
-layout = { join = "", items = "children" }
-
-[sequence]
-production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
 [PortList.node]
 first = "$1"
 rest = "$2"
 
+# ============================================================================
+# 端口声明分支（wire 端口 / reg 端口）
+# ============================================================================
+
 [PortDecl]
+layout = { ref = "decl" }
+production = ["@WirePortDecl|@RegPortDecl"]
+inline = true
+[PortDecl.node]
+decl = "$1"
+
+# ----- wire 端口（input / output / inout，可选 wire 关键字，无初始化）-----
+[WirePortDecl]
 layout = { line = [
     { ref = "direction" },
     { opt = { group = [
@@ -32,7 +38,7 @@ layout = { line = [
 ] }
 production = [
     "keyword.input|keyword.output|keyword.inout",
-    "@OptType?",
+    "keyword.wire?",
     "@Range?",
     "id",
 ]
@@ -44,18 +50,55 @@ end_case = [
 ]
 symbol_kind = "port"
 symbol_name = "port_name"
-[PortDecl.node]
+[WirePortDecl.node]
 direction = "$1"
 port_type = "$2"
 range = "$3"
 port_name = "$4"
 
-[OptType]
-layout = { ref = "type_desc" }
-production = ["keyword.wire|keyword.reg"]
+# ----- reg 端口（仅 output，必须有 reg，允许初始化）-----
+[RegPortDecl]
+layout = { line = [
+    "output ",
+    "reg ",
+    { opt = { group = [
+        "[",
+        { ref = "range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "port_name" },
+    { opt = { group = [
+        " = ",
+        { ref = "init" },
+    ] } },
+] }
+production = ["keyword.output", "keyword.reg", "@Range?", "id", "@PortInit?"]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "newline",
+    "space.dedent",
+]
+symbol_kind = "port"
+symbol_name = "port_name"
+[RegPortDecl.node]
+direction = "output"
+range = "$3"
+port_name = "$4"
+init = "$5"
+
+# 端口初始化（用于 reg 端口）
+[PortInit]
+layout = { line = ["= ", { ref = "value" }] }
+production = ["symbol.base.equal", "@Expression"]
 inline = true
-[OptType.node]
-type_desc = "$1"
+[PortInit.node]
+value = "$2"
+
+# ============================================================================
+# 范围声明（共用）
+# ============================================================================
 
 [Range]
 layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
@@ -69,6 +112,10 @@ production = [
 [Range.node]
 msb = "$2"
 lsb = "$4"
+
+# ============================================================================
+# 内部 wire / reg / localparam 声明
+# ============================================================================
 
 [WireDecl]
 layout = { line = [
@@ -101,9 +148,13 @@ layout = { line = [
     ] } },
     " ",
     { ref = "reg_name" },
+    { opt = { group = [
+        " = ",
+        { ref = "init" },
+    ] } },
     ";",
 ] }
-production = ["keyword.reg", "@Range?", "id", "symbol.base.semicolon"]
+production = ["keyword.reg", "@Range?", "id", "@RegInit?", "symbol.base.semicolon"]
 end_case = ["newline"]
 symbol_kind = "reg"
 symbol_name = "reg_name"
@@ -111,6 +162,15 @@ symbol_name = "reg_name"
 reg_type = "$1"
 range = "$2"
 reg_name = "$3"
+init = "$4"
+
+# 内部 reg 初始化
+[RegInit]
+layout = { line = ["= ", { ref = "value" }] }
+production = ["symbol.base.equal", "@Expression"]
+inline = true
+[RegInit.node]
+value = "$2"
 
 [LocalParamDecl]
 layout = { line = ["localparam ", { join = ",", items = "items" }, ";"] }

@@ -66,15 +66,17 @@ def pipeline():
         source = f.read()
     print(f"📄 源文件: {src_file}")
 
+    RULES_DIR = "pyv_compiler/grammar/rules_verilog"
+
     # 2. 词法分析
-    lexer = Lexer()
+    lexer = Lexer(rules_dir=RULES_DIR)
     tokens = lexer.tokenize(source)
     print(f"🔤 Token 数: {len(tokens)}")
 
     # 3. 语法分析（使用 Verilog 规则）
     register = GrammarRulesRegister()
-    rules = register.rules_registration("pyv_compiler/grammar/rules_verilog")
-    parser = Parser()
+    rules = register.rules_registration(RULES_DIR)
+    parser = Parser(rules_dir=RULES_DIR)
     parser.grammar_rules = rules
     parser.statement_rule_names = [
         name for name, rule in rules.items() if rule.end_case and name != "Expression"
@@ -110,7 +112,7 @@ def pipeline():
     # 6. 代码生成（使用 Renderer）
     global renderer_enable
     if renderer_enable:
-        renderer = Renderer(rules_dir="pyv_compiler/grammar/rules_verilog")
+        renderer = Renderer(rules_dir=RULES_DIR)
         content = renderer.render(ast)
 
         with open(gen_file, "w", encoding="utf-8") as f:

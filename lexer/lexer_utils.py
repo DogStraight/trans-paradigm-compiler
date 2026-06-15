@@ -1,4 +1,5 @@
 # lexer/lexer_utils.py
+import os
 import tomllib
 from core.define import FileManager
 
@@ -9,6 +10,13 @@ def get_token_define(
     token_define = FileManager.read_file(token_define)
     token_define_dict: dict = tomllib.loads(token_define)
     return token_define_dict
+
+
+def get_token_define_from_dir(rules_dir: str) -> dict:
+    """从规则目录加载 _token.toml"""
+    path = os.path.join(rules_dir, "_token.toml")
+    content = FileManager.read_file(path)
+    return tomllib.loads(content)
 
 
 # 如果使能这个装饰器，则将返回的当前的token值的类型做一次简化，

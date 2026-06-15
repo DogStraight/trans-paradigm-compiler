@@ -63,21 +63,45 @@
 
 - [ ] **Lexer 缩进改造** — 改为关键字触发（`begin`/`case`/`module`），跳过续行对齐
 - [ ] **域管理 + 符号表集成到配置** — `scope_open` / `scope_kind` / `symbol_kind` 字段已加入，Parser 集成待完成
+- [ ] **配置文件的目录化整合** — `_token.toml` / `_symbol_level.toml` 已搬入 `rules_verilog/`，Lexer/Parser 已支持从 `rules_dir` 自发现，后续新增语言只需一套目录
 
 ### 🔴 未开始 — 需 Scope/Symbol 就绪后
 
 - [ ] **`integer` / `genvar` 声明** — 简单语法规则 + CG 模板
-- [ ] **Reg/Wire 带初值** — `reg [3:0] cnt = 4'd0;`
 - [ ] **多维数组** — `reg [7:0] mem [0:255];`
 - [ ] **`for` 循环语句** — `for (i = 0; i < N; i = i + 1)`
 - [ ] **`generate for / if / case`** — generate 域管理 + 循环/条件生成
 - [ ] **`function` / `task`** — 子语言解析器 + 独立作用域
+  - 需先在 `token.toml` 注册 `keyword.function` / `keyword.task` / `keyword.endfunction` / `keyword.endtask`
+  - 需在 TOML 规则中标记 `scope_open = true` / `scope_kind = "function"`
+  - 函数/任务的内部 `input`/`output` 要注册到自己的域而非模块域
 - [ ] **`$clog2` 等系统函数** — Pratt 表达式支持
 
 ### 📋 延伸规划
 
+#### 预处理器（配置驱动）
+- [ ] **`define / `include / `ifdef 支持**
+  - 作为独立流水线阶段插在 Lexer 之前
+  - 预处理规则由 TOML 配置（`_preprocessor.toml`），保持项目风格
+  - 优先级中等，可作为一个微型独立项目之后实现
+
+#### DSL 生成器完备化
+- [ ] **多语言验证** — 目前只有 Verilog 一个实例，完备性不足
+- [ ] **新增第二语言试验** — 用同一套 TOML rules → Doc IR 流水线验证通用性
+- [ ] **自动化 diff 测试** — 当前 gen/*.v 与 ref/*.v 靠肉眼对比
+
+#### 对标 Pyverilog 的元能力提取
+- [ ] **研究 Pyverilog 数据流分析**（`dataflow_analyzer.py`）
+  - 模块连线提取、信号绑定、常量传播
+  - 评估是否能作为独立的 analyzer pass 嵌入流水线
+- [ ] **研究 Pyverilog 控制流分析**（`controlflow_analyzer.py`）
+  - FSM 状态机提取、状态转换图
+  - 评估是否能作为元能力抽取
+- [ ] **研究其 AST 节点设计** — 每个节点一个 Python 类 vs 通用 `Node` 的取舍
+
+#### 其他
 - [ ] **常量折叠** — 编译期计算常量表达式（`W-1` → `7`）
-- [ ] **类型检查** — 位宽验证
+- [ ] **类型/位宽推断** — 从表达式树推导信号位宽
 - [ ] **跨文件导入** — `import` 语句 + 符号注册
 - [ ] **VS Code 插件** — 语法高亮 + 补全 + 跳转定义
 - [ ] **配置驱动的 LSP** — CLI 命令 `--complete` / `--hover` / `--goto-def`
