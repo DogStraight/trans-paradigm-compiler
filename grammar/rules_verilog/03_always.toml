@@ -4,7 +4,12 @@
 
 [AlwaysBlock]
 body_role = "direct"
-layout = { line = ["always @(", { ref = "sensitivity" }, ") ", { ref = "body" }] }
+layout = { line = [
+    "always @(",
+    { ref = "sensitivity" },
+    ") ",
+    { ref = "body" },
+] }
 production = [
     "keyword.always",
     "symbol.base.at",
@@ -25,8 +30,7 @@ production = [
     "(symbol.extend.logic_or,@EdgeSense)*",
 ]
 [SensitivityList.node]
-first = "$1"
-rest = "$2"
+items = ["$1", "$2.items"] # 统一列表
 
 [EdgeSense]
 layout = { line = [{ ref = "edge" }, " ", { ref = "signal" }] }

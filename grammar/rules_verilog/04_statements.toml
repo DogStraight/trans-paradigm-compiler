@@ -12,7 +12,14 @@ inline = true
 stmt = "$1"
 
 [IfStatement]
-layout = { line = ["if (", { ref = "condition" }, ") ", { ref = "then_stmt" }, " ", { ref = "else_chain" }] }
+layout = { line = [
+    "if (",
+    { ref = "condition" },
+    ") ",
+    { ref = "then_stmt" },
+    " ",
+    { ref = "else_chain" },
+] }
 production = [
     "keyword.if",
     "bracket.l_parentheses",
@@ -35,7 +42,14 @@ inline = true
 branch = "$1"
 
 [ElseIf]
-layout = { line = ["else if (", { ref = "condition" }, ") ", { ref = "then_stmt" }, " ", { ref = "else_chain" }] }
+layout = { line = [
+    "else if (",
+    { ref = "condition" },
+    ") ",
+    { ref = "then_stmt" },
+    " ",
+    { ref = "else_chain" },
+] }
 production = [
     "keyword.else",
     "keyword.if",
@@ -99,8 +113,7 @@ items = "$5"
 layout = { join = "\n" }
 production = ["@CaseItem|@DefaultItem", "(@CaseItem|@DefaultItem)*"]
 [CaseItemList.node]
-first = "$1"
-rest = "$2"
+items = ["$1", "$2.items"] # 统一列表
 
 [CaseItem]
 layout = { line = [{ ref = "value" }, ": ", { ref = "stmt" }] }
@@ -118,7 +131,13 @@ end_case = ["newline"]
 stmt = "$3"
 
 [AssignStatement]
-layout = { line = ["assign ", { ref = "target" }, " = ", { ref = "value" }, ";"] }
+layout = { line = [
+    "assign ",
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+    ";",
+] }
 production = [
     "keyword.assign",
     "id",

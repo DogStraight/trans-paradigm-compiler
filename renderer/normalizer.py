@@ -3,7 +3,6 @@ normalizer.py — 统一的 AST 规范化层
 
 将 parser 原始输出翻译为规范 AST 形式，消除所有 parser 内部构造。
 Renderer 仅依赖此规范形式。
-所有规则通过 normalize_config.toml 配置，零硬编码。
 """
 
 import tomllib
@@ -69,23 +68,31 @@ def _normalize(
     body_field,
 ):
     """递归实现"""
+
+    # ---- 新增：列表展平 ----
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            normalized = _normalize(
+                item,
+                layouts,
+                config,
+                extract_prefixes,
+                extract_names,
+                eliminate_types,
+                merge_attrs,
+                flatten_types,
+                children_field,
+                body_field,
+            )
+            if normalized is not None:
+                if isinstance(normalized, list):
+                    result.extend(normalized)
+                else:
+                    result.append(normalized)
+        return result
+
     if not isinstance(value, Node):
-        if isinstance(value, list):
-            return [
-                _normalize(
-                    v,
-                    layouts,
-                    config,
-                    extract_prefixes,
-                    extract_names,
-                    eliminate_types,
-                    merge_attrs,
-                    flatten_types,
-                    children_field,
-                    body_field,
-                )
-                for v in value
-            ]
         return value
 
     node = value

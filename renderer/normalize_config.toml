@@ -2,16 +2,17 @@
 # 定义 normalizer 如何将 parser 原始输出翻译为规范 AST。
 # 可按语言覆盖（放在对应规则目录下）。
 
-# 需要提取为字符串值的节点
+# 需要提取为字符串值的节点（前缀匹配或精确名匹配）
 [extract_value]
 prefixes = ["keyword.", "symbol."]
-names = ["id"]
+# 注意：id 已被 Identifier 节点替代，不再需要提取为字符串
+names = []
 
 # 需要消除的包装节点类型
 [eliminate]
 types = ["optional", "repeat", "sequence"]
 
-# 需要合并到 children 的命名属性
+# 需要合并到 children 的命名属性（例如 first/rest 合并到 sub_node）
 [merge]
 attrs = ["first", "rest"]
 

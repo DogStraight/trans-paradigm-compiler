@@ -20,7 +20,6 @@ head = { line = [
     ] } },
 ] }
 
-
 body = { indent = true, source = "body" }
 tail = "endmodule"
 production = [
@@ -55,8 +54,8 @@ production = [
     "bracket.r_parentheses",
 ]
 [ParameterList.node]
-first = "$3"
-rest = "$4"
+# 合并第一个 ParamDecl 和后续列表
+params = ["$3", "$4.items"]
 
 [ParamDecl]
 layout = { line = [

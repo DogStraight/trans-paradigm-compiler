@@ -119,7 +119,7 @@ endmodule = "endmodule"
 assign = "assign"
 endcase = "endcase"
 default = "default"
-default = "default"
+# default = "default"
 
 [literal]
 true = "True"

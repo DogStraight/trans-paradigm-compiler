@@ -6,8 +6,7 @@
 layout = { join = ", ", first_soft = true, nest = 1 }
 production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
 [PortList.node]
-first = "$1"
-rest = "$2"
+items = ["$1", "$2.items"] # 统一列表
 
 # ============================================================================
 # 端口声明分支（wire 端口 / reg 端口）
@@ -154,7 +153,13 @@ layout = { line = [
     ] } },
     ";",
 ] }
-production = ["keyword.reg", "@Range?", "id", "@RegInit?", "symbol.base.semicolon"]
+production = [
+    "keyword.reg",
+    "@Range?",
+    "id",
+    "@RegInit?",
+    "symbol.base.semicolon",
+]
 end_case = ["newline"]
 symbol_kind = "reg"
 symbol_name = "reg_name"
@@ -189,8 +194,7 @@ items = "$2"
 layout = { join = "," }
 production = ["@LocalParamItem", "(symbol.base.comma,@LocalParamItem)*"]
 [LocalParamItemList.node]
-first = "$1"
-rest = "$2"
+items = ["$1", "$2.items"]
 
 [LocalParamItem]
 layout = { line = [{ ref = "param_name" }, " = ", { ref = "value" }] }
