@@ -228,7 +228,7 @@ grammar/rules/
 
 ```toml
 [VarInit]
-production = ["id", "symbol.base.colon", "@Type", "symbol.base.equal", "@Initializer"]
+production = ["@Identifier", "symbol.base.colon", "@Type", "symbol.base.equal", "@Initializer"]
 end_case = ["newline"]
 [VarInit.node]
 var_name = "$1"

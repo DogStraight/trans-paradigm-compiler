@@ -1,68 +1,29 @@
-# symbol_level.toml
-# 运算符定义，优先级由数组顺序决定（从低到高）
+# ============================================================================
+# 运算符优先级 — 全局缺省配置
+#
+# Pratt 解析器优先加载语言规则目录下的 _symbol_level.toml，
+# 找不到时使用本文件作为缺省。
+#
+# 优先级由数组顺序决定：从上到下递增（列表最低 → 末尾最高）。
+# 新语言只需在 <rules_dir>/_symbol_level.toml 中覆盖差异部分。
+# ============================================================================
 
-# [[operator]]
-# symbol = "="
-# arity = 2
-# assoc = "right"
-
+# 三目条件 (右结合)
 [[operator]]
 symbol = "?"
 arity = 3
 second = ":"
 assoc = "right"
 
-# 逻辑或（最低优先级）
-[[operator]]
-symbol = "or"
-arity = 2
-assoc = "left"
-
-# 逻辑与（高于 or，低于比较）
-[[operator]]
-symbol = "and"
-arity = 2
-assoc = "left"
-
-# 如果保留 C 风格逻辑运算符，它们应与 and/or 同级
+# 逻辑或
 [[operator]]
 symbol = "||"
 arity = 2
 assoc = "left"
 
+# 逻辑与
 [[operator]]
 symbol = "&&"
-arity = 2
-assoc = "left"
-
-# 比较运算符
-[[operator]]
-symbol = "=="
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = "!="
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = ">"
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = "<"
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = ">="
-arity = 2
-assoc = "left"
-
-[[operator]]
-symbol = "<="
 arity = 2
 assoc = "left"
 
@@ -81,6 +42,38 @@ assoc = "left"
 # 位与
 [[operator]]
 symbol = "&"
+arity = 2
+assoc = "left"
+
+# 相等/不等
+[[operator]]
+symbol = "=="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "!="
+arity = 2
+assoc = "left"
+
+# 比较
+[[operator]]
+symbol = ">"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "<="
 arity = 2
 assoc = "left"
 

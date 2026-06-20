@@ -346,6 +346,7 @@ def parse_expression(
 
     # 匹配条件与处理函数的映射（顺序重要）
     prefix_handlers = [
+        (lambda idx: isinstance(tokens[idx], Node), lambda idx: (tokens[idx], idx + 1)),
         (lambda idx: is_number(tokens[idx]), handle_number),
         (lambda idx: is_string(tokens[idx]), handle_string),
         (lambda idx: is_bool(tokens[idx]), handle_bool),
@@ -474,9 +475,13 @@ def parse(tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]) 
 
 
 def parse_with_count(
-    tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]
+    tokens: list, operator_defs: list
 ) -> Tuple[Node, int]:
-    """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)"""
+    """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
+
+    tokens 可包含 Token 或预解析的 Node（如 CallExpr），
+    Node 作为原子表达式直接返回。
+    """
     prefix_priority, prefix_attrs, infix_priority, infix_attrs = build_priority_maps(
         operator_defs
     )

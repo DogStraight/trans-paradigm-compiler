@@ -126,16 +126,65 @@ def get_close_bracket_string(start_bracket: str, target_string: str) -> str:
 
 
 class GrammarRule:
+    """语法规则
+
+    由 TOML 文件加载，除标准的 production/node/end_case 外，
+    可通过自声明属性附加语义角色，供下游消费（不限于 SemanticAnalyzer）：
+
+    ───────────────────────────────────────────────────────────────
+    语义自声明属性 (semantic_analyzer.py 消费)
+    ───────────────────────────────────────────────────────────────
+    scope = { name_attr?, kind? }    本规则创建新作用域
+        name_attr  从节点某属性提取作用域名称（缺省用规则名）
+        kind       作用域种类（缺省 "block"）
+
+    symbol = { kind, name_attr }     本规则在作用域中注册符号
+        kind       符号种类（如 "wire" / "reg" / "port"）
+        name_attr  从节点提取符号名的属性路径
+
+    identifier_ref = true    本规则的产出节点是标识符引用（触发作用域链解析 + _symbol_ref 绑定）
+    ───────────────────────────────────────────────────────────────
+
+    其他属性由 Parser / Renderer / Normalizer 各自消费。
+    """
+
     def __init__(self, name: str, **kwargs):
         self.name = name
-        # 必填字段，如果缺失则设为空列表/空字典
-        self.production = kwargs.pop("production", [])
-        self.node = kwargs.pop("node", {})
-        # 可选字段，提供默认值
-        self.end_case = kwargs.pop("end_case", [])
-        self.inline = kwargs.pop("inline", False)
-        self.pratt = kwargs.pop("pratt", False)
-        # 剩余的所有未知属性也保存下来
+
+        # 从嵌套的阶段结构中提取属性到顶层，同时保留原始嵌套
+        for stage in ("parser", "analyzer", "renderer"):
+            stage_data = kwargs.pop(stage, {})
+            if stage_data:
+                setattr(self, stage, stage_data)
+                for k, v in stage_data.items():
+                    # node 特殊处理：部分代码直接读 rule.node
+                    if k == "node" and isinstance(v, dict):
+                        self.node = v
+                    elif k == "production":
+                        self.production = v
+                    elif k == "end_case":
+                        self.end_case = v
+                    elif k == "inline":
+                        self.inline = v
+                    elif k == "pratt":
+                        self.pratt = v
+                    elif k == "block_start":
+                        self.block_start = v
+                    elif k == "block_end":
+                        self.block_end = v
+                    elif k == "scope":
+                        self.scope = v
+                    elif k == "symbol":
+                        self.symbol = v
+                    elif k == "identifier_ref":
+                        self.identifier_ref = v
+
+        # 确保核心字段存在（由阶段嵌套结构提供）
+        for fld in ("production", "node", "end_case", "inline", "pratt"):
+            if not hasattr(self, fld):
+                setattr(self, fld, [] if fld in ("production", "node", "end_case") else False)
+
+        # 剩余未识别的属性
         for key, value in kwargs.items():
             setattr(self, key, value)
 

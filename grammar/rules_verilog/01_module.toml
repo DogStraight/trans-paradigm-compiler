@@ -3,6 +3,31 @@
 # ============================================================================
 
 [ModuleDecl]
+
+[ModuleDecl.parser]
+production = [
+    "keyword.module",
+    "@Identifier",
+    "@ParameterList?",
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@Block",
+    "keyword.endmodule",
+]
+end_case = ["keyword.endmodule"]
+
+[ModuleDecl.parser.node]
+module_name = "$2"
+params = "$3"
+ports = "$5"
+body = "$8"
+
+[ModuleDecl.analyzer]
+scope = { name_attr = "module_name", kind = "module" }
+
+[ModuleDecl.renderer]
 head = { line = [
     "module ",
     { ref = "module_name" },
@@ -19,33 +44,12 @@ head = { line = [
         ");",
     ] } },
 ] }
-
 body = { indent = true, source = "body" }
-tail = "endmodule"
-production = [
-    "keyword.module",
-    "id",
-    "@ParameterList?",
-    "bracket.l_parentheses",
-    "@PortList?",
-    "bracket.r_parentheses",
-    "symbol.base.semicolon",
-    "@Block",
-    "keyword.endmodule",
-]
-end_case = ["keyword.endmodule"]
-scope_open = true
-scope_name_attr = "module_name"
-scope_kind = "module"
+tail = { text = "endmodule", break = 2 }
 
-[ModuleDecl.node]
-module_name = "$2"
-params = "$3"
-ports = "$5"
-body = "$8"
 
 [ParameterList]
-layout = { join = ", ", first_soft = true, nest = 1 }
+[ParameterList.parser]
 production = [
     "symbol.base.pound",
     "bracket.l_parentheses",
@@ -53,21 +57,34 @@ production = [
     "(symbol.base.comma,@ParamDecl)*",
     "bracket.r_parentheses",
 ]
-[ParameterList.node]
-# 合并第一个 ParamDecl 和后续列表
+[ParameterList.parser.node]
 params = ["$3", "$4.items"]
 
+[ParameterList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "params" }
+
+
 [ParamDecl]
+
+[ParamDecl.parser]
+production = [
+    "keyword.parameter",
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+[ParamDecl.parser.node]
+param_name = "$2"
+value = "$4"
+
+[ParamDecl.analyzer]
+symbol = { kind = "parameter", name_attr = "param_name" }
+
+[ParamDecl.renderer]
 layout = { line = [
     "parameter ",
     { ref = "param_name" },
     " = ",
     { ref = "value" },
 ] }
-production = ["keyword.parameter", "id", "symbol.base.equal", "@Expression"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
-symbol_kind = "parameter"
-symbol_name = "param_name"
-[ParamDecl.node]
-param_name = "$2"
-value = "$4"

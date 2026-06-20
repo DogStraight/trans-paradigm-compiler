@@ -15,8 +15,8 @@ class Lexer:
     ) -> None:
         if token_define_dict is None:
             if rules_dir:
-                from .lexer_utils import get_token_define_from_dir
-                token_define_dict = get_token_define_from_dir(rules_dir)
+                from .lexer_utils import get_token_define_merged
+                token_define_dict = get_token_define_merged(rules_dir)
             else:
                 token_define_dict = get_token_define()
         self.indent_deep = 0

@@ -268,14 +268,26 @@ class Parser:
     def _collect_expr_tokens(
         self, context: ParseContext, rule: GrammarRule
     ) -> tuple[List[Token], List[int]]:
-        """收集表达式 token 及其在 context 中的索引，遇到 end_case 或文件末尾停止"""
+        """收集表达式 token 及其在 context 中的索引，遇到 end_case 或文件末尾停止
+
+        括号嵌套时忽略 end_case（避免参数列表内的逗号/冒号误停）。
+        """
         expr_tokens: List[Token] = []
         expr_indices: List[int] = []
         ptr = context.token_pointer
         skip_types = {"newline", "comment"}
+        bracket_depth = 0
+        open_brackets = {"(", "[", "{"}
+        close_brackets = {")", "]", "}"}
         while ptr < len(context.tokens):
             tok = context.tokens[ptr]
-            if tok.type in rule.end_case:
+            # 括号嵌套跟踪
+            if tok.content in open_brackets:
+                bracket_depth += 1
+            elif tok.content in close_brackets:
+                bracket_depth -= 1
+            # 仅在括号深度为 0 时检查 end_case
+            if bracket_depth == 0 and tok.type in rule.end_case:
                 break
             if tok.type in skip_types or tok.type.startswith("space"):
                 ptr += 1
@@ -298,12 +310,14 @@ class Parser:
             self._log_state("Pratt 解析: 没有可用于解析的 token")
             return None
 
+        # 预处理：将 id ( args? ) 打包成 CallExpr 节点
+        expr_tokens, expr_indices = self._preprocess_calls(expr_tokens, expr_indices)
+
         try:
             ast_node, consumed = pratt_parser.parse_with_count(
                 expr_tokens, self.operator_defs
             )
         except ValueError as e:
-            # ValueError 表示 token 不能作为表达式解析，属于正常回溯，不输出警告
             self._log_state(f"Pratt 解析: 不适合作为表达式 - {e}")
             return None
         except Exception as e:
@@ -315,13 +329,94 @@ class Parser:
             self._log_state("Pratt 解析: 未消费任何 token")
             return None
 
-        # 将 Pratt 实际消费的 expr token 数量映射回 context 中的位置
+        # 映射回 context 中的位置
         last_consumed_idx = expr_indices[consumed - 1]
         context.token_pointer = last_consumed_idx + 1
         self._log_state(
             f"Pratt 解析成功，消耗了 {consumed}/{len(expr_tokens)} 个 token"
         )
         return ast_node
+
+    def _preprocess_calls(
+        self, tokens: list, indices: list
+    ) -> tuple[list, list]:
+        """扫描 token 列表，将 id ( args? ) 模式替换为 CallExpr 节点
+
+        返回 (新 token 列表, 新索引映射)，每个索引指向原始 token 流中的位置。
+        """
+        result_tokens: list = []
+        result_indices: list = []
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            # 检查是否为 identifier (
+            if (isinstance(tok, Token) and tok.type.startswith("id") and
+                    i + 1 < len(tokens) and isinstance(tokens[i+1], Token) and
+                    tokens[i+1].content == "("):
+                # 找到匹配的右括号
+                depth = 1
+                j = i + 2
+                while j < len(tokens) and depth > 0:
+                    if isinstance(tokens[j], Token):
+                        if tokens[j].content == "(":
+                            depth += 1
+                        elif tokens[j].content == ")":
+                            depth -= 1
+                    j += 1
+                if depth == 0:
+                    # 构造 Callee 节点
+                    callee_node = Node("Identifier", content=tok.content)
+                    # 解析参数
+                    args_node = self._parse_call_args(
+                        tokens[i + 2: j - 1]
+                    )
+                    call_node = Node(
+                        "CallExpr", callee=callee_node, args=args_node
+                    )
+                    result_tokens.append(call_node)
+                    result_indices.append(indices[j - 1])
+                    i = j
+                    continue
+            result_tokens.append(tok)
+            result_indices.append(indices[i])
+            i += 1
+        return result_tokens, result_indices
+
+    def _parse_call_args(self, arg_tokens: list):
+        """解析逗号分隔的参数列表，返回 ArgumentList 节点或 None"""
+        if not arg_tokens:
+            return None
+        # 按逗号分隔参数
+        items = []
+        start = 0
+        depth = 0
+        for i, t in enumerate(arg_tokens):
+            if isinstance(t, Token):
+                if t.content == "(":
+                    depth += 1
+                elif t.content == ")":
+                    depth -= 1
+                elif t.content == "," and depth == 0:
+                    if i > start:
+                        expr = self._parse_single_arg(arg_tokens[start:i])
+                        if expr:
+                            items.append(expr)
+                    start = i + 1
+        if start < len(arg_tokens):
+            expr = self._parse_single_arg(arg_tokens[start:])
+            if expr:
+                items.append(expr)
+        if items:
+            return Node("ArgumentList", items=items)
+        return None
+
+    def _parse_single_arg(self, arg_tokens: list):
+        """用 Pratt 解析单个参数表达式"""
+        try:
+            ast, _ = pratt_parser.parse_with_count(arg_tokens, self.operator_defs)
+            return ast
+        except Exception:
+            return None
 
     # 对应生成式的类型的处理方法
     def _parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:

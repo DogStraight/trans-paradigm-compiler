@@ -109,6 +109,12 @@ pass = "pass"
 posedge = "posedge"
 negedge = "negedge"
 
+# 函数/任务
+function = "function"
+endfunction = "endfunction"
+task = "task"
+endtask = "endtask"
+
 # Verilog 关键字
 wire = "wire"
 reg = "reg"

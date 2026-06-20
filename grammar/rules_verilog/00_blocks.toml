@@ -3,18 +3,30 @@
 # ============================================================================
 
 [Root]
-layout = { join = "\n" }
+
+[Root.parser]
 block_start = ""
 block_end = ""
+
+[Root.renderer]
+layout = { join = "\n" }
+
+
 [Block]
+[Block.parser]
 block_start = "space.indent"
 block_end = "space.dedent"
 
 [BeginEnd]
-body_role = "flatten"
-head = "begin"
-body = { indent = true }
-tail = "end"
+
+[BeginEnd.parser]
 production = ["keyword.begin", "@Block", "keyword.end"]
-[BeginEnd.node]
+end_case = ["keyword.end"]
+[BeginEnd.parser.node]
 body = "$2"
+
+[BeginEnd.renderer]
+body = { indent = true, role = "flatten" }
+head = "begin"
+tail = { text = "end", break = 1 }
+

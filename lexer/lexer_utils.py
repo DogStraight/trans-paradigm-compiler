@@ -1,7 +1,19 @@
 # lexer/lexer_utils.py
 import os
 import tomllib
+from typing import Any
 from core.define import FileManager
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """递归合并 override 到 base，override 的值优先"""
+    result = base.copy()
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
 
 
 def get_token_define(
@@ -17,6 +29,16 @@ def get_token_define_from_dir(rules_dir: str) -> dict:
     path = os.path.join(rules_dir, "_token.toml")
     content = FileManager.read_file(path)
     return tomllib.loads(content)
+
+
+def get_token_define_merged(rules_dir: str) -> dict:
+    """两阶段加载：先加载全局 token.toml，再叠加语言特有 _token.toml"""
+    base = get_token_define()
+    try:
+        lang = get_token_define_from_dir(rules_dir)
+        return _deep_merge(base, lang)
+    except (FileNotFoundError, OSError):
+        return base
 
 
 # 如果使能这个装饰器，则将返回的当前的token值的类型做一次简化，

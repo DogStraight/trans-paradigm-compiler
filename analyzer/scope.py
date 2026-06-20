@@ -21,7 +21,12 @@ def get_symbol_kinds(rules: dict) -> frozenset[str]:
 
 
 class Symbol:
-    """符号：一个已声明的标识符"""
+    """符号：一个已声明的标识符
+
+    name / kind / scope — 所有符号共有的核心元数据
+    attrs — 由语法规则的 symbol_capture 驱动，存储语言相关属性（如 width、value、direction）
+    decl_node — 内部引用，不序列化
+    """
 
     def __init__(
         self,
@@ -29,21 +34,24 @@ class Symbol:
         kind: str,
         decl_node: Node,
         scope: "Scope",
-        width: Optional[int] = None,
+        attrs: Optional[dict] = None,
     ):
         self.name = name
         self.kind = kind
         self.decl_node = decl_node
         self.scope = scope
-        self.width = width
+        self.attrs = attrs or {}
 
     def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "kind": self.kind,
-            "scope": self.scope.name if self.scope else None,
-            "scope_kind": self.scope.kind if self.scope else None,
-        }
+        d: dict = {"name": self.name, "kind": self.kind}
+        if self.scope:
+            d["scope"] = self.scope.name
+            d["scope_kind"] = self.scope.kind
+        # 输出所有由语法规则捕获的属性（如 width、value、direction 等）
+        for k, v in self.attrs.items():
+            if v is not None:
+                d[k] = v
+        return d
 
 
 class Scope:
@@ -56,14 +64,26 @@ class Scope:
         parent: Optional["Scope"] = None,
     ):
         self.name = name
-        self.kind = kind  # module / generate / function / task / block / for
+        self.kind = kind 
         self.parent = parent
         self.symbols: Dict[str, Symbol] = {}
         self.children: List["Scope"] = []
 
-    def declare(self, name: str, kind: str, decl_node: Node) -> Symbol:
+    def declare(
+        self,
+        name: str,
+        kind: str,
+        decl_node: Node,
+        attrs: Optional[dict] = None,
+    ) -> Symbol:
         """在当前作用域声明一个符号"""
-        sym = Symbol(name=name, kind=kind, decl_node=decl_node, scope=self)
+        sym = Symbol(
+            name=name,
+            kind=kind,
+            decl_node=decl_node,
+            scope=self,
+            attrs=attrs,
+        )
         self.symbols[name] = sym
         return sym
 
@@ -76,9 +96,9 @@ class Scope:
         return None
 
     def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "kind": self.kind,
-            "symbols": [s.to_dict() for s in self.symbols.values()],
-            "children": [c.to_dict() for c in self.children],
-        }
+        d: dict = {"name": self.name, "kind": self.kind}
+        if self.symbols:
+            d["symbols"] = [s.to_dict() for s in self.symbols.values()]
+        if self.children:
+            d["children"] = [c.to_dict() for c in self.children]
+        return d

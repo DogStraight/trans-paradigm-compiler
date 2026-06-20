@@ -10,9 +10,9 @@ AST 规范化层在渲染前将所有 parser 内部构造（keyword/symbol/optio
 
 import tomllib
 import os
-from typing import Any, Optional, cast, List
+from typing import Any, Optional, List
 from core.define import Node
-from .normalizer import normalize_ast
+from transform.pre.normalizer import normalize_ast
 from .doc import (
     Doc,
     Empty,
@@ -64,11 +64,8 @@ class Renderer:
             for node_type, cfg in data.items():
                 if not isinstance(cfg, dict):
                     continue
-                layout = {}
-                for key in ("layout", "head", "body", "tail", "body_role"):
-                    if key in cfg:
-                        layout[key] = cfg[key]
-                if layout:
+                layout = cfg.get("renderer")
+                if layout and any(k in layout for k in ("layout", "head", "body", "tail")):
                     if node_type in self._layouts:
                         self._layouts[node_type].update(layout)
                     else:
@@ -102,7 +99,7 @@ class Renderer:
 
     def _load_normalize_config(self, rules_dir: str) -> None:
         """加载 AST 规范化配置"""
-        from .normalizer import _load_config
+        from transform.pre.normalizer import _load_config
 
         self._normalize_config = _load_config()
 
@@ -121,15 +118,32 @@ class Renderer:
     # 节点渲染
     # ---------------------------------------------------------------
     def _render_node(self, node: Node, layout: dict, indent: int) -> Doc:
-        head_expr = layout.get("head") or layout.get("layout")
+        head_expr = layout.get("layout") or layout.get("head")
         body_cfg = layout.get("body")
-        tail_expr = layout.get("tail")
+        tail_cfg = layout.get("tail")
 
-        head_doc = self._eval(head_expr, node, indent) if head_expr else None
+        head_doc = self._eval(head_expr, node, indent, layout) if head_expr else None
         body_docs: List[Doc] = []
         if body_cfg:
-            body_docs = self._render_body(node, indent + 1, body_cfg)
-        tail_doc = self._eval(tail_expr, node, indent) if tail_expr else None
+            body_docs = self._render_body(node, indent + 1, body_cfg, layout)
+
+        # tail 解析：支持 string、{text,break} 紧凑格式、旧 layout 表达式
+        tail_doc = None
+        tb = 0
+        if isinstance(tail_cfg, str):
+            tail_doc = Text(tail_cfg) if tail_cfg else None
+            tb = layout.get("tail_break", 0)
+        elif isinstance(tail_cfg, dict):
+            if "text" in tail_cfg:
+                tail_doc = Text(tail_cfg["text"]) if tail_cfg.get("text") else None
+                tb = tail_cfg.get("break", 0)
+                if "tail_break" in layout:
+                    tb = layout["tail_break"]
+                    if isinstance(tb, bool):
+                        tb = 1 if tb else 0
+            else:
+                tail_doc = self._eval(tail_cfg, node, indent, layout)
+                tb = layout.get("tail_break", 0)
 
         prefix = Text(self._INDENT_STR * indent)
         parts: List[Doc] = []
@@ -139,8 +153,15 @@ class Renderer:
             parts.append(Break())
             parts.append(bd)
         if tail_doc is not None:
+            tb = layout.get("tail_break", 0)
+            if isinstance(tb, bool):
+                tb = 1 if tb else 0
+            # 至少一个前导换行（让 tail 独占一行）
             parts.append(Break())
             parts.append(Concat([prefix, tail_doc]))
+            # 尾部空行：tb > 1 时额外追加 (tb-1) 个换行
+            for _ in range(tb - 1):
+                parts.append(Break())
         if parts:
             return Concat(parts)
         # 没有布局规则或布局为空时兜底
@@ -153,7 +174,7 @@ class Renderer:
     # ---------------------------------------------------------------
     # DSL 求值器 → Doc
     # ---------------------------------------------------------------
-    def _eval(self, expr: Any, node: Node, indent: int) -> Optional[Doc]:
+    def _eval(self, expr: Any, node: Node, indent: int, parent_layout: dict | None = None) -> Optional[Doc]:
         """将 TOML 布局表达式求值为 Doc"""
         if expr is None:
             return None
@@ -169,15 +190,22 @@ class Renderer:
             child = getattr(node, expr["ref"], None)
             if child is None:
                 return None
+            # 合并父规则的 override
+            base_layout = self._layouts.get(child.node_name, {}) if isinstance(child, Node) else {}
+            override = (parent_layout or {}).get("override", {}).get(child.node_name, {}) if isinstance(child, Node) else {}
+            merged = dict(base_layout)
+            merged.update(override)
             if isinstance(child, Node):
-                child_layout = self._layouts.get(child.node_name, {})
-                return self._render_inline(child, child_layout, indent)
+                return self._render_inline(child, merged, indent)
             if isinstance(child, list):
                 docs: List[Doc] = []
                 for item in child:
                     if isinstance(item, Node):
                         item_layout = self._layouts.get(item.node_name, {})
-                        d = self._render_inline(item, item_layout, indent)
+                        item_override = (parent_layout or {}).get("override", {}).get(item.node_name, {})
+                        merged_item = dict(item_layout)
+                        merged_item.update(item_override)
+                        d = self._render_inline(item, merged_item, indent)
                     else:
                         d = Text(str(item))
                     if not isinstance(d, Empty):
@@ -204,7 +232,9 @@ class Renderer:
             rendered: List[Doc] = []
             for item in items:
                 if isinstance(item, Node):
-                    child_layout = self._layouts.get(item.node_name, {})
+                    child_layout = dict(self._layouts.get(item.node_name, {}))
+                    item_override = (parent_layout or {}).get("override", {}).get(item.node_name, {})
+                    child_layout.update(item_override)
                     d = self._render_inline(item, child_layout, indent)
                 else:
                     d = Text(str(item))
@@ -233,7 +263,7 @@ class Renderer:
         if "group" in expr:
             parts: List[Doc] = []
             for e in expr["group"]:
-                d = self._eval(e, node, indent)
+                d = self._eval(e, node, indent, parent_layout)
                 if d is None:
                     return None  # ref 引用缺失，整个 group 无意义
                 if not isinstance(d, Empty):
@@ -253,7 +283,7 @@ class Renderer:
                         parts.append(SoftLine())
                         had_content = False  # soft 重置，防止连续 soft
                 else:
-                    d = self._eval(e, node, indent)
+                    d = self._eval(e, node, indent, parent_layout)
                     if d is not None:
                         parts.append(d)
                         had_content = True
@@ -290,7 +320,7 @@ class Renderer:
                 for ref in refs:
                     if getattr(node, ref, None) is None:
                         return None
-            return self._eval(inner, node, indent)
+            return self._eval(inner, node, indent, parent_layout)
 
         return None
 
@@ -299,17 +329,30 @@ class Renderer:
     # ---------------------------------------------------------------
     def _render_inline(self, node: Node, layout: dict, indent: int) -> Doc:
         """内联渲染节点（用于 ref 在 line/group/join 中引用子节点时）"""
-        head_expr = layout.get("head") or layout.get("layout")
+        head_expr = layout.get("layout") or layout.get("head")
         body_cfg = layout.get("body")
-        tail_expr = layout.get("tail")
+        tail_cfg = layout.get("tail")
 
         prefix = Text(self._INDENT_STR * indent)
 
-        head_doc = self._eval(head_expr, node, indent) if head_expr else None
+        head_doc = self._eval(head_expr, node, indent, layout) if head_expr else None
         body_docs: List[Doc] = []
         if body_cfg:
-            body_docs = self._render_body(node, indent + 1, body_cfg)
-        tail_doc = self._eval(tail_expr, node, indent) if tail_expr else None
+            body_docs = self._render_body(node, indent + 1, body_cfg, layout)
+
+        # tail 解析
+        tail_doc = None
+        tb = 0
+        if isinstance(tail_cfg, str):
+            tail_doc = Text(tail_cfg) if tail_cfg else None
+            tb = layout.get("tail_break", 0)
+        elif isinstance(tail_cfg, dict):
+            if "text" in tail_cfg:
+                tail_doc = Text(tail_cfg["text"]) if tail_cfg.get("text") else None
+                tb = tail_cfg.get("break", 0)
+            else:
+                tail_doc = self._eval(tail_cfg, node, indent, layout)
+                tb = layout.get("tail_break", 0)
 
         parts: List[Doc] = []
         if head_doc is not None:
@@ -318,8 +361,15 @@ class Renderer:
             parts.append(Break())
             parts.append(bd)
         if tail_doc is not None:
+            tb = layout.get("tail_break", 0)
+            if isinstance(tb, bool):
+                tb = 1 if tb else 0
+            # 至少一个前导换行（让 tail 独占一行）
             parts.append(Break())
             parts.append(Concat([prefix, tail_doc]))
+            # 尾部空行：tb > 1 时额外追加 (tb-1) 个换行
+            for _ in range(tb - 1):
+                parts.append(Break())
         if parts:
             return Concat(parts)
         return self._render_fallback(node, indent)
@@ -343,7 +393,7 @@ class Renderer:
         return [attr]
 
     def _render_body(
-        self, node: Node, indent: int, body_cfg: Optional[dict] = None
+        self, node: Node, indent: int, body_cfg: Optional[dict] = None, parent_layout: dict | None = None
     ) -> List[Doc]:
         """渲染节点主体：遍历子节点，每个缩进一行
 
@@ -372,7 +422,9 @@ class Renderer:
         elif source:
             container = getattr(node, source, None)
             if isinstance(container, Node):
-                children = getattr(container, self._children_field, [])
+                # 优先使用与 source 同名的属性（如 CaseItemList.items），
+                # 再回退到 children_field（如 Block.sub_node）
+                children = getattr(container, source, None) or getattr(container, self._children_field, [])
             elif isinstance(container, list):
                 children = container
             else:
@@ -383,7 +435,9 @@ class Renderer:
         docs: List[Doc] = []
         children_list = [c for c in children if isinstance(c, Node)]
         for i, child in enumerate(children_list):
-            child_layout = self._layouts.get(child.node_name, {})
+            child_layout = dict(self._layouts.get(child.node_name, {}))
+            child_override = (parent_layout or {}).get("override", {}).get(child.node_name, {})
+            child_layout.update(child_override)
             d = self._render_node(child, child_layout, indent)
             if not isinstance(d, Empty):
                 if body_cfg and isinstance(body_cfg, dict):

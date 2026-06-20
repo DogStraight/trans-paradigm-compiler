@@ -26,10 +26,16 @@ from lexer import Lexer
 from parser import Parser
 from core.define import GrammarRulesRegister
 from parser.rule_selector import RuleSelector
-from renderer.normalizer import normalize_ast
+from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
+from transform.post import AstTransformer
 import json
+
+
+# 可选：后阶段变换插件
+# from transform.post.plugins.implicit_decl import ImplicitDeclPlugin
+# from transform.post.plugins.width_eval import WidthEvalPlugin
 
 
 def pipeline():
@@ -97,6 +103,8 @@ def pipeline():
     print(f"📋 AST 已保存 ({os.path.getsize(ast_json)} bytes)")
 
     # 5. 语义分析（构建符号表，链接标识符到声明）
+    #     核心职责：管理作用域 + 注册显式声明的符号
+    #     高级服务（隐式声明、位宽计算等）在可选的 transform 插件中完成
     global analyzer_enable
     if analyzer_enable:
         analyzer = SemanticAnalyzer(rules)
@@ -109,7 +117,16 @@ def pipeline():
             f"🔗 符号表已保存 ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)"
         )
 
-    # 6. 代码生成（使用 Renderer）
+    # 6. 后阶段 AST 变换（可选插件管线）
+    global transform_enable
+    if transform_enable and analyzer_enable:
+        transformer = AstTransformer()
+        # 按需注册插件，例如:
+        # transformer.register(ImplicitDeclPlugin())
+        # transformer.register(WidthEvalPlugin())
+        ast = transformer.transform(ast, scope)
+
+    # 7. 代码生成（使用 Renderer）
     global renderer_enable
     if renderer_enable:
         renderer = Renderer(rules_dir=RULES_DIR)
@@ -121,6 +138,7 @@ def pipeline():
 
 
 if __name__ == "__main__":
-    analyzer_enable = True
-    renderer_enable = True
+    analyzer_enable = True     # 语义分析（作用域 + 符号注册）
+    transform_enable = False   # 后阶段变换插件管线（默认关闭）
+    renderer_enable = True     # 代码生成
     pipeline()

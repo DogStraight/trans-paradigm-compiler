@@ -3,13 +3,7 @@
 # ============================================================================
 
 [AlwaysBlock]
-body_role = "direct"
-layout = { line = [
-    "always @(",
-    { ref = "sensitivity" },
-    ") ",
-    { ref = "body" },
-] }
+[AlwaysBlock.parser]
 production = [
     "keyword.always",
     "symbol.base.at",
@@ -19,22 +13,37 @@ production = [
     "@Statement",
 ]
 end_case = ["newline"]
-[AlwaysBlock.node]
+[AlwaysBlock.parser.node]
 sensitivity = "$4"
 body = "$6"
 
+[AlwaysBlock.renderer]
+layout = { line = [
+    "always @(",
+    { ref = "sensitivity" },
+    ") ",
+    { ref = "body" },
+] }
+body = { role = "direct" }
+[AlwaysBlock.renderer.override]
+BeginEnd = { tail_break = 2 }
+
 [SensitivityList]
-layout = { join = " or " }
+[SensitivityList.parser]
 production = [
     "@EdgeSense|symbol.base.multiple",
     "(symbol.extend.logic_or,@EdgeSense)*",
 ]
-[SensitivityList.node]
-items = ["$1", "$2.items"] # 统一列表
+[SensitivityList.parser.node]
+items = ["$1", "$2.items"]
+[SensitivityList.renderer]
+layout = { join = " or ", items = "items" } # 统一列表
 
 [EdgeSense]
-layout = { line = [{ ref = "edge" }, " ", { ref = "signal" }] }
-production = ["keyword.posedge|keyword.negedge", "id"]
-[EdgeSense.node]
+[EdgeSense.parser]
+production = ["keyword.posedge|keyword.negedge", "@Identifier"]
+[EdgeSense.parser.node]
 edge = "$1"
 signal = "$2"
+[EdgeSense.renderer]
+layout = { line = [{ ref = "edge" }, " ", { ref = "signal" }] }

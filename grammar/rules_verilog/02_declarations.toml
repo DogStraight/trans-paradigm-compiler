@@ -3,24 +3,31 @@
 # ============================================================================
 
 [PortList]
-layout = { join = ", ", first_soft = true, nest = 1 }
+[PortList.parser]
 production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
-[PortList.node]
-items = ["$1", "$2.items"] # 统一列表
+[PortList.parser.node]
+items = ["$1", "$2.items"]
+[PortList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "items" } # 统一列表
 
 # ============================================================================
 # 端口声明分支（wire 端口 / reg 端口）
 # ============================================================================
 
 [PortDecl]
-layout = { ref = "decl" }
+[PortDecl.parser]
 production = ["@WirePortDecl|@RegPortDecl"]
 inline = true
-[PortDecl.node]
+[PortDecl.parser.node]
 decl = "$1"
+[PortDecl.renderer]
+layout = { ref = "decl" }
 
 # ----- wire 端口（input / output / inout，可选 wire 关键字，无初始化）-----
 [WirePortDecl]
+[WirePortDecl.analyzer]
+symbol = { kind = "port", name_attr = "port_name" }
+[WirePortDecl.renderer]
 layout = { line = [
     { ref = "direction" },
     { opt = { group = [
@@ -35,11 +42,12 @@ layout = { line = [
     " ",
     { ref = "port_name" },
 ] }
+[WirePortDecl.parser]
 production = [
     "keyword.input|keyword.output|keyword.inout",
     "keyword.wire?",
     "@Range?",
-    "id",
+    "@Identifier",
 ]
 end_case = [
     "symbol.base.comma",
@@ -47,9 +55,7 @@ end_case = [
     "newline",
     "space.dedent",
 ]
-symbol_kind = "port"
-symbol_name = "port_name"
-[WirePortDecl.node]
+[WirePortDecl.parser.node]
 direction = "$1"
 port_type = "$2"
 range = "$3"
@@ -57,6 +63,9 @@ port_name = "$4"
 
 # ----- reg 端口（仅 output，必须有 reg，允许初始化）-----
 [RegPortDecl]
+[RegPortDecl.analyzer]
+symbol = { kind = "port", name_attr = "port_name" }
+[RegPortDecl.renderer]
 layout = { line = [
     "output ",
     "reg ",
@@ -72,16 +81,15 @@ layout = { line = [
         { ref = "init" },
     ] } },
 ] }
-production = ["keyword.output", "keyword.reg", "@Range?", "id", "@PortInit?"]
+[RegPortDecl.parser]
+production = ["keyword.output", "keyword.reg", "@Range?", "@Identifier", "@PortInit?"]
 end_case = [
     "symbol.base.comma",
     "bracket.r_parentheses",
     "newline",
     "space.dedent",
 ]
-symbol_kind = "port"
-symbol_name = "port_name"
-[RegPortDecl.node]
+[RegPortDecl.parser.node]
 direction = "output"
 range = "$3"
 port_name = "$4"
@@ -89,18 +97,20 @@ init = "$5"
 
 # 端口初始化（用于 reg 端口）
 [PortInit]
-layout = { line = ["= ", { ref = "value" }] }
+[PortInit.parser]
 production = ["symbol.base.equal", "@Expression"]
 inline = true
-[PortInit.node]
+[PortInit.parser.node]
 value = "$2"
+[PortInit.renderer]
+layout = { line = ["= ", { ref = "value" }] }
 
 # ============================================================================
 # 范围声明（共用）
 # ============================================================================
 
 [Range]
-layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
+[Range.parser]
 production = [
     "bracket.l_square_bracket",
     "@Expression",
@@ -108,15 +118,20 @@ production = [
     "@Expression",
     "bracket.r_square_bracket",
 ]
-[Range.node]
+[Range.parser.node]
 msb = "$2"
 lsb = "$4"
+[Range.renderer]
+layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
 
 # ============================================================================
 # 内部 wire / reg / localparam 声明
 # ============================================================================
 
 [WireDecl]
+[WireDecl.analyzer]
+symbol = { kind = "wire", name_attr = "wire_name" }
+[WireDecl.renderer]
 layout = { line = [
     "wire ",
     { opt = { group = [
@@ -128,16 +143,18 @@ layout = { line = [
     { ref = "wire_name" },
     ";",
 ] }
-production = ["keyword.wire", "@Range?", "id", "symbol.base.semicolon"]
+[WireDecl.parser]
+production = ["keyword.wire", "@Range?", "@Identifier", "symbol.base.semicolon"]
 end_case = ["newline"]
-symbol_kind = "wire"
-symbol_name = "wire_name"
-[WireDecl.node]
+[WireDecl.parser.node]
 wire_type = "$1"
 range = "$2"
 wire_name = "$3"
 
 [RegDecl]
+[RegDecl.analyzer]
+symbol = { kind = "reg", name_attr = "reg_name" }
+[RegDecl.renderer]
 layout = { line = [
     "reg ",
     { opt = { group = [
@@ -153,17 +170,16 @@ layout = { line = [
     ] } },
     ";",
 ] }
+[RegDecl.parser]
 production = [
     "keyword.reg",
     "@Range?",
-    "id",
+    "@Identifier",
     "@RegInit?",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
-symbol_kind = "reg"
-symbol_name = "reg_name"
-[RegDecl.node]
+[RegDecl.parser.node]
 reg_type = "$1"
 range = "$2"
 reg_name = "$3"
@@ -171,34 +187,42 @@ init = "$4"
 
 # 内部 reg 初始化
 [RegInit]
-layout = { line = ["= ", { ref = "value" }] }
+[RegInit.parser]
 production = ["symbol.base.equal", "@Expression"]
 inline = true
-[RegInit.node]
+[RegInit.parser.node]
 value = "$2"
+[RegInit.renderer]
+layout = { line = ["= ", { ref = "value" }] }
 
 [LocalParamDecl]
+[LocalParamDecl.analyzer]
+symbol = { kind = "localparam", name_attr = "items.sub_node.param_name" }
+[LocalParamDecl.renderer]
 layout = { line = ["localparam ", { join = ",", items = "items" }, ";"] }
+[LocalParamDecl.parser]
 production = [
     "keyword.localparam",
     "@LocalParamItemList",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
-symbol_kind = "localparam"
-symbol_name = "items.sub_node.param_name"
-[LocalParamDecl.node]
+[LocalParamDecl.parser.node]
 items = "$2"
 
 [LocalParamItemList]
-layout = { join = "," }
+[LocalParamItemList.parser]
 production = ["@LocalParamItem", "(symbol.base.comma,@LocalParamItem)*"]
-[LocalParamItemList.node]
+[LocalParamItemList.parser.node]
 items = ["$1", "$2.items"]
+[LocalParamItemList.renderer]
+layout = { join = ",", items = "items" }
 
 [LocalParamItem]
-layout = { line = [{ ref = "param_name" }, " = ", { ref = "value" }] }
-production = ["id", "symbol.base.equal", "@Expression"]
-[LocalParamItem.node]
+[LocalParamItem.parser]
+production = ["@Identifier", "symbol.base.equal", "@Expression"]
+[LocalParamItem.parser.node]
 param_name = "$1"
 value = "$3"
+[LocalParamItem.renderer]
+layout = { line = [{ ref = "param_name" }, " = ", { ref = "value" }] }

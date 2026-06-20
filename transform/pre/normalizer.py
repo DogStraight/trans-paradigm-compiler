@@ -10,8 +10,10 @@ import os
 from typing import Any, Optional
 from core.define import Node
 
-# 默认配置路径（相对于本文件）
-_DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "normalize_config.toml")
+# 默认配置路径（位于 transform/config/）
+_DEFAULT_CONFIG = os.path.join(
+    os.path.dirname(__file__), "..", "config", "normalize_config.toml"
+)
 
 
 def _load_config(config_path: Optional[str] = None) -> dict:
@@ -222,7 +224,9 @@ def _normalize(
 
     # 6. body_role = "flatten" → body 内容展开到 children_field
     if layouts:
-        role = layouts.get(node.node_name, {}).get("body_role")
+        layout = layouts.get(node.node_name, {})
+        body_cfg = layout.get("body", {})
+        role = body_cfg.get("role") if isinstance(body_cfg, dict) else layout.get("body_role")
         if role == "flatten":
             body = getattr(node, body_field, None)
             if body is not None:

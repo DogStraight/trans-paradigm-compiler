@@ -4,6 +4,12 @@
 
 # ---------- 基本原子 ----------
 [BitWidthLiteral]
+[BitWidthLiteral.parser]
+production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
+[BitWidthLiteral.parser.node]
+width = "$1"
+value = "$3"
+[BitWidthLiteral.renderer]
 layout = { line = [
     { opt = { group = [
         { ref = "width" },
@@ -12,55 +18,67 @@ layout = { line = [
     { ref = "base" },
     { ref = "value" },
 ] }
-production = ["literal.number", "symbol.base.single_quote", "id"]
-[BitWidthLiteral.node]
-width = "$1"
-value = "$3"
 
 [Number]
-layout = { ref = "value" }
+[Number.parser]
 production = ["literal.number"]
-[Number.node]
+[Number.parser.node]
 value = "$1"
+[Number.renderer]
+layout = { ref = "value" }
 
 [Identifier]
-layout = { ref = "content" }
+[Identifier.parser]
 production = ["id"]
-[Identifier.node]
-content = "$1"
+inline = false
+[Identifier.parser.node]
+content = "$1.value"
+
+[Identifier.analyzer]
+identifier_ref = true
+
+[Identifier.renderer]
+layout = { ref = "content" }
+
 
 [ParenthesizedExpr]
-layout = { line = ["(", { ref = "expr" }, ")"] }
+[ParenthesizedExpr.parser]
 production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
-[ParenthesizedExpr.node]
+[ParenthesizedExpr.parser.node]
 expr = "$2"
+[ParenthesizedExpr.renderer]
+layout = { line = ["(", { ref = "expr" }, ")"] }
 
 [IndexedId]
-layout = { line = [{ ref = "id_name" }, "[", { ref = "index" }, "]"] }
+[IndexedId.parser]
 production = [
-    "id",
+    "@Identifier",
     "bracket.l_square_bracket",
     "@Expression",
     "bracket.r_square_bracket",
 ]
-[IndexedId.node]
+[IndexedId.parser.node]
 id_name = "$1"
 index = "$3"
+[IndexedId.renderer]
+layout = { line = [{ ref = "id_name" }, "[", { ref = "index" }, "]"] }
 
 [ConcatExpr]
-layout = { line = ["{", { join = "," }, "}"] }
+[ConcatExpr.parser]
 production = [
     "bracket.l_curly_bracket",
     "@Expression",
     "(symbol.base.comma,@Expression)*",
     "bracket.r_curly_bracket",
 ]
-[ConcatExpr.node]
+[ConcatExpr.parser.node]
 first = "$2"
 rest = "$3"
+[ConcatExpr.renderer]
+layout = { line = ["{", { join = "," }, "}"] }
 
 [ReplicateExpr]
-layout = { line = ["{", { ref = "count" }, { ref = "value" }, "}"] }
+[ReplicateExpr.parser]
 production = [
     "bracket.l_curly_bracket",
     "@Expression",
@@ -69,63 +87,96 @@ production = [
     "bracket.r_curly_bracket",
     "bracket.r_curly_bracket",
 ]
-[ReplicateExpr.node]
+[ReplicateExpr.parser.node]
 count = "$2"
 value = "$4"
+[ReplicateExpr.renderer]
+layout = { line = ["{", { ref = "count" }, { ref = "value" }, "}"] }
 
 # ---------- 运算符优先级（自底向上）----------
 [PrimaryExpr]
-layout = { ref = "value" }
+[PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr",
+    "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr",
 ]
 inline = true
-[PrimaryExpr.node]
+[PrimaryExpr.parser.node]
 value = "$1"
+[PrimaryExpr.renderer]
+layout = { ref = "value" }
+
+[CallExpr]
+[CallExpr.parser]
+production = [
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+]
+[CallExpr.parser.node]
+callee = "$1"
+args = "$3"
+[CallExpr.renderer]
+layout = { line = [{ ref = "callee" }, "(", { ref = "args" }, ")"] }
+
+[ArgumentList]
+[ArgumentList.parser]
+production = ["@Expression", "(symbol.base.comma,@Expression)*"]
+[ArgumentList.parser.node]
+items = ["$1", "$2.items"]
+[ArgumentList.renderer]
+layout = { join = ", ", items = "items" }
 
 [UnaryExpr]
+[UnaryExpr.parser]
 production = ["symbol.base.not|symbol.base.bit_not", "@PrimaryExpr"]
 pratt = true
-[UnaryExpr.node]
+[UnaryExpr.parser.node]
 op = "$1"
 operand = "$2"
 
 [MulExpr]
+[MulExpr.parser]
 production = ["@PrimaryExpr|@UnaryExpr", "(@MulOp,@PrimaryExpr|@UnaryExpr)*"]
 pratt = true
-[MulExpr.node]
+[MulExpr.parser.node]
 head = "$1"
 tail = "$2"
 
 [AddExpr]
+[AddExpr.parser]
 production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
 pratt = true
-[AddExpr.node]
+[AddExpr.parser.node]
 head = "$1"
 tail = "$2"
 
 [CompareExpr]
+[CompareExpr.parser]
 production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
 pratt = true
-[CompareExpr.node]
+[CompareExpr.parser.node]
 left = "$1"
 op_rhs = "$2"
 
 [LogicAndExpr]
+[LogicAndExpr.parser]
 production = ["@CompareExpr", "(@LogicAndOp,@CompareExpr)*"]
 pratt = true
-[LogicAndExpr.node]
+[LogicAndExpr.parser.node]
 head = "$1"
 tail = "$2"
 
 [LogicOrExpr]
+[LogicOrExpr.parser]
 production = ["@LogicAndExpr", "(@LogicOrOp,@LogicAndExpr)*"]
 pratt = true
-[LogicOrExpr.node]
+[LogicOrExpr.parser.node]
 head = "$1"
 tail = "$2"
 
 [Expression]
+[Expression.parser]
 production = ["@LogicOrExpr"]
 end_case = [
     "symbol.base.colon",
@@ -135,21 +186,24 @@ end_case = [
     "keyword.begin",
 ]
 pratt = true
-[Expression.node]
+[Expression.parser.node]
 expr = "$1"
 
 # ---------- 运算符节点（用于代码生成）----------
 [MulOp]
+[MulOp.parser]
 production = ["symbol.base.multiple|symbol.base.div|symbol.base.mod"]
-[MulOp.node]
+[MulOp.parser.node]
 op = "$1"
 
 [AddOp]
+[AddOp.parser]
 production = ["symbol.base.add|symbol.base.sub"]
-[AddOp.node]
+[AddOp.parser.node]
 op = "$1"
 
 [CmpOp]
+[CmpOp.parser]
 production = [
     "symbol.extend.is_equal",
     "symbol.extend.not_equal",
@@ -158,24 +212,28 @@ production = [
     "symbol.extend.bigger_equal",
     "symbol.extend.lesser_equal",
 ]
-[CmpOp.node]
+[CmpOp.parser.node]
 op = "$1"
 
 [LogicAndOp]
+[LogicAndOp.parser]
 production = ["symbol.extend.logic_double_and"]
-[LogicAndOp.node]
+[LogicAndOp.parser.node]
 op = "$1"
 
 [LogicOrOp]
+[LogicOrOp.parser]
 production = ["symbol.extend.logic_double_or"]
-[LogicOrOp.node]
+[LogicOrOp.parser.node]
 op = "$1"
 
 # ---------- Pratt 解析器产生的中间节点（无 production）----------
 [UnaryOp]
+[UnaryOp.renderer]
 layout = { line = [{ ref = "op" }, { ref = "operand" }] }
 
 [BinaryOp]
+[BinaryOp.renderer]
 layout = { line = [
     { ref = "left" },
     " ",

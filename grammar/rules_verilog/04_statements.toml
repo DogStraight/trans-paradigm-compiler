@@ -3,23 +3,18 @@
 # ============================================================================
 
 [Statement]
-layout = { ref = "stmt" }
+[Statement.parser]
 production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl",
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@FuncDecl|@TaskDecl|@SubroutineCall",
 ]
 inline = true
-[Statement.node]
+[Statement.parser.node]
 stmt = "$1"
+[Statement.renderer]
+layout = { ref = "stmt" }
 
 [IfStatement]
-layout = { line = [
-    "if (",
-    { ref = "condition" },
-    ") ",
-    { ref = "then_stmt" },
-    " ",
-    { ref = "else_chain" },
-] }
+[IfStatement.parser]
 production = [
     "keyword.if",
     "bracket.l_parentheses",
@@ -29,27 +24,31 @@ production = [
     "@ElseChain?",
 ]
 end_case = ["newline"]
-[IfStatement.node]
+[IfStatement.parser.node]
 condition = "$3"
 then_stmt = "$5"
 else_chain = "$6"
-
-[ElseChain]
-layout = { ref = "branch" }
-production = ["@ElseIf|@ElseBranch"]
-inline = true
-[ElseChain.node]
-branch = "$1"
-
-[ElseIf]
+[IfStatement.renderer]
 layout = { line = [
-    "else if (",
+    "if (",
     { ref = "condition" },
     ") ",
     { ref = "then_stmt" },
     " ",
     { ref = "else_chain" },
 ] }
+
+[ElseChain]
+[ElseChain.parser]
+production = ["@ElseIf|@ElseBranch"]
+inline = true
+[ElseChain.parser.node]
+branch = "$1"
+[ElseChain.renderer]
+layout = { ref = "branch" }
+
+[ElseIf]
+[ElseIf.parser]
 production = [
     "keyword.else",
     "keyword.if",
@@ -59,43 +58,56 @@ production = [
     "@Statement",
     "@ElseChain?",
 ]
-[ElseIf.node]
+[ElseIf.parser.node]
 condition = "$4"
 then_stmt = "$6"
 else_chain = "$7"
+[ElseIf.renderer]
+layout = { line = [
+    "else if (",
+    { ref = "condition" },
+    ") ",
+    { ref = "then_stmt" },
+    " ",
+    { ref = "else_chain" },
+] }
 
 [ElseBranch]
-body_role = "direct"
-layout = { line = ["else ", { ref = "body" }] }
+[ElseBranch.parser]
 production = ["keyword.else", "@Statement"]
-[ElseBranch.node]
+[ElseBranch.parser.node]
 body = "$2"
+[ElseBranch.renderer]
+layout = { line = ["else ", { ref = "body" }] }
+body = { role = "direct" }
 
 [NonBlockingAssign]
-layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
+[NonBlockingAssign.parser]
 production = [
-    "id",
+    "@Identifier",
     "symbol.extend.lesser_equal",
     "@Expression",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
-[NonBlockingAssign.node]
+[NonBlockingAssign.parser.node]
 target = "$1"
 value = "$3"
+[NonBlockingAssign.renderer]
+layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
 
 [BlockingAssign]
-layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
-production = ["id", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
+[BlockingAssign.parser]
+production = ["@Identifier", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
 end_case = ["newline"]
-[BlockingAssign.node]
+[BlockingAssign.parser.node]
 target = "$1"
 value = "$3"
+[BlockingAssign.renderer]
+layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
 
 [CaseStatement]
-head = { line = ["case (", { ref = "expr" }, ")"] }
-body = { indent = true, source = "items" }
-tail = "endcase"
+[CaseStatement.parser]
 production = [
     "keyword.case",
     "bracket.l_parentheses",
@@ -105,32 +117,55 @@ production = [
     "keyword.endcase",
 ]
 end_case = ["newline"]
-[CaseStatement.node]
+[CaseStatement.parser.node]
 expr = "$3"
 items = "$5"
+[CaseStatement.renderer]
+head = { line = ["case (", { ref = "expr" }, ")"] }
+body = { indent = true, source = "items" }
+tail = { text = "endcase", break = 1 }
 
 [CaseItemList]
-layout = { join = "\n" }
+[CaseItemList.parser]
 production = ["@CaseItem|@DefaultItem", "(@CaseItem|@DefaultItem)*"]
-[CaseItemList.node]
-items = ["$1", "$2.items"] # 统一列表
+[CaseItemList.parser.node]
+items = ["$1", "$2.items"]
+[CaseItemList.renderer]
+layout = { join = "\n", items = "items" } # 统一列表
 
 [CaseItem]
-layout = { line = [{ ref = "value" }, ": ", { ref = "stmt" }] }
+[CaseItem.parser]
 production = ["@Expression", "symbol.base.colon", "@Statement"]
 end_case = ["newline"]
-[CaseItem.node]
+[CaseItem.parser.node]
 value = "$1"
 stmt = "$3"
+[CaseItem.renderer]
+layout = { line = [{ ref = "value" }, ": ", { ref = "stmt" }] }
 
 [DefaultItem]
-layout = { line = ["default: ", { ref = "stmt" }] }
+[DefaultItem.parser]
 production = ["keyword.default", "symbol.base.colon", "@Statement"]
 end_case = ["newline"]
-[DefaultItem.node]
+[DefaultItem.parser.node]
 stmt = "$3"
+[DefaultItem.renderer]
+layout = { line = ["default: ", { ref = "stmt" }] }
 
 [AssignStatement]
+[AssignStatement.parser]
+production = [
+    "keyword.assign",
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[AssignStatement.parser.node]
+target = "$2"
+value = "$4"
+[AssignStatement.renderer]
 layout = { line = [
     "assign ",
     { ref = "target" },
@@ -138,14 +173,82 @@ layout = { line = [
     { ref = "value" },
     ";",
 ] }
+
+# ============================================================================
+# 函数声明
+# ============================================================================
+
+[FuncDecl]
+[FuncDecl.parser]
 production = [
-    "keyword.assign",
-    "id",
-    "symbol.base.equal",
-    "@Expression",
+    "keyword.function",
+    "@Identifier",
     "symbol.base.semicolon",
+    "@Block",
+    "keyword.endfunction",
 ]
+end_case = ["keyword.endfunction"]
+[FuncDecl.parser.node]
+func_name = "$2"
+body = "$4"
+
+[FuncDecl.analyzer]
+scope = { name_attr = "func_name", kind = "function" }
+
+[FuncDecl.renderer]
+head = { line = [
+    "function ",
+    { ref = "func_name" },
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endfunction", break = 2 }
+
+# ============================================================================
+# 任务声明
+# ============================================================================
+
+[TaskDecl]
+[TaskDecl.parser]
+production = [
+    "keyword.task",
+    "@Identifier",
+    "symbol.base.semicolon",
+    "@Block",
+    "keyword.endtask",
+]
+end_case = ["keyword.endtask"]
+[TaskDecl.parser.node]
+task_name = "$2"
+body = "$4"
+
+[TaskDecl.analyzer]
+scope = { name_attr = "task_name", kind = "task" }
+
+[TaskDecl.renderer]
+head = { line = [
+    "task ",
+    { ref = "task_name" },
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endtask", break = 2 }
+
+# ============================================================================
+# 子程序调用（任务调用、函数调用作为独立语句）
+# ============================================================================
+
+[SubroutineCall]
+[SubroutineCall.parser]
+production = ["@Identifier", "symbol.base.semicolon"]
 end_case = ["newline"]
-[AssignStatement.node]
-target = "$2"
-value = "$4"
+[SubroutineCall.parser.node]
+callee = "$1"
+[SubroutineCall.renderer]
+layout = { line = [{ ref = "callee" }, ";"] }
+
+[ArgumentList]
+layout = { join = ", ", items = "items" }
+production = ["@Expression", "(symbol.base.comma,@Expression)*"]
+[ArgumentList.node]
+items = ["$1", "$2.items"]
