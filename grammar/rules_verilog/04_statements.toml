@@ -5,7 +5,7 @@
 [Statement]
 [Statement.parser]
 production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@FuncDecl|@TaskDecl|@SubroutineCall",
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall",
 ]
 inline = true
 [Statement.parser.node]
@@ -175,29 +175,91 @@ layout = { line = [
 ] }
 
 # ============================================================================
-# 函数声明
+# 函数声明（两种风格互斥，通过 | 选择）
 # ============================================================================
 
 [FuncDecl]
 [FuncDecl.parser]
+production = ["@FuncDeclANSI|@FuncDeclOld"]
+inline = true
+[FuncDecl.parser.node]
+body = "$1"
+
+# ANSI 风格：function name(ports);
+[FuncDeclANSI]
+[FuncDeclANSI.parser]
 production = [
     "keyword.function",
+    "(keyword.automatic|keyword.static)?",
+    "@Range?",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@Block",
+    "keyword.endfunction",
+]
+end_case = ["keyword.endfunction"]
+[FuncDeclANSI.parser.node]
+func_name = "$4"
+body = "$9"
+automatic = "$2"
+func_range = "$3"
+ports = "$6"
+
+[FuncDeclANSI.analyzer]
+scope = { name_attr = "func_name", kind = "function" }
+
+[FuncDeclANSI.renderer]
+head = { line = [
+    "function ",
+    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { opt = { group = [
+        "[",
+        { ref = "func_range" },
+        "] ",
+    ] } },
+    { ref = "func_name" },
+    "(",
+    { ref = "ports" },
+    ")",
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endfunction", break = 2 }
+
+# 旧风格：function name; input x; ... endfunction
+[FuncDeclOld]
+[FuncDeclOld.parser]
+production = [
+    "keyword.function",
+    "(keyword.automatic|keyword.static)?",
+    "@Range?",
     "@Identifier",
     "symbol.base.semicolon",
     "@Block",
     "keyword.endfunction",
 ]
 end_case = ["keyword.endfunction"]
-[FuncDecl.parser.node]
-func_name = "$2"
-body = "$4"
+[FuncDeclOld.parser.node]
+func_name = "$4"
+body = "$6"
+automatic = "$2"
+func_range = "$3"
 
-[FuncDecl.analyzer]
+[FuncDeclOld.analyzer]
 scope = { name_attr = "func_name", kind = "function" }
 
-[FuncDecl.renderer]
+[FuncDeclOld.renderer]
 head = { line = [
     "function ",
+    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { opt = { group = [
+        "[",
+        { ref = "func_range" },
+        "] ",
+    ] } },
     { ref = "func_name" },
     ";",
 ] }
@@ -205,29 +267,77 @@ body = { indent = true, source = "body" }
 tail = { text = "endfunction", break = 2 }
 
 # ============================================================================
-# 任务声明
+# 任务声明（两种风格互斥）
 # ============================================================================
 
 [TaskDecl]
 [TaskDecl.parser]
+production = ["@TaskDeclANSI|@TaskDeclOld"]
+inline = true
+[TaskDecl.parser.node]
+body = "$1"
+
+# ANSI 风格：task name(ports);
+[TaskDeclANSI]
+[TaskDeclANSI.parser]
 production = [
     "keyword.task",
+    "(keyword.automatic|keyword.static)?",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@Block",
+    "keyword.endtask",
+]
+end_case = ["keyword.endtask"]
+[TaskDeclANSI.parser.node]
+task_name = "$3"
+body = "$8"
+automatic = "$2"
+ports = "$5"
+
+[TaskDeclANSI.analyzer]
+scope = { name_attr = "task_name", kind = "task" }
+
+[TaskDeclANSI.renderer]
+head = { line = [
+    "task ",
+    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { ref = "task_name" },
+    "(",
+    { ref = "ports" },
+    ")",
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endtask", break = 2 }
+
+# 旧风格：task name; input x; ... endtask
+[TaskDeclOld]
+[TaskDeclOld.parser]
+production = [
+    "keyword.task",
+    "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "symbol.base.semicolon",
     "@Block",
     "keyword.endtask",
 ]
 end_case = ["keyword.endtask"]
-[TaskDecl.parser.node]
-task_name = "$2"
-body = "$4"
+[TaskDeclOld.parser.node]
+task_name = "$3"
+body = "$5"
+automatic = "$2"
 
-[TaskDecl.analyzer]
+[TaskDeclOld.analyzer]
 scope = { name_attr = "task_name", kind = "task" }
 
-[TaskDecl.renderer]
+[TaskDeclOld.renderer]
 head = { line = [
     "task ",
+    { opt = { line = [{ ref = "automatic" }, " "] } },
     { ref = "task_name" },
     ";",
 ] }

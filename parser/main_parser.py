@@ -107,6 +107,11 @@ class Parser:
             else:
                 extracted = self._extract_from_spec(spec, all_matched_nodes)
                 if extracted is not None:
+                    # 解包 optional 包装节点：空的跳过，非空的取其子节点
+                    if isinstance(extracted, Node) and extracted.node_name == "optional":
+                        if not hasattr(extracted, "sub_node") or not extracted.sub_node:
+                            continue
+                        extracted = extracted.sub_node[0]
                     rule_node.add_attr(attr_name, extracted)
 
     def _try_inline_rule(

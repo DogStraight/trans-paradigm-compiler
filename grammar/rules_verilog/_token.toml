@@ -114,6 +114,8 @@ function = "function"
 endfunction = "endfunction"
 task = "task"
 endtask = "endtask"
+automatic = "automatic"
+static = "static"
 
 # Verilog 关键字
 wire = "wire"

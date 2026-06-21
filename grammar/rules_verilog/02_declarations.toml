@@ -41,6 +41,7 @@ layout = { line = [
     ] } },
     " ",
     { ref = "port_name" },
+    { opt = { ref = "semi" } },
 ] }
 [WirePortDecl.parser]
 production = [
@@ -48,8 +49,10 @@ production = [
     "keyword.wire?",
     "@Range?",
     "@Identifier",
+    "symbol.base.semicolon?",
 ]
 end_case = [
+    "symbol.base.semicolon",
     "symbol.base.comma",
     "bracket.r_parentheses",
     "newline",
@@ -60,7 +63,7 @@ direction = "$1"
 port_type = "$2"
 range = "$3"
 port_name = "$4"
-
+semi = "$5"
 # ----- reg 端口（仅 output，必须有 reg，允许初始化）-----
 [RegPortDecl]
 [RegPortDecl.analyzer]
@@ -80,10 +83,12 @@ layout = { line = [
         " = ",
         { ref = "init" },
     ] } },
+    { opt = { ref = "semi" } },
 ] }
 [RegPortDecl.parser]
-production = ["keyword.output", "keyword.reg", "@Range?", "@Identifier", "@PortInit?"]
+production = ["keyword.output", "keyword.reg", "@Range?", "@Identifier", "@PortInit?", "symbol.base.semicolon?"]
 end_case = [
+    "symbol.base.semicolon",
     "symbol.base.comma",
     "bracket.r_parentheses",
     "newline",
@@ -94,6 +99,7 @@ direction = "output"
 range = "$3"
 port_name = "$4"
 init = "$5"
+semi = "$6"
 
 # 端口初始化（用于 reg 端口）
 [PortInit]
