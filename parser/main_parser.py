@@ -23,11 +23,28 @@ class Parser:
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
-            if rule.end_case  # 只有定义了结束符的规则才作为语句
+            if getattr(rule, "end_case", None)  # 只有定义了结束符的规则才作为语句
         ]
         self.rule_selector = RuleSelector(self.grammar_rules, self.statement_rule_names)
 
         self.skip_types = ["newline", "comment", "space.indent_keep"]
+
+        # 从 token 定义加载 Pratt 分类器，替换 pratt_parser 中的硬编码 is_* 函数
+        if rules_dir:
+            categories = pratt_parser.load_token_categories(rules_dir)
+            if categories:
+                pratt_parser.install_token_classifier(categories)
+
+        # 收集原子规则列表（顺序敏感：较长的 production 优先）
+        self.atomic_rules: List[GrammarRule] = sorted(
+            (
+                rule
+                for rule in self.grammar_rules.values()
+                if getattr(rule, "atomic", False)
+            ),
+            key=lambda r: len(getattr(r, "production", [])),
+            reverse=True,
+        )
 
         self._log_state("Parser initialized", mode="w")
 
@@ -92,7 +109,9 @@ class Parser:
         self, rule_node: Node, rule: GrammarRule, all_matched_nodes: List[Node]
     ) -> None:
         """将规则中的属性映射绑定到规则节点上"""
-        for attr_name, spec in rule.node.items():
+        if not isinstance(getattr(rule, "node", None), dict):
+            return
+        for attr_name, spec in getattr(rule, "node", {}).items():
             if isinstance(spec, list):
                 merged = []
                 for item_spec in spec:
@@ -108,7 +127,10 @@ class Parser:
                 extracted = self._extract_from_spec(spec, all_matched_nodes)
                 if extracted is not None:
                     # 解包 optional 包装节点：空的跳过，非空的取其子节点
-                    if isinstance(extracted, Node) and extracted.node_name == "optional":
+                    if (
+                        isinstance(extracted, Node)
+                        and extracted.node_name == "optional"
+                    ):
                         if not hasattr(extracted, "sub_node") or not extracted.sub_node:
                             continue
                         extracted = extracted.sub_node[0]
@@ -122,10 +144,10 @@ class Parser:
         context: ParseContext,
     ) -> Optional[Node]:
         """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。"""
-        if not rule.inline or len(rule.node) != 1:
+        if not getattr(rule, "inline", False) or len(getattr(rule, "node", {})) != 1:
             return None
 
-        for _, pos_str in rule.node.items():
+        for _, pos_str in getattr(rule, "node", {}).items():
             if not isinstance(pos_str, str):
                 continue
             # 提取路径（如果有）
@@ -168,18 +190,21 @@ class Parser:
         else:
             context.update_current_node(old_node)
 
-    def _prepare_production(self, context: ParseContext, prod: str) -> bool:
+    def _prepare_production(
+        self, context: ParseContext, features: dict
+    ) -> bool:
         """为匹配产生式做准备：跳过空白/注释，条件跳过 indent/dedent。返回 False 表示 token 不足。"""
         self._skip_tokens(context, tuple(self.skip_types))
         if not context.has_more_tokens():
             return False
         should_skip = True
-        if prod.startswith("@") and not prod.endswith("?"):
-            ref_name = prod[1:]
-            ref_rule = self.grammar_rules.get(ref_name)
+        # 非可选的规则调用 (@Rule)：如果目标规则有 block_start 则不跳过 indent/dedent
+        if features.get("type") == "call":
+            ref_rule = self.grammar_rules.get(features["name"])
             if ref_rule and getattr(ref_rule, "block_start", None):
                 should_skip = False
-        elif prod.endswith("?"):
+        # 可选产生式 (...?)：不跳过 indent/dedent
+        elif features.get("type") == "optional":
             should_skip = False
         if should_skip:
             self._skip_tokens(context, ("space.indent", "space.dedent"))
@@ -187,19 +212,24 @@ class Parser:
 
     def _check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
         """检查当前 token 是否匹配规则的结束符。匹配返回 True，不匹配返回 False。"""
-        if not rule.end_case or not context.has_more_tokens():
+        if not getattr(rule, "end_case", None) or not context.has_more_tokens():
             return True
         token = context.peek_token()
-        if token and token.type in rule.end_case:
+        if token and token.type in getattr(rule, "end_case", []):
             return True
         if (
             getattr(rule, "block_start", None)
             and str(getattr(rule, "block_start", "")).strip()
         ):
             return True
-        for ref_name in rule.production:
-            if isinstance(ref_name, str) and ref_name.startswith("@"):
-                inner = self.grammar_rules.get(ref_name[1:])
+        # 检查是否包含引用块规则的产生式（如 @Block）
+        for prod in getattr(rule, "production", []):
+            try:
+                feats = analyze_production_features(prod)
+            except Exception:
+                continue
+            if feats and feats.get("type") == "call":
+                inner = self.grammar_rules.get(feats["name"])
                 if inner and getattr(inner, "block_start", None):
                     return True
         return False
@@ -209,14 +239,13 @@ class Parser:
     ) -> Optional[List[Node]]:
         """匹配规则的所有产生式。成功返回节点列表，任一产生式失败返回 None。"""
         all_matched_nodes = []
-        for prod in rule.production:
-            if not self._prepare_production(context, prod):
-                break
-
+        for prod in getattr(rule, "production", []):
             self._log_state(f"处理产生式: {prod}")
             features = analyze_production_features(prod)
             if not features:
                 continue
+            if not self._prepare_production(context, features):
+                break
 
             snapshot = context.create_snapshot()
             result_node = self._process_production_node(features, context)
@@ -231,7 +260,7 @@ class Parser:
         self, context: ParseContext, rule: GrammarRule
     ) -> Optional[Node]:
         # Pratt 规则特殊处理：直接返回 Pratt 解析结果
-        if rule.pratt:
+        if getattr(rule, "pratt", False):
             return self._try_pratt_rule(context, rule)
 
         # 块规则：有非空 block_start 属性，调用 parse_block
@@ -270,37 +299,21 @@ class Parser:
         self._log_state(f"规则 {rule.name} 匹配成功")
         return rule_node
 
-    def _collect_expr_tokens(
-        self, context: ParseContext, rule: GrammarRule
-    ) -> tuple[List[Token], List[int]]:
-        """收集表达式 token 及其在 context 中的索引，遇到 end_case 或文件末尾停止
+    # ──────────────────────────────────────────────
+    # 动态原子解析
+    # ──────────────────────────────────────────────
 
-        括号嵌套时忽略 end_case（避免参数列表内的逗号/冒号误停）。
-        """
-        expr_tokens: List[Token] = []
-        expr_indices: List[int] = []
-        ptr = context.token_pointer
-        skip_types = {"newline", "comment"}
-        bracket_depth = 0
-        open_brackets = {"(", "[", "{"}
-        close_brackets = {")", "]", "}"}
-        while ptr < len(context.tokens):
-            tok = context.tokens[ptr]
-            # 括号嵌套跟踪
-            if tok.content in open_brackets:
-                bracket_depth += 1
-            elif tok.content in close_brackets:
-                bracket_depth -= 1
-            # 仅在括号深度为 0 时检查 end_case
-            if bracket_depth == 0 and tok.type in rule.end_case:
-                break
-            if tok.type in skip_types or tok.type.startswith("space"):
-                ptr += 1
-                continue
-            expr_tokens.append(tok)
-            expr_indices.append(ptr)
-            ptr += 1
-        return expr_tokens, expr_indices
+    def _parse_atom(self, context: ParseContext) -> tuple[Optional[Node], int]:
+        """尝试按顺序匹配原子规则，返回 (node, consumed) 或 (None, 0)。"""
+        start_ptr = context.token_pointer
+        for rule in self.atomic_rules:
+            snapshot = context.create_snapshot()
+            node = self._try_rule_productions(context, rule)
+            if node is not None:
+                consumed = context.token_pointer - start_ptr
+                return node, consumed
+            context.restore_snapshot(snapshot)
+        return None, 0
 
     def _try_pratt_rule(
         self, context: ParseContext, rule: GrammarRule
@@ -310,17 +323,28 @@ class Parser:
             self._log_state("Pratt 解析: 没有可用 token")
             return None
 
-        expr_tokens, expr_indices = self._collect_expr_tokens(context, rule)
-        if not expr_tokens:
-            self._log_state("Pratt 解析: 没有可用于解析的 token")
-            return None
+        start = context.token_pointer
+        stop_tokens: Optional[set] = (
+            set(getattr(rule, "end_case", []))
+            if getattr(rule, "end_case", None)
+            else None
+        )
 
-        # 预处理：将 id ( args? ) 打包成 CallExpr 节点
-        expr_tokens, expr_indices = self._preprocess_calls(expr_tokens, expr_indices)
+        # 原子解析器闭包：供 Pratt 回调，适配 (tokens, idx) → (node, consumed)
+        def atom_parser(tokens_list, idx):
+            old_ptr = context.token_pointer
+            context.token_pointer = idx
+            node, consumed = self._parse_atom(context)
+            context.token_pointer = old_ptr  # Pratt 自己管理指针
+            return node, consumed
 
         try:
             ast_node, consumed = pratt_parser.parse_with_count(
-                expr_tokens, self.operator_defs
+                context.tokens,
+                start,
+                self.operator_defs,
+                atom_parser=atom_parser,
+                stop_tokens=stop_tokens,
             )
         except ValueError as e:
             self._log_state(f"Pratt 解析: 不适合作为表达式 - {e}")
@@ -330,107 +354,18 @@ class Parser:
             self._warn(f"Pratt 表达式解析失败: {e}")
             return None
 
-        if consumed == 0:
+        if ast_node is None or consumed == 0:
             self._log_state("Pratt 解析: 未消费任何 token")
             return None
 
-        # 映射回 context 中的位置
-        last_consumed_idx = expr_indices[consumed - 1]
-        context.token_pointer = last_consumed_idx + 1
-        self._log_state(
-            f"Pratt 解析成功，消耗了 {consumed}/{len(expr_tokens)} 个 token"
-        )
+        context.token_pointer = start + consumed
+        self._log_state(f"Pratt 解析成功，消耗 {consumed} 个 token")
         return ast_node
-
-    def _preprocess_calls(
-        self, tokens: list, indices: list
-    ) -> tuple[list, list]:
-        """扫描 token 列表，将 id ( args? ) 模式替换为 CallExpr 节点
-
-        返回 (新 token 列表, 新索引映射)，每个索引指向原始 token 流中的位置。
-        """
-        result_tokens: list = []
-        result_indices: list = []
-        i = 0
-        while i < len(tokens):
-            tok = tokens[i]
-            # 检查是否为 identifier (
-            if (isinstance(tok, Token) and tok.type.startswith("id") and
-                    i + 1 < len(tokens) and isinstance(tokens[i+1], Token) and
-                    tokens[i+1].content == "("):
-                # 找到匹配的右括号
-                depth = 1
-                j = i + 2
-                while j < len(tokens) and depth > 0:
-                    if isinstance(tokens[j], Token):
-                        if tokens[j].content == "(":
-                            depth += 1
-                        elif tokens[j].content == ")":
-                            depth -= 1
-                    j += 1
-                if depth == 0:
-                    # 构造 Callee 节点
-                    callee_node = Node("Identifier", content=tok.content)
-                    # 解析参数
-                    args_node = self._parse_call_args(
-                        tokens[i + 2: j - 1]
-                    )
-                    call_node = Node(
-                        "CallExpr", callee=callee_node, args=args_node
-                    )
-                    result_tokens.append(call_node)
-                    result_indices.append(indices[j - 1])
-                    i = j
-                    continue
-            result_tokens.append(tok)
-            result_indices.append(indices[i])
-            i += 1
-        return result_tokens, result_indices
-
-    def _parse_call_args(self, arg_tokens: list):
-        """解析逗号分隔的参数列表，返回 ArgumentList 节点或 None"""
-        if not arg_tokens:
-            return None
-        # 按逗号分隔参数
-        items = []
-        start = 0
-        depth = 0
-        for i, t in enumerate(arg_tokens):
-            if isinstance(t, Token):
-                if t.content == "(":
-                    depth += 1
-                elif t.content == ")":
-                    depth -= 1
-                elif t.content == "," and depth == 0:
-                    if i > start:
-                        expr = self._parse_single_arg(arg_tokens[start:i])
-                        if expr:
-                            items.append(expr)
-                    start = i + 1
-        if start < len(arg_tokens):
-            expr = self._parse_single_arg(arg_tokens[start:])
-            if expr:
-                items.append(expr)
-        if items:
-            return Node("ArgumentList", items=items)
-        return None
-
-    def _parse_single_arg(self, arg_tokens: list):
-        """用 Pratt 解析单个参数表达式"""
-        try:
-            ast, _ = pratt_parser.parse_with_count(arg_tokens, self.operator_defs)
-            return ast
-        except Exception:
-            return None
 
     # 对应生成式的类型的处理方法
     def _parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
         token_type: str = node["token_type"]
         self._log_state(f"解析普通token: {token_type}")
-
-        if not re.match(r"^[a-zA-Z0-9_\.]+$", token_type):
-            self._log_state(f"无效的普通token格式: {token_type}")
-            return None
 
         if not context.has_more_tokens():
             self._log_state("无更多token可解析")
@@ -473,7 +408,7 @@ class Parser:
         self._log_state("解析序列节点")
         try:
             with context:
-                seq_node = Node("sequence")
+                seq_node = Node("seq")
                 for item in items:
                     result = self._process_production_node(item, context)
                     if result is None:
@@ -548,7 +483,7 @@ class Parser:
                 with context:
                     first = self._process_production_node(item_elem, context)
                     if first is None:
-                        return Node("list", items=[])
+                        return Node("repeat", items=[])
                     collected.append(first)
             # 循环匹配 (sep item) 对
             while True:
@@ -559,12 +494,12 @@ class Parser:
                     if next_item is None:
                         break
                     collected.append(next_item)
-            return Node("list", items=collected)
+            return Node("repeat", items=collected)
 
         self._log_state("解析重复节点（零次或多次）")
         nodes = self._repeat_loop(elem, context) or []
         self._log_state(f"重复解析完成，匹配次数: {len(nodes)}")
-        return Node("list", items=nodes)
+        return Node("repeat", items=nodes)
 
     def _parse_optional(self, node: dict, context: ParseContext) -> Optional[Node]:
         elem = node["elem"]

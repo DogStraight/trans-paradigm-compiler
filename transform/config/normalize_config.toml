@@ -6,11 +6,11 @@
 [extract_value]
 prefixes = ["keyword.", "symbol."]
 # 注意：id 已被 Identifier 节点替代，不再需要提取为字符串
-names = []
+names = ["literal.number", "literal.string", "literal.bool_true", "literal.bool_false", "literal.none"]
 
 # 需要消除的包装节点类型
 [eliminate]
-types = ["optional", "repeat", "sequence"]
+types = ["optional", "repeat", "seq"]
 
 # 需要合并到 children 的命名属性（例如 first/rest 合并到 sub_node）
 [merge]

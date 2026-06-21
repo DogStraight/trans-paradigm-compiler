@@ -75,7 +75,7 @@ class Lexer:
 
         while text_idx < lex_text_len:
             # token container
-            current_token: Token = Token()
+            current_token: Token = Token(line=line_number, column=start_point)
 
             # reset offset
             offset = 0
@@ -132,7 +132,7 @@ class Lexer:
 
                         if current_depth > self.indent_deep:
                             # emit indent token
-                            indent_token = Token()
+                            indent_token = Token(line=line_number, column=start_point)
                             indent_token.set_type("space.indent")
                             indent_token.set_content(space_content)
 
@@ -140,7 +140,7 @@ class Lexer:
                         elif current_depth < self.indent_deep:
                             # emit one or more dedent tokens
                             while self.indent_deep > current_depth:
-                                dedent_token = Token()
+                                dedent_token = Token(line=line_number, column=start_point)
                                 dedent_token.set_type("space.dedent")
                                 dedent_token.set_content("")
 
@@ -340,7 +340,7 @@ class Lexer:
         """当新行没有前导空格时，输出所有待处理的 dedent 令牌"""
         if self.new_line_start:
             while self.indent_deep > 0:
-                dedent_token = Token()
+                dedent_token = Token(line=0, column=0)
                 dedent_token.set_type("space.dedent")
                 dedent_token.set_content("")
                 tokens.append(dedent_token)

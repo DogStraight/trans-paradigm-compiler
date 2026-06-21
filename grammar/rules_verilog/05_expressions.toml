@@ -6,6 +6,7 @@
 [BitWidthLiteral]
 [BitWidthLiteral.parser]
 production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
+atomic = true
 [BitWidthLiteral.parser.node]
 width = "$1"
 value = "$3"
@@ -22,6 +23,7 @@ layout = { line = [
 [Number]
 [Number.parser]
 production = ["literal.number"]
+atomic = true
 [Number.parser.node]
 value = "$1"
 [Number.renderer]
@@ -30,6 +32,7 @@ layout = { ref = "value" }
 [Identifier]
 [Identifier.parser]
 production = ["id"]
+atomic = true
 inline = false
 [Identifier.parser.node]
 content = "$1.value"
@@ -44,6 +47,7 @@ layout = { ref = "content" }
 [ParenthesizedExpr]
 [ParenthesizedExpr.parser]
 production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+atomic = true
 [ParenthesizedExpr.parser.node]
 expr = "$2"
 [ParenthesizedExpr.renderer]
@@ -57,6 +61,7 @@ production = [
     "@Expression",
     "bracket.r_square_bracket",
 ]
+atomic = true
 [IndexedId.parser.node]
 id_name = "$1"
 index = "$3"
@@ -71,6 +76,7 @@ production = [
     "(symbol.base.comma,@Expression)*",
     "bracket.r_curly_bracket",
 ]
+atomic = true
 [ConcatExpr.parser.node]
 first = "$2"
 rest = "$3"
@@ -87,6 +93,7 @@ production = [
     "bracket.r_curly_bracket",
     "bracket.r_curly_bracket",
 ]
+atomic = true
 [ReplicateExpr.parser.node]
 count = "$2"
 value = "$4"
@@ -113,6 +120,7 @@ production = [
     "@ArgumentList?",
     "bracket.r_parentheses",
 ]
+atomic = true
 [CallExpr.parser.node]
 callee = "$1"
 args = "$3"
@@ -178,16 +186,8 @@ tail = "$2"
 [Expression]
 [Expression.parser]
 production = ["@LogicOrExpr"]
-end_case = [
-    "symbol.base.colon",
-    "symbol.base.semicolon",
-    "symbol.base.comma",
-    "keyword.endcase",
-    "keyword.begin",
-]
 pratt = true
 [Expression.parser.node]
-expr = "$1"
 
 # ---------- 运算符节点（用于代码生成）----------
 [MulOp]

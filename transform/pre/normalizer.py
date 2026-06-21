@@ -153,7 +153,7 @@ def _normalize(
                         result.append(normalized)
         # sequence 中的分隔符（逗号等）已被 extract_value 提取为字符串，
         # 过滤掉非 Node 项，避免与 layout 的 join 分隔符冲突
-        if node.node_name == "sequence":
+        if node.node_name == "seq":
             result = [x for x in result if isinstance(x, Node)]
         return result
 

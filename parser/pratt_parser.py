@@ -1,7 +1,7 @@
 # parser/pratt_parser.py
 import os
 import tomllib
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 from core.define import Node, Token, FileManager
 
 
@@ -52,35 +52,50 @@ def build_priority_maps(operator_defs):
     return prefix_priority, prefix_attrs, infix_priority, infix_attrs
 
 
-# ========== 辅助函数：判断 token 类型 ==========
-def is_number(token: Token) -> bool:
-    return token.type == "literal.number"
+# ========== Token 分类（从 _token.toml 加载）==========
+def load_token_categories(rules_dir: str) -> dict:
+    """从语言特定 _token.toml 加载 [token_category] 配置"""
+    try:
+        path = os.path.join(rules_dir, "_token.toml")
+        content = FileManager.read_file(path)
+        data = tomllib.loads(content)
+        return data.get("token_category", {})
+    except Exception:
+        return {}
 
 
-def is_string(token: Token) -> bool:
-    return token.type == "literal.string"
+def build_token_classifier(categories: dict) -> dict:
+    """从分类配置构建 {name: check_fn(token) -> bool} 映射"""
+    checks = {}
+    for name, cfg in categories.items():
+        match = cfg.get("match", "exact")
+        types = cfg.get("types", [])
+        if match == "exact":
+            type_set = set(types)
+            checks[name] = lambda t, s=type_set: isinstance(t, Token) and t.type in s
+        elif match == "prefix":
+            prefixes = tuple(types)
+            checks[name] = lambda t, p=prefixes: isinstance(t, Token) and t.type.startswith(p)
+    return checks
 
 
-def is_bool(token: Token) -> bool:
-    return token.type in ("literal.bool_true", "literal.bool_false")
+# 模块级分类器（由 install_token_classifier 设置）
+_token_checks: dict = {}
+def _check(name: str, token) -> bool:
+    fn = _token_checks.get(name)
+    return fn(token) if fn else False
 
+def is_number(token) -> bool:    return _check("number", token)
+def is_string(token) -> bool:    return _check("string", token)
+def is_bool(token) -> bool:      return _check("bool", token)
+def is_identifier(token) -> bool: return _check("identifier", token)
+def is_operator(token) -> bool:   return _check("operator", token)
+def is_none(token) -> bool:      return _check("none", token)
 
-def is_identifier(token: Token) -> bool:
-    return token.type == "id" or token.type.startswith("id.")
-
-
-def is_operator(token: Token) -> bool:
-    return token.type.startswith("symbol.base.") or token.type.startswith(
-        "symbol.extend."
-    )
-
-
-def is_paren(token: Token) -> bool:
-    return token.type.startswith("bracket.")
-
-
-def is_none(token: Token) -> bool:
-    return token.type == "literal.none"
+def install_token_classifier(categories: dict) -> None:
+    """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
+    global _token_checks
+    _token_checks = build_token_classifier(categories)
 
 
 # ========== 字面量解析辅助 ==========
@@ -119,83 +134,7 @@ def parse_number_literal(token: Token) -> Node:
         return Node("Number", value=content)
 
 
-def parse_brace_expr(
-    tokens: List[Token],
-    idx: int,
-    prefix_priority: Dict[str, int],
-    prefix_attrs: Dict[str, Any],
-    infix_priority: Dict[str, int],
-    infix_attrs: Dict[str, Any],
-    max_infix_prio: int,
-    unary_prefix_rbp: int,
-) -> Tuple[Node, int]:
-    """解析花括号表达式 { ... }，支持串联和复制模式"""
-    idx += 1  # 跳过 '{'
-    items = []
-    is_replication = False
-    node = None
-
-    while idx < len(tokens):
-        if is_paren(tokens[idx]) and tokens[idx].content == "}":
-            break
-        if tokens[idx].content == ",":
-            idx += 1
-            continue
-
-        item_node, idx = parse_expression(
-            tokens,
-            idx,
-            0,
-            prefix_priority,
-            prefix_attrs,
-            infix_priority,
-            infix_attrs,
-            max_infix_prio,
-            unary_prefix_rbp,
-        )
-        if item_node is None:
-            break
-        items.append(item_node)
-
-        # 检测复制模式: {count{value}}
-        if idx < len(tokens) and is_paren(tokens[idx]) and tokens[idx].content == "{":
-            inner_node, idx = parse_expression(
-                tokens,
-                idx,
-                0,
-                prefix_priority,
-                prefix_attrs,
-                infix_priority,
-                infix_attrs,
-                max_infix_prio,
-                unary_prefix_rbp,
-            )
-            node = Node("ReplicateExpr", count=item_node, value=inner_node)
-            is_replication = True
-            break
-
-    # 消费右花括号
-    if idx >= len(tokens) or not (is_paren(tokens[idx]) and tokens[idx].content == "}"):
-        raise ValueError("缺少右花括号")
-    idx += 1
-
-    if is_replication:
-        assert node is not None, "复制模式未生成节点"
-        return node, idx
-    else:
-        # 使用 first/rest 结构（与语法规则一致）
-        if not items:
-            return Node("ConcatExpr", first=None, rest=None), idx
-        first = items[0]
-        if len(items) > 1:
-            rest_items = []
-            for item in items[1:]:
-                rest_items.append(Node("symbol.base.comma", value=","))
-                rest_items.append(item)
-            rest = Node("sequence", sub_node=rest_items)
-        else:
-            rest = None
-        return Node("ConcatExpr", first=first, rest=rest), idx
+# parse_brace_expr 已由原子规则 ConcatExpr / ReplicateExpr 替代
 
 
 # ========== Pratt 解析核心 ==========
@@ -209,171 +148,81 @@ def parse_expression(
     infix_attrs: Dict[str, Any],
     max_infix_prio: int,
     unary_prefix_rbp: int,
+    atom_parser=None,
+    stop_tokens: Optional[set] = None,
 ) -> Tuple[Node, int]:
-    """递归解析表达式，返回 (Node, 新索引)"""
+    """递归解析表达式，返回 (Node, 新索引)
+
+    atom_parser: Optional[(tokens, idx) → (node, consumed)] 原子规则回调
+    stop_tokens: Optional[set[str]] 遇到这些 token 类型时停止中缀循环
+    """
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
 
-    token = tokens[idx]
-
-    # ---------- 括号处理器注册表 ----------
-    def handle_parentheses(tokens, cur_idx):
-        # 圆括号: ( expr )
-        cur_idx += 1  # 跳过 '('
-        inner_node, cur_idx = parse_expression(
-            tokens,
-            cur_idx,
-            0,
-            prefix_priority,
-            prefix_attrs,
-            infix_priority,
-            infix_attrs,
-            max_infix_prio,
-            unary_prefix_rbp,
-        )
-        current_token: Token = tokens[cur_idx]
-        if cur_idx >= len(tokens) or not (
-            is_paren(current_token) and current_token.content == ")"
-        ):
-            raise ValueError("缺少右括号")
-        cur_idx += 1
-        pe = Node("ParenthesizedExpr", expr=inner_node)
-
-        return pe, cur_idx
-
-    def handle_braces(tokens, cur_idx):
-        # 花括号: { ... } 支持串联和复制模式
-        return parse_brace_expr(
-            tokens,
-            cur_idx,
-            prefix_priority,
-            prefix_attrs,
-            infix_priority,
-            infix_attrs,
-            max_infix_prio,
-            unary_prefix_rbp,
-        )
-
-    bracket_handlers = {
-        "(": handle_parentheses,
-        "{": handle_braces,
-    }
-
-    # ---------- 前缀处理函数（返回 (Node, new_idx)）----------
-    def handle_number(cur_idx):
-        node = parse_number_literal(tokens[cur_idx])
-        cur_idx += 1
-        return node, cur_idx
-
-    def handle_string(cur_idx):
-        s = (
-            tokens[cur_idx].content[1:-1]
-            if len(tokens[cur_idx].content) >= 2
-            else tokens[cur_idx].content
-        )
-        node = Node("String", value=s)
-        cur_idx += 1
-        return node, cur_idx
-
-    def handle_bool(cur_idx):
-        node = Node("Bool", value=(tokens[cur_idx].type == "literal.bool_true"))
-
-        cur_idx += 1
-        return node, cur_idx
-
-    def handle_identifier(cur_idx):
-        name = tokens[cur_idx].content
-        node = Node("Identifier", content=name)
-
-        cur_idx += 1
-        # 处理 id[expr] 索引访问
-        if (
-            cur_idx < len(tokens)
-            and is_paren(tokens[cur_idx])
-            and tokens[cur_idx].content == "["
-        ):
-            cur_idx += 1  # 跳过 '['
-            index_node, cur_idx = parse_expression(
-                tokens,
-                cur_idx,
-                0,
-                prefix_priority,
-                prefix_attrs,
-                infix_priority,
-                infix_attrs,
-                max_infix_prio,
-                unary_prefix_rbp,
-            )
-            if cur_idx >= len(tokens) or not (
-                is_paren(tokens[cur_idx]) and tokens[cur_idx].content == "]"
-            ):
-                raise ValueError("缺少右方括号")
-            cur_idx += 1
-            node = Node("IndexedId", id_name=name, index=index_node)
-        return node, cur_idx
-
-    def handle_bracket(cur_idx):
-        current_token: Token = tokens[cur_idx]
-        handler = bracket_handlers[current_token.content]
-        node, new_idx = handler(tokens, cur_idx)
-        return node, new_idx
-
-    def handle_prefix_op(cur_idx):
-        current_token: Token = tokens[cur_idx]
-        props = prefix_attrs[current_token.content]
-        if props.get("arity") == 1 and props.get("position") == "prefix":
-            op = current_token.content
-            cur_idx += 1
-            right, cur_idx = parse_expression(
-                tokens,
-                cur_idx,
-                unary_prefix_rbp,
-                prefix_priority,
-                prefix_attrs,
-                infix_priority,
-                infix_attrs,
-                max_infix_prio,
-                unary_prefix_rbp,
-            )
-            uo = Node("UnaryOp", op=op, operand=right, position="prefix")
-            return uo, cur_idx
-        else:
-            raise ValueError(f"不支持的前缀运算符: {tokens[cur_idx].content}")
-
-    def handle_none(cur_idx):
-        cur_idx += 1
-        return Node("NoneLiteral"), cur_idx
-
-    # 匹配条件与处理函数的映射（顺序重要）
-    prefix_handlers = [
-        (lambda idx: isinstance(tokens[idx], Node), lambda idx: (tokens[idx], idx + 1)),
-        (lambda idx: is_number(tokens[idx]), handle_number),
-        (lambda idx: is_string(tokens[idx]), handle_string),
-        (lambda idx: is_bool(tokens[idx]), handle_bool),
-        (lambda idx: is_identifier(tokens[idx]), handle_identifier),
-        (lambda idx: is_paren(tokens[idx]), handle_bracket),
-        (
-            lambda idx: is_operator(tokens[idx])
-            and tokens[idx].content in prefix_attrs,
-            handle_prefix_op,
-        ),
-        (lambda idx: is_none(tokens[idx]), handle_none),
-    ]
-
-    # 匹配并执行前缀处理
+    # ---------- 前缀处理（先原子解析器，后内置前缀）----------
     node = None
-    for cond, handler in prefix_handlers:
-        if cond(idx):
-            node, idx = handler(idx)
-            break
-    else:
-        raise ValueError(
-            f"意外的 token: {tokens[idx].content} (type: {tokens[idx].type})"
-        )
+    # 1. 原子解析器
+    if atom_parser is not None:
+        node, consumed = atom_parser(tokens, idx)
+        if node is not None:
+            idx += consumed
+
+    # 2. 内置前缀（原子未命中时启用）
+    if node is None:
+        token = tokens[idx]
+        if isinstance(token, Node):
+            node, idx = token, idx + 1
+        elif is_number(token):
+            node = parse_number_literal(token)
+            idx += 1
+        elif is_string(token):
+            s = token.content[1:-1] if len(token.content) >= 2 else token.content
+            node = Node("String", value=s)
+            idx += 1
+        elif is_bool(token):
+            node = Node("Bool", value=(token.type == "literal.bool_true"))
+            idx += 1
+        elif is_identifier(token):
+            name = token.content
+            node = Node("Identifier", content=name)
+            idx += 1
+        elif is_operator(token) and token.content in prefix_attrs:
+            props = prefix_attrs[token.content]
+            if props.get("arity") == 1 and props.get("position") == "prefix":
+                op = token.content
+                idx += 1
+                right, idx = parse_expression(
+                    tokens,
+                    idx,
+                    unary_prefix_rbp,
+                    prefix_priority,
+                    prefix_attrs,
+                    infix_priority,
+                    infix_attrs,
+                    max_infix_prio,
+                    unary_prefix_rbp,
+                    atom_parser,
+                    stop_tokens,
+                )
+                node = Node("UnaryOp", op=op, operand=right, position="prefix")
+            else:
+                raise ValueError(f"不支持的前缀运算符: {token.content}")
+        elif is_none(token):
+            node = Node("NoneLiteral")
+            idx += 1
+        else:
+            raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 
     # ---------- 中缀（led）----------
     while idx < len(tokens):
         token = tokens[idx]
+        # 停止符集合：遇到则终止表达式解析（如右括号、逗号等）
+        if (
+            stop_tokens is not None
+            and isinstance(token, Token)
+            and token.type in stop_tokens
+        ):
+            break
         if not is_operator(token):
             break
         op = token.content
@@ -403,6 +252,8 @@ def parse_expression(
                 infix_attrs,
                 max_infix_prio,
                 unary_prefix_rbp,
+                atom_parser,
+                stop_tokens,
             )
             node = Node("BinaryOp", op=op, left=node, right=right_node)
         elif arity == 3:
@@ -420,6 +271,8 @@ def parse_expression(
                 infix_attrs,
                 max_infix_prio,
                 unary_prefix_rbp,
+                atom_parser,
+                stop_tokens,
             )
             if idx >= len(tokens) or tokens[idx].content != second_sym:
                 raise ValueError(f"缺少三元运算符的第二个符号: {second_sym}")
@@ -434,6 +287,8 @@ def parse_expression(
                 infix_attrs,
                 max_infix_prio,
                 unary_prefix_rbp,
+                atom_parser,
+                stop_tokens,
             )
             node = Node(
                 "TernaryOp",
@@ -475,8 +330,12 @@ def parse(tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]) 
 
 
 def parse_with_count(
-    tokens: list, operator_defs: list
-) -> Tuple[Node, int]:
+    tokens: list,
+    start_idx: int = 0,
+    operator_defs: Optional[list] = None,
+    atom_parser=None,
+    stop_tokens: Optional[set] = None,
+) -> Tuple[Optional[Node], int]:
     """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
 
     tokens 可包含 Token 或预解析的 Node（如 CallExpr），
@@ -490,7 +349,7 @@ def parse_with_count(
 
     ast, idx = parse_expression(
         tokens,
-        0,
+        start_idx,
         0,
         prefix_priority,
         prefix_attrs,
@@ -498,5 +357,9 @@ def parse_with_count(
         infix_attrs,
         max_infix_prio,
         unary_prefix_rbp,
+        atom_parser,
+        stop_tokens,
     )
-    return ast, idx
+    if ast is None:
+        return None, 0
+    return ast, idx - start_idx

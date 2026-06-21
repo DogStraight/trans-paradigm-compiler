@@ -1,8 +1,10 @@
 class Token:
 
-    def __init__(self, content="", type="") -> None:
+    def __init__(self, content="", type="", line=0, column=0) -> None:
         self.content: str = content
         self.type: str = type
+        self.line: int = line
+        self.column: int = column
 
     def set_content(self, content: str) -> None:
         self.content = content
@@ -148,8 +150,29 @@ class GrammarRule:
     其他属性由 Parser / Renderer / Normalizer 各自消费。
     """
 
+    # 从 parser/analyzer 阶段提取的字段名集合
+    _KNOWN_FIELDS = {
+        "production",
+        "node",
+        "end_case",
+        "inline",
+        "pratt",
+        "atomic",
+        "block_start",
+        "block_end",
+        "scope",
+        "symbol",
+        "identifier_ref",
+    }
+    # 默认值为列表的字段
+    _LIST_FIELDS = {"production", "node", "end_case"}
+
     def __init__(self, name: str, **kwargs):
         self.name = name
+
+        # 设置默认值
+        for fld in self._KNOWN_FIELDS:
+            setattr(self, fld, [] if fld in self._LIST_FIELDS else False)
 
         # 从嵌套的阶段结构中提取属性到顶层，同时保留原始嵌套
         for stage in ("parser", "analyzer", "renderer"):
@@ -157,32 +180,11 @@ class GrammarRule:
             if stage_data:
                 setattr(self, stage, stage_data)
                 for k, v in stage_data.items():
-                    # node 特殊处理：部分代码直接读 rule.node
-                    if k == "node" and isinstance(v, dict):
-                        self.node = v
-                    elif k == "production":
-                        self.production = v
-                    elif k == "end_case":
-                        self.end_case = v
-                    elif k == "inline":
-                        self.inline = v
-                    elif k == "pratt":
-                        self.pratt = v
-                    elif k == "block_start":
-                        self.block_start = v
-                    elif k == "block_end":
-                        self.block_end = v
-                    elif k == "scope":
-                        self.scope = v
-                    elif k == "symbol":
-                        self.symbol = v
-                    elif k == "identifier_ref":
-                        self.identifier_ref = v
-
-        # 确保核心字段存在（由阶段嵌套结构提供）
-        for fld in ("production", "node", "end_case", "inline", "pratt"):
-            if not hasattr(self, fld):
-                setattr(self, fld, [] if fld in ("production", "node", "end_case") else False)
+                    if k in self._KNOWN_FIELDS:
+                        # node 只接受 dict 类型
+                        if k == "node" and not isinstance(v, dict):
+                            continue
+                        setattr(self, k, v)
 
         # 剩余未识别的属性
         for key, value in kwargs.items():
@@ -191,8 +193,8 @@ class GrammarRule:
     def dump(self) -> dict:
         return {
             self.name: {
-                "production": self.production,
-                "node": self.node,
+                "production": getattr(self, "production", []),
+                "node": getattr(self, "node", None),
             }
         }
 
