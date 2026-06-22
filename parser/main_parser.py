@@ -454,12 +454,14 @@ class Parser:
             snapshot = context.create_snapshot()
             result = self._process_production_node(elem, context)
             if result is None:
+                # 修复：失败时恢复快照，避免部分消费的 token 残留
                 context.restore_snapshot(snapshot)
                 break
             nodes.append(result)
             if max_count is not None and len(nodes) >= max_count:
                 break
-        return nodes if len(nodes) >= min_count else None
+        ret = nodes if len(nodes) >= min_count else None
+        return ret
 
     def _parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
         elem = node["elem"]

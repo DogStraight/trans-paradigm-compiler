@@ -203,12 +203,13 @@ layout = { join = ", ", items = "items" }
 
 [WireIdItem]
 [WireIdItem.parser]
-production = ["@Identifier", "@Range?"]
+production = ["@Identifier", "@Range?", "@RegInit?"]
 [WireIdItem.parser.node]
 name = "$1"
 array_range = "$2"
+init = "$3"
 [WireIdItem.renderer]
-layout = { line = [{ ref = "name" }, { opt = { group = ["[", { ref = "array_range" }, "]"] } }] }
+layout = { line = [{ ref = "name" }, { opt = { group = ["[", { ref = "array_range" }, "]"] } }, { opt = { group = [" = ", { ref = "init" }] } }] }
 
 [RegDecl]
 [RegDecl.parser]
