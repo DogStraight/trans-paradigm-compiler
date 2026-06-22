@@ -54,9 +54,9 @@ def build_priority_maps(operator_defs):
 
 # ========== Token 分类（从 _token.toml 加载）==========
 def load_token_categories(rules_dir: str) -> dict:
-    """从语言特定 _token.toml 加载 [token_category] 配置"""
+    """从 _pratt.toml 加载 [token_category] 配置"""
     try:
-        path = os.path.join(rules_dir, "_token.toml")
+        path = os.path.join(rules_dir, "_pratt.toml")
         content = FileManager.read_file(path)
         data = tomllib.loads(content)
         return data.get("token_category", {})
