@@ -9,26 +9,29 @@ Doc 是纯数据结构，不执行任何渲染逻辑。
 
 from dataclasses import dataclass
 
-
 # ============================================================================
 # Doc 类型
 # ============================================================================
 
+
 @dataclass
 class Doc:
     """Doc 基类"""
+
     pass
 
 
 @dataclass
 class Empty(Doc):
     """无内容"""
+
     pass
 
 
 @dataclass
 class Text(Doc):
     """字面量文本"""
+
     text: str
 
 
@@ -39,6 +42,7 @@ class Line(Doc):
     flat 模式 → 一个空格
     broken 模式 → 换行 + 当前缩进
     """
+
     pass
 
 
@@ -48,12 +52,14 @@ class Break(Doc):
     硬换行。
     无论 flat/broken 都强制换行 + 当前缩进。
     """
+
     pass
 
 
 @dataclass
 class Concat(Doc):
     """顺序拼接"""
+
     docs: list[Doc]
 
 
@@ -63,6 +69,7 @@ class Nest(Doc):
     缩进偏移。
     对 Nest 内部的所有 Line/Break 产生的新行增加 indent 格缩进。
     """
+
     indent: int
     doc: Doc
 
@@ -77,6 +84,7 @@ class Prefix(Doc):
     - 第一行文本前插入 indent 个空格
     - 后续所有 Line/Break 换行时增加 indent 格缩进
     """
+
     indent: int
     doc: Doc
 
@@ -89,6 +97,7 @@ class Union(Doc):
     broken = 保留换行的版本
     layout 算法选择能适应当前剩余宽度的版本。
     """
+
     flat: Doc
     broken: Doc
 
@@ -167,6 +176,7 @@ def soft_line() -> Doc:
 # ============================================================================
 # Layout 算法
 # ============================================================================
+
 
 def layout(doc: Doc, max_width: int = 80) -> str:
     """

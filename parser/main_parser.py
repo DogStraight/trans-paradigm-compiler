@@ -451,13 +451,14 @@ class Parser:
         """循环匹配 elem，返回压平后的节点列表；若少于 min_count 则返回 None。"""
         nodes = []
         while True:
-            with context:
-                result = self._process_production_node(elem, context)
-                if result is None:
-                    break
-                nodes.append(result)
-                if max_count is not None and len(nodes) >= max_count:
-                    break
+            snapshot = context.create_snapshot()
+            result = self._process_production_node(elem, context)
+            if result is None:
+                context.restore_snapshot(snapshot)
+                break
+            nodes.append(result)
+            if max_count is not None and len(nodes) >= max_count:
+                break
         return nodes if len(nodes) >= min_count else None
 
     def _parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
@@ -578,11 +579,22 @@ class Parser:
         """跳过空白并消费起始符，成功返回 True"""
         self._skip_tokens(context, tuple(self.skip_types))
         current = context.peek_token()
-        if not current or current.type != start_token:
-            self._log_state(f"期望块开始标记 {start_token}，未找到")
+        if not current:
+            self._log_state(f"期望块开始标记 {start_token}，文件已结束")
             return False
-        context.advance_token()
-        return True
+        if current.type == start_token:
+            context.advance_token()
+            return True
+        # 如果期待 space.indent 但遇到了 space.dedent，说明延续行对齐
+        if start_token == "space.indent":
+            while current and current.type == "space.dedent":
+                context.advance_token()
+                current = context.peek_token()
+            if current and current.type == "space.indent":
+                context.advance_token()
+            return True
+        self._log_state(f"期望块开始标记 {start_token}，实际为 {current.type}")
+        return False
 
     def _parse_block_body(
         self, context: ParseContext, block_node: Node, end_token: Optional[str]

@@ -53,6 +53,22 @@ expr = "$2"
 [ParenthesizedExpr.renderer]
 layout = { line = ["(", { ref = "expr" }, ")"] }
 
+# ---------- 链式索引 a[i][j] ----------
+[ChainIndex]
+[ChainIndex.parser]
+production = [
+    "@IndexedId",
+    "bracket.l_square_bracket",
+    "@Expression",
+    "bracket.r_square_bracket",
+]
+atomic = true
+[ChainIndex.parser.node]
+base = "$1"
+index = "$3"
+[ChainIndex.renderer]
+layout = { line = [{ ref = "base" }, "[", { ref = "index" }, "]"] }
+
 [IndexedId]
 [IndexedId.parser]
 production = [
@@ -104,7 +120,7 @@ layout = { line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"] }
 [PrimaryExpr]
 [PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
+    "@BitWidthLiteral|@Number|@ChainIndex|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
 [PrimaryExpr.parser.node]

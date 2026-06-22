@@ -176,72 +176,84 @@ layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
 
 [WireDecl]
 [WireDecl.parser]
-production = ["keyword.wire", "@Range?", "@Identifier", "@Range?", "symbol.base.semicolon"]
+production = ["keyword.wire", "@Range?", "@WireIdList", "symbol.base.semicolon"]
 end_case = ["newline"]
 [WireDecl.parser.node]
 wire_type = "$1"
 range = "$2"
-wire_name = "$3"
-array_range = "$4"
+items = "$3.items"
 [WireDecl.analyzer]
-symbol = { kind = "wire", name_attr = "wire_name" }
+symbol = { kind = "wire", name_attr = "items.name" }
 [WireDecl.renderer]
 layout = { line = [
     "wire ",
-    { opt = { group = [
-        "[",
-        { ref = "range" },
-        "]",
-    ] } },
+    { opt = { group = ["[", { ref = "range" }, "]"] } },
     " ",
-    { ref = "wire_name" },
-    { opt = { group = [
-        "[",
-        { ref = "array_range" },
-        "]",
-    ] } },
+    { join = ", ", items = "items" },
     ";",
 ] }
+
+[WireIdList]
+[WireIdList.parser]
+production = ["@WireIdItem", "(symbol.base.comma,@WireIdItem)*"]
+[WireIdList.parser.node]
+items = ["$1", "$2.items"]
+[WireIdList.renderer]
+layout = { join = ", ", items = "items" }
+
+[WireIdItem]
+[WireIdItem.parser]
+production = ["@Identifier", "@Range?"]
+[WireIdItem.parser.node]
+name = "$1"
+array_range = "$2"
+[WireIdItem.renderer]
+layout = { line = [{ ref = "name" }, { opt = { group = ["[", { ref = "array_range" }, "]"] } }] }
 
 [RegDecl]
 [RegDecl.parser]
 production = [
     "keyword.reg",
     "@Range?",
-    "@Identifier",
-    "@Range?",
-    "@RegInit?",
+    "@RegIdList",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [RegDecl.parser.node]
 reg_type = "$1"
 range = "$2"
-reg_name = "$3"
-array_range = "$4"
-init = "$5"
+items = "$3.items"
 [RegDecl.analyzer]
-symbol = { kind = "reg", name_attr = "reg_name" }
+symbol = { kind = "reg", name_attr = "items.name" }
 [RegDecl.renderer]
 layout = { line = [
     "reg ",
-    { opt = { group = [
-        "[",
-        { ref = "range" },
-        "]",
-    ] } },
+    { opt = { group = ["[", { ref = "range" }, "]"] } },
     " ",
-    { ref = "reg_name" },
-    { opt = { group = [
-        "[",
-        { ref = "array_range" },
-        "]",
-    ] } },
-    { opt = { group = [
-        " = ",
-        { ref = "init" },
-    ] } },
+    { join = ", ", items = "items" },
     ";",
+] }
+
+[RegIdList]
+[RegIdList.parser]
+production = ["@RegIdItem", "(symbol.base.comma,@RegIdItem)*"]
+[RegIdList.parser.node]
+items = ["$1", "$2.items"]
+[RegIdList.renderer]
+layout = { join = ", ", items = "items" }
+
+[RegIdItem]
+[RegIdItem.parser]
+production = ["@Identifier", "@Range?", "@RegInit?"]
+[RegIdItem.parser.node]
+name = "$1"
+array_range = "$2"
+init = "$3"
+[RegIdItem.renderer]
+layout = { line = [
+    { ref = "name" },
+    { opt = { group = ["[", { ref = "array_range" }, "]"] } },
+    { opt = { group = [" = ", { ref = "init" }] } },
 ] }
 
 # 内部 reg 初始化
@@ -259,15 +271,16 @@ layout = { line = ["= ", { ref = "value" }] }
 production = [
     "keyword.integer",
     "@Identifier",
+    "(symbol.base.comma,@Identifier)*",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [IntegerDecl.parser.node]
-int_name = "$2"
+int_names = ["$2", "$3.items"]
 [IntegerDecl.analyzer]
-symbol = { kind = "integer", name_attr = "int_name" }
+symbol = { kind = "integer", name_attr = "int_names.content" }
 [IntegerDecl.renderer]
-layout = { line = ["integer ", { ref = "int_name" }, ";"] }
+layout = { line = ["integer ", { join = ", ", items = "int_names" }, ";"] }
 
 [LocalParamDecl]
 [LocalParamDecl.parser]

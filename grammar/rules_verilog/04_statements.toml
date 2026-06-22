@@ -84,7 +84,7 @@ body = { role = "direct" }
 [NonBlockingAssign]
 [NonBlockingAssign.parser]
 production = [
-    "@Identifier",
+    "@PrimaryExpr",
     "symbol.extend.lesser_equal",
     "@Expression",
     "symbol.base.semicolon",
@@ -98,7 +98,7 @@ layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
 
 [BlockingAssign]
 [BlockingAssign.parser]
-production = ["@Identifier", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
+production = ["@PrimaryExpr", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
 end_case = ["newline"]
 [BlockingAssign.parser.node]
 target = "$1"

@@ -72,15 +72,19 @@ symbol = "|"
 arity = 2
 assoc = "left"
 
-# 位异或
+# 位异或 / 位与 / 位或
 [[operator]]
 symbol = "^"
 arity = 2
 assoc = "left"
 
-# 位与
 [[operator]]
 symbol = "&"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "|"
 arity = 2
 assoc = "left"
 

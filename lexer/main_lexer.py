@@ -126,17 +126,18 @@ class Lexer:
                         if len(space_content) % self.indent_level == 0:
                             current_depth = len(space_content) // self.indent_level
                         else:
-                            raise IndentationError(
-                                f"Indentation error at line {line_number}, column {start_col}"
-                            )
+                            # 不对齐的缩进：保持当前深度（延续行对齐用）
+                            current_depth = self.indent_deep
 
                         if current_depth > self.indent_deep:
-                            # emit indent token
-                            indent_token = Token(line=line_number, column=start_point)
-                            indent_token.set_type("space.indent")
-                            indent_token.set_content(space_content)
+                            # emit one or more indent tokens（逐层渐变）
+                            while self.indent_deep < current_depth:
+                                indent_token = Token(line=line_number, column=start_point)
+                                indent_token.set_type("space.indent")
+                                indent_token.set_content(space_content)
 
-                            tokens.append(indent_token)
+                                tokens.append(indent_token)
+                                self.indent_deep += 1
                         elif current_depth < self.indent_deep:
                             # emit one or more dedent tokens
                             while self.indent_deep > current_depth:
