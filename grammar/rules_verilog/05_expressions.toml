@@ -257,3 +257,13 @@ layout = { line = [
     " ",
     { ref = "right" },
 ] }
+
+[TernaryOp]
+[TernaryOp.renderer]
+layout = { line = [
+    { ref = "cond" },
+    " ? ",
+    { ref = "second" },
+    " : ",
+    { ref = "third" },
+] }

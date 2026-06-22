@@ -294,7 +294,7 @@ def parse_expression(
                 "TernaryOp",
                 op1=op,
                 op2=second_sym,
-                first=node,
+                cond=node,
                 second=middle,
                 third=right,
             )
