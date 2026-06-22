@@ -483,7 +483,9 @@ class Parser:
                 with context:
                     first = self._process_production_node(item_elem, context)
                     if first is None:
-                        return Node("repeat", items=[])
+                        r = Node("repeat", items=[])
+                        r.sub_node = []
+                        return r
                     collected.append(first)
             # 循环匹配 (sep item) 对
             while True:
@@ -494,12 +496,15 @@ class Parser:
                     if next_item is None:
                         break
                     collected.append(next_item)
-            return Node("repeat", items=collected)
-
+            r = Node("repeat", items=collected)
+            r.sub_node = collected[:]
+            return r
         self._log_state("解析重复节点（零次或多次）")
         nodes = self._repeat_loop(elem, context) or []
         self._log_state(f"重复解析完成，匹配次数: {len(nodes)}")
-        return Node("repeat", items=nodes)
+        r = Node("repeat", items=nodes)
+        r.sub_node = nodes[:]
+        return r
 
     def _parse_optional(self, node: dict, context: ParseContext) -> Optional[Node]:
         elem = node["elem"]

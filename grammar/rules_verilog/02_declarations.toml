@@ -4,11 +4,22 @@
 
 [PortList]
 [PortList.parser]
-production = ["@PortDecl", "(symbol.base.comma,@PortDecl)*"]
+production = ["@PortDecl", "(symbol.base.comma,(@PortDecl|@PortIdRef))*"]
 [PortList.parser.node]
 items = ["$1", "$2.items"]
 [PortList.renderer]
 layout = { join = ", ", first_soft = true, nest = 1, items = "items" } # 统一列表
+
+# ----- 端口引用（用于 input reg [7:0] a, b 中的 b）-----
+[PortIdRef]
+[PortIdRef.parser]
+production = ["@Identifier"]
+[PortIdRef.parser.node]
+port_name = "$1"
+[PortIdRef.analyzer]
+symbol = { kind = "port", name_attr = "port_name" }
+[PortIdRef.renderer]
+layout = { ref = "port_name" }
 
 # ============================================================================
 # 端口声明分支（wire 端口 / reg 端口）
@@ -23,12 +34,41 @@ decl = "$1"
 [PortDecl.renderer]
 layout = { ref = "decl" }
 
+# ----- 函数/任务体端口声明（旧风格 input [7:0] x, y;，优先于 WirePortDecl）-----
+[BodyPortDecl]
+[BodyPortDecl.parser]
+production = [
+    "keyword.input|keyword.output|keyword.inout",
+    "(keyword.wire|keyword.reg)?",
+    "@Range?",
+    "@Identifier",
+    "(symbol.base.comma,@Identifier)*",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[BodyPortDecl.parser.node]
+direction = "$1"
+port_type = "$2"
+range = "$3"
+names = ["$4", "$5.items"]
+[BodyPortDecl.analyzer]
+symbol = { kind = "port", name_attr = "names.content" }
+[BodyPortDecl.renderer]
+layout = { line = [
+    { ref = "direction" },
+    { opt = { group = [" ", { ref = "port_type" }] } },
+    { opt = { group = [" [", { ref = "range" }, "]"] } },
+    " ",
+    { join = ", ", items = "names" },
+    ";",
+] }
+
 # ----- wire 端口（input / output / inout，可选 wire 关键字，无初始化）-----
 [WirePortDecl]
 [WirePortDecl.parser]
 production = [
     "keyword.input|keyword.output|keyword.inout",
-    "keyword.wire?",
+    "(keyword.wire|keyword.reg)?",
     "@Range?",
     "@Identifier",
     "symbol.base.semicolon?",
@@ -200,6 +240,21 @@ inline = true
 value = "$2"
 [RegInit.renderer]
 layout = { line = ["= ", { ref = "value" }] }
+
+[IntegerDecl]
+[IntegerDecl.parser]
+production = [
+    "keyword.integer",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[IntegerDecl.parser.node]
+int_name = "$2"
+[IntegerDecl.analyzer]
+symbol = { kind = "integer", name_attr = "int_name" }
+[IntegerDecl.renderer]
+layout = { line = ["integer ", { ref = "int_name" }, ";"] }
 
 [LocalParamDecl]
 [LocalParamDecl.parser]

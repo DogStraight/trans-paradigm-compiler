@@ -120,6 +120,7 @@ static = "static"
 # Verilog 关键字
 wire = "wire"
 reg = "reg"
+integer = "integer"
 begin = "begin"
 end = "end"
 always = "always"

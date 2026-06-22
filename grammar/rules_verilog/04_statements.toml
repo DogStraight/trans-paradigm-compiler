@@ -5,7 +5,7 @@
 [Statement]
 [Statement.parser]
 production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall",
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@BodyPortDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall|@IntegerDecl|@ForLoop|@ModuleInst",
 ]
 inline = true
 [Statement.parser.node]
@@ -23,7 +23,7 @@ production = [
     "@Statement",
     "@ElseChain?",
 ]
-end_case = ["newline"]
+end_case = ["newline", "keyword.end", "keyword.else", "space.dedent"]
 [IfStatement.parser.node]
 condition = "$3"
 then_stmt = "$5"
@@ -156,7 +156,7 @@ layout = { line = ["default: ", { ref = "stmt" }] }
 [AssignStatement.parser]
 production = [
     "keyword.assign",
-    "@Identifier",
+    "@PrimaryExpr",
     "symbol.base.equal",
     "@Expression",
     "symbol.base.semicolon",
@@ -345,17 +345,174 @@ body = { indent = true, source = "body" }
 tail = { text = "endtask", break = 2 }
 
 # ============================================================================
+# For 循环
+# ============================================================================
+
+[ForLoop]
+[ForLoop.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@ForInit",
+    "symbol.base.semicolon",
+    "@Expression",
+    "symbol.base.semicolon",
+    "@ForStep",
+    "bracket.r_parentheses",
+    "@Statement",
+]
+end_case = ["newline"]
+[ForLoop.parser.node]
+init = "$3"
+condition = "$5"
+step = "$7"
+body = "$9"
+[ForLoop.renderer]
+layout = { line = [
+    "for (",
+    { ref = "init" },
+    "; ",
+    { ref = "condition" },
+    "; ",
+    { ref = "step" },
+    ") ",
+    { ref = "body" },
+] }
+
+[ForInit]
+[ForInit.parser]
+production = ["@Identifier", "symbol.base.equal", "@Expression"]
+[ForInit.parser.node]
+target = "$1"
+value = "$3"
+[ForInit.renderer]
+layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
+
+[ForStep]
+[ForStep.parser]
+production = ["@Identifier", "symbol.base.equal", "@Expression"]
+[ForStep.parser.node]
+target = "$1"
+value = "$3"
+[ForStep.renderer]
+layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
+
+# ============================================================================
+# 模块实例化
+# ============================================================================
+
+[ModuleInst]
+[ModuleInst.parser]
+production = [
+    "@Identifier",
+    "@ParamOverride?",
+    "@Identifier",
+    "@PortConnection",
+]
+end_case = ["newline"]
+[ModuleInst.parser.node]
+module_name = "$1"
+params = "$2"
+inst_name = "$3"
+ports = "$4"
+[ModuleInst.analyzer]
+symbol = { kind = "module_instance", name_attr = "inst_name" }
+[ModuleInst.renderer]
+head = { line = [
+    { ref = "module_name" },
+    { opt = { group = [" ", { ref = "params" }] } },
+    " ",
+    { ref = "inst_name" },
+    " ",
+    { ref = "ports" },
+] }
+
+[ParamOverride]
+[ParamOverride.parser]
+production = [
+    "symbol.base.pound",
+    "bracket.l_parentheses",
+    "@ParamOverrideList?",
+    "bracket.r_parentheses",
+]
+[ParamOverride.parser.node]
+params = "$3"
+[ParamOverride.renderer]
+layout = { line = ["#(", { ref = "params" }, ")"] }
+
+[ParamOverrideList]
+[ParamOverrideList.parser]
+production = ["@NamedParamOverride", "(symbol.base.comma,@NamedParamOverride)*"]
+[ParamOverrideList.parser.node]
+items = ["$1", "$2.items"]
+[ParamOverrideList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+
+[NamedParamOverride]
+[NamedParamOverride.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+[NamedParamOverride.parser.node]
+param_name = "$2"
+value = "$4"
+[NamedParamOverride.renderer]
+layout = { line = [".", { ref = "param_name" }, "(", { ref = "value" }, ")"] }
+
+[PortConnection]
+[PortConnection.parser]
+production = [
+    "bracket.l_parentheses",
+    "@NamedPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[PortConnection.parser.node]
+ports = "$2"
+[PortConnection.renderer]
+layout = { line = ["(", { ref = "ports" }, ")", ";"] }
+
+[NamedPortList]
+[NamedPortList.parser]
+production = ["@NamedPortConnect", "(symbol.base.comma,@NamedPortConnect)*"]
+[NamedPortList.parser.node]
+items = ["$1", "$2.items"]
+[NamedPortList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+
+[NamedPortConnect]
+[NamedPortConnect.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+[NamedPortConnect.parser.node]
+port_name = "$2"
+value = "$4"
+[NamedPortConnect.renderer]
+layout = { line = [".", { ref = "port_name" }, "(", { ref = "value" }, ")"] }
+
+# ============================================================================
 # 子程序调用（任务调用、函数调用作为独立语句）
 # ============================================================================
 
 [SubroutineCall]
 [SubroutineCall.parser]
-production = ["@Identifier", "symbol.base.semicolon"]
+production = ["@Identifier", "bracket.l_parentheses", "@ArgumentList?", "bracket.r_parentheses", "symbol.base.semicolon"]
 end_case = ["newline"]
 [SubroutineCall.parser.node]
 callee = "$1"
+args = "$3"
 [SubroutineCall.renderer]
-layout = { line = [{ ref = "callee" }, ";"] }
+layout = { line = [{ ref = "callee" }, "(", { ref = "args" }, ")", ";"] }
 
 [ArgumentList]
 layout = { join = ", ", items = "items" }

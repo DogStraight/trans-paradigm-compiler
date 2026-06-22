@@ -98,7 +98,7 @@ atomic = true
 count = "$2"
 value = "$4"
 [ReplicateExpr.renderer]
-layout = { line = ["{", { ref = "count" }, { ref = "value" }, "}"] }
+layout = { line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"] }
 
 # ---------- 运算符优先级（自底向上）----------
 [PrimaryExpr]
@@ -133,7 +133,7 @@ production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 [ArgumentList.parser.node]
 items = ["$1", "$2.items"]
 [ArgumentList.renderer]
-layout = { join = ", ", items = "items" }
+layout = { join = ", ", first_soft = true, items = "items" }
 
 [UnaryExpr]
 [UnaryExpr.parser]
