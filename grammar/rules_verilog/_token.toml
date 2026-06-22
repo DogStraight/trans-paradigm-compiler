@@ -132,6 +132,30 @@ generate = "generate"
 endgenerate = "endgenerate"
 genvar = "genvar"
 
+# ========== 系统函数 ==========
+[sysfunc]
+clog2 = "$clog2"
+urandom = "$urandom"
+urandom_range = "$urandom_range"
+random = "$random"
+display = "$display"
+write = "$write"
+monitor = "$monitor"
+readmemh = "$readmemh"
+readmemb = "$readmemb"
+writememh = "$writememh"
+writememb = "$writememb"
+fopen = "$fopen"
+fclose = "$fclose"
+fdisplay = "$fdisplay"
+fwrite = "$fwrite"
+fread = "$fread"
+stime = "$stime"
+time = "$time"
+realtime = "$realtime"
+finish = "$finish"
+stop = "$stop"
+
 # ========== Pratt 字面量/操作符分类 ==========
 # match 策略: exact = 精确匹配, prefix = 前缀匹配
 [token_category]

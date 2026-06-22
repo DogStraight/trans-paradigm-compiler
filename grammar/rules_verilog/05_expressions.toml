@@ -104,7 +104,7 @@ layout = { line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"] }
 [PrimaryExpr]
 [PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr",
+    "@BitWidthLiteral|@Number|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
 [PrimaryExpr.parser.node]
@@ -126,6 +126,22 @@ callee = "$1"
 args = "$3"
 [CallExpr.renderer]
 layout = { line = [{ ref = "callee" }, "(", { ref = "args" }, ")"] }
+
+[SysFuncCall]
+[SysFuncCall.parser]
+production = [
+    "symbol.base.dollar",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+]
+atomic = true
+[SysFuncCall.parser.node]
+callee = "$2"
+args = "$4"
+[SysFuncCall.renderer]
+layout = { line = ["$", { ref = "callee" }, "(", { ref = "args" }, ")"] }
 
 [ArgumentList]
 [ArgumentList.parser]
