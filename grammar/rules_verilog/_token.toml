@@ -128,6 +128,9 @@ endmodule = "endmodule"
 assign = "assign"
 endcase = "endcase"
 default = "default"
+generate = "generate"
+endgenerate = "endgenerate"
+genvar = "genvar"
 
 # ========== Pratt 字面量/操作符分类 ==========
 # match 策略: exact = 精确匹配, prefix = 前缀匹配

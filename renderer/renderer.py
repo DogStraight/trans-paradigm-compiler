@@ -21,6 +21,7 @@ from .doc import (
     Break,
     Concat,
     Nest,
+    Prefix,
     Union,
     group,
     flatten,
@@ -145,26 +146,22 @@ class Renderer:
                 tail_doc = self._eval(tail_cfg, node, indent, layout)
                 tb = layout.get("tail_break", 0)
 
-        prefix = Text(self._INDENT_STR * indent)
         parts: List[Doc] = []
         if head_doc is not None:
-            parts.append(Concat([prefix, head_doc]))
+            parts.append(Prefix(indent * len(self._INDENT_STR), head_doc))
         for bd in body_docs:
             parts.append(Break())
             parts.append(bd)
         if tail_doc is not None:
-            tb = layout.get("tail_break", 0)
+            tb = layout.get("tail_break", tb)
             if isinstance(tb, bool):
                 tb = 1 if tb else 0
-            # 至少一个前导换行（让 tail 独占一行）
             parts.append(Break())
-            parts.append(Concat([prefix, tail_doc]))
-            # 尾部空行：tb > 1 时额外追加 (tb-1) 个换行
+            parts.append(Prefix(indent * len(self._INDENT_STR), tail_doc))
             for _ in range(tb - 1):
                 parts.append(Break())
         if parts:
             return Concat(parts)
-        # 没有布局规则或布局为空时兜底
         return self._render_fallback(node, indent)
 
     def _render_fallback(self, node: Node, indent: int) -> Doc:
@@ -333,14 +330,11 @@ class Renderer:
         body_cfg = layout.get("body")
         tail_cfg = layout.get("tail")
 
-        prefix = Text(self._INDENT_STR * indent)
-
         head_doc = self._eval(head_expr, node, indent, layout) if head_expr else None
         body_docs: List[Doc] = []
         if body_cfg:
             body_docs = self._render_body(node, indent + 1, body_cfg, layout)
 
-        # tail 解析
         tail_doc = None
         tb = 0
         if isinstance(tail_cfg, str):
@@ -361,13 +355,11 @@ class Renderer:
             parts.append(Break())
             parts.append(bd)
         if tail_doc is not None:
-            tb = layout.get("tail_break", 0)
+            tb = layout.get("tail_break", tb)
             if isinstance(tb, bool):
                 tb = 1 if tb else 0
-            # 至少一个前导换行（让 tail 独占一行）
             parts.append(Break())
-            parts.append(Concat([prefix, tail_doc]))
-            # 尾部空行：tb > 1 时额外追加 (tb-1) 个换行
+            parts.append(Prefix(indent * len(self._INDENT_STR), tail_doc))
             for _ in range(tb - 1):
                 parts.append(Break())
         if parts:

@@ -68,6 +68,20 @@ class Nest(Doc):
 
 
 @dataclass
+class Prefix(Doc):
+    """
+    首行缩进 + 后续行 Nest 的统一原语。
+
+    等价于 Concat([Text(indent 空格), Nest(indent, doc)])，
+    但语义更清晰：
+    - 第一行文本前插入 indent 个空格
+    - 后续所有 Line/Break 换行时增加 indent 格缩进
+    """
+    indent: int
+    doc: Doc
+
+
+@dataclass
 class Union(Doc):
     """
     二象性选择。
@@ -110,6 +124,11 @@ def flatten(doc: Doc) -> Doc:
             return Concat([flatten(d) for d in docs])
         case Nest(i, d):
             return Nest(i, flatten(d))
+        case Prefix(i, d):
+            flat_inner = flatten(d)
+            if isinstance(flat_inner, Empty):
+                return Text(" " * i)
+            return Concat([Text(" " * i), flat_inner])
         case Union(flat, _):
             return flatten(flat)
         case _:
@@ -185,6 +204,9 @@ def _best(w: int, k: int, doc: Doc) -> str:
         case Nest(i, d):
             return _best(w, k + i, d)
 
+        case Prefix(i, d):
+            return " " * i + _best(w, k + i, d)
+
         case Union(flat, broken):
             # 尝试 flat 版本
             flat_s = _best(w, k, flat)
@@ -234,6 +256,11 @@ def _fits(w: int, doc: Doc) -> bool:
                             return False
                         # 递归后不确定 col，用保守估算
                         return True
+                    case Prefix(i, inner):
+                        col += i
+                        if col > w:
+                            return False
+                        return _fits(w - col, inner)
                     case Union(flat, _):
                         if not _fits(w - col, flat):
                             return False
@@ -256,6 +283,8 @@ def _fits(w: int, doc: Doc) -> bool:
             return col <= w
         case Nest(_, d):
             return _fits(w, d)
+        case Prefix(i, d):
+            return _fits(w - i, d)
         case Union(flat, _):
             return _fits(w, flat)
         case _:

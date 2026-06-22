@@ -176,12 +176,13 @@ layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
 
 [WireDecl]
 [WireDecl.parser]
-production = ["keyword.wire", "@Range?", "@Identifier", "symbol.base.semicolon"]
+production = ["keyword.wire", "@Range?", "@Identifier", "@Range?", "symbol.base.semicolon"]
 end_case = ["newline"]
 [WireDecl.parser.node]
 wire_type = "$1"
 range = "$2"
 wire_name = "$3"
+array_range = "$4"
 [WireDecl.analyzer]
 symbol = { kind = "wire", name_attr = "wire_name" }
 [WireDecl.renderer]
@@ -194,6 +195,11 @@ layout = { line = [
     ] } },
     " ",
     { ref = "wire_name" },
+    { opt = { group = [
+        "[",
+        { ref = "array_range" },
+        "]",
+    ] } },
     ";",
 ] }
 
@@ -203,6 +209,7 @@ production = [
     "keyword.reg",
     "@Range?",
     "@Identifier",
+    "@Range?",
     "@RegInit?",
     "symbol.base.semicolon",
 ]
@@ -211,7 +218,8 @@ end_case = ["newline"]
 reg_type = "$1"
 range = "$2"
 reg_name = "$3"
-init = "$4"
+array_range = "$4"
+init = "$5"
 [RegDecl.analyzer]
 symbol = { kind = "reg", name_attr = "reg_name" }
 [RegDecl.renderer]
@@ -224,6 +232,11 @@ layout = { line = [
     ] } },
     " ",
     { ref = "reg_name" },
+    { opt = { group = [
+        "[",
+        { ref = "array_range" },
+        "]",
+    ] } },
     { opt = { group = [
         " = ",
         { ref = "init" },

@@ -5,7 +5,7 @@
 [Statement]
 [Statement.parser]
 production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@BodyPortDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall|@IntegerDecl|@ForLoop|@ModuleInst",
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@BodyPortDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall|@IntegerDecl|@ForLoop|@ModuleInst|@GenerateBlock|@GenvarDecl",
 ]
 inline = true
 [Statement.parser.node]
@@ -398,6 +398,40 @@ value = "$3"
 layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
 
 # ============================================================================
+# Generate 块
+# ============================================================================
+
+[GenerateBlock]
+[GenerateBlock.parser]
+production = [
+    "keyword.generate",
+    "@Block",
+    "keyword.endgenerate",
+]
+end_case = ["keyword.endgenerate"]
+[GenerateBlock.parser.node]
+body = "$2"
+[GenerateBlock.renderer]
+head = "generate"
+body = { indent = true, source = "body" }
+tail = { text = "endgenerate", break = 2 }
+
+[GenvarDecl]
+[GenvarDecl.parser]
+production = [
+    "keyword.genvar",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[GenvarDecl.parser.node]
+genvar_name = "$2"
+[GenvarDecl.analyzer]
+symbol = { kind = "genvar", name_attr = "genvar_name" }
+[GenvarDecl.renderer]
+layout = { line = ["genvar ", { ref = "genvar_name" }, ";"] }
+
+# ============================================================================
 # 模块实例化
 # ============================================================================
 
@@ -423,9 +457,10 @@ head = { line = [
     { opt = { group = [" ", { ref = "params" }] } },
     " ",
     { ref = "inst_name" },
-    " ",
-    { ref = "ports" },
+    " (",
 ] }
+body = { indent = true, items = ["ports"] }
+tail = { text = ");", break = 1 }
 
 [ParamOverride]
 [ParamOverride.parser]
@@ -438,7 +473,7 @@ production = [
 [ParamOverride.parser.node]
 params = "$3"
 [ParamOverride.renderer]
-layout = { line = ["#(", { ref = "params" }, ")"] }
+head = { line = ["#(", { ref = "params" }, ")"] }
 
 [ParamOverrideList]
 [ParamOverrideList.parser]
@@ -446,7 +481,7 @@ production = ["@NamedParamOverride", "(symbol.base.comma,@NamedParamOverride)*"]
 [ParamOverrideList.parser.node]
 items = ["$1", "$2.items"]
 [ParamOverrideList.renderer]
-layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+layout = { join = ", ", nest = 1, items = "items" }
 
 [NamedParamOverride]
 [NamedParamOverride.parser]
@@ -475,7 +510,7 @@ end_case = ["newline"]
 [PortConnection.parser.node]
 ports = "$2"
 [PortConnection.renderer]
-layout = { line = ["(", { ref = "ports" }, ")", ";"] }
+layout = { join = ", ", items = "ports" }
 
 [NamedPortList]
 [NamedPortList.parser]
@@ -483,7 +518,7 @@ production = ["@NamedPortConnect", "(symbol.base.comma,@NamedPortConnect)*"]
 [NamedPortList.parser.node]
 items = ["$1", "$2.items"]
 [NamedPortList.renderer]
-layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+layout = { join = ", ", items = "items" }
 
 [NamedPortConnect]
 [NamedPortConnect.parser]

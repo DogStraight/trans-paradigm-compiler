@@ -18,15 +18,24 @@ block_start = "space.indent"
 block_end = "space.dedent"
 
 [BeginEnd]
-
 [BeginEnd.parser]
-production = ["keyword.begin", "@Block", "keyword.end"]
+production = ["keyword.begin", "@BlockLabel?", "@Block", "keyword.end"]
 end_case = ["keyword.end"]
 [BeginEnd.parser.node]
-body = "$2"
+label = "$2"
+body = "$3"
 
 [BeginEnd.renderer]
 body = { indent = true, role = "flatten" }
-head = "begin"
+head = { line = ["begin", { opt = { group = [": ", { ref = "label" }] } }] }
 tail = { text = "end", break = 1 }
+
+[BlockLabel]
+[BlockLabel.parser]
+production = ["symbol.base.colon", "@Identifier"]
+inline = true
+[BlockLabel.parser.node]
+name = "$2"
+[BlockLabel.renderer]
+layout = { line = [": ", { ref = "name" }] }
 
