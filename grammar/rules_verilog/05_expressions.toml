@@ -53,36 +53,47 @@ expr = "$2"
 [ParenthesizedExpr.renderer]
 layout = { line = ["(", { ref = "expr" }, ")"] }
 
-# ---------- 链式索引 a[i][j] ----------
-[ChainIndex]
-[ChainIndex.parser]
+# ---------- 位段 / 索引选择（Verilog 2005 兼容）----------
+# 选择后缀：[expr] / [hi:lo] / [base+:width] / [base-:width]
+[SelectSuffix]
+[SelectSuffix.parser]
 production = [
-    "@IndexedId",
-    "bracket.l_square_bracket",
     "@Expression",
-    "bracket.r_square_bracket",
+    "((symbol.base.colon|symbol.extend.plus_range|symbol.extend.minus_range),@Expression)?",
 ]
-atomic = true
-[ChainIndex.parser.node]
-base = "$1"
-index = "$3"
-[ChainIndex.renderer]
-layout = { line = [{ ref = "base" }, "[", { ref = "index" }, "]"] }
+[SelectSuffix.parser.node]
+index = "$1"
+range_suffix = "$2"
+[SelectSuffix.renderer]
+layout = { line = [
+    { ref = "index" },
+    { opt = { ref = "range_suffix" } },
+] }
 
-[IndexedId]
-[IndexedId.parser]
+# 选择表达式：a[i] / a[hi:lo] / a[i][j] / a[hi:lo][k] / a[base+:width]
+# 第一层包含括号，后续括号由 layout 中的硬编码 text 提供
+[SelectExpr]
+[SelectExpr.parser]
 production = [
     "@Identifier",
     "bracket.l_square_bracket",
-    "@Expression",
+    "@SelectSuffix",
     "bracket.r_square_bracket",
+    "(bracket.l_square_bracket,@SelectSuffix,bracket.r_square_bracket)*",
 ]
 atomic = true
-[IndexedId.parser.node]
-id_name = "$1"
-index = "$3"
-[IndexedId.renderer]
-layout = { line = [{ ref = "id_name" }, "[", { ref = "index" }, "]"] }
+[SelectExpr.parser.node]
+base = "$1"
+first_suffix = "$3"
+extra_suffixes = "$5.items"  # list of seq(bracket, suffix, bracket)
+[SelectExpr.renderer]
+layout = { line = [
+    { ref = "base" },
+    "[",
+    { ref = "first_suffix" },
+    "]",
+    { ref = "extra_suffixes" },
+] }
 
 [ConcatExpr]
 [ConcatExpr.parser]
@@ -120,7 +131,7 @@ layout = { line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"] }
 [PrimaryExpr]
 [PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@ChainIndex|@IndexedId|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
+    "@BitWidthLiteral|@Number|@SelectExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
 [PrimaryExpr.parser.node]
@@ -283,3 +294,7 @@ layout = { line = [
     " : ",
     { ref = "false_val" },
 ] }
+["bracket.l_square_bracket"]
+renderer = { layout = { ref = "value" } }
+["bracket.r_square_bracket"]
+renderer = { layout = { ref = "value" } }

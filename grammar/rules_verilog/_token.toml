@@ -48,6 +48,8 @@ sub_one = "--"
 double_dot = ".."
 logic_double_and = "&&"
 logic_double_or = "||"
+plus_range = "+:"
+minus_range = "-:"
 
 # Verilog 逻辑运算符（字母形式，会被 alpha_tokens 匹配）
 logic_add = "and"

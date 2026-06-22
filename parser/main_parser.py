@@ -524,7 +524,7 @@ class Parser:
         nodes = self._repeat_loop(elem, context, min_count=1)
         if nodes is None:
             return None
-        plus_node = Node("plus")
+        plus_node = Node("plus", items=nodes)
         for child in nodes:
             plus_node.add_sub_node(child)
         return plus_node

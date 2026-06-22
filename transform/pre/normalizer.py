@@ -152,9 +152,10 @@ def _normalize(
                     else:
                         result.append(normalized)
         # sequence 中的分隔符（逗号等）已被 extract_value 提取为字符串，
-        # 过滤掉非 Node 项，避免与 layout 的 join 分隔符冲突
+        # 注意：分隔列表由 _parse_repeat 的 separator 模式处理，不经过 seq 消除；
+        # 纯 seq（如括号包裹）需要保留字符串项，不过滤。
         if node.node_name == "seq":
-            result = [x for x in result if isinstance(x, Node)]
+            pass  # 保留所有项（含字符串）
         return result
 
     # 3. 展开透明容器（Block 等）
