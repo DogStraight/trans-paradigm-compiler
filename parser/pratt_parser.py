@@ -295,8 +295,8 @@ def parse_expression(
                 op1=op,
                 op2=second_sym,
                 cond=node,
-                second=middle,
-                third=right,
+                true_val=middle,
+                false_val=right,
             )
         else:
             raise ValueError(f"不支持的运算符元数: {arity}")

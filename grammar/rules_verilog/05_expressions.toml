@@ -263,7 +263,7 @@ layout = { line = [
 layout = { line = [
     { ref = "cond" },
     " ? ",
-    { ref = "second" },
+    { ref = "true_val" },
     " : ",
-    { ref = "third" },
+    { ref = "false_val" },
 ] }
