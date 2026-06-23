@@ -32,7 +32,6 @@ from analyzer import SemanticAnalyzer
 from transform.post import AstTransformer
 import json
 
-
 # 可选：后阶段变换插件
 # from transform.post.plugins.implicit_decl import ImplicitDeclPlugin
 # from transform.post.plugins.width_eval import WidthEvalPlugin
@@ -77,6 +76,13 @@ def pipeline():
     # 2. 词法分析
     lexer = Lexer(rules_dir=RULES_DIR)
     tokens = lexer.tokenize(source)
+    with open(
+        os.path.join(".\\verilog", "lex", "tokens_" + stem + ".txt"),
+        "w",
+        encoding="utf-8",
+    ) as f:
+        for token in tokens:
+            f.write(f"{token.column},{token.line}:{token.type} {token.content}\n")
     print(f"🔤 Token 数: {len(tokens)}")
 
     # 3. 语法分析（使用 Verilog 规则）
@@ -143,7 +149,7 @@ def pipeline():
 
 
 if __name__ == "__main__":
-    analyzer_enable = True     # 语义分析（作用域 + 符号注册）
-    transform_enable = False   # 后阶段变换插件管线（默认关闭）
-    renderer_enable = True     # 代码生成
+    analyzer_enable = True  # 语义分析（作用域 + 符号注册）
+    transform_enable = False  # 后阶段变换插件管线（默认关闭）
+    renderer_enable = True  # 代码生成
     pipeline()

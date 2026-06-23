@@ -5,7 +5,7 @@
 [Statement]
 [Statement.parser]
 production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@BodyPortDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall|@IntegerDecl|@ForLoop|@ModuleInst|@GenerateBlock|@GenvarDecl",
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@BodyPortDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall|@IntegerDecl|@ForLoop|@ModuleInst|@GenerateBlock|@GenvarDecl|@NullStmt",
 ]
 inline = true
 [Statement.parser.node]
@@ -98,7 +98,12 @@ layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
 
 [BlockingAssign]
 [BlockingAssign.parser]
-production = ["@PrimaryExpr", "symbol.base.equal", "@Expression", "symbol.base.semicolon"]
+production = [
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
 end_case = ["newline"]
 [BlockingAssign.parser.node]
 target = "$1"
@@ -106,24 +111,39 @@ value = "$3"
 [BlockingAssign.renderer]
 layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
 
+# ============================================================================
+# Case 语句（符合 Verilog-2005）
+# ============================================================================
+
+[CaseKeyword]
+[CaseKeyword.parser]
+production = ["keyword.case|keyword.casex|keyword.casez"]
+[CaseKeyword.parser.node]
+value = "$1"
+[CaseKeyword.renderer]
+layout = { ref = "value" }
+
+
 [CaseStatement]
 [CaseStatement.parser]
 production = [
-    "keyword.case",
+    "@CaseKeyword",
     "bracket.l_parentheses",
     "@Expression",
     "bracket.r_parentheses",
     "@CaseItemList",
     "keyword.endcase",
 ]
-end_case = ["newline"]
+end_case = ["keyword.endcase", "keyword.end"]
 [CaseStatement.parser.node]
+case_type = "$1" # "case" / "casex" / "casez"
 expr = "$3"
 items = "$5"
 [CaseStatement.renderer]
-head = { line = ["case (", { ref = "expr" }, ")"] }
+head = { line = [{ ref = "case_type" }, " (", { ref = "expr" }, ")"] }
 body = { indent = true, source = "items" }
 tail = { text = "endcase", break = 1 }
+
 
 [CaseItemList]
 [CaseItemList.parser]
@@ -131,26 +151,43 @@ production = ["@CaseItem|@DefaultItem", "(@CaseItem|@DefaultItem)*"]
 [CaseItemList.parser.node]
 items = ["$1", "$2.items"]
 [CaseItemList.renderer]
-layout = { join = "\n", items = "items" } # 统一列表
+layout = { join = "\n", items = "items" }
 
 [CaseItem]
 [CaseItem.parser]
-production = ["@Expression", "symbol.base.colon", "@Statement"]
-end_case = ["newline"]
+production = [
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+    "symbol.base.colon",
+    "@StatementOrNull",
+]
 [CaseItem.parser.node]
-value = "$1"
-stmt = "$3"
+values = ["$1", "$2.items"]
+stmt = "$4"
 [CaseItem.renderer]
-layout = { line = [{ ref = "value" }, ": ", { ref = "stmt" }] }
+layout = { line = [{ join = ", ", items = "values" }, ": ", { ref = "stmt" }] }
 
 [DefaultItem]
 [DefaultItem.parser]
-production = ["keyword.default", "symbol.base.colon", "@Statement"]
-end_case = ["newline"]
+production = ["keyword.default", "symbol.base.colon?", "@StatementOrNull"]
 [DefaultItem.parser.node]
 stmt = "$3"
 [DefaultItem.renderer]
-layout = { line = ["default: ", { ref = "stmt" }] }
+layout = { line = [
+    "default",
+    { opt = { ref = "colon" } },
+    " ",
+    { ref = "stmt" },
+] }
+
+[StatementOrNull]
+[StatementOrNull.parser]
+production = ["@Statement|symbol.base.semicolon"]
+inline = true
+[StatementOrNull.parser.node]
+stmt = "$1"
+[StatementOrNull.renderer]
+layout = { ref = "stmt" }
 
 [AssignStatement]
 [AssignStatement.parser]
@@ -214,7 +251,10 @@ scope = { name_attr = "func_name", kind = "function" }
 [FuncDeclANSI.renderer]
 head = { line = [
     "function ",
-    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
     { opt = { group = [
         "[",
         { ref = "func_range" },
@@ -254,7 +294,10 @@ scope = { name_attr = "func_name", kind = "function" }
 [FuncDeclOld.renderer]
 head = { line = [
     "function ",
-    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
     { opt = { group = [
         "[",
         { ref = "func_range" },
@@ -304,7 +347,10 @@ scope = { name_attr = "task_name", kind = "task" }
 [TaskDeclANSI.renderer]
 head = { line = [
     "task ",
-    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
     { ref = "task_name" },
     "(",
     { ref = "ports" },
@@ -337,7 +383,10 @@ scope = { name_attr = "task_name", kind = "task" }
 [TaskDeclOld.renderer]
 head = { line = [
     "task ",
-    { opt = { line = [{ ref = "automatic" }, " "] } },
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
     { ref = "task_name" },
     ";",
 ] }
@@ -403,11 +452,7 @@ layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
 
 [GenerateBlock]
 [GenerateBlock.parser]
-production = [
-    "keyword.generate",
-    "@Block",
-    "keyword.endgenerate",
-]
+production = ["keyword.generate", "@Block", "keyword.endgenerate"]
 end_case = ["keyword.endgenerate"]
 [GenerateBlock.parser.node]
 body = "$2"
@@ -418,11 +463,7 @@ tail = { text = "endgenerate", break = 2 }
 
 [GenvarDecl]
 [GenvarDecl.parser]
-production = [
-    "keyword.genvar",
-    "@Identifier",
-    "symbol.base.semicolon",
-]
+production = ["keyword.genvar", "@Identifier", "symbol.base.semicolon"]
 end_case = ["newline"]
 [GenvarDecl.parser.node]
 genvar_name = "$2"
@@ -454,7 +495,10 @@ symbol = { kind = "module_instance", name_attr = "inst_name" }
 [ModuleInst.renderer]
 head = { line = [
     { ref = "module_name" },
-    { opt = { group = [" ", { ref = "params" }] } },
+    { opt = { group = [
+        " ",
+        { ref = "params" },
+    ] } },
     " ",
     { ref = "inst_name" },
     " (",
@@ -541,7 +585,13 @@ layout = { line = [".", { ref = "port_name" }, "(", { ref = "value" }, ")"] }
 
 [SubroutineCall]
 [SubroutineCall.parser]
-production = ["@Identifier", "bracket.l_parentheses", "@ArgumentList?", "bracket.r_parentheses", "symbol.base.semicolon"]
+production = [
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
 end_case = ["newline"]
 [SubroutineCall.parser.node]
 callee = "$1"
@@ -554,3 +604,11 @@ layout = { join = ", ", items = "items" }
 production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 [ArgumentList.node]
 items = ["$1", "$2.items"]
+
+[NullStmt]
+[NullStmt.parser]
+production = ["symbol.base.semicolon"]
+end_case = ["newline"]
+[NullStmt.parser.node]
+[NullStmt.renderer]
+layout = ";"

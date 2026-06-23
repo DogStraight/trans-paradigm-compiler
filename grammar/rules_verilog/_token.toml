@@ -74,6 +74,8 @@ al_comb = "al_comb"
 if = "if"
 else = "else"
 case = "case"
+casex = "casex"
+casez = "casez"
 
 # 导入
 import = "import"
