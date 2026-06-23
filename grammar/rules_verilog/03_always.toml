@@ -12,7 +12,7 @@ production = [
     "bracket.r_parentheses",
     "@Statement",
 ]
-end_case = ["newline"]
+end_case = ["newline", "keyword.end"]
 [AlwaysBlock.parser.node]
 sensitivity = "$4"
 body = "$6"
@@ -35,9 +35,9 @@ production = [
     "(symbol.extend.logic_or,@EdgeSense)*",
 ]
 [SensitivityList.parser.node]
-items = ["$1", "$2.items"]
+items = ["$1", "$2.items[*].sub_node[1]"]
 [SensitivityList.renderer]
-layout = { join = " or ", items = "items" } # 统一列表
+layout = { join = " or ", items = "items" }
 
 [EdgeSense]
 [EdgeSense.parser]

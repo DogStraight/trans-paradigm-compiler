@@ -1,10 +1,24 @@
-refactor(parser): 解析器大规模硬编码消除与原子规则重构
+refactor(parser): _parse_repeat 统一递归 + 声明式分隔符 + 增强路径
 
-- GrammarRule.__init__: 数据驱动替代 elif 硬编码链
-- 新增 atomic 标记: 标记原子规则(括号/函数调用/拼接/索引等)
-- 新增 _parse_atom 动态匹配: 遍历 atomic_rules 尝试完整规则匹配
-- 移除 _collect_expr_tokens / _preprocess_calls / _parse_call_args / _parse_single_arg
-- 改造 Pratt 解析器: 新增 atom_parser 回调 + stop_tokens 参数
+- _parse_repeat 移除所有分隔符检测启发式，统一走 _repeat_loop 递归
+- 删除 _parse_separated_repeat，node 映射层用 $X.items[*].sub_node[1] 提纯
+- _get_attr_by_path 增强支持 [*] map 和 [N] 索引语法
+- 移除 GrammarRule._DICT_FIELDS 及 repeat 元数据字段
+- load_all_toml 新增跨文件重名覆盖检测警告
+
+fix(grammar): AlwaysBlock 恢复 @Statement 修复 begin 同行与 endmodule 泄漏
+
+- AlwaysBlock 由 @ProcBlock 改回 @Statement
+- 补充 end_case = ["newline", "keyword.end"] 保障闭合
+- CaseStatement.end_case 补充 "newline", "space.dedent"
+
+fix(layout): 修复 6 个端口声明 layout 的空格粘连
+
+- AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl
+- BodyInputDecl/BodyOutputDecl/BodyInoutDecl
+- 统一 spacing 模式: 文本无尾部空格 + opt 空格写在开头 + 括号前加空格
+
+docs: 新增 layout_spacing_prompt.md（DSL 原语速查 + 空格规则）
 - 消除产生式字符串模式匹配(startswith("@")/endswith("?")等)
 - 统一内部 AST 节点名与特征类型名: sequence->seq, list->repeat
 - Token 分类配置化: is_* 函数由 _token.toml 中 [token_category] 驱动

@@ -106,7 +106,7 @@ production = [
 atomic = true
 [ConcatExpr.parser.node]
 first = "$2"
-rest = "$3"
+rest = "$3.items[*].sub_node[1]"
 [ConcatExpr.renderer]
 layout = { line = ["{", { join = "," }, "}"] }
 
@@ -174,7 +174,7 @@ layout = { line = ["$", { ref = "callee" }, "(", { ref = "args" }, ")"] }
 [ArgumentList.parser]
 production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 [ArgumentList.parser.node]
-items = ["$1", "$2.items"]
+items = ["$1", "$2.items[*].sub_node[1]"]
 [ArgumentList.renderer]
 layout = { join = ", ", first_soft = true, items = "items" }
 

@@ -13,7 +13,7 @@ production = [
     "@PortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
-    "@Block",
+    "@ModuleBlock",          # 使用模块专用块，内部条目为 ModuleItem
     "keyword.endmodule",
 ]
 end_case = ["keyword.endmodule"]
@@ -58,14 +58,13 @@ production = [
     "bracket.r_parentheses",
 ]
 [ParameterList.parser.node]
-params = ["$3", "$4.items"]
+params = ["$3", "$4.items[*].sub_node[1]"]
 
 [ParameterList.renderer]
 layout = { join = ", ", first_soft = true, nest = 1, items = "params" }
 
 
 [ParamDecl]
-
 [ParamDecl.parser]
 production = [
     "keyword.parameter",

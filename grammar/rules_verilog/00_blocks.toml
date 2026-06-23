@@ -1,9 +1,8 @@
 # ============================================================================
-# Verilog 语法规则 — 顶层结构与块
+# Verilog 语法规则 — 顶层结构与块（重构为组合模式）
 # ============================================================================
 
 [Root]
-
 [Root.parser]
 block_start = ""
 block_end = ""
@@ -11,25 +10,53 @@ block_end = ""
 [Root.renderer]
 layout = { join = "\n" }
 
-
-[Block]
-[Block.parser]
+# ----- 模块体（Module 内部）-----
+[ModuleBlock]
+[ModuleBlock.parser]
 block_start = "space.indent"
 block_end = "space.dedent"
+entry = "ModuleItem"
+[ModuleBlock.renderer]
+body = { indent = true, role = "flatten" }
 
+# ----- 过程体（always / initial 内部）-----
+[ProcBlock]
+[ProcBlock.parser]
+block_start = "space.indent"
+block_end = "space.dedent"
+entry = "Statement"
+[ProcBlock.renderer]
+body = { indent = true, role = "flatten" }
+
+# ----- 任务/函数体（task / function 内部）-----
+[TaskBlock]
+[TaskBlock.parser]
+block_start = "space.indent"
+block_end = "space.dedent"
+entry = "TaskStatement"
+[TaskBlock.renderer]
+body = { indent = true, role = "flatten" }
+
+# ----- Begin/End 块（显式关键字，非缩进）-----
 [BeginEnd]
 [BeginEnd.parser]
-production = ["keyword.begin", "@BlockLabel?", "@Block", "keyword.end"]
+production = [
+    "keyword.begin",
+    "@BlockLabel?",
+    "@ProcBlock",    # 内部使用过程块
+    "keyword.end",
+]
 end_case = ["keyword.end"]
 [BeginEnd.parser.node]
 label = "$2"
 body = "$3"
 
 [BeginEnd.renderer]
-body = { indent = true, role = "flatten" }
 head = { line = ["begin", { opt = { group = [": ", { ref = "label" }] } }] }
+body = { indent = true, source = "body" }
 tail = { text = "end", break = 1 }
 
+# ----- 块标签（可选）-----
 [BlockLabel]
 [BlockLabel.parser]
 production = ["symbol.base.colon", "@Identifier"]
@@ -38,4 +65,3 @@ inline = true
 name = "$2"
 [BlockLabel.renderer]
 layout = { line = [": ", { ref = "name" }] }
-

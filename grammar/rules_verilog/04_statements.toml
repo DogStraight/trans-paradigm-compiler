@@ -1,17 +1,62 @@
 # ============================================================================
-# Verilog 语法规则 — 语句
+# Verilog 语法规则 — 语句（组合分层）
 # ============================================================================
 
+# ---------- 原子组 1：通用控制流和过程赋值 ----------
+[BasicStmt]
+[BasicStmt.parser]
+production = [
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoop|@SubroutineCall|@NullStmt",
+]
+inline = true
+[BasicStmt.parser.node]
+stmt = "$1"
+[BasicStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 原子组 2：过程内部局部声明 ----------
+[ProcLocalDecl]
+[ProcLocalDecl.parser]
+production = ["@RegDecl|@IntegerDecl"]
+inline = true
+[ProcLocalDecl.parser.node]
+decl = "$1"
+[ProcLocalDecl.renderer]
+layout = { ref = "decl" }
+
+# ---------- 过程语句（用于 always / initial 内部） ----------
 [Statement]
 [Statement.parser]
-production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@AlwaysBlock|@CaseStatement|@AssignStatement|@LocalParamDecl|@BodyPortDecl|@WirePortDecl|@RegPortDecl|@FuncDecl|@TaskDecl|@SubroutineCall|@IntegerDecl|@ForLoop|@ModuleInst|@GenerateBlock|@GenvarDecl|@NullStmt",
-]
+production = ["@BasicStmt|@ProcLocalDecl"]
 inline = true
 [Statement.parser.node]
 stmt = "$1"
 [Statement.renderer]
 layout = { ref = "stmt" }
+
+# ---------- 任务/函数语句（额外允许 TaskPortDecl） ----------
+[TaskStatement]
+[TaskStatement.parser]
+production = ["@BasicStmt|@ProcLocalDecl|@TaskPortDecl"]
+inline = true
+[TaskStatement.parser.node]
+stmt = "$1"
+[TaskStatement.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 模块顶层条目（用于 module 体） ----------
+[ModuleItem]
+[ModuleItem.parser]
+production = [
+    "@AlwaysBlock|@AssignStatement|@ModuleInst|@GenerateBlock|@BodyPortDecl|@WireDecl|@RegDecl|@IntegerDecl|@LocalParamDecl|@FuncDecl|@TaskDecl|@GenvarDecl",
+]
+inline = true
+[ModuleItem.parser.node]
+item = "$1"
+[ModuleItem.renderer]
+layout = { ref = "item" }
+
+# ---------- 以下所有具体语句规则保持不变，只调整内部引用的块 ----------
 
 [IfStatement]
 [IfStatement.parser]
@@ -111,10 +156,6 @@ value = "$3"
 [BlockingAssign.renderer]
 layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
 
-# ============================================================================
-# Case 语句（符合 Verilog-2005）
-# ============================================================================
-
 [CaseKeyword]
 [CaseKeyword.parser]
 production = ["keyword.case|keyword.casex|keyword.casez"]
@@ -122,7 +163,6 @@ production = ["keyword.case|keyword.casex|keyword.casez"]
 value = "$1"
 [CaseKeyword.renderer]
 layout = { ref = "value" }
-
 
 [CaseStatement]
 [CaseStatement.parser]
@@ -134,16 +174,15 @@ production = [
     "@CaseItemList",
     "keyword.endcase",
 ]
-end_case = ["keyword.endcase", "keyword.end"]
+end_case = ["keyword.endcase", "keyword.end", "newline", "space.dedent"]
 [CaseStatement.parser.node]
-case_type = "$1" # "case" / "casex" / "casez"
+case_type = "$1"
 expr = "$3"
 items = "$5"
 [CaseStatement.renderer]
 head = { line = [{ ref = "case_type" }, " (", { ref = "expr" }, ")"] }
 body = { indent = true, source = "items" }
 tail = { text = "endcase", break = 1 }
-
 
 [CaseItemList]
 [CaseItemList.parser]
@@ -162,7 +201,7 @@ production = [
     "@StatementOrNull",
 ]
 [CaseItem.parser.node]
-values = ["$1", "$2.items"]
+values = ["$1", "$2.items[*].sub_node[1]"]
 stmt = "$4"
 [CaseItem.renderer]
 layout = { line = [{ join = ", ", items = "values" }, ": ", { ref = "stmt" }] }
@@ -211,10 +250,7 @@ layout = { line = [
     ";",
 ] }
 
-# ============================================================================
-# 函数声明（两种风格互斥，通过 | 选择）
-# ============================================================================
-
+# ----- 函数声明（两种风格）-----
 [FuncDecl]
 [FuncDecl.parser]
 production = ["@FuncDeclANSI|@FuncDeclOld"]
@@ -222,7 +258,6 @@ inline = true
 [FuncDecl.parser.node]
 body = "$1"
 
-# ANSI 风格：function name(ports);
 [FuncDeclANSI]
 [FuncDeclANSI.parser]
 production = [
@@ -234,7 +269,7 @@ production = [
     "@PortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
-    "@Block",
+    "@TaskBlock",                          # 函数体使用 TaskBlock
     "keyword.endfunction",
 ]
 end_case = ["keyword.endfunction"]
@@ -269,7 +304,6 @@ head = { line = [
 body = { indent = true, source = "body" }
 tail = { text = "endfunction", break = 2 }
 
-# 旧风格：function name; input x; ... endfunction
 [FuncDeclOld]
 [FuncDeclOld.parser]
 production = [
@@ -278,7 +312,7 @@ production = [
     "@Range?",
     "@Identifier",
     "symbol.base.semicolon",
-    "@Block",
+    "@TaskBlock",
     "keyword.endfunction",
 ]
 end_case = ["keyword.endfunction"]
@@ -309,10 +343,7 @@ head = { line = [
 body = { indent = true, source = "body" }
 tail = { text = "endfunction", break = 2 }
 
-# ============================================================================
-# 任务声明（两种风格互斥）
-# ============================================================================
-
+# ----- 任务声明（两种风格）-----
 [TaskDecl]
 [TaskDecl.parser]
 production = ["@TaskDeclANSI|@TaskDeclOld"]
@@ -320,7 +351,6 @@ inline = true
 [TaskDecl.parser.node]
 body = "$1"
 
-# ANSI 风格：task name(ports);
 [TaskDeclANSI]
 [TaskDeclANSI.parser]
 production = [
@@ -331,7 +361,7 @@ production = [
     "@PortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
-    "@Block",
+    "@TaskBlock",
     "keyword.endtask",
 ]
 end_case = ["keyword.endtask"]
@@ -360,7 +390,6 @@ head = { line = [
 body = { indent = true, source = "body" }
 tail = { text = "endtask", break = 2 }
 
-# 旧风格：task name; input x; ... endtask
 [TaskDeclOld]
 [TaskDeclOld.parser]
 production = [
@@ -368,7 +397,7 @@ production = [
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "symbol.base.semicolon",
-    "@Block",
+    "@TaskBlock",
     "keyword.endtask",
 ]
 end_case = ["keyword.endtask"]
@@ -393,10 +422,7 @@ head = { line = [
 body = { indent = true, source = "body" }
 tail = { text = "endtask", break = 2 }
 
-# ============================================================================
-# For 循环
-# ============================================================================
-
+# ----- For 循环 -----
 [ForLoop]
 [ForLoop.parser]
 production = [
@@ -446,13 +472,10 @@ value = "$3"
 [ForStep.renderer]
 layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
 
-# ============================================================================
-# Generate 块
-# ============================================================================
-
+# ----- Generate 块 -----
 [GenerateBlock]
 [GenerateBlock.parser]
-production = ["keyword.generate", "@Block", "keyword.endgenerate"]
+production = ["keyword.generate", "@ModuleBlock", "keyword.endgenerate"]
 end_case = ["keyword.endgenerate"]
 [GenerateBlock.parser.node]
 body = "$2"
@@ -461,21 +484,7 @@ head = "generate"
 body = { indent = true, source = "body" }
 tail = { text = "endgenerate", break = 2 }
 
-[GenvarDecl]
-[GenvarDecl.parser]
-production = ["keyword.genvar", "@Identifier", "symbol.base.semicolon"]
-end_case = ["newline"]
-[GenvarDecl.parser.node]
-genvar_name = "$2"
-[GenvarDecl.analyzer]
-symbol = { kind = "genvar", name_attr = "genvar_name" }
-[GenvarDecl.renderer]
-layout = { line = ["genvar ", { ref = "genvar_name" }, ";"] }
-
-# ============================================================================
-# 模块实例化
-# ============================================================================
-
+# ----- 模块实例化 -----
 [ModuleInst]
 [ModuleInst.parser]
 production = [
@@ -523,7 +532,7 @@ head = { line = ["#(", { ref = "params" }, ")"] }
 [ParamOverrideList.parser]
 production = ["@NamedParamOverride", "(symbol.base.comma,@NamedParamOverride)*"]
 [ParamOverrideList.parser.node]
-items = ["$1", "$2.items"]
+items = ["$1", "$2.items[*].sub_node[1]"]
 [ParamOverrideList.renderer]
 layout = { join = ", ", nest = 1, items = "items" }
 
@@ -560,7 +569,7 @@ layout = { join = ", ", items = "ports" }
 [NamedPortList.parser]
 production = ["@NamedPortConnect", "(symbol.base.comma,@NamedPortConnect)*"]
 [NamedPortList.parser.node]
-items = ["$1", "$2.items"]
+items = ["$1", "$2.items[*].sub_node[1]"]
 [NamedPortList.renderer]
 layout = { join = ", ", items = "items" }
 
@@ -579,10 +588,7 @@ value = "$4"
 [NamedPortConnect.renderer]
 layout = { line = [".", { ref = "port_name" }, "(", { ref = "value" }, ")"] }
 
-# ============================================================================
-# 子程序调用（任务调用、函数调用作为独立语句）
-# ============================================================================
-
+# ----- 子程序调用 -----
 [SubroutineCall]
 [SubroutineCall.parser]
 production = [
@@ -598,12 +604,6 @@ callee = "$1"
 args = "$3"
 [SubroutineCall.renderer]
 layout = { line = [{ ref = "callee" }, "(", { ref = "args" }, ")", ";"] }
-
-[ArgumentList]
-layout = { join = ", ", items = "items" }
-production = ["@Expression", "(symbol.base.comma,@Expression)*"]
-[ArgumentList.node]
-items = ["$1", "$2.items"]
 
 [NullStmt]
 [NullStmt.parser]

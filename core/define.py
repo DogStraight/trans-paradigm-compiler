@@ -91,6 +91,14 @@ class FileManager:
             fr = data.pop("file_rules", None)
             if fr:
                 all_file_rules.extend(fr)
+            # 检测跨文件重名覆盖
+            overlaps = merged.keys() & data.keys()
+            if overlaps:
+                print(
+                    f"⚠️ [加载] {fname} 覆盖了之前文件中的规则: "
+                    f"{', '.join(sorted(overlaps))}",
+                    file=__import__("sys").stderr,
+                )
             merged.update(data)
         if all_file_rules:
             merged["file_rules"] = all_file_rules
@@ -172,7 +180,10 @@ class GrammarRule:
 
         # 设置默认值
         for fld in self._KNOWN_FIELDS:
-            setattr(self, fld, [] if fld in self._LIST_FIELDS else False)
+            if fld in self._LIST_FIELDS:
+                setattr(self, fld, [])
+            else:
+                setattr(self, fld, False)
 
         # 从嵌套的阶段结构中提取属性到顶层，同时保留原始嵌套
         for stage in ("parser", "analyzer", "renderer"):

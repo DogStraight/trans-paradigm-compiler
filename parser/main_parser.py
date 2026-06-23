@@ -71,19 +71,64 @@ class Parser:
 
     @staticmethod
     def _get_attr_by_path(obj: Any, path: str) -> Any:
-        """支持点号路径的属性提取，如 'value.content'"""
-        if obj is None:
-            return None
-        parts = path.split(".")
-        current = obj
-        for part in parts:
-            if current is None:
-                return None
-            if hasattr(current, part):
-                current = getattr(current, part)
+        """递归路径提取，支持：
+        - value.content      → 嵌套属性（已有）
+        - items[0]           → 列表索引
+        - items[*]           → 列表 map，取每个元素的后续属性
+        """
+        if obj is None or not path:
+            return obj
+
+        first, _, rest = path.partition(".")
+
+        # 解析 [*] 或 [N] 语法
+        m = re.match(r"^(\w*)\[(\d+|\*)\]$", first)
+        if m:
+            attr_name = m.group(1)
+            index_spec = m.group(2)
+
+            sub = obj
+            if attr_name:
+                sub = getattr(sub, attr_name, None)
+                if sub is None:
+                    return None
+
+            if index_spec == "*":
+                # [*] map：对列表每个元素递归取后续路径
+                if not isinstance(sub, list):
+                    return None
+                results = []
+                for item in sub:
+                    val = Parser._get_attr_by_path(item, rest)
+                    if val is not None:
+                        if isinstance(val, list):
+                            results.extend(val)
+                        else:
+                            results.append(val)
+                return results if results else None
             else:
+                # [N]：列表索引
+                idx = int(index_spec)
+                if isinstance(sub, list) and 0 <= idx < len(sub):
+                    return Parser._get_attr_by_path(sub[idx], rest)
                 return None
-        return current
+
+        # 纯属性名
+        sub = getattr(obj, first, None)
+        if sub is not None:
+            return Parser._get_attr_by_path(sub, rest)
+        if isinstance(obj, list):
+            # 列表兜底：对每个元素取属性
+            results = []
+            for item in obj:
+                val = Parser._get_attr_by_path(item, path)
+                if val is not None:
+                    if isinstance(val, list):
+                        results.extend(val)
+                    else:
+                        results.append(val)
+            return results if results else None
+        return None
 
     def _extract_from_spec(self, spec: str, all_matched_nodes: List[Node]) -> Any:
         """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
@@ -244,6 +289,7 @@ class Parser:
             features = analyze_production_features(prod)
             if not features:
                 continue
+
             if not self._prepare_production(context, features):
                 break
 
@@ -464,44 +510,8 @@ class Parser:
         return ret
 
     def _parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
+        """重复匹配：elem 作为子 production 递归匹配，始终走通用递归。"""
         elem = node["elem"]
-        # 检测分隔列表模式，支持 (item sep)* 和 (sep item)* 两种顺序
-        item_elem = sep_elem = None
-        sep_first = False
-        if elem.get("type") == "seq":
-            items = elem.get("items", [])
-            if len(items) == 2:
-                if items[0].get("type") == "token":
-                    sep_elem, item_elem = items[0], items[1]  # (sep, item)*
-                    sep_first = True
-                elif items[1].get("type") == "token":
-                    item_elem, sep_elem = items[0], items[1]  # (item, sep)*
-
-        if sep_elem is not None:
-            assert item_elem is not None
-            self._log_state("解析分隔列表（零次或多次）")
-            collected = []
-            if not sep_first:
-                # (item, sep)*: 先匹配第一个 item
-                with context:
-                    first = self._process_production_node(item_elem, context)
-                    if first is None:
-                        r = Node("repeat", items=[])
-                        r.sub_node = []
-                        return r
-                    collected.append(first)
-            # 循环匹配 (sep item) 对
-            while True:
-                with context:
-                    if self._process_production_node(sep_elem, context) is None:
-                        break
-                    next_item = self._process_production_node(item_elem, context)
-                    if next_item is None:
-                        break
-                    collected.append(next_item)
-            r = Node("repeat", items=collected)
-            r.sub_node = collected[:]
-            return r
         self._log_state("解析重复节点（零次或多次）")
         nodes = self._repeat_loop(elem, context) or []
         self._log_state(f"重复解析完成，匹配次数: {len(nodes)}")

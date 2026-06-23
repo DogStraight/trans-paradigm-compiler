@@ -28,7 +28,7 @@ class RuleSelector:
                 return False
             visited.add(rule_name)
             rule = self.grammar_rules[rule_name]
-            for prod in rule.production:
+            for prod in getattr(rule, "production", []):
                 prod_node = analyze_production_features(prod)
                 if prod_node and can_start(prod_node, visited.copy()):
                     return True
@@ -68,9 +68,9 @@ class RuleSelector:
         # 收集可能匹配的规则：只检查每个规则的第一条产生式
         possible_rules = []
         for rule in self.grammar_rules.values():
-            if not rule.production:
+            if not getattr(rule, "production", []):
                 continue
-            first_prod = rule.production[0]
+            first_prod = getattr(rule, "production", [])[0]
             try:
                 features = analyze_production_features(first_prod)
             except Exception:
@@ -96,7 +96,7 @@ class RuleSelector:
 
 
 if __name__ == "__main__":
-    from define import GrammarRulesRegister
+    from ..core.define import GrammarRulesRegister
 
     rules_dict = (
         GrammarRulesRegister().rules_registration()
