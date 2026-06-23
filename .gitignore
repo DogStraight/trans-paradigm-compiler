@@ -4,3 +4,4 @@ verilog/*
 __pycache__
 */__pycache__
 parser_debug.log
+grammar_backup/

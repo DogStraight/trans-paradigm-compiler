@@ -69,6 +69,50 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 [PortList.renderer]
 layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
 
+[TaskPortList]
+[TaskPortList.parser]
+production = ["@TaskAnsiPortDecl", "(symbol.base.comma,@TaskAnsiPortDecl)*"]
+[TaskPortList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[TaskPortList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+
+[TaskAnsiPortDecl]
+[TaskAnsiPortDecl.parser]
+production = ["@TaskAnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl"]
+inline = true
+[TaskAnsiPortDecl.parser.node]
+decl = "$1"
+[TaskAnsiPortDecl.renderer]
+layout = { ref = "decl" }
+
+[TaskAnsiInputDecl]
+[TaskAnsiInputDecl.parser]
+production = ["keyword.input", "(keyword.wire|keyword.reg)?", "@Range?", "@DeclaratorList"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+[TaskAnsiInputDecl.parser.node]
+direction = "input"
+port_type = "$2"
+packed_range = "$3"
+items = "$4"
+[TaskAnsiInputDecl.analyzer]
+symbol = { kind = "port", name_attr = "items.name" }
+[TaskAnsiInputDecl.renderer]
+layout = { line = [
+    "input",
+    { opt = { group = [
+        " ",
+        { ref = "port_type" },
+    ] } },
+    { opt = { group = [
+        " [",
+        { ref = "packed_range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "items" },
+] }
+
 [AnsiPortDecl]
 [AnsiPortDecl.parser]
 production = ["@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl"]

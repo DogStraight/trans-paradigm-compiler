@@ -266,7 +266,7 @@ production = [
     "@Range?",
     "@Identifier",
     "bracket.l_parentheses",
-    "@PortList?",
+    "@TaskPortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
     "@TaskBlock",                          # 函数体使用 TaskBlock
@@ -358,7 +358,7 @@ production = [
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "bracket.l_parentheses",
-    "@PortList?",
+    "@TaskPortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
     "@TaskBlock",
@@ -498,7 +498,7 @@ end_case = ["newline"]
 module_name = "$1"
 params = "$2"
 inst_name = "$3"
-ports = "$4"
+ports = "$4.ports"
 [ModuleInst.analyzer]
 symbol = { kind = "module_instance", name_attr = "inst_name" }
 [ModuleInst.renderer]
@@ -513,7 +513,7 @@ head = { line = [
     " (",
 ] }
 body = { indent = true, items = ["ports"] }
-tail = { text = ");", break = 1 }
+tail = { text = ");", break = 2 }
 
 [ParamOverride]
 [ParamOverride.parser]
@@ -562,8 +562,6 @@ production = [
 end_case = ["newline"]
 [PortConnection.parser.node]
 ports = "$2"
-[PortConnection.renderer]
-layout = { join = ", ", items = "ports" }
 
 [NamedPortList]
 [NamedPortList.parser]
@@ -571,7 +569,7 @@ production = ["@NamedPortConnect", "(symbol.base.comma,@NamedPortConnect)*"]
 [NamedPortList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
 [NamedPortList.renderer]
-layout = { join = ", ", items = "items" }
+layout = { join = ", ", nest = 2, items = "items" }
 
 [NamedPortConnect]
 [NamedPortConnect.parser]
