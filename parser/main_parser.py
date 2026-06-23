@@ -235,23 +235,21 @@ class Parser:
         else:
             context.update_current_node(old_node)
 
-    def _prepare_production(
-        self, context: ParseContext, features: dict
-    ) -> bool:
+    def _prepare_production(self, context: ParseContext, features: dict) -> bool:
         """为匹配产生式做准备：跳过空白/注释，条件跳过 indent/dedent。返回 False 表示 token 不足。"""
-        self._skip_tokens(context, tuple(self.skip_types))
-        if not context.has_more_tokens():
-            return False
         should_skip = True
-        # 非可选的规则调用 (@Rule)：如果目标规则有 block_start 则不跳过 indent/dedent
         if features.get("type") == "call":
             ref_rule = self.grammar_rules.get(features["name"])
             if ref_rule and getattr(ref_rule, "block_start", None):
                 should_skip = False
-        # 可选产生式 (...?)：不跳过 indent/dedent
-        elif features.get("type") == "optional":
+        elif features.get("type") in ("optional",):
+            should_skip = False
+        elif features.get("type") == "repeat" and features.get("min", 0) == 0:
             should_skip = False
         if should_skip:
+            self._skip_tokens(context, tuple(self.skip_types))
+            if not context.has_more_tokens():
+                return False
             self._skip_tokens(context, ("space.indent", "space.dedent"))
         return True
 
@@ -267,7 +265,6 @@ class Parser:
             and str(getattr(rule, "block_start", "")).strip()
         ):
             return True
-        # 检查是否包含引用块规则的产生式（如 @Block）
         for prod in getattr(rule, "production", []):
             try:
                 feats = analyze_production_features(prod)
@@ -500,7 +497,6 @@ class Parser:
             snapshot = context.create_snapshot()
             result = self._process_production_node(elem, context)
             if result is None:
-                # 修复：失败时恢复快照，避免部分消费的 token 残留
                 context.restore_snapshot(snapshot)
                 break
             nodes.append(result)
@@ -619,7 +615,25 @@ class Parser:
             current = context.peek_token()
             assert current is not None
             if current.type == end_token:
-                context.advance_token()  # 消费结束符
+                # 对标记为 struktural 的块结束符：窥视后续 token
+                # 若是语句起始 token，说明 dedent 是内部嵌套，跳过继续
+                if context.block_end_structural:
+                    snapshot = context.create_snapshot()
+                    context.advance_token()
+                    self._skip_tokens(context, tuple(self.skip_types))
+                    if context.has_more_tokens():
+                        next_tok = context.peek_token()
+                        if (
+                            getattr(next_tok, "type", None)
+                            in self.rule_selector.start_token_map
+                        ):
+                            context.restore_snapshot(snapshot)
+                            context.advance_token()
+                            continue
+                    context.restore_snapshot(snapshot)
+                    context.advance_token()
+                    break
+                context.advance_token()
                 break
             stmt_node = self.parse_sentence(context)
             if stmt_node is None:
@@ -645,13 +659,18 @@ class Parser:
         resolved = self._resolve_block_rule(start_token)
         if resolved is None:
             return None
-        _, block_name, end_token = resolved
+        matched_rule, block_name, end_token = resolved
 
         if start_token and not self._consume_start_token(context, start_token):
             return None
 
         block_node = Node(block_name)
+        old_structural = context.block_end_structural
+        context.block_end_structural = getattr(
+            matched_rule, "block_end_structural", False
+        )
         self._parse_block_body(context, block_node, end_token)
+        context.block_end_structural = old_structural
         return block_node
 
     # 解析器的入口
@@ -659,3 +678,7 @@ class Parser:
         context = ParseContext(tokens)
         block_node = self.parse_block(context, start_token="")
         return block_node if block_node else None
+
+
+
+

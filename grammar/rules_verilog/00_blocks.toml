@@ -13,6 +13,7 @@ layout = { join = "\n" }
 # ----- 模块体（Module 内部）-----
 [ModuleBlock]
 [ModuleBlock.parser]
+block_end_structural = true
 block_start = "space.indent"
 block_end = "space.dedent"
 entry = "ModuleItem"
@@ -22,6 +23,7 @@ body = { indent = true, role = "flatten" }
 # ----- 过程体（always / initial 内部）-----
 [ProcBlock]
 [ProcBlock.parser]
+block_end_structural = true
 block_start = "space.indent"
 block_end = "space.dedent"
 entry = "Statement"
@@ -31,6 +33,7 @@ body = { indent = true, role = "flatten" }
 # ----- 任务/函数体（task / function 内部）-----
 [TaskBlock]
 [TaskBlock.parser]
+block_end_structural = true
 block_start = "space.indent"
 block_end = "space.dedent"
 entry = "TaskStatement"
@@ -46,7 +49,7 @@ production = [
     "@ProcBlock",    # 内部使用过程块
     "keyword.end",
 ]
-end_case = ["keyword.end"]
+end_case = ["keyword.end", "newline", "space.dedent"]
 [BeginEnd.parser.node]
 label = "$2"
 body = "$3"

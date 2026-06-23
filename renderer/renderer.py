@@ -279,13 +279,13 @@ class Renderer:
                 doc = Nest(nest_level * len(self._INDENT_STR), doc)
             return doc
 
-        # ---- group（Doc IR 的 group）----
+        # ---- group（Doc IR 的 group；跳过 Empty 子项，不因可选缺失而整体中止）----
         if "group" in expr:
             parts: List[Doc] = []
             for e in expr["group"]:
                 d = self._eval(e, node, indent, parent_layout)
                 if d is None:
-                    return None  # ref 引用缺失，整个 group 无意义
+                    return None  # 真正的缺失（非 opt 包裹的 ref），整体无意义
                 if not isinstance(d, Empty):
                     parts.append(d)
             if not parts:
@@ -305,8 +305,9 @@ class Renderer:
                 else:
                     d = self._eval(e, node, indent, parent_layout)
                     if d is not None:
-                        parts.append(d)
-                        had_content = True
+                        if not isinstance(d, Empty):
+                            parts.append(d)
+                            had_content = True
             if not parts:
                 return None
             doc: Doc = Concat(parts)
@@ -321,7 +322,7 @@ class Renderer:
                 return None
             return Nest(len(self._INDENT_STR), Concat(body_docs))
 
-        # ---- opt ----
+        # ---- opt（可选内容：引用缺失时返回 Empty 而非 None，避免上游 group 整体跳过）----
         if "opt" in expr:
             inner = expr["opt"]
             # opt 包裹 line 或 ref 时，检查引用是否缺失
@@ -339,7 +340,7 @@ class Renderer:
                     refs.append(inner["items"])
                 for ref in refs:
                     if getattr(node, ref, None) is None:
-                        return None
+                        return Empty()
             return self._eval(inner, node, indent, parent_layout)
 
         return None

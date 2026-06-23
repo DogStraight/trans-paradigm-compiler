@@ -210,6 +210,7 @@ layout = { line = [{ join = ", ", items = "values" }, ": ", { ref = "stmt" }] }
 [DefaultItem.parser]
 production = ["keyword.default", "symbol.base.colon?", "@StatementOrNull"]
 [DefaultItem.parser.node]
+colon = "$2"
 stmt = "$3"
 [DefaultItem.renderer]
 layout = { line = [
