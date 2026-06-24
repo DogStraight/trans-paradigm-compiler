@@ -27,7 +27,7 @@ class Parser:
         ]
         self.rule_selector = RuleSelector(self.grammar_rules, self.statement_rule_names)
 
-        self.skip_types = ["newline", "comment", "space.indent_keep"]
+        self.skip_types = ["newline", "comment"]
 
         # 从 token 定义加载 Pratt 分类器，替换 pratt_parser 中的硬编码 is_* 函数
         if rules_dir:

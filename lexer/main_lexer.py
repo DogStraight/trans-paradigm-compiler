@@ -1,7 +1,7 @@
 # lexer/main_lexer.py
 from core.define import Token
 from core.err import IndentationError, UnexpectedTokenError
-from .lexer_utils import get_token_define, simplify_output
+from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM
 
 
@@ -29,6 +29,7 @@ class Lexer:
         self.newline: list = list(self.token_define["newline"].values())
         self.alpha_tokens = []
         self._build_alpha_tokens()
+        self.full_token_map: dict[str, str] = self._build_full_token_map()
         self.previous_token_type: str = ""
 
         # is output comments
@@ -60,7 +61,6 @@ class Lexer:
             if isinstance(lit_value, str) and lit_value.isalpha():
                 self.alpha_tokens.append((lit_value, f"literal.{lit_name}"))
 
-    @simplify_output(False)
     def tokenize(self, lex_text: str) -> list[Token]:
         lex_text_len: int = len(lex_text)
         lex_text = lex_text + "\n"  # add a newline at the end
@@ -348,67 +348,49 @@ class Lexer:
                 self.indent_deep -= 1
             self.new_line_start = False
 
+    def _build_full_token_map(self) -> dict[str, str]:
+        """构建 {原始字符串: 完整类型名} 的扁平映射表"""
+        m: dict[str, str] = {}
+        # bracket
+        for name, val in self.token_define.get("bracket", {}).items():
+            if isinstance(val, str):
+                m[val] = f"bracket.{name}"
+        # symbol.base
+        for name, val in self.token_define.get("symbol", {}).get("base", {}).items():
+            if isinstance(val, str):
+                m[val] = f"symbol.base.{name}"
+        # symbol.extend
+        for name, val in self.token_define.get("symbol", {}).get("extend", {}).items():
+            if isinstance(val, str):
+                m[val] = f"symbol.extend.{name}"
+        # literal 精确匹配（排除 string/number 等由 lexer 正则处理的）
+        for name, val in self.token_define.get("literal", {}).items():
+            if name in ("string", "number"):
+                continue
+            if isinstance(val, str):
+                m[val] = f"literal.{name}"
+        # keyword（从 token_define["id"]["keyword"] 加载）
+        for kw, orig in self.token_define.get("id", {}).get("keyword", {}).items():
+            if isinstance(orig, str):
+                m[orig] = f"keyword.{orig}"
+        return m
+
     # only use in method tokenize
     def refine_type(self, _token: Token) -> Token:
         # this method provide more refined token type #
-        match _token.type:
-            # space indentation is already handled in tokenize loop
-            case "space":
-                # should not reach here normally, but keep for safety
-                _token.type = "space"
-
-            # in case token type is id
-            case "id":
-                # 1. 尝试匹配字母形式的 token（符号、括号、精确字面量）
-                matched = False
-                for value, typ in self.alpha_tokens:
-                    if _token.content == value:
-                        _token.type = typ
-                        matched = True
-                        break
-
-                if not matched:
-                    # 2. 原有关键字检查
-                    id_kw_set = self.token_define[_token.type]["keyword"]
-                    if _token.content in id_kw_set:
-                        _token.type = "keyword." + _token.content
-                    else:
-                        _token.type = "id"
-
-            # in case token type is bracket
-            case "bracket":
-                for bracket_type in self.token_define["bracket"]:
-                    if _token.content == self.token_define["bracket"][bracket_type]:
-                        _token.type += "." + bracket_type
-                        break
-
-            # in case token type is symbol
-            # base symbol
-            case "symbol.base":
-                for base_symbol in self.token_define["symbol"]["base"]:
-                    if (
-                        _token.content
-                        == self.token_define["symbol"]["base"][base_symbol]
-                    ):
-                        _token.type += "." + base_symbol
-                        break
-            # extend symbol
-            case "symbol.extend":
-                for ex_symbol in self.token_define["symbol"]["extend"]:
-                    if (
-                        _token.content
-                        == self.token_define["symbol"]["extend"][ex_symbol]
-                    ):
-                        _token.type += "." + ex_symbol
-                        break
-
-            # in case token type is unrecognized
-            case "unrecognized":
-                raise UnexpectedTokenError(f"Unexpected token: {_token.content} ")
-
-            # case default
-            case _:
-                # do nothing
-                ...
+        if _token.type == "unrecognized":
+            raise UnexpectedTokenError(f"Unexpected token: {_token.content} ")
+        if _token.type == "id":
+            # 扁平映射表查找：覆盖 keyword / bracket / symbol 等字母形式
+            full_type = self.full_token_map.get(_token.content)
+            if full_type is not None:
+                _token.type = full_type
+            else:
+                _token.type = "id"
+        elif _token.type in ("bracket", "symbol.base", "symbol.extend"):
+            full_type = self.full_token_map.get(_token.content)
+            if full_type is not None:
+                _token.type = full_type
+        # else: 保持原有类型（newline / space / literal.string / literal.number / comment 等）
         self.previous_token_type = _token.type
         return _token

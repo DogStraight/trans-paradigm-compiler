@@ -102,8 +102,8 @@ def pipeline():
     rules = register.rules_registration(RULES_DIR)
 
     # 设定起始 token 缓存路径（避免每次重建）
-    cache_dir = os.path.join(src_dir, "..", "grammar")
-    cache_path = os.path.normpath(os.path.join(cache_dir, "start_token_cache.json"))
+    cache_dir = os.path.join(src_dir, ".cache")
+    cache_path = os.path.normpath(os.path.join(cache_dir, "start_tokens.json"))
     from parser.rule_selector import set_default_cache_path
     set_default_cache_path(cache_path)
 

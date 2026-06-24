@@ -111,9 +111,11 @@ def load_token_map(cache_path: str) -> Optional[Dict[str, List[str]]]:
 _DEFAULT_CACHE_PATH: Optional[str] = None
 
 
-def set_default_cache_path(path: str) -> None:
+def set_default_cache_path(path: str | None = None) -> str | None:
     global _DEFAULT_CACHE_PATH
-    _DEFAULT_CACHE_PATH = path
+    if path is not None:
+        _DEFAULT_CACHE_PATH = path
+    return _DEFAULT_CACHE_PATH
 
 
 class RuleSelector:
