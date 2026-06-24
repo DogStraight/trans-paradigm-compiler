@@ -29,10 +29,10 @@ class FileManager:
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
     rules_file: str = "pyv_compiler/grammar/rules.toml"
-    rules_dir: str = "pyv_compiler/grammar/rules"
+    rules_dir: str = "pyv_compiler/grammar/rules_verilog"
     token_define_file: str = "pyv_compiler/grammar/token.toml"
     lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
-    symbol_level_file: str = "pyv_compiler/grammar/symbol_level.toml"
+
     cg_rules_dir: str = "pyv_compiler/grammar/cg_rules"
     debug_log_file: str | None = "pyv_compiler/parser_debug.log"
     # debug_log_file: str | None = None
@@ -168,7 +168,7 @@ class GrammarRule:
         "atomic",
         "block_start",
         "block_end",
-        "block_end_structural",
+        "end_verify",
         "scope",
         "symbol",
         "identifier_ref",

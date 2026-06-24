@@ -6,13 +6,10 @@ from core.define import Node, Token, FileManager
 
 
 # ========== 运算符定义加载 ==========
-def load_operator_defs(rules_dir: str | None = None) -> List[Tuple[int, dict]]:
+def load_operator_defs(rules_dir: str) -> List[Tuple[int, dict]]:
     """加载运算符优先级和结合性定义"""
-    if rules_dir:
-        path = os.path.join(rules_dir, "_symbol_level.toml")
-        content = FileManager.read_file(path)
-    else:
-        content = FileManager.read_file(FileManager.symbol_level_file)
+    path = os.path.join(rules_dir, "_symbol_level.toml")
+    content = FileManager.read_file(path)
     data = tomllib.loads(content)
     operators = data.get("operator", [])
     operator_defs = []

@@ -9,20 +9,18 @@ production = [
     "keyword.module",
     "@Identifier",
     "@ParameterList?",
-    "bracket.l_parentheses",
-    "@PortList?",
-    "bracket.r_parentheses",
+    "@PortParens?",
     "symbol.base.semicolon",
     "@ModuleBlock",          # 使用模块专用块，内部条目为 ModuleItem
     "keyword.endmodule",
 ]
-end_case = ["keyword.endmodule"]
+end_case = ["keyword.endmodule", "newline"]
 
 [ModuleDecl.parser.node]
 module_name = "$2"
 params = "$3"
-ports = "$5"
-body = "$8"
+ports = "$4"
+body = "$6"
 
 [ModuleDecl.analyzer]
 scope = { name_attr = "module_name", kind = "module" }
@@ -37,15 +35,30 @@ head = { line = [
         { soft = true },
         ")",
     ] } },
-    { group = [
+    { opt = { group = [
         "(",
         { opt = { ref = "ports" } },
         { soft = true },
-        ");",
-    ] },
+        ")",
+    ] } },
+    ";",
 ] }
 body = { indent = true, source = "body" }
 tail = { text = "endmodule", break = 2 }
+
+# 端口括号包装器（支持无端口模块）
+[PortParens]
+[PortParens.parser]
+inline = true
+production = [
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+]
+[PortParens.parser.node]
+ports = "$2"
+[PortParens.renderer]
+layout = { ref = "ports" }
 
 
 [ParameterList]

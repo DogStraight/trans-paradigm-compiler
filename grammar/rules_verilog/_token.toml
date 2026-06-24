@@ -1,68 +1,14 @@
-[space]
-blank_space = " "
-tab = "\t"
-
-[newline]
-newline = "\n"
-
 [comment]
 boundary = "/"
 
-[symbol.base]
-add = "+"
-sub = "-"
-multiple = "*"
-and = "&"
-or = "|"
-not = "!"
-bit_not = "~"
-xnor = "^"
-bigger = ">"
-lesser = "<"
-div = "/"
-mod = "%"
-equal = "="
-dot = "."
-comma = ","
-colon = ":"
-semicolon = ";"
-question_mark = "?"
-at = "@"
-pound = "#"
-single_quote = "'"
-dollar = "$"
-
 [symbol.extend]
-r_shift = ">>"
-l_shift = "<<"
-point_to = "->"
-power = "**"
-bigger_equal = ">="
-lesser_equal = "<="
-is_equal = "=="
-not_equal = "!="
-add_equal = "+="
-sub_equal = "-="
-add_one = "++"
-sub_one = "--"
-double_dot = ".."
-logic_double_and = "&&"
-logic_double_or = "||"
 plus_range = "+:"
 minus_range = "-:"
 
-# Verilog 逻辑运算符（字母形式，会被 alpha_tokens 匹配）
+# Verilog 逻辑运算符（字母形式）
 logic_add = "and"
 logic_or = "or"
 logic_not = "not"
-
-[bracket]
-l_parentheses = "("
-r_parentheses = ")"
-l_square_bracket = "["
-r_square_bracket = "]"
-l_curly_bracket = "{"
-r_curly_bracket = "}"
 
 [id]
 [id.keyword]

@@ -1,8 +1,9 @@
 # lexer/main_lexer.py
 from core.define import Token
-from core.err import IndentationError, UnexpectedTokenError
+from core.err import UnexpectedTokenError
 from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM
+from .lexer_utils import get_token_define_merged, get_indent_config
 
 
 class Lexer:
@@ -13,23 +14,36 @@ class Lexer:
         token_define_dict: dict | None = None,
         rules_dir: str | None = None,
     ) -> None:
-        if token_define_dict is None:
-            if rules_dir:
-                from .lexer_utils import get_token_define_merged
-                token_define_dict = get_token_define_merged(rules_dir)
-            else:
-                token_define_dict = get_token_define()
+        if rules_dir:
+            token_define_dict = get_token_define_merged(rules_dir)
+            self.indent_enable, self.indent_level = (
+                get_indent_config(rules_dir).get("indent_enable", False),
+                get_indent_config(rules_dir).get("indent_level", 4),
+            )
+        else:
+            token_define_dict = get_token_define()
         self.indent_deep = 0
-        self.indent_level = 4
         self.token_define = token_define_dict
-        self.blank: list = list(token_define_dict["space"].values()) + list(
-            token_define_dict["newline"].values()
+        self.blank: list = list(token_define_dict.get("space", {}).values()) + list(
+            token_define_dict.get("newline", {}).values()
         )
-        self.bracket: list = list(self.token_define["bracket"].values())
-        self.newline: list = list(self.token_define["newline"].values())
+        self.newline: list = list(token_define_dict.get("newline", {}).values())
         self.alpha_tokens = []
         self._build_alpha_tokens()
         self.full_token_map: dict[str, str] = self._build_full_token_map()
+
+        # 括号配对表 → 开闭集合 + 类型映射
+        bracket_pairs: list = self.token_define.get("bracket", {}).get("pairs", [])
+        self.open_brackets: set[str] = set()
+        self.close_brackets: set[str] = set()
+        self.bracket_type_map: dict[str, str] = {}
+        for open_c, close_c, name in bracket_pairs:
+            self.open_brackets.add(open_c)
+            self.close_brackets.add(close_c)
+            self.bracket_type_map[open_c] = f"bracket.l_{name}"
+            self.bracket_type_map[close_c] = f"bracket.r_{name}"
+        self.bracket_depth: int = 0
+
         self.previous_token_type: str = ""
 
         # is output comments
@@ -45,14 +59,20 @@ class Lexer:
 
         # 1. symbol.base 和 symbol.extend
         for cat in ("base", "extend"):
-            for sym_name, sym_value in self.token_define["symbol"][cat].items():
+            for sym_name, sym_value in (
+                self.token_define.get("symbol", {}).get(cat, {}).items()
+            ):
                 if isinstance(sym_value, str) and sym_value.isalpha():
                     self.alpha_tokens.append((sym_value, f"symbol.{cat}.{sym_name}"))
 
-        # 2. bracket
-        for bracket_name, bracket_value in self.token_define["bracket"].items():
-            if isinstance(bracket_value, str) and bracket_value.isalpha():
-                self.alpha_tokens.append((bracket_value, f"bracket.{bracket_name}"))
+        # 2. bracket（来自 pairs 结构）
+        for open_c, close_c, name in self.token_define.get("bracket", {}).get(
+            "pairs", []
+        ):
+            if isinstance(open_c, str) and open_c.isalpha():
+                self.alpha_tokens.append((open_c, f"bracket.l_{name}"))
+            if isinstance(close_c, str) and close_c.isalpha():
+                self.alpha_tokens.append((close_c, f"bracket.r_{name}"))
 
         # 3. literal 精确字面量（排除 string, number）
         for lit_name, lit_value in self.token_define.get("literal", {}).items():
@@ -87,26 +107,22 @@ class Lexer:
 
             # in case current char is a newline char
             if lex_text[text_idx] in self.newline:
-                start_point += 1  # move on
+                start_point += 1
 
-                # set current token line info
                 current_token.set_type("newline")
                 current_token.set_content(lex_text[text_idx])
 
-                # reset line info
                 line_number += 1
                 text_idx += 1
                 start_point = 0
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
-                # mark new line start for next line
                 self.new_line_start = True
                 continue
 
             # in case current char is a space
             elif lex_text[text_idx] in self.token_define["space"].values():
                 space_content: str = ""
-                start_col = start_point
                 while (
                     text_idx < lex_text_len
                     and lex_text[text_idx] in self.token_define["space"].values()
@@ -116,41 +132,55 @@ class Lexer:
                     offset += 1
 
                 # handle indentation only when this line just started
-                if self.new_line_start:
+                if self.new_line_start and self.indent_enable:
                     # empty line (only spaces followed by newline) -> ignore
                     if text_idx < lex_text_len and lex_text[text_idx] in self.newline:
-                        # ignore spaces on empty line, do not change indent
-                        self.new_line_start = True  # keep flag for next line
+                        self.new_line_start = True
                     else:
-                        # calculate indent depth
-                        if len(space_content) % self.indent_level == 0:
-                            current_depth = len(space_content) // self.indent_level
-                        else:
-                            # 不对齐的缩进：保持当前深度（延续行对齐用）
+                        # 行首空格：先判 bracket 深度，再用能否整除判断折行
+                        if self.bracket_depth > 0:
+                            # 括号内：抑制一切结构缩进（仅用于对齐，非结构变化）
                             current_depth = self.indent_deep
+                        elif len(space_content) % self.indent_level != 0:
+                            # 不对齐 → 续行折行，保持当前深度
+                            current_depth = self.indent_deep
+                        else:
+                            # 对齐到缩进网格 → 结构深度变化
+                            current_depth = len(space_content) // self.indent_level
 
                         if current_depth > self.indent_deep:
-                            # emit one or more indent tokens（逐层渐变）
+                            # 结构缩进
                             while self.indent_deep < current_depth:
-                                indent_token = Token(line=line_number, column=start_point)
+                                indent_token = Token(
+                                    line=line_number, column=start_point
+                                )
                                 indent_token.set_type("space.indent")
                                 indent_token.set_content(space_content)
-
                                 tokens.append(indent_token)
                                 self.indent_deep += 1
                         elif current_depth < self.indent_deep:
-                            # emit one or more dedent tokens
+                            # 结构反缩进
                             while self.indent_deep > current_depth:
-                                dedent_token = Token(line=line_number, column=start_point)
+                                dedent_token = Token(
+                                    line=line_number, column=start_point
+                                )
                                 dedent_token.set_type("space.dedent")
                                 dedent_token.set_content("")
-
                                 tokens.append(dedent_token)
                                 self.indent_deep -= 1
-                        # if equal: nothing to emit
-                        self.indent_deep = current_depth
+                        else:  # current_depth == self.indent_deep
+                            # 同深度：不对齐且括号外才是折行
+                            if (
+                                self.bracket_depth == 0
+                                and len(space_content) % self.indent_level != 0
+                            ):
+                                fold_token = Token(line=line_number, column=start_point)
+                                fold_token.set_type("space.fold")
+                                fold_token.set_content("")
+                                tokens.append(fold_token)
+
                         self.new_line_start = False
-                # else: spaces inside a line -> ignore
+                # else: ignore
 
                 # update start_point
                 start_point += len(space_content)
@@ -159,8 +189,6 @@ class Lexer:
             # in case current chars is // comment (Verilog style)
             elif lex_text[text_idx] == "/" and next_char == "/":
                 self._emit_pending_dedent(tokens)
-                if self.new_line_start:
-                    self.new_line_start = False
                 comment_content: str = ""
                 while text_idx < lex_text_len and lex_text[text_idx] != "\n":
                     comment_content += lex_text[text_idx]
@@ -213,14 +241,21 @@ class Lexer:
                 continue
 
             # in case current char is a bracket
-            elif lex_text[text_idx] in self.bracket:
+            elif (
+                lex_text[text_idx] in self.open_brackets
+                or lex_text[text_idx] in self.close_brackets
+            ):
                 self._emit_pending_dedent(tokens)
 
-                # set current token line info
+                # 跟踪括号深度
+                if lex_text[text_idx] in self.open_brackets:
+                    self.bracket_depth += 1
+                else:
+                    self.bracket_depth -= 1
+
                 current_token.set_type("bracket")
                 current_token.set_content(lex_text[text_idx])
 
-                # reset line info
                 text_idx += 1
                 start_point += 1
                 current_token = self.refine_type(current_token)
@@ -351,10 +386,12 @@ class Lexer:
     def _build_full_token_map(self) -> dict[str, str]:
         """构建 {原始字符串: 完整类型名} 的扁平映射表"""
         m: dict[str, str] = {}
-        # bracket
-        for name, val in self.token_define.get("bracket", {}).items():
-            if isinstance(val, str):
-                m[val] = f"bracket.{name}"
+        # bracket（来自 pairs）
+        for open_c, close_c, name in self.token_define.get("bracket", {}).get(
+            "pairs", []
+        ):
+            m[open_c] = f"bracket.l_{name}"
+            m[close_c] = f"bracket.r_{name}"
         # symbol.base
         for name, val in self.token_define.get("symbol", {}).get("base", {}).items():
             if isinstance(val, str):

@@ -108,7 +108,7 @@ atomic = true
 first = "$2"
 rest = "$3.items[*].sub_node[1]"
 [ConcatExpr.renderer]
-layout = { line = ["{", { join = "," }, "}"] }
+layout = { line = ["{", { join = ",", nest = 1 }, "}"] }
 
 [ReplicateExpr]
 [ReplicateExpr.parser]
@@ -176,7 +176,7 @@ production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 [ArgumentList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
 [ArgumentList.renderer]
-layout = { join = ", ", first_soft = true, items = "items" }
+layout = { join = ", ", items = "items", nest = 1 }
 
 [UnaryExpr]
 [UnaryExpr.parser]

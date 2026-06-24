@@ -16,7 +16,7 @@ class ParseContext:
         self.production_pointer = 0
         self.exc_type = None
         self.exc_tb = None
-        self.block_end_structural = False
+        self.end_verify = False
 
     def __enter__(self):
         # 修复：进入with块时压入快照

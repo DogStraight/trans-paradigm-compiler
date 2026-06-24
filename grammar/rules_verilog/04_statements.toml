@@ -6,7 +6,7 @@
 [BasicStmt]
 [BasicStmt.parser]
 production = [
-    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoop|@SubroutineCall|@NullStmt",
+    "@IfBlock|@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoop|@SubroutineCall|@NullStmt",
 ]
 inline = true
 [BasicStmt.parser.node]
@@ -68,7 +68,7 @@ production = [
     "@Statement",
     "@ElseChain?",
 ]
-end_case = ["newline", "keyword.end", "keyword.else", "space.dedent"]
+end_case = ["newline", "keyword.end", "keyword.else"]
 [IfStatement.parser.node]
 condition = "$3"
 then_stmt = "$5"
@@ -77,15 +77,43 @@ else_chain = "$6"
 layout = { line = [
     "if (",
     { ref = "condition" },
-    ") ",
+    ")",
+    { soft = true, indent = 1 },
+    { ref = "then_stmt" },
+    { soft = true },
+    { ref = "else_chain" },
+] }
+
+
+[IfBlock]
+[IfBlock.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@BeginEnd",
+    "@ElseChain?",
+]
+end_case = ["newline", "keyword.end", "keyword.else"]
+[IfBlock.parser.node]
+condition = "$3"
+then_stmt = "$5"
+else_chain = "$6"
+[IfBlock.renderer]
+layout = { line = [
+    "if (",
+    { ref = "condition" },
+    ")",
     { ref = "then_stmt" },
     " ",
     { ref = "else_chain" },
 ] }
 
+
 [ElseChain]
 [ElseChain.parser]
-production = ["@ElseIf|@ElseBranch"]
+production = ["@ElseIf|@ElseBlockBranch|@ElseBranch"]
 inline = true
 [ElseChain.parser.node]
 branch = "$1"
@@ -111,11 +139,20 @@ else_chain = "$7"
 layout = { line = [
     "else if (",
     { ref = "condition" },
-    ") ",
+    ")",
+    { soft = true, indent = 1 },
     { ref = "then_stmt" },
-    " ",
+    { soft = true },
     { ref = "else_chain" },
 ] }
+
+[ElseBlockBranch]
+[ElseBlockBranch.parser]
+production = ["keyword.else", "@BeginEnd"]
+[ElseBlockBranch.parser.node]
+body = "$2"
+[ElseBlockBranch.renderer]
+layout = { line = ["else ", { ref = "body" }] }
 
 [ElseBranch]
 [ElseBranch.parser]
@@ -123,7 +160,7 @@ production = ["keyword.else", "@Statement"]
 [ElseBranch.parser.node]
 body = "$2"
 [ElseBranch.renderer]
-layout = { line = ["else ", { ref = "body" }] }
+layout = { line = ["else", { break = true, indent = 1 }, { ref = "body" }] }
 body = { role = "direct" }
 
 [NonBlockingAssign]
@@ -174,7 +211,7 @@ production = [
     "@CaseItemList",
     "keyword.endcase",
 ]
-end_case = ["keyword.endcase", "keyword.end", "newline", "space.dedent"]
+end_case = ["keyword.endcase", "keyword.end", "newline"]
 [CaseStatement.parser.node]
 case_type = "$1"
 expr = "$3"
@@ -316,7 +353,7 @@ production = [
     "@TaskBlock",
     "keyword.endfunction",
 ]
-end_case = ["keyword.endfunction"]
+end_case = ["keyword.endfunction", "newline"]
 [FuncDeclOld.parser.node]
 func_name = "$4"
 body = "$6"
@@ -452,6 +489,7 @@ layout = { line = [
     "; ",
     { ref = "step" },
     ") ",
+    { soft = true, indent = 1 },
     { ref = "body" },
 ] }
 

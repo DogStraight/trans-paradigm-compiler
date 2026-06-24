@@ -154,7 +154,7 @@ arity = 1
 position = "prefix"
 
 [[operator]]
-symbol = "~"
+symbol = "^"
 arity = 1
 position = "prefix"
 

@@ -40,20 +40,18 @@ class Line(Doc):
     """
     软换行。
     flat 模式 → 一个空格
-    broken 模式 → 换行 + 当前缩进
+    broken 模式 → 换行 + 当前缩进 + 附加缩进
     """
-
-    pass
+    indent: int = 0
 
 
 @dataclass
 class Break(Doc):
     """
     硬换行。
-    无论 flat/broken 都强制换行 + 当前缩进。
+    无论 flat/broken 都强制换行 + 当前缩进 + 附加缩进。
     """
-
-    pass
+    indent: int = 0
 
 
 @dataclass
@@ -198,11 +196,11 @@ def _best(w: int, k: int, doc: Doc) -> str:
         case Text(s):
             return s
 
-        case Line():
-            return "\n" + " " * k
+        case Line(indent=i):
+            return "\n" + " " * (k + i)
 
-        case Break():
-            return "\n" + " " * k
+        case Break(indent=i):
+            return "\n" + " " * (k + i)
 
         case Concat(docs):
             result: list[str] = []

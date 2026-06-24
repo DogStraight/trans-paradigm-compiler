@@ -30,7 +30,7 @@ production = ["@Declarator", "(symbol.base.comma,@Declarator)*"]
 [DeclaratorList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
 [DeclaratorList.renderer]
-layout = { join = ", ", items = "items" }
+layout = { join = ", ", items = "items", nest = 1 }
 
 # ---------- 初始化与范围 ----------
 [Init]
@@ -89,7 +89,7 @@ layout = { ref = "decl" }
 [TaskAnsiInputDecl]
 [TaskAnsiInputDecl.parser]
 production = ["keyword.input", "(keyword.wire|keyword.reg)?", "@Range?", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [TaskAnsiInputDecl.parser.node]
 direction = "input"
 port_type = "$2"

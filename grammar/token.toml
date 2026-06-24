@@ -47,12 +47,11 @@ logic_double_and = "&&"
 logic_double_or = "||"
 
 [bracket]
-l_parentheses = "("
-r_parentheses = ")"
-l_square_bracket = "["
-r_square_bracket = "]"
-l_curly_bracket = "{"
-r_curly_bracket = "}"
+pairs = [
+    ["(", ")", "parentheses"],
+    ["[", "]", "square_bracket"],
+    ["{", "}", "curly_bracket"],
+]
 
 [literal]
 string = "(\".*\")|('.*')"
