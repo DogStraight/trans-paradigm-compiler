@@ -85,22 +85,6 @@ def parse_block_body(
         current = context.peek_token()
         assert current is not None
         if current.type == end_token:
-            if context.end_verify:
-                snapshot = context.create_snapshot()
-                context.advance_token()
-                self._skip_tokens(context, tuple(self.skip_types))
-                if context.has_more_tokens():
-                    next_tok = context.peek_token()
-                    if (
-                        getattr(next_tok, "type", None)
-                        in self.rule_selector.start_token_map
-                    ):
-                        context.restore_snapshot(snapshot)
-                        context.advance_token()
-                        continue
-                context.restore_snapshot(snapshot)
-                context.advance_token()
-                break
             context.advance_token()
             break
         stmt_node = parse_sentence(self, context)
@@ -135,8 +119,5 @@ def parse_block(
         return None
 
     block_node = Node(block_name)
-    old_verify = context.end_verify
-    context.end_verify = getattr(matched_rule, "end_verify", False)
     parse_block_body(self, context, block_node, end_token)
-    context.end_verify = old_verify
     return block_node

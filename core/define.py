@@ -168,7 +168,6 @@ class GrammarRule:
         "atomic",
         "block_start",
         "block_end",
-        "end_verify",
         "scope",
         "symbol",
         "identifier_ref",

@@ -46,6 +46,6 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
             continue
         if feats and feats.get("type") == "call":
             inner = self.grammar_rules.get(feats["name"])
-            if inner and getattr(inner, "block_start", None) is not None:
+            if inner and isinstance(getattr(inner, "block_start", None), str):
                 return True
     return False

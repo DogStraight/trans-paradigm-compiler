@@ -42,7 +42,7 @@ def load_style(rules_dir: str) -> dict:
 
     result = {
         "indent_str": "    ",
-        "max_inline": 10,
+        "max_inline": 40,
         "children_field": "sub_node",
     }
 

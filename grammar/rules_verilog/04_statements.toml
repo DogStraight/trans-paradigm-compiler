@@ -6,7 +6,7 @@
 [BasicStmt]
 [BasicStmt.parser]
 production = [
-    "@IfBlock|@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoop|@SubroutineCall|@NullStmt",
+    "@IfStatement|@BeginEnd|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoop|@SubroutineCall|@NullStmt",
 ]
 inline = true
 [BasicStmt.parser.node]
@@ -77,36 +77,9 @@ else_chain = "$6"
 layout = { line = [
     "if (",
     { ref = "condition" },
-    ")",
-    { soft = true, indent = 1 },
+    ") ",
     { ref = "then_stmt" },
     { soft = true },
-    { ref = "else_chain" },
-] }
-
-
-[IfBlock]
-[IfBlock.parser]
-production = [
-    "keyword.if",
-    "bracket.l_parentheses",
-    "@Expression",
-    "bracket.r_parentheses",
-    "@BeginEnd",
-    "@ElseChain?",
-]
-end_case = ["newline", "keyword.end", "keyword.else"]
-[IfBlock.parser.node]
-condition = "$3"
-then_stmt = "$5"
-else_chain = "$6"
-[IfBlock.renderer]
-layout = { line = [
-    "if (",
-    { ref = "condition" },
-    ")",
-    { ref = "then_stmt" },
-    " ",
     { ref = "else_chain" },
 ] }
 
@@ -301,6 +274,7 @@ body = "$1"
 production = [
     "keyword.function",
     "(keyword.automatic|keyword.static)?",
+    "keyword.signed?",
     "@Range?",
     "@Identifier",
     "bracket.l_parentheses",
@@ -312,11 +286,12 @@ production = [
 ]
 end_case = ["keyword.endfunction"]
 [FuncDeclANSI.parser.node]
-func_name = "$4"
-body = "$9"
+func_name = "$5"
+body = "$10"
 automatic = "$2"
-func_range = "$3"
-ports = "$6"
+is_signed = "$3"
+func_range = "$4"
+ports = "$7"
 
 [FuncDeclANSI.analyzer]
 scope = { name_attr = "func_name", kind = "function" }
@@ -326,6 +301,10 @@ head = { line = [
     "function ",
     { opt = { line = [
         { ref = "automatic" },
+        " ",
+    ] } },
+    { opt = { line = [
+        { ref = "is_signed" },
         " ",
     ] } },
     { opt = { group = [
@@ -347,6 +326,7 @@ tail = { text = "endfunction", break = 2 }
 production = [
     "keyword.function",
     "(keyword.automatic|keyword.static)?",
+    "keyword.signed?",
     "@Range?",
     "@Identifier",
     "symbol.base.semicolon",
@@ -355,10 +335,11 @@ production = [
 ]
 end_case = ["keyword.endfunction", "newline"]
 [FuncDeclOld.parser.node]
-func_name = "$4"
-body = "$6"
+func_name = "$5"
+body = "$7"
 automatic = "$2"
-func_range = "$3"
+is_signed = "$3"
+func_range = "$4"
 
 [FuncDeclOld.analyzer]
 scope = { name_attr = "func_name", kind = "function" }
@@ -368,6 +349,10 @@ head = { line = [
     "function ",
     { opt = { line = [
         { ref = "automatic" },
+        " ",
+    ] } },
+    { opt = { line = [
+        { ref = "is_signed" },
         " ",
     ] } },
     { opt = { group = [
@@ -489,7 +474,6 @@ layout = { line = [
     "; ",
     { ref = "step" },
     ") ",
-    { soft = true, indent = 1 },
     { ref = "body" },
 ] }
 

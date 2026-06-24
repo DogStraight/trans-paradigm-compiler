@@ -1,97 +1,141 @@
-# Renderer 设计方案 — AST + 布局规则驱动的代码生成
+# Renderer 设计文档 & 当前架构说明
 
-## 问题分析
-
-当前后端架构：
-
-```
-AST → CG (模板引擎) → 文本 → Formatter (行扫描) → 格式化文本
-```
-
-### 核心矛盾
-
-1. **CG 模板硬编码格式**：`\n`、`    `（缩进空格）、逗号/分号位置全部硬编码在 TOML template 里
-2. **Formatter 逆向工程**：把 CG 生成的文本重新解析（行扫描/括号深度/正则），猜回结构再重排
-3. **互相拉扯**：CG 生成 `if (cond)\n    stmt`，Formatter 又拆了重拼，两遍做同一件事
-
-### 根源
-> **风格在 CG 阶段就已经固化成字符串了，Formatter 只能靠猜来还原结构**
+> ⚠️ 本文档描述**当前实现**的架构，不是理想设计。
+> 已知问题在末尾「开放问题」中列出。
 
 ---
 
-## 新架构
+## 架构总览
 
 ```
-AST → Renderer (AST + 布局规则) → 格式化文本
+AST → Normalizer → Renderer (Doc IR) → layout() → 格式化文本
 ```
 
-**CG 和 Formatter 合并为一个 Renderer**，直接从 AST 渲染最终文本。
+```
+Renderer/
+├── renderer.py          # 入口：Renderer.render() → normalize → render → layout
+├── doc.py               # Doc IR 类型 + Wadler-Leijen layout 算法
+├── loader.py            # TOML 配置加载
+├── node_renderer.py     # 节点级三段式渲染 (head/body/tail)
+└── primitives/          # DSL 原语求值器
+    ├── __init__.py      # eval_expr() 分发
+    ├── registry.py      # @register() 装饰器中心
+    ├── text.py          # 字面量
+    ├── ref_prim.py      # 子节点引用
+    ├── join_prim.py     # 列表连接
+    ├── group_prim.py    # 组（自动 inline/wrap）
+    ├── line_prim.py     # 行布局
+    ├── indent_prim.py   # 缩进（当前未在 Verilog 中使用）
+    ├── opt_prim.py      # 条件可选
+    └── soft_break.py    # 软/硬换行控制
+```
 
 ---
 
 ## 核心哲学：本质硬编码 vs 偶然硬编码
 
 ```
-本质硬编码（保留在 Renderer 代码中，DSL 原语）
-├── text()     — 插入字面量文本
-├── ref()      — 引用子节点，递归渲染
-├── join()     — 用分隔符连接多个项目
-├── group()    — 组（可能在一行或折行）
-├── line()     — 行布局（多个元素水平排列）
-├── indent()   — 增加缩进级别
-└── opt()      — 条件存在（引用的子节点可能为空）
+本质硬编码（Renderer Python 代码）
+├── text()       — 字面量文本
+├── ref()        — 子节点引用，递归渲染
+├── join()       — 分隔符连接列表
+├── group()      — 组（flat 或 broken，自动宽度感知）
+├── line()       — 水平排列 + {soft} 换行点
+├── indent()     — 增一级缩进
+├── opt()        — 条件存在
+├── soft/break   — 换行控制
 
-偶然硬编码（必须配置化，放 TOML）
-├── 节点类型名        ModuleDecl, IfStatement, ...
-├── 字段名            module_name, condition, then_stmt, ...
-├── 关键字字面量      module, endmodule, if, else, reg, ...
-├── 列表结构          first/rest 展平、分隔符
-└── 特殊语法结构      端口对齐、always 块格式
+偶然硬编码（TOML 配置）
+├── 节点类型名       ModuleDecl, IfStatement, ...
+├── 字段名           module_name, condition, then_stmt, ...
+├── 关键字字面量     module, endmodule, if, else, reg, ...
+├── 列表结构         展平路径、分隔符
+└── 特殊语法结构     端口对齐、always 块格式
 ```
-
-**Renderer 代码只包含 DSL 原语**。所有"这门语言长什么样"的知识都在 TOML 里。
 
 ---
 
-## DSL 原语（本质硬编码）
+## Doc IR（中间表示）
 
-### `text(text)` — 字面量文本
+基于 Wadler "A prettier printer" (2003) / Leijen "Wadler-Lindig" 模型。
 
-插入一段固定文本，Renderer 自动管理空格。
+### 类型
 
-在 TOML 中简写为字符串：
+| 类型 | 含义 |
+|------|------|
+| `Empty` | 无内容 |
+| `Text(s)` | 字面量 |
+| `Line(i)` | 软换行：flat→空格, broken→换行+k+i |
+| `Break(i)` | 硬换行：永远换行+k+i（不被 flatten） |
+| `Concat(docs)` | 顺序拼接 |
+| `Nest(i, doc)` | 缩进偏移：内部所有 Line/Break 的 k 增加 i |
+| `Prefix(i, doc)` | 首行缩进 i + 内部 Nest i（当前几乎已弃用） |
+| `Union(flat, broken)` | 二象性：group 创建 Union(flatten(doc), doc) |
+
+### Layout 算法
+
+```python
+def layout(doc, width=40) -> str:
+    """宽度感知的 Doc → 字符串"""
+    return _best(width, 0, doc)
+
+def _best(w, k, doc):
+    match doc:
+        case Empty():  return ""
+        case Text(s):  return s
+        case Line(i):  return "\n" + " " * (k + i)
+        case Break(i): return "\n" + " " * (k + i)
+        case Concat(docs):  return "".join(_best(w, k, d) for d in docs)
+        case Nest(i, d):    return _best(w, k + i, d)
+        case Prefix(i, d):  return " " * i + _best(w, k + i, d)
+        case Union(flat, broken):
+            flat_s = _best(w, k, flat)
+            first_line = flat_s.split("\n")[0]
+            if len(first_line) <= w - k:
+                return flat_s
+            return _best(w, k, broken)
+```
+
+---
+
+## DSL 原语
+
+### `text("string")` — 字面量文本
+
+TOML 简写为字符串。直接对应 `Text(s)`。
+
 ```toml
 "module "
 ";"
 ```
 
-### `ref(child_name)` — 子节点引用
+### `ref("child_name")` — 子节点引用
 
-引用 AST 节点的某个字段，递归渲染该子节点。
+获取 AST 节点的属性，递归渲染。`ref` 调 `_render_inline`，
+不额外加缩进 Prefix。
 
 ```toml
 { ref = "module_name" }
 { ref = "condition" }
+{ ref = "then_stmt" }
 ```
+
+支持属性路径：`{ ref = "items.name" }`。
 
 ### `join(separator, items)` — 列表连接
 
-将多个子项用分隔符连接。
-
 ```toml
-# 用逗号+空格连接端口列表
-{ join = ",", items = "ports" }
-
-# 用逗号连接参数列表
-{ join = ",", items = "params" }
+{ join = ", ", items = "ports" }
+{ join = ",", items = "params", first_soft = true, nest = 1 }
 ```
+
+`first_soft` 表示第一个元素前加软换行。自动 `group` 包装。
 
 ### `group(children...)` — 组
 
-一组内容，要么在一行内渲染，要么折行渲染。Renderer 根据内容长度自动决策。
+创建 `Union(flatten(doc), doc)`。内容超宽时自动折行。
 
 ```toml
-# 可选参数组：(#(params))
 { group = [
     " #(",
     { ref = "params" },
@@ -101,437 +145,195 @@ AST → Renderer (AST + 布局规则) → 格式化文本
 
 ### `line(children...)` — 行布局
 
-多个元素水平排列。
+多个元素水平排列。内部的 `{ soft = true }` 为可选的折行点。
+整个 line 自动 `group` 包装（当存在 soft 时）。
 
 ```toml
-# module <name> #(...) (...);
 { line = [
     "module ",
     { ref = "module_name" },
     { opt = { group = [" #(", { ref = "params" }, ")"] } },
-    " (",
+    { soft = true },
+    "(",
     { ref = "ports" },
     ");",
 ] }
 ```
 
-### `indent(children...)` — 缩进
-
-子内容缩进一级。在 TOML 中通常用于 body 描述：
+### `indent(children...)` — 缩进（当前未使用）
 
 ```toml
-body = { indent = true }
+{ indent = [{ ref = "body" }] }
 ```
 
-等价于：
-```toml
-{ indent = ["@body"] }
-```
+### `opt(children...)` — 条件可选
 
-### `opt(children...)` — 条件组
-
-如果组内引用的子节点不存在，整组跳过。
+如果引用的子节点不存在，返回 `Empty()`（而非 None），
+避免上层 group 因 None 整体跳过。
 
 ```toml
-# 只在有 params 时才渲染 #(params)
+{ opt = { ref = "params" } }
 { opt = { group = [" #(", { ref = "params" }, ")"] } }
 ```
 
+### `soft` / `break` — 换行控制
+
+```toml
+{ soft = true }          # 软换行：flat→空格, broken→换行
+{ break = true }         # 硬换行：始终换行
+{ break = true, indent = 1 }  # 换行并多缩进一级
+```
+
 ---
 
-## 布局规则语言（TOML 表示）
+## 三段式渲染 (head / body / tail)
 
-### 格式约定
-
-每个 DSL 原语在 TOML 中的表示：
-
-| DSL 原语 | TOML 表示 |
-|---------|-----------|
-| `text(s)` | `"s"`（字符串）|
-| `ref(name)` | `{ ref = "name" }` |
-| `join(sep, items)` | `{ join = "sep", items = "field" }` |
-| `group(children)` | `{ group = [...] }` |
-| `line(children)` | `{ line = [...] }` |
-| `indent(children)` | `{ indent = [...] }` 或 `body = { indent = true }` |
-| `opt(children)` | `{ opt = [...] }` |
-
-### 块结构：三段式 head + body + tail
-
-对于带 close 关键字的块结构节点：
+每个节点的 layout 由三部分组成：
 
 ```toml
-[ModuleDecl]
-# head: 开口行
-head = { line = [
-    "module ",
-    { ref = "module_name" },
-    { opt = { group = [" #(", { join = ",", items = "params" }, ")"] } },
-    " (",
-    { ref = "ports" },
-    ");",
-] }
-# body: 主体（剩余子节点，每个缩进一级）
-body = { indent = true }
-# tail: 关闭关键字
-tail = "endmodule"
-```
-
-渲染效果：
-```verilog
-module traffic_light (
-    input wire clk,
-    input wire rst_n,
-    output reg [1:0] light
-);
-    reg [1:0] state;
-    always @(posedge clk) begin
-        ...
-    end
-endmodule
-```
-
-### 无主体节点：直接用 layout
-
-```toml
-[RegDecl]
-layout = { line = [
-    "reg ",
-    { opt = { group = ["[", { ref = "range" }, "]"] } },
-    { ref = "reg_name" },
-    ";",
-] }
-```
-
-### 列表节点：用 join
-
-```toml
-[PortList]
-layout = { join = ",", items = "@body" }
-```
-
-### 内联包装节点：用 ref
-
-```toml
-[Statement]
-layout = { ref = "stmt" }
-
-[ElseChain]
-layout = { ref = "branch" }
-```
-
-### 完整规则一览
-
-```toml
-# ===== 模块 =====
-[ModuleDecl]
-head = { line = [
-    "module ",
-    { ref = "module_name" },
-    { opt = { group = [" #(", { join = ",", items = "params" }, ")"] } },
-    " (",
-    { ref = "ports" },
-    ");",
-] }
-body = { indent = true }
-tail = "endmodule"
-
-[ParameterList]
-layout = { join = ",", items = "@body" }
-
-[ParamDecl]
-layout = { line = [
-    "parameter ", { ref = "param_name" }, " = ", { ref = "value" },
-] }
-
-# ===== 端口 =====
-[PortList]
-layout = { join = ",", items = "@body" }
-
-[PortDecl]
-layout = { line = [
-    { ref = "direction" }, " ",
-    { opt = { ref = "port_type" } },
-    { opt = { group = [" [", { ref = "range" }, "]"] } },
-    " ", { ref = "port_name" },
-] }
-
-# ===== 声明 =====
-[RegDecl]
-layout = { line = [
-    "reg ",
-    { opt = { group = ["[", { ref = "range" }, "]"] } },
-    { ref = "reg_name" }, ";",
-] }
-
-[WireDecl]
-layout = { line = [
-    "wire ",
-    { opt = { group = ["[", { ref = "range" }, "]"] } },
-    { ref = "wire_name" }, ";",
-] }
-
-[LocalParamDecl]
-layout = { line = [
-    "localparam ",
-    { join = ",", items = "items" }, ";",
-] }
-
-[LocalParamItem]
-layout = { line = [
-    { ref = "param_name" }, " = ", { ref = "value" },
-] }
-
-# ===== 赋值 =====
-[BlockingAssign]
-layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
-
-[NonBlockingAssign]
-layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
-
-[AssignStatement]
-layout = { line = ["assign ", { ref = "target" }, " = ", { ref = "value" }, ";"] }
-
-# ===== 时序 =====
-[AlwaysBlock]
-layout = { line = ["always @(", { ref = "sensitivity" }, ") ", { ref = "body" }] }
-
 [BeginEnd]
-head = "begin"
-body = { indent = true }
-tail = "end"
-
-# ===== Case =====
-[CaseStatement]
-head = { line = ["case (", { ref = "expr" }, ")"] }
-body = { indent = true }
-tail = "endcase"
-
-[CaseItem]
-layout = { line = [{ ref = "label" }, ": ", { ref = "body" }] }
-
-# ===== 控制流 =====
-[IfStatement]
-layout = { line = ["if (", { ref = "condition" }, ") ", { ref = "then_stmt" }] }
-
-[ElseIf]
-layout = { line = ["else if (", { ref = "condition" }, ") ", { ref = "body" }] }
-
-[ElseBranch]
-layout = { line = ["else ", { ref = "body" }] }
-
-[Statement]
-layout = { ref = "stmt" }
-
-[ElseChain]
-layout = { ref = "branch" }
-
-[Range]
-layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
-
-[OptType]
-layout = { ref = "type_desc" }
+head = "begin"                              # ← 开口
+body = { indent = true, source = "body" }   # ← 主体
+tail = { text = "end", break = 1 }          # ← 闭合
 ```
+
+渲染伪代码：
+
+```python
+def render_node(node, layout, indent, renderer):
+    parts = []
+    if head:
+        parts.append(eval_expr(head, node, indent))
+    if body:
+        body_docs = render_body(node, indent + 1, body_cfg)
+        for bd in body_docs:
+            parts.append(Break(4))          # 换行 + 额外缩进一级
+            parts.append(Nest(4, bd))       # 内部 break 继承此深度
+    if tail:
+        parts.append(Break())               # tail 与 head 同级
+        parts.append(tail_doc)
+    return Concat(parts)                    # 无 Prefix
+```
+
+### 缩进策略（当前方案）
+
+- `render_node` **不**添加 `Prefix(indent*4, doc)`
+- body 子项的缩进由父级的 body 渲染段统一控制：
+  - `Break(4)` → 换行到 `k+4`
+  - `Nest(4, bd)` → 子项内部 break 继承 `k+4`
+- tail 用 `Break()`（无额外缩进），与 head 平齐
+
+这样每层 body 恰好向里缩进一级，`end` 与对应 `begin` 对齐。
 
 ---
 
-## Renderer 实现
+## 原语注册机制
 
-### 核心类
-
-```python
-class Renderer:
-    """AST → 格式化文本
-    只包含 DSL 原语（text/ref/join/group/line/indent/opt），
-    所有语言特定知识来自 TOML 布局规则。
-    """
-
-    def __init__(self, rules_dir: str):
-        self._layouts: dict[str, dict] = {}
-        self._load_layouts(rules_dir)
-
-    def render(self, node: Node, indent: int = 0) -> str:
-        """入口：渲染 AST 根节点"""
-        ...
-
-    def _render_node(self, node: Node, layout: dict, indent: int) -> str:
-        """渲染单个节点"""
-        ...
-```
-
-### DSL 求值器
+新增原语只需三步：
 
 ```python
-def _eval(self, expr, node, indent):
-    """递归求值一个布局表达式"""
+# 1. primitives/my_prim.py
+from .registry import register
 
-    if isinstance(expr, str):
-        # text("...")
-        return expr
-
-    if "ref" in expr:
-        # ref("child_name")
-        child = node.get_attr(expr["ref"])
-        if child is None:
-            return None
-        return self._render_node(child, indent)
-
-    if "join" in expr:
-        # join(sep, items)
-        items = self._resolve_items(node, expr["items"])
-        rendered = [self._render_node(item, indent) for item in items]
-        return expr["join"].join(filter(None, rendered))
-
-    if "group" in expr:
-        # group(children...) — 尝试一行，太长则折行
-        parts = [self._eval(e, node, indent) for e in expr["group"]]
-        parts = [p for p in parts if p is not None]
-        joined = "".join(parts)
-        if len(joined) < self._max_inline:
-            return joined
-        return ("\n" + self._indent_str * (indent + 1)).join(parts)
-
-    if "line" in expr:
-        # line(children...) — 水平排列
-        parts = [self._eval(e, node, indent) for e in expr["line"]]
-        return "".join(filter(None, parts))
-
-    if "indent" in expr:
-        # indent(children...) — 缩进一级
-        return self._render_children(node, indent + 1)
-
-    if "opt" in expr:
-        result = self._eval(expr["opt"], node, indent)
-        return result if result else ""
-
-    return ""
+@register("my_key")
+def eval_my(expr, node, indent, parent_layout, renderer):
+    ...
+    return SomeDoc()
 ```
-
-### 渲染流程
 
 ```python
-def _render_node(self, node, layout, indent):
-    head = layout.get("head") or layout.get("layout")
-    body_cfg = layout.get("body")
-    tail = layout.get("tail")
-
-    # 渲染头部
-    open_line = self._eval(head, node, indent) if head else ""
-
-    # 渲染主体
-    body_lines = []
-    if body_cfg:
-        body_lines = self._render_children(node, indent + 1)
-
-    # 渲染尾部
-    close_line = self._eval(tail, node, indent) if tail else ""
-
-    # 组装
-    prefix = self._indent_str * indent
-    if body_lines or close_line:
-        return (prefix + open_line + "\n" +
-                "\n".join(body_lines) + "\n" +
-                prefix + close_line)
-    else:
-        return prefix + open_line
+# 2. primitives/__init__.py 加 import
+from . import my_prim
 ```
-
-### 缩进与辅助方法
 
 ```python
-class Renderer:
-    _INDENT_STR = "    "  # 4 空格
-
-    def _render_children(self, node, indent):
-        """渲染所有子节点，每个一行"""
-        lines = []
-        for child in node.sub_node:
-            layout = self._layouts.get(child.name, {})
-            r = self._render_node(child, layout, indent)
-            if r:
-                lines.append(r)
-        return lines
-
-    def _resolve_items(self, node, items_spec):
-        """解析 items 引用：@body = 所有子节点，否则按字段名取"""
-        if items_spec == "@body":
-            return node.sub_node
-        attr = node.get_attr(items_spec)
-        if isinstance(attr, list):
-            return attr
-        return [attr] if attr else []
+# 3. 定义 TOML 布局时使用
+{ my_key = [...] }
 ```
+
+无需手动维护 dispatch 表。
 
 ---
 
 ## 与旧系统对比
 
-### 旧模板（偶然/本质硬编码混合）
+### 旧架构 (已废弃)
 
 ```
-module {{ module_name }}{{#params}}{{?@first}} #(
-{{/@first}}    {{.}}{{!@last}},{{/@last}}{{?@last}}
-){{/@last}}{{/params}} (
-{{#ports}}    {{.}}{{!@last}},{{/@last}}
-{{/ports}});
-{{#body}}    {{.}}
-{{/body}}endmodule
+AST → CG (Jinja2 模板) → 文本 → Formatter (行扫描/正则) → 格式化文本
 ```
 
-**问题**：`\n`、`    `（空格缩进）等格式细节也混在模板中，与语言知识耦合在一起。
+问题：CG 生成的文本已经固化了换行和缩进，Formatter 只能靠猜还原结构。
 
-### 新布局（分离清晰）
+### 当前架构
 
-```toml
-[ModuleDecl]
-head = { line = [
-    "module ",                          # 偶然(text)
-    { ref = "module_name" },            # 偶然(ref)
-    { opt = { group = [                 # 本质(opt/group)
-        " #(", { join = ",", items = "params" }, ")"   # 偶然(text/join)
-    ] } },
-    " (",
-    { ref = "ports" },                  # 偶然(ref)
-    ");",
-] }
-body = { indent = true }                # 本质(indent)
-tail = "endmodule"                      # 偶然(text)
+```
+AST → Normalizer → Renderer (Doc IR) → layout() → 文本
 ```
 
-**偶然硬编码 → TOML 配置**
-**本质硬编码 → Renderer Python 代码**
+一次完成，无需二次格式化。
+
+---
+
+## 模块文件结构
+
+```
+renderer/
+├── __init__.py
+├── renderer.py      ~50行  入口，orchestrator
+├── doc.py           ~200行 Doc IR 类型 + layout 算法
+├── loader.py        ~60行  TOML 加载
+├── node_renderer.py ~200行 节点渲染 + body 解析
+└── primitives/
+    ├── __init__.py   ~40行  分发调度
+    ├── registry.py   ~30行  @register 装饰器
+    ├── text.py       ~15行  text 原语
+    ├── ref_prim.py   ~45行  ref 原语
+    ├── join_prim.py  ~60行  join 原语
+    ├── group_prim.py ~25行  group 原语
+    ├── line_prim.py  ~45行  line 原语
+    ├── indent_prim.py~20行  indent 原语
+    ├── opt_prim.py   ~30行  opt 原语
+    └── soft_break.py ~30行  soft/break 原语
+```
 
 ---
 
 ## 开放问题
 
-### Q1: 列表展平
-`PortList` 在 AST 中是 `first` + `rest` 结构。布局规则中如何展平？用 `@body` 引用所有子节点？
+### Q1: Prefix 是否应移除
 
-### Q2: 端口对齐
-```
-input  wire [W-1:0] a,
-output reg  [W-1:0] sum
-```
-对齐是纯格式问题，Renderer 是否做后处理对齐？
+当前 `Prefix` 只在 `node_renderer.py` 的 import 中存在，
+实际 `render_node` 已不再使用它。可以考虑完全删除 Prefix 类型。
 
-### Q3: 单行/多行决策
-短内容（如 `#(param)`）内联一行，长内容折行。Renderer 根据内容长度自动决策？还是由规则显式指定？
+### Q2: indent 原语未验证
 
----
+`indent_prim.py` 的 `eval_indent` 目前没有被任何 Verilog 布局使用。
+它通过 `Nest(indent * 4, body_docs)` 实现缩进，但这里的 `indent`
+是层级数（从 `eval_expr` 传入），`indent * 4` 可能与其他地方的
+缩进策略不一致。需要在实际使用时验证。
 
-## 迁移计划
+### Q3: soft_break 的 indent 语义
 
-### Phase 1：Renderer 核心（本质硬编码）
-- 创建 `renderer/` 目录
-- 实现 `Renderer` 类：`_eval` DSL 解释器
-- 实现 text/ref/join/group/line/indent/opt 原语
-- 实现布局规则加载器
+`{ soft = true, indent = 1 }` 在 `line_prim.py` 中被支持，
+但在 `if_statement` 布局中 `{ soft = true }` 的 indent 行为
+可能与预期的缩进层级有偏差。break 的 indent 是否应从「额外缩进」
+理解为「绝对缩进层级」需要更清晰的定义。
 
-### Phase 2：Verilog 布局规则（偶然硬编码）
-- 为每个 Verilog 节点类型编写 TOML layout 字段
-- 布局规则放在语法规则 TOML 中（与 production 同文件）
+### Q4: render_inline 与 render_node 冗余
 
-### Phase 3：集成与清理
-- 修改 run_pipeline.py：Renderer 替代 CG + Formatter
-- 删除 generator/、旧 formatter/verilog_formatter.py
-- 验证所有测试用例输出一致
+两个函数逻辑几乎相同（都不加 Prefix），区别只在于语义。
+可以合并为一个参数化的 `_render` 函数。
+
+### Q5: body_cfg 的 indent=true 形同虚设
+
+`{ body = { indent = true, source = "body" } }` 中的 `indent = true`
+在 `render_body` 中被忽略（`render_body` 只读取 `source` 和 `items`）。
+实际的缩进来自 `_render_node` 中 body 段的 `Break(4) + Nest(4, bd)`。
+这个配置字段容易造成误解——应该移除或让它真正控制缩进行为。
+
+### Q6: 行宽上限全局统一
+
+`MAX_INLINE = 40` 是全局的，不能按节点类型设置。
+对某些节点可能需要更长的行宽。未来可考虑
+在 TOML layout 中增加 `max_inline` 字段覆盖全局设置。

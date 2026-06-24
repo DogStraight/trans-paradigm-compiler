@@ -81,6 +81,7 @@ default = "default"
 generate = "generate"
 endgenerate = "endgenerate"
 genvar = "genvar"
+signed = "signed"
 
 # ========== 系统函数注册表 ==========
 [sysfunc]

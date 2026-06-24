@@ -29,7 +29,7 @@ class Renderer:
 
     # 默认风格参数（可被 TOML 覆盖）
     _INDENT_STR = "    "
-    _MAX_INLINE = 10
+    _MAX_INLINE = 40
 
     def __init__(self, rules_dir: str):
         self._layouts: dict[str, dict] = {}
