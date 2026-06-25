@@ -4,6 +4,7 @@ from core.err import UnexpectedTokenError
 from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM
 from .lexer_utils import get_token_define_merged, get_indent_config
+from .comment_fsm import CommentFSM
 
 
 class Lexer:
@@ -45,9 +46,6 @@ class Lexer:
         self.bracket_depth: int = 0
 
         self.previous_token_type: str = ""
-
-        # is output comments
-        self.output_comments = False
 
         # new line start flag for indent handling
         self.new_line_start = False
@@ -186,21 +184,27 @@ class Lexer:
                 start_point += len(space_content)
                 continue
 
-            # in case current chars is // comment (Verilog style)
-            elif lex_text[text_idx] == "/" and next_char == "/":
-                self._emit_pending_dedent(tokens)
-                comment_content: str = ""
-                while text_idx < lex_text_len and lex_text[text_idx] != "\n":
-                    comment_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
-                current_token.set_type("comment")
-                current_token.set_content(comment_content)
-
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                start_point += offset
-                continue
+            # comment (// or /*) — 使用 CommentFSM 解析
+            elif (lex_text[text_idx] in self.token_define.get("comment", {}).get("boundary", "/")
+                  and next_char in ("/", "*")):
+                result = CommentFSM.run(lex_text, text_idx, self.token_define)
+                if result is None:
+                    # should not happen if condition matched, but safety check
+                    pass
+                else:
+                    comment_content, new_idx = result
+                    self._emit_pending_dedent(tokens)
+                    current_token.set_type("comment")
+                    current_token.set_content(comment_content)
+                    current_token = self.refine_type(current_token)
+                    tokens.append(current_token)
+                    offset = new_idx - text_idx
+                    text_idx = new_idx
+                    start_point += offset
+                    # comments at beginning of line should not affect indentation
+                    if self.new_line_start:
+                        self.new_line_start = False
+                    continue
 
             # in case current char is unsized Verilog literal ('b1, 'd0, 'hFF, 'o7)
             elif lex_text[text_idx] == "'" and next_char in "dDbBhHoO":
@@ -262,28 +266,7 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # in case current char in comment
-            elif lex_text[text_idx] in self.token_define["comment"]["boundary"]:
-                # comments at beginning of line should not affect indentation
-                if self.new_line_start:
-                    # ignore indent for comment-only line
-                    self.new_line_start = False
-
-                comment_content: str = ""
-                while text_idx < lex_text_len and lex_text[text_idx] != "\n":
-                    comment_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
-
-                current_token.set_type("comment")
-                current_token.set_content(comment_content)
-
-                # reset line info\
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                if self.output_comments:
-                    tokens.append(current_token)
-                continue
+            # (comment handled by CommentFSM in earlier branch)
 
             # in case current char is an id
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":

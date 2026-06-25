@@ -41,6 +41,16 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 [DeclaratorList.renderer]
 layout = { join = ", ", items = "items", nest = 1 }
 
+# ---------- 端口声明公共尾部（复用：input/output/inout × ANSI/Body/Task）----------
+[PortTail]
+[PortTail.parser]
+production = ["(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?", "@DeclaratorList"]
+[PortTail.parser.node]
+port_type = "$1"
+is_signed = "$2"
+packed_range = "$3"
+items = "$4"
+
 # ---------- 初始化与范围 ----------
 [Init]
 [Init.parser]
@@ -97,14 +107,14 @@ layout = { ref = "decl" }
 
 [TaskAnsiInputDecl]
 [TaskAnsiInputDecl.parser]
-production = ["keyword.input", "(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?", "@DeclaratorList"]
+production = ["keyword.input", "@PortTail"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 [TaskAnsiInputDecl.parser.node]
 direction = "input"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [TaskAnsiInputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [TaskAnsiInputDecl.renderer]
@@ -138,14 +148,14 @@ layout = { ref = "decl" }
 
 [AnsiInputDecl]
 [AnsiInputDecl.parser]
-production = ["keyword.input", "keyword.wire?", "keyword.signed?", "@Range?", "@DeclaratorList"]
+production = ["keyword.input", "@PortTail"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 [AnsiInputDecl.parser.node]
 direction = "input"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [AnsiInputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [AnsiInputDecl.renderer]
@@ -170,20 +180,14 @@ layout = { line = [
 
 [AnsiOutputDecl]
 [AnsiOutputDecl.parser]
-production = [
-    "keyword.output",
-    "(keyword.wire|keyword.reg)?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
-]
+production = ["keyword.output", "@PortTail"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 [AnsiOutputDecl.parser.node]
 direction = "output"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [AnsiOutputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [AnsiOutputDecl.renderer]
@@ -208,14 +212,14 @@ layout = { line = [
 
 [AnsiInoutDecl]
 [AnsiInoutDecl.parser]
-production = ["keyword.inout", "keyword.wire?", "keyword.signed?", "@Range?", "@DeclaratorList"]
+production = ["keyword.inout", "@PortTail"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 [AnsiInoutDecl.parser.node]
 direction = "inout"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [AnsiInoutDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [AnsiInoutDecl.renderer]
@@ -255,19 +259,16 @@ layout = { ref = "decl" }
 [BodyInputDecl.parser]
 production = [
     "keyword.input",
-    "keyword.wire?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
+    "@PortTail",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [BodyInputDecl.parser.node]
 direction = "input"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [BodyInputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [BodyInputDecl.renderer]
@@ -295,19 +296,16 @@ layout = { line = [
 [BodyOutputDecl.parser]
 production = [
     "keyword.output",
-    "(keyword.wire|keyword.reg)?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
+    "@PortTail",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [BodyOutputDecl.parser.node]
 direction = "output"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [BodyOutputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [BodyOutputDecl.renderer]
@@ -335,19 +333,16 @@ layout = { line = [
 [BodyInoutDecl.parser]
 production = [
     "keyword.inout",
-    "keyword.wire?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
+    "@PortTail",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [BodyInoutDecl.parser.node]
 direction = "inout"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [BodyInoutDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [BodyInoutDecl.renderer]
@@ -388,19 +383,16 @@ layout = { ref = "decl" }
 [TaskInputDecl.parser]
 production = [
     "keyword.input",
-    "(keyword.wire|keyword.reg)?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
+    "@PortTail",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [TaskInputDecl.parser.node]
 direction = "input"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [TaskInputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [TaskInputDecl.renderer]
@@ -428,19 +420,16 @@ layout = { line = [
 [TaskOutputDecl.parser]
 production = [
     "keyword.output",
-    "(keyword.wire|keyword.reg)?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
+    "@PortTail",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [TaskOutputDecl.parser.node]
 direction = "output"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [TaskOutputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [TaskOutputDecl.renderer]
@@ -468,19 +457,16 @@ layout = { line = [
 [TaskInoutDecl.parser]
 production = [
     "keyword.inout",
-    "(keyword.wire|keyword.reg)?",
-    "keyword.signed?",
-    "@Range?",
-    "@DeclaratorList",
+    "@PortTail",
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
 [TaskInoutDecl.parser.node]
 direction = "inout"
-port_type = "$2"
-is_signed = "$3"
-packed_range = "$4"
-items = "$5"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
 [TaskInoutDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [TaskInoutDecl.renderer]

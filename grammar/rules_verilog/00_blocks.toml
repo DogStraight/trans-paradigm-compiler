@@ -10,6 +10,16 @@ block_end = ""
 [Root.renderer]
 layout = { join = "\n" }
 
+# ----- 注释节点（语句级，自然继承 block 缩进）-----
+[Comment]
+[Comment.parser]
+production = ["comment"]
+end_case = ["newline"]
+[Comment.parser.node]
+value = "$1.value"
+[Comment.renderer]
+layout = { ref = "value" }
+
 # ----- 模块体（Module 内部）-----
 [ModuleBlock]
 [ModuleBlock.parser]
