@@ -12,6 +12,10 @@ git config core.hooksPath .github/hooks/git
 
 ## 可用钩子
 
+### post-commit
+
+每次提交后自动更新 `session-summary.md` 中的日期和分支 SHA。
+
 ### commit-msg
 
 校验提交信息格式：
