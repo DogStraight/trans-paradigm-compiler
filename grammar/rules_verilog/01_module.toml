@@ -35,12 +35,12 @@ head = { line = [
         { soft = true },
         ")",
     ] } },
+    "(",
     { opt = { group = [
-        "(",
         { opt = { ref = "ports" } },
-        { soft = true },
-        ")",
-    ] } },
+        { opt = { group = [{ break = true }], ref = "ports" } },
+    ], ref = "ports" } },
+    ")",
     ";",
     { break = true },
 ] }
