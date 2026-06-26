@@ -38,7 +38,6 @@ head = { line = [
     { opt = { group = [
         "(",
         { opt = { ref = "ports" } },
-        { soft = true },
         ")",
     ] } },
     ";",
