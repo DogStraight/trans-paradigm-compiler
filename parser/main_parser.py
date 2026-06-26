@@ -89,7 +89,7 @@ class Parser:
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
-            if getattr(rule, "end_case") is not None
+            if getattr(rule, "end_case", [])
         ]
         self.rule_selector = RuleSelector(self.grammar_rules, self.statement_rule_names)
         self.skip_types = ["newline", "space.fold"]

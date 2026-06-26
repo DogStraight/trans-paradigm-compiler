@@ -118,7 +118,7 @@ def pipeline():
     parser.statement_rule_names = [
         name
         for name, rule in rules.items()
-        if getattr(rule, "end_case") is not None and name != "Expression"
+        if getattr(rule, "end_case", []) and name != "Expression"
     ]
     parser.rule_selector = RuleSelector(rules, parser.statement_rule_names)
     parser.atomic_rules = sorted(
