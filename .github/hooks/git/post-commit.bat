@@ -1,17 +1,12 @@
-#!/usr/bin/env pwsh
-# Post-commit hook — 更新 session-summary.md 的当前状态
-
-$summary = ".github/session-summary.md"
-if (-not (Test-Path $summary)) { exit 0 }
-
-$sha = git rev-parse --short HEAD
-$today = Get-Date -Format "yyyy-MM-dd"
-$content = Get-Content $summary -Raw
-
-# 更新分支行中的 SHA
-$content = $content -replace '(?<=-\s\*\*分支\*\*:\s`dev`（`)[^`]+', $sha
-# 更新标题日期
-$content = $content -replace '(?<=# Session Summary — )\S+', $today
-
-Set-Content $summary -Value $content -Encoding UTF8 -NoNewline
-exit 0
+@echo off
+REM Post-commit hook — update session-summary.md
+powershell -ExecutionPolicy Bypass -Command ^
+    $s = '.github/session-summary.md'; ^
+    if (-not (Test-Path $s)) { exit 0 }; ^
+    $sha = git rev-parse --short HEAD; ^
+    $today = Get-Date -Format 'yyyy-MM-dd'; ^
+    $c = Get-Content $s -Raw; ^
+    $c = $c -replace '(?<=Session Summary — )\S+', $today; ^
+    $c = $c -replace '(?<=`dev`（`)[^`]+', $sha; ^
+    Set-Content $s -Value $c -Encoding UTF8 -NoNewline; ^
+    exit 0
