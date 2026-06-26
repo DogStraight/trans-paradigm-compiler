@@ -1,0 +1,38 @@
+#!/bin/sh
+# Post-commit hook — 更新 session-summary.md 的当前状态
+
+SUMMARY=".github/session-summary.md"
+
+if [ ! -f "$SUMMARY" ]; then
+    exit 0
+fi
+
+# 获取当前 HEAD SHA
+NEW_SHA=$(git rev-parse --short HEAD)
+
+# 更新日期和 SHA（仅替换 "当前状态" 区块的行）
+# 匹配 "- **分支**: dev（*）" 和 "- **测试**: *"
+case "$(uname -s)" in
+    Linux*)   SED="sed -i";;
+    Darwin*)  SED="sed -i ''";;
+    CYGWIN*|MINGW*|MSYS*)
+        SED="sed -i"
+        # 在 Windows Bash (Git Bash) 下运行
+        ;;
+    *)
+        # 尝试 PowerShell 方式
+        powershell -Command "
+            \$path = '$SUMMARY'
+            \$content = Get-Content \$path -Raw
+            \$today = Get-Date -Format 'yyyy-MM-dd'
+            \$content = \$content -replace '(?<=-\s\*\*分支\*\*:\sdev\（)[^）]+', '$NEW_SHA'
+            \$content = \$content -replace '(?<=# Session Summary — )\S+', \$today
+            Set-Content \$path -Value \$content -Encoding UTF8 -NoNewline
+        "
+        exit 0
+        ;;
+esac
+
+# Unix 分支（非 Windows）
+$SED "s/- \*\*分支\*\*: dev（[^）]*）/- **分支**: dev（$NEW_SHA）/g" "$SUMMARY"
+$SED "s/# Session Summary — .*/# Session Summary — $(date +%F)/g" "$SUMMARY"

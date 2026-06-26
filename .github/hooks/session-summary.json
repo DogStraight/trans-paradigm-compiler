@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "powershell -ExecutionPolicy Bypass -File .github/hooks/scripts/load-summary.ps1",
+        "timeout": 10
+      }
+    ]
+  }
+}
