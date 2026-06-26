@@ -25,7 +25,7 @@ case "$(uname -s)" in
             \$path = '$SUMMARY'
             \$content = Get-Content \$path -Raw
             \$today = Get-Date -Format 'yyyy-MM-dd'
-            \$content = \$content -replace '(?<=-\s\*\*分支\*\*:\sdev\（)[^）]+', '$NEW_SHA'
+            \$content = \$content -replace '(?<=-\s\*\*分支\*\*:\s`dev`（`)[^`]+', '$NEW_SHA'
             \$content = \$content -replace '(?<=# Session Summary — )\S+', \$today
             Set-Content \$path -Value \$content -Encoding UTF8 -NoNewline
         "

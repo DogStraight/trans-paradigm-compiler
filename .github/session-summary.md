@@ -1,4 +1,4 @@
-# Session Summary — 2026-06-26 ~ 2026-06-27
+# Session Summary — 2026-06-27
 
 ## 完成清单
 
