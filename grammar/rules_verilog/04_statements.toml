@@ -592,7 +592,7 @@ production = ["@NamedPortConnect", "(symbol.base.comma,@NamedPortConnect)*"]
 [NamedPortList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
 [NamedPortList.renderer]
-layout = { join = ", ", nest = 2, items = "items" }
+layout = { join = ", ", items = "items" }
 
 [NamedPortConnect]
 [NamedPortConnect.parser]
