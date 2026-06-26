@@ -108,6 +108,10 @@ class Parser:
             key=lambda r: len(getattr(r, "production", [])),
             reverse=True,
         )
+
+        # inline comment 指纹匹配（解析后从源 token 流回溯）
+        self._inline_comments: list[dict] = []
+
         self._log_state("Parser initialized", mode="w")
 
     def _log_state(self, action: str, mode: str = "a") -> None:
@@ -136,6 +140,9 @@ class Parser:
 
     def parse(self, tokens: List[Token]) -> Optional[Node]:
         """解析器的入口：token 流 → AST"""
+        # 每次 parse 重置 inline comment 收集状态
+        self._inline_comments = []
+        self._parse_tokens = tokens  # 供指纹回溯用
         context = ParseContext(tokens)
         # 语义路径：Root 规则路径入栈
         context.sibling_counter["Root"] = 1
@@ -144,4 +151,60 @@ class Parser:
         context.path_stack.pop()
         # 保存 comment_table 供后续消费
         self._comment_table = dict(context.comment_table)
+        # 指纹定宽：从源 token 流回溯 + 最小唯一宽度
+        self._resolve_fingerprints()
         return block_node if block_node else None
+
+    @staticmethod
+    def _preceding_tokens(tokens: list[Token], idx: int, n: int = 8) -> list[str]:
+        """从源 token 流中回溯 idx 之前的 N 个非空白/注释 token 的内容"""
+        result: list[str] = []
+        while idx >= 0 and len(result) < n:
+            t = tokens[idx]
+            if t.type not in ("comment", "newline", "space.fold"):
+                result.insert(0, t.content)
+            idx -= 1
+        return result
+
+    def _resolve_fingerprints(self) -> None:
+        """从源 token 流回溯取指纹 + 动态窗缩小到最小无冲突宽度
+
+        指纹为 token 内容列表（不受渲染器空白变化影响）。
+        先按 (text, line) 去重消除回溯导致的重复收集。
+        """
+        if not self._inline_comments:
+            return
+
+        # 去重
+        seen_keys: set[tuple[str, int]] = set()
+        unique: list[dict] = []
+        for c in self._inline_comments:
+            key = (c["text"], c["line"])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique.append(c)
+        self._inline_comments = unique
+
+        # 从源 token 流回溯取指纹
+        tokens: list[Token] = getattr(self, "_parse_tokens", [])
+        for c in self._inline_comments:
+            c["tokens"] = self._preceding_tokens(tokens, c["token_index"])
+            del c["token_index"]
+
+        # 动态窗缩小到最小无冲突宽度（至少 2，避免单 token 过于泛化）
+        width = 2
+        while True:
+            seen: set[tuple[str, ...]] = set()
+            ok = True
+            for c in self._inline_comments:
+                fp = tuple(c["tokens"][-width:])
+                if fp in seen:
+                    ok = False
+                    break
+                seen.add(fp)
+            if ok:
+                break
+            width += 1
+        for c in self._inline_comments:
+            c["fingerprint"] = c["tokens"][-width:]
+            del c["tokens"]

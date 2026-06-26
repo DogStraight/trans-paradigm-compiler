@@ -53,6 +53,7 @@ def pipeline():
     if "--debug" in flags:
         debug = enable_ast_debug(True)
         print("🔍 调试模式已开启")
+    inline_comments_enable = "--inline-comments" in flags
 
     if args:
         arg = args[0].replace("ref_", "").replace(".v", "")
@@ -189,6 +190,14 @@ def pipeline():
     if renderer_enable:
         renderer = Renderer(rules_dir=RULES_DIR)
         content = renderer.render(ast)
+
+        # 7b. 可选：inline comment 指纹回注
+        if inline_comments_enable:
+            from renderer.inline_comment import inject_comments
+            ic = getattr(parser, "_inline_comments", None)
+            if ic:
+                print(f"💬 Inline comment 指纹回注: {len(ic)} 条")
+                content = inject_comments(content, ic)
 
         from datetime import datetime
 

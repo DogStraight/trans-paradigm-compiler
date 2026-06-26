@@ -54,6 +54,15 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
                 context.comment_table[path] += " " + nxt.content
             else:
                 context.comment_table[path] = nxt.content
+
+            # 指纹收集：记录 token 索引（解析后用源 token 流回溯取指纹）
+            self._inline_comments.append({
+                "token_index": context.token_pointer - 1,  # 刚消费的 token
+                "text": nxt.content,
+                "line": nxt.line,
+                "column": nxt.column,  # 源列号，用于精确定位
+            })
+
             context.advance_token()
         else:
             break
