@@ -152,6 +152,14 @@ def pipeline():
         json.dump(ast.dump(), f, indent=2)
     print(f"📋 AST 已保存 ({os.path.getsize(ast_json)} bytes)")
 
+    # 保存语义路径注释表
+    ct = getattr(parser, "_comment_table", None)
+    if ct:
+        cmt_path = os.path.join(ast_dir, stem.replace("ref_", "") + "_comments.json")
+        with open(cmt_path, "w", encoding="utf-8") as f:
+            json.dump(ct, f, indent=2, ensure_ascii=False)
+        print(f"💬 注释语义路径已保存 ({os.path.getsize(cmt_path)} bytes, {len(ct)} 条)")
+
     # 5. 语义分析（构建符号表，链接标识符到声明）
     #     核心职责：管理作用域 + 注册显式声明的符号
     #     高级服务（隐式声明、位宽计算等）在可选的 transform 插件中完成

@@ -17,6 +17,11 @@ class ParseContext:
         self.exc_type = None
         self.exc_tb = None
 
+        # 语义路径跟踪
+        self.sibling_counter: dict[str, int] = {}          # 规则名 → 自然序
+        self.path_stack: list[str] = []                     # 当前语义路径栈
+        self.comment_table: dict[str, str] = {}             # 语义路径 → 注释文本
+
     def __enter__(self):
         # 修复：进入with块时压入快照
         snapshot = self.create_snapshot()
@@ -50,6 +55,7 @@ class ParseContext:
             "current_node": copy.deepcopy(self.current_node),
             "current_rule": self.current_rule,
             "production_pointer": self.production_pointer,
+            "comment_table": dict(self.comment_table),
         }
         return snapshot
 
@@ -60,6 +66,7 @@ class ParseContext:
         self.current_node = snapshot["current_node"]
         self.current_rule = snapshot["current_rule"]
         self.production_pointer = snapshot["production_pointer"]
+        self.comment_table = snapshot["comment_table"]
 
     def update_current_node(self, node: Node):
         self.current_node = node

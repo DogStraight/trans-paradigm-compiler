@@ -100,7 +100,7 @@ def parse_block_body(
         if not context.has_more_tokens():
             break
 
-        # 行尾注释 → Comment 节点，不经过规则匹配（含后续空白行清理）
+        # 行尾注释 → Comment 节点，不经过规则匹配
         self._collect_line_comments(context, block_node)
         if not context.has_more_tokens():
             break

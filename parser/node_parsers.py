@@ -42,6 +42,22 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
     parsed_node = Node(token_type)
     parsed_node.add_attr("value", current_token.content)
     context.advance_token()
+
+    # 语义路径：消费并记录紧随当前 token 的 inline comment
+    # inline comment 不是行尾注释（后继不是 newline），需要跳过以不阻塞生产式匹配
+    while True:
+        nxt = context.peek_token(offset=0)
+        if nxt and nxt.type == "comment":
+            path = "/" + "/".join(context.path_stack) + f"/{token_type}/after"
+            if path in context.comment_table:
+                # 同一槽位多个 comment 按原序合并
+                context.comment_table[path] += " " + nxt.content
+            else:
+                context.comment_table[path] = nxt.content
+            context.advance_token()
+        else:
+            break
+
     self._log_state(f"普通token {token_type} 解析成功")
     return parsed_node
 

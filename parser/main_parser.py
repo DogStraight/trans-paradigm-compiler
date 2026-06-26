@@ -137,5 +137,11 @@ class Parser:
     def parse(self, tokens: List[Token]) -> Optional[Node]:
         """解析器的入口：token 流 → AST"""
         context = ParseContext(tokens)
+        # 语义路径：Root 规则路径入栈
+        context.sibling_counter["Root"] = 1
+        context.path_stack.append("Root[0]")
         block_node = self.parse_block(context, start_token="")
+        context.path_stack.pop()
+        # 保存 comment_table 供后续消费
+        self._comment_table = dict(context.comment_table)
         return block_node if block_node else None
