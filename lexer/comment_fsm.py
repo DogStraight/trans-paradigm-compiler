@@ -1,104 +1,87 @@
 """
-comment_fsm.py — 注释剥离有限状态机
+comment_fsm.py — 配置驱动的注释解析器
 
-将注释解析从主词法分析器中抽离，作为独立阶段。
-支持行注释 // 和块注释 /* */ ，注释边界符由 _token.toml 的 [comment] 段配置。
-
-用法:
-    token_def = {...}  # 从 _token.toml 加载的合并字典
-    result = CommentFSM.run(source_text, start_index, token_def)
-    if result:
-        content, end_pos = result  # content 为注释原文（不含行尾 \n）
+完全由 _token.toml 的 [comment] pairs 配置驱动：
+  pairs = [
+    ["//", "\\n", "line"],
+    ["/*", "*/", "block"],
+  ]
 """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
+
+
+class CommentRule:
+    """一种注释类型的匹配规则"""
+    def __init__(self, start: str, end: str, kind: str):
+        self.start = start        # 起始标记，如 "//"
+        self.end = end            # 结束标记，如 "\\n" 或 "*/"
+        self.kind = kind          # "line" | "block"
+        self.start_len = len(start)
+        self.end_len = len(end)
 
 
 class CommentFSM:
-    """基于 GenericFSM 模式的注释解析器"""
+    @staticmethod
+    def build_rules(token_define: dict) -> List[CommentRule]:
+        """从配置构建注释规则列表"""
+        pairs = token_define.get("comment", {}).get("pairs", [])
+        rules = []
+        for item in pairs:
+            if len(item) >= 3:
+                start, end, kind = item[0], item[1], item[2]
+            elif len(item) == 2:
+                start, end = item
+                kind = "line"
+            else:
+                continue
+            rules.append(CommentRule(start, end, kind))
+        # 按起始标记长度降序，避免短标记优先匹配（如 / 在 // 前）
+        rules.sort(key=lambda r: -r.start_len)
+        return rules
 
-    # 状态常量
-    INIT = 0           # 初始，等待边界符
-    SEEN_BOUNDARY = 1  # 已见一个边界符，判断是 // 还是 /*
-    LINE = 2           # 行注释中 // ...
-    BLOCK = 3          # 块注释中 /* ...
-    BLOCK_STAR = 4     # 块注释中遇到 *，准备闭合
+    @staticmethod
+    def get_start_patterns(token_define: dict) -> List[str]:
+        """获取所有注释起始标记，用于 lexer 预判断"""
+        rules = CommentFSM.build_rules(token_define)
+        return [r.start for r in rules]
 
     @staticmethod
     def run(
         text: str, start: int, token_define: dict
-    ) -> Optional[Tuple[str, int]]:
-        """尝试从 start 位置解析注释
-
-        Args:
-            text: 源文本
-            start: 当前解析位置
-            token_define: 合并后的 token 定义字典（含 [comment]）
+    ) -> Optional[Tuple[str, int, str]]:
+        """从 start 位置尝试匹配任意注释类型
 
         Returns:
-            (content, end_pos)  注释原文（不含行尾 \n）+ 结束位置（指向 \n 或注释后首字符）
-            None                当前位置不是注释
+            (content, end_pos, kind) — 注释内容、结束位置、类型
+            None — 当前位置不是注释
         """
-        # 获取注释边界符（默认为 "/"）
-        comment_cfg = token_define.get("comment", {})
-        boundaries = comment_cfg.get("boundary", "/")
-        # 支持多字符边界符列表或单个字符
-        if isinstance(boundaries, str):
-            boundaries = [boundaries]
+        rules = CommentFSM.build_rules(token_define)
+        for rule in rules:
+            # 检查是否以起始标记开头
+            if text[start:start + rule.start_len] != rule.start:
+                continue
 
-        if start >= len(text):
-            return None
-        if text[start] not in boundaries:
-            return None
+            pos = start + rule.start_len
+            content = text[start:pos]
 
-        # 启动 FSM
-        state = CommentFSM.SEEN_BOUNDARY
-        pos = start + 1
-        content = text[start]
-
-        while pos < len(text):
-            ch = text[pos]
-
-            if state == CommentFSM.SEEN_BOUNDARY:
-                if ch in boundaries:
-                    # // 行注释
-                    state = CommentFSM.LINE
-                    content += ch
+            if rule.kind == "line":
+                # 行注释：直到 \n 或文件末尾，不消费 \n
+                while pos < len(text) and text[pos] != "\n":
+                    content += text[pos]
                     pos += 1
-                elif ch == "*":
-                    # /* 块注释
-                    state = CommentFSM.BLOCK
-                    content += ch
-                    pos += 1
-                else:
-                    # 不是注释（单独的 / 不是注释边界）
-                    return None
+                return (content, pos, "line")
 
-            elif state == CommentFSM.LINE:
-                # 行注释：遇到 \n 即停止，不消费 \n，交由 lexer 主循环处理
-                if ch == "\n":
-                    break
-                content += ch
-                pos += 1
-
-            elif state == CommentFSM.BLOCK:
-                if ch == "*":
-                    state = CommentFSM.BLOCK_STAR
-                content += ch
-                pos += 1
-
-            elif state == CommentFSM.BLOCK_STAR:
-                if ch == "/":
-                    content += ch
+            elif rule.kind == "block":
+                # 块注释：直到结束标记
+                while pos < len(text):
+                    if text[pos:pos + rule.end_len] == rule.end:
+                        content += text[pos:pos + rule.end_len]
+                        pos += rule.end_len
+                        return (content, pos, "block")
+                    content += text[pos]
                     pos += 1
-                    break
-                elif ch == "*":
-                    content += ch
-                    pos += 1
-                    # 保持 BLOCK_STAR 状态
-                else:
-                    state = CommentFSM.BLOCK
-                    content += ch
-                    pos += 1
+                # 文件未闭合块注释
+                return (content, pos, "block")
 
-        return (content, pos)
+        return None

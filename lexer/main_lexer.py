@@ -183,15 +183,15 @@ class Lexer:
                 start_point += len(space_content)
                 continue
 
-            # comment (// or /*) — 使用 CommentFSM 解析
-            elif (lex_text[text_idx] in self.token_define.get("comment", {}).get("boundary", "/")
-                  and next_char in ("/", "*")):
+            # comment — 使用 CommentFSM 解析（完全配置驱动）
+            elif any(
+                lex_text[text_idx:text_idx + len(s)]
+                in (s,)
+                for s in CommentFSM.get_start_patterns(self.token_define)
+            ):
                 result = CommentFSM.run(lex_text, text_idx, self.token_define)
-                if result is None:
-                    # should not happen if condition matched, but safety check
-                    pass
-                else:
-                    comment_content, new_idx = result
+                if result is not None:
+                    comment_content, new_idx, kind = result
                     self._emit_pending_dedent(tokens)
                     current_token.set_type("comment")
                     current_token.set_content(comment_content)

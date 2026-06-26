@@ -1,5 +1,11 @@
 [comment]
-boundary = "/"
+# 注释类型定义: [起始标记, 结束标记, 类型]
+# line 类型: 行注释，结束于 newline
+# block 类型: 块注释，结束于结束标记
+pairs = [
+  ["//", "\n", "line"],
+  ["/*", "*/", "block"],
+]
 
 [symbol.extend]
 plus_range = "+:"
