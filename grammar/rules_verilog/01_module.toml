@@ -38,9 +38,11 @@ head = { line = [
     { opt = { group = [
         "(",
         { opt = { ref = "ports" } },
+        { soft = true },
         ")",
     ] } },
     ";",
+    { break = true },
 ] }
 body = { indent = true, source = "body" }
 tail = { text = "endmodule", break = 2 }
