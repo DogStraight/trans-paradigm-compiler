@@ -148,9 +148,10 @@ class RuleSelector:
         rule_names = self.start_token_map.get(token.type, [])
         if not rule_names:
             return []
-        # 按 statement_rule_names 排序
+        # 按 statement_rule_names 排序，不在列表中的规则排到最后
+        _ORDER_NOT_FOUND = len(self.statement_rule_names)
         order = {name: i for i, name in enumerate(self.statement_rule_names)}
-        rule_names.sort(key=lambda n: order.get(n, 9999))
+        rule_names.sort(key=lambda n: order.get(n, _ORDER_NOT_FOUND))
         # 名称 → 对象
         result = []
         for name in rule_names:
