@@ -9,9 +9,7 @@ import parser.pratt_parser as pratt_parser
 # 导入拆分后的模块方法
 from .attribute_binder import (
     bind_attributes,
-    extract_from_spec,
     try_inline_rule,
-    get_attr_by_path,
 )
 from .node_parsers import (
     parse_token,
@@ -29,7 +27,7 @@ from .production_matcher import (
     try_rule_productions,
 )
 from .end_case_checker import prepare_production, check_end_case
-from .atom_parser import parse_atom, try_pratt_rule
+from .atom_parser import try_pratt_rule
 from .block_parser import (
     parse_sentence,
     resolve_block_rule,
@@ -45,9 +43,7 @@ class Parser:
     # ── 从拆分模块导入的方法绑定 ──
     # attribute_binder
     _bind_attributes = bind_attributes
-    _extract_from_spec = extract_from_spec
     _try_inline_rule = try_inline_rule
-    _get_attr_by_path = staticmethod(get_attr_by_path)
 
     # node_parsers
     _parse_token = parse_token
@@ -69,7 +65,6 @@ class Parser:
     _check_end_case = check_end_case
 
     # atom_parser
-    _parse_atom = parse_atom
     _try_pratt_rule = try_pratt_rule
 
     # block_parser
@@ -86,20 +81,16 @@ class Parser:
         except FileNotFoundError:
             pass
         if FileManager.debug_log_file is not None:
-            self.debug_log_file = FileManager.get_full_path(
-                FileManager.debug_log_file
-            )
+            self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
         if rules_dir:
             self.operator_defs = pratt_parser.load_operator_defs(rules_dir)
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
-            if getattr(rule, "end_case", None)
+            if getattr(rule, "end_case") is not None
         ]
-        self.rule_selector = RuleSelector(
-            self.grammar_rules, self.statement_rule_names
-        )
-        self.skip_types = ["newline", "comment", "space.fold"]
+        self.rule_selector = RuleSelector(self.grammar_rules, self.statement_rule_names)
+        self.skip_types = ["newline", "space.fold"]
 
         if rules_dir:
             categories = pratt_parser.load_token_categories(rules_dir)
@@ -135,9 +126,7 @@ class Parser:
                 break
 
     @staticmethod
-    def _restore_current_node(
-        old_node: Optional[Node], context: ParseContext
-    ) -> None:
+    def _restore_current_node(old_node: Optional[Node], context: ParseContext) -> None:
         if old_node is None:
             context.current_node = None
         else:

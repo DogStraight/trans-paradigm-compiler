@@ -7,8 +7,17 @@ production feature 类型的递归解析。
 
 from typing import Optional, List
 from core.define import Node
-from core.err import _SequenceMatchError, _BranchMatchError
 from .parser_context import ParseContext
+
+
+class _SequenceMatchError(Exception):
+    """序列匹配失败时抛出的内部异常"""
+    pass
+
+
+class _BranchMatchError(Exception):
+    """分支匹配失败时抛出的内部异常"""
+    pass
 
 
 def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:

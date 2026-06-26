@@ -14,7 +14,7 @@ layout = { join = "\n" }
 [Comment]
 [Comment.parser]
 production = ["comment"]
-end_case = ["newline"]
+end_case = []
 [Comment.parser.node]
 value = "$1.value"
 [Comment.renderer]

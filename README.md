@@ -98,7 +98,7 @@ pyv_compiler/
 │   ├── rule_selector.py          # 规则选择器（token → 候选规则）
 │   └── feature_analyze.py        # 产生式预计算加速
 │
-├── renderer/                     # 渲染器（替代旧 CG + Formatter）
+├── renderer/                     # 渲染器
 │   ├── __init__.py
 │   ├── renderer.py               # 7 DSL 原语的 AST→文本引擎
 │   ├── normalizer.py             # AST 规范化（配置驱动）

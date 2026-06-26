@@ -1,6 +1,5 @@
 # lexer/main_lexer.py
 from core.define import Token
-from core.err import UnexpectedTokenError
 from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM
 from .lexer_utils import get_token_define_merged, get_indent_config
@@ -399,7 +398,7 @@ class Lexer:
     def refine_type(self, _token: Token) -> Token:
         # this method provide more refined token type #
         if _token.type == "unrecognized":
-            raise UnexpectedTokenError(f"Unexpected token: {_token.content} ")
+            raise ValueError(f"Unexpected token: {_token.content} ")
         if _token.type == "id":
             # 扁平映射表查找：覆盖 keyword / bracket / symbol 等字母形式
             full_type = self.full_token_map.get(_token.content)

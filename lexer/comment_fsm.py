@@ -8,7 +8,7 @@ comment_fsm.py — 注释剥离有限状态机
     token_def = {...}  # 从 _token.toml 加载的合并字典
     result = CommentFSM.run(source_text, start_index, token_def)
     if result:
-        content, end_pos = result  # content 包含注释原文 + 终止符
+        content, end_pos = result  # content 为注释原文（不含行尾 \n）
 """
 
 from typing import Optional, Tuple
@@ -36,7 +36,7 @@ class CommentFSM:
             token_define: 合并后的 token 定义字典（含 [comment]）
 
         Returns:
-            (content, end_pos)  注释原文 + 结束位置（不含终止符）
+            (content, end_pos)  注释原文（不含行尾 \n）+ 结束位置（指向 \n 或注释后首字符）
             None                当前位置不是注释
         """
         # 获取注释边界符（默认为 "/"）
@@ -75,9 +75,8 @@ class CommentFSM:
                     return None
 
             elif state == CommentFSM.LINE:
-                # 行注释：直到换行（不含 \n 本身）
+                # 行注释：遇到 \n 即停止，不消费 \n，交由 lexer 主循环处理
                 if ch == "\n":
-                    pos += 1
                     break
                 content += ch
                 pos += 1

@@ -105,7 +105,8 @@ class FileManager:
         return merged
 
 
-from .err import BracketMismatchError
+class BracketMismatchError(Exception):
+    pass
 
 
 def get_close_bracket_string(start_bracket: str, target_string: str) -> str:

@@ -1,3 +1,4 @@
+# parser/end_case_checker.py
 """
 end_case_checker.py — 生产式准备 & 结束符检查
 
@@ -5,7 +6,6 @@ end_case_checker.py — 生产式准备 & 结束符检查
 _check_end_case（检查结束符是否匹配）。
 """
 
-from typing import Optional
 from core.define import GrammarRule
 from .parser_context import ParseContext
 from .feature_analyze import analyze_production_features
@@ -14,7 +14,10 @@ from .feature_analyze import analyze_production_features
 def prepare_production(self, context: ParseContext, features: dict) -> bool:
     """为匹配产生式做准备：跳过空白/注释。返回 False 表示 token 不足。"""
     should_skip = True
-    if features.get("type") == "call":
+    
+    if features.get("type") == "token" and features.get("token_type") == "comment":
+        should_skip = False
+    elif features.get("type") == "call":
         ref_rule = self.grammar_rules.get(features["name"])
         if ref_rule and getattr(ref_rule, "block_start", None):
             should_skip = False

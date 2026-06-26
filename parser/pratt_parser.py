@@ -131,9 +131,6 @@ def parse_number_literal(token: Token) -> Node:
         return Node("Number", value=content)
 
 
-# parse_brace_expr 已由原子规则 ConcatExpr / ReplicateExpr 替代
-
-
 # ========== Pratt 解析核心 ==========
 def parse_expression(
     tokens: List[Token],
@@ -158,6 +155,12 @@ def parse_expression(
 
     # ---------- 前缀处理（先原子解析器，后内置前缀）----------
     node = None
+    # 跳过行内注释（不纳入表达式 AST）
+    while idx < len(tokens) and isinstance(tokens[idx], Token) and tokens[idx].type == "comment":
+        idx += 1
+    if idx >= len(tokens):
+        raise ValueError("表达式不完整")
+
     # 1. 原子解析器
     if atom_parser is not None:
         node, consumed = atom_parser(tokens, idx)
@@ -302,28 +305,6 @@ def parse_expression(
         raise ValueError("解析失败，未生成 AST 节点")
     return node, idx
 
-
-# ========== 对外接口 ==========
-def parse(tokens: List[Token], operator_defs: List[Tuple[int, Dict[str, Any]]]) -> Node:
-    """解析 token 列表，返回 AST 根节点"""
-    prefix_priority, prefix_attrs, infix_priority, infix_attrs = build_priority_maps(
-        operator_defs
-    )
-    max_infix_prio = max(infix_priority.values()) if infix_priority else 0
-    unary_prefix_rbp = max_infix_prio + 1
-
-    ast, _ = parse_expression(
-        tokens,
-        0,
-        0,
-        prefix_priority,
-        prefix_attrs,
-        infix_priority,
-        infix_attrs,
-        max_infix_prio,
-        unary_prefix_rbp,
-    )
-    return ast
 
 
 def parse_with_count(
