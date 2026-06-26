@@ -34,6 +34,7 @@ from .block_parser import (
     consume_start_token,
     parse_block_body,
     parse_block,
+    collect_line_comments,
 )
 
 
@@ -73,6 +74,7 @@ class Parser:
     _consume_start_token = consume_start_token
     _parse_block_body = parse_block_body
     parse_block = parse_block
+    _collect_line_comments = collect_line_comments
 
     def __init__(self, rules_dir: str | None = None) -> None:
         self.grammar_rules: Dict[str, GrammarRule] = {}
