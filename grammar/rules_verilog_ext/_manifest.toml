@@ -1,0 +1,13 @@
+# _manifest.toml — 增强语法配置入口
+#
+# 增强层的配置只会被 transform 阶段读取，
+# Parser / Renderer 不感知 transform 的存在。
+
+[ext]
+# 增强层依赖的核心语法规则目录
+base_rules = "rules_verilog"
+
+# 类型定义文件（_types.toml）
+types = "_types.toml"
+
+# 各增强规则的挂载点声明在规则自身的 [RuleName.inject] 中

@@ -76,8 +76,13 @@ class Parser:
     parse_block = parse_block
     _collect_line_comments = collect_line_comments
 
-    def __init__(self, rules_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        rules_dir: str | None = None,
+        cache_enabled: bool = True,
+    ) -> None:
         self.grammar_rules: Dict[str, GrammarRule] = {}
+        self._cache_enabled = cache_enabled
         try:
             self.grammar_rules = GrammarRulesRegister().rules_registration()
         except FileNotFoundError:
@@ -91,13 +96,19 @@ class Parser:
             for name, rule in self.grammar_rules.items()
             if getattr(rule, "end_case", [])
         ]
-        self.rule_selector = RuleSelector(self.grammar_rules, self.statement_rule_names)
-        self.skip_types = ["newline", "space.fold"]
-
         if rules_dir:
+            # 传入 rules_dir 时由调用方接管 RuleSelector，此处不创建缓存
+            self.skip_types = ["newline", "space.fold"]
             categories = pratt_parser.load_token_categories(rules_dir)
             if categories:
                 pratt_parser.install_token_classifier(categories)
+        else:
+            self.rule_selector = RuleSelector(
+                self.grammar_rules,
+                self.statement_rule_names,
+                cache_enabled=cache_enabled,
+            )
+            self.skip_types = ["newline", "space.fold"]
 
         self.atomic_rules: List[GrammarRule] = sorted(
             (

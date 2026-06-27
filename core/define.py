@@ -255,6 +255,60 @@ class GrammarRulesRegister:
             self.rules[rule_name] = rule
         return self.rules
 
+    def inject_productions(self, inject_config: dict[str, list[str]]) -> None:
+        """
+        将增强规则的 alternative 注入到语法规则的分支列表中。
+
+        两层注入：
+        1. 直接注入：将 alternative 追加到规则自身的 production 分支（原模式）
+        2. 传播注入：找到所有引用了本规则的 production，把 @RuleName 替换为
+           @TypedDecl|@AnsiPortDecl 形式，实现"先匹配增强语法，再降级原始语法"
+
+        inject_config: { "RuleName": ["@ExtRule1", "@ExtRule2"] }
+        """
+        # ── 第一层：修改规则自身 production ──
+        for rule_name, alternatives in inject_config.items():
+            if rule_name not in self.rules:
+                print(f"⚠️ [inject] 规则 {rule_name} 不存在，跳过注入")
+                continue
+            rule = self.rules[rule_name]
+            prods = list(getattr(rule, "production", []))
+            if not prods:
+                continue
+            # 将 alternative 作为分支追加到第一个 production 元素
+            first_prod = prods[0]
+            if isinstance(first_prod, str):
+                for alt in alternatives:
+                    if "|" in first_prod:
+                        first_prod = f"{alt}|{first_prod}"  # 前置（优先匹配）
+                    else:
+                        first_prod += f"|{alt}"
+                prods[0] = first_prod
+                object.__setattr__(rule, "production", tuple(prods))
+
+        # ── 第二层：传播到引用该规则的所有 production ──
+        for rule_name, alternatives in inject_config.items():
+            target_ref = f"@{rule_name}"
+            for other_name, other_rule in self.rules.items():
+                if other_name in inject_config:
+                    continue  # 自身已处理
+                other_prods = list(getattr(other_rule, "production", []))
+                changed = False
+                for i, prod in enumerate(other_prods):
+                    if not isinstance(prod, str):
+                        continue
+                    for alt in alternatives:
+                        # 将 @RuleName 替换为 (@ExtRule|@RuleName)
+                        # 括号保证 | 分支不会与相邻元素意外结合（如 (symbol.base.comma,...)* 中的逗号）
+                        replacement = f"({alt}|{target_ref})"
+                        if target_ref in prod:
+                            prod = prod.replace(target_ref, replacement)
+                            changed = True
+                    other_prods[i] = prod
+                if changed:
+                    object.__setattr__(other_rule, "production", tuple(other_prods))
+                    print(f"  ↳ [inject] 传播到 {other_name}: {other_prods}")
+
 
 class Node:
     def __init__(self, node_name: str, **kwargs) -> None:

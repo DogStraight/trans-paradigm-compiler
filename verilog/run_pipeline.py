@@ -24,7 +24,7 @@ if project_root not in sys.path:
 
 from lexer import Lexer
 from parser import Parser
-from core.define import GrammarRulesRegister
+from core.define import GrammarRulesRegister, FileManager
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
@@ -88,6 +88,7 @@ def pipeline():
     print(f"📄 源文件: {src_file}")
 
     RULES_DIR = "pyv_compiler/grammar/rules_verilog"
+    EXT_DIR = "pyv_compiler/grammar/rules_verilog_ext"
 
     # 2. 词法分析
     lexer = Lexer(rules_dir=RULES_DIR)
@@ -103,9 +104,31 @@ def pipeline():
             f.write(f"{token.column},{token.line}:{token.type} {token.content}\n")
     print(f"🔤 Token 数: {len(tokens)}")
 
-    # 3. 语法分析（使用 Verilog 规则）
+    # 3. 语法分析（使用 Verilog 规则 + 增强语法）
     register = GrammarRulesRegister()
     rules = register.rules_registration(RULES_DIR)
+    # 加载增强语法规则
+    from core.define import FileManager
+    ext_rules = {}
+    ext_dir_full = FileManager.get_full_path(EXT_DIR)
+    if os.path.isdir(ext_dir_full):
+        ext_register = GrammarRulesRegister()
+        ext_rules = ext_register.rules_registration(EXT_DIR)
+        # 合并到 register.rules，保证 inject 时能找到核心规则
+        register.rules.update(ext_rules)
+        rules.update(ext_rules)
+
+        # 从增强语法规则的自声明 [RuleName.inject] 构建注入配置
+        inject_cfg = {}
+        for rname, rrule in ext_rules.items():
+            inj = getattr(rrule, "inject", None)
+            if inj and isinstance(inj, dict):
+                targets = inj.get("targets", [])
+                if targets:
+                    for t in targets:
+                        inject_cfg.setdefault(t, []).append(f"@{rname}")
+        if inject_cfg:
+            register.inject_productions(inject_cfg)
 
     # 设定起始 token 缓存路径（避免每次重建）
     cache_dir = os.path.join(src_dir, ".cache")
@@ -114,7 +137,7 @@ def pipeline():
 
     set_default_cache_path(cache_path)
 
-    parser = Parser(rules_dir=RULES_DIR)
+    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False)
     parser.grammar_rules = rules
     parser.statement_rule_names = [
         name

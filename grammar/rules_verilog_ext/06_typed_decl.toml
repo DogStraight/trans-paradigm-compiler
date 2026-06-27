@@ -1,0 +1,49 @@
+# ===== 增强语法：类型化声明 =====
+#
+# spi.master spi_io;
+#   ↓ transform 展开
+# output spi_io_clk;
+# output spi_io_mosi;
+# input  spi_io_miso;
+# output spi_io_cs;
+
+# 挂载点：注入到核心语法规则
+[TypedDecl.inject]
+targets = ["AnsiPortDecl", "ModuleItem"]
+
+[TypeRef]
+[TypeRef.parser]
+production = ["id", "symbol.base.dot", "id"]
+inline = true
+[TypeRef.parser.node]
+group = "$1"
+role = "$3"
+[TypeRef.renderer]
+layout = { line = [{ ref = "group" }, ".", { ref = "role" }] }
+
+[TypedDecl]
+[TypedDecl.parser]
+production = [
+    "@TypeRef",
+    "id",
+]
+end_case = ["newline", "symbol.base.semicolon", "symbol.base.comma", "bracket.r_parentheses"]
+[TypedDecl.parser.node]
+type_ref = "$1"
+instance_name = "$2"
+
+# analyzer：收集对此符号的所有引用（供 transform 引用替换用）
+[TypedDecl.analyzer]
+symbol = { kind = "typed_port", name_attr = "instance_name" }
+ref_collect = true
+
+# transform：展开为 WireDecl 列表
+[TypedDecl.transform]
+kind = "expand"
+source = { ref = "{type_ref.group}.{type_ref.role}", table = "type" }
+foreach = "signals"
+[TypedDecl.transform.output]
+node = "WireDecl"
+[TypedDecl.transform.output.attrs]
+direction = "{signal.direction}"
+name = "{instance_name}_{signal.name}"

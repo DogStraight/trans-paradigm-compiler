@@ -124,6 +124,7 @@ class RuleSelector:
         grammar_rules: Dict[str, GrammarRule],
         statement_rule_names: List[str],
         cache_path: Optional[str] = None,
+        cache_enabled: bool = True,
     ):
         self.grammar_rules = grammar_rules
         self.statement_rule_names = statement_rule_names
@@ -131,14 +132,17 @@ class RuleSelector:
         self._names_to_rules: Optional[Dict[str, GrammarRule]] = None
 
         # 尝试从缓存加载
-        path = cache_path or _DEFAULT_CACHE_PATH
-        loaded = load_token_map(path) if path else None
-        if loaded:
-            self.start_token_map = loaded
-        else:
-            self.start_token_map = build_start_token_map_names(
-                grammar_rules, statement_rule_names
-            )
+        if cache_enabled:
+            path = cache_path or _DEFAULT_CACHE_PATH
+            loaded = load_token_map(path) if path else None
+            if loaded:
+                self.start_token_map = loaded
+                return
+        self.start_token_map = build_start_token_map_names(
+            grammar_rules, statement_rule_names
+        )
+        if cache_enabled:
+            path = cache_path or _DEFAULT_CACHE_PATH
             if path:
                 save_token_map(self.start_token_map, path)
 
