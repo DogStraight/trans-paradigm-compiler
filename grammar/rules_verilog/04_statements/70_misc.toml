@@ -1,0 +1,36 @@
+# ===== 子程序调用 & 空语句 & Generate 块 =====
+
+[SubroutineCall]
+[SubroutineCall.parser]
+production = [
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[SubroutineCall.parser.node]
+callee = "$1"
+args = "$3"
+[SubroutineCall.renderer]
+layout = { line = [{ ref = "callee" }, "(", { ref = "args" }, ")", ";"] }
+
+[NullStmt]
+[NullStmt.parser]
+production = ["symbol.base.semicolon"]
+end_case = ["newline"]
+[NullStmt.parser.node]
+[NullStmt.renderer]
+layout = ";"
+
+[GenerateBlock]
+[GenerateBlock.parser]
+production = ["keyword.generate", "@ModuleBlock", "keyword.endgenerate"]
+end_case = ["keyword.endgenerate"]
+[GenerateBlock.parser.node]
+body = "$2"
+[GenerateBlock.renderer]
+head = "generate"
+body = { indent = true, source = "body" }
+tail = { text = "endgenerate", break = 2 }

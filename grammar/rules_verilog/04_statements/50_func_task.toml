@@ -1,0 +1,183 @@
+# ===== 函数 & 任务声明 =====
+
+[FuncDecl]
+[FuncDecl.parser]
+production = ["@FuncDeclANSI|@FuncDeclOld"]
+inline = true
+[FuncDecl.parser.node]
+body = "$1"
+
+[FuncDeclANSI]
+[FuncDeclANSI.parser]
+production = [
+    "keyword.function",
+    "(keyword.automatic|keyword.static)?",
+    "keyword.signed?",
+    "@Range?",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@TaskPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@TaskBlock",
+    "keyword.endfunction",
+]
+end_case = ["keyword.endfunction"]
+[FuncDeclANSI.parser.node]
+func_name = "$5"
+body = "$10"
+automatic = "$2"
+is_signed = "$3"
+func_range = "$4"
+ports = "$7"
+
+[FuncDeclANSI.analyzer]
+scope = { name_attr = "func_name", kind = "function" }
+
+[FuncDeclANSI.renderer]
+head = { line = [
+    "function ",
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
+    { opt = { line = [
+        { ref = "is_signed" },
+        " ",
+    ] } },
+    { opt = { group = [
+        "[",
+        { ref = "func_range" },
+        "] ",
+    ] } },
+    { ref = "func_name" },
+    "(",
+    { ref = "ports" },
+    ")",
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endfunction", break = 2 }
+
+[FuncDeclOld]
+[FuncDeclOld.parser]
+production = [
+    "keyword.function",
+    "(keyword.automatic|keyword.static)?",
+    "keyword.signed?",
+    "@Range?",
+    "@Identifier",
+    "symbol.base.semicolon",
+    "@TaskBlock",
+    "keyword.endfunction",
+]
+end_case = ["keyword.endfunction", "newline"]
+[FuncDeclOld.parser.node]
+func_name = "$5"
+body = "$7"
+automatic = "$2"
+is_signed = "$3"
+func_range = "$4"
+
+[FuncDeclOld.analyzer]
+scope = { name_attr = "func_name", kind = "function" }
+
+[FuncDeclOld.renderer]
+head = { line = [
+    "function ",
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
+    { opt = { line = [
+        { ref = "is_signed" },
+        " ",
+    ] } },
+    { opt = { group = [
+        "[",
+        { ref = "func_range" },
+        "] ",
+    ] } },
+    { ref = "func_name" },
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endfunction", break = 2 }
+
+[TaskDecl]
+[TaskDecl.parser]
+production = ["@TaskDeclANSI|@TaskDeclOld"]
+inline = true
+[TaskDecl.parser.node]
+body = "$1"
+
+[TaskDeclANSI]
+[TaskDeclANSI.parser]
+production = [
+    "keyword.task",
+    "(keyword.automatic|keyword.static)?",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@TaskPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@TaskBlock",
+    "keyword.endtask",
+]
+end_case = ["keyword.endtask"]
+[TaskDeclANSI.parser.node]
+task_name = "$3"
+body = "$8"
+automatic = "$2"
+ports = "$5"
+
+[TaskDeclANSI.analyzer]
+scope = { name_attr = "task_name", kind = "task" }
+
+[TaskDeclANSI.renderer]
+head = { line = [
+    "task ",
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
+    { ref = "task_name" },
+    "(",
+    { ref = "ports" },
+    ")",
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endtask", break = 2 }
+
+[TaskDeclOld]
+[TaskDeclOld.parser]
+production = [
+    "keyword.task",
+    "(keyword.automatic|keyword.static)?",
+    "@Identifier",
+    "symbol.base.semicolon",
+    "@TaskBlock",
+    "keyword.endtask",
+]
+end_case = ["keyword.endtask"]
+[TaskDeclOld.parser.node]
+task_name = "$3"
+body = "$5"
+automatic = "$2"
+
+[TaskDeclOld.analyzer]
+scope = { name_attr = "task_name", kind = "task" }
+
+[TaskDeclOld.renderer]
+head = { line = [
+    "task ",
+    { opt = { line = [
+        { ref = "automatic" },
+        " ",
+    ] } },
+    { ref = "task_name" },
+    ";",
+] }
+body = { indent = true, source = "body" }
+tail = { text = "endtask", break = 2 }

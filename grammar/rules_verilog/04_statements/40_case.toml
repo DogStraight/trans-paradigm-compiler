@@ -1,0 +1,74 @@
+# ===== case 语句 =====
+
+[CaseKeyword]
+[CaseKeyword.parser]
+production = ["keyword.case|keyword.casex|keyword.casez"]
+[CaseKeyword.parser.node]
+value = "$1"
+[CaseKeyword.renderer]
+layout = { ref = "value" }
+
+[CaseStatement]
+[CaseStatement.parser]
+production = [
+    "@CaseKeyword",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@CaseItemList",
+    "keyword.endcase",
+]
+end_case = ["keyword.endcase", "keyword.end", "newline"]
+[CaseStatement.parser.node]
+case_type = "$1"
+expr = "$3"
+items = "$5"
+[CaseStatement.renderer]
+head = { line = [{ ref = "case_type" }, " (", { ref = "expr" }, ")"] }
+body = { indent = true, source = "items" }
+tail = { text = "endcase", break = 1 }
+
+[CaseItemList]
+[CaseItemList.parser]
+production = ["@CaseItem|@DefaultItem", "(@CaseItem|@DefaultItem)*"]
+[CaseItemList.parser.node]
+items = ["$1", "$2.items"]
+[CaseItemList.renderer]
+layout = { join = "\n", items = "items" }
+
+[CaseItem]
+[CaseItem.parser]
+production = [
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+    "symbol.base.colon",
+    "@StatementOrNull",
+]
+[CaseItem.parser.node]
+values = ["$1", "$2.items[*].sub_node[1]"]
+stmt = "$4"
+[CaseItem.renderer]
+layout = { line = [{ join = ", ", items = "values" }, ": ", { ref = "stmt" }] }
+
+[DefaultItem]
+[DefaultItem.parser]
+production = ["keyword.default", "symbol.base.colon?", "@StatementOrNull"]
+[DefaultItem.parser.node]
+colon = "$2"
+stmt = "$3"
+[DefaultItem.renderer]
+layout = { line = [
+    "default",
+    { opt = { ref = "colon" } },
+    " ",
+    { ref = "stmt" },
+] }
+
+[StatementOrNull]
+[StatementOrNull.parser]
+production = ["@Statement|symbol.base.semicolon"]
+inline = true
+[StatementOrNull.parser.node]
+stmt = "$1"
+[StatementOrNull.renderer]
+layout = { ref = "stmt" }

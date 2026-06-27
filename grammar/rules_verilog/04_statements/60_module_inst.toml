@@ -1,0 +1,102 @@
+# ===== 模块实例化 =====
+
+[ModuleInst]
+[ModuleInst.parser]
+production = [
+    "@Identifier",
+    "@ParamOverride?",
+    "@Identifier",
+    "@PortConnection",
+]
+end_case = ["newline"]
+[ModuleInst.parser.node]
+module_name = "$1"
+params = "$2"
+inst_name = "$3"
+ports = "$4.ports"
+[ModuleInst.analyzer]
+symbol = { kind = "module_instance", name_attr = "inst_name" }
+[ModuleInst.renderer]
+head = { line = [
+    { ref = "module_name" },
+    { opt = { group = [
+        " ",
+        { ref = "params" },
+    ] } },
+    " ",
+    { ref = "inst_name" },
+    " (",
+] }
+body = { indent = true, items = ["ports"] }
+tail = { text = ");", break = 2 }
+
+[ParamOverride]
+[ParamOverride.parser]
+production = [
+    "symbol.base.pound",
+    "bracket.l_parentheses",
+    "@ParamOverrideList?",
+    "bracket.r_parentheses",
+]
+[ParamOverride.parser.node]
+params = "$3"
+[ParamOverride.renderer]
+head = { line = ["#(", { ref = "params" }, ")"] }
+
+[ParamOverrideList]
+[ParamOverrideList.parser]
+production = ["@NamedParamOverride", "(symbol.base.comma,@NamedParamOverride)*"]
+[ParamOverrideList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[ParamOverrideList.renderer]
+layout = { join = ", ", nest = 1, items = "items" }
+
+[NamedParamOverride]
+[NamedParamOverride.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+[NamedParamOverride.parser.node]
+param_name = "$2"
+value = "$4"
+[NamedParamOverride.renderer]
+layout = { line = [".", { ref = "param_name" }, "(", { ref = "value" }, ")"] }
+
+[PortConnection]
+[PortConnection.parser]
+production = [
+    "bracket.l_parentheses",
+    "@NamedPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[PortConnection.parser.node]
+ports = "$2"
+
+[NamedPortList]
+[NamedPortList.parser]
+production = ["@NamedPortConnect", "(symbol.base.comma,@NamedPortConnect)*"]
+[NamedPortList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[NamedPortList.renderer]
+layout = { join = ", ", items = "items" }
+
+[NamedPortConnect]
+[NamedPortConnect.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+[NamedPortConnect.parser.node]
+port_name = "$2"
+value = "$4"
+[NamedPortConnect.renderer]
+layout = { line = [".", { ref = "port_name" }, "(", { ref = "value" }, ")"] }

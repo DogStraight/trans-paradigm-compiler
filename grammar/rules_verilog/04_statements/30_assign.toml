@@ -1,0 +1,53 @@
+# ===== 过程赋值 & 连续赋值 =====
+
+[NonBlockingAssign]
+[NonBlockingAssign.parser]
+production = [
+    "@PrimaryExpr",
+    "symbol.extend.lesser_equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[NonBlockingAssign.parser.node]
+target = "$1"
+value = "$3"
+[NonBlockingAssign.renderer]
+layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
+
+[BlockingAssign]
+[BlockingAssign.parser]
+production = [
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[BlockingAssign.parser.node]
+target = "$1"
+value = "$3"
+[BlockingAssign.renderer]
+layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
+
+[AssignStatement]
+[AssignStatement.parser]
+production = [
+    "keyword.assign",
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = ["newline"]
+[AssignStatement.parser.node]
+target = "$2"
+value = "$4"
+[AssignStatement.renderer]
+layout = { line = [
+    "assign ",
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+    ";",
+] }
