@@ -2,7 +2,7 @@
 from core.define import Token
 from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM
-from .lexer_utils import get_token_define_merged, get_indent_config
+from .lexer_utils import get_token_define_merged
 from .comment_fsm import CommentFSM
 
 
@@ -16,12 +16,11 @@ class Lexer:
     ) -> None:
         if rules_dir:
             token_define_dict = get_token_define_merged(rules_dir)
-            self.indent_enable, self.indent_level = (
-                get_indent_config(rules_dir).get("indent_enable", False),
-                get_indent_config(rules_dir).get("indent_level", 4),
-            )
         else:
             token_define_dict = get_token_define()
+        # indent 配置已合并进 token_define_dict（来自 base/_lexer.toml）
+        self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
+        self.indent_level = token_define_dict.get("indent", {}).get("level", 4)
         self.indent_deep = 0
         self.token_define = token_define_dict
         self.blank: list = list(token_define_dict.get("space", {}).values()) + list(

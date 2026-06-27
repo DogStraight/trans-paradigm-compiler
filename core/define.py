@@ -28,10 +28,10 @@ class FileManager:
     _base_dir: str = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
-    rules_file: str = "pyv_compiler/grammar/rules.toml"
+    rules_file: str = "pyv_compiler/grammar/rules_verilog/base/token.toml"
     rules_dir: str = "pyv_compiler/grammar/rules_verilog"
-    token_define_file: str = "pyv_compiler/grammar/token.toml"
-    lookup_file: str = "pyv_compiler/grammar/production_lookup.toml"
+    token_define_file: str = "pyv_compiler/grammar/rules_verilog/base/token.toml"
+    lookup_file: str = "pyv_compiler/grammar/rules_verilog/base/production_lookup.toml"
 
     cg_rules_dir: str = "pyv_compiler/grammar/cg_rules"
     debug_log_file: str | None = "pyv_compiler/parser_debug.log"

@@ -1,0 +1,21 @@
+# _lexer.toml — 词法阶段配置
+#
+# 定义注释解析规则、缩进控制、以及 token 分类器。
+# 语言特有覆盖在 {lang}/_token.toml 中。
+
+[comment]
+pairs = [["//", "\n", "line"], ["/*", "*/", "block"]]
+
+[indent]
+enable = false
+level = 4
+
+[token_category]
+# 字面量/操作符分类（用于 Pratt 解析器的 token 识别）
+# match 策略: exact = 精确匹配, prefix = 前缀匹配
+number = { match = "exact", types = ["literal.number"] }
+string = { match = "exact", types = ["literal.string"] }
+bool = { match = "exact", types = ["literal.bool_true", "literal.bool_false"] }
+identifier = { match = "prefix", types = ["id", "id."] }
+operator = { match = "prefix", types = ["symbol.base.", "symbol.extend."] }
+none = { match = "exact", types = ["literal.none"] }

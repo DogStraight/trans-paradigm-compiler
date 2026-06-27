@@ -37,7 +37,10 @@ def load_layouts(rules_dir: str, layouts: dict) -> None:
 
 
 def load_style(rules_dir: str) -> dict:
-    """加载风格配置，返回 {'indent_str': str, 'max_inline': int, 'children_field': str}"""
+    """加载风格配置：base/_style.toml 为基础，{lang}/_style.toml 可选覆盖
+
+    返回 {'indent_str': str, 'max_inline': int, 'children_field': str}
+    """
     from core.define import FileManager
 
     result = {
@@ -46,27 +49,31 @@ def load_style(rules_dir: str) -> dict:
         "children_field": "sub_node",
     }
 
-    base = FileManager.get_full_path(rules_dir)
-    if not os.path.isdir(base):
-        return result
+    search_dirs = [
+        os.path.join(rules_dir, "base"),   # base/_style.toml 优先
+        rules_dir,                         # 语言特有 _style.toml 覆盖
+    ]
 
-    for fname in ("_style.toml", "_formatter.toml"):
-        fpath = os.path.join(base, fname)
-        if os.path.isfile(fpath):
-            with open(fpath, "rb") as f:
-                data = tomllib.load(f)
-            style = data.get("style", {})
-            if "indent" in style:
-                val = style["indent"]
-                if isinstance(val, int):
-                    result["indent_str"] = " " * val
-                else:
-                    result["indent_str"] = val
-            if "max_inline" in style:
-                result["max_inline"] = style["max_inline"]
-            if "children_field" in style:
-                result["children_field"] = style["children_field"]
-            return result  # 优先找到哪个用哪个
+    for search_dir in search_dirs:
+        base_path = FileManager.get_full_path(search_dir)
+        if not os.path.isdir(base_path):
+            continue
+        for fname in ("_style.toml", "_formatter.toml"):
+            fpath = os.path.join(base_path, fname)
+            if os.path.isfile(fpath):
+                with open(fpath, "rb") as f:
+                    data = tomllib.load(f)
+                style = data.get("style", {})
+                if "indent" in style:
+                    val = style["indent"]
+                    if isinstance(val, int):
+                        result["indent_str"] = " " * val
+                    else:
+                        result["indent_str"] = val
+                if "max_inline" in style:
+                    result["max_inline"] = style["max_inline"]
+                if "children_field" in style:
+                    result["children_field"] = style["children_field"]
 
     return result
 
