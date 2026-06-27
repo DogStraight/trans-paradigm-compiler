@@ -11,18 +11,6 @@
 [TypedDecl.inject]
 targets = ["AnsiPortDecl", "ModuleItem"]
 
-# ANSI 端口声明替换为 SimpleTail（无 DeclaratorList 逗号重复）
-# SV 标准中 ANSI 端口列表的每个端口只声明一个信号名，
-# 逗号只出现在 port_list 级别，不出现在 apsi_port 内部。
-# 修复前：input wire rstn, spi.master spi_io → DeclaratorList 吃掉 spi
-# 修复后：@Declarator 只匹配 rstn，, spi.master spi_io 由外层 PortList 处理
-[TypedDecl.inject.replace]
-AnsiInputDecl = { old = "@PortTail", new = "@SimpleTail" }
-AnsiOutputDecl = { old = "@PortTail", new = "@SimpleTail" }
-AnsiInoutDecl = { old = "@PortTail", new = "@SimpleTail" }
-# TaskAnsiInputDecl 的 end_case 补上 ; — 函数体中的端口声明以 ; 结束
-TaskAnsiInputDecl = { old = "end_case = [\"symbol.base.comma\", \"bracket.r_parentheses\", \"newline\"]", new = "end_case = [\"symbol.base.comma\", \"bracket.r_parentheses\", \"newline\", \"symbol.base.semicolon\"]" }
-
 [TypeRef]
 [TypeRef.parser]
 production = ["id", "symbol.base.dot", "id"]
