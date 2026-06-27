@@ -1,0 +1,170 @@
+# ============================================================================
+# Verilog 语法规则 — 端口与声明（组合复用）
+# ============================================================================
+
+[PortList]
+[PortList.parser]
+production = ["@AnsiPortDecl", "(symbol.base.comma,@AnsiPortDecl)*"]
+[PortList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[PortList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+
+[TaskPortList]
+[TaskPortList.parser]
+production = ["@TaskAnsiPortDecl", "(symbol.base.comma,@TaskAnsiPortDecl)*"]
+[TaskPortList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[TaskPortList.renderer]
+layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+
+[TaskAnsiPortDecl]
+[TaskAnsiPortDecl.parser]
+production = ["@TaskAnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl"]
+inline = true
+[TaskAnsiPortDecl.parser.node]
+decl = "$1"
+[TaskAnsiPortDecl.renderer]
+layout = { ref = "decl" }
+
+[TaskAnsiInputDecl]
+[TaskAnsiInputDecl.parser]
+production = ["keyword.input", "@PortTail"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+[TaskAnsiInputDecl.parser.node]
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+[TaskAnsiInputDecl.analyzer]
+symbol = { kind = "port", name_attr = "items.name" }
+[TaskAnsiInputDecl.renderer]
+layout = { line = [
+    "input",
+    { opt = { group = [
+        " ",
+        { ref = "port_type" },
+    ] } },
+    { opt = { group = [
+        " ",
+        { ref = "is_signed" },
+    ] } },
+    { opt = { group = [
+        " [",
+        { ref = "packed_range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "items" },
+] }
+
+[AnsiPortDecl]
+[AnsiPortDecl.parser]
+production = ["@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl"]
+inline = true
+[AnsiPortDecl.parser.node]
+decl = "$1"
+[AnsiPortDecl.renderer]
+layout = { ref = "decl" }
+
+[AnsiInputDecl]
+[AnsiInputDecl.parser]
+production = ["keyword.input", "@PortTail"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+[AnsiInputDecl.parser.node]
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+[AnsiInputDecl.analyzer]
+symbol = { kind = "port", name_attr = "items.name" }
+[AnsiInputDecl.renderer]
+layout = { line = [
+    "input",
+    { opt = { group = [
+        " ",
+        { ref = "port_type" },
+    ] } },
+    { opt = { group = [
+        " ",
+        { ref = "is_signed" },
+    ] } },
+    { opt = { group = [
+        " [",
+        { ref = "packed_range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "items" },
+] }
+
+[AnsiOutputDecl]
+[AnsiOutputDecl.parser]
+production = ["keyword.output", "@PortTail"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+[AnsiOutputDecl.parser.node]
+direction = "output"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+[AnsiOutputDecl.analyzer]
+symbol = { kind = "port", name_attr = "items.name" }
+[AnsiOutputDecl.renderer]
+layout = { line = [
+    "output",
+    { opt = { group = [
+        " ",
+        { ref = "port_type" },
+    ] } },
+    { opt = { group = [
+        " ",
+        { ref = "is_signed" },
+    ] } },
+    { opt = { group = [
+        " [",
+        { ref = "packed_range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "items" },
+] }
+
+[AnsiInoutDecl]
+[AnsiInoutDecl.parser]
+production = ["keyword.inout", "@PortTail"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+[AnsiInoutDecl.parser.node]
+direction = "inout"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+[AnsiInoutDecl.analyzer]
+symbol = { kind = "port", name_attr = "items.name" }
+[AnsiInoutDecl.renderer]
+layout = { line = [
+    "inout",
+    { opt = { group = [
+        " ",
+        { ref = "port_type" },
+    ] } },
+    { opt = { group = [
+        " ",
+        { ref = "is_signed" },
+    ] } },
+    { opt = { group = [
+        " [",
+        { ref = "packed_range" },
+        "]",
+    ] } },
+    " ",
+    { ref = "items" },
+] }
+
+# ============================================================================
+# 模块旧风格端口（体内，带分号）—— input/inout 不允许 reg
+# ============================================================================
+
