@@ -313,8 +313,10 @@ class GrammarRulesRegister:
         self, replace_config: dict[str, dict[str, str]]
     ) -> None:
         """
-        替换指定规则的 production 元素中匹配的字符串。
+        替换指定规则的 production 或 end_case 中匹配的字符串。
         replace_config: { "RuleName": { "old": "目标字符串", "new": "新字符串" } }
+        若 old 以 "end_case = " 为前缀，则匹配并替换 end_case 属性，
+        否则匹配并替换 production 元素。
         """
         for rule_name, spec in replace_config.items():
             if rule_name not in self.rules:
@@ -325,15 +327,32 @@ class GrammarRulesRegister:
             new_str = spec.get("new", "")
             if not old_str:
                 continue
-            prods = list(getattr(rule, "production", []))
-            changed = False
-            for i, prod in enumerate(prods):
-                if isinstance(prod, str) and old_str in prod:
-                    prods[i] = prod.replace(old_str, new_str)
-                    changed = True
-            if changed:
-                object.__setattr__(rule, "production", tuple(prods))
-                print(f"  ↳ [inject/replace] {rule_name}: {prods}")
+
+            # 判断替换目标：end_case 还是 production
+            ec_prefix = 'end_case = '
+            if old_str.startswith(ec_prefix):
+                old_ec = old_str[len(ec_prefix):]
+                new_ec = new_str[len(ec_prefix):]
+                # end_case 是列表，序列化为字符串比较
+                import json as _json
+                current = list(getattr(rule, "end_case", []))
+                old_list = _json.loads(old_ec)
+                if current == old_list:
+                    new_list = _json.loads(new_ec)
+                    object.__setattr__(rule, "end_case", tuple(new_list))
+                    print(f"  ↳ [inject/replace] {rule_name}.end_case: {new_list}")
+                else:
+                    print(f"  ⚠️ [inject/replace] {rule_name}.end_case 不匹配: 当前={current}, 期望={old_list}")
+            else:
+                prods = list(getattr(rule, "production", []))
+                changed = False
+                for i, prod in enumerate(prods):
+                    if isinstance(prod, str) and old_str in prod:
+                        prods[i] = prod.replace(old_str, new_str)
+                        changed = True
+                if changed:
+                    object.__setattr__(rule, "production", tuple(prods))
+                    print(f"  ↳ [inject/replace] {rule_name}: {prods}")
 
 
 class Node:

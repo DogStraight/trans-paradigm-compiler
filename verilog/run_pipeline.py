@@ -120,6 +120,7 @@ def pipeline():
 
         # 从增强语法规则的自声明 [RuleName.inject] 构建注入配置
         inject_cfg = {}
+        replace_cfg = {}
         for rname, rrule in ext_rules.items():
             inj = getattr(rrule, "inject", None)
             if inj and isinstance(inj, dict):
@@ -127,8 +128,13 @@ def pipeline():
                 if targets:
                     for t in targets:
                         inject_cfg.setdefault(t, []).append(f"@{rname}")
+                repl = inj.get("replace", {})
+                if repl:
+                    replace_cfg.update(repl)
         if inject_cfg:
             register.inject_productions(inject_cfg)
+        if replace_cfg:
+            register.inject_productions_replace(replace_cfg)
 
     # 设定起始 token 缓存路径（避免每次重建）
     cache_dir = os.path.join(src_dir, ".cache")

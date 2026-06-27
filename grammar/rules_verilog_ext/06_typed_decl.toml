@@ -11,13 +11,17 @@
 [TypedDecl.inject]
 targets = ["AnsiPortDecl", "ModuleItem"]
 
-# ── 限制 ──
-# DeclaratorList 的 (symbol.base.comma,@Declarator)* 与 PortList 的
-# (symbol.base.comma,(@TypedDecl|@AnsiPortDecl))* 共用逗号分隔符，
-# 因此 TypedDecl 端口放在标准端口之后可能导致 DeclaratorList 贪心消费。
-# 建议：TypedDecl 端口放在端口列表首位。
-# 若需放在任意位置，需覆盖 PortTail 移除 @DeclaratorList 的逗号重复路径，
-# 这会影响 BodyInputDecl/TaskAnsiInputDecl 等旧风格端口的多声明语法。
+# ANSI 端口声明替换为 SimpleTail（无 DeclaratorList 逗号重复）
+# SV 标准中 ANSI 端口列表的每个端口只声明一个信号名，
+# 逗号只出现在 port_list 级别，不出现在 apsi_port 内部。
+# 修复前：input wire rstn, spi.master spi_io → DeclaratorList 吃掉 spi
+# 修复后：@Declarator 只匹配 rstn，, spi.master spi_io 由外层 PortList 处理
+[TypedDecl.inject.replace]
+AnsiInputDecl = { old = "@PortTail", new = "@SimpleTail" }
+AnsiOutputDecl = { old = "@PortTail", new = "@SimpleTail" }
+AnsiInoutDecl = { old = "@PortTail", new = "@SimpleTail" }
+# TaskAnsiInputDecl 的 end_case 补上 ; — 函数体中的端口声明以 ; 结束
+TaskAnsiInputDecl = { old = "end_case = [\"symbol.base.comma\", \"bracket.r_parentheses\", \"newline\"]", new = "end_case = [\"symbol.base.comma\", \"bracket.r_parentheses\", \"newline\", \"symbol.base.semicolon\"]" }
 
 [TypeRef]
 [TypeRef.parser]

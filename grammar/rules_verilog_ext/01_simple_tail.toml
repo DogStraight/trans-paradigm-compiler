@@ -1,0 +1,17 @@
+# SimpleTail — ANSI 端口专用简化尾部（无逗号多声明）
+#
+# 与 PortTail 功能相同但使用 @Declarator（单声明器），
+# 消除 input wire rstn, spi. 歧义。
+# BodyPortDecl / TaskAnsiPortDecl 仍使用原 @PortTail。
+#
+# SV 标准：ANSI 端口列表的每个端口只声明一个信号名，
+# 逗号只出现在 port_list 级别，不出现在 apsi_port 内部。
+
+[SimpleTail]
+[SimpleTail.parser]
+production = ["(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?", "@Declarator"]
+[SimpleTail.parser.node]
+port_type = "$1"
+is_signed = "$2"
+packed_range = "$3"
+items = "$4"
