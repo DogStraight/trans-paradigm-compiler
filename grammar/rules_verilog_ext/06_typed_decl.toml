@@ -11,6 +11,14 @@
 [TypedDecl.inject]
 targets = ["AnsiPortDecl", "ModuleItem"]
 
+# ── 限制 ──
+# DeclaratorList 的 (symbol.base.comma,@Declarator)* 与 PortList 的
+# (symbol.base.comma,(@TypedDecl|@AnsiPortDecl))* 共用逗号分隔符，
+# 因此 TypedDecl 端口放在标准端口之后可能导致 DeclaratorList 贪心消费。
+# 建议：TypedDecl 端口放在端口列表首位。
+# 若需放在任意位置，需覆盖 PortTail 移除 @DeclaratorList 的逗号重复路径，
+# 这会影响 BodyInputDecl/TaskAnsiInputDecl 等旧风格端口的多声明语法。
+
 [TypeRef]
 [TypeRef.parser]
 production = ["id", "symbol.base.dot", "id"]

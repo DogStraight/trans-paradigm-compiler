@@ -309,6 +309,32 @@ class GrammarRulesRegister:
                     object.__setattr__(other_rule, "production", tuple(other_prods))
                     print(f"  ↳ [inject] 传播到 {other_name}: {other_prods}")
 
+    def inject_productions_replace(
+        self, replace_config: dict[str, dict[str, str]]
+    ) -> None:
+        """
+        替换指定规则的 production 元素中匹配的字符串。
+        replace_config: { "RuleName": { "old": "目标字符串", "new": "新字符串" } }
+        """
+        for rule_name, spec in replace_config.items():
+            if rule_name not in self.rules:
+                print(f"⚠️ [inject/replace] 规则 {rule_name} 不存在，跳过")
+                continue
+            rule = self.rules[rule_name]
+            old_str = spec.get("old", "")
+            new_str = spec.get("new", "")
+            if not old_str:
+                continue
+            prods = list(getattr(rule, "production", []))
+            changed = False
+            for i, prod in enumerate(prods):
+                if isinstance(prod, str) and old_str in prod:
+                    prods[i] = prod.replace(old_str, new_str)
+                    changed = True
+            if changed:
+                object.__setattr__(rule, "production", tuple(prods))
+                print(f"  ↳ [inject/replace] {rule_name}: {prods}")
+
 
 class Node:
     def __init__(self, node_name: str, **kwargs) -> None:
