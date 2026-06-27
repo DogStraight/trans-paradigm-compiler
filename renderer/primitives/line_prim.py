@@ -34,26 +34,28 @@ def eval_line(
     """求值 line 原语"""
     nest_level = expr.get("nest", 0)
     parts: List[Doc] = []
-    had_content = False
+    pending_nest = 0
     has_soft = False
 
     for e in expr["line"]:
         if isinstance(e, dict) and (e.get("soft") or e.get("break")):
-            if had_content:
-                indent_level = e.get("indent", 0)
-                extra_indent = indent_level * len(renderer._INDENT_STR)
-                if e.get("break"):
-                    parts.append(Break(extra_indent))
-                else:
-                    parts.append(SoftLine(extra_indent))
-                has_soft = True
-                had_content = False
+            indent_level = e.get("indent", 0)
+            extra_indent = indent_level * len(renderer._INDENT_STR)
+            if e.get("break"):
+                parts.append(Break(extra_indent))
+            else:
+                parts.append(SoftLine(extra_indent))
+            has_soft = True
+            if indent_level > 0:
+                pending_nest += extra_indent
         else:
             d = renderer._eval(e, node, indent, parent_layout)
             if d is not None:
                 if not isinstance(d, Empty):
+                    if pending_nest > 0:
+                        d = Nest(pending_nest, d)
+                        pending_nest = 0
                     parts.append(d)
-                    had_content = True
 
     if not parts:
         return None

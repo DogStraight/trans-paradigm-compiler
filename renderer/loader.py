@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 
 def load_layouts(rules_dir: str, layouts: dict) -> None:
-    """从 TOML 规则目录加载所有 layout 定义到 layouts 字典"""
+    """从 TOML 规则目录加载所有 layout 定义到 layouts 字典（递归子目录）"""
     from core.define import FileManager
 
     base = FileManager.get_full_path(rules_dir)
@@ -18,9 +18,16 @@ def load_layouts(rules_dir: str, layouts: dict) -> None:
         return
 
     for fname in sorted(os.listdir(base)):
-        if not fname.endswith(".toml") or fname.startswith("_"):
+        if fname.startswith("_"):
             continue
         fpath = os.path.join(base, fname)
+        # 子目录递归
+        if os.path.isdir(fpath) and "." not in fname:
+            sub = os.path.join(rules_dir, fname).replace("\\", "/")
+            load_layouts(sub, layouts)
+            continue
+        if not fname.endswith(".toml"):
+            continue
         with open(fpath, "rb") as f:
             data = tomllib.load(f)
         for node_type, cfg in data.items():

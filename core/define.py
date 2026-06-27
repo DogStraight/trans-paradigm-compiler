@@ -71,9 +71,10 @@ class FileManager:
     def load_all_toml(cls, dir_relative_path: str) -> dict:
         """
         加载指定目录下所有 .toml 文件并合并为一个 dict。
+        支持递归子目录（子目录名不以下划线开头且不含 . 时递归）。
         文件按名称排序加载，同名 key 后者覆盖前者。
         file_rules 列表特殊处理：所有文件中的 file_rules 会合并为一个列表。
-        以下划线 _ 开头的文件被跳过（可用于禁用或注释）。
+        以下划线 _ 开头的文件/目录被跳过。
         如果目录不存在或为空，返回空 dict。
         """
         dir_path = cls.get_full_path(dir_relative_path)
@@ -82,9 +83,22 @@ class FileManager:
         if not os.path.isdir(dir_path):
             return merged
         for fname in sorted(os.listdir(dir_path)):
-            if not fname.endswith(".toml") or fname.startswith("_"):
+            if fname.startswith("_"):
                 continue
             fpath = os.path.join(dir_path, fname)
+            # 子目录递归
+            if os.path.isdir(fpath) and "." not in fname:
+                sub = cls.load_all_toml(
+                    os.path.join(dir_relative_path, fname).replace("\\", "/")
+                )
+                for k, v in sub.items():
+                    if k == "file_rules":
+                        all_file_rules.extend(v)
+                    else:
+                        merged[k] = v
+                continue
+            if not fname.endswith(".toml"):
+                continue
             with open(fpath, "r", encoding="utf-8") as f:
                 data = tomllib.loads(f.read())
             # file_rules 特殊处理：跨文件合并

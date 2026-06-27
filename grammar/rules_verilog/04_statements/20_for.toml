@@ -1,0 +1,92 @@
+# ===== for 循环（块体 vs 裸语句体） =====
+
+[ForLoop]
+[ForLoop.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@ForInit",
+    "symbol.base.semicolon",
+    "@Expression",
+    "symbol.base.semicolon",
+    "@ForStep",
+    "bracket.r_parentheses",
+    "@ForBodyStmt",
+]
+end_case = ["newline"]
+[ForLoop.parser.node]
+init = "$3"
+condition = "$5"
+step = "$7"
+body = "$9"
+[ForLoop.renderer]
+layout = { line = [
+    "for (",
+    { ref = "init" },
+    "; ",
+    { ref = "condition" },
+    "; ",
+    { ref = "step" },
+    ") ",
+    { soft = true, indent = 1 },
+    { ref = "body" },
+] }
+
+[ForLoopBlock]
+[ForLoopBlock.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@ForInit",
+    "symbol.base.semicolon",
+    "@Expression",
+    "symbol.base.semicolon",
+    "@ForStep",
+    "bracket.r_parentheses",
+    "@BeginEnd",
+]
+end_case = ["newline"]
+[ForLoopBlock.parser.node]
+init = "$3"
+condition = "$5"
+step = "$7"
+body = "$9"
+[ForLoopBlock.renderer]
+layout = { line = [
+    "for (",
+    { ref = "init" },
+    "; ",
+    { ref = "condition" },
+    "; ",
+    { ref = "step" },
+    ") ",
+    { ref = "body" },
+] }
+
+[ForInit]
+[ForInit.parser]
+production = ["@Identifier", "symbol.base.equal", "@Expression"]
+[ForInit.parser.node]
+target = "$1"
+value = "$3"
+[ForInit.renderer]
+layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
+
+[ForStep]
+[ForStep.parser]
+production = ["@Identifier", "symbol.base.equal", "@Expression"]
+[ForStep.parser.node]
+target = "$1"
+value = "$3"
+[ForStep.renderer]
+layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
+
+# 非 begin/end 的 for 循环体
+[ForBodyStmt]
+[ForBodyStmt.parser]
+production = ["@IfBlock|@IfStmt|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoopBlock|@ForLoop|@SubroutineCall|@NullStmt"]
+inline = true
+[ForBodyStmt.parser.node]
+stmt = "$1"
+[ForBodyStmt.renderer]
+layout = { ref = "stmt" }
