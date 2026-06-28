@@ -18,6 +18,9 @@ targets = ["AnsiPortDecl", "ModuleItem"]
 
 # ── 类型化类型描述符 spa(master) ──
 [TypedTypeSpec]
+[TypedTypeSpec.inject]
+targets = ["PortDeclPrefix"]
+
 [TypedTypeSpec.parser]
 production = ["@Identifier", "bracket.l_parentheses", "@Identifier", "bracket.r_parentheses"]
 [TypedTypeSpec.parser.node]

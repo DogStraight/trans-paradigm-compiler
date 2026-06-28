@@ -24,7 +24,8 @@ if project_root not in sys.path:
 
 from lexer import Lexer
 from parser import Parser
-from core.define import GrammarRulesRegister, FileManager, inject_productions, inject_replace_rule
+from core.define import GrammarRulesRegister, FileManager
+from parser.grammar_inject import inject_productions, inject_replace_rule
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
