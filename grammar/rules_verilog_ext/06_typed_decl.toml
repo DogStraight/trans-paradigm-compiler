@@ -16,21 +16,19 @@
 [TypedPortDecl.inject]
 targets = ["AnsiPortDecl", "ModuleItem"]
 
-# ── 类型化类型描述符 spa(master) ──
+# ── 类型化类型描述符 spi.slave ──
 [TypedTypeSpec]
 [TypedTypeSpec.inject]
-# 挂载在 PortDeclPrefix 的调用处，不是 PortDeclPrefix 内部
-# 这样 TypedTypeSpec 和 PortDeclPrefix 作为平行分支，
-# @PortDeclPrefix @DeclaratorList | @TypedTypeSpec @DeclaratorList
+# 挂载在 PortDeclPrefix 的调用处，与 @PortDeclPrefix 平行分支
 targets = ["AnsiInputDecl.production[0]", "AnsiOutputDecl.production[0]", "AnsiInoutDecl.production[0]"]
 
 [TypedTypeSpec.parser]
-production = ["@Identifier", "bracket.l_parentheses", "@Identifier", "bracket.r_parentheses"]
+production = ["@Identifier", "symbol.base.dot", "@Identifier"]
 [TypedTypeSpec.parser.node]
 type_name = "$1"
 role_name = "$3"
 [TypedTypeSpec.renderer]
-layout = { line = [{ ref = "type_name" }, "(", { ref = "role_name" }, ")"] }
+layout = { line = [{ ref = "type_name" }, ".", { ref = "role_name" }] }
 
 # ── 类型化端口声明（无方向关键字）spa(master) spi_io ──
 [TypedPortDecl]

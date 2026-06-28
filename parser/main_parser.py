@@ -202,9 +202,10 @@ class Parser:
             c["tokens"] = self._preceding_tokens(tokens, c["token_index"])
             del c["token_index"]
 
-        # 动态窗缩小到最小无冲突宽度（至少 2，避免单 token 过于泛化）
+        # 动态窗缩小到最小无冲突宽度（至少 2，最大不超过素材长度）
+        min_tokens = min(len(c["tokens"]) for c in self._inline_comments)
         width = 2
-        while True:
+        while width <= min_tokens:
             seen: set[tuple[str, ...]] = set()
             ok = True
             for c in self._inline_comments:

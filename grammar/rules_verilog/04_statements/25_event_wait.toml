@@ -1,0 +1,22 @@
+# ===== 事件等待语句 @(posedge clk); 或 @(posedge clk) stmt =====
+
+[EventWaitStmt]
+[EventWaitStmt.parser]
+production = [
+    "symbol.base.at",
+    "bracket.l_parentheses",
+    "@SensitivityList",
+    "bracket.r_parentheses",
+    "@Statement|symbol.base.semicolon",
+]
+end_case = ["newline"]
+[EventWaitStmt.parser.node]
+sensitivity = "$3"
+body = "$5"
+[EventWaitStmt.renderer]
+layout = { line = [
+    "@(",
+    { ref = "sensitivity" },
+    ") ",
+    { ref = "body" },
+] }

@@ -22,8 +22,9 @@ def _match_end(line: str, tokens: list[str]) -> int:
     return pos
 
 
-def _best_match_line(lines: list[str], tokens: list[str],
-                     start: int, end: int, skip: set[int]) -> int:
+def _best_match_line(
+    lines: list[str], tokens: list[str], start: int, end: int, skip: set[int]
+) -> int:
     """在 [start, end) 范围内找最佳匹配行。
 
     评分规则（两阶段）：
@@ -76,7 +77,7 @@ def inject_comments(rendered: str, inline_comments: list[dict]) -> str:
             pos = _match_end(lines[best], tokens)
             line = lines[best]
             # 在指纹匹配位置后插入注释，而非行尾追加
-            indent = " " if pos > 0 and not line[pos-1].isspace() else ""
+            indent = " " if pos > 0 and not line[pos - 1].isspace() else ""
             lines[best] = line[:pos] + indent + c["text"] + line[pos:]
             occupied.add(best)
         else:
