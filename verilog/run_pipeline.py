@@ -24,7 +24,7 @@ if project_root not in sys.path:
 
 from lexer import Lexer
 from parser import Parser
-from core.define import GrammarRulesRegister, FileManager
+from core.define import GrammarRulesRegister, FileManager, inject_productions, inject_replace_rule
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
@@ -132,9 +132,9 @@ def pipeline():
                 if repl:
                     replace_cfg.update(repl)
         if inject_cfg:
-            register.inject_productions(inject_cfg)
+            inject_productions(register.rules, inject_cfg)
         if replace_cfg:
-            register.inject_productions_replace(replace_cfg)
+            inject_replace_rule(register.rules, replace_cfg)
 
     # 设定起始 token 缓存路径（避免每次重建）
     cache_dir = os.path.join(src_dir, ".cache")
