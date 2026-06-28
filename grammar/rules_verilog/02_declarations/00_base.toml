@@ -40,15 +40,30 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 [DeclaratorList.renderer]
 layout = { join = ", ", items = "items", nest = 1 }
 
-# ---------- 端口声明公共尾部（复用：input/output/inout × ANSI/Body/Task）----------
-[PortTail]
-[PortTail.parser]
-production = ["(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?", "@DeclaratorList"]
-[PortTail.parser.node]
+# ---------- 类型描述符（端口/声明的类型部分）----------
+[TypeSpec]
+[TypeSpec.parser]
+production = ["(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?"]
+[TypeSpec.parser.node]
 port_type = "$1"
 is_signed = "$2"
 packed_range = "$3"
-items = "$4"
+[TypeSpec.renderer]
+layout = { line = [
+    { opt = { group = [" ", { ref = "port_type" }] } },
+    { opt = { group = [" ", { ref = "is_signed" }] } },
+    { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
+] }
+
+# ---------- 端口声明公共尾部（复用：input/output/inout × ANSI/Body/Task）----------
+[PortTail]
+[PortTail.parser]
+production = ["@TypeSpec", "@DeclaratorList"]
+[PortTail.parser.node]
+port_type = "$1.port_type"
+is_signed = "$1.is_signed"
+packed_range = "$1.packed_range"
+items = "$2"
 
 # ---------- 初始化与范围 ----------
 [Init]

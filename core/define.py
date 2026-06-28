@@ -255,6 +255,17 @@ class GrammarRulesRegister:
             self.rules[rule_name] = rule
         return self.rules
 
+    @staticmethod
+    def _has_top_level_choice(prod: str) -> bool:
+        """检测 production 字符串中是否有顶层的 |（不在括号/分组内）"""
+        depth = 0
+        for ch in prod:
+            if ch == '(': depth += 1
+            elif ch == ')': depth -= 1
+            elif ch == '|' and depth == 0:
+                return True
+        return False
+
     def inject_productions(self, inject_config: dict[str, list[str]]) -> None:
         """
         将增强规则的 alternative 注入到语法规则的分支列表中。
@@ -279,7 +290,7 @@ class GrammarRulesRegister:
             first_prod = prods[0]
             if isinstance(first_prod, str):
                 for alt in alternatives:
-                    if "|" in first_prod:
+                    if self._has_top_level_choice(first_prod):
                         first_prod = f"{alt}|{first_prod}"  # 前置（优先匹配）
                     else:
                         first_prod += f"|{alt}"

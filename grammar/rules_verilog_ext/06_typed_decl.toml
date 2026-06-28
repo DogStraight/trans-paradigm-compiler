@@ -1,49 +1,52 @@
-# ===== 增强语法：类型化声明 =====
+# ===== 增强语法：类型化端口声明 =====
 #
-# spi.master spi_io;
+# spi(master) spi_io;
 #   ↓ transform 展开
 # output spi_io_clk;
 # output spi_io_mosi;
 # input  spi_io_miso;
 # output spi_io_cs;
+#
+# 架构：
+#   TypeSpec 已从 PortTail 中抽离为独立规则
+#   TypedTypeSpec 注入到 TypeSpec 作为优先分支
+#   TypedPortDecl 注入到 AnsiPortDecl 作为优先分支
 
-# 挂载点：注入到核心语法规则
-[TypedDecl.inject]
+# 挂载点
+[TypedPortDecl.inject]
 targets = ["AnsiPortDecl", "ModuleItem"]
 
-[TypeRef]
-[TypeRef.parser]
-production = ["id", "symbol.base.dot", "id"]
-inline = true
-[TypeRef.parser.node]
-group = "$1"
-role = "$3"
-[TypeRef.renderer]
-layout = { line = [{ ref = "group" }, ".", { ref = "role" }] }
+# ── 类型化类型描述符 spa(master) ──
+[TypedTypeSpec]
+[TypedTypeSpec.parser]
+production = ["@Identifier", "bracket.l_parentheses", "@Identifier", "bracket.r_parentheses"]
+[TypedTypeSpec.parser.node]
+type_name = "$1"
+role_name = "$3"
+[TypedTypeSpec.renderer]
+layout = { line = [{ ref = "type_name" }, "(", { ref = "role_name" }, ")"] }
 
-[TypedDecl]
-[TypedDecl.parser]
-production = [
-    "@TypeRef",
-    "id",
-]
+# ── 类型化端口声明（无方向关键字）spa(master) spi_io ──
+[TypedPortDecl]
+[TypedPortDecl.parser]
+production = ["@TypedTypeSpec", "@Declarator"]
 end_case = ["newline", "symbol.base.semicolon", "symbol.base.comma", "bracket.r_parentheses"]
-[TypedDecl.parser.node]
-type_ref = "$1"
+[TypedPortDecl.parser.node]
+type_spec = "$1"
 instance_name = "$2"
 
-# analyzer：收集对此符号的所有引用（供 transform 引用替换用）
-[TypedDecl.analyzer]
-symbol = { kind = "typed_port", name_attr = "instance_name" }
+# analyzer
+[TypedPortDecl.analyzer]
+symbol = { kind = "typed_port", name_attr = "instance_name.name" }
 ref_collect = true
 
-# transform：展开为 WireDecl 列表
-[TypedDecl.transform]
-kind = "expand"
-source = { ref = "{type_ref.group}.{type_ref.role}", table = "type" }
-foreach = "signals"
-[TypedDecl.transform.output]
-node = "WireDecl"
-[TypedDecl.transform.output.attrs]
-direction = "{signal.direction}"
-name = "{instance_name}_{signal.name}"
+# transform（预留）
+#[TypedPortDecl.transform]
+#kind = "expand"
+#source = { ref = "{type_spec.type_name}.{type_spec.role_name}", table = "type" }
+#foreach = "signals"
+#[TypedPortDecl.transform.output]
+#node = "WireDecl"
+#[TypedPortDecl.transform.output.attrs]
+#direction = "{signal.direction}"
+#name = "{instance_name}_{signal.name}"
