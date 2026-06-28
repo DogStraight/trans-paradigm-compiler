@@ -131,8 +131,8 @@ class Parser:
                 f.write(f"[{action}]\n")
 
     def _warn(self, message: str) -> None:
-        self._log_state(f"警告: {message}")
-        print(f"⚠️ [解析器] {message}", file=sys.stderr)
+        self._log_state(f"WARN: {message}")
+        print(f"[parser] {message}", file=sys.stderr)
 
     def _skip_tokens(self, context: ParseContext, skip_types: tuple) -> None:
         while context.has_more_tokens():

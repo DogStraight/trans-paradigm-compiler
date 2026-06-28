@@ -108,10 +108,11 @@ class FileManager:
             # 检测跨文件重名覆盖
             overlaps = merged.keys() & data.keys()
             if overlaps:
+                import sys as _sys
                 print(
-                    f"⚠️ [加载] {fname} 覆盖了之前文件中的规则: "
+                    f"[loader] {fname} overwrites previous rules: "
                     f"{', '.join(sorted(overlaps))}",
-                    file=__import__("sys").stderr,
+                    file=_sys.stderr,
                 )
             merged.update(data)
         if all_file_rules:

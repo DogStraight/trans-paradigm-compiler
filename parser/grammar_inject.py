@@ -5,6 +5,7 @@ grammar_inject.py — 语法规则注入工具函数
 """
 
 import re
+import sys
 from typing import Any
 from .feature_analyze import analyze_production_features
 
@@ -19,6 +20,13 @@ def _parse_target(target: str) -> tuple[str, str, int]:
     if not m:
         return target.lstrip("@"), "production", 0
     return m.group(1), m.group(2) or "production", int(m.group(3)) if m.group(3) else 0
+
+
+_VERBOSE = False
+
+def set_verbose(v: bool) -> None:
+    global _VERBOSE
+    _VERBOSE = v
 
 
 def inject_alternatives(rule: Any, alternatives: list[str]) -> None:
@@ -56,7 +64,8 @@ def propagate_alternatives(
             other_prods[i] = prod
         if changed:
             object.__setattr__(other_rule, "production", tuple(other_prods))
-            print(f"  ↳ [inject] 传播到 {other_name}: {other_prods}")
+            if _VERBOSE:
+                print(f"  [inject] propagate {other_name}: {other_prods}")
 
 
 def inject_replace_rule(
@@ -79,9 +88,10 @@ def inject_replace_rule(
             if current == old_list:
                 new_list = _json.loads(new_str[len(ec_prefix):])
                 object.__setattr__(rule, "end_case", tuple(new_list))
-                print(f"  ↳ [inject/replace] {rule_name}.end_case: {new_list}")
-            else:
-                print(f"  ⚠️ [inject/replace] {rule_name}.end_case 不匹配: 当前={current}")
+                if _VERBOSE:
+                    print(f"  [inject/replace] {rule_name}.end_case -> {new_list}")
+            elif _VERBOSE:
+                print(f"  [inject/replace] {rule_name}.end_case mismatch: has {current}")
         else:
             prods = list(getattr(rule, "production", []))
             changed = False
@@ -91,7 +101,8 @@ def inject_replace_rule(
                     changed = True
             if changed:
                 object.__setattr__(rule, "production", tuple(prods))
-                print(f"  ↳ [inject/replace] {rule_name}: {prods}")
+                if _VERBOSE:
+                    print(f"  [inject/replace] {rule_name}: {prods}")
 
 
 def inject_productions(
@@ -107,7 +118,8 @@ def inject_productions(
         for tgt in alternatives:
             tgt_name, tgt_attr, tgt_idx = _parse_target(tgt)
             if tgt_name not in rules:
-                print(f"⚠️ [inject] 目标 {tgt_name} 不存在，跳过")
+                if _VERBOSE:
+                    print(f"  [inject] target {tgt_name} not found, skip")
                 continue
             target_rule = rules[tgt_name]
 
@@ -116,7 +128,8 @@ def inject_productions(
                 if f"@{ext_rule_name}" not in current:
                     current.append(f"@{ext_rule_name}")
                     object.__setattr__(target_rule, "end_case", tuple(current))
-                    print(f"  ↳ [inject] {tgt_name}.end_case 追加: {current}")
+                    if _VERBOSE:
+                        print(f"  [inject] {tgt_name}.end_case += {current}")
                 continue
 
             prods = list(getattr(target_rule, "production", []))
@@ -153,4 +166,5 @@ def inject_productions(
                     other_prods[i] = prod
                 if changed:
                     object.__setattr__(other_rule, "production", tuple(other_prods))
-                    print(f"  ↳ [inject] 传播到 {other_name}: {other_prods}")
+                    if _VERBOSE:
+                        print(f"  [inject] propagate {other_name}: {other_prods}")
