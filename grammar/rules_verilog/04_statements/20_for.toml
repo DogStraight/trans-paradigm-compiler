@@ -84,7 +84,7 @@ layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
 # 非 begin/end 的 for 循环体
 [ForBodyStmt]
 [ForBodyStmt.parser]
-production = ["@IfBlock|@IfStmt|@NonBlockingAssign|@BlockingAssign|@CaseStatement|@ForLoopBlock|@ForLoop|@SubroutineCall|@NullStmt"]
+production = ["@NonBlockStmt"]
 inline = true
 [ForBodyStmt.parser.node]
 stmt = "$1"
