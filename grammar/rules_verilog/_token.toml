@@ -55,6 +55,9 @@ interface = "interface"
 # 模块
 module = "module"
 
+# 自定义类型（增强语法）
+type = "type"
+
 # 标签
 tag = "tag"
 

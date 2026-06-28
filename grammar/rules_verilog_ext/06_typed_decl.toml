@@ -44,13 +44,22 @@ instance_name = "$2"
 symbol = { kind = "typed_port", name_attr = "instance_name.name" }
 ref_collect = true
 
-# transform（预留）
-#[TypedPortDecl.transform]
-#kind = "expand"
-#source = { ref = "{type_spec.type_name}.{type_spec.role_name}", table = "type" }
-#foreach = "signals"
-#[TypedPortDecl.transform.output]
-#node = "WireDecl"
-#[TypedPortDecl.transform.output.attrs]
-#direction = "{signal.direction}"
-#name = "{instance_name}_{signal.name}"
+# transform: 原语展开 — 将类型化端口展开为具体端口声明
+#   source.lookup  → 从 type 表查 {type_spec.type_name}.{type_spec.role_name}
+#   foreach       → 取查到的 signals 列表
+#   as            → 每项绑定为 signal，emit 模板中用 {signal.xxx}
+#   emit          → 为每个信号生成一个 AnsiInputDecl 节点
+[TypedPortDecl.transform]
+kind = "expand"
+source = { lookup = "type", key = "{type_spec.type_name}.{type_spec.role_name}" }
+foreach = "signals"
+as = "signal"
+condition = { exists = "type_spec.type_name" }
+
+[TypedPortDecl.transform.emit]
+node = "AnsiInputDecl"
+direction = "{signal.direction}"
+
+[[TypedPortDecl.transform.emit.sub_node]]
+node = "Declarator"
+name = "{instance_name}_{signal.name}"

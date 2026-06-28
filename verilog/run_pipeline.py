@@ -211,10 +211,18 @@ def pipeline():
     global transform_enable
     if transform_enable and analyzer_enable:
         transformer = AstTransformer()
-        # 按需注册插件，例如:
-        # transformer.register(ImplicitDeclPlugin())
-        # transformer.register(WidthEvalPlugin())
-        # ast = transformer.transform(ast, scope)
+        # 配置驱动变换引擎：加载规则的 [RuleName.transform] 配置
+        # 原语（expand/replace/delete）自动处理，
+        # 复杂逻辑通过 @transform_handler 注册自定义 handler 兜底。
+        from transform.post.engine import ConfigDrivenTransform
+        transformer.register(ConfigDrivenTransform(
+            rules=rules,
+            ext_dir=FileManager.get_full_path(EXT_DIR),
+        ))
+        ast = transformer.transform(ast, scope)
+        stats = transformer.plugins[0].stats
+        print(f"🔧 Transform: expand={stats['expand']} replace={stats['replace']} "
+              f"delete={stats['delete']} custom={stats['custom']} skipped={stats['skipped']}")
 
     # 7. 代码生成（使用 Renderer）
     global renderer_enable
@@ -241,6 +249,6 @@ def pipeline():
 
 if __name__ == "__main__":
     analyzer_enable = True  # 语义分析（作用域 + 符号注册）
-    transform_enable = False  # 后阶段变换插件管线（默认关闭）
+    transform_enable = True  # 后阶段变换插件管线（原语 + custom handler）
     renderer_enable = True  # 代码生成
     pipeline()
