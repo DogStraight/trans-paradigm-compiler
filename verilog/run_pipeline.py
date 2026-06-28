@@ -128,7 +128,8 @@ def pipeline():
                 targets = inj.get("targets", [])
                 if targets:
                     for t in targets:
-                        inject_cfg.setdefault(t, []).append(f"@{rname}")
+                        # config: {ext_rule: [target_path]}  （不是 {target: [ext_rule]}）
+                        inject_cfg.setdefault(rname, []).append(f"@{t}")
                 repl = inj.get("replace", {})
                 if repl:
                     replace_cfg.update(repl)

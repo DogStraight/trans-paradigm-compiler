@@ -19,7 +19,10 @@ targets = ["AnsiPortDecl", "ModuleItem"]
 # ── 类型化类型描述符 spa(master) ──
 [TypedTypeSpec]
 [TypedTypeSpec.inject]
-targets = ["PortDeclPrefix"]
+# 挂载在 PortDeclPrefix 的调用处，不是 PortDeclPrefix 内部
+# 这样 TypedTypeSpec 和 PortDeclPrefix 作为平行分支，
+# @PortDeclPrefix @DeclaratorList | @TypedTypeSpec @DeclaratorList
+targets = ["AnsiInputDecl.production[0]", "AnsiOutputDecl.production[0]", "AnsiInoutDecl.production[0]"]
 
 [TypedTypeSpec.parser]
 production = ["@Identifier", "bracket.l_parentheses", "@Identifier", "bracket.r_parentheses"]
