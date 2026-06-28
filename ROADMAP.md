@@ -155,6 +155,8 @@ D5. Transform 引擎：原语优先，handler 兜底
 - [ ] 全量 diff 自动化（不依赖肉眼对比）
 
 **P3 — 工程化**
+- [ ] 新手教程：从零添加一条语法规则（10 分钟可跟做）
+- [ ] `--validate-config` 模式：启动时检查 TOML 配置完整性
 - [ ] `pyproject.toml` / `setup.py`
 - [ ] PyPI 发布
 - [ ] CI（GitHub Actions）
