@@ -1,4 +1,9 @@
-# parser/pratt_parser.py
+"""Pratt parser — operator-precedence expression parsing.
+
+Loads operator definitions from _symbol_level.toml and handles
+infix/prefix/postfix operators with proper precedence and associativity.
+"""
+
 import os
 import tomllib
 from typing import List, Tuple, Dict, Any, Optional

@@ -1,8 +1,7 @@
-# parser/feature_analyze.py
+"""Production feature analyzer — detect choice/seq structure in production strings."""
+
 from typing import Optional, Tuple, Dict, Any
 import re
-
-# 处理分支和序列的优先级顺序及对应的类型与字段名
 SEPARATOR_HANDLERS = [
     ("|", "choice", "alternatives"),  # 分支优先级最高
     (",", "seq", "items"),  # 序列次之

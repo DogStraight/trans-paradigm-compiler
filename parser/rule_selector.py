@@ -1,4 +1,5 @@
-# parser/rule_selector.py
+"""RuleSelector — candidate rule filtering based on start token matching."""
+
 import json
 import os
 from typing import List, Dict, Optional, Set

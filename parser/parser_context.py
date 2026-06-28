@@ -1,4 +1,5 @@
-# parser/parser_context.py
+"""ParseContext — parser state container with snapshot/restore for backtracking."""
+
 from core.define import Token, Node, GrammarRule
 import copy
 

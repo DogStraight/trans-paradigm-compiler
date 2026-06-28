@@ -1,7 +1,6 @@
-"""
-grammar_inject.py — 语法规则注入工具函数
+"""Grammar rule injection — production injection, propagation, and replacement.
 
-支持目标寻址语法：RuleName.production[N] / RuleName.end_case
+Supports target addressing syntax: RuleName.production[N] / RuleName.end_case
 """
 
 import re

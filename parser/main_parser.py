@@ -1,4 +1,14 @@
-# parser/main_parser.py
+"""Main parser — recursive descent with backtracking.
+
+Orchestrates parsing by coordinating sub-parsers:
+  - node_parsers: token/call/seq/choice/repeat/optional
+  - production_matcher: rule production matching
+  - attribute_binder: $N path extraction and node assembly
+  - block_parser: block/body parsing
+  - atom_parser: atomic rule + Pratt expression
+  - end_case_checker: terminating token validation
+"""
+
 import sys
 from typing import Optional, List, Dict
 from core.define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager

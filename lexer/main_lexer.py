@@ -1,4 +1,10 @@
-# lexer/main_lexer.py
+"""Lexer — tokenizer driven by _token.toml configuration.
+
+Converts Verilog source text into a stream of Token objects.
+Keyword/symbol/literal/comment/whitespace patterns are all defined
+in TOML — no hardcoded lexer logic.
+"""
+
 from core.define import Token
 from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM

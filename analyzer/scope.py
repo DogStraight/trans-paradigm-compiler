@@ -1,4 +1,4 @@
-"""Scope 作用域与 Symbol 符号表"""
+"""Scope (scope chain) and Symbol (declared identifier) types."""
 
 from typing import Optional, Dict, List
 from core.define import Node

@@ -1,4 +1,5 @@
-# lexer/lexer_utils.py
+"""Lexer utilities: TOML config loading and merging."""
+
 import os
 import tomllib
 from core.define import FileManager

@@ -1,12 +1,11 @@
-"""SemanticAnalyzer — 精简的语义分析器基类
+"""SemanticAnalyzer — scope management and symbol registration.
 
-遍历 AST，管理作用域，注册显式声明的符号，解析标识符引用。
-语义概念（节点名、属性名、默认值）使用代码内联默认值。
-作用域/符号自声明：语法规则 TOML 中的 scope={}/symbol={} 自描述语义角色，
-规则名即语义，无需外部配置文件。
+Walks the AST, manages scope enter/exit via rule self-declaration
+(scope={}/symbol={} in TOML), registers explicitly declared symbols,
+and resolves identifier references via scope chain lookup.
 
-高级服务（隐式声明、位宽计算、常量折叠等）作为可选插件
-注入 transform/post 管线，按需启用。
+Advanced services (implicit decl, width eval, constant folding) are
+provided by optional transform/post plugins.
 """
 
 from typing import Dict, List, Optional, Any

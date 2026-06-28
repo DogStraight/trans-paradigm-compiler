@@ -1,3 +1,10 @@
+"""Core type definitions: Token, GrammarRule, GrammarRulesRegister, Node.
+
+These types are shared across all pipeline stages — Lexer produces Token,
+Parser consumes Token and produces Node (AST), GrammarRule drives both
+parsing and rendering.
+"""
+
 class Token:
 
     def __init__(self, content="", type="", line=0, column=0) -> None:
