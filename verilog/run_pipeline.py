@@ -24,7 +24,7 @@ if project_root not in sys.path:
 
 from lexer import Lexer
 from parser import Parser
-from core.define import GrammarRulesRegister, FileManager
+from core.define import GrammarRulesRegister, FileManager, ParseError
 from parser.grammar_inject import inject_productions, inject_replace_rule
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
@@ -128,8 +128,9 @@ def pipeline():
                 targets = inj.get("targets", [])
                 if targets:
                     for t in targets:
-                        # config: {ext_rule: [target_path]}  （不是 {target: [ext_rule]}）
-                        inject_cfg.setdefault(rname, []).append(f"@{t}")
+                        # TOML 中 targets 可能带 @ 也可能不带，统一补充
+                        t_clean = f"@{t}" if not t.startswith("@") else t
+                        inject_cfg.setdefault(rname, []).append(t_clean)
                 repl = inj.get("replace", {})
                 if repl:
                     replace_cfg.update(repl)
@@ -159,7 +160,11 @@ def pipeline():
         reverse=True,
     )
 
-    ast = parser.parse(tokens)
+    try:
+        ast = parser.parse(tokens)
+    except ParseError as e:
+        print(f"\n[parser] ❌ 解析失败:\n{e}", file=sys.stderr)
+        return
     if ast is None:
         print("[parser] parse failed")
         return

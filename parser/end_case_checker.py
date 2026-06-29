@@ -38,7 +38,9 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
         return True
 
     token = context.peek_token()
-    if token and token.type in getattr(rule, "end_case", []):
+    end_cases = getattr(rule, "end_case", [])
+
+    if token and token.type in end_cases:
         return True
 
     # 说明 body 由 parse_block 管理，end_case 仅作辅助验证
@@ -51,4 +53,13 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
             inner = self.grammar_rules.get(feats["name"])
             if inner and isinstance(getattr(inner, "block_start", None), str):
                 return True
+
+    # 增强诊断：end_case 不匹配时给出预期
+    if token:
+        self._log_state(
+            f"✗ end_case 不匹配: 规则 {rule.name} "
+            f"期望 {end_cases}, 实际 '{token.content}' (type={token.type}) "
+            f"Ln {token.line}",
+            context=context,
+        )
     return False

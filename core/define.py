@@ -127,6 +127,47 @@ class FileManager:
         return merged
 
 
+class ParseError(Exception):
+    """解析错误，携带失败上下文以便快速定位。
+
+    Attributes:
+        msg: 人类可读的错误描述
+        token: 失败时的当前 Token（可为 None）
+        rule: 正在尝试匹配的规则名（可为 None）
+        path: 当前语义路径（可为 None）
+        candidates: 候选规则列表（可为 None）
+        context_info: 解析上下文摘要（token 指针等）
+    """
+
+    def __init__(
+        self,
+        msg: str = "",
+        token=None,
+        rule: str | None = None,
+        path: str | None = None,
+        candidates: list | None = None,
+        context_info: str | None = None,
+    ):
+        self.token = token
+        self.rule = rule
+        self.path = path
+        self.candidates = candidates
+        self.context_info = context_info
+        # 构建详细信息
+        parts = [msg]
+        if token:
+            parts.append(f"  token: '{token.content}' (type={token.type}) Ln {token.line}")
+        if rule:
+            parts.append(f"  rule: {rule}")
+        if path:
+            parts.append(f"  path: {path}")
+        if candidates is not None:
+            parts.append(f"  candidates ({len(candidates)}): {[r.name if hasattr(r, 'name') else str(r) for r in candidates]}")
+        if context_info:
+            parts.append(f"  ctx: {context_info}")
+        super().__init__("\n".join(parts))
+
+
 class BracketMismatchError(Exception):
     pass
 

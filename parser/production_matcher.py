@@ -30,7 +30,10 @@ def match_productions(
     """匹配规则的所有产生式。成功返回节点列表，任一产生式失败返回 None。"""
     all_matched_nodes = []
     for prod in getattr(rule, "production", []):
-        self._log_state(f"处理产生式: {prod}")
+        self._log_state(
+            f"处理产生式: {prod} | {self._debug_token_info(context)}",
+            context=context,
+        )
         from .feature_analyze import analyze_production_features
         features = analyze_production_features(prod)
         if not features:
@@ -43,7 +46,10 @@ def match_productions(
         result_node = process_production_node(self, features, context)
         if result_node is None:
             context.restore_snapshot(snapshot)
-            self._log_state(f"产生式 {prod} 匹配失败")
+            self._log_state(
+                f"✗ 产生式 {prod} 匹配失败 | {self._debug_token_info(context)}",
+                context=context,
+            )
             return None
         all_matched_nodes.append(result_node)
     return all_matched_nodes
@@ -79,7 +85,21 @@ def try_rule_productions(
         context.path_stack.pop()
         return result
 
-    self._log_state(f"尝试匹配规则: {rule.name}")
+    # 记录失败尝试（成功后清空）
+    current_token = context.peek_token()
+    if hasattr(self, "_failure_attempts"):
+        self._failure_attempts.append({
+            "rule": rule.name,
+            "token": str(current_token.content) if current_token else "EOF",
+            "token_index": context.token_pointer,
+            "token_type": current_token.type if current_token else "EOF",
+            "path": "/".join(context.path_stack),
+        })
+
+    self._log_state(
+        f"尝试匹配规则: {rule.name} | {self._debug_token_info(context)}",
+        context=context,
+    )
     context.update_current_rule(rule)
 
     rule_node = Node(rule.name)
@@ -109,6 +129,8 @@ def try_rule_productions(
         return inline_result
 
     self._restore_current_node(old_node, context)
-    self._log_state(f"规则 {rule.name} 匹配成功")
+    self._log_state(
+        f"✓ 规则 {rule.name} 匹配成功", context=context
+    )
     context.path_stack.pop()
     return rule_node
