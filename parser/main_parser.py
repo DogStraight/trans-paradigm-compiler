@@ -11,7 +11,14 @@ Orchestrates parsing by coordinating sub-parsers:
 
 import sys
 from typing import Optional, List, Dict
-from core.define import Node, Token, GrammarRule, GrammarRulesRegister, FileManager, ParseError
+from core.define import (
+    Node,
+    Token,
+    GrammarRule,
+    GrammarRulesRegister,
+    FileManager,
+    ParseError,
+)
 from .parser_context import ParseContext
 from .rule_selector import RuleSelector, _compute_start_tokens
 import parser.pratt_parser as pratt_parser
@@ -175,18 +182,14 @@ class Parser:
         if level >= self.LOG_ERROR:
             print(f"[parser] {action}", file=sys.stderr)
 
-    def _log_info(
-        self, action: str, context: ParseContext | None = None
-    ) -> None:
+    def _log_info(self, action: str, context: ParseContext | None = None) -> None:
         """INFO 级日志：始终输出"""
         self._log_state(action, level=self.LOG_INFO, context=context)
 
     def _warn(self, message: str, context: ParseContext | None = None) -> None:
         """WARN 级日志：始终输出到日志文件和 stderr"""
         indent = self._log_indent(context) if context else ""
-        self._log_state(
-            f"WARN: {message}", level=self.LOG_WARN, context=context
-        )
+        self._log_state(f"WARN: {message}", level=self.LOG_WARN, context=context)
         print(f"[parser] {indent}⚠️ {message}", file=sys.stderr)
 
     @staticmethod
@@ -194,12 +197,14 @@ class Parser:
         """返回当前 token 和 token_pointer 的调试信息字符串"""
         if context.has_more_tokens():
             tok = context.peek_token()
+            assert isinstance(tok, Token)
             return f"tok='{tok.content}' type={tok.type} idx={context.token_pointer}"
         return f"tok=EOF idx={context.token_pointer}"
 
     def _expected_tokens_for_rule(self, rule: GrammarRule) -> str:
         """计算规则可能接受的起始 token 类型集合，返回可读描述。"""
         from .feature_analyze import analyze_production_features
+
         prods = getattr(rule, "production", [])
         if not prods:
             return "<empty production>"
@@ -215,7 +220,9 @@ class Parser:
             return "<unknown>"
         sorted_starts = sorted(starts)
         if len(sorted_starts) > 10:
-            return f"{{{', '.join(sorted_starts[:10])}, ...}} ({len(sorted_starts)} total)"
+            return (
+                f"{{{', '.join(sorted_starts[:10])}, ...}} ({len(sorted_starts)} total)"
+            )
         return f"{{{', '.join(sorted_starts)}}}"
 
     def _skip_tokens(self, context: ParseContext, skip_types: tuple) -> None:
@@ -260,9 +267,7 @@ class Parser:
             self._dump_failure_summary(context)
             raise
         except Exception as exc:
-            self._log_info(
-                f"解析异常: {exc} | token={self._debug_token_info(context)}"
-            )
+            self._log_info(f"解析异常: {exc} | token={self._debug_token_info(context)}")
             self._dump_failure_summary(context)
             raise
 
@@ -285,7 +290,10 @@ class Parser:
                 f"[parser]  token_pos={pos}  rules={unique_rules}",
                 file=sys.stderr,
             )
-        print(f"[parser]  ═══ 当前 token: {self._debug_token_info(context)} ═══", file=sys.stderr)
+        print(
+            f"[parser]  ═══ 当前 token: {self._debug_token_info(context)} ═══",
+            file=sys.stderr,
+        )
 
     @staticmethod
     def _preceding_tokens(tokens: list[Token], idx: int, n: int = 8) -> list[str]:

@@ -97,7 +97,7 @@ layout = { line = [
 [AnsiInputDecl]
 [AnsiInputDecl.parser]
 production = ["@PortDeclPrefix", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiInputDecl.parser.node]
 direction = "$1.direction"
 port_type = "$1.port_type"
@@ -119,7 +119,7 @@ layout = { line = [
 [AnsiOutputDecl]
 [AnsiOutputDecl.parser]
 production = ["@PortDeclPrefix", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiOutputDecl.parser.node]
 direction = "$1.direction"
 port_type = "$1.port_type"
@@ -151,7 +151,7 @@ layout = { line = [
 [AnsiInoutDecl]
 [AnsiInoutDecl.parser]
 production = ["@PortDeclPrefix", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiInoutDecl.parser.node]
 direction = "$1.direction"
 port_type = "$1.port_type"

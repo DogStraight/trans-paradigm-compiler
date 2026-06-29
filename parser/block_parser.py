@@ -20,6 +20,11 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
         return None
 
     candidates = self.rule_selector.get_candidate_rules(current)
+    self._log_state(
+        f"parse_sentence: {self._debug_token_info(context)} "
+        f"candidates={[r.name for r in candidates]}",
+        context=context,
+    )
     if not candidates:
         return None
 
@@ -30,8 +35,19 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
             return node
         context.restore_snapshot(snapshot)
 
+    # 构建期望 token 集合提示
+    expected_parts = []
+    for r in candidates[:5]:  # 最多展示 5 个
+        expected_parts.append(f"{r.name}→{self._expected_tokens_for_rule(r)}")
+    if len(candidates) > 5:
+        expected_parts.append(f"... 还有 {len(candidates)-5} 个")
+    expected_hint = " | ".join(expected_parts)
+
     self._warn(
-        f"所有候选规则匹配失败: '{current.content}' (type: {current.type})"
+        f"所有候选规则匹配失败: '{current.content}' (type: {current.type}) "
+        f"Ln {current.line}\n"
+        f"  候选规则期望的起始 token: {expected_hint}",
+        context=context,
     )
     return None
 
@@ -107,6 +123,10 @@ def parse_block_body(
 
         current = context.peek_token()
         assert current is not None
+        self._log_state(
+            f"parse_block_body: {self._debug_token_info(context)} "
+            f"end_token={end_token}"
+        )
         if current.type == end_token:
             context.advance_token()
             break

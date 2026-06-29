@@ -1,0 +1,213 @@
+# ===== 类型声明：TypeDecl =====
+# type spi (parameter MODE = 0, parameter DATA_WIDTH = 8) {
+#     master : input miso, output clk, mosi, cs;
+#     slave  : revert master;
+#     fn read : { }
+# }
+
+[TypeDecl]
+[TypeDecl.inject]
+# TypeDecl 是顶层声明（与 ModuleDecl 同级），靠 statement_rule_names 自动发现，
+# 注入 ModuleItem 使其在模块体内也可用（嵌套类型场景）
+targets = ["@ModuleItem"]
+
+[TypeDecl.parser]
+production = ["keyword.type", "@Identifier", "@TypeParamList?", "@TypeBody"]
+end_case = ["newline"]
+
+[TypeDecl.parser.node]
+type_name = "$2"
+params = "$3"
+body = "$4"
+
+[TypeDecl.renderer]
+[TypeDecl.renderer.layout]
+line = [
+    "keyword.type",
+    " ",
+    { ref = "type_name" },
+    { ref = "params" },
+    " ",
+    { ref = "body" },
+]
+
+# analyzer: 类型声明注册到 TypeRegistry
+[TypeDecl.analyzer]
+scope = { kind = "type", name_attr = "type_name" }
+
+# transform: 类型声明不会出现在输出中，被 SemanticAnalyzer 消费后移除
+[TypeDecl.transform]
+kind = "delete"
+
+
+# ── 类型参数列表 type (parameter MODE = 0, ...) ──
+[TypeParamList]
+[TypeParamList.parser]
+production = [
+    "bracket.l_parentheses",
+    "@TypeParamItem",
+    "(symbol.base.comma,@TypeParamItem)*",
+    "bracket.r_parentheses",
+]
+
+[TypeParamList.parser.node]
+items = ["$2", "$3.items[*].sub_node[1]"]
+
+[TypeParamList.renderer]
+layout = { line = ["(", { join = ", ", items = [{ ref = "items" }] }, ")"] }
+
+
+# ── 单个参数 parameter MODE = 0 ──
+[TypeParamItem]
+[TypeParamItem.parser]
+production = [
+    "keyword.parameter",
+    "@Identifier",
+    "symbol.base.equal",
+    "@PrimaryExpr",
+]
+
+[TypeParamItem.parser.node]
+name = "$2"
+default = "$4"
+
+[TypeParamItem.renderer]
+layout = { line = ["parameter ", { ref = "name" }, " = ", { ref = "default" }] }
+
+
+# ── 类型体 { master : ...; slave : ...; } ──
+[TypeBody]
+[TypeBody.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "@TypeMember*",
+    "bracket.r_curly_bracket",
+]
+
+[TypeBody.parser.node]
+members = "$2"
+
+[TypeBody.renderer]
+[TypeBody.renderer.layout]
+line = ["{", { break = 1 }]
+
+[TypeBody.renderer.layout.body]
+indent = 4
+source = "members"
+
+[TypeBody.renderer.layout.tail]
+text = "}"
+break = 2
+
+
+# ── 类型成员（role | revert | method）──
+[TypeMember]
+inline = true
+[TypeMember.parser]
+production = ["@TypeRole | @RevertDecl | @TypeMethod"]
+[TypeMember.parser.node]
+child = "$1"
+
+[TypeMember.renderer]
+layout = { ref = "child" }
+
+
+# ── 类型角色 master : input miso, output clk, ...; ──
+[TypeRole]
+[TypeRole.parser]
+production = [
+    "@Identifier",
+    "symbol.base.colon",
+    "@TypePortDecl",
+    "(symbol.base.comma,@TypePortDecl)*",
+    "symbol.base.semicolon",
+]
+
+[TypeRole.parser.node]
+role_name = "$1"
+ports = ["$3", "$4.items[*].sub_node[1]"]
+
+[TypeRole.renderer]
+[TypeRole.renderer.layout]
+[TypeRole.renderer.layout.line]
+items = [{ ref = "role_name" }, ":", { break = 1 }]
+
+[TypeRole.renderer.layout.body]
+indent = 4
+source = "ports"
+
+[TypeRole.analyzer]
+# 角色本身不创建符号，是类型的内部结构
+
+
+# ── 类型端口声明 input miso, output clk ... ──
+# 复用 AnsiInputDecl / AnsiOutputDecl / AnsiInoutDecl
+# 同时支持 revert master（角色反转声明）
+[TypePortDecl]
+inline = true
+[TypePortDecl.parser]
+production = ["@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeRevertPort"]
+[TypePortDecl.parser.node]
+child = "$1"
+
+[TypePortDecl.renderer]
+layout = { ref = "child" }
+
+
+# ── 角色反转声明 revert master（在 TypeRole 体内使用，不含分号）──
+[TypeRevertPort]
+[TypeRevertPort.parser]
+production = ["keyword.revert", "@Identifier"]
+
+[TypeRevertPort.parser.node]
+target_role = "$2"
+
+[TypeRevertPort.renderer]
+layout = { line = ["revert ", { ref = "target_role" }] }
+
+
+# ── revert 声明 slave : revert master; ──
+[RevertDecl]
+[RevertDecl.parser]
+production = ["keyword.revert", "@Identifier", "symbol.base.semicolon"]
+
+[RevertDecl.parser.node]
+target_role = "$2"
+
+[RevertDecl.renderer]
+layout = { line = ["revert ", { ref = "target_role" }, ";"] }
+
+[RevertDecl.transform]
+kind = "custom"
+handler = "expand_revert"
+
+
+# ── 方法声明 fn read : { ... } ──
+[TypeMethod]
+[TypeMethod.parser]
+production = [
+    "keyword.fn",
+    "@Identifier",
+    "symbol.base.colon",
+    "@TypeMethodBody",
+]
+
+[TypeMethod.parser.node]
+method_name = "$2"
+body = "$4"
+
+[TypeMethod.renderer]
+[TypeMethod.renderer.layout]
+line = ["fn ", { ref = "method_name" }, ": ", { ref = "body" }]
+
+[TypeMethod.analyzer]
+symbol = { kind = "type_method", name_attr = "method_name" }
+
+
+# ── 方法体 { ... } ──
+[TypeMethodBody]
+[TypeMethodBody.parser]
+production = ["bracket.l_curly_bracket", "bracket.r_curly_bracket"]
+
+[TypeMethodBody.renderer]
+layout = { line = ["{", "}"] }

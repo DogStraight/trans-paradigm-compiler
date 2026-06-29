@@ -35,7 +35,8 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
 
     if token_type != current_token.type:
         self._log_state(
-            f"token类型不匹配: 期望 {token_type}, 实际 {current_token.type}"
+            f"token类型不匹配: 期望 {token_type}, 实际 {current_token.type} "
+            f"| {self._debug_token_info(context)}"
         )
         return None
 
@@ -67,14 +68,18 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
         else:
             break
 
-    self._log_state(f"普通token {token_type} 解析成功")
+    self._log_state(
+        f"普通token {token_type} 解析成功 | {self._debug_token_info(context)}"
+    )
     return parsed_node
 
 
 def parse_call(self, node: dict, context: ParseContext) -> Optional[Node]:
     """调用另一个语法规则"""
     rule_name = node["name"]
-    self._log_state(f"调用规则: {rule_name}")
+    self._log_state(
+        f"调用规则: {rule_name} | {self._debug_token_info(context)}"
+    )
     snapshot = context.create_snapshot()
 
     target_rule = self.grammar_rules[rule_name]
@@ -88,7 +93,7 @@ def parse_call(self, node: dict, context: ParseContext) -> Optional[Node]:
 def parse_seq(self, node: dict, context: ParseContext) -> Optional[Node]:
     """顺序序列：所有子项依次匹配"""
     items = node["items"]
-    self._log_state("解析序列节点")
+    self._log_state(f"解析序列节点 | {self._debug_token_info(context)}")
     try:
         with context:
             seq_node = Node("seq")
@@ -97,17 +102,17 @@ def parse_seq(self, node: dict, context: ParseContext) -> Optional[Node]:
                 if result is None:
                     raise _SequenceMatchError()
                 seq_node.add_sub_node(result)
-            self._log_state("序列解析成功")
+            self._log_state(f"序列解析成功 | {self._debug_token_info(context)}")
             return seq_node
     except _SequenceMatchError:
-        self._log_state("序列项匹配失败")
+        self._log_state(f"序列项匹配失败 | {self._debug_token_info(context)}")
         return None
 
 
 def parse_choice(self, node: dict, context: ParseContext) -> Optional[Node]:
     """分支选择：依次尝试每个分支"""
     alternatives = node["alternatives"]
-    self._log_state("解析分支节点")
+    self._log_state(f"解析分支节点 | {self._debug_token_info(context)}")
     original_pointer = context.token_pointer
     for alt in alternatives:
         context.token_pointer = original_pointer
@@ -115,13 +120,13 @@ def parse_choice(self, node: dict, context: ParseContext) -> Optional[Node]:
             with context:
                 result = self._process_production_node(alt, context)
                 if result is not None:
-                    self._log_state("分支匹配成功")
+                    self._log_state(f"分支匹配成功 | {self._debug_token_info(context)}")
                     return result
                 raise _BranchMatchError()
         except _BranchMatchError:
             continue
     context.token_pointer = original_pointer
-    self._log_state("所有分支匹配失败")
+    self._log_state(f"所有分支匹配失败 | {self._debug_token_info(context)}")
     return None
 
 
@@ -149,9 +154,9 @@ def repeat_loop(
 def parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
     """零次或多次重复"""
     elem = node["elem"]
-    self._log_state("解析重复节点（零次或多次）")
+    self._log_state(f"解析重复节点（零次或多次）| {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context) or []
-    self._log_state(f"重复解析完成，匹配次数: {len(nodes)}")
+    self._log_state(f"重复解析完成，匹配次数: {len(nodes)} | {self._debug_token_info(context)}")
     r = Node("repeat", items=nodes)
     r.sub_node = nodes[:]
     return r
@@ -160,7 +165,7 @@ def parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
 def parse_optional(self, node: dict, context: ParseContext) -> Optional[Node]:
     """可选（零次或一次）"""
     elem = node["elem"]
-    self._log_state("解析可选节点")
+    self._log_state(f"解析可选节点 | {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context, min_count=0, max_count=1)
     optional_node = Node("optional")
     if nodes:
@@ -171,7 +176,7 @@ def parse_optional(self, node: dict, context: ParseContext) -> Optional[Node]:
 def parse_plus(self, node: dict, context: ParseContext) -> Optional[Node]:
     """至少一次重复"""
     elem = node["elem"]
-    self._log_state("解析至少一次重复节点")
+    self._log_state(f"解析至少一次重复节点 | {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context, min_count=1)
     if nodes is None:
         return None

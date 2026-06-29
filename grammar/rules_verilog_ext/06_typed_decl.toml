@@ -14,13 +14,13 @@
 
 # 挂载点
 [TypedPortDecl.inject]
-targets = ["AnsiPortDecl", "ModuleItem"]
+targets = ["@AnsiPortDecl", "@ModuleItem"]
 
 # ── 类型化类型描述符 spi.slave ──
 [TypedTypeSpec]
 [TypedTypeSpec.inject]
 # 挂载在 PortDeclPrefix 的调用处，与 @PortDeclPrefix 平行分支
-targets = ["AnsiInputDecl.production[0]", "AnsiOutputDecl.production[0]", "AnsiInoutDecl.production[0]"]
+targets = ["@AnsiInputDecl.production[0]", "@AnsiOutputDecl.production[0]", "@AnsiInoutDecl.production[0]"]
 
 [TypedTypeSpec.parser]
 production = ["@Identifier", "symbol.base.dot", "@Identifier"]
