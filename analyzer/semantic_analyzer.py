@@ -8,9 +8,31 @@ Advanced services (implicit decl, width eval, constant folding) are
 provided by optional transform/post plugins.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from core.define import Node
 from .scope import Scope, Symbol
+
+
+# ── Capture 后处理器注册中心 ──
+# 语言特定的 capture 后处理通过此系统注册，不硬编码在 analyzer 中。
+# 注册: register_capture_hook("resolve_revert")(fn)
+# 调用: 由 TOML 中 [RuleName.analyzer] capture_hooks = ["resolve_revert"] 触发
+
+_capture_hooks: dict[str, Callable] = {}
+
+
+def register_capture_hook(name: str) -> Callable:
+    """装饰器：注册一个 capture 后处理器
+
+    Hook 签名:
+        def hook(node, sym_rule, scope, name, attrs) -> dict:
+            # 修改 attrs 并返回
+            return attrs
+    """
+    def decorator(fn: Callable) -> Callable:
+        _capture_hooks[name] = fn
+        return fn
+    return decorator
 
 
 class SemanticAnalyzer:
@@ -62,8 +84,8 @@ class SemanticAnalyzer:
         scope = self._current_scope
         assert scope is not None, "analyze() must be called before walking"
 
-        # 1. 进入新作用域（规则自声明）
-        scope_meta = getattr(rule, "scope", None) if rule else None
+        # 1. 进入新作用域（规则自声明，从 analyzer 配置读取）
+        scope_meta = getattr(rule, "analyzer", {}).get("scope") if rule else None
         if scope_meta:
             name_attr = scope_meta.get("name_attr")
             if name_attr:
@@ -83,13 +105,13 @@ class SemanticAnalyzer:
             self._current_scope = new_scope
             scope = new_scope
 
-        # 2. 声明符号（规则自声明）
-        sym_meta = getattr(rule, "symbol", None) if rule else None
+        # 2. 声明符号（规则自声明，从 analyzer 配置读取）
+        sym_meta = getattr(rule, "analyzer", {}).get("symbol") if rule else None
         if sym_meta:
             self._declare_from_node(node, sym_meta, scope)
 
-        # 3. 解析标识符引用（规则自声明）
-        if rule and getattr(rule, "identifier_ref", False):
+        # 3. 解析标识符引用（规则自声明，从 analyzer 配置读取）
+        if rule and getattr(rule, "analyzer", {}).get("identifier_ref", False):
             self._resolve_identifier(node, scope)
 
         # 4. 递归子节点
@@ -162,6 +184,15 @@ class SemanticAnalyzer:
                     values = [v for v in values if v is not None]
                     if values:
                         attrs[attr_name] = values if len(values) > 1 else values[0]
+
+            # capture 后处理器：由 [RuleName.analyzer] capture_hooks = [...] 触发
+            hooks = sym_rule.get("capture_hooks", [])
+            if isinstance(hooks, str):
+                hooks = [hooks]
+            for hook_name in hooks:
+                hook = _capture_hooks.get(hook_name)
+                if hook:
+                    attrs = hook(node, sym_rule, scope, name, attrs) or attrs
 
             sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
             self._all_symbols.append(sym)

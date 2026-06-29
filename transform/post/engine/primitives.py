@@ -16,7 +16,6 @@ import re
 from typing import Any, Optional, Callable
 from core.define import Node
 
-
 # ── 模板字符串解析 ──
 
 _TEMPLATE_RE = re.compile(r"\{([^}]+)\}")
@@ -33,8 +32,9 @@ def resolve_template(template: str, context: dict[str, Any]) -> str:
 
     未匹配的占位符保留原样。
     """
+
     def _lookup(path: str, ctx: dict) -> str:
-        parts = re.split(r'\.|\[|\]', path)
+        parts = re.split(r"\.|\[|\]", path)
         parts = [p for p in parts if p]
         val: Any = ctx
         try:
@@ -71,6 +71,7 @@ def resolve_attrs(
 
 
 # ── 原语: lookup ──
+
 
 def lookup(
     table: dict[str, Any],
@@ -147,6 +148,7 @@ def lookup_scope(
 
 # ── 原语: lookup_type_scope ──
 
+
 def lookup_type_scope(
     root_scope: Any,
     key_template: str,
@@ -170,6 +172,7 @@ def lookup_type_scope(
         角色符号的 attrs dict（含 ports 等），未找到返回 None
     """
     from analyzer.scope import Scope as ScopeType
+
     key = resolve_template(key_template, context)
     parts = key.split(".")
     if len(parts) < 2:
@@ -211,6 +214,7 @@ def lookup_type_scope(
 
 # ── 原语: foreach ──
 
+
 def foreach(
     items: list[Any],
     as_name: str,
@@ -241,6 +245,7 @@ def foreach(
 
 # ── 原语: emit ──
 
+
 def emit(
     node_spec: dict[str, Any],
     context: dict[str, Any],
@@ -262,7 +267,7 @@ def emit(
     if isinstance(node_spec, str):
         return Node(node_spec)
 
-    node_name = node_spec.get("node", "")
+    node_name = resolve_template(node_spec.get("node", ""), context)
     if not node_name:
         raise ValueError(f"emit: node_spec 缺少 'node' 字段: {node_spec}")
 
@@ -288,6 +293,7 @@ def emit(
 
 
 # ── 原语: replace ──
+
 
 def replace(
     old_node: Node,
@@ -326,7 +332,7 @@ def replace(
                 if new_nodes is None:
                     current.pop(i)
                 elif isinstance(new_nodes, list):
-                    current[i:i+1] = new_nodes
+                    current[i : i + 1] = new_nodes
                 else:
                     current[i] = new_nodes
                 break
@@ -349,6 +355,7 @@ def replace(
 
 # ── 原语: delete ──
 
+
 def delete(
     node: Node,
     parent: Optional[Node] = None,
@@ -359,6 +366,7 @@ def delete(
 
 
 # ── 原语: condition ──
+
 
 def condition(
     predicate: Callable[[dict[str, Any]], bool],
@@ -376,6 +384,7 @@ def make_exists_condition(path: str) -> Callable[[dict[str, Any]], bool]:
     Returns:
         谓词函数
     """
+
     def _pred(ctx: dict) -> bool:
         parts = path.split(".")
         val: Any = ctx
@@ -389,4 +398,5 @@ def make_exists_condition(path: str) -> Callable[[dict[str, Any]], bool]:
             if val is None:
                 return False
         return True
+
     return _pred

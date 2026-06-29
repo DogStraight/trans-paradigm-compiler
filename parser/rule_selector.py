@@ -27,9 +27,7 @@ def _compute_start_tokens(
             return set()
         visited.add(name)
         rule = grammar_rules[name]
-        bs = getattr(rule, "block_start", None)
-        if bs and isinstance(bs, str) and bs.strip():
-            return {bs}
+        # 块规则的起始 token 由 block 外部负责，不在 First Set 计算中
         result: Set[str] = set()
         for prod in getattr(rule, "production", []):
             try:
@@ -168,6 +166,6 @@ class RuleSelector:
 
     def get_block_rule(self, start_token: str) -> Optional[str]:
         for rule_name, rule in self.grammar_rules.items():
-            if getattr(rule, "block_start", None) == start_token:
+            if getattr(rule, "is_block", False):
                 return rule_name
         return None

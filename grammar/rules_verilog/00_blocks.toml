@@ -4,8 +4,7 @@
 
 [Root]
 [Root.parser]
-block_start = ""
-block_end = ""
+is_block = true
 
 [Root.renderer]
 layout = { join = "\n" }
@@ -23,8 +22,7 @@ layout = { ref = "value" }
 # ----- 模块体（Module 内部）-----
 [ModuleBlock]
 [ModuleBlock.parser]
-block_start = ""
-block_end = ""
+is_block = true
 entry = "ModuleItem"
 [ModuleBlock.renderer]
 body = { indent = true, role = "flatten" }
@@ -32,8 +30,7 @@ body = { indent = true, role = "flatten" }
 # ----- 过程体（always / initial 内部）-----
 [ProcBlock]
 [ProcBlock.parser]
-block_start = ""
-block_end = ""
+is_block = true
 entry = "Statement"
 [ProcBlock.renderer]
 body = { indent = true, role = "flatten" }
@@ -41,8 +38,7 @@ body = { indent = true, role = "flatten" }
 # ----- 任务/函数体（task / function 内部）-----
 [TaskBlock]
 [TaskBlock.parser]
-block_start = ""
-block_end = ""
+is_block = true
 entry = "TaskStatement"
 [TaskBlock.renderer]
 body = { indent = true, role = "flatten" }

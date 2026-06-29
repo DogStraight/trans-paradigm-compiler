@@ -23,9 +23,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from lexer import Lexer
-from parser import Parser
-from core.define import GrammarRulesRegister, FileManager, ParseError
-from parser.grammar_inject import inject_productions, inject_replace_rule
+from parser import Parser, setup_grammar
+from core.define import FileManager, ParseError
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
@@ -105,55 +104,23 @@ def pipeline():
             f.write(f"{token.column},{token.line}:{token.type} {token.content}\n")
     print(f"[lexer] tokens: {len(tokens)}")
 
-    # 3. 语法分析（使用 Verilog 规则 + 增强语法）
-    register = GrammarRulesRegister()
-    rules = register.rules_registration(RULES_DIR)
-    # 加载增强语法规则
-    from core.define import FileManager
-    ext_rules = {}
-    ext_dir_full = FileManager.get_full_path(EXT_DIR)
-    if os.path.isdir(ext_dir_full):
-        ext_register = GrammarRulesRegister()
-        ext_rules = ext_register.rules_registration(EXT_DIR)
-        # 合并到 register.rules，保证 inject 时能找到核心规则
-        register.rules.update(ext_rules)
-        rules.update(ext_rules)
-
-        # 从增强语法规则的自声明 [RuleName.inject] 构建注入配置
-        inject_cfg = {}
-        replace_cfg = {}
-        for rname, rrule in ext_rules.items():
-            inj = getattr(rrule, "inject", None)
-            if inj and isinstance(inj, dict):
-                targets = inj.get("targets", [])
-                if targets:
-                    for t in targets:
-                        # TOML 中 targets 可能带 @ 也可能不带，统一补充
-                        t_clean = f"@{t}" if not t.startswith("@") else t
-                        inject_cfg.setdefault(rname, []).append(t_clean)
-                repl = inj.get("replace", {})
-                if repl:
-                    replace_cfg.update(repl)
-        if inject_cfg:
-            inject_productions(register.rules, inject_cfg)
-        if replace_cfg:
-            inject_replace_rule(register.rules, replace_cfg)
+    # 3. 语法分析（加载核心规则 + EXT 增强语法 + production injection）
+    rules = setup_grammar(RULES_DIR, EXT_DIR)
 
     # 设定起始 token 缓存路径（避免每次重建）
     cache_dir = os.path.join(src_dir, ".cache")
     cache_path = os.path.normpath(os.path.join(cache_dir, "start_tokens.json"))
-    from parser.rule_selector import set_default_cache_path
-
+    from parser.rule_selector import RuleSelector as _RS, set_default_cache_path
     set_default_cache_path(cache_path)
 
     parser = Parser(rules_dir=RULES_DIR, cache_enabled=False)
     parser.grammar_rules = rules
     parser.statement_rule_names = [
-        name
-        for name, rule in rules.items()
-        if getattr(rule, "end_case", []) and name != "Expression"
+        name for name, rule in rules.items()
+        if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+        and name != "Expression"
     ]
-    parser.rule_selector = RuleSelector(rules, parser.statement_rule_names)
+    parser.rule_selector = _RS(rules, parser.statement_rule_names)
     parser.atomic_rules = sorted(
         (rule for rule in rules.values() if getattr(rule, "atomic", False)),
         key=lambda r: len(getattr(r, "production")),

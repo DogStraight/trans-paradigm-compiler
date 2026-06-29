@@ -79,9 +79,8 @@ def try_rule_productions(
     context.path_stack.append(seg)
 
     # 块规则
-    block_start = getattr(rule, "block_start", None)
-    if block_start is not None and isinstance(block_start, str):
-        result = self.parse_block(context, start_token=block_start, rule=rule)
+    if getattr(rule, "is_block", False):
+        result = self.parse_block(context, start_token="", rule=rule)
         context.path_stack.pop()
         return result
 
@@ -114,7 +113,7 @@ def try_rule_productions(
     # 属性绑定
     self._bind_attributes(rule_node, rule, all_matched_nodes)
 
-    # 检查结束符
+    # 检查结束符/终止符（含 end_case 正匹配 + forbidden_next 反匹配）
     if not self._check_end_case(context, rule):
         self._restore_current_node(old_node, context)
         context.path_stack.pop()

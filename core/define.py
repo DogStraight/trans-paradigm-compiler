@@ -222,7 +222,8 @@ class GrammarRule:
     其他属性由 Parser / Renderer / Normalizer 各自消费。
     """
 
-    # 从 parser/analyzer 阶段提取的字段名集合
+    # 从 parser/analyzer 阶段提取到顶层的字段名集合
+    # 只包含 Parser/Renderer 消费的字段，analyzer 专用字段留在 rule.analyzer 中
     _KNOWN_FIELDS = {
         "production",
         "node",
@@ -230,11 +231,7 @@ class GrammarRule:
         "inline",
         "pratt",
         "atomic",
-        "block_start",
-        "block_end",
-        "scope",
-        "symbol",
-        "identifier_ref",
+        "is_block",
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
@@ -264,6 +261,14 @@ class GrammarRule:
         # 剩余未识别的属性
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def has_pass_end_case(self) -> bool:
+        """检查是否有正匹配的 end_case 项（非 ! 前缀）。
+
+        用于 statement_rule_names 过滤：仅含 ! 前缀的 end_case 不应视为语句级规则。
+        """
+        ec = getattr(self, "end_case", [])
+        return any(isinstance(item, str) and not item.startswith("!") for item in ec)
 
     def dump(self) -> dict:
         return {

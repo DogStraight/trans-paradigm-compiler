@@ -1,12 +1,12 @@
 """Main parser — recursive descent with backtracking.
 
 Orchestrates parsing by coordinating sub-parsers:
-  - node_parsers: token/call/seq/choice/repeat/optional
-  - production_matcher: rule production matching
-  - attribute_binder: $N path extraction and node assembly
-  - block_parser: block/body parsing
-  - atom_parser: atomic rule + Pratt expression
-  - end_case_checker: terminating token validation
+    - node_parsers: token/call/seq/choice/repeat/optional
+    - production_matcher: rule production matching
+    - attribute_binder: $N path extraction and node assembly
+    - block_parser: block/body parsing
+    - atom_parser: atomic rule + Pratt expression
+    - end_case_checker: terminating token validation
 """
 
 import sys
@@ -104,7 +104,17 @@ class Parser:
         rules_dir: str | None = None,
         cache_enabled: bool = True,
         verbose: bool = False,
+        log_file: str | None = None,
     ) -> None:
+        """初始化解析器。
+
+        Args:
+            rules_dir: 语法规则目录（相对路径）。传入时由调用方接管 RuleSelector。
+            cache_enabled: 是否启用磁盘缓存。
+            verbose: 调试日志开关。True 时输出所有级别日志，False 时只输出 WARN/ERROR。
+            log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
+                     空字符串或 "/dev/null" 类似值表示不写日志。
+        """
         self.grammar_rules: Dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
         self.verbose = verbose
@@ -115,14 +125,21 @@ class Parser:
             self.grammar_rules = GrammarRulesRegister().rules_registration()
         except FileNotFoundError:
             pass
-        if FileManager.debug_log_file is not None:
-            self.debug_log_file = FileManager.get_full_path(FileManager.debug_log_file)
+        # 日志文件：构造参数优先，回退到 FileManager 全局配置
+        if log_file is None:
+            if FileManager.debug_log_file is not None:
+                self.debug_log_file = FileManager.get_full_path(
+                    FileManager.debug_log_file
+                )
+        elif log_file:
+            self.debug_log_file = FileManager.get_full_path(log_file)
+        # log_file="" 或 "/dev/null" → 不写日志（不设置 self.debug_log_file）
         if rules_dir:
             self.operator_defs = pratt_parser.load_operator_defs(rules_dir)
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
-            if getattr(rule, "end_case", [])
+            if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
         ]
         if rules_dir:
             # 传入 rules_dir 时由调用方接管 RuleSelector，此处不创建缓存
@@ -170,16 +187,23 @@ class Parser:
         """带级别的日志记录。
 
         级别规则：
-          - DEBUG（默认）：仅 verbose=True 时写入
-          - INFO：始终写入
-          - WARN/ERROR：始终写入，ERROR 还会打印到 stderr
+            - DEBUG（默认）：仅 verbose=True 时写入
+            - INFO：始终写入
+            - WARN：始终写入到日志文件 + stderr
+            - ERROR：始终写入到日志文件 + stderr
+
+        Args:
+            mode: "w" 覆盖写入，"a" 追加。只在文件打开时有效。
         """
+        log_path = getattr(self, "debug_log_file", None)
+        if log_path is None:
+            return
+
         if level >= self.LOG_INFO or self.verbose:
-            if hasattr(self, "debug_log_file"):
-                indent = self._log_indent(context) if context else ""
-                with open(self.debug_log_file, mode, encoding="utf-8") as f:
-                    f.write(f"{indent}[{action}]\n")
-        if level >= self.LOG_ERROR:
+            indent = self._log_indent(context) if context else ""
+            with open(log_path, mode, encoding="utf-8") as f:
+                f.write(f"{indent}[{action}]\n")
+        if level >= self.LOG_WARN:
             print(f"[parser] {action}", file=sys.stderr)
 
     def _log_info(self, action: str, context: ParseContext | None = None) -> None:
@@ -187,10 +211,8 @@ class Parser:
         self._log_state(action, level=self.LOG_INFO, context=context)
 
     def _warn(self, message: str, context: ParseContext | None = None) -> None:
-        """WARN 级日志：始终输出到日志文件和 stderr"""
-        indent = self._log_indent(context) if context else ""
+        """WARN 级日志：由 _log_state 统一输出到日志文件和 stderr"""
         self._log_state(f"WARN: {message}", level=self.LOG_WARN, context=context)
-        print(f"[parser] {indent}⚠️ {message}", file=sys.stderr)
 
     @staticmethod
     def _debug_token_info(context: ParseContext) -> str:

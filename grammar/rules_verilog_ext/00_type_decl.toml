@@ -137,7 +137,7 @@ indent = 4
 source = "ports"
 
 [TypeRole.analyzer]
-symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
+symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }, capture_hooks = ["resolve_revert"] }
 
 
 # ── 类型端口声明 input miso, output clk ... ──
@@ -177,9 +177,6 @@ target_role = "$2"
 [RevertDecl.renderer]
 layout = { line = ["revert ", { ref = "target_role" }, ";"] }
 
-[RevertDecl.transform]
-kind = "custom"
-handler = "expand_revert"
 
 
 # ── 方法声明 fn read : { ... } ──

@@ -52,9 +52,17 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
     return None
 
 
+def _get_block_end(rule: GrammarRule) -> str:
+    """从规则的 end_case 中提取块结束符（第一个正匹配项，无则返回空字符串）"""
+    for item in getattr(rule, "end_case", []):
+        if isinstance(item, str) and not item.startswith("!"):
+            return item
+    return ""
+
+
 def resolve_block_rule(
     self, start_token: Optional[str]
-) -> Optional[Tuple[GrammarRule, str, Optional[str]]]:
+) -> Optional[Tuple[GrammarRule, str, str]]:
     """查找起始符对应的块规则，返回 (matched_rule, block_name, end_token) 或 None"""
     block_rule_name = (
         self.rule_selector.get_block_rule(start_token)
@@ -69,7 +77,7 @@ def resolve_block_rule(
         self._log_state(f"未找到匹配的块规则: {start_token}")
         return None
     block_name = matched_rule.name
-    end_token = getattr(matched_rule, "block_end", None)
+    end_token = _get_block_end(matched_rule)
     return matched_rule, block_name, end_token
 
 
@@ -146,7 +154,7 @@ def parse_block(
     if rule is not None:
         matched_rule = rule
         block_name = rule.name
-        end_token = getattr(rule, "block_end", None)
+        end_token = _get_block_end(rule)
     else:
         resolved = resolve_block_rule(self, start_token)
         if resolved is None:

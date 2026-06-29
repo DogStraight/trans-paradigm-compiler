@@ -2,30 +2,15 @@
 engine.py — ConfigDrivenTransform 插件
 
 核心变换引擎，作为 TransformPlugin 注册到 AstTransformer 管线。
-
-工作流程:
-  1. 遍历 AST 节点
-  2. 每个节点查找其规则名对应的 transform 配置
-  3. 根据 config.kind 调度：
-       "expand"   → 原语展开 (lookup + foreach + emit)
-       "replace"  → 节点替换
-       "delete"   → 节点删除
-       "custom"   → 委托给已注册的 Python handler
-  4. 返回变换结果
-
-原语无法覆盖的场景 → 用 handler 兜底。
+所有变换操作（expand/replace/delete/custom/扩展）都是注册的原语，
+由 registry.py 的 register_primitive 统一管理。
 """
 
 from typing import Any, Optional, Callable
 from core.define import Node
 from analyzer.scope import Scope
 from transform.post.ast_transformer import TransformPlugin
-from .registry import (
-    TransformContext,
-    TransformResult,
-    SKIP,
-    get_handler,
-)
+from .registry import TransformResult, TransformContext, SKIP, register_primitive, get_primitive, get_handler
 from .primitives import (
     lookup as _lookup,
     lookup_scope as _lookup_scope,
@@ -34,7 +19,7 @@ from .primitives import (
     emit as _emit,
     resolve_attrs,
 )
-from .config_loader import load_transform_configs
+
 
 
 class ConfigDrivenTransform(TransformPlugin):
@@ -68,7 +53,13 @@ class ConfigDrivenTransform(TransformPlugin):
             }
             self._tables = tables
         else:
-            self._configs, self._tables = load_transform_configs(rules, ext_dir)
+            # 从规则 TOML 的 [RuleName.transform] 提取变换配置
+            self._configs = {
+                name: transform
+                for name, rule in rules.items()
+                if isinstance((transform := getattr(rule, "transform", None)), dict)
+            }
+            self._tables = {}
 
         self._stats = {
             "expand": 0,
@@ -190,7 +181,7 @@ class ConfigDrivenTransform(TransformPlugin):
         if config is None:
             return SKIP
 
-        # 条件守卫：所有 kind 统一检查
+        # 条件守卫
         condition_cfg = config.get("condition")
         if condition_cfg:
             context = self._build_context(node)
@@ -204,155 +195,19 @@ class ConfigDrivenTransform(TransformPlugin):
                     return SKIP
 
         kind = config.get("kind", "")
-
-        if kind == "custom":
-            return self._apply_custom(node, root_scope, config)
-        elif kind == "expand":
-            return self._apply_expand(node, config, root_scope)
-        elif kind == "replace":
-            return self._apply_replace(node, config, root_scope)
-        elif kind == "delete":
-            return None
-        else:
-            # 未知 kind → 跳过
-            return SKIP
-
-    # ── 原语: expand ──
-
-    def _apply_expand(self, node: Node, config: dict, root_scope: Scope) -> TransformResult:
-        """expand 变换：lookup + foreach + emit
-
-        配置格式:
-            kind = "expand"
-            source = { lookup = "type", key = "{attr}.{attr}" }
-            foreach = "signals"
-            as = "signal"
-            emit = { node = "NodeName", direction = "{signal.direction}", ... }
-            # 可选
-            condition = { exists = "attr.path" }
-        """
-        # 构建上下文
-        context = self._build_context(node)
-
-        # source 查表（支持 type 表和 scope 符号表）
-        source_cfg = config.get("source", {})
-        lookup_source = source_cfg.get("lookup", "")
-        lookup_key = source_cfg.get("key", "")
-
-        data = None
-        if lookup_source == "scope":
-            data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
-        elif lookup_source == "scope_type":
-            data = _lookup_type_scope(root_scope, lookup_key, context) if lookup_key else None
-        elif lookup_source:
-            table = self._tables.get(lookup_source, {})
-            data = _lookup(table, lookup_key, context) if lookup_key else None
-
-        # foreach 遍历
-        #   foreach: 数据源字段名（从 lookup 结果中取哪个字段作为遍历列表）
-        #   as:      迭代变量名（在 emit 模板中用 {变量名.xxx}，默认用 foreach 字段名）
-        foreach_field = config.get("foreach", "")
-        as_name = config.get("as", foreach_field)  # 默认与 foreach 字段同名
-        items: list = []
-        if data and foreach_field:
-            if isinstance(data, dict) and foreach_field in data:
-                raw_items = data[foreach_field]
-                items = raw_items if isinstance(raw_items, list) else [raw_items]
-            elif isinstance(data, list):
-                items = data
-                as_name = foreach_field or "item"
-        elif data and not foreach_field:
-            # 没有 foreach，用 data 本身作为 context 扩展
-            if isinstance(data, dict):
-                context.update(data)
-
-        # emit 生成
-        emit_spec = config.get("emit")
-        if emit_spec is None:
-            self._stats["skipped"] += 1
-            return SKIP
-
-        if items:
-            # 有 foreach → 对每个 item emit
-            def _do_emit(item: Any, ctx: dict) -> Optional[Node]:
-                return _emit(emit_spec, ctx)
-
-            results = _foreach(items, as_name, _do_emit, context)
-            if results:
-                self._stats["expand"] += 1
-                return results
-            return SKIP
-        else:
-            # 无 foreach → 直接 emit
-            result = _emit(emit_spec, context)
-            self._stats["expand"] += 1
+        prim = get_primitive(kind)
+        if prim is not None:
+            result = prim(self, node, config, root_scope)
+            if result is None:
+                self._stats["delete"] += 1
+            elif result is not SKIP:
+                self._stats[kind] = self._stats.get(kind, 0) + 1
+            else:
+                self._stats["skipped"] += 1
             return result
 
-    # ── 原语: replace ──
-
-    def _apply_replace(self, node: Node, config: dict, root_scope: Scope) -> TransformResult:
-        """replace 变换：用新节点替换当前节点
-
-        配置格式:
-            kind = "replace"
-            source = { lookup = "scope", key = "{name}" }  # 可选：查符号表
-            emit = { node = "NewNode", ... }
-        """
-        context = self._build_context(node)
-
-        # 可选：先查 scope 表（替换时可能需要符号信息）
-        source_cfg = config.get("source", {})
-        lookup_source = source_cfg.get("lookup", "")
-        lookup_key = source_cfg.get("key", "")
-        if lookup_source == "scope" and lookup_key:
-            scope_data = _lookup_scope(root_scope, lookup_key, context)
-            if scope_data and isinstance(scope_data, dict):
-                context.update(scope_data)
-
-        emit_spec = config.get("emit")
-        if emit_spec is None:
-            return SKIP
-        result = _emit(emit_spec, context)
-        self._stats["replace"] += 1
-        return result
-
-    # ── custom handler ──
-
-    def _apply_custom(
-        self,
-        node: Node,
-        root_scope: Scope,
-        config: dict,
-    ) -> TransformResult:
-        """custom 变换：委托给已注册的 Python handler"""
-        handler_name = config.get("handler", "")
-        if not handler_name:
-            print(f"  ⚠️ [transform] {node.node_name}: kind=custom 但未指定 handler")
-            return SKIP
-
-        handler = get_handler(handler_name)
-        if handler is None:
-            print(f"  ⚠️ [transform] {node.node_name}: handler '{handler_name}' 未注册")
-            return SKIP
-
-        ctx = TransformContext(
-            rule_name=node.node_name,
-            config=config,
-            tables=self._tables,
-            extra=self._extra,
-        )
-        try:
-            result = handler(node, root_scope, ctx)
-            self._stats["custom"] += 1
-            return result
-        except Exception as e:
-            print(
-                f"  ❌ [transform] {node.node_name}: handler '{handler_name}' 异常: {e}"
-            )
-            import traceback
-
-            traceback.print_exc()
-            return SKIP
+        # 未知 kind → 跳过
+        return SKIP
 
     # ── 辅助 ──
 
@@ -435,3 +290,135 @@ class ConfigDrivenTransform(TransformPlugin):
         # 额外注入
         ctx["_node"] = node
         return ctx
+# ============================================================
+# 内置原语注册（模块级，import 时自动注册）
+# ============================================================
+
+
+def _expand_primitive(engine, node, config, root_scope):
+    """expand 原语：lookup + foreach + emit"""
+    from .primitives import make_exists_condition
+
+    context = engine._build_context(node)
+
+    source_cfg = config.get("source", {})
+    lookup_source = source_cfg.get("lookup", "")
+    lookup_key = source_cfg.get("key", "")
+
+    data = None
+    if lookup_source == "scope":
+        data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
+    elif lookup_source == "scope_type":
+        data = _lookup_type_scope(root_scope, lookup_key, context) if lookup_key else None
+    elif lookup_source:
+        table = engine._tables.get(lookup_source, {})
+        data = _lookup(table, lookup_key, context) if lookup_key else None
+
+    foreach_field = config.get("foreach", "")
+    as_name = config.get("as", foreach_field)
+    items: list = []
+    if data and foreach_field:
+        if isinstance(data, dict) and foreach_field in data:
+            raw_items = data[foreach_field]
+            items = raw_items if isinstance(raw_items, list) else [raw_items]
+        elif isinstance(data, list):
+            items = data
+            as_name = foreach_field or "item"
+    elif data and not foreach_field:
+        if isinstance(data, dict):
+            context.update(data)
+
+    # items_path 嵌套拍平：遍历 items 中每个元素，沿点号路径取出子列表展开
+    # 例如 items_path = "items.items" → 对每个 port 取出 port["items"]["items"] 列表
+    flatten_path = config.get("items_path", "")
+    if flatten_path and items:
+        flat: list = []
+        for item in items:
+            cur = item
+            for part in flatten_path.split("."):
+                if isinstance(cur, dict):
+                    cur = cur.get(part)
+                else:
+                    cur = None
+                    break
+            if isinstance(cur, list):
+                # 将子列表元素展开到主列表，同时保留外层 context 属性
+                for sub in cur:
+                    if isinstance(sub, dict):
+                        merged = dict(item if isinstance(item, dict) else {})
+                        merged.update(sub)
+                        flat.append(merged)
+                    else:
+                        flat.append(sub)
+            elif cur is not None:
+                flat.append(cur)
+        items = flat
+
+    emit_spec = config.get("emit")
+    if emit_spec is None:
+        return SKIP
+
+    if items:
+        def _do_emit(item: Any, ctx: dict):
+            return _emit(emit_spec, ctx)
+        results = _foreach(items, as_name, _do_emit, context)
+        return results if results else SKIP
+    else:
+        result = _emit(emit_spec, context)
+        return result
+
+
+def _replace_primitive(engine, node, config, root_scope):
+    """replace 原语：用新节点替换当前节点"""
+    context = engine._build_context(node)
+
+    source_cfg = config.get("source", {})
+    lookup_source = source_cfg.get("lookup", "")
+    lookup_key = source_cfg.get("key", "")
+    if lookup_source == "scope" and lookup_key:
+        scope_data = _lookup_scope(root_scope, lookup_key, context)
+        if scope_data and isinstance(scope_data, dict):
+            context.update(scope_data)
+
+    emit_spec = config.get("emit")
+    if emit_spec is None:
+        return SKIP
+    return _emit(emit_spec, context)
+
+
+def _delete_primitive(engine, node, config, root_scope):
+    """delete 原语：删除节点"""
+    return None
+
+
+def _custom_primitive(engine, node, config, root_scope):
+    """custom 原语（向后兼容）：委托给旧式 handler"""
+    handler_name = config.get("handler", "")
+    if not handler_name:
+        return SKIP
+
+    handler = get_handler(handler_name)
+    if handler is None:
+        return SKIP
+
+    ctx = TransformContext(
+        rule_name=node.node_name,
+        config=config,
+        tables=engine._tables,
+        extra=engine._extra,
+    )
+    try:
+        result = handler(node, root_scope, ctx)
+        return result
+    except Exception as e:
+        print(f"  ❌ [transform] {node.node_name}: handler '{handler_name}' 异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return SKIP
+
+
+# 统一注册到原语注册表
+register_primitive("expand", _expand_primitive)
+register_primitive("replace", _replace_primitive)
+register_primitive("delete", _delete_primitive)
+register_primitive("custom", _custom_primitive)

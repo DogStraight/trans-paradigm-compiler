@@ -5,6 +5,7 @@
 [Declarator]
 [Declarator.parser]
 production = ["@Identifier", "@RangeBracket*", "@Init?"]
+end_case = ["!symbol.base.dot"]
 [Declarator.parser.node]
 name = "$1"
 array_range = "$2"

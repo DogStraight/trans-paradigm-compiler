@@ -17,11 +17,10 @@
 targets = ["@AnsiPortDecl", "@ModuleItem"]
 
 # ── 类型化类型描述符 spi.slave ──
+# 注意：TypedTypeSpec 不注入到 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl，
+# 避免 DeclaratorList 的逗号 repeat 贪心吞噬下一端口。TypedPortDecl 已通过
+# @AnsiPortDecl 注入覆盖独立端口声明场景，TypedTypeSpec 只被 TypedPortDecl 直接引用。
 [TypedTypeSpec]
-[TypedTypeSpec.inject]
-# 挂载在 PortDeclPrefix 的调用处，与 @PortDeclPrefix 平行分支
-targets = ["@AnsiInputDecl.production[0]", "@AnsiOutputDecl.production[0]", "@AnsiInoutDecl.production[0]"]
-
 [TypedTypeSpec.parser]
 production = ["@Identifier", "symbol.base.dot", "@Identifier"]
 [TypedTypeSpec.parser.node]
@@ -50,10 +49,5 @@ ref_collect = true
 #   as            → 每项绑定为 port，emit 模板中用 {port.xxx}
 #   emit          → 为每个端口生成一个 AnsiInputDecl/AnsiOutputDecl 节点
 [TypedPortDecl.transform]
-kind = "custom"
-handler = "expand_typed_port"
+kind = "expand_typed_port"
 condition = { exists = "type_spec.type_name" }
-# 注意：原语 expand 当前要求所有 emit 方向相同，但类型端口既有 input 又有 output，
-# 需要 handler 做方向感知的 emit。kind = "expand" 适合单方向场景。此处的 custom handler
-# 用 Python 逻辑查 scope_type 并做方向相关展开。如需纯配置实现，可拆分两个
-# expand 规则（TypedInputPort/TypedOutputPort）分别注入。
