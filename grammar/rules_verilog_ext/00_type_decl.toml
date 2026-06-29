@@ -137,7 +137,7 @@ indent = 4
 source = "ports"
 
 [TypeRole.analyzer]
-# 角色本身不创建符号，是类型的内部结构
+symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
 
 
 # ── 类型端口声明 input miso, output clk ... ──

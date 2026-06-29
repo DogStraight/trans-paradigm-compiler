@@ -145,6 +145,70 @@ def lookup_scope(
     return {"name": sym.name, "kind": sym.kind, **sym.attrs}
 
 
+# ── 原语: lookup_type_scope ──
+
+def lookup_type_scope(
+    root_scope: Any,
+    key_template: str,
+    context: dict[str, Any],
+) -> Any:
+    """从 scope 作用域链中按类型作用域 + 角色名查找
+
+    专用于 EXT 类型系统：TypeDecl 在 scope 中创建 type 子作用域，
+    其下 role 符号存储了 ports 信息。
+
+    Key 语法: "type_name.role_name" → 先找 type 子域，再找 role 符号
+    例如: "spi.master" → root_scope.find_child_scope("spi", "type")
+                             → type_scope.resolve("master")
+                             → Symbol.attrs (含 ports)
+
+    Args:
+        root_scope: 语义分析产出的根 Scope 对象
+        key_template: 键模板，例如 "{type_spec.type_name}.{type_spec.role_name}"
+        context: 当前上下文（节点属性）
+    Returns:
+        角色符号的 attrs dict（含 ports 等），未找到返回 None
+    """
+    from analyzer.scope import Scope as ScopeType
+    key = resolve_template(key_template, context)
+    parts = key.split(".")
+    if len(parts) < 2:
+        return None
+    type_name = parts[0]
+    role_name = parts[1]
+    attr_path = parts[2:] if len(parts) > 2 else []
+
+    if not hasattr(root_scope, "find_child_scope"):
+        return None
+
+    # 1. 查找 type 子作用域
+    type_scope = root_scope.find_child_scope(type_name, "type")
+    if type_scope is None:
+        return None
+
+    # 2. 在类型作用域中查找角色符号
+    role_sym = type_scope.resolve(role_name)
+    if role_sym is None:
+        return None
+
+    # 3. 有属性路径 → 从 attrs 取
+    if attr_path:
+        val: Any = role_sym.attrs
+        for attr in attr_path:
+            if isinstance(val, dict) and attr in val:
+                val = val[attr]
+            else:
+                return None
+        return val
+
+    # 4. 返回角色符号的完整 attrs
+    return {
+        "name": role_sym.name,
+        "kind": role_sym.kind,
+        **role_sym.attrs,
+    }
+
+
 # ── 原语: foreach ──
 
 def foreach(

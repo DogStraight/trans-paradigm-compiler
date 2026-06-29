@@ -7,7 +7,6 @@
 # 增强层依赖的核心语法规则目录
 base_rules = "rules_verilog"
 
-# 类型定义文件（_types.toml）
-types = "_types.toml"
-
 # 各增强规则的挂载点声明在规则自身的 [RuleName.inject] 中
+# TypeDecl 的类型角色信息由 SemanticAnalyzer 从 TOML 规则定义中提取并存入 scope 符号表，
+# Transform 引擎通过 lookup_type_scope 原语从 scope 查询，无需独立的 _types.toml。

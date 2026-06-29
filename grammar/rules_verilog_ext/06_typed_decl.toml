@@ -45,21 +45,15 @@ symbol = { kind = "typed_port", name_attr = "instance_name.name" }
 ref_collect = true
 
 # transform: 原语展开 — 将类型化端口展开为具体端口声明
-#   source.lookup  → 从 type 表查 {type_spec.type_name}.{type_spec.role_name}
-#   foreach       → 取查到的 signals 列表
-#   as            → 每项绑定为 signal，emit 模板中用 {signal.xxx}
-#   emit          → 为每个信号生成一个 AnsiInputDecl 节点
+#   source.lookup  → scope_type: 从 scope 类型域查 {type_name}.{role_name}
+#   foreach       → 取查到的 ports 列表（由 analyzer capture 从 TypeRole 提取）
+#   as            → 每项绑定为 port，emit 模板中用 {port.xxx}
+#   emit          → 为每个端口生成一个 AnsiInputDecl/AnsiOutputDecl 节点
 [TypedPortDecl.transform]
-kind = "expand"
-source = { lookup = "type", key = "{type_spec.type_name}.{type_spec.role_name}" }
-foreach = "signals"
-as = "signal"
+kind = "custom"
+handler = "expand_typed_port"
 condition = { exists = "type_spec.type_name" }
-
-[TypedPortDecl.transform.emit]
-node = "AnsiInputDecl"
-direction = "{signal.direction}"
-
-[[TypedPortDecl.transform.emit.sub_node]]
-node = "Declarator"
-name = "{instance_name}_{signal.name}"
+# 注意：原语 expand 当前要求所有 emit 方向相同，但类型端口既有 input 又有 output，
+# 需要 handler 做方向感知的 emit。kind = "expand" 适合单方向场景。此处的 custom handler
+# 用 Python 逻辑查 scope_type 并做方向相关展开。如需纯配置实现，可拆分两个
+# expand 规则（TypedInputPort/TypedOutputPort）分别注入。

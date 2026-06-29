@@ -29,6 +29,7 @@ from .registry import (
 from .primitives import (
     lookup as _lookup,
     lookup_scope as _lookup_scope,
+    lookup_type_scope as _lookup_type_scope,
     foreach as _foreach,
     emit as _emit,
     resolve_attrs,
@@ -241,6 +242,8 @@ class ConfigDrivenTransform(TransformPlugin):
         data = None
         if lookup_source == "scope":
             data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
+        elif lookup_source == "scope_type":
+            data = _lookup_type_scope(root_scope, lookup_key, context) if lookup_key else None
         elif lookup_source:
             table = self._tables.get(lookup_source, {})
             data = _lookup(table, lookup_key, context) if lookup_key else None

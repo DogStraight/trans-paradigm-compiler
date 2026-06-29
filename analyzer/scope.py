@@ -95,6 +95,21 @@ class Scope:
             return self.parent.resolve(name)
         return None
 
+    def find_child_scope(self, name: str, kind: str | None = None) -> Optional["Scope"]:
+        """按名称（和可选种类）查找直接子作用域
+
+        Args:
+            name: 作用域名称
+            kind: 可选，限定作用域种类（如 "type"、"module"）
+        Returns:
+            匹配的子 Scope，未找到返回 None
+        """
+        for child in self.children:
+            if child.name == name:
+                if kind is None or child.kind == kind:
+                    return child
+        return None
+
     def to_dict(self) -> dict:
         d: dict = {"name": self.name, "kind": self.kind}
         if self.symbols:

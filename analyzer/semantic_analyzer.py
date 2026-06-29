@@ -111,6 +111,11 @@ class SemanticAnalyzer:
         if not name_attr:
             return
 
+        # capture 配置：将节点属性提取到符号的 attrs 中
+        # 格式: capture = { attr_name = "source_path", ... }
+        # 例如: capture = { ports = "ports" } → 将 node.ports 存入 sym.attrs["ports"]
+        capture = sym_rule.get("capture", {})
+
         names = self._extract_names(node, name_attr)
         for name in names:
             if not name:
@@ -120,7 +125,45 @@ class SemanticAnalyzer:
                 self._errors.append(f"重复声明 '{name}' 在作用域 '{scope.name}'")
                 continue
 
-            sym = scope.declare(name=name, kind=kind, decl_node=node, attrs={})
+            # 提取 capture 数据（可递归，产出纯 JSON 可序列化的结构）
+            attrs: dict = {}
+
+            def _capture_val(val: Any) -> Any:
+                """将 Node 属性递归提取为 JSON 可序列化的值"""
+                if val is None:
+                    return None
+                if isinstance(val, (str, int, float, bool)):
+                    return val
+                if isinstance(val, Node):
+                    # 优先取主要值（content/name/value）
+                    for p in ("content", "name", "value"):
+                        pv = getattr(val, p, None)
+                        if pv is not None and isinstance(pv, str):
+                            return pv
+                    # 否则递归提取所有非私有属性
+                    d: dict = {}
+                    for sub_attr in vars(val):
+                        if sub_attr.startswith("_"):
+                            continue
+                        sv = _capture_val(getattr(val, sub_attr))
+                        if sv is not None:
+                            d[sub_attr] = sv
+                    return d if d else None
+                if isinstance(val, list):
+                    items = [_capture_val(v) for v in val]
+                    items = [v for v in items if v is not None]
+                    return items if items else None
+                return str(val)
+
+            for attr_name, source_path in capture.items():
+                captured = list(self._walk_path(node, source_path))
+                if captured:
+                    values = [_capture_val(v) for v in captured]
+                    values = [v for v in values if v is not None]
+                    if values:
+                        attrs[attr_name] = values if len(values) > 1 else values[0]
+
+            sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
             self._all_symbols.append(sym)
 
     # ---- 路径遍历（共享 _walk_path / _extract_names）----
