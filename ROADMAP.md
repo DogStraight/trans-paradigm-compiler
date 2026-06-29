@@ -149,7 +149,12 @@ D5. Transform 引擎：原语优先，handler 兜底
 - [ ] Renderer layouts for all new rules
 - [ ] `ref_spi_inf.v` 完整解析 → 生成
 
-**P2 — 质量**
+**P2 — 上下文敏感文法**
+- [ ] 前向引用解析（decl before use 需要双遍或符号表辅助的回溯）
+- [ ] 声明与使用的二义性消解（identifier 是类型名还是实例名）
+- [ ] 预处理器集成（`` `define / `include / `ifdef `` 在 Lexer 前展开）
+
+**P3 — 质量**
 - [ ] 输出整洁度审查（无多余空格/空行）
 - [ ] i18n 错误/日志信息
 - [ ] 全量 diff 自动化（不依赖肉眼对比）
