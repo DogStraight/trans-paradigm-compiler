@@ -150,6 +150,7 @@ class RuleSelector:
         token: Token,
         pre_symbols: dict[str, str] | None = None,
         pre_hints: dict[str, list[str]] | None = None,
+        scope_lookup_fn=None,
     ) -> List[GrammarRule]:
         if token is None:
             return []
@@ -175,6 +176,21 @@ class RuleSelector:
                             return -1
                     return 0
                 rule_names.sort(key=_hint_key)
+
+        # 运行时作用域查询：如果 scope 中已知此符号种类，也作为 hint
+        if scope_lookup_fn is not None and token.type == "id":
+            scope_kind = scope_lookup_fn(token.content)
+            if scope_kind and pre_hints and scope_kind in pre_hints:
+                hints = pre_hints[scope_kind]
+                def _scope_hint_key(name: str) -> int:
+                    for hint in hints:
+                        if hint.startswith("*"):
+                            if name.endswith(hint[1:]):
+                                return -1
+                        elif name == hint:
+                            return -1
+                    return 0
+                rule_names.sort(key=_scope_hint_key)
 
         # 名称 → 对象
         result = []

@@ -72,6 +72,16 @@ def try_rule_productions(
     if getattr(rule, "pratt", False):
         return self._try_pratt_rule(context, rule)
 
+    # 作用域推入（如规则有 scope 声明）
+    rule_parser = getattr(rule, "parser", {})
+    scope_def = rule_parser.get("scope") if isinstance(rule_parser, dict) else None
+    scope_pushed = False
+    if scope_def and isinstance(scope_def, dict):
+        scope_kind = scope_def.get("kind", rule.name)
+        scope_name = rule.name
+        self.scope_stack.push(scope_name, scope_kind)
+        scope_pushed = True
+
     # 语义路径：规则自然序 +1，入栈（block 规则也走此路径）
     sn = context.sibling_counter.get(rule.name, 0)
     context.sibling_counter[rule.name] = sn + 1
@@ -82,6 +92,8 @@ def try_rule_productions(
     if getattr(rule, "is_block", False):
         result = self.parse_block(context, start_token="", rule=rule)
         context.path_stack.pop()
+        if scope_pushed:
+            self.scope_stack.pop()
         return result
 
     # 记录失败尝试（成功后清空）
@@ -108,6 +120,8 @@ def try_rule_productions(
     all_matched_nodes = match_productions(self, context, rule)
     if all_matched_nodes is None:
         context.path_stack.pop()
+        if scope_pushed:
+            self.scope_stack.pop()
         return None
 
     # 属性绑定
@@ -117,6 +131,8 @@ def try_rule_productions(
     if not self._check_end_case(context, rule):
         self._restore_current_node(old_node, context)
         context.path_stack.pop()
+        if scope_pushed:
+            self.scope_stack.pop()
         return None
 
     # Inline 扁平化
@@ -125,6 +141,8 @@ def try_rule_productions(
     )
     if inline_result is not None:
         context.path_stack.pop()
+        if scope_pushed:
+            self.scope_stack.pop()
         return inline_result
 
     self._restore_current_node(old_node, context)
@@ -132,4 +150,6 @@ def try_rule_productions(
         f"✓ 规则 {rule.name} 匹配成功", context=context
     )
     context.path_stack.pop()
+    if scope_pushed:
+        self.scope_stack.pop()
     return rule_node

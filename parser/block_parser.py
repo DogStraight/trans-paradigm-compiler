@@ -19,7 +19,10 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
     if current is None:
         return None
 
-    candidates = self.rule_selector.get_candidate_rules(current, self.pre_symbols, self.pre_hints)
+    candidates = self.rule_selector.get_candidate_rules(
+        current, self.pre_symbols, self.pre_hints,
+        self.scope_stack.lookup,
+    )
     self._log_state(
         f"parse_sentence: {self._debug_token_info(context)} "
         f"candidates={[r.name for r in candidates]}",
@@ -30,9 +33,11 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
 
     for rule in candidates:
         snapshot = context.create_snapshot()
+        scope_depth = self.scope_stack.snapshot()
         node = self._try_rule_productions(context, rule)
         if node is not None:
             return node
+        self.scope_stack.restore(scope_depth)
         context.restore_snapshot(snapshot)
 
     # 构建期望 token 集合提示

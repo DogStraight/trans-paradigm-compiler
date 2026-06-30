@@ -53,6 +53,7 @@ from .block_parser import (
     parse_block,
     collect_line_comments,
 )
+from .scope_stack import ScopeStack
 
 
 class Parser:
@@ -125,6 +126,8 @@ class Parser:
         # 预扫描符号表（可选）
         self.pre_symbols = pre_symbols or {}
         self.pre_hints: dict[str, list[str]] = {}
+        # 解析时作用域栈（可选，配合 peek scope 使用）
+        self.scope_stack = ScopeStack()
 
         try:
             self.grammar_rules = GrammarRulesRegister().rules_registration()

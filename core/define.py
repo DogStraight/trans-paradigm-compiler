@@ -290,6 +290,43 @@ class GrammarRulesRegister:
     def __init__(self) -> None:
         self.rules: dict[str, GrammarRule] = {}
 
+    @staticmethod
+    def _resolve_peek(rules_dict: dict) -> dict:
+        """解析跨阶段窥视引用（peek）。
+
+        在 TOML 中使用：
+            [RuleName.parser]
+            peek = { scope = "analyzer", symbol = "analyzer" }
+
+        加载期将 analyzer.scope 拷贝到 parser.scope，
+        不增加运行期耦合。
+        """
+        import copy
+        for rule_name, rule_dict in rules_dict.items():
+            if rule_name == "file_rules":
+                continue
+            parser = rule_dict.get("parser")
+            if not isinstance(parser, dict):
+                continue
+            peek = parser.pop("peek", None)
+            if not isinstance(peek, dict):
+                continue
+            for target_field, source_stage_name in peek.items():
+                source_stage = rule_dict.get(source_stage_name)
+                if not isinstance(source_stage, dict):
+                    raise ValueError(
+                        f"peek: rule '{rule_name}' source stage "
+                        f"'{source_stage_name}' not found or not a dict"
+                    )
+                value = source_stage.get(target_field)
+                if value is None:
+                    raise ValueError(
+                        f"peek: rule '{rule_name}' field '{target_field}' "
+                        f"not found in stage '{source_stage_name}'"
+                    )
+                parser[target_field] = copy.deepcopy(value)
+        return rules_dict
+
     def rules_registration(self, rules_dir: str = "") -> dict[str, GrammarRule]:
         """
         加载语法规则：优先从目录加载所有 .toml 文件，
@@ -302,6 +339,8 @@ class GrammarRulesRegister:
         if not rules_dict:
             # 回退：单文件加载
             rules_dict = FileManager.load_rules()
+        # 解析 peek 引用（加载期，不影响运行期隔离）
+        rules_dict = self._resolve_peek(rules_dict)
         for rule_name, rule_dict in rules_dict.items():
             if rule_name == "file_rules":
                 continue

@@ -5,6 +5,7 @@
 [ModuleDecl]
 
 [ModuleDecl.parser]
+peek = { scope = "analyzer" }
 production = [
     "keyword.module",
     "@Identifier",

@@ -9,6 +9,7 @@ body = "$1"
 
 [FuncDeclANSI]
 [FuncDeclANSI.parser]
+peek = { scope = "analyzer" }
 production = [
     "keyword.function",
     "(keyword.automatic|keyword.static)?",
@@ -113,6 +114,7 @@ body = "$1"
 
 [TaskDeclANSI]
 [TaskDeclANSI.parser]
+peek = { scope = "analyzer" }
 production = [
     "keyword.task",
     "(keyword.automatic|keyword.static)?",
