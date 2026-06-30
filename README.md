@@ -1,9 +1,9 @@
 # PyV 编译器 → Verilog
 
+<!-- Keywords: TOML grammar; configuration-driven parser; recursive descent + Pratt; Wadler-Lindig; Doc IR; Verilog; pretty printer; Python; compiler frontend; context-sensitive grammar; metaprogramming; language workbench; AI-friendly configuration -->
+
 配置驱动的 Verilog 编译框架，支持词法分析 → 语法分析 → 语义分析 → 代码生成的完整流水线。
 **Renderer** 替代了传统的 CG（模板引擎）+ Formatter（行扫描）两步式架构，直接从 AST + 布局规则渲染为格式化文本。
-
-设计哲学：**本质硬编码保留在代码中，偶然硬编码全部配置化**。
 
 ## 流水线
 
