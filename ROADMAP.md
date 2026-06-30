@@ -172,7 +172,7 @@ D5. Transform 引擎：原语优先，handler 兜底
 ## 四、悬而未决的设计问题
 
 ### Q1. TypeDecl 的 body 结构
-
+...
 ```
 type spi (params) {
     master : input miso, output clk, mosi, cs;
@@ -180,74 +180,82 @@ type spi (params) {
     fn read : { ... }
 }
 ```
-
+...
 - role 定义是 `role_name : port_decl_list`
 - `revert` 是引用另一个 role 并反转方向
 - `fn` / `task` / `function` 定义接口方法
-
-**待定**：fn body 里是否能包含 always/assign（行为级描述），还是只做接口签名？
+...
+**待定**：fn body 里是否能包含 always/assign，还是只做接口签名？
 
 ### Q2. 类型参数传递
-
-```
-spi(0,8).slave spi_io
-```
-
-位置参数 `0` 和 `8` 对应 `parameter MODE = 0, DATA_WIDTH = 8`。
-
-**待定**：
-- 是否支持命名参数 `spi(MODE=0, DATA_WIDTH=8).slave`？
-- 参数默认值如何影响展开（`parameter MODE = 0`，不传参时用默认值）？
-
+...
 ### Q3. revert 精确语义
-
-```
-slave : revert master;
-```
-
-假设 `master` 定义为：
-```
-input  miso,
-output clk, mosi, cs
-```
-
-`revert master` 的结果是：
-```
-output miso,
-input  clk, mosi, cs
-```
-
-即**方向取反**。但：
-- inout 取反还是 inout？
-- 位宽是否保持不变？
-- 名字是否完全相同？
-
+...
 ### Q4. 无 role 的类型变量
-
-```
-spi spi_conn;
-```
-
-不指定 `.slave` 时，使用哪个 role？默认第一个？还是需要报错？
-
+...
 ### Q5. 方法调用链
-
-```
-spi_io.read().spi_data
-```
-
-- `spi_io` 是 `spi` 类型实例
-- `.read()` 调用类型的方法，返回"方法返回值"
-- `.spi_data` 取返回值的字段
-
-**待定**：方法返回值是什么——单个信号？信号组？需要引入"匿名结构体"概念吗？
-
+...
 ### Q6. 展开后的命名空间
+...
+---
 
-```
-spi(0,8).slave  spi_io;
-→ 展开为
-input  spi_io_clk;
+## 五、今晚新增待办项（2026-06-30 会话）
+
+### P0 — 格式化器 + 容错解析
+- [ ] pipieline mode: 新增 `format` 模式（Lexer→Parser→Normalizer→Renderer，跳过 Analyzer+Transform）
+- [ ] 错误容忍：Parser 在语法错误时返回部分 AST，不直接抛异常终止
+- [ ] `--format` CLI 入口：输入 .v 文件 → 输出格式化后的 .v 文件
+- [ ] 保留原始注释位置（不丢失行内注释）
+- [ ] 参考 Prettier 的"格式化即正确"理念
+
+### P0 — 配置化预处理器
+- [ ] `base/_preprocess.toml` — include_pattern、search_paths、defines 配置
+- [ ] `lexer/preprocess.py` — 正则驱动的 include 展开（纯文本替换，不涉及解析）
+- [ ] 引擎级管线模式：include_pattern = "" 时跳过预处理步骤
+- [ ] 可动态开关（format 模式下关闭预处理保留源文本完整性）
+
+### P1 — 核心 Verilog 完备（已有）
+- [ ] generate / generate if / generate case / genvar
+- [ ] forever / repeat / wait / disable
+- [ ] always_ff / always_comb / always_latch
+- [ ] initial / force / release / deassign
+- [ ] 数组声明 reg [7:0] mem [0:255]
+- [ ] while 循环
+- [ ] 条件运算符 ?: 完整支持（已部分实现）
+- [ ] 增强注释解析（块注释 /**/ 跨行）
+
+### P1 — 上下文敏感文法增强
+- [ ] pre_scan ← 已完成（2026-06-30）
+- [ ] scope_stack ← 已完成（2026-06-30）
+- [ ] peek 跨域引用 ← 已完成（2026-06-30）
+- [ ] identifier_ref 属性级类型解析 ← 已完成（2026-06-30）
+- [ ] RuleSelector 运行时 scope 查询消歧
+- [ ] import / `include 跨文件符号传播
+
+### P2 — 增强语法层
+- [ ] TypeDecl ParamList 支持（`spi(0,8).slave`）
+- [ ] TypeMethod / TypeVar 规则
+- [ ] 方法调用链解析（`spi_io.read().data`）
+- [ ] RevertDecl transform → port direction reversal
+- [ ] 更多类型用例（不同参数、嵌套类型、多 role）
+
+### P3 — 工程化
+- [ ] pipeline modes 配置化（`_pipeline.toml` 声明各模式阶段子集）
+- [ ] 新手教程：从零添加一条语法规则（10 分钟可跟做）
+- [ ] `--validate-config` 模式：启动时检查 TOML 配置完整性
+- [ ] 输出整洁度审查（无多余空格/空行）
+- [ ] 全量 diff 自动化（不依赖肉眼对比）
+- [ ] pyproject.toml / setup.py
+- [ ] CI（GitHub Actions）
+- [ ] 贡献指南（CONTRIBUTING.md）
+- [ ] 许可证选择（MIT）
+
+### 架构级讨论（远期）
+- [ ] LLVM IR 对接可行性（需要 LLVM 专家协助）
+- [ ] "任意语言转任意语言"的 Transform 管线分叉
+- [ ] WASM 后端输出
+- [ ] 增量解析（类似 tree-sitter 的热重载）
+- [ ] 可视化语法编辑器（前端 Web 应用）
 output spi_io_mosi;
 output spi_io_miso;
 output spi_io_cs;
