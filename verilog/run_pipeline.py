@@ -22,7 +22,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from lexer import Lexer
+from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
 from core.define import FileManager, ParseError
 from parser.rule_selector import RuleSelector
@@ -104,6 +104,12 @@ def pipeline():
             f.write(f"{token.column},{token.line}:{token.type} {token.content}\n")
     print(f"[lexer] tokens: {len(tokens)}")
 
+    # 2b. 预扫描（可选，默认开启）
+    pre_scan_config = load_pre_scan_config(RULES_DIR)
+    pre_symbols = pre_scan(source, pre_scan_config)
+    if pre_symbols:
+        print(f"[prescan] symbols: {len(pre_symbols)}")
+
     # 3. 语法分析（加载核心规则 + EXT 增强语法 + production injection）
     rules = setup_grammar(RULES_DIR, EXT_DIR)
 
@@ -113,7 +119,8 @@ def pipeline():
     from parser.rule_selector import RuleSelector as _RS, set_default_cache_path
     set_default_cache_path(cache_path)
 
-    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False)
+    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False, pre_symbols=pre_symbols)
+    parser.pre_hints = pre_scan_config.get("hints", {})
     parser.grammar_rules = rules
     parser.statement_rule_names = [
         name for name, rule in rules.items()

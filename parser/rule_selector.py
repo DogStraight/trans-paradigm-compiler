@@ -145,7 +145,12 @@ class RuleSelector:
             if path:
                 save_token_map(self.start_token_map, path)
 
-    def select_candidates(self, token: Token) -> List[GrammarRule]:
+    def select_candidates(
+        self,
+        token: Token,
+        pre_symbols: dict[str, str] | None = None,
+        pre_hints: dict[str, list[str]] | None = None,
+    ) -> List[GrammarRule]:
         if token is None:
             return []
         rule_names = self.start_token_map.get(token.type, [])
@@ -155,6 +160,22 @@ class RuleSelector:
         _ORDER_NOT_FOUND = len(self.statement_rule_names)
         order = {name: i for i, name in enumerate(self.statement_rule_names)}
         rule_names.sort(key=lambda n: order.get(n, _ORDER_NOT_FOUND))
+
+        # 预符号提示：如果 token 是 id 且已知符号名，优先匹配相关规则
+        if pre_symbols and pre_hints and token.type == "id":
+            kind = pre_symbols.get(token.content)
+            if kind and kind in pre_hints:
+                hints = pre_hints[kind]
+                def _hint_key(name: str) -> int:
+                    for hint in hints:
+                        if hint.startswith("*"):
+                            if name.endswith(hint[1:]):
+                                return -1
+                        elif name == hint:
+                            return -1
+                    return 0
+                rule_names.sort(key=_hint_key)
+
         # 名称 → 对象
         result = []
         for name in rule_names:

@@ -105,6 +105,7 @@ class Parser:
         cache_enabled: bool = True,
         verbose: bool = False,
         log_file: str | None = None,
+        pre_symbols: dict[str, str] | None = None,
     ) -> None:
         """初始化解析器。
 
@@ -114,12 +115,16 @@ class Parser:
             verbose: 调试日志开关。True 时输出所有级别日志，False 时只输出 WARN/ERROR。
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
                      空字符串或 "/dev/null" 类似值表示不写日志。
+            pre_symbols: Lexer 预扫描符号表 { name: kind }，用于辅助规则选择。
         """
         self.grammar_rules: Dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
         self.verbose = verbose
         # 失败尝试摘要
         self._failure_attempts: list[dict] = []
+        # 预扫描符号表（可选）
+        self.pre_symbols = pre_symbols or {}
+        self.pre_hints: dict[str, list[str]] = {}
 
         try:
             self.grammar_rules = GrammarRulesRegister().rules_registration()
