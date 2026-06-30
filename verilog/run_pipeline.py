@@ -185,6 +185,14 @@ def pipeline():
         print(
             f"[symbols] saved ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)"
         )
+        if analyzer.has_errors:
+            for err in analyzer.errors:
+                print(f"[analyzer] ERROR {err}")
+            for ref in analyzer._unresolved_refs:
+                print(f"[analyzer] WARN {ref}")
+            if analyzer.errors:
+                print("[analyzer] 语义错误，终止管线")
+                return
 
     # 6. 后阶段 AST 变换（可选插件管线）
     global transform_enable

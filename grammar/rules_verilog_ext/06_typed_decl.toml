@@ -26,6 +26,9 @@ production = ["@Identifier", "symbol.base.dot", "@Identifier"]
 [TypedTypeSpec.parser.node]
 type_name = "$1"
 role_name = "$3"
+[TypedTypeSpec.analyzer]
+# type_name 是对类型声明的引用，按指定属性名查找
+identifier_ref = "type_name"
 [TypedTypeSpec.renderer]
 layout = { line = [{ ref = "type_name" }, ".", { ref = "role_name" }] }
 

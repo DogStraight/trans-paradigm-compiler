@@ -44,6 +44,7 @@ class SemanticAnalyzer:
         self._current_scope: Optional[Scope] = None
         self._all_symbols: List[Symbol] = []
         self._errors: List[str] = []
+        self._unresolved_refs: List[str] = []
     # 语义概念（节点名、属性名、默认值）直接使用字面量，无需配置文件或映射表
 
     # 配置文件加载方法已移除（_semantic.toml / _name_symbol.toml 已删除）
@@ -55,8 +56,13 @@ class SemanticAnalyzer:
         self._all_symbols.clear()
         self._errors.clear()
         self._scope_name_node_ids: set[int] = set()
+        self._unresolved_refs.clear()
         self._walk(ast)
         return ast
+
+    @property
+    def has_errors(self) -> bool:
+        return len(self._errors) > 0 or len(self._unresolved_refs) > 0
 
     @property
     def root_scope(self) -> Optional[Scope]:
@@ -112,7 +118,11 @@ class SemanticAnalyzer:
 
         # 3. 解析标识符引用（规则自声明，从 analyzer 配置读取）
         if rule and getattr(rule, "analyzer", {}).get("identifier_ref", False):
-            self._resolve_identifier(node, scope)
+            iref = getattr(rule, "analyzer", {}).get("identifier_ref")
+            if isinstance(iref, str):
+                self._resolve_identifier(node, scope, attr=iref)
+            else:
+                self._resolve_identifier(node, scope)
 
         # 4. 递归子节点
         for child in node.iter_children():
@@ -260,13 +270,24 @@ class SemanticAnalyzer:
 
     # ---- 标识符解析 ----
 
-    def _resolve_identifier(self, node: Node, scope: Scope) -> None:
+    def _resolve_identifier(self, node: Node, scope: Scope, attr: str | None = None) -> None:
         # 跳过作用域定义名自身的 Identifier（如模块名、函数名）
         if id(node) in self._scope_name_node_ids:
             return
-        name = getattr(node, "content", None) or getattr(node, "name", None)
+        if attr:
+            # 从指定属性提取引用名（如 TypedTypeSpec 的 type_name）
+            name = getattr(node, attr, None)
+            if isinstance(name, Node):
+                name = getattr(name, "content", str(name))
+        else:
+            name = getattr(node, "content", None) or getattr(node, "name", None)
         if not name:
             return
         sym = scope.resolve(name)
         if sym is not None:
             node.add_attr("_symbol_ref", sym)
+        elif attr:
+            # 指定属性名时：找不到符号则记录未解析引用
+            msg = f"未解析的{attr}引用: '{name}' (节点: {node.node_name})"
+            self._unresolved_refs.append(f"{node.node_name}.{attr}: '{name}'")
+            print(f"[analyzer] WARN {msg}")
