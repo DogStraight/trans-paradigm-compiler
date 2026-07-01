@@ -31,8 +31,9 @@ line = [
     { ref = "body" },
 ]
 
-# analyzer: 类型声明注册到 TypeRegistry
+# analyzer: 类型符号注册到父作用域 + 类型内部创建独立作用域
 [TypeDecl.analyzer]
+symbol = { kind = "type", name_attr = "type_name" }
 scope = { kind = "type", name_attr = "type_name" }
 
 # transform: 类型声明不会出现在输出中，被 SemanticAnalyzer 消费后移除

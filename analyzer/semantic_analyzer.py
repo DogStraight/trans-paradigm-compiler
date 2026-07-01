@@ -90,7 +90,15 @@ class SemanticAnalyzer:
         scope = self._current_scope
         assert scope is not None, "analyze() must be called before walking"
 
-        # 1. 进入新作用域（规则自声明，从 analyzer 配置读取）
+        # 1. 声明符号（规则自声明，从 analyzer 配置读取）
+        #    在进入新作用域之前执行，确保符号注册到父作用域而非自身作用域。
+        sym_meta = getattr(rule, "analyzer", {}).get("symbol") if rule else None
+        if sym_meta:
+            current_scope = self._current_scope
+            assert current_scope is not None
+            self._declare_from_node(node, sym_meta, current_scope)
+
+        # 2. 进入新作用域（规则自声明，从 analyzer 配置读取）
         scope_meta = getattr(rule, "analyzer", {}).get("scope") if rule else None
         if scope_meta:
             name_attr = scope_meta.get("name_attr")
@@ -110,11 +118,6 @@ class SemanticAnalyzer:
             scope.children.append(new_scope)
             self._current_scope = new_scope
             scope = new_scope
-
-        # 2. 声明符号（规则自声明，从 analyzer 配置读取）
-        sym_meta = getattr(rule, "analyzer", {}).get("symbol") if rule else None
-        if sym_meta:
-            self._declare_from_node(node, sym_meta, scope)
 
         # 3. 解析标识符引用（规则自声明，从 analyzer 配置读取）
         if rule and getattr(rule, "analyzer", {}).get("identifier_ref", False):

@@ -83,13 +83,18 @@ def _expand_typed_port(engine, node, config, root_scope):
         if not port_names:
             continue
 
-        emit_node = "AnsiOutputDecl" if direction in ("input",) else "AnsiInputDecl" if direction in ("output",) else "AnsiInoutDecl" if direction in ("inout",) else "AnsiInputDecl"
+        # 符号表中存储的方向直接对应当前角色/模块的 Verilog 关键字：
+        #   stored "input"  → 模块侧 input（信号流入模块）
+        #   stored "output" → 模块侧 output（信号流出模块）
+        #   stored "inout"  → 模块侧 inout
+        emit_node = "AnsiInputDecl" if direction in ("input",) else "AnsiOutputDecl" if direction in ("output",) else "AnsiInoutDecl" if direction in ("inout",) else "AnsiInputDecl"
+        verilog_dir = direction
         for port_name in port_names:
             full_name = f"{inst_name}_{port_name}" if inst_name else port_name
             decl_node = _Node("Declarator"); decl_node.add_attr("name", full_name)
             decl_list = _Node("DeclaratorList"); decl_list.add_attr("items", [decl_node])
             result_node = _Node(emit_node)
-            result_node.add_attr("direction", direction)
+            result_node.add_attr("direction", verilog_dir)
             result_node.add_attr("items", decl_list)
             results.append(result_node)
 
