@@ -15,3 +15,4 @@
 | **[INRIA Syntax](https://github.com/moosetechnology/syntax)** | 存在性确认 | C/Fortran 领域的配置驱动解析原型，验证了"不止我们在做" |
 | **[textX](https://github.com/textX/textX)** | 架构对比 | Python 生态的 DSL 工作台，配置驱动理念的同行参考 |
 | **[dynparser](https://github.com/jleahred/dynparser)** | 设计参考 | 运行时规则加载（PEG 文本 / 宏内联 / API 追加）、自举、AST 后处理链 |
+| **Parser Combinators** ([pyparsing](https://github.com/pyparsing/pyparsing) / [nom](https://github.com/rust-bakery/nom)) | 架构对比 | 语法即代码 vs 配置驱动；Scannerless vs 管线分离；无渲染 vs Doc IR |
