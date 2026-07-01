@@ -16,8 +16,9 @@ from core.define import FileManager
 # constants
 # ---------------------------------------------------------------------------
 
-_MAX_ITERATIONS = 128  # safety limit against circular `define
-_COL_WEIGHT = 1000  # line-offset weight in column-proximity scoring
+_MAX_ITERATIONS = 128       # safety limit against circular `define
+_COL_WEIGHT = 1000          # line-offset weight in column-proximity scoring
+_SENTINEL = "@@PYV@@"        # placeholder marker — cannot appear in any Verilog token
 
 # ---------------------------------------------------------------------------
 # config
@@ -180,7 +181,7 @@ def protect_and_reverse(
     placements: list[tuple[int, int, str, str]] = []  # (line_idx, col, ph, value)
 
     for idx, (src_line, src_col, value) in enumerate(literal_sites):
-        ph = f"__PH_{idx:X}__"
+        ph = f"{_SENTINEL}{idx}{_SENTINEL}"
         placeholders[ph] = value
 
         best_line = -1
