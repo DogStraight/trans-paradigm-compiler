@@ -1,15 +1,21 @@
 """registry.py — Transform 原语注册中心"""
 
 from __future__ import annotations
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
 from core.define import Node
 from analyzer.scope import Scope
+
+if TYPE_CHECKING:
+    from .core import ConfigDrivenTransform
 
 
 class _Skip:
     """标记值：跳过变换，不修改节点"""
+
     def __repr__(self):
         return "SKIP"
+
+
 SKIP = _Skip()
 
 TransformResult = Node | list[Node] | None | _Skip
@@ -17,8 +23,14 @@ TransformResult = Node | list[Node] | None | _Skip
 
 class TransformContext:
     """变换上下文（保留兼容，custom handler 用）"""
-    def __init__(self, rule_name: str = "", config: Optional[dict] = None,
-                 tables: Optional[dict] = None, extra: Optional[dict] = None):
+
+    def __init__(
+        self,
+        rule_name: str = "",
+        config: Optional[dict] = None,
+        tables: Optional[dict] = None,
+        extra: Optional[dict] = None,
+    ):
         self.rule_name = rule_name
         self.config = config or {}
         self.tables = tables or {}
@@ -26,7 +38,9 @@ class TransformContext:
 
 
 # Primitive 签名：(engine, node, config, root_scope) → TransformResult
-TransformPrimitive = Callable[["ConfigDrivenTransform", Node, dict, Scope], TransformResult]
+TransformPrimitive = Callable[
+    ["ConfigDrivenTransform", Node, dict, Scope], TransformResult
+]
 
 # ── 注册中心 ──
 

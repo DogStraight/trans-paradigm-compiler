@@ -87,6 +87,7 @@ def pipeline():
             if os.path.exists(f):
                 return f, d, group
         return "", "", ""
+
     src_file, ref_dir, test_group = _find_src(test_name, group_hint)
     if not src_file:
         groups = [group_hint] if group_hint else ["normal", "errors"]
@@ -141,14 +142,17 @@ def pipeline():
     cache_dir = os.path.join(src_dir, ".cache")
     cache_path = os.path.normpath(os.path.join(cache_dir, "start_tokens.json"))
     from parser.rule_selector import RuleSelector as _RS, set_default_cache_path
+
     set_default_cache_path(cache_path)
 
     parser = Parser(rules_dir=RULES_DIR, cache_enabled=False, pre_symbols=pre_symbols)
     parser.pre_hints = pre_scan_config.get("hints", {})
     parser.grammar_rules = rules
     parser.statement_rule_names = [
-        name for name, rule in rules.items()
-        if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+        name
+        for name, rule in rules.items()
+        if hasattr(rule, "has_pass_end_case")
+        and rule.has_pass_end_case()
         and name != "Expression"
     ]
     parser.rule_selector = _RS(rules, parser.statement_rule_names)
@@ -226,15 +230,19 @@ def pipeline():
         # 原语（expand/replace/delete）自动处理，
         # 复杂逻辑通过 @transform_handler 注册自定义 handler 兜底。
         from transform.post.engine import ConfigDrivenTransform
-        transformer.register(ConfigDrivenTransform(
-            rules=rules,
-            ext_dir=FileManager.get_full_path(EXT_DIR),
-        ))
-        ast = transformer.transform(ast, scope)
-        stats = transformer.plugins[0].stats
+
+        transformer.register(
+            ConfigDrivenTransform(
+                rules=rules,
+                ext_dir=FileManager.get_full_path(EXT_DIR),
+            )
+        )
+
+        ast = transformer.transform(ast, scope)  # type: ignore
+        stats = getattr(transformer, "_transform_stats", {})
         active = {k: v for k, v in stats.items() if v}
         if active:
-            parts = ' '.join(f'{k}={v}' for k, v in active.items())
+            parts = " ".join(f"{k}={v}" for k, v in active.items())
             print(f"[transform] {parts}")
 
     # 7. 代码生成（使用 Renderer）
@@ -246,6 +254,7 @@ def pipeline():
         # 7b. 可选：inline comment 指纹回注
         if inline_comments_enable:
             from renderer.inline_comment import inject_comments
+
             ic = getattr(parser, "_inline_comments", None)
             if ic:
                 print(f"[comments] inline fingerprint injection: {len(ic)} items")

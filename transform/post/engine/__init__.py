@@ -22,7 +22,7 @@
     ast = transformer.transform(ast, scope)
 """
 
-from .engine import ConfigDrivenTransform
+from .core import ConfigDrivenTransform
 from .registry import register_primitive, get_primitive, SKIP
 
 # ── 原语：expand_typed_port ──

@@ -17,7 +17,6 @@ from .primitives import (
     lookup_type_scope as _lookup_type_scope,
     foreach as _foreach,
     emit as _emit,
-    resolve_attrs,
 )
 
 
@@ -401,14 +400,8 @@ def _custom_primitive(engine, node, config, root_scope):
     if handler is None:
         return SKIP
 
-    ctx = TransformContext(
-        rule_name=node.node_name,
-        config=config,
-        tables=engine._tables,
-        extra=engine._extra,
-    )
     try:
-        result = handler(node, root_scope, ctx)
+        result = handler(engine, node, config, root_scope)
         return result
     except Exception as e:
         print(f"  ❌ [transform] {node.node_name}: handler '{handler_name}' 异常: {e}")

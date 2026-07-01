@@ -21,7 +21,7 @@ def setup_grammar(
         rules_dir: 核心语法目录相对路径
         ext_dir: 增强语法目录相对路径（None 表示不加载）
     Returns:
-        { rule_name: GrammarRule, ... }
+        { rule_name: Grammar_rule, ... }
     """
     register = GrammarRulesRegister()
     rules = register.rules_registration(rules_dir)
@@ -36,16 +36,16 @@ def setup_grammar(
             rules.update(ext_rules)
 
             # 从增强规则的自声明 [RuleName.inject] 构建注入配置
-            inject_cfg: dict[str, list[str]] = {}
-            replace_cfg: dict[str, dict] = {}
-            for rname, rrule in ext_rules.items():
-                inj = getattr(rrule, "inject", None)
+            inject_cfg: dict[str, Any] = {}
+            replace_cfg: dict[str, Any] = {}
+            for r_name, r_rule in ext_rules.items():
+                inj = getattr(r_rule, "inject", None)
                 if inj and isinstance(inj, dict):
                     targets = inj.get("targets", [])
                     if targets:
                         for t in targets:
                             t_clean = f"@{t}" if not t.startswith("@") else t
-                            inject_cfg.setdefault(rname, []).append(t_clean)
+                            inject_cfg.setdefault(r_name, []).append(t_clean)
                     repl = inj.get("replace", {})
                     if repl:
                         replace_cfg.update(repl)
