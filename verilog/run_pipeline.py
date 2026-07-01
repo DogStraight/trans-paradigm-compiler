@@ -44,9 +44,13 @@ import json
 
 
 def pipeline():
-    # 支持命令行参数
-    #   python run_pipeline.py [test_name] [--debug]
-    #   python run_pipeline.py --debug ref_complex
+    # 支持命令行参数:
+    #   python run_pipeline.py                       # 默认 normal/ref_led_blinker
+    #   python run_pipeline.py normal counter         # 指定组 + 用例
+    #   python run_pipeline.py errors syntax_err      # 错误组 + 用例
+    #   python run_pipeline.py counter               # 自动查找（normal 优先）
+    #   python run_pipeline.py --debug ...
+    #   python run_pipeline.py --inline-comments ...
     debug = enable_ast_debug()  # 先读环境变量
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     flags = [a for a in sys.argv[1:] if a.startswith("--")]
@@ -55,26 +59,46 @@ def pipeline():
         print("[debug] enabled")
     inline_comments_enable = "--inline-comments" in flags
 
-    if args:
-        arg = args[0].replace("ref_", "").replace(".v", "")
-        test_name = f"ref\\ref_{arg}"
+    if len(args) >= 2 and args[0] in ("normal", "errors"):
+        group_hint = args[0]
+        name_arg = args[1]
+    elif len(args) >= 1 and args[0] in ("normal", "errors"):
+        group_hint = args[0]
+        name_arg = ""  # 不指定用例名，后续报错提示
+    elif len(args) >= 1:
+        group_hint = ""  # 自动查找
+        name_arg = args[0]
     else:
-        test_name = "ref\\ref_led_blinker"  # 默认测试文件
+        group_hint = ""
+        name_arg = "led_blinker"
+
+    arg = name_arg.replace("ref_", "").replace(".v", "") if name_arg else ""
+    test_name = f"ref_{arg}" if arg else ""
 
     src_dir = os.path.dirname(os.path.abspath(__file__))
-    ref_dir = os.path.join(src_dir, "ref")
-    src_file = os.path.join(ref_dir, test_name + ".v")
-    if not os.path.exists(src_file):
-        src_file = os.path.join(src_dir, test_name + ".v")
-    if not os.path.exists(src_file):
-        print(f"[error] source not found: {src_file}")
+    tests_dir = os.path.join(src_dir, "tests")
+
+    # 双目录查找：可按 group 指定，或自动扫描 normal → errors
+    def _find_src(test_name: str, hint: str) -> tuple[str, str, str]:
+        groups = [hint] if hint else ["normal", "errors"]
+        for group in groups:
+            d = os.path.join(tests_dir, group, "ref")
+            f = os.path.join(d, test_name + ".v")
+            if os.path.exists(f):
+                return f, d, group
+        return "", "", ""
+    src_file, ref_dir, test_group = _find_src(test_name, group_hint)
+    if not src_file:
+        groups = [group_hint] if group_hint else ["normal", "errors"]
+        print(f"[error] source not found: {test_name} (searched: {', '.join(groups)})")
         sys.exit(1)
 
     stem = os.path.splitext(os.path.basename(src_file))[0]
 
-    gen_dir = os.path.join(src_dir, "gen")
-    ast_dir = os.path.join(src_dir, "ast")
-    sym_dir = os.path.join(src_dir, "symbols")
+    out_base = os.path.join(tests_dir, test_group)
+    gen_dir = os.path.join(out_base, "gen")
+    ast_dir = os.path.join(out_base, "ast")
+    sym_dir = os.path.join(out_base, "symbols")
     os.makedirs(gen_dir, exist_ok=True)
     os.makedirs(ast_dir, exist_ok=True)
     os.makedirs(sym_dir, exist_ok=True)
@@ -93,7 +117,7 @@ def pipeline():
     # 2. 词法分析
     lexer = Lexer(rules_dir=RULES_DIR)
     tokens = lexer.tokenize(source)
-    lex_dir = os.path.join(src_dir, "lex")
+    lex_dir = os.path.join(out_base, "lex")
     os.makedirs(lex_dir, exist_ok=True)
     with open(
         os.path.join(lex_dir, "tokens_" + stem + ".txt"),
