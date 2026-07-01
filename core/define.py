@@ -350,23 +350,11 @@ class GrammarRulesRegister:
 
 
 class Node:
-    ERROR_NODE_NAME = "__error__"
 
     def __init__(self, node_name: str, **kwargs) -> None:
         self.node_name = node_name
         for key, value in kwargs.items():
             setattr(self, key, value)
-
-    @property
-    def is_error(self) -> bool:
-        return self.node_name == self.ERROR_NODE_NAME
-
-    @property
-    def raw_text(self) -> str:
-        if not self.is_error:
-            return ""
-        tokens = getattr(self, "raw_tokens", [])
-        return " ".join(t.content for t in tokens)
 
     @staticmethod
     def _dump_item(item):
@@ -403,9 +391,6 @@ class Node:
             if value is None:
                 continue
             if isinstance(value, list) and len(value) == 0:
-                continue
-            if attr == "raw_tokens" and self.is_error:
-                result["raw_text"] = self.raw_text
                 continue
             dumped = self._dump_item(value)
             if dumped is not None:
