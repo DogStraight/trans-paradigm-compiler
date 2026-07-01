@@ -1,13 +1,63 @@
 # PyV Compiler — 项目约定
 
+## ⚠️ Agent 行为准则（最高优先级）
+
+**禁止事项：**
+- ❌ **绝不 `pip install` 任何包** — 项目零外部依赖，只用 Python 3.11+ 标准库
+- ❌ **绝不在 Python 代码中硬编码 Verilog 专用逻辑** — 所有语言行为由 TOML 配置驱动
+- ❌ **不要修改管线顺序** — Lexer → Parser → Normalizer → SemanticAnalyzer → Renderer 不可颠倒
+- ❌ **不要引入新的配置文件格式** — 只使用 TOML
+
+**必须遵守：**
+- ✅ 新增语法特性 → 优先改 TOML 规则文件，改不动了再动引擎代码
+- ✅ 修改 ≥ 3 个文件时，先想能不能减少到 1-2 个
+- ✅ 每次修改后运行 `python verilog/run_all_tests.py` 确认全量回归通过
+- ✅ 新语法特性 = 新 `verilog/ref/ref_*.v` 测试用例
+
 ## 项目概述
 
 配置驱动的 Verilog 编译框架（纯 Python 3.11+，零外部依赖）。
-**本质硬编码保留在代码中，偶然硬编码全部配置化**。详见 [README](../../README.md)。
+**本质硬编码保留在代码中，偶然硬编码全部配置化**。详见 [README](../../README.md) 和 [ROADMAP.md](../../ROADMAP.md)。
 
-## 代码风格
+## 项目哲学与架构约束
 
-见 `/memories/repo/style.md`——硬编码阈值、架构约束、命名约定、架构决策完整记录。
+### 硬编码阈值（最核心原则）
+
+| 可硬编码（语言通用） | 不可硬编码（语言专用） |
+|---------------------|----------------------|
+| id / number / string / comment | module / wire / always / function |
+| newline / space / symbol / operator | typedef / Declarator / PortTail |
+| open_bracket / close_bracket | end_case / rule_hints / 类型系统 |
+
+判断标准：**这个概念是否在任何编程语言中都存在？** 是 → 可硬编码；否 → 必须 TOML 配置化。
+
+### 三阶配置化
+
+| 层级 | 方式 | 示例 |
+|------|------|------|
+| 核心引擎 | Python，零外部依赖 | main_parser.py, renderer.py |
+| 语法规则 | TOML production + layout | _token.toml, 00_blocks.toml |
+| 元能力 | EXT 注入 + transform 原语 | rules_verilog_ext/, transform/post/ |
+
+每层严格单向依赖：TOML → Python，不反向。
+
+### 已确定的架构决策（不再争论）
+
+- 递归下降 + 回溯（非生成式解析器）
+- Pratt 表达式解析（声明式优先级 via `_symbol_level.toml`）
+- Doc IR 渲染（Wadler-Lindig 算法）
+- EXT 注入（非继承/覆写）
+- 预扫描符号表（非 parser 内联语义分析）
+- 单 TOML 格式（非多格式混用）
+- 零外部依赖（非 PyPI 包）
+- 不写单元测试 — E2E 覆盖 + 快速反馈循环更有效
+
+### 命名约定
+
+- Python: `snake_case`（函数/变量/方法）
+- 节点类型/规则名: `PascalCase`（`Declarator`, `ModuleInst`）
+- 私有: `_prefix`（`_match_productions`, `_CACHE`）
+- 常量/枚举: `UPPER_CASE`（`LOG_INFO`, `_ORDER_NOT_FOUND`）
 
 ## 管线（顺序不可颠倒）
 
@@ -153,15 +203,36 @@ Statement  → CtrlStmt | ProcAssignStmt | ProcLocalDecl | CallStmt
 
 详见 `transform/post/` 和 `grammar/rules_verilog_ext/` 中的 transform 配置示例。
 
+## 调试快速参考
+
+### 常见失败模式速查
+
+| 现象 | 可能原因 | 排查方向 |
+|------|---------|---------|
+| 生成代码完全为空 | parser 返回 Root 仅 1 节点 | 检查 Token 流 + 候选规则匹配 |
+| `所有候选规则匹配失败: '...'` | 语句级规则过滤条件错误 | 检查 `end_case` 是否为空列表 |
+| 注释与代码合并到同一行 | `join` 的 `SoftLine` 被 group flat 展平 | `\n` 分隔符改用 `Break` 且不 group |
+| 缩进错位/多余空格 | `Nest` 叠加效应 | 检查父级 body indent + 子级 join nest |
+| 端口 `)` 不在独立行 | 软换行被 group flat 模式吞掉 | 添加 `{ soft = true }` 或 `{ break = true }` |
+| 模块实例端口缩进偏移 | `join nest` 与父 `body indent` 叠加 | 移除子级 nest |
+| 数字/字面量渲染为空 | `extract_value.names` 未覆盖该 literal 类型 | 在 `normalize_config.toml` 中添加 |
+
+详见 [debug_known_issues.md](../../docs/debug_known_issues.md) 和 [design_lessons.md](../../docs/design_lessons.md)。
+
+### 调试工作流
+
+1. **解析失败** → 用 `/pipeline-debug` skill 追踪 Token→AST
+2. **渲染布局异常** → 用 `/renderer-debug` skill 追踪 Doc IR
+3. **TOML 规则配置错误** → 用 `/grammar-lint` skill 静态检查
+4. **AST 结构异常** → 输出 AST JSON（`verilog/ast/*.json`），对照 [ast_normalization.md](../../docs/ast_normalization.md) 检查规范形式
+
 ## 可用 Skills
 
-| Skill | 用途 | 调用 |
-|-------|------|------|
-| [grammar-lint](../../.github/skills/grammar-lint/SKILL.md) | TOML 语法规则静态检查 | `/grammar-lint` |
-| [pipeline-debug](../../.github/skills/pipeline-debug/SKILL.md) | 管线故障排查（Token→AST→渲染） | `/pipeline-debug` |
-| [renderer-debug](../../.github/skills/renderer-debug/SKILL.md) | 渲染布局问题追踪 | `/renderer-debug` |
-
-已知问题速查：[debug_known_issues.md](../../docs/debug_known_issues.md)
+| Skill | 用途 | 触发方式 |
+|-------|------|---------|
+| grammar-lint | TOML 语法规则静态检查 | `/grammar-lint` |
+| pipeline-debug | 管线故障排查（Token→AST→渲染） | `/pipeline-debug` |
+| renderer-debug | 渲染布局问题追踪 | `/renderer-debug` |
 
 ## Git 提交约定
 
@@ -177,3 +248,18 @@ type(scope): description
 所有测试用例在 `verilog/ref/ref_*.v`，生成结果在 `verilog/gen/gen_*.v`。
 全量回归：`python verilog/run_all_tests.py`（支持 `-v`、`--json` 参数）。
 单用例：`python verilog/run_pipeline.py <test_name>`。
+
+## 关键文档索引
+
+| 文档 | 内容 | 何时查阅 |
+|------|------|---------|
+| [README](../../README.md) | 项目概述与快速入门 | 初次了解项目 |
+| [ROADMAP](../../ROADMAP.md) | 架构决策、设计哲学、非目标 | 理解"为什么不那样做" |
+| [docs/grammar.md](../../docs/grammar.md) | AST 节点类型图谱（Mermaid） | 了解有哪些节点类型 |
+| [docs/ast_normalization.md](../../docs/ast_normalization.md) | 规范化后的规范 AST 结构 | 写 Renderer/Transform 时 |
+| [docs/renderer_design.md](../../docs/renderer_design.md) | Doc IR 架构与 DSL 原语 | 调试渲染布局问题 |
+| [docs/config_reference.md](../../docs/config_reference.md) | 所有 TOML 参数参考表 | 写 TOML 规则时查参数 |
+| [docs/debug_known_issues.md](../../docs/debug_known_issues.md) | 已知问题速查表 | 遇到眼熟的问题时 |
+| [docs/design_lessons.md](../../docs/design_lessons.md) | 语义级 bug 与架构教训 | 避免重蹈覆辙 |
+| [docs/layout_spacing_prompt.md](../../docs/layout_spacing_prompt.md) | 布局间距设计提示 | 处理缩进/空行问题 |
+| [TODO.md](../../TODO.md) | 当前待办事项 | 找下一个任务 |
