@@ -1,0 +1,26 @@
+0,1:keyword.module module
+6,1:id top
+9,1:bracket.l_parentheses (
+10,1:id bad
+13,1:keyword.input input
+18,1:id clk
+20,1:bracket.r_parentheses )
+21,1:symbol.base.semicolon ;
+22,1:newline 
+
+4,2:id rstn
+7,2:newline 
+
+4,3:keyword.reg reg
+7,3:id counter
+13,3:symbol.base.semicolon ;
+14,3:newline 
+
+4,4:keyword.wire wire
+8,4:id flag
+11,4:symbol.base.semicolon ;
+12,4:newline 
+
+0,5:keyword.endmodule endmodule
+8,5:newline 
+

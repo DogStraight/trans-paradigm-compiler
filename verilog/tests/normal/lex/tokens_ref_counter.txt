@@ -1,0 +1,176 @@
+0,1:comment // Test 1: 计数器 — 带参数、多 always 块、嵌套 if
+37,1:newline 
+
+0,2:comment // 功能: 秒计数器，每 1 秒翻转一次 LED
+25,2:newline 
+
+0,3:newline 
+
+0,4:keyword.module module
+6,4:id counter
+13,4:symbol.base.pound #
+14,4:bracket.l_parentheses (
+15,4:newline 
+
+4,5:keyword.parameter parameter
+13,5:id CLK_HZ
+19,5:symbol.base.equal =
+21,5:literal.number 50_000_000
+31,5:symbol.base.comma ,
+32,5:newline 
+
+4,6:keyword.parameter parameter
+13,6:id TARGET
+19,6:symbol.base.equal =
+21,6:literal.number 32'd1000
+29,6:newline 
+
+0,7:bracket.r_parentheses )
+1,7:bracket.l_parentheses (
+2,7:newline 
+
+4,8:keyword.input input
+10,8:keyword.wire wire
+20,8:id clk
+22,8:symbol.base.comma ,
+23,8:newline 
+
+4,9:keyword.input input
+10,9:keyword.wire wire
+20,9:id rst_n
+24,9:symbol.base.comma ,
+25,9:newline 
+
+4,10:keyword.output output
+10,10:keyword.reg reg
+20,10:id led
+22,10:newline 
+
+0,11:bracket.r_parentheses )
+1,11:symbol.base.semicolon ;
+2,11:newline 
+
+0,12:newline 
+
+4,13:keyword.reg reg
+7,13:bracket.l_square_bracket [
+8,13:literal.number 31
+10,13:symbol.base.colon :
+11,13:literal.number 0
+12,13:bracket.r_square_bracket ]
+14,13:id counter
+20,13:symbol.base.semicolon ;
+21,13:newline 
+
+4,14:keyword.reg reg
+7,14:bracket.l_square_bracket [
+8,14:literal.number 31
+10,14:symbol.base.colon :
+11,14:literal.number 0
+12,14:bracket.r_square_bracket ]
+14,14:id divider
+20,14:symbol.base.semicolon ;
+21,14:newline 
+
+0,15:newline 
+
+4,16:keyword.always always
+10,16:symbol.base.at @
+11,16:bracket.l_parentheses (
+12,16:keyword.posedge posedge
+19,16:id clk
+22,16:symbol.extend.logic_or or
+24,16:keyword.negedge negedge
+31,16:id rst_n
+35,16:bracket.r_parentheses )
+37,16:keyword.begin begin
+41,16:newline 
+
+8,17:keyword.if if
+10,17:bracket.l_parentheses (
+11,17:symbol.base.not !
+12,17:id rst_n
+16,17:bracket.r_parentheses )
+18,17:keyword.begin begin
+22,17:newline 
+
+12,18:id counter
+19,18:symbol.extend.lesser_equal <=
+22,18:literal.number 32'd0
+27,18:symbol.base.semicolon ;
+28,18:newline 
+
+12,19:id divider
+19,19:symbol.extend.lesser_equal <=
+22,19:literal.number 32'd0
+27,19:symbol.base.semicolon ;
+28,19:newline 
+
+12,20:id led
+19,20:symbol.extend.lesser_equal <=
+22,20:literal.number 1'b0
+26,20:symbol.base.semicolon ;
+27,20:newline 
+
+8,21:keyword.end end
+11,21:keyword.else else
+15,21:keyword.begin begin
+19,21:newline 
+
+12,22:keyword.if if
+14,22:bracket.l_parentheses (
+15,22:id divider
+22,22:symbol.extend.is_equal ==
+25,22:id TARGET
+30,22:bracket.r_parentheses )
+32,22:keyword.begin begin
+36,22:newline 
+
+16,23:id divider
+23,23:symbol.extend.lesser_equal <=
+26,23:literal.number 32'd0
+31,23:symbol.base.semicolon ;
+32,23:newline 
+
+16,24:id counter
+23,24:symbol.extend.lesser_equal <=
+26,24:id counter
+33,24:symbol.base.add +
+35,24:literal.number 32'd1
+40,24:symbol.base.semicolon ;
+41,24:newline 
+
+16,25:id led
+23,25:symbol.extend.lesser_equal <=
+26,25:symbol.base.bit_not ~
+27,25:id led
+29,25:symbol.base.semicolon ;
+30,25:newline 
+
+12,26:keyword.end end
+15,26:keyword.else else
+19,26:keyword.begin begin
+23,26:newline 
+
+16,27:id divider
+23,27:symbol.extend.lesser_equal <=
+26,27:id divider
+33,27:symbol.base.add +
+35,27:literal.number 32'd1
+40,27:symbol.base.semicolon ;
+41,27:newline 
+
+12,28:keyword.end end
+14,28:newline 
+
+8,29:keyword.end end
+10,29:newline 
+
+4,30:keyword.end end
+6,30:newline 
+
+0,31:newline 
+
+0,32:keyword.endmodule endmodule
+8,32:newline 
+

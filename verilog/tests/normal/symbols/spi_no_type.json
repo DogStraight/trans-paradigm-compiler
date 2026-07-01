@@ -1,0 +1,18 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "spi_invoker",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "spi_io",
+          "kind": "typed_port",
+          "scope": "spi_invoker",
+          "scope_kind": "module"
+        }
+      ]
+    }
+  ]
+}

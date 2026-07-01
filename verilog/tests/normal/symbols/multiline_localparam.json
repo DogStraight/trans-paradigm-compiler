@@ -1,0 +1,10 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "t",
+      "kind": "module"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "task_test",
+      "kind": "module",
+      "children": [
+        {
+          "name": "swap",
+          "kind": "task"
+        }
+      ]
+    }
+  ]
+}

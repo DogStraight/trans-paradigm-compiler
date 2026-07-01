@@ -1,0 +1,28 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "simple_func",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "W",
+          "kind": "parameter",
+          "scope": "simple_func",
+          "scope_kind": "module"
+        }
+      ],
+      "children": [
+        {
+          "name": "my_max",
+          "kind": "function"
+        },
+        {
+          "name": "my_swap",
+          "kind": "task"
+        }
+      ]
+    }
+  ]
+}

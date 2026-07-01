@@ -1,0 +1,24 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "t",
+      "kind": "module",
+      "children": [
+        {
+          "name": "f",
+          "kind": "function",
+          "symbols": [
+            {
+              "name": "p",
+              "kind": "reg",
+              "scope": "f",
+              "scope_kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

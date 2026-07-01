@@ -1,0 +1,2 @@
+reg counter;
+wire flag;

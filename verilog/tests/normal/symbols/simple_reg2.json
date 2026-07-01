@@ -1,0 +1,24 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "simple_reg",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "a",
+          "kind": "reg",
+          "scope": "simple_reg",
+          "scope_kind": "module"
+        },
+        {
+          "name": "b",
+          "kind": "reg",
+          "scope": "simple_reg",
+          "scope_kind": "module"
+        }
+      ]
+    }
+  ]
+}

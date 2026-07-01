@@ -1,0 +1,92 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "complex_pipeline_processor",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "DATA_WIDTH",
+          "kind": "parameter",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "NUM_STAGES",
+          "kind": "parameter",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "MEM_DEPTH",
+          "kind": "parameter",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "clk",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "rst_n",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "start",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "data_in",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "done",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "result",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        }
+      ],
+      "children": [
+        {
+          "name": "parity",
+          "kind": "function",
+          "symbols": [
+            {
+              "name": "j",
+              "kind": "integer",
+              "scope": "parity",
+              "scope_kind": "function"
+            },
+            {
+              "name": "p",
+              "kind": "reg",
+              "scope": "parity",
+              "scope_kind": "function"
+            },
+            {
+              "name": "d",
+              "kind": "port",
+              "scope": "parity",
+              "scope_kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

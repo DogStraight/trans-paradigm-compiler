@@ -1,0 +1,16 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "func_wrapper",
+      "kind": "module",
+      "children": [
+        {
+          "name": "parity",
+          "kind": "function"
+        }
+      ]
+    }
+  ]
+}

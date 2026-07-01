@@ -1,0 +1,329 @@
+0,1:comment // Test 4: 纯组合逻辑 — 多操作、连续赋值
+27,1:newline 
+
+0,2:comment // 功能: 位宽转换 + 算术运算
+18,2:newline 
+
+0,3:newline 
+
+0,4:keyword.module module
+6,4:id alu
+9,4:symbol.base.pound #
+10,4:bracket.l_parentheses (
+11,4:newline 
+
+4,5:keyword.parameter parameter
+13,5:id W
+14,5:symbol.base.equal =
+16,5:literal.number 8
+17,5:newline 
+
+0,6:bracket.r_parentheses )
+1,6:bracket.l_parentheses (
+2,6:newline 
+
+4,7:keyword.input input
+10,7:keyword.wire wire
+14,7:bracket.l_square_bracket [
+15,7:id W
+15,7:symbol.base.sub -
+16,7:literal.number 1
+17,7:symbol.base.colon :
+18,7:literal.number 0
+19,7:bracket.r_square_bracket ]
+27,7:id a
+27,7:symbol.base.comma ,
+28,7:newline 
+
+4,8:keyword.input input
+10,8:keyword.wire wire
+14,8:bracket.l_square_bracket [
+15,8:id W
+15,8:symbol.base.sub -
+16,8:literal.number 1
+17,8:symbol.base.colon :
+18,8:literal.number 0
+19,8:bracket.r_square_bracket ]
+27,8:id b
+27,8:symbol.base.comma ,
+28,8:newline 
+
+4,9:keyword.input input
+10,9:keyword.wire wire
+14,9:bracket.l_square_bracket [
+15,9:literal.number 2
+16,9:symbol.base.colon :
+17,9:literal.number 0
+18,9:bracket.r_square_bracket ]
+28,9:id op
+29,9:symbol.base.comma ,
+30,9:newline 
+
+4,10:keyword.output output
+10,10:keyword.reg reg
+14,10:bracket.l_square_bracket [
+15,10:id W
+15,10:symbol.base.sub -
+16,10:literal.number 1
+17,10:symbol.base.colon :
+18,10:literal.number 0
+19,10:bracket.r_square_bracket ]
+27,10:id result
+32,10:symbol.base.comma ,
+33,10:newline 
+
+4,11:keyword.output output
+10,11:keyword.reg reg
+28,11:id zero
+31,11:symbol.base.comma ,
+32,11:newline 
+
+4,12:keyword.output output
+10,12:keyword.reg reg
+28,12:id overflow
+35,12:newline 
+
+0,13:bracket.r_parentheses )
+1,13:symbol.base.semicolon ;
+2,13:newline 
+
+0,14:newline 
+
+4,15:keyword.wire wire
+8,15:bracket.l_square_bracket [
+9,15:id W
+9,15:symbol.base.sub -
+10,15:literal.number 1
+11,15:symbol.base.colon :
+12,15:literal.number 0
+13,15:bracket.r_square_bracket ]
+15,15:id sum
+17,15:symbol.base.semicolon ;
+18,15:newline 
+
+4,16:keyword.wire wire
+8,16:bracket.l_square_bracket [
+9,16:id W
+9,16:symbol.base.sub -
+10,16:literal.number 1
+11,16:symbol.base.colon :
+12,16:literal.number 0
+13,16:bracket.r_square_bracket ]
+15,16:id diff
+18,16:symbol.base.semicolon ;
+19,16:newline 
+
+4,17:keyword.wire wire
+8,17:bracket.l_square_bracket [
+9,17:id W
+9,17:symbol.base.sub -
+10,17:literal.number 1
+11,17:symbol.base.colon :
+12,17:literal.number 0
+13,17:bracket.r_square_bracket ]
+15,17:id and_w
+19,17:symbol.base.semicolon ;
+20,17:newline 
+
+4,18:keyword.wire wire
+8,18:bracket.l_square_bracket [
+9,18:id W
+9,18:symbol.base.sub -
+10,18:literal.number 1
+11,18:symbol.base.colon :
+12,18:literal.number 0
+13,18:bracket.r_square_bracket ]
+15,18:id or_w
+18,18:symbol.base.semicolon ;
+19,18:newline 
+
+4,19:keyword.wire wire
+8,19:bracket.l_square_bracket [
+9,19:id W
+9,19:symbol.base.sub -
+10,19:literal.number 1
+11,19:symbol.base.colon :
+12,19:literal.number 0
+13,19:bracket.r_square_bracket ]
+15,19:id xor_w
+19,19:symbol.base.semicolon ;
+20,19:newline 
+
+0,20:newline 
+
+4,21:keyword.assign assign
+10,21:id sum
+15,21:symbol.base.equal =
+17,21:id a
+18,21:symbol.base.add +
+20,21:id b
+20,21:symbol.base.semicolon ;
+21,21:newline 
+
+4,22:keyword.assign assign
+10,22:id diff
+15,22:symbol.base.equal =
+17,22:id a
+18,22:symbol.base.sub -
+20,22:id b
+20,22:symbol.base.semicolon ;
+21,22:newline 
+
+4,23:keyword.assign assign
+10,23:id and_w
+15,23:symbol.base.equal =
+17,23:id a
+18,23:symbol.base.and &
+20,23:id b
+20,23:symbol.base.semicolon ;
+21,23:newline 
+
+4,24:keyword.assign assign
+10,24:id or_w
+15,24:symbol.base.equal =
+17,24:id a
+18,24:symbol.base.or |
+20,24:id b
+20,24:symbol.base.semicolon ;
+21,24:newline 
+
+4,25:keyword.assign assign
+10,25:id xor_w
+15,25:symbol.base.equal =
+17,25:id a
+18,25:symbol.base.xnor ^
+20,25:id b
+20,25:symbol.base.semicolon ;
+21,25:newline 
+
+0,26:newline 
+
+4,27:keyword.always always
+10,27:symbol.base.at @
+11,27:bracket.l_parentheses (
+12,27:symbol.base.multiple *
+13,27:bracket.r_parentheses )
+15,27:keyword.begin begin
+19,27:newline 
+
+8,28:keyword.case case
+12,28:bracket.l_parentheses (
+13,28:id op
+14,28:bracket.r_parentheses )
+15,28:newline 
+
+12,29:literal.number 3'd0
+16,29:symbol.base.colon :
+18,29:id result
+24,29:symbol.base.equal =
+26,29:id sum
+28,29:symbol.base.semicolon ;
+29,29:newline 
+
+12,30:literal.number 3'd1
+16,30:symbol.base.colon :
+18,30:id result
+24,30:symbol.base.equal =
+26,30:id diff
+29,30:symbol.base.semicolon ;
+30,30:newline 
+
+12,31:literal.number 3'd2
+16,31:symbol.base.colon :
+18,31:id result
+24,31:symbol.base.equal =
+26,31:id and_w
+30,31:symbol.base.semicolon ;
+31,31:newline 
+
+12,32:literal.number 3'd3
+16,32:symbol.base.colon :
+18,32:id result
+24,32:symbol.base.equal =
+26,32:id or_w
+29,32:symbol.base.semicolon ;
+30,32:newline 
+
+12,33:literal.number 3'd4
+16,33:symbol.base.colon :
+18,33:id result
+24,33:symbol.base.equal =
+26,33:id xor_w
+30,33:symbol.base.semicolon ;
+31,33:newline 
+
+12,34:keyword.default default
+18,34:symbol.base.colon :
+20,34:id result
+26,34:symbol.base.equal =
+28,34:bracket.l_curly_bracket {
+29,34:id W
+29,34:bracket.l_curly_bracket {
+30,34:literal.number 1'b0
+34,34:bracket.r_curly_bracket }
+35,34:bracket.r_curly_bracket }
+36,34:symbol.base.semicolon ;
+37,34:newline 
+
+8,35:keyword.endcase endcase
+14,35:newline 
+
+8,36:id zero
+16,36:symbol.base.equal =
+18,36:bracket.l_parentheses (
+19,36:id result
+25,36:symbol.extend.is_equal ==
+28,36:bracket.l_curly_bracket {
+29,36:id W
+29,36:bracket.l_curly_bracket {
+30,36:literal.number 1'b0
+34,36:bracket.r_curly_bracket }
+35,36:bracket.r_curly_bracket }
+36,36:bracket.r_parentheses )
+37,36:symbol.base.semicolon ;
+38,36:newline 
+
+8,37:id overflow
+16,37:symbol.base.equal =
+18,37:bracket.l_parentheses (
+19,37:id a
+19,37:bracket.l_square_bracket [
+20,37:id W
+20,37:symbol.base.sub -
+21,37:literal.number 1
+22,37:bracket.r_square_bracket ]
+24,37:symbol.extend.is_equal ==
+27,37:id b
+27,37:bracket.l_square_bracket [
+28,37:id W
+28,37:symbol.base.sub -
+29,37:literal.number 1
+30,37:bracket.r_square_bracket ]
+31,37:bracket.r_parentheses )
+33,37:symbol.extend.logic_double_and &&
+36,37:bracket.l_parentheses (
+37,37:id result
+42,37:bracket.l_square_bracket [
+43,37:id W
+43,37:symbol.base.sub -
+44,37:literal.number 1
+45,37:bracket.r_square_bracket ]
+47,37:symbol.extend.not_equal !=
+50,37:id a
+50,37:bracket.l_square_bracket [
+51,37:id W
+51,37:symbol.base.sub -
+52,37:literal.number 1
+53,37:bracket.r_square_bracket ]
+54,37:bracket.r_parentheses )
+55,37:symbol.base.semicolon ;
+56,37:newline 
+
+4,38:keyword.end end
+6,38:newline 
+
+0,39:newline 
+
+0,40:keyword.endmodule endmodule
+8,40:newline 
+

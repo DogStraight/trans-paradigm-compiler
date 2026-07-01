@@ -1,0 +1,10 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "array2d_test",
+      "kind": "module"
+    }
+  ]
+}

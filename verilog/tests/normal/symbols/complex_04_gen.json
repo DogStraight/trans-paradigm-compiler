@@ -1,0 +1,102 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "complex_pipeline_processor",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "DATA_WIDTH",
+          "kind": "parameter",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "NUM_STAGES",
+          "kind": "parameter",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "MEM_DEPTH",
+          "kind": "parameter",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "clk",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "rst_n",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "start",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "data_in",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "done",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "result",
+          "kind": "port",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "state",
+          "kind": "reg",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "data_pipe",
+          "kind": "reg",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "memory",
+          "kind": "reg",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "i",
+          "kind": "integer",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "duplicated_data",
+          "kind": "wire",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        },
+        {
+          "name": "g",
+          "kind": "genvar",
+          "scope": "complex_pipeline_processor",
+          "scope_kind": "module"
+        }
+      ]
+    }
+  ]
+}

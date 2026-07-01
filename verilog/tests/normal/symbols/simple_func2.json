@@ -1,0 +1,16 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "simple_func",
+      "kind": "module",
+      "children": [
+        {
+          "name": "parity",
+          "kind": "function"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "chain_index_test",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "mem",
+          "kind": "reg",
+          "scope": "chain_index_test",
+          "scope_kind": "module"
+        },
+        {
+          "name": "i",
+          "kind": "integer",
+          "scope": "chain_index_test",
+          "scope_kind": "module"
+        },
+        {
+          "name": "j",
+          "kind": "integer",
+          "scope": "chain_index_test",
+          "scope_kind": "module"
+        }
+      ]
+    }
+  ]
+}

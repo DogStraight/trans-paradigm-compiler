@@ -1,0 +1,36 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "t",
+      "kind": "module",
+      "children": [
+        {
+          "name": "parity",
+          "kind": "function",
+          "symbols": [
+            {
+              "name": "j",
+              "kind": "integer",
+              "scope": "parity",
+              "scope_kind": "function"
+            },
+            {
+              "name": "p",
+              "kind": "reg",
+              "scope": "parity",
+              "scope_kind": "function"
+            },
+            {
+              "name": "d",
+              "kind": "port",
+              "scope": "parity",
+              "scope_kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

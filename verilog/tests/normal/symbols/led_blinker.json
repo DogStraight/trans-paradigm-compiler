@@ -1,0 +1,24 @@
+{
+  "name": "<global>",
+  "kind": "global",
+  "children": [
+    {
+      "name": "led_blinker",
+      "kind": "module",
+      "symbols": [
+        {
+          "name": "CLK_MHZ",
+          "kind": "parameter",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        },
+        {
+          "name": "MAX_CNT",
+          "kind": "parameter",
+          "scope": "led_blinker",
+          "scope_kind": "module"
+        }
+      ]
+    }
+  ]
+}
