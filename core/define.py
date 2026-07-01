@@ -350,10 +350,23 @@ class GrammarRulesRegister:
 
 
 class Node:
+    ERROR_NODE_NAME = "__error__"
+
     def __init__(self, node_name: str, **kwargs) -> None:
         self.node_name = node_name
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    @property
+    def is_error(self) -> bool:
+        return self.node_name == self.ERROR_NODE_NAME
+
+    @property
+    def raw_text(self) -> str:
+        if not self.is_error:
+            return ""
+        tokens = getattr(self, "raw_tokens", [])
+        return " ".join(t.content for t in tokens)
 
     @staticmethod
     def _dump_item(item):
@@ -385,19 +398,18 @@ class Node:
     def dump(self):
         result = {}
         for attr, value in self.__dict__.items():
-            # 跳过 node_name 字段（类型已由外层键隐含）
             if attr == "node_name":
                 continue
-            # 跳过值为 None 或空列表的属性
             if value is None:
                 continue
             if isinstance(value, list) and len(value) == 0:
                 continue
-            # 递归处理值
+            if attr == "raw_tokens" and self.is_error:
+                result["raw_text"] = self.raw_text
+                continue
             dumped = self._dump_item(value)
             if dumped is not None:
                 result[attr] = dumped
-        # 外层键仍使用 node_name 提供类型信息
         return {self.node_name: result}
 
     def add_sub_node(self, sub: "Node") -> None:

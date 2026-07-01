@@ -51,6 +51,8 @@ class Renderer:
     # ---------------------------------------------------------------
     def render(self, node: Node, indent: int = 0) -> str:
         """渲染完整 AST 为格式化文本"""
+        if node.is_error:
+            return node.raw_text
         node = normalize_ast(node, self._layouts, self._normalize_config)
         if not isinstance(node, Node):
             return str(node) if node else ""

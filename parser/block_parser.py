@@ -40,21 +40,18 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
         self.scope_stack.restore(scope_depth)
         context.restore_snapshot(snapshot)
 
-    # 构建期望 token 集合提示
-    expected_parts = []
-    for r in candidates[:5]:  # 最多展示 5 个
-        expected_parts.append(f"{r.name}→{self._expected_tokens_for_rule(r)}")
-    if len(candidates) > 5:
-        expected_parts.append(f"... 还有 {len(candidates)-5} 个")
-    expected_hint = " | ".join(expected_parts)
-
-    self._warn(
-        f"所有候选规则匹配失败: '{current.content}' (type: {current.type}) "
-        f"Ln {current.line}\n"
-        f"  候选规则期望的起始 token: {expected_hint}",
-        context=context,
-    )
-    return None
+    # 所有候选规则都匹配失败 → 消费当前行作为 __error__ 节点
+    error_tokens = [current]
+    context.advance_token()
+    while context.has_more_tokens():
+        tok = context.peek_token()
+        if tok.type == "newline":
+            break
+        error_tokens.append(tok)
+        context.advance_token()
+    error_node = Node(Node.ERROR_NODE_NAME)
+    error_node.raw_tokens = error_tokens
+    return error_node
 
 
 def _get_block_end(rule: GrammarRule) -> str:
