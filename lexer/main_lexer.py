@@ -10,6 +10,8 @@ from .lexer_utils import get_token_define
 from .number_fsm import NumberFSM
 from .lexer_utils import get_token_define_merged
 from .comment_fsm import CommentFSM
+import tomllib
+from pathlib import Path
 
 
 class Lexer:
@@ -24,7 +26,11 @@ class Lexer:
             token_define_dict = get_token_define_merged(rules_dir)
         else:
             token_define_dict = get_token_define()
-        # indent 配置已合并进 token_define_dict（来自 base/_lexer.toml）
+        self.token_define = token_define_dict
+        
+        # 加载宏配置（非 token，独立文件）
+        self.macro_config = self._load_macro_config(rules_dir)
+
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
         self.indent_level = token_define_dict.get("indent", {}).get("level", 4)
         self.indent_deep = 0
@@ -54,6 +60,21 @@ class Lexer:
         # new line start flag for indent handling
         self.new_line_start = False
         pass
+
+    @staticmethod
+    def _load_macro_config(rules_dir: str | None) -> dict:
+        """加载 base/_macro.toml 宏配置（独立于 token 定义）。"""
+        if not rules_dir:
+            return {}
+        from core.define import FileManager
+        base = FileManager.get_full_path(rules_dir)
+        macro_path = Path(base) / "base" / "_macro.toml"
+        if not macro_path.exists():
+            return {}
+        with open(macro_path, "rb") as f:
+            cfg = tomllib.load(f)
+        return {d: f"macro.{d}" for d in cfg.get("directives", {})} | \
+               {"prefix": cfg.get("macro_call", {}).get("prefix", "`")}
 
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""
@@ -293,6 +314,33 @@ class Lexer:
 
                 # reset line info
                 start_point += offset
+                current_token = self.refine_type(current_token)
+                tokens.append(current_token)
+                continue
+
+            # in case current char is a macro backtick
+            elif lex_text[text_idx] == self.macro_config.get("prefix", "`"):
+                self._emit_pending_dedent(tokens)
+
+                macro_content = lex_text[text_idx]  # the backtick itself
+                text_idx += 1
+                # 消费后续的标识符字符
+                while text_idx < lex_text_len and (
+                    lex_text[text_idx].isalpha()
+                    or lex_text[text_idx] == "_"
+                    or lex_text[text_idx].isdigit()
+                ):
+                    macro_content += lex_text[text_idx]
+                    text_idx += 1
+                    offset += 1
+
+                # 判断是指令还是调用
+                macro_name = macro_content[1:]  # 去掉前缀 ` 
+                macro_type = self.macro_config.get(macro_name, "macro.call")
+                current_token.set_type(macro_type)
+                current_token.set_content(macro_content)
+
+                start_point += len(macro_content)
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 continue

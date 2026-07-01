@@ -35,6 +35,7 @@ def run_all(
     verbose=False,
     json_out=False,
     inline_comments=False,
+    expand_macros=False,
     group_filter=None,
     name_filter=None,
 ):
@@ -105,6 +106,12 @@ def run_all(
         with open(path, encoding="utf-8") as f:
             source = f.read()
 
+        macro_table = {}
+        original_source = source
+        if expand_macros:
+            from preprocessor import preprocess
+            source, macro_table = preprocess(source, RULES_DIR)
+
         tokens = lex.tokenize(source)
         try:
             ast = parser.parse(tokens)
@@ -118,6 +125,14 @@ def run_all(
             ast = transformer.transform(ast, scope)
 
             output = renderer.render(ast)
+
+            # 逆向宏：保护字面量 → 全局替换 → 恢复字面量
+            if macro_table:
+                from preprocessor import protect_and_reverse, load_macro_config
+                config = load_macro_config(RULES_DIR)
+                define_kw = config.get("directives", {}).get("define", "define")
+                output = protect_and_reverse(output, original_source, macro_table,
+                                             define_keyword=define_kw)
 
             line_count = len([l for l in output.split("\n") if l.strip()])
 
@@ -180,6 +195,7 @@ if __name__ == "__main__":
     verbose = "-v" in sys.argv or "--verbose" in sys.argv
     json_out = "--json" in sys.argv
     inline_comments = "--inline-comments" in sys.argv
+    expand_macros = "--expand-macros" in sys.argv
 
     pos_args = [a for a in sys.argv[1:] if not a.startswith("-")]
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
@@ -195,6 +211,7 @@ if __name__ == "__main__":
         verbose=verbose,
         json_out=json_out,
         inline_comments=inline_comments,
+        expand_macros=expand_macros,
         group_filter=group_filter,
         name_filter=name_filter,
     )

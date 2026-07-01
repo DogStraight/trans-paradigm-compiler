@@ -1,0 +1,22 @@
+# ============================================================================
+# 宏定义 — 预处理器指令识别
+# 宏不是语法 token，不放在 _token.toml 中。
+# Lexer 加载此文件，将反引号开头的指令/调用识别为 macro.* 类型，
+# 供后续 preprocessing 阶段消费。
+# ============================================================================
+
+[directives]
+# 宏定义指令（关键字形式，` + 关键字 = 完整 token）
+define = "define"
+include = "include"
+ifdef = "ifdef"
+ifndef = "ifndef"
+elsif = "elsif"
+else = "else"
+endif = "endif"
+undef = "undef"
+timescale = "timescale"
+
+[macro_call]
+# 宏调用前缀
+prefix = "`"

@@ -115,6 +115,14 @@ def pipeline():
     RULES_DIR = "pyv_compiler/grammar/rules_verilog"
     EXT_DIR = "pyv_compiler/grammar/rules_verilog_ext"
 
+    # 1b. 预处理：展开宏（--expand-macros）
+    macro_table = {}
+    original_source = source  # keep for literal protection
+    if "--expand-macros" in flags:
+        from preprocessor import preprocess
+        source, macro_table = preprocess(source, RULES_DIR)
+        print(f"[preprocessor] macros defined: {len(macro_table)}")
+
     # 2. 词法分析
     lexer = Lexer(rules_dir=RULES_DIR)
     tokens = lexer.tokenize(source)
@@ -251,7 +259,16 @@ def pipeline():
         renderer = Renderer(rules_dir=RULES_DIR)
         content = renderer.render(ast)
 
-        # 7b. 可选：inline comment 指纹回注
+        # 7b. 逆向宏：保护字面量 → 全局替换 → 恢复字面量
+        if macro_table:
+            from preprocessor import protect_and_reverse, load_macro_config
+            config = load_macro_config(RULES_DIR)
+            define_kw = config.get("directives", {}).get("define", "define")
+            content = protect_and_reverse(content, original_source, macro_table,
+                                          define_keyword=define_kw)
+            print(f"[preprocessor] macros reversed")
+
+        # 7c. 可选：inline comment 指纹回注
         if inline_comments_enable:
             from renderer.inline_comment import inject_comments
 
