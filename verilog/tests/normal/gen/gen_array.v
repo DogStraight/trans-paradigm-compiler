@@ -5,8 +5,8 @@ module array_test();
     reg [31:0] data_bus[0:7];
     integer i;
     always @(posedge clk) begin
-        if (we)
-            mem[addr] <= data_in;
+        if ( we )
+        mem[addr] <= data_in;
         data_out <= mem[addr];
     end
     

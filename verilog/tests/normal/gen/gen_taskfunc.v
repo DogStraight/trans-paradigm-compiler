@@ -11,10 +11,10 @@ module taskfunc_test #( parameter W = 8 )(
         input [W - 1:0] y
         ;
         begin
-            if (x > y)
-                my_max = x;
+            if ( x > y )
+            my_max = x;
             else
-                my_max = y;
+            my_max = y;
         end
     endfunction
     

@@ -13,10 +13,10 @@ some random stuff here
 wire flag;
 // valid always block
 always @(posedge clk or negedge rstn) begin
-    if (!rstn)
-        counter <= 8'b0;
+    if ( ! rstn )
+    counter <= 8'b0;
     else
-        counter <= counter + 1'b1;
+    counter <= counter + 1'b1;
 end
 
 broken line with no meaning
