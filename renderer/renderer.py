@@ -55,10 +55,11 @@ class Renderer:
             cached = self._merged_layout_cache.get(key)
             if cached is not None:
                 return cached
+        key = None  # 无父类型时不缓存
         base = dict(self._layouts.get(child_node_name, {}))
         override = (parent_layout or {}).get("override", {}).get(child_node_name, {})
         base.update(override)
-        if parent_type:
+        if parent_type and key is not None:
             self._merged_layout_cache[key] = base
         return base
 

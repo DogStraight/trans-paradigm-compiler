@@ -2,6 +2,11 @@
 
 from typing import Optional, Tuple, Dict, Any
 import re
+
+# 预编译正则（避免每次调用 build_tree 重复编译）
+_RE_CALL = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_RE_TOKEN = re.compile(r"^[a-zA-Z_\.]+$")
+
 SEPARATOR_HANDLERS = [
     ("|", "choice", "alternatives"),  # 分支优先级最高
     (",", "seq", "items"),  # 序列次之
