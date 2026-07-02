@@ -23,6 +23,19 @@ class ParseContext:
         self.path_stack: list[str] = []                     # 当前语义路径栈
         self.comment_table: dict[str, str] = {}             # 语义路径 → 注释文本
 
+        # 错误恢复深度基准（用于限制 fallback 的级联深度）
+        self._recovery_base_depth: int | None = None
+
+    def set_recovery_base(self):
+        """标记当前 path_stack 深度为错误恢复的基准"""
+        self._recovery_base_depth = len(self.path_stack)
+
+    def within_recovery_range(self, max_depth: int = 1) -> bool:
+        """当前深度距离基准是否在 max_depth 层以内"""
+        if self._recovery_base_depth is None:
+            return False
+        return (len(self.path_stack) - self._recovery_base_depth) <= max_depth
+
     def __enter__(self):
         # 修复：进入with块时压入快照
         snapshot = self.create_snapshot()

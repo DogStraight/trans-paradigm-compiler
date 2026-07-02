@@ -52,6 +52,7 @@ from .block_parser import (
     parse_block_body,
     parse_block,
     collect_line_comments,
+    consume_error_line,
 )
 from .scope_stack import ScopeStack
 
@@ -99,6 +100,7 @@ class Parser:
     _parse_block_body = parse_block_body
     parse_block = parse_block
     _collect_line_comments = collect_line_comments
+    _consume_error_line = consume_error_line
 
     def __init__(
         self,
@@ -107,6 +109,7 @@ class Parser:
         verbose: bool = False,
         log_file: str | None = None,
         pre_symbols: dict[str, str] | None = None,
+        error_recovery: bool = True,
     ) -> None:
         """初始化解析器。
 
@@ -117,10 +120,13 @@ class Parser:
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
                      空字符串或 "/dev/null" 类似值表示不写日志。
             pre_symbols: Lexer 预扫描符号表 { name: kind }，用于辅助规则选择。
+            error_recovery: 错误恢复开关。True 时逐行隔离语法错误，输出 ErrorNode；
+                           False 时严格回溯，遇到错误即停止解析。
         """
         self.grammar_rules: Dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
         self.verbose = verbose
+        self.error_recovery = error_recovery
         # 失败尝试摘要
         self._failure_attempts: list[dict] = []
         # 预扫描符号表（可选）
@@ -172,9 +178,24 @@ class Parser:
             key=lambda r: len(getattr(r, "production", [])),
             reverse=True,
         )
+        # 从语法规则中收集所有块结束关键字（用于错误恢复的安全检测）
+        self._block_end_types: tuple[str, ...] = self._build_block_end_types()
 
         # inline comment 指纹匹配（解析后从源 token 流回溯）
         self._inline_comments: list[dict] = []
+
+    def _build_block_end_types(self) -> tuple[str, ...]:
+        """从已加载的 grammar_rules 中收集所有块结束关键字类型。
+
+        扫描所有规则的 end_case，收集以 'keyword.end' 开头的条目，
+        用于 parse_block_body 中错误恢复的安全边界检测。
+        """
+        seen: set[str] = set()
+        for rule in self.grammar_rules.values():
+            for item in getattr(rule, "end_case", []):
+                if isinstance(item, str) and item.startswith("keyword.end"):
+                    seen.add(item)
+        return tuple(sorted(seen))
 
         self._log_state("Parser initialized", mode="w")
 

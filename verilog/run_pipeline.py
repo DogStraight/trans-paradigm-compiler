@@ -153,9 +153,10 @@ def pipeline():
 
     set_default_cache_path(cache_path)
 
-    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False, pre_symbols=pre_symbols)
+    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False, pre_symbols=pre_symbols, error_recovery=True)
     parser.pre_hints = pre_scan_config.get("hints", {})
     parser.grammar_rules = rules
+    parser._block_end_types = parser._build_block_end_types()
     parser.statement_rule_names = [
         name
         for name, rule in rules.items()

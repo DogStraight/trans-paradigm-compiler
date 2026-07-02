@@ -1,7 +1,7 @@
 # 参考与借鉴项目
 
 > 分析过的项目及其对我们设计的影响。
-> 最后更新：2026-07-01
+> 最后更新：2026-07-02
 
 | 项目 | 关系 | 主要启发 |
 |------|------|---------|
@@ -16,3 +16,5 @@
 | **[textX](https://github.com/textX/textX)** | 架构对比 | Python 生态的 DSL 工作台，配置驱动理念的同行参考 |
 | **[dynparser](https://github.com/jleahred/dynparser)** | 设计参考 | 运行时规则加载（PEG 文本 / 宏内联 / API 追加）、自举、AST 后处理链 |
 | **Parser Combinators** ([pyparsing](https://github.com/pyparsing/pyparsing) / [nom](https://github.com/rust-bakery/nom)) | 架构对比 | 语法即代码 vs 配置驱动；Scannerless vs 管线分离；无渲染 vs Doc IR |
+| **[parlex](https://github.com/ikhomyakov/parlex)** | 架构对比 | Rust 下仿 lex/yacc 编译期生成器；SLR(1) 运行时歧义消解对 end_case 有启发；但 v0.4 · 0⭐ · 4K 下载 · 个人项目无社区 · 参考价值有限 |
+| **[ModelCC](https://modelcc.ikor.org/)** | 设计参考 | 模型驱动 parser generator（Java 类+注解 → 解析器）；Earley chart parser；内置引用解析 → ASG；`@Priority`/`@Associativity` 声明式消歧验证了 PyV 声明式配置方向；但 r2015 后已停滞 |

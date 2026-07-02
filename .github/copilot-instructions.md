@@ -77,10 +77,23 @@
 ## CLI 用法
 
 ```bash
-python main.py pipeline [test_name]           # CLI 入口
-python verilog/run_pipeline.py [test_name]     # 直接运行（默认 led_blinker）
-python verilog/run_all_tests.py                # 全量回归（--verbose / --json）
+python main.py pipeline [test_name]                   # CLI 入口
+python verilog/run_pipeline.py [test_name]             # 直接运行（默认 normal/ref_led_blinker）
+python verilog/run_pipeline.py [group] [test_name]    # 指定组+用例，如 normal counter
+python verilog/run_pipeline.py --debug                 # 调试模式（输出调试信息）
+python verilog/run_pipeline.py --inline-comments       # 内联注释指纹回注
+python verilog/run_pipeline.py --expand-macros         # 宏展开
+python verilog/run_all_tests.py                        # 全量回归
+python verilog/run_all_tests.py -v                     # 详细输出
+python verilog/run_all_tests.py --json                 # JSON 报告（输出到 test_report.json）
+python verilog/run_all_tests.py normal                 # 仅 normal 组
+python verilog/run_all_tests.py errors                 # 仅 errors 组
+python verilog/run_all_tests.py normal counter         # 仅单个用例
+python verilog/run_all_tests.py --expand-macros        # 展开宏后再测试
 ```
+
+`run_pipeline.py` 查找顺序：`normal/<test_name>` → `errors/<test_name>`。
+`run_all_tests.py` 支持 `normal` / `errors` 分组过滤和子串匹配筛选。
 
 ## 语法规则（TOML）
 
@@ -236,18 +249,68 @@ Statement  → CtrlStmt | ProcAssignStmt | ProcLocalDecl | CallStmt
 
 ## Git 提交约定
 
-启用 `core.hooksPath` 后自动校验：
+启用 `core.hooksPath` 后自动校验（`.github/hooks/git/`）：
 ```
 type(scope): description
 # 示例: feat(parser): add for-loop support
 ```
+
+### Git Hooks
+
+| Hook | 用途 |
+|------|------|
+| `commit-msg` | 验证提交信息格式 `type(scope): description` |
+| `post-commit` | 自动更新 `.github/session-summary.md`（日期 + HEAD SHA） |
+
+启用方式：
+```bash
+git config core.hooksPath .github/hooks/git
+```
+
 允许的 type: `feat`, `fix`, `refactor`, `style`, `test`, `docs`, `chore`, `perf`, `ci`
+
+详见 `.github/hooks/git/README.md`。
 
 ## 测试
 
-所有测试用例在 `verilog/ref/ref_*.v`，生成结果在 `verilog/gen/gen_*.v`。
-全量回归：`python verilog/run_all_tests.py`（支持 `-v`、`--json` 参数）。
-单用例：`python verilog/run_pipeline.py <test_name>`。
+### 测试目录结构
+
+```
+verilog/tests/
+├── normal/         — 正常用例（预期解析成功）
+│   ├── ref/       — 参考输入 .v 文件
+│   ├── gen/       — 自动生成 .v 文件
+│   ├── ast/       — AST JSON 快照
+│   ├── lex/       — Token 流快照
+│   └── symbols/   — 符号表快照
+└── errors/        — 错误用例（预期解析失败）
+    ├── ref/ / gen/ / ast/ / lex/
+```
+
+### 命令
+
+```bash
+python verilog/run_all_tests.py              # 全量回归
+python verilog/run_all_tests.py -v           # 详细输出
+python verilog/run_all_tests.py --json       # JSON 报告（test_report.json）
+python verilog/run_all_tests.py normal       # 仅 normal 组
+python verilog/run_all_tests.py errors       # 仅 errors 组
+python verilog/run_all_tests.py counter      # 子串匹配筛选
+python verilog/run_pipeline.py counter       # 单用例
+python verilog/run_pipeline.py --debug       # 调试模式
+```
+
+- 新语法特性 = 新 `verilog/ref/ref_*.v` 测试用例
+- 生成结果在 `verilog/gen/gen_*.v`，与参考文件对比行数和状态
+- 目标：全量回归 < 1s，33 测试 → 300 测试 < 10s
+
+## 预处理器（`preprocessor/`）
+
+- 独立阶段，插在 Lexer 前执行
+- 当前支持：`` `define `` 宏展开 + 逆向还原
+- 入口：`preprocessor.preprocess()` / `preprocessor.protect_and_reverse()`
+- 使用 `--expand-macros` 开关启用
+- TOML 配置：`grammar/rules_verilog/base/_macro.toml`
 
 ## 关键文档索引
 
@@ -262,4 +325,5 @@ type(scope): description
 | [docs/debug_known_issues.md](../../docs/debug_known_issues.md) | 已知问题速查表 | 遇到眼熟的问题时 |
 | [docs/design_lessons.md](../../docs/design_lessons.md) | 语义级 bug 与架构教训 | 避免重蹈覆辙 |
 | [docs/layout_spacing_prompt.md](../../docs/layout_spacing_prompt.md) | 布局间距设计提示 | 处理缩进/空行问题 |
+| [docs/references.md](../../docs/references.md) | 外部项目对比与参考 | 调研/设计决策时查阅 |
 | [TODO.md](../../TODO.md) | 当前待办事项 | 找下一个任务 |

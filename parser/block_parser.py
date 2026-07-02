@@ -10,6 +10,33 @@ from core.define import Node, GrammarRule
 from .parser_context import ParseContext
 
 
+def consume_error_line(self, context: ParseContext) -> Node:
+    """吞掉当前行并输出 Error 节点（行级错误隔离）。
+
+    当所有候选规则都无法匹配时触发，将无法解析的 token 行包装为 Error 节点，
+    让 parse_block_body 可以继续解析后续行，实现行间错误隔离。
+    """
+    error_node = Node("Error")
+    error_node.add_attr("raw", "")
+
+    if not context.has_more_tokens():
+        return error_node
+
+    tokens = []
+    while context.has_more_tokens():
+        t = context.peek_token()
+        assert t is not None
+        if t.type == "newline":
+            context.advance_token()  # 吞掉换行
+            break
+        tokens.append(t)
+        context.advance_token()  # advance 不返回值，需先 peek
+
+    raw = " ".join(t.content for t in tokens)
+    error_node.add_attr("raw", raw)
+    return error_node
+
+
 def parse_sentence(self, context: ParseContext) -> Optional[Node]:
     """解析一条语句：根据当前 token 选择候选规则并尝试匹配。"""
     if not context.has_more_tokens():
@@ -20,7 +47,9 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
         return None
 
     candidates = self.rule_selector.get_candidate_rules(
-        current, self.pre_symbols, self.pre_hints,
+        current,
+        self.pre_symbols,
+        self.pre_hints,
         self.scope_stack.lookup,
     )
     self._log_state(
@@ -40,18 +69,12 @@ def parse_sentence(self, context: ParseContext) -> Optional[Node]:
         self.scope_stack.restore(scope_depth)
         context.restore_snapshot(snapshot)
 
-    # 所有候选规则都匹配失败
-    expected_parts = []
-    for r in candidates[:5]:
-        expected_parts.append(f"{r.name}→{self._expected_tokens_for_rule(r)}")
+    # 所有候选规则都匹配失败 → 简略警告
+    rule_hint = ", ".join(r.name for r in candidates[:5])
     if len(candidates) > 5:
-        expected_parts.append(f"... 还有 {len(candidates)-5} 个")
-    expected_hint = " | ".join(expected_parts)
-
+        rule_hint += f" ... ({len(candidates)} 个候选)"
     self._warn(
-        f"所有候选规则匹配失败: '{current.content}' (type: {current.type}) "
-        f"Ln {current.line}\n"
-        f"  候选规则期望的起始 token: {expected_hint}",
+        f"匹配失败: '{current.content}' Ln {current.line} " f"→ 尝试过: {rule_hint}",
         context=context,
     )
     return None
@@ -75,9 +98,7 @@ def resolve_block_rule(
         else None
     )
     self._log_state(f"找到块规则: {block_rule_name}")
-    matched_rule = (
-        self.grammar_rules.get(block_rule_name) if block_rule_name else None
-    )
+    matched_rule = self.grammar_rules.get(block_rule_name) if block_rule_name else None
     if matched_rule is None:
         self._log_state(f"未找到匹配的块规则: {start_token}")
         return None
@@ -100,9 +121,7 @@ def consume_start_token(self, context: ParseContext, start_token: str) -> bool:
     return False
 
 
-def collect_line_comments(
-    self, context: ParseContext, block_node: Node
-) -> None:
+def collect_line_comments(self, context: ParseContext, block_node: Node) -> None:
     """收集行尾注释（comment → newline），并清除后续空白行"""
     while context.has_more_tokens():
         cur = context.peek_token()
@@ -145,6 +164,30 @@ def parse_block_body(
             break
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
+            # 严格模式：不恢复，直接终止块
+            if not getattr(self, "error_recovery", True):
+                break
+            if context.has_more_tokens():
+                nxt = context.peek_token()
+                # 到达块结束符 → 正常终止，不恢复
+                if nxt is not None and nxt.type == end_token:
+                    break
+                # Root 块 (end_token="") 到达 end 类关键字 → 消费为 ErrorNode 后终止
+                # 子块（如 ModuleBlock）不消费，让父级规则处理结束符
+                if (
+                    end_token == ""
+                    and nxt is not None
+                    and nxt.type in getattr(self, "_block_end_types", ())
+                ):
+                    if block_node.node_name == "Root":
+                        consumed = self._consume_error_line(context)
+                        if consumed is not None and getattr(consumed, "raw", ""):
+                            block_node.add_sub_node(consumed)
+                    break
+                recovered = self._consume_error_line(context)
+                if recovered is not None and getattr(recovered, "raw", ""):
+                    block_node.add_sub_node(recovered)
+                    continue
             break
         block_node.add_sub_node(stmt_node)
 
