@@ -1,7 +1,6 @@
 """ParseContext — parser state container with snapshot/restore for backtracking."""
 
 from core.define import Token, Node, GrammarRule
-import copy
 
 
 class ParseContext:
@@ -66,7 +65,7 @@ class ParseContext:
         snapshot = {
             "token_pointer": self.token_pointer,
             "match_length": self.match_length,
-            "current_node": copy.deepcopy(self.current_node),
+            "current_node": self.current_node,
             "current_rule": self.current_rule,
             "production_pointer": self.production_pointer,
             "comment_table": dict(self.comment_table),
