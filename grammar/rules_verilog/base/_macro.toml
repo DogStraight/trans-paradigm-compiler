@@ -8,14 +8,25 @@
 [directives]
 # 宏定义指令（关键字形式，` + 关键字 = 完整 token）
 define = "define"
+undef = "undef"
+undefineall = "undefineall"
 include = "include"
 ifdef = "ifdef"
 ifndef = "ifndef"
 elsif = "elsif"
 else = "else"
 endif = "endif"
-undef = "undef"
 timescale = "timescale"
+default_nettype = "default_nettype"
+resetall = "resetall"
+celldefine = "celldefine"
+endcelldefine = "endcelldefine"
+unconnected_drive = "unconnected_drive"
+nounconnected_drive = "nounconnected_drive"
+pragma = "pragma"
+line = "line"
+begin_keywords = "begin_keywords"
+end_keywords = "end_keywords"
 
 [macro_call]
 # 宏调用前缀
