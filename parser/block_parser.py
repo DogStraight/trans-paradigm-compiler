@@ -207,9 +207,10 @@ def _try_block_recovery(
     cfg = _block_recovery_cfg(self, block_node)
     if cfg and isinstance(cfg, dict):
         strategy = cfg.get("strategy")
-        handler = _BLOCK_RECOVERY_STRATEGIES.get(strategy)
-        if handler:
-            return handler(self, context, block_node)
+        if isinstance(strategy, str):
+            handler = _BLOCK_RECOVERY_STRATEGIES.get(strategy)
+            if handler:
+                return handler(self, context, block_node)
 
     return False
 
