@@ -5,8 +5,7 @@ module index_test(
     input wire [2:0] idx,
     output reg [7:0] out);
 
-    always @(*) begin
-        out = data[idx];
+    always @ ( * ) begin
+    out = data[idx];
     end
-    
 endmodule

@@ -13,6 +13,7 @@ production = [
     "@Statement",
 ]
 end_case = ["newline", "keyword.end"]
+recovery = { after = "keyword.always" }
 [AlwaysBlock.parser.node]
 sensitivity = "$4"
 body = "$6"

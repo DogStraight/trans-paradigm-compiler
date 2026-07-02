@@ -19,6 +19,7 @@ production = [
     "keyword.endcase",
 ]
 end_case = ["keyword.endcase", "keyword.end", "newline"]
+recovery = { after = "@CaseKeyword" }
 [CaseStatement.parser.node]
 case_type = "$1"
 expr = "$3"

@@ -14,6 +14,7 @@ production = [
     "@ForBodyStmt",
 ]
 end_case = ["newline"]
+recovery = { after = "keyword.for" }
 [ForLoop.parser.node]
 init = "$3"
 condition = "$5"
@@ -46,6 +47,7 @@ production = [
     "@BeginEnd",
 ]
 end_case = ["newline"]
+recovery = { after = "keyword.for" }
 [ForLoopBlock.parser.node]
 init = "$3"
 condition = "$5"

@@ -3,25 +3,27 @@ module simple_func #( parameter W = 8 )(
     output reg [W - 1:0] result);
 
     // ANSI 风格带参函数
-    function automatic [W - 1:0] my_max(
-        input [W - 1:0] x,
-        input [W - 1:0] y);
-        begin
-            my_max = (x > y) ? x : y;
-        end
+    function automatic [ W - 1 : 0 ] my_max (
+    input [W - 1:0] x
+    ,
+    input [W - 1:0] y
+    ) ;
+    begin
+    my_max = (x > y) ? x : y;
+    end
     endfunction
-    
     // ANSI 风格带参任务
     task automatic my_swap(
         input [W - 1:0] x,
         output [W - 1:0] y);
         begin
-            y = x;
+        y = x;
         end
-    endtask
-    
-    always @(*) begin
+        endtask
+        always @ ( * ) begin
         result = my_max(a, a);
-    end
+        end
+        endmodule
+    endtask
     
 endmodule

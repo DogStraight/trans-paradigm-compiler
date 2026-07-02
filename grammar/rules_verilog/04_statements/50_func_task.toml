@@ -24,6 +24,7 @@ production = [
     "keyword.endfunction",
 ]
 end_case = ["keyword.endfunction"]
+recovery = { after = "keyword.function" }
 [FuncDeclANSI.parser.node]
 func_name = "$5"
 body = "$10"
@@ -73,6 +74,7 @@ production = [
     "keyword.endfunction",
 ]
 end_case = ["keyword.endfunction", "newline"]
+recovery = { after = "keyword.function" }
 [FuncDeclOld.parser.node]
 func_name = "$5"
 body = "$7"
@@ -127,6 +129,7 @@ production = [
     "keyword.endtask",
 ]
 end_case = ["keyword.endtask"]
+recovery = { after = "keyword.task" }
 [TaskDeclANSI.parser.node]
 task_name = "$3"
 body = "$8"
@@ -163,6 +166,7 @@ production = [
     "keyword.endtask",
 ]
 end_case = ["keyword.endtask"]
+recovery = { after = "keyword.task" }
 [TaskDeclOld.parser.node]
 task_name = "$3"
 body = "$5"
