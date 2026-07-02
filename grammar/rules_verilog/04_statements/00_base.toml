@@ -26,7 +26,7 @@
 [CtrlStmt]
 [CtrlStmt.parser]
 production = [
-    "@IfStatement|@CaseStatement|@ForLoopBlock|@ForLoop|@BeginEnd|@EventWaitStmt",
+    "@IfBlock|@IfStmt|@CaseStatement|@ForLoopBlock|@ForLoop|@BeginEnd|@EventWaitStmt",
 ]
 inline = true
 [CtrlStmt.parser.node]

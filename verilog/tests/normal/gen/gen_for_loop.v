@@ -6,13 +6,15 @@ module priority_encoder(
     output reg valid);
 
     integer i;
-    always @ ( * ) begin
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
     code = 3'd0;
     valid = 1'b0;
-    for (i = 0; i < 8; i = i + 1)  begin
-            if ( req [ i ] ) begin
-            code = i;
-            valid = 1'b1;
-        end
+    for (i = 0; i < 8; i = i + 1) 
+        if (/* ERROR: begin */) /* ERROR: begin */
+    if (req[i]) begin
+        code = i;
+        valid = 1'b1;
     end
+    else if (/* ERROR: end */) /* ERROR: end */
+    /* ERROR: end */
 endmodule

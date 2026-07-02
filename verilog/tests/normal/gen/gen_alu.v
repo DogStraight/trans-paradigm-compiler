@@ -18,16 +18,16 @@ module alu #( parameter W = 8 )(
     assign and_w = a & b;
     assign or_w = a | b;
     assign xor_w = a ^ b;
-    always @ ( * ) begin
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
     case (op)
-        3'd0: result = sum;
-        3'd1: result = diff;
-        3'd2: result = and_w;
-        3'd3: result = or_w;
-        3'd4: result = xor_w;
-        default: result = {W{1'b0}};
+        3'd0: if (/* ERROR: result = sum ; */) /* ERROR: result = sum ; */
+        3'd1: if (/* ERROR: result = diff ; */) /* ERROR: result = diff ; */
+        3'd2: if (/* ERROR: result = and_w ; */) /* ERROR: result = and_w ; */
+        3'd3: if (/* ERROR: result = or_w ; */) /* ERROR: result = or_w ; */
+        3'd4: if (/* ERROR: result = xor_w ; */) /* ERROR: result = xor_w ; */
+        default: if (/* ERROR: result = { W { 1'b0 } } ; */) /* ERROR: result = { W { 1'b0 } } ; */
     endcase
     zero = (result == {W{1'b0}});
     overflow = (a[W - 1] == b[W - 1]) && (result[W - 1] != a[W - 1]);
-    end
+    /* ERROR: end */
 endmodule

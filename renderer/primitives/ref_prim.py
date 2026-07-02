@@ -22,40 +22,40 @@ def eval_ref(
     parent_layout: Optional[dict],
     renderer: Any,
 ) -> Optional[Doc]:
-    """求值 ref 原语"""
+    """求值 ref 原语，ref 所在节点的 _error 也会渲染"""
     child = getattr(node, expr["ref"], None)
-    if child is None:
-        return None
 
-    # ---- 单 Node ----
-    if isinstance(child, Node):
-        base_layout = renderer._layouts.get(child.node_name, {})
-        override = (
-            (parent_layout or {}).get("override", {}).get(child.node_name, {})
-        )
-        merged = dict(base_layout)
-        merged.update(override)
-        return renderer._render_inline(child, merged, indent)
+    parts: List[Doc] = []
 
-    # ---- Node 列表 ----
-    if isinstance(child, list):
-        docs: List[Doc] = []
-        for item in child:
-            if isinstance(item, Node):
-                item_layout = renderer._layouts.get(item.node_name, {})
-                item_override = (
-                    (parent_layout or {})
-                    .get("override", {})
-                    .get(item.node_name, {})
-                )
-                merged_item = dict(item_layout)
-                merged_item.update(item_override)
-                d = renderer._render_inline(item, merged_item, indent)
-            else:
-                d = Text(str(item))
+    # ---- 主引用内容 ----
+    if child is not None:
+        if isinstance(child, Node):
+            merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
+            d = renderer._render_inline(child, merged, indent)
             if not isinstance(d, Empty):
-                docs.append(d)
-        return Concat(docs) if docs else None
+                parts.append(d)
 
-    # ---- 标量值 ----
-    return Text(str(child))
+        elif isinstance(child, list):
+            for item in child:
+                if isinstance(item, Node):
+                    merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
+                    d = renderer._render_inline(item, merged, indent)
+                else:
+                    d = Text(str(item))
+                if not isinstance(d, Empty):
+                    parts.append(d)
+
+        else:
+            parts.append(Text(str(child)))
+
+    # ---- _error（用 Error 节点的布局渲染）----
+    err_node = getattr(node, "_error", None)
+    if isinstance(err_node, Node):
+        err_layout = renderer._layouts.get("Error", {})
+        err_doc = renderer._render_inline(err_node, err_layout, indent)
+        if not isinstance(err_doc, Empty):
+            if parts:
+                parts.append(Text(" "))
+            parts.append(err_doc)
+
+    return Concat(parts) if parts else None

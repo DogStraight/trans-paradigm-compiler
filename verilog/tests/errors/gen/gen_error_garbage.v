@@ -1,20 +1,19 @@
 // Test file for error-tolerant parsing
 // Contains garbage lines interspersed with valid Verilog
-module error_test (
+/* ERROR: module error_test ( */
 input wire clk
-,
-input wire rstn ,
-this is total garbage that should not parse ,
+/* ERROR: , */
+/* ERROR: input wire rstn , */
+/* ERROR: this is total garbage that should not parse , */
 output wire [7:0] data
-) ;
+/* ERROR: ) ; */
 // valid register declaration
 reg [7:0] counter;
-some random stuff here
+/* ERROR: some random stuff here */
 wire flag;
 // valid always block
-always @ ( posedge clk or negedge rstn ) begin
-if ( ! rstn )
-counter <= 8'b0;
-else
+always @(posedge clk or negedge rstn) if (/* ERROR: begin */) /* ERROR: begin */
+if (!rstn /* ERROR: counter <= 8'b0 ; */) /* ERROR: counter <= 8'b0 ; */ /* ERROR: counter <= 8'b0 ; */
+/* ERROR: else */
 counter <= counter + 1'b1;
-end
+/* ERROR: end */

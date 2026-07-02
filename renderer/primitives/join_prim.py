@@ -47,14 +47,8 @@ def eval_join(
 
     for item in items:
         if isinstance(item, Node):
-            child_layout = dict(renderer._layouts.get(item.node_name, {}))
-            item_override = (
-                (parent_layout or {})
-                .get("override", {})
-                .get(item.node_name, {})
-            )
-            child_layout.update(item_override)
-            d = renderer._render_inline(item, child_layout, indent)
+            merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
+            d = renderer._render_inline(item, merged, indent)
         else:
             d = Text(str(item))
         if not isinstance(d, Empty):

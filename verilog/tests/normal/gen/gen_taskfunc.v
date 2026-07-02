@@ -5,32 +5,32 @@ module taskfunc_test #( parameter W = 8 )(
     output reg [W - 1:0] result);
 
     // 函数
-    function automatic [ W - 1 : 0 ] my_max ;
+    function automatic /* ERROR: ; */ [W - 1:0 /* ERROR: ; */] my_max /* ERROR: ; */(/* ERROR: ; */);
+    endfunction
+    
     input [W - 1:0] x
     ;
     input [W - 1:0] y
     ;
     begin
-    if ( x > y )
-    my_max = x;
-    else
-    my_max = y;
+        if (x > y /* ERROR: my_max = x ; */) /* ERROR: my_max = x ; */ /* ERROR: my_max = x ; */
+        /* ERROR: else */
+        my_max = y;
     end
-    endfunction
+    /* ERROR: endfunction */
     // 任务
-    task automatic my_swap;
-        input [W - 1:0] x
-        ;
-        output [W - 1:0] y
-        ;
-        begin
-        y = x;
-        end
-        endtask
-        always @ ( * ) begin
-        result = my_max(a, b);
-        end
-        endmodule
+    task automatic /* ERROR: ; */ my_swap /* ERROR: ; */(/* ERROR: ; */);
     endtask
     
+    input [W - 1:0] x
+    ;
+    output [W - 1:0] y
+    ;
+    begin
+        y = x;
+    end
+    /* ERROR: endtask */
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
+    result = my_max(a, b);
+    /* ERROR: end */
 endmodule

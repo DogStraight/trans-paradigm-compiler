@@ -12,16 +12,14 @@ module task_test( input clk);
         output reg [7:0] swapped_a,
         output reg [7:0] swapped_b);
         begin
-        swapped_a = b;
-        swapped_b = a;
+            swapped_a = b;
+            swapped_b = a;
         end
-        endtask
-        always @ ( * ) begin
-        a = 8'h11;
-        b = 8'h22;
-        swap(a, b, result_a, result_b);
-        end
-        endmodule
     endtask
     
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
+    a = 8'h11;
+    b = 8'h22;
+    swap(a, b, result_a, result_b);
+    /* ERROR: end */
 endmodule

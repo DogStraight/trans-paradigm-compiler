@@ -13,7 +13,7 @@ layout = { join = "\n" }
 # ----- Error 节点（语法错误恢复）-----
 [Error]
 [Error.renderer]
-layout = { ref = "raw" }
+layout = { line = ["/* ERROR: ", { ref = "raw" }, " */"] }
 
 # ----- 注释节点（语句级，自然继承 block 缩进）-----
 [Comment]

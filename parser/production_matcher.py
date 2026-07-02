@@ -11,9 +11,7 @@ from core.define import Node, GrammarRule
 from .parser_context import ParseContext
 
 
-def process_production_node(
-    self, node: dict, context: ParseContext
-) -> Optional[Node]:
+def process_production_node(self, node: dict, context: ParseContext) -> Optional[Node]:
     """dispatch 到 _parse_* 方法"""
     typ = node.get("type")
     method_name = f"_parse_{typ}"
@@ -24,35 +22,114 @@ def process_production_node(
     return method(node, context)
 
 
+def _get_recovery_cfg(self, rule: GrammarRule) -> Optional[dict]:
+    """读取规则的 recovery 配置"""
+    p = getattr(rule, "parser", {})
+    if isinstance(p, dict):
+        return p.get("recovery")
+    return None
+
+
+def _get_prod_features(self, rule: GrammarRule, prod: str) -> Optional[dict]:
+    """获取产生式特征，带缓存"""
+    cache = getattr(rule, "_prod_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(rule, "_prod_cache", cache)
+    if prod not in cache:
+        from .feature_analyze import analyze_production_features
+
+        cache[prod] = analyze_production_features(prod)
+    return cache[prod]
+
+
+def _try_production(
+    self, context: ParseContext, prod: str, rule: GrammarRule, committed: bool
+) -> Optional[Node]:
+    """尝试匹配单个产生式，失败时如果已提交则产 ErrorNode（吞行）"""
+    features = _get_prod_features(self, rule, prod)
+    if not features:
+        return None
+    if not self._prepare_production(context, features):
+        return None
+
+    snapshot = context.create_snapshot()
+    result = process_production_node(self, features, context)
+    if result is not None:
+        return result
+
+    # 匹配失败
+    context.restore_snapshot(snapshot)
+
+    # 已提交 → 产 ErrorNode（吞行）
+    if committed:
+        err = Node("Error")
+        tokens = []
+        # 如果是在匹配具体 token 时失败，也停在该 token 类型上
+        stop_types = {"newline"}
+        expected_token = None
+        if features.get("type") == "token":
+            expected_token = features["token_type"]
+            stop_types.add(expected_token)
+        while context.has_more_tokens():
+            t = context.peek_token()
+            if t is not None and t.type in stop_types:
+                if t.type == expected_token:
+                    context.advance_token()  # 消费预期的终止符（如 )），上层不用再管
+                break
+            if t is not None:
+                tokens.append(t)
+                context.advance_token()
+            else:
+                break
+        if tokens:
+            err.add_attr("raw", " ".join(t.content for t in tokens))
+        return err
+
+    return None
+
+
 def match_productions(
     self, context: ParseContext, rule: GrammarRule
-) -> Optional[List[Node]]:
-    """匹配规则的所有产生式。成功返回节点列表，任一产生式失败返回 None。"""
+) -> tuple[Optional[List[Node]], Optional[Node]]:
+    """匹配规则的所有产生式。
+
+    返回 (matched_nodes, error_node)：
+        matched_nodes=None & error_node=None → 全部失败（未提交）
+        matched_nodes=[] & error_node=Node   → 提交后部分失败
+        matched_nodes=[...] & error_node=None → 完全成功
+    """
+    recovery = _get_recovery_cfg(self, rule)
+    after = None
+    committed = False  # 无 recovery → 严格回溯
+    if recovery and isinstance(recovery, dict):
+        after = recovery.get("after")
+        committed = after is not None  # 有 after 显式指定时才提交
+
     all_matched_nodes = []
     for prod in getattr(rule, "production", []):
         self._log_state(
             f"处理产生式: {prod} | {self._debug_token_info(context)}",
             context=context,
         )
-        from .feature_analyze import analyze_production_features
-        features = analyze_production_features(prod)
-        if not features:
-            continue
 
-        if not self._prepare_production(context, features):
-            break
-
-        snapshot = context.create_snapshot()
-        result_node = process_production_node(self, features, context)
+        result_node = _try_production(self, context, prod, rule, committed)
         if result_node is None:
-            context.restore_snapshot(snapshot)
-            self._log_state(
-                f"✗ 产生式 {prod} 匹配失败 | {self._debug_token_info(context)}",
-                context=context,
-            )
-            return None
+            # 未提交且匹配失败 → 全部失败
+            return None, None
+
+        if result_node.node_name == "Error" and committed:
+            # 已提交后产出的 ErrorNode → 部分成功
+            all_matched_nodes.append(result_node)
+            return all_matched_nodes, result_node
+
         all_matched_nodes.append(result_node)
-    return all_matched_nodes
+
+        # 检查是否到达提交点
+        if not committed and after and after in prod:
+            committed = True
+
+    return all_matched_nodes, None
 
 
 def _build_semantic_path(context: ParseContext) -> str:
@@ -96,16 +173,18 @@ def try_rule_productions(
             self.scope_stack.pop()
         return result
 
-    # 记录失败尝试（成功后清空）
+    # 记录失败尝试（仅调试收集模式）
     current_token = context.peek_token()
-    if hasattr(self, "_failure_attempts"):
-        self._failure_attempts.append({
-            "rule": rule.name,
-            "token": str(current_token.content) if current_token else "EOF",
-            "token_index": context.token_pointer,
-            "token_type": current_token.type if current_token else "EOF",
-            "path": "/".join(context.path_stack),
-        })
+    if getattr(self, "_collect_failures", False):
+        self._failure_attempts.append(
+            {
+                "rule": rule.name,
+                "token": str(current_token.content) if current_token else "EOF",
+                "token_index": context.token_pointer,
+                "token_type": current_token.type if current_token else "EOF",
+                "path": "/".join(context.path_stack),
+            }
+        )
 
     self._log_state(
         f"尝试匹配规则: {rule.name} | {self._debug_token_info(context)}",
@@ -117,38 +196,41 @@ def try_rule_productions(
     old_node = context.current_node
     context.update_current_node(rule_node)
 
-    all_matched_nodes = match_productions(self, context, rule)
-    if all_matched_nodes is None:
+    all_matched_nodes, error_node = match_productions(self, context, rule)
+    if all_matched_nodes is None and error_node is None:
         context.path_stack.pop()
         if scope_pushed:
             self.scope_stack.pop()
         return None
 
-    # 属性绑定
-    self._bind_attributes(rule_node, rule, all_matched_nodes)
+    # 部分成功：有 error_node 时标记规则节点
+    if error_node is not None:
+        rule_node.add_attr("_error", error_node)
 
-    # 检查结束符/终止符（含 end_case 正匹配 + forbidden_next 反匹配）
-    if not self._check_end_case(context, rule):
+    # 属性绑定
+    self._bind_attributes(rule_node, rule, all_matched_nodes or [])
+
+    # 有 error 的规则跳过 end_case 检查（已处于错误状态）
+    if error_node is None and not self._check_end_case(context, rule):
         self._restore_current_node(old_node, context)
         context.path_stack.pop()
         if scope_pushed:
             self.scope_stack.pop()
         return None
 
-    # Inline 扁平化
-    inline_result = self._try_inline_rule(
-        rule, all_matched_nodes, old_node, context
-    )
-    if inline_result is not None:
-        context.path_stack.pop()
-        if scope_pushed:
-            self.scope_stack.pop()
-        return inline_result
+    # Inline 扁平化（不扁平包含 error 的规则）
+    if error_node is None:
+        inline_result = self._try_inline_rule(
+            rule, all_matched_nodes, old_node, context
+        )
+        if inline_result is not None:
+            context.path_stack.pop()
+            if scope_pushed:
+                self.scope_stack.pop()
+            return inline_result
 
     self._restore_current_node(old_node, context)
-    self._log_state(
-        f"✓ 规则 {rule.name} 匹配成功", context=context
-    )
+    self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
     context.path_stack.pop()
     if scope_pushed:
         self.scope_stack.pop()

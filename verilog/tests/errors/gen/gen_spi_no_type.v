@@ -14,13 +14,14 @@ module spi_invoker(
     output reg [7:0] spi_data,
     output reg spi_data_en);
 
-    always @ ( posedge clk ) begin
-    if ( ! rstn ) begin
-    spi_data <= 8'b0;
-    spi_data_en <= 1'b0;
-    end else begin
+    always @(posedge clk) if (/* ERROR: begin */) /* ERROR: begin */
+    if (!rstn) begin
+        spi_data <= 8'b0;
+        spi_data_en <= 1'b0;
+    end
+    else if (/* ERROR: begin */) /* ERROR: begin */
     spi_data <= spi_data + 1'b1;
     spi_data_en <= 1'b1;
-    end
-    end
+    /* ERROR: end */
+    /* ERROR: end */
 endmodule

@@ -6,16 +6,18 @@ module signed_test(
     wire signed [31:0] acc;
     reg signed [15:0] accum;
     integer i;
-    always @ ( * ) begin
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
     accum = a + b;
-    end
-    function signed [ 31 : 0 ] add ;
+    /* ERROR: end */
+    function signed /* ERROR: ; */ [31:0 /* ERROR: ; */] add /* ERROR: ; */(/* ERROR: ; */);
+    endfunction
+    
     input signed [15:0] x
     ;
     input signed [15:0] y
     ;
     begin
-    add = x + y;
+        add = x + y;
     end
-    endfunction
+    /* ERROR: endfunction */
 endmodule

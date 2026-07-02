@@ -1,4 +1,10 @@
 {
   "name": "<global>",
-  "kind": "global"
+  "kind": "global",
+  "children": [
+    {
+      "name": "top",
+      "kind": "module"
+    }
+  ]
 }

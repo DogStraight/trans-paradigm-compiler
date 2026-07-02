@@ -15,74 +15,73 @@ module traffic_light(
     localparam YELLOW = 2'd2;
     localparam RED = 2'd3;
     // 状态寄存器
-    always @ ( posedge clk or negedge rst_n ) begin
-    if ( ! rst_n ) begin
-    state <= IDLE;
-    end else begin
+    always @(posedge clk or negedge rst_n) if (/* ERROR: begin */) /* ERROR: begin */
+    if (!rst_n) begin
+        state <= IDLE;
+    end
+    else if (/* ERROR: begin */) /* ERROR: begin */
     state <= next_state;
-    end
-    end
+    /* ERROR: end */
+    /* ERROR: end */
     // 次态逻辑
-    always @ ( * ) begin
-    case ( state )
-    IDLE : begin
-    if ( car_sensor )
-    next_state = GREEN;
-    else
-    next_state = IDLE;
-    end
-    GREEN : begin
-    if ( timer == 32'd50 )
-    next_state = YELLOW;
-    else
-    next_state = GREEN;
-    end
-    YELLOW : begin
-    if ( timer == 32'd5 )
-    next_state = RED;
-    else
-    next_state = YELLOW;
-    end
-    RED : begin
-    if ( timer == 32'd30 )
-    next_state = IDLE;
-    else
-    next_state = RED;
-    end
-    default : next_state = IDLE ;
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
+    case /* ERROR: if ( car_sensor ) */ (state /* ERROR: if ( car_sensor ) */)
+        IDLE: if (/* ERROR: begin */) /* ERROR: begin */
     endcase
-    end
+    next_state = GREEN;
+    /* ERROR: else */
+    next_state = IDLE;
+    /* ERROR: end */
+    /* ERROR: GREEN : begin */
+    if (timer == 32'd50 /* ERROR: next_state = YELLOW ; */) /* ERROR: next_state = YELLOW ; */ /* ERROR: next_state = YELLOW ; */
+    /* ERROR: else */
+    next_state = GREEN;
+    /* ERROR: end */
+    /* ERROR: YELLOW : begin */
+    if (timer == 32'd5 /* ERROR: next_state = RED ; */) /* ERROR: next_state = RED ; */ /* ERROR: next_state = RED ; */
+    /* ERROR: else */
+    next_state = YELLOW;
+    /* ERROR: end */
+    /* ERROR: RED : begin */
+    if (timer == 32'd30 /* ERROR: next_state = IDLE ; */) /* ERROR: next_state = IDLE ; */ /* ERROR: next_state = IDLE ; */
+    /* ERROR: else */
+    next_state = RED;
+    /* ERROR: end */
+    /* ERROR: default : next_state = IDLE ; */
+    /* ERROR: endcase */
+    /* ERROR: end */
     // 计时器
-    always @ ( posedge clk or negedge rst_n ) begin
-    if ( ! rst_n )
+    always @(posedge clk or negedge rst_n) if (/* ERROR: begin */) /* ERROR: begin */
+    if (!rst_n /* ERROR: timer <= 32'd0 ; */) /* ERROR: timer <= 32'd0 ; */ /* ERROR: timer <= 32'd0 ; */
+    /* ERROR: else if ( state != next_state ) */
     timer <= 32'd0;
-    else if ( state != next_state )
-    timer <= 32'd0;
-    else
+    /* ERROR: else */
     timer <= timer + 32'd1;
-    end
+    /* ERROR: end */
     // 输出
-    always @ ( * ) begin
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
     case (state)
-        IDLE: light = 2'd0;
-        GREEN: light = 2'd1;
-        YELLOW: light = 2'd2;
-        RED: light = 2'd3;
-        default: light = 2'd0;
+        IDLE: if (/* ERROR: light = 2'd0 ; */) /* ERROR: light = 2'd0 ; */
+        GREEN: if (/* ERROR: light = 2'd1 ; */) /* ERROR: light = 2'd1 ; */
+        YELLOW: if (/* ERROR: light = 2'd2 ; */) /* ERROR: light = 2'd2 ; */
+        RED: if (/* ERROR: light = 2'd3 ; */) /* ERROR: light = 2'd3 ; */
+        default: if (/* ERROR: light = 2'd0 ; */) /* ERROR: light = 2'd0 ; */
     endcase
-    end
+    /* ERROR: end */
     reg a = 1'b0;
-    always @(*) begin
-        if ( a == 1'b0 ) begin
-        if ( state == GREEN ) begin
-        if ( timer == 32'd25 ) begin
-        if ( car_sensor ) begin
-        a = 1'b1;
-    end
-    
-    end
-    end else begin
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
+    if (a == 1'b0)
+        if (/* ERROR: begin */) /* ERROR: begin */
+    else if (/* ERROR: if ( state == GREEN ) begin */) /* ERROR: if ( state == GREEN ) begin */
+    if (timer == 32'd25)
+        if (/* ERROR: begin */) /* ERROR: begin */
+    else if (/* ERROR: if ( car_sensor ) begin */) /* ERROR: if ( car_sensor ) begin */
+    a = 1'b1;
+    /* ERROR: end */
+    /* ERROR: end */
+    /* ERROR: end */
+    /* ERROR: end else begin */
     a = 1'b0;
-    end
-    end
+    /* ERROR: end */
+    /* ERROR: end */
 endmodule

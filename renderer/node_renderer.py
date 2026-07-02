@@ -187,12 +187,8 @@ def render_body(
     docs: List[Doc] = []
     children_list = [c for c in children if isinstance(c, Node)]
     for i, child in enumerate(children_list):
-        child_layout = dict(renderer._layouts.get(child.node_name, {}))
-        child_override = (
-            (parent_layout or {}).get("override", {}).get(child.node_name, {})
-        )
-        child_layout.update(child_override)
-        d = render_node(child, child_layout, indent, renderer)
+        merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
+        d = render_node(child, merged, indent, renderer)
         if not isinstance(d, Empty):
             if body_cfg and isinstance(body_cfg, dict):
                 sep = body_cfg.get("sep")

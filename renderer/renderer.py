@@ -38,6 +38,29 @@ class Renderer:
         load_layouts(rules_dir, self._layouts)
         self._apply_style(rules_dir)
         self._normalize_config = load_normalize_config(rules_dir)
+        # 布局合并缓存 {(parent_type, child_type): merged_layout}
+        self._merged_layout_cache: dict[tuple[str, str], dict] = {}
+
+    def _get_merged_layout(
+        self, parent_layout: dict, child_node_name: str
+    ) -> dict:
+        """获取子节点的合并后布局（base_layout + override），带缓存"""
+        parent_type = None
+        for ptype, pl in self._layouts.items():
+            if pl is parent_layout:
+                parent_type = ptype
+                break
+        if parent_type:
+            key = (parent_type, child_node_name)
+            cached = self._merged_layout_cache.get(key)
+            if cached is not None:
+                return cached
+        base = dict(self._layouts.get(child_node_name, {}))
+        override = (parent_layout or {}).get("override", {}).get(child_node_name, {})
+        base.update(override)
+        if parent_type:
+            self._merged_layout_cache[key] = base
+        return base
 
     def _apply_style(self, rules_dir: str) -> None:
         """从 TOML 加载风格参数到实例属性"""

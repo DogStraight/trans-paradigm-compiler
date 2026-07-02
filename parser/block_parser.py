@@ -5,9 +5,31 @@ block_parser.py — 块 & 语句级解析
 _parse_block_body, parse_block。
 """
 
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple, Callable
 from core.define import Node, GrammarRule
 from .parser_context import ParseContext
+
+# 块级恢复策略分发表
+_BLOCK_RECOVERY_STRATEGIES: dict[str, Callable] = {}
+
+
+def _register_strategy(name: str):
+    """装饰器：注册块恢复策略"""
+    def decorator(fn: Callable) -> Callable:
+        _BLOCK_RECOVERY_STRATEGIES[name] = fn
+        return fn
+    return decorator
+
+
+@_register_strategy("consume_line")
+def _recover_consume_line(
+    self, context: ParseContext, block_node: Node
+) -> bool:
+    """吞掉当前行作为 Error 节点，返回 True（继续循环）"""
+    err = self._consume_error_line(context)
+    if err is not None and getattr(err, "raw", ""):
+        block_node.add_sub_node(err)
+    return True
 
 
 def consume_error_line(self, context: ParseContext) -> Node:
@@ -139,55 +161,89 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
     self._skip_tokens(context, tuple(self.skip_types))
 
 
+def _block_recovery_cfg(self, block_node: Node) -> Optional[dict]:
+    """读取块规则的 recovery 配置（从 rule.parser 字典中）"""
+    rule = (
+        self.grammar_rules.get(block_node.node_name)
+        if hasattr(self, "grammar_rules")
+        else None
+    )
+    if rule:
+        p = getattr(rule, "parser", {})
+        if isinstance(p, dict):
+            return p.get("recovery")
+    return None
+
+
+def _try_block_recovery(
+    self,
+    context: ParseContext,
+    block_node: Node,
+    rule: GrammarRule,
+) -> bool:
+    """尝试行级恢复，成功返 True（继续循环），否则返 False（终止块）"""
+    if not context.has_more_tokens():
+        return False
+    nxt = context.peek_token()
+    if nxt is None:
+        return False
+
+    end_case = getattr(rule, "end_case", [])
+    has_end_token = any(isinstance(e, str) and not e.startswith("!") for e in end_case)
+
+    # 有明确结束符 → 到达时正常终止
+    if has_end_token and nxt.type in end_case:
+        return False
+
+    # 无明确结束符时遇到 end 类关键字 → 消费为 ErrorNode 后终止（仅 Root）
+    if not has_end_token and nxt.type in getattr(self, "_block_end_types", ()):
+        if block_node.node_name == "Root":
+            err = self._consume_error_line(context)
+            if err is not None and getattr(err, "raw", ""):
+                block_node.add_sub_node(err)
+        return False
+
+    # 有 consume_line 恢复配置 → 吞行继续
+    cfg = _block_recovery_cfg(self, block_node)
+    if cfg and isinstance(cfg, dict):
+        strategy = cfg.get("strategy")
+        handler = _BLOCK_RECOVERY_STRATEGIES.get(strategy)
+        if handler:
+            return handler(self, context, block_node)
+
+    return False
+
+
 def parse_block_body(
-    self, context: ParseContext, block_node: Node, end_token: Optional[str]
+    self,
+    context: ParseContext,
+    block_node: Node,
+    rule: GrammarRule,
 ) -> None:
     """循环解析句子直到遇到结束符或文件末尾，将子句添加到 block_node"""
+    end_case = getattr(rule, "end_case", [])
+    end_token = _get_block_end(rule)
+
     while context.has_more_tokens():
         self._skip_tokens(context, tuple(self.skip_types))
         if not context.has_more_tokens():
             break
-
-        # 行尾注释 → Comment 节点，不经过规则匹配
         self._collect_line_comments(context, block_node)
         if not context.has_more_tokens():
             break
 
         current = context.peek_token()
         assert current is not None
-        self._log_state(
-            f"parse_block_body: {self._debug_token_info(context)} "
-            f"end_token={end_token}"
-        )
         if current.type == end_token:
-            context.advance_token()
+            # 不消费 end_token，留给调用方的 production 匹配
             break
+
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
-            # 严格模式：不恢复，直接终止块
             if not getattr(self, "error_recovery", True):
                 break
-            if context.has_more_tokens():
-                nxt = context.peek_token()
-                # 到达块结束符 → 正常终止，不恢复
-                if nxt is not None and nxt.type == end_token:
-                    break
-                # Root 块 (end_token="") 到达 end 类关键字 → 消费为 ErrorNode 后终止
-                # 子块（如 ModuleBlock）不消费，让父级规则处理结束符
-                if (
-                    end_token == ""
-                    and nxt is not None
-                    and nxt.type in getattr(self, "_block_end_types", ())
-                ):
-                    if block_node.node_name == "Root":
-                        consumed = self._consume_error_line(context)
-                        if consumed is not None and getattr(consumed, "raw", ""):
-                            block_node.add_sub_node(consumed)
-                    break
-                recovered = self._consume_error_line(context)
-                if recovered is not None and getattr(recovered, "raw", ""):
-                    block_node.add_sub_node(recovered)
-                    continue
+            if _try_block_recovery(self, context, block_node, rule):
+                continue
             break
         block_node.add_sub_node(stmt_node)
 
@@ -218,5 +274,5 @@ def parse_block(
         return None
 
     block_node = Node(block_name)
-    parse_block_body(self, context, block_node, end_token)
+    parse_block_body(self, context, block_node, matched_rule)
     return block_node

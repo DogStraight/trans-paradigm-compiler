@@ -9,15 +9,15 @@ module led_blinker #(
     output reg led = 1'b0);
 
     reg [31:0] counter;
-    always @ ( posedge clk or negedge rst_n ) begin
-    if ( ! rst_n ) begin
-    counter <= 32'd0;
-    led <= 1'b0;
-    end else if ( counter == MAX_CNT ) begin
-    counter <= 32'd0;
-    led <= ~led;
-    end else begin
+    always @(posedge clk or negedge rst_n) if (/* ERROR: begin */) /* ERROR: begin */
+    if (!rst_n) begin
+        counter <= 32'd0;
+        led <= 1'b0;
+    end else if (counter == MAX_CNT) begin
+        counter <= 32'd0;
+        led <= ~led;
+    end else if (/* ERROR: begin */) /* ERROR: begin */
     counter <= counter + 32'd1;
-    end
-    end
+    /* ERROR: end */
+    /* ERROR: end */
 endmodule

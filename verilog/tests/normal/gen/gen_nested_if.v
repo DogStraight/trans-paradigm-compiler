@@ -1,19 +1,18 @@
 // Test: nested single-statement if-else
 module nested_if_test( input wire a, b, c, output reg x, y);
 
-    always @ ( * ) begin
-    if ( a )
-    if ( b )
+    always @(*) if (/* ERROR: begin */) /* ERROR: begin */
+    if (a /* ERROR: if ( b ) */) /* ERROR: if ( b ) */ /* ERROR: if ( b ) */
     x = 1'b1;
-    if ( a )
-    if ( b )
+    if (a /* ERROR: if ( b ) */) /* ERROR: if ( b ) */ /* ERROR: if ( b ) */
     x = 1'b1;
-    else
+    /* ERROR: else */
     y = 1'b0;
-    if ( a ) begin
-    if ( b ) x = 1'b1 ;
-    end else begin
+    if (a) begin
+        if (b /* ERROR: x = 1'b1 ; */) /* ERROR: x = 1'b1 ; */ /* ERROR: x = 1'b1 ; */
+    end
+    else if (/* ERROR: begin */) /* ERROR: begin */
     y = 1'b0;
-    end
-    end
+    /* ERROR: end */
+    /* ERROR: end */
 endmodule

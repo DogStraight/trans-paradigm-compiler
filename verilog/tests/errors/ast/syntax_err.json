@@ -1,3 +1,75 @@
 {
-  "Root": {}
+  "Root": {
+    "sub_node": [
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "top"
+            }
+          },
+          "ports": {
+            "PortParens": {
+              "_error": {
+                "Error": {
+                  "raw": "bad input clk"
+                }
+              }
+            }
+          },
+          "body": {
+            "ModuleBlock": {
+              "sub_node": [
+                {
+                  "Error": {
+                    "raw": "rstn"
+                  }
+                },
+                {
+                  "RegDecl": {
+                    "reg_type": "reg",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "counter"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "WireDecl": {
+                    "wire_type": "wire",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "flag"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
 }
