@@ -222,7 +222,6 @@ def parse_block_body(
     rule: GrammarRule,
 ) -> None:
     """循环解析句子直到遇到结束符或文件末尾，将子句添加到 block_node"""
-    end_case = getattr(rule, "end_case", [])
     end_token = _get_block_end(rule)
 
     while context.has_more_tokens():
@@ -259,12 +258,11 @@ def parse_block(
     if rule is not None:
         matched_rule = rule
         block_name = rule.name
-        end_token = _get_block_end(rule)
     else:
         resolved = resolve_block_rule(self, start_token)
         if resolved is None:
             return None
-        matched_rule, block_name, end_token = resolved
+        matched_rule, block_name, _ = resolved
 
     self._log_state(
         f"进入 parse_block, block={block_name}, start_token={start_token}, "

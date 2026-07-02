@@ -197,8 +197,6 @@ class Parser:
                     seen.add(item)
         return tuple(sorted(seen))
 
-        self._log_state("Parser initialized", mode="w")
-
     def _log_indent(self, context: ParseContext | None = None) -> str:
         """根据当前解析嵌套深度生成缩进前缀"""
         depth = 0

@@ -75,12 +75,12 @@ def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
         if (
             s.startswith("@")
             and len(s) > 1
-            and re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", s[1:])
+            and _RE_CALL.match(s[1:])
         ):
             return {"type": "call", "name": s[1:]}
 
         # 5. 普通 token
-        if re.match(r"^[a-zA-Z_\.]+$", s):
+        if _RE_TOKEN.match(s):
             return {"type": "token", "token_type": s}
 
         raise ValueError(f"无效的产生式片段: {s}")

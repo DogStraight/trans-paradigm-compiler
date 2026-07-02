@@ -132,15 +132,6 @@ def match_productions(
     return all_matched_nodes, None
 
 
-def _build_semantic_path(context: ParseContext) -> str:
-    """从 path_stack + current_rule 构建当前完整语义路径"""
-    rule_name = context.current_rule.name if context.current_rule else "?"
-    idx = context.sibling_counter.get(rule_name, 0)
-    parts = list(context.path_stack)
-    parts.append(f"{rule_name}[{idx}]")
-    return "/" + "/".join(parts)
-
-
 def try_rule_productions(
     self, context: ParseContext, rule: GrammarRule
 ) -> Optional[Node]:

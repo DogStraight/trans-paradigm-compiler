@@ -10,6 +10,9 @@ from typing import Any, List, Optional
 from core.define import Node, GrammarRule
 from .parser_context import ParseContext
 
+# 预编译路径解析正则（避免每调用重新编译）
+_RE_INDEX_PATH = re.compile(r"^(\w*)\[(\d+|\*)\]$")
+
 
 def get_attr_by_path(obj: Any, path: str) -> Any:
     """递归路径提取，支持：
@@ -22,7 +25,7 @@ def get_attr_by_path(obj: Any, path: str) -> Any:
 
     first, _, rest = path.partition(".")
 
-    m = re.match(r"^(\w*)\[(\d+|\*)\]$", first)
+    m = _RE_INDEX_PATH.match(first)
     if m:
         attr_name = m.group(1)
         index_spec = m.group(2)
