@@ -39,10 +39,11 @@ def load_macro_config(rules_dir: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def preprocess(source: str, rules_dir: str) -> tuple[str, dict[str, str]]:
-    """Expand `define macros → (expanded_source, macro_defs).
+def preprocess(source: str, rules_dir: str) -> tuple[str, dict[str, str], list[str]]:
+    """Expand `define macros → (expanded_source, macro_defs, directive_lines).
 
     macro_defs maps name → fully-expanded body.
+    directive_lines preserves original directive texts (stripped from output).
     """
     config = load_macro_config(rules_dir)
     prefix = config.get("macro_call", {}).get("prefix", "`")
@@ -50,20 +51,57 @@ def preprocess(source: str, rules_dir: str) -> tuple[str, dict[str, str]]:
 
     macro_defs: dict[str, str] = {}
     _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
-    _DEFINE_RE = re.compile(
-        rf"\{prefix}({'|'.join(directives)})\s+(\w+)\s+(.*?)\s*$",
+    _DIRECTIVE_RE = re.compile(
+        rf"\{prefix}(\w+)\b\s*(.*?)\s*$",
         re.MULTILINE,
     )
 
-    for m in _DEFINE_RE.finditer(source):
-        name, body = m.group(2), m.group(3)
-        macro_defs[name] = body.strip()
+    # Phase 1: scan all directives, strip from source, record for reversal
+    lines = source.split("\n")
+    directive_lines: list[str] = []
+    stripped_lines: list[str] = []
+
+    for line in lines:
+        # Detect directive line
+        for m in _DIRECTIVE_RE.finditer(line):
+            directive_name = m.group(1)
+            # Don't strip macro calls (no matching directive keyword)
+            if directive_name not in directives:
+                continue
+            arg = m.group(2).strip()
+            raw_directive = m.group(0).strip()
+
+            if directive_name == "define":
+                # parse "name body"
+                name_end = arg.find(" ")
+                if name_end > 0:
+                    def_name = arg[:name_end]
+                    def_body = arg[name_end:].strip()
+                    macro_defs[def_name] = def_body
+                else:
+                    macro_defs[arg] = ""
+                directive_lines.append(raw_directive)
+
+            elif directive_name == "undef":
+                macro_defs.pop(arg, None)
+                directive_lines.append(raw_directive)
+
+            else:
+                # include, timescale, ifdef, etc. — preserve line for reversal
+                directive_lines.append(raw_directive)
+
+            line = ""  # strip the whole line
+            break
+
+        stripped_lines.append(line)
+
+    stripped_source = "\n".join(stripped_lines)
 
     if not macro_defs:
-        return source, {}
+        return stripped_source, {}, directive_lines
 
-    # ---- iterative expansion of source text ----
-    result = source
+    # ---- iterative expansion of stripped source ----
+    result = stripped_source
     for _ in range(_MAX_ITERATIONS):
         changed = False
 
@@ -94,7 +132,7 @@ def preprocess(source: str, rules_dir: str) -> tuple[str, dict[str, str]]:
         if not changed:
             break
 
-    return result, macro_defs
+    return result, macro_defs, directive_lines
 
 
 # ---------------------------------------------------------------------------

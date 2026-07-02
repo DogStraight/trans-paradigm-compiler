@@ -107,10 +107,11 @@ def run_all(
             source = f.read()
 
         macro_table = {}
+        directive_lines: list[str] = []
         original_source = source
         if expand_macros:
             from preprocessor import preprocess
-            source, macro_table = preprocess(source, RULES_DIR)
+            source, macro_table, directive_lines = preprocess(source, RULES_DIR)
 
         tokens = lex.tokenize(source)
         try:
@@ -133,6 +134,11 @@ def run_all(
                 define_kw = config.get("directives", {}).get("define", "define")
                 output = protect_and_reverse(output, original_source, macro_table,
                                              define_keyword=define_kw)
+
+            # 恢复被剥离的指令行
+            if directive_lines:
+                header = "\n".join(directive_lines)
+                output = header + "\n" + output
 
             line_count = len([l for l in output.split("\n") if l.strip()])
 

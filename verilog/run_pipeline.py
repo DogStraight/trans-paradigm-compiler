@@ -117,10 +117,11 @@ def pipeline():
 
     # 1b. 预处理：展开宏（--expand-macros）
     macro_table = {}
+    directive_lines: list[str] = []
     original_source = source  # keep for literal protection
     if "--expand-macros" in flags:
         from preprocessor import preprocess
-        source, macro_table = preprocess(source, RULES_DIR)
+        source, macro_table, directive_lines = preprocess(source, RULES_DIR)
         print(f"[preprocessor] macros defined: {len(macro_table)}")
 
     # 2. 词法分析
@@ -268,6 +269,11 @@ def pipeline():
             content = protect_and_reverse(content, original_source, macro_table,
                                           define_keyword=define_kw)
             print(f"[preprocessor] macros reversed")
+        # 恢复被剥离的指令行（define/include/undef 等）
+        if directive_lines:
+            header = "\n".join(directive_lines)
+            content = header + "\n" + content
+            print(f"[preprocessor] directives restored: {len(directive_lines)}")
 
         # 7c. 可选：inline comment 指纹回注
         if inline_comments_enable:

@@ -13,10 +13,11 @@ from typing import Optional, Tuple, List
 
 class CommentRule:
     """一种注释类型的匹配规则"""
+
     def __init__(self, start: str, end: str, kind: str):
-        self.start = start        # 起始标记，如 "//"
-        self.end = end            # 结束标记，如 "\\n" 或 "*/"
-        self.kind = kind          # "line" | "block"
+        self.start = start  # 起始标记，如 "//"
+        self.end = end  # 结束标记，如 "\\n" 或 "*/"
+        self.kind = kind  # "line" | "block"
         self.start_len = len(start)
         self.end_len = len(end)
 
@@ -59,7 +60,7 @@ class CommentFSM:
         rules = CommentFSM.build_rules(token_define)
         for rule in rules:
             # 检查是否以起始标记开头
-            if text[start:start + rule.start_len] != rule.start:
+            if text[start : start + rule.start_len] != rule.start:
                 continue
 
             pos = start + rule.start_len
@@ -75,8 +76,8 @@ class CommentFSM:
             elif rule.kind == "block":
                 # 块注释：直到结束标记
                 while pos < len(text):
-                    if text[pos:pos + rule.end_len] == rule.end:
-                        content += text[pos:pos + rule.end_len]
+                    if text[pos : pos + rule.end_len] == rule.end:
+                        content += text[pos : pos + rule.end_len]
                         pos += rule.end_len
                         return (content, pos, "block")
                     content += text[pos]
