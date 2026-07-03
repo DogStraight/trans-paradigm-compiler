@@ -1,83 +1,79 @@
 # 声明式错误恢复（`recovery` 字段）
 
-## 改动范围（2026-07-02）
+## 概述
 
-### 引擎层
-
-| 文件 | 改动 | 类型 |
-|------|------|------|
-| `parser/production_matcher.py` | `match_productions` 中 `committed` 默认值从 `after is None`（True）修正为 `False`，同时错误恢复吞行时如果目标 token 类型可以在该 token 上停止并消费它 | 🐛 修复 |
-| `parser/block_parser.py` | `parse_block_body` 遇到 `end_token` 时不再 `advance_token()`，改由调用方 production 消费 | 🐛 修复 |
-| `renderer/primitives/ref_prim.py` | `eval_ref` 渲染 `ref` 后检查父节点 `_error` 属性，有则用 Error 布局追加渲染 | ✨ 新功能 |
-| `renderer/renderer.py` | 添加 `_get_merged_layout()` 方法及缓存 `_merged_layout_cache` | ⚡ 优化 |
-| `renderer/node_renderer.py` | `render_body` 中布局合并走 `_get_merged_layout` | ⚡ 优化 |
-| `renderer/primitives/join_prim.py` | 同上 | ⚡ 优化 |
-| `core/define.py` | `GrammarRule._KNOWN_FIELDS` 未变动（`recovery` 通过 `rule.parser` dict 存取） | — |
-
-### TO M L 配置层
-
-| 文件 | 规则 | 改动 |
-|------|------|------|
-| `00_blocks.toml` | Root, ModuleBlock, ProcBlock, TaskBlock | 添加 `recovery = { strategy = "consume_line" }` |
-| `00_blocks.toml` | ModuleBlock | 添加 `end_case = ["keyword.endmodule"]` |
-| `00_blocks.toml` | ProcBlock | 添加 `end_case = ["keyword.end"]` |
-| `00_blocks.toml` | TaskBlock | 添加 `end_case = ["keyword.endfunction", "keyword.endtask"]` |
-| `00_blocks.toml` | Error | layout 改为 `{ line = ["/* ERROR: ", { ref = "raw" }, " */"] }` |
-| `00_blocks.toml` | 三处 `entry = "..."` | 删除（解析器不消费的无效配置） |
-| `01_module.toml` | PortParens | 添加 `recovery = { after = "bracket.l_parentheses" }` |
-| `10_if.toml` | IfBlock, IfStmt | `recovery = { after = "keyword.if" }` |
-| | ElseIfBlock, ElseIfStmt, ElseBlockBranch, ElseBranch | `recovery = { after = "keyword.else" }` |
-| `03_always.toml` | AlwaysBlock | `recovery = { after = "keyword.always" }` |
-| `20_for.toml` | ForLoop, ForLoopBlock | `recovery = { after = "keyword.for" }` |
-| `40_case.toml` | CaseStatement | `recovery = { after = "@CaseKeyword" }` |
-| `30_assign.toml` | AssignStatement | `recovery = { after = "keyword.assign" }` |
-| `50_func_task.toml` | FuncDeclANSI, FuncDeclOld | `recovery = { after = "keyword.function" }` |
-| | TaskDeclANSI, TaskDeclOld | `recovery = { after = "keyword.task" }` |
-| `70_misc.toml` | GenerateBlock | `recovery = { after = "keyword.generate" }` |
-
-## 设计原则
-
-1. **`recovery` 是声明式描述**：只声明"这个规则在出错时能恢复多少信息"，不写恢复的具体逻辑
-2. **没有 `recovery` = 严格回溯**：`committed = False`，和以前一样零侵入
-3. **策略独立**：Block 级和 Production 级策略互不依赖，可以混合使用
-
-## 两层恢复机制
-
-| 层级 | 字段 | 效果 |
-|------|------|------|
-| **Block 级** | `strategy = "consume_line"` | 块内一句匹配失败时，吞掉整行，块继续 |
-| **Production 级** | `after = "keyword.xxx"` | 产生式列表中该 token 匹配成功后视为"已提交"——后续任意元素失败时不回溯，产 ErrorNode |
-
-### Block 级示例
+错误恢复通过 TOML 规则的 `recovery` 字段声明。有两种形式：
 
 ```toml
-[ModuleBlock.parser]
-end_case = ["keyword.endmodule"]
-recovery = { strategy = "consume_line" }
+# 形式 1: 布尔值 — 启用默认恢复（skip_to_end）
+recovery = true
+
+# 形式 2: 字典 — 按 $N 路径指定恢复策略
+recovery = { "$3" = "skip_to_matching" }
 ```
 
-### Production 级示例
+未设置 `recovery` 的规则行为不变（严格回溯）。
+
+## 恢复策略
+
+| 策略 | 行为 | 适用场景 |
+|------|------|---------|
+| `"skip_to_end"`（默认） | 双路径同步扫描：同步到后继产生式起始 / 当前产生式自然结束 / 规则 end_case 边界 | 通用语句级恢复 |
+| `"skip_one"` | 只跳过当前一个 token，不向前扫描 | 原子规则、标识符 |
+| `"skip_to_matching"` | 括号感知扫描：维护嵌套深度，遇到匹配的关闭括号时停止 | 端口、块、括号包裹的结构 |
+| `"skip_to_newline"` | 跳到下一个换行，吞掉本行剩余内容 | 语句级恢复 |
+
+## 路径语法
+
+key 使用 `$N` 语法（与 attribute_binder 一致），1-based：
 
 ```toml
-[IfBlock.parser]
+[PortParens.parser]
 production = [
-    "keyword.if",          # ← after 提交点：匹配后 committed = True
-    "bracket.l_parentheses",
-    "@Expression",
-    "bracket.r_parentheses",
-    "@BeginEnd",
-    "@ElseChain?",
+    "bracket.l_parentheses",     # $1
+    "@PortList?",                # $2
+    "bracket.r_parentheses",     # $3
 ]
-end_case = ["newline", "keyword.end", "keyword.else"]
-recovery = { after = "keyword.if" }
+recovery = { "$3" = "skip_to_matching" }
 ```
 
-`after` 在 `keyword.if` 匹配成功后设 `committed = True`。此后 `@Expression` 出错时不回溯，产 ErrorNode。`@Expression` 本身不设 `recovery`，所以它内部还按严格回溯执行。
+子元素寻址（choice 的替代索引、seq 的项索引）：
 
-## 三层 Error 恢复覆盖示例
+```toml
+recovery = { "$2.$1" = "skip_one" }
+```
 
-输入：
-```verilog
+## 全局开关
+
+```python
+parser = Parser(global_recovery=True)  # 全局启用 recovery
+```
+
+`global_recovery=False` 时忽略所有 TOML 的 `recovery` 标记。
+
+## 引擎架构
+
+```
+_try_production()  →  检查 committed
+    ↓ 失败 + committed
+_find_recovery_strategy()  →  查 recovery 字典
+    ↓
+策略分派: skip_to_end / skip_one / skip_to_matching / skip_to_newline
+    ↓
+ErrorNode(raw=第一个坏 token) + 消费 token 到同步点
+```
+
+路径通过 `context._recovery_path` 逐层传递：
+
+```
+_try_production          设置 "$3"                    (production[2] 1-based)
+  └─ _parse_choice       扩展 "$3.$1", "$3.$2"        (choice 替代索引)
+      └─ _parse_call     失败时查 _recovery_path → _try_recovery_by_path
+```
+
+## 括号映射
+
+括号配对从 `base/token.toml` 的 `[bracket] pairs` 定义加载，在 `Parser.__init__` 中初始化为 `self._bracket_map` / `self._inverse_bracket_map`。
 module top (bad input clk);
     rstn
     reg counter;

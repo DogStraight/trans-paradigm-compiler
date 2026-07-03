@@ -40,12 +40,12 @@ def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
     t = context.peek_token()
     if t is not None:
         err.add_attr("raw", t.content)
+        end_case_tokens = set(getattr(rule, "end_case", []))
+        end_case_tokens.update(getattr(context, "_end_case_chain", set()))
         if strategy == "skip_one":
             context.advance_token()
         elif strategy == "skip_to_matching":
             depth = 0
-            end_case_tokens = set(getattr(rule, "end_case", []))
-            end_case_tokens.update(getattr(context, "_end_case_chain", set()))
             while context.has_more_tokens():
                 tk = context.peek_token()
                 assert tk is not None
