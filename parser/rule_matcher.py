@@ -100,11 +100,8 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
 
 
 def _get_recovery_cfg(self, rule: GrammarRule) -> bool:
-    """规则级 recovery 检查：局部 recovery=true 优先，否则回退全局。"""
-    p = getattr(rule, "parser", {})
-    if isinstance(p, dict) and p.get("recovery"):
-        return True  # 局部标记始终生效
-    return getattr(self, "global_recovery", False)  # 全局默认
+    """规则级 recovery 检查：已完全关闭。始终返回 False。"""
+    return False
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:

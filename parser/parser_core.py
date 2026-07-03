@@ -371,7 +371,7 @@ class Parser:
         verbose: bool = False,
         log_file: str | None = None,
         pre_symbols: dict[str, str] | None = None,
-        global_recovery: bool = True,
+        global_recovery: bool = False,
         rules: dict[str, GrammarRule] | None = None,
         rule_selector: "RuleSelector | None" = None,
     ) -> None:

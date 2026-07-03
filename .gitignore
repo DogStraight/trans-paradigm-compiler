@@ -1,6 +1,9 @@
 *.log
 .vscode
-verilog/tests/*
+verilog/tests/*/gen/
+verilog/tests/*/ast/
+verilog/tests/*/symbols/
+verilog/tests/*/lex/
 verilog/.cache/*
 verilog/output/
 verilog/test_report.json
@@ -8,3 +11,5 @@ __pycache__
 */__pycache__
 parser_debug.log
 grammar_backup/
+parser_baseline/
+_test_*.py
