@@ -182,10 +182,22 @@ def _try_production(
     if not self._prepare_production(context, feature_tree):
         return None
 
+    # 设置当前 recovery 寻址路径（$N 1-based）
+    old_path = context._recovery_path
+    old_rule = context._recovery_rule
+    if prod_index is not None:
+        context._recovery_path = f"${prod_index + 1}"
+    context._recovery_rule = rule
+
     snapshot = context.create_snapshot()
     result = process_production_node(self, feature_tree, context)
     if result is not None:
+        context._recovery_path = old_path
+        context._recovery_rule = old_rule
         return result
+
+    context._recovery_path = old_path
+    context._recovery_rule = old_rule
 
     # 匹配失败
     context.restore_snapshot(snapshot)

@@ -7,6 +7,59 @@ production feature 类型的递归解析。
 
 from core.define import Node
 from .parser_core import ParseContext
+from .rule_matcher import _find_recovery_strategy, _get_prod_features
+
+
+def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
+    """根据当前 context._recovery_path 检查 recovery 配置，返回 ErrorNode 或 None。"""
+    rule = getattr(context, "_recovery_rule", None)
+    if rule is None:
+        return None
+    path = getattr(context, "_recovery_path", "")
+    if not path:
+        return None
+    # 解析路径提取 prod_index：路径如 "$3" 或 "$3.$1" → 提取 3
+    parts = path.strip("$").split(".")
+    try:
+        prod_index = int(parts[0]) - 1  # 1-based → 0-based
+    except ValueError:
+        return None
+    # 从缓存中获取 flat 列表
+    prods = getattr(rule, "production", [])
+    if prod_index < 0 or prod_index >= len(prods):
+        return None
+    prod_str = prods[prod_index]
+    prod_features = _get_prod_features(self, rule, prod_str)
+    if prod_features is None:
+        return None
+    strategy = _find_recovery_strategy(rule, prod_features, prod_index)
+    if strategy is None or strategy == "end_case":
+        return None
+    # 执行策略
+    err = Node("Error")
+    t = context.peek_token()
+    if t is not None:
+        err.add_attr("raw", t.content)
+        if strategy == "single":
+            context.advance_token()
+        elif strategy == "bracket":
+            depth = 0
+            end_case_tokens = set(getattr(rule, "end_case", []))
+            end_case_tokens.update(getattr(context, "_end_case_chain", set()))
+            while context.has_more_tokens():
+                tk = context.peek_token()
+                assert tk is not None
+                if tk.type in end_case_tokens:
+                    break
+                from .rule_matcher import _BRACKET_MAP, _INVERSE_BRACKET_MAP
+                if tk.type in _BRACKET_MAP:
+                    depth += 1
+                elif tk.type in _INVERSE_BRACKET_MAP:
+                    if depth == 0:
+                        break
+                    depth -= 1
+                context.advance_token()
+    return err
 
 
 class _SequenceMatchError(Exception):
@@ -78,28 +131,36 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
 
 
 def parse_call(self, node: dict, context: ParseContext) -> Node | None:
-    """调用另一个语法规则"""
+    """调用另一个语法规则，失败时按 recovery 路径创建 ErrorNode"""
     rule_name = node["name"]
     self._log_state(f"调用规则: {rule_name} | {self._debug_token_info(context)}")
     snapshot = context.create_snapshot()
 
-    target_rule = self.grammar_rules[rule_name]
+    target_rule = self.grammar_rules.get(rule_name)
+    if target_rule is None:
+        context.restore_snapshot(snapshot)
+        return _try_recovery_by_path(self, context) or None
+
     result_node = self._try_rule_productions(context, target_rule)
     if result_node is None:
         context.restore_snapshot(snapshot)
-        return None
+        return _try_recovery_by_path(self, context) or None
     return result_node
 
 
 def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
-    """顺序序列：所有子项依次匹配"""
+    """顺序序列：所有子项依次匹配，带 recovery 寻址"""
     items = node["items"]
     self._log_state(f"解析序列节点 | {self._debug_token_info(context)}")
     try:
         with context:
             seq_node = Node("seq")
-            for item in items:
+            for idx, item in enumerate(items):
+                # 扩展 recovery 路径（$1, $2, ...）
+                old_path = context._recovery_path
+                context._recovery_path = f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
                 result = self._process_production_node(item, context)
+                context._recovery_path = old_path
                 if result is None:
                     raise _SequenceMatchError()
                 seq_node.add_sub_node(result)
@@ -111,21 +172,34 @@ def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
 
 
 def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
-    """分支选择：依次尝试每个分支"""
+    """分支选择：依次尝试每个分支，带 recovery 寻址"""
     alternatives = node["alternatives"]
     self._log_state(f"解析分支节点 | {self._debug_token_info(context)}")
     original_pointer = context.token_pointer
-    for alt in alternatives:
+    for idx, alt in enumerate(alternatives):
         context.token_pointer = original_pointer
+        # 扩展 recovery 路径（$1, $2, ...）
+        old_path = context._recovery_path
+        context._recovery_path = f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
         try:
             with context:
                 result = self._process_production_node(alt, context)
                 if result is not None:
+                    context._recovery_path = old_path
                     self._log_state(f"分支匹配成功 | {self._debug_token_info(context)}")
                     return result
                 raise _BranchMatchError()
         except _BranchMatchError:
+            # 当前分支失败，检查 sub-element recovery
+            if context._recovery_path:
+                err = self._try_recovery_by_path(context)
+                if err is not None:
+                    context._recovery_path = old_path
+                    self._log_state(f"分支 recovery | {self._debug_token_info(context)}")
+                    return err
             continue
+        finally:
+            context._recovery_path = old_path
     context.token_pointer = original_pointer
     self._log_state(f"所有分支匹配失败 | {self._debug_token_info(context)}")
     return None

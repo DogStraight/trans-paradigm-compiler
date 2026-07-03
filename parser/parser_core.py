@@ -50,6 +50,12 @@ class ParseContext:
         # 已提交规则链的 end_case 累积（错误恢复时用于停止扫描）
         self._end_case_chain: set[str] = set()
 
+        # 当前 recovery 寻址路径（如 "$3.$1"），逐层传递
+        self._recovery_path: str = ""
+
+        # 当前拥有 recovery 配置的规则（由 _try_production 设置）
+        self._recovery_rule: Any = None
+
     def set_recovery_base(self):
         """标记当前 path_stack 深度为错误恢复的基准"""
         self._recovery_base_depth = len(self.path_stack)
@@ -301,6 +307,7 @@ from .node_parsers import (
     parse_optional,
     parse_plus,
     repeat_loop,
+    _try_recovery_by_path,
 )
 from .rule_matcher import (
     process_production_node,
@@ -346,6 +353,7 @@ class Parser:
     _parse_optional = parse_optional
     _parse_plus = parse_plus
     _repeat_loop = repeat_loop
+    _try_recovery_by_path = _try_recovery_by_path
 
     # production_matcher
     _process_production_node = process_production_node
