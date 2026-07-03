@@ -31,7 +31,9 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
     return {raw}
 
 
-def _find_sync_token(rule: GrammarRule, from_index: int, grammar_rules: dict) -> set[str]:
+def _find_sync_token(
+    rule: GrammarRule, from_index: int, grammar_rules: dict
+) -> set[str]:
     """从产生式列表中查找第 from_index 个元素之后的同步 token 集合。
 
     跳过 optional/repeat 元素，找到第一个非可选产生式的起始 token。
@@ -121,13 +123,19 @@ def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
 
 
 def _try_production(
-    self, context: ParseContext, prod: str, rule: GrammarRule, committed: bool,
+    self,
+    context: ParseContext,
+    prod: str,
+    rule: GrammarRule,
+    committed: bool,
     sync_tokens: set[str] | None = None,
+    prod_index: int | None = None,
 ) -> Node | None:
     """尝试匹配单个产生式，失败时如果已提交则产 ErrorNode（吞行）。
 
     Args:
-        sync_tokens: 后继生产式的起始 token 集合。失败时 recovery 吞到这些 token 停止。
+        sync_tokens: 后继生产式的起始 token 集合。
+        prod_index: 该生产式在规则 production 数组中的索引，用于寻址 recovery 配置。
     """
     features = _get_prod_features(self, rule, prod)
     if not features:
@@ -149,20 +157,49 @@ def _try_production(
         first_bad = context.peek_token()
         first_raw = first_bad.content if first_bad else ""
 
-        # 简单 token 失败（非括号类）→ 只消费当前 token，不扫描
+        # 简单 token 失败 → 默认只消费当前 token
+        # 但如果该产生式配置了 recovery 策略（如 bracket），则按策略执行
         if features.get("type") == "token":
-            st = features.get("token_type", "")
-            # 括号类 token 由 bracket 策略处理
-            if st in _INVERSE_BRACKET_MAP:
-                strategy = "bracket"
-            else:
-                if first_bad is not None:
+            per_strategy = None
+            recovery_cfg = getattr(rule, "recovery", {})
+            if isinstance(recovery_cfg, dict) and prod_index is not None:
+                key = f"production[{prod_index}]"
+                per_strategy = recovery_cfg.get(key)
+            if per_strategy == "bracket":
+                # bracket 策略：有括号感知的扫描
+                end_case_tokens: set[str] = set()
+                for ec in getattr(rule, "end_case", []):
+                    if isinstance(ec, str) and not ec.startswith("!"):
+                        end_case_tokens.add(ec)
+                end_case_tokens.update(getattr(context, "_end_case_chain", set()))
+                depth = 0
+                while context.has_more_tokens():
+                    t = context.peek_token()
+                    assert t is not None
+                    if t.type in end_case_tokens:
+                        break
+                    if t.type in _BRACKET_MAP:
+                        depth += 1
+                    elif t.type in _INVERSE_BRACKET_MAP:
+                        if depth == 0:
+                            break
+                        depth -= 1
                     context.advance_token()
                 err.add_attr("raw", first_raw)
                 return err
+            # 默认：只消费当前 token
+            if first_bad is not None:
+                context.advance_token()
+            err.add_attr("raw", first_raw)
+            return err
 
-        # 恢复策略选择
-        strategy = getattr(rule, "recovery_strategy", "end_case")
+        # 从 recovery 字典中查找当前产生式的策略
+        strategy = "end_case"
+        recovery_cfg = getattr(rule, "recovery", {})
+        if isinstance(recovery_cfg, dict) and prod_index is not None:
+            key = f"production[{prod_index}]"
+            strategy = recovery_cfg.get(key, "end_case")
+
         end_case_tokens: set[str] = set()
         for ec in getattr(rule, "end_case", []):
             if isinstance(ec, str) and not ec.startswith("!"):
@@ -170,24 +207,22 @@ def _try_production(
         end_case_tokens.update(getattr(context, "_end_case_chain", set()))
 
         if strategy == "single":
-            # 策略：single — 只消费当前一个 token
             if first_bad is not None:
                 context.advance_token()
             err.add_attr("raw", first_raw)
             return err
 
         elif strategy == "bracket":
-            # 策略：bracket — 括号感知扫描，维护嵌套深度
             depth = 0
             while context.has_more_tokens():
                 t = context.peek_token()
+                assert t is not None
                 if t.type in end_case_tokens:
                     break
                 if t.type in _BRACKET_MAP:
                     depth += 1
                 elif t.type in _INVERSE_BRACKET_MAP:
                     if depth == 0:
-                        # 最外层关闭括号 → 停止但不消费
                         break
                     depth -= 1
                 context.advance_token()
@@ -223,7 +258,10 @@ def _try_production(
                 scan_ptr = context.token_pointer
                 found = False
                 for i in range(longer_pos):
-                    if i < len(context.tokens) and context.tokens[scan_ptr + i].type in next_start:
+                    if (
+                        i < len(context.tokens)
+                        and context.tokens[scan_ptr + i].type in next_start
+                    ):
                         found = True
                         break
                 stop = shorter_pos if found else longer_pos
@@ -295,7 +333,13 @@ def match_productions(
         next_sync = _find_sync_token(rule, i + 1, self.grammar_rules)
 
         result_node = _try_production(
-            self, context, prod, rule, committed, sync_tokens=next_sync,
+            self,
+            context,
+            prod,
+            rule,
+            committed,
+            sync_tokens=next_sync,
+            prod_index=i,
         )
         if result_node is None:
             # 未提交且匹配失败 → 全部失败
