@@ -234,9 +234,48 @@ SUFFIX_MAP = {
 }
 
 
-def analyze_production_features(production: str) -> dict[str, Any] | None:
+def _flatten_production_features(
+    features: dict[str, Any], prefix: str = "",
+) -> list[tuple[str, dict[str, Any]]]:
+    """将产生式特征树展平为 (path, leaf_feature) 列表。
+
+    path 采用 $N 寻址语法，如：
+        choice:  $1, $2, $3
+        seq:     $1.$1, $1.$2
+        repeat:  内部元素沿用外层路径
     """
-    分析产生式字符串，返回纯字典结构的中间 AST。
+    typ = features.get("type")
+    if typ in ("token", "call"):
+        return [(prefix, features)]
+    if typ == "choice":
+        result = []
+        for i, alt in enumerate(features.get("alternatives", [])):
+            p = f"{prefix}.${i + 1}" if prefix else f"${i + 1}"
+            result.extend(_flatten_production_features(alt, p))
+        return result
+    if typ == "seq":
+        result = []
+        for i, item in enumerate(features.get("items", [])):
+            p = f"{prefix}.${i + 1}" if prefix else f"${i + 1}"
+            result.extend(_flatten_production_features(item, p))
+        return result
+    if typ in ("repeat", "plus", "optional"):
+        return _flatten_production_features(features.get("elem", {}), prefix)
+    return []
+
+
+def flatten_production_features(
+    production: str,
+) -> list[tuple[str, dict[str, Any]]]:
+    """分析产生式并展平为 (path, leaf_feature) 列表。"""
+    features = analyze_production_features(production)
+    if features is None:
+        return []
+    return _flatten_production_features(features)
+
+
+def analyze_production_features(production: str) -> dict[str, Any] | None:
+    """分析产生式字符串，返回纯字典结构的中间 AST。
     支持后缀操作符：
         *  零次或多次 -> {"type": "repeat", "elem": ...}
         +  一次或多次 -> {"type": "plus", "elem": ...}

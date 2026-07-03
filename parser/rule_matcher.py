@@ -62,6 +62,37 @@ _BRACKET_MAP = {
 _INVERSE_BRACKET_MAP = {v: k for k, v in _BRACKET_MAP.items()}
 
 
+def _find_recovery_strategy(
+    rule: GrammarRule,
+    prod_features: dict | None,
+    prod_index: int | None,
+) -> str | None:
+    """从 recovery 字典中查找当前产生式的恢复策略。
+
+    key 采用 $N 路径语法（与 attribute_binder 一致），如：
+        "$3"          — 第 3 个 production 元素（1-based）
+        "$3.$1"       — 第 3 个元素的第 1 个子元素
+    未找到返回 None。
+    """
+    recovery_cfg = getattr(rule, "recovery", {})
+    if not isinstance(recovery_cfg, dict) or prod_index is None:
+        return None
+
+    # 1. 精确匹配 $N（1-based）
+    key = f"${prod_index + 1}"
+    if key in recovery_cfg:
+        return recovery_cfg[key]
+
+    # 2. 子元素匹配：遍历 flattened 叶子，检查 $N.$m 路径
+    if prod_features is not None:
+        flat = prod_features.get("flat", [])
+        for leaf_path, _leaf_feat in flat:
+            sub_key = f"{key}.{leaf_path}"
+            if sub_key in recovery_cfg:
+                return recovery_cfg[sub_key]
+    return None
+
+
 def _find_current_end(spec: str, grammar_rules: dict) -> set[str]:
     """计算一个产生式规格字符串的自然结束 token。
 
@@ -110,15 +141,22 @@ def _get_recovery_cfg(self, rule: GrammarRule) -> bool:
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
-    """获取产生式特征，带缓存"""
+    """获取产生式特征，带缓存。返回 {"tree": ..., "flat": [...]} 或 None。"""
     cache = getattr(rule, "_prod_cache", None)
     if cache is None:
         cache = {}
         setattr(rule, "_prod_cache", cache)
     if prod not in cache:
-        from .rule_selector import analyze_production_features
+        from .rule_selector import analyze_production_features, flatten_production_features
 
-        cache[prod] = analyze_production_features(prod)
+        feat = analyze_production_features(prod)
+        if feat is not None:
+            cache[prod] = {
+                "tree": feat,
+                "flat": flatten_production_features(prod),
+            }
+        else:
+            cache[prod] = None
     return cache[prod]
 
 
@@ -140,11 +178,12 @@ def _try_production(
     features = _get_prod_features(self, rule, prod)
     if not features:
         return None
-    if not self._prepare_production(context, features):
+    feature_tree = features["tree"]
+    if not self._prepare_production(context, feature_tree):
         return None
 
     snapshot = context.create_snapshot()
-    result = process_production_node(self, features, context)
+    result = process_production_node(self, feature_tree, context)
     if result is not None:
         return result
 
@@ -158,15 +197,9 @@ def _try_production(
         first_raw = first_bad.content if first_bad else ""
 
         # 简单 token 失败 → 默认只消费当前 token
-        # 但如果该产生式配置了 recovery 策略（如 bracket），则按策略执行
-        if features.get("type") == "token":
-            per_strategy = None
-            recovery_cfg = getattr(rule, "recovery", {})
-            if isinstance(recovery_cfg, dict) and prod_index is not None:
-                key = f"production[{prod_index}]"
-                per_strategy = recovery_cfg.get(key)
+        if feature_tree.get("type") == "token":
+            per_strategy = _find_recovery_strategy(rule, features, prod_index)
             if per_strategy == "bracket":
-                # bracket 策略：有括号感知的扫描
                 end_case_tokens: set[str] = set()
                 for ec in getattr(rule, "end_case", []):
                     if isinstance(ec, str) and not ec.startswith("!"):
@@ -187,18 +220,12 @@ def _try_production(
                     context.advance_token()
                 err.add_attr("raw", first_raw)
                 return err
-            # 默认：只消费当前 token
             if first_bad is not None:
                 context.advance_token()
             err.add_attr("raw", first_raw)
             return err
 
-        # 从 recovery 字典中查找当前产生式的策略
-        strategy = "end_case"
-        recovery_cfg = getattr(rule, "recovery", {})
-        if isinstance(recovery_cfg, dict) and prod_index is not None:
-            key = f"production[{prod_index}]"
-            strategy = recovery_cfg.get(key, "end_case")
+        strategy = _find_recovery_strategy(rule, features, prod_index) or "end_case"
 
         end_case_tokens: set[str] = set()
         for ec in getattr(rule, "end_case", []):
