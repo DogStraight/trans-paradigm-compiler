@@ -58,6 +58,13 @@ def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
                         break
                     depth -= 1
                 context.advance_token()
+        elif strategy == "skip_to_newline":
+            while context.has_more_tokens():
+                tk = context.peek_token()
+                assert tk is not None
+                if tk.type in end_case_tokens or tk.type == "newline":
+                    break
+                context.advance_token()
     return err
 
 

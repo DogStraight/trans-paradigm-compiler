@@ -68,6 +68,7 @@ def _find_recovery_strategy(
         "skip_to_end"          — （默认）同步到 end_case / 后继生产式 / 当前生产式自然结束
         "skip_one"             — 只跳过当前一个 token，不向前扫描
         "skip_to_matching"     — 括号感知扫描：维护嵌套深度，遇到匹配的关闭括号时停止
+        "skip_to_newline"      — 跳到下一个换行，用于语句级恢复（吞掉本行剩余内容）
     """
     recovery_cfg = getattr(rule, "recovery", {})
     if not isinstance(recovery_cfg, dict) or prod_index is None:
@@ -207,35 +208,6 @@ def _try_production(
         first_bad = context.peek_token()
         first_raw = first_bad.content if first_bad else ""
 
-        # 简单 token 失败 → 默认只消费当前 token
-        if feature_tree.get("type") == "token":
-            per_strategy = _find_recovery_strategy(rule, features, prod_index)
-            if per_strategy == "skip_to_matching":
-                end_case_tokens: set[str] = set()
-                for ec in getattr(rule, "end_case", []):
-                    if isinstance(ec, str) and not ec.startswith("!"):
-                        end_case_tokens.add(ec)
-                end_case_tokens.update(getattr(context, "_end_case_chain", set()))
-                depth = 0
-                while context.has_more_tokens():
-                    t = context.peek_token()
-                    assert t is not None
-                    if t.type in end_case_tokens:
-                        break
-                    if t.type in self._bracket_map:
-                        depth += 1
-                    elif t.type in self._inverse_bracket_map:
-                        if depth == 0:
-                            break
-                        depth -= 1
-                    context.advance_token()
-                err.add_attr("raw", first_raw)
-                return err
-            if first_bad is not None:
-                context.advance_token()
-            err.add_attr("raw", first_raw)
-            return err
-
         strategy = _find_recovery_strategy(rule, features, prod_index) or "skip_to_end"
 
         end_case_tokens: set[str] = set()
@@ -267,7 +239,17 @@ def _try_production(
             err.add_attr("raw", first_raw)
             return err
 
-        # 策略：end_case（默认）— 双路径同步扫描
+        elif strategy == "skip_to_newline":
+            while context.has_more_tokens():
+                t = context.peek_token()
+                assert t is not None
+                if t.type in end_case_tokens or t.type == "newline":
+                    break
+                context.advance_token()
+            err.add_attr("raw", first_raw)
+            return err
+
+        # 策略：skip_to_end（默认）— 双路径同步扫描
         next_start = sync_tokens or set()
         current_end = _find_current_end(prod, self.grammar_rules, self._bracket_map)
 
