@@ -143,9 +143,21 @@ def _try_production(
     # 匹配失败
     context.restore_snapshot(snapshot)
 
-    # 已提交 → 产 ErrorNode（双路径同步：后继生产式起始 vs 当前生产式结束）
+    # 已提交 → 产 ErrorNode
     if committed:
         err = Node("Error")
+        # 记录第一个坏 token 的精确内容
+        first_bad = context.peek_token()
+        first_raw = first_bad.content if first_bad else ""
+
+        # 简单 token 失败（如 bracket.r_parentheses、symbol.base.semicolon）→
+        # 只消费当前这个坏 token，不向前扫描。外面的 production/block recovery
+        # 会处理后续 token，达到逐 token 恢复粒度。
+        if features.get("type") == "token":
+            if first_bad is not None:
+                context.advance_token()
+            err.add_attr("raw", first_raw)
+            return err
 
         # 路径 A — 后继生产式起始 token（next-start 同步）
         next_start = sync_tokens or set()
@@ -153,11 +165,13 @@ def _try_production(
         # 路径 B — 当前生产式的自然结束 token（current-end 同步）
         current_end = _find_current_end(prod, self.grammar_rules)
 
-        # 兜底：规则 end_case
+        # 兜底：规则 end_case + 上级 committed 链的 end_case
         end_case_tokens: set[str] = set()
         for ec in getattr(rule, "end_case", []):
             if isinstance(ec, str) and not ec.startswith("!"):
                 end_case_tokens.add(ec)
+        # 合并上级 committed 链的 end_case（用于深层嵌套错误恢复）
+        end_case_tokens.update(getattr(context, "_end_case_chain", set()))
 
         # 扫描阶段：不消费 token，只记录位置
         scan_ptr = context.token_pointer
@@ -200,17 +214,13 @@ def _try_production(
         elif pos_current is not None:
             stop = pos_current
 
-        # 消费阶段：从当前位置消费到决策位置
+        # 消费阶段：从当前位置消费到决策位置；ErrorNode 只记第一个坏 token
         if stop is not None:
-            tokens = []
-            for _ in range(stop):
+            for i in range(stop):
                 if context.has_more_tokens():
-                    tokens.append(context.peek_token())
                     context.advance_token()
                 else:
                     break
-            if tokens:
-                err.add_attr("raw", " ".join(t.content for t in tokens))
         else:
             # 没有找到任何停止标记，消费到 end_case 边界
             while context.has_more_tokens():
@@ -218,6 +228,7 @@ def _try_production(
                 if t is not None and t.type in end_case_tokens:
                     break
                 context.advance_token()
+        err.add_attr("raw", first_raw)
         return err
 
     return None
@@ -246,6 +257,18 @@ def match_productions(
     prods = getattr(rule, "production", [])
     all_matched_nodes = []
     error_node = None
+
+    # 如果本规则 committed 且有 end_case，推入 end_case 链供深度嵌套使用
+    _pushed_end_case = False
+    if committed:
+        ec_tokens = set()
+        for ec in getattr(rule, "end_case", []):
+            if isinstance(ec, str) and not ec.startswith("!"):
+                ec_tokens.add(ec)
+        if ec_tokens:
+            context._end_case_chain.update(ec_tokens)
+            _pushed_end_case = True
+
     for i, prod in enumerate(prods):
         self._log_state(
             f"处理产生式: {prod} | {self._debug_token_info(context)}",
@@ -270,12 +293,24 @@ def match_productions(
             if next_sync:
                 while context.has_more_tokens():
                     t = context.peek_token()
-                    if t is not None and t.type in next_sync:
-                        break
+                    if t is not None:
+                        if t.type in next_sync:
+                            break
+                        # 遇到 end_case 链 token → 停止快进，让上级 recovery 接手
+                        if t.type in getattr(context, "_end_case_chain", set()):
+                            break
                     context.advance_token()
             continue
 
         all_matched_nodes.append(result_node)
+
+    # 恢复 end_case 链
+    if _pushed_end_case:
+        ec_tokens = set()
+        for ec in getattr(rule, "end_case", []):
+            if isinstance(ec, str) and not ec.startswith("!"):
+                ec_tokens.add(ec)
+        context._end_case_chain.difference_update(ec_tokens)
 
     return all_matched_nodes, error_node
 

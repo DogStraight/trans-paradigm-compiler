@@ -115,13 +115,14 @@ def parse_block_body(
     block_node: Node,
     rule: GrammarRule,
 ) -> bool:
-    """循环解析句子直到遇到结束符或文件末尾。返回 False 表示语法错误中断。
+    """循环解析句子直到遇到结束符或文件末尾。
 
-    块体只做生产式级别的恢复（通过规则的 committed/recovery 机制），
-    不做行级错误吞行。句子无法匹配时直接停止块体解析，父级 production
-    的 recovery 机制负责产出 ErrorNode。
+    遇到无法匹配的 token 时做逐 token 恢复：
+    跳过当前 token 为 ErrorNode，继续下一句。
     """
     end_token = _get_block_end(rule)
+    recovery_limit = getattr(self, "_recovery_max_skips", 20)
+    skip_count = 0
 
     while context.has_more_tokens():
         self._skip_tokens(context, tuple(self.skip_types))
@@ -134,14 +135,22 @@ def parse_block_body(
         current = context.peek_token()
         assert current is not None
         if current.type == end_token:
-            # 不消费 end_token，留给调用方的 production 匹配
             break
 
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
-            # 无法匹配任何规则 → 停止块体解析
-            # 由父级 production 的 committed/recovery 机制决定是否产出 ErrorNode
-            break
+            # 逐 token 恢复：跳过一个 token 为 ErrorNode，继续
+            bad = context.peek_token()
+            if bad is None:
+                break
+            if skip_count >= recovery_limit:
+                break
+            err = Node("Error")
+            err.add_attr("raw", bad.content)
+            block_node.add_sub_node(err)
+            context.advance_token()
+            skip_count += 1
+            continue
         block_node.add_sub_node(stmt_node)
     return True
 

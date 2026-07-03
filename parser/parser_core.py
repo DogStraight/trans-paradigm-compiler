@@ -47,6 +47,9 @@ class ParseContext:
         # 错误恢复深度基准（用于限制 fallback 的级联深度）
         self._recovery_base_depth: int | None = None
 
+        # 已提交规则链的 end_case 累积（错误恢复时用于停止扫描）
+        self._end_case_chain: set[str] = set()
+
     def set_recovery_base(self):
         """标记当前 path_stack 深度为错误恢复的基准"""
         self._recovery_base_depth = len(self.path_stack)
