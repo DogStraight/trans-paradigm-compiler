@@ -4,9 +4,9 @@ Supports target addressing syntax: RuleName.production[N] / RuleName.end_case
 """
 
 import re
-import sys
+from collections.abc import Mapping
 from typing import Any
-from .feature_analyze import analyze_production_features
+from .rule_selector import analyze_production_features
 
 
 def _has_top_level_choice(prod: str) -> bool:
@@ -22,6 +22,7 @@ def _parse_target(target: str) -> tuple[str, str, int]:
 
 
 _VERBOSE = False
+
 
 def set_verbose(v: bool) -> None:
     global _VERBOSE
@@ -44,7 +45,10 @@ def inject_alternatives(rule: Any, alternatives: list[str]) -> None:
 
 
 def propagate_alternatives(
-    rules: dict[str, Any], rule_name: str, alternatives: list[str], skip_names: set[str],
+    rules: dict[str, Any],
+    rule_name: str,
+    alternatives: list[str],
+    skip_names: set[str],
 ) -> None:
     target_ref = f"@{rule_name}"
     for other_name, other_rule in rules.items():
@@ -68,9 +72,11 @@ def propagate_alternatives(
 
 
 def inject_replace_rule(
-    rules: dict[str, Any], replace_config: dict[str, dict[str, str]],
+    rules: dict[str, Any],
+    replace_config: dict[str, dict[str, str]],
 ) -> None:
     import json as _json
+
     for rule_name, spec in replace_config.items():
         if rule_name not in rules:
             print(f"⚠️ [inject/replace] 规则 {rule_name} 不存在，跳过")
@@ -83,14 +89,16 @@ def inject_replace_rule(
         ec_prefix = "end_case = "
         if old_str.startswith(ec_prefix):
             current = list(getattr(rule, "end_case", []))
-            old_list = _json.loads(old_str[len(ec_prefix):])
+            old_list = _json.loads(old_str[len(ec_prefix) :])
             if current == old_list:
-                new_list = _json.loads(new_str[len(ec_prefix):])
+                new_list = _json.loads(new_str[len(ec_prefix) :])
                 object.__setattr__(rule, "end_case", tuple(new_list))
                 if _VERBOSE:
                     print(f"  [inject/replace] {rule_name}.end_case -> {new_list}")
             elif _VERBOSE:
-                print(f"  [inject/replace] {rule_name}.end_case mismatch: has {current}")
+                print(
+                    f"  [inject/replace] {rule_name}.end_case mismatch: has {current}"
+                )
         else:
             prods = list(getattr(rule, "production", []))
             changed = False
@@ -105,14 +113,17 @@ def inject_replace_rule(
 
 
 def inject_productions(
-    rules: dict[str, Any], inject_config: dict[str, list[str] | dict],
+    rules: dict[str, Any],
+    inject_config: Mapping[str, list[str] | dict],
 ) -> None:
     """
     两层注入：直接注入 + 传播注入。
     inject_config: { "ExtRule": ["@TargetRule.production[0]"] }
     """
     for ext_rule_name, target_cfg in inject_config.items():
-        alternatives: list[str] = target_cfg if isinstance(target_cfg, list) else target_cfg.get("alts", [])
+        alternatives: list[str] = (
+            target_cfg if isinstance(target_cfg, list) else target_cfg.get("alts", [])
+        )
 
         for tgt in alternatives:
             tgt_name, tgt_attr, tgt_idx = _parse_target(tgt)

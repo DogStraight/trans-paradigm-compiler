@@ -1,18 +1,18 @@
 # parser/__init__.py
 import os
-from typing import Dict, Optional
+from typing import Optional
 from core.define import GrammarRule, GrammarRulesRegister, FileManager
-from .main_parser import Parser
+from .parser_core import Parser
 from .grammar_inject import inject_productions, inject_replace_rule
 
 
 def _apply_ext_injections(
-    rules: Dict[str, GrammarRule],
-    ext_rules: Dict[str, GrammarRule],
+    rules: dict[str, GrammarRule],
+    ext_rules: dict[str, GrammarRule],
 ) -> None:
     """Apply injection configurations from extension rules to the main rule table."""
-    inject_config: Dict[str, list] = {}
-    replace_config: Dict[str, Dict[str, str]] = {}
+    inject_config: dict[str, list[str]] = {}
+    replace_config: dict[str, dict[str, str]] = {}
 
     for r_name, r_rule in ext_rules.items():
         inj = getattr(r_rule, "inject", None)
@@ -35,7 +35,7 @@ def setup_grammar(
     rules_dir: str,
     register: Optional[GrammarRulesRegister] = None,
     ext_dir: Optional[str] = None,
-) -> Dict[str, GrammarRule]:
+) -> dict[str, GrammarRule]:
     """
     Load core grammar + extended grammar, apply production injections,
     and return the merged rule table.
@@ -44,7 +44,7 @@ def setup_grammar(
         rules_dir: Path to core grammar rules directory (relative).
         ext_dir: Path to extended grammar rules directory (optional).
         register: Optional GrammarRulesRegister instance.
-                  Defaults to GrammarRulesRegister.get_default().
+                    Defaults to GrammarRulesRegister.get_default().
 
     Returns:
         { rule_name: GrammarRule, ... }

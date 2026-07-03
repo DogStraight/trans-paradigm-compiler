@@ -19,7 +19,263 @@ from core.define import (
     FileManager,
     ParseError,
 )
-from .parser_context import ParseContext
+
+# merged inline: ParseContext
+
+
+class ParseContext:
+    """解析上下文，管理解析过程中的所有状态"""
+
+    def __init__(self, tokens: list[Token]) -> None:
+        self._snapshot_stack = []  # 添加快照栈
+        self.tokens = tokens
+        self.token_pointer = 0
+        self.match_length = 0
+        self.current_node: Node | None = None
+        self.current_rule: GrammarRule | None = None
+        self.production_pointer = 0
+        self.exc_type = None
+        self.exc_tb = None
+
+        # 语义路径跟踪
+        self.sibling_counter: dict[str, int] = {}  # 规则名 → 自然序
+        self.path_stack: list[str] = []  # 当前语义路径栈
+        self.comment_table: dict[str, str] = {}  # 语义路径 → 注释文本
+
+        # 错误恢复深度基准（用于限制 fallback 的级联深度）
+        self._recovery_base_depth: int | None = None
+
+    def set_recovery_base(self):
+        """标记当前 path_stack 深度为错误恢复的基准"""
+        self._recovery_base_depth = len(self.path_stack)
+
+    def within_recovery_range(self, max_depth: int = 1) -> bool:
+        """当前深度距离基准是否在 max_depth 层以内"""
+        if self._recovery_base_depth is None:
+            return False
+        return (len(self.path_stack) - self._recovery_base_depth) <= max_depth
+
+    def __enter__(self):
+        # 修复：进入with块时压入快照
+        snapshot = self.create_snapshot()
+        self._snapshot_stack.append(snapshot)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # 修复：先判断栈非空，再pop
+        if not self._snapshot_stack:
+            return False
+        snapshot = self._snapshot_stack.pop()
+        if exc_type is not None:
+            self.restore_snapshot(snapshot)
+        # 返回False让异常继续传播（如需捕获可在外层处理）
+        return False
+
+    def advance_token(self, count=1):
+        """向前移动token指针"""
+        self.token_pointer += count
+        self.match_length += count
+
+    def advance_production(self, count=1):
+        """向前移动产生式指针"""
+        self.production_pointer += count
+
+    def create_snapshot(self):
+        """创建解析状态快照，用于回溯"""
+        snapshot = {
+            "token_pointer": self.token_pointer,
+            "match_length": self.match_length,
+            "current_node": self.current_node,
+            "current_rule": self.current_rule,
+            "production_pointer": self.production_pointer,
+            "comment_table": dict(self.comment_table),
+        }
+        return snapshot
+
+    def restore_snapshot(self, snapshot):
+        """恢复到之前的解析状态"""
+        self.token_pointer = snapshot["token_pointer"]
+        self.match_length = snapshot["match_length"]
+        self.current_node = snapshot["current_node"]
+        self.current_rule = snapshot["current_rule"]
+        self.production_pointer = snapshot["production_pointer"]
+        self.comment_table = snapshot["comment_table"]
+
+    def update_current_node(self, node: Node):
+        self.current_node = node
+
+    def update_current_rule(self, rule: GrammarRule):
+        self.current_rule = rule
+
+    def update_match_length(self, length: int):
+        self.match_length = length
+
+    def has_more_tokens(self) -> bool:
+        """判断是否还有未解析的token"""
+        return self.token_pointer < len(self.tokens)
+
+    def peek_token(self, offset=0) -> Token | None:
+        """查看指定偏移的token（不移动指针）"""
+        pos = self.token_pointer + offset
+        return self.tokens[pos] if pos < len(self.tokens) else None
+
+    def check_end_case(self, end_case: list[str]) -> bool:
+        """检查当前 token 是否属于结束符集合（或已无更多 token）"""
+        if not self.has_more_tokens():
+            return True
+        next_token = self.peek_token()
+        if next_token is None:
+            return True
+        return next_token.type in end_case
+
+
+"""ScopeStack — 轻量作用域栈，供 Parser 在解析过程中实时查询符号。
+
+与 Analyzer 的后阶段全量分析不同，ScopeStack 只服务于 Parser 的规则选择，
+在回溯时需配合 snapshot/restore 回滚。
+
+scope 声明来源：规则 TOML 中的 [RuleName.analyzer] scope = { ... }，
+通过 peek 机制声明式复制到 parser 域。
+"""
+
+class ScopeEntry:
+    """作用域条目"""
+
+    def __init__(self, name: str, kind: str):
+        self.name: str = name
+        self.kind: str = kind
+        # 本作用域中注册的符号
+        self.symbols: dict[str, str] = {}
+
+
+class ScopeStack:
+    """轻量级作用域栈"""
+
+    def __init__(self) -> None:
+        # 根作用域（全局）
+        self._stack: list[ScopeEntry] = [ScopeEntry("__global__", "global")]
+
+    # ── 快照/恢复（配合 parser 回溯） ──
+
+    def snapshot(self) -> int:
+        """返回当前栈深度作为快照。"""
+        return len(self._stack)
+
+    def restore(self, depth: int) -> None:
+        """恢复到指定栈深度（丢弃上层作用域）。"""
+        while len(self._stack) > depth:
+            self._stack.pop()
+
+    # ── 作用域管理 ──
+
+    def push(self, name: str, kind: str) -> None:
+        """进入新作用域。"""
+        self._stack.append(ScopeEntry(name, kind))
+
+    def pop(self) -> None:
+        """退出当前作用域。"""
+        if len(self._stack) > 1:
+            self._stack.pop()
+
+    # ── 符号注册与查找 ──
+
+    def register(self, name: str, kind: str) -> None:
+        """在当前作用域注册符号。"""
+        self._stack[-1].symbols[name] = kind
+
+    def lookup(self, name: str) -> Optional[str]:
+        """沿作用域链查找符号，返回其 kind，未找到返回 None。"""
+        for entry in reversed(self._stack):
+            if name in entry.symbols:
+                return entry.symbols[name]
+        return None
+
+    # ── 查询 ──
+
+    @property
+    def depth(self) -> int:
+        return len(self._stack)
+
+    @property
+    def current(self) -> ScopeEntry:
+        return self._stack[-1]
+
+    def current_kind(self) -> str:
+        return self._stack[-1].kind
+
+    def dump(self) -> list[dict]:
+        """调试用：导出整个栈。"""
+        return [
+            {"name": e.name, "kind": e.kind, "symbols": dict(e.symbols)}
+            for e in self._stack
+        ]
+
+
+"""
+atom_parser.py — 原子规则 & Pratt 桥接
+
+职责：_parse_atom（按序尝试原子规则），
+_try_pratt_rule（调用 Pratt 解析器处理表达式）。
+"""
+
+
+def parse_atom(self, context: ParseContext) -> tuple[Optional[Node], int]:
+    """尝试按顺序匹配原子规则，返回 (node, consumed) 或 (None, 0)。"""
+    start_ptr = context.token_pointer
+    for rule in self.atomic_rules:
+        snapshot = context.create_snapshot()
+        node = self._try_rule_productions(context, rule)
+        if node is not None:
+            consumed = context.token_pointer - start_ptr
+            return node, consumed
+        context.restore_snapshot(snapshot)
+    return None, 0
+
+
+def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Optional[Node]:
+    """使用 Pratt 解析器解析表达式规则"""
+    self._log_state(f"使用 Pratt 解析器解析规则: {rule.name}")
+    if not context.has_more_tokens():
+        self._log_state("Pratt 解析: 没有可用 token")
+        return None
+
+    start = context.token_pointer
+    stop_tokens = (
+        set(getattr(rule, "end_case", [])) if getattr(rule, "end_case", None) else None
+    )
+
+    def atom_parser(_tokens, idx):
+        old_ptr = context.token_pointer
+        context.token_pointer = idx
+        node, consumed = parse_atom(self, context)
+        context.token_pointer = old_ptr
+        return node, consumed
+
+    try:
+        ast_node, consumed = pratt_parser.parse_with_count(
+            context.tokens,
+            start,
+            self.operator_defs,
+            atom_parser=atom_parser,
+            stop_tokens=stop_tokens,
+        )
+    except ValueError as e:
+        self._log_state(f"Pratt 解析: 不适合作为表达式 - {e}")
+        return None
+    except Exception as e:
+        self._log_state(f"Pratt 解析失败: {e}")
+        self._warn(f"Pratt 表达式解析失败: {e}")
+        return None
+
+    if ast_node is None or consumed == 0:
+        self._log_state("Pratt 解析: 未消费任何 token")
+        return None
+
+    context.token_pointer = start + consumed
+    self._log_state(f"Pratt 解析成功，消耗 {consumed} 个 token")
+    return ast_node
+
+
 from .rule_selector import RuleSelector, _compute_start_tokens
 import parser.pratt_parser as pratt_parser
 
@@ -38,13 +294,15 @@ from .node_parsers import (
     parse_plus,
     repeat_loop,
 )
-from .production_matcher import (
+from .rule_matcher import (
     process_production_node,
     match_productions,
     try_rule_productions,
+    prepare_production,
+    check_end_case,
 )
-from .end_case_checker import prepare_production, check_end_case
-from .atom_parser import try_pratt_rule
+
+# merged inline: try_pratt_rule
 from .block_parser import (
     parse_sentence,
     resolve_block_rule,
@@ -54,7 +312,8 @@ from .block_parser import (
     collect_line_comments,
     consume_error_line,
 )
-from .scope_stack import ScopeStack
+
+# merged inline: ScopeStack
 
 
 class Parser:
@@ -264,7 +523,7 @@ class Parser:
 
     def _expected_tokens_for_rule(self, rule: GrammarRule) -> str:
         """计算规则可能接受的起始 token 类型集合，返回可读描述。"""
-        from .feature_analyze import analyze_production_features
+        from .rule_selector import analyze_production_features
 
         prods = getattr(rule, "production", [])
         if not prods:

@@ -8,7 +8,7 @@ attribute_binder.py — 属性映射绑定 & 路径提取
 import re
 from typing import Any, List, Optional
 from core.define import Node, GrammarRule
-from .parser_context import ParseContext
+from .parser_core import ParseContext
 
 # 预编译路径解析正则（避免每调用重新编译）
 _RE_INDEX_PATH = re.compile(r"^(\w*)\[(\d+|\*)\]$")
@@ -68,9 +68,7 @@ def get_attr_by_path(obj: Any, path: str) -> Any:
     return None
 
 
-def extract_from_spec(
-    self, spec: str, all_matched_nodes: List[Node]
-) -> Any:
+def extract_from_spec(self, spec: str, all_matched_nodes: List[Node]) -> Any:
     """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
     if not isinstance(spec, str):
         return None
@@ -115,10 +113,7 @@ def bind_attributes(
         else:
             extracted = extract_from_spec(self, spec, all_matched_nodes)
             if extracted is not None:
-                if (
-                    isinstance(extracted, Node)
-                    and extracted.node_name == "optional"
-                ):
+                if isinstance(extracted, Node) and extracted.node_name == "optional":
                     if not hasattr(extracted, "sub_node") or not extracted.sub_node:
                         continue
                     extracted = extracted.sub_node[0]

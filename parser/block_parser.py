@@ -7,7 +7,7 @@ _parse_block_body, parse_block。
 
 from typing import Optional, Tuple, Callable
 from core.define import Node, GrammarRule
-from .parser_context import ParseContext
+from .parser_core import ParseContext
 
 # 块级恢复策略分发表
 _BLOCK_RECOVERY_STRATEGIES: dict[str, Callable] = {}
@@ -15,16 +15,16 @@ _BLOCK_RECOVERY_STRATEGIES: dict[str, Callable] = {}
 
 def _register_strategy(name: str):
     """装饰器：注册块恢复策略"""
+
     def decorator(fn: Callable) -> Callable:
         _BLOCK_RECOVERY_STRATEGIES[name] = fn
         return fn
+
     return decorator
 
 
 @_register_strategy("consume_line")
-def _recover_consume_line(
-    self, context: ParseContext, block_node: Node
-) -> bool:
+def _recover_consume_line(self, context: ParseContext, block_node: Node) -> bool:
     """吞掉当前行作为 Error 节点，返回 True（继续循环）"""
     err = self._consume_error_line(context)
     if err is not None and getattr(err, "raw", ""):
@@ -115,9 +115,7 @@ def resolve_block_rule(
 ) -> Optional[Tuple[GrammarRule, str, str]]:
     """查找起始符对应的块规则，返回 (matched_rule, block_name, end_token) 或 None"""
     block_rule_name = (
-        self.rule_selector.get_block_rule(start_token)
-        if start_token is not None
-        else None
+        self.rule_selector.get_block_rule() if start_token is not None else None
     )
     self._log_state(f"找到块规则: {block_rule_name}")
     matched_rule = self.grammar_rules.get(block_rule_name) if block_rule_name else None

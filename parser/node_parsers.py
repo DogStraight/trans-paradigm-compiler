@@ -7,16 +7,18 @@ production feature 类型的递归解析。
 
 from typing import Optional, List
 from core.define import Node
-from .parser_context import ParseContext
+from .parser_core import ParseContext
 
 
 class _SequenceMatchError(Exception):
     """序列匹配失败时抛出的内部异常"""
+
     pass
 
 
 class _BranchMatchError(Exception):
     """分支匹配失败时抛出的内部异常"""
+
     pass
 
 
@@ -57,12 +59,14 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
                 context.comment_table[path] = nxt.content
 
             # 指纹收集：记录 token 索引（解析后用源 token 流回溯取指纹）
-            self._inline_comments.append({
-                "token_index": context.token_pointer - 1,  # 刚消费的 token
-                "text": nxt.content,
-                "line": nxt.line,
-                "column": nxt.column,  # 源列号，用于精确定位
-            })
+            self._inline_comments.append(
+                {
+                    "token_index": context.token_pointer - 1,  # 刚消费的 token
+                    "text": nxt.content,
+                    "line": nxt.line,
+                    "column": nxt.column,  # 源列号，用于精确定位
+                }
+            )
 
             context.advance_token()
         else:
@@ -77,9 +81,7 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
 def parse_call(self, node: dict, context: ParseContext) -> Optional[Node]:
     """调用另一个语法规则"""
     rule_name = node["name"]
-    self._log_state(
-        f"调用规则: {rule_name} | {self._debug_token_info(context)}"
-    )
+    self._log_state(f"调用规则: {rule_name} | {self._debug_token_info(context)}")
     snapshot = context.create_snapshot()
 
     target_rule = self.grammar_rules[rule_name]
@@ -156,7 +158,9 @@ def parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
     elem = node["elem"]
     self._log_state(f"解析重复节点（零次或多次）| {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context) or []
-    self._log_state(f"重复解析完成，匹配次数: {len(nodes)} | {self._debug_token_info(context)}")
+    self._log_state(
+        f"重复解析完成，匹配次数: {len(nodes)} | {self._debug_token_info(context)}"
+    )
     r = Node("repeat", items=nodes)
     r.sub_node = nodes[:]
     return r
