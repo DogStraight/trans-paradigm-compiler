@@ -28,7 +28,6 @@ layout = ";"
 [GenerateBlock.parser]
 production = ["keyword.generate", "@ModuleBlock", "keyword.endgenerate"]
 end_case = ["keyword.endgenerate"]
-recovery = { after = "keyword.generate" }
 [GenerateBlock.parser.node]
 body = "$2"
 [GenerateBlock.renderer]

@@ -5,7 +5,6 @@
 [Root]
 [Root.parser]
 is_block = true
-recovery = { strategy = "consume_line" }
 
 [Root.renderer]
 layout = { join = "\n" }
@@ -30,7 +29,6 @@ layout = { ref = "value" }
 [ModuleBlock.parser]
 is_block = true
 end_case = ["keyword.endmodule"]
-recovery = { strategy = "consume_line" }
 [ModuleBlock.renderer]
 body = { indent = true, role = "flatten" }
 
@@ -39,7 +37,6 @@ body = { indent = true, role = "flatten" }
 [ProcBlock.parser]
 is_block = true
 end_case = ["keyword.end"]
-recovery = { strategy = "consume_line" }
 [ProcBlock.renderer]
 body = { indent = true, role = "flatten" }
 
@@ -48,7 +45,6 @@ body = { indent = true, role = "flatten" }
 [TaskBlock.parser]
 is_block = true
 end_case = ["keyword.endfunction", "keyword.endtask"]
-recovery = { strategy = "consume_line" }
 [TaskBlock.renderer]
 body = { indent = true, role = "flatten" }
 

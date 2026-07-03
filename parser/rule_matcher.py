@@ -11,6 +11,83 @@ from core.define import Node, GrammarRule
 from .parser_core import ParseContext
 
 
+def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
+    """计算一个产生式规格字符串的起始 token 类型集合。
+
+    支持:
+        "symbol.base.semicolon" → {"symbol.base.semicolon"}
+        "@Identifier"          → 查找规则的第一个 token
+        "keyword.module"       → {"keyword.module"}
+        "@PortParens?"         → 去除 ? 后查找规则
+    """
+    raw = spec.rstrip("?+*")
+    if raw.startswith("@"):
+        rule = grammar_rules.get(raw[1:])
+        if rule:
+            prods = getattr(rule, "production", [])
+            if prods:
+                return _first_token_of_spec(prods[0], grammar_rules)
+        return set()
+    return {raw}
+
+
+def _find_sync_token(rule: GrammarRule, from_index: int, grammar_rules: dict) -> set[str]:
+    """从产生式列表中查找第 from_index 个元素之后的同步 token 集合。
+
+    跳过 optional/repeat 元素，找到第一个非可选产生式的起始 token。
+    如果到末尾都没有找到，使用规则的 end_case。
+    """
+    prods = getattr(rule, "production", [])
+    for i in range(from_index, len(prods)):
+        prod = prods[i]
+        # 跳过带 ? 的可选元素和 * 的重复元素
+        if prod.endswith("?") or prod.endswith("*"):
+            continue
+        tokens = _first_token_of_spec(prod, grammar_rules)
+        if tokens:
+            return tokens
+    # 兜底：使用 end_case
+    ec = getattr(rule, "end_case", [])
+    return {t for t in ec if isinstance(t, str) and not t.startswith("!")}
+
+
+# 括号匹配映射
+_BRACKET_MAP = {
+    "bracket.l_parentheses": "bracket.r_parentheses",
+    "bracket.l_brace": "bracket.r_brace",
+    "bracket.l_bracket": "bracket.r_bracket",
+}
+_INVERSE_BRACKET_MAP = {v: k for k, v in _BRACKET_MAP.items()}
+
+
+def _find_current_end(spec: str, grammar_rules: dict) -> set[str]:
+    """计算一个产生式规格字符串的自然结束 token。
+
+    例如:
+        "@PortParens?"  → {"bracket.r_parentheses"}
+        "symbol.base.semicolon"  → {"symbol.base.semicolon"}
+        "@Identifier"  → {"id"}
+        "@ParameterList?"  → {"bracket.r_parentheses"}
+    """
+    raw = spec.rstrip("?+*")
+    # 1. 显式括号闭合：如 bracket.l_parentheses → bracket.r_parentheses
+    close = _BRACKET_MAP.get(raw)
+    if close:
+        return {close}
+
+    # 2. 规则引用：查找规则的最后一个生产式元素
+    if raw.startswith("@"):
+        rule = grammar_rules.get(raw[1:])
+        if rule:
+            prods = getattr(rule, "production", [])
+            if prods:
+                return _find_current_end(prods[-1], grammar_rules)
+        return set()
+
+    # 3. 普通 token → 自身就是结束
+    return {raw}
+
+
 def process_production_node(self, node: dict, context: ParseContext) -> Node | None:
     """dispatch 到 _parse_* 方法"""
     typ = node.get("type")
@@ -22,12 +99,12 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
     return method(node, context)
 
 
-def _get_recovery_cfg(self, rule: GrammarRule) -> dict | None:
-    """读取规则的 recovery 配置"""
+def _get_recovery_cfg(self, rule: GrammarRule) -> bool:
+    """规则级 recovery 检查：局部 recovery=true 优先，否则回退全局。"""
     p = getattr(rule, "parser", {})
-    if isinstance(p, dict):
-        return p.get("recovery")
-    return None
+    if isinstance(p, dict) and p.get("recovery"):
+        return True  # 局部标记始终生效
+    return getattr(self, "global_recovery", False)  # 全局默认
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
@@ -44,9 +121,14 @@ def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
 
 
 def _try_production(
-    self, context: ParseContext, prod: str, rule: GrammarRule, committed: bool
+    self, context: ParseContext, prod: str, rule: GrammarRule, committed: bool,
+    sync_tokens: set[str] | None = None,
 ) -> Node | None:
-    """尝试匹配单个产生式，失败时如果已提交则产 ErrorNode（吞行）"""
+    """尝试匹配单个产生式，失败时如果已提交则产 ErrorNode（吞行）。
+
+    Args:
+        sync_tokens: 后继生产式的起始 token 集合。失败时 recovery 吞到这些 token 停止。
+    """
     features = _get_prod_features(self, rule, prod)
     if not features:
         return None
@@ -61,29 +143,81 @@ def _try_production(
     # 匹配失败
     context.restore_snapshot(snapshot)
 
-    # 已提交 → 产 ErrorNode（吞行）
+    # 已提交 → 产 ErrorNode（双路径同步：后继生产式起始 vs 当前生产式结束）
     if committed:
         err = Node("Error")
-        tokens = []
-        # 如果是在匹配具体 token 时失败，也停在该 token 类型上
-        stop_types = {"newline"}
-        expected_token = None
-        if features.get("type") == "token":
-            expected_token = features["token_type"]
-            stop_types.add(expected_token)
-        while context.has_more_tokens():
-            t = context.peek_token()
-            if t is not None and t.type in stop_types:
-                if t.type == expected_token:
-                    context.advance_token()  # 消费预期的终止符（如 )），上层不用再管
+
+        # 路径 A — 后继生产式起始 token（next-start 同步）
+        next_start = sync_tokens or set()
+
+        # 路径 B — 当前生产式的自然结束 token（current-end 同步）
+        current_end = _find_current_end(prod, self.grammar_rules)
+
+        # 兜底：规则 end_case
+        end_case_tokens: set[str] = set()
+        for ec in getattr(rule, "end_case", []):
+            if isinstance(ec, str) and not ec.startswith("!"):
+                end_case_tokens.add(ec)
+
+        # 扫描阶段：不消费 token，只记录位置
+        scan_ptr = context.token_pointer
+        pos_next: int | None = None      # 路径 A 的匹配位置
+        pos_current: int | None = None   # 路径 B 的匹配位置
+        scan_len = 0
+        while scan_ptr < len(context.tokens):
+            t = context.tokens[scan_ptr]
+            if t.type in end_case_tokens:
                 break
-            if t is not None:
-                tokens.append(t)
-                context.advance_token()
+            scan_len += 1
+            if pos_next is None and next_start and t.type in next_start:
+                pos_next = scan_len
+            if pos_current is None and current_end and t.type in current_end:
+                pos_current = scan_len
+            scan_ptr += 1
+
+        # 决策：选择最佳停止位置
+        stop: int | None = None
+        if pos_next is not None and pos_current is not None:
+            if pos_next == pos_current:
+                stop = pos_next   # 同位置 → 无争议
             else:
-                break
-        if tokens:
-            err.add_attr("raw", " ".join(t.content for t in tokens))
+                shorter_pos, longer_pos = sorted([pos_next, pos_current])
+                # 检查后继生产式起始 token 是否在较长路径的范围内出现
+                # 如果在 → 截断在较短位置（后继生产式可以接手）
+                # 不在 → 用较长位置（避免跳过头错过同步点）
+                scan_ptr = context.token_pointer
+                found = False
+                for i in range(longer_pos):
+                    if i < len(context.tokens) and context.tokens[scan_ptr + i].type in next_start:
+                        found = True
+                        break
+                if found:
+                    stop = shorter_pos  # 后继 token 在长路径内 → 截断用短路径
+                else:
+                    stop = longer_pos   # 不在 → 用长路径
+        elif pos_next is not None:
+            stop = pos_next
+        elif pos_current is not None:
+            stop = pos_current
+
+        # 消费阶段：从当前位置消费到决策位置
+        if stop is not None:
+            tokens = []
+            for _ in range(stop):
+                if context.has_more_tokens():
+                    tokens.append(context.peek_token())
+                    context.advance_token()
+                else:
+                    break
+            if tokens:
+                err.add_attr("raw", " ".join(t.content for t in tokens))
+        else:
+            # 没有找到任何停止标记，消费到 end_case 边界
+            while context.has_more_tokens():
+                t = context.peek_token()
+                if t is not None and t.type in end_case_tokens:
+                    break
+                context.advance_token()
         return err
 
     return None
@@ -100,36 +234,46 @@ def match_productions(
         matched_nodes=[...] & error_node=None → 完全成功
     """
     recovery = _get_recovery_cfg(self, rule)
-    after = None
-    committed = False  # 无 recovery → 严格回溯
-    if recovery and isinstance(recovery, dict):
-        after = recovery.get("after")
-        committed = after is not None  # 有 after 显式指定时才提交
+    committed = bool(recovery)  # 有 recovery 标记即整个规则提交，不严格回溯
 
+    # 同步 committed 标志到 context，供子规则（如 optional）查询
+    context._committed = committed
+
+    prods = getattr(rule, "production", [])
     all_matched_nodes = []
-    for prod in getattr(rule, "production", []):
+    error_node = None
+    for i, prod in enumerate(prods):
         self._log_state(
             f"处理产生式: {prod} | {self._debug_token_info(context)}",
             context=context,
         )
 
-        result_node = _try_production(self, context, prod, rule, committed)
+        # 预先计算下一个生产式的同步 token，传给当前元素作为 recovery 停止边界
+        next_sync = _find_sync_token(rule, i + 1, self.grammar_rules)
+
+        result_node = _try_production(
+            self, context, prod, rule, committed, sync_tokens=next_sync,
+        )
         if result_node is None:
             # 未提交且匹配失败 → 全部失败
             return None, None
 
         if result_node.node_name == "Error" and committed:
-            # 已提交后产出的 ErrorNode → 部分成功
+            # 已提交后产出的 ErrorNode：记录错误，继续匹配后续产生式
             all_matched_nodes.append(result_node)
-            return all_matched_nodes, result_node
+            error_node = result_node
+            # 快进到下一个非可选产生式的起始 token
+            if next_sync:
+                while context.has_more_tokens():
+                    t = context.peek_token()
+                    if t is not None and t.type in next_sync:
+                        break
+                    context.advance_token()
+            continue
 
         all_matched_nodes.append(result_node)
 
-        # 检查是否到达提交点
-        if not committed and after and after in prod:
-            committed = True
-
-    return all_matched_nodes, None
+    return all_matched_nodes, error_node
 
 
 def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:

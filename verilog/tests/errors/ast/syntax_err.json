@@ -3,6 +3,9 @@
     "sub_node": [
       {
         "ModuleDecl": {
+          "_error": {
+            "Error": {}
+          },
           "module_name": {
             "Identifier": {
               "content": "top"
@@ -12,55 +15,47 @@
             "PortParens": {
               "_error": {
                 "Error": {
-                  "raw": "bad input clk"
+                  "raw": "bad input clk )"
                 }
               }
             }
           },
           "body": {
-            "ModuleBlock": {
-              "sub_node": [
+            "ModuleBlock": {}
+          }
+        }
+      },
+      {
+        "RegDecl": {
+          "reg_type": "reg",
+          "items": {
+            "DeclaratorList": {
+              "items": [
                 {
-                  "Error": {
-                    "raw": "rstn"
-                  }
-                },
-                {
-                  "RegDecl": {
-                    "reg_type": "reg",
-                    "items": {
-                      "DeclaratorList": {
-                        "items": [
-                          {
-                            "Declarator": {
-                              "name": {
-                                "Identifier": {
-                                  "content": "counter"
-                                }
-                              }
-                            }
-                          }
-                        ]
+                  "Declarator": {
+                    "name": {
+                      "Identifier": {
+                        "content": "counter"
                       }
                     }
                   }
-                },
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "WireDecl": {
+          "wire_type": "wire",
+          "items": {
+            "DeclaratorList": {
+              "items": [
                 {
-                  "WireDecl": {
-                    "wire_type": "wire",
-                    "items": {
-                      "DeclaratorList": {
-                        "items": [
-                          {
-                            "Declarator": {
-                              "name": {
-                                "Identifier": {
-                                  "content": "flag"
-                                }
-                              }
-                            }
-                          }
-                        ]
+                  "Declarator": {
+                    "name": {
+                      "Identifier": {
+                        "content": "flag"
                       }
                     }
                   }

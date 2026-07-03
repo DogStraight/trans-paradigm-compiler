@@ -8,23 +8,23 @@ module error_test (
     output wire [7:0] data
 );
 
-    // valid register declaration
-    reg [7:0] counter;
-    some random stuff here
-    wire flag;
+    // // valid register declaration
+    // reg [7:0] counter;
+    // some random stuff here
+    // wire flag;
 
-    // valid always block
-    always @(posedge clk or negedge rstn) begin
-        if (!rstn)
-            counter <= 8'b0;
-        else
-            counter <= counter + 1'b1;
-    end
+    // // valid always block
+    // always @(posedge clk or negedge rstn) begin
+    //     if (!rstn)
+    //         counter <= 8'b0;
+    //     else
+    //         counter <= counter + 1'b1;
+    // end
 
-    broken line with no meaning
-    assign flag = counter[0];
+    // broken line with no meaning
+    // assign flag = counter[0];
 
-    // more garbage
-    xyz abc def ghi;
+    // // more garbage
+    // xyz abc def ghi;
 
 endmodule

@@ -41,6 +41,9 @@ class ParseContext:
         self.path_stack: list[str] = []  # 当前语义路径栈
         self.comment_table: dict[str, str] = {}  # 语义路径 → 注释文本
 
+        # 错误恢复：已提交的父规则是否在处理可选元素时遇到失败
+        self._committed: bool = False
+
         # 错误恢复深度基准（用于限制 fallback 的级联深度）
         self._recovery_base_depth: int | None = None
 
@@ -88,6 +91,7 @@ class ParseContext:
             "current_rule": self.current_rule,
             "production_pointer": self.production_pointer,
             "comment_table": dict(self.comment_table),
+            "_committed": self._committed,
         }
         return snapshot
 
@@ -99,6 +103,7 @@ class ParseContext:
         self.current_rule = snapshot["current_rule"]
         self.production_pointer = snapshot["production_pointer"]
         self.comment_table = snapshot["comment_table"]
+        self._committed = snapshot["_committed"]
 
     def update_current_node(self, node: Node):
         self.current_node = node
@@ -310,7 +315,6 @@ from .block_parser import (
     parse_block_body,
     parse_block,
     collect_line_comments,
-    consume_error_line,
 )
 
 # merged inline: ScopeStack
@@ -359,7 +363,6 @@ class Parser:
     _parse_block_body = parse_block_body
     parse_block = parse_block
     _collect_line_comments = collect_line_comments
-    _consume_error_line = consume_error_line
 
     def __init__(
         self,
@@ -368,7 +371,7 @@ class Parser:
         verbose: bool = False,
         log_file: str | None = None,
         pre_symbols: dict[str, str] | None = None,
-        error_recovery: bool = True,
+        global_recovery: bool = True,
         rules: dict[str, GrammarRule] | None = None,
         rule_selector: "RuleSelector | None" = None,
     ) -> None:
@@ -381,15 +384,15 @@ class Parser:
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
                         空字符串或 "/dev/null" 类似值表示不写日志。
             pre_symbols: Lexer 预扫描符号表 { name: kind }，用于辅助规则选择。
-            error_recovery: 错误恢复开关。True 时逐行隔离语法错误，输出 ErrorNode；
-                            False 时严格回溯，遇到错误即停止解析。
+            global_recovery: 全局语法恢复开关。True 时各规则 recovery 标记生效，
+                            False 时忽略所有 recovery 标记，严格回溯。
             rules: 预加载的语法规则表。传入时跳过内部 GrammarRulesRegister 加载。
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
         self.grammar_rules: dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
         self.verbose = verbose
-        self.error_recovery = error_recovery
+        self.global_recovery = global_recovery
         # 失败尝试摘要
         self._failure_attempts: list[dict] = []
         # 预扫描符号表（可选）
@@ -449,24 +452,8 @@ class Parser:
             key=lambda r: len(getattr(r, "production", [])),
             reverse=True,
         )
-        # 从语法规则中收集所有块结束关键字（用于错误恢复的安全检测）
-        self._block_end_types: tuple[str, ...] = self._build_block_end_types()
-
         # inline comment 指纹匹配（解析后从源 token 流回溯）
         self._inline_comments: list[dict] = []
-
-    def _build_block_end_types(self) -> tuple[str, ...]:
-        """从已加载的 grammar_rules 中收集所有块结束关键字类型。
-
-        扫描所有规则的 end_case，收集以 'keyword.end' 开头的条目，
-        用于 parse_block_body 中错误恢复的安全边界检测。
-        """
-        seen: set[str] = set()
-        for rule in self.grammar_rules.values():
-            for item in getattr(rule, "end_case", []):
-                if isinstance(item, str) and item.startswith("keyword.end"):
-                    seen.add(item)
-        return tuple(sorted(seen))
 
     def _log_indent(self, context: ParseContext | None = None) -> str:
         """根据当前解析嵌套深度生成缩进前缀"""

@@ -6,6 +6,7 @@
 
 [ModuleDecl.parser]
 peek = { scope = "analyzer" }
+recovery = true
 production = [
     "keyword.module",
     "@Identifier",
@@ -52,7 +53,7 @@ tail = { text = "endmodule", break = 2 }
 [PortParens]
 [PortParens.parser]
 inline = true
-recovery = { after = "bracket.l_parentheses" }
+recovery = true
 production = [
     "bracket.l_parentheses",
     "@PortList?",

@@ -80,8 +80,7 @@ def run_all(
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
 
-        out_dir = os.path.join(base_dir, "tests", group, "gen")
-        os.makedirs(out_dir, exist_ok=True)
+        out_dir = os.path.join(base_dir, "tests", group)
 
         # 日志抑制
         old_stdout = sys.stdout

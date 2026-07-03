@@ -82,6 +82,7 @@ def run_pipeline_on_source(
     transform_enabled: bool = True,
     renderer_enabled: bool = True,
     stage: Optional[str] = None,
+    global_recovery: bool = False,
     rules_dir: str = "pyv_compiler/grammar/rules_verilog",
     ext_dir: str = "pyv_compiler/grammar/rules_verilog_ext",
 ) -> Dict[str, Any]:
@@ -118,7 +119,7 @@ def run_pipeline_on_source(
     # Determine output directory
     if out_dir is None:
         if input_path and "tests" in input_path:
-            parts = input_path.split(os.sep)
+            parts = input_path.replace("\\", "/").split("/")
             group = (
                 "normal"
                 if "normal" in parts
@@ -222,13 +223,13 @@ def run_pipeline_on_source(
         rules_dir=rules_dir,
         cache_enabled=False,
         pre_symbols=pre_symbols,
-        error_recovery=True,
+        global_recovery=global_recovery,
         rules=rules,
         rule_selector=rule_selector,
     )
     parser.pre_hints = pre_scan_config.get("hints", {})
 
-    # No longer need to manually assign parser.grammar_rules, _block_end_types,
+    # No longer need to manually assign parser.grammar_rules,
     # statement_rule_names, rule_selector, or atomic_rules — all are set internally.
 
     try:

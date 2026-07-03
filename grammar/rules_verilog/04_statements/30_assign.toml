@@ -40,7 +40,6 @@ production = [
     "symbol.base.semicolon",
 ]
 end_case = ["newline"]
-recovery = { after = "keyword.assign" }
 [AssignStatement.parser.node]
 target = "$2"
 value = "$4"

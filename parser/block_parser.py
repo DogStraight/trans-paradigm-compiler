@@ -5,58 +5,8 @@ block_parser.py — 块 & 语句级解析
 _parse_block_body, parse_block。
 """
 
-from collections.abc import Callable
 from core.define import Node, GrammarRule
 from .parser_core import ParseContext
-
-# 块级恢复策略分发表
-_BLOCK_RECOVERY_STRATEGIES: dict[str, Callable] = {}
-
-
-def _register_strategy(name: str):
-    """装饰器：注册块恢复策略"""
-
-    def decorator(fn: Callable) -> Callable:
-        _BLOCK_RECOVERY_STRATEGIES[name] = fn
-        return fn
-
-    return decorator
-
-
-@_register_strategy("consume_line")
-def _recover_consume_line(self, context: ParseContext, block_node: Node) -> bool:
-    """吞掉当前行作为 Error 节点，返回 True（继续循环）"""
-    err = self._consume_error_line(context)
-    if err is not None and getattr(err, "raw", ""):
-        block_node.add_sub_node(err)
-    return True
-
-
-def consume_error_line(self, context: ParseContext) -> Node:
-    """吞掉当前行并输出 Error 节点（行级错误隔离）。
-
-    当所有候选规则都无法匹配时触发，将无法解析的 token 行包装为 Error 节点，
-    让 parse_block_body 可以继续解析后续行，实现行间错误隔离。
-    """
-    error_node = Node("Error")
-    error_node.add_attr("raw", "")
-
-    if not context.has_more_tokens():
-        return error_node
-
-    tokens = []
-    while context.has_more_tokens():
-        t = context.peek_token()
-        assert t is not None
-        if t.type == "newline":
-            context.advance_token()  # 吞掉换行
-            break
-        tokens.append(t)
-        context.advance_token()  # advance 不返回值，需先 peek
-
-    raw = " ".join(t.content for t in tokens)
-    error_node.add_attr("raw", raw)
-    return error_node
 
 
 def parse_sentence(self, context: ParseContext) -> Node | None:
@@ -159,67 +109,18 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
     self._skip_tokens(context, tuple(self.skip_types))
 
 
-def _block_recovery_cfg(self, block_node: Node) -> dict | None:
-    """读取块规则的 recovery 配置（从 rule.parser 字典中）"""
-    rule = (
-        self.grammar_rules.get(block_node.node_name)
-        if hasattr(self, "grammar_rules")
-        else None
-    )
-    if rule:
-        p = getattr(rule, "parser", {})
-        if isinstance(p, dict):
-            return p.get("recovery")
-    return None
-
-
-def _try_block_recovery(
-    self,
-    context: ParseContext,
-    block_node: Node,
-    rule: GrammarRule,
-) -> bool:
-    """尝试行级恢复，成功返 True（继续循环），否则返 False（终止块）"""
-    if not context.has_more_tokens():
-        return False
-    nxt = context.peek_token()
-    if nxt is None:
-        return False
-
-    end_case = getattr(rule, "end_case", [])
-    has_end_token = any(isinstance(e, str) and not e.startswith("!") for e in end_case)
-
-    # 有明确结束符 → 到达时正常终止
-    if has_end_token and nxt.type in end_case:
-        return False
-
-    # 无明确结束符时遇到 end 类关键字 → 消费为 ErrorNode 后终止（仅 Root）
-    if not has_end_token and nxt.type in getattr(self, "_block_end_types", ()):
-        if block_node.node_name == "Root":
-            err = self._consume_error_line(context)
-            if err is not None and getattr(err, "raw", ""):
-                block_node.add_sub_node(err)
-        return False
-
-    # 有 consume_line 恢复配置 → 吞行继续
-    cfg = _block_recovery_cfg(self, block_node)
-    if cfg and isinstance(cfg, dict):
-        strategy = cfg.get("strategy")
-        if isinstance(strategy, str):
-            handler = _BLOCK_RECOVERY_STRATEGIES.get(strategy)
-            if handler:
-                return handler(self, context, block_node)
-
-    return False
-
-
 def parse_block_body(
     self,
     context: ParseContext,
     block_node: Node,
     rule: GrammarRule,
 ) -> bool:
-    """循环解析句子直到遇到结束符或文件末尾。返回 False 表示语法错误中断。"""
+    """循环解析句子直到遇到结束符或文件末尾。返回 False 表示语法错误中断。
+
+    块体只做生产式级别的恢复（通过规则的 committed/recovery 机制），
+    不做行级错误吞行。句子无法匹配时直接停止块体解析，父级 production
+    的 recovery 机制负责产出 ErrorNode。
+    """
     end_token = _get_block_end(rule)
 
     while context.has_more_tokens():
@@ -238,10 +139,8 @@ def parse_block_body(
 
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
-            if not getattr(self, "error_recovery", True):
-                return False  # 无恢复配置时严格回溯：不产出部分结果
-            if _try_block_recovery(self, context, block_node, rule):
-                continue
+            # 无法匹配任何规则 → 停止块体解析
+            # 由父级 production 的 committed/recovery 机制决定是否产出 ErrorNode
             break
         block_node.add_sub_node(stmt_node)
     return True

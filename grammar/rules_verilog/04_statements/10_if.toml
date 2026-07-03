@@ -11,7 +11,6 @@ production = [
     "@ElseChain?",
 ]
 end_case = ["newline", "keyword.end", "keyword.else"]
-recovery = { after = "keyword.if" }
 [IfBlock.parser.node]
 condition = "$3"
 then_stmt = "$5"
@@ -36,7 +35,6 @@ production = [
     "@ElseChain?",
 ]
 end_case = ["newline", "keyword.end", "keyword.else"]
-recovery = { after = "keyword.if" }
 [IfStmt.parser.node]
 condition = "$3"
 then_stmt = "$5"
@@ -72,7 +70,6 @@ production = [
     "@BeginEnd",
     "@ElseChain?",
 ]
-recovery = { after = "keyword.else" }
 [ElseIfBlock.parser.node]
 condition = "$4"
 then_stmt = "$6"
@@ -97,7 +94,6 @@ production = [
     "@Statement",
     "@ElseChain?",
 ]
-recovery = { after = "keyword.else" }
 [ElseIfStmt.parser.node]
 condition = "$4"
 then_stmt = "$6"
@@ -115,7 +111,6 @@ layout = { line = [
 [ElseBlockBranch]
 [ElseBlockBranch.parser]
 production = ["keyword.else", "@BeginEnd"]
-recovery = { after = "keyword.else" }
 [ElseBlockBranch.parser.node]
 body = "$2"
 [ElseBlockBranch.renderer]
@@ -124,7 +119,6 @@ layout = { line = ["else ", { ref = "body" }] }
 [ElseBranch]
 [ElseBranch.parser]
 production = ["keyword.else", "@NonBlockStmt"]
-recovery = { after = "keyword.else" }
 [ElseBranch.parser.node]
 body = "$2"
 [ElseBranch.renderer]
