@@ -6,7 +6,7 @@ loader.py — TOML 布局规则 / 风格 / 规范化配置加载
 
 import tomllib
 import os
-from typing import Any, Optional
+from typing import Optional
 
 
 def load_layouts(rules_dir: str, layouts: dict) -> None:
@@ -34,9 +34,7 @@ def load_layouts(rules_dir: str, layouts: dict) -> None:
             if not isinstance(cfg, dict):
                 continue
             layout = cfg.get("renderer")
-            if layout and any(
-                k in layout for k in ("layout", "head", "body", "tail")
-            ):
+            if layout and any(k in layout for k in ("layout", "head", "body", "tail")):
                 if node_type in layouts:
                     layouts[node_type].update(layout)
                 else:
@@ -57,8 +55,8 @@ def load_style(rules_dir: str) -> dict:
     }
 
     search_dirs = [
-        os.path.join(rules_dir, "base"),   # base/_style.toml 优先
-        rules_dir,                         # 语言特有 _style.toml 覆盖
+        os.path.join(rules_dir, "base"),  # base/_style.toml 优先
+        rules_dir,  # 语言特有 _style.toml 覆盖
     ]
 
     for search_dir in search_dirs:

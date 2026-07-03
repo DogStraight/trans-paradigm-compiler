@@ -2,17 +2,16 @@
 
 import json
 import os
-from typing import List, Dict, Optional, Set
+from typing import Any
 from core.define import Token, GrammarRule
-
 
 
 def _compute_start_tokens(
     feat: dict,
-    grammar_rules: Dict[str, GrammarRule],
-    visited: Set[str],
-) -> Set[str]:
-    """递归计算一个 feature 可能起始的 token 类型集合 (First Set)。"""
+    grammar_rules: dict[str, GrammarRule],
+    visited: set[str],
+) -> set[str]:
+    """递归计算一个 feature 可能起始的 token 类型集合 (First set)。"""
     typ = feat.get("type")
 
     if typ == "token":
@@ -27,8 +26,8 @@ def _compute_start_tokens(
             return set()
         visited.add(name)
         rule = grammar_rules[name]
-        # 块规则的起始 token 由 block 外部负责，不在 First Set 计算中
-        result: Set[str] = set()
+        # 块规则的起始 token 由 block 外部负责，不在 First set 计算中
+        result: set[str] = set()
         for prod in getattr(rule, "production", []):
             try:
                 pf = analyze_production_features(prod)
@@ -40,7 +39,7 @@ def _compute_start_tokens(
 
     if typ == "choice":
         alts = feat.get("alternatives", [])
-        result: Set[str] = set()
+        result: set[str] = set()
         for alt in alts:
             result.update(_compute_start_tokens(alt, grammar_rules, visited.copy()))
         return result
@@ -60,11 +59,11 @@ def _compute_start_tokens(
 
 
 def build_start_token_map_names(
-    grammar_rules: Dict[str, GrammarRule],
-    statement_rule_names: List[str],
-) -> Dict[str, List[str]]:
+    grammar_rules: dict[str, GrammarRule],
+    statement_rule_names: list[str],
+) -> dict[str, list[str]]:
     """预计算起始 token → 规则名称列表的映射表（可序列化为 JSON）。"""
-    name_map: Dict[str, List[str]] = {}
+    name_map: dict[str, list[str]] = {}
     for name in statement_rule_names:
         if name not in grammar_rules:
             continue
@@ -87,14 +86,14 @@ def build_start_token_map_names(
     return name_map
 
 
-def save_token_map(name_map: Dict[str, List[str]], cache_path: str) -> None:
+def save_token_map(name_map: dict[str, list[str]], cache_path: str) -> None:
     """将起始 token 映射表保存到 JSON 文件。"""
     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(name_map, f, indent=2, ensure_ascii=False)
 
 
-def load_token_map(cache_path: str) -> Optional[Dict[str, List[str]]]:
+def load_token_map(cache_path: str) -> dict[str, list[str]] | None:
     """从 JSON 文件加载起始 token 映射表。"""
     if not os.path.exists(cache_path):
         return None
@@ -105,7 +104,7 @@ def load_token_map(cache_path: str) -> Optional[Dict[str, List[str]]]:
         return None
 
 
-_DEFAULT_CACHE_PATH: Optional[str] = None
+_DEFAULT_CACHE_PATH: str | None = None
 
 
 def set_default_cache_path(path: str | None = None) -> str | None:
@@ -118,15 +117,15 @@ def set_default_cache_path(path: str | None = None) -> str | None:
 class RuleSelector:
     def __init__(
         self,
-        grammar_rules: Dict[str, GrammarRule],
-        statement_rule_names: List[str],
-        cache_path: Optional[str] = None,
+        grammar_rules: dict[str, GrammarRule],
+        statement_rule_names: list[str],
+        cache_path: str | None = None,
         cache_enabled: bool = True,
     ):
         self.grammar_rules = grammar_rules
         self.statement_rule_names = statement_rule_names
-        self.start_token_map: Dict[str, List[str]] = {}
-        self._names_to_rules: Optional[Dict[str, GrammarRule]] = None
+        self.start_token_map: dict[str, list[str]] = {}
+        self._names_to_rules: dict[str, GrammarRule] | None = None
 
         # 尝试从缓存加载
         if cache_enabled:
@@ -149,7 +148,7 @@ class RuleSelector:
         pre_symbols: dict[str, str] | None = None,
         pre_hints: dict[str, list[str]] | None = None,
         scope_lookup_fn=None,
-    ) -> List[GrammarRule]:
+    ) -> list[GrammarRule]:
         if token is None:
             return []
         rule_names = self.start_token_map.get(token.type, [])
@@ -203,7 +202,7 @@ class RuleSelector:
 
     get_candidate_rules = select_candidates
 
-    def get_block_rule(self) -> Optional[str]:
+    def get_block_rule(self) -> str | None:
         for rule_name, rule in self.grammar_rules.items():
             if getattr(rule, "is_block", False):
                 return rule_name
@@ -212,7 +211,6 @@ class RuleSelector:
 
 """Production feature analyzer — detect choice/seq structure in production strings."""
 
-from typing import Optional, Tuple, Dict, Any
 import re
 
 # 预编译正则（避免每次调用 build_tree 重复编译）
@@ -232,7 +230,7 @@ SUFFIX_MAP = {
 }
 
 
-def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
+def analyze_production_features(production: str) -> dict[str, Any] | None:
     """
     分析产生式字符串，返回纯字典结构的中间 AST。
     支持后缀操作符：
@@ -240,9 +238,9 @@ def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
         +  一次或多次 -> {"type": "plus", "elem": ...}
         ?  零次或一次 -> {"type": "optional", "elem": ...}
     """
-    placeholder_map: Dict[str, Optional[Dict[str, Any]]] = {}
+    placeholder_map: dict[str, dict[str, Any] | None] = {}
 
-    def find_outermost_paren(s: str) -> Optional[Tuple[int, int]]:
+    def find_outermost_paren(s: str) -> tuple[int, int] | None:
         stack = []
         for i, ch in enumerate(s):
             if ch == "(":
@@ -253,7 +251,7 @@ def analyze_production_features(production: str) -> Optional[Dict[str, Any]]:
                     return (start, i)
         return None
 
-    def build_tree(s: str) -> Optional[Dict[str, Any]]:
+    def build_tree(s: str) -> dict[str, Any] | None:
         s = s.strip().replace(" ", "")
         if not s:
             return None

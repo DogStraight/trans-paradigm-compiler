@@ -5,7 +5,7 @@ block_parser.py — 块 & 语句级解析
 _parse_block_body, parse_block。
 """
 
-from typing import Optional, Tuple, Callable
+from collections.abc import Callable
 from core.define import Node, GrammarRule
 from .parser_core import ParseContext
 
@@ -59,7 +59,7 @@ def consume_error_line(self, context: ParseContext) -> Node:
     return error_node
 
 
-def parse_sentence(self, context: ParseContext) -> Optional[Node]:
+def parse_sentence(self, context: ParseContext) -> Node | None:
     """解析一条语句：根据当前 token 选择候选规则并尝试匹配。"""
     if not context.has_more_tokens():
         return None
@@ -111,8 +111,8 @@ def _get_block_end(rule: GrammarRule) -> str:
 
 
 def resolve_block_rule(
-    self, start_token: Optional[str]
-) -> Optional[Tuple[GrammarRule, str, str]]:
+    self, start_token: str | None
+) -> tuple[GrammarRule, str, str | None] | None:
     """查找起始符对应的块规则，返回 (matched_rule, block_name, end_token) 或 None"""
     block_rule_name = (
         self.rule_selector.get_block_rule() if start_token is not None else None
@@ -159,7 +159,7 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
     self._skip_tokens(context, tuple(self.skip_types))
 
 
-def _block_recovery_cfg(self, block_node: Node) -> Optional[dict]:
+def _block_recovery_cfg(self, block_node: Node) -> dict | None:
     """读取块规则的 recovery 配置（从 rule.parser 字典中）"""
     rule = (
         self.grammar_rules.get(block_node.node_name)
@@ -249,9 +249,9 @@ def parse_block_body(
 def parse_block(
     self,
     context: ParseContext,
-    start_token: Optional[str] = None,
-    rule: Optional[GrammarRule] = None,
-) -> Optional[Node]:
+    start_token: str | None = None,
+    rule: GrammarRule | None = None,
+) -> Node | None:
     """解析一个代码块。"""
     if rule is not None:
         matched_rule = rule

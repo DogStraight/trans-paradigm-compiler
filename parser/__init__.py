@@ -1,6 +1,5 @@
 # parser/__init__.py
 import os
-from typing import Optional
 from core.define import GrammarRule, GrammarRulesRegister, FileManager
 from .parser_core import Parser
 from .grammar_inject import inject_productions, inject_replace_rule
@@ -33,8 +32,8 @@ def _apply_ext_injections(
 
 def setup_grammar(
     rules_dir: str,
-    register: Optional[GrammarRulesRegister] = None,
-    ext_dir: Optional[str] = None,
+    register: GrammarRulesRegister | None = None,
+    ext_dir: str | None = None,
 ) -> dict[str, GrammarRule]:
     """
     Load core grammar + extended grammar, apply production injections,

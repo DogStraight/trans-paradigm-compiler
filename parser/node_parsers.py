@@ -5,7 +5,6 @@ node_parsers.py — 生产式子句对应的 _parse_* 方法
 production feature 类型的递归解析。
 """
 
-from typing import Optional, List
 from core.define import Node
 from .parser_core import ParseContext
 
@@ -22,7 +21,7 @@ class _BranchMatchError(Exception):
     pass
 
 
-def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     """匹配一个普通 token"""
     token_type: str = node["token_type"]
     self._log_state(f"解析普通token: {token_type}")
@@ -78,7 +77,7 @@ def parse_token(self, node: dict, context: ParseContext) -> Optional[Node]:
     return parsed_node
 
 
-def parse_call(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     """调用另一个语法规则"""
     rule_name = node["name"]
     self._log_state(f"调用规则: {rule_name} | {self._debug_token_info(context)}")
@@ -92,7 +91,7 @@ def parse_call(self, node: dict, context: ParseContext) -> Optional[Node]:
     return result_node
 
 
-def parse_seq(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
     """顺序序列：所有子项依次匹配"""
     items = node["items"]
     self._log_state(f"解析序列节点 | {self._debug_token_info(context)}")
@@ -111,7 +110,7 @@ def parse_seq(self, node: dict, context: ParseContext) -> Optional[Node]:
         return None
 
 
-def parse_choice(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
     """分支选择：依次尝试每个分支"""
     alternatives = node["alternatives"]
     self._log_state(f"解析分支节点 | {self._debug_token_info(context)}")
@@ -137,8 +136,8 @@ def repeat_loop(
     elem: dict,
     context: ParseContext,
     min_count: int = 0,
-    max_count: Optional[int] = None,
-) -> Optional[List[Node]]:
+    max_count: int | None = None,
+) -> list[Node | None] | None:
     """循环匹配 elem，返回压平后的节点列表；若少于 min_count 则返回 None。"""
     nodes = []
     while True:
@@ -153,7 +152,7 @@ def repeat_loop(
     return nodes if len(nodes) >= min_count else None
 
 
-def parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_repeat(self, node: dict, context: ParseContext) -> Node | None:
     """零次或多次重复"""
     elem = node["elem"]
     self._log_state(f"解析重复节点（零次或多次）| {self._debug_token_info(context)}")
@@ -166,18 +165,18 @@ def parse_repeat(self, node: dict, context: ParseContext) -> Optional[Node]:
     return r
 
 
-def parse_optional(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_optional(self, node: dict, context: ParseContext) -> Node | None:
     """可选（零次或一次）"""
     elem = node["elem"]
     self._log_state(f"解析可选节点 | {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context, min_count=0, max_count=1)
     optional_node = Node("optional")
-    if nodes:
+    if nodes and nodes[0] is not None:
         optional_node.add_sub_node(nodes[0])
     return optional_node
 
 
-def parse_plus(self, node: dict, context: ParseContext) -> Optional[Node]:
+def parse_plus(self, node: dict, context: ParseContext) -> Node | None:
     """至少一次重复"""
     elem = node["elem"]
     self._log_state(f"解析至少一次重复节点 | {self._debug_token_info(context)}")
@@ -186,5 +185,5 @@ def parse_plus(self, node: dict, context: ParseContext) -> Optional[Node]:
         return None
     plus_node = Node("plus", items=nodes)
     for child in nodes:
-        plus_node.add_sub_node(child)
+        plus_node.add_sub_node(child) if child is not None else None
     return plus_node

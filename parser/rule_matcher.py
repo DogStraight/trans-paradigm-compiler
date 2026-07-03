@@ -1,17 +1,17 @@
 """
-production_matcher.py — 生产式匹配核心
+rule_matcher.py — 生产式匹配核心 + 结束符检查
 
 职责：_process_production_node（dispatch），
 _match_productions（循环匹配产生式列表），
-_try_rule_productions（单规则匹配全流程）。
+_try_rule_productions（单规则匹配全流程），
+_prepare_production / _check_end_case（结束符检查）。
 """
 
-from typing import Optional, List
 from core.define import Node, GrammarRule
 from .parser_core import ParseContext
 
 
-def process_production_node(self, node: dict, context: ParseContext) -> Optional[Node]:
+def process_production_node(self, node: dict, context: ParseContext) -> Node | None:
     """dispatch 到 _parse_* 方法"""
     typ = node.get("type")
     method_name = f"_parse_{typ}"
@@ -22,7 +22,7 @@ def process_production_node(self, node: dict, context: ParseContext) -> Optional
     return method(node, context)
 
 
-def _get_recovery_cfg(self, rule: GrammarRule) -> Optional[dict]:
+def _get_recovery_cfg(self, rule: GrammarRule) -> dict | None:
     """读取规则的 recovery 配置"""
     p = getattr(rule, "parser", {})
     if isinstance(p, dict):
@@ -30,7 +30,7 @@ def _get_recovery_cfg(self, rule: GrammarRule) -> Optional[dict]:
     return None
 
 
-def _get_prod_features(self, rule: GrammarRule, prod: str) -> Optional[dict]:
+def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
     """获取产生式特征，带缓存"""
     cache = getattr(rule, "_prod_cache", None)
     if cache is None:
@@ -45,7 +45,7 @@ def _get_prod_features(self, rule: GrammarRule, prod: str) -> Optional[dict]:
 
 def _try_production(
     self, context: ParseContext, prod: str, rule: GrammarRule, committed: bool
-) -> Optional[Node]:
+) -> Node | None:
     """尝试匹配单个产生式，失败时如果已提交则产 ErrorNode（吞行）"""
     features = _get_prod_features(self, rule, prod)
     if not features:
@@ -91,7 +91,7 @@ def _try_production(
 
 def match_productions(
     self, context: ParseContext, rule: GrammarRule
-) -> tuple[Optional[List[Node]], Optional[Node]]:
+) -> tuple[list[Node | None] | None, Node | None]:
     """匹配规则的所有产生式。
 
     返回 (matched_nodes, error_node)：
@@ -132,9 +132,7 @@ def match_productions(
     return all_matched_nodes, None
 
 
-def try_rule_productions(
-    self, context: ParseContext, rule: GrammarRule
-) -> Optional[Node]:
+def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """尝试匹配一个语法规则的全部逻辑"""
     # Pratt 规则
     if getattr(rule, "pratt", False):
@@ -244,7 +242,7 @@ from .rule_selector import analyze_production_features
 def prepare_production(self, context: ParseContext, features: dict) -> bool:
     """为匹配产生式做准备：跳过空白/注释。返回 False 表示 token 不足。"""
     should_skip = True
-    
+
     if features.get("type") == "token" and features.get("token_type") == "comment":
         should_skip = False
     elif features.get("type") == "call":

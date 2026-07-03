@@ -84,9 +84,9 @@ def run_all(
         os.makedirs(out_dir, exist_ok=True)
 
         # 日志抑制
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
         if not verbose:
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
         try:

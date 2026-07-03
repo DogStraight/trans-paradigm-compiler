@@ -41,9 +41,7 @@ class Renderer:
         # 布局合并缓存 {(parent_type, child_type): merged_layout}
         self._merged_layout_cache: dict[tuple[str, str], dict] = {}
 
-    def _get_merged_layout(
-        self, parent_layout: dict, child_node_name: str
-    ) -> dict:
+    def _get_merged_layout(self, parent_layout: dict, child_node_name: str) -> dict:
         """获取子节点的合并后布局（base_layout + override），带缓存"""
         parent_type = None
         for ptype, pl in self._layouts.items():

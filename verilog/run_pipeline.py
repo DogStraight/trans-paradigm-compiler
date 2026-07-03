@@ -169,15 +169,20 @@ def run_pipeline_on_source(
         # 语法规则（含 EXT 注入）
         rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dir)
         stmt_names = [
-            n for n, r in rules.items()
-            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+            n
+            for n, r in rules.items()
+            if hasattr(r, "has_pass_end_case")
+            and r.has_pass_end_case()
+            and n != "Expression"
         ]
         rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
         lexer = Lexer(rules_dir=rules_dir)
         renderer = Renderer(rules_dir=rules_dir)
         transformer = AstTransformer()
         transformer.register(
-            ConfigDrivenTransform(rules=rules, ext_dir=FileManager.get_full_path(ext_dir))
+            ConfigDrivenTransform(
+                rules=rules, ext_dir=FileManager.get_full_path(ext_dir)
+            )
         )
         ctx[rules_dir] = {
             "rules": rules,

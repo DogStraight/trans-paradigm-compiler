@@ -6,7 +6,7 @@ attribute_binder.py — 属性映射绑定 & 路径提取
 """
 
 import re
-from typing import Any, List, Optional
+from typing import Any
 from core.define import Node, GrammarRule
 from .parser_core import ParseContext
 
@@ -68,7 +68,7 @@ def get_attr_by_path(obj: Any, path: str) -> Any:
     return None
 
 
-def extract_from_spec(self, spec: str, all_matched_nodes: List[Node]) -> Any:
+def extract_from_spec(self, spec: str, all_matched_nodes: list[Node]) -> Any:
     """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
     if not isinstance(spec, str):
         return None
@@ -93,7 +93,7 @@ def bind_attributes(
     self,
     rule_node: Node,
     rule: GrammarRule,
-    all_matched_nodes: List[Node],
+    all_matched_nodes: list[Node],
 ) -> None:
     """将规则中的属性映射绑定到规则节点上"""
     if not isinstance(getattr(rule, "node", None), dict):
@@ -123,10 +123,10 @@ def bind_attributes(
 def try_inline_rule(
     self,
     rule: GrammarRule,
-    all_matched_nodes: List[Node],
-    old_node: Optional[Node],
+    all_matched_nodes: list[Node],
+    old_node: Node | None,
     context: ParseContext,
-) -> Optional[Node]:
+) -> Node | None:
     """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。"""
     if not getattr(rule, "inline", False) or len(getattr(rule, "node", {})) != 1:
         return None

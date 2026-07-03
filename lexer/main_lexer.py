@@ -27,7 +27,7 @@ class Lexer:
         else:
             token_define_dict = get_token_define()
         self.token_define = token_define_dict
-        
+
         # 加载宏配置（非 token，独立文件）
         self.macro_config = self._load_macro_config(rules_dir)
 
@@ -67,14 +67,16 @@ class Lexer:
         if not rules_dir:
             return {}
         from core.define import FileManager
+
         base = FileManager.get_full_path(rules_dir)
         macro_path = Path(base) / "base" / "_macro.toml"
         if not macro_path.exists():
             return {}
         with open(macro_path, "rb") as f:
             cfg = tomllib.load(f)
-        return {d: f"macro.{d}" for d in cfg.get("directives", {})} | \
-               {"prefix": cfg.get("macro_call", {}).get("prefix", "`")}
+        return {d: f"macro.{d}" for d in cfg.get("directives", {})} | {
+            "prefix": cfg.get("macro_call", {}).get("prefix", "`")
+        }
 
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""
@@ -211,8 +213,7 @@ class Lexer:
 
             # comment — 使用 CommentFSM 解析（完全配置驱动）
             elif any(
-                lex_text[text_idx:text_idx + len(s)]
-                in (s,)
+                lex_text[text_idx : text_idx + len(s)] in (s,)
                 for s in CommentFSM.get_start_patterns(self.token_define)
             ):
                 result = CommentFSM.run(lex_text, text_idx, self.token_define)
@@ -335,7 +336,7 @@ class Lexer:
                     offset += 1
 
                 # 判断是指令还是调用
-                macro_name = macro_content[1:]  # 去掉前缀 ` 
+                macro_name = macro_content[1:]  # 去掉前缀 `
                 macro_type = self.macro_config.get(macro_name, "macro.call")
                 current_token.set_type(macro_type)
                 current_token.set_content(macro_content)

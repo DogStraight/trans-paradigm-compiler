@@ -6,7 +6,7 @@ node_renderer.py — AST 节点级渲染逻辑
 
 from typing import Any, Optional, List
 from core.define import Node
-from .doc import Doc, Empty, Text, Break, Concat, Prefix, Nest
+from .doc import Doc, Empty, Text, Break, Concat, Nest
 from .primitives import eval_expr
 
 

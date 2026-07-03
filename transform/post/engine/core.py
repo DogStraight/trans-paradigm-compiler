@@ -10,7 +10,14 @@ from typing import Any, Optional, Callable
 from core.define import Node
 from analyzer.scope import Scope
 from transform.post.ast_transformer import TransformPlugin
-from .registry import TransformResult, TransformContext, SKIP, register_primitive, get_primitive, get_handler
+from .registry import (
+    TransformResult,
+    TransformContext,
+    SKIP,
+    register_primitive,
+    get_primitive,
+    get_handler,
+)
 from .primitives import (
     lookup as _lookup,
     lookup_scope as _lookup_scope,
@@ -18,7 +25,6 @@ from .primitives import (
     foreach as _foreach,
     emit as _emit,
 )
-
 
 
 class ConfigDrivenTransform(TransformPlugin):
@@ -289,6 +295,8 @@ class ConfigDrivenTransform(TransformPlugin):
         # 额外注入
         ctx["_node"] = node
         return ctx
+
+
 # ============================================================
 # 内置原语注册（模块级，import 时自动注册）
 # ============================================================
@@ -308,7 +316,9 @@ def _expand_primitive(engine, node, config, root_scope):
     if lookup_source == "scope":
         data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
     elif lookup_source == "scope_type":
-        data = _lookup_type_scope(root_scope, lookup_key, context) if lookup_key else None
+        data = (
+            _lookup_type_scope(root_scope, lookup_key, context) if lookup_key else None
+        )
     elif lookup_source:
         table = engine._tables.get(lookup_source, {})
         data = _lookup(table, lookup_key, context) if lookup_key else None
@@ -358,8 +368,10 @@ def _expand_primitive(engine, node, config, root_scope):
         return SKIP
 
     if items:
+
         def _do_emit(item: Any, ctx: dict):
             return _emit(emit_spec, ctx)
+
         results = _foreach(items, as_name, _do_emit, context)
         return results if results else SKIP
     else:
@@ -406,6 +418,7 @@ def _custom_primitive(engine, node, config, root_scope):
     except Exception as e:
         print(f"  ❌ [transform] {node.node_name}: handler '{handler_name}' 异常: {e}")
         import traceback
+
         traceback.print_exc()
         return SKIP
 

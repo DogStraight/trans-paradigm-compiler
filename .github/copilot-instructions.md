@@ -316,7 +316,7 @@ python verilog/run_pipeline.py --debug       # 调试模式
 
 | 文档 | 内容 | 何时查阅 |
 |------|------|---------|
-| [README](../../README.md) | 项目概述与快速入门 | 初次了解项目 |
+| [coding_style.md](../../docs/coding_style.md) | 代码注释/命名/布局规范 | 编写新代码或审查风格时 |
 | [ROADMAP](../../ROADMAP.md) | 架构决策、设计哲学、非目标 | 理解"为什么不那样做" |
 | [docs/grammar.md](../../docs/grammar.md) | AST 节点类型图谱（Mermaid） | 了解有哪些节点类型 |
 | [docs/ast_normalization.md](../../docs/ast_normalization.md) | 规范化后的规范 AST 结构 | 写 Renderer/Transform 时 |

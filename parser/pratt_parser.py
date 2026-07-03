@@ -6,12 +6,12 @@ infix/prefix/postfix operators with proper precedence and associativity.
 
 import os
 import tomllib
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Any
 from core.define import Node, Token, FileManager
 
 
 # ========== 运算符定义加载 ==========
-def load_operator_defs(rules_dir: str) -> List[Tuple[int, dict]]:
+def load_operator_defs(rules_dir: str) -> list[tuple[int, dict]]:
     """加载运算符优先级和结合性定义"""
     path = os.path.join(rules_dir, "_symbol_level.toml")
     content = FileManager.read_file(path)
@@ -77,22 +77,44 @@ def build_token_classifier(categories: dict) -> dict:
             checks[name] = lambda t, s=type_set: isinstance(t, Token) and t.type in s
         elif match == "prefix":
             prefixes = tuple(types)
-            checks[name] = lambda t, p=prefixes: isinstance(t, Token) and t.type.startswith(p)
+            checks[name] = lambda t, p=prefixes: isinstance(
+                t, Token
+            ) and t.type.startswith(p)
     return checks
 
 
 # 模块级分类器（由 install_token_classifier 设置）
 _token_checks: dict = {}
+
+
 def _check(name: str, token) -> bool:
     fn = _token_checks.get(name)
     return fn(token) if fn else False
 
-def is_number(token) -> bool:    return _check("number", token)
-def is_string(token) -> bool:    return _check("string", token)
-def is_bool(token) -> bool:      return _check("bool", token)
-def is_identifier(token) -> bool: return _check("identifier", token)
-def is_operator(token) -> bool:   return _check("operator", token)
-def is_none(token) -> bool:      return _check("none", token)
+
+def is_number(token) -> bool:
+    return _check("number", token)
+
+
+def is_string(token) -> bool:
+    return _check("string", token)
+
+
+def is_bool(token) -> bool:
+    return _check("bool", token)
+
+
+def is_identifier(token) -> bool:
+    return _check("identifier", token)
+
+
+def is_operator(token) -> bool:
+    return _check("operator", token)
+
+
+def is_none(token) -> bool:
+    return _check("none", token)
+
 
 def install_token_classifier(categories: dict) -> None:
     """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
@@ -138,22 +160,22 @@ def parse_number_literal(token: Token) -> Node:
 
 # ========== Pratt 解析核心 ==========
 def parse_expression(
-    tokens: List[Token],
+    tokens: list[Token],
     idx: int,
     rbp: int,
-    prefix_priority: Dict[str, int],
-    prefix_attrs: Dict[str, Any],
-    infix_priority: Dict[str, int],
-    infix_attrs: Dict[str, Any],
+    prefix_priority: dict[str, int],
+    prefix_attrs: dict[str, Any],
+    infix_priority: dict[str, int],
+    infix_attrs: dict[str, Any],
     max_infix_prio: int,
     unary_prefix_rbp: int,
     atom_parser=None,
-    stop_tokens: Optional[set] = None,
-) -> Tuple[Node, int]:
+    stop_tokens: set | None = None,
+) -> tuple[Node, int]:
     """递归解析表达式，返回 (Node, 新索引)
 
-    atom_parser: Optional[(tokens, idx) → (node, consumed)] 原子规则回调
-    stop_tokens: Optional[set[str]] 遇到这些 token 类型时停止中缀循环
+    atom_parser: (tokens, idx) → (node, consumed) | None 原子规则回调
+    stop_tokens: set[str | None] 遇到这些 token 类型时停止中缀循环
     """
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
@@ -161,7 +183,11 @@ def parse_expression(
     # ---------- 前缀处理（先原子解析器，后内置前缀）----------
     node = None
     # 跳过行内注释（不纳入表达式 AST）
-    while idx < len(tokens) and isinstance(tokens[idx], Token) and tokens[idx].type == "comment":
+    while (
+        idx < len(tokens)
+        and isinstance(tokens[idx], Token)
+        and tokens[idx].type == "comment"
+    ):
         idx += 1
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
@@ -311,14 +337,13 @@ def parse_expression(
     return node, idx
 
 
-
 def parse_with_count(
     tokens: list,
     start_idx: int = 0,
-    operator_defs: Optional[list] = None,
+    operator_defs: list | None = None,
     atom_parser=None,
-    stop_tokens: Optional[set] = None,
-) -> Tuple[Optional[Node], int]:
+    stop_tokens: set | None = None,
+) -> tuple[Node | None, int]:
     """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
 
     tokens 可包含 Token 或预解析的 Node（如 CallExpr），

@@ -10,7 +10,6 @@ Orchestrates parsing by coordinating sub-parsers:
 """
 
 import sys
-from typing import Optional, List, Dict
 from core.define import (
     Node,
     Token,
@@ -138,6 +137,7 @@ scope 声明来源：规则 TOML 中的 [RuleName.analyzer] scope = { ... }，
 通过 peek 机制声明式复制到 parser 域。
 """
 
+
 class ScopeEntry:
     """作用域条目"""
 
@@ -183,7 +183,7 @@ class ScopeStack:
         """在当前作用域注册符号。"""
         self._stack[-1].symbols[name] = kind
 
-    def lookup(self, name: str) -> Optional[str]:
+    def lookup(self, name: str) -> str | None:
         """沿作用域链查找符号，返回其 kind，未找到返回 None。"""
         for entry in reversed(self._stack):
             if name in entry.symbols:
@@ -219,7 +219,7 @@ _try_pratt_rule（调用 Pratt 解析器处理表达式）。
 """
 
 
-def parse_atom(self, context: ParseContext) -> tuple[Optional[Node], int]:
+def parse_atom(self, context: ParseContext) -> tuple[Node | None, int]:
     """尝试按顺序匹配原子规则，返回 (node, consumed) 或 (None, 0)。"""
     start_ptr = context.token_pointer
     for rule in self.atomic_rules:
@@ -232,7 +232,7 @@ def parse_atom(self, context: ParseContext) -> tuple[Optional[Node], int]:
     return None, 0
 
 
-def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Optional[Node]:
+def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """使用 Pratt 解析器解析表达式规则"""
     self._log_state(f"使用 Pratt 解析器解析规则: {rule.name}")
     if not context.has_more_tokens():
@@ -386,7 +386,7 @@ class Parser:
             rules: 预加载的语法规则表。传入时跳过内部 GrammarRulesRegister 加载。
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
-        self.grammar_rules: Dict[str, GrammarRule] = {}
+        self.grammar_rules: dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
         self.verbose = verbose
         self.error_recovery = error_recovery
@@ -440,7 +440,7 @@ class Parser:
             )
         self.skip_types = ["newline", "space.fold"]
 
-        self.atomic_rules: List[GrammarRule] = sorted(
+        self.atomic_rules: list[GrammarRule] = sorted(
             (
                 rule
                 for rule in self.grammar_rules.values()
@@ -554,13 +554,13 @@ class Parser:
                 break
 
     @staticmethod
-    def _restore_current_node(old_node: Optional[Node], context: ParseContext) -> None:
+    def _restore_current_node(old_node: Node | None, context: ParseContext) -> None:
         if old_node is None:
             context.current_node = None
         else:
             context.update_current_node(old_node)
 
-    def parse(self, tokens: List[Token]) -> Optional[Node]:
+    def parse(self, tokens: list[Token]) -> Node | None:
         """解析器的入口：token 流 → AST"""
         # 每次 parse 重置状态
         self._inline_comments = []

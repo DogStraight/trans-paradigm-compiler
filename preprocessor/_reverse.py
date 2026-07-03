@@ -2,7 +2,7 @@
 
 import re
 
-_COL_WEIGHT = 1000     # line-offset weight in column-proximity scoring
+_COL_WEIGHT = 1000  # line-offset weight in column-proximity scoring
 _SENTINEL = "@@PYV@@"  # placeholder marker
 
 
@@ -61,7 +61,7 @@ def protect_and_reverse(
 
     1. Scan *original source* for literals matching macro values.
     2. In the *rendered output*, locate each literal by line ± window
-       and column proximity (not first-find).
+        and column proximity (not first-find).
     3. Replace with unique placeholders (`` __PH_N__ ``).
     4. Run macro reversal.
     5. Restore placeholders → original literal values.
@@ -137,9 +137,9 @@ def reverse_macros(
     lines = output.split("\n")
 
     for name, value in items:
-        defline_prefix = f"{prefix}{define_keyword} {name}"
+        def_line_prefix = f"{prefix}{define_keyword} {name}"
         for i, line in enumerate(lines):
-            if line.lstrip().startswith(defline_prefix):
+            if line.lstrip().startswith(def_line_prefix):
                 continue
             lines[i] = line.replace(value, f"{prefix}{name}")
 

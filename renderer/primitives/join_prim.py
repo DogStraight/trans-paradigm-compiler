@@ -17,7 +17,14 @@ TOML 表示:
 from typing import Any, Optional, List
 from core.define import Node
 from ..doc import (
-    Doc, Empty, Text, Line as SoftLine, Break, Concat, Nest, group,
+    Doc,
+    Empty,
+    Text,
+    Line as SoftLine,
+    Break,
+    Concat,
+    Nest,
+    group,
 )
 from .registry import register
 

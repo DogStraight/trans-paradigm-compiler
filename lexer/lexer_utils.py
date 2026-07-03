@@ -34,9 +34,7 @@ def get_token_define_from_dir(rules_dir: str, config_name: str) -> dict:
 def get_token_define_merged(rules_dir: str) -> dict:
     """两阶段加载：先加载 base/token.toml + base/_lexer.toml，再叠加语言特有 _token.toml"""
     base_dir = os.path.join(rules_dir, "base")
-    base = get_token_define(
-        os.path.join(base_dir, "token.toml")
-    )
+    base = get_token_define(os.path.join(base_dir, "token.toml"))
     lexer = get_token_define_from_dir(base_dir, "_lexer")
     base = _deep_merge(base, lexer)
     try:
@@ -44,4 +42,3 @@ def get_token_define_merged(rules_dir: str) -> dict:
         return _deep_merge(base, lang)
     except (FileNotFoundError, OSError):
         return base
-
