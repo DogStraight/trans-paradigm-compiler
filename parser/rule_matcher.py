@@ -53,15 +53,6 @@ def _find_sync_token(
     return {t for t in ec if isinstance(t, str) and not t.startswith("!")}
 
 
-# 括号匹配映射
-_BRACKET_MAP = {
-    "bracket.l_parentheses": "bracket.r_parentheses",
-    "bracket.l_brace": "bracket.r_brace",
-    "bracket.l_bracket": "bracket.r_bracket",
-}
-_INVERSE_BRACKET_MAP = {v: k for k, v in _BRACKET_MAP.items()}
-
-
 def _find_recovery_strategy(
     rule: GrammarRule,
     prod_features: dict | None,
@@ -72,7 +63,11 @@ def _find_recovery_strategy(
     key 采用 $N 路径语法（与 attribute_binder 一致），如：
         "$3"          — 第 3 个 production 元素（1-based）
         "$3.$1"       — 第 3 个元素的第 1 个子元素
-    未找到返回 None。
+
+    可选值（策略名）：
+        "skip_to_end"          — （默认）同步到 end_case / 后继生产式 / 当前生产式自然结束
+        "skip_one"             — 只跳过当前一个 token，不向前扫描
+        "skip_to_matching"     — 括号感知扫描：维护嵌套深度，遇到匹配的关闭括号时停止
     """
     recovery_cfg = getattr(rule, "recovery", {})
     if not isinstance(recovery_cfg, dict) or prod_index is None:
@@ -93,7 +88,7 @@ def _find_recovery_strategy(
     return None
 
 
-def _find_current_end(spec: str, grammar_rules: dict) -> set[str]:
+def _find_current_end(spec: str, grammar_rules: dict, bracket_map: dict[str, str] | None = None) -> set[str]:
     """计算一个产生式规格字符串的自然结束 token。
 
     例如:
@@ -104,9 +99,10 @@ def _find_current_end(spec: str, grammar_rules: dict) -> set[str]:
     """
     raw = spec.rstrip("?+*")
     # 1. 显式括号闭合：如 bracket.l_parentheses → bracket.r_parentheses
-    close = _BRACKET_MAP.get(raw)
-    if close:
-        return {close}
+    if bracket_map:
+        close = bracket_map.get(raw)
+        if close:
+            return {close}
 
     # 2. 规则引用：查找规则的最后一个生产式元素
     if raw.startswith("@"):
@@ -114,7 +110,7 @@ def _find_current_end(spec: str, grammar_rules: dict) -> set[str]:
         if rule:
             prods = getattr(rule, "production", [])
             if prods:
-                return _find_current_end(prods[-1], grammar_rules)
+                return _find_current_end(prods[-1], grammar_rules, bracket_map)
         return set()
 
     # 3. 普通 token → 自身就是结束
@@ -147,7 +143,10 @@ def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
         cache = {}
         setattr(rule, "_prod_cache", cache)
     if prod not in cache:
-        from .rule_selector import analyze_production_features, flatten_production_features
+        from .rule_selector import (
+            analyze_production_features,
+            flatten_production_features,
+        )
 
         feat = analyze_production_features(prod)
         if feat is not None:
@@ -211,7 +210,7 @@ def _try_production(
         # 简单 token 失败 → 默认只消费当前 token
         if feature_tree.get("type") == "token":
             per_strategy = _find_recovery_strategy(rule, features, prod_index)
-            if per_strategy == "bracket":
+            if per_strategy == "skip_to_matching":
                 end_case_tokens: set[str] = set()
                 for ec in getattr(rule, "end_case", []):
                     if isinstance(ec, str) and not ec.startswith("!"):
@@ -223,9 +222,9 @@ def _try_production(
                     assert t is not None
                     if t.type in end_case_tokens:
                         break
-                    if t.type in _BRACKET_MAP:
+                    if t.type in self._bracket_map:
                         depth += 1
-                    elif t.type in _INVERSE_BRACKET_MAP:
+                    elif t.type in self._inverse_bracket_map:
                         if depth == 0:
                             break
                         depth -= 1
@@ -237,7 +236,7 @@ def _try_production(
             err.add_attr("raw", first_raw)
             return err
 
-        strategy = _find_recovery_strategy(rule, features, prod_index) or "end_case"
+        strategy = _find_recovery_strategy(rule, features, prod_index) or "skip_to_end"
 
         end_case_tokens: set[str] = set()
         for ec in getattr(rule, "end_case", []):
@@ -245,22 +244,22 @@ def _try_production(
                 end_case_tokens.add(ec)
         end_case_tokens.update(getattr(context, "_end_case_chain", set()))
 
-        if strategy == "single":
+        if strategy == "skip_one":
             if first_bad is not None:
                 context.advance_token()
             err.add_attr("raw", first_raw)
             return err
 
-        elif strategy == "bracket":
+        elif strategy == "skip_to_matching":
             depth = 0
             while context.has_more_tokens():
                 t = context.peek_token()
                 assert t is not None
                 if t.type in end_case_tokens:
                     break
-                if t.type in _BRACKET_MAP:
+                if t.type in self._bracket_map:
                     depth += 1
-                elif t.type in _INVERSE_BRACKET_MAP:
+                elif t.type in self._inverse_bracket_map:
                     if depth == 0:
                         break
                     depth -= 1
@@ -270,7 +269,7 @@ def _try_production(
 
         # 策略：end_case（默认）— 双路径同步扫描
         next_start = sync_tokens or set()
-        current_end = _find_current_end(prod, self.grammar_rules)
+        current_end = _find_current_end(prod, self.grammar_rules, self._bracket_map)
 
         scan_ptr = context.token_pointer
         pos_next: int | None = None

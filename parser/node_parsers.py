@@ -33,16 +33,16 @@ def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
     if prod_features is None:
         return None
     strategy = _find_recovery_strategy(rule, prod_features, prod_index)
-    if strategy is None or strategy == "end_case":
+    if strategy is None or strategy == "skip_to_end":
         return None
     # 执行策略
     err = Node("Error")
     t = context.peek_token()
     if t is not None:
         err.add_attr("raw", t.content)
-        if strategy == "single":
+        if strategy == "skip_one":
             context.advance_token()
-        elif strategy == "bracket":
+        elif strategy == "skip_to_matching":
             depth = 0
             end_case_tokens = set(getattr(rule, "end_case", []))
             end_case_tokens.update(getattr(context, "_end_case_chain", set()))
@@ -51,10 +51,9 @@ def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
                 assert tk is not None
                 if tk.type in end_case_tokens:
                     break
-                from .rule_matcher import _BRACKET_MAP, _INVERSE_BRACKET_MAP
-                if tk.type in _BRACKET_MAP:
+                if tk.type in self._bracket_map:
                     depth += 1
-                elif tk.type in _INVERSE_BRACKET_MAP:
+                elif tk.type in self._inverse_bracket_map:
                     if depth == 0:
                         break
                     depth -= 1

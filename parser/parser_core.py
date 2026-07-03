@@ -54,7 +54,7 @@ class ParseContext:
         self._recovery_path: str = ""
 
         # 当前拥有 recovery 配置的规则（由 _try_production 设置）
-        self._recovery_rule: Any = None
+        self._recovery_rule: GrammarRule | None = None
 
     def set_recovery_base(self):
         """标记当前 path_stack 深度为错误恢复的基准"""
@@ -412,6 +412,30 @@ class Parser:
         # 解析时作用域栈（可选，配合 peek scope 使用）
         self.scope_stack = ScopeStack()
 
+        # 加载括号映射（从 token 配置的 [bracket] pairs）
+        self._bracket_map: dict[str, str] = {}
+        self._inverse_bracket_map: dict[str, str] = {}
+        if rules_dir:
+            try:
+                from lexer.lexer_utils import get_token_define
+                path = f"{rules_dir}/base/token.toml"
+                data = get_token_define(path)
+                for open_c, close_c, name in data.get("bracket", {}).get("pairs", []):
+                    l = f"bracket.l_{name}"
+                    r = f"bracket.r_{name}"
+                    self._bracket_map[l] = r
+                    self._inverse_bracket_map[r] = l
+            except Exception:
+                pass
+        if not self._bracket_map:
+            # 保底
+            self._bracket_map = {
+                "bracket.l_parentheses": "bracket.r_parentheses",
+                "bracket.l_brace": "bracket.r_brace",
+                "bracket.l_bracket": "bracket.r_bracket",
+            }
+            self._inverse_bracket_map = {v: k for k, v in self._bracket_map.items()}
+
         # 规则加载：外部注入优先，回退内部自动加载
         if rules is not None:
             self.grammar_rules = rules
@@ -436,7 +460,8 @@ class Parser:
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
-            if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+            if hasattr(rule, "has_pass_end_case")
+            and rule.has_pass_end_case()
             and name != "Expression"
         ]
         # RuleSelector：外部注入优先，回退内部创建

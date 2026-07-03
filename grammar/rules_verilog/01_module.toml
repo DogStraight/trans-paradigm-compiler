@@ -1,5 +1,10 @@
 # ============================================================================
 # Verilog 语法规则 — 模块声明
+#
+# recovery 恢复策略（通过 $N 寻址指定 production 元素）：
+#   "skip_to_end"         — （默认）同步到 end_case / 后继生产式
+#   "skip_one"            — 只跳过当前一个 token
+#   "skip_to_matching"    — 括号感知：跳过到匹配的关闭括号
 # ============================================================================
 
 [ModuleDecl]
@@ -53,7 +58,7 @@ tail = { text = "endmodule", break = 2 }
 [PortParens]
 [PortParens.parser]
 inline = true
-recovery = { "$3" = "bracket" }
+recovery = { "$3" = "skip_to_matching" }
 production = [
     "bracket.l_parentheses",
     "@PortList?",
