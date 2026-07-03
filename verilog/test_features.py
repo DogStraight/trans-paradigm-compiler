@@ -46,7 +46,7 @@ def test_token_classifier_installed():
     rules = load_rules()
     stmt_names = [
         n for n, r in rules.items()
-        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
@@ -65,7 +65,7 @@ def test_pratt_parses_not_operator():
     rules = load_rules()
     stmt_names = [
         n for n, r in rules.items()
-        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
@@ -86,7 +86,7 @@ def test_pratt_parses_addition():
     rules = load_rules()
     stmt_names = [
         n for n, r in rules.items()
-        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
@@ -111,7 +111,7 @@ def test_first_set_keyword_reg():
     rules = load_rules()
     stmt_names = [
         n for n, r in rules.items()
-        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     name_map = build_start_token_map_names(rules, stmt_names)
     reg_candidates = name_map.get("keyword.reg", [])
@@ -128,11 +128,14 @@ def test_first_set_keyword_input():
     rules = load_rules()
     stmt_names = [
         n for n, r in rules.items()
-        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     name_map = build_start_token_map_names(rules, stmt_names)
     input_candidates = name_map.get("keyword.input", [])
-    assert "AnsiInputDecl" in input_candidates, "keyword.input 应包含 AnsiInputDecl"
+    assert "BodyInputDecl" in input_candidates, \
+        "keyword.input 应包含 BodyInputDecl（语句级 input 声明）"
+    assert "AnsiInputDecl" not in input_candidates, \
+        "keyword.input 不应包含 AnsiInputDecl（已标记 statement=false）"
 
 
 # ──────────────────────────────────────────────
@@ -145,14 +148,14 @@ def test_atomic_not_affected_by_committed():
     # 检查 atomic 标记的规则
     atomic_rules = [
         name for name, rule in rules.items()
-        if getattr(rule, "atomic", False)
+        if getattr(rule, "is_atom", False)
     ]
     assert "Number" in atomic_rules, "Number 应是原子规则"
     assert "Identifier" in atomic_rules, "Identifier 应是原子规则"
     # atomic 规则生产式数量应合理（非空）
     for name in atomic_rules:
         rule = rules[name]
-        prods = getattr(rule, "production", [])
+        prods = rule.prods
         assert len(prods) > 0, f"原子规则 {name} 不应有空的 production"
 
 
@@ -161,7 +164,7 @@ def test_bitwidth_literal_not_greedy():
     rules = load_rules()
     stmt_names = [
         n for n, r in rules.items()
-        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)

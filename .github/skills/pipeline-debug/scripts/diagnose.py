@@ -152,7 +152,7 @@ def diagnose(test_name: str, verbose: bool = False, no_render: bool = False) -> 
     parser.statement_rule_names = statement_rule_names
     parser.rule_selector = RuleSelector(rules, parser.statement_rule_names)
     parser.atomic_rules = sorted(
-        (rule for rule in rules.values() if getattr(rule, "atomic", False)),
+        (rule for rule in rules.values() if getattr(rule, "is_atom", False)),
         key=lambda r: len(getattr(r, "production", [])),
         reverse=True,
     )

@@ -1,43 +1,13 @@
-"""
-join 原语 — 自动宽度感知列表连接
-
-TOML 表示:
-    { join = ", ", items = "ports" }
-    { join = ",", items = "params", prefix = "(", suffix = ")" }
-    { join = ",", items = "items", first_soft = true, nest = 1 }
-
-支持参数:
-    join       分隔符文本
-    nest       额外缩进层级
-    first_soft 第一个元素前加软换行
-    prefix     整体前缀
-    suffix     整体后缀
-"""
-
+"""join 原语 — 列表连接"""
 from typing import Any, Optional, List
 from core.define import Node
-from ..doc import (
-    Doc,
-    Empty,
-    Text,
-    Line as SoftLine,
-    Break,
-    Concat,
-    Nest,
-    group,
-)
+from ..doc import Doc, Empty, Text, Line as SoftLine, Break, Concat, Nest, group
 from .registry import register
 
 
 @register("join")
-def eval_join(
-    expr: dict,
-    node: Node,
-    indent: int,
-    parent_layout: Optional[dict],
-    renderer: Any,
-) -> Optional[Doc]:
-    """求值 join 原语"""
+def eval_join(expr: dict, node: Node, indent: int,
+              parent_layout: Optional[dict], renderer: Any) -> Optional[Doc]:
     sep_text = expr["join"].rstrip()
     nest_level = expr.get("nest", 0)
     first_soft = expr.get("first_soft", False)

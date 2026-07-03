@@ -79,7 +79,7 @@ def trace(test_name: str, show_doc: bool = False, target_node: str = "") -> None
     ]
     parser.rule_selector = RuleSelector(rules, parser.statement_rule_names)
     parser.atomic_rules = sorted(
-        (rule for rule in rules.values() if getattr(rule, "atomic", False)),
+        (rule for rule in rules.values() if getattr(rule, "is_atom", False)),
         key=lambda r: len(getattr(r, "production", [])),
         reverse=True,
     )

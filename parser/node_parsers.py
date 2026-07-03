@@ -12,6 +12,8 @@ from .rule_matcher import _find_recovery_strategy, _get_prod_features
 
 def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
     """根据当前 context._recovery_path 检查 recovery 配置，返回 ErrorNode 或 None。"""
+    if not getattr(self, "global_recovery", False):
+        return None
     rule = getattr(context, "_recovery_rule", None)
     if rule is None:
         return None
@@ -25,7 +27,7 @@ def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
     except ValueError:
         return None
     # 从缓存中获取 flat 列表
-    prods = getattr(rule, "production", [])
+    prods = rule.prods
     if prod_index < 0 or prod_index >= len(prods):
         return None
     prod_str = prods[prod_index]
@@ -68,22 +70,10 @@ def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
     return err
 
 
-class _SequenceMatchError(Exception):
-    """序列匹配失败时抛出的内部异常"""
-
-    pass
-
-
-class _BranchMatchError(Exception):
-    """分支匹配失败时抛出的内部异常"""
-
-    pass
-
-
 def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     """匹配一个普通 token"""
     token_type: str = node["token_type"]
-    self._log_state(f"解析普通token: {token_type}")
+    self._log_state(f"解析token: {token_type}")
 
     if not context.has_more_tokens():
         self._log_state("无更多token可解析")
@@ -94,10 +84,7 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
         return None
 
     if token_type != current_token.type:
-        self._log_state(
-            f"token类型不匹配: 期望 {token_type}, 实际 {current_token.type} "
-            f"| {self._debug_token_info(context)}"
-        )
+        self._log_state(lambda: f"token类型不匹配: 期望 {token_type}, 实际 {current_token.type} | {self._debug_token_info(context)}")
         return None
 
     parsed_node = Node(token_type)
@@ -130,16 +117,14 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
         else:
             break
 
-    self._log_state(
-        f"普通token {token_type} 解析成功 | {self._debug_token_info(context)}"
-    )
+    self._log_state(lambda: f"token {token_type} ok | {self._debug_token_info(context)}")
     return parsed_node
 
 
 def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     """调用另一个语法规则，失败时按 recovery 路径创建 ErrorNode"""
     rule_name = node["name"]
-    self._log_state(f"调用规则: {rule_name} | {self._debug_token_info(context)}")
+    self._log_state(lambda: f"调用规则: {rule_name} | {self._debug_token_info(context)}")
     snapshot = context.create_snapshot()
 
     target_rule = self.grammar_rules.get(rule_name)
@@ -157,57 +142,46 @@ def parse_call(self, node: dict, context: ParseContext) -> Node | None:
 def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
     """顺序序列：所有子项依次匹配，带 recovery 寻址"""
     items = node["items"]
-    self._log_state(f"解析序列节点 | {self._debug_token_info(context)}")
-    try:
-        with context:
-            seq_node = Node("seq")
-            for idx, item in enumerate(items):
-                # 扩展 recovery 路径（$1, $2, ...）
-                old_path = context._recovery_path
-                context._recovery_path = f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
-                result = self._process_production_node(item, context)
-                context._recovery_path = old_path
-                if result is None:
-                    raise _SequenceMatchError()
-                seq_node.add_sub_node(result)
-            self._log_state(f"序列解析成功 | {self._debug_token_info(context)}")
-            return seq_node
-    except _SequenceMatchError:
-        self._log_state(f"序列项匹配失败 | {self._debug_token_info(context)}")
-        return None
+    self._log_state(lambda: f"解析序列节点 | {self._debug_token_info(context)}")
+    with context:
+        seq_node = Node("seq")
+        for idx, item in enumerate(items):
+            old_path = context._recovery_path
+            context._recovery_path = (
+                f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
+            )
+            result = self._process_production_node(item, context)
+            context._recovery_path = old_path
+            if result is None:
+                return None
+            seq_node.add_sub_node(result)
+        self._log_state(lambda: f"序列解析成功 | {self._debug_token_info(context)}")
+        return seq_node
 
 
 def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
     """分支选择：依次尝试每个分支，带 recovery 寻址"""
     alternatives = node["alternatives"]
-    self._log_state(f"解析分支节点 | {self._debug_token_info(context)}")
+    self._log_state(lambda: f"解析分支节点 | {self._debug_token_info(context)}")
     original_pointer = context.token_pointer
     for idx, alt in enumerate(alternatives):
         context.token_pointer = original_pointer
-        # 扩展 recovery 路径（$1, $2, ...）
         old_path = context._recovery_path
         context._recovery_path = f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
-        try:
-            with context:
-                result = self._process_production_node(alt, context)
-                if result is not None:
-                    context._recovery_path = old_path
-                    self._log_state(f"分支匹配成功 | {self._debug_token_info(context)}")
-                    return result
-                raise _BranchMatchError()
-        except _BranchMatchError:
-            # 当前分支失败，检查 sub-element recovery
-            if context._recovery_path:
-                err = self._try_recovery_by_path(context)
-                if err is not None:
-                    context._recovery_path = old_path
-                    self._log_state(f"分支 recovery | {self._debug_token_info(context)}")
-                    return err
-            continue
-        finally:
+        with context:
+            result = self._process_production_node(alt, context)
             context._recovery_path = old_path
+            if result is not None:
+                return result
+        # 当前分支失败，检查 sub-element recovery
+        if context._recovery_path:
+            err = self._try_recovery_by_path(context)
+            if err is not None:
+                context._recovery_path = old_path
+                return err
+        context._recovery_path = old_path
     context.token_pointer = original_pointer
-    self._log_state(f"所有分支匹配失败 | {self._debug_token_info(context)}")
+    self._log_state(lambda: f"所有分支匹配失败 | {self._debug_token_info(context)}")
     return None
 
 
@@ -235,11 +209,9 @@ def repeat_loop(
 def parse_repeat(self, node: dict, context: ParseContext) -> Node | None:
     """零次或多次重复"""
     elem = node["elem"]
-    self._log_state(f"解析重复节点（零次或多次）| {self._debug_token_info(context)}")
+    self._log_state(lambda: f"解析重复节点 | {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context) or []
-    self._log_state(
-        f"重复解析完成，匹配次数: {len(nodes)} | {self._debug_token_info(context)}"
-    )
+    self._log_state(lambda: f"重复完成, cnt={len(nodes)} | {self._debug_token_info(context)}")
     r = Node("repeat", items=nodes)
     r.sub_node = nodes[:]
     return r
@@ -248,7 +220,7 @@ def parse_repeat(self, node: dict, context: ParseContext) -> Node | None:
 def parse_optional(self, node: dict, context: ParseContext) -> Node | None:
     """可选（零次或一次）"""
     elem = node["elem"]
-    self._log_state(f"解析可选节点 | {self._debug_token_info(context)}")
+    self._log_state(lambda: f"解析可选节点 | {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context, min_count=0, max_count=1)
     optional_node = Node("optional")
     if nodes and nodes[0] is not None:
@@ -259,7 +231,7 @@ def parse_optional(self, node: dict, context: ParseContext) -> Node | None:
 def parse_plus(self, node: dict, context: ParseContext) -> Node | None:
     """至少一次重复"""
     elem = node["elem"]
-    self._log_state(f"解析至少一次重复节点 | {self._debug_token_info(context)}")
+    self._log_state(lambda: f"解析至少一次重复节点 | {self._debug_token_info(context)}")
     nodes = repeat_loop(self, elem, context, min_count=1)
     if nodes is None:
         return None

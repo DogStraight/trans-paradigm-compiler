@@ -29,7 +29,7 @@ def _compute_start_tokens(
         # 块规则的起始 token 由 block 外部负责，不在 First set 计算中
         if getattr(rule, "is_block", False):
             return set()
-        prods = getattr(rule, "production", [])
+        prods = rule.prods
         if not prods:
             return set()
         # 只取第一个 production 元素的 First set（后续元素可能不可达）
@@ -72,7 +72,7 @@ def build_start_token_map_names(
         if name not in grammar_rules:
             continue
         rule = grammar_rules[name]
-        prods = getattr(rule, "production", [])
+        prods = rule.prods
         if not prods:
             continue
         first_prod_str = prods[0]

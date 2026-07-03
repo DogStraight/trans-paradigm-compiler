@@ -5,6 +5,10 @@ Parser consumes Token and produces Node (AST), GrammarRule drives both
 parsing and rendering.
 """
 
+import tomllib
+import os
+from pathlib import Path
+
 
 class Token:
 
@@ -24,13 +28,77 @@ class Token:
         return self.content
 
 
-import tomllib
-import os
-from pathlib import Path
+class Node:
+
+    def __init__(self, node_name: str, **kwargs) -> None:
+        self.node_name = node_name
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    @staticmethod
+    def _dump_item(item):
+        if isinstance(item, Node):
+            return item.dump()
+        if isinstance(item, dict):
+            filtered = {k: Node._dump_item(v) for k, v in item.items()
+                        if v is not None and not (isinstance(v, list) and not v)}
+            return filtered if filtered else None
+        if isinstance(item, list):
+            filtered = [Node._dump_item(x) for x in item if x is not None]
+            filtered = [x for x in filtered if x is not None]
+            return filtered if filtered else None
+        return item
+
+    def dump(self):
+        result = {}
+        for attr, value in self.__dict__.items():
+            if attr == "node_name" or value is None:
+                continue
+            if isinstance(value, list) and not value:
+                continue
+            dumped = Node._dump_item(value)
+            if dumped is not None:
+                result[attr] = dumped
+        return {self.node_name: result}
+
+    def add_sub_node(self, sub: "Node") -> None:
+        if not hasattr(self, "sub_node"):
+            self.sub_node = []
+        self.sub_node.append(sub)
+
+    def iter_children(self):
+        seen = set()
+        if hasattr(self, "sub_node"):
+            seen.update(id(c) for c in self.sub_node)
+            yield from self.sub_node
+        for attr_name in vars(self):
+            val = getattr(self, attr_name)
+            if isinstance(val, Node):
+                if id(val) not in seen:
+                    seen.add(id(val))
+                    yield val
+                continue
+            if not isinstance(val, list):
+                continue
+            for item in val:
+                if isinstance(item, Node) and id(item) not in seen:
+                    seen.add(id(item))
+                    yield item
+
+    def add_attr(self, attr_name: str, attr_value) -> None:
+        setattr(self, attr_name, attr_value)
+
+    def __str__(self) -> str:
+        attrs = {k: v for k, v in self.__dict__.items()}
+        return f'{self.node_name}({", ".join(f"{k}={v}" for k,v in attrs.items())})'
+
+    def __repr__(self) -> str:
+        return f'"{self.node_name}"'
 
 
 class FileManager:
     """纯静态工具类 — 文件路径管理与 TOML 加载。全局单例（无实例状态）。"""
+
     _base_dir: str = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
@@ -40,7 +108,7 @@ class FileManager:
     lookup_file: str = "pyv_compiler/grammar/rules_verilog/base/production_lookup.toml"
 
     cg_rules_dir: str = "pyv_compiler/grammar/cg_rules"
-    debug_log_file: str | None = "pyv_compiler/parser_debug.log"
+    debug_log_file: str | None = None
     # debug_log_file: str | None = None
 
     @classmethod
@@ -128,16 +196,7 @@ class FileManager:
 
 
 class ParseError(Exception):
-    """解析错误，携带失败上下文以便快速定位。
-
-    Attributes:
-        msg: 人类可读的错误描述
-        token: 失败时的当前 Token（可为 None）
-        rule: 正在尝试匹配的规则名（可为 None）
-        path: 当前语义路径（可为 None）
-        candidates: 候选规则列表（可为 None）
-        context_info: 解析上下文摘要（token 指针等）
-    """
+    """解析错误，携带失败上下文以便快速定位。"""
 
     def __init__(
         self,
@@ -153,54 +212,20 @@ class ParseError(Exception):
         self.path = path
         self.candidates = candidates
         self.context_info = context_info
-        # 构建详细信息
         parts = [msg]
         if token:
-            parts.append(
-                f"  token: '{token.content}' (type={token.type}) Ln {token.line}"
-            )
+            parts.append(f"  token: '{token.content}' (type={token.type}) Ln {token.line}")
         if rule:
             parts.append(f"  rule: {rule}")
         if path:
             parts.append(f"  path: {path}")
         if candidates is not None:
-            parts.append(
-                f"  candidates ({len(candidates)}): {[r.name if hasattr(r, 'name') else str(r) for r in candidates]}"
-            )
+            names = [r.name if hasattr(r, 'name') else str(r) for r in candidates]
+            parts.append(f"  candidates ({len(candidates)}): {names}")
         if context_info:
             parts.append(f"  ctx: {context_info}")
         super().__init__("\n".join(parts))
 
-
-class BracketMismatchError(Exception):
-    pass
-
-
-def get_close_bracket_string(start_bracket: str, target_string: str) -> str:
-    close_bracket = ""
-    close_bracket_dict = {"(": ")", "[": "]", "{": "}", "<": ">"}
-    # check if start_bracket is valid
-    if start_bracket not in close_bracket_dict:
-        raise BracketMismatchError(f"Invalid start bracket: {start_bracket}")
-
-    close_bracket = close_bracket_dict[start_bracket]
-    start: bool = False
-    l_bracket_cnt: int = 0
-    r_bracket_cnt: int = 0
-    extract_string: str = ""
-    for ch in target_string:
-        if ch == start_bracket:
-            start = True
-            l_bracket_cnt += 1
-        elif ch == close_bracket:
-            r_bracket_cnt += 1
-        if start is True:
-            extract_string += ch
-        if start is True and l_bracket_cnt == r_bracket_cnt:
-            break
-    if l_bracket_cnt != r_bracket_cnt:
-        raise BracketMismatchError(f"Invalid bracket pair in {target_string}")
-    return extract_string[1:-1]
 
 
 class GrammarRule:
@@ -229,17 +254,18 @@ class GrammarRule:
     # 从 parser/analyzer 阶段提取到顶层的字段名集合
     # 只包含 Parser/Renderer 消费的字段，analyzer 专用字段留在 rule.analyzer 中
     _KNOWN_FIELDS = {
-        "production",
-        "node",
-        "end_case",
-        "inline",
-        "pratt",
-        "atomic",
-        "is_block",
-        "recovery",
+        "production",  # 产生式列表，定义规则匹配什么
+        "node",  # 属性映射，如何从匹配结果构建 AST 节点（$N 路径语法）
+        "end_case",  # 终止符列表，匹配后检查的 token 边界
+        "inline",  # 内联扁平化：只保留第一个子节点，消除包装节点
+        "pratt",  # 使用 Pratt 解析器处理表达式（替换普通生产式匹配）
+        "recovery",  # 错误恢复策略：true / false / {$N: strategy} 字典
+        "structure",  # 结构角色字典，展开为 is_block / is_statement / is_atom
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
+    # 默认值为 None 的三态字段（未设置时由启发式或 False 兜底）
+    _NONE_FIELDS = {"structure"}
 
     def __init__(self, name: str, **kwargs):
         self.name = name
@@ -248,6 +274,8 @@ class GrammarRule:
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
+            elif fld in self._NONE_FIELDS:
+                setattr(self, fld, None)  # 三态：None=未设置
             else:
                 setattr(self, fld, False)
 
@@ -267,18 +295,50 @@ class GrammarRule:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def has_pass_end_case(self) -> bool:
-        """检查是否有正匹配的 end_case 项（非 ! 前缀）。
+        # 从 structure 字典中计算 is_block / is_statement / is_atom
+        #
+        # TOML 写法:
+        #   structure = { is_block = true }           — 块规则，走 parse_block
+        #   structure = { is_statement = false }       — 非语句规则，排除出候选列表
+        #   structure = { is_atom = true }             — 原子规则，抑制 recovery
+        #
+        # 真值表（唯一有效组合）:
+        #   is_block  is_statement  is_atom   |  含义
+        #   ──────────────────────────────────┼─────────────────
+        #    false       None       false     |  普通规则（默认）
+        #    false       None       true      |  原子规则（Number/Identifier）
+        #    false       false      false     |  非语句规则（AnsiInputDecl）
+        #    false       true       false     |  显式语句规则
+        #    true        None       false     |  块规则（ModuleBlock）
+        #    true        false      false     |  块但非语句（Root）
+        #   ──────────────────────────────────┴─────────────────
+        #   is_block + is_atom 同时为真不可能存在（互斥解析路径）
+        struct = getattr(self, "structure", None) or {}
+        self.is_block = struct.get("is_block", False)
+        self.is_statement = struct.get("is_statement", None)
+        self.is_atom = struct.get("is_atom", False)
 
-        用于 statement_rule_names 过滤：仅含 ! 前缀的 end_case 不应视为语句级规则。
+    def has_pass_end_case(self) -> bool:
+        """检查该规则是否为语句级规则。
+
+        用于 statement_rule_names 过滤：
+        - is_statement=True  → 明确标记为语句规则
+        - is_statement=False → 明确排除
+        - is_statement=None  → 未显式设置，回退到 end_case 启发式判断
         """
+        stmt = getattr(self, "is_statement", None)
+        if stmt is True:
+            return True
+        if stmt is False:
+            return False
+        # None：用 end_case 启发式
         ec = getattr(self, "end_case", [])
         return any(isinstance(item, str) and not item.startswith("!") for item in ec)
 
     def dump(self) -> dict:
         return {
             self.name: {
-                "production": getattr(self, "production", []),
+                "production": self.prods,
                 "node": getattr(self, "node", None),
             }
         }
@@ -288,6 +348,11 @@ class GrammarRule:
 
     def __repr__(self) -> str:
         return f"<GrammarRule {self.name}>"
+
+    @property
+    def prods(self) -> list:
+        """生产式列表的快捷访问"""
+        return getattr(self, "production", [])
 
 
 class GrammarRulesRegister:
@@ -375,86 +440,3 @@ class GrammarRulesRegister:
             self.rules[rule_name] = rule
         self._loaded_dirs = cached | {rules_dir}
         return self.rules
-
-
-class Node:
-
-    def __init__(self, node_name: str, **kwargs) -> None:
-        self.node_name = node_name
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    @staticmethod
-    def _dump_item(item):
-        # 递归处理 Node、dict、list，过滤 None 和空列表
-        if isinstance(item, Node):
-            return item.dump()
-        if isinstance(item, dict):
-            # 过滤掉值为 None 或空列表的键值对
-            filtered = {}
-            for k, v in item.items():
-                if v is None:
-                    continue
-                if isinstance(v, list) and len(v) == 0:
-                    continue
-                dumped_v = Node._dump_item(v)
-                if dumped_v is not None:
-                    filtered[k] = dumped_v
-            return filtered if filtered else None
-        if isinstance(item, list):
-            # 过滤掉列表中的 None 和空列表项
-            filtered = [Node._dump_item(x) for x in item if x is not None]
-            filtered = [
-                x for x in filtered if x is not None
-            ]  # 二次过滤（以防 _dump_item 返回 None）
-            return filtered if filtered else None
-        # 基本类型直接返回
-        return item
-
-    def dump(self):
-        result = {}
-        for attr, value in self.__dict__.items():
-            if attr == "node_name":
-                continue
-            if value is None:
-                continue
-            if isinstance(value, list) and len(value) == 0:
-                continue
-            dumped = self._dump_item(value)
-            if dumped is not None:
-                result[attr] = dumped
-        return {self.node_name: result}
-
-    def add_sub_node(self, sub: "Node") -> None:
-        if not hasattr(self, "sub_node"):
-            self.sub_node = []
-        self.sub_node.append(sub)
-
-    def iter_children(self):
-        seen = set()
-        if hasattr(self, "sub_node"):
-            seen.update(id(c) for c in self.sub_node)
-            yield from self.sub_node
-        for attr_name in vars(self):
-            val = getattr(self, attr_name)
-            if isinstance(val, Node):
-                if id(val) not in seen:
-                    seen.add(id(val))
-                    yield val
-                continue
-            if not isinstance(val, list):
-                continue
-            for item in val:
-                if isinstance(item, Node) and id(item) not in seen:
-                    seen.add(id(item))
-                    yield item
-
-    def add_attr(self, attr_name: str, attr_value) -> None:
-        setattr(self, attr_name, attr_value)
-
-    def __str__(self) -> str:
-        attrs = {k: v for k, v in self.__dict__.items()}
-        return f'{self.node_name}({", ".join(f"{k}={v}" for k,v in attrs.items())})'
-
-    def __repr__(self) -> str:
-        return f'"{self.node_name}"'

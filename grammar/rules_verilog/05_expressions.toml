@@ -6,7 +6,7 @@
 [BitWidthLiteral]
 [BitWidthLiteral.parser]
 production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
-atomic = true
+structure = { is_atom = true }
 [BitWidthLiteral.parser.node]
 width = "$1"
 value = "$3"
@@ -23,7 +23,7 @@ layout = { line = [
 [Number]
 [Number.parser]
 production = ["literal.number"]
-atomic = true
+structure = { is_atom = true }
 [Number.parser.node]
 value = "$1"
 [Number.renderer]
@@ -32,7 +32,7 @@ layout = { ref = "value" }
 [Identifier]
 [Identifier.parser]
 production = ["id"]
-atomic = true
+structure = { is_atom = true }
 inline = false
 [Identifier.parser.node]
 content = "$1.value"
@@ -47,7 +47,7 @@ layout = { ref = "content" }
 [ParenthesizedExpr]
 [ParenthesizedExpr.parser]
 production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
-atomic = true
+structure = { is_atom = true }
 [ParenthesizedExpr.parser.node]
 expr = "$2"
 [ParenthesizedExpr.renderer]
@@ -81,7 +81,7 @@ production = [
     "bracket.r_square_bracket",
     "(bracket.l_square_bracket,@SelectSuffix,bracket.r_square_bracket)*",
 ]
-atomic = true
+structure = { is_atom = true }
 [SelectExpr.parser.node]
 base = "$1"
 first_suffix = "$3"
@@ -103,7 +103,7 @@ production = [
     "(symbol.base.comma,@Expression)*",
     "bracket.r_curly_bracket",
 ]
-atomic = true
+structure = { is_atom = true }
 [ConcatExpr.parser.node]
 first = "$2"
 rest = "$3.items[*].sub_node[1]"
@@ -120,7 +120,7 @@ production = [
     "bracket.r_curly_bracket",
     "bracket.r_curly_bracket",
 ]
-atomic = true
+structure = { is_atom = true }
 [ReplicateExpr.parser.node]
 count = "$2"
 value = "$4"
@@ -147,7 +147,7 @@ production = [
     "@ArgumentList?",
     "bracket.r_parentheses",
 ]
-atomic = true
+structure = { is_atom = true }
 [CallExpr.parser.node]
 callee = "$1"
 args = "$3"
@@ -163,7 +163,7 @@ production = [
     "@ArgumentList?",
     "bracket.r_parentheses",
 ]
-atomic = true
+structure = { is_atom = true }
 [SysFuncCall.parser.node]
 callee = "$2"
 args = "$4"
@@ -228,6 +228,7 @@ tail = "$2"
 
 [Expression]
 [Expression.parser]
+structure = { is_statement = false }
 production = ["@LogicOrExpr"]
 pratt = true
 end_case = ["symbol.base.comma", "symbol.base.semicolon", "bracket.r_parentheses", "bracket.r_square_bracket", "bracket.r_curly_bracket", "symbol.base.colon"]

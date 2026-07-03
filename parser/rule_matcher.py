@@ -34,23 +34,26 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
 def _find_sync_token(
     rule: GrammarRule, from_index: int, grammar_rules: dict
 ) -> set[str]:
-    """从产生式列表中查找第 from_index 个元素之后的同步 token 集合。
-
-    跳过 optional/repeat 元素，找到第一个非可选产生式的起始 token。
-    如果到末尾都没有找到，使用规则的 end_case。
-    """
-    prods = getattr(rule, "production", [])
+    """从产生式列表中查找第 from_index 个元素之后的同步 token 集合（结果缓存）。"""
+    cache = getattr(rule, "_sync_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(rule, "_sync_cache", cache)
+    if from_index in cache:
+        return cache[from_index]
+    prods = rule.prods
     for i in range(from_index, len(prods)):
         prod = prods[i]
-        # 跳过带 ? 的可选元素和 * 的重复元素
         if prod.endswith("?") or prod.endswith("*"):
             continue
         tokens = _first_token_of_spec(prod, grammar_rules)
         if tokens:
+            cache[from_index] = tokens
             return tokens
-    # 兜底：使用 end_case
     ec = getattr(rule, "end_case", [])
-    return {t for t in ec if isinstance(t, str) and not t.startswith("!")}
+    result = {t for t in ec if isinstance(t, str) and not t.startswith("!")}
+    cache[from_index] = result
+    return result
 
 
 def _find_recovery_strategy(
@@ -65,10 +68,13 @@ def _find_recovery_strategy(
         "$3.$1"       — 第 3 个元素的第 1 个子元素
 
     可选值（策略名）：
-        "skip_to_end"          — （默认）同步到 end_case / 后继生产式 / 当前生产式自然结束
-        "skip_one"             — 只跳过当前一个 token，不向前扫描
-        "skip_to_matching"     — 括号感知扫描：维护嵌套深度，遇到匹配的关闭括号时停止
-        "skip_to_newline"      — 跳到下一个换行，用于语句级恢复（吞掉本行剩余内容）
+        "skip_to_end"             — （默认）同步到 end_case / 后继生产式 / 当前生产式自然结束
+        "skip_one"                — 只跳过当前一个 token，不向前扫描
+        "skip_to_matching"        — 括号感知扫描：维护嵌套深度，遇到匹配的关闭括号时停止
+        "skip_to_newline"         — 跳到下一个换行，用于语句级恢复（吞掉本行剩余内容）
+        "skip_then_retry_until"   — 两阶段：先 skip_to_end 到同步点，然后重新尝试匹配同一产生式。
+                                    重试成功则用真实解析结果替代 ErrorNode，失败则回退为 ErrorNode。
+                                    类似 Chumsky 的 skip_then_retry_until 策略。
     """
     recovery_cfg = getattr(rule, "recovery", {})
     if not isinstance(recovery_cfg, dict) or prod_index is None:
@@ -109,7 +115,7 @@ def _find_current_end(spec: str, grammar_rules: dict, bracket_map: dict[str, str
     if raw.startswith("@"):
         rule = grammar_rules.get(raw[1:])
         if rule:
-            prods = getattr(rule, "production", [])
+            prods = rule.prods
             if prods:
                 return _find_current_end(prods[-1], grammar_rules, bracket_map)
         return set()
@@ -130,11 +136,21 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
 
 
 def _get_recovery_cfg(self, rule: GrammarRule) -> bool:
-    """规则级 recovery 检查：局部 recovery=true 优先，否则回退全局。"""
+    """规则级 recovery 检查。
+
+    全局开关 (global_recovery) 为 master switch：
+    - False → 所有 recovery 禁用（包括局部 recovery=true）
+    - True  → 规则级 recovery=truedict 生效
+    """
+    if not getattr(self, "global_recovery", False):
+        return False
     p = getattr(rule, "parser", {})
-    if isinstance(p, dict) and p.get("recovery"):
-        return True
-    return getattr(self, "global_recovery", False)
+    if isinstance(p, dict):
+        val = p.get("recovery")
+        if isinstance(val, dict):
+            return True  # dict = 有子策略配置（如 PortParens）
+        return bool(val)
+    return False
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
@@ -302,6 +318,17 @@ def _try_production(
                 if t is not None and t.type in end_case_tokens:
                     break
                 context.advance_token()
+
+        # skip_then_retry_until: skip 后重新尝试匹配同一产生式
+        if strategy == "skip_then_retry_until":
+            retry_snmp = context.create_snapshot()
+            if self._prepare_production(context, feature_tree):
+                retry_result = process_production_node(self, feature_tree, context)
+                if retry_result is not None:
+                    return retry_result  # 恢复成功！
+            # 重试失败，回退到 skip-stop 位置
+            context.restore_snapshot(retry_snmp)
+
         err.add_attr("raw", first_raw)
         return err
 
@@ -319,7 +346,7 @@ def match_productions(
         matched_nodes=[...] & error_node=None → 完全成功
     """
     # 原子规则始终严格回溯，不受 recovery 影响
-    if getattr(rule, "atomic", False):
+    if getattr(rule, "is_atom", False):
         recovery = False
     else:
         recovery = _get_recovery_cfg(self, rule)
@@ -328,7 +355,7 @@ def match_productions(
     # 同步 committed 标志到 context，供子规则（如 optional）查询
     context._committed = committed
 
-    prods = getattr(rule, "production", [])
+    prods = rule.prods
     all_matched_nodes = []
     error_node = None
 
@@ -344,10 +371,7 @@ def match_productions(
             _pushed_end_case = True
 
     for i, prod in enumerate(prods):
-        self._log_state(
-            f"处理产生式: {prod} | {self._debug_token_info(context)}",
-            context=context,
-        )
+        self._log_state(lambda: f"产生式: {prod} | {self._debug_token_info(context)}")
 
         # 预先计算下一个生产式的同步 token，传给当前元素作为 recovery 停止边界
         next_sync = _find_sync_token(rule, i + 1, self.grammar_rules)
@@ -439,7 +463,7 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
         )
 
     self._log_state(
-        f"尝试匹配规则: {rule.name} | {self._debug_token_info(context)}",
+        lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
         context=context,
     )
     context.update_current_rule(rule)
@@ -566,7 +590,7 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
         return True
 
     # 说明 body 由 parse_block 管理，end_case 仅作辅助验证
-    for prod in getattr(rule, "production", []):
+    for prod in rule.prods:
         try:
             feats = analyze_production_features(prod)
         except Exception:

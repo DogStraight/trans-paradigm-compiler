@@ -1,17 +1,4 @@
-"""
-group 原语 — 组（可能在一行或折行）
-
-TOML 表示:
-    { group = [
-        " #(",
-        { ref = "params" },
-        ")",
-    ] }
-
-group 会自动尝试 flat 版本（一行），
-如果超宽则回退到 broken 版本（保留换行）。
-"""
-
+"""group 原语 — flat/broken 二象性"""
 from typing import Any, Optional, List
 from core.define import Node
 from ..doc import Doc, Empty, Concat, group
@@ -19,14 +6,8 @@ from .registry import register
 
 
 @register("group")
-def eval_group(
-    expr: dict,
-    node: Node,
-    indent: int,
-    parent_layout: Optional[dict],
-    renderer: Any,
-) -> Optional[Doc]:
-    """求值 group 原语"""
+def eval_group(expr: dict, node: Node, indent: int,
+               parent_layout: Optional[dict], renderer: Any) -> Optional[Doc]:
     parts: List[Doc] = []
     for e in expr["group"]:
         d = renderer._eval(e, node, indent, parent_layout)

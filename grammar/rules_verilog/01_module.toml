@@ -2,10 +2,12 @@
 # Verilog 语法规则 — 模块声明
 #
 # recovery 恢复策略（通过 $N 寻址指定 production 元素）：
-#   "skip_to_end"         — （默认）同步到 end_case / 后继生产式
-#   "skip_one"            — 只跳过当前一个 token
-#   "skip_to_matching"    — 括号感知：跳过到匹配的关闭括号
-#   "skip_to_newline"     — 跳到下一个换行（吞掉本行剩余内容）
+#   "skip_to_end"             — （默认）同步到 end_case / 后继生产式
+#   "skip_one"                — 只跳过当前一个 token
+#   "skip_to_matching"        — 括号感知：跳过到匹配的关闭括号
+#   "skip_to_newline"         — 跳到下一个换行（吞掉本行剩余内容）
+#   "skip_then_retry_until"   — 两阶段：先 skip 到同步点，再重试匹配同一产生式。
+#                               重试成功则用真实解析结果替代 ErrorNode。
 # ============================================================================
 
 [ModuleDecl]
@@ -89,6 +91,7 @@ layout = { join = ", ", first_soft = true, nest = 1, items = "params" }
 
 [ParamDecl]
 [ParamDecl.parser]
+structure = { is_statement = false }
 production = [
     "keyword.parameter",
     "@Identifier",

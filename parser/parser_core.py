@@ -418,6 +418,7 @@ class Parser:
         if rules_dir:
             try:
                 from lexer.lexer_utils import get_token_define
+
                 path = f"{rules_dir}/base/token.toml"
                 data = get_token_define(path)
                 for open_c, close_c, name in data.get("bracket", {}).get("pairs", []):
@@ -460,9 +461,7 @@ class Parser:
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
-            if hasattr(rule, "has_pass_end_case")
-            and rule.has_pass_end_case()
-            and name != "Expression"
+            if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
         ]
         # RuleSelector：外部注入优先，回退内部创建
         if rule_selector is not None:
@@ -487,9 +486,9 @@ class Parser:
             (
                 rule
                 for rule in self.grammar_rules.values()
-                if getattr(rule, "atomic", False)
+                if getattr(rule, "is_atom", False)
             ),
-            key=lambda r: len(getattr(r, "production", [])),
+            key=lambda r: len(r.prods),
             reverse=True,
         )
         # inline comment 指纹匹配（解析后从源 token 流回溯）
@@ -509,27 +508,22 @@ class Parser:
         level: int = LOG_DEBUG,
         context: ParseContext | None = None,
     ) -> None:
-        """带级别的日志记录。
-
-        级别规则：
-            - DEBUG（默认）：仅 verbose=True 时写入
-            - INFO：始终写入
-            - WARN：始终写入到日志文件 + stderr
-            - ERROR：始终写入到日志文件 + stderr
-
-        Args:
-            mode: "w" 覆盖写入，"a" 追加。只在文件打开时有效。
-        """
+        """带级别的日志记录。支持 action 为 callable 惰性求值。"""
         log_path = getattr(self, "debug_log_file", None)
         if log_path is None:
+            # 无日志文件：WARN 输出到 stderr，其余跳过
+            if level >= self.LOG_WARN:
+                if callable(action):
+                    action = action()
+                print(f"[parser] {action}", file=sys.stderr)
             return
 
+        if callable(action):
+            action = action()
         if level >= self.LOG_INFO or self.verbose:
             indent = self._log_indent(context) if context else ""
             with open(log_path, mode, encoding="utf-8") as f:
                 f.write(f"{indent}[{action}]\n")
-        if level >= self.LOG_WARN:
-            print(f"[parser] {action}", file=sys.stderr)
 
     def _log_info(self, action: str, context: ParseContext | None = None) -> None:
         """INFO 级日志：始终输出"""
@@ -552,7 +546,7 @@ class Parser:
         """计算规则可能接受的起始 token 类型集合，返回可读描述。"""
         from .rule_selector import analyze_production_features
 
-        prods = getattr(rule, "production", [])
+        prods = rule.prods
         if not prods:
             return "<empty production>"
         try:
@@ -614,7 +608,7 @@ class Parser:
             self._dump_failure_summary(context)
             raise
         except Exception as exc:
-            self._log_info(f"解析异常: {exc} | token={self._debug_token_info(context)}")
+            self._log_info(f"解析异常: {exc} | token={context.token_pointer}")
             self._dump_failure_summary(context)
             raise
 
@@ -638,7 +632,7 @@ class Parser:
                 file=sys.stderr,
             )
         print(
-            f"[parser]  ═══ 当前 token: {self._debug_token_info(context)} ═══",
+            f"[parser]  ═══ 当前 token: {context.token_pointer} ═══",
             file=sys.stderr,
         )
 

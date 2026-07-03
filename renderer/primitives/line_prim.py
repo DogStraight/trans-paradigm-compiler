@@ -1,22 +1,4 @@
-"""
-line 原语 — 行布局（多个元素水平排列）
-
-TOML 表示:
-    { line = [
-        "module ",
-        { ref = "module_name" },
-        { soft = true },
-        " (",
-        { ref = "ports" },
-        ");",
-    ] }
-
-支持:
-    soft / break 在 line 内控制换行点
-    nest         额外缩进
-    indent       soft/break 的附加缩进
-"""
-
+"""line 原语 — 行布局"""
 from typing import Any, Optional, List
 from core.define import Node
 from ..doc import Doc, Empty, Line as SoftLine, Break, Concat, Nest, group
@@ -24,14 +6,8 @@ from .registry import register
 
 
 @register("line")
-def eval_line(
-    expr: dict,
-    node: Node,
-    indent: int,
-    parent_layout: Optional[dict],
-    renderer: Any,
-) -> Optional[Doc]:
-    """求值 line 原语"""
+def eval_line(expr: dict, node: Node, indent: int,
+              parent_layout: Optional[dict], renderer: Any) -> Optional[Doc]:
     nest_level = expr.get("nest", 0)
     parts: List[Doc] = []
     pending_nest = 0

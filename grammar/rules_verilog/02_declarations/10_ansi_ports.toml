@@ -29,6 +29,7 @@ layout = { ref = "decl" }
 
 [TaskAnsiInputDecl]
 [TaskAnsiInputDecl.parser]
+structure = { is_statement = false }
 production = ["keyword.input", "@PortTail"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
 [TaskAnsiInputDecl.parser.node]
@@ -96,6 +97,7 @@ layout = { line = [
 
 [AnsiInputDecl]
 [AnsiInputDecl.parser]
+structure = { is_statement = false }
 production = ["@PortDeclPrefix", "@DeclaratorList"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiInputDecl.parser.node]
@@ -118,6 +120,7 @@ layout = { line = [
 
 [AnsiOutputDecl]
 [AnsiOutputDecl.parser]
+structure = { is_statement = false }
 production = ["@PortDeclPrefix", "@DeclaratorList"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiOutputDecl.parser.node]
@@ -150,6 +153,7 @@ layout = { line = [
 
 [AnsiInoutDecl]
 [AnsiInoutDecl.parser]
+structure = { is_statement = false }
 production = ["@PortDeclPrefix", "@DeclaratorList"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiInoutDecl.parser.node]

@@ -24,11 +24,7 @@ def parse_sentence(self, context: ParseContext) -> Node | None:
         self.pre_hints,
         self.scope_stack.lookup,
     )
-    self._log_state(
-        f"parse_sentence: {self._debug_token_info(context)} "
-        f"candidates={[r.name for r in candidates]}",
-        context=context,
-    )
+    self._log_state(lambda: f"sentence: {self._debug_token_info(context)} candidates={[r.name for r in candidates]}")
     if not candidates:
         return None
 
@@ -117,12 +113,10 @@ def parse_block_body(
 ) -> bool:
     """循环解析句子直到遇到结束符或文件末尾。
 
-    遇到无法匹配的 token 时做逐 token 恢复：
-    跳过当前 token 为 ErrorNode，继续下一句。
+    global_recovery=False 时：遇到无法匹配的 token 直接 break（纯回溯）。
+    global_recovery=True 时：做逐 token 跳过恢复，创建 ErrorNode 继续。
     """
     end_token = _get_block_end(rule)
-    recovery_limit = getattr(self, "_recovery_max_skips", 20)
-    skip_count = 0
 
     while context.has_more_tokens():
         self._skip_tokens(context, tuple(self.skip_types))
@@ -139,17 +133,17 @@ def parse_block_body(
 
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
-            # 逐 token 恢复：跳过一个 token 为 ErrorNode，继续
+            # 全局回溯模式：直接退出块体
+            if not getattr(self, "global_recovery", False):
+                break
+            # 恢复模式：跳过当前 token（所有语句级规则都无法匹配它），继续下一轮
             bad = context.peek_token()
             if bad is None:
-                break
-            if skip_count >= recovery_limit:
                 break
             err = Node("Error")
             err.add_attr("raw", bad.content)
             block_node.add_sub_node(err)
             context.advance_token()
-            skip_count += 1
             continue
         block_node.add_sub_node(stmt_node)
     return True

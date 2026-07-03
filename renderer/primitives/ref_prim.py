@@ -1,13 +1,4 @@
-"""
-ref 原语 — 子节点引用
-
-TOML 表示:
-    { ref = "child_name" }
-
-引用 AST 节点的某个字段，递归渲染该子节点。
-支持单节点和列表。
-"""
-
+"""ref 原语 — 子节点引用"""
 from typing import Any, Optional, List
 from core.define import Node
 from ..doc import Doc, Text, Concat, Empty
@@ -15,14 +6,8 @@ from .registry import register
 
 
 @register("ref")
-def eval_ref(
-    expr: dict,
-    node: Node,
-    indent: int,
-    parent_layout: Optional[dict],
-    renderer: Any,
-) -> Optional[Doc]:
-    """求值 ref 原语，ref 所在节点的 _error 也会渲染"""
+def eval_ref(expr: dict, node: Node, indent: int,
+             parent_layout: Optional[dict], renderer: Any) -> Optional[Doc]:
     child = getattr(node, expr["ref"], None)
 
     parts: List[Doc] = []

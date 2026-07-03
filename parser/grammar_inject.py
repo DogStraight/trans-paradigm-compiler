@@ -54,7 +54,7 @@ def propagate_alternatives(
     for other_name, other_rule in rules.items():
         if other_name in skip_names:
             continue
-        other_prods = list(getattr(other_rule, "production", []))
+        other_prods = list(other_rule.prods)
         changed = False
         for i, prod in enumerate(other_prods):
             if not isinstance(prod, str):
@@ -100,7 +100,7 @@ def inject_replace_rule(
                     f"  [inject/replace] {rule_name}.end_case mismatch: has {current}"
                 )
         else:
-            prods = list(getattr(rule, "production", []))
+            prods = list(rule.prods)
             changed = False
             for i, prod in enumerate(prods):
                 if isinstance(prod, str) and old_str in prod:
@@ -142,7 +142,7 @@ def inject_productions(
                         print(f"  [inject] {tgt_name}.end_case += {current}")
                 continue
 
-            prods = list(getattr(target_rule, "production", []))
+            prods = list(target_rule.prods)
             if not prods:
                 continue
             if tgt_idx >= len(prods):
@@ -164,7 +164,7 @@ def inject_productions(
             for other_name, other_rule in rules.items():
                 if other_name in inject_config or other_name == tgt_name:
                     continue
-                other_prods = list(getattr(other_rule, "production", []))
+                other_prods = list(other_rule.prods)
                 changed = False
                 for i, prod in enumerate(other_prods):
                     if not isinstance(prod, str):

@@ -1,14 +1,4 @@
-"""
-opt 原语 — 条件可选内容
-
-TOML 表示:
-    { opt = { ref = "params" } }
-    { opt = { group = [" #(", { ref = "params" }, ")"] } }
-
-当引用的子节点不存在时返回 Empty（而非 None），
-避免上游 group 因 None 而整体跳过。
-"""
-
+"""opt 原语 — 条件可选"""
 from typing import Any, Optional
 from core.define import Node
 from ..doc import Doc, Empty
@@ -16,14 +6,8 @@ from .registry import register
 
 
 @register("opt")
-def eval_opt(
-    expr: dict,
-    node: Node,
-    indent: int,
-    parent_layout: Optional[dict],
-    renderer: Any,
-) -> Doc:
-    """求值 opt 原语"""
+def eval_opt(expr: dict, node: Node, indent: int,
+             parent_layout: Optional[dict], renderer: Any) -> Doc:
     inner = expr["opt"]
 
     # 检查引用是否缺失

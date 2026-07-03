@@ -174,7 +174,6 @@ def run_pipeline_on_source(
             for n, r in rules.items()
             if hasattr(r, "has_pass_end_case")
             and r.has_pass_end_case()
-            and n != "Expression"
         ]
         rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
         lexer = Lexer(rules_dir=rules_dir)
@@ -440,6 +439,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Re-inject inline comment fingerprints",
     )
+    parser.add_argument(
+        "--recovery",
+        action="store_true",
+        help="Enable production-level error recovery (slower, default off)",
+    )
 
     parser.add_argument(
         "--rules-dir",
@@ -483,6 +487,7 @@ def main() -> None:
         transform_enabled=args.transform,
         renderer_enabled=args.renderer,
         stage=args.stage,
+        global_recovery=args.recovery,
         rules_dir=args.rules_dir,
         ext_dir=args.ext_dir,
     )
