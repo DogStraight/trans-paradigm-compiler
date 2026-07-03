@@ -2,6 +2,8 @@
 .vscode
 verilog/tests/*
 verilog/.cache/*
+verilog/output/
+verilog/test_report.json
 __pycache__
 */__pycache__
 parser_debug.log

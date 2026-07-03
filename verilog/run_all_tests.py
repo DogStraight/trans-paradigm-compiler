@@ -1,99 +1,73 @@
 #!/usr/bin/env python3
-"""End-to-end regression test — 与 run_pipeline.py 共享同套测试发现逻辑。
+"""
+Regression test runner – schedules run_pipeline.py for each test case.
+Does not re-implement the pipeline, instead imports and calls run_pipeline_on_source.
 
-用法:
-    python run_all_tests.py                    # 所有测试
-    python run_all_tests.py normal             # normal 组
-    python run_all_tests.py errors             # errors 组
-    python run_all_tests.py normal counter     # normal/ref_counter
-    python run_all_tests.py -v                 # 详细输出
-    python run_all_tests.py --json             # JSON 报告
+Usage:
+    python run_all_tests.py                    # all tests
+    python run_all_tests.py normal             # normal group only
+    python run_all_tests.py errors             # errors group only
+    python run_all_tests.py normal counter     # normal/ref_counter only
+    python run_all_tests.py -v                 # verbose output
+    python run_all_tests.py --json             # JSON report
+    python run_all_tests.py --expand-macros    # enable macro expansion
+    python run_all_tests.py --inline-comments  # enable inline comment injection
 """
 
-import sys, os, json, time
+import sys
+import os
+import json
+import time
+import io
+from typing import List, Tuple, Dict, Any
 
+# Force stdout to UTF-8
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
+
+# Add project root to path for importing pipeline
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from lexer import Lexer
-from parser import Parser, setup_grammar
-from core.define import ParseError, FileManager
-from parser.rule_selector import RuleSelector as _RS, set_default_cache_path
-from transform.pre.normalizer import normalize_ast
-from analyzer import SemanticAnalyzer
-from transform.post import AstTransformer
-from transform.post.engine import ConfigDrivenTransform
-from renderer.renderer import Renderer
 
-RULES_DIR = os.path.join(project_root, "grammar", "rules_verilog")
-EXT_DIR = os.path.join(project_root, "grammar", "rules_verilog_ext")
-
-
-def run_all(
-    verbose=False,
-    json_out=False,
-    inline_comments=False,
-    expand_macros=False,
-    group_filter=None,
-    name_filter=None,
-):
-    # Setup start token cache
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    cache_path = os.path.join(base_dir, ".cache", "start_tokens.json")
-    set_default_cache_path(cache_path)
-
-    # Load grammar
-    rules = setup_grammar(RULES_DIR, EXT_DIR)
-
-    # Initialize parser
-    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False)
-    parser.grammar_rules = rules
-    parser.statement_rule_names = [
-        name
-        for name, rule in rules.items()
-        if hasattr(rule, "has_pass_end_case")
-        and rule.has_pass_end_case()
-        and name != "Expression"
-    ]
-    parser.rule_selector = _RS(rules, parser.statement_rule_names)
-    parser.atomic_rules = sorted(
-        (rule for rule in rules.values() if getattr(rule, "atomic", False)),
-        key=lambda r: len(getattr(r, "production", [])),
-        reverse=True,
-    )
-
-    lex = Lexer(rules_dir=RULES_DIR)
-    renderer = Renderer(RULES_DIR)
-    analyzer = SemanticAnalyzer(rules)
-    transformer = AstTransformer()
-    transformer.register(
-        ConfigDrivenTransform(
-            rules=rules,
-            ext_dir=FileManager.get_full_path(EXT_DIR),
-        )
-    )
-
-    # 收集测试用例 — 与 run_pipeline.py 相同的双目录发现
+def discover_tests(
+    base_dir: str, group_filter: str | None = None, name_filter: str | None = None
+) -> List[Tuple[str, str, str]]:
+    """Discover test files. Returns list of (name, full_path, group)."""
     tests_dir = os.path.join(base_dir, "tests")
-    cases: list[tuple[str, str, str]] = []  # (name, path, group)
+    cases = []
     groups = [group_filter] if group_filter else ["normal", "errors"]
     for group in groups:
-        group_ref = os.path.join(tests_dir, group, "ref")
-        if not os.path.isdir(group_ref):
+        ref_dir = os.path.join(tests_dir, group, "ref")
+        if not os.path.isdir(ref_dir):
             continue
-        for f in os.listdir(group_ref):
+        for f in sorted(os.listdir(ref_dir)):
             if not f.endswith(".v") or f.startswith("_"):
                 continue
             name = f.replace(".v", "")
             if name_filter and name != name_filter:
                 continue
-            cases.append((name, os.path.join(group_ref, f), group))
-    cases.sort(key=lambda x: x[0])
+            cases.append((name, os.path.join(ref_dir, f), group))
+    return cases
 
+
+def run_all(
+    verbose: bool = False,
+    json_out: bool = False,
+    inline_comments: bool = False,
+    expand_macros: bool = False,
+    group_filter: str | None = None,
+    name_filter: str | None = None,
+) -> bool:
+    """Run all tests and return True if all pass."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Import the core pipeline function (shared context initializes on first call)
+    from run_pipeline import run_pipeline_on_source
+
+    cases = discover_tests(base_dir, group_filter, name_filter)
     if not cases:
-        print("[error] no test cases found")
+        print("[error] no test cases found", file=sys.stderr)
         return False
 
     results = []
@@ -103,72 +77,60 @@ def run_all(
     t_start = time.time()
 
     for name, path, group in cases:
-        with open(path, encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             source = f.read()
 
-        macro_table = {}
-        directive_lines: list[str] = []
-        original_source = source
-        if expand_macros:
-            from preprocessor import preprocess
-            source, macro_table, directive_lines = preprocess(source, RULES_DIR)
+        out_dir = os.path.join(base_dir, "tests", group, "gen")
+        os.makedirs(out_dir, exist_ok=True)
 
-        tokens = lex.tokenize(source)
+        # 日志抑制
+        if not verbose:
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = io.StringIO()
+            sys.stderr = io.StringIO()
         try:
-            ast = parser.parse(tokens)
-            if ast is None:
-                raise RuntimeError("parser returned None")
-            ast = normalize_ast(ast)
+            result: Dict[str, Any] = run_pipeline_on_source(
+                source=source,
+                input_path=path,
+                out_dir=out_dir,
+                expand_macros=expand_macros,
+                inline_comments=inline_comments,
+                debug=False,
+                quiet=True,
+                analyzer_enabled=True,
+                transform_enabled=True,
+                renderer_enabled=True,
+                stage=None,
+            )
+        finally:
+            if not verbose:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
 
-            ast = analyzer.analyze(ast)
-            scope = analyzer.root_scope
-            assert scope is not None, "SemanticAnalyzer did not set root_scope"
-            ast = transformer.transform(ast, scope)
+        success = result["success"]
+        err_msg = result["error"] or ""
 
-            output = renderer.render(ast)
+        # 判定测试结果
+        if group == "errors":
+            passed = not success
+        else:
+            passed = success
 
-            # 逆向宏：保护字面量 → 全局替换 → 恢复字面量
-            if macro_table:
-                from preprocessor import protect_and_reverse, load_macro_config
-                config = load_macro_config(RULES_DIR)
-                define_kw = config.get("directives", {}).get("define", "define")
-                output = protect_and_reverse(output, original_source, macro_table,
-                                             define_keyword=define_kw)
-
-            # 恢复被剥离的指令行
-            if directive_lines:
-                header = "\n".join(directive_lines)
-                output = header + "\n" + output
-
-            line_count = len([l for l in output.split("\n") if l.strip()])
-
-            # 保存生成文件
-            gen_dir = os.path.join(tests_dir, group, "gen")
-            os.makedirs(gen_dir, exist_ok=True)
-            gen_path = os.path.join(gen_dir, name.replace("ref_", "gen_") + ".v")
-            with open(gen_path, "w", encoding="utf-8") as f:
-                f.write(output)
-
+        if passed:
             if group == "errors":
-                results.append((name, True, line_count, ""))
                 total_err += 1
                 status = "ERR"
             else:
-                results.append((name, True, line_count, ""))
                 total_ok += 1
                 status = "OK"
-        except ParseError as e:
-            results.append((name, False, 0, str(e).split("\n")[0]))
+        else:
             total_fail += 1
             status = "FAIL"
-            line_count = 0
-        except Exception as e:
-            results.append((name, False, 0, str(e)))
-            total_fail += 1
-            status = "FAIL"
-            line_count = 0
 
-        print(f"  {name:25s} {status:5s} {line_count:3d} lines")
+        results.append((name, passed, status, err_msg[:60]))
+
+        print(f"  {name:25s} {status:5s} {err_msg[:40]}")
 
     elapsed = time.time() - t_start
     total = total_ok + total_err + total_fail
@@ -185,8 +147,8 @@ def run_all(
             "fail": total_fail,
             "elapsed": round(elapsed, 2),
             "cases": [
-                {"name": n, "ok": ok, "lines": ln, "error": err}
-                for n, ok, ln, err in results
+                {"name": n, "ok": ok, "status": status, "error": err}
+                for n, ok, status, err in results
             ],
         }
         json_path = os.path.join(base_dir, "test_report.json")

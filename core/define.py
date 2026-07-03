@@ -5,6 +5,7 @@ Parser consumes Token and produces Node (AST), GrammarRule drives both
 parsing and rendering.
 """
 
+
 class Token:
 
     def __init__(self, content="", type="", line=0, column=0) -> None:
@@ -23,15 +24,13 @@ class Token:
         return self.content
 
 
-from dataclasses import dataclass
 import tomllib
 import os
 from pathlib import Path
-from typing import List
 
 
-@dataclass
 class FileManager:
+    """纯静态工具类 — 文件路径管理与 TOML 加载。全局单例（无实例状态）。"""
     _base_dir: str = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
@@ -116,6 +115,7 @@ class FileManager:
             overlaps = merged.keys() & data.keys()
             if overlaps:
                 import sys as _sys
+
                 print(
                     f"[loader] {fname} overwrites previous rules: "
                     f"{', '.join(sorted(overlaps))}",
@@ -156,13 +156,17 @@ class ParseError(Exception):
         # 构建详细信息
         parts = [msg]
         if token:
-            parts.append(f"  token: '{token.content}' (type={token.type}) Ln {token.line}")
+            parts.append(
+                f"  token: '{token.content}' (type={token.type}) Ln {token.line}"
+            )
         if rule:
             parts.append(f"  rule: {rule}")
         if path:
             parts.append(f"  path: {path}")
         if candidates is not None:
-            parts.append(f"  candidates ({len(candidates)}): {[r.name if hasattr(r, 'name') else str(r) for r in candidates]}")
+            parts.append(
+                f"  candidates ({len(candidates)}): {[r.name if hasattr(r, 'name') else str(r) for r in candidates]}"
+            )
         if context_info:
             parts.append(f"  ctx: {context_info}")
         super().__init__("\n".join(parts))
@@ -286,9 +290,24 @@ class GrammarRule:
 
 
 class GrammarRulesRegister:
+    """语法规则注册器 — 全局单例模式。
+
+    主管线使用 GrammarRulesRegister.get_default() 获取共享实例，
+    script/skill 等临时场景可创建独立实例 GrammarRulesRegister()。
+    """
+
+    _default_instance: "GrammarRulesRegister | None" = None
+
+    @classmethod
+    def get_default(cls) -> "GrammarRulesRegister":
+        """获取全局默认单例实例。"""
+        if cls._default_instance is None:
+            cls._default_instance = cls()
+        return cls._default_instance
 
     def __init__(self) -> None:
         self.rules: dict[str, GrammarRule] = {}
+        self._loaded_dirs: set[str] = set()
 
     @staticmethod
     def _resolve_peek(rules_dict: dict) -> dict:
@@ -302,6 +321,7 @@ class GrammarRulesRegister:
         不增加运行期耦合。
         """
         import copy
+
         for rule_name, rule_dict in rules_dict.items():
             if rule_name == "file_rules":
                 continue
@@ -331,10 +351,16 @@ class GrammarRulesRegister:
         """
         加载语法规则：优先从目录加载所有 .toml 文件，
         目录不存在或为空时回退到单文件 rules.toml。
+
+        支持缓存：已加载过的目录跳过磁盘 IO，直接使用 self.rules。
         :param rules_dir: 规则目录的相对路径
         """
         if rules_dir == "":
             rules_dir = FileManager.rules_dir
+        # 缓存命中：该目录已加载过
+        cached = getattr(self, "_loaded_dirs", set())
+        if rules_dir in cached and self.rules:
+            return self.rules
         rules_dict = FileManager.load_all_toml(rules_dir)
         if not rules_dict:
             # 回退：单文件加载
@@ -346,6 +372,7 @@ class GrammarRulesRegister:
                 continue
             rule = GrammarRule(rule_name, **rule_dict)  # 解包字典
             self.rules[rule_name] = rule
+        self._loaded_dirs = cached | {rules_dir}
         return self.rules
 
 

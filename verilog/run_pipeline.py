@@ -1,192 +1,249 @@
 #!/usr/bin/env python3
 """
-PyV 编译器端到端测试
-使用 verilog/ref_*.v 作为输入，用 Verilog 语法规则解析，
-再用 Renderer 生成代码，并与参考文件对比。
-
-用法:
-    python run_pipeline.py                    # 默认 led_blinker_ref.v
-    python run_pipeline.py ref_counter        # 测试计数器
-    python run_pipeline.py ref_fsm            # 测试状态机
-    python run_pipeline.py ref_top            # 测试顶层模块
-    python run_pipeline.py ref_alu            # 测试 ALU
-    python run_pipeline.py ref_dff            # 测试 D 触发器
+PyV Compiler Pipeline - End-to-end compilation with stage control.
+Supports direct input, test discovery, macro expansion, inline comments,
+and optional semantic/transform/render stages.
 """
 
-import sys, os
-from core.define import Node
-
-sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
-
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+import sys
+import os
+import json
+import argparse
+from datetime import datetime
+from typing import Optional, Any, Dict, Tuple
 
 from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
-from core.define import FileManager, ParseError
+from core.define import FileManager, ParseError, GrammarRulesRegister
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
 from transform.post import AstTransformer
+from transform.post.engine import ConfigDrivenTransform
+from preprocessor import preprocess, protect_and_reverse, load_macro_config
+from renderer.inline_comment import inject_comments
+
+# 模块级共享管线状态：组件按 rules_dir 缓存，避免重复初始化
+_PIPELINE_SHARED: dict = {}
+
 from scripts.ast_debug import (
     enable_ast_debug,
     dump_ast_compact,
     dump_tokens,
     count_ast_nodes,
 )
-import json
 
-# 可选：后阶段变换插件
-# from transform.post.plugins.implicit_decl import ImplicitDeclPlugin
-# from transform.post.plugins.width_eval import WidthEvalPlugin
+# Add project root to sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Force stdout to UTF-8
+sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
 
-def pipeline():
-    # 支持命令行参数:
-    #   python run_pipeline.py                       # 默认 normal/ref_led_blinker
-    #   python run_pipeline.py normal counter         # 指定组 + 用例
-    #   python run_pipeline.py errors syntax_err      # 错误组 + 用例
-    #   python run_pipeline.py counter               # 自动查找（normal 优先）
-    #   python run_pipeline.py --debug ...
-    #   python run_pipeline.py --inline-comments ...
-    debug = enable_ast_debug()  # 先读环境变量
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    flags = [a for a in sys.argv[1:] if a.startswith("--")]
-    if "--debug" in flags:
-        debug = enable_ast_debug(True)
-        print("[debug] enabled")
-    inline_comments_enable = "--inline-comments" in flags
-
-    if len(args) >= 2 and args[0] in ("normal", "errors"):
-        group_hint = args[0]
-        name_arg = args[1]
-    elif len(args) >= 1 and args[0] in ("normal", "errors"):
-        group_hint = args[0]
-        name_arg = ""  # 不指定用例名，后续报错提示
-    elif len(args) >= 1:
-        group_hint = ""  # 自动查找
-        name_arg = args[0]
-    else:
-        group_hint = ""
-        name_arg = "led_blinker"
-
-    arg = name_arg.replace("ref_", "").replace(".v", "") if name_arg else ""
-    test_name = f"ref_{arg}" if arg else ""
-
+# ---------------------------- Helpers ----------------------------
+def find_test_file(test_name: str, hint: str = "") -> Tuple[str, str, str]:
+    """Find test file in tests/ directory. Returns (full_path, group, stem)."""
     src_dir = os.path.dirname(os.path.abspath(__file__))
     tests_dir = os.path.join(src_dir, "tests")
+    groups = [hint] if hint else ["normal", "errors"]
+    stem = test_name.replace("ref_", "").replace(".v", "")
+    for group in groups:
+        d = os.path.join(tests_dir, group, "ref")
+        f = os.path.join(d, f"ref_{stem}.v")
+        if os.path.exists(f):
+            return f, group, stem
+    return "", "", ""
 
-    # 双目录查找：可按 group 指定，或自动扫描 normal → errors
-    def _find_src(test_name: str, hint: str) -> tuple[str, str, str]:
-        groups = [hint] if hint else ["normal", "errors"]
-        for group in groups:
-            d = os.path.join(tests_dir, group, "ref")
-            f = os.path.join(d, test_name + ".v")
-            if os.path.exists(f):
-                return f, d, group
-        return "", "", ""
 
-    src_file, ref_dir, test_group = _find_src(test_name, group_hint)
-    if not src_file:
-        groups = [group_hint] if group_hint else ["normal", "errors"]
-        print(f"[error] source not found: {test_name} (searched: {', '.join(groups)})")
-        sys.exit(1)
+def ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
 
-    stem = os.path.splitext(os.path.basename(src_file))[0]
 
-    out_base = os.path.join(tests_dir, test_group)
-    gen_dir = os.path.join(out_base, "gen")
-    ast_dir = os.path.join(out_base, "ast")
-    sym_dir = os.path.join(out_base, "symbols")
-    os.makedirs(gen_dir, exist_ok=True)
-    os.makedirs(ast_dir, exist_ok=True)
-    os.makedirs(sym_dir, exist_ok=True)
-    gen_file = os.path.join(gen_dir, "gen_" + stem.replace("ref_", "") + ".v")
-    ast_json = os.path.join(ast_dir, stem.replace("ref_", "") + ".json")
-    sym_json = os.path.join(sym_dir, stem.replace("ref_", "") + ".json")
+def save_json(data: Any, path: str, label: str = "", log_fn=None) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    if label:
+        (log_fn or print)(f"[{label}] saved ({os.path.getsize(path)} bytes)")
 
-    # 1. 读取源文件
-    with open(src_file, "r", encoding="utf-8") as f:
-        source = f.read()
-    print(f"[source] {src_file}")
 
-    RULES_DIR = "pyv_compiler/grammar/rules_verilog"
-    EXT_DIR = "pyv_compiler/grammar/rules_verilog_ext"
+# ---------------------------- Core Pipeline ----------------------------
+def run_pipeline_on_source(
+    source: str,
+    input_path: Optional[str] = None,
+    out_dir: Optional[str] = None,
+    expand_macros: bool = False,
+    inline_comments: bool = False,
+    debug: bool = False,
+    quiet: bool = False,
+    analyzer_enabled: bool = True,
+    transform_enabled: bool = True,
+    renderer_enabled: bool = True,
+    stage: Optional[str] = None,
+    rules_dir: str = "pyv_compiler/grammar/rules_verilog",
+    ext_dir: str = "pyv_compiler/grammar/rules_verilog_ext",
+) -> Dict[str, Any]:
+    """
+    Core pipeline: process Verilog source and return results.
 
-    # 1b. 预处理：展开宏（--expand-macros）
+    Returns dict:
+        success: bool
+        output: str (generated Verilog code, if renderer enabled)
+        ast: Any (final AST)
+        error: str (error message if any)
+        parser: Parser instance (for comment table, etc.)
+    """
+
+    # Quiet-aware logger
+    def _log(msg: str, *args, **kwargs) -> None:
+        if not quiet:
+            print(msg, *args, **kwargs)
+
+    result = {
+        "success": False,
+        "output": "",
+        "ast": None,
+        "error": "",
+        "parser": None,
+    }
+
+    if debug:
+        enable_ast_debug(True)
+        _log("[debug] enabled")
+
+    original_source = source
+
+    # Determine output directory
+    if out_dir is None:
+        if input_path and "tests" in input_path:
+            parts = input_path.split(os.sep)
+            group = (
+                "normal"
+                if "normal" in parts
+                else ("errors" if "errors" in parts else "normal")
+            )
+            tests_dir = os.path.join(os.path.dirname(__file__), "tests")
+            out_dir = os.path.join(tests_dir, group)
+        else:
+            out_dir = os.path.join(os.path.dirname(__file__), "output")
+    gen_dir = os.path.join(out_dir, "gen")
+    ast_dir = os.path.join(out_dir, "ast")
+    sym_dir = os.path.join(out_dir, "symbols")
+    lex_dir = os.path.join(out_dir, "lex")
+    ensure_dir(gen_dir)
+    ensure_dir(ast_dir)
+    ensure_dir(sym_dir)
+    ensure_dir(lex_dir)
+
+    # Base filename for intermediate files
+    if input_path:
+        stem = os.path.splitext(os.path.basename(input_path))[0]
+        base_name = stem.replace("ref_", "")
+    else:
+        base_name = "input"
+
+    gen_file = os.path.join(gen_dir, f"gen_{base_name}.v")
+    ast_json = os.path.join(ast_dir, f"{base_name}.json")
+    sym_json = os.path.join(sym_dir, f"{base_name}.json")
+    comment_json = os.path.join(ast_dir, f"{base_name}_comments.json")
+
+    flags = []
+    if expand_macros:
+        flags.append("--expand-macros")
+    if inline_comments:
+        flags.append("--inline-comments")
+
+    # ---- Stage: Preprocess ----
     macro_table = {}
-    directive_lines: list[str] = []
-    original_source = source  # keep for literal protection
-    if "--expand-macros" in flags:
-        from preprocessor import preprocess
-        source, macro_table, directive_lines = preprocess(source, RULES_DIR)
-        print(f"[preprocessor] macros defined: {len(macro_table)}")
+    directive_lines = []
+    if expand_macros:
+        source, macro_table, directive_lines = preprocess(source, rules_dir)
+        _log(f"[preprocessor] macros defined: {len(macro_table)}")
 
-    # 2. 词法分析
-    lexer = Lexer(rules_dir=RULES_DIR)
+    # ---- Stage: Shared pipeline context (rules, lexer, renderer, etc.) ----
+    # 所有按 rules_dir 可复用的组件集中初始化并缓存
+    ctx = _PIPELINE_SHARED
+    if rules_dir not in ctx:
+        # 语法规则（含 EXT 注入）
+        rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dir)
+        stmt_names = [
+            n for n, r in rules.items()
+            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case() and n != "Expression"
+        ]
+        rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
+        lexer = Lexer(rules_dir=rules_dir)
+        renderer = Renderer(rules_dir=rules_dir)
+        transformer = AstTransformer()
+        transformer.register(
+            ConfigDrivenTransform(rules=rules, ext_dir=FileManager.get_full_path(ext_dir))
+        )
+        ctx[rules_dir] = {
+            "rules": rules,
+            "rule_selector": rule_selector,
+            "lexer": lexer,
+            "renderer": renderer,
+            "transformer": transformer,
+        }
+    shared = ctx[rules_dir]
+    rules = shared["rules"]
+    rule_selector = shared["rule_selector"]
+    lexer = shared["lexer"]
+    renderer = shared["renderer"]
+    transformer = shared["transformer"]
+
+    # ---- Stage: Lexical analysis ----
     tokens = lexer.tokenize(source)
-    lex_dir = os.path.join(out_base, "lex")
-    os.makedirs(lex_dir, exist_ok=True)
-    with open(
-        os.path.join(lex_dir, "tokens_" + stem + ".txt"),
-        "w",
-        encoding="utf-8",
-    ) as f:
-        for token in tokens:
-            f.write(f"{token.column},{token.line}:{token.type} {token.content}\n")
-    print(f"[lexer] tokens: {len(tokens)}")
+    if not quiet:
+        tok_path = os.path.join(lex_dir, f"tokens_{base_name}.txt")
+        with open(tok_path, "w", encoding="utf-8") as f:
+            for tok in tokens:
+                f.write(f"{tok.column},{tok.line}:{tok.type} {tok.content}\n")
+    _log(f"[lexer] tokens: {len(tokens)}")
+    if stage == "lex":
+        result["success"] = True
+        return result
 
-    # 2b. 预扫描（可选，默认开启）
-    pre_scan_config = load_pre_scan_config(RULES_DIR)
+    # ---- Stage: Pre-scan ----
+    pre_scan_config = load_pre_scan_config(rules_dir)
     pre_symbols = pre_scan(source, pre_scan_config)
     if pre_symbols:
-        print(f"[prescan] symbols: {len(pre_symbols)}")
+        _log(f"[prescan] symbols: {len(pre_symbols)}")
 
-    # 3. 语法分析（加载核心规则 + EXT 增强语法 + production injection）
-    rules = setup_grammar(RULES_DIR, EXT_DIR)
-
-    # 设定起始 token 缓存路径（避免每次重建）
-    cache_dir = os.path.join(src_dir, ".cache")
-    cache_path = os.path.normpath(os.path.join(cache_dir, "start_tokens.json"))
-    from parser.rule_selector import RuleSelector as _RS, set_default_cache_path
-
-    set_default_cache_path(cache_path)
-
-    parser = Parser(rules_dir=RULES_DIR, cache_enabled=False, pre_symbols=pre_symbols, error_recovery=True)
-    parser.pre_hints = pre_scan_config.get("hints", {})
-    parser.grammar_rules = rules
-    parser._block_end_types = parser._build_block_end_types()
-    parser.statement_rule_names = [
-        name
-        for name, rule in rules.items()
-        if hasattr(rule, "has_pass_end_case")
-        and rule.has_pass_end_case()
-        and name != "Expression"
-    ]
-    parser.rule_selector = _RS(rules, parser.statement_rule_names)
-    parser.atomic_rules = sorted(
-        (rule for rule in rules.values() if getattr(rule, "atomic", False)),
-        key=lambda r: len(getattr(r, "production")),
-        reverse=True,
+    # ---- Stage: Parse ----
+    # Instantiate Parser with injected rules and rule_selector
+    parser = Parser(
+        rules_dir=rules_dir,
+        cache_enabled=False,
+        pre_symbols=pre_symbols,
+        error_recovery=True,
+        rules=rules,
+        rule_selector=rule_selector,
     )
+    parser.pre_hints = pre_scan_config.get("hints", {})
+
+    # No longer need to manually assign parser.grammar_rules, _block_end_types,
+    # statement_rule_names, rule_selector, or atomic_rules — all are set internally.
 
     try:
         ast = parser.parse(tokens)
     except ParseError as e:
-        print(f"\n[parser] ❌ 解析失败:\n{e}", file=sys.stderr)
-        return
+        result["error"] = str(e)
+        print(f"\n[parser] Parse failed:\n{e}", file=sys.stderr)
+        return result
     if ast is None:
-        print("[parser] parse failed")
-        return
+        result["error"] = "parser returned None"
+        _log("[parser] parse failed")
+        return result
+    result["parser"] = parser
+    if stage == "parse":
+        result["success"] = True
+        result["ast"] = ast
+        return result
 
-    if debug:
-        print(f"[ast] nodes (raw): {count_ast_nodes(ast)}")
-
-    # 4. AST 规范化（翻译 parser 内部构造为规范形式）
+    # ---- Stage: AST normalization ----
     ast = normalize_ast(ast)
-
     if debug:
         print(f"[ast] nodes (normalized): {count_ast_nodes(ast)}")
         print("[ast] structure:")
@@ -196,105 +253,241 @@ def pipeline():
             print("[lexer] token stream:")
             dump_tokens(tokens)
 
-    # 保存规范化的 AST（覆盖 ast_json）
-    with open(ast_json, "w", encoding="utf-8") as f:
-        json.dump(ast.dump(), f, indent=2)
-    print(f"[ast] saved ({os.path.getsize(ast_json)} bytes)")
+    if not quiet:
+        save_json(ast.dump(), ast_json, "ast", log_fn=_log)
 
-    # 保存语义路径注释表
+    # Save comment table
     ct = getattr(parser, "_comment_table", None)
     if ct:
-        cmt_path = os.path.join(ast_dir, stem.replace("ref_", "") + "_comments.json")
-        with open(cmt_path, "w", encoding="utf-8") as f:
-            json.dump(ct, f, indent=2, ensure_ascii=False)
-        print(f"[comments] saved ({os.path.getsize(cmt_path)} bytes, {len(ct)} items)")
+        if not quiet:
+            save_json(ct, comment_json, "comments", log_fn=_log)
+        _log(f"[comments] {len(ct)} items")
 
-    # 5. 语义分析（构建符号表，链接标识符到声明）
-    #     核心职责：管理作用域 + 注册显式声明的符号
-    #     高级服务（隐式声明、位宽计算等）在可选的 transform 插件中完成
-    global analyzer_enable
-    if analyzer_enable:
+    # ---- Stage: Semantic analysis ----
+    if analyzer_enabled:
         analyzer = SemanticAnalyzer(rules)
         ast = analyzer.analyze(ast)
-        scope = analyzer.root_scope
-        assert scope is not None, "语义分析后 root_scope 不应为空"
-        with open(sym_json, "w", encoding="utf-8") as f:
-            json.dump(scope.to_dict(), f, indent=2)
-        print(
-            f"[symbols] saved ({os.path.getsize(sym_json)} bytes, {len(analyzer.all_symbols)} symbols)"
-        )
+        if analyzer.root_scope is None:
+            _log("[analyzer] warning: no scope produced")
+        else:
+            if not quiet:
+                save_json(
+                    analyzer.root_scope.to_dict(), sym_json, "symbols", log_fn=_log
+                )
+            _log(f"[symbols] {len(analyzer.all_symbols)} symbols")
         if analyzer.has_errors:
             for err in analyzer.errors:
-                print(f"[analyzer] ERROR {err}")
+                _log(f"[analyzer] ERROR {err}")
             for ref in analyzer._unresolved_refs:
-                print(f"[analyzer] WARN {ref}")
+                _log(f"[analyzer] WARN {ref}")
             if analyzer.errors:
-                print("[analyzer] 语义错误，终止管线")
-                return
+                result["error"] = "; ".join(analyzer.errors)
+                _log("[analyzer] semantic errors, stopping pipeline")
+                return result
+        scope = analyzer.root_scope
+    else:
+        _log("[analyzer] skipped")
+        scope = None
+    if stage == "analyze":
+        result["success"] = True
+        result["ast"] = ast
+        return result
 
-    # 6. 后阶段 AST 变换（可选插件管线）
-    global transform_enable
-    if transform_enable and analyzer_enable:
-        transformer = AstTransformer()
-        # 配置驱动变换引擎：加载规则的 [RuleName.transform] 配置
-        # 原语（expand/replace/delete）自动处理，
-        # 复杂逻辑通过 @transform_handler 注册自定义 handler 兜底。
-        from transform.post.engine import ConfigDrivenTransform
-
-        transformer.register(
-            ConfigDrivenTransform(
-                rules=rules,
-                ext_dir=FileManager.get_full_path(EXT_DIR),
-            )
-        )
-
-        ast = transformer.transform(ast, scope)  # type: ignore
+    # ---- Stage: AST transform ----
+    if transform_enabled and analyzer_enabled and scope is not None:
+        ast = transformer.transform(ast, scope)
         stats = getattr(transformer, "_transform_stats", {})
         active = {k: v for k, v in stats.items() if v}
         if active:
             parts = " ".join(f"{k}={v}" for k, v in active.items())
-            print(f"[transform] {parts}")
+            _log(f"[transform] {parts}")
+    elif transform_enabled:
+        _log("[transform] skipped because semantic analysis was disabled")
+    if stage == "transform":
+        result["success"] = True
+        result["ast"] = ast
+        return result
 
-    # 7. 代码生成（使用 Renderer）
-    global renderer_enable
-    if renderer_enable:
-        renderer = Renderer(rules_dir=RULES_DIR)
+    # ---- Stage: Render ----
+    if renderer_enabled:
         content = renderer.render(ast)
 
-        # 7b. 逆向宏：保护字面量 → 全局替换 → 恢复字面量
+        # Reverse macro protection
         if macro_table:
-            from preprocessor import protect_and_reverse, load_macro_config
-            config = load_macro_config(RULES_DIR)
+            config = load_macro_config(rules_dir)
             define_kw = config.get("directives", {}).get("define", "define")
-            content = protect_and_reverse(content, original_source, macro_table,
-                                          define_keyword=define_kw)
-            print(f"[preprocessor] macros reversed")
-        # 恢复被剥离的指令行（define/include/undef 等）
+            content = protect_and_reverse(
+                content, original_source, macro_table, define_keyword=define_kw
+            )
+            _log("[preprocessor] macros reversed")
+
+        # Restore directive lines
         if directive_lines:
-            header = "\n".join(directive_lines)
-            content = header + "\n" + content
-            print(f"[preprocessor] directives restored: {len(directive_lines)}")
+            content = "\n".join(directive_lines) + "\n" + content
+            _log(f"[preprocessor] directives restored: {len(directive_lines)}")
 
-        # 7c. 可选：inline comment 指纹回注
-        if inline_comments_enable:
-            from renderer.inline_comment import inject_comments
+        # Inline comment injection
+        if inline_comments:
+            raw_inline = getattr(parser, "_inline_comments", None)
+            if raw_inline:
+                if isinstance(raw_inline, list):
+                    ic = raw_inline
+                elif isinstance(raw_inline, dict):
+                    ic = []
+                    for line_num, info in raw_inline.items():
+                        if (
+                            isinstance(info, dict)
+                            and "text" in info
+                            and "fingerprint" in info
+                        ):
+                            ic.append(
+                                {
+                                    "line": line_num,
+                                    "text": info["text"],
+                                    "fingerprint": info["fingerprint"],
+                                }
+                            )
+                        else:
+                            if "line" not in info:
+                                info["line"] = line_num
+                            ic.append(info)
+                else:
+                    ic = []
+                if ic:
+                    content = inject_comments(content, ic)
+                    _log(f"[comments] inline fingerprint injection: {len(ic)} items")
 
-            ic = getattr(parser, "_inline_comments", None)
-            if ic:
-                print(f"[comments] inline fingerprint injection: {len(ic)} items")
-                content = inject_comments(content, ic)
-
-        from datetime import datetime
-
+        # Write output
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         header = f"// Generated by PyV Compiler at {stamp}\n\n"
         with open(gen_file, "w", encoding="utf-8") as f:
             f.write(header + content)
-        print(f"[output] {gen_file}")
+        _log(f"[output] {gen_file}")
+
+        result["output"] = content
+        result["ast"] = ast
+        result["success"] = True
+    else:
+        print("[renderer] skipped")
+        result["ast"] = ast
+
+    return result
+
+
+# ---------------------------- Command-line entry ----------------------------
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="PyV Compiler Pipeline – stage control and flexible execution",
+        epilog="Example: python run_pipeline.py ref_counter --no-analyzer --stage=parse",
+    )
+    input_group = parser.add_mutually_exclusive_group(required=False)
+    input_group.add_argument(
+        "test_name",
+        nargs="?",
+        default=None,
+        help="Test case name (e.g., 'counter' or 'ref_counter'), auto-located in tests/",
+    )
+    input_group.add_argument(
+        "-i", "--input", type=str, help="Direct Verilog source file path"
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=str,
+        default=None,
+        help="Output directory (auto-detected if not given)",
+    )
+
+    parser.add_argument(
+        "--stage",
+        choices=["lex", "parse", "analyze", "transform", "render"],
+        help="Stop after specified stage (for debugging)",
+    )
+    parser.add_argument(
+        "--no-analyzer",
+        dest="analyzer",
+        action="store_false",
+        help="Skip semantic analysis",
+    )
+    parser.add_argument(
+        "--no-transform",
+        dest="transform",
+        action="store_false",
+        help="Skip AST transform",
+    )
+    parser.add_argument(
+        "--no-renderer",
+        dest="renderer",
+        action="store_false",
+        help="Skip code generation",
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print debug info (AST structure, token stream)",
+    )
+    parser.add_argument(
+        "--expand-macros", action="store_true", help="Expand `define macros"
+    )
+    parser.add_argument(
+        "--inline-comments",
+        action="store_true",
+        help="Re-inject inline comment fingerprints",
+    )
+
+    parser.add_argument(
+        "--rules-dir",
+        type=str,
+        default="pyv_compiler/grammar/rules_verilog",
+        help="Core grammar rules directory",
+    )
+    parser.add_argument(
+        "--ext-dir",
+        type=str,
+        default="pyv_compiler/grammar/rules_verilog_ext",
+        help="Extended grammar rules directory",
+    )
+
+    parser.set_defaults(analyzer=True, transform=True, renderer=True)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if not args.input and not args.test_name:
+        print("[error] Must specify input file (-i) or test case name", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine source file
+    src_file = args.input
+    if not src_file:
+        src_file, _, _ = find_test_file(args.test_name or "led_blinker")
+        if not src_file:
+            print(f"[error] test file not found: {args.test_name}", file=sys.stderr)
+            sys.exit(1)
+
+    with open(src_file, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    result = run_pipeline_on_source(
+        source=source,
+        input_path=src_file,
+        out_dir=args.out_dir,
+        expand_macros=args.expand_macros,
+        inline_comments=args.inline_comments,
+        debug=args.debug,
+        analyzer_enabled=args.analyzer,
+        transform_enabled=args.transform,
+        renderer_enabled=args.renderer,
+        stage=args.stage,
+        rules_dir=args.rules_dir,
+        ext_dir=args.ext_dir,
+    )
+
+    if not result["success"]:
+        sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    analyzer_enable = True  # 语义分析（作用域 + 符号注册）
-    transform_enable = True  # 后阶段变换插件管线（原语 + custom handler）
-    renderer_enable = True  # 代码生成
-    pipeline()
+    main()

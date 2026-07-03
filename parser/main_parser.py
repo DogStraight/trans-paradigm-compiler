@@ -110,6 +110,8 @@ class Parser:
         log_file: str | None = None,
         pre_symbols: dict[str, str] | None = None,
         error_recovery: bool = True,
+        rules: dict[str, GrammarRule] | None = None,
+        rule_selector: "RuleSelector | None" = None,
     ) -> None:
         """初始化解析器。
 
@@ -118,10 +120,12 @@ class Parser:
             cache_enabled: 是否启用磁盘缓存。
             verbose: 调试日志开关。True 时输出所有级别日志，False 时只输出 WARN/ERROR。
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
-                     空字符串或 "/dev/null" 类似值表示不写日志。
+                        空字符串或 "/dev/null" 类似值表示不写日志。
             pre_symbols: Lexer 预扫描符号表 { name: kind }，用于辅助规则选择。
             error_recovery: 错误恢复开关。True 时逐行隔离语法错误，输出 ErrorNode；
-                           False 时严格回溯，遇到错误即停止解析。
+                            False 时严格回溯，遇到错误即停止解析。
+            rules: 预加载的语法规则表。传入时跳过内部 GrammarRulesRegister 加载。
+            rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
         self.grammar_rules: Dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
@@ -135,10 +139,16 @@ class Parser:
         # 解析时作用域栈（可选，配合 peek scope 使用）
         self.scope_stack = ScopeStack()
 
-        try:
-            self.grammar_rules = GrammarRulesRegister().rules_registration()
-        except FileNotFoundError:
-            pass
+        # 规则加载：外部注入优先，回退内部自动加载
+        if rules is not None:
+            self.grammar_rules = rules
+        else:
+            try:
+                self.grammar_rules = (
+                    GrammarRulesRegister.get_default().rules_registration()
+                )
+            except FileNotFoundError:
+                pass
         # 日志文件：构造参数优先，回退到 FileManager 全局配置
         if log_file is None:
             if FileManager.debug_log_file is not None:
@@ -155,9 +165,11 @@ class Parser:
             for name, rule in self.grammar_rules.items()
             if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
         ]
-        if rules_dir:
+        # RuleSelector：外部注入优先，回退内部创建
+        if rule_selector is not None:
+            self.rule_selector = rule_selector
+        elif rules_dir:
             # 传入 rules_dir 时由调用方接管 RuleSelector，此处不创建缓存
-            self.skip_types = ["newline", "space.fold"]
             categories = pratt_parser.load_token_categories(rules_dir)
             if categories:
                 pratt_parser.install_token_classifier(categories)
@@ -167,7 +179,7 @@ class Parser:
                 self.statement_rule_names,
                 cache_enabled=cache_enabled,
             )
-            self.skip_types = ["newline", "space.fold"]
+        self.skip_types = ["newline", "space.fold"]
 
         self.atomic_rules: List[GrammarRule] = sorted(
             (
