@@ -230,6 +230,7 @@ tail = "$2"
 [Expression.parser]
 production = ["@LogicOrExpr"]
 pratt = true
+end_case = ["symbol.base.comma", "symbol.base.semicolon", "bracket.r_parentheses", "bracket.r_square_bracket", "bracket.r_curly_bracket", "symbol.base.colon"]
 [Expression.parser.node]
 
 # ---------- 运算符节点（用于代码生成）----------

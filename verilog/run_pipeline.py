@@ -460,9 +460,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if not args.input and not args.test_name:
-        print("[error] Must specify input file (-i) or test case name", file=sys.stderr)
-        sys.exit(1)
 
     # Determine source file
     src_file = args.input

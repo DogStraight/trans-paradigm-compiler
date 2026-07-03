@@ -27,15 +27,19 @@ def _compute_start_tokens(
         visited.add(name)
         rule = grammar_rules[name]
         # 块规则的起始 token 由 block 外部负责，不在 First set 计算中
-        result: set[str] = set()
-        for prod in getattr(rule, "production", []):
-            try:
-                pf = analyze_production_features(prod)
-            except Exception:
-                continue
-            if pf:
-                result.update(_compute_start_tokens(pf, grammar_rules, visited.copy()))
-        return result
+        if getattr(rule, "is_block", False):
+            return set()
+        prods = getattr(rule, "production", [])
+        if not prods:
+            return set()
+        # 只取第一个 production 元素的 First set（后续元素可能不可达）
+        try:
+            pf = analyze_production_features(prods[0])
+        except Exception:
+            return set()
+        if pf:
+            return _compute_start_tokens(pf, grammar_rules, visited.copy())
+        return set()
 
     if typ == "choice":
         alts = feat.get("alternatives", [])

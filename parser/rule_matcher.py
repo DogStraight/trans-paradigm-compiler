@@ -100,8 +100,11 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
 
 
 def _get_recovery_cfg(self, rule: GrammarRule) -> bool:
-    """规则级 recovery 检查：已完全关闭。始终返回 False。"""
-    return False
+    """规则级 recovery 检查：局部 recovery=true 优先，否则回退全局。"""
+    p = getattr(rule, "parser", {})
+    if isinstance(p, dict) and p.get("recovery"):
+        return True
+    return getattr(self, "global_recovery", False)
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
@@ -230,8 +233,12 @@ def match_productions(
         matched_nodes=[] & error_node=Node   → 提交后部分失败
         matched_nodes=[...] & error_node=None → 完全成功
     """
-    recovery = _get_recovery_cfg(self, rule)
-    committed = bool(recovery)  # 有 recovery 标记即整个规则提交，不严格回溯
+    # 原子规则始终严格回溯，不受 recovery 影响
+    if getattr(rule, "atomic", False):
+        recovery = False
+    else:
+        recovery = _get_recovery_cfg(self, rule)
+    committed = bool(recovery)
 
     # 同步 committed 标志到 context，供子规则（如 optional）查询
     context._committed = committed

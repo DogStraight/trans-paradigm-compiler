@@ -426,21 +426,25 @@ class Parser:
             name
             for name, rule in self.grammar_rules.items()
             if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+            and name != "Expression"
         ]
         # RuleSelector：外部注入优先，回退内部创建
         if rule_selector is not None:
             self.rule_selector = rule_selector
         elif rules_dir:
             # 传入 rules_dir 时由调用方接管 RuleSelector，此处不创建缓存
-            categories = pratt_parser.load_token_categories(rules_dir)
-            if categories:
-                pratt_parser.install_token_classifier(categories)
+            pass
         else:
             self.rule_selector = RuleSelector(
                 self.grammar_rules,
                 self.statement_rule_names,
                 cache_enabled=cache_enabled,
             )
+        # Token 分类器（Pratt 解析器依赖）无论 RuleSelector 来源如何都需要安装
+        if rules_dir:
+            categories = pratt_parser.load_token_categories(rules_dir)
+            if categories:
+                pratt_parser.install_token_classifier(categories)
         self.skip_types = ["newline", "space.fold"]
 
         self.atomic_rules: list[GrammarRule] = sorted(
