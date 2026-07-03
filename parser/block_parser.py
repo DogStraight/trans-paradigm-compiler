@@ -218,8 +218,8 @@ def parse_block_body(
     context: ParseContext,
     block_node: Node,
     rule: GrammarRule,
-) -> None:
-    """循环解析句子直到遇到结束符或文件末尾，将子句添加到 block_node"""
+) -> bool:
+    """循环解析句子直到遇到结束符或文件末尾。返回 False 表示语法错误中断。"""
     end_token = _get_block_end(rule)
 
     while context.has_more_tokens():
@@ -239,11 +239,12 @@ def parse_block_body(
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
             if not getattr(self, "error_recovery", True):
-                break
+                return False  # 无恢复配置时严格回溯：不产出部分结果
             if _try_block_recovery(self, context, block_node, rule):
                 continue
             break
         block_node.add_sub_node(stmt_node)
+    return True
 
 
 def parse_block(
@@ -271,5 +272,6 @@ def parse_block(
         return None
 
     block_node = Node(block_name)
-    parse_block_body(self, context, block_node, matched_rule)
+    if not parse_block_body(self, context, block_node, matched_rule):
+        return None  # 语法错误中断，不产出部分块
     return block_node
