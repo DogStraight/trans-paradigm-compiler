@@ -146,37 +146,61 @@ def _try_production(
     # 已提交 → 产 ErrorNode
     if committed:
         err = Node("Error")
-        # 记录第一个坏 token 的精确内容
         first_bad = context.peek_token()
         first_raw = first_bad.content if first_bad else ""
 
-        # 简单 token 失败（如 bracket.r_parentheses、symbol.base.semicolon）→
-        # 只消费当前这个坏 token，不向前扫描。外面的 production/block recovery
-        # 会处理后续 token，达到逐 token 恢复粒度。
+        # 简单 token 失败（非括号类）→ 只消费当前 token，不扫描
         if features.get("type") == "token":
+            st = features.get("token_type", "")
+            # 括号类 token 由 bracket 策略处理
+            if st in _INVERSE_BRACKET_MAP:
+                strategy = "bracket"
+            else:
+                if first_bad is not None:
+                    context.advance_token()
+                err.add_attr("raw", first_raw)
+                return err
+
+        # 恢复策略选择
+        strategy = getattr(rule, "recovery_strategy", "end_case")
+        end_case_tokens: set[str] = set()
+        for ec in getattr(rule, "end_case", []):
+            if isinstance(ec, str) and not ec.startswith("!"):
+                end_case_tokens.add(ec)
+        end_case_tokens.update(getattr(context, "_end_case_chain", set()))
+
+        if strategy == "single":
+            # 策略：single — 只消费当前一个 token
             if first_bad is not None:
                 context.advance_token()
             err.add_attr("raw", first_raw)
             return err
 
-        # 路径 A — 后继生产式起始 token（next-start 同步）
-        next_start = sync_tokens or set()
+        elif strategy == "bracket":
+            # 策略：bracket — 括号感知扫描，维护嵌套深度
+            depth = 0
+            while context.has_more_tokens():
+                t = context.peek_token()
+                if t.type in end_case_tokens:
+                    break
+                if t.type in _BRACKET_MAP:
+                    depth += 1
+                elif t.type in _INVERSE_BRACKET_MAP:
+                    if depth == 0:
+                        # 最外层关闭括号 → 停止但不消费
+                        break
+                    depth -= 1
+                context.advance_token()
+            err.add_attr("raw", first_raw)
+            return err
 
-        # 路径 B — 当前生产式的自然结束 token（current-end 同步）
+        # 策略：end_case（默认）— 双路径同步扫描
+        next_start = sync_tokens or set()
         current_end = _find_current_end(prod, self.grammar_rules)
 
-        # 兜底：规则 end_case + 上级 committed 链的 end_case
-        end_case_tokens: set[str] = set()
-        for ec in getattr(rule, "end_case", []):
-            if isinstance(ec, str) and not ec.startswith("!"):
-                end_case_tokens.add(ec)
-        # 合并上级 committed 链的 end_case（用于深层嵌套错误恢复）
-        end_case_tokens.update(getattr(context, "_end_case_chain", set()))
-
-        # 扫描阶段：不消费 token，只记录位置
         scan_ptr = context.token_pointer
-        pos_next: int | None = None      # 路径 A 的匹配位置
-        pos_current: int | None = None   # 路径 B 的匹配位置
+        pos_next: int | None = None
+        pos_current: int | None = None
         scan_len = 0
         while scan_ptr < len(context.tokens):
             t = context.tokens[scan_ptr]
@@ -189,40 +213,32 @@ def _try_production(
                 pos_current = scan_len
             scan_ptr += 1
 
-        # 决策：选择最佳停止位置
+        # 决策最佳停止位置
         stop: int | None = None
         if pos_next is not None and pos_current is not None:
             if pos_next == pos_current:
-                stop = pos_next   # 同位置 → 无争议
+                stop = pos_next
             else:
                 shorter_pos, longer_pos = sorted([pos_next, pos_current])
-                # 检查后继生产式起始 token 是否在较长路径的范围内出现
-                # 如果在 → 截断在较短位置（后继生产式可以接手）
-                # 不在 → 用较长位置（避免跳过头错过同步点）
                 scan_ptr = context.token_pointer
                 found = False
                 for i in range(longer_pos):
                     if i < len(context.tokens) and context.tokens[scan_ptr + i].type in next_start:
                         found = True
                         break
-                if found:
-                    stop = shorter_pos  # 后继 token 在长路径内 → 截断用短路径
-                else:
-                    stop = longer_pos   # 不在 → 用长路径
+                stop = shorter_pos if found else longer_pos
         elif pos_next is not None:
             stop = pos_next
         elif pos_current is not None:
             stop = pos_current
 
-        # 消费阶段：从当前位置消费到决策位置；ErrorNode 只记第一个坏 token
         if stop is not None:
-            for i in range(stop):
+            for _ in range(stop):
                 if context.has_more_tokens():
                     context.advance_token()
                 else:
                     break
         else:
-            # 没有找到任何停止标记，消费到 end_case 边界
             while context.has_more_tokens():
                 t = context.peek_token()
                 if t is not None and t.type in end_case_tokens:

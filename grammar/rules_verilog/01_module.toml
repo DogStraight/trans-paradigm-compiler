@@ -12,7 +12,7 @@ production = [
     "@Identifier",
     "@ParameterList?",
     "@PortParens?",
-    "symbol.base.semicolon",
+    "symbol.base.semicolon?",
     "@ModuleBlock",          # 使用模块专用块，内部条目为 ModuleItem
     "keyword.endmodule",
 ]
@@ -54,6 +54,7 @@ tail = { text = "endmodule", break = 2 }
 [PortParens.parser]
 inline = true
 recovery = true
+recovery_strategy = "bracket"
 production = [
     "bracket.l_parentheses",
     "@PortList?",

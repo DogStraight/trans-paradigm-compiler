@@ -236,9 +236,12 @@ class GrammarRule:
         "pratt",
         "atomic",
         "is_block",
+        "recovery_strategy",
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
+    # 默认字符串值
+    _STR_DEFAULTS = {"recovery_strategy": "end_case"}
 
     def __init__(self, name: str, **kwargs):
         self.name = name
@@ -247,6 +250,8 @@ class GrammarRule:
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
+            elif fld in self._STR_DEFAULTS:
+                setattr(self, fld, self._STR_DEFAULTS[fld])
             else:
                 setattr(self, fld, False)
 
