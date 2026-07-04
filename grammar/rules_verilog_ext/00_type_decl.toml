@@ -138,9 +138,7 @@ indent = 4
 source = "ports"
 
 [TypeRole.analyzer]
-symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }, capture_hooks = [
-    "resolve_revert",
-] }
+symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
 
 
 # ── 类型端口声明 input miso, output clk ... ──

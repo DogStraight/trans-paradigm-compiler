@@ -300,10 +300,42 @@ def run_pipeline_on_source(
 
     # ---- Stage: AST transform ----
     if transform_enabled and analyzer_enabled and scope is not None:
-        # 注入语义映射表（分析器产出的结构化语义数据）
+        # 语义映射表：分析器产出 raw 数据，管线在此做数据变换
+        mapping = analyzer.semantic_mapping
+
+        # 解析 revert 关系：将 type_revert 条目展开为实际端口
+        # 例: type_revert.spi.slave = "master" → 复制 spi.master 的端口并反转方向
+        type_ports = mapping.get("type_ports_flat", {})
+        type_revert = mapping.get("type_revert", {})
+        if type_revert and type_ports:
+            from copy import deepcopy
+
+            def _rev_dir(d: str) -> str:
+                return (
+                    "output" if d in ("input", "input_reg")
+                    else "input" if d in ("output", "output_reg")
+                    else d
+                )
+
+            for type_name, roles in type_revert.items():
+                for role_name, target_role in roles.items():
+                    # 查 target 角色的端口
+                    target_ports = type_ports.get(type_name, {}).get(target_role)
+                    if not target_ports:
+                        continue
+                    # 复制并反转方向
+                    resolved = []
+                    for p in target_ports:
+                        rev = deepcopy(p)
+                        rev["direction"] = _rev_dir(rev.get("direction", ""))
+                        resolved.append(rev)
+                    # 设为本角色的端口
+                    type_ports.setdefault(type_name, {})[role_name] = resolved
+
+        # 注入处理后的映射表到 transform 插件
         for plugin in transformer.plugins:
             if hasattr(plugin, "set_tables"):
-                plugin.set_tables(analyzer.semantic_mapping)
+                plugin.set_tables(mapping)
         ast = transformer.transform(ast, scope)
         # 收集变换统计
         total = 0
