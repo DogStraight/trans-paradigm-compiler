@@ -3,7 +3,7 @@
 只识别单文件内的顶层声明名，不处理 import/pkg 等跨文件引用。
 预扫描不是精确的——漏掉的声明名只是让 parser 多试几条规则而已。
 
-配置由 load_pre_scan_config() 加载编译，pre_scan() 只做文本扫描。
+配置由 ConfigRegistry 声明式加载，不再内部 try/except 吞错误。
 
 用法:
     from lexer.pre_scan import pre_scan, load_pre_scan_config
@@ -12,15 +12,26 @@
 """
 
 import re
-import tomllib
-import os
+from core.config_registry import config
+
+
+# ========== 配置声明 ==========
+config.declare("lexer.pre_scan",
+               file="base/_pre_scan.toml",
+               section="pre_scan",
+               required=False,
+               description="预扫描声明识别配置")
+
+
+# ── 编译缓存 ──
+_CACHE: dict[str, dict] = {}
 
 
 def load_pre_scan_config(rules_dir: str | None = None) -> dict:
-    """加载并编译预扫描 TOML 配置。
+    """从 ConfigRegistry 获取预扫描配置并编译。
 
     Args:
-        rules_dir: 规则目录（含 base/_pre_scan.toml）。
+        rules_dir: 规则目录（保留参数，实际从 Registry 读取）。
 
     Returns:
         编译后的配置字典，可直接传入 pre_scan()。
@@ -28,29 +39,16 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
     if rules_dir is not None and rules_dir in _CACHE:
         return _CACHE[rules_dir]
 
-    candidates: list[str] = []
-    if rules_dir:
-        candidates = [
-            os.path.join(rules_dir, "base", "_pre_scan.toml"),
-            os.path.join(rules_dir, "_pre_scan.toml"),
-        ]
-    if not candidates:
-        candidates = [
-            "grammar/rules_verilog/base/_pre_scan.toml",
-            "grammar/rules_verilog/_pre_scan.toml",
-        ]
+    raw = {}
+    try:
+        raw = config.get("lexer.pre_scan")
+    except KeyError:
+        pass
 
-    for path in candidates:
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                data = tomllib.load(f)
-            return _compile(data.get("pre_scan", {}), rules_dir)
-
-    return _compile({}, rules_dir)
-
-
-# ── 编译缓存 ──
-_CACHE: dict[str, dict] = {}
+    result = _compile(raw, rules_dir)
+    if rules_dir is not None:
+        _CACHE[rules_dir] = result
+    return result
 
 
 def _compile(config: dict, rules_dir: str | None = None) -> dict:

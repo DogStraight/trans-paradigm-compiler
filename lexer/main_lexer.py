@@ -3,15 +3,22 @@
 Converts Verilog source text into a stream of Token objects.
 Keyword/symbol/literal/comment/whitespace patterns are all defined
 in TOML — no hardcoded lexer logic.
+
+配置通过 ConfigRegistry 声明式加载。
 """
 
 from core.define import Token
-from .lexer_utils import get_token_define
-from .number_fsm import NumberFSM
+from core.config_registry import config
 from .lexer_utils import get_token_define_merged
+from .number_fsm import NumberFSM
 from .comment_fsm import CommentFSM
-import tomllib
-from pathlib import Path
+
+
+# ========== 配置声明 ==========
+config.declare("lexer.macro_config",
+               file="base/_macro.toml",
+               required=False,
+               description="宏指令配置（`define 等）")
 
 
 class Lexer:
@@ -25,16 +32,26 @@ class Lexer:
         if rules_dir:
             token_define_dict = get_token_define_merged(rules_dir)
         else:
+            from .lexer_utils import get_token_define
             token_define_dict = get_token_define()
         self.token_define = token_define_dict
 
-        # 加载宏配置（非 token，独立文件）
-        self.macro_config = self._load_macro_config(rules_dir)
+        # 宏配置（从 ConfigRegistry 获取原始数据后变换）
+        self.macro_config = {}
+        try:
+            raw = config.get("lexer.macro_config")
+            if raw:
+                self.macro_config = {
+                    d: f"macro.{d}" for d in raw.get("directives", {})
+                } | {
+                    "prefix": raw.get("macro_call", {}).get("prefix", "`")
+                }
+        except KeyError:
+            pass
 
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
         self.indent_level = token_define_dict.get("indent", {}).get("level", 4)
         self.indent_deep = 0
-        self.token_define = token_define_dict
         self.blank: list = list(token_define_dict.get("space", {}).values()) + list(
             token_define_dict.get("newline", {}).values()
         )
@@ -60,24 +77,6 @@ class Lexer:
         # new line start flag for indent handling
         self.new_line_start = False
         pass
-
-    @staticmethod
-    def _load_macro_config(rules_dir: str | None) -> dict:
-        """加载 base/_macro.toml 宏配置（独立于 token 定义）。"""
-        if not rules_dir:
-            return {}
-        from core.define import FileManager
-
-        base = FileManager.get_full_path(rules_dir)
-        macro_path = Path(base) / "base" / "_macro.toml"
-        if not macro_path.exists():
-            return {}
-        with open(macro_path, "rb") as f:
-            cfg = tomllib.load(f)
-        return {d: f"macro.{d}" for d in cfg.get("directives", {})} | {
-            "prefix": cfg.get("macro_call", {}).get("prefix", "`")
-        }
-
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""
         self.alpha_tokens.clear()

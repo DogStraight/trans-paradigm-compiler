@@ -4,21 +4,26 @@ Loads operator definitions from _symbol_level.toml and handles
 infix/prefix/postfix operators with proper precedence and associativity.
 """
 
-import os
-import tomllib
 from typing import Any
-from core.define import Node, Token, FileManager
+from core.define import Node, Token
+from core.config_registry import config
 
 
-# ========== 运算符定义加载 ==========
-def load_operator_defs(rules_dir: str) -> list[tuple[int, dict]]:
-    """加载运算符优先级和结合性定义"""
-    path = os.path.join(rules_dir, "_symbol_level.toml")
-    content = FileManager.read_file(path)
-    data = tomllib.loads(content)
-    operators = data.get("operator", [])
+# ========== 配置声明（启动时由 ConfigRegistry.load_all() 统一加载）==========
+config.declare("pratt.operator_defs",
+               file="_symbol_level.toml",
+               section="operator",
+               description="运算符优先级和结合性定义")
+config.declare("pratt.token_categories",
+               file="base/_lexer.toml",
+               section="token_category",
+               description="Pratt 解析器的 token 分类器")
+
+
+def process_operator_data(data: list) -> list[tuple[int, dict]]:
+    """处理原始运算符 TOML 配置为 (priority, props) 列表。"""
     operator_defs = []
-    for idx, op in enumerate(operators, start=1):
+    for idx, op in enumerate(data, start=1):
         props = {
             "symbol": op["symbol"],
             "arity": op["arity"],
@@ -54,26 +59,7 @@ def build_priority_maps(operator_defs):
     return prefix_priority, prefix_attrs, infix_priority, infix_attrs
 
 
-# ========== Token 分类（从 _token.toml 加载）==========
-def load_token_categories(rules_dir: str) -> dict:
-    """从 base/_lexer.toml 加载 [token_category] 配置"""
-    import logging
-    base_path = os.path.join(rules_dir, "base", "_lexer.toml")
-    if not os.path.exists(base_path):
-        logging.warning(f"[pratt] token categories not found: {base_path}")
-        return {}
-    try:
-        content = FileManager.read_file(base_path)
-        data = tomllib.loads(content)
-        categories = data.get("token_category", {})
-        if not categories:
-            logging.warning(f"[pratt] no [token_category] in {base_path}")
-        return categories
-    except Exception as e:
-        logging.error(f"[pratt] failed to load {base_path}: {e}")
-        return {}
-
-
+# ========== Token 分类 ==========
 def build_token_classifier(categories: dict) -> dict:
     """从分类配置构建 {name: check_fn(token) -> bool} 映射"""
     checks = {}
@@ -126,19 +112,12 @@ def is_none(token) -> bool:
 
 def install_token_classifier(categories: dict) -> None:
     """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
+    if not categories:
+        raise ValueError(
+            "[pratt] token categories is empty — check base/_lexer.toml [token_category]"
+        )
     global _token_checks
-    if categories:
-        _token_checks = build_token_classifier(categories)
-    else:
-        # 兜底：按 Token type 命名惯例推断分类
-        _token_checks = build_token_classifier({
-            "number": {"match": "prefix", "types": ["literal.number"]},
-            "string": {"match": "prefix", "types": ["literal.string"]},
-            "bool": {"match": "prefix", "types": ["literal.bool"]},
-            "identifier": {"match": "prefix", "types": ["id"]},
-            "operator": {"match": "prefix", "types": ["symbol"]},
-            "none": {"match": "prefix", "types": ["literal.none"]},
-        })
+    _token_checks = build_token_classifier(categories)
 
 
 # ========== 字面量解析辅助 ==========

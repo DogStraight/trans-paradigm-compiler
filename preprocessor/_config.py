@@ -1,14 +1,18 @@
-"""Preprocessor config loader — reads base/_macro.toml."""
+"""Preprocessor config loader — reads base/_macro.toml via ConfigRegistry."""
 
-import tomllib
-from pathlib import Path
-from core.define import FileManager
+from core.config_registry import config
+
+
+# ========== 配置声明 ==========
+config.declare("preprocessor.macro_config",
+               file="base/_macro.toml",
+               required=False,
+               description="预处理器宏配置")
 
 
 def load_macro_config(rules_dir: str) -> dict:
-    """Load base/_macro.toml configuration."""
-    base = Path(FileManager.get_full_path(rules_dir)) / "base" / "_macro.toml"
-    if not base.exists():
+    """从 ConfigRegistry 获取宏配置。"""
+    try:
+        return dict(config.get("preprocessor.macro_config"))
+    except KeyError:
         return {}
-    with open(base, "rb") as f:
-        return tomllib.load(f)

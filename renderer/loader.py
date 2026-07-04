@@ -2,11 +2,26 @@
 loader.py — TOML 布局规则 / 风格 / 规范化配置加载
 
 从 TOML 规则目录加载 layout 定义、风格参数和规范化配置。
+风格参数通过 ConfigRegistry 声明式加载。
 """
 
 import tomllib
 import os
 from typing import Optional
+from core.config_registry import config
+
+
+# ========== 配置声明 ==========
+config.declare("renderer.style",
+               file="base/_style.toml",
+               section="style",
+               required=False,
+               description="渲染器风格参数（缩进、行宽）")
+config.declare("renderer.style_lang",
+               file="_style.toml",
+               section="style",
+               required=False,
+               description="语言特有风格覆盖")
 
 
 def load_layouts(rules_dir: str, layouts: dict) -> None:
@@ -42,43 +57,34 @@ def load_layouts(rules_dir: str, layouts: dict) -> None:
 
 
 def load_style(rules_dir: str) -> dict:
-    """加载风格配置：base/_style.toml 为基础，{lang}/_style.toml 可选覆盖
+    """加载风格配置：从 ConfigRegistry 获取 base 和 lang 风格。
 
     返回 {'indent_str': str, 'max_inline': int, 'children_field': str}
     """
-    from core.define import FileManager
-
     result = {
         "indent_str": "    ",
         "max_inline": 40,
         "children_field": "sub_node",
     }
 
-    search_dirs = [
-        os.path.join(rules_dir, "base"),  # base/_style.toml 优先
-        rules_dir,  # 语言特有 _style.toml 覆盖
-    ]
-
-    for search_dir in search_dirs:
-        base_path = FileManager.get_full_path(search_dir)
-        if not os.path.isdir(base_path):
+    # base/_style.toml（required=False，没有就用默认值）
+    for key in ("renderer.style", "renderer.style_lang"):
+        try:
+            style = config.get(key)
+            if not isinstance(style, dict):
+                continue
+            if "indent" in style:
+                val = style["indent"]
+                if isinstance(val, int):
+                    result["indent_str"] = " " * val
+                else:
+                    result["indent_str"] = val
+            if "max_inline" in style:
+                result["max_inline"] = style["max_inline"]
+            if "children_field" in style:
+                result["children_field"] = style["children_field"]
+        except KeyError:
             continue
-        for fname in ("_style.toml", "_formatter.toml"):
-            fpath = os.path.join(base_path, fname)
-            if os.path.isfile(fpath):
-                with open(fpath, "rb") as f:
-                    data = tomllib.load(f)
-                style = data.get("style", {})
-                if "indent" in style:
-                    val = style["indent"]
-                    if isinstance(val, int):
-                        result["indent_str"] = " " * val
-                    else:
-                        result["indent_str"] = val
-                if "max_inline" in style:
-                    result["max_inline"] = style["max_inline"]
-                if "children_field" in style:
-                    result["children_field"] = style["children_field"]
 
     return result
 

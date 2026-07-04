@@ -412,22 +412,19 @@ class Parser:
         # 解析时作用域栈（可选，配合 peek scope 使用）
         self.scope_stack = ScopeStack()
 
-        # 加载括号映射（从 token 配置的 [bracket] pairs）
+        # 加载括号映射（从 ConfigRegistry 的 token_base 配置）
         self._bracket_map: dict[str, str] = {}
         self._inverse_bracket_map: dict[str, str] = {}
-        if rules_dir:
-            try:
-                from lexer.lexer_utils import get_token_define
-
-                path = f"{rules_dir}/base/token.toml"
-                data = get_token_define(path)
-                for open_c, close_c, name in data.get("bracket", {}).get("pairs", []):
-                    l = f"bracket.l_{name}"
-                    r = f"bracket.r_{name}"
-                    self._bracket_map[l] = r
-                    self._inverse_bracket_map[r] = l
-            except Exception:
-                pass
+        from core.config_registry import config as _cfg
+        try:
+            token_data = _cfg.get("lexer.token_base")
+            for open_c, close_c, name in token_data.get("bracket", {}).get("pairs", []):
+                l = f"bracket.l_{name}"
+                r = f"bracket.r_{name}"
+                self._bracket_map[l] = r
+                self._inverse_bracket_map[r] = l
+        except (KeyError, Exception):
+            pass
         if not self._bracket_map:
             # 保底
             self._bracket_map = {
@@ -456,18 +453,23 @@ class Parser:
         elif log_file:
             self.debug_log_file = FileManager.get_full_path(log_file)
         # log_file="" 或 "/dev/null" → 不写日志（不设置 self.debug_log_file）
-        if rules_dir:
-            self.operator_defs = pratt_parser.load_operator_defs(rules_dir)
         self.statement_rule_names = [
             name
             for name, rule in self.grammar_rules.items()
             if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
         ]
+        # 运算符定义（从 ConfigRegistry 获取）
+        from core.config_registry import config as _cfg
+        raw_ops = _cfg.get("pratt.operator_defs")
+        self.operator_defs = pratt_parser.process_operator_data(raw_ops)
+        # Token 分类器（ConfigRegistry 已加载）
+        categories = _cfg.get("pratt.token_categories")
+        if categories:
+            pratt_parser.install_token_classifier(categories)
         # RuleSelector：外部注入优先，回退内部创建
         if rule_selector is not None:
             self.rule_selector = rule_selector
         elif rules_dir:
-            # 传入 rules_dir 时由调用方接管 RuleSelector，此处不创建缓存
             pass
         else:
             self.rule_selector = RuleSelector(
@@ -475,10 +477,6 @@ class Parser:
                 self.statement_rule_names,
                 cache_enabled=cache_enabled,
             )
-        # Token 分类器（Pratt 解析器依赖）无论 RuleSelector 来源如何都需要安装
-        if rules_dir:
-            categories = pratt_parser.load_token_categories(rules_dir)
-            pratt_parser.install_token_classifier(categories)
         self.skip_types = ["newline", "space.fold"]
 
         self.atomic_rules: list[GrammarRule] = sorted(

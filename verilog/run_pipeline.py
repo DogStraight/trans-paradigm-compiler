@@ -15,6 +15,7 @@ from typing import Optional, Any, Dict, Tuple
 from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
 from core.define import FileManager, ParseError, GrammarRulesRegister
+from core.config_registry import ConfigRegistry, config
 from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
@@ -23,6 +24,15 @@ from transform.post import AstTransformer
 from transform.post.engine import ConfigDrivenTransform
 from preprocessor import preprocess, protect_and_reverse, load_macro_config
 from renderer.inline_comment import inject_comments
+
+
+# ========== 配置声明（启动时由 ConfigRegistry.load_all() 统一加载）==========
+config.declare("analyzer.mapping",
+               file="_analyzer.toml",
+               section="mapping",
+               base="ext",
+               required=False,
+               description="增强层语义映射配置（扩展规则目录）")
 
 # 模块级共享管线状态：组件按 rules_dir 缓存，避免重复初始化
 _PIPELINE_SHARED: dict = {}
@@ -167,6 +177,9 @@ def run_pipeline_on_source(
     # 所有按 rules_dir 可复用的组件集中初始化并缓存
     ctx = _PIPELINE_SHARED
     if rules_dir not in ctx:
+        # 统一加载所有 ConfigRegistry 声明
+        ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
+
         # 语法规则（含 EXT 注入）
         rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dir)
         stmt_names = [
@@ -271,24 +284,17 @@ def run_pipeline_on_source(
     # ---- Stage: Semantic analysis ----
     if analyzer_enabled:
         analyzer = SemanticAnalyzer(rules)
-        if rules_dir:
-            # 加载增强层 _analyzer.toml（映射配置在 EXT 目录中）
-            try:
-                ext_analyzer_path = os.path.join(
-                    FileManager.get_full_path(ext_dir), "_analyzer.toml"
-                )
-                if os.path.exists(ext_analyzer_path):
-                    with open(ext_analyzer_path, "rb") as f:
-                        import tomllib
-                        analyzer_cfg = tomllib.load(f)
-                        if isinstance(analyzer_cfg, dict):
-                            mapping_cfg = analyzer_cfg.get("mapping", {})
-                            analyzer._mapping_config = [
-                                v for v in mapping_cfg.values()
-                                if isinstance(v, dict) and v.get("trigger")
-                            ]
-            except Exception:
-                pass
+
+        # 从 ConfigRegistry 获取增强层语义映射配置
+        try:
+            mapping_cfg = config.get("analyzer.mapping")
+            if mapping_cfg:
+                analyzer._mapping_config = [
+                    v for v in mapping_cfg.values()
+                    if isinstance(v, dict) and "trigger" in v
+                ]
+        except KeyError:
+            pass
         ast = analyzer.analyze(ast)
         if analyzer.root_scope is None:
             _log("[analyzer] warning: no scope produced")
@@ -380,8 +386,8 @@ def run_pipeline_on_source(
 
         # Reverse macro protection
         if macro_table:
-            config = load_macro_config(rules_dir)
-            define_kw = config.get("directives", {}).get("define", "define")
+            macro_raw = load_macro_config(rules_dir)
+            define_kw = macro_raw.get("directives", {}).get("define", "define")
             content = protect_and_reverse(
                 content, original_source, macro_table, define_keyword=define_kw
             )
@@ -505,6 +511,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable production-level error recovery (slower, default off)",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress log output and skip JSON/symbol file saves",
+    )
 
     parser.add_argument(
         "--rules-dir",
@@ -544,6 +555,7 @@ def main() -> None:
         expand_macros=args.expand_macros,
         inline_comments=args.inline_comments,
         debug=args.debug,
+        quiet=args.quiet,
         analyzer_enabled=args.analyzer,
         transform_enabled=args.transform,
         renderer_enabled=args.renderer,
