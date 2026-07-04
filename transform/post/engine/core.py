@@ -244,13 +244,13 @@ class ConfigDrivenTransform(TransformPlugin):
                             break
 
                 # 无论是否有快捷方式，都展开子属性（sub_node 等）
-                # 跳过 name/content/value，因为它们已由快捷方式处理
+                # 已注册为快捷方式的 name/content/value 跳过重复展开
                 for attr_name in vars(obj):
-                    if attr_name.startswith("_") or attr_name in (
-                        "name",
-                        "content",
-                        "value",
-                    ):
+                    if attr_name.startswith("_"):
+                        continue
+                    if attr_name in ("name", "content", "value") and has_primary:
+                        continue
+
                         continue
                     val = getattr(obj, attr_name)
                     key = f"{prefix}{attr_name}" if prefix else attr_name

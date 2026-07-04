@@ -223,8 +223,9 @@ class SemanticAnalyzer:
             self._all_symbols.append(sym)
 
             # 收集语义映射（用于 transform 后端）
-            if kind == "role" and hasattr(scope.parent, "name"):
-                type_name = scope.parent.name
+            if kind == "role":
+                # 角色符号注册在类型作用域中（如 spi），scope.name 就是类型名
+                type_name = scope.name
                 role_name = name
                 ports_data = attrs.get("ports", [])
                 if not isinstance(ports_data, list):

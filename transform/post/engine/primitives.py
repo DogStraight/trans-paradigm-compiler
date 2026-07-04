@@ -34,6 +34,11 @@ def resolve_template(template: str, context: dict[str, Any]) -> str:
     """
 
     def _lookup(path: str, ctx: dict) -> str:
+        # 优先尝试扁平 key（_build_context 产出格式）
+        if path in ctx:
+            val = ctx[path]
+            return str(val) if not isinstance(val, (Node, dict, list)) else "{" + path + "}"
+        # 回退嵌套路径
         parts = re.split(r"\.|\[|\]", path)
         parts = [p for p in parts if p]
         val: Any = ctx
@@ -279,11 +284,21 @@ def emit(
     resolved = resolve_attrs(raw_base, context)
 
     # 递归处理 sub_node 中的嵌套 emit 规格
+    # 以及任何包含 "node" 键的 dict（自动视为嵌套 emit）
     kwargs: dict[str, Any] = {}
     for attr_name, attr_val in resolved.items():
         if attr_name == "sub_node" and isinstance(attr_val, list):
             kwargs[attr_name] = [
                 emit(item, context) if isinstance(item, dict) else item
+                for item in attr_val
+            ]
+        elif isinstance(attr_val, dict) and "node" in attr_val:
+            kwargs[attr_name] = emit(attr_val, context)
+        elif isinstance(attr_val, list):
+            kwargs[attr_name] = [
+                emit(item, context)
+                if isinstance(item, dict) and "node" in item
+                else item
                 for item in attr_val
             ]
         else:
@@ -381,11 +396,16 @@ def make_exists_condition(path: str) -> Callable[[dict[str, Any]], bool]:
 
     Args:
         path: 属性路径，如 "type_spec.type_name"
+              支持嵌套路径和扁平 key 两种形式
     Returns:
         谓词函数
     """
 
     def _pred(ctx: dict) -> bool:
+        # 优先尝试扁平 key（_build_context 产出格式）
+        if path in ctx:
+            return True
+        # 回退嵌套路径
         parts = path.split(".")
         val: Any = ctx
         for p in parts:
