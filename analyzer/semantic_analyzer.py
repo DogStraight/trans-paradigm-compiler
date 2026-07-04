@@ -45,6 +45,13 @@ class SemanticAnalyzer:
         self._all_symbols: List[Symbol] = []
         self._errors: List[str] = []
         self._unresolved_refs: List[str] = []
+        # 语义映射表：分析器产出的结构化语义数据，供 transform 后端消费
+        # type_ports: { type_name: { role_name: [{direction, names}, ...] } }
+        # type_revert: { type_name: { role_name: target_role } }
+        self._semantic_mapping: dict = {
+            "type_ports": {},
+            "type_revert": {},
+        }
     # 语义概念（节点名、属性名、默认值）直接使用字面量，无需配置文件或映射表
 
     # 配置文件加载方法已移除（_semantic.toml / _name_symbol.toml 已删除）
@@ -75,6 +82,10 @@ class SemanticAnalyzer:
     @property
     def errors(self) -> List[str]:
         return self._errors
+
+    @property
+    def semantic_mapping(self) -> dict:
+        return self._semantic_mapping
 
     # ---- 递归遍历核心 ----
 
@@ -209,6 +220,49 @@ class SemanticAnalyzer:
 
             sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
             self._all_symbols.append(sym)
+
+            # 收集语义映射（用于 transform 后端）
+            if kind == "role" and hasattr(scope.parent, "name"):
+                type_name = scope.parent.name
+                role_name = name
+                ports_data = attrs.get("ports", [])
+                if not isinstance(ports_data, list):
+                    ports_data = [ports_data] if ports_data else []
+                # 扁平化：提取 direction + 所有端口名
+                flat_ports = []
+                for p in ports_data:
+                    if not isinstance(p, dict):
+                        continue
+                    direction = p.get("direction", "")
+                    names = []
+                    items = p.get("items", {})
+                    if isinstance(items, dict):
+                        inner = items.get("items", [])
+                        if isinstance(inner, list):
+                            for decl in inner:
+                                if isinstance(decl, dict):
+                                    n = decl.get("name", "")
+                                    if n:
+                                        names.append(n)
+                                elif isinstance(decl, str):
+                                    names.append(decl)
+                        elif isinstance(inner, str):
+                            names.append(inner)
+                    if names:
+                        flat_ports.append({"direction": direction, "names": names})
+                if flat_ports:
+                    self._semantic_mapping["type_ports"].setdefault(
+                        type_name, {}
+                    )[role_name] = flat_ports
+
+                # 收集 revert 关系
+                for p in ports_data:
+                    if isinstance(p, dict) and p.get("node_name") == "TypeRevertPort":
+                        target = p.get("target_role", "")
+                        if target:
+                            self._semantic_mapping["type_revert"].setdefault(
+                                type_name, {}
+                            )[role_name] = target
 
     # ---- 路径遍历（共享 _walk_path / _extract_names）----
 

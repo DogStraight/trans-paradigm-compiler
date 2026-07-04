@@ -181,7 +181,7 @@ def run_pipeline_on_source(
         transformer = AstTransformer()
         transformer.register(
             ConfigDrivenTransform(
-                rules=rules, ext_dir=FileManager.get_full_path(ext_dir)
+                rules=rules
             )
         )
         ctx[rules_dir] = {
@@ -300,12 +300,23 @@ def run_pipeline_on_source(
 
     # ---- Stage: AST transform ----
     if transform_enabled and analyzer_enabled and scope is not None:
+        # 注入语义映射表（分析器产出的结构化语义数据）
+        for plugin in transformer.plugins:
+            if hasattr(plugin, "set_tables"):
+                plugin.set_tables(analyzer.semantic_mapping)
         ast = transformer.transform(ast, scope)
-        stats = getattr(transformer, "_transform_stats", {})
-        active = {k: v for k, v in stats.items() if v}
-        if active:
-            parts = " ".join(f"{k}={v}" for k, v in active.items())
-            _log(f"[transform] {parts}")
+        # 收集变换统计
+        total = 0
+        parts = []
+        for plugin in transformer.plugins:
+            if hasattr(plugin, "stats"):
+                s = plugin.stats
+                for k, v in s.items():
+                    if v:
+                        parts.append(f"{k}={v}")
+                        total += v
+        if parts:
+            _log(f"[transform] {' '.join(parts)}")
     elif transform_enabled:
         _log("[transform] skipped because semantic analysis was disabled")
     if stage == "transform":

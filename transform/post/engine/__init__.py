@@ -17,7 +17,6 @@
     transformer = AstTransformer()
     transformer.register(ConfigDrivenTransform(
         rules=grammar_rules,
-        ext_dir="grammar/rules_verilog_ext",
     ))
     ast = transformer.transform(ast, scope)
 """

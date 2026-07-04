@@ -42,29 +42,19 @@ class ConfigDrivenTransform(TransformPlugin):
     def __init__(
         self,
         rules: dict[str, Any],
-        ext_dir: str = "",
         tables: Optional[dict] = None,
         extra: Optional[dict] = None,
     ):
         self._rules = rules
         self._extra = extra or {}
 
-        # 加载 transform 配置和参考表
-        if tables is not None:
-            self._configs = {
-                name: transform
-                for name, rule in rules.items()
-                if isinstance((transform := getattr(rule, "transform", None)), dict)
-            }
-            self._tables = tables
-        else:
-            # 从规则 TOML 的 [RuleName.transform] 提取变换配置
-            self._configs = {
-                name: transform
-                for name, rule in rules.items()
-                if isinstance((transform := getattr(rule, "transform", None)), dict)
-            }
-            self._tables = {}
+        # 从规则 TOML 的 [RuleName.transform] 提取变换配置
+        self._configs = {
+            name: transform
+            for name, rule in rules.items()
+            if isinstance((transform := getattr(rule, "transform", None)), dict)
+        }
+        self._tables = tables or {}
 
         self._stats = {
             "expand": 0,
@@ -77,6 +67,10 @@ class ConfigDrivenTransform(TransformPlugin):
     @property
     def stats(self) -> dict[str, int]:
         return dict(self._stats)
+
+    def set_tables(self, tables: dict) -> None:
+        """注入运行期映射表（分析器产出的语义映射）"""
+        self._tables = tables
 
     # ── TransformPlugin 接口 ──
 
