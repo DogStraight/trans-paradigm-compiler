@@ -58,7 +58,7 @@ items = ["$2", "$3.items[*].sub_node[1]"]
 layout = { line = ["(", { join = ", ", items = [{ ref = "items" }] }, ")"] }
 
 
-# ── 单个参数 parameter MODE = 0 ──
+# ── type (parameter MODE = 0) 单个参数 ──
 [TypeParamItem]
 [TypeParamItem.parser]
 production = [
@@ -67,16 +67,14 @@ production = [
     "symbol.base.equal",
     "@PrimaryExpr",
 ]
-
 [TypeParamItem.parser.node]
 name = "$2"
 default = "$4"
-
 [TypeParamItem.renderer]
 layout = { line = ["parameter ", { ref = "name" }, " = ", { ref = "default" }] }
 
 
-# ── 类型体 { master : ...; slave : ...; } ──
+# ── 类型体 { master : ...; fn read : { }; } ──
 [TypeBody]
 [TypeBody.parser]
 production = [
@@ -84,18 +82,14 @@ production = [
     "@TypeMember*",
     "bracket.r_curly_bracket",
 ]
-
 [TypeBody.parser.node]
 members = "$2"
-
 [TypeBody.renderer]
 [TypeBody.renderer.layout]
 line = ["{", { break = 1 }]
-
 [TypeBody.renderer.layout.body]
 indent = 4
 source = "members"
-
 [TypeBody.renderer.layout.tail]
 text = "}"
 break = 2
@@ -113,7 +107,7 @@ child = "$1"
 layout = { ref = "child" }
 
 
-# ── 类型角色 master : input miso, output clk, ...; ──
+# ── 角色 master : input miso, output clk, ...; ──
 [TypeRole]
 [TypeRole.parser]
 production = [
@@ -123,27 +117,23 @@ production = [
     "(symbol.base.comma,@TypePortDecl)*",
     "symbol.base.semicolon",
 ]
-
 [TypeRole.parser.node]
 role_name = "$1"
 ports = ["$3", "$4.items[*].sub_node[1]"]
-
 [TypeRole.renderer]
 [TypeRole.renderer.layout]
 [TypeRole.renderer.layout.line]
 items = [{ ref = "role_name" }, ":", { break = 1 }]
-
 [TypeRole.renderer.layout.body]
 indent = 4
 source = "ports"
-
 [TypeRole.analyzer]
 symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
 
 
-# ── 类型端口声明 input miso, output clk ... ──
-# 复用 AnsiInputDecl / AnsiOutputDecl / AnsiInoutDecl
-# 同时支持 revert master（角色反转声明）
+# ── 角色端口　input miso | output clk | revert master ──
+# 复用核心规则的 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl
+# TypeRevertPort 用于角色体内的 revert 引用（不含分号）
 [TypePortDecl]
 inline = true
 [TypePortDecl.parser]
@@ -152,31 +142,29 @@ production = [
 ]
 [TypePortDecl.parser.node]
 child = "$1"
-
 [TypePortDecl.renderer]
 layout = { ref = "child" }
 
 
-# ── 角色反转声明 revert master（在 TypeRole 体内使用，不含分号）──
+# ── 角色内 revert（不含分号，被 TypePortDecl 引用）──
 [TypeRevertPort]
 [TypeRevertPort.parser]
 production = ["keyword.revert", "@Identifier"]
-
 [TypeRevertPort.parser.node]
 target_role = "$2"
-
 [TypeRevertPort.renderer]
 layout = { line = ["revert ", { ref = "target_role" }] }
 
 
-# ── revert 声明 slave : revert master; ──
+# ── 成员级 revert（含分号，被 TypeMember 引用）──
+# 注意与 TypeRevertPort 的区别：
+#   TypeRevertPort — 角色端口中的引用（不含分号，被 TypePortDecl 引用）
+#   RevertDecl    — 类型成员中的语句（含分号，被 TypeMember 引用）
 [RevertDecl]
 [RevertDecl.parser]
 production = ["keyword.revert", "@Identifier", "symbol.base.semicolon"]
-
 [RevertDecl.parser.node]
 target_role = "$2"
-
 [RevertDecl.renderer]
 layout = { line = ["revert ", { ref = "target_role" }, ";"] }
 

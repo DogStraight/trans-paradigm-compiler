@@ -1,17 +1,12 @@
-# ===== 增强语法：类型化端口声明 =====
+# ===== 类型化端口声明（增强语法）=====
 #
-# spi(master) spi_io;
+# spi.slave spi_io;
 #   ↓ transform 展开
 # output spi_io_clk;
 # output spi_io_mosi;
 # input  spi_io_miso;
 # output spi_io_cs;
 #
-# 架构：
-#   TypeSpec 已从 PortTail 中抽离为独立规则
-#   TypedTypeSpec 注入到 TypeSpec 作为优先分支
-#   TypedPortDecl 注入到 AnsiPortDecl 作为优先分支
-
 # 挂载点
 [TypedPortDecl.inject]
 targets = ["@AnsiPortDecl", "@ModuleItem"]
@@ -36,7 +31,12 @@ layout = { line = [{ ref = "type_name" }, ".", { ref = "role_name" }] }
 [TypedPortDecl]
 [TypedPortDecl.parser]
 production = ["@TypedTypeSpec", "@Declarator"]
-end_case = ["newline", "symbol.base.semicolon", "symbol.base.comma", "bracket.r_parentheses"]
+end_case = [
+    "newline",
+    "symbol.base.semicolon",
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+]
 [TypedPortDecl.parser.node]
 type_spec = "$1"
 instance_name = "$2"
@@ -61,6 +61,12 @@ kind = "switch"
 on = "{$.direction}"
 
 [TypedPortDecl.transform.emit.cases]
-input = { kind = "emit", node = "AnsiInputDecl", direction = "input", items = { node = "DeclaratorList", items = [{ node = "Declarator", name = "{instance_name.name.content}_{$.name}" }] } }
-output = { kind = "emit", node = "AnsiOutputDecl", direction = "output", items = { node = "DeclaratorList", items = [{ node = "Declarator", name = "{instance_name.name.content}_{$.name}" }] } }
-inout = { kind = "emit", node = "AnsiInoutDecl", direction = "inout", items = { node = "DeclaratorList", items = [{ node = "Declarator", name = "{instance_name.name.content}_{$.name}" }] } }
+input = { kind = "emit", node = "AnsiInputDecl", direction = "input", items = { node = "DeclaratorList", items = [
+    { node = "Declarator", name = "{instance_name.name.content}_{$.name}" },
+] } }
+output = { kind = "emit", node = "AnsiOutputDecl", direction = "output", items = { node = "DeclaratorList", items = [
+    { node = "Declarator", name = "{instance_name.name.content}_{$.name}" },
+] } }
+inout = { kind = "emit", node = "AnsiInoutDecl", direction = "inout", items = { node = "DeclaratorList", items = [
+    { node = "Declarator", name = "{instance_name.name.content}_{$.name}" },
+] } }
