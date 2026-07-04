@@ -38,24 +38,22 @@ def register_capture_hook(name: str) -> Callable:
 class SemanticAnalyzer:
     """语义分析器：遍历 AST，注册声明，解析标识符引用"""
 
-    def __init__(self, grammar_rules: Dict[str, Any]):
+    def __init__(self, grammar_rules: Dict[str, Any], mapping_config: Optional[dict] = None):
         self._rules = grammar_rules
         self._root_scope: Optional[Scope] = None
         self._current_scope: Optional[Scope] = None
         self._all_symbols: List[Symbol] = []
         self._errors: List[str] = []
         self._unresolved_refs: List[str] = []
-        # 语义映射表：分析器产出的结构化语义数据，供 transform 后端消费
-        # type_ports: { type_name: { role_name: [{direction, names}, ...] } }
-        # type_revert: { type_name: { role_name: target_role } }
-        self._semantic_mapping: dict = {
-            "type_ports": {},
-            "type_ports_flat": {},
-            "type_revert": {},
-        }
-    # 语义概念（节点名、属性名、默认值）直接使用字面量，无需配置文件或映射表
-
-    # 配置文件加载方法已移除（_semantic.toml / _name_symbol.toml 已删除）
+        # 语义映射配置（从 _analyzer.toml 加载）
+        self._mapping_config: list[dict] = []
+        if mapping_config:
+            self._mapping_config = [
+                v for v in mapping_config.values()
+                if isinstance(v, dict) and "trigger" in v
+            ]
+        # 语义映射表
+        self._semantic_mapping: dict = {}
 
     def analyze(self, ast: Node) -> Node:
         """对 AST 进行语义分析，返回带 _symbol_ref 的 AST（只读）"""
@@ -222,60 +220,123 @@ class SemanticAnalyzer:
             sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
             self._all_symbols.append(sym)
 
-            # 收集语义映射（用于 transform 后端）
-            if kind == "role":
-                # 角色符号注册在类型作用域中（如 spi），scope.name 就是类型名
-                type_name = scope.name
-                role_name = name
-                ports_data = attrs.get("ports", [])
-                if not isinstance(ports_data, list):
-                    ports_data = [ports_data] if ports_data else []
-                # 扁平化：提取 direction + 所有端口名
-                flat_ports = []
-                expand_ports = []
-                for p in ports_data:
-                    if not isinstance(p, dict):
-                        continue
-                    direction = p.get("direction", "")
-                    names = []
-                    items = p.get("items", {})
-                    if isinstance(items, dict):
-                        inner = items.get("items", [])
-                        if isinstance(inner, list):
-                            for decl in inner:
-                                if isinstance(decl, dict):
-                                    n = decl.get("name", "")
-                                    if n:
-                                        names.append(n)
-                                elif isinstance(decl, str):
-                                    names.append(decl)
-                        elif isinstance(inner, str):
-                            names.append(inner)
-                    if names:
-                        flat_ports.append({"direction": direction, "names": names})
-                        # 拍平：每条端口名一条记录
-                        for n in names:
-                            expand_ports.append({
-                                "direction": direction,
-                                "name": n,
-                            })
-                if flat_ports:
-                    self._semantic_mapping["type_ports"].setdefault(
-                        type_name, {}
-                    )[role_name] = flat_ports
-                if expand_ports:
-                    self._semantic_mapping["type_ports_flat"].setdefault(
-                        type_name, {}
-                    )[role_name] = expand_ports
+            # 收集语义映射（根据 _analyzer.toml 配置，懒初始化表结构）
+            self._apply_mappings(kind, name, scope, attrs)
 
-                # 收集 revert 关系
-                for p in ports_data:
-                    if isinstance(p, dict) and p.get("node_name") == "TypeRevertPort":
-                        target = p.get("target_role", "")
-                        if target:
-                            self._semantic_mapping["type_revert"].setdefault(
-                                type_name, {}
-                            )[role_name] = target
+    # ---- 语义映射收集（由 _analyzer.toml 驱动）----
+
+    def _apply_mappings(self, kind: str, name: str, scope: Scope, attrs: dict) -> None:
+        """根据 _analyzer.toml 的 mapping 配置收集语义映射数据。"""
+        if not self._mapping_config:
+            return
+        for entry in self._mapping_config:
+            trigger = entry.get("trigger", {})
+            if trigger.get("kind") != kind:
+                continue
+            table = entry.get("table", "")
+            if not table:
+                continue
+            if table not in self._semantic_mapping:
+                self._semantic_mapping[table] = {}
+
+            # 构建映射键
+            key_template = entry.get("key", "")
+            ctx = {"scope.name": scope.name, "name": name}
+            key = key_template
+            for k, v in ctx.items():
+                key = key.replace("{" + k + "}", str(v))
+
+            # 提取源数据
+            source_cfg = entry.get("source", {})
+            source_data = attrs.get(source_cfg.get("attr", ""), [])
+            if not isinstance(source_data, list):
+                source_data = [source_data] if source_data else []
+
+            # 筛选
+            filter_cfg = source_cfg.get("filter", {})
+            if filter_cfg:
+                filtered = []
+                for item in source_data:
+                    if isinstance(item, dict) and all(
+                        item.get(k) == v for k, v in filter_cfg.items()
+                    ):
+                        filtered.append(item)
+                source_data = filtered
+
+            # 按 items 逐项处理
+            if source_cfg.get("items", False):
+                items = []
+                values = []
+                for item in source_data:
+                    if not isinstance(item, dict):
+                        continue
+                    fields = entry.get("fields", {})
+                    if fields:
+                        records = [{}]
+                        for field_name, field_template in fields.items():
+                            field_str = str(field_template)
+                            if field_str.startswith("{$.") and field_str.endswith("}"):
+                                field_key = field_str[3:-1]
+                                val = item.get(field_key, field_str)
+                                for r in records:
+                                    r[field_name] = val
+                            elif "[*]" in field_str:
+                                val = item
+                                for part in field_str.replace("[*]", "").split("."):
+                                    part = part.strip()
+                                    if isinstance(val, dict):
+                                        val = val.get(part, {})
+                                    elif isinstance(val, list):
+                                        names = []
+                                        for v in val:
+                                            if isinstance(v, dict):
+                                                n = v.get(part, "")
+                                                if n:
+                                                    names.append(n)
+                                            elif isinstance(v, str):
+                                                names.append(v)
+                                        val = names
+                                    else:
+                                        val = {}
+                                if isinstance(val, list):
+                                    # 列表值：为每个值创建一条独立记录
+                                    new_records = []
+                                    for single_val in val:
+                                        for r in records:
+                                            nr = dict(r)
+                                            nr[field_name] = single_val
+                                            new_records.append(nr)
+                                    records = new_records
+                                else:
+                                    for r in records:
+                                        r[field_name] = val if val else field_str
+                            else:
+                                for r in records:
+                                    r[field_name] = field_str
+                        items.extend(records)
+                    # value 简写：直接取 item 的某字段
+                    value_key = entry.get("value", "")
+                    if value_key:
+                        values.append(item.get(value_key, ""))
+                if items:
+                    # 嵌套 key 展开："spi.master" → {spi: {master: items}}
+                    self._set_nested(self._semantic_mapping[table], key, items)
+                if values:
+                    self._set_nested(self._semantic_mapping[table], key,
+                                     values[0] if len(values) == 1 else values)
+
+            # first_only：只取第一个匹配
+            if entry.get("first_only"):
+                # 已在上面的 items 循环中处理
+                pass
+
+    def _set_nested(self, d: dict, key: str, value: Any) -> None:
+        """将 "spi.master" 展开为 {spi: {master: value}} 存入 dict"""
+        parts = key.split(".")
+        parent = d
+        for p in parts[:-1]:
+            parent = parent.setdefault(p, {})
+        parent[parts[-1]] = value
 
     # ---- 路径遍历（共享 _walk_path / _extract_names）----
 

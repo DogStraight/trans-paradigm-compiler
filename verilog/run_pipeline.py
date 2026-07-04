@@ -271,6 +271,24 @@ def run_pipeline_on_source(
     # ---- Stage: Semantic analysis ----
     if analyzer_enabled:
         analyzer = SemanticAnalyzer(rules)
+        if rules_dir:
+            # 加载增强层 _analyzer.toml（映射配置在 EXT 目录中）
+            try:
+                ext_analyzer_path = os.path.join(
+                    FileManager.get_full_path(ext_dir), "_analyzer.toml"
+                )
+                if os.path.exists(ext_analyzer_path):
+                    with open(ext_analyzer_path, "rb") as f:
+                        import tomllib
+                        analyzer_cfg = tomllib.load(f)
+                        if isinstance(analyzer_cfg, dict):
+                            mapping_cfg = analyzer_cfg.get("mapping", {})
+                            analyzer._mapping_config = [
+                                v for v in mapping_cfg.values()
+                                if isinstance(v, dict) and v.get("trigger")
+                            ]
+            except Exception:
+                pass
         ast = analyzer.analyze(ast)
         if analyzer.root_scope is None:
             _log("[analyzer] warning: no scope produced")

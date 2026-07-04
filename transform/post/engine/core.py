@@ -373,7 +373,13 @@ def _expand_primitive(engine, node, config, root_scope):
                     saved = {}
                     try:
                         for k, v in ctx.items():
-                            if not hasattr(node, k):
+                            # foreach 的 item 存在 $ 下，展开到节点顶层
+                            if k == "$" and isinstance(v, dict):
+                                for ik, iv in v.items():
+                                    if not hasattr(node, ik):
+                                        setattr(node, ik, iv)
+                                        saved[ik] = None
+                            elif not hasattr(node, k):
                                 setattr(node, k, v)
                                 saved[k] = None
                             elif getattr(node, k) != v:

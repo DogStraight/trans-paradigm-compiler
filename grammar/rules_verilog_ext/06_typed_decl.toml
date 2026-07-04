@@ -58,15 +58,15 @@ foreach = "$"
 
 [TypedPortDecl.transform.emit]
 kind = "switch"
-on = "{$.direction}"
+on = "{direction}"
 
 [TypedPortDecl.transform.emit.cases]
 input = { kind = "emit", node = "AnsiInputDecl", direction = "input", items = { node = "DeclaratorList", items = [
-    { node = "Declarator", name = "{instance_name.name.content}_{$.name}" },
+    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
 ] } }
 output = { kind = "emit", node = "AnsiOutputDecl", direction = "output", items = { node = "DeclaratorList", items = [
-    { node = "Declarator", name = "{instance_name.name.content}_{$.name}" },
+    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
 ] } }
 inout = { kind = "emit", node = "AnsiInoutDecl", direction = "inout", items = { node = "DeclaratorList", items = [
-    { node = "Declarator", name = "{instance_name.name.content}_{$.name}" },
+    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
 ] } }

@@ -1,0 +1,41 @@
+# _analyzer.toml — 增强语法层的语义映射配置
+#
+# 定义分析器在符号注册后如何收集语义映射数据。
+# 每条 mapping 条目声明映射表的触发条件、键构造规则、和数据源提取方式。
+#
+# trigger = { kind = "..." }     ← 符号类别触发
+# table = "name"                 ← 输出到 mapping["name"]
+# key = "{scope.name}.{name}"    ← 键模板（{attr} 取符号上下文）
+# source = { attr = "ports", ... } ← 从符号 attrs 的哪个字段提取
+# items = true                   ← 源数据是列表，逐项处理
+# fields = { ... }               ← 每项提取的子字段
+# value = "field"                ← 简写：直接取某字段值
+
+[mapping.type_ports_flat]
+trigger = { kind = "role" }
+table = "type_ports_flat"
+key = "{scope.name}.{name}"
+source = { attr = "ports", items = true }
+fields = { direction = "{$.direction}", name = "items.items[*].name" }
+
+[mapping.type_ports]
+trigger = { kind = "role" }
+table = "type_ports"
+key = "{scope.name}.{name}"
+source = { attr = "ports", items = true }
+fields = { direction = "{$.direction}", names = "items.items[*].name" }
+
+[mapping.type_revert]
+trigger = { kind = "role" }
+table = "type_revert"
+key = "{scope.name}.{name}"
+source = { attr = "ports", items = true, filter = { node_name = "TypeRevertPort" } }
+value = "target_role"
+
+[mapping.type_default_ports]
+trigger = { kind = "role" }
+table = "type_default_ports"
+key = "{scope.name}"
+first_only = true
+source = { attr = "ports", items = true }
+fields = { direction = "{$.direction}", name = "items.items[*].name" }
