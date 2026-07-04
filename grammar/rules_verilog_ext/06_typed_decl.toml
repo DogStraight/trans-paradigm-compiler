@@ -46,11 +46,21 @@ instance_name = "$2"
 symbol = { kind = "typed_port", name_attr = "instance_name.name" }
 ref_collect = true
 
-# transform: 原语展开 — 将类型化端口展开为具体端口声明
-#   source.lookup  → scope_type: 从 scope 类型域查 {type_name}.{role_name}
-#   foreach       → 取查到的 ports 列表（由 analyzer capture 从 TypeRole 提取）
-#   as            → 每项绑定为 port，emit 模板中用 {port.xxx}
-#   emit          → 为每个端口生成一个 AnsiInputDecl/AnsiOutputDecl 节点
+# transform: 通过原语展开类型化端口
+#   1. expand: 从语义映射表查 {type_name}.{role_name} 的扁平端口列表
+#   2. foreach: 遍历每个端口
+#   3. switch: 按 direction 分支发射不同节点类型
 [TypedPortDecl.transform]
-kind = "expand_typed_port"
+kind = "expand"
 condition = { exists = "type_spec.type_name" }
+source = { lookup = "type_ports_flat", key = "{type_spec.type_name}.{type_spec.role_name}" }
+foreach = "$"
+
+[TypedPortDecl.transform.emit]
+kind = "switch"
+on = "{direction}"
+
+[TypedPortDecl.transform.emit.cases]
+input = { kind = "emit", node = "AnsiInputDecl", direction = "input", items = { node = "DeclaratorList", items = [{ node = "Declarator", name = "{instance_name}_{name}" }] } }
+output = { kind = "emit", node = "AnsiOutputDecl", direction = "output", items = { node = "DeclaratorList", items = [{ node = "Declarator", name = "{instance_name}_{name}" }] } }
+inout = { kind = "emit", node = "AnsiInoutDecl", direction = "inout", items = { node = "DeclaratorList", items = [{ node = "Declarator", name = "{instance_name}_{name}" }] } }

@@ -50,6 +50,7 @@ class SemanticAnalyzer:
         # type_revert: { type_name: { role_name: target_role } }
         self._semantic_mapping: dict = {
             "type_ports": {},
+            "type_ports_flat": {},
             "type_revert": {},
         }
     # 语义概念（节点名、属性名、默认值）直接使用字面量，无需配置文件或映射表
@@ -230,6 +231,7 @@ class SemanticAnalyzer:
                     ports_data = [ports_data] if ports_data else []
                 # 扁平化：提取 direction + 所有端口名
                 flat_ports = []
+                expand_ports = []
                 for p in ports_data:
                     if not isinstance(p, dict):
                         continue
@@ -250,10 +252,20 @@ class SemanticAnalyzer:
                             names.append(inner)
                     if names:
                         flat_ports.append({"direction": direction, "names": names})
+                        # 拍平：每条端口名一条记录
+                        for n in names:
+                            expand_ports.append({
+                                "direction": direction,
+                                "name": n,
+                            })
                 if flat_ports:
                     self._semantic_mapping["type_ports"].setdefault(
                         type_name, {}
                     )[role_name] = flat_ports
+                if expand_ports:
+                    self._semantic_mapping["type_ports_flat"].setdefault(
+                        type_name, {}
+                    )[role_name] = expand_ports
 
                 # 收集 revert 关系
                 for p in ports_data:

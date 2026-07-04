@@ -24,6 +24,7 @@ from .primitives import (
     lookup_type_scope as _lookup_type_scope,
     foreach as _foreach,
     emit as _emit,
+    resolve_template,
 )
 
 
@@ -363,12 +364,37 @@ def _expand_primitive(engine, node, config, root_scope):
 
     if items:
 
-        def _do_emit(item: Any, ctx: dict):
+        def _do_transform(item: Any, ctx: dict):
+            """对 foreach 元素执行变换：emit 或原语调度"""
+            if isinstance(emit_spec, dict) and "kind" in emit_spec:
+                prim = get_primitive(emit_spec["kind"])
+                if prim:
+                    # 将 foreach 上下文注到节点上供原语消费
+                    saved = {}
+                    try:
+                        for k, v in ctx.items():
+                            if not hasattr(node, k):
+                                setattr(node, k, v)
+                                saved[k] = None
+                            elif getattr(node, k) != v:
+                                saved[k] = getattr(node, k)
+                                setattr(node, k, v)
+                        return prim(engine, node, emit_spec, root_scope)
+                    finally:
+                        for k, v_orig in saved.items():
+                            if v_orig is None:
+                                delattr(node, k)
+                            else:
+                                setattr(node, k, v_orig)
             return _emit(emit_spec, ctx)
 
-        results = _foreach(items, as_name, _do_emit, context)
+        results = _foreach(items, as_name, _do_transform, context)
         return results if results else SKIP
     else:
+        if isinstance(emit_spec, dict) and "kind" in emit_spec:
+            prim = get_primitive(emit_spec["kind"])
+            if prim:
+                return prim(engine, node, emit_spec, root_scope)
         result = _emit(emit_spec, context)
         return result
 
@@ -388,6 +414,10 @@ def _replace_primitive(engine, node, config, root_scope):
     emit_spec = config.get("emit")
     if emit_spec is None:
         return SKIP
+    if isinstance(emit_spec, dict) and "kind" in emit_spec:
+        prim = get_primitive(emit_spec["kind"])
+        if prim:
+            return prim(engine, node, emit_spec, root_scope)
     return _emit(emit_spec, context)
 
 
@@ -422,3 +452,61 @@ register_primitive("expand", _expand_primitive)
 register_primitive("replace", _replace_primitive)
 register_primitive("delete", _delete_primitive)
 register_primitive("custom", _custom_primitive)
+
+
+# ── emit 原语：创建 AST 节点 ──
+
+
+def _emit_primitive(engine, node, config, root_scope):
+    """emit 原语：根据规格创建 AST 节点。"""
+    context = engine._build_context(node)
+    result = _emit(config, context)
+    return result if result is not None else SKIP
+
+
+register_primitive("emit", _emit_primitive)
+
+
+# ── switch 原语：按条件分支调度不同变换 ──
+
+
+def _switch_primitive(engine, node, config, root_scope):
+    """switch 原语：按条件分支调度不同变换。
+
+    配置格式:
+        kind = "switch"
+        on = "{attr}"       # 模板表达式，被求值作为分支键
+        cases.val1 = { kind = "emit", node = "...", ... }
+        cases.val2 = { kind = "expand", ... }
+        default = { ... }   # 可选兜底，无 kind 时作为 emit 规格
+    """
+    context = engine._build_context(node)
+    on_expr = config.get("on", "")
+    value = resolve_template(on_expr, context)
+    if value == on_expr:
+        return SKIP
+
+    cases = config.get("cases", {})
+    sub_config = cases.get(value) or config.get("default")
+    if sub_config is None:
+        return SKIP
+
+    kind = sub_config.get("kind", "")
+    if kind:
+        prim = get_primitive(kind)
+        if prim:
+            result = prim(engine, node, sub_config, root_scope)
+            if result is not SKIP:
+                engine._stats["switch"] = engine._stats.get("switch", 0) + 1
+            return result
+    else:
+        # 无 kind → 直接作为 emit 规格
+        ctx = engine._build_context(node)
+        result = _emit(sub_config, ctx)
+        if result is not None:
+            engine._stats["switch"] = engine._stats.get("switch", 0) + 1
+            return result
+    return SKIP
+
+
+register_primitive("switch", _switch_primitive)

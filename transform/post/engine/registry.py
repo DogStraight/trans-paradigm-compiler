@@ -51,7 +51,7 @@ def register_primitive(name: str, fn: TransformPrimitive) -> None:
     """直接注册一个变换原语。
 
     内置原语在 engine.py 中注册，扩展原语在 __init__.py 或自定义模块中注册。
-    TOML 中 kind = "expand_typed_port" 直接索引此注册表。
+    TOML 中 kind = "xxx" 直接索引此注册表。
     """
     if name in _primitive_registry:
         raise ValueError(f"Transform primitive '{name}' 已注册")
