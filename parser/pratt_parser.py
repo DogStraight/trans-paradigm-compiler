@@ -57,12 +57,20 @@ def build_priority_maps(operator_defs):
 # ========== Token 分类（从 _token.toml 加载）==========
 def load_token_categories(rules_dir: str) -> dict:
     """从 base/_lexer.toml 加载 [token_category] 配置"""
+    import logging
+    base_path = os.path.join(rules_dir, "base", "_lexer.toml")
+    if not os.path.exists(base_path):
+        logging.warning(f"[pratt] token categories not found: {base_path}")
+        return {}
     try:
-        base_path = os.path.join(rules_dir, "base", "_lexer.toml")
         content = FileManager.read_file(base_path)
         data = tomllib.loads(content)
-        return data.get("token_category", {})
-    except Exception:
+        categories = data.get("token_category", {})
+        if not categories:
+            logging.warning(f"[pratt] no [token_category] in {base_path}")
+        return categories
+    except Exception as e:
+        logging.error(f"[pratt] failed to load {base_path}: {e}")
         return {}
 
 
@@ -119,7 +127,18 @@ def is_none(token) -> bool:
 def install_token_classifier(categories: dict) -> None:
     """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
     global _token_checks
-    _token_checks = build_token_classifier(categories)
+    if categories:
+        _token_checks = build_token_classifier(categories)
+    else:
+        # 兜底：按 Token type 命名惯例推断分类
+        _token_checks = build_token_classifier({
+            "number": {"match": "prefix", "types": ["literal.number"]},
+            "string": {"match": "prefix", "types": ["literal.string"]},
+            "bool": {"match": "prefix", "types": ["literal.bool"]},
+            "identifier": {"match": "prefix", "types": ["id"]},
+            "operator": {"match": "prefix", "types": ["symbol"]},
+            "none": {"match": "prefix", "types": ["literal.none"]},
+        })
 
 
 # ========== 字面量解析辅助 ==========

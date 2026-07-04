@@ -478,8 +478,7 @@ class Parser:
         # Token 分类器（Pratt 解析器依赖）无论 RuleSelector 来源如何都需要安装
         if rules_dir:
             categories = pratt_parser.load_token_categories(rules_dir)
-            if categories:
-                pratt_parser.install_token_classifier(categories)
+            pratt_parser.install_token_classifier(categories)
         self.skip_types = ["newline", "space.fold"]
 
         self.atomic_rules: list[GrammarRule] = sorted(
