@@ -90,6 +90,7 @@ python verilog/run_all_tests.py normal                 # 仅 normal 组
 python verilog/run_all_tests.py errors                 # 仅 errors 组
 python verilog/run_all_tests.py normal counter         # 仅单个用例
 python verilog/run_all_tests.py --expand-macros        # 展开宏后再测试
+python verilog/run_pipeline.py --recovery              # 启用错误恢复
 ```
 
 `run_pipeline.py` 查找顺序：`normal/<test_name>` → `errors/<test_name>`。
@@ -216,6 +217,19 @@ Statement  → CtrlStmt | ProcAssignStmt | ProcLocalDecl | CallStmt
 
 详见 `transform/post/` 和 `grammar/rules_verilog_ext/` 中的 transform 配置示例。
 
+## 错误恢复（Production 级）
+
+Parser 支持可选的 production 级错误恢复，通过 `[RuleName.parser] recovery = true` 声明：
+
+- 启用恢复的规则设 `committed = True`，后续 production 元素失败时不回溯，产出 `ErrorNode`
+- 智能停止位置检测：同步扫描 next-start / current-end 双路径，选最佳截断点
+- ErrorNode 渲染为 `/* ERROR: ... */`
+- `--recovery` 开关启用全局恢复（默认关闭）
+- `errors/` 组测试需要 `--recovery` 才能成功（当前 4 个 errors 用例默认 FAIL）
+- 恢复策略：`skip_to_end` / `skip_one` / `skip_to_matching` / `skip_to_newline` / `skip_then_retry_until`
+
+详见 [docs/recovery.md](../../docs/recovery.md)。
+
 ## 调试快速参考
 
 ### 常见失败模式速查
@@ -241,11 +255,30 @@ Statement  → CtrlStmt | ProcAssignStmt | ProcLocalDecl | CallStmt
 
 ## 可用 Skills
 
+### Workspace Skills
+
 | Skill | 用途 | 触发方式 |
 |-------|------|---------|
 | grammar-lint | TOML 语法规则静态检查 | `/grammar-lint` |
 | pipeline-debug | 管线故障排查（Token→AST→渲染） | `/pipeline-debug` |
 | renderer-debug | 渲染布局问题追踪 | `/renderer-debug` |
+
+### User-level Skills（`c:\Users\micro\.agents\skills\`）
+
+| Skill | 用途 | 触发方式 |
+|-------|------|---------|
+| grammar-extension | 语法扩展工作流：从 TOML 规则到测试验证 | `/grammar-extension` |
+| hardcode-check | 检查魔法数字/重复逻辑/硬编码路径 | `/hardcode-check` |
+| project-research | 调研外部项目，评估对 PyV 的参考价值 | `/project-research` |
+| pwsh-cookbook | PowerShell 脚本编写参考（转义/编码/hook） | `/pwsh-cookbook` |
+
+## Session Summary Hook
+
+每次新对话时，`UserPromptSubmit` hook 自动运行 `.github/hooks/scripts/load-summary.ps1`，加载 `.github/session-summary.md` 注入上下文。
+
+- 配置在 `.github/hooks/session-summary.json` 中
+- `post-commit` Git hook 自动更新 session-summary（日期 + HEAD SHA）
+- 让新对话快速接入上次进展
 
 ## Git 提交约定
 
@@ -302,7 +335,7 @@ python verilog/run_pipeline.py --debug       # 调试模式
 
 - 新语法特性 = 新 `verilog/ref/ref_*.v` 测试用例
 - 生成结果在 `verilog/gen/gen_*.v`，与参考文件对比行数和状态
-- 目标：全量回归 < 1s，33 测试 → 300 测试 < 10s
+- 目标：全量回归 < 1s，32 测试 → 300 测试 < 10s
 
 ## 预处理器（`preprocessor/`）
 

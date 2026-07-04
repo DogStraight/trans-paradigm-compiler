@@ -1,14 +1,19 @@
 from .scope import Scope, Symbol, get_symbol_kinds
 from .semantic_analyzer import SemanticAnalyzer, register_capture_hook
 
-
 # ── 内置 capture 后处理器 ──
+
 
 @register_capture_hook("resolve_revert")
 def _resolve_revert(node, sym_rule, scope, name, attrs):
     """解析角色中的 revert 声明：查目标角色端口并反转方向。"""
+
     def _rev(d):
-        return "output" if d in ("input", "input_reg") else "input" if d in ("output", "output_reg") else d
+        return (
+            "output"
+            if d in ("input", "input_reg")
+            else "input" if d in ("output", "output_reg") else d
+        )
 
     ports = attrs.get("ports")
     if not ports:
@@ -23,7 +28,7 @@ def _resolve_revert(node, sym_rule, scope, name, attrs):
         if port.get("node_name") == "TypeRevertPort":
             target = port.get("target_role", "")
             if target and target in scope.symbols:
-                for tp in (scope.symbols[target].attrs.get("ports") or []):
+                for tp in scope.symbols[target].attrs.get("ports") or []:
                     if not isinstance(tp, dict) or not tp.get("direction"):
                         continue
                     rev = dict(tp)
@@ -35,4 +40,10 @@ def _resolve_revert(node, sym_rule, scope, name, attrs):
     return attrs
 
 
-__all__ = ["Scope", "Symbol", "get_symbol_kinds", "SemanticAnalyzer", "register_capture_hook"]
+__all__ = [
+    "Scope",
+    "Symbol",
+    "get_symbol_kinds",
+    "SemanticAnalyzer",
+    "register_capture_hook",
+]

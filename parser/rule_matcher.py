@@ -95,7 +95,9 @@ def _find_recovery_strategy(
     return None
 
 
-def _find_current_end(spec: str, grammar_rules: dict, bracket_map: dict[str, str] | None = None) -> set[str]:
+def _find_current_end(
+    spec: str, grammar_rules: dict, bracket_map: dict[str, str] | None = None
+) -> set[str]:
     """计算一个产生式规格字符串的自然结束 token。
 
     例如:
@@ -135,22 +137,15 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
     return method(node, context)
 
 
-def _get_recovery_cfg(self, rule: GrammarRule) -> bool:
-    """规则级 recovery 检查。
+def _get_recovery(self, rule):
+    """获取规则级的 recovery 策略配置。
 
-    全局开关 (global_recovery) 为 master switch：
-    - False → 所有 recovery 禁用（包括局部 recovery=true）
-    - True  → 规则级 recovery=truedict 生效
+    返回 None（未配置，使用默认 skip_to_end）或 dict（显式 $N 策略）。
+    全局开关 `global_recovery` 关闭时也返回 None。
     """
     if not getattr(self, "global_recovery", False):
-        return False
-    p = getattr(rule, "parser", {})
-    if isinstance(p, dict):
-        val = p.get("recovery")
-        if isinstance(val, dict):
-            return True  # dict = 有子策略配置（如 PortParens）
-        return bool(val)
-    return False
+        return None
+    return getattr(rule, "recovery", None)
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
@@ -176,6 +171,128 @@ def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
     return cache[prod]
 
 
+def _compute_end_case_tokens(rule: GrammarRule, context: ParseContext) -> set[str]:
+    """计算规则的 end_case + 继承的 _end_case_chain。"""
+    tokens: set[str] = set()
+    for ec in getattr(rule, "end_case", []):
+        if isinstance(ec, str) and not ec.startswith("!"):
+            tokens.add(ec)
+    tokens.update(getattr(context, "_end_case_chain", set()))
+    return tokens
+
+
+def _recover_skip_strategy(
+    self,
+    context: ParseContext,
+    strategy: str,
+    first_raw: str,
+    end_case_tokens: set[str],
+) -> Node | None:
+    """执行除 skip_to_end 之外的简单恢复策略。返回 ErrorNode，未知策略返回 None。"""
+    err = Node("Error")
+    err.add_attr("raw", first_raw)
+
+    if strategy == "skip_one":
+        if context.has_more_tokens():
+            context.advance_token()
+        return err
+
+    elif strategy == "skip_to_matching":
+        depth = 0
+        while context.has_more_tokens():
+            t = context.peek_token()
+            assert t is not None
+            if t.type in end_case_tokens:
+                break
+            if t.type in self._bracket_map:
+                depth += 1
+            elif t.type in self._inverse_bracket_map:
+                if depth == 0:
+                    break
+                depth -= 1
+            context.advance_token()
+        return err
+
+    elif strategy == "skip_to_newline":
+        while context.has_more_tokens():
+            t = context.peek_token()
+            assert t is not None
+            if t.type in end_case_tokens or t.type == "newline":
+                break
+            context.advance_token()
+        return err
+
+    return None  # skip_to_end 由
+
+
+def _recover_skip_to_end(
+    self,
+    context: ParseContext,
+    prod: str,
+    rule: GrammarRule,
+    sync_tokens: set[str] | None,
+    first_raw: str,
+    end_case_tokens: set[str],
+) -> Node:
+    """skip_to_end — 双路径同步扫描。"""
+    next_start = sync_tokens or set()
+    current_end = _find_current_end(prod, self.grammar_rules, self._bracket_map)
+
+    scan_ptr = context.token_pointer
+    pos_next: int | None = None
+    pos_current: int | None = None
+    scan_len = 0
+    while scan_ptr < len(context.tokens):
+        t = context.tokens[scan_ptr]
+        if t.type in end_case_tokens:
+            break
+        scan_len += 1
+        if pos_next is None and next_start and t.type in next_start:
+            pos_next = scan_len
+        if pos_current is None and current_end and t.type in current_end:
+            pos_current = scan_len
+        scan_ptr += 1
+
+    # 决策最佳停止位置
+    stop: int | None = None
+    if pos_next is not None and pos_current is not None:
+        if pos_next == pos_current:
+            stop = pos_next
+        else:
+            shorter_pos, longer_pos = sorted([pos_next, pos_current])
+            scan_ptr = context.token_pointer
+            found = False
+            for i in range(longer_pos):
+                if (
+                    i < len(context.tokens)
+                    and context.tokens[scan_ptr + i].type in next_start
+                ):
+                    found = True
+                    break
+            stop = shorter_pos if found else longer_pos
+    elif pos_next is not None:
+        stop = pos_next
+    elif pos_current is not None:
+        stop = pos_current
+
+    if stop is not None:
+        for _ in range(stop):
+            if context.has_more_tokens():
+                context.advance_token()
+            else:
+                break
+    else:
+        while context.has_more_tokens():
+            t = context.peek_token()
+            if t is not None and t.type in end_case_tokens:
+                break
+            context.advance_token()
+
+    err = Node("Error")
+    err.add_attr("raw", first_raw)
+    return err
+
+
 def _try_production(
     self,
     context: ParseContext,
@@ -185,7 +302,12 @@ def _try_production(
     sync_tokens: set[str] | None = None,
     prod_index: int | None = None,
 ) -> Node | None:
-    """尝试匹配单个产生式，失败时如果已提交则产 ErrorNode（吞行）。
+    """尝试匹配单个产生式。
+
+    Phase 1: 正常匹配（process_production_node）
+    Phase 2: 匹配失败 + committed → 恢复
+              显式策略（skip_one/matching/newline）→ _recover_skip_strategy
+              默认（skip_to_end）→ _recover_skip_to_end 双路径同步
 
     Args:
         sync_tokens: 后继生产式的起始 token 集合。
@@ -198,7 +320,7 @@ def _try_production(
     if not self._prepare_production(context, feature_tree):
         return None
 
-    # 设置当前 recovery 寻址路径（$N 1-based）
+    # Phase 1: 正常匹配
     old_path = context._recovery_path
     old_rule = context._recovery_rule
     if prod_index is not None:
@@ -214,125 +336,43 @@ def _try_production(
 
     context._recovery_path = old_path
     context._recovery_rule = old_rule
-
-    # 匹配失败
     context.restore_snapshot(snapshot)
 
-    # 已提交 → 产 ErrorNode
-    if committed:
-        err = Node("Error")
-        first_bad = context.peek_token()
-        first_raw = first_bad.content if first_bad else ""
+    # Phase 2: 恢复（仅 committed 模式）
+    if not committed:
+        return None
 
-        strategy = _find_recovery_strategy(rule, features, prod_index) or "skip_to_end"
+    first_bad = context.peek_token()
+    first_raw = first_bad.content if first_bad else ""
+    strategy = _find_recovery_strategy(rule, features, prod_index) or "skip_to_end"
+    end_case_tokens = _compute_end_case_tokens(rule, context)
 
-        end_case_tokens: set[str] = set()
-        for ec in getattr(rule, "end_case", []):
-            if isinstance(ec, str) and not ec.startswith("!"):
-                end_case_tokens.add(ec)
-        end_case_tokens.update(getattr(context, "_end_case_chain", set()))
-
-        if strategy == "skip_one":
-            if first_bad is not None:
-                context.advance_token()
-            err.add_attr("raw", first_raw)
-            return err
-
-        elif strategy == "skip_to_matching":
-            depth = 0
-            while context.has_more_tokens():
-                t = context.peek_token()
-                assert t is not None
-                if t.type in end_case_tokens:
-                    break
-                if t.type in self._bracket_map:
-                    depth += 1
-                elif t.type in self._inverse_bracket_map:
-                    if depth == 0:
-                        break
-                    depth -= 1
-                context.advance_token()
-            err.add_attr("raw", first_raw)
-            return err
-
-        elif strategy == "skip_to_newline":
-            while context.has_more_tokens():
-                t = context.peek_token()
-                assert t is not None
-                if t.type in end_case_tokens or t.type == "newline":
-                    break
-                context.advance_token()
-            err.add_attr("raw", first_raw)
-            return err
-
-        # 策略：skip_to_end（默认）— 双路径同步扫描
-        next_start = sync_tokens or set()
-        current_end = _find_current_end(prod, self.grammar_rules, self._bracket_map)
-
-        scan_ptr = context.token_pointer
-        pos_next: int | None = None
-        pos_current: int | None = None
-        scan_len = 0
-        while scan_ptr < len(context.tokens):
-            t = context.tokens[scan_ptr]
-            if t.type in end_case_tokens:
-                break
-            scan_len += 1
-            if pos_next is None and next_start and t.type in next_start:
-                pos_next = scan_len
-            if pos_current is None and current_end and t.type in current_end:
-                pos_current = scan_len
-            scan_ptr += 1
-
-        # 决策最佳停止位置
-        stop: int | None = None
-        if pos_next is not None and pos_current is not None:
-            if pos_next == pos_current:
-                stop = pos_next
-            else:
-                shorter_pos, longer_pos = sorted([pos_next, pos_current])
-                scan_ptr = context.token_pointer
-                found = False
-                for i in range(longer_pos):
-                    if (
-                        i < len(context.tokens)
-                        and context.tokens[scan_ptr + i].type in next_start
-                    ):
-                        found = True
-                        break
-                stop = shorter_pos if found else longer_pos
-        elif pos_next is not None:
-            stop = pos_next
-        elif pos_current is not None:
-            stop = pos_current
-
-        if stop is not None:
-            for _ in range(stop):
-                if context.has_more_tokens():
-                    context.advance_token()
-                else:
-                    break
-        else:
-            while context.has_more_tokens():
-                t = context.peek_token()
-                if t is not None and t.type in end_case_tokens:
-                    break
-                context.advance_token()
-
-        # skip_then_retry_until: skip 后重新尝试匹配同一产生式
-        if strategy == "skip_then_retry_until":
-            retry_snmp = context.create_snapshot()
-            if self._prepare_production(context, feature_tree):
-                retry_result = process_production_node(self, feature_tree, context)
-                if retry_result is not None:
-                    return retry_result  # 恢复成功！
-            # 重试失败，回退到 skip-stop 位置
-            context.restore_snapshot(retry_snmp)
-
-        err.add_attr("raw", first_raw)
+    # 尝试显式策略（skip_one / skip_to_matching / skip_to_newline）
+    err = _recover_skip_strategy(self, context, strategy, first_raw, end_case_tokens)
+    if err is not None:
         return err
 
-    return None
+    # 默认：skip_to_end — 双路径同步扫描
+    err = _recover_skip_to_end(
+        self,
+        context,
+        prod,
+        rule,
+        sync_tokens,
+        first_raw,
+        end_case_tokens,
+    )
+
+    # skip_then_retry_until: 跳过后再试一次
+    if strategy == "skip_then_retry_until":
+        retry_snmp = context.create_snapshot()
+        if self._prepare_production(context, feature_tree):
+            retry_result = process_production_node(self, feature_tree, context)
+            if retry_result is not None:
+                return retry_result  # 恢复成功！
+        context.restore_snapshot(retry_snmp)
+
+    return err
 
 
 def match_productions(
@@ -345,12 +385,7 @@ def match_productions(
         matched_nodes=[] & error_node=Node   → 提交后部分失败
         matched_nodes=[...] & error_node=None → 完全成功
     """
-    # 原子规则始终严格回溯，不受 recovery 影响
-    if getattr(rule, "is_atom", False):
-        recovery = False
-    else:
-        recovery = _get_recovery_cfg(self, rule)
-    committed = bool(recovery)
+    committed = _get_recovery(self, rule) is not None
 
     # 同步 committed 标志到 context，供子规则（如 optional）查询
     context._committed = committed

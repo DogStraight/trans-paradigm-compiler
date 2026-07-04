@@ -113,8 +113,9 @@ def parse_block_body(
 ) -> bool:
     """循环解析句子直到遇到结束符或文件末尾。
 
-    global_recovery=False 时：遇到无法匹配的 token 直接 break（纯回溯）。
-    global_recovery=True 时：做逐 token 跳过恢复，创建 ErrorNode 继续。
+    `parse_sentence` 返回 None 时直接 break，块体解析停止。
+    错误恢复由各语句规则自身的 production-level recovery 配置
+    （`[RuleName.parser] recovery`）负责兜底。
     """
     end_token = _get_block_end(rule)
 
@@ -133,18 +134,7 @@ def parse_block_body(
 
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
-            # 全局回溯模式：直接退出块体
-            if not getattr(self, "global_recovery", False):
-                break
-            # 恢复模式：跳过当前 token（所有语句级规则都无法匹配它），继续下一轮
-            bad = context.peek_token()
-            if bad is None:
-                break
-            err = Node("Error")
-            err.add_attr("raw", bad.content)
-            block_node.add_sub_node(err)
-            context.advance_token()
-            continue
+            break
         block_node.add_sub_node(stmt_node)
     return True
 

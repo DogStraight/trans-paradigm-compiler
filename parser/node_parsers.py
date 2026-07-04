@@ -5,69 +5,45 @@ node_parsers.py — 生产式子句对应的 _parse_* 方法
 production feature 类型的递归解析。
 """
 
+from . import rule_matcher
 from core.define import Node
 from .parser_core import ParseContext
-from .rule_matcher import _find_recovery_strategy, _get_prod_features
 
 
 def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
-    """根据当前 context._recovery_path 检查 recovery 配置，返回 ErrorNode 或 None。"""
+    """子元素级恢复：_parse_call / _parse_choice 内单个引用失败时触发。
+
+    只处理非 skip_to_end 的显式策略（skip_one / skip_to_matching / skip_to_newline），
+    skip_to_end 由外层 _try_production 统一处理双路径同步。
+    """
     if not getattr(self, "global_recovery", False):
         return None
     rule = getattr(context, "_recovery_rule", None)
-    if rule is None:
-        return None
     path = getattr(context, "_recovery_path", "")
-    if not path:
+    if not rule or not path:
         return None
-    # 解析路径提取 prod_index：路径如 "$3" 或 "$3.$1" → 提取 3
+    # 从路径 "$3" 或 "$3.$1" 提取 prod_index
     parts = path.strip("$").split(".")
     try:
-        prod_index = int(parts[0]) - 1  # 1-based → 0-based
+        prod_index = int(parts[0]) - 1
     except ValueError:
         return None
-    # 从缓存中获取 flat 列表
     prods = rule.prods
     if prod_index < 0 or prod_index >= len(prods):
         return None
-    prod_str = prods[prod_index]
-    prod_features = _get_prod_features(self, rule, prod_str)
+    prod_features = rule_matcher._get_prod_features(self, rule, prods[prod_index])
     if prod_features is None:
         return None
-    strategy = _find_recovery_strategy(rule, prod_features, prod_index)
+    strategy = rule_matcher._find_recovery_strategy(rule, prod_features, prod_index)
     if strategy is None or strategy == "skip_to_end":
-        return None
-    # 执行策略
-    err = Node("Error")
+        return None  # skip_to_end 归 _try_production 处理
+
     t = context.peek_token()
-    if t is not None:
-        err.add_attr("raw", t.content)
-        end_case_tokens = set(getattr(rule, "end_case", []))
-        end_case_tokens.update(getattr(context, "_end_case_chain", set()))
-        if strategy == "skip_one":
-            context.advance_token()
-        elif strategy == "skip_to_matching":
-            depth = 0
-            while context.has_more_tokens():
-                tk = context.peek_token()
-                assert tk is not None
-                if tk.type in end_case_tokens:
-                    break
-                if tk.type in self._bracket_map:
-                    depth += 1
-                elif tk.type in self._inverse_bracket_map:
-                    if depth == 0:
-                        break
-                    depth -= 1
-                context.advance_token()
-        elif strategy == "skip_to_newline":
-            while context.has_more_tokens():
-                tk = context.peek_token()
-                assert tk is not None
-                if tk.type in end_case_tokens or tk.type == "newline":
-                    break
-                context.advance_token()
-    return err
+    first_raw = t.content if t else ""
+    end_case_tokens = rule_matcher._compute_end_case_tokens(rule, context)
+    return rule_matcher._recover_skip_strategy(
+        self, context, strategy, first_raw, end_case_tokens,
+    )
 
 
 def parse_token(self, node: dict, context: ParseContext) -> Node | None:

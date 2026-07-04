@@ -265,7 +265,7 @@ class GrammarRule:
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
     # 默认值为 None 的三态字段（未设置时由启发式或 False 兜底）
-    _NONE_FIELDS = {"structure"}
+    _NONE_FIELDS = {"structure", "recovery"}
 
     def __init__(self, name: str, **kwargs):
         self.name = name

@@ -138,7 +138,9 @@ indent = 4
 source = "ports"
 
 [TypeRole.analyzer]
-symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }, capture_hooks = ["resolve_revert"] }
+symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }, capture_hooks = [
+    "resolve_revert",
+] }
 
 
 # ── 类型端口声明 input miso, output clk ... ──
@@ -147,7 +149,9 @@ symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }
 [TypePortDecl]
 inline = true
 [TypePortDecl.parser]
-production = ["@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeRevertPort"]
+production = [
+    "@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeRevertPort",
+]
 [TypePortDecl.parser.node]
 child = "$1"
 
@@ -177,7 +181,6 @@ target_role = "$2"
 
 [RevertDecl.renderer]
 layout = { line = ["revert ", { ref = "target_role" }, ";"] }
-
 
 
 # ── 方法声明 fn read : { ... } ──
