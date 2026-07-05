@@ -105,8 +105,7 @@ production = [
 ]
 structure = { is_atom = true }
 [ConcatExpr.parser.node]
-first = "$2"
-rest = "$3.items[*].sub_node[1]"
+sub_node = ["$2", "$3.items[*].sub_node[1]"]
 [ConcatExpr.renderer]
 layout = { line = ["{", { join = ",", nest = 1 }, "}"] }
 
