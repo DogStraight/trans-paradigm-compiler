@@ -212,6 +212,7 @@ def _reverse_by_tokens(
     )
     replacements: list[tuple[int, int, str]] = []
     replaced = [False] * len(rtokens)
+    reversed_names: set[str] = set()
 
     for name, mseq in sorted_macros:
         candidate_spans: list[tuple[int, int]] = []
@@ -252,13 +253,14 @@ def _reverse_by_tokens(
             else:
                 logging.warning(
                     f"macro '{name}' ambiguous: {len(candidate_spans)} candidates "
-                    f"even at minimum window size, leaving expanded"
+                    f"even at minimum window size, "
+                    f"falling back to string match"
                 )
                 continue
         else:
             logging.warning(
                 f"macro '{name}' ambiguous: {len(candidate_spans)} candidates, "
-                f"leaving expanded"
+                f"falling back to string match"
             )
             continue
 
@@ -266,14 +268,26 @@ def _reverse_by_tokens(
         c_start = _token_start(rtokens[ri_start], line_offsets)
         c_end = _token_end(rtokens[ri_end - 1], line_offsets)
         replacements.append((c_start, c_end, f"{prefix}{name}"))
+        reversed_names.add(name)
         for i in range(ri_start, ri_end):
             replaced[i] = True
 
-    # ---- 4. 从后往前执行替换 ----
+    # ---- 4. 从后往前执行 Token 替换 ----
     replacements.sort(key=lambda x: x[0], reverse=True)
     result = rendered
     for c_start, c_end, new_text in replacements:
         result = result[:c_start] + new_text + result[c_end:]
+
+    # ---- 5. 未通过 Token 匹配的宏用字符串替换兜底 ----
+    remaining = {
+        name: body
+        for name, body in macro_defs.items()
+        if name not in reversed_names
+    }
+    if remaining:
+        result = _reverse_macros_simple(
+            result, remaining, prefix, define_keyword
+        )
 
     return result
 
