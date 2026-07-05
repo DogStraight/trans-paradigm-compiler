@@ -100,24 +100,51 @@ def expand_tokens(
 ) -> list[Token]:
     """在 Token 流中展开 macro.call  token。
 
-    将每个 macro.call("`NAME") 替换为宏体经 Lexer tokenize 后的 Token 序列。
+    按行分组处理：对含 macro.call 的行，将宏体替换后重建文本并重新 tokenize。
+    这样 Lexer 的 NumberFSM 能在完整行上下文中工作（如 8'b0 不会被宏切开）。
+
+    文本重建规则：
+    - 非宏 token 尾部加空格 → 保持 token 边界独立
+    - 宏体直接插入，不加空格 → 自动与相邻 token 合并（如 8 贴着 'b0 → 8'b0）
     同时过滤 macro.define / macro.include 等指令 token。
-    保留非宏 Token 不变。
     """
     result: list[Token] = []
-    for tok in tokens:
-        if tok.type.startswith("macro."):
-            if tok.type == "macro.call":
-                name = tok.content[1:]  # 去掉 ` 前缀
-                body = macro_defs.get(name)
-                if body is not None:
-                    body_tokens = lexer.tokenize(body)
-                    result.extend(body_tokens)
-                else:
-                    result.append(tok)
-            # macro.define / macro.include 等指令 token → 丢弃
-            continue
-        result.append(tok)
+    i = 0
+    while i < len(tokens):
+        # 收集一行（不含换行）
+        line_start = i
+        while i < len(tokens) and tokens[i].type != "newline":
+            i += 1
+        line_tokens = tokens[line_start:i]
+
+        # 检查行内是否有 macro.call
+        has_macro = any(t.type == "macro.call" for t in line_tokens)
+
+        if has_macro:
+            # 重建行文本：非宏 token 尾部加空格，宏体直接插入
+            parts: list[str] = []
+            for t in line_tokens:
+                if t.type == "macro.call":
+                    name = t.content[1:]
+                    parts.append(macro_defs.get(name, t.content))
+                elif not t.type.startswith("macro."):
+                    parts.append(t.content + " ")
+            line_text = "".join(parts)
+
+            # 重新 tokenize
+            new_tokens = lexer.tokenize(line_text)
+            result.extend(new_tokens)
+        else:
+            # 无宏的行：原样通过（过滤指令 token）
+            for t in line_tokens:
+                if not t.type.startswith("macro."):
+                    result.append(t)
+
+        # 保留换行 token
+        if i < len(tokens) and tokens[i].type == "newline":
+            result.append(tokens[i])
+            i += 1
+
     return result
 
 
