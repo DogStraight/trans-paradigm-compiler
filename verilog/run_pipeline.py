@@ -227,10 +227,11 @@ def run_pipeline_on_source(
         result["success"] = True
         return result
 
-    # ---- Stage: Token 级宏展开 ----
+    # ---- Stage: 纯文本宏展开（在 lexer 之前）----
     if expand_macros and macro_table:
-        tokens, macro_stack = expand_tokens(tokens, macro_table, lexer)
-        _log(f"[preprocessor] tokens after macro expansion: {len(tokens)}")
+        source, restore_stack = expand_tokens(source, macro_table)
+        tokens = lexer.tokenize(source)
+        _log(f"[preprocessor] macros expanded, tokens: {len(tokens)}")
 
     # ---- Stage: Pre-scan ----
     pre_scan_config = load_pre_scan_config(rules_dir)
@@ -401,7 +402,7 @@ def run_pipeline_on_source(
             content = protect_and_reverse(
                 content, original_source, macro_table,
                 define_keyword=define_kw, lexer=lexer,
-                expansion_stack=macro_stack,
+                restoration_stack=restore_stack,
             )
             _log("[preprocessor] macros reversed")
 

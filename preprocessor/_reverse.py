@@ -221,80 +221,54 @@ def _check_context(
     return True
 
 
-def _reverse_by_stack(
+def _restore_lines(
     rendered: str,
-    macro_defs: dict[str, str],
     prefix: str,
-    lexer,
-    expansion_stack: list[dict],
+    restoration_stack: list[dict],
 ) -> str:
-    """基于展开栈上下文锚点的精确宏还原。
+    """顺序扫描 + 同步词验证的宏还原。
 
-    每个展开记录携带宏展开时的前/后文 token（ctx_before/ctx_after）。
-    在渲染结果中找到宏体位置后，验证上下文是否匹配，消除歧义。
+    按展开顺序扫描渲染输出，每找到 body 就用同步词验证。
+    验证不通过 → 跳过继续找下一个。顺序保证第 N 条记录找第 N 个 body。
     """
-    rtokens = lexer.tokenize(rendered)
-    line_offsets = _compute_line_offsets(rendered)
-    replacements: list[tuple[int, int, str]] = []
-    replaced = [False] * len(rtokens)
-    reversed_names: set[str] = set()
-
-    for entry in expansion_stack:
-        name = entry["macro"]
-        body = entry["body"]
-        ctx_before = entry["ctx_before"]
-        ctx_after = entry["ctx_after"]
-
-        # Tokenize 宏体
-        body_tokens = lexer.tokenize(body)
-        body_seq = [(t.type, t.content) for t in body_tokens if not _is_skippable(t)]
-        if not body_seq:
-            continue
-
-        # 在渲染结果中查找匹配
-        candidate_spans: list[tuple[int, int]] = []
-        ri = 0
-        while ri < len(rtokens):
-            if replaced[ri] or _is_skippable(rtokens[ri]):
-                ri += 1
-                continue
-            match_end = _try_match_sequence(rtokens, ri, body_seq)
-            if match_end is not None:
-                if _check_context(rtokens, ri, match_end, ctx_before, ctx_after):
-                    candidate_spans.append((ri, match_end))
-                ri = match_end
-            else:
-                ri += 1
-
-        if len(candidate_spans) == 1:
-            ri_start, ri_end = candidate_spans[0]
-            c_start = _token_start(rtokens[ri_start], line_offsets)
-            c_end = _token_end(rtokens[ri_end - 1], line_offsets)
-            replacements.append((c_start, c_end, f"{prefix}{name}"))
-            reversed_names.add(name)
-            for i in range(ri_start, ri_end):
-                replaced[i] = True
-        elif len(candidate_spans) > 1:
-            logging.warning(
-                f"macro '{name}' ambiguous: {len(candidate_spans)} context-matched "
-                f"candidates, falling back to string match"
-            )
-        # 0 candidates: skip
-
-    # 执行替换
-    replacements.sort(key=lambda x: x[0], reverse=True)
     result = rendered
-    for c_start, c_end, new_text in replacements:
-        result = result[:c_start] + new_text + result[c_end:]
+    search_pos = 0
 
-    # 未匹配的宏用字符串替换兜底
-    remaining = {
-        name: body
-        for name, body in macro_defs.items()
-        if name not in reversed_names
-    }
-    if remaining:
-        result = _reverse_macros_simple(result, remaining, prefix, "define")
+    for entry in restoration_stack:
+        body = entry["body"]
+        macro = entry["macro"]
+        sync = entry.get("sync", "")
+        sync_nth = entry.get("sync_nth", 1)
+
+        while True:
+            pos = result.find(body, search_pos)
+            if pos < 0:
+                break
+
+            search_pos = pos + 1
+
+            # 同步词验证：检查 body 前是否有第 N 个同步词
+            if sync:
+                before = result[max(0, pos - 15):pos]
+                # 找第 sync_nth 个同步词
+                count = 0
+                sync_idx = -1
+                while True:
+                    sync_idx = before.find(sync, sync_idx + 1)
+                    if sync_idx < 0:
+                        break
+                    count += 1
+                    if count == sync_nth:
+                        break
+                if count < sync_nth:
+                    continue  # 没有第 N 个同步词 → 跳过
+
+            # 匹配成功
+            result = result[:pos] + f"{prefix}{macro}" + result[pos + len(body):]
+            search_pos = pos + len(f"{prefix}{macro}")
+            break
+
+    return result
 
     return result
 
@@ -305,15 +279,8 @@ def _reverse_by_tokens(
     prefix: str,
     define_keyword: str,
     lexer,
-    expansion_stack: Optional[list[dict]] = None,
 ) -> str:
     """Token 序列匹配的宏还原。"""
-
-    # 如果有展开栈，优先使用上下文锚点匹配
-    if expansion_stack:
-        return _reverse_by_stack(
-            rendered, macro_defs, prefix, lexer, expansion_stack
-        )
 
     # ---- 原有 Token 序列匹配逻辑（展开栈不存在时 fallback）----
 
@@ -445,17 +412,17 @@ def protect_and_reverse(
     define_keyword: str = "define",
     window: int = 3,
     lexer=None,
-    expansion_stack: Optional[list[dict]] = None,
+    restoration_stack: Optional[list[dict]] = None,
 ) -> str:
     """Reverse macro expansion in rendered output.
 
-    If `expansion_stack` is provided, uses context-anchored matching (best).
+    If `restoration_stack` is provided, uses line-level restoration (best).
     Elif `lexer` is provided, uses Token sequence matching.
     Otherwise falls back to string-based heuristic.
     """
-    if expansion_stack and lexer is not None:
-        return _reverse_by_stack(
-            rendered, macro_defs, prefix, lexer, expansion_stack
+    if restoration_stack:
+        return _restore_lines(
+            rendered, prefix, restoration_stack
         )
     if lexer is not None:
         return _reverse_by_tokens(

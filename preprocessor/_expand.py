@@ -2,15 +2,11 @@
 
 Two modes:
   1. String-level (legacy):  preprocess() — expands in source text
-  2. Token-level (preferred): scan_directives() + expand_tokens() — expands
-     in Lexer-produced token stream.
+  2. Pure-text (preferred): scan_directives() + expand_tokens() — expands
+     `` `NAME `` in source text before lexer.
 """
 
 import re
-from typing import Optional
-
-from core.define import Token
-
 _MAX_ITERATIONS = 128  # safety limit against circular `define
 
 
@@ -92,102 +88,90 @@ def scan_directives(
     return macro_defs, directive_lines, "\n".join(clean_lines)
 
 
-def expand_tokens(
-    tokens: list[Token],
-    macro_defs: dict[str, str],
-    lexer,
-    prefix: str = "`",
-) -> list[Token]:
-    """在 Token 流中展开 macro.call  token。
+def _find_sync_word(line: str, macro_col: int) -> tuple[str, int]:
+    """向左找最近的非空白词作为同步词。
 
-    按行分组处理：对含 macro.call 的行，将宏体替换后重建文本并重新 tokenize。
-    这样 Lexer 的 NumberFSM 能在完整行上下文中工作（如 8'b0 不会被宏切开）。
-
-    文本重建规则：
-    - 非宏 token 尾部加空格 → 保持 token 边界独立
-    - 宏体直接插入，不加空格 → 自动与相邻 token 合并（如 8 贴着 'b0 → 8'b0）
-    同时过滤 macro.define / macro.include 等指令 token。
-
-    Returns (expanded_tokens, expansion_stack):
-        expansion_stack — reverser 使用的上下文锚点列表，每项含：
-            macro: 宏名
-            body: 宏体文本
-            ctx_before: [(type, content), ...]  宏展开前 N 个 token
-            ctx_after:  [(type, content), ...]  宏展开后 N 个 token
+    Returns: (sync_text, offset_from_sync_end_to_macro_start)
     """
-    CTX_WINDOW = 2
+    # 跳过空白
+    pos = macro_col - 1
+    while pos >= 0 and line[pos] in ' \t':
+        pos -= 1
+    if pos < 0:
+        return "", macro_col
 
-    result: list[Token] = []
-    expansion_stack: list[dict] = []
-    i = 0
-    while i < len(tokens):
-        # 收集一行（不含换行）
-        line_start = i
-        while i < len(tokens) and tokens[i].type != "newline":
-            i += 1
-        line_tokens = tokens[line_start:i]
+    # 找到这个词的开头
+    word_end = pos + 1
+    while pos >= 0 and line[pos] not in ' \t':
+        pos -= 1
+    sync_text = line[pos + 1:word_end]
+    offset = macro_col - word_end
+    return sync_text, offset
 
-        # 检查行内是否有 macro.call
-        has_macro = any(t.type == "macro.call" for t in line_tokens)
 
-        if has_macro:
-            # ---- 记录展开上下文栈 ----
-            for mi, t in enumerate(line_tokens):
-                if t.type != "macro.call":
-                    continue
-                name = t.content[1:]
-                body = macro_defs.get(name)
-                if not body:
-                    continue
+def expand_tokens(
+    source: str,
+    macro_defs: dict[str, str],
+    *,
+    prefix: str = "`",
+) -> tuple[str, list[dict]]:
+    """在源码文本中展开宏调用（纯文本层）。
 
-                # 前文：向前取 CTX_WINDOW 个非宏、非换行 token
-                ctx_before: list[tuple[str, str]] = []
-                for j in range(mi - 1, -1, -1):
-                    if len(ctx_before) >= CTX_WINDOW:
-                        break
-                    tj = line_tokens[j]
-                    if not tj.type.startswith("macro.") and tj.type != "newline":
-                        ctx_before.insert(0, (tj.type, tj.content))
+    用正则搜索 `NAME，向左扫同步词，记录位置后替换宏体。
+    不再依赖 Token 流或 Lexer。
 
-                # 后文：向后取 CTX_WINDOW 个非宏、非换行 token
-                ctx_after: list[tuple[str, str]] = []
-                for j in range(mi + 1, len(line_tokens)):
-                    if len(ctx_after) >= CTX_WINDOW:
-                        break
-                    tj = line_tokens[j]
-                    if not tj.type.startswith("macro.") and tj.type != "newline":
-                        ctx_after.append((tj.type, tj.content))
+    Returns: (expanded_source, restoration_stack)
+        restoration_stack — 逆序处理用的还原记录列表，每项含：
+            macro, body, sync_text, offset
+    """
+    import re
+    _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
+    restoration_stack: list[dict] = []
+    lines = source.split("\n")
 
-                expansion_stack.append({
-                    "macro": name,
-                    "body": body,
-                    "ctx_before": ctx_before,
-                    "ctx_after": ctx_after,
-                })
+    for line_no, line in enumerate(lines, 1):
+        # 在当前行中从右到左找宏调用，避免替换后偏移变化
+        macro_matches: list[tuple[int, int, str, str]] = []
+        for m in _MACRO_RE.finditer(line):
+            name = m.group(1)
+            body = macro_defs.get(name)
+            if body is None:
+                continue
+            macro_col = m.start()  # 0-based column in the line
+            macro_matches.append((macro_col, m.end(), body, name))
 
-            # ---- 重建行文本并重新 tokenize ----
-            parts: list[str] = []
-            for t in line_tokens:
-                if t.type == "macro.call":
-                    name = t.content[1:]
-                    parts.append(macro_defs.get(name, t.content))
-                elif not t.type.startswith("macro."):
-                    parts.append(t.content + " ")
-            line_text = "".join(parts)
-            new_tokens = lexer.tokenize(line_text)
-            result.extend(new_tokens)
-        else:
-            # 无宏的行：原样通过（过滤指令 token）
-            for t in line_tokens:
-                if not t.type.startswith("macro."):
-                    result.append(t)
+        if not macro_matches:
+            continue
 
-        # 保留换行 token
-        if i < len(tokens) and tokens[i].type == "newline":
-            result.append(tokens[i])
-            i += 1
+        # 统计行内同步词出现次数，确定每个宏对应第几个同步词
+        sync_counter: dict[str, int] = {}
+        # 按列号正序处理以计数
+        for macro_col, macro_end, body, name in sorted(macro_matches):
+            sync_text, _ = _find_sync_word(line, macro_col)
+            sync_counter[sync_text] = sync_counter.get(sync_text, 0) + 1
 
-    return result, expansion_stack
+        # 从右到左替换
+        parts = list(line)
+        for macro_col, macro_end, body, name in reversed(macro_matches):
+            sync_text, offset = _find_sync_word(line, macro_col)
+            nth = sync_counter[sync_text]
+            sync_counter[sync_text] = nth - 1  # 从右到左递减
+
+            # 替换
+            parts[macro_col:macro_end] = body
+
+            # 记录
+            restoration_stack.append({
+                "macro": name,
+                "body": body,
+                "sync": sync_text,
+                "sync_nth": nth,
+                "offset": offset,
+            })
+
+        lines[line_no - 1] = "".join(parts)
+
+    return "\n".join(lines), restoration_stack
 
 
 # ============================================================
