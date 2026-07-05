@@ -1,13 +1,12 @@
 """
-loader.py — TOML 布局规则 / 风格 / 规范化配置加载
+loader.py — TOML 布局规则 / 风格加载
 
-从 TOML 规则目录加载 layout 定义、风格参数和规范化配置。
+从 TOML 规则目录加载 layout 定义和风格参数。
 风格参数通过 ConfigRegistry 声明式加载。
 """
 
 import tomllib
 import os
-from typing import Optional
 from core.config_registry import config
 
 
@@ -89,8 +88,4 @@ def load_style(rules_dir: str) -> dict:
     return result
 
 
-def load_normalize_config(rules_dir: str) -> Optional[dict]:
-    """加载 AST 规范化配置"""
-    from transform.pre.normalizer import _load_config
 
-    return _load_config()

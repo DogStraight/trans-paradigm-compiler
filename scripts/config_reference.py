@@ -14,7 +14,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULTS = {
     "token.toml": "grammar/token.toml",
     "symbol_level.toml": "grammar/symbol_level.toml",
-    "normalize_config.toml": "transform/config/normalize_config.toml",
 }
 
 LANG_FILES = {

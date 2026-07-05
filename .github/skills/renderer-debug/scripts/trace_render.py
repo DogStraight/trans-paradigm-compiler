@@ -110,7 +110,7 @@ def trace(test_name: str, show_doc: bool = False, target_node: str = "") -> None
         sys.exit(1)
 
     # 归一化
-    norm = normalize_ast(ast, renderer._layouts, renderer._normalize_config)
+    norm = normalize_ast(ast, renderer._layouts)
 
     # 获取布局配置并构建 Doc IR
     layouts = renderer._layouts

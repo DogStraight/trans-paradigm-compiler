@@ -21,7 +21,7 @@ from transform.pre.normalizer import normalize_ast
 from .doc import Doc, layout
 from .primitives import eval_expr
 from .node_renderer import render_node, render_inline, render_body, resolve_items
-from .loader import load_layouts, load_style, load_normalize_config
+from .loader import load_layouts, load_style
 
 
 class Renderer:
@@ -34,10 +34,8 @@ class Renderer:
     def __init__(self, rules_dir: str):
         self._layouts: dict[str, dict] = {}
         self._children_field = "sub_node"
-        self._normalize_config: Optional[dict] = None
         load_layouts(rules_dir, self._layouts)
         self._apply_style(rules_dir)
-        self._normalize_config = load_normalize_config(rules_dir)
         # 布局合并缓存 {(parent_type, child_type): merged_layout}
         self._merged_layout_cache: dict[tuple[str, str], dict] = {}
 
@@ -73,7 +71,7 @@ class Renderer:
     # ---------------------------------------------------------------
     def render(self, node: Node, indent: int = 0) -> str:
         """渲染完整 AST 为格式化文本"""
-        node = normalize_ast(node, self._layouts, self._normalize_config)
+        node = normalize_ast(node, self._layouts)
         if not isinstance(node, Node):
             return str(node) if node else ""
         doc = self._render_node(node, self._layouts.get(node.node_name, {}), indent)
