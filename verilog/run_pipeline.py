@@ -166,6 +166,9 @@ def run_pipeline_on_source(
     if inline_comments:
         flags.append("--inline-comments")
 
+    # ---- Stage: 配置加载（必须在任何 config.get() 之前）----
+    ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
+
     # ---- Stage: Preprocess ----
     macro_table = {}
     directive_lines = []
@@ -177,8 +180,6 @@ def run_pipeline_on_source(
     # 所有按 rules_dir 可复用的组件集中初始化并缓存
     ctx = _PIPELINE_SHARED
     if rules_dir not in ctx:
-        # 统一加载所有 ConfigRegistry 声明
-        ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
 
         # 语法规则（含 EXT 注入）
         rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dir)
