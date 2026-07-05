@@ -390,7 +390,8 @@ def run_pipeline_on_source(
             macro_raw = load_macro_config(rules_dir)
             define_kw = macro_raw.get("directives", {}).get("define", "define")
             content = protect_and_reverse(
-                content, original_source, macro_table, define_keyword=define_kw
+                content, original_source, macro_table,
+                define_keyword=define_kw, lexer=lexer,
             )
             _log("[preprocessor] macros reversed")
 
