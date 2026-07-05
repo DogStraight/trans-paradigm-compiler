@@ -282,6 +282,7 @@ def run_pipeline_on_source(
         _log(f"[comments] {len(ct)} items")
 
     # ---- Stage: Semantic analysis ----
+    analyzer = None
     if analyzer_enabled:
         analyzer = SemanticAnalyzer(rules)
 
@@ -323,7 +324,7 @@ def run_pipeline_on_source(
         return result
 
     # ---- Stage: AST transform ----
-    if transform_enabled and analyzer_enabled and scope is not None:
+    if transform_enabled and analyzer is not None and scope is not None:
         # 语义映射表：分析器产出 raw 数据，管线在此做数据变换
         mapping = analyzer.semantic_mapping
 
@@ -374,7 +375,7 @@ def run_pipeline_on_source(
         if parts:
             _log(f"[transform] {' '.join(parts)}")
     elif transform_enabled:
-        _log("[transform] skipped because semantic analysis was disabled")
+        _log("[transform] skipped (analyzer=None or no scope)")
     if stage == "transform":
         result["success"] = True
         result["ast"] = ast
