@@ -22,7 +22,10 @@ from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
 from transform.post import AstTransformer
 from transform.post.engine import ConfigDrivenTransform
-from preprocessor import preprocess, protect_and_reverse, load_macro_config
+from preprocessor import (
+    preprocess, scan_directives, expand_tokens,
+    protect_and_reverse, load_macro_config,
+)
 from renderer.inline_comment import inject_comments
 
 
@@ -169,11 +172,11 @@ def run_pipeline_on_source(
     # ---- Stage: 配置加载（必须在任何 config.get() 之前）----
     ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
 
-    # ---- Stage: Preprocess ----
+    # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
     macro_table = {}
     directive_lines = []
     if expand_macros:
-        source, macro_table, directive_lines = preprocess(source, rules_dir)
+        macro_table, directive_lines, source = scan_directives(source, rules_dir)
         _log(f"[preprocessor] macros defined: {len(macro_table)}")
 
     # ---- Stage: Shared pipeline context (rules, lexer, renderer, etc.) ----
@@ -223,6 +226,11 @@ def run_pipeline_on_source(
     if stage == "lex":
         result["success"] = True
         return result
+
+    # ---- Stage: Token 级宏展开 ----
+    if expand_macros and macro_table:
+        tokens = expand_tokens(tokens, macro_table, lexer)
+        _log(f"[preprocessor] tokens after macro expansion: {len(tokens)}")
 
     # ---- Stage: Pre-scan ----
     pre_scan_config = load_pre_scan_config(rules_dir)
