@@ -229,7 +229,7 @@ def run_pipeline_on_source(
 
     # ---- Stage: Token 级宏展开 ----
     if expand_macros and macro_table:
-        tokens = expand_tokens(tokens, macro_table, lexer)
+        tokens, macro_stack = expand_tokens(tokens, macro_table, lexer)
         _log(f"[preprocessor] tokens after macro expansion: {len(tokens)}")
 
     # ---- Stage: Pre-scan ----
@@ -401,6 +401,7 @@ def run_pipeline_on_source(
             content = protect_and_reverse(
                 content, original_source, macro_table,
                 define_keyword=define_kw, lexer=lexer,
+                expansion_stack=macro_stack,
             )
             _log("[preprocessor] macros reversed")
 

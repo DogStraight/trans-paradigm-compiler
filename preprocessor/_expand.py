@@ -107,8 +107,18 @@ def expand_tokens(
     - 非宏 token 尾部加空格 → 保持 token 边界独立
     - 宏体直接插入，不加空格 → 自动与相邻 token 合并（如 8 贴着 'b0 → 8'b0）
     同时过滤 macro.define / macro.include 等指令 token。
+
+    Returns (expanded_tokens, expansion_stack):
+        expansion_stack — reverser 使用的上下文锚点列表，每项含：
+            macro: 宏名
+            body: 宏体文本
+            ctx_before: [(type, content), ...]  宏展开前 N 个 token
+            ctx_after:  [(type, content), ...]  宏展开后 N 个 token
     """
+    CTX_WINDOW = 2
+
     result: list[Token] = []
+    expansion_stack: list[dict] = []
     i = 0
     while i < len(tokens):
         # 收集一行（不含换行）
@@ -121,7 +131,41 @@ def expand_tokens(
         has_macro = any(t.type == "macro.call" for t in line_tokens)
 
         if has_macro:
-            # 重建行文本：非宏 token 尾部加空格，宏体直接插入
+            # ---- 记录展开上下文栈 ----
+            for mi, t in enumerate(line_tokens):
+                if t.type != "macro.call":
+                    continue
+                name = t.content[1:]
+                body = macro_defs.get(name)
+                if not body:
+                    continue
+
+                # 前文：向前取 CTX_WINDOW 个非宏、非换行 token
+                ctx_before: list[tuple[str, str]] = []
+                for j in range(mi - 1, -1, -1):
+                    if len(ctx_before) >= CTX_WINDOW:
+                        break
+                    tj = line_tokens[j]
+                    if not tj.type.startswith("macro.") and tj.type != "newline":
+                        ctx_before.insert(0, (tj.type, tj.content))
+
+                # 后文：向后取 CTX_WINDOW 个非宏、非换行 token
+                ctx_after: list[tuple[str, str]] = []
+                for j in range(mi + 1, len(line_tokens)):
+                    if len(ctx_after) >= CTX_WINDOW:
+                        break
+                    tj = line_tokens[j]
+                    if not tj.type.startswith("macro.") and tj.type != "newline":
+                        ctx_after.append((tj.type, tj.content))
+
+                expansion_stack.append({
+                    "macro": name,
+                    "body": body,
+                    "ctx_before": ctx_before,
+                    "ctx_after": ctx_after,
+                })
+
+            # ---- 重建行文本并重新 tokenize ----
             parts: list[str] = []
             for t in line_tokens:
                 if t.type == "macro.call":
@@ -130,8 +174,6 @@ def expand_tokens(
                 elif not t.type.startswith("macro."):
                     parts.append(t.content + " ")
             line_text = "".join(parts)
-
-            # 重新 tokenize
             new_tokens = lexer.tokenize(line_text)
             result.extend(new_tokens)
         else:
@@ -145,7 +187,7 @@ def expand_tokens(
             result.append(tokens[i])
             i += 1
 
-    return result
+    return result, expansion_stack
 
 
 # ============================================================
