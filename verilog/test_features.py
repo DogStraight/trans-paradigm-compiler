@@ -30,8 +30,10 @@ def load_rules():
 # Check 1: Token classifier installed
 # ──────────────────────────────────────────────
 
+
 def _parse_quiet(parser, tokens):
     import io
+
     old = sys.stderr
     sys.stderr = io.StringIO()
     try:
@@ -45,14 +47,19 @@ def test_token_classifier_installed():
     assert pratt_parser.is_operator is not None
     rules = load_rules()
     stmt_names = [
-        n for n, r in rules.items()
+        n
+        for n, r in rules.items()
         if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
+
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
     parser = Parser(
-        rules_dir=RULES_DIR, cache_enabled=False, global_recovery=False,
-        rules=rules, rule_selector=rs,
+        rules_dir=RULES_DIR,
+        cache_enabled=False,
+        global_recovery=False,
+        rules=rules,
+        rule_selector=rs,
     )
     lexer = Lexer(rules_dir=RULES_DIR)
     tokens = lexer.tokenize("module m; wire a; endmodule")
@@ -64,14 +71,19 @@ def test_pratt_parses_not_operator():
     """!rst_n 必须能被 Pratt 解析为 UnaryOp。"""
     rules = load_rules()
     stmt_names = [
-        n for n, r in rules.items()
+        n
+        for n, r in rules.items()
         if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
+
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
     parser = Parser(
-        rules_dir=RULES_DIR, cache_enabled=False, global_recovery=False,
-        rules=rules, rule_selector=rs,
+        rules_dir=RULES_DIR,
+        cache_enabled=False,
+        global_recovery=False,
+        rules=rules,
+        rule_selector=rs,
     )
 
     lexer = Lexer(rules_dir=RULES_DIR)
@@ -85,14 +97,19 @@ def test_pratt_parses_addition():
     """a + b 必须能被 Pratt 解析为 BinaryOp。"""
     rules = load_rules()
     stmt_names = [
-        n for n, r in rules.items()
+        n
+        for n, r in rules.items()
         if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
+
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
     parser = Parser(
-        rules_dir=RULES_DIR, cache_enabled=False, global_recovery=False,
-        rules=rules, rule_selector=rs,
+        rules_dir=RULES_DIR,
+        cache_enabled=False,
+        global_recovery=False,
+        rules=rules,
+        rule_selector=rs,
     )
 
     lexer = Lexer(rules_dir=RULES_DIR)
@@ -106,19 +123,27 @@ def test_pratt_parses_addition():
 # Check 2: First set correctness
 # ──────────────────────────────────────────────
 
+
 def test_first_set_keyword_reg():
     """keyword.reg 不应包含 AnsiInputDecl 等端口规则。"""
     rules = load_rules()
     stmt_names = [
-        n for n, r in rules.items()
+        n
+        for n, r in rules.items()
         if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     name_map = build_start_token_map_names(rules, stmt_names)
     reg_candidates = name_map.get("keyword.reg", [])
     assert "RegDecl" in reg_candidates, "keyword.reg 至少应包含 RegDecl"
     # 端口声明规则不应出现在 keyword.reg 的候选集中
-    port_rules = {"AnsiInputDecl", "AnsiOutputDecl", "AnsiInoutDecl",
-                  "BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl"}
+    port_rules = {
+        "AnsiInputDecl",
+        "AnsiOutputDecl",
+        "AnsiInoutDecl",
+        "BodyInputDecl",
+        "BodyOutputDecl",
+        "BodyInoutDecl",
+    }
     overlap = port_rules & set(reg_candidates)
     assert not overlap, f"keyword.reg 不应包含端口规则，实际包含: {overlap}"
 
@@ -127,28 +152,31 @@ def test_first_set_keyword_input():
     """keyword.input 应包含端口声明规则。"""
     rules = load_rules()
     stmt_names = [
-        n for n, r in rules.items()
+        n
+        for n, r in rules.items()
         if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     name_map = build_start_token_map_names(rules, stmt_names)
     input_candidates = name_map.get("keyword.input", [])
-    assert "BodyInputDecl" in input_candidates, \
-        "keyword.input 应包含 BodyInputDecl（语句级 input 声明）"
-    assert "AnsiInputDecl" not in input_candidates, \
-        "keyword.input 不应包含 AnsiInputDecl（已标记 statement=false）"
+    assert (
+        "BodyInputDecl" in input_candidates
+    ), "keyword.input 应包含 BodyInputDecl（语句级 input 声明）"
+    assert (
+        "AnsiInputDecl" not in input_candidates
+    ), "keyword.input 不应包含 AnsiInputDecl（已标记 statement=false）"
 
 
 # ──────────────────────────────────────────────
 # Check 3: Atomic rules are strict
 # ──────────────────────────────────────────────
 
+
 def test_atomic_not_affected_by_committed():
     """原子规则应不受 match_productions 的 committed 影响。"""
     rules = load_rules()
     # 检查 atomic 标记的规则
     atomic_rules = [
-        name for name, rule in rules.items()
-        if getattr(rule, "is_atom", False)
+        name for name, rule in rules.items() if getattr(rule, "is_atom", False)
     ]
     assert "Number" in atomic_rules, "Number 应是原子规则"
     assert "Identifier" in atomic_rules, "Identifier 应是原子规则"
@@ -159,25 +187,30 @@ def test_atomic_not_affected_by_committed():
         assert len(prods) > 0, f"原子规则 {name} 不应有空的 production"
 
 
-def test_bitwidth_literal_not_greedy():
-    """BitWidthLiteral 匹配 literal.number 失败后不应吞后续 token。"""
+def test_bit_width_literal_not_greedy():
+    """bit_widthLiteral 匹配 literal.number 失败后不应吞后续 token。"""
     rules = load_rules()
     stmt_names = [
-        n for n, r in rules.items()
+        n
+        for n, r in rules.items()
         if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
     ]
     from parser.rule_selector import RuleSelector
+
     rs = RuleSelector(rules, stmt_names, cache_enabled=False)
     parser = Parser(
-        rules_dir=RULES_DIR, cache_enabled=False, global_recovery=True,
-        rules=rules, rule_selector=rs,
+        rules_dir=RULES_DIR,
+        cache_enabled=False,
+        global_recovery=True,
+        rules=rules,
+        rule_selector=rs,
     )
 
     lexer = Lexer(rules_dir=RULES_DIR)
     src = "module t; wire a; assign a = 32'd1000; endmodule"
     tokens = lexer.tokenize(src)
     ast = _parse_quiet(parser, tokens)
-    assert ast is not None, "含 BitWidthLiteral 的 module 应解析成功"
+    assert ast is not None, "含 bit_widthLiteral 的 module 应解析成功"
 
 
 # ──────────────────────────────────────────────
@@ -191,7 +224,7 @@ CHECKS = [
     ("first_set_keyword_reg", test_first_set_keyword_reg),
     ("first_set_keyword_input", test_first_set_keyword_input),
     ("atomic_not_affected_by_committed", test_atomic_not_affected_by_committed),
-    ("bitwidth_literal_not_greedy", test_bitwidth_literal_not_greedy),
+    ("bit_width_literal_not_greedy", test_bit_width_literal_not_greedy),
 ]
 
 
