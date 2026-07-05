@@ -1,9 +1,7 @@
 """Macro expansion — strip directives, expand `` `NAME `` references.
 
-Two modes:
-  1. String-level (legacy):  preprocess() — expands in source text
-  2. Pure-text (preferred): scan_directives() + expand_tokens() — expands
-     `` `NAME `` in source text before lexer.
+Pipeline: scan_directives() → expand_tokens() → Lexer
+Both operate on pure text, no token dependency.
 """
 
 import re
@@ -25,7 +23,7 @@ def _build_macro_re(prefix: str) -> re.Pattern:
 
 
 # ============================================================
-# Token 级展开（新方案）
+# 纯文本展开（新方案）
 # ============================================================
 
 
@@ -124,20 +122,18 @@ def expand_tokens(
         restoration_stack — 逆序处理用的还原记录列表，每项含：
             macro, body, sync_text, offset
     """
-    import re
     _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
     restoration_stack: list[dict] = []
     lines = source.split("\n")
 
     for line_no, line in enumerate(lines, 1):
-        # 在当前行中从右到左找宏调用，避免替换后偏移变化
         macro_matches: list[tuple[int, int, str, str]] = []
         for m in _MACRO_RE.finditer(line):
             name = m.group(1)
             body = macro_defs.get(name)
             if body is None:
                 continue
-            macro_col = m.start()  # 0-based column in the line
+            macro_col = m.start()
             macro_matches.append((macro_col, m.end(), body, name))
 
         if not macro_matches:
@@ -150,8 +146,9 @@ def expand_tokens(
             sync_text, _ = _find_sync_word(line, macro_col)
             sync_counter[sync_text] = sync_counter.get(sync_text, 0) + 1
 
-        # 从右到左替换
+        # 从右到左替换（避免位置偏移）
         parts = list(line)
+        forward_entries: list[dict] = []
         for macro_col, macro_end, body, name in reversed(macro_matches):
             sync_text, offset = _find_sync_word(line, macro_col)
             nth = sync_counter[sync_text]
@@ -160,8 +157,8 @@ def expand_tokens(
             # 替换
             parts[macro_col:macro_end] = body
 
-            # 记录
-            restoration_stack.append({
+            # 记录（逆序 processing，但用头插保证正序）
+            forward_entries.append({
                 "macro": name,
                 "body": body,
                 "sync": sync_text,
@@ -169,50 +166,9 @@ def expand_tokens(
                 "offset": offset,
             })
 
+        # 正序存入 restoration_stack（匹配渲染输出的出现顺序）
+        restoration_stack.extend(reversed(forward_entries))
+
         lines[line_no - 1] = "".join(parts)
 
     return "\n".join(lines), restoration_stack
-
-
-# ============================================================
-# 字符串级展开（旧方案，保留向后兼容）
-# ============================================================
-
-
-def preprocess(source: str, rules_dir: str) -> tuple[str, dict[str, str], list[str]]:
-    """Expand `define macros → (expanded_source, macro_defs, directive_lines).
-
-    macro_defs maps name → fully-expanded body.
-    directive_lines preserves original directive texts (stripped from output).
-
-    Legacy string-level expansion. Prefer scan_directives() + expand_tokens()
-    for new code.
-    """
-    prefix, directives = _load_config(rules_dir)
-    _MACRO_RE = _build_macro_re(prefix)
-
-    macro_defs, directive_lines, stripped_source = scan_directives(source, rules_dir)
-
-    if not macro_defs:
-        return stripped_source, {}, directive_lines
-
-    # ---- iterative expansion of stripped source ----
-    result = stripped_source
-    for _ in range(_MAX_ITERATIONS):
-        changed = False
-
-        def _expand(m: re.Match) -> str:
-            nonlocal changed
-            name = m.group(1)
-            if name in directives:
-                return m.group(0)
-            if name in macro_defs:
-                changed = True
-                return macro_defs[name]
-            return m.group(0)
-
-        result = _MACRO_RE.sub(_expand, result)
-        if not changed:
-            break
-
-    return result, macro_defs, directive_lines

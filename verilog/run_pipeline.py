@@ -23,7 +23,7 @@ from analyzer import SemanticAnalyzer
 from transform.post import AstTransformer
 from transform.post.engine import ConfigDrivenTransform
 from preprocessor import (
-    preprocess, scan_directives, expand_tokens,
+    scan_directives, expand_tokens,
     protect_and_reverse, load_macro_config,
 )
 from renderer.inline_comment import inject_comments
