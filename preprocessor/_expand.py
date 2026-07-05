@@ -86,25 +86,39 @@ def scan_directives(
     return macro_defs, directive_lines, "\n".join(clean_lines)
 
 
-def _find_sync_word(line: str, macro_col: int) -> tuple[str, int]:
+def _find_sync_word(line: str, macro_col: int, prev_line: str = "") -> tuple[str, int]:
     """向左找最近的非空白词作为同步词。
 
+    优先在当前行找，找不到则尝试上一行末尾词。
     Returns: (sync_text, offset_from_sync_end_to_macro_start)
     """
-    # 跳过空白
+    # 当前行向左找
     pos = macro_col - 1
     while pos >= 0 and line[pos] in ' \t':
         pos -= 1
-    if pos < 0:
-        return "", macro_col
+    if pos >= 0:
+        word_end = pos + 1
+        while pos >= 0 and line[pos] not in ' \t':
+            pos -= 1
+        sync_text = line[pos + 1:word_end]
+        offset = macro_col - word_end
+        return sync_text, offset
 
-    # 找到这个词的开头
-    word_end = pos + 1
-    while pos >= 0 and line[pos] not in ' \t':
-        pos -= 1
-    sync_text = line[pos + 1:word_end]
-    offset = macro_col - word_end
-    return sync_text, offset
+    # 当前行没有 → 取上一行末尾非空白词
+    if prev_line:
+        pos = len(prev_line) - 1
+        while pos >= 0 and prev_line[pos] in ' \t':
+            pos -= 1
+        if pos >= 0:
+            word_end = pos + 1
+            while pos >= 0 and prev_line[pos] not in ' \t':
+                pos -= 1
+            sync_text = prev_line[pos + 1:word_end]
+            # offset 要跨过换行符
+            offset = macro_col + 1
+            return sync_text, offset
+
+    return "", macro_col
 
 
 def expand_tokens(
@@ -139,18 +153,19 @@ def expand_tokens(
         if not macro_matches:
             continue
 
+        prev_line = lines[line_no - 2] if line_no >= 2 else ""
+
         # 统计行内同步词出现次数，确定每个宏对应第几个同步词
         sync_counter: dict[str, int] = {}
-        # 按列号正序处理以计数
         for macro_col, macro_end, body, name in sorted(macro_matches):
-            sync_text, _ = _find_sync_word(line, macro_col)
+            sync_text, _ = _find_sync_word(line, macro_col, prev_line)
             sync_counter[sync_text] = sync_counter.get(sync_text, 0) + 1
 
         # 从右到左替换（避免位置偏移）
         parts = list(line)
         forward_entries: list[dict] = []
         for macro_col, macro_end, body, name in reversed(macro_matches):
-            sync_text, offset = _find_sync_word(line, macro_col)
+            sync_text, offset = _find_sync_word(line, macro_col, prev_line)
             nth = sync_counter[sync_text]
             sync_counter[sync_text] = nth - 1  # 从右到左递减
 

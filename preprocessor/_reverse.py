@@ -24,6 +24,7 @@ def _restore_lines(
         macro = entry["macro"]
         sync = entry.get("sync", "")
         sync_nth = entry.get("sync_nth", 1)
+        offset = entry.get("offset", 0)
 
         pos = 0
         while True:
@@ -31,9 +32,10 @@ def _restore_lines(
             if pos < 0:
                 break
 
-            # 同步词验证：检查 body 前是否有第 N 个同步词
+            # 同步词验证：动态窗大小 = max(15, sync长度 + offset + 5)
             if sync:
-                before = result[max(0, pos - 15):pos]
+                window = max(15, len(sync) + offset + 5)
+                before = result[max(0, pos - window):pos]
                 count = 0
                 sync_idx = -1
                 while True:
