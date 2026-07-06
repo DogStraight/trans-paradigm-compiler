@@ -39,3 +39,18 @@ key = "{scope.name}"
 first_only = true
 source = { attr = "ports", items = true }
 fields = { direction = "{$.direction}", name = "items.items[*].name" }
+
+# ── 方向反转映射表（语言专用数据）──
+# 被 capture hook resolve_nested 和 transform value_map 共享
+[direction]
+revert_map = { input = "output", output = "input", input_reg = "output_reg", output_reg = "input_reg", inout = "inout" }
+
+# ── 后处理：revert 方向反转 ──
+# value_map 原语：用配置映射表替换指定字段的值
+# Python 只提供通用 value_map 操作，语言专用映射表在此定义
+[resolve.revert_resolve]
+kind = "value_map"
+source_table = "type_revert"
+target_table = "type_ports_flat"
+field = "direction"
+map = { input = "output", output = "input", input_reg = "output_reg", output_reg = "input_reg", inout = "inout" }

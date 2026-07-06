@@ -151,30 +151,31 @@ def lookup_scope(
     return {"name": sym.name, "kind": sym.kind, **sym.attrs}
 
 
-# ── 原语: lookup_type_scope ──
+# ── 原语: lookup_child_scope（取代 lookup_type_scope）──
 
 
-def lookup_type_scope(
+def lookup_child_scope(
     root_scope: Any,
     key_template: str,
+    scope_kind: str,
     context: dict[str, Any],
 ) -> Any:
-    """从 scope 作用域链中按类型作用域 + 角色名查找
+    """按作用域 kind + 名称查找作用域内符号
 
-    专用于 EXT 类型系统：TypeDecl 在 scope 中创建 type 子作用域，
-    其下 role 符号存储了 ports 信息。
+    通用版本的 lookup_type_scope — scope_kind 由调用者传参而非硬编码。
 
-    Key 语法: "type_name.role_name" → 先找 type 子域，再找 role 符号
-    例如: "spi.master" → root_scope.find_child_scope("spi", "type")
-                             → type_scope.resolve("master")
-                             → Symbol.attrs (含 ports)
+    Key 语法: "scope_name.symbol_name.attr" → 先找子域，再找符号，再取属性
+    例如 "spi.master" + scope_kind="type" → root_scope.find_child_scope("spi", "type")
+                                               → type_scope.resolve("master")
+                                               → Symbol.attrs
 
     Args:
-        root_scope: 语义分析产出的根 Scope 对象
-        key_template: 键模板，例如 "{type_spec.type_name}.{type_spec.role_name}"
-        context: 当前上下文（节点属性）
+        root_scope:   根 Scope
+        key_template: 键模板，如 "{type_spec.type_name}.{type_spec.role_name}"
+        scope_kind:   子作用域的 kind 过滤条件（如 "type"），由 TOML 配置提供
+        context:      当前上下文
     Returns:
-        角色符号的 attrs dict（含 ports 等），未找到返回 None
+        符号的 dict（含 name/kind/attrs），或指定属性值，未找到返回 None
     """
     from analyzer.scope import Scope as ScopeType
 
@@ -182,26 +183,23 @@ def lookup_type_scope(
     parts = key.split(".")
     if len(parts) < 2:
         return None
-    type_name = parts[0]
-    role_name = parts[1]
+    scope_name = parts[0]
+    sym_name = parts[1]
     attr_path = parts[2:] if len(parts) > 2 else []
 
     if not hasattr(root_scope, "find_child_scope"):
         return None
 
-    # 1. 查找 type 子作用域
-    type_scope = root_scope.find_child_scope(type_name, "type")
-    if type_scope is None:
+    child_scope = root_scope.find_child_scope(scope_name, scope_kind)
+    if child_scope is None:
         return None
 
-    # 2. 在类型作用域中查找角色符号
-    role_sym = type_scope.resolve(role_name)
-    if role_sym is None:
+    sym = child_scope.resolve(sym_name)
+    if sym is None:
         return None
 
-    # 3. 有属性路径 → 从 attrs 取
     if attr_path:
-        val: Any = role_sym.attrs
+        val: Any = sym.attrs
         for attr in attr_path:
             if isinstance(val, dict) and attr in val:
                 val = val[attr]
@@ -209,12 +207,36 @@ def lookup_type_scope(
                 return None
         return val
 
-    # 4. 返回角色符号的完整 attrs
     return {
-        "name": role_sym.name,
-        "kind": role_sym.kind,
-        **role_sym.attrs,
+        "name": sym.name,
+        "kind": sym.kind,
+        **sym.attrs,
     }
+
+
+# ── 原语: value_map ──
+
+
+def value_map(
+    value: Any,
+    mapping: dict[str, Any],
+    default: Any = None,
+) -> Any:
+    """通用值映射：通过查找表将输入值映射到输出值
+
+    这是"方向反转"等操作的本质原语 — 语言专用的映射表由 TOML 配置提供，
+    Python 只负责执行"查表换值"这个通用操作。
+
+    Args:
+        value:   输入值
+        mapping: 映射表 { 原值 → 新值 }
+        default: 未匹配时的兜底值（None = 返回原值）
+    Returns:
+        映射后的值
+    """
+    if value in mapping:
+        return mapping[value]
+    return default if default is not None else value
 
 
 # ── 原语: foreach ──

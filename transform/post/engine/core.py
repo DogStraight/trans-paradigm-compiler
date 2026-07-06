@@ -21,7 +21,7 @@ from .registry import (
 from .primitives import (
     lookup as _lookup,
     lookup_scope as _lookup_scope,
-    lookup_type_scope as _lookup_type_scope,
+    lookup_child_scope as _lookup_child_scope,
     foreach as _foreach,
     emit as _emit,
     resolve_template,
@@ -309,11 +309,15 @@ def _expand_primitive(engine, node, config, root_scope):
 
     data = None
     if lookup_source == "scope":
-        data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
-    elif lookup_source == "scope_type":
-        data = (
-            _lookup_type_scope(root_scope, lookup_key, context) if lookup_key else None
-        )
+        # 支持 scope_kind 参数：按 kind 查找子作用域再解析符号
+        scope_kind = source_cfg.get("scope_kind")
+        if scope_kind:
+            data = (
+                _lookup_child_scope(root_scope, lookup_key, scope_kind, context)
+                if lookup_key else None
+            )
+        else:
+            data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
     elif lookup_source:
         table = engine._tables.get(lookup_source, {})
         data = _lookup(table, lookup_key, context) if lookup_key else None

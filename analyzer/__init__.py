@@ -1,5 +1,6 @@
 from .scope import Scope, Symbol, get_symbol_kinds
-from .semantic_analyzer import SemanticAnalyzer, register_capture_hook
+from .semantic_analyzer import SemanticAnalyzer
+from .primitives import register_capture_hook, register_primitive, get_primitive
 
 
 __all__ = [
@@ -8,4 +9,6 @@ __all__ = [
     "get_symbol_kinds",
     "SemanticAnalyzer",
     "register_capture_hook",
+    "register_primitive",
+    "get_primitive",
 ]

@@ -1,89 +1,85 @@
 """
-inline_comment.py — 基于指纹的行内注释回注
+inline_comment.py — 基于锚点的行内注释回注
 
-解析阶段收集 inline comment 和前文 token 指纹，
-渲染后通过指纹匹配将注释插回生成代码的对应位置。
+设计思路：将 inline comment 视为"特殊宏"，复用宏体恢复的文本级替换思路。
 
-匹配策略：子序列匹配（flexible）+ 末端偏好评分。
-指纹是 token 内容列表，判断渲染行是否按顺序包含这些 token 内容，
-忽略空白差异。多行匹配时优先选匹配结束位置最靠近行尾的行，
-因为 inline comment 天然位于代码构造的末尾。
+解析阶段：记录注释紧跟的 token 内容作为锚点（anchor token）。
+渲染后：在渲染输出中搜索锚点内容，在锚点后追加注释文本。
+
+与旧指纹方案对比：
+- 无 multi-token fingerprint → 无动态窗算法、无 token_index 回溯
+- 锚点是紧前 token，不受宏展开影响（宏展开改变的是宏体，锚点是宏调用的相邻 token）
+- 行号窗口 [line-3, line+3] 约束搜索范围，降低歧义
 """
 
 
-def _match_end(line: str, tokens: list[str]) -> int:
-    """子序列匹配，返回匹配结束位置（-1 表示不匹配）"""
-    pos = 0
-    for t in tokens:
-        pos = line.find(t, pos)
-        if pos == -1:
-            return -1
-        pos += len(t)
-    return pos
-
-
-def _best_match_line(
-    lines: list[str], tokens: list[str], start: int, end: int, skip: set[int]
-) -> int:
-    """在 [start, end) 范围内找最佳匹配行。
-
-    评分规则（两阶段）：
-    1. 匹配结束位置离行尾非空白越近越好（绝对字符距离）
-    2. 平局时优先选择索引更大的行（更深嵌套，更接近注释原始位置）
-    返回 -1 表示无可匹配行。
+def restore_comments(rendered: str, comment_anchors: list[dict]) -> str:
     """
-    best_idx = -1
-    best_dist = 10**9
-    for i in range(start, end):
-        if i in skip:
-            continue
-        pos = _match_end(lines[i], tokens)
-        if pos < 0:
-            continue
-        content_len = len(lines[i].rstrip())
-        if content_len == 0:
-            continue
-        dist = content_len - pos
-        # 平局时优先选择索引更大的行（更深嵌套，更可能是注释位置）
-        if dist < best_dist or (dist == best_dist and i > best_idx):
-            best_dist = dist
-            best_idx = i
-    return best_idx
+    通过锚点匹配将 inline comment 回注到渲染文本中。
 
-
-def inject_comments(rendered: str, inline_comments: list[dict]) -> str:
-    """
-    在渲染后的文本中匹配指纹，回注 inline comment。
+    每个锚点条目：
+        anchor: 紧前 token 内容（如 ";"、")"、"="）
+        text:   注释文本（如 "// my comment"）
+        line:   源行号（0-based）
 
     策略：
-    - 按源行号排序（稳定），优先保证注释出现顺序与源文件一致
-    - 在 [line-3, line+3] 窗口内找最佳匹配行
-    - 匹配成功则追加到行尾
-    - 匹配失败则退化到行号窗口最后一行
+    1. 按源行号排序，保证插入顺序
+    2. 在 [line-3, line+3] 窗口内搜索锚点
+    3. 同一行连续多个匹配时取最后一个（靠近行尾）
+    4. 一行仅插入一条注释
+    5. 匹配失败则退化到窗口最后一行行尾追加
     """
-    if not inline_comments:
-        return rendered
+    if not comment_anchors:
+        return rendered, 0
+
+    # 去重：parser 回溯可能导致同一条 comment 被多次收集
+    # 按 (text, line) 去重，保留最先记录的锚点（最接近注释的紧前 token）
+    seen: set[tuple[str, int]] = set()
+    unique: list[dict] = []
+    for c in comment_anchors:
+        key = (c["text"], c["line"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
 
     lines = rendered.split("\n")
     occupied: set[int] = set()
 
-    for c in sorted(inline_comments, key=lambda x: x["line"]):
-        tokens = c["fingerprint"]
-        start = max(0, c["line"] - 1 - 3)
-        end = min(len(lines), c["line"] + 3)
+    for c in sorted(unique, key=lambda x: x["line"]):
+        anchor = c["anchor"]
+        comment = c["text"]
+        src_line = c["line"]
 
-        best = _best_match_line(lines, tokens, start, end, occupied)
-        if best >= 0:
-            pos = _match_end(lines[best], tokens)
-            line = lines[best]
-            # 在指纹匹配位置后插入注释，而非行尾追加
+        start = max(0, src_line - 1 - 3)
+        end = min(len(lines), src_line + 3)
+
+        best_idx = -1
+        best_pos = -1
+
+        for i in range(start, end):
+            if i in occupied:
+                continue
+            # 从右向左搜：优先匹配行尾附近的锚点（更可能是注释位置）
+            pos = lines[i].rfind(anchor)
+            if pos < 0:
+                continue
+            # 取最后一个匹配（同一行可能有多个相同 token）
+            if i > best_idx or (i == best_idx and pos > best_pos):
+                best_idx = i
+                best_pos = pos
+
+        if best_idx >= 0:
+            # 在锚点后插入注释
+            pos = best_pos + len(anchor)
+            line = lines[best_idx]
             indent = " " if pos > 0 and not line[pos - 1].isspace() else ""
-            lines[best] = line[:pos] + indent + c["text"] + line[pos:]
-            occupied.add(best)
+            lines[best_idx] = line[:pos] + indent + "  " + comment + line[pos:]
+            occupied.add(best_idx)
         else:
+            # 退化到行号窗口最后一行行尾
             target = min(end - 1, len(lines) - 1)
             if target not in occupied:
-                lines[target] = lines[target].rstrip() + "  " + c["text"]
+                lines[target] = lines[target].rstrip() + "  " + comment
                 occupied.add(target)
 
-    return "\n".join(lines)
+    return "\n".join(lines), len(unique)

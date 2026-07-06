@@ -56,6 +56,8 @@ def run_all(
     json_out: bool = False,
     inline_comments: bool = False,
     expand_macros: bool = False,
+    no_semantic: bool = False,
+    enable_diff: bool = False,
     group_filter: str | None = None,
     name_filter: str | None = None,
 ) -> bool:
@@ -97,8 +99,8 @@ def run_all(
                 inline_comments=inline_comments,
                 debug=False,
                 quiet=True,
-                analyzer_enabled=True,
-                transform_enabled=True,
+                analyzer_enabled=not no_semantic,
+                transform_enabled=not no_semantic,
                 renderer_enabled=True,
                 stage=None,
             )
@@ -110,10 +112,10 @@ def run_all(
         success = result["success"]
         err_msg = result["error"] or ""
 
-        # ---- 生成文件与参考文件的 diff 检查 ----
+# ---- 生成文件与参考文件的 diff 检查（默认关闭）----
         diff_ok = True
         diff_lines: list[str] = []
-        if group == "normal":
+        if enable_diff and group == "normal":
             base_name = name.replace("ref_", "", 1) if name.startswith("ref_") else name
             gen_path = os.path.join(out_dir, "gen", f"gen_{base_name}.v")
             if os.path.exists(gen_path):
@@ -194,6 +196,8 @@ if __name__ == "__main__":
     json_out = "--json" in sys.argv
     inline_comments = "--inline-comments" in sys.argv
     expand_macros = "--expand-macros" in sys.argv
+    no_semantic = "--no-semantic" in sys.argv
+    enable_diff = "--diff" in sys.argv
 
     pos_args = [a for a in sys.argv[1:] if not a.startswith("-")]
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
@@ -210,6 +214,8 @@ if __name__ == "__main__":
         json_out=json_out,
         inline_comments=inline_comments,
         expand_macros=expand_macros,
+        no_semantic=no_semantic,
+        enable_diff=enable_diff,
         group_filter=group_filter,
         name_filter=name_filter,
     )

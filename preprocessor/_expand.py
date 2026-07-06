@@ -114,7 +114,6 @@ def _find_sync_word(line: str, macro_col: int, prev_line: str = "") -> tuple[str
             while pos >= 0 and prev_line[pos] not in ' \t':
                 pos -= 1
             sync_text = prev_line[pos + 1:word_end]
-            # offset 要跨过换行符
             offset = macro_col + 1
             return sync_text, offset
 

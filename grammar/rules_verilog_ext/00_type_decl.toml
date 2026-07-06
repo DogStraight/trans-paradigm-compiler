@@ -128,22 +128,35 @@ items = [{ ref = "role_name" }, ":", { break = 1 }]
 indent = 4
 source = "ports"
 [TypeRole.analyzer]
-symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
+symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }, capture_hooks = ["resolve_nested"] }
 
 
 # ── 角色端口　input miso | output clk | revert master ──
 # 复用核心规则的 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl
 # TypeRevertPort 用于角色体内的 revert 引用（不含分号）
+# TypeNestedPort 用于引用另一类型的角色端口（嵌套类型）
 [TypePortDecl]
 inline = true
 [TypePortDecl.parser]
 production = [
-    "@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeRevertPort",
+    "@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeRevertPort | @TypeNestedPort",
 ]
 [TypePortDecl.parser.node]
 child = "$1"
 [TypePortDecl.renderer]
 layout = { ref = "child" }
+
+
+# ── 嵌套类型引用 axis.master data（被 TypePortDecl 引用）──
+# 注意：不含 ; — 由外层 TypeRole 或调用者提供
+[TypeNestedPort]
+[TypeNestedPort.parser]
+production = ["@TypedTypeSpec", "@Identifier"]
+[TypeNestedPort.parser.node]
+type_spec = "$1"
+instance_name = "$2"
+[TypeNestedPort.renderer]
+layout = { line = [{ ref = "type_spec" }, " ", { ref = "instance_name" }] }
 
 
 # ── 角色内 revert（不含分号，被 TypePortDecl 引用）──

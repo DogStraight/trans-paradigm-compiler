@@ -20,22 +20,36 @@ from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
+import analyzer.hooks  # noqa: F401 — 注册 Verilog 专用 capture hooks
 from transform.post import AstTransformer
 from transform.post.engine import ConfigDrivenTransform
+from transform.post.plugins.semantic_mapping import SemanticMappingPlugin
 from preprocessor import (
     scan_directives, expand_tokens,
     protect_and_reverse, load_macro_config,
 )
-from renderer.inline_comment import inject_comments
+from renderer.inline_comment import restore_comments
 
 
 # ========== 配置声明（启动时由 ConfigRegistry.load_all() 统一加载）==========
-config.declare("analyzer.mapping",
+config.declare("transform.semantic_mapping",
                file="_analyzer.toml",
                section="mapping",
                base="ext",
                required=False,
-               description="增强层语义映射配置（扩展规则目录）")
+               description="语义映射表构建配置（ext 目录），由 SemanticMappingPlugin 消费")
+config.declare("transform.semantic_resolve",
+               file="_analyzer.toml",
+               section="resolve",
+               base="ext",
+               required=False,
+               description="语义映射表后处理配置（ext 目录），如 revert 方向反转")
+config.declare("analyzer.direction",
+               file="_analyzer.toml",
+               section="direction",
+               base="ext",
+               required=False,
+               description="方向反转映射表，由 capture hook resolve_nested 消费")
 
 # 模块级共享管线状态：组件按 rules_dir 缓存，避免重复初始化
 _PIPELINE_SHARED: dict = {}
@@ -169,8 +183,10 @@ def run_pipeline_on_source(
     if inline_comments:
         flags.append("--inline-comments")
 
-    # ---- Stage: 配置加载（必须在任何 config.get() 之前）----
-    ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
+    # ---- Stage: 配置加载（只执行一次，缓存后跳过）----
+    if "_config_loaded" not in _PIPELINE_SHARED:
+        ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
+        _PIPELINE_SHARED["_config_loaded"] = True
 
     # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
     macro_table = {}
@@ -295,17 +311,6 @@ def run_pipeline_on_source(
     analyzer = None
     if analyzer_enabled:
         analyzer = SemanticAnalyzer(rules)
-
-        # 从 ConfigRegistry 获取增强层语义映射配置
-        try:
-            mapping_cfg = config.get("analyzer.mapping")
-            if mapping_cfg:
-                analyzer._mapping_config = [
-                    v for v in mapping_cfg.values()
-                    if isinstance(v, dict) and "trigger" in v
-                ]
-        except KeyError:
-            pass
         ast = analyzer.analyze(ast)
         if analyzer.root_scope is None:
             _log("[analyzer] warning: no scope produced")
@@ -334,44 +339,36 @@ def run_pipeline_on_source(
         return result
 
     # ---- Stage: AST transform ----
+    semantic_mapping_plugin = None
     if transform_enabled and analyzer is not None and scope is not None:
-        # 语义映射表：分析器产出 raw 数据，管线在此做数据变换
-        mapping = analyzer.semantic_mapping
+        # Phase 1: 构建语义映射表 + 后处理管线
+        # 由 SemanticMappingPlugin 完成，从 _analyzer.toml 读取 mapping.* + resolve.* 条目
+        mapping_cfg: dict = {}
+        try:
+            mapping_raw = config.get("transform.semantic_mapping")
+            if mapping_raw:
+                mapping_cfg.update(mapping_raw)
+        except KeyError:
+            pass
+        try:
+            resolve_raw = config.get("transform.semantic_resolve")
+            if resolve_raw:
+                mapping_cfg.update(resolve_raw)
+        except KeyError:
+            pass
 
-        # 解析 revert 关系：将 type_revert 条目展开为实际端口
-        # 例: type_revert.spi.slave = "master" → 复制 spi.master 的端口并反转方向
-        type_ports = mapping.get("type_ports_flat", {})
-        type_revert = mapping.get("type_revert", {})
-        if type_revert and type_ports:
-            from copy import deepcopy
+        semantic_mapping_plugin = SemanticMappingPlugin(mapping_cfg or None)
+        semantic_mapping_plugin.process(ast, scope)
+        mapping = semantic_mapping_plugin.tables
 
-            def _rev_dir(d: str) -> str:
-                return (
-                    "output" if d in ("input", "input_reg")
-                    else "input" if d in ("output", "output_reg")
-                    else d
-                )
-
-            for type_name, roles in type_revert.items():
-                for role_name, target_role in roles.items():
-                    # 查 target 角色的端口
-                    target_ports = type_ports.get(type_name, {}).get(target_role)
-                    if not target_ports:
-                        continue
-                    # 复制并反转方向
-                    resolved = []
-                    for p in target_ports:
-                        rev = deepcopy(p)
-                        rev["direction"] = _rev_dir(rev.get("direction", ""))
-                        resolved.append(rev)
-                    # 设为本角色的端口
-                    type_ports.setdefault(type_name, {})[role_name] = resolved
-
-        # 注入处理后的映射表到 transform 插件
+        # Phase 2: 注入映射表到 ConfigDrivenTransform
         for plugin in transformer.plugins:
             if hasattr(plugin, "set_tables"):
                 plugin.set_tables(mapping)
+
+        # Phase 3: 执行配置驱动的 AST 变换
         ast = transformer.transform(ast, scope)
+
         # 收集变换统计
         total = 0
         parts = []
@@ -411,36 +408,12 @@ def run_pipeline_on_source(
             content = "\n".join(directive_lines) + "\n" + content
             _log(f"[preprocessor] directives restored: {len(directive_lines)}")
 
-        # Inline comment injection
+        # Inline comment restoration（锚点匹配，宏展开后亦可用）
         if inline_comments:
-            raw_inline = getattr(parser, "_inline_comments", None)
-            if raw_inline:
-                if isinstance(raw_inline, list):
-                    ic = raw_inline
-                elif isinstance(raw_inline, dict):
-                    ic = []
-                    for line_num, info in raw_inline.items():
-                        if (
-                            isinstance(info, dict)
-                            and "text" in info
-                            and "fingerprint" in info
-                        ):
-                            ic.append(
-                                {
-                                    "line": line_num,
-                                    "text": info["text"],
-                                    "fingerprint": info["fingerprint"],
-                                }
-                            )
-                        else:
-                            if "line" not in info:
-                                info["line"] = line_num
-                            ic.append(info)
-                else:
-                    ic = []
-                if ic:
-                    content = inject_comments(content, ic)
-                    _log(f"[comments] inline fingerprint injection: {len(ic)} items")
+            anchors = getattr(parser, "_comment_anchors", None)
+            if anchors:
+                content, n = restore_comments(content, anchors)
+                _log(f"[comments] inline anchor restoration: {n} items")
 
         # Write output
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -529,6 +502,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Suppress log output and skip JSON/symbol file saves",
     )
+    parser.add_argument(
+        "--no-semantic",
+        action="store_true",
+        help="Skip semantic analysis (analyzer + transform)",
+    )
 
     parser.add_argument(
         "--rules-dir",
@@ -569,8 +547,8 @@ def main() -> None:
         inline_comments=args.inline_comments,
         debug=args.debug,
         quiet=args.quiet,
-        analyzer_enabled=args.analyzer,
-        transform_enabled=args.transform,
+        analyzer_enabled=args.analyzer and not args.no_semantic,
+        transform_enabled=args.transform and not args.no_semantic,
         renderer_enabled=args.renderer,
         stage=args.stage,
         global_recovery=args.recovery,

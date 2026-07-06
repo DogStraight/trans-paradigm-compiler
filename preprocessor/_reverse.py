@@ -32,20 +32,25 @@ def _restore_lines(
             if pos < 0:
                 break
 
-            # 同步词验证：动态窗大小 = max(15, sync长度 + offset + 5)
             if sync:
                 window = max(15, len(sync) + offset + 5)
                 before = result[max(0, pos - window):pos]
                 count = 0
                 sync_idx = -1
+                matched = False
                 while True:
                     sync_idx = before.find(sync, sync_idx + 1)
                     if sync_idx < 0:
                         break
                     count += 1
                     if count == sync_nth:
-                        break
-                if count < sync_nth:
+                        # 偏移验证：实际偏移 vs 记录偏移，允许 ±2
+                        real_sync_end = max(0, pos - window) + sync_idx + len(sync)
+                        actual_offset = pos - real_sync_end
+                        if abs(actual_offset - offset) <= 2:
+                            matched = True
+                            break
+                if not matched:
                     pos += 1
                     continue
 

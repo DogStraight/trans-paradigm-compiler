@@ -79,13 +79,14 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
             else:
                 context.comment_table[path] = nxt.content
 
-            # 指纹收集：记录 token 索引（解析后用源 token 流回溯取指纹）
-            self._inline_comments.append(
+            # 锚点记录：将 inline comment 视为"特殊宏"，锚点为紧前 token 内容
+            # 渲染后通过锚点匹配回注，复用宏恢复的文本级替换思路
+            self._comment_anchors.append(
                 {
-                    "token_index": context.token_pointer - 1,  # 刚消费的 token
-                    "text": nxt.content,
-                    "line": nxt.line,
-                    "column": nxt.column,  # 源列号，用于精确定位
+                    "anchor": current_token.content,  # 刚消费的 token 内容（锚点）
+                    "text": nxt.content,               # 注释文本
+                    "line": nxt.line,                  # 源行号，用于搜索窗口
+                    "type": token_type,                # 锚点 token 类型
                 }
             )
 
@@ -98,20 +99,41 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
 
 
 def parse_call(self, node: dict, context: ParseContext) -> Node | None:
-    """调用另一个语法规则，失败时按 recovery 路径创建 ErrorNode"""
+    """调用另一个语法规则，带 Packrat 记忆化
+
+    缓存 (rule_name, position) → (result, new_position)，
+    避免回溯导致同一规则在同一位置被反复尝试。
+    缓存仅在同一次 parse() 调用期间有效，不同文件间不共享。
+    """
     rule_name = node["name"]
+    pos = context.token_pointer
+
+    # Packrat 记忆化：命中则跳过执行直接恢复位置
+    cache = self._parse_call_cache
+    key = (rule_name, pos)
+    if key in cache:
+        result, new_pos = cache[key]
+        context.token_pointer = new_pos
+        return result
+
     self._log_state(lambda: f"调用规则: {rule_name} | {self._debug_token_info(context)}")
     snapshot = context.create_snapshot()
 
     target_rule = self.grammar_rules.get(rule_name)
     if target_rule is None:
         context.restore_snapshot(snapshot)
-        return _try_recovery_by_path(self, context) or None
+        result = _try_recovery_by_path(self, context) or None
+        cache[key] = (result, context.token_pointer)
+        return result
 
     result_node = self._try_rule_productions(context, target_rule)
     if result_node is None:
         context.restore_snapshot(snapshot)
-        return _try_recovery_by_path(self, context) or None
+        result = _try_recovery_by_path(self, context) or None
+        cache[key] = (result, context.token_pointer)
+        return result
+
+    cache[key] = (result_node, context.token_pointer)
     return result_node
 
 

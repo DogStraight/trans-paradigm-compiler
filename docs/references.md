@@ -18,3 +18,5 @@
 | **Parser Combinators** ([pyparsing](https://github.com/pyparsing/pyparsing) / [nom](https://github.com/rust-bakery/nom)) | 架构对比 | 语法即代码 vs 配置驱动；Scannerless vs 管线分离；无渲染 vs Doc IR |
 | **[parlex](https://github.com/ikhomyakov/parlex)** | 架构对比 | Rust 下仿 lex/yacc 编译期生成器；SLR(1) 运行时歧义消解对 end_case 有启发；但 v0.4 · 0⭐ · 4K 下载 · 个人项目无社区 · 参考价值有限 |
 | **[ModelCC](https://modelcc.ikor.org/)** | 设计参考 | 模型驱动 parser generator（Java 类+注解 → 解析器）；Earley chart parser；内置引用解析 → ASG；`@Priority`/`@Associativity` 声明式消歧验证了 PyV 声明式配置方向；但 r2015 后已停滞 |
+| **[MoonBit](https://www.moonbitlang.com/)** | 架构对比 | Wasm-first 语言编译器（OCaml）。**双轨解析（Menhir LR + 手写递归下降并行）** 对比验证可借鉴。`parsing_core.ml` 的同步栈错误恢复设计值得参考。全职团队（IDEA）、v0.10.3、极活跃。但语言设计（类型系统）+ 多后端与 PyV 目标无关 |
+| **[Taichi](https://github.com/taichi-dev/taichi)** | 架构对比 | 高性能数值计算嵌入式 DSL（嵌入 Python）。复用 Python `ast` 模块，无自定义 Lexer/Parser。**多级 IR 设计**（FrontendIR → LowerAST → SSA IR）的 lower_ast pass 与 PyV normalizer 职责类似。但 LLVM/SPIR-V 代码生成、自动微分、GPU 后端均与 PyV 目标无关。v1.7.4 · 28.3k⭐ · 极活跃 |
