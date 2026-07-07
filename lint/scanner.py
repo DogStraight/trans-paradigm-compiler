@@ -45,8 +45,8 @@ class LinterScanner:
     ):
         # 加载配置注册表（Parser/Lexer 需要）
         ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
-        # 加载语法规则（含 EXT 注入）
-        self.rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dir)
+        # 加载语法规则（含 EXT 注入），使用新注册器避免缓存污染
+        self.rules = setup_grammar(rules_dir, GrammarRulesRegister(), ext_dir)
         stmt_names = [
             n for n, r in self.rules.items()
             if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
@@ -95,6 +95,10 @@ class LinterScanner:
             if end_token and current.type == end_token:
                 break
 
+            # 跳过宏指令行（`define / `include / `ifdef 等）
+            if self._skip_macro_line(context):
+                continue
+
             # 尝试匹配一条语句
             stmt = self.parser.parse_sentence(context)
             if stmt is not None:
@@ -121,6 +125,19 @@ class LinterScanner:
                 context.advance_token()
             else:
                 break
+
+    def _skip_macro_line(self, context: ParseContext) -> bool:
+        """如果当前 token 是 macro.*，跳过整行（到 newline）。返回 True 跳过了。"""
+        t = context.peek_token()
+        if t and t.type.startswith("macro."):
+            # 跳过 macro 指令 token 和行内剩余所有 token
+            while context.has_more_tokens():
+                cur = context.peek_token()
+                if cur is None or cur.type == "newline":
+                    return True
+                context.advance_token()
+            return True
+        return False
 
     def _skip_to_boundary(self, context: ParseContext, block_end: str = "") -> None:
         """跳过 token 直到下一个安全边界（; 或块结束符或 start_token）。"""

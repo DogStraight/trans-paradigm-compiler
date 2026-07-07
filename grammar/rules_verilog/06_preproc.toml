@@ -1,0 +1,115 @@
+# ============================================================================
+# 预处理器指令 — 伪语法规则（供 Parser 识别，linter 跳过）
+#
+# 这些规则使 Parser 能匹配 `` `define `` / `` `include `` 等预处理指令。
+# 每条规则只匹配指令 token 本身，行内剩余内容由 linter 的
+# _skip_remaining_line 跳过。
+#
+# 关键：end_case = []（空列表），这样 has_pass_end_case() 返回 False，
+# 规则不会被加入 statement_rule_names，Parser 不会在语句级匹配中
+# 尝试它们。但规则存在，linter 扫描到 macro.* token 时 parse_sentence
+# 不匹配任何语句规则 → 记错 → 被 _skip_macro_line 拦截跳过。
+#
+# 实际上规则存在即可，linter 不依赖它们——_skip_trivia 直接跳 macro.* token。
+# ============================================================================
+
+[MacroLine]
+[MacroLine.parser]
+production = ["macro.define"]
+end_case = []
+
+[MacroUndef]
+[MacroUndef.parser]
+production = ["macro.undef"]
+end_case = []
+
+[MacroInclude]
+[MacroInclude.parser]
+production = ["macro.include"]
+end_case = []
+
+[MacroIfdef]
+[MacroIfdef.parser]
+production = ["macro.ifdef"]
+end_case = []
+
+[MacroIfndef]
+[MacroIfndef.parser]
+production = ["macro.ifndef"]
+end_case = []
+
+[MacroElsif]
+[MacroElsif.parser]
+production = ["macro.elsif"]
+end_case = []
+
+[MacroElse]
+[MacroElse.parser]
+production = ["macro.else"]
+end_case = []
+
+[MacroEndif]
+[MacroEndif.parser]
+production = ["macro.endif"]
+end_case = []
+
+[MacroTimescale]
+[MacroTimescale.parser]
+production = ["macro.timescale"]
+end_case = []
+
+[MacroDefaultNettype]
+[MacroDefaultNettype.parser]
+production = ["macro.default_nettype"]
+end_case = []
+
+[MacroResetall]
+[MacroResetall.parser]
+production = ["macro.resetall"]
+end_case = []
+
+[MacroCellDefine]
+[MacroCellDefine.parser]
+production = ["macro.celldefine"]
+end_case = []
+
+[MacroEndCellDefine]
+[MacroEndCellDefine.parser]
+production = ["macro.endcelldefine"]
+end_case = []
+
+[MacroUnconnectedDrive]
+[MacroUnconnectedDrive.parser]
+production = ["macro.unconnected_drive"]
+end_case = []
+
+[MacroNoUnconnectedDrive]
+[MacroNoUnconnectedDrive.parser]
+production = ["macro.nounconnected_drive"]
+end_case = []
+
+[MacroPragma]
+[MacroPragma.parser]
+production = ["macro.pragma"]
+end_case = []
+
+[MacroLineDirective]
+[MacroLineDirective.parser]
+production = ["macro.line"]
+end_case = []
+
+[MacroBeginKeywords]
+[MacroBeginKeywords.parser]
+production = ["macro.begin_keywords"]
+end_case = []
+
+[MacroEndKeywords]
+[MacroEndKeywords.parser]
+production = ["macro.end_keywords"]
+end_case = []
+
+[MacroCall]
+[MacroCall.parser]
+production = ["macro.call"]
+end_case = []
+
