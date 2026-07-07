@@ -4,7 +4,7 @@
 # structure 字段可选值：
 #   { is_block = true }       — 块规则，引擎走 parse_block 路径
 #   { is_statement = false }  — 非语句规则，排除出 parse_sentence 候选列表
-#   { is_atom = true }        — 原子规则，抑制 recovery / 注册到 atomic_rules
+#   { is_atom = true }        — 原子规则，不参与语句级匹配 / 注册到 atomic_rules
 #   可组合: { is_block = true, is_statement = false }
 # ============================================================================
 
@@ -14,11 +14,6 @@ structure = { is_block = true }
 
 [Root.renderer]
 layout = { join = "\n" }
-
-# ----- Error 节点（语法错误恢复）-----
-[Error]
-[Error.renderer]
-layout = { line = ["/* ERROR: ", { ref = "raw" }, " */"] }
 
 # ----- 注释节点（语句级，自然继承 block 缩进）-----
 [Comment]

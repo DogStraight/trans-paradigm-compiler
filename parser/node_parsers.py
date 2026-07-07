@@ -86,7 +86,7 @@ def parse_call(self, node: dict, context: ParseContext) -> Node | None:
 
 
 def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
-    """顺序序列：所有子项依次匹配，带 recovery 寻址"""
+    """顺序序列：所有子项依次匹配"""
     items = node["items"]
     self._log_state(lambda: f"解析序列节点 | {self._debug_token_info(context)}")
     with context:
@@ -101,7 +101,7 @@ def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
 
 
 def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
-    """分支选择：依次尝试每个分支，带 recovery 寻址"""
+    """分支选择：依次尝试每个分支"""
     alternatives = node["alternatives"]
     self._log_state(lambda: f"解析分支节点 | {self._debug_token_info(context)}")
     original_pointer = context.token_pointer

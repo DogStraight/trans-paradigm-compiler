@@ -259,13 +259,12 @@ class GrammarRule:
         "end_case",  # 终止符列表，匹配后检查的 token 边界
         "inline",  # 内联扁平化：只保留第一个子节点，消除包装节点
         "pratt",  # 使用 Pratt 解析器处理表达式（替换普通生产式匹配）
-        "recovery",  # 错误恢复策略：true / false / {$N: strategy} 字典
         "structure",  # 结构角色字典，展开为 is_block / is_statement / is_atom
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
     # 默认值为 None 的三态字段（未设置时由启发式或 False 兜底）
-    _NONE_FIELDS = {"structure", "recovery"}
+    _NONE_FIELDS = {"structure"}
 
     def __init__(self, name: str, **kwargs):
         self.name = name
@@ -300,7 +299,7 @@ class GrammarRule:
         # TOML 写法:
         #   structure = { is_block = true }           — 块规则，走 parse_block
         #   structure = { is_statement = false }       — 非语句规则，排除出候选列表
-        #   structure = { is_atom = true }             — 原子规则，抑制 recovery
+        #   structure = { is_atom = true }             — 原子规则，不参与语句级匹配
         #
         # 真值表（唯一有效组合）:
         #   is_block  is_statement  is_atom   |  含义

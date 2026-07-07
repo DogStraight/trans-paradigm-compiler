@@ -1,9 +1,12 @@
 # TODO
 
-## 错误恢复
+## 错误恢复（已否决）
 
-- [ ] **测试覆盖严重不足** — 当前 4 个 errors 测试全部 FAIL（因 `--recovery` 默认关闭），实际恢复能力无人知晓
-  - 需要按策略编写独立测试：skip_to_end / skip_one / skip_to_matching / skip_to_newline / skip_then_retry_until
-  - 需要测试 committed 传播 + end_case_chain 的同步边界
-  - 需要测试 global_recovery 三层开关的行为
-  - 需明确：恢复能力到底到什么程度？哪些场景能恢复、哪些不能？
+解析器引擎架构（回溯递归下降 + 配置驱动）与错误恢复不兼容。
+详见 [docs/recovery.md](../../docs/recovery.md) 作废说明。
+
+- 调研结论：Tree-sitter（GLR LR 表）、ANTLR（ATN 编译）、MoonBit（手写 sync 栈）
+  都依赖"当前状态 × 当前 token"的查询能力，我们的引擎没有编译阶段无法提供
+- 替代方案：当前仅做更精确的错误消息（ParseError 上下文），不做 Token 级恢复
+- 遗留：4 个 errors 测试用例（error_garbage / error_garbage2 / error_missing_semicolon / error_extra_begin）
+  需要评估是删除还是重写为"解析失败测试"

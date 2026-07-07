@@ -544,7 +544,6 @@ def main() -> None:
         transform_enabled=args.transform and not args.no_semantic,
         renderer_enabled=args.renderer,
         stage=args.stage,
-        global_recovery=args.recovery,
         rules_dir=args.rules_dir,
         ext_dir=args.ext_dir,
     )

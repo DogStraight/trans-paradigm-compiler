@@ -113,8 +113,7 @@ def parse_block_body(
     """循环解析句子直到遇到结束符或文件末尾。
 
     `parse_sentence` 返回 None 时直接 break，块体解析停止。
-    错误恢复由各语句规则自身的 production-level recovery 配置
-    （`[RuleName.parser] recovery`）负责兜底。
+    语句匹配失败时直接 break，停止块体解析。
     """
     end_token = _get_block_end(rule)
 

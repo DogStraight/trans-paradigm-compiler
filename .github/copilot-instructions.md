@@ -90,7 +90,6 @@ python verilog/run_all_tests.py normal                 # 仅 normal 组
 python verilog/run_all_tests.py errors                 # 仅 errors 组
 python verilog/run_all_tests.py normal counter         # 仅单个用例
 python verilog/run_all_tests.py --expand-macros        # 展开宏后再测试
-python verilog/run_pipeline.py --recovery              # 启用错误恢复
 ```
 
 `run_pipeline.py` 查找顺序：`normal/<test_name>` → `errors/<test_name>`。
@@ -216,19 +215,6 @@ Statement  → CtrlStmt | ProcAssignStmt | ProcLocalDecl | CallStmt
 - 插件通过 `AstTransformer.register(plugin)` 注入，默认不含任何插件
 
 详见 `transform/post/` 和 `grammar/rules_verilog_ext/` 中的 transform 配置示例。
-
-## 错误恢复（Production 级）
-
-Parser 支持可选的 production 级错误恢复，通过 `[RuleName.parser] recovery = true` 声明：
-
-- 启用恢复的规则设 `committed = True`，后续 production 元素失败时不回溯，产出 `ErrorNode`
-- 智能停止位置检测：同步扫描 next-start / current-end 双路径，选最佳截断点
-- ErrorNode 渲染为 `/* ERROR: ... */`
-- `--recovery` 开关启用全局恢复（默认关闭）
-- `errors/` 组测试需要 `--recovery` 才能成功（当前 4 个 errors 用例默认 FAIL）
-- 恢复策略：`skip_to_end` / `skip_one` / `skip_to_matching` / `skip_to_newline` / `skip_then_retry_until`
-
-详见 [docs/recovery.md](../../docs/recovery.md)。
 
 ## 调试快速参考
 

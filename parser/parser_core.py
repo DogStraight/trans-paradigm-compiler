@@ -362,8 +362,6 @@ class Parser:
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
                         空字符串或 "/dev/null" 类似值表示不写日志。
             pre_symbols: Lexer 预扫描符号表 { name: kind }，用于辅助规则选择。
-            global_recovery: 全局语法恢复开关。True 时各规则 recovery 标记生效，
-                            False 时忽略所有 recovery 标记，严格回溯。
             rules: 预加载的语法规则表。传入时跳过内部 GrammarRulesRegister 加载。
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """

@@ -273,11 +273,9 @@ raise ParseError(
 )
 ```
 
-### 8.2 错误恢复
+### 8.2 解析异常
 
-- Parser 错误恢复在 `parse_block_body` 层处理，不深入 `_try_rule_productions`
-- 错误节点包装为 `ErrorNode`，不影响后续解析
-- 块结束关键字自动收集，不硬编码
+解析失败时抛出 `ParseError`（携带 token/rule/path/candidates 上下文）。
 
 ---
 

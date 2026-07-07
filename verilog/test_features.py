@@ -57,7 +57,6 @@ def test_token_classifier_installed():
     parser = Parser(
         rules_dir=RULES_DIR,
         cache_enabled=False,
-        global_recovery=False,
         rules=rules,
         rule_selector=rs,
     )
@@ -81,7 +80,6 @@ def test_pratt_parses_not_operator():
     parser = Parser(
         rules_dir=RULES_DIR,
         cache_enabled=False,
-        global_recovery=False,
         rules=rules,
         rule_selector=rs,
     )
@@ -107,7 +105,6 @@ def test_pratt_parses_addition():
     parser = Parser(
         rules_dir=RULES_DIR,
         cache_enabled=False,
-        global_recovery=False,
         rules=rules,
         rule_selector=rs,
     )
@@ -171,8 +168,8 @@ def test_first_set_keyword_input():
 # ──────────────────────────────────────────────
 
 
-def test_atomic_not_affected_by_committed():
-    """原子规则应不受 match_productions 的 committed 影响。"""
+def test_atomic_rules_exist():
+    """原子规则（Number/Identifier）应正确标记。"""
     rules = load_rules()
     # 检查 atomic 标记的规则
     atomic_rules = [
@@ -201,7 +198,6 @@ def test_bit_width_literal_not_greedy():
     parser = Parser(
         rules_dir=RULES_DIR,
         cache_enabled=False,
-        global_recovery=True,
         rules=rules,
         rule_selector=rs,
     )
@@ -223,7 +219,7 @@ CHECKS = [
     ("pratt_parses_addition", test_pratt_parses_addition),
     ("first_set_keyword_reg", test_first_set_keyword_reg),
     ("first_set_keyword_input", test_first_set_keyword_input),
-    ("atomic_not_affected_by_committed", test_atomic_not_affected_by_committed),
+    ("atomic_rules_exist", test_atomic_rules_exist),
     ("bit_width_literal_not_greedy", test_bit_width_literal_not_greedy),
 ]
 
