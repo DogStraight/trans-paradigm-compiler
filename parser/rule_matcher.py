@@ -577,6 +577,14 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         should_skip = False
     if should_skip:
         self._skip_tokens(context, tuple(self.skip_types))
+        # 跳过 production 元素间的注释（line comment 由 repeat_loop 收集）
+        while context.has_more_tokens():
+            t = context.peek_token()
+            if t and t.type == "comment":
+                context.advance_token()
+                self._skip_tokens(context, tuple(self.skip_types))
+            else:
+                break
         if not context.has_more_tokens():
             return False
     return True

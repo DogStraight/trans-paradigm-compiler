@@ -120,10 +120,16 @@ def parse_block_body(
     end_token = _get_block_end(rule)
 
     while context.has_more_tokens():
-        self._skip_tokens(context, tuple(self.skip_types))
-        if not context.has_more_tokens():
-            break
-        self._collect_line_comments(context, block_node)
+        # 反复跳过空白 + 收集注释，直到没有更多注释为止
+        while True:
+            self._skip_tokens(context, tuple(self.skip_types))
+            if not context.has_more_tokens():
+                break
+            before = context.token_pointer
+            self._collect_line_comments(context, block_node)
+            if context.token_pointer == before:
+                break  # 没有收集到注释，退出内层循环
+
         if not context.has_more_tokens():
             break
 
