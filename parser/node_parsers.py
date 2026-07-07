@@ -67,29 +67,16 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     parsed_node.add_attr("value", current_token.content)
     context.advance_token()
 
-    # 语义路径：消费并记录紧随当前 token 的 inline comment
-    # inline comment 不是行尾注释（后继不是 newline），需要跳过以不阻塞生产式匹配
+    # 收集紧随当前 token 的 inline comment（仅限同行的注释）
     while True:
         nxt = context.peek_token(offset=0)
         if nxt and nxt.type == "comment":
-            path = "/" + "/".join(context.path_stack) + f"/{token_type}/after"
-            if path in context.comment_table:
-                # 同一槽位多个 comment 按原序合并
-                context.comment_table[path] += " " + nxt.content
-            else:
-                context.comment_table[path] = nxt.content
-
-            # 锚点记录：将 inline comment 视为"特殊宏"，锚点为紧前 token 内容
-            # 渲染后通过锚点匹配回注，复用宏恢复的文本级替换思路
-            self._comment_anchors.append(
-                {
-                    "anchor": current_token.content,  # 刚消费的 token 内容（锚点）
-                    "text": nxt.content,               # 注释文本
-                    "line": nxt.line,                  # 源行号，用于搜索窗口
-                    "type": token_type,                # 锚点 token 类型
-                }
-            )
-
+            self._comment_anchors.append({
+                "anchor": current_token.content,
+                "text": nxt.content,
+                "line": nxt.line,
+                "type": token_type,
+            })
             context.advance_token()
         else:
             break

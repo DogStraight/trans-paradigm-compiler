@@ -127,7 +127,11 @@ def try_inline_rule(
     old_node: Node | None,
     context: ParseContext,
 ) -> Node | None:
-    """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。"""
+    """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。
+
+    内联前：如果当前规则节点（即将被丢弃）有 Comment 子节点，
+    将它们转发到 old_node（父节点），避免行间注释丢失。
+    """
     if not getattr(rule, "inline", False) or len(getattr(rule, "node", {})) != 1:
         return None
 

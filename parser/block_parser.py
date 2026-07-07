@@ -88,7 +88,7 @@ def consume_start_token(self, context: ParseContext, start_token: str) -> bool:
 
 
 def collect_line_comments(self, context: ParseContext, block_node: Node) -> None:
-    """收集行尾注释（comment → newline），并清除后续空白行"""
+    """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为 Comment 节点。"""
     while context.has_more_tokens():
         cur = context.peek_token()
         if cur and cur.type == "comment":
@@ -101,7 +101,6 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
                 context.advance_token()  # 跳过 newline
                 continue
         break
-    # 清除后续空白行 vs 下一句之间的空行
     self._skip_tokens(context, tuple(self.skip_types))
 
 

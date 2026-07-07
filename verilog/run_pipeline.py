@@ -28,7 +28,7 @@ from preprocessor import (
     scan_directives, expand_tokens,
     protect_and_reverse, load_macro_config,
 )
-from renderer.inline_comment import restore_comments
+from renderer.inline_comment import restore_comments, restore_line_comments
 
 
 # ========== 配置声明（启动时由 ConfigRegistry.load_all() 统一加载）==========
@@ -191,6 +191,7 @@ def run_pipeline_on_source(
     # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
     macro_table = {}
     directive_lines = []
+    restore_stack = None
     if expand_macros:
         macro_table, directive_lines, source = scan_directives(source, rules_dir)
         _log(f"[preprocessor] macros defined: {len(macro_table)}")
@@ -300,13 +301,6 @@ def run_pipeline_on_source(
     if not quiet:
         save_json(ast.dump(), ast_json, "ast", log_fn=_log)
 
-    # Save comment table
-    ct = getattr(parser, "_comment_table", None)
-    if ct:
-        if not quiet:
-            save_json(ct, comment_json, "comments", log_fn=_log)
-        _log(f"[comments] {len(ct)} items")
-
     # ---- Stage: Semantic analysis ----
     analyzer = None
     if analyzer_enabled:
@@ -414,6 +408,12 @@ def run_pipeline_on_source(
             if anchors:
                 content, n = restore_comments(content, anchors)
                 _log(f"[comments] inline anchor restoration: {n} items")
+
+        # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
+        line_anchors = getattr(parser, "_line_comment_anchors", None)
+        if line_anchors:
+            content, n = restore_line_comments(content, line_anchors)
+            _log(f"[comments] line anchor restoration: {n} items")
 
         # Write output
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

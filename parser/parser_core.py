@@ -39,7 +39,6 @@ class ParseContext:
         # 语义路径跟踪
         self.sibling_counter: dict[str, int] = {}  # 规则名 → 自然序
         self.path_stack: list[str] = []  # 当前语义路径栈
-        self.comment_table: dict[str, str] = {}  # 语义路径 → 注释文本
 
         # 错误恢复：已提交的父规则是否在处理可选元素时遇到失败
         self._committed: bool = False
@@ -99,7 +98,6 @@ class ParseContext:
             "current_node": self.current_node,
             "current_rule": self.current_rule,
             "production_pointer": self.production_pointer,
-            "comment_table": dict(self.comment_table),
             "_committed": self._committed,
         }
         return snapshot
@@ -111,7 +109,6 @@ class ParseContext:
         self.current_node = snapshot["current_node"]
         self.current_rule = snapshot["current_rule"]
         self.production_pointer = snapshot["production_pointer"]
-        self.comment_table = snapshot["comment_table"]
         self._committed = snapshot["_committed"]
 
     def update_current_node(self, node: Node):
@@ -490,6 +487,8 @@ class Parser:
         )
         # inline comment 锚点记录（渲染后通过锚点匹配回注）
         self._comment_anchors: list[dict] = []
+        # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）
+        self._line_comment_anchors: list[dict] = []
         # Packrat 记忆化缓存：(rule_name, position) → (result, new_position)
         self._parse_call_cache: dict[tuple[str, int], tuple] = {}
 
@@ -584,6 +583,7 @@ class Parser:
         """解析器的入口：token 流 → AST"""
         # 每次 parse 重置状态
         self._comment_anchors = []
+        self._line_comment_anchors = []
         self._parse_call_cache.clear()
         self._failure_attempts = []
         context = ParseContext(tokens)
@@ -594,8 +594,6 @@ class Parser:
             context.path_stack.append("Root[0]")
             block_node = self.parse_block(context, start_token="")
             context.path_stack.pop()
-            # 保存 comment_table 供后续消费
-            self._comment_table = dict(context.comment_table)
             if block_node is None:
                 self._dump_failure_summary(context)
             return block_node if block_node else None

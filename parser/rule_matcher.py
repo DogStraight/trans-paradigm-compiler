@@ -577,12 +577,22 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         should_skip = False
     if should_skip:
         self._skip_tokens(context, tuple(self.skip_types))
-        # 跳过 production 元素间的注释（line comment 由 repeat_loop 收集）
+        # 跳过 production 元素间的注释，同时收集锚点供渲染后回插
+        # （模块体注释由 collect_line_comments AST 路径处理，不在此重复）
         while context.has_more_tokens():
             t = context.peek_token()
             if t and t.type == "comment":
+                anchor = None
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
+                nxt = context.peek_token()
+                if nxt:
+                    anchor = nxt.content
+                self._line_comment_anchors.append({
+                    "text": t.content,
+                    "line": t.line,
+                    "anchor": anchor,
+                })
             else:
                 break
         if not context.has_more_tokens():
@@ -594,8 +604,8 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
     """检查当前 token 是否匹配规则的终止条件。
 
     end_case 列表中的 token 支持极性前缀：
-      无前缀  — 正匹配：token 在此集合中 → 匹配成功
-      ! 前缀  — 反匹配：token 在此集合中 → 匹配失败
+        无前缀  — 正匹配：token 在此集合中 → 匹配成功
+        ! 前缀  — 反匹配：token 在此集合中 → 匹配失败
 
     例如: end_case = ["symbol.base.comma", "!symbol.base.dot"]
     """
