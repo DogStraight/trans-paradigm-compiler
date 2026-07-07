@@ -62,7 +62,7 @@ tail = { text = "endmodule", break = 2 }
 [PortParens]
 [PortParens.parser]
 inline = true
-recovery = { "$3" = "skip_to_matching" }
+recovery = { "$3" = "skip_then_retry_until" }
 production = [
     "bracket.l_parentheses",
     "@PortList?",
@@ -71,7 +71,14 @@ production = [
 [PortParens.parser.node]
 ports = "$2"
 [PortParens.renderer]
-layout = { ref = "ports" }
+layout = { line = [
+    { ref = "ports" },
+    { opt = { group = [
+        " /* ERROR: ",
+        { ref = "_error.raw" },
+        " */",
+    ] } },
+] }
 
 
 [ParameterList]

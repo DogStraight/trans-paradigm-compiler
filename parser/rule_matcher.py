@@ -142,6 +142,9 @@ def _get_recovery(self, rule):
 
     返回 None（未配置，使用默认 skip_to_end）或 dict（显式 $N 策略）。
     全局开关 `global_recovery` 关闭时也返回 None。
+
+    注：规则未配 recovery = 不参与 committed 恢复，普通回溯兜底。
+    只有显式声明 recovery 的规则才会开启 committed 模式。
     """
     if not getattr(self, "global_recovery", False):
         return None
@@ -350,9 +353,44 @@ def _try_production(
     # 尝试显式策略（skip_one / skip_to_matching / skip_to_newline）
     err = _recover_skip_strategy(self, context, strategy, first_raw, end_case_tokens)
     if err is not None:
-        return err
+        # skip_then_retry_until 不走显式策略，fall through 到下方循环
+        if strategy != "skip_then_retry_until":
+            return err
 
-    # 默认：skip_to_end — 双路径同步扫描
+    # skip_then_retry_until: 逐行跳过 + 重试，直到成功或到达 end_case/EOF
+    if strategy == "skip_then_retry_until":
+        max_iters = 20
+        skipped_parts: list[str] = []
+        for _ in range(max_iters):
+            t = context.peek_token()
+            if t is None or t.type in end_case_tokens:
+                break
+            # 跳过本行剩余内容，累积 raw text
+            line_parts: list[str] = []
+            while context.has_more_tokens():
+                t2 = context.peek_token()
+                if t2 is None or t2.type in end_case_tokens or t2.type == "newline":
+                    break
+                line_parts.append(t2.content)
+                context.advance_token()
+            if line_parts:
+                skipped_parts.append(" ".join(line_parts))
+            # 跳过换行
+            if context.has_more_tokens() and context.peek_token().type == "newline":
+                context.advance_token()
+            # 重试匹配
+            retry_snap = context.create_snapshot()
+            if self._prepare_production(context, feature_tree):
+                retry_result = process_production_node(self, feature_tree, context)
+                if retry_result is not None:
+                    # 跳过内容作为错误节点返回（token 已被消费）
+                    err_raw = "; ".join(skipped_parts)
+                    err_node = Node("Error")
+                    err_node.add_attr("raw", err_raw)
+                    return err_node
+            context.restore_snapshot(retry_snap)
+
+    # 默认：skip_to_end — 双路径同步扫描（含 skip_then_retry_until 的最终兜底）
     err = _recover_skip_to_end(
         self,
         context,
@@ -362,15 +400,6 @@ def _try_production(
         first_raw,
         end_case_tokens,
     )
-
-    # skip_then_retry_until: 跳过后再试一次
-    if strategy == "skip_then_retry_until":
-        retry_snmp = context.create_snapshot()
-        if self._prepare_production(context, feature_tree):
-            retry_result = process_production_node(self, feature_tree, context)
-            if retry_result is not None:
-                return retry_result  # 恢复成功！
-        context.restore_snapshot(retry_snmp)
 
     return err
 

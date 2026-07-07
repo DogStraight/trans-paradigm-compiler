@@ -4,7 +4,7 @@
 module error_test (
     input wire clk,
     input wire rstn,
-    // this is total garbage that should not parse,
+    this is total garbage that should not parse,
     output wire [7:0] data
 );
 
