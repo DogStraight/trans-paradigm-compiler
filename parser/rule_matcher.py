@@ -353,44 +353,57 @@ def _try_production(
     # 尝试显式策略（skip_one / skip_to_matching / skip_to_newline）
     err = _recover_skip_strategy(self, context, strategy, first_raw, end_case_tokens)
     if err is not None:
-        # skip_then_retry_until 不走显式策略，fall through 到下方循环
-        if strategy != "skip_then_retry_until":
+        # *_then_retry 类策略不走显式路径，fall through 到下方 retry 循环
+        if not strategy.endswith("_then_retry"):
             return err
 
-    # skip_then_retry_until: 逐行跳过 + 重试，直到成功或到达 end_case/EOF
-    if strategy == "skip_then_retry_until":
+    # --- 带重试的迭代跳过策略 ---
+    #   skip_to_newline_then_retry: 跳过一行 → 重试，直到成功
+    #   skip_one_then_retry:        跳过一个 token → 重试，直到成功
+    #   公共逻辑：累积跳过的 raw text，重试成功时返回 ErrorNode（含累积内容）
+    #   到达 end_case/EOF 后仍无成功 → fall through 到默认 skip_to_end
+    if strategy.endswith("_then_retry"):
         max_iters = 20
         skipped_parts: list[str] = []
         for _ in range(max_iters):
             t = context.peek_token()
             if t is None or t.type in end_case_tokens:
                 break
-            # 跳过本行剩余内容，累积 raw text
+            # 跳跃：按策略跳过相应 tokens 并累积 raw text
             line_parts: list[str] = []
-            while context.has_more_tokens():
-                t2 = context.peek_token()
-                if t2 is None or t2.type in end_case_tokens or t2.type == "newline":
-                    break
-                line_parts.append(t2.content)
-                context.advance_token()
+            if strategy == "skip_one_then_retry":
+                # 跳过当前一个 token
+                tok = context.peek_token()
+                if tok:
+                    line_parts.append(tok.content)
+                    context.advance_token()
+            elif strategy == "skip_to_newline_then_retry":
+                # 跳到行末
+                while context.has_more_tokens():
+                    t2 = context.peek_token()
+                    if t2 is None or t2.type in end_case_tokens or t2.type == "newline":
+                        break
+                    line_parts.append(t2.content)
+                    context.advance_token()
+                # 跳过换行
+                if context.has_more_tokens() and context.peek_token().type == "newline":
+                    context.advance_token()
             if line_parts:
                 skipped_parts.append(" ".join(line_parts))
-            # 跳过换行
-            if context.has_more_tokens() and context.peek_token().type == "newline":
-                context.advance_token()
             # 重试匹配
             retry_snap = context.create_snapshot()
             if self._prepare_production(context, feature_tree):
                 retry_result = process_production_node(self, feature_tree, context)
                 if retry_result is not None:
-                    # 跳过内容作为错误节点返回（token 已被消费）
                     err_raw = "; ".join(skipped_parts)
                     err_node = Node("Error")
                     err_node.add_attr("raw", err_raw)
-                    return err_node
+                    # 将错误挂到成功节点上，返回成功节点（而非替换）
+                    retry_result.add_attr("_error_skip", err_node)
+                    return retry_result
             context.restore_snapshot(retry_snap)
 
-    # 默认：skip_to_end — 双路径同步扫描（含 skip_then_retry_until 的最终兜底）
+    # 默认：skip_to_end — 双路径同步扫描（含 *_then_retry 的最终兜底）
     err = _recover_skip_to_end(
         self,
         context,
