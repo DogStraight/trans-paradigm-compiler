@@ -10,6 +10,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run tests
-        run: python verilog/run_all_tests.py
+        run: python verilog/run_all_tests.py normal
       - name: Run tests (macro expansion)
-        run: python verilog/run_all_tests.py --expand-macros
+        run: python verilog/run_all_tests.py normal --expand-macros
