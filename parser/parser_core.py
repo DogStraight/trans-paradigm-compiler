@@ -40,31 +40,6 @@ class ParseContext:
         self.sibling_counter: dict[str, int] = {}  # 规则名 → 自然序
         self.path_stack: list[str] = []  # 当前语义路径栈
 
-        # 错误恢复：已提交的父规则是否在处理可选元素时遇到失败
-        self._committed: bool = False
-
-        # 错误恢复深度基准（用于限制 fallback 的级联深度）
-        self._recovery_base_depth: int | None = None
-
-        # 已提交规则链的 end_case 累积（错误恢复时用于停止扫描）
-        self._end_case_chain: set[str] = set()
-
-        # 当前 recovery 寻址路径（如 "$3.$1"），逐层传递
-        self._recovery_path: str = ""
-
-        # 当前拥有 recovery 配置的规则（由 _try_production 设置）
-        self._recovery_rule: GrammarRule | None = None
-
-    def set_recovery_base(self):
-        """标记当前 path_stack 深度为错误恢复的基准"""
-        self._recovery_base_depth = len(self.path_stack)
-
-    def within_recovery_range(self, max_depth: int = 1) -> bool:
-        """当前深度距离基准是否在 max_depth 层以内"""
-        if self._recovery_base_depth is None:
-            return False
-        return (len(self.path_stack) - self._recovery_base_depth) <= max_depth
-
     def __enter__(self):
         # 修复：进入with块时压入快照
         snapshot = self.create_snapshot()
@@ -98,7 +73,7 @@ class ParseContext:
             "current_node": self.current_node,
             "current_rule": self.current_rule,
             "production_pointer": self.production_pointer,
-            "_committed": self._committed,
+
         }
         return snapshot
 
@@ -109,7 +84,6 @@ class ParseContext:
         self.current_node = snapshot["current_node"]
         self.current_rule = snapshot["current_rule"]
         self.production_pointer = snapshot["production_pointer"]
-        self._committed = snapshot["_committed"]
 
     def update_current_node(self, node: Node):
         self.current_node = node
@@ -304,7 +278,6 @@ from .node_parsers import (
     parse_optional,
     parse_plus,
     repeat_loop,
-    _try_recovery_by_path,
 )
 from .rule_matcher import (
     process_production_node,
@@ -350,8 +323,6 @@ class Parser:
     _parse_optional = parse_optional
     _parse_plus = parse_plus
     _repeat_loop = repeat_loop
-    _try_recovery_by_path = _try_recovery_by_path
-
     # production_matcher
     _process_production_node = process_production_node
     _match_productions = match_productions
@@ -379,7 +350,6 @@ class Parser:
         verbose: bool = False,
         log_file: str | None = None,
         pre_symbols: dict[str, str] | None = None,
-        global_recovery: bool = False,
         rules: dict[str, GrammarRule] | None = None,
         rule_selector: "RuleSelector | None" = None,
     ) -> None:
@@ -400,7 +370,6 @@ class Parser:
         self.grammar_rules: dict[str, GrammarRule] = {}
         self._cache_enabled = cache_enabled
         self.verbose = verbose
-        self.global_recovery = global_recovery
         # 失败尝试摘要
         self._failure_attempts: list[dict] = []
         # 预扫描符号表（可选）

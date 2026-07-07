@@ -5,45 +5,8 @@ node_parsers.py — 生产式子句对应的 _parse_* 方法
 production feature 类型的递归解析。
 """
 
-from . import rule_matcher
 from core.define import Node
 from .parser_core import ParseContext
-
-
-def _try_recovery_by_path(self, context: ParseContext) -> Node | None:
-    """子元素级恢复：_parse_call / _parse_choice 内单个引用失败时触发。
-
-    只处理非 skip_to_end 的显式策略（skip_one / skip_to_matching / skip_to_newline），
-    skip_to_end 由外层 _try_production 统一处理双路径同步。
-    """
-    if not getattr(self, "global_recovery", False):
-        return None
-    rule = getattr(context, "_recovery_rule", None)
-    path = getattr(context, "_recovery_path", "")
-    if not rule or not path:
-        return None
-    # 从路径 "$3" 或 "$3.$1" 提取 prod_index
-    parts = path.strip("$").split(".")
-    try:
-        prod_index = int(parts[0]) - 1
-    except ValueError:
-        return None
-    prods = rule.prods
-    if prod_index < 0 or prod_index >= len(prods):
-        return None
-    prod_features = rule_matcher._get_prod_features(self, rule, prods[prod_index])
-    if prod_features is None:
-        return None
-    strategy = rule_matcher._find_recovery_strategy(rule, prod_features, prod_index)
-    if strategy is None or strategy == "skip_to_end":
-        return None  # skip_to_end 归 _try_production 处理
-
-    t = context.peek_token()
-    first_raw = t.content if t else ""
-    end_case_tokens = rule_matcher._compute_end_case_tokens(rule, context)
-    return rule_matcher._recover_skip_strategy(
-        self, context, strategy, first_raw, end_case_tokens,
-    )
 
 
 def parse_token(self, node: dict, context: ParseContext) -> Node | None:
@@ -109,16 +72,14 @@ def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     target_rule = self.grammar_rules.get(rule_name)
     if target_rule is None:
         context.restore_snapshot(snapshot)
-        result = _try_recovery_by_path(self, context) or None
-        cache[key] = (result, context.token_pointer)
-        return result
+        cache[key] = (None, context.token_pointer)
+        return None
 
     result_node = self._try_rule_productions(context, target_rule)
     if result_node is None:
         context.restore_snapshot(snapshot)
-        result = _try_recovery_by_path(self, context) or None
-        cache[key] = (result, context.token_pointer)
-        return result
+        cache[key] = (None, context.token_pointer)
+        return None
 
     cache[key] = (result_node, context.token_pointer)
     return result_node
@@ -131,12 +92,7 @@ def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
     with context:
         seq_node = Node("seq")
         for idx, item in enumerate(items):
-            old_path = context._recovery_path
-            context._recovery_path = (
-                f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
-            )
             result = self._process_production_node(item, context)
-            context._recovery_path = old_path
             if result is None:
                 return None
             seq_node.add_sub_node(result)
@@ -151,20 +107,10 @@ def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
     original_pointer = context.token_pointer
     for idx, alt in enumerate(alternatives):
         context.token_pointer = original_pointer
-        old_path = context._recovery_path
-        context._recovery_path = f"{old_path}.${idx + 1}" if old_path else f"${idx + 1}"
         with context:
             result = self._process_production_node(alt, context)
-            context._recovery_path = old_path
             if result is not None:
                 return result
-        # 当前分支失败，检查 sub-element recovery
-        if context._recovery_path:
-            err = self._try_recovery_by_path(context)
-            if err is not None:
-                context._recovery_path = old_path
-                return err
-        context._recovery_path = old_path
     context.token_pointer = original_pointer
     self._log_state(lambda: f"所有分支匹配失败 | {self._debug_token_info(context)}")
     return None

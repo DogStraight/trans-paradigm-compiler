@@ -56,7 +56,6 @@ def run_all(
     json_out: bool = False,
     inline_comments: bool = False,
     expand_macros: bool = False,
-    global_recovery: bool = False,
     no_semantic: bool = False,
     enable_diff: bool = False,
     group_filter: str | None = None,
@@ -104,7 +103,6 @@ def run_all(
                 transform_enabled=not no_semantic,
                 renderer_enabled=True,
                 stage=None,
-                global_recovery=global_recovery,
             )
         finally:
             if not verbose:
@@ -198,7 +196,6 @@ if __name__ == "__main__":
     json_out = "--json" in sys.argv
     inline_comments = "--inline-comments" in sys.argv
     expand_macros = "--expand-macros" in sys.argv
-    global_recovery = "--recovery" in sys.argv
     no_semantic = "--no-semantic" in sys.argv
     enable_diff = "--diff" in sys.argv
 
@@ -217,7 +214,6 @@ if __name__ == "__main__":
         json_out=json_out,
         inline_comments=inline_comments,
         expand_macros=expand_macros,
-        global_recovery=global_recovery,
         no_semantic=no_semantic,
         enable_diff=enable_diff,
         group_filter=group_filter,

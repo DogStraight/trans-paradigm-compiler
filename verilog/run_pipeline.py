@@ -109,7 +109,6 @@ def run_pipeline_on_source(
     transform_enabled: bool = True,
     renderer_enabled: bool = True,
     stage: Optional[str] = None,
-    global_recovery: bool = False,
     rules_dir: str = "pyv_compiler/grammar/rules_verilog",
     ext_dir: str = "pyv_compiler/grammar/rules_verilog_ext",
 ) -> Dict[str, Any]:
@@ -262,7 +261,6 @@ def run_pipeline_on_source(
         rules_dir=rules_dir,
         cache_enabled=False,
         pre_symbols=pre_symbols,
-        global_recovery=global_recovery,
         rules=rules,
         rule_selector=rule_selector,
     )
@@ -491,11 +489,6 @@ def parse_args() -> argparse.Namespace:
         "--inline-comments",
         action="store_true",
         help="Re-inject inline comment fingerprints",
-    )
-    parser.add_argument(
-        "--recovery",
-        action="store_true",
-        help="Enable production-level error recovery (slower, default off)",
     )
     parser.add_argument(
         "--quiet",

@@ -31,99 +31,7 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
     return {raw}
 
 
-def _find_sync_token(
-    rule: GrammarRule, from_index: int, grammar_rules: dict
-) -> set[str]:
-    """从产生式列表中查找第 from_index 个元素之后的同步 token 集合（结果缓存）。"""
-    cache = getattr(rule, "_sync_cache", None)
-    if cache is None:
-        cache = {}
-        setattr(rule, "_sync_cache", cache)
-    if from_index in cache:
-        return cache[from_index]
-    prods = rule.prods
-    for i in range(from_index, len(prods)):
-        prod = prods[i]
-        if prod.endswith("?") or prod.endswith("*"):
-            continue
-        tokens = _first_token_of_spec(prod, grammar_rules)
-        if tokens:
-            cache[from_index] = tokens
-            return tokens
-    ec = getattr(rule, "end_case", [])
-    result = {t for t in ec if isinstance(t, str) and not t.startswith("!")}
-    cache[from_index] = result
-    return result
 
-
-def _find_recovery_strategy(
-    rule: GrammarRule,
-    prod_features: dict | None,
-    prod_index: int | None,
-) -> str | None:
-    """从 recovery 字典中查找当前产生式的恢复策略。
-
-    key 采用 $N 路径语法（与 attribute_binder 一致），如：
-        "$3"          — 第 3 个 production 元素（1-based）
-        "$3.$1"       — 第 3 个元素的第 1 个子元素
-
-    可选值（策略名）：
-        "skip_to_end"             — （默认）同步到 end_case / 后继生产式 / 当前生产式自然结束
-        "skip_one"                — 只跳过当前一个 token，不向前扫描
-        "skip_to_matching"        — 括号感知扫描：维护嵌套深度，遇到匹配的关闭括号时停止
-        "skip_to_newline"         — 跳到下一个换行，用于语句级恢复（吞掉本行剩余内容）
-        "skip_then_retry_until"   — 两阶段：先 skip_to_end 到同步点，然后重新尝试匹配同一产生式。
-                                    重试成功则用真实解析结果替代 ErrorNode，失败则回退为 ErrorNode。
-                                    类似 Chumsky 的 skip_then_retry_until 策略。
-    """
-    recovery_cfg = getattr(rule, "recovery", {})
-    if not isinstance(recovery_cfg, dict) or prod_index is None:
-        return None
-
-    # 1. 精确匹配 $N（1-based）
-    key = f"${prod_index + 1}"
-    if key in recovery_cfg:
-        return recovery_cfg[key]
-
-    # 2. 子元素匹配：遍历 flattened 叶子，检查 $N.$m 路径
-    if prod_features is not None:
-        flat = prod_features.get("flat", [])
-        for leaf_path, _leaf_feat in flat:
-            sub_key = f"{key}.{leaf_path}"
-            if sub_key in recovery_cfg:
-                return recovery_cfg[sub_key]
-    return None
-
-
-def _find_current_end(
-    spec: str, grammar_rules: dict, bracket_map: dict[str, str] | None = None
-) -> set[str]:
-    """计算一个产生式规格字符串的自然结束 token。
-
-    例如:
-        "@PortParens?"  → {"bracket.r_parentheses"}
-        "symbol.base.semicolon"  → {"symbol.base.semicolon"}
-        "@Identifier"  → {"id"}
-        "@ParameterList?"  → {"bracket.r_parentheses"}
-    """
-    raw = spec.rstrip("?+*")
-    # 1. 显式括号闭合：如 bracket.l_parentheses → bracket.r_parentheses
-    if bracket_map:
-        close = bracket_map.get(raw)
-        if close:
-            return {close}
-
-    # 2. 规则引用：查找规则的最后一个生产式元素
-    if raw.startswith("@"):
-        rule = grammar_rules.get(raw[1:])
-        if rule:
-            prods = rule.prods
-            if prods:
-                return _find_current_end(prods[-1], grammar_rules, bracket_map)
-        return set()
-
-    # 3. 普通 token → 自身就是结束
-    return {raw}
 
 
 def process_production_node(self, node: dict, context: ParseContext) -> Node | None:
@@ -135,20 +43,6 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
         self._log_state(f"未知节点类型: {typ}")
         return None
     return method(node, context)
-
-
-def _get_recovery(self, rule):
-    """获取规则级的 recovery 策略配置。
-
-    返回 None（未配置，使用默认 skip_to_end）或 dict（显式 $N 策略）。
-    全局开关 `global_recovery` 关闭时也返回 None。
-
-    注：规则未配 recovery = 不参与 committed 恢复，普通回溯兜底。
-    只有显式声明 recovery 的规则才会开启 committed 模式。
-    """
-    if not getattr(self, "global_recovery", False):
-        return None
-    return getattr(rule, "recovery", None)
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
@@ -174,148 +68,13 @@ def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
     return cache[prod]
 
 
-def _compute_end_case_tokens(rule: GrammarRule, context: ParseContext) -> set[str]:
-    """计算规则的 end_case + 继承的 _end_case_chain。"""
-    tokens: set[str] = set()
-    for ec in getattr(rule, "end_case", []):
-        if isinstance(ec, str) and not ec.startswith("!"):
-            tokens.add(ec)
-    tokens.update(getattr(context, "_end_case_chain", set()))
-    return tokens
-
-
-def _recover_skip_strategy(
-    self,
-    context: ParseContext,
-    strategy: str,
-    first_raw: str,
-    end_case_tokens: set[str],
-) -> Node | None:
-    """执行除 skip_to_end 之外的简单恢复策略。返回 ErrorNode，未知策略返回 None。"""
-    err = Node("Error")
-    err.add_attr("raw", first_raw)
-
-    if strategy == "skip_one":
-        if context.has_more_tokens():
-            context.advance_token()
-        return err
-
-    elif strategy == "skip_to_matching":
-        depth = 0
-        while context.has_more_tokens():
-            t = context.peek_token()
-            assert t is not None
-            if t.type in end_case_tokens:
-                break
-            if t.type in self._bracket_map:
-                depth += 1
-            elif t.type in self._inverse_bracket_map:
-                if depth == 0:
-                    break
-                depth -= 1
-            context.advance_token()
-        return err
-
-    elif strategy == "skip_to_newline":
-        while context.has_more_tokens():
-            t = context.peek_token()
-            assert t is not None
-            if t.type in end_case_tokens or t.type == "newline":
-                break
-            context.advance_token()
-        return err
-
-    return None  # skip_to_end 由
-
-
-def _recover_skip_to_end(
-    self,
-    context: ParseContext,
-    prod: str,
-    rule: GrammarRule,
-    sync_tokens: set[str] | None,
-    first_raw: str,
-    end_case_tokens: set[str],
-) -> Node:
-    """skip_to_end — 双路径同步扫描。"""
-    next_start = sync_tokens or set()
-    current_end = _find_current_end(prod, self.grammar_rules, self._bracket_map)
-
-    scan_ptr = context.token_pointer
-    pos_next: int | None = None
-    pos_current: int | None = None
-    scan_len = 0
-    while scan_ptr < len(context.tokens):
-        t = context.tokens[scan_ptr]
-        if t.type in end_case_tokens:
-            break
-        scan_len += 1
-        if pos_next is None and next_start and t.type in next_start:
-            pos_next = scan_len
-        if pos_current is None and current_end and t.type in current_end:
-            pos_current = scan_len
-        scan_ptr += 1
-
-    # 决策最佳停止位置
-    stop: int | None = None
-    if pos_next is not None and pos_current is not None:
-        if pos_next == pos_current:
-            stop = pos_next
-        else:
-            shorter_pos, longer_pos = sorted([pos_next, pos_current])
-            scan_ptr = context.token_pointer
-            found = False
-            for i in range(longer_pos):
-                if (
-                    i < len(context.tokens)
-                    and context.tokens[scan_ptr + i].type in next_start
-                ):
-                    found = True
-                    break
-            stop = shorter_pos if found else longer_pos
-    elif pos_next is not None:
-        stop = pos_next
-    elif pos_current is not None:
-        stop = pos_current
-
-    if stop is not None:
-        for _ in range(stop):
-            if context.has_more_tokens():
-                context.advance_token()
-            else:
-                break
-    else:
-        while context.has_more_tokens():
-            t = context.peek_token()
-            if t is not None and t.type in end_case_tokens:
-                break
-            context.advance_token()
-
-    err = Node("Error")
-    err.add_attr("raw", first_raw)
-    return err
-
-
 def _try_production(
     self,
     context: ParseContext,
-    prod: str,
     rule: GrammarRule,
-    committed: bool,
-    sync_tokens: set[str] | None = None,
-    prod_index: int | None = None,
+    prod: str,
 ) -> Node | None:
-    """尝试匹配单个产生式。
-
-    Phase 1: 正常匹配（process_production_node）
-    Phase 2: 匹配失败 + committed → 恢复
-              显式策略（skip_one/matching/newline）→ _recover_skip_strategy
-              默认（skip_to_end）→ _recover_skip_to_end 双路径同步
-
-    Args:
-        sync_tokens: 后继生产式的起始 token 集合。
-        prod_index: 该生产式在规则 production 数组中的索引，用于寻址 recovery 配置。
-    """
+    """尝试匹配单个产生式。"""
     features = _get_prod_features(self, rule, prod)
     if not features:
         return None
@@ -323,177 +82,32 @@ def _try_production(
     if not self._prepare_production(context, feature_tree):
         return None
 
-    # Phase 1: 正常匹配
-    old_path = context._recovery_path
-    old_rule = context._recovery_rule
-    if prod_index is not None:
-        context._recovery_path = f"${prod_index + 1}"
-    context._recovery_rule = rule
-
     snapshot = context.create_snapshot()
     result = process_production_node(self, feature_tree, context)
     if result is not None:
-        context._recovery_path = old_path
-        context._recovery_rule = old_rule
         return result
 
-    context._recovery_path = old_path
-    context._recovery_rule = old_rule
     context.restore_snapshot(snapshot)
-
-    # Phase 2: 恢复（仅 committed 模式）
-    if not committed:
-        return None
-
-    first_bad = context.peek_token()
-    first_raw = first_bad.content if first_bad else ""
-    strategy = _find_recovery_strategy(rule, features, prod_index) or "skip_to_end"
-    end_case_tokens = _compute_end_case_tokens(rule, context)
-
-    # 尝试显式策略（skip_one / skip_to_matching / skip_to_newline）
-    err = _recover_skip_strategy(self, context, strategy, first_raw, end_case_tokens)
-    if err is not None:
-        # *_then_retry 类策略不走显式路径，fall through 到下方 retry 循环
-        if not strategy.endswith("_then_retry"):
-            return err
-
-    # --- 带重试的迭代跳过策略 ---
-    #   skip_to_newline_then_retry: 跳过一行 → 重试，直到成功
-    #   skip_one_then_retry:        跳过一个 token → 重试，直到成功
-    #   公共逻辑：累积跳过的 raw text，重试成功时返回 ErrorNode（含累积内容）
-    #   到达 end_case/EOF 后仍无成功 → fall through 到默认 skip_to_end
-    if strategy.endswith("_then_retry"):
-        max_iters = 20
-        skipped_parts: list[str] = []
-        for _ in range(max_iters):
-            t = context.peek_token()
-            if t is None or t.type in end_case_tokens:
-                break
-            # 跳跃：按策略跳过相应 tokens 并累积 raw text
-            line_parts: list[str] = []
-            if strategy == "skip_one_then_retry":
-                # 跳过当前一个 token
-                tok = context.peek_token()
-                if tok:
-                    line_parts.append(tok.content)
-                    context.advance_token()
-            elif strategy == "skip_to_newline_then_retry":
-                # 跳到行末
-                while context.has_more_tokens():
-                    t2 = context.peek_token()
-                    if t2 is None or t2.type in end_case_tokens or t2.type == "newline":
-                        break
-                    line_parts.append(t2.content)
-                    context.advance_token()
-                # 跳过换行
-                if context.has_more_tokens() and context.peek_token().type == "newline":
-                    context.advance_token()
-            if line_parts:
-                skipped_parts.append(" ".join(line_parts))
-            # 重试匹配
-            retry_snap = context.create_snapshot()
-            if self._prepare_production(context, feature_tree):
-                retry_result = process_production_node(self, feature_tree, context)
-                if retry_result is not None:
-                    err_raw = "; ".join(skipped_parts)
-                    err_node = Node("Error")
-                    err_node.add_attr("raw", err_raw)
-                    # 将错误挂到成功节点上，返回成功节点（而非替换）
-                    retry_result.add_attr("_error_skip", err_node)
-                    return retry_result
-            context.restore_snapshot(retry_snap)
-
-    # 默认：skip_to_end — 双路径同步扫描（含 *_then_retry 的最终兜底）
-    err = _recover_skip_to_end(
-        self,
-        context,
-        prod,
-        rule,
-        sync_tokens,
-        first_raw,
-        end_case_tokens,
-    )
-
-    return err
+    return None
 
 
 def match_productions(
     self, context: ParseContext, rule: GrammarRule
-) -> tuple[list[Node | None] | None, Node | None]:
-    """匹配规则的所有产生式。
-
-    返回 (matched_nodes, error_node)：
-        matched_nodes=None & error_node=None → 全部失败（未提交）
-        matched_nodes=[] & error_node=Node   → 提交后部分失败
-        matched_nodes=[...] & error_node=None → 完全成功
-    """
-    committed = _get_recovery(self, rule) is not None
-
-    # 同步 committed 标志到 context，供子规则（如 optional）查询
-    context._committed = committed
-
+) -> list[Node | None] | None:
+    """匹配规则的所有产生式。返回 matched_nodes 列表，失败返回 None。"""
     prods = rule.prods
-    all_matched_nodes = []
-    error_node = None
-
-    # 如果本规则 committed 且有 end_case，推入 end_case 链供深度嵌套使用
-    _pushed_end_case = False
-    if committed:
-        ec_tokens = set()
-        for ec in getattr(rule, "end_case", []):
-            if isinstance(ec, str) and not ec.startswith("!"):
-                ec_tokens.add(ec)
-        if ec_tokens:
-            context._end_case_chain.update(ec_tokens)
-            _pushed_end_case = True
+    all_matched_nodes: list[Node | None] = []
 
     for i, prod in enumerate(prods):
         self._log_state(lambda: f"产生式: {prod} | {self._debug_token_info(context)}")
 
-        # 预先计算下一个生产式的同步 token，传给当前元素作为 recovery 停止边界
-        next_sync = _find_sync_token(rule, i + 1, self.grammar_rules)
-
-        result_node = _try_production(
-            self,
-            context,
-            prod,
-            rule,
-            committed,
-            sync_tokens=next_sync,
-            prod_index=i,
-        )
+        result_node = _try_production(self, context, rule, prod)
         if result_node is None:
-            # 未提交且匹配失败 → 全部失败
-            return None, None
-
-        if result_node.node_name == "Error" and committed:
-            # 已提交后产出的 ErrorNode：记录错误，继续匹配后续产生式
-            all_matched_nodes.append(result_node)
-            error_node = result_node
-            # 快进到下一个非可选产生式的起始 token
-            if next_sync:
-                while context.has_more_tokens():
-                    t = context.peek_token()
-                    if t is not None:
-                        if t.type in next_sync:
-                            break
-                        # 遇到 end_case 链 token → 停止快进，让上级 recovery 接手
-                        if t.type in getattr(context, "_end_case_chain", set()):
-                            break
-                    context.advance_token()
-            continue
+            return None
 
         all_matched_nodes.append(result_node)
 
-    # 恢复 end_case 链
-    if _pushed_end_case:
-        ec_tokens = set()
-        for ec in getattr(rule, "end_case", []):
-            if isinstance(ec, str) and not ec.startswith("!"):
-                ec_tokens.add(ec)
-        context._end_case_chain.difference_update(ec_tokens)
-
-    return all_matched_nodes, error_node
+    return all_matched_nodes
 
 
 def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:
@@ -549,38 +163,33 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
     old_node = context.current_node
     context.update_current_node(rule_node)
 
-    all_matched_nodes, error_node = match_productions(self, context, rule)
-    if all_matched_nodes is None and error_node is None:
+    all_matched_nodes = match_productions(self, context, rule)
+    if all_matched_nodes is None:
         context.path_stack.pop()
         if scope_pushed:
             self.scope_stack.pop()
         return None
 
-    # 部分成功：有 error_node 时标记规则节点
-    if error_node is not None:
-        rule_node.add_attr("_error", error_node)
-
     # 属性绑定
-    self._bind_attributes(rule_node, rule, all_matched_nodes or [])
+    self._bind_attributes(rule_node, rule, all_matched_nodes)
 
-    # 有 error 的规则跳过 end_case 检查（已处于错误状态）
-    if error_node is None and not self._check_end_case(context, rule):
+    # end_case 检查
+    if not self._check_end_case(context, rule):
         self._restore_current_node(old_node, context)
         context.path_stack.pop()
         if scope_pushed:
             self.scope_stack.pop()
         return None
 
-    # Inline 扁平化（不扁平包含 error 的规则）
-    if error_node is None:
-        inline_result = self._try_inline_rule(
-            rule, all_matched_nodes, old_node, context
-        )
-        if inline_result is not None:
-            context.path_stack.pop()
-            if scope_pushed:
-                self.scope_stack.pop()
-            return inline_result
+    # Inline 扁平化
+    inline_result = self._try_inline_rule(
+        rule, all_matched_nodes, old_node, context
+    )
+    if inline_result is not None:
+        context.path_stack.pop()
+        if scope_pushed:
+            self.scope_stack.pop()
+        return inline_result
 
     self._restore_current_node(old_node, context)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
