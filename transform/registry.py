@@ -6,7 +6,7 @@ from core.define import Node
 from analyzer.scope import Scope
 
 if TYPE_CHECKING:
-    from .core import ConfigDrivenTransform
+    from .config_driven import ConfigDrivenTransform
 
 
 class _Skip:

@@ -38,8 +38,8 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
 from typing import Any, Optional
 from core.define import Node
 from analyzer.scope import Scope
-from transform.post.ast_transformer import TransformPlugin
-from transform.post.engine.primitives import value_map
+from .pipeline import TransformPlugin
+from .primitives._flow import value_map
 
 
 class SemanticMappingPlugin(TransformPlugin):
@@ -330,7 +330,43 @@ class SemanticMappingPlugin(TransformPlugin):
         self._walk_refs(root, target)
 
     def _walk_refs(self, scope: Scope, target: dict) -> None:
-        """递归遍历 scope 树，消费 _ref_callbacks"""
+        """递归遍历 scope 树，消费 _ref_callbacks
+
+        输入（来自分析器 resolve_refs 原语）：
+            sym.attrs["_ref_callbacks"] = [
+                {
+                    "kind": "nested",           # 跨类型引用
+                    "resolved_ports": [           # scope 查找结果（嵌套结构）
+                        { "direction": "input",
+                          "items": { "items": [{ "name": "tvalid" }, ...] } },
+                        ...
+                    ],
+                    "prefix": "upstream",        # nested: 实例名前缀
+                    "source_type": "axis",       # nested: 源类型名
+                    "source_role": "master",
+                },
+                {
+                    "kind": "invert",            # 同类型反转引用
+                    "resolved_ports": [...],
+                    "source_role": "master",
+                }
+            ]
+
+        处理（仅机械操作，无 scope 查找）：
+            1. _flatten_port 将嵌套 {direction, items: {items: [{name}]}}
+               展开为扁平 {direction, name}
+            2. nested: _prefix_port_name 给 name 加前缀
+            3. invert: 用 _invert_map 反转 direction
+            4. _merge_to_flat 合并到 type_ports_flat
+
+        输出：
+            type_ports_flat["{scope.name}.{sym.name}"] 追加扁平端口条目
+            [{ "direction": "output", "name": "upstream_tvalid" }, ...]
+
+        下游消费：
+            ConfigDrivenTransform expand 原语
+            → lookup type_ports_flat → foreach → switch → emit AST 节点
+        """
         for sym in scope.symbols.values():
             callbacks = sym.attrs.get("_ref_callbacks", [])
             if not isinstance(callbacks, list):
@@ -371,7 +407,16 @@ class SemanticMappingPlugin(TransformPlugin):
 
     @staticmethod
     def _merge_to_flat(target: dict, key: str, ports: list[dict]) -> None:
-        """将展开后的端口合并到 type_ports_flat 的指定 key 下"""
+        """将展开后的扁平端口合并到 type_ports_flat 的指定 key 下
+
+        合并语义：追加而非覆盖。
+        同一 key 下已有条目（来自 [mapping.type_ports_flat] 的常规端口）不变，
+        新解析的端口追加到末尾。
+
+        最终 type_ports_flat 包含：
+            - 从原始 capture 提取的常规端口（含 exclude_keys 过滤）
+            - 从 _ref_callbacks 展开的嵌套/invert 端口（接在末尾）
+        """
         parts = key.split(".")
         parent = target
         for p in parts[:-1]:
@@ -397,8 +442,15 @@ class SemanticMappingPlugin(TransformPlugin):
     def _flatten_port(port: dict) -> list[dict]:
         """将嵌套结构的端口展开为扁平 {direction, name} 格式
 
-        输入: { "direction": "input", "items": { "items": [{ "name": "miso" }] } }
-        输出: [{ "direction": "input", "name": "miso" }]
+        分析器回调中 resolved_ports 是嵌套结构（JSON 序列化的 AST）：
+            { "direction": "input",
+              "items": { "node_name": "DeclaratorList",
+                          "items": [{ "node_name": "Declarator", "name": "miso" }] } }
+
+        而 type_ports_flat 需要扁平格式供模板解析：
+            [{ "direction": "input", "name": "miso" }]
+
+        这是分析器产出格式与变换器消费格式之间的适配层。
         """
         direction = port.get("direction", "")
         items = port.get("items", {})

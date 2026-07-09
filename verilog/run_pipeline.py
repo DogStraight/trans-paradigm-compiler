@@ -17,13 +17,13 @@ from parser import Parser, setup_grammar
 from core.define import FileManager, ParseError, GrammarRulesRegister
 from core.config_registry import ConfigRegistry, config
 from parser.rule_selector import RuleSelector
-from transform.pre.normalizer import normalize_ast
+from transform.normalizer import normalize_ast
 from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
 import analyzer.primitives.resolve  # noqa: F401 — 注册引用解析原语
-from transform.post import AstTransformer
-from transform.post.engine import ConfigDrivenTransform
-from transform.post.plugins.semantic_mapping import SemanticMappingPlugin
+from transform import AstTransformer
+from transform.config_driven import ConfigDrivenTransform
+from transform.semantic_mapping import SemanticMappingPlugin
 from preprocessor import (
     scan_directives, expand_tokens,
     protect_and_reverse, load_macro_config,

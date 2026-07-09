@@ -26,7 +26,7 @@ from parser import Parser
 from core.define import GrammarRulesRegister
 from parser.rule_selector import RuleSelector
 from renderer.renderer import Renderer
-from transform.pre.normalizer import normalize_ast
+from transform.normalizer import normalize_ast
 from renderer.doc import Doc, Text, Line, Break, Concat, Nest, Union, Empty
 
 

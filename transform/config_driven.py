@@ -1,15 +1,15 @@
 """
-engine.py — ConfigDrivenTransform 插件
+config_driven.py — ConfigDrivenTransform 插件
 
 核心变换引擎，作为 TransformPlugin 注册到 AstTransformer 管线。
 所有变换操作（expand/replace/delete/custom/扩展）都是注册的原语，
 由 registry.py 的 register_primitive 统一管理。
 """
 
-from typing import Any, Optional, Callable
+from typing import Any, Optional
 from core.define import Node
 from analyzer.scope import Scope
-from transform.post.ast_transformer import TransformPlugin
+from .pipeline import TransformPlugin
 from .registry import (
     TransformResult,
     TransformContext,
@@ -18,14 +18,14 @@ from .registry import (
     get_primitive,
     get_handler,
 )
-from .primitives import (
+from .primitives._template import resolve_template
+from .primitives._lookup import (
     lookup as _lookup,
     lookup_scope as _lookup_scope,
     lookup_child_scope as _lookup_child_scope,
-    foreach as _foreach,
-    emit as _emit,
-    resolve_template,
 )
+from .primitives._flow import foreach as _foreach
+from .primitives._ast import emit as _emit
 
 
 class ConfigDrivenTransform(TransformPlugin):
@@ -185,7 +185,7 @@ class ConfigDrivenTransform(TransformPlugin):
         condition_cfg = config.get("condition")
         if condition_cfg:
             context = self._build_context(node)
-            from .primitives import make_exists_condition
+            from .primitives._flow import make_exists_condition
 
             exists_path = condition_cfg.get("exists", "")
             if exists_path:
@@ -298,8 +298,23 @@ class ConfigDrivenTransform(TransformPlugin):
 
 
 def _expand_primitive(engine, node, config, root_scope):
-    """expand 原语：lookup + foreach + emit"""
-    from .primitives import make_exists_condition
+    """expand 原语：lookup + foreach + emit
+
+    消费 type_ports_flat 表（含常规端口 + _apply_refs 展开的回调端口），
+    对每条扁平端口 { direction, name } 做 foreach → switch → emit AST 节点。
+
+    数据流：
+        type_ports_flat["spi"]["slave"] = [
+            { "direction": "output", "name": "miso" },   # 常规端口
+            { "direction": "input",  "name": "clk" },    # 来自 _apply_refs
+            ...
+        ]
+        ↓
+        foreach → {direction} → switch → emit AnsiInputDecl/AnsiOutputDecl
+        ↓
+        AST 节点追加到模块端口列表
+    """
+    from .primitives._flow import make_exists_condition
 
     context = engine._build_context(node)
 

@@ -8,7 +8,7 @@ ImplicitDeclPlugin — 隐式声明插件（可选）
 
 from core.define import Node
 from analyzer.scope import Scope
-from transform.post.ast_transformer import TransformPlugin
+from .pipeline import TransformPlugin
 
 
 class ImplicitDeclPlugin(TransformPlugin):
