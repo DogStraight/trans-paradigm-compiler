@@ -20,7 +20,7 @@ from parser.rule_selector import RuleSelector
 from transform.pre.normalizer import normalize_ast
 from renderer.renderer import Renderer
 from analyzer import SemanticAnalyzer
-import analyzer.hooks  # noqa: F401 — 注册 Verilog 专用 capture hooks
+import analyzer.primitives.resolve  # noqa: F401 — 注册引用解析原语
 from transform.post import AstTransformer
 from transform.post.engine import ConfigDrivenTransform
 from transform.post.plugins.semantic_mapping import SemanticMappingPlugin
@@ -43,7 +43,7 @@ config.declare("transform.semantic_resolve",
                section="resolve",
                base="ext",
                required=False,
-               description="语义映射表后处理配置（ext 目录），如 revert 方向反转")
+               description="语义映射表后处理配置（ext 目录），如 invert 方向反转")
 config.declare("analyzer.direction",
                file="_analyzer.toml",
                section="direction",
@@ -94,6 +94,44 @@ def save_json(data: Any, path: str, label: str = "", log_fn=None) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
     if label:
         (log_fn or print)(f"[{label}] saved ({os.path.getsize(path)} bytes)")
+
+
+def _collect_callbacks(scope) -> dict:
+    """递归收集 scope 树中所有符号的 _ref_callbacks
+
+    输出文件格式（trans_callback/{name}.json）：
+        {
+            "type_name.role_name": [     # 键 = "{scope.name}.{sym.name}"
+                {
+                    "kind": "nested",   # 引用类型
+                    "resolved_ports": [   # scope 知识：查到的目标端口数据
+                        { "direction": "input", "name": "tvalid" },
+                        ...
+                    ],
+                    # type-specific meta:
+                    "prefix": "upstream",       # nested 才有
+                    "source_type": "axis",      # nested 才有
+                    "source_role": "master",    # nested/invert 都有
+                }
+            ]
+        }
+
+    Returns:
+        { "type_name.role_name": [callback, ...], ... }
+    """
+    result: dict = {}
+
+    def _walk(s):
+        for sym in s.symbols.values():
+            cbs = sym.attrs.get("_ref_callbacks", [])
+            if cbs:
+                key = f"{s.name}.{sym.name}"
+                result[key] = cbs
+        for child in s.children:
+            _walk(child)
+
+    _walk(scope)
+    return result
 
 
 # ---------------------------- Core Pipeline ----------------------------
@@ -174,6 +212,9 @@ def run_pipeline_on_source(
     gen_file = os.path.join(gen_dir, f"gen_{base_name}.v")
     ast_json = os.path.join(ast_dir, f"{base_name}.json")
     sym_json = os.path.join(sym_dir, f"{base_name}.json")
+    cb_dir = os.path.join(out_dir, "trans_callback")
+    cb_json = os.path.join(cb_dir, f"{base_name}.json")
+    ensure_dir(cb_dir)
     comment_json = os.path.join(ast_dir, f"{base_name}_comments.json")
 
     flags = []
@@ -311,6 +352,10 @@ def run_pipeline_on_source(
                 save_json(
                     analyzer.root_scope.to_dict(), sym_json, "symbols", log_fn=_log
                 )
+                # Dump transform callbacks (_ref_callbacks) to trans_callback/
+                callbacks = _collect_callbacks(analyzer.root_scope)
+                if callbacks:
+                    save_json(callbacks, cb_json, "callbacks", log_fn=_log)
             _log(f"[symbols] {len(analyzer.all_symbols)} symbols")
         if analyzer.has_errors:
             for err in analyzer.errors:

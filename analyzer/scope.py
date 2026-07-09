@@ -96,7 +96,7 @@ class Scope:
         return None
 
     def find_child_scope(self, name: str, kind: str | None = None) -> Optional["Scope"]:
-        """按名称（和可选种类）查找直接子作用域
+        """按名称（和可选种类）递归查找子作用域（DFS）
 
         Args:
             name: 作用域名称
@@ -108,6 +108,10 @@ class Scope:
             if child.name == name:
                 if kind is None or child.kind == kind:
                     return child
+            # 递归深入
+            found = child.find_child_scope(name, kind)
+            if found is not None:
+                return found
         return None
 
     def to_dict(self) -> dict:

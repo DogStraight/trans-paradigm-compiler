@@ -56,6 +56,21 @@ layout = { line = [
     { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
 ] }
 
+# input/inout 专用类型描述符（不含 reg）
+[TypeSpecNoReg]
+[TypeSpecNoReg.parser]
+production = ["keyword.wire?", "keyword.signed?", "@Range?"]
+[TypeSpecNoReg.parser.node]
+port_type = "$1"
+is_signed = "$2"
+packed_range = "$3"
+[TypeSpecNoReg.renderer]
+layout = { line = [
+    { opt = { group = [" ", { ref = "port_type" }] } },
+    { opt = { group = [" ", { ref = "is_signed" }] } },
+    { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
+] }
+
 # ---------- 端口声明公共尾部（复用：input/output/inout × ANSI/Body/Task）----------
 [PortTail]
 [PortTail.parser]

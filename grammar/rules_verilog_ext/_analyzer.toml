@@ -10,12 +10,18 @@
 # items = true                   ← 源数据是列表，逐项处理
 # fields = { ... }               ← 每项提取的子字段
 # value = "field"                ← 简写：直接取某字段值
+# exclude_keys = [...]           ← 排除含指定 key 的条目（用于跳过 ref）
 
+# ── 常规端口表（不含 ref 条目）──
+# exclude_keys 跳过 TypeNestedPort(type_spec) 和 TypeInvertPort(target_role)
 [mapping.type_ports_flat]
 trigger = { kind = "role" }
 table = "type_ports_flat"
 key = "{scope.name}.{name}"
-source = { attr = "ports", items = true }
+source = { attr = "ports", items = true, exclude_keys = [
+    "type_spec",
+    "target_role",
+] }
 fields = { direction = "{$.direction}", name = "items.items[*].name" }
 
 [mapping.type_ports]
@@ -25,11 +31,11 @@ key = "{scope.name}.{name}"
 source = { attr = "ports", items = true }
 fields = { direction = "{$.direction}", names = "items.items[*].name" }
 
-[mapping.type_revert]
+[mapping.type_invert]
 trigger = { kind = "role" }
-table = "type_revert"
+table = "type_invert"
 key = "{scope.name}.{name}"
-source = { attr = "ports", items = true, filter = { node_name = "TypeRevertPort" } }
+source = { attr = "ports", items = true, filter = { node_name = "TypeInvertPort" } }
 value = "target_role"
 
 [mapping.type_default_ports]
@@ -41,16 +47,26 @@ source = { attr = "ports", items = true }
 fields = { direction = "{$.direction}", name = "items.items[*].name" }
 
 # ── 方向反转映射表（语言专用数据）──
-# 被 capture hook resolve_nested 和 transform value_map 共享
+# 被 resolve_refs 原语和 transform 共享
 [direction]
-revert_map = { input = "output", output = "input", input_reg = "output_reg", output_reg = "input_reg", inout = "inout" }
+invert_map = { input = "output", output = "input", input_reg = "output_reg", output_reg = "input_reg", inout = "inout" }
 
-# ── 后处理：revert 方向反转 ──
-# value_map 原语：用配置映射表替换指定字段的值
-# Python 只提供通用 value_map 操作，语言专用映射表在此定义
-[resolve.revert_resolve]
-kind = "value_map"
-source_table = "type_revert"
-target_table = "type_ports_flat"
-field = "direction"
-map = { input = "output", output = "input", input_reg = "output_reg", output_reg = "input_reg", inout = "inout" }
+# ── 变换回调：引用解析 ──
+# 分析器原语 resolve_refs 产出 _ref_callbacks，
+# 变换器收到回调后，按回调中 scope 知识（resolved_ports）做实操。
+#
+# 协议（分析器→变换器）：
+#   sym.attrs["_ref_callbacks"] = [
+#     { "kind": "nested",
+#       "resolved_ports": [{"direction": ..., "name": ...}],
+#       "prefix": "upstream",               # nested: 实例名前缀
+#       "source_type": "axis",              # nested: 源类型名
+#       "source_role": "master" },           # 源角色名
+#     { "kind": "invert",
+#       "resolved_ports": [...],
+#       "source_role": "master" }
+#   ]
+# 变换器消费后做机械操作（prefix / invert_map），合并到 type_ports_flat。
+[resolve.apply_type_refs]
+kind = "apply_refs"
+source_table = "type_ports_flat"

@@ -10,9 +10,10 @@ optional 声明加载失败 → 空 dict，不再有隐式的 try/except 吞错�
 用法:
     # 1. 在组件模块级别声明
     from core.config_registry import config
-    config.declare("pratt.token_categories",
-                   file="base/_lexer.toml",
-                   section="token_category")
+    config.declare(
+        "pratt.token_categories",
+        file="base/_lexer.toml",
+        section="token_category")
 
     # 2. 管线启动点统一加载
     ConfigRegistry.load_all(rules_dir, ext_dir="path/to/ext")
@@ -34,12 +35,16 @@ class ConfigRegistry:
     _resolved: bool = False
 
     @classmethod
-    def declare(cls, name: str, *,
-                file: str,
-                section: str | None = None,
-                required: bool = True,
-                base: str = "rules",
-                description: str = "") -> None:
+    def declare(
+        cls,
+        name: str,
+        *,
+        file: str,
+        section: str | None = None,
+        required: bool = True,
+        base: str = "rules",
+        description: str = "",
+    ) -> None:
         """声明一个配置依赖。
 
         Args:
@@ -88,9 +93,7 @@ class ConfigRegistry:
             base_key = spec.get("base", "rules")
             base_dir = bases.get(base_key)
             if base_dir is None:
-                errors.append(
-                    f"  [{name}] base='{base_key}' 未在 load_all() 中提供"
-                )
+                errors.append(f"  [{name}] base='{base_key}' 未在 load_all() 中提供")
                 continue
 
             try:
@@ -147,10 +150,7 @@ class ConfigRegistry:
     @classmethod
     def registered_sources(cls) -> list[dict]:
         """返回所有声明的摘要（用于调试/检查）"""
-        return [
-            {"name": n, **s}
-            for n, s in cls._entries.items()
-        ]
+        return [{"name": n, **s} for n, s in cls._entries.items()]
 
     @classmethod
     def reset(cls) -> None:

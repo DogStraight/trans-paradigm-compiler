@@ -135,15 +135,15 @@ D5. Transform 引擎：原语优先，handler 兜底
 - [ ] `while` 循环
 
 **P1 — EXT 类型系统**
-- [ ] `keyword.revert` 注册
+- [ ] `keyword.invert` 注册
 - [ ] `keyword.fn` 或复用 `task`/`function`
 - [ ] `TypeDecl` 解析规则（type name(params) { roles + methods }）
-- [ ] `RevertDecl` 规则（`revert other_role;`）
+- [ ] `InvertDecl` 规则（`invert other_role;`）
 - [ ] `TypeMethod` 规则（`fn read: { }`）
 - [ ] `TypeVar` 规则（`spi spi_conn;`）
 - [ ] `TypedPortDecl` TypeParamList 支持（`spi(0,8).slave`）
 - [ ] 方法调用链（`spi_io.read().spi_data`）
-- [ ] Transform: RevertDecl → direction reversal
+- [ ] Transform: InvertDecl → direction reversal
 - [ ] Transform: TypeMethod → stub expansion
 - [ ] Transfrom: TypeVar → default role expansion
 - [ ] Renderer layouts for all new rules
@@ -176,20 +176,20 @@ D5. Transform 引擎：原语优先，handler 兜底
 ```
 type spi (params) {
     master : input miso, output clk, mosi, cs;
-    slave  : revert master;
+    slave  : invert master;
     fn read : { ... }
 }
 ```
 ...
 - role 定义是 `role_name : port_decl_list`
-- `revert` 是引用另一个 role 并反转方向
+- `invert` 是引用另一个 role 并反转方向
 - `fn` / `task` / `function` 定义接口方法
 ...
 **待定**：fn body 里是否能包含 always/assign，还是只做接口签名？
 
 ### Q2. 类型参数传递
 ...
-### Q3. revert 精确语义
+### Q3. invert 精确语义
 ...
 ### Q4. 无 role 的类型变量
 ...
@@ -236,7 +236,7 @@ type spi (params) {
 - [ ] TypeDecl ParamList 支持（`spi(0,8).slave`）
 - [ ] TypeMethod / TypeVar 规则
 - [ ] 方法调用链解析（`spi_io.read().data`）
-- [ ] RevertDecl transform → port direction reversal
+- [ ] InvertDecl transform → port direction reversal
 - [ ] 更多类型用例（不同参数、嵌套类型、多 role）
 
 ### P3 — 工程化

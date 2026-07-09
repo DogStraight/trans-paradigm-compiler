@@ -1,33 +1,59 @@
 # ============================================================================
 # 宏定义 — 预处理器指令识别
 # 宏不是语法 token，不放在 _token.toml 中。
-# Lexer 加载此文件，将反引号开头的指令/调用识别为 macro.* 类型，
-# 供后续 preprocessing 阶段消费。
+# Lexer 根据 macro_recognition 策略从字符流中识别宏 token，
+# 再通过 directives 表分类为指令或调用，供后续 preprocessing 阶段消费。
 # ============================================================================
 
+# ── [macro_recognition] Lexer 层宏 token 识别策略 ──
+#
+# 分为 directive（指令关键字）和 call（宏调用）两段独立配置。
+# 每段指定 strategy 和对应参数。
+#
+# 策略取值：
+#   "prefix"  — 前缀字符 + 标识符序列
+#   "suffix"  — 标识符 + 后缀标记
+#   "none"    — Lexer 不识别此类宏 token，由上层负责
+#
+# 不同语言的典型配置：
+#   Verilog:  directive / call 都用 prefix，前缀 ``
+#   C:        directive 用 prefix（#），call 用 none（宏调用就是普通标识符）
+#   Rust:     directive / call 都用 suffix（!）
+#
+
+[macro_recognition.directive]
+strategy = "prefix"
+prefix = "`"
+
+[macro_recognition.call]
+strategy = "prefix"
+prefix = "`"
+
+# ── [directives] 指令关键字表 ──
+#
+# macro_recognition 识别出一个宏 token 后，查此表判定类别：
+#   匹配 key  →  token 类型为 macro.<key>（指令关键字）
+#   不匹配    →  token 类型为 macro.call（用户自定义宏调用）
+#
 [directives]
-# 宏定义指令（关键字形式，` + 关键字 = 完整 token）
-define = "define"
-undef = "undef"
-undefineall = "undefineall"
-include = "include"
-ifdef = "ifdef"
-ifndef = "ifndef"
-elsif = "elsif"
 else = "else"
+line = "line"
+undef = "undef"
+ifdef = "ifdef"
+elsif = "elsif"
 endif = "endif"
-timescale = "timescale"
-default_nettype = "default_nettype"
+define = "define"
+ifndef = "ifndef"
+pragma = "pragma"
+include = "include"
 resetall = "resetall"
+timescale = "timescale"
 celldefine = "celldefine"
+undefineall = "undefineall"
+end_keywords = "end_keywords"
 endcelldefine = "endcelldefine"
+begin_keywords = "begin_keywords"
+default_nettype = "default_nettype"
 unconnected_drive = "unconnected_drive"
 nounconnected_drive = "nounconnected_drive"
-pragma = "pragma"
-line = "line"
-begin_keywords = "begin_keywords"
-end_keywords = "end_keywords"
 
-[macro_call]
-# 宏调用前缀
-prefix = "`"

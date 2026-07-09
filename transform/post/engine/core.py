@@ -314,10 +314,13 @@ def _expand_primitive(engine, node, config, root_scope):
         if scope_kind:
             data = (
                 _lookup_child_scope(root_scope, lookup_key, scope_kind, context)
-                if lookup_key else None
+                if lookup_key
+                else None
             )
         else:
-            data = _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
+            data = (
+                _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
+            )
     elif lookup_source:
         table = engine._tables.get(lookup_source, {})
         data = _lookup(table, lookup_key, context) if lookup_key else None

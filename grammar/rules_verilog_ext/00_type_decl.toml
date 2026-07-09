@@ -1,7 +1,7 @@
 # ===== 类型声明：TypeDecl =====
 # type spi (parameter MODE = 0, parameter DATA_WIDTH = 8) {
 #     master : input miso, output clk, mosi, cs;
-#     slave  : revert master;
+#     slave  : invert master;
 #     fn read : { }
 # }
 
@@ -95,11 +95,11 @@ text = "}"
 break = 2
 
 
-# ── 类型成员（role | revert | method）──
+# ── 类型成员（role | invert | method）──
 [TypeMember]
 inline = true
 [TypeMember.parser]
-production = ["@TypeRole | @RevertDecl | @TypeMethod"]
+production = ["@TypeRole | @InvertDecl | @TypeMethod"]
 [TypeMember.parser.node]
 child = "$1"
 
@@ -128,18 +128,39 @@ items = [{ ref = "role_name" }, ":", { break = 1 }]
 indent = 4
 source = "ports"
 [TypeRole.analyzer]
-symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" }, capture_hooks = ["resolve_nested"] }
+symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
+primitives = ["resolve_refs"]
+
+[TypeRole.analyzer.resolve_refs]
+source = "ports"
+target = "_ref_callbacks"
+name_attr = "role_name"
+
+[[TypeRole.analyzer.resolve_refs.refs]]
+marker = "type_spec"
+kind = "nested"
+scope_mode = "child"
+scope_kind = "type"
+key = "{type_spec.type_name}"
+role_key = "{type_spec.role_name}"
+meta = { prefix = "instance_name" }
+
+[[TypeRole.analyzer.resolve_refs.refs]]
+marker = "target_role"
+kind = "invert"
+scope_mode = "self"
+role_key = "{target_role}"
 
 
-# ── 角色端口　input miso | output clk | revert master ──
+# ── 角色端口　input miso | output clk | invert master ──
 # 复用核心规则的 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl
-# TypeRevertPort 用于角色体内的 revert 引用（不含分号）
+# TypeInvertPort 用于角色体内的 invert 引用（不含分号）
 # TypeNestedPort 用于引用另一类型的角色端口（嵌套类型）
 [TypePortDecl]
 inline = true
 [TypePortDecl.parser]
 production = [
-    "@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeRevertPort | @TypeNestedPort",
+    "@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeInvertPort | @TypeNestedPort",
 ]
 [TypePortDecl.parser.node]
 child = "$1"
@@ -159,27 +180,27 @@ instance_name = "$2"
 layout = { line = [{ ref = "type_spec" }, " ", { ref = "instance_name" }] }
 
 
-# ── 角色内 revert（不含分号，被 TypePortDecl 引用）──
-[TypeRevertPort]
-[TypeRevertPort.parser]
-production = ["keyword.revert", "@Identifier"]
-[TypeRevertPort.parser.node]
+# ── 角色内 invert（不含分号，被 TypePortDecl 引用）──
+[TypeInvertPort]
+[TypeInvertPort.parser]
+production = ["keyword.invert", "@Identifier"]
+[TypeInvertPort.parser.node]
 target_role = "$2"
-[TypeRevertPort.renderer]
-layout = { line = ["revert ", { ref = "target_role" }] }
+[TypeInvertPort.renderer]
+layout = { line = ["invert ", { ref = "target_role" }] }
 
 
-# ── 成员级 revert（含分号，被 TypeMember 引用）──
-# 注意与 TypeRevertPort 的区别：
-#   TypeRevertPort — 角色端口中的引用（不含分号，被 TypePortDecl 引用）
-#   RevertDecl    — 类型成员中的语句（含分号，被 TypeMember 引用）
-[RevertDecl]
-[RevertDecl.parser]
-production = ["keyword.revert", "@Identifier", "symbol.base.semicolon"]
-[RevertDecl.parser.node]
+# ── 成员级 invert（含分号，被 TypeMember 引用）──
+# 注意与 TypeInvertPort 的区别：
+#   TypeInvertPort — 角色端口中的引用（不含分号，被 TypePortDecl 引用）
+#   InvertDecl    — 类型成员中的语句（含分号，被 TypeMember 引用）
+[InvertDecl]
+[InvertDecl.parser]
+production = ["keyword.invert", "@Identifier", "symbol.base.semicolon"]
+[InvertDecl.parser.node]
 target_role = "$2"
-[RevertDecl.renderer]
-layout = { line = ["revert ", { ref = "target_role" }, ";"] }
+[InvertDecl.renderer]
+layout = { line = ["invert ", { ref = "target_role" }, ";"] }
 
 
 # ── 方法声明 fn read : { ... } ──

@@ -98,14 +98,14 @@ layout = { line = [
 [AnsiInputDecl]
 [AnsiInputDecl.parser]
 structure = { is_statement = false }
-production = ["@PortDeclPrefix", "@DeclaratorList"]
+production = ["keyword.input", "@TypeSpecNoReg", "@DeclaratorList"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiInputDecl.parser.node]
-direction = "$1.direction"
-port_type = "$1.port_type"
-is_signed = "$1.is_signed"
-packed_range = "$1.packed_range"
-items = "$2"
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$3"
 [AnsiInputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [AnsiInputDecl.renderer]
@@ -121,19 +121,19 @@ layout = { line = [
 [AnsiOutputDecl]
 [AnsiOutputDecl.parser]
 structure = { is_statement = false }
-production = ["@PortDeclPrefix", "@DeclaratorList"]
+production = ["keyword.output", "@TypeSpec", "@DeclaratorList"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiOutputDecl.parser.node]
-direction = "$1.direction"
-port_type = "$1.port_type"
-is_signed = "$1.is_signed"
-packed_range = "$1.packed_range"
-items = "$2"
+direction = "output"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$3"
 [AnsiOutputDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [AnsiOutputDecl.renderer]
 layout = { line = [
-    "output",
+    { ref = "direction" },
     { opt = { group = [
         " ",
         { ref = "port_type" },
@@ -154,19 +154,19 @@ layout = { line = [
 [AnsiInoutDecl]
 [AnsiInoutDecl.parser]
 structure = { is_statement = false }
-production = ["@PortDeclPrefix", "@DeclaratorList"]
+production = ["keyword.inout", "@TypeSpecNoReg", "@DeclaratorList"]
 end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
 [AnsiInoutDecl.parser.node]
-direction = "$1.direction"
-port_type = "$1.port_type"
-is_signed = "$1.is_signed"
-packed_range = "$1.packed_range"
-items = "$2"
+direction = "inout"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$3"
 [AnsiInoutDecl.analyzer]
 symbol = { kind = "port", name_attr = "items.name" }
 [AnsiInoutDecl.renderer]
 layout = { line = [
-    "inout",
+    { ref = "direction" },
     { opt = { group = [
         " ",
         { ref = "port_type" },

@@ -5,14 +5,14 @@
 
 ---
 
-## 1. 双重反转：revert 方向处理
+## 1. 双重反转：invert 方向处理
 
 **日期**：2026-07-01  
-**涉及**：`resolve_revert`（analyzer 钩子）+ `expand_typed_port`（transform 原语）
+**涉及**：`resolve_invert`（analyzer 钩子）+ `expand_typed_port`（transform 原语）
 
 ### 现象
 
-`type spi { master: input miso, output clk; slave: revert master; }` 定义下，
+`type spi { master: input miso, output clk; slave: invert master; }` 定义下，
 `spi.slave spi_io` 展开为**全 output** 端口。
 
 ### 根因
@@ -20,7 +20,7 @@
 两个模块各自做了一次"正确的"反转，组合后变成双重反转：
 
 ```
-resolve_revert（analyzer 侧）
+resolve_invert（analyzer 侧）
   视角：类型域内信号流
   逻辑："master 的 input → 作为 slave 就是 output"
   局部正确 ✓
@@ -32,7 +32,7 @@ expand_typed_port（transform 侧）
 
 组合效果：
   原始: master input miso
-  → resolve_revert: slave output miso        （第 1 次反转）
+  → resolve_invert: slave output miso        （第 1 次反转）
   → expand_typed_port: direction=="output"
     → emit AnsiInputDecl + direction="output"  （第 2 次反转）
   → renderer 输出 "output"

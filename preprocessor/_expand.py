@@ -13,7 +13,8 @@ def _load_config(rules_dir: str) -> tuple[str, set[str]]:
     from ._config import load_macro_config
 
     cfg = load_macro_config(rules_dir)
-    prefix = cfg.get("macro_call", {}).get("prefix", "`")
+    recognition = cfg.get("macro_recognition", {})
+    prefix = recognition.get("prefix", "`")
     directives = set(cfg.get("directives", {}).values())
     return prefix, directives
 

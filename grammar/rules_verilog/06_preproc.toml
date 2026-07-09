@@ -1,112 +1,157 @@
 # ============================================================================
-# 预处理器指令 — 伪语法规则（供 Parser 识别，linter 跳过）
+# 预处理器指令 — 语法规则（供 Parser/linter 解析宏指令体）
 #
-# 这些规则使 Parser 能匹配 `` `define `` / `` `include `` 等预处理指令。
-# 每条规则只匹配指令 token 本身，行内剩余内容由 linter 的
-# _skip_remaining_line 跳过。
+# 每条规则定义指令 token 后的参数结构，供 linter 的 parse_sentence 解析。
+# 解析成功 → 宏指令语法正确；失败 → linter 跳整行并警告。
 #
-# 关键：end_case = []（空列表），这样 has_pass_end_case() 返回 False，
-# 规则不会被加入 statement_rule_names，Parser 不会在语句级匹配中
-# 尝试它们。但规则存在，linter 扫描到 macro.* token 时 parse_sentence
-# 不匹配任何语句规则 → 记错 → 被 _skip_macro_line 拦截跳过。
-#
-# 实际上规则存在即可，linter 不依赖它们——_skip_trivia 直接跳 macro.* token。
+# 规则都以 is_statement = true + end_case = ["newline"] 声明为语句级规则，
+# 使 parse_sentence 能匹配它们。
 # ============================================================================
 
-[MacroLine]
-[MacroLine.parser]
-production = ["macro.define"]
-end_case = []
-
-[MacroUndef]
-[MacroUndef.parser]
-production = ["macro.undef"]
-end_case = []
-
-[MacroInclude]
-[MacroInclude.parser]
-production = ["macro.include"]
-end_case = []
-
-[MacroIfdef]
-[MacroIfdef.parser]
-production = ["macro.ifdef"]
-end_case = []
-
-[MacroIfndef]
-[MacroIfndef.parser]
-production = ["macro.ifndef"]
-end_case = []
-
-[MacroElsif]
-[MacroElsif.parser]
-production = ["macro.elsif"]
-end_case = []
-
-[MacroElse]
-[MacroElse.parser]
-production = ["macro.else"]
-end_case = []
-
-[MacroEndif]
-[MacroEndif.parser]
-production = ["macro.endif"]
-end_case = []
-
-[MacroTimescale]
-[MacroTimescale.parser]
-production = ["macro.timescale"]
-end_case = []
-
-[MacroDefaultNettype]
-[MacroDefaultNettype.parser]
-production = ["macro.default_nettype"]
-end_case = []
+# ── 无参指令 ──────────────────────────────────────────────
 
 [MacroResetall]
 [MacroResetall.parser]
 production = ["macro.resetall"]
-end_case = []
+end_case = ["newline"]
+structure = { is_statement = true }
 
-[MacroCellDefine]
-[MacroCellDefine.parser]
+[MacroCelldefine]
+[MacroCelldefine.parser]
 production = ["macro.celldefine"]
-end_case = []
+end_case = ["newline"]
+structure = { is_statement = true }
 
 [MacroEndCellDefine]
 [MacroEndCellDefine.parser]
 production = ["macro.endcelldefine"]
-end_case = []
+end_case = ["newline"]
+structure = { is_statement = true }
 
-[MacroUnconnectedDrive]
-[MacroUnconnectedDrive.parser]
-production = ["macro.unconnected_drive"]
-end_case = []
+[MacroElse]
+[MacroElse.parser]
+production = ["macro.else"]
+end_case = ["newline"]
+structure = { is_statement = true }
 
-[MacroNoUnconnectedDrive]
-[MacroNoUnconnectedDrive.parser]
-production = ["macro.nounconnected_drive"]
-end_case = []
-
-[MacroPragma]
-[MacroPragma.parser]
-production = ["macro.pragma"]
-end_case = []
-
-[MacroLineDirective]
-[MacroLineDirective.parser]
-production = ["macro.line"]
-end_case = []
-
-[MacroBeginKeywords]
-[MacroBeginKeywords.parser]
-production = ["macro.begin_keywords"]
-end_case = []
+[MacroEndif]
+[MacroEndif.parser]
+production = ["macro.endif"]
+end_case = ["newline"]
+structure = { is_statement = true }
 
 [MacroEndKeywords]
 [MacroEndKeywords.parser]
 production = ["macro.end_keywords"]
-end_case = []
+end_case = ["newline"]
+structure = { is_statement = true }
+
+[MacroNoUnconnectedDrive]
+[MacroNoUnconnectedDrive.parser]
+production = ["macro.nounconnected_drive"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 单标识符参数 ──────────────────────────────────────────
+
+[MacroUndef]
+[MacroUndef.parser]
+production = ["macro.undef", "@Identifier"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+[MacroIfdef]
+[MacroIfdef.parser]
+production = ["macro.ifdef", "@Identifier"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+[MacroIfndef]
+[MacroIfndef.parser]
+production = ["macro.ifndef", "@Identifier"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+[MacroUnconnectedDrive]
+[MacroUnconnectedDrive.parser]
+production = ["macro.unconnected_drive", "@Identifier"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+[MacroDefaultNettype]
+# 参数是 net 类型关键字（wire/tri 等），不是 id token，不强制匹配参数
+[MacroDefaultNettype.parser]
+production = ["macro.default_nettype"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 字符串参数 ────────────────────────────────────────────
+
+[MacroInclude]
+[MacroInclude.parser]
+production = ["macro.include", "literal.string"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+[MacroBeginKeywords]
+[MacroBeginKeywords.parser]
+production = ["macro.begin_keywords", "literal.string"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 数字 + 字符串 ─────────────────────────────────────────
+
+[MacroLineDirective]
+[MacroLineDirective.parser]
+production = ["macro.line", "literal.number", "literal.string"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 标识符 / 标识符 ──────────────────────────────────────
+
+[MacroTimescale]
+[MacroTimescale.parser]
+production = ["macro.timescale", "literal.number", "@Identifier", "symbol.base.div", "literal.number", "@Identifier"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 条件表达式 ────────────────────────────────────────────
+
+[MacroElsif]
+[MacroElsif.parser]
+production = ["macro.elsif", "@PrimaryExpr"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 多参数 ────────────────────────────────────────────────
+
+[MacroPragma]
+[MacroPragma.parser]
+production = ["macro.pragma", "@Identifier"]
+end_case = ["newline"]
+structure = { is_statement = true }
+
+# ── 宏定义 ────────────────────────────────────────────────
+# define 体可以是数字字面量、表达式、字符串等常见类型，
+# 也可能是自由文本。MacroValue 封装 Expression 并接受 newline 作为终止符。
+
+[MacroValue]
+[MacroValue.parser]
+production = ["@Expression"]
+end_case = ["newline"]
+
+[MacroDefine]
+[MacroDefine.parser]
+production = ["macro.define", "@Identifier", "@MacroValue?"]
+end_case = ["newline"]
+structure = { is_statement = true }
+[MacroDefine.parser.node]
+macro_name = "$1"
+body = "$2"
+
+
+
+
 
 [MacroCall]
 [MacroCall.parser]

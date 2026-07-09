@@ -1,6 +1,6 @@
 type axis {
     master : input tvalid, tready, output tdata, tkeep;
-    slave : revert master;
+    slave : invert master;
 }
 
 type wrapper {

@@ -36,15 +36,19 @@ class Lexer:
             token_define_dict = get_token_define()
         self.token_define = token_define_dict
 
-        # 宏配置（从 ConfigRegistry 获取原始数据后变换）
+        # 宏识别策略与配置
+        # 分 directive（指令关键字）和 call（宏调用）两段，每段独立配置 strategy 和参数
+        self._macro_dir_cfg: dict = {}   # directive 段配置
+        self._macro_call_cfg: dict = {}  # call 段配置
         self.macro_config = {}
         try:
             raw = config.get("lexer.macro_config")
             if raw:
+                rec = raw.get("macro_recognition", {})
+                self._macro_dir_cfg = rec.get("directive", {})
+                self._macro_call_cfg = rec.get("call", {})
                 self.macro_config = {
                     d: f"macro.{d}" for d in raw.get("directives", {})
-                } | {
-                    "prefix": raw.get("macro_call", {}).get("prefix", "`")
                 }
         except KeyError:
             pass
@@ -318,13 +322,28 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # in case current char is a macro backtick
-            elif lex_text[text_idx] == self.macro_config.get("prefix", "`"):
-                self._emit_pending_dedent(tokens)
+            # ── 宏 token 识别（prefix 策略）──
+            #
+            # 按 directive → call 顺序检查，相同前缀时 directive 优先。
+            # 命中 directives 表 → macro.<key>；未命中且 call 策略相同 → macro.call。
+            #
+            dir_prefix = (self._macro_dir_cfg.get("prefix", "")
+                          if self._macro_dir_cfg.get("strategy") == "prefix" else "")
+            call_prefix = (self._macro_call_cfg.get("prefix", "")
+                           if self._macro_call_cfg.get("strategy") == "prefix" else "")
+            ch = lex_text[text_idx]
+            matched_prefix = ""
+            check_dir = False
+            if dir_prefix and ch == dir_prefix:
+                matched_prefix = dir_prefix
+                check_dir = True
+            elif call_prefix and ch == call_prefix:
+                matched_prefix = call_prefix
 
-                macro_content = lex_text[text_idx]  # the backtick itself
+            if matched_prefix:
+                self._emit_pending_dedent(tokens)
+                macro_content = ch
                 text_idx += 1
-                # 消费后续的标识符字符
                 while text_idx < lex_text_len and (
                     lex_text[text_idx].isalpha()
                     or lex_text[text_idx] == "_"
@@ -334,9 +353,8 @@ class Lexer:
                     text_idx += 1
                     offset += 1
 
-                # 判断是指令还是调用
-                macro_name = macro_content[1:]  # 去掉前缀 `
-                macro_type = self.macro_config.get(macro_name, "macro.call")
+                macro_name = macro_content[1:]  # 去掉前缀
+                macro_type = self.macro_config.get(macro_name, "macro.call") if check_dir else "macro.call"
                 current_token.set_type(macro_type)
                 current_token.set_content(macro_content)
 
@@ -344,6 +362,8 @@ class Lexer:
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 continue
+
+            # in case current char is a number
 
             # in case current char is a number
             elif lex_text[text_idx].isdigit():

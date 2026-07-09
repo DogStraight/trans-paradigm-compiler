@@ -5,7 +5,7 @@ type spi (
     parameter DATA_WIDTH = 8
 ) {
     master : input miso, output clk, mosi, cs;
-    slave : revert master;
+    slave : invert master;
 }
 */
 

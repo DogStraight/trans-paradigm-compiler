@@ -57,7 +57,7 @@ module = "module"
 
 # 自定义类型（增强语法）
 type = "type"
-revert = "revert"
+invert = "invert"
 fn = "fn"
 
 # 标签

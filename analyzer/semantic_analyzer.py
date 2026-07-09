@@ -113,16 +113,25 @@ class SemanticAnalyzer:
         rule = self._rules.get(node.node_name)
         config = getattr(rule, "analyzer", {}) if rule else {}
 
-        # 按预定顺序执行原语（scope_exit 除外，它在递归后执行）
+        # 按预定顺序执行标准原语（scope_exit 除外，它在递归后执行）
         for prim_name in _PRIMITIVE_ORDER:
             if prim_name == "scope_exit":
                 continue  # scope_exit 在递归后处理
             prim = get_primitive(prim_name)
             if prim is None:
                 continue
-            # 检查该原语是否被当前规则的 analyzer 配置触发
             if _is_primitive_triggered(prim_name, config):
                 prim(self, node, config)
+
+        # 执行自定义原语（由 [RuleName.analyzer] primitives 列表声明）
+        custom_primitives: list = config.get("primitives", [])
+        if isinstance(custom_primitives, list):
+            for prim_name in custom_primitives:
+                if prim_name in _PRIMITIVE_ORDER:
+                    continue  # 已在标准原语中处理过
+                prim = get_primitive(prim_name)
+                if prim is not None:
+                    prim(self, node, config)
 
         # 递归子节点
         for child in node.iter_children():

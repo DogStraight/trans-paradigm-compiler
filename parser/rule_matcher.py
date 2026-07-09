@@ -46,26 +46,19 @@ def process_production_node(self, node: dict, context: ParseContext) -> Node | N
 
 
 def _get_prod_features(self, rule: GrammarRule, prod: str) -> dict | None:
-    """获取产生式特征，带缓存。返回 {"tree": ..., "flat": [...]} 或 None。"""
-    cache = getattr(rule, "_prod_cache", None)
-    if cache is None:
-        cache = {}
-        setattr(rule, "_prod_cache", cache)
-    if prod not in cache:
-        from .rule_selector import (
-            analyze_production_features,
-            flatten_production_features,
-        )
+    """获取产生式特征（每次实时计算，无缓存）。"""
+    from .rule_selector import (
+        analyze_production_features,
+        flatten_production_features,
+    )
 
-        feat = analyze_production_features(prod)
-        if feat is not None:
-            cache[prod] = {
-                "tree": feat,
-                "flat": flatten_production_features(prod),
-            }
-        else:
-            cache[prod] = None
-    return cache[prod]
+    feat = analyze_production_features(prod)
+    if feat is not None:
+        return {
+            "tree": feat,
+            "flat": flatten_production_features(prod),
+        }
+    return None
 
 
 def _try_production(
