@@ -7,7 +7,7 @@ delete  删除节点（replace 的特化）
 
 from typing import Any, Optional
 from core.define import Node
-from ._template import resolve_attrs
+from .template import resolve_attrs
 
 
 def emit(

@@ -2,10 +2,10 @@
 cli.py — pyv-lint 命令行入口
 
 用法:
-    python lint/cli.py input.v                          # 文本输出
-    python lint/cli.py input.v --json                   # LSP 兼容 JSON
-    python lint/cli.py input.v --json --pretty           # 格式化 JSON
-    echo "module m; wire a; endmodule" | python lint/cli.py   # 从 stdin
+    python linter/cli.py input.v                          # 文本输出
+    python linter/cli.py input.v --json                   # LSP 兼容 JSON
+    python linter/cli.py input.v --json --pretty           # 格式化 JSON
+    echo "module m; wire a; endmodule" | python linter/cli.py   # 从 stdin
 """
 
 import sys
@@ -17,7 +17,7 @@ import argparse
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from lint.scanner import LinterScanner
+from linter.scanner import LinterScanner
 
 
 def main() -> None:

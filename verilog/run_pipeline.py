@@ -17,6 +17,7 @@ from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
 from core.define import ParseError, GrammarRulesRegister
 from core.config_registry import ConfigRegistry
+from core.utils import ensure_dir, save_json
 from parser.rule_selector import RuleSelector
 
 # ── 分析器 ──
@@ -29,7 +30,7 @@ from analyzer.analyze_verilog_ext import mapping_entries, resolve_entries, colle
 from transform import AstTransformer
 from transform.config_driven import ConfigDrivenTransform
 from transform.semantic_mapping import SemanticMappingPlugin
-from transform.normalizer import normalize_ast
+from normalizer import normalize_ast
 
 # ── 渲染器 ──
 from renderer.renderer import Renderer
@@ -75,17 +76,6 @@ def find_test_file(test_name: str, hint: str = "") -> Tuple[str, str, str]:
         if os.path.exists(f):
             return f, group, stem
     return "", "", ""
-
-
-def ensure_dir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
-
-
-def save_json(data: Any, path: str, label: str = "", log_fn=None) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    if label:
-        (log_fn or print)(f"[{label}] saved ({os.path.getsize(path)} bytes)")
 
 
 # ---------------------------- Core Pipeline ----------------------------

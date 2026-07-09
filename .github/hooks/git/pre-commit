@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-commit hook: check for hardcoded language knowledge in lint/."""
+"""Pre-commit hook: check for hardcoded language knowledge in linter/."""
 import re, subprocess, sys
 from pathlib import Path
 

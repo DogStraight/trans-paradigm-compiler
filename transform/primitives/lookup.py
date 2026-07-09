@@ -6,7 +6,7 @@ lookup_child_scope  按 kind+名称查找子作用域中的符号
 """
 
 from typing import Any
-from ._template import resolve_template
+from .template import resolve_template
 
 
 def lookup(

@@ -13,12 +13,12 @@ from .registry import get_registry
 from .text import eval_text
 
 # 导入所有原语模块（触发 @register 装饰器执行）
-from . import ref_prim  # noqa: F401
-from . import join_prim  # noqa: F401
-from . import group_prim  # noqa: F401
-from . import line_prim  # noqa: F401
-from . import indent_prim  # noqa: F401
-from . import opt_prim  # noqa: F401
+from . import ref  # noqa: F401
+from . import join  # noqa: F401
+from . import group  # noqa: F401
+from . import line  # noqa: F401
+from . import indent  # noqa: F401
+from . import opt  # noqa: F401
 from . import soft_break  # noqa: F401
 
 

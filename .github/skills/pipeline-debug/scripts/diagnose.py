@@ -28,7 +28,7 @@ from parser import Parser
 from core.define import GrammarRulesRegister
 from parser.rule_selector import RuleSelector, build_start_token_map_names
 from renderer.renderer import Renderer
-from transform.normalizer import normalize_ast
+from normalizer import normalize_ast
 from core.define import Node as AstNode
 
 # ── 诊断结果收集 ──

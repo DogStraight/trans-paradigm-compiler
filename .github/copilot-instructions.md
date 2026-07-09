@@ -279,7 +279,7 @@ type(scope): description
 | Hook | 用途 |
 |------|------|
 | `commit-msg` | 验证提交信息格式 `type(scope): description` |
-| `pre-commit` | 检查 `lint/` 代码中是否有硬编码语言知识（Verilog 专用 token、中文消息等） |
+| `pre-commit` | 检查 `linter/` 代码中是否有硬编码语言知识（Verilog 专用 token、中文消息等） |
 | `post-commit` | 自动更新 `.github/session-summary.md`（日期 + HEAD SHA） |
 
 启用方式：

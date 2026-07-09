@@ -1,4 +1,4 @@
-# check-hardcode.ps1 — 检查 lint/ 引擎代码中是否引入了硬编码语言知识
+# check-hardcode.ps1 — 检查 linter/ 引擎代码中是否引入了硬编码语言知识
 # 在 post-commit 中自动运行。
 
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))

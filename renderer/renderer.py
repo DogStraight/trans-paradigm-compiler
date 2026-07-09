@@ -17,7 +17,7 @@ AST 规范化层在渲染前将所有 parser 内部构造（keyword/symbol/optio
 
 from typing import Any, Optional, List
 from core.define import Node
-from transform.normalizer import normalize_ast
+from normalizer import normalize_ast
 from .doc import Doc, layout
 from .primitives import eval_expr
 from .node_renderer import render_node, render_inline, render_body, resolve_items

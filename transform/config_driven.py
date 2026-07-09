@@ -18,14 +18,14 @@ from .registry import (
     get_primitive,
     get_handler,
 )
-from .primitives._template import resolve_template
-from .primitives._lookup import (
+from .primitives.template import resolve_template
+from .primitives.lookup import (
     lookup as _lookup,
     lookup_scope as _lookup_scope,
     lookup_child_scope as _lookup_child_scope,
 )
-from .primitives._flow import foreach as _foreach
-from .primitives._ast import emit as _emit
+from .primitives.flow import foreach as _foreach
+from .primitives.node import emit as _emit
 
 
 class ConfigDrivenTransform(TransformPlugin):
@@ -183,7 +183,7 @@ class ConfigDrivenTransform(TransformPlugin):
         condition_cfg = config.get("condition")
         if condition_cfg:
             context = self._build_context(node)
-            from .primitives._flow import make_exists_condition
+            from .primitives.flow import make_exists_condition
 
             exists_path = condition_cfg.get("exists", "")
             if exists_path:
@@ -312,7 +312,7 @@ def _expand_primitive(engine, node, config, root_scope):
         ↓
         AST 节点追加到模块端口列表
     """
-    from .primitives._flow import make_exists_condition
+    from .primitives.flow import make_exists_condition
 
     context = engine._build_context(node)
 
