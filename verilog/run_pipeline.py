@@ -36,6 +36,9 @@ from normalizer import normalize_ast
 from renderer.renderer import Renderer
 from renderer.inline_comment import restore_comments, restore_line_comments
 
+# ── Linter（前置语法检查）──
+from linter.scanner import LinterScanner
+
 # ── 预处理器（可选）──
 from preprocessor import (
     scan_directives,
@@ -91,8 +94,8 @@ def run_pipeline_on_source(
     transform_enabled: bool = True,
     renderer_enabled: bool = True,
     stage: Optional[str] = None,
-    rules_dir: str = "pyv_compiler/grammar/rules_verilog",
-    ext_dir: str = "pyv_compiler/grammar/rules_verilog_ext",
+    rules_dir: str = "grammar/rules_verilog",
+    ext_dir: str = "grammar/rules_verilog_ext",
 ) -> Dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -188,6 +191,7 @@ def run_pipeline_on_source(
         ]
         rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
         lexer = Lexer(rules_dir=rules_dir)
+        linter = LinterScanner(rules_dir=rules_dir, ext_dir=ext_dir)
         renderer = Renderer(rules_dir=rules_dir)
         transformer = AstTransformer()
         transformer.register(ConfigDrivenTransform(rules=rules))
@@ -195,6 +199,7 @@ def run_pipeline_on_source(
             "rules": rules,
             "rule_selector": rule_selector,
             "lexer": lexer,
+            "linter": linter,
             "renderer": renderer,
             "transformer": transformer,
         }
@@ -202,6 +207,7 @@ def run_pipeline_on_source(
     rules = shared["rules"]
     rule_selector = shared["rule_selector"]
     lexer = shared["lexer"]
+    linter = shared["linter"]
     renderer = shared["renderer"]
     transformer = shared["transformer"]
 
@@ -228,6 +234,14 @@ def run_pipeline_on_source(
     pre_symbols = pre_scan(source, pre_scan_config)
     if pre_symbols:
         _log(f"[prescan] symbols: {len(pre_symbols)}")
+
+    # ---- Stage: Lint（前置语法检查，失败时截断管线）----
+    lint_errors = linter.scan(source)
+    if lint_errors:
+        for err in lint_errors:
+            _log(f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}")
+        result["error"] = f"lint failed: {len(lint_errors)} error(s)"
+        return result
 
     # ---- Stage: Parse ----
     # Instantiate Parser with injected rules and rule_selector
@@ -474,13 +488,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rules-dir",
         type=str,
-        default="pyv_compiler/grammar/rules_verilog",
+        default="grammar/rules_verilog",
         help="Core grammar rules directory",
     )
     parser.add_argument(
         "--ext-dir",
         type=str,
-        default="pyv_compiler/grammar/rules_verilog_ext",
+        default="grammar/rules_verilog_ext",
         help="Extended grammar rules directory",
     )
 

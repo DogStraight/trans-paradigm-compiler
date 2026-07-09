@@ -12,10 +12,10 @@ import sys
 import os
 import json
 import argparse
+import io
 
 # 强制 UTF-8 输出（避免中文乱码）
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from linter.scanner import LinterScanner
 
@@ -23,7 +23,9 @@ from linter.scanner import LinterScanner
 def main() -> None:
     parser = argparse.ArgumentParser(description="PyV Linter — 语法错误扫描器")
     parser.add_argument("input", nargs="?", help="源文件路径（省略则从 stdin 读取）")
-    parser.add_argument("--json", action="store_true", help="以 LSP Diagnostic JSON 格式输出")
+    parser.add_argument(
+        "--json", action="store_true", help="以 LSP Diagnostic JSON 格式输出"
+    )
     parser.add_argument("--pretty", action="store_true", help="格式化 JSON 输出")
     args = parser.parse_args()
 
@@ -39,8 +41,14 @@ def main() -> None:
         sys.exit(1)
 
     # 确定语法规则目录
-    rules_dir = os.path.join(os.path.dirname(__file__), "..", "grammar", "rules_verilog")
-    ext_dir = os.path.join(os.path.dirname(__file__), "..", "grammar", "rules_verilog_ext")
+    rules_dir = os.path.join(
+        os.path.dirname(__file__), "..", "grammar", "rules_verilog"
+    )
+    ext_dir = os.path.join(
+        os.path.dirname(__file__), "..", "grammar", "rules_verilog_ext"
+    )
+    ext_dir = ext_dir if os.path.isdir(ext_dir) else ""
+
     if not os.path.isdir(rules_dir):
         print(f"错误：找不到语法规则目录 {rules_dir}", file=sys.stderr)
         sys.exit(1)
@@ -48,7 +56,7 @@ def main() -> None:
     # 扫描
     scanner = LinterScanner(
         rules_dir=rules_dir,
-        ext_dir=ext_dir if os.path.isdir(ext_dir) else None,
+        ext_dir=ext_dir,
     )
     diagnostics = scanner.scan(source)
 
@@ -60,8 +68,10 @@ def main() -> None:
         for d in diagnostics:
             start = d.range[0]
             end = d.range[1]
-            print(f"  Ln {start.line + 1}:{start.character + 1} - "
-                  f"Ln {end.line + 1}:{end.character + 1}  {d.message}")
+            print(
+                f"  Ln {start.line + 1}:{start.character + 1} - "
+                f"Ln {end.line + 1}:{end.character + 1}  {d.message}"
+            )
 
     sys.exit(1 if diagnostics else 0)
 

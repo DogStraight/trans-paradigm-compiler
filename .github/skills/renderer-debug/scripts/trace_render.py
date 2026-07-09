@@ -19,7 +19,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
 )))
 sys.path.insert(0, PROJECT_ROOT)
 
-RULES_DIR = "pyv_compiler/grammar/rules_verilog"
+RULES_DIR = "grammar/rules_verilog"
 
 from lexer import Lexer
 from parser import Parser

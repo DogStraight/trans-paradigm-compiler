@@ -100,14 +100,14 @@ class FileManager:
     """纯静态工具类 — 文件路径管理与 TOML 加载。全局单例（无实例状态）。"""
 
     _base_dir: str = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        os.path.dirname(os.path.abspath(__file__))
     )
-    rules_file: str = "pyv_compiler/grammar/rules_verilog/base/token.toml"
-    rules_dir: str = "pyv_compiler/grammar/rules_verilog"
-    token_define_file: str = "pyv_compiler/grammar/rules_verilog/base/token.toml"
-    lookup_file: str = "pyv_compiler/grammar/rules_verilog/base/production_lookup.toml"
+    rules_file: str = "grammar/rules_verilog/base/token.toml"
+    rules_dir: str = "grammar/rules_verilog"
+    token_define_file: str = "grammar/rules_verilog/base/token.toml"
+    lookup_file: str = "grammar/rules_verilog/base/production_lookup.toml"
 
-    cg_rules_dir: str = "pyv_compiler/grammar/cg_rules"
+    cg_rules_dir: str = "grammar/cg_rules"
     debug_log_file: str | None = None
     # debug_log_file: str | None = None
 

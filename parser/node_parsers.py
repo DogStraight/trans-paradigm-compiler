@@ -56,32 +56,19 @@ def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     缓存仅在同一次 parse() 调用期间有效，不同文件间不共享。
     """
     rule_name = node["name"]
-    pos = context.token_pointer
-
-    # Packrat 记忆化：命中则跳过执行直接恢复位置
-    cache = self._parse_call_cache
-    key = (rule_name, pos)
-    if key in cache:
-        result, new_pos = cache[key]
-        context.token_pointer = new_pos
-        return result
-
     self._log_state(lambda: f"调用规则: {rule_name} | {self._debug_token_info(context)}")
     snapshot = context.create_snapshot()
 
     target_rule = self.grammar_rules.get(rule_name)
     if target_rule is None:
         context.restore_snapshot(snapshot)
-        cache[key] = (None, context.token_pointer)
         return None
 
     result_node = self._try_rule_productions(context, target_rule)
     if result_node is None:
         context.restore_snapshot(snapshot)
-        cache[key] = (None, context.token_pointer)
         return None
 
-    cache[key] = (result_node, context.token_pointer)
     return result_node
 
 

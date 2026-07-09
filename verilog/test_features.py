@@ -18,8 +18,8 @@ from parser.parser_core import Parser, ParseContext
 from lexer import Lexer
 import parser.pratt_parser as pratt_parser
 
-RULES_DIR = "pyv_compiler/grammar/rules_verilog"
-EXT_DIR = "pyv_compiler/grammar/rules_verilog_ext"
+RULES_DIR = "grammar/rules_verilog"
+EXT_DIR = "grammar/rules_verilog_ext"
 
 
 def load_rules():

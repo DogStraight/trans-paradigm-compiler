@@ -457,7 +457,7 @@ class Parser:
         # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）
         self._line_comment_anchors: list[dict] = []
         # Packrat 记忆化缓存：(rule_name, position) → (result, new_position)
-        self._parse_call_cache: dict[tuple[str, int], tuple] = {}
+
 
     def _log_indent(self, context: ParseContext | None = None) -> str:
         """根据当前解析嵌套深度生成缩进前缀"""
@@ -551,7 +551,6 @@ class Parser:
         # 每次 parse 重置状态
         self._comment_anchors = []
         self._line_comment_anchors = []
-        self._parse_call_cache.clear()
         self._failure_attempts = []
         context = ParseContext(tokens)
 
