@@ -24,8 +24,6 @@ role_name = "$3"
 [TypedTypeSpec.analyzer]
 # type_name 是对类型声明的引用，按指定属性名查找
 identifier_ref = "type_name"
-[TypedTypeSpec.renderer]
-layout = { line = [{ ref = "type_name" }, ".", { ref = "role_name" }] }
 
 # ── 类型化端口声明（无方向关键字）spa(master) spi_io ──
 [TypedPortDecl]

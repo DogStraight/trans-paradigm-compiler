@@ -9,7 +9,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
 设计原理：
     所有语言专用的"语义对齐逻辑"由 TOML 配置驱动，Python 只提供通用原语。
     - mapping.* 条目：定义"如何从符号构建映射表"
-    - resolve.* 条目：定义"如何后处理映射表"（使用 value_map 等通用原语）
+    - resolve.* 条目：定义"如何后处理映射表"（使用 apply_refs 原语）
 
 配置：
     由 _analyzer.toml 的 [mapping.*] 和 [resolve.*] 条目驱动。
@@ -23,11 +23,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
         fields = { ... }               ← 每项提取的子字段
 
     resolve 条目（后处理管线）：
-        kind = "value_map"             ← 后处理原语类型
-        source_table = "type_invert"   ← 源映射表
-        target_table = "type_ports_flat" ← 目标映射表
-        field = "direction"            ← 要变换的字段
-        map = { input = "output", ... } ← 值映射表（语言专用）
+        kind = "apply_refs"            ← 消费 _ref_callbacks，展开并合并到表中
 
 管线顺序：
     1. SemanticMappingPlugin._build_mappings() — 从 scope 树构建原始映射表
@@ -36,10 +32,10 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
 """
 
 from typing import Any, Optional
+from copy import deepcopy
 from core.define import Node
 from analyzer.scope import Scope
 from .pipeline import TransformPlugin
-from .primitives._flow import value_map
 
 
 class SemanticMappingPlugin(TransformPlugin):
@@ -57,18 +53,16 @@ class SemanticMappingPlugin(TransformPlugin):
         raw = raw_config or {}
         # mapping 条目：从符号构建映射表
         self._mapping_entries: list[dict] = [
-            v for v in raw.values()
-            if isinstance(v, dict) and "trigger" in v
+            v for v in raw.values() if isinstance(v, dict) and "trigger" in v
         ]
         # resolve 条目：映射表后处理
         self._resolve_entries: list[dict] = [
-            v for v in raw.values()
-            if isinstance(v, dict) and v.get("kind") in ("value_map", "apply_refs")
+            v
+            for v in raw.values()
+            if isinstance(v, dict) and v.get("kind") == "apply_refs"
         ]
         self._tables: dict[str, Any] = {}
-        # 方向反转映射表（来自 _analyzer.toml [direction] invert_map）
-        direction = raw.get("direction", {})
-        self._invert_map: dict[str, str] = direction.get("invert_map", {})
+        self._root_scope: Optional[Scope] = None
 
     @property
     def tables(self) -> dict[str, Any]:
@@ -143,7 +137,8 @@ class SemanticMappingPlugin(TransformPlugin):
         exclude_keys = source_cfg.get("exclude_keys", [])
         if exclude_keys:
             source_data = [
-                item for item in source_data
+                item
+                for item in source_data
                 if not (isinstance(item, dict) and any(k in item for k in exclude_keys))
             ]
 
@@ -154,13 +149,12 @@ class SemanticMappingPlugin(TransformPlugin):
                 self._set_nested(self._tables[table], key, items_result)
             if values:
                 self._set_nested(
-                    self._tables[table], key,
+                    self._tables[table],
+                    key,
                     values[0] if len(values) == 1 else values,
                 )
 
-    def _process_items(
-        self, entry: dict, source_data: list
-    ) -> tuple[list, list]:
+    def _process_items(self, entry: dict, source_data: list) -> tuple[list, list]:
         """处理 items 模式的数据提取"""
         items_result = []
         values = []
@@ -235,69 +229,12 @@ class SemanticMappingPlugin(TransformPlugin):
         """执行所有 resolve.* 后处理条目
 
         目前支持:
-            kind = "value_map"  — 用值映射表变换指定字段
             kind = "apply_refs" — 消费分析器产出的 _ref_callbacks，展开 ref 并合并
         """
         for entry in self._resolve_entries:
             kind = entry.get("kind", "")
-            if kind == "value_map":
-                self._apply_value_map(entry)
-            elif kind == "apply_refs":
+            if kind == "apply_refs":
                 self._apply_refs()
-
-    def _apply_value_map(self, entry: dict) -> None:
-        """通用 value_map 后处理：查表替换指定字段的值
-
-        配置格式:
-            kind = "value_map"
-            source_table = "type_invert"       # 源表：包含 invert 引用关系的表
-            target_table = "type_ports_flat"   # 目标表：包含要变换数据的表
-            source_to_target_key = [           # 如何从 source 表key映射到 target 表key
-                "{type_name}.{target_role}",   # target 表 key 模板
-            ]
-            source_key_parts = ["{type_name}", "{role_name}"]  # source 表 key 的组成部分
-            target_role_value = "${target_role}"               # source 表 value 字段
-            field = "direction"                # 要变换的字段名
-            map = { input = "output", ... }    # 值映射表（语言专用）
-        """
-        source_table_key = entry.get("source_table", "")
-        target_table_key = entry.get("target_table", "")
-        field = entry.get("field", "")
-        value_map_cfg = entry.get("map", {})
-
-        source_table = self._tables.get(source_table_key, {})
-        target_table = self._tables.get(target_table_key, {})
-
-        if not source_table or not target_table or not value_map_cfg:
-            return
-
-        from copy import deepcopy
-
-        for type_name, roles in source_table.items():
-            for role_name, target_role_val in roles.items():
-                # target_role_val 是 source 表中存储的值（如 "master"）
-                if not isinstance(target_role_val, str):
-                    continue
-
-                # 在 target 表中查找目标角色的数据
-                target_data = target_table.get(type_name, {}).get(target_role_val)
-                if not target_data:
-                    continue
-
-                # 复制并做 value_map 变换
-                resolved = []
-                for item in target_data:
-                    if not isinstance(item, dict):
-                        continue
-                    new_item = deepcopy(item)
-                    if field in new_item:
-                        new_item[field] = value_map(
-                            new_item[field], value_map_cfg
-                        )
-                    resolved.append(new_item)
-
-                # 写回 target 表
-                target_table.setdefault(type_name, {})[role_name] = resolved
 
     # ── 变换回调消费：apply_refs ──
 
@@ -327,9 +264,17 @@ class SemanticMappingPlugin(TransformPlugin):
         if root is None:
             return
 
-        self._walk_refs(root, target)
+        # 从 mapping 条目中读取字段配置，驱动 _flatten_port 的提取路径
+        flatten_fields: dict = {}
+        for entry in self._mapping_entries:
+            if entry.get("table") == "type_ports_flat":
+                flatten_fields = entry.get("fields", {})
+                break
 
-    def _walk_refs(self, scope: Scope, target: dict) -> None:
+        self._walk_refs(root, target, flatten_fields)
+
+    def _walk_refs(self, scope: Scope, target: dict,
+                   flatten_fields: Optional[dict] = None) -> None:
         """递归遍历 scope 树，消费 _ref_callbacks
 
         输入（来自分析器 resolve_refs 原语）：
@@ -356,7 +301,7 @@ class SemanticMappingPlugin(TransformPlugin):
             1. _flatten_port 将嵌套 {direction, items: {items: [{name}]}}
                展开为扁平 {direction, name}
             2. nested: _prefix_port_name 给 name 加前缀
-            3. invert: 用 _invert_map 反转 direction
+            3. invert: 用 cb 中的 invert_map 反转 direction（由语言扩展注入回调）
             4. _merge_to_flat 合并到 type_ports_flat
 
         输出：
@@ -384,26 +329,28 @@ class SemanticMappingPlugin(TransformPlugin):
                     prefix = cb.get("prefix", "")
                     expanded = []
                     for p in resolved_ports:
-                        flat_list = self._flatten_port(p)
+                        flat_list = self._flatten_port(p, flatten_fields)
                         for item in flat_list:
                             self._prefix_port_name(item, prefix)
                             expanded.append(item)
                     self._merge_to_flat(target, key, expanded)
 
                 elif kind == "invert":
+                    # 从回调中读取 invert_map（由 analyze_verilog_ext._invert_map 注入）
+                    invert_map = cb["invert_map"]
                     expanded = []
                     for p in resolved_ports:
-                        flat_list = self._flatten_port(p)
+                        flat_list = self._flatten_port(p, flatten_fields)
                         for item in flat_list:
                             if "direction" in item:
-                                item["direction"] = self._invert_map.get(
+                                item["direction"] = invert_map.get(
                                     item["direction"], item["direction"]
                                 )
                             expanded.append(item)
                     self._merge_to_flat(target, key, expanded)
 
         for child in scope.children:
-            self._walk_refs(child, target)
+            self._walk_refs(child, target, flatten_fields)
 
     @staticmethod
     def _merge_to_flat(target: dict, key: str, ports: list[dict]) -> None:
@@ -439,27 +386,43 @@ class SemanticMappingPlugin(TransformPlugin):
                     SemanticMappingPlugin._prefix_port_name(item, prefix)
 
     @staticmethod
-    def _flatten_port(port: dict) -> list[dict]:
+    def _flatten_port(port: dict, fields: Optional[dict] = None) -> list[dict]:
         """将嵌套结构的端口展开为扁平 {direction, name} 格式
 
-        分析器回调中 resolved_ports 是嵌套结构（JSON 序列化的 AST）：
-            { "direction": "input",
-              "items": { "node_name": "DeclaratorList",
-                          "items": [{ "node_name": "Declarator", "name": "miso" }] } }
-
-        而 type_ports_flat 需要扁平格式供模板解析：
-            [{ "direction": "input", "name": "miso" }]
-
-        这是分析器产出格式与变换器消费格式之间的适配层。
+        fields 配置（来自 mapping 条目的字段声明）决定提取路径。
+        默认回退 items.items[*].name 兼容既有配置。
         """
-        direction = port.get("direction", "")
-        items = port.get("items", {})
-        if isinstance(items, dict):
-            name_list = items.get("items", [])
-        elif isinstance(items, list):
-            name_list = items
+        fields = fields or {}
+        dir_spec = fields.get("direction", "{$.direction}")
+        name_spec = fields.get("name", "items.items[*].name")
+
+        direction = ""
+        if dir_spec.startswith("{$.") and dir_spec.endswith("}"):
+            direction = port.get(dir_spec[3:-1], "")
+
+        names: list = []
+        if "[*]" in name_spec:
+            val = port
+            for part in name_spec.replace("[*]", "").split("."):
+                part = part.strip()
+                if isinstance(val, dict):
+                    val = val.get(part, {})
+                elif isinstance(val, list):
+                    collected = []
+                    for v in val:
+                        if isinstance(v, dict):
+                            n = v.get(part, "")
+                            if n:
+                                collected.append(n)
+                        elif isinstance(v, str):
+                            collected.append(v)
+                    val = collected
+                else:
+                    val = {}
+            names = val if isinstance(val, list) else [val] if val else []
         else:
-            name_list = []
-        if not name_list:
+            names = [port.get(name_spec, "")]
+
+        if not names:
             return [{"direction": direction, "name": port.get("name", "")}]
-        return [{"direction": direction, "name": n.get("name", "")} for n in name_list if isinstance(n, dict)]
+        return [{"direction": direction, "name": n} if isinstance(n, str) else {"direction": direction, "name": ""} for n in names]

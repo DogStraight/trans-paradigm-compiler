@@ -120,7 +120,8 @@ def _resolve_one(marker: str, item: dict, scope, rd: dict) -> dict | None:
             if target_sym is None:
                 return None
             src = get_attrs_list(target_sym, rd.get("source", "ports"))
-            resolved = _collect_callbacks(src, target_scope, rd.get("refs", []))
+            # 递归解析，展平内层回调（防止 kind:invert 等回调混入 resolved_ports）
+            resolved = _resolve_and_flatten(src, target_scope, rd.get("refs", []))
             if not resolved:
                 resolved = [deepcopy(s) for s in src]
         finally:
@@ -144,3 +145,22 @@ def _resolve_one(marker: str, item: dict, scope, rd: dict) -> dict | None:
             pop_cycle()
 
     return build_callback(kind, resolved, rd.get("meta", {}), ctx)
+
+
+def _resolve_and_flatten(
+    items: list, scope, ref_descs: list
+) -> list[dict]:
+    """递归解析引用，展平回调→扁平端口数据
+
+    与 _collect_callbacks 的区别：不保留回调结构（kind/resolved_ports），
+    而是提取 resolved_ports 展开到结果列表。用于 scope_mode="child"
+    场景中，确保目标角色的端口数据是纯端口列表，不含嵌套回调。
+    """
+    result = []
+    callbacks = _collect_callbacks(items, scope, ref_descs)
+    for cb in callbacks:
+        if isinstance(cb, dict) and "resolved_ports" in cb:
+            result.extend(deepcopy(cb["resolved_ports"]))
+        else:
+            result.append(deepcopy(cb))
+    return result

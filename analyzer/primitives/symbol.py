@@ -75,7 +75,7 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
             continue
 
         if name in current_scope.symbols:
-            analyzer._errors.append(f"重复声明 '{name}' 在作用域 '{current_scope.name}'")
+            analyzer._context.report(f"重复声明 '{name}' 在作用域 '{current_scope.name}'", code="E001")
             continue
 
         attrs: dict = _build_capture_attrs(node, capture)

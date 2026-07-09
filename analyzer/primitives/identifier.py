@@ -45,5 +45,4 @@ def identifier_resolve(analyzer, node: Node, config: dict) -> None:
     if sym is not None:
         node.add_attr("_symbol_ref", sym)
     elif isinstance(iref, str):
-        analyzer._unresolved_refs.append(f"{node.node_name}.{iref}: '{name}'")
-        print(f"[analyzer] WARN 未解析的{iref}引用: '{name}' (节点: {node.node_name})")
+        analyzer._context.report(f"未解析的{iref}引用: '{name}'", code="W001", level="warning")

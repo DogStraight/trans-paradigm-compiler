@@ -2,7 +2,7 @@
 config_driven.py — ConfigDrivenTransform 插件
 
 核心变换引擎，作为 TransformPlugin 注册到 AstTransformer 管线。
-所有变换操作（expand/replace/delete/custom/扩展）都是注册的原语，
+所有变换操作（expand/replace/delete/扩展）都是注册的原语，
 由 registry.py 的 register_primitive 统一管理。
 """
 
@@ -61,7 +61,6 @@ class ConfigDrivenTransform(TransformPlugin):
             "expand": 0,
             "replace": 0,
             "delete": 0,
-            "custom": 0,
             "skipped": 0,
         }
 
@@ -81,7 +80,6 @@ class ConfigDrivenTransform(TransformPlugin):
             "expand": 0,
             "replace": 0,
             "delete": 0,
-            "custom": 0,
             "skipped": 0,
         }
         result = self._walk(ast, root_scope, parent=None, parent_attr=None)
@@ -454,32 +452,10 @@ def _delete_primitive(engine, node, config, root_scope):
     return None
 
 
-def _custom_primitive(engine, node, config, root_scope):
-    """custom 原语（向后兼容）：委托给旧式 handler"""
-    handler_name = config.get("handler", "")
-    if not handler_name:
-        return SKIP
-
-    handler = get_handler(handler_name)
-    if handler is None:
-        return SKIP
-
-    try:
-        result = handler(engine, node, config, root_scope)
-        return result
-    except Exception as e:
-        print(f"  ❌ [transform] {node.node_name}: handler '{handler_name}' 异常: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return SKIP
-
-
 # 统一注册到原语注册表
 register_primitive("expand", _expand_primitive)
 register_primitive("replace", _replace_primitive)
 register_primitive("delete", _delete_primitive)
-register_primitive("custom", _custom_primitive)
 
 
 # ── emit 原语：创建 AST 节点 ──

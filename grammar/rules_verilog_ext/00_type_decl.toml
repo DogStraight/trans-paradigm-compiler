@@ -20,17 +20,6 @@ type_name = "$2"
 params = "$3"
 body = "$4"
 
-[TypeDecl.renderer]
-[TypeDecl.renderer.layout]
-line = [
-    "keyword.type",
-    " ",
-    { ref = "type_name" },
-    { ref = "params" },
-    " ",
-    { ref = "body" },
-]
-
 # analyzer: 类型符号注册到父作用域 + 类型内部创建独立作用域
 [TypeDecl.analyzer]
 symbol = { kind = "type", name_attr = "type_name" }
@@ -54,9 +43,6 @@ production = [
 [TypeParamList.parser.node]
 items = ["$2", "$3.items[*].sub_node[1]"]
 
-[TypeParamList.renderer]
-layout = { line = ["(", { join = ", ", items = [{ ref = "items" }] }, ")"] }
-
 
 # ── type (parameter MODE = 0) 单个参数 ──
 [TypeParamItem]
@@ -70,8 +56,6 @@ production = [
 [TypeParamItem.parser.node]
 name = "$2"
 default = "$4"
-[TypeParamItem.renderer]
-layout = { line = ["parameter ", { ref = "name" }, " = ", { ref = "default" }] }
 
 
 # ── 类型体 { master : ...; fn read : { }; } ──
@@ -84,15 +68,6 @@ production = [
 ]
 [TypeBody.parser.node]
 members = "$2"
-[TypeBody.renderer]
-[TypeBody.renderer.layout]
-line = ["{", { break = 1 }]
-[TypeBody.renderer.layout.body]
-indent = 4
-source = "members"
-[TypeBody.renderer.layout.tail]
-text = "}"
-break = 2
 
 
 # ── 类型成员（role | invert | method）──
@@ -102,9 +77,6 @@ inline = true
 production = ["@TypeRole | @InvertDecl | @TypeMethod"]
 [TypeMember.parser.node]
 child = "$1"
-
-[TypeMember.renderer]
-layout = { ref = "child" }
 
 
 # ── 角色 master : input miso, output clk, ...; ──
@@ -120,16 +92,9 @@ production = [
 [TypeRole.parser.node]
 role_name = "$1"
 ports = ["$3", "$4.items[*].sub_node[1]"]
-[TypeRole.renderer]
-[TypeRole.renderer.layout]
-[TypeRole.renderer.layout.line]
-items = [{ ref = "role_name" }, ":", { break = 1 }]
-[TypeRole.renderer.layout.body]
-indent = 4
-source = "ports"
 [TypeRole.analyzer]
 symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
-primitives = ["resolve_refs"]
+primitives = ["resolve_refs", "attach_invert_map"]
 
 [TypeRole.analyzer.resolve_refs]
 source = "ports"
@@ -164,8 +129,6 @@ production = [
 ]
 [TypePortDecl.parser.node]
 child = "$1"
-[TypePortDecl.renderer]
-layout = { ref = "child" }
 
 
 # ── 嵌套类型引用 axis.master data（被 TypePortDecl 引用）──
@@ -176,8 +139,6 @@ production = ["@TypedTypeSpec", "@Identifier"]
 [TypeNestedPort.parser.node]
 type_spec = "$1"
 instance_name = "$2"
-[TypeNestedPort.renderer]
-layout = { line = [{ ref = "type_spec" }, " ", { ref = "instance_name" }] }
 
 
 # ── 角色内 invert（不含分号，被 TypePortDecl 引用）──
@@ -186,8 +147,6 @@ layout = { line = [{ ref = "type_spec" }, " ", { ref = "instance_name" }] }
 production = ["keyword.invert", "@Identifier"]
 [TypeInvertPort.parser.node]
 target_role = "$2"
-[TypeInvertPort.renderer]
-layout = { line = ["invert ", { ref = "target_role" }] }
 
 
 # ── 成员级 invert（含分号，被 TypeMember 引用）──
@@ -199,8 +158,6 @@ layout = { line = ["invert ", { ref = "target_role" }] }
 production = ["keyword.invert", "@Identifier", "symbol.base.semicolon"]
 [InvertDecl.parser.node]
 target_role = "$2"
-[InvertDecl.renderer]
-layout = { line = ["invert ", { ref = "target_role" }, ";"] }
 
 
 # ── 方法声明 fn read : { ... } ──
@@ -217,10 +174,6 @@ production = [
 method_name = "$2"
 body = "$4"
 
-[TypeMethod.renderer]
-[TypeMethod.renderer.layout]
-line = ["fn ", { ref = "method_name" }, ": ", { ref = "body" }]
-
 [TypeMethod.analyzer]
 symbol = { kind = "type_method", name_attr = "method_name" }
 
@@ -229,6 +182,3 @@ symbol = { kind = "type_method", name_attr = "method_name" }
 [TypeMethodBody]
 [TypeMethodBody.parser]
 production = ["bracket.l_curly_bracket", "bracket.r_curly_bracket"]
-
-[TypeMethodBody.renderer]
-layout = { line = ["{", "}"] }

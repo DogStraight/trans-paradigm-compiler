@@ -12,46 +12,43 @@ import argparse
 from datetime import datetime
 from typing import Optional, Any, Dict, Tuple
 
+# ── 词法 / 语法 / 配置 ──
 from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
-from core.define import FileManager, ParseError, GrammarRulesRegister
-from core.config_registry import ConfigRegistry, config
+from core.define import ParseError, GrammarRulesRegister
+from core.config_registry import ConfigRegistry
 from parser.rule_selector import RuleSelector
-from transform.normalizer import normalize_ast
-from renderer.renderer import Renderer
-from analyzer import SemanticAnalyzer
-import analyzer.primitives.resolve  # noqa: F401 — 注册引用解析原语
+
+# ── 分析器 ──
+from analyzer import AnalysisPipeline
+
+# ── Verilog 语言扩展（注入 primitive 原语 + 映射表配置）──
+from analyzer.analyze_verilog_ext import mapping_entries, resolve_entries, collect_callbacks
+
+# ── 变换器 ──
 from transform import AstTransformer
 from transform.config_driven import ConfigDrivenTransform
 from transform.semantic_mapping import SemanticMappingPlugin
-from preprocessor import (
-    scan_directives, expand_tokens,
-    protect_and_reverse, load_macro_config,
-)
+from transform.normalizer import normalize_ast
+
+# ── 渲染器 ──
+from renderer.renderer import Renderer
 from renderer.inline_comment import restore_comments, restore_line_comments
 
+# ── 预处理器（可选）──
+from preprocessor import (
+    scan_directives,
+    expand_tokens,
+    protect_and_reverse,
+    load_macro_config,
+)
 
-# ========== 配置声明（启动时由 ConfigRegistry.load_all() 统一加载）==========
-config.declare("transform.semantic_mapping",
-               file="_analyzer.toml",
-               section="mapping",
-               base="ext",
-               required=False,
-               description="语义映射表构建配置（ext 目录），由 SemanticMappingPlugin 消费")
-config.declare("transform.semantic_resolve",
-               file="_analyzer.toml",
-               section="resolve",
-               base="ext",
-               required=False,
-               description="语义映射表后处理配置（ext 目录），如 invert 方向反转")
-config.declare("analyzer.direction",
-               file="_analyzer.toml",
-               section="direction",
-               base="ext",
-               required=False,
-               description="方向反转映射表，由 capture hook resolve_nested 消费")
+# Add project root to sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# 模块级共享管线状态：组件按 rules_dir 缓存，避免重复初始化
+# 模块级共享状态：rules/lexer/renderer/transformer 按 rules_dir 缓存，避免重复初始化
 _PIPELINE_SHARED: dict = {}
 
 from scripts.ast_debug import (
@@ -60,11 +57,6 @@ from scripts.ast_debug import (
     dump_tokens,
     count_ast_nodes,
 )
-
-# Add project root to sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 # Force stdout to UTF-8
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
@@ -94,44 +86,6 @@ def save_json(data: Any, path: str, label: str = "", log_fn=None) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
     if label:
         (log_fn or print)(f"[{label}] saved ({os.path.getsize(path)} bytes)")
-
-
-def _collect_callbacks(scope) -> dict:
-    """递归收集 scope 树中所有符号的 _ref_callbacks
-
-    输出文件格式（trans_callback/{name}.json）：
-        {
-            "type_name.role_name": [     # 键 = "{scope.name}.{sym.name}"
-                {
-                    "kind": "nested",   # 引用类型
-                    "resolved_ports": [   # scope 知识：查到的目标端口数据
-                        { "direction": "input", "name": "tvalid" },
-                        ...
-                    ],
-                    # type-specific meta:
-                    "prefix": "upstream",       # nested 才有
-                    "source_type": "axis",      # nested 才有
-                    "source_role": "master",    # nested/invert 都有
-                }
-            ]
-        }
-
-    Returns:
-        { "type_name.role_name": [callback, ...], ... }
-    """
-    result: dict = {}
-
-    def _walk(s):
-        for sym in s.symbols.values():
-            cbs = sym.attrs.get("_ref_callbacks", [])
-            if cbs:
-                key = f"{s.name}.{sym.name}"
-                result[key] = cbs
-        for child in s.children:
-            _walk(child)
-
-    _walk(scope)
-    return result
 
 
 # ---------------------------- Core Pipeline ----------------------------
@@ -217,12 +171,6 @@ def run_pipeline_on_source(
     ensure_dir(cb_dir)
     comment_json = os.path.join(ast_dir, f"{base_name}_comments.json")
 
-    flags = []
-    if expand_macros:
-        flags.append("--expand-macros")
-    if inline_comments:
-        flags.append("--inline-comments")
-
     # ---- Stage: 配置加载（只执行一次，缓存后跳过）----
     if "_config_loaded" not in _PIPELINE_SHARED:
         ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
@@ -246,18 +194,13 @@ def run_pipeline_on_source(
         stmt_names = [
             n
             for n, r in rules.items()
-            if hasattr(r, "has_pass_end_case")
-            and r.has_pass_end_case()
+            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
         ]
         rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
         lexer = Lexer(rules_dir=rules_dir)
         renderer = Renderer(rules_dir=rules_dir)
         transformer = AstTransformer()
-        transformer.register(
-            ConfigDrivenTransform(
-                rules=rules
-            )
-        )
+        transformer.register(ConfigDrivenTransform(rules=rules))
         ctx[rules_dir] = {
             "rules": rules,
             "rule_selector": rule_selector,
@@ -343,7 +286,7 @@ def run_pipeline_on_source(
     # ---- Stage: Semantic analysis ----
     analyzer = None
     if analyzer_enabled:
-        analyzer = SemanticAnalyzer(rules)
+        analyzer = AnalysisPipeline(rules)
         ast = analyzer.analyze(ast)
         if analyzer.root_scope is None:
             _log("[analyzer] warning: no scope produced")
@@ -353,17 +296,17 @@ def run_pipeline_on_source(
                     analyzer.root_scope.to_dict(), sym_json, "symbols", log_fn=_log
                 )
                 # Dump transform callbacks (_ref_callbacks) to trans_callback/
-                callbacks = _collect_callbacks(analyzer.root_scope)
+                callbacks = collect_callbacks(analyzer.root_scope)
                 if callbacks:
                     save_json(callbacks, cb_json, "callbacks", log_fn=_log)
             _log(f"[symbols] {len(analyzer.all_symbols)} symbols")
         if analyzer.has_errors:
-            for err in analyzer.errors:
-                _log(f"[analyzer] ERROR {err}")
-            for ref in analyzer._unresolved_refs:
-                _log(f"[analyzer] WARN {ref}")
-            if analyzer.errors:
-                result["error"] = "; ".join(analyzer.errors)
+            for d in analyzer.diagnostics:
+                _log(f"[analyzer] {d}")
+            if any(d.level == "error" for d in analyzer.diagnostics):
+                result["error"] = "; ".join(
+                    str(d) for d in analyzer.diagnostics if d.level == "error"
+                )
                 _log("[analyzer] semantic errors, stopping pipeline")
                 return result
         scope = analyzer.root_scope
@@ -379,22 +322,11 @@ def run_pipeline_on_source(
     semantic_mapping_plugin = None
     if transform_enabled and analyzer is not None and scope is not None:
         # Phase 1: 构建语义映射表 + 后处理管线
-        # 由 SemanticMappingPlugin 完成，从 _analyzer.toml 读取 mapping.* + resolve.* 条目
+        # 由 SemanticMappingPlugin 完成，mapping/resolve 配置来自语言扩展
         mapping_cfg: dict = {}
-        try:
-            mapping_raw = config.get("transform.semantic_mapping")
-            if mapping_raw:
-                mapping_cfg.update(mapping_raw)
-        except KeyError:
-            pass
-        try:
-            resolve_raw = config.get("transform.semantic_resolve")
-            if resolve_raw:
-                mapping_cfg.update(resolve_raw)
-        except KeyError:
-            pass
-
-        semantic_mapping_plugin = SemanticMappingPlugin(mapping_cfg or None)
+        mapping_cfg.update(mapping_entries)
+        mapping_cfg.update(resolve_entries)
+        semantic_mapping_plugin = SemanticMappingPlugin(mapping_cfg)
         semantic_mapping_plugin.process(ast, scope)
         mapping = semantic_mapping_plugin.tables
 
@@ -434,8 +366,11 @@ def run_pipeline_on_source(
             macro_raw = load_macro_config(rules_dir)
             define_kw = macro_raw.get("directives", {}).get("define", "define")
             content = protect_and_reverse(
-                content, original_source, macro_table,
-                define_keyword=define_kw, lexer=lexer,
+                content,
+                original_source,
+                macro_table,
+                define_keyword=define_kw,
+                lexer=lexer,
                 restoration_stack=restore_stack,
             )
             _log("[preprocessor] macros reversed")
