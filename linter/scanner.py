@@ -30,23 +30,20 @@ class LinterScanner:
         ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
         from core.define import GrammarRulesRegister
 
-        self.rules = setup_grammar(
+        rules = setup_grammar(
             rules_dir, GrammarRulesRegister.get_default(), ext_dir
         )
         stmt_names = [
-            n for n, r in self.rules.items()
+            n for n, r in rules.items()
             if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
         ]
-        self.rule_selector = RuleSelector(self.rules, stmt_names, cache_enabled=False)
+        rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
         self.lexer = Lexer(rules_dir=rules_dir)
-        self.parser = Parser(
-            rules=self.rules,
-            rule_selector=self.rule_selector,
-            cache_enabled=False,
-        )
+        self.parser = Parser(rules=rules, rule_selector=rule_selector, cache_enabled=False)
 
-        # 推导边界 Token
-        self._boundary_tokens: Set[str] = self._derive_boundary_tokens(self.rules)
+        # 推导边界 Token + 语句起始 Token
+        self._boundary_tokens: Set[str] = self._derive_boundary_tokens(rules)
+        self._statement_starts: Set[str] = self._derive_statement_starts(rules)
         self._trivia_types = tuple(self.parser.skip_types) + ("comment",)
 
         # 宏前缀
@@ -67,6 +64,36 @@ class LinterScanner:
                     boundary.add(end)
         return boundary
 
+    @staticmethod
+    def _derive_statement_starts(rules: Dict[str, GrammarRule]) -> Set[str]:
+        """从有 end_case 的规则中提取首 token 集合，用于智能跳过。"""
+        starts: Set[str] = set()
+        for rule in rules.values():
+            ec = getattr(rule, "end_case", None)
+            if not ec:
+                continue
+            prods = getattr(rule, "production", [])
+            if not prods:
+                continue
+            first = prods[0]
+            # keyword.module → keyword.module
+            # keyword.case|keyword.casex → 展开分支
+            for part in first.split("|"):
+                part = part.strip()
+                if part.startswith("@"):
+                    # @RuleRef — 找被引用规则的首 token
+                    ref_rule = rules.get(part[1:])
+                    if ref_rule:
+                        ref_prods = getattr(ref_rule, "production", [])
+                        if ref_prods:
+                            for ref_part in ref_prods[0].split("|"):
+                                ref_part = ref_part.strip()
+                                if not ref_part.startswith("@"):
+                                    starts.add(ref_part)
+                else:
+                    starts.add(part)
+        return starts
+
     # ── 公开入口 ──────────────────────────────────────────
 
     def scan(self, source: str) -> List[LintDiagnostic]:
@@ -78,6 +105,9 @@ class LinterScanner:
         # Stage 1: 提取宏定义，校验宏指令语法
         macro_defs, directive_lines, clean_source = scan_directives(source, self._rules_dir)
         self._validate_directives(directive_lines, macro_defs, prefix, errors)
+
+        # Stage 1.5: 展开前校验宏调用（宏名是否已定义）
+        self._validate_macro_calls(clean_source, macro_defs, prefix, errors)
 
         # Stage 2: 展开宏调用，扫描纯代码
         if macro_defs:
@@ -92,6 +122,31 @@ class LinterScanner:
         context = ParseContext(tokens)
         self._scan_block(context, errors)
         return errors
+
+    # ── 宏调用校验 ──────────────────────────────────────
+
+    def _validate_macro_calls(
+        self,
+        source: str,
+        macro_defs: Dict[str, str],
+        prefix: str,
+        errors: List[LintDiagnostic],
+    ) -> None:
+        """展开前校验宏调用：检查宏名是否已定义。"""
+        import re
+        pattern = re.compile(re.escape(prefix) + r"(\w+)")
+        # clean_source 已去掉指令行，所有宏调用都是展开引用
+        for i, line in enumerate(source.split("\n"), 1):
+            for m in pattern.finditer(line):
+                name = m.group(1)
+                if name not in macro_defs:
+                    pos = Position(line=max(0, i - 1), character=m.start())
+                    errors.append(LintDiagnostic(
+                        range=(pos, pos),
+                        message=f"undefined macro: '{name}'",
+                        severity=1,
+                        code="macro-undefined",
+                    ))
 
     # ── 宏指令校验 ──────────────────────────────────────
 
@@ -162,6 +217,11 @@ class LinterScanner:
             if stmt is not None:
                 continue
 
+            # 宏调用 token：跳过即可（未定义宏已在 _validate_macro_calls 中报过）
+            if current.type.startswith("macro."):
+                context.advance_token()
+                continue
+
             # 匹配失败：记录错误并跳过
             start_pos = Position(
                 line=max(0, current.line - 1),
@@ -189,10 +249,9 @@ class LinterScanner:
                 break
 
     def _skip_to_boundary(self, context: ParseContext, block_end: str = "") -> None:
-        """跳过 token 直到下一个安全边界。
-
-        只停在块结束符或分号上，避免逗号等细粒度边界产生级联误报。
-        """
+        """跳过 token 直到下一个安全边界：分号或块结束符。"""
+        # 当前 token 已匹配失败，先消耗再跳
+        context.advance_token()
         while context.has_more_tokens():
             t = context.peek_token()
             assert t is not None
@@ -202,7 +261,6 @@ class LinterScanner:
                 if t.type == "symbol.base.semicolon":
                     context.advance_token()
                     return
-                # 块结束符 keyword.endmodule, keyword.end, keyword.endfunction 等
                 if t.type.startswith("keyword.end"):
                     context.advance_token()
                     return
