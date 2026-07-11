@@ -11,9 +11,17 @@ from analyzer.scope import Scope
 
 class TransformPlugin(ABC):
     """AST 变换插件基类"""
+
+    _transformer: Optional["AstTransformer"] = None
+
     @abstractmethod
     def process(self, ast: Node, root_scope: Scope) -> Node:
         ...
+
+    @property
+    def stats(self) -> dict[str, int]:
+        """变换统计，子类可覆盖"""
+        return {}
 
 
 class AstTransformer:
@@ -31,5 +39,6 @@ class AstTransformer:
 
     def transform(self, ast: Node, root_scope: Scope) -> Node:
         for plugin in self._plugins:
+            plugin._transformer = self
             ast = plugin.process(ast, root_scope)
         return ast

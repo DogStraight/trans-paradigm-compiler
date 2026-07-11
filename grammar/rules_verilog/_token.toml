@@ -63,6 +63,9 @@ fn = "fn"
 # 标签
 tag = "tag"
 
+# 接口实现绑定
+impl = "impl"
+
 # 流程控制
 pass = "pass"
 

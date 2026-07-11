@@ -76,6 +76,13 @@ class ConfigDrivenTransform(TransformPlugin):
 
     def process(self, ast: Node, root_scope: Scope) -> Node:
         """遍历 AST 并执行所有匹配的变换"""
+        # 自动拉取 SemanticMappingPlugin 的映射表
+        if self._transformer:
+            for plugin in self._transformer.plugins:
+                if type(plugin).__name__ == "SemanticMappingPlugin":
+                    self._tables = plugin.tables  # type: ignore[attr-defined]
+                    break
+
         self._stats = {
             "expand": 0,
             "replace": 0,

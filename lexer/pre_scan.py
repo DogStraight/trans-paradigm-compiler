@@ -14,13 +14,14 @@
 import re
 from core.config_registry import config
 
-
 # ========== 配置声明 ==========
-config.declare("lexer.pre_scan",
-               file="base/_pre_scan.toml",
-               section="pre_scan",
-               required=False,
-               description="预扫描声明识别配置")
+config.declare(
+    "lexer.pre_scan",
+    file="base/_pre_scan.toml",
+    section="pre_scan",
+    required=False,
+    description="预扫描声明识别配置",
+)
 
 
 # ── 编译缓存 ──

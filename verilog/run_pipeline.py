@@ -21,7 +21,7 @@ from core.utils import ensure_dir, save_json
 from parser.rule_selector import RuleSelector
 
 # ── 分析器 ──
-from analyzer import AnalysisPipeline
+from analyzer import AnalysisTraversal
 
 # ── Verilog 语言扩展（注入 primitive 原语 + 映射表配置）──
 from analyzer.analyze_verilog_ext import mapping_entries, resolve_entries, collect_callbacks
@@ -193,15 +193,12 @@ def run_pipeline_on_source(
         lexer = Lexer(rules_dir=rules_dir)
         linter = LinterScanner(rules_dir=rules_dir, ext_dir=ext_dir)
         renderer = Renderer(rules_dir=rules_dir)
-        transformer = AstTransformer()
-        transformer.register(ConfigDrivenTransform(rules=rules))
         ctx[rules_dir] = {
             "rules": rules,
             "rule_selector": rule_selector,
             "lexer": lexer,
             "linter": linter,
             "renderer": renderer,
-            "transformer": transformer,
         }
     shared = ctx[rules_dir]
     rules = shared["rules"]
@@ -209,7 +206,6 @@ def run_pipeline_on_source(
     lexer = shared["lexer"]
     linter = shared["linter"]
     renderer = shared["renderer"]
-    transformer = shared["transformer"]
 
     # ---- Stage: Lexical analysis ----
     tokens = lexer.tokenize(source)
@@ -290,7 +286,7 @@ def run_pipeline_on_source(
     # ---- Stage: Semantic analysis ----
     analyzer = None
     if analyzer_enabled:
-        analyzer = AnalysisPipeline(rules)
+        analyzer = AnalysisTraversal(rules)
         ast = analyzer.analyze(ast)
         if analyzer.root_scope is None:
             _log("[analyzer] warning: no scope produced")
@@ -323,23 +319,16 @@ def run_pipeline_on_source(
         return result
 
     # ---- Stage: AST transform ----
-    semantic_mapping_plugin = None
     if transform_enabled and analyzer is not None and scope is not None:
-        # Phase 1: 构建语义映射表 + 后处理管线
-        # 由 SemanticMappingPlugin 完成，mapping/resolve 配置来自语言扩展
+        # 注册语义映射插件 + 配置驱动变换
         mapping_cfg: dict = {}
         mapping_cfg.update(mapping_entries)
         mapping_cfg.update(resolve_entries)
-        semantic_mapping_plugin = SemanticMappingPlugin(mapping_cfg)
-        semantic_mapping_plugin.process(ast, scope)
-        mapping = semantic_mapping_plugin.tables
+        transformer = AstTransformer()
+        transformer.register(ConfigDrivenTransform(rules=rules))
+        transformer.register(SemanticMappingPlugin(mapping_cfg))
 
-        # Phase 2: 注入映射表到 ConfigDrivenTransform
-        for plugin in transformer.plugins:
-            if hasattr(plugin, "set_tables"):
-                plugin.set_tables(mapping)
-
-        # Phase 3: 执行配置驱动的 AST 变换
+        # 一次 transform 完成：映射表构建 + 配置变换
         ast = transformer.transform(ast, scope)
 
         # 收集变换统计

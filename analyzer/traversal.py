@@ -1,4 +1,4 @@
-"""AnalysisPipeline — 原语驱动的语义分析管线
+"""AnalysisTraversal — 原语驱动的 AST 遍历调度
 
 职责（对应分析器 5 模块之一：遍历调度）：
     遍历 AST，对每个节点根据 TOML [RuleName.analyzer] 配置
@@ -6,7 +6,7 @@
 
 文件结构中对应的职责模块：
     context.py        — [1] 上下文承载
-    pipeline.py       — [2] 遍历调度
+    traversal.py    — [2] 遍历调度
     scope.py          — [3] 符号表管理
     diagnostic.py     — [4] 诊断聚合
     primitives/       — [5] 原子操作库
@@ -24,7 +24,6 @@ from .context import AnalysisContext
 from .diagnostic import Diagnostic
 from .primitives import (
     get_primitive,
-    has_primitive,
 )
 
 # ── 原语执行管线顺序 ──
@@ -37,7 +36,7 @@ _PRIMITIVE_ORDER = [
 ]
 
 
-class AnalysisPipeline:
+class AnalysisTraversal:
     """原语驱动的语义分析管线
 
     遍历 AST，对每个节点根据 TOML [RuleName.analyzer] 配置

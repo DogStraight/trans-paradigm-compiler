@@ -1,0 +1,28 @@
+# ===== 接口实现绑定：ImplBinding =====
+#
+# impl <inst_name> #(params) (.port1(sig1), .port2(sig2));
+#
+# 在模块体内声明一个接口实例的实现绑定。
+# parser 解析为 AST，transform 阶段展开为 ModuleInst（自动连线）。
+
+[ImplBinding]
+[ImplBinding.inject]
+targets = ["@InstStmt"]
+
+[ImplBinding.parser]
+production = [
+    "keyword.impl",
+    "@Identifier",
+    "@ParamOverride?",
+    "@PortConnection",
+]
+end_case = ["newline"]
+
+[ImplBinding.parser.node]
+inst_name = "$2"
+params = "$3"
+ports = "$4.ports"
+
+# transform：暂只删除节点（展开 + 自动连线后续实现）
+[ImplBinding.transform]
+kind = "delete"
