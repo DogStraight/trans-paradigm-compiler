@@ -20,6 +20,7 @@ import json
 import time
 import io
 from typing import List, Tuple, Dict, Any
+from core.define import DEFAULT_EXT_DIRS
 
 # Force stdout to UTF-8
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
@@ -103,6 +104,7 @@ def run_all(
                 transform_enabled=not no_semantic,
                 renderer_enabled=True,
                 stage=None,
+                ext_dirs=DEFAULT_EXT_DIRS,
             )
         finally:
             if not verbose:

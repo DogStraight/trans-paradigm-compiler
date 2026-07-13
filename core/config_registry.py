@@ -1,26 +1,19 @@
 """ConfigRegistry — 声明式配置注册中心。
 
-问题：当前各模块在内部直接读 TOML 文件，路径解析各自为政，
-失败时静默返回空值，没人知道配置挂了。
-
-方案：所有配置依赖必须在模块级别通过 declare() 声明，
-启动时由 load_all() 统一加载验证。required 声明加载失败 → RuntimeError，
-optional 声明加载失败 → 空 dict，不再有隐式的 try/except 吞错误。
-
 用法:
-    # 1. 在组件模块级别声明
-    from core.config_registry import config
-    config.declare(
-        "pratt.token_categories",
-        file="base/_lexer.toml",
-        section="token_category")
+    # 1. 在管线启动点统一加载
+    from core.config_registry import ConfigRegistry
+    ConfigRegistry.load_all(rules_dir, ext_dirs=ext_dirs)
 
-    # 2. 管线启动点统一加载
-    ConfigRegistry.load_all(rules_dir, ext_dir="path/to/ext")
+    # 2. 使用（key 常量定义在 core/config_map.py）
+    from core.config_map import PRATT_TOKEN_CATEGORIES
+    cats = config.get(PRATT_TOKEN_CATEGORIES)
 
-    # 3. 使用
-    cats = config.get("pratt.token_categories")
+所有 config.declare() 声明集中在 core/config_map.py 中。
 """
+
+
+
 
 import os
 import tomllib
@@ -66,12 +59,13 @@ class ConfigRegistry:
         }
 
     @classmethod
-    def load_all(cls, rules_dir: str, **base_dirs: str) -> None:
+    def load_all(cls, rules_dir: str, ext_dirs: list[str] | None = None, **base_dirs: str) -> None:
         """加载所有已声明的配置。
 
         每个声明的 file 路径根据其 base 参数选基准目录拼接：
         - base="rules" 用 rules_dir（默认）
-        - base="ext" 用 base_dirs["ext_dir"]
+        - base="ext" 用 ext_dirs[0]（兼容单层 EXT）
+        - base="ext_N" 用 ext_dirs[N]（多层 EXT）
         - 自定义 base 名 → 从 **base_dirs 取对应 key
 
         对所有 required=True 的声明：加载失败抛 RuntimeError，列出所有错误。
@@ -81,6 +75,13 @@ class ConfigRegistry:
 
         # 基准目录表
         bases: dict[str, str] = {"rules": rules_dir}
+        ext_list = list(ext_dirs) if ext_dirs else []
+        for i, d in enumerate(ext_list):
+            bases[f"ext_{i}"] = d
+        if ext_list:
+            bases["ext"] = ext_list[0]  # 兼容 base="ext"
+        else:
+            bases["ext"] = ""  # ext 为空，required=False 的声明静默失败
         for bk, bv in base_dirs.items():
             # 去掉 _dir 后缀便于匹配
             key = bk.removesuffix("_dir")
@@ -162,3 +163,9 @@ class ConfigRegistry:
 
 # 模块级单例（简化 import）
 config = ConfigRegistry
+
+# 加载配置声明（在 ConfigRegistry 定义之后，确保 import 安全）
+from core import config_map  # noqa: F401
+
+# 自动安装配置声明
+config_map.install()

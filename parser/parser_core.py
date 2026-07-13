@@ -73,7 +73,6 @@ class ParseContext:
             "current_node": self.current_node,
             "current_rule": self.current_rule,
             "production_pointer": self.production_pointer,
-
         }
         return snapshot
 
@@ -376,27 +375,9 @@ class Parser:
         # 解析时作用域栈（可选，配合 peek scope 使用）
         self.scope_stack = ScopeStack()
 
-        # 加载括号映射（从 ConfigRegistry 的 token_base 配置）
-        self._bracket_map: dict[str, str] = {}
-        self._inverse_bracket_map: dict[str, str] = {}
-        from core.config_registry import config as _cfg
-        try:
-            token_data = _cfg.get("lexer.token_base")
-            for open_c, close_c, name in token_data.get("bracket", {}).get("pairs", []):
-                l = f"bracket.l_{name}"
-                r = f"bracket.r_{name}"
-                self._bracket_map[l] = r
-                self._inverse_bracket_map[r] = l
-        except (KeyError, Exception):
-            pass
-        if not self._bracket_map:
-            # 保底
-            self._bracket_map = {
-                "bracket.l_parentheses": "bracket.r_parentheses",
-                "bracket.l_brace": "bracket.r_brace",
-                "bracket.l_bracket": "bracket.r_bracket",
-            }
-            self._inverse_bracket_map = {v: k for k, v in self._bracket_map.items()}
+        # 加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）
+        from core.utils import get_bracket_map
+        self._bracket_map, self._inverse_bracket_map = get_bracket_map()
 
         # 规则加载：外部注入优先，回退内部自动加载
         if rules is not None:
@@ -424,6 +405,7 @@ class Parser:
         ]
         # 运算符定义（从 ConfigRegistry 获取）
         from core.config_registry import config as _cfg
+
         raw_ops = _cfg.get("pratt.operator_defs")
         self.operator_defs = pratt_parser.process_operator_data(raw_ops)
         # Token 分类器（ConfigRegistry 已加载）
@@ -456,8 +438,6 @@ class Parser:
         self._comment_anchors: list[dict] = []
         # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）
         self._line_comment_anchors: list[dict] = []
-        # Packrat 记忆化缓存：(rule_name, position) → (result, new_position)
-
 
     def _log_indent(self, context: ParseContext | None = None) -> str:
         """根据当前解析嵌套深度生成缩进前缀"""

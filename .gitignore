@@ -1,5 +1,6 @@
 *.log
 .vscode
+.ruff_cache
 verilog/tests/*/gen/
 verilog/tests/*/ast/
 verilog/tests/*/symbols/

@@ -8,19 +8,7 @@ loader.py — TOML 布局规则 / 风格加载
 import tomllib
 import os
 from core.config_registry import config
-
-
-# ========== 配置声明 ==========
-config.declare("renderer.style",
-               file="base/_style.toml",
-               section="style",
-               required=False,
-               description="渲染器风格参数（缩进、行宽）")
-config.declare("renderer.style_lang",
-               file="_style.toml",
-               section="style",
-               required=False,
-               description="语言特有风格覆盖")
+from core.config_map import RENDERER_STYLE
 
 
 def load_layouts(rules_dir: str, layouts: dict) -> None:
@@ -67,7 +55,7 @@ def load_style(rules_dir: str) -> dict:
     }
 
     # base/_style.toml（required=False，没有就用默认值）
-    for key in ("renderer.style", "renderer.style_lang"):
+    for key in (RENDERER_STYLE,):
         try:
             style = config.get(key)
             if not isinstance(style, dict):

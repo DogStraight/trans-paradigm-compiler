@@ -18,12 +18,14 @@ from parser.parser_core import Parser, ParseContext
 from lexer import Lexer
 import parser.pratt_parser as pratt_parser
 
-RULES_DIR = "grammar/rules_verilog"
-EXT_DIR = "grammar/rules_verilog_ext"
+from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS as EXT_DIRS
+
+RULES_DIR = DEFAULT_RULES_DIR
+from core.define import DEFAULT_EXT_DIRS as EXT_DIRS
 
 
 def load_rules():
-    return setup_grammar(RULES_DIR, GrammarRulesRegister.get_default(), EXT_DIR)
+    return setup_grammar(RULES_DIR, GrammarRulesRegister.get_default(), ext_dirs=EXT_DIRS)
 
 
 # ──────────────────────────────────────────────

@@ -223,8 +223,11 @@ def main():
     args = ap.parse_args()
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    rules_dir = os.path.join(project_root, "grammar", "rules_verilog")
-    ext_dir = os.path.join(project_root, "grammar", "rules_verilog_ext")
+    sys.path.insert(0, project_root)
+    from core.define import DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR
+
+    rules_dir = os.path.join(project_root, DEFAULT_RULES_DIR)
+    ext_dir = os.path.join(project_root, DEFAULT_EXT_DIRS[0])
 
     refs, inverted, all_rules = scan_rules(rules_dir)
     ext_refs, ext_inverted, ext_rules = scan_rules(ext_dir)

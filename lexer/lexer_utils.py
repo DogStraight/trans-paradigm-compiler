@@ -7,21 +7,7 @@ import os
 import tomllib
 from core.define import FileManager
 from core.config_registry import config
-
-
-# ========== 配置声明 ==========
-config.declare("lexer.token_base",
-               file="base/token.toml",
-               required=True,
-               description="基础词法定义（符号、关键字、括号）")
-config.declare("lexer.lexer_base",
-               file="base/_lexer.toml",
-               required=True,
-               description="词法阶段配置（注释解析、token 分类）")
-config.declare("lexer.token_lang",
-               file="_token.toml",
-               required=False,
-               description="语言特有词法覆盖")
+from core.config_map import LEXER_TOKEN_BASE, LEXER_LEXER_BASE, LEXER_TOKEN_LANG, LEXER_TOKEN_EXT
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -43,18 +29,25 @@ def get_token_define(base_dir: str = "") -> dict:
     return tomllib.loads(token_content)
 
 
-def get_token_define_merged(rules_dir: str) -> dict:
-    """两阶段加载：先从 ConfigRegistry 获取，再叠加语言特有覆盖。
+def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -> dict:
+    """加载 token 定义：基础定义 + 语言覆盖 + 增强层覆盖。
 
     替代旧的路径拼接 + try/except 模式。
     """
-    base = dict(config.get("lexer.token_base"))
-    lexer_cfg = dict(config.get("lexer.lexer_base"))
+    base = dict(config.get(LEXER_TOKEN_BASE))
+    lexer_cfg = dict(config.get(LEXER_LEXER_BASE))
     base = _deep_merge(base, lexer_cfg)
     try:
-        lang = config.get("lexer.token_lang")
+        lang = config.get(LEXER_TOKEN_LANG)
         if lang:
             base = _deep_merge(base, lang)
     except KeyError:
         pass
+    for ext_dir in (ext_dirs or []):
+        try:
+            ext_tokens = config.get(LEXER_TOKEN_EXT)
+            if ext_tokens:
+                base = _deep_merge(base, ext_tokens)
+        except KeyError:
+            pass
     return base

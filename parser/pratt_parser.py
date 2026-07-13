@@ -7,17 +7,7 @@ infix/prefix/postfix operators with proper precedence and associativity.
 from typing import Any
 from core.define import Node, Token
 from core.config_registry import config
-
-
-# ========== 配置声明（启动时由 ConfigRegistry.load_all() 统一加载）==========
-config.declare("pratt.operator_defs",
-               file="_symbol_level.toml",
-               section="operator",
-               description="运算符优先级和结合性定义")
-config.declare("pratt.token_categories",
-               file="base/_lexer.toml",
-               section="token_category",
-               description="Pratt 解析器的 token 分类器")
+from core.config_map import PRATT_OPERATOR_DEFS, PRATT_TOKEN_CATEGORIES
 
 
 def process_operator_data(data: list) -> list[tuple[int, dict]]:

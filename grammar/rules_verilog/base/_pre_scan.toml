@@ -12,9 +12,15 @@
 
 # 跟在声明关键词后面但不是声明名的语境关键词
 context_keywords = [
-    "automatic", "signed", "unsigned",
-    "reg", "wire", "logic",
-    "input", "output", "inout",
+    "automatic",
+    "signed",
+    "unsigned",
+    "reg",
+    "wire",
+    "logic",
+    "input",
+    "output",
+    "inout",
 ]
 
 # ── 声明类别 ──

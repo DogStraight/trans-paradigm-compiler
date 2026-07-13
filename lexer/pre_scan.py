@@ -13,15 +13,7 @@
 
 import re
 from core.config_registry import config
-
-# ========== 配置声明 ==========
-config.declare(
-    "lexer.pre_scan",
-    file="base/_pre_scan.toml",
-    section="pre_scan",
-    required=False,
-    description="预扫描声明识别配置",
-)
+from core.config_map import LEXER_PRE_SCAN
 
 
 # ── 编译缓存 ──
@@ -42,7 +34,7 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
 
     raw = {}
     try:
-        raw = config.get("lexer.pre_scan")
+        raw = config.get(LEXER_PRE_SCAN)
     except KeyError:
         pass
 

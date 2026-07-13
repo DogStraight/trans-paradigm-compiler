@@ -33,7 +33,7 @@ def _apply_ext_injections(
 def setup_grammar(
     rules_dir: str,
     register: GrammarRulesRegister | None = None,
-    ext_dir: str | None = None,
+    ext_dirs: list[str] | None = None,
 ) -> dict[str, GrammarRule]:
     """
     Load core grammar + extended grammar, apply production injections,
@@ -41,7 +41,7 @@ def setup_grammar(
 
     Args:
         rules_dir: Path to core grammar rules directory (relative).
-        ext_dir: Path to extended grammar rules directory (optional).
+        ext_dirs: Paths to extended grammar rules directories (optional).
         register: Optional GrammarRulesRegister instance.
                     Defaults to GrammarRulesRegister.get_default().
 
@@ -54,10 +54,10 @@ def setup_grammar(
     core_rules = register.rules_registration(rules_dir)
 
     ext_rules = {}
-    if ext_dir:
+    for ext_dir in (ext_dirs or []):
         ext_dir_full = FileManager.get_full_path(ext_dir)
         if os.path.isdir(ext_dir_full):
-            ext_rules = register.rules_registration(ext_dir)
+            ext_rules.update(register.rules_registration(ext_dir))
 
     # Merge core and extension rules
     rules = core_rules.copy()

@@ -12,11 +12,9 @@ from analyzer.scope import Scope
 from .pipeline import TransformPlugin
 from .registry import (
     TransformResult,
-    TransformContext,
     SKIP,
     register_primitive,
     get_primitive,
-    get_handler,
 )
 from .primitives.template import resolve_template
 from .primitives.lookup import (
@@ -35,7 +33,7 @@ class ConfigDrivenTransform(TransformPlugin):
         transformer = AstTransformer()
         transformer.register(ConfigDrivenTransform(
             rules=grammar_rules,
-            ext_dir="grammar/rules_verilog_ext",
+            ext_dirs=DEFAULT_EXT_DIRS,
         ))
         ast = transformer.transform(ast, root_scope)
     """

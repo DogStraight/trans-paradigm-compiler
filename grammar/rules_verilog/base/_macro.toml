@@ -57,3 +57,8 @@ default_nettype = "default_nettype"
 unconnected_drive = "unconnected_drive"
 nounconnected_drive = "nounconnected_drive"
 
+# ── [expand] 宏展开器参数 ──
+# 用户可通过此段控制展开行为，无需修改 Python 代码。
+[expand]
+max_iterations = 128
+

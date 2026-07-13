@@ -15,7 +15,7 @@ from typing import Optional, Any, Dict, Tuple
 # ── 词法 / 语法 / 配置 ──
 from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
-from core.define import ParseError, GrammarRulesRegister
+from core.define import ParseError, GrammarRulesRegister, DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR
 from core.config_registry import ConfigRegistry
 from core.utils import ensure_dir, save_json
 from parser.rule_selector import RuleSelector
@@ -94,8 +94,8 @@ def run_pipeline_on_source(
     transform_enabled: bool = True,
     renderer_enabled: bool = True,
     stage: Optional[str] = None,
-    rules_dir: str = "grammar/rules_verilog",
-    ext_dir: str = "grammar/rules_verilog_ext",
+    rules_dir: str = DEFAULT_RULES_DIR,
+    ext_dirs: list[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -166,7 +166,7 @@ def run_pipeline_on_source(
 
     # ---- Stage: 配置加载（只执行一次，缓存后跳过）----
     if "_config_loaded" not in _PIPELINE_SHARED:
-        ConfigRegistry.load_all(rules_dir, ext_dir=ext_dir)
+        ConfigRegistry.load_all(rules_dir, ext_dirs=ext_dirs)
         _PIPELINE_SHARED["_config_loaded"] = True
 
     # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
@@ -183,15 +183,15 @@ def run_pipeline_on_source(
     if rules_dir not in ctx:
 
         # 语法规则（含 EXT 注入）
-        rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dir)
+        rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_dirs)
         stmt_names = [
             n
             for n, r in rules.items()
             if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
         ]
         rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
-        lexer = Lexer(rules_dir=rules_dir)
-        linter = LinterScanner(rules_dir=rules_dir, ext_dir=ext_dir)
+        lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_dirs)
+        linter = LinterScanner(rules_dir=rules_dir, ext_dirs=ext_dirs)
         renderer = Renderer(rules_dir=rules_dir)
         ctx[rules_dir] = {
             "rules": rules,
@@ -477,14 +477,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rules-dir",
         type=str,
-        default="grammar/rules_verilog",
+        default=DEFAULT_RULES_DIR,
         help="Core grammar rules directory",
     )
     parser.add_argument(
-        "--ext-dir",
+        "--ext-dirs",
         type=str,
-        default="grammar/rules_verilog_ext",
-        help="Extended grammar rules directory",
+        nargs="*",
+        default=DEFAULT_EXT_DIRS,
+        help="Extended grammar rules directories (can specify multiple)",
     )
 
     parser.set_defaults(analyzer=True, transform=True, renderer=True)
@@ -518,7 +519,7 @@ def main() -> None:
         renderer_enabled=args.renderer,
         stage=args.stage,
         rules_dir=args.rules_dir,
-        ext_dir=args.ext_dir,
+        ext_dirs=args.ext_dirs,
     )
 
     if not result["success"]:

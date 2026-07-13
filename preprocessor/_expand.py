@@ -5,7 +5,16 @@ Both operate on pure text, no token dependency.
 """
 
 import re
-_MAX_ITERATIONS = 128  # safety limit against circular `define
+
+
+def _get_expand_config() -> dict:
+    """从 ConfigRegistry 获取展开器参数，未配置时返回默认值。"""
+    from core.config_registry import config
+    from core.config_map import PREPROCESSOR_EXPAND
+    try:
+        return dict(config.get(PREPROCESSOR_EXPAND))
+    except (KeyError, RuntimeError):
+        return {"max_iterations": 128}
 
 
 def _load_config(rules_dir: str) -> tuple[str, set[str]]:
@@ -72,7 +81,9 @@ def scan_directives(
         return {}, directive_lines, "\n".join(clean_lines)
 
     # ---- 宏体全展开（为 reverser 提供已展开的值）----
-    for _ in range(_MAX_ITERATIONS):
+    expand_cfg = _get_expand_config()
+    max_iter = expand_cfg.get("max_iterations", 128)
+    for _ in range(max_iter):
         changed = False
         for name, body in list(macro_defs.items()):
             new_body = _MACRO_RE.sub(

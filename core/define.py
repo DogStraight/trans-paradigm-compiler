@@ -10,6 +10,30 @@ import os
 from pathlib import Path
 
 
+def _load_pyv_meta() -> dict:
+    """加载引擎元配置文件 grammar/pyv.toml。"""
+    config_path = os.path.join(os.path.dirname(__file__), "..", "grammar", "pyv.toml")
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            return tomllib.loads(f.read())
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"[config] 找不到引擎元配置: {config_path}\n"
+            f"  请确保 grammar/pyv.toml 存在。"
+        )
+    except tomllib.TOMLDecodeError as e:
+        raise RuntimeError(f"[config] pyv.toml 解析失败: {e}")
+
+
+_pyv_meta = _load_pyv_meta()
+
+# 增强语法层目录（来自 pyv.toml [grammar]）
+DEFAULT_EXT_DIRS: list[str] = _pyv_meta["grammar"]["ext_dirs"]
+
+# 核心语法规则目录（来自 pyv.toml [grammar]）
+DEFAULT_RULES_DIR: str = _pyv_meta["grammar"]["rules_dir"]
+
+
 class Token:
 
     def __init__(self, content="", type="", line=0, column=0) -> None:
@@ -102,14 +126,12 @@ class FileManager:
     _base_dir: str = os.path.dirname(
         os.path.dirname(os.path.abspath(__file__))
     )
-    rules_file: str = "grammar/rules_verilog/base/token.toml"
-    rules_dir: str = "grammar/rules_verilog"
-    token_define_file: str = "grammar/rules_verilog/base/token.toml"
-    lookup_file: str = "grammar/rules_verilog/base/production_lookup.toml"
-
-    cg_rules_dir: str = "grammar/cg_rules"
+    rules_file: str = ""
+    rules_dir: str = DEFAULT_RULES_DIR
+    token_define_file: str = ""
+    lookup_file: str = ""
+    cg_rules_dir: str = ""
     debug_log_file: str | None = None
-    # debug_log_file: str | None = None
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:
@@ -157,7 +179,7 @@ class FileManager:
         if not os.path.isdir(dir_path):
             return merged
         for fname in sorted(os.listdir(dir_path)):
-            if fname.startswith("_"):
+            if fname.startswith("_") or fname == "token.toml":
                 continue
             fpath = os.path.join(dir_path, fname)
             # 子目录递归

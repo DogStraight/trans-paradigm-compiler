@@ -37,7 +37,14 @@
             ]
           }
         }
-      ]
+      ],
+      "invert_map": {
+        "input": "output",
+        "output": "input",
+        "input_reg": "output_reg",
+        "output_reg": "input_reg",
+        "inout": "inout"
+      }
     }
   ]
 }

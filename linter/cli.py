@@ -17,10 +17,11 @@ import io
 # 强制 UTF-8 输出（避免中文乱码）
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
 from linter.scanner import LinterScanner
 
 
-def main() -> None:
+def cli_main() -> None:
     parser = argparse.ArgumentParser(description="PyV Linter — 语法错误扫描器")
     parser.add_argument("input", nargs="?", help="源文件路径（省略则从 stdin 读取）")
     parser.add_argument(
@@ -42,12 +43,13 @@ def main() -> None:
 
     # 确定语法规则目录
     rules_dir = os.path.join(
-        os.path.dirname(__file__), "..", "grammar", "rules_verilog"
+        os.path.dirname(__file__), "..", DEFAULT_RULES_DIR
     )
-    ext_dir = os.path.join(
-        os.path.dirname(__file__), "..", "grammar", "rules_verilog_ext"
-    )
-    ext_dir = ext_dir if os.path.isdir(ext_dir) else ""
+    ext_dirs = []
+    for ed in DEFAULT_EXT_DIRS:
+        candidate = os.path.join(os.path.dirname(__file__), "..", ed)
+        if os.path.isdir(candidate):
+            ext_dirs.append(candidate)
 
     if not os.path.isdir(rules_dir):
         print(f"错误：找不到语法规则目录 {rules_dir}", file=sys.stderr)
@@ -56,7 +58,7 @@ def main() -> None:
     # 扫描
     scanner = LinterScanner(
         rules_dir=rules_dir,
-        ext_dir=ext_dir,
+        ext_dirs=ext_dirs,
     )
     diagnostics = scanner.scan(source)
 
@@ -77,4 +79,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    cli_main()

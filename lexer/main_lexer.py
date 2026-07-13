@@ -9,16 +9,10 @@ in TOML — no hardcoded lexer logic.
 
 from core.define import Token
 from core.config_registry import config
+from core.config_map import LEXER_MACRO_CONFIG
 from .lexer_utils import get_token_define_merged
 from .number_fsm import NumberFSM
 from .comment_fsm import CommentFSM
-
-
-# ========== 配置声明 ==========
-config.declare("lexer.macro_config",
-               file="base/_macro.toml",
-               required=False,
-               description="宏指令配置（`define 等）")
 
 
 class Lexer:
@@ -28,28 +22,28 @@ class Lexer:
         self,
         token_define_dict: dict | None = None,
         rules_dir: str | None = None,
+        ext_dirs: list[str] | None = None,
     ) -> None:
         if rules_dir:
-            token_define_dict = get_token_define_merged(rules_dir)
+            token_define_dict = get_token_define_merged(rules_dir, ext_dirs)
         else:
             from .lexer_utils import get_token_define
+
             token_define_dict = get_token_define()
         self.token_define = token_define_dict
 
         # 宏识别策略与配置
         # 分 directive（指令关键字）和 call（宏调用）两段，每段独立配置 strategy 和参数
-        self._macro_dir_cfg: dict = {}   # directive 段配置
+        self._macro_dir_cfg: dict = {}  # directive 段配置
         self._macro_call_cfg: dict = {}  # call 段配置
         self.macro_config = {}
         try:
-            raw = config.get("lexer.macro_config")
+            raw = config.get(LEXER_MACRO_CONFIG)
             if raw:
                 rec = raw.get("macro_recognition", {})
                 self._macro_dir_cfg = rec.get("directive", {})
                 self._macro_call_cfg = rec.get("call", {})
-                self.macro_config = {
-                    d: f"macro.{d}" for d in raw.get("directives", {})
-                }
+                self.macro_config = {d: f"macro.{d}" for d in raw.get("directives", {})}
         except KeyError:
             pass
 
@@ -81,6 +75,7 @@ class Lexer:
         # new line start flag for indent handling
         self.new_line_start = False
         pass
+
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""
         self.alpha_tokens.clear()
@@ -327,10 +322,16 @@ class Lexer:
             # 按 directive → call 顺序检查，相同前缀时 directive 优先。
             # 命中 directives 表 → macro.<key>；未命中且 call 策略相同 → macro.call。
             #
-            dir_prefix = (self._macro_dir_cfg.get("prefix", "")
-                          if self._macro_dir_cfg.get("strategy") == "prefix" else "")
-            call_prefix = (self._macro_call_cfg.get("prefix", "")
-                           if self._macro_call_cfg.get("strategy") == "prefix" else "")
+            dir_prefix = (
+                self._macro_dir_cfg.get("prefix", "")
+                if self._macro_dir_cfg.get("strategy") == "prefix"
+                else ""
+            )
+            call_prefix = (
+                self._macro_call_cfg.get("prefix", "")
+                if self._macro_call_cfg.get("strategy") == "prefix"
+                else ""
+            )
             ch = lex_text[text_idx]
             matched_prefix = ""
             check_dir = False
@@ -354,7 +355,11 @@ class Lexer:
                     offset += 1
 
                 macro_name = macro_content[1:]  # 去掉前缀
-                macro_type = self.macro_config.get(macro_name, "macro.call") if check_dir else "macro.call"
+                macro_type = (
+                    self.macro_config.get(macro_name, "macro.call")
+                    if check_dir
+                    else "macro.call"
+                )
                 current_token.set_type(macro_type)
                 current_token.set_content(macro_content)
 
