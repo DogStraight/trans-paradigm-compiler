@@ -10,10 +10,10 @@
 """
 
 from core.define import Node
-from .registry import analyzer_primitive
+from .registry import register
 
 
-@analyzer_primitive("identifier_resolve")
+@register("identifier_resolve")
 def identifier_resolve(analyzer, node: Node, config: dict) -> None:
     """解析标识符引用
 

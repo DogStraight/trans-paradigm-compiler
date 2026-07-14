@@ -96,6 +96,7 @@ def run_pipeline_on_source(
     stage: Optional[str] = None,
     rules_dir: str = DEFAULT_RULES_DIR,
     ext_dirs: list[str] | None = None,
+    include_dirs: list[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -174,7 +175,9 @@ def run_pipeline_on_source(
     directive_lines = []
     restore_stack = None
     if expand_macros:
-        macro_table, directive_lines, source = scan_directives(source, rules_dir)
+        macro_table, directive_lines, source = scan_directives(
+            source, rules_dir, source_path=input_path, search_dirs=include_dirs
+        )
         _log(f"[preprocessor] macros defined: {len(macro_table)}")
 
     # ---- Stage: Shared pipeline context (rules, lexer, renderer, etc.) ----
@@ -488,6 +491,15 @@ def parse_args() -> argparse.Namespace:
         help="Extended grammar rules directories (can specify multiple)",
     )
 
+    parser.add_argument(
+        "--include",
+        type=str,
+        action="append",
+        dest="include_dirs",
+        default=None,
+        help="Add directory to preprocessor include search path (can specify multiple)",
+    )
+
     parser.set_defaults(analyzer=True, transform=True, renderer=True)
     return parser.parse_args()
 
@@ -520,6 +532,7 @@ def main() -> None:
         stage=args.stage,
         rules_dir=args.rules_dir,
         ext_dirs=args.ext_dirs,
+        include_dirs=args.include_dirs,
     )
 
     if not result["success"]:

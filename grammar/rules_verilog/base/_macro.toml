@@ -62,3 +62,16 @@ nounconnected_drive = "nounconnected_drive"
 [expand]
 max_iterations = 128
 
+# ── [directive_handlers] 指令处理器启用/配置 ──
+# 每个指令对应 _directives.py 中注册的一个 handler。
+# enabled: false 时该指令被扫描器忽略（仍记录到 directive_lines）。
+# 可扩展自定义配置，如 include 的搜索路径、define 的参数模式等。
+[directive_handlers]
+define = { enabled = true }
+undef = { enabled = true }
+
+[directive_handlers.include]
+enabled = true
+search_dirs = []
+# silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
+silent = false

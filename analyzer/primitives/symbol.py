@@ -21,7 +21,7 @@ capture 配置:
 
 from typing import Any, Optional, Callable
 from core.define import Node
-from .registry import analyzer_primitive
+from .registry import register
 
 # ── Capture 后处理器注册中心 ──
 # 语言特定的 capture 后处理通过此系统注册，不硬编码在原语中。
@@ -45,7 +45,7 @@ def register_capture_hook(name: str) -> Callable:
 # ── 原语: symbol_declare ──
 
 
-@analyzer_primitive("symbol_declare")
+@register("symbol_declare")
 def symbol_declare(analyzer, node: Node, config: dict) -> None:
     """声明符号
 

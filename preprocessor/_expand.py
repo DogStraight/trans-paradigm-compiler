@@ -2,9 +2,15 @@
 
 Pipeline: scan_directives() → expand_tokens() → Lexer
 Both operate on pure text, no token dependency.
+
+指令处理由 primitives/registry.py 的注册表分发，新增指令不修改本文件。
 """
 
+import os
 import re
+
+from .primitives.registry import get_primitive
+from .primitives.include import resolve_source_dir
 
 
 def _get_expand_config() -> dict:
@@ -15,6 +21,17 @@ def _get_expand_config() -> dict:
         return dict(config.get(PREPROCESSOR_EXPAND))
     except (KeyError, RuntimeError):
         return {"max_iterations": 128}
+
+
+def _get_include_config() -> dict:
+    """从 ConfigRegistry 获取 include 配置，未配置时返回默认值。"""
+    from core.config_registry import config
+    from core.config_map import PREPROCESSOR_DIRECTIVES
+    try:
+        raw = dict(config.get(PREPROCESSOR_DIRECTIVES))
+        return dict(raw.get("include", {}))
+    except (KeyError, RuntimeError):
+        return {"search_dirs": [], "silent": False}
 
 
 def _load_config(rules_dir: str) -> tuple[str, set[str]]:
@@ -38,7 +55,12 @@ def _build_macro_re(prefix: str) -> re.Pattern:
 
 
 def scan_directives(
-    source: str, rules_dir: str
+    source: str,
+    rules_dir: str,
+    *,
+    source_path: str | None = None,
+    _include_stack: set[str] | None = None,
+    search_dirs: list[str] | None = None,
 ) -> tuple[dict[str, str], list[str], str]:
     """扫描源文件中的宏指令，构建宏表并返回清洗后的源码。
 
@@ -50,35 +72,57 @@ def scan_directives(
     prefix, directives = _load_config(rules_dir)
     _MACRO_RE = _build_macro_re(prefix)
 
-    macro_defs: dict[str, str] = {}
+    if _include_stack is None:
+        _include_stack = set()
+
+    # include 配置（从 ConfigRegistry 读）
+    inc_config = _get_include_config()
+
+    # 搜索路径：CLI 传入的 search_dirs 优先，合并配置中的 search_dirs
+    cli_dirs = search_dirs or []
+    cfg_dirs = inc_config.get("search_dirs", [])
+    src_dir = resolve_source_dir(source_path, rules_dir)
+    all_dirs = cli_dirs + cfg_dirs + [src_dir, rules_dir]
+
+    # Handler 共享上下文
+    ctx = {
+        "macro_defs": {},
+        "directive_lines": [],
+        "_inject_lines": [],
+        "_include_stack": _include_stack,
+        "source_dir": src_dir,
+        "inc_dirs": all_dirs,
+        "rules_dir": rules_dir,
+        "_include_config": inc_config,
+    }
+
     lines = source.split("\n")
-    directive_lines: list[str] = []
-    clean_lines: list[str] = []
 
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith(prefix):
-            # 指令行
-            directive_lines.append(stripped)
-            # 解析 `define
-            if stripped.startswith(f"{prefix}define "):
-                arg = stripped[len(prefix) + len("define "):]
-                name_end = arg.find(" ")
-                if name_end > 0:
-                    def_name = arg[:name_end]
-                    def_body = arg[name_end:].strip()
-                    macro_defs[def_name] = def_body
-                else:
-                    macro_defs[arg] = ""
-            elif stripped.startswith(f"{prefix}undef "):
-                arg = stripped[len(prefix) + len("undef "):].strip()
-                macro_defs.pop(arg, None)
-            # include, timescale 等非 define/undef 指令：仅保留 line
-        else:
-            clean_lines.append(line)
+        if not stripped.startswith(prefix):
+            ctx["_inject_lines"].append(line)
+            continue
+
+        # 指令行
+        ctx["directive_lines"].append(stripped)
+
+        # 从指令行提取 directive 关键字
+        # `define foo bar → "define"
+        after_prefix = stripped[len(prefix):]
+        space_pos = after_prefix.find(" ")
+        directive_name = after_prefix[:space_pos] if space_pos > 0 else after_prefix
+
+        handler = get_primitive(directive_name)
+        if handler:
+            handler(stripped, prefix, directive_name, ctx)
+
+    macro_defs = ctx["macro_defs"]
+    directive_lines = ctx["directive_lines"]
+    clean_source = "\n".join(ctx["_inject_lines"])
 
     if not macro_defs:
-        return {}, directive_lines, "\n".join(clean_lines)
+        return {}, directive_lines, clean_source
 
     # ---- 宏体全展开（为 reverser 提供已展开的值）----
     expand_cfg = _get_expand_config()
@@ -95,7 +139,7 @@ def scan_directives(
         if not changed:
             break
 
-    return macro_defs, directive_lines, "\n".join(clean_lines)
+    return macro_defs, directive_lines, clean_source
 
 
 def _find_sync_word(line: str, macro_col: int, prev_line: str = "") -> tuple[str, int]:

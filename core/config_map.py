@@ -91,6 +91,7 @@ RENDERER_STYLE        = "renderer.style"
 # 预处理
 PREPROCESSOR_MACRO_CONFIG = "preprocessor.macro_config"
 PREPROCESSOR_EXPAND       = "preprocessor.expand"
+PREPROCESSOR_DIRECTIVES   = "preprocessor.directives"
 
 # Linter
 

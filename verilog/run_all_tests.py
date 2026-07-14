@@ -37,7 +37,7 @@ def discover_tests(
     """Discover test files. Returns list of (name, full_path, group)."""
     tests_dir = os.path.join(base_dir, "tests")
     cases = []
-    groups = [group_filter] if group_filter else ["normal", "errors"]
+    groups = [group_filter] if group_filter else ["normal", "errors", "warning"]
     for group in groups:
         ref_dir = os.path.join(tests_dir, group, "ref")
         if not os.path.isdir(ref_dir):
@@ -76,6 +76,7 @@ def run_all(
     results = []
     total_ok = 0
     total_err = 0
+    total_warn = 0
     total_fail = 0
     t_start = time.time()
 
@@ -145,6 +146,8 @@ def run_all(
         # 判定测试结果
         if group == "errors":
             passed = not success
+        elif group == "warning":
+            passed = success
         else:
             passed = success and diff_ok
 
@@ -152,6 +155,9 @@ def run_all(
             if group == "errors":
                 total_err += 1
                 status = "ERR"
+            elif group == "warning":
+                total_warn += 1
+                status = "WARN"
             else:
                 total_ok += 1
                 status = "OK"
@@ -167,10 +173,10 @@ def run_all(
         print(f"  {name:25s} {status:5s} {err_msg[:40]}")
 
     elapsed = time.time() - t_start
-    total = total_ok + total_err + total_fail
+    total = total_ok + total_err + total_fail + total_warn
     print(f"\n{'=' * 40}")
     print(
-        f"\n  Total: {total}  OK: {total_ok}  ERR: {total_err}  FAIL: {total_fail}  Time: {elapsed:.1f}s"
+        f"\n  Total: {total}  OK: {total_ok}  ERR: {total_err}  WARN: {total_warn}  FAIL: {total_fail}  Time: {elapsed:.1f}s"
     )
 
     if json_out:
@@ -178,6 +184,7 @@ def run_all(
             "total": total,
             "ok": total_ok,
             "err": total_err,
+            "warn": total_warn,
             "fail": total_fail,
             "elapsed": round(elapsed, 2),
             "cases": [
@@ -205,8 +212,8 @@ if __name__ == "__main__":
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
     name_filter = pos_args[1] if len(pos_args) >= 2 else None
 
-    if group_filter and group_filter not in ("normal", "errors"):
-        print(f"[error] unknown group: {group_filter} (expected normal|errors)")
+    if group_filter and group_filter not in ("normal", "errors", "warning"):
+        print(f"[error] unknown group: {group_filter} (expected normal|errors|warning)")
         sys.exit(1)
     if name_filter:
         name_filter = f"ref_{name_filter}".replace(".v", "")

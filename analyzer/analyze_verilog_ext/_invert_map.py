@@ -1,18 +1,17 @@
-"""_invert_map.py — Verilog 方向反转映射
+"""_invert_map.py — 方向反转映射原语
 
 注册为 analyzer primitive，在 resolve_refs 之后运行，
 为 _ref_callbacks 中的 invert 回调附加方向反转映射表。
 
-作用：
-    将 _analyzer.toml 的 [direction] invert_map 注入到回调中，
-    使变换回调自描述（声明式），变换器无需再查配置即可执行反转。
+映射表由调用侧通过 TOML 配置传入（`analyzer.invert_map`），
+引擎本身不包含任何语言专用方向数据。
 
 回调输出格式：
     {
         "kind": "invert",
         "source_role": "master",
-        "resolved_ports": [...],        # scope 查到的原始端口
-        "invert_map": {                 # ← 由本原语附加
+        "resolved_ports": [...],
+        "invert_map": {                 # ← 由本原语从 config 读取
             "input": "output",
             "output": "input",
             ...
@@ -21,24 +20,15 @@
 """
 
 from core.define import Node
-from analyzer.primitives.registry import analyzer_primitive
-
-# Verilog 方向反转映射表（语言专用数据）
-_INVERT_MAP = {
-    "input": "output",
-    "output": "input",
-    "input_reg": "output_reg",
-    "output_reg": "input_reg",
-    "inout": "inout",
-}
+from analyzer.primitives.registry import register
 
 
-@analyzer_primitive("attach_invert_map")
+@register("attach_invert_map")
 def attach_invert_map(analyzer, node: Node, config: dict) -> None:
     """为 _ref_callbacks 中的 invert 回调附加 invert_map
 
-    在 TypeRole 的 analyzer 管线中，此原语应排在 resolve_refs 之后。
-    它扫描当前符号的 _ref_callbacks，为 kind="invert" 的条目附加 invert_map。
+    从 config 参数读取 invert_map，而非硬编码。
+    语言专用数据由调用侧的 TOML analyzer.invert_map 提供。
     """
     role_name = getattr(node, "role_name", None)
     if role_name is None:
@@ -59,7 +49,13 @@ def attach_invert_map(analyzer, node: Node, config: dict) -> None:
     if not callbacks:
         return
 
-    invert_map = _INVERT_MAP
+    invert_map = config.get("invert_map", {})
+
+    # 兼容嵌套写法：analyzer.attach_invert_map = { invert_map = {...} }
+    if not invert_map:
+        prim_cfg = config.get("attach_invert_map", {})
+        if isinstance(prim_cfg, dict):
+            invert_map = prim_cfg.get("invert_map", {})
 
     if not invert_map:
         return

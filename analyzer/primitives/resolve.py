@@ -22,7 +22,7 @@ Pipeline:
 
 from copy import deepcopy
 from core.define import Node
-from .registry import analyzer_primitive
+from .registry import register
 from ._utils import (
     resolve_name,
     find_symbol_in_scope,
@@ -37,7 +37,7 @@ from ._utils import (
 )
 
 
-@analyzer_primitive("resolve_refs")
+@register("resolve_refs")
 def resolve_refs(analyzer, node: Node, config: dict) -> None:
     """分析器原语：引用解析，产出变换回调
 

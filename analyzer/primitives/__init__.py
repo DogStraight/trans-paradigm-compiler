@@ -4,7 +4,7 @@
 由 SemanticAnalyzer 在 AST 遍历时根据 TOML 配置自动分派。
 
 文件结构:
-    registry.py      — 原语注册中心（register/get/@analyzer_primitive）
+    registry.py      — 原语注册中心（register/get/@register）
     scope.py         — scope_enter / scope_exit 原语
     symbol.py        — symbol_declare 原语 + capture 提取
     identifier.py    — identifier_resolve 原语
@@ -20,7 +20,7 @@
     6. scope_exit          — 退出作用域
 
 扩展方式:
-    自定义原语只需 @analyzer_primitive 注册，即可在 TOML 中引用。
+    自定义原语只需 @register 注册，即可在 TOML 中引用。
     无需修改 SemanticAnalyzer 代码。
 """
 
@@ -29,7 +29,8 @@ from .registry import (
     get_primitive,
     has_primitive,
     list_primitives,
-    analyzer_primitive,
+    register,
+    analyzer_primitive,  # 向下兼容
     AnalyzerPrimitive,
 )
 from .scope import scope_enter, scope_exit
@@ -48,13 +49,14 @@ from ._utils import (
 )
 
 # 确保原语在 import 时自动注册
-# (各原语模块的 @analyzer_primitive 装饰器在 import 时自动执行注册)
+# (各原语模块的 @register 装饰器在 import 时自动执行注册)
 
 __all__ = [
     "register_primitive",
     "get_primitive",
     "has_primitive",
     "list_primitives",
+    "register",
     "analyzer_primitive",
     "AnalyzerPrimitive",
     "register_capture_hook",

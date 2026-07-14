@@ -96,6 +96,9 @@ ports = ["$3", "$4.items[*].sub_node[1]"]
 symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
 primitives = ["resolve_refs", "attach_invert_map"]
 
+[TypeRole.analyzer.attach_invert_map]
+invert_map = { input = "output", output = "input", inout = "inout" }
+
 [TypeRole.analyzer.resolve_refs]
 source = "ports"
 target = "_ref_callbacks"

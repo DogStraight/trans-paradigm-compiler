@@ -12,10 +12,10 @@
 
 from core.define import Node
 from analyzer.scope import Scope
-from .registry import analyzer_primitive
+from .registry import register
 
 
-@analyzer_primitive("scope_enter")
+@register("scope_enter")
 def scope_enter(analyzer, node: Node, config: dict) -> None:
     """进入新作用域
 
@@ -50,7 +50,7 @@ def scope_enter(analyzer, node: Node, config: dict) -> None:
     analyzer._current_scope = new_scope
 
 
-@analyzer_primitive("scope_exit")
+@register("scope_exit")
 def scope_exit(analyzer, node: Node, config: dict) -> None:
     """退出当前作用域
 

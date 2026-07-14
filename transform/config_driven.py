@@ -3,14 +3,14 @@ config_driven.py — ConfigDrivenTransform 插件
 
 核心变换引擎，作为 TransformPlugin 注册到 AstTransformer 管线。
 所有变换操作（expand/replace/delete/扩展）都是注册的原语，
-由 registry.py 的 register_primitive 统一管理。
+由 primitives/registry.py 的 register_primitive 统一管理。
 """
 
 from typing import Any, Optional
 from core.define import Node
 from analyzer.scope import Scope
 from .pipeline import TransformPlugin
-from .registry import (
+from .primitives.registry import (
     TransformResult,
     SKIP,
     register_primitive,

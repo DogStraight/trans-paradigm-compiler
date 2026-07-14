@@ -11,7 +11,7 @@
 import importlib
 import pkgutil
 
-# 自动加载所有 _*.py 模块（通过 @analyzer_primitive 注册原语）
+# 自动加载所有 _*.py 模块（通过 @register 注册原语）
 for _imp, modname, _ in pkgutil.iter_modules(__path__):
     if modname.startswith("_") and modname != "__init__":
         importlib.import_module(f"{__name__}.{modname}")

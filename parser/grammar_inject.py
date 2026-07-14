@@ -3,6 +3,7 @@
 Supports target addressing syntax: RuleName.production[N] / RuleName.end_case
 """
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -75,8 +76,6 @@ def inject_replace_rule(
     rules: dict[str, Any],
     replace_config: dict[str, dict[str, str]],
 ) -> None:
-    import json as _json
-
     for rule_name, spec in replace_config.items():
         if rule_name not in rules:
             print(f"⚠️ [inject/replace] 规则 {rule_name} 不存在，跳过")
@@ -89,9 +88,9 @@ def inject_replace_rule(
         ec_prefix = "end_case = "
         if old_str.startswith(ec_prefix):
             current = list(getattr(rule, "end_case", []))
-            old_list = _json.loads(old_str[len(ec_prefix) :])
+            old_list = json.loads(old_str[len(ec_prefix) :])
             if current == old_list:
-                new_list = _json.loads(new_str[len(ec_prefix) :])
+                new_list = json.loads(new_str[len(ec_prefix) :])
                 object.__setattr__(rule, "end_case", tuple(new_list))
                 if _VERBOSE:
                     print(f"  [inject/replace] {rule_name}.end_case -> {new_list}")
