@@ -34,9 +34,10 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
 from typing import Any, Optional
 from core.define import Node
 from analyzer.scope import Scope
-from .pipeline import TransformPlugin
+from .pipeline import TransformPlugin, AstTransformer, register_plugin
 
 
+@register_plugin
 class SemanticMappingPlugin(TransformPlugin):
     """语义映射表构建 + 后处理管线插件
 
@@ -44,6 +45,8 @@ class SemanticMappingPlugin(TransformPlugin):
     """
 
     def __init__(self, raw_config: Optional[dict] = None):
+        if raw_config is None:
+            raw_config = AstTransformer._shared_ctx.get("mapping_cfg", {})
         """初始化
 
         Args:
@@ -263,17 +266,12 @@ class SemanticMappingPlugin(TransformPlugin):
         if root is None:
             return
 
-        # 从 mapping 条目中读取字段配置，驱动 _flatten_port 的提取路径
-        flatten_fields: dict = {}
-        for entry in self._mapping_entries:
-            if entry.get("table") == "type_ports_flat":
-                flatten_fields = entry.get("fields", {})
-                break
 
-        self._walk_refs(root, target, flatten_fields)
+        self._walk_refs(root, target)
 
-    def _walk_refs(self, scope: Scope, target: dict,
-                   flatten_fields: Optional[dict] = None) -> None:
+    def _walk_refs(
+        self, scope: Scope, target: dict, flatten_fields: Optional[dict] = None
+    ) -> None:
         """递归遍历 scope 树，消费 _ref_callbacks
 
         输入（来自分析器 resolve_refs 原语）：
@@ -281,8 +279,10 @@ class SemanticMappingPlugin(TransformPlugin):
                 {
                     "kind": "nested",           # 跨类型引用
                     "resolved_ports": [           # scope 查找结果（嵌套结构）
-                        { "direction": "input",
-                          "items": { "items": [{ "name": "tvalid" }, ...] } },
+                        {
+                            "direction": "input",
+                            "items": { "items": [{ "name": "tvalid" }, ...] }
+                        },
                         ...
                     ],
                     "prefix": "upstream",        # nested: 实例名前缀
@@ -298,10 +298,9 @@ class SemanticMappingPlugin(TransformPlugin):
 
         处理（仅机械操作，无 scope 查找）：
             1. _flatten_port 将嵌套 {direction, items: {items: [{name}]}}
-               展开为扁平 {direction, name}
+            展开为扁平 {direction, name}
             2. nested: _prefix_port_name 给 name 加前缀
-            3. invert: 用 cb 中的 invert_map 反转 direction（由语言扩展注入回调）
-            4. _merge_to_flat 合并到 type_ports_flat
+            3. _merge_to_flat 合并到 type_ports_flat
 
         输出：
             type_ports_flat["{scope.name}.{sym.name}"] 追加扁平端口条目
@@ -310,6 +309,9 @@ class SemanticMappingPlugin(TransformPlugin):
         下游消费：
             ConfigDrivenTransform expand 原语
             → lookup type_ports_flat → foreach → switch → emit AST 节点
+
+        注意：invert 方向反转已在分析器阶段由 attach_invert_map 原语完成，
+        变换器不再感知 direction/invert_map——只合并已处理好的端口数据。
         """
         for sym in scope.symbols.values():
             callbacks = sym.attrs.get("_ref_callbacks", [])
@@ -319,50 +321,25 @@ class SemanticMappingPlugin(TransformPlugin):
             key = f"{scope.name}.{sym.name}"
 
             for cb in callbacks:
-                kind = cb.get("kind", "")
                 resolved_ports = cb.get("resolved_ports", [])
                 if not resolved_ports:
                     continue
 
-                if kind == "nested":
-                    prefix = cb.get("prefix", "")
-                    expanded = []
-                    for p in resolved_ports:
-                        flat_list = self._flatten_port(p, flatten_fields)
-                        for item in flat_list:
-                            self._prefix_port_name(item, prefix)
-                            expanded.append(item)
-                    self._merge_to_flat(target, key, expanded)
-
-                elif kind == "invert":
-                    # 从回调中读取 invert_map（由 analyze_verilog_ext._invert_map 注入）
-                    invert_map = cb["invert_map"]
-                    expanded = []
-                    for p in resolved_ports:
-                        flat_list = self._flatten_port(p, flatten_fields)
-                        for item in flat_list:
-                            if "direction" in item:
-                                item["direction"] = invert_map.get(
-                                    item["direction"], item["direction"]
-                                )
-                            expanded.append(item)
-                    self._merge_to_flat(target, key, expanded)
+                # resolved_ports 已在分析器阶段拍平为 {direction, name} 格式
+                prefix = cb.get("prefix", "")
+                expanded = []
+                for p in resolved_ports:
+                    if prefix and isinstance(p, dict):
+                        p["name"] = f"{prefix}_{p['name']}" if p.get("name") else p.get("name", "")
+                    expanded.append(p)
+                self._merge_to_flat(target, key, expanded)
 
         for child in scope.children:
-            self._walk_refs(child, target, flatten_fields)
+            self._walk_refs(child, target)
 
     @staticmethod
     def _merge_to_flat(target: dict, key: str, ports: list[dict]) -> None:
-        """将展开后的扁平端口合并到 type_ports_flat 的指定 key 下
 
-        合并语义：追加而非覆盖。
-        同一 key 下已有条目（来自 [mapping.type_ports_flat] 的常规端口）不变，
-        新解析的端口追加到末尾。
-
-        最终 type_ports_flat 包含：
-            - 从原始 capture 提取的常规端口（含 exclude_keys 过滤）
-            - 从 _ref_callbacks 展开的嵌套/invert 端口（接在末尾）
-        """
         parts = key.split(".")
         parent = target
         for p in parts[:-1]:
@@ -373,55 +350,64 @@ class SemanticMappingPlugin(TransformPlugin):
         existing.extend(ports)
         parent[parts[-1]] = existing
 
-    @staticmethod
-    def _prefix_port_name(port: dict, prefix: str) -> None:
-        """为端口 name 添加前缀"""
-        if "name" in port and isinstance(port["name"], str):
-            port["name"] = f"{prefix}_{port['name']}"
-        if "items" in port and isinstance(port["items"], dict):
-            inner = port["items"].get("items", [])
-            if isinstance(inner, list):
-                for item in inner:
-                    SemanticMappingPlugin._prefix_port_name(item, prefix)
 
-    @staticmethod
-    def _flatten_port(port: dict, fields: Optional[dict] = None) -> list[dict]:
-        """将嵌套结构的端口展开为扁平 {direction, name} 格式
+# ── 模块级辅助函数（不依赖类上下文）────────────
 
-        fields 配置（来自 mapping 条目的字段声明）决定提取路径。
-        默认回退 items.items[*].name 兼容既有配置。
-        """
-        fields = fields or {}
-        dir_spec = fields.get("direction", "{$.direction}")
-        name_spec = fields.get("name", "items.items[*].name")
 
-        direction = ""
-        if dir_spec.startswith("{$.") and dir_spec.endswith("}"):
-            direction = port.get(dir_spec[3:-1], "")
+def _prefix_port_name(port: dict, prefix: str) -> None:
+    """为端口 name 添加前缀"""
+    if "name" in port and isinstance(port["name"], str):
+        port["name"] = f"{prefix}_{port['name']}"
+    if "items" in port and isinstance(port["items"], dict):
+        inner = port["items"].get("items", [])
+        if isinstance(inner, list):
+            for item in inner:
+                _prefix_port_name(item, prefix)
 
-        names: list = []
-        if "[*]" in name_spec:
-            val = port
-            for part in name_spec.replace("[*]", "").split("."):
-                part = part.strip()
-                if isinstance(val, dict):
-                    val = val.get(part, {})
-                elif isinstance(val, list):
-                    collected = []
-                    for v in val:
-                        if isinstance(v, dict):
-                            n = v.get(part, "")
-                            if n:
-                                collected.append(n)
-                        elif isinstance(v, str):
-                            collected.append(v)
-                    val = collected
-                else:
-                    val = {}
-            names = val if isinstance(val, list) else [val] if val else []
-        else:
-            names = [port.get(name_spec, "")]
 
-        if not names:
-            return [{"direction": direction, "name": port.get("name", "")}]
-        return [{"direction": direction, "name": n} if isinstance(n, str) else {"direction": direction, "name": ""} for n in names]
+def _flatten_port(port: dict, fields: dict | None = None) -> list[dict]:
+    """将嵌套结构的端口展开为扁平 {direction, name} 格式
+
+    fields 配置（来自 mapping 条目的字段声明）决定提取路径。
+    默认回退 items.items[*].name 兼容既有配置。
+    """
+    fields = fields or {}
+    dir_spec = fields.get("direction", "{$.direction}")
+    name_spec = fields.get("name", "items.items[*].name")
+
+    direction = ""
+    if dir_spec.startswith("{$.") and dir_spec.endswith("}"):
+        direction = port.get(dir_spec[3:-1], "")
+
+    names: list = []
+    if "[*]" in name_spec:
+        val = port
+        for part in name_spec.replace("[*]", "").split("."):
+            part = part.strip()
+            if isinstance(val, dict):
+                val = val.get(part, {})
+            elif isinstance(val, list):
+                collected = []
+                for v in val:
+                    if isinstance(v, dict):
+                        n = v.get(part, "")
+                        if n:
+                            collected.append(n)
+                    elif isinstance(v, str):
+                        collected.append(v)
+                val = collected
+            else:
+                val = {}
+        names = val if isinstance(val, list) else [val] if val else []
+    else:
+        names = [port.get(name_spec, "")]
+    if not names:
+        return [{"direction": direction, "name": port.get("name", "")}]
+    return [
+        (
+            {"direction": direction, "name": n}
+            if isinstance(n, str)
+            else {"direction": direction, "name": ""}
+        )
+        for n in names
+    ]

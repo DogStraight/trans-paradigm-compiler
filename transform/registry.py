@@ -6,8 +6,13 @@ registry.py — （旧位置，向下兼容）
 """
 
 from .primitives.registry import (
-    _Skip, SKIP, TransformResult, TransformContext,
+    _Skip,
+    SKIP,
+    TransformResult,
+    TransformContext,
     TransformPrimitive,
-    register_primitive, get_primitive, list_primitives,
+    register_primitive,
+    get_primitive,
+    list_primitives,
     register,
 )

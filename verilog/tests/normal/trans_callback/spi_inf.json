@@ -5,7 +5,7 @@
       "resolved_ports": [
         {
           "node_name": "AnsiInputDecl",
-          "direction": "input",
+          "direction": "output",
           "items": {
             "node_name": "DeclaratorList",
             "items": [
@@ -18,7 +18,7 @@
         },
         {
           "node_name": "AnsiOutputDecl",
-          "direction": "output",
+          "direction": "input",
           "items": {
             "node_name": "DeclaratorList",
             "items": [
@@ -37,14 +37,7 @@
             ]
           }
         }
-      ],
-      "invert_map": {
-        "input": "output",
-        "output": "input",
-        "input_reg": "output_reg",
-        "output_reg": "input_reg",
-        "inout": "inout"
-      }
+      ]
     }
   ]
 }

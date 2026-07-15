@@ -7,15 +7,20 @@ and optional semantic/transform/render stages.
 
 import sys
 import os
-import json
 import argparse
 from datetime import datetime
 from typing import Optional, Any, Dict, Tuple
+from core.define import Node
 
 # ── 词法 / 语法 / 配置 ──
 from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
-from core.define import ParseError, GrammarRulesRegister, DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR
+from core.define import (
+    ParseError,
+    GrammarRulesRegister,
+    DEFAULT_EXT_DIRS,
+    DEFAULT_RULES_DIR,
+)
 from core.config_registry import ConfigRegistry
 from core.utils import ensure_dir, save_json
 from parser.rule_selector import RuleSelector
@@ -24,12 +29,14 @@ from parser.rule_selector import RuleSelector
 from analyzer import AnalysisTraversal
 
 # ── Verilog 语言扩展（注入 primitive 原语 + 映射表配置）──
-from analyzer.analyze_verilog_ext import mapping_entries, resolve_entries, collect_callbacks
+from analyzer.analyze_verilog_ext import (
+    mapping_entries,
+    resolve_entries,
+    collect_callbacks,
+)
 
 # ── 变换器 ──
-from transform import AstTransformer
-from transform.config_driven import ConfigDrivenTransform
-from transform.semantic_mapping import SemanticMappingPlugin
+from transform import AstTransformer, collect_extra_asts
 from normalizer import normalize_ast
 
 # ── 渲染器 ──
@@ -118,6 +125,7 @@ def run_pipeline_on_source(
         "success": False,
         "output": "",
         "ast": None,
+        "extra_asts": [],
         "error": "",
         "parser": None,
     }
@@ -186,7 +194,9 @@ def run_pipeline_on_source(
     if rules_dir not in ctx:
 
         # 语法规则（含 EXT 注入）
-        rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_dirs)
+        rules = setup_grammar(
+            rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_dirs
+        )
         stmt_names = [
             n
             for n, r in rules.items()
@@ -238,7 +248,9 @@ def run_pipeline_on_source(
     lint_errors = linter.scan(source)
     if lint_errors:
         for err in lint_errors:
-            _log(f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}")
+            _log(
+                f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}"
+            )
         result["error"] = f"lint failed: {len(lint_errors)} error(s)"
         return result
 
@@ -323,13 +335,13 @@ def run_pipeline_on_source(
 
     # ---- Stage: AST transform ----
     if transform_enabled and analyzer is not None and scope is not None:
-        # 注册语义映射插件 + 配置驱动变换
+        # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
         mapping_cfg: dict = {}
         mapping_cfg.update(mapping_entries)
         mapping_cfg.update(resolve_entries)
+        AstTransformer.set_shared("rules", rules)
+        AstTransformer.set_shared("mapping_cfg", mapping_cfg)
         transformer = AstTransformer()
-        transformer.register(ConfigDrivenTransform(rules=rules))
-        transformer.register(SemanticMappingPlugin(mapping_cfg))
 
         # 一次 transform 完成：映射表构建 + 配置变换
         ast = transformer.transform(ast, scope)
@@ -352,6 +364,11 @@ def run_pipeline_on_source(
         result["success"] = True
         result["ast"] = ast
         return result
+
+    # ---- Stage: 收集虚拟逻辑分发（TransformPlugin 已将提取结果存入共享上下文）----
+    extra_asts: list[tuple[str, Node]] = collect_extra_asts()
+    if extra_asts:
+        _log(f"[remapper] extracted {len(extra_asts)} extra AST(s)")
 
     # ---- Stage: Render ----
     if renderer_enabled:
@@ -395,6 +412,14 @@ def run_pipeline_on_source(
         with open(gen_file, "w", encoding="utf-8") as f:
             f.write(header + content)
         _log(f"[output] {gen_file}")
+
+        # Render extra ASTs as separate files
+        for out_name, extra_root in extra_asts:
+            extra_content = renderer.render(extra_root)
+            extra_file = os.path.join(gen_dir, f"gen_{out_name}.v")
+            with open(extra_file, "w", encoding="utf-8") as f:
+                f.write(header + extra_content)
+            _log(f"[remapper] extra output: {extra_file}")
 
         result["output"] = content
         result["ast"] = ast

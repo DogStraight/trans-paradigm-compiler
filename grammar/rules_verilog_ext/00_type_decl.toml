@@ -1,16 +1,18 @@
-# ===== 类型声明：TypeDecl =====
-# type spi (parameter MODE = 0, parameter DATA_WIDTH = 8) {
-#     master : input miso, output clk, mosi, cs;
-#     slave  : invert master;
-#     fn read : { }
-# }
+# =============================================================================
+# TypeDecl — 类型声明
+#   type spi (parameter MODE = 0, DATA_WIDTH = 8) {
+#       master : input miso, output clk, mosi, cs;
+#       slave  : invert master;
+#   }
+#
+#   实例块 impl 见 10_impl_binding.toml
+# =============================================================================
 
-[TypeDecl]
+# ── 注入目标 ──
 [TypeDecl.inject]
-# TypeDecl 是顶层声明（与 ModuleDecl 同级），靠 statement_rule_names 自动发现，
-# 注入 ModuleItem 使其在模块体内也可用（嵌套类型场景）
 targets = ["@ModuleItem"]
 
+# ── 解析 ──
 [TypeDecl.parser]
 production = ["keyword.type", "@Identifier", "@TypeParamList?", "@TypeBody"]
 end_case = ["newline"]
@@ -20,18 +22,19 @@ type_name = "$2"
 params = "$3"
 body = "$4"
 
-# analyzer: 类型符号注册到父作用域 + 类型内部创建独立作用域
+# ── 语义分析 ──
 [TypeDecl.analyzer]
-symbol = { kind = "type", name_attr = "type_name" }
-scope = { kind = "type", name_attr = "type_name" }
+symbol     = { kind = "type", name_attr = "type_name" }
+scope      = { kind = "type", name_attr = "type_name" }
 
-# transform: 类型声明不会出现在输出中，被 SemanticAnalyzer 消费后移除
+# ── 变换 ──
 [TypeDecl.transform]
 kind = "delete"
 
 
-# ── 类型参数列表 type (parameter MODE = 0, ...) ──
-[TypeParamList]
+# ─────────────────────────────────────────────────────────────────────
+# TypeParamList — 类型参数列表  type (parameter MODE = 0, ...)
+# ─────────────────────────────────────────────────────────────────────
 [TypeParamList.parser]
 production = [
     "bracket.l_parentheses",
@@ -39,27 +42,23 @@ production = [
     "(symbol.base.comma,@TypeParamItem)*",
     "bracket.r_parentheses",
 ]
-
 [TypeParamList.parser.node]
 items = ["$2", "$3.items[*].sub_node[1]"]
 
 
-# ── type (parameter MODE = 0) 单个参数 ──
-[TypeParamItem]
+# ─────────────────────────────────────────────────────────────────────
+# TypeParamItem — 单个参数  parameter MODE = 0
+# ─────────────────────────────────────────────────────────────────────
 [TypeParamItem.parser]
-production = [
-    "keyword.parameter",
-    "@Identifier",
-    "symbol.base.equal",
-    "@PrimaryExpr",
-]
+production = ["keyword.parameter", "@Identifier", "symbol.base.equal", "@PrimaryExpr"]
 [TypeParamItem.parser.node]
-name = "$2"
+name    = "$2"
 default = "$4"
 
 
-# ── 类型体 { master : ...; fn read : { }; } ──
-[TypeBody]
+# ─────────────────────────────────────────────────────────────────────
+# TypeBody — 类型体  { master : ...; ... }
+# ─────────────────────────────────────────────────────────────────────
 [TypeBody.parser]
 production = [
     "bracket.l_curly_bracket",
@@ -70,17 +69,20 @@ production = [
 members = "$2"
 
 
-# ── 类型成员（role | invert | method）──
+# TypeMember — 类型成员（role | invert | impl）
 [TypeMember]
 inline = true
 [TypeMember.parser]
-production = ["@TypeRole | @InvertDecl | @TypeMethod"]
+production = ["@TypeRole | @InvertDecl | @TypeImplDecl"]
 [TypeMember.parser.node]
 child = "$1"
 
 
-# ── 角色 master : input miso, output clk, ...; ──
-[TypeRole]
+# =============================================================================
+# TypeRole — 角色声明  master : input miso, output clk, ...;
+# =============================================================================
+
+# ── 解析 ──
 [TypeRole.parser]
 production = [
     "@Identifier",
@@ -91,17 +93,15 @@ production = [
 ]
 [TypeRole.parser.node]
 role_name = "$1"
-ports = ["$3", "$4.items[*].sub_node[1]"]
+ports     = ["$3", "$4.items[*].sub_node[1]"]
+
+# ── 语义分析管线 ──
 [TypeRole.analyzer]
-symbol = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
-primitives = ["resolve_refs", "attach_invert_map"]
+symbol    = { kind = "role", name_attr = "role_name", capture = { ports = "ports" } }
+primitives = ["resolve_refs", "flatten_ports", "attach_invert_map"]
 
-[TypeRole.analyzer.attach_invert_map]
-invert_map = { input = "output", output = "input", inout = "inout" }
-
+# 1. resolve_refs — 引用解析（通用原语）
 [TypeRole.analyzer.resolve_refs]
-source = "ports"
-target = "_ref_callbacks"
 name_attr = "role_name"
 
 [[TypeRole.analyzer.resolve_refs.refs]]
@@ -109,7 +109,7 @@ marker = "type_spec"
 kind = "nested"
 scope_mode = "child"
 scope_kind = "type"
-key = "{type_spec.type_name}"
+key     = "{type_spec.type_name}"
 role_key = "{type_spec.role_name}"
 meta = { prefix = "instance_name" }
 
@@ -119,11 +119,22 @@ kind = "invert"
 scope_mode = "self"
 role_key = "{target_role}"
 
+# 2. flatten_ports — 端口拍平（语言扩展原语）
+[TypeRole.analyzer.flatten_ports]
+direction = "{$.direction}"
+name      = "items.items[*].name"
 
-# ── 角色端口　input miso | output clk | invert master ──
-# 复用核心规则的 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl
-# TypeInvertPort 用于角色体内的 invert 引用（不含分号）
-# TypeNestedPort 用于引用另一类型的角色端口（嵌套类型）
+# 3. attach_invert_map — 挂载反转映射（语言扩展原语）
+[TypeRole.analyzer.attach_invert_map]
+invert_map = { input = "output", output = "input", inout = "inout" }
+
+
+# =============================================================================
+# TypePortDecl — 角色端口：input miso | output clk | invert master
+#   复用核心规则的 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl
+#   TypeInvertPort 用于角色体内的 invert 引用（不含分号）
+#   TypeNestedPort 用于引用另一类型的角色端口（嵌套类型）
+# =============================================================================
 [TypePortDecl]
 inline = true
 [TypePortDecl.parser]
@@ -134,8 +145,10 @@ production = [
 child = "$1"
 
 
-# ── 嵌套类型引用 axis.master data（被 TypePortDecl 引用）──
-# 注意：不含 ; — 由外层 TypeRole 或调用者提供
+# ─────────────────────────────────────────────────────────────────────
+# TypeNestedPort — 嵌套类型引用  axis.master data
+#   注意：不含 ; — 由外层 TypeRole 提供
+# ─────────────────────────────────────────────────────────────────────
 [TypeNestedPort]
 [TypeNestedPort.parser]
 production = ["@TypedTypeSpec", "@Identifier"]
@@ -152,6 +165,32 @@ production = ["keyword.invert", "@Identifier"]
 target_role = "$2"
 
 
+# ─────────────────────────────────────────────────────────────────────
+# TypeImplDecl — 类型体 impl 定义
+#   impl [role_name] #(params) (.port1, .port2) { body }
+#   impl [master] { body }    ← 可省略 #(params) 和 (portlist)
+#   定义接口实例在类型中的行为，body 是 Verilog 过程语句。
+# ─────────────────────────────────────────────────────────────────────
+[TypeImplDecl]
+[TypeImplDecl.parser]
+production = [
+    "keyword.impl",
+    "bracket.l_square_bracket",
+    "@Identifier",
+    "bracket.r_square_bracket",
+    "@ParamOverride?",
+    "(bracket.l_parentheses,@NamedPortList?,bracket.r_parentheses)?",
+    "bracket.l_curly_bracket",
+    "@ProcStmt*",
+    "bracket.r_curly_bracket",
+]
+[TypeImplDecl.parser.node]
+role_name = "$3"
+params = "$5"
+ports = "$6.sub_node[1]"
+body = "$8"
+
+
 # ── 成员级 invert（含分号，被 TypeMember 引用）──
 # 注意与 TypeInvertPort 的区别：
 #   TypeInvertPort — 角色端口中的引用（不含分号，被 TypePortDecl 引用）
@@ -163,25 +202,4 @@ production = ["keyword.invert", "@Identifier", "symbol.base.semicolon"]
 target_role = "$2"
 
 
-# ── 方法声明 fn read : { ... } ──
-[TypeMethod]
-[TypeMethod.parser]
-production = [
-    "keyword.fn",
-    "@Identifier",
-    "symbol.base.colon",
-    "@TypeMethodBody",
-]
 
-[TypeMethod.parser.node]
-method_name = "$2"
-body = "$4"
-
-[TypeMethod.analyzer]
-symbol = { kind = "type_method", name_attr = "method_name" }
-
-
-# ── 方法体 { ... } ──
-[TypeMethodBody]
-[TypeMethodBody.parser]
-production = ["bracket.l_curly_bracket", "bracket.r_curly_bracket"]

@@ -1,22 +1,10 @@
 """_invert_map.py — 方向反转映射原语
 
 注册为 analyzer primitive，在 resolve_refs 之后运行，
-为 _ref_callbacks 中的 invert 回调附加方向反转映射表。
+就地反转 _ref_callbacks 中 invert 回调的 resolved_ports 方向。
 
-映射表由调用侧通过 TOML 配置传入（`analyzer.invert_map`），
-引擎本身不包含任何语言专用方向数据。
-
-回调输出格式：
-    {
-        "kind": "invert",
-        "source_role": "master",
-        "resolved_ports": [...],
-        "invert_map": {                 # ← 由本原语从 config 读取
-            "input": "output",
-            "output": "input",
-            ...
-        }
-    }
+反转由 TOML 配置传入（`analyzer.invert_map`），引擎本身不含语言专用数据。
+变换器不再感知 invert_map——它只看到已经反转好的扁平端口。
 """
 
 from core.define import Node
@@ -25,10 +13,11 @@ from analyzer.primitives.registry import register
 
 @register("attach_invert_map")
 def attach_invert_map(analyzer, node: Node, config: dict) -> None:
-    """为 _ref_callbacks 中的 invert 回调附加 invert_map
+    """为 _ref_callbacks 中的 invert 回调就地反转 resolved_ports
 
-    从 config 参数读取 invert_map，而非硬编码。
-    语言专用数据由调用侧的 TOML analyzer.invert_map 提供。
+    从 config 读取 invert_map，直接反转 resolved_ports 中的 direction 字段。
+    变换器不再感知 invert_map 的存在——它只看到已经反转好的端口数据。
+    语言专用数据由 TOML analyzer.invert_map 提供。
     """
     role_name = getattr(node, "role_name", None)
     if role_name is None:
@@ -60,12 +49,19 @@ def attach_invert_map(analyzer, node: Node, config: dict) -> None:
     if not invert_map:
         return
 
-    # 为 invert 回调附加 invert_map
+    # 就地反转 invert 回调的 resolved_ports
     modified = False
     for cb in callbacks:
-        if cb.get("kind") == "invert" and "invert_map" not in cb:
-            cb["invert_map"] = dict(invert_map)
-            modified = True
+        if cb.get("kind") != "invert":
+            continue
+        ports = cb.get("resolved_ports", [])
+        if not ports:
+            continue
+        for port in ports:
+            if "direction" in port:
+                original = port["direction"]
+                port["direction"] = invert_map.get(original, original)
+        modified = True
 
     if modified:
         sym.attrs["_ref_callbacks"] = callbacks

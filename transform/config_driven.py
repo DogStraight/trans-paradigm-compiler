@@ -9,7 +9,7 @@ config_driven.py — ConfigDrivenTransform 插件
 from typing import Any, Optional
 from core.define import Node
 from analyzer.scope import Scope
-from .pipeline import TransformPlugin
+from .pipeline import TransformPlugin, AstTransformer, register_plugin
 from .primitives.registry import (
     TransformResult,
     SKIP,
@@ -26,15 +26,13 @@ from .primitives.flow import foreach as _foreach
 from .primitives.node import emit as _emit
 
 
+@register_plugin
 class ConfigDrivenTransform(TransformPlugin):
     """配置驱动的 AST 变换插件
 
     用法:
+        AstTransformer.set_shared("rules", grammar_rules)
         transformer = AstTransformer()
-        transformer.register(ConfigDrivenTransform(
-            rules=grammar_rules,
-            ext_dirs=DEFAULT_EXT_DIRS,
-        ))
         ast = transformer.transform(ast, root_scope)
     """
 
@@ -44,6 +42,8 @@ class ConfigDrivenTransform(TransformPlugin):
         tables: Optional[dict] = None,
         extra: Optional[dict] = None,
     ):
+        if rules is None:
+            rules = AstTransformer._shared_ctx.get("rules", {})
         self._rules = rules
         self._extra = extra or {}
 
