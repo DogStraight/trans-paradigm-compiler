@@ -59,6 +59,16 @@ def setup_grammar(
         if os.path.isdir(ext_dir_full):
             ext_rules.update(register.rules_registration(ext_dir))
 
+    # 加载组件（含 grammar 文件 + Python handler）
+    try:
+        from core.component_loader import load_all_components, get_component_grammar_files
+        load_all_components()
+        for gf_path in get_component_grammar_files():
+            comp_rules = register.rules_registration_from_file(gf_path)
+            ext_rules.update(comp_rules)
+    except ImportError:
+        pass
+
     # Merge core and extension rules
     rules = core_rules.copy()
     rules.update(ext_rules)

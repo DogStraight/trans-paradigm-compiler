@@ -16,10 +16,10 @@
 from .pipeline import AstTransformer, TransformPlugin, mark_extra, collect_extra_asts
 
 # 确保注册了 @register_plugin 的模块被导入
-# 执行顺序：SemanticMappingPlugin → ImplWrapperPlugin → ConfigDrivenTransform
-# SMP 先运行以填充映射表，供 CDT 的 TypedPortDecl 展开消费
+# 执行顺序：SemanticMappingPlugin → ComponentSlotPlugin → ConfigDrivenTransform
+# SMP 先运行以填充映射表；组件槽位在 CDT 之前扫描 TypedPortDecl
+# 组件插件由 grammar/rules_verilog_ext/_components/*/ 下的 handler 注册
 from . import semantic_mapping
-from . import impl_wrapper
 from . import config_driven
 
 __all__ = [

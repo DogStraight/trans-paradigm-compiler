@@ -18,8 +18,6 @@ from parser import Parser, setup_grammar
 from core.define import (
     ParseError,
     GrammarRulesRegister,
-    DEFAULT_EXT_DIRS,
-    DEFAULT_RULES_DIR,
 )
 from core.config_registry import ConfigRegistry
 from core.utils import ensure_dir, save_json
@@ -28,11 +26,10 @@ from parser.rule_selector import RuleSelector
 # ── 分析器 ──
 from analyzer import AnalysisTraversal
 
-# ── Verilog 语言扩展（注入 primitive 原语 + 映射表配置）──
-from analyzer.analyze_verilog_ext import (
-    mapping_entries,
-    resolve_entries,
-    collect_callbacks,
+# ── 语言配置（由 typed_ports 组件提供）──
+from grammar.rules_verilog_ext._components.typed_ports._mapping import (
+    LANG, RULES_DIR, EXT_DIRS,
+    mapping_entries, resolve_entries, collect_callbacks,
 )
 
 # ── 变换器 ──
@@ -102,8 +99,8 @@ def run_pipeline_on_source(
     renderer_enabled: bool = True,
     stage: Optional[str] = None,
     no_lint: bool = False,
-    rules_dir: str = DEFAULT_RULES_DIR,
-    ext_dirs: list[str] | None = None,
+    rules_dir: str = RULES_DIR,
+    ext_dirs: list[str] | None = EXT_DIRS,
     include_dirs: list[str] | None = None,
 ) -> Dict[str, Any]:
     """
@@ -512,14 +509,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rules-dir",
         type=str,
-        default=DEFAULT_RULES_DIR,
+        default=RULES_DIR,
         help="Core grammar rules directory",
     )
     parser.add_argument(
         "--ext-dirs",
         type=str,
         nargs="*",
-        default=DEFAULT_EXT_DIRS,
+        default=EXT_DIRS,
         help="Extended grammar rules directories (can specify multiple)",
     )
 

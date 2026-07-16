@@ -2,7 +2,16 @@
 
 定义分析器符号 attrs → 变换器映射表的转换规则。
 消费方：SemanticMappingPlugin（transform 管线第一阶段）
+
+本文件是 typed_ports 组件的语言配置入口。
 """
+
+# ── 语言配置（由管线消费）──
+LANG = "verilog"
+RULES_DIR = "grammar/rules_verilog"
+EXT_DIRS = ["grammar/rules_verilog_ext"]
+INLINE_COMMENT_ENABLED = True
+EXPAND_MACROS_ENABLED = False
 
 # 端口表：从 role 符号的 attrs["ports"] 提取 direction + name
 _type_ports_flat = {

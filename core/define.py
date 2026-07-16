@@ -450,8 +450,8 @@ class GrammarRulesRegister:
             return self.rules
         rules_dict = FileManager.load_all_toml(rules_dir)
         if not rules_dict:
-            # 回退：单文件加载
-            rules_dict = FileManager.load_rules()
+            # 空目录不是错误（如 ext 目录迁移后），返回空
+            return self.rules
         # 解析 peek 引用（加载期，不影响运行期隔离）
         rules_dict = self._resolve_peek(rules_dict)
         for rule_name, rule_dict in rules_dict.items():
@@ -461,3 +461,17 @@ class GrammarRulesRegister:
             self.rules[rule_name] = rule
         self._loaded_dirs = cached | {rules_dir}
         return self.rules
+
+    def rules_registration_from_file(self, file_path: str) -> dict[str, GrammarRule]:
+        """从单个 TOML 文件加载规则。"""
+        import tomllib
+        with open(file_path, "rb") as f:
+            rules_dict = tomllib.load(f)
+        result = {}
+        for rule_name, rule_dict in rules_dict.items():
+            if rule_name == "file_rules":
+                continue
+            rule = GrammarRule(rule_name, **rule_dict)
+            self.rules[rule_name] = rule
+            result[rule_name] = rule
+        return result
