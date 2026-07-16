@@ -9,7 +9,7 @@ import sys
 import os
 import argparse
 from datetime import datetime
-from typing import Optional, Any, Dict, Tuple
+from typing import Any
 from core.define import Node
 
 # ── 预加载组件（确保组件插件先于引擎插件注册）──
@@ -81,7 +81,7 @@ sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
 
 # ---------------------------- Helpers ----------------------------
-def find_test_file(test_name: str, hint: str = "") -> Tuple[str, str, str]:
+def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
     """Find test file in tests/ directory. Returns (full_path, group, stem)."""
     src_dir = os.path.dirname(os.path.abspath(__file__))
     tests_dir = os.path.join(src_dir, "tests")
@@ -98,8 +98,8 @@ def find_test_file(test_name: str, hint: str = "") -> Tuple[str, str, str]:
 # ---------------------------- Core Pipeline ----------------------------
 def run_pipeline_on_source(
     source: str,
-    input_path: Optional[str] = None,
-    out_dir: Optional[str] = None,
+    input_path: str | None = None,
+    out_dir: str | None = None,
     expand_macros: bool = False,
     inline_comments: bool = False,
     debug: bool = False,
@@ -107,12 +107,12 @@ def run_pipeline_on_source(
     analyzer_enabled: bool = True,
     transform_enabled: bool = True,
     renderer_enabled: bool = True,
-    stage: Optional[str] = None,
+    stage: str | None = None,
     no_lint: bool = False,
     rules_dir: str = RULES_DIR,
     ext_dirs: list[str] | None = EXT_DIRS,
     include_dirs: list[str] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
 

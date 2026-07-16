@@ -1,5 +1,5 @@
 """ref 原语 — 子节点引用"""
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from ..doc import Doc, Text, Concat, Empty
 from .registry import register
@@ -7,7 +7,7 @@ from .registry import register
 
 @register("ref")
 def eval_ref(expr: dict, node: Node, indent: int,
-             parent_layout: Optional[dict], renderer: Any) -> Optional[Doc]:
+             parent_layout: dict | None, renderer: Any) -> Doc | None:
     child = getattr(node, expr["ref"], None)
 
     parts: List[Doc] = []

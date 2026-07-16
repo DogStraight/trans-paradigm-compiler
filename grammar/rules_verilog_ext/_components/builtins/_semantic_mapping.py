@@ -31,7 +31,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
     3. ConfigDrivenTransform.process()          — 使用映射表展开类型端口
 """
 
-from typing import Any, Optional
+from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
 from transform.pipeline import TransformPlugin, AstTransformer, register_plugin
@@ -44,7 +44,7 @@ class SemanticMappingPlugin(TransformPlugin):
     由 _analyzer.toml 的 [mapping.*] 和 [resolve.*] 联合驱动。
     """
 
-    def __init__(self, raw_config: Optional[dict] = None):
+    def __init__(self, raw_config: dict | None = None):
         if raw_config is None:
             raw_config = AstTransformer._shared_ctx.get("mapping_cfg", {})
         """初始化
@@ -64,7 +64,7 @@ class SemanticMappingPlugin(TransformPlugin):
             if isinstance(v, dict) and v.get("kind") == "apply_refs"
         ]
         self._tables: dict[str, Any] = {}
-        self._root_scope: Optional[Scope] = None
+        self._root_scope: Scope | None = None
 
     @property
     def tables(self) -> dict[str, Any]:
@@ -270,7 +270,7 @@ class SemanticMappingPlugin(TransformPlugin):
         self._walk_refs(root, target)
 
     def _walk_refs(
-        self, scope: Scope, target: dict, flatten_fields: Optional[dict] = None
+        self, scope: Scope, target: dict, flatten_fields: dict | None = None
     ) -> None:
         """递归遍历 scope 树，消费 _ref_callbacks
 

@@ -6,7 +6,7 @@ registry.py — Transform 原语注册中心
 """
 
 from __future__ import annotations
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING
 from core.define import Node
 from analyzer.scope import Scope
 
@@ -59,7 +59,7 @@ def register_primitive(name: str, fn: TransformPrimitive) -> None:
     _registry[name] = fn
 
 
-def get_primitive(name: str) -> Optional[TransformPrimitive]:
+def get_primitive(name: str) -> TransformPrimitive | None:
     return _registry.get(name)
 
 

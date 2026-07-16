@@ -24,7 +24,7 @@ class CommentRule:
 
 class CommentFSM:
     @staticmethod
-    def build_rules(token_define: dict) -> List[CommentRule]:
+    def build_rules(token_define: dict) -> list[CommentRule]:
         """从配置构建注释规则列表"""
         pairs = token_define.get("comment", {}).get("pairs", [])
         rules = []
@@ -42,7 +42,7 @@ class CommentFSM:
         return rules
 
     @staticmethod
-    def get_start_patterns(token_define: dict) -> List[str]:
+    def get_start_patterns(token_define: dict) -> list[str]:
         """获取所有注释起始标记，用于 lexer 预判断"""
         rules = CommentFSM.build_rules(token_define)
         return [r.start for r in rules]
@@ -50,7 +50,7 @@ class CommentFSM:
     @staticmethod
     def run(
         text: str, start: int, token_define: dict
-    ) -> Optional[Tuple[str, int, str]]:
+    ) -> tuple[str, int, str] | None:
         """从 start 位置尝试匹配任意注释类型
 
         Returns:

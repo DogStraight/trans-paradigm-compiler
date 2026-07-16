@@ -1,6 +1,6 @@
 """join 原语 — 列表连接"""
 
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from ..doc import Doc, Empty, Text, Line as SoftLine, Break, Concat, Nest, group
 from .registry import register
@@ -8,8 +8,8 @@ from .registry import register
 
 @register("join")
 def eval_join(
-    expr: dict, node: Node, indent: int, parent_layout: Optional[dict], renderer: Any
-) -> Optional[Doc]:
+    expr: dict, node: Node, indent: int, parent_layout: dict | None, renderer: Any
+) -> Doc | None:
     sep_text = expr["join"].rstrip()
     nest_level = expr.get("nest", 0)
     first_soft = expr.get("first_soft", False)
@@ -22,7 +22,7 @@ def eval_join(
     no_sep = not expr["join"]
 
     items = renderer._resolve_items(node, expr.get("items"))
-    rendered: List[Doc] = []
+    rendered: list[Doc] = []
 
     for item in items:
         if isinstance(item, Node):
@@ -36,7 +36,7 @@ def eval_join(
     if not rendered:
         return None
 
-    result: List[Doc] = []
+    result: list[Doc] = []
     if prefix:
         result.append(Text(prefix))
 

@@ -5,7 +5,7 @@ replace 替换父节点中的子节点
 delete  删除节点（replace 的特化）
 """
 
-from typing import Any, Optional
+from typing import Any
 from core.define import Node
 from .template import resolve_attrs
 

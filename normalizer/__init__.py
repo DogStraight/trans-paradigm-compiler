@@ -50,7 +50,7 @@ BODY_FIELD = "body"
 
 def normalize_ast(
     value: Any,
-    layouts: Optional[dict] = None,
+    layouts: dict | None = None,
 ) -> Any:
     """
     递归规范化 AST。

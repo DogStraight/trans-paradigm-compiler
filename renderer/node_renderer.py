@@ -4,7 +4,7 @@ node_renderer.py — AST 节点级渲染逻辑
 将单个 AST 节点渲染为 Doc IR，处理 head/body/tail 三段式布局。
 """
 
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from .doc import Doc, Empty, Text, Break, Concat, Nest
 from .primitives import eval_expr
@@ -160,7 +160,7 @@ def render_body(
 
     if items_list:
         # 具名属性列表：按顺序从 node 提取子节点
-        children: List[Node] = []
+        children: list[Node] = []
         for attr_name in items_list:
             val = getattr(node, attr_name, None)
             if val is None:

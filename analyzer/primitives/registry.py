@@ -8,7 +8,7 @@
 按 TOML 配置 [RuleName.analyzer] 的声明顺序依次执行。
 """
 
-from typing import Callable, Optional, Any
+from typing import Any, Callable
 from core.define import Node
 
 
@@ -41,7 +41,7 @@ def register_primitive(name: str, fn: AnalyzerPrimitive) -> None:
     _primitives[name] = fn
 
 
-def get_primitive(name: str) -> Optional[AnalyzerPrimitive]:
+def get_primitive(name: str) -> AnalyzerPrimitive | None:
     """按名称获取已注册的原语"""
     return _primitives.get(name)
 

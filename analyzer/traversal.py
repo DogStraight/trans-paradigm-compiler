@@ -17,7 +17,7 @@
     可扩展 — 语言专用原语通过外部模块注入
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Any
 from core.define import Node
 from .scope import Scope, Symbol
 from .context import AnalysisContext
@@ -34,12 +34,12 @@ class AnalysisTraversal:
     依次执行注册的分析器原语。
     """
 
-    def __init__(self, grammar_rules: Dict[str, Any]):
+    def __init__(self, grammar_rules: dict[str, Any]):
         self._rules = grammar_rules
         self._primitive_order = self._load_primitive_order()
-        self._root_scope: Optional[Scope] = None
-        self._current_scope: Optional[Scope] = None
-        self._all_symbols: List[Symbol] = []
+        self._root_scope: Scope | None = None
+        self._current_scope: Scope | None = None
+        self._all_symbols: list[Symbol] = []
         self._context = AnalysisContext()
         self._scope_name_node_ids: set[int] = set()
 
@@ -74,15 +74,15 @@ class AnalysisTraversal:
         return len(self._context.diagnostics) > 0
 
     @property
-    def root_scope(self) -> Optional[Scope]:
+    def root_scope(self) -> Scope | None:
         return self._root_scope
 
     @property
-    def all_symbols(self) -> List[Symbol]:
+    def all_symbols(self) -> list[Symbol]:
         return self._all_symbols
 
     @property
-    def diagnostics(self) -> List[Diagnostic]:
+    def diagnostics(self) -> list[Diagnostic]:
         return self._context.diagnostics
 
     # ---- 递归遍历核心 ----

@@ -5,7 +5,7 @@
 所有测试通过。
 """
 
-from typing import Dict, Tuple, Set, Callable, Optional
+from typing import Callable
 
 # ============================================================================
 # 通用 FSM 引擎
@@ -17,15 +17,15 @@ class GenericFSM:
 
     def __init__(
         self,
-        transitions: Dict[Tuple[int, str], int],
-        category_func: Callable[[str], Optional[str]],
-        accepting_states: Set[int],
+        transitions: dict[tuple[int, str], int],
+        category_func: Callable[[str], str | None],
+        accepting_states: set[int],
     ):
         self.transitions = transitions
         self.category_func = category_func
         self.accepting = accepting_states
 
-    def next_state(self, state: int, ch: str) -> Optional[int]:
+    def next_state(self, state: int, ch: str) -> int | None:
         cat = self.category_func(ch)
         if cat is None:
             return None
@@ -115,7 +115,7 @@ class NumberFSM:
     }
 
     @staticmethod
-    def _char_category(ch: str) -> Optional[str]:
+    def _char_category(ch: str) -> str | None:
         return NumberFSM._CHAR_CATEGORY.get(ch)
 
     # 转移表
@@ -209,7 +209,7 @@ class NumberFSM:
     _FSM = GenericFSM(_TRANSITIONS, _char_category, _ACCEPTING)
 
     @classmethod
-    def run(cls, text: str, start_pos: int) -> Tuple[str, int]:
+    def run(cls, text: str, start_pos: int) -> tuple[str, int]:
         """从 start_pos 开始解析数字字面量，返回 (token, end_pos)"""
         if start_pos >= len(text):
             return "", start_pos
@@ -258,7 +258,7 @@ class NumberFSM:
 
     # 数值范围检测（Verilog 位宽）
     @staticmethod
-    def verify_verilog_range(token: str) -> Tuple[bool, Optional[str]]:
+    def verify_verilog_range(token: str) -> tuple[bool, str | None]:
         """返回 (是否合法, 错误信息或None)"""
         import re
 

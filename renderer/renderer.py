@@ -15,7 +15,7 @@ AST 规范化层在渲染前将所有 parser 内部构造（keyword/symbol/optio
 - doc.py: Doc IR 类型 + layout 算法
 """
 
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from normalizer import normalize_ast
 from .doc import Doc, layout
@@ -90,18 +90,18 @@ class Renderer:
         self,
         node: Node,
         indent: int,
-        body_cfg: Optional[dict] = None,
-        parent_layout: Optional[dict] = None,
-    ) -> List[Doc]:
+        body_cfg: dict | None = None,
+        parent_layout: dict | None = None,
+    ) -> list[Doc]:
         return render_body(node, indent, body_cfg, parent_layout, self)
 
-    def _resolve_items(self, node: Node, items_spec: Optional[str]) -> List[Any]:
+    def _resolve_items(self, node: Node, items_spec: str | None) -> list[Any]:
         return resolve_items(node, items_spec, self)
 
     # ---------------------------------------------------------------
     # DSL 求值（委托到 primitives）
     # ---------------------------------------------------------------
     def _eval(
-        self, expr: Any, node: Node, indent: int, parent_layout: Optional[dict] = None
-    ) -> Optional[Doc]:
+        self, expr: Any, node: Node, indent: int, parent_layout: dict | None = None
+    ) -> Doc | None:
         return eval_expr(expr, node, indent, parent_layout, self)

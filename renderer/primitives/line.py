@@ -1,5 +1,5 @@
 """line 原语 — 行布局"""
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from ..doc import Doc, Empty, Line as SoftLine, Break, Concat, Nest, group
 from .registry import register
@@ -7,9 +7,9 @@ from .registry import register
 
 @register("line")
 def eval_line(expr: dict, node: Node, indent: int,
-              parent_layout: Optional[dict], renderer: Any) -> Optional[Doc]:
+              parent_layout: dict | None, renderer: Any) -> Doc | None:
     nest_level = expr.get("nest", 0)
-    parts: List[Doc] = []
+    parts: list[Doc] = []
     pending_nest = 0
     has_soft = False
 

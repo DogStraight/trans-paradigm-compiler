@@ -4,7 +4,7 @@
 注册到 AstTransformer 管线。
 """
 
-from typing import Any, Optional
+from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
 from transform.pipeline import TransformPlugin, register_plugin
@@ -38,7 +38,7 @@ class ComponentSlotPlugin(TransformPlugin):
     """
 
     def __init__(self):
-        self._root_scope: Optional[Scope] = None
+        self._root_scope: Scope | None = None
         self._type_map: dict[str, str] = {}
         self._stats = {"slots_called": 0}
 
@@ -104,7 +104,7 @@ class ComponentSlotPlugin(TransformPlugin):
         root.sub_node = remaining
         return root
 
-    def _find_type_impl(self, td: Node) -> Optional[Node]:
+    def _find_type_impl(self, td: Node) -> Node | None:
         body = getattr(td, "body", None)
         if body is None:
             return None

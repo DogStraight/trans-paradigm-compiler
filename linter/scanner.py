@@ -7,7 +7,7 @@ scanner.py — Linter 扫描核心
 - 输出 LSP 兼容的诊断信息
 """
 
-from typing import List
+
 
 from core.config_registry import ConfigRegistry
 from lexer import Lexer
@@ -89,7 +89,7 @@ class LinterScanner:
     def _scan_block(
         self,
         context: ParseContext,
-        errors: List[LintDiagnostic],
+        errors: list[LintDiagnostic],
         end_token: str = "",
     ) -> None:
         """分层切片扫描。

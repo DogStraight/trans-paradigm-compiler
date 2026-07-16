@@ -19,7 +19,7 @@ import os
 import json
 import time
 import io
-from typing import List, Tuple, Dict, Any
+from typing import Any
 from core.define import DEFAULT_EXT_DIRS
 
 # Force stdout to UTF-8
@@ -33,7 +33,7 @@ if project_root not in sys.path:
 
 def discover_tests(
     base_dir: str, group_filter: str | None = None, name_filter: str | None = None
-) -> List[Tuple[str, str, str]]:
+) -> list[tuple[str, str, str]]:
     """Discover test files. Returns list of (name, full_path, group)."""
     tests_dir = os.path.join(base_dir, "tests")
     cases = []
@@ -93,7 +93,7 @@ def run_all(
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
         try:
-            result: Dict[str, Any] = run_pipeline_on_source(
+            result: dict[str, Any] = run_pipeline_on_source(
                 source=source,
                 input_path=path,
                 out_dir=out_dir,

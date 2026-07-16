@@ -8,7 +8,7 @@
     原语签名统一为 prim(analyzer, node, context, config)。
 """
 
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from .scope import Scope
 from .diagnostic import Diagnostic
@@ -28,16 +28,16 @@ class AnalysisContext:
 
     def __init__(
         self,
-        node: Optional[Node] = None,
-        scope: Optional[Scope] = None,
-        root_scope: Optional[Scope] = None,
-        config: Optional[dict] = None,
+        node: Node | None = None,
+        scope: Scope | None = None,
+        root_scope: Scope | None = None,
+        config: dict | None = None,
     ):
         self.node = node
         self.scope = scope
         self.root_scope = root_scope
         self.config = config or {}
-        self.diagnostics: List[Diagnostic] = []
+        self.diagnostics: list[Diagnostic] = []
         self.extra: dict[str, Any] = {}
 
     def report(self, message: str, code: str = "", level: str = "error") -> None:

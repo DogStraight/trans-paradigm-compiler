@@ -3,7 +3,7 @@
 Uses sync-word restoration (pure-text, no token dependency).
 """
 
-from typing import Optional
+
 
 
 def _restore_lines(

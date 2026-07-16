@@ -1,6 +1,5 @@
 """Scope (scope chain) and Symbol (declared identifier) types."""
 
-from typing import Optional, Dict, List
 from core.define import Node
 
 
@@ -34,7 +33,7 @@ class Symbol:
         kind: str,
         decl_node: Node,
         scope: "Scope",
-        attrs: Optional[dict] = None,
+        attrs: dict | None = None,
     ):
         self.name = name
         self.kind = kind
@@ -61,20 +60,20 @@ class Scope:
         self,
         name: str,
         kind: str = "block",
-        parent: Optional["Scope"] = None,
+        parent: "Scope | None" = None,
     ):
         self.name = name
         self.kind = kind 
         self.parent = parent
-        self.symbols: Dict[str, Symbol] = {}
-        self.children: List["Scope"] = []
+        self.symbols: dict[str, Symbol] = {}
+        self.children: list["Scope"] = []
 
     def declare(
         self,
         name: str,
         kind: str,
         decl_node: Node,
-        attrs: Optional[dict] = None,
+        attrs: dict | None = None,
     ) -> Symbol:
         """在当前作用域声明一个符号"""
         sym = Symbol(
@@ -87,7 +86,7 @@ class Scope:
         self.symbols[name] = sym
         return sym
 
-    def resolve(self, name: str) -> Optional[Symbol]:
+    def resolve(self, name: str) -> Symbol | None:
         """沿作用域链查找符号"""
         if name in self.symbols:
             return self.symbols[name]
@@ -95,7 +94,7 @@ class Scope:
             return self.parent.resolve(name)
         return None
 
-    def find_child_scope(self, name: str, kind: str | None = None) -> Optional["Scope"]:
+    def find_child_scope(self, name: str, kind: str | None = None) -> "Scope | None":
         """按名称（和可选种类）递归查找子作用域（DFS）
 
         Args:

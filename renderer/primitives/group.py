@@ -1,6 +1,6 @@
 """group 原语 — flat/broken 二象性"""
 
-from typing import Any, Optional, List
+from typing import Any
 from core.define import Node
 from ..doc import Doc, Empty, Concat, group
 from .registry import register

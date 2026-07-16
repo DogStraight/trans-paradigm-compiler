@@ -1,7 +1,7 @@
 """typed_ports 组件 — 变换槽位。"""
 
 import hashlib
-from typing import Optional
+
 
 from core.component_loader import register_transform_slot
 from core.define import Node
@@ -15,11 +15,11 @@ def delete_type_decl(node: Node, ctx) -> None:
 
 
 @register_transform_slot("build_wrapper")
-def build_wrapper(node: Node, ctx) -> Optional[Node]:
+def build_wrapper(node: Node, ctx) -> Node | None:
     """从 TypeDecl + TypeImplDecl 构建包装模块。"""
     td = ctx.get("type_decl")
     impl_block = ctx.get("impl_block")
-    root_scope: Optional[Scope] = ctx.get("root_scope")
+    root_scope: Scope | None = ctx.get("root_scope")
     if not td or not impl_block or not root_scope:
         return None
     type_name = _text(getattr(td, "type_name", None))
@@ -74,7 +74,7 @@ def build_wrapper(node: Node, ctx) -> Optional[Node]:
 
 
 @register_transform_slot("expand_typed_port")
-def expand_typed_port(node: Node, ctx) -> Optional[Node]:
+def expand_typed_port(node: Node, ctx) -> Node | None:
     """TypedPortDecl 展开由 ConfigDrivenTransform 的 expand 原语处理。"""
     return node
 
@@ -172,7 +172,7 @@ def _first_role_name(root_scope, type_name: str) -> str:
     return ""
 
 
-def _make_param_list(type_params) -> Optional[Node]:
+def _make_param_list(type_params) -> Node | None:
     items = getattr(type_params, "items", []) or getattr(type_params, "sub_node", [])
     if not items:
         return None
@@ -207,7 +207,7 @@ def _port_name(pn) -> str:
     return ""
 
 
-def _port_decl(direction: str, name: str) -> Optional[Node]:
+def _port_decl(direction: str, name: str) -> Node | None:
     if not name:
         return None
     cls = "AnsiInputDecl" if direction == "input" else "AnsiOutputDecl"

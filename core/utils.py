@@ -2,7 +2,7 @@
 
 import os
 import json
-from typing import Any, Optional, Callable
+from typing import Any, Callable
 
 
 def ensure_dir(path: str) -> None:
@@ -11,7 +11,7 @@ def ensure_dir(path: str) -> None:
 
 
 def save_json(
-    data: Any, path: str, label: str = "", log_fn: Optional[Callable] = None
+    data: Any, path: str, label: str = "", log_fn: Callable | None = None
 ) -> None:
     """将 data 写入 JSON 文件。"""
     with open(path, "w", encoding="utf-8") as f:

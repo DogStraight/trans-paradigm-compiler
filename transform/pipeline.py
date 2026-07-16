@@ -10,7 +10,7 @@ pipeline.py — AstTransformer + TransformPlugin 基类 + 自动注册
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, List, Optional
+from typing import Any, ClassVar
 from core.define import Node
 from analyzer.scope import Scope
 
@@ -34,7 +34,7 @@ def register_plugin(cls: type["TransformPlugin"]) -> type["TransformPlugin"]:
 class TransformPlugin(ABC):
     """AST 变换插件基类"""
 
-    _transformer: Optional["AstTransformer"] = None
+    _transformer: "AstTransformer | None" = None
 
     @abstractmethod
     def process(self, ast: Node, root_scope: Scope) -> Node: ...
@@ -50,7 +50,7 @@ class AstTransformer:
 
     _shared_ctx: ClassVar[dict[str, Any]] = {}
 
-    def __init__(self, plugins: Optional[List[TransformPlugin]] = None):
+    def __init__(self, plugins: list[TransformPlugin] | None = None):
         if plugins is not None:
             self._plugins = list(plugins)
         else:
@@ -71,7 +71,7 @@ class AstTransformer:
         self._plugins.append(plugin)
 
     @property
-    def plugins(self) -> List[TransformPlugin]:
+    def plugins(self) -> list[TransformPlugin]:
         return list(self._plugins)
 
     def transform(self, ast: Node, root_scope: Scope) -> Node:

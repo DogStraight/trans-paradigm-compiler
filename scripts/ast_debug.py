@@ -12,7 +12,7 @@ AST 调试工具 — 集成到管线的可选调试模块
 
 import os
 import sys
-from typing import Optional
+
 
 
 # ---------------------------------------------------------------

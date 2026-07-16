@@ -5,7 +5,7 @@ primitives/__init__.py — DSL 原语求值器
 每个原语对应一个文件，通过 @register() 装饰器自动注册到调度中心。
 """
 
-from typing import Any, Optional
+from typing import Any
 from core.define import Node
 from ..doc import Doc, Text
 
@@ -28,9 +28,9 @@ def eval_expr(
     expr: Any,
     node: Node,
     indent: int,
-    parent_layout: Optional[dict],
+    parent_layout: dict | None,
     renderer: Any,  # Renderer 实例，用于回调 _render_inline/_render_body 等
-) -> Optional[Doc]:
+) -> Doc | None:
     """将 TOML 布局表达式求值为 Doc
 
     Args:

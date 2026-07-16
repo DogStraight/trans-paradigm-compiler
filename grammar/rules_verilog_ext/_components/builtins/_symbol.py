@@ -19,7 +19,7 @@ capture 配置:
     例如: capture = { ports = "ports" } → 将 node.ports 内容存入 sym.attrs["ports"]
 """
 
-from typing import Any, Optional, Callable
+from typing import Any, Callable
 from core.define import Node
 from analyzer.primitives.registry import register
 
@@ -177,7 +177,7 @@ def _extract_names(analyzer, node: Node, name_attr: str) -> list[str]:
     return names
 
 
-def _resolve_name_value(val: Any) -> Optional[str]:
+def _resolve_name_value(val: Any) -> str | None:
     """将值解析为符号名字符串"""
     if val is None:
         return None

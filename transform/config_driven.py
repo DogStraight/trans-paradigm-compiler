@@ -6,7 +6,7 @@ config_driven.py — ConfigDrivenTransform 插件
 由 primitives/registry.py 的 register_primitive 统一管理。
 """
 
-from typing import Any, Optional
+from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
 from .pipeline import TransformPlugin, AstTransformer, register_plugin
@@ -39,8 +39,8 @@ class ConfigDrivenTransform(TransformPlugin):
     def __init__(
         self,
         rules: dict[str, Any] | None = None,
-        tables: Optional[dict] = None,
-        extra: Optional[dict] = None,
+        tables: dict | None = None,
+        extra: dict | None = None,
     ):
         if rules is None:
             rules = AstTransformer._shared_ctx.get("rules", {})
@@ -98,8 +98,8 @@ class ConfigDrivenTransform(TransformPlugin):
         self,
         node: Any,
         root_scope: Scope,
-        parent: Optional[Node],
-        parent_attr: Optional[str],
+        parent: Node | None,
+        parent_attr: str | None,
     ) -> TransformResult:
         """递归遍历并变换 AST"""
         if isinstance(node, list):
@@ -117,8 +117,8 @@ class ConfigDrivenTransform(TransformPlugin):
         self,
         items: list,
         root_scope: Scope,
-        parent: Optional[Node],
-        parent_attr: Optional[str],
+        parent: Node | None,
+        parent_attr: str | None,
     ) -> list:
         """遍历列表，扁平化处理变换结果"""
         result: list = []
@@ -173,8 +173,8 @@ class ConfigDrivenTransform(TransformPlugin):
         self,
         node: Node,
         root_scope: Scope,
-        parent: Optional[Node],
-        parent_attr: Optional[str],
+        parent: Node | None,
+        parent_attr: str | None,
     ) -> TransformResult:
         """根据 transform 配置调度变换"""
         config = self._configs.get(node.node_name)

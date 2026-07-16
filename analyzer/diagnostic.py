@@ -3,7 +3,6 @@
 与 LSP Diagnostic 格式兼容，支持错误级别、错误码、位置信息。
 """
 
-from typing import Optional
 from core.define import Node
 
 
@@ -22,7 +21,7 @@ class Diagnostic:
         message: str,
         code: str = "",
         level: str = "error",
-        node: Optional[Node] = None,
+        node: Node | None = None,
     ):
         self.message = message
         self.code = code

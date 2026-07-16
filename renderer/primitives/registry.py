@@ -5,11 +5,11 @@ registry.py — DSL 原语动态注册中心
 无需手动修改 __init__.py 的 dispatch 列表。
 """
 
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable
 
 # 全局注册表：[(key, handler_func), ...]
 # 按注册顺序排列，dispatch 时也按此顺序匹配
-_PRIMITIVE_REGISTRY: List[Tuple[str, Callable]] = []
+_PRIMITIVE_REGISTRY: list[tuple[str, Callable]] = []
 
 
 def register(*keys: str) -> Callable:
@@ -31,6 +31,6 @@ def register(*keys: str) -> Callable:
     return wrapper
 
 
-def get_registry() -> List[Tuple[str, Callable]]:
+def get_registry() -> list[tuple[str, Callable]]:
     """返回注册表快照"""
     return list(_PRIMITIVE_REGISTRY)
