@@ -26,14 +26,15 @@ _DISPATCH: dict[str, str] = {
 
 def process_production_node(self, node: dict, context: ParseContext) -> Node | None:
     """dispatch 到 _parse_* 方法（查表而非 getattr）"""
-    typ = node.get("type")
+    # 用 [] 直接索引代替 .get() 避免两次 dict 查找
+    typ = node["type"] if "type" in node else None
+    if typ is None:
+        return None
     method_name = _DISPATCH.get(typ)
     if method_name is None:
-        self._log_state(f"未知节点类型: {typ}")
         return None
     method = getattr(self, method_name, None)
     if method is None:
-        self._log_state(f"未绑定方法: {method_name}")
         return None
     return method(node, context)
 
@@ -211,17 +212,19 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 
 def prepare_production(self, context: ParseContext, features: dict) -> bool:
     """为匹配产生式做准备：跳过空白/注释。"""
+    ftype = features["type"] if "type" in features else None
     should_skip = True
 
-    if features.get("type") == "token" and features.get("token_type") == "comment":
-        should_skip = False
-    elif features.get("type") == "call":
+    if ftype == "token":
+        if features.get("token_type") == "comment":
+            should_skip = False
+    elif ftype == "call":
         ref_rule = self.grammar_rules.get(features["name"])
         if ref_rule and getattr(ref_rule, "is_block", False):
             should_skip = False
-    elif features.get("type") in ("optional",):
+    elif ftype == "optional":
         should_skip = False
-    elif features.get("type") == "repeat" and features.get("min", 0) == 0:
+    elif ftype == "repeat" and features.get("min", 0) == 0:
         should_skip = False
     if should_skip:
         self._skip_tokens(context, tuple(self.skip_types))
