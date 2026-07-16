@@ -1,22 +1,81 @@
 """typed_ports 组件 — 变换槽位。"""
 
 import hashlib
+from typing import Optional
+
 from core.component_loader import register_transform_slot
 from core.define import Node
+from analyzer.scope import Scope
+from transform.pipeline import mark_extra
 
 
 @register_transform_slot("delete_type_decl")
-def delete_type_decl(node: Node, ctx) -> Node | None:
+def delete_type_decl(node: Node, ctx) -> None:
     return None
 
 
 @register_transform_slot("build_wrapper")
-def build_wrapper(node: Node, ctx) -> Node:
-    return node
+def build_wrapper(node: Node, ctx) -> Optional[Node]:
+    """从 TypeDecl + TypeImplDecl 构建包装模块。"""
+    td = ctx.get("type_decl")
+    impl_block = ctx.get("impl_block")
+    root_scope: Optional[Scope] = ctx.get("root_scope")
+    if not td or not impl_block or not root_scope:
+        return None
+    type_name = _text(getattr(td, "type_name", None))
+    if not type_name:
+        return None
+    role_name = _first_role_name(root_scope, type_name) or "impl"
+    wrapper_name = f"{type_name}_{role_name}"
+    ports = _resolved_ports(root_scope, type_name)
+    mod = Node("ModuleDecl")
+    name_node = Node("Identifier")
+    name_node.add_attr("content", wrapper_name)
+    mod.add_attr("module_name", name_node)
+    # 参数列表
+    type_params = getattr(td, "params", None)
+    if type_params:
+        plp = _make_param_list(type_params)
+        if plp:
+            mod.add_attr("params", plp)
+    # 合并端口
+    port_items = []
+    if ports:
+        for p in ports:
+            d = _port_decl(p["direction"], p["name"])
+            if d:
+                port_items.append(d)
+    impl_ports = getattr(impl_block, "ports", None)
+    if impl_ports:
+        ipl = getattr(impl_ports, "items", [])
+        for ip in ipl:
+            if ip.node_name not in ("AnsiInputDecl", "AnsiOutputDecl", "AnsiInoutDecl", "TypedPortDecl"):
+                continue
+            pname = _port_name(ip)
+            if pname and not any(_port_name(pi) == pname for pi in port_items):
+                port_items.append(ip)
+    if port_items:
+        pl = Node("PortList")
+        pl.add_attr("items", port_items)
+        mod.add_attr("ports", pl)
+    # Body
+    body = Node("ModuleBlock")
+    body.add_attr("sub_node", [])
+    impl_body = getattr(impl_block, "body", None)
+    if impl_body:
+        if isinstance(impl_body, list):
+            body.sub_node = [n for n in impl_body if isinstance(n, Node)]
+        elif isinstance(impl_body, Node):
+            subs = getattr(impl_body, "sub_node", []) or getattr(impl_body, "items", [])
+            body.sub_node = [n for n in subs if isinstance(n, Node)]
+    mod.add_attr("body", body)
+    mark_extra(wrapper_name, mod)
+    return mod
 
 
 @register_transform_slot("expand_typed_port")
-def expand_typed_port(node: Node, ctx) -> Node | None:
+def expand_typed_port(node: Node, ctx) -> Optional[Node]:
+    """TypedPortDecl 展开由 ConfigDrivenTransform 的 expand 原语处理。"""
     return node
 
 
@@ -101,6 +160,67 @@ def _text(n) -> str:
             if r:
                 return r
     return ""
+
+
+def _first_role_name(root_scope, type_name: str) -> str:
+    sc = root_scope.find_child_scope(type_name, kind="type") if root_scope else None
+    if sc is None:
+        return ""
+    for sym in sc.symbols.values():
+        if sym.kind == "role":
+            return sym.name
+    return ""
+
+
+def _make_param_list(type_params) -> Optional[Node]:
+    items = getattr(type_params, "items", []) or getattr(type_params, "sub_node", [])
+    if not items:
+        return None
+    param_decls = []
+    for item in items:
+        if not isinstance(item, Node) or item.node_name != "TypeParamItem":
+            continue
+        name = getattr(item, "name", None)
+        default = getattr(item, "default", None)
+        if name is None:
+            continue
+        pd = Node("ParamDecl")
+        pd.add_attr("param_name", name)
+        if default is not None:
+            pd.add_attr("value", default)
+        param_decls.append(pd)
+    if not param_decls:
+        return None
+    pl = Node("ParameterList")
+    pl.add_attr("params", param_decls)
+    return pl
+
+
+def _port_name(pn) -> str:
+    items = getattr(pn, "items", None)
+    if items is None:
+        return ""
+    for dcl in getattr(items, "items", []):
+        name = getattr(dcl, "name", None)
+        if name:
+            return _text(name)
+    return ""
+
+
+def _port_decl(direction: str, name: str) -> Optional[Node]:
+    if not name:
+        return None
+    cls = "AnsiInputDecl" if direction == "input" else "AnsiOutputDecl"
+    decl = Node(cls)
+    decl.add_attr("direction", direction)
+    lst = Node("DeclaratorList")
+    dcl = Node("Declarator")
+    nid = Node("Identifier")
+    nid.add_attr("content", name)
+    dcl.add_attr("name", nid)
+    lst.add_attr("items", [dcl])
+    decl.add_attr("items", lst)
+    return decl
 
 
 def _resolved_ports(root, type_name: str) -> list[dict]:
