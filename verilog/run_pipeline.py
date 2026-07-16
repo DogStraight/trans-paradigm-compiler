@@ -101,6 +101,7 @@ def run_pipeline_on_source(
     transform_enabled: bool = True,
     renderer_enabled: bool = True,
     stage: Optional[str] = None,
+    no_lint: bool = False,
     rules_dir: str = DEFAULT_RULES_DIR,
     ext_dirs: list[str] | None = None,
     include_dirs: list[str] | None = None,
@@ -245,14 +246,15 @@ def run_pipeline_on_source(
         _log(f"[prescan] symbols: {len(pre_symbols)}")
 
     # ---- Stage: Lint（前置语法检查，失败时截断管线）----
-    lint_errors = linter.scan(source)
-    if lint_errors:
-        for err in lint_errors:
-            _log(
-                f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}"
-            )
-        result["error"] = f"lint failed: {len(lint_errors)} error(s)"
-        return result
+    if not no_lint:
+        lint_errors = linter.scan(source)
+        if lint_errors:
+            for err in lint_errors:
+                _log(
+                    f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}"
+                )
+            result["error"] = f"lint failed: {len(lint_errors)} error(s)"
+            return result
 
     # ---- Stage: Parse ----
     # Instantiate Parser with injected rules and rule_selector
@@ -484,6 +486,11 @@ def parse_args() -> argparse.Namespace:
         help="Print debug info (AST structure, token stream)",
     )
     parser.add_argument(
+        "--no-lint",
+        action="store_true",
+        help="Skip linter pre-check",
+    )
+    parser.add_argument(
         "--expand-macros", action="store_true", help="Expand `define macros"
     )
     parser.add_argument(
@@ -555,6 +562,7 @@ def main() -> None:
         transform_enabled=args.transform and not args.no_semantic,
         renderer_enabled=args.renderer,
         stage=args.stage,
+        no_lint=args.no_lint,
         rules_dir=args.rules_dir,
         ext_dirs=args.ext_dirs,
         include_dirs=args.include_dirs,

@@ -27,21 +27,14 @@ body = "$4"
 symbol     = { kind = "type", name_attr = "type_name" }
 scope      = { kind = "type", name_attr = "type_name" }
 
-# ── 变换 ──
-[TypeDecl.transform]
-kind = "delete"
+# ── 变换（由 ImplWrapperPlugin 处理包装 + 删除，此处不配置）
 
 
 # ─────────────────────────────────────────────────────────────────────
 # TypeParamList — 类型参数列表  type (parameter MODE = 0, ...)
 # ─────────────────────────────────────────────────────────────────────
 [TypeParamList.parser]
-production = [
-    "bracket.l_parentheses",
-    "@TypeParamItem",
-    "(symbol.base.comma,@TypeParamItem)*",
-    "bracket.r_parentheses",
-]
+production = ["bracket.l_parentheses", "@TypeParamItem?", "(symbol.base.comma,@TypeParamItem)*", "bracket.r_parentheses"]
 [TypeParamList.parser.node]
 items = ["$2", "$3.items[*].sub_node[1]"]
 
@@ -167,28 +160,28 @@ target_role = "$2"
 
 # ─────────────────────────────────────────────────────────────────────
 # TypeImplDecl — 类型体 impl 定义
-#   impl [role_name] #(params) (.port1, .port2) { body }
-#   impl [master] { body }    ← 可省略 #(params) 和 (portlist)
-#   定义接口实例在类型中的行为，body 是 Verilog 过程语句。
+#   impl [master] (input clk, ...) { body }
+#   定义角色实现块：ANSI 端口声明 + 实现体。
+#   端口包含实现专用信号，接口信号自动从角色定义合并。
 # ─────────────────────────────────────────────────────────────────────
 [TypeImplDecl]
 [TypeImplDecl.parser]
 production = [
     "keyword.impl",
     "bracket.l_square_bracket",
-    "@Identifier",
+    "@Identifier",        # $3: 角色名
     "bracket.r_square_bracket",
-    "@ParamOverride?",
-    "(bracket.l_parentheses,@NamedPortList?,bracket.r_parentheses)?",
+    "bracket.l_parentheses",
+    "@PortList?",         # $6: ANSI 端口列表（实现专用信号）
+    "bracket.r_parentheses",
     "bracket.l_curly_bracket",
-    "@ProcStmt*",
+    "@ModuleItem*",       # $9: 实现体
     "bracket.r_curly_bracket",
 ]
 [TypeImplDecl.parser.node]
 role_name = "$3"
-params = "$5"
-ports = "$6.sub_node[1]"
-body = "$8"
+ports = "$6"
+body = "$9"
 
 
 # ── 成员级 invert（含分号，被 TypeMember 引用）──

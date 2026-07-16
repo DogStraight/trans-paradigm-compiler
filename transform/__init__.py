@@ -15,4 +15,18 @@
 
 from .pipeline import AstTransformer, TransformPlugin, mark_extra, collect_extra_asts
 
-__all__ = ["AstTransformer", "TransformPlugin", "mark_extra", "collect_extra_asts"]
+# 确保注册了 @register_plugin 的模块被导入
+# 执行顺序：SemanticMappingPlugin → ImplWrapperPlugin → ConfigDrivenTransform
+# SMP 先运行以填充映射表，供 CDT 的 TypedPortDecl 展开消费
+from . import semantic_mapping
+from . import impl_wrapper
+from . import config_driven
+
+__all__ = [
+    "AstTransformer",
+    "TransformPlugin",
+    "mark_extra",
+    "collect_extra_asts",
+    "config_driven",
+    "semantic_mapping",
+]

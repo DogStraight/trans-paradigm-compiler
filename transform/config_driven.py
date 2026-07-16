@@ -38,7 +38,7 @@ class ConfigDrivenTransform(TransformPlugin):
 
     def __init__(
         self,
-        rules: dict[str, Any],
+        rules: dict[str, Any] | None = None,
         tables: Optional[dict] = None,
         extra: Optional[dict] = None,
     ):
@@ -48,6 +48,7 @@ class ConfigDrivenTransform(TransformPlugin):
         self._extra = extra or {}
 
         # 从规则 TOML 的 [RuleName.transform] 提取变换配置
+        assert rules is not None
         self._configs = {
             name: transform
             for name, rule in rules.items()

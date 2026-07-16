@@ -4,38 +4,20 @@
       "kind": "invert",
       "resolved_ports": [
         {
-          "node_name": "AnsiInputDecl",
           "direction": "output",
-          "items": {
-            "node_name": "DeclaratorList",
-            "items": [
-              {
-                "node_name": "Declarator",
-                "name": "miso"
-              }
-            ]
-          }
+          "name": "miso"
         },
         {
-          "node_name": "AnsiOutputDecl",
           "direction": "input",
-          "items": {
-            "node_name": "DeclaratorList",
-            "items": [
-              {
-                "node_name": "Declarator",
-                "name": "clk"
-              },
-              {
-                "node_name": "Declarator",
-                "name": "mosi"
-              },
-              {
-                "node_name": "Declarator",
-                "name": "cs"
-              }
-            ]
-          }
+          "name": "sck"
+        },
+        {
+          "direction": "input",
+          "name": "mosi"
+        },
+        {
+          "direction": "input",
+          "name": "cs"
         }
       ]
     }

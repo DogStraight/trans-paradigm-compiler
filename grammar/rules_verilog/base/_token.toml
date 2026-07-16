@@ -45,6 +45,7 @@ sub_one = "--"
 double_dot = ".."
 logic_double_and = "&&"
 logic_double_or = "||"
+arrow = "=>"
 
 [bracket]
 pairs = [

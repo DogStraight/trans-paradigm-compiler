@@ -1,13 +1,11 @@
 """Main parser — recursive descent with backtracking.
 
-Orchestrates parsing by coordinating sub-parsers:
-    - node_parsers: token/call/seq/choice/repeat/optional
-    - production_matcher: rule production matching
+Orchestrates parsing by coordinating:
+    - _production: production element dispatch + matching + end_case
     - attribute_binder: $N path extraction and node assembly
     - block_parser: block/body parsing
-    - atom_parser: atomic rule + Pratt expression
-    - end_case_checker: terminating token validation
-"""
+    - pratt_parser: Pratt expression parsing (独立库模块)
+    - rule_selector: 规则选择 + production 分析 (独立库模块)"""
 
 import sys
 from core.define import (
@@ -41,20 +39,18 @@ class ParseContext:
         self.path_stack: list[str] = []  # 当前语义路径栈
 
     def __enter__(self):
-        # 修复：进入with块时压入快照
+        # 进入 with 块时自动创建快照，异常时自动回滚
         snapshot = self.create_snapshot()
         self._snapshot_stack.append(snapshot)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # 修复：先判断栈非空，再pop
         if not self._snapshot_stack:
             return False
         snapshot = self._snapshot_stack.pop()
         if exc_type is not None:
             self.restore_snapshot(snapshot)
-        # 返回False让异常继续传播（如需捕获可在外层处理）
-        return False
+        return False  # 异常继续传播
 
     def advance_token(self, count=1):
         """向前移动token指针"""
@@ -84,13 +80,16 @@ class ParseContext:
         self.current_rule = snapshot["current_rule"]
         self.production_pointer = snapshot["production_pointer"]
 
-    def update_current_node(self, node: Node):
+    def update_current_node(self, node: Node) -> None:
+        """更新当前正在构造的 AST 节点。"""
         self.current_node = node
 
-    def update_current_rule(self, rule: GrammarRule):
+    def update_current_rule(self, rule: GrammarRule) -> None:
+        """更新当前正在匹配的语法规则。"""
         self.current_rule = rule
 
-    def update_match_length(self, length: int):
+    def update_match_length(self, length: int) -> None:
+        """更新已匹配的 token 数。"""
         self.match_length = length
 
     def has_more_tokens(self) -> bool:
@@ -112,16 +111,6 @@ class ParseContext:
         return next_token.type in end_case
 
 
-"""ScopeStack — 轻量作用域栈，供 Parser 在解析过程中实时查询符号。
-
-与 Analyzer 的后阶段全量分析不同，ScopeStack 只服务于 Parser 的规则选择，
-在回溯时需配合 snapshot/restore 回滚。
-
-scope 声明来源：规则 TOML 中的 [RuleName.analyzer] scope = { ... }，
-通过 peek 机制声明式复制到 parser 域。
-"""
-
-
 class ScopeEntry:
     """作用域条目"""
 
@@ -133,7 +122,13 @@ class ScopeEntry:
 
 
 class ScopeStack:
-    """轻量级作用域栈"""
+    """轻量级作用域栈，供 Parser 在解析过程中实时查询符号。
+
+    与 Analyzer 的后阶段全量分析不同，ScopeStack 只服务于 Parser 规则选择，
+    回溯时需配合 snapshot/restore 回滚。
+
+    scope 声明来源：规则 TOML 中的 [RuleName.analyzer] scope = { ... }。
+    """
 
     def __init__(self) -> None:
         # 根作用域（全局）
@@ -193,14 +188,6 @@ class ScopeStack:
             {"name": e.name, "kind": e.kind, "symbols": dict(e.symbols)}
             for e in self._stack
         ]
-
-
-"""
-atom_parser.py — 原子规则 & Pratt 桥接
-
-职责：_parse_atom（按序尝试原子规则），
-_try_pratt_rule（调用 Pratt 解析器处理表达式）。
-"""
 
 
 def parse_atom(self, context: ParseContext) -> tuple[Node | None, int]:
@@ -268,7 +255,12 @@ from .attribute_binder import (
     bind_attributes,
     try_inline_rule,
 )
-from .node_parsers import (
+from ._production import (
+    process_production_node,
+    match_productions,
+    try_rule_productions,
+    prepare_production,
+    check_end_case,
     parse_token,
     parse_call,
     parse_seq,
@@ -278,15 +270,7 @@ from .node_parsers import (
     parse_plus,
     repeat_loop,
 )
-from .rule_matcher import (
-    process_production_node,
-    match_productions,
-    try_rule_productions,
-    prepare_production,
-    check_end_case,
-)
 
-# merged inline: try_pratt_rule
 from .block_parser import (
     parse_sentence,
     resolve_block_rule,
@@ -295,9 +279,6 @@ from .block_parser import (
     parse_block,
     collect_line_comments,
 )
-
-# merged inline: ScopeStack
-
 
 class Parser:
     """语法分析器 — 将 token 流解析为 AST"""
@@ -313,7 +294,7 @@ class Parser:
     _bind_attributes = bind_attributes
     _try_inline_rule = try_inline_rule
 
-    # node_parsers
+    # _production (合并 rule_matcher + node_parsers)
     _parse_token = parse_token
     _parse_call = parse_call
     _parse_seq = parse_seq
@@ -322,12 +303,9 @@ class Parser:
     _parse_optional = parse_optional
     _parse_plus = parse_plus
     _repeat_loop = repeat_loop
-    # production_matcher
     _process_production_node = process_production_node
     _match_productions = match_productions
     _try_rule_productions = try_rule_productions
-
-    # end_case_checker
     _prepare_production = prepare_production
     _check_end_case = check_end_case
 
@@ -576,7 +554,3 @@ class Parser:
             f"[parser]  ═══ 当前 token: {context.token_pointer} ═══",
             file=sys.stderr,
         )
-
-    # inline comment 回注：锚点匹配替代指纹匹配。
-    # 锚点即注释紧跟的 token 内容，在 parser/node_parsers.py _parse_token 中收集。
-    # 渲染后通过 renderer/inline_comment.py 做文本级锚点搜索 + 行号窗口定位。
