@@ -26,15 +26,6 @@ from .primitives import (
     get_primitive,
 )
 
-# ── 原语执行管线顺序 ──
-
-_PRIMITIVE_ORDER = [
-    "symbol_declare",      # 1. 先声明符号（注册到父作用域）
-    "scope_enter",         # 2. 再进入新作用域
-    "identifier_resolve",  # 3. 解析标识符引用
-    "scope_exit",          # 4. 退出作用域（递归后执行）
-]
-
 
 class AnalysisTraversal:
     """原语驱动的语义分析管线
@@ -45,12 +36,28 @@ class AnalysisTraversal:
 
     def __init__(self, grammar_rules: Dict[str, Any]):
         self._rules = grammar_rules
+        self._primitive_order = self._load_primitive_order()
         self._root_scope: Optional[Scope] = None
         self._current_scope: Optional[Scope] = None
         self._all_symbols: List[Symbol] = []
         self._context = AnalysisContext()
-        # 作用域定义名节点 ID 集合
         self._scope_name_node_ids: set[int] = set()
+
+    @staticmethod
+    def _load_primitive_order() -> list[str]:
+        try:
+            from core.component_loader import get_primitive_order
+            order = get_primitive_order()
+            if order:
+                return order
+        except ImportError:
+            pass
+        return [
+            "symbol_declare",
+            "scope_enter",
+            "identifier_resolve",
+            "scope_exit",
+        ]
 
     def analyze(self, ast: Node) -> Node:
         """对 AST 进行语义分析，返回带 _symbol_ref 的 AST"""
@@ -94,7 +101,8 @@ class AnalysisTraversal:
         self._context.config = config
 
         # 标准原语
-        for prim_name in _PRIMITIVE_ORDER:
+        po = self._primitive_order
+        for prim_name in po:
             if prim_name == "scope_exit":
                 continue
             prim = get_primitive(prim_name)
@@ -104,10 +112,11 @@ class AnalysisTraversal:
                 prim(self, node, config)
 
         # 自定义原语
+        po_set = set(po)
         custom_primitives: list = config.get("primitives", [])
         if isinstance(custom_primitives, list):
             for prim_name in custom_primitives:
-                if prim_name in _PRIMITIVE_ORDER:
+                if prim_name in po_set:
                     continue
                 prim = get_primitive(prim_name)
                 if prim is not None:

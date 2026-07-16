@@ -96,6 +96,27 @@ def get_transform_slots() -> dict[str, callable]:
     return dict(_transform_slots)
 
 
+_PRIMITIVE_ORDER: list[str] = []
+
+
+def get_primitive_order() -> list[str]:
+    """返回合并后的分析器原语执行顺序。
+
+    从各组件声明的 primitive_order 合并。
+    """
+    if _PRIMITIVE_ORDER:
+        return list(_PRIMITIVE_ORDER)
+    # 从组件收集
+    seen: set[str] = set()
+    for info in _loaded_components.values():
+        order = info.get("meta", {}).get("analyzer", {}).get("primitive_order", [])
+        for p in order:
+            if p not in seen:
+                _PRIMITIVE_ORDER.append(p)
+                seen.add(p)
+    return list(_PRIMITIVE_ORDER)
+
+
 def _load_python_handlers(cdir: str, handler_files: list[str]) -> list[Any]:
     """加载组件中的 Python handler 文件。"""
     modules = []
