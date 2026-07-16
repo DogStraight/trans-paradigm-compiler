@@ -12,10 +12,15 @@ _TEMPLATE_RE = re.compile(r"\{([^}]+)\}")
 
 def resolve_template(template: str, context: dict[str, Any]) -> str:
     """解析模板字符串 {attr.sub_attr}，从 context 中取值"""
+
     def _lookup(path: str, ctx: dict) -> str:
         if path in ctx:
             val = ctx[path]
-            return str(val) if not isinstance(val, (Node, dict, list)) else "{" + path + "}"
+            return (
+                str(val)
+                if not isinstance(val, (Node, dict, list))
+                else "{" + path + "}"
+            )
         parts = re.split(r"\.|\[|\]", path)
         parts = [p for p in parts if p]
         val: Any = ctx
@@ -34,6 +39,7 @@ def resolve_template(template: str, context: dict[str, Any]) -> str:
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             return "{" + path + "}"
         return str(val) if not isinstance(val, (Node, dict, list)) else "{" + path + "}"
+
     return _TEMPLATE_RE.sub(lambda m: _lookup(m.group(1), context), template)
 
 

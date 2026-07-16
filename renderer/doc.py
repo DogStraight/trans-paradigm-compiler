@@ -42,6 +42,7 @@ class Line(Doc):
     flat 模式 → 一个空格
     broken 模式 → 换行 + 当前缩进 + 附加缩进
     """
+
     indent: int = 0
 
 
@@ -51,6 +52,7 @@ class Break(Doc):
     硬换行。
     无论 flat/broken 都强制换行 + 当前缩进 + 附加缩进。
     """
+
     indent: int = 0
 
 

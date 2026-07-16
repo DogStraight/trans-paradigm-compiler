@@ -74,6 +74,3 @@ def load_style(rules_dir: str) -> dict:
             continue
 
     return result
-
-
-

@@ -14,7 +14,6 @@ from typing import Any, ClassVar, List, Optional
 from core.define import Node
 from analyzer.scope import Scope
 
-
 # ── 全局注册表 ──
 
 _plugin_registry: list[type["TransformPlugin"]] = []
@@ -38,8 +37,7 @@ class TransformPlugin(ABC):
     _transformer: Optional["AstTransformer"] = None
 
     @abstractmethod
-    def process(self, ast: Node, root_scope: Scope) -> Node:
-        ...
+    def process(self, ast: Node, root_scope: Scope) -> Node: ...
 
     @property
     def stats(self) -> dict[str, int]:

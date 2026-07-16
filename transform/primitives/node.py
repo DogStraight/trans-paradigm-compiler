@@ -44,9 +44,11 @@ def emit(
             kwargs[attr_name] = emit(attr_val, context)
         elif isinstance(attr_val, list):
             kwargs[attr_name] = [
-                emit(item, context)
-                if isinstance(item, dict) and "node" in item
-                else item
+                (
+                    emit(item, context)
+                    if isinstance(item, dict) and "node" in item
+                    else item
+                )
                 for item in attr_val
             ]
         else:

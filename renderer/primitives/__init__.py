@@ -12,14 +12,16 @@ from ..doc import Doc, Text
 from .registry import get_registry
 from .text import eval_text
 
-# 导入所有原语模块（触发 @register 装饰器执行）
-from . import ref  # noqa: F401
-from . import join  # noqa: F401
-from . import group  # noqa: F401
-from . import line  # noqa: F401
-from . import indent  # noqa: F401
-from . import opt  # noqa: F401
-from . import soft_break  # noqa: F401
+# 导入所有原语模块，触发 @register 装饰器注册处理函数
+from . import ref as _ref
+from . import join as _join
+from . import group as _group
+from . import line as _line
+from . import indent as _indent
+from . import opt as _opt
+from . import soft_break as _soft_break
+
+_PRIMITIVE_MODULES = (_ref, _join, _group, _line, _indent, _opt, _soft_break)
 
 
 def eval_expr(

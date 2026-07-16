@@ -59,19 +59,6 @@ def list_primitives() -> list[str]:
 # ── 装饰器 ──
 
 
-def analyzer_primitive(name: str) -> Callable:
-    """装饰器：注册一个分析器原语（旧名，向下兼容）。
-
-    请使用 @register(name) 替代。
-
-    Usage:
-        @analyzer_primitive("scope_enter")
-        def scope_enter(analyzer, node, config):
-            ...
-    """
-    return register(name)
-
-
 def register(name: str) -> Callable:
     """装饰器：注册一个分析器原语。
 

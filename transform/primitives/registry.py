@@ -16,8 +16,10 @@ if TYPE_CHECKING:
 
 class _Skip:
     """标记值：跳过变换，不修改节点"""
+
     def __repr__(self):
         return "SKIP"
+
 
 SKIP = _Skip()
 
@@ -26,8 +28,14 @@ TransformResult = Node | list[Node] | None | _Skip
 
 class TransformContext:
     """变换上下文"""
-    def __init__(self, rule_name: str = "", config: Optional[dict] = None,
-                 tables: Optional[dict] = None, extra: Optional[dict] = None):
+
+    def __init__(
+        self,
+        rule_name: str = "",
+        config: Optional[dict] = None,
+        tables: Optional[dict] = None,
+        extra: Optional[dict] = None,
+    ):
         self.rule_name = rule_name
         self.config = config or {}
         self.tables = tables or {}
@@ -70,7 +78,9 @@ def register(name: str) -> Callable:
         def handle_expand(engine, node, config, root_scope):
             ...
     """
+
     def decorator(fn: TransformPrimitive) -> TransformPrimitive:
         register_primitive(name, fn)
         return fn
+
     return decorator

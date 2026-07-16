@@ -141,7 +141,7 @@ def restore_line_comments(rendered: str, anchors: list[dict]) -> tuple[str, int]
                 raw_pos = len(lines[best_idx]) - len(stripped) + content_pos
                 before = lines[best_idx][:raw_pos]
                 after = lines[best_idx][raw_pos:]
-                line_indent = lines[best_idx][:len(lines[best_idx]) - len(stripped)]
+                line_indent = lines[best_idx][: len(lines[best_idx]) - len(stripped)]
                 comment_line = line_indent + text
                 lines[best_idx] = before.rstrip()
                 lines.insert(best_idx + 1, comment_line)
