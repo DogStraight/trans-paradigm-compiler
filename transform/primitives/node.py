@@ -60,8 +60,8 @@ def emit(
 def replace(
     old_node: Node,
     new_nodes: Node | list[Node] | None,
-    parent: Optional[Node] = None,
-    parent_attr: Optional[str] = None,
+    parent: Node | None = None,
+    parent_attr: str | None = None,
 ) -> list[Node]:
     """替换节点
 
@@ -107,8 +107,8 @@ def replace(
 
 def delete(
     node: Node,
-    parent: Optional[Node] = None,
-    parent_attr: Optional[str] = None,
+    parent: Node | None = None,
+    parent_attr: str | None = None,
 ) -> list[Node]:
     """删除节点（replace 的特化）"""
     return replace(node, None, parent, parent_attr)

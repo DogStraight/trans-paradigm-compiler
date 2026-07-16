@@ -4,7 +4,7 @@ node_renderer.py — AST 节点级渲染逻辑
 将单个 AST 节点渲染为 Doc IR，处理 head/body/tail 三段式布局。
 """
 
-from typing import Any
+from typing import Any,Optional
 from core.define import Node
 from .doc import Doc, Empty, Text, Break, Concat, Nest
 from .primitives import eval_expr
@@ -36,7 +36,7 @@ def render_node(
     tail_cfg = layout.get("tail")
     indent_spaces = len(renderer._INDENT_STR)
 
-    parts: List[Doc] = []
+    parts: list[Doc] = []
 
     # --- head ---
     if head_expr:
@@ -94,7 +94,7 @@ def render_inline(
     tail_cfg = layout.get("tail")
     indent_spaces = len(renderer._INDENT_STR)
 
-    parts: List[Doc] = []
+    parts: list[Doc] = []
 
     # --- head（内联：不加前缀）---
     if head_expr:
@@ -142,7 +142,7 @@ def render_body(
     body_cfg: Optional[dict],
     parent_layout: Optional[dict],
     renderer: Any,
-) -> List[Doc]:
+) -> list[Doc]:
     """渲染节点主体：遍历子节点，每个缩进一行
 
     body_cfg 可指定 source 字段名（如 source = "items"），
@@ -184,7 +184,7 @@ def render_body(
     else:
         children = getattr(node, children_field, [])
 
-    docs: List[Doc] = []
+    docs: list[Doc] = []
     children_list = [c for c in children if isinstance(c, Node)]
     for i, child in enumerate(children_list):
         merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
@@ -202,7 +202,7 @@ def resolve_items(
     node: Node,
     items_spec: Optional[str],
     renderer: Any,
-) -> List[Any]:
+) -> list[Any]:
     """解析 items 引用
 
     未指定时 → node.{children_field}

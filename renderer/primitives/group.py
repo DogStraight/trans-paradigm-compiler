@@ -8,9 +8,9 @@ from .registry import register
 
 @register("group")
 def eval_group(
-    expr: dict, node: Node, indent: int, parent_layout: Optional[dict], renderer: Any
-) -> Optional[Doc]:
-    parts: List[Doc] = []
+    expr: dict, node: Node, indent: int, parent_layout: dict | None, renderer: Any
+) -> Doc | None:
+    parts: list[Doc] = []
     for e in expr["group"]:
         d = renderer._eval(e, node, indent, parent_layout)
         if d is None:

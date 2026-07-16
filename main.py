@@ -26,13 +26,15 @@ def main() -> None:
 
     if command == "pipeline":
         from verilog.run_pipeline import main as pipeline_main
+
         sys.argv = [sys.argv[0]] + args
         pipeline_main()
 
     elif command == "linter":
-        from linter.cli import main as linter_main
+        from linter.cli import cli_main as cli_main
+
         sys.argv = [sys.argv[0]] + args
-        linter_main()
+        cli_main()
 
     else:
         print(f"Unknown command: {command}")

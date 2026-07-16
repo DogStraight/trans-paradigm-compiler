@@ -32,9 +32,9 @@ class TransformContext:
     def __init__(
         self,
         rule_name: str = "",
-        config: Optional[dict] = None,
-        tables: Optional[dict] = None,
-        extra: Optional[dict] = None,
+        config: dict | None = None,
+        tables: dict | None = None,
+        extra: dict | None = None,
     ):
         self.rule_name = rule_name
         self.config = config or {}
