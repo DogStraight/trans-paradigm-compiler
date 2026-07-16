@@ -35,7 +35,6 @@ from analyzer import AnalysisTraversal
 
 # ── 语言配置（由 typed_ports 组件提供）──
 from grammar.rules_verilog_ext._components.typed_ports._mapping import (
-    LANG,
     RULES_DIR,
     EXT_DIRS,
     mapping_entries,
@@ -183,9 +182,6 @@ def run_pipeline_on_source(
     ast_json = os.path.join(ast_dir, f"{base_name}.json") if ast_dir else None
     sym_json = os.path.join(sym_dir, f"{base_name}.json") if sym_dir else None
     cb_json = os.path.join(cb_dir, f"{base_name}.json") if cb_dir else None
-    comment_json = (
-        os.path.join(ast_dir, f"{base_name}_comments.json") if ast_dir else None
-    )
 
     # ---- Stage: 配置加载（只执行一次，缓存后跳过）----
     if "_config_loaded" not in _PIPELINE_SHARED:
@@ -362,7 +358,6 @@ def run_pipeline_on_source(
         ast = transformer.transform(ast, scope)
 
         # 收集变换统计
-        total = 0
         parts = []
         for plugin in transformer.plugins:
             if hasattr(plugin, "stats"):
@@ -370,7 +365,6 @@ def run_pipeline_on_source(
                 for k, v in s.items():
                     if v:
                         parts.append(f"{k}={v}")
-                        total += v
         if parts:
             _log(f"[transform] {' '.join(parts)}")
     elif transform_enabled:
