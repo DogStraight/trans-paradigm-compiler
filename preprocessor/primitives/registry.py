@@ -7,7 +7,6 @@ registry.py — 预处理器指令处理器注册中心
 
 from typing import Any, Callable
 
-
 # ── Handler 签名 ──────────────────────────────────
 # context 是 handler 之间共享的运行时状态
 DirectiveContext = dict[str, Any]
@@ -43,7 +42,9 @@ def register(name: str) -> Callable[[DirectiveHandler], DirectiveHandler]:
         def handle_define(stripped, prefix, name, ctx):
             ...
     """
+
     def decorator(func: DirectiveHandler) -> DirectiveHandler:
         register_primitive(name, func)
         return func
+
     return decorator

@@ -2,10 +2,10 @@
 comment_fsm.py — 配置驱动的注释解析器
 
 完全由 _token.toml 的 [comment] pairs 配置驱动：
-  pairs = [
-    ["//", "\\n", "line"],
-    ["/*", "*/", "block"],
-  ]
+    pairs = [
+        ["//", "\\n", "line"],
+        ["/*", "*/", "block"],
+    ]
 """
 
 from typing import Optional, Tuple, List

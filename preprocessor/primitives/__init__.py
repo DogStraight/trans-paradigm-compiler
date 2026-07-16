@@ -4,3 +4,5 @@
 # 新增指令只需新建文件 + 装饰器注册。
 
 from . import define, undef, include
+
+__all__ = ["define", "undef", "include"]

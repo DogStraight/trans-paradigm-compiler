@@ -385,7 +385,7 @@ def run_pipeline_on_source(
 
         # Reverse macro protection
         if macro_table:
-            macro_raw = load_macro_config(rules_dir)
+            macro_raw = load_macro_config()
             define_kw = macro_raw.get("directives", {}).get("define", "define")
             content = protect_and_reverse(
                 content,

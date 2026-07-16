@@ -38,7 +38,7 @@ def _load_config(rules_dir: str) -> tuple[str, set[str]]:
     """Load macro config → (prefix, directives_set)."""
     from ._config import load_macro_config
 
-    cfg = load_macro_config(rules_dir)
+    cfg = load_macro_config()
     recognition = cfg.get("macro_recognition", {})
     prefix = recognition.get("prefix", "`")
     directives = set(cfg.get("directives", {}).values())

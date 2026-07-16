@@ -9,6 +9,8 @@ from ._reverse import protect_and_reverse
 from ._config import load_macro_config
 
 __all__ = [
-    "scan_directives", "expand_tokens",
-    "protect_and_reverse", "load_macro_config",
+    "scan_directives",
+    "expand_tokens",
+    "protect_and_reverse",
+    "load_macro_config",
 ]
