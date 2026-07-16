@@ -55,10 +55,9 @@ def test_token_classifier_installed():
     ]
     from parser.rule_selector import RuleSelector
 
-    rs = RuleSelector(rules, stmt_names, cache_enabled=False)
+    rs = RuleSelector(rules, stmt_names)
     parser = Parser(
         rules_dir=RULES_DIR,
-        cache_enabled=False,
         rules=rules,
         rule_selector=rs,
     )
@@ -78,10 +77,9 @@ def test_pratt_parses_not_operator():
     ]
     from parser.rule_selector import RuleSelector
 
-    rs = RuleSelector(rules, stmt_names, cache_enabled=False)
+    rs = RuleSelector(rules, stmt_names)
     parser = Parser(
         rules_dir=RULES_DIR,
-        cache_enabled=False,
         rules=rules,
         rule_selector=rs,
     )
@@ -103,10 +101,9 @@ def test_pratt_parses_addition():
     ]
     from parser.rule_selector import RuleSelector
 
-    rs = RuleSelector(rules, stmt_names, cache_enabled=False)
+    rs = RuleSelector(rules, stmt_names)
     parser = Parser(
         rules_dir=RULES_DIR,
-        cache_enabled=False,
         rules=rules,
         rule_selector=rs,
     )
@@ -196,10 +193,9 @@ def test_bit_width_literal_not_greedy():
     ]
     from parser.rule_selector import RuleSelector
 
-    rs = RuleSelector(rules, stmt_names, cache_enabled=False)
+    rs = RuleSelector(rules, stmt_names)
     parser = Parser(
         rules_dir=RULES_DIR,
-        cache_enabled=False,
         rules=rules,
         rule_selector=rs,
     )

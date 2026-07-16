@@ -206,7 +206,7 @@ def run_pipeline_on_source(
             for n, r in rules.items()
             if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
         ]
-        rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
+        rule_selector = RuleSelector(rules, stmt_names)
         lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_dirs)
         linter = LinterScanner(rules_dir=rules_dir, ext_dirs=ext_dirs)
         renderer = Renderer(rules_dir=rules_dir)
@@ -263,7 +263,6 @@ def run_pipeline_on_source(
     # Instantiate Parser with injected rules and rule_selector
     parser = Parser(
         rules_dir=rules_dir,
-        cache_enabled=False,
         pre_symbols=pre_symbols,
         rules=rules,
         rule_selector=rule_selector,

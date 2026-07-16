@@ -37,10 +37,10 @@ class LinterScanner:
             for n, r in rules.items()
             if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
         ]
-        rule_selector = RuleSelector(rules, stmt_names, cache_enabled=False)
+        rule_selector = RuleSelector(rules, stmt_names)
         self.lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_list)
         self.parser = Parser(
-            rules=rules, rule_selector=rule_selector, cache_enabled=False
+            rules=rules, rule_selector=rule_selector
         )
 
         # 从语法规则推导切片策略 + 终止符

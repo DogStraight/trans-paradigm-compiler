@@ -1,7 +1,5 @@
 """RuleSelector — candidate rule filtering based on start token matching."""
 
-import json
-import os
 from typing import Any
 from core.define import Token, GrammarRule
 
@@ -90,54 +88,20 @@ def build_start_token_map_names(
     return name_map
 
 
-def save_token_map(name_map: dict[str, list[str]], cache_path: str) -> None:
-    """将起始 token 映射表保存到 JSON 文件。"""
-    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump(name_map, f, indent=2, ensure_ascii=False)
-
-
-def load_token_map(cache_path: str) -> dict[str, list[str]] | None:
-    """从 JSON 文件加载起始 token 映射表。"""
-    if not os.path.exists(cache_path):
-        return None
-    try:
-        with open(cache_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-_DEFAULT_CACHE_PATH: str | None = None
-
-
 class RuleSelector:
     def __init__(
         self,
         grammar_rules: dict[str, GrammarRule],
         statement_rule_names: list[str],
-        cache_path: str | None = None,
-        cache_enabled: bool = True,
     ):
         self.grammar_rules = grammar_rules
         self.statement_rule_names = statement_rule_names
         self.start_token_map: dict[str, list[str]] = {}
         self._names_to_rules: dict[str, GrammarRule] | None = None
 
-        # 尝试从缓存加载
-        if cache_enabled:
-            path = cache_path or _DEFAULT_CACHE_PATH
-            loaded = load_token_map(path) if path else None
-            if loaded:
-                self.start_token_map = loaded
-                return
         self.start_token_map = build_start_token_map_names(
             grammar_rules, statement_rule_names
         )
-        if cache_enabled:
-            path = cache_path or _DEFAULT_CACHE_PATH
-            if path:
-                save_token_map(self.start_token_map, path)
 
     def select_candidates(
         self,

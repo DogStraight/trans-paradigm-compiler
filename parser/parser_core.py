@@ -306,7 +306,6 @@ class Parser:
     def __init__(
         self,
         rules_dir: str | None = None,
-        cache_enabled: bool = True,
         verbose: bool = False,
         log_file: str | None = None,
         pre_symbols: dict[str, str] | None = None,
@@ -317,7 +316,6 @@ class Parser:
 
         Args:
             rules_dir: 语法规则目录（相对路径）。传入时由调用方接管 RuleSelector。
-            cache_enabled: 是否启用磁盘缓存。
             verbose: 调试日志开关。True 时输出所有级别日志，False 时只输出 WARN/ERROR。
             log_file: 日志文件路径。None 时读 FileManager.debug_log_file，
                         空字符串或 "/dev/null" 类似值表示不写日志。
@@ -326,7 +324,6 @@ class Parser:
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
         self.grammar_rules: dict[str, GrammarRule] = {}
-        self._cache_enabled = cache_enabled
         self.verbose = verbose
         # 失败尝试摘要
         self._failure_attempts: list[dict] = []
@@ -382,7 +379,6 @@ class Parser:
             self.rule_selector = RuleSelector(
                 self.grammar_rules,
                 self.statement_rule_names,
-                cache_enabled=cache_enabled,
             )
         self.skip_types = ["newline", "space.fold"]
 
