@@ -36,11 +36,11 @@ EXTRACT_NAMES = frozenset({
     "literal.none",
 })
 
-# 核心消除集合（只消除 parser 内部结构）
-# optional  → 空值过滤
-# repeat    → 零次或多次重复（展开为列表）
-# seq       → 序列（展开为列表）
-# 注意：语法层结构（如 DeclaratorList）不在这里，保留原样
+# Core elimination set (parser-internal structures only)
+# optional  → filter None
+# repeat    → zero-or-more (unfold to list)
+# seq       → sequence (unfold to list)
+# Note: grammar-level structures (e.g. DeclaratorList) are preserved as-is
 ELIMINATE_TYPES = frozenset({"optional", "repeat", "seq"})
 
 # AST 字段名约定（与 core/define.py 中的 Node 类对齐）

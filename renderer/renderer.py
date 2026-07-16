@@ -1,18 +1,10 @@
-"""
-Renderer — AST + 布局规则驱动的代码生成器
+"""Renderer — AST + layout-rule-driven code generator.
 
-只包含 DSL 原语（text/ref/join/group/line/indent/opt），
-所有语言特定知识来自 TOML 布局规则。
-AST 规范化层在渲染前将所有 parser 内部构造（keyword/symbol/optional/repeat/sequence/first+rest）
-翻译为规范形式，Renderer 无需关心 parser 实现细节。
-风格参数（缩进、行宽）来自 _style.toml 配置。
-
-关键设计：
-- renderer.py: 轻量的 orchestrator，暴露公共 API
-- primitives/: 每个 DSL 原语一个文件，共 8 个原语
-- node_renderer.py: 节点级渲染（_render_node / _render_inline / _render_body）
-- loader.py: TOML 加载逻辑
-- doc.py: Doc IR 类型 + layout 算法
+Contains only DSL primitives (text/ref/join/group/line/indent/opt).
+All language-specific knowledge comes from TOML layout rules.
+The AST normalizer converts parser-internal constructs
+(keyword/symbol/optional/repeat/sequence/first+rest)
+before rendering.
 """
 
 from typing import Any

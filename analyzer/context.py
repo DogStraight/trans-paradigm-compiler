@@ -1,11 +1,11 @@
-"""context.py — 分析上下文（AnalysisContext）
+"""context.py — AnalysisContext
 
-分析器遍历过程中的"黑匣子"，是原语/槽位之间唯一的通信介质。
-所有状态通过此对象传递，原语不持有任何全局变量。
+The "black box" data bus between primitives during analysis traversal.
+All state is passed through this object; primitives hold no global state.
 
-职责：
-    承载当前 AST 节点、作用域、全局状态、诊断信息。
-    原语签名统一为 prim(analyzer, node, context, config)。
+Responsibilities:
+    Carry current AST node, scope, global state, and diagnostics.
+    Primitive signature: prim(analyzer, node, context, config).
 """
 
 from typing import Any

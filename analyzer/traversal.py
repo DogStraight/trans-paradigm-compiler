@@ -1,20 +1,8 @@
-"""AnalysisTraversal — 原语驱动的 AST 遍历调度
+"""traversal.py — AnalysisTraversal
 
-职责（对应分析器 5 模块之一：遍历调度）：
-    遍历 AST，对每个节点根据 TOML [RuleName.analyzer] 配置
-    依次执行注册的分析器原语。
-
-文件结构中对应的职责模块：
-    context.py        — [1] 上下文承载
-    traversal.py    — [2] 遍历调度
-    scope.py          — [3] 符号表管理
-    diagnostic.py     — [4] 诊断聚合
-    primitives/       — [5] 原子操作库
-
-设计原则：
-    语言无关 — 所有原语不包含 Verilog 专用逻辑
-    可组合 — 原语按需注册，TOML 配置决定哪些触发
-    可扩展 — 语言专用原语通过外部模块注入
+Primitive-driven semantic analysis pipeline.
+Walks the AST and executes registered analyzer primitives according
+to TOML [RuleName.analyzer] configuration for each node.
 """
 
 from typing import Any

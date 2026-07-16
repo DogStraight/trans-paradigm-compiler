@@ -1,15 +1,15 @@
-"""analyzer/ — 语义分析框架
+"""analyzer/ — semantic analysis framework
 
-职责（5 模块）:
-    context.py     — [1] 上下文承载：AnalysisContext（原语间数据总线）
-    traversal.py   — [2] 遍历调度：AnalysisTraversal（AST 遍历 + 原语分派）
-    scope.py       — [3] 符号表管理：Scope / Symbol
-    diagnostic.py  — [4] 诊断聚合：Diagnostic（结构化错误信息）
-    primitives/    — [5] 原子操作库：原语注册 + 内置原语 + 工具函数
+Modules (5):
+    context.py     — AnalysisContext: data bus between primitives
+    traversal.py   — AnalysisTraversal: AST walk + primitive dispatch
+    scope.py       — Scope / Symbol: scope chain + symbol table
+    diagnostic.py  — Diagnostic: structured diagnostics
+    primitives/    — primitive registry and built-in primitives
 
-设计原则：
-    语言无关 — 所有代码不包含任何语言专用逻辑
-    可扩展 — 语言专用原语通过外部模块注入，不在此目录内
+Design principles:
+    Language-agnostic — no language-specific logic in this directory
+    Extensible — language-specific primitives injected via external modules
 """
 
 from .scope import Scope, Symbol, get_symbol_kinds
