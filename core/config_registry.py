@@ -12,9 +12,6 @@
 所有 config.declare() 声明集中在 core/config_map.py 中。
 """
 
-
-
-
 import os
 import tomllib
 from typing import Any
@@ -59,7 +56,9 @@ class ConfigRegistry:
         }
 
     @classmethod
-    def load_all(cls, rules_dir: str, ext_dirs: list[str] | None = None, **base_dirs: str) -> None:
+    def load_all(
+        cls, rules_dir: str, ext_dirs: list[str] | None = None, **base_dirs: str
+    ) -> None:
         """加载所有已声明的配置。
 
         每个声明的 file 路径根据其 base 参数选基准目录拼接：
@@ -142,16 +141,6 @@ class ConfigRegistry:
                 f"[ConfigRegistry] '{name}' 未声明。可用声明: {list(cls._entries.keys())}"
             )
         return cls._loaded[name]
-
-    @classmethod
-    def is_declared(cls, name: str) -> bool:
-        """检查是否已声明某个配置"""
-        return name in cls._entries
-
-    @classmethod
-    def registered_sources(cls) -> list[dict]:
-        """返回所有声明的摘要（用于调试/检查）"""
-        return [{"name": n, **s} for n, s in cls._entries.items()]
 
     @classmethod
     def reset(cls) -> None:

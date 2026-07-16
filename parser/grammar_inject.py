@@ -25,53 +25,6 @@ def _parse_target(target: str) -> tuple[str, str, int]:
 _VERBOSE = False
 
 
-def set_verbose(v: bool) -> None:
-    global _VERBOSE
-    _VERBOSE = v
-
-
-def inject_alternatives(rule: Any, alternatives: list[str]) -> None:
-    prods = list(getattr(rule, "production", []))
-    if not prods:
-        return
-    first_prod = prods[0]
-    if isinstance(first_prod, str):
-        for alt in alternatives:
-            if _has_top_level_choice(first_prod):
-                first_prod = f"{alt}|{first_prod}"
-            else:
-                first_prod += f"|{alt}"
-        prods[0] = first_prod
-        object.__setattr__(rule, "production", tuple(prods))
-
-
-def propagate_alternatives(
-    rules: dict[str, Any],
-    rule_name: str,
-    alternatives: list[str],
-    skip_names: set[str],
-) -> None:
-    target_ref = f"@{rule_name}"
-    for other_name, other_rule in rules.items():
-        if other_name in skip_names:
-            continue
-        other_prods = list(other_rule.prods)
-        changed = False
-        for i, prod in enumerate(other_prods):
-            if not isinstance(prod, str):
-                continue
-            for alt in alternatives:
-                replacement = f"({target_ref}|{alt})"
-                if alt in prod:
-                    prod = prod.replace(alt, replacement)
-                    changed = True
-            other_prods[i] = prod
-        if changed:
-            object.__setattr__(other_rule, "production", tuple(other_prods))
-            if _VERBOSE:
-                print(f"  [inject] propagate {other_name}: {other_prods}")
-
-
 def inject_replace_rule(
     rules: dict[str, Any],
     replace_config: dict[str, dict[str, str]],

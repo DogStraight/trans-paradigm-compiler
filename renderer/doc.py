@@ -142,33 +142,11 @@ def flatten(doc: Doc) -> Doc:
             return doc
 
 
-def concat(*docs: Doc) -> Doc:
-    """拼接多个 Doc，过滤掉 Empty"""
-    flat: list[Doc] = []
-    for d in docs:
-        if isinstance(d, Empty):
-            continue
-        if isinstance(d, Concat):
-            flat.extend(d.docs)
-        else:
-            flat.append(d)
-    if not flat:
-        return _EMPTY
-    if len(flat) == 1:
-        return flat[0]
-    return Concat(flat)
-
-
 def nest(indent: int, doc: Doc) -> Doc:
     """缩进，嵌套空 Doc 时返回空"""
     if isinstance(doc, Empty):
         return doc
     return Nest(indent, doc)
-
-
-def soft_line() -> Doc:
-    """等价于 Line()，语义更清晰"""
-    return Line()
 
 
 # ============================================================================

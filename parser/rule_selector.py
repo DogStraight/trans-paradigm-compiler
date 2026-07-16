@@ -111,13 +111,6 @@ def load_token_map(cache_path: str) -> dict[str, list[str]] | None:
 _DEFAULT_CACHE_PATH: str | None = None
 
 
-def set_default_cache_path(path: str | None = None) -> str | None:
-    global _DEFAULT_CACHE_PATH
-    if path is not None:
-        _DEFAULT_CACHE_PATH = path
-    return _DEFAULT_CACHE_PATH
-
-
 class RuleSelector:
     def __init__(
         self,
@@ -272,28 +265,6 @@ def flatten_production_features(
     if features is None:
         return []
     return _flatten_production_features(features)
-
-
-def get_rule_start_tokens(
-    rule: GrammarRule,
-    grammar_rules: dict[str, GrammarRule],
-) -> set[str]:
-    """返回一条规则可能起始的 token 类型集合（First set）。
-
-    支持 @RuleRef 递归展开、分支展开、后缀运算符处理。
-    轻量封装，供 linter 等外部模块复用。
-    """
-    prods = rule.prods
-    if not prods:
-        return set()
-    try:
-        feat = analyze_production_features(prods[0])
-    except Exception:
-        return set()
-    if feat is None:
-        return set()
-    visited: set[str] = set()
-    return _compute_start_tokens(feat, grammar_rules, visited)
 
 
 def analyze_production_features(production: str) -> dict[str, Any] | None:

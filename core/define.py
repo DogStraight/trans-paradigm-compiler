@@ -64,8 +64,11 @@ class Node:
         if isinstance(item, Node):
             return item.dump()
         if isinstance(item, dict):
-            filtered = {k: Node._dump_item(v) for k, v in item.items()
-                        if v is not None and not (isinstance(v, list) and not v)}
+            filtered = {
+                k: Node._dump_item(v)
+                for k, v in item.items()
+                if v is not None and not (isinstance(v, list) and not v)
+            }
             return filtered if filtered else None
         if isinstance(item, list):
             filtered = [Node._dump_item(x) for x in item if x is not None]
@@ -123,9 +126,7 @@ class Node:
 class FileManager:
     """纯静态工具类 — 文件路径管理与 TOML 加载。全局单例（无实例状态）。"""
 
-    _base_dir: str = os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__))
-    )
+    _base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     rules_file: str = ""
     rules_dir: str = DEFAULT_RULES_DIR
     token_define_file: str = ""
@@ -145,23 +146,9 @@ class FileManager:
             return f.read()
 
     @classmethod
-    def write_file(cls, relative_path: str, content: str) -> None:
-        """Write content to file at relative path"""
-        with open(cls.get_full_path(relative_path), "w", encoding="utf-8") as f:
-            f.write(content)
-
-    @classmethod
     def exists(cls, relative_path: str) -> bool:
         """Check if file exists"""
         return os.path.exists(cls.get_full_path(relative_path))
-
-    @classmethod
-    def load_rules(cls, rules_file: str = "") -> dict:
-        """Load grammar rules from a single TOML file (legacy)"""
-        if rules_file == "":
-            rules_file = cls.rules_file
-        rules_content = cls.read_file(rules_file)
-        return tomllib.loads(rules_content)
 
     @classmethod
     def load_all_toml(cls, dir_relative_path: str) -> dict:
@@ -236,18 +223,19 @@ class ParseError(Exception):
         self.context_info = context_info
         parts = [msg]
         if token:
-            parts.append(f"  token: '{token.content}' (type={token.type}) Ln {token.line}")
+            parts.append(
+                f"  token: '{token.content}' (type={token.type}) Ln {token.line}"
+            )
         if rule:
             parts.append(f"  rule: {rule}")
         if path:
             parts.append(f"  path: {path}")
         if candidates is not None:
-            names = [r.name if hasattr(r, 'name') else str(r) for r in candidates]
+            names = [r.name if hasattr(r, "name") else str(r) for r in candidates]
             parts.append(f"  candidates ({len(candidates)}): {names}")
         if context_info:
             parts.append(f"  ctx: {context_info}")
         super().__init__("\n".join(parts))
-
 
 
 class GrammarRule:
@@ -465,6 +453,7 @@ class GrammarRulesRegister:
     def rules_registration_from_file(self, file_path: str) -> dict[str, GrammarRule]:
         """从单个 TOML 文件加载规则。"""
         import tomllib
+
         with open(file_path, "rb") as f:
             rules_dict = tomllib.load(f)
         result = {}

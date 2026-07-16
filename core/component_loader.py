@@ -8,11 +8,14 @@ component_loader.py — 组件加载器
 import importlib.util
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 
 _COMPONENT_DIR = os.path.join(
     os.path.dirname(__file__),
-    "..", "grammar", "rules_verilog_ext", "_components",
+    "..",
+    "grammar",
+    "rules_verilog_ext",
+    "_components",
 )
 
 # 全局注册：组件名 → { grammar, analyzer, transform }
@@ -41,6 +44,7 @@ def discover_components() -> list[dict[str, Any]]:
 def _parse_component_toml(path: str) -> dict[str, Any] | None:
     """简易解析 component.toml（仅支持单层 [table]）。"""
     import tomllib
+
     with open(path, "rb") as f:
         raw = tomllib.load(f)
     comp = raw.get("component", {})
@@ -70,7 +74,9 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
 
     # 2. 分析器 handler
     analyzer_handlers = meta.get("analyzer", {})
-    info["analyzer"] = _load_python_handlers(cdir, analyzer_handlers.get("handlers", []))
+    info["analyzer"] = _load_python_handlers(
+        cdir, analyzer_handlers.get("handlers", [])
+    )
 
     # 3. 变换 handler
     transform_meta = meta.get("transform", {})
@@ -81,18 +87,20 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 # 全局变换槽位注册表
-_transform_slots: dict[str, callable] = {}
+_transform_slots: dict[str, Callable] = {}
 
 
 def register_transform_slot(name: str):
     """装饰器：注册变换槽位。"""
+
     def decorator(fn):
         _transform_slots[name] = fn
         return fn
+
     return decorator
 
 
-def get_transform_slots() -> dict[str, callable]:
+def get_transform_slots() -> dict[str, Callable]:
     return dict(_transform_slots)
 
 
@@ -151,5 +159,4 @@ def get_component_grammar_files() -> list[str]:
     return files
 
 
-def get_loaded_components() -> dict[str, dict[str, Any]]:
-    return dict(_loaded_components)
+

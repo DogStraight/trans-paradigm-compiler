@@ -5,12 +5,12 @@
 """
 
 import re
-from copy import deepcopy
 from core.define import Node
 
 
 def resolve_template(template: str, context: dict) -> str:
     """从 context dict 沿点号路径取值，解析 {a.b.c} 模板"""
+
     def _lookup(m):
         key = m.group(1)
         val = context
@@ -20,6 +20,7 @@ def resolve_template(template: str, context: dict) -> str:
             else:
                 return ""
         return str(val) if val is not None else ""
+
     return re.sub(r"\{([^}]+)\}", _lookup, template)
 
 
@@ -78,8 +79,10 @@ def push_cycle(marker: str, target_key: str) -> bool:
     """入栈循环引用检测，返回 True 表示已存在（循环）"""
     pair = (marker, target_key)
     if pair in _resolve_stack:
-        print(f"[analyzer] ERROR 循环引用: "
-              f"{' → '.join(f'{p[1]}' for p in _resolve_stack + [pair])}")
+        print(
+            f"[analyzer] ERROR 循环引用: "
+            f"{' → '.join(f'{p[1]}' for p in _resolve_stack + [pair])}"
+        )
         return True
     _resolve_stack.append(pair)
     return False

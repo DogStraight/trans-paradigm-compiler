@@ -67,10 +67,6 @@ class ConfigDrivenTransform(TransformPlugin):
     def stats(self) -> dict[str, int]:
         return dict(self._stats)
 
-    def set_tables(self, tables: dict) -> None:
-        """注入运行期映射表（分析器产出的语义映射）"""
-        self._tables = tables
-
     # ── TransformPlugin 接口 ──
 
     def process(self, ast: Node, root_scope: Scope) -> Node:

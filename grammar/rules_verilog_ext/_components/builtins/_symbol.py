@@ -23,23 +23,8 @@ from typing import Any, Optional, Callable
 from core.define import Node
 from analyzer.primitives.registry import register
 
-# ── Capture 后处理器注册中心 ──
-# 语言特定的 capture 后处理通过此系统注册，不硬编码在原语中。
-
+# ── Capture 后处理器中心（目前未使用，保留扩展点）──
 _capture_hooks: dict[str, Callable] = {}
-
-
-def register_capture_hook(name: str) -> Callable:
-    """装饰器：注册一个 capture 后处理器
-
-    Hook 签名:
-        def hook(node, sym_rule, scope, name, attrs) -> dict:
-            return attrs
-    """
-    def decorator(fn: Callable) -> Callable:
-        _capture_hooks[name] = fn
-        return fn
-    return decorator
 
 
 # ── 原语: symbol_declare ──

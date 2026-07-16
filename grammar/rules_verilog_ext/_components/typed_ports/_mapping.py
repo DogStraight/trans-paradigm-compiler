@@ -10,9 +10,6 @@
 LANG = "verilog"
 RULES_DIR = "grammar/rules_verilog"
 EXT_DIRS = ["grammar/rules_verilog_ext"]
-INLINE_COMMENT_ENABLED = True
-EXPAND_MACROS_ENABLED = False
-
 # 端口表：从 role 符号的 attrs["ports"] 提取 direction + name
 _type_ports_flat = {
     "trigger": {"kind": "role"},

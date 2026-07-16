@@ -57,10 +57,6 @@ class ParseContext:
         self.token_pointer += count
         self.match_length += count
 
-    def advance_production(self, count=1):
-        """向前移动产生式指针"""
-        self.production_pointer += count
-
     def create_snapshot(self):
         """创建解析状态快照，用于回溯（tuple 比 dict 快 3x）"""
         return (
@@ -86,10 +82,6 @@ class ParseContext:
     def update_current_rule(self, rule: GrammarRule) -> None:
         """更新当前正在匹配的语法规则。"""
         self.current_rule = rule
-
-    def update_match_length(self, length: int) -> None:
-        """更新已匹配的 token 数。"""
-        self.match_length = length
 
     def has_more_tokens(self) -> bool:
         """判断是否还有未解析的token"""
@@ -177,9 +169,6 @@ class ScopeStack:
     @property
     def current(self) -> ScopeEntry:
         return self._stack[-1]
-
-    def current_kind(self) -> str:
-        return self._stack[-1].kind
 
     def dump(self) -> list[dict]:
         """调试用：导出整个栈。"""
@@ -462,30 +451,6 @@ class Parser:
             assert isinstance(tok, Token)
             return f"tok='{tok.content}' type={tok.type} idx={context.token_pointer}"
         return f"tok=EOF idx={context.token_pointer}"
-
-    def _expected_tokens_for_rule(self, rule: GrammarRule) -> str:
-        """计算规则可能接受的起始 token 类型集合，返回可读描述。"""
-        from .rule_selector import analyze_production_features
-
-        prods = rule.prods
-        if not prods:
-            return "<empty production>"
-        try:
-            feat = analyze_production_features(prods[0])
-        except Exception:
-            return "<analyze failed>"
-        if not feat:
-            return "<no features>"
-        visited: set = set()
-        starts = _compute_start_tokens(feat, self.grammar_rules, visited)
-        if not starts:
-            return "<unknown>"
-        sorted_starts = sorted(starts)
-        if len(sorted_starts) > 10:
-            return (
-                f"{{{', '.join(sorted_starts[:10])}, ...}} ({len(sorted_starts)} total)"
-            )
-        return f"{{{', '.join(sorted_starts)}}}"
 
     def _skip_tokens(self, context: ParseContext, skip_types: tuple) -> None:
         while context.has_more_tokens():
