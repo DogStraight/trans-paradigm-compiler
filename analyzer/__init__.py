@@ -16,7 +16,7 @@ from .scope import Scope, Symbol, get_symbol_kinds
 from .traversal import AnalysisTraversal
 from .context import AnalysisContext
 from .diagnostic import Diagnostic
-from .primitives import register_capture_hook, register_primitive, get_primitive
+from .primitives import register_primitive, get_primitive
 
 
 __all__ = [
@@ -26,7 +26,6 @@ __all__ = [
     "AnalysisTraversal",
     "AnalysisContext",
     "Diagnostic",
-    "register_capture_hook",
     "register_primitive",
     "get_primitive",
 ]

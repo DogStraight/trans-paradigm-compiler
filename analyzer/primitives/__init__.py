@@ -33,10 +33,6 @@ from .registry import (
     analyzer_primitive,  # 向下兼容
     AnalyzerPrimitive,
 )
-from .scope import scope_enter, scope_exit
-from .symbol import symbol_declare, register_capture_hook
-from .identifier import identifier_resolve
-from .resolve import resolve_refs
 from ._utils import (
     resolve_name,
     find_symbol_in_scope,
@@ -59,9 +55,4 @@ __all__ = [
     "register",
     "analyzer_primitive",
     "AnalyzerPrimitive",
-    "register_capture_hook",
-    "scope_enter",
-    "scope_exit",
-    "symbol_declare",
-    "identifier_resolve",
 ]

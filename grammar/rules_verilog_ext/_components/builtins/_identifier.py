@@ -10,7 +10,7 @@
 """
 
 from core.define import Node
-from .registry import register
+from analyzer.primitives.registry import register
 
 
 @register("identifier_resolve")

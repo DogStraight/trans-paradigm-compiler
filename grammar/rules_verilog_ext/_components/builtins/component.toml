@@ -1,0 +1,13 @@
+[component]
+name = "builtins"
+lang = "*"
+description = "跨语言通用的分析器原语和变换插件"
+requires = []
+
+[component.analyzer]
+primitives = ["scope_enter", "scope_exit", "symbol_declare", "identifier_resolve", "resolve_refs"]
+handlers = ["_scope.py", "_symbol.py", "_identifier.py", "_resolve.py"]
+
+[component.transform]
+slots = []
+handlers = ["_semantic_mapping.py"]

@@ -22,8 +22,8 @@ Pipeline:
 
 from copy import deepcopy
 from core.define import Node
-from .registry import register
-from ._utils import (
+from analyzer.primitives.registry import register
+from analyzer.primitives._utils import (
     resolve_name,
     find_symbol_in_scope,
     get_attrs_list,

@@ -21,7 +21,7 @@ capture 配置:
 
 from typing import Any, Optional, Callable
 from core.define import Node
-from .registry import register
+from analyzer.primitives.registry import register
 
 # ── Capture 后处理器注册中心 ──
 # 语言特定的 capture 后处理通过此系统注册，不硬编码在原语中。

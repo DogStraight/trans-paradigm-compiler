@@ -12,7 +12,7 @@
 
 from core.define import Node
 from analyzer.scope import Scope
-from .registry import register
+from analyzer.primitives.registry import register
 
 
 @register("scope_enter")

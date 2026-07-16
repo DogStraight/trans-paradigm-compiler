@@ -12,6 +12,12 @@ from datetime import datetime
 from typing import Optional, Any, Dict, Tuple
 from core.define import Node
 
+# ── 预加载组件（确保组件插件先于引擎插件注册）──
+from core.component_loader import load_all_components
+load_all_components()
+# 显式导入引擎插件，确保在组件插件之后注册
+import transform.config_driven  # noqa: F401, E402
+
 # ── 词法 / 语法 / 配置 ──
 from lexer import Lexer, pre_scan, load_pre_scan_config
 from parser import Parser, setup_grammar
