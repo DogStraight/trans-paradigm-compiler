@@ -2,7 +2,7 @@
 name = "typed_ports"
 lang = "verilog"
 description = "类型化端口：type 声明 + 角色 + impl 绑定 + 自动展开"
-requires = []
+requires = ["builtins"]
 
 # 语法规则：引用 ext 目录中的文件，不重复定义
 [component.grammar]

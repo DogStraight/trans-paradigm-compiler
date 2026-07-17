@@ -4,12 +4,12 @@
 module alu #(
     parameter W = 8
 )(
-    input  wire [W-1:0]       a,
-    input  wire [W-1:0]       b,
-    input  wire [2:0]         op,
-    output reg  [W-1:0]       result,
-    output reg                zero,
-    output reg                overflow
+    input  wire [W-1:0] a,
+    input  wire [W-1:0] b,
+    input  wire [2:0]   op,
+    output reg  [W-1:0] result,
+    output reg          zero,
+    output reg          overflow
 );
 
     wire [W-1:0] sum;

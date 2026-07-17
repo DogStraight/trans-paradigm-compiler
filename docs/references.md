@@ -1,7 +1,7 @@
 # 参考与借鉴项目
 
 > 分析过的项目及其对我们设计的影响。
-> 最后更新：2026-07-16
+> 最后更新：2026-07-17
 
 | 项目 | 关系 | 主要启发 |
 |------|------|---------|
@@ -14,7 +14,7 @@
 | **[Tree-sitter](https://github.com/tree-sitter/tree-sitter)** | 架构对比 | 增量解析与容错解析的思路参考 |
 | **[INRIA Syntax](https://github.com/moosetechnology/syntax)** | 存在性确认 | C/Fortran 领域的配置驱动解析原型，验证了"不止我们在做" |
 | **[textX](https://github.com/textX/textX)** | 架构对比 | Python 生态的 DSL 工作台，配置驱动理念的同行参考 |
-| **[dynparser](https://github.com/jleahred/dynparser)** | 设计参考 | 运行时规则加载（PEG 文本 / 宏内联 / API 追加）、自举、AST 后处理链 |
+| **[Spoofax](https://github.com/metaborg/spoofax)** | 架构对比 | 语言工作台（Java/Eclipse），编译期生成 vs 运行时 TOML。Statix scope graph 约束系统值得参考 |
 | **Parser Combinators** ([pyparsing](https://github.com/pyparsing/pyparsing) / [nom](https://github.com/rust-bakery/nom)) | 架构对比 | 语法即代码 vs 配置驱动；Scannerless vs 管线分离；无渲染 vs Doc IR |
 | **[parlex](https://github.com/ikhomyakov/parlex)** | 架构对比 | Rust 下仿 lex/yacc 编译期生成器；SLR(1) 运行时歧义消解对 end_case 有启发；但 v0.4 · 0⭐ · 4K 下载 · 个人项目无社区 · 参考价值有限 |
 | **[ModelCC](https://modelcc.ikor.org/)** | 设计参考 | 模型驱动 parser generator（Java 类+注解 → 解析器）；Earley chart parser；内置引用解析 → ASG；`@Priority`/`@Associativity` 声明式消歧验证了 PyV 声明式配置方向；但 r2015 后已停滞 |
@@ -24,7 +24,10 @@
 | **[DHParser](https://gitlab.lrz.de/badw-it/DHParser)** | 架构对比 | Python EBNF parser generator，专注数字人文 DSL 快速原型（1.9.7·Apache 2.0）。完整 left-recursion 支持（squirrel parser LR 算法）、测试驱动语法开发 + post-mortem debugger、声明式 AST tree transformation。依赖 cython（可选）。无 Doc IR 渲染器、不关心多文件输出。**错误恢复方案不同**：PyV 用反向解析器将错误节点暴露给用户，不依赖复杂的 post-mortem 工具 |
 | **[Langium](https://github.com/eclipse-langium/langium)** | 架构对比 | TypeScript 语言工程框架（Eclipse·MIT·v4.3.0·1k⭐·极活跃）。底层 Chevrotain LL(k) 解析器，.langium 声明语法 → 生成 TypeScript AST 类型定义 + LSP 服务。**核心差异**：(1) 生成式解析器（LL(k)），非配置驱动；(2) LSP-first——框架直接产出语法高亮/补全/跳转等 IDE 功能；(3) TypeScript/Node.js 技术栈，非零依赖；(4) 渲染使用模板/visitor，非 Doc IR。**💡 可借鉴**：grammar DSL 直接生成 AST 类型定义的理念——PyV 可考虑从 TOML production 推导 TypeScript 类型定义 |
 | **[RADLR](https://github.com/acweathersby/radlr)** | 架构对比 | Rust parser compiler 框架（acweathersby·v1.0.1-beta2·0⭐·单人·最后更新 2025-09）。支持 LL/LR/RAD/GLL/GLR 等多种解析算法，生成字节码解析器。CLI + WASM 浏览器 Lab UI。**核心差异**：(1) Rust 实现，parser generator（非配置驱动运行时解析）；(2) 自举——解析器自身的语法由 RADLR 语法（.radlr 文件）定义并自解析；(3) 生成字节码而非运行时 AST 操作；(4) WASM 浏览器互动 Lab 是亮点。**💡 可借鉴**：parser 分类报告（LL/RD/RAD 等）及算法复杂度评估——PyV 可借鉴其 metrics 概念用于调试输出 |
-| **[Parsy](https://github.com/python-parsy/parsy)** | 架构对比 | Python monadic parser combinator（v2.2·MIT·零依赖·<800LOC·极成熟）。LL(infinity) 风格，组合子模式。**与 PyV 不同道路**：语法即代码（Python 组合子）vs 配置驱动（TOML production）；从头组合出解析器而非写声明式规则。**💡 可借鉴**：极简实现（单文件<800行）、近10年零不兼容变更的稳定性 |
+| **[Xtext](https://github.com/eclipse-xtext/xtext)** | 架构对比 | Eclipse 语言框架，生成式 vs 运行时 TOML。语法 DSL 生成 AST 类型定义的思路可借鉴，Maven 复杂度验证了零依赖方向正确 | Python monadic parser combinator（v2.2·MIT·零依赖·<800LOC·极成熟）。LL(infinity) 风格，组合子模式。**与 PyV 不同道路**：语法即代码（Python 组合子）vs 配置驱动（TOML production）；从头组合出解析器而非写声明式规则。**💡 可借鉴**：极简实现（单文件<800行）、近10年零不兼容变更的稳定性 |
 | **[Parsek](https://github.com/anptrs/parsek)** | 架构对比 | Python 轻量 parser combinator（v2.4.0·零依赖·单文件）。支持组合子+FSM 混合风格。**与 Parsy 同类，关键差异**：支持 FSM 格式定义，可用于简单状态机解析。v2.4.0·相较 Parsy 较新。**💡 可借鉴**：组合子+FSM 混合模式——PyV 词法分析器使用 FSM，解析器使用递归下降，两套风格可互相参考 |
 | **[wadler-lindig](https://github.com/patrick-kidger/wadler-lindig)** | 深度参考 | Python Wadler-Lindig pretty-printer（v0.1.7·MIT·零依赖·核心77行）。**与 PyV Renderer 共享同一理论源头**（Wadler-Lindig Doc IR 算法）。**核心差异**：(1) 通用目的（repr/日志美化），非代码生成专用；(2) 无 layout DSL 配置，硬编码式使用；(3) 无 group/flat/broken 显式控制，自动选择。**PyV 的 Renderer 在此算法之上扩展了 TOML 配置化的 layout DSL、primitives 体系、inline comment 回注等** |
 | **[parsejoy](https://github.com/adewes/parsejoy)** | 架构对比 | YAML 定义 EBNF 语法→运行时解析（C++/Go/Python 三实现）。**自述"高度实验性且未完成"**。C++ 版依赖 Boost+LuaJIT+YAML-CPP（重）。Python 版有多个实验性实现（GLR parser）。**同**：YAML 语法即数据。**异**：(1) 多语言实现（非纯 Python）；(2) 依赖重（尤其 C++）；(3) GLR 算法非递归下降；(4) 无渲染器、无 AST 变换管线、无语义分析。**状态**：已停滞，仅实验用途 |
+| **[MLIR ODS (llvm/llvm-project)](https://github.com/llvm/llvm-project)** | 深度参考 | 配置驱动 Operation 定义体系（TableGen .td），自动生成 C++ 构造器/验证器/序列化。39.3k⭐ · 极活跃 · LLVM 基金会 · 最后更新 2026-07-16。**详见下方调研报告** |
+| **[CIRCT (llvm/circt)](https://github.com/llvm/circt)** | 设计参考 | MLIR-based 硬件编译器，FIRRTL→HW→SV→Verilog 多级下降管线。2.2k⭐ · 极活跃 · LLVM 基金会 · 最后更新 2026-07-16。**详见下方调研报告** |
+| **[ClangIR / CIR (llvm/llvm-project)](https://clang.llvm.org/docs/ClangIR.html)** | 架构对比 | Clang 的 MLIR-based 中级 IR，C/C++ → CIR → LLVM IR。使用 ODS 定义所有操作。已上流到 llvm 主仓库。**详见下方调研报告** |

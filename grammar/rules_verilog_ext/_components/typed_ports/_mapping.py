@@ -1,19 +1,25 @@
-"""_mapping.py — Verilog 语义映射表定义
+"""_mapping.py — Verilog semantic mapping table definitions.
 
-定义分析器符号 attrs → 变换器映射表的转换规则。
-消费方：SemanticMappingPlugin（transform 管线第一阶段）
+Defines how analyzer symbol attrs map to transformer mapping tables.
+Consumed by SemanticMappingPlugin (first stage of transform pipeline).
 
-本文件是 typed_ports 组件的语言配置入口。
+This file is the typed_ports component's language config entry point.
 """
 
-# ── 语言配置（由管线消费）──
+from grammar.rules_verilog_ext._components._protocol import (
+    TABLE_TYPE_PORTS_FLAT,
+    ATTR_REF_CALLBACKS,
+)
+
+# ── Language config (consumed by pipeline) ──
 LANG = "verilog"
 RULES_DIR = "grammar/rules_verilog"
 EXT_DIRS = ["grammar/rules_verilog_ext"]
-# 端口表：从 role 符号的 attrs["ports"] 提取 direction + name
+
+# Port mapping: extract direction + name from role symbol attrs["ports"]
 _type_ports_flat = {
     "trigger": {"kind": "role"},
-    "table": "type_ports_flat",
+    "table": TABLE_TYPE_PORTS_FLAT,
     "key": "{scope.name}.{name}",
     "source": {
         "attr": "ports",
@@ -26,13 +32,11 @@ _type_ports_flat = {
     },
 }
 
-# 变换回调消费
-_apply_refs = {
-    "kind": "apply_refs",
-}
+# Transform callback consumer
+_apply_refs = {"kind": "apply_refs"}
 
 mapping_entries: dict = {
-    "type_ports_flat": _type_ports_flat,
+    TABLE_TYPE_PORTS_FLAT: _type_ports_flat,
 }
 
 resolve_entries: dict = {
@@ -41,16 +45,16 @@ resolve_entries: dict = {
 
 
 def collect_callbacks(scope) -> dict:
-    """递归收集 scope 树中所有符号的 _ref_callbacks
+    """Recursively collect _ref_callbacks from all symbols in the scope tree.
 
-    输出文件格式（trans_callback/{name}.json）：
+    Output format (trans_callback/{name}.json):
         { "type_name.role_name": [{ "kind": "nested|invert", ... }] }
     """
     result: dict = {}
 
     def _walk(s):
         for sym in s.symbols.values():
-            cbs = sym.attrs.get("_ref_callbacks", [])
+            cbs = sym.attrs.get(ATTR_REF_CALLBACKS, [])
             if cbs:
                 result[f"{s.name}.{sym.name}"] = cbs
         for child in s.children:
@@ -58,7 +62,3 @@ def collect_callbacks(scope) -> dict:
 
     _walk(scope)
     return result
-
-resolve_entries: dict = {
-    "apply_type_refs": _apply_refs,
-}

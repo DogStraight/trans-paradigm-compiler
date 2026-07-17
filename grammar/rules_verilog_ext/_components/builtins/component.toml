@@ -12,3 +12,6 @@ handlers = ["_scope.py", "_symbol.py", "_identifier.py", "_resolve.py"]
 [component.transform]
 slots = []
 handlers = ["_semantic_mapping.py"]
+
+[component.mapping]
+entry = "_resolve.py"

@@ -36,6 +36,13 @@ def main() -> None:
         sys.argv = [sys.argv[0]] + args
         cli_main()
 
+    elif command == "new" and args and args[0] == "component":
+        from scripts.scaffold_component import scaffold_component
+
+        name = args[1] if len(args) > 1 else ""
+        lang = args[3] if len(args) > 3 and args[2] == "--lang" else "verilog"
+        scaffold_component(name, lang)
+
     else:
         print(f"Unknown command: {command}")
         _print_usage()
@@ -46,8 +53,9 @@ def _print_usage() -> None:
     print("Usage: python main.py <command> [args...]")
     print()
     print("Commands:")
-    print("  pipeline [test_name]  运行 Verilog 编译管线")
-    print("  linter [input_file]   运行语法扫描器")
+    print("  pipeline [test_name]          Run the Verilog compilation pipeline")
+    print("  linter [input_file]           Run the syntax scanner")
+    print("  new component <name>          Scaffold a new component")
 
 
 if __name__ == "__main__":

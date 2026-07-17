@@ -1,14 +1,15 @@
-"""
-component_loader.py — 组件加载器
+"""component_loader.py — Component loading and management.
 
-组件 = 语法规则 + 分析器原语 + 变换槽位的自包含单元。
-每个组件在 grammar/rules_verilog_ext/_components/<name>/ 目录中。
+A component is a self-contained unit of grammar rules + analyzer primitives
++ transform slots, located in grammar/rules_verilog_ext/_components/<name>/.
 """
 
 import importlib.util
 import os
 import sys
 from typing import Any, Callable
+
+from grammar.rules_verilog_ext._components._protocol import META_NAME, META_REQUIRES
 
 _COMPONENT_DIR = os.path.join(
     os.path.dirname(__file__),
@@ -18,18 +19,19 @@ _COMPONENT_DIR = os.path.join(
     "_components",
 )
 
-# 全局注册：组件名 → { grammar, analyzer, transform }
 _loaded_components: dict[str, dict[str, Any]] = {}
+_transform_slots: dict[str, Callable] = {}
+_PRIMITIVE_ORDER: list[str] = []
 
 
 def discover_components() -> list[dict[str, Any]]:
-    """扫描 _components/ 目录，返回所有组件元信息。"""
+    """Scan _components/ and return metadata for all components."""
     if not os.path.isdir(_COMPONENT_DIR):
         return []
     result = []
     for name in sorted(os.listdir(_COMPONENT_DIR)):
         cdir = os.path.join(_COMPONENT_DIR, name)
-        if not os.path.isdir(cdir):
+        if not os.path.isdir(cdir) or name.startswith("_"):
             continue
         toml_path = os.path.join(cdir, "component.toml")
         if not os.path.isfile(toml_path):
@@ -42,27 +44,51 @@ def discover_components() -> list[dict[str, Any]]:
 
 
 def _parse_component_toml(path: str) -> dict[str, Any] | None:
-    """简易解析 component.toml（仅支持单层 [table]）。"""
+    """Parse component.toml and validate minimal fields."""
     import tomllib
 
     with open(path, "rb") as f:
         raw = tomllib.load(f)
     comp = raw.get("component", {})
-    if not comp.get("name"):
+    if not comp.get(META_NAME):
         return None
     return comp
 
 
+def _resolve_dependencies(metas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Topological sort by requires[]. Raises ValueError on cycle/missing."""
+    names = {m[META_NAME] for m in metas}
+    ordered: list[dict[str, Any]] = []
+    visited: set[str] = set()
+
+    def _visit(name: str, path: list[str]) -> None:
+        if name in visited:
+            return
+        if name in path:
+            raise ValueError(f"Component dependency cycle: {' -> '.join(path + [name])}")
+        if name not in names:
+            raise ValueError(f"Component '{name}' requires '{name}' but it's not found")
+        meta = next(m for m in metas if m[META_NAME] == name)
+        for dep in meta.get(META_REQUIRES, []):
+            _visit(dep, path + [name])
+        visited.add(name)
+        ordered.append(meta)
+
+    for m in metas:
+        _visit(m[META_NAME], [])
+    return ordered
+
+
 def load_component(meta: dict[str, Any]) -> dict[str, Any]:
-    """加载一个组件：grammar → analyzer → transform。"""
-    name = meta["name"]
+    """Load a component: grammar files -> analyzer handlers -> transform handlers."""
+    name = meta[META_NAME]
     if name in _loaded_components:
         return _loaded_components[name]
 
     cdir = meta["_dir"]
     info: dict[str, Any] = {"name": name, "meta": meta}
 
-    # 1. 语法文件（组件本地 grammar files）
+    # 1. Grammar files
     grammar_meta = meta.get("grammar", {})
     grammar_files = grammar_meta.get("files", [])
     loaded_grammars = []
@@ -72,13 +98,13 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
             loaded_grammars.append(fpath)
     info["grammar_files"] = loaded_grammars
 
-    # 2. 分析器 handler
-    analyzer_handlers = meta.get("analyzer", {})
+    # 2. Analyzer handlers
+    analyzer_meta = meta.get("analyzer", {})
     info["analyzer"] = _load_python_handlers(
-        cdir, analyzer_handlers.get("handlers", [])
+        cdir, analyzer_meta.get("handlers", [])
     )
 
-    # 3. 变换 handler
+    # 3. Transform handlers
     transform_meta = meta.get("transform", {})
     info["transform"] = _load_python_handlers(cdir, transform_meta.get("handlers", []))
 
@@ -86,17 +112,33 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     return info
 
 
-# 全局变换槽位注册表
-_transform_slots: dict[str, Callable] = {}
+def load_all_components() -> list[dict[str, Any]]:
+    """Discover, dependency-sort, and load all components."""
+    metas = discover_components()
+    ordered = _resolve_dependencies(metas)
+    result = []
+    for meta in ordered:
+        info = load_component(meta)
+        result.append(info)
+    return result
+
+
+def get_component_grammar_files(lang: str = "") -> list[str]:
+    """Get grammar file paths for all loaded components, optionally filtered by lang."""
+    files = []
+    for info in _loaded_components.values():
+        meta = info.get("meta", {})
+        if lang and meta.get("lang", "*") not in (lang, "*"):
+            continue
+        files.extend(info.get("grammar_files", []))
+    return files
 
 
 def register_transform_slot(name: str):
-    """装饰器：注册变换槽位。"""
-
+    """Decorator: register a transform slot."""
     def decorator(fn):
         _transform_slots[name] = fn
         return fn
-
     return decorator
 
 
@@ -104,17 +146,10 @@ def get_transform_slots() -> dict[str, Callable]:
     return dict(_transform_slots)
 
 
-_PRIMITIVE_ORDER: list[str] = []
-
-
 def get_primitive_order() -> list[str]:
-    """返回合并后的分析器原语执行顺序。
-
-    从各组件声明的 primitive_order 合并。
-    """
+    """Return merged analyzer primitive execution order from all loaded components."""
     if _PRIMITIVE_ORDER:
         return list(_PRIMITIVE_ORDER)
-    # 从组件收集
     seen: set[str] = set()
     for info in _loaded_components.values():
         order = info.get("meta", {}).get("analyzer", {}).get("primitive_order", [])
@@ -126,7 +161,7 @@ def get_primitive_order() -> list[str]:
 
 
 def _load_python_handlers(cdir: str, handler_files: list[str]) -> list[Any]:
-    """加载组件中的 Python handler 文件。"""
+    """Load Python handler files from a component directory."""
     modules = []
     for hf in handler_files:
         hpath = os.path.join(cdir, hf)
@@ -140,23 +175,6 @@ def _load_python_handlers(cdir: str, handler_files: list[str]) -> list[Any]:
             spec.loader.exec_module(mod)
             modules.append(mod)
     return modules
-
-
-def load_all_components() -> list[dict[str, Any]]:
-    """发现并加载所有组件。"""
-    result = []
-    for meta in discover_components():
-        info = load_component(meta)
-        result.append(info)
-    return result
-
-
-def get_component_grammar_files() -> list[str]:
-    """获取所有组件的语法文件路径列表。"""
-    files = []
-    for info in _loaded_components.values():
-        files.extend(info.get("grammar_files", []))
-    return files
 
 
 
