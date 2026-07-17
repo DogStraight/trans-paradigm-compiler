@@ -1,11 +1,11 @@
 """transform/ — post-phase AST transform pipeline.
 
 Files:
-    pipeline.py         — AstTransformer + TransformPlugin base class
-    config_driven.py    — ConfigDrivenTransform (transform engine)
-    registry.py         — primitive registry (legacy re-export)
-    primitives/         — transform primitives
-    plugins/            — built-in transform plugins
+    pipeline.py            — AstTransformer + TransformPlugin base class
+    config_driven.py       — ConfigDrivenTransform (transform engine)
+    _semantic_mapping.py   — SemanticMappingPlugin (mapping table builder)
+    registry.py            — primitive registry (legacy re-export)
+    primitives/            — transform primitives
 
 Language-specific plugins are registered by component handlers
 (grammar/<lang>/ext/_components/*/).
@@ -21,7 +21,7 @@ from .pipeline import AstTransformer, TransformPlugin, mark_extra, collect_extra
 # Load built-in transform plugins (must happen after load_all_components()
 # so component plugins register before engine plugins).
 from . import config_driven  # noqa: F401 — triggers @register_plugin
-from . import plugins  # noqa: F401 — loads _semantic_mapping.py
+from . import _semantic_mapping  # noqa: F401 — triggers @register_plugin
 
 __all__ = [
     "AstTransformer",
@@ -29,5 +29,5 @@ __all__ = [
     "mark_extra",
     "collect_extra_asts",
     "config_driven",
-    "plugins",
+    "_semantic_mapping",
 ]
