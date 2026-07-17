@@ -26,6 +26,7 @@ def _node_text(n: Any) -> str:
 def _get_slots():
     """懒加载组件槽位，避免 import 时循环依赖。"""
     from core.component_loader import get_transform_slots
+
     return get_transform_slots()
 
 
@@ -151,9 +152,3 @@ class ComponentSlotPlugin(TransformPlugin):
                 new.append(c)
         node.sub_node = new
         return node
-
-
-
-
-
-

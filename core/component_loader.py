@@ -151,6 +151,21 @@ def get_transform_slots() -> dict[str, Callable]:
     return dict(_transform_slots)
 
 
+def get_component_mapping_config() -> tuple[dict, dict]:
+    """Collect mapping_entries and resolve_entries from all loaded components."""
+    mapping_entries: dict = {}
+    resolve_entries: dict = {}
+    for info in _loaded_components.values():
+        for mod in info.get("analyzer", []):
+            entries = getattr(mod, "mapping_entries", None)
+            if entries:
+                mapping_entries.update(entries)
+            resolves = getattr(mod, "resolve_entries", None)
+            if resolves:
+                resolve_entries.update(resolves)
+    return mapping_entries, resolve_entries
+
+
 def get_primitive_order() -> list[str]:
     """Return merged analyzer primitive execution order from all loaded components."""
     if _PRIMITIVE_ORDER:

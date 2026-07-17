@@ -210,7 +210,7 @@ def _port_name(pn) -> str:
 def _port_decl(direction: str, name: str) -> Node | None:
     if not name:
         return None
-    cls = "AnsiInputDecl" if direction == "input" else "AnsiOutputDecl"
+    cls = {"input": "AnsiInputDecl", "inout": "AnsiInoutDecl"}.get(direction, "AnsiOutputDecl")
     decl = Node(cls)
     decl.add_attr("direction", direction)
     lst = Node("DeclaratorList")

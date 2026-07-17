@@ -25,6 +25,8 @@ from parser import Parser, setup_grammar
 from core.define import (
     ParseError,
     GrammarRulesRegister,
+    DEFAULT_RULES_DIR,
+    DEFAULT_EXT_DIRS,
 )
 from core.config_registry import ConfigRegistry
 from core.utils import ensure_dir, save_json
@@ -33,14 +35,9 @@ from parser.rule_selector import RuleSelector
 # ── 分析器 ──
 from analyzer import AnalysisTraversal
 
-# ── 语言配置（由 typed_ports 组件提供）──
-from grammar.verilog.ext._components.typed_ports._mapping import (
-    RULES_DIR,
-    EXT_DIRS,
-    mapping_entries,
-    resolve_entries,
-    collect_callbacks,
-)
+# ── 语言配置（组件系统收集）──
+from core.component_loader import get_component_mapping_config
+from grammar.verilog.ext._components.typed_ports._mapping import collect_callbacks
 
 # ── 变换器 ──
 from transform import AstTransformer, collect_extra_asts
@@ -109,8 +106,8 @@ def run_pipeline_on_source(
     renderer_enabled: bool = True,
     stage: str | None = None,
     no_lint: bool = False,
-    rules_dir: str = RULES_DIR,
-    ext_dirs: list[str] | None = EXT_DIRS,
+    rules_dir: str = DEFAULT_RULES_DIR,
+    ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
     include_dirs: list[str] | None = None,
 ) -> dict[str, Any]:
     """
@@ -347,9 +344,10 @@ def run_pipeline_on_source(
     # ---- Stage: AST transform ----
     if transform_enabled and analyzer is not None and scope is not None:
         # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
+        mp_entries, rv_entries = get_component_mapping_config()
         mapping_cfg: dict = {}
-        mapping_cfg.update(mapping_entries)
-        mapping_cfg.update(resolve_entries)
+        mapping_cfg.update(mp_entries)
+        mapping_cfg.update(rv_entries)
         AstTransformer.set_shared("rules", rules)
         AstTransformer.set_shared("mapping_cfg", mapping_cfg)
         transformer = AstTransformer()
@@ -521,14 +519,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rules-dir",
         type=str,
-        default=RULES_DIR,
+        default=DEFAULT_RULES_DIR,
         help="Core grammar rules directory",
     )
     parser.add_argument(
         "--ext-dirs",
         type=str,
         nargs="*",
-        default=EXT_DIRS,
+        default=DEFAULT_EXT_DIRS,
         help="Extended grammar rules directories (can specify multiple)",
     )
 

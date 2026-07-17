@@ -11,10 +11,8 @@ from core._protocol import (
     ATTR_REF_CALLBACKS,
 )
 
-# ── Language config (consumed by pipeline) ──
+# ── Language info ──
 LANG = "verilog"
-RULES_DIR = "grammar/verilog"
-EXT_DIRS = ["grammar/verilog/ext"]
 
 # Port mapping: extract direction + name from role symbol attrs["ports"]
 _type_ports_flat = {
