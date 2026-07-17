@@ -6,7 +6,7 @@ Consumed by SemanticMappingPlugin (first stage of transform pipeline).
 This file is the typed_ports component's language config entry point.
 """
 
-from grammar.verilog.ext._components._protocol import (
+from core._protocol import (
     TABLE_TYPE_PORTS_FLAT,
     ATTR_REF_CALLBACKS,
 )

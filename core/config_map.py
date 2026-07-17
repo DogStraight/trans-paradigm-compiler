@@ -24,7 +24,7 @@ def _find_grammar_pyv_toml() -> str:
 
     # Read user config to find which grammar package
     user_config = os.path.join(root, "pyv.config.json")
-    rules_dir = "grammar/verilog"  # default
+    rules_dir = ""  # no default — must be set in pyv.config.json
     if os.path.isfile(user_config):
         try:
             with open(user_config, encoding="utf-8") as f:

@@ -9,15 +9,19 @@ import os
 import sys
 from typing import Any, Callable
 
-from grammar.verilog.ext._components._protocol import META_NAME, META_REQUIRES
+from core._protocol import META_NAME, META_REQUIRES
 
-_COMPONENT_DIR = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "grammar",
-    "verilog/ext",
-    "_components",
-)
+def _get_component_dir() -> str:
+    """Resolve component directory from config: <ext_dirs[0]>/_components."""
+    try:
+        from core.define import _pyv_meta
+        ext_dirs = _pyv_meta.get("grammar", {}).get("ext_dirs", [])
+        if ext_dirs:
+            root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            return os.path.join(root, ext_dirs[0], "_components")
+    except Exception:
+        pass
+    return ""
 
 _loaded_components: dict[str, dict[str, Any]] = {}
 _transform_slots: dict[str, Callable] = {}
@@ -26,11 +30,12 @@ _PRIMITIVE_ORDER: list[str] = []
 
 def discover_components() -> list[dict[str, Any]]:
     """Scan _components/ and return metadata for all components."""
-    if not os.path.isdir(_COMPONENT_DIR):
+    comp_dir = _get_component_dir()
+    if not comp_dir or not os.path.isdir(comp_dir):
         return []
     result = []
-    for name in sorted(os.listdir(_COMPONENT_DIR)):
-        cdir = os.path.join(_COMPONENT_DIR, name)
+    for name in sorted(os.listdir(comp_dir)):
+        cdir = os.path.join(comp_dir, name)
         if not os.path.isdir(cdir) or name.startswith("_"):
             continue
         toml_path = os.path.join(cdir, "component.toml")
