@@ -67,6 +67,12 @@ def _cmd_format(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _cmd_init(args: argparse.Namespace) -> None:
+    """pyv init — scaffold a new PyV project config."""
+    from scripts.scaffold_config import scaffold_config
+    scaffold_config(args.lang)
+
+
 def _cmd_lint(args: argparse.Namespace) -> None:
     """pyv lint — run syntax checker on a Verilog file."""
     from linter.scanner import LinterScanner
@@ -139,6 +145,10 @@ Examples:
     p_lint.add_argument("--json", action="store_true", help="LSP-compatible JSON output")
     p_lint.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
+    # init
+    p_init = sub.add_parser("init", help="Initialize a PyV project config")
+    p_init.add_argument("--lang", default="verilog", help="Target language")
+
     # pipeline (dev)
     p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")
     p_pipe.add_argument("test_name", nargs="*", help="Test case name (e.g., counter)")
@@ -155,6 +165,7 @@ Examples:
     dispatch = {
         "format": _cmd_format,
         "lint": _cmd_lint,
+        "init": _cmd_init,
         "pipeline": _cmd_pipeline,
     }
     if args.command == "new":

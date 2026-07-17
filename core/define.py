@@ -20,8 +20,8 @@ def _load_pyv_meta() -> dict:
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Step 1: Load user config (pyv.config.json) to find grammar package
-    user_config = os.path.join(root, "pyv.config.json")
+    # Step 1: Load user config (config/pyv.config.json) to find grammar package
+    user_config = os.path.join(root, "config", "pyv.config.json")
     if os.path.isfile(user_config):
         try:
             with open(user_config, encoding="utf-8") as f:
@@ -50,7 +50,7 @@ def _load_pyv_meta() -> dict:
     if "grammar" not in merged:
         raise RuntimeError(
             f"[config] No grammar package found.\n"
-            f"  Create pyv.config.json or ensure {rules_dir}/pyv.toml exists."
+            f"  Create config/pyv.config.json or ensure {rules_dir}/pyv.toml exists."
         )
     return merged
 

@@ -23,7 +23,7 @@ def _find_grammar_pyv_toml() -> str:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Read user config to find which grammar package
-    user_config = os.path.join(root, "pyv.config.json")
+    user_config = os.path.join(root, "config", "pyv.config.json")
     rules_dir = ""  # no default — must be set in pyv.config.json
     if os.path.isfile(user_config):
         try:
@@ -86,7 +86,7 @@ def _load_meta_declarations() -> list[tuple]:
 
     # 2. Load EXT grammar package pyv.toml files
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    user_config = os.path.join(root, "pyv.config.json")
+    user_config = os.path.join(root, "config", "pyv.config.json")
     ext_dirs = []
     if os.path.isfile(user_config):
         try:
