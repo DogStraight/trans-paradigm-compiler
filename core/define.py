@@ -11,21 +11,55 @@ import os
 from pathlib import Path
 
 
+def _find_user_config() -> str:
+    """Find the project configuration file.
+
+    Search order:
+        1. $PYV_CONFIG env var (explicit override)
+        2. From CWD upward: config/pyv.config.json or pyv.config.json
+        3. ~/.config/pyv/config.json (global fallback)
+    """
+    # 1. Env var override
+    env_path = os.environ.get("PYV_CONFIG")
+    if env_path:
+        path = os.path.abspath(env_path)
+        if os.path.isfile(path):
+            return path
+
+    # 2. Walk up from CWD
+    candidates = ["config/pyv.config.json", "pyv.config.json"]
+    cwd = os.path.abspath(os.getcwd())
+    parent = cwd
+    while True:
+        for name in candidates:
+            path = os.path.join(parent, name)
+            if os.path.isfile(path):
+                return path
+        next_parent = os.path.dirname(parent)
+        if next_parent == parent:
+            break
+        parent = next_parent
+
+    # 3. Global fallback
+    home = os.path.expanduser("~/.config/pyv/config.json")
+    if os.path.isfile(home):
+        return home
+
+    return ""
+
+
 def _load_pyv_meta() -> dict:
     """加载项目配置。
 
     架构：
-        $PYV_CONFIG 或 config/pyv.config.json（用户配置）→ 选择语法包
+        pyv.config.json（用户配置）→ 选择语法包
             └── grammar/<rules_dir>/pyv.toml（语法包自带引擎接口配置）
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Step 1: Load user config to find grammar package
-    #   $PYV_CONFIG env var overrides default config/pyv.config.json
-    user_config = os.environ.get("PYV_CONFIG")
-    if not user_config:
-        user_config = os.path.join(root, "config", "pyv.config.json")
-    if os.path.isfile(user_config):
+    user_config = _find_user_config()
+    if user_config:
         try:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)

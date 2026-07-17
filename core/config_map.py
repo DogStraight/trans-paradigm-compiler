@@ -13,21 +13,42 @@ import tomllib
 from core.config_registry import config
 
 
+def _find_user_config() -> str:
+    """Find project config file (duplicated in define.py to avoid circular imports)."""
+    env_path = os.environ.get("PYV_CONFIG")
+    if env_path:
+        path = os.path.abspath(env_path)
+        if os.path.isfile(path):
+            return path
+    candidates = ["config/pyv.config.json", "pyv.config.json"]
+    cwd = os.path.abspath(os.getcwd())
+    parent = cwd
+    while True:
+        for name in candidates:
+            path = os.path.join(parent, name)
+            if os.path.isfile(path):
+                return path
+        next_parent = os.path.dirname(parent)
+        if next_parent == parent:
+            break
+        parent = next_parent
+    home = os.path.expanduser("~/.config/pyv/config.json")
+    return home if os.path.isfile(home) else ""
+
+
 def _find_grammar_pyv_toml() -> str:
     """Locate the grammar package's pyv.toml.
 
     Follows the two-layer config:
-        $PYV_CONFIG or config/pyv.config.json → selects grammar package
+        pyv.config.json → selects grammar package
         grammar/<pkg>/pyv.toml → engine interface config
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Read user config to find which grammar package
-    user_config = os.environ.get("PYV_CONFIG")
-    if not user_config:
-        user_config = os.path.join(root, "config", "pyv.config.json")
+    user_config = _find_user_config()
     rules_dir = ""  # no default — must be set in pyv.config.json
-    if os.path.isfile(user_config):
+    if user_config:
         try:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
@@ -88,11 +109,9 @@ def _load_meta_declarations() -> list[tuple]:
 
     # 2. Load EXT grammar package pyv.toml files
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    user_config = os.environ.get("PYV_CONFIG")
-    if not user_config:
-        user_config = os.path.join(root, "config", "pyv.config.json")
+    user_config = _find_user_config()
     ext_dirs = []
-    if os.path.isfile(user_config):
+    if user_config:
         try:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
