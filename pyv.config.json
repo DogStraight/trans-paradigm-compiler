@@ -1,0 +1,42 @@
+{
+    "//": "PyV Compiler — project configuration",
+    "//": "All default parameters externalized here. Engine code reads from this file.",
+    "grammar": {
+        "rules_dir": "grammar/rules_verilog",
+        "ext_dirs": [
+            "grammar/rules_verilog_ext"
+        ],
+        "token_base": "base/_token.toml",
+        "lexer_base": "base/_lexer.toml",
+        "token_lang": "token.toml",
+        "token_ext": "_token_ext.toml",
+        "macro_config": "base/_macro.toml",
+        "pre_scan": "base/_pre_scan.toml"
+    },
+    "pratt": {
+        "operator_defs": "base/_symbol_level.toml",
+        "token_categories": "base/_lexer.toml"
+    },
+    "renderer": {
+        "style": "base/_style.toml"
+    },
+    "preprocessor": {
+        "macro_config": "base/_macro.toml",
+        "expand": "base/_macro.toml",
+        "directives": "base/_macro.toml"
+    },
+    "pipeline": {
+        "stages": [
+            "lex",
+            "parse",
+            "normalize",
+            "analyze",
+            "transform",
+            "render"
+        ],
+        "default_test": "led_blinker"
+    },
+    "output": {
+        "encoding": "utf-8"
+    }
+}

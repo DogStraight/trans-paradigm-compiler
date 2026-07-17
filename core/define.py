@@ -5,21 +5,39 @@ Parser consumes Token and produces Node (AST), GrammarRule drives both
 parsing and rendering.
 """
 
+import json
 import tomllib
 import os
 from pathlib import Path
 
 
 def _load_pyv_meta() -> dict:
-    """加载引擎元配置文件 grammar/pyv.toml。"""
-    config_path = os.path.join(os.path.dirname(__file__), "..", "grammar", "pyv.toml")
+    """加载项目配置。
+
+    优先级：
+        1. pyv.config.json（用户自定义，JSON 格式）
+        2. grammar/pyv.toml（引擎默认，TOML 格式）
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # Try pyv.config.json first (user-facing, JSON)
+    user_config = os.path.join(root, "pyv.config.json")
+    if os.path.isfile(user_config):
+        try:
+            with open(user_config, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, KeyError) as e:
+            raise RuntimeError(f"[config] pyv.config.json 解析失败: {e}")
+
+    # Fallback to grammar/pyv.toml (engine metadata, TOML)
+    meta_path = os.path.join(root, "grammar", "pyv.toml")
     try:
-        with open(config_path, encoding="utf-8") as f:
+        with open(meta_path, encoding="utf-8") as f:
             return tomllib.loads(f.read())
     except FileNotFoundError:
         raise RuntimeError(
-            f"[config] 找不到引擎元配置: {config_path}\n"
-            f"  请确保 grammar/pyv.toml 存在。"
+            f"[config] 找不到引擎元配置。\n"
+            f"  请创建 pyv.config.json 或确保 grammar/pyv.toml 存在。"
         )
     except tomllib.TOMLDecodeError as e:
         raise RuntimeError(f"[config] pyv.toml 解析失败: {e}")
