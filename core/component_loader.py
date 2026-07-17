@@ -1,7 +1,7 @@
 """component_loader.py — Component loading and management.
 
 A component is a self-contained unit of grammar rules + analyzer primitives
-+ transform slots, located in grammar/rules_verilog_ext/_components/<name>/.
++ transform slots, located in grammar/<lang>/ext/_components/<name>/.
 """
 
 import importlib.util
@@ -9,13 +9,13 @@ import os
 import sys
 from typing import Any, Callable
 
-from grammar.rules_verilog_ext._components._protocol import META_NAME, META_REQUIRES
+from grammar.verilog.ext._components._protocol import META_NAME, META_REQUIRES
 
 _COMPONENT_DIR = os.path.join(
     os.path.dirname(__file__),
     "..",
     "grammar",
-    "rules_verilog_ext",
+    "verilog/ext",
     "_components",
 )
 

@@ -34,7 +34,7 @@ from parser.rule_selector import RuleSelector
 from analyzer import AnalysisTraversal
 
 # ── 语言配置（由 typed_ports 组件提供）──
-from grammar.rules_verilog_ext._components.typed_ports._mapping import (
+from grammar.verilog.ext._components.typed_ports._mapping import (
     RULES_DIR,
     EXT_DIRS,
     mapping_entries,

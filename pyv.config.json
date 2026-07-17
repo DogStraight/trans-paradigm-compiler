@@ -1,10 +1,10 @@
 {
-    "//": "PyV Compiler — project configuration",
-    "//": "Selects which grammar package(s) to use. Each package has its own pyv.toml",
-    "//": "with engine interface config (token definitions, layouts, etc.).",
+    "//": "PyV Compiler — project configuration.",
+    "//": "grammar.rules_dir points to the language package root.",
+    "//": "Each language package has its own pyv.toml with engine interface config.",
     "grammar": {
-        "rules_dir": "grammar/rules_verilog",
-        "ext_dirs": ["grammar/rules_verilog_ext"]
+        "rules_dir": "grammar/verilog",
+        "ext_dirs": ["grammar/verilog/ext"]
     },
     "pipeline": {
         "stages": ["lex", "parse", "normalize", "analyze", "transform", "render"],

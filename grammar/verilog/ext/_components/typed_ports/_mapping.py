@@ -6,15 +6,15 @@ Consumed by SemanticMappingPlugin (first stage of transform pipeline).
 This file is the typed_ports component's language config entry point.
 """
 
-from grammar.rules_verilog_ext._components._protocol import (
+from grammar.verilog.ext._components._protocol import (
     TABLE_TYPE_PORTS_FLAT,
     ATTR_REF_CALLBACKS,
 )
 
 # ── Language config (consumed by pipeline) ──
 LANG = "verilog"
-RULES_DIR = "grammar/rules_verilog"
-EXT_DIRS = ["grammar/rules_verilog_ext"]
+RULES_DIR = "grammar/verilog"
+EXT_DIRS = ["grammar/verilog/ext"]
 
 # Port mapping: extract direction + name from role symbol attrs["ports"]
 _type_ports_flat = {

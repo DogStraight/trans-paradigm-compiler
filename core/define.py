@@ -32,7 +32,7 @@ def _load_pyv_meta() -> dict:
         cfg = {}
 
     # Step 2: Load grammar package pyv.toml for engine interface config
-    rules_dir = cfg.get("grammar", {}).get("rules_dir", "grammar/rules_verilog")
+    rules_dir = cfg.get("grammar", {}).get("rules_dir", "grammar/verilog")
     meta_path = os.path.join(root, rules_dir, "pyv.toml")
     meta: dict = {}
     if os.path.isfile(meta_path):
