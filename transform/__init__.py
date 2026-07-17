@@ -1,6 +1,7 @@
 """transform/ — post-phase AST transform pipeline.
 
 Files:
+    normalizer.py          — AST normalization (parser output → canonical form)
     pipeline.py            — AstTransformer + TransformPlugin base class
     config_driven.py       — ConfigDrivenTransform (transform engine)
     _semantic_mapping.py   — SemanticMappingPlugin (mapping table builder)

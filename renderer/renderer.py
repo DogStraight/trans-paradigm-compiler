@@ -9,7 +9,7 @@ before rendering.
 
 from typing import Any
 from core.define import Node
-from normalizer import normalize_ast
+from transform.normalizer import normalize_ast
 from .doc import Doc, layout
 from .primitives import eval_expr
 from .node_renderer import render_node, render_inline, render_body, resolve_items

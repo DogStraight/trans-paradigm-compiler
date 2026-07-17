@@ -17,7 +17,7 @@ Renderer 仅依赖此规范形式。
   - BODY_FIELD:       AST body 字段名
 """
 
-from typing import Any, Optional
+from typing import Any
 from core.define import Node
 
 # ============================================================

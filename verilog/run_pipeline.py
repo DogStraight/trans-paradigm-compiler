@@ -39,7 +39,7 @@ from grammar.verilog.ext._components.typed_ports._mapping import collect_callbac
 
 # ── 变换器 ──
 from transform import AstTransformer, collect_extra_asts
-from normalizer import normalize_ast
+from transform.normalizer import normalize_ast
 
 # ── 渲染器 ──
 from renderer.renderer import Renderer

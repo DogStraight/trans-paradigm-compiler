@@ -20,6 +20,6 @@
 """
 
 from .renderer import Renderer
-from normalizer import normalize_ast
+from transform.normalizer import normalize_ast
 
 __all__ = ["Renderer", "normalize_ast"]
