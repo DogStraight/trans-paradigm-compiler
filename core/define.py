@@ -15,19 +15,22 @@ def _load_pyv_meta() -> dict:
     """加载项目配置。
 
     架构：
-        pyv.config.json（用户配置）→ 选择语法包
+        $PYV_CONFIG 或 config/pyv.config.json（用户配置）→ 选择语法包
             └── grammar/<rules_dir>/pyv.toml（语法包自带引擎接口配置）
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Step 1: Load user config (config/pyv.config.json) to find grammar package
-    user_config = os.path.join(root, "config", "pyv.config.json")
+    # Step 1: Load user config to find grammar package
+    #   $PYV_CONFIG env var overrides default config/pyv.config.json
+    user_config = os.environ.get("PYV_CONFIG")
+    if not user_config:
+        user_config = os.path.join(root, "config", "pyv.config.json")
     if os.path.isfile(user_config):
         try:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
         except (json.JSONDecodeError, KeyError) as e:
-            raise RuntimeError(f"[config] pyv.config.json parse failed: {e}")
+            raise RuntimeError(f"[config] {user_config} parse failed: {e}")
     else:
         cfg = {}
 

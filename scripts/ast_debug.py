@@ -13,15 +13,13 @@ AST 调试工具 — 集成到管线的可选调试模块
 import os
 import sys
 
-
-
 # ---------------------------------------------------------------
 # 开关控制
 # ---------------------------------------------------------------
 _DEBUG_ENABLED = False
 
 
-def enable_ast_debug(force: Optional[bool] = None) -> bool:
+def enable_ast_debug(force: bool | None = None) -> bool:
     """启用/查询调试状态。优先级: force > 环境变量 DEBUG_AST > False"""
     global _DEBUG_ENABLED
     if force is not None:
@@ -98,7 +96,9 @@ def dump_ast(node, indent: int = 0, max_depth: int = 20, file=sys.stdout) -> Non
         dump_ast(child, indent + 4, max_depth, file)
 
 
-def dump_ast_compact(node, indent: int = 0, max_depth: int = 15, file=sys.stdout) -> None:
+def dump_ast_compact(
+    node, indent: int = 0, max_depth: int = 15, file=sys.stdout
+) -> None:
     """紧凑格式转储 AST（每行一个节点）"""
     if not enable_ast_debug():
         return
@@ -135,8 +135,13 @@ def dump_ast_compact(node, indent: int = 0, max_depth: int = 15, file=sys.stdout
 # ---------------------------------------------------------------
 # Token 流查看
 # ---------------------------------------------------------------
-def dump_tokens(tokens, start: int = 0, end: Optional[int] = None,
-                highlight: Optional[int] = None, file=sys.stdout) -> None:
+def dump_tokens(
+    tokens,
+    start: int = 0,
+    end: int | None = None,
+    highlight: int | None = None,
+    file=sys.stdout,
+) -> None:
     """显示 token 窗口，支持高亮指定位置"""
     if not enable_ast_debug():
         return
@@ -164,7 +169,7 @@ def count_ast_nodes(node) -> int:
     return count
 
 
-def ast_type_distribution(node, dist: Optional[dict] = None) -> dict:
+def ast_type_distribution(node, dist: dict | None = None) -> dict:
     """统计各节点类型数量"""
     if dist is None:
         dist = {}

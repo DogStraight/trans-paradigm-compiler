@@ -58,35 +58,37 @@ def scaffold_component(name: str, lang: str = "verilog", desc: str = "") -> None
 
     desc = desc or f"{name} component for {lang}"
 
-    cdir = os.path.join(_COMPONENT_DIR, name)
-    if os.path.exists(cdir):
-        print(f"[error] component already exists: {cdir}")
+    c_dir = os.path.join(_COMPONENT_DIR, name)
+    if os.path.exists(c_dir):
+        print(f"[error] component already exists: {c_dir}")
         sys.exit(1)
 
-    os.makedirs(cdir)
+    os.makedirs(c_dir)
 
     # component.toml
-    with open(os.path.join(cdir, "component.toml"), "w", encoding="utf-8") as f:
+    with open(os.path.join(c_dir, "component.toml"), "w", encoding="utf-8") as f:
         f.write(COMPONENT_TOML_TPL.format(name=name, lang=lang, desc=desc))
 
     # Grammar file
-    with open(os.path.join(cdir, f"00_{name}.toml"), "w", encoding="utf-8") as f:
+    with open(os.path.join(c_dir, f"00_{name}.toml"), "w", encoding="utf-8") as f:
         f.write(GRAMMAR_TOML_TPL.format(name=name, desc=desc))
 
     # Handler
-    with open(os.path.join(cdir, f"_{name}.py"), "w", encoding="utf-8") as f:
+    with open(os.path.join(c_dir, f"_{name}.py"), "w", encoding="utf-8") as f:
         f.write(HANDLER_PY_TPL.format(name=name, desc=desc))
 
-    print(f"[ok] Created component '{name}' at {cdir}")
-    print(f"      {cdir}/component.toml")
-    print(f"      {cdir}/00_{name}.toml")
-    print(f"      {cdir}/_{name}.py")
+    print(f"[ok] Created component '{name}' at {c_dir}")
+    print(f"      {c_dir}/component.toml")
+    print(f"      {c_dir}/00_{name}.toml")
+    print(f"      {c_dir}/_{name}.py")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scaffold a new PyV component")
     parser.add_argument("name", help="Component name (snake_case)")
-    parser.add_argument("--lang", default="verilog", help="Target language (default: verilog)")
+    parser.add_argument(
+        "--lang", default="verilog", help="Target language (default: verilog)"
+    )
     parser.add_argument("--desc", default="", help="Component description")
     args = parser.parse_args()
     scaffold_component(args.name, args.lang, args.desc)
