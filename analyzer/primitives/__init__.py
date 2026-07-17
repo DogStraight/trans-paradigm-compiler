@@ -1,7 +1,8 @@
-"""analyzer/primitives/ — 原语注册中心
+"""analyzer/primitives/ — primitive registry and built-in primitives.
 
-原语实现在各组件目录（_components/*/）中，通过 @register 注册到此。
-本目录只保留注册机制和通用工具函数。
+Built-in analyzer primitives (scope, symbol, identifier, resolve) are
+loaded here as regular imports — not through the component system.
+Language-specific primitives are injected via components.
 """
 
 from .registry import (
@@ -12,6 +13,12 @@ from .registry import (
     register,
     AnalyzerPrimitive,
 )
+
+# Load built-in analyzer primitives (triggers @register decorators)
+from . import _scope  # noqa: F401
+from . import _symbol  # noqa: F401
+from . import _identifier  # noqa: F401
+from . import _resolve  # noqa: F401
 
 __all__ = [
     "register_primitive",
