@@ -1,19 +1,48 @@
+"""config_map.py — Config declaration and convention mapping.
+
+Reads [config.*] entries from the grammar package's pyv.toml and registers
+them with ConfigRegistry. All modules reference config via imported constants.
+
+To add a new engine capability, just add a [config.xxx] entry to the
+grammar package's pyv.toml.
 """
-config_map.py — 配置声明与约定映射
 
-从 grammar/pyv.toml 的 [config.*] 条目读取配置声明，
-注册到 ConfigRegistry。所有模块通过导入常量引用配置。
-
-新增引擎能力时，只需在 pyv.toml 追加 [config.xxx] 条目。
-"""
-
+import json
 import os
 import tomllib
 from core.config_registry import config
 
 
+def _find_grammar_pyv_toml() -> str:
+    """Locate the grammar package's pyv.toml.
+
+    Follows the two-layer config:
+        pyv.config.json → selects grammar package
+        grammar/<pkg>/pyv.toml → engine interface config
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # Read user config to find which grammar package
+    user_config = os.path.join(root, "pyv.config.json")
+    rules_dir = "grammar/rules_verilog"  # default
+    if os.path.isfile(user_config):
+        try:
+            with open(user_config, encoding="utf-8") as f:
+                cfg = json.load(f)
+            rules_dir = cfg.get("grammar", {}).get("rules_dir", rules_dir)
+        except (json.JSONDecodeError, KeyError):
+            pass  # fallback to default
+
+    meta_path = os.path.join(root, rules_dir, "pyv.toml")
+    if not os.path.isfile(meta_path):
+        raise FileNotFoundError(
+            f"[config] Grammar package pyv.toml not found: {meta_path}"
+        )
+    return meta_path
+
+
 def _flatten_config(table: dict, prefix: str = "") -> list:
-    """递归展开嵌套的 config 表为 (dotted_key, spec) 列表。
+    """Recursively flatten nested config table into (dotted_key, spec) pairs.
 
     [config.lexer]
     token_base = { file = "..." }
@@ -24,7 +53,6 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
     for key, value in table.items():
         full_key = f"{prefix}.{key}" if prefix else key
         if isinstance(value, dict) and "file" not in value:
-            # 子表（不含 file 字段 → 继续展开）
             result.extend(_flatten_config(value, full_key))
         else:
             result.append((full_key, value))
@@ -32,8 +60,8 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
 
 
 def _load_meta_declarations() -> list[tuple]:
-    """从 pyv.toml 的 [config.*] 读取声明列表。"""
-    meta_path = os.path.join(os.path.dirname(__file__), "..", "grammar", "pyv.toml")
+    """Read [config.*] declarations from the grammar package pyv.toml."""
+    meta_path = _find_grammar_pyv_toml()
     with open(meta_path, encoding="utf-8") as f:
         meta = tomllib.loads(f.read())
 

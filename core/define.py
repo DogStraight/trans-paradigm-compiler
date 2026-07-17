@@ -14,33 +14,45 @@ from pathlib import Path
 def _load_pyv_meta() -> dict:
     """加载项目配置。
 
-    优先级：
-        1. pyv.config.json（用户自定义，JSON 格式）
-        2. grammar/pyv.toml（引擎默认，TOML 格式）
+    架构：
+        pyv.config.json（用户配置）→ 选择语法包
+            └── grammar/<rules_dir>/pyv.toml（语法包自带引擎接口配置）
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Try pyv.config.json first (user-facing, JSON)
+    # Step 1: Load user config (pyv.config.json) to find grammar package
     user_config = os.path.join(root, "pyv.config.json")
     if os.path.isfile(user_config):
         try:
             with open(user_config, encoding="utf-8") as f:
-                return json.load(f)
+                cfg = json.load(f)
         except (json.JSONDecodeError, KeyError) as e:
-            raise RuntimeError(f"[config] pyv.config.json 解析失败: {e}")
+            raise RuntimeError(f"[config] pyv.config.json parse failed: {e}")
+    else:
+        cfg = {}
 
-    # Fallback to grammar/pyv.toml (engine metadata, TOML)
-    meta_path = os.path.join(root, "grammar", "pyv.toml")
-    try:
-        with open(meta_path, encoding="utf-8") as f:
-            return tomllib.loads(f.read())
-    except FileNotFoundError:
+    # Step 2: Load grammar package pyv.toml for engine interface config
+    rules_dir = cfg.get("grammar", {}).get("rules_dir", "grammar/rules_verilog")
+    meta_path = os.path.join(root, rules_dir, "pyv.toml")
+    meta: dict = {}
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                meta = tomllib.loads(f.read())
+        except tomllib.TOMLDecodeError as e:
+            raise RuntimeError(f"[config] {rules_dir}/pyv.toml parse failed: {e}")
+
+    # Step 3: Merge — user config takes precedence, grammar package fills engine config
+    merged = dict(cfg)
+    for k, v in meta.items():
+        merged.setdefault(k, v)
+
+    if "grammar" not in merged:
         raise RuntimeError(
-            f"[config] 找不到引擎元配置。\n"
-            f"  请创建 pyv.config.json 或确保 grammar/pyv.toml 存在。"
+            f"[config] No grammar package found.\n"
+            f"  Create pyv.config.json or ensure {rules_dir}/pyv.toml exists."
         )
-    except tomllib.TOMLDecodeError as e:
-        raise RuntimeError(f"[config] pyv.toml 解析失败: {e}")
+    return merged
 
 
 _pyv_meta = _load_pyv_meta()
