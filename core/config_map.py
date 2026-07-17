@@ -60,24 +60,58 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
 
 
 def _load_meta_declarations() -> list[tuple]:
-    """Read [config.*] declarations from the grammar package pyv.toml."""
-    meta_path = _find_grammar_pyv_toml()
-    with open(meta_path, encoding="utf-8") as f:
+    """Read [config.*] declarations from all grammar package pyv.toml files.
+
+    Loads the core grammar package pyv.toml first, then merges declarations
+    from each EXT directory's pyv.toml (if present). EXT declarations use
+    base="ext_N" so they're resolved against their respective EXT directory.
+    """
+    declarations = []
+
+    # 1. Load core grammar package pyv.toml
+    core_path = _find_grammar_pyv_toml()
+    with open(core_path, encoding="utf-8") as f:
         meta = tomllib.loads(f.read())
 
-    declarations = []
     config_table = meta.get("config", {})
     for config_key, spec in _flatten_config(config_table):
-        declarations.append(
-            (
+        declarations.append((
+            config_key,
+            spec.get("file", ""),
+            spec.get("section"),
+            spec.get("base", "rules"),
+            spec.get("required", True),
+            spec.get("description", ""),
+        ))
+
+    # 2. Load EXT grammar package pyv.toml files
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    user_config = os.path.join(root, "pyv.config.json")
+    ext_dirs = []
+    if os.path.isfile(user_config):
+        try:
+            with open(user_config, encoding="utf-8") as f:
+                cfg = json.load(f)
+            ext_dirs = cfg.get("grammar", {}).get("ext_dirs", [])
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    for i, ed in enumerate(ext_dirs):
+        ext_pyv = os.path.join(root, ed, "pyv.toml")
+        if not os.path.isfile(ext_pyv):
+            continue
+        with open(ext_pyv, encoding="utf-8") as f:
+            ext_meta = tomllib.loads(f.read())
+        ext_config = ext_meta.get("config", {})
+        for config_key, spec in _flatten_config(ext_config):
+            declarations.append((
                 config_key,
                 spec.get("file", ""),
                 spec.get("section"),
-                spec.get("base", "rules"),
-                spec.get("required", True),
+                spec.get("base", f"ext_{i}"),  # resolves against ext_dirs[i]
+                spec.get("required", False),
                 spec.get("description", ""),
-            )
-        )
+            ))
     return declarations
 
 

@@ -1,0 +1,7 @@
+# PyV 增强语法层配置
+#
+# EXT 目录是核心语法的"增量覆盖层"。
+# 本文件声明 EXT 提供的额外引擎接口，加载时会与核心 pyv.toml 合并。
+
+[config.lexer]
+token_ext = { file = "_token_ext.toml", required = false }
