@@ -16,8 +16,6 @@ from core.define import Node
 from core.component_loader import load_all_components
 
 load_all_components()
-# 显式导入引擎插件，确保在组件插件之后注册
-import transform.config_driven  # noqa: F401, E402
 
 # ── 词法 / 语法 / 配置 ──
 from lexer import Lexer, pre_scan, load_pre_scan_config
