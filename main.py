@@ -18,6 +18,33 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 
+def _load_pipeline_stages() -> list[str]:
+    """从 pyv_config.json 加载管线阶段顺序。"""
+    import json
+    from core.config_registry import _find_user_config
+
+    path = _find_user_config()
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                cfg = json.load(f)
+            return cfg.get("pipeline", {}).get("stages", _DEFAULT_STAGES)
+        except Exception:
+            pass
+    return _DEFAULT_STAGES
+
+
+_DEFAULT_STAGES = [
+    "lex",
+    "lint",
+    "parse",
+    "normalize",
+    "analyze",
+    "transform",
+    "render",
+]
+
+
 def _resolve_grammar_dirs() -> tuple[str, list[str]]:
     """Resolve and validate grammar directories from pyv.toml metadata."""
     from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
@@ -35,7 +62,9 @@ def _resolve_grammar_dirs() -> tuple[str, list[str]]:
         if os.path.isdir(candidate):
             ext_dirs.append(candidate)
         else:
-            print(f"[warn] EXT grammar directory not found: {candidate}", file=sys.stderr)
+            print(
+                f"[warn] EXT grammar directory not found: {candidate}", file=sys.stderr
+            )
 
     return rules_dir, ext_dirs
 
@@ -70,6 +99,7 @@ def _cmd_format(args: argparse.Namespace) -> None:
 def _cmd_init(args: argparse.Namespace) -> None:
     """pyv init — scaffold a new PyV project config."""
     from scripts.scaffold_config import scaffold_config
+
     scaffold_config(args.lang)
 
 
@@ -102,8 +132,10 @@ def _cmd_lint(args: argparse.Namespace) -> None:
     else:
         for d in diagnostics:
             start, end = d.range
-            print(f"  Ln {start.line + 1}:{start.character + 1} - "
-                  f"Ln {end.line + 1}:{end.character + 1}  {d.message}")
+            print(
+                f"  Ln {start.line + 1}:{start.character + 1} - "
+                f"Ln {end.line + 1}:{end.character + 1}  {d.message}"
+            )
 
     sys.exit(1 if diagnostics else 0)
 
@@ -111,6 +143,9 @@ def _cmd_lint(args: argparse.Namespace) -> None:
 def _cmd_pipeline(args: argparse.Namespace) -> None:
     """pyv pipeline — run a single test case (dev use)."""
     from verilog.run_pipeline import main as pipeline_main
+
+    # 注入 stages 配置到环境，让 run_pipeline 可读取
+    os.environ.setdefault("_PYV_STAGES", ",".join(_load_pipeline_stages()))
     sys.argv = [sys.argv[0]] + (args.test_name or [])
     pipeline_main()
 
@@ -118,6 +153,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> None:
 def _cmd_new_component(args: argparse.Namespace) -> None:
     """pyv new component — scaffold a new component."""
     from scripts.scaffold_component import scaffold_component
+
     scaffold_component(args.name, args.lang or "verilog")
 
 
@@ -142,7 +178,9 @@ Examples:
     # lint
     p_lint = sub.add_parser("lint", help="Lint a Verilog file")
     p_lint.add_argument("file", nargs="?", help="Path to .v file (stdin if omitted)")
-    p_lint.add_argument("--json", action="store_true", help="LSP-compatible JSON output")
+    p_lint.add_argument(
+        "--json", action="store_true", help="LSP-compatible JSON output"
+    )
     p_lint.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
     # init

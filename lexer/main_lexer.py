@@ -8,11 +8,19 @@ in TOML — no hardcoded lexer logic.
 """
 
 from core.define import Token
-from core.config_registry import config
+from core.config_registry import declare_cfg
 
 from .lexer_utils import get_token_define_merged
 from .number_fsm import NumberFSM
 from .comment_fsm import CommentFSM
+
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# lexer.macro_config
+#   #sym:config = (root)
+#   格式: dict
+#     { macro_recognition: { directive: { strategy, prefix }, call: { strategy, prefix } },
+#       directives: { keyword: token_type, ... } }
+_macro_cfg: dict = declare_cfg("lexer.macro_config", {}, __name__, "_macro_cfg")
 
 
 class Lexer:
@@ -33,19 +41,10 @@ class Lexer:
         self.token_define = token_define_dict
 
         # 宏识别策略与配置
-        # 分 directive（指令关键字）和 call（宏调用）两段，每段独立配置 strategy 和参数
-        self._macro_dir_cfg: dict = {}  # directive 段配置
-        self._macro_call_cfg: dict = {}  # call 段配置
-        self.macro_config = {}
-        try:
-            raw = config.get("lexer.macro_config")
-            if raw:
-                rec = raw.get("macro_recognition", {})
-                self._macro_dir_cfg = rec.get("directive", {})
-                self._macro_call_cfg = rec.get("call", {})
-                self.macro_config = {d: f"macro.{d}" for d in raw.get("directives", {})}
-        except KeyError:
-            pass
+        raw = _macro_cfg
+        self._macro_dir_cfg: dict = raw.get("macro_recognition", {}).get("directive", {})
+        self._macro_call_cfg: dict = raw.get("macro_recognition", {}).get("call", {})
+        self.macro_config = {d: f"macro.{d}" for d in raw.get("directives", {})}
 
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
         self.indent_level = token_define_dict.get("indent", {}).get("level", 4)

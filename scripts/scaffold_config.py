@@ -8,7 +8,7 @@ import json
 _CONFIG_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config"
 )
-_DEFAULT = os.path.join(_CONFIG_DIR, "pyv.config.json")
+_DEFAULT = os.path.join(_CONFIG_DIR, "pyv_config.json")
 
 
 def scaffold_config(lang: str = "verilog") -> None:

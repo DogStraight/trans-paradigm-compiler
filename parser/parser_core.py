@@ -16,6 +16,18 @@ from core.define import (
     FileManager,
     ParseError,
 )
+from core.config_registry import declare_cfg
+
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# parser.operator_defs
+#   #sym:config = [operator]
+#   格式: dict — 运算符优先级定义
+_operator_defs_cfg = declare_cfg("parser.operator_defs", [], __name__, "_operator_defs_cfg")
+
+# parser.token_categories
+#   #sym:config = [token_category]
+#   格式: dict — Token 分类映射
+_token_categories_cfg: dict = declare_cfg("parser.token_categories", {}, __name__, "_token_categories_cfg")
 
 # merged inline: ParseContext
 
@@ -361,15 +373,11 @@ class Parser:
             for name, rule in self.grammar_rules.items()
             if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
         ]
-        # 运算符定义（从 ConfigRegistry 获取）
-        from core.config_registry import config as _cfg
-
-        raw_ops = _cfg.get("pratt.operator_defs")
-        self.operator_defs = pratt_parser.process_operator_data(raw_ops)
-        # Token 分类器（ConfigRegistry 已加载）
-        categories = _cfg.get("pratt.token_categories")
-        if categories:
-            pratt_parser.install_token_classifier(categories)
+        # 运算符定义
+        self.operator_defs = pratt_parser.process_operator_data(_operator_defs_cfg)
+        # Token 分类器
+        if _token_categories_cfg:
+            pratt_parser.install_token_classifier(_token_categories_cfg)
         # RuleSelector：外部注入优先，回退内部创建
         if rule_selector is not None:
             self.rule_selector = rule_selector

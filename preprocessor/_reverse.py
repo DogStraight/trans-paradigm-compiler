@@ -3,7 +3,18 @@
 Uses sync-word restoration (pure-text, no token dependency).
 """
 
+from core.config_registry import declare_cfg
 
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# preprocessor.reverse
+#   #sym:config = [reverse]
+#   格式: dict
+#     { sync_window_base: int, sync_window_pad: int, offset_tolerance: int }
+_reverse_cfg: dict = declare_cfg(
+    "preprocessor.reverse",
+    {"sync_window_base": 15, "sync_window_pad": 5, "offset_tolerance": 2},
+    __name__, "_reverse_cfg",
+)
 
 
 def _restore_lines(
@@ -13,10 +24,16 @@ def _restore_lines(
 ) -> str:
     """同步词验证的宏还原。
 
-    每条记录独立从头扫描，找到 body 后检查前 15 字符内是否有同步词。
+    每条记录独立从头扫描，找到 body 后检查前 N 字符内是否有同步词。
     同步词不匹配 → 跳过找下一个 body。
     匹配后替换文本，下一条记录从头扫（已替换的位置不再有 body）。
+
+    参数来自配置 preprocessor.reverse（_macro.toml → [reverse]）。
     """
+    sync_window_base = _reverse_cfg.get("sync_window_base", 15)
+    sync_window_pad = _reverse_cfg.get("sync_window_pad", 5)
+    offset_tolerance = _reverse_cfg.get("offset_tolerance", 2)
+
     result = rendered
 
     for entry in restoration_stack:
@@ -33,8 +50,8 @@ def _restore_lines(
                 break
 
             if sync:
-                window = max(15, len(sync) + offset + 5)
-                before = result[max(0, pos - window):pos]
+                window = max(sync_window_base, len(sync) + offset + sync_window_pad)
+                before = result[max(0, pos - window) : pos]
                 count = 0
                 sync_idx = -1
                 matched = False
@@ -44,10 +61,9 @@ def _restore_lines(
                         break
                     count += 1
                     if count == sync_nth:
-                        # 偏移验证：实际偏移 vs 记录偏移，允许 ±2
                         real_sync_end = max(0, pos - window) + sync_idx + len(sync)
                         actual_offset = pos - real_sync_end
-                        if abs(actual_offset - offset) <= 2:
+                        if abs(actual_offset - offset) <= offset_tolerance:
                             matched = True
                             break
                 if not matched:
@@ -55,7 +71,7 @@ def _restore_lines(
                     continue
 
             # 匹配成功
-            result = result[:pos] + f"{prefix}{macro}" + result[pos + len(body):]
+            result = result[:pos] + f"{prefix}{macro}" + result[pos + len(body) :]
             break
 
     return result
@@ -63,18 +79,13 @@ def _restore_lines(
 
 def protect_and_reverse(
     rendered: str,
-    original_source: str,
-    macro_defs: dict[str, str],
     prefix: str = "`",
-    define_keyword: str = "define",
-    window: int = 3,
-    lexer=None,
-    restoration_stack: Optional[list[dict]] = None,
+    restoration_stack: list[dict] | None = None,
 ) -> str:
     """Reverse macro expansion in rendered output.
 
     Uses `restoration_stack` for sync-word-based restoration.
-    Falls back to string-based heuristic if no stack provided.
+    参数 prefix 和容差值来自配置 preprocessor.reverse（_macro.toml → [reverse]）。
     """
     if restoration_stack:
         return _restore_lines(rendered, prefix, restoration_stack)

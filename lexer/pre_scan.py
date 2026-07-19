@@ -12,7 +12,15 @@
 """
 
 import re
-from core.config_registry import config
+from core.config_registry import declare_cfg
+
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# lexer.pre_scan
+#   #sym:config = [pre_scan]
+#   格式: dict
+#     { context_keywords: list[str],
+#       decl: { kind: { keyword, ... }, ... } }
+_pre_scan_cfg: dict = declare_cfg("lexer.pre_scan", {}, __name__, "_pre_scan_cfg")
 
 
 
@@ -32,11 +40,7 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
     if rules_dir is not None and rules_dir in _CACHE:
         return _CACHE[rules_dir]
 
-    raw = {}
-    try:
-        raw = config.get("lexer.pre_scan")
-    except KeyError:
-        pass
+    raw = dict(_pre_scan_cfg)
 
     result = _compile(raw, rules_dir)
     if rules_dir is not None:

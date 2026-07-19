@@ -10,14 +10,16 @@ import tomllib
 import os
 from pathlib import Path
 
+# ── 配置文件查找路径 ──
+_CONFIG_CANDIDATES = ["config/pyv_config.json"]
+
 
 def _find_user_config() -> str:
     """Find the project configuration file.
 
     Search order:
         1. $PYV_CONFIG env var (explicit override)
-        2. From CWD upward: config/pyv.config.json or pyv.config.json
-        3. ~/.config/pyv/config.json (global fallback)
+        2. From CWD upward: config/pyv_config.json
     """
     # 1. Env var override
     env_path = os.environ.get("PYV_CONFIG")
@@ -27,11 +29,10 @@ def _find_user_config() -> str:
             return path
 
     # 2. Walk up from CWD
-    candidates = ["config/pyv.config.json", "pyv.config.json"]
     cwd = os.path.abspath(os.getcwd())
     parent = cwd
     while True:
-        for name in candidates:
+        for name in _CONFIG_CANDIDATES:
             path = os.path.join(parent, name)
             if os.path.isfile(path):
                 return path
@@ -41,10 +42,6 @@ def _find_user_config() -> str:
         parent = next_parent
 
     # 3. Global fallback
-    home = os.path.expanduser("~/.config/pyv/config.json")
-    if os.path.isfile(home):
-        return home
-
     return ""
 
 
@@ -52,7 +49,7 @@ def _load_pyv_meta() -> dict:
     """加载项目配置。
 
     架构：
-        pyv.config.json（用户配置）→ 选择语法包
+        pyv_config.json（用户配置）→ 选择语法包
             └── grammar/<rules_dir>/pyv.toml（语法包自带引擎接口配置）
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,26 +65,47 @@ def _load_pyv_meta() -> dict:
     else:
         cfg = {}
 
-    # Step 2: Load grammar package pyv.toml for engine interface config
-    rules_dir = cfg.get("grammar", {}).get("rules_dir", "")
-    meta_path = os.path.join(root, rules_dir, "pyv.toml")
+    # Step 2: Resolve grammar package path
+    # pyv_config.json 中 grammar 可以是字符串（路径）或旧格式对象
+    grammar_val = cfg.get("grammar", "")
+    if isinstance(grammar_val, str):
+        grammar_dir = grammar_val
+    elif isinstance(grammar_val, dict):
+        grammar_dir = grammar_val.get("rules_dir", "")
+    else:
+        grammar_dir = ""
+
+    # Step 3: Load grammar package pyv.toml for engine interface config
+    meta_path = os.path.join(root, grammar_dir, "pyv.toml")
     meta: dict = {}
     if os.path.isfile(meta_path):
         try:
             with open(meta_path, encoding="utf-8") as f:
                 meta = tomllib.loads(f.read())
         except tomllib.TOMLDecodeError as e:
-            raise RuntimeError(f"[config] {rules_dir}/pyv.toml parse failed: {e}")
+            raise RuntimeError(f"[config] {grammar_dir}/pyv.toml parse failed: {e}")
 
-    # Step 3: Merge — user config takes precedence, grammar package fills engine config
+    # Step 4: 自动发现 ext 目录（<grammar_dir>/ext/pyv.toml）
+    ext_dirs: list[str] = []
+    ext_candidate = os.path.join(root, grammar_dir, "ext", "pyv.toml")
+    if os.path.isfile(ext_candidate):
+        ext_dirs.append(os.path.join(grammar_dir, "ext"))
+
+    # Step 5: Normalize — grammar 统一为对象格式
     merged = dict(cfg)
+    merged["grammar"] = {
+        "rules_dir": grammar_dir,
+        "ext_dirs": ext_dirs,
+    }
+    # pyv.toml 中其他 engine config 补入
     for k, v in meta.items():
-        merged.setdefault(k, v)
+        if k != "grammar":
+            merged.setdefault(k, v)
 
     if "grammar" not in merged:
         raise RuntimeError(
             f"[config] No grammar package found.\n"
-            f"  Create config/pyv.config.json or ensure {rules_dir}/pyv.toml exists."
+            f"  Create config/pyv_config.json or ensure {grammar_dir}/pyv.toml exists."
         )
     return merged
 

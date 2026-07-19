@@ -6,37 +6,43 @@ Both operate on pure text, no token dependency.
 指令处理由 primitives/registry.py 的注册表分发，新增指令不修改本文件。
 """
 
-import os
 import re
-
+from core.config_registry import declare_cfg
 from .primitives.registry import get_primitive
 from .primitives.include import resolve_source_dir
 
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# preprocessor.macro_config
+#   #sym:config = (root)  ← 无 section，取整个文件
+#   格式: dict
+#     { macro_recognition: { directive: { strategy, prefix }, call: { strategy, prefix } },
+#       directives: { keyword: token_type, ... } }
+_macro_cfg: dict = declare_cfg("preprocessor.macro_config", {}, __name__, "_macro_cfg")
+
+# preprocessor.expand
+#   #sym:config = [expand]
+#   格式: dict — { max_iterations: int }
+_expand_cfg: dict = declare_cfg("preprocessor.expand", {"max_iterations": 128}, __name__, "_expand_cfg")
+
+# preprocessor.directives
+#   #sym:config = [directive_handlers]
+#   格式: dict
+#     { define: { enabled: bool },
+#       include: { enabled: bool, search_dirs: list[str], silent: bool } }
+_directives_cfg: dict = declare_cfg("preprocessor.directives", {}, __name__, "_directives_cfg")
+
 
 def _get_expand_config() -> dict:
-    """从 ConfigRegistry 获取展开器参数，未配置时返回默认值。"""
-    from core.config_registry import config
-    try:
-        return dict(config.get("preprocessor.expand"))
-    except (KeyError, RuntimeError):
-        return {"max_iterations": 128}
+    return _expand_cfg
 
 
 def _get_include_config() -> dict:
-    """从 ConfigRegistry 获取 include 配置，未配置时返回默认值。"""
-    from core.config_registry import config
-    try:
-        raw = dict(config.get("preprocessor.directives"))
-        return dict(raw.get("include", {}))
-    except (KeyError, RuntimeError):
-        return {"search_dirs": [], "silent": False}
+    return dict(_directives_cfg.get("include", {}))
 
 
 def _load_config() -> tuple[str, set[str]]:
     """Load macro config from ConfigRegistry → (prefix, directives_set)."""
-    from ._config import load_macro_config
-
-    cfg = load_macro_config()
+    cfg = dict(_macro_cfg)
     recognition = cfg.get("macro_recognition", {})
     prefix = recognition.get("prefix", "`")
     directives = set(cfg.get("directives", {}).values())
@@ -67,7 +73,7 @@ def scan_directives(
         directive_lines: 原始指令文本（用于 render 后恢复）
         clean_source:    去掉指令行后的源码
     """
-    prefix, directives = _load_config()
+    prefix, _ = _load_config()
     _MACRO_RE = _build_macro_re(prefix)
 
     if _include_stack is None:
@@ -107,7 +113,7 @@ def scan_directives(
 
         # 从指令行提取 directive 关键字
         # `define foo bar → "define"
-        after_prefix = stripped[len(prefix):]
+        after_prefix = stripped[len(prefix) :]
         space_pos = after_prefix.find(" ")
         directive_name = after_prefix[:space_pos] if space_pos > 0 else after_prefix
 
@@ -148,26 +154,26 @@ def _find_sync_word(line: str, macro_col: int, prev_line: str = "") -> tuple[str
     """
     # 当前行向左找
     pos = macro_col - 1
-    while pos >= 0 and line[pos] in ' \t':
+    while pos >= 0 and line[pos] in " \t":
         pos -= 1
     if pos >= 0:
         word_end = pos + 1
-        while pos >= 0 and line[pos] not in ' \t':
+        while pos >= 0 and line[pos] not in " \t":
             pos -= 1
-        sync_text = line[pos + 1:word_end]
+        sync_text = line[pos + 1 : word_end]
         offset = macro_col - word_end
         return sync_text, offset
 
     # 当前行没有 → 取上一行末尾非空白词
     if prev_line:
         pos = len(prev_line) - 1
-        while pos >= 0 and prev_line[pos] in ' \t':
+        while pos >= 0 and prev_line[pos] in " \t":
             pos -= 1
         if pos >= 0:
             word_end = pos + 1
-            while pos >= 0 and prev_line[pos] not in ' \t':
+            while pos >= 0 and prev_line[pos] not in " \t":
                 pos -= 1
-            sync_text = prev_line[pos + 1:word_end]
+            sync_text = prev_line[pos + 1 : word_end]
             offset = macro_col + 1
             return sync_text, offset
 
@@ -226,13 +232,15 @@ def expand_tokens(
             parts[macro_col:macro_end] = body
 
             # 记录（逆序 processing，但用头插保证正序）
-            forward_entries.append({
-                "macro": name,
-                "body": body,
-                "sync": sync_text,
-                "sync_nth": nth,
-                "offset": offset,
-            })
+            forward_entries.append(
+                {
+                    "macro": name,
+                    "body": body,
+                    "sync": sync_text,
+                    "sync_nth": nth,
+                    "offset": offset,
+                }
+            )
 
         # 正序存入 restoration_stack（匹配渲染输出的出现顺序）
         restoration_stack.extend(reversed(forward_entries))

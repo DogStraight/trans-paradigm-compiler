@@ -5,6 +5,13 @@
 
 反转由 TOML 配置传入（`analyzer.invert_map`），引擎本身不含语言专用数据。
 变换器不再感知 invert_map——它只看到已经反转好的扁平端口。
+
+本文件使用的配置（来自 pyv.toml 中 typed_ports 组件的 analyzer 声明）:
+    invert_map: dict — 端口方向反转映射
+        { "direction_name": "reversed_direction", ... }
+        例: { "input": "output", "output": "input" }
+    attach_invert_map: dict — 同 invert_map 的外层包装（兼容嵌套写法）
+        { "invert_map": { ... }, "other_meta": ... }
 """
 
 from core.define import Node

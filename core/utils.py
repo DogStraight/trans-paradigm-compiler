@@ -3,6 +3,13 @@
 import os
 import json
 from typing import Any, Callable
+from core.config_registry import declare_cfg
+
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# lexer.token_base
+#   #sym:config = (root)
+#   格式: dict — { bracket: { pairs: [[open, close, name], ...] } }
+_token_base_cfg: dict = declare_cfg("lexer.token_base", {}, __name__, "_token_base_cfg")
 
 
 def ensure_dir(path: str) -> None:
@@ -27,9 +34,7 @@ def get_bracket_map() -> tuple[dict[str, str], dict[str, str]]:
     正向映射：bracket.l_{name} → bracket.r_{name}
     反向映射：bracket.r_{name} → bracket.l_{name}
     """
-    from core.config_registry import config as _cfg
-
-    token_data = _cfg.get("lexer.token_base")
+    token_data = _token_base_cfg
     bracket_map: dict[str, str] = {}
     inverse: dict[str, str] = {}
     for _, _, name in token_data.get("bracket", {}).get("pairs", []):

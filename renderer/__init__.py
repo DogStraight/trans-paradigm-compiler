@@ -21,5 +21,15 @@
 
 from .renderer import Renderer
 from transform.normalizer import normalize_ast
+from . import loader
 
-__all__ = ["Renderer", "normalize_ast"]
+__all__ = ["Renderer", "normalize_ast", "get_config_refs"]
+
+
+from core.config_registry import _CONFIG_DECLARATIONS
+
+
+def get_config_refs() -> dict[str, str]:
+    """返回本部件所有配置需求: { "namespace.key": "_xxx_cfg", ... }"""
+    prefix = __name__ + "."
+    return {k: var for k, entries in _CONFIG_DECLARATIONS.items() for mod, var in entries if mod.startswith(prefix)}

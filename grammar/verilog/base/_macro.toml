@@ -75,3 +75,9 @@ enabled = true
 search_dirs = []
 # silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
 silent = false
+
+# ── [reverse] 宏还原参数 ──
+[reverse]
+sync_window_base = 15
+sync_window_pad = 5
+offset_tolerance = 2

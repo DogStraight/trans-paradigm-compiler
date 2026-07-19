@@ -6,15 +6,17 @@
     ConfigRegistry.load_all(rules_dir, ext_dirs=ext_dirs)
 
     # 2. 使用（key 为 "lexer.xxx" / "pratt.xxx" / "renderer.xxx" 等）
-    cats = config.get("pratt.token_categories")
+    cats = config.get("parser.token_categories")
 
-配置声明自动从 grammar 包的 pyv.toml 中读取 [config.*] 注册。
+配置声明自动从 grammar 包的 pyv.toml 中读取 [xxx] 注册（grammar 段落除外）。
 """
 
 import json
 import os
 import tomllib
-from typing import Any
+from typing import Any, TypeVar
+
+_CONFIG_CANDIDATES = ["config/pyv_config.json"]
 
 
 # ──────────────────────────────────────────────
@@ -29,11 +31,10 @@ def _find_user_config() -> str:
         path = os.path.abspath(env_path)
         if os.path.isfile(path):
             return path
-    candidates = ["config/pyv.config.json", "pyv.config.json"]
     cwd = os.path.abspath(os.getcwd())
     parent = cwd
     while True:
-        for name in candidates:
+        for name in _CONFIG_CANDIDATES:
             path = os.path.join(parent, name)
             if os.path.isfile(path):
                 return path
@@ -41,23 +42,23 @@ def _find_user_config() -> str:
         if next_parent == parent:
             break
         parent = next_parent
-    home = os.path.expanduser("~/.config/pyv/config.json")
-    return home if os.path.isfile(home) else ""
+    return ""
 
 
 def _find_grammar_pyv_toml() -> str:
     """Locate the grammar package's pyv.toml."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     user_config = _find_user_config()
-    rules_dir = ""
+    grammar_dir = ""
     if user_config:
         try:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
-            rules_dir = cfg.get("grammar", {}).get("rules_dir", rules_dir)
+            g = cfg.get("grammar", "")
+            grammar_dir = g if isinstance(g, str) else g.get("rules_dir", "")
         except (json.JSONDecodeError, KeyError):
             pass
-    meta_path = os.path.join(root, rules_dir, "pyv.toml")
+    meta_path = os.path.join(root, grammar_dir, "pyv.toml")
     if not os.path.isfile(meta_path):
         raise FileNotFoundError(
             f"[config] Grammar package pyv.toml not found: {meta_path}"
@@ -81,48 +82,49 @@ def _load_meta_declarations() -> list[tuple]:
     """Read [config.*] declarations from grammar package pyv.toml files."""
     declarations = []
 
-    # 1. Core grammar package
+    # 1. Core grammar package — 所有 [xxx] 段落（除了 grammar）都是配置声明
     core_path = _find_grammar_pyv_toml()
     with open(core_path, encoding="utf-8") as f:
         meta = tomllib.loads(f.read())
-    config_table = meta.get("config", {})
-    for config_key, spec in _flatten_config(config_table):
-        declarations.append((
-            config_key,
-            spec.get("file", ""),
-            spec.get("section"),
-            spec.get("base", "rules"),
-            spec.get("required", True),
-            spec.get("description", ""),
-        ))
+    for ns, table in meta.items():
+        if ns == "grammar":
+            continue
+        for config_key, spec in _flatten_config({ns: table}):
+            declarations.append((
+                config_key,
+                spec.get("file", ""),
+                spec.get("section"),
+                spec.get("base", "rules"),
+                spec.get("required", True),
+                spec.get("description", ""),
+            ))
 
-    # 2. EXT grammar packages
+    # 2. EXT grammar packages (auto-discover: <grammar_dir>/ext/pyv.toml)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    user_config = _find_user_config()
+    core_pyv = _find_grammar_pyv_toml()
+    grammar_dir = os.path.dirname(core_pyv)
     ext_dirs = []
-    if user_config:
-        try:
-            with open(user_config, encoding="utf-8") as f:
-                cfg = json.load(f)
-            ext_dirs = cfg.get("grammar", {}).get("ext_dirs", [])
-        except (json.JSONDecodeError, KeyError):
-            pass
+    ext_candidate = os.path.join(grammar_dir, "ext", "pyv.toml")
+    if os.path.isfile(ext_candidate):
+        ext_dirs.append(os.path.join(grammar_dir, "ext"))
     for i, ed in enumerate(ext_dirs):
         ext_pyv = os.path.join(root, ed, "pyv.toml")
         if not os.path.isfile(ext_pyv):
             continue
         with open(ext_pyv, encoding="utf-8") as f:
             ext_meta = tomllib.loads(f.read())
-        ext_config = ext_meta.get("config", {})
-        for config_key, spec in _flatten_config(ext_config):
-            declarations.append((
-                config_key,
-                spec.get("file", ""),
-                spec.get("section"),
-                spec.get("base", f"ext_{i}"),
-                spec.get("required", False),
-                spec.get("description", ""),
-            ))
+        for ns, table in ext_meta.items():
+            if ns == "grammar":
+                continue
+            for config_key, spec in _flatten_config({ns: table}):
+                declarations.append((
+                    config_key,
+                    spec.get("file", ""),
+                    spec.get("section"),
+                    spec.get("base", f"ext_{i}"),
+                    spec.get("required", False),
+                    spec.get("description", ""),
+                ))
     return declarations
 
 
@@ -249,6 +251,9 @@ class ConfigRegistry:
 
         cls._resolved = True
 
+        # 将真实配置值推入各模块的模块级变量
+        _push_loaded_config()
+
     @classmethod
     def get(cls, name: str) -> Any:
         """获取已加载的配置值。
@@ -280,3 +285,44 @@ config = ConfigRegistry
 
 # 自动安装配置声明（在 ConfigRegistry 定义之后，确保 import 安全）
 _install_config_declarations()
+
+
+# ──────────────────────────────────────────────
+# 配置声明：declare_cfg(key, default) — 注册 + 取值合一
+# ──────────────────────────────────────────────
+# 消费端模块级调用一次，自动注册到 _CONFIG_DECLARATIONS，
+# 各包 __init__.py 的 get_config_refs() 从此查询，无需源码扫描。
+
+_CONFIG_DECLARATIONS: dict[str, list[tuple[str, str]]] = {}
+"""{ "namespace.key": [("module.name", "_var_cfg"), ...], ... }"""
+
+
+T = TypeVar("T")
+
+
+def declare_cfg(key: str, default: T, module: str = "", var: str = "") -> T:
+    """声明一个配置依赖：注册 key 并返回默认值。
+
+    load_all() 完成后会推入真实配置值，此后代码只通过变量使用。
+    同一 key 可被多个模块声明，每个都会收到推送。
+    用法:
+        _xxx_cfg = declare_cfg("namespace.key", {default}, __name__, "_xxx_cfg")
+    """
+    if module and var:
+        _CONFIG_DECLARATIONS.setdefault(key, []).append((module, var))
+    return default
+
+
+def _push_loaded_config() -> None:
+    """load_all() 完成后调用，将真实配置值推入各模块的模块级变量。"""
+    import sys
+    for key, entries in _CONFIG_DECLARATIONS.items():
+        for mod_name, var_name in entries:
+            mod = sys.modules.get(mod_name)
+            if mod is None:
+                continue
+            try:
+                val = config.get(key)
+                setattr(mod, var_name, val)
+            except (KeyError, RuntimeError):
+                pass

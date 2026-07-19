@@ -53,7 +53,6 @@ from preprocessor import (
     scan_directives,
     expand_tokens,
     protect_and_reverse,
-    load_macro_config,
 )
 
 # Add project root to sys.path
@@ -381,14 +380,8 @@ def run_pipeline_on_source(
 
         # Reverse macro protection
         if macro_table:
-            macro_raw = load_macro_config()
-            define_kw = macro_raw.get("directives", {}).get("define", "define")
             content = protect_and_reverse(
                 content,
-                original_source,
-                macro_table,
-                define_keyword=define_kw,
-                lexer=lexer,
                 restoration_stack=restore_stack,
             )
             _log("[preprocessor] macros reversed")

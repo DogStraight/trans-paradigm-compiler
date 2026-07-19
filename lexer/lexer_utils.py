@@ -5,7 +5,28 @@
 
 import tomllib
 from core.define import FileManager
-from core.config_registry import config
+from core.config_registry import declare_cfg
+
+# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# lexer.token_base
+#   #sym:config = (root)
+#   格式: dict — { "token_name": { type, pattern }, ... }
+_token_base_cfg: dict = declare_cfg("lexer.token_base", {}, __name__, "_token_base_cfg")
+
+# lexer.lexer_base
+#   #sym:config = (root)
+#   格式: dict — { "state_name": [{ type, pattern, token }, ...], ... }
+_lexer_base_cfg: dict = declare_cfg("lexer.lexer_base", {}, __name__, "_lexer_base_cfg")
+
+# lexer.token_lang
+#   #sym:config = (root)
+#   格式: dict — 语言专用 token 覆盖（可选）
+_token_lang_cfg: dict = declare_cfg("lexer.token_lang", {}, __name__, "_token_lang_cfg")
+
+# lexer.token_ext
+#   #sym:config = (root)
+#   格式: dict — 增强层 token 覆盖（可选）
+_token_ext_cfg: dict = declare_cfg("lexer.token_ext", {}, __name__, "_token_ext_cfg")
 def _deep_merge(base: dict, override: dict) -> dict:
     """递归合并 override 到 base，override 的值优先"""
     result = base.copy()
@@ -30,20 +51,10 @@ def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -
 
     替代旧的路径拼接 + try/except 模式。
     """
-    base = dict(config.get("lexer.token_base"))
-    lexer_cfg = dict(config.get("lexer.lexer_base"))
-    base = _deep_merge(base, lexer_cfg)
-    try:
-        lang = config.get("lexer.token_lang")
-        if lang:
-            base = _deep_merge(base, lang)
-    except KeyError:
-        pass
-    for ext_dir in (ext_dirs or []):
-        try:
-            ext_tokens = config.get("lexer.token_ext")
-            if ext_tokens:
-                base = _deep_merge(base, ext_tokens)
-        except KeyError:
-            pass
+    base = dict(_token_base_cfg)
+    base = _deep_merge(base, dict(_lexer_base_cfg))
+    if _token_lang_cfg:
+        base = _deep_merge(base, dict(_token_lang_cfg))
+    if _token_ext_cfg:
+        base = _deep_merge(base, dict(_token_ext_cfg))
     return base
