@@ -5,9 +5,8 @@
     from core.config_registry import ConfigRegistry
     ConfigRegistry.load_all(rules_dir, ext_dirs=ext_dirs)
 
-    # 2. 使用（key 常量定义在 core/config_map.py）
-    from core.config_map import PRATT_TOKEN_CATEGORIES
-    cats = config.get(PRATT_TOKEN_CATEGORIES)
+    # 2. 使用（key 为 "lexer.xxx" / "pratt.xxx" / "renderer.xxx" 等）
+    cats = config.get("pratt.token_categories")
 
 所有 config.declare() 声明集中在 core/config_map.py 中。
 """

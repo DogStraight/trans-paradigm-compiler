@@ -7,7 +7,7 @@ infix/prefix/postfix operators with proper precedence and associativity.
 from typing import Any
 from core.define import Node, Token
 from core.config_registry import config
-from core.config_map import PRATT_OPERATOR_DEFS, PRATT_TOKEN_CATEGORIES
+
 
 
 def process_operator_data(data: list) -> list[tuple[int, dict]]:
