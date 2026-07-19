@@ -4,10 +4,12 @@ lexer_base = { file = "base/_lexer.toml", required = true }
 token_lang = { file = "token.toml", required = false }
 macro_config = { file = "base/_macro.toml", required = false }
 pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = false }
+bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
 
 [parser]
 operator_defs = { file = "base/_symbol_level.toml", section = "operator", required = true }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
+rules = { file = ["0*.toml", "0*/*.toml"], required = true }
 
 [renderer]
 style = { file = "base/_style.toml", section = "style", required = false }

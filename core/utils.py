@@ -6,10 +6,10 @@ from typing import Any, Callable
 from core.config_registry import declare_cfg
 
 # ── 配置需求（来自 pyv.toml） ──────────────────────────
-# lexer.token_base
-#   #sym:config = (root)
-#   格式: dict — { bracket: { pairs: [[open, close, name], ...] } }
-_token_base_cfg: dict = declare_cfg("lexer.token_base", {}, __name__, "_token_base_cfg")
+# lexer.bracket_map
+#   #sym:config = [bracket]
+#   格式: dict — { pairs: [[open, close, name], ...] }
+_bracket_cfg: dict = declare_cfg("lexer.bracket_map", {}, __name__, "_bracket_cfg")
 
 
 def ensure_dir(path: str) -> None:
@@ -30,11 +30,11 @@ def save_json(
 def get_bracket_map() -> tuple[dict[str, str], dict[str, str]]:
     """从 ConfigRegistry 加载括号映射，返回 (正向映射, 反向映射)。
 
-    配置源：lexer.token_base → [bracket] pairs = [[open, close, name], ...]
+    配置源：lexer.bracket_map → [bracket] pairs = [[open, close, name], ...]
     正向映射：bracket.l_{name} → bracket.r_{name}
     反向映射：bracket.r_{name} → bracket.l_{name}
     """
-    token_data = _token_base_cfg
+    token_data = _bracket_cfg
     bracket_map: dict[str, str] = {}
     inverse: dict[str, str] = {}
     for _, _, name in token_data.get("bracket", {}).get("pairs", []):

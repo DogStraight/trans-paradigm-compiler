@@ -11,12 +11,63 @@
 配置声明自动从 grammar 包的 pyv.toml 中读取 [xxx] 注册（grammar 段落除外）。
 """
 
-import json
 import os
+import json
+import re
 import tomllib
 from typing import Any, TypeVar
 
 _CONFIG_CANDIDATES = ["config/pyv_config.json"]
+
+
+def _glob_to_regex(pattern: str) -> re.Pattern:
+    """将 glob 风格模式（支持 * 和 ?）编译为正则对象。"""
+    pattern = pattern.replace("/", os.sep).replace("\\", os.sep)  # 统一分隔符
+    escaped = re.escape(pattern)
+    escaped = escaped.replace(r"\*", ".*").replace(r"\?", ".")
+    return re.compile(f"^{escaped}$")
+
+
+def _glob_match(patterns: list[str], base_dir: str) -> list[str]:
+    """用 os + re 实现的 glob 匹配，返回绝对路径列表。
+
+    支持的 pattern 格式：
+        "*.toml"       → base_dir 下所有 .toml 文件
+        "0*.toml"      → base_dir 下以 0 开头的 .toml 文件
+        "0*/*.toml"    → base_dir 下以 0 开头的子目录中的 .toml 文件
+    """
+    compiled = [_glob_to_regex(p) for p in patterns]
+    # 统一分隔符后再用 os.sep 判断，跨平台兼容
+    has_dir = any(os.sep in p.replace("/", os.sep) for p in patterns)
+    results: list[str] = []
+
+    if not has_dir:
+        try:
+            for entry in os.scandir(base_dir):
+                if entry.is_file():
+                    for regex in compiled:
+                        if regex.match(entry.name):
+                            results.append(entry.path)
+                            break
+        except PermissionError:
+            pass
+        return sorted(results)
+
+    try:
+        for root, dirs, files in os.walk(base_dir):
+            rel_root = os.path.relpath(root, base_dir)
+            if rel_root == ".":
+                rel_root = ""
+            for name in files + dirs:
+                rel_path = os.path.join(rel_root, name)
+                for regex in compiled:
+                    if regex.match(rel_path):
+                        results.append(os.path.join(root, name))
+                        break
+    except PermissionError:
+        pass
+
+    return sorted(results)
 
 
 # ──────────────────────────────────────────────
@@ -90,14 +141,22 @@ def _load_meta_declarations() -> list[tuple]:
         if ns == "grammar":
             continue
         for config_key, spec in _flatten_config({ns: table}):
-            declarations.append((
-                config_key,
-                spec.get("file", ""),
-                spec.get("section"),
-                spec.get("base", "rules"),
-                spec.get("required", True),
-                spec.get("description", ""),
-            ))
+            if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
+                # 文件式配置：file 为字符串路径或列表模式
+                declarations.append(
+                    (
+                        config_key,
+                        spec.get("file", ""),
+                        spec.get("section"),
+                        spec.get("base", "rules"),
+                        spec.get("required", True),
+                        spec.get("description", ""),
+                        None,
+                    )
+                )
+            else:
+                # 非文件式配置，以 bare data 形式注册
+                declarations.append((config_key, "", None, "", False, "", spec))
 
     # 2. EXT grammar packages (auto-discover: <grammar_dir>/ext/pyv.toml)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -117,14 +176,20 @@ def _load_meta_declarations() -> list[tuple]:
             if ns == "grammar":
                 continue
             for config_key, spec in _flatten_config({ns: table}):
-                declarations.append((
-                    config_key,
-                    spec.get("file", ""),
-                    spec.get("section"),
-                    spec.get("base", f"ext_{i}"),
-                    spec.get("required", False),
-                    spec.get("description", ""),
-                ))
+                if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
+                    declarations.append(
+                        (
+                            config_key,
+                            spec.get("file", ""),
+                            spec.get("section"),
+                            spec.get("base", f"ext_{i}"),
+                            spec.get("required", False),
+                            spec.get("description", ""),
+                            None,
+                        )
+                    )
+                else:
+                    declarations.append((config_key, "", None, "", False, "", spec))
     return declarations
 
 
@@ -133,7 +198,7 @@ _DECLARATIONS = _load_meta_declarations()
 
 def _install_config_declarations():
     """注册所有配置声明（模块导入时自动执行）。"""
-    for name, file, section, base, required, desc in _DECLARATIONS:
+    for name, file, section, base, required, desc, bare_value in _DECLARATIONS:
         config.declare(
             name,
             file=file,
@@ -141,6 +206,7 @@ def _install_config_declarations():
             base=base,
             required=required,
             description=desc,
+            bare_value=bare_value,
         )
 
 
@@ -156,21 +222,23 @@ class ConfigRegistry:
         cls,
         name: str,
         *,
-        file: str,
+        file: str | list[str],
         section: str | None = None,
         required: bool = True,
         base: str = "rules",
         description: str = "",
+        bare_value: Any = None,
     ) -> None:
         """声明一个配置依赖。
 
         Args:
-            name: 配置唯一标识名（命名空间风格，如 "pratt.token_categories"）
-            file: TOML 文件路径（相对 base 目录）
-            section: TOML 中的 section key，None 表示整个文件内容
-            required: 加载失败是否致命（True=崩溃，False=静默返回空 dict）
-            base: 基准目录名，对应 load_all() 的 **base_dirs 参数中的 key
-            description: 人类可读描述（用于错误信息）
+            name: 配置唯一标识名
+            file: TOML 文件路径（相对 base 目录），空字符串表示 bare data
+            section: TOML 中的 section key
+            required: 加载失败是否致命
+            base: 基准目录名
+            description: 人类可读描述
+            bare_value: 非文件式配置的原始值（如列表）
         """
         if name in cls._entries:
             return  # 重复声明安全无害
@@ -180,6 +248,7 @@ class ConfigRegistry:
             "required": required,
             "base": base,
             "description": description,
+            "bare_value": bare_value,
         }
 
     @classmethod
@@ -217,6 +286,12 @@ class ConfigRegistry:
         errors: list[str] = []
 
         for name, spec in cls._entries.items():
+            # bare data：非文件式配置，值已由 pyv.toml 直接提供
+            bare = spec.get("bare_value")
+            if bare is not None:
+                cls._loaded[name] = bare
+                continue
+
             base_key = spec.get("base", "rules")
             base_dir = bases.get(base_key)
             if base_dir is None:
@@ -224,14 +299,37 @@ class ConfigRegistry:
                 continue
 
             try:
-                path = os.path.join(base_dir, spec["file"]).replace("\\", "/")
-                content = FileManager.read_file(path)
-                data = tomllib.loads(content)
+                file_spec = spec["file"]
+                # file 可以是字符串（单文件）或列表（glob 模式）
+                if isinstance(file_spec, str):
+                    paths = [file_spec]
+                elif isinstance(file_spec, list):
+                    paths = file_spec
+                else:
+                    raise TypeError(f"file 必须是字符串或列表: {file_spec}")
 
-                if spec["section"]:
-                    data = data.get(spec["section"], {})
+                merged: Any = None
+                for fp in paths:
+                    # glob 模式：匹配 0 或多个文件
+                    matched = _glob_match([fp], base_dir)
+                    if not matched:
+                        # 不匹配时尝试直接作为文件路径
+                        matched = [os.path.join(base_dir, fp).replace("\\", "/")]
+                    for m in sorted(matched):
+                        content = FileManager.read_file(m.replace("\\", "/"))
+                        data = tomllib.loads(content)
+                        if spec["section"]:
+                            data = data.get(spec["section"], {})
+                        if merged is None:
+                            merged = data
+                        elif isinstance(merged, dict) and isinstance(data, dict):
+                            merged.update(data)
+                        else:
+                            merged = data
 
-                cls._loaded[name] = data
+                if merged is None:
+                    raise FileNotFoundError(f"未找到匹配文件: {file_spec}")
+                cls._loaded[name] = merged
 
             except Exception as e:
                 if spec["required"]:
@@ -240,6 +338,9 @@ class ConfigRegistry:
                         loc += f" → [{spec['section']}]"
                     errors.append(f"  [{name}] {loc}: {e}")
                 else:
+                    cls._loaded[name] = {}
+            finally:
+                if name not in cls._loaded:
                     cls._loaded[name] = {}
 
         if errors:
@@ -316,6 +417,7 @@ def declare_cfg(key: str, default: T, module: str = "", var: str = "") -> T:
 def _push_loaded_config() -> None:
     """load_all() 完成后调用，将真实配置值推入各模块的模块级变量。"""
     import sys
+
     for key, entries in _CONFIG_DECLARATIONS.items():
         for mod_name, var_name in entries:
             mod = sys.modules.get(mod_name)
