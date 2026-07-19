@@ -13,7 +13,7 @@
 
 import re
 from core.config_registry import config
-from core.config_map import LEXER_PRE_SCAN
+
 
 
 # ── 编译缓存 ──
@@ -34,7 +34,7 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
 
     raw = {}
     try:
-        raw = config.get(LEXER_PRE_SCAN)
+        raw = config.get("lexer.pre_scan")
     except KeyError:
         pass
 

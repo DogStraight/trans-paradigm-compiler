@@ -3,13 +3,9 @@
 配置通过 ConfigRegistry 声明式加载，不再内部 try/except 吞错误。
 """
 
-import os
 import tomllib
 from core.define import FileManager
 from core.config_registry import config
-from core.config_map import LEXER_TOKEN_BASE, LEXER_LEXER_BASE, LEXER_TOKEN_LANG, LEXER_TOKEN_EXT
-
-
 def _deep_merge(base: dict, override: dict) -> dict:
     """递归合并 override 到 base，override 的值优先"""
     result = base.copy()
@@ -34,18 +30,18 @@ def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -
 
     替代旧的路径拼接 + try/except 模式。
     """
-    base = dict(config.get(LEXER_TOKEN_BASE))
-    lexer_cfg = dict(config.get(LEXER_LEXER_BASE))
+    base = dict(config.get("lexer.token_base"))
+    lexer_cfg = dict(config.get("lexer.lexer_base"))
     base = _deep_merge(base, lexer_cfg)
     try:
-        lang = config.get(LEXER_TOKEN_LANG)
+        lang = config.get("lexer.token_lang")
         if lang:
             base = _deep_merge(base, lang)
     except KeyError:
         pass
     for ext_dir in (ext_dirs or []):
         try:
-            ext_tokens = config.get(LEXER_TOKEN_EXT)
+            ext_tokens = config.get("lexer.token_ext")
             if ext_tokens:
                 base = _deep_merge(base, ext_tokens)
         except KeyError:

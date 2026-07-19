@@ -8,7 +8,6 @@ comment_fsm.py — 配置驱动的注释解析器
     ]
 """
 
-from typing import Optional, Tuple, List
 
 
 class CommentRule:

@@ -9,7 +9,7 @@ in TOML — no hardcoded lexer logic.
 
 from core.define import Token
 from core.config_registry import config
-from core.config_map import LEXER_MACRO_CONFIG
+
 from .lexer_utils import get_token_define_merged
 from .number_fsm import NumberFSM
 from .comment_fsm import CommentFSM
@@ -38,7 +38,7 @@ class Lexer:
         self._macro_call_cfg: dict = {}  # call 段配置
         self.macro_config = {}
         try:
-            raw = config.get(LEXER_MACRO_CONFIG)
+            raw = config.get("lexer.macro_config")
             if raw:
                 rec = raw.get("macro_recognition", {})
                 self._macro_dir_cfg = rec.get("directive", {})

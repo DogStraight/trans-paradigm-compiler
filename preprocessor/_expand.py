@@ -16,9 +16,8 @@ from .primitives.include import resolve_source_dir
 def _get_expand_config() -> dict:
     """从 ConfigRegistry 获取展开器参数，未配置时返回默认值。"""
     from core.config_registry import config
-    from core.config_map import PREPROCESSOR_EXPAND
     try:
-        return dict(config.get(PREPROCESSOR_EXPAND))
+        return dict(config.get("preprocessor.expand"))
     except (KeyError, RuntimeError):
         return {"max_iterations": 128}
 
@@ -26,9 +25,8 @@ def _get_expand_config() -> dict:
 def _get_include_config() -> dict:
     """从 ConfigRegistry 获取 include 配置，未配置时返回默认值。"""
     from core.config_registry import config
-    from core.config_map import PREPROCESSOR_DIRECTIVES
     try:
-        raw = dict(config.get(PREPROCESSOR_DIRECTIVES))
+        raw = dict(config.get("preprocessor.directives"))
         return dict(raw.get("include", {}))
     except (KeyError, RuntimeError):
         return {"search_dirs": [], "silent": False}
