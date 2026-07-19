@@ -8,12 +8,138 @@
     # 2. 使用（key 为 "lexer.xxx" / "pratt.xxx" / "renderer.xxx" 等）
     cats = config.get("pratt.token_categories")
 
-所有 config.declare() 声明集中在 core/config_map.py 中。
+配置声明自动从 grammar 包的 pyv.toml 中读取 [config.*] 注册。
 """
 
+import json
 import os
 import tomllib
 from typing import Any
+
+
+# ──────────────────────────────────────────────
+# 配置声明加载（从 grammar 包 pyv.toml 读取 [config.*]）
+# ──────────────────────────────────────────────
+
+
+def _find_user_config() -> str:
+    """Find project config file (duplicated in define.py to avoid circular imports)."""
+    env_path = os.environ.get("PYV_CONFIG")
+    if env_path:
+        path = os.path.abspath(env_path)
+        if os.path.isfile(path):
+            return path
+    candidates = ["config/pyv.config.json", "pyv.config.json"]
+    cwd = os.path.abspath(os.getcwd())
+    parent = cwd
+    while True:
+        for name in candidates:
+            path = os.path.join(parent, name)
+            if os.path.isfile(path):
+                return path
+        next_parent = os.path.dirname(parent)
+        if next_parent == parent:
+            break
+        parent = next_parent
+    home = os.path.expanduser("~/.config/pyv/config.json")
+    return home if os.path.isfile(home) else ""
+
+
+def _find_grammar_pyv_toml() -> str:
+    """Locate the grammar package's pyv.toml."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    user_config = _find_user_config()
+    rules_dir = ""
+    if user_config:
+        try:
+            with open(user_config, encoding="utf-8") as f:
+                cfg = json.load(f)
+            rules_dir = cfg.get("grammar", {}).get("rules_dir", rules_dir)
+        except (json.JSONDecodeError, KeyError):
+            pass
+    meta_path = os.path.join(root, rules_dir, "pyv.toml")
+    if not os.path.isfile(meta_path):
+        raise FileNotFoundError(
+            f"[config] Grammar package pyv.toml not found: {meta_path}"
+        )
+    return meta_path
+
+
+def _flatten_config(table: dict, prefix: str = "") -> list:
+    """Recursively flatten nested config table into (dotted_key, spec) pairs."""
+    result = []
+    for key, value in table.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict) and "file" not in value:
+            result.extend(_flatten_config(value, full_key))
+        else:
+            result.append((full_key, value))
+    return result
+
+
+def _load_meta_declarations() -> list[tuple]:
+    """Read [config.*] declarations from grammar package pyv.toml files."""
+    declarations = []
+
+    # 1. Core grammar package
+    core_path = _find_grammar_pyv_toml()
+    with open(core_path, encoding="utf-8") as f:
+        meta = tomllib.loads(f.read())
+    config_table = meta.get("config", {})
+    for config_key, spec in _flatten_config(config_table):
+        declarations.append((
+            config_key,
+            spec.get("file", ""),
+            spec.get("section"),
+            spec.get("base", "rules"),
+            spec.get("required", True),
+            spec.get("description", ""),
+        ))
+
+    # 2. EXT grammar packages
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    user_config = _find_user_config()
+    ext_dirs = []
+    if user_config:
+        try:
+            with open(user_config, encoding="utf-8") as f:
+                cfg = json.load(f)
+            ext_dirs = cfg.get("grammar", {}).get("ext_dirs", [])
+        except (json.JSONDecodeError, KeyError):
+            pass
+    for i, ed in enumerate(ext_dirs):
+        ext_pyv = os.path.join(root, ed, "pyv.toml")
+        if not os.path.isfile(ext_pyv):
+            continue
+        with open(ext_pyv, encoding="utf-8") as f:
+            ext_meta = tomllib.loads(f.read())
+        ext_config = ext_meta.get("config", {})
+        for config_key, spec in _flatten_config(ext_config):
+            declarations.append((
+                config_key,
+                spec.get("file", ""),
+                spec.get("section"),
+                spec.get("base", f"ext_{i}"),
+                spec.get("required", False),
+                spec.get("description", ""),
+            ))
+    return declarations
+
+
+_DECLARATIONS = _load_meta_declarations()
+
+
+def _install_config_declarations():
+    """注册所有配置声明（模块导入时自动执行）。"""
+    for name, file, section, base, required, desc in _DECLARATIONS:
+        config.declare(
+            name,
+            file=file,
+            section=section,
+            base=base,
+            required=required,
+            description=desc,
+        )
 
 
 class ConfigRegistry:
@@ -152,8 +278,5 @@ class ConfigRegistry:
 # 模块级单例（简化 import）
 config = ConfigRegistry
 
-# 加载配置声明（在 ConfigRegistry 定义之后，确保 import 安全）
-from core import config_map  # noqa: F401
-
-# 自动安装配置声明
-config_map.install()
+# 自动安装配置声明（在 ConfigRegistry 定义之后，确保 import 安全）
+_install_config_declarations()
