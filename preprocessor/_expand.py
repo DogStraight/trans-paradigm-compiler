@@ -34,8 +34,8 @@ def _get_include_config() -> dict:
         return {"search_dirs": [], "silent": False}
 
 
-def _load_config(rules_dir: str) -> tuple[str, set[str]]:
-    """Load macro config → (prefix, directives_set)."""
+def _load_config() -> tuple[str, set[str]]:
+    """Load macro config from ConfigRegistry → (prefix, directives_set)."""
     from ._config import load_macro_config
 
     cfg = load_macro_config()
@@ -69,7 +69,7 @@ def scan_directives(
         directive_lines: 原始指令文本（用于 render 后恢复）
         clean_source:    去掉指令行后的源码
     """
-    prefix, directives = _load_config(rules_dir)
+    prefix, directives = _load_config()
     _MACRO_RE = _build_macro_re(prefix)
 
     if _include_stack is None:
@@ -124,7 +124,7 @@ def scan_directives(
     if not macro_defs:
         return {}, directive_lines, clean_source
 
-    # ---- 宏体全展开（为 reverser 提供已展开的值）----
+    # ---- Fully expand macro bodies (for reverser) ----
     expand_cfg = _get_expand_config()
     max_iter = expand_cfg.get("max_iterations", 128)
     for _ in range(max_iter):

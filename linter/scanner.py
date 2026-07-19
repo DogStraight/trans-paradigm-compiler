@@ -48,7 +48,7 @@ class LinterScanner:
         self._trivia_types = tuple(self.parser.skip_types) + ("comment",)
 
         # 宏前缀
-        self._macro_prefix, _ = _load_config(rules_dir)
+        self._macro_prefix, _ = _load_config()
 
     # ── 静态辅助 ──────────────────────────────────────────
 
