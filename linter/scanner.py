@@ -54,6 +54,16 @@ class LinterScanner:
                 if tt not in info.get("end_case", set()):
                     self._start_map.setdefault(tt, []).append({**info, "_name": name})
 
+        # 补充：将 block.start 也注册为起始 token
+        for name, rule in rules.items():
+            if not isinstance(rule, GrammarRule):
+                continue
+            bs = getattr(rule, "block_start", "") or ""
+            if bs and bs not in self._start_map:
+                info = self._tree.get(name)
+                if info and info["prods"]:
+                    self._start_map.setdefault(bs, []).append({**info, "_name": name})
+
         self._macro_prefix, _ = _load_config()
 
         # ── 动态收集 block 起止符 ─────────────────

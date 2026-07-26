@@ -19,52 +19,6 @@ value = "$1.value"
 [Comment.renderer.layout]
 ref = "value"
 
-[ModuleBlock.parser]
-end_case = [
-    "keyword.endmodule",
-]
-
-[ModuleBlock.parser.structure]
-is_block = true
-
-[ModuleBlock.renderer.body]
-indent = true
-role = "flatten"
-
-[ModuleBlock.structure]
-is_block = true
-
-[ProcBlock.parser]
-end_case = [
-    "keyword.end",
-]
-
-[ProcBlock.parser.structure]
-is_block = true
-
-[ProcBlock.renderer.body]
-indent = true
-role = "flatten"
-
-[ProcBlock.structure]
-is_block = true
-
-[TaskBlock.parser]
-end_case = [
-    "keyword.endfunction",
-    "keyword.endtask",
-]
-
-[TaskBlock.parser.structure]
-is_block = true
-
-[TaskBlock.renderer.body]
-indent = true
-role = "flatten"
-
-[TaskBlock.structure]
-is_block = true
-
 [BeginEnd.parser]
 production = [
     "@BlockLabel?",

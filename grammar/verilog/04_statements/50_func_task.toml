@@ -9,7 +9,6 @@ body = "$1"
 
 [FuncDeclANSI.parser]
 production = [
-    "keyword.function",
     "(keyword.automatic|keyword.static)?",
     "keyword.signed?",
     "@Range?",
@@ -18,23 +17,21 @@ production = [
     "@TaskPortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
-    "@TaskBlock",
-    "keyword.endfunction",
 ]
 end_case = [
     "keyword.endfunction",
+    "newline",
 ]
 
 [FuncDeclANSI.parser.peek]
 scope = "analyzer"
 
 [FuncDeclANSI.parser.node]
-func_name = "$5"
-body = "$10"
-automatic = "$2"
-is_signed = "$3"
-func_range = "$4"
-ports = "$7"
+func_name = ""
+automatic = ""
+is_signed = ""
+func_range = ""
+ports = ""
 
 [FuncDeclANSI.analyzer.scope]
 name_attr = "func_name"
@@ -65,25 +62,27 @@ line = [
 
 [FuncDeclANSI.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [FuncDeclANSI.renderer.tail]
 text = "endfunction"
 break = 2
 
 [FuncDeclANSI.structure]
+is_block = true
 is_statement = true
+
+[FuncDeclANSI.block]
+start = "keyword.function"
+end = "keyword.endfunction"
 
 [FuncDeclOld.parser]
 production = [
-    "keyword.function",
     "(keyword.automatic|keyword.static)?",
     "keyword.signed?",
     "@Range?",
     "@Identifier",
     "symbol.base.semicolon",
-    "@TaskBlock",
-    "keyword.endfunction",
 ]
 end_case = [
     "keyword.endfunction",
@@ -91,11 +90,10 @@ end_case = [
 ]
 
 [FuncDeclOld.parser.node]
-func_name = "$5"
-body = "$7"
-automatic = "$2"
-is_signed = "$3"
-func_range = "$4"
+func_name = ""
+automatic = ""
+is_signed = ""
+func_range = ""
 
 [FuncDeclOld.analyzer.scope]
 name_attr = "func_name"
@@ -123,14 +121,19 @@ line = [
 
 [FuncDeclOld.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [FuncDeclOld.renderer.tail]
 text = "endfunction"
 break = 2
 
 [FuncDeclOld.structure]
+is_block = true
 is_statement = true
+
+[FuncDeclOld.block]
+start = "keyword.function"
+end = "keyword.endfunction"
 
 [TaskDecl.parser]
 production = [
@@ -143,28 +146,25 @@ body = "$1"
 
 [TaskDeclANSI.parser]
 production = [
-    "keyword.task",
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "bracket.l_parentheses",
     "@TaskPortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
-    "@TaskBlock",
-    "keyword.endtask",
 ]
 end_case = [
     "keyword.endtask",
+    "newline",
 ]
 
 [TaskDeclANSI.parser.peek]
 scope = "analyzer"
 
 [TaskDeclANSI.parser.node]
-task_name = "$3"
-body = "$8"
-automatic = "$2"
-ports = "$5"
+task_name = ""
+automatic = ""
+ports = ""
 
 [TaskDeclANSI.analyzer.scope]
 name_attr = "task_name"
@@ -186,32 +186,34 @@ line = [
 
 [TaskDeclANSI.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [TaskDeclANSI.renderer.tail]
 text = "endtask"
 break = 2
 
 [TaskDeclANSI.structure]
+is_block = true
 is_statement = true
+
+[TaskDeclANSI.block]
+start = "keyword.task"
+end = "keyword.endtask"
 
 [TaskDeclOld.parser]
 production = [
-    "keyword.task",
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "symbol.base.semicolon",
-    "@TaskBlock",
-    "keyword.endtask",
 ]
 end_case = [
     "keyword.endtask",
+    "newline",
 ]
 
 [TaskDeclOld.parser.node]
-task_name = "$3"
-body = "$5"
-automatic = "$2"
+task_name = ""
+automatic = ""
 
 [TaskDeclOld.analyzer.scope]
 name_attr = "task_name"
@@ -230,11 +232,16 @@ line = [
 
 [TaskDeclOld.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [TaskDeclOld.renderer.tail]
 text = "endtask"
 break = 2
 
 [TaskDeclOld.structure]
+is_block = true
 is_statement = true
+
+[TaskDeclOld.block]
+start = "keyword.task"
+end = "keyword.endtask"

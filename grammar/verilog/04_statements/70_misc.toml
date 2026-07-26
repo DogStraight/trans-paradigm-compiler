@@ -43,28 +43,29 @@ layout = ";"
 is_statement = true
 
 [GenerateBlock.parser]
-production = [
-    "keyword.generate",
-    "@ModuleBlock",
-    "keyword.endgenerate",
-]
+production = []
 end_case = [
     "keyword.endgenerate",
+    "newline",
 ]
 
 [GenerateBlock.parser.node]
-body = "$2"
 
 [GenerateBlock.renderer]
 head = "generate"
 
 [GenerateBlock.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [GenerateBlock.renderer.tail]
 text = "endgenerate"
 break = 2
 
 [GenerateBlock.structure]
+is_block = true
 is_statement = true
+
+[GenerateBlock.block]
+start = "keyword.generate"
+end = "keyword.endgenerate"

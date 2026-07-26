@@ -1,12 +1,9 @@
 [ModuleDecl.parser]
 production = [
-    "keyword.module",
     "@Identifier",
     "@ParameterList?",
     "@PortParens?",
     "symbol.base.semicolon?",
-    "@ModuleBlock",
-    "keyword.endmodule",
 ]
 end_case = [
     "keyword.endmodule",
@@ -17,10 +14,9 @@ end_case = [
 scope = "analyzer"
 
 [ModuleDecl.parser.node]
-module_name = "$2"
-params = "$3"
-ports = "$4"
-body = "$6"
+module_name = ""
+params = ""
+ports = ""
 
 [ModuleDecl.analyzer.scope]
 name_attr = "module_name"
@@ -50,14 +46,19 @@ line = [
 
 [ModuleDecl.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [ModuleDecl.renderer.tail]
 text = "endmodule"
 break = 2
 
 [ModuleDecl.structure]
+is_block = true
 is_statement = true
+
+[ModuleDecl.block]
+start = "keyword.module"
+end = "keyword.endmodule"
 
 [PortParens.parser]
 inline = true
