@@ -182,9 +182,9 @@ def run_all(
                     fidelity_dropped = True
                     fidelity_changed.append((name, prev, fidelity))
 
-                # 更新缓存（先保存旧值用于输出）
+                # 更新缓存：保存最高保真度（下降后不会覆盖缓存）
                 prev_display = prev if prev is not None else fidelity
-                fidelity_cache[name] = fidelity
+                fidelity_cache[name] = max(prev or 0, fidelity)
 
         # 判定测试结果
         if group == "errors":

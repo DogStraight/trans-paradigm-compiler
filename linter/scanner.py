@@ -1,32 +1,37 @@
 """
-scanner.py — Linter 扫描核心
+scanner.py — 分层 Linter，三层独立使能。
 
-职责：
-- 轻量级逐句扫描，出错跳过并继续
-- 宏指令语法校验（复用 Parser 的解析能力）
-- 输出 LSP 兼容的诊断信息
+Phase 1: 块边界匹配（block opener/closer 嵌套计数）
+Phase 2: 语句识别（start_tokens → end_case 边界，岛式多规则取最长）
+Phase 3: 语句内字面量匹配（production 中 token 精确匹配，@SubRule 黑盒）
+
+每层可独立开关。LinterScanner(...) 构造时通过 enable_phase1/2/3 控制。
 """
 
-
-
 import os
-
+from core.define import Token, GrammarRule
 from core.config_registry import ConfigRegistry
 from lexer import Lexer
-from parser import Parser, setup_grammar
-from parser.rule_selector import RuleSelector
-from parser.parser_core import ParseContext
+from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
 from . import LintDiagnostic, Position
-from .grammar_slicer import build_slicing_map, DeclSlice, StmtSlice, SkipSlice
+from .grammar_slicer import build_slice_tree, get_start_tokens
+
+_TRIVIA = frozenset({"newline", "space.fold", "comment", "space"})
 
 
 class LinterScanner:
-    """轻量级语法扫描器。"""
-
-    def __init__(self, rules_dir: str, ext_dirs: list[str] | None = None):
+    def __init__(
+        self,
+        rules_dir: str,
+        ext_dirs: list[str] | None = None,
+        enable_phase1: bool = True,
+        enable_phase2: bool = True,
+        enable_phase3: bool = False,
+    ):
         self._rules_dir = rules_dir
+        ext_list = ext_dirs or []
         ext_list = ext_dirs or []
         ConfigRegistry.load_all(
             rules_dir,
@@ -38,43 +43,126 @@ class LinterScanner:
         rules = setup_grammar(
             rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_list
         )
-        stmt_names = [
-            n
-            for n, r in rules.items()
-            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
-        ]
-        rule_selector = RuleSelector(rules, stmt_names)
+        self._tree = build_slice_tree(rules)
         self.lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_list)
-        self.parser = Parser(
-            rules=rules, rule_selector=rule_selector
-        )
 
-        # 从语法规则推导切片策略 + 终止符
-        self._slice_map, self._terminators = build_slicing_map(rules, stmt_names)
-        self._trivia_types = tuple(self.parser.skip_types) + ("comment",)
+        self._start_map: dict[str, list[dict]] = {}
+        for name, info in self._tree.items():
+            if not info["prods"]:
+                continue
+            for tt in get_start_tokens(info["prods"]):
+                if tt not in info.get("end_case", set()):
+                    self._start_map.setdefault(tt, []).append({**info, "_name": name})
 
-        # 宏前缀
         self._macro_prefix, _ = _load_config()
 
-    # ── 静态辅助 ──────────────────────────────────────────
+        # ── 动态收集 block 起止符 ─────────────────
+        self._block_openers, self._block_closers = self._build_block_delimiters(rules)
 
-    def _skip_to_terminator(self, context: ParseContext) -> None:
-        """跳过到下一个终止符（由语法规则 end_case 推导）。"""
-        while context.has_more_tokens():
-            t = context.peek_token()
-            assert t is not None
-            if t.type in self._terminators:
-                context.advance_token()
-                return
-            context.advance_token()
+        self.enable_phase1 = enable_phase1
+        self.enable_phase2 = enable_phase2
+        self.enable_phase3 = enable_phase3
+        self._p3_depth = 0
+        self._p3_trace_log: list[str] = []
 
-    # ── 公开入口 ──────────────────────────────────────────
+    # ── P3 调试追踪 ────────────────────────────────
+
+    @property
+    def debug_p3(self) -> bool:
+        return getattr(self, "_debug_p3", False)
+
+    @debug_p3.setter
+    def debug_p3(self, value: bool):
+        self._debug_p3 = value
+        if not value:
+            self._p3_trace_log.clear()
+
+    def _p3_trace(self, event: str, i: int, detail: str = "", **kw):
+        """记录 P3 递归追踪。仅在 debug_p3=True 时生效。
+
+        event — 事件名（enter/exit/decision/error）
+        i     — 当前 token 位置
+        detail — 人类可读描述
+        kw     — 额外结构信息
+        """
+        if not self.debug_p3:
+            return
+        indent = "  " * self._p3_depth
+        parts = [f"{indent}{event:8s} i={i:3d}"]
+        if detail:
+            parts.append(detail)
+        for k, v in kw.items():
+            parts.append(f"{k}={v}")
+        self._p3_trace_log.append(" ".join(parts))
+
+    # ── 动态 block delimiter 收集 ─────────────────
+
+    @staticmethod
+    def _build_block_delimiters(rules: dict) -> tuple[set[str], set[str]]:
+        """从语法规则中收集 block 起止符集合。
+
+        优先使用规则上的 block.start / block.end（显式声明），
+        回退到 start_tokens / end_case 推导。
+        """
+        from linter.grammar_slicer import build_slice_tree, get_start_tokens
+
+        tree = build_slice_tree(rules)
+        openers: set[str] = set()
+        closers: set[str] = set()
+
+        # Phase 1: 从 block.start/block.end 显式声明收集
+        for name, rule in rules.items():
+            if not isinstance(rule, GrammarRule):
+                continue
+            if not getattr(rule, "is_block", False):
+                continue
+            bs = getattr(rule, "block_start", "") or ""
+            be = getattr(rule, "block_end", "") or ""
+            if bs:
+                openers.add(bs)
+            if be:
+                closers.add(be)
+
+        # Phase 2: 回退到 end_case / start_tokens 推导（兼容旧格式）
+        anon_blocks: set[str] = set()
+        for name, info in tree.items():
+            if not info.get("is_block"):
+                continue
+            rule = rules.get(name)
+            # 如果 block.start/end 均已显式声明，完全跳过树推导
+            if rule and getattr(rule, "block_start", "") and getattr(rule, "block_end", ""):
+                continue
+            closers |= info.get("end_case", set())
+            prods = info.get("prods", [])
+            if not prods:
+                anon_blocks.add(name)
+            elif not (rule and getattr(rule, "block_start", "")):
+                openers |= get_start_tokens(prods)
+
+        # 对匿名 block，收集引用它的父规则的起始 token 作为 opener，
+        # 以及父规则末尾的 token 作为额外的 closer（如 endgenerate）。
+        seen_parents: set[str] = set()
+        for name, info in tree.items():
+            prods = info.get("prods", [])
+            if not prods or name in seen_parents:
+                continue
+            for feat in prods:
+                if feat.get("type") != "call":
+                    continue
+                if feat.get("name") in anon_blocks:
+                    openers |= get_start_tokens(prods)
+                    # 收集父规则末尾的 token 作为额外的 closer
+                    for feat in reversed(prods):
+                        if feat.get("type") == "token":
+                            closers.add(feat["token_type"])
+                            break
+                    seen_parents.add(name)
+                    break
+
+        return openers, closers
 
     def scan(self, source: str) -> list[LintDiagnostic]:
-        """扫描源代码，返回所有诊断信息。"""
-        errors: list[LintDiagnostic] = []
-
-        # 提取宏定义 + 展开
+        errors: list = []
         macro_defs, _, clean_source = scan_directives(source, self._rules_dir)
         if macro_defs:
             lex_source, _ = expand_tokens(
@@ -86,83 +174,538 @@ class LinterScanner:
             lex_source = source
 
         tokens = self.lexer.tokenize(lex_source)
-        context = ParseContext(tokens)
-        self._scan_block(context, errors)
+        if not tokens:
+            return errors
+
+        if self.enable_phase1:
+            errors += self._phase1_boundary(tokens)
+        if self.enable_phase2:
+            errors += self._phase2_statement(tokens)
+        if self.enable_phase3:
+            errors += self._phase3_literal(tokens)
+
         return errors
 
-    # ── 核心扫描 ──────────────────────────────────────────
+    # ── Phase 1: 块边界 ──────────────────────────────
 
-    def _scan_block(
-        self,
-        context: ParseContext,
-        errors: list[LintDiagnostic],
-        end_token: str = "",
-    ) -> None:
-        """分层切片扫描。
-
-        层1：声明级块（module/function/task/case → end*）— 整体跳过
-        层2：逐句解析（always/if/for/assign 等）
-        层3：解析失败 → 跳到分号，报告一次错误
-        """
-        while context.has_more_tokens():
-            self._skip_trivia(context)
-            if not context.has_more_tokens():
-                break
-
-            current = context.peek_token()
-            assert current is not None
-
-            if end_token and current.type == end_token:
-                break
-
-            # 从切片策略表查询当前 token 的处理方式
-            strategy = self._slice_map.get(current.type)
-
-            if isinstance(strategy, DeclSlice):
-                # 声明/块头部：跳到终止符
-                self._skip_to_terminator(context)
+    def _phase1_boundary(self, tokens: list) -> list:
+        errors: list = []
+        depth = 0
+        for t in tokens:
+            if t.type in _TRIVIA:
                 continue
-
-            if isinstance(strategy, StmtSlice):
-                # 语句：由 parse_sentence 处理
-                if self.parser.parse_sentence(context) is not None:
-                    continue
-                # parse_sentence 失败 → 走 error 路径
-                pass
-
-            if isinstance(strategy, SkipSlice):
-                # 静默跳过
-                context.advance_token()
-                continue
-
-            # 宏调用：跳过
-            if current.type.startswith("macro."):
-                context.advance_token()
-                continue
-
-            # 未知 token：先试 parse_sentence，失败则跳到终止符
-            if self.parser.parse_sentence(context) is not None:
-                continue
-
-            start_pos = Position(
-                line=max(0, current.line - 1), character=max(0, current.column - 1)
-            )
-            self._skip_to_terminator(context)
+            if t.type in self._block_openers:
+                depth += 1
+            elif t.type in self._block_closers:
+                depth -= 1
+                if depth < 0:
+                    errors.append(
+                        LintDiagnostic(
+                            range=(
+                                Position(t.line, t.column),
+                                Position(t.line, t.column),
+                            ),
+                            message=f"unmatched '{t.content}' without block start",
+                            severity=1,
+                            code="phase1-boundary",
+                        )
+                    )
+                    depth = 0
+        if depth > 0:
             errors.append(
                 LintDiagnostic(
-                    range=(start_pos, start_pos),
-                    message=f"syntax error: unexpected '{current.content}'",
+                    range=(Position(0, 0), Position(0, 0)),
+                    message=f"unclosed block: {depth} unclosed block(s) at EOF",
                     severity=1,
-                    code="parse-error",
+                    code="phase1-boundary",
                 )
             )
+        return errors
 
-    # ── 辅助方法 ──────────────────────────────────────────
+    # ── Phase 2: 语句识别 ────────────────────────────
 
-    def _skip_trivia(self, context: ParseContext) -> None:
-        while context.has_more_tokens():
-            t = context.peek_token()
-            if t and t.type in self._trivia_types:
-                context.advance_token()
-            else:
+    def _phase2_statement(self, tokens: list) -> list:
+        errors: list = []
+        i = 0
+        while i < len(tokens):
+            i = self._skip(tokens, i)
+            if i >= len(tokens):
                 break
+            t = tokens[i]
+            if t.type.startswith("macro."):
+                i += 1
+                continue
+            best_i = i
+            for info in self._start_map.get(t.type, []):
+                result = self._consume(tokens, i, info)
+                if result is not None and result > best_i:
+                    best_i = result
+            if best_i > i:
+                i = best_i
+                continue
+            errors.append(
+                LintDiagnostic(
+                    range=(Position(t.line, t.column), Position(t.line, t.column)),
+                    message=f"syntax error: unexpected '{t.content}'",
+                    severity=1,
+                    code="phase2-statement",
+                )
+            )
+            i += 1
+        return errors
+
+    def _consume(self, tokens: list, i: int, info: dict) -> int | None:
+        ec = info.get("end_case", set())
+        is_block = info.get("is_block", False)
+        has_prods = bool(info.get("prods"))
+        if is_block and not has_prods:
+            return self._skip_to_end(tokens, i, ec) if ec else None
+        if not ec:
+            return i + 1
+        return self._skip_to_end(tokens, i + 1, ec)
+
+    # ── Phase 3: 字面量匹配（递归岛式）────────────
+
+    def _phase3_literal(self, tokens: list) -> list:
+        """字面量匹配：逐 token 推进，在每个位置尝试语句规则匹配。
+
+        `;` 是岛屿边界——不依赖 _match_island 返回值跳跃，
+        确保内层语句不被外层 block skip 吞掉。
+        """
+        errors: list = []
+        i = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t.type.startswith("macro."):
+                i += 1
+                continue
+            self._p3_trace("scan", i, f"token={t.type}({t.content})")
+            candidates = self._start_map.get(t.type, [])
+            if candidates:
+                self._p3_trace(
+                    "candidates", i, f"token={t.type}", count=len(candidates)
+                )
+            best_errors: list | None = None
+            best_i = i
+            best_is_stmt = False
+            best_name = ""
+            for info in candidates:
+                prods = info.get("prods", [])
+                if not prods:
+                    continue
+                name = info.get("_name", "?")
+                trial: list = []
+                result = self._match_island(tokens, i, prods, trial)
+                is_stmt = info.get("is_statement", False)
+                self._p3_trace(
+                    "trial",
+                    i,
+                    f"rule={name}",
+                    result=result,
+                    errs=len(trial),
+                    is_stmt=is_stmt,
+                )
+                if (
+                    best_errors is None
+                    or len(trial) < len(best_errors)
+                    or (
+                        len(trial) == len(best_errors)
+                        and (
+                            (is_stmt and not best_is_stmt)
+                            or (is_stmt == best_is_stmt and result > best_i)
+                        )
+                    )
+                ):
+                    best_i = result
+                    best_errors = trial
+                    best_is_stmt = is_stmt
+                    best_name = name
+            if best_errors is not None:
+                self._p3_trace(
+                    "best", i, f"rule={best_name}", i_next=best_i, errs=len(best_errors)
+                )
+                errors += best_errors
+                i = best_i  # 岛屿边界已可靠，直接跳跃
+            else:
+                i += 1
+        return errors
+
+    def _match_island(
+        self,
+        tokens: list,
+        i: int,
+        prods: list,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """递归匹配 production 列表。
+
+        语句岛屿：`;` 是岛屿边界，block 内容不扩展岛屿。
+        返回岛屿末尾（; 处或 block 开始前），block 及其后的元素只验证不跳位。
+
+        stop_on — 父层 end_case，当前 token 在其中时停止匹配（解决逗号歧义）。
+        """
+        if not prods or i >= len(tokens):
+            return i
+        # 首元素静默检查：有错误才跳过，optional 无害不推进则继续试后面的元素
+        first_silent: list = []
+        result = self._match_deep(tokens, i, prods[0], first_silent, stop_on=stop_on)
+        if first_silent:
+            self._p3_trace("exit", i, "first_elem_errored", result=result)
+            return i
+        if result > i:
+            errors += first_silent
+            i = result
+        self._p3_trace("island", i, f"first_ok, stop_on={stop_on}", prods=len(prods))
+        # 找到第一个 block call 的索引
+        block_start = len(prods)
+        for idx, feat in enumerate(prods[1:], start=1):
+            if feat.get("type") == "call":
+                info = self._tree.get(feat.get("name", ""))
+                if info and self._depth_for(info) == "block":
+                    block_start = idx
+                    break
+        # 岛屿元素：正常匹配，影响 i
+        for feat in prods[1:block_start]:
+            if i >= len(tokens):
+                break
+            # 当前 token 是父层 end_case 边界 → 停
+            if stop_on and tokens[i].type in stop_on:
+                self._p3_trace("stop", i, f"hit stop_on {tokens[i].type}")
+                break
+            i = self._match_deep(tokens, i, feat, errors, stop_on=stop_on)
+        self._p3_trace("island_end", i, f"block_start={block_start}")
+        # block 及之后：独立验证，不影响岛屿边界
+        j = i
+        for feat in prods[block_start:]:
+            if j >= len(tokens):
+                break
+            if stop_on and tokens[j].type in stop_on:
+                break
+            j = self._match_deep(tokens, j, feat, errors, stop_on=stop_on)
+        return i
+
+    def _match_deep(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """递归匹配一个元素 — 按 type 分发到对应处理器。"""
+        if i >= len(tokens):
+            return i
+        if stop_on and tokens[i].type in stop_on:
+            self._p3_trace("boundary", i, f"hit stop_on {tokens[i].type}")
+            return i
+        typ = node.get("type", "")
+        self._p3_trace(
+            "enter", i, f"type={typ}", node=node.get("name", node.get("token_type", ""))
+        )
+
+        handler = {
+            "token": self._match_token,
+            "call": self._match_call,
+            "optional": self._match_optional,
+            "choice": self._match_choice,
+            "seq": self._match_seq,
+            "repeat": self._match_repeat,
+            "plus": self._match_plus,
+        }.get(typ)
+        if handler:
+            return handler(tokens, i, node, errors, stop_on)
+        return i + 1
+
+    # ── _match_deep 子分发器 ──────────────────────
+
+    def _match_token(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """精确匹配 token。"""
+        tok = node["token_type"]
+        if node.get("optional"):
+            if i < len(tokens) and tokens[i].type == tok:
+                return i + 1
+            return i
+        if i < len(tokens) and tokens[i].type == tok:
+            return i + 1
+        t = tokens[i]
+        errors.append(
+            LintDiagnostic(
+                range=(Position(t.line, t.column), Position(t.line, t.column)),
+                message=f"expected '{tok}', got '{t.type}'",
+                severity=1,
+                code="phase3-literal",
+            )
+        )
+        self._p3_trace("token_err", i, f"want={tok} got={t.type}")
+        return i + 1
+
+    def _match_call(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """@SubRule 调用，按 depth 分发。"""
+        if node.get("optional"):
+            return i
+        info = self._tree.get(node["name"])
+        if info is None:
+            return i + 1
+        depth = self._depth_for(info)
+        self._p3_trace("branch", i, f"call {node['name']}", depth=depth)
+        prods = info.get("prods", [])
+        if depth == "block":
+            ec = info.get("end_case", set())
+            if not ec:
+                return i + 1
+            end_pos = self._skip_to_end(tokens, i, ec)
+            return max(i, end_pos - 1)
+        if not prods:
+            return i + 1
+        if depth == "atom":
+            return i + 1
+        if depth == "shallow":
+            return self._match_shallow(tokens, i, prods, errors)
+        # full
+        stop = set(info.get("end_case", set()))
+        if stop_on:
+            stop |= stop_on
+        self._p3_trace("full", i, f"recurse {node['name']}", stop=stop)
+        return self._match_island(tokens, i, prods, errors, stop_on=stop)
+
+    def _match_optional(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """optional：静默尝试，失败不推进。"""
+        inner = node.get("elem", {})
+        silent: list = []
+        result = self._match_deep(tokens, i, inner, silent, stop_on=stop_on)
+        if result > i and not silent:
+            self._p3_trace("optional", i, "matched", result=result)
+            return result
+        self._p3_trace("optional", i, "skipped")
+        return i
+
+    def _match_choice(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """choice：试所有路径，取错误最少的。"""
+        best_i = i
+        best_silent: list = []
+        for alt_idx, alt in enumerate(node.get("alternatives", [])):
+            silent_errs: list = []
+            result = self._match_deep(tokens, i, alt, silent_errs, stop_on=stop_on)
+            self._p3_trace(
+                "choice", i, f"alt#{alt_idx}", result=result, errs=len(silent_errs)
+            )
+            if result > best_i or (
+                result == best_i and len(silent_errs) < len(best_silent)
+            ):
+                best_i = result
+                best_silent = silent_errs
+        if best_i > i:
+            errors += best_silent
+            return best_i
+        t = tokens[i]
+        errors.append(
+            LintDiagnostic(
+                range=(Position(t.line, t.column), Position(t.line, t.column)),
+                message=f"unexpected '{t.content}'",
+                severity=1,
+                code="phase3-literal",
+            )
+        )
+        return i + 1
+
+    def _match_seq(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """seq：顺序组，每个元素依次匹配。"""
+        for item in node.get("items", []):
+            if i >= len(tokens):
+                break
+            i = self._match_deep(tokens, i, item, errors, stop_on=stop_on)
+        return i
+
+    def _match_repeat(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """repeat：贪婪重复，直到无法推进。"""
+        count = 0
+        while i < len(tokens):
+            prev_i = i
+            silent: list = []
+            result = self._match_deep(
+                tokens, i, node.get("elem", {}), silent, stop_on=stop_on
+            )
+            if result <= prev_i or silent:
+                break
+            i = result
+            count += 1
+        self._p3_trace("repeat", i, f"matched {count}x")
+        return i
+
+    def _match_plus(
+        self,
+        tokens: list,
+        i: int,
+        node: dict,
+        errors: list,
+        stop_on: set | None = None,
+    ) -> int:
+        """plus：至少匹配一次。"""
+        silent: list = []
+        first = self._match_deep(
+            tokens, i, node.get("elem", {}), silent, stop_on=stop_on
+        )
+        if first <= i or silent:
+            t = tokens[i]
+            errors.append(
+                LintDiagnostic(
+                    range=(Position(t.line, t.column), Position(t.line, t.column)),
+                    message="expected at least one match",
+                    severity=1,
+                    code="phase3-literal",
+                )
+            )
+            self._p3_trace("plus_err", i, "no_match")
+            return i + 1
+        i = first
+        count = 1
+        while i < len(tokens):
+            prev_i = i
+            i = self._match_deep(
+                tokens, i, node.get("elem", {}), errors, stop_on=stop_on
+            )
+            if i <= prev_i:
+                break
+            count += 1
+        self._p3_trace("plus", i, f"matched {count}x")
+        return i
+
+    def _depth_for(self, info: dict) -> str:
+        """根据 structure + pratt + is_atom 决定匹配深度。"""
+        if info.get("pratt") or info.get("is_atom"):
+            return "atom"
+        if info.get("is_block"):
+            return "block"
+        if info.get("is_statement"):
+            return "shallow"
+        if info.get("prods"):
+            return "full"
+        return "atom"
+
+    def _match_shallow(self, tokens: list, i: int, prods: list, errors: list) -> int:
+        """浅匹配：匹配字面量 token，@SubRule 做边界跳过。"""
+        for feat in prods:
+            if i >= len(tokens):
+                break
+            i = self._match_shallow_elem(tokens, i, feat, errors)
+        return i
+
+    def _match_shallow_elem(
+        self, tokens: list[Token], i: int, node: dict, errors: list
+    ) -> int:
+        if i >= len(tokens):
+            return i
+        typ = node.get("type", "")
+        if typ == "token":
+            tok = node["token_type"]
+            if node.get("optional"):
+                if tokens[i].type == tok:
+                    return i + 1
+                return i
+            if tokens[i].type == tok:
+                return i + 1
+            t = tokens[i]
+            errors.append(
+                LintDiagnostic(
+                    range=(Position(t.line, t.column), Position(t.line, t.column)),
+                    message=f"expected '{tok}', got '{t.type}'",
+                    severity=1,
+                    code="phase3-literal",
+                )
+            )
+            return i + 1
+        if typ == "call":
+            if node.get("optional"):
+                return i
+            info = self._tree.get(node["name"])
+            sub_ec = info.get("end_case", set()) if info else set()
+            if sub_ec:
+                return self._skip_to_end(tokens, i, sub_ec)
+            # 无 end_case 的 call：默认只匹配下一个非 trivia token
+            return self._skip(tokens, i + 1)
+        if typ == "optional":
+            inner = node.get("elem", {})
+            result = self._match_shallow_elem(tokens, i, inner, errors)
+            if result is not None and result > i:
+                return result
+            return i
+        # choice/seq/repeat/plus 等复合类型：浅匹配不深入，不消费
+        return i
+
+    # ── 辅助 ─────────────────────────────────────────
+
+    def _skip_to_end(self, tokens: list, i: int, end_set: set[str]) -> int:
+        depth = 0
+        # 分离 ! 前缀的排除项
+        exclude = {s[1:] for s in end_set if s.startswith("!")}
+        positive = {s for s in end_set if not s.startswith("!")}
+        # 没有正项止步条件时，只前进 1 token（避免吞掉整个语句）
+        if not positive:
+            return self._skip(tokens, i + 1)
+        while i < len(tokens):
+            t = tokens[i]
+            if t.type in _TRIVIA:
+                i += 1
+                continue
+            # ! 前缀表示遇到该 token 时不停止（继续前进）
+            if t.type in exclude:
+                i += 1
+                continue
+            if "newline" in positive and t.type == "newline":
+                return i + 1
+            if t.type in positive and depth == 0:
+                return i + 1
+            if t.type in self._block_openers:
+                depth += 1
+            elif t.type in self._block_closers:
+                depth = max(0, depth - 1)
+            i += 1
+        return i
+
+    def _skip(self, tokens: list, i: int) -> int:
+        while i < len(tokens) and tokens[i].type in _TRIVIA:
+            i += 1
+        return i

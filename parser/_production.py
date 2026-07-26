@@ -146,11 +146,63 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 
     # 块规则
     if getattr(rule, "is_block", False):
-        result = self.parse_block(context, start_token="", rule=rule)
-        context.path_stack.pop()
-        if scope_pushed:
-            self.scope_stack.pop()
-        return result
+        bs = getattr(rule, "block_start", None)
+
+        if bs:
+            # 有显式 block.start 的块规则（如 BeginEnd）：自行消费起止符
+            # 1) 消费起始符
+            self._skip_tokens(context, tuple(self.skip_types))
+            tok = context.peek_token()
+            if not tok or tok.type != bs:
+                context.path_stack.pop()
+                if scope_pushed:
+                    self.scope_stack.pop()
+                return None
+            context.advance_token()
+
+            # 2) 正常匹配 production（如 @BlockLabel?）
+            rule_node = Node(rule.name)
+            old_node = context.current_node
+            context.update_current_node(rule_node)
+            all_matched = match_productions(self, context, rule)
+            if all_matched is None:
+                context.update_current_node(old_node)
+                context.path_stack.pop()
+                if scope_pushed:
+                    self.scope_stack.pop()
+                return None
+            self._bind_attributes(rule_node, rule, all_matched)
+
+            # 3) 解析块体
+            block_body = Node("Block")
+            from .block_parser import parse_block_body
+            parse_block_body(self, context, block_body, rule)
+            body_children = getattr(block_body, "sub_node", [])
+            for child in body_children:
+                rule_node.add_sub_node(child)
+            rule_node.add_attr("body", body_children)
+
+            # 4) 消费结束符
+            be = getattr(rule, "block_end", None) or _get_block_end_for(rule)
+            if be:
+                self._skip_tokens(context, tuple(self.skip_types))
+                tok = context.peek_token()
+                if tok and tok.type == be:
+                    context.advance_token()
+
+            self._restore_current_node(old_node, context)
+            context.path_stack.pop()
+            if scope_pushed:
+                self.scope_stack.pop()
+            return rule_node
+        else:
+            # 匿名块（无 block.start）：由父规则 production 中的 @ 调用触发
+            # 块体由 parse_block 处理，结束符由父规则负责消费
+            result = self.parse_block(context, start_token="", rule=rule)
+            context.path_stack.pop()
+            if scope_pushed:
+                self.scope_stack.pop()
+            return result
 
     # 记录失败尝试
     current_token = context.peek_token()
@@ -444,6 +496,16 @@ def parse_plus(self, node: dict, context: ParseContext) -> Node | None:
     for child in nodes:
         plus_node.add_sub_node(child) if child is not None else None
     return plus_node
+
+
+def _get_block_end_for(rule) -> str:
+    """从规则中提取块结束符 token 类型。"""
+    if hasattr(rule, "block_end") and rule.block_end:
+        return rule.block_end
+    for item in getattr(rule, "end_case", []):
+        if isinstance(item, str) and not item.startswith("!"):
+            return item
+    return ""
 
 
 # 公开别名（保持与 parser_core 中 _repeat_loop = repeat_loop 的兼容）

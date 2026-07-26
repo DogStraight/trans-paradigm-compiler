@@ -49,7 +49,12 @@ def parse_sentence(self, context: ParseContext) -> Node | None:
 
 
 def _get_block_end(rule: GrammarRule) -> str:
-    """从规则的 end_case 中提取块结束符（第一个正匹配项，无则返回空字符串）"""
+    """从规则中提取块结束符。
+
+    优先使用 block.end（显式声明），回退到 end_case 第一个正匹配项。
+    """
+    if hasattr(rule, "block_end") and rule.block_end:
+        return rule.block_end
     for item in getattr(rule, "end_case", []):
         if isinstance(item, str) and not item.startswith("!"):
             return item

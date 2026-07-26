@@ -346,12 +346,13 @@ class GrammarRule:
     # 从 parser/analyzer 阶段提取到顶层的字段名集合
     # 只包含 Parser/Renderer 消费的字段，analyzer 专用字段留在 rule.analyzer 中
     _KNOWN_FIELDS = {
-        "production",  # 产生式列表，定义规则匹配什么
-        "node",  # 属性映射，如何从匹配结果构建 AST 节点（$N 路径语法）
-        "end_case",  # 终止符列表，匹配后检查的 token 边界
-        "inline",  # 内联扁平化：只保留第一个子节点，消除包装节点
-        "pratt",  # 使用 Pratt 解析器处理表达式（替换普通生产式匹配）
-        "structure",  # 结构角色字典，展开为 is_block / is_statement / is_atom
+        "production",
+        "node",
+        "end_case",
+        "inline",
+        "pratt",
+        "structure",
+        "block",
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
@@ -363,10 +364,10 @@ class GrammarRule:
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
+            elif fld in ("structure", "block"):
+                setattr(self, fld, None)
             else:
                 setattr(self, fld, False)
-        # structure 默认 None（无结构标记时为 None，读取时兜底为空 dict）
-        self.structure = None
 
         # 从嵌套的阶段结构中提取属性到顶层，同时保留原始嵌套
         for stage in ("parser", "analyzer", "renderer"):
@@ -404,6 +405,12 @@ class GrammarRule:
         self.is_block = struct.get("is_block", False)
         self.is_statement = struct.get("is_statement", False)
         self.is_atom = struct.get("is_atom", False)
+
+        # 从 block 字典中提取块起始/结束符
+        #   block = { start = "keyword.begin", end = "keyword.end" }
+        block = getattr(self, "block", None) or {}
+        self.block_start = block.get("start", "")
+        self.block_end = block.get("end", "")
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。
