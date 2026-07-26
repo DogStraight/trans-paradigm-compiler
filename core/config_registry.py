@@ -253,7 +253,11 @@ class ConfigRegistry:
 
     @classmethod
     def load_all(
-        cls, rules_dir: str, ext_dirs: list[str] | None = None, **base_dirs: str
+        cls,
+        rules_dir: str,
+        ext_dirs: list[str] | None = None,
+        plugins_dir: str = "",
+        **base_dirs: str,
     ) -> None:
         """加载所有已声明的配置。
 
@@ -277,6 +281,8 @@ class ConfigRegistry:
             bases["ext"] = ext_list[0]  # 兼容 base="ext"
         else:
             bases["ext"] = ""  # ext 为空，required=False 的声明静默失败
+        if plugins_dir:
+            bases["plugins"] = plugins_dir
         for bk, bv in base_dirs.items():
             # 去掉 _dir 后缀便于匹配
             key = bk.removesuffix("_dir")

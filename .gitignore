@@ -18,3 +18,5 @@ _test_*.py
 # 讨论过程文件
 inf_impl_example.txt
 inf_model_example.txt
+
+*.egg-info/
