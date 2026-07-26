@@ -7,10 +7,6 @@ join = "\n"
 [Root.structure]
 is_block = true
 
-[Root.block]
-start = ""
-end = ""
-
 [Comment.parser]
 production = [
     "comment",
@@ -38,10 +34,6 @@ role = "flatten"
 [ModuleBlock.structure]
 is_block = true
 
-[ModuleBlock.block]
-start = ""
-end = "keyword.endmodule"
-
 [ProcBlock.parser]
 end_case = [
     "keyword.end",
@@ -56,10 +48,6 @@ role = "flatten"
 
 [ProcBlock.structure]
 is_block = true
-
-[ProcBlock.block]
-start = ""
-end = "keyword.end"
 
 [TaskBlock.parser]
 end_case = [
@@ -76,10 +64,6 @@ role = "flatten"
 
 [TaskBlock.structure]
 is_block = true
-
-[TaskBlock.block]
-start = ""
-end = "keyword.endfunction"
 
 [BeginEnd.parser]
 production = [
