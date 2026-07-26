@@ -5,7 +5,7 @@
   "ref_call": 1.0,
   "ref_comma_decl": 1.0,
   "ref_comments": 0.9289,
-  "ref_complex": 0.5495,
+  "ref_complex": 1.0,
   "ref_concat_nest": 1.0,
   "ref_for_loop": 1.0,
   "ref_fsm": 1.0,

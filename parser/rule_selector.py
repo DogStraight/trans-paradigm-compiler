@@ -70,6 +70,13 @@ def build_start_token_map_names(
         if name not in grammar_rules:
             continue
         rule = grammar_rules[name]
+
+        # 补充：block.start 也作为起始 token 注册（优先于 production 处理，
+        # 确保空 production 的块规则如 GenerateBlock 仍能注册起始符）
+        bs = getattr(rule, "block_start", None)
+        if bs:
+            name_map.setdefault(bs, []).append(name)
+
         prods = rule.prods
         if not prods:
             continue
@@ -85,13 +92,6 @@ def build_start_token_map_names(
             if tok not in name_map:
                 name_map[tok] = []
             name_map[tok].append(name)
-
-        # 补充：block.start 也作为起始 token 注册
-        bs = getattr(rule, "block_start", None)
-        if bs and bs not in name_map:
-            name_map[bs] = []
-        if bs:
-            name_map.setdefault(bs, []).append(name)
     return name_map
 
 
