@@ -394,8 +394,15 @@ class GrammarRule:
         #   structure = { is_statement = true }       — 语句规则
         #   structure = { is_atom = true }            — 原子规则（表达式粒度）
         #
-        # 三种标记互斥，默认均为 false。子句级规则不设置 structure，
-        # 此时 is_block=false, is_statement=false, is_atom=false。
+        # 真值表（唯一有效组合）:
+        #   is_block  is_statement  is_atom   |  含义
+        #   ──────────────────────────────────┼─────────────────
+        #    false      false       false     |  子句级规则（默认，不写 structure）
+        #    false      true        false     |  语句规则
+        #    false      false       true      |  原子规则（Number/Identifier）
+        #    true       false       false     |  块规则（ModuleBlock）
+        #   ──────────────────────────────────┴─────────────────
+        #   三种标记互斥，同时只能有一个为 true。
         struct = getattr(self, "structure", None) or {}
         self.is_block = struct.get("is_block", False)
         self.is_statement = struct.get("is_statement", False)
