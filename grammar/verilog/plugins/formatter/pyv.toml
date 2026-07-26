@@ -1,0 +1,12 @@
+# Formatter plugin — 结构感知的 Verilog 格式化器
+#
+# 品类列表：每个品类定义 matcher + family + 对齐行为
+# break_distance: 同品类行之间超过 N 行其他内容则切为独立组
+#
+# [[formatter.categories]]
+# name = "port_dir"
+# enabled = true
+# matcher = { first_token = ["input", "output", "inout"] }
+# family = "port_dir"
+# align_port_names = true
+# break_distance = 3

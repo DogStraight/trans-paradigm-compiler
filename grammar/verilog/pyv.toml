@@ -21,4 +21,4 @@ directives = { file = "base/_macro.toml", section = "directive_handlers", requir
 reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 
 [plugins]
-enabled = ["typed_ports"]
+enabled = ["typed_ports", "formatter"]
