@@ -9,6 +9,8 @@ scanner.py — Linter 扫描核心
 
 
 
+import os
+
 from core.config_registry import ConfigRegistry
 from lexer import Lexer
 from parser import Parser, setup_grammar
@@ -26,7 +28,11 @@ class LinterScanner:
     def __init__(self, rules_dir: str, ext_dirs: list[str] | None = None):
         self._rules_dir = rules_dir
         ext_list = ext_dirs or []
-        ConfigRegistry.load_all(rules_dir, ext_dirs=ext_list)
+        ConfigRegistry.load_all(
+            rules_dir,
+            ext_dirs=ext_list,
+            plugins_dir=os.path.join(rules_dir, "plugins"),
+        )
         from core.define import GrammarRulesRegister
 
         rules = setup_grammar(

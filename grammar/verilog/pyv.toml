@@ -19,3 +19,6 @@ macro_config = { file = "base/_macro.toml", required = false }
 expand = { file = "base/_macro.toml", section = "expand", required = false }
 directives = { file = "base/_macro.toml", section = "directive_handlers", required = false }
 reverse = { file = "base/_macro.toml", section = "reverse", required = false }
+
+[plugins]
+enabled = ["typed_ports"]

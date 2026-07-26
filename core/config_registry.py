@@ -158,38 +158,41 @@ def _load_meta_declarations() -> list[tuple]:
                 # 非文件式配置，以 bare data 形式注册
                 declarations.append((config_key, "", None, "", False, "", spec))
 
-    # 2. EXT grammar packages (auto-discover: <grammar_dir>/ext/pyv.toml)
+    # 2. Plugin packages — 从 [plugins] enabled 读取插件 pyv.toml
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    core_pyv = _find_grammar_pyv_toml()
-    grammar_dir = os.path.dirname(core_pyv)
-    ext_dirs = []
-    ext_candidate = os.path.join(grammar_dir, "ext", "pyv.toml")
-    if os.path.isfile(ext_candidate):
-        ext_dirs.append(os.path.join(grammar_dir, "ext"))
-    for i, ed in enumerate(ext_dirs):
-        ext_pyv = os.path.join(root, ed, "pyv.toml")
-        if not os.path.isfile(ext_pyv):
-            continue
-        with open(ext_pyv, encoding="utf-8") as f:
-            ext_meta = tomllib.loads(f.read())
-        for ns, table in ext_meta.items():
-            if ns == "grammar":
-                continue
-            for config_key, spec in _flatten_config({ns: table}):
-                if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
-                    declarations.append(
-                        (
-                            config_key,
-                            spec.get("file", ""),
-                            spec.get("section"),
-                            spec.get("base", f"ext_{i}"),
-                            spec.get("required", False),
-                            spec.get("description", ""),
-                            None,
-                        )
-                    )
-                else:
-                    declarations.append((config_key, "", None, "", False, "", spec))
+    plugins_cfg = meta.get("plugins", {})
+    if isinstance(plugins_cfg, dict):
+        enabled = plugins_cfg.get("enabled", [])
+        if isinstance(enabled, list):
+            grammar_dir = os.path.dirname(core_path)
+            for name in enabled:
+                plugin_pyv = os.path.join(grammar_dir, "plugins", name, "pyv.toml")
+                if not os.path.isfile(plugin_pyv):
+                    continue
+                with open(plugin_pyv, encoding="utf-8") as f:
+                    plugin_meta = tomllib.loads(f.read())
+                for ns, table in plugin_meta.items():
+                    if ns == "grammar":
+                        continue
+                    for config_key, spec in _flatten_config({ns: table}):
+                        if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
+                            file_spec = spec["file"]
+                            prefixed = file_spec
+                            if isinstance(file_spec, str):
+                                prefixed = f"{name}/{file_spec}"
+                            elif isinstance(file_spec, list):
+                                prefixed = [f"{name}/{f}" for f in file_spec]
+                            declarations.append(
+                                (
+                                    config_key,
+                                    prefixed,
+                                    spec.get("section"),
+                                    "plugins",
+                                    spec.get("required", False),
+                                    spec.get("description", ""),
+                                    None,
+                                )
+                            )
     return declarations
 
 

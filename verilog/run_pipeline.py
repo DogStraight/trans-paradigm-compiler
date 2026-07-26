@@ -178,7 +178,11 @@ def run_pipeline_on_source(
 
     # ---- Stage: 配置加载（只执行一次，缓存后跳过）----
     if "_config_loaded" not in _PIPELINE_SHARED:
-        ConfigRegistry.load_all(rules_dir, ext_dirs=ext_dirs)
+        ConfigRegistry.load_all(
+            rules_dir,
+            ext_dirs=ext_dirs,
+            plugins_dir=os.path.join(rules_dir, "plugins"),
+        )
         _PIPELINE_SHARED["_config_loaded"] = True
 
     # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
