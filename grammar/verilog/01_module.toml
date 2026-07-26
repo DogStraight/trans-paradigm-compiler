@@ -125,6 +125,3 @@ line = [
     " = ",
     { ref = "value" },
 ]
-
-[ParamDecl.structure]
-is_statement = false

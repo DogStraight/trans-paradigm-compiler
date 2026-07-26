@@ -91,9 +91,6 @@ line = [
     { ref = "items" },
 ]
 
-[TaskAnsiInputDecl.structure]
-is_statement = false
-
 [AnsiPortDecl.parser]
 production = [
     "@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
@@ -204,9 +201,6 @@ line = [
     { ref = "items" },
 ]
 
-[AnsiInputDecl.structure]
-is_statement = false
-
 [AnsiOutputDecl.parser]
 production = [
     "keyword.output",
@@ -254,9 +248,6 @@ line = [
     { ref = "items" },
 ]
 
-[AnsiOutputDecl.structure]
-is_statement = false
-
 [AnsiInoutDecl.parser]
 production = [
     "keyword.inout",
@@ -303,6 +294,3 @@ line = [
     " ",
     { ref = "items" },
 ]
-
-[AnsiInoutDecl.structure]
-is_statement = false

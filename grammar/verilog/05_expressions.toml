@@ -360,9 +360,6 @@ is_statement = false
 
 [Expression.parser.node]
 
-[Expression.structure]
-is_statement = false
-
 [MulOp.parser]
 production = [
     "symbol.base.multiple|symbol.base.div|symbol.base.mod",
