@@ -49,6 +49,17 @@ def _load_config() -> tuple[str, set[str]]:
     return prefix, directives
 
 
+def _is_ifdef_active(ctx: dict) -> bool:
+    """检查当前行是否在活跃的 ifdef 分支内。
+
+    必须检查整条栈链：如果任意外层帧 inactive，当前行也不应输出。
+    """
+    stack: list = ctx.get("_ifdef_stack", [])
+    if not stack:
+        return True
+    return all(f.get("active", True) for f in stack)
+
+
 def _build_macro_re(prefix: str) -> re.Pattern:
     return re.compile(rf"\{prefix}(\w+)")
 
@@ -105,7 +116,9 @@ def scan_directives(
     for line in lines:
         stripped = line.strip()
         if not stripped.startswith(prefix):
-            ctx["_inject_lines"].append(line)
+            # 非指令行：仅在活跃 ifdef 分支内保留
+            if _is_ifdef_active(ctx):
+                ctx["_inject_lines"].append(line)
             continue
 
         # 指令行
