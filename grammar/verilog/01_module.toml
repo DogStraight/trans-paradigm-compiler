@@ -14,9 +14,9 @@ end_case = [
 scope = "analyzer"
 
 [ModuleDecl.parser.node]
-module_name = ""
-params = ""
-ports = ""
+module_name = "$1"
+params = "$2"
+ports = "$3"
 
 [ModuleDecl.analyzer.scope]
 name_attr = "module_name"

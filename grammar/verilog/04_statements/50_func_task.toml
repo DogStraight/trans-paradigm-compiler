@@ -27,11 +27,11 @@ end_case = [
 scope = "analyzer"
 
 [FuncDeclANSI.parser.node]
-func_name = ""
-automatic = ""
-is_signed = ""
-func_range = ""
-ports = ""
+func_name = "$4"
+automatic = "$1"
+is_signed = "$2"
+func_range = "$3"
+ports = "$6"
 
 [FuncDeclANSI.analyzer.scope]
 name_attr = "func_name"
@@ -90,10 +90,10 @@ end_case = [
 ]
 
 [FuncDeclOld.parser.node]
-func_name = ""
-automatic = ""
-is_signed = ""
-func_range = ""
+func_name = "$4"
+automatic = "$1"
+is_signed = "$2"
+func_range = "$3"
 
 [FuncDeclOld.analyzer.scope]
 name_attr = "func_name"
@@ -162,9 +162,9 @@ end_case = [
 scope = "analyzer"
 
 [TaskDeclANSI.parser.node]
-task_name = ""
-automatic = ""
-ports = ""
+task_name = "$2"
+automatic = "$1"
+ports = "$4"
 
 [TaskDeclANSI.analyzer.scope]
 name_attr = "task_name"
@@ -212,8 +212,8 @@ end_case = [
 ]
 
 [TaskDeclOld.parser.node]
-task_name = ""
-automatic = ""
+task_name = "$2"
+automatic = "$1"
 
 [TaskDeclOld.analyzer.scope]
 name_attr = "task_name"
