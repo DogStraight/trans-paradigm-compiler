@@ -129,6 +129,7 @@ def run_pipeline_on_source(
         "extra_asts": [],
         "error": "",
         "parser": None,
+        "post_lint_errors": 0,
     }
 
     if debug:
@@ -425,6 +426,20 @@ def run_pipeline_on_source(
         result["output"] = content
         result["ast"] = ast
         result["success"] = True
+
+        # ── 后置 lint：检查生成代码是否有语法错误 ──────
+        if content.strip():
+            post_errors = linter.scan(content)
+            result["post_lint_errors"] = len(post_errors)
+            if post_errors:
+                _log(f"[post-lint] {len(post_errors)} error(s) in output")
+                for err in post_errors:
+                    _log(
+                        f"  post-lint: {err.message} "
+                        f"at L{err.range[0].line}:{err.range[0].character}"
+                    )
+        else:
+            result["post_lint_errors"] = 0
     else:
         print("[renderer] skipped")
         result["ast"] = ast

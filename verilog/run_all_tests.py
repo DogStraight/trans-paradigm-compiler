@@ -155,6 +155,7 @@ def run_all(
 
         success = result["success"]
         err_msg = result["error"] or ""
+        post_lint_errors = result.get("post_lint_errors", 0)
 
         # ── 文本保真度比较（normal 组）────────────────
         fidelity = 1.0  # 默认值
@@ -204,6 +205,9 @@ def run_all(
                 if fidelity_dropped:
                     total_warn += 1
                     status = "WARN"
+                elif post_lint_errors:
+                    total_warn += 1
+                    status = "LINT"
                 else:
                     total_ok += 1
                     status = "OK"
@@ -219,6 +223,8 @@ def run_all(
             suffix = f"  fidelity={fidelity:.4f}"
         if fidelity_dropped:
             suffix += f"  ↓ from {prev_display:.4f}"
+        if post_lint_errors:
+            suffix += f"  post-lint={post_lint_errors}"
         print(f"  {name:25s} {status:5s} {err_msg[:30]}{suffix}")
 
     # ── 保存保真度缓存 ─────────────────────────────────
