@@ -34,7 +34,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
 from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
-from transform.pipeline import TransformPlugin, AstTransformer, register_plugin
+from transform.engine import TransformPlugin, AstTransformer, register_plugin
 
 
 @register_plugin

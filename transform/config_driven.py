@@ -9,7 +9,7 @@ config_driven.py — ConfigDrivenTransform 插件
 from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
-from .pipeline import TransformPlugin, AstTransformer, register_plugin
+from .engine import TransformPlugin, AstTransformer, register_plugin
 from .primitives.registry import (
     TransformResult,
     SKIP,

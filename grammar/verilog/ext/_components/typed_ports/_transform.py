@@ -6,7 +6,7 @@ import hashlib
 from core.component_loader import register_transform_slot
 from core.define import Node
 from analyzer.scope import Scope
-from transform.pipeline import mark_extra
+from transform.engine import mark_extra
 
 
 @register_transform_slot("delete_type_decl")

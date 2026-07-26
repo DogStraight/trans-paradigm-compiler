@@ -57,6 +57,17 @@ class Break(Doc):
 
 
 @dataclass
+class LineBreak(Doc):
+    """
+    条件换行（尾部专用）。
+    flat 模式 → 空字符串（不产生空格）
+    broken 模式 → 换行 + 当前缩进 + 附加缩进
+    """
+
+    indent: int = 0
+
+
+@dataclass
 class Concat(Doc):
     """顺序拼接"""
 
@@ -129,6 +140,8 @@ def flatten(doc: Doc) -> Doc:
             return Text(" ")
         case Break():
             return doc
+        case LineBreak():
+            return Empty()  # flat 模式：消失
         case Concat(docs):
             return Concat([flatten(d) for d in docs])
         case Nest(i, d):
@@ -181,6 +194,9 @@ def _best(w: int, k: int, doc: Doc) -> str:
 
         case Break(indent=i):
             return "\n" + " " * (k + i)
+
+        case LineBreak(indent=i):
+            return "\n" + " " * (k + i)  # broken 模式：换行
 
         case Concat(docs):
             result: list[str] = []

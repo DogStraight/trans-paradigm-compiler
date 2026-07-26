@@ -2,7 +2,7 @@
 
 Files:
     normalizer.py          — AST normalization (parser output → canonical form)
-    pipeline.py            — AstTransformer + TransformPlugin base class
+    engine.py              — AstTransformer + TransformPlugin base class
     config_driven.py       — ConfigDrivenTransform (transform engine)
     _semantic_mapping.py   — SemanticMappingPlugin (mapping table builder)
     registry.py            — primitive registry (legacy re-export)
@@ -17,7 +17,7 @@ Extra output:
     collect_extra_asts()           — called before render to collect extras
 """
 
-from .pipeline import AstTransformer, TransformPlugin, mark_extra, collect_extra_asts
+from .engine import AstTransformer, TransformPlugin, mark_extra, collect_extra_asts
 
 # Load built-in transform plugins (must happen after load_all_components()
 # so component plugins register before engine plugins).

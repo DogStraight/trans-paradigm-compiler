@@ -7,7 +7,7 @@
 from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
-from transform.pipeline import TransformPlugin, register_plugin
+from transform.engine import TransformPlugin, register_plugin
 
 
 def _node_text(n: Any) -> str:
