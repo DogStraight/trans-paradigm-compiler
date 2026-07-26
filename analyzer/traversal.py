@@ -34,7 +34,7 @@ class AnalysisTraversal:
     @staticmethod
     def _load_primitive_order() -> list[str]:
         try:
-            from core.component_loader import get_primitive_order
+            from core.plugin_loader import get_primitive_order
             order = get_primitive_order()
             if order:
                 return order

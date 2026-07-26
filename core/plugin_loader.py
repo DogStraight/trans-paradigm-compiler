@@ -1,4 +1,4 @@
-"""component_loader.py — Component loading and management.
+"""plugin_loader.py — Plugin loading and management.
 
 A component is a self-contained unit of grammar rules + analyzer primitives
 + transform slots, located in grammar/<lang>/plugins/<name>/.

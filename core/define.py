@@ -85,11 +85,8 @@ def _load_pyv_meta() -> dict:
         except tomllib.TOMLDecodeError as e:
             raise RuntimeError(f"[config] {grammar_dir}/pyv.toml parse failed: {e}")
 
-    # Step 4: 自动发现 ext 目录（<grammar_dir>/ext/pyv.toml）
+    # Step 4: 插件目录由 pyv.toml [plugins] enabled 管理（config_registry 自动发现）
     ext_dirs: list[str] = []
-    ext_candidate = os.path.join(root, grammar_dir, "ext", "pyv.toml")
-    if os.path.isfile(ext_candidate):
-        ext_dirs.append(os.path.join(grammar_dir, "ext"))
 
     # Step 5: Normalize — grammar 统一为对象格式
     merged = dict(cfg)

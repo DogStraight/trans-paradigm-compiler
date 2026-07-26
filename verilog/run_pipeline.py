@@ -12,7 +12,7 @@ from typing import Any
 from core.define import Node
 
 # ── 预加载组件（确保组件插件先于引擎插件注册）──
-from core.component_loader import load_all_components
+from core.plugin_loader import load_all_components
 
 load_all_components()
 
@@ -33,8 +33,8 @@ from parser.rule_selector import RuleSelector
 from analyzer import AnalysisTraversal
 
 # ── 语言配置（组件系统收集）──
-from core.component_loader import get_component_mapping_config
-from grammar.verilog.ext._components.typed_ports._mapping import collect_callbacks
+from core.plugin_loader import get_component_mapping_config
+from grammar.verilog.plugins.typed_ports._mapping import collect_callbacks
 
 # ── 变换器 ──
 from transform import AstTransformer, collect_extra_asts

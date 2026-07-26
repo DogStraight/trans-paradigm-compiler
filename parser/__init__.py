@@ -61,7 +61,7 @@ def setup_grammar(
 
     # 加载组件（含 grammar 文件 + Python handler）
     try:
-        from core.component_loader import load_all_components, get_component_grammar_files
+        from core.plugin_loader import load_all_components, get_component_grammar_files
         load_all_components()
         for gf_path in get_component_grammar_files():
             comp_rules = register.rules_registration_from_file(gf_path)
