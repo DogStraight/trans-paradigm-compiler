@@ -1,6 +1,3 @@
-# ===== 过程赋值 & 连续赋值 =====
-
-[NonBlockingAssign]
 [NonBlockingAssign.parser]
 production = [
     "@PrimaryExpr",
@@ -8,14 +5,25 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [NonBlockingAssign.parser.node]
 target = "$1"
 value = "$3"
-[NonBlockingAssign.renderer]
-layout = { line = [{ ref = "target" }, " <= ", { ref = "value" }, ";"] }
 
-[BlockingAssign]
+[NonBlockingAssign.renderer.layout]
+line = [
+    { ref = "target" },
+    " <= ",
+    { ref = "value" },
+    ";",
+]
+
+[NonBlockingAssign.structure]
+is_statement = true
+
 [BlockingAssign.parser]
 production = [
     "@PrimaryExpr",
@@ -23,14 +31,25 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [BlockingAssign.parser.node]
 target = "$1"
 value = "$3"
-[BlockingAssign.renderer]
-layout = { line = [{ ref = "target" }, " = ", { ref = "value" }, ";"] }
 
-[AssignStatement]
+[BlockingAssign.renderer.layout]
+line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+    ";",
+]
+
+[BlockingAssign.structure]
+is_statement = true
+
 [AssignStatement.parser]
 production = [
     "keyword.assign",
@@ -39,15 +58,22 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [AssignStatement.parser.node]
 target = "$2"
 value = "$4"
-[AssignStatement.renderer]
-layout = { line = [
+
+[AssignStatement.renderer.layout]
+line = [
     "assign ",
     { ref = "target" },
     " = ",
     { ref = "value" },
     ";",
-] }
+]
+
+[AssignStatement.structure]
+is_statement = true

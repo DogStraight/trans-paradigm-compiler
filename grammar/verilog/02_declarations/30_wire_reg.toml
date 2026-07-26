@@ -1,8 +1,3 @@
-# ============================================================================
-# Verilog 语法规则 — 端口与声明（组合复用）
-# ============================================================================
-
-[WireDecl]
 [WireDecl.parser]
 production = [
     "keyword.wire",
@@ -11,29 +6,40 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [WireDecl.parser.node]
 wire_type = "$1"
 is_signed = "$2"
 packed_range = "$3"
 items = "$4"
-[WireDecl.analyzer]
-symbol = { kind = "wire", name_attr = "items.name" }
-[WireDecl.renderer]
-layout = { line = [
+
+[WireDecl.analyzer.symbol]
+kind = "wire"
+name_attr = "items.name"
+
+[WireDecl.renderer.layout]
+line = [
     "wire",
-    { opt = { group = [" ", { ref = "is_signed" }] } },
     { opt = { group = [
-        " [",
-        { ref = "packed_range" },
-        "]",
-    ] } },
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
     " ",
     { ref = "items" },
     ";",
-] }
+]
 
-[RegDecl]
+[WireDecl.structure]
+is_statement = true
+
 [RegDecl.parser]
 production = [
     "keyword.reg",
@@ -42,36 +48,63 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [RegDecl.parser.node]
 reg_type = "$1"
 is_signed = "$2"
 packed_range = "$3"
 items = "$4"
-[RegDecl.analyzer]
-symbol = { kind = "reg", name_attr = "items.name" }
-[RegDecl.renderer]
-layout = { line = [
+
+[RegDecl.analyzer.symbol]
+kind = "reg"
+name_attr = "items.name"
+
+[RegDecl.renderer.layout]
+line = [
     "reg",
-    { opt = { group = [" ", { ref = "is_signed" }] } },
     { opt = { group = [
-        " [",
-        { ref = "packed_range" },
-        "]",
-    ] } },
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
     " ",
     { ref = "items" },
     ";",
-] }
+]
 
-[IntegerDecl]
+[RegDecl.structure]
+is_statement = true
+
 [IntegerDecl.parser]
-production = ["keyword.integer", "@DeclaratorList", "symbol.base.semicolon"]
-end_case = ["newline"]
+production = [
+    "keyword.integer",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
 [IntegerDecl.parser.node]
 items = "$2"
-[IntegerDecl.analyzer]
-symbol = { kind = "integer", name_attr = "items.name" }
-[IntegerDecl.renderer]
-layout = { line = ["integer ", { ref = "items" }, ";"] }
 
+[IntegerDecl.analyzer.symbol]
+kind = "integer"
+name_attr = "items.name"
+
+[IntegerDecl.renderer.layout]
+line = [
+    "integer ",
+    { ref = "items" },
+    ";",
+]
+
+[IntegerDecl.structure]
+is_statement = true

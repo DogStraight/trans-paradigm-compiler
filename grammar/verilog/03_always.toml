@@ -1,8 +1,3 @@
-# ============================================================================
-# Verilog 语法规则 — always 块与敏感列表
-# ============================================================================
-
-[AlwaysBlock]
 [AlwaysBlock.parser]
 production = [
     "keyword.always",
@@ -12,38 +7,61 @@ production = [
     "bracket.r_parentheses",
     "@Statement",
 ]
-end_case = ["newline", "keyword.end"]
+end_case = [
+    "newline",
+    "keyword.end",
+]
+
 [AlwaysBlock.parser.node]
 sensitivity = "$4"
 body = "$6"
 
-[AlwaysBlock.renderer]
-layout = { line = [
+[AlwaysBlock.renderer.layout]
+line = [
     "always @(",
     { ref = "sensitivity" },
     ") ",
     { ref = "body" },
-] }
-body = { role = "direct" }
-[AlwaysBlock.renderer.override]
-BeginEnd = { tail_break = 2 }
+]
 
-[SensitivityList]
+[AlwaysBlock.renderer.body]
+role = "direct"
+
+[AlwaysBlock.renderer.override.BeginEnd]
+tail_break = 2
+
+[AlwaysBlock.structure]
+is_statement = true
+
 [SensitivityList.parser]
 production = [
     "@EdgeSense|symbol.base.multiple",
     "(symbol.extend.logic_or,@EdgeSense)*",
 ]
-[SensitivityList.parser.node]
-items = ["$1", "$2.items[*].sub_node[1]"]
-[SensitivityList.renderer]
-layout = { join = " or ", items = "items" }
 
-[EdgeSense]
+[SensitivityList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[SensitivityList.renderer.layout]
+join = " or "
+items = "items"
+
 [EdgeSense.parser]
-production = ["keyword.posedge|keyword.negedge", "@Identifier"]
+production = [
+    "keyword.posedge|keyword.negedge",
+    "@Identifier",
+]
+
 [EdgeSense.parser.node]
 edge = "$1"
 signal = "$2"
-[EdgeSense.renderer]
-layout = { line = [{ ref = "edge" }, " ", { ref = "signal" }] }
+
+[EdgeSense.renderer.layout]
+line = [
+    { ref = "edge" },
+    " ",
+    { ref = "signal" },
+]

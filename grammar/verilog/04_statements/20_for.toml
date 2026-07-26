@@ -1,6 +1,3 @@
-# ===== for 循环（块体 vs 裸语句体） =====
-
-[ForLoop]
 [ForLoop.parser]
 production = [
     "keyword.for",
@@ -13,14 +10,18 @@ production = [
     "bracket.r_parentheses",
     "@ForBodyStmt",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [ForLoop.parser.node]
 init = "$3"
 condition = "$5"
 step = "$7"
 body = "$9"
-[ForLoop.renderer]
-layout = { line = [
+
+[ForLoop.renderer.layout]
+line = [
     "for (",
     { ref = "init" },
     "; ",
@@ -30,9 +31,11 @@ layout = { line = [
     ") ",
     { soft = true, indent = 1 },
     { ref = "body" },
-] }
+]
 
-[ForLoopBlock]
+[ForLoop.structure]
+is_statement = true
+
 [ForLoopBlock.parser]
 production = [
     "keyword.for",
@@ -45,14 +48,18 @@ production = [
     "bracket.r_parentheses",
     "@BeginEnd",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
+
 [ForLoopBlock.parser.node]
 init = "$3"
 condition = "$5"
 step = "$7"
 body = "$9"
-[ForLoopBlock.renderer]
-layout = { line = [
+
+[ForLoopBlock.renderer.layout]
+line = [
     "for (",
     { ref = "init" },
     "; ",
@@ -61,32 +68,55 @@ layout = { line = [
     { ref = "step" },
     ") ",
     { ref = "body" },
-] }
+]
 
-[ForInit]
+[ForLoopBlock.structure]
+is_statement = true
+
 [ForInit.parser]
-production = ["@Identifier", "symbol.base.equal", "@Expression"]
+production = [
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+]
+
 [ForInit.parser.node]
 target = "$1"
 value = "$3"
-[ForInit.renderer]
-layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
 
-[ForStep]
+[ForInit.renderer.layout]
+line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+]
+
 [ForStep.parser]
-production = ["@Identifier", "symbol.base.equal", "@Expression"]
+production = [
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+]
+
 [ForStep.parser.node]
 target = "$1"
 value = "$3"
-[ForStep.renderer]
-layout = { line = [{ ref = "target" }, " = ", { ref = "value" }] }
 
-# 非 begin/end 的 for 循环体
-[ForBodyStmt]
+[ForStep.renderer.layout]
+line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+]
+
 [ForBodyStmt.parser]
-production = ["@NonBlockStmt"]
+production = [
+    "@NonBlockStmt",
+]
 inline = true
+
 [ForBodyStmt.parser.node]
 stmt = "$1"
-[ForBodyStmt.renderer]
-layout = { ref = "stmt" }
+
+[ForBodyStmt.renderer.layout]
+ref = "stmt"

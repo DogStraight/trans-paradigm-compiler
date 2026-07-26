@@ -1,6 +1,3 @@
-# ===== if 语句（块体 vs 裸语句） =====
-
-[IfBlock]
 [IfBlock.parser]
 production = [
     "keyword.if",
@@ -10,21 +7,32 @@ production = [
     "@BeginEnd",
     "@ElseChain?",
 ]
-end_case = ["newline", "keyword.end", "keyword.else"]
+end_case = [
+    "newline",
+    "keyword.end",
+    "keyword.else",
+]
+
 [IfBlock.parser.node]
 condition = "$3"
 then_stmt = "$5"
 else_chain = "$6"
-[IfBlock.renderer]
-layout = { line = [
+
+[IfBlock.renderer.layout]
+line = [
     "if (",
     { ref = "condition" },
     ") ",
     { ref = "then_stmt" },
-    { opt = { line = [{ soft = true }, { ref = "else_chain" }] } },
-] }
+    { opt = { line = [
+    { soft = true },
+    { ref = "else_chain" },
+] } },
+]
 
-[IfStmt]
+[IfBlock.structure]
+is_statement = true
+
 [IfStmt.parser]
 production = [
     "keyword.if",
@@ -34,32 +42,45 @@ production = [
     "@Statement",
     "@ElseChain?",
 ]
-end_case = ["newline", "keyword.end", "keyword.else"]
+end_case = [
+    "newline",
+    "keyword.end",
+    "keyword.else",
+]
+
 [IfStmt.parser.node]
 condition = "$3"
 then_stmt = "$5"
 else_chain = "$6"
-[IfStmt.renderer]
-layout = { line = [
+
+[IfStmt.renderer.layout]
+line = [
     "if (",
     { ref = "condition" },
     ")",
     { break = true, indent = 1 },
     { ref = "then_stmt" },
-    { opt = { line = [{ break = true }, { ref = "else_chain" }] } },
-] }
+    { opt = { line = [
+    { break = true },
+    { ref = "else_chain" },
+] } },
+]
 
+[IfStmt.structure]
+is_statement = true
 
-[ElseChain]
 [ElseChain.parser]
-production = ["@ElseIfBlock|@ElseIfStmt|@ElseBlockBranch|@ElseBranch"]
+production = [
+    "@ElseIfBlock|@ElseIfStmt|@ElseBlockBranch|@ElseBranch",
+]
 inline = true
+
 [ElseChain.parser.node]
 branch = "$1"
-[ElseChain.renderer]
-layout = { ref = "branch" }
 
-[ElseIfBlock]
+[ElseChain.renderer.layout]
+ref = "branch"
+
 [ElseIfBlock.parser]
 production = [
     "keyword.else",
@@ -70,20 +91,24 @@ production = [
     "@BeginEnd",
     "@ElseChain?",
 ]
+
 [ElseIfBlock.parser.node]
 condition = "$4"
 then_stmt = "$6"
 else_chain = "$7"
-[ElseIfBlock.renderer]
-layout = { line = [
+
+[ElseIfBlock.renderer.layout]
+line = [
     "else if (",
     { ref = "condition" },
     ") ",
     { ref = "then_stmt" },
-    { opt = { line = [{ soft = true }, { ref = "else_chain" }] } },
-] }
+    { opt = { line = [
+    { soft = true },
+    { ref = "else_chain" },
+] } },
+]
 
-[ElseIfStmt]
 [ElseIfStmt.parser]
 production = [
     "keyword.else",
@@ -94,33 +119,55 @@ production = [
     "@Statement",
     "@ElseChain?",
 ]
+
 [ElseIfStmt.parser.node]
 condition = "$4"
 then_stmt = "$6"
 else_chain = "$7"
-[ElseIfStmt.renderer]
-layout = { line = [
+
+[ElseIfStmt.renderer.layout]
+line = [
     "else if (",
     { ref = "condition" },
     ")",
     { break = true, indent = 1 },
     { ref = "then_stmt" },
-    { opt = { line = [{ break = true }, { ref = "else_chain" }] } },
-] }
+    { opt = { line = [
+    { break = true },
+    { ref = "else_chain" },
+] } },
+]
 
-[ElseBlockBranch]
 [ElseBlockBranch.parser]
-production = ["keyword.else", "@BeginEnd"]
+production = [
+    "keyword.else",
+    "@BeginEnd",
+]
+
 [ElseBlockBranch.parser.node]
 body = "$2"
-[ElseBlockBranch.renderer]
-layout = { line = ["else ", { ref = "body" }] }
 
-[ElseBranch]
+[ElseBlockBranch.renderer.layout]
+line = [
+    "else ",
+    { ref = "body" },
+]
+
 [ElseBranch.parser]
-production = ["keyword.else", "@NonBlockStmt"]
+production = [
+    "keyword.else",
+    "@NonBlockStmt",
+]
+
 [ElseBranch.parser.node]
 body = "$2"
-[ElseBranch.renderer]
-layout = { line = ["else", { break = true, indent = 1 }, { ref = "body" }] }
-body = { role = "direct" }
+
+[ElseBranch.renderer.layout]
+line = [
+    "else",
+    { break = true, indent = 1 },
+    { ref = "body" },
+]
+
+[ElseBranch.renderer.body]
+role = "direct"

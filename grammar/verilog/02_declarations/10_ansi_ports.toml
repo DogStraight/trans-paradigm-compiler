@@ -1,190 +1,308 @@
-# ============================================================================
-# Verilog 语法规则 — 端口与声明（组合复用）
-# ============================================================================
-
-[PortList]
 [PortList.parser]
-production = ["@AnsiPortDecl", "(symbol.base.comma,@AnsiPortDecl)*"]
+production = [
+    "@AnsiPortDecl",
+    "(symbol.base.comma,@AnsiPortDecl)*",
+]
+
 [PortList.parser.node]
-items = ["$1", "$2.items[*].sub_node[1]"]
-[PortList.renderer]
-layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
 
-[TaskPortList]
+[PortList.renderer.layout]
+join = ", "
+first_soft = true
+nest = 1
+items = "items"
+
 [TaskPortList.parser]
-production = ["@TaskAnsiPortDecl", "(symbol.base.comma,@TaskAnsiPortDecl)*"]
-[TaskPortList.parser.node]
-items = ["$1", "$2.items[*].sub_node[1]"]
-[TaskPortList.renderer]
-layout = { join = ", ", first_soft = true, nest = 1, items = "items" }
+production = [
+    "@TaskAnsiPortDecl",
+    "(symbol.base.comma,@TaskAnsiPortDecl)*",
+]
 
-[TaskAnsiPortDecl]
+[TaskPortList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[TaskPortList.renderer.layout]
+join = ", "
+first_soft = true
+nest = 1
+items = "items"
+
 [TaskAnsiPortDecl.parser]
-production = ["@TaskAnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl"]
+production = [
+    "@TaskAnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
+]
 inline = true
+
 [TaskAnsiPortDecl.parser.node]
 decl = "$1"
-[TaskAnsiPortDecl.renderer]
-layout = { ref = "decl" }
 
-[TaskAnsiInputDecl]
+[TaskAnsiPortDecl.renderer.layout]
+ref = "decl"
+
 [TaskAnsiInputDecl.parser]
-structure = { is_statement = false }
-production = ["keyword.input", "@PortTail"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+production = [
+    "keyword.input",
+    "@PortTail",
+]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "newline",
+]
+
+[TaskAnsiInputDecl.parser.structure]
+is_statement = false
+
 [TaskAnsiInputDecl.parser.node]
 direction = "input"
 port_type = "$2.port_type"
 is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$2.items"
-[TaskAnsiInputDecl.analyzer]
-symbol = { kind = "port", name_attr = "items.name" }
-[TaskAnsiInputDecl.renderer]
-layout = { line = [
+
+[TaskAnsiInputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[TaskAnsiInputDecl.renderer.layout]
+line = [
     "input",
     { opt = { group = [
-        " ",
-        { ref = "port_type" },
-    ] } },
+    " ",
+    { ref = "port_type" },
+] } },
     { opt = { group = [
-        " ",
-        { ref = "is_signed" },
-    ] } },
+    " ",
+    { ref = "is_signed" },
+] } },
     { opt = { group = [
-        " [",
-        { ref = "packed_range" },
-        "]",
-    ] } },
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
     " ",
     { ref = "items" },
-] }
+]
 
-[AnsiPortDecl]
+[TaskAnsiInputDecl.structure]
+is_statement = false
+
 [AnsiPortDecl.parser]
-production = ["@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl"]
+production = [
+    "@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
+]
 inline = true
+
 [AnsiPortDecl.parser.node]
 decl = "$1"
-[AnsiPortDecl.renderer]
-layout = { ref = "decl" }
 
-[DirSpec]
+[AnsiPortDecl.renderer.layout]
+ref = "decl"
+
 [DirSpec.parser]
-production = ["keyword.input|keyword.output|keyword.inout"]
+production = [
+    "keyword.input|keyword.output|keyword.inout",
+]
+
 [DirSpec.parser.node]
 direction = "$1"
-[DirSpec.renderer]
-layout = { ref = "direction" }
 
-# ---------- 端口列表条目前缀（dir + type）----------
-# 自定义类型注入到此规则作为优先分支
-[PortDeclPrefix]
+[DirSpec.renderer.layout]
+ref = "direction"
+
 [PortDeclPrefix.parser]
-production = ["@DirSpec", "@TypeSpec"]
+production = [
+    "@DirSpec",
+    "@TypeSpec",
+]
+
 [PortDeclPrefix.parser.node]
 direction = "$1.direction"
 port_type = "$2.port_type"
 is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
-[PortDeclPrefix.renderer]
-layout = { line = [
-    { ref = "direction" },
-    { opt = { group = [" ", { ref = "port_type" }] } },
-    { opt = { group = [" ", { ref = "is_signed" }] } },
-    { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
-] }
 
-[AnsiInputDecl]
+[[PortDeclPrefix.renderer.layout.line]]
+ref = "direction"
+
+[[PortDeclPrefix.renderer.layout.line]]
+
+[PortDeclPrefix.renderer.layout.line.opt]
+group = [
+    " ",
+    { ref = "port_type" },
+]
+
+[[PortDeclPrefix.renderer.layout.line]]
+
+[PortDeclPrefix.renderer.layout.line.opt]
+group = [
+    " ",
+    { ref = "is_signed" },
+]
+
+[[PortDeclPrefix.renderer.layout.line]]
+
+[PortDeclPrefix.renderer.layout.line.opt]
+group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+]
+
 [AnsiInputDecl.parser]
-structure = { is_statement = false }
-production = ["keyword.input", "@TypeSpecNoReg", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
+production = [
+    "keyword.input",
+    "@TypeSpecNoReg",
+    "@DeclaratorList",
+]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "newline",
+]
+
+[AnsiInputDecl.parser.structure]
+is_statement = false
+
 [AnsiInputDecl.parser.node]
 direction = "input"
 port_type = "$2.port_type"
 is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$3"
-[AnsiInputDecl.analyzer]
-symbol = { kind = "port", name_attr = "items.name" }
-[AnsiInputDecl.renderer]
-layout = { line = [
+
+[AnsiInputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[AnsiInputDecl.renderer.layout]
+line = [
     { ref = "direction" },
-    { opt = { group = [" ", { ref = "port_type" }] } },
-    { opt = { group = [" ", { ref = "is_signed" }] } },
-    { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
     " ",
     { ref = "items" },
-] }
+]
 
-[AnsiOutputDecl]
+[AnsiInputDecl.structure]
+is_statement = false
+
 [AnsiOutputDecl.parser]
-structure = { is_statement = false }
-production = ["keyword.output", "@TypeSpec", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
+production = [
+    "keyword.output",
+    "@TypeSpec",
+    "@DeclaratorList",
+]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "newline",
+]
+
+[AnsiOutputDecl.parser.structure]
+is_statement = false
+
 [AnsiOutputDecl.parser.node]
 direction = "output"
 port_type = "$2.port_type"
 is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$3"
-[AnsiOutputDecl.analyzer]
-symbol = { kind = "port", name_attr = "items.name" }
-[AnsiOutputDecl.renderer]
-layout = { line = [
+
+[AnsiOutputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[AnsiOutputDecl.renderer.layout]
+line = [
     { ref = "direction" },
     { opt = { group = [
-        " ",
-        { ref = "port_type" },
-    ] } },
+    " ",
+    { ref = "port_type" },
+] } },
     { opt = { group = [
-        " ",
-        { ref = "is_signed" },
-    ] } },
+    " ",
+    { ref = "is_signed" },
+] } },
     { opt = { group = [
-        " [",
-        { ref = "packed_range" },
-        "]",
-    ] } },
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
     " ",
     { ref = "items" },
-] }
+]
 
-[AnsiInoutDecl]
+[AnsiOutputDecl.structure]
+is_statement = false
+
 [AnsiInoutDecl.parser]
-structure = { is_statement = false }
-production = ["keyword.inout", "@TypeSpecNoReg", "@DeclaratorList"]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "symbol.base.semicolon", "newline"]
+production = [
+    "keyword.inout",
+    "@TypeSpecNoReg",
+    "@DeclaratorList",
+]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "newline",
+]
+
+[AnsiInoutDecl.parser.structure]
+is_statement = false
+
 [AnsiInoutDecl.parser.node]
 direction = "inout"
 port_type = "$2.port_type"
 is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$3"
-[AnsiInoutDecl.analyzer]
-symbol = { kind = "port", name_attr = "items.name" }
-[AnsiInoutDecl.renderer]
-layout = { line = [
+
+[AnsiInoutDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[AnsiInoutDecl.renderer.layout]
+line = [
     { ref = "direction" },
     { opt = { group = [
-        " ",
-        { ref = "port_type" },
-    ] } },
+    " ",
+    { ref = "port_type" },
+] } },
     { opt = { group = [
-        " ",
-        { ref = "is_signed" },
-    ] } },
+    " ",
+    { ref = "is_signed" },
+] } },
     { opt = { group = [
-        " [",
-        { ref = "packed_range" },
-        "]",
-    ] } },
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
     " ",
     { ref = "items" },
-] }
+]
 
-# ============================================================================
-# 模块旧风格端口（体内，带分号）—— input/inout 不允许 reg
-# ============================================================================
-
+[AnsiInoutDecl.structure]
+is_statement = false

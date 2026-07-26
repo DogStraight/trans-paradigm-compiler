@@ -1,26 +1,53 @@
-# ============================================================================
-# Verilog 语法规则 — 端口与声明（组合复用）
-# ============================================================================
-
-[LocalParamDecl]
 [LocalParamDecl.parser]
-production = ["keyword.localparam", "@DeclaratorList", "symbol.base.semicolon"]
-end_case = ["newline"]
+production = [
+    "keyword.localparam",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
 [LocalParamDecl.parser.node]
 items = "$2"
-[LocalParamDecl.analyzer]
-symbol = { kind = "localparam", name_attr = "items.name" }
-[LocalParamDecl.renderer]
-layout = { line = ["localparam ", { ref = "items" }, ";"] }
 
-[GenvarDecl]
+[LocalParamDecl.analyzer.symbol]
+kind = "localparam"
+name_attr = "items.name"
+
+[LocalParamDecl.renderer.layout]
+line = [
+    "localparam ",
+    { ref = "items" },
+    ";",
+]
+
+[LocalParamDecl.structure]
+is_statement = true
+
 [GenvarDecl.parser]
-production = ["keyword.genvar", "@Identifier", "symbol.base.semicolon"]
-end_case = ["newline"]
+production = [
+    "keyword.genvar",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
 [GenvarDecl.parser.node]
 genvar_name = "$2"
-[GenvarDecl.analyzer]
-symbol = { kind = "genvar", name_attr = "genvar_name" }
-[GenvarDecl.renderer]
-layout = { line = ["genvar ", { ref = "genvar_name" }, ";"] }
 
+[GenvarDecl.analyzer.symbol]
+kind = "genvar"
+name_attr = "genvar_name"
+
+[GenvarDecl.renderer.layout]
+line = [
+    "genvar ",
+    { ref = "genvar_name" },
+    ";",
+]
+
+[GenvarDecl.structure]
+is_statement = true

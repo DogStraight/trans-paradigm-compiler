@@ -1,70 +1,93 @@
-# ===== 类型化端口声明（增强语法）=====
-#
-# spi.slave spi_io;
-#   ↓ transform 展开
-# output spi_io_clk;
-# output spi_io_mosi;
-# input  spi_io_miso;
-# output spi_io_cs;
-#
-# 挂载点
 [TypedPortDecl.inject]
-targets = ["@AnsiPortDecl", "@ModuleItem"]
+targets = [
+    "@AnsiPortDecl",
+    "@ModuleItem",
+]
 
-# ── 类型化类型描述符 spi.slave ──
-# 注意：TypedTypeSpec 不注入到 AnsiInputDecl/AnsiOutputDecl/AnsiInoutDecl，
-# 避免 DeclaratorList 的逗号 repeat 贪心吞噬下一端口。TypedPortDecl 已通过
-# @AnsiPortDecl 注入覆盖独立端口声明场景，TypedTypeSpec 只被 TypedPortDecl 直接引用。
-[TypedTypeSpec]
-[TypedTypeSpec.parser]
-production = ["@Identifier", "symbol.base.dot", "@Identifier"]
-[TypedTypeSpec.parser.node]
-type_name = "$1"
-role_name = "$3"
-[TypedTypeSpec.analyzer]
-# type_name 是对类型声明的引用，按指定属性名查找
-identifier_ref = "type_name"
-
-# ── 类型化端口声明（无方向关键字）spa(master) spi_io ──
-[TypedPortDecl]
 [TypedPortDecl.parser]
-production = ["@TypedTypeSpec", "@Declarator"]
+production = [
+    "@TypedTypeSpec",
+    "@Declarator",
+]
 end_case = [
     "newline",
     "symbol.base.semicolon",
     "symbol.base.comma",
     "bracket.r_parentheses",
 ]
+
 [TypedPortDecl.parser.node]
 type_spec = "$1"
 instance_name = "$2"
 
-# analyzer
 [TypedPortDecl.analyzer]
-symbol = { kind = "typed_port", name_attr = "instance_name.name" }
 ref_collect = true
 
-# transform: 通过原语展开类型化端口
-#   1. expand: 从语义映射表查 {type_name}.{role_name} 的扁平端口列表
-#   2. foreach: 遍历每个端口
-#   3. switch: 按 direction 分支发射不同节点类型
+[TypedPortDecl.analyzer.symbol]
+kind = "typed_port"
+name_attr = "instance_name.name"
+
 [TypedPortDecl.transform]
 kind = "expand"
-condition = { exists = "type_spec.type_name" }
-source = { lookup = "type_ports_flat", key = "{type_spec.type_name}.{type_spec.role_name}" }
 foreach = "$"
+
+[TypedPortDecl.transform.condition]
+exists = "type_spec.type_name"
+
+[TypedPortDecl.transform.source]
+lookup = "type_ports_flat"
+key = "{type_spec.type_name}.{type_spec.role_name}"
 
 [TypedPortDecl.transform.emit]
 kind = "switch"
 on = "{direction}"
 
-[TypedPortDecl.transform.emit.cases]
-input = { kind = "emit", node = "AnsiInputDecl", direction = "input", items = { node = "DeclaratorList", items = [
+[TypedPortDecl.transform.emit.cases.input]
+kind = "emit"
+node = "AnsiInputDecl"
+direction = "input"
+
+[TypedPortDecl.transform.emit.cases.input.items]
+node = "DeclaratorList"
+items = [
     { node = "Declarator", name = "{instance_name.name.content}_{name}" },
-] } }
-output = { kind = "emit", node = "AnsiOutputDecl", direction = "output", items = { node = "DeclaratorList", items = [
+]
+
+[TypedPortDecl.transform.emit.cases.output]
+kind = "emit"
+node = "AnsiOutputDecl"
+direction = "output"
+
+[TypedPortDecl.transform.emit.cases.output.items]
+node = "DeclaratorList"
+items = [
     { node = "Declarator", name = "{instance_name.name.content}_{name}" },
-] } }
-inout = { kind = "emit", node = "AnsiInoutDecl", direction = "inout", items = { node = "DeclaratorList", items = [
+]
+
+[TypedPortDecl.transform.emit.cases.inout]
+kind = "emit"
+node = "AnsiInoutDecl"
+direction = "inout"
+
+[TypedPortDecl.transform.emit.cases.inout.items]
+node = "DeclaratorList"
+items = [
     { node = "Declarator", name = "{instance_name.name.content}_{name}" },
-] } }
+]
+
+[TypedPortDecl.structure]
+is_statement = true
+
+[TypedTypeSpec.parser]
+production = [
+    "@Identifier",
+    "symbol.base.dot",
+    "@Identifier",
+]
+
+[TypedTypeSpec.parser.node]
+type_name = "$1"
+role_name = "$3"
+
+[TypedTypeSpec.analyzer]
+identifier_ref = "type_name"

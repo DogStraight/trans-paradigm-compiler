@@ -1,27 +1,19 @@
-# ===== 接口实现绑定：ImplBinding =====
-#
-# 旧形式（完全显式）：
-#   impl <module_name> #(params) <inst_name> (.port1(sig1), .port2(sig2));
-#
-# 新形式（接口绑定）：
-#   impl <module_name> #(params) <inst_name> (.explicit_ports...) => <interface>;
-#
-# 在模块体内声明一个包装模块实例化。
-# parser 解析为 AST，transform 阶段生成 ModuleInst。
-
-[ImplBinding]
 [ImplBinding.inject]
-targets = ["@InstStmt"]
+targets = [
+    "@InstStmt",
+]
 
 [ImplBinding.parser]
 production = [
     "keyword.impl",
-    "@Identifier",         # $2: wrapper module名
-    "@ParamOverride?",     # $3: 参数覆写
-    "@Identifier?",        # $4: 可选实例名（缺省时复用模块名）
-    "@PortConnection",     # $5: 端口连接（旧形式）
+    "@Identifier",
+    "@ParamOverride?",
+    "@Identifier?",
+    "@PortConnection",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
 
 [ImplBinding.parser.node]
 module_name = "$2"
@@ -29,26 +21,27 @@ params = "$3"
 inst_name = "$4"
 ports = "$5.ports"
 
-# ── 接口绑定形式 ──
-#   impl <mod> #(params) (.explicit_ports...) => <interface>;
-# 不产生实例名，不是模块例化——是声明接口行为绑定。
-# 与 ImplBinding 共享 inject targets，parser 按规则名尝试匹配。
+[ImplBinding.structure]
+is_statement = true
 
-[ImplBindingWithInterface]
 [ImplBindingWithInterface.inject]
-targets = ["@InstStmt"]
+targets = [
+    "@InstStmt",
+]
 
 [ImplBindingWithInterface.parser]
 production = [
     "keyword.impl",
-    "@TypedTypeSpec",      # $2: 类型.角色引用 (如 spi.master)
-    "@ParamOverride?",     # $3: 参数覆写
-    "@ImplPortsParens?",   # $4: 可选显式端口 (括号 + NamedPortList 组合)
-    "symbol.extend.arrow", # $5: =>
-    "@Identifier",         # $6: 接口变量名
+    "@TypedTypeSpec",
+    "@ParamOverride?",
+    "@ImplPortsParens?",
+    "symbol.extend.arrow",
+    "@Identifier",
     "symbol.base.semicolon",
 ]
-end_case = ["newline"]
+end_case = [
+    "newline",
+]
 
 [ImplBindingWithInterface.parser.node]
 type_spec = "$2"
@@ -56,15 +49,16 @@ params = "$3"
 ports = "$4"
 interface_ref = "$6"
 
-# ImplPortsParens — 显式端口连接的括号包装器
-# 独立为规则以确保各 token 前的空白被正确跳过
-[ImplPortsParens]
+[ImplBindingWithInterface.structure]
+is_statement = true
+
 [ImplPortsParens.parser]
 inline = true
 production = [
     "bracket.l_parentheses",
-    "@NamedPortList?",   # $2
+    "@NamedPortList?",
     "bracket.r_parentheses",
 ]
+
 [ImplPortsParens.parser.node]
 ports = "$2"

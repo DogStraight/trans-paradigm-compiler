@@ -70,9 +70,9 @@ class LinterScanner:
 
     # ── 公开入口 ──────────────────────────────────────────
 
-    def scan(self, source: str) -> List[LintDiagnostic]:
+    def scan(self, source: str) -> list[LintDiagnostic]:
         """扫描源代码，返回所有诊断信息。"""
-        errors: List[LintDiagnostic] = []
+        errors: list[LintDiagnostic] = []
 
         # 提取宏定义 + 展开
         macro_defs, _, clean_source = scan_directives(source, self._rules_dir)

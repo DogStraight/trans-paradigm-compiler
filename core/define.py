@@ -358,8 +358,6 @@ class GrammarRule:
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
-    # 默认值为 None 的三态字段（未设置时由启发式或 False 兜底）
-    _NONE_FIELDS = {"structure"}
 
     def __init__(self, name: str, **kwargs):
         self.name = name
@@ -368,10 +366,10 @@ class GrammarRule:
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
-            elif fld in self._NONE_FIELDS:
-                setattr(self, fld, None)  # 三态：None=未设置
             else:
                 setattr(self, fld, False)
+        # structure 默认 None（无结构标记时为 None，读取时兜底为空 dict）
+        self.structure = None
 
         # 从嵌套的阶段结构中提取属性到顶层，同时保留原始嵌套
         for stage in ("parser", "analyzer", "renderer"):
@@ -393,41 +391,23 @@ class GrammarRule:
         #
         # TOML 写法:
         #   structure = { is_block = true }           — 块规则，走 parse_block
-        #   structure = { is_statement = false }       — 非语句规则，排除出候选列表
-        #   structure = { is_atom = true }             — 原子规则，不参与语句级匹配
+        #   structure = { is_statement = true }       — 语句规则
+        #   structure = { is_atom = true }            — 原子规则（表达式粒度）
         #
-        # 真值表（唯一有效组合）:
-        #   is_block  is_statement  is_atom   |  含义
-        #   ──────────────────────────────────┼─────────────────
-        #    false       None       false     |  普通规则（默认）
-        #    false       None       true      |  原子规则（Number/Identifier）
-        #    false       false      false     |  非语句规则（AnsiInputDecl）
-        #    false       true       false     |  显式语句规则
-        #    true        None       false     |  块规则（ModuleBlock）
-        #    true        false      false     |  块但非语句（Root）
-        #   ──────────────────────────────────┴─────────────────
-        #   is_block + is_atom 同时为真不可能存在（互斥解析路径）
+        # 三种标记互斥，默认均为 false。子句级规则不设置 structure，
+        # 此时 is_block=false, is_statement=false, is_atom=false。
         struct = getattr(self, "structure", None) or {}
         self.is_block = struct.get("is_block", False)
-        self.is_statement = struct.get("is_statement", None)
+        self.is_statement = struct.get("is_statement", False)
         self.is_atom = struct.get("is_atom", False)
 
     def has_pass_end_case(self) -> bool:
-        """检查该规则是否为语句级规则。
+        """该规则是否为语句级规则（用于 parse_sentence 候选列表）。
 
-        用于 statement_rule_names 过滤：
-        - is_statement=True  → 明确标记为语句规则
-        - is_statement=False → 明确排除
-        - is_statement=None  → 未显式设置，回退到 end_case 启发式判断
+        is_statement=True → 是语句规则，加入候选列表。
+        is_statement=False → 非语句规则，排除。
         """
-        stmt = getattr(self, "is_statement", None)
-        if stmt is True:
-            return True
-        if stmt is False:
-            return False
-        # None：用 end_case 启发式
-        ec = getattr(self, "end_case", [])
-        return any(isinstance(item, str) and not item.startswith("!") for item in ec)
+        return self.is_statement is True
 
     def dump(self) -> dict:
         return {

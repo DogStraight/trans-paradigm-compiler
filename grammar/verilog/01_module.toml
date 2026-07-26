@@ -1,21 +1,20 @@
-# ============================================================================
-# Verilog 语法规则 — 模块声明
-# ============================================================================
-
-[ModuleDecl]
-
 [ModuleDecl.parser]
-peek = { scope = "analyzer" }
 production = [
     "keyword.module",
     "@Identifier",
     "@ParameterList?",
     "@PortParens?",
     "symbol.base.semicolon?",
-    "@ModuleBlock",          # 使用模块专用块，内部条目为 ModuleItem
+    "@ModuleBlock",
     "keyword.endmodule",
 ]
-end_case = ["keyword.endmodule", "newline"]
+end_case = [
+    "keyword.endmodule",
+    "newline",
+]
+
+[ModuleDecl.parser.peek]
+scope = "analyzer"
 
 [ModuleDecl.parser.node]
 module_name = "$2"
@@ -23,33 +22,43 @@ params = "$3"
 ports = "$4"
 body = "$6"
 
-[ModuleDecl.analyzer]
-scope = { name_attr = "module_name", kind = "module" }
+[ModuleDecl.analyzer.scope]
+name_attr = "module_name"
+kind = "module"
 
-[ModuleDecl.renderer]
-head = { line = [
+[ModuleDecl.renderer.head]
+line = [
     "module ",
     { ref = "module_name" },
     { opt = { group = [
-        " #(",
-        { ref = "params" },
-        { soft = true },
-        ")",
-    ] } },
+    " #(",
+    { ref = "params" },
+    { soft = true },
+    ")",
+] } },
     "(",
     { opt = { group = [
-        { opt = { ref = "ports" } },
-        { opt = { group = [{ break = true }], ref = "ports" } },
-    ], ref = "ports" } },
+    { opt = { ref = "ports" } },
+    { opt = { group = [
+    { break = true },
+], ref = "ports" } },
+], ref = "ports" } },
     ")",
     ";",
     { break = true },
-] }
-body = { indent = true, source = "body" }
-tail = { text = "endmodule", break = 2 }
+]
 
-# 端口括号包装器（支持无端口模块）
-[PortParens]
+[ModuleDecl.renderer.body]
+indent = true
+source = "body"
+
+[ModuleDecl.renderer.tail]
+text = "endmodule"
+break = 2
+
+[ModuleDecl.structure]
+is_statement = true
+
 [PortParens.parser]
 inline = true
 production = [
@@ -57,13 +66,13 @@ production = [
     "@PortList?",
     "bracket.r_parentheses",
 ]
+
 [PortParens.parser.node]
 ports = "$2"
-[PortParens.renderer]
-layout = { ref = "ports" }
 
+[PortParens.renderer.layout]
+ref = "ports"
 
-[ParameterList]
 [ParameterList.parser]
 production = [
     "symbol.base.pound",
@@ -72,34 +81,50 @@ production = [
     "(symbol.base.comma,@ParamDecl)*",
     "bracket.r_parentheses",
 ]
+
 [ParameterList.parser.node]
-params = ["$3", "$4.items[*].sub_node[1]"]
+params = [
+    "$3",
+    "$4.items[*].sub_node[1]",
+]
 
-[ParameterList.renderer]
-layout = { join = ", ", first_soft = true, nest = 1, items = "params" }
+[ParameterList.renderer.layout]
+join = ", "
+first_soft = true
+nest = 1
+items = "params"
 
-
-[ParamDecl]
 [ParamDecl.parser]
-structure = { is_statement = false }
 production = [
     "keyword.parameter",
     "@Identifier",
     "symbol.base.equal",
     "@Expression",
 ]
-end_case = ["symbol.base.comma", "bracket.r_parentheses", "newline"]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "newline",
+]
+
+[ParamDecl.parser.structure]
+is_statement = false
+
 [ParamDecl.parser.node]
 param_name = "$2"
 value = "$4"
 
-[ParamDecl.analyzer]
-symbol = { kind = "parameter", name_attr = "param_name" }
+[ParamDecl.analyzer.symbol]
+kind = "parameter"
+name_attr = "param_name"
 
-[ParamDecl.renderer]
-layout = { line = [
+[ParamDecl.renderer.layout]
+line = [
     "parameter ",
     { ref = "param_name" },
     " = ",
     { ref = "value" },
-] }
+]
+
+[ParamDecl.structure]
+is_statement = false
