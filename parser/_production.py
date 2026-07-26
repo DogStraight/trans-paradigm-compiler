@@ -166,6 +166,7 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             context.update_current_node(rule_node)
             all_matched = match_productions(self, context, rule)
             if all_matched is None:
+                assert old_node is not None
                 context.update_current_node(old_node)
                 context.path_stack.pop()
                 if scope_pushed:
@@ -176,11 +177,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             # 3) 解析块体
             block_body = Node("Block")
             from .block_parser import parse_block_body
+
             parse_block_body(self, context, block_body, rule)
             body_children = getattr(block_body, "sub_node", [])
             for child in body_children:
                 rule_node.add_sub_node(child)
-            rule_node.add_attr("body", body_children)
 
             # 4) 消费结束符
             be = getattr(rule, "block_end", None) or _get_block_end_for(rule)
@@ -207,13 +208,15 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
     # 记录失败尝试
     current_token = context.peek_token()
     if getattr(self, "_collect_failures", False):
-        self._failure_attempts.append({
-            "rule": rule.name,
-            "token": str(current_token.content) if current_token else "EOF",
-            "token_index": context.token_pointer,
-            "token_type": current_token.type if current_token else "EOF",
-            "path": "/".join(context.path_stack),
-        })
+        self._failure_attempts.append(
+            {
+                "rule": rule.name,
+                "token": str(current_token.content) if current_token else "EOF",
+                "token_index": context.token_pointer,
+                "token_type": current_token.type if current_token else "EOF",
+                "path": "/".join(context.path_stack),
+            }
+        )
 
     self._log_state(
         lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
@@ -286,11 +289,13 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
                 nxt = context.peek_token()
-                self._line_comment_anchors.append({
-                    "text": t.content,
-                    "line": t.line,
-                    "anchor": nxt.content if nxt else None,
-                })
+                self._line_comment_anchors.append(
+                    {
+                        "text": t.content,
+                        "line": t.line,
+                        "anchor": nxt.content if nxt else None,
+                    }
+                )
             else:
                 break
         if not context.has_more_tokens():
@@ -378,24 +383,30 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     while True:
         nxt = context.peek_token(offset=0)
         if nxt and nxt.type == "comment":
-            self._comment_anchors.append({
-                "anchor": current_token.content,
-                "text": nxt.content,
-                "line": nxt.line,
-                "type": token_type,
-            })
+            self._comment_anchors.append(
+                {
+                    "anchor": current_token.content,
+                    "text": nxt.content,
+                    "line": nxt.line,
+                    "type": token_type,
+                }
+            )
             context.advance_token()
         else:
             break
 
-    self._log_state(lambda: f"token {token_type} ok | {self._debug_token_info(context)}")
+    self._log_state(
+        lambda: f"token {token_type} ok | {self._debug_token_info(context)}"
+    )
     return parsed_node
 
 
 def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     """调用另一个语法规则。"""
     rule_name = node["name"]
-    self._log_state(lambda: f"调用规则: {rule_name} | {self._debug_token_info(context)}")
+    self._log_state(
+        lambda: f"调用规则: {rule_name} | {self._debug_token_info(context)}"
+    )
     snapshot = context.create_snapshot()
 
     target_rule = self.grammar_rules.get(rule_name)
@@ -468,7 +479,9 @@ def parse_repeat(self, node: dict, context: ParseContext) -> Node | None:
     elem = node["elem"]
     self._log_state(lambda: f"解析重复节点 | {self._debug_token_info(context)}")
     nodes = _repeat_loop(self, elem, context) or []
-    self._log_state(lambda: f"重复完成, cnt={len(nodes)} | {self._debug_token_info(context)}")
+    self._log_state(
+        lambda: f"重复完成, cnt={len(nodes)} | {self._debug_token_info(context)}"
+    )
     r = Node("repeat", items=nodes)
     r.sub_node = nodes[:]
     return r

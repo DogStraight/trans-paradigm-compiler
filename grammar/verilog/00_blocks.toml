@@ -91,7 +91,7 @@ end_case = [
 ]
 
 [BeginEnd.parser.node]
-label = ""
+label = "$1"
 
 [BeginEnd.renderer.head]
 line = [
@@ -104,7 +104,7 @@ line = [
 
 [BeginEnd.renderer.body]
 indent = true
-source = "body"
+role = "flatten"
 
 [BeginEnd.renderer.tail]
 text = "end"
