@@ -31,6 +31,51 @@ _expand_cfg: dict = declare_cfg("preprocessor.expand", {"max_iterations": 128}, 
 #       include: { enabled: bool, search_dirs: list[str], silent: bool } }
 _directives_cfg: dict = declare_cfg("preprocessor.directives", {}, __name__, "_directives_cfg")
 
+# preprocessor.continuation
+#   #sym:config = [continuation]
+#   格式: dict — { enabled: bool, character: str }
+_continuation_cfg: dict = declare_cfg("preprocessor.continuation", {}, __name__, "_continuation_cfg")
+
+
+def _join_continuation_lines(source: str, cfg: dict | None = None) -> str:
+    """合并反斜杠延续行。
+
+    行尾为 continuation 字符时，与下一行合并为同一逻辑行。
+    合并后的行若仍以 continuation 结尾，继续合并（支持链式折行）。
+    cfg 支持:
+        enabled: bool (default True)
+        character: str (default "\\")
+    """
+    if cfg is None:
+        cfg = dict(_continuation_cfg)
+    if not cfg.get("enabled", True):
+        return source
+    char = cfg.get("character", "\\")
+    lines = source.split("\n")
+    result: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.rstrip()
+        if stripped.endswith(char) and i + 1 < len(lines):
+            prefix = stripped[: -len(char)]
+            merged = prefix
+            i += 1
+            while i < len(lines):
+                next_stripped = lines[i].rstrip()
+                if next_stripped.endswith(char):
+                    merged += next_stripped[: -len(char)]
+                    i += 1
+                else:
+                    merged += lines[i].lstrip()
+                    i += 1
+                    break
+            result.append(merged)
+        else:
+            result.append(line)
+            i += 1
+    return "\n".join(result)
+
 
 def _get_expand_config() -> dict:
     return _expand_cfg
@@ -111,6 +156,8 @@ def scan_directives(
         "_include_config": inc_config,
     }
 
+    # ── 预合并延续行（反斜杠折行）──
+    source = _join_continuation_lines(source)
     lines = source.split("\n")
 
     for line in lines:

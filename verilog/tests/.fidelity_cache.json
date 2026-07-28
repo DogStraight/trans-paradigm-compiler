@@ -31,5 +31,8 @@
   "ref_taskfunc": 1.0,
   "ref_top": 1.0,
   "ref_sim_initial": 1.0,
-  "ref_sim_loops": 0.5248
+  "ref_sim_loops": 0.5248,
+  "ref_param_hex_space": 0.322,
+  "ref_param_range": 0.3494,
+  "ref_timescale": 0.5378
 }
