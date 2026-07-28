@@ -202,21 +202,24 @@ class LinterScanner:
                 continue
             if t.type in self._block_openers:
                 depth += 1
-            elif t.type in self._block_closers:
-                depth -= 1
-                if depth < 0:
-                    errors.append(
-                        LintDiagnostic(
-                            range=(
-                                Position(t.line, t.column),
-                                Position(t.line, t.column),
-                            ),
-                            message=f"unmatched '{t.content}' without block start",
-                            severity=1,
-                            code="phase1-boundary",
-                        )
-                    )
-                    depth = 0
+                continue
+            if t.type not in self._block_closers:
+                continue
+            depth -= 1
+            if depth >= 0:
+                continue
+            errors.append(
+                LintDiagnostic(
+                    range=(
+                        Position(t.line, t.column),
+                        Position(t.line, t.column),
+                    ),
+                    message=f"unmatched '{t.content}' without block start",
+                    severity=1,
+                    code="phase1-boundary",
+                )
+            )
+            depth = 0
         if depth > 0:
             errors.append(
                 LintDiagnostic(
@@ -318,7 +321,9 @@ class LinterScanner:
                     errs=len(trial),
                     is_stmt=is_stmt,
                 )
-                if _is_better_match(best_errors, trial, best_is_stmt, is_stmt, result, best_i):
+                if _is_better_match(
+                    best_errors, trial, best_is_stmt, is_stmt, result, best_i
+                ):
                     best_i = result
                     best_errors = trial
                     best_is_stmt = is_stmt
