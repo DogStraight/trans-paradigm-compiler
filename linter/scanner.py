@@ -129,16 +129,11 @@ class LinterScanner:
     def _build_block_delimiters(rules: dict) -> tuple[set[str], set[str]]:
         """从语法规则中收集 block 起止符集合。
 
-        优先使用规则上的 block.start / block.end（显式声明），
-        回退到 start_tokens / end_case 推导。
+        只信任 block.start / block.end 显式声明，不做树推导。
+        如果规则缺少显式声明，则认为该 block 不需要 P1 边界检查。
         """
-        from linter.grammar_slicer import build_slice_tree, get_start_tokens
-
-        tree = build_slice_tree(rules)
         openers: set[str] = set()
         closers: set[str] = set()
-
-        # Phase 1: 从 block.start/block.end 显式声明收集
         for name, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
@@ -150,43 +145,6 @@ class LinterScanner:
                 openers.add(bs)
             if be:
                 closers.add(be)
-
-        # Phase 2: 回退到 end_case / start_tokens 推导（兼容旧格式）
-        anon_blocks: set[str] = set()
-        for name, info in tree.items():
-            if not info.get("is_block"):
-                continue
-            rule = rules.get(name)
-            # 如果 block.start/end 均已显式声明，完全跳过树推导
-            if rule and getattr(rule, "block_start", "") and getattr(rule, "block_end", ""):
-                continue
-            closers |= info.get("end_case", set())
-            prods = info.get("prods", [])
-            if not prods:
-                anon_blocks.add(name)
-            elif not (rule and getattr(rule, "block_start", "")):
-                openers |= get_start_tokens(prods)
-
-        # 对匿名 block，收集引用它的父规则的起始 token 作为 opener，
-        # 以及父规则末尾的 token 作为额外的 closer（如 endgenerate）。
-        seen_parents: set[str] = set()
-        for name, info in tree.items():
-            prods = info.get("prods", [])
-            if not prods or name in seen_parents:
-                continue
-            for feat in prods:
-                if feat.get("type") != "call":
-                    continue
-                if feat.get("name") in anon_blocks:
-                    openers |= get_start_tokens(prods)
-                    # 收集父规则末尾的 token 作为额外的 closer
-                    for feat in reversed(prods):
-                        if feat.get("type") == "token":
-                            closers.add(feat["token_type"])
-                            break
-                    seen_parents.add(name)
-                    break
-
         return openers, closers
 
     def scan(self, source: str) -> list[LintDiagnostic]:
