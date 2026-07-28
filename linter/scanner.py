@@ -81,12 +81,9 @@ class LinterScanner:
                 if tt not in info.get("end_case", set()):
                     entry: dict = {**info, "_name": name}
                     if info.get("is_block"):
-                        # block 规则的生产式匹配需跳过 block.start token
-                        rule = rules.get(name)
-                        if rule and isinstance(rule, GrammarRule):
-                            bs = getattr(rule, "block_start", "") or ""
-                            if bs:
-                                entry["_block_start"] = bs
+                        bs = getattr(rules.get(name), "block_start", "") or ""
+                        if bs:
+                            entry["_block_start"] = bs
                     self._start_map.setdefault(tt, []).append(entry)
 
         # 补充：将 block.start 也注册为起始 token
