@@ -22,6 +22,9 @@ logic_not = "not"
 al_ff = "al_ff"
 al_comb = "al_comb"
 
+# 仿真
+initial = "initial"
+
 # 分支
 if = "if"
 else = "else"

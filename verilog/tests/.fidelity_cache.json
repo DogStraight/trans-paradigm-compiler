@@ -29,5 +29,7 @@
   "ref_spi_inf": 0.1738,
   "ref_task": 1.0,
   "ref_taskfunc": 1.0,
-  "ref_top": 1.0
+  "ref_top": 1.0,
+  "ref_sim_initial": 1.0,
+  "ref_sim_loops": 0.5248
 }

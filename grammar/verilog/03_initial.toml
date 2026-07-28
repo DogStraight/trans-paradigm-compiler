@@ -1,0 +1,22 @@
+# ============================================================================
+# Verilog 语法规则 — initial 块 [仿真专用][不可综合]
+# ============================================================================
+# initial 与 always 相似但不带敏感列表，是仿真入口点。
+
+[InitialBlock]
+[InitialBlock.parser]
+structure = { is_statement = true }
+production = [
+    "keyword.initial",
+    "@Statement",
+]
+end_case = ["newline"]
+
+[InitialBlock.parser.node]
+body = "$2"
+
+[InitialBlock.renderer]
+layout = { line = ["initial ", { ref = "body" }] }
+body = { role = "direct" }
+[InitialBlock.renderer.override]
+BeginEnd = { tail_break = 2 }
