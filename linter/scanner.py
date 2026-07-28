@@ -321,6 +321,9 @@ class LinterScanner:
                     errs=len(trial),
                     is_stmt=is_stmt,
                 )
+                # 未推进的候选视为不匹配，不参与选择
+                if result <= i:
+                    continue
                 if _is_better_match(
                     best_errors, trial, best_is_stmt, is_stmt, result, best_i
                 ):
