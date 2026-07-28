@@ -88,18 +88,14 @@ class LinterScanner:
 
         # 补充：将 block.start 也注册为起始 token
         # 允许多个规则共享同一 block.start（如 FuncDeclANSI + FuncDeclOld）
-        seen_block_start: set = set()
         for name, rule in rules.items():
-            if not isinstance(rule, GrammarRule):
-                continue
             bs = getattr(rule, "block_start", "") or ""
             if not bs:
                 continue
-            # 检查是否已通过 production 起始 token 注册过
-            if bs in self._start_map:
-                existing_names = {e.get("_name") for e in self._start_map[bs]}
-                if name in existing_names:
-                    continue
+            # 跳过已通过 production 起始 token 注册的同名规则
+            existing = self._start_map.get(bs, [])
+            if any(e.get("_name") == name for e in existing):
+                continue
             info = self._tree.get(name)
             if info and info["prods"]:
                 self._start_map.setdefault(bs, []).append(
@@ -367,11 +363,12 @@ class LinterScanner:
         # 找到第一个 block call 的索引
         block_start = len(prods)
         for idx, feat in enumerate(prods[1:], start=1):
-            if feat.get("type") == "call":
-                info = self._tree.get(feat.get("name", ""))
-                if info and self._depth_for(info) == "block":
-                    block_start = idx
-                    break
+            if feat.get("type") != "call":
+                continue
+            info = self._tree.get(feat.get("name", ""))
+            if info and self._depth_for(info) == "block":
+                block_start = idx
+                break
         # 岛屿元素：正常匹配，影响 i
         for feat in prods[1:block_start]:
             if i >= len(tokens):
@@ -547,10 +544,12 @@ class LinterScanner:
             self._p3_trace(
                 "choice", i, f"alt#{alt_idx}", result=result, errs=len(silent_errs)
             )
-            if result > best_i or (
-                result == best_i and len(silent_errs) < len(best_silent)
-            ):
+            if result < best_i:
+                continue
+            if result > best_i:
                 best_i = result
+                best_silent = silent_errs
+            elif len(silent_errs) < len(best_silent):
                 best_silent = silent_errs
         if best_i > i:
             errors += best_silent
