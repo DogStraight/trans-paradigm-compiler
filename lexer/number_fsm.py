@@ -239,6 +239,15 @@ class NumberFSM:
             # 禁止连续下划线
             if ch == "_" and prev_underscore:
                 break
+            # Verilog 允许 'h 'd 'b 'o 后的值与基字符之间有空格（如 32'h ffff_ffff）
+            if state in {
+                cls.VERILOG_HEX_VALUE,
+                cls.VERILOG_DEC_VALUE,
+                cls.VERILOG_BIN_VALUE,
+                cls.VERILOG_OCT_VALUE,
+            } and (ch == " " or ch == "\t"):
+                pos += 1
+                continue
             nxt = fsm.next_state(state, ch)
             if nxt is None:
                 break
