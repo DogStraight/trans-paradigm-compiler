@@ -52,17 +52,35 @@ class LinterScanner:
                 continue
             for tt in get_start_tokens(info["prods"]):
                 if tt not in info.get("end_case", set()):
-                    self._start_map.setdefault(tt, []).append({**info, "_name": name})
+                    entry: dict = {**info, "_name": name}
+                    if info.get("is_block"):
+                        # block 规则的生产式匹配需跳过 block.start token
+                        rule = rules.get(name)
+                        if rule and isinstance(rule, GrammarRule):
+                            bs = getattr(rule, "block_start", "") or ""
+                            if bs:
+                                entry["_block_start"] = bs
+                    self._start_map.setdefault(tt, []).append(entry)
 
         # 补充：将 block.start 也注册为起始 token
+        # 允许多个规则共享同一 block.start（如 FuncDeclANSI + FuncDeclOld）
+        seen_block_start: set = set()
         for name, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
             bs = getattr(rule, "block_start", "") or ""
-            if bs and bs not in self._start_map:
-                info = self._tree.get(name)
-                if info and info["prods"]:
-                    self._start_map.setdefault(bs, []).append({**info, "_name": name})
+            if not bs:
+                continue
+            # 检查是否已通过 production 起始 token 注册过
+            if bs in self._start_map:
+                existing_names = {e.get("_name") for e in self._start_map[bs]}
+                if name in existing_names:
+                    continue
+            info = self._tree.get(name)
+            if info and info["prods"]:
+                self._start_map.setdefault(bs, []).append(
+                    {**info, "_name": name, "_block_start": bs}
+                )
 
         self._macro_prefix, _ = _load_config()
 
@@ -305,7 +323,14 @@ class LinterScanner:
                     continue
                 name = info.get("_name", "?")
                 trial: list = []
-                result = self._match_island(tokens, i, prods, trial)
+                # block 规则：block.start token 已被 parser 消费，
+                # P3 需跳过当前 token 再从 production 起始匹配
+                start_i = i
+                if info.get("is_block") and info.get("_block_start"):
+                    bs = info["_block_start"]
+                    if start_i < len(tokens) and tokens[start_i].type == bs:
+                        start_i += 1
+                result = self._match_island(tokens, start_i, prods, trial)
                 is_stmt = info.get("is_statement", False)
                 self._p3_trace(
                     "trial",
@@ -403,11 +428,20 @@ class LinterScanner:
         errors: list,
         stop_on: set | None = None,
     ) -> int:
-        """递归匹配一个元素 — 按 type 分发到对应处理器。"""
+        """递归匹配一个元素 — 按 type 分发到对应处理器。
+
+        匹配前跳过 trivia（newline/space/comment），与 parser 的 _skip_tokens 一致。
+        """
         if i >= len(tokens):
             return i
         if stop_on and tokens[i].type in stop_on:
             self._p3_trace("boundary", i, f"hit stop_on {tokens[i].type}")
+            return i
+        # 跳过 trivia，确保匹配时指向有效 token
+        i = self._skip(tokens, i)
+        if i >= len(tokens):
+            return i
+        if stop_on and tokens[i].type in stop_on:
             return i
         typ = node.get("type", "")
         self._p3_trace(
@@ -468,11 +502,22 @@ class LinterScanner:
         """@SubRule 调用，按 depth 分发。"""
         if node.get("optional"):
             return i
-        info = self._tree.get(node["name"])
+        return self._match_call_impl(tokens, i, self._tree.get(node["name"]), errors, stop_on, node["name"])
+
+    def _match_call_impl(
+        self,
+        tokens: list,
+        i: int,
+        info: dict | None,
+        errors: list,
+        stop_on: set | None = None,
+        name: str = "",
+    ) -> int:
+        """@SubRule 调用实现（按 depth 分发），供 _match_call 和 optional 路径共用。"""
         if info is None:
             return i + 1
         depth = self._depth_for(info)
-        self._p3_trace("branch", i, f"call {node['name']}", depth=depth)
+        self._p3_trace("branch", i, f"call {name}", depth=depth)
         prods = info.get("prods", [])
         if depth == "block":
             ec = info.get("end_case", set())
@@ -490,7 +535,7 @@ class LinterScanner:
         stop = set(info.get("end_case", set()))
         if stop_on:
             stop |= stop_on
-        self._p3_trace("full", i, f"recurse {node['name']}", stop=stop)
+        self._p3_trace("full", i, f"recurse {name}", stop=stop)
         return self._match_island(tokens, i, prods, errors, stop_on=stop)
 
     def _match_optional(
