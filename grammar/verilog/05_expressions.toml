@@ -106,6 +106,14 @@ line = [
     { opt = { ref = "range_suffix" } },
 ]
 
+# SelectSuffix 内的 BinaryOp（如 a[i-1]）不产生操作符两侧空格
+[SelectSuffix.renderer.override.BinaryOp]
+layout = { line = [
+    { ref = "left" },
+    { ref = "op" },
+    { ref = "right" },
+] }
+
 [SelectExpr.parser]
 production = [
     "@Identifier",
