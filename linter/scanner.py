@@ -55,7 +55,7 @@ class LinterScanner:
         ext_dirs: list[str] | None = None,
         enable_phase1: bool = True,
         enable_phase2: bool = True,
-        enable_phase3: bool = False,
+        enable_phase3: bool = True,
     ):
         self._rules_dir = rules_dir
         ext_list = ext_dirs or []
@@ -358,15 +358,14 @@ class LinterScanner:
         """
         if not prods or i >= len(tokens):
             return i
-        # 首元素静默检查：有错误才跳过，optional 无害不推进则继续试后面的元素
+        # 首元素静默检查：未推进才算匹配失败
+        # choice 的成功分支会附带失败分支的 silent 错误，不视为整体失败
         first_silent: list = []
         result = self._match_deep(tokens, i, prods[0], first_silent, stop_on=stop_on)
-        if first_silent:
+        if result <= i:
             self._p3_trace("exit", i, "first_elem_errored", result=result)
             return i
-        if result > i:
-            errors += first_silent
-            i = result
+        i = result
         self._p3_trace("island", i, f"first_ok, stop_on={stop_on}", prods=len(prods))
         # 找到第一个 block call 的索引
         block_start = len(prods)
@@ -476,8 +475,19 @@ class LinterScanner:
         errors: list,
         stop_on: set | None = None,
     ) -> int:
-        """@SubRule 调用，按 depth 分发。"""
+        """@SubRule 调用，按 depth 分发。
+
+        optional 的 @SubRule? 先静默尝试匹配，成功则前进。
+        """
         if node.get("optional"):
+            info = self._tree.get(node["name"])
+            if info:
+                silent: list = []
+                result = self._match_call_impl(
+                    tokens, i, info, silent, stop_on, node["name"]
+                )
+                if result > i and not silent:
+                    return result
             return i
         return self._match_call_impl(
             tokens, i, self._tree.get(node["name"]), errors, stop_on, node["name"]
@@ -662,7 +672,11 @@ class LinterScanner:
         return "atom"
 
     def _match_shallow(self, tokens: list, i: int, prods: list, errors: list) -> int:
-        """浅匹配：匹配字面量 token，@SubRule 做边界跳过。"""
+        """浅匹配：匹配字面量 token，@SubRule 做边界跳过。
+
+        入口跳过 trivia，与 _match_deep 一致。
+        """
+        i = self._skip(tokens, i)
         for feat in prods:
             if i >= len(tokens):
                 break
