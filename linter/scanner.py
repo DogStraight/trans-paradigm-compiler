@@ -194,7 +194,7 @@ class LinterScanner:
 
     # ── Phase 1: 块边界 ──────────────────────────────
 
-    def _phase1_boundary(self, tokens: list) -> list:
+    def _phase1_boundary(self, tokens: list[Token]) -> list:
         errors: list = []
         depth = 0
         for t in tokens:
@@ -278,8 +278,8 @@ class LinterScanner:
     def _phase3_literal(self, tokens: list) -> list:
         """字面量匹配：逐 token 推进，在每个位置尝试语句规则匹配。
 
-        `;` 是岛屿边界——不依赖 _match_island 返回值跳跃，
-        确保内层语句不被外层 block skip 吞掉。
+        岛屿边界由规则的 end_case 定义，不依赖 _match_island
+        返回值跳跃，确保内层语句不被外层 block skip 吞掉。
         """
         errors: list = []
         i = 0
@@ -348,8 +348,8 @@ class LinterScanner:
     ) -> int:
         """递归匹配 production 列表。
 
-        语句岛屿：`;` 是岛屿边界，block 内容不扩展岛屿。
-        返回岛屿末尾（; 处或 block 开始前），block 及其后的元素只验证不跳位。
+        语句岛屿：end_case 是岛屿边界，block 内容不扩展岛屿。
+        返回岛屿末尾（end_case 处或 block 开始前），block 及其后的元素只验证不跳位。
 
         stop_on — 父层 end_case，当前 token 在其中时停止匹配（解决逗号歧义）。
         """
