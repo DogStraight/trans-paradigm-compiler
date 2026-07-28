@@ -21,6 +21,33 @@ from .grammar_slicer import build_slice_tree, get_start_tokens
 _TRIVIA = frozenset({"newline", "space.fold", "comment", "space"})
 
 
+def _is_better_match(
+    best_errors: list | None,
+    trial: list,
+    best_is_stmt: bool,
+    is_stmt: bool,
+    result: int,
+    best_i: int,
+) -> bool:
+    """判断 trial 是否优于当前最佳匹配。
+
+    优先级：首次候选 > 更少错误 > 语句规则优先 > 更长匹配。
+    """
+    if best_errors is None:
+        return True
+    if len(trial) < len(best_errors):
+        return True
+    if len(trial) > len(best_errors):
+        return False
+    # 错误数相同：语句规则优先
+    if is_stmt and not best_is_stmt:
+        return True
+    if not is_stmt and best_is_stmt:
+        return False
+    # 语句状态相同：取更长匹配
+    return result > best_i
+
+
 class LinterScanner:
     def __init__(
         self,
@@ -134,7 +161,7 @@ class LinterScanner:
         """
         openers: set[str] = set()
         closers: set[str] = set()
-        for name, rule in rules.items():
+        for _, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
             if not getattr(rule, "is_block", False):
@@ -298,17 +325,7 @@ class LinterScanner:
                     errs=len(trial),
                     is_stmt=is_stmt,
                 )
-                if (
-                    best_errors is None
-                    or len(trial) < len(best_errors)
-                    or (
-                        len(trial) == len(best_errors)
-                        and (
-                            (is_stmt and not best_is_stmt)
-                            or (is_stmt == best_is_stmt and result > best_i)
-                        )
-                    )
-                ):
+                if _is_better_match(best_errors, trial, best_is_stmt, is_stmt, result, best_i):
                     best_i = result
                     best_errors = trial
                     best_is_stmt = is_stmt
@@ -460,7 +477,9 @@ class LinterScanner:
         """@SubRule 调用，按 depth 分发。"""
         if node.get("optional"):
             return i
-        return self._match_call_impl(tokens, i, self._tree.get(node["name"]), errors, stop_on, node["name"])
+        return self._match_call_impl(
+            tokens, i, self._tree.get(node["name"]), errors, stop_on, node["name"]
+        )
 
     def _match_call_impl(
         self,
