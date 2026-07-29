@@ -13,9 +13,8 @@ def scanner(config_loaded):
         DEFAULT_RULES_DIR,
         ext_dirs=DEFAULT_EXT_DIRS,
     )
+    ls.enable_phase0 = False
     ls.enable_phase1 = True
-    ls.enable_phase2 = False
-    ls.enable_phase3 = False
     return ls
 
 

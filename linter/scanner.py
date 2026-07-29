@@ -1,11 +1,12 @@
 """
-scanner.py — 分层 Linter，三层独立使能。
+scanner.py — 四阶管线 Linter。
 
-Phase 1: 块边界匹配（block opener/closer 嵌套计数）
-Phase 2: 语句识别（start_tokens → end_case 边界，岛式多规则取最长）
-Phase 3: 语句内字面量匹配（production 中 token 精确匹配，@SubRule 黑盒）
+P0: Token 检查 — 未定义宏等非法 token
+P1: 块边界配对 — bound.start/end 栈追踪
+P2: 语句识别 — start_tokens → end_case 边界
+P3: 字面量匹配 — production 中 token 精确匹配
 
-每层可独立开关。LinterScanner(...) 构造时通过 enable_phase1/2/3 控制。
+每层可独立开关。LinterScanner(...) 构造时通过 enable_phase0/1/2/3 控制。
 """
 
 import os
@@ -53,9 +54,10 @@ class LinterScanner:
         self,
         rules_dir: str,
         ext_dirs: list[str] | None = None,
+        enable_phase0: bool = True,
         enable_phase1: bool = True,
         enable_phase2: bool = True,
-        enable_phase3: bool = True,
+        enable_phase3: bool = False,
     ):
         self._rules_dir = rules_dir
         ext_list = ext_dirs or []
@@ -71,6 +73,7 @@ class LinterScanner:
             rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_list
         )
         self._tree = build_slice_tree(rules)
+        self._grammar_rules = rules
         self.lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_list)
 
         self._start_map: dict[str, list[dict]] = {}
@@ -105,10 +108,11 @@ class LinterScanner:
         self._macro_prefix, _ = _load_config()
 
         # ── 动态收集 block 起止符 ─────────────────
-        self._block_openers, self._block_closers, self._block_pairs = (
+        self._block_openers, self._block_closers, self._block_pairs, self._opener_to_rule = (
             self._build_block_delimiters(rules)
         )
 
+        self.enable_phase0 = enable_phase0
         self.enable_phase1 = enable_phase1
         self.enable_phase2 = enable_phase2
         self.enable_phase3 = enable_phase3
@@ -150,19 +154,18 @@ class LinterScanner:
     @staticmethod
     def _build_block_delimiters(
         rules: dict,
-    ) -> tuple[set[str], set[str], dict[str, set[str]]]:
-        """从语法规则的 bound 字段（不是 block）收集起止符集合及配对映射。
+    ) -> tuple[set[str], set[str], dict[str, set[str]], dict[str, str]]:
+        """从语法规则的 bound 字段收集起止符集合及配对映射。
 
-        bound.start/end 专供 linter P1 边界检查，与 parser 的 block.start/end 解耦。
-        任何规则只要有显式 bound.start/end 定义就追踪。
-
-        Returns: (openers, closers, closer_to_openers)
+        Returns: (openers, closers, closer_to_openers, opener_to_rule)
             closer_to_openers — 每个 closer token 对应的有效 opener token 集合。
+            opener_to_rule    — 每个 opener token 对应的规则名称（用于骨架上上文）。
         """
         openers: set[str] = set()
         closers: set[str] = set()
         closer_to_openers: dict[str, set[str]] = {}
-        for _, rule in rules.items():
+        opener_to_rule: dict[str, str] = {}
+        for name, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
             bs = getattr(rule, "bound_start", "") or ""
@@ -171,11 +174,14 @@ class LinterScanner:
                 continue
             if bs:
                 openers.add(bs)
+                # 第一个声明该 bound 的规则胜出
+                if bs not in opener_to_rule:
+                    opener_to_rule[bs] = name
             if be:
                 closers.add(be)
             if bs and be:
                 closer_to_openers.setdefault(be, set()).add(bs)
-        return openers, closers, closer_to_openers
+        return openers, closers, closer_to_openers, opener_to_rule
 
     def scan(self, source: str) -> list[LintDiagnostic]:
         errors: list = []
@@ -193,39 +199,77 @@ class LinterScanner:
         if not tokens:
             return errors
 
+        # ── P0: Token 检查 ────────────────────────
+        if self.enable_phase0:
+            errors += self._phase0_token_check(tokens)
+
+        # ── P1: 块边界 ────────────────────────
+        skeleton: dict = {"type": "root", "start": 0, "end": len(tokens), "children": []}
         if self.enable_phase1:
-            errors += self._phase1_boundary(tokens)
+            p1_errors, skeleton = self._phase1_boundary(tokens)
+            errors += p1_errors
+
+        # ── P2: 语句识别 ────────────────────
         if self.enable_phase2:
-            errors += self._phase2_statement(tokens)
-        if self.enable_phase3:
-            errors += self._phase3_literal(tokens)
+            errors += self._phase2_statement(tokens, skeleton)
+
+        # ── P3: 字面量匹配 ─────────────────
+        # （待重构）
 
         return errors
 
-    # ── Phase 1: 块边界 ──────────────────────────────
+    # ── P0: Token 检查 ─────────────────────────
 
-    def _phase1_boundary(self, tokens: list[Token]) -> list:
-        """扫描 block start/end 配对，用栈记录 opener 并检查 closer 是否匹配。
+    def _phase0_token_check(self, tokens: list[Token]) -> list:
+        """检测 token 流中不应存在的 token 类型（如未展开的宏）。"""
+        errors: list = []
+        for t in tokens:
+            if t.type.startswith("macro."):
+                errors.append(
+                    LintDiagnostic(
+                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        message=f"undefined macro '{t.content}'",
+                        severity=1,
+                        code="undefined-macro",
+                    )
+                )
+        return errors
 
-        不匹配时仍弹出（恢复栈一致性），但报精准错误提示正确的关闭符。
+    # ── P1: 块边界 ──────────────────────────────
+
+    def _phase1_boundary(self, tokens: list[Token]) -> tuple[list, dict]:
+        """扫描 block start/end 配对，返回 (errors, skeleton)。
+
+        skeleton 为嵌套的边界树，每个 bound 节点含规则名称：
+            {
+                "type": "root",
+                "rule": "",
+                "start": 0, "end": 100,
+                "children": [
+                    {
+                        "type": "bound",
+                        "rule": "ModuleDecl",
+                        "start": 2, "end": 96,
+                        "children": [...]
+                    }
+                ]
+            }
         """
         errors: list = []
-        stack: list[str] = []
-        for t in tokens:
+        raw_regions: list[tuple[int, int, str]] = []
+        stack: list[tuple[str, int]] = []
+        for idx, t in enumerate(tokens):
             if t.type in _TRIVIA:
                 continue
             if t.type in self._block_openers:
-                stack.append(t.type)
+                stack.append((t.type, idx))
                 continue
             if t.type not in self._block_closers:
                 continue
             if not stack:
                 errors.append(
                     LintDiagnostic(
-                        range=(
-                            Position(t.line, t.column),
-                            Position(t.line, t.column),
-                        ),
+                        range=(Position(t.line, t.column), Position(t.line, t.column)),
                         message=f"unmatched '{t.content}' without block start",
                         severity=1,
                         code="phase1-boundary",
@@ -233,20 +277,20 @@ class LinterScanner:
                 )
                 continue
             expected_openers = self._block_pairs.get(t.type, set())
-            actual = stack.pop()
+            actual, start_idx = stack.pop()
             if expected_openers and actual not in expected_openers:
-                # 找出该关闭符对应的正确开启符名称
                 errors.append(
                     LintDiagnostic(
-                        range=(
-                            Position(t.line, t.column),
-                            Position(t.line, t.column),
-                        ),
+                        range=(Position(t.line, t.column), Position(t.line, t.column)),
                         message=f"mismatched block closer '{t.content}'",
                         severity=1,
                         code="phase1-boundary",
                     )
                 )
+                continue
+            # 记录闭合区域（含规则名称）
+            rule_name = self._opener_to_rule.get(actual, actual)
+            raw_regions.append((start_idx, idx, rule_name))
         if stack:
             errors.append(
                 LintDiagnostic(
@@ -256,29 +300,133 @@ class LinterScanner:
                     code="phase1-boundary",
                 )
             )
-        return errors
 
-    # ── Phase 2: 语句识别 ────────────────────────────
+        skeleton = self._build_skeleton(raw_regions, len(tokens))
+        return errors, skeleton
 
-    def _phase2_statement(self, tokens: list) -> list:
+    @staticmethod
+    def _build_skeleton(
+        regions: list[tuple[int, int, str]], total: int
+    ) -> dict:
+        """从 (start, end, rule_name) 列表构建嵌套骨架树。"""
+        regions.sort(key=lambda r: r[0])
+        root: dict = {
+            "type": "root",
+            "rule": "",
+            "start": 0,
+            "end": total,
+            "children": [],
+        }
+        stack: list[dict] = [root]
+
+        for start, end, rule_name in regions:
+            node: dict = {
+                "type": "bound",
+                "rule": rule_name,
+                "start": start,
+                "end": end,
+                "children": [],
+            }
+            while stack and not (
+                stack[-1]["start"] <= start and end <= stack[-1]["end"]
+            ):
+                stack.pop()
+            if stack:
+                stack[-1]["children"].append(node)
+            stack.append(node)
+
+        return root
+
+    # ── Phase 2: 复用解析器做句验证 ─────────────
+
+    def _phase2_statement(self, tokens: list, skeleton: dict) -> list:
+        """复用 parser 的句解析函数，验证每行是否为合法语句开始。
+
+        1. 利用 P1 骨架跳过 bound 区域
+        2. 对非 bound token 调用 parser.parse_sentence 尝试解析
+        3. 解析失败 → 报行级错误，跳到换行
+        4. 解析成功 → 推进到解析结束位置
+        """
+        from parser.parser_core import Parser, ParseContext
+        from parser.rule_selector import RuleSelector
+
+        # 延迟初始化 parser 实例
+        if not hasattr(self, "_p2_parser"):
+            rules_dict = self._grammar_rules
+            stmt_names = [
+                n for n, r in rules_dict.items()
+                if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
+            ]
+            rs = RuleSelector(rules_dict, stmt_names)
+            self._p2_parser = Parser(rules=rules_dict, rule_selector=rs)
+
+        parser = self._p2_parser
+        context = ParseContext(tokens)
         errors: list = []
+
         i = 0
+        bracket_depth = 0
+        # 模块头等待关闭：跳过 module name #(...) (...); 区域
+        skip_until_semi = False
+
         while i < len(tokens):
             i = self._skip(tokens, i)
             if i >= len(tokens):
                 break
             t = tokens[i]
-            if t.type.startswith("macro."):
+
+            # 括号/方括号深度
+            if t.type in ("bracket.l_parentheses", "bracket.l_square_bracket"):
+                bracket_depth += 1
                 i += 1
                 continue
-            best_i = i
-            for info in self._start_map.get(t.type, []):
-                result = self._consume(tokens, i, info)
-                if result is not None and result > best_i:
-                    best_i = result
-            if best_i > i:
-                i = best_i
+            if t.type in ("bracket.r_parentheses", "bracket.r_square_bracket"):
+                bracket_depth = max(0, bracket_depth - 1)
+                i += 1
                 continue
+
+            # 关键字 bound 起止符
+            if t.type in self._block_openers:
+                # module/function/task 后跳过到 `;`（模块/函数头）
+                if t.type in ("keyword.module", "keyword.function", "keyword.task"):
+                    skip_until_semi = True
+                i += 1
+                continue
+            if t.type in self._block_closers:
+                i += 1
+                continue
+
+            # 括号/方括号内部 → 跳过
+            if bracket_depth > 0:
+                i += 1
+                continue
+
+            # 模块头跳过模式
+            if skip_until_semi:
+                if t.type == "symbol.base.semicolon":
+                    skip_until_semi = False
+                i += 1
+                continue
+
+            # 调用 parser 尝试解析一条句子
+            context.token_pointer = i
+            context.match_length = 0
+            context.current_node = None
+            context.current_rule = None
+            context.sibling_counter.clear()
+            context.path_stack.clear()
+
+            try:
+                node = parser.parse_sentence(context)
+            except Exception:
+                node = None
+
+            if node is not None:
+                # 解析成功，跳到句子末尾
+                i = context.token_pointer
+                continue
+
+            # 解析失败：报行级错误，跳到换行
             errors.append(
                 LintDiagnostic(
                     range=(Position(t.line, t.column), Position(t.line, t.column)),
@@ -288,6 +436,13 @@ class LinterScanner:
                 )
             )
             i += 1
+            while i < len(tokens) and tokens[i].type not in (
+                "newline",
+            ) and tokens[i].type not in self._block_closers and tokens[i].type not in (
+                "bracket.r_parentheses", "bracket.r_square_bracket"
+            ):
+                i += 1
+
         return errors
 
     def _consume(self, tokens: list, i: int, info: dict) -> int | None:
