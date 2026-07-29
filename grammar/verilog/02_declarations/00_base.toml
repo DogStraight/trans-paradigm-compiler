@@ -93,6 +93,7 @@ layout = { line = ["= ", { ref = "value" }] }
 
 [Range]
 [Range.parser]
+bound = { start = "bracket.l_square_bracket", end = "bracket.r_square_bracket" }
 production = [
     "bracket.l_square_bracket",
     "@Expression",
@@ -105,6 +106,10 @@ msb = "$2"
 lsb = "$4"
 [Range.renderer]
 layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
+
+[Range.bound]
+start = "bracket.l_square_bracket"
+end = "bracket.r_square_bracket"
 
 # ============================================================================
 # 模块 ANSI 端口（括号内，无分号）

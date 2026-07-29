@@ -1,4 +1,5 @@
 [ModuleDecl.parser]
+bound = { start = "keyword.module", end = "keyword.endmodule" }
 production = [
     "@Identifier",
     "@ParameterList?",
@@ -56,11 +57,8 @@ break = 2
 is_block = true
 is_statement = true
 
-[ModuleDecl.block]
-start = "keyword.module"
-end = "keyword.endmodule"
-
 [PortParens.parser]
+bound = { start = "bracket.l_parentheses", end = "bracket.r_parentheses" }
 inline = true
 production = [
     "bracket.l_parentheses",
@@ -75,6 +73,7 @@ ports = "$2"
 ref = "ports"
 
 [ParameterList.parser]
+bound = { start = "bracket.l_parentheses", end = "bracket.r_parentheses" }
 production = [
     "symbol.base.pound",
     "bracket.l_parentheses",

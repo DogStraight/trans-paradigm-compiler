@@ -352,7 +352,7 @@ class GrammarRule:
         "inline",
         "pratt",
         "structure",
-        "block",
+        "bound",
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
@@ -364,7 +364,7 @@ class GrammarRule:
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
-            elif fld in ("structure", "block"):
+            elif fld in ("structure", "bound"):
                 setattr(self, fld, None)
             else:
                 setattr(self, fld, False)
@@ -406,11 +406,14 @@ class GrammarRule:
         self.is_statement = struct.get("is_statement", False)
         self.is_atom = struct.get("is_atom", False)
 
-        # 从 block 字典中提取块起始/结束符
-        #   block = { start = "keyword.begin", end = "keyword.end" }
-        block = getattr(self, "block", None) or {}
-        self.block_start = block.get("start", "")
-        self.block_end = block.get("end", "")
+        # 从 bound 字典中提取边界起止符（替代 block.start/end）
+        #   bound = { start = "keyword.begin", end = "keyword.end" }
+        bnd = getattr(self, "bound", None) or {}
+        self.bound_start = bnd.get("start", "")
+        self.bound_end = bnd.get("end", "")
+        # 向后兼容：block_start/end 映射到 bound_start/end
+        self.block_start = self.bound_start
+        self.block_end = self.bound_end
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。

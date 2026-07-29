@@ -102,6 +102,7 @@ line = [
 ]
 
 [PortConnection.parser]
+bound = { start = "bracket.l_parentheses", end = "bracket.r_parentheses" }
 production = [
     "bracket.l_parentheses",
     "@NamedPortList?",

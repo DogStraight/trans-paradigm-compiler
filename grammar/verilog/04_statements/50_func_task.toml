@@ -8,6 +8,7 @@ inline = true
 body = "$1"
 
 [FuncDeclANSI.parser]
+bound = { start = "keyword.function", end = "keyword.endfunction" }
 production = [
     "(keyword.automatic|keyword.static)?",
     "keyword.signed?",
@@ -72,11 +73,8 @@ break = 2
 is_block = true
 is_statement = true
 
-[FuncDeclANSI.block]
-start = "keyword.function"
-end = "keyword.endfunction"
-
 [FuncDeclOld.parser]
+bound = { start = "keyword.function", end = "keyword.endfunction" }
 production = [
     "(keyword.automatic|keyword.static)?",
     "keyword.signed?",
@@ -131,10 +129,6 @@ break = 2
 is_block = true
 is_statement = true
 
-[FuncDeclOld.block]
-start = "keyword.function"
-end = "keyword.endfunction"
-
 [TaskDecl.parser]
 production = [
     "@TaskDeclANSI|@TaskDeclOld",
@@ -145,6 +139,7 @@ inline = true
 body = "$1"
 
 [TaskDeclANSI.parser]
+bound = { start = "keyword.task", end = "keyword.endtask" }
 production = [
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
@@ -196,11 +191,8 @@ break = 2
 is_block = true
 is_statement = true
 
-[TaskDeclANSI.block]
-start = "keyword.task"
-end = "keyword.endtask"
-
 [TaskDeclOld.parser]
+bound = { start = "keyword.task", end = "keyword.endtask" }
 production = [
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
@@ -241,7 +233,3 @@ break = 2
 [TaskDeclOld.structure]
 is_block = true
 is_statement = true
-
-[TaskDeclOld.block]
-start = "keyword.task"
-end = "keyword.endtask"

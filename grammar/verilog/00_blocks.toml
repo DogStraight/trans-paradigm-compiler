@@ -20,6 +20,7 @@ value = "$1.value"
 ref = "value"
 
 [BeginEnd.parser]
+bound = { start = "keyword.begin", end = "keyword.end" }
 production = [
     "@BlockLabel?",
 ]
@@ -51,10 +52,6 @@ break = 1
 [BeginEnd.structure]
 is_block = true
 is_statement = true
-
-[BeginEnd.block]
-start = "keyword.begin"
-end = "keyword.end"
 
 [BlockLabel.parser]
 production = [

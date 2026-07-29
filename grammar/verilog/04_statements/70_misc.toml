@@ -43,6 +43,7 @@ layout = ";"
 is_statement = true
 
 [GenerateBlock.parser]
+bound = { start = "keyword.generate", end = "keyword.endgenerate" }
 production = []
 end_case = [
     "keyword.endgenerate",
@@ -65,7 +66,3 @@ break = 2
 [GenerateBlock.structure]
 is_block = true
 is_statement = true
-
-[GenerateBlock.block]
-start = "keyword.generate"
-end = "keyword.endgenerate"

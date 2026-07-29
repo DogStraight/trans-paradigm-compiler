@@ -105,7 +105,9 @@ class LinterScanner:
         self._macro_prefix, _ = _load_config()
 
         # ── 动态收集 block 起止符 ─────────────────
-        self._block_openers, self._block_closers = self._build_block_delimiters(rules)
+        self._block_openers, self._block_closers, self._block_pairs = (
+            self._build_block_delimiters(rules)
+        )
 
         self.enable_phase1 = enable_phase1
         self.enable_phase2 = enable_phase2
@@ -146,26 +148,34 @@ class LinterScanner:
     # ── 动态 block delimiter 收集 ─────────────────
 
     @staticmethod
-    def _build_block_delimiters(rules: dict) -> tuple[set[str], set[str]]:
-        """从语法规则中收集 block 起止符集合。
+    def _build_block_delimiters(
+        rules: dict,
+    ) -> tuple[set[str], set[str], dict[str, set[str]]]:
+        """从语法规则的 bound 字段（不是 block）收集起止符集合及配对映射。
 
-        只信任 block.start / block.end 显式声明，不做树推导。
-        如果规则缺少显式声明，则认为该 block 不需要 P1 边界检查。
+        bound.start/end 专供 linter P1 边界检查，与 parser 的 block.start/end 解耦。
+        任何规则只要有显式 bound.start/end 定义就追踪。
+
+        Returns: (openers, closers, closer_to_openers)
+            closer_to_openers — 每个 closer token 对应的有效 opener token 集合。
         """
         openers: set[str] = set()
         closers: set[str] = set()
+        closer_to_openers: dict[str, set[str]] = {}
         for _, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
-            if not getattr(rule, "is_block", False):
+            bs = getattr(rule, "bound_start", "") or ""
+            be = getattr(rule, "bound_end", "") or ""
+            if not bs and not be:
                 continue
-            bs = getattr(rule, "block_start", "") or ""
-            be = getattr(rule, "block_end", "") or ""
             if bs:
                 openers.add(bs)
             if be:
                 closers.add(be)
-        return openers, closers
+            if bs and be:
+                closer_to_openers.setdefault(be, set()).add(bs)
+        return openers, closers, closer_to_openers
 
     def scan(self, source: str) -> list[LintDiagnostic]:
         errors: list = []
@@ -195,36 +205,53 @@ class LinterScanner:
     # ── Phase 1: 块边界 ──────────────────────────────
 
     def _phase1_boundary(self, tokens: list[Token]) -> list:
+        """扫描 block start/end 配对，用栈记录 opener 并检查 closer 是否匹配。
+
+        不匹配时仍弹出（恢复栈一致性），但报精准错误提示正确的关闭符。
+        """
         errors: list = []
-        depth = 0
+        stack: list[str] = []
         for t in tokens:
             if t.type in _TRIVIA:
                 continue
             if t.type in self._block_openers:
-                depth += 1
+                stack.append(t.type)
                 continue
             if t.type not in self._block_closers:
                 continue
-            depth -= 1
-            if depth >= 0:
-                continue
-            errors.append(
-                LintDiagnostic(
-                    range=(
-                        Position(t.line, t.column),
-                        Position(t.line, t.column),
-                    ),
-                    message=f"unmatched '{t.content}' without block start",
-                    severity=1,
-                    code="phase1-boundary",
+            if not stack:
+                errors.append(
+                    LintDiagnostic(
+                        range=(
+                            Position(t.line, t.column),
+                            Position(t.line, t.column),
+                        ),
+                        message=f"unmatched '{t.content}' without block start",
+                        severity=1,
+                        code="phase1-boundary",
+                    )
                 )
-            )
-            depth = 0
-        if depth > 0:
+                continue
+            expected_openers = self._block_pairs.get(t.type, set())
+            actual = stack.pop()
+            if expected_openers and actual not in expected_openers:
+                # 找出该关闭符对应的正确开启符名称
+                errors.append(
+                    LintDiagnostic(
+                        range=(
+                            Position(t.line, t.column),
+                            Position(t.line, t.column),
+                        ),
+                        message=f"mismatched block closer '{t.content}'",
+                        severity=1,
+                        code="phase1-boundary",
+                    )
+                )
+        if stack:
             errors.append(
                 LintDiagnostic(
                     range=(Position(0, 0), Position(0, 0)),
-                    message=f"unclosed block: {depth} unclosed block(s) at EOF",
+                    message=f"unclosed block: {len(stack)} unclosed block(s) at EOF",
                     severity=1,
                     code="phase1-boundary",
                 )
@@ -441,7 +468,7 @@ class LinterScanner:
 
     def _match_token(
         self,
-        tokens: list,
+        tokens: list[Token],
         i: int,
         node: dict,
         errors: list,
@@ -469,7 +496,7 @@ class LinterScanner:
 
     def _match_call(
         self,
-        tokens: list,
+        tokens: list[Token],
         i: int,
         node: dict,
         errors: list,
@@ -495,7 +522,7 @@ class LinterScanner:
 
     def _match_call_impl(
         self,
-        tokens: list,
+        tokens: list[Token],
         i: int,
         info: dict | None,
         errors: list,
@@ -529,7 +556,7 @@ class LinterScanner:
 
     def _match_optional(
         self,
-        tokens: list,
+        tokens: list[Token],
         i: int,
         node: dict,
         errors: list,
@@ -547,7 +574,7 @@ class LinterScanner:
 
     def _match_choice(
         self,
-        tokens: list,
+        tokens: list[Token],
         i: int,
         node: dict,
         errors: list,
