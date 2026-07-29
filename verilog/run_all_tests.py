@@ -12,6 +12,8 @@ Usage:
     python run_all_tests.py --json             # JSON report
     python run_all_tests.py --expand-macros    # enable macro expansion
     python run_all_tests.py --inline-comments  # enable inline comment injection
+    python run_all_tests.py --no-semantic      # skip analyzer + transform stages
+    python run_all_tests.py --no-lint          # skip linter pre-check
 """
 
 import sys
@@ -39,7 +41,7 @@ def discover_tests(
     """Discover test files. Returns list of (name, full_path, group)."""
     tests_dir = os.path.join(base_dir, "tests")
     cases = []
-    groups = [group_filter] if group_filter else ["normal", "errors", "warning"]
+    groups = [group_filter] if group_filter else ["normal", "errors", "warning", "transform"]
     for group in groups:
         ref_dir = os.path.join(tests_dir, group, "ref")
         if not os.path.isdir(ref_dir):
@@ -66,18 +68,23 @@ def _strip_all(text: str) -> str:
     return "".join("".join(lines).split())
 
 
-def _load_fidelity_cache(base_dir: str) -> dict:
-    """Load cached fidelity results from JSON."""
-    path = os.path.join(base_dir, "tests", ".fidelity_cache.json")
+def _fidelity_cache_path(base_dir: str, group: str) -> str:
+    """Get per-group fidelity cache path."""
+    return os.path.join(base_dir, "tests", group, ".fidelity_cache.json")
+
+
+def _load_fidelity_cache(base_dir: str, group: str) -> dict:
+    """Load cached fidelity results from per-group JSON."""
+    path = _fidelity_cache_path(base_dir, group)
     if os.path.isfile(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
-def _save_fidelity_cache(base_dir: str, cache: dict) -> None:
-    """Save fidelity cache to JSON."""
-    path = os.path.join(base_dir, "tests", ".fidelity_cache.json")
+def _save_fidelity_cache(base_dir: str, group: str, cache: dict) -> None:
+    """Save fidelity cache to per-group JSON."""
+    path = _fidelity_cache_path(base_dir, group)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2, ensure_ascii=False)
 
@@ -88,6 +95,7 @@ def run_all(
     inline_comments: bool = False,
     expand_macros: bool = False,
     no_semantic: bool = False,
+    no_lint: bool = False,
     enable_diff: bool = False,
     group_filter: str | None = None,
     name_filter: str | None = None,
@@ -109,9 +117,6 @@ def run_all(
         if os.path.isdir(gen_dir):
             shutil.rmtree(gen_dir)
             print(f"  [setup] cleared {os.path.relpath(gen_dir, base_dir)}/")
-
-    # ── 加载保真度缓存 ─────────────────────────────────
-    fidelity_cache = _load_fidelity_cache(base_dir)
 
     results = []
     total_ok = 0
@@ -146,6 +151,7 @@ def run_all(
                 transform_enabled=not no_semantic,
                 renderer_enabled=True,
                 stage=None,
+                no_lint=no_lint,
                 ext_dirs=DEFAULT_EXT_DIRS,
             )
         finally:
@@ -157,10 +163,13 @@ def run_all(
         err_msg = result["error"] or ""
         post_lint_errors = result.get("post_lint_errors", 0)
 
-        # ── 文本保真度比较（normal 组）────────────────
+        # ── 文本保真度比较（normal / transform 组）────────────────
+        # normal 组：ref = 输入文件，保真度 = 管线输出对输入的保留程度
+        # transform 组：ref = 正确展开后的输出，保真度 = 管线输出对展开预期的匹配程度
         fidelity = 1.0  # 默认值
         fidelity_dropped = False
-        if group == "normal" and success:
+        prev_display = fidelity  # 默认值，供块外引用
+        if group in ("normal", "transform") and success:
             base_name = name.replace("ref_", "", 1) if name.startswith("ref_") else name
             gen_path = os.path.join(out_dir, "gen", f"gen_{base_name}.v")
             if os.path.exists(gen_path):
@@ -176,15 +185,17 @@ def run_all(
                     fidelity = difflib.SequenceMatcher(None, ref_flat, gen_flat).ratio()
                     fidelity = round(fidelity, 4)
 
-                # 与缓存比较，检测保真度下降
-                prev = fidelity_cache.get(name)
+                # 按组加载缓存，检测保真度下降
+                group_cache = _load_fidelity_cache(base_dir, group)
+                prev = group_cache.get(name)
                 if prev is not None and fidelity < prev:
                     fidelity_dropped = True
                     fidelity_changed.append((name, prev, fidelity))
 
                 # 更新缓存：保存最高保真度（下降后不会覆盖缓存）
                 prev_display = prev if prev is not None else fidelity
-                fidelity_cache[name] = max(prev or 0, fidelity)
+                group_cache[name] = max(prev or 0, fidelity)
+                _save_fidelity_cache(base_dir, group, group_cache)
 
         # 判定测试结果
         if group == "errors":
@@ -192,7 +203,8 @@ def run_all(
         elif group == "warning":
             passed = success
         else:
-            passed = success  # normal 组：管线成功即通过，保真度下降仅触发 WARN
+            # normal/transform 组：管线成功即通过，但保真度下降算 FAIL
+            passed = success and not fidelity_dropped
 
         if passed:
             if group == "errors":
@@ -202,10 +214,7 @@ def run_all(
                 total_warn += 1
                 status = "WARN"
             else:
-                if fidelity_dropped:
-                    total_warn += 1
-                    status = "WARN"
-                elif post_lint_errors:
+                if post_lint_errors:
                     total_warn += 1
                     status = "LINT"
                 else:
@@ -219,16 +228,13 @@ def run_all(
 
         # 输出详情
         suffix = ""
-        if fidelity < 1.0 and group == "normal":
+        if fidelity < 1.0 and group in ("normal", "transform"):
             suffix = f"  fidelity={fidelity:.4f}"
         if fidelity_dropped:
             suffix += f"  ↓ from {prev_display:.4f}"
         if post_lint_errors:
             suffix += f"  post-lint={post_lint_errors}"
         print(f"  {name:25s} {status:5s} {err_msg[:30]}{suffix}")
-
-    # ── 保存保真度缓存 ─────────────────────────────────
-    _save_fidelity_cache(base_dir, fidelity_cache)
 
     # ── 打印保真度下降汇总 ────────────────────────────
     if fidelity_changed:
@@ -273,14 +279,15 @@ if __name__ == "__main__":
     inline_comments = "--inline-comments" in sys.argv
     expand_macros = "--expand-macros" in sys.argv
     no_semantic = "--no-semantic" in sys.argv
+    no_lint = "--no-lint" in sys.argv
     enable_diff = "--diff" in sys.argv  # kept for backward compat, no longer needed
 
     pos_args = [a for a in sys.argv[1:] if not a.startswith("-")]
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
     name_filter = pos_args[1] if len(pos_args) >= 2 else None
 
-    if group_filter and group_filter not in ("normal", "errors", "warning"):
-        print(f"[error] unknown group: {group_filter} (expected normal|errors|warning)")
+    if group_filter and group_filter not in ("normal", "errors", "warning", "transform"):
+        print(f"[error] unknown group: {group_filter} (expected normal|errors|warning|transform)")
         sys.exit(1)
     if name_filter:
         name_filter = f"ref_{name_filter}".replace(".v", "")
@@ -291,6 +298,7 @@ if __name__ == "__main__":
         inline_comments=inline_comments,
         expand_macros=expand_macros,
         no_semantic=no_semantic,
+        no_lint=no_lint,
         enable_diff=enable_diff,
         group_filter=group_filter,
         name_filter=name_filter,

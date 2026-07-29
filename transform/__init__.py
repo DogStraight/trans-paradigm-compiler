@@ -21,8 +21,9 @@ from .engine import AstTransformer, TransformPlugin, mark_extra, collect_extra_a
 
 # Load built-in transform plugins (must happen after load_all_components()
 # so component plugins register before engine plugins).
-from . import config_driven  # noqa: F401 — triggers @register_plugin
+# 顺序要求：SemanticMappingPlugin（建映射表）必须先于 ConfigDrivenTransform（消费映射表）
 from . import _semantic_mapping  # noqa: F401 — triggers @register_plugin
+from . import config_driven  # noqa: F401 — triggers @register_plugin
 
 __all__ = [
     "AstTransformer",

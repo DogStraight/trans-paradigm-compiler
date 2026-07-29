@@ -42,9 +42,15 @@ def find_symbol_in_scope(scope, name: str):
 
 
 def get_attrs_list(sym, field: str) -> list:
-    """从符号 attrs 中读取列表字段"""
+    """从符号 attrs 中读取列表字段
+
+    兼容 _build_capture_attrs 对单元素列表的 unwrap 行为：
+    若存的是单值而非列表，自动包装为列表返回。
+    """
     items = sym.attrs.get(field, []) if sym else []
-    return items if isinstance(items, list) else []
+    if isinstance(items, list):
+        return items
+    return [items]
 
 
 def match_marker(item: dict, marker: str) -> bool:

@@ -119,7 +119,11 @@ def _resolve_one(marker: str, item: dict, scope, rd: dict) -> dict | None:
             target_sym = find_symbol_in_scope(target_scope, role_key)
             if target_sym is None:
                 return None
-            src = get_attrs_list(target_sym, rd.get("source", "ports"))
+            # 优先使用已解析的回调数据（_ref_callbacks），回退到原始端口数据
+            # 回调数据包含 invert 等引用的展开结果，原始端口数据可能只是引用标记
+            src = get_attrs_list(target_sym, "_ref_callbacks") or get_attrs_list(
+                target_sym, rd.get("source", "ports")
+            )
             # 递归解析，展平内层回调（防止 kind:invert 等回调混入 resolved_ports）
             resolved = _resolve_and_flatten(src, target_scope, rd.get("refs", []))
             if not resolved:
@@ -158,9 +162,18 @@ def _resolve_and_flatten(
     """
     result = []
     callbacks = _collect_callbacks(items, scope, ref_descs)
-    for cb in callbacks:
-        if isinstance(cb, dict) and "resolved_ports" in cb:
-            result.extend(deepcopy(cb["resolved_ports"]))
-        else:
-            result.append(deepcopy(cb))
+    if callbacks:
+        for cb in callbacks:
+            if isinstance(cb, dict) and "resolved_ports" in cb:
+                result.extend(deepcopy(cb["resolved_ports"]))
+            else:
+                result.append(deepcopy(cb))
+    else:
+        # 无嵌套 ref_descs 时，items 可能已是 _ref_callbacks 数据
+        # （直接含 resolved_ports 的回调），尝试提取
+        for it in items:
+            if isinstance(it, dict) and "resolved_ports" in it:
+                result.extend(deepcopy(it["resolved_ports"]))
+            else:
+                result.append(deepcopy(it))
     return result

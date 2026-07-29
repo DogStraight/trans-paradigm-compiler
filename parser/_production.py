@@ -343,6 +343,20 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
             if inner and getattr(inner, "is_block", False):
                 return True
 
+    # 定长 production（顶层无 ? * + 后缀）：production 已精确消费规则应占的 token，
+    # 当前 token 是父规则的责任。正匹配项此时仅作日志警告，不拒绝规则。
+    # 这使 end_case 的 "symbol.base.comma" / "bracket.r_parentheses" 等
+    # 可推导项可以从语法规则中安全移除，只在变长 production 中保留硬要求。
+    if not _has_variable_production(rule):
+        if token:
+            self._log_state(
+                f"~ end_case 不匹配(定长production,仅警告): 规则 {rule.name} "
+                f"期望 {raw_list}, 实际 '{token.content}' (type={token.type}) "
+                f"Ln {token.line}",
+                context=context,
+            )
+        return True
+
     if token:
         self._log_state(
             f"✗ end_case 不匹配: 规则 {rule.name} "
@@ -350,6 +364,28 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
             f"Ln {token.line}",
             context=context,
         )
+    return False
+
+
+def _has_variable_production(rule: GrammarRule) -> bool:
+    """检查规则的 production 列表是否含有变长元素（顶层 ? * + 后缀）。
+
+    定长 production 的所有元素都是固定匹配（无 ? * +），解析器已精确消费
+    规则应有的 token，end_case 正匹配仅为建议。变长 production 需要
+    end_case 来确定何时停止重复匹配。
+    """
+    for prod in getattr(rule, "production", []):
+        if not isinstance(prod, str):
+            continue
+        # 扫描顶层字符（不在括号内）是否有 ? * + 后缀
+        depth = 0
+        for ch in prod:
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            elif depth == 0 and ch in ('?', '*', '+'):
+                return True
     return False
 
 
