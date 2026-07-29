@@ -85,7 +85,7 @@ def _infer_scope_kind(rule_name: str, first_tokens: set[str]) -> "ScopeKind":
         "TaskDeclOld": ScopeKind.TASK,
         "GenerateBlock": ScopeKind.GENERATE,
         "LoopGen": ScopeKind.GENERATE,
-        "CaseStatement": ScopeKind.CASE,
+        "CaseStmt": ScopeKind.CASE,
     }
     if rule_name in name_map:
         return name_map[rule_name]

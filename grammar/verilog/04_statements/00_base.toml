@@ -10,23 +10,24 @@
 #     ├─ DeclStmt        : WireDecl, RegDecl, BodyPortDecl, ...
 #     ├─ InstStmt        : ModuleInst, GenerateBlock, LoopGen
 #     ├─ FuncStmt        : FuncDecl, TaskDecl
-#     ├─ AssignStmt      : AssignStatement (module-level)
-#     └─ ProcStmt        : AlwaysBlock (进入过程体)
+#     ├─ AssignStmt      : AssignStmt (module-level)
+#     ├─ ProcStmt        : AlwaysStmt, InitialStmt (进入过程体)
+#     └─ (initial 仅用于仿真，不可综合)
 #
-#   Statement           (过程体语句)
+#   Stmt                (过程体语句)
 #     ├─ CtrlStmt        : If, Case, ForLoop, BeginEnd
 #     ├─ ProcAssignStmt  : BlockingAssign, NonBlockingAssign
 #     ├─ ProcLocalDecl   : RegDecl, IntegerDecl
 #     └─ CallStmt        : SubroutineCall, NullStmt
 #
-#   TaskStatement       = Statement | TaskPortDecl
+#   TaskStmt            = Stmt | TaskPortDecl
 # ============================================================================
 
 # ---------- 过程体控制流 ----------
 [CtrlStmt]
 [CtrlStmt.parser]
 production = [
-    "@IfBlock|@IfStmt|@CaseStatement|@ForLoopBlock|@ForLoop|@BeginEnd|@EventWaitStmt",
+    "@IfBlock|@IfStmt|@CaseStmt|@ForLoopBlock|@ForLoop|@BeginEnd|@EventWaitStmt",
 ]
 inline = true
 [CtrlStmt.parser.node]
@@ -65,23 +66,23 @@ decl = "$1"
 layout = { ref = "decl" }
 
 # ---------- 过程语句（用于 always / initial 内部） ----------
-[Statement]
-[Statement.parser]
+[Stmt]
+[Stmt.parser]
 production = ["@CtrlStmt|@ProcAssignStmt|@ProcLocalDecl|@CallStmt"]
 inline = true
-[Statement.parser.node]
+[Stmt.parser.node]
 stmt = "$1"
-[Statement.renderer]
+[Stmt.renderer]
 layout = { ref = "stmt" }
 
 # ---------- 任务/函数语句（额外允许 TaskPortDecl） ----------
-[TaskStatement]
-[TaskStatement.parser]
+[TaskStmt]
+[TaskStmt.parser]
 production = ["@CtrlStmt|@ProcAssignStmt|@ProcLocalDecl|@CallStmt|@TaskPortDecl"]
 inline = true
-[TaskStatement.parser.node]
+[TaskStmt.parser.node]
 stmt = "$1"
-[TaskStatement.renderer]
+[TaskStmt.renderer]
 layout = { ref = "stmt" }
 
 # ---------- 模块体声明 ----------
@@ -94,10 +95,10 @@ decl = "$1"
 [DeclStmt.renderer]
 layout = { ref = "decl" }
 
-# ---------- 模块体实例化 ----------
+# ---------- 模块体实例化 / 生成 ----------
 [InstStmt]
 [InstStmt.parser]
-production = ["@ModuleInst|@GenerateBlock"]
+production = ["@ModuleInst|@GenerateBlock|@LoopGen"]
 inline = true
 [InstStmt.parser.node]
 inst = "$1"
@@ -114,10 +115,12 @@ decl = "$1"
 [FuncStmt.renderer]
 layout = { ref = "decl" }
 
-# ---------- 模块体过程（always） ----------
+# ---------- 模块体过程（always / initial） ----------
+# initial 仅用于仿真场景（不可综合），但语法解析层面与 always 同级。
+# 若后续需要区分仿真/综合上下文，可通过 analyzer 阶段或单独的语法变体实现过滤。
 [ProcStmt]
 [ProcStmt.parser]
-production = ["@AlwaysBlock"]
+production = ["@AlwaysStmt|@InitialStmt"]
 inline = true
 [ProcStmt.parser.node]
 stmt = "$1"
@@ -128,7 +131,7 @@ layout = { ref = "stmt" }
 [ModuleItem]
 [ModuleItem.parser]
 production = [
-    "@DeclStmt|@InstStmt|@FuncStmt|@AssignStatement|@ProcStmt",
+    "@DeclStmt|@InstStmt|@FuncStmt|@AssignStmt|@ProcStmt",
 ]
 inline = true
 [ModuleItem.parser.node]

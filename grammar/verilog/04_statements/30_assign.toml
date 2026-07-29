@@ -1,3 +1,19 @@
+# ============================================================================
+# Verilog 语法规则 — 赋值语句
+# ============================================================================
+# 本文件定义三种赋值类型:
+#   NonBlockingAssign — 非阻塞赋值 <=（过程体内）
+#   BlockingAssign     — 阻塞赋值 =（过程体内）
+#   AssignStmt         — 连续赋值 assign（模块级）
+#
+# 被引用于: 04_statements/00_base.toml (ProcAssignStmt, DeclStmt)
+
+# ============================================================================
+# NonBlockingAssign — 非阻塞赋值
+# ============================================================================
+# 过程体内的 <= 赋值，目标必须是 reg 或 integer 等变量类型。
+# 所有 <= 在过程块结束时同时更新，用于时序逻辑。
+
 [NonBlockingAssign.parser]
 production = [
     "@PrimaryExpr",
@@ -23,6 +39,12 @@ line = [
 
 [NonBlockingAssign.structure]
 is_statement = true
+
+
+# ============================================================================
+# BlockingAssign — 阻塞赋值
+# ============================================================================
+# 过程体内的 = 赋值，语句按顺序执行，用于组合逻辑。
 
 [BlockingAssign.parser]
 production = [
@@ -50,7 +72,14 @@ line = [
 [BlockingAssign.structure]
 is_statement = true
 
-[AssignStatement.parser]
+
+# ============================================================================
+# AssignStmt — 连续赋值
+# ============================================================================
+# 模块级的 assign 语句，目标可以是 wire 或 reg。
+# 在模块体中连续执行（非过程体内）。
+
+[AssignStmt.parser]
 production = [
     "keyword.assign",
     "@PrimaryExpr",
@@ -62,11 +91,11 @@ end_case = [
     "newline",
 ]
 
-[AssignStatement.parser.node]
+[AssignStmt.parser.node]
 target = "$2"
 value = "$4"
 
-[AssignStatement.renderer.layout]
+[AssignStmt.renderer.layout]
 line = [
     "assign ",
     { ref = "target" },
@@ -75,5 +104,5 @@ line = [
     ";",
 ]
 
-[AssignStatement.structure]
+[AssignStmt.structure]
 is_statement = true

@@ -11,9 +11,6 @@ production = [
 ]
 end_case = [
     "newline",
-    "symbol.base.semicolon",
-    "symbol.base.comma",
-    "bracket.r_parentheses",
 ]
 
 [TypedPortDecl.parser.node]

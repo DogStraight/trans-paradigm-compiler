@@ -387,20 +387,34 @@ class GrammarRule:
 
         # 从 structure 字典中计算 is_block / is_statement / is_atom
         #
-        # TOML 写法:
-        #   structure = { is_block = true }           — 块规则，走 parse_block
-        #   structure = { is_statement = true }       — 语句规则
-        #   structure = { is_atom = true }            — 原子规则（表达式粒度）
+        # 三个标记是**正交的标记位**，各自控制不同维度的解析行为：
         #
-        # 真值表（唯一有效组合）:
+        #   is_block     — 解析策略：该规则有 bound（起止符），被引用时
+        #                  newline 跳过逻辑不同，First set 计算跳过其内容。
+        #                  用于 function…endfunction 等块结构。
+        #
+        #   is_statement — 可见性：该规则出现在 parse_sentence() 的候选
+        #                  列表中，可在块体内作为独立语句被识别。
+        #
+        #   is_atom      — 解析策略：原子/终结点规则（Number、Identifier），
+        #                  不进一步分解。
+        #
+        # TOML 写法:
+        #   structure = { is_block = true }            — 块规则
+        #   structure = { is_statement = true }        — 语句规则
+        #   structure = { is_atom = true }             — 原子规则
+        #   structure = { is_block = true, is_statement = true }  — 块语句
+        #
+        # 标记位组合:
         #   is_block  is_statement  is_atom   |  含义
-        #   ──────────────────────────────────┼─────────────────
-        #    false      false       false     |  子句级规则（默认，不写 structure）
-        #    false      true        false     |  语句规则
-        #    false      false       true      |  原子规则（Number/Identifier）
-        #    true       false       false     |  块规则（ModuleBlock）
-        #   ──────────────────────────────────┴─────────────────
-        #   三种标记互斥，同时只能有一个为 true。
+        #   ──────────────────────────────────┼─────────────────────────
+        #    false      false       false     |  子句级规则（默认）
+        #    false      true        false     |  语句规则（IfStmt）
+        #    false      false       true      |  原子规则（Number）
+        #    true       false       false     |  纯块规则（Root）
+        #    true       true        false     |  块语句（FuncDeclANSI）
+        #   ──────────────────────────────────┴─────────────────────────
+        #   理论上 is_block + is_atom 同时为 true 无意义，代码中不会出现。
         struct = getattr(self, "structure", None) or {}
         self.is_block = struct.get("is_block", False)
         self.is_statement = struct.get("is_statement", False)

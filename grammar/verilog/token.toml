@@ -1,3 +1,18 @@
+# ============================================================================
+# Verilog 语言词法 Token 定义
+# ============================================================================
+# 本文件定义 Verilog 语言的关键字 Token 和系统函数注册表。
+# 基础运算符和符号 Token 在 base/_token.toml 中定义。
+#
+# 本文件覆盖的 Token:
+#   [comment]        — 注释样式（行注释 //, 块注释 /* */）
+#   [symbol.extend]  — 多字符符号（+:  -:  and  or  not）
+#   [id.keyword]     — Verilog 关键字（always, module, if 等）
+#   [sysfunc]        — 系统函数名（$display, $clog2 等）
+#
+# ⚠ 已知限制: 当前只覆盖 Verilog-1995/2001 关键字，
+#   未包含 SystemVerilog 关键字（logic, always_ff, always_comb 等）。
+
 [comment]
 # 注释类型定义: [起始标记, 结束标记, 类型]
 # line 类型: 行注释，结束于 newline

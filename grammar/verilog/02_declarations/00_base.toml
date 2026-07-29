@@ -1,6 +1,23 @@
 # ============================================================================
 # Verilog 语法规则 — 端口与声明（组合复用）
 # ============================================================================
+# 本文件定义端口和声明的基础组合单元，被 ANSI 端口、Body 端口、Task 端口
+# 以及 Wire/Reg/Integer 声明等规则复用：
+#   Declarator      — 单个声明器: name [range] = init
+#   RangeBracket    — 带括号的范围 [msb:lsb]，用于多维数组
+#   DeclaratorList  — 逗号分隔的声明器列表
+#   TypeSpec        — 类型描述符（wire/reg + signed + range）
+#   TypeSpecNoReg   — input/inout 专用类型描述符（不含 reg）
+#   PortTail        — 端口声明公共尾部（direction + TypeSpec + DeclaratorList）
+#   Init            — 初始化器 = expr
+#   Range           — 范围 [msb:lsb]
+
+# ============================================================================
+# Declarator — 声明器
+# ============================================================================
+# 单个声明项: name [range] [= init_value]
+# 例如: data_out [0:7] = 8'h00
+# end_case 使用 "!symbol.base.dot" 排除号段，防止 eat .port_name 语法。
 
 [Declarator]
 [Declarator.parser]
@@ -20,7 +37,13 @@ layout = { line = [
     ] } },
 ] }
 
-# 带括号的范围（用于数组维域：@RangeBracket* 实现 [0:3][0:7]）
+
+# ============================================================================
+# RangeBracket — 带括号的范围（数组维域）
+# ============================================================================
+# 将 Range 包装为带括号的形式，用于多维数组声明。
+# 例如: [0:3][0:7]（两个 RangeBracket）
+
 [RangeBracket]
 [RangeBracket.parser]
 production = ["@Range"]
@@ -33,6 +56,12 @@ layout = { line = [
     "]",
 ] }
 
+
+# ============================================================================
+# DeclaratorList — 声明器列表
+# ============================================================================
+# 逗号分隔的多个声明器，如 wire a, b, c;
+
 [DeclaratorList]
 [DeclaratorList.parser]
 production = ["@Declarator", "(symbol.base.comma,@Declarator)*"]
@@ -41,7 +70,13 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 [DeclaratorList.renderer]
 layout = { join = ", ", items = "items", nest = 1 }
 
-# ---------- 类型描述符（端口/声明的类型部分）----------
+
+# ============================================================================
+# TypeSpec — 类型描述符
+# ============================================================================
+# 端口/声明的类型部分: (wire|reg)? signed? [range]?
+# 用于 output/端口体声明（output 允许 reg）等场景。
+
 [TypeSpec]
 [TypeSpec.parser]
 production = ["(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?"]
@@ -56,7 +91,12 @@ layout = { line = [
     { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
 ] }
 
-# input/inout 专用类型描述符（不含 reg）
+
+# ============================================================================
+# TypeSpecNoReg — input/inout 专用类型描述符（不含 reg）
+# ============================================================================
+# 与 TypeSpec 的区别是不含 keyword.reg，因为 input/inout 不能声明为 reg。
+
 [TypeSpecNoReg]
 [TypeSpecNoReg.parser]
 production = ["keyword.wire?", "keyword.signed?", "@Range?"]
@@ -71,7 +111,14 @@ layout = { line = [
     { opt = { group = [" [", { ref = "packed_range" }, "]"] } },
 ] }
 
-# ---------- 端口声明公共尾部（复用：input/output/inout × ANSI/Body/Task）----------
+
+# ============================================================================
+# PortTail — 端口声明公共尾部
+# ============================================================================
+# 端口声明的公共部分: TypeSpec + DeclaratorList
+# 被 BodyInputDecl/BodyOutputDecl/BodyInoutDecl/TaskInputDecl 等复用。
+# 通过 dot 路径语法 ($1.port_type) 穿透 TypeSpec 提取子属性。
+
 [PortTail]
 [PortTail.parser]
 production = ["@TypeSpec", "@DeclaratorList"]
@@ -81,7 +128,12 @@ is_signed = "$1.is_signed"
 packed_range = "$1.packed_range"
 items = "$2"
 
-# ---------- 初始化与范围 ----------
+
+# ============================================================================
+# Init — 初始化器
+# ============================================================================
+# = value 部分，如 `= 8'hFF`。inline = true 展平为父节点的一部分。
+
 [Init]
 [Init.parser]
 production = ["symbol.base.equal", "@Expression"]
@@ -90,6 +142,13 @@ inline = true
 value = "$2"
 [Init.renderer]
 layout = { line = ["= ", { ref = "value" }] }
+
+
+# ============================================================================
+# Range — 范围 [msb:lsb]
+# ============================================================================
+# Verilog 的范围声明 [msb:lsb]，如 [7:0]、[WIDTH-1:0]。
+# bound 定义了 [ 和 ] 的配对关系，便于解析器识别范围边界。
 
 [Range]
 [Range.parser]
@@ -110,8 +169,4 @@ layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
 [Range.bound]
 start = "bracket.l_square_bracket"
 end = "bracket.r_square_bracket"
-
-# ============================================================================
-# 模块 ANSI 端口（括号内，无分号）
-# ============================================================================
 

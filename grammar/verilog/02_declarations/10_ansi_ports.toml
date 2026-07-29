@@ -1,3 +1,17 @@
+# ============================================================================
+# Verilog 语法规则 — ANSI 端口声明
+# ============================================================================
+# 本文件定义模块 ANSI 风格端口列表（括号内，无分号）和任务 ANSI 端口。
+# ANSI 端口即在 module/task/function 头部括号内直接声明的端口。
+#
+# 被引用于: 01_module.toml (PortParens → PortList)
+
+# ============================================================================
+# PortList — 模块 ANSI 端口列表
+# ============================================================================
+# module 头部括号内的端口列表: (input clk, output [3:0] data, …)
+# join = ", " 以逗号+空格连接，first_soft = true 在 flat 模式省略首空格。
+
 [PortList.parser]
 production = [
     "@AnsiPortDecl",
@@ -15,6 +29,14 @@ join = ", "
 first_soft = true
 nest = 1
 items = "items"
+
+
+# ============================================================================
+# TaskPortList — 任务 ANSI 端口列表
+# ============================================================================
+# task 头部括号内的端口列表，结构与 PortList 相同。
+# 语法上 tasks 的 input 端口不允许 reg 类型（PortTail 使用 TypeSpec），
+# 但 output/inout 允许 reg。
 
 [TaskPortList.parser]
 production = [
@@ -34,6 +56,11 @@ first_soft = true
 nest = 1
 items = "items"
 
+
+# ============================================================================
+# TaskAnsiPortDecl — 任务 ANSI 端口声明（分发器）
+# ============================================================================
+
 [TaskAnsiPortDecl.parser]
 production = [
     "@TaskAnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
@@ -46,14 +73,18 @@ decl = "$1"
 [TaskAnsiPortDecl.renderer.layout]
 ref = "decl"
 
+
+# ============================================================================
+# TaskAnsiInputDecl — 任务 ANSI input 端口
+# ============================================================================
+# 任务函数的 input 端口，使用 @PortTail（不含 reg 的 TypeSpecNoReg）。
+
 [TaskAnsiInputDecl.parser]
 production = [
     "keyword.input",
     "@PortTail",
 ]
 end_case = [
-    "symbol.base.comma",
-    "bracket.r_parentheses",
     "newline",
 ]
 
@@ -91,6 +122,11 @@ line = [
     { ref = "items" },
 ]
 
+
+# ============================================================================
+# AnsiPortDecl — 模块 ANSI 端口声明（分发器）
+# ============================================================================
+
 [AnsiPortDecl.parser]
 production = [
     "@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
@@ -103,6 +139,11 @@ decl = "$1"
 [AnsiPortDecl.renderer.layout]
 ref = "decl"
 
+# ============================================================================
+# DirSpec — 端口方向描述符
+# ============================================================================
+# Verilog 端口方向: input / output / inout
+
 [DirSpec.parser]
 production = [
     "keyword.input|keyword.output|keyword.inout",
@@ -113,6 +154,12 @@ direction = "$1"
 
 [DirSpec.renderer.layout]
 ref = "direction"
+
+
+# ============================================================================
+# PortDeclPrefix — 端口声明前缀（方向 + 类型）
+# ============================================================================
+# 端口声明的公共前缀部分，主要用于 Body 风格端口和旧式端口声明。
 
 [PortDeclPrefix.parser]
 production = [
@@ -154,6 +201,13 @@ group = [
     "]",
 ]
 
+
+# ============================================================================
+# AnsiInputDecl — 模块 ANSI input 端口
+# ============================================================================
+# 模块 ANSI 风格 input 声明，使用 @TypeSpecNoReg（input 不允许 reg）。
+# 逗号分隔由父规则 PortList 的 (， @AnsiPortDecl)* 管理。
+
 [AnsiInputDecl.parser]
 production = [
     "keyword.input",
@@ -161,9 +215,6 @@ production = [
     "@DeclaratorList",
 ]
 end_case = [
-    "symbol.base.comma",
-    "bracket.r_parentheses",
-    "symbol.base.semicolon",
     "newline",
 ]
 
@@ -201,6 +252,12 @@ line = [
     { ref = "items" },
 ]
 
+
+# ============================================================================
+# AnsiOutputDecl — 模块 ANSI output 端口
+# ============================================================================
+# 模块 ANSI 风格 output 声明，使用 @TypeSpec（output 允许 reg 类型）。
+
 [AnsiOutputDecl.parser]
 production = [
     "keyword.output",
@@ -208,9 +265,6 @@ production = [
     "@DeclaratorList",
 ]
 end_case = [
-    "symbol.base.comma",
-    "bracket.r_parentheses",
-    "symbol.base.semicolon",
     "newline",
 ]
 
@@ -248,6 +302,12 @@ line = [
     { ref = "items" },
 ]
 
+
+# ============================================================================
+# AnsiInoutDecl — 模块 ANSI inout 端口
+# ============================================================================
+# 模块 ANSI 风格 inout 声明，使用 @TypeSpecNoReg（inout 不允许 reg）。
+
 [AnsiInoutDecl.parser]
 production = [
     "keyword.inout",
@@ -255,9 +315,6 @@ production = [
     "@DeclaratorList",
 ]
 end_case = [
-    "symbol.base.comma",
-    "bracket.r_parentheses",
-    "symbol.base.semicolon",
     "newline",
 ]
 

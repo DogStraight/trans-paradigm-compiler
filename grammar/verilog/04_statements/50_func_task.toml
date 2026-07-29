@@ -1,3 +1,15 @@
+# ============================================================================
+# Verilog 语法规则 — function/task 声明
+# ============================================================================
+# 本文件定义函数和任务声明，各支持两种风格:
+#   FuncDeclANSI / FuncDeclOld  — 函数（ANSI 和旧式）
+#   TaskDeclANSI / TaskDeclOld  — 任务（ANSI 和旧式）
+#
+# 被引用于: 04_statements/00_base.toml (FuncStmt)
+#
+# ⚠ 已知限制: 当前未实现 function 返回类型（integer/real/time）的完整支持，
+#   只支持 [range] 形式的位宽返回。
+
 [FuncDecl.parser]
 production = [
     "@FuncDeclANSI|@FuncDeclOld",
@@ -129,6 +141,11 @@ break = 2
 is_block = true
 is_statement = true
 
+
+# ============================================================================
+# TaskDecl — 任务声明（分发器）
+# ============================================================================
+
 [TaskDecl.parser]
 production = [
     "@TaskDeclANSI|@TaskDeclOld",
@@ -137,6 +154,12 @@ inline = true
 
 [TaskDecl.parser.node]
 body = "$1"
+
+
+# ============================================================================
+# TaskDeclANSI — 任务声明（ANSI 风格）
+# ============================================================================
+# 格式: task [automatic] name (ports); … endtask
 
 [TaskDeclANSI.parser]
 bound = { start = "keyword.task", end = "keyword.endtask" }
@@ -233,3 +256,10 @@ break = 2
 [TaskDeclOld.structure]
 is_block = true
 is_statement = true
+
+
+# ============================================================================
+# TaskDeclOld — 任务声明（旧式风格）
+# ============================================================================
+# 格式: task [automatic] name; …端口声明… endtask
+# 与 ANSI 风格的区别是端口在函数体内声明而非括号内。

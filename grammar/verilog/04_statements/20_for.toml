@@ -1,3 +1,13 @@
+# ============================================================================
+# Verilog 语法规则 — for 循环
+# ============================================================================
+# 本文件定义 Verilog for 循环两种变体:
+#   ForLoop       — for 体可用任意语句
+#   ForLoopBlock  — for 体必须用 begin…end
+#
+# 配合规则: ForInit（初始化）, ForStep（步进）, ForBodyStmt（循环体分发）
+# 被引用于: 04_statements/00_base.toml (CtrlStmt)
+
 [ForLoop.parser]
 production = [
     "keyword.for",
@@ -35,6 +45,12 @@ line = [
 
 [ForLoop.structure]
 is_statement = true
+
+
+# ============================================================================
+# ForLoopBlock — for 循环（块体版）
+# ============================================================================
+# for 体必须用 @BeginEnd（即 begin…end）。
 
 [ForLoopBlock.parser]
 production = [

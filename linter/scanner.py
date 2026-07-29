@@ -19,7 +19,7 @@ from preprocessor._expand import scan_directives, expand_tokens, _load_config
 from . import LintDiagnostic, Position
 from .grammar_slicer import build_slice_tree, get_start_tokens
 
-_TRIVIA = frozenset({"newline", "space.fold", "comment", "space"})
+_TRIVIA = frozenset({"space.fold", "comment", "space"})
 
 
 def _is_better_match(
@@ -109,6 +109,18 @@ class LinterScanner:
         # ── 动态收集 block 起止符 ─────────────────
         self._block_openers, self._block_closers, self._block_pairs, self._opener_to_rule = (
             self._build_block_delimiters(rules)
+        )
+        # 从 bound 配置推导括号起止符集 + 需跳过头的 bound
+        self._bracket_openers = frozenset(
+            t for t in self._block_openers if t.startswith("bracket.")
+        )
+        self._bracket_closers = frozenset(
+            t for t in self._block_closers if t.startswith("bracket.")
+        )
+        self._header_bounds = frozenset(
+            t for t in self._block_openers
+            if not t.startswith("bracket.")
+            and t not in ("keyword.begin", "keyword.generate")
         )
 
         self.enable_phase0 = enable_phase0
@@ -341,7 +353,7 @@ class LinterScanner:
     def _phase2_statement(self, tokens: list, skeleton: dict) -> list:
         """轻量版句扫描：用 _start_map + _consume 确定语句边界。
 
-        不构建 AST、不管理作用域——只回答「当前 token 是否是合法语句开始」。
+        括号集/头跳过集均从 bound 配置推导，无硬编码 token。
         """
         errors: list = []
         bracket_depth = 0
@@ -354,19 +366,23 @@ class LinterScanner:
                 break
             t = tokens[i]
 
-            # 括号深度
-            if t.type in ("bracket.l_parentheses", "bracket.l_square_bracket"):
+            if t.type == "newline":
+                i += 1
+                continue
+
+            # 括号深度（从 _bracket_openers/_bracket_closers 推导）
+            if t.type in self._bracket_openers:
                 bracket_depth += 1
                 i += 1
                 continue
-            if t.type in ("bracket.r_parentheses", "bracket.r_square_bracket"):
+            if t.type in self._bracket_closers:
                 bracket_depth = max(0, bracket_depth - 1)
                 i += 1
                 continue
 
-            # 关键字 bound 起止符
+            # 关键字 bound（非括号 bound）
             if t.type in self._block_openers:
-                if t.type in ("keyword.module", "keyword.function", "keyword.task"):
+                if t.type in self._header_bounds:
                     skip_until_semi = True
                 i += 1
                 continue
@@ -374,12 +390,10 @@ class LinterScanner:
                 i += 1
                 continue
 
-            # 括号内部跳过
             if bracket_depth > 0:
                 i += 1
                 continue
 
-            # 模块/函数头跳过
             if skip_until_semi:
                 if t.type == "symbol.base.semicolon":
                     skip_until_semi = False
@@ -409,9 +423,7 @@ class LinterScanner:
             i += 1
             while i < len(tokens) and tokens[i].type not in (
                 "newline",
-            ) and tokens[i].type not in self._block_closers and tokens[i].type not in (
-                "bracket.r_parentheses", "bracket.r_square_bracket"
-            ):
+            ) and tokens[i].type not in self._block_closers and tokens[i].type not in self._bracket_closers:
                 i += 1
 
         return errors
@@ -880,27 +892,23 @@ class LinterScanner:
 
     # ── 辅助 ─────────────────────────────────────────
 
-    def _skip_to_end(self, tokens: list, i: int, end_set: set[str]) -> int:
+    def _skip_to_end(self, tokens: list[Token], i: int, end_set: set[str]) -> int:
         depth = 0
-        # 分离 ! 前缀的排除项
         exclude = {s[1:] for s in end_set if s.startswith("!")}
         positive = {s for s in end_set if not s.startswith("!")}
-        # 没有正项止步条件时，只前进 1 token（避免吞掉整个语句）
         if not positive:
             return self._skip(tokens, i + 1)
         while i < len(tokens):
             t = tokens[i]
-            if t.type in _TRIVIA:
-                i += 1
-                continue
-            # ! 前缀表示遇到该 token 时不停止（继续前进）
             if t.type in exclude:
                 i += 1
                 continue
-            if "newline" in positive and t.type == "newline":
-                return i + 1
+            # end_case 匹配优先于 trivia 跳过
             if t.type in positive and depth == 0:
                 return i + 1
+            if t.type in _TRIVIA:
+                i += 1
+                continue
             if t.type in self._block_openers:
                 depth += 1
             elif t.type in self._block_closers:

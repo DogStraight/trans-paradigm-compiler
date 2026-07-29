@@ -1,3 +1,16 @@
+# ============================================================================
+# Verilog 语法规则 — 模块体端口声明（带分号）
+# ============================================================================
+# 本文件定义模块体内部的端口声明（即非 ANSI 风格，在 begin…end 外写
+# input/output/inout + 分号的形式）以及任务/函数体的端口声明。
+#
+# 这些规则与 ANSI 端口共享 PortTail/TypeSpec/DeclaratorList 等基础单元。
+# 被引用于: 04_statements/00_base.toml (DeclStmt → BodyPortDecl)
+
+# ============================================================================
+# BodyPortDecl — 模块体端口声明（分发器）
+# ============================================================================
+
 [BodyPortDecl.parser]
 production = [
     "@BodyInputDecl|@BodyOutputDecl|@BodyInoutDecl",
@@ -9,6 +22,13 @@ decl = "$1"
 
 [BodyPortDecl.renderer.layout]
 ref = "decl"
+
+
+# ============================================================================
+# BodyInputDecl — 模块体 input 声明
+# ============================================================================
+# 模块体内的 input 端口声明，以分号结尾。
+# 格式: input [wire] [signed] [range] name1, name2, ... ;
 
 [BodyInputDecl.parser]
 production = [
@@ -55,6 +75,13 @@ line = [
 [BodyInputDecl.structure]
 is_statement = true
 
+
+# ============================================================================
+# BodyOutputDecl — 模块体 output 声明
+# ============================================================================
+# 模块体内的 output 端口声明，以分号结尾。
+# 格式: output [wire|reg] [signed] [range] name1, name2, ... ;
+
 [BodyOutputDecl.parser]
 production = [
     "keyword.output",
@@ -100,6 +127,13 @@ line = [
 [BodyOutputDecl.structure]
 is_statement = true
 
+
+# ============================================================================
+# BodyInoutDecl — 模块体 inout 声明
+# ============================================================================
+# 模块体内的 inout 端口声明，以分号结尾。
+# 格式: inout [wire] [signed] [range] name1, name2, ... ;
+
 [BodyInoutDecl.parser]
 production = [
     "keyword.inout",
@@ -144,6 +178,12 @@ line = [
 
 [BodyInoutDecl.structure]
 is_statement = true
+
+
+# ============================================================================
+# TaskPortDecl — 任务/函数体端口声明（分发器）
+# ============================================================================
+# 任务和函数体内的端口声明（带分号），结构与 BodyPortDecl 相同。
 
 [TaskPortDecl.parser]
 production = [
@@ -202,6 +242,11 @@ line = [
 [TaskInputDecl.structure]
 is_statement = true
 
+
+# ============================================================================
+# TaskOutputDecl — 任务/函数体 output 声明
+# ============================================================================
+
 [TaskOutputDecl.parser]
 production = [
     "keyword.output",
@@ -246,6 +291,11 @@ line = [
 
 [TaskOutputDecl.structure]
 is_statement = true
+
+
+# ============================================================================
+# TaskInoutDecl — 任务/函数体 inout 声明
+# ============================================================================
 
 [TaskInoutDecl.parser]
 production = [

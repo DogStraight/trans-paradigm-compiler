@@ -1,9 +1,34 @@
+# ============================================================================
+# Verilog 语法规则 — 表达式 [基础]
+# ============================================================================
+# 本文件定义 Verilog 表达式体系的全部节点：
+#   字面量:   BitWidthLiteral, Number
+#   标识符:   Identifier
+#   选择/索引: SelectSuffix, SelectExpr
+#   拼接/复制: ConcatExpr, ReplicateExpr
+#   函数调用: CallExpr, SysFuncCall, ArgumentList
+#   运算符链: UnaryExpr → MulExpr → AddExpr → CompareExpr
+#            → LogicAndExpr → LogicOrExpr → Expression
+#   控制流:   ParenthesizedExpr
+#
+# 依赖: base/_token.toml (运算符符号、括号、逗号等)
+# 被引用于: 几乎所有其他语法文件
+
+# ============================================================================
+# BitWidthLiteral — 位宽字面量
+# ============================================================================
+# Verilog 的带宽度基数数字，如 `8'hFF`, `32'd100`, `4'b1010`。
+# 格式: <width>'<s?><base><value>
+#   width — 十进制宽度（literal.number）
+#   '     — 基数标记
+#   value — 完整数字串（由 @Identifier 捕获，包含基数字符和数值部分）
+#
+# ⚠ 已知限制: 当前未拆分 base（h/d/b/o）和 value 为独立字段，
+#   渲染时通过 ref="value" 直接输出 Identifier 内容（如 "hFF"）。
+#   若需精确控制（如 signed 标识 'sh' 的支持），需扩展生产式。
+
 [BitWidthLiteral.parser]
-production = [
-    "literal.number",
-    "symbol.base.single_quote",
-    "@Identifier",
-]
+production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
 
 [BitWidthLiteral.parser.structure]
 is_atom = true
@@ -15,13 +40,7 @@ value = "$3"
 [[BitWidthLiteral.renderer.layout.line]]
 
 [BitWidthLiteral.renderer.layout.line.opt]
-group = [
-    { ref = "width" },
-    "'",
-]
-
-[[BitWidthLiteral.renderer.layout.line]]
-ref = "base"
+group = [{ ref = "width" }, "'"]
 
 [[BitWidthLiteral.renderer.layout.line]]
 ref = "value"
@@ -30,9 +49,7 @@ ref = "value"
 is_atom = true
 
 [Number.parser]
-production = [
-    "literal.number",
-]
+production = ["literal.number"]
 
 [Number.parser.structure]
 is_atom = true
@@ -46,10 +63,16 @@ ref = "value"
 [Number.structure]
 is_atom = true
 
+
+# ============================================================================
+# Identifier — 标识符
+# ============================================================================
+# Verilog 标识符，匹配 [a-z_A-Z][a-z_A-Z0-9]*。
+# 是表达式中最基本的原子节点。
+# analyzer 中 identifier_ref = true 表示此节点参与符号引用分析。
+
 [Identifier.parser]
-production = [
-    "id",
-]
+production = ["id"]
 inline = false
 
 [Identifier.parser.structure]
@@ -67,12 +90,15 @@ ref = "content"
 [Identifier.structure]
 is_atom = true
 
+
+# ============================================================================
+# ParenthesizedExpr — 括号表达式
+# ============================================================================
+# 括号包裹的子表达式，如 (a + b)。
+# 作用是改变运算符优先级或提高可读性。
+
 [ParenthesizedExpr.parser]
-production = [
-    "bracket.l_parentheses",
-    "@Expression",
-    "bracket.r_parentheses",
-]
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
 
 [ParenthesizedExpr.parser.structure]
 is_atom = true
@@ -81,14 +107,18 @@ is_atom = true
 expr = "$2"
 
 [ParenthesizedExpr.renderer.layout]
-line = [
-    "(",
-    { ref = "expr" },
-    ")",
-]
+line = ["(", { ref = "expr" }, ")"]
 
 [ParenthesizedExpr.structure]
 is_atom = true
+
+
+# ============================================================================
+# SelectSuffix — 选择/索引后缀
+# ============================================================================
+# 数组/向量选择的后半部分: 单个索引 (a[0])、范围 (a[3:0])、+:/−: 切片。
+# 生产式: <index> (: <msb> | +: <width> | -: <width>)?
+# BinaryOp 在此上下文中不产生操作符两侧空格（如 a[i-1] 紧凑输出）。
 
 [SelectSuffix.parser]
 production = [
@@ -101,18 +131,18 @@ index = "$1"
 range_suffix = "$2"
 
 [SelectSuffix.renderer.layout]
-line = [
-    { ref = "index" },
-    { opt = { ref = "range_suffix" } },
-]
+line = [{ ref = "index" }, { opt = { ref = "range_suffix" } }]
 
 # SelectSuffix 内的 BinaryOp（如 a[i-1]）不产生操作符两侧空格
 [SelectSuffix.renderer.override.BinaryOp]
-layout = { line = [
-    { ref = "left" },
-    { ref = "op" },
-    { ref = "right" },
-] }
+layout = { line = [{ ref = "left" }, { ref = "op" }, { ref = "right" }] }
+
+
+# ============================================================================
+# SelectExpr — 选择表达式（数组/向量下标）
+# ============================================================================
+# 对标识符进行下标或范围选择，如 arr[idx]、vec[3:0]、matrix[i][j]。
+# 支持链式后缀: base[idx1][idx2]...
 
 [SelectExpr.parser]
 production = [
@@ -143,6 +173,13 @@ line = [
 [SelectExpr.structure]
 is_atom = true
 
+
+# ============================================================================
+# ConcatExpr — 拼接表达式
+# ============================================================================
+# Verilog 的拼接操作 {a, b, c}，将多个信号/值合并为更宽的向量。
+# 生产式: { Expr , Expr , ... }
+
 [ConcatExpr.parser]
 production = [
     "bracket.l_curly_bracket",
@@ -155,20 +192,20 @@ production = [
 is_atom = true
 
 [ConcatExpr.parser.node]
-sub_node = [
-    "$2",
-    "$3.items[*].sub_node[1]",
-]
+sub_node = ["$2", "$3.items[*].sub_node[1]"]
 
 [ConcatExpr.renderer.layout]
-line = [
-    "{",
-    { join = ",", nest = 1 },
-    "}",
-]
+line = ["{", { join = ",", nest = 1 }, "}"]
 
 [ConcatExpr.structure]
 is_atom = true
+
+
+# ============================================================================
+# ReplicateExpr — 复制表达式
+# ============================================================================
+# Verilog 的复制操作 {n{value}}，将值重复 n 次拼接。
+# 例如: {4{1'b0}} → 4'b0000
 
 [ReplicateExpr.parser]
 production = [
@@ -188,17 +225,17 @@ count = "$2"
 value = "$4"
 
 [ReplicateExpr.renderer.layout]
-line = [
-    "{",
-    { ref = "count" },
-    "{",
-    { ref = "value" },
-    "}",
-    "}",
-]
+line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"]
 
 [ReplicateExpr.structure]
 is_atom = true
+
+
+# ============================================================================
+# PrimaryExpr — 初等表达式（原子选择器）
+# ============================================================================
+# 表达式的最底层: 字面量、标识符、选择、括号、复制、拼接、调用。
+# 所有运算符操作的起点。
 
 [PrimaryExpr.parser]
 production = [
@@ -211,6 +248,12 @@ value = "$1"
 
 [PrimaryExpr.renderer.layout]
 ref = "value"
+
+
+# ============================================================================
+# CallExpr — 函数调用（无 $ 前缀）
+# ============================================================================
+# 用户定义函数或任务调用: func_name(arg1, arg2)
 
 [CallExpr.parser]
 production = [
@@ -228,15 +271,17 @@ callee = "$1"
 args = "$3"
 
 [CallExpr.renderer.layout]
-line = [
-    { ref = "callee" },
-    "(",
-    { ref = "args" },
-    ")",
-]
+line = [{ ref = "callee" }, "(", { ref = "args" }, ")"]
 
 [CallExpr.structure]
 is_atom = true
+
+
+# ============================================================================
+# SysFuncCall — 系统函数/任务调用（$ 前缀）
+# ============================================================================
+# 以 $ 开头的系统调用，如 $display(), $clog2(), $urandom()。
+# 生产式: $ Identifier ( ArgumentList? )
 
 [SysFuncCall.parser]
 production = [
@@ -255,104 +300,109 @@ callee = "$2"
 args = "$4"
 
 [SysFuncCall.renderer.layout]
-line = [
-    "$",
-    { ref = "callee" },
-    "(",
-    { ref = "args" },
-    ")",
-]
+line = ["$", { ref = "callee" }, "(", { ref = "args" }, ")"]
 
 [SysFuncCall.structure]
 is_atom = true
 
+
+# ============================================================================
+# ArgumentList — 函数参数列表
+# ============================================================================
+# 逗号分隔的表达式列表: (expr1, expr2, …)
+
 [ArgumentList.parser]
-production = [
-    "@Expression",
-    "(symbol.base.comma,@Expression)*",
-]
+production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 
 [ArgumentList.parser.node]
-items = [
-    "$1",
-    "$2.items[*].sub_node[1]",
-]
+items = ["$1", "$2.items[*].sub_node[1]"]
 
 [ArgumentList.renderer.layout]
 join = ", "
 items = "items"
 nest = 1
 
+
+# ============================================================================
+# 运算符表达式链（Pratt 解析）
+# ============================================================================
+# 以下规则按优先级从高到低排列，通过 pratt = true 接入 Pratt 解析器。
+#
+# 层级结构（从高到低）:
+#   UnaryExpr     — ! ~ （一元）
+#   MulExpr       — * / %
+#   AddExpr       — + -
+#   CompareExpr   — == != > < >= <=
+#   LogicAndExpr  — &&
+#   LogicOrExpr   — ||
+#   Expression    — 顶层
+#
+# ⚠ Verilog 还支持字母形式的逻辑运算符 (and/or/not)，
+#   但当前实现只覆盖了符号形式 (&&/||/!~)，字母运算符待补充。
+
+# —— 一元运算符 ——
 [UnaryExpr.parser]
-production = [
-    "symbol.base.not|symbol.base.bit_not",
-    "@PrimaryExpr",
-]
+production = ["symbol.base.not|symbol.base.bit_not", "@PrimaryExpr"]
 pratt = true
 
 [UnaryExpr.parser.node]
 op = "$1"
 operand = "$2"
 
+# —— 乘法类 ——
 [MulExpr.parser]
-production = [
-    "@PrimaryExpr|@UnaryExpr",
-    "(@MulOp,@PrimaryExpr|@UnaryExpr)*",
-]
+production = ["@PrimaryExpr|@UnaryExpr", "(@MulOp,@PrimaryExpr|@UnaryExpr)*"]
 pratt = true
 
 [MulExpr.parser.node]
 head = "$1"
 tail = "$2"
 
+# —— 加法类 ——
 [AddExpr.parser]
-production = [
-    "@MulExpr",
-    "(@AddOp,@MulExpr)*",
-]
+production = ["@MulExpr", "(@AddOp,@MulExpr)*"]
 pratt = true
 
 [AddExpr.parser.node]
 head = "$1"
 tail = "$2"
 
+# —— 比较 ——
 [CompareExpr.parser]
-production = [
-    "@AddExpr",
-    "(@CmpOp,@AddExpr)?",
-]
+production = ["@AddExpr", "(@CmpOp,@AddExpr)?"]
 pratt = true
 
 [CompareExpr.parser.node]
 left = "$1"
 op_rhs = "$2"
 
+# —— 逻辑与 ——
 [LogicAndExpr.parser]
-production = [
-    "@CompareExpr",
-    "(@LogicAndOp,@CompareExpr)*",
-]
+production = ["@CompareExpr", "(@LogicAndOp,@CompareExpr)*"]
 pratt = true
 
 [LogicAndExpr.parser.node]
 head = "$1"
 tail = "$2"
 
+# —— 逻辑或（表达式顶层）——
 [LogicOrExpr.parser]
-production = [
-    "@LogicAndExpr",
-    "(@LogicOrOp,@LogicAndExpr)*",
-]
+production = ["@LogicAndExpr", "(@LogicOrOp,@LogicAndExpr)*"]
 pratt = true
 
 [LogicOrExpr.parser.node]
 head = "$1"
 tail = "$2"
 
+
+# ============================================================================
+# Expression — 顶层表达式
+# ============================================================================
+# Verilog 表达式的根节点。end_case 列出了可能在表达式后出现的 token，
+# 帮助解析器判断表达式何时结束。
+
 [Expression.parser]
-production = [
-    "@LogicOrExpr",
-]
+production = ["@LogicOrExpr"]
 pratt = true
 end_case = [
     "symbol.base.comma",
@@ -368,22 +418,26 @@ is_statement = false
 
 [Expression.parser.node]
 
+
+# ============================================================================
+# 运算符原子规则
+# ============================================================================
+
+# 乘法类运算符: * / %
 [MulOp.parser]
-production = [
-    "symbol.base.multiple|symbol.base.div|symbol.base.mod",
-]
+production = ["symbol.base.multiple|symbol.base.div|symbol.base.mod"]
 
 [MulOp.parser.node]
 op = "$1"
 
+# 加法类运算符: + -
 [AddOp.parser]
-production = [
-    "symbol.base.add|symbol.base.sub",
-]
+production = ["symbol.base.add|symbol.base.sub"]
 
 [AddOp.parser.node]
 op = "$1"
 
+# 比较运算符: == != > < >= <=
 [CmpOp.parser]
 production = [
     "symbol.extend.is_equal",
@@ -397,36 +451,35 @@ production = [
 [CmpOp.parser.node]
 op = "$1"
 
+
+# 逻辑与运算符: &&
 [LogicAndOp.parser]
-production = [
-    "symbol.extend.logic_double_and",
-]
+production = ["symbol.extend.logic_double_and"]
 
 [LogicAndOp.parser.node]
 op = "$1"
 
+# 逻辑或运算符: ||
 [LogicOrOp.parser]
-production = [
-    "symbol.extend.logic_double_or",
-]
+production = ["symbol.extend.logic_double_or"]
 
 [LogicOrOp.parser.node]
 op = "$1"
 
+
+# ============================================================================
+# 运算符通用渲染器
+# ============================================================================
+# 以下渲染器由 Pratt 解析器在构造 BinaryOp/UnaryOp/TernaryOp 节点时使用。
+# BinaryOp 在操作符两侧各加一个空格（a + b）；
+# UnaryOp 无空格（~a）；
+# TernaryOp 在 ? 和 : 两侧加空格（cond ? t : f）。
+
 [UnaryOp.renderer.layout]
-line = [
-    { ref = "op" },
-    { ref = "operand" },
-]
+line = [{ ref = "op" }, { ref = "operand" }]
 
 [BinaryOp.renderer.layout]
-line = [
-    { ref = "left" },
-    " ",
-    { ref = "op" },
-    " ",
-    { ref = "right" },
-]
+line = [{ ref = "left" }, " ", { ref = "op" }, " ", { ref = "right" }]
 
 [TernaryOp.renderer.layout]
 line = [

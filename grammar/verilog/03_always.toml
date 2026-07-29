@@ -1,22 +1,55 @@
-[AlwaysBlock.parser]
+# ============================================================================
+# Verilog 语法规则 — always 块 [时序/组合逻辑][可综合]
+# ============================================================================
+# 本文件定义 always 块及其灵敏度列表相关规则：
+#   AlwaysStmt      — always @(…) 过程语句
+#   SensitivityList — 灵敏度列表（posedge/negedge 或 *）
+#   EdgeSense       — 边沿敏感表达式（posedge clk）
+#
+# 依赖: token.toml (keyword.always / keyword.posedge / keyword.negedge /
+#                   symbol.base.at / symbol.base.multiple / symbol.base.comma /
+#                   symbol.extend.logic_or)
+#       04_statements/ (Statement)
+# 被引用于: 04_statements/00_base.toml (ProcStmt → AlwaysStmt)
+#
+# ⚠ 作用域说明:
+#   always 是**可综合**的过程块，用于描述时序逻辑（posedge/negedge 敏感）
+#   和组合逻辑（@* 或电平敏感列表），是 FPGA/ASIC 综合的核心构造。
+#   与 initial（仅仿真）相对。
+#
+# 渲染示例:
+#   always @(posedge clk or negedge rst_n) begin
+#     if (!rst_n)
+#       q <= 1'b0;
+#     else
+#       q <= d;
+#   end
+
+# ============================================================================
+# AlwaysStmt — always 过程语句
+# ============================================================================
+# Verilog 的 always 过程语句，敏感列表后的 @Stmt 支持单语句或 begin…end 块。
+# renderer.body.role = "direct" 表示体内容直出（不额外包装）。
+# renderer.override.BeginEnd.tail_break = 2 当体内是 begin…end 时，end 后多空一行。
+
+[AlwaysStmt.parser]
 production = [
     "keyword.always",
     "symbol.base.at",
     "bracket.l_parentheses",
     "@SensitivityList",
     "bracket.r_parentheses",
-    "@Statement",
+    "@Stmt",
 ]
 end_case = [
     "newline",
-    "keyword.end",
 ]
 
-[AlwaysBlock.parser.node]
+[AlwaysStmt.parser.node]
 sensitivity = "$4"
 body = "$6"
 
-[AlwaysBlock.renderer.layout]
+[AlwaysStmt.renderer.layout]
 line = [
     "always @(",
     { ref = "sensitivity" },
@@ -24,19 +57,30 @@ line = [
     { ref = "body" },
 ]
 
-[AlwaysBlock.renderer.body]
+[AlwaysStmt.renderer.body]
 role = "direct"
 
-[AlwaysBlock.renderer.override.BeginEnd]
+[AlwaysStmt.renderer.override.BeginEnd]
 tail_break = 2
 
-[AlwaysBlock.structure]
+[AlwaysStmt.structure]
 is_statement = true
+
+
+# ============================================================================
+# SensitivityList — 灵敏列表
+# ============================================================================
+# always 块中的敏感信号列表，如 `posedge clk or negedge rst_n`。
+# 支持 `*`（自动敏感），以及 `or` / `,` 分隔的边沿表达式。
+# 根据 IEEE 1364-2001，or 和逗号在灵敏度列表中语义等价。
+# join = " or " 以 Verilog 风格的 or 连接多个敏感信号。
+# $1 可以是 @EdgeSense 或 symbol.base.multiple（即 *）。
+# $2 收集后续的 (or|,, @EdgeSense) 重复对。
 
 [SensitivityList.parser]
 production = [
     "@EdgeSense|symbol.base.multiple",
-    "(symbol.extend.logic_or,@EdgeSense)*",
+    "((symbol.extend.logic_or|symbol.base.comma),@EdgeSense)*",
 ]
 
 [SensitivityList.parser.node]
@@ -48,6 +92,14 @@ items = [
 [SensitivityList.renderer.layout]
 join = " or "
 items = "items"
+
+
+# ============================================================================
+# EdgeSense — 边沿敏感表达式
+# ============================================================================
+# 单个边沿敏感信号，如 `posedge clk`。
+# 生产式: (posedge|negedge) <identifier>
+# 渲染: posedge clk（边沿类型 + 空格 + 信号名）。
 
 [EdgeSense.parser]
 production = [
