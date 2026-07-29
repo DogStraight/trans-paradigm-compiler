@@ -73,14 +73,13 @@ class LinterScanner:
             rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_list
         )
         self._tree = build_slice_tree(rules)
-        self._grammar_rules = rules
         self.lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_list)
 
         self._start_map: dict[str, list[dict]] = {}
         for name, info in self._tree.items():
             if not info["prods"]:
                 continue
-            for tt in get_start_tokens(info["prods"]):
+            for tt in get_start_tokens(info["prods"], self._tree):
                 if tt not in info.get("end_case", set()):
                     entry: dict = {**info, "_name": name}
                     if info.get("is_block"):
@@ -337,45 +336,25 @@ class LinterScanner:
 
         return root
 
-    # ── Phase 2: 复用解析器做句验证 ─────────────
+    # ── Phase 2: 轻量句边界扫描 ─────────────────
 
     def _phase2_statement(self, tokens: list, skeleton: dict) -> list:
-        """复用 parser 的句解析函数，验证每行是否为合法语句开始。
+        """轻量版句扫描：用 _start_map + _consume 确定语句边界。
 
-        1. 利用 P1 骨架跳过 bound 区域
-        2. 对非 bound token 调用 parser.parse_sentence 尝试解析
-        3. 解析失败 → 报行级错误，跳到换行
-        4. 解析成功 → 推进到解析结束位置
+        不构建 AST、不管理作用域——只回答「当前 token 是否是合法语句开始」。
         """
-        from parser.parser_core import Parser, ParseContext
-        from parser.rule_selector import RuleSelector
-
-        # 延迟初始化 parser 实例
-        if not hasattr(self, "_p2_parser"):
-            rules_dict = self._grammar_rules
-            stmt_names = [
-                n for n, r in rules_dict.items()
-                if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
-            ]
-            rs = RuleSelector(rules_dict, stmt_names)
-            self._p2_parser = Parser(rules=rules_dict, rule_selector=rs)
-
-        parser = self._p2_parser
-        context = ParseContext(tokens)
         errors: list = []
-
-        i = 0
         bracket_depth = 0
-        # 模块头等待关闭：跳过 module name #(...) (...); 区域
         skip_until_semi = False
 
+        i = 0
         while i < len(tokens):
             i = self._skip(tokens, i)
             if i >= len(tokens):
                 break
             t = tokens[i]
 
-            # 括号/方括号深度
+            # 括号深度
             if t.type in ("bracket.l_parentheses", "bracket.l_square_bracket"):
                 bracket_depth += 1
                 i += 1
@@ -387,7 +366,6 @@ class LinterScanner:
 
             # 关键字 bound 起止符
             if t.type in self._block_openers:
-                # module/function/task 后跳过到 `;`（模块/函数头）
                 if t.type in ("keyword.module", "keyword.function", "keyword.task"):
                     skip_until_semi = True
                 i += 1
@@ -396,37 +374,30 @@ class LinterScanner:
                 i += 1
                 continue
 
-            # 括号/方括号内部 → 跳过
+            # 括号内部跳过
             if bracket_depth > 0:
                 i += 1
                 continue
 
-            # 模块头跳过模式
+            # 模块/函数头跳过
             if skip_until_semi:
                 if t.type == "symbol.base.semicolon":
                     skip_until_semi = False
                 i += 1
                 continue
 
-            # 调用 parser 尝试解析一条句子
-            context.token_pointer = i
-            context.match_length = 0
-            context.current_node = None
-            context.current_rule = None
-            context.sibling_counter.clear()
-            context.path_stack.clear()
-
-            try:
-                node = parser.parse_sentence(context)
-            except Exception:
-                node = None
-
-            if node is not None:
-                # 解析成功，跳到句子末尾
-                i = context.token_pointer
+            # 尝试 _start_map 匹配（轻量、无 AST）
+            candidates = self._start_map.get(t.type, [])
+            best_i = i
+            for info in candidates:
+                result = self._consume(tokens, i, info)
+                if result is not None and result > best_i:
+                    best_i = result
+            if best_i > i:
+                i = best_i
                 continue
 
-            # 解析失败：报行级错误，跳到换行
+            # 无候选规则匹配 → 行级错误
             errors.append(
                 LintDiagnostic(
                     range=(Position(t.line, t.column), Position(t.line, t.column)),

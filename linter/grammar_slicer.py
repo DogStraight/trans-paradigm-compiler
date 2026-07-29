@@ -50,7 +50,7 @@ def build_slice_tree(rules: dict[str, GrammarRule]) -> dict[str, dict]:
     return tree
 
 
-def get_start_tokens(parsed: list[dict]) -> set[str]:
+def get_start_tokens(parsed: list[dict], tree: dict | None = None) -> set[str]:
     """从解析后的 production 列表中提取起始字面量 token 集合。
 
     只取第一个 top-level 元素的可达 token 类型。
@@ -58,10 +58,10 @@ def get_start_tokens(parsed: list[dict]) -> set[str]:
     """
     if not parsed:
         return set()
-    return _collect_first_start_tokens(parsed[0])
+    return _collect_first_start_tokens(parsed[0], tree)
 
 
-def _collect_first_start_tokens(feat: dict | None) -> set[str]:
+def _collect_first_start_tokens(feat: dict | None, tree: dict | None = None) -> set[str]:
     """递归收集单个元素的起始 token。"""
     if feat is None:
         return set()
@@ -69,7 +69,17 @@ def _collect_first_start_tokens(feat: dict | None) -> set[str]:
     if typ == "token":
         return {feat["token_type"]}
     if typ == "call":
-        return set()
+        if tree is None:
+            return set()
+        name = feat.get("name", "")
+        info = tree.get(name)
+        if info is None:
+            return set()
+        # inline 规则取第一个 production 的 First 集
+        prods = info.get("prods", [])
+        if not prods:
+            return set()
+        return _collect_first_start_tokens(prods[0], tree)
     if typ == "optional":
         # 可选元素的第一 token 不是强制起始
         return set()
