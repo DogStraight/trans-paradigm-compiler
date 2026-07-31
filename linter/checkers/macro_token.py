@@ -8,6 +8,7 @@ from __future__ import annotations
 from core.define import Token
 
 from .. import LintDiagnostic, Position
+from .._constants import MACRO_TOKEN_PREFIX
 from ..checker import Checker
 
 
@@ -22,7 +23,7 @@ class MacroTokenChecker(Checker):
         errors: list[LintDiagnostic] = []
         for idx in range(self.start, min(self.end, len(tokens))):
             t = tokens[idx]
-            if t.type.startswith("macro."):
+            if t.type.startswith(MACRO_TOKEN_PREFIX):
                 errors.append(
                     LintDiagnostic(
                         range=(Position(t.line, t.column), Position(t.line, t.column)),

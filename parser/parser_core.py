@@ -17,6 +17,7 @@ from core.define import (
     ParseError,
 )
 from core.config_registry import declare_cfg
+from ._constants import ROOT_RULE_NAME
 
 # ── 配置需求（来自 pyv.toml） ──────────────────────────
 # parser.operator_defs
@@ -28,6 +29,13 @@ _operator_defs_cfg = declare_cfg("parser.operator_defs", [], __name__, "_operato
 #   #sym:config = [token_category]
 #   格式: dict — Token 分类映射
 _token_categories_cfg: dict = declare_cfg("parser.token_categories", {}, __name__, "_token_categories_cfg")
+
+# parser.skip_types
+#   #sym:config = (list)
+#   格式: list[str] — 解析时需要跳过的空白/折叠 token 类型
+_skip_types_cfg: list[str] = declare_cfg(
+    "parser.skip_types", ["newline", "space.fold"], __name__, "_skip_types_cfg"
+)
 
 # merged inline: ParseContext
 
@@ -275,6 +283,34 @@ from .block_parser import (
     collect_line_comments,
 )
 
+
+def _parse_bit_width_literal(content: str) -> Node | None:
+    """Verilog 位宽字面量解析：8'hFF / 32'd100 / 'hFF / 4'b1010。
+
+    由 Parser 注入到 pratt_parser，使通用表达式解析器保持语言无关。
+    返回 None 表示该 token 不是位宽字面量（回退到通用数字解析）。
+    """
+    if "'" not in content:
+        return None
+    parts = content.split("'", 1)
+    width_part = parts[0].strip()
+    rest = parts[1] if len(parts) > 1 else ""
+    # 宽度部分可能为空（自动位宽）或数字
+    width = None
+    if width_part:
+        try:
+            width = int(width_part)
+        except ValueError:
+            # 非法宽度，按自动处理
+            width = None
+    if rest and rest[0] in ("b", "o", "d", "h"):
+        base = rest[0]
+        value = rest[1:] if len(rest) > 1 else ""
+        return Node("BitWidthLiteral", width=width, base=base, value=value)
+    # 格式错误：回退为普通数字（由调用方处理）
+    return None
+
+
 class Parser:
     """语法分析器 — 将 token 流解析为 AST"""
 
@@ -378,6 +414,8 @@ class Parser:
         # Token 分类器
         if _token_categories_cfg:
             pratt_parser.install_token_classifier(_token_categories_cfg)
+        # 注入语言层位宽字面量解析器（保持 pratt_parser 语言无关）
+        pratt_parser.install_bit_width_literal_parser(_parse_bit_width_literal)
         # RuleSelector：外部注入优先，回退内部创建
         if rule_selector is not None:
             self.rule_selector = rule_selector
@@ -388,7 +426,7 @@ class Parser:
                 self.grammar_rules,
                 self.statement_rule_names,
             )
-        self.skip_types = ["newline", "space.fold"]
+        self.skip_types = list(_skip_types_cfg)
 
         # 无日志文件时替换 _log_state 为空操作，避免 28k+ 次空调用开销
         if getattr(self, "debug_log_file", None) is None and not self.verbose:
@@ -480,9 +518,9 @@ class Parser:
         context = ParseContext(tokens)
 
         try:
-            # 语义路径：Root 规则路径入栈
-            context.sibling_counter["Root"] = 1
-            context.path_stack.append("Root[0]")
+            # 语义路径：根规则路径入栈
+            context.sibling_counter[ROOT_RULE_NAME] = 1
+            context.path_stack.append(f"{ROOT_RULE_NAME}[0]")
             block_node = self.parse_block(context, start_token="")
             context.path_stack.pop()
             if block_node is None:

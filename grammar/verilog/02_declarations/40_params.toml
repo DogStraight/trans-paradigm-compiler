@@ -19,7 +19,7 @@ production = [
     "symbol.base.semicolon",
 ]
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [LocalParamDecl.parser.node]

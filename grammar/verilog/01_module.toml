@@ -147,8 +147,7 @@ items = "params"
 # 单个参数定义：parameter [range] name = value
 # 例如: parameter [3:0] DATA_WIDTH = 4'hF
 #
-# is_statement = false 表示此规则不出现在 statement 选择列表中，
-# 它只作为 ParameterList 的子规则被引用。
+# 此规则只作为 ParameterList 的子规则被引用（非语句候选，由框架推导）。
 # analyzer.symbol 注册为 kind=parameter 供后续分析阶段使用。
 
 [ParamDecl.parser]

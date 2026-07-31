@@ -9,6 +9,7 @@ _production.py — 生产式解析全流程（合并 rule_matcher + node_parsers
 
 from core.define import Node, GrammarRule
 from .parser_core import ParseContext
+from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
 
 # ── production 元素 dispatch 表 ──
@@ -175,7 +176,7 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             self._bind_attributes(rule_node, rule, all_matched)
 
             # 3) 解析块体
-            block_body = Node("Block")
+            block_body = Node(BLOCK_NODE_NAME)
             from .block_parser import parse_block_body
 
             parse_block_body(self, context, block_body, rule)
@@ -271,7 +272,7 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
     should_skip = True
 
     if ftype == "token":
-        if features.get("token_type") == "comment":
+        if features.get("token_type") == COMMENT_TOKEN_TYPE:
             should_skip = False
     elif ftype == "call":
         ref_rule = self.grammar_rules.get(features["name"])
@@ -285,7 +286,7 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         self._skip_tokens(context, tuple(self.skip_types))
         while context.has_more_tokens():
             t = context.peek_token()
-            if t and t.type == "comment":
+            if t and t.type == COMMENT_TOKEN_TYPE:
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
                 nxt = context.peek_token()
@@ -418,7 +419,7 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     # 收集紧随当前 token 的 inline comment
     while True:
         nxt = context.peek_token(offset=0)
-        if nxt and nxt.type == "comment":
+        if nxt and nxt.type == COMMENT_TOKEN_TYPE:
             self._comment_anchors.append(
                 {
                     "anchor": current_token.content,

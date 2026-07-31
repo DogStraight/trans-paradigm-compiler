@@ -7,6 +7,7 @@ infix/prefix/postfix operators with proper precedence and associativity.
 from typing import Any
 from core.define import Node, Token
 from core.config_registry import config
+from ._constants import COMMENT_TOKEN_TYPE
 
 
 
@@ -70,6 +71,12 @@ def build_token_classifier(categories: dict) -> dict:
 # 模块级分类器（由 install_token_classifier 设置）
 _token_checks: dict = {}
 
+# 位宽字面量解析钩子：由语言层注入（None = 不识别位宽字面量）
+_bit_width_literal_parser = None
+
+# 布尔真值 token 类型（由 token_category.bool 配置推导）
+_bool_true_type = None
+
 
 def _check(name: str, token) -> bool:
     fn = _token_checks.get(name)
@@ -100,38 +107,41 @@ def is_none(token) -> bool:
     return _check("none", token)
 
 
+def install_bit_width_literal_parser(fn) -> None:
+    """注入位宽字面量解析器 fn(content) -> Node | None。
+
+    None 返回值表示该 token 不是位宽字面量，回退到通用数字解析。
+    由语言层在初始化时调用，保持本模块语言无关。
+    """
+    global _bit_width_literal_parser
+    _bit_width_literal_parser = fn
+
+
 def install_token_classifier(categories: dict) -> None:
     """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
     if not categories:
         raise ValueError(
             "[pratt] token categories is empty — check base/_lexer.toml [token_category]"
         )
-    global _token_checks
+    global _token_checks, _bool_true_type
     _token_checks = build_token_classifier(categories)
+    # 从 bool 分类配置推导真值 token 类型（约定：types 列表第一个为真值）
+    bool_cfg = categories.get("bool")
+    if isinstance(bool_cfg, dict):
+        bool_types = bool_cfg.get("types") or []
+        _bool_true_type = bool_types[0] if bool_types else None
+    else:
+        _bool_true_type = None
 
 
 # ========== 字面量解析辅助 ==========
 def parse_number_literal(token: Token) -> Node:
     content = token.content
-    if "'" in content:
-        parts = content.split("'", 1)
-        width_part = parts[0].strip()
-        rest = parts[1] if len(parts) > 1 else ""
-        # 宽度部分可能为空（自动位宽）或数字
-        width = None
-        if width_part:
-            try:
-                width = int(width_part)
-            except ValueError:
-                # 非法宽度，按自动处理
-                width = None
-        if rest and rest[0] in ("b", "o", "d", "h"):
-            base = rest[0]
-            value = rest[1:] if len(rest) > 1 else ""
-            node = Node("BitWidthLiteral", width=width, base=base, value=value)
+    # 位宽字面量（如 8'hff）：由语言层注入的解析器处理
+    if _bit_width_literal_parser is not None:
+        node = _bit_width_literal_parser(content)
+        if node is not None:
             return node
-        # 格式错误：回退为普通数字
-        return Node("Number", value=content)
     # 浮点数
     if "." in content:
         try:
@@ -174,7 +184,7 @@ def parse_expression(
     while (
         idx < len(tokens)
         and isinstance(tokens[idx], Token)
-        and tokens[idx].type == "comment"
+        and tokens[idx].type == COMMENT_TOKEN_TYPE
     ):
         idx += 1
     if idx >= len(tokens):
@@ -199,7 +209,7 @@ def parse_expression(
             node = Node("String", value=s)
             idx += 1
         elif is_bool(token):
-            node = Node("Bool", value=(token.type == "literal.bool_true"))
+            node = Node("Bool", value=(token.type == _bool_true_type))
             idx += 1
         elif is_identifier(token):
             name = token.content

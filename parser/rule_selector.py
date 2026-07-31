@@ -2,6 +2,7 @@
 
 from typing import Any
 from core.define import Token, GrammarRule
+from ._constants import IDENTIFIER_TOKEN_TYPE
 
 
 def _compute_start_tokens(
@@ -95,6 +96,17 @@ def build_start_token_map_names(
     return name_map
 
 
+def _hint_rank(name: str, hints: list[str]) -> int:
+    """hint 匹配优先级：精确命中或通配后缀命中返回 -1，否则 0。"""
+    for hint in hints:
+        if hint.startswith("*"):
+            if name.endswith(hint[1:]):
+                return -1
+        elif name == hint:
+            return -1
+    return 0
+
+
 class RuleSelector:
     def __init__(
         self,
@@ -128,38 +140,16 @@ class RuleSelector:
         rule_names.sort(key=lambda n: order.get(n, _ORDER_NOT_FOUND))
 
         # 预符号提示：如果 token 是 id 且已知符号名，优先匹配相关规则
-        if pre_symbols and pre_hints and token.type == "id":
+        if pre_symbols and pre_hints and token.type == IDENTIFIER_TOKEN_TYPE:
             kind = pre_symbols.get(token.content)
             if kind and kind in pre_hints:
-                hints = pre_hints[kind]
-
-                def _hint_key(name: str) -> int:
-                    for hint in hints:
-                        if hint.startswith("*"):
-                            if name.endswith(hint[1:]):
-                                return -1
-                        elif name == hint:
-                            return -1
-                    return 0
-
-                rule_names.sort(key=_hint_key)
+                rule_names.sort(key=lambda n: _hint_rank(n, pre_hints[kind]))
 
         # 运行时作用域查询：如果 scope 中已知此符号种类，也作为 hint
-        if scope_lookup_fn is not None and token.type == "id":
+        if scope_lookup_fn is not None and token.type == IDENTIFIER_TOKEN_TYPE:
             scope_kind = scope_lookup_fn(token.content)
             if scope_kind and pre_hints and scope_kind in pre_hints:
-                hints = pre_hints[scope_kind]
-
-                def _scope_hint_key(name: str) -> int:
-                    for hint in hints:
-                        if hint.startswith("*"):
-                            if name.endswith(hint[1:]):
-                                return -1
-                        elif name == hint:
-                            return -1
-                    return 0
-
-                rule_names.sort(key=_scope_hint_key)
+                rule_names.sort(key=lambda n: _hint_rank(n, pre_hints[scope_kind]))
 
         # 名称 → 对象
         result = []
@@ -196,6 +186,9 @@ SUFFIX_MAP = {
     "*": "repeat",
     "?": "optional",
 }
+
+# 测试输出分隔线
+_SEPARATOR = "-" * 60
 
 
 def _flatten_production_features(
@@ -325,11 +318,12 @@ if __name__ == "__main__":
         "literal+ | @FuncCall+",
         "(@Stmt|newline)*",
     ]
+
     for prod in test_cases:
         try:
             ast = analyze_production_features(prod)
             print(f"产生式: {prod}")
             print(f"AST: {ast}")
-            print("-" * 60)
+            print(_SEPARATOR)
         except Exception as e:
             print(f"失败: {prod} -> {e}")

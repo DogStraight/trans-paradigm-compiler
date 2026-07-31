@@ -53,7 +53,7 @@ ref = "value"
 #   end
 #
 # is_block = true 启用块解析路径：消费 begin → 匹配标签 → parse_block_body
-# 循环解析语句 → 消费 end。is_statement = true 使其出现在语句候选列表中。
+# 循环解析语句 → 消费 end。is_statement（语句候选）由框架推导，不手写。
 
 [BeginEnd.parser]
 production = [

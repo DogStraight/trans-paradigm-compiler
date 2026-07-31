@@ -22,7 +22,6 @@ CTX_TOP = "top"            # 顶层
 CTX_MODULE_BODY = "module_body"  # 模块体
 CTX_PROC_BODY = "proc_body"      # 过程体（always/initial/function/task 内）
 CTX_GEN_BODY = "gen_body"        # generate 块内
-CTX_OTHER = "other"              # 其他（未归类）
 
 
 @runtime_checkable

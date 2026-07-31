@@ -7,6 +7,11 @@ _parse_block_body, parse_block。
 
 from core.define import Node, GrammarRule
 from .parser_core import ParseContext
+from ._constants import (
+    COMMENT_NODE_NAME,
+    COMMENT_TOKEN_TYPE,
+    NEWLINE_TOKEN_TYPE,
+)
 
 
 def parse_sentence(self, context: ParseContext) -> Node | None:
@@ -96,10 +101,10 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
     """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为 Comment 节点。"""
     while context.has_more_tokens():
         cur = context.peek_token()
-        if cur and cur.type == "comment":
+        if cur and cur.type == COMMENT_TOKEN_TYPE:
             nxt = context.peek_token(offset=1)
-            if nxt and nxt.type == "newline":
-                comment_node = Node("Comment")
+            if nxt and nxt.type == NEWLINE_TOKEN_TYPE:
+                comment_node = Node(COMMENT_NODE_NAME)
                 comment_node.add_attr("value", cur.content)
                 block_node.add_sub_node(comment_node)
                 context.advance_token()  # 跳过 comment

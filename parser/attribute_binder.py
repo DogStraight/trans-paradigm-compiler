@@ -68,19 +68,27 @@ def get_attr_by_path(obj: Any, path: str) -> Any:
     return None
 
 
-def extract_from_spec(self, spec: str, all_matched_nodes: list[Node]) -> Any:
-    """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
-    if not isinstance(spec, str):
+def _parse_pos_spec(spec: str) -> tuple[int, str | None] | None:
+    """解析 $N 或 $N.path 位置规约 → (pos_index, path)。非法返回 None。"""
+    if not spec:
         return None
     try:
         if "." in spec:
             base_part, path = spec.split(".", 1)
-            pos = int(base_part.strip("$")) - 1
-        else:
-            pos = int(spec.strip("$")) - 1
-            path = None
+            return int(base_part.strip("$")) - 1, path
+        return int(spec.strip("$")) - 1, None
     except ValueError:
+        return None
+
+
+def extract_from_spec(self, spec: str, all_matched_nodes: list[Node]) -> Any:
+    """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
+    if not isinstance(spec, str):
+        return None
+    parsed = _parse_pos_spec(spec)
+    if parsed is None:
         return spec
+    pos, path = parsed
     if 0 <= pos < len(all_matched_nodes):
         sub = all_matched_nodes[pos]
         if path:
@@ -138,17 +146,10 @@ def try_inline_rule(
     for _, pos_str in getattr(rule, "node", {}).items():
         if not isinstance(pos_str, str):
             continue
-        if "." in pos_str:
-            base_part, _ = pos_str.split(".", 1)
-            try:
-                pos = int(base_part.strip("$")) - 1
-            except ValueError:
-                continue
-        else:
-            try:
-                pos = int(pos_str.strip("$")) - 1
-            except ValueError:
-                continue
+        parsed = _parse_pos_spec(pos_str)
+        if parsed is None:
+            continue
+        pos, _ = parsed
         if not (0 <= pos < len(all_matched_nodes)):
             continue
         inner = all_matched_nodes[pos]

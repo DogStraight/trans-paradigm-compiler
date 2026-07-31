@@ -249,3 +249,54 @@ class TestEdgeCases:
         """无法识别的 token 类型（既非原子也非运算符）→ ValueError。"""
         with pytest.raises(ValueError):
             parse(*pratt, [T("unknown","???")])
+
+
+# ═══════════════════════════════════════════════════════
+# 语言无关性：位宽字面量注入 + bool 配置驱动
+# ═══════════════════════════════════════════════════════
+
+class TestLanguageNeutrality:
+    """pratt_parser 不内置语言语法：位宽字面量由注入回调处理，bool 由配置驱动。"""
+
+    def test_bit_width_injection(self):
+        """注入位宽解析器后，8'hff 被解析为 BitWidthLiteral。"""
+        import parser.pratt_parser as pp
+
+        def _verilog_bw(content):
+            if "'" in content:
+                parts = content.split("'", 1)
+                rest = parts[1] if len(parts) > 1 else ""
+                if rest and rest[0] in ("b", "o", "d", "h"):
+                    return Node("BitWidthLiteral", width=None, base=rest[0], value=rest[1:])
+            return None
+
+        pp.install_bit_width_literal_parser(_verilog_bw)
+        try:
+            n = pp.parse_number_literal(T("number", "8'hff"))
+            assert n.node_name == "BitWidthLiteral"
+            assert n.base == "h" and n.value == "ff"
+        finally:
+            pp.install_bit_width_literal_parser(None)
+
+    def test_no_injection_fallback_generic(self):
+        """无注入时位宽样式数字回退为通用 Number（语言无关）。"""
+        import parser.pratt_parser as pp
+
+        pp.install_bit_width_literal_parser(None)
+        n = pp.parse_number_literal(T("number", "8'hff"))
+        assert n.node_name == "Number"
+        assert n.value == "8'hff"
+
+    def test_bool_true_type_from_config(self):
+        """bool 真值类型从 token_category 配置推导，而非硬编码。"""
+        import parser.pratt_parser as pp
+
+        cats = {"bool": {"match": "exact",
+                         "types": ["literal.bool_true", "literal.bool_false"]}}
+        pp.install_token_classifier(cats)
+        try:
+            assert pp._bool_true_type == "literal.bool_true"
+            assert pp.is_bool(T("literal.bool_true", "true"))
+            assert not pp.is_bool(T("number", "1"))
+        finally:
+            pp.install_token_classifier(_SYNTH_CATEGORIES)

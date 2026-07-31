@@ -11,9 +11,8 @@ from __future__ import annotations
 from core.define import Token
 
 from .. import LintDiagnostic, Position
+from .._constants import TRIVIA as _TRIVIA
 from ..checker import Checker
-
-_TRIVIA = frozenset({"space.fold", "comment", "space"})
 
 
 class BoundaryChecker(Checker):

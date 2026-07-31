@@ -16,8 +16,7 @@ from __future__ import annotations
 from core.define import Token
 
 from .. import LintDiagnostic, Position
-
-_TRIVIA = frozenset({"space.fold", "comment", "space", "newline"})
+from .._constants import TRIVIA as _TRIVIA
 
 # 表达式根（借力 pratt，不内联展开）：Expression / PrimaryExpr / pratt 链
 # PrimaryExpr 由 EC 独立原子匹配器处理，避免 matcher ↔ EC 互相递归。
@@ -57,15 +56,21 @@ class RuleMatcher:
     ) -> int:
         """按 production 列表匹配，返回消费位置。
 
-        与 _match_seq 相同：某个元素未推进则整体回滚，防止前一元素失败后
-        后续元素（如 @Expression）在未推进位置假匹配。
+        顶层 production 是顺序列表：optional 元素不推进是合法的（结构可
+        不存在），应跳过继续；非 optional 元素不推进才视为失败回滚（防止
+        前一元素失败后后续元素在未推进位置假匹配）。
         """
         start = i
         for feat in prods:
             if i >= limit:
                 break
+            before = len(errors)
             j = self.match(tokens, i, feat, errors, limit, strict=True)
             if j <= i:
+                # optional 可不存在；全可选 call（如 TypeSpecNoReg）匹配成功但
+                # 不消费也属合法——两者都跳过继续，仅真正失败（有错误）才回滚
+                if feat.get("type") == "optional" or len(errors) == before:
+                    continue
                 return start
             i = j
         return i
@@ -92,7 +97,7 @@ class RuleMatcher:
         if typ == "choice":
             return self._match_choice(tokens, i, node, errors, limit, strict)
         if typ == "optional":
-            return self._match_optional(tokens, i, node, limit)
+            return self._match_optional(tokens, i, node, errors, limit)
         if typ == "seq":
             return self._match_seq(tokens, i, node, errors, limit, strict)
         if typ == "repeat":
@@ -180,8 +185,17 @@ class RuleMatcher:
                 return self._skip_to_end(tokens, i, ec, limit)
             return i
 
-        # 语句类（@Stmt / @IfBlock 等嵌套语句）→ 跳到 end_case（扁平化）
-        if info.get("is_statement"):
+        # 语句类（@Stmt / @IfBlock 等嵌套语句）→ strict 语境跳过 end_case（扁平化）
+        # strict=False（choice/optional 试探，如 PortList 里的 TypedPortDecl）落到
+        # 普通内联匹配，避免"双角色"规则在端口列表被 end_case 错误跳过吞掉内容
+        if info.get("is_statement") and strict:
+            # 先验证起始 token，防止非嵌套语句上下文误跳过
+            firsts = self._first_tokens_of_rule(name, set())
+            k = _skip(tokens, i, limit)
+            if k >= limit:
+                return i
+            if firsts and tokens[k].type not in firsts:
+                return i  # 起始不匹配 → 视为失败（不跳过）
             ec: set[str] = {s for s in (info.get("end_case") or [])}
             if ec:
                 return self._skip_to_end(tokens, i, ec, limit)
@@ -197,14 +211,30 @@ class RuleMatcher:
         for feat in prods:
             if j >= limit:
                 break
+            before = len(sub_errs)
             k = self.match(tokens, j, feat, sub_errs, limit, strict)
             if k <= j:
-                # 某元素未推进 → 整体回滚（防止前一元素失败后
-                # 后续 @Expression 在未推进位置假匹配）
+                # optional 可不存在；全可选 call（如 TypeSpecNoReg）与 0 次
+                # repeat（如 RangeBracket*）匹配成功但不消费也属合法——都跳过
+                # 继续。token/choice/plus 等失败仍回滚，防止前一元素失败后
+                # 后续 @Expression 在未推进位置假匹配
+                if feat.get("type") == "optional":
+                    continue
+                if feat.get("type") in ("call", "repeat") and len(sub_errs) == before:
+                    continue
                 return start
             j = k
         if not silent:
             errors += sub_errs
+        # 内联匹配后检查 end_case 排除项（如 Declarator 的 !symbol.base.dot），
+        # 命中排除 token 视为失败回滚（防止声明器吞掉后续端口/点语法）
+        if j > start:
+            ec = info.get("end_case") or []
+            exclude = {s[1:] for s in ec if isinstance(s, str) and s.startswith("!")}
+            if exclude:
+                k = _skip(tokens, j, limit)
+                if k < limit and tokens[k].type in exclude:
+                    return start
         return j
 
     def _match_choice(
@@ -249,12 +279,80 @@ class RuleMatcher:
         return i
 
     def _match_optional(
-        self, tokens: list[Token], i: int, node: dict, limit: int
+        self,
+        tokens: list[Token],
+        i: int,
+        node: dict,
+        errors: list,
+        limit: int,
     ) -> int:
         inner = node.get("elem", {})
         trial: list = []
         j = self.match(tokens, i, inner, trial, limit, strict=False)
-        return j if j > i else i
+        if j > i:
+            return j
+        # 失败但必然首 token 出现在当前位置 → 结构存在但不完整
+        # （如 `@PortParens?` 遇到 `(` 但端口列表坏），报错并跳过恢复
+        ft = self._first_tokens(inner, set())
+        if ft:
+            k = _skip(tokens, i, limit)
+            if k < limit and tokens[k].type in ft:
+                t = tokens[k]
+                errors.append(
+                    LintDiagnostic(
+                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        message=(
+                            f"incomplete structure, expected one of: "
+                            f"{', '.join(sorted(ft))}"
+                        ),
+                        severity=1,
+                        code="phase-statement",
+                    )
+                )
+                return k + 1
+        return i
+
+    def _first_tokens(self, feat: dict, visited: set) -> set[str]:
+        """递归计算 feature 的必然首 token 类型集合（防环）。"""
+        typ = feat.get("type", "")
+        if typ == "token":
+            tt = feat.get("token_type", "")
+            if "|" in tt:
+                return set(tt.split("|"))
+            return {tt}
+        if typ == "call":
+            name = feat.get("name", "")
+            if name in visited:
+                return set()
+            info = self._tree.get(name)
+            if info:
+                prods = info.get("prods", [])
+                if prods and isinstance(prods[0], dict):
+                    return self._first_tokens(prods[0], visited | {name})
+            return set()
+        if typ == "seq":
+            items = feat.get("items", [])
+            if items:
+                return self._first_tokens(items[0], visited)
+            return set()
+        if typ == "choice":
+            result: set[str] = set()
+            for a in feat.get("alternatives", []):
+                result |= self._first_tokens(a, visited)
+            return result
+        if typ in ("optional", "repeat", "plus"):
+            return self._first_tokens(feat.get("elem", {}) or {}, visited)
+        return set()
+
+    def _first_tokens_of_rule(self, name: str, visited: set) -> set[str]:
+        """规则 production 首元素的必然首 token 集合。"""
+        info = self._tree.get(name)
+        if not info:
+            return set()
+        prods = info.get("prods", [])
+        if not prods or not isinstance(prods[0], dict):
+            return set()
+        return self._first_tokens(prods[0], visited | {name})
 
     def _match_seq(
         self,

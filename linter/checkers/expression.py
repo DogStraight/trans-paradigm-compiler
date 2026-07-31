@@ -20,10 +20,24 @@ from __future__ import annotations
 from core.define import Token
 
 from .. import LintDiagnostic, Position
+from .._constants import (
+    BRACKET_L_CURLY,
+    BRACKET_L_PAREN,
+    BRACKET_L_SQUARE,
+    BRACKET_R_CURLY,
+    BRACKET_R_PAREN,
+    BRACKET_R_SQUARE,
+    IDENTIFIER_TOKEN_TYPE,
+    NUMBER_TOKEN_TYPE,
+    SYMBOL_COLON,
+    SYMBOL_COMMA,
+    SYMBOL_DOLLAR,
+    SYMBOL_SINGLE_QUOTE,
+    TRIVIA as _TRIVIA,
+)
 
 # newline 纳入 trivia：表达式可跨行（如多行拼接 { a,\n  b }），
 # 否则 _match_concat 里 first 表达式从行尾 newline 消费，拼接会停在首元素。
-_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 
 
 class ExpressionChecker:
@@ -133,31 +147,33 @@ class ExpressionChecker:
         t = tokens[j]
         tt = t.type
 
-        if tt == "bracket.l_curly_bracket":
+        if tt == BRACKET_L_CURLY:
             return self._match_concat(tokens, j, n)
-        if tt == "literal.number":
+        if tt == BRACKET_L_PAREN:
+            return self._match_paren(tokens, j, n)
+        if tt == NUMBER_TOKEN_TYPE:
             return self._match_number(tokens, j, n)
-        if tt == "id":
+        if tt == IDENTIFIER_TOKEN_TYPE:
             return self._match_identifier(tokens, j, n)
-        if tt == "symbol.base.dollar":
+        if tt == SYMBOL_DOLLAR:
             return self._match_syscall(tokens, j, n)
         return None, 0
 
     def _match_number(self, tokens: list[Token], j: int, n: int):
         """literal.number 或位宽字面量（number ' id）。"""
         k = self._skip_trivia(tokens, j + 1, n)
-        if k < n and tokens[k].type == "symbol.base.single_quote":
+        if k < n and tokens[k].type == SYMBOL_SINGLE_QUOTE:
             k2 = self._skip_trivia(tokens, k + 1, n)
-            if k2 < n and tokens[k2].type == "id":
+            if k2 < n and tokens[k2].type == IDENTIFIER_TOKEN_TYPE:
                 return object(), k2 + 1 - j  # 位宽字面量 32'hFF
         return object(), 1  # 纯数字
 
     def _match_identifier(self, tokens: list[Token], j: int, n: int):
         """id 开头：SelectExpr / CallExpr / 简单 Identifier。"""
         k = self._skip_trivia(tokens, j + 1, n)
-        if k < n and tokens[k].type == "bracket.l_square_bracket":
+        if k < n and tokens[k].type == BRACKET_L_SQUARE:
             return self._match_select(tokens, j, n)
-        if k < n and tokens[k].type == "bracket.l_parentheses":
+        if k < n and tokens[k].type == BRACKET_L_PAREN:
             return self._match_call(tokens, j, n)
         return object(), 1
 
@@ -166,17 +182,17 @@ class ExpressionChecker:
         i = j + 1  # 已消费 id
         while i < n:
             i = self._skip_trivia(tokens, i, n)
-            if i >= n or tokens[i].type != "bracket.l_square_bracket":
+            if i >= n or tokens[i].type != BRACKET_L_SQUARE:
                 break
             i = self._skip_trivia(tokens, i + 1, n)  # 消费 [
             c = self._consume_expr(
-                tokens, i, {"symbol.base.colon", "bracket.r_square_bracket"}
+                tokens, i, {SYMBOL_COLON, BRACKET_R_SQUARE}
             )
             i = self._skip_trivia(tokens, i + c, n)
-            if i < n and tokens[i].type == "symbol.base.colon":
-                c2 = self._consume_expr(tokens, i + 1, {"bracket.r_square_bracket"})
+            if i < n and tokens[i].type == SYMBOL_COLON:
+                c2 = self._consume_expr(tokens, i + 1, {BRACKET_R_SQUARE})
                 i = self._skip_trivia(tokens, i + 1 + c2, n)
-            if i >= n or tokens[i].type != "bracket.r_square_bracket":
+            if i >= n or tokens[i].type != BRACKET_R_SQUARE:
                 break
             i += 1
         return object(), i - j
@@ -186,66 +202,76 @@ class ExpressionChecker:
         i = self._skip_trivia(tokens, j + 1, n)
         i = self._skip_trivia(tokens, i + 1, n)  # ( 之后
         first = self._consume_expr(
-            tokens, i, {"symbol.base.comma", "bracket.r_parentheses"}
+            tokens, i, {SYMBOL_COMMA, BRACKET_R_PAREN}
         )
         i = self._skip_trivia(tokens, i + first, n)
-        while i < n and tokens[i].type == "symbol.base.comma":
+        while i < n and tokens[i].type == SYMBOL_COMMA:
             c = self._consume_expr(
-                tokens, i + 1, {"symbol.base.comma", "bracket.r_parentheses"}
+                tokens, i + 1, {SYMBOL_COMMA, BRACKET_R_PAREN}
             )
             i = self._skip_trivia(tokens, i + 1 + c, n)
-        if i < n and tokens[i].type == "bracket.r_parentheses":
+        if i < n and tokens[i].type == BRACKET_R_PAREN:
             i += 1
         return object(), i - j
 
     def _match_syscall(self, tokens: list[Token], j: int, n: int):
         """SysFuncCall: $ id ( args? )"""
         i = self._skip_trivia(tokens, j + 1, n)
-        if i >= n or tokens[i].type != "id":
+        if i >= n or tokens[i].type != IDENTIFIER_TOKEN_TYPE:
             return object(), i - j
         i = self._skip_trivia(tokens, i + 1, n)
-        if i >= n or tokens[i].type != "bracket.l_parentheses":
+        if i >= n or tokens[i].type != BRACKET_L_PAREN:
             return object(), i - j
         i = self._skip_trivia(tokens, i + 1, n)
         first = self._consume_expr(
-            tokens, i, {"symbol.base.comma", "bracket.r_parentheses"}
+            tokens, i, {SYMBOL_COMMA, BRACKET_R_PAREN}
         )
         i = self._skip_trivia(tokens, i + first, n)
-        while i < n and tokens[i].type == "symbol.base.comma":
+        while i < n and tokens[i].type == SYMBOL_COMMA:
             c = self._consume_expr(
-                tokens, i + 1, {"symbol.base.comma", "bracket.r_parentheses"}
+                tokens, i + 1, {SYMBOL_COMMA, BRACKET_R_PAREN}
             )
             i = self._skip_trivia(tokens, i + 1 + c, n)
-        if i < n and tokens[i].type == "bracket.r_parentheses":
+        if i < n and tokens[i].type == BRACKET_R_PAREN:
             i += 1
         return object(), i - j
 
     def _match_concat(self, tokens: list[Token], j: int, n: int):
         """ConcatExpr: { expr (, expr)* } 或 ReplicateExpr: { n { expr } }"""
         i = self._skip_trivia(tokens, j + 1, n)
-        # ReplicateExpr: { number { expr } }
-        if i < n and tokens[i].type == "literal.number":
-            k = self._skip_trivia(tokens, i + 1, n)
-            if k < n and tokens[k].type == "bracket.l_curly_bracket":
-                k2 = self._consume_expr(tokens, k + 1, {"bracket.r_curly_bracket"})
+        # ReplicateExpr: { n { expr } }，复制数 n 可为数字、标识符或表达式
+        if i < n:
+            cnt = self._consume_expr(tokens, i, {BRACKET_L_CURLY})
+            k = self._skip_trivia(tokens, i + cnt, n)
+            if cnt > 0 and k < n and tokens[k].type == BRACKET_L_CURLY:
+                k2 = self._consume_expr(tokens, k + 1, {BRACKET_R_CURLY})
                 k3 = self._skip_trivia(tokens, k + 1 + k2, n)
-                if k3 < n and tokens[k3].type == "bracket.r_curly_bracket":
+                if k3 < n and tokens[k3].type == BRACKET_R_CURLY:
                     k4 = self._skip_trivia(tokens, k3 + 1, n)
-                    if k4 < n and tokens[k4].type == "bracket.r_curly_bracket":
+                    if k4 < n and tokens[k4].type == BRACKET_R_CURLY:
                         return object(), k4 + 1 - j
         # ConcatExpr: { expr (, expr)* }
         first = self._consume_expr(
-            tokens, i, {"symbol.base.comma", "bracket.r_curly_bracket"}
+            tokens, i, {SYMBOL_COMMA, BRACKET_R_CURLY}
         )
         i = self._skip_trivia(tokens, i + first, n)
-        while i < n and tokens[i].type == "symbol.base.comma":
+        while i < n and tokens[i].type == SYMBOL_COMMA:
             c = self._consume_expr(
-                tokens, i + 1, {"symbol.base.comma", "bracket.r_curly_bracket"}
+                tokens, i + 1, {SYMBOL_COMMA, BRACKET_R_CURLY}
             )
             i = self._skip_trivia(tokens, i + 1 + c, n)
-        if i < n and tokens[i].type == "bracket.r_curly_bracket":
+        if i < n and tokens[i].type == BRACKET_R_CURLY:
             i += 1
         return object(), i - j
+
+    def _match_paren(self, tokens: list[Token], j: int, n: int):
+        """括号表达式: ( expr )，作为原子（后续 ?: / 中缀由 pratt 处理）。"""
+        i = self._skip_trivia(tokens, j + 1, n)
+        c = self._consume_expr(tokens, i, {BRACKET_R_PAREN})
+        i = self._skip_trivia(tokens, i + c, n)
+        if i < n and tokens[i].type == BRACKET_R_PAREN:
+            return object(), i + 1 - j
+        return object(), 1  # 无法闭合，只消费 '('
 
     # ── 辅助 ────────────────────────────────────
 

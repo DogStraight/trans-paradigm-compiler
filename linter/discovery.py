@@ -18,23 +18,14 @@ from core.define import Token
 
 from .checker import (
     CTX_TOP,
-    CTX_MODULE_BODY,
-    CTX_PROC_BODY,
-    CTX_GEN_BODY,
     DiscoveredNode,
 )
+from ._constants import (
+    NEWLINE_TOKEN_TYPE,
+    SEMICOLON_TOKEN_TYPE,
+    TRIVIA as _TRIVIA,
+)
 from .lookahead import LookaheadTable
-
-_TRIVIA = frozenset({"space.fold", "comment", "space", "newline"})
-
-# 块 opener → 上下文
-_OPENER_CTX = {
-    "keyword.module": CTX_MODULE_BODY,
-    "keyword.begin": CTX_PROC_BODY,
-    "keyword.function": CTX_PROC_BODY,
-    "keyword.task": CTX_PROC_BODY,
-    "keyword.generate": CTX_GEN_BODY,
-}
 
 
 class Discovery:
@@ -47,13 +38,24 @@ class Discovery:
         block_closers: frozenset[str],
         bracket_openers: frozenset[str],
         bracket_closers: frozenset[str],
+        opener_ctx: dict[str, str] | None = None,
+        module_item_rule: str = "ModuleItem",
+        stmt_rule: str = "Stmt",
     ) -> None:
         self._tree = tree
-        self._lookahead = LookaheadTable(tree)
+        self._lookahead = LookaheadTable(tree, module_item_rule, stmt_rule)
         self._block_openers = block_openers
         self._block_closers = block_closers
         self._bracket_openers = bracket_openers
         self._bracket_closers = bracket_closers
+        # 块 opener → 消歧上下文（配置驱动，缺省沿用当前上下文）
+        self._opener_ctx = opener_ctx or {}
+        # 块结束符集合：作为语句扫描的终止符（替代硬编码 endmodule 等）
+        self._block_ends = frozenset(
+            info["block_end"]
+            for info in tree.values()
+            if isinstance(info, dict) and info.get("block_end")
+        )
 
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
         """扫描 token 流，返回发现的扁平节点列表。"""
@@ -101,7 +103,7 @@ class Discovery:
                                 context=ctx_stack[-1],
                             )
                         )
-                ctx_stack.append(_OPENER_CTX.get(t.type, ctx_stack[-1]))
+                ctx_stack.append(self._opener_ctx.get(t.type, ctx_stack[-1]))
                 i += 1
                 continue
             if t.type in self._block_closers:
@@ -168,10 +170,9 @@ class Discovery:
                 depth += 1
             elif t.type in self._bracket_closers:
                 depth = max(0, depth - 1)
-            elif depth == 0 and t.type in (
-                "symbol.base.semicolon",
-                "newline",
-                "keyword.endmodule",
+            elif depth == 0 and (
+                t.type in (SEMICOLON_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
+                or t.type in self._block_ends
             ):
                 return i + 1
             i += 1

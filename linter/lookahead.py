@@ -96,10 +96,15 @@ def _discriminator(prods: list[dict], tree: dict) -> set[str]:
 class LookaheadTable:
     """从规则树预计算的前瞻消歧表。"""
 
-    def __init__(self, tree: dict) -> None:
+    def __init__(
+        self,
+        tree: dict,
+        module_item_rule: str = "ModuleItem",
+        stmt_rule: str = "Stmt",
+    ) -> None:
         self._tree = tree
-        self._module_leaves = _context_leaves(tree, "ModuleItem")
-        self._proc_leaves = _context_leaves(tree, "Stmt")
+        self._module_leaves = _context_leaves(tree, module_item_rule)
+        self._proc_leaves = _context_leaves(tree, stmt_rule)
 
         self.keyword_map: dict[str, list[str]] = {}
         self.ident_by_ctx: dict[str, list[dict]] = {
