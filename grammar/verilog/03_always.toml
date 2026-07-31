@@ -76,8 +76,8 @@ tail_break = 2
 
 [SensitivityList.parser]
 production = [
-    "@EdgeSense|symbol.base.multiple",
-    "((symbol.extend.logic_or|symbol.base.comma),@EdgeSense)*",
+    "@EdgeSense|@Identifier|symbol.base.multiple",
+    "((symbol.extend.logic_or|symbol.base.comma),(@EdgeSense|@Identifier))*",
 ]
 
 [SensitivityList.parser.node]
