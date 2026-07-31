@@ -21,7 +21,9 @@ from core.define import Token
 
 from .. import LintDiagnostic, Position
 
-_TRIVIA = frozenset({"space.fold", "space", "comment"})
+# newline 纳入 trivia：表达式可跨行（如多行拼接 { a,\n  b }），
+# 否则 _match_concat 里 first 表达式从行尾 newline 消费，拼接会停在首元素。
+_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 
 
 class ExpressionChecker:

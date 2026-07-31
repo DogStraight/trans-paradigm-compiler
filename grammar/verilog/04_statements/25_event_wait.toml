@@ -28,6 +28,3 @@ line = [
     ") ",
     { ref = "body" },
 ]
-
-[EventWaitStmt.structure]
-is_statement = true

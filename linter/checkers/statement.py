@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from core.define import Token
 
-from .. import LintDiagnostic
+from .. import LintDiagnostic, Position
 from ..checker import Checker
 
 
@@ -24,20 +24,54 @@ class StatementChecker(Checker):
 
     def __init__(
         self,
-        rule: str,
+        rule: "str | list[str]",
         start: int,
         end: int,
         matcher,
     ) -> None:
-        self.rule = rule
+        # 同一起始 token 可对应多个候选规则（如 TaskDeclANSI/Old、FuncDeclANSI/Old）
+        self.rules = rule if isinstance(rule, (list, tuple)) else [rule]
         self.start = start
         self.end = end
         self._matcher = matcher
-        self._prods = matcher._tree.get(rule, {}).get("prods", [])
 
-    def validate(self, tokens: list[Token]) -> list[LintDiagnostic]:
+    def _try_rule(self, tokens: list[Token], rule: str) -> list[LintDiagnostic]:
         errors: list[LintDiagnostic] = []
+        prods = self._matcher._tree.get(rule, {}).get("prods", [])
+        start = self.start
+        # 块规则：production 不含 block.start（如 ModuleDecl 从 @Identifier 开始），
+        # 需先校验并消费 block.start token，再按 production 匹配块内容。
+        bs = (self._matcher._tree.get(rule, {}) or {}).get("block_start") or ""
+        if bs:
+            if start < len(tokens) and tokens[start].type == bs:
+                start += 1
+            else:
+                t = tokens[start]
+                errors.append(
+                    LintDiagnostic(
+                        range=(
+                            Position(t.line, t.column),
+                            Position(t.line, t.column),
+                        ),
+                        message=f"expected block start '{bs}', got '{t.content}'",
+                        severity=1,
+                        code="phase-statement",
+                    )
+                )
+                start += 1
         self._matcher.match_rule(
-            tokens, self.start, self._prods, errors, min(self.end, len(tokens))
+            tokens, start, prods, errors, min(self.end, len(tokens))
         )
         return errors
+
+    def validate(self, tokens: list[Token]) -> list[LintDiagnostic]:
+        """对每个候选规则尝试匹配：无错误的候选立即胜出，
+        全部有错时取错误最少的候选（还原旧 P2 的多候选取优行为）。"""
+        best: list[LintDiagnostic] | None = None
+        for rule in self.rules:
+            errs = self._try_rule(tokens, rule)
+            if not errs:
+                return errs
+            if best is None or len(errs) < len(best):
+                best = errs
+        return best or []

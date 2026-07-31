@@ -27,9 +27,6 @@ name_attr = "type_name"
 kind = "type"
 name_attr = "type_name"
 
-[TypeDecl.structure]
-is_statement = true
-
 [TypeParamList.parser]
 production = [
     "bracket.l_parentheses",

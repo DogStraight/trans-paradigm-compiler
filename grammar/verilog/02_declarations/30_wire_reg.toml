@@ -54,9 +54,6 @@ line = [
     ";",
 ]
 
-[WireDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # RegDecl — reg 声明
@@ -103,9 +100,6 @@ line = [
     ";",
 ]
 
-[RegDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # IntegerDecl — integer 声明
@@ -136,6 +130,3 @@ line = [
     { ref = "items" },
     ";",
 ]
-
-[IntegerDecl.structure]
-is_statement = true

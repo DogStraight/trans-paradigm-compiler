@@ -43,9 +43,6 @@ line = [
     { ref = "body" },
 ]
 
-[ForLoop.structure]
-is_statement = true
-
 
 # ============================================================================
 # ForLoopBlock — for 循环（块体版）
@@ -85,9 +82,6 @@ line = [
     ") ",
     { ref = "body" },
 ]
-
-[ForLoopBlock.structure]
-is_statement = true
 
 [ForInit.parser]
 production = [

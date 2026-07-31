@@ -21,9 +21,6 @@ params = "$3"
 inst_name = "$4"
 ports = "$5.ports"
 
-[ImplBinding.structure]
-is_statement = true
-
 [ImplBindingWithInterface.inject]
 targets = [
     "@InstStmt",
@@ -48,9 +45,6 @@ type_spec = "$2"
 params = "$3"
 ports = "$4"
 interface_ref = "$6"
-
-[ImplBindingWithInterface.structure]
-is_statement = true
 
 [ImplPortsParens.parser]
 inline = true

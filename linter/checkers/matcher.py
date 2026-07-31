@@ -90,7 +90,7 @@ class RuleMatcher:
         if typ == "call":
             return self._match_call(tokens, i, node, errors, limit, strict)
         if typ == "choice":
-            return self._match_choice(tokens, i, node, errors, limit)
+            return self._match_choice(tokens, i, node, errors, limit, strict)
         if typ == "optional":
             return self._match_optional(tokens, i, node, limit)
         if typ == "seq":
@@ -208,7 +208,13 @@ class RuleMatcher:
         return j
 
     def _match_choice(
-        self, tokens: list[Token], i: int, node: dict, errors: list, limit: int
+        self,
+        tokens: list[Token],
+        i: int,
+        node: dict,
+        errors: list,
+        limit: int,
+        strict: bool,
     ) -> int:
         best_i = i
         best_errs: list | None = None
@@ -225,19 +231,21 @@ class RuleMatcher:
         if best_errs is not None and best_i > i:
             errors += best_errs
             return best_i
-        # 所有分支都无进展 → 报 unexpected
-        j = _skip(tokens, i, limit)
-        if j < limit:
-            t = tokens[j]
-            errors.append(
-                LintDiagnostic(
-                    range=(Position(t.line, t.column), Position(t.line, t.column)),
-                    message=f"unexpected '{t.content}'",
-                    severity=1,
-                    code="phase-statement",
+        # 所有分支都无进展：仅在必选位置（strict）报 unexpected 并吞 token 恢复；
+        # 可选语境（optional/repeat 内）失败不推进，防止吞 token 造成误匹配。
+        if strict:
+            j = _skip(tokens, i, limit)
+            if j < limit:
+                t = tokens[j]
+                errors.append(
+                    LintDiagnostic(
+                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        message=f"unexpected '{t.content}'",
+                        severity=1,
+                        code="phase-statement",
+                    )
                 )
-            )
-            return j + 1
+                return j + 1
         return i
 
     def _match_optional(

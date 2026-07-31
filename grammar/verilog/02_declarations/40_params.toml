@@ -36,9 +36,6 @@ line = [
     ";",
 ]
 
-[LocalParamDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # GenvarDecl — genvar 声明
@@ -69,6 +66,3 @@ line = [
     { ref = "genvar_name" },
     ";",
 ]
-
-[GenvarDecl.structure]
-is_statement = true

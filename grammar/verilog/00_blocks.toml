@@ -16,14 +16,11 @@
 # 整个源文件的容器。所有 TopLevel 规则（ModuleDecl、Comment 等）解析后由
 # flatten 机制合并到此节点下。renderer 以 "\n" 连接所有子节点。
 
-[Root.parser.structure]
+[Root]
 is_block = true
 
 [Root.renderer.layout]
 join = "\n"
-
-[Root.structure]
-is_block = true
 
 
 # ============================================================================
@@ -59,9 +56,10 @@ ref = "value"
 # 循环解析语句 → 消费 end。is_statement = true 使其出现在语句候选列表中。
 
 [BeginEnd.parser]
-bound = { start = "keyword.begin", end = "keyword.end" }
 production = [
+    "keyword.begin",
     "@BlockLabel?",
+    "keyword.end",
 ]
 end_case = [
     "newline",
@@ -87,9 +85,8 @@ role = "flatten"
 text = "end"
 break = 1
 
-[BeginEnd.structure]
+[BeginEnd]
 is_block = true
-is_statement = true
 
 
 # ============================================================================

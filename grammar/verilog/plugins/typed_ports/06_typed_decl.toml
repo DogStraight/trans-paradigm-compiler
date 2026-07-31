@@ -72,9 +72,6 @@ items = [
     { node = "Declarator", name = "{instance_name.name.content}_{name}" },
 ]
 
-[TypedPortDecl.structure]
-is_statement = true
-
 [TypedTypeSpec.parser]
 production = [
     "@Identifier",

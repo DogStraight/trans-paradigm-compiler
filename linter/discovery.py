@@ -76,8 +76,31 @@ class Discovery:
                 i = self._skip_balanced(tokens, i, n)
                 continue
 
-            # 块边界 → 上下文切换
+            # 块边界 → 上下文切换 + 块语句发现（ModuleDecl / GenerateBlock 等）
+            # 块语句的 block.start 即真实起始 token（ModuleDecl 的 production 首
+            # 元素是 @Identifier 模块名），必须在此注册节点，否则无法发现与检查
+            # （如 module 缺名字）。注册后不跳过：内部语句由块上下文机制发现。
             if t.type in self._block_openers:
+                nxt_type = self._next_type(tokens, i + 1, n)
+                candidates = self._lookahead.classify(
+                    t.type, nxt_type, ctx_stack[-1]
+                )
+                if candidates:
+                    rule = candidates[0] if len(candidates) == 1 else candidates
+                    be = (
+                        self._tree.get(candidates[0], {}) or {}
+                    ).get("block_end") or ""
+                    end = self._skip_to_end(tokens, i, {be}, n) if be else i + 1
+                    if end > i:
+                        nodes.append(
+                            DiscoveredNode(
+                                type="statement",
+                                rule=rule,
+                                start=i,
+                                end=end,
+                                context=ctx_stack[-1],
+                            )
+                        )
                 ctx_stack.append(_OPENER_CTX.get(t.type, ctx_stack[-1]))
                 i += 1
                 continue
@@ -92,8 +115,8 @@ class Discovery:
             nxt_type = self._next_type(tokens, i + 1, n)
             candidates = self._lookahead.classify(t.type, nxt_type, ctx)
             if candidates:
-                rule = candidates[0]
-                end = self._statement_end(tokens, i, rule, n)
+                rule = candidates[0] if len(candidates) == 1 else candidates
+                end = self._statement_end(tokens, i, candidates[0], n)
                 if end > i:
                     nodes.append(
                         DiscoveredNode(

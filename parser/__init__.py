@@ -1,6 +1,6 @@
 # parser/__init__.py
 import os
-from core.define import GrammarRule, GrammarRulesRegister, FileManager
+from core.define import GrammarRule, GrammarRulesRegister, FileManager, derive_rule_roles
 from .parser_core import Parser
 from .grammar_inject import inject_productions, inject_replace_rule
 
@@ -75,6 +75,9 @@ def setup_grammar(
 
     if ext_rules:
         _apply_ext_injections(rules, ext_rules)
+
+    # 加载与注入完成后推导规则角色（is_statement 从语句入口选择器推导）
+    derive_rule_roles(rules)
 
     return rules
 

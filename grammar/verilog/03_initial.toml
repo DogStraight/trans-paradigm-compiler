@@ -20,7 +20,6 @@
 
 [InitialStmt]
 [InitialStmt.parser]
-structure = { is_statement = true }
 production = [
     "keyword.initial",
     "@Stmt",

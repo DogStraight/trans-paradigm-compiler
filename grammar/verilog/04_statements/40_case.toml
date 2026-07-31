@@ -61,9 +61,6 @@ source = "items"
 text = "endcase"
 break = 1
 
-[CaseStmt.structure]
-is_statement = true
-
 [CaseItemList.parser]
 production = [
     "@CaseItem|@DefaultItem",

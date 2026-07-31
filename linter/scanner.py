@@ -60,25 +60,31 @@ class LinterScanner:
 
         # ── 动态收集 block 起止符 ─────────────────
         _openers, _closers, self._block_pairs, _ = self._build_block_delimiters(rules)
+
+        # 括号配对单一来源：lexer.bracket_map（规则侧 bracket bound 已移除，
+        # 括号由 [bracket].pairs 统一定义）。括号同时加入 block 起止符集，
+        # 使 BoundaryChecker 的栈式配对与 matcher 的括号上下文检查正常生效。
+        _raw_pairs = ConfigRegistry._loaded.get("lexer.bracket_map", {}).get("pairs", [])
+        _bracket_pairs: dict[str, set[str]] = {}
+        for _l, _r, _name in _raw_pairs:
+            _lt = f"bracket.l_{_name}"
+            _rt = f"bracket.r_{_name}"
+            _openers.add(_lt)
+            _closers.add(_rt)
+            _bracket_pairs.setdefault(_rt, set()).add(_lt)
+
         self._block_openers = frozenset(_openers)
         self._block_closers = frozenset(_closers)
-        # 从 bound 配置推导括号起止符集
+        for _rt, _ls in _bracket_pairs.items():
+            self._block_pairs.setdefault(_rt, set()).update(_ls)
         self._bracket_openers = frozenset(
             t for t in self._block_openers if t.startswith("bracket.")
         )
         self._bracket_closers = frozenset(
             t for t in self._block_closers if t.startswith("bracket.")
         )
-
-        # 从 bracket_map 配置推导所有括号 token（含非 bound 的花括号）
-        _all_open = set(self._bracket_openers)
-        _all_close = set(self._bracket_closers)
-        _raw_pairs = ConfigRegistry._loaded.get("lexer.bracket_map", {}).get("pairs", [])
-        for _, _, _name in _raw_pairs:
-            _all_open.add(f"bracket.l_{_name}")
-            _all_close.add(f"bracket.r_{_name}")
-        self._all_bracket_openers = frozenset(_all_open)
-        self._all_bracket_closers = frozenset(_all_close)
+        self._all_bracket_openers = self._bracket_openers
+        self._all_bracket_closers = self._bracket_closers
 
         # 表达式检查器（借力 pratt）+ 共享规则匹配器
         from parser.pratt_parser import process_operator_data
@@ -125,13 +131,13 @@ class LinterScanner:
         for name, rule in rules.items():
             if not isinstance(rule, GrammarRule):
                 continue
-            bs = getattr(rule, "bound_start", "") or ""
-            be = getattr(rule, "bound_end", "") or ""
+            bs = getattr(rule, "block_start", "") or ""
+            be = getattr(rule, "block_end", "") or ""
             if not bs and not be:
                 continue
             if bs:
                 openers.add(bs)
-                # 第一个声明该 bound 的规则胜出
+                # 第一个声明该 block 的规则胜出
                 if bs not in opener_to_rule:
                     opener_to_rule[bs] = name
             if be:

@@ -67,6 +67,7 @@ layout = { ref = "decl" }
 
 # ---------- 过程语句（用于 always / initial 内部） ----------
 [Stmt]
+statement_entry = true
 [Stmt.parser]
 production = ["@CtrlStmt|@ProcAssignStmt|@ProcLocalDecl|@CallStmt"]
 inline = true
@@ -77,6 +78,7 @@ layout = { ref = "stmt" }
 
 # ---------- 任务/函数语句（额外允许 TaskPortDecl） ----------
 [TaskStmt]
+statement_entry = true
 [TaskStmt.parser]
 production = ["@CtrlStmt|@ProcAssignStmt|@ProcLocalDecl|@CallStmt|@TaskPortDecl"]
 inline = true
@@ -129,6 +131,7 @@ layout = { ref = "stmt" }
 
 # ---------- 模块顶层条目（用于 module 体） ----------
 [ModuleItem]
+statement_entry = true
 [ModuleItem.parser]
 production = [
     "@DeclStmt|@InstStmt|@FuncStmt|@AssignStmt|@ProcStmt",

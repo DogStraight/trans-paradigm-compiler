@@ -110,11 +110,20 @@ class LookaheadTable:
 
     def _build(self) -> None:
         for name, info in self._tree.items():
+            # 块起始 token（block.start）优先注册为起始 token：
+            # ModuleDecl 等块语句的 production 首元素是 @Identifier（模块名），
+            # 真实起始 token 是 block.start（keyword.module），不注册则无法发现。
+            # 块规则不要求 is_statement（generate 等非语句块同样需被发现）。
+            bs = info.get("block_start") or ""
+            if bs:
+                self.keyword_map.setdefault(bs, []).append(name)
+                continue
+
             if not info.get("is_statement"):
                 continue
             prods = info.get("prods")
             if not prods:
-                continue  # 空 production 的 bound 块（GenerateBlock 等）由边界检查处理
+                continue  # 空 production 的 block 块（GenerateBlock 等）由边界检查处理
             firsts = _rule_first(name, self._tree)
             if not firsts:
                 continue

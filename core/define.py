@@ -6,6 +6,7 @@ parsing and rendering.
 """
 
 import json
+import re
 import tomllib
 import os
 from pathlib import Path
@@ -351,8 +352,10 @@ class GrammarRule:
         "end_case",
         "inline",
         "pratt",
-        "structure",
-        "bound",
+        "is_atom",
+        "is_block",
+        "is_statement",
+        "statement_entry",
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
@@ -364,8 +367,6 @@ class GrammarRule:
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
-            elif fld in ("structure", "bound"):
-                setattr(self, fld, None)
             else:
                 setattr(self, fld, False)
 
@@ -385,49 +386,21 @@ class GrammarRule:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        # 从 structure 字典中计算 is_block / is_statement / is_atom
-        #
-        # 三个标记是**正交的标记位**，各自控制不同维度的解析行为：
-        #
-        #   is_block     — 解析策略：该规则有 bound（起止符），被引用时
-        #                  newline 跳过逻辑不同，First set 计算跳过其内容。
-        #                  用于 function…endfunction 等块结构。
-        #
-        #   is_statement — 可见性：该规则出现在 parse_sentence() 的候选
-        #                  列表中，可在块体内作为独立语句被识别。
-        #
-        #   is_atom      — 解析策略：原子/终结点规则（Number、Identifier），
-        #                  不进一步分解。
-        #
-        # TOML 写法:
-        #   structure = { is_block = true }            — 块规则
-        #   structure = { is_statement = true }        — 语句规则
-        #   structure = { is_atom = true }             — 原子规则
-        #   structure = { is_block = true, is_statement = true }  — 块语句
-        #
-        # 标记位组合:
-        #   is_block  is_statement  is_atom   |  含义
-        #   ──────────────────────────────────┼─────────────────────────
-        #    false      false       false     |  子句级规则（默认）
-        #    false      true        false     |  语句规则（IfStmt）
-        #    false      false       true      |  原子规则（Number）
-        #    true       false       false     |  纯块规则（Root）
-        #    true       true        false     |  块语句（FuncDeclANSI）
-        #   ──────────────────────────────────┴─────────────────────────
-        #   理论上 is_block + is_atom 同时为 true 无意义，代码中不会出现。
-        struct = getattr(self, "structure", None) or {}
-        self.is_block = struct.get("is_block", False)
-        self.is_statement = struct.get("is_statement", False)
-        self.is_atom = struct.get("is_atom", False)
-
-        # 从 bound 字典中提取边界起止符（替代 block.start/end）
-        #   bound = { start = "keyword.begin", end = "keyword.end" }
-        bnd = getattr(self, "bound", None) or {}
-        self.bound_start = bnd.get("start", "")
-        self.bound_end = bnd.get("end", "")
-        # 向后兼容：block_start/end 映射到 bound_start/end
-        self.block_start = self.bound_start
-        self.block_end = self.bound_end
+        # is_block 块规则：从 production 首尾字面 token 推导块边界，并剥离出
+        # "内容部分"（parser 块路径单独消费 start/end，node 绑定基于内容部分
+        # 编号，故剥离后 $1/$2 等绑定不变）。
+        #   production = ["keyword.module", "@Identifier", ..., "keyword.endmodule"]
+        #   → block_start="keyword.module", block_end="keyword.endmodule",
+        #     prods=["@Identifier", ...]
+        self.block_start = ""
+        self.block_end = ""
+        if getattr(self, "is_block", False) and self.prods:
+            prods = list(self.prods)
+            if prods and isinstance(prods[0], str) and prods[0].startswith("keyword."):
+                self.block_start = prods.pop(0)
+            if prods and isinstance(prods[-1], str) and prods[-1].startswith("keyword."):
+                self.block_end = prods.pop()
+            self.production = prods
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。
@@ -455,6 +428,79 @@ class GrammarRule:
     def prods(self) -> list:
         """生产式列表的快捷访问"""
         return getattr(self, "production", [])
+
+
+# ── 规则角色推导 ──────────────────────────────────────────
+# is_statement 不手写：从"语句入口选择器"（statement_entry = true）沿
+# 选择器结构展开推导。只沿"选择器 → 选择器"展开，遇有具体 token 的叶子
+# 即标记为语句，不做传递闭包（避免 Expression / ParamDecl 被误判为语句）。
+
+_STATEMENT_REF_RE = re.compile(r"@([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _is_selector_rule(rule: "GrammarRule") -> bool:
+    """production 是否含"纯 @ 分派"元素（形如 @A|@B|@C）——即选择器规则。
+
+    选择器（CtrlStmt/DeclStmt/ProcAssignStmt 等）用 | 分派到多个语句/声明
+    叶子。排除顺序组合的组件规则（Declarator/TypedPortDecl/ModuleInst 等
+    production 无顶层 |），避免把声明内部结构（Range/Init/PortConnection
+    等）误标为语句。
+    """
+    prods = rule.prods
+    if not prods:
+        return False
+    for p in prods:
+        if not isinstance(p, str):
+            continue
+        if "|" not in p:
+            continue
+        # 去掉括号复合与 ?/*/+ 后缀，剥离后若全是 @ 引用则为纯 @ 分派
+        body = re.sub(r"\([^)]*\)[?*+]?", "", p)
+        body = re.sub(r"[?*+]", "", body)
+        parts = [s.strip() for s in body.split("|")]
+        if parts and all(parts) and all(pt.startswith("@") for pt in parts):
+            return True
+    return False
+
+
+def _expand_statement_entry(rules: dict, name: str, visited: set[str]) -> None:
+    if name in visited:
+        return
+    visited.add(name)
+    rule = rules.get(name)
+    if rule is None:
+        return
+    for p in rule.prods:
+        if not isinstance(p, str):
+            continue
+        for m in _STATEMENT_REF_RE.finditer(p):
+            sub = rules.get(m.group(1))
+            if sub is None:
+                continue
+            if _is_selector_rule(sub):
+                _expand_statement_entry(rules, sub.name, visited)
+            elif not getattr(sub, "is_atom", False):
+                # 非选择器且非原子（原子如 Identifier/Literal 是组件，绝不可能是语句）
+                sub.is_statement = True
+
+
+def derive_rule_roles(rules: dict[str, "GrammarRule"]) -> None:
+    """加载与注入完成后推导规则角色（当前为 is_statement）。
+
+    两条推导路径：
+    1. 块语句（is_block 且有明确 block_start）天然是语句候选，
+       必须进入 statement_rule_names（parser 顶层依赖其选择规则，
+       如 ModuleDecl 不在任何语句入口选择器引用链下，只能由此推导）。
+    2. 语句入口选择器（statement_entry=true）自身是语句，且其引用的
+       非原子叶子规则也是语句。
+    """
+    visited: set[str] = set()
+    for name, rule in rules.items():
+        if getattr(rule, "is_block", False) and getattr(rule, "block_start", ""):
+            rule.is_statement = True
+        if getattr(rule, "statement_entry", False):
+            rule.is_statement = True
+            _expand_statement_entry(rules, name, visited)
 
 
 class GrammarRulesRegister:

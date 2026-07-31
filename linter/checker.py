@@ -47,7 +47,7 @@ class DiscoveredNode:
     """
 
     type: str              # "bound" | "statement" | "token"
-    rule: str
+    rule: "str | list[str]"  # 同一起始 token 的多个候选规则（如 TaskDeclANSI/Old）
     start: int
     end: int
     context: str = CTX_TOP

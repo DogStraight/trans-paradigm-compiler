@@ -37,9 +37,6 @@ line = [
     ";",
 ]
 
-[NonBlockingAssign.structure]
-is_statement = true
-
 
 # ============================================================================
 # BlockingAssign — 阻塞赋值
@@ -68,9 +65,6 @@ line = [
     { ref = "value" },
     ";",
 ]
-
-[BlockingAssign.structure]
-is_statement = true
 
 
 # ============================================================================
@@ -103,6 +97,3 @@ line = [
     { ref = "value" },
     ";",
 ]
-
-[AssignStmt.structure]
-is_statement = true

@@ -1,0 +1,181 @@
+# 语法规则字段设计
+
+> 状态: 已定稿（2026-08-01）
+> 目标: 明确 GrammarRule 字段的语义、职责边界与正交度，收敛到最小复杂度
+> 变更: 本次将 structure 展平、bound 更名 block、is_statement/is_block 转推导
+
+## 设计哲学
+
+**production 即真相（single source of truth）**：
+
+- 配置作者只表达"语法是什么"（production），框架推导"怎么处理"。
+- 保留的字段必须**职责唯一、正交、不可推导**——凡是能从 production 结构推导的信息，都不该让作者手写，否则手写标记与真实结构必然漂移（`ModuleDecl` 漏检即由此产生）。
+- **不牺牲框架通用性**：推导逻辑基于通用的 production 结构特征，不绑定 Verilog。
+
+## 字段分类总览
+
+| 分类 | 字段 | 作者是否必写 |
+|------|------|-------------|
+| 本质 | `production` | ✅ 必写 |
+| 本质 | `is_atom` | ✅ 必写（原子规则） |
+| 本质 | `is_block` | ✅ 必写（块解析策略） |
+| 语义边界 | `end_case` | 仅变长/歧义规则 |
+| 增强 | `node` / `analyzer.*` / `renderer.*` | 可选 |
+| 推导 | `block_start` / `block_end` / `is_statement` / `inline` | 不写（框架算） |
+| 移除 | `structure` / `block = {start,end}` / `bound` 括号语义 / `[Rule.bound]` | — |
+
+---
+
+## 一、本质字段
+
+### `production` — 语法结构本体
+
+规则的生成式列表，是语法的唯一真相。
+
+```toml
+[AssignStmt.parser]
+production = [
+    "keyword.assign",
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+```
+
+- **消费方**: parser（规则匹配）、linter（语句检查器）
+- **元素类型**: 字面 token（可含 `|` 候选）、子规则引用（`@Expression`）、后缀 `?`/`*`/`+`
+
+### `is_atom` — 原子操作数解析策略（顶层 `[Rule]`）
+
+标记"此规则可作为表达式操作数的原子"，供 pratt 解析器**原子优先结合**。
+
+```toml
+[Number]
+is_atom = true
+
+[ConcatExpr]
+is_atom = true
+```
+
+- **消费方**: parser `parser_core.py` 的 `atomic_rules`（按 production 长度降序，作为 `atom_parser` 回调逐个尝试）
+- **不可推导**: "哪些规则是表达式原子"是**语义决定**——`ConcatExpr`（`{a,b}`）、`SelectExpr`（`a[3:0]`）是复合结构（含变长 `@Expression`）却作为原子，production 结构无法区分，必须作者标注。
+
+### `is_block` — 块解析策略（顶层 `[Rule]`）
+
+标记"此规则走块解析路径"（消费 block 边界、body 内 newline 跳过逻辑、First set 跳过其内容）。
+
+```toml
+[Root]
+is_block = true
+
+[GenerateBlock]
+is_block = true
+```
+
+- **消费方**: parser `_production.py`/`block_parser.py`/`rule_selector.py`（块匹配与边界）、linter `matcher.py`/`grammar_slicer.py`
+- **不可推导**: 既有有 block 边界的块规则（`BeginEnd`/`ModuleDecl`），也有**无边界的纯块角色**（`Root` 文件容器）——后者 production 结构无法表达，必须作者标注。
+
+---
+
+## 二、语义边界字段
+
+> `block = { start, end }` **已移除**（2026-08-01 重构）：块的起止 token 是语法结构本身，
+> 直接写进 `production` 首尾（如 `ModuleDecl` 的 `keyword.module` / `keyword.endmodule`），
+> 由框架在 `is_block` 时从 production 首尾字面 token 推导 `block_start` / `block_end`。
+
+### `block_start` / `block_end` — 语法块边界（推导字段）
+
+块规则的起止符配对，用于块解析与边界识别。**不手写**：`is_block = true` 时从 `production` 首尾字面 token 推导。
+
+```toml
+[ModuleDecl.parser]
+production = [
+    "keyword.module",        # ← 推导为 block_start
+    "@Identifier",
+    "@ParameterList?",
+    "@PortParens?",
+    "symbol.base.semicolon?",
+    "keyword.endmodule",     # ← 推导为 block_end
+]
+```
+
+- **消费方**: parser（块解析路径）、linter（发现器起始 token 注册、边界配对检查）
+- **推导规则**: `is_block = true` 且 `production` 首元素是 `keyword.*` 字面 token → 首为 `block_start`、尾为 `block_end`；推导后从 `production` 剥离出"内容部分"（parser 块路径单独消费起止符，node 绑定 `$N` 基于内容部分，剥离后不变）
+- **仅语法块**（`keyword.*` 边界）：括号配对不在此声明，统一走 `[bracket].pairs` 配置
+- **不可推导**: `is_block` 本身（`Root` 等无边界块角色需作者标注）；但起止 token 完全由 production 表达，不再重复手写
+
+### `end_case` — 变长/歧义规则的终止条件（`[Rule.parser]`）
+
+规则匹配完成后，下一个 token 的预期集合；用于变长 production 的终止判定。
+
+```toml
+[Declarator.parser]
+end_case = ["!symbol.base.dot"]   # 排除式：遇到 dot 不停止
+```
+
+- **消费方**: parser（规则边界）、linter（语句发现器的 `_statement_end`）
+- **何时需要**: 变长 production（`*`/`+`/可选终止）或存在歧义时；定长 production 可省
+- **不可推导**: `!` 排除语法、逗号列表终止等是语言手工微调
+
+---
+
+## 三、增强字段（可选，正交）
+
+### `node` — 属性绑定（`[Rule.parser.node]`）
+
+从生产式消费位置提取 AST 节点属性（`$1`/`$2` 引用）。
+
+### `analyzer.*` / `renderer.*` — 语义/渲染配置
+
+各自领域的配置，与语法结构正交。
+
+---
+
+## 四、推导字段（框架自动计算）
+
+### `is_statement` — 从入口选择器 + 块语句推导
+
+两条推导路径，均由框架计算：
+
+1. **语句入口选择器**：被"语句入口选择器"（`[Rule] statement_entry = true`）沿**选择器结构**引用的规则即为语句。
+
+```toml
+[Stmt]
+statement_entry = true
+```
+
+2. **块语句**：`is_block = true` 且有 `block_start` 的规则天然是语句候选（`ModuleDecl` 等根级块不在任何入口选择器引用链下，只能由此推导，否则 parser 顶层无法选择它）。
+
+- **选择器判定**: production 含"纯 `@` 分派"元素（形如 `@A|@B|@C`，无字面 token）；顺序组合的组件规则（`Declarator`/`TypedPortDecl` 等无顶层 `|`）不算选择器，避免把声明内部结构（`Range`/`Init`/`PortConnection`）误标为语句
+- **关键**: 必须沿**选择器结构**展开，而非对 `@引用` 做传递闭包——否则 `Expression`/`ParamDecl`/`Identifier` 会被误判为语句
+- **框架侧**: `setup_grammar` 加载与注入完成后调用 `derive_rule_roles()` 全局推导
+
+### `inline` — 选择器规则自动展平
+
+production 是纯 choice of calls（如 `CtrlStmt`、`PrimaryExpr`）→ 自动内联展平。
+
+---
+
+## 五、本次变更（从旧字段迁移）
+
+| 旧字段 | 新状态 | 说明 |
+|--------|--------|------|
+| `structure = { is_atom = true }` | `[Rule] is_atom = true` | 展平到顶层 |
+| `structure = { is_block = true }` | `[Rule] is_block = true` | 展平到顶层 |
+| `structure = { is_statement = true }` | 删除 | 转推导（statement_entry + 块语句） |
+| `bound = { start, end }`（语法块） | 删除 | 起止 token 写回 `production` 首尾，由 `is_block` 推导 `block_start/end` |
+| `bound = { start, end }`（括号配对） | 删除 | 走 `[bracket].pairs` |
+| `[Rule.bound]` 顶层 table | 删除 | 单一写法 |
+| `block = { start, end }` | 删除 | 同 bound 处理，production 推导 |
+| `structure` 字段本身 | 删除 | 展平为顶层标记 |
+
+---
+
+## 相关
+
+- `core/define.py` — GrammarRule 字段定义与 `derive_rule_roles()` 推导
+- `parser/parser_core.py` — `atomic_rules` 原子优先结合、`statement_rule_names` 候选
+- `parser/rule_selector.py` — First set / 候选过滤
+- `linter/lookahead.py` — 语句发现消歧表（消费 is_statement、block.start）
+- `docs/end_case_audit.md` — end_case 严格度审计

@@ -20,8 +20,8 @@ inline = true
 body = "$1"
 
 [FuncDeclANSI.parser]
-bound = { start = "keyword.function", end = "keyword.endfunction" }
 production = [
+    "keyword.function",
     "(keyword.automatic|keyword.static)?",
     "keyword.signed?",
     "@Range?",
@@ -30,6 +30,7 @@ production = [
     "@TaskPortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
+    "keyword.endfunction",
 ]
 end_case = [
     "keyword.endfunction",
@@ -81,18 +82,18 @@ role = "flatten"
 text = "endfunction"
 break = 2
 
-[FuncDeclANSI.structure]
+[FuncDeclANSI]
 is_block = true
-is_statement = true
 
 [FuncDeclOld.parser]
-bound = { start = "keyword.function", end = "keyword.endfunction" }
 production = [
+    "keyword.function",
     "(keyword.automatic|keyword.static)?",
     "keyword.signed?",
     "@Range?",
     "@Identifier",
     "symbol.base.semicolon",
+    "keyword.endfunction",
 ]
 end_case = [
     "keyword.endfunction",
@@ -137,9 +138,8 @@ role = "flatten"
 text = "endfunction"
 break = 2
 
-[FuncDeclOld.structure]
+[FuncDeclOld]
 is_block = true
-is_statement = true
 
 
 # ============================================================================
@@ -162,14 +162,15 @@ body = "$1"
 # 格式: task [automatic] name (ports); … endtask
 
 [TaskDeclANSI.parser]
-bound = { start = "keyword.task", end = "keyword.endtask" }
 production = [
+    "keyword.task",
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "bracket.l_parentheses",
     "@TaskPortList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
+    "keyword.endtask",
 ]
 end_case = [
     "keyword.endtask",
@@ -210,16 +211,16 @@ role = "flatten"
 text = "endtask"
 break = 2
 
-[TaskDeclANSI.structure]
+[TaskDeclANSI]
 is_block = true
-is_statement = true
 
 [TaskDeclOld.parser]
-bound = { start = "keyword.task", end = "keyword.endtask" }
 production = [
+    "keyword.task",
     "(keyword.automatic|keyword.static)?",
     "@Identifier",
     "symbol.base.semicolon",
+    "keyword.endtask",
 ]
 end_case = [
     "keyword.endtask",
@@ -253,9 +254,8 @@ role = "flatten"
 text = "endtask"
 break = 2
 
-[TaskDeclOld.structure]
+[TaskDeclOld]
 is_block = true
-is_statement = true
 
 
 # ============================================================================

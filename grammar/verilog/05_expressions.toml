@@ -28,10 +28,8 @@
 #   若需精确控制（如 signed 标识 'sh' 的支持），需扩展生产式。
 
 [BitWidthLiteral.parser]
-production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
-
-[BitWidthLiteral.parser.structure]
 is_atom = true
+production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
 
 [BitWidthLiteral.parser.node]
 width = "$1"
@@ -45,23 +43,15 @@ group = [{ ref = "width" }, "'"]
 [[BitWidthLiteral.renderer.layout.line]]
 ref = "value"
 
-[BitWidthLiteral.structure]
-is_atom = true
-
 [Number.parser]
-production = ["literal.number"]
-
-[Number.parser.structure]
 is_atom = true
+production = ["literal.number"]
 
 [Number.parser.node]
 value = "$1"
 
 [Number.renderer.layout]
 ref = "value"
-
-[Number.structure]
-is_atom = true
 
 
 # ============================================================================
@@ -72,11 +62,9 @@ is_atom = true
 # analyzer 中 identifier_ref = true 表示此节点参与符号引用分析。
 
 [Identifier.parser]
+is_atom = true
 production = ["id"]
 inline = false
-
-[Identifier.parser.structure]
-is_atom = true
 
 [Identifier.parser.node]
 content = "$1.value"
@@ -87,9 +75,6 @@ identifier_ref = true
 [Identifier.renderer.layout]
 ref = "content"
 
-[Identifier.structure]
-is_atom = true
-
 
 # ============================================================================
 # ParenthesizedExpr — 括号表达式
@@ -98,19 +83,14 @@ is_atom = true
 # 作用是改变运算符优先级或提高可读性。
 
 [ParenthesizedExpr.parser]
-production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
-
-[ParenthesizedExpr.parser.structure]
 is_atom = true
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
 
 [ParenthesizedExpr.parser.node]
 expr = "$2"
 
 [ParenthesizedExpr.renderer.layout]
 line = ["(", { ref = "expr" }, ")"]
-
-[ParenthesizedExpr.structure]
-is_atom = true
 
 
 # ============================================================================
@@ -145,6 +125,7 @@ layout = { line = [{ ref = "left" }, { ref = "op" }, { ref = "right" }] }
 # 支持链式后缀: base[idx1][idx2]...
 
 [SelectExpr.parser]
+is_atom = true
 production = [
     "@Identifier",
     "bracket.l_square_bracket",
@@ -152,9 +133,6 @@ production = [
     "bracket.r_square_bracket",
     "(bracket.l_square_bracket,@SelectSuffix,bracket.r_square_bracket)*",
 ]
-
-[SelectExpr.parser.structure]
-is_atom = true
 
 [SelectExpr.parser.node]
 base = "$1"
@@ -170,9 +148,6 @@ line = [
     { ref = "extra_suffixes" },
 ]
 
-[SelectExpr.structure]
-is_atom = true
-
 
 # ============================================================================
 # ConcatExpr — 拼接表达式
@@ -181,6 +156,7 @@ is_atom = true
 # 生产式: { Expr , Expr , ... }
 
 [ConcatExpr.parser]
+is_atom = true
 production = [
     "bracket.l_curly_bracket",
     "@Expression",
@@ -188,17 +164,11 @@ production = [
     "bracket.r_curly_bracket",
 ]
 
-[ConcatExpr.parser.structure]
-is_atom = true
-
 [ConcatExpr.parser.node]
 sub_node = ["$2", "$3.items[*].sub_node[1]"]
 
 [ConcatExpr.renderer.layout]
 line = ["{", { join = ",", nest = 1 }, "}"]
-
-[ConcatExpr.structure]
-is_atom = true
 
 
 # ============================================================================
@@ -208,6 +178,7 @@ is_atom = true
 # 例如: {4{1'b0}} → 4'b0000
 
 [ReplicateExpr.parser]
+is_atom = true
 production = [
     "bracket.l_curly_bracket",
     "@Expression",
@@ -217,18 +188,12 @@ production = [
     "bracket.r_curly_bracket",
 ]
 
-[ReplicateExpr.parser.structure]
-is_atom = true
-
 [ReplicateExpr.parser.node]
 count = "$2"
 value = "$4"
 
 [ReplicateExpr.renderer.layout]
 line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"]
-
-[ReplicateExpr.structure]
-is_atom = true
 
 
 # ============================================================================
@@ -256,6 +221,7 @@ ref = "value"
 # 用户定义函数或任务调用: func_name(arg1, arg2)
 
 [CallExpr.parser]
+is_atom = true
 production = [
     "@Identifier",
     "bracket.l_parentheses",
@@ -263,18 +229,12 @@ production = [
     "bracket.r_parentheses",
 ]
 
-[CallExpr.parser.structure]
-is_atom = true
-
 [CallExpr.parser.node]
 callee = "$1"
 args = "$3"
 
 [CallExpr.renderer.layout]
 line = [{ ref = "callee" }, "(", { ref = "args" }, ")"]
-
-[CallExpr.structure]
-is_atom = true
 
 
 # ============================================================================
@@ -284,6 +244,7 @@ is_atom = true
 # 生产式: $ Identifier ( ArgumentList? )
 
 [SysFuncCall.parser]
+is_atom = true
 production = [
     "symbol.base.dollar",
     "@Identifier",
@@ -292,18 +253,12 @@ production = [
     "bracket.r_parentheses",
 ]
 
-[SysFuncCall.parser.structure]
-is_atom = true
-
 [SysFuncCall.parser.node]
 callee = "$2"
 args = "$4"
 
 [SysFuncCall.renderer.layout]
 line = ["$", { ref = "callee" }, "(", { ref = "args" }, ")"]
-
-[SysFuncCall.structure]
-is_atom = true
 
 
 # ============================================================================
@@ -412,9 +367,6 @@ end_case = [
     "bracket.r_curly_bracket",
     "symbol.base.colon",
 ]
-
-[Expression.parser.structure]
-is_statement = false
 
 [Expression.parser.node]
 

@@ -88,9 +88,6 @@ end_case = [
     "newline",
 ]
 
-[TaskAnsiInputDecl.parser.structure]
-is_statement = false
-
 [TaskAnsiInputDecl.parser.node]
 direction = "input"
 port_type = "$2.port_type"
@@ -218,9 +215,6 @@ end_case = [
     "newline",
 ]
 
-[AnsiInputDecl.parser.structure]
-is_statement = false
-
 [AnsiInputDecl.parser.node]
 direction = "input"
 port_type = "$2.port_type"
@@ -268,9 +262,6 @@ end_case = [
     "newline",
 ]
 
-[AnsiOutputDecl.parser.structure]
-is_statement = false
-
 [AnsiOutputDecl.parser.node]
 direction = "output"
 port_type = "$2.port_type"
@@ -317,9 +308,6 @@ production = [
 end_case = [
     "newline",
 ]
-
-[AnsiInoutDecl.parser.structure]
-is_statement = false
 
 [AnsiInoutDecl.parser.node]
 direction = "inout"

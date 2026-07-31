@@ -30,12 +30,13 @@
 # renderer.tail 在 endmodule 后额外空一行（break = 2）。
 
 [ModuleDecl.parser]
-bound = { start = "keyword.module", end = "keyword.endmodule" }
 production = [
+    "keyword.module",
     "@Identifier",
     "@ParameterList?",
     "@PortParens?",
     "symbol.base.semicolon?",
+    "keyword.endmodule",
 ]
 end_case = [
     "keyword.endmodule",
@@ -84,9 +85,8 @@ role = "flatten"
 text = "endmodule"
 break = 2
 
-[ModuleDecl.structure]
+[ModuleDecl]
 is_block = true
-is_statement = true
 
 
 # ============================================================================
@@ -97,7 +97,6 @@ is_statement = true
 # 渲染时直接引用 ports 子节点列表。
 
 [PortParens.parser]
-bound = { start = "bracket.l_parentheses", end = "bracket.r_parentheses" }
 inline = true
 production = [
     "bracket.l_parentheses",
@@ -121,7 +120,6 @@ ref = "ports"
 # nest = 1 在 broken 模式下增加一级缩进。
 
 [ParameterList.parser]
-bound = { start = "bracket.l_parentheses", end = "bracket.r_parentheses" }
 production = [
     "symbol.base.pound",
     "bracket.l_parentheses",
@@ -166,9 +164,6 @@ end_case = [
     "bracket.r_parentheses",
     "newline",
 ]
-
-[ParamDecl.parser.structure]
-is_statement = false
 
 [ParamDecl.parser.node]
 param_range = "$2"

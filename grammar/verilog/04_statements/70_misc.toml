@@ -40,9 +40,6 @@ line = [
     ";",
 ]
 
-[SubroutineCall.structure]
-is_statement = true
-
 
 # ============================================================================
 # NullStmt — 空语句
@@ -62,20 +59,19 @@ end_case = [
 [NullStmt.renderer]
 layout = ";"
 
-[NullStmt.structure]
-is_statement = true
-
 
 # ============================================================================
 # GenerateBlock — generate 块
 # ============================================================================
 # generate … endgenerate 结构，用于条件生成和循环生成。
-# production = [] 表示依赖 bound 的块机制（无独有生产式），
+# production = [] 表示依赖 block 的块机制（无独有生产式），
 # 体内容由 flatten 机制收集。
 
 [GenerateBlock.parser]
-bound = { start = "keyword.generate", end = "keyword.endgenerate" }
-production = []
+production = [
+    "keyword.generate",
+    "keyword.endgenerate",
+]
 end_case = [
     "keyword.endgenerate",
     "newline",
@@ -94,9 +90,8 @@ role = "flatten"
 text = "endgenerate"
 break = 2
 
-[GenerateBlock.structure]
+[GenerateBlock]
 is_block = true
-is_statement = true
 
 
 # ============================================================================
@@ -161,6 +156,3 @@ line = [
     ") ",
     { ref = "body" },
 ]
-
-[LoopGen.structure]
-is_statement = true

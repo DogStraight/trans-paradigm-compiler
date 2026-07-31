@@ -61,9 +61,6 @@ items = [
 text = ");"
 break = 2
 
-[ModuleInst.structure]
-is_statement = true
-
 
 # ============================================================================
 # ParamOverride — 参数覆盖
@@ -143,10 +140,9 @@ line = [
 # PortConnection — 端口连接括号
 # ============================================================================
 # 实例化的端口连接部分: (.port1(w1), .port2(w2));
-# bound 定义 ( ) 配对，以处理多行端口列表。
+# 括号配对由 [bracket].pairs 配置统一处理。
 
 [PortConnection.parser]
-bound = { start = "bracket.l_parentheses", end = "bracket.r_parentheses" }
 production = [
     "bracket.l_parentheses",
     "@NamedPortList?",
@@ -159,9 +155,6 @@ end_case = [
 
 [PortConnection.parser.node]
 ports = "$2"
-
-[PortConnection.structure]
-is_statement = false
 
 
 # ============================================================================

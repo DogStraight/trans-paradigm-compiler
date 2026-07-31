@@ -72,9 +72,6 @@ line = [
     ";",
 ]
 
-[BodyInputDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # BodyOutputDecl — 模块体 output 声明
@@ -124,9 +121,6 @@ line = [
     ";",
 ]
 
-[BodyOutputDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # BodyInoutDecl — 模块体 inout 声明
@@ -175,9 +169,6 @@ line = [
     { ref = "items" },
     ";",
 ]
-
-[BodyInoutDecl.structure]
-is_statement = true
 
 
 # ============================================================================
@@ -239,9 +230,6 @@ line = [
     ";",
 ]
 
-[TaskInputDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # TaskOutputDecl — 任务/函数体 output 声明
@@ -289,9 +277,6 @@ line = [
     ";",
 ]
 
-[TaskOutputDecl.structure]
-is_statement = true
-
 
 # ============================================================================
 # TaskInoutDecl — 任务/函数体 inout 声明
@@ -338,6 +323,3 @@ line = [
     { ref = "items" },
     ";",
 ]
-
-[TaskInoutDecl.structure]
-is_statement = true
