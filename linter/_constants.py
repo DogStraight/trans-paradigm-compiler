@@ -32,3 +32,6 @@ SYMBOL_COMMA = "symbol.base.comma"
 SYMBOL_COLON = "symbol.base.colon"
 SYMBOL_SINGLE_QUOTE = "symbol.base.single_quote"
 SYMBOL_DOLLAR = "symbol.base.dollar"
+# part-select 运算符（Verilog [a +: b] / [a -: b]）
+SYMBOL_PLUS_RANGE = "symbol.extend.plus_range"
+SYMBOL_MINUS_RANGE = "symbol.extend.minus_range"

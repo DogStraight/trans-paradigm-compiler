@@ -17,6 +17,7 @@ from __future__ import annotations
 from core.define import Token
 
 from .checker import (
+    CTX_PROC_BODY,
     CTX_TOP,
     DiscoveredNode,
 )
@@ -41,9 +42,12 @@ class Discovery:
         opener_ctx: dict[str, str] | None = None,
         module_item_rule: str = "ModuleItem",
         stmt_rule: str = "Stmt",
+        matcher=None,
     ) -> None:
         self._tree = tree
-        self._lookahead = LookaheadTable(tree, module_item_rule, stmt_rule)
+        self._lookahead = LookaheadTable(
+            tree, module_item_rule, stmt_rule, matcher=matcher
+        )
         self._block_openers = block_openers
         self._block_closers = block_closers
         self._bracket_openers = bracket_openers
@@ -58,97 +62,200 @@ class Discovery:
         )
 
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
-        """扫描 token 流，返回发现的扁平节点列表。"""
+        """扫描 token 流，递归发现嵌套节点，返回树（children 填充）。"""
+        return self._discover_range(tokens, 0, len(tokens), CTX_TOP, 0)
+
+    def _discover_range(
+        self,
+        tokens: list[Token],
+        start: int,
+        end: int,
+        context: str,
+        depth: int,
+    ) -> list[DiscoveredNode]:
+        """在 [start, end) 区间内扫描语句；块容器递归产出 children。
+
+        层级最多到句子级：递归进入块 body 发现句子节点，不深入句子内部
+        （表达式/字面量等黑盒）。句子结束边界由 production 推导（见
+        _statement_end），不依赖 end_case 手写值。
+        """
         nodes: list[DiscoveredNode] = []
-        ctx_stack: list[str] = [CTX_TOP]
-        i = 0
-        n = len(tokens)
-        while i < n:
-            i = self._skip(tokens, i, n)
-            if i >= n:
+        i = start
+        while i < end:
+            i = self._skip(tokens, i, end)
+            if i >= end:
                 break
             t = tokens[i]
 
-            if t.type == "newline":
+            if t.type == NEWLINE_TOKEN_TYPE:
                 i += 1
                 continue
 
-            # 括号内容整体跳过（如端口列表），避免内部 token 被误判为语句起点
+            # 括号内容整体跳过（端口列表/参数列表等），避免内部 token 误判
             if t.type in self._bracket_openers:
-                i = self._skip_balanced(tokens, i, n)
+                i = self._skip_balanced(tokens, i, end)
                 continue
 
-            # 块边界 → 上下文切换 + 块语句发现（ModuleDecl / GenerateBlock 等）
-            # 块语句的 block.start 即真实起始 token（ModuleDecl 的 production 首
-            # 元素是 @Identifier 模块名），必须在此注册节点，否则无法发现与检查
-            # （如 module 缺名字）。注册后不跳过：内部语句由块上下文机制发现。
+            # 块边界 → 注册块节点 + 递归 body 产出 children
             if t.type in self._block_openers:
-                nxt_type = self._next_type(tokens, i + 1, n)
-                candidates = self._lookahead.classify(
-                    t.type, nxt_type, ctx_stack[-1]
-                )
+                candidates = self._lookahead.classify(tokens, i, context)
+                end_idx = i + 1
                 if candidates:
                     rule = candidates[0] if len(candidates) == 1 else candidates
                     be = (
                         self._tree.get(candidates[0], {}) or {}
                     ).get("block_end") or ""
-                    end = self._skip_to_end(tokens, i, {be}, n) if be else i + 1
-                    if end > i:
-                        nodes.append(
-                            DiscoveredNode(
-                                type="statement",
-                                rule=rule,
-                                start=i,
-                                end=end,
-                                context=ctx_stack[-1],
-                            )
-                        )
-                ctx_stack.append(self._opener_ctx.get(t.type, ctx_stack[-1]))
-                i += 1
-                continue
-            if t.type in self._block_closers:
-                if len(ctx_stack) > 1:
-                    ctx_stack.pop()
-                i += 1
-                continue
-
-            # 语句发现：上下文 + 前瞻消歧
-            ctx = ctx_stack[-1]
-            nxt_type = self._next_type(tokens, i + 1, n)
-            candidates = self._lookahead.classify(t.type, nxt_type, ctx)
-            if candidates:
-                rule = candidates[0] if len(candidates) == 1 else candidates
-                end = self._statement_end(tokens, i, candidates[0], n)
-                if end > i:
-                    nodes.append(
-                        DiscoveredNode(
+                    end_idx = self._skip_to_end(tokens, i, {be}, end) if be else i + 1
+                    if end_idx > i:
+                        node = DiscoveredNode(
                             type="statement",
                             rule=rule,
                             start=i,
-                            end=end,
-                            context=ctx,
+                            end=end_idx,
+                            context=context,
                         )
+                        body_start, body_end = self._block_body(
+                            tokens, i, end_idx, candidates[0], end
+                        )
+                        if body_start < body_end:
+                            node.children = self._discover_range(
+                                tokens,
+                                body_start,
+                                body_end,
+                                self._opener_ctx.get(t.type, context),
+                                depth + 1,
+                            )
+                        nodes.append(node)
+                i = end_idx
+                continue
+
+            if t.type in self._block_closers:
+                i += 1
+                continue
+
+            # 语句发现：上下文 + 动态两级消歧
+            candidates = self._lookahead.classify(tokens, i, context)
+            if candidates:
+                rule = candidates[0] if len(candidates) == 1 else candidates
+                e = self._statement_end(tokens, i, candidates[0], end)
+                if e > i:
+                    node = DiscoveredNode(
+                        type="statement",
+                        rule=rule,
+                        start=i,
+                        end=e,
+                        context=context,
                     )
-                    i = end
+                    # 引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归
+                    if isinstance(candidates[0], str) and self._is_nested_container(
+                        candidates[0]
+                    ):
+                        body = self._locate_stmt_body(tokens, i, candidates[0], e)
+                        if body is not None:
+                            bs, _, entry = body
+                            bctx = CTX_PROC_BODY if entry == "Stmt" else context
+                            if bs < e:
+                                node.children = self._discover_range(
+                                    tokens, bs, e, bctx, depth + 1
+                                )
+                    nodes.append(node)
+                    i = e
                     continue
             i += 1
         return nodes
 
     # ── 辅助 ────────────────────────────────────
 
+    def _is_nested_container(self, rule: str) -> bool:
+        """规则是否引用式容器：production 含 @Stmt/@BeginEnd 类语句/块 call。
+
+        配置驱动（不硬编码规则名）：call 目标 is_statement 或 is_block 即容器。
+        """
+        info = self._tree.get(rule, {})
+        return any(self._feat_calls_stmt(f) for f in info.get("prods", []))
+
+    def _feat_calls_stmt(self, feat) -> bool:
+        """feature 是否（直接/嵌套）引用语句或块规则。"""
+        if not isinstance(feat, dict):
+            return False
+        typ = feat.get("type")
+        if typ == "call":
+            tinfo = self._tree.get(feat.get("name", ""), {})
+            return bool(tinfo.get("is_statement") or tinfo.get("is_block"))
+        if typ in ("optional", "repeat", "plus"):
+            return self._feat_calls_stmt(feat.get("elem"))
+        if typ == "seq":
+            return any(self._feat_calls_stmt(x) for x in feat.get("items", []))
+        if typ == "choice":
+            return any(
+                self._feat_calls_stmt(x) for x in feat.get("alternatives", [])
+            )
+        return False
+
+    def _locate_stmt_body(
+        self, tokens: list[Token], i: int, rule: str, end: int
+    ) -> tuple[int, int, str] | None:
+        """定位引用式容器 production 中首个语句/块元素的 token 区间。
+
+        用共享 matcher 逐元素匹配 production，遇到 is_statement/is_block 的
+        call（@Stmt/@BeginEnd 等）即记录其起始位置。返回 (body_start, body_end, 入口规则名)。
+        """
+        matcher = self._lookahead._matcher
+        if matcher is None:
+            return None
+        info = self._tree.get(rule, {})
+        j = i
+        for feat in info.get("prods", []):
+            if j >= end or not isinstance(feat, dict):
+                break
+            name = feat.get("name") if feat.get("type") == "call" else ""
+            if name:
+                tinfo = self._tree.get(name, {})
+                if tinfo.get("is_statement") or tinfo.get("is_block"):
+                    return j, end, name
+            trial: list = []
+            try:
+                k = matcher.match(tokens, j, feat, trial, end, strict=True)
+            except Exception:
+                break
+            j = k if k > j else j + 1
+        return None
+
     def _statement_end(self, tokens: list[Token], i: int, rule: str, n: int) -> int:
-        """确定语句的粗略边界（end_case 或分号/行尾）。
+        """确定语句的粗略边界（production 推导结束符，其次 end_case）。
 
         单 token 语句（如 NullStmt 的分号）只消费起始 token，
         避免 end_case=["newline"] 在单行文件里延伸吞掉后续语句。
         """
         if self._is_single_token_rule(rule):
             return i + 1
-        ec = self._lookahead.end_case(rule)
+        # 结束符优先从 production 推导（production 即真相）：结尾纯字面 token
+        # （如分号）是句子天然结束边界，不依赖手写 end_case。
+        ec = self._derived_end_case(rule)
+        if not ec:
+            ec = self._lookahead.end_case(rule)
         if ec:
             return self._skip_to_end(tokens, i, ec, n)
         # 无 end_case → 跳到分号或行尾
         return self._skip_to_statement_end(tokens, i, n)
+
+    def _derived_end_case(self, rule: str) -> set[str]:
+        """从 production 推导结束符：结尾纯字面 token（非 @、无 ?*+ 后缀）。
+
+        仅对非容器规则推导——容器（case/if/for 等含 @Stmt body）内部有分号，
+        结尾字面 token 不是唯一终止，强行推导会截断在内部语句处。容器回退到
+        配置 end_case。返回空集表示无可推导结束符。
+        """
+        if self._is_nested_container(rule):
+            return set()
+        info = self._tree.get(rule, {})
+        prods = info.get("prods", [])
+        if not prods:
+            return set()
+        last = prods[-1]
+        if isinstance(last, dict) and last.get("type") == "token":
+            return {last["token_type"]}
+        return set()
 
     def _is_single_token_rule(self, rule: str) -> bool:
         """production 只有单个字面 token（如 NullStmt 的 ';'）。"""
@@ -161,6 +268,74 @@ class Discovery:
             return False
         # 含 "|" 的多 token 候选（如 keyword.case|casex）不算单 token
         return "|" not in first.get("token_type", "")
+
+    def _block_body(
+        self,
+        tokens: list[Token],
+        i: int,
+        end_idx: int,
+        rule: str,
+        n: int,
+    ) -> tuple[int, int]:
+        """块 body 区间：块头后 ~ block_end 前。
+
+        有分号声明头（module/function/task）→ body 从头后的分号开始；
+        无头（begin/generate）→ body 从 block_start 后开始。end_idx 是
+        block_end token 之后的位置，body_end = end_idx - 1（不含 end）。
+        """
+        if self._has_semicolon_header(rule):
+            start = self._skip_block_header(tokens, i, end_idx)
+        else:
+            start = i + 1
+        end = max(start, end_idx - 1)
+        return start, end
+
+    def _has_semicolon_header(self, rule: str) -> bool:
+        """块规则 production 是否含分号声明头（module/function/task）。
+
+        递归查找本规则直接结构中的分号（含 optional/seq/choice 包裹，不深入
+        call——端口列表内部的分号不是头结束符）。begin/generate 无此头。
+        """
+        info = self._tree.get(rule, {})
+        return any(
+            self._feat_has_semicolon(f) for f in info.get("prods", [])
+        )
+
+    @staticmethod
+    def _feat_has_semicolon(feat) -> bool:
+        """feature 是否直接含分号 token（不深入 call）。"""
+        if not isinstance(feat, dict):
+            return False
+        typ = feat.get("type")
+        if typ == "token":
+            return feat.get("token_type") == SEMICOLON_TOKEN_TYPE
+        if typ in ("optional", "repeat", "plus"):
+            return Discovery._feat_has_semicolon(feat.get("elem"))
+        if typ == "seq":
+            return any(
+                Discovery._feat_has_semicolon(i) for i in feat.get("items", [])
+            )
+        if typ == "choice":
+            return any(
+                Discovery._feat_has_semicolon(a)
+                for a in feat.get("alternatives", [])
+            )
+        return False
+
+    def _skip_block_header(self, tokens: list[Token], i: int, n: int) -> int:
+        """跳过块头：从 i（block_start）跳到第一个顶层分号之后（body 开始）。"""
+        depth = 0
+        j = i + 1
+        while j < n:
+            t = tokens[j]
+            if t.type in self._bracket_openers:
+                depth += 1
+            elif t.type in self._bracket_closers:
+                depth = max(0, depth - 1)
+            elif depth == 0 and t.type == SEMICOLON_TOKEN_TYPE:
+                return j + 1
+            j += 1
+        return j
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:
         depth = 0

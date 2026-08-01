@@ -6,17 +6,24 @@
     2. ident_rules   — 标识符触发的规则（B 类），每条含判别 token 集 + 适用上下文
     3. context_leaves — 各块上下文（模块体/过程体）可出现的语句叶子规则集合
 
-B 类消歧策略（决策 1：动态前瞻逐级缩小范围）：
-    - 先用块上下文（骨架树推导）过滤候选集
-    - 再前瞻 id 之后的第一个必选 token（判别 token）确定具体规则
+B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
+    - Level 1（变长前瞻）：首 token 相同时逐 token 预视，每预视一个就缩小
+      候选路径集，直到只剩唯一一条（前瞻深度到语句边界块为止，不穿透）。
+    - Level 2（试解析）：候选生成式含深层 call / 前缀无法静态表达 / 边界内
+      未收敛时，对每个候选用完整 production 试解析匹配（复用 RuleMatcher），
+      比较匹配结果（错误数 + 消费位置）定夺。
     例如 `foo` 在过程体：
-        foo = ...   → BlockingAssign（判别 {symbol.base.equal}）
-        foo <= ...  → NonBlockingAssign（判别 {symbol.extend.lesser_equal}）
-        foo(...)    → SubroutineCall（判别 {bracket.l_parentheses}）
+        foo = ...   → BlockingAssign（前缀 ["="]）
+        foo <= ...  → NonBlockingAssign（前缀 ["<="]）
+        foo(...)    → SubroutineCall（前缀 ["("]）
+        foo u1(...) → ModuleInst（前缀 [id, "("]，需预视 2 token）
 """
 
 from __future__ import annotations
 
+from core.define import Token
+
+from ._constants import SEMICOLON_TOKEN_TYPE, TRIVIA as _TRIVIA
 from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
 from .grammar_slicer import _collect_first_start_tokens
 
@@ -57,18 +64,36 @@ def _collect_calls(feat: dict | None) -> list[str]:
     return []
 
 
+def _is_pure_call_choice(feat: dict | None) -> bool:
+    """feature 是否纯 @ 分派：call 或 choice-of-calls（无 token/repeat 等）。"""
+    if feat is None:
+        return False
+    typ = feat.get("type")
+    if typ == "call":
+        return True
+    if typ == "choice":
+        return all(
+            _is_pure_call_choice(a) for a in feat.get("alternatives", [])
+        )
+    return False
+
+
 def _expand_selector(name: str, tree: dict, acc: set[str], visited: set[str]) -> None:
-    """递归展开选择器规则（inline 分发），收集叶子规则名。"""
+    """递归展开选择器规则（inline 分发），收集叶子语句规则名。
+
+    选择器 = production 仅 1 个元素且为纯 @ 分派（如 Stmt → @A|@B|@C）。
+    遇含具体 token 的叶子语句（BlockingAssign 等）即停止加入，不继续展开
+    到表达式原子（与 derive_rule_roles 的 is_statement 推导语义对齐）。
+    """
     if name in visited:
         return
     visited.add(name)
     info = tree.get(name)
     if not info or not info.get("prods"):
         return
-    first = info["prods"][0]
-    calls = _collect_calls(first)
-    if calls:
-        for c in calls:
+    prods = info["prods"]
+    if len(prods) == 1 and _is_pure_call_choice(prods[0]):
+        for c in _collect_calls(prods[0]):
             _expand_selector(c, tree, acc, visited)
     else:
         acc.add(name)
@@ -81,16 +106,92 @@ def _context_leaves(tree: dict, root_name: str) -> set[str]:
     return acc
 
 
-def _discriminator(prods: list[dict], tree: dict) -> set[str]:
-    """计算 id 开头规则的判别 token 集：id 之后第一个必选元素的 first 集。
+# 表达式黑盒：first 是 id（与触发相同）或内部复杂，前缀无判别价值。
+# 作为"终止元素"：路径在此结束，不继续展开其后的 token。
+_EXPR_BLACKBOX = {"Expression", "PrimaryExpr"}
+# 前缀路径最大长度（防御；真实判别前缀都很短，到边界块即止）
+_MAX_PREFIX_LEN = 8
 
-    跳过 optional/repeat（它们无强制起始 token），直到遇到有 first 的元素。
+
+def _feat_token_paths(
+    feat: dict | None, tree: dict
+) -> set[tuple[str, ...]] | None:
+    """单个 production 元素的判别 token 序列集。
+
+    返回 set[tuple[str, ...]]：该元素可能的前缀 token 序列（含空元组 = epsilon）。
+    返回 None：该元素是**终止元素**（表达式黑盒/语句/块边界）——路径在此结束，
+    不继续展开其后的 token。前缀在此截断，后续由变长前瞻在边界块内区分。
     """
-    for feat in prods[1:]:
-        firsts = _first_of(feat, tree)
-        if firsts:
-            return firsts
-    return set()
+    if feat is None:
+        return {()}
+    typ = feat.get("type")
+    if typ == "token":
+        return {(feat["token_type"],)}
+    if typ == "choice":
+        result: set[tuple[str, ...]] = set()
+        for alt in feat.get("alternatives", []):
+            sub = _feat_token_paths(alt, tree)
+            if sub is None:
+                return None  # 任一分支含终止元素 → 整体终止
+            result |= sub
+        return result
+    if typ == "seq":
+        result = {()}
+        for item in feat.get("items", []):
+            sub = _feat_token_paths(item, tree)
+            if sub is None:
+                return result  # seq 遇终止元素 → 保留到该元素为止的前缀
+            result = {p + s for p in result for s in sub}
+        return result
+    if typ == "optional":
+        elem = feat.get("elem")
+        sub = _feat_token_paths(elem, tree)
+        if sub is None:
+            return None  # 可选复杂 call → 截断（内容不可静态判别）
+        return {()} | sub
+    if typ in ("repeat", "plus"):
+        # 变长重复：0 次 或 1 次（再长不增加判别深度，到边界块为止）
+        elem = feat.get("elem")
+        sub = _feat_token_paths(elem, tree)
+        if sub is None:
+            return None
+        return {()} | sub
+    if typ == "call":
+        name = feat.get("name", "")
+        if name in _EXPR_BLACKBOX:
+            return None  # 表达式黑盒 → 终止元素
+        info = tree.get(name)
+        if info is None:
+            return None
+        if info.get("is_statement") or info.get("is_block"):
+            return None  # 语句/块边界 → 终止元素（不穿透句子级）
+        if not info.get("is_atom"):
+            return None  # 非原子复杂 call（参数列表/端口连接等）→ 截断，走 Level 2
+        prods = info.get("prods", [])
+        if not prods:
+            return None
+        return {(t,) for t in _collect_first_start_tokens(prods[0], tree)}
+    return {()}
+
+
+def _build_prefix_paths(prods: list[dict], tree: dict) -> set[tuple[str, ...]]:
+    """从 production（id 之后的元素）构建判别前缀路径集。
+
+    遇终止元素（表达式黑盒/语句/块）即截断该路径——前缀只覆盖"能区分候选"
+    的部分，句内剩余内容由变长前瞻在边界块内直接看实际 token。
+    """
+    result: set[tuple[str, ...]] = {()}
+    for feat in prods:
+        sub = _feat_token_paths(feat, tree)
+        if sub is None:
+            break  # 终止元素 → 路径到此为止
+        result = {
+            p + s
+            for p in result
+            for s in sub
+            if len(p) + len(s) <= _MAX_PREFIX_LEN
+        }
+    return result
 
 
 class LookaheadTable:
@@ -101,16 +202,22 @@ class LookaheadTable:
         tree: dict,
         module_item_rule: str = "ModuleItem",
         stmt_rule: str = "Stmt",
+        matcher=None,
     ) -> None:
         self._tree = tree
+        self._matcher = matcher
         self._module_leaves = _context_leaves(tree, module_item_rule)
         self._proc_leaves = _context_leaves(tree, stmt_rule)
+        # 句子终止符（边界块）：分号 + 块结束，Level 1 前瞻上界
+        self._block_ends = frozenset(
+            info["block_end"]
+            for info in tree.values()
+            if isinstance(info, dict) and info.get("block_end")
+        )
 
         self.keyword_map: dict[str, list[str]] = {}
-        self.ident_by_ctx: dict[str, list[dict]] = {
-            CTX_MODULE_BODY: [],
-            CTX_PROC_BODY: [],
-        }
+        # B 类：context → 候选子集（变长，不预写死 key，get 默认空）
+        self.ident_by_ctx: dict[str, list[dict]] = {}
         self._build()
 
     def _build(self) -> None:
@@ -133,35 +240,128 @@ class LookaheadTable:
             if not firsts:
                 continue
             if "id" in firsts:
-                # B 类：标识符触发 → 归类到适用上下文 + 判别 token
-                disc = _discriminator(prods, self._tree)
-                if not disc:
-                    continue
-                entry = {"name": name, "discriminator": disc}
+                # B 类：标识符触发 → 前缀路径 + 按上下文归属（变长子集）
+                paths = _build_prefix_paths(prods[1:], self._tree)
+                # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
+                paths = {p for p in paths if p}
+                entry = {"name": name, "paths": paths}
                 if name in self._module_leaves:
-                    self.ident_by_ctx[CTX_MODULE_BODY].append(entry)
+                    self.ident_by_ctx.setdefault(CTX_MODULE_BODY, []).append(entry)
                 if name in self._proc_leaves:
-                    self.ident_by_ctx[CTX_PROC_BODY].append(entry)
+                    self.ident_by_ctx.setdefault(CTX_PROC_BODY, []).append(entry)
             else:
                 # A 类：关键字/具体符号触发
                 for tt in firsts:
                     self.keyword_map.setdefault(tt, []).append(name)
 
-    def classify(self, tok_type: str, nxt_type: str, context: str) -> list[str] | None:
-        """消歧：根据当前 token、下一 token、块上下文，返回候选规则名列表。
+    def classify(self, tokens: list[Token], i: int, context: str) -> list[str] | None:
+        """两级消歧：根据当前位置与上下文，返回候选规则名列表。
 
-        返回 None 表示无候选（当前 token 不是语句起点）。
+        Level 1（变长前瞻）：首 token 相同逐 token 预视缩小候选，直到唯一。
+        Level 2（试解析）：候选生成式复杂/边界内未收敛 → 完整 production 试解析。
+        返回 None = 无候选（非语句起点或未识别语法）。
         """
-        # 1. 关键字/具体符号触发
+        tok_type = tokens[i].type
+        # 1. 关键字/具体符号触发（A 类）
         if tok_type in self.keyword_map:
             return self.keyword_map[tok_type]
-
-        # 2. 标识符触发 → 上下文过滤 + 判别 token 前瞻
+        # 2. 标识符触发（B 类）→ 动态两级消歧
         if tok_type == "id":
-            for entry in self.ident_by_ctx.get(context, []):
-                if nxt_type in entry["discriminator"]:
-                    return [entry["name"]]
+            entries = self.ident_by_ctx.get(context, [])
+            if not entries:
+                return None
+            return self._resolve_ident(tokens, i, entries)
         return None
+
+    def _resolve_ident(
+        self, tokens: list[Token], i: int, entries: list[dict]
+    ) -> list[str] | None:
+        """Level 1：变长前瞻逐 token 淘汰候选，直到唯一且完整路径验证。
+
+        空 paths 候选（无静态前缀可判）不参与淘汰，单独留到 Level 2 试解析，
+        避免其空集导致其它候选提前收敛误判。命中要求候选唯一且 seen 恰好
+        等于其一条完整判别路径（前缀匹配不命中——防止 `#(` 误判参数实例化）。
+        """
+        n = len(tokens)
+        limit = self._find_boundary(tokens, i + 1, n)
+        l2_only: list[dict] = [e for e in entries if not e.get("paths")]
+        path_entries: list[dict] = [e for e in entries if e.get("paths")]
+        seen: list[str] = []
+        pos = i + 1
+        while pos < limit:
+            if tokens[pos].type in _TRIVIA:
+                pos += 1
+                continue
+            seen.append(tokens[pos].type)
+            kept: list[dict] = []
+            for entry in path_entries:
+                # 匹配：实际序列 seen 以某条判别路径开头（路径是判别前缀，
+                # seen 可更长——判别点后的内容不影响归属）
+                if any(
+                    tuple(seen)[: len(p)] == p for p in entry.get("paths", ())
+                ):
+                    kept.append(entry)
+            path_entries = kept
+            if not path_entries and not l2_only:
+                return None  # 候选清空 → 未识别（Phase 5 报错，先跳过）
+            # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
+            if len(path_entries) == 1 and any(
+                len(p) == len(seen) and p == tuple(seen)
+                for p in path_entries[0].get("paths", ())
+            ):
+                return [path_entries[0]["name"]]
+            if not path_entries:
+                break  # 只剩需试解析的候选 → 走 Level 2
+            pos += 1
+        # 到边界块 / path 候选耗尽
+        if not seen:
+            return None  # 无任何判别 token（如 `id;`）→ 无法确认是语句起点
+        if l2_only:
+            return self._try_parse(tokens, i, path_entries + l2_only, limit)
+        if len(path_entries) == 1:
+            return [path_entries[0]["name"]]
+        if not path_entries:
+            return None
+        # 多候选未收敛 → Level 2 试解析
+        return self._try_parse(tokens, i, path_entries, limit)
+
+    def _try_parse(
+        self, tokens: list[Token], i: int, entries: list[dict], limit: int
+    ) -> list[str] | None:
+        """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。"""
+        if self._matcher is None:
+            return None
+        best: tuple[int, int, str] | None = None
+        for entry in entries:
+            name = entry["name"]
+            info = self._tree.get(name, {})
+            prods = info.get("prods", [])
+            if not prods:
+                continue
+            trial: list = []
+            try:
+                j = self._matcher.match_rule(tokens, i, prods, trial, limit)
+            except Exception:
+                continue
+            errs = len(trial)
+            consumed = j - i
+            if best is None or errs < best[0] or (
+                errs == best[0] and consumed > best[1]
+            ):
+                best = (errs, consumed, name)
+        if best is None or best[0] != 0:
+            return None  # 全失败 → 未识别
+        return [best[2]]
+
+    def _find_boundary(self, tokens: list[Token], i: int, n: int) -> int:
+        """返回从 i 起第一个句子终止符（分号/块结束）的位置（边界块上界）。"""
+        j = i
+        while j < n:
+            t = tokens[j]
+            if t.type == SEMICOLON_TOKEN_TYPE or t.type in self._block_ends:
+                return j
+            j += 1
+        return n
 
     def end_case(self, rule: str) -> set[str]:
         info = self._tree.get(rule, {})

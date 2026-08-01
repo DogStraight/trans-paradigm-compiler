@@ -55,6 +55,7 @@ as = "as"
 # 循环
 for = "for"
 while = "while"
+repeat = "repeat"
 break = "break"
 continue = "continue"
 in = "in"

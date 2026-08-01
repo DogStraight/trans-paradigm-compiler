@@ -115,6 +115,7 @@ class LinterScanner:
                 "linter.module_item_rule", "ModuleItem"
             ),
             stmt_rule=ConfigRegistry._loaded.get("linter.stmt_rule", "Stmt"),
+            matcher=self._matcher,
         )
 
         self.enable_phase0 = enable_phase0
@@ -190,8 +191,11 @@ class LinterScanner:
             registry.add(MacroTokenChecker(0, len(tokens)))
 
         # ── P2: 语句发现 + 扁平检查 ─────────────
+        # discovery 产出多层级树（children 嵌套）；深度优先遍历把每个节点
+        # 注册为独立 StatementChecker——父节点按 production 匹配（@Stmt 由
+        # matcher 用 end_case 扁平跳过），子节点独立检查自身区间，扁平验证。
         if self.enable_phase2:
-            for node in self._discovery.discover(tokens):
+            def register(node) -> None:
                 registry.add(
                     StatementChecker(
                         node.rule,
@@ -200,5 +204,10 @@ class LinterScanner:
                         self._matcher,
                     )
                 )
+                for child in node.children:
+                    register(child)
+
+            for node in self._discovery.discover(tokens):
+                register(node)
 
         return registry.validate_all(tokens)

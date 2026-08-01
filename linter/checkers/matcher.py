@@ -171,18 +171,51 @@ class RuleMatcher:
 
         # 表达式根（Expression / pratt 链）→ 交 ExpressionChecker
         if name in _EXPR_RULES or info.get("pratt"):
+            if name == "PrimaryExpr":
+                # @PrimaryExpr 只匹配原子操作数（赋值目标/操作数），不消费
+                # 运算符——避免 `a <= b` 被当比较表达式吞掉（NonBlockingAssign
+                # 的 <= 赋值歧义）。@Expression 才做完整 pratt 表达式解析。
+                j = i
+                while j < limit and tokens[j].type in _TRIVIA:
+                    j += 1
+                if j >= limit:
+                    return i
+                _, consumed = self._expr._match_atom(tokens, j)
+                if consumed <= 0:
+                    if strict and not silent:
+                        t = tokens[j]
+                        errors.append(
+                            LintDiagnostic(
+                                range=(
+                                    Position(t.line, t.column),
+                                    Position(t.line, t.column),
+                                ),
+                                message=f"expected expression, got '{t.type}'",
+                                severity=1,
+                                code="phase-expr",
+                            )
+                        )
+                        return j + 1
+                    return i
+                return j + consumed
+            # @Expression / pratt 链：先跳过 trivia——从行首 newline 等 trivia
+            # 位置 consume 时，pratt 的 consumed 不含已跳过的 trivia，会与后续
+            # 元素错位（多行表达式 RHS 误报）。
+            j = i
+            while j < limit and tokens[j].type in _TRIVIA:
+                j += 1
             sub_errors, consumed = self._expr.consume(
-                tokens, i, stop_tokens=self._stop_for(name)
+                tokens, j, stop_tokens=self._stop_for(name)
             )
             if not silent:
                 errors += sub_errors
-            return i + consumed
+            return j + consumed
 
         # 块类（@BeginEnd 等）→ 跳到 end_case
         if info.get("is_block"):
-            ec: set[str] = {s for s in (info.get("end_case") or [])}
-            if ec:
-                return self._skip_to_end(tokens, i, ec, limit)
+            ec_block: set[str] = set(info.get("end_case") or ())
+            if ec_block:
+                return self._skip_to_end(tokens, i, ec_block, limit)
             return i
 
         # 语句类（@Stmt / @IfBlock 等嵌套语句）→ strict 语境跳过 end_case（扁平化）
@@ -196,9 +229,9 @@ class RuleMatcher:
                 return i
             if firsts and tokens[k].type not in firsts:
                 return i  # 起始不匹配 → 视为失败（不跳过）
-            ec: set[str] = {s for s in (info.get("end_case") or [])}
-            if ec:
-                return self._skip_to_end(tokens, i, ec, limit)
+            ec_stmt: set[str] = set(info.get("end_case") or ())
+            if ec_stmt:
+                return self._skip_to_end(tokens, i, ec_stmt, limit)
             return i
 
         # 普通子规则（含 is_atom 原子）→ 内联匹配其 production
@@ -229,7 +262,7 @@ class RuleMatcher:
         # 内联匹配后检查 end_case 排除项（如 Declarator 的 !symbol.base.dot），
         # 命中排除 token 视为失败回滚（防止声明器吞掉后续端口/点语法）
         if j > start:
-            ec = info.get("end_case") or []
+            ec: list = info.get("end_case") or []
             exclude = {s[1:] for s in ec if isinstance(s, str) and s.startswith("!")}
             if exclude:
                 k = _skip(tokens, j, limit)
@@ -248,6 +281,21 @@ class RuleMatcher:
     ) -> int:
         best_i = i
         best_errs: list | None = None
+        # 先跳过 trivia：choice 从第一个非 trivia token 开始尝试分支，避免
+        # 内部分支（如 @Expression 的 pratt consume）在 trivia 位置消费错位
+        # （consumed 不含已跳过的 trivia，导致 case item 等从行首 newline 失败）。
+        i = _skip(tokens, i, limit)
+        if i >= limit:
+            if strict:
+                errors.append(
+                    LintDiagnostic(
+                        range=(Position(tokens[limit - 1].line, tokens[limit - 1].column), Position(tokens[limit - 1].line, tokens[limit - 1].column)),
+                        message="unexpected end of statement",
+                        severity=1,
+                        code="phase-statement",
+                    )
+                )
+            return i
         for alt in node.get("alternatives", []):
             trial: list = []
             j = self.match(tokens, i, alt, trial, limit, strict=False)

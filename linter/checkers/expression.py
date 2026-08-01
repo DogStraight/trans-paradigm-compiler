@@ -32,6 +32,8 @@ from .._constants import (
     SYMBOL_COLON,
     SYMBOL_COMMA,
     SYMBOL_DOLLAR,
+    SYMBOL_MINUS_RANGE,
+    SYMBOL_PLUS_RANGE,
     SYMBOL_SINGLE_QUOTE,
     TRIVIA as _TRIVIA,
 )
@@ -178,7 +180,10 @@ class ExpressionChecker:
         return object(), 1
 
     def _match_select(self, tokens: list[Token], j: int, n: int):
-        """SelectExpr: id [ suffix ] ( [ suffix ] )*"""
+        """SelectExpr: id [ suffix ] ( [ suffix ] )*
+
+        suffix 支持范围 [a:b] 与 part-select [a +: b] / [a -: b]。
+        """
         i = j + 1  # 已消费 id
         while i < n:
             i = self._skip_trivia(tokens, i, n)
@@ -186,10 +191,16 @@ class ExpressionChecker:
                 break
             i = self._skip_trivia(tokens, i + 1, n)  # 消费 [
             c = self._consume_expr(
-                tokens, i, {SYMBOL_COLON, BRACKET_R_SQUARE}
+                tokens,
+                i,
+                {SYMBOL_COLON, BRACKET_R_SQUARE, SYMBOL_PLUS_RANGE, SYMBOL_MINUS_RANGE},
             )
             i = self._skip_trivia(tokens, i + c, n)
-            if i < n and tokens[i].type == SYMBOL_COLON:
+            if i < n and tokens[i].type in (
+                SYMBOL_COLON,
+                SYMBOL_PLUS_RANGE,
+                SYMBOL_MINUS_RANGE,
+            ):
                 c2 = self._consume_expr(tokens, i + 1, {BRACKET_R_SQUARE})
                 i = self._skip_trivia(tokens, i + 1 + c2, n)
             if i >= n or tokens[i].type != BRACKET_R_SQUARE:

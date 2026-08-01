@@ -88,16 +88,16 @@ def _collect_first_start_tokens(feat: dict | None, tree: dict | None = None) -> 
     if typ == "choice":
         result: set[str] = set()
         for alt in feat.get("alternatives", []):
-            result |= _collect_first_start_tokens(alt)
+            result |= _collect_first_start_tokens(alt, tree)
         return result
     if typ == "seq":
         items = feat.get("items", [])
         if items:
-            return _collect_first_start_tokens(items[0])
+            return _collect_first_start_tokens(items[0], tree)
         return set()
     if typ in ("repeat", "plus"):
         elem = feat.get("elem")
         if elem:
-            return _collect_first_start_tokens(elem)
+            return _collect_first_start_tokens(elem, tree)
         return set()
     return set()
