@@ -26,6 +26,7 @@ from core.define import Token
 from core.utils import square_bracket_types
 
 from ._constants import (
+    IDENTIFIER_TOKEN_TYPE,
     SEMICOLON_TOKEN_TYPE,
     TRIVIA as _TRIVIA,
 )
@@ -79,9 +80,7 @@ def _statement_rules(tree: dict) -> set[str]:
 _MAX_PREFIX_LEN = 8
 
 
-def _feat_token_paths(
-    feat: dict | None, tree: dict
-) -> set[tuple[str, ...]] | None:
+def _feat_token_paths(feat: dict | None, tree: dict) -> set[tuple[str, ...]] | None:
     """单个 production 元素的判别 token 序列集。
 
     返回 set[tuple[str, ...]]：该元素可能的前缀 token 序列（含空元组 = epsilon）。
@@ -164,10 +163,7 @@ def _build_prefix_paths(prods: list[dict], tree: dict) -> set[tuple[str, ...]]:
         if sub is None:
             break  # 终止元素 → 路径到此为止
         result = {
-            p + s
-            for p in result
-            for s in sub
-            if len(p) + len(s) <= _MAX_PREFIX_LEN
+            p + s for p in result for s in sub if len(p) + len(s) <= _MAX_PREFIX_LEN
         }
     return result
 
@@ -241,7 +237,7 @@ class LookaheadTable:
             firsts = _rule_first(name, self._tree)
             if not firsts:
                 continue
-            if "id" in firsts:
+            if IDENTIFIER_TOKEN_TYPE in firsts:
                 # B 类：标识符触发 → 前缀路径 + 按上下文归属（变长子集）
                 paths = _build_prefix_paths(prods[1:], self._tree)
                 # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
@@ -278,7 +274,7 @@ class LookaheadTable:
         entries: list[dict] | None = None
         if tok_type in self.keyword_map:
             entries = self.keyword_map[tok_type]
-        elif tok_type == "id":
+        elif tok_type == IDENTIFIER_TOKEN_TYPE:
             entries = self.ident_by_ctx.get(context, [])
         if not entries:
             return None
@@ -321,8 +317,7 @@ class LookaheadTable:
                 # 路径短，如块规则头 automatic 只是完整路径的前缀；也可能比路径长，
                 # 判别点后的内容不影响归属）
                 if any(
-                    tuple(seen)[: min(len(seen), len(p))]
-                    == p[: min(len(seen), len(p))]
+                    tuple(seen)[: min(len(seen), len(p))] == p[: min(len(seen), len(p))]
                     for p in entry.get("paths", ())
                 ):
                     kept.append(entry)
@@ -379,8 +374,10 @@ class LookaheadTable:
                 continue
             errs = len(trial)
             consumed = j - i
-            if best is None or errs < best[0] or (
-                errs == best[0] and consumed > best[1]
+            if (
+                best is None
+                or errs < best[0]
+                or (errs == best[0] and consumed > best[1])
             ):
                 best = (errs, consumed, name)
         if best is None or best[0] != 0:
