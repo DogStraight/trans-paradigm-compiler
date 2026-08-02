@@ -23,10 +23,20 @@ from .checker import (
 )
 from ._constants import (
     NEWLINE_TOKEN_TYPE,
-    SEMICOLON_TOKEN_TYPE,
     TRIVIA as _TRIVIA,
 )
 from .lookahead import LookaheadTable
+from lexer.lexer_utils import semicolon_token_type
+
+# 分号 token 类型（句子终止符，从 lexer.token_base 配置推导，构造期已加载）。
+_SEMICOLON_TYPE: str | None = None
+
+
+def _semicolon_type() -> str:
+    global _SEMICOLON_TYPE
+    if _SEMICOLON_TYPE is None:
+        _SEMICOLON_TYPE = semicolon_token_type()
+    return _SEMICOLON_TYPE
 
 
 class Discovery:
@@ -148,7 +158,7 @@ class Discovery:
                     e = self._skip_to_end(
                         tokens,
                         i,
-                        {SEMICOLON_TOKEN_TYPE} | self._block_ends,
+                        {_semicolon_type()} | self._block_ends,
                         end,
                     )
                 else:
@@ -339,65 +349,28 @@ class Discovery:
         rule: str,
         n: int,
     ) -> tuple[int, int]:
-        """块 body 区间：块头后 ~ block_end 前。
+        """块 body 区间：块头 production 匹配结束后 ~ block_end 前。
 
-        有分号声明头（module/function/task）→ body 从头后的分号开始；
-        无头（begin/generate）→ body 从 block_start 后开始。end_idx 是
-        block_end token 之后的位置，body_end = end_idx - 1（不含 end）。
+        块头即块规则 production 内容（剥离 block_start/block_end 后），复用共享
+        matcher 做生成式分析：有深度的 @call 递归匹配，无深度的字面 token 作为
+        同步词消费（分号无深度 → 天然同步信号，无需"头结束符"语义假设）。匹配
+        到 production 末尾即 body 起点。end_idx 是 block_end token 之后的位置，
+        body_end = end_idx - 1（不含 end）。
         """
-        if self._has_semicolon_header(rule):
-            start = self._skip_block_header(tokens, i, end_idx)
-        else:
-            start = i + 1
+        matcher = self._lookahead._matcher
+        start = i + 1
+        if matcher is not None:
+            prods = (self._tree.get(rule, {}) or {}).get("prods", [])
+            if prods:
+                trial: list = []
+                try:
+                    j = matcher.match_rule(tokens, i + 1, prods, trial, end_idx)
+                except Exception:
+                    j = i + 1
+                if j > i + 1:
+                    start = j
         end = max(start, end_idx - 1)
         return start, end
-
-    def _has_semicolon_header(self, rule: str) -> bool:
-        """块规则 production 是否含分号声明头（module/function/task）。
-
-        递归查找本规则直接结构中的分号（含 optional/seq/choice 包裹，不深入
-        call——端口列表内部的分号不是头结束符）。begin/generate 无此头。
-        """
-        info = self._tree.get(rule, {})
-        return any(
-            self._feat_has_semicolon(f) for f in info.get("prods", [])
-        )
-
-    @staticmethod
-    def _feat_has_semicolon(feat) -> bool:
-        """feature 是否直接含分号 token（不深入 call）。"""
-        if not isinstance(feat, dict):
-            return False
-        typ = feat.get("type")
-        if typ == "token":
-            return feat.get("token_type") == SEMICOLON_TOKEN_TYPE
-        if typ in ("optional", "repeat", "plus"):
-            return Discovery._feat_has_semicolon(feat.get("elem"))
-        if typ == "seq":
-            return any(
-                Discovery._feat_has_semicolon(i) for i in feat.get("items", [])
-            )
-        if typ == "choice":
-            return any(
-                Discovery._feat_has_semicolon(a)
-                for a in feat.get("alternatives", [])
-            )
-        return False
-
-    def _skip_block_header(self, tokens: list[Token], i: int, n: int) -> int:
-        """跳过块头：从 i（block_start）跳到第一个顶层分号之后（body 开始）。"""
-        depth = 0
-        j = i + 1
-        while j < n:
-            t = tokens[j]
-            if t.type in self._bracket_openers:
-                depth += 1
-            elif t.type in self._bracket_closers:
-                depth = max(0, depth - 1)
-            elif depth == 0 and t.type == SEMICOLON_TOKEN_TYPE:
-                return j + 1
-            j += 1
-        return j
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:
         depth = 0
@@ -408,7 +381,7 @@ class Discovery:
             elif t.type in self._bracket_closers:
                 depth = max(0, depth - 1)
             elif depth == 0 and (
-                t.type in (SEMICOLON_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
+                t.type in (_semicolon_type(), NEWLINE_TOKEN_TYPE)
                 or t.type in self._block_ends
             ):
                 return i + 1

@@ -27,11 +27,21 @@ from core.utils import square_bracket_types
 
 from ._constants import (
     IDENTIFIER_TOKEN_TYPE,
-    SEMICOLON_TOKEN_TYPE,
     TRIVIA as _TRIVIA,
 )
 from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
 from .grammar_slicer import _collect_first_start_tokens
+from lexer.lexer_utils import semicolon_token_type
+
+# 分号 token 类型（句子终止符，从 lexer.token_base 配置推导，构造期已加载）。
+_SEMICOLON_TYPE: str | None = None
+
+
+def _semicolon_type() -> str:
+    global _SEMICOLON_TYPE
+    if _SEMICOLON_TYPE is None:
+        _SEMICOLON_TYPE = semicolon_token_type()
+    return _SEMICOLON_TYPE
 
 # 方括号开/闭类型（从 lexer.bracket_map 推导，构造期配置已加载）。
 # 模块级惰性缓存：_feat_token_paths 等模块级函数与实例方法共用。
@@ -389,7 +399,7 @@ class LookaheadTable:
         j = i
         while j < n:
             t = tokens[j]
-            if t.type == SEMICOLON_TOKEN_TYPE or t.type in self._block_ends:
+            if t.type == _semicolon_type() or t.type in self._block_ends:
                 return j
             j += 1
         return n
@@ -410,7 +420,7 @@ class LookaheadTable:
                 depth -= 1
                 if depth == 0:
                     return j + 1
-            elif tt == SEMICOLON_TOKEN_TYPE or tt in self._block_ends:
+            elif tt == _semicolon_type() or tt in self._block_ends:
                 return pos  # 越界（未闭合）→ 保守
             j += 1
         return pos

@@ -11,8 +11,7 @@ TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 BRACKET_TOKEN_PREFIX = "bracket."
 MACRO_TOKEN_PREFIX = "macro."
 
-# 语句终止 token 类型
-SEMICOLON_TOKEN_TYPE = "symbol.base.semicolon"
+# 语句终止 token 类型（分号类型从 lexer.token_base 配置推导，见 lexer.lexer_utils）
 NEWLINE_TOKEN_TYPE = "newline"
 
 # 字面量 / 标识符 token 类型
