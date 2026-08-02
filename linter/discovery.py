@@ -48,6 +48,8 @@ class Discovery:
         self._lookahead = LookaheadTable(
             tree, module_item_rule, stmt_rule, matcher=matcher
         )
+        # 过程体语句入口选择器名（配置驱动，用于引用式容器 body 上下文判断）
+        self._stmt_rule = stmt_rule
         self._block_openers = block_openers
         self._block_closers = block_closers
         self._bracket_openers = bracket_openers
@@ -153,7 +155,13 @@ class Discovery:
                         body = self._locate_stmt_body(tokens, i, candidates[0], e)
                         if body is not None:
                             bs, _, entry = body
-                            bctx = CTX_PROC_BODY if entry == "Stmt" else context
+                            # body 入口是过程体语句选择器（配置 stmt_rule）→ proc_body；
+                            # 否则继承当前上下文（if/for/case 在 proc 内维持 proc）。
+                            bctx = (
+                                CTX_PROC_BODY
+                                if entry == self._stmt_rule
+                                else context
+                            )
                             if bs < e:
                                 node.children = self._discover_range(
                                     tokens, bs, e, bctx, depth + 1
