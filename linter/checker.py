@@ -17,11 +17,8 @@ from core.define import Token
 
 from . import LintDiagnostic
 
-# 块上下文（消歧用）：发现阶段由骨架树推导
-CTX_TOP = "top"            # 顶层
-CTX_MODULE_BODY = "module_body"  # 模块体
-CTX_PROC_BODY = "proc_body"      # 过程体（always/initial/function/task 内）
-CTX_GEN_BODY = "gen_body"        # generate 块内
+# 顶层上下文（发现入口）：块内上下文由 opener_context 配置动态生成，不硬编码
+CTX_TOP = "top"
 
 
 @runtime_checkable

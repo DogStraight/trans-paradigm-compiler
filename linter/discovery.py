@@ -17,7 +17,6 @@ from __future__ import annotations
 from core.define import Token
 
 from .checker import (
-    CTX_PROC_BODY,
     CTX_TOP,
     DiscoveredNode,
 )
@@ -44,7 +43,11 @@ class Discovery:
     ) -> None:
         self._tree = tree
         self._lookahead = LookaheadTable(
-            tree, module_item_rule, stmt_rule, matcher=matcher
+            tree,
+            module_item_rule,
+            stmt_rule,
+            matcher=matcher,
+            opener_ctx=opener_ctx or {},
         )
         # 过程体语句入口选择器名（配置驱动，用于引用式容器 body 上下文判断）
         self._stmt_rule = stmt_rule
@@ -166,13 +169,8 @@ class Discovery:
                         body = self._locate_stmt_body(tokens, i, candidates[0], e)
                         if body is not None:
                             bs, _, entry = body
-                            # body 入口是过程体语句选择器（配置 stmt_rule）→ proc_body；
-                            # 否则继承当前上下文（if/for/case 在 proc 内维持 proc）。
-                            bctx = (
-                                CTX_PROC_BODY
-                                if entry == self._stmt_rule
-                                else context
-                            )
+                            # 实验：body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
+                            bctx = context
                             if bs < e:
                                 node.children = self._discover_range(
                                     tokens, bs, e, bctx, depth + 1
@@ -378,7 +376,7 @@ class Discovery:
         return n
 
     def _skip_to_end(
-        self, tokens: list[Token], i: int, end_set: set[str], n: int
+        self, tokens: list[Token], i: int, end_set: frozenset[str] | set[str], n: int
     ) -> int:
         depth = 0
         exclude = {s[1:] for s in end_set if s.startswith("!")}

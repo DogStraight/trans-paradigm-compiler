@@ -25,7 +25,6 @@ from core.define import Token
 
 from core.utils import square_bracket_types
 
-from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
 
 # 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
 _TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
@@ -57,17 +56,6 @@ def _rule_first(name: str, tree: dict) -> set[str]:
     return _first_of(info["prods"][0], tree)
 
 
-def _statement_rules(tree: dict) -> set[str]:
-    """所有显式 is_statement 规则名集合（配置驱动，不推导收集）。
-
-    is_statement 是规则作者显式标注的"此规则是语句"字段——语句集合直接
-    据此收集，不再从 Stmt/ModuleItem 选择器递归展开推导。
-    """
-    return {
-        name
-        for name, info in tree.items()
-        if isinstance(info, dict) and info.get("is_statement")
-    }
 
 
 # 表达式黑盒：带 pratt 标识的规则（Expression/运算符链）由 pratt 解析器专门处理，
@@ -175,6 +163,7 @@ class LookaheadTable:
         module_item_rule: str,
         stmt_rule: str,
         matcher=None,
+        opener_ctx: dict[str, str] | None = None,
     ) -> None:
         self._tree = tree
         self._matcher = matcher
@@ -191,8 +180,9 @@ class LookaheadTable:
                     f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
                     "请检查 pyv.toml [linter] 配置与语法规则命名是否一致。"
                 )
-        self._module_leaves = _statement_rules(tree)
-        self._proc_leaves = _statement_rules(tree)
+        # 块内上下文名集合（从 opener_context 配置动态生成，不硬编码
+        # module_body/proc_body 等 Verilog 结构名——换语言由配置决定）
+        self._ctx_names = frozenset(opener_ctx.values()) if opener_ctx else frozenset()
         # 块结束符集合（从块规则 block_end 收集，Level 1 前瞻边界）
         self._block_ends = frozenset(
             info["block_end"]
@@ -265,15 +255,13 @@ class LookaheadTable:
             if not firsts:
                 continue
             if "id" in firsts:
-                # B 类：标识符触发 → 前缀路径 + 按上下文归属（变长子集）
+                # B 类：标识符触发 → 前缀路径 + 注册到所有块内上下文（动态生成）
                 paths = _build_prefix_paths(prods[1:], self._tree)
                 # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
                 paths = {p for p in paths if p}
                 entry = {"name": name, "paths": paths}
-                if name in self._module_leaves:
-                    self.ident_by_ctx.setdefault(CTX_MODULE_BODY, []).append(entry)
-                if name in self._proc_leaves:
-                    self.ident_by_ctx.setdefault(CTX_PROC_BODY, []).append(entry)
+                for ctx in self._ctx_names:
+                    self.ident_by_ctx.setdefault(ctx, []).append(entry)
             else:
                 # A 类：关键字/具体符号触发 → 也计算前缀路径（与 B 类统一两级消歧）
                 apaths = self._a_prefix_paths(prods)
