@@ -61,26 +61,22 @@ is_atom = true
 - **消费方**: parser `parser_core.py` 的 `atomic_rules`（按 production 长度降序，作为 `atom_parser` 回调逐个尝试）
 - **不可推导**: "哪些规则是表达式原子"是**语义决定**——`ConcatExpr`（`{a,b}`）、`SelectExpr`（`a[3:0]`）是复合结构（含变长 `@Expression`）却作为原子，production 结构无法区分，必须作者标注。
 
-### `pratt` / `expr_atom` — 表达式处理标识（`[Rule.parser]`）
+### `pratt` — 表达式处理标识（`[Rule.parser]`）
 
-标记"此规则属于 pratt 表达式域"。**表达式根/黑盒按标识识别，不硬编码规则名**（`Expression`/`PrimaryExpr` 换语言即失效）：
+标记"此规则由 pratt 解析器处理"（运算符链 / 完整表达式，如 `Expression`、`UnaryExpr`、各级优先级规则）。**表达式根/黑盒按标识识别，不硬编码规则名**（`Expression`/`PrimaryExpr` 换语言即失效）：
 
-- `pratt = true`：规则由 pratt 解析器处理（运算符链 / 完整表达式，如 `Expression`、`UnaryExpr`、各级优先级规则）。parser 走 `try_pratt_rule`；linter 视为**表达式黑盒**（lookahead 前缀路径在此截断，matcher 交 ExpressionChecker 完整 pratt 解析）。
-- `expr_atom = true`：pratt 表达式域的**原子入口**（如 `PrimaryExpr`），由 ExpressionChecker 原子匹配器处理——只匹配操作数、不消费运算符（解决 `a <= b` 赋值 vs 比较歧义）。
+- parser 走 `try_pratt_rule`；linter 视为**表达式黑盒**（lookahead 前缀路径在此截断，matcher 交 ExpressionChecker 完整 pratt 解析）。
 
 ```toml
-[PrimaryExpr.parser]
-production = [...]
-inline = true
-expr_atom = true
-
 [Expression.parser]
 production = ["@PrimaryExpr|@UnaryExpr", "(@BinaryOp,@PrimaryExpr|@UnaryExpr)*"]
 pratt = true
 ```
 
-- **消费方**: parser `_production.py`（pratt 走 try_pratt_rule）；linter `lookahead.py`（pratt 黑盒截断前缀）、`checkers/matcher.py`（pratt→完整、expr_atom→原子匹配）
-- **区分理由**: `PrimaryExpr` 不能标 `pratt = true`——parser 会把它交给 pratt 解析（改变解析行为）；用 `expr_atom` 单独标记"原子入口"。
+**原子入口（PrimaryExpr）不显式标记，由结构推导**：production 是纯 `@` 分派（choice of calls）且**全部分支都是 `is_atom` 规则**的选择器，即表达式原子入口（`PrimaryExpr = @BitWidthLiteral|@Number|@SelectExpr|@Identifier|...` 全为 `is_atom`）。`_is_atom_selector` 推导之，matcher 对其走 ExpressionChecker 原子匹配器——只匹配操作数、不消费运算符（解决 `a <= b` 赋值 vs 比较歧义）。
+
+- **消费方**: parser `_production.py`（pratt 走 try_pratt_rule）；linter `lookahead.py`（pratt 黑盒截断前缀）、`checkers/matcher.py`（pratt→完整解析、`_is_atom_selector`→原子匹配）
+- **区分理由**: `PrimaryExpr` 不能标 `pratt = true`——parser 会把它交给 pratt 解析（改变解析行为）；也不能标 `is_atom = true`——`is_atom` 会让 lookahead 展开 first tokens（破坏黑盒截断）、matcher 把普通原子也拉到 EC（实测 6 测试 FAIL）。原子入口由 `_is_atom_selector` 从 `is_atom` 结构推导，与 `is_atom` 正交（同一维度，无需独立字段）。
 
 ### `is_block` — 块解析策略（顶层 `[Rule]`）
 

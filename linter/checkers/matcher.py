@@ -18,9 +18,29 @@ from core.define import Token
 from .. import LintDiagnostic, Position
 from .._constants import TRIVIA as _TRIVIA
 
-# 表达式根（借力 pratt，不内联展开）：按 pratt / expr_atom 标识识别，不硬编码
-# 规则名（Expression/PrimaryExpr 换语言即失效）。expr_atom（PrimaryExpr）由
-# EC 独立原子匹配器处理，避免 matcher ↔ EC 互相递归。
+# 表达式根（借力 pratt，不内联展开）：按 pratt 标识 / 原子选择器推导识别，不硬编码
+# 规则名（Expression/PrimaryExpr 换语言即失效）。PrimaryExpr 由 EC 独立原子匹配器
+# 处理（避免 matcher ↔ EC 互相递归），其身份由 _is_atom_selector 从 is_atom 结构推导。
+
+
+def _is_atom_selector(info: dict, tree: dict) -> bool:
+    """推导"表达式原子入口"：production 是纯 @ 分派（choice of calls）且全部
+    分支都是 is_atom 规则（如 PrimaryExpr = @BitWidthLiteral|@Number|...）。
+    不显式标记——从 is_atom 结构正交推导，与 is_atom 共享同一维度。
+    """
+    prods = info.get("prods", [])
+    if len(prods) != 1:
+        return False
+    feat = prods[0]
+    if not feat or feat.get("type") != "choice":
+        return False
+    for alt in feat.get("alternatives", []):
+        if alt.get("type") != "call":
+            return False
+        sub = tree.get(alt.get("name"))
+        if sub is None or not sub.get("is_atom"):
+            return False
+    return True
 
 
 def _skip(tokens: list[Token], i: int, limit: int) -> int:
@@ -169,12 +189,13 @@ class RuleMatcher:
         if info is None:
             return i
 
-        # 表达式根（pratt 标识 / 原子表达式入口）→ 交 ExpressionChecker
-        if info.get("pratt") or info.get("expr_atom"):
-            if info.get("expr_atom"):
-                # @PrimaryExpr（expr_atom）只匹配原子操作数（赋值目标/操作数），不消费
-                # 运算符——避免 `a <= b` 被当比较表达式吞掉（NonBlockingAssign
-                # 的 <= 赋值歧义）。@Expression 才做完整 pratt 表达式解析。
+        # 表达式根（pratt 标识 / 原子选择器推导）→ 交 ExpressionChecker
+        is_atom_sel = _is_atom_selector(info, self._tree)
+        if info.get("pratt") or is_atom_sel:
+            if is_atom_sel:
+                # @PrimaryExpr（is_atom 规则集合选择器，可推导）只匹配原子操作数
+                # （赋值目标/操作数），不消费运算符——避免 `a <= b` 被当比较表达式
+                # 吞掉（NonBlockingAssign 的 <= 赋值歧义）。@Expression 才完整 pratt。
                 j = i
                 while j < limit and tokens[j].type in _TRIVIA:
                     j += 1

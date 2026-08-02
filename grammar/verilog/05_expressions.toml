@@ -207,7 +207,6 @@ production = [
     "@BitWidthLiteral|@Number|@SelectExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
-expr_atom = true
 
 [PrimaryExpr.parser.node]
 value = "$1"
