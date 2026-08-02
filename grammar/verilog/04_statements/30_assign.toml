@@ -14,6 +14,9 @@
 # 过程体内的 <= 赋值，目标必须是 reg 或 integer 等变量类型。
 # 所有 <= 在过程块结束时同时更新，用于时序逻辑。
 
+[NonBlockingAssign]
+is_statement = true
+
 [NonBlockingAssign.parser]
 production = [
     "@PrimaryExpr",
@@ -42,6 +45,9 @@ line = [
 # BlockingAssign — 阻塞赋值
 # ============================================================================
 # 过程体内的 = 赋值，语句按顺序执行，用于组合逻辑。
+
+[BlockingAssign]
+is_statement = true
 
 [BlockingAssign.parser]
 production = [
@@ -72,6 +78,9 @@ line = [
 # ============================================================================
 # 模块级的 assign 语句，目标可以是 wire 或 reg。
 # 在模块体中连续执行（非过程体内）。
+
+[AssignStmt]
+is_statement = true
 
 [AssignStmt.parser]
 production = [

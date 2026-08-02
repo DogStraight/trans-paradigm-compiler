@@ -4,6 +4,9 @@ targets = [
     "@ModuleItem",
 ]
 
+[TypedPortDecl]
+is_statement = true
+
 [TypedPortDecl.parser]
 production = [
     "@TypedTypeSpec",

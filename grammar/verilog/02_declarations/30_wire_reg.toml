@@ -15,6 +15,9 @@
 # 例如: wire [3:0] data_out;
 #       wire signed [7:0] result;
 
+[WireDecl]
+is_statement = true
+
 [WireDecl.parser]
 production = [
     "keyword.wire",
@@ -61,6 +64,9 @@ line = [
 # 格式: reg [signed] [range] name1 [= init], name2, ... ;
 # 注意: reg 不代表寄存器，只是 Verilog 的变量类型。
 
+[RegDecl]
+is_statement = true
+
 [RegDecl.parser]
 production = [
     "keyword.reg",
@@ -106,6 +112,9 @@ line = [
 # ============================================================================
 # 格式: integer name1, name2, ... ;
 # integer 是 Verilog 中的 32 位有符号变量类型。
+
+[IntegerDecl]
+is_statement = true
 
 [IntegerDecl.parser]
 production = [

@@ -3,6 +3,9 @@ targets = [
     "@InstStmt",
 ]
 
+[ImplBinding]
+is_statement = true
+
 [ImplBinding.parser]
 production = [
     "keyword.impl",
@@ -25,6 +28,9 @@ ports = "$5.ports"
 targets = [
     "@InstStmt",
 ]
+
+[ImplBindingWithInterface]
+is_statement = true
 
 [ImplBindingWithInterface.parser]
 production = [

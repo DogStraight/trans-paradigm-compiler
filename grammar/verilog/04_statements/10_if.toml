@@ -11,6 +11,9 @@
 # 不带 Block 的变体接受任意 Statement，兼容标准语法。
 # 被引用于: 04_statements/00_base.toml (CtrlStmt)
 
+[IfBlock]
+is_statement = true
+
 [IfBlock.parser]
 production = [
     "keyword.if",
@@ -46,6 +49,9 @@ line = [
 # IfStmt — if 语句（单语句体版）
 # ============================================================================
 # 与 IfBlock 的区别在于 @Stmt 接受任意单语句而无需 begin…end。
+
+[IfStmt]
+is_statement = true
 
 [IfStmt.parser]
 production = [

@@ -84,6 +84,7 @@ break = 2
 
 [FuncDeclANSI]
 is_block = true
+is_statement = true
 
 [FuncDeclOld.parser]
 production = [
@@ -140,6 +141,7 @@ break = 2
 
 [FuncDeclOld]
 is_block = true
+is_statement = true
 
 
 # ============================================================================
@@ -213,6 +215,7 @@ break = 2
 
 [TaskDeclANSI]
 is_block = true
+is_statement = true
 
 [TaskDeclOld.parser]
 production = [
@@ -256,6 +259,7 @@ break = 2
 
 [TaskDeclOld]
 is_block = true
+is_statement = true
 
 
 # ============================================================================

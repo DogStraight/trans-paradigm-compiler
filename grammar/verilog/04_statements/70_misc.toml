@@ -15,6 +15,9 @@
 # 函数/任务调用语句: func_name(arg1, arg2);
 # 与 CallExpr 的区别在于末尾有分号，作为独立语句。
 
+[SubroutineCall]
+is_statement = true
+
 [SubroutineCall.parser]
 production = [
     "@Identifier",
@@ -45,6 +48,9 @@ line = [
 # NullStmt — 空语句
 # ============================================================================
 # 单独的 ; 分号，表示无操作。语法上总是合法的。
+
+[NullStmt]
+is_statement = true
 
 [NullStmt.parser]
 production = [
@@ -92,6 +98,7 @@ break = 2
 
 [GenerateBlock]
 is_block = true
+is_statement = true
 
 
 # ============================================================================
@@ -122,6 +129,9 @@ is_block = true
 #       adder #(.WIDTH(8)) u_add (.a(a[i]), .b(b[i]), .sum(sum[i]));
 #     end
 #   endgenerate
+
+[LoopGen]
+is_statement = true
 
 [LoopGen.parser]
 production = [

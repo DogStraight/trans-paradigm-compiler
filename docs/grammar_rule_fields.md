@@ -132,24 +132,27 @@ end_case = ["!symbol.base.dot"]   # 排除式：遇到 dot 不停止
 
 ---
 
-## 四、推导字段（框架自动计算）
+## 四、框架字段（is_statement 显式标记 / inline 推导）
 
-### `is_statement` — 从入口选择器 + 块语句推导
+### `is_statement` — 显式标记（语句规则开关）
 
-两条推导路径，均由框架计算：
-
-1. **语句入口选择器**：被"语句入口选择器"（`[Rule] statement_entry = true`）沿**选择器结构**引用的规则即为语句。
+每个语句规则直接标记 `is_statement = true`，框架不再推导：
 
 ```toml
-[Stmt]
-statement_entry = true
+[BlockingAssign]
+is_statement = true
 ```
 
-2. **块语句**：`is_block = true` 且有 `block_start` 的规则天然是语句候选（`ModuleDecl` 等根级块不在任何入口选择器引用链下，只能由此推导，否则 parser 顶层无法选择它）。
-
-- **选择器判定**: production 含"纯 `@` 分派"元素（形如 `@A|@B|@C`，无字面 token）；顺序组合的组件规则（`Declarator`/`TypedPortDecl` 等无顶层 `|`）不算选择器，避免把声明内部结构（`Range`/`Init`/`PortConnection`）误标为语句
-- **关键**: 必须沿**选择器结构**展开，而非对 `@引用` 做传递闭包——否则 `Expression`/`ParamDecl`/`Identifier` 会被误判为语句
-- **框架侧**: `setup_grammar` 加载与注入完成后调用 `derive_rule_roles()` 全局推导
+- **语义**: 该规则是一条可发现的"句子"（模块级或过程体语句）。parser 顶层
+  `statement_rule_names`、linter 发现/消歧/检查均消费此字段。
+- **入口选择器**（`Stmt`/`TaskStmt`/`ModuleItem`）：保留 `statement_entry = true` 仅作
+  "语句分发入口"的语义标识，**不标** `is_statement`（选择器不是句子；标了会导致
+  linter 消歧表与 parser 候选出现冗余注册）。
+- **块语句**（`ModuleDecl`/`FuncDecl`/`TaskDecl`/`BeginEnd`/`GenerateBlock` 等）同样显式
+  标 `is_statement = true`（与 `is_block = true` 并列）。
+- **上下文归属**：linter 的 B 类 ident 候选按模块/过程上下文分组，由
+  `lookahead._context_leaves` 从入口选择器沿纯 `@` 分派展开（结构遍历，与
+  `is_statement` 无关）。
 
 ### `inline` — 选择器规则自动展平
 
@@ -163,7 +166,7 @@ production 是纯 choice of calls（如 `CtrlStmt`、`PrimaryExpr`）→ 自动�
 |--------|--------|------|
 | `structure = { is_atom = true }` | `[Rule] is_atom = true` | 展平到顶层 |
 | `structure = { is_block = true }` | `[Rule] is_block = true` | 展平到顶层 |
-| `structure = { is_statement = true }` | 删除 | 转推导（statement_entry + 块语句） |
+| `structure = { is_statement = true }` | `[Rule] is_statement = true` | 显式标记，无推导 |
 | `bound = { start, end }`（语法块） | 删除 | 起止 token 写回 `production` 首尾，由 `is_block` 推导 `block_start/end` |
 | `bound = { start, end }`（括号配对） | 删除 | 走 `[bracket].pairs` |
 | `[Rule.bound]` 顶层 table | 删除 | 单一写法 |
@@ -174,7 +177,7 @@ production 是纯 choice of calls（如 `CtrlStmt`、`PrimaryExpr`）→ 自动�
 
 ## 相关
 
-- `core/define.py` — GrammarRule 字段定义与 `derive_rule_roles()` 推导
+- `core/define.py` — GrammarRule 字段定义
 - `parser/parser_core.py` — `atomic_rules` 原子优先结合、`statement_rule_names` 候选
 - `parser/rule_selector.py` — First set / 候选过滤
 - `linter/lookahead.py` — 语句发现消歧表（消费 is_statement、block.start）

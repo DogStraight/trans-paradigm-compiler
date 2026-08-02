@@ -3,6 +3,9 @@ targets = [
     "@ModuleItem",
 ]
 
+[TypeDecl]
+is_statement = true
+
 [TypeDecl.parser]
 production = [
     "keyword.type",

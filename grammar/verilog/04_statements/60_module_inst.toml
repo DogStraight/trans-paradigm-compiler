@@ -18,6 +18,9 @@
 # 完整格式: module_name #(.p1(v1)) inst_name (.port1(w1), .port2(w2));
 # analyzer.symbol 注册 kind=module_instance 供后续分析。
 
+[ModuleInst]
+is_statement = true
+
 [ModuleInst.parser]
 production = [
     "@Identifier",

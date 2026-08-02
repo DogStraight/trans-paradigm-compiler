@@ -32,6 +32,9 @@
 # renderer.body.role = "direct" 表示体内容直出（不额外包装）。
 # renderer.override.BeginEnd.tail_break = 2 当体内是 begin…end 时，end 后多空一行。
 
+[AlwaysStmt]
+is_statement = true
+
 [AlwaysStmt.parser]
 production = [
     "keyword.always",

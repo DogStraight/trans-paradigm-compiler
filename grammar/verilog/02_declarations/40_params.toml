@@ -12,6 +12,9 @@
 # 格式: localparam name1 = value1, name2 = value2, ... ;
 # localparam 与 parameter 的区别在于不能被模块实例化时覆盖。
 
+[LocalParamDecl]
+is_statement = true
+
 [LocalParamDecl.parser]
 production = [
     "keyword.localparam",
@@ -42,6 +45,9 @@ line = [
 # ============================================================================
 # 格式: genvar name;
 # genvar 是用于 generate 循环的变量类型。
+
+[GenvarDecl]
+is_statement = true
 
 [GenvarDecl.parser]
 production = [

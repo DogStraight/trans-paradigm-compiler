@@ -5,6 +5,9 @@
 # 与 always 的敏感列表不同，它后接单条语句或分号（即空操作）。
 # 被引用于: 04_statements/00_base.toml (CtrlStmt)
 
+[EventWaitStmt]
+is_statement = true
+
 [EventWaitStmt.parser]
 production = [
     "symbol.base.at",

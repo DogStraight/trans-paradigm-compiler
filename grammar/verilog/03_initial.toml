@@ -19,6 +19,8 @@
 #   end
 
 [InitialStmt]
+is_statement = true
+
 [InitialStmt.parser]
 production = [
     "keyword.initial",

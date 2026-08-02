@@ -83,7 +83,7 @@ def _expand_selector(name: str, tree: dict, acc: set[str], visited: set[str]) ->
 
     选择器 = production 仅 1 个元素且为纯 @ 分派（如 Stmt → @A|@B|@C）。
     遇含具体 token 的叶子语句（BlockingAssign 等）即停止加入，不继续展开
-    到表达式原子（与 derive_rule_roles 的 is_statement 推导语义对齐）。
+    到表达式原子（与 is_statement 显式标记的规则集合对齐）。
     """
     if name in visited:
         return

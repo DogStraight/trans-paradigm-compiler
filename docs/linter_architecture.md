@@ -168,7 +168,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["grammar/*.toml"] --> B["core/define.py<br/>GrammarRule + derive_rule_roles<br/>is_statement/is_block 推导"]
+    A["grammar/*.toml"] --> B["core/define.py<br/>GrammarRule 字段<br/>is_statement 显式标记"]
     B --> C[grammar_slicer.py<br/>build_slice_tree<br/>production → feature 树]
     C --> D["lookahead 消歧表<br/>keyword_map / ident_by_ctx"]
     C --> E[discovery 递归]
@@ -179,10 +179,12 @@ flowchart LR
 
 - **选入字段** `statement_entry = true`：标记 `Stmt`/`TaskStmt`/`ModuleItem` 三个语句入口
   选择器，是句子注册的开关——其下所有非原子叶子自动成为可发现句子。
-- **is_statement 推导**（`derive_rule_roles`）：块规则（is_block+block_start）天然语句 +
-  入口选择器沿纯 @ 分派递归展开（非传递闭包，防 Expression/ParamDecl 误判）。
+- **is_statement 显式标记**：语句规则在 TOML 直接标 `is_statement = true`（含块规则与
+  入口选择器下的叶子），无推导。入口选择器（Stmt/TaskStmt/ModuleItem）只保留
+  `statement_entry` 作为分发入口标识，不标 is_statement（避免消歧表/parser 冗余候选）。
 - **lookahead 叶子集**：`_context_leaves` 从 pyv.toml 的 `module_item_rule`/`stmt_rule`
-  展开（与 derive_rule_roles 入口来源不同、逻辑一致）。
+  入口选择器沿纯 @ 分派展开——纯结构遍历（不依赖 is_statement），用于 B 类 ident
+  候选的模块/过程上下文分组。
 - **opener_context**：块 opener token → 消歧上下文映射。
 
 ---
