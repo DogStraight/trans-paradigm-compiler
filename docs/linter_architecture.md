@@ -137,6 +137,12 @@ flowchart TD
   seen 比路径短——块规则头 `automatic` 只是完整路径的前缀）淘汰候选。
 - **命中条件**：候选唯一 且 seen 恰好等于其一条完整判别路径（前缀匹配不命中——防止
   `module test #(...)` 的 `#` 前缀误判为参数化实例化）。
+- **操作数/范围延续（括号配对跳过）**：`[`（select 目标 `data[i]`、块头范围 `[7:0]`）是
+  @PrimaryExpr 或可选头元素内部的括号区间，Level 1 用**括号配对跳过**（`_skip_square`，
+  语言无关，不依赖表达式原子化器）不参与判别 token 匹配——否则 `data[i] = i` 的 `[i]`、
+  `function [7:0]` 的 `[7:0]` 让判别路径不匹配而漏检。配合 `_feat_token_paths`：first 含 `[`
+  的可选复杂 call（`@Range?`）保留 epsilon + first 集（可被括号跳过），其他（`@ParamOverride?`
+  的 `#(...)` 无法跳过）维持截断走 Level 2。括号未闭合（残缺）→ 跳过失败 → 保守淘汰（不吞错）。
 - **空 paths 候选**（无静态前缀可判）不参与淘汰，单独留到 Level 2。
 - **前瞻深度上界 = 语句边界块**（分号/块结束），不穿透，天然有界。
 
@@ -148,6 +154,8 @@ flowchart TD
 | `foo <= bar;` | seen `[<=]` | NonBlockingAssign |
 | `foo(bar);` | seen `[ ( ]` | SubroutineCall |
 | `foo u1(...);`（module_body） | seen `[id, (]` | ModuleInst（2-token 预视） |
+| `data[i] = i;`（proc_body） | seen `[=]`（`[i]` 括号跳过） | BlockingAssign |
+| `function [7:0] add(...)` | seen `[id, (]`（`[7:0]` 括号跳过） | FuncDeclANSI |
 | `module test #(...)`（module_body） | seen `[#,(]` 不匹配 `[#,id,(]` | None（不误判） |
 | `task bar;` | seen `[id, ;]` | TaskDeclOld（试解析区分 ANSI/Old） |
 | `task automatic swap(...)` | seen `[automatic,id,(]` | TaskDeclANSI |
@@ -225,6 +233,8 @@ flowchart LR
 | 表达式内运算符后换行（多行 RHS）误报 | pratt 无 newline trivia 跳过 | 记录 TODO，不阻塞 |
 | `always @*` 敏感列表误判 | `@*` 与 `@(...)` 消歧边界 | 记录 TODO |
 | while/repeat 无完整语法规则 | 已补关键字，无语句规则 | body 语句仍被发现，结构不检查 |
+| function 范围头漏检 | `@Range?` 截断判别路径 | ✅ 已修复（2026-08-02）：first 含 `[` 的可选复杂 call 保留 first 集 |
+| select 目标漏检（`data[i] = i`） | B 类不认 `id [` | ✅ 已修复（2026-08-02）：Level 1 括号配对跳过 `[` |
 
 ## 文件职责一览
 
@@ -232,7 +242,7 @@ flowchart LR
 |------|------|
 | `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker（每节点独立扁平验证） |
 | `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符、块头跳过、结束符推导、上下文/深度 |
-| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast） |
+| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast；`[` 括号配对跳过操作数延续、`@Range?` first 集） |
 | `linter/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
 | `linter/checkers/statement.py` | 语句检查器（块规则先消费 block_start + 多候选取优） |
 | `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；表达式根按 pratt 标识 + `_is_atom_selector` 推导识别、@PrimaryExpr 原子、choice/@Expression 先跳 trivia） |
