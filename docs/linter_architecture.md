@@ -19,7 +19,7 @@
 
 ```mermaid
 flowchart LR
-    A[源码 .v] --> B[预处理器<br/>宏展开/去指令]
+    A[源码 .v] --> B["预处理器<br/>宏展开/去指令"]
     B --> C[Lexer 词法<br/>token 流]
     C --> D{scan 编排}
     D --> E[P1 块边界配对<br/>BoundaryChecker]
@@ -49,12 +49,12 @@ flowchart LR
 ```mermaid
 flowchart TD
     A[_discover_range<br/>start, end, context, depth] --> B{扫描 token}
-    B -->|块 opener| C[注册块节点<br/>ModuleDecl/FuncDecl/BeginEnd]
-    C --> D[定位 body 区间<br/>块头跳过/块结束]
+    B -->|块 opener| C["注册块节点<br/>ModuleDecl/FuncDecl/BeginEnd"]
+    C --> D["定位 body 区间<br/>块头跳过/块结束"]
     D --> E[递归 children]
     B -->|语句起点| F[lookahead.classify<br/>两级消歧]
     F --> G[注册语句节点]
-    G --> H{是引用式容器?<br/>含 @Stmt/@BeginEnd}
+    G --> H{"是引用式容器?<br/>含 @Stmt/@BeginEnd"}
     H -->|是| I[定位 @Stmt body<br/>递归 children]
     H -->|否| J[叶子语句<br/>不深入句子内部]
     E --> K[多层级树<br/>children 填充]
@@ -108,7 +108,7 @@ ModuleDecl
 
 ```mermaid
 flowchart TD
-    A[classify tokens, i, context] --> B[收集候选 entries<br/>A 类 keyword_map / B 类 ident_by_ctx<br/>结构统一 {name, paths}]
+    A[classify tokens, i, context] --> B["收集候选 entries<br/>A 类 keyword_map / B 类 ident_by_ctx<br/>结构统一 {name, paths}"]
     B --> C{候选数}
     C -->|1| D[直接返回唯一规则]
     C -->|>1| E[Level 1 变长前瞻<br/>逐 token 缩小候选<br/>公共前缀匹配]
@@ -168,9 +168,9 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[grammar/*.toml] --> B[core/define.py<br/>GrammarRule + derive_rule_roles<br/>is_statement/is_block 推导]
+    A["grammar/*.toml"] --> B["core/define.py<br/>GrammarRule + derive_rule_roles<br/>is_statement/is_block 推导"]
     B --> C[grammar_slicer.py<br/>build_slice_tree<br/>production → feature 树]
-    C --> D[lookahead 消歧表<br/>keyword_map / ident_by_ctx]
+    C --> D["lookahead 消歧表<br/>keyword_map / ident_by_ctx"]
     C --> E[discovery 递归]
     C --> F[RuleMatcher 检查]
     G["pyv.toml [linter]"] -->|opener_context| E
@@ -192,11 +192,11 @@ flowchart LR
 ```mermaid
 flowchart LR
     A[多层级节点树] --> B[深度优先遍历]
-    B --> C[StatementChecker<br/>按 production 匹配区间]
+    B --> C["StatementChecker<br/>按 production 匹配区间"]
     C --> D[RuleMatcher 共享匹配器]
-    D --> E[token/choice/optional/repeat/call 匹配]
-    D --> F[ExpressionChecker<br/>@Expression pratt 完整 / @PrimaryExpr 原子]
-    C --> G[嵌套 @Stmt → end_case 扁平跳过<br/>由独立子 checker 检查]
+    D --> E["token/choice/optional/repeat/call 匹配"]
+    D --> F["ExpressionChecker<br/>@Expression pratt 完整 / @PrimaryExpr 原子"]
+    C --> G["嵌套 @Stmt → end_case 扁平跳过<br/>由独立子 checker 检查"]
 ```
 
 - **父节点**按 production 匹配自身区间（`@Stmt` 由 matcher 用 end_case 扁平跳过，不深入
