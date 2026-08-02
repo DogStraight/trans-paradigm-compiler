@@ -18,9 +18,9 @@ from core.define import Token
 from .. import LintDiagnostic, Position
 from .._constants import TRIVIA as _TRIVIA
 
-# 表达式根（借力 pratt，不内联展开）：Expression / PrimaryExpr / pratt 链
-# PrimaryExpr 由 EC 独立原子匹配器处理，避免 matcher ↔ EC 互相递归。
-_EXPR_RULES = {"Expression", "PrimaryExpr"}
+# 表达式根（借力 pratt，不内联展开）：按 pratt / expr_atom 标识识别，不硬编码
+# 规则名（Expression/PrimaryExpr 换语言即失效）。expr_atom（PrimaryExpr）由
+# EC 独立原子匹配器处理，避免 matcher ↔ EC 互相递归。
 
 
 def _skip(tokens: list[Token], i: int, limit: int) -> int:
@@ -169,10 +169,10 @@ class RuleMatcher:
         if info is None:
             return i
 
-        # 表达式根（Expression / pratt 链）→ 交 ExpressionChecker
-        if name in _EXPR_RULES or info.get("pratt"):
-            if name == "PrimaryExpr":
-                # @PrimaryExpr 只匹配原子操作数（赋值目标/操作数），不消费
+        # 表达式根（pratt 标识 / 原子表达式入口）→ 交 ExpressionChecker
+        if info.get("pratt") or info.get("expr_atom"):
+            if info.get("expr_atom"):
+                # @PrimaryExpr（expr_atom）只匹配原子操作数（赋值目标/操作数），不消费
                 # 运算符——避免 `a <= b` 被当比较表达式吞掉（NonBlockingAssign
                 # 的 <= 赋值歧义）。@Expression 才做完整 pratt 表达式解析。
                 j = i

@@ -106,9 +106,10 @@ def _context_leaves(tree: dict, root_name: str) -> set[str]:
     return acc
 
 
-# 表达式黑盒：first 是 id（与触发相同）或内部复杂，前缀无判别价值。
-# 作为"终止元素"：路径在此结束，不继续展开其后的 token。
-_EXPR_BLACKBOX = {"Expression", "PrimaryExpr"}
+# 表达式黑盒：带 pratt 标识的规则（Expression/运算符链）由 pratt 解析器专门处理，
+# first 是 id（与触发相同）或内部复杂，前缀无判别价值。作为"终止元素"：
+# 路径在此结束，不继续展开其后的 token。按 pratt 标识识别而非硬编码规则名
+# （换一套语法配置，表达式规则即使改名也带 pratt=true）。
 # 前缀路径最大长度（防御；真实判别前缀都很短，到边界块即止）
 _MAX_PREFIX_LEN = 8
 
@@ -158,11 +159,11 @@ def _feat_token_paths(
         return {()} | sub
     if typ == "call":
         name = feat.get("name", "")
-        if name in _EXPR_BLACKBOX:
-            return None  # 表达式黑盒 → 终止元素
         info = tree.get(name)
         if info is None:
             return None
+        if info.get("pratt"):
+            return None  # pratt 表达式黑盒（由 pratt 解析器处理）→ 终止元素
         if info.get("is_statement") or info.get("is_block"):
             return None  # 语句/块边界 → 终止元素（不穿透句子级）
         if not info.get("is_atom"):

@@ -351,6 +351,7 @@ class GrammarRule:
         "end_case",
         "inline",
         "pratt",
+        "expr_atom",
         "is_atom",
         "is_block",
         "is_statement",
