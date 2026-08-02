@@ -4,12 +4,12 @@
 一种被发现的语法结构及其 token 区间。检查阶段据此实例化对应 Checker。
 
 发现策略（决策 1：动态前瞻逐步缩小范围）：
-    - 用块边界维护上下文栈（top / module_body / proc_body / gen_body）
+    - 用块边界维护上下文栈（顶层 CTX_TOP + opener_context 配置的块内上下文）
     - 在上下文中逐 token 扫描：
         关键字/具体符号触发 → 直接注册（A 类）
         标识符触发 → 上下文过滤 + 下一 token 前瞻消歧（B 类）
-    - 注册语句后跳到其 end_case 边界，继续扫描（嵌套语句被自然发现，
-      因为 body 区间在后续扫描中会再次命中）
+    - 注册语句后跳到其句子结束边界（production 推导 _stmt_ends/_derived_end_case），
+      继续扫描（嵌套语句被自然发现，因为 body 区间在后续扫描中会再次命中）
 """
 
 from __future__ import annotations

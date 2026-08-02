@@ -3,8 +3,8 @@
 从规则树（build_slice_tree 产物）预计算，供发现阶段（discovery）使用：
 
     1. keyword_map  — 具体 token 类型 → 规则名列表（A 类：关键字/具体符号触发）
-    2. ident_rules   — 标识符触发的规则（B 类），每条含判别 token 集 + 适用上下文
-    3. context_leaves — 各块上下文（模块体/过程体）可出现的语句叶子规则集合
+    2. ident_by_ctx  — 标识符触发的规则（B 类），每条含判别前缀路径集，注册到
+       opener_context 动态生成的块内上下文名集合（_ctx_names）
 
 B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
     - Level 1（变长前瞻）：首 token 相同时逐 token 预视，每预视一个就缩小

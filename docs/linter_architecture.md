@@ -73,16 +73,20 @@ flowchart TD
 - **包装规则穿透**：容器判定（`_is_nested_container`）与 body 定位（`_locate_stmt_body`）
   穿透纯 @ 分派包装规则（如 `ForLoop` 的 body 是 `@ForBodyStmt`，内部是 `@Stmt|@BeginEnd`），
   不硬编码规则名、不因中间包装层漏判容器。
-- **容器节点边界 = body 显式终止符**：引用式容器节点 end 延伸到 body 语句的分号/块结束
-  （`_skip_to_end({分号}|块结束)`，depth 0）——覆盖单语句 body（如 `for` 的单语句）而非在
+- **容器节点边界 = body 显式终止符**：引用式容器节点 end 延伸到 body 语句的句子结束符
+  （`_skip_to_end(_stmt_ends)`，depth 0）——覆盖单语句 body（如 `for` 的单语句）而非在
   头行尾截断；头内分号（`for` 的 init/cond）在括号 depth>0 被跳过。
-- **块头跳过**：module/function/task 的声明头以分号收尾（`_has_semicolon_header` 递归查
-  production 分号），注册块后跳到 body 开始，避免函数名/模块名被误判为语句。
-- **句子结束符从 production 推导**（`_derived_end_case`）：production 结尾纯字面 token
-  （如分号）即句子天然结束边界。仅对非容器规则推导，恢复模块级/过程体内缺分号检测。
-- **上下文 + 深度栈**：块容器按 `opener_context` 切上下文（module→module_body、
-  begin→proc_body、function/task→proc_body、generate→gen_body）；引用式 `@Stmt`→proc_body
-  （body 入口等于配置 `stmt_rule`）。depth 参数防循环。
+- **块 body 生成式分析**（`_block_body`）：复用共享 matcher 按块头 production 匹配（有深度
+  的 @call 递归匹配、无深度的字面 token 作同步词消费——分号只是其中普通成员，无"头结束
+  符"语义假设），匹配到 production 末尾即 body 起点，避免函数名/模块名被误判为语句。
+- **句子结束符从 production 推导**：lookahead 侧 `_stmt_ends` 从**所有 is_statement 规则**
+  的 production 末尾字面 token（解包 optional）+ 配置 end_case 推导（排除 trivia 与 `!`
+  排除项），分号只是其中普通成员（不假设分号）——`_find_boundary`/容器 `_skip_to_end`
+  共用；discovery 侧 `_derived_end_case` 对非容器规则推导 production 末尾字面 token，
+  恢复模块级/过程体内缺分号检测。
+- **上下文 + 深度栈**：块容器按 `opener_context` 配置切上下文（`opener_ctx.get(opener,
+  context)`，上下文名由配置任意定义，不映射 Verilog 结构名）；引用式容器 body 上下文
+  继承当前上下文（不假设 stmt_rule→proc_body）。depth 参数防循环。
 
 实测示例：
 
@@ -144,7 +148,8 @@ flowchart TD
   的可选复杂 call（`@Range?`）保留 epsilon + first 集（可被括号跳过），其他（`@ParamOverride?`
   的 `#(...)` 无法跳过）维持截断走 Level 2。括号未闭合（残缺）→ 跳过失败 → 保守淘汰（不吞错）。
 - **空 paths 候选**（无静态前缀可判）不参与淘汰，单独留到 Level 2。
-- **前瞻深度上界 = 语句边界块**（分号/块结束），不穿透，天然有界。
+- **前瞻深度上界 = 语句边界块**（`_stmt_ends`——从语句规则 production+end_case 推导，
+  不假设分号），不穿透，天然有界。
 
 示例：
 
@@ -190,13 +195,19 @@ flowchart LR
 - **is_statement 显式标记**：语句规则在 TOML 直接标 `is_statement = true`（含块规则与
   入口选择器下的叶子），无推导。入口选择器（Stmt/TaskStmt/ModuleItem）只保留
   `statement_entry` 作为分发入口标识，不标 is_statement（避免消歧表/parser 冗余候选）。
-- **lookahead 叶子集**：`_context_leaves` 从 pyv.toml 的 `module_item_rule`/`stmt_rule`
-  入口选择器沿纯 @ 分派展开——纯结构遍历（不依赖 is_statement），用于 B 类 ident
-  候选的模块/过程上下文分组。
+- **语句集合 = is_statement 显式收集**（`_statement_rules`）：直接收集规则树中显式
+  `is_statement` 规则全集，不推导收集（原 `_context_leaves`/`_expand_selector` 已删）；
+  B 类 ident 候选注册到**所有**块内上下文（`_ctx_names` 从 opener_context 动态生成），
+  靠 Level 2 试解析精确筛选上下文归属。
 - **入口选择器名必配 + fail-fast**：`module_item_rule`/`stmt_rule` 必须由 pyv.toml
   显式配置，代码无默认值（不硬编码 `ModuleItem`/`Stmt`——换一套配置即失效）。
   scanner 读配置缺失即抛错；LookaheadTable 构造校验名字存在于规则树，失效即抛错。
-- **opener_context**：块 opener token → 消歧上下文映射。
+- **opener_context**：块 opener token → 消歧上下文映射（上下文名由配置任意定义，不映射
+  Verilog 结构名）。双重作用：发现阶段块切上下文（`opener_ctx.get(opener, context)`）+
+  B 类 ident 注册的块内上下文名集合（`_ctx_names`）。
+- **分号假设彻底移除**：句子结束符完全由 `_stmt_ends`（语句规则 production 末尾 +
+  end_case）接管，代码不再特指分号类型；原 `semicolon_token_type()` 推导函数已作为
+  死代码删除。
 
 ---
 
@@ -239,13 +250,12 @@ flowchart LR
 | 文件 | 职责 |
 |------|------|
 | `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker（每节点独立扁平验证） |
-| `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符、块头跳过、结束符推导、上下文/深度 |
-| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast；`[` 括号配对跳过操作数延续、`@Range?` first 集） |
+| `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符（`_stmt_ends`）、块 body 生成式分析、结束符推导、上下文/深度 |
+| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast、is_statement 显式收集、上下文名动态生成、`_stmt_ends` 句子结束符推导；`[` 括号配对跳过操作数延续、`@Range?` first 集） |
 | `linter/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
 | `linter/checkers/statement.py` | 语句检查器（块规则先消费 block_start + 多候选取优） |
-| `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；表达式根按 pratt 标识 + `_is_atom_selector` 推导识别、@PrimaryExpr 原子、choice/@Expression 先跳 trivia） |
+| `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；表达式根按 pratt 标识 + `_is_atom_selector` 推导识别、@PrimaryExpr 原子走 `match_atom`（is_atom 规则 production 驱动）、choice/@Expression 先跳 trivia） |
 | `linter/checkers/expression.py` | 表达式检查器（pratt + 原子，含 part-select） |
 | `linter/checkers/boundary.py` | 块/括号边界配对（P1） |
 | `linter/checkers/macro_token.py` | 非法 token 检查（P0） |
-| `linter/_constants.py` | 共享 token 类型常量 |
 | `linter/checker.py` | Checker 协议 + 注册表 + DiscoveredNode |

@@ -1,0 +1,27 @@
+{
+  "desc": "linter 错误发现准确度对照表。expect 列出该样本应被检出的诊断 code（命中任一即类别正确检出）；错误样本 expect 非空，合法样本 expect 为空（不应报错）。",
+  "samples": {
+    "e01_missing_endmodule.v":   { "desc": "缺 endmodule",                    "expect": ["phase1-boundary"] },
+    "e02_extra_endmodule.v":     { "desc": "多余 endmodule",                  "expect": ["phase1-boundary"] },
+    "e03_unclosed_begin.v":      { "desc": "begin 未闭合（缺 end）",          "expect": ["phase1-boundary"] },
+    "e04_stray_end.v":           { "desc": "孤立 end 无 begin",               "expect": ["phase1-boundary"] },
+    "e05_missing_semicolon.v":   { "desc": "缺分号",                          "expect": ["phase-statement"] },
+    "e06_missing_module_name.v": { "desc": "模块缺名",                        "expect": ["phase-statement"] },
+    "e07_bad_keyword.v":         { "desc": "关键字拼错 alwayss",              "expect": ["phase-statement"] },
+    "e08_assign_no_rhs.v":       { "desc": "赋值缺 RHS",                      "expect": ["phase-expr"] },
+    "e09_if_missing_paren.v":    { "desc": "if 缺括号",                       "expect": ["phase-statement"] },
+    "e10_expr_bad_rhs.v":        { "desc": "表达式尾随运算符",                "expect": ["phase-expr"] },
+    "e11_expr_unclosed_paren.v": { "desc": "表达式括号未闭合",                "expect": ["phase-expr"] },
+    "e12_undefined_macro.v":     { "desc": "未定义宏（依赖 preprocessor/lexer 配合，非 linter 单责）", "expect": ["undefined-macro"], "category": "external" },
+    "e13_missing_wire_name.v":   { "desc": "wire 缺名",                       "expect": ["phase-statement"] },
+    "e14_truncated_assign.v":    { "desc": "assign 被截断（无分号/无结束）",   "expect": ["phase-statement", "phase1-boundary"] },
+    "e16_mismatched_brace.v":    { "desc": "花括号未闭合",                    "expect": ["phase-expr"] }
+  },
+  "valid": {
+    "v01_wire_assign.v":    { "desc": "合法：wire+assign" },
+    "v02_always_posedge.v": { "desc": "合法：always+if/else" },
+    "v03_initial.v":        { "desc": "合法：initial" },
+    "v04_vector_select.v":  { "desc": "合法：位选 data[0]" },
+    "v05_module_inst.v":    { "desc": "合法：模块实例化" }
+  }
+}
