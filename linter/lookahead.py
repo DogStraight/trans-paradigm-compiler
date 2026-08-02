@@ -23,7 +23,12 @@ from __future__ import annotations
 
 from core.define import Token
 
-from ._constants import SEMICOLON_TOKEN_TYPE, TRIVIA as _TRIVIA
+from ._constants import (
+    BRACKET_L_SQUARE,
+    BRACKET_R_SQUARE,
+    SEMICOLON_TOKEN_TYPE,
+    TRIVIA as _TRIVIA,
+)
 from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
 from .grammar_slicer import _collect_first_start_tokens
 
@@ -147,6 +152,18 @@ def _feat_token_paths(
     if typ == "optional":
         elem = feat.get("elem")
         sub = _feat_token_paths(elem, tree)
+        if sub is None and elem is not None and elem.get("type") == "call":
+            # 可选复杂 call：仅当 first 含 `[`（可被 Level 1 括号配对跳过，如
+            # @Range? 的 [7:0]）时保留 epsilon + first 集——否则 function [7:0]
+            # 的 [ 不在判别路径（A 类多候选消歧被淘汰）而漏检。其他复杂 call
+            # （如 @ParamOverride? 的 #(...)，Level 1 无法跳过其内部）维持截断
+            # → paths 空走 Level 2 试解析，避免 # 后的 ( 逐 token 误淘汰。
+            info = tree.get(elem.get("name", "")) or {}
+            prods = info.get("prods") or []
+            if prods:
+                firsts = {t for t in _collect_first_start_tokens(prods[0], tree)}
+                if BRACKET_L_SQUARE in firsts:
+                    return {()} | {(t,) for t in firsts}
         if sub is None:
             return None  # 可选复杂 call → 截断（内容不可静态判别）
         return {()} | sub
@@ -325,6 +342,15 @@ class LookaheadTable:
             if tokens[pos].type in _TRIVIA:
                 pos += 1
                 continue
+            # 操作数/范围延续：`[` 是 @PrimaryExpr 内部（a[i]）或块头范围（[7:0]）
+            # 的括号区间，用括号配对跳过、不参与判别 token 匹配——否则
+            # data[i] = i 的 [i]、function [7:0] 的 [7:0] 让判别路径不匹配而漏检。
+            # 括号未闭合（残缺）→ 跳过失败，保守加入 seen 走淘汰（不吞错）。
+            if tokens[pos].type == BRACKET_L_SQUARE:
+                end = self._skip_square(tokens, pos, n)
+                if end > pos:
+                    pos = end
+                    continue
             seen.append(tokens[pos].type)
             kept: list[dict] = []
             for entry in path_entries:
@@ -407,6 +433,27 @@ class LookaheadTable:
                 return j
             j += 1
         return n
+
+    def _skip_square(self, tokens: list[Token], pos: int, n: int) -> int:
+        """从 `[` 跳到匹配的 `]` 之后（处理嵌套 [..]）。
+
+        未闭合（遇语句边界/末尾仍无 `]`）返回 pos，让调用方保守处理
+        （`[` 加入判别 seen → 不匹配 → 淘汰，不吞错）。
+        """
+        depth = 0
+        j = pos
+        while j < n:
+            tt = tokens[j].type
+            if tt == BRACKET_L_SQUARE:
+                depth += 1
+            elif tt == BRACKET_R_SQUARE:
+                depth -= 1
+                if depth == 0:
+                    return j + 1
+            elif tt == SEMICOLON_TOKEN_TYPE or tt in self._block_ends:
+                return pos  # 越界（未闭合）→ 保守
+            j += 1
+        return pos
 
     def end_case(self, rule: str) -> set[str]:
         info = self._tree.get(rule, {})

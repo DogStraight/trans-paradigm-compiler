@@ -14,14 +14,16 @@
 - [ ] **while/repeat 语句无完整语法规则**：`while`/`repeat` 已定义为关键字（token.toml），
   - 但 grammar 无对应语句规则（RepeatStmt/WhileStmt），发现器跳过其内部（body 语句仍被发现）
   - 方案：如需检查 while/repeat 结构，补充对应语法规则（语法扩展，非 linter 改动）
-- [ ] **function 有范围头漏检**：`function [7:0] add(...)` 的 `@Range?` 非原子 call 截断判别
-  - 路径，`[`（范围）不匹配 paths → function 块不发现（漏检整个 function）
+- [x] **function 有范围头漏检**：`function [7:0] add(...)` 的 `@Range?` 非原子 call 截断判别
   - 根因：`_feat_token_paths` 对非原子 call（@Range 等在判别点前）返回 None 截断，丢 first 集
-  - 方案：可选头元素（@Range?）保留 epsilon 分支 + 复杂分支截断（或非原子 call 返回 first 集）
-- [ ] **带下标赋值目标漏检**：`data[i] = i;`（for/always 内）的 `data[` 首判别 token 是 `[`
+  - **已修复（2026-08-02）**：`_feat_token_paths` 对 first 含 `[` 的可选复杂 call（@Range?）保留
+    epsilon + first 集（可被 Level 1 括号配对跳过）；其他（@ParamOverride? 的 `#(...)`）维持
+    截断走 Level 2。验证：`function [7:0] add` 发现 FuncDecl，normal/errors 全过。
+- [x] **带下标赋值目标漏检**：`data[i] = i;`（for/always 内）的 `data[` 首判别 token 是 `[`
   - （select），B 类 paths 只认 `=`/`<=`/`(` → 语句不发现
-  - 根因：B 类判别点要求 @PrimaryExpr 后第一个 token 是 =/<=/(，不覆盖 select 目标
-  - 方案：B 类对 `id [` 前缀也判为赋值/调用候选（或 Level 2 试解析覆盖）
+  - **已修复（2026-08-02）**：Level 1 前瞻遇 `[` 用括号配对跳过区间（`_skip_square`，语言无关，
+    不依赖 `_match_select`）；残缺 `data [i = i` 括号未闭合→跳过失败→保守淘汰不吞错。
+    验证：`data[i] = i` 发现 BlockingAssign，`a[3:0] = b` 亦修复，ModuleInst 无回归。
 
 ## 设计说明（已落地，供参考）
 
