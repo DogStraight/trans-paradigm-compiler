@@ -233,8 +233,6 @@ flowchart LR
 | 表达式内运算符后换行（多行 RHS）误报 | pratt 无 newline trivia 跳过 | 记录 TODO，不阻塞 |
 | `always @*` 敏感列表误判 | `@*` 与 `@(...)` 消歧边界 | 记录 TODO |
 | while/repeat 无完整语法规则 | 已补关键字，无语句规则 | body 语句仍被发现，结构不检查 |
-| function 范围头漏检 | `@Range?` 截断判别路径 | ✅ 已修复（2026-08-02）：first 含 `[` 的可选复杂 call 保留 first 集 |
-| select 目标漏检（`data[i] = i`） | B 类不认 `id [` | ✅ 已修复（2026-08-02）：Level 1 括号配对跳过 `[` |
 
 ## 文件职责一览
 
