@@ -139,7 +139,20 @@ class Discovery:
             candidates = self._lookahead.classify(tokens, i, context)
             if candidates:
                 rule = candidates[0] if len(candidates) == 1 else candidates
-                e = self._statement_end(tokens, i, candidates[0], end)
+                if isinstance(candidates[0], str) and self._is_nested_container(
+                    candidates[0]
+                ):
+                    # 容器节点边界 = body 语句的显式终止符（分号/块结束，depth 0），
+                    # 覆盖单语句 body（如 for 的单语句/if 的 else 链）而非在头行尾
+                    # 截断——头内分号（for 的 init/cond）在括号 depth>0 被跳过。
+                    e = self._skip_to_end(
+                        tokens,
+                        i,
+                        {SEMICOLON_TOKEN_TYPE} | self._block_ends,
+                        end,
+                    )
+                else:
+                    e = self._statement_end(tokens, i, candidates[0], end)
                 if e > i:
                     node = DiscoveredNode(
                         type="statement",
@@ -183,13 +196,16 @@ class Discovery:
         return any(self._feat_calls_stmt(f) for f in info.get("prods", []))
 
     def _feat_calls_stmt(self, feat) -> bool:
-        """feature 是否（直接/嵌套）引用语句或块规则。"""
+        """feature 是否（直接/穿透包装规则）引用语句或块规则。"""
         if not isinstance(feat, dict):
             return False
         typ = feat.get("type")
         if typ == "call":
             tinfo = self._tree.get(feat.get("name", ""), {})
-            return bool(tinfo.get("is_statement") or tinfo.get("is_block"))
+            if tinfo.get("is_statement") or tinfo.get("is_block"):
+                return True
+            # 包装规则（纯 @ 分派选择器，如 ForBodyStmt → @Stmt|@BeginEnd）→ 穿透
+            return self._inner_stmt_entry(feat.get("name", "")) is not None
         if typ in ("optional", "repeat", "plus"):
             return self._feat_calls_stmt(feat.get("elem"))
         if typ == "seq":
@@ -199,6 +215,40 @@ class Discovery:
                 self._feat_calls_stmt(x) for x in feat.get("alternatives", [])
             )
         return False
+
+    def _inner_stmt_entry(self, name: str) -> str | None:
+        """包装规则（纯 @ 分派选择器）→ 内部首个语句/块入口名（如 ForBodyStmt→Stmt）。"""
+        info = self._tree.get(name, {})
+        prods = info.get("prods", [])
+        if len(prods) == 1:
+            return self._find_stmt_in_feat(prods[0])
+        return None
+
+    def _find_stmt_in_feat(self, feat):
+        """在 feature 内递归找首个语句/块入口名（穿透包装）。"""
+        if not isinstance(feat, dict):
+            return None
+        typ = feat.get("type")
+        if typ == "call":
+            tinfo = self._tree.get(feat.get("name", ""), {})
+            if tinfo.get("is_statement") or tinfo.get("is_block"):
+                return feat["name"]
+            return self._inner_stmt_entry(feat.get("name", ""))
+        if typ == "choice":
+            for alt in feat.get("alternatives", []):
+                r = self._find_stmt_in_feat(alt)
+                if r:
+                    return r
+            return None
+        if typ == "seq":
+            for item in feat.get("items", []):
+                r = self._find_stmt_in_feat(item)
+                if r:
+                    return r
+            return None
+        if typ in ("optional", "repeat", "plus"):
+            return self._find_stmt_in_feat(feat.get("elem"))
+        return None
 
     def _locate_stmt_body(
         self, tokens: list[Token], i: int, rule: str, end: int
@@ -221,6 +271,10 @@ class Discovery:
                 tinfo = self._tree.get(name, {})
                 if tinfo.get("is_statement") or tinfo.get("is_block"):
                     return j, end, name
+                # 包装规则穿透：body 起始 = 该 call 匹配起始，入口 = 内部语句名
+                inner = self._inner_stmt_entry(name)
+                if inner:
+                    return j, end, inner
             trial: list = []
             try:
                 k = matcher.match(tokens, j, feat, trial, end, strict=True)

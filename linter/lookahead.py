@@ -215,7 +215,7 @@ class LookaheadTable:
             if isinstance(info, dict) and info.get("block_end")
         )
 
-        self.keyword_map: dict[str, list[str]] = {}
+        self.keyword_map: dict[str, list[dict]] = {}
         # B 类：context → 候选子集（变长，不预写死 key，get 默认空）
         self.ident_by_ctx: dict[str, list[dict]] = {}
         self._build()
@@ -228,7 +228,15 @@ class LookaheadTable:
             # 块规则不要求 is_statement（generate 等非语句块同样需被发现）。
             bs = info.get("block_start") or ""
             if bs:
-                self.keyword_map.setdefault(bs, []).append(name)
+                # 还原 block_start 到 production 首元素：块规则（task/function）
+                # 的 prods 已剥离 keyword.task 等，还原后与普通 A 类规则视图统一
+                # （prods[0] 都是触发 token），paths 统一从 prods[1:] 开始。
+                bprods = info.get("prods") or []
+                full = [{"type": "token", "token_type": bs}] + bprods
+                bpaths = self._a_prefix_paths(full)
+                self.keyword_map.setdefault(bs, []).append(
+                    {"name": name, "paths": bpaths}
+                )
                 continue
 
             if not info.get("is_statement"):
@@ -250,28 +258,39 @@ class LookaheadTable:
                 if name in self._proc_leaves:
                     self.ident_by_ctx.setdefault(CTX_PROC_BODY, []).append(entry)
             else:
-                # A 类：关键字/具体符号触发
+                # A 类：关键字/具体符号触发 → 也计算前缀路径（与 B 类统一两级消歧）
+                apaths = self._a_prefix_paths(prods)
+                entry = {"name": name, "paths": apaths}
                 for tt in firsts:
-                    self.keyword_map.setdefault(tt, []).append(name)
+                    self.keyword_map.setdefault(tt, []).append(entry)
+
+    def _a_prefix_paths(self, prods: list[dict]) -> set[tuple[str, ...]]:
+        """A 类/块规则的前缀路径（production 视图统一：prods[0] 是触发 token）。
+
+        块规则的 block_start 已由 _build 还原为 prods[0]，普通 A 类规则 prods[0]
+        本就是触发 token（keyword.if 等）——统一从 prods[1:] 开始计算判别路径。
+        """
+        return {p for p in _build_prefix_paths(prods[1:], self._tree) if p}
 
     def classify(self, tokens: list[Token], i: int, context: str) -> list[str] | None:
-        """两级消歧：根据当前位置与上下文，返回候选规则名列表。
+        """统一两级消歧：A/B 类候选都走同一套管线。
 
         Level 1（变长前瞻）：首 token 相同逐 token 预视缩小候选，直到唯一。
         Level 2（试解析）：候选生成式复杂/边界内未收敛 → 完整 production 试解析。
         返回 None = 无候选（非语句起点或未识别语法）。
         """
         tok_type = tokens[i].type
-        # 1. 关键字/具体符号触发（A 类）
+        # 收集候选 entries（A 类 keyword_map / B 类 ident_by_ctx，结构一致）
+        entries: list[dict] | None = None
         if tok_type in self.keyword_map:
-            return self.keyword_map[tok_type]
-        # 2. 标识符触发（B 类）→ 动态两级消歧
-        if tok_type == "id":
+            entries = self.keyword_map[tok_type]
+        elif tok_type == "id":
             entries = self.ident_by_ctx.get(context, [])
-            if not entries:
-                return None
-            return self._resolve_ident(tokens, i, entries)
-        return None
+        if not entries:
+            return None
+        if len(entries) == 1:
+            return [entries[0]["name"]]  # 唯一候选，无需消歧
+        return self._resolve_ident(tokens, i, entries)
 
     def _resolve_ident(
         self, tokens: list[Token], i: int, entries: list[dict]
@@ -295,10 +314,13 @@ class LookaheadTable:
             seen.append(tokens[pos].type)
             kept: list[dict] = []
             for entry in path_entries:
-                # 匹配：实际序列 seen 以某条判别路径开头（路径是判别前缀，
-                # seen 可更长——判别点后的内容不影响归属）
+                # 匹配：实际序列 seen 与判别路径公共前缀一致（双向——seen 可能比
+                # 路径短，如块规则头 automatic 只是完整路径的前缀；也可能比路径长，
+                # 判别点后的内容不影响归属）
                 if any(
-                    tuple(seen)[: len(p)] == p for p in entry.get("paths", ())
+                    tuple(seen)[: min(len(seen), len(p))]
+                    == p[: min(len(seen), len(p))]
+                    for p in entry.get("paths", ())
                 ):
                     kept.append(entry)
             path_entries = kept
@@ -316,14 +338,17 @@ class LookaheadTable:
         # 到边界块 / path 候选耗尽
         if not seen:
             return None  # 无任何判别 token（如 `id;`）→ 无法确认是语句起点
+        # 试解析的匹配上界需含终止符（分号在 limit 位置，多取一个 token 才能
+        # 消费句子结束符，否则 TaskDeclOld 的 `;` 超出区间而失败）
+        t_limit = min(limit + 1, n)
         if l2_only:
-            return self._try_parse(tokens, i, path_entries + l2_only, limit)
+            return self._try_parse(tokens, i, path_entries + l2_only, t_limit)
         if len(path_entries) == 1:
             return [path_entries[0]["name"]]
         if not path_entries:
             return None
         # 多候选未收敛 → Level 2 试解析
-        return self._try_parse(tokens, i, path_entries, limit)
+        return self._try_parse(tokens, i, path_entries, t_limit)
 
     def _try_parse(
         self, tokens: list[Token], i: int, entries: list[dict], limit: int
@@ -339,8 +364,14 @@ class LookaheadTable:
             if not prods:
                 continue
             trial: list = []
+            j = i
+            # 块规则（task/function 等）：block_start 已从 production 剥离，
+            # 试解析前先消费 block_start token（同 StatementChecker 的做法）。
+            bs = info.get("block_start") or ""
+            if bs and j < limit and tokens[j].type == bs:
+                j += 1
             try:
-                j = self._matcher.match_rule(tokens, i, prods, trial, limit)
+                j = self._matcher.match_rule(tokens, j, prods, trial, limit)
             except Exception:
                 continue
             errs = len(trial)
