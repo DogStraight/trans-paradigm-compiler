@@ -70,13 +70,19 @@ flowchart TD
     body = 块头后 ~ 块结束前。
   - 引用式：production 含 `@Stmt`/`@BeginEnd`（`AlwaysStmt`/`IfStmt`/`ForLoop`/`CaseStmt`/
     `EventWaitStmt`），body 由 `_locate_stmt_body`（复用 matcher 逐元素匹配）定位。
+- **包装规则穿透**：容器判定（`_is_nested_container`）与 body 定位（`_locate_stmt_body`）
+  穿透纯 @ 分派包装规则（如 `ForLoop` 的 body 是 `@ForBodyStmt`，内部是 `@Stmt|@BeginEnd`），
+  不硬编码规则名、不因中间包装层漏判容器。
+- **容器节点边界 = body 显式终止符**：引用式容器节点 end 延伸到 body 语句的分号/块结束
+  （`_skip_to_end({分号}|块结束)`，depth 0）——覆盖单语句 body（如 `for` 的单语句）而非在
+  头行尾截断；头内分号（`for` 的 init/cond）在括号 depth>0 被跳过。
 - **块头跳过**：module/function/task 的声明头以分号收尾（`_has_semicolon_header` 递归查
   production 分号），注册块后跳到 body 开始，避免函数名/模块名被误判为语句。
 - **句子结束符从 production 推导**（`_derived_end_case`）：production 结尾纯字面 token
   （如分号）即句子天然结束边界。仅对非容器规则推导，恢复模块级/过程体内缺分号检测。
 - **上下文 + 深度栈**：块容器按 `opener_context` 切上下文（module→module_body、
-  begin→proc_body、function/task→proc_body、generate→gen_body）；引用式 `@Stmt`→proc_body。
-  depth 参数防循环。
+  begin→proc_body、function/task→proc_body、generate→gen_body）；引用式 `@Stmt`→proc_body
+  （body 入口等于配置 `stmt_rule`）。depth 参数防循环。
 
 实测示例：
 
@@ -98,36 +104,37 @@ ModuleDecl
 
 ---
 
-## 3. 动态两级路径消歧（lookahead.py）
+## 3. 动态两级路径消歧（lookahead.py）— A/B 类统一
 
 ```mermaid
 flowchart TD
-    A[classify tokens, i, context] --> B{A 类?<br/>keyword_map 命中}
-    B -->|是| C[直接返回规则<br/>keyword.if/begin/assign...]
-    B -->|否| D{B 类?<br/>tok_type == id}
-    D -->|否| E[None 非语句起点]
-    D -->|是| F[ident_by_ctx 取<br/>当前上下文候选子集]
-    F --> G[Level 1 变长前瞻<br/>逐 token 缩小候选<br/>seen 以路径开头]
-    G -->|唯一且完整路径| H[命中]
-    G -->|候选清空| I[None 未识别]
-    G -->|到边界块未收敛| J[Level 2 试解析<br/>RuleMatcher 完整 production]
-    J -->|错误最少消费最多| H
-    J -->|全失败| I
+    A[classify tokens, i, context] --> B[收集候选 entries<br/>A 类 keyword_map / B 类 ident_by_ctx<br/>结构统一 {name, paths}]
+    B --> C{候选数}
+    C -->|1| D[直接返回唯一规则]
+    C -->|>1| E[Level 1 变长前瞻<br/>逐 token 缩小候选<br/>公共前缀匹配]
+    E -->|唯一且完整路径| D
+    E -->|候选清空| F[None 未识别]
+    E -->|到边界块未收敛| G[Level 2 试解析<br/>RuleMatcher 完整 production<br/>limit 含终止符]
+    G -->|错误最少消费最多| D
+    G -->|全失败| F
 ```
 
-### 配置驱动的候选表
+### 统一抽象：A/B 候选同构
 
-- **A 类**（关键字/具体符号触发）：`keyword_map` —— 规则 first token → 规则名列表，
-  不区分上下文（如 `keyword.if`/`keyword.begin`/`keyword.assign`）。
-- **B 类**（标识符触发）：`ident_by_ctx[context]` —— 上下文 → 候选子集（变长，不预写死
-  key）。候选从 `statement_entry` 入口选择器（Stmt/ModuleItem/TaskStmt）沿纯 @ 分派展开
-  的叶子集归属。
+- **A 类**（关键字/具体符号触发）：`keyword_map[type]` → 候选 entries（含 paths）。
+  块规则（task/function/module）在构建时**还原 block_start** 到 production 首元素，
+  与普通 A 类规则视图统一（prods[0] 都是触发 token），paths 统一从 prods[1:] 计算。
+- **B 类**（标识符触发）：`ident_by_ctx[context]` → 候选 entries（含 paths）。
+  候选从 `statement_entry` 入口选择器沿纯 @ 分派展开的叶子集按上下文归属。
+- 两者候选结构一致 `{name, paths}`，`classify` 统一走同一套两级消歧管线；
+  唯一候选直接返回，多候选才消歧。
 
 ### Level 1：变长前瞻
 
-- 每条 B 类候选规则预计算「**判别前缀路径集**」：从 production（id 之后）展开，遇表达式
+- 每条候选规则预计算「**判别前缀路径集**」：从 production 触发 token 之后展开，遇表达式
   黑盒/语句/块/非原子 call 即截断（前缀只覆盖"能区分候选"的部分）。
-- 消歧：逐个预视 token，用 `seen 以某路径开头` 匹配淘汰候选。
+- 消歧：逐个预视 token，用**公共前缀匹配**（seen 与实际序列与路径双向前缀一致，允许
+  seen 比路径短——块规则头 `automatic` 只是完整路径的前缀）淘汰候选。
 - **命中条件**：候选唯一 且 seen 恰好等于其一条完整判别路径（前缀匹配不命中——防止
   `module test #(...)` 的 `#` 前缀误判为参数化实例化）。
 - **空 paths 候选**（无静态前缀可判）不参与淘汰，单独留到 Level 2。
@@ -142,6 +149,8 @@ flowchart TD
 | `foo(bar);` | seen `[ ( ]` | SubroutineCall |
 | `foo u1(...);`（module_body） | seen `[id, (]` | ModuleInst（2-token 预视） |
 | `module test #(...)`（module_body） | seen `[#,(]` 不匹配 `[#,id,(]` | None（不误判） |
+| `task bar;` | seen `[id, ;]` | TaskDeclOld（试解析区分 ANSI/Old） |
+| `task automatic swap(...)` | seen `[automatic,id,(]` | TaskDeclANSI |
 
 ### Level 2：试解析兜底
 
@@ -149,6 +158,9 @@ flowchart TD
   变长前瞻到边界块仍无法收敛、候选无静态前缀（空 paths）。
 - 对每个候选用 `RuleMatcher` **完整 production 试解析**（临时错误列表，静默），取
   "错误最少、其次消费最多"者；全失败 → None（未识别）。
+- **块规则**试解析先消费 block_start（TaskDecl 的 production 已剥离 keyword.task，
+  match 前需前置），`limit` 含终止符（多取一个 token 消费分号，否则 TaskDeclOld 的
+  `;` 超出区间而失败）。
 
 ---
 
@@ -209,12 +221,12 @@ flowchart LR
 
 | 文件 | 职责 |
 |------|------|
-| `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker |
-| `linter/discovery.py` | 递归发现器：容器 children、块头跳过、结束符推导、上下文/深度 |
-| `linter/lookahead.py` | 前瞻消歧表 + 动态两级消歧（变长前瞻 + 试解析） |
+| `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker（每节点独立扁平验证） |
+| `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符、块头跳过、结束符推导、上下文/深度 |
+| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析） |
 | `linter/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
 | `linter/checkers/statement.py` | 语句检查器（块规则先消费 block_start + 多候选取优） |
-| `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call） |
+| `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；@PrimaryExpr 原子、choice/@Expression 先跳 trivia） |
 | `linter/checkers/expression.py` | 表达式检查器（pratt + 原子，含 part-select） |
 | `linter/checkers/boundary.py` | 块/括号边界配对（P1） |
 | `linter/checkers/macro_token.py` | 非法 token 检查（P0） |
