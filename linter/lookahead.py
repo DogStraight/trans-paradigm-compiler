@@ -206,6 +206,19 @@ class LookaheadTable:
     ) -> None:
         self._tree = tree
         self._matcher = matcher
+        # fail-fast：语句入口选择器名（配置 linter.module_item_rule/stmt_rule，
+        # 兜底默认 ModuleItem/Stmt）必须存在于规则树。若语法规则改名/删除或
+        # pyv.toml 配置失效，此处直接抛错——而非 _context_leaves 静默返回空集
+        # 导致 B 类 ident 候选全部消失（ModuleInst 等漏检），那是静默降级。
+        for _name, _role in (
+            (module_item_rule, "linter.module_item_rule（模块体语句入口）"),
+            (stmt_rule, "linter.stmt_rule（过程体语句入口）"),
+        ):
+            if _name not in tree:
+                raise RuntimeError(
+                    f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
+                    "请检查 pyv.toml [linter] 配置与语法规则命名是否一致。"
+                )
         self._module_leaves = _context_leaves(tree, module_item_rule)
         self._proc_leaves = _context_leaves(tree, stmt_rule)
         # 句子终止符（边界块）：分号 + 块结束，Level 1 前瞻上界
