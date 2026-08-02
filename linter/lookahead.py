@@ -58,68 +58,17 @@ def _rule_first(name: str, tree: dict) -> set[str]:
     return _first_of(info["prods"][0], tree)
 
 
-def _collect_calls(feat: dict | None) -> list[str]:
-    """收集一个 feature 中引用的所有子规则名（用于展开选择器）。"""
-    if feat is None:
-        return []
-    typ = feat.get("type")
-    if typ == "call":
-        return [feat["name"]]
-    if typ == "choice":
-        result: list[str] = []
-        for alt in feat.get("alternatives", []):
-            result += _collect_calls(alt)
-        return result
-    if typ == "seq":
-        result = []
-        for item in feat.get("items", []):
-            result += _collect_calls(item)
-        return result
-    if typ in ("optional", "repeat", "plus"):
-        return _collect_calls(feat.get("elem"))
-    return []
+def _statement_rules(tree: dict) -> set[str]:
+    """所有显式 is_statement 规则名集合（配置驱动，不推导收集）。
 
-
-def _is_pure_call_choice(feat: dict | None) -> bool:
-    """feature 是否纯 @ 分派：call 或 choice-of-calls（无 token/repeat 等）。"""
-    if feat is None:
-        return False
-    typ = feat.get("type")
-    if typ == "call":
-        return True
-    if typ == "choice":
-        return all(
-            _is_pure_call_choice(a) for a in feat.get("alternatives", [])
-        )
-    return False
-
-
-def _expand_selector(name: str, tree: dict, acc: set[str], visited: set[str]) -> None:
-    """递归展开选择器规则（inline 分发），收集叶子语句规则名。
-
-    选择器 = production 仅 1 个元素且为纯 @ 分派（如 Stmt → @A|@B|@C）。
-    遇含具体 token 的叶子语句（BlockingAssign 等）即停止加入，不继续展开
-    到表达式原子（与 is_statement 显式标记的规则集合对齐）。
+    is_statement 是规则作者显式标注的"此规则是语句"字段——语句集合直接
+    据此收集，不再从 Stmt/ModuleItem 选择器递归展开推导。
     """
-    if name in visited:
-        return
-    visited.add(name)
-    info = tree.get(name)
-    if not info or not info.get("prods"):
-        return
-    prods = info["prods"]
-    if len(prods) == 1 and _is_pure_call_choice(prods[0]):
-        for c in _collect_calls(prods[0]):
-            _expand_selector(c, tree, acc, visited)
-    else:
-        acc.add(name)
-
-
-def _context_leaves(tree: dict, root_name: str) -> set[str]:
-    """展开根选择器规则，返回其下所有叶子语句规则名集合。"""
-    acc: set[str] = set()
-    _expand_selector(root_name, tree, acc, set())
-    return acc
+    return {
+        name
+        for name, info in tree.items()
+        if isinstance(info, dict) and info.get("is_statement")
+    }
 
 
 # 表达式黑盒：带 pratt 标识的规则（Expression/运算符链）由 pratt 解析器专门处理，
@@ -237,8 +186,8 @@ class LookaheadTable:
         self._matcher = matcher
         # fail-fast：语句入口选择器名（pyv.toml [linter] module_item_rule/stmt_rule）
         # 必须存在于规则树。代码不硬编码任何语法规则名——换一套配置即失效；
-        # 名字缺失/失效在此直接抛错，而非 _context_leaves 静默返回空集导致
-        # B 类 ident 候选全部消失（ModuleInst 等漏检），那是静默降级。
+        # 名字缺失/失效在此直接抛错，而非静默返回空集导致 B 类 ident 候选
+        # 全部消失（ModuleInst 等漏检），那是静默降级。
         for _name, _role in (
             (module_item_rule, "linter.module_item_rule（模块体语句入口）"),
             (stmt_rule, "linter.stmt_rule（过程体语句入口）"),
@@ -248,8 +197,8 @@ class LookaheadTable:
                     f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
                     "请检查 pyv.toml [linter] 配置与语法规则命名是否一致。"
                 )
-        self._module_leaves = _context_leaves(tree, module_item_rule)
-        self._proc_leaves = _context_leaves(tree, stmt_rule)
+        self._module_leaves = _statement_rules(tree)
+        self._proc_leaves = _statement_rules(tree)
         # 句子终止符（边界块）：分号 + 块结束，Level 1 前瞻上界
         self._block_ends = frozenset(
             info["block_end"]
