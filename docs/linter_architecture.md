@@ -185,6 +185,9 @@ flowchart LR
 - **lookahead 叶子集**：`_context_leaves` 从 pyv.toml 的 `module_item_rule`/`stmt_rule`
   入口选择器沿纯 @ 分派展开——纯结构遍历（不依赖 is_statement），用于 B 类 ident
   候选的模块/过程上下文分组。
+- **入口选择器名必配 + fail-fast**：`module_item_rule`/`stmt_rule` 必须由 pyv.toml
+  显式配置，代码无默认值（不硬编码 `ModuleItem`/`Stmt`——换一套配置即失效）。
+  scanner 读配置缺失即抛错；LookaheadTable 构造校验名字存在于规则树，失效即抛错。
 - **opener_context**：块 opener token → 消歧上下文映射。
 
 ---

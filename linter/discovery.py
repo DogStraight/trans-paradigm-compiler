@@ -39,9 +39,9 @@ class Discovery:
         block_closers: frozenset[str],
         bracket_openers: frozenset[str],
         bracket_closers: frozenset[str],
+        module_item_rule: str,
+        stmt_rule: str,
         opener_ctx: dict[str, str] | None = None,
-        module_item_rule: str = "ModuleItem",
-        stmt_rule: str = "Stmt",
         matcher=None,
     ) -> None:
         self._tree = tree

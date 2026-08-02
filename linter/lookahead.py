@@ -200,16 +200,16 @@ class LookaheadTable:
     def __init__(
         self,
         tree: dict,
-        module_item_rule: str = "ModuleItem",
-        stmt_rule: str = "Stmt",
+        module_item_rule: str,
+        stmt_rule: str,
         matcher=None,
     ) -> None:
         self._tree = tree
         self._matcher = matcher
-        # fail-fast：语句入口选择器名（配置 linter.module_item_rule/stmt_rule，
-        # 兜底默认 ModuleItem/Stmt）必须存在于规则树。若语法规则改名/删除或
-        # pyv.toml 配置失效，此处直接抛错——而非 _context_leaves 静默返回空集
-        # 导致 B 类 ident 候选全部消失（ModuleInst 等漏检），那是静默降级。
+        # fail-fast：语句入口选择器名（pyv.toml [linter] module_item_rule/stmt_rule）
+        # 必须存在于规则树。代码不硬编码任何语法规则名——换一套配置即失效；
+        # 名字缺失/失效在此直接抛错，而非 _context_leaves 静默返回空集导致
+        # B 类 ident 候选全部消失（ModuleInst 等漏检），那是静默降级。
         for _name, _role in (
             (module_item_rule, "linter.module_item_rule（模块体语句入口）"),
             (stmt_rule, "linter.stmt_rule（过程体语句入口）"),
