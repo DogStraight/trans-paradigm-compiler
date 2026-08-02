@@ -209,6 +209,10 @@ flowchart LR
 - **子节点**独立检查自身区间（扁平验证）。
 - **@PrimaryExpr 只匹配原子**（不消费运算符）——解决 `a <= b` 赋值 vs 比较歧义；
   **@Expression 完整 pratt**。
+- **表达式识别机制**（不硬编码规则名，换语言即失效）：
+  - `@Expression`/运算符链带 `pratt = true` → lookahead 前缀路径黑盒截断、matcher 交 EC 完整 pratt；
+  - `@PrimaryExpr`（原子入口）由 `_is_atom_selector` **从 is_atom 结构推导**（production 纯
+    @ 分派且全部分支 is_atom），matcher 交 EC 原子匹配；不显式标记，与 is_atom 正交。
 - **matcher trivia 处理**：`_match_choice`/`@Expression` 先跳过 trivia，避免多行表达式 /
   case item 从行首 newline 消费错位。
 
@@ -228,10 +232,10 @@ flowchart LR
 |------|------|
 | `linter/scanner.py` | 编排 P1/P0/P2；深度优先注册节点 checker（每节点独立扁平验证） |
 | `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符、块头跳过、结束符推导、上下文/深度 |
-| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析） |
+| `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast） |
 | `linter/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
 | `linter/checkers/statement.py` | 语句检查器（块规则先消费 block_start + 多候选取优） |
-| `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；@PrimaryExpr 原子、choice/@Expression 先跳 trivia） |
+| `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；表达式根按 pratt 标识 + `_is_atom_selector` 推导识别、@PrimaryExpr 原子、choice/@Expression 先跳 trivia） |
 | `linter/checkers/expression.py` | 表达式检查器（pratt + 原子，含 part-select） |
 | `linter/checkers/boundary.py` | 块/括号边界配对（P1） |
 | `linter/checkers/macro_token.py` | 非法 token 检查（P0） |
