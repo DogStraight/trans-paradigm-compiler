@@ -2,8 +2,9 @@
 
 从 production 树内联匹配规则，供两个检查器复用：
     - StatementChecker：在语句区间内按 production 精确匹配
-    - ExpressionChecker：通过 atom_parser 回调识别 Verilog 原子表达式
-      （BitWidthLiteral / ConcatExpr / ReplicateExpr / SelectExpr / CallExpr ...）
+    - ExpressionChecker：pratt 的 atom_parser 回调经 match_atom 识别 Verilog 原子
+      （BitWidthLiteral / ConcatExpr / ReplicateExpr / SelectExpr / CallExpr ...），
+      原子由 is_atom 规则 production 驱动（参考 parser atomic_rules），不手写。
 
 strict 语境约定：
     - strict=True  — 必选位置（production 顶层）：token 失败报错 + 跳过恢复
@@ -19,8 +20,8 @@ from .. import LintDiagnostic, Position
 from .._constants import TRIVIA as _TRIVIA
 
 # 表达式根（借力 pratt，不内联展开）：按 pratt 标识 / 原子选择器推导识别，不硬编码
-# 规则名（Expression/PrimaryExpr 换语言即失效）。PrimaryExpr 由 EC 独立原子匹配器
-# 处理（避免 matcher ↔ EC 互相递归），其身份由 _is_atom_selector 从 is_atom 结构推导。
+# 规则名（Expression/PrimaryExpr 换语言即失效）。PrimaryExpr 身份由 _is_atom_selector
+# 从 is_atom 结构推导；原子匹配走 match_atom（is_atom 规则集合 + production 降序）。
 
 
 def _is_atom_selector(info: dict, tree: dict) -> bool:
@@ -63,6 +64,17 @@ class RuleMatcher:
         self._expr = expr_checker
         self._block_openers = block_openers
         self._block_closers = block_closers
+        # 原子规则集合（参考 parser.atomic_rules）：is_atom 规则按 production
+        # 长度降序（长的先试，ReplicateExpr 先于 ConcatExpr，避免被误吞）。
+        self._atom_rules = sorted(
+            (
+                name
+                for name, info in tree.items()
+                if isinstance(info, dict) and info.get("is_atom")
+            ),
+            key=lambda n: len(tree[n].get("prods", [])),
+            reverse=True,
+        )
 
     # ── 对外接口 ────────────────────────────────
 
@@ -125,6 +137,28 @@ class RuleMatcher:
         if typ == "plus":
             return self._match_repeat(tokens, i, node, errors, limit, True)
         return i
+
+    def match_atom(self, tokens: list[Token], i: int):
+        """匹配一个表达式原子，返回 (node, consumed) 或 (None, 0)。
+
+        参考 parser 的 _atom_parser_impl / atomic_rules 流程：按 production 长度
+        降序逐个尝试 is_atom 规则，返回第一个有进展者。只消费操作数、不消费
+        运算符（避免 `a <= b` 赋值 vs 比较歧义）；production 内遇 @Expression /
+        pratt 规则由 _match_call_impl 交回 ExpressionChecker.consume（pratt 切断
+        左递归环，binding power + stop_tokens 保证终止）。
+        """
+        n = len(tokens)
+        j = _skip(tokens, i, n)
+        if j >= n:
+            return None, 0
+        for name in self._atom_rules:
+            trial: list = []
+            k = self._match_call_impl(
+                tokens, j, name, trial, n, strict=False, silent=True
+            )
+            if k > j:
+                return object(), k - j
+        return None, 0
 
     def _match_token(
         self,
@@ -201,7 +235,7 @@ class RuleMatcher:
                     j += 1
                 if j >= limit:
                     return i
-                _, consumed = self._expr._match_atom(tokens, j)
+                _, consumed = self.match_atom(tokens, j)
                 if consumed <= 0:
                     if strict and not silent:
                         t = tokens[j]

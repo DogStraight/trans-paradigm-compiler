@@ -23,14 +23,25 @@ from __future__ import annotations
 
 from core.define import Token
 
+from core.utils import square_bracket_types
+
 from ._constants import (
-    BRACKET_L_SQUARE,
-    BRACKET_R_SQUARE,
     SEMICOLON_TOKEN_TYPE,
     TRIVIA as _TRIVIA,
 )
 from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
 from .grammar_slicer import _collect_first_start_tokens
+
+# 方括号开/闭类型（从 lexer.bracket_map 推导，构造期配置已加载）。
+# 模块级惰性缓存：_feat_token_paths 等模块级函数与实例方法共用。
+_SQUARE_LR: tuple[str, str] | None = None
+
+
+def _square_bracket_lr() -> tuple[str, str]:
+    global _SQUARE_LR
+    if _SQUARE_LR is None:
+        _SQUARE_LR = square_bracket_types()
+    return _SQUARE_LR
 
 
 def _first_of(feat: dict | None, tree: dict) -> set[str]:
@@ -162,7 +173,7 @@ def _feat_token_paths(
             prods = info.get("prods") or []
             if prods:
                 firsts = {t for t in _collect_first_start_tokens(prods[0], tree)}
-                if BRACKET_L_SQUARE in firsts:
+                if _square_bracket_lr()[0] in firsts:
                     return {()} | {(t,) for t in firsts}
         if sub is None:
             return None  # 可选复杂 call → 截断（内容不可静态判别）
@@ -245,6 +256,9 @@ class LookaheadTable:
             for info in tree.values()
             if isinstance(info, dict) and info.get("block_end")
         )
+        # 方括号开/闭类型（配置推导）：Level 1 括号配对跳过 @PrimaryExpr 内部/
+        # 块头范围的 [..] 区间，不参与判别 token 匹配。
+        self._l_square, self._r_square = _square_bracket_lr()
 
         self.keyword_map: dict[str, list[dict]] = {}
         # B 类：context → 候选子集（变长，不预写死 key，get 默认空）
@@ -346,7 +360,7 @@ class LookaheadTable:
             # 的括号区间，用括号配对跳过、不参与判别 token 匹配——否则
             # data[i] = i 的 [i]、function [7:0] 的 [7:0] 让判别路径不匹配而漏检。
             # 括号未闭合（残缺）→ 跳过失败，保守加入 seen 走淘汰（不吞错）。
-            if tokens[pos].type == BRACKET_L_SQUARE:
+            if tokens[pos].type == self._l_square:
                 end = self._skip_square(tokens, pos, n)
                 if end > pos:
                     pos = end
@@ -444,9 +458,9 @@ class LookaheadTable:
         j = pos
         while j < n:
             tt = tokens[j].type
-            if tt == BRACKET_L_SQUARE:
+            if tt == self._l_square:
                 depth += 1
-            elif tt == BRACKET_R_SQUARE:
+            elif tt == self._r_square:
                 depth -= 1
                 if depth == 0:
                     return j + 1

@@ -18,20 +18,3 @@ NEWLINE_TOKEN_TYPE = "newline"
 # 字面量 / 标识符 token 类型
 NUMBER_TOKEN_TYPE = "literal.number"
 IDENTIFIER_TOKEN_TYPE = "id"
-
-# 括号 token 类型
-BRACKET_L_CURLY = "bracket.l_curly_bracket"
-BRACKET_R_CURLY = "bracket.r_curly_bracket"
-BRACKET_L_SQUARE = "bracket.l_square_bracket"
-BRACKET_R_SQUARE = "bracket.r_square_bracket"
-BRACKET_L_PAREN = "bracket.l_parentheses"
-BRACKET_R_PAREN = "bracket.r_parentheses"
-
-# 符号 token 类型
-SYMBOL_COMMA = "symbol.base.comma"
-SYMBOL_COLON = "symbol.base.colon"
-SYMBOL_SINGLE_QUOTE = "symbol.base.single_quote"
-SYMBOL_DOLLAR = "symbol.base.dollar"
-# part-select 运算符（Verilog [a +: b] / [a -: b]）
-SYMBOL_PLUS_RANGE = "symbol.extend.plus_range"
-SYMBOL_MINUS_RANGE = "symbol.extend.minus_range"

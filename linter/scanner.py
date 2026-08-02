@@ -100,6 +100,9 @@ class LinterScanner:
             self._block_openers,
             self._block_closers,
         )
+        # 后置注入：ExpressionChecker 的 pratt 原子回调复用共享 matcher 的
+        # production 驱动原子匹配（参考 parser atomic_rules 流程，不手写原子逻辑）
+        self._expr_checker.set_atom_matcher(self._matcher)
 
         _opener_ctx = {
             k: v for k, v in ConfigRegistry._loaded.get("linter.opener_context", [])
