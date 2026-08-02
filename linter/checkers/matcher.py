@@ -17,7 +17,9 @@ from __future__ import annotations
 from core.define import Token
 
 from .. import LintDiagnostic, Position
-from .._constants import TRIVIA as _TRIVIA
+
+# 通用词法常量（语言无关，自包含于引用处）
+_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 
 # 表达式根（借力 pratt，不内联展开）：按 pratt 标识 / 原子选择器推导识别，不硬编码
 # 规则名（Expression/PrimaryExpr 换语言即失效）。PrimaryExpr 身份由 _is_atom_selector

@@ -25,11 +25,10 @@ from core.define import Token
 
 from core.utils import square_bracket_types
 
-from ._constants import (
-    IDENTIFIER_TOKEN_TYPE,
-    TRIVIA as _TRIVIA,
-)
 from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
+
+# 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
+_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 from .grammar_slicer import _collect_first_start_tokens
 from lexer.lexer_utils import semicolon_token_type
 
@@ -247,7 +246,7 @@ class LookaheadTable:
             firsts = _rule_first(name, self._tree)
             if not firsts:
                 continue
-            if IDENTIFIER_TOKEN_TYPE in firsts:
+            if "id" in firsts:
                 # B 类：标识符触发 → 前缀路径 + 按上下文归属（变长子集）
                 paths = _build_prefix_paths(prods[1:], self._tree)
                 # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
@@ -284,7 +283,7 @@ class LookaheadTable:
         entries: list[dict] | None = None
         if tok_type in self.keyword_map:
             entries = self.keyword_map[tok_type]
-        elif tok_type == IDENTIFIER_TOKEN_TYPE:
+        elif tok_type == "id":
             entries = self.ident_by_ctx.get(context, [])
         if not entries:
             return None

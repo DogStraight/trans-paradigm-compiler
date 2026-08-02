@@ -21,11 +21,10 @@ from .checker import (
     CTX_TOP,
     DiscoveredNode,
 )
-from ._constants import (
-    NEWLINE_TOKEN_TYPE,
-    TRIVIA as _TRIVIA,
-)
 from .lookahead import LookaheadTable
+
+# 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
+_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 from lexer.lexer_utils import semicolon_token_type
 
 # 分号 token 类型（句子终止符，从 lexer.token_base 配置推导，构造期已加载）。
@@ -99,7 +98,7 @@ class Discovery:
                 break
             t = tokens[i]
 
-            if t.type == NEWLINE_TOKEN_TYPE:
+            if t.type == "newline":
                 i += 1
                 continue
 
@@ -381,7 +380,7 @@ class Discovery:
             elif t.type in self._bracket_closers:
                 depth = max(0, depth - 1)
             elif depth == 0 and (
-                t.type in (_semicolon_type(), NEWLINE_TOKEN_TYPE)
+                t.type in (_semicolon_type(), "newline")
                 or t.type in self._block_ends
             ):
                 return i + 1

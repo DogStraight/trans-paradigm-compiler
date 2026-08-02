@@ -11,8 +11,10 @@ from __future__ import annotations
 from core.define import Token
 
 from .. import LintDiagnostic, Position
-from .._constants import TRIVIA as _TRIVIA
 from ..checker import Checker
+
+# 通用词法常量（语言无关，自包含于引用处）
+_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 
 
 class BoundaryChecker(Checker):

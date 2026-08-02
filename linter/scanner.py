@@ -23,7 +23,6 @@ from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
 from . import LintDiagnostic
-from ._constants import BRACKET_TOKEN_PREFIX
 from .grammar_slicer import build_slice_tree
 from .discovery import Discovery
 from .checker import CheckerRegistry
@@ -79,10 +78,10 @@ class LinterScanner:
         for _rt, _ls in _bracket_pairs.items():
             self._block_pairs.setdefault(_rt, set()).update(_ls)
         self._bracket_openers = frozenset(
-            t for t in self._block_openers if t.startswith(BRACKET_TOKEN_PREFIX)
+            t for t in self._block_openers if t.startswith("bracket.")
         )
         self._bracket_closers = frozenset(
-            t for t in self._block_closers if t.startswith(BRACKET_TOKEN_PREFIX)
+            t for t in self._block_closers if t.startswith("bracket.")
         )
         self._all_bracket_openers = self._bracket_openers
         self._all_bracket_closers = self._bracket_closers
