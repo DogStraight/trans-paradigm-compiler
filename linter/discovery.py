@@ -25,17 +25,6 @@ from .lookahead import LookaheadTable
 
 # 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
 _TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
-from lexer.lexer_utils import semicolon_token_type
-
-# 分号 token 类型（句子终止符，从 lexer.token_base 配置推导，构造期已加载）。
-_SEMICOLON_TYPE: str | None = None
-
-
-def _semicolon_type() -> str:
-    global _SEMICOLON_TYPE
-    if _SEMICOLON_TYPE is None:
-        _SEMICOLON_TYPE = semicolon_token_type()
-    return _SEMICOLON_TYPE
 
 
 class Discovery:
@@ -157,7 +146,7 @@ class Discovery:
                     e = self._skip_to_end(
                         tokens,
                         i,
-                        {_semicolon_type()} | self._block_ends,
+                        self._lookahead._stmt_ends,
                         end,
                     )
                 else:
@@ -372,6 +361,8 @@ class Discovery:
         return start, end
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:
+        # 实验：不假设"句子以分号结束"（分号是语言特定知识）——句子终止应
+        # 由 _derived_end_case（production 末尾字面 token）覆盖，此处仅通用终止。
         depth = 0
         while i < n:
             t = tokens[i]
@@ -380,8 +371,7 @@ class Discovery:
             elif t.type in self._bracket_closers:
                 depth = max(0, depth - 1)
             elif depth == 0 and (
-                t.type in (_semicolon_type(), "newline")
-                or t.type in self._block_ends
+                t.type == "newline" or t.type in self._block_ends
             ):
                 return i + 1
             i += 1

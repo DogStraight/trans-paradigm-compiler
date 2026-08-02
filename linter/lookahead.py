@@ -30,17 +30,6 @@ from .checker import CTX_MODULE_BODY, CTX_PROC_BODY
 # 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
 _TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 from .grammar_slicer import _collect_first_start_tokens
-from lexer.lexer_utils import semicolon_token_type
-
-# 分号 token 类型（句子终止符，从 lexer.token_base 配置推导，构造期已加载）。
-_SEMICOLON_TYPE: str | None = None
-
-
-def _semicolon_type() -> str:
-    global _SEMICOLON_TYPE
-    if _SEMICOLON_TYPE is None:
-        _SEMICOLON_TYPE = semicolon_token_type()
-    return _SEMICOLON_TYPE
 
 # 方括号开/闭类型（从 lexer.bracket_map 推导，构造期配置已加载）。
 # 模块级惰性缓存：_feat_token_paths 等模块级函数与实例方法共用。
@@ -204,11 +193,19 @@ class LookaheadTable:
                 )
         self._module_leaves = _statement_rules(tree)
         self._proc_leaves = _statement_rules(tree)
-        # 句子终止符（边界块）：分号 + 块结束，Level 1 前瞻上界
+        # 块结束符集合（从块规则 block_end 收集，Level 1 前瞻边界）
         self._block_ends = frozenset(
             info["block_end"]
             for info in tree.values()
             if isinstance(info, dict) and info.get("block_end")
+        )
+        # 句子结束符（从语句规则 production 末尾字面 token + 配置 end_case 推导，
+        # 不假设分号——分号只是其中普通成员，随语言配置变化）
+        self._stmt_ends = frozenset(
+            tok
+            for info in tree.values()
+            if isinstance(info, dict) and info.get("is_statement")
+            for tok in LookaheadTable._rule_end_tokens(info)
         )
         # 方括号开/闭类型（配置推导）：Level 1 括号配对跳过 @PrimaryExpr 内部/
         # 块头范围的 [..] 区间，不参与判别 token 匹配。
@@ -218,6 +215,27 @@ class LookaheadTable:
         # B 类：context → 候选子集（变长，不预写死 key，get 默认空）
         self.ident_by_ctx: dict[str, list[dict]] = {}
         self._build()
+
+    @staticmethod
+    def _rule_end_tokens(info: dict) -> set[str]:
+        """规则 production 末尾字面 token（解包 optional）+ 配置 end_case。
+
+        排除 ! 前缀（排除项）与 trivia（newline 等——trivia 是分隔符，
+        非句子结束 token；end_case 里的 newline 表示"语句后可换行"）。
+        """
+        result = {
+            s for s in (info.get("end_case", []) or [])
+            if not s.startswith("!") and s not in _TRIVIA
+        }
+        prods = info.get("prods", [])
+        if prods:
+            last = prods[-1]
+            if isinstance(last, dict):
+                if last.get("type") == "optional":
+                    last = last.get("elem") or {}
+                if last.get("type") == "token" and last["token_type"] not in _TRIVIA:
+                    result.add(last["token_type"])
+        return result
 
     def _build(self) -> None:
         for name, info in self._tree.items():
@@ -398,7 +416,7 @@ class LookaheadTable:
         j = i
         while j < n:
             t = tokens[j]
-            if t.type == _semicolon_type() or t.type in self._block_ends:
+            if t.type in self._stmt_ends:
                 return j
             j += 1
         return n
@@ -419,7 +437,7 @@ class LookaheadTable:
                 depth -= 1
                 if depth == 0:
                     return j + 1
-            elif tt == _semicolon_type() or tt in self._block_ends:
+            elif tt in self._stmt_ends:
                 return pos  # 越界（未闭合）→ 保守
             j += 1
         return pos

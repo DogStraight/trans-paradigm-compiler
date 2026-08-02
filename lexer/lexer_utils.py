@@ -60,13 +60,4 @@ def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -
     return base
 
 
-def semicolon_token_type() -> str:
-    """从 lexer.token_base 推导分号 token 类型（配置驱动，不硬编码）。
 
-    分号定义在 [symbol.base]（如 semicolon = ";"），lexer 按 symbol.{cat}.{name}
-    命名，推导得到 "symbol.base.semicolon"。换语言时自动适配，避免硬编码失效。
-    """
-    for name in _token_base_cfg.get("symbol", {}).get("base", {}):
-        if name == "semicolon":
-            return f"symbol.base.{name}"
-    raise RuntimeError("lexer.token_base 缺少 semicolon 符号定义")
