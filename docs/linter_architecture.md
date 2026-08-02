@@ -161,7 +161,7 @@ flowchart LR
     C --> D[lookahead 消歧表<br/>keyword_map / ident_by_ctx]
     C --> E[discovery 递归]
     C --> F[RuleMatcher 检查]
-    G[pyv.toml [linter]] -->|opener_context| E
+    G["pyv.toml [linter]"] -->|opener_context| E
     G -->|module_item_rule/stmt_rule| D
 ```
 
