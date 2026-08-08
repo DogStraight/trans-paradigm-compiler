@@ -344,11 +344,13 @@ class TestNegative:
             "\x01",  # control char SOH
             "\x1a",  # control char SUB
             "\x7f",  # DEL
-            "\ufeff",  # BOM
         ],
     )
     def test_non_printable_raises_value_error(self, lexer, src):
-        """零宽/控制字符/不可见字符在 refine_type 阶段 → ValueError。"""
+        """零宽/控制字符在 refine_type 阶段 → ValueError。
+
+        （UTF-8 BOM 已由 [space] bom 配置支持为可忽略字符，不在此列。）
+        """
         with pytest.raises(ValueError, match="Unexpected token"):
             lexer.tokenize(src)
 
@@ -425,6 +427,49 @@ class TestNegative:
     def test_timeout_safety_net(self, lexer, src):
         """安全网：验证所有 FSM while 循环在 2s 内必定终止。"""
         lexer.tokenize(src)
+
+
+# ═══════════════════════════════════════════════════════
+# CRLF / UTF-8 BOM 支持 — 配置驱动，不崩溃
+# ═══════════════════════════════════════════════════════
+
+
+class TestCrlfBomSupport:
+    """CRLF 行尾 / UTF-8 BOM 应由 [space] 配置自然支持（lexer 侧修复）。
+
+    修复前 \r 与 \ufeff 无归属 → unrecognized → refine_type 抛 ValueError。
+    修复后两者作为可忽略空白吞掉，token 类型序列与 LF / 无 BOM 输入一致。
+    """
+
+    def test_crlf_input_tokenizes(self, lexer):
+        """CRLF 行尾 → 正常 tokenize，不崩。"""
+        src = "module m;\r\n    assign a = b;\r\nendmodule\r\n"
+        types = [t.type for t in lexer.tokenize(src)]
+        assert types  # 非空
+        assert types[0] == "keyword.module"
+
+    def test_crlf_token_types_match_lf(self, lexer):
+        """CRLF 与 LF 输入的 token 类型序列应一致（\r 被吞，不产生多余 token）。"""
+        lf = lexer.tokenize("module m;\n    assign a = b;\nendmodule\n")
+        crlf = lexer.tokenize("module m;\r\n    assign a = b;\r\nendmodule\r\n")
+        assert [t.type for t in crlf] == [t.type for t in lf]
+
+    def test_bom_prefix_tokenizes(self, lexer):
+        """UTF-8 BOM 文件头 → BOM 被忽略，首个 token 是 module。"""
+        src = "\ufeffmodule m;\n    assign a = b;\nendmodule\n"
+        tokens = lexer.tokenize(src)
+        assert tokens[0].type == "keyword.module"
+
+    def test_bom_prefix_types_match_plain(self, lexer):
+        """BOM 前缀与无 BOM 输入的 token 类型序列应一致。"""
+        plain = lexer.tokenize("module m;\nendmodule\n")
+        bom = lexer.tokenize("\ufeffmodule m;\nendmodule\n")
+        assert [t.type for t in bom] == [t.type for t in plain]
+
+    def test_bom_alone_is_ignored(self, lexer):
+        """单独 BOM 字符 → 作为空白吞掉，不抛异常。"""
+        tokens = lexer.tokenize("\ufeff")
+        assert tokens == []
 
 
 @pytest.fixture(scope="module")

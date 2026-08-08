@@ -1,6 +1,11 @@
 [space]
 blank_space = " "
 tab = "\t"
+# CRLF 行尾的 \r 部分（\n 由 [newline] 处理）：作为可忽略空白吞掉，
+# 使 \r\n 输入自然解析为单行换行，无需 lexer 侧硬编码行尾风格。
+carriage_return = "\r"
+# UTF-8 BOM（文件头不可见标记）：作为可忽略字符吞掉，不参与 token 流。
+bom = "\ufeff"
 
 [newline]
 newline = "\n"

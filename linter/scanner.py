@@ -22,7 +22,7 @@ from lexer import Lexer
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
-from . import LintDiagnostic
+from . import LintDiagnostic, Position
 from .grammar_slicer import build_slice_tree
 from .discovery import Discovery
 from .checker import CheckerRegistry
@@ -177,7 +177,21 @@ class LinterScanner:
         else:
             lex_source = source
 
-        tokens = self.lexer.tokenize(lex_source)
+        try:
+            tokens = self.lexer.tokenize(lex_source)
+        except Exception as exc:
+            # 通用防御：lexer 无法处理输入（不支持的字符/行尾风格/BOM 等）时
+            # 转诊断而非崩溃冒泡——否则调用方（CLI/编辑器集成）直接异常。
+            # 不硬编码具体格式（CRLF/BOM 等由 lexer 侧支持），此处只对
+            # "lexer 异常"这一通用情况做响应；lexer 修复后输入自然正常解析。
+            return [
+                LintDiagnostic(
+                    range=(Position(0, 0), Position(0, 0)),
+                    message=f"lexer error: {exc}",
+                    severity=1,
+                    code="lexer-error",
+                )
+            ]
         if not tokens:
             return errors
 
