@@ -15,8 +15,4 @@ grammar_backup/
 parser_baseline/
 _test_*.py
 .github/
-# 讨论过程文件
-inf_impl_example.txt
-inf_model_example.txt
-
 *.egg-info/
