@@ -22,6 +22,10 @@ from core.define import DEFAULT_RULES_DIR
 from linter.scanner import LinterScanner
 from verilog.eval_lint_accuracy import evaluate
 
+# known_miss（已知漏检登记）的硬上限：防止把新漏检悄悄标成 known_miss
+# 来维持门禁绿色（虚假绿风险）。超过上限说明测试在靠豁免掩盖漏检。
+MAX_KNOWN_MISS = 3
+
 
 @pytest.fixture(scope="module")
 def accuracy() -> tuple[list[dict], dict]:
@@ -49,7 +53,7 @@ def test_error_samples_all_detected(accuracy) -> None:
 
 
 def test_known_miss_tracked(accuracy) -> None:
-    """known_miss 样本被显式追踪（KNOWN-MISS 判定），漏检可见、可追踪。
+    """known_miss 样本被显式追踪（KNOWN-MISS 判定），且有硬上限防滥用。
 
     known_miss 是"已知漏检"的显式登记（expected.json 标记）；修复后清空。
     当前 0 表示无已知漏检——之前 e15 在此登记，本次修复后转 HIT。
@@ -57,6 +61,12 @@ def test_known_miss_tracked(accuracy) -> None:
     rows, summary = accuracy
     known = [r["file"] for r in rows if r["verdict"] == "KNOWN-MISS"]
     assert summary["known_miss"] == len(known)
+    # 防滥用（虚假绿）：known_miss 必须有限度；超过上限说明门禁在靠豁免
+    # 维持绿色，应修复漏检而非登记豁免。
+    assert summary["known_miss"] <= MAX_KNOWN_MISS, (
+        f"known_miss {summary['known_miss']} 超过上限 {MAX_KNOWN_MISS}，"
+        "请修复这些漏检而不是登记豁免（否则门禁是虚假绿）"
+    )
 
 
 def test_error_category_always_hit(accuracy) -> None:

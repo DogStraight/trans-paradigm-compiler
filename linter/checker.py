@@ -15,7 +15,7 @@ from typing import Protocol, runtime_checkable
 
 from core.define import Token
 
-from . import LintDiagnostic
+from . import LintDiagnostic, Position
 
 # 顶层上下文（发现入口）：块内上下文由 opener_context 配置动态生成，不硬编码
 CTX_TOP = "top"
@@ -67,12 +67,28 @@ class CheckerRegistry:
         return len(self._checkers)
 
     def validate_all(self, tokens: list[Token]) -> list[LintDiagnostic]:
-        """扁平验证所有已注册检查器，合并错误。"""
+        """扁平验证所有已注册检查器，合并错误。
+
+        单个检查器失败不影响其他（扁平架构的解耦收益），但**不静默吞掉**：
+        异常转为 linter-internal-error 诊断，使检查器崩溃可见——否则合法样本
+        会因检查器崩溃而"不报错=绿"（虚假绿，生产事故温床）。诊断 message
+        记录检查器类型与异常，便于定位。
+        """
         errors: list[LintDiagnostic] = []
         for checker in self._checkers:
             try:
                 errors += checker.validate(tokens)
-            except Exception:
-                # 单个检查器失败不影响其他（扁平架构的解耦收益）
-                continue
+            except Exception as exc:
+                t = tokens[0] if tokens else None
+                pos = Position(t.line, t.column) if t else Position(0, 0)
+                errors.append(
+                    LintDiagnostic(
+                        range=(pos, pos),
+                        message=(
+                            f"linter internal error in {type(checker).__name__}: {exc}"
+                        ),
+                        severity=1,
+                        code="linter-internal-error",
+                    )
+                )
         return errors
