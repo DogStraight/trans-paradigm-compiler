@@ -389,10 +389,18 @@ class LookaheadTable:
             bs = info.get("block_start") or ""
             if bs and j < limit and tokens[j].type == bs:
                 j += 1
+            # probe 模式：本试探的 limit 是人为截断的（句子边界+1），语句区间
+            # 在 EOF 处耗尽是正常截断而非残缺——EOF 报错会把截断试探误判为匹配
+            # 失败（合法 for 被报未识别）。试探语境置 True，真实检查不受影响。
+            matcher = self._matcher
+            old_probe = matcher._probe_eof
+            matcher._probe_eof = True
             try:
-                j = self._matcher.match_rule(tokens, j, prods, trial, limit)
+                j = matcher.match_rule(tokens, j, prods, trial, limit)
             except Exception:
                 continue
+            finally:
+                matcher._probe_eof = old_probe
             errs = len(trial)
             consumed = j - i
             if (

@@ -73,6 +73,25 @@ class TestMatcherStatement:
         src = "module m;\n    assign a = b;\nendmodule\n"
         assert scanner.scan(src) == []
 
+    def test_missing_semicolon_eof_no_newline_reports(self, scanner):
+        # 无末尾换行 + 缺分号（缺失 token 处即 EOF）→ phase-statement。
+        # 修复：此前 match_rule 在 i>=limit 静默 break → 完全漏检（只有 boundary）。
+        src = "module m;\n    assign a = b"  # 无末尾换行，缺分号 + 缺 endmodule
+        errs = scanner.scan(src)
+        assert any(e.code == "phase-statement" for e in errs)
+
+    def test_bad_always_body_eof_no_newline_reports(self, scanner):
+        # 无末尾换行 + always 坏 body（endmodule 紧随 @(*)）→ phase-statement。
+        # 修复：此前 e15 去末尾换行后 n=0 完全漏检。
+        src = "module m;\n    always @(*) endmodule"
+        errs = scanner.scan(src)
+        assert any(e.code == "phase-statement" for e in errs)
+
+    def test_valid_assign_eof_no_newline_no_error(self, scanner):
+        # 无末尾换行 + 合法语句 → 零误报（修复不破坏合法 EOF 场景）
+        src = "module m;\n    assign a = b;\nendmodule"
+        assert scanner.scan(src) == []
+
 
 class TestStatementChecker:
     """StatementChecker 契约。"""

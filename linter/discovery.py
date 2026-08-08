@@ -395,7 +395,16 @@ class Discovery:
                     j = i + 1
                 if j > i + 1:
                     start = j
-        end = max(start, end_idx - 1)
+        # 块体终点：end_idx 是 block_end 之后的位置，正常时 end = end_idx - 1
+        # （不含 block_end）。若扫描到 EOF（end_idx == n）且末尾 token 不是本
+        # 规则 block_end，说明块未正常关闭（如缺 endmodule）——块体应延伸到
+        # EOF，而非 end_idx - 1（那会把最后一个 token 误切出块体，使块内末尾
+        # 残缺语句的终止检查点丢失 → 缺分号/坏语句体漏检）。
+        be = (self._tree.get(rule, {}) or {}).get("block_end") or ""
+        if end_idx < n or (end_idx == n and be and tokens[end_idx - 1].type == be):
+            end = max(start, end_idx - 1)
+        else:
+            end = max(start, n)
         return start, end
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:

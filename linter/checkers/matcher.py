@@ -66,6 +66,11 @@ class RuleMatcher:
         self._expr = expr_checker
         self._block_openers = block_openers
         self._block_closers = block_closers
+        # 试探模式（probe）：Level 2 消歧试解析（lookahead._try_parse）的 limit
+        # 是人为截断的（句子边界+1），语句区间在 EOF 处耗尽是正常截断而非残缺
+        # ——此时 EOF 报错会把截断试探误判为匹配失败（合法 for 被报未识别）。
+        # 试探语境置 True，EOF 不报错；真实检查（StatementChecker）保持报错。
+        self._probe_eof = False
         # 原子规则集合（参考 parser.atomic_rules）：is_atom 规则按 production
         # 长度降序（长的先试，ReplicateExpr 先于 ConcatExpr，避免被误吞）。
         self._atom_rules = sorted(
@@ -95,8 +100,17 @@ class RuleMatcher:
         前一元素失败后后续元素在未推进位置假匹配）。
         """
         start = i
-        for feat in prods:
+        for pos, feat in enumerate(prods):
             if i >= limit:
+                # 语句区间在 token 流末尾耗尽而 production 仍有必选元素 → 语句
+                # 不完整（残缺：缺分号/缺语句体，缺失 token 处恰为文件末尾无换行
+                # 时即 EOF）。仅 optional 元素可合法缺失。报一次错即终止，不静默。
+                # probe 语境（_try_parse 截断试探）不报——那是正常截断非残缺。
+                if (
+                    not self._probe_eof
+                    and any(f.get("type") != "optional" for f in prods[pos:])
+                ):
+                    self._report_eof(tokens, limit, errors)
                 break
             before = len(errors)
             j = self.match(tokens, i, feat, errors, limit, strict=True)
@@ -175,6 +189,11 @@ class RuleMatcher:
         # token_type 可能含 "|"（如 keyword.case|casex|casez）
         j = _skip(tokens, i, limit)
         if j >= limit:
+            # 区间内 token 耗尽（无更多非 trivia token）→ 必选 token 缺失
+            # （如缺分号且语句区间在 EOF 结尾）。可选语境静默，必选报错。
+            # probe 语境（_try_parse 截断试探）不报——那是正常截断非残缺。
+            if strict and not self._probe_eof:
+                self._report_eof(tokens, limit, errors)
             return i
         actual = tokens[j].type
         if actual in tok.split("|"):
@@ -558,6 +577,23 @@ class RuleMatcher:
         return i
 
     # ── 辅助 ────────────────────────────────────
+
+    def _report_eof(self, tokens: list[Token], limit: int, errors: list) -> None:
+        """语句区间在 token 流末尾耗尽：production 仍有必选元素 → 语句不完整。
+
+        残缺语句（缺分号/缺语句体/缺右括号）缺失的 token 处恰为文件末尾且无
+        末尾换行时，token 流即在此耗尽——此前静默返回导致全部漏检。现统一报
+        错（位置取区间最后一个 token），语言无关（不假设具体 token 类型）。
+        """
+        t = tokens[limit - 1]
+        errors.append(
+            LintDiagnostic(
+                range=(Position(t.line, t.column), Position(t.line, t.column)),
+                message="unexpected end of statement",
+                severity=1,
+                code="phase-statement",
+            )
+        )
 
     def _stop_for(self, name: str) -> set[str] | None:
         """表达式在给定规则上下文下的停止 token 集。"""
