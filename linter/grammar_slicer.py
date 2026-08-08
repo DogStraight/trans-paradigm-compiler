@@ -77,11 +77,19 @@ def _collect_first_start_tokens(feat: dict | None, tree: dict | None = None) -> 
         info = tree.get(name)
         if info is None:
             return set()
+        # 块规则：block_start 已从 production 剥离（如 BeginEnd 的 keyword.begin），
+        # 需并入 firsts——否则 @BeginEnd 等块候选的首 token 收集缺失，导致
+        # Stmt/CtrlStmt firsts 漏掉 begin（matcher @Stmt 起始校验失灵）。
+        result: set[str] = set()
+        bs = info.get("block_start") or ""
+        if bs:
+            result.add(bs)
         # inline 规则取第一个 production 的 First 集
         prods = info.get("prods", [])
         if not prods:
-            return set()
-        return _collect_first_start_tokens(prods[0], tree)
+            return result
+        result |= _collect_first_start_tokens(prods[0], tree)
+        return result
     if typ == "optional":
         # 可选元素的第一 token 不是强制起始
         return set()

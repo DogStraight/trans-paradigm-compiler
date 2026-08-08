@@ -268,8 +268,17 @@ class RuleMatcher:
                 errors += sub_errors
             return j + consumed
 
-        # 块类（@BeginEnd 等）→ 跳到 end_case
+        # 块类（@BeginEnd 等）→ 校验 block_start 后跳到 end_case
         if info.get("is_block"):
+            # 先校验起始 token：块规则必须由 block_start 触发（如 BeginEnd 的
+            # keyword.begin）。不校验会导致 @BeginEnd 对任意 token（如
+            # `always @(*) endmodule` 的 endmodule）也"跳到 end_case"把坏 body
+            # 静默吞掉——@Stmt 位置非块起点时应视为失败，让上层报错。
+            bs = info.get("block_start") or ""
+            if bs:
+                k = _skip(tokens, i, limit)
+                if k >= limit or tokens[k].type != bs:
+                    return i
             ec_block: set[str] = set(info.get("end_case") or ())
             if ec_block:
                 return self._skip_to_end(tokens, i, ec_block, limit)
@@ -285,7 +294,28 @@ class RuleMatcher:
             if k >= limit:
                 return i
             if firsts and tokens[k].type not in firsts:
-                return i  # 起始不匹配 → 视为失败（不跳过）
+                # 起始不匹配。区分两种"@Stmt 位置非语句开头"：
+                # - 块 opener（begin/fork 等，firsts 未覆盖的块 body）：合法，
+                #   由发现阶段独立发现 BeginEnd 块 → 静默不跳过。
+                # - 其他（块结束符/句子结束符/无关 token）：语句 body 缺失
+                #   （如 `always @(*) endmodule`）→ 报错，不再静默吞掉。
+                if tokens[k].type in self._block_openers:
+                    return i
+                if not silent:
+                    t = tokens[k]
+                    errors.append(
+                        LintDiagnostic(
+                            range=(
+                                Position(t.line, t.column),
+                                Position(t.line, t.column),
+                            ),
+                            message=f"expected statement, got '{t.content}'",
+                            severity=1,
+                            code="phase-statement",
+                        )
+                    )
+                    return k + 1
+                return i
             ec_stmt: set[str] = set(info.get("end_case") or ())
             if ec_stmt:
                 return self._skip_to_end(tokens, i, ec_stmt, limit)
@@ -431,9 +461,17 @@ class RuleMatcher:
                 return set()
             info = self._tree.get(name)
             if info:
+                # 块规则：block_start 已从 production 剥离（如 BeginEnd 的
+                # keyword.begin），需并入 firsts，否则 @BeginEnd 等块候选的
+                # 首 token 收集缺失（Stmt/CtrlStmt firsts 漏 begin）。
+                result: set[str] = set()
+                bs = info.get("block_start") or ""
+                if bs:
+                    result.add(bs)
                 prods = info.get("prods", [])
                 if prods and isinstance(prods[0], dict):
-                    return self._first_tokens(prods[0], visited | {name})
+                    result |= self._first_tokens(prods[0], visited | {name})
+                return result
             return set()
         if typ == "seq":
             items = feat.get("items", [])

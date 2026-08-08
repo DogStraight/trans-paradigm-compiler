@@ -49,11 +49,14 @@ def test_error_samples_all_detected(accuracy) -> None:
 
 
 def test_known_miss_tracked(accuracy) -> None:
-    """known_miss 样本被显式追踪（KNOWN-MISS 判定），漏检可见、可追踪。"""
+    """known_miss 样本被显式追踪（KNOWN-MISS 判定），漏检可见、可追踪。
+
+    known_miss 是"已知漏检"的显式登记（expected.json 标记）；修复后清空。
+    当前 0 表示无已知漏检——之前 e15 在此登记，本次修复后转 HIT。
+    """
     rows, summary = accuracy
     known = [r["file"] for r in rows if r["verdict"] == "KNOWN-MISS"]
     assert summary["known_miss"] == len(known)
-    assert summary["known_miss"] >= 1, "应至少有一个 known_miss 样本被追踪（当前 e15）"
 
 
 def test_error_category_always_hit(accuracy) -> None:
