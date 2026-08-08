@@ -93,6 +93,33 @@ class TestMatcherStatement:
         assert scanner.scan(src) == []
 
 
+class TestEofProbe:
+    """match_rule 在 token 耗尽处的 EOF 报错 + probe（截断试探）静默。
+
+    固化 2026-08-08 修复：残缺语句（缺分号/缺 body）缺失 token 处为 EOF 时
+    必选元素必须报错（不静默）；但 Level 2 消歧的截断试探（_try_parse）是
+    人为截断，EOF 处应静默——否则合法 for 被误判为未识别。
+    """
+
+    def test_match_rule_reports_eof_in_real_mode(self, scanner):
+        # 真实检查（probe=False）：assign 缺分号 + EOF 结尾 → 报 unexpected end
+        tokens = _tokens(scanner, "assign a = b")
+        prods = scanner._matcher._tree["AssignStmt"]["prods"]
+        errs = []
+        scanner._matcher._probe_eof = False
+        scanner._matcher.match_rule(tokens, 0, prods, errs, len(tokens))
+        assert any(e.code == "phase-statement" for e in errs)
+
+    def test_match_rule_probe_silent_on_eof(self, scanner):
+        # probe 语境（Level 2 截断试探）：EOF 处静默不报错
+        tokens = _tokens(scanner, "assign a = b")
+        prods = scanner._matcher._tree["AssignStmt"]["prods"]
+        errs = []
+        scanner._matcher._probe_eof = True
+        scanner._matcher.match_rule(tokens, 0, prods, errs, len(tokens))
+        assert errs == []
+
+
 class TestStatementChecker:
     """StatementChecker 契约。"""
 
@@ -130,3 +157,41 @@ class TestExpressionChecker:
             tokens, 0, stop_tokens={"symbol.base.semicolon"}
         )
         assert any(e.code == "phase-expr" for e in errs)
+
+    def test_nested_parens_no_error(self, scanner):
+        # 嵌套括号表达式完整消费、零错误
+        tokens = _tokens(scanner, "a + (b * c);")
+        errs, consumed = scanner._expr_checker.consume(
+            tokens, 0, stop_tokens={"symbol.base.semicolon"}
+        )
+        assert errs == []
+        assert consumed >= 6
+
+    def test_stop_tokens_respected(self, scanner):
+        # stop_tokens（逗号）生效：表达式在逗号处停止，不越过
+        tokens = _tokens(scanner, "a + b , c")
+        errs, consumed = scanner._expr_checker.consume(
+            tokens, 0, stop_tokens={"symbol.base.comma"}
+        )
+        assert errs == []
+        assert consumed == 3  # a + b 三个 token，逗号前停
+
+    def test_select_atom_consumed(self, scanner):
+        # 位选原子（data[3:0]）作为操作数被原子匹配消费，不吞运算符
+        tokens = _tokens(scanner, "data[3:0] + 1;")
+        errs, consumed = scanner._expr_checker.consume(
+            tokens, 0, stop_tokens={"symbol.base.semicolon"}
+        )
+        assert errs == []
+        assert consumed >= 5  # data [ 3 : 0 ] + 1 至少 7 token（+ 后继续）
+
+    @pytest.mark.xfail(
+        reason="TODO: 多行 RHS 运算符后换行被 pratt 视为表达式终止（已知误报，待修）",
+        strict=True,
+    )
+    def test_multiline_rhs_no_false_positive(self, scanner):
+        # 多行 RHS（b +\n c）当前误报 "expected ';' got 'id'"。
+        # strict=True：若修复后意外通过 → XPASS 变失败，提示移除标记（防假绿）。
+        src = "module m;\n    assign a = b +\n        c;\nendmodule\n"
+        errs = scanner.scan(src)
+        assert errs == []

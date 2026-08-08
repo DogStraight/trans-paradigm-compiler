@@ -118,3 +118,25 @@ class TestNonStatement:
                 assert lookahead.classify(tokens, i, "module_body") is None
                 return
         raise AssertionError("no '+' token found")
+
+
+class TestTryParseProbe:
+    """Level 2 试解析（_try_parse）的 probe 模式：截断 limit 不因 EOF 误判失败。
+
+    固化 2026-08-08 修复：_try_parse 的 limit 是人为截断的（句子边界+1），
+    语句区间在 EOF 处耗尽是正常截断而非残缺——probe 使其不报 EOF 错误，
+    否则合法 for 被误判为未识别（曾引发 normal 样本误报回归）。
+    """
+
+    def test_try_parse_valid_for_in_truncated_limit(self, scanner, lookahead):
+        # 合法 for：截断 limit 下 @Stmt 在 limit 外是正常截断，probe 生效 → 返回
+        # [ForLoop] 而非 []（防 for 误报回归）
+        tokens = _tokens(scanner, "for (i = 0; i < 8; i = i + 1) a = 1;")
+        entries = lookahead.keyword_map.get("keyword.for", [])
+        assert entries
+        i = next(k for k, t in enumerate(tokens) if t.type == "keyword.for")
+        limit = lookahead._find_boundary(tokens, i + 1, len(tokens))
+        result = lookahead._try_parse(
+            tokens, i, entries, min(limit + 1, len(tokens))
+        )
+        assert result == ["ForLoop"]
