@@ -13,13 +13,10 @@ import sys
 import io
 import json
 
-# 强制 UTF-8 输出（避免 Windows GBK 控制台报 UnicodeEncodeError）
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-
 # 项目根（本文件在 <root>/verilog/ 下）
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _ROOT)
-os.chdir(_ROOT)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from core.define import DEFAULT_RULES_DIR
 from linter.scanner import LinterScanner
@@ -29,11 +26,22 @@ _REF_DIR = os.path.join(_LINT_DIR, "ref")
 _EXPECT_PATH = os.path.join(_LINT_DIR, "expected.json")
 
 
-def main() -> None:
+def _load_table() -> dict:
     with open(_EXPECT_PATH, "r", encoding="utf-8") as f:
-        table = json.load(f)
+        return json.load(f)
 
-    scanner = LinterScanner(DEFAULT_RULES_DIR)
+
+def evaluate(scanner, table=None) -> tuple[list[dict], dict]:
+    """对全部样本逐一跑 LinterScanner，返回 (rows, summary)。
+
+    rows: 每样本一行 {file, desc, expect, codes, n, external, verdict}；
+          verdict ∈ {HIT, MISS, DETECTED-BADCODE, OK, FP, EXTERNAL-MISS}。
+    summary: 错误样本/检出/漏检/误报的原始计数 + 格式化百分比。
+
+    --json 打印与 pytest 断言都基于本函数返回，判定逻辑单一来源。
+    """
+    if table is None:
+        table = _load_table()
 
     rows = []
     stats = {
@@ -87,6 +95,7 @@ def main() -> None:
             "expect": expect,
             "codes": codes,
             "n": len(errs),
+            "external": is_ext,
             "verdict": verdict,
         })
 
@@ -103,6 +112,7 @@ def main() -> None:
             "expect": [],
             "codes": codes,
             "n": len(errs),
+            "external": False,
             "verdict": "FP" if len(errs) > 0 else "OK",
         })
         if len(errs) > 0:
@@ -130,7 +140,26 @@ def main() -> None:
         "误报 FP": fp,
         "误报率": f"{fp / valid_total:.1%}" if valid_total else "n/a",
         "精确率 precision (1-FP率)": f"{1 - fp / valid_total:.1%}" if valid_total else "n/a",
+        # 程序化断言用原始计数（中文格式化字段仅供打印，避免测试依赖显示文本）
+        "err_total": err_total,
+        "detected": detected,
+        "miss": miss,
+        "hit_code": hit,
+        "detected_badcode": badcode,
+        "valid_total": valid_total,
+        "fp": fp,
     }
+
+    return rows, summary
+
+
+def main() -> None:
+    # 强制 UTF-8 输出（避免 Windows GBK 控制台报 UnicodeEncodeError）
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    os.chdir(_ROOT)
+
+    scanner = LinterScanner(DEFAULT_RULES_DIR)
+    rows, summary = evaluate(scanner)
 
     # ── 输出 ──────────────────────────────────
     if "--json" in sys.argv:

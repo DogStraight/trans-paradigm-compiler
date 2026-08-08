@@ -282,7 +282,11 @@ class LookaheadTable:
 
         Level 1（变长前瞻）：首 token 相同逐 token 预视缩小候选，直到唯一。
         Level 2（试解析）：候选生成式复杂/边界内未收敛 → 完整 production 试解析。
-        返回 None = 无候选（非语句起点或未识别语法）。
+        返回：
+            None       = 无候选（非语句起点，discovery 静默跳过）。
+            [name, ..] = 候选命中（注册节点供检查）。
+            []         = 有语句起点特征但无任何已知规则匹配（拼错关键字/残缺
+                         结构头）——discovery 据此报"未识别语句"，不静默吞错。
         """
         tok_type = tokens[i].type
         # 收集候选 entries（A 类 keyword_map / B 类 ident_by_ctx，结构一致）
@@ -338,7 +342,9 @@ class LookaheadTable:
                     kept.append(entry)
             path_entries = kept
             if not path_entries and not l2_only:
-                return None  # 候选清空 → 未识别（Phase 5 报错，先跳过）
+                # 候选清空：有语句起点特征但内容不匹配任何已知语句规则
+                # （拼错关键字/残缺结构头）→ 空列表表示"未识别"，discovery 报错。
+                return []
             # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
             if len(path_entries) == 1 and any(
                 len(p) == len(seen) and p == tuple(seen)
@@ -359,7 +365,7 @@ class LookaheadTable:
         if len(path_entries) == 1:
             return [path_entries[0]["name"]]
         if not path_entries:
-            return None
+            return []  # path 候选耗尽且无 Level 2 候选 → 未识别
         # 多候选未收敛 → Level 2 试解析
         return self._try_parse(tokens, i, path_entries, t_limit)
 
@@ -396,7 +402,7 @@ class LookaheadTable:
             ):
                 best = (errs, consumed, name)
         if best is None or best[0] != 0:
-            return None  # 全失败 → 未识别
+            return []  # 全失败 → 未识别（discovery 据此报错）
         return [best[2]]
 
     def _find_boundary(self, tokens: list[Token], i: int, n: int) -> int:

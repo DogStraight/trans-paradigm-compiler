@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from core.define import Token
 
+from . import LintDiagnostic, Position
 from .checker import (
     CTX_TOP,
     DiscoveredNode,
@@ -63,10 +64,32 @@ class Discovery:
             for info in tree.values()
             if isinstance(info, dict) and info.get("block_end")
         )
+        # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
+        self._unrecognized: list[LintDiagnostic] = []
 
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
         """扫描 token 流，递归发现嵌套节点，返回树（children 填充）。"""
+        self._unrecognized = []
         return self._discover_range(tokens, 0, len(tokens), CTX_TOP, 0)
+
+    def unrecognized_diagnostics(self) -> list[LintDiagnostic]:
+        """本次 discover 期间记录的"未识别语句"诊断。"""
+        return list(self._unrecognized)
+
+    def _record_unrecognized(self, tokens: list[Token], i: int) -> None:
+        """记录"未识别语句"诊断：有语句起点特征但无任何已知规则匹配。"""
+        t = tokens[i]
+        self._unrecognized.append(
+            LintDiagnostic(
+                range=(
+                    Position(t.line, t.column),
+                    Position(t.line, t.column),
+                ),
+                message="unrecognized statement: no grammar rule matches here",
+                severity=1,
+                code="phase-unrecognized",
+            )
+        )
 
     def _discover_range(
         self,
@@ -103,6 +126,14 @@ class Discovery:
             if t.type in self._block_openers:
                 candidates = self._lookahead.classify(tokens, i, context)
                 end_idx = i + 1
+                if candidates is None:
+                    i = end_idx
+                    continue
+                if not candidates:
+                    # 块关键字存在但块头 production 不匹配 → 未识别块
+                    self._record_unrecognized(tokens, i)
+                    i = end_idx
+                    continue
                 if candidates:
                     rule = candidates[0] if len(candidates) == 1 else candidates
                     be = (
@@ -138,6 +169,15 @@ class Discovery:
 
             # 语句发现：上下文 + 动态两级消歧
             candidates = self._lookahead.classify(tokens, i, context)
+            if candidates is None:
+                i += 1
+                continue
+            if not candidates:
+                # 有语句起点特征但无任何已知语句规则匹配（拼错关键字/残缺结构头）
+                # → 记录未识别诊断，不静默吞错。
+                self._record_unrecognized(tokens, i)
+                i += 1
+                continue
             if candidates:
                 rule = candidates[0] if len(candidates) == 1 else candidates
                 if isinstance(candidates[0], str) and self._is_nested_container(

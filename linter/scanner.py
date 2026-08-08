@@ -219,4 +219,7 @@ class LinterScanner:
             for node in self._discovery.discover(tokens):
                 register(node)
 
-        return registry.validate_all(tokens)
+        # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
+        errors = self._discovery.unrecognized_diagnostics()
+        errors += registry.validate_all(tokens)
+        return errors
