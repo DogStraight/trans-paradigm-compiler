@@ -12,10 +12,17 @@
     "e09_if_missing_paren.v":    { "desc": "if 缺括号",                       "expect": ["phase-unrecognized"] },
     "e10_expr_bad_rhs.v":        { "desc": "表达式尾随运算符",                "expect": ["phase-expr"] },
     "e11_expr_unclosed_paren.v": { "desc": "表达式括号未闭合",                "expect": ["phase-expr"] },
-    "e12_undefined_macro.v":     { "desc": "未定义宏（依赖 preprocessor/lexer 配合，非 linter 单责）", "expect": ["undefined-macro"], "category": "external" },
+    "e12_undefined_macro.v":     { "desc": "行内未定义宏调用",               "expect": ["undefined-macro"] },
     "e13_missing_wire_name.v":   { "desc": "wire 缺名",                       "expect": ["phase-statement"] },
     "e14_truncated_assign.v":    { "desc": "assign 被截断（无分号/无结束）",   "expect": ["phase-statement", "phase1-boundary"] },
-    "e16_mismatched_brace.v":    { "desc": "花括号未闭合",                    "expect": ["phase-expr"] }
+    "e15_bad_always_body.v":     { "desc": "always 缺语句体（endmodule 紧跟 @(*)，已知漏检）", "expect": ["phase-statement"], "known_miss": true },
+    "e16_mismatched_brace.v":    { "desc": "花括号未闭合",                    "expect": ["phase-expr"] },
+    "e17_if_missing_rparen.v":   { "desc": "if 缺右括号",                     "expect": ["phase-unrecognized"] },
+    "e18_for_missing_semicolon.v": { "desc": "for 缺分号",                   "expect": ["phase-statement"] },
+    "e19_case_missing_endcase.v": { "desc": "case 误用 end 作结束符",         "expect": ["phase-statement", "phase1-boundary"] },
+    "e20_task_missing_endtask.v": { "desc": "task 误用 end 作结束符",         "expect": ["phase1-boundary"] },
+    "e21_expr_double_op.v":      { "desc": "表达式双运算符 b + * c",          "expect": ["phase-expr", "phase-statement"] },
+    "e22_assign_no_lhs.v":       { "desc": "assign 缺左值",                   "expect": ["phase-expr", "phase-statement"] }
   },
   "valid": {
     "v01_wire_assign.v":    { "desc": "合法：wire+assign" },

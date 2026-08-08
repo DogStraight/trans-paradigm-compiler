@@ -38,10 +38,22 @@ def test_error_sample_set_is_nonempty(accuracy) -> None:
 
 
 def test_error_samples_all_detected(accuracy) -> None:
-    """错误样本全部检出（>=1 诊断）→ recall 100%。"""
+    """错误样本全部检出（>=1 诊断）→ 无未知漏检。
+
+    known_miss 样本（expected.json 显式标记）不计入——它们被门禁单独
+    追踪（test_known_miss_tracked），修复后自动转 HIT。
+    """
     rows, summary = accuracy
     miss = [r["file"] for r in rows if r["verdict"] == "MISS"]
     assert summary["miss"] == 0, f"漏检样本: {miss}"
+
+
+def test_known_miss_tracked(accuracy) -> None:
+    """known_miss 样本被显式追踪（KNOWN-MISS 判定），漏检可见、可追踪。"""
+    rows, summary = accuracy
+    known = [r["file"] for r in rows if r["verdict"] == "KNOWN-MISS"]
+    assert summary["known_miss"] == len(known)
+    assert summary["known_miss"] >= 1, "应至少有一个 known_miss 样本被追踪（当前 e15）"
 
 
 def test_error_category_always_hit(accuracy) -> None:

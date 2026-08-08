@@ -1,3 +1,3 @@
 module m;
-    `UNDEFINED_MACRO a;
+    assign a = `UNDEFINED;
 endmodule

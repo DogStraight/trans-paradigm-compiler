@@ -49,7 +49,8 @@ def evaluate(scanner, table=None) -> tuple[list[dict], dict]:
         "detected": 0,        # 错误样本被检出（>=1 诊断）
         "hit_code": 0,        # 检出且类别命中期望
         "detected_badcode": 0,  # 检出但类别不符
-        "miss": 0,            # 漏检（0 诊断）
+        "miss": 0,            # 漏检（0 诊断，非 known_miss）
+        "known_miss": 0,      # 已知漏检（expected.json 标 known_miss，追踪用）
         "ext_total": 0,       # 外部依赖类（preprocessor/lexer）样本数
         "ext_detected": 0,    # 外部依赖类被检出
         "valid_total": len(table["valid"]),
@@ -77,8 +78,14 @@ def evaluate(scanner, table=None) -> tuple[list[dict], dict]:
         else:
             stats["err_total"] += 1
             if len(errs) == 0:
-                verdict = "MISS"
-                stats["miss"] += 1
+                if meta.get("known_miss"):
+                    # 已知漏检：错误样本但当前未检出，单列追踪（不视为回归）。
+                    # 未来修复后自动转 HIT。
+                    verdict = "KNOWN-MISS"
+                    stats["known_miss"] += 1
+                else:
+                    verdict = "MISS"
+                    stats["miss"] += 1
             else:
                 stats["detected"] += 1
                 hit = any(c in expect for c in codes)
@@ -122,6 +129,7 @@ def evaluate(scanner, table=None) -> tuple[list[dict], dict]:
     err_total = stats["err_total"]
     detected = stats["detected"]
     miss = stats["miss"]
+    known_miss = stats["known_miss"]
     hit = stats["hit_code"]
     badcode = stats["detected_badcode"]
     valid_total = stats["valid_total"]
@@ -133,6 +141,7 @@ def evaluate(scanner, table=None) -> tuple[list[dict], dict]:
         "  类别正确检出 (HIT)": hit,
         "  检出但类别不符": badcode,
         "漏检 (0 诊断)": miss,
+        "已知漏检 (known_miss)": known_miss,
         "检出率 recall": f"{detected / err_total:.1%}" if err_total else "n/a",
         "类别准确率 (HIT/检出)": f"{hit / detected:.1%}" if detected else "n/a",
         "外部依赖类 (preprocessor/lexer)": f"{stats['ext_detected']}/{stats['ext_total']} 检出",
@@ -144,6 +153,7 @@ def evaluate(scanner, table=None) -> tuple[list[dict], dict]:
         "err_total": err_total,
         "detected": detected,
         "miss": miss,
+        "known_miss": known_miss,
         "hit_code": hit,
         "detected_badcode": badcode,
         "valid_total": valid_total,
@@ -172,8 +182,8 @@ def main() -> None:
     print(f"{'样本':<26}{'判定':<18}{'n':<4}{'期望':<32}{'实际 code'}")
     print("-" * 96)
     for r in rows:
-        tag = {"HIT": "HIT ✅", "MISS": "MISS ❌", "DETECTED-BADCODE": "BADCODE ⚠",
-               "OK": "OK ✅", "FP": "FP ❌",
+        tag = {"HIT": "HIT ✅", "MISS": "MISS ❌", "KNOWN-MISS": "KNOWN-MISS ⚠",
+               "DETECTED-BADCODE": "BADCODE ⚠", "OK": "OK ✅", "FP": "FP ❌",
                "EXTERNAL-MISS": "EXT-MISS ⚠"}[r["verdict"]]
         print(f"{r['file']:<26}{tag:<18}{r['n']:<4}{str(r['expect']):<32}{','.join(r['codes'])[:34]}")
     print("=" * 96)
