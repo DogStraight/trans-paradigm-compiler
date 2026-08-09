@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from core.define import Token
 
-from .. import LintDiagnostic, Position
+from .. import LintDiagnostic, token_span
 from ..checker import Checker
 
 
@@ -25,7 +25,7 @@ class MacroTokenChecker(Checker):
             if t.type.startswith("macro."):
                 errors.append(
                     LintDiagnostic(
-                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        range=token_span(t),
                         message=f"undefined macro '{t.content}'",
                         severity=1,
                         code="undefined-macro",

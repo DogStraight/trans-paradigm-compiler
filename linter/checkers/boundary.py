@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from core.define import Token
 
-from .. import LintDiagnostic, Position
+from .. import LintDiagnostic, token_span
 from ..checker import Checker
 
 # 通用词法常量（语言无关，自包含于引用处）
@@ -49,7 +49,7 @@ class BoundaryChecker(Checker):
             if not stack:
                 errors.append(
                     LintDiagnostic(
-                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        range=token_span(t),
                         message=f"unmatched '{t.content}' without block start",
                         severity=1,
                         code="phase1-boundary",
@@ -61,7 +61,7 @@ class BoundaryChecker(Checker):
             if expected_openers and actual not in expected_openers:
                 errors.append(
                     LintDiagnostic(
-                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        range=token_span(t),
                         message=f"mismatched block closer '{t.content}'",
                         severity=1,
                         code="phase1-boundary",
@@ -69,9 +69,11 @@ class BoundaryChecker(Checker):
                 )
                 continue
         if stack:
+            # 锚定到第一个（最外层）未闭合的块 opener，而非文件开头 (0,0)。
+            opener_t = tokens[stack[0][1]]
             errors.append(
                 LintDiagnostic(
-                    range=(Position(0, 0), Position(0, 0)),
+                    range=token_span(opener_t),
                     message=f"unclosed block: {len(stack)} unclosed block(s) at EOF",
                     severity=1,
                     code="phase1-boundary",

@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field, asdict
 
+from core.define import Token
+
 
 @dataclass
 class Position:
@@ -18,6 +20,27 @@ class LintDiagnostic:
     code: str = "parse-error"
     source: str = "pyv-lint"
     message: str = ""
+
+
+def token_pos(t: Token) -> Position:
+    """Token → LSP 0-based 单点位置。
+
+    token.line 为 1-based（lexer/parser 惯例，错误消息按 1-based 显示），
+    而 LSP Position.line 为 0-based——此处做 1-based→0-based 归一。
+    """
+    return Position(t.line - 1, t.column)
+
+
+def token_span(t: Token) -> tuple[Position, Position]:
+    """Token → 覆盖整个 token 的 0-based 范围（start..end 含内容宽度）。
+
+    诊断锚定到具体 token 时用 span 而非零宽单点，LSP 下能高亮整个出错
+    token，位置更精确。
+    """
+    return (
+        Position(t.line - 1, t.column),
+        Position(t.line - 1, t.column + len(t.content)),
+    )
 
     def to_dict(self) -> dict:
         return {

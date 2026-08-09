@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from core.define import Token
 
-from .. import LintDiagnostic, Position
+from .. import LintDiagnostic, token_span
 
 # 通用词法常量（语言无关，自包含于引用处）
 _TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
@@ -202,7 +202,7 @@ class RuleMatcher:
             t = tokens[j]
             errors.append(
                 LintDiagnostic(
-                    range=(Position(t.line, t.column), Position(t.line, t.column)),
+                    range=token_span(t),
                     message=f"expected '{tok}', got '{actual}'",
                     severity=1,
                     code="phase-statement",
@@ -262,10 +262,7 @@ class RuleMatcher:
                         t = tokens[j]
                         errors.append(
                             LintDiagnostic(
-                                range=(
-                                    Position(t.line, t.column),
-                                    Position(t.line, t.column),
-                                ),
+                                range=token_span(t),
                                 message=f"expected expression, got '{t.type}'",
                                 severity=1,
                                 code="phase-expr",
@@ -324,10 +321,7 @@ class RuleMatcher:
                     t = tokens[k]
                     errors.append(
                         LintDiagnostic(
-                            range=(
-                                Position(t.line, t.column),
-                                Position(t.line, t.column),
-                            ),
+                            range=token_span(t),
                             message=f"expected statement, got '{t.content}'",
                             severity=1,
                             code="phase-statement",
@@ -393,9 +387,11 @@ class RuleMatcher:
         i = _skip(tokens, i, limit)
         if i >= limit:
             if strict:
+                # 区间在 token 流末尾耗尽：锚定最后一个非 trivia token（残缺
+                # 语句缺失 token 的位置），避免指到区间末的 newline 等 trivia。
                 errors.append(
                     LintDiagnostic(
-                        range=(Position(tokens[limit - 1].line, tokens[limit - 1].column), Position(tokens[limit - 1].line, tokens[limit - 1].column)),
+                        range=token_span(self._last_non_trivia(tokens, limit)),
                         message="unexpected end of statement",
                         severity=1,
                         code="phase-statement",
@@ -423,7 +419,7 @@ class RuleMatcher:
                 t = tokens[j]
                 errors.append(
                     LintDiagnostic(
-                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        range=token_span(t),
                         message=f"unexpected '{t.content}'",
                         severity=1,
                         code="phase-statement",
@@ -454,7 +450,7 @@ class RuleMatcher:
                 t = tokens[k]
                 errors.append(
                     LintDiagnostic(
-                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        range=token_span(t),
                         message=(
                             f"incomplete structure, expected one of: "
                             f"{', '.join(sorted(ft))}"
@@ -559,10 +555,7 @@ class RuleMatcher:
                         t = tokens[j]
                         errors.append(
                             LintDiagnostic(
-                                range=(
-                                    Position(t.line, t.column),
-                                    Position(t.line, t.column),
-                                ),
+                                range=token_span(t),
                                 message="expected at least one match",
                                 severity=1,
                                 code="phase-statement",
@@ -578,17 +571,30 @@ class RuleMatcher:
 
     # ── 辅助 ────────────────────────────────────
 
+    @staticmethod
+    def _last_non_trivia(tokens: list[Token], limit: int) -> Token:
+        """区间 [0, limit) 内最后一个非 trivia token（残缺语句 EOF 锚点）。
+
+        limit 取 min(end, len(tokens))，区间末可能是 newline 等 trivia，直接取
+        tokens[limit-1] 会把诊断指到换行符上。
+        """
+        j = min(limit, len(tokens)) - 1
+        while j >= 0 and tokens[j].type in _TRIVIA:
+            j -= 1
+        return tokens[max(0, j)]
+
     def _report_eof(self, tokens: list[Token], limit: int, errors: list) -> None:
         """语句区间在 token 流末尾耗尽：production 仍有必选元素 → 语句不完整。
 
         残缺语句（缺分号/缺语句体/缺右括号）缺失的 token 处恰为文件末尾且无
         末尾换行时，token 流即在此耗尽——此前静默返回导致全部漏检。现统一报
-        错（位置取区间最后一个 token），语言无关（不假设具体 token 类型）。
+        错（位置取区间最后一个非 trivia token），语言无关（不假设具体 token
+        类型）。
         """
-        t = tokens[limit - 1]
+        t = self._last_non_trivia(tokens, limit)
         errors.append(
             LintDiagnostic(
-                range=(Position(t.line, t.column), Position(t.line, t.column)),
+                range=token_span(t),
                 message="unexpected end of statement",
                 severity=1,
                 code="phase-statement",

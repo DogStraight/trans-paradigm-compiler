@@ -19,7 +19,7 @@ from __future__ import annotations
 from core.config_registry import ConfigRegistry
 from core.define import Token
 
-from .. import LintDiagnostic, Position
+from .. import LintDiagnostic, token_span
 from parser.pratt_parser import install_token_classifier, parse_with_count
 
 
@@ -90,7 +90,7 @@ class ExpressionChecker:
                 t = tokens[idx]
                 return [
                     LintDiagnostic(
-                        range=(Position(t.line, t.column), Position(t.line, t.column)),
+                        range=token_span(t),
                         message=f"expected expression, got '{t.type}'",
                         severity=1,
                         code="phase-expr",
@@ -101,7 +101,7 @@ class ExpressionChecker:
             t = tokens[idx]
             return [
                 LintDiagnostic(
-                    range=(Position(t.line, t.column), Position(t.line, t.column)),
+                    range=token_span(t),
                     message=str(exc),
                     severity=1,
                     code="phase-expr",
@@ -111,7 +111,7 @@ class ExpressionChecker:
             t = tokens[idx]
             return [
                 LintDiagnostic(
-                    range=(Position(t.line, t.column), Position(t.line, t.column)),
+                    range=token_span(t),
                     message=f"invalid expression at '{t.content}'",
                     severity=1,
                     code="phase-expr",

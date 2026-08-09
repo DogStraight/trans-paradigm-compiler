@@ -15,7 +15,7 @@ from typing import Protocol, runtime_checkable
 
 from core.define import Token
 
-from . import LintDiagnostic, Position
+from . import LintDiagnostic, Position, token_pos
 
 # 顶层上下文（发现入口）：块内上下文由 opener_context 配置动态生成，不硬编码
 CTX_TOP = "top"
@@ -80,7 +80,7 @@ class CheckerRegistry:
                 errors += checker.validate(tokens)
             except Exception as exc:
                 t = tokens[0] if tokens else None
-                pos = Position(t.line, t.column) if t else Position(0, 0)
+                pos = token_pos(t) if t else Position(0, 0)
                 errors.append(
                     LintDiagnostic(
                         range=(pos, pos),

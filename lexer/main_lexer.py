@@ -297,6 +297,7 @@ class Lexer:
 
                 id_content: str = lex_text[text_idx]
                 text_idx += 1
+                offset += 1  # 首字符也要计入列偏移（否则后续 token 列号累积偏左）
                 while text_idx < lex_text_len and (
                     lex_text[text_idx].isalpha()
                     or lex_text[text_idx] == "_"
@@ -395,6 +396,7 @@ class Lexer:
                 string_content: str = ""
                 string_content += lex_text[text_idx]
                 text_idx += 1
+                offset += 1  # 起始引号计入列偏移
                 while (
                     text_idx < lex_text_len
                     and lex_text[text_idx] != end_char
@@ -406,6 +408,7 @@ class Lexer:
                 if text_idx < lex_text_len:
                     string_content += lex_text[text_idx]
                     text_idx += 1
+                    offset += 1  # 结束引号计入列偏移
 
                 # set current token line info
                 current_token.set_type("literal.string")

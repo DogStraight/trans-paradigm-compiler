@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from core.define import Token
 
-from . import LintDiagnostic, Position
+from . import LintDiagnostic, token_span
 from .checker import (
     CTX_TOP,
     DiscoveredNode,
@@ -81,10 +81,7 @@ class Discovery:
         t = tokens[i]
         self._unrecognized.append(
             LintDiagnostic(
-                range=(
-                    Position(t.line, t.column),
-                    Position(t.line, t.column),
-                ),
+                range=token_span(t),
                 message="unrecognized statement: no grammar rule matches here",
                 severity=1,
                 code="phase-unrecognized",
