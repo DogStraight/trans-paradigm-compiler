@@ -145,7 +145,6 @@ def run_all(
                 out_dir=out_dir,
                 expand_macros=expand_macros,
                 inline_comments=inline_comments,
-                debug=False,
                 quiet=True,
                 analyzer_enabled=not no_semantic,
                 transform_enabled=not no_semantic,

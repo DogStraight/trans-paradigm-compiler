@@ -62,13 +62,6 @@ if project_root not in sys.path:
 # 模块级共享状态：rules/lexer/renderer/transformer 按 rules_dir 缓存，避免重复初始化
 _PIPELINE_SHARED: dict = {}
 
-from scripts.ast_debug import (
-    enable_ast_debug,
-    dump_ast_compact,
-    dump_tokens,
-    count_ast_nodes,
-)
-
 # Force stdout to UTF-8
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
@@ -95,7 +88,6 @@ def run_pipeline_on_source(
     out_dir: str | None = None,
     expand_macros: bool = False,
     inline_comments: bool = False,
-    debug: bool = False,
     quiet: bool = False,
     analyzer_enabled: bool = True,
     transform_enabled: bool = True,
@@ -131,10 +123,6 @@ def run_pipeline_on_source(
         "parser": None,
         "post_lint_errors": 0,
     }
-
-    if debug:
-        enable_ast_debug(True)
-        _log("[debug] enabled")
 
     original_source = source
 
@@ -294,14 +282,6 @@ def run_pipeline_on_source(
 
     # ---- Stage: AST normalization ----
     ast = normalize_ast(ast)
-    if debug:
-        print(f"[ast] nodes (normalized): {count_ast_nodes(ast)}")
-        print("[ast] structure:")
-        dump_ast_compact(ast)
-        print()
-        if len(tokens) <= 150:
-            print("[lexer] token stream:")
-            dump_tokens(tokens)
 
     if not quiet and ast_json:
         save_json(ast.dump(), ast_json, "ast", log_fn=_log)
@@ -495,11 +475,6 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Print debug info (AST structure, token stream)",
-    )
-    parser.add_argument(
         "--no-lint",
         action="store_true",
         help="Skip linter pre-check",
@@ -570,7 +545,6 @@ def main() -> None:
         out_dir=args.out_dir,
         expand_macros=args.expand_macros,
         inline_comments=args.inline_comments,
-        debug=args.debug,
         quiet=args.quiet,
         analyzer_enabled=args.analyzer and not args.no_semantic,
         transform_enabled=args.transform and not args.no_semantic,
