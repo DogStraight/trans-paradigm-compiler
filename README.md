@@ -1,4 +1,4 @@
-# PyV — configuration-driven language pipeline
+# TransParadigm — configuration-driven language pipeline
 
 <!--
 Keywords: TOML grammar; configuration-driven pipeline; recursive descent + Pratt;
@@ -10,7 +10,7 @@ model-friendly configuration; forkable pipeline
 Write language rules in TOML. The whole pipeline — lexer, parser, analyzer,
 transform, renderer — is configurable, forkable, and model-friendly.
 
-## Why PyV
+## Why TransParadigm
 
 - **Rules are data, not code.** All language specifics live in TOML config files.
   The engine is a generic skeleton; every stage has a configuration surface.

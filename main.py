@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py — PyV Compiler CLI entry point
+main.py — TransParadigm Compiler CLI entry point
 
 Usage:
     python main.py format <file>                  Format a Verilog file
@@ -70,7 +70,7 @@ def _resolve_grammar_dirs() -> tuple[str, list[str]]:
 
 
 def _cmd_format(args: argparse.Namespace) -> None:
-    """pyv format — format a Verilog file through the full pipeline."""
+    """tpc format — format a Verilog file through the full pipeline."""
     if not os.path.isfile(args.file):
         print(f"[fatal] File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
@@ -97,14 +97,14 @@ def _cmd_format(args: argparse.Namespace) -> None:
 
 
 def _cmd_init(args: argparse.Namespace) -> None:
-    """pyv init — scaffold a new PyV project config."""
+    """tpc init — scaffold a new TransParadigm project config."""
     from scripts.scaffold_config import scaffold_config
 
     scaffold_config(args.lang)
 
 
 def _cmd_lint(args: argparse.Namespace) -> None:
-    """pyv lint — run syntax checker on a Verilog file."""
+    """tpc lint — run syntax checker on a Verilog file."""
     from linter.scanner import LinterScanner
     import json
 
@@ -141,7 +141,7 @@ def _cmd_lint(args: argparse.Namespace) -> None:
 
 
 def _cmd_pipeline(args: argparse.Namespace) -> None:
-    """pyv pipeline — run a single test case (dev use)."""
+    """tpc pipeline — run a single test case (dev use)."""
     from tests.e2e.run_pipeline import main as pipeline_main
 
     # 注入 stages 配置到环境，让 run_pipeline 可读取
@@ -151,7 +151,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> None:
 
 
 def _cmd_new_component(args: argparse.Namespace) -> None:
-    """pyv new component — scaffold a new component."""
+    """tpc new component — scaffold a new component."""
     from scripts.scaffold_component import scaffold_component
 
     scaffold_component(args.name, args.lang or "verilog")
@@ -159,7 +159,7 @@ def _cmd_new_component(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="PyV Compiler — configuration-driven compiler frontend",
+        description="TransParadigm Compiler — configuration-driven compiler frontend",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

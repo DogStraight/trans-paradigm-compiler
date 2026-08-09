@@ -1,5 +1,5 @@
 """
-cli.py — pyv-lint 命令行入口
+cli.py — tpc-lint 命令行入口
 
 用法:
     python linter/cli.py input.v                          # 文本输出
@@ -22,7 +22,7 @@ from linter.scanner import LinterScanner
 
 
 def cli_main() -> None:
-    parser = argparse.ArgumentParser(description="PyV Linter — 语法错误扫描器")
+    parser = argparse.ArgumentParser(description="TransParadigm Linter — 语法错误扫描器")
     parser.add_argument("input", nargs="?", help="源文件路径（省略则从 stdin 读取）")
     parser.add_argument(
         "--json", action="store_true", help="以 LSP Diagnostic JSON 格式输出"

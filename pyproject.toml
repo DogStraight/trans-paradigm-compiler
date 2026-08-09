@@ -3,7 +3,7 @@ requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyv-compiler"
+name = "transparadigm-compiler"
 version = "0.1.0"
 description = "Configuration-driven language pipeline — write language rules in TOML; configurable, forkable, model-friendly"
 readme = "README.md"
@@ -38,7 +38,7 @@ classifiers = [
 dependencies = []
 
 [project.scripts]
-pyv = "main:main"
+tpc = "main:main"
 
 [project.optional-dependencies]
 test = [

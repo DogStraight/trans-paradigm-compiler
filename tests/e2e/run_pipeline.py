@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PyV Compiler Pipeline - End-to-end compilation with stage control.
+TransParadigm Compiler Pipeline - End-to-end compilation with stage control.
 Supports direct input, test discovery, macro expansion, inline comments,
 and optional semantic/transform/render stages.
 """
@@ -430,7 +430,7 @@ def run_pipeline_on_source(
 # ---------------------------- Command-line entry ----------------------------
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="PyV Compiler Pipeline – stage control and flexible execution",
+        description="TransParadigm Compiler Pipeline – stage control and flexible execution",
         epilog="Example: python run_pipeline.py ref_counter --no-analyzer --stage=parse",
     )
     input_group = parser.add_mutually_exclusive_group(required=False)
