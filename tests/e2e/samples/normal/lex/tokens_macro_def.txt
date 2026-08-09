@@ -1,0 +1,80 @@
+0,1:macro.define `define
+8,1:id WIDTH
+13,1:literal.number 8
+14,1:newline 
+
+0,2:macro.include `include
+9,2:literal.string "defs.vh"
+16,2:newline 
+
+0,3:keyword.module module
+6,3:id counter
+12,3:bracket.l_parentheses (
+13,3:newline 
+
+4,4:keyword.input input
+9,4:id clk
+11,4:symbol.base.comma ,
+12,4:newline 
+
+4,5:keyword.input input
+9,5:id rstn
+12,5:symbol.base.comma ,
+13,5:newline 
+
+4,6:keyword.output output
+10,6:keyword.reg reg
+13,6:bracket.l_square_bracket [
+14,6:macro.call `WIDTH
+20,6:symbol.base.sub -
+21,6:literal.number 1
+22,6:symbol.base.colon :
+23,6:literal.number 0
+24,6:bracket.r_square_bracket ]
+26,6:id count
+30,6:newline 
+
+0,7:bracket.r_parentheses )
+1,7:symbol.base.semicolon ;
+2,7:newline 
+
+4,8:keyword.always always
+10,8:symbol.base.at @
+11,8:bracket.l_parentheses (
+12,8:keyword.posedge posedge
+19,8:id clk
+21,8:bracket.r_parentheses )
+23,8:keyword.begin begin
+27,8:newline 
+
+8,9:keyword.if if
+10,9:bracket.l_parentheses (
+11,9:symbol.base.not !
+12,9:id rstn
+15,9:bracket.r_parentheses )
+16,9:newline 
+
+12,10:id count
+17,10:symbol.extend.lesser_equal <=
+20,10:macro.call `WIDTH
+26,10:literal.number 'b0
+29,10:symbol.base.semicolon ;
+30,10:newline 
+
+8,11:keyword.else else
+11,11:newline 
+
+12,12:id count
+17,12:symbol.extend.lesser_equal <=
+20,12:id count
+25,12:symbol.base.add +
+27,12:literal.number 1'b1
+31,12:symbol.base.semicolon ;
+32,12:newline 
+
+4,13:keyword.end end
+6,13:newline 
+
+0,14:keyword.endmodule endmodule
+8,14:newline 
+

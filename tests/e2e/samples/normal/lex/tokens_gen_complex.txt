@@ -1,0 +1,1514 @@
+0,1:comment // complex_pipeline_processor.v
+31,1:newline 
+
+0,2:comment // 复杂流水线处理器，包含 generate 结构、函数、任务、内存阵列
+37,2:newline 
+
+0,3:keyword.module module
+6,3:id complex_pipeline_processor
+32,3:symbol.base.pound #
+33,3:bracket.l_parentheses (
+34,3:newline 
+
+4,4:keyword.parameter parameter
+13,4:id DATA_WIDTH
+23,4:symbol.base.equal =
+25,4:literal.number 8
+26,4:newline 
+
+4,5:keyword.parameter parameter
+13,5:id NUM_STAGES
+23,5:symbol.base.equal =
+25,5:literal.number 4
+26,5:newline 
+
+4,6:keyword.parameter parameter
+13,6:id MEM_DEPTH
+22,6:symbol.base.equal =
+24,6:literal.number 16
+26,6:newline 
+
+0,7:bracket.r_parentheses )
+2,7:bracket.l_parentheses (
+3,7:newline 
+
+4,8:keyword.input input
+9,8:keyword.wire wire
+13,8:id clk
+15,8:symbol.base.comma ,
+16,8:newline 
+
+4,9:keyword.input input
+9,9:keyword.wire wire
+13,9:id rst_n
+17,9:symbol.base.comma ,
+18,9:newline 
+
+4,10:keyword.input input
+9,10:keyword.wire wire
+13,10:id start
+17,10:symbol.base.comma ,
+18,10:newline 
+
+4,11:keyword.input input
+9,11:keyword.wire wire
+13,11:bracket.l_square_bracket [
+14,11:id DATA_WIDTH
+24,11:symbol.base.sub -
+26,11:literal.number 1
+27,11:symbol.base.colon :
+28,11:literal.number 0
+29,11:bracket.r_square_bracket ]
+31,11:id data_in
+37,11:symbol.base.comma ,
+38,11:newline 
+
+4,12:keyword.output output
+10,12:keyword.reg reg
+13,12:id done
+16,12:symbol.base.comma ,
+17,12:newline 
+
+4,13:keyword.output output
+10,13:keyword.reg reg
+13,13:bracket.l_square_bracket [
+14,13:id DATA_WIDTH
+24,13:symbol.base.sub -
+26,13:literal.number 1
+27,13:symbol.base.colon :
+28,13:literal.number 0
+29,13:bracket.r_square_bracket ]
+31,13:id result
+36,13:newline 
+
+0,14:bracket.r_parentheses )
+1,14:symbol.base.semicolon ;
+2,14:newline 
+
+4,15:comment // ********** 函数和任务声明 (可综合) **********
+42,15:newline 
+
+4,16:comment // 函数: 奇偶校验
+15,16:newline 
+
+4,17:keyword.function function
+12,17:keyword.automatic automatic
+21,17:id parity
+26,17:bracket.l_parentheses (
+28,17:keyword.input input
+33,17:bracket.l_square_bracket [
+34,17:id DATA_WIDTH
+44,17:symbol.base.sub -
+46,17:literal.number 1
+47,17:symbol.base.colon :
+48,17:literal.number 0
+49,17:bracket.r_square_bracket ]
+51,17:id d
+51,17:bracket.r_parentheses )
+52,17:symbol.base.semicolon ;
+53,17:newline 
+
+8,18:keyword.integer integer
+15,18:id j
+15,18:symbol.base.semicolon ;
+16,18:newline 
+
+8,19:keyword.reg reg
+11,19:id p
+11,19:symbol.base.semicolon ;
+12,19:newline 
+
+8,20:keyword.begin begin
+12,20:newline 
+
+12,21:id p
+13,21:symbol.base.equal =
+15,21:literal.number 1'b0
+19,21:symbol.base.semicolon ;
+20,21:newline 
+
+12,22:keyword.for for
+15,22:bracket.l_parentheses (
+16,22:id j
+17,22:symbol.base.equal =
+19,22:literal.number 0
+20,22:symbol.base.semicolon ;
+22,22:id j
+23,22:symbol.base.lesser <
+25,22:id DATA_WIDTH
+34,22:symbol.base.semicolon ;
+36,22:id j
+37,22:symbol.base.equal =
+39,22:id j
+40,22:symbol.base.add +
+42,22:literal.number 1
+43,22:bracket.r_parentheses )
+45,22:newline 
+
+16,23:id p
+17,23:symbol.base.equal =
+19,23:id p
+20,23:symbol.base.xnor ^
+22,23:id d
+22,23:bracket.l_square_bracket [
+23,23:id j
+23,23:bracket.r_square_bracket ]
+24,23:symbol.base.semicolon ;
+25,23:newline 
+
+12,24:id parity
+18,24:symbol.base.equal =
+20,24:id p
+20,24:symbol.base.semicolon ;
+21,24:newline 
+
+8,25:keyword.end end
+10,25:newline 
+
+4,26:keyword.endfunction endfunction
+14,26:newline 
+
+4,27:newline 
+
+4,28:comment // 任务: 交换两个信号
+17,28:newline 
+
+4,29:keyword.task task
+8,29:keyword.automatic automatic
+17,29:id swap
+20,29:bracket.l_parentheses (
+21,29:newline 
+
+8,30:keyword.input input
+13,30:keyword.reg reg
+16,30:bracket.l_square_bracket [
+17,30:id DATA_WIDTH
+27,30:symbol.base.sub -
+29,30:literal.number 1
+30,30:symbol.base.colon :
+31,30:literal.number 0
+32,30:bracket.r_square_bracket ]
+34,30:id a
+34,30:symbol.base.comma ,
+36,30:id b
+36,30:symbol.base.comma ,
+37,30:newline 
+
+8,31:keyword.output output
+14,31:keyword.reg reg
+17,31:bracket.l_square_bracket [
+18,31:id DATA_WIDTH
+28,31:symbol.base.sub -
+30,31:literal.number 1
+31,31:symbol.base.colon :
+32,31:literal.number 0
+33,31:bracket.r_square_bracket ]
+35,31:id swapped_a
+43,31:symbol.base.comma ,
+44,31:newline 
+
+8,32:keyword.output output
+14,32:keyword.reg reg
+17,32:bracket.l_square_bracket [
+18,32:id DATA_WIDTH
+28,32:symbol.base.sub -
+30,32:literal.number 1
+31,32:symbol.base.colon :
+32,32:literal.number 0
+33,32:bracket.r_square_bracket ]
+35,32:id swapped_b
+43,32:bracket.r_parentheses )
+44,32:symbol.base.semicolon ;
+45,32:newline 
+
+8,33:keyword.begin begin
+12,33:newline 
+
+12,34:id swapped_a
+21,34:symbol.base.equal =
+23,34:id b
+23,34:symbol.base.semicolon ;
+24,34:newline 
+
+12,35:id swapped_b
+21,35:symbol.base.equal =
+23,35:id a
+23,35:symbol.base.semicolon ;
+24,35:newline 
+
+8,36:keyword.end end
+10,36:newline 
+
+4,37:keyword.endtask endtask
+10,37:newline 
+
+4,38:newline 
+
+4,39:comment // ********** 参数本地重定义 **********
+36,39:newline 
+
+4,40:keyword.localparam localparam
+14,40:id STAGES
+20,40:symbol.base.equal =
+22,40:bracket.l_parentheses (
+23,40:id NUM_STAGES
+33,40:symbol.base.lesser <
+35,40:literal.number 2
+36,40:bracket.r_parentheses )
+38,40:symbol.base.question_mark ?
+40,40:literal.number 2
+42,40:symbol.base.colon :
+44,40:id NUM_STAGES
+53,40:symbol.base.semicolon ;
+54,40:newline 
+
+4,41:keyword.localparam localparam
+14,41:id LOG2_MEM
+22,41:symbol.base.equal =
+24,41:symbol.base.dollar $
+25,41:id clog2
+29,41:bracket.l_parentheses (
+30,41:id MEM_DEPTH
+38,41:bracket.r_parentheses )
+39,41:symbol.base.semicolon ;
+40,41:newline 
+
+4,42:comment // ********** 所有 reg 声明均带初始值 **********
+43,42:newline 
+
+4,43:keyword.reg reg
+7,43:bracket.l_square_bracket [
+8,43:literal.number 1
+9,43:symbol.base.colon :
+10,43:literal.number 0
+11,43:bracket.r_square_bracket ]
+13,43:id state
+18,43:symbol.base.equal =
+20,43:literal.number 2'b0
+24,43:symbol.base.semicolon ;
+25,43:newline 
+
+4,44:keyword.reg reg
+7,44:bracket.l_square_bracket [
+8,44:literal.number 1
+9,44:symbol.base.colon :
+10,44:literal.number 0
+11,44:bracket.r_square_bracket ]
+13,44:id next_state
+23,44:symbol.base.equal =
+25,44:literal.number 2'b0
+29,44:symbol.base.semicolon ;
+30,44:newline 
+
+4,45:keyword.reg reg
+7,45:bracket.l_square_bracket [
+8,45:id STAGES
+14,45:symbol.base.sub -
+16,45:literal.number 1
+17,45:symbol.base.colon :
+18,45:literal.number 0
+19,45:bracket.r_square_bracket ]
+21,45:id valid_pipe
+31,45:symbol.base.equal =
+33,45:bracket.l_curly_bracket {
+34,45:id STAGES
+39,45:bracket.l_curly_bracket {
+40,45:literal.number 1'b0
+44,45:bracket.r_curly_bracket }
+45,45:bracket.r_curly_bracket }
+46,45:symbol.base.semicolon ;
+47,45:newline 
+
+4,46:keyword.reg reg
+7,46:bracket.l_square_bracket [
+8,46:id DATA_WIDTH
+18,46:symbol.base.sub -
+20,46:literal.number 1
+21,46:symbol.base.colon :
+22,46:literal.number 0
+23,46:bracket.r_square_bracket ]
+25,46:id data_pipe
+33,46:bracket.l_square_bracket [
+34,46:literal.number 0
+35,46:symbol.base.colon :
+36,46:id STAGES
+42,46:symbol.base.sub -
+44,46:literal.number 1
+45,46:bracket.r_square_bracket ]
+46,46:symbol.base.semicolon ;
+47,46:newline 
+
+4,47:keyword.reg reg
+7,47:bracket.l_square_bracket [
+8,47:id LOG2_MEM
+16,47:symbol.base.sub -
+18,47:literal.number 1
+19,47:symbol.base.colon :
+20,47:literal.number 0
+21,47:bracket.r_square_bracket ]
+23,47:id mem_addr
+31,47:symbol.base.equal =
+33,47:bracket.l_curly_bracket {
+34,47:id LOG2_MEM
+41,47:bracket.l_curly_bracket {
+42,47:literal.number 1'b0
+46,47:bracket.r_curly_bracket }
+47,47:bracket.r_curly_bracket }
+48,47:symbol.base.semicolon ;
+49,47:newline 
+
+4,48:keyword.reg reg
+7,48:bracket.l_square_bracket [
+8,48:id DATA_WIDTH
+18,48:symbol.base.sub -
+20,48:literal.number 1
+21,48:symbol.base.colon :
+22,48:literal.number 0
+23,48:bracket.r_square_bracket ]
+25,48:id mem_read
+33,48:symbol.base.equal =
+35,48:bracket.l_curly_bracket {
+36,48:id DATA_WIDTH
+45,48:bracket.l_curly_bracket {
+46,48:literal.number 1'b0
+50,48:bracket.r_curly_bracket }
+51,48:bracket.r_curly_bracket }
+52,48:symbol.base.semicolon ;
+53,48:newline 
+
+4,49:keyword.reg reg
+7,49:bracket.l_square_bracket [
+8,49:id DATA_WIDTH
+18,49:symbol.base.sub -
+20,49:literal.number 1
+21,49:symbol.base.colon :
+22,49:literal.number 0
+23,49:bracket.r_square_bracket ]
+25,49:id mem_write
+34,49:symbol.base.equal =
+36,49:bracket.l_curly_bracket {
+37,49:id DATA_WIDTH
+46,49:bracket.l_curly_bracket {
+47,49:literal.number 1'b0
+51,49:bracket.r_curly_bracket }
+52,49:bracket.r_curly_bracket }
+53,49:symbol.base.semicolon ;
+54,49:newline 
+
+4,50:keyword.reg reg
+7,50:id mem_we
+13,50:symbol.base.equal =
+15,50:literal.number 1'b0
+19,50:symbol.base.semicolon ;
+20,50:newline 
+
+4,51:keyword.reg reg
+7,51:bracket.l_square_bracket [
+8,51:id DATA_WIDTH
+18,51:symbol.base.sub -
+20,51:literal.number 1
+21,51:symbol.base.colon :
+22,51:literal.number 0
+23,51:bracket.r_square_bracket ]
+25,51:id internal_reg
+37,51:symbol.base.equal =
+39,51:bracket.l_curly_bracket {
+40,51:id DATA_WIDTH
+49,51:bracket.l_curly_bracket {
+50,51:literal.number 1'b0
+54,51:bracket.r_curly_bracket }
+55,51:bracket.r_curly_bracket }
+56,51:symbol.base.semicolon ;
+57,51:newline 
+
+4,52:keyword.reg reg
+7,52:bracket.l_square_bracket [
+8,52:id DATA_WIDTH
+18,52:symbol.base.sub -
+20,52:literal.number 1
+21,52:symbol.base.colon :
+22,52:literal.number 0
+23,52:bracket.r_square_bracket ]
+25,52:id swapped_reg_a
+38,52:symbol.base.equal =
+40,52:bracket.l_curly_bracket {
+41,52:id DATA_WIDTH
+50,52:bracket.l_curly_bracket {
+51,52:literal.number 1'b0
+55,52:bracket.r_curly_bracket }
+56,52:bracket.r_curly_bracket }
+57,52:symbol.base.semicolon ;
+58,52:newline 
+
+4,53:keyword.reg reg
+7,53:bracket.l_square_bracket [
+8,53:id DATA_WIDTH
+18,53:symbol.base.sub -
+20,53:literal.number 1
+21,53:symbol.base.colon :
+22,53:literal.number 0
+23,53:bracket.r_square_bracket ]
+25,53:id swapped_reg_b
+38,53:symbol.base.equal =
+40,53:bracket.l_curly_bracket {
+41,53:id DATA_WIDTH
+50,53:bracket.l_curly_bracket {
+51,53:literal.number 1'b0
+55,53:bracket.r_curly_bracket }
+56,53:bracket.r_curly_bracket }
+57,53:symbol.base.semicolon ;
+58,53:newline 
+
+4,54:keyword.reg reg
+7,54:bracket.l_square_bracket [
+8,54:literal.number 3
+9,54:symbol.base.colon :
+10,54:literal.number 0
+11,54:bracket.r_square_bracket ]
+13,54:id cycle_cnt
+22,54:symbol.base.equal =
+24,54:literal.number 4'd0
+28,54:symbol.base.semicolon ;
+29,54:newline 
+
+4,55:comment // 二维内存阵列 (初始值全部为0)
+23,55:newline 
+
+4,56:keyword.reg reg
+7,56:bracket.l_square_bracket [
+8,56:id DATA_WIDTH
+18,56:symbol.base.sub -
+20,56:literal.number 1
+21,56:symbol.base.colon :
+22,56:literal.number 0
+23,56:bracket.r_square_bracket ]
+25,56:id memory
+30,56:bracket.l_square_bracket [
+31,56:literal.number 0
+32,56:symbol.base.colon :
+33,56:id MEM_DEPTH
+42,56:symbol.base.sub -
+44,56:literal.number 1
+45,56:bracket.r_square_bracket ]
+46,56:symbol.base.semicolon ;
+47,56:newline 
+
+4,57:keyword.integer integer
+11,57:id i
+11,57:symbol.base.semicolon ;
+12,57:newline 
+
+4,58:comment // 内存初始化 (可综合复位)
+20,58:newline 
+
+4,59:keyword.always always
+10,59:symbol.base.at @
+11,59:bracket.l_parentheses (
+12,59:keyword.posedge posedge
+19,59:id clk
+22,59:symbol.extend.logic_or or
+24,59:keyword.negedge negedge
+31,59:id rst_n
+35,59:bracket.r_parentheses )
+37,59:keyword.begin begin
+41,59:newline 
+
+8,60:keyword.if if
+10,60:bracket.l_parentheses (
+11,60:symbol.base.not !
+12,60:id rst_n
+16,60:bracket.r_parentheses )
+18,60:keyword.begin begin
+22,60:newline 
+
+12,61:keyword.for for
+15,61:bracket.l_parentheses (
+16,61:id i
+17,61:symbol.base.equal =
+19,61:literal.number 0
+20,61:symbol.base.semicolon ;
+22,61:id i
+23,61:symbol.base.lesser <
+25,61:id MEM_DEPTH
+33,61:symbol.base.semicolon ;
+35,61:id i
+36,61:symbol.base.equal =
+38,61:id i
+39,61:symbol.base.add +
+41,61:literal.number 1
+42,61:bracket.r_parentheses )
+44,61:newline 
+
+16,62:id memory
+21,62:bracket.l_square_bracket [
+22,62:id i
+22,62:bracket.r_square_bracket ]
+24,62:symbol.extend.lesser_equal <=
+27,62:bracket.l_curly_bracket {
+28,62:id DATA_WIDTH
+37,62:bracket.l_curly_bracket {
+38,62:literal.number 1'b0
+42,62:bracket.r_curly_bracket }
+43,62:bracket.r_curly_bracket }
+44,62:symbol.base.semicolon ;
+45,62:newline 
+
+8,63:keyword.end end
+10,63:newline 
+
+4,64:keyword.end end
+6,64:newline 
+
+4,65:newline 
+
+4,66:comment // ********** generate 结构: 产生多个数据复制模块 **********
+52,66:newline 
+
+4,67:comment // 位宽扩展模块 (组合逻辑)
+20,67:newline 
+
+4,68:keyword.wire wire
+8,68:bracket.l_square_bracket [
+9,68:id DATA_WIDTH
+19,68:symbol.base.multiple *
+21,68:literal.number 2
+23,68:symbol.base.sub -
+25,68:literal.number 1
+26,68:symbol.base.colon :
+27,68:literal.number 0
+28,68:bracket.r_square_bracket ]
+30,68:id duplicated_data
+44,68:bracket.l_square_bracket [
+45,68:literal.number 0
+46,68:symbol.base.colon :
+47,68:id STAGES
+53,68:symbol.base.sub -
+55,68:literal.number 1
+56,68:bracket.r_square_bracket ]
+57,68:symbol.base.semicolon ;
+58,68:newline 
+
+4,69:keyword.generate generate
+11,69:newline 
+
+8,70:keyword.genvar genvar
+14,70:id g
+14,70:symbol.base.semicolon ;
+15,70:newline 
+
+8,71:keyword.for for
+11,71:bracket.l_parentheses (
+12,71:id g
+13,71:symbol.base.equal =
+15,71:literal.number 0
+16,71:symbol.base.semicolon ;
+18,71:id g
+19,71:symbol.base.lesser <
+21,71:id STAGES
+26,71:symbol.base.semicolon ;
+28,71:id g
+29,71:symbol.base.equal =
+31,71:id g
+32,71:symbol.base.add +
+34,71:literal.number 1
+35,71:bracket.r_parentheses )
+37,71:newline 
+
+12,72:keyword.begin begin
+16,72:symbol.base.colon :
+18,72:id dup_gen
+24,72:newline 
+
+16,73:comment // 使用函数计算奇偶位并扩展
+31,73:newline 
+
+16,74:keyword.assign assign
+22,74:id duplicated_data
+36,74:bracket.l_square_bracket [
+37,74:id g
+37,74:bracket.r_square_bracket ]
+39,74:symbol.base.equal =
+41,74:bracket.l_curly_bracket {
+42,74:bracket.l_curly_bracket {
+43,74:bracket.l_parentheses (
+44,74:id DATA_WIDTH
+53,74:bracket.r_parentheses )
+54,74:bracket.l_curly_bracket {
+55,74:id parity
+60,74:bracket.l_parentheses (
+61,74:id data_pipe
+69,74:bracket.l_square_bracket [
+70,74:id g
+70,74:bracket.r_square_bracket ]
+71,74:bracket.r_parentheses )
+72,74:bracket.r_curly_bracket }
+73,74:bracket.r_curly_bracket }
+74,74:symbol.base.comma ,
+75,74:newline 
+
+20,75:id data_pipe
+28,75:bracket.l_square_bracket [
+29,75:id g
+29,75:bracket.r_square_bracket ]
+30,75:bracket.r_curly_bracket }
+31,75:symbol.base.semicolon ;
+32,75:newline 
+
+12,76:keyword.end end
+14,76:newline 
+
+4,77:keyword.endgenerate endgenerate
+14,77:newline 
+
+4,78:newline 
+
+4,79:comment // 条件生成: 若 DATA_WIDTH > 4 则生成额外的校验逻辑
+40,79:newline 
+
+4,80:keyword.generate generate
+11,80:newline 
+
+8,81:keyword.if if
+10,81:bracket.l_parentheses (
+11,81:id DATA_WIDTH
+21,81:symbol.base.bigger >
+23,81:literal.number 4
+24,81:bracket.r_parentheses )
+26,81:keyword.begin begin
+30,81:symbol.base.colon :
+32,81:id wide_data_gen
+44,81:newline 
+
+12,82:keyword.wire wire
+16,82:bracket.l_square_bracket [
+17,82:id DATA_WIDTH
+27,82:symbol.base.sub -
+29,82:literal.number 1
+30,82:symbol.base.colon :
+31,82:literal.number 0
+32,82:bracket.r_square_bracket ]
+34,82:id parity_bus
+43,82:symbol.base.semicolon ;
+44,82:newline 
+
+12,83:keyword.assign assign
+18,83:id parity_bus
+28,83:symbol.base.equal =
+30,83:bracket.l_curly_bracket {
+31,83:id DATA_WIDTH
+40,83:bracket.l_curly_bracket {
+41,83:id duplicated_data
+55,83:bracket.l_square_bracket [
+56,83:literal.number 0
+57,83:bracket.r_square_bracket ]
+58,83:bracket.l_square_bracket [
+59,83:id DATA_WIDTH
+69,83:symbol.base.multiple *
+71,83:literal.number 2
+73,83:symbol.base.sub -
+75,83:literal.number 1
+76,83:bracket.r_square_bracket ]
+77,83:bracket.r_curly_bracket }
+78,83:bracket.r_curly_bracket }
+79,83:symbol.base.semicolon ;
+80,83:newline 
+
+8,84:keyword.end end
+11,84:keyword.else else
+15,84:keyword.begin begin
+19,84:symbol.base.colon :
+21,84:id narrow_data_gen
+35,84:newline 
+
+12,85:comment // 空占位
+18,85:newline 
+
+12,86:keyword.wire wire
+16,86:id dummy
+21,86:symbol.base.equal =
+23,86:literal.number 1'b0
+27,86:symbol.base.semicolon ;
+28,86:newline 
+
+8,87:keyword.end end
+10,87:newline 
+
+4,88:keyword.endgenerate endgenerate
+14,88:newline 
+
+4,89:newline 
+
+4,90:comment // ********** 状态机定义 **********
+34,90:newline 
+
+4,91:keyword.localparam localparam
+14,91:id IDLE
+18,91:symbol.base.equal =
+20,91:literal.number 2'b00
+25,91:symbol.base.comma ,
+26,91:newline 
+
+8,92:id FETCH
+13,92:symbol.base.equal =
+15,92:literal.number 2'b01
+20,92:symbol.base.comma ,
+21,92:newline 
+
+8,93:id PROCESS
+15,93:symbol.base.equal =
+17,93:literal.number 2'b10
+22,93:symbol.base.comma ,
+23,93:newline 
+
+8,94:id WRITEBACK
+17,94:symbol.base.equal =
+19,94:literal.number 2'b11
+24,94:symbol.base.semicolon ;
+25,94:newline 
+
+4,95:comment // 状态寄存器
+12,95:newline 
+
+4,96:keyword.always always
+10,96:symbol.base.at @
+11,96:bracket.l_parentheses (
+12,96:keyword.posedge posedge
+19,96:id clk
+22,96:symbol.extend.logic_or or
+24,96:keyword.negedge negedge
+31,96:id rst_n
+35,96:bracket.r_parentheses )
+37,96:keyword.begin begin
+41,96:newline 
+
+8,97:keyword.if if
+10,97:bracket.l_parentheses (
+11,97:symbol.base.not !
+12,97:id rst_n
+16,97:bracket.r_parentheses )
+17,97:newline 
+
+12,98:id state
+17,98:symbol.extend.lesser_equal <=
+20,98:id IDLE
+23,98:symbol.base.semicolon ;
+24,98:newline 
+
+8,99:keyword.else else
+11,99:newline 
+
+12,100:id state
+17,100:symbol.extend.lesser_equal <=
+20,100:id next_state
+29,100:symbol.base.semicolon ;
+30,100:newline 
+
+4,101:keyword.end end
+6,101:newline 
+
+4,102:newline 
+
+4,103:comment // 次态逻辑
+11,103:newline 
+
+4,104:keyword.always always
+10,104:symbol.base.at @
+11,104:bracket.l_parentheses (
+12,104:symbol.base.multiple *
+13,104:bracket.r_parentheses )
+15,104:keyword.begin begin
+19,104:newline 
+
+8,105:id next_state
+18,105:symbol.base.equal =
+20,105:id state
+24,105:symbol.base.semicolon ;
+25,105:newline 
+
+8,106:keyword.case case
+12,106:bracket.l_parentheses (
+13,106:id state
+17,106:bracket.r_parentheses )
+18,106:newline 
+
+12,107:id IDLE
+15,107:symbol.base.colon :
+17,107:keyword.if if
+19,107:bracket.l_parentheses (
+20,107:id start
+24,107:bracket.r_parentheses )
+25,107:newline 
+
+16,108:id next_state
+26,108:symbol.base.equal =
+28,108:id FETCH
+32,108:symbol.base.semicolon ;
+33,108:newline 
+
+12,109:id FETCH
+16,109:symbol.base.colon :
+18,109:id next_state
+28,109:symbol.base.equal =
+30,109:id PROCESS
+36,109:symbol.base.semicolon ;
+37,109:newline 
+
+12,110:id PROCESS
+18,110:symbol.base.colon :
+20,110:keyword.if if
+22,110:bracket.l_parentheses (
+23,110:id cycle_cnt
+32,110:symbol.extend.is_equal ==
+35,110:literal.number 4'd5
+39,110:bracket.r_parentheses )
+40,110:newline 
+
+16,111:id next_state
+26,111:symbol.base.equal =
+28,111:id WRITEBACK
+36,111:symbol.base.semicolon ;
+37,111:newline 
+
+12,112:id WRITEBACK
+20,112:symbol.base.colon :
+22,112:id next_state
+32,112:symbol.base.equal =
+34,112:id IDLE
+37,112:symbol.base.semicolon ;
+38,112:newline 
+
+12,113:keyword.default default
+18,113:symbol.base.colon :
+20,113:id next_state
+30,113:symbol.base.equal =
+32,113:id IDLE
+35,113:symbol.base.semicolon ;
+36,113:newline 
+
+8,114:keyword.endcase endcase
+14,114:newline 
+
+4,115:keyword.end end
+6,115:newline 
+
+4,116:newline 
+
+4,117:comment // ********** 流水线寄存器 (带初始值) **********
+42,117:newline 
+
+4,118:keyword.integer integer
+11,118:id p
+11,118:symbol.base.semicolon ;
+12,118:newline 
+
+4,119:keyword.always always
+10,119:symbol.base.at @
+11,119:bracket.l_parentheses (
+12,119:keyword.posedge posedge
+19,119:id clk
+22,119:symbol.extend.logic_or or
+24,119:keyword.negedge negedge
+31,119:id rst_n
+35,119:bracket.r_parentheses )
+37,119:keyword.begin begin
+41,119:newline 
+
+8,120:keyword.if if
+10,120:bracket.l_parentheses (
+11,120:symbol.base.not !
+12,120:id rst_n
+16,120:bracket.r_parentheses )
+18,120:keyword.begin begin
+22,120:newline 
+
+12,121:id valid_pipe
+22,121:symbol.extend.lesser_equal <=
+25,121:bracket.l_curly_bracket {
+26,121:id STAGES
+31,121:bracket.l_curly_bracket {
+32,121:literal.number 1'b0
+36,121:bracket.r_curly_bracket }
+37,121:bracket.r_curly_bracket }
+38,121:symbol.base.semicolon ;
+39,121:newline 
+
+12,122:keyword.for for
+15,122:bracket.l_parentheses (
+16,122:id p
+17,122:symbol.base.equal =
+19,122:literal.number 0
+20,122:symbol.base.semicolon ;
+22,122:id p
+23,122:symbol.base.lesser <
+25,122:id STAGES
+30,122:symbol.base.semicolon ;
+32,122:id p
+33,122:symbol.base.equal =
+35,122:id p
+36,122:symbol.base.add +
+38,122:literal.number 1
+39,122:bracket.r_parentheses )
+41,122:newline 
+
+16,123:id data_pipe
+24,123:bracket.l_square_bracket [
+25,123:id p
+25,123:bracket.r_square_bracket ]
+27,123:symbol.extend.lesser_equal <=
+30,123:bracket.l_curly_bracket {
+31,123:id DATA_WIDTH
+40,123:bracket.l_curly_bracket {
+41,123:literal.number 1'b0
+45,123:bracket.r_curly_bracket }
+46,123:bracket.r_curly_bracket }
+47,123:symbol.base.semicolon ;
+48,123:newline 
+
+8,124:keyword.end end
+11,124:keyword.else else
+15,124:keyword.begin begin
+19,124:newline 
+
+12,125:comment // 移位流水线
+20,125:newline 
+
+12,126:id valid_pipe
+22,126:symbol.extend.lesser_equal <=
+25,126:bracket.l_curly_bracket {
+26,126:id valid_pipe
+35,126:bracket.l_square_bracket [
+36,126:id STAGES
+42,126:symbol.base.sub -
+44,126:literal.number 2
+45,126:symbol.base.colon :
+46,126:literal.number 0
+47,126:bracket.r_square_bracket ]
+48,126:symbol.base.comma ,
+50,126:bracket.l_parentheses (
+51,126:id state
+56,126:symbol.extend.is_equal ==
+59,126:id FETCH
+63,126:bracket.r_parentheses )
+64,126:bracket.r_curly_bracket }
+65,126:symbol.base.semicolon ;
+66,126:newline 
+
+12,127:keyword.for for
+15,127:bracket.l_parentheses (
+16,127:id p
+17,127:symbol.base.equal =
+19,127:literal.number 0
+20,127:symbol.base.semicolon ;
+22,127:id p
+23,127:symbol.base.lesser <
+25,127:id STAGES
+31,127:symbol.base.sub -
+33,127:literal.number 1
+34,127:symbol.base.semicolon ;
+36,127:id p
+37,127:symbol.base.equal =
+39,127:id p
+40,127:symbol.base.add +
+42,127:literal.number 1
+43,127:bracket.r_parentheses )
+46,127:id data_pipe
+54,127:bracket.l_square_bracket [
+55,127:id p
+56,127:symbol.base.add +
+58,127:literal.number 1
+59,127:bracket.r_square_bracket ]
+61,127:symbol.extend.lesser_equal <=
+64,127:id data_pipe
+72,127:bracket.l_square_bracket [
+73,127:id p
+73,127:bracket.r_square_bracket ]
+74,127:symbol.base.semicolon ;
+75,127:newline 
+
+12,128:keyword.if if
+14,128:bracket.l_parentheses (
+15,128:id state
+20,128:symbol.extend.is_equal ==
+23,128:id FETCH
+27,128:bracket.r_parentheses )
+28,128:newline 
+
+16,129:id data_pipe
+24,129:bracket.l_square_bracket [
+25,129:literal.number 0
+26,129:bracket.r_square_bracket ]
+28,129:symbol.extend.lesser_equal <=
+31,129:id data_in
+37,129:symbol.base.semicolon ;
+38,129:newline 
+
+8,130:keyword.end end
+10,130:newline 
+
+4,131:keyword.end end
+6,131:newline 
+
+4,132:newline 
+
+4,133:comment // ********** 内存读写逻辑 **********
+35,133:newline 
+
+4,134:keyword.always always
+10,134:symbol.base.at @
+11,134:bracket.l_parentheses (
+12,134:keyword.posedge posedge
+19,134:id clk
+22,134:symbol.extend.logic_or or
+24,134:keyword.negedge negedge
+31,134:id rst_n
+35,134:bracket.r_parentheses )
+37,134:keyword.begin begin
+41,134:newline 
+
+8,135:keyword.if if
+10,135:bracket.l_parentheses (
+11,135:symbol.base.not !
+12,135:id rst_n
+16,135:bracket.r_parentheses )
+18,135:keyword.begin begin
+22,135:newline 
+
+12,136:id mem_addr
+20,136:symbol.extend.lesser_equal <=
+23,136:bracket.l_curly_bracket {
+24,136:id LOG2_MEM
+31,136:bracket.l_curly_bracket {
+32,136:literal.number 1'b0
+36,136:bracket.r_curly_bracket }
+37,136:bracket.r_curly_bracket }
+38,136:symbol.base.semicolon ;
+39,136:newline 
+
+12,137:id mem_we
+18,137:symbol.extend.lesser_equal <=
+21,137:literal.number 1'b0
+25,137:symbol.base.semicolon ;
+26,137:newline 
+
+12,138:id mem_write
+21,138:symbol.extend.lesser_equal <=
+24,138:bracket.l_curly_bracket {
+25,138:id DATA_WIDTH
+34,138:bracket.l_curly_bracket {
+35,138:literal.number 1'b0
+39,138:bracket.r_curly_bracket }
+40,138:bracket.r_curly_bracket }
+41,138:symbol.base.semicolon ;
+42,138:newline 
+
+12,139:id mem_read
+20,139:symbol.extend.lesser_equal <=
+23,139:bracket.l_curly_bracket {
+24,139:id DATA_WIDTH
+33,139:bracket.l_curly_bracket {
+34,139:literal.number 1'b0
+38,139:bracket.r_curly_bracket }
+39,139:bracket.r_curly_bracket }
+40,139:symbol.base.semicolon ;
+41,139:newline 
+
+8,140:keyword.end end
+11,140:keyword.else else
+15,140:keyword.begin begin
+19,140:newline 
+
+12,141:comment // 写内存 (地址由流水线末级数据决定)
+33,141:newline 
+
+12,142:keyword.if if
+14,142:bracket.l_parentheses (
+15,142:id state
+20,142:symbol.extend.is_equal ==
+23,142:id PROCESS
+30,142:symbol.extend.logic_double_and &&
+33,142:id valid_pipe
+42,142:bracket.l_square_bracket [
+43,142:id STAGES
+49,142:symbol.base.sub -
+51,142:literal.number 1
+52,142:bracket.r_square_bracket ]
+53,142:bracket.r_parentheses )
+55,142:keyword.begin begin
+59,142:newline 
+
+16,143:id mem_addr
+24,143:symbol.extend.lesser_equal <=
+27,143:id data_pipe
+35,143:bracket.l_square_bracket [
+36,143:id STAGES
+42,143:symbol.base.sub -
+44,143:literal.number 1
+45,143:bracket.r_square_bracket ]
+46,143:bracket.l_square_bracket [
+47,143:id LOG2_MEM
+55,143:symbol.base.sub -
+57,143:literal.number 1
+58,143:symbol.base.colon :
+59,143:literal.number 0
+60,143:bracket.r_square_bracket ]
+61,143:symbol.base.semicolon ;
+62,143:newline 
+
+16,144:id mem_write
+25,144:symbol.extend.lesser_equal <=
+28,144:id data_pipe
+36,144:bracket.l_square_bracket [
+37,144:id STAGES
+43,144:symbol.base.sub -
+45,144:literal.number 1
+46,144:bracket.r_square_bracket ]
+47,144:symbol.base.semicolon ;
+48,144:newline 
+
+16,145:id mem_we
+22,145:symbol.extend.lesser_equal <=
+25,145:literal.number 1'b1
+29,145:symbol.base.semicolon ;
+30,145:newline 
+
+12,146:keyword.end end
+15,146:keyword.else else
+19,146:keyword.begin begin
+23,146:newline 
+
+16,147:id mem_we
+22,147:symbol.extend.lesser_equal <=
+25,147:literal.number 1'b0
+29,147:symbol.base.semicolon ;
+30,147:newline 
+
+12,148:keyword.end end
+14,148:newline 
+
+12,149:comment // 读内存 (组合后寄存器)
+27,149:newline 
+
+12,150:id mem_read
+20,150:symbol.extend.lesser_equal <=
+23,150:id memory
+28,150:bracket.l_square_bracket [
+29,150:id mem_addr
+36,150:bracket.r_square_bracket ]
+37,150:symbol.base.semicolon ;
+38,150:newline 
+
+8,151:keyword.end end
+10,151:newline 
+
+4,152:keyword.end end
+6,152:newline 
+
+4,153:newline 
+
+4,154:comment // 实际内存写入 (单独 always，确保写入正确)
+32,154:newline 
+
+4,155:keyword.always always
+10,155:symbol.base.at @
+11,155:bracket.l_parentheses (
+12,155:keyword.posedge posedge
+19,155:id clk
+21,155:bracket.r_parentheses )
+23,155:keyword.begin begin
+27,155:newline 
+
+8,156:keyword.if if
+10,156:bracket.l_parentheses (
+11,156:id mem_we
+16,156:bracket.r_parentheses )
+17,156:newline 
+
+12,157:id memory
+17,157:bracket.l_square_bracket [
+18,157:id mem_addr
+25,157:bracket.r_square_bracket ]
+27,157:symbol.extend.lesser_equal <=
+30,157:id mem_write
+38,157:symbol.base.semicolon ;
+39,157:newline 
+
+4,158:keyword.end end
+6,158:newline 
+
+4,159:newline 
+
+4,160:comment // ********** 使用任务进行计算 **********
+37,160:newline 
+
+4,161:keyword.always always
+10,161:symbol.base.at @
+11,161:bracket.l_parentheses (
+12,161:keyword.posedge posedge
+19,161:id clk
+22,161:symbol.extend.logic_or or
+24,161:keyword.negedge negedge
+31,161:id rst_n
+35,161:bracket.r_parentheses )
+37,161:keyword.begin begin
+41,161:newline 
+
+8,162:keyword.if if
+10,162:bracket.l_parentheses (
+11,162:symbol.base.not !
+12,162:id rst_n
+16,162:bracket.r_parentheses )
+18,162:keyword.begin begin
+22,162:newline 
+
+12,163:id internal_reg
+24,163:symbol.extend.lesser_equal <=
+27,163:bracket.l_curly_bracket {
+28,163:id DATA_WIDTH
+37,163:bracket.l_curly_bracket {
+38,163:literal.number 1'b0
+42,163:bracket.r_curly_bracket }
+43,163:bracket.r_curly_bracket }
+44,163:symbol.base.semicolon ;
+45,163:newline 
+
+12,164:id swapped_reg_a
+25,164:symbol.extend.lesser_equal <=
+28,164:bracket.l_curly_bracket {
+29,164:id DATA_WIDTH
+38,164:bracket.l_curly_bracket {
+39,164:literal.number 1'b0
+43,164:bracket.r_curly_bracket }
+44,164:bracket.r_curly_bracket }
+45,164:symbol.base.semicolon ;
+46,164:newline 
+
+12,165:id swapped_reg_b
+25,165:symbol.extend.lesser_equal <=
+28,165:bracket.l_curly_bracket {
+29,165:id DATA_WIDTH
+38,165:bracket.l_curly_bracket {
+39,165:literal.number 1'b0
+43,165:bracket.r_curly_bracket }
+44,165:bracket.r_curly_bracket }
+45,165:symbol.base.semicolon ;
+46,165:newline 
+
+8,166:keyword.end end
+10,166:newline 
+
+8,167:keyword.else else
+12,167:keyword.if if
+14,167:bracket.l_parentheses (
+15,167:id state
+20,167:symbol.extend.is_equal ==
+23,167:id PROCESS
+29,167:bracket.r_parentheses )
+31,167:keyword.begin begin
+35,167:newline 
+
+12,168:comment // 调用任务交换两个寄存器值
+27,168:newline 
+
+12,169:id swap
+15,169:bracket.l_parentheses (
+16,169:id internal_reg
+27,169:symbol.base.comma ,
+28,169:newline 
+
+16,170:id mem_read
+23,170:symbol.base.comma ,
+24,170:newline 
+
+16,171:id swapped_reg_a
+28,171:symbol.base.comma ,
+29,171:newline 
+
+16,172:id swapped_reg_b
+28,172:bracket.r_parentheses )
+29,172:symbol.base.semicolon ;
+30,172:newline 
+
+12,173:comment // 使用函数计算奇偶并更新内部寄存器
+31,173:newline 
+
+12,174:id internal_reg
+24,174:symbol.extend.lesser_equal <=
+27,174:bracket.l_curly_bracket {
+28,174:id parity
+33,174:bracket.l_parentheses (
+34,174:id swapped_reg_a
+46,174:bracket.r_parentheses )
+47,174:symbol.base.comma ,
+48,174:newline 
+
+16,175:id swapped_reg_b
+28,175:bracket.l_square_bracket [
+29,175:id DATA_WIDTH
+39,175:symbol.base.sub -
+41,175:literal.number 2
+42,175:symbol.base.colon :
+43,175:literal.number 0
+44,175:bracket.r_square_bracket ]
+45,175:bracket.r_curly_bracket }
+46,175:symbol.base.semicolon ;
+47,175:newline 
+
+8,176:keyword.end end
+10,176:newline 
+
+4,177:keyword.end end
+6,177:newline 
+
+4,178:newline 
+
+4,179:comment // ********** 计数器 **********
+32,179:newline 
+
+4,180:keyword.always always
+10,180:symbol.base.at @
+11,180:bracket.l_parentheses (
+12,180:keyword.posedge posedge
+19,180:id clk
+22,180:symbol.extend.logic_or or
+24,180:keyword.negedge negedge
+31,180:id rst_n
+35,180:bracket.r_parentheses )
+37,180:keyword.begin begin
+41,180:newline 
+
+8,181:keyword.if if
+10,181:bracket.l_parentheses (
+11,181:symbol.base.not !
+12,181:id rst_n
+16,181:bracket.r_parentheses )
+17,181:newline 
+
+12,182:id cycle_cnt
+21,182:symbol.extend.lesser_equal <=
+24,182:literal.number 4'd0
+28,182:symbol.base.semicolon ;
+29,182:newline 
+
+8,183:keyword.else else
+12,183:keyword.if if
+14,183:bracket.l_parentheses (
+15,183:id state
+20,183:symbol.extend.is_equal ==
+23,183:id PROCESS
+29,183:bracket.r_parentheses )
+30,183:newline 
+
+12,184:id cycle_cnt
+21,184:symbol.extend.lesser_equal <=
+24,184:id cycle_cnt
+33,184:symbol.base.add +
+35,184:literal.number 4'd1
+39,184:symbol.base.semicolon ;
+40,184:newline 
+
+8,185:keyword.else else
+11,185:newline 
+
+12,186:id cycle_cnt
+21,186:symbol.extend.lesser_equal <=
+24,186:literal.number 4'd0
+28,186:symbol.base.semicolon ;
+29,186:newline 
+
+4,187:keyword.end end
+6,187:newline 
+
+4,188:newline 
+
+4,189:comment // ********** 输出逻辑 **********
+33,189:newline 
+
+4,190:keyword.always always
+10,190:symbol.base.at @
+11,190:bracket.l_parentheses (
+12,190:keyword.posedge posedge
+19,190:id clk
+22,190:symbol.extend.logic_or or
+24,190:keyword.negedge negedge
+31,190:id rst_n
+35,190:bracket.r_parentheses )
+37,190:keyword.begin begin
+41,190:newline 
+
+8,191:keyword.if if
+10,191:bracket.l_parentheses (
+11,191:symbol.base.not !
+12,191:id rst_n
+16,191:bracket.r_parentheses )
+18,191:keyword.begin begin
+22,191:newline 
+
+12,192:id result
+18,192:symbol.extend.lesser_equal <=
+21,192:bracket.l_curly_bracket {
+22,192:id DATA_WIDTH
+31,192:bracket.l_curly_bracket {
+32,192:literal.number 1'b0
+36,192:bracket.r_curly_bracket }
+37,192:bracket.r_curly_bracket }
+38,192:symbol.base.semicolon ;
+39,192:newline 
+
+12,193:id done
+16,193:symbol.extend.lesser_equal <=
+19,193:literal.number 1'b0
+23,193:symbol.base.semicolon ;
+24,193:newline 
+
+8,194:keyword.end end
+10,194:newline 
+
+8,195:keyword.else else
+12,195:keyword.if if
+14,195:bracket.l_parentheses (
+15,195:id state
+20,195:symbol.extend.is_equal ==
+23,195:id WRITEBACK
+31,195:bracket.r_parentheses )
+33,195:keyword.begin begin
+37,195:newline 
+
+12,196:id result
+18,196:symbol.extend.lesser_equal <=
+21,196:id internal_reg
+32,196:symbol.base.semicolon ;
+33,196:newline 
+
+12,197:id done
+16,197:symbol.extend.lesser_equal <=
+19,197:literal.number 1'b1
+23,197:symbol.base.semicolon ;
+24,197:newline 
+
+8,198:keyword.end end
+11,198:keyword.else else
+15,198:keyword.begin begin
+19,198:newline 
+
+12,199:id done
+16,199:symbol.extend.lesser_equal <=
+19,199:literal.number 1'b0
+23,199:symbol.base.semicolon ;
+24,199:newline 
+
+8,200:keyword.end end
+10,200:newline 
+
+4,201:keyword.end end
+6,201:newline 
+
+4,202:newline 
+
+0,203:keyword.endmodule endmodule
+8,203:newline 
+
+0,204:newline 
+
+0,205:comment // Generated by PyV Compiler at 2026-07-20 23:37:58
+51,205:newline 
+

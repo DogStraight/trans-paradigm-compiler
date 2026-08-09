@@ -1,0 +1,565 @@
+{
+  "Root": {
+    "sub_node": [
+      {
+        "Comment": {
+          "value": "// generate 语法测试"
+        }
+      },
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "generate_test"
+            }
+          },
+          "params": {
+            "ParameterList": {
+              "params": [
+                {
+                  "ParamDecl": {
+                    "param_name": {
+                      "Identifier": {
+                        "content": "DATA_WIDTH"
+                      }
+                    },
+                    "value": {
+                      "Number": {
+                        "value": "8"
+                      }
+                    }
+                  }
+                },
+                {
+                  "ParamDecl": {
+                    "param_name": {
+                      "Identifier": {
+                        "content": "NUM_STAGES"
+                      }
+                    },
+                    "value": {
+                      "Number": {
+                        "value": "4"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "ports": {
+            "PortList": {
+              "items": [
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "clk"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "BinaryOp": {
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "content": "DATA_WIDTH"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "value": "1"
+                              }
+                            }
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "data_in"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "wire",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "BinaryOp": {
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "content": "DATA_WIDTH"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "value": "1"
+                              }
+                            }
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "data_out"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sub_node": [
+            {
+              "WireDecl": {
+                "wire_type": "wire",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "BinaryOp": {
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "content": "DATA_WIDTH"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "value": "1"
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "pipe"
+                            }
+                          },
+                          "array_range": {
+                            "RangeBracket": {
+                              "range": {
+                                "Range": {
+                                  "msb": {
+                                    "Number": {
+                                      "value": "0"
+                                    }
+                                  },
+                                  "lsb": {
+                                    "BinaryOp": {
+                                      "op": "-",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "NUM_STAGES"
+                                        }
+                                      },
+                                      "right": {
+                                        "Number": {
+                                          "value": "1"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "Comment": {
+                "value": "// generate for: 流水线寄存器 — 逐级传递"
+              }
+            },
+            {
+              "GenerateBlock": {
+                "sub_node": [
+                  {
+                    "GenvarDecl": {
+                      "genvar_name": {
+                        "Identifier": {
+                          "content": "g"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "ForLoop": {
+                      "init": {
+                        "ForInit": {
+                          "target": {
+                            "Identifier": {
+                              "content": "g"
+                            }
+                          },
+                          "value": {
+                            "Number": {
+                              "value": "0"
+                            }
+                          }
+                        }
+                      },
+                      "condition": {
+                        "BinaryOp": {
+                          "op": "<",
+                          "left": {
+                            "Identifier": {
+                              "content": "g"
+                            }
+                          },
+                          "right": {
+                            "Identifier": {
+                              "content": "NUM_STAGES"
+                            }
+                          }
+                        }
+                      },
+                      "step": {
+                        "ForStep": {
+                          "target": {
+                            "Identifier": {
+                              "content": "g"
+                            }
+                          },
+                          "value": {
+                            "BinaryOp": {
+                              "op": "+",
+                              "left": {
+                                "Identifier": {
+                                  "content": "g"
+                                }
+                              },
+                              "right": {
+                                "Number": {
+                                  "value": "1"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "body": {
+                        "BeginEnd": {
+                          "label": {
+                            "Identifier": {
+                              "content": "stage"
+                            }
+                          },
+                          "sub_node": [
+                            {
+                              "IfBlock": {
+                                "condition": {
+                                  "BinaryOp": {
+                                    "op": "==",
+                                    "left": {
+                                      "Identifier": {
+                                        "content": "g"
+                                      }
+                                    },
+                                    "right": {
+                                      "Number": {
+                                        "value": "0"
+                                      }
+                                    }
+                                  }
+                                },
+                                "then_stmt": {
+                                  "BeginEnd": {
+                                    "sub_node": [
+                                      {
+                                        "AssignStatement": {
+                                          "target": {
+                                            "SelectExpr": {
+                                              "base": {
+                                                "Identifier": {
+                                                  "content": "pipe"
+                                                }
+                                              },
+                                              "first_suffix": {
+                                                "SelectSuffix": {
+                                                  "index": {
+                                                    "Identifier": {
+                                                      "content": "g"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          },
+                                          "value": {
+                                            "Identifier": {
+                                              "content": "data_in"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                "else_chain": {
+                                  "ElseBlockBranch": {
+                                    "body": {
+                                      "BeginEnd": {
+                                        "sub_node": [
+                                          {
+                                            "AssignStatement": {
+                                              "target": {
+                                                "SelectExpr": {
+                                                  "base": {
+                                                    "Identifier": {
+                                                      "content": "pipe"
+                                                    }
+                                                  },
+                                                  "first_suffix": {
+                                                    "SelectSuffix": {
+                                                      "index": {
+                                                        "Identifier": {
+                                                          "content": "g"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "value": {
+                                                "SelectExpr": {
+                                                  "base": {
+                                                    "Identifier": {
+                                                      "content": "pipe"
+                                                    }
+                                                  },
+                                                  "first_suffix": {
+                                                    "SelectSuffix": {
+                                                      "index": {
+                                                        "BinaryOp": {
+                                                          "op": "-",
+                                                          "left": {
+                                                            "Identifier": {
+                                                              "content": "g"
+                                                            }
+                                                          },
+                                                          "right": {
+                                                            "Number": {
+                                                              "value": "1"
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "Comment": {
+                "value": "// generate if/else: 根据位宽选择输出级"
+              }
+            },
+            {
+              "GenerateBlock": {
+                "sub_node": [
+                  {
+                    "IfBlock": {
+                      "condition": {
+                        "BinaryOp": {
+                          "op": ">",
+                          "left": {
+                            "Identifier": {
+                              "content": "DATA_WIDTH"
+                            }
+                          },
+                          "right": {
+                            "Number": {
+                              "value": "8"
+                            }
+                          }
+                        }
+                      },
+                      "then_stmt": {
+                        "BeginEnd": {
+                          "label": {
+                            "Identifier": {
+                              "content": "wide"
+                            }
+                          },
+                          "sub_node": [
+                            {
+                              "AssignStatement": {
+                                "target": {
+                                  "Identifier": {
+                                    "content": "data_out"
+                                  }
+                                },
+                                "value": {
+                                  "SelectExpr": {
+                                    "base": {
+                                      "Identifier": {
+                                        "content": "pipe"
+                                      }
+                                    },
+                                    "first_suffix": {
+                                      "SelectSuffix": {
+                                        "index": {
+                                          "BinaryOp": {
+                                            "op": "-",
+                                            "left": {
+                                              "Identifier": {
+                                                "content": "NUM_STAGES"
+                                              }
+                                            },
+                                            "right": {
+                                              "Number": {
+                                                "value": "1"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "else_chain": {
+                        "ElseBlockBranch": {
+                          "body": {
+                            "BeginEnd": {
+                              "label": {
+                                "Identifier": {
+                                  "content": "narrow"
+                                }
+                              },
+                              "sub_node": [
+                                {
+                                  "AssignStatement": {
+                                    "target": {
+                                      "Identifier": {
+                                        "content": "data_out"
+                                      }
+                                    },
+                                    "value": {
+                                      "SelectExpr": {
+                                        "base": {
+                                          "Identifier": {
+                                            "content": "pipe"
+                                          }
+                                        },
+                                        "first_suffix": {
+                                          "SelectSuffix": {
+                                            "index": {
+                                              "Number": {
+                                                "value": "0"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

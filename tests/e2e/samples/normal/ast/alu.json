@@ -1,0 +1,976 @@
+{
+  "Root": {
+    "sub_node": [
+      {
+        "Comment": {
+          "value": "// Test 4: 纯组合逻辑 — 多操作、连续赋值"
+        }
+      },
+      {
+        "Comment": {
+          "value": "// 功能: 位宽转换 + 算术运算"
+        }
+      },
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "alu"
+            }
+          },
+          "params": {
+            "ParameterList": {
+              "params": [
+                {
+                  "ParamDecl": {
+                    "param_name": {
+                      "Identifier": {
+                        "content": "W"
+                      }
+                    },
+                    "value": {
+                      "Number": {
+                        "value": "8"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "ports": {
+            "PortList": {
+              "items": [
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "BinaryOp": {
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "content": "W"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "value": "1"
+                              }
+                            }
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "a"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "BinaryOp": {
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "content": "W"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "value": "1"
+                              }
+                            }
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "b"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "Number": {
+                            "value": "2"
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "op"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "reg",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "BinaryOp": {
+                            "op": "-",
+                            "left": {
+                              "Identifier": {
+                                "content": "W"
+                              }
+                            },
+                            "right": {
+                              "Number": {
+                                "value": "1"
+                              }
+                            }
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "result"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "reg",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "zero"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "reg",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "overflow"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sub_node": [
+            {
+              "WireDecl": {
+                "wire_type": "wire",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "BinaryOp": {
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "value": "1"
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "sum"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "WireDecl": {
+                "wire_type": "wire",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "BinaryOp": {
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "value": "1"
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "diff"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "WireDecl": {
+                "wire_type": "wire",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "BinaryOp": {
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "value": "1"
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "and_w"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "WireDecl": {
+                "wire_type": "wire",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "BinaryOp": {
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "value": "1"
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "or_w"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "WireDecl": {
+                "wire_type": "wire",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "BinaryOp": {
+                        "op": "-",
+                        "left": {
+                          "Identifier": {
+                            "content": "W"
+                          }
+                        },
+                        "right": {
+                          "Number": {
+                            "value": "1"
+                          }
+                        }
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "xor_w"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "target": {
+                  "Identifier": {
+                    "content": "sum"
+                  }
+                },
+                "value": {
+                  "BinaryOp": {
+                    "op": "+",
+                    "left": {
+                      "Identifier": {
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "target": {
+                  "Identifier": {
+                    "content": "diff"
+                  }
+                },
+                "value": {
+                  "BinaryOp": {
+                    "op": "-",
+                    "left": {
+                      "Identifier": {
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "target": {
+                  "Identifier": {
+                    "content": "and_w"
+                  }
+                },
+                "value": {
+                  "BinaryOp": {
+                    "op": "&",
+                    "left": {
+                      "Identifier": {
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "target": {
+                  "Identifier": {
+                    "content": "or_w"
+                  }
+                },
+                "value": {
+                  "BinaryOp": {
+                    "op": "|",
+                    "left": {
+                      "Identifier": {
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AssignStatement": {
+                "target": {
+                  "Identifier": {
+                    "content": "xor_w"
+                  }
+                },
+                "value": {
+                  "BinaryOp": {
+                    "op": "^",
+                    "left": {
+                      "Identifier": {
+                        "content": "a"
+                      }
+                    },
+                    "right": {
+                      "Identifier": {
+                        "content": "b"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "AlwaysBlock": {
+                "sensitivity": {
+                  "SensitivityList": {
+                    "items": [
+                      "*"
+                    ]
+                  }
+                },
+                "body": {
+                  "BeginEnd": {
+                    "sub_node": [
+                      {
+                        "CaseStatement": {
+                          "case_type": {
+                            "CaseKeyword": {
+                              "value": "case"
+                            }
+                          },
+                          "expr": {
+                            "Identifier": {
+                              "content": "op"
+                            }
+                          },
+                          "items": {
+                            "CaseItemList": {
+                              "items": [
+                                {
+                                  "CaseItem": {
+                                    "values": [
+                                      {
+                                        "Number": {
+                                          "value": "3'd0"
+                                        }
+                                      }
+                                    ],
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "result"
+                                          }
+                                        },
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "sum"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "values": [
+                                      {
+                                        "Number": {
+                                          "value": "3'd1"
+                                        }
+                                      }
+                                    ],
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "result"
+                                          }
+                                        },
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "diff"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "values": [
+                                      {
+                                        "Number": {
+                                          "value": "3'd2"
+                                        }
+                                      }
+                                    ],
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "result"
+                                          }
+                                        },
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "and_w"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "values": [
+                                      {
+                                        "Number": {
+                                          "value": "3'd3"
+                                        }
+                                      }
+                                    ],
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "result"
+                                          }
+                                        },
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "or_w"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseItem": {
+                                    "values": [
+                                      {
+                                        "Number": {
+                                          "value": "3'd4"
+                                        }
+                                      }
+                                    ],
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "result"
+                                          }
+                                        },
+                                        "value": {
+                                          "Identifier": {
+                                            "content": "xor_w"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "DefaultItem": {
+                                    "colon": ":",
+                                    "stmt": {
+                                      "BlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "result"
+                                          }
+                                        },
+                                        "value": {
+                                          "ReplicateExpr": {
+                                            "count": {
+                                              "Identifier": {
+                                                "content": "W"
+                                              }
+                                            },
+                                            "value": {
+                                              "Number": {
+                                                "value": "1'b0"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "BlockingAssign": {
+                          "target": {
+                            "Identifier": {
+                              "content": "zero"
+                            }
+                          },
+                          "value": {
+                            "ParenthesizedExpr": {
+                              "expr": {
+                                "BinaryOp": {
+                                  "op": "==",
+                                  "left": {
+                                    "Identifier": {
+                                      "content": "result"
+                                    }
+                                  },
+                                  "right": {
+                                    "ReplicateExpr": {
+                                      "count": {
+                                        "Identifier": {
+                                          "content": "W"
+                                        }
+                                      },
+                                      "value": {
+                                        "Number": {
+                                          "value": "1'b0"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "BlockingAssign": {
+                          "target": {
+                            "Identifier": {
+                              "content": "overflow"
+                            }
+                          },
+                          "value": {
+                            "BinaryOp": {
+                              "op": "&&",
+                              "left": {
+                                "ParenthesizedExpr": {
+                                  "expr": {
+                                    "BinaryOp": {
+                                      "op": "==",
+                                      "left": {
+                                        "SelectExpr": {
+                                          "base": {
+                                            "Identifier": {
+                                              "content": "a"
+                                            }
+                                          },
+                                          "first_suffix": {
+                                            "SelectSuffix": {
+                                              "index": {
+                                                "BinaryOp": {
+                                                  "op": "-",
+                                                  "left": {
+                                                    "Identifier": {
+                                                      "content": "W"
+                                                    }
+                                                  },
+                                                  "right": {
+                                                    "Number": {
+                                                      "value": "1"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "SelectExpr": {
+                                          "base": {
+                                            "Identifier": {
+                                              "content": "b"
+                                            }
+                                          },
+                                          "first_suffix": {
+                                            "SelectSuffix": {
+                                              "index": {
+                                                "BinaryOp": {
+                                                  "op": "-",
+                                                  "left": {
+                                                    "Identifier": {
+                                                      "content": "W"
+                                                    }
+                                                  },
+                                                  "right": {
+                                                    "Number": {
+                                                      "value": "1"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "ParenthesizedExpr": {
+                                  "expr": {
+                                    "BinaryOp": {
+                                      "op": "!=",
+                                      "left": {
+                                        "SelectExpr": {
+                                          "base": {
+                                            "Identifier": {
+                                              "content": "result"
+                                            }
+                                          },
+                                          "first_suffix": {
+                                            "SelectSuffix": {
+                                              "index": {
+                                                "BinaryOp": {
+                                                  "op": "-",
+                                                  "left": {
+                                                    "Identifier": {
+                                                      "content": "W"
+                                                    }
+                                                  },
+                                                  "right": {
+                                                    "Number": {
+                                                      "value": "1"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "SelectExpr": {
+                                          "base": {
+                                            "Identifier": {
+                                              "content": "a"
+                                            }
+                                          },
+                                          "first_suffix": {
+                                            "SelectSuffix": {
+                                              "index": {
+                                                "BinaryOp": {
+                                                  "op": "-",
+                                                  "left": {
+                                                    "Identifier": {
+                                                      "content": "W"
+                                                    }
+                                                  },
+                                                  "right": {
+                                                    "Number": {
+                                                      "value": "1"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

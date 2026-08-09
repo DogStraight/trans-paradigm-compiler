@@ -1,0 +1,270 @@
+0,1:keyword.module module
+6,1:id complex_partial
+21,1:symbol.base.pound #
+22,1:bracket.l_parentheses (
+23,1:newline 
+
+4,2:keyword.parameter parameter
+13,2:id DATA_WIDTH
+23,2:symbol.base.equal =
+25,2:literal.number 8
+26,2:newline 
+
+4,3:keyword.parameter parameter
+13,3:id NUM_STAGES
+23,3:symbol.base.equal =
+25,3:literal.number 4
+26,3:newline 
+
+4,4:keyword.parameter parameter
+13,4:id MEM_DEPTH
+22,4:symbol.base.equal =
+24,4:literal.number 16
+26,4:newline 
+
+0,5:bracket.r_parentheses )
+2,5:bracket.l_parentheses (
+4,5:keyword.input input
+9,5:keyword.wire wire
+13,5:id clk
+15,5:bracket.r_parentheses )
+16,5:symbol.base.semicolon ;
+17,5:newline 
+
+4,6:keyword.localparam localparam
+14,6:id STAGES
+20,6:symbol.base.equal =
+22,6:bracket.l_parentheses (
+23,6:id NUM_STAGES
+33,6:symbol.base.lesser <
+35,6:literal.number 2
+36,6:bracket.r_parentheses )
+38,6:symbol.base.question_mark ?
+40,6:literal.number 2
+42,6:symbol.base.colon :
+44,6:id NUM_STAGES
+53,6:symbol.base.semicolon ;
+54,6:newline 
+
+4,7:keyword.localparam localparam
+14,7:id LOG2_MEM
+22,7:symbol.base.equal =
+24,7:symbol.base.dollar $
+25,7:id clog2
+29,7:bracket.l_parentheses (
+30,7:id MEM_DEPTH
+38,7:bracket.r_parentheses )
+39,7:symbol.base.semicolon ;
+40,7:newline 
+
+4,8:comment // 函数声明
+11,8:newline 
+
+4,9:keyword.function function
+12,9:keyword.automatic automatic
+21,9:id parity
+26,9:bracket.l_parentheses (
+28,9:keyword.input input
+33,9:bracket.l_square_bracket [
+34,9:id DATA_WIDTH
+44,9:symbol.base.sub -
+46,9:literal.number 1
+47,9:symbol.base.colon :
+48,9:literal.number 0
+49,9:bracket.r_square_bracket ]
+51,9:id d
+51,9:bracket.r_parentheses )
+52,9:symbol.base.semicolon ;
+53,9:newline 
+
+8,10:keyword.reg reg
+11,10:id p
+11,10:symbol.base.semicolon ;
+12,10:newline 
+
+8,11:keyword.begin begin
+12,11:newline 
+
+12,12:id p
+13,12:symbol.base.equal =
+15,12:literal.number 1'b0
+19,12:symbol.base.semicolon ;
+20,12:newline 
+
+12,13:id parity
+18,13:symbol.base.equal =
+20,13:id p
+20,13:symbol.base.semicolon ;
+21,13:newline 
+
+8,14:keyword.end end
+10,14:newline 
+
+4,15:keyword.endfunction endfunction
+14,15:newline 
+
+4,16:newline 
+
+4,17:comment // 任务声明
+11,17:newline 
+
+4,18:keyword.task task
+8,18:keyword.automatic automatic
+17,18:id swap
+20,18:bracket.l_parentheses (
+21,18:newline 
+
+8,19:keyword.input input
+13,19:keyword.reg reg
+16,19:bracket.l_square_bracket [
+17,19:id DATA_WIDTH
+27,19:symbol.base.sub -
+29,19:literal.number 1
+30,19:symbol.base.colon :
+31,19:literal.number 0
+32,19:bracket.r_square_bracket ]
+34,19:id a
+34,19:symbol.base.comma ,
+36,19:id b
+36,19:symbol.base.comma ,
+37,19:newline 
+
+8,20:keyword.output output
+14,20:keyword.reg reg
+17,20:bracket.l_square_bracket [
+18,20:id DATA_WIDTH
+28,20:symbol.base.sub -
+30,20:literal.number 1
+31,20:symbol.base.colon :
+32,20:literal.number 0
+33,20:bracket.r_square_bracket ]
+35,20:id swapped_a
+43,20:symbol.base.comma ,
+44,20:newline 
+
+8,21:keyword.output output
+14,21:keyword.reg reg
+17,21:bracket.l_square_bracket [
+18,21:id DATA_WIDTH
+28,21:symbol.base.sub -
+30,21:literal.number 1
+31,21:symbol.base.colon :
+32,21:literal.number 0
+33,21:bracket.r_square_bracket ]
+35,21:id swapped_b
+43,21:bracket.r_parentheses )
+44,21:symbol.base.semicolon ;
+45,21:newline 
+
+8,22:keyword.begin begin
+12,22:newline 
+
+12,23:id swapped_a
+21,23:symbol.base.equal =
+23,23:id b
+23,23:symbol.base.semicolon ;
+24,23:newline 
+
+12,24:id swapped_b
+21,24:symbol.base.equal =
+23,24:id a
+23,24:symbol.base.semicolon ;
+24,24:newline 
+
+8,25:keyword.end end
+10,25:newline 
+
+4,26:keyword.endtask endtask
+10,26:newline 
+
+4,27:newline 
+
+4,28:keyword.reg reg
+7,28:bracket.l_square_bracket [
+8,28:literal.number 1
+9,28:symbol.base.colon :
+10,28:literal.number 0
+11,28:bracket.r_square_bracket ]
+13,28:id state
+18,28:symbol.base.equal =
+20,28:literal.number 2'b0
+24,28:symbol.base.semicolon ;
+25,28:newline 
+
+4,29:keyword.reg reg
+7,29:bracket.l_square_bracket [
+8,29:literal.number 3
+9,29:symbol.base.colon :
+10,29:literal.number 0
+11,29:bracket.r_square_bracket ]
+13,29:id cycle_cnt
+22,29:symbol.base.equal =
+24,29:literal.number 4'd0
+28,29:symbol.base.semicolon ;
+29,29:newline 
+
+4,30:keyword.integer integer
+11,30:id i
+11,30:symbol.base.semicolon ;
+12,30:newline 
+
+4,31:keyword.always always
+10,31:symbol.base.at @
+11,31:bracket.l_parentheses (
+12,31:keyword.posedge posedge
+19,31:id clk
+22,31:symbol.extend.logic_or or
+24,31:keyword.negedge negedge
+31,31:id rst_n
+35,31:bracket.r_parentheses )
+37,31:keyword.begin begin
+41,31:newline 
+
+8,32:keyword.if if
+10,32:bracket.l_parentheses (
+11,32:symbol.base.not !
+12,32:id rst_n
+16,32:bracket.r_parentheses )
+18,32:keyword.begin begin
+22,32:newline 
+
+12,33:keyword.for for
+15,33:bracket.l_parentheses (
+16,33:id i
+17,33:symbol.base.equal =
+19,33:literal.number 0
+20,33:symbol.base.semicolon ;
+22,33:id i
+23,33:symbol.base.lesser <
+25,33:id MEM_DEPTH
+33,33:symbol.base.semicolon ;
+35,33:id i
+36,33:symbol.base.equal =
+38,33:id i
+39,33:symbol.base.add +
+41,33:literal.number 1
+42,33:bracket.r_parentheses )
+44,33:newline 
+
+16,34:id cycle_cnt
+25,34:symbol.extend.lesser_equal <=
+28,34:literal.number 4'd0
+32,34:symbol.base.semicolon ;
+33,34:newline 
+
+8,35:keyword.end end
+10,35:newline 
+
+4,36:keyword.end end
+6,36:newline 
+
+4,37:newline 
+
+0,38:keyword.endmodule endmodule
+8,38:newline 
+
+0,39:newline 
+
+0,40:comment // Generated by PyV Compiler at 2026-07-20 23:37:58
+51,40:newline 
+

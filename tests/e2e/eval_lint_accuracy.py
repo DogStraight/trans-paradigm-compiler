@@ -4,8 +4,8 @@
 expected.json 对照表比对，统计错误组检出率/类别准确率 + 合法组误报。
 
 用法:
-    python verilog/eval_lint_accuracy.py
-    python verilog/eval_lint_accuracy.py --json     # 输出完整 JSON
+    python tests/e2e/eval_lint_accuracy.py
+    python tests/e2e/eval_lint_accuracy.py --json     # 输出完整 JSON
 """
 
 import os
@@ -13,15 +13,15 @@ import sys
 import io
 import json
 
-# 项目根（本文件在 <root>/verilog/ 下）
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 项目根（本文件在 <root>/tests/e2e/ 下）
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from core.define import DEFAULT_RULES_DIR
 from linter.scanner import LinterScanner
 
-_LINT_DIR = os.path.join("verilog", "tests", "lint_err")
+_LINT_DIR = os.path.join("tests", "e2e", "samples", "lint_err")
 _REF_DIR = os.path.join(_LINT_DIR, "ref")
 _EXPECT_PATH = os.path.join(_LINT_DIR, "expected.json")
 

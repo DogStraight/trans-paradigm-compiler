@@ -1,0 +1,146 @@
+0,1:comment // Reference: Simple LED Blinker in Verilog
+43,1:newline 
+
+0,2:comment // 功能: 每计数到 1000 次翻转一次 LED
+26,2:newline 
+
+0,3:keyword.module module
+7,3:id led_blinker
+19,3:symbol.base.pound #
+21,3:bracket.l_parentheses (
+22,3:newline 
+
+4,4:keyword.parameter parameter
+14,4:id CLK_MHZ
+22,4:symbol.base.equal =
+24,4:literal.number 100
+27,4:symbol.base.comma ,
+28,4:newline 
+
+4,5:keyword.parameter parameter
+14,5:id MAX_CNT
+22,5:symbol.base.equal =
+24,5:literal.number 32'd1000
+32,5:newline 
+
+0,6:bracket.r_parentheses )
+1,6:bracket.l_parentheses (
+2,6:newline 
+
+4,7:keyword.input input
+11,7:keyword.wire wire
+22,7:id clk
+25,7:symbol.base.comma ,
+26,7:newline 
+
+4,8:keyword.input input
+11,8:keyword.wire wire
+22,8:id rst_n
+27,8:symbol.base.comma ,
+28,8:newline 
+
+4,9:keyword.output output
+11,9:keyword.reg reg
+22,9:id led
+26,9:symbol.base.equal =
+28,9:literal.number 1'b0
+32,9:newline 
+
+0,10:bracket.r_parentheses )
+1,10:symbol.base.semicolon ;
+2,10:newline 
+
+0,11:newline 
+
+4,12:keyword.reg reg
+8,12:bracket.l_square_bracket [
+9,12:literal.number 31
+11,12:symbol.base.colon :
+12,12:literal.number 0
+13,12:bracket.r_square_bracket ]
+15,12:id counter
+22,12:symbol.base.semicolon ;
+23,12:newline 
+
+0,13:newline 
+
+4,14:keyword.always always
+11,14:symbol.base.at @
+12,14:bracket.l_parentheses (
+13,14:keyword.posedge posedge
+21,14:id clk
+25,14:symbol.extend.logic_or or
+28,14:keyword.negedge negedge
+36,14:id rst_n
+41,14:bracket.r_parentheses )
+43,14:keyword.begin begin
+48,14:newline 
+
+8,15:keyword.if if
+11,15:bracket.l_parentheses (
+12,15:symbol.base.not !
+13,15:id rst_n
+18,15:bracket.r_parentheses )
+20,15:keyword.begin begin
+25,15:newline 
+
+12,16:id counter
+20,16:symbol.extend.lesser_equal <=
+23,16:literal.number 32'd0
+28,16:symbol.base.semicolon ;
+29,16:newline 
+
+12,17:id led
+20,17:symbol.extend.lesser_equal <=
+23,17:literal.number 1'b0
+27,17:symbol.base.semicolon ;
+28,17:newline 
+
+8,18:keyword.end end
+12,18:keyword.else else
+17,18:keyword.if if
+20,18:bracket.l_parentheses (
+21,18:id counter
+29,18:symbol.extend.is_equal ==
+32,18:id MAX_CNT
+39,18:bracket.r_parentheses )
+41,18:keyword.begin begin
+46,18:newline 
+
+12,19:id counter
+20,19:symbol.extend.lesser_equal <=
+23,19:literal.number 32'd0
+28,19:symbol.base.semicolon ;
+29,19:newline 
+
+12,20:id led
+20,20:symbol.extend.lesser_equal <=
+23,20:symbol.base.bit_not ~
+24,20:id led
+27,20:symbol.base.semicolon ;
+28,20:newline 
+
+8,21:keyword.end end
+12,21:keyword.else else
+17,21:keyword.begin begin
+22,21:newline 
+
+12,22:id counter
+20,22:symbol.extend.lesser_equal <=
+23,22:id counter
+31,22:symbol.base.add +
+33,22:literal.number 32'd1
+38,22:symbol.base.semicolon ;
+39,22:newline 
+
+8,23:keyword.end end
+11,23:newline 
+
+4,24:keyword.end end
+7,24:newline 
+
+0,25:newline 
+
+0,26:keyword.endmodule endmodule
+9,26:newline 
+

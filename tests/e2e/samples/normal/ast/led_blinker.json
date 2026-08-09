@@ -1,0 +1,347 @@
+{
+  "Root": {
+    "sub_node": [
+      {
+        "Comment": {
+          "value": "// Reference: Simple LED Blinker in Verilog"
+        }
+      },
+      {
+        "Comment": {
+          "value": "// 功能: 每计数到 1000 次翻转一次 LED"
+        }
+      },
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "led_blinker"
+            }
+          },
+          "params": {
+            "ParameterList": {
+              "params": [
+                {
+                  "ParamDecl": {
+                    "param_name": {
+                      "Identifier": {
+                        "content": "CLK_MHZ"
+                      }
+                    },
+                    "value": {
+                      "Number": {
+                        "value": "100"
+                      }
+                    }
+                  }
+                },
+                {
+                  "ParamDecl": {
+                    "param_name": {
+                      "Identifier": {
+                        "content": "MAX_CNT"
+                      }
+                    },
+                    "value": {
+                      "Number": {
+                        "value": "32'd1000"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "ports": {
+            "PortList": {
+              "items": [
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "clk"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "port_type": "wire",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "rst_n"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "reg",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "led"
+                                }
+                              },
+                              "init": {
+                                "Number": {
+                                  "value": "1'b0"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sub_node": [
+            {
+              "RegDecl": {
+                "reg_type": "reg",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "Number": {
+                        "value": "31"
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "counter"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "AlwaysStmt": {
+                "sensitivity": {
+                  "SensitivityList": {
+                    "items": [
+                      {
+                        "EdgeSense": {
+                          "edge": "posedge",
+                          "signal": {
+                            "Identifier": {
+                              "content": "clk"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "EdgeSense": {
+                          "edge": "negedge",
+                          "signal": {
+                            "Identifier": {
+                              "content": "rst_n"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "body": {
+                  "BeginEnd": {
+                    "sub_node": [
+                      {
+                        "IfBlock": {
+                          "condition": {
+                            "UnaryOp": {
+                              "op": "!",
+                              "operand": {
+                                "Identifier": {
+                                  "content": "rst_n"
+                                }
+                              },
+                              "position": "prefix"
+                            }
+                          },
+                          "then_stmt": {
+                            "BeginEnd": {
+                              "sub_node": [
+                                {
+                                  "NonBlockingAssign": {
+                                    "target": {
+                                      "Identifier": {
+                                        "content": "counter"
+                                      }
+                                    },
+                                    "value": {
+                                      "Number": {
+                                        "value": "32'd0"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "NonBlockingAssign": {
+                                    "target": {
+                                      "Identifier": {
+                                        "content": "led"
+                                      }
+                                    },
+                                    "value": {
+                                      "Number": {
+                                        "value": "1'b0"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "else_chain": {
+                            "ElseIfBlock": {
+                              "condition": {
+                                "BinaryOp": {
+                                  "op": "==",
+                                  "left": {
+                                    "Identifier": {
+                                      "content": "counter"
+                                    }
+                                  },
+                                  "right": {
+                                    "Identifier": {
+                                      "content": "MAX_CNT"
+                                    }
+                                  }
+                                }
+                              },
+                              "then_stmt": {
+                                "BeginEnd": {
+                                  "sub_node": [
+                                    {
+                                      "NonBlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "counter"
+                                          }
+                                        },
+                                        "value": {
+                                          "Number": {
+                                            "value": "32'd0"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "NonBlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "led"
+                                          }
+                                        },
+                                        "value": {
+                                          "UnaryOp": {
+                                            "op": "~",
+                                            "operand": {
+                                              "Identifier": {
+                                                "content": "led"
+                                              }
+                                            },
+                                            "position": "prefix"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "else_chain": {
+                                "ElseBlockBranch": {
+                                  "body": {
+                                    "BeginEnd": {
+                                      "sub_node": [
+                                        {
+                                          "NonBlockingAssign": {
+                                            "target": {
+                                              "Identifier": {
+                                                "content": "counter"
+                                              }
+                                            },
+                                            "value": {
+                                              "BinaryOp": {
+                                                "op": "+",
+                                                "left": {
+                                                  "Identifier": {
+                                                    "content": "counter"
+                                                  }
+                                                },
+                                                "right": {
+                                                  "Number": {
+                                                    "value": "32'd1"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

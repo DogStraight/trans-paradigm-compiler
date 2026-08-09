@@ -93,8 +93,8 @@ Built with Python 3.11+, zero runtime dependencies.
 
 ```bash
 python -m pytest tests/ -q                # 329 unit tests
-python verilog/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
-python verilog/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
+python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
+python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 ```
 
 ## License

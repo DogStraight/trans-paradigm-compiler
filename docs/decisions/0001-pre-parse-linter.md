@@ -26,4 +26,4 @@ linter 前置于 parser（`config/pyv_config.json` stages: `lex → lint → par
 > Impl: linter/checkers/matcher.py::RuleMatcher
 > Test: tests/test_linter_discovery.py
 > Test: tests/test_linter_matcher.py
-> Test: verilog/eval_lint_accuracy.py
+> Test: tests/e2e/eval_lint_accuracy.py

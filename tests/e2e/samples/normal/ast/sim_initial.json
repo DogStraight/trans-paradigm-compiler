@@ -1,0 +1,99 @@
+{
+  "Root": {
+    "sub_node": [
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "sim_initial"
+            }
+          },
+          "sub_node": [
+            {
+              "RegDecl": {
+                "reg_type": "reg",
+                "packed_range": {
+                  "Range": {
+                    "msb": {
+                      "Number": {
+                        "value": "7"
+                      }
+                    },
+                    "lsb": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                "items": {
+                  "DeclaratorList": {
+                    "items": [
+                      {
+                        "Declarator": {
+                          "name": {
+                            "Identifier": {
+                              "content": "cnt"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "InitialBlock": {
+                "body": {
+                  "BeginEnd": {
+                    "sub_node": [
+                      {
+                        "BlockingAssign": {
+                          "target": {
+                            "Identifier": {
+                              "content": "cnt"
+                            }
+                          },
+                          "value": {
+                            "Number": {
+                              "value": "8'd0"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "BlockingAssign": {
+                          "target": {
+                            "Identifier": {
+                              "content": "cnt"
+                            }
+                          },
+                          "value": {
+                            "BinaryOp": {
+                              "op": "+",
+                              "left": {
+                                "Identifier": {
+                                  "content": "cnt"
+                                }
+                              },
+                              "right": {
+                                "Number": {
+                                  "value": "1'b1"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

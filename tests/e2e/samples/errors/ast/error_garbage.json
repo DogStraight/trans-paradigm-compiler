@@ -1,0 +1,25 @@
+{
+  "Root": {
+    "sub_node": [
+      {
+        "Comment": {
+          "value": "// Test file for error-tolerant parsing"
+        }
+      },
+      {
+        "Comment": {
+          "value": "// Contains garbage lines interspersed with valid Verilog"
+        }
+      },
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "error_test"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,2049 @@
+{
+  "Root": {
+    "sub_node": [
+      {
+        "TypeDecl": {
+          "type_name": {
+            "Identifier": {
+              "content": "spi"
+            }
+          },
+          "params": {
+            "TypeParamList": {
+              "items": [
+                {
+                  "TypeParamItem": {
+                    "name": {
+                      "Identifier": {
+                        "content": "MODE"
+                      }
+                    },
+                    "default": {
+                      "Number": {
+                        "value": "0"
+                      }
+                    }
+                  }
+                },
+                {
+                  "TypeParamItem": {
+                    "name": {
+                      "Identifier": {
+                        "content": "DATA_WIDTH"
+                      }
+                    },
+                    "default": {
+                      "Number": {
+                        "value": "8"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "body": {
+            "TypeBody": {
+              "members": [
+                {
+                  "TypeRole": {
+                    "role_name": {
+                      "Identifier": {
+                        "content": "master"
+                      }
+                    },
+                    "ports": [
+                      {
+                        "AnsiInputDecl": {
+                          "direction": "input",
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "miso"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AnsiOutputDecl": {
+                          "direction": "output",
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "sck"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "mosi"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "cs"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "TypeRole": {
+                    "role_name": {
+                      "Identifier": {
+                        "content": "slave"
+                      }
+                    },
+                    "ports": [
+                      {
+                        "TypeInvertPort": {
+                          "target_role": {
+                            "Identifier": {
+                              "content": "master"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "TypeImplDecl": {
+                    "role_name": {
+                      "Identifier": {
+                        "content": "master"
+                      }
+                    },
+                    "ports": {
+                      "PortList": {
+                        "items": [
+                          {
+                            "AnsiInputDecl": {
+                              "direction": "input",
+                              "items": {
+                                "DeclaratorList": {
+                                  "items": [
+                                    {
+                                      "Declarator": {
+                                        "name": {
+                                          "Identifier": {
+                                            "content": "clk"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "AnsiInputDecl": {
+                              "direction": "input",
+                              "items": {
+                                "DeclaratorList": {
+                                  "items": [
+                                    {
+                                      "Declarator": {
+                                        "name": {
+                                          "Identifier": {
+                                            "content": "rst_n"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "AnsiInputDecl": {
+                              "direction": "input",
+                              "packed_range": {
+                                "Range": {
+                                  "msb": {
+                                    "BinaryOp": {
+                                      "op": "-",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "DATA_WIDTH"
+                                        }
+                                      },
+                                      "right": {
+                                        "Number": {
+                                          "value": "1"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "lsb": {
+                                    "Number": {
+                                      "value": "0"
+                                    }
+                                  }
+                                }
+                              },
+                              "items": {
+                                "DeclaratorList": {
+                                  "items": [
+                                    {
+                                      "Declarator": {
+                                        "name": {
+                                          "Identifier": {
+                                            "content": "data_in"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "AnsiInputDecl": {
+                              "direction": "input",
+                              "items": {
+                                "DeclaratorList": {
+                                  "items": [
+                                    {
+                                      "Declarator": {
+                                        "name": {
+                                          "Identifier": {
+                                            "content": "data_in_en"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "AnsiOutputDecl": {
+                              "direction": "output",
+                              "port_type": "reg",
+                              "packed_range": {
+                                "Range": {
+                                  "msb": {
+                                    "BinaryOp": {
+                                      "op": "-",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "DATA_WIDTH"
+                                        }
+                                      },
+                                      "right": {
+                                        "Number": {
+                                          "value": "1"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "lsb": {
+                                    "Number": {
+                                      "value": "0"
+                                    }
+                                  }
+                                }
+                              },
+                              "items": {
+                                "DeclaratorList": {
+                                  "items": [
+                                    {
+                                      "Declarator": {
+                                        "name": {
+                                          "Identifier": {
+                                            "content": "data_out"
+                                          }
+                                        },
+                                        "init": {
+                                          "ReplicateExpr": {
+                                            "count": {
+                                              "Identifier": {
+                                                "content": "DATA_WIDTH"
+                                              }
+                                            },
+                                            "value": {
+                                              "Number": {
+                                                "value": "1'b0"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "AnsiOutputDecl": {
+                              "direction": "output",
+                              "port_type": "reg",
+                              "items": {
+                                "DeclaratorList": {
+                                  "items": [
+                                    {
+                                      "Declarator": {
+                                        "name": {
+                                          "Identifier": {
+                                            "content": "data_out_en"
+                                          }
+                                        },
+                                        "init": {
+                                          "Number": {
+                                            "value": "1'b0"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "body": [
+                      {
+                        "LocalParamDecl": {
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "IDLE"
+                                      }
+                                    },
+                                    "init": {
+                                      "Number": {
+                                        "value": "2'b00"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "LocalParamDecl": {
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "TRANS"
+                                      }
+                                    },
+                                    "init": {
+                                      "Number": {
+                                        "value": "2'b01"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "LocalParamDecl": {
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "DONE"
+                                      }
+                                    },
+                                    "init": {
+                                      "Number": {
+                                        "value": "2'b10"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "RegDecl": {
+                          "reg_type": "reg",
+                          "packed_range": {
+                            "Range": {
+                              "msb": {
+                                "Number": {
+                                  "value": "1"
+                                }
+                              },
+                              "lsb": {
+                                "Number": {
+                                  "value": "0"
+                                }
+                              }
+                            }
+                          },
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "state"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "next"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "RegDecl": {
+                          "reg_type": "reg",
+                          "packed_range": {
+                            "Range": {
+                              "msb": {
+                                "Number": {
+                                  "value": "3"
+                                }
+                              },
+                              "lsb": {
+                                "Number": {
+                                  "value": "0"
+                                }
+                              }
+                            }
+                          },
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "bit_cnt"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "RegDecl": {
+                          "reg_type": "reg",
+                          "packed_range": {
+                            "Range": {
+                              "msb": {
+                                "BinaryOp": {
+                                  "op": "-",
+                                  "left": {
+                                    "Identifier": {
+                                      "content": "DATA_WIDTH"
+                                    }
+                                  },
+                                  "right": {
+                                    "Number": {
+                                      "value": "1"
+                                    }
+                                  }
+                                }
+                              },
+                              "lsb": {
+                                "Number": {
+                                  "value": "0"
+                                }
+                              }
+                            }
+                          },
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "sreg"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "WireDecl": {
+                          "wire_type": "wire",
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "cpol"
+                                      }
+                                    },
+                                    "init": {
+                                      "SelectExpr": {
+                                        "base": {
+                                          "Identifier": {
+                                            "content": "MODE"
+                                          }
+                                        },
+                                        "first_suffix": {
+                                          "SelectSuffix": {
+                                            "index": {
+                                              "Number": {
+                                                "value": "1"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "WireDecl": {
+                          "wire_type": "wire",
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "cpha"
+                                      }
+                                    },
+                                    "init": {
+                                      "SelectExpr": {
+                                        "base": {
+                                          "Identifier": {
+                                            "content": "MODE"
+                                          }
+                                        },
+                                        "first_suffix": {
+                                          "SelectSuffix": {
+                                            "index": {
+                                              "Number": {
+                                                "value": "0"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AlwaysStmt": {
+                          "sensitivity": {
+                            "SensitivityList": {
+                              "items": [
+                                {
+                                  "EdgeSense": {
+                                    "edge": "posedge",
+                                    "signal": {
+                                      "Identifier": {
+                                        "content": "clk"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "EdgeSense": {
+                                    "edge": "negedge",
+                                    "signal": {
+                                      "Identifier": {
+                                        "content": "rst_n"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "body": {
+                            "BeginEnd": {
+                              "sub_node": [
+                                {
+                                  "IfBlock": {
+                                    "condition": {
+                                      "UnaryOp": {
+                                        "op": "!",
+                                        "operand": {
+                                          "Identifier": {
+                                            "content": "rst_n"
+                                          }
+                                        },
+                                        "position": "prefix"
+                                      }
+                                    },
+                                    "then_stmt": {
+                                      "BeginEnd": {
+                                        "sub_node": [
+                                          {
+                                            "NonBlockingAssign": {
+                                              "target": {
+                                                "Identifier": {
+                                                  "content": "state"
+                                                }
+                                              },
+                                              "value": {
+                                                "Identifier": {
+                                                  "content": "IDLE"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "NonBlockingAssign": {
+                                              "target": {
+                                                "Identifier": {
+                                                  "content": "bit_cnt"
+                                                }
+                                              },
+                                              "value": {
+                                                "Number": {
+                                                  "value": "0"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "NonBlockingAssign": {
+                                              "target": {
+                                                "Identifier": {
+                                                  "content": "sreg"
+                                                }
+                                              },
+                                              "value": {
+                                                "Number": {
+                                                  "value": "0"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "else_chain": {
+                                      "ElseBlockBranch": {
+                                        "body": {
+                                          "BeginEnd": {
+                                            "sub_node": [
+                                              {
+                                                "NonBlockingAssign": {
+                                                  "target": {
+                                                    "Identifier": {
+                                                      "content": "state"
+                                                    }
+                                                  },
+                                                  "value": {
+                                                    "Identifier": {
+                                                      "content": "next"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "Comment": {
+                                                  "value": "// SCK 分频：在 TRANS 状态每个 clk 周期翻转一次"
+                                                }
+                                              },
+                                              {
+                                                "IfBlock": {
+                                                  "condition": {
+                                                    "BinaryOp": {
+                                                      "op": "&&",
+                                                      "left": {
+                                                        "BinaryOp": {
+                                                          "op": "==",
+                                                          "left": {
+                                                            "Identifier": {
+                                                              "content": "state"
+                                                            }
+                                                          },
+                                                          "right": {
+                                                            "Identifier": {
+                                                              "content": "IDLE"
+                                                            }
+                                                          }
+                                                        }
+                                                      },
+                                                      "right": {
+                                                        "Identifier": {
+                                                          "content": "data_in_en"
+                                                        }
+                                                      }
+                                                    }
+                                                  },
+                                                  "then_stmt": {
+                                                    "BeginEnd": {
+                                                      "sub_node": [
+                                                        {
+                                                          "NonBlockingAssign": {
+                                                            "target": {
+                                                              "Identifier": {
+                                                                "content": "sreg"
+                                                              }
+                                                            },
+                                                            "value": {
+                                                              "Identifier": {
+                                                                "content": "data_in"
+                                                              }
+                                                            }
+                                                          }
+                                                        },
+                                                        {
+                                                          "NonBlockingAssign": {
+                                                            "target": {
+                                                              "Identifier": {
+                                                                "content": "bit_cnt"
+                                                              }
+                                                            },
+                                                            "value": {
+                                                              "BinaryOp": {
+                                                                "op": "-",
+                                                                "left": {
+                                                                  "Identifier": {
+                                                                    "content": "DATA_WIDTH"
+                                                                  }
+                                                                },
+                                                                "right": {
+                                                                  "Number": {
+                                                                    "value": "1"
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  "else_chain": {
+                                                    "ElseIfBlock": {
+                                                      "condition": {
+                                                        "BinaryOp": {
+                                                          "op": "&&",
+                                                          "left": {
+                                                            "BinaryOp": {
+                                                              "op": "==",
+                                                              "left": {
+                                                                "Identifier": {
+                                                                  "content": "state"
+                                                                }
+                                                              },
+                                                              "right": {
+                                                                "Identifier": {
+                                                                  "content": "TRANS"
+                                                                }
+                                                              }
+                                                            }
+                                                          },
+                                                          "right": {
+                                                            "Identifier": {
+                                                              "content": "sck_phase"
+                                                            }
+                                                          }
+                                                        }
+                                                      },
+                                                      "then_stmt": {
+                                                        "BeginEnd": {
+                                                          "sub_node": [
+                                                            {
+                                                              "NonBlockingAssign": {
+                                                                "target": {
+                                                                  "Identifier": {
+                                                                    "content": "sreg"
+                                                                  }
+                                                                },
+                                                                "value": {
+                                                                  "ConcatExpr": {
+                                                                    "sub_node": [
+                                                                      {
+                                                                        "SelectExpr": {
+                                                                          "base": {
+                                                                            "Identifier": {
+                                                                              "content": "sreg"
+                                                                            }
+                                                                          },
+                                                                          "first_suffix": {
+                                                                            "SelectSuffix": {
+                                                                              "index": {
+                                                                                "BinaryOp": {
+                                                                                  "op": "-",
+                                                                                  "left": {
+                                                                                    "Identifier": {
+                                                                                      "content": "DATA_WIDTH"
+                                                                                    }
+                                                                                  },
+                                                                                  "right": {
+                                                                                    "Number": {
+                                                                                      "value": "2"
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              },
+                                                                              "range_suffix": [
+                                                                                ":",
+                                                                                {
+                                                                                  "Number": {
+                                                                                    "value": "0"
+                                                                                  }
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      },
+                                                                      {
+                                                                        "Identifier": {
+                                                                          "content": "miso"
+                                                                        }
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                }
+                                                              }
+                                                            },
+                                                            {
+                                                              "IfStmt": {
+                                                                "condition": {
+                                                                  "BinaryOp": {
+                                                                    "op": "!=",
+                                                                    "left": {
+                                                                      "Identifier": {
+                                                                        "content": "bit_cnt"
+                                                                      }
+                                                                    },
+                                                                    "right": {
+                                                                      "Number": {
+                                                                        "value": "0"
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                },
+                                                                "then_stmt": {
+                                                                  "NonBlockingAssign": {
+                                                                    "target": {
+                                                                      "Identifier": {
+                                                                        "content": "bit_cnt"
+                                                                      }
+                                                                    },
+                                                                    "value": {
+                                                                      "BinaryOp": {
+                                                                        "op": "-",
+                                                                        "left": {
+                                                                          "Identifier": {
+                                                                            "content": "bit_cnt"
+                                                                          }
+                                                                        },
+                                                                        "right": {
+                                                                          "Number": {
+                                                                            "value": "1"
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          ]
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "RegDecl": {
+                          "reg_type": "reg",
+                          "items": {
+                            "DeclaratorList": {
+                              "items": [
+                                {
+                                  "Declarator": {
+                                    "name": {
+                                      "Identifier": {
+                                        "content": "sck_phase"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AlwaysStmt": {
+                          "sensitivity": {
+                            "SensitivityList": {
+                              "items": [
+                                {
+                                  "EdgeSense": {
+                                    "edge": "posedge",
+                                    "signal": {
+                                      "Identifier": {
+                                        "content": "clk"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "EdgeSense": {
+                                    "edge": "negedge",
+                                    "signal": {
+                                      "Identifier": {
+                                        "content": "rst_n"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "body": {
+                            "BeginEnd": {
+                              "sub_node": [
+                                {
+                                  "IfBlock": {
+                                    "condition": {
+                                      "UnaryOp": {
+                                        "op": "!",
+                                        "operand": {
+                                          "Identifier": {
+                                            "content": "rst_n"
+                                          }
+                                        },
+                                        "position": "prefix"
+                                      }
+                                    },
+                                    "then_stmt": {
+                                      "BeginEnd": {
+                                        "sub_node": [
+                                          {
+                                            "NonBlockingAssign": {
+                                              "target": {
+                                                "Identifier": {
+                                                  "content": "sck_phase"
+                                                }
+                                              },
+                                              "value": {
+                                                "Number": {
+                                                  "value": "1'b0"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "else_chain": {
+                                      "ElseIfBlock": {
+                                        "condition": {
+                                          "BinaryOp": {
+                                            "op": "==",
+                                            "left": {
+                                              "Identifier": {
+                                                "content": "state"
+                                              }
+                                            },
+                                            "right": {
+                                              "Identifier": {
+                                                "content": "TRANS"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "then_stmt": {
+                                          "BeginEnd": {
+                                            "sub_node": [
+                                              {
+                                                "NonBlockingAssign": {
+                                                  "target": {
+                                                    "Identifier": {
+                                                      "content": "sck_phase"
+                                                    }
+                                                  },
+                                                  "value": {
+                                                    "UnaryOp": {
+                                                      "op": "~",
+                                                      "operand": {
+                                                        "Identifier": {
+                                                          "content": "sck_phase"
+                                                        }
+                                                      },
+                                                      "position": "prefix"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "else_chain": {
+                                          "ElseBlockBranch": {
+                                            "body": {
+                                              "BeginEnd": {
+                                                "sub_node": [
+                                                  {
+                                                    "NonBlockingAssign": {
+                                                      "target": {
+                                                        "Identifier": {
+                                                          "content": "sck_phase"
+                                                        }
+                                                      },
+                                                      "value": {
+                                                        "Number": {
+                                                          "value": "1'b0"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AlwaysStmt": {
+                          "sensitivity": {
+                            "SensitivityList": {
+                              "items": [
+                                "*"
+                              ]
+                            }
+                          },
+                          "body": {
+                            "BeginEnd": {
+                              "sub_node": [
+                                {
+                                  "BlockingAssign": {
+                                    "target": {
+                                      "Identifier": {
+                                        "content": "next"
+                                      }
+                                    },
+                                    "value": {
+                                      "Identifier": {
+                                        "content": "state"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "CaseStmt": {
+                                    "case_type": {
+                                      "CaseKeyword": {
+                                        "value": "case"
+                                      }
+                                    },
+                                    "expr": {
+                                      "Identifier": {
+                                        "content": "state"
+                                      }
+                                    },
+                                    "items": {
+                                      "CaseItemList": {
+                                        "items": [
+                                          {
+                                            "CaseItem": {
+                                              "values": [
+                                                {
+                                                  "Identifier": {
+                                                    "content": "IDLE"
+                                                  }
+                                                }
+                                              ],
+                                              "stmt": {
+                                                "IfStmt": {
+                                                  "condition": {
+                                                    "Identifier": {
+                                                      "content": "data_in_en"
+                                                    }
+                                                  },
+                                                  "then_stmt": {
+                                                    "BlockingAssign": {
+                                                      "target": {
+                                                        "Identifier": {
+                                                          "content": "next"
+                                                        }
+                                                      },
+                                                      "value": {
+                                                        "Identifier": {
+                                                          "content": "TRANS"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "CaseItem": {
+                                              "values": [
+                                                {
+                                                  "Identifier": {
+                                                    "content": "TRANS"
+                                                  }
+                                                }
+                                              ],
+                                              "stmt": {
+                                                "IfStmt": {
+                                                  "condition": {
+                                                    "BinaryOp": {
+                                                      "op": "&&",
+                                                      "left": {
+                                                        "BinaryOp": {
+                                                          "op": "==",
+                                                          "left": {
+                                                            "Identifier": {
+                                                              "content": "bit_cnt"
+                                                            }
+                                                          },
+                                                          "right": {
+                                                            "Number": {
+                                                              "value": "0"
+                                                            }
+                                                          }
+                                                        }
+                                                      },
+                                                      "right": {
+                                                        "Identifier": {
+                                                          "content": "sck_phase"
+                                                        }
+                                                      }
+                                                    }
+                                                  },
+                                                  "then_stmt": {
+                                                    "BlockingAssign": {
+                                                      "target": {
+                                                        "Identifier": {
+                                                          "content": "next"
+                                                        }
+                                                      },
+                                                      "value": {
+                                                        "Identifier": {
+                                                          "content": "DONE"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "CaseItem": {
+                                              "values": [
+                                                {
+                                                  "Identifier": {
+                                                    "content": "DONE"
+                                                  }
+                                                }
+                                              ],
+                                              "stmt": {
+                                                "BlockingAssign": {
+                                                  "target": {
+                                                    "Identifier": {
+                                                      "content": "next"
+                                                    }
+                                                  },
+                                                  "value": {
+                                                    "Identifier": {
+                                                      "content": "IDLE"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AssignStmt": {
+                          "target": {
+                            "Identifier": {
+                              "content": "cs"
+                            }
+                          },
+                          "value": {
+                            "ParenthesizedExpr": {
+                              "expr": {
+                                "BinaryOp": {
+                                  "op": "||",
+                                  "left": {
+                                    "BinaryOp": {
+                                      "op": "==",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "state"
+                                        }
+                                      },
+                                      "right": {
+                                        "Identifier": {
+                                          "content": "IDLE"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "right": {
+                                    "BinaryOp": {
+                                      "op": "==",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "state"
+                                        }
+                                      },
+                                      "right": {
+                                        "Identifier": {
+                                          "content": "DONE"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AssignStmt": {
+                          "target": {
+                            "Identifier": {
+                              "content": "sck"
+                            }
+                          },
+                          "value": {
+                            "TernaryOp": {
+                              "op1": "?",
+                              "op2": ":",
+                              "cond": {
+                                "ParenthesizedExpr": {
+                                  "expr": {
+                                    "BinaryOp": {
+                                      "op": "==",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "state"
+                                        }
+                                      },
+                                      "right": {
+                                        "Identifier": {
+                                          "content": "TRANS"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "true_val": {
+                                "ParenthesizedExpr": {
+                                  "expr": {
+                                    "TernaryOp": {
+                                      "op1": "?",
+                                      "op2": ":",
+                                      "cond": {
+                                        "Identifier": {
+                                          "content": "sck_phase"
+                                        }
+                                      },
+                                      "true_val": {
+                                        "Identifier": {
+                                          "content": "cpol"
+                                        }
+                                      },
+                                      "false_val": {
+                                        "UnaryOp": {
+                                          "op": "~",
+                                          "operand": {
+                                            "Identifier": {
+                                              "content": "cpol"
+                                            }
+                                          },
+                                          "position": "prefix"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "false_val": {
+                                "Identifier": {
+                                  "content": "cpol"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AssignStmt": {
+                          "target": {
+                            "Identifier": {
+                              "content": "mosi"
+                            }
+                          },
+                          "value": {
+                            "TernaryOp": {
+                              "op1": "?",
+                              "op2": ":",
+                              "cond": {
+                                "ParenthesizedExpr": {
+                                  "expr": {
+                                    "BinaryOp": {
+                                      "op": "==",
+                                      "left": {
+                                        "Identifier": {
+                                          "content": "state"
+                                        }
+                                      },
+                                      "right": {
+                                        "Identifier": {
+                                          "content": "TRANS"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "true_val": {
+                                "SelectExpr": {
+                                  "base": {
+                                    "Identifier": {
+                                      "content": "sreg"
+                                    }
+                                  },
+                                  "first_suffix": {
+                                    "SelectSuffix": {
+                                      "index": {
+                                        "BinaryOp": {
+                                          "op": "-",
+                                          "left": {
+                                            "Identifier": {
+                                              "content": "DATA_WIDTH"
+                                            }
+                                          },
+                                          "right": {
+                                            "Number": {
+                                              "value": "1"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "false_val": {
+                                "Number": {
+                                  "value": "1'b0"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "AlwaysStmt": {
+                          "sensitivity": {
+                            "SensitivityList": {
+                              "items": [
+                                {
+                                  "EdgeSense": {
+                                    "edge": "posedge",
+                                    "signal": {
+                                      "Identifier": {
+                                        "content": "clk"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "EdgeSense": {
+                                    "edge": "negedge",
+                                    "signal": {
+                                      "Identifier": {
+                                        "content": "rst_n"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "body": {
+                            "BeginEnd": {
+                              "sub_node": [
+                                {
+                                  "IfBlock": {
+                                    "condition": {
+                                      "UnaryOp": {
+                                        "op": "!",
+                                        "operand": {
+                                          "Identifier": {
+                                            "content": "rst_n"
+                                          }
+                                        },
+                                        "position": "prefix"
+                                      }
+                                    },
+                                    "then_stmt": {
+                                      "BeginEnd": {
+                                        "sub_node": [
+                                          {
+                                            "NonBlockingAssign": {
+                                              "target": {
+                                                "Identifier": {
+                                                  "content": "data_out"
+                                                }
+                                              },
+                                              "value": {
+                                                "Number": {
+                                                  "value": "0"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "NonBlockingAssign": {
+                                              "target": {
+                                                "Identifier": {
+                                                  "content": "data_out_en"
+                                                }
+                                              },
+                                              "value": {
+                                                "Number": {
+                                                  "value": "1'b0"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "else_chain": {
+                                      "ElseIfBlock": {
+                                        "condition": {
+                                          "BinaryOp": {
+                                            "op": "==",
+                                            "left": {
+                                              "Identifier": {
+                                                "content": "state"
+                                              }
+                                            },
+                                            "right": {
+                                              "Identifier": {
+                                                "content": "DONE"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "then_stmt": {
+                                          "BeginEnd": {
+                                            "sub_node": [
+                                              {
+                                                "NonBlockingAssign": {
+                                                  "target": {
+                                                    "Identifier": {
+                                                      "content": "data_out"
+                                                    }
+                                                  },
+                                                  "value": {
+                                                    "Identifier": {
+                                                      "content": "sreg"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "NonBlockingAssign": {
+                                                  "target": {
+                                                    "Identifier": {
+                                                      "content": "data_out_en"
+                                                    }
+                                                  },
+                                                  "value": {
+                                                    "Number": {
+                                                      "value": "1'b1"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "else_chain": {
+                                          "ElseBlockBranch": {
+                                            "body": {
+                                              "BeginEnd": {
+                                                "sub_node": [
+                                                  {
+                                                    "NonBlockingAssign": {
+                                                      "target": {
+                                                        "Identifier": {
+                                                          "content": "data_out_en"
+                                                        }
+                                                      },
+                                                      "value": {
+                                                        "Number": {
+                                                          "value": "1'b0"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ModuleDecl": {
+          "module_name": {
+            "Identifier": {
+              "content": "spi_invoker"
+            }
+          },
+          "ports": {
+            "PortList": {
+              "items": [
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "clk"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiInputDecl": {
+                    "direction": "input",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "rstn"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "TypedPortDecl": {
+                    "type_spec": {
+                      "TypedTypeSpec": {
+                        "type_name": {
+                          "Identifier": {
+                            "content": "spi"
+                          }
+                        },
+                        "role_name": {
+                          "Identifier": {
+                            "content": "master"
+                          }
+                        }
+                      }
+                    },
+                    "instance_name": {
+                      "Declarator": {
+                        "name": {
+                          "Identifier": {
+                            "content": "spi_io"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "reg",
+                    "packed_range": {
+                      "Range": {
+                        "msb": {
+                          "Number": {
+                            "value": "7"
+                          }
+                        },
+                        "lsb": {
+                          "Number": {
+                            "value": "0"
+                          }
+                        }
+                      }
+                    },
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "spi_data"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "AnsiOutputDecl": {
+                    "direction": "output",
+                    "port_type": "reg",
+                    "items": {
+                      "DeclaratorList": {
+                        "items": [
+                          {
+                            "Declarator": {
+                              "name": {
+                                "Identifier": {
+                                  "content": "spi_data_en"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sub_node": [
+            {
+              "Comment": {
+                "value": "// 通过 impl 绑定 spi_master 包装模块"
+              }
+            },
+            {
+              "Comment": {
+                "value": "// spi_io 为 spi.slave 类型，=> 表示自动连线"
+              }
+            },
+            {
+              "ImplBindingWithInterface": {
+                "type_spec": {
+                  "TypedTypeSpec": {
+                    "type_name": {
+                      "Identifier": {
+                        "content": "spi"
+                      }
+                    },
+                    "role_name": {
+                      "Identifier": {
+                        "content": "master"
+                      }
+                    }
+                  }
+                },
+                "params": {
+                  "ParamOverride": {
+                    "params": {
+                      "ParamOverrideList": {
+                        "items": [
+                          {
+                            "NamedParamOverride": {
+                              "param_name": {
+                                "Identifier": {
+                                  "content": "MODE"
+                                }
+                              },
+                              "value": {
+                                "Number": {
+                                  "value": "0"
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "NamedParamOverride": {
+                              "param_name": {
+                                "Identifier": {
+                                  "content": "DATA_WIDTH"
+                                }
+                              },
+                              "value": {
+                                "Number": {
+                                  "value": "8"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "ports": {
+                  "NamedPortList": {
+                    "items": [
+                      {
+                        "NamedPortConnect": {
+                          "port_name": {
+                            "Identifier": {
+                              "content": "clk"
+                            }
+                          },
+                          "value": {
+                            "Identifier": {
+                              "content": "clk"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "NamedPortConnect": {
+                          "port_name": {
+                            "Identifier": {
+                              "content": "rst_n"
+                            }
+                          },
+                          "value": {
+                            "Identifier": {
+                              "content": "rstn"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "NamedPortConnect": {
+                          "port_name": {
+                            "Identifier": {
+                              "content": "data_in"
+                            }
+                          },
+                          "value": {
+                            "Identifier": {
+                              "content": "spi_data"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "NamedPortConnect": {
+                          "port_name": {
+                            "Identifier": {
+                              "content": "data_in_en"
+                            }
+                          },
+                          "value": {
+                            "Identifier": {
+                              "content": "spi_data_en"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "NamedPortConnect": {
+                          "port_name": {
+                            "Identifier": {
+                              "content": "data_out"
+                            }
+                          },
+                          "value": {
+                            "Identifier": {
+                              "content": "spi_data"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "NamedPortConnect": {
+                          "port_name": {
+                            "Identifier": {
+                              "content": "data_out_en"
+                            }
+                          },
+                          "value": {
+                            "Identifier": {
+                              "content": "spi_data_en"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "interface_ref": {
+                  "Identifier": {
+                    "content": "spi_io"
+                  }
+                }
+              }
+            },
+            {
+              "AlwaysStmt": {
+                "sensitivity": {
+                  "SensitivityList": {
+                    "items": [
+                      {
+                        "EdgeSense": {
+                          "edge": "posedge",
+                          "signal": {
+                            "Identifier": {
+                              "content": "clk"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "body": {
+                  "BeginEnd": {
+                    "sub_node": [
+                      {
+                        "IfBlock": {
+                          "condition": {
+                            "UnaryOp": {
+                              "op": "!",
+                              "operand": {
+                                "Identifier": {
+                                  "content": "rstn"
+                                }
+                              },
+                              "position": "prefix"
+                            }
+                          },
+                          "then_stmt": {
+                            "BeginEnd": {
+                              "sub_node": [
+                                {
+                                  "NonBlockingAssign": {
+                                    "target": {
+                                      "Identifier": {
+                                        "content": "spi_data"
+                                      }
+                                    },
+                                    "value": {
+                                      "Number": {
+                                        "value": "8'b0"
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "NonBlockingAssign": {
+                                    "target": {
+                                      "Identifier": {
+                                        "content": "spi_data_en"
+                                      }
+                                    },
+                                    "value": {
+                                      "Number": {
+                                        "value": "1'b0"
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "else_chain": {
+                            "ElseBlockBranch": {
+                              "body": {
+                                "BeginEnd": {
+                                  "sub_node": [
+                                    {
+                                      "NonBlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "spi_data"
+                                          }
+                                        },
+                                        "value": {
+                                          "BinaryOp": {
+                                            "op": "+",
+                                            "left": {
+                                              "Identifier": {
+                                                "content": "spi_data"
+                                              }
+                                            },
+                                            "right": {
+                                              "Number": {
+                                                "value": "1'b1"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "NonBlockingAssign": {
+                                        "target": {
+                                          "Identifier": {
+                                            "content": "spi_data_en"
+                                          }
+                                        },
+                                        "value": {
+                                          "Number": {
+                                            "value": "1'b1"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -75,7 +75,7 @@ def _cmd_format(args: argparse.Namespace) -> None:
         print(f"[fatal] File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    from verilog.run_pipeline import run_pipeline_on_source
+    from tests.e2e.run_pipeline import run_pipeline_on_source
 
     rules_dir, ext_dirs = _resolve_grammar_dirs()
 
@@ -142,7 +142,7 @@ def _cmd_lint(args: argparse.Namespace) -> None:
 
 def _cmd_pipeline(args: argparse.Namespace) -> None:
     """pyv pipeline — run a single test case (dev use)."""
-    from verilog.run_pipeline import main as pipeline_main
+    from tests.e2e.run_pipeline import main as pipeline_main
 
     # 注入 stages 配置到环境，让 run_pipeline 可读取
     os.environ.setdefault("_PYV_STAGES", ",".join(_load_pipeline_stages()))

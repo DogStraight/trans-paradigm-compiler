@@ -1,0 +1,47 @@
+0,1:keyword.module module
+6,1:id sim_initial
+16,1:bracket.l_parentheses (
+17,1:bracket.r_parentheses )
+18,1:symbol.base.semicolon ;
+19,1:newline 
+
+0,2:newline 
+
+4,3:keyword.reg reg
+7,3:bracket.l_square_bracket [
+8,3:literal.number 7
+9,3:symbol.base.colon :
+10,3:literal.number 0
+11,3:bracket.r_square_bracket ]
+13,3:id cnt
+15,3:symbol.base.semicolon ;
+16,3:newline 
+
+0,4:newline 
+
+4,5:keyword.initial initial
+11,5:keyword.begin begin
+15,5:newline 
+
+8,6:id cnt
+11,6:symbol.base.equal =
+13,6:literal.number 8'd0
+17,6:symbol.base.semicolon ;
+18,6:newline 
+
+8,7:id cnt
+11,7:symbol.base.equal =
+13,7:id cnt
+16,7:symbol.base.add +
+18,7:literal.number 1'b1
+22,7:symbol.base.semicolon ;
+23,7:newline 
+
+4,8:keyword.end end
+6,8:newline 
+
+0,9:newline 
+
+0,10:keyword.endmodule endmodule
+8,10:newline 
+

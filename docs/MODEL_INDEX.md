@@ -16,7 +16,7 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 前置 token 级 linter（反解析器） | `decisions/0001-pre-parse-linter.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/test_linter_discovery.py`<br>`tests/test_linter_matcher.py`<br>`verilog/eval_lint_accuracy.py` |
+| 前置 token 级 linter（反解析器） | `decisions/0001-pre-parse-linter.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/test_linter_discovery.py`<br>`tests/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
 | is_statement 显式声明 | `decisions/0002-is-statement-explicit.md` | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/test_linter_lookahead.py` |
 | 配置加载 fail-fast | `decisions/0003-config-load-fail-fast.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::get_token_define_merged` | `tests/test_config_loading.py` |
 | Linter 两阶段架构（发现+扁平检查） | `linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/test_linter_checker.py` |

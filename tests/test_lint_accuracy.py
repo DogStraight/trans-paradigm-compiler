@@ -1,6 +1,6 @@
 """linter 错误发现准确度回归门禁。
 
-复用 verilog/eval_lint_accuracy.evaluate() 的单一判定逻辑，把准确度
+复用 tests/e2e/eval_lint_accuracy.evaluate() 的单一判定逻辑，把准确度
 对照实验固化为 pytest 断言——错误样本必须全检出且类别命中期望，合法
 样本必须零误报。任何未来改动把 recall/类别准确率/精确率拉低都会在此
 失败，防止"测试不敏感、回归悄悄发生"（2026-08-03 审计教训）。
@@ -20,7 +20,7 @@ if _ROOT not in sys.path:
 
 from core.define import DEFAULT_RULES_DIR
 from linter.scanner import LinterScanner
-from verilog.eval_lint_accuracy import evaluate
+from tests.e2e.eval_lint_accuracy import evaluate
 
 # known_miss（已知漏检登记）的硬上限：防止把新漏检悄悄标成 known_miss
 # 来维持门禁绿色（虚假绿风险）。超过上限说明测试在靠豁免掩盖漏检。
@@ -92,7 +92,7 @@ def test_valid_samples_all_clear(accuracy) -> None:
 
 def test_normal_samples_no_diagnostic() -> None:
     """normal/ref 全部合法样本零诊断（零误报回归保护，含 28 个真实样例）。"""
-    normal_dir = os.path.join(_ROOT, "verilog", "tests", "normal", "ref")
+    normal_dir = os.path.join(_ROOT, "tests", "e2e", "samples", "normal", "ref")
     files = sorted(f for f in os.listdir(normal_dir) if f.endswith(".v"))
     assert files, "normal/ref 样本为空"
     scanner = LinterScanner(DEFAULT_RULES_DIR)

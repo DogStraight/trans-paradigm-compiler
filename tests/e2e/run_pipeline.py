@@ -55,7 +55,7 @@ from preprocessor import (
 )
 
 # Add project root to sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
@@ -70,7 +70,7 @@ sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
     """Find test file in tests/ directory. Returns (full_path, group, stem)."""
     src_dir = os.path.dirname(os.path.abspath(__file__))
-    tests_dir = os.path.join(src_dir, "tests")
+    tests_dir = os.path.join(src_dir, "samples")
     groups = [hint] if hint else ["normal", "errors"]
     stem = test_name.replace("ref_", "").replace(".v", "")
     for group in groups:
@@ -128,14 +128,14 @@ def run_pipeline_on_source(
 
     # Determine output directory
     if out_dir is None:
-        if input_path and "tests" in input_path:
+        if input_path and "samples" in input_path:
             parts = input_path.replace("\\", "/").split("/")
             group = (
                 "normal"
                 if "normal" in parts
                 else ("errors" if "errors" in parts else "normal")
             )
-            tests_dir = os.path.join(os.path.dirname(__file__), "tests")
+            tests_dir = os.path.join(os.path.dirname(__file__), "samples")
             out_dir = os.path.join(tests_dir, group)
         else:
             out_dir = None  # 无合法输出目录，跳过文件写入

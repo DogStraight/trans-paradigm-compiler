@@ -30,7 +30,7 @@ from core.define import DEFAULT_EXT_DIRS
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
 # Add project root to path for importing pipeline
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
@@ -39,7 +39,7 @@ def discover_tests(
     base_dir: str, group_filter: str | None = None, name_filter: str | None = None
 ) -> list[tuple[str, str, str]]:
     """Discover test files. Returns list of (name, full_path, group)."""
-    tests_dir = os.path.join(base_dir, "tests")
+    tests_dir = os.path.join(base_dir, "samples")
     cases = []
     groups = [group_filter] if group_filter else ["normal", "errors", "warning", "transform"]
     for group in groups:
@@ -70,7 +70,7 @@ def _strip_all(text: str) -> str:
 
 def _fidelity_cache_path(base_dir: str, group: str) -> str:
     """Get per-group fidelity cache path."""
-    return os.path.join(base_dir, "tests", group, ".fidelity_cache.json")
+    return os.path.join(base_dir, "samples", group, ".fidelity_cache.json")
 
 
 def _load_fidelity_cache(base_dir: str, group: str) -> dict:
@@ -113,7 +113,7 @@ def run_all(
 
     # ── 清空所有 gen/ 目录 ─────────────────────────────
     for group in set(g for _, _, g in cases):
-        gen_dir = os.path.join(base_dir, "tests", group, "gen")
+        gen_dir = os.path.join(base_dir, "samples", group, "gen")
         if os.path.isdir(gen_dir):
             shutil.rmtree(gen_dir)
             print(f"  [setup] cleared {os.path.relpath(gen_dir, base_dir)}/")
@@ -130,7 +130,7 @@ def run_all(
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
 
-        out_dir = os.path.join(base_dir, "tests", group)
+        out_dir = os.path.join(base_dir, "samples", group)
 
         # 日志抑制
         old_stdout = sys.stdout
