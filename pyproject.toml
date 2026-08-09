@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyv-compiler"
+version = "0.1.0"
+description = "Configuration-driven language pipeline — write language rules in TOML; configurable, forkable, model-friendly"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "biominescence", email = "oho15799293498@outlook.com" }]
+keywords = [
+    "compiler",
+    "parser",
+    "formatter",
+    "linter",
+    "verilog",
+    "toml-grammar",
+    "dsl",
+    "language-workbench",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: General",
+]
+
+# 零运行时依赖（测试用 pytest）
+dependencies = []
+
+[project.scripts]
+pyv = "main:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "pytest-timeout>=2.0",
+]
+
+[tool.setuptools.packages.find]
+include = [
+    "core*",
+    "lexer*",
+    "parser*",
+    "linter*",
+    "analyzer*",
+    "transform*",
+    "renderer*",
+    "preprocessor*",
+]
+
+# 运行时数据：语法 TOML + 项目配置。
+# 注1：语法（grammar/verilog/*.toml）是独立外置资产，可单独发布 / 单独 fork 使用；
+#      此处随引擎捆绑只是便捷形态之一，不是语法的唯一发布方式。
+# 注2：editable/dev 模式从源码树定位（main.py / config 查找逻辑以源码路径为准）；
+#      此处供 sdist/wheel 携带数据，供未来发行使用。
+[tool.setuptools.data-files]
+"grammar" = ["grammar/pyv.toml", "grammar/verilog/**/*.toml", "grammar/verilog/plugins/**/*.toml"]
+"config" = ["config/pyv_config.json"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+timeout = 60
+timeout_method = "thread"
+
+[tool.coverage.run]
+source = [
+    "core",
+    "lexer",
+    "parser",
+    "linter",
+    "analyzer",
+    "transform",
+    "renderer",
+    "preprocessor",
+]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+sort = "Cover"
+
+[tool.coverage.html]
+directory = "coverage_html"

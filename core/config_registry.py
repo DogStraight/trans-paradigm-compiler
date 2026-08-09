@@ -9,6 +9,8 @@
     cats = config.get("parser.token_categories")
 
 配置声明自动从 grammar 包的 pyv.toml 中读取 [xxx] 注册（grammar 段落除外）。
+
+Doc: docs/decisions/0003-config-load-fail-fast.md
 """
 
 import os
