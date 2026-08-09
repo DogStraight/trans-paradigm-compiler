@@ -11,7 +11,7 @@ from core.config_registry import declare_cfg
 from .primitives.registry import get_primitive
 from .primitives.include import resolve_source_dir
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config
 #   #sym:config = (root)  ← 无 section，取整个文件
 #   格式: dict

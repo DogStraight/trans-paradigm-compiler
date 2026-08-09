@@ -1,21 +1,14 @@
-# ADR-0004: 品牌命名 TransParadigm（CLI: tpc）
+# ADR-0004: 品牌 TransParadigm（CLI: tpc）
 
 - Status: accepted
 - Date: 2026-08-10
 
-## 背景
-
-原品牌 `pyv`（Py + Verilog）存在三层问题：
-1. **不表达核心**：项目核心是"范式 → 范式"的配置驱动语言映射（transpile/elaborate），而非"Python + Verilog"。
-2. **语义家族淹没**：`pyv-` 前缀在 Python 生态泛滥（pyvista/pyvisa/pyvmomi/pyvis…），且同域有先行者 Pyverilog（Python-Verilog 工具，797★），`pyv` 零辨识度。
-3. **注册 vs 品牌分层不清**：`pyv` / `pyv-compiler` 在 PyPI 均 404 可注册——问题在品牌/语义层，不在注册层。
-
 ## 决策
 
 - **品牌**：TransParadigm（包名 `transparadigm-compiler`）
-- **CLI**：`tpc`（console script `tpc = main:main`）
+- **CLI**：`tpc`（console script `tpc = main:main`）——Trans-Paradigm-Compiler 首字母；全名 13 字母太长，CLI 取短名，可念且占位干净（PyPI 404、GitHub 无精确同名）。
 - **语义**：trans（转换，拉丁词根，覆盖"范式→范式"不绑定终点）+ paradigm（范式）——表达"把任意范式映射/转换为另一种范式"。
-- **保留不动**：配置文件 `pyv.toml` / `pyv_config.json` 文件名及加载字符串、环境变量 `PYV_CONFIG` / `_PYV_STAGES`、测试生成物快照、`references.md` 历史引用。
+- **早期名称占位**：`pyv` 为本项目早期品牌名（Py + Verilog），已全部迁移——`pyv.toml`→`tpc.toml`、`pyv_config.json`→`tpc_config.json`、`PYV_CONFIG`→`TPC_CONFIG`、`_PYV_STAGES` 移除（无读取者）。
 
 ## 权衡 / 命名方法论（可复用）
 

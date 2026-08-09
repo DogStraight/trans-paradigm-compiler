@@ -8,7 +8,7 @@
     # 2. 使用（key 为 "lexer.xxx" / "pratt.xxx" / "renderer.xxx" 等）
     cats = config.get("parser.token_categories")
 
-配置声明自动从 grammar 包的 pyv.toml 中读取 [xxx] 注册（grammar 段落除外）。
+配置声明自动从 grammar 包的 tpc.toml 中读取 [xxx] 注册（grammar 段落除外）。
 
 Doc: docs/decisions/0003-config-load-fail-fast.md
 """
@@ -19,7 +19,7 @@ import re
 import tomllib
 from typing import Any, TypeVar
 
-_CONFIG_CANDIDATES = ["config/pyv_config.json"]
+_CONFIG_CANDIDATES = ["config/tpc_config.json"]
 
 
 def _glob_to_regex(pattern: str) -> re.Pattern:
@@ -73,13 +73,13 @@ def _glob_match(patterns: list[str], base_dir: str) -> list[str]:
 
 
 # ──────────────────────────────────────────────
-# 配置声明加载（从 grammar 包 pyv.toml 读取 [config.*]）
+# 配置声明加载（从 grammar 包 tpc.toml 读取 [config.*]）
 # ──────────────────────────────────────────────
 
 
 def _find_user_config() -> str:
     """Find project config file (duplicated in define.py to avoid circular imports)."""
-    env_path = os.environ.get("PYV_CONFIG")
+    env_path = os.environ.get("TPC_CONFIG")
     if env_path:
         path = os.path.abspath(env_path)
         if os.path.isfile(path):
@@ -98,8 +98,8 @@ def _find_user_config() -> str:
     return ""
 
 
-def _find_grammar_pyv_toml() -> str:
-    """Locate the grammar package's pyv.toml."""
+def _find_grammar_tpc_toml() -> str:
+    """Locate the grammar package's tpc.toml."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     user_config = _find_user_config()
     grammar_dir = ""
@@ -111,10 +111,10 @@ def _find_grammar_pyv_toml() -> str:
             grammar_dir = g if isinstance(g, str) else g.get("rules_dir", "")
         except (json.JSONDecodeError, KeyError):
             pass
-    meta_path = os.path.join(root, grammar_dir, "pyv.toml")
+    meta_path = os.path.join(root, grammar_dir, "tpc.toml")
     if not os.path.isfile(meta_path):
         raise FileNotFoundError(
-            f"[config] Grammar package pyv.toml not found: {meta_path}"
+            f"[config] Grammar package tpc.toml not found: {meta_path}"
         )
     return meta_path
 
@@ -132,11 +132,11 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
 
 
 def _load_meta_declarations() -> list[tuple]:
-    """Read [config.*] declarations from grammar package pyv.toml files."""
+    """Read [config.*] declarations from grammar package tpc.toml files."""
     declarations = []
 
     # 1. Core grammar package — 所有 [xxx] 段落（除了 grammar）都是配置声明
-    core_path = _find_grammar_pyv_toml()
+    core_path = _find_grammar_tpc_toml()
     with open(core_path, encoding="utf-8") as f:
         meta = tomllib.loads(f.read())
     for ns, table in meta.items():
@@ -160,7 +160,7 @@ def _load_meta_declarations() -> list[tuple]:
                 # 非文件式配置，以 bare data 形式注册
                 declarations.append((config_key, "", None, "", False, "", spec))
 
-    # 2. Plugin packages — 从 [plugins] enabled 读取插件 pyv.toml
+    # 2. Plugin packages — 从 [plugins] enabled 读取插件 tpc.toml
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     plugins_cfg = meta.get("plugins", {})
     if isinstance(plugins_cfg, dict):
@@ -168,10 +168,10 @@ def _load_meta_declarations() -> list[tuple]:
         if isinstance(enabled, list):
             grammar_dir = os.path.dirname(core_path)
             for name in enabled:
-                plugin_pyv = os.path.join(grammar_dir, "plugins", name, "pyv.toml")
-                if not os.path.isfile(plugin_pyv):
+                plugin_tpc = os.path.join(grammar_dir, "plugins", name, "tpc.toml")
+                if not os.path.isfile(plugin_tpc):
                     continue
-                with open(plugin_pyv, encoding="utf-8") as f:
+                with open(plugin_tpc, encoding="utf-8") as f:
                     plugin_meta = tomllib.loads(f.read())
                 for ns, table in plugin_meta.items():
                     if ns == "grammar":
@@ -297,7 +297,7 @@ class ConfigRegistry:
         errors: list[str] = []
 
         for name, spec in cls._entries.items():
-            # bare data：非文件式配置，值已由 pyv.toml 直接提供
+            # bare data：非文件式配置，值已由 tpc.toml 直接提供
             bare = spec.get("bare_value")
             if bare is not None:
                 cls._loaded[name] = bare

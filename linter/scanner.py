@@ -109,13 +109,13 @@ class LinterScanner:
         _opener_ctx = {
             k: v for k, v in ConfigRegistry._loaded.get("linter.opener_context", [])
         }
-        # 语句入口选择器名必须由 pyv.toml [linter] 显式配置——代码不硬编码任何
+        # 语句入口选择器名必须由 tpc.toml [linter] 显式配置——代码不硬编码任何
         # 语法规则名（换一套配置即失效的默认值）。缺失即 fail-fast，不静默降级。
         _module_item_rule = ConfigRegistry._loaded.get("linter.module_item_rule")
         _stmt_rule = ConfigRegistry._loaded.get("linter.stmt_rule")
         if not _module_item_rule or not _stmt_rule:
             raise RuntimeError(
-                "[linter] 配置缺少语句入口选择器：pyv.toml [linter] 必须配置 "
+                "[linter] 配置缺少语句入口选择器：tpc.toml [linter] 必须配置 "
                 "module_item_rule（模块体语句入口）与 stmt_rule（过程体语句入口）。"
             )
         self._discovery = Discovery(

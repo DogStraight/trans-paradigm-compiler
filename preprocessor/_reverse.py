@@ -5,7 +5,7 @@ Uses sync-word restoration (pure-text, no token dependency).
 
 from core.config_registry import declare_cfg
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.reverse
 #   #sym:config = [reverse]
 #   格式: dict

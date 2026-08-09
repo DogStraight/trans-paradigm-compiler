@@ -1,6 +1,6 @@
 {
     "//": "TransParadigm Compiler — project configuration.",
-    "//": "grammar: path to the grammar package folder containing pyv.toml.",
+    "//": "grammar: path to the grammar package folder containing tpc.toml.",
     "grammar": "grammar/verilog",
     "pipeline": {
         "stages": [

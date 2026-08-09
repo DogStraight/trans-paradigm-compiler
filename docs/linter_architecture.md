@@ -177,7 +177,7 @@ flowchart TD
 
 ---
 
-## 4. 配置驱动（pyv.toml [linter] + TOML 规则）
+## 4. 配置驱动（tpc.toml [linter] + TOML 规则）
 
 ```mermaid
 flowchart LR
@@ -186,7 +186,7 @@ flowchart LR
     C --> D["lookahead 消歧表<br/>keyword_map / ident_by_ctx"]
     C --> E[discovery 递归]
     C --> F[RuleMatcher 检查]
-    G["pyv.toml [linter]"] -->|opener_context| E
+    G["tpc.toml [linter]"] -->|opener_context| E
     G -->|module_item_rule/stmt_rule| D
 ```
 
@@ -199,7 +199,7 @@ flowchart LR
   `is_statement` 规则全集，不推导收集（原 `_context_leaves`/`_expand_selector` 已删）；
   B 类 ident 候选注册到**所有**块内上下文（`_ctx_names` 从 opener_context 动态生成），
   靠 Level 2 试解析精确筛选上下文归属。
-- **入口选择器名必配 + fail-fast**：`module_item_rule`/`stmt_rule` 必须由 pyv.toml
+- **入口选择器名必配 + fail-fast**：`module_item_rule`/`stmt_rule` 必须由 tpc.toml
   显式配置，代码无默认值（不硬编码 `ModuleItem`/`Stmt`——换一套配置即失效）。
   scanner 读配置缺失即抛错；LookaheadTable 构造校验名字存在于规则树，失效即抛错。
 - **opener_context**：块 opener token → 消歧上下文映射（上下文名由配置任意定义，不映射

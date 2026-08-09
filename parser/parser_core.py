@@ -19,7 +19,7 @@ from core.define import (
 from core.config_registry import declare_cfg
 from ._constants import ROOT_RULE_NAME
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # parser.operator_defs
 #   #sym:config = [operator]
 #   格式: dict — 运算符优先级定义

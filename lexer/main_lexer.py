@@ -14,7 +14,7 @@ from .lexer_utils import get_token_define_merged
 from .number_fsm import NumberFSM
 from .comment_fsm import CommentFSM
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.macro_config
 #   #sym:config = (root)
 #   格式: dict

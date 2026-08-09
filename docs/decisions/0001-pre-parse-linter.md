@@ -9,7 +9,7 @@
 
 ## 决策
 
-linter 前置于 parser（`config/pyv_config.json` stages: `lex → lint → parse → ...`），直接消费 token 流产出错误诊断，不构建 AST；parser 只解析合法输入。语法配置与 parser 同源（同一份 `grammar/*.toml`），复用部分解析器基础设施（pratt + 共享 RuleMatcher）。
+linter 前置于 parser（`config/tpc_config.json` stages: `lex → lint → parse → ...`），直接消费 token 流产出错误诊断，不构建 AST；parser 只解析合法输入。语法配置与 parser 同源（同一份 `grammar/*.toml`），复用部分解析器基础设施（pratt + 共享 RuleMatcher）。
 
 ## 权衡
 

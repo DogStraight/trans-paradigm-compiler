@@ -19,7 +19,7 @@ if _project_root not in sys.path:
 
 
 def _load_pipeline_stages() -> list[str]:
-    """从 pyv_config.json 加载管线阶段顺序。"""
+    """从 tpc_config.json 加载管线阶段顺序。"""
     import json
     from core.config_registry import _find_user_config
 
@@ -46,14 +46,14 @@ _DEFAULT_STAGES = [
 
 
 def _resolve_grammar_dirs() -> tuple[str, list[str]]:
-    """Resolve and validate grammar directories from pyv.toml metadata."""
+    """Resolve and validate grammar directories from tpc.toml metadata."""
     from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
 
     root = _project_root
     rules_dir = os.path.join(root, DEFAULT_RULES_DIR)
     if not os.path.isdir(rules_dir):
         print(f"[fatal] Grammar directory not found: {rules_dir}", file=sys.stderr)
-        print(f"        Check grammar/pyv.toml [grammar].rules_dir", file=sys.stderr)
+        print(f"        Check grammar/tpc.toml [grammar].rules_dir", file=sys.stderr)
         sys.exit(1)
 
     ext_dirs = []
@@ -144,8 +144,6 @@ def _cmd_pipeline(args: argparse.Namespace) -> None:
     """tpc pipeline — run a single test case (dev use)."""
     from tests.e2e.run_pipeline import main as pipeline_main
 
-    # 注入 stages 配置到环境，让 run_pipeline 可读取
-    os.environ.setdefault("_PYV_STAGES", ",".join(_load_pipeline_stages()))
     sys.argv = [sys.argv[0]] + (args.test_name or [])
     pipeline_main()
 
@@ -184,7 +182,7 @@ Examples:
     p_lint.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
     # init
-    p_init = sub.add_parser("init", help="Initialize a PyV project config")
+    p_init = sub.add_parser("init", help="Initialize a TransParadigm project config")
     p_init.add_argument("--lang", default="verilog", help="Target language")
 
     # pipeline (dev)

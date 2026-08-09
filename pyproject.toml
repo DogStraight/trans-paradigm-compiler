@@ -65,8 +65,8 @@ include = [
 # 注2：editable/dev 模式从源码树定位（main.py / config 查找逻辑以源码路径为准）；
 #      此处供 sdist/wheel 携带数据，供未来发行使用。
 [tool.setuptools.data-files]
-"grammar" = ["grammar/pyv.toml", "grammar/verilog/**/*.toml", "grammar/verilog/plugins/**/*.toml"]
-"config" = ["config/pyv_config.json"]
+"grammar" = ["grammar/tpc.toml", "grammar/verilog/**/*.toml", "grammar/verilog/plugins/**/*.toml"]
+"config" = ["config/tpc_config.json"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

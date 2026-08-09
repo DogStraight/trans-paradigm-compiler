@@ -9,7 +9,7 @@ import tomllib
 import os
 from core.config_registry import declare_cfg
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # renderer.style
 #   #sym:config = [style]
 #   格式: dict — { indent: int|str, max_inline: int, children_field: str }

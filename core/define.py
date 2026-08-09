@@ -11,18 +11,18 @@ import os
 from pathlib import Path
 
 # ── 配置文件查找路径 ──
-_CONFIG_CANDIDATES = ["config/pyv_config.json"]
+_CONFIG_CANDIDATES = ["config/tpc_config.json"]
 
 
 def _find_user_config() -> str:
     """Find the project configuration file.
 
     Search order:
-        1. $PYV_CONFIG env var (explicit override)
-        2. From CWD upward: config/pyv_config.json
+        1. $TPC_CONFIG env var (explicit override)
+        2. From CWD upward: config/tpc_config.json
     """
     # 1. Env var override
-    env_path = os.environ.get("PYV_CONFIG")
+    env_path = os.environ.get("TPC_CONFIG")
     if env_path:
         path = os.path.abspath(env_path)
         if os.path.isfile(path):
@@ -45,12 +45,12 @@ def _find_user_config() -> str:
     return ""
 
 
-def _load_pyv_meta() -> dict:
+def _load_tpc_meta() -> dict:
     """加载项目配置。
 
     架构：
-        pyv_config.json（用户配置）→ 选择语法包
-            └── grammar/<rules_dir>/pyv.toml（语法包自带引擎接口配置）
+        tpc_config.json（用户配置）→ 选择语法包
+            └── grammar/<rules_dir>/tpc.toml（语法包自带引擎接口配置）
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -66,7 +66,7 @@ def _load_pyv_meta() -> dict:
         cfg = {}
 
     # Step 2: Resolve grammar package path
-    # pyv_config.json 中 grammar 可以是字符串（路径）或旧格式对象
+    # tpc_config.json 中 grammar 可以是字符串（路径）或旧格式对象
     grammar_val = cfg.get("grammar", "")
     if isinstance(grammar_val, str):
         grammar_dir = grammar_val
@@ -75,17 +75,17 @@ def _load_pyv_meta() -> dict:
     else:
         grammar_dir = ""
 
-    # Step 3: Load grammar package pyv.toml for engine interface config
-    meta_path = os.path.join(root, grammar_dir, "pyv.toml")
+    # Step 3: Load grammar package tpc.toml for engine interface config
+    meta_path = os.path.join(root, grammar_dir, "tpc.toml")
     meta: dict = {}
     if os.path.isfile(meta_path):
         try:
             with open(meta_path, encoding="utf-8") as f:
                 meta = tomllib.loads(f.read())
         except tomllib.TOMLDecodeError as e:
-            raise RuntimeError(f"[config] {grammar_dir}/pyv.toml parse failed: {e}")
+            raise RuntimeError(f"[config] {grammar_dir}/tpc.toml parse failed: {e}")
 
-    # Step 4: 插件目录由 pyv.toml [plugins] enabled 管理（config_registry 自动发现）
+    # Step 4: 插件目录由 tpc.toml [plugins] enabled 管理（config_registry 自动发现）
     ext_dirs: list[str] = []
 
     # Step 5: Normalize — grammar 统一为对象格式
@@ -94,7 +94,7 @@ def _load_pyv_meta() -> dict:
         "rules_dir": grammar_dir,
         "ext_dirs": ext_dirs,
     }
-    # pyv.toml 中其他 engine config 补入
+    # tpc.toml 中其他 engine config 补入
     for k, v in meta.items():
         if k != "grammar":
             merged.setdefault(k, v)
@@ -102,18 +102,18 @@ def _load_pyv_meta() -> dict:
     if "grammar" not in merged:
         raise RuntimeError(
             f"[config] No grammar package found.\n"
-            f"  Create config/pyv_config.json or ensure {grammar_dir}/pyv.toml exists."
+            f"  Create config/tpc_config.json or ensure {grammar_dir}/tpc.toml exists."
         )
     return merged
 
 
-_pyv_meta = _load_pyv_meta()
+_tpc_meta = _load_tpc_meta()
 
-# 增强语法层目录（来自 pyv.toml [grammar]）
-DEFAULT_EXT_DIRS: list[str] = _pyv_meta["grammar"]["ext_dirs"]
+# 增强语法层目录（来自 tpc.toml [grammar]）
+DEFAULT_EXT_DIRS: list[str] = _tpc_meta["grammar"]["ext_dirs"]
 
-# 核心语法规则目录（来自 pyv.toml [grammar]）
-DEFAULT_RULES_DIR: str = _pyv_meta["grammar"]["rules_dir"]
+# 核心语法规则目录（来自 tpc.toml [grammar]）
+DEFAULT_RULES_DIR: str = _tpc_meta["grammar"]["rules_dir"]
 
 
 class Token:

@@ -167,7 +167,7 @@ class LookaheadTable:
     ) -> None:
         self._tree = tree
         self._matcher = matcher
-        # fail-fast：语句入口选择器名（pyv.toml [linter] module_item_rule/stmt_rule）
+        # fail-fast：语句入口选择器名（tpc.toml [linter] module_item_rule/stmt_rule）
         # 必须存在于规则树。代码不硬编码任何语法规则名——换一套配置即失效；
         # 名字缺失/失效在此直接抛错，而非静默返回空集导致 B 类 ident 候选
         # 全部消失（ModuleInst 等漏检），那是静默降级。
@@ -178,7 +178,7 @@ class LookaheadTable:
             if _name not in tree:
                 raise RuntimeError(
                     f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
-                    "请检查 pyv.toml [linter] 配置与语法规则命名是否一致。"
+                    "请检查 tpc.toml [linter] 配置与语法规则命名是否一致。"
                 )
         # 块内上下文名集合（从 opener_context 配置动态生成，不硬编码
         # module_body/proc_body 等 Verilog 结构名——换语言由配置决定）
