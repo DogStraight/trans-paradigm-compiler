@@ -1,9 +1,49 @@
-# TODO — 后置边界问题
+# TODO
+
+## 1. 工程化的基础设施（2026-08-10 立项）
+
+> 现状：`pyproject.toml`（build-system/project/scripts/optional-deps/pytest/coverage）与 LICENSE 已落地；
+> `.github/` 为空目录、全库无 `ci.yml`（CI 曾存在后被 `38e2daf` 移除）；缺 CONTRIBUTING/CHANGELOG/API 文档；
+> 2026-07-25 质量评估遗留 P0/P1（异常层级、覆盖率门禁）。
+
+- [x] **tests/ 单元测试按部件归档**（2026-08-10）：16 个测试文件从平铺 `tests/` 根归档到
+      `tests/{linter,parser,lexer,analyzer,renderer,core}/`，`conftest.py`/`__init__.py` 留在根；
+      329 全绿（修复：子目录不建 `__init__.py` 防遮蔽项目根同名牌；`test_lint_accuracy._ROOT` 上移一层）
+- [ ] **恢复 CI**：`.github/workflows/ci.yml`（Windows + Python 3.11/3.12/3.13 矩阵，pytest + coverage）；
+      前置：从 `.gitignore` 移除 `.github/`（当前规则导致 CI 无法被追踪）
+- [ ] **安装可验证**：`pip install -e ".[test]"` 通过（pyproject 已建未验证，依赖管理评估遗留）
+- [ ] **覆盖率门禁**：恢复覆盖率测量脚本 + 目标 ≥90%（2026-07-25 P1 遗留）
+- [ ] **异常层级统一**：统一异常体系 + 清理 except 吞噬 + TOML 模式验证（2026-07-25 P0 遗留）
+- [ ] **补文档**：CONTRIBUTING、CHANGELOG、API 文档（docs/ 现有 12 文件缺这三项）
+
+## 2. 预处理器增强（2026-08-10 立项）
+
+> 现状：已有 define/ifdef/include/undef primitives + `_expand.py`/`_reverse.py`；
+> 已修复嵌套 ifdef inactive 祖先、续行拼接、include 配置化；
+> 行首未知指令当前被 scan_directives 整体删除（跨子系统容错边界）。
+
+- [ ] **管线内宏 token 决议**：行内宏调用在预处理器阶段展开/决议，管线内不再残留宏 token
+      （linter P0 保险措施的前提；当前 e12 靠行内宏调用做 undefined-macro 可达性验证）
+- [ ] **未知/错误指令容错**：行首未知指令从"整体删除"改为可配置策略 + 诊断报告（保留容错）
+- [ ] **带参宏支持**（如 `` `define NAME(a,b) ... ``）：评估参数展开（当前仅文本替换）
+- [ ] **预处理器单元测试**：指令原语/宏展开/ifdef 分支/逆向恢复（当前零测试，后续按部件分文件补充）
+
+## 3. 格式化插件完善（2026-08-10 立项）
+
+> 现状：品类系统框架完成（boundary/engine/grouping/passes）；
+> `formatter/tpc.toml` 品类配置仍为注释模板；无单元测试（逻辑验证靠人工）；
+> boundary.py 存在 keyword.*→ScopeKind 语言渗透（待立项）。
+
+- [ ] **品类配置落地**：tpc.toml 启用实际品类（port_dir/declaration/parameter/assignment/
+      genvar_integer/function/task + inst_port handler），替换注释模板
+- [ ] **formatter 单元测试**：边界扫描器/分组/品类引擎/passes（当前零测试，后续按部件分文件补充）
+- [ ] **boundary.py 语言渗透消除**：keyword.*→ScopeKind 映射外部化到配置（遵守"不编码语言知识"铁律）
+- [ ] **管线集成验证**：结构路径（Lex→边界扫描→引擎→输出）与主管线共存验证
+
+## linter 边界问题（后置，不阻塞全绿）
 
 > 发现器多层级化 + 两级消歧完成后暴露的边界问题（用户明确：接受误报，边界管理，
 > 此清单后置处理，不阻塞当前全绿状态）。
-
-## linter 边界问题
 
 - [ ] **表达式内运算符后换行（多行 RHS）误报**：`a <= b +\n c;` 中 `+` 后换行被 pratt 视为表达式终止
   - 根因：`parser/pratt_parser.py` 无 newline/trivia 跳过逻辑（表达式不跨行）
