@@ -20,11 +20,12 @@
   "ref_plusrange": 1.0,
   "ref_signed": 1.0,
   "ref_sim_initial": 1.0,
-  "ref_sim_loops": 0.7,
+  "ref_sim_loops": 1.0,
   "ref_simple": 1.0,
   "ref_task": 1.0,
   "ref_taskfunc": 1.0,
   "ref_top": 1.0,
   "ref_simple_func": 1.0,
-  "ref_concat_nest": 1.0
+  "ref_concat_nest": 1.0,
+  "ref_loops_gen": 1.0
 }

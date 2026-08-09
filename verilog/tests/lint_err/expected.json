@@ -22,7 +22,16 @@
     "e19_case_missing_endcase.v": { "desc": "case 误用 end 作结束符",         "expect": ["phase-statement", "phase1-boundary"] },
     "e20_task_missing_endtask.v": { "desc": "task 误用 end 作结束符",         "expect": ["phase1-boundary"] },
     "e21_expr_double_op.v":      { "desc": "表达式双运算符 b + * c",          "expect": ["phase-expr", "phase-statement"] },
-    "e22_assign_no_lhs.v":       { "desc": "assign 缺左值",                   "expect": ["phase-expr", "phase-statement"] }
+    "e22_assign_no_lhs.v":       { "desc": "assign 缺左值",                   "expect": ["phase-expr", "phase-statement"] },
+    "e23_assign_missing_eq.v":   { "desc": "assign 缺等号 a b",               "expect": ["phase-statement", "phase-expr"] },
+    "e24_assign_extra_rhs.v":    { "desc": "RHS 多余（链式 = b = c）",         "expect": ["phase-statement"] },
+    "e25_for_missing_rparen.v":  { "desc": "for 缺右括号",                    "expect": ["phase1-boundary", "phase-statement"] },
+    "e26_case_missing_colon.v":  { "desc": "case item 缺冒号",                "expect": ["phase-statement"] },
+    "e27_assign_rhs_adjacent.v": { "desc": "RHS 相邻操作数缺运算符 b c",       "expect": ["phase-statement"] },
+    "e28_for_missing_first_semi.v": { "desc": "for 缺第一个分号",             "expect": ["phase-unrecognized"] },
+    "e29_while_missing_rparen.v":  { "desc": "while 缺右括号",               "expect": ["phase-statement", "phase1-boundary"] },
+    "e30_ifgen_missing_semi.v":    { "desc": "模块项 if-generate 体内缺分号", "expect": ["phase-statement"] },
+    "e31_casegen_missing_endcase.v": { "desc": "模块项 case-generate 缺 endcase", "expect": ["phase-statement", "phase1-boundary"] }
   },
   "valid": {
     "v01_wire_assign.v":    { "desc": "合法：wire+assign" },

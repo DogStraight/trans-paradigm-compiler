@@ -328,7 +328,13 @@ class ConfigRegistry:
                         content = FileManager.read_file(m.replace("\\", "/"))
                         data = tomllib.loads(content)
                         if spec["section"]:
-                            data = data.get(spec["section"], {})
+                            # 文件存在但缺声明的段 → 配置声明错误，fail-fast
+                            # （不能再静默 `data.get(section, {})` 退化成空表）。
+                            if spec["section"] not in data:
+                                raise KeyError(
+                                    f"文件存在但缺少声明段 [{spec['section']}]"
+                                )
+                            data = data[spec["section"]]
                         if merged is None:
                             merged = data
                         elif isinstance(merged, dict) and isinstance(data, dict):
@@ -340,7 +346,16 @@ class ConfigRegistry:
                     raise FileNotFoundError(f"未找到匹配文件: {file_spec}")
                 cls._loaded[name] = merged
 
-            except Exception as e:
+            except tomllib.TOMLDecodeError as e:
+                # TOML 语法损坏（重复 key / 格式错误）必须 fail-fast：即使
+                # required=False 也不能静默退化成空表——否则下游以空配置继续
+                # 运行（如关键字表丢失 → 全部 token 退化为 id），静默错乱。
+                loc = f"{base_key}:{spec['file']}"
+                if spec["section"]:
+                    loc += f" → [{spec['section']}]"
+                errors.append(f"  [{name}] {loc}: TOML 语法错误: {e}")
+            except FileNotFoundError as e:
+                # 文件缺失：required=True 是错误；required=False 是合法的可选缺失。
                 if spec["required"]:
                     loc = f"{base_key}:{spec['file']}"
                     if spec["section"]:
@@ -348,6 +363,13 @@ class ConfigRegistry:
                     errors.append(f"  [{name}] {loc}: {e}")
                 else:
                     cls._loaded[name] = {}
+            except Exception as e:
+                # 其他异常（缺段/结构不符等）：文件存在但配置结构有问题，属于
+                # 配置声明错误——required=False 也不应静默，统一 fail-fast。
+                loc = f"{base_key}:{spec['file']}"
+                if spec["section"]:
+                    loc += f" → [{spec['section']}]"
+                errors.append(f"  [{name}] {loc}: {e}")
             finally:
                 if name not in cls._loaded:
                     cls._loaded[name] = {}

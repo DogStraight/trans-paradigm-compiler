@@ -57,7 +57,32 @@ def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -
         base = _deep_merge(base, dict(_token_lang_cfg))
     if _token_ext_cfg:
         base = _deep_merge(base, dict(_token_ext_cfg))
+    _validate_token_define(base)
     return base
+
+
+def _validate_token_define(td: dict) -> None:
+    """token 配置结构性自检（简单校验，fail-fast）。
+
+    防护"配置加载失败被静默吞掉 → 空表 → 全部 token 退化为 id"的静默错乱
+    （2026-08-09 token.toml 重复 key 事故：整个 [id.keyword] 表丢失后，
+    module/always/begin 全被当普通 id，linter/parser 全面静默错乱）。
+
+    只校验 lexer 硬依赖的关键段存在 + 关键字表非空——不校验具体关键字内容
+    （语言无关，只拦"结构性退化"）。
+    """
+    missing = [s for s in ("symbol", "space", "newline", "bracket", "id") if s not in td]
+    if missing:
+        raise RuntimeError(
+            "[lexer] token 配置缺少关键段: " + ", ".join(missing)
+            + "（检查 grammar 下 base/_token.toml 与 token.toml 是否损坏）"
+        )
+    kw = (td.get("id") or {}).get("keyword") or {}
+    if not isinstance(kw, dict) or not kw:
+        raise RuntimeError(
+            "[lexer] token 配置的 [id.keyword] 缺失或为空——关键字表为空会导致"
+            "全部标识符退化为 id（静默错乱）。检查 token.toml 关键字定义是否完整。"
+        )
 
 
 

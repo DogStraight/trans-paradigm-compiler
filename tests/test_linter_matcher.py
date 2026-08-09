@@ -185,13 +185,41 @@ class TestExpressionChecker:
         assert errs == []
         assert consumed >= 5  # data [ 3 : 0 ] + 1 至少 7 token（+ 后继续）
 
-    @pytest.mark.xfail(
-        reason="TODO: 多行 RHS 运算符后换行被 pratt 视为表达式终止（已知误报，待修）",
-        strict=True,
-    )
     def test_multiline_rhs_no_false_positive(self, scanner):
-        # 多行 RHS（b +\n c）当前误报 "expected ';' got 'id'"。
-        # strict=True：若修复后意外通过 → XPASS 变失败，提示移除标记（防假绿）。
+        # 多行 RHS（b +\n c）：IEEE 1364 §3.1 规定换行只作 token 分隔、无语义，
+        # 运算符在行尾的多行表达式必须零误报。修复：match_atom 的 consumed 从
+        # 入参 i 起算（含跳过的 trivia），pratt 递归右操作数不错位。
         src = "module m;\n    assign a = b +\n        c;\nendmodule\n"
         errs = scanner.scan(src)
         assert errs == []
+
+    def test_multiline_rhs_blocking_assign(self, scanner):
+        # 过程体内多行 RHS（非阻塞赋值，含位选原子续行）
+        src = (
+            "module m;\n"
+            "    always @(posedge clk) begin\n"
+            "        q <= d +\n"
+            "            {e[3:0], f};\n"
+            "    end\n"
+            "endmodule\n"
+        )
+        errs = scanner.scan(src)
+        assert errs == []
+
+    def test_multiline_rhs_nested_operator(self, scanner):
+        # 多行 RHS 连续运算符链（每行末尾一个运算符），零误报
+        src = (
+            "module m;\n"
+            "    assign a = b +\n"
+            "        c *\n"
+            "        d;\n"
+            "endmodule\n"
+        )
+        errs = scanner.scan(src)
+        assert errs == []
+
+    def test_multiline_rhs_trailing_operator_still_error(self, scanner):
+        # 行尾运算符但下一行是分号（真残缺 b +;）→ 仍报错（不因宽容忍漏检）
+        src = "module m;\n    assign a = b +\n        ;\nendmodule\n"
+        errs = scanner.scan(src)
+        assert any(e.code in ("phase-expr", "phase-statement") for e in errs)

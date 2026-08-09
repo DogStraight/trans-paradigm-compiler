@@ -157,6 +157,11 @@ class RuleMatcher:
     def match_atom(self, tokens: list[Token], i: int):
         """匹配一个表达式原子，返回 (node, consumed) 或 (None, 0)。
 
+        consumed 从入参 i 起算（含内部跳过的 trivia）——即调用方直接
+        `idx += consumed` 即可推进到原子之后。若不含 trivia，pratt 在
+        运算符后换行位置（如 `b +\\n c` 的右操作数）递归调用本回调时，
+        `idx += consumed` 会错位一格、把表达式截断在 `b +`（多行 RHS 误报）。
+
         参考 parser 的 _atom_parser_impl / atomic_rules 流程：按 production 长度
         降序逐个尝试 is_atom 规则，返回第一个有进展者。只消费操作数、不消费
         运算符（避免 `a <= b` 赋值 vs 比较歧义）；production 内遇 @Expression /
@@ -173,7 +178,9 @@ class RuleMatcher:
                 tokens, j, name, trial, n, strict=False, silent=True
             )
             if k > j:
-                return object(), k - j
+                # consumed 从 i 起算（含 _skip 跳过的 trivia），保证 pratt
+                # 递归层的 `idx += consumed` 推进到原子之后不错位。
+                return object(), k - i
         return None, 0
 
     def _match_token(

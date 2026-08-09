@@ -27,7 +27,7 @@
 [CtrlStmt]
 [CtrlStmt.parser]
 production = [
-    "@IfBlock|@IfStmt|@CaseStmt|@ForLoopBlock|@ForLoop|@BeginEnd|@EventWaitStmt",
+    "@IfBlock|@IfStmt|@CaseStmt|@ForLoopBlock|@ForLoop|@WhileLoop|@RepeatLoop|@ForeverLoop|@BeginEnd|@EventWaitStmt",
 ]
 inline = true
 [CtrlStmt.parser.node]
@@ -98,9 +98,11 @@ decl = "$1"
 layout = { ref = "decl" }
 
 # ---------- 模块体实例化 / 生成 ----------
+# 模块项级条件/分支 generate（A.4.2）：if(cond) begin…end / case(expr)…endcase
+# 复用 IfBlock/CaseStmt——其 @BeginEnd 体由 flatten 收集模块项内容（与 LoopGen 同机制）。
 [InstStmt]
 [InstStmt.parser]
-production = ["@ModuleInst|@GenerateBlock|@LoopGen"]
+production = ["@ModuleInst|@GenerateBlock|@LoopGen|@IfBlock|@CaseStmt"]
 inline = true
 [InstStmt.parser.node]
 inst = "$1"
