@@ -64,6 +64,11 @@ max_iterations = 128
 # 多路径诊断（enumerate_conditions）的最大枚举配置数上限，防分支爆炸。
 max_configs = 64
 
+# ── [continuation] 反斜杠续行参数 ──
+[continuation]
+enabled = true
+character = "\\"
+
 # ── [directive_handlers] 指令处理器启用/配置 ──
 # 指令关键字 → 预定义操作（op）绑定：换语言时把指令关键字映射到对应操作即可，
 # 范式从代码迁移到配置。op 为注册在 primitives/registry.py 的处理器名（缺省=指令关键字）。
