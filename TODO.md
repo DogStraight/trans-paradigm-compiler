@@ -12,6 +12,16 @@
 - [ ] **覆盖率门禁**：恢复覆盖率测量脚本 + 目标 ≥90%（2026-07-25 P1 遗留）
 - [ ] **异常层级统一**：统一异常体系 + 清理 except 吞噬 + TOML 模式验证（2026-07-25 P0 遗留）
 - [ ] **补文档**：CONTRIBUTING、CHANGELOG、API 文档（docs/ 现有 12 文件缺这三项）
+- [ ] **自定义 DSL 完整示例**：用本套配置化体系从零定义一个小语言（规则 TOML + 插件 +
+      最小用例 + 跑通全管线），作为外部贡献者上手参考——展示"语言知识全外部化"能力，
+      降低想拿本项目当骨架/改造的人的入门门槛（当前文档全围绕 Verilog，缺"从零搭语言"的 walkthrough）
+- [ ] **调试基础设施**（parser + linter 共用，当前最难调试的两个模块）：
+      a) 日志分级开关（ERROR/WARN/INFO/TRACE，修复 `debug_log_file=None` 时 `_log_state`
+         变空操作导致 WARN 全被吞的问题——本会话多次踩坑）；
+      b) parser 停点/trace（`_failure_attempts` 已有雏形，扩展为按 token 位置/规则名过滤、
+         parse 中途可查 `token_pointer` 停点）；
+      c) discovery 节点树 token 区间 dump（节点 rule + [start,end) → 行号）；
+      d) 行号对账工具（token 1-based line vs token_span 0-based vs 物理行内容）
 
 ## 2. 预处理器增强（2026-08-10 立项）
 
