@@ -24,15 +24,16 @@ import io
 import difflib
 import shutil
 from typing import Any
+
+# Add project root to path for importing pipeline（必须在 import core 之前）
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from core.define import DEFAULT_EXT_DIRS
 
 # Force stdout to UTF-8
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
-
-# Add project root to path for importing pipeline
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 
 def discover_tests(
