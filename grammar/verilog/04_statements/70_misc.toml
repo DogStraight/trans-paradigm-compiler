@@ -167,6 +167,11 @@ break = 2
 is_block = true
 is_statement = true
 
+# generate 引入独立的 generate 作用域：generate-if 各分支互斥（elaboration 时
+# 只展开一个），其内同名声明（如各分支实例化同名的模块）合法，不应报重复声明。
+[GenerateBlock.analyzer]
+scope = { kind = "generate" }
+
 
 # ============================================================================
 # LoopGen — 生成循环（generate 体内的 for 循环）
