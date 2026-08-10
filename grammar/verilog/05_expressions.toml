@@ -242,12 +242,14 @@ line = [{ ref = "callee" }, "(", { ref = "args" }, ")"]
 # ============================================================================
 # 以 $ 开头的系统调用，如 $display(), $clog2(), $urandom()。
 # 生产式: $ Identifier ( ArgumentList? )
+# 函数名可为 @Identifier，也允许 signed/unsigned（IEEE 系统函数 $signed/$unsigned
+# 的函数名与声明关键字冲突，需显式放行，否则 $signed(...) 无法作为表达式原子）。
 
 [SysFuncCall.parser]
 is_atom = true
 production = [
     "symbol.base.dollar",
-    "@Identifier",
+    "(@Identifier|keyword.signed|keyword.unsigned)",
     "bracket.l_parentheses",
     "@ArgumentList?",
     "bracket.r_parentheses",
