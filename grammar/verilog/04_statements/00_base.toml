@@ -156,7 +156,7 @@ layout = { ref = "stmt" }
 
 [NonBlockStmt]
 [NonBlockStmt.parser]
-production = ["@CtrlStmt|@ProcAssignStmt|@CallStmt"]
+production = ["@AttrStmt|@CtrlStmt|@ProcAssignStmt|@CallStmt"]
 inline = true
 [NonBlockStmt.parser.node]
 stmt = "$1"

@@ -39,6 +39,42 @@ layout = { line = [
 
 
 # ============================================================================
+# AttrStmt — 过程体属性语句（(* ... *) 前缀语句，如 (* full_case *) case ...）
+# ============================================================================
+# 过程体内 attribute 实例 + 语句（常见于 (* parallel_case *) case / (* full_case *) case）。
+# 挂载位点：@Stmt（过程体语句入口），与 ModuleItem 的 AttrDecl 互补。
+# 注意：挂 @Stmt 会把 AlwaysStmt/IfStmt 等规则的 body 从 @Stmt（call）传播成
+# (@AttrStmt|@Stmt)（choice）。linter 的 _locate_stmt_body 已支持 choice 内
+# 语句/块 call 的 body 定位（discovery.py），无需改注入位点。
+
+[AttrStmt.inject]
+targets = ["@Stmt"]
+
+[AttrStmt]
+is_statement = true
+
+[AttrStmt.parser]
+production = [
+    "@AttrInstance",
+    "@CtrlStmt|@ProcAssignStmt|@CallStmt|@IfBlock|@IfStmt",
+]
+end_case = [
+    "newline",
+]
+
+[AttrStmt.parser.node]
+attrs = "$1"
+stmt = "$2"
+
+[AttrStmt.renderer]
+layout = { line = [
+    { ref = "attrs" },
+    " ",
+    { ref = "stmt" },
+] }
+
+
+# ============================================================================
 # AttrInstance — (* attr_spec { , attr_spec } *)
 # ============================================================================
 [AttrInstance]
