@@ -5,11 +5,11 @@
 ```
 tpc.toml                    Data TOML files              Python consumer
 ┌─────────────────┐        ┌──────────────────┐         ┌──────────────────┐
-│ [config.xxx]    │──file→ │ [section]         │──→     │ _xxx_cfg: dict   │
-│   key_name      │  section│ key = value       │  config.get()│                 │
-│   file="..."    │  (#sym)│ ...               │         │ def func():      │
+│ [config.xxx]    │──file→ │ [section]        │──→      │ _xxx_cfg: dict   │
+│   key_name      │ section│ key = value      │  config.get()│             │
+│   file="..."    │  (#sym)│ ...              │         │ def func():      │
 │   section=".."  │        └──────────────────┘         │   return _xxx_cfg│
-└─────────────────┘                                      └──────────────────┘
+└─────────────────┘                                     └──────────────────┘
 ```
 
 ### Tier 1: `tpc.toml` — Declaration + Addressing

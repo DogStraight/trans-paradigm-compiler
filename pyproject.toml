@@ -3,7 +3,7 @@ requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "transparadigm-compiler"
+name = "trans-paradigm-compiler"
 version = "0.1.0"
 description = "Configuration-driven language pipeline — write language rules in TOML; configurable, forkable, model-friendly"
 readme = "README.md"
