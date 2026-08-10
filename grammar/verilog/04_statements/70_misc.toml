@@ -3,6 +3,7 @@
 # ============================================================================
 # 本文件定义不归属大类的语句规则:
 #   SubroutineCall — 子程序调用（无返回值）
+#   SysTaskStmt    — 系统任务语句（$display(...) 等）
 #   NullStmt       — 空语句（单独的分号）
 #   GenerateBlock  — generate … endgenerate 块
 #   LoopGen        — 生成循环（generate 体内的 for 循环）
@@ -30,6 +31,30 @@ end_case = [
     "newline",
 ]
 
+
+# ============================================================================
+# SysTaskStmt — 系统任务语句（$ 前缀，如 $display(...)）
+# ============================================================================
+# 独立语句的系统调用: $display(...); $finish; 等。
+# 与 SysFuncCall（表达式原子）区别在于末尾分号，作为独立语句。
+# 函数名允许 signed/unsigned（与声明关键字冲突，同 SysFuncCall）。
+
+[SysTaskStmt]
+is_statement = true
+
+[SysTaskStmt.parser]
+production = [
+    "symbol.base.dollar",
+    "(@Identifier|keyword.signed|keyword.unsigned)",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
 [SubroutineCall.parser.node]
 callee = "$1"
 args = "$3"
@@ -41,6 +66,48 @@ line = [
     { ref = "args" },
     ")",
     ";",
+]
+
+
+# ============================================================================
+# PropertyStmt — SVA property 语句（assert/assume/restrict property）
+# ============================================================================
+# SystemVerilog Assertions 模块级/过程体语句:
+#   assert property (expr);
+#   assume property (expr);
+#   restrict property (expr);
+# assert/assume/restrict/property 均按普通标识符处理（非关键字），通过
+# 判别前缀（property + 括号）与赋值/调用等 id 语句消歧。属性体为表达式。
+
+[PropertyStmt]
+is_statement = true
+
+[PropertyStmt.parser]
+production = [
+    "@Identifier",
+    "keyword.property",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[PropertyStmt.parser.node]
+kind = "$1"
+prop = "$2"
+body = "$4"
+
+[PropertyStmt.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { ref = "prop" },
+    "(",
+    { ref = "body" },
+    ");",
 ]
 
 

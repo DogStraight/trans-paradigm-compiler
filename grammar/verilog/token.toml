@@ -105,6 +105,7 @@ generate = "generate"
 endgenerate = "endgenerate"
 genvar = "genvar"
 signed = "signed"
+property = "property"
 
 # ========== 系统函数注册表 ==========
 [sysfunc]
