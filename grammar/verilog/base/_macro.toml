@@ -61,6 +61,8 @@ nounconnected_drive = "nounconnected_drive"
 # 用户可通过此段控制展开行为，无需修改 Python 代码。
 [expand]
 max_iterations = 128
+# 多路径诊断（enumerate_conditions）的最大枚举配置数上限，防分支爆炸。
+max_configs = 64
 
 # ── [directive_handlers] 指令处理器启用/配置 ──
 # 指令关键字 → 预定义操作（op）绑定：换语言时把指令关键字映射到对应操作即可，

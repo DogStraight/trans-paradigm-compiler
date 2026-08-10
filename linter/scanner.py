@@ -168,10 +168,16 @@ class LinterScanner:
                 closer_to_openers.setdefault(be, set()).add(bs)
         return openers, closers, closer_to_openers, opener_to_rule
 
-    def scan(self, source: str) -> list[LintDiagnostic]:
+    def scan(
+        self,
+        source: str,
+        *,
+        predefined: dict[str, str] | None = None,
+        undefine: set[str] | None = None,
+    ) -> list[LintDiagnostic]:
         errors: list = []
         macro_defs, func_macros, _, _, _, clean_source = scan_directives(
-            source, self._rules_dir
+            source, self._rules_dir, predefined=predefined, undefine=undefine
         )
         if macro_defs:
             lex_source, _ = expand_tokens(

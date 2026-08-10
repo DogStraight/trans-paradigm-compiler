@@ -269,6 +269,72 @@ def scan_directives(
     return macro_defs, func_macros, condition_blocks, placeholders, directive_lines, clean_source
 
 
+# ============================================================
+# 多路径诊断：条件块叶路径枚举
+# ============================================================
+
+
+def _enumerate_rec(
+    blocks: list[dict],
+    idx: int,
+    define: set[str],
+    undefine: set[str],
+    out: list[dict],
+    max_configs: int,
+) -> None:
+    """递归枚举条件块叶路径。blocks 为先序（外层先），depth 表示嵌套层级。"""
+    if len(out) >= max_configs:
+        return
+    if idx >= len(blocks):
+        out.append({"define": set(define), "undefine": set(undefine)})
+        return
+    block = blocks[idx]
+    d = block.get("depth", 0)
+    # 当前块的子块范围：其后连续 depth 更大的块
+    sub_end = idx + 1
+    while sub_end < len(blocks) and blocks[sub_end].get("depth", 0) > d:
+        sub_end += 1
+    branches = block["branches"]
+    for i, branch in enumerate(branches):
+        new_def = set(define)
+        new_undef = set(undefine)
+        # 选中分支 i 需前面所有分支条件为假
+        for j in range(i):
+            c = branches[j].get("cond")
+            if c:
+                new_undef.add(c)
+        if not branch.get("is_else"):
+            c = branch.get("cond")
+            if c:
+                if i == 0 and block.get("negated"):
+                    new_undef.add(c)  # ifndef 分支：条件未定义
+                else:
+                    new_def.add(c)  # ifdef / elsif 分支：条件已定义
+        if idx + 1 < sub_end and blocks[idx + 1].get("parent_branch") is branch:
+            # 有属于该分支的子块：先枚举子块（含其后所有块）
+            _enumerate_rec(blocks, idx + 1, new_def, new_undef, out, max_configs)
+        else:
+            # 该分支下无子块：直接继续后续块
+            _enumerate_rec(blocks, sub_end, new_def, new_undef, out, max_configs)
+
+
+def enumerate_conditions(
+    blocks: list[dict], max_configs: int | None = None
+) -> list[dict]:
+    """枚举条件块的所有叶分支路径假设（多路径诊断用）。
+
+    blocks 来自 scan_directives 的 condition_blocks（先序，含 depth）。
+    返回 list[dict]，每项 {"define": set[str], "undefine": set[str]}，
+    可直接作为 scan_directives(predefined=..., undefine=...) 的注入参数。
+    枚举数受 max_configs 上限约束（防 2^N 分支爆炸），默认读 preprocessor.expand。
+    """
+    if max_configs is None:
+        max_configs = _get_expand_config().get("max_configs", 64)
+    configs: list[dict] = []
+    _enumerate_rec(blocks, 0, set(), set(), configs, max_configs)
+    return configs
+
+
 def _find_sync_word(line: str, macro_col: int, prev_line: str = "") -> tuple[str, int]:
     """向左找最近的非空白词作为同步词。
 

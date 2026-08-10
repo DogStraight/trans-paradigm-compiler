@@ -71,10 +71,13 @@ def handle_ifdef(stripped: str, prefix: str, name: str, ctx: dict) -> None:
     defined = _is_macro_defined(ctx, cond)
     stack: list = ctx.setdefault("_ifdef_stack", [])
     branch = _new_branch(cond, False, defined)
+    parent_branch = stack[-1].get("cur_branch") if stack else None
     block = {
         "ifdef_line": stripped,
         "cond": cond,
         "negated": False,
+        "depth": len(stack),
+        "parent_branch": parent_branch,
         "boundary_lines": [stripped],
         "branches": [branch],
         "cur_branch": branch,
@@ -96,10 +99,13 @@ def handle_ifndef(stripped: str, prefix: str, name: str, ctx: dict) -> None:
     defined = _is_macro_defined(ctx, cond)
     stack: list = ctx.setdefault("_ifdef_stack", [])
     branch = _new_branch(cond, False, not defined)
+    parent_branch = stack[-1].get("cur_branch") if stack else None
     block = {
         "ifdef_line": stripped,
         "cond": cond,
         "negated": True,
+        "depth": len(stack),
+        "parent_branch": parent_branch,
         "boundary_lines": [stripped],
         "branches": [branch],
         "cur_branch": branch,
