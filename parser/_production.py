@@ -369,16 +369,23 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
 
 
 def _has_variable_production(rule: GrammarRule) -> bool:
-    """检查规则的 production 列表是否含有变长元素（顶层 ? * + 后缀）。
+    """检查规则的 production 是否需要 end_case 硬性确认终止点。
 
-    定长 production 的所有元素都是固定匹配（无 ? * +），解析器已精确消费
-    规则应有的 token，end_case 正匹配仅为建议。变长 production 需要
-    end_case 来确定何时停止重复匹配。
+    production（列表 = 一条产生式的顺序 token 序列）含变长元素（? * +）时，
+    若**最后一个元素是纯字面 token**（如 `localparam integer? ... ;` 的末尾
+    分号），production 已精确消费到句尾——中间 optional 不改变"末尾固定
+    token 已消费"的事实，end_case 正匹配仅为建议（放宽）。只有变长结尾
+    （repeat/optional/plus 或 call/choice 收尾）才需要 end_case 确认何时
+    停止。定长 production（无 ? * +）本就放宽。
     """
-    for prod in getattr(rule, "production", []):
+    prods = getattr(rule, "production", [])
+    if not prods:
+        return False
+    has_var = False
+    for prod in prods:
         if not isinstance(prod, str):
             continue
-        # 扫描顶层字符（不在括号内）是否有 ? * + 后缀
+        # 顶层是否有 ? * + 后缀（括号内不算）
         depth = 0
         for ch in prod:
             if ch == '(':
@@ -386,7 +393,23 @@ def _has_variable_production(rule: GrammarRule) -> bool:
             elif ch == ')':
                 depth -= 1
             elif depth == 0 and ch in ('?', '*', '+'):
-                return True
+                has_var = True
+                break
+    if not has_var:
+        return False
+    # 有变长元素：最后一个元素是纯字面 token（非 @call / 非 (choice / 无后缀）
+    # → 已精确消费到句尾，放宽；否则需要 end_case 硬性确认。
+    last = prods[-1]
+    if not isinstance(last, str) or last.startswith(("@", "(")):
+        return True
+    depth = 0
+    for ch in last:
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+        elif depth == 0 and ch in ('?', '*', '+'):
+            return True
     return False
 
 
