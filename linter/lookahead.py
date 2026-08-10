@@ -262,6 +262,15 @@ class LookaheadTable:
                 entry = {"name": name, "paths": paths}
                 for ctx in self._ctx_names:
                     self.ident_by_ctx.setdefault(ctx, []).append(entry)
+                # 同一规则还可能以非 id 字面 token 起始（如拼接赋值 lvalue 的
+                # `{`，来自 @PrimaryExpr 的 Concatenation 分支）→ 这些起始 token
+                # 一并注册到 keyword_map，否则 `{a,b} = expr;` 从 `{` 触发不了
+                # BlockingAssign，bracket 分支会整体跳过导致 RHS 误判为新语句。
+                non_id = firsts - {"id"}
+                if non_id:
+                    aentry = {"name": name, "paths": paths}
+                    for tt in non_id:
+                        self.keyword_map.setdefault(tt, []).append(aentry)
             else:
                 # A 类：关键字/具体符号触发 → 也计算前缀路径（与 B 类统一两级消歧）
                 apaths = self._a_prefix_paths(prods)
@@ -342,9 +351,12 @@ class LookaheadTable:
                     kept.append(entry)
             path_entries = kept
             if not path_entries and not l2_only:
-                # 候选清空：有语句起点特征但内容不匹配任何已知语句规则
-                # （拼错关键字/残缺结构头）→ 空列表表示"未识别"，discovery 报错。
-                return []
+                # Level 1 判别路径被操作数内部内容挡住（如拼接 lvalue
+                # `{a,b} = expr;` 的 {..}，起点非 id）→ 回退 Level 2 对原始
+                # 候选完整 production 试解析（判别不了不等于未识别；残缺语句
+                # 试解析仍零匹配返回 []，不吞错）。
+                t_limit = min(limit + 1, n)
+                return self._try_parse(tokens, i, entries, t_limit)
             # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
             if len(path_entries) == 1 and any(
                 len(p) == len(seen) and p == tuple(seen)

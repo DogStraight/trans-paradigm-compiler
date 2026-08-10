@@ -114,8 +114,30 @@ class Discovery:
                 i += 1
                 continue
 
-            # 括号内容整体跳过（端口列表/参数列表等），避免内部 token 误判
+            # 括号内容：先尝试语句分类——`{` 拼接可作赋值 lvalue（{a,b} = expr; ，
+            # BlockingAssign 的 first 含 bracket.l_curly_bracket，由 keyword_map
+            # 触发），命中即按语句发现；否则整体跳过括号区间（端口/参数列表等）。
+            # 仅对无 block_end 的纯语句规则走语句分支（块规则仍由块分支处理）。
             if t.type in self._bracket_openers:
+                candidates = self._lookahead.classify(tokens, i, context)
+                if candidates and not (
+                    isinstance(candidates[0], str)
+                    and (self._tree.get(candidates[0], {}) or {}).get("block_end")
+                ):
+                    rule = candidates[0] if len(candidates) == 1 else candidates
+                    e = self._statement_end(tokens, i, candidates[0], end)
+                    if e > i:
+                        nodes.append(
+                            DiscoveredNode(
+                                type="statement",
+                                rule=rule,
+                                start=i,
+                                end=e,
+                                context=context,
+                            )
+                        )
+                        i = e
+                        continue
                 i = self._skip_balanced(tokens, i, end)
                 continue
 
