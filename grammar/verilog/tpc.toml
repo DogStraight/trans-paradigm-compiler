@@ -37,4 +37,4 @@ continuation = { file = "base/_macro.toml", section = "continuation", required =
 reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 
 [plugins]
-enabled = ["typed_ports", "formatter"]
+enabled = ["typed_ports", "formatter", "attributes"]

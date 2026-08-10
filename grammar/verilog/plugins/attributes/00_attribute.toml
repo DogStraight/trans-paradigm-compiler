@@ -1,0 +1,107 @@
+# ============================================================================
+# Verilog 属性（attribute）插件 — IEEE 1364-2005 A.9.1
+# ============================================================================
+#   attribute_instance ::= (* attr_spec { , attr_spec }  *)
+#   attr_spec ::= attr_name [ = constant_expression ]
+#   attr_name ::= identifier
+#
+# 设计：attribute 作为"带属性声明"的独立入口 AttrDecl 注入 ModuleItem（inject），
+# 不修改核心 RegDecl/WireDecl 规则——插件不启用时核心 grammar 完全不变，
+# 保持测试稳定性；启用后挂载到实际语法位置（声明前）。
+#
+# 挂载位点：ModuleItem（模块体顶层）。AttrDecl = @AttrInstance @RegDecl|@WireDecl|@IntegerDecl
+
+[AttrDecl.inject]
+targets = ["@ModuleItem"]
+
+[AttrDecl]
+is_statement = true
+
+[AttrDecl.parser]
+production = [
+    "@AttrInstance",
+    "@RegDecl|@WireDecl|@IntegerDecl",
+]
+end_case = [
+    "newline",
+]
+
+[AttrDecl.parser.node]
+attrs = "$1"
+decl = "$2"
+
+[AttrDecl.renderer]
+layout = { line = [
+    { ref = "attrs" },
+    " ",
+    { ref = "decl" },
+] }
+
+
+# ============================================================================
+# AttrInstance — (* attr_spec { , attr_spec } *)
+# ============================================================================
+[AttrInstance]
+[AttrInstance.parser]
+production = [
+    "bracket.l_parentheses",
+    "symbol.base.multiple",
+    "@AttrSpecList",
+    "symbol.base.multiple",
+    "bracket.r_parentheses",
+]
+end_case = [
+    "bracket.r_parentheses",
+]
+[AttrInstance.parser.node]
+specs = "$3"
+[AttrInstance.renderer]
+layout = { line = [
+    "(",
+    "*",
+    " ",
+    { ref = "specs" },
+    " ",
+    "*",
+    ")",
+] }
+
+
+# ============================================================================
+# AttrSpecList — 逗号分隔的 attr_spec 列表（(* a, b = 1 *)）
+# ============================================================================
+[AttrSpecList]
+[AttrSpecList.parser]
+production = ["@AttrSpec", "(symbol.base.comma,@AttrSpec)*"]
+[AttrSpecList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[AttrSpecList.renderer]
+layout = { join = ", ", items = "items" }
+
+
+# ============================================================================
+# AttrSpec — 单个属性项: attr_name [ = constant_expression ]
+# ============================================================================
+[AttrSpec]
+[AttrSpec.parser]
+production = ["@Identifier", "@AttrValue?"]
+[AttrSpec.parser.node]
+name = "$1"
+value = "$2"
+[AttrSpec.renderer]
+layout = { line = [
+    { ref = "name" },
+    { opt = { group = [
+        " = ",
+        { ref = "value" },
+    ] } },
+] }
+
+[AttrValue]
+inline = true
+[AttrValue.parser]
+production = ["symbol.base.equal", "@PrimaryExpr"]
+[AttrValue.parser.node]
+value = "$2"
+[AttrValue.renderer]
+layout = { ref = "value" }
