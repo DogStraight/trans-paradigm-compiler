@@ -118,12 +118,17 @@ def inject_productions(
                     continue
                 other_prods = list(other_rule.prods)
                 changed = False
+                # 规则引用按完整 token 边界匹配，避免误伤 @StmtOrNull 这类
+                # 以目标规则名开头（@Stmt + OrNull）的复合规则名。
+                tgt_pattern = re.compile(
+                    r"(?<![A-Za-z0-9_])" + re.escape(tgt_ref) + r"(?![A-Za-z0-9_])"
+                )
                 for i, prod in enumerate(other_prods):
                     if not isinstance(prod, str):
                         continue
                     replacement = f"({target_ref}|{tgt_ref})"
-                    if tgt_ref in prod:
-                        prod = prod.replace(tgt_ref, replacement)
+                    if tgt_pattern.search(prod):
+                        prod = tgt_pattern.sub(replacement, prod)
                         changed = True
                     other_prods[i] = prod
                 if changed:
