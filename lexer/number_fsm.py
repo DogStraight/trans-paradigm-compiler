@@ -243,6 +243,7 @@ class NumberFSM:
         # 初始接受位置：如果初始状态可接受，则至少包含第一个字符
         last_accept = start_pos + 1 if state in cls._ACCEPTING else -1
         prev_underscore = False
+        after_space = False
 
         while pos < len(text):
             ch = text[pos]
@@ -257,7 +258,14 @@ class NumberFSM:
                 cls.VERILOG_OCT_VALUE,
             } and (ch == " " or ch == "\t"):
                 pos += 1
+                after_space = True
                 continue
+            # 跨空格不允许 '?' 基值：数字后的 '?'（带空格）是三元运算符而非基值
+            # （如 2'b00 ? a : b）。'?' 必须紧跟数字（如 4'b1?0）才视为基值；
+            # x/z 仍允许跨空格（如 32'h x）。
+            if after_space and ch == "?":
+                break
+            after_space = False
             nxt = fsm.next_state(state, ch)
             if nxt is None:
                 break
