@@ -250,16 +250,25 @@ class Lexer:
                 # handle possible dedent before actual token
                 self._emit_pending_dedent(tokens)
 
-                extend_symbol = f"{lex_text[text_idx]}{next_char}"
+                # 最长匹配：从 base 字符起贪心扩展，extend 表里有什么就支持
+                # 多长（如 >>>/<<< 三字符，配置驱动，不硬编码符号长度）。
+                extend_values = self.token_define["symbol"]["extend"].values()
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_type("symbol.base")
                 text_idx += 1
                 offset += 1
-                if extend_symbol in self.token_define["symbol"]["extend"].values():
-                    current_token.set_content(extend_symbol)
+                candidate = current_token.content
+                while text_idx < lex_text_len:
+                    probe = candidate + lex_text[text_idx]
+                    if probe in extend_values:
+                        candidate = probe
+                        text_idx += 1
+                        offset += 1
+                    else:
+                        break
+                if len(candidate) > 1:
+                    current_token.set_content(candidate)
                     current_token.set_type("symbol.extend")
-                    text_idx += 1
-                    offset += 1
 
                 # reset line info
                 start_point += offset

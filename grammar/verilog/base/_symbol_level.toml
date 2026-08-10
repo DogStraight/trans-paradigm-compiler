@@ -88,7 +88,7 @@ symbol = "|"
 arity = 2
 assoc = "left"
 
-# 移位
+# 移位（逻辑与算术，IEEE A.2.5 shift_operator: << >> <<< >>>）
 [[operator]]
 symbol = "<<"
 arity = 2
@@ -96,6 +96,16 @@ assoc = "left"
 
 [[operator]]
 symbol = ">>"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "<<<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">>>"
 arity = 2
 assoc = "left"
 

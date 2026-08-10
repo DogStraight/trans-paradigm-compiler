@@ -37,6 +37,8 @@ dollar = "$"
 [symbol.extend]
 r_shift = ">>"
 l_shift = "<<"
+arith_r_shift = ">>>"
+arith_l_shift = "<<<"
 point_to = "->"
 power = "**"
 bigger_equal = ">="
