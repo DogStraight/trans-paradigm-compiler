@@ -81,6 +81,9 @@ layout = { join = ", ", items = "items" }
 
 # ============================================================================
 # AttrSpec — 单个属性项: attr_name [ = constant_expression ]
+# 值用 AttrConstPrimary（constant_primary 的实用子集），符合 IEEE A.8.4：
+#   number | 位宽字面量 | 参数/常量标识符 | string
+# 不含普通函数调用/系统函数/非常量选择（标准要求 constant_* 版本）。
 # ============================================================================
 [AttrSpec]
 [AttrSpec.parser]
@@ -100,8 +103,21 @@ layout = { line = [
 [AttrValue]
 inline = true
 [AttrValue.parser]
-production = ["symbol.base.equal", "@PrimaryExpr"]
+production = ["symbol.base.equal", "@AttrConstPrimary"]
 [AttrValue.parser.node]
 value = "$2"
 [AttrValue.renderer]
+layout = { ref = "value" }
+
+
+# ============================================================================
+# AttrConstPrimary — 常量 primary（IEEE A.8.4 constant_primary 实用子集）
+# ============================================================================
+[AttrConstPrimary]
+inline = true
+[AttrConstPrimary.parser]
+production = ["@BitWidthLiteral|@Number|@Identifier|literal.string"]
+[AttrConstPrimary.parser.node]
+value = "$1"
+[AttrConstPrimary.renderer]
 layout = { ref = "value" }
