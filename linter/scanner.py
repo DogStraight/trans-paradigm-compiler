@@ -170,10 +170,13 @@ class LinterScanner:
 
     def scan(self, source: str) -> list[LintDiagnostic]:
         errors: list = []
-        macro_defs, _, clean_source = scan_directives(source, self._rules_dir)
+        macro_defs, func_macros, _, _, _, clean_source = scan_directives(
+            source, self._rules_dir
+        )
         if macro_defs:
             lex_source, _ = expand_tokens(
-                clean_source, macro_defs, prefix=self._macro_prefix
+                clean_source, macro_defs, prefix=self._macro_prefix,
+                func_macros=func_macros,
             )
         elif clean_source != source:
             lex_source = clean_source

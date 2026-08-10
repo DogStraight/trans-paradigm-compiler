@@ -70,8 +70,12 @@ def _restore_lines(
                     pos += 1
                     continue
 
-            # 匹配成功
-            result = result[:pos] + f"{prefix}{macro}" + result[pos + len(body) :]
+            # 匹配成功：function-like 宏恢复为 `NAME(args) 形态，object-like 恢复为 `NAME
+            if entry.get("is_func"):
+                replacement = f"{prefix}{macro}({entry.get('args', '')})"
+            else:
+                replacement = f"{prefix}{macro}"
+            result = result[:pos] + replacement + result[pos + len(body) :]
             break
 
     return result
@@ -89,4 +93,21 @@ def protect_and_reverse(
     """
     if restoration_stack:
         return _restore_lines(rendered, prefix, restoration_stack)
+    return rendered
+
+
+def restore_condition_blocks(
+    rendered: str, placeholders: dict[str, str] | None = None
+) -> str:
+    """把渲染输出中的条件块占位注释替换回原文段。
+
+    placeholders: {占位 id → 原文段}，来自 scan_directives。
+    占位注释（`// <tpc:cond:N>`）在扫描时替代 inactive 分支 + 块边界指令，
+    渲染后原位替换回原文，实现条件编译多义性的保真恢复。
+    """
+    if not placeholders:
+        return rendered
+    for ph_id, original in placeholders.items():
+        marker = f"// <{ph_id}>"
+        rendered = rendered.replace(marker, original)
     return rendered

@@ -52,6 +52,7 @@ from preprocessor import (
     scan_directives,
     expand_tokens,
     protect_and_reverse,
+    restore_condition_blocks,
 )
 
 # Add project root to sys.path
@@ -97,6 +98,8 @@ def run_pipeline_on_source(
     rules_dir: str = DEFAULT_RULES_DIR,
     ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
     include_dirs: list[str] | None = None,
+    predefined: dict[str, str] | None = None,
+    undefine: set[str] | None = None,
 ) -> dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -176,11 +179,18 @@ def run_pipeline_on_source(
 
     # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
     macro_table = {}
+    func_macros = {}
+    placeholders = {}
     directive_lines = []
     restore_stack = None
     if expand_macros:
-        macro_table, directive_lines, source = scan_directives(
-            source, rules_dir, source_path=input_path, search_dirs=include_dirs
+        macro_table, func_macros, _, placeholders, directive_lines, source = scan_directives(
+            source,
+            rules_dir,
+            source_path=input_path,
+            search_dirs=include_dirs,
+            predefined=predefined,
+            undefine=undefine,
         )
         _log(f"[preprocessor] macros defined: {len(macro_table)}")
 
@@ -230,7 +240,9 @@ def run_pipeline_on_source(
 
     # ---- Stage: 纯文本宏展开（在 lexer 之前）----
     if expand_macros and macro_table:
-        source, restore_stack = expand_tokens(source, macro_table)
+        source, restore_stack = expand_tokens(
+            source, macro_table, func_macros=func_macros
+        )
         tokens = lexer.tokenize(source)
         _log(f"[preprocessor] macros expanded, tokens: {len(tokens)}")
 
@@ -370,7 +382,12 @@ def run_pipeline_on_source(
             )
             _log("[preprocessor] macros reversed")
 
-        # Restore directive lines
+        # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
+        if placeholders:
+            content = restore_condition_blocks(content, placeholders)
+            _log(f"[preprocessor] condition blocks restored: {len(placeholders)}")
+
+        # Restore directive lines（副作用指令 define/undef/include）
         if directive_lines:
             content = "\n".join(directive_lines) + "\n" + content
             _log(f"[preprocessor] directives restored: {len(directive_lines)}")
@@ -520,6 +537,20 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Add directory to preprocessor include search path (can specify multiple)",
     )
+    parser.add_argument(
+        "-D", "--define",
+        action="append",
+        dest="define",
+        default=None,
+        help="Predefine a macro for conditional compilation: -D NAME or -D NAME=VAL (can repeat)",
+    )
+    parser.add_argument(
+        "-U", "--undefine",
+        action="append",
+        dest="undefine",
+        default=None,
+        help="Force a macro to be undefined for conditional compilation: -U NAME (can repeat)",
+    )
 
     parser.set_defaults(analyzer=True, transform=True, renderer=True)
     return parser.parse_args()
@@ -536,6 +567,15 @@ def main() -> None:
             print(f"[error] test file not found: {args.test_name}", file=sys.stderr)
             sys.exit(1)
 
+    # -D NAME[=VAL] → predefined；-U NAME → undefine
+    predefined: dict[str, str] = {}
+    for d in args.define or []:
+        if "=" in d:
+            k, v = d.split("=", 1)
+            predefined[k] = v
+        else:
+            predefined[d] = "1"
+    undefine: set[str] = set(args.undefine or [])
     with open(src_file, "r", encoding="utf-8") as f:
         source = f.read()
 
@@ -554,6 +594,8 @@ def main() -> None:
         rules_dir=args.rules_dir,
         ext_dirs=args.ext_dirs,
         include_dirs=args.include_dirs,
+        predefined=predefined,
+        undefine=undefine,
     )
 
     if not result["success"]:

@@ -7,12 +7,13 @@ Architecture:
 from core.config_registry import _CONFIG_DECLARATIONS
 from . import _expand, _reverse
 from ._expand import scan_directives, expand_tokens
-from ._reverse import protect_and_reverse
+from ._reverse import protect_and_reverse, restore_condition_blocks
 
 __all__ = [
     "scan_directives",
     "expand_tokens",
     "protect_and_reverse",
+    "restore_condition_blocks",
     "get_config_refs",
     "_expand",
     "_reverse",
