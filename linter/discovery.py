@@ -27,6 +27,31 @@ from .lookahead import LookaheadTable
 _TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 
 
+def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
+    """从语法树推导属性对开括号（如 (* ... *)）。
+
+    配置驱动：找 production 以 "(" + "*" 两个纯 token 开头的规则
+    （如 AttrInstance），返回 (开括号 token, 次 token)。无则 None。
+    """
+    for info in tree.values():
+        if not isinstance(info, dict):
+            continue
+        prods = info.get("prods") or []
+        if len(prods) < 2:
+            continue
+        p0, p1 = prods[0], prods[1]
+        if (
+            isinstance(p0, dict)
+            and p0.get("type") == "token"
+            and p0.get("token_type") == "bracket.l_parentheses"
+            and isinstance(p1, dict)
+            and p1.get("type") == "token"
+            and p1.get("token_type") == "symbol.base.multiple"
+        ):
+            return ("bracket.l_parentheses", "symbol.base.multiple")
+    return None
+
+
 class Discovery:
     """发现器：产出自动注册的扁平节点列表。"""
 
@@ -64,6 +89,11 @@ class Discovery:
             for info in tree.values()
             if isinstance(info, dict) and info.get("block_end")
         )
+        # 属性对开括号推导（配置驱动，不硬编码规则名）：找 production 以
+        # "(" + "*" 开头的规则（如 AttrInstance 的 (* ... *)）。_skip_to_end
+        # 据此整体跳过属性对，使带属性的语句（如 (* parallel_case *) case ...）
+        # 边界不被属性内的括号/newline 截断。
+        self._attr_openers = _derive_attr_openers(tree)
         # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
         self._unrecognized: list[LintDiagnostic] = []
 
@@ -119,6 +149,16 @@ class Discovery:
             # 触发），命中即按语句发现；否则整体跳过括号区间（端口/参数列表等）。
             # 仅对无 block_end 的纯语句规则走语句分支（块规则仍由块分支处理）。
             if t.type in self._bracket_openers:
+                # 属性对 (* ... *)：整体跳过，不注册语句节点。属性是元数据，
+                # 其 body（case/赋值）由后续扫描独立发现——注册 AttrStmt 会因
+                # checker 需匹配跨行 body、边界难定而误报。
+                if (
+                    self._attr_openers
+                    and t.type == self._attr_openers[0]
+                    and self._next_type(tokens, i + 1, end) == self._attr_openers[1]
+                ):
+                    i = self._skip_balanced(tokens, i, end)
+                    continue
                 candidates = self._lookahead.classify(tokens, i, context)
                 if candidates and not (
                     isinstance(candidates[0], str)
@@ -321,13 +361,21 @@ class Discovery:
         for feat in info.get("prods", []):
             if j >= end or not isinstance(feat, dict):
                 break
-            name = feat.get("name") if feat.get("type") == "call" else ""
+            typ = feat.get("type")
+            name = feat.get("name") if typ == "call" else ""
             if name:
                 tinfo = self._tree.get(name, {})
                 if tinfo.get("is_statement") or tinfo.get("is_block"):
                     return j, end, name
                 # 包装规则穿透：body 起始 = 该 call 匹配起始，入口 = 内部语句名
                 inner = self._inner_stmt_entry(name)
+                if inner:
+                    return j, end, inner
+            elif typ == "choice":
+                # choice 内直接引用语句/块（如传播产生的 (@AttrStmt|@Stmt)）：
+                # body 起始 = choice 起始。entry 仅用于标记，递归由 _discover_range
+                # 独立扫描 [bs, e)，不依赖具体入口名。
+                inner = self._find_stmt_in_feat(feat)
                 if inner:
                     return j, end, inner
             trial: list = []
@@ -461,6 +509,17 @@ class Discovery:
                 return i + 1
             if t.type in _TRIVIA:
                 i += 1
+                continue
+            # 属性对 (* ... *)：整体跳过（不改变块 depth）。属性后的行尾换行
+            # 也属于属性前缀（body 从下一行开始），一并跳过——否则换行会被
+            # end_case 当语句边界截断（(* x *) 后换行 case 的边界只到属性行）。
+            if (
+                self._attr_openers
+                and t.type == self._attr_openers[0]
+                and self._next_type(tokens, i + 1, n) == self._attr_openers[1]
+            ):
+                i = self._skip_balanced(tokens, i, n)
+                i = self._skip(tokens, i, n)
                 continue
             if t.type in self._block_openers:
                 depth += 1
