@@ -16,3 +16,5 @@ parser_baseline/
 _test_*.py
 .github/
 *.egg-info/
+# 管线运行临时输出
+/tmp/
