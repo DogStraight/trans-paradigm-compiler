@@ -223,7 +223,17 @@ class Lexer:
                     tokens.append(current_token)
                     offset = new_idx - text_idx
                     text_idx = new_idx
-                    start_point += offset
+                    # 多行块注释跨行：行号同步前进（此前只平移列、行号不增，
+                    # 注释后的所有 token 行号系统性偏少）；列重算到注释最后一
+                    # 行内（该行注释内容宽度），单行注释仍按列平移 offset。
+                    newlines = comment_content.count("\n")
+                    if newlines:
+                        line_number += newlines
+                        start_point = (
+                            len(comment_content) - comment_content.rfind("\n") - 1
+                        )
+                    else:
+                        start_point += offset
                     # comments at beginning of line should not affect indentation
                     if self.new_line_start:
                         self.new_line_start = False

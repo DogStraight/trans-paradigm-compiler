@@ -190,12 +190,22 @@ class LookaheadTable:
             if isinstance(info, dict) and info.get("block_end")
         )
         # 句子结束符（从语句规则 production 末尾字面 token + 配置 end_case 推导，
-        # 不假设分号——分号只是其中普通成员，随语言配置变化）
-        self._stmt_ends = frozenset(
-            tok
-            for info in tree.values()
-            if isinstance(info, dict) and info.get("is_statement")
-            for tok in LookaheadTable._rule_end_tokens(info)
+        # 不假设分号——分号只是其中普通成员，随语言配置变化）。并入所有块规则
+        # 的 block_end（keyword.end 等）：块结束符天然是容器语句边界，discovery
+        # 的 _skip_to_end 依赖它正确定位 if/for 等嵌套容器的终止点——缺失时
+        # if 块边界延伸到后续语句（吞掉后续 always 等），语句边界错乱。
+        self._stmt_ends = (
+            frozenset(
+                tok
+                for info in tree.values()
+                if isinstance(info, dict) and info.get("is_statement")
+                for tok in LookaheadTable._rule_end_tokens(info)
+            )
+            | frozenset(
+                info["block_end"]
+                for info in tree.values()
+                if isinstance(info, dict) and info.get("block_end")
+            )
         )
         # 方括号开/闭类型（配置推导）：Level 1 括号配对跳过 @PrimaryExpr 内部/
         # 块头范围的 [..] 区间，不参与判别 token 匹配。

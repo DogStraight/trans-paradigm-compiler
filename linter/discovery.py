@@ -465,6 +465,12 @@ class Discovery:
             if t.type in self._block_openers:
                 depth += 1
             elif t.type in self._block_closers:
+                # positive 闭合符（如 keyword.end）使深度归零 → 该 token 就是
+                # 目标块结束符，返回其之后位置。此前缺失此分支：depth 1→0 的
+                # end 被跳过（positive 检查在 depth 更新前），容器边界越过正确
+                # end 延伸到 EOF，把后续语句吞进块体。
+                if t.type in positive and depth <= 1:
+                    return i + 1
                 depth = max(0, depth - 1)
             i += 1
         return n
