@@ -1,0 +1,10 @@
+# tpc.toml — c4（Tiny C 演示 DSL）语法包入口配置
+#
+# 阶段 1：词法。parser/operator/renderer/linter 等后续语法阶段补充。
+# 配置结构遵循 grammar/<lang>/ 约定（参考 grammar/verilog/tpc.toml）。
+
+[lexer]
+token_base = { file = "base/_token.toml", required = true }
+lexer_base = { file = "base/_lexer.toml", required = true }
+token_lang = { file = "token.toml", required = true }
+bracket_map = { file = "base/_token.toml", section = "bracket", required = false }

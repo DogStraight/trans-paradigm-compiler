@@ -13,26 +13,36 @@ rewrite"从口号变事实。
 
 ## 状态
 
-位置已开，范畴裁剪待定（P0.2 第一步）。开工前定三件事：
+范畴：**完整实现**（用户定：本体不大，不裁剪）——覆盖 c4 全量：
+类型（char/int/指针）、字面量（十/十六/八进制、字符、字符串）、
+if/else、while、return、块、表达式语句、全局/局部声明、函数、enum。
 
-1. **范畴裁剪**：c4 内核（int/char/指针/数组/函数/if/while/for/递归）vs 扩展
-   （struct/float/switch 等明确不进）——进/不进清单
-2. **任务拆分顺序**：lexer → parser → analyzer → transform → renderer 先哪层
-3. **核心渗透预检**：先跑最小 lexer 验证，尽早暴露 core 里的 Verilog 渗透
+实现进度（每阶段验证后勾选）：
+
+- [x] **词法层**（阶段 1-2）：token/lexer/关键字配置 + C 代码 tokenize 验证
+      - `tpc.toml` [lexer] + `base/_token.toml` + `base/_lexer.toml` + `token.toml`
+      - 验证通过：`int main(){ printf("hello\n"); int x=0x1F; char c='a'; ... }`
+        → 关键字/标识符/十/十六进制数字/字符/字符串/运算符/注释(// #) 全对
+      - **机制依赖**：`ConfigRegistry.load_language(rules_dir)`（core/config_registry.py）
+        从指定语言包重新声明并加载——打破"import 期只注册默认包"的单语言假设
+- [ ] 表达式规则（阶段 3）：原子 + Pratt 全运算符链
+- [ ] 语句/声明规则（阶段 4）：if/else、while、return、函数、变量、enum
+- [ ] analyzer 符号表 + renderer（阶段 5）
+- [ ] 测试样本 + 管线跑通 + 语言无关性验收（阶段 6）
 
 ## 结构约定（遵循 grammar/<lang>/）
 
-- `tpc.toml`：语言包入口（[lexer]/[parser]/[renderer]/[linter]/... 声明）——
-  范畴裁剪确定后填，避免半成品触发 fail-fast 配置验证
+- `tpc.toml`：语言包入口（[lexer]/[parser]/[renderer]/[linter]/... 声明）
 - 规则文件按数字前缀排序（`00_*.toml` / `01_*.toml` ...）
 - `base/`：共享 token/lexer/operator 基础
 - `plugins/`：语言插件（如有）
 
 ## 待办
 
-- [ ] 范畴裁剪清单（进/不进）
-- [ ] 核心渗透预检（最小 lexer）
-- [ ] tpc.toml 入口
-- [ ] 分层实现（每层一个 commit，参照 chibicc 增量）
+- [x] 核心渗透预检（最小 lexer）——词法层跑通，未发现 core 渗透
+- [x] tpc.toml 入口
+- [ ] 表达式/语句/声明规则
+- [ ] analyzer 符号表 + renderer
+- [ ] 测试样本 + 管线跑通
 - [ ] 语言无关性验收（core 无 Verilog 渗透）
 - [ ] "从零搭语言" walkthrough 文档（模型可消费性演示）

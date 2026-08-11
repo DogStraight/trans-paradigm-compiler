@@ -133,12 +133,26 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
     return result
 
 
-def _load_meta_declarations() -> list[tuple]:
-    """Read [config.*] declarations from grammar package tpc.toml files."""
+def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
+    """Read [config.*] declarations from grammar package tpc.toml files.
+
+    Args:
+        grammar_dir: 语言包目录（相对项目根，如 "grammar/c4"）。空时用
+            默认包（config/tpc_config.json 指向的 grammar）——保持既有单语言
+            行为；第二语言（c4 等）通过 ConfigRegistry.load_language 传入。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     declarations = []
 
     # 1. Core grammar package — 所有 [xxx] 段落（除了 grammar）都是配置声明
-    core_path = _find_grammar_tpc_toml()
+    if grammar_dir:
+        core_path = os.path.join(root, grammar_dir, "tpc.toml")
+        if not os.path.isfile(core_path):
+            raise ConfigError(
+                f"[config] grammar package tpc.toml not found: {core_path}"
+            )
+    else:
+        core_path = _find_grammar_tpc_toml()
     with open(core_path, encoding="utf-8") as f:
         meta = tomllib.loads(f.read())
     for ns, table in meta.items():
@@ -163,14 +177,13 @@ def _load_meta_declarations() -> list[tuple]:
                 declarations.append((config_key, "", None, "", False, "", spec))
 
     # 2. Plugin packages — 从 [plugins] enabled 读取插件 tpc.toml
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     plugins_cfg = meta.get("plugins", {})
     if isinstance(plugins_cfg, dict):
         enabled = plugins_cfg.get("enabled", [])
         if isinstance(enabled, list):
-            grammar_dir = os.path.dirname(core_path)
+            package_dir = os.path.dirname(core_path)
             for name in enabled:
-                plugin_tpc = os.path.join(grammar_dir, "plugins", name, "tpc.toml")
+                plugin_tpc = os.path.join(package_dir, "plugins", name, "tpc.toml")
                 if not os.path.isfile(plugin_tpc):
                     continue
                 with open(plugin_tpc, encoding="utf-8") as f:
@@ -257,6 +270,44 @@ class ConfigRegistry:
             "description": description,
             "bare_value": bare_value,
         }
+
+    @classmethod
+    def load_language(
+        cls,
+        rules_dir: str,
+        ext_dirs: list[str] | None = None,
+        plugins_dir: str = "",
+    ) -> None:
+        """加载指定语言包（第二语言/换语言）：从 rules_dir 的 tpc.toml
+        重新生成配置声明并加载全部配置。
+
+        默认 import 期只从 config/tpc_config.json 指向的单一 grammar 包注册
+        声明（单语言假设）。本方法允许同一进程切换到其他语言包——"语言
+        无关性"的核心能力，供 c4 等第二语言验证使用。
+
+        Args:
+            rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
+        """
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.isfile(os.path.join(root, rules_dir, "tpc.toml")):
+            rules_dir = os.path.join("grammar", rules_dir)
+        if not os.path.isfile(os.path.join(root, rules_dir, "tpc.toml")):
+            raise ConfigError(
+                f"[config] grammar package tpc.toml not found under: {rules_dir}"
+            )
+        decls = _load_meta_declarations(grammar_dir=rules_dir)
+        cls._entries.clear()
+        for name, file, section, base, required, desc, bare in decls:
+            cls.declare(
+                name,
+                file=file,
+                section=section,
+                base=base,
+                required=required,
+                description=desc,
+                bare_value=bare,
+            )
+        cls.load_all(rules_dir, ext_dirs=ext_dirs, plugins_dir=plugins_dir)
 
     @classmethod
     def load_all(
