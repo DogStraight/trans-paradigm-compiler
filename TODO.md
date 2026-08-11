@@ -13,8 +13,15 @@
 > 现状：`pyproject.toml`（build-system/project/scripts/optional-deps/pytest/coverage）与 LICENSE 已落地；
 > 2026-07-25 质量评估遗留 P0/P1（异常层级、覆盖率门禁）。
 
-- [ ] **异常层级统一**：统一异常体系 + 清理 except 吞噬 + TOML 模式验证（2026-07-25 P0 遗留）
+- [x] **异常层级统一**：统一异常体系 + 清理 except 吞噬 + TOML 模式验证（2026-07-25 P0 遗留）
       ——开发新语言前清理，避免新代码踩坑
+      - core/errors.py：TransParadigmError 基类 + ConfigError/GrammarError/LexError/
+        ParseError/TransformError/LintInternalError 子类；ParseError 迁移继承，core.define
+        re-export 保持兼容
+      - config 加载路径（define._load_tpc_meta / config_registry.load_all）→ ConfigError
+      - 语法验证（rule_selector 产生式片段 / define peek / lookahead 入口规则）→ GrammarError；
+        linter 配置缺失 → ConfigError
+      - 清理 component/plugin loader 裸 except Exception: pass → OSError 收紧
 - [x] **调试基础设施**（parser + linter 共用，当前最难调试的两个模块，第二语言开发会大量依赖）：
       a) 日志分级开关（LOG_TRACE/DEBUG/INFO/WARN/ERROR，`_log_level` 阈值替代空 lambda 替换，
          修复 `debug_log_file=None` 时 WARN 被吞——parser_core.py `_log_state`/`_log_level`）；

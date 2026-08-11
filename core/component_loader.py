@@ -19,8 +19,9 @@ def _get_component_dir() -> str:
         plugins_dir = os.path.join(root, DEFAULT_RULES_DIR, "plugins")
         if os.path.isdir(plugins_dir):
             return plugins_dir
-    except Exception:
-        pass
+    except OSError:
+        # 仅容忍文件系统级异常；import/配置异常（如 ConfigError）应冒泡而非静默
+        return ""
     return ""
 
 _loaded_components: dict[str, dict[str, Any]] = {}

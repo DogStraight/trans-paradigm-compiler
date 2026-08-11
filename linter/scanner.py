@@ -20,6 +20,7 @@ Doc: docs/decisions/0001-pre-parse-linter.md
 import os
 
 from core.define import GrammarRule
+from core.errors import ConfigError
 from core.config_registry import ConfigRegistry
 from lexer import Lexer
 from parser import setup_grammar
@@ -114,7 +115,7 @@ class LinterScanner:
         _module_item_rule = ConfigRegistry._loaded.get("linter.module_item_rule")
         _stmt_rule = ConfigRegistry._loaded.get("linter.stmt_rule")
         if not _module_item_rule or not _stmt_rule:
-            raise RuntimeError(
+            raise ConfigError(
                 "[linter] 配置缺少语句入口选择器：tpc.toml [linter] 必须配置 "
                 "module_item_rule（模块体语句入口）与 stmt_rule（过程体语句入口）。"
             )

@@ -10,6 +10,15 @@ import tomllib
 import os
 from pathlib import Path
 
+from core.errors import (
+    ConfigError,
+    GrammarError,
+    LexError,
+    ParseError,
+    TransformError,
+    LintInternalError,
+)
+
 # ── 配置文件查找路径 ──
 _CONFIG_CANDIDATES = ["config/tpc_config.json"]
 
@@ -61,7 +70,7 @@ def _load_tpc_meta() -> dict:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
         except (json.JSONDecodeError, KeyError) as e:
-            raise RuntimeError(f"[config] {user_config} parse failed: {e}")
+            raise ConfigError(f"[config] {user_config} parse failed: {e}")
     else:
         cfg = {}
 
@@ -83,7 +92,7 @@ def _load_tpc_meta() -> dict:
             with open(meta_path, encoding="utf-8") as f:
                 meta = tomllib.loads(f.read())
         except tomllib.TOMLDecodeError as e:
-            raise RuntimeError(f"[config] {grammar_dir}/tpc.toml parse failed: {e}")
+            raise ConfigError(f"[config] {grammar_dir}/tpc.toml parse failed: {e}")
 
     # Step 4: 插件目录由 tpc.toml [plugins] enabled 管理（config_registry 自动发现）
     ext_dirs: list[str] = []
@@ -100,7 +109,7 @@ def _load_tpc_meta() -> dict:
             merged.setdefault(k, v)
 
     if "grammar" not in merged:
-        raise RuntimeError(
+        raise ConfigError(
             f"[config] No grammar package found.\n"
             f"  Create config/tpc_config.json or ensure {grammar_dir}/tpc.toml exists."
         )
@@ -286,40 +295,6 @@ class FileManager:
         return merged
 
 
-class ParseError(Exception):
-    """解析错误，携带失败上下文以便快速定位。"""
-
-    def __init__(
-        self,
-        msg: str = "",
-        token=None,
-        rule: str | None = None,
-        path: str | None = None,
-        candidates: list | None = None,
-        context_info: str | None = None,
-    ):
-        self.token = token
-        self.rule = rule
-        self.path = path
-        self.candidates = candidates
-        self.context_info = context_info
-        parts = [msg]
-        if token:
-            parts.append(
-                f"  token: '{token.content}' (type={token.type}) Ln {token.line}"
-            )
-        if rule:
-            parts.append(f"  rule: {rule}")
-        if path:
-            parts.append(f"  path: {path}")
-        if candidates is not None:
-            names = [r.name if hasattr(r, "name") else str(r) for r in candidates]
-            parts.append(f"  candidates ({len(candidates)}): {names}")
-        if context_info:
-            parts.append(f"  ctx: {context_info}")
-        super().__init__("\n".join(parts))
-
-
 class GrammarRule:
     """语法规则
 
@@ -474,13 +449,13 @@ class GrammarRulesRegister:
             for target_field, source_stage_name in peek.items():
                 source_stage = rule_dict.get(source_stage_name)
                 if not isinstance(source_stage, dict):
-                    raise ValueError(
+                    raise GrammarError(
                         f"peek: rule '{rule_name}' source stage "
                         f"'{source_stage_name}' not found or not a dict"
                     )
                 value = source_stage.get(target_field)
                 if value is None:
-                    raise ValueError(
+                    raise GrammarError(
                         f"peek: rule '{rule_name}' field '{target_field}' "
                         f"not found in stage '{source_stage_name}'"
                     )

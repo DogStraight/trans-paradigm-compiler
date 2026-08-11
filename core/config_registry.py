@@ -19,6 +19,8 @@ import re
 import tomllib
 from typing import Any, TypeVar
 
+from core.errors import ConfigError
+
 _CONFIG_CANDIDATES = ["config/tpc_config.json"]
 
 
@@ -377,7 +379,7 @@ class ConfigRegistry:
                     cls._loaded[name] = {}
 
         if errors:
-            raise RuntimeError(
+            raise ConfigError(
                 "[ConfigRegistry] 以下配置加载失败：\n"
                 + "\n".join(errors)
                 + "\n\n请检查规则目录结构和 TOML 文件内容。"

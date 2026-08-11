@@ -22,6 +22,7 @@ B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
 from __future__ import annotations
 
 from core.define import Token
+from core.errors import GrammarError
 
 from core.utils import square_bracket_types
 
@@ -176,7 +177,7 @@ class LookaheadTable:
             (stmt_rule, "linter.stmt_rule（过程体语句入口）"),
         ):
             if _name not in tree:
-                raise RuntimeError(
+                raise GrammarError(
                     f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
                     "请检查 tpc.toml [linter] 配置与语法规则命名是否一致。"
                 )
