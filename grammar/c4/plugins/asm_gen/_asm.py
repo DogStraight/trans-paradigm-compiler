@@ -285,21 +285,14 @@ class _C4Compiler:
         return None
 
     def _arg_list(self, args: Node | None) -> list[Node]:
+        """提取实参节点列表（健壮：不依赖 items 具体结构）。"""
         if args is None:
             return []
-        items = getattr(args, "items", None)
-        if isinstance(items, list):
-            out = []
-            for it in items:
-                if isinstance(it, Node) and it.node_name == "Expression":
-                    out.append(it)
-                else:
-                    ch = list(it.iter_children())
-                    if ch:
-                        out.append(ch[0])
-            return out
-        ch = list(args.iter_children())
-        return ch if ch else []
+        out = []
+        for ch in args.iter_children():
+            if isinstance(ch, Node):
+                out.append(ch)
+        return out
 
     def _ident_text(self, node: Node | None) -> str:
         if node is None:

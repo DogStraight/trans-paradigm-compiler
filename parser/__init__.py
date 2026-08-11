@@ -59,10 +59,17 @@ def setup_grammar(
         if os.path.isdir(ext_dir_full):
             ext_rules.update(register.rules_registration(ext_dir))
 
-    # 加载组件（含 grammar 文件 + Python handler）
+    # 加载组件（含 grammar 文件 + Python handler）——**单语言选择模型**：
+    # 只加载当前 rules_dir 语言包的组件，先清空先前语言包的组件状态，
+    # 避免多语言组件 grammar 混合进规则表（load_language 切换语言时）。
     try:
-        from core.plugin_loader import load_all_components, get_component_grammar_files
-        load_all_components()
+        from core.plugin_loader import (
+            load_all_components,
+            get_component_grammar_files,
+            _loaded_components,
+        )
+        _loaded_components.clear()
+        load_all_components(plugins_dir=f"{rules_dir}/plugins")
         for gf_path in get_component_grammar_files():
             comp_rules = register.rules_registration_from_file(gf_path)
             ext_rules.update(comp_rules)
