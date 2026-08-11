@@ -18,3 +18,5 @@ _test_*.py
 *.egg-info/
 # 管线运行临时输出
 /tmp/
+# 第三方参考源码（c4/chibicc 等，随时参考不纳入版本控制）
+/reference/
