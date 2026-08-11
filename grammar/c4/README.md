@@ -35,9 +35,18 @@ if/else、while、return、块、表达式语句、全局/局部声明、函数�
 - [x] **汇编生成**（阶段 5）：AsmGenPlugin（c4 编译逻辑：符号表/表达式/语句/
       函数 → c4 VM 指令，跳转回填）+ renderer 逐行渲染——`int main(){...}`
       全管线（lex→parse→analyze→transform→render）产出完整汇编，374 回归无破坏
-- [ ] **测试样本 + 管线跑通 + 语言无关性验收**（阶段 6）：正式测试样本、
-      组件加载机制接入（当前 AsmGenPlugin 靠显式 import 触发注册，run_pipeline
-      尚未自动加载 c4 插件）、walkthrough 文档
+- [x] **测试样本 + 组件加载接入 + 验收**（阶段 6）：
+      - 组件加载参数化（plugin_loader 支持按语言包扫 plugins/，setup_grammar
+        清空并加载当前语言包组件——单语言不混合；handler 幂等加载）
+      - tests/c4/test_c4_asm.py：6 项集成测试（赋值/if-else/while 回跳/调用/
+        优先级/守卫），用独立 GrammarRulesRegister 实例避免污染全局单例
+      - 修复第二个语言差异：语句 end_case=[newline]（Verilog 换行定界）→ C 以
+        ;/} 定界——单行多语句解析失败
+      - 全量 380 通过（374 + 6）
+
+## 剩余/后续
+- 语言无关性验收文档化（已修复 5 个核心渗透/单语言假设，见下）
+- "从零搭语言" walkthrough 文档（模型可消费性演示）
 
 **过程中修复的核心渗透（第二语言验证的产出）**：
 1. `ConfigRegistry.load_language`（core/config_registry.py）——打破"import 期只注册
