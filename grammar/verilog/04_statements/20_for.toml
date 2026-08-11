@@ -11,6 +11,9 @@
 [ForLoop]
 is_statement = true
 
+[ForLoop.analyzer]
+scope = { kind = "for_loop" }
+
 [ForLoop.parser]
 production = [
     "keyword.for",

@@ -47,8 +47,13 @@
 
 ### P0.3 渗透清理（第二语言暴露的残留渗透一并处理）
 
-- [ ] **boundary.py 语言渗透消除**：keyword.*→ScopeKind 映射外部化到配置（遵守"不编码语言知识"铁律）
-- [ ] **其他暴露点清理**：第二语言验收中发现的 core/linter/transform 残留 Verilog 知识，记录并清理
+- [x] **boundary.py 语言渗透消除**：ScopeKind 从规则自身 `analyzer.scope.kind` 声明推导，
+      boundary.py 不硬编码任何 keyword.* / 规则名 / 结构类别（遵守"不编码语言知识"铁律）
+      - 为 BeginEnd/AlwaysStmt/InitialStmt/ForLoop/CaseStmt 补 `analyzer.scope` kind 声明
+      - 只接受结构边界类别（ScopeKind 枚举内的 kind），类型系统 kind（如 TypeDecl 的 "type"）跳过
+      - 附带修复：core/config_registry.py 插件 tpc.toml 的 bare data 声明缺失 bug
+- [x] **其他暴露点清理**：第二语言验收中发现的 core/linter/transform 残留 Verilog 知识，
+      记录并清理——grep 确认核心/linter/transform 源码无残留硬编码逻辑（仅注释示例）
 
 ## P1 — Verilog 实例完善（插件增强）
 

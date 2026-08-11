@@ -18,22 +18,7 @@ from typing import Any
 
 from lexer import Lexer
 
-from core.config_registry import declare_cfg
-
-# ── 结构边界映射（语言特定，外部化到 formatter/tpc.toml [formatter.scope_kind]）──
-# 换语言（如 c4）由配置重新映射；boundary.py 不硬编码任何 keyword.* / 规则名。
-_scope_token_map: list = declare_cfg(
-    "formatter.scope_kind.token_map", [], __name__, "_scope_token_map"
-)
-_scope_rule_map: list = declare_cfg(
-    "formatter.scope_kind.rule_map", [], __name__, "_scope_rule_map"
-)
-_scope_end_map: list = declare_cfg(
-    "formatter.scope_kind.end_map", [], __name__, "_scope_end_map"
-)
-_scope_end_markers: list = declare_cfg(
-    "formatter.scope_kind.end_keyword_markers", [], __name__, "_scope_end_markers"
-)
+from core.define import GrammarRule
 
 
 # ── BlockTokenMap ──
@@ -89,24 +74,16 @@ def _resolve_first_tokens(tree: dict, feat: dict | None, visited: set[str] | Non
     return set()
 
 
-def _kind_from_name(name: str) -> "ScopeKind":
-    """配置中的 kind 字符串（如 "module"/"for_loop"）→ ScopeKind 枚举。"""
+def _kind_from_name(name: str) -> "ScopeKind | None":
+    """规则 analyzer.scope.kind 的字符串（如 "module"/"for_loop"）→ ScopeKind 枚举。
+
+    只接受 formatter 关心的结构边界类别；其它 kind（如类型系统的 "type"）
+    不属于结构边界，返回 None（调用方跳过，不进入 scope_kind_map）。
+    """
     try:
         return ScopeKind[name.strip().upper()]
     except (KeyError, AttributeError):
-        return ScopeKind.BLOCK
-
-
-def _infer_scope_kind(rule_name: str, first_tokens: set[str]) -> "ScopeKind":
-    """从规则名或起始 token 推断 ScopeKind（映射来自配置，非硬编码）。"""
-    rule_map = dict(_scope_rule_map)
-    if rule_name in rule_map:
-        return _kind_from_name(rule_map[rule_name])
-    token_map = dict(_scope_token_map)
-    for tok in first_tokens:
-        if tok in token_map:
-            return _kind_from_name(token_map[tok])
-    return ScopeKind.BLOCK
+        return None
 
 
 # ── 边界 token 集合（由语法规则自动构建）──
@@ -163,8 +140,15 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
                 break
 
     # ── 第二轮：有 end_case 关键字终结符的隐式块（case/function/task 等）──
-    # 终结符集合来自配置（formatter.scope_kind.end_keyword_markers），非硬编码
-    _END_KEYWORD_MARKERS = frozenset(_scope_end_markers)
+    # 终结符从规则推导（非 is_block 规则 end_case 里 keyword.* 的终结符），
+    # 不硬编码 endcase/endfunction 等具体名
+    _END_KEYWORD_MARKERS = frozenset(
+        tok
+        for info in tree.values()
+        if isinstance(info, dict) and not info.get("is_block")
+        for tok in (info.get("end_case") or set())
+        if isinstance(tok, str) and tok.startswith("keyword.")
+    )
     for name, info in tree.items():
         if info.get("is_block"):
             continue  # 第一轮已处理
@@ -181,21 +165,49 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             openers |= tokens
             closers |= ec & _END_KEYWORD_MARKERS  # 只取关键字终结符
 
-    # ── 构建 scope_kind_map ──
-    for name, info in tree.items():
-        is_block = info.get("is_block", False)
-        ec = info.get("end_case", set())
-        if not is_block and not (ec & _END_KEYWORD_MARKERS):
+    # ── 构建 scope_kind_map：从规则 analyzer.scope.kind 推导（结构类别是规则
+    #    自身的语义声明，非 formatter 单独映射表）──
+    for name, rule in rules.items():
+        if not isinstance(rule, GrammarRule):
             continue
-        prods = info.get("prods", [])
-        if not prods:
+        analyzer = getattr(rule, "analyzer", None)
+        if not isinstance(analyzer, dict):
             continue
-        tokens = _resolve_first_tokens(tree, prods[0])
+        scope_meta = analyzer.get("scope")
+        if not isinstance(scope_meta, dict):
+            continue
+        kind_name = scope_meta.get("kind")
+        if not kind_name:
+            continue
+        kind = _kind_from_name(kind_name)
+        if kind is None:
+            continue  # 非结构边界 kind（如类型系统的 "type"），不进入 scope_kind_map
+        info = tree.get(name, {}) or {}
+        prods = info.get("prods") or getattr(rule, "prods", []) or []
+        # first tokens → kind
+        tokens = _resolve_first_tokens(tree, prods[0]) if prods else set()
         if not tokens:
             tokens = get_start_tokens(prods)
         for tok in tokens:
-            if tok not in scope_kind_map:
-                scope_kind_map[tok] = _infer_scope_kind(name, tokens)
+            scope_kind_map.setdefault(tok, kind)
+        # block_start / block_end → kind
+        bs = getattr(rule, "block_start", "") or ""
+        be = getattr(rule, "block_end", "") or ""
+        if bs:
+            scope_kind_map.setdefault(bs, kind)
+        if be:
+            scope_kind_map.setdefault(be, kind)
+        # end_case 关键字终结符 → kind
+        ec = info.get("end_case") or getattr(rule, "end_case", []) or []
+        for e in ec:
+            if isinstance(e, str) and e.startswith("keyword."):
+                scope_kind_map.setdefault(e, kind)
+        # production 里其余关键字 token → kind（case 的 endcase 等结构终结符）
+        for feat in prods:
+            if isinstance(feat, dict) and feat.get("type") == "token":
+                tt = feat.get("token_type")
+                if isinstance(tt, str) and tt.startswith("keyword."):
+                    scope_kind_map.setdefault(tt, kind)
 
     ifdef_set = {"macro.ifdef", "macro.ifndef", "macro.else", "macro.elsif", "macro.endif"}
     return BlockTokenMap(
@@ -282,8 +294,6 @@ class BoundaryScanner:
         self.closers = self.token_map.closers
         self.ifdef_set = self.token_map.ifdef_set
         self.scope_kind_map = self.token_map.scope_kind_map
-        # 结束 token → 结构类别（来自配置，非硬编码）
-        self._end_kind_map = dict(_scope_end_map)
         self.lexer = lexer
 
     def scan(self, source: str) -> list[LineContext]:
@@ -358,7 +368,7 @@ class BoundaryScanner:
         return self.scope_kind_map.get(token_type, ScopeKind.BLOCK)
 
     def _scope_kind_for_closer(self, token_type: str) -> ScopeKind | None:
-        return self._end_kind_map.get(token_type)
+        return self.scope_kind_map.get(token_type)
 
     def _current_depth(self, scope_path: list) -> int:
         return len(scope_path) - 1

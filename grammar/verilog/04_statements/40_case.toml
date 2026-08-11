@@ -30,6 +30,9 @@ ref = "value"
 [CaseStmt]
 is_statement = true
 
+[CaseStmt.analyzer]
+scope = { kind = "case" }
+
 [CaseStmt.parser]
 production = [
     "@CaseKeyword",

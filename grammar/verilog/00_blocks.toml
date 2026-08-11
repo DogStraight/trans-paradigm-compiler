@@ -89,6 +89,9 @@ break = 1
 is_block = true
 is_statement = true
 
+[BeginEnd.analyzer]
+scope = { kind = "block" }
+
 
 # ============================================================================
 # BlockLabel — begin 块标签
