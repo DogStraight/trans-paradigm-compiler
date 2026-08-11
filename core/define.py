@@ -257,7 +257,10 @@ class FileManager:
         if not os.path.isdir(dir_path):
             return merged
         for fname in sorted(os.listdir(dir_path)):
-            if fname.startswith("_") or fname == "token.toml":
+            # 跳过：下划线前缀（辅助文件）、token.toml（语言词法覆盖，
+            # 由 [lexer] 声明加载）、plugins（语言插件目录，插件 tpc.toml
+            # 不是语法规则——如 asm_gen 的 [transform] 表会污染规则集）
+            if fname.startswith("_") or fname == "token.toml" or fname == "plugins":
                 continue
             fpath = os.path.join(dir_path, fname)
             # 子目录递归
