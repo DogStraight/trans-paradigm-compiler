@@ -370,9 +370,13 @@ class GrammarRule:
         self.block_end = ""
         if getattr(self, "is_block", False) and self.prods:
             prods = list(self.prods)
-            if prods and isinstance(prods[0], str) and prods[0].startswith("keyword."):
+            # 块起止符推导：production 首尾**字面 token**（非 @call 引用）即视为
+            # 块边界。原实现硬编码 `keyword.` 前缀（Verilog 渗透——module/begin/end
+            # 都是 keyword），c4 的 `{`/`}`（bracket）无法推导导致匿名块无限递归。
+            # 语言无关化：任何非 @ 字面 token 都可作块起止符。
+            if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
                 self.block_start = prods.pop(0)
-            if prods and isinstance(prods[-1], str) and prods[-1].startswith("keyword."):
+            if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
                 self.block_end = prods.pop()
             self.production = prods
 

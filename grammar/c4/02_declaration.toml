@@ -1,0 +1,136 @@
+# ============================================================================
+# c4（Tiny C 演示 DSL）语法规则 — 声明与程序结构
+# ============================================================================
+# 对应 reference/c4/c4.c main() 的声明循环：
+#   全局变量 / 函数定义（参数 + 局部声明 + 体）/ enum
+#
+# Program 是根块规则（is_block，get_block_rule 选中的第一个块规则）；
+# body 由 parse_block_body 用 parse_sentence 逐句解析（首 token 触发）。
+
+# ============================================================================
+# Program — 根块（整个文件 = 全局声明序列）
+# ============================================================================
+
+[Program]
+is_block = true
+
+[Program.parser]
+production = []
+
+[Program.parser.node]
+
+
+# ============================================================================
+# GlobalDecl — 全局声明选择器（结构描述；实际由 parse_sentence 发现各规则）
+# ============================================================================
+
+[GlobalDecl.parser]
+production = [
+    "@FuncDef|@VarDecl|@EnumDecl",
+]
+inline = true
+
+[GlobalDecl.parser.node]
+value = "$1"
+
+
+# ============================================================================
+# VarDecl — 变量声明  类型 name [= expr] (, name [= expr])* ;
+# ============================================================================
+
+[VarDecl]
+is_statement = true
+
+[VarDecl.parser]
+production = [
+    "@TypeName",
+    "@Identifier",
+    "(symbol.base.equal,@Expression)?",
+    "(symbol.base.comma,@Identifier,(symbol.base.equal,@Expression)?)*",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[VarDecl.parser.node]
+type_name = "$1"
+name = "$2"
+init = "$3"
+more = "$4"
+
+
+# ============================================================================
+# FuncDef — 函数定义  类型 name ( 参数? ) { 体 }
+# ============================================================================
+
+[FuncDef]
+is_statement = true
+
+[FuncDef.parser]
+production = [
+    "@TypeName",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ParamList?",
+    "bracket.r_parentheses",
+    "@BlockStmt",
+]
+end_case = [
+    "newline",
+]
+
+[FuncDef.parser.node]
+type_name = "$1"
+name = "$2"
+params = "$4"
+body = "$6"
+
+
+# ============================================================================
+# ParamList / ParamDecl — 参数列表  类型 name (, 类型 name)*
+# ============================================================================
+
+[ParamList.parser]
+production = [
+    "@ParamDecl",
+    "(symbol.base.comma,@ParamDecl)*",
+]
+
+[ParamList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+
+
+[ParamDecl.parser]
+production = [
+    "@TypeName",
+    "@Identifier",
+]
+
+[ParamDecl.parser.node]
+type_name = "$1"
+name = "$2"
+
+
+# ============================================================================
+# EnumDecl — enum { a, b, c } ;   （简化：暂不支持 = 显式值）
+# ============================================================================
+
+[EnumDecl]
+is_statement = true
+
+[EnumDecl.parser]
+production = [
+    "keyword.enum",
+    "bracket.l_curly_bracket",
+    "@Identifier",
+    "(symbol.base.comma,@Identifier)*",
+    "bracket.r_curly_bracket",
+    "symbol.base.semicolon?",
+]
+end_case = [
+    "newline",
+]
+
+[EnumDecl.parser.node]
+items = ["$3", "$4.items[*].sub_node[1]"]
