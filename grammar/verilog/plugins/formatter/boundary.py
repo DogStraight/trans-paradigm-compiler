@@ -18,6 +18,23 @@ from typing import Any
 
 from lexer import Lexer
 
+from core.config_registry import declare_cfg
+
+# ── 结构边界映射（语言特定，外部化到 formatter/tpc.toml [formatter.scope_kind]）──
+# 换语言（如 c4）由配置重新映射；boundary.py 不硬编码任何 keyword.* / 规则名。
+_scope_token_map: list = declare_cfg(
+    "formatter.scope_kind.token_map", [], __name__, "_scope_token_map"
+)
+_scope_rule_map: list = declare_cfg(
+    "formatter.scope_kind.rule_map", [], __name__, "_scope_rule_map"
+)
+_scope_end_map: list = declare_cfg(
+    "formatter.scope_kind.end_map", [], __name__, "_scope_end_map"
+)
+_scope_end_markers: list = declare_cfg(
+    "formatter.scope_kind.end_keyword_markers", [], __name__, "_scope_end_markers"
+)
+
 
 # ── BlockTokenMap ──
 
@@ -72,43 +89,23 @@ def _resolve_first_tokens(tree: dict, feat: dict | None, visited: set[str] | Non
     return set()
 
 
-def _infer_scope_kind(rule_name: str, first_tokens: set[str]) -> "ScopeKind":
-    """从规则名或起始 token 推断 ScopeKind。"""
-    # 按规则名匹配
-    name_map = {
-        "ModuleBlock": ScopeKind.MODULE,
-        "BeginEnd": ScopeKind.BLOCK,
+def _kind_from_name(name: str) -> "ScopeKind":
+    """配置中的 kind 字符串（如 "module"/"for_loop"）→ ScopeKind 枚举。"""
+    try:
+        return ScopeKind[name.strip().upper()]
+    except (KeyError, AttributeError):
+        return ScopeKind.BLOCK
 
-        "FuncDeclANSI": ScopeKind.FUNCTION,
-        "FuncDeclOld": ScopeKind.FUNCTION,
-        "TaskDeclANSI": ScopeKind.TASK,
-        "TaskDeclOld": ScopeKind.TASK,
-        "GenerateBlock": ScopeKind.GENERATE,
-        "LoopGen": ScopeKind.GENERATE,
-        "CaseStmt": ScopeKind.CASE,
-    }
-    if rule_name in name_map:
-        return name_map[rule_name]
-    # 按 token 类型回退
-    token_map = {
-        "keyword.module": ScopeKind.MODULE,
-        "keyword.begin": ScopeKind.BLOCK,
-        "keyword.function": ScopeKind.FUNCTION,
-        "keyword.task": ScopeKind.TASK,
-        "keyword.generate": ScopeKind.GENERATE,
-        "keyword.case": ScopeKind.CASE,
-        "keyword.casex": ScopeKind.CASE,
-        "keyword.casez": ScopeKind.CASE,
-        "keyword.always": ScopeKind.ALWAYS,
-        "keyword.initial": ScopeKind.INITIAL,
-        "keyword.for": ScopeKind.FOR_LOOP,
-        "keyword.forever": ScopeKind.FOR_LOOP,
-        "keyword.repeat": ScopeKind.FOR_LOOP,
-        "keyword.while": ScopeKind.FOR_LOOP,
-    }
+
+def _infer_scope_kind(rule_name: str, first_tokens: set[str]) -> "ScopeKind":
+    """从规则名或起始 token 推断 ScopeKind（映射来自配置，非硬编码）。"""
+    rule_map = dict(_scope_rule_map)
+    if rule_name in rule_map:
+        return _kind_from_name(rule_map[rule_name])
+    token_map = dict(_scope_token_map)
     for tok in first_tokens:
         if tok in token_map:
-            return token_map[tok]
+            return _kind_from_name(token_map[tok])
     return ScopeKind.BLOCK
 
 
@@ -166,10 +163,8 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
                 break
 
     # ── 第二轮：有 end_case 关键字终结符的隐式块（case/function/task 等）──
-    _END_KEYWORD_MARKERS = frozenset({
-        "keyword.endcase", "keyword.endfunction", "keyword.endtask",
-        "keyword.endgenerate", "keyword.endmodule",
-    })
+    # 终结符集合来自配置（formatter.scope_kind.end_keyword_markers），非硬编码
+    _END_KEYWORD_MARKERS = frozenset(_scope_end_markers)
     for name, info in tree.items():
         if info.get("is_block"):
             continue  # 第一轮已处理
@@ -287,6 +282,8 @@ class BoundaryScanner:
         self.closers = self.token_map.closers
         self.ifdef_set = self.token_map.ifdef_set
         self.scope_kind_map = self.token_map.scope_kind_map
+        # 结束 token → 结构类别（来自配置，非硬编码）
+        self._end_kind_map = dict(_scope_end_map)
         self.lexer = lexer
 
     def scan(self, source: str) -> list[LineContext]:
@@ -361,15 +358,7 @@ class BoundaryScanner:
         return self.scope_kind_map.get(token_type, ScopeKind.BLOCK)
 
     def _scope_kind_for_closer(self, token_type: str) -> ScopeKind | None:
-        m = {
-            "keyword.endmodule": ScopeKind.MODULE,
-            "keyword.endfunction": ScopeKind.FUNCTION,
-            "keyword.endtask": ScopeKind.TASK,
-            "keyword.endgenerate": ScopeKind.GENERATE,
-            "keyword.endcase": ScopeKind.CASE,
-            "keyword.end": ScopeKind.BLOCK,
-        }
-        return m.get(token_type)
+        return self._end_kind_map.get(token_type)
 
     def _current_depth(self, scope_path: list) -> int:
         return len(scope_path) - 1

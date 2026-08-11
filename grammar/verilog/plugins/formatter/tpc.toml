@@ -10,3 +10,54 @@
 # family = "port_dir"
 # align_port_names = true
 # break_distance = 3
+
+# ── 结构边界映射（语言特定，外部化——boundary.py 不硬编码任何 keyword.* / 规则名）──
+# scope kind 字符串 → ScopeKind 枚举（MODULE/BLOCK/FUNCTION/TASK/GENERATE/CASE/
+# ALWAYS/INITIAL/FOR_LOOP）。换语言（如 c4）由本表重新映射。
+[formatter.scope_kind]
+# token 类型 → 结构类别
+token_map = [
+    ["keyword.module", "module"],
+    ["keyword.begin", "block"],
+    ["keyword.function", "function"],
+    ["keyword.task", "task"],
+    ["keyword.generate", "generate"],
+    ["keyword.case", "case"],
+    ["keyword.casex", "case"],
+    ["keyword.casez", "case"],
+    ["keyword.always", "always"],
+    ["keyword.initial", "initial"],
+    ["keyword.for", "for_loop"],
+    ["keyword.forever", "for_loop"],
+    ["keyword.repeat", "for_loop"],
+    ["keyword.while", "for_loop"],
+]
+# 规则名 → 结构类别
+rule_map = [
+    ["ModuleBlock", "module"],
+    ["BeginEnd", "block"],
+    ["FuncDeclANSI", "function"],
+    ["FuncDeclOld", "function"],
+    ["TaskDeclANSI", "task"],
+    ["TaskDeclOld", "task"],
+    ["GenerateBlock", "generate"],
+    ["LoopGen", "generate"],
+    ["CaseStmt", "case"],
+]
+# 结束 token → 结构类别（_scope_kind_for_closer）
+end_map = [
+    ["keyword.endmodule", "module"],
+    ["keyword.endfunction", "function"],
+    ["keyword.endtask", "task"],
+    ["keyword.endgenerate", "generate"],
+    ["keyword.endcase", "case"],
+    ["keyword.end", "block"],
+]
+# 隐式块的关键字终结符集合（build_block_tokens 第二轮用）
+end_keyword_markers = [
+    "keyword.endcase",
+    "keyword.endfunction",
+    "keyword.endtask",
+    "keyword.endgenerate",
+    "keyword.endmodule",
+]
