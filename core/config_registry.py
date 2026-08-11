@@ -192,7 +192,9 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
                     if ns == "grammar":
                         continue
                     for config_key, spec in _flatten_config({ns: table}):
-                        if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
+                        if isinstance(spec, dict) and isinstance(
+                            spec.get("file"), (str, list)
+                        ):
                             file_spec = spec["file"]
                             prefixed = file_spec
                             if isinstance(file_spec, str):
@@ -278,12 +280,16 @@ class ConfigRegistry:
         ext_dirs: list[str] | None = None,
         plugins_dir: str = "",
     ) -> None:
-        """加载指定语言包（第二语言/换语言）：从 rules_dir 的 tpc.toml
-        重新生成配置声明并加载全部配置。
+        """加载指定语言包（**单语言选择**）：从 rules_dir 的 tpc.toml 重新生成
+        配置声明并加载全部配置。
 
-        默认 import 期只从 config/tpc_config.json 指向的单一 grammar 包注册
-        声明（单语言假设）。本方法允许同一进程切换到其他语言包——"语言
-        无关性"的核心能力，供 c4 等第二语言验证使用。
+        架构约束（2026-08-12 决策）：
+        - 管线**一次只使用一种语言的语法**——本方法在初始化时选一个语言包
+          （c4 或 verilog），加载后替换全部声明，不与其他语言混合共存。
+        - **非运行中热重载**：语言切换 = 重新初始化管线（改 config 指向 +
+          重启，或测试/验证时显式 load_language），不提供热切换 API。
+        - 默认 import 期只从 config/tpc_config.json 指向的单一 grammar 包注册
+          声明（单语言假设）；本方法供第二语言（c4 等）验证时选择语言包。
 
         Args:
             rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
