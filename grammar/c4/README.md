@@ -28,8 +28,12 @@ if/else、while、return、块、表达式语句、全局/局部声明、函数�
       类型转换/条件/自增/sizeof/解引用 12 种全 parse 正确）
 - [x] **语句/声明层**（阶段 4）：if/else、while、return、块、表达式语句、
       变量声明、函数定义、enum——`int main(){...}` 完整程序 parse 成功
-- [ ] **汇编生成**（阶段 5）：transform 插件（符号表 + 指令发射）→ c4 VM 汇编文本
-- [ ] **测试样本 + 管线跑通 + 语言无关性验收**（阶段 6）
+- [x] **汇编生成**（阶段 5）：AsmGenPlugin（c4 编译逻辑：符号表/表达式/语句/
+      函数 → c4 VM 指令，跳转回填）+ renderer 逐行渲染——`int main(){...}`
+      全管线（lex→parse→analyze→transform→render）产出完整汇编，374 回归无破坏
+- [ ] **测试样本 + 管线跑通 + 语言无关性验收**（阶段 6）：正式测试样本、
+      组件加载机制接入（当前 AsmGenPlugin 靠显式 import 触发注册，run_pipeline
+      尚未自动加载 c4 插件）、walkthrough 文档
 
 **过程中修复的核心渗透（第二语言验证的产出）**：
 1. `ConfigRegistry.load_language`（core/config_registry.py）——打破"import 期只注册
