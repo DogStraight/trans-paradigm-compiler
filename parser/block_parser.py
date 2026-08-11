@@ -42,10 +42,15 @@ def parse_sentence(self, context: ParseContext) -> Node | None:
         self.scope_stack.restore(scope_depth)
         context.restore_snapshot(snapshot)
 
-    # 所有候选规则都匹配失败 → 简略警告
+    # 所有候选规则都匹配失败 → 记录失败现场（供最终报告）+ 简略警告
     rule_hint = ", ".join(r.name for r in candidates[:5])
     if len(candidates) > 5:
-        rule_hint += f" ... ({len(candidates)} 个候选)"
+        rule_hint += f" ... ({len(candidates)} candidates)"
+    self._record_fail_site(
+        context,
+        rule=rule_hint,
+        reason="all sentence candidates failed",
+    )
     self._warn(
         f"匹配失败: '{current.content}' Ln {current.line} " f"→ 尝试过: {rule_hint}",
         context=context,
@@ -148,6 +153,17 @@ def parse_block_body(
 
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
+            self._record_fail_site(
+                context,
+                rule="sentence",
+                reason="sentence parse returned None (block body stop)",
+                preserve=True,
+            )
+            # 仅当仍有未消费 token（非 EOF/非块结束符）时标记"提前停止"：
+            # 这是语法错误的典型现场——解析无法继续但输入未耗尽。
+            cur = context.peek_token()
+            if cur is not None and cur.type != end_token:
+                self._parse_truncated = True
             break
         block_node.add_sub_node(stmt_node)
     return True

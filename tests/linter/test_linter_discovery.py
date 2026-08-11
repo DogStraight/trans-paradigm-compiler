@@ -81,3 +81,23 @@ class TestUnrecognized:
         src = "module m;\n    always @(*) begin\n        a = 1;\n    end\nendmodule\n"
         _, diags = _nodes(scanner, src)
         assert diags == []
+
+    def test_unrecognized_diagnostic_includes_token_window(self, scanner):
+        # 拼错关键字 → 诊断 message 附带 token 窗口（前后文定位）
+        src = "module m;\n    alwayss @(*) begin\n    end\nendmodule\n"
+        _, diags = _nodes(scanner, src)
+        unrec = [d for d in diags if d.code == "phase-unrecognized"]
+        assert unrec
+        assert ">>" in unrec[0].message  # 当前 token 标记
+        assert "alwayss" in unrec[0].message  # 出错 token 内容
+
+    def test_dump_nodes_has_rule_and_range(self, scanner):
+        # c) 节点树 token 区间 dump：rule + [start,end) → 行号
+        src = "module m;\n    always @(*) begin\n        a = 1;\n    end\nendmodule\n"
+        tokens = scanner.lexer.tokenize(src)
+        nodes = scanner._discovery.discover(tokens)
+        dump = scanner._discovery.dump_nodes(tokens, nodes)
+        assert "ModuleDecl [0," in dump
+        assert "AlwaysStmt" in dump
+        assert "L1-" in dump  # 行号信息
+        assert "span0 L" in dump  # 0-based span 对账信息

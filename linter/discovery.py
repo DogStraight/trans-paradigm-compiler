@@ -106,13 +106,53 @@ class Discovery:
         """本次 discover 期间记录的"未识别语句"诊断。"""
         return list(self._unrecognized)
 
+    def dump_nodes(
+        self,
+        tokens: list[Token],
+        nodes: list[DiscoveredNode] | None = None,
+    ) -> str:
+        """把发现节点树 dump 为文本：rule + [start,end) → 行号。
+
+        行号同时给 1-based（token.line，lexer/parser 惯例）与 0-based
+        （token_span.start.line，LSP 诊断惯例），便于与诊断位置对账。
+        """
+        if nodes is None:
+            nodes = self.discover(tokens)
+        lines: list[str] = []
+
+        def walk(items: list[DiscoveredNode], depth: int) -> None:
+            for n in items:
+                rule = n.rule if isinstance(n.rule, str) else "/".join(n.rule)
+                s = n.start
+                e = max(n.start, n.end - 1)
+                s_line = tokens[s].line if s < len(tokens) else "?"
+                e_line = tokens[e].line if e < len(tokens) else "?"
+                s_span0 = token_span(tokens[s])[0].line if s < len(tokens) else "?"
+                lines.append(
+                    f"{'  ' * depth}{rule} [{n.start},{n.end}) "
+                    f"L{s_line}-{e_line} (span0 L{s_span0})"
+                )
+                walk(n.children, depth + 1)
+
+        walk(nodes, 0)
+        return "\n".join(lines)
+
     def _record_unrecognized(self, tokens: list[Token], i: int) -> None:
-        """记录"未识别语句"诊断：有语句起点特征但无任何已知规则匹配。"""
+        """记录"未识别语句"诊断：有语句起点特征但无任何已知规则匹配。
+
+        诊断 message 附带 token 窗口（前后文），覆盖"涉及上下文才触发"
+        的错误——单点 token 往往无法定位根因。
+        """
+        from core.debug_report import format_token_window
+
         t = tokens[i]
         self._unrecognized.append(
             LintDiagnostic(
                 range=token_span(t),
-                message="unrecognized statement: no grammar rule matches here",
+                message=(
+                    "unrecognized statement: no grammar rule matches here "
+                    f"| {format_token_window(tokens, i)}"
+                ),
                 severity=1,
                 code="phase-unrecognized",
             )

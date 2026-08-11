@@ -126,6 +126,11 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
 
 def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """尝试匹配一个语法规则的全部逻辑"""
+    # 停点/trace：按规则名或 token 位置过滤（仅真实 Parser 有此方法）
+    trace_fn = getattr(self, "_maybe_trace", None)
+    if trace_fn is not None:
+        trace_fn(context, rule.name)
+
     # Pratt 规则
     if getattr(rule, "pratt", False):
         return self._try_pratt_rule(context, rule)
@@ -155,6 +160,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             self._skip_tokens(context, tuple(self.skip_types))
             tok = context.peek_token()
             if not tok or tok.type != bs:
+                self._record_fail_site(
+                    context,
+                    rule=rule.name,
+                    reason=f"block start mismatch: expected {bs}",
+                )
                 context.path_stack.pop()
                 if scope_pushed:
                     self.scope_stack.pop()
@@ -167,6 +177,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             context.update_current_node(rule_node)
             all_matched = match_productions(self, context, rule)
             if all_matched is None:
+                self._record_fail_site(
+                    context,
+                    rule=rule.name,
+                    reason="block header production failed",
+                )
                 assert old_node is not None
                 context.update_current_node(old_node)
                 context.path_stack.pop()
@@ -206,19 +221,6 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
                 self.scope_stack.pop()
             return result
 
-    # 记录失败尝试
-    current_token = context.peek_token()
-    if getattr(self, "_collect_failures", False):
-        self._failure_attempts.append(
-            {
-                "rule": rule.name,
-                "token": str(current_token.content) if current_token else "EOF",
-                "token_index": context.token_pointer,
-                "token_type": current_token.type if current_token else "EOF",
-                "path": "/".join(context.path_stack),
-            }
-        )
-
     self._log_state(
         lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
         context=context,
@@ -231,6 +233,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 
     all_matched_nodes = match_productions(self, context, rule)
     if all_matched_nodes is None:
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="production match failed",
+        )
         context.path_stack.pop()
         if scope_pushed:
             self.scope_stack.pop()
@@ -241,6 +248,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 
     # end_case 检查
     if not self._check_end_case(context, rule):
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="end_case mismatch",
+        )
         self._restore_current_node(old_node, context)
         context.path_stack.pop()
         if scope_pushed:
