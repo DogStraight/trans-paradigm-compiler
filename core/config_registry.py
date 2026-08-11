@@ -377,8 +377,14 @@ class ConfigRegistry:
                     # glob 模式：匹配 0 或多个文件
                     matched = _glob_match([fp], base_dir)
                     if not matched:
-                        # 不匹配时尝试直接作为文件路径
-                        matched = [os.path.join(base_dir, fp).replace("\\", "/")]
+                        if "*" not in fp and "?" not in fp:
+                            # 字面路径：glob 不匹配也直接尝试（文件缺失交给 FileNotFoundError）
+                            matched = [os.path.join(base_dir, fp).replace("\\", "/")]
+                        elif spec["required"]:
+                            # 通配符无匹配且必选 → 显式报错。避免 fallback 到含 * 的
+                            # 字面路径触发 Errno 22，以及静默降级为空表。
+                            raise FileNotFoundError(f"glob 未找到匹配文件: {fp}")
+                        # required=False 的通配无匹配 → 合法空（跳过）
                     for m in sorted(matched):
                         content = FileManager.read_file(m.replace("\\", "/"))
                         data = tomllib.loads(content)
@@ -492,11 +498,18 @@ def declare_cfg(key: str, default: T, module: str = "", var: str = "") -> T:
 
     load_all() 完成后会推入真实配置值，此后代码只通过变量使用。
     同一 key 可被多个模块声明，每个都会收到推送。
+
+    若配置已加载（_resolved），直接返回真实值——支持 load_language 之后
+    按需 import 消费模块（否则该模块的 declare_cfg 注册晚于 _push_loaded_config，
+    会一直持有默认值）。
+
     用法:
         _xxx_cfg = declare_cfg("namespace.key", {default}, __name__, "_xxx_cfg")
     """
     if module and var:
         _CONFIG_DECLARATIONS.setdefault(key, []).append((module, var))
+    if ConfigRegistry._resolved:
+        return ConfigRegistry._loaded.get(key, default)
     return default
 
 

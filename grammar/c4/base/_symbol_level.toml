@@ -1,0 +1,169 @@
+# _symbol_level.toml — c4（Tiny C 演示 DSL）运算符定义
+#
+# 优先级由数组顺序决定（从低到高）；一元前缀/后缀高于所有二元。
+# 对应 reference/c4/c4.c 的 expr() precedence climbing 层级。
+
+# 赋值（最低，右结合）
+[[operator]]
+symbol = "="
+arity = 2
+assoc = "right"
+
+# 条件（右结合）
+[[operator]]
+symbol = "?"
+arity = 3
+second = ":"
+assoc = "right"
+
+# 逻辑或
+[[operator]]
+symbol = "||"
+arity = 2
+assoc = "left"
+
+# 逻辑与
+[[operator]]
+symbol = "&&"
+arity = 2
+assoc = "left"
+
+# 位或
+[[operator]]
+symbol = "|"
+arity = 2
+assoc = "left"
+
+# 位异或
+[[operator]]
+symbol = "^"
+arity = 2
+assoc = "left"
+
+# 位与
+[[operator]]
+symbol = "&"
+arity = 2
+assoc = "left"
+
+# 相等
+[[operator]]
+symbol = "=="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "!="
+arity = 2
+assoc = "left"
+
+# 关系
+[[operator]]
+symbol = "<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "<="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">="
+arity = 2
+assoc = "left"
+
+# 移位
+[[operator]]
+symbol = "<<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">>"
+arity = 2
+assoc = "left"
+
+# 加减
+[[operator]]
+symbol = "+"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "-"
+arity = 2
+assoc = "left"
+
+# 乘除模
+[[operator]]
+symbol = "*"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "/"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "%"
+arity = 2
+assoc = "left"
+
+# 一元前缀（高于所有二元；* 解引用、& 取址）
+[[operator]]
+symbol = "+"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "-"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "!"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "~"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "*"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "&"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "++"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "--"
+arity = 1
+position = "prefix"
+
+# 一元后缀（最高优先级）
+[[operator]]
+symbol = "++"
+arity = 1
+position = "postfix"
+
+[[operator]]
+symbol = "--"
+arity = 1
+position = "postfix"
