@@ -84,6 +84,35 @@
       genvar_integer/function/task + inst_port handler），替换注释模板
 - [ ] **管线集成验证**：结构路径（Lex→边界扫描→引擎→输出）与主管线共存验证
 
+### P1.4 增强语法渲染 + 管线展开开关
+
+> 来源：2026-08-13 方向确认（formatter 完善过程中）——增强语法（typed_ports 等）解析展开后，
+> 打印环节存在**格式化（保留增强语法源码）**与**展开（生成基础 Verilog）**两种需求；
+> 现状只实现"展开"一路（transform 无条件 expand，renderer 从未渲染过增强节点）。
+
+- [x] **现状确认**：typed_ports/tpc.toml 无 renderer 配置（`[lexer]/[grammar]/[analyzer]/[transform]`
+      四个 section，缺 layout）；renderer 不认识 TypedPortDecl/TypeDecl 节点；管线仅
+      `transform_enabled` 整体开关，无"展开 vs 保留增强语法"粒度；`TypedPortDecl.transform.kind="expand"`
+      无条件执行
+- [x] **增强节点 layout 规则**：给增强节点（TypedPortDecl/TypeDecl/TypeBody/TypeMember/TypeRole/
+      TypeInvertPort/InvertDecl/TypedTypeSpec）写 TOML 布局规则（text/ref/join/line/indent DSL，
+      与基础语法同机制）——renderer 布局驱动，零语言特定代码，增强节点直出
+      - renderer 原语增强：join 新增 `no_soft` 选项（硬拼接不折行不 group，保留原始分隔符含空格）
+        ——role 端口列表 `master : input clk, ...;` 需整行不折
+      - 前置确认完成：TypedPortDecl parse 后 = type_spec(TypedTypeSpec) + instance_name(Declarator)；
+        TypeDecl = type_name + body(TypeBody，members repeat 经 normalize 展平为 list)；
+        normalizer 只消 optional/repeat/seq，增强节点保留
+- [x] **管线展开开关（通用级）**：`expand_enhanced: bool`（默认 True）——False 时跳过
+      analyze/transform（AST 保留增强节点，renderer 用增强 layout 渲染，format 照常）；
+      True 走当前展开路径。判断依据 = 规则已有 `transform.kind`，不逐个组件加开关
+      - 两条路最终都过 format（formatter 职责不变，纯排版）
+- [ ] **保留路径 formatter 适配**：保留路径下 formatter 对增强行缩进不识别（`spi.slave spi_io);`
+      顶格、`);` 不拆）——formatter 需从规则推导增强结构（不硬编码），或保留路径暂不强格式化
+- [ ] **TypeImplDecl / impl 绑定 layout**：impl 绑定（`impl [role] (ports) { body }`）的保留渲染
+      未覆盖（impl_test 样本）
+- [ ] **验证补充**：typed_ports 更多样本（impl/nested/invert）在 expand_enhanced=True/False 两路
+      均产出可读文本 + token 完整 + format 幂等（当前 4 单测覆盖 spi_inf 基础形态）
+
 ## P2 — 工程化收尾（发布准备，不阻碍功能推进）
 
 ### P2.0 机制可理解性（配置生命周期 + 表达式机制，第二语言过程暴露）
