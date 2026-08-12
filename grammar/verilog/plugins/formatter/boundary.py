@@ -100,6 +100,11 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
     Returns:
         BlockTokenMap 包含 openers / closers / ifdef_set / scope_kind_map
     """
+    # 有配对结束符的块类别（结构类别语义，非具体关键字）
+    _BLOCK_KINDS = frozenset({
+        ScopeKind.MODULE, ScopeKind.BLOCK, ScopeKind.CASE,
+        ScopeKind.GENERATE, ScopeKind.FUNCTION, ScopeKind.TASK,
+    })
     from linter.grammar_slicer import build_slice_tree, get_start_tokens
 
     tree = build_slice_tree(rules)
@@ -184,30 +189,44 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             continue  # 非结构边界 kind（如类型系统的 "type"），不进入 scope_kind_map
         info = tree.get(name, {}) or {}
         prods = info.get("prods") or getattr(rule, "prods", []) or []
-        # first tokens → kind
+        # 有配对结束符（block_end / end_case 含关键字 / 块类别）的规则才是"块"；
+        # always/initial/if/for 等语句头的 end_case 是 [newline]（非关键字），且
+        # 不在块类别，其 first token 不进 openers（体是 begin 块或单语句）
+        bs = getattr(rule, "block_start", "") or ""
+        be = getattr(rule, "block_end", "") or ""
+        ec = info.get("end_case") or getattr(rule, "end_case", []) or []
+        ec_kw = [e for e in ec if isinstance(e, str) and e.startswith("keyword.")]
+        has_pair = bool(be) or bool(ec_kw) or kind in _BLOCK_KINDS
+        if has_pair and not be:
+            # 无 block_end 的块（如 CaseStmt：endcase 在 production 尾）——
+            # 取 production 尾字面 token 作配对 closer
+            prods_full = getattr(rule, "production", None) or getattr(rule, "prods", None) or []
+            if prods_full and isinstance(prods_full[-1], str) and not prods_full[-1].startswith("@"):
+                be = prods_full[-1]
+        # first tokens → kind（块类规则的入口 token 才是 opener）
         tokens = _resolve_first_tokens(tree, prods[0]) if prods else set()
         if not tokens:
             tokens = get_start_tokens(prods)
         for tok in tokens:
             scope_kind_map.setdefault(tok, kind)
-        # block_start / block_end → kind
-        bs = getattr(rule, "block_start", "") or ""
-        be = getattr(rule, "block_end", "") or ""
+            if has_pair and isinstance(tok, str) and tok.startswith("keyword."):
+                openers.add(tok)
+        # block_start / block_end → kind（opener / closer）
         if bs:
             scope_kind_map.setdefault(bs, kind)
+            if isinstance(bs, str) and bs.startswith("keyword."):
+                openers.add(bs)
         if be:
             scope_kind_map.setdefault(be, kind)
-        # end_case 关键字终结符 → kind
-        ec = info.get("end_case") or getattr(rule, "end_case", []) or []
+            if isinstance(be, str) and be.startswith("keyword."):
+                closers.add(be)
+        # end_case 关键字终结符 → kind（closer：语句结束符如 endcase/endmodule）
         for e in ec:
             if isinstance(e, str) and e.startswith("keyword."):
                 scope_kind_map.setdefault(e, kind)
-        # production 里其余关键字 token → kind（case 的 endcase 等结构终结符）
-        for feat in prods:
-            if isinstance(feat, dict) and feat.get("type") == "token":
-                tt = feat.get("token_type")
-                if isinstance(tt, str) and tt.startswith("keyword."):
-                    scope_kind_map.setdefault(tt, kind)
+                closers.add(e)
+        # production 里其余关键字 token → 仅映射 kind，不改变 openers/closers
+        # （opener/closer 语义已由 first token / block_start / block_end / end_case 覆盖）
 
     ifdef_set = {"macro.ifdef", "macro.ifndef", "macro.else", "macro.elsif", "macro.endif"}
     return BlockTokenMap(
@@ -316,8 +335,23 @@ class BoundaryScanner:
         for t in tokens:
             if t.type in self._TRIVIA:
                 if t.type == "comment":
-                    line_has_comment = True
-                    line_buf.append(t.content)
+                    if "\n" in t.content:
+                        # 多行块注释（`/* ... */` 跨多行）：按物理行拆分逐行产出
+                        # context，保持与源行对齐（否则 ctxs 数 < 源行数，后续所有
+                        # 行 line_number/缩进错位）
+                        segs = t.content.split("\n")
+                        line_buf.append(segs[0])
+                        for seg in segs[1:]:
+                            self._emit_line(
+                                contexts, line_buf, line_num, scope_path,
+                                ifdef_branches, pending_block_header,
+                                pending_block_footer, True, pending_case_item,
+                            )
+                            line_buf = [seg]
+                            line_num += 1
+                    else:
+                        line_has_comment = True
+                        line_buf.append(t.content)
                 elif t.type == "newline":
                     self._emit_line(
                         contexts, line_buf, line_num, scope_path,

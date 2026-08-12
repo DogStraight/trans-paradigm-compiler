@@ -65,13 +65,37 @@ DEFAULT_CATEGORIES: list[dict[str, Any]] = [
 ]
 
 
+def _load_categories_from_config() -> list[dict] | None:
+    """从 ConfigRegistry 读品类配置（语言包 tpc.toml 的 [[formatter.categories]]）。
+
+    未加载 / 无配置时返回 None（调用方 fallback 到代码内默认值）。
+    """
+    try:
+        from core.config_registry import ConfigRegistry
+        cfg = ConfigRegistry.get("formatter.categories")
+        if isinstance(cfg, list) and cfg:
+            return cfg
+    except Exception:
+        pass
+    return None
+
+
 def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEngine:
     """从配置构建格式化引擎。"""
     from .engine import FormatterEngine, FormatterPass
+    from .passes.indent import run_indent_pass
     from .passes.inst_port import run_inst_port_align
 
     engine = FormatterEngine()
-    categories = categories or DEFAULT_CATEGORIES
+    # 缩进重排 pass（最前：先定缩进，品类/端口对齐再基于新缩进重组行）
+    engine.register(FormatterPass(
+        name="indent",
+        kind="handler",
+        handler=run_indent_pass,
+    ))
+    if categories is None:
+        # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
+        categories = _load_categories_from_config() or DEFAULT_CATEGORIES
     for cat in categories:
         if not cat.get("enabled", True):
             continue
