@@ -38,7 +38,17 @@ def run_indent_pass(
         # 本行是其单语句体 → +1（匹配 PicoRV32/ref 风格）。嵌套单语句头（如
         # `if (A)` 后接 `if (B)`）也悬挂；else 链行（行首 else）与 if/end 对齐不
         # 悬挂。begin/end/endcase 等块头尾行走各自逻辑（block_header/footer）。
-        prev = contexts[idx - 1] if idx > 0 else None
+        # 跨过条件编译指令行（`ifdef/`elsif/`else/`endif，顶格）找实际语句头：
+        # `if (X)` 后接 `ifdef 块（ifdef 分支内容是 if 的单语句体，继承悬挂）
+        prev = None
+        _k = idx - 1
+        while _k >= 0:
+            cand = contexts[_k]
+            if cand.text.lstrip().startswith(_IFDEF_DIRECTIVE):
+                _k -= 1
+                continue
+            prev = cand
+            break
         hanging = (
             prev is not None
             and prev.single_stmt_header
