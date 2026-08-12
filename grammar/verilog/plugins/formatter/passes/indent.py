@@ -62,11 +62,19 @@ def run_indent_pass(
             and ctx.block_header_of is None
             and ctx.block_footer_of is None
         )
-        if hanging:
+        if ctx.port_list_end:
+            # 模块端口列表结束行（`);`）→ 对齐模块头（0 级）
+            target = 0
+        elif hanging:
             # 相对上一行实际缩进 +1（嵌套单语句头可累积，如 if(a)→if(b)→stmt）
             prev_ln = prev.line_number - 1
             prev_level = _indent_level(result[prev_ln], indent_width)
             target = prev_level + 1
+        elif ctx.multi_line_cont:
+            # 多行语句续行：相对语句头实际缩进 +1（同语句内续行同级，不累积）
+            hdr_ln = ctx.multi_header_line - 1
+            hdr_level = _indent_level(result[hdr_ln], indent_width)
+            target = hdr_level + 1
         elif case_item_hang:
             target = ctx.scope_depth + 1
         elif ctx.block_header_of is not None:

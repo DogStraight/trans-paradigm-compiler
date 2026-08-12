@@ -284,3 +284,54 @@ def test_integration_token_preserved():
     def strip_all(text):
         return "".join("".join(l.split()) for l in text.splitlines())
     assert strip_all(out) == strip_all(src)
+
+
+def test_integration_multiline_stmt_cont():
+    """多行语句续行：语句头行尾无分号 → 续行相对语句头 +1（同语句同级，不累积）。"""
+    src = (
+        "module m;\n"
+        "    always @* begin\n"
+        "        is_foo <= is_alu_reg_imm && |{mem_rdata_q[31:25],\n"
+        "            mem_rdata_q[14:12],\n"
+        "            mem_rdata_q[6:0]};\n"
+        "        is_bar <= x;\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    assert _ind4(_find(out, "is_foo <=")) == 8            # 语句头 2 级
+    assert _ind4(_find(out, "mem_rdata_q[14:12],")) == 12  # 续行 +1
+    assert _ind4(_find(out, "mem_rdata_q[6:0]};")) == 12   # 续行同级（不累积）
+    assert _ind4(_find(out, "is_bar <=")) == 8            # 新语句头回到 2 级
+
+
+def test_integration_inst_port_no_cont():
+    """实例端口行（`.name(...)`）不参与多行续行（inst_port 对齐）。"""
+    src = (
+        "module m;\n"
+        "    foo u_foo (\n"
+        "        .a(a),\n"
+        "        .b(b)\n"
+        "    );\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    assert _ind4(_find(out, "u_foo (")) == 4
+    assert _ind4(_find(out, ".a(a),")) == 8               # 端口行正常 depth（不续行）
+    assert _ind4(_find(out, ");")) == 4                    # 结束行不续行
+
+
+def test_integration_port_list_no_cont():
+    """模块端口列表（`);` 前）不参与多行续行。"""
+    src = (
+        "module m (\n"
+        "    input clk,\n"
+        "    output reg [31:0] q\n"
+        ");\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    # port_dir 品类列对齐可能改变空格，按行首 token 匹配
+    assert _ind4(_find(out, "clk,")) == 4
+    assert _ind4(_find(out, "output reg")) == 4
+    assert _ind4(_find(out, ");")) == 0
