@@ -140,4 +140,5 @@ def format_source(source: str, rules_dir: str, categories: list[dict] | None = N
     lines = source.split("\n")
     engine = build_engine(categories)
     formatted = engine.run(lines, contexts)
-    return "\n".join(formatted)
+    # 清理行尾尾随空格（对齐产生的冗余；ref 0 行尾随）
+    return "\n".join(l.rstrip() for l in formatted)

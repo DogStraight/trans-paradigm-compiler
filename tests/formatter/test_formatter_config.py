@@ -73,3 +73,16 @@ def test_default_matches_config():
         for c in DEFAULT_CATEGORIES
     ]
     assert cfg_normalized == default_normalized
+
+
+def test_format_source_no_trailing_whitespace():
+    """format_source 输出无行尾尾随空格（对齐冗余清理）。"""
+    from core.define import DEFAULT_RULES_DIR
+    from grammar.verilog.plugins.formatter import format_source
+    src = "module m;\n    reg [31:0] a;\n    reg [31:0] bcd;\n    assign x = a;\nendmodule\n"
+    out = format_source(src, DEFAULT_RULES_DIR)
+    assert not any(l != l.rstrip() for l in out.split("\n"))
+    # token 不丢
+    def norm(s):
+        return "".join("".join(l.split()) for l in s.splitlines())
+    assert norm(out) == norm(src)
