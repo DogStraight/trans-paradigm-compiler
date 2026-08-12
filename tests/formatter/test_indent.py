@@ -335,3 +335,28 @@ def test_integration_port_list_no_cont():
     assert _ind4(_find(out, "clk,")) == 4
     assert _ind4(_find(out, "output reg")) == 4
     assert _ind4(_find(out, ");")) == 0
+
+
+def test_integration_ifdef_single_stmt_body():
+    """if 单语句头后接 ifdef 块：各分支内容继承悬挂（独立 ifdef pass）。"""
+    src = (
+        "module m;\n"
+        "    always @(posedge clk) begin\n"
+        "        if (resetn && wr && rd)\n"
+        "`ifdef TESTBUG_001\n"
+        "            r[rd ^ 1] <= wdata;\n"
+        "`elsif TESTBUG_002\n"
+        "            r[rd] <= wdata ^ 1;\n"
+        "`else\n"
+        "            r[rd] <= wdata;\n"
+        "`endif\n"
+        "        q <= 1;\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    assert _ind4(_find(out, "if (resetn")) == 8
+    assert _ind4(_find(out, "r[rd ^ 1]")) == 12       # ifdef 首分支内容悬挂
+    assert _ind4(_find(out, "wdata ^ 1")) == 12        # elsif 分支
+    assert _ind4(_find(out, "r[rd] <= wdata;")) == 12  # else 分支
+    assert _ind4(_find(out, "q <= 1")) == 8            # ifdef 后恢复正常

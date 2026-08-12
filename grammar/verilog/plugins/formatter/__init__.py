@@ -84,6 +84,7 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     """从配置构建格式化引擎。"""
     from .engine import FormatterEngine, FormatterPass
     from .passes.indent import run_indent_pass
+    from .passes.ifdef import run_ifdef_pass
     from .passes.inst_port import run_inst_port_align
 
     engine = FormatterEngine()
@@ -92,6 +93,12 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
         name="indent",
         kind="handler",
         handler=run_indent_pass,
+    ))
+    # 条件编译块内容缩进 pass（紧跟单语句头的 ifdef 块内容继承悬挂）
+    engine.register(FormatterPass(
+        name="ifdef",
+        kind="handler",
+        handler=run_ifdef_pass,
     ))
     if categories is None:
         # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
