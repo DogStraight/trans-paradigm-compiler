@@ -54,6 +54,12 @@ def group_by_scope(
         # 按 break_distance 细分组
         cur = [matched[0]]
         for k in range(1, len(matched)):
+            between = lines[matched[k - 1] + 1:matched[k]]
+            # 空行是明确的视觉组边界（ref 端口/声明按空行分组，避免跨组 name 列拉宽）
+            if any(not l.strip() for l in between):
+                result.append(cur)
+                cur = [matched[k]]
+                continue
             gap = sum(
                 1 for j in range(matched[k - 1] + 1, matched[k])
                 if _first_token(lines[j]) and (not match_fn or match_fn(lines[j]))

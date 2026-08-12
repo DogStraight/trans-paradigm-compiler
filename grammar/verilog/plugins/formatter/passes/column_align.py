@@ -177,12 +177,14 @@ def _join_semantic(cols: list[str], widths: list[int]) -> str:
     parts = [cols[0]]
     for j, val in enumerate(body, start=1):
         if not val:
-            parts.append(" " if 1 <= j <= 4 else "")
+            parts.append(" " if 1 <= j <= 3 else "")
             continue
         w = widths[j] if j < len(widths) else 0
-        if j >= 5:
-            parts.append(" " + val)
-        elif j < 4:
+        # 只对齐前 3 列（first/opt_type/opt_range）；name 及之后紧跟
+        # （ref 风格：类型/位宽列对齐 + name 紧跟，逗号/分号不被推到列尾）
+        if j >= 4:
+            parts.append(" " + val if val else "")
+        elif j < 3:
             parts.append(val + " " * (w - len(val) + 1))
         else:
             parts.append(val + " " * (w - len(val)))
