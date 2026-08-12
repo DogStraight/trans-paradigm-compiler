@@ -115,8 +115,9 @@ def test_object_macro_sync_reversed():
     assert "`W - 1:0" in out
     assert "`BW - 1:0" in out
     # 位宽字面量组合：`W'd0 / `BW'd0 整体还原（宏调用 + `'` 后缀），assign 行不丢
-    assert "assign sig_a = `W'd0" in out
-    assert "assign sig_b = `BW'd0" in out
+    # （formatter assignment 对齐在 assign 后可能加空格，只断言宏+后缀整体）
+    assert "sig_a = `W'd0" in out
+    assert "sig_b = `BW'd0" in out
 
 
 def test_object_macro_def_reversed():

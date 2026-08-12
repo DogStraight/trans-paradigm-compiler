@@ -130,7 +130,8 @@ def test_key_constructs_preserved(picorv32_result):
     assert 'if (instr_lui)' in out and 'new_ascii_instr = "lui";' in out
     # localparam 显式类型（曾丢 integer / [range]）
     assert "localparam integer irq_timer = 0;" in out
-    assert "localparam [35:0] TRACE_BRANCH" in out
+    # 位宽 localparam：formatter 对齐后 name 列前可能有多空格，去空白匹配
+    assert "localparam[35:0]TRACE_BRANCH" in _strip_all(out)
     # 嵌套条件块完整恢复
     assert "`ifdef RISCV_FORMAL" in out
     assert "`ifdef PICORV32_TESTBUG_003" in out

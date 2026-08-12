@@ -100,7 +100,11 @@ def _is_port_line(line: str) -> bool:
 
 
 def _align_group(lines: list[str], group: list[int]) -> None:
-    """对齐一组端口行的 name / expr 两列（ref 格式：`.name(...expr...),`）。"""
+    """对齐一组端口行的 name / expr 两列（ref 格式：`.name(...expr...),`）。
+
+    缩进统一为组内最大缩进：原始渲染常让首端口行（实例声明行的续行）
+    比后续端口行多一层缩进（如 `.clk` 12 / `.resetn` 8），ref 统一对齐。
+    """
     rows = []
     for idx in group:
         m = _match_port(lines[idx])
@@ -110,8 +114,9 @@ def _align_group(lines: list[str], group: list[int]) -> None:
         return
     max_name = max(len(r[1][1]) for r in rows)
     max_expr = max(len(r[1][2]) for r in rows)
+    max_indent = max(len(r[1][0]) for r in rows)
     for idx, (indent, name, expr, term) in rows:
-        lines[idx] = indent + name.ljust(max_name) + "(" + expr.ljust(max_expr) + ")" + term
+        lines[idx] = " " * max_indent + name.ljust(max_name) + "(" + expr.ljust(max_expr) + ")" + term
 
 
 def _align_contiguous_ports(lines: list[str]) -> None:
