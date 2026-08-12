@@ -11,10 +11,36 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ..boundary import LineContext
 from ..grouping import group_by_scope, extract_rows, compute_column_widths
+
+
+# 纯数字位宽 `[msb:lsb]`（高位数字右对齐用；含表达式/参数如 `[WIDTH-1:0]` 不匹配）
+_RANGE_RE = re.compile(r"^\[(\d+):(\d+)\]$")
+
+
+def _align_range_internal(rows: list[list[str]], col: int = 3) -> None:
+    """组内位宽列内部右对齐（ref 风格：`[3:0]` 与 `[31:0]` 同组时 → `[ 3:0]`）。
+
+    只补 msb 前空格，不改 token 内容；msb 全为单数字时不改动。
+    """
+    msb_width = 0
+    for row in rows:
+        r = row[col] if len(row) > col else ""
+        m = _RANGE_RE.match(r)
+        if m:
+            msb_width = max(msb_width, len(m.group(1)))
+    if msb_width <= 1:
+        return
+    for row in rows:
+        if len(row) <= col:
+            continue
+        m = _RANGE_RE.match(row[col])
+        if m:
+            row[col] = "[%*s:%s]" % (msb_width, m.group(1), m.group(2))
 
 
 def _build_matcher(cfg: dict) -> Any | None:
@@ -176,18 +202,19 @@ def _join_semantic(cols: list[str], widths: list[int]) -> str:
     body = cols[1:7] if len(cols) >= 8 else cols[1:]
     parts = [cols[0]]
     for j, val in enumerate(body, start=1):
-        if not val:
-            parts.append(" " if 1 <= j <= 3 else "")
-            continue
         w = widths[j] if j < len(widths) else 0
-        # 只对齐前 3 列（first/opt_type/opt_range）；name 及之后紧跟
-        # （ref 风格：类型/位宽列对齐 + name 紧跟，逗号/分号不被推到列尾）
-        if j >= 4:
-            parts.append(" " + val if val else "")
-        elif j < 3:
-            parts.append(val + " " * (w - len(val) + 1))
+        # 前 3 列（first/opt_type/opt_range）对齐（空列补到列宽+分隔）；
+        # name 列从"内容起点"（前 3 列后）开始但不填充自身，
+        # 终结符（`,`/`;`）紧跟 name（ref 端口/声明的 name 起始列对齐风格）
+        if j <= 3:
+            if val:
+                parts.append(val + " " * (w - len(val) + 1))
+            else:
+                parts.append(" " * (w + 1))
+        elif j == 4:
+            parts.append(val)
         else:
-            parts.append(val + " " * (w - len(val)))
+            parts.append(" " + val if val else "")
     if term:
         parts.append(term)
     return "".join(parts)
@@ -211,6 +238,8 @@ def run_category_pass(
         rows, idxs = extract_rows(result, group, extract_fn)
         if len(rows) < 2:
             continue
+        # 位宽列内部右对齐（`[3:0]` → `[ 3:0]`），与 ref 同组内对齐一致
+        _align_range_internal(rows)
         widths = compute_column_widths(rows, 5)
         for ri, cols in enumerate(rows):
             result[idxs[ri]] = _join_semantic(cols, widths)
