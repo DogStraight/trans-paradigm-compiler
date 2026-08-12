@@ -91,10 +91,15 @@ def format_generated(content: str, rules: Any, lexer: Any) -> str:
     """
     try:
         from grammar.verilog.plugins.formatter.boundary import BoundaryScanner
-        from grammar.verilog.plugins.formatter import build_engine, split_port_close_lines
+        from grammar.verilog.plugins.formatter import (
+            build_engine,
+            split_port_close_lines,
+            split_inst_tail_lines,
+        )
 
-        # 先拆端口尾行（`name );` → `name` + `);`），再扫描，避免 contexts 错位
+        # 先拆粘连行（端口尾行 + 参数化实例化尾行），再扫描，避免 contexts 错位
         lines = split_port_close_lines(content.split("\n"))
+        lines = split_inst_tail_lines(lines)
         split_content = "\n".join(lines)
 
         scanner = BoundaryScanner(rules, lexer)

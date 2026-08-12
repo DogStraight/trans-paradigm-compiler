@@ -430,3 +430,50 @@ def test_split_port_close_no_false_positive():
     assert out[1] == "    output            mem_instr"
     assert out[2] == ");"
     assert len(out) == 4
+
+
+def test_split_inst_tail_no_false_positive():
+    """参数化实例化尾行拆分 + 不误拆普通 `(expr) id (` 形态。"""
+    from grammar.verilog.plugins.formatter import split_inst_tail_lines
+    lines = [
+        "    .STACKADDR(STACKADDR)) picorv32_core (",
+        "        .clk(clk),",
+        "endmodule",
+    ]
+    out = split_inst_tail_lines(lines)
+    assert out[0] == "    .STACKADDR(STACKADDR)"
+    assert out[1] == ") picorv32_core ("
+    assert out[2:] == lines[1:]
+
+    # 非粘连行（无 `)) inst (` 形态）不动
+    lines2 = ["    foo(bar) baz;", "    x = y;"]
+    out2 = split_inst_tail_lines(lines2)
+    assert out2 == lines2
+
+
+def test_integration_inst_tail_split():
+    """参数化实例化尾行拆 `)` + 实例名（对齐 ref：`...name(expr)` + `) inst (`）。"""
+    src = (
+        "module m;\n"
+        "    foo #(.A(a),\n"
+        "        .B(b)) inst_name (\n"
+        "        .clk(clk),\n"
+        "        .rst(rst)\n"
+        "    );\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    # `.B(b)) inst_name (` 被拆成 `.B(b)` + `) inst_name (`（`);`/`)` 独立行缩进 4，ref 一致）
+    assert "        .B(b)" in out
+    assert any(") inst_name (" in l for l in out)
+    assert ".B(b)) inst_name (" not in "".join(out)
+    # token 完整
+    def _strip_all(text: str) -> str:
+        lines = []
+        for line in text.splitlines():
+            ci = line.find("//")
+            if ci >= 0:
+                line = line[:ci]
+            lines.append(line)
+        return "".join("".join(lines).split())
+    assert _strip_all("\n".join(out)) == _strip_all(src)

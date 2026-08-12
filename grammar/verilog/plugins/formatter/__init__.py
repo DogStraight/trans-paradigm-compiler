@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from .engine import FormatterEngine, FormatterPass
@@ -125,6 +126,47 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     return engine
 
 
+# 参数化实例化尾行：`...name(expr)) inst_name (`（参数列表关闭 `)` + 实例名 + 端口开 `(`）
+_INST_TAIL_RE = re.compile(r"^(.*)\)\s+(\w+)\s*\($")
+
+
+def split_inst_tail_lines(lines: list[str]) -> list[str]:
+    """拆参数化实例化粘连行：`...) inst_name (` → `...` + `) inst_name (`。
+
+    渲染器常把参数列表关闭 `)` 与实例名、端口开 `(` 粘连成一行，如
+    `.STACKADDR(STACKADDR)) picorv32_core (`。ref 风格是参数行 + `) inst_name (` 独立行。
+
+    识别：行尾 `) inst_name (` 且其前部分以 `)` 结尾（即参数关闭 + 参数列表关闭的
+    `))` 形态，head 为括号平衡的完整最后一个参数）。只加换行，不改 token。
+    """
+    out: list[str] = []
+    for line in lines:
+        s = line.rstrip()
+        m = _INST_TAIL_RE.match(s)
+        if m:
+            head = m.group(1).rstrip()
+            # head 须以 `)` 结尾（行内 `))`，参数关闭 + 参数列表关闭相邻），
+            # 且为 `.name(...)` 参数形态；括号平衡（完整参数）才拆
+            if head.endswith(")") and "." in head and _balanced_parens(head):
+                out.append(head)
+                out.append(s[len(head):])
+                continue
+        out.append(line)
+    return out
+
+
+def _balanced_parens(s: str) -> bool:
+    depth = 0
+    for ch in s:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
 def split_port_close_lines(
     lines: list[str], categories: list[dict] | None = None
 ) -> list[str]:
@@ -178,8 +220,10 @@ def format_source(source: str, rules_dir: str, categories: list[dict] | None = N
     rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default())
     lexer = Lexer(rules_dir=rules_dir)
 
-    # 先拆端口尾行（`name );` → `name` + `);`），再扫描/跑 pass，避免 contexts 错位
+    # 先拆粘连行（端口尾行 `name );` + 参数化实例化尾行 `...); inst (`），
+    # 再扫描/跑 pass，避免 contexts 错位
     lines = split_port_close_lines(source.split("\n"), categories)
+    lines = split_inst_tail_lines(lines)
     split_source = "\n".join(lines)
 
     from .boundary import BoundaryScanner
