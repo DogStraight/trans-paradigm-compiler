@@ -360,3 +360,24 @@ def test_integration_ifdef_single_stmt_body():
     assert _ind4(_find(out, "wdata ^ 1")) == 12        # elsif 分支
     assert _ind4(_find(out, "r[rd] <= wdata;")) == 12  # else 分支
     assert _ind4(_find(out, "q <= 1")) == 8            # ifdef 后恢复正常
+
+
+def test_integration_multiline_ternary_cont():
+    """连续赋值 `=` 的三目链续行 +2（ref 风格），末行 `:` 同级。"""
+    src = (
+        "module m;\n"
+        "`ifdef ALTOPS\n"
+        "    assign pcpi_rd =\n"
+        "        instr_mul ? (a + b) :\n"
+        "        instr_mulh ? (a - b) : 1'b0;\n"
+        "`else\n"
+        "    assign pcpi_rd = 1'b0;\n"
+        "`endif\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    # assignment 品类列对齐可能改变空格，按宽松 key 匹配
+    assert _ind4(_find(out, "pcpi_rd =")) == 4
+    assert _ind4(_find(out, "instr_mul ?")) == 12        # 三目链续行 +2
+    assert _ind4(_find(out, "instr_mulh ?")) == 12
+    assert _ind4(_find(out, "1'b0;")) == 12              # 末行同级

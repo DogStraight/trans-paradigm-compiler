@@ -62,10 +62,11 @@ def run_indent_pass(
             prev_level = _indent_level(result[prev_ln], indent_width)
             target = prev_level + 1
         elif ctx.multi_line_cont:
-            # 多行语句续行：相对语句头实际缩进 +1（同语句内续行同级，不累积）
+            # 多行语句续行：相对语句头实际缩进 +1（同语句内续行同级，不累积）；
+            # 语句头行尾 `=` 的三目链续行（multi_extra）额外 +1（ref 用 +2）
             hdr_ln = ctx.multi_header_line - 1
             hdr_level = _indent_level(result[hdr_ln], indent_width)
-            target = hdr_level + 1
+            target = hdr_level + 1 + (1 if ctx.multi_extra else 0)
         elif case_item_hang:
             target = ctx.scope_depth + 1
         elif ctx.block_header_of is not None:

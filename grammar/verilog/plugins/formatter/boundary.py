@@ -416,6 +416,8 @@ class LineContext:
     """本行是多行语句的续行（语句头在前一行，本行无分号继续）。"""
     multi_header_line: int = 0
     """续行所属多行语句的语句头行号（1-based），续行缩进相对它 +1。"""
+    multi_extra: bool = False
+    """续行额外 +1（语句头行尾是 `=` 连续赋值，三目链续行 ref 用 +2）。"""
     port_list_end: bool = False
     """本行是模块端口列表结束行（`);`），缩进对齐模块头（0 级）。"""
 
@@ -469,6 +471,7 @@ class BoundaryScanner:
         in_port_list = False
         multi_active = False
         multi_header_line = 0
+        multi_depth_extra = 0
         line_first_token: str | None = None
         last_line_nontrivia: str | None = None
         # 追踪最近的 case 深度，用于识别 case 分支项
@@ -522,6 +525,7 @@ class BoundaryScanner:
                     # 多行语句续行：本行是否续行（上一行是多行语句头/续行）
                     is_cont = multi_active
                     hdr_line = multi_header_line if is_cont else 0
+                    hdr_extra = multi_depth_extra if is_cont else 0
                     line_ends_stmt = last_line_nontrivia in self.stmt_end_tokens
                     is_block_line = (
                         pending_block_header is not None
@@ -565,9 +569,13 @@ class BoundaryScanner:
                         multi_active = False
                     else:
                         multi_active = True
-                        # 只有新语句头才记下 header 行号；续行保持语句头（同级）
+                        # 只有新语句头才记下 header 行号；续行保持语句头（同级）。
+                        # 语句头行尾是 `=`（连续赋值，三目链 `? :` 续行 ref 用 +2）
                         if not is_cont:
                             multi_header_line = line_num
+                            multi_depth_extra = (
+                                1 if last_line_nontrivia == "symbol.base.equal" else 0
+                            )
                     self._emit_line(
                         contexts,
                         line_buf,
@@ -583,6 +591,7 @@ class BoundaryScanner:
                         is_cont,
                         hdr_line,
                         port_list_end,
+                        hdr_extra,
                     )
                     line_buf = []
                     line_num += 1
@@ -725,6 +734,7 @@ class BoundaryScanner:
         multi_cont=False,
         multi_hdr_line=0,
         port_list_end=False,
+        multi_extra=False,
     ):
         if not buf:
             contexts.append(LineContext(line_number=line_num, text=""))
@@ -748,5 +758,6 @@ class BoundaryScanner:
             multi_line_cont=multi_cont,
             multi_header_line=multi_hdr_line,
             port_list_end=port_list_end,
+            multi_extra=multi_extra,
         )
         contexts.append(ctx)
