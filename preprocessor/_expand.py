@@ -10,6 +10,7 @@ import re
 from core.config_registry import declare_cfg
 from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
 from .primitives.include import resolve_source_dir
+from ._bridge import make_marker
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config
@@ -107,6 +108,10 @@ def _is_ifdef_active(ctx: dict) -> bool:
     return all(f.get("active", True) for f in stack)
 
 
+# 宏调用后紧跟的位宽字面量后缀：`W'd0、`W'h1F、`W'sb101、`W'0 等
+_LITERAL_SUFFIX_RE = re.compile(r"^'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*")
+
+
 def _build_macro_re(prefix: str) -> re.Pattern:
     return re.compile(rf"\{prefix}(\w+)")
 
@@ -114,6 +119,25 @@ def _build_macro_re(prefix: str) -> re.Pattern:
 # ============================================================
 # 纯文本展开（新方案）
 # ============================================================
+
+
+def _inject_directive_marker(ctx: dict, stack: list, stripped: str) -> None:
+    """active 指令行（define/undef/include）原位占位。
+
+    指令行从 token 流剥离（不进入 clean_source），但在原位置插入
+    `// <tpc:directive:N>` 整行注释 marker，原文记入 placeholders；渲染后由
+    restore_anchors 原位回插，实现指令行位置保真（不再堆到文件头）。
+    """
+    seq = ctx["_directive_seq"]
+    ctx["_directive_seq"] = seq + 1
+    marker = f"tpc:directive:{seq}"
+    ctx.setdefault("_directive_placeholders", {})[marker] = stripped
+    if stack:
+        branch = stack[-1].get("cur_branch")
+        if branch is not None:
+            branch["lines"].append(f"// <{marker}>")
+    else:
+        ctx["_inject_lines"].append(f"// <{marker}>")
 
 
 def scan_directives(
@@ -158,6 +182,8 @@ def scan_directives(
         "_cond_blocks": [],
         "_cond_seq": 0,
         "_cond_placeholders": {},
+        "_directive_seq": 0,
+        "_directive_placeholders": {},
         "_predefined": dict(predefined) if predefined else {},
         "_undefine": set(undefine) if undefine else set(),
         "directive_lines": [],
@@ -205,9 +231,9 @@ def scan_directives(
         kind_of = get_primitive_kind(directive_name)
         handler_cfg = _directives_cfg.get(directive_name, {})
         if not handler_cfg.get("enabled", True):
-            # 配置禁用：不执行 handler（仍按指令行处理，active 记 directive_lines）
+            # 配置禁用：不执行 handler，但原文原位占位保留
             if _is_ifdef_active(ctx):
-                ctx["directive_lines"].append(stripped)
+                _inject_directive_marker(ctx, stack, stripped)
             elif stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:
@@ -227,11 +253,11 @@ def scan_directives(
 
         # 副作用指令行（define/undef/include）
         if _is_ifdef_active(ctx):
-            # 活跃分支内：执行，原文记入 directive_lines（恢复时堆头部）
-            ctx["directive_lines"].append(stripped)
+            # 活跃分支内：执行 handler，原文原位占位（渲染后回插到原位置）
             handler = get_primitive(op)
             if handler:
                 handler(stripped, prefix, directive_name, ctx)
+            _inject_directive_marker(ctx, stack, stripped)
         elif stack:
             # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
             branch = stack[-1].get("cur_branch")
@@ -241,7 +267,8 @@ def scan_directives(
     macro_defs = ctx["macro_defs"]
     func_macros = ctx["_func_params"]
     condition_blocks = ctx.get("_cond_blocks", [])
-    placeholders = ctx.get("_cond_placeholders", {})
+    placeholders = dict(ctx.get("_cond_placeholders", {}))
+    placeholders.update(ctx.get("_directive_placeholders", {}))
     directive_lines = ctx["directive_lines"]
     clean_source = "\n".join(ctx["_inject_lines"])
 
@@ -335,40 +362,6 @@ def enumerate_conditions(
     return configs
 
 
-def _find_sync_word(line: str, macro_col: int, prev_line: str = "") -> tuple[str, int]:
-    """向左找最近的非空白词作为同步词。
-
-    优先在当前行找，找不到则尝试上一行末尾词。
-    Returns: (sync_text, offset_from_sync_end_to_macro_start)
-    """
-    # 当前行向左找
-    pos = macro_col - 1
-    while pos >= 0 and line[pos] in " \t":
-        pos -= 1
-    if pos >= 0:
-        word_end = pos + 1
-        while pos >= 0 and line[pos] not in " \t":
-            pos -= 1
-        sync_text = line[pos + 1 : word_end]
-        offset = macro_col - word_end
-        return sync_text, offset
-
-    # 当前行没有 → 取上一行末尾非空白词
-    if prev_line:
-        pos = len(prev_line) - 1
-        while pos >= 0 and prev_line[pos] in " \t":
-            pos -= 1
-        if pos >= 0:
-            word_end = pos + 1
-            while pos >= 0 and prev_line[pos] not in " \t":
-                pos -= 1
-            sync_text = prev_line[pos + 1 : word_end]
-            offset = macro_col + 1
-            return sync_text, offset
-
-    return "", macro_col
-
-
 def _match_paren_args(line: str, open_idx: int) -> tuple[str, int]:
     """从 open_idx（`(` 位置）匹配括号，返回 (内部文本, 闭括号后位置)。
 
@@ -422,6 +415,39 @@ def _expand_func_call(
     return body
 
 
+def _extend_literal_suffix(line: str, end: int) -> int:
+    """扩展宏调用区间到其后的位宽字面量后缀（`W'd0 → `W'd0 整体纳入）。
+
+    宏调用后紧跟 `'` 时（如 `W'd0、`W'h1F），token 替换若只换宏名会留下
+    `tpc_marker_N'd0`（标识符 + 位宽字面量，非合法数字字面量，解析丢行）；
+    把 `'<base><digits>` 一并纳入调用区间，token 替换整体，还原时整体回插原文。
+    """
+    m = _LITERAL_SUFFIX_RE.match(line[end:])
+    if m and m.end() > 0:
+        return end + m.end()
+    return end
+
+
+def _extend_macro_chain(line: str, end: int, macro_re: re.Pattern) -> int:
+    """吞噬宏调用链：宏调用 + 位宽字面量后缀 + 后续相邻宏调用（`W'd`RST）。
+
+    复合/嵌套宏调用（如 `W'd`RST = `W + 'd + `RST）token 替换成单个 token，
+    fragment 为整段原文——避免拆成相邻 token 后粘连（tpc_marker_A tpc_marker_B
+    无词边界，全词匹配还原失败）。
+    """
+    cur = end
+    while True:
+        nxt = _extend_literal_suffix(line, cur)
+        if nxt > cur:
+            cur = nxt
+        m = macro_re.match(line[cur:])
+        if m and m.start() == 0:  # 紧跟宏调用（无空白分隔）
+            cur = cur + m.end()
+            continue
+        break
+    return cur
+
+
 def expand_tokens(
     source: str,
     macro_defs: dict[str, str],
@@ -429,24 +455,40 @@ def expand_tokens(
     prefix: str = "`",
     func_macros: dict[str, list[str]] | None = None,
 ) -> tuple[str, list[dict]]:
-    """在源码文本中展开宏调用（纯文本层）。
+    """在源码文本中展开宏调用（纯文本层），并注册统一锚。
 
     用正则搜索 `NAME，向左扫同步词，记录位置后替换宏体。
     带参宏（func_macros 中登记的名字）识别 `NAME( ... ) 调用并做形参替换。
     不再依赖 Token 流或 Lexer。
 
+    锚形态（统一位置桥，见 _bridge）：
+      line   整行占位：独占整行的宏调用（`debug(...)`）、行首空体宏
+             （`FORMAL_KEEP reg ...）→ 整行替换为 `// <tpc:macro:N>` 占位，
+             fragment = 整行原文（含宏调用），渲染后整行回插。
+      sync   行内非空体宏（如 `assign z = `MIN(x, y);`）→ 保留 body 替换，
+             记录同步词字段，由同步词窗口启发式回插（兼容现状）。
+
     Returns: (expanded_source, restoration_stack)
-        restoration_stack — 逆序处理用的还原记录列表，每项含：
-            macro, body, sync_text, offset, is_func, args
+        restoration_stack — 统一锚列表，每项含 marker/fragment/mode 等。
     """
     _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
     func_macros = func_macros or {}
     restoration_stack: list[dict] = []
     lines = source.split("\n")
 
+    _macro_seq = 0
+
+    def _next_macro_seq() -> int:
+        nonlocal _macro_seq
+        _macro_seq += 1
+        return _macro_seq
+
     for line_no, line in enumerate(lines, 1):
         macro_matches: list[tuple[int, int, str, str, bool, str]] = []
+        consumed_until = -1
         for m in _MACRO_RE.finditer(line):
+            if m.start() < consumed_until:
+                continue  # 已被前一个宏调用链吞噬（`W'd`RST 嵌套）
             name = m.group(1)
             if name in func_macros and line[m.end() :].startswith("("):
                 args_text, close_idx = _match_paren_args(line, m.end())
@@ -454,52 +496,63 @@ def expand_tokens(
                     body = _expand_func_call(
                         name, args_text, func_macros, macro_defs
                     )
+                    end = _extend_macro_chain(line, close_idx, _MACRO_RE)
+                    consumed_until = max(consumed_until, end)
                     macro_matches.append(
-                        (m.start(), close_idx, body, name, True, args_text)
+                        (m.start(), end, body, name, True, args_text)
                     )
                     continue
             body = macro_defs.get(name)
             if body is None:
                 continue
-            macro_matches.append((m.start(), m.end(), body, name, False, ""))
+            end = _extend_macro_chain(line, m.end(), _MACRO_RE)
+            consumed_until = max(consumed_until, end)
+            macro_matches.append((m.start(), end, body, name, False, ""))
 
         if not macro_matches:
             continue
 
-        prev_line = lines[line_no - 2] if line_no >= 2 else ""
+        # ── 行首空体宏（`FORMAL_KEEP reg ...`）→ 整行占位 ──
+        # 行首空体宏是 decl 修饰符（如 `FORMAL_KEEP reg [3:0] q;`），唯一 token
+        # 替换会破坏 decl 解析（标识符 + decl 相邻）；整行占位回插整行原文。
+        single_head_empty = (
+            len(macro_matches) == 1
+            and not macro_matches[0][2]
+            and line[: macro_matches[0][0]].strip() == ""
+        )
+        if single_head_empty:
+            marker = make_marker("macro", _next_macro_seq())
+            lines[line_no - 1] = f"// <{marker}>"
+            restoration_stack.append(
+                {
+                    "marker": marker,
+                    "fragment": line,
+                    "mode": "line",
+                    "kind": "macro",
+                }
+            )
+            continue
 
-        # 统计行内同步词出现次数，确定每个宏对应第几个同步词
-        sync_counter: dict[str, int] = {}
-        for col, end, body, name, is_func, args_text in sorted(macro_matches):
-            sync_text, _ = _find_sync_word(line, col, prev_line)
-            sync_counter[sync_text] = sync_counter.get(sync_text, 0) + 1
-
-        # 从右到左替换（避免位置偏移）
+        # ── 其他宏（非空 body 的 assert/MIN、空 body 的 debug 等）→ 唯一 token ──
+        # token 是唯一标识符（tpc_marker_N），随 AST 确定渲染，还原时 find 精确；
+        # 不依赖注释通道（restore_comments 启发式对多锚不可靠）或同步词容差。
+        # 空 body 宏 token 替换后为 `tpc_marker_N;`（裸任务调用，可解析）。
         parts = list(line)
         forward_entries: list[dict] = []
         for col, end, body, name, is_func, args_text in reversed(macro_matches):
-            sync_text, offset = _find_sync_word(line, col, prev_line)
-            nth = sync_counter[sync_text]
-            sync_counter[sync_text] = nth - 1  # 从右到左递减
-
-            # 替换
-            parts[col:end] = body
-
+            token = f"tpc_marker_{_next_macro_seq()}"
+            fragment = line[col:end]  # 宏调用原文（含反引号与实参）
+            parts[col:end] = token
             forward_entries.append(
                 {
-                    "macro": name,
-                    "body": body,
-                    "sync": sync_text,
-                    "sync_nth": nth,
-                    "offset": offset,
+                    "marker": token,
+                    "fragment": fragment,
+                    "mode": "token",
+                    "kind": "macro",
                     "is_func": is_func,
-                    "args": args_text,
                 }
             )
-
-        # 正序存入 restoration_stack（匹配渲染输出的出现顺序）
         restoration_stack.extend(reversed(forward_entries))
-
         lines[line_no - 1] = "".join(parts)
 
     return "\n".join(lines), restoration_stack

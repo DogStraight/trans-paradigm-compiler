@@ -183,6 +183,7 @@ def run_pipeline_on_source(
     placeholders = {}
     directive_lines = []
     restore_stack = None
+    tpc_src_map = None
     if expand_macros:
         macro_table, func_macros, _, placeholders, directive_lines, source = scan_directives(
             source,
@@ -193,6 +194,15 @@ def run_pipeline_on_source(
             undefine=undefine,
         )
         _log(f"[preprocessor] macros defined: {len(macro_table)}")
+        # 扫描 clean_source 中 tpc marker 的源行号（restore_line_comments 对被吞
+        # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）
+        tpc_src_map = {}
+        for _i, _l in enumerate(source.split("\n"), 1):
+            if "// <tpc:" in _l:
+                _start = _l.find("tpc:")
+                _end = _l.find(">", _start)
+                if _end > _start:
+                    tpc_src_map[_l[_start:_end]] = _i
 
     # ---- Stage: Shared pipeline context (rules, lexer, renderer, etc.) ----
     # 所有按 rules_dir 可复用的组件集中初始化并缓存
@@ -374,19 +384,6 @@ def run_pipeline_on_source(
     if renderer_enabled:
         content = renderer.render(ast)
 
-        # Reverse macro protection
-        if macro_table:
-            content = protect_and_reverse(
-                content,
-                restoration_stack=restore_stack,
-            )
-            _log("[preprocessor] macros reversed")
-
-        # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
-        if placeholders:
-            content = restore_condition_blocks(content, placeholders)
-            _log(f"[preprocessor] condition blocks restored: {len(placeholders)}")
-
         # Restore directive lines（副作用指令 define/undef/include）
         if directive_lines:
             content = "\n".join(directive_lines) + "\n" + content
@@ -402,8 +399,29 @@ def run_pipeline_on_source(
         # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
         line_anchors = getattr(parser, "_line_comment_anchors", None)
         if line_anchors:
-            content, n = restore_line_comments(content, line_anchors)
+            content, n = restore_line_comments(
+                content, line_anchors, tpc_src_map=tpc_src_map
+            )
             _log(f"[comments] line anchor restoration: {n} items")
+
+        # Reverse macro protection — 必须放在 line-comment restore 之后：
+        # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进
+        # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
+        # 才能定位 marker 并替换为整行原文残片。
+        if restore_stack:
+            content = protect_and_reverse(
+                content,
+                restoration_stack=restore_stack,
+            )
+            _log("[preprocessor] macros reversed")
+
+        # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
+        # 必须放在 line-comment restore 之后：占位符 `// <tpc:cond:N>` 本身是注释行，
+        # 可能被 production skip 吞掉并记入 line_comment_anchors，若先 restore 条件块、
+        # 后回插行注释，占位符会被再次插回而残留。
+        if placeholders:
+            content = restore_condition_blocks(content, placeholders)
+            _log(f"[preprocessor] condition blocks restored: {len(placeholders)}")
 
         # Write output (no header — gen file is raw content for clean diffing)
         if gen_file:

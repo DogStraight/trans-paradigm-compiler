@@ -48,7 +48,7 @@ layout = { ref = "stmt" }
 # ---------- 过程体内调用/空语句 ----------
 [CallStmt]
 [CallStmt.parser]
-production = ["@SubroutineCall|@SysTaskStmt|@PropertyStmt|@NullStmt"]
+production = ["@SubroutineCall|@TaskCallStmt|@SysTaskStmt|@PropertyStmt|@NullStmt"]
 inline = true
 [CallStmt.parser.node]
 stmt = "$1"

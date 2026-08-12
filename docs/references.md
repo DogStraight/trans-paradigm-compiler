@@ -31,3 +31,29 @@
 | **[MLIR ODS (llvm/llvm-project)](https://github.com/llvm/llvm-project)** | 深度参考 | 配置驱动 Operation 定义体系（TableGen .td），自动生成 C++ 构造器/验证器/序列化。39.3k⭐ · 极活跃 · LLVM 基金会 · 最后更新 2026-07-16。**详见下方调研报告** |
 | **[CIRCT (llvm/circt)](https://github.com/llvm/circt)** | 设计参考 | MLIR-based 硬件编译器，FIRRTL→HW→SV→Verilog 多级下降管线。2.2k⭐ · 极活跃 · LLVM 基金会 · 最后更新 2026-07-16。**详见下方调研报告** |
 | **[ClangIR / CIR (llvm/llvm-project)](https://clang.llvm.org/docs/ClangIR.html)** | 架构对比 | Clang 的 MLIR-based 中级 IR，C/C++ → CIR → LLVM IR。使用 ODS 定义所有操作。已上流到 llvm 主仓库。**详见下方调研报告** |
+| **[JetBrains MPS](https://github.com/JetBrains/MPS)** | 架构对比 | 重量级语言工作台（项目化 DSL + 多目标生成）。1.7k⭐ · 极活跃（Apache-2.0）· 已配置 AGENTS.md/MCP 支持 coding agents。语言工作台天花板参照——重（Java/IDEA），非运行时配置驱动 |
+| **[Ohm](https://github.com/ohmjs/ohm)** | 架构对比 | JS PEG + 语义操作完全分离 + 语法 OO 扩展 + 在线可视化编辑器。5.5k⭐ · 53 贡献者 · 130 依赖方 · v17 半年前。最接近"语法实验台"——但只到 parse+semantics，无渲染/变换/多语言管线 |
+| **[desugar](https://github.com/michaelmillar/desugar)** | 方向参考 | Rust browser-native 编译器工作室：逐步实现 pass + 每 pass 可视化 + 导出独立工程。0⭐ · 单人 · 4 月前活跃。最接近"编译器模拟器"概念——但定位教学（expression-based，无类型检查/后端） |
+| **[ldtk](https://github.com/Terran-One/ldtk)** | 架构对比 | TS 模块化语言开发工具包。1⭐ · 3 年前停滞 · WIP 未成。同生态位小众项目的冷启动现状参照 |
+
+## 生态位与竞品现状（2026-08-12 调研）
+
+> 调研方式：GitHub topic（language-workbench / parser-generator）+ 具体项目主页。
+> 聚焦 tpc 定位：配置驱动、多语言、完整管线的轻量语言工具，以及"编译器模拟器/语法实验台"方向。
+
+### 分层地图
+- **重量级语言工作台**：MPS（1.7k⭐·活跃）、Langium（TS·1k⭐·活跃）、Xtext/Spoofax——IDE 集成、Java/TS、生成式
+- **活跃配置/声明式 DSL 工具**：textX（Python·852⭐·640 依赖方·活跃）、Ohm（JS·5.5k⭐）——单点（DSL 元模型 / parse+semantics）
+- **停滞/小众配置管线**：Koine（2⭐·2025 停）、ldtk（1⭐·停）、parsejoy/INRIA Syntax（停）
+- **编译器工作室/教学**：desugar（0⭐·单人）——逐步 pass 可视化，最接近"编译器模拟器"
+- **生成式 parser generator**（513 仓库）：ANTLR/PEG.js/lalrpop/TatSu/BNFC 等——生成解析器，不同赛道
+
+### 结论
+1. **直接竞品（配置驱动 + 完整管线 + 多语言 + 渲染 + 零依赖）无活跃对手**——生态两极分化：要么重（MPS/Langium），要么单点（parser generator），中间地带空着
+2. 但**生态冷**：language-workbench 全 topic 14 仓库、多数 1-5⭐ 且停滞；同定位新项目（Koine/desugar/ldtk）冷启动普遍失败
+3. **必须正视 textX**：Python + 活跃 + 852⭐，是"Python 里配置驱动搭语言"的第一入口。差异定位：textX = 单一语法→元模型+解释（DSL 快速建模）；tpc = 多语言配置驱动完整管线 + 渲染器 + 插件体系（语言级管线引擎）
+
+### 自由度 vs 上手度（定位反思）
+- tpc 把"语言知识外部化"→ 用户要自己提供语言知识（配置+插件）→ **自由度极高，但挑人**：只适合有范式要固化的人 / 编译器·语言爱好者 / 有现成语法想管线化的人；不适合"想开箱即用"的人
+- 对比：textX 用元模型+自动生成降自由度换上手度（852⭐）；Koine 用完整配置换自由度（2⭐·停）——不是自由度越高越好，是**自由度/上手度的平衡点**
+- 结论："挑人"是定位的必然，不是缺陷。关键是**被挑中的人体验要好**（引导/文档/模板，见 TODO P2.0 + c4 模板化），而不是把受众扩大到所有人
