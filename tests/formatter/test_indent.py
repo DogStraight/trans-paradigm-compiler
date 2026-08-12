@@ -4,17 +4,38 @@
 其余行按 depth 缩进；只改行首空白，token 不丢。
 """
 
+import os
+import pytest
+
 from grammar.verilog.plugins.formatter.boundary import LineContext, ScopeKind
 from grammar.verilog.plugins.formatter.passes.indent import run_indent_pass
 
+pytestmark = pytest.mark.usefixtures("config_loaded")
 
-def _ctx(depth: int, hdr=None, ftr=None, text: str = "") -> LineContext:
+
+def _ind4(s: str) -> int:
+    n = 0
+    for c in s:
+        if c == "\t":
+            n += 4
+        elif c == " ":
+            n += 1
+        else:
+            break
+    return n
+
+
+def _ctx(depth: int, hdr=None, ftr=None, text: str = "", sst=False, else_hdr=False,
+         case_item=False) -> LineContext:
     return LineContext(
         line_number=1,
         text=text,
         scope_depth=depth,
         block_header_of=hdr,
         block_footer_of=ftr,
+        single_stmt_header=sst,
+        is_else_header=else_hdr,
+        is_case_item=case_item,
     )
 
 
@@ -115,3 +136,151 @@ def test_ifdef_all_variants_top_level():
     for directive in ("`ifdef", "`ifndef", "`else", "`elsif", "`endif"):
         out = _fmt([f"        {directive} FOO"], [_ctx(3)])
         assert out[0] == f"{directive} FOO"
+
+
+# ── 单语句体悬挂（if/for/else，无 begin）──
+
+def test_if_single_stmt_body_hanging():
+    # `if (X)`（无 begin 单语句头）→ 其单语句体 +1
+    lines = ["if (!resetn)", "mem_state <= 0;"]
+    ctxs = [_ctx(3, sst=True), _ctx(3)]
+    out = _fmt(lines, ctxs)
+    assert out[0] == " " * 12 + "if (!resetn)"
+    assert out[1] == " " * 16 + "mem_state <= 0;"
+
+
+def test_for_single_stmt_body_hanging():
+    lines = ["for (i = 0; i < n; i = i + 1)", "cpuregs[i] = 0;"]
+    ctxs = [_ctx(3, sst=True), _ctx(3)]
+    out = _fmt(lines, ctxs)
+    assert out[1] == " " * 16 + "cpuregs[i] = 0;"
+
+
+def test_else_line_not_hanging():
+    # `if (A)` 后 `else` 链行不悬挂（与 if 对齐）；else 的单语句体悬挂
+    lines = ["if (a)", "else", "b = 1;"]
+    ctxs = [_ctx(3, sst=True), _ctx(3, sst=True, else_hdr=True), _ctx(3)]
+    out = _fmt(lines, ctxs)
+    assert out[1] == " " * 12 + "else"
+    assert out[2] == " " * 16 + "b = 1;"
+
+
+def test_nested_if_both_hanging():
+    # `if (A)` 单语句头后 `if (B)`（嵌套）→ +1；`if (B)` 的单语句体再 +1
+    lines = ["if (a)", "if (b)", "x = 1;"]
+    ctxs = [_ctx(3, sst=True), _ctx(3, sst=True), _ctx(3)]
+    out = _fmt(lines, ctxs)
+    assert out[1] == " " * 16 + "if (b)"
+    assert out[2] == " " * 20 + "x = 1;"
+
+
+def test_case_item_without_begin_hanging():
+    # 无 begin 的 case 分支项（`3'b010:` / `default:`）→ case+1 级
+    lines = ["3'b010:", "x = 1;"]
+    ctxs = [_ctx(3, case_item=True), _ctx(3)]
+    out = _fmt(lines, ctxs)
+    assert out[0] == " " * 16 + "3'b010:"
+
+
+def test_inline_if_body_no_hanging():
+    # `if (X) stmt;`（body 同行，sst=False）→ 下一行新 if 不被悬挂
+    lines = [
+        "if (cpu_state == cpu_state_fetch)  ok = 1;",
+        "if (cpu_state == cpu_state_ld_rs1) ok = 1;",
+    ]
+    ctxs = [_ctx(3), _ctx(3)]
+    out = _fmt(lines, ctxs)
+    assert out[1] == " " * 12 + "if (cpu_state == cpu_state_ld_rs1) ok = 1;"
+
+
+# ── 集成测试（真实语法 + 边界扫描，验证 generate 层级 / 悬挂）──
+
+def _fmt_source(src: str):
+    from grammar.verilog.plugins.formatter import format_source
+    from core.define import DEFAULT_RULES_DIR
+    return format_source(src, DEFAULT_RULES_DIR)
+
+
+def _find(out: list[str], key: str) -> str:
+    for line in out:
+        if key in line:
+            return line
+    raise AssertionError(f"未找到包含 {key!r} 的行: {out}")
+
+
+def test_integration_generate_no_depth():
+    """独立 `generate`/`endgenerate` 不贡献缩进层级（匹配单行 generate 风格）。"""
+    src = (
+        "module m;\n"
+        "    generate\n"
+        "        if (P) begin : gen\n"
+        "            assign x = 1;\n"
+        "        end\n"
+        "    endgenerate\n"
+        "    always @(posedge clk) begin\n"
+        "        q <= 1;\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    assert _ind4(_find(out, "if (P) begin")) == 4        # generate 内 if begin 1 级
+    assert _ind4(_find(out, "assign x = 1")) == 8        # body 2 级
+    assert _ind4(_find(out, "endgenerate")) == 4         # 与 generate 同级
+    assert _ind4(_find(out, "always @(posedge clk)")) == 4  # module 内 1 级
+
+
+def test_integration_if_for_single_stmt_body():
+    """if/for 无 begin 单语句体悬挂 +1。"""
+    src = (
+        "module m;\n"
+        "    always @(posedge clk) begin\n"
+        "        if (!resetn)\n"
+        "            q <= 0;\n"
+        "        for (i = 0; i < 4; i = i + 1)\n"
+        "            r[i] <= 0;\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    assert _ind4(_find(out, "if (!resetn)")) == 8
+    assert _ind4(_find(out, "q <= 0")) == 12             # if 单语句体 +1
+    assert _ind4(_find(out, "r[i] <= 0")) == 12          # for 单语句体 +1
+
+
+def test_integration_else_aligned():
+    """else 与 if 对齐（不悬挂），else 单语句体悬挂。"""
+    src = (
+        "module m;\n"
+        "    always @(posedge clk) begin\n"
+        "        if (a)\n"
+        "            x <= 1;\n"
+        "        else\n"
+        "            x <= 2;\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    assert _ind4(_find(out, "if (a)")) == 8
+    assert _ind4(_find(out, "x <= 1")) == 12
+    assert _ind4(_find(out, "else")) == 8                # 与 if 对齐
+    assert _ind4(_find(out, "x <= 2")) == 12
+
+
+def test_integration_token_preserved():
+    """格式化后 token 完整（不丢不增）。"""
+    src = (
+        "module m;\n"
+        "    always @(posedge clk) begin\n"
+        "        if (a) begin\n"
+        "            q <= 1;\n"
+        "        end else begin\n"
+        "            q <= 0;\n"
+        "        end\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src)
+
+    def strip_all(text):
+        return "".join("".join(l.split()) for l in text.splitlines())
+    assert strip_all(out) == strip_all(src)

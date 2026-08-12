@@ -30,6 +30,15 @@ class BlockTokenMap:
     closers: set[str] = field(default_factory=set)
     ifdef_set: set[str] = field(default_factory=set)
     scope_kind_map: dict[str, "ScopeKind"] = field(default_factory=dict)
+    stmt_headers: set[str] = field(default_factory=set)
+    stmt_end_tokens: set[str] = field(default_factory=set)
+    """语句结束 token（分号类）：从语句规则 production 里的 *.semicolon 推导。"""
+    stmt_headers: set[str] = field(default_factory=set)
+    """控制流语句头 token（if/for/else 等，从 is_statement 规则推导）。
+
+    用于识别"无 begin 的单语句体"（如 `if (X)` 后接单语句）的悬挂缩进。
+    具体关键字一律由规则推导，不在此硬编码。
+    """
 
 
 def _resolve_first_tokens(tree: dict, feat: dict | None, visited: set[str] | None = None) -> set[str]:
@@ -229,11 +238,71 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         # （opener/closer 语义已由 first token / block_start / block_end / end_case 覆盖）
 
     ifdef_set = {"macro.ifdef", "macro.ifndef", "macro.else", "macro.elsif", "macro.endif"}
+
+    # ── 语句头 token 集：控制流规则（body 是 @Stmt/@BeginEnd/@ElseChain 引用）
+    #    的 first token，排除已作块 openers 的。用于识别"无 begin 的单语句体"
+    #    悬挂缩进（如 `if (X)` 后接单语句）。不要求 is_statement：else 系列规则
+    #    （ElseBranch/ElseIfStmt）未标 is_statement，但语义上是语句头（体可为单
+    #    语句）。具体关键字一律由规则推导，不在此硬编码。
+    def _collect_call_names(feat, out: set[str]) -> None:
+        """递归收集 feature 树里的 @call 引用名（choice/seq/repeat 内部也要）。"""
+        if isinstance(feat, dict):
+            if feat.get("type") == "call":
+                out.add(feat.get("name", ""))
+            for key in ("alternatives", "items"):
+                v = feat.get(key)
+                if isinstance(v, list):
+                    for x in v:
+                        _collect_call_names(x, out)
+            for key in ("elem",):
+                v = feat.get(key)
+                if isinstance(v, (dict, list)):
+                    _collect_call_names(v, out)
+        elif isinstance(feat, str) and feat.startswith("@"):
+            out.add(feat[1:])
+
+    stmt_headers: set[str] = set()
+    for name, info in tree.items():
+        if not isinstance(info, dict):
+            continue
+        prods = info.get("prods", [])
+        if not prods:
+            continue
+        refs: set[str] = set()
+        for f in prods:
+            _collect_call_names(f, refs)
+        # 体内引用语句/块（@Stmt/@Statement/@BeginEnd/@ElseChain）→ 控制流，
+        # 体可为单语句（if/for/else/while/always 等），需要悬挂缩进
+        if not (refs & {"Stmt", "Statement", "BeginEnd", "ElseChain"}):
+            continue
+        toks = get_start_tokens(prods)
+        stmt_headers |= toks
+    # 只保留关键字类（控制流语句头都是关键字：if/for/else/always 等），
+    # 排除符号类 first token（如 `@` 事件控制、`;` 空语句——它们不是语句头）
+    stmt_headers = {t for t in stmt_headers if t.startswith("keyword.")}
+    # 已作块 openers/closers 的（case/generate/function/task/module 等）不重复
+    stmt_headers -= openers
+    stmt_headers -= closers
+
+    # ── 语句结束 token（分号类）：从规则 production 里的 *.semicolon 推导。
+    #    用于识别 if/for 单行体（body 同行，如 `if (X) stmt;`）——行尾分号
+    #    表示语句头在本行已结束，非单语句头（语言知识外部化，不硬编码分号）
+    stmt_end_tokens: set[str] = set()
+    for info in tree.values():
+        if not isinstance(info, dict):
+            continue
+        for f in info.get("prods", []):
+            tt = f.get("token_type") if isinstance(f, dict) else f
+            if isinstance(tt, str) and tt.endswith(".semicolon"):
+                stmt_end_tokens.add(tt)
+
     return BlockTokenMap(
         openers=openers,
         closers=closers,
         ifdef_set=ifdef_set,
         scope_kind_map=scope_kind_map,
+        stmt_headers=stmt_headers,
+        stmt_end_tokens=stmt_end_tokens,
     )
 
 
@@ -290,6 +359,10 @@ class LineContext:
     """本行是否包含行内 // 注释。"""
     is_case_item: bool = False
     """本行是否是 case/default 分支行。"""
+    single_stmt_header: bool = False
+    """本行是无 begin 的单语句头（如 `if (X)` / `for (...)`），下一行是其单语句体。"""
+    is_else_header: bool = False
+    """本行行首是 else（else 链行），与 if/end 对齐、不悬挂缩进。"""
 
 
 # ── 边界扫描器 ──
@@ -313,6 +386,8 @@ class BoundaryScanner:
         self.closers = self.token_map.closers
         self.ifdef_set = self.token_map.ifdef_set
         self.scope_kind_map = self.token_map.scope_kind_map
+        self.stmt_headers = self.token_map.stmt_headers
+        self.stmt_end_tokens = self.token_map.stmt_end_tokens
         self.lexer = lexer
 
     def scan(self, source: str) -> list[LineContext]:
@@ -329,6 +404,9 @@ class BoundaryScanner:
         pending_block_header: ScopeKind | None = None
         pending_block_footer: ScopeKind | None = None
         pending_case_item = False
+        pending_stmt_header = False
+        pending_is_else = False
+        last_line_nontrivia: str | None = None
         # 追踪最近的 case 深度，用于识别 case 分支项
         case_depth = -1
 
@@ -346,6 +424,7 @@ class BoundaryScanner:
                                 contexts, line_buf, line_num, scope_path,
                                 ifdef_branches, pending_block_header,
                                 pending_block_footer, True, pending_case_item,
+                                False, False,
                             )
                             line_buf = [seg]
                             line_num += 1
@@ -353,10 +432,15 @@ class BoundaryScanner:
                         line_has_comment = True
                         line_buf.append(t.content)
                 elif t.type == "newline":
+                    # if/for 单行体（body 同行，如 `if (X) stmt;`）：行尾分号
+                    # 表示语句头已在同行结束 → 非单语句头
+                    if last_line_nontrivia in self.stmt_end_tokens:
+                        pending_stmt_header = False
                     self._emit_line(
                         contexts, line_buf, line_num, scope_path,
                         ifdef_branches, pending_block_header,
                         pending_block_footer, line_has_comment, pending_case_item,
+                        pending_stmt_header, pending_is_else,
                     )
                     line_buf = []
                     line_num += 1
@@ -364,10 +448,19 @@ class BoundaryScanner:
                     pending_block_header = None
                     pending_block_footer = None
                     pending_case_item = False
+                    pending_stmt_header = False
+                    pending_is_else = False
+                    last_line_nontrivia = None
                 # skip space.* tokens
                 continue
 
             line_buf.append(t.content)
+            last_line_nontrivia = t.type
+
+            # 行首 token 是 else → else 链行（自身不悬挂，与 if/end 对齐；
+            # 其单语句体仍由 sst 触发下一行悬挂）
+            if t.type == "keyword.else" and not line_buf[:-1]:
+                pending_is_else = True
 
             if t.type in self.ifdef_set:
                 self._handle_ifdef_token(t, scope_path, ifdef_branches)
@@ -375,14 +468,25 @@ class BoundaryScanner:
                 kind = self._scope_kind_for(t.type)
                 if kind == ScopeKind.CASE:
                     case_depth = self._current_depth(scope_path) + 1
-                pending_block_header = kind
+                # generate/endgenerate 不贡献缩进层级：匹配单行 `generate if ... begin`
+                # 风格（generate 块内容与 module 内容同级），其指令行按普通行缩进
+                if kind != ScopeKind.GENERATE:
+                    pending_block_header = kind
+                # 行内有 begin 块（如 `if (X) begin`）→ 非单语句体，取消悬挂
+                if kind == ScopeKind.BLOCK:
+                    pending_stmt_header = False
                 self._handle_opener(t, kind, scope_path, ifdef_branches)
             elif t.type in self.closers:
                 kind = self._scope_kind_for_closer(t.type)
-                pending_block_footer = kind
+                if kind != ScopeKind.GENERATE:
+                    pending_block_footer = kind
                 self._handle_closer(t, scope_path, ifdef_branches)
                 if kind == ScopeKind.CASE:
                     case_depth = -1
+
+            # 控制流语句头（if/for/else 等，从规则推导）→ 本行是单语句头候选
+            if t.type in self.stmt_headers:
+                pending_stmt_header = True
 
             # 识别 case 分支项：在 case 深度上遇到标识符或 default
             if case_depth >= 0 and self._current_depth(scope_path) == case_depth + 1:
@@ -394,6 +498,7 @@ class BoundaryScanner:
                 contexts, line_buf, line_num, scope_path,
                 ifdef_branches, pending_block_header,
                 pending_block_footer, line_has_comment, pending_case_item,
+                pending_stmt_header, pending_is_else,
             )
 
         return contexts
@@ -430,17 +535,22 @@ class BoundaryScanner:
                 self._restore_scope(scope_path, branch.openers)
 
     def _handle_opener(self, t, kind, scope_path, ifdef_branches):
+        if kind == ScopeKind.GENERATE:
+            return  # generate 不贡献缩进层级（不入栈）
         node = ScopeNode(kind=kind, name=t.content, token_line=t.line)
         scope_path.append(node)
         if ifdef_branches:
             ifdef_branches[-1].extra_openers.append(node)
 
     def _handle_closer(self, t, scope_path, ifdef_branches):
+        if self._scope_kind_for_closer(t.type) == ScopeKind.GENERATE:
+            return  # endgenerate 不弹栈（generate 未入栈）
         if len(scope_path) > 1:
             scope_path.pop()
 
     def _emit_line(self, contexts, buf, line_num, scope_path, ifdef_branches,
-                   block_header_of, block_footer_of, has_comment, is_case_item):
+                   block_header_of, block_footer_of, has_comment, is_case_item,
+                   single_stmt_header=False, is_else_header=False):
         if not buf:
             contexts.append(LineContext(line_number=line_num, text=""))
             return
@@ -458,6 +568,8 @@ class BoundaryScanner:
             block_footer_of=block_footer_of,
             has_trailing_comment=has_comment,
             is_case_item=is_case_item,
+            single_stmt_header=single_stmt_header,
+            is_else_header=is_else_header,
         )
         contexts.append(ctx)
 
