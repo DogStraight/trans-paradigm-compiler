@@ -381,3 +381,52 @@ def test_integration_multiline_ternary_cont():
     assert _ind4(_find(out, "instr_mul ?")) == 12        # 三目链续行 +2
     assert _ind4(_find(out, "instr_mulh ?")) == 12
     assert _ind4(_find(out, "1'b0;")) == 12              # 末行同级
+
+
+def test_integration_port_tail_close_split():
+    """模块端口尾行 `name );` 拆成 `name` + 独立 `);`（ref picorv32_wb 风格）。
+
+    渲染器常把 `);` 粘连到最后一个端口行且顶格；拆行后端口行参与对齐（缩进 4、
+    name 列对齐），`);` 顶格 0 级。
+    """
+    src = (
+        "module m(\n"
+        "    input  [ 7:0] a,\n"
+        "    output [ 7:0] b,\n"
+        "output [15:0] c );\n"
+        "    assign b = a;\n"
+        "    assign c = {a, a};\n"
+        "endmodule\n"
+    )
+    out = _fmt_source(src).split("\n")
+    # `);` 拆为独立行，顶格
+    assert ");" in out
+    # 端口行对齐到组内（name 列起点一致），缩进 4
+    b_line = _find(out, "b,")
+    c_line = _find(out, "c")
+    assert _ind4(b_line) == 4
+    assert _ind4(c_line) == 4
+    # c 行不带 `);`（已被拆出）
+    assert "c );" not in out and "c);" not in out
+    # token 完整（去空白后与源一致）
+    def _strip_all(text: str) -> str:
+        lines = []
+        for line in text.splitlines():
+            ci = line.find("//")
+            if ci >= 0:
+                line = line[:ci]
+            lines.append(line)
+        return "".join("".join(lines).split())
+    assert _strip_all("\n".join(out)) == _strip_all(src)
+
+
+def test_split_port_close_no_false_positive():
+    """非端口行的 `);` 不被拆（如 assign 宏调用 `assign z = `MIN(x, y);`）。"""
+    from grammar.verilog.plugins.formatter import split_port_close_lines
+    lines = ["    assign z = `MIN(x, y);", "    output            mem_instr );", "endmodule"]
+    out = split_port_close_lines(lines)
+    # 宏调用行保留原样；端口尾行拆成两行
+    assert out[0] == "    assign z = `MIN(x, y);"
+    assert out[1] == "    output            mem_instr"
+    assert out[2] == ");"
+    assert len(out) == 4

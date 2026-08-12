@@ -125,6 +125,44 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     return engine
 
 
+def split_port_close_lines(
+    lines: list[str], categories: list[dict] | None = None
+) -> list[str]:
+    """拆模块端口尾行：`output name );` → `output name` + `);`（ref picorv32_wb 风格）。
+
+    渲染器常把模块端口关闭符 `);` 粘连到最后一个端口行（如 `output mem_instr );`），
+    且该行顶格。这里按 port_dir 品类 matcher（input/output/inout）识别端口尾行，
+    把 `);` 拆为独立行（indent 按 port_list_end 对齐 0 级），端口行本身交给后续
+    indent/port_dir 对齐统一缩进。只加换行，不改 token。
+    """
+    if categories is None:
+        categories = _load_categories_from_config() or DEFAULT_CATEGORIES
+    port_tokens: set[str] = set()
+    for cat in categories:
+        # 只认端口方向品类（port_dir），防误拆 assignment/declaration 等
+        # （如 `assign z = `MIN(x, y);` 行尾也含 `);`，但 first_token 是 assign）
+        if cat.get("family") != "port_dir":
+            continue
+        first = cat.get("matcher", {}).get("first_token")
+        if isinstance(first, str):
+            port_tokens.add(first)
+        elif isinstance(first, list):
+            port_tokens.update(first)
+    if not port_tokens:
+        return list(lines)
+    out: list[str] = []
+    for line in lines:
+        s = line.rstrip()
+        if s.endswith(");") and s.strip():
+            first = s.lstrip().split(None, 1)[0]
+            if first in port_tokens:
+                out.append(s[:-2].rstrip())
+                out.append(");")
+                continue
+        out.append(line)
+    return out
+
+
 def format_source(source: str, rules_dir: str, categories: list[dict] | None = None) -> str:
     """一站式格式化入口：lex → 边界扫描 → pass 编排。
 
@@ -140,11 +178,14 @@ def format_source(source: str, rules_dir: str, categories: list[dict] | None = N
     rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default())
     lexer = Lexer(rules_dir=rules_dir)
 
+    # 先拆端口尾行（`name );` → `name` + `);`），再扫描/跑 pass，避免 contexts 错位
+    lines = split_port_close_lines(source.split("\n"), categories)
+    split_source = "\n".join(lines)
+
     from .boundary import BoundaryScanner
     scanner = BoundaryScanner(rules, lexer)
-    contexts = scanner.scan(source)
+    contexts = scanner.scan(split_source)
 
-    lines = source.split("\n")
     engine = build_engine(categories)
     formatted = engine.run(lines, contexts)
     # 清理行尾尾随空格（对齐产生的冗余；ref 0 行尾随）

@@ -91,12 +91,16 @@ def format_generated(content: str, rules: Any, lexer: Any) -> str:
     """
     try:
         from grammar.verilog.plugins.formatter.boundary import BoundaryScanner
-        from grammar.verilog.plugins.formatter import build_engine
+        from grammar.verilog.plugins.formatter import build_engine, split_port_close_lines
+
+        # 先拆端口尾行（`name );` → `name` + `);`），再扫描，避免 contexts 错位
+        lines = split_port_close_lines(content.split("\n"))
+        split_content = "\n".join(lines)
 
         scanner = BoundaryScanner(rules, lexer)
-        contexts = scanner.scan(content)
+        contexts = scanner.scan(split_content)
         engine = build_engine()
-        formatted = engine.run(content.split("\n"), contexts)
+        formatted = engine.run(lines, contexts)
         return "\n".join(l.rstrip() for l in formatted)
     except Exception as e:  # noqa: BLE001 — 增强 pass 失败不阻断管线
         print(f"[formatter] skipped ({e})", file=sys.stderr)
