@@ -24,6 +24,54 @@ params = "$3"
 inst_name = "$4"
 ports = "$5.ports"
 
+[ImplBinding.renderer]
+# `impl module_name [params] [inst_name] (ports);`（语句级，仿 ModuleInst）
+head = { line = [
+    "impl ",
+    { ref = "module_name" },
+    { opt = { group = [
+        " ",
+        { ref = "params" },
+    ] } },
+    { opt = { group = [
+        " ",
+        { ref = "inst_name" },
+    ] } },
+    " (",
+] }
+body = { indent = true, items = ["ports"] }
+tail = { text = ");", break = 2 }
+
+
+[ImplBindingWithInterface.renderer]
+# `impl type.role [params] (ports) => iface;`（自动连线绑定）
+# 注意：ImplPortsParens 为 inline 节点，ports 属性已直接是 NamedPortList，
+# 括号需在 layout 手动给出；箭头 token 是 `=>`（symbol.extend.arrow）。
+layout = { line = [
+    "impl ",
+    { ref = "type_spec" },
+    { opt = { group = [
+        " ",
+        { ref = "params" },
+    ] } },
+    { opt = { group = [
+        " (",
+        { ref = "ports" },
+        ")",
+    ] } },
+    " => ",
+    { ref = "interface_ref" },
+    ";",
+] }
+
+[ImplPortsParens.renderer]
+# `(ports)` 包装（inline 节点通常被消除，此 layout 备用）
+layout = { line = [
+    "(",
+    { ref = "ports" },
+    ")",
+] }
+
 [ImplBindingWithInterface.inject]
 targets = [
     "@InstStmt",

@@ -1,10 +1,10 @@
 """增强语法渲染 + 管线展开开关（P1.4）测试。
 
 验证：
-  1. renderer 增强节点 layout：TypedPortDecl/TypeDecl 等不经过 transform 也能直出
-     （保留增强语法源码路径）
+  1. renderer 增强节点 layout：TypedPortDecl/TypeDecl/TypeImplDecl/impl 绑定
+     不经过 transform 也能直出（保留增强语法源码路径）
   2. 管线 expand_enhanced 开关：True 展开增强节点（当前默认），False 保留增强语法
-  3. 展开路径产出基础 Verilog（token 与保留路径的增强语法不对应，但各自完整）
+  3. 保留路径 token 完整；保留路径默认不 format（formatter 不识别增强结构）
 """
 
 import os
@@ -15,17 +15,24 @@ from tests.e2e.run_pipeline import run_pipeline_on_source
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
-# 增强语法样本（typed_ports）：模块端口用类型引用 + type 定义
-ENHANCED_SRC = """module spi_invoker(
+# 增强语法样本（typed_ports）：模块端口用类型引用 + type 定义 + impl 绑定 + TypeImplDecl
+ENHANCED_SRC = """module top(
     input clk,
-    input rstn,
     spi.slave spi_io
 );
+    spi_master u0 (.clk(clk));
+    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {
     master : input clk, input miso, output mosi, output cs;
     slave  : input clk, input mosi, output miso, output cs;
+    impl [master] (
+        input clk,
+        output sck
+    ) {
+        wire [7:0] data;
+    }
 }
 """
 
@@ -59,6 +66,11 @@ def test_preserve_path_keeps_enhanced_syntax():
     assert "type spi" in out
     assert "master : input clk, input miso, output mosi, output cs;" in out
     assert "slave : input clk, input mosi, output miso, output cs;" in out
+    # impl 绑定保留（括号 + `=>` 箭头）
+    assert "impl spi.master (.clk(clk)) => top;" in out
+    # TypeImplDecl 保留（body 内容渲染）
+    assert "impl [master] ( input clk, output sck) {" in out
+    assert "wire [7:0] data;" in out
     # 不出现展开产物
     assert "spi_io_clk" not in out
 
@@ -90,3 +102,13 @@ def test_expand_path_format_idempotent():
     once = format_source(r["output"], DEFAULT_RULES_DIR)
     twice = format_source(once, DEFAULT_RULES_DIR)
     assert twice == once
+
+
+def test_preserve_path_default_no_format():
+    """保留路径默认不 format（renderer 输出即源码视图，formatter 不识别增强结构）。"""
+    r = _run(expand_enhanced=False)
+    assert r["success"]
+    out = r["output"]
+    # 渲染输出（非格式化）保留增强源码缩进：TypeImplDecl body 缩进正常
+    assert "wire [7:0] data;" in out
+    assert "        wire [7:0] data;" in out  # 8 空格（renderer 缩进）

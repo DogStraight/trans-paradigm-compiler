@@ -185,6 +185,18 @@ role_name = "$3"
 ports = "$6"
 body = "$9"
 
+[TypeImplDecl.renderer]
+# `impl [role] (ports) { body }`（type 定义内的实现声明）
+head = { line = [
+    "impl [",
+    { ref = "role_name" },
+    "] (",
+    { opt = { group = ["", { ref = "ports" }] } },
+    ") {",
+] }
+body = { source = "body" }
+tail = "}"
+
 [InvertDecl.parser]
 production = [
     "keyword.invert",

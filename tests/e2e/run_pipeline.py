@@ -124,7 +124,7 @@ def run_pipeline_on_source(
     renderer_enabled: bool = True,
     stage: str | None = None,
     no_lint: bool = False,
-    format_output: bool = True,
+    format_output: bool | None = None,
     expand_enhanced: bool = True,
     rules_dir: str = DEFAULT_RULES_DIR,
     ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
@@ -159,6 +159,12 @@ def run_pipeline_on_source(
     }
 
     original_source = source
+
+    # format_output 默认跟随展开模式：保留增强语法路径（expand_enhanced=False）
+    # 时不强格式化（formatter 不识别增强结构，渲染输出即源码视图）；显式传入
+    # 则强制（未来 formatter 支持增强行后可用）。
+    if format_output is None:
+        format_output = expand_enhanced
 
     # Determine output directory
     if out_dir is None:
