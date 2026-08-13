@@ -97,15 +97,16 @@ def run_wrap_pass(
     lines: list[str],
     contexts: list[LineContext],
     max_width: int = DEFAULT_MAX_WIDTH,
+    indent_width: int = 4,
 ) -> list[str]:
     """折行：超宽行在安全断点拆成多行（贪婪拆到尾行 ≤ 宽，保证幂等）。"""
     out: list[str] = []
     for line in lines:
-        out.extend(_wrap_line(line, max_width))
+        out.extend(_wrap_line(line, max_width, indent_width))
     return out
 
 
-def _wrap_line(line: str, max_width: int) -> list[str]:
+def _wrap_line(line: str, max_width: int, indent_width: int = 4) -> list[str]:
     """折单行：循环拆到每段 ≤ max_width。尾行缩进 = 语句头缩进 + 1 级。"""
     # 不折的行：空/注释/指令/端口/声明（assign 除外）
     if len(line) <= max_width:
@@ -127,7 +128,7 @@ def _wrap_line(line: str, max_width: int) -> list[str]:
         return [line]
 
     indent = _indent_of(line)
-    cont_indent = indent + " " * 4  # 续行 +1 级
+    cont_indent = indent + " " * indent_width  # 续行 +1 级
 
     result: list[str] = []
     cur = line

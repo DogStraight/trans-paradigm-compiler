@@ -87,3 +87,34 @@ def test_format_source_no_trailing_whitespace():
     def norm(s):
         return "".join("".join(l.split()) for l in s.splitlines())
     assert norm(out) == norm(src)
+
+
+def test_style_loaded_from_config():
+    """formatter.style（indent_width/max_line_width）从配置读取。"""
+    from grammar.verilog.plugins.formatter.style import load_style
+    style = load_style()
+    assert style["indent_width"] == 4
+    assert style["max_line_width"] == 100
+
+
+def test_style_drives_indent_width(monkeypatch):
+    """indent_width 配置驱动缩进宽度（build_engine 传参给 indent pass）。"""
+    from grammar.verilog.plugins.formatter import build_engine
+    from grammar.verilog.plugins.formatter import style as style_mod
+    from grammar.verilog.plugins.formatter.boundary import LineContext
+
+    # monkeypatch style.load_style 返回 indent_width=2（build_engine 内 from .style import）
+    monkeypatch.setattr(style_mod, "load_style", lambda: {"indent_width": 2, "max_line_width": 100})
+
+    eng = build_engine([])
+    # 构造简单输入：module + 一级嵌套
+    lines = ["module m;", "begin", "end", "endmodule"]
+    ctxs = [
+        LineContext(line_number=1, text="module m;", scope_depth=0),
+        LineContext(line_number=2, text="begin", scope_depth=1),
+        LineContext(line_number=3, text="end", scope_depth=0),
+        LineContext(line_number=4, text="endmodule", scope_depth=0),
+    ]
+    out = eng.run(lines, ctxs)
+    # begin 应缩进 2（indent_width=2 生效）
+    assert out[1] == "  begin", f"indent_width=2 未生效: {out[1]!r}"

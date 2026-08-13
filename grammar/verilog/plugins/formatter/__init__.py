@@ -88,19 +88,28 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     from .passes.ifdef import run_ifdef_pass
     from .passes.inst_port import run_inst_port_align
     from .passes.wrap import run_wrap_pass
+    from .style import load_style
+
+    style = load_style()  # indent_width / max_line_width（配置驱动）
+    iw = style.get("indent_width", 4)
+    mw = style.get("max_line_width", 100)
 
     engine = FormatterEngine()
     # 缩进重排 pass（最前：先定缩进，品类/端口对齐再基于新缩进重组行）
     engine.register(FormatterPass(
         name="indent",
         kind="handler",
-        handler=run_indent_pass,
+        handler=lambda lines, ctxs: run_indent_pass(
+            lines, ctxs, indent_width=iw
+        ),
     ))
     # 条件编译块内容缩进 pass（紧跟单语句头的 ifdef 块内容继承悬挂）
     engine.register(FormatterPass(
         name="ifdef",
         kind="handler",
-        handler=run_ifdef_pass,
+        handler=lambda lines, ctxs: run_ifdef_pass(
+            lines, ctxs, indent_width=iw
+        ),
     ))
     if categories is None:
         # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
@@ -128,7 +137,9 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     engine.register(FormatterPass(
         name="wrap",
         kind="handler",
-        handler=run_wrap_pass,
+        handler=lambda lines, ctxs: run_wrap_pass(
+            lines, ctxs, max_width=mw, indent_width=iw
+        ),
     ))
     return engine
 

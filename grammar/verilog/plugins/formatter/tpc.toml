@@ -56,3 +56,9 @@ break_distance = 3
 
 # 结构边界映射（token/规则 → 结构类别）**不从本文件配置**——由各规则自身的
 # [RuleName.analyzer] scope = { kind = "..." } 声明，boundary.py 从语法规则推导。
+
+# 风格参数：indent_width 缩进空格数 / max_line_width 折行阈值
+# （可选，缺省 4 / 100）
+[formatter.style]
+indent_width = 4
+max_line_width = 100
