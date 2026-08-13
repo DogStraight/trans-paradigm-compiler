@@ -160,11 +160,10 @@ def run_pipeline_on_source(
 
     original_source = source
 
-    # format_output 默认跟随展开模式：保留增强语法路径（expand_enhanced=False）
-    # 时不强格式化（formatter 不识别增强结构，渲染输出即源码视图）；显式传入
-    # 则强制（未来 formatter 支持增强行后可用）。
+    # format_output 默认 True：展开/保留两条路都过 formatter（boundary 已支持
+    # curly 块，增强语法缩进可格式化）；显式传 False 可关。
     if format_output is None:
-        format_output = expand_enhanced
+        format_output = True
 
     # Determine output directory
     if out_dir is None:

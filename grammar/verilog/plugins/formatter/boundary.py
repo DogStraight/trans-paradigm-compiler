@@ -100,6 +100,21 @@ def _kind_from_name(name: str) -> "ScopeKind | None":
         return None
 
 
+def _same_line_next(tokens: list, idx: int, trivia: frozenset[str]) -> bool:
+    """`{` 后同行还有非 trivia 内容 → 表达式花括号（concat/replicate）。
+
+    行尾 `{`（块开，如 `type spi {` / `impl [m] (...) {`）后是换行；
+    行中 `{`（表达式，如 `assign x = {a, b};`）后是表达式内容。
+    """
+    for t in tokens[idx + 1:]:
+        if t.type in trivia:
+            if t.type == "newline":
+                return False
+            continue
+        return True
+    return False
+
+
 # ── 边界 token 集合（由语法规则自动构建）──
 
 
@@ -476,8 +491,13 @@ class BoundaryScanner:
         last_line_nontrivia: str | None = None
         # 追踪最近的 case 深度，用于识别 case 分支项
         case_depth = -1
+        # 表达式花括号（concat/replicate `{a, b}`）未闭合计数：表达式 `{` 不是块，
+        # 不入栈；其 `}` 优先闭合表达式（计数 -1），不 pop 块栈
+        brace_expr_depth = 0
 
-        for t in tokens:
+        tokens = list(tokens)
+        for _ti in range(len(tokens)):
+            t = tokens[_ti]
             if t.type in self._TRIVIA:
                 if t.type == "comment":
                     if "\n" in t.content:
@@ -619,6 +639,21 @@ class BoundaryScanner:
 
             if t.type in self.ifdef_set:
                 self._handle_ifdef_token(t, scope_path, ifdef_branches)
+            elif t.type == "bracket.l_curly_bracket":
+                # `{` 天然是块边界（TypeBody/TypeImplDecl 等结构块）；
+                # 表达式花括号（concat/replicate，`{` 同行后还有内容）是特例，
+                # 计数排除、不入块栈——括号深度通用处理，不硬编码结构名
+                if _same_line_next(tokens, _ti, self._TRIVIA):
+                    brace_expr_depth += 1
+                else:
+                    pending_block_header = ScopeKind.BLOCK
+                    self._handle_opener(t, ScopeKind.BLOCK, scope_path, ifdef_branches)
+            elif t.type == "bracket.r_curly_bracket":
+                if brace_expr_depth > 0:
+                    brace_expr_depth -= 1  # 闭合表达式 `}`，不动块栈
+                else:
+                    pending_block_footer = ScopeKind.BLOCK
+                    self._handle_closer(t, scope_path, ifdef_branches)
             elif t.type in self.openers:
                 kind = self._scope_kind_for(t.type)
                 if kind == ScopeKind.MODULE:

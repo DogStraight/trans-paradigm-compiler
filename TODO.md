@@ -106,12 +106,14 @@
       analyze/transform（AST 保留增强节点，renderer 用增强 layout 渲染，format 照常）；
       True 走当前展开路径。判断依据 = 规则已有 `transform.kind`，不逐个组件加开关
       - 两条路最终都过 format（formatter 职责不变，纯排版）
-- [ ] **保留路径 formatter 适配**：保留路径下 formatter 对增强行缩进不识别（`spi.slave spi_io);`
-      顶格、`);` 不拆）——formatter 需从规则推导增强结构（不硬编码），或保留路径暂不强格式化
-- [ ] **TypeImplDecl / impl 绑定 layout**：impl 绑定（`impl [role] (ports) { body }`）的保留渲染
-      未覆盖（impl_test 样本）
+- [x] **保留路径 formatter 适配**：formatter 从规则推导增强结构（不硬编码）——boundary 加
+      curly 块支持（`{`/`}` 天然块边界，行尾 `{`=块入栈 / 行中 `{`=表达式计数排除），
+      TypeBody/TypeImplDecl 缩进正确；format_output 默认 True 两条路都过 formatter
+- [x] **TypeImplDecl / impl 绑定 layout**：TypeImplDecl（`impl [role] (ports) { body }`）、
+      ImplBinding（`impl module [params] [inst] (ports);`）、ImplBindingWithInterface
+      （`impl type.role [params] (ports) => iface;`）layout 已写（箭头 `=>`、括号手动给出）
 - [ ] **验证补充**：typed_ports 更多样本（impl/nested/invert）在 expand_enhanced=True/False 两路
-      均产出可读文本 + token 完整 + format 幂等（当前 4 单测覆盖 spi_inf 基础形态）
+      均产出可读文本 + token 完整 + format 幂等（当前 5 单测覆盖 impl 绑定 + TypeImplDecl）
 
 ## P2 — 工程化收尾（发布准备，不阻碍功能推进）
 

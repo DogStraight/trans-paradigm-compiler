@@ -104,11 +104,13 @@ def test_expand_path_format_idempotent():
     assert twice == once
 
 
-def test_preserve_path_default_no_format():
-    """保留路径默认不 format（renderer 输出即源码视图，formatter 不识别增强结构）。"""
+def test_preserve_path_format_enhanced():
+    """保留路径默认过 formatter：增强语法 curly 块缩进正确（boundary 支持花括号）。"""
     r = _run(expand_enhanced=False)
     assert r["success"]
     out = r["output"]
-    # 渲染输出（非格式化）保留增强源码缩进：TypeImplDecl body 缩进正常
+    # TypeImplDecl body 内容渲染
     assert "wire [7:0] data;" in out
-    assert "        wire [7:0] data;" in out  # 8 空格（renderer 缩进）
+    # curly 块缩进：type body 内容 4 空格、TypeImplDecl body 内容 8 空格
+    assert "    master : input clk, input miso, output mosi, output cs;" in out
+    assert "        wire [7:0] data;" in out
