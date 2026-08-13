@@ -147,12 +147,17 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
         # 无 size：直接进 base_prefix
         current = start
     else:
-        # 有 size：非零开头数字（digit1-9）→ size_state（digit0-9 可继续）。
-        # 单独的 0（前导零形态，如 "0" / "0.5" / "0x1F"）也接受——digit0 直接
-        # 进 size_state（0 本身是合法十进制整数，0x/0b 前缀由 C 形态单独处理）。
+        # 有 size：size 语义 = non_zero_unsigned_number（IEEE A.8.7，
+        # non_zero_decimal_digit 开头）——带前缀形态只 digit1-9 开头（0'b1 非法）；
+        # 无前缀纯十进制形态（verilog_dec）允许 digit0 开头（0 本身是合法
+        # unsigned_number）
         size_state = new_state()
-        for i in range(0, 10):
-            transitions[(start, f"digit{i}")] = size_state
+        if no_prefix:
+            for i in range(0, 10):
+                transitions[(start, f"digit{i}")] = size_state
+        else:
+            for i in range(1, 10):
+                transitions[(start, f"digit{i}")] = size_state
         for i in range(0, 10):
             transitions[(size_state, f"digit{i}")] = size_state
         transitions[(size_state, "underscore")] = size_state

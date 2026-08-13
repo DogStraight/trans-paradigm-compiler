@@ -41,3 +41,14 @@ bases = ["d", "b", "o", "h"]
 value_digits = { d = "dec", b = "bin", o = "oct", h = "hex" }
 value_allow = ["x", "z", "?"]
 value_allow_space = true
+
+[[number.based]]
+name = "verilog_dec"
+# 纯十进制（无前缀）：0 / 123 / 3.14 / 1e10（decimal_number ::= unsigned_number
+# | [size] decimal_base unsigned_number 的 unsigned_number 部分；
+# 浮点/科学计数由生成器内置链处理）
+size = { digits = "nonzero" }
+base_prefix = "none"
+bases = []
+value_digits = { d = "dec" }
+value_allow = []

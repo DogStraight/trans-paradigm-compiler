@@ -117,15 +117,12 @@ class TestBaselineSignedKnownBug:
         contents = [t.content for t in tokens if t.type != "space.indent"]
         assert contents == ["8'sb1010"], f"8'sb1010 → {contents!r}"
 
-    def test_leading_zero_width_buggy(self, lexer):
-        """🐛 0'b1 当前被接受为位宽数字（标准要求 size 非零开头）。
-
-        重写 FSM 后应拒绝（切为 0 + ' + b1 或报错）。
-        """
+    def test_leading_zero_width_rejected(self, lexer):
+        """✅ 0'b1 被拒绝为位宽数字（标准 A.8.7：size = non_zero_unsigned_number，
+        必须以 1-9 开头）。0 是合法 unsigned_number，'b1 是 unsized——切为两个 token。"""
         tokens = lexer.tokenize("0'b1")
         contents = [t.content for t in tokens if t.type != "space.indent"]
-        # 当前行为：LEADING_ZERO 有 quote 转移，0'b1 被当完整字面量
-        assert contents == ["0'b1"], f"0'b1 → {contents!r}（已知缺陷：前导零位宽被接受）"
+        assert contents == ["0", "'b1"], f"0'b1 → {contents!r}（size 非零开头）"
 
 
 class TestBaselineUnsupported:
