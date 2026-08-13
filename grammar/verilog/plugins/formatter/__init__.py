@@ -87,6 +87,7 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     from .passes.indent import run_indent_pass
     from .passes.ifdef import run_ifdef_pass
     from .passes.inst_port import run_inst_port_align
+    from .passes.wrap import run_wrap_pass
 
     engine = FormatterEngine()
     # 缩进重排 pass（最前：先定缩进，品类/端口对齐再基于新缩进重组行）
@@ -122,6 +123,12 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
         name="inst_port",
         kind="handler",
         handler=run_inst_port_align,
+    ))
+    # 宽度折行 pass（最后：品类/端口对齐定稿后，超宽行折行；续行继承语句头 +1）
+    engine.register(FormatterPass(
+        name="wrap",
+        kind="handler",
+        handler=run_wrap_pass,
     ))
     return engine
 

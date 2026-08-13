@@ -32,14 +32,15 @@ def test_categories_have_matchers():
 
 
 def test_build_engine_uses_config():
-    """build_engine 从配置构建：indent → 品类 → inst_port。"""
+    """build_engine 从配置构建：indent → 品类 → inst_port → wrap。"""
     from grammar.verilog.plugins.formatter import build_engine
     eng = build_engine()
     names = [p.name for p in eng._passes]
     assert names[0] == "indent"
     assert "port_dir" in names
     assert "declaration" in names
-    assert "inst_port" == names[-1]
+    assert "inst_port" in names
+    assert names[-1] == "wrap"
 
 
 def test_explicit_categories_override():

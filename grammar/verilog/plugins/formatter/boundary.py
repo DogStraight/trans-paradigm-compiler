@@ -544,7 +544,22 @@ class BoundaryScanner:
                         in_port_list = False
                     # 多行语句续行：本行是否续行（上一行是多行语句头/续行）
                     is_cont = multi_active
-                    hdr_line = multi_header_line if is_cont else 0
+                    op_cont = False
+                    # 行首是运算符（`&&`/`||`/`*`/`+`/`?`/`:` 等，不含 `.`）→
+                    # 表达式续行（折行 pass 拆出的续行行尾有分号，但仍属上一语句的
+                    # 表达式部分；二次 format 时靠行首运算符识别续行，缩进相对
+                    # 语句头 +1）。`.` 是实例端口连接行，不属运算符续行。
+                    if (
+                        not is_cont
+                        and line_first_token is not None
+                        and line_first_token.startswith("symbol.")
+                        and not line_first_token.endswith(".dot")
+                    ):
+                        is_cont = True
+                        op_cont = True
+                    hdr_line = (
+                        (line_num - 1) if op_cont else multi_header_line
+                    ) if is_cont else 0
                     hdr_extra = multi_depth_extra if is_cont else 0
                     line_ends_stmt = last_line_nontrivia in self.stmt_end_tokens
                     is_block_line = (
