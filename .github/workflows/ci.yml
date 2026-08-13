@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, feature]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        os: [windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package (editable + test deps)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Run full test suite with coverage gate
+        run: |
+          python -m pytest tests -q --cov
+
+      - name: Verify CLI works
+        run: |
+          echo "module m; reg a; endmodule" | Out-File -Encoding utf8 ci_check.v
+          tpc format ci_check.v
+        shell: pwsh
