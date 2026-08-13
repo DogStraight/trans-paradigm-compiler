@@ -1,23 +1,33 @@
 # C 语言数字字面量形态声明（c4 演示 DSL）
 #
-# C 数字形态（无 size 形态 + C 前缀）：
-#   十进制整数    123 / 0
-#   十六进制     0x1F
-#   二进制       0b101
-#   八进制       0o17
-# （浮点/科学计数形态待生成器 real 支持后补充）
+# 对齐参考实现 reference/c4/c4.c 的 next()（标准锚点）：
+#   if (ival = tk - '0') { ... 十进制 ... }                    # 非零开头 → 十进制
+#   else if (*p == 'x' || *p == 'X') { ... ival * 16 ... }     # 0x/0X → 十六进制
+#   else { while (*p >= '0' && *p <= '7') ... ival * 8 ... }   # 前导 0 → 八进制
+#
+# c4 只支持三种形态：十进制（非零开头）、0x/0X 十六进制、前导 0 八进制。
+# 不支持 0b/0o（C23/Python 风格）——0b101 应拆为 0 + 标识符 b101。
+# 不支持浮点（c4 的 int 是唯一数字类型）——3.14 拆为 3 + . + 14。
 
 [[number.based]]
 name = "c_prefix"
 size = "none"
-base_prefix = "0x|0b|0o"     # C 风格前缀（多字符）
+base_prefix = "0x"          # C 十六进制前缀（0X 由大小写类别覆盖）
 bases = []
-value_digits = { x = "hex", b = "bin", o = "oct" }
+value_digits = { x = "hex" }
+value_allow = []
+
+[[number.based]]
+name = "c_octal"
+size = "none"
+base_prefix = "0"           # c4.c 前导 0 八进制（0[0-7]*，含 0 本身）
+bases = []
+value_digits = { "0" = "oct" }
 value_allow = []
 
 [[number.based]]
 name = "c_dec"
-size = { digits = "nonzero" }   # 十进制整数（走 size_state：123 / 0 / 浮点）
+size = { digits = "nonzero" }   # 严格非零开头十进制（0 由 c_octal 提供，0x 由 c_prefix）
 base_prefix = "none"
 bases = []
 value_digits = { d = "dec" }

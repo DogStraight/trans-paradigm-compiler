@@ -113,3 +113,49 @@ class TestGenVerilogWidth:
         """8'（有 size 无 base）→ 吃有效前缀 8（size 态是接受态，十进制整数）。"""
         tok, end = vrun.run("8'", 0)
         assert tok == "8"
+
+
+class TestGenMultiCharPrefix:
+    """多字符前缀：每条前缀独立建链，值随前缀。
+
+    回归：曾只建同首字符组的第一条链（plist[0][1:]），且 value 进制只取
+    第一个——0x|0b 声明下 0b101 只能吃到 0。
+    """
+
+    MULTI_CFG = [
+        {
+            "name": "c_prefix",
+            "size": "none",
+            "base_prefix": "0x|0b",
+            "bases": [],
+            "value_digits": {"x": "hex", "b": "bin"},
+            "value_allow": [],
+        },
+    ]
+
+    @pytest.fixture(scope="class")
+    def mrun(self):
+        pats = compile_patterns(self.MULTI_CFG)
+        return _Runner(pats)
+
+    @pytest.mark.parametrize(
+        "src,expected",
+        [
+            ("0x1F", "0x1F"),   # hex 链
+            ("0b101", "0b101"), # bin 链（回归：曾只吃 0）
+            ("0x", "0x"),       # hex value 空 → 前缀本身
+            ("0b", "0b"),       # bin value 空 → 前缀本身
+            ("0o17", ""),       # 0o 未声明 → 无匹配
+        ],
+    )
+    def test_multi(self, mrun, src, expected):
+        tok, _ = mrun.run(src, 0)
+        assert tok == expected, f"{src!r} → {tok!r}"
+
+    def test_value_radix_follows_prefix(self, mrun):
+        """0b 后只认 bin digit：0b12 的 2 不并入（bin 无 digit2）。"""
+        tok, _ = mrun.run("0b12", 0)
+        assert tok == "0b1", f"0b12 → {tok!r}"
+        # 0x 后只认 hex digit：0x1g 的 g 不并入
+        tok, _ = mrun.run("0x1g", 0)
+        assert tok == "0x1", f"0x1g → {tok!r}"

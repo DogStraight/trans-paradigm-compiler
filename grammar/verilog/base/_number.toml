@@ -47,7 +47,8 @@ name = "verilog_dec"
 # 纯十进制（无前缀）：0 / 123 / 3.14 / 1e10（decimal_number ::= unsigned_number
 # | [size] decimal_base unsigned_number 的 unsigned_number 部分；
 # 浮点/科学计数由生成器内置链处理）
-size = { digits = "nonzero" }
+# size.digits = "any"：允许 0 开头（0 / 017 / 0.5 都是十进制，Verilog 无 C 八进制）
+size = { digits = "any" }
 base_prefix = "none"
 bases = []
 value_digits = { d = "dec" }
