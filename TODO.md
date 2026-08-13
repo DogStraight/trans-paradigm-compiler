@@ -2,32 +2,26 @@
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 完成基线（当前验证过的事实）：
-> - 549 测试全过；PicoRV32 token 完整硬基线（format 不改 token）
+> - 587 测试全过；PicoRV32 token 完整硬基线（format 不改 token）
 > - c4 第二语言完成（.c → c4 VM 汇编，6 集成测试）——语言无关主张实证
-> - formatter 已接入管线（format_output 默认 True），67 单测 + 幂等回归
-> - 预处理器宏相关完成（带参宏/条件编译还原/指令原位回插，e2e 守卫 12+ 项）
-> - typed_ports 增强渲染双路径（展开/保留，expand_enhanced 开关）
+> - formatter 接入管线 + 幂等 + 宽度折行 + SV 基础覆盖 + 风格参数化 + 品类对齐
+> - 预处理器宏相关完成（带参宏/条件编译还原/指令原位回插 + primitives 单测 19 项）
+> - typed_ports 增强渲染双路径（展开/保留，expand_enhanced）+ nested/invert 验证
 > - 数字形态配置化完成（声明→FSM 生成器 + 语言包声明 + signed 's + 0'b1 标准拒绝）
 
 ## P1 — Verilog 实例完善
 
-### P1.1 预处理器单元测试（primitives 级）
+### P1.3 SV 插件化（SV 语法做成插件，插拔动态适配）
 
-- [ ] 指令原语/宏展开/ifdef 分支/逆向恢复逐部件单测
-      （e2e 宏还原测试已有，缺 primitives 级）
+> 来源：2026-08-13 用户方向——SV 基础已内嵌（logic/always_ff/always_comb 在
+> verilog 语言包），但 SV 特性会持续增长（interface/class/struct/assertion 等），
+> 内嵌会让 verilog 语言包膨胀。做成**独立插件**（如 plugins/sv）：
+> 插拔动态适配——verilog 包按需挂载 SV 插件，接口/class 等新特性进插件不进主包。
 
-### P1.3 formatter 补齐（实用缺口）
-
-- [ ] **宽度控制折行**：独立 pass，indent 后——检测超宽行（max_line_width 可配），
-      在运算符/逗号断点拆行 + 续行 +1；复用 multi_line_cont 机制；不改 token，幂等锁
-- [ ] **SystemVerilog 基础覆盖**：logic/always_ff/always_comb 关键字 + 基础语法
-- [ ] **风格参数化**：缩进宽度 / tab vs 空格 / `[ 3:0]` 高位空格 / 运算符周围空格
-      进 formatter tpc.toml
-
-### P1.4 增强渲染补充
-
-- [ ] 验证补充：typed_ports 更多样本（nested/invert）在 expand_enhanced=True/False
-      两路产出可读文本 + token 完整 + format 幂等
+- [ ] SV 插件骨架：plugins/sv/tpc.toml + 语法文件（token_ext/规则），
+      verilog tpc.toml [plugins] enabled 控制挂载
+- [ ] 迁移已内嵌的 SV 三样（logic/always_ff/always_comb）到插件
+- [ ] 验证：挂载/卸载 SV 插件后 verilog 包行为正确（插拔无残留）
 
 ## P2 — 工程化收尾（发布准备）
 
