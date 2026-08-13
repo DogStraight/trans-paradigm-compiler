@@ -20,3 +20,6 @@ _test_*.py
 /tmp/
 # 第三方参考源码（c4/chibicc 等，随时参考不纳入版本控制）
 /reference/
+
+.coverage
+
