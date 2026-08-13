@@ -10,8 +10,9 @@ in TOML — no hardcoded lexer logic.
 from core.define import Token
 from core.config_registry import declare_cfg
 
-from .lexer_utils import get_token_define_merged
+from .lexer_utils import get_token_define_merged, get_number_config
 from .number_fsm import NumberFSM
+from .number_runner import build_number_runner
 from .comment_fsm import CommentFSM
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
@@ -73,6 +74,10 @@ class Lexer:
 
         # new line start flag for indent handling
         self.new_line_start = False
+
+        # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM；
+        # 无配置 → 回退旧 NumberFSM（兼容路径）
+        self._number_runner = build_number_runner(get_number_config())
         pass
 
     def _build_alpha_tokens(self) -> None:
@@ -239,12 +244,25 @@ class Lexer:
                         self.new_line_start = False
                     continue
 
-            # in case current char is unsized Verilog literal ('b1, 'd0, 'hFF, 'o7)
-            elif lex_text[text_idx] == "'" and next_char in "dDbBhHoO":
+            # in case current char is unsized Verilog literal ('b1, 'd0, 'hFF, 'o7, 's signed)
+            elif lex_text[text_idx] == "'" and next_char in "dDbBhHoOsS":
                 self._emit_pending_dedent(tokens)
 
-                number_content, new_idx = NumberFSM.run(lex_text, text_idx)
+                if self._number_runner is not None:
+                    number_content, new_idx = self._number_runner.run(lex_text, text_idx)
+                else:
+                    number_content, new_idx = NumberFSM.run(lex_text, text_idx)
                 offset = new_idx - text_idx
+
+                # runner 空结果（如 `'d` 无 value）：防死循环，退化为符号
+                if not number_content or offset <= 0:
+                    text_idx += 1
+                    start_point += 1
+                    current_token.set_content(lex_text[text_idx - 1])
+                    current_token.set_type("symbol.base")
+                    current_token = self.refine_type(current_token)
+                    tokens.append(current_token)
+                    continue
 
                 current_token.set_type("literal.number")
                 current_token.set_content(number_content)
@@ -388,13 +406,25 @@ class Lexer:
                 continue
 
             # in case current char is a number
-
-            # in case current char is a number
             elif lex_text[text_idx].isdigit():
                 self._emit_pending_dedent(tokens)
 
-                number_content, new_idx = NumberFSM.run(lex_text, text_idx)
+                if self._number_runner is not None:
+                    number_content, new_idx = self._number_runner.run(lex_text, text_idx)
+                else:
+                    number_content, new_idx = NumberFSM.run(lex_text, text_idx)
                 offset = new_idx - text_idx
+
+                # runner 返回空（形态不匹配）：不消费字符，交给后续分支
+                # （防死循环：text_idx 必须前进）
+                if not number_content or offset <= 0:
+                    text_idx += 1
+                    start_point += 1
+                    current_token.set_content(lex_text[text_idx - 1])
+                    current_token.set_type("id")
+                    current_token = self.refine_type(current_token)
+                    tokens.append(current_token)
+                    continue
 
                 # set current token line info
                 current_token.set_type("literal.number")

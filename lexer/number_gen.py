@@ -49,8 +49,14 @@ _CHAR_CATEGORY: dict[str, str] = {
     "o": "base_o", "O": "base_o",
     "h": "base_h", "H": "base_h",
     "s": "sign_s", "S": "sign_s",
-    "a": "hex_abc", "c": "hex_abc", "e": "hex_e", "f": "hex_abc",
-    "A": "hex_abc", "C": "hex_abc", "E": "hex_e", "F": "hex_abc",
+    # hex value digit：a/b/c/d/f（b/d 既是 base 字母也是 hex digit——
+    # 在 value 位置由 hex_value_b/hex_value_d 类别识别，与 base 位置区分；
+    # e 保持 eE 类别——它同时是指数标记和 hex digit，两种位置共用）
+    "a": "hex_value_abc", "c": "hex_value_abc", "f": "hex_value_abc",
+    "b": "hex_value_b", "d": "hex_value_d",
+    "A": "hex_value_abc", "C": "hex_value_abc", "F": "hex_value_abc",
+    "B": "hex_value_b", "D": "hex_value_d",
+    "e": "eE", "E": "eE",
     "x": "xz", "X": "xz", "z": "xz", "Z": "xz", "?": "xz",
     "_": "underscore", ".": "dot", "'": "quote", "+": "sign", "-": "sign",
 }
@@ -90,7 +96,8 @@ def _digit_cats_for(radix: str) -> set[str]:
     if radix == "hex":
         return {"digit0", "digit1", "digit2", "digit3", "digit4", "digit5",
                 "digit6", "digit7", "digit8", "digit9",
-                "hex_abc", "hex_e", "xz"}
+                "hex_value_abc", "hex_value_b", "hex_value_d", "eE",
+                "xz"}
     if radix == "dec":
         return {"digit0", "digit1", "digit2", "digit3", "digit4", "digit5",
                 "digit6", "digit7", "digit8", "digit9", "xz"}
@@ -126,6 +133,9 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     value_digits = cfg.get("value_digits", {})
     value_allow = cfg.get("value_allow", [])
     allow_space = cfg.get("value_allow_space", False)
+    # 无前缀形态（base_prefix = "none"）：size 态即最终接受态（十进制整数/浮点），
+    # 不建 quote/base 链
+    no_prefix = base_prefix == "none"
 
     # ── size 部分 ──
     size_is_none = size_cfg == "none" or (
@@ -137,16 +147,47 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
         # 无 size：直接进 base_prefix
         current = start
     else:
-        # 有 size：非零开头数字（digit1-9）→ size_state（digit0-9 可继续）
+        # 有 size：非零开头数字（digit1-9）→ size_state（digit0-9 可继续）。
+        # 单独的 0（前导零形态，如 "0" / "0.5" / "0x1F"）也接受——digit0 直接
+        # 进 size_state（0 本身是合法十进制整数，0x/0b 前缀由 C 形态单独处理）。
         size_state = new_state()
-        for i in range(1, 10):
+        for i in range(0, 10):
             transitions[(start, f"digit{i}")] = size_state
         for i in range(0, 10):
             transitions[(size_state, f"digit{i}")] = size_state
         transitions[(size_state, "underscore")] = size_state
+        # 浮点/科学计数：dec [. dec] [e[+-] dec]（旧 FSM DEC_INT 行为）
+        frac_state = new_state()          # 小数点后（3.14）
+        exp_state = new_state()           # e 之后（1e10）
+        exp_sign_state = new_state()      # e+ / e- 符号后
+        exp_digit_state = new_state()     # 指数数字
+        transitions[(size_state, "dot")] = frac_state
+        transitions[(size_state, "eE")] = exp_state
+        for i in range(0, 10):
+            transitions[(frac_state, f"digit{i}")] = frac_state
+        transitions[(frac_state, "underscore")] = frac_state
+        transitions[(frac_state, "eE")] = exp_state
+        accepting.add(frac_state)
+        transitions[(exp_state, "sign")] = exp_sign_state
+        for i in range(0, 10):
+            transitions[(exp_state, f"digit{i}")] = exp_digit_state
+        for i in range(0, 10):
+            transitions[(exp_sign_state, f"digit{i}")] = exp_digit_state
+        for i in range(0, 10):
+            transitions[(exp_digit_state, f"digit{i}")] = exp_digit_state
+        transitions[(exp_digit_state, "underscore")] = exp_digit_state
+        accepting.add(exp_digit_state)
+        # size 态本身是接受态：十进制整数（7 / 123 / 0 等）
+        accepting.add(size_state)
         current = size_state
 
     # ── base_prefix 部分 ──
+    # 无前缀形态（base_prefix="none"）：size 态即接受态，直接返回
+    if no_prefix:
+        return NumberPattern(
+            name, transitions, accepting, start, base_states, allow_space
+        )
+
     # 前缀可能是多字符（0x/0b）或带可选 s（'s）
     prefixes = _expand_prefix(base_prefix)
     # 多字符前缀：逐字符建链
@@ -181,13 +222,17 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
         )
 
     # ── 单字符前缀（' 或 's）──
+    # 's 是 ' + s 两字符：' → quote 态 → s → sign_s 态 → base 字母 → value
     quote_state = new_state()
-    # 可选的 s（signed）
     signed_opt = cfg.get("signed", False)
     if signed_opt:
-        transitions[(current, "sign_s")] = quote_state
+        # 先 '（quote）到 quote_state，再 s（sign_s）到 sign_after_state
+        transitions[(current, "quote")] = quote_state
+        sign_after_state = new_state()
+        transitions[(quote_state, "sign_s")] = sign_after_state
     else:
         transitions[(current, "quote")] = quote_state
+        sign_after_state = quote_state
 
     # ── base 字母 → value 态 ──
     for base_char in bases:
@@ -197,8 +242,7 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
         base_states[base_lower] = value_state
         cat = _CHAR_CATEGORY.get(base_char)
         if cat:
-            transitions[(quote_state, cat)] = value_state
-            # 注意：'s 后 quote_state 会经 s 到达，再经 base 字母到 value
+            transitions[(sign_after_state, cat)] = value_state
         # value 态：进制 digit 集 + 允许的特殊字符
         for cat in _digit_cats_for(radix):
             if cat == "xz" and "x" not in value_allow and "z" not in value_allow and "?" not in value_allow:

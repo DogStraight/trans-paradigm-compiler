@@ -103,19 +103,19 @@ class TestBaselineVerilogWidth:
 
 
 class TestBaselineSignedKnownBug:
-    """signed 位宽 's — 已知缺陷，断言当前实际行为（重写 FSM 时修）。"""
+    """signed 位宽 's — 已修复（配置驱动生成 FSM 支持 's 链）。"""
 
-    def test_signed_literal_buggy(self, lexer):
-        """🐛 16'sd100 当前被错切为 16 + ' + sd100（AFTER_QUOTE 无 s 转移）。
-
-        重写 FSM 后应变为单 token ['16'sd100']。
-        """
+    def test_signed_literal_fixed(self, lexer):
+        """✅ 16'sd100 现在为单 token（'s 链：' → s → d → value）。"""
         tokens = lexer.tokenize("16'sd100")
         contents = [t.content for t in tokens if t.type != "space.indent"]
-        # 当前行为：16 是 number，' 是符号，sd100 是 id
-        assert contents == ["16", "'", "sd100"], (
-            f"16'sd100 → {contents!r}（已知缺陷：signed 位宽未支持）"
-        )
+        assert contents == ["16'sd100"], f"16'sd100 → {contents!r}"
+
+    def test_signed_binary_fixed(self, lexer):
+        """✅ 8'sb1010 单 token（signed 二进制）。"""
+        tokens = lexer.tokenize("8'sb1010")
+        contents = [t.content for t in tokens if t.type != "space.indent"]
+        assert contents == ["8'sb1010"], f"8'sb1010 → {contents!r}"
 
     def test_leading_zero_width_buggy(self, lexer):
         """🐛 0'b1 当前被接受为位宽数字（标准要求 size 非零开头）。

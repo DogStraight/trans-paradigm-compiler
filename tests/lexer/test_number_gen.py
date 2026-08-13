@@ -110,6 +110,6 @@ class TestGenVerilogWidth:
         assert tok, f"{src!r} 应吃到有效前缀"
 
     def test_incomplete_no_base(self, vrun):
-        """8'（有 size 无 base）→ 无 token（不走通，不 accept）。"""
-        tok, _ = vrun.run("8'", 0)
-        assert tok == ""
+        """8'（有 size 无 base）→ 吃有效前缀 8（size 态是接受态，十进制整数）。"""
+        tok, end = vrun.run("8'", 0)
+        assert tok == "8"

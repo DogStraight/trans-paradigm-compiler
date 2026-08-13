@@ -5,6 +5,7 @@ token_lang = { file = "token.toml", required = false }
 macro_config = { file = "base/_macro.toml", required = false }
 pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = false }
 bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
+number = { file = "base/_number.toml", section = "number", required = false }
 
 [parser]
 operator_defs = { file = "base/_symbol_level.toml", section = "operator", required = true }

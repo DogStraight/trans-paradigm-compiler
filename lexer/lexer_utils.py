@@ -27,6 +27,23 @@ _token_lang_cfg: dict = declare_cfg("lexer.token_lang", {}, __name__, "_token_la
 #   #sym:config = (root)
 #   格式: dict — 增强层 token 覆盖（可选）
 _token_ext_cfg: dict = declare_cfg("lexer.token_ext", {}, __name__, "_token_ext_cfg")
+
+# lexer.number
+#   #sym:config = (root)
+#   格式: dict — 数字字面量形态声明（[[number.based]] 编译为 FSM）
+_number_cfg: dict = declare_cfg("lexer.number", {}, __name__, "_number_cfg")
+
+
+def get_number_config() -> list[dict]:
+    """读取数字形态声明（lexer.number），供 number_gen 编译。
+
+    Returns: [[number.based]] 形态列表（空 = 使用默认/不启用配置化数字）。
+    """
+    raw = _number_cfg or {}
+    based = raw.get("based", [])
+    if isinstance(based, list):
+        return [b for b in based if isinstance(b, dict)]
+    return []
 def _deep_merge(base: dict, override: dict) -> dict:
     """递归合并 override 到 base，override 的值优先"""
     result = base.copy()
