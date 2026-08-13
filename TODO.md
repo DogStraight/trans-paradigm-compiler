@@ -27,17 +27,18 @@
 
 ### P2.0 机制可理解性
 
-- [ ] 配置生命周期评估 + 文档化（declare_cfg 三阶段时序）
-- [ ] 表达式系统隐式约定文档化（Pratt/operator 顺序/三元）
-- [ ] 组件协议文档（插件层：register_plugin/transform 钩子/analyzer 原语）
-- [ ] c4 定位为最小语言包模板（模型"从仿写到可代写"的增量路径）
+- [x] 配置生命周期评估 + 文档化（docs/config_lifecycle.md——三阶段时序 + 坑 + 评估结论保持注册制）
+- [x] 表达式系统隐式约定文档化（docs/expression_conventions.md——优先级/atom/三元/一元）
+- [x] 组件协议文档（docs/component_protocol.md——组件/槽位/原语/inject）
+- [x] c4 定位为最小语言包模板（grammar/c4/README.md 模板路径 + 4 文档索引）
 
 ### P2.2 发布收尾
 
-- [ ] 覆盖率门禁（≥90%）
-- [ ] 恢复 CI（.github/workflows/ci.yml；先移除 .gitignore 的 .github/）
-- [ ] 安装可验证（pip install -e ".[test]"）
-- [ ] 补文档（CONTRIBUTING / CHANGELOG / API）
+- [x] 覆盖率门禁（.coveragerc omit 入口/回退，fail_under=84，实测 84.57%）
+- [x] 恢复 CI（.github/workflows/ci.yml：Windows + Python 3.11/3.12/3.13）
+- [x] 安装可验证（pip install -e ".[test]" + tpc CLI 实测）
+- [x] 补文档（CONTRIBUTING.md / CHANGELOG.md / docs/api.md）
+- [ ] 覆盖率远期目标 ≥90%（当前 84.57%，需补 transform/renderer 等薄弱区）
 
 
 ## 设计说明（已落地，供参考）

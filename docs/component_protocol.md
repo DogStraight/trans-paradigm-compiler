@@ -107,7 +107,39 @@ targets = ["@AnsiPortDecl", "@ModuleItem"]
 组件语法通过 `inject` 挂到基础语法的注入点（`@Xxx` 引用位），
 `setup_grammar` 把组件规则并入注入点——不修改基础语法文件。
 
-## 7. 写新组件的最小步骤
+## 7. 数据流（analyzer → transform 通道）
+
+```
+TOML grammar rules
+      ↓ (setup_grammar 加载)
+Parser 产出 AST
+      ↓
+Analyzer 遍历 AST，执行组件原语
+      ↓ (原语写入 sym.attrs，键见 _protocol.py)
+SemanticMappingPlugin 读作用域树，构建映射表
+      ↓ (表：type_ports_flat 等)
+ConfigDrivenTransform 消费映射表
+      ↓ (expand / replace / delete 操作)
+Renderer 产出格式化输出
+```
+
+### `_ref_callbacks` 协议（analyzer ↔ transformer 关键通道）
+
+1. **Analyzer**（`_resolve.py`）：把回调写入 `sym.attrs["_ref_callbacks"]`
+2. **Collector**（`_mapping.py`）：`collect_callbacks()` 从作用域树读取
+3. **Transformer**（`_semantic_mapping.py`）：从回调构建映射表
+
+所有此类魔数键集中在 `core/_protocol.py` 定义，**禁止在代码里写裸字符串**。
+
+## 8. 脚手架
+
+```bash
+python main.py new component my_feature --lang verilog
+```
+
+生成 `plugins/my_feature/`（tpc.toml + 00_xxx.toml + _handler.py 骨架）。
+
+## 9. 写新组件的最小步骤
 
 1. `plugins/<name>/tpc.toml`：声明语法文件 + 处理器 + 槽位/原语。
 2. `plugins/<name>/00_xxx.toml`：语法规则（`inject` 挂到基础语法）。
@@ -115,7 +147,7 @@ targets = ["@AnsiPortDecl", "@ModuleItem"]
 4. 语言包 tpc.toml `[plugins] enabled = ["<name>", ...]` 挂载。
 5. `setup_grammar` 自动发现加载；`get_component_grammar_files` 取语法文件。
 
-## 8. 常见坑
+## 10. 常见坑
 
 | 坑 | 现象 | 修法 |
 |---|---|---|
@@ -123,3 +155,4 @@ targets = ["@AnsiPortDecl", "@ModuleItem"]
 | inject target 拼错 | 语法未挂上 | 确认注入点存在（`@Xxx` 引用位） |
 | 原语顺序错 | analyzer 阶段顺序乱 | `[analyzer].primitives` 数组顺序 |
 | 单语言污染 | 组件跨语言加载 | tpc.toml 声明 `lang` 过滤 |
+| 魔数键裸写 | 拼写错难查 | 用 `core/_protocol.py` 常量 |
