@@ -88,3 +88,19 @@ role_name = "$3"
 
 [TypedTypeSpec.analyzer]
 identifier_ref = "type_name"
+
+[TypedTypeSpec.renderer]
+layout = { line = [
+    { ref = "type_name" },
+    ".",
+    { ref = "role_name" },
+] }
+
+
+[TypedPortDecl.renderer]
+# 保留增强语法：`type.role name`（如 `spi.slave spi_io`）
+layout = { line = [
+    { ref = "type_spec" },
+    " ",
+    { ref = "instance_name" },
+] }

@@ -66,7 +66,13 @@ def build_wrapper(node: Node, ctx) -> Node | None:
         if isinstance(impl_body, list):
             body.sub_node = [n for n in impl_body if isinstance(n, Node)]
         elif isinstance(impl_body, Node):
+            # normalize 把单元素 repeat 展平为单节点（如 body=[WireDecl] → WireDecl），
+            # 此时取 sub_node/items 可能得到 DeclaratorList 等非列表 → 需包成列表
             subs = getattr(impl_body, "sub_node", []) or getattr(impl_body, "items", [])
+            if isinstance(subs, Node):
+                subs = [subs]
+            elif not isinstance(subs, list):
+                subs = [impl_body]
             body.sub_node = [n for n in subs if isinstance(n, Node)]
     mod.add_attr("body", body)
     mark_extra(wrapper_name, mod)

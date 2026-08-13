@@ -124,7 +124,8 @@ def run_pipeline_on_source(
     renderer_enabled: bool = True,
     stage: str | None = None,
     no_lint: bool = False,
-    format_output: bool = True,
+    format_output: bool | None = None,
+    expand_enhanced: bool = True,
     rules_dir: str = DEFAULT_RULES_DIR,
     ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
     include_dirs: list[str] | None = None,
@@ -158,6 +159,11 @@ def run_pipeline_on_source(
     }
 
     original_source = source
+
+    # format_output 默认 True：展开/保留两条路都过 formatter（boundary 已支持
+    # curly 块，增强语法缩进可格式化）；显式传 False 可关。
+    if format_output is None:
+        format_output = True
 
     # Determine output directory
     if out_dir is None:
@@ -339,8 +345,14 @@ def run_pipeline_on_source(
         save_json(ast.dump(), ast_json, "ast", log_fn=_log)
 
     # ---- Stage: Semantic analysis ----
+    # expand_enhanced=False：保留增强语法路径（格式化增强源码），跳过
+    # analyze/transform——增强节点（TypedPortDecl/TypeDecl 等）不经 expand，
+    # 由 renderer 的增强节点 layout 直出；render() 内部自带 normalize。
     analyzer = None
-    if analyzer_enabled:
+    scope = None
+    if not expand_enhanced:
+        _log("[pipeline] enhanced-expansion disabled: preserving enhanced syntax")
+    elif analyzer_enabled:
         analyzer = AnalysisTraversal(rules)
         ast = analyzer.analyze(ast)
         if analyzer.root_scope is None:
@@ -368,7 +380,6 @@ def run_pipeline_on_source(
         scope = analyzer.root_scope
     else:
         _log("[analyzer] skipped")
-        scope = None
     if stage == "analyze":
         result["success"] = True
         result["ast"] = ast

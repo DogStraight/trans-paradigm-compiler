@@ -15,6 +15,12 @@ def eval_join(
     first_soft = expr.get("first_soft", False)
     prefix = expr.get("prefix", "")
     suffix = expr.get("suffix", "")
+    # no_soft: 硬拼接，不插 SoftLine、不 group（用于"必须一行"的列表，
+    # 如增强语法 role 端口列表 `master : input clk, input miso, ...;`）。
+    # 硬拼接时保留原始分隔符（含尾随空格，如 ", "），避免 rstrip 丢空格。
+    no_soft = expr.get("no_soft", False)
+    if no_soft:
+        sep_text = expr["join"]
 
     # 分隔符为 \n → 使用硬换行，不 group
     # 分隔符为空 → 直接拼接，不 group
@@ -49,6 +55,8 @@ def eval_join(
                 result.append(Break())
             elif no_sep:
                 pass  # 直接拼接，不插入任何内容
+            elif no_soft:
+                result.append(Text(sep_text))  # 硬分隔，无 SoftLine（不折行）
             else:
                 result.append(Text(sep_text))
                 result.append(SoftLine())
@@ -57,7 +65,7 @@ def eval_join(
     if suffix:
         result.append(Text(suffix))
 
-    if is_newline_sep or no_sep:
+    if is_newline_sep or no_sep or no_soft:
         doc = Concat(result)
     else:
         doc = group(Concat(result))

@@ -185,6 +185,18 @@ role_name = "$3"
 ports = "$6"
 body = "$9"
 
+[TypeImplDecl.renderer]
+# `impl [role] (ports) { body }`（type 定义内的实现声明）
+head = { line = [
+    "impl [",
+    { ref = "role_name" },
+    "] (",
+    { opt = { group = ["", { ref = "ports" }] } },
+    ") {",
+] }
+body = { source = "body" }
+tail = "}"
+
 [InvertDecl.parser]
 production = [
     "keyword.invert",
@@ -194,3 +206,45 @@ production = [
 
 [InvertDecl.parser.node]
 target_role = "$2"
+
+
+# ── 增强节点渲染（保留增强语法路径）──
+
+[TypeDecl.renderer]
+layout = { line = [
+    "type ",
+    { ref = "type_name" },
+] }
+# body 是单个 TypeBody 节点（有自身 layout `{...}`），用 items 直接引用
+body = { items = ["body"] }
+
+[TypeBody.renderer]
+layout = "{"
+body = { source = "members" }
+tail = "}"
+
+[TypeMember.renderer]
+layout = { ref = "child" }
+
+[TypeRole.renderer]
+# `;` 直接进 layout（tail 会因 render_node 的硬 Break 独立成行）
+layout = { line = [
+    { ref = "role_name" },
+    " : ",
+    { join = ", ", items = "ports", no_soft = true },
+    ";",
+] }
+
+[TypeInvertPort.renderer]
+layout = { line = [
+    "invert ",
+    { ref = "target_role" },
+] }
+
+[InvertDecl.renderer]
+# `;` 进 layout（同上，避免独立成行）
+layout = { line = [
+    "invert ",
+    { ref = "target_role" },
+    ";",
+] }

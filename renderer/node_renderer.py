@@ -172,11 +172,17 @@ def render_body(
     elif source:
         container = getattr(node, source, None)
         if isinstance(container, Node):
-            # 优先使用与 source 同名的属性（如 CaseItemList.items），
-            # 再回退到 children_field（如 Block.sub_node）
-            children = getattr(container, source, None) or getattr(
-                container, children_field, []
-            )
+            # 单节点：若为容器（同名 source 属性或 sub_node 非空）取其子节点；
+            # 否则把节点本身作为唯一 child——normalize 会把单元素 repeat 展平
+            # 为单节点（如 TypeImplDecl.body: repeat[WireDecl] → WireDecl），
+            # 此时 source 指向的就是内容本身。
+            sub = getattr(container, source, None)
+            if sub is None:
+                sub = getattr(container, children_field, None)
+            if sub:
+                children = sub if isinstance(sub, list) else [sub]
+            else:
+                children = [container]
         elif isinstance(container, list):
             children = container
         else:
