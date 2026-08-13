@@ -1,0 +1,64 @@
+[ImplBinding.inject]
+targets = [
+    "@InstStmt",
+]
+
+[ImplBinding]
+is_statement = true
+
+[ImplBinding.parser]
+production = [
+    "keyword.impl",
+    "@Identifier",
+    "@ParamOverride?",
+    "@Identifier?",
+    "@PortConnection",
+]
+end_case = [
+    "newline",
+]
+
+[ImplBinding.parser.node]
+module_name = "$2"
+params = "$3"
+inst_name = "$4"
+ports = "$5.ports"
+
+[ImplBindingWithInterface.inject]
+targets = [
+    "@InstStmt",
+]
+
+[ImplBindingWithInterface]
+is_statement = true
+
+[ImplBindingWithInterface.parser]
+production = [
+    "keyword.impl",
+    "@TypedTypeSpec",
+    "@ParamOverride?",
+    "@ImplPortsParens?",
+    "symbol.extend.arrow",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[ImplBindingWithInterface.parser.node]
+type_spec = "$2"
+params = "$3"
+ports = "$4"
+interface_ref = "$6"
+
+[ImplPortsParens.parser]
+inline = true
+production = [
+    "bracket.l_parentheses",
+    "@NamedPortList?",
+    "bracket.r_parentheses",
+]
+
+[ImplPortsParens.parser.node]
+ports = "$2"

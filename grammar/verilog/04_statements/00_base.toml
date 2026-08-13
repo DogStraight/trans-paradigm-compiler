@@ -1,0 +1,166 @@
+# ============================================================================
+# Verilog 语法规则 — 语句（组合分层）
+# ============================================================================
+
+# ============================================================================
+# Verilog 语法规则 — 语句分层（增强语法挂载点依此分层注入）
+#
+# 层级结构：
+#   ModuleItem          (模块体顶层)
+#     ├─ DeclStmt        : WireDecl, RegDecl, BodyPortDecl, ...
+#     ├─ InstStmt        : ModuleInst, GenerateBlock, LoopGen
+#     ├─ FuncStmt        : FuncDecl, TaskDecl
+#     ├─ AssignStmt      : AssignStmt (module-level)
+#     ├─ ProcStmt        : AlwaysStmt, InitialStmt (进入过程体)
+#     └─ (initial 仅用于仿真，不可综合)
+#
+#   Stmt                (过程体语句)
+#     ├─ CtrlStmt        : If, Case, ForLoop, BeginEnd
+#     ├─ ProcAssignStmt  : BlockingAssign, NonBlockingAssign
+#     ├─ ProcLocalDecl   : RegDecl, IntegerDecl
+#     └─ CallStmt        : SubroutineCall, NullStmt
+#
+#   TaskStmt            = Stmt | TaskPortDecl
+# ============================================================================
+
+# ---------- 过程体控制流 ----------
+[CtrlStmt]
+[CtrlStmt.parser]
+production = [
+    "@IfBlock|@IfStmt|@CaseStmt|@ForLoopBlock|@ForLoop|@WhileLoop|@RepeatLoop|@ForeverLoop|@BeginEnd|@EventWaitStmt",
+]
+inline = true
+[CtrlStmt.parser.node]
+stmt = "$1"
+[CtrlStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 过程体赋值 ----------
+[ProcAssignStmt]
+[ProcAssignStmt.parser]
+production = ["@BlockingAssign|@NonBlockingAssign"]
+inline = true
+[ProcAssignStmt.parser.node]
+stmt = "$1"
+[ProcAssignStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 过程体内调用/空语句 ----------
+[CallStmt]
+[CallStmt.parser]
+production = ["@SubroutineCall|@NullStmt"]
+inline = true
+[CallStmt.parser.node]
+stmt = "$1"
+[CallStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 过程内部局部声明 ----------
+[ProcLocalDecl]
+[ProcLocalDecl.parser]
+production = ["@RegDecl|@IntegerDecl"]
+inline = true
+[ProcLocalDecl.parser.node]
+decl = "$1"
+[ProcLocalDecl.renderer]
+layout = { ref = "decl" }
+
+# ---------- 过程语句（用于 always / initial 内部） ----------
+[Stmt]
+statement_entry = true
+[Stmt.parser]
+production = ["@CtrlStmt|@ProcAssignStmt|@ProcLocalDecl|@CallStmt"]
+inline = true
+[Stmt.parser.node]
+stmt = "$1"
+[Stmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 任务/函数语句（额外允许 TaskPortDecl） ----------
+[TaskStmt]
+statement_entry = true
+[TaskStmt.parser]
+production = ["@CtrlStmt|@ProcAssignStmt|@ProcLocalDecl|@CallStmt|@TaskPortDecl"]
+inline = true
+[TaskStmt.parser.node]
+stmt = "$1"
+[TaskStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 模块体声明 ----------
+[DeclStmt]
+[DeclStmt.parser]
+production = ["@WireDecl|@RegDecl|@BodyPortDecl|@IntegerDecl|@LocalParamDecl|@GenvarDecl"]
+inline = true
+[DeclStmt.parser.node]
+decl = "$1"
+[DeclStmt.renderer]
+layout = { ref = "decl" }
+
+# ---------- 模块体实例化 / 生成 ----------
+# 模块项级条件/分支 generate（A.4.2）：if(cond) begin…end / case(expr)…endcase
+# 复用 IfBlock/CaseStmt——其 @BeginEnd 体由 flatten 收集模块项内容（与 LoopGen 同机制）。
+[InstStmt]
+[InstStmt.parser]
+production = ["@ModuleInst|@GenerateBlock|@LoopGen|@IfBlock|@CaseStmt"]
+inline = true
+[InstStmt.parser.node]
+inst = "$1"
+[InstStmt.renderer]
+layout = { ref = "inst" }
+
+# ---------- 模块体函数/任务定义 ----------
+[FuncStmt]
+[FuncStmt.parser]
+production = ["@FuncDecl|@TaskDecl"]
+inline = true
+[FuncStmt.parser.node]
+decl = "$1"
+[FuncStmt.renderer]
+layout = { ref = "decl" }
+
+# ---------- 模块体过程（always / initial） ----------
+# initial 仅用于仿真场景（不可综合），但语法解析层面与 always 同级。
+# 若后续需要区分仿真/综合上下文，可通过 analyzer 阶段或单独的语法变体实现过滤。
+[ProcStmt]
+[ProcStmt.parser]
+production = ["@AlwaysStmt|@InitialStmt"]
+inline = true
+[ProcStmt.parser.node]
+stmt = "$1"
+[ProcStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 模块顶层条目（用于 module 体） ----------
+[ModuleItem]
+statement_entry = true
+[ModuleItem.parser]
+production = [
+    "@DeclStmt|@InstStmt|@FuncStmt|@AssignStmt|@ProcStmt",
+]
+inline = true
+[ModuleItem.parser.node]
+item = "$1"
+[ModuleItem.renderer]
+layout = { ref = "item" }
+
+# ---------- 保持兼容：BasicStmt / NonBlockStmt 别名（不依赖此分层的旧注入仍可用） ----------
+[BasicStmt]
+[BasicStmt.parser]
+production = ["@CtrlStmt|@ProcAssignStmt|@CallStmt"]
+inline = true
+[BasicStmt.parser.node]
+stmt = "$1"
+[BasicStmt.renderer]
+layout = { ref = "stmt" }
+
+[NonBlockStmt]
+[NonBlockStmt.parser]
+production = ["@CtrlStmt|@ProcAssignStmt|@CallStmt"]
+inline = true
+[NonBlockStmt.parser.node]
+stmt = "$1"
+[NonBlockStmt.renderer]
+layout = { ref = "stmt" }
+
+# ---------- 以下所有具体语句规则保持不变，只调整内部引用的块 ----------

@@ -1,0 +1,341 @@
+# ============================================================================
+# Verilog 语法规则 — ANSI 端口声明
+# ============================================================================
+# 本文件定义模块 ANSI 风格端口列表（括号内，无分号）和任务 ANSI 端口。
+# ANSI 端口即在 module/task/function 头部括号内直接声明的端口。
+#
+# 被引用于: 01_module.toml (PortParens → PortList)
+
+# ============================================================================
+# PortList — 模块 ANSI 端口列表
+# ============================================================================
+# module 头部括号内的端口列表: (input clk, output [3:0] data, …)
+# join = ", " 以逗号+空格连接，first_soft = true 在 flat 模式省略首空格。
+
+[PortList.parser]
+production = [
+    "@AnsiPortDecl",
+    "(symbol.base.comma,@AnsiPortDecl)*",
+]
+
+[PortList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[PortList.renderer.layout]
+join = ", "
+first_soft = true
+nest = 1
+items = "items"
+
+
+# ============================================================================
+# TaskPortList — 任务 ANSI 端口列表
+# ============================================================================
+# task 头部括号内的端口列表，结构与 PortList 相同。
+# 语法上 tasks 的 input 端口不允许 reg 类型（PortTail 使用 TypeSpec），
+# 但 output/inout 允许 reg。
+
+[TaskPortList.parser]
+production = [
+    "@TaskAnsiPortDecl",
+    "(symbol.base.comma,@TaskAnsiPortDecl)*",
+]
+
+[TaskPortList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[TaskPortList.renderer.layout]
+join = ", "
+first_soft = true
+nest = 1
+items = "items"
+
+
+# ============================================================================
+# TaskAnsiPortDecl — 任务 ANSI 端口声明（分发器）
+# ============================================================================
+
+[TaskAnsiPortDecl.parser]
+production = [
+    "@TaskAnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
+]
+inline = true
+
+[TaskAnsiPortDecl.parser.node]
+decl = "$1"
+
+[TaskAnsiPortDecl.renderer.layout]
+ref = "decl"
+
+
+# ============================================================================
+# TaskAnsiInputDecl — 任务 ANSI input 端口
+# ============================================================================
+# 任务函数的 input 端口，使用 @PortTail（不含 reg 的 TypeSpecNoReg）。
+
+[TaskAnsiInputDecl.parser]
+production = [
+    "keyword.input",
+    "@PortTail",
+]
+end_case = [
+    "newline",
+]
+
+[TaskAnsiInputDecl.parser.node]
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[TaskAnsiInputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[TaskAnsiInputDecl.renderer.layout]
+line = [
+    "input",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+]
+
+
+# ============================================================================
+# AnsiPortDecl — 模块 ANSI 端口声明（分发器）
+# ============================================================================
+
+[AnsiPortDecl.parser]
+production = [
+    "@AnsiInputDecl|@AnsiOutputDecl|@AnsiInoutDecl",
+]
+inline = true
+
+[AnsiPortDecl.parser.node]
+decl = "$1"
+
+[AnsiPortDecl.renderer.layout]
+ref = "decl"
+
+# ============================================================================
+# DirSpec — 端口方向描述符
+# ============================================================================
+# Verilog 端口方向: input / output / inout
+
+[DirSpec.parser]
+production = [
+    "keyword.input|keyword.output|keyword.inout",
+]
+
+[DirSpec.parser.node]
+direction = "$1"
+
+[DirSpec.renderer.layout]
+ref = "direction"
+
+
+# ============================================================================
+# PortDeclPrefix — 端口声明前缀（方向 + 类型）
+# ============================================================================
+# 端口声明的公共前缀部分，主要用于 Body 风格端口和旧式端口声明。
+
+[PortDeclPrefix.parser]
+production = [
+    "@DirSpec",
+    "@TypeSpec",
+]
+
+[PortDeclPrefix.parser.node]
+direction = "$1.direction"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+
+[[PortDeclPrefix.renderer.layout.line]]
+ref = "direction"
+
+[[PortDeclPrefix.renderer.layout.line]]
+
+[PortDeclPrefix.renderer.layout.line.opt]
+group = [
+    " ",
+    { ref = "port_type" },
+]
+
+[[PortDeclPrefix.renderer.layout.line]]
+
+[PortDeclPrefix.renderer.layout.line.opt]
+group = [
+    " ",
+    { ref = "is_signed" },
+]
+
+[[PortDeclPrefix.renderer.layout.line]]
+
+[PortDeclPrefix.renderer.layout.line.opt]
+group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+]
+
+
+# ============================================================================
+# AnsiInputDecl — 模块 ANSI input 端口
+# ============================================================================
+# 模块 ANSI 风格 input 声明，使用 @TypeSpecNoReg（input 不允许 reg）。
+# 逗号分隔由父规则 PortList 的 (， @AnsiPortDecl)* 管理。
+
+[AnsiInputDecl.parser]
+production = [
+    "keyword.input",
+    "@TypeSpecNoReg",
+    "@DeclaratorList",
+]
+end_case = [
+    "newline",
+]
+
+[AnsiInputDecl.parser.node]
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$3"
+
+[AnsiInputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[AnsiInputDecl.renderer.layout]
+line = [
+    { ref = "direction" },
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+]
+
+
+# ============================================================================
+# AnsiOutputDecl — 模块 ANSI output 端口
+# ============================================================================
+# 模块 ANSI 风格 output 声明，使用 @TypeSpec（output 允许 reg 类型）。
+
+[AnsiOutputDecl.parser]
+production = [
+    "keyword.output",
+    "@TypeSpec",
+    "@DeclaratorList",
+]
+end_case = [
+    "newline",
+]
+
+[AnsiOutputDecl.parser.node]
+direction = "output"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$3"
+
+[AnsiOutputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[AnsiOutputDecl.renderer.layout]
+line = [
+    { ref = "direction" },
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+]
+
+
+# ============================================================================
+# AnsiInoutDecl — 模块 ANSI inout 端口
+# ============================================================================
+# 模块 ANSI 风格 inout 声明，使用 @TypeSpecNoReg（inout 不允许 reg）。
+
+[AnsiInoutDecl.parser]
+production = [
+    "keyword.inout",
+    "@TypeSpecNoReg",
+    "@DeclaratorList",
+]
+end_case = [
+    "newline",
+]
+
+[AnsiInoutDecl.parser.node]
+direction = "inout"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$3"
+
+[AnsiInoutDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[AnsiInoutDecl.renderer.layout]
+line = [
+    { ref = "direction" },
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+]

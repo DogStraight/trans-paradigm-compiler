@@ -1,0 +1,108 @@
+# ============================================================================
+# Verilog 语法规则 — 赋值语句
+# ============================================================================
+# 本文件定义三种赋值类型:
+#   NonBlockingAssign — 非阻塞赋值 <=（过程体内）
+#   BlockingAssign     — 阻塞赋值 =（过程体内）
+#   AssignStmt         — 连续赋值 assign（模块级）
+#
+# 被引用于: 04_statements/00_base.toml (ProcAssignStmt, DeclStmt)
+
+# ============================================================================
+# NonBlockingAssign — 非阻塞赋值
+# ============================================================================
+# 过程体内的 <= 赋值，目标必须是 reg 或 integer 等变量类型。
+# 所有 <= 在过程块结束时同时更新，用于时序逻辑。
+
+[NonBlockingAssign]
+is_statement = true
+
+[NonBlockingAssign.parser]
+production = [
+    "@PrimaryExpr",
+    "symbol.extend.lesser_equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[NonBlockingAssign.parser.node]
+target = "$1"
+value = "$3"
+
+[NonBlockingAssign.renderer.layout]
+line = [
+    { ref = "target" },
+    " <= ",
+    { ref = "value" },
+    ";",
+]
+
+
+# ============================================================================
+# BlockingAssign — 阻塞赋值
+# ============================================================================
+# 过程体内的 = 赋值，语句按顺序执行，用于组合逻辑。
+
+[BlockingAssign]
+is_statement = true
+
+[BlockingAssign.parser]
+production = [
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[BlockingAssign.parser.node]
+target = "$1"
+value = "$3"
+
+[BlockingAssign.renderer.layout]
+line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+    ";",
+]
+
+
+# ============================================================================
+# AssignStmt — 连续赋值
+# ============================================================================
+# 模块级的 assign 语句，目标可以是 wire 或 reg。
+# 在模块体中连续执行（非过程体内）。
+
+[AssignStmt]
+is_statement = true
+
+[AssignStmt.parser]
+production = [
+    "keyword.assign",
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[AssignStmt.parser.node]
+target = "$2"
+value = "$4"
+
+[AssignStmt.renderer.layout]
+line = [
+    "assign ",
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+    ";",
+]

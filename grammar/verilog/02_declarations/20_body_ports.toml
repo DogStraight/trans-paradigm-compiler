@@ -1,0 +1,343 @@
+# ============================================================================
+# Verilog 语法规则 — 模块体端口声明（带分号）
+# ============================================================================
+# 本文件定义模块体内部的端口声明（即非 ANSI 风格，在 begin…end 外写
+# input/output/inout + 分号的形式）以及任务/函数体的端口声明。
+#
+# 这些规则与 ANSI 端口共享 PortTail/TypeSpec/DeclaratorList 等基础单元。
+# 被引用于: 04_statements/00_base.toml (DeclStmt → BodyPortDecl)
+
+# ============================================================================
+# BodyPortDecl — 模块体端口声明（分发器）
+# ============================================================================
+
+[BodyPortDecl.parser]
+production = [
+    "@BodyInputDecl|@BodyOutputDecl|@BodyInoutDecl",
+]
+inline = true
+
+[BodyPortDecl.parser.node]
+decl = "$1"
+
+[BodyPortDecl.renderer.layout]
+ref = "decl"
+
+
+# ============================================================================
+# BodyInputDecl — 模块体 input 声明
+# ============================================================================
+# 模块体内的 input 端口声明，以分号结尾。
+# 格式: input [wire] [signed] [range] name1, name2, ... ;
+
+[BodyInputDecl]
+is_statement = true
+
+[BodyInputDecl.parser]
+production = [
+    "keyword.input",
+    "@PortTail",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[BodyInputDecl.parser.node]
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[BodyInputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[BodyInputDecl.renderer.layout]
+line = [
+    "input",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# BodyOutputDecl — 模块体 output 声明
+# ============================================================================
+# 模块体内的 output 端口声明，以分号结尾。
+# 格式: output [wire|reg] [signed] [range] name1, name2, ... ;
+
+[BodyOutputDecl]
+is_statement = true
+
+[BodyOutputDecl.parser]
+production = [
+    "keyword.output",
+    "@PortTail",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[BodyOutputDecl.parser.node]
+direction = "output"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[BodyOutputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[BodyOutputDecl.renderer.layout]
+line = [
+    "output",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# BodyInoutDecl — 模块体 inout 声明
+# ============================================================================
+# 模块体内的 inout 端口声明，以分号结尾。
+# 格式: inout [wire] [signed] [range] name1, name2, ... ;
+
+[BodyInoutDecl]
+is_statement = true
+
+[BodyInoutDecl.parser]
+production = [
+    "keyword.inout",
+    "@PortTail",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[BodyInoutDecl.parser.node]
+direction = "inout"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[BodyInoutDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[BodyInoutDecl.renderer.layout]
+line = [
+    "inout",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# TaskPortDecl — 任务/函数体端口声明（分发器）
+# ============================================================================
+# 任务和函数体内的端口声明（带分号），结构与 BodyPortDecl 相同。
+
+[TaskPortDecl.parser]
+production = [
+    "@TaskInputDecl|@TaskOutputDecl|@TaskInoutDecl",
+]
+inline = true
+
+[TaskPortDecl.parser.node]
+decl = "$1"
+
+[TaskPortDecl.renderer.layout]
+ref = "decl"
+
+[TaskInputDecl]
+is_statement = true
+
+[TaskInputDecl.parser]
+production = [
+    "keyword.input",
+    "@PortTail",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[TaskInputDecl.parser.node]
+direction = "input"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[TaskInputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[TaskInputDecl.renderer.layout]
+line = [
+    "input",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# TaskOutputDecl — 任务/函数体 output 声明
+# ============================================================================
+
+[TaskOutputDecl]
+is_statement = true
+
+[TaskOutputDecl.parser]
+production = [
+    "keyword.output",
+    "@PortTail",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[TaskOutputDecl.parser.node]
+direction = "output"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[TaskOutputDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[TaskOutputDecl.renderer.layout]
+line = [
+    "output",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# TaskInoutDecl — 任务/函数体 inout 声明
+# ============================================================================
+
+[TaskInoutDecl]
+is_statement = true
+
+[TaskInoutDecl.parser]
+production = [
+    "keyword.inout",
+    "@PortTail",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[TaskInoutDecl.parser.node]
+direction = "inout"
+port_type = "$2.port_type"
+is_signed = "$2.is_signed"
+packed_range = "$2.packed_range"
+items = "$2.items"
+
+[TaskInoutDecl.analyzer.symbol]
+kind = "port"
+name_attr = "items.name"
+
+[TaskInoutDecl.renderer.layout]
+line = [
+    "inout",
+    { opt = { group = [
+    " ",
+    { ref = "port_type" },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]

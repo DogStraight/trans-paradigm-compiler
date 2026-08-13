@@ -1,0 +1,168 @@
+# ============================================================================
+# Verilog 语法规则 — 杂项语句
+# ============================================================================
+# 本文件定义不归属大类的语句规则:
+#   SubroutineCall — 子程序调用（无返回值）
+#   NullStmt       — 空语句（单独的分号）
+#   GenerateBlock  — generate … endgenerate 块
+#   LoopGen        — 生成循环（generate 体内的 for 循环）
+#
+# 被引用于: 04_statements/00_base.toml (CallStmt, InstStmt)
+
+# ============================================================================
+# SubroutineCall — 子程序调用
+# ============================================================================
+# 函数/任务调用语句: func_name(arg1, arg2);
+# 与 CallExpr 的区别在于末尾有分号，作为独立语句。
+
+[SubroutineCall]
+is_statement = true
+
+[SubroutineCall.parser]
+production = [
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[SubroutineCall.parser.node]
+callee = "$1"
+args = "$3"
+
+[SubroutineCall.renderer.layout]
+line = [
+    { ref = "callee" },
+    "(",
+    { ref = "args" },
+    ")",
+    ";",
+]
+
+
+# ============================================================================
+# NullStmt — 空语句
+# ============================================================================
+# 单独的 ; 分号，表示无操作。语法上总是合法的。
+
+[NullStmt]
+is_statement = true
+
+[NullStmt.parser]
+production = [
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[NullStmt.parser.node]
+
+[NullStmt.renderer]
+layout = ";"
+
+
+# ============================================================================
+# GenerateBlock — generate 块
+# ============================================================================
+# generate … endgenerate 结构，用于条件生成和循环生成。
+# production = [] 表示依赖 block 的块机制（无独有生产式），
+# 体内容由 flatten 机制收集。
+
+[GenerateBlock.parser]
+production = [
+    "keyword.generate",
+    "keyword.endgenerate",
+]
+end_case = [
+    "keyword.endgenerate",
+    "newline",
+]
+
+[GenerateBlock.parser.node]
+
+[GenerateBlock.renderer]
+head = "generate"
+
+[GenerateBlock.renderer.body]
+indent = true
+role = "flatten"
+
+[GenerateBlock.renderer.tail]
+text = "endgenerate"
+break = 2
+
+[GenerateBlock]
+is_block = true
+is_statement = true
+
+
+# ============================================================================
+# LoopGen — 生成循环（generate 体内的 for 循环）
+# ============================================================================
+# Verilog 的 generate for 循环，用于在 elaboration 阶段静态展开硬件结构，
+# 而非在仿真/运行时动态执行。
+#
+# 与过程体 for 循环 (ForLoop/ForLoopBlock) 的区别:
+#   - 循环变量为 genvar 类型（编译期整数变量）
+#   - 循环体必须为 begin…end 块（且通常带标签）
+#   - 体内只能包含生成项（实例化、assign、嵌套 generate 块等）
+#   - 在 elaboration 阶段展开，不消耗仿真时间
+#
+# 格式:
+#   for (i = 0; i < N; i = i + 1) begin : loop_label
+#     ...实例化/赋值/生成项...
+#   end
+#
+# 依赖: token.toml (keyword.for)
+#       04_statements/ (ForInit, Expression, ForStep, BeginEnd)
+# 被引用于: 04_statements/00_base.toml (InstStmt → LoopGen)
+#
+# 渲染示例:
+#   genvar i;
+#   generate
+#     for (i = 0; i < N; i = i + 1) begin : gen_adder
+#       adder #(.WIDTH(8)) u_add (.a(a[i]), .b(b[i]), .sum(sum[i]));
+#     end
+#   endgenerate
+
+[LoopGen]
+is_statement = true
+
+[LoopGen.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@ForInit",
+    "symbol.base.semicolon",
+    "@Expression",
+    "symbol.base.semicolon",
+    "@ForStep",
+    "bracket.r_parentheses",
+    "@BeginEnd",
+]
+end_case = [
+    "newline",
+]
+
+[LoopGen.parser.node]
+init = "$3"
+condition = "$5"
+step = "$7"
+body = "$9"
+
+[LoopGen.renderer.layout]
+line = [
+    "for (",
+    { ref = "init" },
+    "; ",
+    { ref = "condition" },
+    "; ",
+    { ref = "step" },
+    ") ",
+    { ref = "body" },
+]

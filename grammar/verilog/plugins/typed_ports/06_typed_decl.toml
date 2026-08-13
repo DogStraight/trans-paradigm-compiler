@@ -1,0 +1,90 @@
+[TypedPortDecl.inject]
+targets = [
+    "@AnsiPortDecl",
+    "@ModuleItem",
+]
+
+[TypedPortDecl]
+is_statement = true
+
+[TypedPortDecl.parser]
+production = [
+    "@TypedTypeSpec",
+    "@Declarator",
+]
+end_case = [
+    "newline",
+]
+
+[TypedPortDecl.parser.node]
+type_spec = "$1"
+instance_name = "$2"
+
+[TypedPortDecl.analyzer]
+ref_collect = true
+
+[TypedPortDecl.analyzer.symbol]
+kind = "typed_port"
+name_attr = "instance_name.name"
+
+[TypedPortDecl.transform]
+kind = "expand"
+foreach = "$"
+
+[TypedPortDecl.transform.condition]
+exists = "type_spec.type_name"
+
+[TypedPortDecl.transform.source]
+lookup = "type_ports_flat"
+key = "{type_spec.type_name}.{type_spec.role_name}"
+
+[TypedPortDecl.transform.emit]
+kind = "switch"
+on = "{direction}"
+
+[TypedPortDecl.transform.emit.cases.input]
+kind = "emit"
+node = "AnsiInputDecl"
+direction = "input"
+
+[TypedPortDecl.transform.emit.cases.input.items]
+node = "DeclaratorList"
+items = [
+    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
+]
+
+[TypedPortDecl.transform.emit.cases.output]
+kind = "emit"
+node = "AnsiOutputDecl"
+direction = "output"
+
+[TypedPortDecl.transform.emit.cases.output.items]
+node = "DeclaratorList"
+items = [
+    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
+]
+
+[TypedPortDecl.transform.emit.cases.inout]
+kind = "emit"
+node = "AnsiInoutDecl"
+direction = "inout"
+
+[TypedPortDecl.transform.emit.cases.inout.items]
+node = "DeclaratorList"
+items = [
+    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
+]
+
+[TypedTypeSpec.parser]
+production = [
+    "@Identifier",
+    "symbol.base.dot",
+    "@Identifier",
+]
+
+[TypedTypeSpec.parser.node]
+type_name = "$1"
+role_name = "$3"
+
+[TypedTypeSpec.analyzer]
+identifier_ref = "type_name"

@@ -1,0 +1,67 @@
+[space]
+blank_space = " "
+tab = "\t"
+# CRLF 行尾的 \r 部分（\n 由 [newline] 处理）：作为可忽略空白吞掉，
+# 使 \r\n 输入自然解析为单行换行，无需 lexer 侧硬编码行尾风格。
+carriage_return = "\r"
+# UTF-8 BOM（文件头不可见标记）：作为可忽略字符吞掉，不参与 token 流。
+bom = "\ufeff"
+
+[newline]
+newline = "\n"
+
+[symbol.base]
+add = "+"
+sub = "-"
+multiple = "*"
+and = "&"
+or = "|"
+not = "!"
+bit_not = "~"
+xnor = "^"
+bigger = ">"
+lesser = "<"
+div = "/"
+mod = "%"
+equal = "="
+dot = "."
+comma = ","
+colon = ":"
+semicolon = ";"
+question_mark = "?"
+at = "@"
+pound = "#"
+single_quote = "'"
+dollar = "$"
+
+[symbol.extend]
+r_shift = ">>"
+l_shift = "<<"
+point_to = "->"
+power = "**"
+bigger_equal = ">="
+lesser_equal = "<="
+is_equal = "=="
+not_equal = "!="
+add_equal = "+="
+sub_equal = "-="
+add_one = "++"
+sub_one = "--"
+double_dot = ".."
+logic_double_and = "&&"
+logic_double_or = "||"
+arrow = "=>"
+
+[bracket]
+pairs = [
+    ["(", ")", "parentheses"],
+    ["[", "]", "square_bracket"],
+    ["{", "}", "curly_bracket"],
+]
+
+[literal]
+string = "(\".*\")|('.*')"
+number = "\\d+"
+
+[id.id]
+id = "[a-z_A-Z][a-z_A-Z0-9]*"

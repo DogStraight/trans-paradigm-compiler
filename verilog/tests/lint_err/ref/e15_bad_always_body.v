@@ -1,0 +1,2 @@
+module m;
+    always @(*) endmodule

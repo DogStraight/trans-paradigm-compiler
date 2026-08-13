@@ -1,0 +1,83 @@
+# ============================================================================
+# 宏定义 — 预处理器指令识别
+# 宏不是语法 token，不放在 _token.toml 中。
+# Lexer 根据 macro_recognition 策略从字符流中识别宏 token，
+# 再通过 directives 表分类为指令或调用，供后续 preprocessing 阶段消费。
+# ============================================================================
+
+# ── [macro_recognition] Lexer 层宏 token 识别策略 ──
+#
+# 分为 directive（指令关键字）和 call（宏调用）两段独立配置。
+# 每段指定 strategy 和对应参数。
+#
+# 策略取值：
+#   "prefix"  — 前缀字符 + 标识符序列
+#   "suffix"  — 标识符 + 后缀标记
+#   "none"    — Lexer 不识别此类宏 token，由上层负责
+#
+# 不同语言的典型配置：
+#   Verilog:  directive / call 都用 prefix，前缀 ``
+#   C:        directive 用 prefix（#），call 用 none（宏调用就是普通标识符）
+#   Rust:     directive / call 都用 suffix（!）
+#
+
+[macro_recognition.directive]
+strategy = "prefix"
+prefix = "`"
+
+[macro_recognition.call]
+strategy = "prefix"
+prefix = "`"
+
+# ── [directives] 指令关键字表 ──
+#
+# macro_recognition 识别出一个宏 token 后，查此表判定类别：
+#   匹配 key  →  token 类型为 macro.<key>（指令关键字）
+#   不匹配    →  token 类型为 macro.call（用户自定义宏调用）
+#
+[directives]
+else = "else"
+line = "line"
+undef = "undef"
+ifdef = "ifdef"
+elsif = "elsif"
+endif = "endif"
+define = "define"
+ifndef = "ifndef"
+pragma = "pragma"
+include = "include"
+resetall = "resetall"
+timescale = "timescale"
+celldefine = "celldefine"
+undefineall = "undefineall"
+end_keywords = "end_keywords"
+endcelldefine = "endcelldefine"
+begin_keywords = "begin_keywords"
+default_nettype = "default_nettype"
+unconnected_drive = "unconnected_drive"
+nounconnected_drive = "nounconnected_drive"
+
+# ── [expand] 宏展开器参数 ──
+# 用户可通过此段控制展开行为，无需修改 Python 代码。
+[expand]
+max_iterations = 128
+
+# ── [directive_handlers] 指令处理器启用/配置 ──
+# 每个指令对应 _directives.py 中注册的一个 handler。
+# enabled: false 时该指令被扫描器忽略（仍记录到 directive_lines）。
+# 可扩展自定义配置，如 include 的搜索路径、define 的参数模式等。
+[directive_handlers]
+define = { enabled = true }
+undef = { enabled = true }
+
+[directive_handlers.include]
+enabled = true
+search_dirs = []
+# silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
+silent = false
+
+# ── [reverse] 宏还原参数 ──
+[reverse]
+sync_window_base = 15
+sync_window_pad = 5
+offset_tolerance = 2

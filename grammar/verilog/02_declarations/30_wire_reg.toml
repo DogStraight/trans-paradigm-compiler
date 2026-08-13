@@ -1,0 +1,141 @@
+# ============================================================================
+# Verilog 语法规则 — Wire/Reg/Integer 声明
+# ============================================================================
+# 本文件定义模块体内的线网和变量声明。
+#
+# 被引用于: 04_statements/00_base.toml (DeclStmt → WireDecl|RegDecl|IntegerDecl)
+#
+# ⚠ 已知限制: 当前只支持 wire/reg/integer，不支持 tri/wand/wor/supply0/supply1
+#   等 IEEE 1364 定义的其他线网类型。
+
+# ============================================================================
+# WireDecl — wire 声明
+# ============================================================================
+# 格式: wire [signed] [range] name1 [= init], name2, ... ;
+# 例如: wire [3:0] data_out;
+#       wire signed [7:0] result;
+
+[WireDecl]
+is_statement = true
+
+[WireDecl.parser]
+production = [
+    "keyword.wire",
+    "keyword.signed?",
+    "@Range?",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[WireDecl.parser.node]
+wire_type = "$1"
+is_signed = "$2"
+packed_range = "$3"
+items = "$4"
+
+[WireDecl.analyzer.symbol]
+kind = "wire"
+name_attr = "items.name"
+
+[WireDecl.renderer.layout]
+line = [
+    "wire",
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# RegDecl — reg 声明
+# ============================================================================
+# 格式: reg [signed] [range] name1 [= init], name2, ... ;
+# 注意: reg 不代表寄存器，只是 Verilog 的变量类型。
+
+[RegDecl]
+is_statement = true
+
+[RegDecl.parser]
+production = [
+    "keyword.reg",
+    "keyword.signed?",
+    "@Range?",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[RegDecl.parser.node]
+reg_type = "$1"
+is_signed = "$2"
+packed_range = "$3"
+items = "$4"
+
+[RegDecl.analyzer.symbol]
+kind = "reg"
+name_attr = "items.name"
+
+[RegDecl.renderer.layout]
+line = [
+    "reg",
+    { opt = { group = [
+    " ",
+    { ref = "is_signed" },
+] } },
+    { opt = { group = [
+    " [",
+    { ref = "packed_range" },
+    "]",
+] } },
+    " ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# IntegerDecl — integer 声明
+# ============================================================================
+# 格式: integer name1, name2, ... ;
+# integer 是 Verilog 中的 32 位有符号变量类型。
+
+[IntegerDecl]
+is_statement = true
+
+[IntegerDecl.parser]
+production = [
+    "keyword.integer",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[IntegerDecl.parser.node]
+items = "$2"
+
+[IntegerDecl.analyzer.symbol]
+kind = "integer"
+name_attr = "items.name"
+
+[IntegerDecl.renderer.layout]
+line = [
+    "integer ",
+    { ref = "items" },
+    ";",
+]

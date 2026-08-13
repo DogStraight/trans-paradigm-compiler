@@ -1,0 +1,25 @@
+{
+  "spi.slave": [
+    {
+      "kind": "invert",
+      "resolved_ports": [
+        {
+          "direction": "output",
+          "name": "miso"
+        },
+        {
+          "direction": "input",
+          "name": "sck"
+        },
+        {
+          "direction": "input",
+          "name": "mosi"
+        },
+        {
+          "direction": "input",
+          "name": "cs"
+        }
+      ]
+    }
+  ]
+}

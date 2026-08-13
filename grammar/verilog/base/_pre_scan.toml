@@ -1,0 +1,60 @@
+# _pre_scan.toml — 预扫描配置
+#
+# 定义 Lexer 阶段之后、Parser 之前的顶层声明符号预扫描规则。
+# 每种声明类别指定 keyword 和 name_capture 方式。
+#
+# name_capture 支持：
+#   "next_word"    — 声明关键词后的第一个单词就是声明名（module/interface/task）
+#   "after_range"  — 声明关键词后可能跟范围 [a:b]，再跟声明名（function）
+#   "after_skip"   — 声明关键词后跳过指定的 skip_keywords，再捕获声明名
+
+[pre_scan]
+
+# 跟在声明关键词后面但不是声明名的语境关键词
+context_keywords = [
+    "automatic",
+    "signed",
+    "unsigned",
+    "reg",
+    "wire",
+    "logic",
+    "input",
+    "output",
+    "inout",
+]
+
+# ── 声明类别 ──
+
+[pre_scan.decl.module]
+keyword = "module"
+name_capture = "next_word"
+terminators = ["(", "#", ";"]
+# Parser 规则选择提示：遇到已知模块名时优先试这些规则
+rule_hints = ["ModuleInst", "ModuleRef"]
+
+[pre_scan.decl.interface]
+keyword = "interface"
+name_capture = "next_word"
+terminators = ["(", "#", ";"]
+rule_hints = ["ModuleInst"]
+
+[pre_scan.decl.function]
+keyword = "function"
+name_capture = "after_range"
+skip_keywords = ["automatic"]
+terminators = ["("]
+rule_hints = ["SubroutineCall", "FuncCall"]
+
+[pre_scan.decl.task]
+keyword = "task"
+name_capture = "next_word"
+skip_keywords = ["automatic"]
+terminators = ["(", ";"]
+rule_hints = ["SubroutineCall", "FuncCall"]
+
+[pre_scan.decl.typedef]
+keyword = "typedef"
+name_capture = "last_word_before_semicolon"
+terminators = [";"]
+# 以 * 结尾表示后缀匹配（如 "*TypeSpec" 匹配 AnsiTypeSpec/InlineTypeSpec 等）
+rule_hints = ["*TypeSpec"]

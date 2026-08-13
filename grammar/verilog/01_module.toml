@@ -1,0 +1,184 @@
+# ============================================================================
+# Verilog 语法规则 — 模块声明 [核心]
+# ============================================================================
+# 本文件定义 Verilog 模块的完整声明结构：
+#   ModuleDecl     — 模块定义（module…endmodule）
+#   PortParens     — 端口括号列表 (…)
+#   ParameterList  — 参数化列表 #(…)
+#   ParamDecl      — 单个参数声明 parameter name = value
+#
+# 依赖: token.toml (keyword.module/keyword.endmodule/keyword.parameter)
+#       02_declarations/ (Range, Identifier, Expression)
+# 被引用于: 04_statements/60_module_inst.toml (实例化引用)
+#
+# 模块渲染示例:
+#   module adder #(parameter WIDTH = 8) (
+#     input  [WIDTH-1:0] a,
+#     output [WIDTH-1:0] y
+#   );
+#     …body…
+#   endmodule
+
+# ============================================================================
+# ModuleDecl — 模块声明
+# ============================================================================
+# Verilog 模块的顶层容器。bound 定义 module→endmodule 配对。
+# 生产式: module <name> #(params)? (ports)? ; …body… endmodule
+#
+# parser.peek.scope = "analyzer" 表示该规则触发分析器作用域上下文切换。
+# renderer.body.role = "flatten" 将子节点列表直接展开到模块体。
+# renderer.tail 在 endmodule 后额外空一行（break = 2）。
+
+[ModuleDecl.parser]
+production = [
+    "keyword.module",
+    "@Identifier",
+    "@ParameterList?",
+    "@PortParens?",
+    "symbol.base.semicolon?",
+    "keyword.endmodule",
+]
+end_case = [
+    "keyword.endmodule",
+    "newline",
+]
+
+[ModuleDecl.parser.peek]
+scope = "analyzer"
+
+[ModuleDecl.parser.node]
+module_name = "$1"
+params = "$2"
+ports = "$3"
+
+[ModuleDecl.analyzer.scope]
+name_attr = "module_name"
+kind = "module"
+
+[ModuleDecl.renderer.head]
+line = [
+    "module ",
+    { ref = "module_name" },
+    { opt = { group = [
+    " #(",
+    { ref = "params" },
+    { soft = true },
+    ")",
+] } },
+    "(",
+    { opt = { group = [
+    { opt = { ref = "ports" } },
+    { opt = { group = [
+    { break = true },
+], ref = "ports" } },
+], ref = "ports" } },
+    ")",
+    ";",
+    { break = true },
+]
+
+[ModuleDecl.renderer.body]
+indent = true
+role = "flatten"
+
+[ModuleDecl.renderer.tail]
+text = "endmodule"
+break = 2
+
+[ModuleDecl]
+is_block = true
+is_statement = true
+
+
+# ============================================================================
+# PortParens — 端口括号
+# ============================================================================
+# 模块名的端口列表括号：(port1, port2, …)
+# inline = true 表示 AST 中此节点被展平，直接暴露内部 ports。
+# 渲染时直接引用 ports 子节点列表。
+
+[PortParens.parser]
+inline = true
+production = [
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+]
+
+[PortParens.parser.node]
+ports = "$2"
+
+[PortParens.renderer.layout]
+ref = "ports"
+
+
+# ============================================================================
+# ParameterList — 参数化列表
+# ============================================================================
+# 模块的 #(…​) 参数化部分，如 `module adder #(WIDTH = 8)`。
+# 生产式: #( ParamDecl , ParamDecl , … )
+# join = ", " 用逗号+空格分隔参数，first_soft = true 在 flat 模式下省略首部空格。
+# nest = 1 在 broken 模式下增加一级缩进。
+
+[ParameterList.parser]
+production = [
+    "symbol.base.pound",
+    "bracket.l_parentheses",
+    "@ParamDecl",
+    "(symbol.base.comma,@ParamDecl)*",
+    "bracket.r_parentheses",
+]
+
+[ParameterList.parser.node]
+params = [
+    "$3",
+    "$4.items[*].sub_node[1]",
+]
+
+[ParameterList.renderer.layout]
+join = ", "
+first_soft = true
+nest = 1
+items = "params"
+
+
+# ============================================================================
+# ParamDecl — 参数声明
+# ============================================================================
+# 单个参数定义：parameter [range] name = value
+# 例如: parameter [3:0] DATA_WIDTH = 4'hF
+#
+# 此规则只作为 ParameterList 的子规则被引用（非语句候选，由框架推导）。
+# analyzer.symbol 注册为 kind=parameter 供后续分析阶段使用。
+
+[ParamDecl.parser]
+production = [
+    "keyword.parameter",
+    "@Range?",
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+]
+end_case = [
+    "symbol.base.comma",
+    "bracket.r_parentheses",
+    "newline",
+]
+
+[ParamDecl.parser.node]
+param_range = "$2"
+param_name = "$3"
+value = "$5"
+
+[ParamDecl.analyzer.symbol]
+kind = "parameter"
+name_attr = "param_name"
+
+[ParamDecl.renderer.layout]
+line = [
+    "parameter ",
+    { opt = { line = ["[", { ref = "param_range" }, "] "] } },
+    { ref = "param_name" },
+    " = ",
+    { ref = "value" },
+]

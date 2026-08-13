@@ -1,0 +1,226 @@
+# ============================================================================
+# Verilog 语法规则 — for 循环
+# ============================================================================
+# 本文件定义 Verilog for 循环两种变体:
+#   ForLoop       — for 体可用任意语句
+#   ForLoopBlock  — for 体必须用 begin…end
+#
+# 配合规则: ForInit（初始化）, ForStep（步进）, ForBodyStmt（循环体分发）
+# 被引用于: 04_statements/00_base.toml (CtrlStmt)
+
+[ForLoop]
+is_statement = true
+
+[ForLoop.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@ForInit",
+    "symbol.base.semicolon",
+    "@Expression",
+    "symbol.base.semicolon",
+    "@ForStep",
+    "bracket.r_parentheses",
+    "@ForBodyStmt",
+]
+end_case = [
+    "newline",
+]
+
+[ForLoop.parser.node]
+init = "$3"
+condition = "$5"
+step = "$7"
+body = "$9"
+
+[ForLoop.renderer.layout]
+line = [
+    "for (",
+    { ref = "init" },
+    "; ",
+    { ref = "condition" },
+    "; ",
+    { ref = "step" },
+    ") ",
+    { soft = true, indent = 1 },
+    { ref = "body" },
+]
+
+
+# ============================================================================
+# ForLoopBlock — for 循环（块体版）
+# ============================================================================
+# for 体必须用 @BeginEnd（即 begin…end）。
+
+[ForLoopBlock]
+is_statement = true
+
+[ForLoopBlock.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@ForInit",
+    "symbol.base.semicolon",
+    "@Expression",
+    "symbol.base.semicolon",
+    "@ForStep",
+    "bracket.r_parentheses",
+    "@BeginEnd",
+]
+end_case = [
+    "newline",
+]
+
+[ForLoopBlock.parser.node]
+init = "$3"
+condition = "$5"
+step = "$7"
+body = "$9"
+
+[ForLoopBlock.renderer.layout]
+line = [
+    "for (",
+    { ref = "init" },
+    "; ",
+    { ref = "condition" },
+    "; ",
+    { ref = "step" },
+    ") ",
+    { ref = "body" },
+]
+
+[ForInit.parser]
+production = [
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+]
+
+[ForInit.parser.node]
+target = "$1"
+value = "$3"
+
+[ForInit.renderer.layout]
+line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+]
+
+[ForStep.parser]
+production = [
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+]
+
+[ForStep.parser.node]
+target = "$1"
+value = "$3"
+
+[ForStep.renderer.layout]
+line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+]
+
+[ForBodyStmt.parser]
+production = [
+    "@NonBlockStmt",
+]
+inline = true
+
+[ForBodyStmt.parser.node]
+stmt = "$1"
+
+[ForBodyStmt.renderer.layout]
+ref = "stmt"
+
+
+# ============================================================================
+# WhileLoop / RepeatLoop / ForeverLoop — while/repeat/forever 循环
+# ============================================================================
+# 配合 ForLoop 构成完整循环族（IEEE A.6.8）。
+#   while (expr) stmt   — 条件循环（可综合 RTL 常用）
+#   repeat (expr) stmt  — 次数循环（可综合）
+#   forever stmt        — 无限循环（仅仿真，与 always 配合；语法上并入循环族）
+#
+# 被引用于: 04_statements/00_base.toml (CtrlStmt)
+
+[WhileLoop]
+is_statement = true
+
+[WhileLoop.parser]
+production = [
+    "keyword.while",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@ForBodyStmt",
+]
+end_case = [
+    "newline",
+]
+
+[WhileLoop.parser.node]
+condition = "$3"
+body = "$5"
+
+[WhileLoop.renderer.layout]
+line = [
+    "while (",
+    { ref = "condition" },
+    ") ",
+    { ref = "body" },
+]
+
+
+[RepeatLoop]
+is_statement = true
+
+[RepeatLoop.parser]
+production = [
+    "keyword.repeat",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@ForBodyStmt",
+]
+end_case = [
+    "newline",
+]
+
+[RepeatLoop.parser.node]
+count = "$3"
+body = "$5"
+
+[RepeatLoop.renderer.layout]
+line = [
+    "repeat (",
+    { ref = "count" },
+    ") ",
+    { ref = "body" },
+]
+
+
+[ForeverLoop]
+is_statement = true
+
+[ForeverLoop.parser]
+production = [
+    "keyword.forever",
+    "@Stmt",
+]
+end_case = [
+    "newline",
+]
+
+[ForeverLoop.parser.node]
+body = "$2"
+
+[ForeverLoop.renderer.layout]
+line = [
+    "forever ",
+    { ref = "body" },
+]

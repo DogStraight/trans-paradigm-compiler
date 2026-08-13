@@ -1,0 +1,7 @@
+# _style.toml — 渲染风格默认值
+# 语言特有覆盖在 {lang}/_style.toml 中
+
+[style]
+indent = 4
+max_inline = 40
+children_field = "sub_node"

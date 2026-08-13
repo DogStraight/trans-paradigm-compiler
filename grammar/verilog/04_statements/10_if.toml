@@ -1,0 +1,218 @@
+# ============================================================================
+# Verilog 语法规则 — if/else 语句
+# ============================================================================
+# 本文件定义 if 条件分支的两种形式:
+#   IfBlock/ElseIfBlock   — 体内必须用 begin…end 块
+#   IfStmt/ElseIfStmt     — 体内可以用任意单语句
+#   ElseBlockBranch       — else + begin…end
+#   ElseBranch            — else + 任意单语句
+#
+# Block 后缀变体用于强制代码风格（要求结构化块），
+# 不带 Block 的变体接受任意 Statement，兼容标准语法。
+# 被引用于: 04_statements/00_base.toml (CtrlStmt)
+
+[IfBlock]
+is_statement = true
+
+[IfBlock.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@BeginEnd",
+    "@ElseChain?",
+]
+end_case = [
+    "newline",
+]
+
+[IfBlock.parser.node]
+condition = "$3"
+then_stmt = "$5"
+else_chain = "$6"
+
+[IfBlock.renderer.layout]
+line = [
+    "if (",
+    { ref = "condition" },
+    ") ",
+    { ref = "then_stmt" },
+    { opt = { line = [
+    { soft = true },
+    { ref = "else_chain" },
+] } },
+]
+
+
+# ============================================================================
+# IfStmt — if 语句（单语句体版）
+# ============================================================================
+# 与 IfBlock 的区别在于 @Stmt 接受任意单语句而无需 begin…end。
+
+[IfStmt]
+is_statement = true
+
+[IfStmt.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+    "@ElseChain?",
+]
+end_case = [
+    "newline",
+]
+
+[IfStmt.parser.node]
+condition = "$3"
+then_stmt = "$5"
+else_chain = "$6"
+
+[IfStmt.renderer.layout]
+line = [
+    "if (",
+    { ref = "condition" },
+    ")",
+    { break = true, indent = 1 },
+    { ref = "then_stmt" },
+    { opt = { line = [
+    { break = true },
+    { ref = "else_chain" },
+] } },
+]
+
+
+# ============================================================================
+# ElseChain — else 链（分发器）
+# ============================================================================
+# 分发到 4 种 else 变体: else if (块/单句) 或 else (块/单句)。
+
+[ElseChain.parser]
+production = [
+    "@ElseIfBlock|@ElseIfStmt|@ElseBlockBranch|@ElseBranch",
+]
+inline = true
+
+[ElseChain.parser.node]
+branch = "$1"
+
+[ElseChain.renderer.layout]
+ref = "branch"
+
+
+# ============================================================================
+# ElseIfBlock — else if（块体版）
+# ============================================================================
+# else if 后必须用 begin…end。
+
+[ElseIfBlock.parser]
+production = [
+    "keyword.else",
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@BeginEnd",
+    "@ElseChain?",
+]
+
+[ElseIfBlock.parser.node]
+condition = "$4"
+then_stmt = "$6"
+else_chain = "$7"
+
+[ElseIfBlock.renderer.layout]
+line = [
+    "else if (",
+    { ref = "condition" },
+    ") ",
+    { ref = "then_stmt" },
+    { opt = { line = [
+    { soft = true },
+    { ref = "else_chain" },
+] } },
+]
+
+
+# ============================================================================
+# ElseIfStmt — else if（单语句体版）
+# ============================================================================
+# else if 后可用任意单语句（无需 begin…end）。
+
+[ElseIfStmt.parser]
+production = [
+    "keyword.else",
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+    "@ElseChain?",
+]
+
+[ElseIfStmt.parser.node]
+condition = "$4"
+then_stmt = "$6"
+else_chain = "$7"
+
+[ElseIfStmt.renderer.layout]
+line = [
+    "else if (",
+    { ref = "condition" },
+    ")",
+    { break = true, indent = 1 },
+    { ref = "then_stmt" },
+    { opt = { line = [
+    { break = true },
+    { ref = "else_chain" },
+] } },
+]
+
+
+# ============================================================================
+# ElseBlockBranch — else（块体版）
+# ============================================================================
+# else 后必须用 begin…end。
+
+[ElseBlockBranch.parser]
+production = [
+    "keyword.else",
+    "@BeginEnd",
+]
+
+[ElseBlockBranch.parser.node]
+body = "$2"
+
+[ElseBlockBranch.renderer.layout]
+line = [
+    "else ",
+    { ref = "body" },
+]
+
+
+# ============================================================================
+# ElseBranch — else（单语句体版）
+# ============================================================================
+# else 后可用任意单语句（无需 begin…end）。
+
+[ElseBranch.parser]
+production = [
+    "keyword.else",
+    "@NonBlockStmt",
+]
+
+[ElseBranch.parser.node]
+body = "$2"
+
+[ElseBranch.renderer.layout]
+line = [
+    "else",
+    { break = true, indent = 1 },
+    { ref = "body" },
+]
+
+[ElseBranch.renderer.body]
+role = "direct"

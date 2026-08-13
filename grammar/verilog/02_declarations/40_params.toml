@@ -1,0 +1,74 @@
+# ============================================================================
+# Verilog 语法规则 — 参数声明
+# ============================================================================
+# 本文件定义模块体内的参数声明（localparam 和 genvar）。
+# 注意: parameter 声明在 01_module.toml 的 ParamDecl 中定义。
+#
+# 被引用于: 04_statements/00_base.toml (DeclStmt → LocalParamDecl|GenvarDecl)
+
+# ============================================================================
+# LocalParamDecl — localparam 声明
+# ============================================================================
+# 格式: localparam name1 = value1, name2 = value2, ... ;
+# localparam 与 parameter 的区别在于不能被模块实例化时覆盖。
+
+[LocalParamDecl]
+is_statement = true
+
+[LocalParamDecl.parser]
+production = [
+    "keyword.localparam",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "symbol.base.semicolon",
+]
+
+[LocalParamDecl.parser.node]
+items = "$2"
+
+[LocalParamDecl.analyzer.symbol]
+kind = "localparam"
+name_attr = "items.name"
+
+[LocalParamDecl.renderer.layout]
+line = [
+    "localparam ",
+    { ref = "items" },
+    ";",
+]
+
+
+# ============================================================================
+# GenvarDecl — genvar 声明
+# ============================================================================
+# 格式: genvar name;
+# genvar 是用于 generate 循环的变量类型。
+
+[GenvarDecl]
+is_statement = true
+
+[GenvarDecl.parser]
+production = [
+    "keyword.genvar",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[GenvarDecl.parser.node]
+genvar_name = "$2"
+
+[GenvarDecl.analyzer.symbol]
+kind = "genvar"
+name_attr = "genvar_name"
+
+[GenvarDecl.renderer.layout]
+line = [
+    "genvar ",
+    { ref = "genvar_name" },
+    ";",
+]

@@ -1,0 +1,196 @@
+[TypeDecl.inject]
+targets = [
+    "@ModuleItem",
+]
+
+[TypeDecl]
+is_statement = true
+
+[TypeDecl.parser]
+production = [
+    "keyword.type",
+    "@Identifier",
+    "@TypeParamList?",
+    "@TypeBody",
+]
+end_case = [
+    "newline",
+]
+
+[TypeDecl.parser.node]
+type_name = "$2"
+params = "$3"
+body = "$4"
+
+[TypeDecl.analyzer.symbol]
+kind = "type"
+name_attr = "type_name"
+
+[TypeDecl.analyzer.scope]
+kind = "type"
+name_attr = "type_name"
+
+[TypeParamList.parser]
+production = [
+    "bracket.l_parentheses",
+    "@TypeParamItem?",
+    "(symbol.base.comma,@TypeParamItem)*",
+    "bracket.r_parentheses",
+]
+
+[TypeParamList.parser.node]
+items = [
+    "$2",
+    "$3.items[*].sub_node[1]",
+]
+
+[TypeParamItem.parser]
+production = [
+    "keyword.parameter",
+    "@Identifier",
+    "symbol.base.equal",
+    "@PrimaryExpr",
+]
+
+[TypeParamItem.parser.node]
+name = "$2"
+default = "$4"
+
+[TypeBody.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "@TypeMember*",
+    "bracket.r_curly_bracket",
+]
+
+[TypeBody.parser.node]
+members = "$2"
+
+[TypeMember]
+inline = true
+
+[TypeMember.parser]
+production = [
+    "@TypeRole | @InvertDecl | @TypeImplDecl",
+]
+
+[TypeMember.parser.node]
+child = "$1"
+
+[TypeRole.parser]
+production = [
+    "@Identifier",
+    "symbol.base.colon",
+    "@TypePortDecl",
+    "(symbol.base.comma,@TypePortDecl)*",
+    "symbol.base.semicolon",
+]
+
+[TypeRole.parser.node]
+role_name = "$1"
+ports = [
+    "$3",
+    "$4.items[*].sub_node[1]",
+]
+
+[TypeRole.analyzer]
+primitives = [
+    "resolve_refs",
+    "flatten_ports",
+    "attach_invert_map",
+]
+
+[TypeRole.analyzer.symbol]
+kind = "role"
+name_attr = "role_name"
+
+[TypeRole.analyzer.symbol.capture]
+ports = "ports"
+
+[TypeRole.analyzer.resolve_refs]
+name_attr = "role_name"
+
+[[TypeRole.analyzer.resolve_refs.refs]]
+marker = "type_spec"
+kind = "nested"
+scope_mode = "child"
+scope_kind = "type"
+key = "{type_spec.type_name}"
+role_key = "{type_spec.role_name}"
+
+[TypeRole.analyzer.resolve_refs.refs.meta]
+prefix = "instance_name"
+
+[[TypeRole.analyzer.resolve_refs.refs]]
+marker = "target_role"
+kind = "invert"
+scope_mode = "self"
+role_key = "{target_role}"
+
+[TypeRole.analyzer.flatten_ports]
+direction = "{$.direction}"
+name = "items.items[*].name"
+
+[TypeRole.analyzer.attach_invert_map.invert_map]
+input = "output"
+output = "input"
+inout = "inout"
+
+[TypePortDecl]
+inline = true
+
+[TypePortDecl.parser]
+production = [
+    "@AnsiInputDecl | @AnsiOutputDecl | @AnsiInoutDecl | @TypeInvertPort | @TypeNestedPort",
+]
+
+[TypePortDecl.parser.node]
+child = "$1"
+
+[TypeNestedPort.parser]
+production = [
+    "@TypedTypeSpec",
+    "@Identifier",
+]
+
+[TypeNestedPort.parser.node]
+type_spec = "$1"
+instance_name = "$2"
+
+[TypeInvertPort.parser]
+production = [
+    "keyword.invert",
+    "@Identifier",
+]
+
+[TypeInvertPort.parser.node]
+target_role = "$2"
+
+[TypeImplDecl.parser]
+production = [
+    "keyword.impl",
+    "bracket.l_square_bracket",
+    "@Identifier",
+    "bracket.r_square_bracket",
+    "bracket.l_parentheses",
+    "@PortList?",
+    "bracket.r_parentheses",
+    "bracket.l_curly_bracket",
+    "@ModuleItem*",
+    "bracket.r_curly_bracket",
+]
+
+[TypeImplDecl.parser.node]
+role_name = "$3"
+ports = "$6"
+body = "$9"
+
+[InvertDecl.parser]
+production = [
+    "keyword.invert",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+
+[InvertDecl.parser.node]
+target_role = "$2"

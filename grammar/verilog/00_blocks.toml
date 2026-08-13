@@ -1,0 +1,114 @@
+# ============================================================================
+# Verilog 语法规则 — 块结构 [基础]
+# ============================================================================
+# 本文件定义 Verilog 中最基础的块结构：
+#   Root       — 顶层根节点，整个文件的容器
+#   Comment    — 注释节点，将行/块注释挂载到 AST
+#   BeginEnd   — begin…end 块（带可选标签）
+#   BlockLabel — begin 块的前导标签（`: label_name`）
+#
+# 依赖: token.toml (comment / keyword.begin / keyword.end / symbol.base.colon)
+# 被引用于: 04_statements/ (CtrlStmt), 03_always.toml, 03_initial.toml 等
+
+# ============================================================================
+# Root — 顶层根节点
+# ============================================================================
+# 整个源文件的容器。所有 TopLevel 规则（ModuleDecl、Comment 等）解析后由
+# flatten 机制合并到此节点下。renderer 以 "\n" 连接所有子节点。
+
+[Root]
+is_block = true
+
+[Root.renderer.layout]
+join = "\n"
+
+
+# ============================================================================
+# Comment — 注释节点
+# ============================================================================
+# 将词法分析器产出的 comment token 包装为 AST 节点。
+# 注释内容通过 "$1.value" 从首个 token 的 value 字段提取。
+# 渲染时直接输出原文，不做格式化。
+
+[Comment.parser]
+production = [
+    "comment",
+]
+end_case = []
+
+[Comment.parser.node]
+value = "$1.value"
+
+[Comment.renderer.layout]
+ref = "value"
+
+
+# ============================================================================
+# BeginEnd — begin…end 块
+# ============================================================================
+# Verilog 的块语句，用于将多个语句组合为一个块。
+# 支持可选标签（`: label_name`），渲染后如：
+#   begin : block_name
+#     ...statements...
+#   end
+#
+# is_block = true 启用块解析路径：消费 begin → 匹配标签 → parse_block_body
+# 循环解析语句 → 消费 end。is_statement（语句候选）由框架推导，不手写。
+
+[BeginEnd.parser]
+production = [
+    "keyword.begin",
+    "@BlockLabel?",
+    "keyword.end",
+]
+end_case = [
+    "newline",
+]
+
+[BeginEnd.parser.node]
+label = "$1"
+
+[BeginEnd.renderer.head]
+line = [
+    "begin",
+    { opt = { group = [
+    ": ",
+    { ref = "label" },
+] } },
+]
+
+[BeginEnd.renderer.body]
+indent = true
+role = "flatten"
+
+[BeginEnd.renderer.tail]
+text = "end"
+break = 1
+
+[BeginEnd]
+is_block = true
+is_statement = true
+
+
+# ============================================================================
+# BlockLabel — begin 块标签
+# ============================================================================
+# 可选地出现在 begin 之后，冒号 + 标识符的形式。
+# 例如: `begin : alu_comb` 中的 `: alu_comb`。
+# inline = true 表示 AST 节点在单子节点时被展平。
+
+[BlockLabel.parser]
+production = [
+    "symbol.base.colon",
+    "@Identifier",
+]
+inline = true
+
+[BlockLabel.parser.node]
+name = "$2"
+
+[BlockLabel.renderer.layout]
+line = [
+    ": ",
+    { ref = "name" },
+]

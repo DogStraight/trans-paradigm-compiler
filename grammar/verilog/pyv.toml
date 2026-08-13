@@ -1,0 +1,39 @@
+[lexer]
+token_base = { file = "base/_token.toml", required = true }
+lexer_base = { file = "base/_lexer.toml", required = true }
+token_lang = { file = "token.toml", required = false }
+macro_config = { file = "base/_macro.toml", required = false }
+pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = false }
+bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
+
+[parser]
+operator_defs = { file = "base/_symbol_level.toml", section = "operator", required = true }
+token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
+rules = { file = ["0*.toml", "0*/*.toml"], required = true }
+# 解析时需要跳过的空白/折叠 token 类型
+skip_types = ["newline", "space.fold"]
+
+[renderer]
+style = { file = "base/_style.toml", section = "style", required = false }
+
+[linter]
+# 块 opener token → 消歧上下文（语句发现阶段用）
+opener_context = [
+    ["keyword.module", "module_body"],
+    ["keyword.begin", "proc_body"],
+    ["keyword.function", "proc_body"],
+    ["keyword.task", "proc_body"],
+    ["keyword.generate", "gen_body"],
+]
+# 模块体 / 过程体语句选择器规则名（推导语句叶子集合用）
+module_item_rule = "ModuleItem"
+stmt_rule = "Stmt"
+
+[preprocessor]
+macro_config = { file = "base/_macro.toml", required = false }
+expand = { file = "base/_macro.toml", section = "expand", required = false }
+directives = { file = "base/_macro.toml", section = "directive_handlers", required = false }
+reverse = { file = "base/_macro.toml", section = "reverse", required = false }
+
+[plugins]
+enabled = ["typed_ports", "formatter"]

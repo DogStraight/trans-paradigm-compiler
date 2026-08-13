@@ -1,0 +1,33 @@
+# ============================================================================
+# Verilog 语法规则 — 事件等待 @(...)
+# ============================================================================
+# 过程体内的 @(event) 等待语句，如 @(posedge clk);
+# 与 always 的敏感列表不同，它后接单条语句或分号（即空操作）。
+# 被引用于: 04_statements/00_base.toml (CtrlStmt)
+
+[EventWaitStmt]
+is_statement = true
+
+[EventWaitStmt.parser]
+production = [
+    "symbol.base.at",
+    "bracket.l_parentheses",
+    "@SensitivityList",
+    "bracket.r_parentheses",
+    "@Stmt|symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[EventWaitStmt.parser.node]
+sensitivity = "$3"
+body = "$5"
+
+[EventWaitStmt.renderer.layout]
+line = [
+    "@(",
+    { ref = "sensitivity" },
+    ") ",
+    { ref = "body" },
+]

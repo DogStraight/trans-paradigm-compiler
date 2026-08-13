@@ -1,0 +1,147 @@
+# ============================================================================
+# Verilog 语法规则 — case 语句
+# ============================================================================
+# 本文件定义 case/casex/casez 分支语句。
+# 支持 CaseItem（带值的分支）和 DefaultItem（default 分支）。
+# 被引用于: 04_statements/00_base.toml (CtrlStmt)
+
+# ============================================================================
+# CaseKeyword — case 类型关键字
+# ============================================================================
+# case（精确匹配）、casex（忽略 x/z）、casez（忽略 z）。
+
+[CaseKeyword.parser]
+production = [
+    "keyword.case|keyword.casex|keyword.casez",
+]
+
+[CaseKeyword.parser.node]
+value = "$1"
+
+[CaseKeyword.renderer.layout]
+ref = "value"
+
+
+# ============================================================================
+# CaseStmt — case 语句
+# ============================================================================
+# 完整 case 结构: case(expr) …case_item… endcase
+
+[CaseStmt]
+is_statement = true
+
+[CaseStmt.parser]
+production = [
+    "@CaseKeyword",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@CaseItemList",
+    "keyword.endcase",
+]
+end_case = [
+    "newline",
+]
+
+[CaseStmt.parser.node]
+case_type = "$1"
+expr = "$3"
+items = "$5"
+
+[CaseStmt.renderer.head]
+line = [
+    { ref = "case_type" },
+    " (",
+    { ref = "expr" },
+    ")",
+]
+
+[CaseStmt.renderer.body]
+indent = true
+source = "items"
+
+[CaseStmt.renderer.tail]
+text = "endcase"
+break = 1
+
+[CaseItemList.parser]
+production = [
+    "@CaseItem|@DefaultItem",
+    "(@CaseItem|@DefaultItem)*",
+]
+
+[CaseItemList.parser.node]
+items = [
+    "$1",
+    "$2.items",
+]
+
+[CaseItemList.renderer.layout]
+join = "\n"
+items = "items"
+
+
+# ============================================================================
+# CaseItem — case 分支项
+# ============================================================================
+# 格式: value1, value2, ... : statement
+# 多个值是逗号分隔表达式列表。
+
+[CaseItem.parser]
+production = [
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+    "symbol.base.colon",
+    "@StmtOrNull",
+]
+
+[CaseItem.parser.node]
+values = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+stmt = "$4"
+
+[CaseItem.renderer.layout]
+line = [
+    { join = ", ", items = "values" },
+    ": ",
+    { ref = "stmt" },
+]
+
+[DefaultItem.parser]
+production = [
+    "keyword.default",
+    "symbol.base.colon?",
+    "@StmtOrNull",
+]
+
+[DefaultItem.parser.node]
+colon = "$2"
+stmt = "$3"
+
+[DefaultItem.renderer.layout]
+line = [
+    "default",
+    { opt = { ref = "colon" } },
+    " ",
+    { ref = "stmt" },
+]
+
+
+# ============================================================================
+# StmtOrNull — 语句或空语句
+# ============================================================================
+# 允许 case 分支项后接任意语句或空分号（即无操作）。
+
+[StmtOrNull.parser]
+production = [
+    "@Stmt|symbol.base.semicolon",
+]
+inline = true
+
+[StmtOrNull.parser.node]
+stmt = "$1"
+
+[StmtOrNull.renderer.layout]
+ref = "stmt"

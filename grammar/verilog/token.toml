@@ -1,0 +1,131 @@
+# ============================================================================
+# Verilog 语言词法 Token 定义
+# ============================================================================
+# 本文件定义 Verilog 语言的关键字 Token 和系统函数注册表。
+# 基础运算符和符号 Token 在 base/_token.toml 中定义。
+#
+# 本文件覆盖的 Token:
+#   [comment]        — 注释样式（行注释 //, 块注释 /* */）
+#   [symbol.extend]  — 多字符符号（+:  -:  and  or  not）
+#   [id.keyword]     — Verilog 关键字（always, module, if 等）
+#   [sysfunc]        — 系统函数名（$display, $clog2 等）
+#
+# ⚠ 已知限制: 当前只覆盖 Verilog-1995/2001 关键字，
+#   未包含 SystemVerilog 关键字（logic, always_ff, always_comb 等）。
+
+[comment]
+# 注释类型定义: [起始标记, 结束标记, 类型]
+# line 类型: 行注释，结束于 newline
+# block 类型: 块注释，结束于结束标记
+pairs = [
+  ["//", "\n", "line"],
+  ["/*", "*/", "block"],
+]
+
+[symbol.extend]
+plus_range = "+:"
+minus_range = "-:"
+
+# Verilog 逻辑运算符（字母形式）
+logic_add = "and"
+logic_or = "or"
+logic_not = "not"
+
+[id]
+[id.keyword]
+# 时序/组合逻辑
+al_ff = "al_ff"
+al_comb = "al_comb"
+
+# 仿真
+initial = "initial"
+
+# 分支
+if = "if"
+else = "else"
+case = "case"
+casex = "casex"
+casez = "casez"
+
+# 导入
+import = "import"
+from = "from"
+as = "as"
+
+# 循环
+for = "for"
+while = "while"
+repeat = "repeat"
+forever = "forever"
+break = "break"
+continue = "continue"
+in = "in"
+
+# 参数
+param = "param"
+parameter = "parameter"
+localparam = "localparam"
+
+# 端口
+input = "input"
+output = "output"
+inout = "inout"
+interface = "interface"
+
+# 模块
+module = "module"
+
+# 流程控制
+pass = "pass"
+
+# 边沿
+posedge = "posedge"
+negedge = "negedge"
+
+# 函数/任务
+function = "function"
+endfunction = "endfunction"
+task = "task"
+endtask = "endtask"
+automatic = "automatic"
+static = "static"
+
+# Verilog 关键字
+wire = "wire"
+reg = "reg"
+integer = "integer"
+begin = "begin"
+end = "end"
+always = "always"
+endmodule = "endmodule"
+assign = "assign"
+endcase = "endcase"
+default = "default"
+generate = "generate"
+endgenerate = "endgenerate"
+genvar = "genvar"
+signed = "signed"
+
+# ========== 系统函数注册表 ==========
+[sysfunc]
+clog2 = "clog2"
+urandom = "urandom"
+urandom_range = "urandom_range"
+random = "random"
+display = "display"
+write = "write"
+monitor = "monitor"
+readmemh = "readmemh"
+readmemb = "readmemb"
+writememh = "writememh"
+writememb = "writememb"
+fopen = "fopen"
+fclose = "fclose"
+fdisplay = "fdisplay"
+fwrite = "fwrite"
+fread = "fread"
+stime = "stime"
+time = "time"
+realtime = "realtime"
+finish = "finish"
+stop = "stop"

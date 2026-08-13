@@ -1,0 +1,269 @@
+# ============================================================================
+# Verilog 语法规则 — function/task 声明
+# ============================================================================
+# 本文件定义函数和任务声明，各支持两种风格:
+#   FuncDeclANSI / FuncDeclOld  — 函数（ANSI 和旧式）
+#   TaskDeclANSI / TaskDeclOld  — 任务（ANSI 和旧式）
+#
+# 被引用于: 04_statements/00_base.toml (FuncStmt)
+#
+# ⚠ 已知限制: 当前未实现 function 返回类型（integer/real/time）的完整支持，
+#   只支持 [range] 形式的位宽返回。
+
+[FuncDecl.parser]
+production = [
+    "@FuncDeclANSI|@FuncDeclOld",
+]
+inline = true
+
+[FuncDecl.parser.node]
+body = "$1"
+
+[FuncDeclANSI.parser]
+production = [
+    "keyword.function",
+    "(keyword.automatic|keyword.static)?",
+    "keyword.signed?",
+    "@Range?",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@TaskPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "keyword.endfunction",
+]
+end_case = [
+    "keyword.endfunction",
+    "newline",
+]
+
+[FuncDeclANSI.parser.peek]
+scope = "analyzer"
+
+[FuncDeclANSI.parser.node]
+func_name = "$4"
+automatic = "$1"
+is_signed = "$2"
+func_range = "$3"
+ports = "$6"
+
+[FuncDeclANSI.analyzer.scope]
+name_attr = "func_name"
+kind = "function"
+
+[FuncDeclANSI.renderer.head]
+line = [
+    "function ",
+    { opt = { line = [
+    { ref = "automatic" },
+    " ",
+] } },
+    { opt = { line = [
+    { ref = "is_signed" },
+    " ",
+] } },
+    { opt = { group = [
+    "[",
+    { ref = "func_range" },
+    "] ",
+] } },
+    { ref = "func_name" },
+    "(",
+    { ref = "ports" },
+    ")",
+    ";",
+]
+
+[FuncDeclANSI.renderer.body]
+indent = true
+role = "flatten"
+
+[FuncDeclANSI.renderer.tail]
+text = "endfunction"
+break = 2
+
+[FuncDeclANSI]
+is_block = true
+is_statement = true
+
+[FuncDeclOld.parser]
+production = [
+    "keyword.function",
+    "(keyword.automatic|keyword.static)?",
+    "keyword.signed?",
+    "@Range?",
+    "@Identifier",
+    "symbol.base.semicolon",
+    "keyword.endfunction",
+]
+end_case = [
+    "keyword.endfunction",
+    "newline",
+]
+
+[FuncDeclOld.parser.node]
+func_name = "$4"
+automatic = "$1"
+is_signed = "$2"
+func_range = "$3"
+
+[FuncDeclOld.analyzer.scope]
+name_attr = "func_name"
+kind = "function"
+
+[FuncDeclOld.renderer.head]
+line = [
+    "function ",
+    { opt = { line = [
+    { ref = "automatic" },
+    " ",
+] } },
+    { opt = { line = [
+    { ref = "is_signed" },
+    " ",
+] } },
+    { opt = { group = [
+    "[",
+    { ref = "func_range" },
+    "] ",
+] } },
+    { ref = "func_name" },
+    ";",
+]
+
+[FuncDeclOld.renderer.body]
+indent = true
+role = "flatten"
+
+[FuncDeclOld.renderer.tail]
+text = "endfunction"
+break = 2
+
+[FuncDeclOld]
+is_block = true
+is_statement = true
+
+
+# ============================================================================
+# TaskDecl — 任务声明（分发器）
+# ============================================================================
+
+[TaskDecl.parser]
+production = [
+    "@TaskDeclANSI|@TaskDeclOld",
+]
+inline = true
+
+[TaskDecl.parser.node]
+body = "$1"
+
+
+# ============================================================================
+# TaskDeclANSI — 任务声明（ANSI 风格）
+# ============================================================================
+# 格式: task [automatic] name (ports); … endtask
+
+[TaskDeclANSI.parser]
+production = [
+    "keyword.task",
+    "(keyword.automatic|keyword.static)?",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@TaskPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "keyword.endtask",
+]
+end_case = [
+    "keyword.endtask",
+    "newline",
+]
+
+[TaskDeclANSI.parser.peek]
+scope = "analyzer"
+
+[TaskDeclANSI.parser.node]
+task_name = "$2"
+automatic = "$1"
+ports = "$4"
+
+[TaskDeclANSI.analyzer.scope]
+name_attr = "task_name"
+kind = "task"
+
+[TaskDeclANSI.renderer.head]
+line = [
+    "task ",
+    { opt = { line = [
+    { ref = "automatic" },
+    " ",
+] } },
+    { ref = "task_name" },
+    "(",
+    { ref = "ports" },
+    ")",
+    ";",
+]
+
+[TaskDeclANSI.renderer.body]
+indent = true
+role = "flatten"
+
+[TaskDeclANSI.renderer.tail]
+text = "endtask"
+break = 2
+
+[TaskDeclANSI]
+is_block = true
+is_statement = true
+
+[TaskDeclOld.parser]
+production = [
+    "keyword.task",
+    "(keyword.automatic|keyword.static)?",
+    "@Identifier",
+    "symbol.base.semicolon",
+    "keyword.endtask",
+]
+end_case = [
+    "keyword.endtask",
+    "newline",
+]
+
+[TaskDeclOld.parser.node]
+task_name = "$2"
+automatic = "$1"
+
+[TaskDeclOld.analyzer.scope]
+name_attr = "task_name"
+kind = "task"
+
+[TaskDeclOld.renderer.head]
+line = [
+    "task ",
+    { opt = { line = [
+    { ref = "automatic" },
+    " ",
+] } },
+    { ref = "task_name" },
+    ";",
+]
+
+[TaskDeclOld.renderer.body]
+indent = true
+role = "flatten"
+
+[TaskDeclOld.renderer.tail]
+text = "endtask"
+break = 2
+
+[TaskDeclOld]
+is_block = true
+is_statement = true
+
+
+# ============================================================================
+# TaskDeclOld — 任务声明（旧式风格）
+# ============================================================================
+# 格式: task [automatic] name; …端口声明… endtask
+# 与 ANSI 风格的区别是端口在函数体内声明而非括号内。

@@ -1,0 +1,209 @@
+# ============================================================================
+# Verilog 语法规则 — 模块实例化
+# ============================================================================
+# 本文件定义模块实例化及参数覆盖/端口连接相关规则:
+#   ModuleInst            — 模块实例化
+#   ParamOverride         — 参数覆盖 #(.name(value))
+#   ParamOverrideList     — 参数覆盖列表
+#   NamedParamOverride    — 单参数覆盖 .name(value)
+#   PortConnection        — 端口连接括号
+#   NamedPortList         — 命名端口列表
+#   NamedPortConnect      — 单端口连接 .port_name(expr)
+#
+# 被引用于: 04_statements/00_base.toml (InstStmt)
+
+# ============================================================================
+# ModuleInst — 模块实例化
+# ============================================================================
+# 完整格式: module_name #(.p1(v1)) inst_name (.port1(w1), .port2(w2));
+# analyzer.symbol 注册 kind=module_instance 供后续分析。
+
+[ModuleInst]
+is_statement = true
+
+[ModuleInst.parser]
+production = [
+    "@Identifier",
+    "@ParamOverride?",
+    "@Identifier",
+    "@PortConnection",
+]
+end_case = [
+    "newline",
+]
+
+[ModuleInst.parser.node]
+module_name = "$1"
+params = "$2"
+inst_name = "$3"
+ports = "$4.ports"
+
+[ModuleInst.analyzer.symbol]
+kind = "module_instance"
+name_attr = "inst_name"
+
+[ModuleInst.renderer.head]
+line = [
+    { ref = "module_name" },
+    { opt = { group = [
+    " ",
+    { ref = "params" },
+] } },
+    " ",
+    { ref = "inst_name" },
+    " (",
+]
+
+[ModuleInst.renderer.body]
+indent = true
+items = [
+    "ports",
+]
+
+[ModuleInst.renderer.tail]
+text = ");"
+break = 2
+
+
+# ============================================================================
+# ParamOverride — 参数覆盖
+# ============================================================================
+# 模块实例化时覆盖参数: #(.WIDTH(8), .DEPTH(16))
+
+[ParamOverride.parser]
+production = [
+    "symbol.base.pound",
+    "bracket.l_parentheses",
+    "@ParamOverrideList?",
+    "bracket.r_parentheses",
+]
+
+[ParamOverride.parser.node]
+params = "$3"
+
+[ParamOverride.renderer.head]
+line = [
+    "#(",
+    { ref = "params" },
+    ")",
+]
+
+
+# ============================================================================
+# ParamOverrideList — 参数覆盖列表
+# ============================================================================
+
+[ParamOverrideList.parser]
+production = [
+    "@NamedParamOverride",
+    "(symbol.base.comma,@NamedParamOverride)*",
+]
+
+[ParamOverrideList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[ParamOverrideList.renderer.layout]
+join = ", "
+nest = 1
+items = "items"
+
+
+# ============================================================================
+# NamedParamOverride — 命名参数覆盖
+# ============================================================================
+# 格式: .param_name(expr)
+
+[NamedParamOverride.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+
+[NamedParamOverride.parser.node]
+param_name = "$2"
+value = "$4"
+
+[NamedParamOverride.renderer.layout]
+line = [
+    ".",
+    { ref = "param_name" },
+    "(",
+    { ref = "value" },
+    ")",
+]
+
+
+# ============================================================================
+# PortConnection — 端口连接括号
+# ============================================================================
+# 实例化的端口连接部分: (.port1(w1), .port2(w2));
+# 括号配对由 [bracket].pairs 配置统一处理。
+
+[PortConnection.parser]
+production = [
+    "bracket.l_parentheses",
+    "@NamedPortList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[PortConnection.parser.node]
+ports = "$2"
+
+
+# ============================================================================
+# NamedPortList — 命名端口列表
+# ============================================================================
+
+[NamedPortList.parser]
+production = [
+    "@NamedPortConnect",
+    "(symbol.base.comma,@NamedPortConnect)*",
+]
+
+[NamedPortList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[NamedPortList.renderer.layout]
+join = ", "
+items = "items"
+
+
+# ============================================================================
+# NamedPortConnect — 命名端口连接
+# ============================================================================
+# 格式: .port_name(expr)
+
+[NamedPortConnect.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+
+[NamedPortConnect.parser.node]
+port_name = "$2"
+value = "$4"
+
+[NamedPortConnect.renderer.layout]
+line = [
+    ".",
+    { ref = "port_name" },
+    "(",
+    { ref = "value" },
+    ")",
+]

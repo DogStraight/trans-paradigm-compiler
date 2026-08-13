@@ -1,0 +1,19 @@
+[lexer]
+token_ext = { file = "_token_ext.toml", required = false }
+
+[grammar]
+files = ["00_type_decl.toml", "06_typed_decl.toml", "10_impl_binding.toml"]
+
+[analyzer]
+primitives = ["resolve_refs", "flatten_ports", "attach_invert_map"]
+handlers = ["_mapping.py", "_flatten_ports.py", "_invert_map.py"]
+
+[transform]
+slots = [
+    "delete_type_decl",
+    "build_wrapper",
+    "expand_typed_port",
+    "auto_connect_ports",
+    "replace_impl_binding",
+]
+handlers = ["_transform.py", "_bridge.py"]
