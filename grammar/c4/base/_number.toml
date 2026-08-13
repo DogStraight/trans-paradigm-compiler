@@ -1,6 +1,6 @@
 # C 语言数字字面量形态声明（c4 演示 DSL）
 #
-# 对齐参考实现 reference/c4/c4.c 的 next()（标准锚点）：
+# 对齐参考实现 rswier/c4 的 c4.c next()（标准锚点，上游 github.com/rswier/c4）：
 #   if (ival = tk - '0') { ... 十进制 ... }                    # 非零开头 → 十进制
 #   else if (*p == 'x' || *p == 'X') { ... ival * 16 ... }     # 0x/0X → 十六进制
 #   else { while (*p >= '0' && *p <= '7') ... ival * 8 ... }   # 前导 0 → 八进制

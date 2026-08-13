@@ -8,7 +8,7 @@ rewrite"从口号变事实。
 
 ## 参照
 
-- `reference/c4/c4.c`（rswier/c4，~500 行最小自举子集 = 最小完备内核）——**范畴裁剪基线**
+- [`rswier/c4`](https://github.com/rswier/c4) 的 `c4.c`（~500 行最小自举子集 = 最小完备内核）——**范畴裁剪基线**
 - chibicc（rui314，commit = 特性增量）——实现节奏参照
 
 ## 状态

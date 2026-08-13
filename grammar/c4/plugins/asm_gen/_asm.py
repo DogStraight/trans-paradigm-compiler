@@ -1,7 +1,7 @@
 # ============================================================================
 # _asm.py — c4 汇编生成插件（c4 AST → c4 VM 指令集）
 #
-# 对应 reference/c4/c4.c 的编译逻辑（expr/stmt/声明 → 指令发射），
+# 对应 rswier/c4 的 c4.c 编译逻辑（expr/stmt/声明 → 指令发射，上游 github.com/rswier/c4），
 # 输出 c4 的 VM 汇编文本（LEA/IMM/JMP/JSR/BZ/BNZ/ENT/ADJ/LEV/LI/LC/SI/SC/PSH/
 # OR/XOR/AND/EQ/NE/LT/GT/LE/GE/SHL/SHR/ADD/SUB/MUL/DIV/MOD）。
 #

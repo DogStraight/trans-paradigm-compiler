@@ -1,7 +1,7 @@
 # _symbol_level.toml — c4（Tiny C 演示 DSL）运算符定义
 #
 # 优先级由数组顺序决定（从低到高）；一元前缀/后缀高于所有二元。
-# 对应 reference/c4/c4.c 的 expr() precedence climbing 层级。
+# 对应 rswier/c4 的 c4.c expr() precedence climbing 层级（上游 github.com/rswier/c4）。
 
 # 赋值（最低，右结合）
 [[operator]]

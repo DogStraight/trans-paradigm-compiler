@@ -3,7 +3,7 @@
 # ============================================================================
 # 基础运算符/符号/括号在 base/_token.toml。
 #
-# 关键字集对应 reference/c4/c4.c 的保留字：
+# 关键字集对应 rswier/c4 的 c4.c 保留字（上游 github.com/rswier/c4）：
 #   char else enum if int return sizeof while（c4 语句/类型关键字）
 #   void（c4 特殊：void 视作 char 类型）
 # 库函数（printf/malloc/exit 等）在 c4 中是系统符号，语法层按普通标识符

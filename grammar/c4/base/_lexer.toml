@@ -1,6 +1,6 @@
 # _lexer.toml — c4（Tiny C 演示 DSL）词法配置
 #
-# 注释：c4 特有——// 和 # 都是行注释（见 reference/c4/c4.c 的 next()）。
+# 注释：c4 特有——// 和 # 都是行注释（见 rswier/c4 的 c4.c next()，上游 github.com/rswier/c4）。
 
 [comment]
 pairs = [

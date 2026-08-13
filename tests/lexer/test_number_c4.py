@@ -1,6 +1,6 @@
 """tests/lexer/test_number_c4.py — c4 数字字面量形态（对齐 c4.c 标准）。
 
-锚点：reference/c4/c4.c 的 next() 只支持三种数字形态：
+锚点：rswier/c4（github.com/rswier/c4）的 c4.c next() 只支持三种数字形态：
   非零开头十进制（123）、0x/0X 十六进制（0x1F）、前导 0 八进制（017 / 0）。
 不支持 0b/0o（C23/Python 风格）——0b101 应拆为 0 + 标识符 b101。
 

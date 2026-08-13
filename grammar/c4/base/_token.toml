@@ -1,6 +1,6 @@
 # _token.toml — c4（Tiny C 演示 DSL）基础 Token 定义
 #
-# 对应 reference/c4/c4.c 词法：数字（十进制/十六进制 0x/八进制 0）、
+# 对应 rswier/c4 的 c4.c 词法（上游 github.com/rswier/c4）：数字（十进制/十六进制 0x/八进制 0）、
 # 标识符、单字符/多字符运算符、括号、字面量。
 # 语言关键字在 ../token.toml（[id.keyword]）。
 
