@@ -50,7 +50,7 @@ scope = { kind = "always" }
 
 [AlwaysStmt.parser]
 production = [
-    "keyword.always",
+    "keyword.always|keyword.always_ff|keyword.always_comb",
     "@EventControl",
     "@Stmt",
 ]
@@ -59,12 +59,14 @@ end_case = [
 ]
 
 [AlwaysStmt.parser.node]
+always_kw = "$1"
 event_control = "$2"
 body = "$3"
 
 [AlwaysStmt.renderer.layout]
 line = [
-    "always ",
+    { ref = "always_kw" },
+    " ",
     { ref = "event_control" },
     " ",
     { ref = "body" },

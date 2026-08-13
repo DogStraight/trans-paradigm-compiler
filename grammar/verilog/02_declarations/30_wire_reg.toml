@@ -69,7 +69,7 @@ is_statement = true
 
 [RegDecl.parser]
 production = [
-    "keyword.reg",
+    "keyword.reg|keyword.logic",
     "keyword.signed?",
     "@Range?",
     "@DeclaratorList",
@@ -91,7 +91,7 @@ name_attr = "items.name"
 
 [RegDecl.renderer.layout]
 line = [
-    "reg",
+    { ref = "reg_type" },
     { opt = { group = [
     " ",
     { ref = "is_signed" },
