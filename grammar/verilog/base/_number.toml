@@ -1,0 +1,54 @@
+# Verilog 数字字面量形态声明（IEEE 1364-2005 A.8.7）
+#
+# 由 lexer/number_gen.py 编译为 FSM 转移表。
+# 统一骨架：形态 = [size] base value
+#   size  = 非零开头数字（可选；unsized = size 空）
+#   base  = '  + 可选 s(signed) + 进制字母(d/b/o/h)
+#   value = 该进制 digit 集（含 x/z/?）
+#
+# 字段说明：
+#   size            {"digits": "nonzero"} 非零开头 / "none" 无 size
+#   base_prefix     "'"  引号（可配 signed = true 加 's）
+#   bases           进制字母列表
+#   value_digits    base 字母 → 进制（dec/bin/oct/hex）
+#   value_allow     value 中允许的特殊字符（x/z/?）
+#   value_allow_space   value 前允许空格（如 32'h ffff_ffff）
+
+[[number.based]]
+name = "verilog_width_signed"
+size = { digits = "nonzero" }
+base_prefix = "'"
+signed = true          # 's 支持：16'sd100
+bases = ["d", "b", "o", "h"]
+value_digits = { d = "dec", b = "bin", o = "oct", h = "hex" }
+value_allow = ["x", "z", "?"]
+value_allow_space = true
+
+[[number.based]]
+name = "verilog_width"
+size = { digits = "nonzero" }
+base_prefix = "'"
+bases = ["d", "b", "o", "h"]
+value_digits = { d = "dec", b = "bin", o = "oct", h = "hex" }
+value_allow = ["x", "z", "?"]
+value_allow_space = true
+
+[[number.based]]
+name = "verilog_unsized"
+size = "none"
+base_prefix = "'"
+bases = ["d", "b", "o", "h"]
+value_digits = { d = "dec", b = "bin", o = "oct", h = "hex" }
+value_allow = ["x", "z", "?"]
+value_allow_space = true
+
+[[number.based]]
+name = "verilog_dec"
+# 纯十进制（无前缀）：0 / 123 / 3.14 / 1e10（decimal_number ::= unsigned_number
+# | [size] decimal_base unsigned_number 的 unsigned_number 部分；
+# 浮点/科学计数由生成器内置链处理）
+size = { digits = "nonzero" }
+base_prefix = "none"
+bases = []
+value_digits = { d = "dec" }
+value_allow = []

@@ -1,0 +1,25 @@
+# C 语言数字字面量形态声明（c4 演示 DSL）
+#
+# C 数字形态（无 size 形态 + C 前缀）：
+#   十进制整数    123 / 0
+#   十六进制     0x1F
+#   二进制       0b101
+#   八进制       0o17
+# （浮点/科学计数形态待生成器 real 支持后补充）
+
+[[number.based]]
+name = "c_prefix"
+size = "none"
+base_prefix = "0x|0b|0o"     # C 风格前缀（多字符）
+bases = []
+value_digits = { x = "hex", b = "bin", o = "oct" }
+value_allow = []
+
+[[number.based]]
+name = "c_dec"
+size = { digits = "nonzero" }   # 十进制整数（走 size_state：123 / 0 / 浮点）
+base_prefix = "none"
+bases = []
+value_digits = { d = "dec" }
+value_allow = []
+
