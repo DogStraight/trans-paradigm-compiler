@@ -11,14 +11,25 @@ from typing import Any, Callable
 
 from core._protocol import META_NAME, META_REQUIRES
 
-def _get_component_dir() -> str:
-    """Resolve component directory: grammar/<lang>/plugins/."""
+def _get_component_dir(plugins_dir: str = "") -> str:
+    """Resolve component directory.
+
+    plugins_dir 非空时用指定语言包的 plugins/（单语言选择——跟随
+    load_language 选中的语言包）；否则用默认包 DEFAULT_RULES_DIR/plugins。
+    """
     try:
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if plugins_dir:
+            abs_dir = (
+                plugins_dir
+                if os.path.isabs(plugins_dir)
+                else os.path.join(root, plugins_dir)
+            )
+            return abs_dir if os.path.isdir(abs_dir) else ""
         from core.define import DEFAULT_RULES_DIR
-        plugins_dir = os.path.join(root, DEFAULT_RULES_DIR, "plugins")
-        if os.path.isdir(plugins_dir):
-            return plugins_dir
+        pdir = os.path.join(root, DEFAULT_RULES_DIR, "plugins")
+        if os.path.isdir(pdir):
+            return pdir
     except OSError:
         # 仅容忍文件系统级异常；import/配置异常（如 ConfigError）应冒泡而非静默
         return ""
@@ -29,9 +40,9 @@ _transform_slots: dict[str, Callable] = {}
 _PRIMITIVE_ORDER: list[str] = []
 
 
-def discover_components() -> list[dict[str, Any]]:
-    """Scan plugins/ directories for tpc.toml with [component] section."""
-    comp_dir = _get_component_dir()
+def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
+    """Scan plugins/ directories for tpc.toml with component sections."""
+    comp_dir = _get_component_dir(plugins_dir)
     if not comp_dir or not os.path.isdir(comp_dir):
         return []
     result = []
@@ -55,9 +66,11 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
 
     with open(path, "rb") as f:
         raw = tomllib.load(f)
-    # Require at least [grammar] files to be a valid component
+    # 组件判定：有 [grammar] files，或纯 transform 插件（有 [transform] handlers，
+    # 如 c4 的 asm_gen——无语法规则文件，只有代码生成插件）
     grammar = raw.get("grammar", {})
-    if not grammar.get("files"):
+    transform = raw.get("transform", {})
+    if not grammar.get("files") and not transform.get("handlers"):
         return None
     comp = {
         "name": os.path.basename(os.path.dirname(path)),
@@ -125,9 +138,12 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     return info
 
 
-def load_all_components() -> list[dict[str, Any]]:
-    """Discover, dependency-sort, and load all components."""
-    metas = discover_components()
+def load_all_components(plugins_dir: str = "") -> list[dict[str, Any]]:
+    """Discover, dependency-sort, and load all components.
+
+    plugins_dir 非空时从指定语言包加载组件（单语言选择）；空时用默认包。
+    """
+    metas = discover_components(plugins_dir)
     ordered = _resolve_dependencies(metas)
     result = []
     for meta in ordered:
@@ -189,13 +205,21 @@ def get_primitive_order() -> list[str]:
 
 
 def _load_python_handlers(cdir: str, handler_files: list[str]) -> list[Any]:
-    """Load Python handler files from a component directory."""
+    """Load Python handler files from a component directory.
+
+    幂等：模块已在 sys.modules（同进程重复加载组件）则直接复用，不重复
+    exec_module——否则 @register 的 analyzer primitive / transform slot 会
+    重复注册抛 ValueError（setup_grammar 单语言重建组件时触发）。
+    """
     modules = []
     for hf in handler_files:
         hpath = os.path.join(cdir, hf)
         if not os.path.isfile(hpath):
             continue
         mod_name = f"_comp_{os.path.basename(cdir)}_{hf.replace('.', '_')}"
+        if mod_name in sys.modules:
+            modules.append(sys.modules[mod_name])
+            continue
         spec = importlib.util.spec_from_file_location(mod_name, hpath)
         if spec and spec.loader:
             mod = importlib.util.module_from_spec(spec)

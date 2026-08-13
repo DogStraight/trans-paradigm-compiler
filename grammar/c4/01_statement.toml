@@ -1,0 +1,130 @@
+# ============================================================================
+# c4（Tiny C 演示 DSL）语法规则 — 语句
+# ============================================================================
+# 对应 reference/c4/c4.c 的 stmt()：
+#   if/else、while、return、{ 块 }、; 空语句、表达式语句
+#
+# Stmt 为选择器（inline），被 if/while 体等 @Stmt 引用；
+# parse_sentence 直接发现各 is_statement 规则。
+
+# ============================================================================
+# Stmt — 语句选择器
+# ============================================================================
+
+[Stmt.parser]
+production = [
+    "@IfStmt|@WhileStmt|@ReturnStmt|@BlockStmt|@EmptyStmt|@ExprStmt|@VarDecl",
+]
+inline = true
+
+[Stmt.parser.node]
+value = "$1"
+
+
+# ============================================================================
+# IfStmt — if ( cond ) stmt [else stmt]
+# ============================================================================
+
+[IfStmt]
+is_statement = true
+
+[IfStmt.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+    "(keyword.else,@Stmt)?",
+]
+
+[IfStmt.parser.node]
+cond = "$3"
+then_body = "$5"
+else_body = "$6"
+
+
+# ============================================================================
+# WhileStmt — while ( cond ) stmt
+# ============================================================================
+
+[WhileStmt]
+is_statement = true
+
+[WhileStmt.parser]
+production = [
+    "keyword.while",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+]
+
+[WhileStmt.parser.node]
+cond = "$3"
+body = "$5"
+
+
+# ============================================================================
+# ReturnStmt — return [expr] ;
+# ============================================================================
+
+[ReturnStmt]
+is_statement = true
+
+[ReturnStmt.parser]
+production = [
+    "keyword.return",
+    "@Expression?",
+    "symbol.base.semicolon",
+]
+
+[ReturnStmt.parser.node]
+value = "$2"
+
+
+# ============================================================================
+# BlockStmt — { stmt... }  复合语句块
+# ============================================================================
+
+[BlockStmt]
+is_block = true
+is_statement = true
+
+# 块边界从 production 首尾字面 token 推导（block_start=“{”/block_end=“}”），
+# 剥离后 production 为空——body 由 parse_block_body 循环 parse_sentence。
+[BlockStmt.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "bracket.r_curly_bracket",
+]
+
+[BlockStmt.parser.node]
+
+
+# ============================================================================
+# EmptyStmt — ;   空语句
+# ============================================================================
+
+[EmptyStmt]
+is_statement = true
+
+[EmptyStmt.parser]
+production = ["symbol.base.semicolon"]
+
+
+# ============================================================================
+# ExprStmt — 表达式语句  expr ;
+# ============================================================================
+
+[ExprStmt]
+is_statement = true
+
+[ExprStmt.parser]
+production = [
+    "@Expression",
+    "symbol.base.semicolon",
+]
+
+[ExprStmt.parser.node]
+expr = "$1"

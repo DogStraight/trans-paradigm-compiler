@@ -162,6 +162,14 @@ class RuleSelector:
     get_candidate_rules = select_candidates
 
     def get_block_rule(self) -> str | None:
+        # 优先无 block_start 的匿名根块（如 c4 的 Program）——根块由整个 token
+        # 流驱动（无显式起止符），而非带 block_start 的具体块规则。回退到
+        # 第一个块规则（兼容 Verilog：根是带 block_start 的 ModuleDecl）。
+        for rule_name, rule in self.grammar_rules.items():
+            if getattr(rule, "is_block", False) and not getattr(
+                rule, "block_start", None
+            ):
+                return rule_name
         for rule_name, rule in self.grammar_rules.items():
             if getattr(rule, "is_block", False):
                 return rule_name

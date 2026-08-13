@@ -1,0 +1,22 @@
+# ============================================================================
+# c4（Tiny C 演示 DSL）语言关键字 Token 定义
+# ============================================================================
+# 基础运算符/符号/括号在 base/_token.toml。
+#
+# 关键字集对应 reference/c4/c4.c 的保留字：
+#   char else enum if int return sizeof while（c4 语句/类型关键字）
+#   void（c4 特殊：void 视作 char 类型）
+# 库函数（printf/malloc/exit 等）在 c4 中是系统符号，语法层按普通标识符
+# 处理（CallExpr 调用），不设关键字——保持语法规则最小。
+
+[id]
+[id.keyword]
+char = "char"
+else = "else"
+enum = "enum"
+if = "if"
+int = "int"
+return = "return"
+sizeof = "sizeof"
+while = "while"
+void = "void"

@@ -1,0 +1,202 @@
+# ============================================================================
+# c4（Tiny C 演示 DSL）语法规则 — 表达式
+# ============================================================================
+# 对应 reference/c4/c4.c 的 expr()：
+#   原子：数字、字符/字符串、标识符、括号、类型转换、调用、下标、sizeof
+#   运算符：由 base/_symbol_level.toml operator_defs 提供全部优先级
+#           （pratt 前缀/中缀处理覆盖一元与二元，含赋值/条件）
+#
+# Expression（pratt=true）是表达式入口；原子规则 is_atom 由 pratt 的
+# atom_parser 遍历；UnaryExpr 提供一元前缀的 first set（rule_selector
+# 识别 -x / *p / &v / !b 等表达式起点）。
+
+# ============================================================================
+# 原子规则
+# ============================================================================
+
+# Number — 数字字面量（十进制/十六进制 0x/八进制，lexer 已按 literal.number 产出）
+[Number.parser]
+is_atom = true
+production = ["literal.number"]
+
+[Number.parser.node]
+value = "$1"
+
+[Number.renderer.layout]
+ref = "value"
+
+
+# StringLit — 字符 'a' 与字符串 "..."（lexer 均产出 literal.string）
+[StringLit.parser]
+is_atom = true
+production = ["literal.string"]
+
+[StringLit.parser.node]
+value = "$1"
+
+[StringLit.renderer.layout]
+ref = "value"
+
+
+# Identifier — 标识符
+[Identifier.parser]
+is_atom = true
+production = ["id"]
+
+[Identifier.parser.node]
+content = "$1.value"
+
+[Identifier.analyzer]
+identifier_ref = true
+
+[Identifier.renderer.layout]
+ref = "content"
+
+
+# ParenthesizedExpr — ( Expression )
+[ParenthesizedExpr.parser]
+is_atom = true
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+
+[ParenthesizedExpr.parser.node]
+expr = "$2"
+
+[ParenthesizedExpr.renderer.layout]
+line = ["(", { ref = "expr" }, ")"]
+
+
+# TypeCastExpr — ( int|char 指针* ) 原子表达式  （c4: (int)x / (char*)p）
+[TypeCastExpr.parser]
+is_atom = true
+production = [
+    "bracket.l_parentheses",
+    "(keyword.int|keyword.char)",
+    "(symbol.base.multiple)*",
+    "bracket.r_parentheses",
+    "@PrimaryExpr",
+]
+
+[TypeCastExpr.parser.node]
+type_base = "$2"
+stars = "$3"
+value = "$5"
+
+[TypeCastExpr.renderer.layout]
+line = ["(", { ref = "type_base" }, { ref = "stars" }, ")", { ref = "value" }]
+
+
+# CallExpr — 函数调用  f(arg1, arg2)
+[CallExpr.parser]
+is_atom = true
+production = [
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+]
+
+[CallExpr.parser.node]
+callee = "$1"
+args = "$3"
+
+[CallExpr.renderer.layout]
+line = [{ ref = "callee" }, "(", { ref = "args" }, ")"]
+
+
+# IndexExpr — 下标  a[i][j]  链式后缀
+[IndexExpr.parser]
+is_atom = true
+production = [
+    "@Identifier",
+    "(bracket.l_square_bracket,@Expression,bracket.r_square_bracket)+",
+]
+
+[IndexExpr.parser.node]
+base = "$1"
+indexes = "$2.items[*].sub_node[1]"
+
+[IndexExpr.renderer.layout]
+line = [{ ref = "base" }, { ref = "indexes" }]
+
+
+# SizeofExpr — sizeof ( 类型 )   （c4 仅支持类型操作数）
+[SizeofExpr.parser]
+is_atom = true
+production = [
+    "keyword.sizeof",
+    "bracket.l_parentheses",
+    "@TypeName",
+    "bracket.r_parentheses",
+]
+
+[SizeofExpr.parser.node]
+type_name = "$3"
+
+[SizeofExpr.renderer.layout]
+line = ["sizeof(", { ref = "type_name" }, ")"]
+
+
+# TypeName — int | char 后跟任意指针 *
+[TypeName.parser]
+production = ["(keyword.int|keyword.char)", "(symbol.base.multiple)*"]
+
+[TypeName.parser.node]
+base = "$1"
+stars = "$2"
+
+[TypeName.renderer.layout]
+line = [{ ref = "base" }, { ref = "stars" }]
+
+
+# ArgumentList — 逗号分隔表达式列表
+[ArgumentList.parser]
+production = ["@Expression", "(symbol.base.comma,@Expression)*"]
+
+[ArgumentList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+
+[ArgumentList.renderer.layout]
+join = ", "
+items = "items"
+
+
+# ============================================================================
+# 表达式结构
+# ============================================================================
+
+# UnaryExpr — 一元前缀（first set 供给；实际前缀解析由 pratt operator_defs 覆盖）
+[UnaryExpr.parser]
+production = [
+    "(symbol.base.not|symbol.base.sub|symbol.base.add|symbol.base.bit_not|symbol.base.multiple|symbol.base.and|symbol.extend.add_one|symbol.extend.sub_one)",
+    "@PrimaryExpr",
+]
+pratt = true
+
+
+# PrimaryExpr — 原子选择器
+[PrimaryExpr.parser]
+production = [
+    "@Number|@StringLit|@Identifier|@ParenthesizedExpr|@TypeCastExpr|@CallExpr|@IndexExpr|@SizeofExpr|@UnaryExpr",
+]
+inline = true
+
+[PrimaryExpr.parser.node]
+value = "$1"
+
+[PrimaryExpr.renderer.layout]
+ref = "value"
+
+
+# Expression — 顶层表达式（pratt 接管全部运算符）
+[Expression.parser]
+production = ["@PrimaryExpr"]
+pratt = true
+end_case = [
+    "symbol.base.semicolon",
+    "bracket.r_parentheses",
+    "bracket.r_square_bracket",
+    "symbol.base.comma",
+    "symbol.base.colon",
+]
+
+[Expression.parser.node]

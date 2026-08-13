@@ -1,0 +1,11 @@
+# ============================================================================
+# c4 — 汇编输出渲染（transform 产出的 AsmProgram/AsmLine 节点布局）
+# ============================================================================
+# AsmProgram：body 逐行输出每个 AsmLine（每行一条指令）
+# AsmLine：渲染 text 字段（单条汇编指令文本）
+
+[AsmProgram.renderer.body]
+indent = false
+
+[AsmLine.renderer.layout]
+ref = "text"

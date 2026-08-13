@@ -1,0 +1,8 @@
+# 组件声明：c4 汇编生成插件
+[component]
+name = "asm_gen"
+lang = "c4"
+description = "c4 AST → c4 VM 汇编文本"
+
+[transform]
+handlers = ["_asm.py"]
