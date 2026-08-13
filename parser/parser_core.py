@@ -19,7 +19,7 @@ from core.define import (
 from core.config_registry import declare_cfg
 from ._constants import ROOT_RULE_NAME
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # parser.operator_defs
 #   #sym:config = [operator]
 #   格式: dict — 运算符优先级定义
@@ -234,9 +234,11 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             stop_tokens=stop_tokens,
         )
     except ValueError as e:
+        self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")
         self._log_state(f"Pratt 解析: 不适合作为表达式 - {e}")
         return None
     except Exception as e:
+        self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")
         self._log_state(f"Pratt 解析失败: {e}")
         self._warn(f"Pratt 表达式解析失败: {e}")
         return None
@@ -314,7 +316,8 @@ def _parse_bit_width_literal(content: str) -> Node | None:
 class Parser:
     """语法分析器 — 将 token 流解析为 AST"""
 
-    # 日志级别
+    # 日志级别（阈值 _log_level 过滤低级别调用）
+    LOG_TRACE = -1
     LOG_DEBUG = 0
     LOG_INFO = 1
     LOG_WARN = 2
@@ -373,8 +376,12 @@ class Parser:
         """
         self.grammar_rules: dict[str, GrammarRule] = {}
         self.verbose = verbose
-        # 失败尝试摘要
-        self._failure_attempts: list[dict] = []
+        # 失败现场：token_index → {rule, reason, path}（按位置聚合，有界）
+        self._fail_sites: dict[int, dict] = {}
+        # 最近一次失败现场报告（退出前保留，供测试/程序化访问）
+        self._last_failure_report: dict | None = None
+        # 解析是否提前停止（输入未耗尽但无规则可继续）
+        self._parse_truncated = False
         # 预扫描符号表（可选）
         self.pre_symbols = pre_symbols or {}
         self.pre_hints: dict[str, list[str]] = {}
@@ -428,9 +435,19 @@ class Parser:
             )
         self.skip_types = list(_skip_types_cfg)
 
-        # 无日志文件时替换 _log_state 为空操作，避免 28k+ 次空调用开销
+        # 日志级别阈值：无文件且非 verbose → 只留 WARN+（stderr 可见），
+        # 修复旧实现把 _log_state 整体替换为空 lambda 导致 WARN 也被吞的问题。
+        # verbose → 全级别（TRACE 起）；有日志文件 → INFO 起写文件。
         if getattr(self, "debug_log_file", None) is None and not self.verbose:
-            self._log_state = lambda *a, **kw: None  # type: ignore[method-assign]
+            self._log_level = self.LOG_WARN
+        elif self.verbose:
+            self._log_level = self.LOG_TRACE
+        else:
+            self._log_level = self.LOG_INFO
+
+        # 停点/trace 过滤器（set_trace 设置，按规则名或 token 位置）
+        self._trace_rule: str | None = None
+        self._trace_token_pos: int | None = None
 
         self.atomic_rules: list[GrammarRule] = sorted(
             (
@@ -460,7 +477,14 @@ class Parser:
         level: int = LOG_DEBUG,
         context: ParseContext | None = None,
     ) -> None:
-        """带级别的日志记录。支持 action 为 callable 惰性求值。"""
+        """带级别的日志记录。支持 action 为 callable 惰性求值。
+
+        级别阈值 _log_level 过滤低级别调用（快速路径，避免空调用开销）；
+        无日志文件时 WARN/ERROR 仍输出到 stderr（修复 WARN 被吞）。
+        """
+        # 快速路径：低于当前阈值级别直接跳过
+        if level < getattr(self, "_log_level", self.LOG_INFO):
+            return
         log_path = getattr(self, "debug_log_file", None)
         if log_path is None:
             # 无日志文件：WARN 输出到 stderr，其余跳过
@@ -484,6 +508,38 @@ class Parser:
     def _warn(self, message: str, context: ParseContext | None = None) -> None:
         """WARN 级日志：由 _log_state 统一输出到日志文件和 stderr"""
         self._log_state(f"WARN: {message}", level=self.LOG_WARN, context=context)
+
+    def set_trace(
+        self, rule: str | None = None, token_pos: int | None = None
+    ) -> None:
+        """设置解析 trace 停点：按规则名或 token 位置过滤。
+
+        命中条件时在 try_rule_productions 入口输出当前解析状态到 stderr
+        （token_pointer / 当前 token / 语义路径）——适合观察某个规则或
+        位置在回溯中的每次尝试，比逐层日志精准。
+        """
+        self._trace_rule = rule
+        self._trace_token_pos = token_pos
+
+    def _maybe_trace(self, context: ParseContext, rule: str = "") -> None:
+        """命中 trace 停点条件时输出当前解析状态（stderr，ASCII）。"""
+        if self._trace_rule is None and self._trace_token_pos is None:
+            return
+        hit_rule = (
+            self._trace_rule is not None and bool(rule) and self._trace_rule in rule
+        )
+        hit_pos = (
+            self._trace_token_pos is not None
+            and context.token_pointer == self._trace_token_pos
+        )
+        if not (hit_rule or hit_pos):
+            return
+        print(
+            f"[trace] rule={rule or '?'} pos={context.token_pointer} "
+            f"{self._debug_token_info(context)} "
+            f"path={'/'.join(context.path_stack)}",
+            file=sys.stderr,
+        )
 
     @staticmethod
     def _debug_token_info(context: ParseContext) -> str:
@@ -514,7 +570,9 @@ class Parser:
         # 每次 parse 重置状态
         self._comment_anchors = []
         self._line_comment_anchors = []
-        self._failure_attempts = []
+        self._fail_sites = {}
+        self._last_failure_report = None
+        self._parse_truncated = False
         context = ParseContext(tokens)
 
         try:
@@ -524,38 +582,76 @@ class Parser:
             block_node = self.parse_block(context, start_token="")
             context.path_stack.pop()
             if block_node is None:
-                self._dump_failure_summary(context)
+                self._dump_failure_report(
+                    context, reason="parse produced no root block"
+                )
+            elif self._parse_truncated and self._last_failure_report is None:
+                # 解析提前停止（输入未耗尽但无规则可继续）→ 也保留失败现场
+                self._dump_failure_report(
+                    context, reason="parse truncated (unconsumed tokens)"
+                )
             return block_node if block_node else None
 
         except ParseError:
             # ParseError 已在抛出处打印了详细上下文
-            self._dump_failure_summary(context)
+            self._dump_failure_report(context, reason="ParseError")
             raise
         except Exception as exc:
             self._log_info(f"解析异常: {exc} | token={context.token_pointer}")
-            self._dump_failure_summary(context)
+            self._dump_failure_report(context, reason=f"exception: {exc}")
             raise
 
-    def _dump_failure_summary(self, context: ParseContext) -> None:
-        """输出失败尝试摘要：列出所有尝试过的规则及对应 token 位置"""
-        if not self._failure_attempts:
+    def _record_fail_site(
+        self,
+        context: ParseContext,
+        rule: str = "",
+        reason: str = "",
+        preserve: bool = False,
+    ) -> None:
+        """记录失败现场：按 token_index 聚合（每个位置保留最新一条）。
+
+        回溯解析中内层失败是常态，此处只做 O(1) dict 写入，不做窗口
+        格式化——完整报告（含 token 窗口）在最终失败时由
+        _dump_failure_report 一次性生成。
+
+        preserve=True 时若该位置已有记录则不覆盖——用于上层泛化记录
+        （如 "sentence"）不覆盖下层更具体的记录（如候选规则名）。
+        """
+        pos = context.token_pointer
+        if preserve and pos in self._fail_sites:
             return
-        print("\n[parser] ═══ 失败尝试摘要 ═══", file=sys.stderr)
-        print(f"[parser]  共 {len(self._failure_attempts)} 次尝试失败", file=sys.stderr)
-        # 按 token_index 分组去重，只显示每个位置最后一次尝试的规则
-        seen_pos: dict[int, list[str]] = {}
-        for fa in self._failure_attempts:
-            pos = fa.get("token_index", -1)
-            seen_pos.setdefault(pos, []).append(fa.get("rule", "?"))
-        for pos in sorted(seen_pos.keys()):
-            rules = seen_pos[pos]
-            # 去重规则名（同一个位置可能多次尝试同一条规则）
-            unique_rules = list(dict.fromkeys(rules))
-            print(
-                f"[parser]  token_pos={pos}  rules={unique_rules}",
-                file=sys.stderr,
-            )
-        print(
-            f"[parser]  ═══ 当前 token: {context.token_pointer} ═══",
-            file=sys.stderr,
+        self._fail_sites[pos] = {
+            "rule": rule,
+            "reason": reason,
+            "path": "/".join(context.path_stack),
+        }
+
+    def _dump_failure_report(
+        self, context: ParseContext, reason: str = ""
+    ) -> None:
+        """输出失败现场报告：位置 + token 窗口 + 失败点信息（退出前保留）。
+
+        只在"所有路径失效、即将放弃"时调用一次；报告同时存入
+        _last_failure_report 供测试/程序化访问。
+        """
+        from core.debug_report import build_failure_report, render_failure_report
+
+        pos = context.token_pointer
+        site = self._fail_sites.get(pos)
+        if site is None and self._fail_sites:
+            # 失败位置无记录：回退到最近的失败现场
+            nearest = min(self._fail_sites, key=lambda k: abs(k - pos))
+            site = self._fail_sites[nearest]
+        report = build_failure_report(
+            position=pos,
+            tokens=getattr(context, "tokens", None),
+            reason=reason or (site or {}).get("reason", ""),
+            rule=(site or {}).get("rule", ""),
+            path=(site or {}).get("path", ""),
+            extra={
+                "match_length": context.match_length,
+                "fail_sites": len(self._fail_sites),
+            },
         )
+        self._last_failure_report = report
+        print(render_failure_report(report), file=sys.stderr)

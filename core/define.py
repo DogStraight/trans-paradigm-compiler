@@ -10,19 +10,28 @@ import tomllib
 import os
 from pathlib import Path
 
+from core.errors import (
+    ConfigError,
+    GrammarError,
+    LexError,
+    ParseError,
+    TransformError,
+    LintInternalError,
+)
+
 # ── 配置文件查找路径 ──
-_CONFIG_CANDIDATES = ["config/pyv_config.json"]
+_CONFIG_CANDIDATES = ["config/tpc_config.json"]
 
 
 def _find_user_config() -> str:
     """Find the project configuration file.
 
     Search order:
-        1. $PYV_CONFIG env var (explicit override)
-        2. From CWD upward: config/pyv_config.json
+        1. $TPC_CONFIG env var (explicit override)
+        2. From CWD upward: config/tpc_config.json
     """
     # 1. Env var override
-    env_path = os.environ.get("PYV_CONFIG")
+    env_path = os.environ.get("TPC_CONFIG")
     if env_path:
         path = os.path.abspath(env_path)
         if os.path.isfile(path):
@@ -45,12 +54,12 @@ def _find_user_config() -> str:
     return ""
 
 
-def _load_pyv_meta() -> dict:
+def _load_tpc_meta() -> dict:
     """加载项目配置。
 
     架构：
-        pyv_config.json（用户配置）→ 选择语法包
-            └── grammar/<rules_dir>/pyv.toml（语法包自带引擎接口配置）
+        tpc_config.json（用户配置）→ 选择语法包
+            └── grammar/<rules_dir>/tpc.toml（语法包自带引擎接口配置）
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -61,12 +70,12 @@ def _load_pyv_meta() -> dict:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
         except (json.JSONDecodeError, KeyError) as e:
-            raise RuntimeError(f"[config] {user_config} parse failed: {e}")
+            raise ConfigError(f"[config] {user_config} parse failed: {e}")
     else:
         cfg = {}
 
     # Step 2: Resolve grammar package path
-    # pyv_config.json 中 grammar 可以是字符串（路径）或旧格式对象
+    # tpc_config.json 中 grammar 可以是字符串（路径）或旧格式对象
     grammar_val = cfg.get("grammar", "")
     if isinstance(grammar_val, str):
         grammar_dir = grammar_val
@@ -75,17 +84,17 @@ def _load_pyv_meta() -> dict:
     else:
         grammar_dir = ""
 
-    # Step 3: Load grammar package pyv.toml for engine interface config
-    meta_path = os.path.join(root, grammar_dir, "pyv.toml")
+    # Step 3: Load grammar package tpc.toml for engine interface config
+    meta_path = os.path.join(root, grammar_dir, "tpc.toml")
     meta: dict = {}
     if os.path.isfile(meta_path):
         try:
             with open(meta_path, encoding="utf-8") as f:
                 meta = tomllib.loads(f.read())
         except tomllib.TOMLDecodeError as e:
-            raise RuntimeError(f"[config] {grammar_dir}/pyv.toml parse failed: {e}")
+            raise ConfigError(f"[config] {grammar_dir}/tpc.toml parse failed: {e}")
 
-    # Step 4: 插件目录由 pyv.toml [plugins] enabled 管理（config_registry 自动发现）
+    # Step 4: 插件目录由 tpc.toml [plugins] enabled 管理（config_registry 自动发现）
     ext_dirs: list[str] = []
 
     # Step 5: Normalize — grammar 统一为对象格式
@@ -94,26 +103,26 @@ def _load_pyv_meta() -> dict:
         "rules_dir": grammar_dir,
         "ext_dirs": ext_dirs,
     }
-    # pyv.toml 中其他 engine config 补入
+    # tpc.toml 中其他 engine config 补入
     for k, v in meta.items():
         if k != "grammar":
             merged.setdefault(k, v)
 
     if "grammar" not in merged:
-        raise RuntimeError(
+        raise ConfigError(
             f"[config] No grammar package found.\n"
-            f"  Create config/pyv_config.json or ensure {grammar_dir}/pyv.toml exists."
+            f"  Create config/tpc_config.json or ensure {grammar_dir}/tpc.toml exists."
         )
     return merged
 
 
-_pyv_meta = _load_pyv_meta()
+_tpc_meta = _load_tpc_meta()
 
-# 增强语法层目录（来自 pyv.toml [grammar]）
-DEFAULT_EXT_DIRS: list[str] = _pyv_meta["grammar"]["ext_dirs"]
+# 增强语法层目录（来自 tpc.toml [grammar]）
+DEFAULT_EXT_DIRS: list[str] = _tpc_meta["grammar"]["ext_dirs"]
 
-# 核心语法规则目录（来自 pyv.toml [grammar]）
-DEFAULT_RULES_DIR: str = _pyv_meta["grammar"]["rules_dir"]
+# 核心语法规则目录（来自 tpc.toml [grammar]）
+DEFAULT_RULES_DIR: str = _tpc_meta["grammar"]["rules_dir"]
 
 
 class Token:
@@ -286,40 +295,6 @@ class FileManager:
         return merged
 
 
-class ParseError(Exception):
-    """解析错误，携带失败上下文以便快速定位。"""
-
-    def __init__(
-        self,
-        msg: str = "",
-        token=None,
-        rule: str | None = None,
-        path: str | None = None,
-        candidates: list | None = None,
-        context_info: str | None = None,
-    ):
-        self.token = token
-        self.rule = rule
-        self.path = path
-        self.candidates = candidates
-        self.context_info = context_info
-        parts = [msg]
-        if token:
-            parts.append(
-                f"  token: '{token.content}' (type={token.type}) Ln {token.line}"
-            )
-        if rule:
-            parts.append(f"  rule: {rule}")
-        if path:
-            parts.append(f"  path: {path}")
-        if candidates is not None:
-            names = [r.name if hasattr(r, "name") else str(r) for r in candidates]
-            parts.append(f"  candidates ({len(candidates)}): {names}")
-        if context_info:
-            parts.append(f"  ctx: {context_info}")
-        super().__init__("\n".join(parts))
-
-
 class GrammarRule:
     """语法规则
 
@@ -474,13 +449,13 @@ class GrammarRulesRegister:
             for target_field, source_stage_name in peek.items():
                 source_stage = rule_dict.get(source_stage_name)
                 if not isinstance(source_stage, dict):
-                    raise ValueError(
+                    raise GrammarError(
                         f"peek: rule '{rule_name}' source stage "
                         f"'{source_stage_name}' not found or not a dict"
                     )
                 value = source_stage.get(target_field)
                 if value is None:
-                    raise ValueError(
+                    raise GrammarError(
                         f"peek: rule '{rule_name}' field '{target_field}' "
                         f"not found in stage '{source_stage_name}'"
                     )

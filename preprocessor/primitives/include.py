@@ -70,14 +70,19 @@ def handle_include(stripped: str, prefix: str, name: str, ctx: dict) -> None:
             inc_source = f.read()
         from .._expand import scan_directives
 
-        inc_macros, inc_dirs_raw, inc_clean = scan_directives(
-            inc_source,
-            ctx["rules_dir"],
-            source_path=inc_path,
-            _include_stack=ctx["_include_stack"],
-            search_dirs=ctx["inc_dirs"],
+        inc_macros, inc_funcs, inc_blocks, inc_placeholders, inc_dirs_raw, inc_clean = (
+            scan_directives(
+                inc_source,
+                ctx["rules_dir"],
+                source_path=inc_path,
+                _include_stack=ctx["_include_stack"],
+                search_dirs=ctx["inc_dirs"],
+            )
         )
         ctx["macro_defs"].update(inc_macros)
+        ctx.setdefault("_func_params", {}).update(inc_funcs)
+        ctx.setdefault("_cond_blocks", []).extend(inc_blocks)
+        ctx.setdefault("_cond_placeholders", {}).update(inc_placeholders)
         ctx["directive_lines"].extend(inc_dirs_raw)
         ctx["_inject_lines"].extend(inc_clean.split("\n"))
     finally:

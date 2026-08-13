@@ -126,6 +126,11 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
 
 def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """尝试匹配一个语法规则的全部逻辑"""
+    # 停点/trace：按规则名或 token 位置过滤（仅真实 Parser 有此方法）
+    trace_fn = getattr(self, "_maybe_trace", None)
+    if trace_fn is not None:
+        trace_fn(context, rule.name)
+
     # Pratt 规则
     if getattr(rule, "pratt", False):
         return self._try_pratt_rule(context, rule)
@@ -155,6 +160,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             self._skip_tokens(context, tuple(self.skip_types))
             tok = context.peek_token()
             if not tok or tok.type != bs:
+                self._record_fail_site(
+                    context,
+                    rule=rule.name,
+                    reason=f"block start mismatch: expected {bs}",
+                )
                 context.path_stack.pop()
                 if scope_pushed:
                     self.scope_stack.pop()
@@ -167,6 +177,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             context.update_current_node(rule_node)
             all_matched = match_productions(self, context, rule)
             if all_matched is None:
+                self._record_fail_site(
+                    context,
+                    rule=rule.name,
+                    reason="block header production failed",
+                )
                 assert old_node is not None
                 context.update_current_node(old_node)
                 context.path_stack.pop()
@@ -206,19 +221,6 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
                 self.scope_stack.pop()
             return result
 
-    # 记录失败尝试
-    current_token = context.peek_token()
-    if getattr(self, "_collect_failures", False):
-        self._failure_attempts.append(
-            {
-                "rule": rule.name,
-                "token": str(current_token.content) if current_token else "EOF",
-                "token_index": context.token_pointer,
-                "token_type": current_token.type if current_token else "EOF",
-                "path": "/".join(context.path_stack),
-            }
-        )
-
     self._log_state(
         lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
         context=context,
@@ -231,6 +233,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 
     all_matched_nodes = match_productions(self, context, rule)
     if all_matched_nodes is None:
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="production match failed",
+        )
         context.path_stack.pop()
         if scope_pushed:
             self.scope_stack.pop()
@@ -241,6 +248,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 
     # end_case 检查
     if not self._check_end_case(context, rule):
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="end_case mismatch",
+        )
         self._restore_current_node(old_node, context)
         context.path_stack.pop()
         if scope_pushed:
@@ -369,16 +381,23 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
 
 
 def _has_variable_production(rule: GrammarRule) -> bool:
-    """检查规则的 production 列表是否含有变长元素（顶层 ? * + 后缀）。
+    """检查规则的 production 是否需要 end_case 硬性确认终止点。
 
-    定长 production 的所有元素都是固定匹配（无 ? * +），解析器已精确消费
-    规则应有的 token，end_case 正匹配仅为建议。变长 production 需要
-    end_case 来确定何时停止重复匹配。
+    production（列表 = 一条产生式的顺序 token 序列）含变长元素（? * +）时，
+    若**最后一个元素是纯字面 token**（如 `localparam integer? ... ;` 的末尾
+    分号），production 已精确消费到句尾——中间 optional 不改变"末尾固定
+    token 已消费"的事实，end_case 正匹配仅为建议（放宽）。只有变长结尾
+    （repeat/optional/plus 或 call/choice 收尾）才需要 end_case 确认何时
+    停止。定长 production（无 ? * +）本就放宽。
     """
-    for prod in getattr(rule, "production", []):
+    prods = getattr(rule, "production", [])
+    if not prods:
+        return False
+    has_var = False
+    for prod in prods:
         if not isinstance(prod, str):
             continue
-        # 扫描顶层字符（不在括号内）是否有 ? * + 后缀
+        # 顶层是否有 ? * + 后缀（括号内不算）
         depth = 0
         for ch in prod:
             if ch == '(':
@@ -386,7 +405,23 @@ def _has_variable_production(rule: GrammarRule) -> bool:
             elif ch == ')':
                 depth -= 1
             elif depth == 0 and ch in ('?', '*', '+'):
-                return True
+                has_var = True
+                break
+    if not has_var:
+        return False
+    # 有变长元素：最后一个元素是纯字面 token（非 @call / 非 (choice / 无后缀）
+    # → 已精确消费到句尾，放宽；否则需要 end_case 硬性确认。
+    last = prods[-1]
+    if not isinstance(last, str) or last.startswith(("@", "(")):
+        return True
+    depth = 0
+    for ch in last:
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+        elif depth == 0 and ch in ('?', '*', '+'):
+            return True
     return False
 
 

@@ -22,6 +22,7 @@ B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
 from __future__ import annotations
 
 from core.define import Token
+from core.errors import GrammarError
 
 from core.utils import square_bracket_types
 
@@ -167,7 +168,7 @@ class LookaheadTable:
     ) -> None:
         self._tree = tree
         self._matcher = matcher
-        # fail-fast：语句入口选择器名（pyv.toml [linter] module_item_rule/stmt_rule）
+        # fail-fast：语句入口选择器名（tpc.toml [linter] module_item_rule/stmt_rule）
         # 必须存在于规则树。代码不硬编码任何语法规则名——换一套配置即失效；
         # 名字缺失/失效在此直接抛错，而非静默返回空集导致 B 类 ident 候选
         # 全部消失（ModuleInst 等漏检），那是静默降级。
@@ -176,9 +177,9 @@ class LookaheadTable:
             (stmt_rule, "linter.stmt_rule（过程体语句入口）"),
         ):
             if _name not in tree:
-                raise RuntimeError(
+                raise GrammarError(
                     f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
-                    "请检查 pyv.toml [linter] 配置与语法规则命名是否一致。"
+                    "请检查 tpc.toml [linter] 配置与语法规则命名是否一致。"
                 )
         # 块内上下文名集合（从 opener_context 配置动态生成，不硬编码
         # module_body/proc_body 等 Verilog 结构名——换语言由配置决定）
@@ -190,12 +191,22 @@ class LookaheadTable:
             if isinstance(info, dict) and info.get("block_end")
         )
         # 句子结束符（从语句规则 production 末尾字面 token + 配置 end_case 推导，
-        # 不假设分号——分号只是其中普通成员，随语言配置变化）
-        self._stmt_ends = frozenset(
-            tok
-            for info in tree.values()
-            if isinstance(info, dict) and info.get("is_statement")
-            for tok in LookaheadTable._rule_end_tokens(info)
+        # 不假设分号——分号只是其中普通成员，随语言配置变化）。并入所有块规则
+        # 的 block_end（keyword.end 等）：块结束符天然是容器语句边界，discovery
+        # 的 _skip_to_end 依赖它正确定位 if/for 等嵌套容器的终止点——缺失时
+        # if 块边界延伸到后续语句（吞掉后续 always 等），语句边界错乱。
+        self._stmt_ends = (
+            frozenset(
+                tok
+                for info in tree.values()
+                if isinstance(info, dict) and info.get("is_statement")
+                for tok in LookaheadTable._rule_end_tokens(info)
+            )
+            | frozenset(
+                info["block_end"]
+                for info in tree.values()
+                if isinstance(info, dict) and info.get("block_end")
+            )
         )
         # 方括号开/闭类型（配置推导）：Level 1 括号配对跳过 @PrimaryExpr 内部/
         # 块头范围的 [..] 区间，不参与判别 token 匹配。
@@ -262,6 +273,15 @@ class LookaheadTable:
                 entry = {"name": name, "paths": paths}
                 for ctx in self._ctx_names:
                     self.ident_by_ctx.setdefault(ctx, []).append(entry)
+                # 同一规则还可能以非 id 字面 token 起始（如拼接赋值 lvalue 的
+                # `{`，来自 @PrimaryExpr 的 Concatenation 分支）→ 这些起始 token
+                # 一并注册到 keyword_map，否则 `{a,b} = expr;` 从 `{` 触发不了
+                # BlockingAssign，bracket 分支会整体跳过导致 RHS 误判为新语句。
+                non_id = firsts - {"id"}
+                if non_id:
+                    aentry = {"name": name, "paths": paths}
+                    for tt in non_id:
+                        self.keyword_map.setdefault(tt, []).append(aentry)
             else:
                 # A 类：关键字/具体符号触发 → 也计算前缀路径（与 B 类统一两级消歧）
                 apaths = self._a_prefix_paths(prods)
@@ -342,9 +362,12 @@ class LookaheadTable:
                     kept.append(entry)
             path_entries = kept
             if not path_entries and not l2_only:
-                # 候选清空：有语句起点特征但内容不匹配任何已知语句规则
-                # （拼错关键字/残缺结构头）→ 空列表表示"未识别"，discovery 报错。
-                return []
+                # Level 1 判别路径被操作数内部内容挡住（如拼接 lvalue
+                # `{a,b} = expr;` 的 {..}，起点非 id）→ 回退 Level 2 对原始
+                # 候选完整 production 试解析（判别不了不等于未识别；残缺语句
+                # 试解析仍零匹配返回 []，不吞错）。
+                t_limit = min(limit + 1, n)
+                return self._try_parse(tokens, i, entries, t_limit)
             # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
             if len(path_entries) == 1 and any(
                 len(p) == len(seen) and p == tuple(seen)

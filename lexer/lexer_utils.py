@@ -7,7 +7,7 @@ import tomllib
 from core.define import FileManager
 from core.config_registry import declare_cfg
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.token_base
 #   #sym:config = (root)
 #   格式: dict — { "token_name": { type, pattern }, ... }

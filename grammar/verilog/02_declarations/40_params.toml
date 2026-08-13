@@ -10,7 +10,10 @@
 # LocalParamDecl — localparam 声明
 # ============================================================================
 # 格式: localparam name1 = value1, name2 = value2, ... ;
+#       localparam integer name = value, ... ;
+#       localparam [msb:lsb] name = value, ... ;
 # localparam 与 parameter 的区别在于不能被模块实例化时覆盖。
+# 类型部分可选（integer 或 [range]），如 localparam integer X = 0。
 
 [LocalParamDecl]
 is_statement = true
@@ -18,6 +21,7 @@ is_statement = true
 [LocalParamDecl.parser]
 production = [
     "keyword.localparam",
+    "(keyword.integer|@Range)?",
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
@@ -26,7 +30,7 @@ end_case = [
 ]
 
 [LocalParamDecl.parser.node]
-items = "$2"
+items = "$3"
 
 [LocalParamDecl.analyzer.symbol]
 kind = "localparam"

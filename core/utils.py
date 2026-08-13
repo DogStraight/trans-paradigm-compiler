@@ -5,7 +5,7 @@ import json
 from typing import Any, Callable
 from core.config_registry import declare_cfg
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.bracket_map
 #   #sym:config = [bracket]
 #   格式: dict — { pairs: [[open, close, name], ...] }

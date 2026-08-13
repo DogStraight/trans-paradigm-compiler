@@ -48,7 +48,7 @@ layout = { ref = "stmt" }
 # ---------- 过程体内调用/空语句 ----------
 [CallStmt]
 [CallStmt.parser]
-production = ["@SubroutineCall|@NullStmt"]
+production = ["@SubroutineCall|@SysTaskStmt|@PropertyStmt|@NullStmt"]
 inline = true
 [CallStmt.parser.node]
 stmt = "$1"
@@ -102,7 +102,7 @@ layout = { ref = "decl" }
 # 复用 IfBlock/CaseStmt——其 @BeginEnd 体由 flatten 收集模块项内容（与 LoopGen 同机制）。
 [InstStmt]
 [InstStmt.parser]
-production = ["@ModuleInst|@GenerateBlock|@LoopGen|@IfBlock|@CaseStmt"]
+production = ["@ModuleInst|@GenerateBlock|@LoopGen|@IfBlock|@CaseStmt|@PropertyStmt"]
 inline = true
 [InstStmt.parser.node]
 inst = "$1"
@@ -156,7 +156,7 @@ layout = { ref = "stmt" }
 
 [NonBlockStmt]
 [NonBlockStmt.parser]
-production = ["@CtrlStmt|@ProcAssignStmt|@CallStmt"]
+production = ["@AttrStmt|@CtrlStmt|@ProcAssignStmt|@CallStmt"]
 inline = true
 [NonBlockStmt.parser.node]
 stmt = "$1"

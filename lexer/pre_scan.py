@@ -14,7 +14,7 @@
 import re
 from core.config_registry import declare_cfg
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.pre_scan
 #   #sym:config = [pre_scan]
 #   格式: dict

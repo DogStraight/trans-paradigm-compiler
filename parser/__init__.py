@@ -85,7 +85,7 @@ __all__ = ["Parser", "setup_grammar", "get_config_refs"]
 from typing import Any
 from core.config_registry import _CONFIG_DECLARATIONS, declare_cfg
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # parser.rules
 #   #sym:config = (list)
 #   格式: list[str] — 语法规则文件/目录路径列表

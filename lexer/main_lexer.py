@@ -14,7 +14,7 @@ from .lexer_utils import get_token_define_merged
 from .number_fsm import NumberFSM
 from .comment_fsm import CommentFSM
 
-# ── 配置需求（来自 pyv.toml） ──────────────────────────
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.macro_config
 #   #sym:config = (root)
 #   格式: dict
@@ -223,7 +223,17 @@ class Lexer:
                     tokens.append(current_token)
                     offset = new_idx - text_idx
                     text_idx = new_idx
-                    start_point += offset
+                    # 多行块注释跨行：行号同步前进（此前只平移列、行号不增，
+                    # 注释后的所有 token 行号系统性偏少）；列重算到注释最后一
+                    # 行内（该行注释内容宽度），单行注释仍按列平移 offset。
+                    newlines = comment_content.count("\n")
+                    if newlines:
+                        line_number += newlines
+                        start_point = (
+                            len(comment_content) - comment_content.rfind("\n") - 1
+                        )
+                    else:
+                        start_point += offset
                     # comments at beginning of line should not affect indentation
                     if self.new_line_start:
                         self.new_line_start = False
@@ -250,16 +260,25 @@ class Lexer:
                 # handle possible dedent before actual token
                 self._emit_pending_dedent(tokens)
 
-                extend_symbol = f"{lex_text[text_idx]}{next_char}"
+                # 最长匹配：从 base 字符起贪心扩展，extend 表里有什么就支持
+                # 多长（如 >>>/<<< 三字符，配置驱动，不硬编码符号长度）。
+                extend_values = self.token_define["symbol"]["extend"].values()
                 current_token.set_content(lex_text[text_idx])
                 current_token.set_type("symbol.base")
                 text_idx += 1
                 offset += 1
-                if extend_symbol in self.token_define["symbol"]["extend"].values():
-                    current_token.set_content(extend_symbol)
+                candidate = current_token.content
+                while text_idx < lex_text_len:
+                    probe = candidate + lex_text[text_idx]
+                    if probe in extend_values:
+                        candidate = probe
+                        text_idx += 1
+                        offset += 1
+                    else:
+                        break
+                if len(candidate) > 1:
+                    current_token.set_content(candidate)
                     current_token.set_type("symbol.extend")
-                    text_idx += 1
-                    offset += 1
 
                 # reset line info
                 start_point += offset

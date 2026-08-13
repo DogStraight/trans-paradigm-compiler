@@ -1,0 +1,159 @@
+# ============================================================================
+# Verilog 属性（attribute）插件 — IEEE 1364-2005 A.9.1
+# ============================================================================
+#   attribute_instance ::= (* attr_spec { , attr_spec }  *)
+#   attr_spec ::= attr_name [ = constant_expression ]
+#   attr_name ::= identifier
+#
+# 设计：attribute 作为"带属性声明"的独立入口 AttrDecl 注入 ModuleItem（inject），
+# 不修改核心 RegDecl/WireDecl 规则——插件不启用时核心 grammar 完全不变，
+# 保持测试稳定性；启用后挂载到实际语法位置（声明前）。
+#
+# 挂载位点：ModuleItem（模块体顶层）。AttrDecl = @AttrInstance @RegDecl|@WireDecl|@IntegerDecl
+
+[AttrDecl.inject]
+targets = ["@ModuleItem"]
+
+[AttrDecl]
+is_statement = true
+
+[AttrDecl.parser]
+production = [
+    "@AttrInstance",
+    "@RegDecl|@WireDecl|@IntegerDecl",
+]
+end_case = [
+    "newline",
+]
+
+[AttrDecl.parser.node]
+attrs = "$1"
+decl = "$2"
+
+[AttrDecl.renderer]
+layout = { line = [
+    { ref = "attrs" },
+    " ",
+    { ref = "decl" },
+] }
+
+
+# ============================================================================
+# AttrStmt — 过程体属性语句（(* ... *) 前缀语句，如 (* full_case *) case ...）
+# ============================================================================
+# 过程体内 attribute 实例 + 语句（常见于 (* parallel_case *) case / (* full_case *) case）。
+# 挂载位点：@Stmt（过程体语句入口），与 ModuleItem 的 AttrDecl 互补。
+# 注意：挂 @Stmt 会把 AlwaysStmt/IfStmt 等规则的 body 从 @Stmt（call）传播成
+# (@AttrStmt|@Stmt)（choice）。linter 的 _locate_stmt_body 已支持 choice 内
+# 语句/块 call 的 body 定位（discovery.py），无需改注入位点。
+
+[AttrStmt.inject]
+targets = ["@Stmt"]
+
+[AttrStmt]
+is_statement = true
+
+[AttrStmt.parser]
+production = [
+    "@AttrInstance",
+    "@CtrlStmt|@ProcAssignStmt|@CallStmt|@IfBlock|@IfStmt",
+]
+end_case = [
+    "newline",
+]
+
+[AttrStmt.parser.node]
+attrs = "$1"
+stmt = "$2"
+
+[AttrStmt.renderer]
+layout = { line = [
+    { ref = "attrs" },
+    " ",
+    { ref = "stmt" },
+] }
+
+
+# ============================================================================
+# AttrInstance — (* attr_spec { , attr_spec } *)
+# ============================================================================
+[AttrInstance]
+[AttrInstance.parser]
+production = [
+    "bracket.l_parentheses",
+    "symbol.base.multiple",
+    "@AttrSpecList",
+    "symbol.base.multiple",
+    "bracket.r_parentheses",
+]
+end_case = [
+    "bracket.r_parentheses",
+]
+[AttrInstance.parser.node]
+specs = "$3"
+[AttrInstance.renderer]
+layout = { line = [
+    "(",
+    "*",
+    " ",
+    { ref = "specs" },
+    " ",
+    "*",
+    ")",
+] }
+
+
+# ============================================================================
+# AttrSpecList — 逗号分隔的 attr_spec 列表（(* a, b = 1 *)）
+# ============================================================================
+[AttrSpecList]
+[AttrSpecList.parser]
+production = ["@AttrSpec", "(symbol.base.comma,@AttrSpec)*"]
+[AttrSpecList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[AttrSpecList.renderer]
+layout = { join = ", ", items = "items" }
+
+
+# ============================================================================
+# AttrSpec — 单个属性项: attr_name [ = constant_expression ]
+# 值用 AttrConstPrimary（constant_primary 的实用子集），符合 IEEE A.8.4：
+#   number | 位宽字面量 | 参数/常量标识符 | string
+# 不含普通函数调用/系统函数/非常量选择（标准要求 constant_* 版本）。
+# ============================================================================
+[AttrSpec]
+[AttrSpec.parser]
+production = ["@Identifier", "@AttrValue?"]
+[AttrSpec.parser.node]
+name = "$1"
+value = "$2"
+[AttrSpec.renderer]
+layout = { line = [
+    { ref = "name" },
+    { opt = { group = [
+        " = ",
+        { ref = "value" },
+    ] } },
+] }
+
+[AttrValue]
+inline = true
+[AttrValue.parser]
+production = ["symbol.base.equal", "@AttrConstPrimary"]
+[AttrValue.parser.node]
+value = "$2"
+[AttrValue.renderer]
+layout = { ref = "value" }
+
+
+# ============================================================================
+# AttrConstPrimary — 常量 primary（IEEE A.8.4 constant_primary 实用子集）
+# ============================================================================
+[AttrConstPrimary]
+inline = true
+[AttrConstPrimary.parser]
+production = ["@BitWidthLiteral|@Number|@Identifier|literal.string"]
+[AttrConstPrimary.parser.node]
+value = "$1"
+[AttrConstPrimary.renderer]
+layout = { ref = "value" }

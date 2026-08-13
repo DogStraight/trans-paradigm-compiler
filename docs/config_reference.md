@@ -3,16 +3,16 @@
 ## Three-tier Architecture
 
 ```
-pyv.toml                    Data TOML files              Python consumer
+tpc.toml                    Data TOML files              Python consumer
 ┌─────────────────┐        ┌──────────────────┐         ┌──────────────────┐
-│ [config.xxx]    │──file→ │ [section]         │──→     │ _xxx_cfg: dict   │
-│   key_name      │  section│ key = value       │  config.get()│                 │
-│   file="..."    │  (#sym)│ ...               │         │ def func():      │
+│ [config.xxx]    │──file→ │ [section]        │──→      │ _xxx_cfg: dict   │
+│   key_name      │ section│ key = value      │  config.get()│             │
+│   file="..."    │  (#sym)│ ...              │         │ def func():      │
 │   section=".."  │        └──────────────────┘         │   return _xxx_cfg│
-└─────────────────┘                                      └──────────────────┘
+└─────────────────┘                                     └──────────────────┘
 ```
 
-### Tier 1: `pyv.toml` — Declaration + Addressing
+### Tier 1: `tpc.toml` — Declaration + Addressing
 
 ```toml
 [config.preprocessor]
@@ -32,7 +32,7 @@ expand = { file = "base/_macro.toml", section = "expand", required = false }
 max_iterations = 128
 ```
 
-Pure data, no logic. The `section` field in pyv.toml (`#sym:config`) points here.
+Pure data, no logic. The `section` field in tpc.toml (`#sym:config`) points here.
 
 ### Tier 3: Python Consumer — Module-level Variable + Thin Wrapper
 
@@ -112,7 +112,7 @@ def get_config_refs() -> dict[str, str]:
     return refs
 ```
 
-### Generating pyv.toml entries
+### Generating tpc.toml entries
 
 ```python
 from preprocessor import get_config_refs

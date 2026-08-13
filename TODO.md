@@ -1,29 +1,94 @@
-# TODO — 后置边界问题
+# TODO
 
-> 发现器多层级化 + 两级消歧完成后暴露的边界问题（用户明确：接受误报，边界管理，
-> 此清单后置处理，不阻塞当前全绿状态）。
+> 排序原则（2026-08-11 重排，由"最大缺口"评估导出）：
+> - **主线 = 第二语言（P0）**：验证"语言无关 / forkable"主张是否成立，是最大缺口；
+>   同时带上**开发前置类工程化**（异常层级、调试基础设施）作为支撑。
+> - **工程化拆两类**：开发前置类 → P0；发布收尾类（CI/安装/文档/覆盖率门禁）→ P2，不阻碍功能推进。
+> - **零测试模块先补测试再堆功能**（预处理器 / formatter），避免在无测试地基上叠加。
 
-## linter 边界问题
+## P0 — 第二语言验证（主线，最大缺口）
 
-- [ ] **表达式内运算符后换行（多行 RHS）误报**：`a <= b +\n c;` 中 `+` 后换行被 pratt 视为表达式终止
-  - 根因：`parser/pratt_parser.py` 无 newline/trivia 跳过逻辑（表达式不跨行）
-  - 影响：`a = b +\n c;`、`a <= (b +\n c);` 等运算符后换行被误报 "expected ';' got 'id'"
-  - 方案：pratt 解析时跳过 newline（或 linter 表达式检查预折叠换行），需评估对 parser 主流程影响
-- [ ] **`always @*` 敏感列表误判**：`always @* begin` 中 `@*` 被当 `@(` 期待括号（`test_nested_begin_end` 相关）
-  - 根因：`@` 后 `*`（symbol.base.multiple）与 `@(...)` 的消歧边界
-- [ ] **while/repeat 语句无完整语法规则**：`while`/`repeat` 已定义为关键字（token.toml），
-  - 但 grammar 无对应语句规则（RepeatStmt/WhileStmt），发现器跳过其内部（body 语句仍被发现）
-  - 方案：如需检查 while/repeat 结构，补充对应语法规则（语法扩展，非 linter 改动）
-- [x] **function 有范围头漏检**：`function [7:0] add(...)` 的 `@Range?` 非原子 call 截断判别
-  - 根因：`_feat_token_paths` 对非原子 call（@Range 等在判别点前）返回 None 截断，丢 first 集
-  - **已修复（2026-08-02）**：`_feat_token_paths` 对 first 含 `[` 的可选复杂 call（@Range?）保留
-    epsilon + first 集（可被 Level 1 括号配对跳过）；其他（@ParamOverride? 的 `#(...)`）维持
-    截断走 Level 2。验证：`function [7:0] add` 发现 FuncDecl，normal/errors 全过。
-- [x] **带下标赋值目标漏检**：`data[i] = i;`（for/always 内）的 `data[` 首判别 token 是 `[`
-  - （select），B 类 paths 只认 `=`/`<=`/`(` → 语句不发现
-  - **已修复（2026-08-02）**：Level 1 前瞻遇 `[` 用括号配对跳过区间（`_skip_square`，语言无关，
-    不依赖 `_match_select`）；残缺 `data [i = i` 括号未闭合→跳过失败→保守淘汰不吞错。
-    验证：`data[i] = i` 发现 BlockingAssign，`a[3:0] = b` 亦修复，ModuleInst 无回归。
+### P0.1 前置清理与支撑（工程化·开发前置）
+
+> 现状：`pyproject.toml`（build-system/project/scripts/optional-deps/pytest/coverage）与 LICENSE 已落地；
+> 2026-07-25 质量评估遗留 P0/P1（异常层级、覆盖率门禁）。
+
+- [x] **异常层级统一**：统一异常体系 + 清理 except 吞噬 + TOML 模式验证（2026-07-25 P0 遗留）
+      ——开发新语言前清理，避免新代码踩坑
+      - core/errors.py：TransParadigmError 基类 + ConfigError/GrammarError/LexError/
+        ParseError/TransformError/LintInternalError 子类；ParseError 迁移继承，core.define
+        re-export 保持兼容
+      - config 加载路径（define._load_tpc_meta / config_registry.load_all）→ ConfigError
+      - 语法验证（rule_selector 产生式片段 / define peek / lookahead 入口规则）→ GrammarError；
+        linter 配置缺失 → ConfigError
+      - 清理 component/plugin loader 裸 except Exception: pass → OSError 收紧
+- [x] **调试基础设施**（parser + linter 共用，当前最难调试的两个模块，第二语言开发会大量依赖）：
+      a) 日志分级开关（LOG_TRACE/DEBUG/INFO/WARN/ERROR，`_log_level` 阈值替代空 lambda 替换，
+         修复 `debug_log_file=None` 时 WARN 被吞——parser_core.py `_log_state`/`_log_level`）；
+      b) parser 停点/trace（`set_trace(rule/token_pos)` + `_maybe_trace`，`try_rule_productions`
+         入口按规则名/位置过滤，输出 token_pointer/当前 token/路径——parser_core.py + _production.py；
+         原 `_failure_attempts` 已升级为失败现场 `_fail_sites`，见 failure-report）；
+      c) discovery 节点树 token 区间 dump（`Discovery.dump_nodes`：rule + [start,end) →
+         1-based/0-based 行号——linter/discovery.py）；
+      d) 行号对账工具（`reconcile_line_numbers` / `reconcile_mismatches`——core/debug_report.py）
+
+### P0.2 Tiny C 演示 DSL（第二语言本体）
+
+> 依据 roadmap：语言范畴参照 c4（最小完备内核）+ chibicc（特性增量）；难度中等偏高（工作量型）。
+
+- [ ] **范畴裁剪**：定三件事——①c4 内核 vs 扩展 ②任务拆分顺序（先哪层）③核心渗透预检
+      （先跑最小 lexer 验证）
+- [ ] **分层实现**：lexer → parser → analyzer → transform → renderer 逐层跑通（参照 chibicc 特性增量）
+- [ ] **核心无渗透验收**：全程盯"分水岭"，任何 Verilog 知识进入 core 即暴露并回改
+      （picorv32 修复记录证明核心改动均由 Verilog 缺口驱动，语言无关性从未被系统验证过）
+- [ ] **模型可消费性演示 + walkthrough**：产出"从零搭语言"完整示例（原"自定义 DSL 完整示例"），
+      兼外部贡献者上手参考——展示"语言知识全外部化"能力，降低拿本项目当骨架/改造的入门门槛
+      （当前文档全围绕 Verilog，缺"从零搭语言"的 walkthrough）
+
+### P0.3 渗透清理（第二语言暴露的残留渗透一并处理）
+
+- [ ] **boundary.py 语言渗透消除**：keyword.*→ScopeKind 映射外部化到配置（遵守"不编码语言知识"铁律）
+- [ ] **其他暴露点清理**：第二语言验收中发现的 core/linter/transform 残留 Verilog 知识，记录并清理
+
+## P1 — Verilog 实例完善（插件增强）
+
+### P1.1 先补零测试的债
+
+> 现状：预处理器与 formatter 均零单元测试（逻辑验证靠人工）。
+
+- [ ] **预处理器单元测试**：指令原语/宏展开/ifdef 分支/逆向恢复（后续按部件分文件补充）
+- [ ] **formatter 单元测试**：边界扫描器/分组/品类引擎/passes（后续按部件分文件补充）
+
+### P1.2 预处理器增强
+
+> 现状：已有 define/ifdef/include/undef primitives + `_expand.py`/`_reverse.py`；
+> 已修复嵌套 ifdef inactive 祖先、续行拼接、include 配置化；
+> 行首未知指令当前被 scan_directives 整体删除（跨子系统容错边界）。
+
+- [ ] **管线内宏 token 决议**：行内宏调用在预处理器阶段展开/决议，管线内不再残留宏 token
+      （linter P0 保险措施的前提；当前 e12 靠行内宏调用做 undefined-macro 可达性验证）
+- [ ] **未知/错误指令容错**：行首未知指令从"整体删除"改为可配置策略 + 诊断报告（保留容错）
+- [ ] **带参宏支持**（如 `` `define NAME(a,b) ... ``）：评估参数展开（当前仅文本替换）
+
+### P1.3 格式化插件完善
+
+> 现状：品类系统框架完成（boundary/engine/grouping/passes）；
+> `formatter/tpc.toml` 品类配置仍为注释模板。
+
+- [ ] **品类配置落地**：tpc.toml 启用实际品类（port_dir/declaration/parameter/assignment/
+      genvar_integer/function/task + inst_port handler），替换注释模板
+- [ ] **管线集成验证**：结构路径（Lex→边界扫描→引擎→输出）与主管线共存验证
+
+## P2 — 工程化收尾（发布准备，不阻碍功能推进）
+
+> 现状：`.github/` 为空目录、全库无 `ci.yml`（CI 曾存在后被 `38e2daf` 移除）；缺 CONTRIBUTING/CHANGELOG/API 文档；
+> 建议在第二语言期间同步建立覆盖率基线，防止渗透回归。
+
+- [ ] **覆盖率门禁**：恢复覆盖率测量脚本 + 目标 ≥90%（2026-07-25 P1 遗留）
+- [ ] **恢复 CI**：`.github/workflows/ci.yml`（Windows + Python 3.11/3.12/3.13 矩阵，pytest + coverage）；
+      前置：从 `.gitignore` 移除 `.github/`（当前规则导致 CI 无法被追踪）
+- [ ] **安装可验证**：`pip install -e ".[test]"` 通过（pyproject 已建未验证，依赖管理评估遗留）
+- [ ] **补文档**：CONTRIBUTING、CHANGELOG、API 文档（docs/ 现有 12 文件缺这三项）
 
 ## 设计说明（已落地，供参考）
 

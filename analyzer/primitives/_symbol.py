@@ -60,7 +60,12 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
             continue
 
         if name in current_scope.symbols:
-            analyzer._context.report(f"重复声明 '{name}' 在作用域 '{current_scope.name}'", code="E001")
+            # generate 作用域内：条件生成分支互斥（elaboration 只展开一个），
+            # 同名声明（如各分支实例化同名模块）合法，合并保留首例不报错。
+            if current_scope.kind != "generate":
+                analyzer._context.report(
+                    f"重复声明 '{name}' 在作用域 '{current_scope.name}'", code="E001"
+                )
             continue
 
         attrs: dict = _build_capture_attrs(node, capture)

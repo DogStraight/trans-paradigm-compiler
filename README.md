@@ -1,13 +1,33 @@
-# PyV — configuration-driven compiler frontend
+# TransParadigm — configuration-driven language pipeline
 
 <!--
-Keywords: TOML grammar; configuration-driven parser; recursive descent + Pratt;
-Wadler-Lindig; Doc IR; Verilog; pretty printer; Python; compiler frontend;
-context-sensitive grammar; metaprogramming; language workbench;
-AI-friendly configuration
+Keywords: TOML grammar; configuration-driven pipeline; recursive descent + Pratt;
+Wadler-Lindig; Doc IR; Verilog; pretty printer; linter; preprocessor; Python;
+compiler frontend; context-sensitive grammar; language workbench; DSL extension;
+model-friendly configuration; forkable pipeline
 -->
 
-Write grammar rules in TOML. Parse and format any language with the same config.
+Write language rules in TOML. The whole pipeline — lexer, parser, analyzer,
+transform, renderer — is configurable, forkable, and model-friendly.
+
+## Why TransParadigm
+
+- **Rules are data, not code.** All language specifics live in TOML config files.
+  The engine is a generic skeleton; every stage has a configuration surface.
+- **Forkable, not rewrite.** Each stage can be replaced or reconfigured. Fork
+  the repo to make private, incremental changes to *your* language pipeline —
+  no engine rewrite required.
+- **Domain-DSL evolution.** Add abstractions on top of an existing language
+  (e.g. a custom type system on Verilog) — no second compiler, just extend the
+  pipeline you already have.
+- **Model-friendly.** Onboarding is optimized for model-assisted contributors:
+  entry-point index, verification protocol, known landmines. A contributor with
+  a model can understand, modify, and verify the pipeline cheaply.
+- **Pre-parse token linter.** The linter runs *before* the parser and consumes
+  the raw token stream — not an AST. It reuses the same TOML grammar and part of
+  the parser machinery (Pratt + shared RuleMatcher), so syntax knowledge never
+  drifts between lint and parse, and it can check broken code that would fail
+  AST construction.
 
 ```verilog
 // Define a custom type with roles
@@ -35,12 +55,12 @@ module spi_invoker (
 );
 ```
 
-## Quick start
+## Quick start (dev mode)
 
 ```bash
-pip install pyv-compiler
-pyv format input.v              # format Verilog
-pyv expand input.v              # expand type extensions
+python main.py format input.v   # format Verilog
+python main.py lint input.v     # lint Verilog
+python main.py new component x  # scaffold a new component / plugin
 ```
 
 ## How it works
@@ -51,17 +71,34 @@ Rules are data, not code. All language specifics live in TOML config files. The 
 Source -> preprocessor -> Lexer -> Parser -> Analyze -> Transform -> Renderer -> Output
 ```
 
-Swap config directory = change language. No engine changes.
+Each stage is independently configurable: swap a config directory, replace a
+production, inject a transform plugin — the rest of the pipeline stays intact.
 
 ## Status
 
 - [x] Verilog core subset (module, always, if/case/for, function/task, expressions, instances)
-- [x] Custom type extensions (`type spi { master/slave }` -> port expansion)
+- [x] Configurable pipeline — lexer / parser / analyze / transform / render
+- [x] Custom type extensions (typed_ports: `type spi { master/slave }` -> port expansion)
 - [x] Formatter with Wadler-Lindig Doc IR pretty printing
+- [x] Linter — pre-parse, token-level "reverse parser"; shares grammar & parser infra (31/31 recall, 0 FP)
+- [x] Preprocessor (`` `include `` / `define` / `ifdef` / `undef`)
 - [ ] Error-tolerant formatting mode
-- [ ] Preprocessor (`` `include `` / `define` / `ifdef`)
-- [ ] More language configs
+- [ ] Second-language validation (a minimal DSL proves the "forkable" claim)
+- [ ] Model guide artifact (MODEL_GUIDE.md)
+- [ ] Packaging / CI
 
-Built with Python 3.11+, zero external dependencies.
+Built with Python 3.11+, zero runtime dependencies.
 
-[ROADMAP](./ROADMAP.md) | [Design docs](./docs/)
+## Verification
+
+```bash
+python -m pytest tests/ -q                # 329 unit tests
+python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
+python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
+```
+
+## License
+
+MIT — see [LICENSE](./LICENSE). Fork and adapt freely; private modifications allowed.
+
+[Design docs](./docs/) | [Linter architecture](./docs/linter_architecture.md)

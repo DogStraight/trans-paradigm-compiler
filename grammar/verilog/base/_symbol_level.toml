@@ -88,7 +88,7 @@ symbol = "|"
 arity = 2
 assoc = "left"
 
-# 移位
+# 移位（逻辑与算术，IEEE A.2.5 shift_operator: << >> <<< >>>）
 [[operator]]
 symbol = "<<"
 arity = 2
@@ -96,6 +96,16 @@ assoc = "left"
 
 [[operator]]
 symbol = ">>"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "<<<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">>>"
 arity = 2
 assoc = "left"
 
@@ -155,6 +165,18 @@ position = "prefix"
 
 [[operator]]
 symbol = "^"
+arity = 1
+position = "prefix"
+
+# 归约运算符（一元）：| & （IEEE A.8.1 unary_operator 的 reduction 子集）
+# 注意与二元位或/位与同符号，pratt 按 operand 位置（前缀）vs infix 位置区分。
+[[operator]]
+symbol = "|"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "&"
 arity = 1
 position = "prefix"
 

@@ -27,6 +27,31 @@ from .lookahead import LookaheadTable
 _TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
 
 
+def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
+    """从语法树推导属性对开括号（如 (* ... *)）。
+
+    配置驱动：找 production 以 "(" + "*" 两个纯 token 开头的规则
+    （如 AttrInstance），返回 (开括号 token, 次 token)。无则 None。
+    """
+    for info in tree.values():
+        if not isinstance(info, dict):
+            continue
+        prods = info.get("prods") or []
+        if len(prods) < 2:
+            continue
+        p0, p1 = prods[0], prods[1]
+        if (
+            isinstance(p0, dict)
+            and p0.get("type") == "token"
+            and p0.get("token_type") == "bracket.l_parentheses"
+            and isinstance(p1, dict)
+            and p1.get("type") == "token"
+            and p1.get("token_type") == "symbol.base.multiple"
+        ):
+            return ("bracket.l_parentheses", "symbol.base.multiple")
+    return None
+
+
 class Discovery:
     """发现器：产出自动注册的扁平节点列表。"""
 
@@ -64,6 +89,11 @@ class Discovery:
             for info in tree.values()
             if isinstance(info, dict) and info.get("block_end")
         )
+        # 属性对开括号推导（配置驱动，不硬编码规则名）：找 production 以
+        # "(" + "*" 开头的规则（如 AttrInstance 的 (* ... *)）。_skip_to_end
+        # 据此整体跳过属性对，使带属性的语句（如 (* parallel_case *) case ...）
+        # 边界不被属性内的括号/newline 截断。
+        self._attr_openers = _derive_attr_openers(tree)
         # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
         self._unrecognized: list[LintDiagnostic] = []
 
@@ -76,13 +106,53 @@ class Discovery:
         """本次 discover 期间记录的"未识别语句"诊断。"""
         return list(self._unrecognized)
 
+    def dump_nodes(
+        self,
+        tokens: list[Token],
+        nodes: list[DiscoveredNode] | None = None,
+    ) -> str:
+        """把发现节点树 dump 为文本：rule + [start,end) → 行号。
+
+        行号同时给 1-based（token.line，lexer/parser 惯例）与 0-based
+        （token_span.start.line，LSP 诊断惯例），便于与诊断位置对账。
+        """
+        if nodes is None:
+            nodes = self.discover(tokens)
+        lines: list[str] = []
+
+        def walk(items: list[DiscoveredNode], depth: int) -> None:
+            for n in items:
+                rule = n.rule if isinstance(n.rule, str) else "/".join(n.rule)
+                s = n.start
+                e = max(n.start, n.end - 1)
+                s_line = tokens[s].line if s < len(tokens) else "?"
+                e_line = tokens[e].line if e < len(tokens) else "?"
+                s_span0 = token_span(tokens[s])[0].line if s < len(tokens) else "?"
+                lines.append(
+                    f"{'  ' * depth}{rule} [{n.start},{n.end}) "
+                    f"L{s_line}-{e_line} (span0 L{s_span0})"
+                )
+                walk(n.children, depth + 1)
+
+        walk(nodes, 0)
+        return "\n".join(lines)
+
     def _record_unrecognized(self, tokens: list[Token], i: int) -> None:
-        """记录"未识别语句"诊断：有语句起点特征但无任何已知规则匹配。"""
+        """记录"未识别语句"诊断：有语句起点特征但无任何已知规则匹配。
+
+        诊断 message 附带 token 窗口（前后文），覆盖"涉及上下文才触发"
+        的错误——单点 token 往往无法定位根因。
+        """
+        from core.debug_report import format_token_window
+
         t = tokens[i]
         self._unrecognized.append(
             LintDiagnostic(
                 range=token_span(t),
-                message="unrecognized statement: no grammar rule matches here",
+                message=(
+                    "unrecognized statement: no grammar rule matches here "
+                    f"| {format_token_window(tokens, i)}"
+                ),
                 severity=1,
                 code="phase-unrecognized",
             )
@@ -114,8 +184,40 @@ class Discovery:
                 i += 1
                 continue
 
-            # 括号内容整体跳过（端口列表/参数列表等），避免内部 token 误判
+            # 括号内容：先尝试语句分类——`{` 拼接可作赋值 lvalue（{a,b} = expr; ，
+            # BlockingAssign 的 first 含 bracket.l_curly_bracket，由 keyword_map
+            # 触发），命中即按语句发现；否则整体跳过括号区间（端口/参数列表等）。
+            # 仅对无 block_end 的纯语句规则走语句分支（块规则仍由块分支处理）。
             if t.type in self._bracket_openers:
+                # 属性对 (* ... *)：整体跳过，不注册语句节点。属性是元数据，
+                # 其 body（case/赋值）由后续扫描独立发现——注册 AttrStmt 会因
+                # checker 需匹配跨行 body、边界难定而误报。
+                if (
+                    self._attr_openers
+                    and t.type == self._attr_openers[0]
+                    and self._next_type(tokens, i + 1, end) == self._attr_openers[1]
+                ):
+                    i = self._skip_balanced(tokens, i, end)
+                    continue
+                candidates = self._lookahead.classify(tokens, i, context)
+                if candidates and not (
+                    isinstance(candidates[0], str)
+                    and (self._tree.get(candidates[0], {}) or {}).get("block_end")
+                ):
+                    rule = candidates[0] if len(candidates) == 1 else candidates
+                    e = self._statement_end(tokens, i, candidates[0], end)
+                    if e > i:
+                        nodes.append(
+                            DiscoveredNode(
+                                type="statement",
+                                rule=rule,
+                                start=i,
+                                end=e,
+                                context=context,
+                            )
+                        )
+                        i = e
+                        continue
                 i = self._skip_balanced(tokens, i, end)
                 continue
 
@@ -299,13 +401,21 @@ class Discovery:
         for feat in info.get("prods", []):
             if j >= end or not isinstance(feat, dict):
                 break
-            name = feat.get("name") if feat.get("type") == "call" else ""
+            typ = feat.get("type")
+            name = feat.get("name") if typ == "call" else ""
             if name:
                 tinfo = self._tree.get(name, {})
                 if tinfo.get("is_statement") or tinfo.get("is_block"):
                     return j, end, name
                 # 包装规则穿透：body 起始 = 该 call 匹配起始，入口 = 内部语句名
                 inner = self._inner_stmt_entry(name)
+                if inner:
+                    return j, end, inner
+            elif typ == "choice":
+                # choice 内直接引用语句/块（如传播产生的 (@AttrStmt|@Stmt)）：
+                # body 起始 = choice 起始。entry 仅用于标记，递归由 _discover_range
+                # 独立扫描 [bs, e)，不依赖具体入口名。
+                inner = self._find_stmt_in_feat(feat)
                 if inner:
                     return j, end, inner
             trial: list = []
@@ -440,9 +550,26 @@ class Discovery:
             if t.type in _TRIVIA:
                 i += 1
                 continue
+            # 属性对 (* ... *)：整体跳过（不改变块 depth）。属性后的行尾换行
+            # 也属于属性前缀（body 从下一行开始），一并跳过——否则换行会被
+            # end_case 当语句边界截断（(* x *) 后换行 case 的边界只到属性行）。
+            if (
+                self._attr_openers
+                and t.type == self._attr_openers[0]
+                and self._next_type(tokens, i + 1, n) == self._attr_openers[1]
+            ):
+                i = self._skip_balanced(tokens, i, n)
+                i = self._skip(tokens, i, n)
+                continue
             if t.type in self._block_openers:
                 depth += 1
             elif t.type in self._block_closers:
+                # positive 闭合符（如 keyword.end）使深度归零 → 该 token 就是
+                # 目标块结束符，返回其之后位置。此前缺失此分支：depth 1→0 的
+                # end 被跳过（positive 检查在 depth 更新前），容器边界越过正确
+                # end 延伸到 EOF，把后续语句吞进块体。
+                if t.type in positive and depth <= 1:
+                    return i + 1
                 depth = max(0, depth - 1)
             i += 1
         return n

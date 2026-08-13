@@ -5,7 +5,7 @@
   2. 声明式品类对齐 + 命令式手写 pass
   3. ifdef/else/endif 宏结构保真
 
-通过 pyv.toml [plugins] enabled 激活。
+通过 tpc.toml [plugins] enabled 激活。
 """
 
 from __future__ import annotations

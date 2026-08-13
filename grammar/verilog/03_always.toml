@@ -2,9 +2,18 @@
 # Verilog 语法规则 — always 块 [时序/组合逻辑][可综合]
 # ============================================================================
 # 本文件定义 always 块及其灵敏度列表相关规则：
-#   AlwaysStmt      — always @(…) 过程语句
+#   AlwaysStmt      — always <event_control> <statement> 过程语句
+#   EventControl    — 事件控制分发器（event_control，路由四种形态）
+#   EventCtrlParen  — @ ( event_expression )  括号事件表达式（含 @(*)）
+#   EventCtrlStar   — @*                      自动敏感（无括号）
+#   EventCtrlIdent  — @ event_identifier      单事件标识符（无括号）
 #   SensitivityList — 灵敏度列表（posedge/negedge 或 *）
 #   EdgeSense       — 边沿敏感表达式（posedge clk）
+#
+# 贴合 IEEE 1364-2005 A.6.7（event_control）：
+#   event_control ::= @ event_identifier | @ ( event_expression ) | @* | @ (*)
+#   EventControl 为分发器（choice of calls），按 @ 后内容路由到三种形态
+#   （@(*) 归入 EventCtrlParen，SensitivityList 支持括号内 *）。
 #
 # 依赖: token.toml (keyword.always / keyword.posedge / keyword.negedge /
 #                   symbol.base.at / symbol.base.multiple / symbol.base.comma /
@@ -28,7 +37,8 @@
 # ============================================================================
 # AlwaysStmt — always 过程语句
 # ============================================================================
-# Verilog 的 always 过程语句，敏感列表后的 @Stmt 支持单语句或 begin…end 块。
+# Verilog 的 always 过程语句：always + @EventControl（事件控制）+ @Stmt。
+# 事件控制统一走 EventControl 分发器（标准 event_control 四种形态）。
 # renderer.body.role = "direct" 表示体内容直出（不额外包装）。
 # renderer.override.BeginEnd.tail_break = 2 当体内是 begin…end 时，end 后多空一行。
 
@@ -38,10 +48,7 @@ is_statement = true
 [AlwaysStmt.parser]
 production = [
     "keyword.always",
-    "symbol.base.at",
-    "bracket.l_parentheses",
-    "@SensitivityList",
-    "bracket.r_parentheses",
+    "@EventControl",
     "@Stmt",
 ]
 end_case = [
@@ -49,14 +56,14 @@ end_case = [
 ]
 
 [AlwaysStmt.parser.node]
-sensitivity = "$4"
-body = "$6"
+event_control = "$2"
+body = "$3"
 
 [AlwaysStmt.renderer.layout]
 line = [
-    "always @(",
-    { ref = "sensitivity" },
-    ") ",
+    "always ",
+    { ref = "event_control" },
+    " ",
     { ref = "body" },
 ]
 
@@ -65,6 +72,91 @@ role = "direct"
 
 [AlwaysStmt.renderer.override.BeginEnd]
 tail_break = 2
+
+
+# ============================================================================
+# EventControl — 事件控制分发器
+# ============================================================================
+# 对应标准 event_control，路由三种形态：
+#   @ ( event_expression )  → EventCtrlParen（含 @(*)）
+#   @*                       → EventCtrlStar
+#   @ event_identifier       → EventCtrlIdent
+# 分发器模式：choice of calls（同 CtrlStmt/PrimaryExpr），@ 后内容决定路由。
+
+[EventControl.parser]
+production = [
+    "symbol.base.at",
+    "@EventCtrlParen|@EventCtrlStar|@EventCtrlIdent",
+]
+
+[EventControl.parser.node]
+control = "$2"
+
+[EventControl.renderer.layout]
+line = [
+    "@",
+    { ref = "control" },
+]
+
+
+# ============================================================================
+# EventCtrlParen — @ ( event_expression )
+# ============================================================================
+# 括号事件表达式，如 @(posedge clk)、@(a or b)、@(*)。
+# 括号为必选整体（不拆可选元素，保证配对），灵敏度列表由 @SensitivityList 承接
+# （其 production 支持 * 与 or/, 分隔的边沿表达式）。
+
+[EventCtrlParen.parser]
+production = [
+    "bracket.l_parentheses",
+    "@SensitivityList",
+    "bracket.r_parentheses",
+]
+
+[EventCtrlParen.parser.node]
+sensitivity = "$2"
+
+[EventCtrlParen.renderer.layout]
+line = [
+    "(",
+    { ref = "sensitivity" },
+    ")",
+]
+
+
+# ============================================================================
+# EventCtrlStar — @*
+# ============================================================================
+# 自动敏感（无括号）：@* 后直接跟语句。
+
+[EventCtrlStar.parser]
+production = [
+    "symbol.base.multiple",
+]
+
+[EventCtrlStar.renderer.layout]
+line = [
+    "*",
+]
+
+
+# ============================================================================
+# EventCtrlIdent — @ event_identifier
+# ============================================================================
+# 单事件标识符（无括号）：@clk 后直接跟语句。
+
+[EventCtrlIdent.parser]
+production = [
+    "@Identifier",
+]
+
+[EventCtrlIdent.parser.node]
+ident = "$1"
+
+[EventCtrlIdent.renderer.layout]
+line = [
+    { ref = "ident" },
+]
 
 
 # ============================================================================

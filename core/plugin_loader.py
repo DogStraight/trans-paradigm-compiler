@@ -19,8 +19,9 @@ def _get_component_dir() -> str:
         plugins_dir = os.path.join(root, DEFAULT_RULES_DIR, "plugins")
         if os.path.isdir(plugins_dir):
             return plugins_dir
-    except Exception:
-        pass
+    except OSError:
+        # 仅容忍文件系统级异常；import/配置异常（如 ConfigError）应冒泡而非静默
+        return ""
     return ""
 
 _loaded_components: dict[str, dict[str, Any]] = {}
@@ -29,7 +30,7 @@ _PRIMITIVE_ORDER: list[str] = []
 
 
 def discover_components() -> list[dict[str, Any]]:
-    """Scan plugins/ directories for pyv.toml with [component] section."""
+    """Scan plugins/ directories for tpc.toml with [component] section."""
     comp_dir = _get_component_dir()
     if not comp_dir or not os.path.isdir(comp_dir):
         return []
@@ -38,7 +39,7 @@ def discover_components() -> list[dict[str, Any]]:
         cdir = os.path.join(comp_dir, name)
         if not os.path.isdir(cdir) or name.startswith("_"):
             continue
-        toml_path = os.path.join(cdir, "pyv.toml")
+        toml_path = os.path.join(cdir, "tpc.toml")
         if not os.path.isfile(toml_path):
             continue
         meta = _parse_component_toml(toml_path)
@@ -49,7 +50,7 @@ def discover_components() -> list[dict[str, Any]]:
 
 
 def _parse_component_toml(path: str) -> dict[str, Any] | None:
-    """Parse plugin pyv.toml's [grammar]/[analyzer]/[transform] sections."""
+    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform] sections."""
     import tomllib
 
     with open(path, "rb") as f:

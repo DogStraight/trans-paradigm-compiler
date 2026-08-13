@@ -1,4 +1,4 @@
-"""PyV Linter — 共享 TOML 语法的轻量错误扫描器。"""
+"""TransParadigm Linter — 共享 TOML 语法的轻量错误扫描器。"""
 
 from dataclasses import dataclass, field, asdict
 
@@ -18,7 +18,7 @@ class LintDiagnostic:
     range: tuple[Position, Position]  # (start, end)
     severity: int = 1                 # 1=Error
     code: str = "parse-error"
-    source: str = "pyv-lint"
+    source: str = "tpc-lint"
     message: str = ""
 
 

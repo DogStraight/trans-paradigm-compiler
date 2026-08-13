@@ -1,13 +1,13 @@
 *.log
 .vscode
 .ruff_cache
-verilog/tests/*/gen/
-verilog/tests/*/ast/
-verilog/tests/*/symbols/
-verilog/tests/*/lex/
-verilog/.cache/*
-verilog/output/
-verilog/test_report.json
+.pytest_cache/
+tests/e2e/samples/*/gen/
+tests/e2e/samples/*/ast/
+tests/e2e/samples/*/symbols/
+tests/e2e/samples/*/lex/
+tests/e2e/samples/*/trans_callback/
+tests/e2e/samples/*/.fidelity_cache.json
 __pycache__
 */__pycache__
 parser_debug.log
@@ -16,3 +16,5 @@ parser_baseline/
 _test_*.py
 .github/
 *.egg-info/
+# 管线运行临时输出
+/tmp/

@@ -1,0 +1,17 @@
+{
+    "//": "TransParadigm Compiler — project configuration.",
+    "//": "grammar: path to the grammar package folder containing tpc.toml.",
+    "grammar": "grammar/verilog",
+    "pipeline": {
+        "stages": [
+            "lex",
+            "lint",
+            "parse",
+            "normalize",
+            "analyze",
+            "transform",
+            "render"
+        ],
+        "default_test": "led_blinker"
+    }
+}

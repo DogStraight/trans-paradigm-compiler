@@ -2,6 +2,7 @@
 
 from typing import Any
 from core.define import Token, GrammarRule
+from core.errors import GrammarError
 from ._constants import IDENTIFIER_TOKEN_TYPE
 
 
@@ -294,12 +295,12 @@ def analyze_production_features(production: str) -> dict[str, Any] | None:
         if _RE_TOKEN.match(s):
             return {"type": "token", "token_type": s}
 
-        raise ValueError(f"无效的产生式片段: {s}")
+        raise GrammarError(f"无效的产生式片段: {s}")
 
     try:
         return build_tree(production)
     except Exception as e:
-        raise Exception(f"分析产生式失败 {production}: {str(e)}")
+        raise GrammarError(f"分析产生式失败 {production}: {str(e)}") from e
 
 
 if __name__ == "__main__":

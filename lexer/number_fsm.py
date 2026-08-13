@@ -93,6 +93,9 @@ class NumberFSM:
         "-": "sign",
         "x": "xX",
         "X": "xX",
+        "z": "xX",
+        "Z": "xX",
+        "?": "xX",
         "b": "bB",
         "B": "bB",
         "o": "oO",
@@ -168,40 +171,47 @@ class NumberFSM:
         (HEX, "bin_digit"): HEX,
         (HEX, "oct_digit"): HEX,
         (HEX, "hex_letter"): HEX,
+        (HEX, "xX"): HEX,
         (HEX, "bB"): HEX,  # b=11
         (HEX, "dD"): HEX,  # d=13
         (HEX, "eE"): HEX,  # e=14
         (HEX, "underscore"): HEX,
-        # BIN
+        # BIN（x/z/? 也是合法二进制基值，如 4'b1x0z）
         (BIN, "bin_digit"): BIN,
+        (BIN, "xX"): BIN,
         (BIN, "underscore"): BIN,
         # OCT
         (OCT, "oct_digit"): OCT,
+        (OCT, "xX"): OCT,
         (OCT, "underscore"): OCT,
         # AFTER_QUOTE
         (AFTER_QUOTE, "dD"): VERILOG_DEC_VALUE,
         (AFTER_QUOTE, "bB"): VERILOG_BIN_VALUE,
         (AFTER_QUOTE, "hH"): VERILOG_HEX_VALUE,
         (AFTER_QUOTE, "oO"): VERILOG_OCT_VALUE,
-        # VERILOG_DEC_VALUE
+        # VERILOG_DEC_VALUE（x/z/? 也合法，如 8'dx）
         (VERILOG_DEC_VALUE, "digit"): VERILOG_DEC_VALUE,
         (VERILOG_DEC_VALUE, "bin_digit"): VERILOG_DEC_VALUE,
         (VERILOG_DEC_VALUE, "oct_digit"): VERILOG_DEC_VALUE,
+        (VERILOG_DEC_VALUE, "xX"): VERILOG_DEC_VALUE,
         (VERILOG_DEC_VALUE, "underscore"): VERILOG_DEC_VALUE,
-        # VERILOG_BIN_VALUE
+        # VERILOG_BIN_VALUE（x/z/? 合法，如 32'bx / 4'b1?0）
         (VERILOG_BIN_VALUE, "bin_digit"): VERILOG_BIN_VALUE,
+        (VERILOG_BIN_VALUE, "xX"): VERILOG_BIN_VALUE,
         (VERILOG_BIN_VALUE, "underscore"): VERILOG_BIN_VALUE,
         # VERILOG_HEX_VALUE（合法十六进制字符：0-9, a-f, A-F + 下划线）
         (VERILOG_HEX_VALUE, "digit"): VERILOG_HEX_VALUE,
         (VERILOG_HEX_VALUE, "bin_digit"): VERILOG_HEX_VALUE,
         (VERILOG_HEX_VALUE, "oct_digit"): VERILOG_HEX_VALUE,
         (VERILOG_HEX_VALUE, "hex_letter"): VERILOG_HEX_VALUE,
+        (VERILOG_HEX_VALUE, "xX"): VERILOG_HEX_VALUE,
         (VERILOG_HEX_VALUE, "bB"): VERILOG_HEX_VALUE,  # b=11
         (VERILOG_HEX_VALUE, "dD"): VERILOG_HEX_VALUE,  # d=13
         (VERILOG_HEX_VALUE, "eE"): VERILOG_HEX_VALUE,  # e=14
         (VERILOG_HEX_VALUE, "underscore"): VERILOG_HEX_VALUE,
-        # VERILOG_OCT_VALUE
+        # VERILOG_OCT_VALUE（x/z/? 合法，如 8'ox）
         (VERILOG_OCT_VALUE, "oct_digit"): VERILOG_OCT_VALUE,
+        (VERILOG_OCT_VALUE, "xX"): VERILOG_OCT_VALUE,
         (VERILOG_OCT_VALUE, "underscore"): VERILOG_OCT_VALUE,
     }
 
@@ -233,6 +243,7 @@ class NumberFSM:
         # 初始接受位置：如果初始状态可接受，则至少包含第一个字符
         last_accept = start_pos + 1 if state in cls._ACCEPTING else -1
         prev_underscore = False
+        after_space = False
 
         while pos < len(text):
             ch = text[pos]
@@ -247,7 +258,14 @@ class NumberFSM:
                 cls.VERILOG_OCT_VALUE,
             } and (ch == " " or ch == "\t"):
                 pos += 1
+                after_space = True
                 continue
+            # 跨空格不允许 '?' 基值：数字后的 '?'（带空格）是三元运算符而非基值
+            # （如 2'b00 ? a : b）。'?' 必须紧跟数字（如 4'b1?0）才视为基值；
+            # x/z 仍允许跨空格（如 32'h x）。
+            if after_space and ch == "?":
+                break
+            after_space = False
             nxt = fsm.next_state(state, ch)
             if nxt is None:
                 break

@@ -1,6 +1,6 @@
 # Component System
 
-Components are self-contained units that extend PyV's capabilities for a specific language feature. Each component bundles:
+Components are self-contained units that extend TransParadigm's capabilities for a specific language feature. Each component bundles:
 
 - **Grammar rules** (TOML) — syntax definitions for the feature
 - **Analyzer primitives** (Python) — semantic analysis during AST traversal
