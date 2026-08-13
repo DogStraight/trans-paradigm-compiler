@@ -1,8 +1,9 @@
 """
-有限状态机驱动的数字字面量解析器（配置表版本）。
+数字字面量解析器（旧实现，硬编码 Verilog 形态）。
 
-使用通用 FSM 引擎 + 转移表，易于维护和扩展。
-所有测试通过。
+⚠ 仅作**无配置回退路径**：语言包未声明 `lexer.number` 时由 main_lexer 调用。
+  配置驱动的新实现见 `lexer/number_gen.py`（声明 → FSM 转移表）+
+  `lexer/number_runner.py`（执行入口），语言形态由 `_number.toml` 提供。
 """
 
 from typing import Callable

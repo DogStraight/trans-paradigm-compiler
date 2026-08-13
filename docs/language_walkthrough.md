@@ -74,8 +74,12 @@ while = "while"
 ...
 ```
 
-**验证**：`Lexer(rules_dir="grammar/c4")` tokenize 一段样例，检查数字（十/十六/八
-进制由 `NumberFSM` 处理，C 的 `0x1F` 兼容）、字符/字符串、运算符、注释。
+**验证**：`Lexer(rules_dir="grammar/c4")` tokenize 一段样例，检查数字、字符/字符串、
+运算符、注释。
+
+> 数字形态由配置驱动（P2.1）：`base/_number.toml` 声明 `[[number.based]]` 形态，
+> 由 `lexer/number_gen.py` 编译为 FSM、`lexer/number_runner.py` 执行。
+> `lexer/number_fsm.py` 仅是**无配置时的回退路径**（旧实现）。
 
 ---
 
