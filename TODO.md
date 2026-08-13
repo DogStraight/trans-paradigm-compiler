@@ -47,8 +47,13 @@
 
 ### P0.3 渗透清理（第二语言暴露的残留渗透一并处理）
 
-- [ ] **boundary.py 语言渗透消除**：keyword.*→ScopeKind 映射外部化到配置（遵守"不编码语言知识"铁律）
-- [ ] **其他暴露点清理**：第二语言验收中发现的 core/linter/transform 残留 Verilog 知识，记录并清理
+- [x] **boundary.py 语言渗透消除**：ScopeKind 从规则自身 `analyzer.scope.kind` 声明推导，
+      boundary.py 不硬编码任何 keyword.* / 规则名 / 结构类别（遵守"不编码语言知识"铁律）
+      - 为 BeginEnd/AlwaysStmt/InitialStmt/ForLoop/CaseStmt 补 `analyzer.scope` kind 声明
+      - 只接受结构边界类别（ScopeKind 枚举内的 kind），类型系统 kind（如 TypeDecl 的 "type"）跳过
+      - 附带修复：core/config_registry.py 插件 tpc.toml 的 bare data 声明缺失 bug
+- [x] **其他暴露点清理**：第二语言验收中发现的 core/linter/transform 残留 Verilog 知识，
+      记录并清理——grep 确认核心/linter/transform 源码无残留硬编码逻辑（仅注释示例）
 
 ## P1 — Verilog 实例完善（插件增强）
 
@@ -80,6 +85,47 @@
 - [ ] **管线集成验证**：结构路径（Lex→边界扫描→引擎→输出）与主管线共存验证
 
 ## P2 — 工程化收尾（发布准备，不阻碍功能推进）
+
+### P2.0 机制可理解性（配置生命周期 + 表达式机制，第二语言过程暴露）
+
+> 来源：c4 加入过程反思（2026-08-12）——`declare_cfg` 注册制配置的加载时序反直觉，
+> 第二语言过程踩了 3 个修复（walkthrough #1/#2/#3）；表达式系统含多处隐式约定。
+> 原则：先评估/文档化，太难理解则改机制。
+
+- [ ] **配置生命周期评估 + 文档化**：declare_cfg（import 期注册）/ load_all（load 后推送）/
+      load_language（替换全部声明）三阶段时序——模块变量 import 时是默认值、load 后才被推入，
+      是"必须先 import 全部模块再 load_all""换语言后新 import 拿到旧默认值"等怪象的根源
+      - 先评估机制简化（显式 config 对象注入 / 消除"import 期默认值"陷阱），给出成本-收益结论
+      - 若保持注册制：写独立"配置生命周期"说明（时序图 + 多语言切换后果 + 常见坑），walkthrough 补一节
+- [ ] **表达式系统隐式约定文档化**：Pratt + `is_atom` + `[[operator]]` 的隐式规则——
+      operator 数组顺序 = 优先级低→高、atom 规则"长 production 优先"、三元 `arity=3`+`second`、
+      一元与二元同符号靠 `position` 区分——walkthrough 补"隐式约定清单"节
+- [ ] **组件协议文档**：插件层协议说明（`@register_plugin` / transform 钩子 / analyzer 原语 /
+      setup_grammar 组件加载）——模型写插件（Python）靠它，避免从既有插件猜协议
+- [ ] **c4 定位为最小语言包模板**：把 c4 正式作为"模型代写新语言"的起步模板
+      （最小完整语言包 + 逐层指南），模型在其上做增量改造，而非从零生成
+      （补强完成后"配置+插件"对模型从"能仿写"到"可代写"）
+
+### P2.1 词法层数字形态配置化（NumberFSM 去硬编码）
+
+> 来源：2026-08-12 盲区确认——数字字面量形态是语言知识（进制前缀/位宽语法/下划线/后缀/科学计数），
+> 现在硬编码在 lexer/number_fsm.py（15 态全局单例 FSM），所有语言共享同一个"Verilog+C 混合"状态机。
+
+- [ ] **数字形态配置化**：语言包声明数字形态（进制前缀、位宽 `N'b/h/d/o`、unsized `'d`、x/z/? 基值语义、
+      下划线、小数/科学计数、后缀），替代硬编码 FSM
+      - 现状：c4 解析 `0x1F` 是"碰巧兼容"（FSM 自带 C 前缀），非 c4 声明；`verify_verilog_range`
+        也是 Verilog 特有——词法层最底层仍有语言渗透，与 P0.3 boundary 同族
+      - 方案：数字形态声明 → 生成 FSM 或形态表（语言无关引擎 + 语言特定形态配置）
+      - 前置：先补数字形态测试基线（现有 tests/lexer 覆盖不区分语言），再动 FSM
+      - **形态模型对齐标准**：IEEE 1364-2005 A.8.7——统一骨架「形态 = `[size] base value`」，
+        base = `'` + 可选 `s`(signed) + 进制字母(`d/b/o/h`)，value = 该进制 digit 集(含 `x/z/?`)，
+        size 非零开头可选（unsized = size 空）；real_number 独立（`unsigned [. unsigned] exp [sign] unsigned`）。
+        C 的 `0x`/浮点/科学计数 = 无 size 形态 + real 形态的子集变体，同一 schema 表达两族
+      - **已知缺陷（重写 FSM 时一并修，当前不修）**：①signed base `'s` 缺失——`16'sd100` 被错切为
+        `16`+`'`+`sd100`（AFTER_QUOTE 无 s 转移）；②`test_signed_literal` 断言空洞（只查 type 不断言
+        content/token 数，假阳性掩盖①）；③`0'b1` 被接受（标准 size 必须 non_zero 开头）；④下划线行为
+        已验证与标准一致（`1__2`/`_1`/`1_` 正确拒绝），无需处理
+      - **测试基线要求**：按语言固化**完整 token 序列 + content**（不只类型），signed 位宽用例必须含断言
 
 > 现状：`.github/` 为空目录、全库无 `ci.yml`（CI 曾存在后被 `38e2daf` 移除）；缺 CONTRIBUTING/CHANGELOG/API 文档；
 > 建议在第二语言期间同步建立覆盖率基线，防止渗透回归。

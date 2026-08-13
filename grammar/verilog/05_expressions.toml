@@ -55,6 +55,24 @@ ref = "value"
 
 
 # ============================================================================
+# StringLiteral — 字符串字面量
+# ============================================================================
+# 双引号/单引号包裹的字符串，如 "lui"、""。用于 ASCII 指令名等（picorv32 的
+# new_ascii_instr = "lui"; 赋值即此形态）。作为表达式原子参与赋值/拼接/参数。
+# 此前缺失导致字符串 RHS 被静默丢弃（渲染出 `x = ;`）。
+
+[StringLiteral.parser]
+is_atom = true
+production = ["literal.string"]
+
+[StringLiteral.parser.node]
+value = "$1"
+
+[StringLiteral.renderer.layout]
+ref = "value"
+
+
+# ============================================================================
 # Identifier — 标识符
 # ============================================================================
 # Verilog 标识符，匹配 [a-z_A-Z][a-z_A-Z0-9]*。
@@ -204,7 +222,7 @@ line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"]
 
 [PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@SelectExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
+    "@BitWidthLiteral|@Number|@StringLiteral|@SelectExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
 

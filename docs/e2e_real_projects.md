@@ -8,10 +8,12 @@
 
 | 样本 | 来源 | 量级 | 状态 |
 |------|------|------|------|
-| `picorv32`（`tests/e2e/samples/real/ref/ref_picorv32.v`） | [PicoRV32](https://github.com/cliffordwolf/picorv32) | 2746 行 / 8 模块 / 展开 2705 行 | 已跑通全管线：run_pipeline success，8 模块渲染，lint 0 |
+| `picorv32`（`tests/e2e/samples/real/ref/ref_picorv32.v`） | [PicoRV32](https://github.com/cliffordwolf/picorv32) | 2746 行 / 8 模块 / 展开 2705 行 | 全量管线收口：8 模块渲染、post-lint 0、占位符 0、保真度 0.8775 |
 
 picorv32 覆盖：多模块、宏条件编译（25 条件块/14 条件宏）、generate-if 互斥分支、
-属性语句（`(* parallel_case *)`）、嵌套 case、三元/拼接/归约/`>>>`/`32'bx`、task、localparam。
+属性语句（`(* parallel_case *)`）、嵌套 case、三元/拼接/归约/`>>>`/`32'bx`、task、localparam、
+裸任务调用（`empty_statement;`）、字符串字面量赋值（`new_ascii_instr = "lui";`）、
+嵌套 `ifdef`（`RISCV_FORMAL` 块内嵌 `TESTBUG_003` 等）。
 
 ## 推荐候选（按测试顺序）
 
@@ -69,7 +71,8 @@ picorv32 覆盖：多模块、宏条件编译（25 条件块/14 条件宏）、g
 ## 现状与下一步
 
 - [x] picorv32 样本就位、跑通全管线
-- [ ] `run_all_tests.py` real 分组接线（白名单 + `expand_macros`/`predefined` 处理）
+- [x] `run_all_tests.py` real 分组接线（real 组强制 `expand_macros`，参与保真度比较，基线 0.8775）
+- [x] 保真度回归守卫 `tests/e2e/test_real_fidelity.py`（7 断言：8 module / post-lint 0 / 无占位符 / 无 WARN / 保真度阈值 / 关键构造保留）
 - [ ] SERV 拉取摸底
 - [ ] uart16550 拉取摸底
 - [ ] ZipCPU 拉取摸底（大样本，优先级最低）

@@ -7,6 +7,8 @@ inline_comment.py — 基于锚点的注释回注
 行内注释由 parse_token（锚点路径）收集。
 """
 
+import re
+
 
 def restore_comments(rendered: str, comment_anchors: list[dict]) -> tuple[str, int]:
     """
@@ -80,7 +82,32 @@ def restore_comments(rendered: str, comment_anchors: list[dict]) -> tuple[str, i
     return "\n".join(lines), len(unique)
 
 
-def restore_line_comments(rendered: str, anchors: list[dict]) -> tuple[str, int]:
+def _interp_tpc_line(src_line: int, rendered_tpc_src: dict, rendered_tpc: dict) -> int:
+    """用已渲染 tpc marker（源行号 → 渲染行号）分段线性插值 src_line 的渲染位置。
+
+    tpc marker 大多数随 AST 渲染（位置精确），少数被 production 吞掉走此回插；
+    被吞 marker 的渲染位置用源行号最接近的已渲染 marker 线性插值（模块内行距
+    接近线性），比裸源行号窗口（模块边界偏移 ±150）可靠。
+    """
+    pairs = sorted((s, rendered_tpc[m]) for m, s in rendered_tpc_src.items())
+    if not pairs:
+        return src_line
+    prev = [p for p in pairs if p[0] <= src_line]
+    nxt = [p for p in pairs if p[0] > src_line]
+    if prev and nxt:
+        p_src, p_r = prev[-1]
+        n_src, n_r = nxt[0]
+        return int(p_r + (src_line - p_src) * (n_r - p_r) / max(1, n_src - p_src))
+    if prev:
+        p_src, p_r = prev[-1]
+        return p_r + (src_line - p_src)
+    n_src, n_r = nxt[0]
+    return n_r - (n_src - src_line)
+
+
+def restore_line_comments(
+    rendered: str, anchors: list[dict], tpc_src_map: dict | None = None
+) -> tuple[str, int]:
     """基于锚点的行注释回插。
 
     工作原理：行注释出现在 source 中某两行之间，无法挂到 AST 节点 sub_node。
@@ -110,27 +137,65 @@ def restore_line_comments(rendered: str, anchors: list[dict]) -> tuple[str, int]
             unique.append(c)
 
     lines = rendered.split("\n")
+    # 已作为整行渲染存在的注释（strip 缩进比较）：随 AST 渲染（未被 production
+    # skip 吞掉），不再回插——否则同一注释被"AST 渲染 + line_comment 回插"双通道
+    # 重复（宏锚/条件占位 marker 在块内容易触发 parser 回溯双收集）。
+    existing_lines: set[str] = {ln.strip() for ln in lines}
     inserted: set[int] = set()  # 已插入注释的行偏移，防止位置冲突
+
+    # 已随 AST 渲染的 tpc: marker（位置精确）——作为被吞 marker 的插值锚点
+    rendered_tpc: dict[str, int] = {}  # marker -> render_line(1-based)
+    for i, l in enumerate(lines, 1):
+        m = re.search(r"// <(tpc:[^>]+)>", l)
+        if m:
+            rendered_tpc[m.group(1)] = i
+    rendered_tpc_src: dict[str, int] = {}
+    if tpc_src_map:
+        rendered_tpc_src = {
+            k: tpc_src_map[k] for k in rendered_tpc if k in tpc_src_map
+        }
 
     for c in sorted(unique, key=lambda x: x["line"]):
         text = c["text"]
         anchor = c["anchor"]
         src_line = c["line"]
+        is_tpc = "tpc:" in text
+
+        if text in existing_lines:
+            continue
 
         if not anchor:
             continue
 
-        start = max(0, src_line - 1 - 1)  # line-2
-        end = min(len(lines), src_line + 2)  # line+2
+        if is_tpc:
+            # 被吞 tpc marker：用已渲染 marker 分段线性插值定位
+            center = _interp_tpc_line(src_line, rendered_tpc_src, rendered_tpc)
+            start = max(0, center - 5)
+            end = min(len(lines), center + 5)
+        else:
+            start = max(0, src_line - 1 - 1)  # line-2
+            end = min(len(lines), src_line + 2)  # line+2
 
         best_idx = -1
 
-        for i in range(start, end):
-            if i in inserted:
-                continue
-            if anchor in lines[i]:
-                best_idx = i
-                break
+        if is_tpc:
+            # tpc marker anchor 用词边界匹配：避免 'cpuregs' 误匹配
+            # 'cpuregs_wrdata'（子串，如 TESTBUG_001 被插到 case 分支），
+            # 只匹配完整 token 出现（'cpuregs[' 等）。
+            anchor_re = re.compile(rf"\b{re.escape(anchor)}\b")
+            for i in range(start, end):
+                if i in inserted:
+                    continue
+                if anchor_re.search(lines[i]):
+                    best_idx = i
+                    break
+        else:
+            for i in range(start, end):
+                if i in inserted:
+                    continue
+                if anchor in lines[i]:
+                    best_idx = i
+                    break
 
         if best_idx >= 0:
             # 判断锚点是否在行内容中间（非行首首个 token）

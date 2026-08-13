@@ -45,6 +45,9 @@
 [AlwaysStmt]
 is_statement = true
 
+[AlwaysStmt.analyzer]
+scope = { kind = "always" }
+
 [AlwaysStmt.parser]
 production = [
     "keyword.always",

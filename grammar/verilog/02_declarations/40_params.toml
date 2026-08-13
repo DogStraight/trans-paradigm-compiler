@@ -21,7 +21,8 @@ is_statement = true
 [LocalParamDecl.parser]
 production = [
     "keyword.localparam",
-    "(keyword.integer|@Range)?",
+    "keyword.integer?",
+    "@Range?",
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
@@ -30,7 +31,9 @@ end_case = [
 ]
 
 [LocalParamDecl.parser.node]
-items = "$3"
+param_integer = "$2"
+param_range = "$3"
+items = "$4"
 
 [LocalParamDecl.analyzer.symbol]
 kind = "localparam"
@@ -39,6 +42,15 @@ name_attr = "items.name"
 [LocalParamDecl.renderer.layout]
 line = [
     "localparam ",
+    { opt = { line = [
+    { ref = "param_integer" },
+    " ",
+] } },
+    { opt = { line = [
+    "[",
+    { ref = "param_range" },
+    "] ",
+] } },
     { ref = "items" },
     ";",
 ]

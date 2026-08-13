@@ -42,7 +42,7 @@ def discover_tests(
     """Discover test files. Returns list of (name, full_path, group)."""
     tests_dir = os.path.join(base_dir, "samples")
     cases = []
-    groups = [group_filter] if group_filter else ["normal", "errors", "warning", "transform"]
+    groups = [group_filter] if group_filter else ["normal", "errors", "warning", "transform", "real"]
     for group in groups:
         ref_dir = os.path.join(tests_dir, group, "ref")
         if not os.path.isdir(ref_dir):
@@ -140,11 +140,13 @@ def run_all(
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
         try:
+            # real 组（真实工业项目）依赖宏展开（picorv32 的条件编译），强制开启
+            effective_expand = expand_macros or group == "real"
             result: dict[str, Any] = run_pipeline_on_source(
                 source=source,
                 input_path=path,
                 out_dir=out_dir,
-                expand_macros=expand_macros,
+                expand_macros=effective_expand,
                 inline_comments=inline_comments,
                 quiet=True,
                 analyzer_enabled=not no_semantic,
@@ -163,13 +165,14 @@ def run_all(
         err_msg = result["error"] or ""
         post_lint_errors = result.get("post_lint_errors", 0)
 
-        # ── 文本保真度比较（normal / transform 组）────────────────
+        # ── 文本保真度比较（normal / transform / real 组）────────────────
         # normal 组：ref = 输入文件，保真度 = 管线输出对输入的保留程度
         # transform 组：ref = 正确展开后的输出，保真度 = 管线输出对展开预期的匹配程度
+        # real 组：ref = 真实项目输入，保真度 = 输出对输入的 token 级保留程度
         fidelity = 1.0  # 默认值
         fidelity_dropped = False
         prev_display = fidelity  # 默认值，供块外引用
-        if group in ("normal", "transform") and success:
+        if group in ("normal", "transform", "real") and success:
             base_name = name.replace("ref_", "", 1) if name.startswith("ref_") else name
             gen_path = os.path.join(out_dir, "gen", f"gen_{base_name}.v")
             if os.path.exists(gen_path):
@@ -203,7 +206,7 @@ def run_all(
         elif group == "warning":
             passed = success
         else:
-            # normal/transform 组：管线成功即通过，但保真度下降算 FAIL
+            # normal/transform/real 组：管线成功即通过，但保真度下降算 FAIL
             passed = success and not fidelity_dropped
 
         if passed:
@@ -286,8 +289,8 @@ if __name__ == "__main__":
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
     name_filter = pos_args[1] if len(pos_args) >= 2 else None
 
-    if group_filter and group_filter not in ("normal", "errors", "warning", "transform"):
-        print(f"[error] unknown group: {group_filter} (expected normal|errors|warning|transform)")
+    if group_filter and group_filter not in ("normal", "errors", "warning", "transform", "real"):
+        print(f"[error] unknown group: {group_filter} (expected normal|errors|warning|transform|real)")
         sys.exit(1)
     if name_filter:
         name_filter = f"ref_{name_filter}".replace(".v", "")

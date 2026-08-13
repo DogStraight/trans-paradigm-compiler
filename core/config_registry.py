@@ -212,6 +212,13 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
                                     None,
                                 )
                             )
+                        else:
+                            # 非文件式配置（bare data）——插件 tpc.toml 里也可能有
+                            # 裸配置（[namespace].foo 点路径键，如插件自身的开关项）。
+                            # 缺此分支会导致插件裸配置从未注册（历史 bug）。
+                            declarations.append(
+                                (config_key, "", None, "", False, "", spec)
+                            )
     return declarations
 
 

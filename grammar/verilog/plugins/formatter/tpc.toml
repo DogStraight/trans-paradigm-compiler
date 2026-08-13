@@ -10,3 +10,6 @@
 # family = "port_dir"
 # align_port_names = true
 # break_distance = 3
+
+# 结构边界映射（token/规则 → 结构类别）**不从本文件配置**——由各规则自身的
+# [RuleName.analyzer] scope = { kind = "..." } 声明，boundary.py 从语法规则推导。

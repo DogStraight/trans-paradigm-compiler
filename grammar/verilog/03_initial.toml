@@ -21,6 +21,9 @@
 [InitialStmt]
 is_statement = true
 
+[InitialStmt.analyzer]
+scope = { kind = "initial" }
+
 [InitialStmt.parser]
 production = [
     "keyword.initial",

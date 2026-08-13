@@ -1,9 +1,14 @@
-"""Macro reversal — restore `` `NAME `` from expanded values.
+"""Macro reversal — 统一位置桥（锚 + 残片）回插。
 
-Uses sync-word restoration (pure-text, no token dependency).
+对外统一入口，内部委托给 _bridge.restore_anchors。
+兼容旧调用格式：
+- protect_and_reverse 接受统一锚列表；旧 sync 记录（含 body/macro/sync 字段、
+  无 mode）自动包装为 mode="sync" 锚。
+- restore_condition_blocks 接受 {marker → 原文段} 占位 dict，内部转为 line 锚。
 """
 
 from core.config_registry import declare_cfg
+from ._bridge import restore_anchors
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.reverse
@@ -17,97 +22,56 @@ _reverse_cfg: dict = declare_cfg(
 )
 
 
-def _restore_lines(
-    rendered: str,
-    prefix: str,
-    restoration_stack: list[dict],
-) -> str:
-    """同步词验证的宏还原。
-
-    每条记录独立从头扫描，找到 body 后检查前 N 字符内是否有同步词。
-    同步词不匹配 → 跳过找下一个 body。
-    匹配后替换文本，下一条记录从头扫（已替换的位置不再有 body）。
-
-    参数来自配置 preprocessor.reverse（_macro.toml → [reverse]）。
-    """
-    sync_window_base = _reverse_cfg.get("sync_window_base", 15)
-    sync_window_pad = _reverse_cfg.get("sync_window_pad", 5)
-    offset_tolerance = _reverse_cfg.get("offset_tolerance", 2)
-
-    result = rendered
-
-    for entry in restoration_stack:
-        body = entry["body"]
-        macro = entry["macro"]
-        sync = entry.get("sync", "")
-        sync_nth = entry.get("sync_nth", 1)
-        offset = entry.get("offset", 0)
-
-        pos = 0
-        while True:
-            pos = result.find(body, pos)
-            if pos < 0:
-                break
-
-            if sync:
-                window = max(sync_window_base, len(sync) + offset + sync_window_pad)
-                before = result[max(0, pos - window) : pos]
-                count = 0
-                sync_idx = -1
-                matched = False
-                while True:
-                    sync_idx = before.find(sync, sync_idx + 1)
-                    if sync_idx < 0:
-                        break
-                    count += 1
-                    if count == sync_nth:
-                        real_sync_end = max(0, pos - window) + sync_idx + len(sync)
-                        actual_offset = pos - real_sync_end
-                        if abs(actual_offset - offset) <= offset_tolerance:
-                            matched = True
-                            break
-                if not matched:
-                    pos += 1
-                    continue
-
-            # 匹配成功：function-like 宏恢复为 `NAME(args) 形态，object-like 恢复为 `NAME
-            if entry.get("is_func"):
-                replacement = f"{prefix}{macro}({entry.get('args', '')})"
-            else:
-                replacement = f"{prefix}{macro}"
-            result = result[:pos] + replacement + result[pos + len(body) :]
-            break
-
-    return result
+def _normalize_anchors(anchors: list[dict] | None) -> list[dict]:
+    """旧 sync 记录（restoration_stack 格式）统一包装为锚。"""
+    if not anchors:
+        return []
+    out = []
+    for entry in anchors:
+        if isinstance(entry, dict) and "mode" in entry:
+            out.append(entry)
+        else:
+            # 旧格式：{macro, body, sync, sync_nth, offset, is_func, args}
+            e = dict(entry)
+            e.setdefault("mode", "sync")
+            out.append(e)
+    return out
 
 
 def protect_and_reverse(
     rendered: str,
     prefix: str = "`",
     restoration_stack: list[dict] | None = None,
+    *,
+    anchors: list[dict] | None = None,
 ) -> str:
-    """Reverse macro expansion in rendered output.
+    """按统一锚列表回插还原（锚 + 残片消耗式）。
 
-    Uses `restoration_stack` for sync-word-based restoration.
-    参数 prefix 和容差值来自配置 preprocessor.reverse（_macro.toml → [reverse]）。
+    参数 prefix 和 sync 容差来自配置 preprocessor.reverse（_macro.toml → [reverse]）。
+    restoration_stack 为旧参数名（兼容），anchors 为统一锚列表。
     """
-    if restoration_stack:
-        return _restore_lines(rendered, prefix, restoration_stack)
-    return rendered
+    if anchors is None:
+        anchors = restoration_stack
+    if not anchors:
+        return rendered
+    return restore_anchors(rendered, _normalize_anchors(anchors), prefix)
 
 
 def restore_condition_blocks(
     rendered: str, placeholders: dict[str, str] | None = None
 ) -> str:
-    """把渲染输出中的条件块占位注释替换回原文段。
+    """把渲染输出中的条件块占位注释替换回原文段（统一为 line 锚回插）。
 
     placeholders: {占位 id → 原文段}，来自 scan_directives。
     占位注释（`// <tpc:cond:N>`）在扫描时替代 inactive 分支 + 块边界指令，
     渲染后原位替换回原文，实现条件编译多义性的保真恢复。
+
+    嵌套条件块由 restore_anchors 的多轮扫描处理：外层残片可能含内层 marker。
     """
     if not placeholders:
         return rendered
-    for ph_id, original in placeholders.items():
-        marker = f"// <{ph_id}>"
-        rendered = rendered.replace(marker, original)
-    return rendered
+    anchors = [
+        {"marker": ph_id, "fragment": original, "mode": "line", "kind": "cond"}
+        for ph_id, original in placeholders.items()
+    ]
+    return restore_anchors(rendered, anchors, "`")

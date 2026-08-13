@@ -33,6 +33,36 @@ end_case = [
 
 
 # ============================================================================
+# TaskCallStmt — 裸任务调用（无括号）
+# ============================================================================
+# 无参数任务调用: task_name;
+# 与 SubroutineCall 的区别在于省略括号直接调用（Verilog 允许
+# 无参数任务不带 () 调用，picorv32 的 assert 宏展开为 empty_statement; 即此形态）。
+# 被引用于: 04_statements/00_base.toml (CallStmt)
+
+[TaskCallStmt]
+is_statement = true
+
+[TaskCallStmt.parser]
+production = [
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "newline",
+]
+
+[TaskCallStmt.parser.node]
+callee = "$1"
+
+[TaskCallStmt.renderer.layout]
+line = [
+    { ref = "callee" },
+    ";",
+]
+
+
+# ============================================================================
 # SysTaskStmt — 系统任务语句（$ 前缀，如 $display(...)）
 # ============================================================================
 # 独立语句的系统调用: $display(...); $finish; 等。
