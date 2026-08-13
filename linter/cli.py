@@ -63,7 +63,8 @@ def cli_main() -> None:
     diagnostics = scanner.scan(source)
 
     if args.json:
-        data = [d.to_dict() for d in diagnostics]
+        from linter import lsp_diagnostic
+        data = [lsp_diagnostic(d) for d in diagnostics]
         indent = 2 if args.pretty else None
         print(json.dumps(data, ensure_ascii=False, indent=indent))
     else:

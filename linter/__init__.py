@@ -42,14 +42,16 @@ def token_span(t: Token) -> tuple[Position, Position]:
         Position(t.line - 1, t.column + len(t.content)),
     )
 
-    def to_dict(self) -> dict:
-        return {
-            "range": {
-                "start": {"line": self.range[0].line, "character": self.range[0].character},
-                "end": {"line": self.range[1].line, "character": self.range[1].character},
-            },
-            "severity": self.severity,
-            "code": self.code,
-            "source": self.source,
-            "message": self.message,
-        }
+
+def lsp_diagnostic(d: LintDiagnostic) -> dict:
+    """LintDiagnostic → LSP Diagnostic JSON 兼容 dict。"""
+    return {
+        "range": {
+            "start": {"line": d.range[0].line, "character": d.range[0].character},
+            "end": {"line": d.range[1].line, "character": d.range[1].character},
+        },
+        "severity": d.severity,
+        "code": d.code,
+        "source": d.source,
+        "message": d.message,
+    }
