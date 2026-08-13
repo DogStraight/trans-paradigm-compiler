@@ -83,6 +83,35 @@ def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
 
 
 # ---------------------------- Core Pipeline ----------------------------
+def format_generated(content: str, rules: Any, lexer: Any) -> str:
+    """对生成文本跑 formatter（缩进/品类对齐/实例端口对齐）。
+
+    复用管线已加载的 rules/lexer，避免重复初始化；失败时不阻断管线，
+    返回原文本并记录 warning（formatter 是增强 pass，不影响主流程）。
+    """
+    try:
+        from grammar.verilog.plugins.formatter.boundary import BoundaryScanner
+        from grammar.verilog.plugins.formatter import (
+            build_engine,
+            split_port_close_lines,
+            split_inst_tail_lines,
+        )
+
+        # 先拆粘连行（端口尾行 + 参数化实例化尾行），再扫描，避免 contexts 错位
+        lines = split_port_close_lines(content.split("\n"))
+        lines = split_inst_tail_lines(lines)
+        split_content = "\n".join(lines)
+
+        scanner = BoundaryScanner(rules, lexer)
+        contexts = scanner.scan(split_content)
+        engine = build_engine()
+        formatted = engine.run(lines, contexts)
+        return "\n".join(l.rstrip() for l in formatted)
+    except Exception as e:  # noqa: BLE001 — 增强 pass 失败不阻断管线
+        print(f"[formatter] skipped ({e})", file=sys.stderr)
+        return content
+
+
 def run_pipeline_on_source(
     source: str,
     input_path: str | None = None,
@@ -95,6 +124,7 @@ def run_pipeline_on_source(
     renderer_enabled: bool = True,
     stage: str | None = None,
     no_lint: bool = False,
+    format_output: bool = True,
     rules_dir: str = DEFAULT_RULES_DIR,
     ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
     include_dirs: list[str] | None = None,
@@ -423,6 +453,13 @@ def run_pipeline_on_source(
             content = restore_condition_blocks(content, placeholders)
             _log(f"[preprocessor] condition blocks restored: {len(placeholders)}")
 
+        # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
+        # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
+        content_pre_format = content
+        if format_output and content.strip():
+            content = format_generated(content, rules, lexer)
+            _log("[formatter] formatted output")
+
         # Write output (no header — gen file is raw content for clean diffing)
         if gen_file:
             with open(gen_file, "w", encoding="utf-8") as f:
@@ -443,8 +480,12 @@ def run_pipeline_on_source(
         result["success"] = True
 
         # ── 后置 lint：检查生成代码是否有语法错误 ──────
-        if content.strip():
-            post_errors = linter.scan(content)
+        # 优先检查未格式化输出：formatter 是纯排版（token 完整已验证），
+        # 语法与渲染输出等价；linter 对 formatter 的多行端口/列对齐结构
+        # 有误报（如 inst_port 拆行导致行号偏移），不应阻断格式化管线。
+        lint_target = content_pre_format if content_pre_format.strip() else content
+        if lint_target.strip():
+            post_errors = linter.scan(lint_target)
             result["post_lint_errors"] = len(post_errors)
             if post_errors:
                 _log(f"[post-lint] {len(post_errors)} error(s) in output")

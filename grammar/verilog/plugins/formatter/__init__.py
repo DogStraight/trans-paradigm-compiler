@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from .engine import FormatterEngine, FormatterPass
@@ -65,13 +66,44 @@ DEFAULT_CATEGORIES: list[dict[str, Any]] = [
 ]
 
 
+def _load_categories_from_config() -> list[dict] | None:
+    """从 ConfigRegistry 读品类配置（语言包 tpc.toml 的 [[formatter.categories]]）。
+
+    未加载 / 无配置时返回 None（调用方 fallback 到代码内默认值）。
+    """
+    try:
+        from core.config_registry import ConfigRegistry
+        cfg = ConfigRegistry.get("formatter.categories")
+        if isinstance(cfg, list) and cfg:
+            return cfg
+    except Exception:
+        pass
+    return None
+
+
 def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEngine:
     """从配置构建格式化引擎。"""
     from .engine import FormatterEngine, FormatterPass
+    from .passes.indent import run_indent_pass
+    from .passes.ifdef import run_ifdef_pass
     from .passes.inst_port import run_inst_port_align
 
     engine = FormatterEngine()
-    categories = categories or DEFAULT_CATEGORIES
+    # 缩进重排 pass（最前：先定缩进，品类/端口对齐再基于新缩进重组行）
+    engine.register(FormatterPass(
+        name="indent",
+        kind="handler",
+        handler=run_indent_pass,
+    ))
+    # 条件编译块内容缩进 pass（紧跟单语句头的 ifdef 块内容继承悬挂）
+    engine.register(FormatterPass(
+        name="ifdef",
+        kind="handler",
+        handler=run_ifdef_pass,
+    ))
+    if categories is None:
+        # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
+        categories = _load_categories_from_config() or DEFAULT_CATEGORIES
     for cat in categories:
         if not cat.get("enabled", True):
             continue
@@ -94,6 +126,85 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
     return engine
 
 
+# 参数化实例化尾行：`...name(expr)) inst_name (`（参数列表关闭 `)` + 实例名 + 端口开 `(`）
+_INST_TAIL_RE = re.compile(r"^(.*)\)\s+(\w+)\s*\($")
+
+
+def split_inst_tail_lines(lines: list[str]) -> list[str]:
+    """拆参数化实例化粘连行：`...) inst_name (` → `...` + `) inst_name (`。
+
+    渲染器常把参数列表关闭 `)` 与实例名、端口开 `(` 粘连成一行，如
+    `.STACKADDR(STACKADDR)) picorv32_core (`。ref 风格是参数行 + `) inst_name (` 独立行。
+
+    识别：行尾 `) inst_name (` 且其前部分以 `)` 结尾（即参数关闭 + 参数列表关闭的
+    `))` 形态，head 为括号平衡的完整最后一个参数）。只加换行，不改 token。
+    """
+    out: list[str] = []
+    for line in lines:
+        s = line.rstrip()
+        m = _INST_TAIL_RE.match(s)
+        if m:
+            head = m.group(1).rstrip()
+            # head 须以 `)` 结尾（行内 `))`，参数关闭 + 参数列表关闭相邻），
+            # 且为 `.name(...)` 参数形态；括号平衡（完整参数）才拆
+            if head.endswith(")") and "." in head and _balanced_parens(head):
+                out.append(head)
+                out.append(s[len(head):])
+                continue
+        out.append(line)
+    return out
+
+
+def _balanced_parens(s: str) -> bool:
+    depth = 0
+    for ch in s:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
+def split_port_close_lines(
+    lines: list[str], categories: list[dict] | None = None
+) -> list[str]:
+    """拆模块端口尾行：`output name );` → `output name` + `);`（ref picorv32_wb 风格）。
+
+    渲染器常把模块端口关闭符 `);` 粘连到最后一个端口行（如 `output mem_instr );`），
+    且该行顶格。这里按 port_dir 品类 matcher（input/output/inout）识别端口尾行，
+    把 `);` 拆为独立行（indent 按 port_list_end 对齐 0 级），端口行本身交给后续
+    indent/port_dir 对齐统一缩进。只加换行，不改 token。
+    """
+    if categories is None:
+        categories = _load_categories_from_config() or DEFAULT_CATEGORIES
+    port_tokens: set[str] = set()
+    for cat in categories:
+        # 只认端口方向品类（port_dir），防误拆 assignment/declaration 等
+        # （如 `assign z = `MIN(x, y);` 行尾也含 `);`，但 first_token 是 assign）
+        if cat.get("family") != "port_dir":
+            continue
+        first = cat.get("matcher", {}).get("first_token")
+        if isinstance(first, str):
+            port_tokens.add(first)
+        elif isinstance(first, list):
+            port_tokens.update(first)
+    if not port_tokens:
+        return list(lines)
+    out: list[str] = []
+    for line in lines:
+        s = line.rstrip()
+        if s.endswith(");") and s.strip():
+            first = s.lstrip().split(None, 1)[0]
+            if first in port_tokens:
+                out.append(s[:-2].rstrip())
+                out.append(");")
+                continue
+        out.append(line)
+    return out
+
+
 def format_source(source: str, rules_dir: str, categories: list[dict] | None = None) -> str:
     """一站式格式化入口：lex → 边界扫描 → pass 编排。
 
@@ -109,11 +220,17 @@ def format_source(source: str, rules_dir: str, categories: list[dict] | None = N
     rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default())
     lexer = Lexer(rules_dir=rules_dir)
 
+    # 先拆粘连行（端口尾行 `name );` + 参数化实例化尾行 `...); inst (`），
+    # 再扫描/跑 pass，避免 contexts 错位
+    lines = split_port_close_lines(source.split("\n"), categories)
+    lines = split_inst_tail_lines(lines)
+    split_source = "\n".join(lines)
+
     from .boundary import BoundaryScanner
     scanner = BoundaryScanner(rules, lexer)
-    contexts = scanner.scan(source)
+    contexts = scanner.scan(split_source)
 
-    lines = source.split("\n")
     engine = build_engine(categories)
     formatted = engine.run(lines, contexts)
-    return "\n".join(formatted)
+    # 清理行尾尾随空格（对齐产生的冗余；ref 0 行尾随）
+    return "\n".join(l.rstrip() for l in formatted)

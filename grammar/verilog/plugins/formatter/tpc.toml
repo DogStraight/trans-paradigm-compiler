@@ -2,14 +2,57 @@
 #
 # 品类列表：每个品类定义 matcher + family + 对齐行为
 # break_distance: 同品类行之间超过 N 行其他内容则切为独立组
-#
-# [[formatter.categories]]
-# name = "port_dir"
-# enabled = true
-# matcher = { first_token = ["input", "output", "inout"] }
-# family = "port_dir"
-# align_port_names = true
-# break_distance = 3
+# 由 __init__.py build_engine 从 ConfigRegistry["formatter.categories"] 读取。
+
+[[formatter.categories]]
+name = "port_dir"
+enabled = true
+matcher = { first_token = ["input", "output", "inout"] }
+family = "port_dir"
+align_port_names = true
+break_distance = 3
+
+[[formatter.categories]]
+name = "declaration"
+enabled = true
+matcher = { first_token = ["reg", "wire"] }
+family = "declaration"
+break_distance = 3
+
+[[formatter.categories]]
+name = "parameter"
+enabled = true
+matcher = { first_token = ["parameter", "localparam"] }
+family = "parameter"
+break_distance = 3
+
+[[formatter.categories]]
+name = "assignment"
+enabled = true
+matcher = { first_token = ["assign"] }
+family = "assignment"
+break_distance = 3
+
+[[formatter.categories]]
+name = "genvar_integer"
+enabled = true
+matcher = { first_token = ["genvar", "integer"] }
+family = "declaration"
+break_distance = 3
+
+[[formatter.categories]]
+name = "function"
+enabled = true
+matcher = { first_token = ["function"] }
+family = "function"
+break_distance = 3
+
+[[formatter.categories]]
+name = "task"
+enabled = true
+matcher = { first_token = ["task"] }
+family = "function"
+break_distance = 3
 
 # 结构边界映射（token/规则 → 结构类别）**不从本文件配置**——由各规则自身的
 # [RuleName.analyzer] scope = { kind = "..." } 声明，boundary.py 从语法规则推导。
