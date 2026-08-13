@@ -157,6 +157,14 @@ production = [
 type_spec = "$1"
 instance_name = "$2"
 
+[TypeNestedPort.renderer]
+# 嵌套类型端口：`type.role name`（如 `spi.master inner`）
+layout = { line = [
+    { ref = "type_spec" },
+    " ",
+    { ref = "instance_name" },
+] }
+
 [TypeInvertPort.parser]
 production = [
     "keyword.invert",
