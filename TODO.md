@@ -2,11 +2,12 @@
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 完成基线（当前验证过的事实）：
-> - 507 测试全过；PicoRV32 token 完整硬基线（format 不改 token）
+> - 549 测试全过；PicoRV32 token 完整硬基线（format 不改 token）
 > - c4 第二语言完成（.c → c4 VM 汇编，6 集成测试）——语言无关主张实证
 > - formatter 已接入管线（format_output 默认 True），67 单测 + 幂等回归
 > - 预处理器宏相关完成（带参宏/条件编译还原/指令原位回插，e2e 守卫 12+ 项）
 > - typed_ports 增强渲染双路径（展开/保留，expand_enhanced 开关）
+> - 数字形态配置化完成（声明→FSM 生成器 + 语言包声明 + signed 's + 0'b1 标准拒绝）
 
 ## P1 — Verilog 实例完善
 
@@ -36,12 +37,6 @@
 - [ ] 表达式系统隐式约定文档化（Pratt/operator 顺序/三元）
 - [ ] 组件协议文档（插件层：register_plugin/transform 钩子/analyzer 原语）
 - [ ] c4 定位为最小语言包模板（模型"从仿写到可代写"的增量路径）
-
-### P2.1 词法层数字形态配置化
-
-- [ ] 数字形态配置化：语言包声明数字形态替代硬编码 NumberFSM
-      （含 signed `'s` 修复、`0'b1` 拒绝、测试基线完整 token 序列）
-- [ ] 前置：补数字形态测试基线（现有 tests/lexer 不区分语言）
 
 ### P2.2 发布收尾
 
