@@ -64,11 +64,28 @@ if/else、while、return、块、表达式语句、全局/局部声明、函数�
 - `base/`：共享 token/lexer/operator 基础
 - `plugins/`：语言插件（汇编生成插件规划在此）
 
+## 定位：最小语言包模板（2026-08-13）
+
+c4 是**模型/开发者"从零搭新语言"的起步模板**：
+- 最小完整语言包（token → lexer → 表达式 → 语句/声明 → transform → 汇编渲染）
+- 覆盖语言无关管线的每一层（lexer/parser/analyzer/transform/renderer）
+- 含一个完整插件（AsmGenPlugin，演示 @register_plugin 协议）
+
+**从 c4 起步做新语言的路径**：拷贝 grammar/c4/ → 改 token/关键字/规则 → 增量加
+语言特性（参照 chibicc 特性增量节奏）。相比从零写，省掉"管线怎么分层/每层写什么"
+的摸索——照 c4 的结构填内容即可。
+
+配套文档：
+- docs/language_walkthrough.md（从零搭语言逐层指南）
+- docs/component_protocol.md（插件层协议）
+- docs/expression_conventions.md（表达式隐式约定）
+- docs/config_lifecycle.md（配置生命周期时序）
+
 ## 待办
 
 - [x] 核心渗透预检（最小 lexer）
 - [x] 表达式/语句/声明规则
-- [ ] 汇编生成（transform 插件 + renderer 布局）
-- [ ] 测试样本 + 管线跑通
-- [ ] 语言无关性验收（core 无 Verilog 渗透）
-- [ ] "从零搭语言" walkthrough 文档（模型可消费性演示）
+- [x] 汇编生成（transform 插件 + renderer 布局）
+- [x] 测试样本 + 管线跑通
+- [x] 语言无关性验收（core 无 Verilog 渗透）
+- [x] "从零搭语言" walkthrough 文档（docs/language_walkthrough.md）

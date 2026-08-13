@@ -30,6 +30,8 @@
 - 决策：`decisions/0001-pre-parse-linter.md`、`decisions/0002-is-statement-explicit.md`、`decisions/0003-config-load-fail-fast.md`、`decisions/0004-branding-trans-paradigm.md`
 - 参考：`config_reference.md`、`grammar_rule_fields.md`、`ieee1364_2005_annex_a.md`、`end_case_audit.md`
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
+- 机制：`config_lifecycle.md`（配置生命周期）、`expression_conventions.md`（表达式约定）、
+  `component_protocol.md`（组件协议）、`api.md`（API 参考）
 - 个人思考沉淀（非对齐体系）：`references.md`（对其他语言类工具的借鉴研究）
 - 计划：`linter_refactor_plan.md`
 

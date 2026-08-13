@@ -127,7 +127,8 @@ def _cmd_lint(args: argparse.Namespace) -> None:
     diagnostics = scanner.scan(source)
 
     if args.json:
-        data = [d.to_dict() for d in diagnostics]
+        from linter import lsp_diagnostic
+        data = [lsp_diagnostic(d) for d in diagnostics]
         print(json.dumps(data, ensure_ascii=False, indent=2 if args.pretty else None))
     else:
         for d in diagnostics:

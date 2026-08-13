@@ -114,3 +114,74 @@ def test_preserve_path_format_enhanced():
     # curly 块缩进：type body 内容 4 空格、TypeImplDecl body 内容 8 空格
     assert "    master : input clk, input miso, output mosi, output cs;" in out
     assert "        wire [7:0] data;" in out
+
+
+# ── nested / invert 补充验证（P1.4）──
+
+NESTED_SRC = """module top(
+    input clk,
+    spi.slave spi_io
+);
+    impl spi.master (.clk(clk)) => top;
+endmodule
+
+type spi {
+    master : input clk, input miso, output mosi, output cs;
+    slave  : input clk, input mosi, output miso, output cs;
+}
+
+type wrap {
+    master : spi.master inner, input enable;
+    slave  : spi.slave inner, invert master;
+}
+"""
+
+
+def _run_nested(**kw):
+    return run_pipeline_on_source(
+        source=NESTED_SRC, quiet=True, no_lint=True, **kw
+    )
+
+
+def test_nested_preserve_renders_nested_port():
+    """保留路径：嵌套类型端口（spi.master inner）渲染。"""
+    r = _run_nested(expand_enhanced=False)
+    assert r["success"], r.get("error", "")
+    out = r["output"]
+    assert "spi.master inner" in out
+    assert "spi.slave inner" in out
+
+
+def test_nested_preserve_renders_invert():
+    """保留路径：invert 端口（invert master）渲染。"""
+    r = _run_nested(expand_enhanced=False)
+    assert r["success"]
+    out = r["output"]
+    assert "invert master" in out
+
+
+def test_nested_preserve_token_complete():
+    """保留路径：nested/invert 样本 token 完整。"""
+    r = _run_nested(expand_enhanced=False)
+    assert r["success"]
+    out = r["output"]
+
+    def strip_all(text: str) -> str:
+        lines = []
+        for line in text.splitlines():
+            ci = line.find("//")
+            if ci >= 0:
+                line = line[:ci]
+            lines.append(line)
+        return "".join("".join(lines).split())
+
+    assert strip_all(out) == strip_all(NESTED_SRC)
+
+
+def test_nested_expand_consumes():
+    """展开路径：嵌套类型被消费（不残留 type.role 引用）。"""
+    r = _run_nested()
+    assert r["success"]
+    out = r["output"]
+    assert "spi.master inner" not in out
+    assert "type wrap" not in out
