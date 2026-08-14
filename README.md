@@ -12,6 +12,13 @@ transform, renderer — is configurable, forkable, and model-friendly.
 
 ## Why TransParadigm
 
+> TransParadigm is one way to build a language toolchain — not a replacement
+> for general-purpose parser generators like ANTLR or Yacc. If you just need a
+> parser for a one-off grammar, those are excellent tools. This project targets
+> a different niche: a forkable, model-friendly pipeline where language rules
+> stay as data and every stage stays reachable for incremental changes. Use it
+> when that trade-off fits; otherwise ANTLR/Yacc remain perfectly good choices.
+
 - **Rules are data, not code.** All language specifics live in TOML config files.
   The engine is a generic skeleton; every stage has a configuration surface.
 - **Forkable, not rewrite.** Each stage can be replaced or reconfigured. Fork
@@ -125,6 +132,12 @@ plugin scripts — no engine code required to add or modify a language.
 ## Language rules in TOML
 
 Concrete example from the c4 language pack (`grammar/c4/`) — a tiny C subset:
+
+> **How to read this example:** language knowledge lives entirely in TOML —
+> `[id.keyword]` defines lexer keywords, `[Rule.parser]` defines syntax
+> (`@X` references another rule, `$N` captures the N-th production slot),
+> `[Rule.parser.node]` shapes the AST, `[Rule.renderer.layout]` controls
+> output. The engine is generic; nothing here is hardcoded in Python.
 
 ```toml
 # token.toml — keywords (lexer turns them into keyword.* tokens)
