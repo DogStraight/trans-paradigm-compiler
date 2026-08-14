@@ -23,7 +23,7 @@ result = run_pipeline_on_source(
     format_output=True,       # formatter 开关（默认 True）
     expand_enhanced=True,     # 增强语法展开/保留（默认 True 展开）
 )
-# result["output"] / result["success"] / result["post_lint_errors"]
+# result["output"] / result["success"] / result["idempotent"]
 ```
 
 ## 核心引擎

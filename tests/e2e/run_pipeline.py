@@ -131,6 +131,7 @@ def run_pipeline_on_source(
     include_dirs: list[str] | None = None,
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
+    check_idempotent: bool = True,
 ) -> dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -155,7 +156,7 @@ def run_pipeline_on_source(
         "extra_asts": [],
         "error": "",
         "parser": None,
-        "post_lint_errors": 0,
+        "idempotent": True,
     }
 
     original_source = source
@@ -466,7 +467,6 @@ def run_pipeline_on_source(
 
         # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
         # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
-        content_pre_format = content
         if format_output and content.strip():
             content = format_generated(content, rules, lexer)
             _log("[formatter] formatted output")
@@ -490,23 +490,48 @@ def run_pipeline_on_source(
         result["ast"] = ast
         result["success"] = True
 
-        # ── 后置 lint：检查生成代码是否有语法错误 ──────
-        # 优先检查未格式化输出：formatter 是纯排版（token 完整已验证），
-        # 语法与渲染输出等价；linter 对 formatter 的多行端口/列对齐结构
-        # 有误报（如 inst_port 拆行导致行号偏移），不应阻断格式化管线。
-        lint_target = content_pre_format if content_pre_format.strip() else content
-        if lint_target.strip():
-            post_errors = linter.scan(lint_target)
-            result["post_lint_errors"] = len(post_errors)
-            if post_errors:
-                _log(f"[post-lint] {len(post_errors)} error(s) in output")
-                for err in post_errors:
-                    _log(
-                        f"  post-lint: {err.message} "
-                        f"at L{err.range[0].line}:{err.range[0].character}"
-                    )
+        # ── 幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
+        # 文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
+        # 替代后置 lint：完整 parser 比 linter 近似更强，且不依赖 linter 对
+        # format 后文本的行号/结构敏感（曾误报）。坏文本（如 `= =` 或缺分号）
+        # 会导致第二遍 parse truncated → idempotent=False。
+        # 展开路径（宏表/占位符/指令行任一非空）跳过：宏体替换、条件分支选择、
+        # 注释锚点漂移都使第二遍内容必然不同——那是展开语义，不是幂等性问题。
+        # 只有非展开路径（内容应稳定）才检查。
+        expanded_path = bool(macro_table) or bool(func_macros) or bool(
+            placeholders
+        ) or bool(directive_lines)
+        if check_idempotent and not expanded_path and content.strip():
+            _log("[idempotency] re-running pipeline on generated output")
+            r2 = run_pipeline_on_source(
+                source=content,
+                input_path=input_path,
+                quiet=True,
+                expand_macros=expand_macros,
+                inline_comments=inline_comments,
+                analyzer_enabled=False,
+                transform_enabled=False,
+                renderer_enabled=True,
+                no_lint=True,
+                format_output=format_output,
+                expand_enhanced=False,
+                rules_dir=rules_dir,
+                ext_dirs=ext_dirs,
+                include_dirs=include_dirs,
+                predefined=predefined,
+                undefine=undefine,
+                check_idempotent=False,
+            )
+            p2 = r2.get("parser")
+            truncated = bool(getattr(p2, "_parse_truncated", False)) if p2 else True
+            result["idempotent"] = bool(r2.get("success")) and not truncated
+            if not result["idempotent"]:
+                _log(
+                    f"[idempotency] FAIL: output re-parse "
+                    f"truncated={truncated} success={r2.get('success')}"
+                )
         else:
-            result["post_lint_errors"] = 0
+            result["idempotent"] = True
     else:
         print("[renderer] skipped")
         result["ast"] = ast

@@ -36,13 +36,35 @@ from core.define import DEFAULT_EXT_DIRS
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
 
+# ── 组别独立参数配置 ─────────────────────────────────
+# errors/lint_err：坏输入，管线应失败（linter 前置抓设定的错误）
+# macro：预处理器展开与还原（展开路径，内容变化是预期，不测幂等）
+# normal/real：解析能力（real 为真实工业项目，强制展开条件编译）
+# transform：天然两条路径——默认非展开（测增强语法保留 + 幂等）；
+#   样例含指令时走展开路径（内容变，不测幂等，由 run_pipeline 内建判定）
+# warning：语义错误捕获（analyzer 警告不阻断管线）
+GROUP_PARAMS: dict[str, dict] = {
+    "normal": {"expand_macros": False},
+    "errors": {"expand_macros": False},
+    "lint_err": {"expand_macros": False},
+    "macro": {"expand_macros": True},
+    "warning": {"expand_macros": False},
+    "transform": {"expand_macros": False},
+    "real": {"expand_macros": True},
+}
+
+
 def discover_tests(
     base_dir: str, group_filter: str | None = None, name_filter: str | None = None
 ) -> list[tuple[str, str, str]]:
     """Discover test files. Returns list of (name, full_path, group)."""
     tests_dir = os.path.join(base_dir, "samples")
     cases = []
-    groups = [group_filter] if group_filter else ["normal", "errors", "warning", "transform", "real"]
+    groups = (
+        [group_filter]
+        if group_filter
+        else ["normal", "errors", "lint_err", "macro", "warning", "transform", "real"]
+    )
     for group in groups:
         ref_dir = os.path.join(tests_dir, group, "ref")
         if not os.path.isdir(ref_dir):
@@ -140,8 +162,9 @@ def run_all(
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
         try:
-            # real 组（真实工业项目）依赖宏展开（picorv32 的条件编译），强制开启
-            effective_expand = expand_macros or group == "real"
+            # 组别独立参数：宏展开按 GROUP_PARAMS 配置，CLI --expand-macros 可覆盖
+            params = GROUP_PARAMS.get(group, {})
+            effective_expand = params.get("expand_macros", False) or expand_macros
             result: dict[str, Any] = run_pipeline_on_source(
                 source=source,
                 input_path=path,
@@ -163,12 +186,15 @@ def run_all(
 
         success = result["success"]
         err_msg = result["error"] or ""
-        post_lint_errors = result.get("post_lint_errors", 0)
+        idempotent = result.get("idempotent", True)
 
         # ── 文本保真度比较（normal / transform / real 组）────────────────
         # normal 组：ref = 输入文件，保真度 = 管线输出对输入的保留程度
         # transform 组：ref = 正确展开后的输出，保真度 = 管线输出对展开预期的匹配程度
         # real 组：ref = 真实项目输入，保真度 = 输出对输入的 token 级保留程度
+        # 缓存 key 带展开模式后缀（expand/plain）：同一样例两种模式的保真值
+        # 独立记忆，防止 --expand-macros 与默认模式互串（曾 concat_nest 被
+        # 展开模式的高保真污染，默认模式误报 drop）。
         fidelity = 1.0  # 默认值
         fidelity_dropped = False
         prev_display = fidelity  # 默认值，供块外引用
@@ -188,38 +214,47 @@ def run_all(
                     fidelity = difflib.SequenceMatcher(None, ref_flat, gen_flat).ratio()
                     fidelity = round(fidelity, 4)
 
-                # 按组加载缓存，检测保真度下降
+                # 按组 + 展开模式加载缓存，检测保真度下降
+                mode = "expand" if effective_expand else "plain"
+                cache_key = f"{name}@{mode}"
                 group_cache = _load_fidelity_cache(base_dir, group)
-                prev = group_cache.get(name)
+                prev = group_cache.get(cache_key)
                 if prev is not None and fidelity < prev:
                     fidelity_dropped = True
                     fidelity_changed.append((name, prev, fidelity))
 
                 # 更新缓存：保存最高保真度（下降后不会覆盖缓存）
                 prev_display = prev if prev is not None else fidelity
-                group_cache[name] = max(prev or 0, fidelity)
+                group_cache[cache_key] = max(prev or 0, fidelity)
                 _save_fidelity_cache(base_dir, group, group_cache)
 
         # 判定测试结果
-        if group == "errors":
-            passed = not success
+        if group in ("errors", "lint_err"):
+            # 坏输入组：linter 前置应抓到设定的错误 → 管线失败。
+            # lint_err 组含 ref_v* 合法对照样例（验证 linter 无误报）→ 应通过
+            passed = success if name.startswith("ref_v") else not success
         elif group == "warning":
+            # 语义警告组：analyzer 警告不阻断 → 管线成功
             passed = success
         else:
-            # normal/transform/real 组：管线成功即通过，但保真度下降算 FAIL
+            # normal/macro/transform/real 组：管线成功即通过，但保真度下降算 FAIL
             passed = success and not fidelity_dropped
 
         if passed:
-            if group == "errors":
-                total_err += 1
-                status = "ERR"
+            if group in ("errors", "lint_err"):
+                if name.startswith("ref_v"):
+                    total_ok += 1
+                    status = "OK"  # ref_v* 合法对照：linter 无误报
+                else:
+                    total_err += 1
+                    status = "ERR"  # ref_e* 设定的错误：linter 抓到
             elif group == "warning":
                 total_warn += 1
                 status = "WARN"
             else:
-                if post_lint_errors:
+                if not idempotent:
                     total_warn += 1
-                    status = "LINT"
+                    status = "IDP"
                 else:
                     total_ok += 1
                     status = "OK"
@@ -235,8 +270,8 @@ def run_all(
             suffix = f"  fidelity={fidelity:.4f}"
         if fidelity_dropped:
             suffix += f"  ↓ from {prev_display:.4f}"
-        if post_lint_errors:
-            suffix += f"  post-lint={post_lint_errors}"
+        if not idempotent:
+            suffix += "  idempotent=FAIL"
         print(f"  {name:25s} {status:5s} {err_msg[:30]}{suffix}")
 
     # ── 打印保真度下降汇总 ────────────────────────────
@@ -289,8 +324,11 @@ if __name__ == "__main__":
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
     name_filter = pos_args[1] if len(pos_args) >= 2 else None
 
-    if group_filter and group_filter not in ("normal", "errors", "warning", "transform", "real"):
-        print(f"[error] unknown group: {group_filter} (expected normal|errors|warning|transform|real)")
+    if group_filter and group_filter not in GROUP_PARAMS:
+        print(
+            f"[error] unknown group: {group_filter} "
+            f"(expected {'|'.join(GROUP_PARAMS)})"
+        )
         sys.exit(1)
     if name_filter:
         name_filter = f"ref_{name_filter}".replace(".v", "")
