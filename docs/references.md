@@ -1,7 +1,7 @@
 # 参考与借鉴项目
 
 > 分析过的项目及其对我们设计的影响。
-> 最后更新：2026-07-17
+> 最后更新：2026-08-14
 
 | 项目 | 关系 | 主要启发 |
 |------|------|---------|
@@ -36,7 +36,47 @@
 | **[desugar](https://github.com/michaelmillar/desugar)** | 方向参考 | Rust browser-native 编译器工作室：逐步实现 pass + 每 pass 可视化 + 导出独立工程。0⭐ · 单人 · 4 月前活跃。最接近"编译器模拟器"概念——但定位教学（expression-based，无类型检查/后端） |
 | **[ldtk](https://github.com/Terran-One/ldtk)** | 架构对比 | TS 模块化语言开发工具包。1⭐ · 3 年前停滞 · WIP 未成。同生态位小众项目的冷启动现状参照 |
 
-## 生态位与竞品现状（2026-08-12 调研）
+## 生态位追踪（2026-08-14 调研）— "语言即数据"的四个活跃分支
+
+> 调研方式：GitHub topic（language-workbench / parser-generator）+ 逐项目源码。
+> 结论先行：**"配置驱动完整管线"依然没人做，但"语言即数据"分化出四个分支**——
+> 按"活跃度 × 定位距离"逐个追踪如下。
+
+### cairn（Scala，2 周前更新）— 与 P3 增量解析直接相关
+
+- 仓库：`eurisko-info-lab/cairn`（Apache-2.0，research software v0.1）
+- **框架**：语言 = `Fragment` 片段组合（`provides/requires/excludes`）→ `Compose.compose` 推流合并 → 内容寻址（每个语言/产物有 digest）。**双向文法**：一个 `GrammarSpec` 同时生成 parse + print，`RoundTrip.check` 验证 parse∘print 定律，`Concrete.put` 做**格式保留编辑**（字节级 splice，只替换目标 span）。另有 ΔL（语义变更语言）、签名账本、Rosetta 多目标投影（Lean/Coq/Scala/Rust）
+- **目标差异**：tpc = 语言工具链（格式化/lint/编译产物）；cairn = **语言的版本控制**（语义变更、哈希、账本、可复现发布）。"git 换成了语言"
+- **形态差异**：无 linter（token 级反解析）、无 formatter（品类对齐）、无第二语言实证——力气花在"语义可信"（哈希/证明/账本），tpc 花在"工具链完整"
+- **💡 对 tpc 的直接价值**：`Grammar.scala` 的增量失效（`invalidateFrom` token 缓存）**正是 TODO P3 增量解析要做的**，cairn 已实现并配了测试（`MetaPreserveFormatSuite`）——tpc P3 可直接参考它的"双向文法 + 格式保留替换"做法
+
+### lvca（OCaml，2022 停）— provenance 一等公民
+
+- 仓库：`joelburget/lvca`（OCaml，dune 构建）
+- **框架**：抽象语法用 `valence`（绑定数量/种类）描述，`[%lvca.abstract_syntax_module]` ppx 从字符串生成 OCaml 类型。核心关注**绑定与变量**（nominal/De Bruijn 双向转换）、双向类型检查（`bidirectional` 包）
+- **目标差异**：lvca 是**研究语言理论**的工具（"Language Verification, Construction, and Analysis"，名字自比 LUCA）；tpc 是工程语言工具链
+- **形态差异**：抽象语法是**代码生成**（ppx 编译期），tpc 是**运行时 TOML**。无渲染器（Fmt 库）、无 linter、无预处理器——停在"语言定义 + 语义"
+- **💡 对 tpc 的价值**：`Provenance.t`（每个节点带 range）是**一等公民**，正是 tpc 的 `Node` 缺的（TODO P3 前置）。lvca 的 provenance 设计可直接借鉴
+
+### rascal（Java，活跃）— 元编程语言的完整实现
+
+- 仓库：`usethesource/rascal`（CWI/SWAT 研究机构出品，源流可溯至 1984 年 ASF+SDF Meta-Environment，40 年学术传承）
+- **框架**：**元编程语言**——Rascal 是一门完整语言（type checker + interpreter + compiler + REPL），`grammar(...)` 定义文法，GLR 广义解析器运行时生成 parser。标准库 + 大量语言分析库（Java/C++/PHP/Python/JS analysis），有 LSP/VS Code 集成。杀手锏是**具体语法模式匹配**（元语言里写对象语言模式）+ **IDE/LSP 生成**（一个语言定义 → VSCode 扩展）
+- **目标差异**：rascal = "用元语言做语言工作"（面向语言研究者/大规模源码分析）；tpc = "给 DSL 作者配置语言管线"。消费方不同
+- **形态差异**：**元语言 + 生成式**（写 Rascal 代码定义文法）vs tpc **配置式 + 通用引擎**（写 TOML 数据）。rascal 在 parser 侧做歧义管理 + 容错解析；tpc 在 parser 前用 linter 挡——同一语法的两种消费方式，各有取舍
+- **借鉴点**：具体语法模式匹配是 rascal 独有优势，tpc 的 transform 插件若借鉴（用 TOML 声明的模式匹配 AST），模型代写门槛可更低——大 feature，v0.2 再议
+
+### NegI（Lua，2 周前更新）
+
+- 仓库：`MegadronA03/NegI` — "Semantic substrate"，偏解释器/沙箱/能力安全
+- 与 tpc 目标基本无关，但证明"语义底座"方向有人活跃
+
+### Koine 作者动向（2025-09 停更后）
+
+- 作者 Chris Bates（`chrsbats`）2025-09 后转向：`outlines-chat`（local chat model + outlines 结构化生成）、`SLIP`（"world modeling" 语言，18 小时前仍活跃）
+- **信号**：Koine 作者从"人定义语言的工具"转向"模型世界里的语言/模型输出约束"——**"配置驱动 + 模型可代写"这个组合依然无人占据**
+
+
 
 > 调研方式：GitHub topic（language-workbench / parser-generator）+ 具体项目主页。
 > 聚焦 tpc 定位：配置驱动、多语言、完整管线的轻量语言工具，以及"编译器模拟器/语法实验台"方向。
