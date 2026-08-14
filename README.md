@@ -241,14 +241,26 @@ Built with Python 3.11+, zero runtime dependencies.
 
 ## Known limitations
 
+- **The complexity wall.** Configuration-driven grammar is a sweet spot for
+  small-to-medium languages (DSLs, subsets, custom extensions — the c4 and
+  Verilog-core cases). For large, complex languages (think C++-scale grammar),
+  the wall is not context-sensitivity — the parser resolves `a * b` as a
+  pointer declaration vs. a multiplication via a symbol table
+  (`pre_symbols` + scope lookup + per-kind rule hints, all config-declared).
+  The wall is *rule scale and semantic depth*: hundreds of productions,
+  template instantiation, overload resolution, elaborate type systems — those
+  are engineering volume that TOML config cannot shrink, and they are not
+  what this tool is aimed at. C++/Rust-scale grammars are out of scope.
 - **Verilog coverage is a subset**, not full IEEE 1364. Focus: synthesizable core
   (module/always/if/case/for/function/task/instances) + custom type extensions.
 - **No IDE / LSP** — this is a CLI pipeline, not an editor plugin.
 - **No optimization passes** — transforms are config-driven structural rewrites
   (e.g. type expansion, macro handling), not LLVM-style optimization.
-- **Linter targets pre-formatted source.** The formatter's line reflow can
-  trip token-level lint checks on formatted output (known edge case); lint runs
-  on the original source.
+- **No line wrapping.** The formatter reflows indentation, alignment and
+  line breaks but does not wrap over-long lines to a width limit — long
+  expressions stay on one line (a known trade-off; wrapping moved the
+  operator to line-start, which the token-level linter misread as a new
+  statement).
 - **Error tolerance is linter-side.** Syntax errors are caught by the pre-parse
   linter and block the pipeline; there is no parser-level error recovery.
 
