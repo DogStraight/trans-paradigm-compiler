@@ -23,6 +23,9 @@ transform, renderer — is configurable, forkable, and model-friendly.
 - **Model-friendly.** Onboarding is optimized for model-assisted contributors:
   entry-point index, verification protocol, known landmines. A contributor with
   a model can understand, modify, and verify the pipeline cheaply.
+  **Validated: the c4 language pack was written by a model** (TOML grammar +
+  plugin scripts) and compiles to c4 VM assembly — "rules are data" is
+  consumable by models, not just humans.
 - **Pre-parse token linter.** The linter runs *before* the parser and consumes
   the raw token stream — not an AST. It reuses the same TOML grammar and part of
   the parser machinery (Pratt + shared RuleMatcher), so syntax knowledge never
@@ -44,7 +47,7 @@ module spi_invoker (
 );
 ```
 
--> one command
+One command expands the custom type to standard Verilog:
 
 ```verilog
 // Expanded to standard Verilog
@@ -53,14 +56,6 @@ module spi_invoker (
     input reg [7:0] spi_io_data_in,
     output reg [7:0] spi_data
 );
-```
-
-## Quick start (dev mode)
-
-```bash
-python main.py format input.v   # format Verilog
-python main.py lint input.v     # lint Verilog
-python main.py new component x  # scaffold a new component / plugin
 ```
 
 ## How it works
@@ -74,6 +69,36 @@ Source -> preprocessor -> Lexer -> Parser -> Analyze -> Transform -> Renderer ->
 Each stage is independently configurable: swap a config directory, replace a
 production, inject a transform plugin — the rest of the pipeline stays intact.
 
+## Subsystems
+
+| Directory | Role |
+|-----------|------|
+| `grammar/` | Language rules as data — `verilog/` and `c4/` TOML packs |
+| `lexer/` | Lexing: token-definition-driven scanning |
+| `parser/` | Syntax: recursive descent + Pratt + rule selection |
+| `linter/` | Pre-parse, token-level lint (reverse parser, reuses the same TOML grammar) |
+| `preprocessor/` | Macro expansion / reverse mapping |
+| `analyzer/` | Semantic analysis: scopes, symbols, types (extensible primitives) |
+| `transform/` | Semantic mapping + config-driven transformations |
+| `renderer/` | Doc IR → formatted output (Wadler-Lindig) |
+| `core/` | Engine skeleton: config registry, errors, plugin loading |
+
+A language pack is a set of TOML files under `grammar/<lang>/` plus optional
+plugin scripts — no engine code required to add or modify a language.
+
+## Quick start (dev mode)
+
+```bash
+python main.py format input.v   # format Verilog
+python main.py lint input.v     # lint Verilog
+python main.py new component x  # scaffold a new component / plugin
+```
+
+`format` and `lint` read a Verilog file and print the result to stdout. There
+are example inputs under `tests/e2e/samples/` (e.g. `normal/ref_*.v`); the c4
+language pack (`grammar/c4/`) shows how a second language is defined in TOML
+and compiled to its own VM assembly (see `tests/c4/test_c4_asm.py`).
+
 ## Status
 
 - [x] Verilog core subset (module, always, if/case/for, function/task, expressions, instances)
@@ -82,17 +107,30 @@ production, inject a transform plugin — the rest of the pipeline stays intact.
 - [x] Formatter with Wadler-Lindig Doc IR pretty printing
 - [x] Linter — pre-parse, token-level "reverse parser"; shares grammar & parser infra (31/31 recall, 0 FP)
 - [x] Preprocessor (`` `include `` / `define` / `ifdef` / `undef`)
+- [x] Second-language validation — c4 (tiny C) built from TOML + plugin, compiles to VM assembly
+- [x] Model guide artifacts (AGENTS.md + docs/MODEL_INDEX.md)
+- [x] Packaging / CI (pip install, GitHub Actions on 3.11/3.12/3.13)
 - [ ] Error-tolerant formatting mode
-- [ ] Second-language validation (a minimal DSL proves the "forkable" claim)
-- [ ] Model guide artifact (MODEL_GUIDE.md)
-- [ ] Packaging / CI
 
 Built with Python 3.11+, zero runtime dependencies.
+
+## Known limitations
+
+- **Verilog coverage is a subset**, not full IEEE 1364. Focus: synthesizable core
+  (module/always/if/case/for/function/task/instances) + custom type extensions.
+- **No IDE / LSP** — this is a CLI pipeline, not an editor plugin.
+- **No optimization passes** — transforms are config-driven structural rewrites
+  (e.g. type expansion, macro handling), not LLVM-style optimization.
+- **Linter targets pre-formatted source.** The formatter's line reflow can
+  trip token-level lint checks on formatted output (known edge case); lint runs
+  on the original source.
+- **Error tolerance is linter-side.** Syntax errors are caught by the pre-parse
+  linter and block the pipeline; there is no parser-level error recovery.
 
 ## Verification
 
 ```bash
-python -m pytest tests/ -q                # 329 unit tests
+python -m pytest tests/ -q                # 611 unit tests
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
 python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 ```
