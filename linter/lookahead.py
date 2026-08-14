@@ -369,9 +369,13 @@ class LookaheadTable:
                 t_limit = min(limit + 1, n)
                 return self._try_parse(tokens, i, entries, t_limit)
             # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
-            if len(path_entries) == 1 and any(
-                len(p) == len(seen) and p == tuple(seen)
-                for p in path_entries[0].get("paths", ())
+            if (
+                len(path_entries) == 1
+                and not l2_only
+                and any(
+                    len(p) == len(seen) and p == tuple(seen)
+                    for p in path_entries[0].get("paths", ())
+                )
             ):
                 return [path_entries[0]["name"]]
             if not path_entries:
