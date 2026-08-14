@@ -66,16 +66,20 @@ def discover_tests(
         else ["normal", "errors", "lint_err", "macro", "warning", "transform", "real"]
     )
     for group in groups:
-        ref_dir = os.path.join(tests_dir, group, "ref")
-        if not os.path.isdir(ref_dir):
+        # transform 组：输入 = input/（增强语法源），预期 = ref/（展开后）
+        src_dir = os.path.join(tests_dir, group, "input" if group == "transform" else "ref")
+        if not os.path.isdir(src_dir):
             continue
-        for f in sorted(os.listdir(ref_dir)):
+        for f in sorted(os.listdir(src_dir)):
             if not f.endswith(".v") or f.startswith("_"):
                 continue
             name = f.replace(".v", "")
-            if name_filter and name != name_filter:
-                continue
-            cases.append((name, os.path.join(ref_dir, f), group))
+            if name_filter:
+                # transform 组输入无 ref_ 前缀（ref_ 在预期文件名上）
+                expect = name_filter.removeprefix("ref_") if group == "transform" else name_filter
+                if name != expect:
+                    continue
+            cases.append((name, os.path.join(src_dir, f), group))
     return cases
 
 
@@ -162,23 +166,27 @@ def run_all(
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
         try:
-            # 组别独立参数：宏展开按 GROUP_PARAMS 配置，CLI --expand-macros 可覆盖
-            params = GROUP_PARAMS.get(group, {})
-            effective_expand = params.get("expand_macros", False) or expand_macros
-            result: dict[str, Any] = run_pipeline_on_source(
-                source=source,
-                input_path=path,
-                out_dir=out_dir,
-                expand_macros=effective_expand,
-                inline_comments=inline_comments,
-                quiet=True,
-                analyzer_enabled=not no_semantic,
-                transform_enabled=not no_semantic,
-                renderer_enabled=True,
-                stage=None,
-                no_lint=no_lint,
-                ext_dirs=DEFAULT_EXT_DIRS,
-            )
+            if group == "transform":
+                # transform 分支自行跑两条路径（见下），跳过公共单路径调用
+                result = {"success": True, "error": "", "idempotent": True}
+            else:
+                # 组别独立参数：宏展开按 GROUP_PARAMS 配置，CLI --expand-macros 可覆盖
+                params = GROUP_PARAMS.get(group, {})
+                effective_expand = params.get("expand_macros", False) or expand_macros
+                result: dict[str, Any] = run_pipeline_on_source(
+                    source=source,
+                    input_path=path,
+                    out_dir=out_dir,
+                    expand_macros=effective_expand,
+                    inline_comments=inline_comments,
+                    quiet=True,
+                    analyzer_enabled=not no_semantic,
+                    transform_enabled=not no_semantic,
+                    renderer_enabled=True,
+                    stage=None,
+                    no_lint=no_lint,
+                    ext_dirs=DEFAULT_EXT_DIRS,
+                )
         finally:
             if not verbose:
                 sys.stdout = old_stdout
@@ -187,6 +195,67 @@ def run_all(
         success = result["success"]
         err_msg = result["error"] or ""
         idempotent = result.get("idempotent", True)
+
+        # ── transform 组：两条路径 ────────────────────────
+        # 1. 不变换直接渲染（expand_enhanced=False）→ 保真度对比输入（增强语法保留）
+        # 2. 变换展开后渲染（expand_enhanced=True）→ 保真度对比 ref（展开正确性）
+        if group == "transform":
+            subs = []
+            idp_bad = False
+            all_pass = True
+            for mode, eh in (("P", False), ("X", True)):
+                r_t = run_pipeline_on_source(
+                    source=source,
+                    input_path=path,
+                    out_dir=out_dir,
+                    expand_macros=False,
+                    inline_comments=inline_comments,
+                    quiet=True,
+                    analyzer_enabled=not no_semantic,
+                    transform_enabled=not no_semantic,
+                    renderer_enabled=True,
+                    stage=None,
+                    no_lint=no_lint,
+                    ext_dirs=DEFAULT_EXT_DIRS,
+                    expand_enhanced=eh,
+                    # 变换路径禁用注释恢复：变换改变结构后锚点漂移，
+                    # 恢复注定找不到位置或误匹配拆坏注释行
+                    enable_line_comment_restore=not eh,
+                )
+                if mode == "P":
+                    ref_text = source  # 增强语法保留：对比输入
+                    thr = 0.99  # token 完整，应接近 1.0
+                else:
+                    ref_path = os.path.join(
+                        base_dir, "samples", "transform", "ref", f"ref_{name}.v"
+                    )
+                    with open(ref_path, encoding="utf-8") as f:
+                        ref_text = f.read()
+                    thr = 0.95  # 展开正确性：实例名 hash 差异可容忍
+                t_out = r_t.get("output", "")
+                rf, gf = _strip_all(ref_text), _strip_all(t_out)
+                t_fid = (
+                    1.0
+                    if rf == gf
+                    else round(difflib.SequenceMatcher(None, rf, gf).ratio(), 4)
+                )
+                t_pass = bool(r_t.get("success")) and t_fid >= thr
+                all_pass = all_pass and t_pass
+                if not r_t.get("idempotent", True):
+                    idp_bad = True
+                subs.append(f"{mode}:{'OK' if t_pass else 'FAIL'}({t_fid:.4f})")
+            if idp_bad:
+                total_warn += 1
+                status = "IDP"
+            elif all_pass:
+                total_ok += 1
+                status = "OK"
+            else:
+                total_fail += 1
+                status = "FAIL"
+            results.append((name, all_pass and not idp_bad, status, " ".join(subs)))
+            print(f"  {name:25s} {status:5s} {' '.join(subs)}")
+            continue
 
         # ── 文本保真度比较（normal / transform / real 组）────────────────
         # normal 组：ref = 输入文件，保真度 = 管线输出对输入的保留程度

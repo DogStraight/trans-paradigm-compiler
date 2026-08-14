@@ -132,6 +132,7 @@ def run_pipeline_on_source(
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
     check_idempotent: bool = True,
+    enable_line_comment_restore: bool = True,
 ) -> dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -439,12 +440,23 @@ def run_pipeline_on_source(
                 _log(f"[comments] inline anchor restoration: {n} items")
 
         # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
+        # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
+        # 了代码结构（impl → ModuleInst、类型端口 → 具体端口），源行号/锚点必然
+        # 漂移，恢复注定找不到位置或误匹配拆坏注释行（曾把含 `spi.slave` 的注释
+        # 从 `.` 处劈开）。但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
+        # 不依赖锚点窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，
+        # 宏还原失效。有宏/条件块时降级 only_tpc，无则整个跳过。
         line_anchors = getattr(parser, "_line_comment_anchors", None)
-        if line_anchors:
+        if line_anchors and enable_line_comment_restore:
             content, n = restore_line_comments(
                 content, line_anchors, tpc_src_map=tpc_src_map
             )
             _log(f"[comments] line anchor restoration: {n} items")
+        elif line_anchors and (restore_stack or placeholders):
+            content, n = restore_line_comments(
+                content, line_anchors, tpc_src_map=tpc_src_map, only_tpc=True
+            )
+            _log(f"[comments] tpc marker restoration: {n} items")
 
         # Reverse macro protection — 必须放在 line-comment restore 之后：
         # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进

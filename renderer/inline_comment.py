@@ -106,7 +106,10 @@ def _interp_tpc_line(src_line: int, rendered_tpc_src: dict, rendered_tpc: dict) 
 
 
 def restore_line_comments(
-    rendered: str, anchors: list[dict], tpc_src_map: dict | None = None
+    rendered: str,
+    anchors: list[dict],
+    tpc_src_map: dict | None = None,
+    only_tpc: bool = False,
 ) -> tuple[str, int]:
     """基于锚点的行注释回插。
 
@@ -123,6 +126,11 @@ def restore_line_comments(
     2. 在 [line-1, line+2] 窗口内搜索锚点文本
     3. 在锚点所在行之前插入注释行
     4. (text, line) 去重，处理回溯导致的重复收集
+
+    only_tpc=True：只回插 tpc marker（`// <tpc:*>`，宏/条件块还原依赖），
+    跳过普通注释。变换路径禁用普通注释恢复（锚点漂移会误匹配拆坏注释行），
+    但宏 marker 是唯一性插值定位、不依赖锚点窗口，仍必须回插——否则
+    protect_and_reverse 找不到 marker，宏还原失效。
     """
     if not anchors:
         return rendered, 0
@@ -160,6 +168,9 @@ def restore_line_comments(
         anchor = c["anchor"]
         src_line = c["line"]
         is_tpc = "tpc:" in text
+
+        if only_tpc and not is_tpc:
+            continue  # 变换路径：普通注释锚点漂移，跳过（tpc marker 仍回插）
 
         if text in existing_lines:
             continue

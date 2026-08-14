@@ -141,6 +141,12 @@ def run_inst_port_align(lines: list[str], contexts: list[LineContext]) -> list[s
     """拆单行多端口 + 连续端口行对齐。"""
     result: list[str] = []
     for line in lines:
+        # impl 绑定语句（`impl type.role (ports)`）：`type.role` 会被当端口段拆开
+        # （如 `impl spi.master (.clk(clk),` 拆成 `.master(.clk(clk),)` + `.clk(clk),`），
+        # 整行跳过拆分——其后续 `.port(expr)` 行仍走连续端口对齐。
+        if line.lstrip().startswith("impl "):
+            result.append(line)
+            continue
         segs = _split_line_ports(line)
         if segs is not None:
             result.extend(segs)
