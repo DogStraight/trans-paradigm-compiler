@@ -33,30 +33,66 @@ transform, renderer — is configurable, forkable, and model-friendly.
   AST construction.
 
 ```verilog
-// Define a custom type with roles
-type spi (parameter DATA_WIDTH = 8) {
-    master : output reg [DATA_WIDTH-1:0] data_out;
-    slave  : input  reg [DATA_WIDTH-1:0] data_in;
+// Define a custom type with roles, then use it in a module port
+type spi {
+    master : input clk, input miso, output mosi, output cs;
+    slave  : input clk, input mosi, output miso, output cs;
 }
 
-// Use it in a module port
-module spi_invoker (
-    input  wire         clk,
-    spi.slave           spi_io,
-    output reg  [7:0]   spi_data
+module top(
+    input clk,
+    spi.slave spi_io
 );
+    impl spi.master (.clk(clk)) => top;
+endmodule
 ```
 
-One command expands the custom type to standard Verilog:
+Running the pipeline expands the custom type to standard Verilog:
 
 ```verilog
-// Expanded to standard Verilog
-module spi_invoker (
-    input wire clk,
-    input reg [7:0] spi_io_data_in,
-    output reg [7:0] spi_data
+module top(
+    input    clk,
+    input    spi_io_clk,
+    input    spi_io_mosi,
+    output   spi_io_miso,
+    output   spi_io_cs
 );
+    spi_master u_spi_master_1c8568 (
+        .clk(clk)
+    );
+endmodule
 ```
+
+### Running the example
+
+Expansion is the default pipeline behavior (`expand_enhanced=True`). Save the
+input above to `top.v`, then run it through the pipeline:
+
+```python
+from tests.e2e.run_pipeline import run_pipeline_on_source
+
+with open("top.v") as f:
+    src = f.read()
+
+result = run_pipeline_on_source(source=src, no_lint=True)  # expand_enhanced=True by default
+print(result["output"])                        # expanded standard Verilog
+```
+
+> `no_lint=True` is required for enhanced syntax today: the pre-parse linter
+> targets plain Verilog and does not yet know `type` / `spi.slave` / `impl`
+> tokens, so it would reject the input before parsing. Enhanced constructs run
+> through the full pipeline (parse → analyze → transform → render) but skip the
+> token-level lint gate.
+
+To keep the enhanced syntax instead (format the `type spi { ... }` as-is):
+
+```python
+result = run_pipeline_on_source(source=src, no_lint=True, expand_enhanced=False)
+```
+
+The two paths share the same formatter; `expand_enhanced` only controls
+whether the enhanced AST nodes are expanded (analyze + transform) or preserved
+(rendered directly by their `[Rule.renderer.layout]`).
 
 ## How it works
 
