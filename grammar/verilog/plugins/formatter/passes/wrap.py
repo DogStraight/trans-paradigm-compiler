@@ -20,9 +20,9 @@ from ..boundary import LineContext
 DEFAULT_MAX_WIDTH = 100
 
 # 安全断点字符（顶层，括号外）——按优先级从低到高拆
-# 逗号 < 逻辑 || && < 三目 ? : < 算术 + - < 乘除 * /
+# 逗号 < 逻辑 || && < 算术 + - < 乘除 * / < 三目 ? :
 _BREAK_HINTS = [",", "||", "&&", "+", "-", "*", "/"]
-# 三目单独处理（? 和 : 都算断点）
+# 三目单独处理（? 和 : 都算断点；断点取符号后，符号留在第一行尾）
 _TERNARY = ("?", ":")
 
 
@@ -36,11 +36,16 @@ def _is_comment_or_directive(line: str) -> bool:
 
 
 def _top_level_split_points(line: str, hints: list[str]) -> list[int]:
-    """返回行内顶层（括号外）断点位置列表（含运算符本身起始）。"""
+    """返回行内顶层（括号外）断点位置列表（含运算符本身起始）。
+
+    跟踪 () 与 [] 深度：位选择 `[31:25]` 内的 `:` 是三目符号但语义上是
+    位选择分隔符，不算断点；[] 内其他运算符同样排除。
+    """
     stripped = line.lstrip()
     base = len(line) - len(stripped)
     points: list[int] = []
     depth = 0
+    bracket_depth = 0
     in_str = False
     i = 0
     while i < len(stripped):
@@ -58,7 +63,11 @@ def _top_level_split_points(line: str, hints: list[str]) -> list[int]:
             depth += 1
         elif ch == ")":
             depth -= 1
-        elif depth == 0:
+        elif ch == "[":
+            bracket_depth += 1
+        elif ch == "]":
+            bracket_depth -= 1
+        elif depth == 0 and bracket_depth == 0:
             for h in hints:
                 if stripped.startswith(h, i):
                     points.append(base + i)
@@ -77,13 +86,18 @@ def _find_break_point(line: str, max_width: int) -> int | None:
     stripped = line.lstrip()
     base = len(line) - len(stripped)
     indent = _indent_of(line)
-    # 候选：按优先级（逗号→逻辑→算术）收集所有顶层断点
+    # 候选：按优先级（逗号→逻辑→算术→三目）收集所有顶层断点。
+    # 断点取"运算符之后"（运算符留在第一行尾，续行从操作数开始）——
+    # parser 的 pratt 表达式不接受运算符行首续行（`&&`/`+` 行首解析失败），
+    # 但接受运算符行尾 + 操作数行首（实测 0 错）。boundary 用"行尾运算符"
+    # 识别续行（见 op_cont 的注释：折行 pass 拆出的续行），indent 保缩进。
     all_points: list[int] = []
     for h in _BREAK_HINTS:
         pts = _top_level_split_points(line, [h])
-        all_points.extend(pts)
-    # 三目
-    all_points.extend(_top_level_split_points(line, list(_TERNARY)))
+        all_points.extend(p + len(h) for p in pts)
+    # 三目 `:` 断点（`?` 后断会续行行首 `:` 非法；`:` 断在冒号后，冒号留行尾）
+    for p in _top_level_split_points(line, [":"]):
+        all_points.append(p + 1)
     if not all_points:
         return None
     # 目标：优先保留最长前缀（最右断点），贪心循环会继续拆尾行

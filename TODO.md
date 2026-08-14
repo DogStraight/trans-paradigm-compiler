@@ -2,9 +2,12 @@
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 完成基线（当前验证过的事实）：
-> - 587 测试全过；PicoRV32 token 完整硬基线（format 不改 token）
+> - 613 测试全过；PicoRV32 token 完整硬基线（format 不改 token）
 > - c4 第二语言完成（.c → c4 VM 汇编，6 集成测试）——语言无关主张实证
-> - formatter 接入管线 + 幂等 + 宽度折行 + SV 基础覆盖 + 风格参数化 + 品类对齐
+> - formatter 接入管线 + 幂等 + 品类对齐 + 风格参数化 + **wrap 折行恢复**
+>   （end_case 分号化试点 6 条：assign 3 + wire/reg/integer 3，折行幂等 + 管线 0 错）
+> - 后置 lint → 幂等检查（非展开路径第二遍 parse truncated 即 FAIL）+ transform
+>   两条路径（P 保留对比输入 / X 展开对比 ref）+ lint_err 命名统一 ref_ 前缀
 > - 预处理器宏相关完成（带参宏/条件编译还原/指令原位回插 + primitives 单测 19 项）
 > - typed_ports 增强渲染双路径（展开/保留，expand_enhanced）+ nested/invert 验证
 > - 数字形态配置化完成（声明→FSM 生成器 + 语言包声明 + signed 's + 0'b1 标准拒绝）
@@ -22,6 +25,62 @@
       verilog tpc.toml [plugins] enabled 控制挂载
 - [ ] 迁移已内嵌的 SV 三样（logic/always_ff/always_comb）到插件
 - [ ] 验证：挂载/卸载 SV 插件后 verilog 包行为正确（插拔无残留）
+
+### P1.4 折行（wrap）完善——end_case 分号化
+
+> 来源：2026-08-15。wrap 已恢复（build_engine 末尾注册，断点取运算符之后、
+> boundary 行尾运算符续行识别 + decl_op_cont 豁免），但根因是**语法把"行"当
+> 语句边界**——27 条规则 "end_case 含 newline 且 production 以分号结尾"。
+> 已试点改 6 条（assign 3 + wire/reg/integer 3），语句边界由分号决定后折行
+> 插入的 newline 不再截断。剩余规则需逐条验证。
+
+- [ ] 剩余 21 条分号收尾规则 end_case 改分号（ForLoop/EventWait/SubroutineCall/
+      TaskCall/声明类等）——逐条改 + 折行场景回归
+- [ ] 函数/任务声明类（FuncDecl/TaskDecl，end_case 含 endfunction/endtask）特殊处理——
+      end_case 不能简单改分号（函数体声明行以分号结尾但块以 endfunction 收），
+      需确认折行时块内声明不截断
+- [ ] wrap 断点：位选择 `[31:25]` 已修（[] 深度跟踪）；三目只断 `:` 后已修；
+      concat `{a, b, ...}` 超宽不折（无顶层断点）——评估是否需要 concat 断点
+- [ ] picorv32 超宽行 75→73（其余无安全断点保留）——检查剩余 73 行是否需要
+      更细断点（长标识符/括号内/块头条件行）
+- [ ] 块头行（`if (...) begin` 超宽条件）折行——当前 wrap 只折分号行，块头不折，
+      需 boundary 支持"块头条件续行"识别
+- [ ] wrap 幂等回归测试补强（现有 test_wrap/test_idempotent 覆盖折行场景）
+
+### P1.6 wrap 升级：惩罚值驱动折行搜索（Verible 参考）
+
+> 来源：2026-08-15 调研 Verible（Google/chipsalliance，C++ CST 驱动 formatter）。
+> Verible 的折行模型是"**策略 + 惩罚 + 搜索**"：每个语法节点在 unwrap 时分配
+> 分区策略（kFitOnLineElseExpand/kWrap/kTabularAlignment/kStack 等），断行
+> 决策 = 在全部 append/wrap 组合里找总惩罚最小的方案（Dijkstra 最短路，
+> `over_column_limit_penalty=10000` 超列惩罚巨大，`max_search_states` 限搜索量）。
+> tpc 的 wrap 是**单点贪心**（最右安全断点）——断点 A 让后续更优的情况处理不了。
+> 不做完整 Dijkstra，做"候选断点 + 惩罚"的局部最优即可。
+
+- [ ] 断点惩罚表：候选断点（逗号/逻辑/算术/三目）各带惩罚值（参考 Verible
+      token-annotator），选总惩罚最小的断点组合而非最右断点
+- [ ] `over_column_limit_penalty` 概念：折不出 ≤ max_width 时允许超列但加惩罚，
+      不再"折不了就留着"——可权衡"折两行但某行略超" vs "不折全超"
+- [ ] 分区策略概念对齐：tpc 的品类对齐 ≈ kTabularAlignment，但缺"参数列表/
+      端口列表/声明"的独立策略——Verible 每种列表一个策略，tpc 可评估
+      按规则类型区分 wrap/stack 策略
+- [ ] 验证：折行结果对比现有贪心（picorv32 75 超宽行 → 惩罚搜索能否折更多、
+      结构是否更稳）
+
+### P1.5 已知缺陷收尾
+
+> 来源：2026-08-15 排查中确认的遗留项，非新增方向，逐项修复。
+
+- [ ] **@ElseChain 跨行匹配缺陷**：`end else` 换行后 `else if` 关联断裂——
+      此前定位过未修（语句发现把折行的 else 链截断）
+- [ ] **transform 实例名 hash 稳定性**：`u_spi_master_xxx` 的 salt 无法复现
+      ref（spi_inf X 路径 ratio 0.9862 因 hash 差异）——期望 ratio 到 1.0，
+      去掉"hash 可容忍"例外（判断 salt 逻辑是否与生成 ref 时漂移）
+- [ ] **变换路径注释恢复**：当前禁用（only_tpc 只回插 tpc marker），普通注释
+      在展开后丢失——长远应精确恢复而非禁用（锚点漂移的根本解决）
+- [ ] **concat 无折行**：`{a, b, c, ...}` 超宽保持原样，评估加 concat 断点
+- [ ] **fidelity 缓存模式区分**：key 已带 @expand/@plain 后缀防互串，但需确认
+      首次运行后缓存语义正确（不同模式不互相污染）
 
 ## P2 — 工程化收尾（发布准备）
 

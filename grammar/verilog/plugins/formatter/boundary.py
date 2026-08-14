@@ -557,6 +557,18 @@ class BoundaryScanner:
                     ):
                         is_cont = True
                         op_cont = True
+                    # 行尾是运算符（`&&`/`+`/`:` 等留在行尾，续行从操作数开始）
+                    # ——wrap 断点取运算符之后（操作数行首，parser 可解析），
+                    # 二次 format 靠行尾运算符识别续行。只设 op_cont 供下一行
+                    # hdr 用（line_num-1 指向本行=语句头）；不设 is_cont——
+                    # 本行是语句头，is_cont 若 True 会阻止 multi_header_line 记录。
+                    if (
+                        last_line_nontrivia is not None
+                        and last_line_nontrivia.startswith("symbol.")
+                        and not last_line_nontrivia.endswith(".dot")
+                        and last_line_nontrivia not in self.stmt_end_tokens
+                    ):
+                        op_cont = True
                     hdr_line = (
                         (line_num - 1) if op_cont else multi_header_line
                     ) if is_cont else 0
@@ -588,6 +600,15 @@ class BoundaryScanner:
                         line_first_token is not None
                         and line_first_token in self.decl_headers
                     )
+                    # 声明行行尾是运算符（`wire a = x &&` 的 `&&`，wrap 折行断点）
+                    # → 声明带初始化表达式且被折行，仍属续行（is_decl 不阻断）
+                    decl_op_cont = (
+                        is_decl
+                        and last_line_nontrivia is not None
+                        and last_line_nontrivia.startswith("symbol.")
+                        and not last_line_nontrivia.endswith(".dot")
+                        and last_line_nontrivia not in self.stmt_end_tokens
+                    )
                     is_conn = line_first_token == "symbol.base.dot"
                     if (
                         line_ends_stmt
@@ -597,7 +618,7 @@ class BoundaryScanner:
                         or is_pure_comment
                         or in_port_list
                         or pending_case_item
-                        or is_decl
+                        or (is_decl and not decl_op_cont)
                         or is_conn
                         or not line_buf
                     ):

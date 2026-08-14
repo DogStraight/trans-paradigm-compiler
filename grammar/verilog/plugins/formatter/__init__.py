@@ -91,6 +91,7 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
 
     style = load_style()  # indent_width（配置驱动）
     iw = style.get("indent_width", 4)
+    mw = style.get("max_line_width", 100)
 
     engine = FormatterEngine()
     # 缩进重排 pass（最前：先定缩进，品类/端口对齐再基于新缩进重组行）
@@ -130,6 +131,16 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
         name="inst_port",
         kind="handler",
         handler=run_inst_port_align,
+    ))
+    # 宽度控制折行 pass（最后：拆行改变行数，后续无依赖它的 pass；
+    # 续行缩进由 wrap 自己管理——indent 的 contexts 对拆出的新行无效）
+    from .passes.wrap import run_wrap_pass
+    engine.register(FormatterPass(
+        name="wrap",
+        kind="handler",
+        handler=lambda lines, ctxs: run_wrap_pass(
+            lines, ctxs, max_width=mw, indent_width=iw
+        ),
     ))
     return engine
 
