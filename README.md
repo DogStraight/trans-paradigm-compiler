@@ -86,6 +86,56 @@ production, inject a transform plugin — the rest of the pipeline stays intact.
 A language pack is a set of TOML files under `grammar/<lang>/` plus optional
 plugin scripts — no engine code required to add or modify a language.
 
+## Language rules in TOML
+
+Concrete example from the c4 language pack (`grammar/c4/`) — a tiny C subset:
+
+```toml
+# token.toml — keywords (lexer turns them into keyword.* tokens)
+[id.keyword]
+if = "if"
+else = "else"
+while = "while"
+int = "int"
+return = "return"
+
+# 01_statement.toml — a statement rule: production + AST shape
+[IfStmt]
+is_statement = true
+
+[IfStmt.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+    "(keyword.else,@Stmt)?",
+]
+
+[IfStmt.parser.node]
+cond = "$3"
+then_body = "$5"
+else_body = "$6"
+
+# 00_expression.toml — an atom + how it renders
+[Number.parser]
+is_atom = true
+production = ["literal.number"]
+
+[Number.parser.node]
+value = "$1"
+
+[Number.renderer.layout]
+ref = "value"
+```
+
+Rules reference tokens (`keyword.if`, `literal.number`), other rules
+(`@Expression`, `@Stmt`), and positional captures (`$3`) — the same notation
+drives lexer, parser, formatter, linter, and renderer. Operators, precedence,
+and rendering live in the same pack (`base/_symbol_level.toml` for Pratt
+priority, `[Rule.renderer.layout]` for Doc IR layout).
+
 ## Quick start (dev mode)
 
 ```bash
@@ -98,6 +148,45 @@ python main.py new component x  # scaffold a new component / plugin
 are example inputs under `tests/e2e/samples/` (e.g. `normal/ref_*.v`); the c4
 language pack (`grammar/c4/`) shows how a second language is defined in TOML
 and compiled to its own VM assembly (see `tests/c4/test_c4_asm.py`).
+
+## API / programming use
+
+Drive the pipeline from Python — lex, parse, analyze, transform, render:
+
+```python
+from core.config_registry import ConfigRegistry
+from core.define import DEFAULT_RULES_DIR, GrammarRulesRegister
+from lexer import Lexer
+from parser import Parser, setup_grammar
+from parser.rule_selector import RuleSelector
+from renderer.renderer import Renderer
+
+ConfigRegistry.load_all(DEFAULT_RULES_DIR, plugins_dir=DEFAULT_RULES_DIR + "/plugins")
+
+rules = setup_grammar(DEFAULT_RULES_DIR, GrammarRulesRegister.get_default())
+stmt_names = [n for n, r in rules.items()
+              if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()]
+parser = Parser(rules_dir=DEFAULT_RULES_DIR, rules=rules,
+                rule_selector=RuleSelector(rules, stmt_names))
+lexer = Lexer(rules_dir=DEFAULT_RULES_DIR)
+
+ast = parser.parse(lexer.tokenize(src))          # parse source
+out = Renderer(rules_dir=DEFAULT_RULES_DIR).render(ast)  # format it
+```
+
+One-liners for common cases:
+
+```python
+from grammar.verilog.plugins.formatter import format_source
+from core.define import DEFAULT_RULES_DIR
+
+formatted = format_source(src, DEFAULT_RULES_DIR)  # format only
+
+from linter.scanner import LinterScanner
+errors = LinterScanner(rules_dir=DEFAULT_RULES_DIR).scan(src)  # lint only
+```
+
+Full interface reference: [`docs/api.md`](./docs/api.md).
 
 ## Status
 
