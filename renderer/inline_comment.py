@@ -222,13 +222,10 @@ def restore_line_comments(
                 inserted = {j + 1 if j >= best_idx else j for j in inserted}
                 inserted.add(best_idx)
         else:
-            # 退化：锚点没找到，在行号窗口末尾追加
-            target = min(end - 1, len(lines) - 1)
-            if target not in inserted:
-                indent = " " * (len(lines[target]) - len(lines[target].lstrip()))
-                comment_line = indent + text
-                lines.insert(target + 1, comment_line)
-                inserted = {j + 1 if j >= target else j for j in inserted}
-                inserted.add(target)
+            # 退化：锚点没找到。不追加到窗口末尾——那会把注释塞进文件尾
+            # （如 endmodule 之后），污染结构导致重新解析 truncated；直接跳过，
+            # 注释丢失但结构合法。常见于连续注释块（锚点指向下一条注释文本，
+            # 渲染后不存在，如模块头注释组）。
+            continue
 
     return "\n".join(lines), len(unique)

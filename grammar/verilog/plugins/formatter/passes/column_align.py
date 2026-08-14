@@ -72,13 +72,28 @@ def _tokenize_bracket_aware(line: str) -> list[str]:
     tokens: list[str] = []
     buf: list[str] = []
     in_bracket = 0
-    for ch in stripped:
+    i = 0
+    n = len(stripped)
+    while i < n:
+        ch = stripped[i]
         if ch == "[":
             in_bracket += 1
             buf.append(ch)
         elif ch == "]":
             in_bracket -= 1
             buf.append(ch)
+        elif ch == "=" and in_bracket == 0:
+            # 连续等号（`==`/`===`）是单个运算符，不拆成多个 `=` token
+            # （防 `a == b` 被拆成 `a = = b`，重组后破坏运算符语义）
+            j = i
+            while j < n and stripped[j] == "=":
+                j += 1
+            eq = stripped[i:j]
+            if buf:
+                tokens.append("".join(buf))
+                buf = []
+            tokens.append(eq)
+            i = j - 1
         elif ch in "(),;={}" and in_bracket == 0:
             # 结构符独立成 token（即使粘连，如 `ffff_ffff,` / `(expr` / `0}`）
             if buf:
@@ -91,6 +106,7 @@ def _tokenize_bracket_aware(line: str) -> list[str]:
                 buf = []
         else:
             buf.append(ch)
+        i += 1
     if buf:
         tokens.append("".join(buf))
     return [indent] + tokens
@@ -170,6 +186,13 @@ def _extract_semantic(tokens: list[str]) -> list[str] | None:
     else:
         decl = rest
         init = ""
+
+    # 声明侧（`=` 前）含拼接/复制表达式（`assign {a, b} = ...`）：其逗号是
+    # 表达式分隔符，不是多声明分隔——走本路径会把逗号当列分隔吞掉（曾毁掉
+    # concat LHS 的 `{a, b}` → `{a  b}`，fidelity 0.95→0.33）。init 侧的
+    # concat（`param X = {a, b};`）保留在 init 里不丢，无需跳过。
+    if "{" in decl or "}" in decl:
+        return None
 
     # 声明部分去掉终结符
     d = [t for t in decl if t not in (",", ";")]

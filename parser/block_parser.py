@@ -103,7 +103,11 @@ def consume_start_token(self, context: ParseContext, start_token: str) -> bool:
 
 
 def collect_line_comments(self, context: ParseContext, block_node: Node) -> None:
-    """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为 Comment 节点。"""
+    """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为 Comment 节点。
+
+    文件尾独立注释（comment 后无 newline，如最后一行是注释且无尾随换行）
+    同样收集——否则被当句子起点导致 parse truncated（无害但误报）。
+    """
     while context.has_more_tokens():
         cur = context.peek_token()
         if cur and cur.type == COMMENT_TOKEN_TYPE:
@@ -114,6 +118,14 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
                 block_node.add_sub_node(comment_node)
                 context.advance_token()  # 跳过 comment
                 context.advance_token()  # 跳过 newline
+                continue
+            if not nxt:
+                # 文件尾注释（无 trailing newline）：同样收集，避免
+                # parse_sentence 把注释当句子起点而 truncated
+                comment_node = Node(COMMENT_NODE_NAME)
+                comment_node.add_attr("value", cur.content)
+                block_node.add_sub_node(comment_node)
+                context.advance_token()  # 跳过 comment
                 continue
         break
     self._skip_tokens(context, tuple(self.skip_types))
