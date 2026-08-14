@@ -73,7 +73,7 @@ class AnalysisTraversal:
     def diagnostics(self) -> list[Diagnostic]:
         return self._context.diagnostics
 
-    # ---- 递归遍历核心 ----
+    # ── 递归遍历核心 ──
 
     def _walk(self, node: Any) -> None:
         if isinstance(node, Node):
@@ -121,9 +121,7 @@ class AnalysisTraversal:
                 scope_exit_prim(self, node, config)
 
 
-# ============================================================
-# 辅助函数
-# ============================================================
+# ── 辅助函数 ──
 
 
 def _is_primitive_triggered(prim_name: str, config: dict) -> bool:

@@ -67,7 +67,7 @@ _PIPELINE_SHARED: dict = {}
 sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
 
-# ---------------------------- Helpers ----------------------------
+# ── Helpers ──
 def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
     """Find test file in tests/ directory. Returns (full_path, group, stem)."""
     src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -82,7 +82,7 @@ def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
     return "", "", ""
 
 
-# ---------------------------- Core Pipeline ----------------------------
+# ── Core Pipeline ──
 def format_generated(content: str, rules: Any, lexer: Any) -> str:
     """对生成文本跑 formatter（缩进/品类对齐/实例端口对齐）。
 
@@ -514,7 +514,7 @@ def run_pipeline_on_source(
     return result
 
 
-# ---------------------------- Command-line entry ----------------------------
+# ── Command-line entry ──
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="TransParadigm Compiler Pipeline – stage control and flexible execution",

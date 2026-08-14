@@ -116,9 +116,7 @@ def _build_macro_re(prefix: str) -> re.Pattern:
     return re.compile(rf"\{prefix}(\w+)")
 
 
-# ============================================================
-# 纯文本展开（新方案）
-# ============================================================
+# ── 纯文本展开（新方案）──
 
 
 def _inject_directive_marker(ctx: dict, stack: list, stripped: str) -> None:
@@ -296,9 +294,7 @@ def scan_directives(
     return macro_defs, func_macros, condition_blocks, placeholders, directive_lines, clean_source
 
 
-# ============================================================
-# 多路径诊断：条件块叶路径枚举
-# ============================================================
+# ── 多路径诊断：条件块叶路径枚举 ──
 
 
 def _enumerate_rec(

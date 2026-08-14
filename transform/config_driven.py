@@ -292,9 +292,7 @@ class ConfigDrivenTransform(TransformPlugin):
         return ctx
 
 
-# ============================================================
-# 内置原语注册（模块级，import 时自动注册）
-# ============================================================
+# ── 内置原语注册（模块级，import 时自动注册）──
 
 
 def _expand_primitive(engine, node, config, root_scope):

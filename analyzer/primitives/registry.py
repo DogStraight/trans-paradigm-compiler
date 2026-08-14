@@ -22,7 +22,7 @@ from core.define import Node
 #     config: dict,                  # Analyzer config dictionary for this rule
 # ] -> None
 #
-# Primitives modify the analyzer's internal state via side effects (scope, symbols, errors).
+# 原语通过副作用修改分析器内部状态（scope、symbols、errors）
 
 AnalyzerPrimitive = Callable[..., None]
 

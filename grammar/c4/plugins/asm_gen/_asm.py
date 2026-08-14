@@ -1,14 +1,13 @@
-# ============================================================================
-# _asm.py — c4 汇编生成插件（c4 AST → c4 VM 指令集）
-#
-# 对应 rswier/c4 的 c4.c 编译逻辑（expr/stmt/声明 → 指令发射，上游 github.com/rswier/c4），
-# 输出 c4 的 VM 汇编文本（LEA/IMM/JMP/JSR/BZ/BNZ/ENT/ADJ/LEV/LI/LC/SI/SC/PSH/
-# OR/XOR/AND/EQ/NE/LT/GT/LE/GE/SHL/SHR/ADD/SUB/MUL/DIV/MOD）。
-#
-# 以 TransformPlugin 注册（@register_plugin），process 守卫根节点为 c4 的
-# Program 才生成汇编（Verilog 等其它语言 AST 原样返回，互不干扰）。
-# 产出：AsmProgram 节点（sub_node = AsmLine，text = 单条指令），由 renderer 渲染。
-# ============================================================================
+"""_asm.py — c4 汇编生成插件（c4 AST → c4 VM 指令集）。
+
+对应 rswier/c4 的 c4.c 编译逻辑（expr/stmt/声明 → 指令发射，上游 github.com/rswier/c4），
+输出 c4 的 VM 汇编文本（LEA/IMM/JMP/JSR/BZ/BNZ/ENT/ADJ/LEV/LI/LC/SI/SC/PSH/
+OR/XOR/AND/EQ/NE/LT/GT/LE/GE/SHL/SHR/ADD/SUB/MUL/DIV/MOD）。
+
+以 TransformPlugin 注册（@register_plugin），process 守卫根节点为 c4 的
+Program 才生成汇编（Verilog 等其它语言 AST 原样返回，互不干扰）。
+产出：AsmProgram 节点（sub_node = AsmLine，text = 单条指令），由 renderer 渲染。
+"""
 
 from typing import Any
 

@@ -50,7 +50,7 @@ def build_priority_maps(operator_defs):
     return prefix_priority, prefix_attrs, infix_priority, infix_attrs
 
 
-# ========== Token 分类 ==========
+# ── Token 分类 ──
 def build_token_classifier(categories: dict) -> dict:
     """从分类配置构建 {name: check_fn(token) -> bool} 映射"""
     checks = {}
@@ -134,7 +134,7 @@ def install_token_classifier(categories: dict) -> None:
         _bool_true_type = None
 
 
-# ========== 字面量解析辅助 ==========
+# ── 字面量解析辅助 ──
 def parse_number_literal(token: Token) -> Node:
     content = token.content
     # 位宽字面量（如 8'hff）：由语言层注入的解析器处理
@@ -156,7 +156,7 @@ def parse_number_literal(token: Token) -> Node:
         return Node("Number", value=content)
 
 
-# ========== Pratt 解析核心 ==========
+# ── Pratt 解析核心 ──
 def parse_expression(
     tokens: list[Token],
     idx: int,
@@ -178,7 +178,7 @@ def parse_expression(
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
 
-    # ---------- 前缀处理（先原子解析器，后内置前缀）----------
+    # ── 前缀处理（先原子解析器，后内置前缀）──
     node = None
     # 跳过行内注释（不纳入表达式 AST）
     while (
@@ -242,7 +242,7 @@ def parse_expression(
         else:
             raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 
-    # ---------- 中缀（led）----------
+    # ── 中缀（led）──
     while idx < len(tokens):
         token = tokens[idx]
         # 停止符集合：遇到则终止表达式解析（如右括号、逗号等）

@@ -1,8 +1,8 @@
-# ============================================================================
+# ── = ──
 # Verilog 语法规则 — 语句（组合分层）
-# ============================================================================
+# ── = ──
 
-# ============================================================================
+# ── = ──
 # Verilog 语法规则 — 语句分层（增强语法挂载点依此分层注入）
 #
 # 层级结构：
@@ -21,9 +21,9 @@
 #     └─ CallStmt        : SubroutineCall, NullStmt
 #
 #   TaskStmt            = Stmt | TaskPortDecl
-# ============================================================================
+# ── = ──
 
-# ---------- 过程体控制流 ----------
+# ── 过程体控制流 ──
 [CtrlStmt]
 [CtrlStmt.parser]
 production = [
@@ -35,7 +35,7 @@ stmt = "$1"
 [CtrlStmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 过程体赋值 ----------
+# ── 过程体赋值 ──
 [ProcAssignStmt]
 [ProcAssignStmt.parser]
 production = ["@BlockingAssign|@NonBlockingAssign"]
@@ -45,7 +45,7 @@ stmt = "$1"
 [ProcAssignStmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 过程体内调用/空语句 ----------
+# ── 过程体内调用/空语句 ──
 [CallStmt]
 [CallStmt.parser]
 production = ["@SubroutineCall|@TaskCallStmt|@SysTaskStmt|@PropertyStmt|@NullStmt"]
@@ -55,7 +55,7 @@ stmt = "$1"
 [CallStmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 过程内部局部声明 ----------
+# ── 过程内部局部声明 ──
 [ProcLocalDecl]
 [ProcLocalDecl.parser]
 production = ["@RegDecl|@IntegerDecl"]
@@ -65,7 +65,7 @@ decl = "$1"
 [ProcLocalDecl.renderer]
 layout = { ref = "decl" }
 
-# ---------- 过程语句（用于 always / initial 内部） ----------
+# ── 过程语句（用于 always / initial 内部） ──
 [Stmt]
 statement_entry = true
 [Stmt.parser]
@@ -76,7 +76,7 @@ stmt = "$1"
 [Stmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 任务/函数语句（额外允许 TaskPortDecl） ----------
+# ── 任务/函数语句（额外允许 TaskPortDecl） ──
 [TaskStmt]
 statement_entry = true
 [TaskStmt.parser]
@@ -87,7 +87,7 @@ stmt = "$1"
 [TaskStmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 模块体声明 ----------
+# ── 模块体声明 ──
 [DeclStmt]
 [DeclStmt.parser]
 production = ["@WireDecl|@RegDecl|@BodyPortDecl|@IntegerDecl|@LocalParamDecl|@GenvarDecl"]
@@ -97,7 +97,7 @@ decl = "$1"
 [DeclStmt.renderer]
 layout = { ref = "decl" }
 
-# ---------- 模块体实例化 / 生成 ----------
+# ── 模块体实例化 / 生成 ──
 # 模块项级条件/分支 generate（A.4.2）：if(cond) begin…end / case(expr)…endcase
 # 复用 IfBlock/CaseStmt——其 @BeginEnd 体由 flatten 收集模块项内容（与 LoopGen 同机制）。
 [InstStmt]
@@ -109,7 +109,7 @@ inst = "$1"
 [InstStmt.renderer]
 layout = { ref = "inst" }
 
-# ---------- 模块体函数/任务定义 ----------
+# ── 模块体函数/任务定义 ──
 [FuncStmt]
 [FuncStmt.parser]
 production = ["@FuncDecl|@TaskDecl"]
@@ -119,7 +119,7 @@ decl = "$1"
 [FuncStmt.renderer]
 layout = { ref = "decl" }
 
-# ---------- 模块体过程（always / initial） ----------
+# ── 模块体过程（always / initial） ──
 # initial 仅用于仿真场景（不可综合），但语法解析层面与 always 同级。
 # 若后续需要区分仿真/综合上下文，可通过 analyzer 阶段或单独的语法变体实现过滤。
 [ProcStmt]
@@ -131,7 +131,7 @@ stmt = "$1"
 [ProcStmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 模块顶层条目（用于 module 体） ----------
+# ── 模块顶层条目（用于 module 体） ──
 [ModuleItem]
 statement_entry = true
 [ModuleItem.parser]
@@ -144,7 +144,7 @@ item = "$1"
 [ModuleItem.renderer]
 layout = { ref = "item" }
 
-# ---------- 保持兼容：BasicStmt / NonBlockStmt 别名（不依赖此分层的旧注入仍可用） ----------
+# ── 保持兼容：BasicStmt / NonBlockStmt 别名（不依赖此分层的旧注入仍可用） ──
 [BasicStmt]
 [BasicStmt.parser]
 production = ["@CtrlStmt|@ProcAssignStmt|@CallStmt"]
@@ -163,4 +163,4 @@ stmt = "$1"
 [NonBlockStmt.renderer]
 layout = { ref = "stmt" }
 
-# ---------- 以下所有具体语句规则保持不变，只调整内部引用的块 ----------
+# ── 以下所有具体语句规则保持不变，只调整内部引用的块 ──

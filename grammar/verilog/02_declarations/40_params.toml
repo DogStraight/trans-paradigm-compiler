@@ -6,9 +6,7 @@
 #
 # 被引用于: 04_statements/00_base.toml (DeclStmt → LocalParamDecl|GenvarDecl)
 
-# ============================================================================
-# LocalParamDecl — localparam 声明
-# ============================================================================
+# ── LocalParamDecl — localparam 声明 ──
 # 格式: localparam name1 = value1, name2 = value2, ... ;
 #       localparam integer name = value, ... ;
 #       localparam [msb:lsb] name = value, ... ;
@@ -56,9 +54,7 @@ line = [
 ]
 
 
-# ============================================================================
-# GenvarDecl — genvar 声明
-# ============================================================================
+# ── GenvarDecl — genvar 声明 ──
 # 格式: genvar name;
 # genvar 是用于 generate 循环的变量类型。
 

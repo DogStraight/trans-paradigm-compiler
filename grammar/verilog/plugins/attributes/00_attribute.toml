@@ -38,9 +38,7 @@ layout = { line = [
 ] }
 
 
-# ============================================================================
-# AttrStmt — 过程体属性语句（(* ... *) 前缀语句，如 (* full_case *) case ...）
-# ============================================================================
+# ── AttrStmt — 过程体属性语句（(* ... *) 前缀语句，如 (* full_case *) case ...） ──
 # 过程体内 attribute 实例 + 语句（常见于 (* parallel_case *) case / (* full_case *) case）。
 # 挂载位点：@Stmt（过程体语句入口），与 ModuleItem 的 AttrDecl 互补。
 # 注意：挂 @Stmt 会把 AlwaysStmt/IfStmt 等规则的 body 从 @Stmt（call）传播成
@@ -74,9 +72,7 @@ layout = { line = [
 ] }
 
 
-# ============================================================================
-# AttrInstance — (* attr_spec { , attr_spec } *)
-# ============================================================================
+# ── AttrInstance — (* attr_spec { , attr_spec } *) ──
 [AttrInstance]
 [AttrInstance.parser]
 production = [
@@ -103,9 +99,7 @@ layout = { line = [
 ] }
 
 
-# ============================================================================
-# AttrSpecList — 逗号分隔的 attr_spec 列表（(* a, b = 1 *)）
-# ============================================================================
+# ── AttrSpecList — 逗号分隔的 attr_spec 列表（(* a, b = 1 *)） ──
 [AttrSpecList]
 [AttrSpecList.parser]
 production = ["@AttrSpec", "(symbol.base.comma,@AttrSpec)*"]
@@ -146,9 +140,7 @@ value = "$2"
 layout = { ref = "value" }
 
 
-# ============================================================================
-# AttrConstPrimary — 常量 primary（IEEE A.8.4 constant_primary 实用子集）
-# ============================================================================
+# ── AttrConstPrimary — 常量 primary（IEEE A.8.4 constant_primary 实用子集） ──
 [AttrConstPrimary]
 inline = true
 [AttrConstPrimary.parser]

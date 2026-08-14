@@ -63,7 +63,7 @@ def _load_tpc_meta() -> dict:
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Step 1: Load user config to find grammar package
+    # 步骤 1：加载用户配置，定位语法包
     user_config = _find_user_config()
     if user_config:
         try:
@@ -74,7 +74,7 @@ def _load_tpc_meta() -> dict:
     else:
         cfg = {}
 
-    # Step 2: Resolve grammar package path
+    # 步骤 2：解析语法包路径
     # tpc_config.json 中 grammar 可以是字符串（路径）或旧格式对象
     grammar_val = cfg.get("grammar", "")
     if isinstance(grammar_val, str):
@@ -84,7 +84,7 @@ def _load_tpc_meta() -> dict:
     else:
         grammar_dir = ""
 
-    # Step 3: Load grammar package tpc.toml for engine interface config
+    # 步骤 3：加载语法包 tpc.toml（引擎接口配置）
     meta_path = os.path.join(root, grammar_dir, "tpc.toml")
     meta: dict = {}
     if os.path.isfile(meta_path):
@@ -94,10 +94,10 @@ def _load_tpc_meta() -> dict:
         except tomllib.TOMLDecodeError as e:
             raise ConfigError(f"[config] {grammar_dir}/tpc.toml parse failed: {e}")
 
-    # Step 4: 插件目录由 tpc.toml [plugins] enabled 管理（config_registry 自动发现）
+    # 步骤 4：插件目录由 tpc.toml [plugins] enabled 管理（config_registry 自动发现）
     ext_dirs: list[str] = []
 
-    # Step 5: Normalize — grammar 统一为对象格式
+    # 步骤 5：归一化 — grammar 统一为对象格式
     merged = dict(cfg)
     merged["grammar"] = {
         "rules_dir": grammar_dir,

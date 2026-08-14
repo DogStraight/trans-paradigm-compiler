@@ -79,9 +79,7 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
         analyzer._all_symbols.append(sym)
 
 
-# ============================================================
-# 内部辅助函数
-# ============================================================
+# ── 内部辅助函数 ──
 
 
 def _build_capture_attrs(node: Node, capture: dict) -> dict:

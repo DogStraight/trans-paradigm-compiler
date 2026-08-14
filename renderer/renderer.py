@@ -58,9 +58,7 @@ class Renderer:
         self._MAX_INLINE = style["max_inline"]
         self._children_field = style["children_field"]
 
-    # ---------------------------------------------------------------
-    # 入口
-    # ---------------------------------------------------------------
+    # ── 入口 ──
     def render(self, node: Node, indent: int = 0) -> str:
         """渲染完整 AST 为格式化文本"""
         node = normalize_ast(node, self._layouts)
@@ -69,9 +67,7 @@ class Renderer:
         doc = self._render_node(node, self._layouts.get(node.node_name, {}), indent)
         return layout(doc, self._MAX_INLINE)
 
-    # ---------------------------------------------------------------
-    # 节点渲染（委托到 node_renderer）
-    # ---------------------------------------------------------------
+    # ── 节点渲染（委托到 node_renderer）──
     def _render_node(self, node: Node, layout_cfg: dict, indent: int) -> Doc:
         return render_node(node, layout_cfg, indent, self)
 
@@ -90,9 +86,7 @@ class Renderer:
     def _resolve_items(self, node: Node, items_spec: str | None) -> list[Any]:
         return resolve_items(node, items_spec, self)
 
-    # ---------------------------------------------------------------
-    # DSL 求值（委托到 primitives）
-    # ---------------------------------------------------------------
+    # ── DSL 求值（委托到 primitives）──
     def _eval(
         self, expr: Any, node: Node, indent: int, parent_layout: dict | None = None
     ) -> Doc | None:

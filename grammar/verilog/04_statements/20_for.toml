@@ -50,9 +50,7 @@ line = [
 ]
 
 
-# ============================================================================
-# ForLoopBlock — for 循环（块体版）
-# ============================================================================
+# ── ForLoopBlock — for 循环（块体版） ──
 # for 体必须用 @BeginEnd（即 begin…end）。
 
 [ForLoopBlock]
@@ -141,9 +139,7 @@ stmt = "$1"
 ref = "stmt"
 
 
-# ============================================================================
-# WhileLoop / RepeatLoop / ForeverLoop — while/repeat/forever 循环
-# ============================================================================
+# ── WhileLoop / RepeatLoop / ForeverLoop — while/repeat/forever 循环 ──
 # 配合 ForLoop 构成完整循环族（IEEE A.6.8）。
 #   while (expr) stmt   — 条件循环（可综合 RTL 常用）
 #   repeat (expr) stmt  — 次数循环（可综合）

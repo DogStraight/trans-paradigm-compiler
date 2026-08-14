@@ -20,9 +20,7 @@ Renderer 仅依赖此规范形式。
 from typing import Any
 from core.define import Node
 
-# ============================================================
-# 通用规范化常量（硬编码，不依赖 TOML 配置）
-# ============================================================
+# ── 通用规范化常量（硬编码，不依赖 TOML 配置）──
 
 # 需要提取为字符串值的 token 名前缀（keyword.xxx → "xxx"）
 EXTRACT_PREFIXES = ["keyword.", "symbol."]
@@ -36,11 +34,11 @@ EXTRACT_NAMES = frozenset({
     "literal.none",
 })
 
-# Core elimination set (parser-internal structures only)
+# 核心消除集合（仅 parser 内部结构）
 # optional  → filter None
 # repeat    → zero-or-more (unfold to list)
 # seq       → sequence (unfold to list)
-# Note: grammar-level structures (e.g. DeclaratorList) are preserved as-is
+# 注：语法层结构（如 DeclaratorList）原样保留
 ELIMINATE_TYPES = frozenset({"optional", "repeat", "seq"})
 
 # AST 字段名约定（与 core/define.py 中的 Node 类对齐）

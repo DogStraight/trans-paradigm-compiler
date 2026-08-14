@@ -19,8 +19,7 @@ Extra output:
 
 from .engine import AstTransformer, TransformPlugin, mark_extra, collect_extra_asts
 
-# Load built-in transform plugins (must happen after load_all_components()
-# so component plugins register before engine plugins).
+# 加载内置变换插件（必须在 load_all_components() 之后，保证组件插件先于引擎插件注册）
 # 顺序要求：SemanticMappingPlugin（建映射表）必须先于 ConfigDrivenTransform（消费映射表）
 from . import _semantic_mapping  # noqa: F401 — triggers @register_plugin
 from . import config_driven  # noqa: F401 — triggers @register_plugin

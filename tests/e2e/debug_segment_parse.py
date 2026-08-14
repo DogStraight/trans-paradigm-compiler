@@ -51,7 +51,7 @@ sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 _MODULE_RE = re.compile(r"^\s*module\s+\w")
 
 
-# ---------------------------- 分段 ----------------------------
+# ── 分段 ──
 def split_by_module(text: str):
     """按 module/endmodule 边界把文本切成若干段。
 
@@ -102,7 +102,7 @@ def _module_name(line: str) -> str:
     return m.group(1) if m else "?"
 
 
-# ---------------------------- 解析 ----------------------------
+# ── 解析 ──
 def build_components(rules_dir: str, ext_dirs: list[str]):
     ConfigRegistry.load_all(
         rules_dir, ext_dirs=ext_dirs, plugins_dir=os.path.join(rules_dir, "plugins")
@@ -152,7 +152,7 @@ def merge_segments(seg_results):
     return root
 
 
-# ---------------------------- 主流程 ----------------------------
+# ── 主流程 ──
 def main() -> int:
     ap = argparse.ArgumentParser(description="分段解析 + 并树")
     ap.add_argument("file", help="Verilog 源文件")

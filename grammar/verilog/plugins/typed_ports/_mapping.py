@@ -30,7 +30,7 @@ _type_ports_flat = {
     },
 }
 
-# Transform callback consumer
+# ── 变换回调消费方 ──
 _apply_refs = {"kind": "apply_refs"}
 
 mapping_entries: dict = {
