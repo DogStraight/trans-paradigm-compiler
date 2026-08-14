@@ -24,8 +24,9 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
+# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [WireDecl.parser.node]
@@ -71,8 +72,9 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
+# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [RegDecl.parser.node]
@@ -116,8 +118,9 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
+# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [IntegerDecl.parser.node]

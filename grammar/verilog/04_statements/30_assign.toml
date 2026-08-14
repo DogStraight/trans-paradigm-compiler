@@ -22,8 +22,10 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
+# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
+# （不用 newline 作 end_case，避免折行插入的换行被误判为语句结束）
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [NonBlockingAssign.parser.node]
@@ -52,8 +54,9 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
+# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [BlockingAssign.parser.node]
@@ -84,8 +87,9 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
+# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
 end_case = [
-    "newline",
+    "symbol.base.semicolon",
 ]
 
 [AssignStmt.parser.node]
