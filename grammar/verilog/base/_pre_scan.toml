@@ -7,6 +7,10 @@
 #   "next_word"    — 声明关键词后的第一个单词就是声明名（module/interface/task）
 #   "after_range"  — 声明关键词后可能跟范围 [a:b]，再跟声明名（function）
 #   "after_skip"   — 声明关键词后跳过指定的 skip_keywords，再捕获声明名
+#
+# ⚠ 本文件只声明**基础语法**的预扫描槽位。增强语法（如 typed_ports）若需要
+#   参与 pre_symbols 消歧，应在插件自己的 tpc.toml 声明 [lexer] pre_scan，
+#   不要往这里加——基础文件只负责基础的 id 槽位。
 
 [pre_scan]
 
@@ -30,7 +34,7 @@ keyword = "module"
 name_capture = "next_word"
 terminators = ["(", "#", ";"]
 # Parser 规则选择提示：遇到已知模块名时优先试这些规则
-rule_hints = ["ModuleInst", "ModuleRef"]
+rule_hints = ["ModuleInst"]
 
 [pre_scan.decl.interface]
 keyword = "interface"
@@ -43,18 +47,11 @@ keyword = "function"
 name_capture = "after_range"
 skip_keywords = ["automatic"]
 terminators = ["("]
-rule_hints = ["SubroutineCall", "FuncCall"]
+rule_hints = ["SubroutineCall"]
 
 [pre_scan.decl.task]
 keyword = "task"
 name_capture = "next_word"
 skip_keywords = ["automatic"]
 terminators = ["(", ";"]
-rule_hints = ["SubroutineCall", "FuncCall"]
-
-[pre_scan.decl.typedef]
-keyword = "typedef"
-name_capture = "last_word_before_semicolon"
-terminators = [";"]
-# 以 * 结尾表示后缀匹配（如 "*TypeSpec" 匹配 AnsiTypeSpec/InlineTypeSpec 等）
-rule_hints = ["*TypeSpec"]
+rule_hints = ["SubroutineCall"]
