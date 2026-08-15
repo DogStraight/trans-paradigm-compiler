@@ -118,6 +118,14 @@ def build_engine(
             lines, ctxs, indent_width=iw
         ),
     ))
+    # 条件编译指令注释标注 pass（`` `else/`endif `` 补配对宏名，VeriGood 借鉴）
+    # 纯文本栈，独立于缩进；幂等（已有注释不重复）
+    from .passes.ifdef_annotate import run_ifdef_annotate
+    engine.register(FormatterPass(
+        name="ifdef_annotate",
+        kind="handler",
+        handler=lambda lines, ctxs: run_ifdef_annotate(lines),
+    ))
     if categories is None:
         # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
         categories = _load_categories_from_config() or DEFAULT_CATEGORIES
