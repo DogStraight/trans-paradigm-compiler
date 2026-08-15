@@ -42,6 +42,12 @@
       enum）、lsu_bus_intf.sv（interface/import）、tutorial class_*.svh（class）
 - [ ] 验证：挂载/卸载 SV 插件后 verilog 包行为正确（插拔无残留）
 
+> **语法蓝本就绪（2026-08-16）**：IEEE 1800-2023 PDF 在项目根目录，
+> Annex A 已提取为 `docs/ieee1800_2023_annex_a.md`（86 节、2557 行，
+> A.1 源文本 / A.2 数据类型 / A.6 语句 / A.8 表达式 / A.9 其他，完整 BNF）。
+> `scripts/ieee_grammar_to_md.py` 已参数化（--title/--source），可重跑刷新。
+> SV 实例的产生式按此 Annex A 切片，逐特性落地（先 package/interface/class）。
+
 ### P1.4 折行（wrap）完善——end_case 分号化
 
 > 来源：2026-08-15。wrap 已恢复（build_engine 末尾注册，断点取运算符之后、

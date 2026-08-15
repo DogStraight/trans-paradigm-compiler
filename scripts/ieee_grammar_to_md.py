@@ -88,12 +88,18 @@ def _find_annex_range(reader: PdfReader, start_marker: str, end_marker: str) -> 
     return a, b - 1
 
 
-def convert(reader: PdfReader, start_idx: int, end_idx: int) -> str:
+def convert(
+    reader: PdfReader,
+    start_idx: int,
+    end_idx: int,
+    title: str = "IEEE 1364-2005 — 语法章节（由 PDF 一次性提取，供快速查阅）",
+    source: str = "`grammar/verilog/IEEE_Std_1364_2005_IEEE_Standard_for_Ver.pdf`",
+) -> str:
     """提取 [start_idx, end_idx] 页为 Markdown：章节标题成 H2，正文成 ```text 块。"""
     md: list[str] = []
-    md.append("# IEEE 1364-2005 — 语法章节（由 PDF 一次性提取，供快速查阅）")
+    md.append(f"# {title}")
     md.append("")
-    md.append("> 来源: `grammar/verilog/IEEE_Std_1364_2005_IEEE_Standard_for_Ver.pdf`")
+    md.append(f"> 来源: {source}")
     md.append("> 生成: `scripts/ieee_grammar_to_md.py`（改 PDF 后重跑即可刷新）")
     md.append("> 注: pypdf 文本提取对上下标/换行有噪声（如 `real_number\\n2 ::=`），以原文 PDF 为准。")
     md.append("")
@@ -136,6 +142,8 @@ def main() -> None:
     ap.add_argument("--end", type=int, help="结束页（1-based），缺省自动探测 Annex A 末页")
     ap.add_argument("--start-marker", default="Annex A")
     ap.add_argument("--end-marker", default="Annex B")
+    ap.add_argument("--title", default="IEEE 1364-2005 — 语法章节（由 PDF 一次性提取，供快速查阅）")
+    ap.add_argument("--source", default="`grammar/verilog/IEEE_Std_1364_2005_IEEE_Standard_for_Ver.pdf`")
     args = ap.parse_args()
 
     reader = PdfReader(args.pdf)
@@ -144,7 +152,7 @@ def main() -> None:
     else:
         start_idx, end_idx = _find_annex_range(reader, args.start_marker, args.end_marker)
 
-    md = convert(reader, start_idx, end_idx)
+    md = convert(reader, start_idx, end_idx, title=args.title, source=args.source)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
