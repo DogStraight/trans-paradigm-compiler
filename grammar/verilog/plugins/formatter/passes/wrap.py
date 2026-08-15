@@ -120,15 +120,20 @@ def _top_level_split_points(
     无断点可折，块头需在条件括号内折（条件本身是括号包裹表达式，折行
     不破坏结构，pratt 跳 newline 已支持）。
 
-    跟踪 () 与 [] 深度：位选择 `[31:25]` 内的 `:` 是三目符号但语义上是
-    位选择分隔符，不算断点；[] 内其他运算符同样排除（allow_in_parens
-    只放行 ()，不放行 []——位选择内断点仍危险）。
+    括号深度语义（按危险度分级）：
+      - `[]`（位选择 `[31:25]`）：内部 `:`/`,` 是分隔符不是运算符，任何
+        断点都危险 → 永远排除。
+      - `{}`（concat/replicate）：内部 `,` 是分隔符（元素间逗号，断裂会
+        破坏元素边界）→ `,` 断点排除；其他运算符（如 `? :`）可断。
+      - `()`（普通括号/函数调用/三目组）：内部运算符是表达式一部分，断点
+        安全（pratt 跳 newline 已支持）→ allow_in_parens 时计入。
     """
     stripped = line.lstrip()
     base = len(line) - len(stripped)
     points: list[int] = []
-    depth = 0
-    bracket_depth = 0
+    depth = 0        # () 深度
+    bracket_depth = 0  # [] 深度
+    brace_depth = 0   # {} 深度
     in_str = False
     i = 0
     while i < len(stripped):
@@ -150,9 +155,16 @@ def _top_level_split_points(
             bracket_depth += 1
         elif ch == "]":
             bracket_depth -= 1
+        elif ch == "{":
+            brace_depth += 1
+        elif ch == "}":
+            brace_depth -= 1
         elif bracket_depth == 0 and (depth == 0 or allow_in_parens):
             for h in hints:
                 if stripped.startswith(h, i):
+                    # concat `{}` 内逗号是元素分隔符，断裂破坏元素边界 → 排除
+                    if brace_depth > 0 and h == ",":
+                        continue
                     points.append(base + i)
                     i += len(h) - 1
                     break
@@ -173,14 +185,16 @@ def _break_candidates(line: str, penalties: dict) -> list[tuple[int, int]]:
 
     Returns: [(断点位置, 断点惩罚), ...] 位置升序。
     """
-    is_header = _is_block_header(line)
+    # 普通语句也放行括号内断点（`trace_data <= (a ? b : c) | d | e` 顶层无断点，
+    # 括号内运算符是表达式一部分，断点安全；`[]`/concat 内 `,` 由
+    # _top_level_split_points 内部排除）
     cands: list[tuple[int, int]] = []
     for h in _BREAK_HINTS:
         kind = _BREAK_KIND[h]
-        for p in _top_level_split_points(line, [h], allow_in_parens=is_header):
+        for p in _top_level_split_points(line, [h], allow_in_parens=True):
             cands.append((p + len(h), penalties.get(kind, 10)))
     # 三目 `:` 断点（`?` 后断会续行行首 `:` 非法；`:` 断在冒号后，冒号留行尾）
-    for p in _top_level_split_points(line, [":"], allow_in_parens=is_header):
+    for p in _top_level_split_points(line, [":"], allow_in_parens=True):
         cands.append((p + 1, penalties.get("ternary", 30)))
     cands.sort(key=lambda c: c[0])
     return cands
@@ -239,12 +253,27 @@ def run_wrap_pass(
     penalties: dict | None = None,
     over_column: int | None = None,
 ) -> list[str]:
-    """折行：超宽行在惩罚最小断点拆成多行（贪婪拆到尾行 ≤ 宽，保证幂等）。"""
+    """折行：超宽行在惩罚最小断点拆成多行（贪婪拆到尾行 ≤ 宽，保证幂等）。
+
+    续行缩进与 boundary 的 multi_line_cont 语义一致：折行发生在"本行是续行"
+    （contexts 的 multi_line_cont，已从语句头折出）时，续行应同级（对齐语句头
+    +4 的效果 = 本行缩进），不再 +4——否则续行再折会逐级递增（once 20 vs
+    twice 16 漂移：`cond) && A && B;` 的续行 `B;` wrap 给 16+4=20，二次
+    format boundary 按语句头重排给 16）。
+    """
     if penalties is None or over_column is None:
         penalties, over_column = _load_wrap_config()
     out: list[str] = []
-    for line in lines:
-        out.extend(_wrap_line(line, max_width, indent_width, penalties, over_column))
+    for i, line in enumerate(lines):
+        is_cont = (
+            i < len(contexts) and contexts[i].multi_line_cont
+        )
+        out.extend(
+            _wrap_line(
+                line, max_width, indent_width, penalties, over_column,
+                already_cont=is_cont,
+            )
+        )
     return out
 
 
@@ -254,8 +283,13 @@ def _wrap_line(
     indent_width: int = 4,
     penalties: dict | None = None,
     over_column: int | None = None,
+    already_cont: bool = False,
 ) -> list[str]:
-    """折单行：循环拆到每段 ≤ max_width。尾行缩进 = 语句头缩进 + 1 级。"""
+    """折单行：循环拆到每段 ≤ max_width。尾行缩进 = 语句头缩进 + 1 级。
+
+    already_cont：本行已是续行（从语句头折出）→ 续行同级（对齐语句头 +4 的
+    效果 = 本行缩进），不再 +4（防逐级递增）。
+    """
     if penalties is None or over_column is None:
         penalties, over_column = _load_wrap_config()
     # 不折的行：空/注释/指令/端口/声明（assign 除外）
@@ -283,7 +317,8 @@ def _wrap_line(
         return [line]
 
     indent = _indent_of(line)
-    cont_indent = indent + " " * indent_width  # 续行 +1 级
+    # 续行 +1 级；本行已是续行 → 同级（对齐语句头 +4 的效果）
+    cont_indent = indent if already_cont else indent + " " * indent_width
 
     result: list[str] = []
     cur = code_part

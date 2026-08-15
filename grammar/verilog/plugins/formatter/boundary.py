@@ -567,8 +567,11 @@ class BoundaryScanner:
                     # 行尾是运算符（`&&`/`+`/`:` 等留在行尾，续行从操作数开始）
                     # ——wrap 断点取运算符之后（操作数行首，parser 可解析），
                     # 二次 format 靠行尾运算符识别续行。只设 op_cont 供下一行
-                    # hdr 用（line_num-1 指向本行=语句头）；不设 is_cont——
-                    # 本行是语句头，is_cont 若 True 会阻止 multi_header_line 记录。
+                    # 判断；**不**作为 hdr 指向 line_num-1——行尾运算符的行若是
+                    # 续行（多折续行，如 `cond) && ENABLE_COUNTERS &&` 行尾 &&
+                    # 的下一行），其深度已含续行偏移，再相对 +1 会多一级
+                    # （once 20 vs twice 16 漂移）。续行一律对齐语句头
+                    # multi_header_line。
                     # comma 是分隔符不是运算符（多行声明/端口列表的续行应对齐
                     # 语句头 multi_header_line，不是 op_cont 的 line_num-1——
                     # 否则 reg a,\n b,\n c; 续行 hdr 逐行指向上一行，缩进递增）。
@@ -580,9 +583,7 @@ class BoundaryScanner:
                         and last_line_nontrivia not in self.stmt_end_tokens
                     ):
                         op_cont = True
-                    hdr_line = (
-                        (line_num - 1) if op_cont else multi_header_line
-                    ) if is_cont else 0
+                    hdr_line = multi_header_line if is_cont else 0
                     hdr_extra = multi_depth_extra if is_cont else 0
                     line_ends_stmt = last_line_nontrivia in self.stmt_end_tokens
                     is_block_line = (

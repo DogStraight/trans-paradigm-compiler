@@ -147,6 +147,41 @@ class TestWrap:
         b = _fmt(a)
         assert a == b, "块头折行二次格式化漂移"
 
+    def test_paren_inner_break(self):
+        """普通语句括号内断点：`x <= (a ? b : c) | d | e` 顶层无断点，括号内可折。"""
+        src = (
+            "module m;\n"
+            "    always @* begin\n"
+            "        trace_data <= (irq_active ? TRACE_IRQ : 0) | TRACE_BRANCH | "
+            "(current_pc & 32'hfffffffe) | (reg_op1 + decoded_imm);\n"
+            "    end\n"
+            "endmodule\n"
+        )
+        out = _fmt(src)
+        lines = out.split("\n")
+        # 折成多行，全部 ≤100
+        tr_lines = [l for l in lines if "trace_data" in l or "current_pc" in l or "reg_op1" in l]
+        assert len(tr_lines) >= 2
+        for l in tr_lines:
+            assert len(l) <= 100, f"折后应 ≤100: {l!r}"
+
+    def test_paren_inner_break_idempotent(self):
+        """括号内断点 + 续行再折幂等：`cond) && A && B;` 的续行 B; 不逐级递增。"""
+        src = (
+            "module m;\n"
+            "    always @* begin\n"
+            "        instr_rdcycleh <= ((mem_rdata_q[6:0] == 7'b1110011 && "
+            "mem_rdata_q[31:12] == 'b11001000000100000010) || "
+            "(mem_rdata_q[6:0] == 7'b1110011 && "
+            "mem_rdata_q[31:12] == 'b11001000000000000010)) && "
+            "ENABLE_COUNTERS && ENABLE_COUNTERS64;\n"
+            "    end\n"
+            "endmodule\n"
+        )
+        a = _fmt(src)
+        b = _fmt(a)
+        assert a == b, "括号内断点续行再折二次格式化漂移"
+
     def test_penalty_prefers_balanced_break(self):
         """惩罚搜索：放弃会让首行超列的最右断点，选两行都不超的方案。
 
