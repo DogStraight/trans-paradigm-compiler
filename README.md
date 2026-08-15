@@ -47,32 +47,46 @@ Known limitations below).
 // Define a custom type with roles, then use it in a module port
 type spi {
     master : input clk, input miso, output mosi, output cs;
-    slave  : input clk, input mosi, output miso, output cs;
+    slave  : invert master;   // slave = master 的端口方向反转
 }
 
 module top(
     input clk,
     spi.slave spi_io
 );
-    impl spi.master (.clk(clk)) => top;
+    // impl type.role (...) => iface 绑定接口实例：
+    // 显式连接的端口保留（.clk），其余端口自动连到接口展开信号（spi_io_*）
+    impl spi.master (.clk(clk)) => spi_io;
 endmodule
 ```
 
-Running the pipeline expands the custom type to standard Verilog:
+Running the pipeline expands the custom type to standard Verilog. The
+interface port `spi.slave spi_io` is expanded to concrete ports, and the
+`impl` binding is rewritten to a module instantiation whose unlisted ports
+are auto-connected to the interface signals:
 
 ```verilog
 module top(
     input    clk,
-    input    spi_io_clk,
-    input    spi_io_mosi,
+    output   spi_io_clk,
     output   spi_io_miso,
-    output   spi_io_cs
+    input    spi_io_mosi,
+    input    spi_io_cs
 );
-    spi_master u_spi_master_1c8568 (
-        .clk(clk)
+
+    spi_master u_spi_master_acb99d (
+        .clk (clk        ),
+        .miso(spi_io_miso),
+        .mosi(spi_io_mosi),
+        .cs  (spi_io_cs  )
     );
+
 endmodule
 ```
+
+> `impl[master](...)` inside the `type` body can carry the implementation
+> body; the pipeline emits it as a separate wrapper module file (e.g.
+> `spi_master.v`).
 
 ### Running the example
 
