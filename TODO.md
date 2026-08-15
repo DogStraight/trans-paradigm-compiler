@@ -121,6 +121,19 @@
 
 - [ ] **@ElseChain 跨行匹配缺陷**：`end else` 换行后 `else if` 关联断裂——
       此前定位过未修（语句发现把折行的 else 链截断）
+- [ ] **多声明品类对齐（Verible kDataDeclaration 参考）**：`reg [1:0] state, next;`
+      被 `_is_multidecl` 跳过（多声明不参与列对齐），同组 `reg [3:0] bit_cnt;`
+      按最大位宽列对齐——两行观感不一致。根因 = 语义列模型只支持单声明，
+      多声明行直接 return None 保留原文。
+      Verible 做法：声明 = 类型头 + 实例列表（kDataDeclaration → kRegisterVariable/
+      kNetVariable 列表），每个实例（含 `state`/`next`）独立参与 kTabularAlignment
+      列对齐，不跳过。tpc 已有对应结构（DeclaratorList.items = Declarator 列表），
+      缺的是 _extract_semantic 对多声明的逐项列提取。
+      方案：column_align 支持多声明——每行按 `,` 顶层分隔拆多个对齐单元，
+      同组内所有单元的名字列对齐到同一基准；`reg a = 1, b = 2` 的 init 列也参与
+      （Verible 的实例对齐含 init 列）。注意 fidelity：real 组（darkriscv
+      `integer clocks=0, running=0, ...`、picorv32 `reg [63:0] next_rs1, ...`）会变，
+      需重跑 real 组更新基线。
 - [ ] **transform 实例名 hash 稳定性**：`u_spi_master_xxx` 的 salt 无法复现
       ref（spi_inf X 路径 ratio 0.9862 因 hash 差异）——期望 ratio 到 1.0，
       去掉"hash 可容忍"例外（判断 salt 逻辑是否与生成 ref 时漂移）
@@ -192,6 +205,11 @@
 - [x] 恢复 CI（.github/workflows/ci.yml：Windows + Python 3.11/3.12/3.13）
 - [x] 安装可验证（pip install -e ".[test]" + tpc CLI 实测）
 - [x] 补文档（CONTRIBUTING.md / CHANGELOG.md / docs/api.md）
+- [ ] **CLI 指令替换 python main 模式（2026-08-16 用户方向）**：
+      用 `tpc format` / `tpc lint` / `tpc new component` 等指令替代 `python main.py xxx`；
+      为此 README 已删除 Quick start + API 两节（留位置），CLI 落地后补回。
+      指令列表对齐 main.py 现有子命令（format/lint/init/pipeline/new），
+      pyproject 配置 console_scripts 入口；CLI 用法写回 README 对应节。
 - [ ] 覆盖率远期目标 ≥90%（当前 84.57%，需补 transform/renderer 等薄弱区）
 
 ## P4 — LLVM IR 前端桥（v0.2 商业向候选，非收尾）
