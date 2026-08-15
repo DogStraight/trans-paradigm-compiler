@@ -70,3 +70,34 @@ class TestWrap:
         src = f"module m;\n    {long_decl}\nendmodule\n"
         out = _fmt(src)
         assert long_decl in out, "无 init 声明不应折行"
+
+    def test_penalty_prefers_balanced_break(self):
+        """惩罚搜索：放弃会让首行超列的最右断点，选两行都不超的方案。
+
+        Verible 惩罚模型：断点惩罚 + 超列惩罚（over_column_penalty）。
+        最右断点（pos=107）会让首行超 7 列（70 惩罚），惩罚模型选 92
+        （两行都不超，仅断点惩罚 10）。
+        """
+        src = (
+            "module m;\n"
+            "    wire very_long_signal_name = condition_a && condition_b && "
+            "condition_c && condition_d && condition_e && condition_f;\n"
+            "endmodule\n"
+        )
+        out = _fmt(src)
+        lines = out.split("\n")
+        # 折成两行：首行 ≤100（不是最右断点），尾行从操作数开始
+        assert len([l for l in lines if "condition_" in l]) == 2
+        assert all(len(l) <= 100 for l in lines if "condition_" in l)
+
+    def test_penalty_idempotent_after_break(self):
+        """惩罚折行后幂等（二次 format 不再漂移）。"""
+        src = (
+            "module m;\n"
+            "    wire very_long_signal_name = condition_a && condition_b && "
+            "condition_c && condition_d && condition_e && condition_f;\n"
+            "endmodule\n"
+        )
+        a = _fmt(src)
+        b = _fmt(a)
+        assert a == b, "惩罚折行后二次格式化漂移"

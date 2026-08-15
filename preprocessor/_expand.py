@@ -119,17 +119,19 @@ def _build_macro_re(prefix: str) -> re.Pattern:
 # ── 纯文本展开（新方案）──
 
 
-def _inject_directive_marker(ctx: dict, stack: list, stripped: str) -> None:
+def _inject_directive_marker(ctx: dict, stack: list, line: str) -> None:
     """active 指令行（define/undef/include）原位占位。
 
     指令行从 token 流剥离（不进入 clean_source），但在原位置插入
     `// <tpc:directive:N>` 整行注释 marker，原文记入 placeholders；渲染后由
     restore_anchors 原位回插，实现指令行位置保真（不再堆到文件头）。
+    原文存**完整行（含前导缩进）**——还原要恢复原文形态，剥缩进会让
+    嵌套 ifdef 内的 define 还原后顶格（ref 里 define 有 2/4 空格缩进）。
     """
     seq = ctx["_directive_seq"]
     ctx["_directive_seq"] = seq + 1
     marker = f"tpc:directive:{seq}"
-    ctx.setdefault("_directive_placeholders", {})[marker] = stripped
+    ctx.setdefault("_directive_placeholders", {})[marker] = line
     if stack:
         branch = stack[-1].get("cur_branch")
         if branch is not None:
@@ -231,7 +233,7 @@ def scan_directives(
         if not handler_cfg.get("enabled", True):
             # 配置禁用：不执行 handler，但原文原位占位保留
             if _is_ifdef_active(ctx):
-                _inject_directive_marker(ctx, stack, stripped)
+                _inject_directive_marker(ctx, stack, line)
             elif stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:
@@ -255,7 +257,7 @@ def scan_directives(
             handler = get_primitive(op)
             if handler:
                 handler(stripped, prefix, directive_name, ctx)
-            _inject_directive_marker(ctx, stack, stripped)
+            _inject_directive_marker(ctx, stack, line)
         elif stack:
             # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
             branch = stack[-1].get("cur_branch")

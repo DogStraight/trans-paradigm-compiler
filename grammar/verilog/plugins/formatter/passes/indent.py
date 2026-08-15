@@ -22,6 +22,9 @@ def run_indent_pass(
     result = list(lines)
     # 条件编译指令行（`ifdef/`ifndef/`else/`elsif/`endif）：PicoRV32 风格顶格，
     # 不随代码块缩进（gen 原始即顶格，indent 按 depth 重算会破坏）
+    # ifdef/else/endif 是条件块边界 → 顶格；`define 行保留原缩进（preprocessor
+    # 还原的原文已含 ifdef 嵌套缩进，ref 里嵌套 define 有 2/4 空格——重算会
+    # 按 scope_depth（模块外=0）顶格，丢失嵌套层级）。
     _IFDEF_DIRECTIVE = ("`ifdef", "`ifndef", "`else", "`elsif", "`endif")
     for idx, ctx in enumerate(contexts):
         # 用 line_number 定位行（1-based），防御 contexts 与行索引错位
@@ -34,6 +37,11 @@ def run_indent_pass(
         if stripped.startswith(_IFDEF_DIRECTIVE):
             result[ln] = stripped
             continue
+        if stripped.startswith("`define"):
+            continue  # define 保留原缩进（preprocessor 还原含嵌套层级）
+        # 注释行不保留原缩进：实例化端口列表内的注释行是续行链一员
+        # （boundary 的 is_pure_comment 不打断 multi_active），走续行缩进
+        # （hdr+1）与端口行对齐；独立注释行按 scope_depth 缩进
         # 单语句体悬挂：上一行是无 begin 的语句头（如 `if (X)` / `for (...)`），
         # 本行是其单语句体 → +1（匹配 PicoRV32/ref 风格）。嵌套单语句头（如
         # `if (A)` 后接 `if (B)`）也悬挂；else 链行（行首 else）与 if/end 对齐不

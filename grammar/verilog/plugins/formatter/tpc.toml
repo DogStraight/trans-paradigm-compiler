@@ -62,3 +62,13 @@ break_distance = 3
 [formatter.style]
 indent_width = 4
 max_line_width = 100
+
+# 折行决策参数（Verible 惩罚模型参考）：
+# - break_penalties: 断点类型 → 惩罚值。逗号最低（最自然的断点），
+#   逻辑/算术/三目递增。折行选择"总惩罚最小"的断点而非最右贪心。
+# - over_column_penalty: 每超 1 列的惩罚系数。折后行可略超 max_line_width
+#   但加重惩罚——权衡"折两行某行略超" vs "不折全超"。
+# max_width 复用 [formatter.style].max_line_width。
+[formatter.wrap]
+over_column_penalty = 10
+break_penalties = { comma = 1, logic = 10, arith = 20, ternary = 30 }

@@ -456,6 +456,7 @@ class BoundaryScanner:
     _COMMENT_LINE = frozenset({"comment"})
 
     def __init__(self, rules: dict, lexer: Lexer):
+        self.lexer = lexer
         self.token_map = build_block_tokens(rules)
         self.openers = self.token_map.openers
         self.closers = self.token_map.closers
@@ -464,7 +465,13 @@ class BoundaryScanner:
         self.stmt_headers = self.token_map.stmt_headers
         self.stmt_end_tokens = self.token_map.stmt_end_tokens
         self.decl_headers = self.token_map.decl_headers
-        self.lexer = lexer
+        # 闭合括号 token type 集（`)`/`]`/`}`）：从 token.toml 的 bracket pairs
+        # 配置推导（bracket_type_map），不硬编码具体 type。行尾闭合括号表示
+        # 括号组（端口列表/参数列表/表达式）在本行闭合——语句若继续（`);` /
+        # `) csr (`），下一行不再是无界续行，避免 `);` 被当成语句头续行
+        self.close_bracket_types = {
+            self.lexer.bracket_type_map[c] for c in self.lexer.close_brackets
+        }
 
     def scan(self, source: str) -> list[LineContext]:
         tokens = self.lexer.tokenize(source)
@@ -562,10 +569,14 @@ class BoundaryScanner:
                     # 二次 format 靠行尾运算符识别续行。只设 op_cont 供下一行
                     # hdr 用（line_num-1 指向本行=语句头）；不设 is_cont——
                     # 本行是语句头，is_cont 若 True 会阻止 multi_header_line 记录。
+                    # comma 是分隔符不是运算符（多行声明/端口列表的续行应对齐
+                    # 语句头 multi_header_line，不是 op_cont 的 line_num-1——
+                    # 否则 reg a,\n b,\n c; 续行 hdr 逐行指向上一行，缩进递增）。
                     if (
                         last_line_nontrivia is not None
                         and last_line_nontrivia.startswith("symbol.")
                         and not last_line_nontrivia.endswith(".dot")
+                        and not last_line_nontrivia.endswith(".comma")
                         and last_line_nontrivia not in self.stmt_end_tokens
                     ):
                         op_cont = True
@@ -609,18 +620,25 @@ class BoundaryScanner:
                         and not last_line_nontrivia.endswith(".dot")
                         and last_line_nontrivia not in self.stmt_end_tokens
                     )
-                    is_conn = line_first_token == "symbol.base.dot"
-                    if (
+                    # 注释行不打断续行：纯注释（`// State` 等）是行内说明，实例化
+                    # 端口列表/多行表达式还在继续——注释行自身保持上一行 multi_active
+                    # （不设 False），后续端口行仍识别为续行。否则 `serv_csr ... (
+                    # .i_cnt7, // RS1 read port` 的注释后端口行顶格，缩进丢失。
+                    if is_pure_comment:
+                        pass  # 保持 multi_active（不打断续行链）
+                    elif (
                         line_ends_stmt
                         or is_block_line
                         or pending_stmt_header
                         or is_directive
-                        or is_pure_comment
                         or in_port_list
                         or pending_case_item
                         or (is_decl and not decl_op_cont)
-                        or is_conn
                         or not line_buf
+                        # 行尾闭合括号（`)`/`]`/`}`）：括号组本行闭合，续行链
+                        # 到此为止——否则 `.b(b)` 后的 `);` 会被当成续行（+1 级），
+                        # 实例端口列表结束行缩进错位
+                        or last_line_nontrivia in self.close_bracket_types
                     ):
                         multi_active = False
                     else:

@@ -83,6 +83,15 @@ class TestBClassIdent:
         tokens = _tokens(scanner, "module m; foo u1 (.a(b)); endmodule")
         assert _classify_at(lookahead, tokens, "foo", "module_body") == ["ModuleInst"]
 
+    def test_param_inst_cross_line(self, scanner, lookahead):
+        # 跨行参数化实例化（模块名/参数/实例名分多行，SERV 风格）：
+        # foo\n  #(.P(p))\nbar\n  (...)\n → 仍分类为 ModuleInst
+        tokens = _tokens(
+            scanner,
+            "module m; foo\n  #(.P(p))\nbar\n  (.a(b)); endmodule",
+        )
+        assert _classify_at(lookahead, tokens, "foo", "module_body") == ["ModuleInst"]
+
 
 class TestUnrecognized:
     """未识别语法（候选清空）→ 返回 []（discovery 报 phase-unrecognized）。"""

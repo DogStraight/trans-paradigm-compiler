@@ -450,6 +450,11 @@ class Discovery:
         仅对非容器规则推导——容器（case/if/for 等含 @Stmt body）内部有分号，
         结尾字面 token 不是唯一终止，强行推导会截断在内部语句处。容器回退到
         配置 end_case。返回空集表示无可推导结束符。
+
+        额外：production 末尾是 call（如 ModuleInst 的 @PortConnection 展开
+        为 `(...);`）——递归查 call 的 production 是否以分号收尾，是则推导
+        分号。这使跨行语句（模块名/参数/实例名分多行）不被 newline end_case
+        截断（分号是可靠终止，depth 跟踪保证括号内分号不误判）。
         """
         if self._is_nested_container(rule):
             return set()
@@ -460,6 +465,18 @@ class Discovery:
         last = prods[-1]
         if isinstance(last, dict) and last.get("type") == "token":
             return {last["token_type"]}
+        # 末尾是 call：递归查其 production 是否以分号收尾
+        if isinstance(last, dict) and last.get("type") == "call":
+            inner = self._tree.get(last.get("name", ""), {})
+            iprods = inner.get("prods", [])
+            if iprods:
+                ilast = iprods[-1]
+                if (
+                    isinstance(ilast, dict)
+                    and ilast.get("type") == "token"
+                    and ilast.get("token_type") == "symbol.base.semicolon"
+                ):
+                    return {"symbol.base.semicolon"}
         return set()
 
     def _is_single_token_rule(self, rule: str) -> bool:
@@ -515,8 +532,11 @@ class Discovery:
         return start, end
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:
-        # 实验：不假设"句子以分号结束"（分号是语言特定知识）——句子终止应
-        # 由 _derived_end_case（production 末尾字面 token）覆盖，此处仅通用终止。
+        # 句子终止 = depth 0 处的分号（通用终结符，几乎所有语句以 ; 收尾——
+        # 即使 production 末尾是 call 如 @PortConnection，分号仍在语句尾）或
+        # 行尾（保守回退）。depth 跟踪保证括号内分号（for 的 init/cond）不截断。
+        # 跨行语句（如模块名/参数/实例名分多行的参数化实例化）不被 newline
+        # 截断——分号是唯一可靠终止。
         depth = 0
         while i < n:
             t = tokens[i]
@@ -525,7 +545,9 @@ class Discovery:
             elif t.type in self._bracket_closers:
                 depth = max(0, depth - 1)
             elif depth == 0 and (
-                t.type == "newline" or t.type in self._block_ends
+                t.type == "symbol.base.semicolon"
+                or t.type == "newline"
+                or t.type in self._block_ends
             ):
                 return i + 1
             i += 1
