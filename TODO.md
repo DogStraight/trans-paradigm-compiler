@@ -48,6 +48,29 @@
 > `scripts/ieee_grammar_to_md.py` 已参数化（--title/--source），可重跑刷新。
 > SV 实例的产生式按此 Annex A 切片，逐特性落地（先 package/interface/class）。
 
+### P1.8 Verilog 语法补全 + 仿真语法插件化（路线 1，发布前置）
+
+> 来源：2026-08-16 用户决策。两条路权衡后选路线 1：
+> ①补全 1364-2005 剩余语法（可综合子集进主包）
+> ②仿真语法拆成独立插件（plugins/sim，按需动态挂载）
+> ③完成后 Verilog 主包纯净可综合 → **发布基线**。
+> 路线 2（完整 SV + UVM）记入 P1.3 后续，不在发布前置。
+> 语法对照：docs/ieee1364_2005_annex_a.md（67 节）。
+
+- [ ] **门级/开关原语**（A.3）：and/or/nand/nor/xor/xnor/buf/not + bufif0/bufif1/
+      notif0/notif1 + pmos/nmos/tran 系列 —— 综合类，进主包
+- [ ] **UDP**（A.5）：primitive/table/endprimitive —— 综合类（老设计），进主包
+- [ ] **时序控制**（A.6.5）：#delay、wait、@event、-> 事件触发 —— 仿真，进插件
+- [ ] **fork/join 并行块**（A.6.3）：fork/join/join_any/join_none —— 仿真，进插件
+- [ ] **force/release、assign/deassign**（A.6.4）—— 仿真，进插件
+- [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
+      仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
+- [ ] config/defparam（A.1.5 / A.2.4）—— 罕见，视需要
+- [ ] 插件骨架验证：plugins/sim/tpc.toml + token_ext/规则，verilog tpc.toml
+      [plugins] enabled 控制挂载；挂载/卸载无残留（复用 P1.3 插拔验证思路）
+- [ ] 发布收尾联动：语法补全后跑全量回归 + real 组（SweRV dmi 样本）+ fidelity
+      基线；仿真插件默认关闭不影响可综合子集纯净性
+
 ### P1.4 折行（wrap）完善——end_case 分号化
 
 > 来源：2026-08-15。wrap 已恢复（build_engine 末尾注册，断点取运算符之后、

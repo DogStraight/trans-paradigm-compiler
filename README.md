@@ -7,10 +7,14 @@ compiler frontend; context-sensitive grammar; language workbench; DSL extension;
 model-friendly configuration; forkable pipeline
 -->
 
-Write language rules in TOML. The whole pipeline — lexer, parser, analyzer,
-transform, renderer — is configurable, forkable, and model-friendly.
+Write language rules in TOML. The front of the pipeline — lexer, parser,
+linter — is fully configuration-driven; analyzer and transform are pure
+plugin extension points, while the renderer is semi-closed (layout is
+configurable, but only its primitives are extensible). The whole pipeline
+is forkable and model-friendly (at least, that is the goal — see Status and
+Known limitations below).
 
-## Why TransParadigm
+## Project features
 
 > TransParadigm is one way to build a language toolchain — not a replacement
 > for general-purpose parser generators like ANTLR or Yacc. If you just need a
@@ -284,6 +288,14 @@ python -m pytest tests/ -q                # 611 unit tests
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
 python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 ```
+
+## README provenance
+
+This README was written with model assistance. The descriptions of the
+pipeline, its stages, and their extensibility are accurate as of the latest
+revision, but if you find any statement that does not match the actual code,
+please open an issue with a correction — precise documentation is preferred
+over polished claims.
 
 ## License
 
