@@ -70,6 +70,28 @@ def _is_comment_or_directive(line: str) -> bool:
     return s.startswith("//") or s.startswith("/*") or s.startswith("`") or s.startswith("*")
 
 
+def _split_trailing_comment(line: str) -> tuple[str, str]:
+    """分离行尾 `//` 注释，返回 (代码部分, 注释部分含 `//`)。
+
+    只在字符串外找 `//`。wrap 折行依赖它：
+      - 分号判据：`wire x = ... ; // comment` 的注释挡住 `endswith(";")`
+        （darkriscv 带注释声明超宽不折的根因）——判据应在代码部分做。
+      - 折行后注释跟尾行（注释不折，但随语句语义位置走）。
+    """
+    in_str = False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            in_str = not in_str
+        elif (
+            ch == "/"
+            and not in_str
+            and i + 1 < len(line)
+            and line[i + 1] == "/"
+        ):
+            return line[:i].rstrip(), line[i:]
+    return line.rstrip(), ""
+
+
 def _top_level_split_points(line: str, hints: list[str]) -> list[int]:
     """返回行内顶层（括号外）断点位置列表（含运算符本身起始）。
 
@@ -217,21 +239,26 @@ def _wrap_line(
     first = stripped.split()[0] if stripped.split() else ""
     if first in ("input", "output", "inout"):
         return [line]  # 端口列表不折
+    # 分离行尾注释：分号判据、声明 `=` 判据都在代码部分做（注释内容不干扰），
+    # 折出的行注释跟尾行（注释不折，但随语句语义位置走）
+    code_part, trailing = _split_trailing_comment(line)
     if first in ("reg", "wire", "parameter", "localparam"):
         # 声明：含 `=`（带初始化表达式）才折——`reg [31:0] x;` 无 = 不折
-        if "=" not in stripped:
+        if "=" not in code_part:
             return [line]
     # 已有续行（无分号结尾）不折——已由前面的 wrap 处理
-    if not line.rstrip().endswith(";"):
+    if not code_part.rstrip().endswith(";"):
         return [line]
 
     indent = _indent_of(line)
     cont_indent = indent + " " * indent_width  # 续行 +1 级
 
     result: list[str] = []
-    cur = line
+    cur = code_part
     guard = 0
-    while len(cur) > max_width and guard < 8:
+    # 超宽判断含行尾注释：代码部分可能 ≤100 但 +注释 >100（darkriscv 带注释声明），
+    # 折行仍需进行；注释不参与拆（不折），只在最后附回尾行
+    while len(cur) + len(trailing) > max_width and guard < 8:
         guard += 1
         pt = _find_break_point(cur, max_width, penalties, over_column, indent_width)
         if pt is None:
@@ -250,6 +277,9 @@ def _wrap_line(
         result.append(head)
         cur = tail
     result.append(cur)
+    # 行尾注释附回最后一行（代码语义位置 = 语句尾）
+    if trailing:
+        result[-1] = result[-1] + " " + trailing.lstrip()
     # 第一行保留原缩进，后续行用 cont_indent
     if len(result) > 1:
         result = [result[0]] + [cont_indent + r.lstrip() for r in result[1:]]

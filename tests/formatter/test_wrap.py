@@ -71,6 +71,40 @@ class TestWrap:
         out = _fmt(src)
         assert long_decl in out, "无 init 声明不应折行"
 
+    def test_trailing_comment_wrapped(self):
+        """行尾注释不挡折行：`wire x = ... ; // comment` 的代码部分超宽仍折。
+
+        原判据 `line.rstrip().endswith(";")` 被行尾注释破坏（darkriscv 带注释
+        声明超宽不折的根因）——判据应在去注释后的代码部分做，注释跟尾行。
+        """
+        src = (
+            "module m;\n"
+            "    wire  [`TH+3:0] DPTR = XRES ? { RESMODE , 4'd0 } : "
+            "{ TPTR , XIDATA[10:7] } ; // set SP_RESET when RES == 1\n"
+            "endmodule\n"
+        )
+        out = _fmt(src)
+        lines = out.split("\n")
+        # 折成多行（代码行被折），注释保留在尾行
+        assert len([l for l in lines if "DPTR" in l or "XIDATA" in l]) >= 2
+        assert "// set SP_RESET when RES == 1" in out, "注释应保留"
+        # 代码行折后均不超宽（注释行除外）
+        for l in lines:
+            if ("DPTR" in l or "XIDATA" in l) and "//" not in l:
+                assert len(l) <= 100, f"代码行应 ≤100: {l!r}"
+
+    def test_trailing_comment_no_wrap_when_code_fits(self):
+        """代码部分 ≤100 仅注释超宽 → 不折（注释不拆）。"""
+        src = (
+            "module m;\n"
+            "    wire ok = fits; // this is a very long trailing comment that "
+            "pushes the line way over one hundred columns total but code is short\n"
+            "endmodule\n"
+        )
+        out = _fmt(src)
+        # 代码短 + 注释长 → 整行保留（wrap 不折注释，代码部分无需折）
+        assert "wire ok = fits;" in out
+
     def test_penalty_prefers_balanced_break(self):
         """惩罚搜索：放弃会让首行超列的最右断点，选两行都不超的方案。
 
