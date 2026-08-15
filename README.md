@@ -46,7 +46,7 @@ Known limitations below).
 ```verilog
 // Define a custom type with roles, then use it in a module port
 type spi {
-    master : input clk, input miso, output mosi, output cs;
+    master : input sclk, input miso, output mosi, output cs;
     slave  : invert master;   // slave = master with port directions reversed
 }
 
@@ -69,7 +69,7 @@ are auto-connected to the interface signals:
 ```verilog
 module top(
     input    clk,
-    output   spi_io_clk,
+    output   spi_io_sclk,
     output   spi_io_miso,
     input    spi_io_mosi,
     input    spi_io_cs
@@ -77,6 +77,7 @@ module top(
 
     spi_master u_spi_master_acb99d (
         .clk (clk        ),
+        .sclk(spi_io_sclk),
         .miso(spi_io_miso),
         .mosi(spi_io_mosi),
         .cs  (spi_io_cs  )
