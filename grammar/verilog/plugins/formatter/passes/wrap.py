@@ -225,20 +225,36 @@ def _break_candidates(
     Returns: [(断点位置, 断点惩罚), ...] 位置升序。
     """
     ast_ok = bool(parser) and bool(_parse_line(parser, _wrap_line_src(line)))
+    # 三目链中间行（行尾 `:`/`,` 且含 `?`）语义已由结构确认（续接下一分支），
+    # concat `{}` 逗号放行——否则断点全在 concat 内被禁，行无法折
+    is_ternary_cont = _is_ternary_cont_line(line)
+    allow_concat = ast_ok or is_ternary_cont
     cands: list[tuple[int, int]] = []
     for h in _BREAK_HINTS:
         kind = _BREAK_KIND[h]
         for p in _top_level_split_points(
-            line, [h], allow_in_parens=True, allow_concat=ast_ok
+            line, [h], allow_in_parens=True, allow_concat=allow_concat
         ):
             cands.append((p + len(h), penalties.get(kind, 10)))
     # 三目 `:` 断点（`?` 后断会续行行首 `:` 非法；`:` 断在冒号后，冒号留行尾）
     for p in _top_level_split_points(
-        line, [":"], allow_in_parens=True, allow_concat=ast_ok
+        line, [":"], allow_in_parens=True, allow_concat=allow_concat
     ):
         cands.append((p + 1, penalties.get("ternary", 30)))
     cands.sort(key=lambda c: c[0])
     return cands
+
+
+def _is_ternary_cont_line(line: str) -> bool:
+    """三目链中间行：行尾 `:`/`,` 且行内含 `?`（续接下一分支的链段）。
+
+    这类行单行解析通常失败（未闭合三目），但结构语义已由行尾分隔符确认；
+    wrap 放行其内部断点（嵌套三目/concat 逗号），续行仍以 `:`/`,` 结尾链不破。
+    """
+    code, _ = _split_trailing_comment(line)
+    return (
+        code.rstrip().endswith((":", ",")) and "?" in code
+    )
 
 
 def _wrap_line_src(line: str) -> str:
@@ -377,7 +393,15 @@ def _wrap_line(
             return [line]
     # 已有续行（无分号结尾）不折——已由前面的 wrap 处理；
     # 块头行例外：if/for/while/case 无分号，条件在 `()` 内可折（断点含括号内）
-    if not is_header and not code_part.rstrip().endswith(";"):
+    # 三目链中间行例外：行尾 `:`（如 `wire x = A ? {B, C} :` 续接下一分支）——
+    # 折在行内嵌套三目 `? :` 或 concat 逗号处，续行仍以 `:`/`,` 结尾链不破
+    # （pratt 跳 newline 已支持，实测解析 OK）；不折则整行超宽永久保留
+    is_ternary_cont = _is_ternary_cont_line(line)
+    if (
+        not is_header
+        and not is_ternary_cont
+        and not code_part.rstrip().endswith(";")
+    ):
         return [line]
 
     indent = _indent_of(line)
@@ -415,6 +439,12 @@ def _wrap_line(
             break
         if has_semi:
             tail += ";"
+        # concat 内元素对齐空格清理：品类对齐对 concat 元素（`{ 16'bx ,`）
+        # 误加列对齐空格（concat 元素非对齐组）——统一去逗号前多余空格
+        # （`{ 16'bx ,` → `{ 16'bx,`），否则折点二次 format 漂移。
+        # 只在含 concat `{` 的 head 做，避免误伤普通表达式
+        if "{" in head and " ," in head:
+            head = head.replace(" ,", ",")
         segments[widest : widest + 1] = [head, tail]
     result = segments
     # 行尾注释附回最后一行（代码语义位置 = 语句尾）

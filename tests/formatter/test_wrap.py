@@ -325,3 +325,35 @@ class TestAstBreak:
         line = "`define VERY_LONG_MACRO_NAME_that_exceeds_one_hundred_columns_width_easily 1"
         out = _wrap_line(line, 100, 4, is_directive=True)
         assert len(out) == 1, "指令行不折"
+
+    def test_ternary_cont_wrapped(self):
+        """三目链中间行（行尾 `:`）可折：`wire x = A ? {B, C} :` 内部断点。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "    wire [31:0] LDATA = FCT3[1:0]==0 ? "
+            "{ FCT3[2]==0&&DATAI[ 7] ? ALL1[31: 8]:ALL0[31: 8] , DATAI[ 7: 0] } :"
+        )
+        out = _wrap_line(line, 100, 4)
+        assert len(out) >= 2, "三目链中间行应折行"
+        for l in out:
+            assert len(l) <= 100, f"折后应 ≤100: len={len(l)}"
+        # 幂等
+        twice = []
+        for l in out:
+            twice.extend(_wrap_line(l, 100, 4))
+        assert twice == out, "三目链折行应幂等"
+
+    def test_ternary_cont_with_comment(self):
+        """三目链中间行带行尾注释（`? {...} : // b-type`）：注释分离后可折。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "            IDATAX[6:0]==`BCC ? { ALL0[31:13], IDATAX[31],IDATAX[7],"
+            "IDATAX[30:25],IDATAX[11:8],ALL0[0] } : // b-type"
+        )
+        out = _wrap_line(line, 100, 4)
+        assert len(out) >= 2, "带注释三目链中间行应折行"
+        for l in out:
+            assert len(l) <= 100
+        assert "// b-type" in out[-1], "注释应保留在尾行"
