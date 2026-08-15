@@ -57,7 +57,8 @@ class TestIfdefAnnotate:
         assert out == lines  # 无配对宏名，原样保留
 
     def test_integration_format_source(self):
-        """format_source 管线内生效且幂等。"""
+        """format_source 管线内生效且幂等（配置默认关闭→不生效；直调 run 生效）。"""
+        # 配置默认关闭：format_source 不标注（破坏性最小，保真度兼容）
         src = (
             "`ifdef FEATURE\n"
             "module m;\n"
@@ -70,7 +71,10 @@ class TestIfdefAnnotate:
             "`endif\n"
         )
         a = format_source(src, DEFAULT_RULES_DIR)
-        b = format_source(a, DEFAULT_RULES_DIR)
-        assert a == b, "ifdef 标注二次格式化漂移"
-        assert "`else // FEATURE" in a
-        assert "`endif // FEATURE" in a
+        assert "`else // FEATURE" not in a, "默认关闭不标注"
+        # 直调 run_ifdef_annotate（pass 本体）生效
+        lines = src.split("\n")
+        out = run_ifdef_annotate(lines)
+        assert "`else // FEATURE" in out
+        # 幂等
+        assert run_ifdef_annotate(out) == out

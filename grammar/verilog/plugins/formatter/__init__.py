@@ -119,13 +119,20 @@ def build_engine(
         ),
     ))
     # 条件编译指令注释标注 pass（`` `else/`endif `` 补配对宏名，VeriGood 借鉴）
-    # 纯文本栈，独立于缩进；幂等（已有注释不重复）
-    from .passes.ifdef_annotate import run_ifdef_annotate
-    engine.register(FormatterPass(
-        name="ifdef_annotate",
-        kind="handler",
-        handler=lambda lines, ctxs: run_ifdef_annotate(lines),
-    ))
+    # 纯文本栈，独立于缩进；幂等（已有注释不重复）。默认关闭（加注释是主动
+    # 增强，与保真度对比 ref 冲突），由 [formatter.ifdef_annotate].enabled 控制
+    try:
+        from core.config_registry import ConfigRegistry
+        from .passes.ifdef_annotate import run_ifdef_annotate
+        _ia_enabled = bool(ConfigRegistry.get("formatter.ifdef_annotate.enabled"))
+    except Exception:  # noqa: BLE001 — 无配置默认关闭
+        _ia_enabled = False
+    if _ia_enabled:
+        engine.register(FormatterPass(
+            name="ifdef_annotate",
+            kind="handler",
+            handler=lambda lines, ctxs: run_ifdef_annotate(lines),
+        ))
     if categories is None:
         # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
         categories = _load_categories_from_config() or DEFAULT_CATEGORIES
@@ -158,6 +165,21 @@ def build_engine(
             lines, ctxs, max_width=mw, indent_width=iw, parser=parser
         ),
     ))
+    # 超长注释折行 pass（VeriGood wrapComment 借鉴，默认关闭）——折纯 `//` 注释
+    # 到 max_width，续行保留 `// ` 前缀；破坏性最小原则，由
+    # [formatter.wrap_comments].enabled 控制
+    try:
+        from core.config_registry import ConfigRegistry
+        from .passes.wrap_comments import run_wrap_comments
+        _wc_enabled = bool(ConfigRegistry.get("formatter.wrap_comments.enabled"))
+    except Exception:  # noqa: BLE001 — 无配置默认关闭
+        _wc_enabled = False
+    if _wc_enabled:
+        engine.register(FormatterPass(
+            name="wrap_comments",
+            kind="handler",
+            handler=lambda lines, ctxs: run_wrap_comments(lines, max_width=mw),
+        ))
     return engine
 
 

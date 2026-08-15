@@ -72,3 +72,13 @@ max_line_width = 100
 [formatter.wrap]
 over_column_penalty = 10
 break_penalties = { comma = 1, logic = 10, arith = 20, ternary = 30 }
+
+# 超长注释折行（VeriGood wrapComment 借鉴，默认关闭——破坏性最小原则）：
+# 折纯 `//` 注释到 max_line_width，续行保留 `// ` 前缀。行内注释不折。
+[formatter.wrap_comments]
+enabled = false
+
+# 条件编译指令注释标注（VeriGood 借鉴，默认关闭——加注释是主动增强，
+# 与保真度对比 ref 冲突）：给 `` `else `` / `` `endif `` 补配对宏名注释。
+[formatter.ifdef_annotate]
+enabled = false
