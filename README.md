@@ -205,53 +205,6 @@ drives lexer, parser, formatter, linter, and renderer. Operators, precedence,
 and rendering live in the same pack (`base/_symbol_level.toml` for Pratt
 priority, `[Rule.renderer.layout]` for Doc IR layout).
 
-## Quick start (dev mode)
-
-```bash
-python main.py format input.v   # format Verilog
-python main.py lint input.v     # lint Verilog
-python main.py new component x  # scaffold a new component / plugin
-```
-
-## API / programming use
-
-Drive the pipeline from Python — lex, parse, analyze, transform, render:
-
-```python
-from core.config_registry import ConfigRegistry
-from core.define import DEFAULT_RULES_DIR, GrammarRulesRegister
-from lexer import Lexer
-from parser import Parser, setup_grammar
-from parser.rule_selector import RuleSelector
-from renderer.renderer import Renderer
-
-ConfigRegistry.load_all(DEFAULT_RULES_DIR, plugins_dir=DEFAULT_RULES_DIR + "/plugins")
-
-rules = setup_grammar(DEFAULT_RULES_DIR, GrammarRulesRegister.get_default())
-stmt_names = [n for n, r in rules.items()
-              if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()]
-parser = Parser(rules_dir=DEFAULT_RULES_DIR, rules=rules,
-                rule_selector=RuleSelector(rules, stmt_names))
-lexer = Lexer(rules_dir=DEFAULT_RULES_DIR)
-
-ast = parser.parse(lexer.tokenize(src))          # parse source
-out = Renderer(rules_dir=DEFAULT_RULES_DIR).render(ast)  # format it
-```
-
-One-liners for common cases:
-
-```python
-from grammar.verilog.plugins.formatter import format_source
-from core.define import DEFAULT_RULES_DIR
-
-formatted = format_source(src, DEFAULT_RULES_DIR)  # format only
-
-from linter.scanner import LinterScanner
-errors = LinterScanner(rules_dir=DEFAULT_RULES_DIR).scan(src)  # lint only
-```
-
-Full interface reference: [`docs/api.md`](./docs/api.md).
-
 ## Status
 
 - [x] Verilog core subset (module, always, if/case/for, function/task, expressions, instances)
