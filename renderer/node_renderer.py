@@ -170,15 +170,25 @@ def render_body(
             elif isinstance(val, list):
                 children.extend(v for v in val if isinstance(v, Node))
     elif source:
-        container = getattr(node, source, None)
+        container = node
+        # 点路径穿透（如 "body.members" → node.body.members）：
+        # 让 body 源可指向嵌套子节点（TypeDecl.body 穿透到 TypeBody.members）
+        for part in source.split("."):
+            container = getattr(container, part, None)
+            if container is None:
+                break
         if isinstance(container, Node):
             # 单节点：若为容器（同名 source 属性或 sub_node 非空）取其子节点；
             # 否则把节点本身作为唯一 child——normalize 会把单元素 repeat 展平
             # 为单节点（如 TypeImplDecl.body: repeat[WireDecl] → WireDecl），
             # 此时 source 指向的就是内容本身。
-            sub = getattr(container, source, None)
-            if sub is None:
+            # 点路径下（source 含 "."）已到达目标节点，直接按容器展开。
+            if "." in source:
                 sub = getattr(container, children_field, None)
+            else:
+                sub = getattr(container, source, None)
+                if sub is None:
+                    sub = getattr(container, children_field, None)
             if sub:
                 children = sub if isinstance(sub, list) else [sub]
             else:

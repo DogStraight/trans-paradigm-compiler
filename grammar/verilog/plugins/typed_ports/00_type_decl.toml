@@ -238,14 +238,18 @@ layout = { line = [
         { ref = "params" },
         ")",
     ] } },
+    " {",
 ] }
-# body 是单个 TypeBody 节点（有自身 layout `{...}`），用 items 直接引用
-body = { items = ["body"] }
+# body 穿透到 TypeBody.members（点路径，一层 Break 无空行）；
+# `}` 由 tail 输出（与 type 对齐）
+body = { source = "body.members" }
+tail = { text = "}", break = 1 }
 
 [TypeBody.renderer]
-layout = "{"
-body = { source = "members" }
+# `{` 由 TypeDecl.layout 尾随输出；members 由 TypeDecl.body 穿透渲染
+# （TypeBody 自身不再渲染 head/body，避免嵌套 Break 产生空行）
 tail = "}"
+
 
 [TypeMember.renderer]
 layout = { ref = "child" }
