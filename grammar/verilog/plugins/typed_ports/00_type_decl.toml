@@ -56,6 +56,17 @@ production = [
 name = "$2"
 default = "$4"
 
+[TypeParamItem.renderer]
+layout = { line = [
+    "parameter ",
+    { ref = "name" },
+    " = ",
+    { ref = "default" },
+] }
+
+[TypeParamList.renderer]
+layout = { join = ", ", items = "items" }
+
 [TypeBody.parser]
 production = [
     "bracket.l_curly_bracket",
@@ -222,6 +233,11 @@ target_role = "$2"
 layout = { line = [
     "type ",
     { ref = "type_name" },
+    { opt = { group = [
+        " (",
+        { ref = "params" },
+        ")",
+    ] } },
 ] }
 # body 是单个 TypeBody 节点（有自身 layout `{...}`），用 items 直接引用
 body = { items = ["body"] }

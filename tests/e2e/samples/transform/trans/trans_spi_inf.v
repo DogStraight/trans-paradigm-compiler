@@ -1,7 +1,7 @@
 module spi_invoker(
     input clk,
     input rstn,
-    input  spi_io_miso,
+    input spi_io_miso,
     output spi_io_sck,
     output spi_io_mosi,
     output spi_io_cs,

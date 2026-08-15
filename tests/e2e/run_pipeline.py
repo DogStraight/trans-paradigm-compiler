@@ -515,9 +515,11 @@ def run_pipeline_on_source(
             _log(f"[output] {gen_file}")
 
         # Render extra ASTs as separate files
+        extra_outputs: list[tuple[str, str]] = []
         for out_name, extra_root in extra_asts:
+            extra_content = renderer.render(extra_root)
+            extra_outputs.append((out_name, extra_content))
             if gen_dir:
-                extra_content = renderer.render(extra_root)
                 extra_file = os.path.join(gen_dir, f"gen_{out_name}.v")
                 with open(extra_file, "w", encoding="utf-8") as f:
                     f.write(extra_content)
@@ -525,6 +527,8 @@ def run_pipeline_on_source(
 
         result["output"] = content
         result["ast"] = ast
+        result["extra_asts"] = extra_asts
+        result["extra_outputs"] = extra_outputs
         result["success"] = True
 
         # ── 幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成

@@ -53,8 +53,11 @@ class ComponentSlotPlugin(TransformPlugin):
         if not slots:
             return ast
 
-        # 第〇阶段：扫描 TypedPortDecl 建类型映射
-        self._scan_typed_ports(ast)
+        # 第〇阶段：构建 接口实例名 → 类型名 映射（type_map）
+        # 从符号表读（typed_port 符号带 capture 的 type_name），不依赖 AST 残留
+        # TypedPortDecl——后者会被 ConfigDrivenTransform 的 expand 提前消费，
+        # 扫 AST 拿不到（此前 type_map 恒空 → impl 自动连线永不触发的根因）。
+        self._scan_typed_ports_scope(root_scope)
 
         # 第一阶段：Root.sub_node 中的 TypeDecl → 包装模块 + 删除
         ast = self._process_type_decls(ast, slots)
@@ -64,17 +67,19 @@ class ComponentSlotPlugin(TransformPlugin):
 
         return ast
 
-    def _scan_typed_ports(self, node: Node) -> None:
-        if node.node_name == "TypedPortDecl":
-            ts = getattr(node, "type_spec", None)
-            inst = getattr(node, "instance_name", None)
-            if ts and inst:
-                tn = _node_text(getattr(ts, "type_name", None))
-                iname = _node_text(getattr(inst, "name", None))
-                if tn and iname:
-                    self._type_map[iname] = tn
-        for c in node.iter_children():
-            self._scan_typed_ports(c)
+    def _scan_typed_ports_scope(self, scope: Scope | None) -> None:
+        """递归遍历符号表，收集 typed_port 符号的 (实例名 → 类型名)。"""
+        if scope is None:
+            return
+        for sym in scope.symbols.values():
+            if sym.kind != "typed_port":
+                continue
+            iname = sym.name
+            tn = sym.attrs.get("type_name", "")
+            if isinstance(tn, str) and tn:
+                self._type_map[iname] = tn
+        for child in scope.children:
+            self._scan_typed_ports_scope(child)
 
     def _process_type_decls(self, root: Node, slots: dict) -> Node:
         subs = getattr(root, "sub_node", [])

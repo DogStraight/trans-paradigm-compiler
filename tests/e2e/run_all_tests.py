@@ -66,8 +66,8 @@ def discover_tests(
         else ["normal", "errors", "lint_err", "macro", "warning", "transform", "real"]
     )
     for group in groups:
-        # transform 组：输入 = input/（增强语法源），预期 = ref/（展开后）
-        src_dir = os.path.join(tests_dir, group, "input" if group == "transform" else "ref")
+        # transform 组：ref/ = 增强语法源（源头，人工维护），trans/ = 展开后预期（生成）
+        src_dir = os.path.join(tests_dir, group, "ref")
         if not os.path.isdir(src_dir):
             continue
         for f in sorted(os.listdir(src_dir)):
@@ -75,7 +75,6 @@ def discover_tests(
                 continue
             name = f.replace(".v", "")
             if name_filter:
-                # transform 组输入无 ref_ 前缀（ref_ 在预期文件名上）
                 expect = name_filter.removeprefix("ref_") if group == "transform" else name_filter
                 if name != expect:
                     continue
@@ -226,9 +225,15 @@ def run_all(
                     ref_text = source  # 增强语法保留：对比输入
                     thr = 0.99  # token 完整，应接近 1.0
                 else:
+                    # X 路径（展开后）：对比 trans/trans_<name>.v（展开预期）
+                    # name 带 ref_ 前缀（如 ref_spi_inf）→ trans_<去前缀>（trans_spi_inf）
+                    x_name = "trans_" + name.removeprefix("ref_")
                     ref_path = os.path.join(
-                        base_dir, "samples", "transform", "ref", f"ref_{name}.v"
+                        base_dir, "samples", "transform", "trans", f"{x_name}.v"
                     )
+                    if not os.path.isfile(ref_path):
+                        # 兼容：trans/ 未生成时回退到 ref/ 本身（只有 P 路径断言）
+                        ref_path = path
                     with open(ref_path, encoding="utf-8") as f:
                         ref_text = f.read()
                     thr = 0.95  # 展开正确性：实例名 hash 差异可容忍

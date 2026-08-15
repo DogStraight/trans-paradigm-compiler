@@ -27,6 +27,13 @@ ref_collect = true
 kind = "typed_port"
 name_attr = "instance_name.name"
 
+# capture 类型名 → 符号 attrs["type_name"]，供 _scan_typed_ports_scope 建 type_map
+# （instance_name → type_name，auto_connect_ports 按接口实例反查类型）。
+# 此前缺失：TypedPortDecl 被 ConfigDrivenTransform 的 expand 提前消费后 AST 无残留
+# 节点，_scan_typed_ports 扫 AST 拿不到，type_map 恒空 → impl 自动连线永不触发。
+[TypedPortDecl.analyzer.symbol.capture]
+type_name = "type_spec.type_name"
+
 [TypedPortDecl.transform]
 kind = "expand"
 foreach = "$"

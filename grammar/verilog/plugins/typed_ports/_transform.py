@@ -96,20 +96,26 @@ def auto_connect_ports(node: Node, ctx) -> Node:
         return node
     iface_name = _text(iface)
     type_name = type_map.get(iface_name, "")
+    # 类型 + role 来自 type_spec（如 spi.master → spi / master）
+    ts = getattr(impl, "type_spec", None)
+    role_name = _text(getattr(ts, "role_name", None)) if ts is not None else ""
     all_ports: list[Node] = []
     explicit_names: set[str] = set()
     explicit = getattr(impl, "ports", None)
-    if explicit is not None:
-        for ep in (getattr(explicit, "items", []) or getattr(explicit, "sub_node", [])):
-            if isinstance(ep, Node) and ep.node_name == "NamedPortConnect":
-                pn = _text(getattr(ep, "port_name", None))
-                if pn:
-                    explicit_names.add(pn)
-                all_ports.append(ep)
+    # impl.ports 结构：可能直接是 NamedPortList，也可能包一层
+    # （ports.sub_node[0] == NamedPortList，inline ImplPortsParens 未展平）。
+    # 统一收敛到 NamedPortConnect 列表。
+    conns: list[Node] = []
+    _collect_connects(explicit, conns)
+    for ep in conns:
+        pn = _text(getattr(ep, "port_name", None))
+        if pn:
+            explicit_names.add(pn)
+        all_ports.append(ep)
     if type_name:
         root = ctx.get("root_scope")
         if root:
-            resolved = _resolved_ports(root, type_name)
+            resolved = _resolved_ports(root, type_name, role_name=role_name)
             for p in resolved:
                 pname = p.get("name", "")
                 if not pname or pname in explicit_names:
@@ -166,6 +172,25 @@ def _text(n) -> str:
             if r:
                 return r
     return ""
+
+
+def _collect_connects(node, out: list[Node]) -> None:
+    """递归收集 NamedPortConnect 节点（兼容 ports 的多层包装结构）。
+
+    impl.ports 可能是 NamedPortList 直接、或包一层（sub_node[0] ==
+    NamedPortList），也可能嵌套在 items/sub_node 里。递归展开收集。
+    """
+    if isinstance(node, Node):
+        if node.node_name == "NamedPortConnect":
+            out.append(node)
+            return
+        for container in ("items", "sub_node"):
+            val = getattr(node, container, None)
+            if isinstance(val, Node):
+                _collect_connects(val, out)
+            elif isinstance(val, list):
+                for v in val:
+                    _collect_connects(v, out)
 
 
 def _first_role_name(root_scope, type_name: str) -> str:
@@ -229,12 +254,19 @@ def _port_decl(direction: str, name: str) -> Node | None:
     return decl
 
 
-def _resolved_ports(root, type_name: str) -> list[dict]:
+def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
+    """解析类型下指定 role 的扁平端口列表（direction + name）。
+
+    role_name 为空时取第一个有端口数据的 role（build_wrapper 兼容行为）；
+    指定时精确匹配该 role（auto_connect_ports 需要——impl type.role 连的是该 role 的端口）。
+    """
     sc = root.find_child_scope(type_name, kind="type") if root else None
     if sc is None:
         return []
     for sym in sc.symbols.values():
         if sym.kind != "role":
+            continue
+        if role_name and sym.name != role_name:
             continue
         rp = sym.attrs.get("resolved_ports", [])
         if rp:
