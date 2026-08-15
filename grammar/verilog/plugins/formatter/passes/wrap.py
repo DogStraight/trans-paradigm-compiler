@@ -68,14 +68,16 @@ def _indent_of(line: str) -> str:
     return line[: len(line) - len(line.lstrip())]
 
 
-def _is_comment_or_directive(line: str) -> bool:
+def _is_comment_or_directive(line: str, is_directive: bool = False) -> bool:
     s = line.lstrip()
-    return (
-        s.startswith("//")
-        or s.startswith("/*")
-        or s.startswith("`")
-        or s.startswith("*")
-    )
+    if s.startswith("//") or s.startswith("/*") or s.startswith("*"):
+        return True
+    if s.startswith("`"):
+        # 指令（`ifdef/`define 等，boundary 配置推导）不折——折了改变宏体/
+        # 条件结构；非指令宏调用语句（`LUI: $display(...)`）可折。无 contexts
+        # 时保守视为指令（不折）。
+        return is_directive
+    return False
 
 
 def _is_block_header(line: str) -> bool:
@@ -186,13 +188,19 @@ def _parse_line(parser: Any, src: str):
     """用 parser 解析单行包装文本，失败返回 None。
 
     parser 是管线复用的实例（format_generated 传入），带 lexer 绑定。
+    解析失败（续行片段、单行不成语句）是 wrap 的预期回退路径——静默
+    stderr（parser 的 WARN/failure-report 对 wrap 无诊断价值，刷屏干扰）。
     """
     try:
         lexer = getattr(parser, "lexer", None)
         if lexer is None:
             return None
         tokens = lexer.tokenize(src)
-        ast = parser.parse(tokens)
+        import contextlib
+        import io as _io
+
+        with contextlib.redirect_stderr(_io.StringIO()):
+            ast = parser.parse(tokens)
         if ast is None or getattr(parser, "_parse_truncated", False):
             return None
         return ast
@@ -311,6 +319,7 @@ def run_wrap_pass(
     out: list[str] = []
     for i, line in enumerate(lines):
         is_cont = i < len(contexts) and contexts[i].multi_line_cont
+        is_directive = i < len(contexts) and contexts[i].is_directive
         out.extend(
             _wrap_line(
                 line,
@@ -320,6 +329,7 @@ def run_wrap_pass(
                 over_column,
                 already_cont=is_cont,
                 parser=parser,
+                is_directive=is_directive,
             )
         )
     return out
@@ -333,11 +343,16 @@ def _wrap_line(
     over_column: int | None = None,
     already_cont: bool = False,
     parser: Any = None,
+    is_directive: bool = False,
 ) -> list[str]:
     """折单行：循环拆到每段 ≤ max_width。尾行缩进 = 语句头缩进 + 1 级。
 
     already_cont：本行已是续行（从语句头折出）→ 续行同级（对齐语句头 +4 的
     效果 = 本行缩进），不再 +4（防逐级递增）。
+
+    is_directive：本行是预处理指令（`ifdef/`define 等，boundary 配置推导）。
+    指令行不折（折了改变宏体/条件）；宏调用语句（行首反引号宏 + `(`，
+    如 `` `LUI: $display(...) ``）可折——其参数在 `()` 内，断点安全。
     """
     if penalties is None or over_column is None:
         penalties, over_column = _load_wrap_config()
@@ -347,7 +362,7 @@ def _wrap_line(
     stripped = line.lstrip()
     if not stripped:
         return [line]
-    if _is_comment_or_directive(line):
+    if _is_comment_or_directive(line, is_directive=is_directive):
         return [line]
     first = stripped.split()[0] if stripped.split() else ""
     if first in ("input", "output", "inout"):
@@ -369,17 +384,27 @@ def _wrap_line(
     # 续行 +1 级；本行已是续行 → 同级（对齐语句头 +4 的效果）
     cont_indent = indent if already_cont else indent + " " * indent_width
 
-    result: list[str] = []
-    cur = code_part
+    # 分段折行：每轮折"最宽段"（含首段），直到所有段 ≤ max_width 或无断点。
+    # 后续段将带 cont_indent（折出的行带续行缩进）——段宽判断含缩进，否则
+    # 100 字符尾行 +4 缩进 = 104 仍超宽（darkriscv 三目链尾行）。
+    # 首段 cur 已含原缩进（code_part = 原行去注释，含缩进），不加；
+    # 折出的新段无缩进，判断 +len(cont_indent)。
+    segments: list[str] = [code_part]
     guard = 0
-    # 超宽判断含行尾注释：代码部分可能 ≤100 但 +注释 >100（darkriscv 带注释声明），
-    # 折行仍需进行；注释不参与拆（不折），只在最后附回尾行
-    while len(cur) + len(trailing) > max_width and guard < 8:
+    while guard < 8:
         guard += 1
+        # 找最宽段（后续段带 cont_indent）
+        def _seg_len(s: str, idx: int) -> int:
+            return len(s) + len(trailing) + (len(cont_indent) if idx > 0 else 0)
+
+        widest = max(range(len(segments)), key=lambda i: _seg_len(segments[i], i))
+        if _seg_len(segments[widest], widest) <= max_width:
+            break
+        cur = segments[widest]
         pt = _find_break_point(cur, max_width, penalties, over_column, indent_width, parser=parser)
         if pt is None:
             break
-        # 拆：分号移尾行
+        # 拆：分号移尾行（分号只属于最后一段；中间段无分号）
         has_semi = cur.rstrip().endswith(";")
         content = cur.rstrip()[:-1] if has_semi else cur.rstrip()
         if pt > len(content):
@@ -390,9 +415,8 @@ def _wrap_line(
             break
         if has_semi:
             tail += ";"
-        result.append(head)
-        cur = tail
-    result.append(cur)
+        segments[widest : widest + 1] = [head, tail]
+    result = segments
     # 行尾注释附回最后一行（代码语义位置 = 语句尾）
     if trailing:
         result[-1] = result[-1] + " " + trailing.lstrip()

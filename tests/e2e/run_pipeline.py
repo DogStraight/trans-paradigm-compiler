@@ -83,7 +83,9 @@ def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
 
 
 # ── Core Pipeline ──
-def format_generated(content: str, rules: Any, lexer: Any, rule_selector: Any = None) -> str:
+def format_generated(
+    content: str, rules: Any, lexer: Any, rule_selector: Any = None, rules_dir: str = None
+) -> str:
     """对生成文本跑 formatter（缩进/品类对齐/实例端口对齐）。
 
     复用管线已加载的 rules/lexer/rule_selector，避免重复初始化；失败时不阻断管线，
@@ -112,6 +114,7 @@ def format_generated(content: str, rules: Any, lexer: Any, rule_selector: Any = 
             parser = Parser(
                 rules_dir=rules_dir, rules=rules, rule_selector=rule_selector, log_file=""
             )
+            parser.lexer = lexer  # wrap 的 AST 断点用它现场解析超宽行
         except Exception:  # noqa: BLE001 — parser 可选，构建失败回退启发式
             parser = None
         engine = build_engine(parser=parser)
@@ -501,7 +504,7 @@ def run_pipeline_on_source(
         # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
         if format_output and content.strip():
             content = format_generated(
-                content, rules, lexer, rule_selector=shared["rule_selector"]
+                content, rules, lexer, rule_selector=shared["rule_selector"], rules_dir=rules_dir
             )
             _log("[formatter] formatted output")
 

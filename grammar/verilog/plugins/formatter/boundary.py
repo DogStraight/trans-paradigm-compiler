@@ -435,6 +435,9 @@ class LineContext:
     """续行额外 +1（语句头行尾是 `=` 连续赋值，三目链续行 ref 用 +2）。"""
     port_list_end: bool = False
     """本行是模块端口列表结束行（`);`），缩进对齐模块头（0 级）。"""
+    is_directive: bool = False
+    """本行是预处理指令（`ifdef/`define 等，从 token 配置推导）。wrap 区分
+    指令不折 vs 宏调用语句（`LUI: $display(...)`，含 `(`）可折。"""
 
 
 # ── 边界扫描器 ──
@@ -592,9 +595,12 @@ class BoundaryScanner:
                         or (line_first_token in self.openers)
                         or (line_first_token in self.closers)
                     )
+                    # 指令行：`\`` 开头且行内无 `(`——纯指令（`ifdef/`define/
+                    # `include 等）无括号；宏调用语句（`LUI: $display(...)` 或
+                    # `debug(...)）含 `(`，是语句形态非指令，wrap 可折其参数
                     is_directive = bool(line_buf) and line_buf[0].lstrip().startswith(
                         "`"
-                    )
+                    ) and "(" not in "".join(line_buf)
                     is_pure_comment = (
                         pending_line_comment
                         or bool(line_buf)
@@ -675,6 +681,7 @@ class BoundaryScanner:
                         hdr_line,
                         port_list_end,
                         hdr_extra,
+                        is_directive,
                     )
                     line_buf = []
                     line_num += 1
@@ -833,6 +840,7 @@ class BoundaryScanner:
         multi_hdr_line=0,
         port_list_end=False,
         multi_extra=False,
+        is_directive=False,
     ):
         if not buf:
             contexts.append(LineContext(line_number=line_num, text=""))
@@ -857,5 +865,6 @@ class BoundaryScanner:
             multi_header_line=multi_hdr_line,
             port_list_end=port_list_end,
             multi_extra=multi_extra,
+            is_directive=is_directive,
         )
         contexts.append(ctx)

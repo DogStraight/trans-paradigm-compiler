@@ -281,3 +281,47 @@ class TestAstBreak:
         for l in once:
             twice.extend(_wrap_line(l, 100, 4, parser=parser))
         assert twice == once, "AST 断点折行应幂等"
+
+    def test_multi_segment_wrap(self):
+        """长行分段折：所有段（含首段）都 ≤100（darkriscv 三目链 311 字符）。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "FCT3 == 7 ? U1REG & S2REGX : FCT3 == 6 ? U1REG | S2REGX : "
+            "FCT3 == 4 ? U1REG ^ S2REGX : FCT3 == 3 ? U1REG < U2REGX : "
+            "FCT3 == 2 ? S1REG < S2REGX : FCT3 == 0 ? (XRCC && FCT7[5] ? "
+            "U1REG - S2REGX : U1REG + S2REGX) : FCT3 == 1 ? S1REG << U2REGX[4:0] : "
+            "!FCT7[5] ? S1REG >> U2REGX[4:0] : $signed(S1REG >>> U2REGX[4:0]);"
+        )
+        out = _wrap_line(line, 100, 4)
+        assert len(out) >= 3, "311 字符三目链应折成多段"
+        for l in out:
+            assert len(l) <= 100, f"所有段应 ≤100: len={len(l)} {l!r}"
+        # 幂等
+        twice = []
+        for l in out:
+            twice.extend(_wrap_line(l, 100, 4))
+        assert twice == out, "多段折行应幂等"
+
+    def test_macro_display_statement_wrapped(self):
+        """宏调用语句（`LUI: $display(...)`）可折——非指令（含 `(`），参数可断。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "            `LUI:     $display(\"trace: %x:%x lui   %%x%0x,%0x\","
+            "                PC,XIDATA,DPTR,$signed(SIMM));"
+        )
+        out = _wrap_line(line, 100, 4, is_directive=False)
+        # 非指令宏调用：折成多行（参数逗号断点），且 ≤100
+        if len(line) > 100:
+            assert len(out) >= 2, "宏 $display 应折行"
+            for l in out:
+                assert len(l) <= 100
+
+    def test_macro_directive_not_wrapped(self):
+        """指令（`ifdef/`define，is_directive=True）不折——折了改变宏体结构。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = "`define VERY_LONG_MACRO_NAME_that_exceeds_one_hundred_columns_width_easily 1"
+        out = _wrap_line(line, 100, 4, is_directive=True)
+        assert len(out) == 1, "指令行不折"
