@@ -10,7 +10,9 @@ inline_comment.py — 基于锚点的注释回注
 import re
 
 
-def restore_comments(rendered: str, comment_anchors: list[dict]) -> tuple[str, int]:
+def restore_comments(
+    rendered: str, comment_anchors: list[dict], only_tpc: bool = False
+) -> tuple[str, int]:
     """
     通过锚点匹配将 inline comment 回注到渲染文本中。
 
@@ -25,6 +27,12 @@ def restore_comments(rendered: str, comment_anchors: list[dict]) -> tuple[str, i
     3. 同一行连续多个匹配时取最后一个（靠近行尾）
     4. 一行仅插入一条注释
     5. 匹配失败则退化到窗口最后一行行尾追加
+
+    only_tpc=True：只回插 tpc marker（`/*<tpc:*>`，宏/条件块还原依赖），跳过
+    普通注释。宏展开/变换路径渲染行号与源行号错位（展开改变行数），±3 窗口
+    在渲染文本定位到错误区域，普通注释（如 `end // case: x` 的 anchor='end'
+    通用子串）会错插到端口/参数行——与 line 通道 only_tpc 语义对称，普通注释
+    锚点漂移时跳过（丢失但结构合法），tpc marker 仍必须回插（否则宏还原失效）。
     """
     if not comment_anchors:
         return rendered, 0
@@ -46,6 +54,9 @@ def restore_comments(rendered: str, comment_anchors: list[dict]) -> tuple[str, i
         anchor = c["anchor"]
         comment = c["text"]
         src_line = c["line"]
+
+        if only_tpc and "tpc:" not in comment:
+            continue  # 展开路径：普通注释锚点漂移，跳过（tpc marker 仍回插）
 
         start = max(0, src_line - 1 - 3)
         end = min(len(lines), src_line + 3)

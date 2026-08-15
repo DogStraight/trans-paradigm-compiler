@@ -170,3 +170,44 @@ def test_empty_body_macro_inline_reversed():
     assert "`TV80DELAY 1'b1;" in out, "空 body 宏应原位还原"
     assert "tpc_marker" not in out, "不应残留 marker"
 
+
+def test_inline_comment_no_drift_with_macros():
+    """展开路径普通行尾注释不漂移（only_tpc：宏 marker 回插，普通注释跳过）。
+
+    宏展开改变行数 → 渲染行号与源行号错位，restore_comments 的 ±3 窗口会
+    在错误区域匹配通用锚点（如 `end`）把注释错插到端口/参数行（tv80 的
+    `end // case: x` 曾漂移到 `parameter Flag_H = 4;` 行尾）。修复后普通
+    注释不参与展开路径回插，宏 marker 仍正常。
+    """
+    src = (
+        "`define FLAG 1\n"
+        "module m;\n"
+        "    parameter Flag_H = 4;\n"
+        "    always @(posedge clk) begin\n"
+        "        if (rst_n)\n"
+        "            q <= `FLAG;\n"
+        "        else begin\n"
+        "            case (x)\n"
+        "                1: q <= 0;\n"
+        "                default: ;\n"
+        "            endcase\n"
+        "        end // case: done\n"
+        "    end\n"
+        "endmodule // T80_ALU\n"
+    )
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+        result = run_pipeline_on_source(
+            source=src, quiet=True, expand_macros=True
+        )
+    assert result["success"], f"管线应成功: {result['error']}"
+    out = result["output"]
+    # 普通注释不回插（漂移会污染声明行），宏正常还原
+    assert "`FLAG" in out, "宏应还原"
+    assert "tpc_marker" not in out, "不应残留 marker"
+    for line in out.split("\n"):
+        if line.strip().startswith("parameter") and "//" in line:
+            raise AssertionError(f"普通注释漂移到参数行: {line!r}")
+
+

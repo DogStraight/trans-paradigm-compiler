@@ -433,14 +433,21 @@ def run_pipeline_on_source(
             _log(f"[preprocessor] directives restored: {len(directive_lines)}")
 
         # Inline comment restoration（锚点匹配，宏展开后亦可用）
-        # restore_stack 非空（宏/条件块还原）时强制启用：空 body 宏的 inline
-        # 锚（`/*<tpc:macro:N>*/`）是块注释，被 parse_token 收集进 _comment_anchors，
-        # 若不回注，protect_and_reverse 找不到 marker，宏调用丢失（tv80 `TV80DELAY`）。
-        if inline_comments or restore_stack:
+        # 展开路径（restore_stack 非空）→ only_tpc：宏 marker（`/*<tpc:macro:N>*/`）
+        # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
+        # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
+        # 但普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——
+        # 只回插 tpc，普通注释跳过（与 line 通道 only_tpc 语义对称）。
+        if inline_comments:
             anchors = getattr(parser, "_comment_anchors", None)
             if anchors:
                 content, n = restore_comments(content, anchors)
                 _log(f"[comments] inline anchor restoration: {n} items")
+        elif restore_stack:
+            anchors = getattr(parser, "_comment_anchors", None)
+            if anchors:
+                content, n = restore_comments(content, anchors, only_tpc=True)
+                _log(f"[comments] tpc inline marker restoration: {n} items")
 
         # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
         # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
