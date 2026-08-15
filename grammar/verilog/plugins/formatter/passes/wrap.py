@@ -70,6 +70,24 @@ def _is_comment_or_directive(line: str) -> bool:
     return s.startswith("//") or s.startswith("/*") or s.startswith("`") or s.startswith("*")
 
 
+def _is_block_header(line: str) -> bool:
+    """块头行：if/else if/for/while/case 等控制流条件行。
+
+    块头条件在 `()` 内，折行时括号内断点允许（条件整体是括号包裹的表达式，
+    `_top_level_split_points` 默认排除括号内——块头特殊放行，否则无断点可折）。
+    识别用行首关键字 + 后随 `(` 条件，不硬编码语言知识之外的东西（关键字
+    集合即控制流语句头，与 boundary 的 stmt_headers 同源）。
+    """
+    s = line.lstrip()
+    if s.startswith(("else ", "else\t")) and "if" in s.split()[:3]:
+        return True
+    # `end else if (...)`（Verilog 同行 else 链）：end 收块 + else if 续条件
+    if s.startswith("end") and "else if" in s:
+        return True
+    first = s.split()[0] if s else ""
+    return first in ("if", "else", "for", "while", "case", "casex", "casez") and "(" in s
+
+
 def _split_trailing_comment(line: str) -> tuple[str, str]:
     """分离行尾 `//` 注释，返回 (代码部分, 注释部分含 `//`)。
 
@@ -92,11 +110,19 @@ def _split_trailing_comment(line: str) -> tuple[str, str]:
     return line.rstrip(), ""
 
 
-def _top_level_split_points(line: str, hints: list[str]) -> list[int]:
-    """返回行内顶层（括号外）断点位置列表（含运算符本身起始）。
+def _top_level_split_points(
+    line: str, hints: list[str], allow_in_parens: bool = False
+) -> list[int]:
+    """返回行内断点位置列表（含运算符本身起始）。
+
+    默认只在顶层（括号外）找断点；allow_in_parens=True（块头行）时括号内
+    运算符也计入——`if (A && B || C) begin` 的条件整体在 `()` 内，顶层
+    无断点可折，块头需在条件括号内折（条件本身是括号包裹表达式，折行
+    不破坏结构，pratt 跳 newline 已支持）。
 
     跟踪 () 与 [] 深度：位选择 `[31:25]` 内的 `:` 是三目符号但语义上是
-    位选择分隔符，不算断点；[] 内其他运算符同样排除。
+    位选择分隔符，不算断点；[] 内其他运算符同样排除（allow_in_parens
+    只放行 ()，不放行 []——位选择内断点仍危险）。
     """
     stripped = line.lstrip()
     base = len(line) - len(stripped)
@@ -124,7 +150,7 @@ def _top_level_split_points(line: str, hints: list[str]) -> list[int]:
             bracket_depth += 1
         elif ch == "]":
             bracket_depth -= 1
-        elif depth == 0 and bracket_depth == 0:
+        elif bracket_depth == 0 and (depth == 0 or allow_in_parens):
             for h in hints:
                 if stripped.startswith(h, i):
                     points.append(base + i)
@@ -135,22 +161,26 @@ def _top_level_split_points(line: str, hints: list[str]) -> list[int]:
 
 
 def _break_candidates(line: str, penalties: dict) -> list[tuple[int, int]]:
-    """收集所有顶层断点候选，每个带断点惩罚值。
+    """收集所有断点候选，每个带断点惩罚值。
 
     断点取"运算符之后"（运算符留在第一行尾，续行从操作数开始）——
     parser 的 pratt 表达式不接受运算符行首续行（`&&`/`+` 行首解析失败），
     但接受运算符行尾 + 操作数行首（实测 0 错）。boundary 用"行尾运算符"
     识别续行（见 op_cont），indent 保缩进。
 
+    allow_in_parens：块头行（if/for/while/case 条件整体在 `()` 内）时括号内
+    运算符也算断点——否则条件行无顶层断点可折。
+
     Returns: [(断点位置, 断点惩罚), ...] 位置升序。
     """
+    is_header = _is_block_header(line)
     cands: list[tuple[int, int]] = []
     for h in _BREAK_HINTS:
         kind = _BREAK_KIND[h]
-        for p in _top_level_split_points(line, [h]):
+        for p in _top_level_split_points(line, [h], allow_in_parens=is_header):
             cands.append((p + len(h), penalties.get(kind, 10)))
     # 三目 `:` 断点（`?` 后断会续行行首 `:` 非法；`:` 断在冒号后，冒号留行尾）
-    for p in _top_level_split_points(line, [":"]):
+    for p in _top_level_split_points(line, [":"], allow_in_parens=is_header):
         cands.append((p + 1, penalties.get("ternary", 30)))
     cands.sort(key=lambda c: c[0])
     return cands
@@ -242,12 +272,14 @@ def _wrap_line(
     # 分离行尾注释：分号判据、声明 `=` 判据都在代码部分做（注释内容不干扰），
     # 折出的行注释跟尾行（注释不折，但随语句语义位置走）
     code_part, trailing = _split_trailing_comment(line)
+    is_header = _is_block_header(line)
     if first in ("reg", "wire", "parameter", "localparam"):
         # 声明：含 `=`（带初始化表达式）才折——`reg [31:0] x;` 无 = 不折
         if "=" not in code_part:
             return [line]
-    # 已有续行（无分号结尾）不折——已由前面的 wrap 处理
-    if not code_part.rstrip().endswith(";"):
+    # 已有续行（无分号结尾）不折——已由前面的 wrap 处理；
+    # 块头行例外：if/for/while/case 无分号，条件在 `()` 内可折（断点含括号内）
+    if not is_header and not code_part.rstrip().endswith(";"):
         return [line]
 
     indent = _indent_of(line)

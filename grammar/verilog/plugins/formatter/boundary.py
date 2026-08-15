@@ -627,18 +627,26 @@ class BoundaryScanner:
                     if is_pure_comment:
                         pass  # 保持 multi_active（不打断续行链）
                     elif (
-                        line_ends_stmt
-                        or is_block_line
-                        or pending_stmt_header
-                        or is_directive
-                        or in_port_list
-                        or pending_case_item
-                        or (is_decl and not decl_op_cont)
-                        or not line_buf
-                        # 行尾闭合括号（`)`/`]`/`}`）：括号组本行闭合，续行链
-                        # 到此为止——否则 `.b(b)` 后的 `);` 会被当成续行（+1 级），
-                        # 实例端口列表结束行缩进错位
-                        or last_line_nontrivia in self.close_bracket_types
+                        # 行尾运算符（`if (A &&` 的 `&&`，wrap 块头折行断点）→
+                        # 表达式未结束，强制下行续行——否则 pending_stmt_header
+                        # （if 是控制流头）把 multi_active 设 False，块头折行的
+                        # 续行（`B) begin`）缩进按 scope_depth 算，二次 format
+                        # 漂移（wrap 折行给 hdr+4，boundary 未识别给 scope_depth）
+                        not op_cont
+                        and (
+                            line_ends_stmt
+                            or is_block_line
+                            or pending_stmt_header
+                            or is_directive
+                            or in_port_list
+                            or pending_case_item
+                            or (is_decl and not decl_op_cont)
+                            or not line_buf
+                            # 行尾闭合括号（`)`/`]`/`}`）：括号组本行闭合，续行链
+                            # 到此为止——否则 `.b(b)` 后的 `);` 会被当成续行（+1 级），
+                            # 实例端口列表结束行缩进错位
+                            or last_line_nontrivia in self.close_bracket_types
+                        )
                     ):
                         multi_active = False
                     else:

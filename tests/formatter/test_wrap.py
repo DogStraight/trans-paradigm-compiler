@@ -105,6 +105,48 @@ class TestWrap:
         # 代码短 + 注释长 → 整行保留（wrap 不折注释，代码部分无需折）
         assert "wire ok = fits;" in out
 
+    def test_block_header_wrapped(self):
+        """块头折行：`if (长条件) begin` 条件括号内断点可折。"""
+        src = (
+            "module m;\n"
+            "    always @* begin\n"
+            "        if ((tstate[1] || (tstate[2] && wait_n == 1'b0)) "
+            "&& no_read == 1'b0 && write == 1'b0 && "
+            "some_extra_long_signal == 1'b1) begin\n"
+            "            q = 1;\n"
+            "        end\n"
+            "    end\n"
+            "endmodule\n"
+        )
+        out = _fmt(src)
+        lines = out.split("\n")
+        # if 头折成多行，`) begin` 保留在尾行
+        if_lines = [l for l in lines if "tstate[1]" in l or "some_extra_long_signal" in l]
+        assert len(if_lines) >= 2
+        assert "begin" in if_lines[-1], "尾行应保留 `) begin`"
+        # 代码行均 ≤100
+        for l in if_lines:
+            assert len(l) <= 100, f"折后应 ≤100: {l!r}"
+
+    def test_block_header_idempotent(self):
+        """块头折行二次 format 稳定（续行缩进不漂移）。"""
+        src = (
+            "module m;\n"
+            "    always @* begin\n"
+            "        if ((tstate[1] || (tstate[2] && wait_n == 1'b0)) "
+            "&& no_read == 1'b0 && write == 1'b0) begin\n"
+            "            q = 1;\n"
+            "        end else if (Halt_FF == 1'b1 || "
+            "(IntCycle == 1'b1 && IStatus == 2'b10)) begin\n"
+            "            q = 2;\n"
+            "        end\n"
+            "    end\n"
+            "endmodule\n"
+        )
+        a = _fmt(src)
+        b = _fmt(a)
+        assert a == b, "块头折行二次格式化漂移"
+
     def test_penalty_prefers_balanced_break(self):
         """惩罚搜索：放弃会让首行超列的最右断点，选两行都不超的方案。
 
