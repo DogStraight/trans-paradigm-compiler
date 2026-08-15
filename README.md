@@ -213,11 +213,6 @@ python main.py lint input.v     # lint Verilog
 python main.py new component x  # scaffold a new component / plugin
 ```
 
-`format` and `lint` read a Verilog file and print the result to stdout. There
-are example inputs under `tests/e2e/samples/` (e.g. `normal/ref_*.v`); the c4
-language pack (`grammar/c4/`) shows how a second language is defined in TOML
-and compiled to its own VM assembly (see `tests/c4/test_c4_asm.py`).
-
 ## API / programming use
 
 Drive the pipeline from Python — lex, parse, analyze, transform, render:
