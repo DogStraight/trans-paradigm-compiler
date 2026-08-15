@@ -47,15 +47,16 @@ Known limitations below).
 // Define a custom type with roles, then use it in a module port
 type spi {
     master : input clk, input miso, output mosi, output cs;
-    slave  : invert master;   // slave = master 的端口方向反转
+    slave  : invert master;   // slave = master with port directions reversed
 }
 
 module top(
     input clk,
     spi.slave spi_io
 );
-    // impl type.role (...) => iface 绑定接口实例：
-    // 显式连接的端口保留（.clk），其余端口自动连到接口展开信号（spi_io_*）
+    // impl type.role (...) => iface binds an interface instance:
+    // explicitly connected ports are kept (.clk), the rest are
+    // auto-connected to the interface expansion signals (spi_io_*)
     impl spi.master (.clk(clk)) => spi_io;
 endmodule
 ```
