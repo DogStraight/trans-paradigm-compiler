@@ -81,8 +81,16 @@ def _load_categories_from_config() -> list[dict] | None:
     return None
 
 
-def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEngine:
-    """从配置构建格式化引擎。"""
+def build_engine(
+    categories: list[dict[str, Any]] | None = None,
+    parser: Any = None,
+) -> FormatterEngine:
+    """从配置构建格式化引擎。
+
+    parser：可选，语法感知 wrap 用——对超宽行现场解析拿 AST 断点
+    （ConcatExpr 逗号/调用参数逗号/位选择内部可断不可断，全由 AST 结构
+    推导，无硬编码）。未传入则 wrap 回退文本括号启发式。
+    """
     from .engine import FormatterEngine, FormatterPass
     from .passes.indent import run_indent_pass
     from .passes.ifdef import run_ifdef_pass
@@ -139,7 +147,7 @@ def build_engine(categories: list[dict[str, Any]] | None = None) -> FormatterEng
         name="wrap",
         kind="handler",
         handler=lambda lines, ctxs: run_wrap_pass(
-            lines, ctxs, max_width=mw, indent_width=iw
+            lines, ctxs, max_width=mw, indent_width=iw, parser=parser
         ),
     ))
     return engine

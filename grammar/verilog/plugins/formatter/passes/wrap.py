@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..boundary import LineContext
 
 # 默认行宽
@@ -47,6 +49,7 @@ def _load_wrap_config() -> tuple[dict, int]:
     over = _DEFAULT_OVER_COLUMN
     try:
         from core.config_registry import ConfigRegistry
+
         cfg = ConfigRegistry.get("formatter.wrap")
         if isinstance(cfg, dict):
             bp = cfg.get("break_penalties")
@@ -67,7 +70,12 @@ def _indent_of(line: str) -> str:
 
 def _is_comment_or_directive(line: str) -> bool:
     s = line.lstrip()
-    return s.startswith("//") or s.startswith("/*") or s.startswith("`") or s.startswith("*")
+    return (
+        s.startswith("//")
+        or s.startswith("/*")
+        or s.startswith("`")
+        or s.startswith("*")
+    )
 
 
 def _is_block_header(line: str) -> bool:
@@ -85,7 +93,9 @@ def _is_block_header(line: str) -> bool:
     if s.startswith("end") and "else if" in s:
         return True
     first = s.split()[0] if s else ""
-    return first in ("if", "else", "for", "while", "case", "casex", "casez") and "(" in s
+    return (
+        first in ("if", "else", "for", "while", "case", "casex", "casez") and "(" in s
+    )
 
 
 def _split_trailing_comment(line: str) -> tuple[str, str]:
@@ -100,18 +110,16 @@ def _split_trailing_comment(line: str) -> tuple[str, str]:
     for i, ch in enumerate(line):
         if ch == '"':
             in_str = not in_str
-        elif (
-            ch == "/"
-            and not in_str
-            and i + 1 < len(line)
-            and line[i + 1] == "/"
-        ):
+        elif ch == "/" and not in_str and i + 1 < len(line) and line[i + 1] == "/":
             return line[:i].rstrip(), line[i:]
     return line.rstrip(), ""
 
 
 def _top_level_split_points(
-    line: str, hints: list[str], allow_in_parens: bool = False
+    line: str,
+    hints: list[str],
+    allow_in_parens: bool = False,
+    allow_concat: bool = False,
 ) -> list[int]:
     """返回行内断点位置列表（含运算符本身起始）。
 
@@ -123,17 +131,18 @@ def _top_level_split_points(
     括号深度语义（按危险度分级）：
       - `[]`（位选择 `[31:25]`）：内部 `:`/`,` 是分隔符不是运算符，任何
         断点都危险 → 永远排除。
-      - `{}`（concat/replicate）：内部 `,` 是分隔符（元素间逗号，断裂会
-        破坏元素边界）→ `,` 断点排除；其他运算符（如 `? :`）可断。
+      - `{}`（concat/replicate）：内部 `,` 是分隔符（元素间逗号）——
+        默认排除（断裂破坏元素边界）；allow_concat=True（AST 确认语句
+        完整）时放行——concat 元素是子表达式，折行可接受。
       - `()`（普通括号/函数调用/三目组）：内部运算符是表达式一部分，断点
         安全（pratt 跳 newline 已支持）→ allow_in_parens 时计入。
     """
     stripped = line.lstrip()
     base = len(line) - len(stripped)
     points: list[int] = []
-    depth = 0        # () 深度
+    depth = 0  # () 深度
     bracket_depth = 0  # [] 深度
-    brace_depth = 0   # {} 深度
+    brace_depth = 0  # {} 深度
     in_str = False
     i = 0
     while i < len(stripped):
@@ -162,8 +171,9 @@ def _top_level_split_points(
         elif bracket_depth == 0 and (depth == 0 or allow_in_parens):
             for h in hints:
                 if stripped.startswith(h, i):
-                    # concat `{}` 内逗号是元素分隔符，断裂破坏元素边界 → 排除
-                    if brace_depth > 0 and h == ",":
+                    # concat `{}` 内逗号是元素分隔符：默认排除（断裂破坏
+                    # 元素边界）；allow_concat（AST 确认语句完整）放行
+                    if brace_depth > 0 and h == "," and not allow_concat:
                         continue
                     points.append(base + i)
                     i += len(h) - 1
@@ -172,7 +182,27 @@ def _top_level_split_points(
     return points
 
 
-def _break_candidates(line: str, penalties: dict) -> list[tuple[int, int]]:
+def _parse_line(parser: Any, src: str):
+    """用 parser 解析单行包装文本，失败返回 None。
+
+    parser 是管线复用的实例（format_generated 传入），带 lexer 绑定。
+    """
+    try:
+        lexer = getattr(parser, "lexer", None)
+        if lexer is None:
+            return None
+        tokens = lexer.tokenize(src)
+        ast = parser.parse(tokens)
+        if ast is None or getattr(parser, "_parse_truncated", False):
+            return None
+        return ast
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _break_candidates(
+    line: str, penalties: dict, parser: Any = None
+) -> list[tuple[int, int]]:
     """收集所有断点候选，每个带断点惩罚值。
 
     断点取"运算符之后"（运算符留在第一行尾，续行从操作数开始）——
@@ -180,24 +210,32 @@ def _break_candidates(line: str, penalties: dict) -> list[tuple[int, int]]:
     但接受运算符行尾 + 操作数行首（实测 0 错）。boundary 用"行尾运算符"
     识别续行（见 op_cont），indent 保缩进。
 
-    allow_in_parens：块头行（if/for/while/case 条件整体在 `()` 内）时括号内
-    运算符也算断点——否则条件行无顶层断点可折。
+    parser：可选，语法感知——解析成功（AST 确认是完整语句）时 concat `{}`
+    顶层逗号也放行（元素是子表达式，可断）；解析失败回退启发式（concat
+    逗号仍排除，保守）。
 
     Returns: [(断点位置, 断点惩罚), ...] 位置升序。
     """
-    # 普通语句也放行括号内断点（`trace_data <= (a ? b : c) | d | e` 顶层无断点，
-    # 括号内运算符是表达式一部分，断点安全；`[]`/concat 内 `,` 由
-    # _top_level_split_points 内部排除）
+    ast_ok = bool(parser) and bool(_parse_line(parser, _wrap_line_src(line)))
     cands: list[tuple[int, int]] = []
     for h in _BREAK_HINTS:
         kind = _BREAK_KIND[h]
-        for p in _top_level_split_points(line, [h], allow_in_parens=True):
+        for p in _top_level_split_points(
+            line, [h], allow_in_parens=True, allow_concat=ast_ok
+        ):
             cands.append((p + len(h), penalties.get(kind, 10)))
     # 三目 `:` 断点（`?` 后断会续行行首 `:` 非法；`:` 断在冒号后，冒号留行尾）
-    for p in _top_level_split_points(line, [":"], allow_in_parens=True):
+    for p in _top_level_split_points(
+        line, [":"], allow_in_parens=True, allow_concat=ast_ok
+    ):
         cands.append((p + 1, penalties.get("ternary", 30)))
     cands.sort(key=lambda c: c[0])
     return cands
+
+
+def _wrap_line_src(line: str) -> str:
+    """构造单行解析包装文本（module 壳 + 该行）。"""
+    return "module m;\n" + line + "\nendmodule\n"
 
 
 def _over_penalty(seg: str, max_width: int, over: int, indent_extra: int = 0) -> int:
@@ -214,6 +252,7 @@ def _find_break_point(
     penalties: dict,
     over: int,
     indent_width: int = 4,
+    parser = None,
 ) -> int | None:
     """选总惩罚最小的断点（Verible 惩罚模型，替代最右贪心）。
 
@@ -224,7 +263,7 @@ def _find_break_point(
     stripped = line.lstrip()
     indent = _indent_of(line)
     cont_indent = indent + " " * indent_width
-    cands = _break_candidates(line, penalties)
+    cands = _break_candidates(line, penalties, parser=parser)
     if not cands:
         return None
 
@@ -252,6 +291,7 @@ def run_wrap_pass(
     indent_width: int = 4,
     penalties: dict | None = None,
     over_column: int | None = None,
+    parser: Any = None,
 ) -> list[str]:
     """折行：超宽行在惩罚最小断点拆成多行（贪婪拆到尾行 ≤ 宽，保证幂等）。
 
@@ -260,18 +300,26 @@ def run_wrap_pass(
     +4 的效果 = 本行缩进），不再 +4——否则续行再折会逐级递增（once 20 vs
     twice 16 漂移：`cond) && A && B;` 的续行 `B;` wrap 给 16+4=20，二次
     format boundary 按语句头重排给 16）。
+
+    parser：可选，语法感知断点——对超宽行现场解析拿 AST 断点（ConcatExpr
+    逗号/调用参数逗号/位选择内部可断不可断，全由 AST 结构推导）。解析输入
+    就是该行文本，AST 节点 → 字符偏移与行内位置同源，无渲染错位问题。
+    未传入/解析失败回退文本括号启发式。
     """
     if penalties is None or over_column is None:
         penalties, over_column = _load_wrap_config()
     out: list[str] = []
     for i, line in enumerate(lines):
-        is_cont = (
-            i < len(contexts) and contexts[i].multi_line_cont
-        )
+        is_cont = i < len(contexts) and contexts[i].multi_line_cont
         out.extend(
             _wrap_line(
-                line, max_width, indent_width, penalties, over_column,
+                line,
+                max_width,
+                indent_width,
+                penalties,
+                over_column,
                 already_cont=is_cont,
+                parser=parser,
             )
         )
     return out
@@ -284,6 +332,7 @@ def _wrap_line(
     penalties: dict | None = None,
     over_column: int | None = None,
     already_cont: bool = False,
+    parser: Any = None,
 ) -> list[str]:
     """折单行：循环拆到每段 ≤ max_width。尾行缩进 = 语句头缩进 + 1 级。
 
@@ -327,7 +376,7 @@ def _wrap_line(
     # 折行仍需进行；注释不参与拆（不折），只在最后附回尾行
     while len(cur) + len(trailing) > max_width and guard < 8:
         guard += 1
-        pt = _find_break_point(cur, max_width, penalties, over_column, indent_width)
+        pt = _find_break_point(cur, max_width, penalties, over_column, indent_width, parser=parser)
         if pt is None:
             break
         # 拆：分号移尾行

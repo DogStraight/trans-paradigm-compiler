@@ -83,10 +83,10 @@ def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
 
 
 # ── Core Pipeline ──
-def format_generated(content: str, rules: Any, lexer: Any) -> str:
+def format_generated(content: str, rules: Any, lexer: Any, rule_selector: Any = None) -> str:
     """对生成文本跑 formatter（缩进/品类对齐/实例端口对齐）。
 
-    复用管线已加载的 rules/lexer，避免重复初始化；失败时不阻断管线，
+    复用管线已加载的 rules/lexer/rule_selector，避免重复初始化；失败时不阻断管线，
     返回原文本并记录 warning（formatter 是增强 pass，不影响主流程）。
     """
     try:
@@ -104,7 +104,17 @@ def format_generated(content: str, rules: Any, lexer: Any) -> str:
 
         scanner = BoundaryScanner(rules, lexer)
         contexts = scanner.scan(split_content)
-        engine = build_engine()
+        # 语法感知 wrap：复用管线已加载的 rule_selector/rules 建 parser（不重复
+        # 初始化），wrap 对超宽行现场解析拿 AST 断点；失败回退文本启发式
+        parser = None
+        try:
+            from parser.parser_core import Parser
+            parser = Parser(
+                rules_dir=rules_dir, rules=rules, rule_selector=rule_selector, log_file=""
+            )
+        except Exception:  # noqa: BLE001 — parser 可选，构建失败回退启发式
+            parser = None
+        engine = build_engine(parser=parser)
         formatted = engine.run(lines, contexts)
         return "\n".join(l.rstrip() for l in formatted)
     except Exception as e:  # noqa: BLE001 — 增强 pass 失败不阻断管线
@@ -490,7 +500,9 @@ def run_pipeline_on_source(
         # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
         # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
         if format_output and content.strip():
-            content = format_generated(content, rules, lexer)
+            content = format_generated(
+                content, rules, lexer, rule_selector=shared["rule_selector"]
+            )
             _log("[formatter] formatted output")
 
         # Write output (no header — gen file is raw content for clean diffing)

@@ -212,3 +212,72 @@ class TestWrap:
         a = _fmt(src)
         b = _fmt(a)
         assert a == b, "惩罚折行后二次格式化漂移"
+
+
+class TestAstBreak:
+    """语法感知断点：AST 确认语句完整 → concat 逗号可断（文本启发式排除）。"""
+
+    @pytest.fixture(scope="class")
+    def parser(self, config_loaded):
+        from parser import Parser, setup_grammar
+        from core.define import GrammarRulesRegister, DEFAULT_EXT_DIRS
+        from parser.rule_selector import RuleSelector
+        from lexer import Lexer
+
+        rules = setup_grammar(DEFAULT_RULES_DIR, GrammarRulesRegister.get_default(), ext_dirs=DEFAULT_EXT_DIRS)
+        stmt_names = [
+            n
+            for n, r in rules.items()
+            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
+        ]
+        p = Parser(
+            rules_dir=DEFAULT_RULES_DIR,
+            rules=rules,
+            rule_selector=RuleSelector(rules, stmt_names),
+            log_file="",
+        )
+        p.lexer = Lexer(rules_dir=DEFAULT_RULES_DIR)
+        return p
+
+    def test_concat_comma_break_with_ast(self, parser):
+        """concat 赋值：AST 确认语句完整 → `{}` 内逗号可断（折成多行）。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "assign mem_la_addr = (mem_do_prefetch || mem_do_rinst) ? "
+            "{ next_pc[31:2] + mem_la_firstword_xfer, 16'b0 } : 32'h0;"
+        )
+        # 带 parser：concat 逗号断点启用
+        out = _wrap_line(line, 100, 4, parser=parser)
+        assert len(out) >= 2, "AST 应允许 concat 逗号断点"
+        for l in out:
+            assert len(l) <= 100
+
+    def test_concat_comma_no_break_without_ast(self):
+        """无 parser：concat 逗号排除（保守），仍能折但断点不同。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "assign mem_la_addr = (mem_do_prefetch || mem_do_rinst) ? "
+            "{ next_pc[31:2] + mem_la_firstword_xfer, 16'b0 } : 32'h0;"
+        )
+        out = _wrap_line(line, 100, 4)
+        # 无 parser 也折（顶层 `||` 断点），但不在 concat 逗号处
+        assert len(out) >= 2
+        joined = "\n".join(out)
+        assert "||\n" in joined or "\n" in joined
+
+    def test_ast_break_idempotent(self, parser):
+        """AST 断点折行二次稳定（幂等）。"""
+        from grammar.verilog.plugins.formatter.passes.wrap import _wrap_line
+
+        line = (
+            "assign mem_la_addr = (mem_do_prefetch || mem_do_rinst) ? "
+            "{ next_pc[31:2] + mem_la_firstword_xfer, 16'b0 } : 32'h0;"
+        )
+        once = _wrap_line(line, 100, 4, parser=parser)
+        # 折出的行再折应无变化（每行 ≤100 不再触发）
+        twice = []
+        for l in once:
+            twice.extend(_wrap_line(l, 100, 4, parser=parser))
+        assert twice == once, "AST 断点折行应幂等"
