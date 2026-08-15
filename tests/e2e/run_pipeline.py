@@ -518,6 +518,13 @@ def run_pipeline_on_source(
         extra_outputs: list[tuple[str, str]] = []
         for out_name, extra_root in extra_asts:
             extra_content = renderer.render(extra_root)
+            # extra 输出与主输出一致：format 开启时也过 formatter（否则品类对齐/
+            # 缩进/换行不统一，trans/ 的包装模块文件格式与主文件不一致）
+            if format_output and extra_content.strip():
+                extra_content = format_generated(
+                    extra_content, rules, lexer,
+                    rule_selector=shared["rule_selector"], rules_dir=rules_dir,
+                )
             extra_outputs.append((out_name, extra_content))
             if gen_dir:
                 extra_file = os.path.join(gen_dir, f"gen_{out_name}.v")
