@@ -289,6 +289,12 @@ class RuleMatcher:
             )
             if not silent:
                 errors += sub_errors
+            # consume 失败（sub_errors 非空）→ 不推进：ExpressionChecker 失败时
+            # 返回 consumed=1 的错误恢复推进，会令 `@Expression?`（如 `.name()`
+            # 空端口）误判"空表达式匹配成功"并吞掉后续 `)`；optional 语境应
+            # 静默不推进（错误已记录），必选语境由上层回滚报错。
+            if sub_errors:
+                return i
             return j + consumed
 
         # 块类（@BeginEnd 等）→ 校验 block_start 后跳到 end_case

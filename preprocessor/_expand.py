@@ -531,15 +531,33 @@ def expand_tokens(
             )
             continue
 
-        # ── 其他宏（非空 body 的 assert/MIN、空 body 的 debug 等）→ 唯一 token ──
-        # token 是唯一标识符（tpc_marker_N），随 AST 确定渲染，还原时 find 精确；
-        # 不依赖注释通道（restore_comments 启发式对多锚不可靠）或同步词容差。
-        # 空 body 宏 token 替换后为 `tpc_marker_N;`（裸任务调用，可解析）。
+        # ── 其他宏 → 锚替换 ──
+        # 非空 body 宏（assert/MIN 等）→ 唯一 token（tpc_marker_N），随 AST 确定
+        # 渲染，还原时 find 精确；不依赖注释通道（restore_comments 启发式对多锚
+        # 不可靠）或同步词容差。
+        # 空 body 宏（`TV80DELAY 1'b1` 行内占位）→ 行内块注释锚（inline）：
+        #   空宏 token 替换会留下 `tpc_marker_N 1'b1` 相邻原子（id + 位宽字面量）
+        #   不可解析；行内注释 marker 是 trivia，parser 跳过，还原时原位回插
+        #   原文宏调用（块注释位置 = 宏调用位置）。
         parts = list(line)
         forward_entries: list[dict] = []
         for col, end, body, name, is_func, args_text in reversed(macro_matches):
-            token = f"tpc_marker_{_next_macro_seq()}"
             fragment = line[col:end]  # 宏调用原文（含反引号与实参）
+            if not body:
+                # 空 body 宏：行内注释锚（marker 唯一，还原精确）
+                marker = make_marker("macro", _next_macro_seq())
+                parts[col:end] = f"/*<{marker}>*/"
+                forward_entries.append(
+                    {
+                        "marker": marker,
+                        "fragment": fragment,
+                        "mode": "inline",
+                        "kind": "macro",
+                        "is_func": is_func,
+                    }
+                )
+                continue
+            token = f"tpc_marker_{_next_macro_seq()}"
             parts[col:end] = token
             forward_entries.append(
                 {

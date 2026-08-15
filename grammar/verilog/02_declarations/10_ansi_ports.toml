@@ -6,14 +6,18 @@
 #
 # 被引用于: 01_module.toml (PortParens → PortList)
 
-# ── PortList — 模块 ANSI 端口列表 ──
-# module 头部括号内的端口列表: (input clk, output [3:0] data, …)
+# ── PortList — 模块端口列表 ──
+# 支持 ANSI 风格（`input clk, output [3:0] data`）与非 ANSI 旧风格裸名字
+# （`m1_n, iorq, write`，方向/类型在 body 声明，tv80s AUTOARG 风格用）。
+# IEEE 1364-2005 A.1.3：list_of_ports ::= port { , port }，port 可为
+#   port_expression（裸名字/表达式）或方向+类型（ANSI）。choice 区分：
+#   AnsiPortDecl first = keyword.input/output/inout，裸名字 first = id。
 # join = ", " 以逗号+空格连接，first_soft = true 在 flat 模式省略首空格。
 
 [PortList.parser]
 production = [
-    "@AnsiPortDecl",
-    "(symbol.base.comma,@AnsiPortDecl)*",
+    "@AnsiPortDecl|@Identifier",
+    "(symbol.base.comma,(@AnsiPortDecl|@Identifier))*",
 ]
 
 [PortList.parser.node]

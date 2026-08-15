@@ -90,7 +90,7 @@ layout = { ref = "stmt" }
 # ── 模块体声明 ──
 [DeclStmt]
 [DeclStmt.parser]
-production = ["@WireDecl|@RegDecl|@BodyPortDecl|@IntegerDecl|@LocalParamDecl|@GenvarDecl"]
+production = ["@WireDecl|@RegDecl|@BodyPortDecl|@IntegerDecl|@LocalParamDecl|@GenvarDecl|@ParamDeclStmt"]
 inline = true
 [DeclStmt.parser.node]
 decl = "$1"

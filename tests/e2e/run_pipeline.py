@@ -433,7 +433,10 @@ def run_pipeline_on_source(
             _log(f"[preprocessor] directives restored: {len(directive_lines)}")
 
         # Inline comment restoration（锚点匹配，宏展开后亦可用）
-        if inline_comments:
+        # restore_stack 非空（宏/条件块还原）时强制启用：空 body 宏的 inline
+        # 锚（`/*<tpc:macro:N>*/`）是块注释，被 parse_token 收集进 _comment_anchors，
+        # 若不回注，protect_and_reverse 找不到 marker，宏调用丢失（tv80 `TV80DELAY`）。
+        if inline_comments or restore_stack:
             anchors = getattr(parser, "_comment_anchors", None)
             if anchors:
                 content, n = restore_comments(content, anchors)

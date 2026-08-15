@@ -140,3 +140,33 @@ def test_ifdef_roundtrip_reversed():
     _, _, out, _ = _run("ref_pp_ifdef_roundtrip.v")
     assert "`ifdef FEATURE" in out
     assert "`endif" in out
+
+
+def test_empty_body_macro_inline_reversed():
+    """空 body 宏行内占位（`TV80DELAY 1'b1）→ inline 注释锚，展开可解析 + 还原原样。
+
+    空 body 宏 token 替换会留下 `tpc_marker_N 1'b1` 相邻原子（id + 位宽字面量）
+    不可解析；inline 锚（`/*<marker>*/`）是 trivia，parser 跳过，还原原位回插
+    宏调用。tv80 的 `define TV80DELAY（无替换体）在 `<=` 后行内使用即此形态。
+    """
+    src = (
+        "`define TV80DELAY\n"
+        "module m;\n"
+        "    always @(posedge clk) begin\n"
+        "        if (!rst_n)\n"
+        "            rd_n <= `TV80DELAY 1'b1;\n"
+        "    end\n"
+        "endmodule\n"
+    )
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+        result = run_pipeline_on_source(
+            source=src, quiet=True, expand_macros=True
+        )
+    assert result["success"], f"管线应成功: {result['error']}"
+    out = result["output"]
+    # 还原后宏调用保留（inline 注释回注位置可能有额外空格，核心段断言）
+    assert "`TV80DELAY 1'b1;" in out, "空 body 宏应原位还原"
+    assert "tpc_marker" not in out, "不应残留 marker"
+

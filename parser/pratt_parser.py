@@ -7,7 +7,7 @@ infix/prefix/postfix operators with proper precedence and associativity.
 from typing import Any
 from core.define import Node, Token
 from core.config_registry import config
-from ._constants import COMMENT_TOKEN_TYPE
+from ._constants import COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 
 
 
@@ -180,11 +180,15 @@ def parse_expression(
 
     # ── 前缀处理（先原子解析器，后内置前缀）──
     node = None
-    # 跳过行内注释（不纳入表达式 AST）
+    # 跳过行内注释与换行（不纳入表达式 AST）。
+    # 换行跳过只发生在前缀位置（表达式/操作数开头）：三目 `cond ? a :` 后接
+    # 续行、行尾运算符（wrap 折行 `&&` 留行尾）后接操作数等，newline 是续行
+    # 分隔符。表达式"结束"仍由中缀循环控制（遇 newline 非运算符自然 break），
+    # 前缀跳过不吞掉结束信号——`expr1\n expr2` 在 expr1 的中缀循环即退出。
     while (
         idx < len(tokens)
         and isinstance(tokens[idx], Token)
-        and tokens[idx].type == COMMENT_TOKEN_TYPE
+        and tokens[idx].type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
     ):
         idx += 1
     if idx >= len(tokens):

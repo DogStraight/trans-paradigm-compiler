@@ -84,3 +84,52 @@ line = [
     { ref = "genvar_name" },
     ";",
 ]
+
+
+# ── ParamDeclStmt — 模块体 parameter 声明 ──
+# 格式: parameter name1 = value1, name2 = value2, ... ;
+#       parameter integer name = value, ... ;
+#       parameter [msb:lsb] name = value, ... ;
+# module 体内的参数声明（IEEE 1364-2005 A.1.2 module_parameter_declaration），
+# 与模块头 #() 内的 ParamDecl 不同——这里是独立语句，可被实例化覆盖。
+# tv80 等旧代码在 body 用 `parameter Mode = 0;`（非 localparam）。
+
+[ParamDeclStmt]
+is_statement = true
+
+[ParamDeclStmt.parser]
+production = [
+    "keyword.parameter",
+    "keyword.integer?",
+    "@Range?",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+end_case = [
+    "symbol.base.semicolon",
+]
+
+[ParamDeclStmt.parser.node]
+param_integer = "$2"
+param_range = "$3"
+items = "$4"
+
+[ParamDeclStmt.analyzer.symbol]
+kind = "parameter"
+name_attr = "items.name"
+
+[ParamDeclStmt.renderer.layout]
+line = [
+    "parameter ",
+    { opt = { line = [
+    { ref = "param_integer" },
+    " ",
+] } },
+    { opt = { line = [
+    "[",
+    { ref = "param_range" },
+    "] ",
+] } },
+    { ref = "items" },
+    ";",
+]

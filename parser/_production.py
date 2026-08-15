@@ -206,6 +206,23 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
                 tok = context.peek_token()
                 if tok and tok.type == be:
                     context.advance_token()
+                    # 结束符后行内注释（`end // comment`）一并消费：
+                    # 块规则结束符不走 parse_token，注释若残留会停在 token 流，
+                    # 使外层规则 end_case（如 IfBlock 的 newline）检查失败回滚。
+                    while context.has_more_tokens():
+                        nxt = context.peek_token()
+                        if nxt and nxt.type == COMMENT_TOKEN_TYPE:
+                            self._comment_anchors.append(
+                                {
+                                    "anchor": tok.content,
+                                    "text": nxt.content,
+                                    "line": nxt.line,
+                                    "type": be,
+                                }
+                            )
+                            context.advance_token()
+                        else:
+                            break
 
             self._restore_current_node(old_node, context)
             context.path_stack.pop()
@@ -498,6 +515,11 @@ def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
     """顺序序列：所有子项依次匹配"""
     items = node["items"]
     self._log_state(lambda: f"解析序列节点 | {self._debug_token_info(context)}")
+    # 入口跳过 trivia（newline/space.fold）：seq 是嵌套元素（repeat 迭代项、
+    # 括号组等），其子 token 遇换行（多行敏感列表 `a or b\n or c`）需能继续；
+    # 规则级跳过由 _try_production 的 prepare_production 负责，嵌套 seq 在此补齐。
+    if hasattr(self, "_skip_tokens"):
+        self._skip_tokens(context, tuple(self.skip_types))
     with context:
         seq_node = Node("seq")
         for idx, item in enumerate(items):
@@ -514,6 +536,10 @@ def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
     alternatives = node["alternatives"]
     self._log_state(lambda: f"解析分支节点 | {self._debug_token_info(context)}")
     original_pointer = context.token_pointer
+    # 入口跳过 trivia：choice 内分支 token 从非 trivia 位置尝试，避免行首
+    # newline 使所有分支（纯 token 分支）失配（多行表达式/列表的续行元素）。
+    if hasattr(self, "_skip_tokens"):
+        self._skip_tokens(context, tuple(self.skip_types))
     for idx, alt in enumerate(alternatives):
         context.token_pointer = original_pointer
         with context:

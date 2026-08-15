@@ -86,11 +86,15 @@ line = [
 
 
 # ── ParamOverrideList — 参数覆盖列表 ──
+# 支持命名参数 `.name(value)` 与位置参数 `expr`（IEEE 1364-2005 A.4.3：
+#   parameter_value_assignment ::= # ( parameter_value { , parameter_value } )
+#   parameter_value ::= expression | data_type | ...
+# 位置参数形态如 `#(Mode, IOWait)`，tv80/真实代码常用）。
 
 [ParamOverrideList.parser]
 production = [
-    "@NamedParamOverride",
-    "(symbol.base.comma,@NamedParamOverride)*",
+    "(@NamedParamOverride|@Expression)",
+    "(symbol.base.comma,(@NamedParamOverride|@Expression))*",
 ]
 
 [ParamOverrideList.parser.node]
@@ -171,13 +175,14 @@ items = "items"
 
 # ── NamedPortConnect — 命名端口连接 ──
 # 格式: .port_name(expr)
+# 空表达式 `.name()`（AUTOARG 风格未连接端口，tv80 用）→ @Expression 可空
 
 [NamedPortConnect.parser]
 production = [
     "symbol.base.dot",
     "@Identifier",
     "bracket.l_parentheses",
-    "@Expression",
+    "@Expression?",
     "bracket.r_parentheses",
 ]
 
