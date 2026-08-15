@@ -94,28 +94,11 @@ line = [
 
 
 # ── PropertyStmt — SVA property 语句（assert/assume/restrict property） ──
-# SystemVerilog Assertions 模块级/过程体语句:
-#   assert property (expr);
-#   assume property (expr);
-#   restrict property (expr);
-# assert/assume/restrict/property 均按普通标识符处理（非关键字），通过
-# 判别前缀（property + 括号）与赋值/调用等 id 语句消歧。属性体为表达式。
-
-[PropertyStmt]
-is_statement = true
-
-[PropertyStmt.parser]
-production = [
-    "@Identifier",
-    "keyword.property",
-    "bracket.l_parentheses",
-    "@Expression",
-    "bracket.r_parentheses",
-    "symbol.base.semicolon",
-]
-end_case = [
-    "newline",
-]
+# ⚠ SystemVerilog Assertions（IEEE 1800）特性，已随 SV 摘除移出 verilog 主包。
+#    SV 实例落地后（grammar/sv/）以 `property` 关键字恢复。
+#    此前实现: assert/assume/restrict property (expr); —— property 作关键字
+#    匹配，通过判别前缀与赋值/调用等 id 语句消歧。现保留规则占位但停用
+#    （production 不再被 Stmt 引用，见 00_base.toml CallStmt 移除引用）。
 
 [PropertyStmt.parser.node]
 kind = "$1"

@@ -33,10 +33,6 @@ logic_not = "not"
 
 [id]
 [id.keyword]
-# 时序/组合逻辑
-al_ff = "al_ff"
-al_comb = "al_comb"
-
 # 仿真
 initial = "initial"
 
@@ -47,22 +43,13 @@ case = "case"
 casex = "casex"
 casez = "casez"
 
-# 导入
-import = "import"
-from = "from"
-as = "as"
-
 # 循环
 for = "for"
 while = "while"
 repeat = "repeat"
 forever = "forever"
-break = "break"
-continue = "continue"
-in = "in"
 
 # 参数
-param = "param"
 parameter = "parameter"
 localparam = "localparam"
 
@@ -70,13 +57,9 @@ localparam = "localparam"
 input = "input"
 output = "output"
 inout = "inout"
-interface = "interface"
 
 # 模块
 module = "module"
-
-# 流程控制
-pass = "pass"
 
 # 边沿
 posedge = "posedge"
@@ -97,10 +80,6 @@ integer = "integer"
 begin = "begin"
 end = "end"
 always = "always"
-# SystemVerilog 关键字（基础子集）
-logic = "logic"
-always_ff = "always_ff"
-always_comb = "always_comb"
 endmodule = "endmodule"
 assign = "assign"
 endcase = "endcase"
@@ -109,7 +88,6 @@ generate = "generate"
 endgenerate = "endgenerate"
 genvar = "genvar"
 signed = "signed"
-property = "property"
 
 # ── 系统函数注册表 ──
 [sysfunc]

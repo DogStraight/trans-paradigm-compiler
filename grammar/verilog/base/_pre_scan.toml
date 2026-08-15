@@ -21,7 +21,6 @@ context_keywords = [
     "unsigned",
     "reg",
     "wire",
-    "logic",
     "input",
     "output",
     "inout",
@@ -34,12 +33,6 @@ keyword = "module"
 name_capture = "next_word"
 terminators = ["(", "#", ";"]
 # Parser 规则选择提示：遇到已知模块名时优先试这些规则
-rule_hints = ["ModuleInst"]
-
-[pre_scan.decl.interface]
-keyword = "interface"
-name_capture = "next_word"
-terminators = ["(", "#", ";"]
 rule_hints = ["ModuleInst"]
 
 [pre_scan.decl.function]

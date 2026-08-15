@@ -48,7 +48,7 @@ scope = { kind = "always" }
 
 [AlwaysStmt.parser]
 production = [
-    "keyword.always|keyword.always_ff|keyword.always_comb",
+    "keyword.always",
     "@EventControl",
     "@Stmt",
 ]

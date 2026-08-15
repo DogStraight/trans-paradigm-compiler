@@ -54,10 +54,10 @@ class TestCallBlockStartPropagation:
         ) == {"keyword.begin"}
 
     def test_alwaysstmt_call_first(self, tree):
-        # SystemVerilog 扩展后 AlwaysStmt 支持 always/always_ff/always_comb
+        # SV 特性摘除后 AlwaysStmt 仅支持 always（1364-2005）
         assert _collect_first_start_tokens(
             {"type": "call", "name": "AlwaysStmt"}, tree
-        ) == {"keyword.always", "keyword.always_ff", "keyword.always_comb"}
+        ) == {"keyword.always"}
 
 
 class TestStmtSelectorFirsts:

@@ -20,10 +20,26 @@
 > verilog 语言包），但 SV 特性会持续增长（interface/class/struct/assertion 等），
 > 内嵌会让 verilog 语言包膨胀。做成**独立插件**（如 plugins/sv）：
 > 插拔动态适配——verilog 包按需挂载 SV 插件，接口/class 等新特性进插件不进主包。
+>
+> **2026-08-16 更新（用户方向修正）**：SV 产生式量大（1800 Annex A 有 400+ 条
+> vs 1364 的 200 条），插件形式不划算——**开独立语法实例**（grammar/sv/ 类似
+> c4 的语言包）。已先行摘除 verilog 主包内嵌的 SV 特性（见下），SV 实例落地后
+> 从实例恢复。
 
-- [ ] SV 插件骨架：plugins/sv/tpc.toml + 语法文件（token_ext/规则），
-      verilog tpc.toml [plugins] enabled 控制挂载
-- [ ] 迁移已内嵌的 SV 三样（logic/always_ff/always_comb）到插件
+- [x] **SV 特性摘除（已完成，647 全过 + run_all 93 全绿）**：
+      - token.toml 删 12 个孤儿 SV/非标准 token（import/from/as/break/continue/
+        in/interface/al_ff/al_comb/param/pass）——零引用零破坏
+      - 删有引用的 4 个：logic/always_ff/always_comb/property（RegDecl/AlwaysStmt/
+        CallStmt/InstStmt 规则引用同步改纯 Verilog；PropertyStmt 规则保留为占位注释）
+      - pre_scan 删 interface decl 段 + context_keywords 删 logic
+      - 删 tests/formatter/test_sv.py（SV 专项）；test_linter_slicer 断言改纯 always
+      - picorv32 样本 `restrict property` 注释化（SVA→等效 Verilog），fidelity 缓存重建
+- [ ] SV 实例骨架：grammar/sv/tpc.toml + 语法文件（token_ext/规则），
+      verilog tpc.toml [plugins] enabled 控制挂载（或独立语言包单语言选择）
+- [ ] 恢复已摘除的 4 特性到 SV 实例：logic/always_ff/always_comb/property
+- [ ] 补充 SV 主要特性：package/interface/class/typedef/struct/enum/import
+- [ ] 验收语料（Sigasi demo，E:\test）：swerv_types.sv（package/typedef/struct/
+      enum）、lsu_bus_intf.sv（interface/import）、tutorial class_*.svh（class）
 - [ ] 验证：挂载/卸载 SV 插件后 verilog 包行为正确（插拔无残留）
 
 ### P1.4 折行（wrap）完善——end_case 分号化
@@ -84,6 +100,53 @@
 - [ ] **concat 无折行**：`{a, b, c, ...}` 超宽保持原样，评估加 concat 断点
 - [ ] **fidelity 缓存模式区分**：key 已带 @expand/@plain 后缀防互串，但需确认
       首次运行后缓存语义正确（不同模式不互相污染）
+
+### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
+
+> 来源：2026-08-16 Sigasi 调研 + VSIX 解包实证。用户拍板：**放分析层插件**
+> （不放在 linter——lexer 期已有 pre_scan 符号预检测，但那是给 parser 的提示；
+> 语义层 Symbol 才有 kind 可区分名字种类，且 analyzer 已统一收集 all_symbols）。
+> 检查逻辑语言通用（进引擎原语），pattern 是语言知识（进 TOML），符合铁律。
+> **不适合当前阶段，计入待办。**
+
+> **Sigasi 实证设计（从 vsix 反编译还原，2026-08-16）**：
+> - 规则 NAMING_CONVENTIONS（前端类别 NAMING_CONVENTION）+ 30 个名字类别参数，
+>   每类一个**正则 pattern**：MODULE_NAME/NET_NAME/VAR_NAME/PORT_NAME/INPUT_NAME/
+>   OUTPUT_NAME/INOUT_NAME/PARAMETER_NAME/PARAMETER_TYPE_NAME/MACRO_NAME/PACKAGE_NAME/
+>   TYPEDEF_NAME/ENUM_TYPEDEF_NAME/ENUM_MEMBER_NAME/UD_NETTYPE_NAME/STRUCT_NAME/
+>   UNION_NAME/CLASS_NAME/INTERFACE_NAME/INTERFACE_CLASS_NAME/INSTANTIATION/
+>   SUBPROGRAM_NAME/FUNCTION_NAME/TASK_NAME/PROGRAM_NAME/CONSTRAINT_NAME/FSM_NAME/
+>   FSM_LABEL_NAME/GENERATE_BLOCK_NAME/COMMENT_HEADER
+> - 每 pattern 带 positive/negative 方向（匹配即合法 vs 不匹配即合法）；
+>   UI 预设 uppercase/lowercase/IGNORE 三选（`nt` 枚举：TRUE/FALSE/IGNORE），
+>   高级用 REGEX 自定义（参数类型枚举含 REGEX）
+> - 错误文案："Naming convention violation: %s should %s pattern '%s'"
+>   （名字 should match/not match pattern）；deprecated 语法单独报
+> - 附带独立规则：连续下划线（ConsecutiveUnderscores）/ 末尾下划线
+>   （UnderscoreAtEnd）——项目 schema 单独配置项，非 naming pattern
+> - 头注释检查（HEADER_COMMENT_CHECK）也复用 namingConvention 参数
+> - severity 按规则 id 配置：`.sigasi/settings.json` 里 `verilog.rules.<id>.severity`
+>   （tutorial 示例：14/17/18 = IGNORE），另有 RTL 级 severity 分离
+> - 对照 tpc：Symbol.kind 即名字类别；30 类清单 → analyzer 符号表 kind 分发，
+>   比"规则级命名配置"更系统（全局一张 pattern 表按 kind 查）
+
+- [ ] `analyzer/primitives/_naming.py`：`@register("naming_check")` 原语——
+      复用 `_symbol._extract_names` 提取名字 → `re.fullmatch` 检查 →
+      违规报诊断（`_context.report`，code N001，level warning）
+- [ ] 触发零机制改动：声明规则 `[RuleName.analyzer]` 加
+      `primitives = ["naming_check"]`（`_is_primitive_triggered` 对未知原语
+      走 primitives 列表，已支持）
+- [ ] 配置（Sigasi 式）：全局 pattern 表按 kind 分发——TOML 建议
+      `[analyzer.naming]`（或插件 tpc.toml）下 `[analyzer.naming.rules.<kind>]`
+      `pattern` + `match = "positive|negative"`；UI 预设 lowercase/uppercase/
+      IGNORE 可做默认 pattern 快捷值（如 `case = "upper"` 自动展开为
+      `^[A-Z][A-Z0-9_]*$`），RE2→Python re 语法兼容
+- [ ] 30 类 kind 映射：Verilog 声明规则 symbol.kind 对齐 Sigasi 类别
+      （module→MODULE_NAME、wire/reg→NET_NAME、var→VAR_NAME、port→PORT_NAME、
+      parameter→PARAMETER_NAME 等），kind 未配置的规则跳过
+- [ ] 注册：`analyzer/primitives/__init__.py` 加 `from . import _naming`
+- [ ] 与 pre_scan 关系确认：pre_scan 是 lexer 期名字收集（parser 提示），
+      naming_check 是语义层规范检查，互不冲突，文档注明
 
 ## P2 — 工程化收尾（发布准备）
 
