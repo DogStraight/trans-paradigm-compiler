@@ -203,10 +203,13 @@ def run_all(
             idp_bad = False
             all_pass = True
             for mode, eh in (("P", False), ("X", True)):
+                # gen/ 语义 = 不展开路线的还原打印（P 路径产物）；
+                # X 路径（展开）输出对比 trans/，不写 gen/（避免同名覆盖 gen 的 P 产物）
+                p_out_dir = out_dir if not eh else None
                 r_t = run_pipeline_on_source(
                     source=source,
                     input_path=path,
-                    out_dir=out_dir,
+                    out_dir=p_out_dir,
                     expand_macros=False,
                     inline_comments=inline_comments,
                     quiet=True,
