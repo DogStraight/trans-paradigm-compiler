@@ -54,8 +54,26 @@ class AnalysisTraversal:
         self._all_symbols.clear()
         self._context = AnalysisContext(root_scope=self._root_scope)
         self._scope_name_node_ids.clear()
+        self._pending_name_refs: list[tuple] = []
         self._walk(ast)
+        self._resolve_pending()
         return ast
+
+    def _resolve_pending(self) -> None:
+        """遍历后统一核对暂存的名称引用。
+
+        单遍遍历时声明可能在调用后方（前向引用，如 task 定义在模块尾、
+        调用在 always 内），遍历结束时符号表已满——用同一 scope 对象重新
+        resolve，仍无才报诊断（避免前向引用误报）。供各名称检查原语
+        （identifier_resolve / check_name_call）失败时暂存。
+        """
+        for scope, name, node in self._pending_name_refs:
+            if scope.resolve(name) is None:
+                self._context.node = node
+                self._context.report(
+                    f"未解析的名称引用: '{name}'", code="W002", level="warning"
+                )
+        self._pending_name_refs = []
 
     @property
     def has_errors(self) -> bool:
@@ -137,7 +155,13 @@ def _is_primitive_triggered(prim_name: str, config: dict) -> bool:
         return False
 
     if prim_name in ("symbol_declare",):
-        return "symbol" in config
+        if "symbol" in config:
+            return True
+        # 无显式 symbol：scope 带 name_attr 即推断声明符号（见 _symbol.symbol_declare）
+        scope_meta = config.get("scope")
+        return bool(
+            isinstance(scope_meta, dict) and scope_meta.get("name_attr")
+        )
     if prim_name in ("scope_enter", "scope_exit"):
         return "scope" in config
     if prim_name == "identifier_resolve":

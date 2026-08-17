@@ -119,8 +119,21 @@
 
 > 来源：2026-08-15 排查中确认的遗留项，非新增方向，逐项修复。
 
-- [ ] **@ElseChain 跨行匹配缺陷**：`end else` 换行后 `else if` 关联断裂——
-      此前定位过未修（语句发现把折行的 else 链截断）
+- [x] **@ElseChain 跨行匹配缺陷**：`end else` 换行后 `else if` 关联断裂——
+      语句发现把折行的 else 链截断（2026-08-17 已修复，见下）
+      > 修复：discovery 容器边界改 _container_end（matcher 按完整 production 匹配，
+      > 覆盖 else chain）+ matcher 块分支优先 block_end（修 `end else` 同行跳过头）+
+      > 延续关键字（else/default）跳过 + IfBlock/IfStmt 移除 end_case=newline。
+      > 验证：653 全过 + run_all 93 绿 + 新增 6 回归测试（TestElseChainDiscovery）。
+- [ ] **未定义 task/function 调用检测（语义层，linter 边界明确）**：`bogusstmt;`
+      语法合法（可能是无参 task 调用），linter 不判语义（勿在 linter 修——id 开头
+      未知语句漏检是设计权衡）。落点 = analyzer：未定义调用是"纯语义级别"。
+      > 已验证（2026-08-17）：当前 analyzer 也不报（Identifier 配 identifier_ref=true
+      > 只 attach _symbol_ref 不产警告，避免隐式 net 误报）；给 SubroutineCall/
+      > TaskCallStmt 配 identifier_ref="callee" 会误报已定义 task（known_task）——
+      > **前置：语法里无任何规则配 symbol_declare（symbol={...}），task/function
+      > 声明根本没入符号表**。需先给 TaskDecl/FuncDecl 配 symbol_declare（声明符号化），
+      > 再给调用规则配 identifier_ref="callee"（字符串 iref 才报 W001）。
 - [ ] **多声明品类对齐（Verible kDataDeclaration 参考）**：`reg [1:0] state, next;`
       被 `_is_multidecl` 跳过（多声明不参与列对齐），同组 `reg [3:0] bit_cnt;`
       按最大位宽列对齐——两行观感不一致。根因 = 语义列模型只支持单声明，

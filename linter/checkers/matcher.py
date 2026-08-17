@@ -297,17 +297,23 @@ class RuleMatcher:
                 return i
             return j + consumed
 
-        # 块类（@BeginEnd 等）→ 校验 block_start 后跳到 end_case
+        # 块类（@BeginEnd 等）→ 校验 block_start 后跳到块结束
         if info.get("is_block"):
             # 先校验起始 token：块规则必须由 block_start 触发（如 BeginEnd 的
             # keyword.begin）。不校验会导致 @BeginEnd 对任意 token（如
-            # `always @(*) endmodule` 的 endmodule）也"跳到 end_case"把坏 body
+            # `always @(*) endmodule` 的 endmodule）也"跳到结束符"把坏 body
             # 静默吞掉——@Stmt 位置非块起点时应视为失败，让上层报错。
             bs = info.get("block_start") or ""
             if bs:
                 k = _skip(tokens, i, limit)
                 if k >= limit or tokens[k].type != bs:
                     return i
+            # 优先用 block_end（精确配对结束符，如 BeginEnd 的 keyword.end）：
+            # end_case（如 newline）是"块后分隔符"，`end else` 同行时 newline
+            # 不出现会跳过头（吞掉 else 链直至后续换行/EOF）。无 block_end 回退。
+            be = info.get("block_end") or ""
+            if be:
+                return self._skip_to_end(tokens, i, {be}, limit)
             ec_block: set[str] = set(info.get("end_case") or ())
             if ec_block:
                 return self._skip_to_end(tokens, i, ec_block, limit)
@@ -642,6 +648,12 @@ class RuleMatcher:
             if t.type in self._block_openers:
                 depth += 1
             elif t.type in self._block_closers:
+                # positive 闭合符（如 keyword.end）使深度归零 → 该 token 就是
+                # 目标块结束符，返回其之后位置。对齐 discovery._skip_to_end：
+                # 缺失此分支时 depth 1→0 的 end 被跳过，块分支用 block_end 跳过
+                # 会越过正确 end 延伸（`end else` 同行吞掉 else 链）。
+                if t.type in positive and depth <= 1:
+                    return i + 1
                 depth = max(0, depth - 1)
             i += 1
         return limit

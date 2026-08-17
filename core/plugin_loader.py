@@ -66,11 +66,17 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
 
     with open(path, "rb") as f:
         raw = tomllib.load(f)
-    # 组件判定：有 [grammar] files，或纯 transform 插件（有 [transform] handlers，
-    # 如 c4 的 asm_gen——无语法规则文件，只有代码生成插件）
+    # 组件判定：有 [grammar] files，或有 [transform] handlers（如 c4 的
+    # asm_gen——无语法规则文件，只有代码生成插件），或有 [analyzer] handlers
+    # （纯语义检查插件，如 semantic_check——无语法规则，只有检查原语）。
     grammar = raw.get("grammar", {})
     transform = raw.get("transform", {})
-    if not grammar.get("files") and not transform.get("handlers"):
+    analyzer = raw.get("analyzer", {})
+    if (
+        not grammar.get("files")
+        and not transform.get("handlers")
+        and not analyzer.get("handlers")
+    ):
         return None
     comp = {
         "name": os.path.basename(os.path.dirname(path)),

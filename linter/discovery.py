@@ -94,6 +94,27 @@ class Discovery:
         # 据此整体跳过属性对，使带属性的语句（如 (* parallel_case *) case ...）
         # 边界不被属性内的括号/newline 截断。
         self._attr_openers = _derive_attr_openers(tree)
+        # 容器结构延续关键字（配置驱动推导，不硬编码）：production 以纯
+        # keyword token 开头、但不启动任何语句/块的规则——如 else（if 链
+        # 延续）、default（case 项延续）。children 递归遇到时跳过：延续
+        # 关键字不单独成语句，其 body（块/语句）由后续扫描自然发现；不跳过
+        # 会把 else 当"有语句特征但无匹配"的未识别语句误报。
+        _stmt_block_firsts: set[str] = set()
+        _continuation: set[str] = set()
+        for _info in tree.values():
+            if not isinstance(_info, dict):
+                continue
+            _prods = _info.get("prods") or []
+            if not _prods or _prods[0].get("type") != "token":
+                continue
+            _tok = _prods[0].get("token_type", "")
+            if _info.get("is_statement") or _info.get("is_block"):
+                _stmt_block_firsts.add(_tok)
+            elif _tok.startswith("keyword."):
+                _continuation.add(_tok)
+        self._continuation_openers = frozenset(
+            _continuation - _stmt_block_firsts
+        )
         # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
         self._unrecognized: list[LintDiagnostic] = []
 
@@ -266,6 +287,13 @@ class Discovery:
                 i += 1
                 continue
 
+            # 容器结构延续关键字（else/default 等，配置驱动推导）：不单独
+            # 成语句，跳过——其 body（块/语句）由后续扫描自然发现。不跳过会
+            # 把 else 当"有语句特征但无匹配"的未识别语句误报。
+            if t.type in self._continuation_openers:
+                i += 1
+                continue
+
             # 语句发现：上下文 + 动态两级消歧
             candidates = self._lookahead.classify(tokens, i, context)
             if candidates is None:
@@ -282,15 +310,7 @@ class Discovery:
                 if isinstance(candidates[0], str) and self._is_nested_container(
                     candidates[0]
                 ):
-                    # 容器节点边界 = body 语句的显式终止符（分号/块结束，depth 0），
-                    # 覆盖单语句 body（如 for 的单语句/if 的 else 链）而非在头行尾
-                    # 截断——头内分号（for 的 init/cond）在括号 depth>0 被跳过。
-                    e = self._skip_to_end(
-                        tokens,
-                        i,
-                        self._lookahead._stmt_ends,
-                        end,
-                    )
+                    e = self._container_end(tokens, i, candidates[0], end)
                 else:
                     e = self._statement_end(tokens, i, candidates[0], end)
                 if e > i:
@@ -425,6 +445,32 @@ class Discovery:
                 break
             j = k if k > j else j + 1
         return None
+
+    def _container_end(
+        self, tokens: list[Token], i: int, rule: str, end: int
+    ) -> int:
+        """容器语句边界：优先用 matcher 按完整 production 匹配确定。
+
+        容器（if/for/while/always 等含语句/块 body）production 末尾是变长元素
+        （optional/choice/call），结束点由 body 结构决定而非固定 token。用
+        matcher 匹配 production 可正确覆盖尾部结构（如 if 的 else chain）；
+        回退 _stmt_ends 会在 then 块 keyword.end 处截断、把 else chain 甩出
+        节点（漏检/误报）。匹配失败（无进展/有结构错误）回退 _stmt_ends，
+        让检查阶段报错、discovery 仍能推进。
+        """
+        matcher = self._lookahead._matcher
+        if matcher is not None:
+            info = self._tree.get(rule, {}) or {}
+            prods = info.get("prods") or []
+            if prods:
+                trial: list = []
+                try:
+                    j = matcher.match_rule(tokens, i, prods, trial, end)
+                except Exception:
+                    j = i
+                if j > i and not trial:
+                    return j
+        return self._skip_to_end(tokens, i, self._lookahead._stmt_ends, end)
 
     def _statement_end(self, tokens: list[Token], i: int, rule: str, n: int) -> int:
         """确定语句的粗略边界（production 推导结束符，其次 end_case）。

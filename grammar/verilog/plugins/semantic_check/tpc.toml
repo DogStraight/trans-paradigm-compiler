@@ -1,0 +1,3 @@
+[analyzer]
+primitives = ["check_name_call"]
+handlers = ["_name_check.py"]

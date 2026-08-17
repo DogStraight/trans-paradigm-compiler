@@ -36,10 +36,21 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
 
     根据 TOML symbol 配置从节点提取名称、捕获属性、注册符号到当前作用域。
     支持: 单名 / 多项声明 / capture 属性提取 / capture_hooks 后处理
+
+    无显式 symbol 时从 scope 配置推断（声明规则通常 scope 与 symbol 的
+    kind/name_attr 一致——如 FuncDecl 的 function/func_name、TaskDecl 的
+    task/task_name）：scope 带 name_attr 即视为"声明符号 + 进入作用域"，
+    避免每个声明规则重复写两份几乎相同的配置。
     """
     sym_meta = config.get("symbol")
     if not sym_meta:
-        return
+        scope_meta = config.get("scope")
+        if not isinstance(scope_meta, dict) or not scope_meta.get("name_attr"):
+            return
+        sym_meta = {
+            "kind": scope_meta.get("kind", "unknown"),
+            "name_attr": scope_meta.get("name_attr"),
+        }
 
     current_scope = analyzer._current_scope
     assert current_scope is not None
