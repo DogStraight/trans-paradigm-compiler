@@ -157,6 +157,7 @@ def run_pipeline_on_source(
     renderer_enabled: bool | None = None,
     stage: str | None = None,
     no_lint: bool | None = None,
+    parse_enabled: bool | None = None,
     format_output: bool | None = None,
     expand_enhanced: bool = True,
     rules_dir: str = DEFAULT_RULES_DIR,
@@ -207,6 +208,8 @@ def run_pipeline_on_source(
         undefine = _cfg.get("undefine")
     if check_idempotent is None:
         check_idempotent = _cfg.get("check_idempotent", True)
+    if parse_enabled is None:
+        parse_enabled = _cfg.get("parse", True)
 
     # Quiet-aware logger
     def _log(msg: str, *args, **kwargs) -> None:
@@ -372,6 +375,11 @@ def run_pipeline_on_source(
                 )
             result["error"] = f"lint failed: {len(lint_errors)} error(s)"
             return result
+
+    # parse 开关：只 lint 不 parse（如 lint 指令：lint 通过即成功）
+    if not parse_enabled:
+        result["success"] = True
+        return result
 
     # ---- Stage: Parse ----
     # Instantiate Parser with injected rules and rule_selector

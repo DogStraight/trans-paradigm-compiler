@@ -27,6 +27,15 @@ def test_commands_declared_as_params():
     assert cmds["expand"].get("preprocess") is True
     assert cmds["expand"].get("analyze") is True
     assert cmds["expand"].get("plugins", {}).get("formatter") is True
+    assert cmds["lint"].get("parse") is False  # lint 只 lint 不 parse
+
+
+def test_lint_only_does_not_parse():
+    # parse_enabled=False：lint 通过即成功，不 parse（无 ast）
+    src = "module m;\n  assign a = b;\nendmodule\n"
+    r = run_pipeline_on_source(src, quiet=True, parse_enabled=False)
+    assert r["success"]
+    assert r["ast"] is None
 
 
 def test_format_params_reject_lint_error():

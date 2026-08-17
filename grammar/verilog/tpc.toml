@@ -72,11 +72,14 @@ render = true
 formatter = true
 
 [commands.lint]
+preprocess = true
 lint = true
+parse = false
 
 [commands.expand]
 preprocess = true
 lint = true
+parse = true
 analyze = true
 transform = true
 render = true
@@ -85,7 +88,9 @@ render = true
 formatter = true
 
 [commands.pipeline]
+preprocess = true
 lint = true
+parse = true
 analyze = true
 transform = true
 render = true
