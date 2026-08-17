@@ -117,16 +117,26 @@ class AnalysisTraversal:
             if _is_primitive_triggered(prim_name, config):
                 prim(self, node, config)
 
-        # 自定义原语
+        # 自定义原语：primitives 列表 + 配置键同名触发（如 check_name_call = {...}
+        # ——键名即原语名，一个键同时触发并携带配置，避免 primitives 列表 + 单独
+        # 配置段两处配合的费解写法）。两者合并去重；跳过标准原语与元键 primitives。
         po_set = set(po)
-        custom_primitives: list = config.get("primitives", [])
-        if isinstance(custom_primitives, list):
-            for prim_name in custom_primitives:
-                if prim_name in po_set:
-                    continue
-                prim = get_primitive(prim_name)
-                if prim is not None:
-                    prim(self, node, config)
+        custom_names: list[str] = []
+        seen: set[str] = set()
+        for prim_name in config.get("primitives", []):
+            if prim_name not in seen and prim_name not in po_set:
+                custom_names.append(prim_name)
+                seen.add(prim_name)
+        for prim_name in config:
+            if prim_name in seen or prim_name in po_set or prim_name == "primitives":
+                continue
+            if get_primitive(prim_name) is not None:
+                custom_names.append(prim_name)
+                seen.add(prim_name)
+        for prim_name in custom_names:
+            prim = get_primitive(prim_name)
+            if prim is not None:
+                prim(self, node, config)
 
         # 递归子节点
         for child in node.iter_children():

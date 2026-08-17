@@ -53,12 +53,7 @@ callee = "$1"
 
 # semantic_check 插件：裸任务调用名参与通用名称检查
 [TaskCallStmt.analyzer]
-primitives = [
-    "check_name_call",
-]
-
-[TaskCallStmt.analyzer.check_name_call]
-name_attr = "callee"
+check_name_call = { name_attr = "callee" }
 
 [TaskCallStmt.renderer.layout]
 line = [
@@ -94,12 +89,7 @@ args = "$3"
 
 # semantic_check 插件：调用名参与通用名称检查（check_name_call 原语）
 [SubroutineCall.analyzer]
-primitives = [
-    "check_name_call",
-]
-
-[SubroutineCall.analyzer.check_name_call]
-name_attr = "callee"
+check_name_call = { name_attr = "callee" }
 
 [SubroutineCall.renderer.layout]
 line = [
