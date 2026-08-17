@@ -18,10 +18,10 @@ def test_commands_declared_in_lang_pack():
     cmds = _load_commands()
     assert set(cmds) >= {"format", "lint", "expand", "pipeline"}
     assert "lex" in cmds["format"]["stages"]
+    assert "preprocess" in cmds["format"]["stages"]  # format 过宏展开 + 还原
     assert "lint" in cmds["format"]["stages"]  # format 保留 lint（AST 生成需 lint 通过）
     assert "analyze" not in cmds["format"]["stages"]  # format 跳过 analyze/transform
-    assert cmds["format"].get("expand_macros") is True  # format 过宏展开 + 还原
-    assert cmds["expand"].get("expand_macros") is True
+    assert "preprocess" in cmds["expand"]["stages"]
 
 
 def test_stages_full_pipeline_rejects_lint_error():
@@ -60,3 +60,21 @@ def test_stages_full_success():
     )
     assert r["success"]
     assert "assign" in r["output"]
+
+
+def test_stages_preprocess_expands_macros():
+    # stages 含 preprocess（在 lex 之前）→ 宏展开 + 还原（format 管线语义）
+    src = (
+        "module m;\n"
+        "  `define W 8\n"
+        "  reg [`W-1:0] data;\n"
+        "  assign out = data;\n"
+        "endmodule\n"
+    )
+    r = run_pipeline_on_source(
+        src,
+        quiet=True,
+        stages=["preprocess", "lex", "lint", "parse", "normalize", "render"],
+    )
+    assert r["success"]
+    assert "`define" in r["output"]  # 宏定义行还原

@@ -107,7 +107,7 @@ def _cmd_format(args: argparse.Namespace) -> None:
         out_dir=None,
         quiet=True,
         stages=cmd.get("stages"),
-        expand_macros=cmd.get("expand_macros", False),
+        # expand_macros 由 stages 含 preprocess 决定，不显式传
     )
 
     if result["success"]:
@@ -137,7 +137,7 @@ def _cmd_expand(args: argparse.Namespace) -> None:
         out_dir=None,
         quiet=True,
         stages=cmd.get("stages"),
-        expand_macros=cmd.get("expand_macros", True),
+        # expand_macros 由 stages 含 preprocess 决定，不显式传
     )
 
     if result["success"]:

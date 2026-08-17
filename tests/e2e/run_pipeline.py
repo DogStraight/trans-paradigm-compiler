@@ -184,8 +184,7 @@ def run_pipeline_on_source(
     _cfg = _load_pipeline_defaults()
     if out_dir is None:
         out_dir = _cfg.get("out_dir")
-    if expand_macros is None:
-        expand_macros = _cfg.get("expand_macros", False)
+    # 预处理（宏展开）默认保留 None：由 stages 含 preprocess 或配置决定
     if inline_comments is None:
         inline_comments = _cfg.get("inline_comments", False)
     if quiet is None:
@@ -218,6 +217,13 @@ def run_pipeline_on_source(
         analyzer_enabled = "analyze" in _stage_set
         transform_enabled = "transform" in _stage_set
         renderer_enabled = "render" in _stage_set
+        # 预处理（宏展开）是显式阶段：stages 含 preprocess 即展开。
+        # 优先级：显式 expand_macros 参数 > stages(指令) > 配置 > False。
+        if expand_macros is None:
+            expand_macros = "preprocess" in _stage_set
+    # 预处理默认：配置 pipeline.expand_macros，缺省 False
+    if expand_macros is None:
+        expand_macros = _cfg.get("expand_macros", False)
 
     # Quiet-aware logger
     def _log(msg: str, *args, **kwargs) -> None:
@@ -348,7 +354,14 @@ def run_pipeline_on_source(
     linter = shared["linter"]
     renderer = shared["renderer"]
 
-    # ---- Stage: Lexical analysis ----
+    # ---- Stage: 预处理（宏展开，纯文本，在 lex 之前）----
+    if expand_macros and macro_table:
+        source, restore_stack = expand_tokens(
+            source, macro_table, func_macros=func_macros
+        )
+        _log("[preprocessor] macros expanded")
+
+    # ---- Stage: Lexical analysis（tokenize 预处理后的文本）----
     tokens = lexer.tokenize(source)
     if not quiet and lex_dir:
         tok_path = os.path.join(lex_dir, f"tokens_{base_name}.txt")
@@ -359,14 +372,6 @@ def run_pipeline_on_source(
     if stage == "lex":
         result["success"] = True
         return result
-
-    # ---- Stage: 纯文本宏展开（在 lexer 之前）----
-    if expand_macros and macro_table:
-        source, restore_stack = expand_tokens(
-            source, macro_table, func_macros=func_macros
-        )
-        tokens = lexer.tokenize(source)
-        _log(f"[preprocessor] macros expanded, tokens: {len(tokens)}")
 
     # ---- Stage: Pre-scan ----
     pre_scan_config = load_pre_scan_config(rules_dir)
