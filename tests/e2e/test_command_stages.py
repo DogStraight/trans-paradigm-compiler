@@ -18,7 +18,7 @@ def test_commands_declared_in_lang_pack():
     cmds = _load_commands()
     assert set(cmds) >= {"format", "lint", "expand", "pipeline"}
     assert "lex" in cmds["format"]["stages"]
-    assert "lint" not in cmds["format"]["stages"]  # format 跳过 lint
+    assert "lint" in cmds["format"]["stages"]  # format 保留 lint（AST 生成需 lint 通过）
     assert "analyze" not in cmds["format"]["stages"]  # format 跳过 analyze/transform
     assert cmds["format"].get("expand_macros") is True  # format 过宏展开 + 还原
     assert cmds["expand"].get("expand_macros") is True
@@ -32,13 +32,14 @@ def test_stages_full_pipeline_rejects_lint_error():
     assert "lint" in r.get("error", "")
 
 
-def test_stages_format_skips_lint():
-    # format 指令（stages 不含 lint）对拼错源码也 success（跳过 lint 校验）
+def test_stages_format_includes_lint():
+    # format 指令 stages 含 lint：拼错源码被 lint 拦截（AST 生成需 lint 通过）
     src = "module m;\n  alwayss @(*) begin\n    a = 1;\n  end\nendmodule\n"
     r = run_pipeline_on_source(
-        src, quiet=True, stages=["lex", "parse", "normalize", "render"]
+        src, quiet=True, stages=["lex", "lint", "parse", "normalize", "render"]
     )
-    assert r["success"]
+    assert not r["success"]
+    assert "lint" in r.get("error", "")
 
 
 def test_stages_lint_only():
