@@ -46,7 +46,7 @@ discover_components(plugins_dir)   # 扫描插件目录的 tpc.toml
   → _resolve_dependencies(metas)   # 按依赖排序（meta 里声明 deps）
   → load_component(meta)           # 逐个：
        grammar_files ← [grammar].files 的 .toml
-       analyzer     ← [analyzer].handlers 的 .py（import 执行 register_analyzer）
+       analyzer     ← [analyzer].handlers 的 .py（import 执行 @register）
        transform    ← [transform].handlers 的 .py（import 执行 register_plugin）
 ```
 
@@ -72,16 +72,34 @@ def expand_typed_port(node: Node, ctx) -> Node | None:
 
 ```python
 # grammar/verilog/plugins/typed_ports/_flatten_ports.py
-from analyzer.primitives.registry import register_primitive
+from analyzer.primitives.registry import register
+from core.define import Node
 
-def flatten_ports(scope, config):
+@register("flatten_ports")
+def flatten_ports(analyzer, node: Node, config: dict) -> None:
+    """签名固定：analyzer（遍历器）/ node（当前 AST 节点）/ config（规则 analyzer 配置）"""
+    self_cfg = config.get("flatten_ports", {})
     ...
-
-register_primitive("flatten_ports", flatten_ports)
 ```
 
-- 原语名在 tpc.toml `[analyzer].primitives` 声明（执行顺序）。
-- 处理器文件在 `[analyzer].handlers`。
+- 处理器文件在 `[analyzer].handlers`（import 即触发 `@register`）。
+- 原语在规则上**按配置键触发**——规则 analyzer 段出现 `原语名 = {...}` 即触发该
+  原语并携带配置（键名 = 原语名，一个键同时管触发与配置）：
+
+```toml
+# 给主包规则加 analyzer 配置（直接在原文件加字段，无需重声明规则）
+[SubroutineCall.analyzer]
+check_name_call = { name_attr = "callee" }
+```
+
+  （兼容旧写法：`primitives = ["原语名"]` 列表 + 单独配置段，两者合并去重。）
+
+- 内置原语（symbol_declare / scope_enter / scope_exit / identifier_resolve）由固定
+  键触发：`symbol` / `scope` / `identifier_ref`。其中 `symbol_declare` 无显式
+  `symbol` 时从 `scope` 推断（scope 带 `name_attr` 即视为"声明符号 + 进入作用域"，
+  声明规则无需重复写 symbol 配置）。
+- 纯 analyzer 插件（只做语义检查、无语法/变换）可只声明 `[analyzer]` 段——组件
+  判定已支持（无 `[grammar] files` / `[transform] handlers` 也可加载）。
 
 ## 5. TransformPlugin（注册到 AstTransformer 管线）
 

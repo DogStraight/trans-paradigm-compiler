@@ -125,18 +125,38 @@ def format_generated(
         return content
 
 
+def _load_pipeline_defaults() -> dict:
+    """从 tpc_config.json 读 pipeline 段，作为 run_pipeline_on_source 参数默认值。
+
+    项目级默认参数（tpc_config.json 提供） + 调用方/CLI 显式传入覆盖
+    （None 表示未传，取配置默认）。找不到配置/解析失败时回退空 dict。
+    """
+    import json
+    from core.config_registry import _find_user_config
+
+    path = _find_user_config()
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                cfg = json.load(f)
+            return cfg.get("pipeline", {})
+        except Exception:
+            pass
+    return {}
+
+
 def run_pipeline_on_source(
     source: str,
     input_path: str | None = None,
     out_dir: str | None = None,
-    expand_macros: bool = False,
-    inline_comments: bool = False,
-    quiet: bool = False,
-    analyzer_enabled: bool = True,
-    transform_enabled: bool = True,
-    renderer_enabled: bool = True,
+    expand_macros: bool | None = None,
+    inline_comments: bool | None = None,
+    quiet: bool | None = None,
+    analyzer_enabled: bool | None = None,
+    transform_enabled: bool | None = None,
+    renderer_enabled: bool | None = None,
     stage: str | None = None,
-    no_lint: bool = False,
+    no_lint: bool | None = None,
     format_output: bool | None = None,
     expand_enhanced: bool = True,
     rules_dir: str = DEFAULT_RULES_DIR,
@@ -144,7 +164,7 @@ def run_pipeline_on_source(
     include_dirs: list[str] | None = None,
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
-    check_idempotent: bool = True,
+    check_idempotent: bool | None = None,
     enable_line_comment_restore: bool = True,
 ) -> dict[str, Any]:
     """
@@ -157,6 +177,36 @@ def run_pipeline_on_source(
         error: str (error message if any)
         parser: Parser instance (for comment table, etc.)
     """
+
+    # 默认参数来源：tpc_config.json 的 pipeline 段（项目级默认值），
+    # 调用方显式传入时覆盖（None 表示"未传，取配置默认"）。
+    _cfg = _load_pipeline_defaults()
+    if out_dir is None:
+        out_dir = _cfg.get("out_dir")
+    if expand_macros is None:
+        expand_macros = _cfg.get("expand_macros", False)
+    if inline_comments is None:
+        inline_comments = _cfg.get("inline_comments", False)
+    if quiet is None:
+        quiet = _cfg.get("quiet", False)
+    if analyzer_enabled is None:
+        analyzer_enabled = _cfg.get("analyzer", True)
+    if transform_enabled is None:
+        transform_enabled = _cfg.get("transform", True)
+    if renderer_enabled is None:
+        renderer_enabled = _cfg.get("renderer", True)
+    if stage is None:
+        stage = _cfg.get("stage")
+    if no_lint is None:
+        no_lint = not _cfg.get("lint", True)
+    if include_dirs is None:
+        include_dirs = _cfg.get("include_dirs")
+    if predefined is None:
+        predefined = _cfg.get("define")
+    if undefine is None:
+        undefine = _cfg.get("undefine")
+    if check_idempotent is None:
+        check_idempotent = _cfg.get("check_idempotent", True)
 
     # Quiet-aware logger
     def _log(msg: str, *args, **kwargs) -> None:
@@ -178,7 +228,7 @@ def run_pipeline_on_source(
     # format_output 默认 True：展开/保留两条路都过 formatter（boundary 已支持
     # curly 块，增强语法缩进可格式化）；显式传 False 可关。
     if format_output is None:
-        format_output = True
+        format_output = _cfg.get("format_output", True)
 
     # Determine output directory
     if out_dir is None:

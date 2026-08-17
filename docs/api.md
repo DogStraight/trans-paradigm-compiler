@@ -66,9 +66,21 @@ from lexer.number_runner import ConfigNumberRunner
 
 ## 配置项速查（config/tpc_config.json）
 
+> 作用：提供**项目级默认参数**，运行时可从控制台（CLI）显式覆盖。
+> `run_pipeline_on_source` 的 `None` 参数会回落到这里的 pipeline 段。
+
 ```json
 {
-  "pipeline": { "stages": ["lex", "lint", "parse", "normalize", "analyze", "transform", "render"] },
-  "grammar": { "rules_dir": "grammar/verilog" }
+  "grammar": "grammar/verilog",
+  "pipeline": {
+    "stages": ["lex", "lint", "parse", "normalize", "analyze", "transform", "render"],
+    "default_test": "led_blinker",
+    "stage": null,
+    "out_dir": null,
+    "analyzer": true, "transform": true, "renderer": true, "lint": true,
+    "expand_macros": false, "inline_comments": false,
+    "format_output": true, "check_idempotent": true, "quiet": false,
+    "include_dirs": [], "define": {}, "undefine": []
+  }
 }
 ```

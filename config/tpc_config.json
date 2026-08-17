@@ -12,6 +12,20 @@
             "transform",
             "render"
         ],
-        "default_test": "led_blinker"
+        "default_test": "led_blinker",
+        "stage": null,
+        "out_dir": null,
+        "analyzer": true,
+        "transform": true,
+        "renderer": true,
+        "lint": true,
+        "expand_macros": false,
+        "inline_comments": false,
+        "format_output": true,
+        "check_idempotent": true,
+        "quiet": false,
+        "include_dirs": [],
+        "define": {},
+        "undefine": []
     }
 }
