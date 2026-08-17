@@ -111,7 +111,7 @@ def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
         transform_enabled=cmd.get("transform", True),
         renderer_enabled=cmd.get("render", True),
         no_lint=not cmd.get("lint", True),
-        format_output=cmd.get("format", True),
+        format_output=cmd.get("plugins", {}).get("formatter", False),
     )
 
     if result["success"]:

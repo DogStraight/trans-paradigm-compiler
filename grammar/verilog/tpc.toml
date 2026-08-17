@@ -56,19 +56,20 @@ reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check"]
 
 # ── 指令定义（main.py 指令 → run_pipeline 参数开关） ──
-# 每个指令声明自己的管线行为（布尔参数开关），main.py 按声明驱动
-# run_pipeline_on_source。用参数开关而非伪阶段列表——宏展开(preprocess)
-# 在前、宏还原在 render 内部，横跨阶段无法用线性 stages 准确表达。
-#   preprocess = 宏展开（还原在 render 阶段）
-#   lint / analyze / transform / render = 各阶段开关
-#   format     = 渲染后过 formatter
+# 每个指令声明自己的管线行为：布尔参数开关 + 插件能力组别。
+#   - 管线阶段开关：preprocess(宏展开，还原在 render 内部) / lint /
+#     analyze / transform / render
+#   - 插件能力组别 [commands.<name>.plugins]：formatter = 渲染后过 formatter
+#     （format 是 formatter 插件提供的能力，单独组别开关）
 [commands.format]
 preprocess = true
 lint = true
 analyze = false
 transform = false
 render = true
-format = true
+
+[commands.format.plugins]
+formatter = true
 
 [commands.lint]
 lint = true
@@ -80,8 +81,14 @@ analyze = true
 transform = true
 render = true
 
+[commands.expand.plugins]
+formatter = true
+
 [commands.pipeline]
 lint = true
 analyze = true
 transform = true
 render = true
+
+[commands.pipeline.plugins]
+formatter = true

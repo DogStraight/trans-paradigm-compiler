@@ -23,9 +23,10 @@ def test_commands_declared_as_params():
     assert fmt.get("analyze") is False  # 跳过 analyze
     assert fmt.get("transform") is False  # 跳过 transform
     assert fmt.get("render") is True
-    assert fmt.get("format") is True  # 渲染后过 formatter
+    assert fmt.get("plugins", {}).get("formatter") is True  # 插件能力：formatter
     assert cmds["expand"].get("preprocess") is True
     assert cmds["expand"].get("analyze") is True
+    assert cmds["expand"].get("plugins", {}).get("formatter") is True
 
 
 def test_format_params_reject_lint_error():
