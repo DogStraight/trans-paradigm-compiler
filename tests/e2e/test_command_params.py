@@ -10,24 +10,34 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from tests.e2e.run_pipeline import run_pipeline_on_source
-from main import _load_commands
+from main import _load_commands, _resolve_command
 
 
 def test_commands_declared_as_params():
-    # [commands] 用参数开关声明：format 展开宏 + lint + 渲染，跳过 analyze/transform
+    # [commands] 只声明差异项（默认 = 完整管线全 true）；_resolve_command 合并默认。
     cmds = _load_commands()
     assert set(cmds) >= {"format", "lint", "expand", "pipeline"}
-    fmt = cmds["format"]
-    assert fmt.get("preprocess") is True  # 宏展开
-    assert fmt.get("lint") is True  # 保留 lint（AST 生成需 lint 通过）
-    assert fmt.get("analyze") is False  # 跳过 analyze
-    assert fmt.get("transform") is False  # 跳过 transform
+    # 语言包只声明差异项——expand/pipeline 无任何显式参数（纯默认 + formatter）
+    fmt = _resolve_command("format")
+    assert fmt.get("preprocess") is True  # 默认：宏展开
+    assert fmt.get("lint") is True  # 默认：保留 lint（AST 生成需 lint 通过）
+    assert fmt.get("analyze") is False  # 差异项：跳过 analyze
+    assert fmt.get("transform") is False  # 差异项：跳过 transform
     assert fmt.get("render") is True
     assert fmt.get("plugins", {}).get("formatter") is True  # 插件能力：formatter
-    assert cmds["expand"].get("preprocess") is True
-    assert cmds["expand"].get("analyze") is True
-    assert cmds["expand"].get("plugins", {}).get("formatter") is True
-    assert cmds["lint"].get("parse") is False  # lint 只 lint 不 parse
+    exp = _resolve_command("expand")
+    assert exp.get("preprocess") is True
+    assert exp.get("analyze") is True
+    assert exp.get("plugins", {}).get("formatter") is True
+    lint_cmd = _resolve_command("lint")
+    assert lint_cmd.get("parse") is False  # 差异项：lint 只 lint 不 parse
+    assert lint_cmd.get("analyze") is False
+    assert lint_cmd.get("render") is False
+    # 未声明的指令名 → 纯默认（完整管线）
+    unknown = _resolve_command("nonexistent")
+    assert unknown.get("preprocess") is True
+    assert unknown.get("parse") is True
+    assert unknown.get("plugins", {}).get("formatter") is False
 
 
 def test_lint_only_does_not_parse():

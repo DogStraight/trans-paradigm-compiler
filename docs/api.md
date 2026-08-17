@@ -73,8 +73,6 @@ from lexer.number_runner import ConfigNumberRunner
 {
   "grammar": "grammar/verilog",
   "pipeline": {
-    "stages": ["lex", "lint", "parse", "normalize", "analyze", "transform", "render"],
-    "default_test": "led_blinker",
     "stage": null,
     "out_dir": null,
     "analyzer": true, "transform": true, "renderer": true, "lint": true,
