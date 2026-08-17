@@ -20,6 +20,7 @@ def test_commands_declared_in_lang_pack():
     assert "lex" in cmds["format"]["stages"]
     assert "lint" not in cmds["format"]["stages"]  # format 跳过 lint
     assert "analyze" not in cmds["format"]["stages"]  # format 跳过 analyze/transform
+    assert cmds["format"].get("expand_macros") is True  # format 过宏展开 + 还原
     assert cmds["expand"].get("expand_macros") is True
 
 
