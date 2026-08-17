@@ -106,7 +106,7 @@ def _same_line_next(tokens: list, idx: int, trivia: frozenset[str]) -> bool:
     行尾 `{`（块开，如 `type spi {` / `impl [m] (...) {`）后是换行；
     行中 `{`（表达式，如 `assign x = {a, b};`）后是表达式内容。
     """
-    for t in tokens[idx + 1:]:
+    for t in tokens[idx + 1 :]:
         if t.type in trivia:
             if t.type == "newline":
                 return False
@@ -544,8 +544,7 @@ class BoundaryScanner:
                     # 模块端口列表结束行（`);`）→ 对齐模块头（0 级）；
                     # 先判断再重置 in_port_list
                     port_list_end = (
-                        in_port_list
-                        and last_line_nontrivia in self.stmt_end_tokens
+                        in_port_list and last_line_nontrivia in self.stmt_end_tokens
                     )
                     # if/for 单行体（body 同行，如 `if (X) stmt;`）：行尾分号
                     # 表示语句头已在同行结束 → 非单语句头；同时结束端口列表
@@ -598,9 +597,11 @@ class BoundaryScanner:
                     # 指令行：`\`` 开头且行内无 `(`——纯指令（`ifdef/`define/
                     # `include 等）无括号；宏调用语句（`LUI: $display(...)` 或
                     # `debug(...)）含 `(`，是语句形态非指令，wrap 可折其参数
-                    is_directive = bool(line_buf) and line_buf[0].lstrip().startswith(
-                        "`"
-                    ) and "(" not in "".join(line_buf)
+                    is_directive = (
+                        bool(line_buf)
+                        and line_buf[0].lstrip().startswith("`")
+                        and "(" not in "".join(line_buf)
+                    )
                     is_pure_comment = (
                         pending_line_comment
                         or bool(line_buf)
