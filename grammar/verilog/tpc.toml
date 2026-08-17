@@ -17,34 +17,6 @@ skip_types = ["newline", "space.fold"]
 [renderer]
 style = { file = "base/_style.toml", section = "style", required = false }
 
-[linter]
-# 块 opener token → 消歧上下文（语句发现阶段用）
-opener_context = [
-    [
-        "keyword.module",
-        "module_body",
-    ],
-    [
-        "keyword.begin",
-        "proc_body",
-    ],
-    [
-        "keyword.function",
-        "proc_body",
-    ],
-    [
-        "keyword.task",
-        "proc_body",
-    ],
-    [
-        "keyword.generate",
-        "gen_body",
-    ],
-]
-# 模块体 / 过程体语句选择器规则名（推导语句叶子集合用）
-module_item_rule = "ModuleItem"
-stmt_rule = "Stmt"
-
 [preprocessor]
 macro_config = { file = "base/_macro.toml", required = false }
 expand = { file = "base/_macro.toml", section = "expand", required = false }
@@ -64,6 +36,7 @@ enabled = ["typed_ports", "formatter", "attributes", "semantic_check"]
 [commands.format]
 preprocess = true
 lint = true
+parse = true
 analyze = false
 transform = false
 render = true

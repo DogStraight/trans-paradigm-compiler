@@ -31,20 +31,19 @@ def _tokens(scanner, src):
     return scanner.lexer.tokenize(src)
 
 
-def _classify_at(lookahead, tokens, content, context):
+def _classify_at(lookahead, tokens, content):
     """定位 content 的 token，返回其 classify 结果（list | None）。"""
     for i, t in enumerate(tokens):
         if t.content == content:
-            return lookahead.classify(tokens, i, context)
+            return lookahead.classify(tokens, i)
     raise AssertionError(f"token '{content}' not found in token stream")
 
 
-class TestIdentByCtx:
-    """B 类 ident 候选注册到所有块内上下文。"""
+class TestIdentCandidates:
+    """B 类 ident 候选注册到单一全局集合（不按上下文分组）。"""
 
-    def test_all_contexts_have_b_class_candidates(self, lookahead):
-        for ctx in ("proc_body", "module_body", "gen_body"):
-            assert lookahead.ident_by_ctx.get(ctx), f"{ctx} 应注册 B 类 ident 候选"
+    def test_ident_candidates_non_empty(self, lookahead):
+        assert lookahead.ident_candidates, "B 类 ident 候选应非空"
 
 
 class TestAClassKeyword:
@@ -52,36 +51,36 @@ class TestAClassKeyword:
 
     def test_if_keyword_classifies_to_ifblock(self, scanner, lookahead):
         tokens = _tokens(scanner, "module m; if (x) begin end endmodule")
-        assert _classify_at(lookahead, tokens, "if", "module_body") == ["IfBlock"]
+        assert _classify_at(lookahead, tokens, "if") == ["IfBlock"]
 
     def test_always_classifies_to_alwaysstmt(self, scanner, lookahead):
         tokens = _tokens(scanner, "module m; always @(*) begin end endmodule")
-        assert _classify_at(lookahead, tokens, "always", "module_body") == ["AlwaysStmt"]
+        assert _classify_at(lookahead, tokens, "always") == ["AlwaysStmt"]
 
 
 class TestBClassIdent:
-    """B 类：标识符触发，按上下文过滤 + 变长前瞻消歧。"""
+    """B 类：标识符触发，变长前瞻消歧（不按上下文过滤）。"""
 
     def test_proc_blocking_assign(self, scanner, lookahead):
         tokens = _tokens(scanner, "module m; always @(*) begin a = 1; end endmodule")
-        assert _classify_at(lookahead, tokens, "a", "proc_body") == ["BlockingAssign"]
+        assert _classify_at(lookahead, tokens, "a") == ["BlockingAssign"]
 
     def test_proc_nonblocking_assign(self, scanner, lookahead):
         tokens = _tokens(scanner, "module m; always @(*) begin b <= 1; end endmodule")
-        assert _classify_at(lookahead, tokens, "b", "proc_body") == ["NonBlockingAssign"]
+        assert _classify_at(lookahead, tokens, "b") == ["NonBlockingAssign"]
 
     def test_proc_subroutine_call(self, scanner, lookahead):
         tokens = _tokens(scanner, "module m; always @(*) begin c(x); end endmodule")
-        assert _classify_at(lookahead, tokens, "c", "proc_body") == ["SubroutineCall"]
+        assert _classify_at(lookahead, tokens, "c") == ["SubroutineCall"]
 
     def test_module_inst(self, scanner, lookahead):
         tokens = _tokens(scanner, "module m; foo u1 (.a(b)); endmodule")
-        assert _classify_at(lookahead, tokens, "foo", "module_body") == ["ModuleInst"]
+        assert _classify_at(lookahead, tokens, "foo") == ["ModuleInst"]
 
-    def test_context_filters_inst_from_proc(self, scanner, lookahead):
-        # 同一 ident：模块体上下文消歧为 ModuleInst（上下文过滤生效）
+    def test_level1_disambiguates_inst(self, scanner, lookahead):
+        # 同一 ident：Level 1 前瞻消歧（foo u1( 两 token 预视）定 ModuleInst
         tokens = _tokens(scanner, "module m; foo u1 (.a(b)); endmodule")
-        assert _classify_at(lookahead, tokens, "foo", "module_body") == ["ModuleInst"]
+        assert _classify_at(lookahead, tokens, "foo") == ["ModuleInst"]
 
     def test_param_inst_cross_line(self, scanner, lookahead):
         # 跨行参数化实例化（模块名/参数/实例名分多行，SERV 风格）：
@@ -90,7 +89,7 @@ class TestBClassIdent:
             scanner,
             "module m; foo\n  #(.P(p))\nbar\n  (.a(b)); endmodule",
         )
-        assert _classify_at(lookahead, tokens, "foo", "module_body") == ["ModuleInst"]
+        assert _classify_at(lookahead, tokens, "foo") == ["ModuleInst"]
 
 
 class TestUnrecognized:
@@ -99,12 +98,12 @@ class TestUnrecognized:
     def test_typo_keyword(self, scanner, lookahead):
         # e07: alwayss 拼错 → 无候选匹配 → []
         tokens = _tokens(scanner, "module m; alwayss @(*) begin end endmodule")
-        assert _classify_at(lookahead, tokens, "alwayss", "module_body") == []
+        assert _classify_at(lookahead, tokens, "alwayss") == []
 
     def test_if_missing_paren(self, scanner, lookahead):
         # e09: if 缺括号 → Level 1 前瞻 paths 失败 → []
         tokens = _tokens(scanner, "module m; always @(*) begin if a begin end end endmodule")
-        assert _classify_at(lookahead, tokens, "if", "proc_body") == []
+        assert _classify_at(lookahead, tokens, "if") == []
 
 
 class TestNonStatement:
@@ -115,7 +114,7 @@ class TestNonStatement:
         tokens = _tokens(scanner, "module m; endmodule")
         for i, t in enumerate(tokens):
             if t.type == "symbol.base.semicolon":
-                assert lookahead.classify(tokens, i, "module_body") == ["NullStmt"]
+                assert lookahead.classify(tokens, i) == ["NullStmt"]
                 return
         raise AssertionError("no semicolon token found")
 
@@ -124,7 +123,7 @@ class TestNonStatement:
         tokens = _tokens(scanner, "a + b")
         for i, t in enumerate(tokens):
             if t.type == "symbol.base.add":
-                assert lookahead.classify(tokens, i, "module_body") is None
+                assert lookahead.classify(tokens, i) is None
                 return
         raise AssertionError("no '+' token found")
 

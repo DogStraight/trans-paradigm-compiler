@@ -17,7 +17,9 @@ from core.define import Token
 
 from . import LintDiagnostic, Position, token_pos
 
-# 顶层上下文（发现入口）：块内上下文由 opener_context 配置动态生成，不硬编码
+# 顶层上下文（发现入口）：块内上下文名不参与候选筛选（B 类 ident 候选是
+# 单一全局集合，靠 Level 1 前瞻/Level 2 试解析精确筛选），context 仅作
+# DiscoveredNode 的归属标记
 CTX_TOP = "top"
 
 

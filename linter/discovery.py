@@ -62,27 +62,17 @@ class Discovery:
         block_closers: frozenset[str],
         bracket_openers: frozenset[str],
         bracket_closers: frozenset[str],
-        module_item_rule: str,
-        stmt_rule: str,
-        opener_ctx: dict[str, str] | None = None,
         matcher=None,
     ) -> None:
         self._tree = tree
         self._lookahead = LookaheadTable(
             tree,
-            module_item_rule,
-            stmt_rule,
             matcher=matcher,
-            opener_ctx=opener_ctx or {},
         )
-        # 过程体语句入口选择器名（配置驱动，用于引用式容器 body 上下文判断）
-        self._stmt_rule = stmt_rule
         self._block_openers = block_openers
         self._block_closers = block_closers
         self._bracket_openers = bracket_openers
         self._bracket_closers = bracket_closers
-        # 块 opener → 消歧上下文（配置驱动，缺省沿用当前上下文）
-        self._opener_ctx = opener_ctx or {}
         # 块结束符集合：作为语句扫描的终止符（替代硬编码 endmodule 等）
         self._block_ends = frozenset(
             info["block_end"]
@@ -220,7 +210,7 @@ class Discovery:
                 ):
                     i = self._skip_balanced(tokens, i, end)
                     continue
-                candidates = self._lookahead.classify(tokens, i, context)
+                candidates = self._lookahead.classify(tokens, i)
                 if candidates and not (
                     isinstance(candidates[0], str)
                     and (self._tree.get(candidates[0], {}) or {}).get("block_end")
@@ -244,7 +234,7 @@ class Discovery:
 
             # 块边界 → 注册块节点 + 递归 body 产出 children
             if t.type in self._block_openers:
-                candidates = self._lookahead.classify(tokens, i, context)
+                candidates = self._lookahead.classify(tokens, i)
                 end_idx = i + 1
                 if candidates is None:
                     i = end_idx
@@ -276,7 +266,7 @@ class Discovery:
                                 tokens,
                                 body_start,
                                 body_end,
-                                self._opener_ctx.get(t.type, context),
+                                context,
                                 depth + 1,
                             )
                         nodes.append(node)
@@ -294,8 +284,8 @@ class Discovery:
                 i += 1
                 continue
 
-            # 语句发现：上下文 + 动态两级消歧
-            candidates = self._lookahead.classify(tokens, i, context)
+            # 语句发现：动态两级消歧
+            candidates = self._lookahead.classify(tokens, i)
             if candidates is None:
                 i += 1
                 continue

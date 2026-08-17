@@ -332,7 +332,6 @@ class GrammarRule:
         "is_atom",
         "is_block",
         "is_statement",
-        "statement_entry",
     }
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}

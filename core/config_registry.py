@@ -245,6 +245,10 @@ class ConfigRegistry:
     _entries: dict[str, dict] = {}
     _loaded: dict[str, Any] = {}
     _resolved: bool = False
+    # 当前 _entries 来源的语言包目录（相对项目根）。None = 尚未按语言包生成
+    # （import 期默认包声明）。load_all 时若 rules_dir 与来源不一致，先按该
+    # 语言包 tpc.toml 重新生成声明——解决"glob 匹配用默认包、换语言失效"。
+    _entries_source: str | None = None
 
     @classmethod
     def declare(
@@ -281,6 +285,38 @@ class ConfigRegistry:
         }
 
     @classmethod
+    def _ensure_entries_for(cls, rules_dir: str) -> str:
+        """确保 _entries 声明来自指定语言包，返回规范化 rules_dir。
+
+        若 rules_dir 存在 tpc.toml（语言包目录）且当前 _entries 来源不是该
+        语言包，按该语言包 tpc.toml 重新生成声明——glob 匹配/文件路径声明
+        都基于当前语言包，而非 import 期锁定的默认包。
+        若 rules_dir 无 tpc.toml（临时目录等低层用法），保持现有 _entries
+        不变（load_all 只换 base 目录），兼容直接 declare + load_all 的契约。
+        """
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidate = rules_dir
+        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            candidate = os.path.join("grammar", rules_dir)
+        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            return rules_dir  # 非语言包目录：保持现有声明（低层契约）
+        if cls._entries_source != candidate:
+            decls = _load_meta_declarations(grammar_dir=candidate)
+            cls._entries.clear()
+            for name, file, section, base, required, desc, bare in decls:
+                cls.declare(
+                    name,
+                    file=file,
+                    section=section,
+                    base=base,
+                    required=required,
+                    description=desc,
+                    bare_value=bare,
+                )
+            cls._entries_source = candidate
+        return candidate
+
+    @classmethod
     def load_language(
         cls,
         rules_dir: str,
@@ -301,25 +337,7 @@ class ConfigRegistry:
         Args:
             rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
         """
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if not os.path.isfile(os.path.join(root, rules_dir, "tpc.toml")):
-            rules_dir = os.path.join("grammar", rules_dir)
-        if not os.path.isfile(os.path.join(root, rules_dir, "tpc.toml")):
-            raise ConfigError(
-                f"[config] grammar package tpc.toml not found under: {rules_dir}"
-            )
-        decls = _load_meta_declarations(grammar_dir=rules_dir)
-        cls._entries.clear()
-        for name, file, section, base, required, desc, bare in decls:
-            cls.declare(
-                name,
-                file=file,
-                section=section,
-                base=base,
-                required=required,
-                description=desc,
-                bare_value=bare,
-            )
+        rules_dir = cls._ensure_entries_for(rules_dir)
         cls.load_all(rules_dir, ext_dirs=ext_dirs, plugins_dir=plugins_dir)
 
     @classmethod
@@ -340,7 +358,12 @@ class ConfigRegistry:
 
         对所有 required=True 的声明：加载失败抛 RuntimeError，列出所有错误。
         对所有 required=False 的声明：加载失败静默存空 dict。
+
+        语言包参数化：rules_dir 与当前声明来源不一致时，先按该语言包 tpc.toml
+        重新生成声明（_ensure_entries_for）——glob 匹配/文件路径声明都基于当前
+        语言包，而非 import 期锁定的默认包。调用方无需先 load_language。
         """
+        rules_dir = cls._ensure_entries_for(rules_dir)
         from core.define import FileManager
 
         # 基准目录表
@@ -484,6 +507,7 @@ class ConfigRegistry:
         cls._entries.clear()
         cls._loaded.clear()
         cls._resolved = False
+        cls._entries_source = None
 
 
 # 模块级单例（简化 import）

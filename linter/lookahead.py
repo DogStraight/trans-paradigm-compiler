@@ -3,8 +3,9 @@
 从规则树（build_slice_tree 产物）预计算，供发现阶段（discovery）使用：
 
     1. keyword_map  — 具体 token 类型 → 规则名列表（A 类：关键字/具体符号触发）
-    2. ident_by_ctx  — 标识符触发的规则（B 类），每条含判别前缀路径集，注册到
-       opener_context 动态生成的块内上下文名集合（_ctx_names）
+    2. ident_candidates — 标识符触发的规则（B 类），每条含判别前缀路径集，
+       单一全局集合（不按上下文分组——所有块内上下文共享同一组候选，靠
+       Level 1 前瞻/Level 2 试解析精确筛选）
 
 B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
     - Level 1（变长前瞻）：首 token 相同时逐 token 预视，每预视一个就缩小
@@ -12,7 +13,7 @@ B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
     - Level 2（试解析）：候选生成式含深层 call / 前缀无法静态表达 / 边界内
       未收敛时，对每个候选用完整 production 试解析匹配（复用 RuleMatcher），
       比较匹配结果（错误数 + 消费位置）定夺。
-    例如 `foo` 在过程体：
+    例如 `foo`：
         foo = ...   → BlockingAssign（前缀 ["="]）
         foo <= ...  → NonBlockingAssign（前缀 ["<="]）
         foo(...)    → SubroutineCall（前缀 ["("]）
@@ -22,7 +23,6 @@ B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
 from __future__ import annotations
 
 from core.define import Token
-from core.errors import GrammarError
 
 from core.utils import square_bracket_types
 
@@ -161,29 +161,10 @@ class LookaheadTable:
     def __init__(
         self,
         tree: dict,
-        module_item_rule: str,
-        stmt_rule: str,
         matcher=None,
-        opener_ctx: dict[str, str] | None = None,
     ) -> None:
         self._tree = tree
         self._matcher = matcher
-        # fail-fast：语句入口选择器名（tpc.toml [linter] module_item_rule/stmt_rule）
-        # 必须存在于规则树。代码不硬编码任何语法规则名——换一套配置即失效；
-        # 名字缺失/失效在此直接抛错，而非静默返回空集导致 B 类 ident 候选
-        # 全部消失（ModuleInst 等漏检），那是静默降级。
-        for _name, _role in (
-            (module_item_rule, "linter.module_item_rule（模块体语句入口）"),
-            (stmt_rule, "linter.stmt_rule（过程体语句入口）"),
-        ):
-            if _name not in tree:
-                raise GrammarError(
-                    f"[linter] 语句入口选择器规则 '{_name}'（{_role}）不存在于语法规则树。"
-                    "请检查 tpc.toml [linter] 配置与语法规则命名是否一致。"
-                )
-        # 块内上下文名集合（从 opener_context 配置动态生成，不硬编码
-        # module_body/proc_body 等 Verilog 结构名——换语言由配置决定）
-        self._ctx_names = frozenset(opener_ctx.values()) if opener_ctx else frozenset()
         # 块结束符集合（从块规则 block_end 收集，Level 1 前瞻边界）
         self._block_ends = frozenset(
             info["block_end"]
@@ -213,8 +194,10 @@ class LookaheadTable:
         self._l_square, self._r_square = _square_bracket_lr()
 
         self.keyword_map: dict[str, list[dict]] = {}
-        # B 类：context → 候选子集（变长，不预写死 key，get 默认空）
-        self.ident_by_ctx: dict[str, list[dict]] = {}
+        # B 类：标识符触发的候选（单一全局集合，不按上下文分组——上下文分组
+        # 是冗余的：所有块内上下文共享同一组 B 类候选，靠 Level 1 前瞻/Level 2
+        # 试解析精确筛选，context 参数不参与筛选）
+        self.ident_candidates: list[dict] = []
         self._build()
 
     @staticmethod
@@ -266,13 +249,12 @@ class LookaheadTable:
             if not firsts:
                 continue
             if "id" in firsts:
-                # B 类：标识符触发 → 前缀路径 + 注册到所有块内上下文（动态生成）
+                # B 类：标识符触发 → 前缀路径 + 注册到全局候选（不按上下文分组）
                 paths = _build_prefix_paths(prods[1:], self._tree)
                 # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
                 paths = {p for p in paths if p}
                 entry = {"name": name, "paths": paths}
-                for ctx in self._ctx_names:
-                    self.ident_by_ctx.setdefault(ctx, []).append(entry)
+                self.ident_candidates.append(entry)
                 # 同一规则还可能以非 id 字面 token 起始（如拼接赋值 lvalue 的
                 # `{`，来自 @PrimaryExpr 的 Concatenation 分支）→ 这些起始 token
                 # 一并注册到 keyword_map，否则 `{a,b} = expr;` 从 `{` 触发不了
@@ -297,7 +279,7 @@ class LookaheadTable:
         """
         return {p for p in _build_prefix_paths(prods[1:], self._tree) if p}
 
-    def classify(self, tokens: list[Token], i: int, context: str) -> list[str] | None:
+    def classify(self, tokens: list[Token], i: int) -> list[str] | None:
         """统一两级消歧：A/B 类候选都走同一套管线。
 
         Level 1（变长前瞻）：首 token 相同逐 token 预视缩小候选，直到唯一。
@@ -309,12 +291,12 @@ class LookaheadTable:
                          结构头）——discovery 据此报"未识别语句"，不静默吞错。
         """
         tok_type = tokens[i].type
-        # 收集候选 entries（A 类 keyword_map / B 类 ident_by_ctx，结构一致）
+        # 收集候选 entries（A 类 keyword_map / B 类 ident_candidates，结构一致）
         entries: list[dict] | None = None
         if tok_type in self.keyword_map:
             entries = self.keyword_map[tok_type]
         elif tok_type == "id":
-            entries = self.ident_by_ctx.get(context, [])
+            entries = self.ident_candidates
         if not entries:
             return None
         if len(entries) == 1:

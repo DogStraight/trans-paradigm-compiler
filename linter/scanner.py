@@ -20,7 +20,6 @@ Doc: docs/decisions/0001-pre-parse-linter.md
 import os
 
 from core.define import GrammarRule
-from core.errors import ConfigError
 from core.config_registry import ConfigRegistry
 from lexer import Lexer
 from parser import setup_grammar
@@ -44,7 +43,11 @@ class LinterScanner:
         enable_phase0: bool = True,
         enable_phase1: bool = True,
         enable_phase2: bool = True,
+        register=None,
     ):
+        """register: GrammarRulesRegister 实例。默认全局单例；多语言场景
+        （如 c4 测试）应传独立实例——单例的 self.rules 累积多目录规则，
+        切语言时旧语言规则会混入新语言规则表。"""
         self._rules_dir = rules_dir
         ext_list = ext_dirs or []
         ConfigRegistry.load_all(
@@ -54,8 +57,10 @@ class LinterScanner:
         )
         from core.define import GrammarRulesRegister
 
+        if register is None:
+            register = GrammarRulesRegister.get_default()
         rules = setup_grammar(
-            rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_list
+            rules_dir, register, ext_dirs=ext_list
         )
         self._tree = build_slice_tree(rules)
         self.lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_list)
@@ -107,27 +112,12 @@ class LinterScanner:
         # production 驱动原子匹配（参考 parser atomic_rules 流程，不手写原子逻辑）
         self._expr_checker.set_atom_matcher(self._matcher)
 
-        _opener_ctx = {
-            k: v for k, v in ConfigRegistry._loaded.get("linter.opener_context", [])
-        }
-        # 语句入口选择器名必须由 tpc.toml [linter] 显式配置——代码不硬编码任何
-        # 语法规则名（换一套配置即失效的默认值）。缺失即 fail-fast，不静默降级。
-        _module_item_rule = ConfigRegistry._loaded.get("linter.module_item_rule")
-        _stmt_rule = ConfigRegistry._loaded.get("linter.stmt_rule")
-        if not _module_item_rule or not _stmt_rule:
-            raise ConfigError(
-                "[linter] 配置缺少语句入口选择器：tpc.toml [linter] 必须配置 "
-                "module_item_rule（模块体语句入口）与 stmt_rule（过程体语句入口）。"
-            )
         self._discovery = Discovery(
             self._tree,
             self._block_openers,
             self._block_closers,
             self._all_bracket_openers,
             self._all_bracket_closers,
-            opener_ctx=_opener_ctx,
-            module_item_rule=_module_item_rule,
-            stmt_rule=_stmt_rule,
             matcher=self._matcher,
         )
 
