@@ -7,7 +7,7 @@ attribute_binder.py — 属性映射绑定 & 路径提取
 
 import re
 from typing import Any
-from core.define import Node, GrammarRule
+from core.define import Node, GrammarRule, CHILDREN_FIELD
 from .parser_core import ParseContext
 
 # 预编译路径解析正则（避免每调用重新编译）
@@ -122,9 +122,11 @@ def bind_attributes(
             extracted = extract_from_spec(self, spec, all_matched_nodes)
             if extracted is not None:
                 if isinstance(extracted, Node) and extracted.node_name == "optional":
-                    if not hasattr(extracted, "sub_node") or not extracted.sub_node:
+                    if not hasattr(extracted, CHILDREN_FIELD) or not getattr(
+                        extracted, CHILDREN_FIELD
+                    ):
                         continue
-                    extracted = extracted.sub_node[0]
+                    extracted = getattr(extracted, CHILDREN_FIELD)[0]
                 rule_node.add_attr(attr_name, extracted)
 
 

@@ -25,10 +25,10 @@ from __future__ import annotations
 from core.define import Token
 
 from core.utils import square_bracket_types
+from core.token_protocol import TRIVIA_TOKEN_TYPES
 
-
-# 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
-_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
+# trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
+_TRIVIA = TRIVIA_TOKEN_TYPES
 from .grammar_slicer import _collect_first_start_tokens
 
 # 方括号开/闭类型（从 lexer.bracket_map 推导，构造期配置已加载）。

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from core.define import Token
+from core.token_protocol import KEYWORD_PREFIX, TRIVIA_TOKEN_TYPES
 
 from . import LintDiagnostic, token_span
 from .checker import (
@@ -23,8 +24,8 @@ from .checker import (
 )
 from .lookahead import LookaheadTable
 
-# 通用词法常量（语言无关，自包含于引用处；原 linter/_constants.py 已删）
-_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
+# 通用词法常量（引擎 token 协议，单一事实源 core/token_protocol.py）
+_TRIVIA = TRIVIA_TOKEN_TYPES
 
 
 def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
@@ -100,7 +101,7 @@ class Discovery:
             _tok = _prods[0].get("token_type", "")
             if _info.get("is_statement") or _info.get("is_block"):
                 _stmt_block_firsts.add(_tok)
-            elif _tok.startswith("keyword."):
+            elif _tok.startswith(KEYWORD_PREFIX):
                 _continuation.add(_tok)
         self._continuation_openers = frozenset(
             _continuation - _stmt_block_firsts

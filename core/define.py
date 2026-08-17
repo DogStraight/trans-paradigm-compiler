@@ -19,39 +19,8 @@ from core.errors import (
     LintInternalError,
 )
 
-# ── 配置文件查找路径 ──
-_CONFIG_CANDIDATES = ["config/tpc_config.json"]
-
-
-def _find_user_config() -> str:
-    """Find the project configuration file.
-
-    Search order:
-        1. $TPC_CONFIG env var (explicit override)
-        2. From CWD upward: config/tpc_config.json
-    """
-    # 1. Env var override
-    env_path = os.environ.get("TPC_CONFIG")
-    if env_path:
-        path = os.path.abspath(env_path)
-        if os.path.isfile(path):
-            return path
-
-    # 2. Walk up from CWD
-    cwd = os.path.abspath(os.getcwd())
-    parent = cwd
-    while True:
-        for name in _CONFIG_CANDIDATES:
-            path = os.path.join(parent, name)
-            if os.path.isfile(path):
-                return path
-        next_parent = os.path.dirname(parent)
-        if next_parent == parent:
-            break
-        parent = next_parent
-
-    # 3. Global fallback
-    return ""
+# ── 配置文件定位（单一实现在 core/_user_config.py，此处 re-export） ──
+from core._user_config import _CONFIG_CANDIDATES, find_user_config as _find_user_config
 
 
 def _load_tpc_meta() -> dict:
@@ -143,6 +112,16 @@ class Token:
         return self.content
 
 
+# ── AST 字段名协议（引擎约定，单一事实源） ──────────────────────
+# parser 产出 / normalizer 消费 / renderer 递归的字段名，集中在此：
+#   CHILDREN_FIELD 子节点列表字段名（Node.add_sub_node / iter_children / renderer
+#                  children_field 默认值 / normalizer 展平目标）
+#   BODY_FIELD      块 body 字段名（语法 TOML node 绑定产出，normalizer 按布局
+#                  role=flatten 展平进 CHILDREN_FIELD）
+CHILDREN_FIELD = "sub_node"
+BODY_FIELD = "body"
+
+
 class Node:
 
     def __init__(self, node_name: str, **kwargs) -> None:
@@ -180,15 +159,15 @@ class Node:
         return {self.node_name: result}
 
     def add_sub_node(self, sub: "Node") -> None:
-        if not hasattr(self, "sub_node"):
-            self.sub_node = []
-        self.sub_node.append(sub)
+        if not hasattr(self, CHILDREN_FIELD):
+            setattr(self, CHILDREN_FIELD, [])
+        getattr(self, CHILDREN_FIELD).append(sub)
 
     def iter_children(self):
         seen = set()
-        if hasattr(self, "sub_node"):
-            seen.update(id(c) for c in self.sub_node)
-            yield from self.sub_node
+        if hasattr(self, CHILDREN_FIELD):
+            seen.update(id(c) for c in getattr(self, CHILDREN_FIELD))
+            yield from getattr(self, CHILDREN_FIELD)
         for attr_name in vars(self):
             val = getattr(self, attr_name)
             if isinstance(val, Node):
@@ -339,6 +318,14 @@ class GrammarRule:
     def __init__(self, name: str, **kwargs):
         self.name = name
 
+        # end_case 是否被 TOML 显式声明（含 end_case = []）——推导只在未声明时
+        # 发生；显式空列表表示"刻意无 end_case"（如 IfBlock/IfStmt 的结构定界）。
+        self._end_case_declared = "end_case" in kwargs or any(
+            isinstance(kwargs.get(s), dict) and "end_case" in kwargs[s]
+            for s in ("parser", "analyzer", "renderer")
+            if s in kwargs
+        )
+
         # 设置默认值
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
@@ -408,6 +395,41 @@ class GrammarRule:
     def prods(self) -> list:
         """生产式列表的快捷访问"""
         return getattr(self, "production", [])
+
+    @property
+    def effective_end_case(self) -> list:
+        """生效的 end_case：显式声明优先，未声明的语句规则从 production 推导。
+
+        推导规则（B1 收敛）：语句规则（is_statement）未声明 end_case 时，
+        production 最后一个元素是**纯字面 token**（非 @call / 非 (choice /
+        无 ?*+ 后缀，非 trivia）→ 推导为该 token（如末尾 symbol.base.semicolon
+        → ["symbol.base.semicolon"]）。其余情况推导为空列表。
+
+        不推导 newline：历史上 newline 作 end_case 是折行/else-chain 系列 bug
+        的根源（wrap 修复把分号规则从 [newline] 改成 [semicolon]）——newline
+        只允许显式声明，不默认注入。容器语句（production 以 call/choice 收尾）
+        推导为空，与 IfBlock/IfStmt 的"结构定界、无 end_case"一致。
+        """
+        if self._end_case_declared or not self.is_statement:
+            return self.end_case
+        prods = self.prods or []
+        if prods:
+            last = prods[-1]
+            # 纯字面 token：非 @call / 非 (choice / 无顶层 ?*+ 后缀 / 非 trivia
+            if isinstance(last, str) and last and not last.startswith(("@", "(")):
+                depth = 0
+                suffix = False
+                for ch in last:
+                    if ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                    elif depth == 0 and ch in ("?", "*", "+"):
+                        suffix = True
+                        break
+                if not suffix and last not in ("newline", "space.fold"):
+                    return [last]
+        return []
 
 
 class GrammarRulesRegister:

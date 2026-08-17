@@ -18,21 +18,15 @@ Renderer 仅依赖此规范形式。
 """
 
 from typing import Any
-from core.define import Node
+from core.define import Node, BODY_FIELD, CHILDREN_FIELD
+from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, LITERAL_PREFIX
 
 # ── 通用规范化常量（硬编码，不依赖 TOML 配置）──
 
-# 需要提取为字符串值的 token 名前缀（keyword.xxx → "xxx"）
-EXTRACT_PREFIXES = ["keyword.", "symbol."]
-
-# 需要提取为字符串值的精确 token 名
-EXTRACT_NAMES = frozenset({
-    "literal.number",
-    "literal.string",
-    "literal.bool_true",
-    "literal.bool_false",
-    "literal.none",
-})
+# 需要提取为字符串值的 token 名前缀（keyword.xxx → "xxx"）——token 叶子节点的
+# 名字即 token 类型，前缀是引擎 token 协议（core/token_protocol）。literal.*
+# 同样提取（literal.number → 值），不再列具体字面量名（A7：语言词法名不进引擎）。
+EXTRACT_PREFIXES = [KEYWORD_PREFIX, SYMBOL_PREFIX, LITERAL_PREFIX]
 
 # 核心消除集合（仅 parser 内部结构）
 # optional  → filter None
@@ -41,9 +35,8 @@ EXTRACT_NAMES = frozenset({
 # 注：语法层结构（如 DeclaratorList）原样保留
 ELIMINATE_TYPES = frozenset({"optional", "repeat", "seq"})
 
-# AST 字段名约定（与 core/define.py 中的 Node 类对齐）
-CHILDREN_FIELD = "sub_node"
-BODY_FIELD = "body"
+# AST 字段名约定（与 core/define.py 的 Node 类对齐）
+# CHILDREN_FIELD / BODY_FIELD 从 core.define 导入（单一事实源）
 
 
 def normalize_ast(
@@ -80,12 +73,10 @@ def _normalize(value, layouts=None):
 
     node = value
 
-    # 1. 按名称前缀/精确名提取字面值（用于 token 节点归一化）
+    # 1. 按名称前缀提取字面值（用于 token 节点归一化）
     for prefix in EXTRACT_PREFIXES:
         if node.node_name.startswith(prefix):
             return getattr(node, "value", node.node_name)
-    if node.node_name in EXTRACT_NAMES:
-        return getattr(node, "value", node.node_name)
 
     # 2. 消除包装节点（仅限 optional / repeat / seq，不碰语法层结构）
     if node.node_name in ELIMINATE_TYPES:

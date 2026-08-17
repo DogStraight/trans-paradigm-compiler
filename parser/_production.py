@@ -7,7 +7,7 @@ _production.py — 生产式解析全流程（合并 rule_matcher + node_parsers
     _prepare_production → _check_end_case（辅助检查）
 """
 
-from core.define import Node, GrammarRule
+from core.define import Node, GrammarRule, CHILDREN_FIELD
 from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
@@ -195,7 +195,7 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             from .block_parser import parse_block_body
 
             parse_block_body(self, context, block_body, rule)
-            body_children = getattr(block_body, "sub_node", [])
+            body_children = getattr(block_body, CHILDREN_FIELD, [])
             for child in body_children:
                 rule_node.add_sub_node(child)
 
@@ -339,7 +339,9 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
         return True
 
     token = context.peek_token()
-    raw_list = getattr(rule, "end_case", [])
+    raw_list = getattr(rule, "effective_end_case", None)
+    if raw_list is None:
+        raw_list = getattr(rule, "end_case", [])
 
     if token:
         pass_tokens: list[str] = []
@@ -581,7 +583,7 @@ def parse_repeat(self, node: dict, context: ParseContext) -> Node | None:
         lambda: f"重复完成, cnt={len(nodes)} | {self._debug_token_info(context)}"
     )
     r = Node("repeat", items=nodes)
-    r.sub_node = nodes[:]
+    setattr(r, CHILDREN_FIELD, nodes[:])
     return r
 
 
@@ -613,7 +615,10 @@ def _get_block_end_for(rule) -> str:
     """从规则中提取块结束符 token 类型。"""
     if hasattr(rule, "block_end") and rule.block_end:
         return rule.block_end
-    for item in getattr(rule, "end_case", []):
+    ec = getattr(rule, "effective_end_case", None)
+    if ec is None:
+        ec = getattr(rule, "end_case", [])
+    for item in ec:
         if isinstance(item, str) and not item.startswith("!"):
             return item
     return ""

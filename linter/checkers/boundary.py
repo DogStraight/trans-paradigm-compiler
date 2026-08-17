@@ -9,12 +9,13 @@
 from __future__ import annotations
 
 from core.define import Token
+from core.token_protocol import TRIVIA_TOKEN_TYPES
 
 from .. import LintDiagnostic, token_span
 from ..checker import Checker
 
-# 通用词法常量（语言无关，自包含于引用处）
-_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
+# trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
+_TRIVIA = TRIVIA_TOKEN_TYPES
 
 
 class BoundaryChecker(Checker):

@@ -8,7 +8,7 @@ before rendering.
 """
 
 from typing import Any
-from core.define import Node
+from core.define import CHILDREN_FIELD, Node
 from transform.normalizer import normalize_ast
 from .doc import Doc, layout
 from .primitives import eval_expr
@@ -25,7 +25,7 @@ class Renderer:
 
     def __init__(self, rules_dir: str):
         self._layouts: dict[str, dict] = {}
-        self._children_field = "sub_node"
+        self._children_field = CHILDREN_FIELD
         load_layouts(rules_dir, self._layouts)
         self._apply_style(rules_dir)
         # 布局合并缓存 {(parent_type, child_type): merged_layout}
@@ -56,7 +56,6 @@ class Renderer:
         style = load_style(rules_dir)
         self._INDENT_STR = style["indent_str"]
         self._MAX_INLINE = style["max_inline"]
-        self._children_field = style["children_field"]
 
     # ── 入口 ──
     def render(self, node: Node, indent: int = 0) -> str:

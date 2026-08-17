@@ -21,7 +21,9 @@ from typing import Any, TypeVar
 
 from core.errors import ConfigError
 
-_CONFIG_CANDIDATES = ["config/tpc_config.json"]
+# 配置文件定位：单一实现在 core/_user_config.py（历史：本文件与 core/define.py
+# 各有一份拷贝），re-export 供 main.py / tests 从本模块导入。
+from core._user_config import _CONFIG_CANDIDATES, find_user_config as _find_user_config
 
 
 def _glob_to_regex(pattern: str) -> re.Pattern:
@@ -77,27 +79,6 @@ def _glob_match(patterns: list[str], base_dir: str) -> list[str]:
 # ──────────────────────────────────────────────
 # 配置声明加载（从 grammar 包 tpc.toml 读取 [config.*]）
 # ──────────────────────────────────────────────
-
-
-def _find_user_config() -> str:
-    """Find project config file (duplicated in define.py to avoid circular imports)."""
-    env_path = os.environ.get("TPC_CONFIG")
-    if env_path:
-        path = os.path.abspath(env_path)
-        if os.path.isfile(path):
-            return path
-    cwd = os.path.abspath(os.getcwd())
-    parent = cwd
-    while True:
-        for name in _CONFIG_CANDIDATES:
-            path = os.path.join(parent, name)
-            if os.path.isfile(path):
-                return path
-        next_parent = os.path.dirname(parent)
-        if next_parent == parent:
-            break
-        parent = next_parent
-    return ""
 
 
 def _find_grammar_tpc_toml() -> str:

@@ -4,6 +4,7 @@ import os
 import json
 from typing import Any, Callable
 from core.config_registry import declare_cfg
+from core.token_protocol import bracket_left, bracket_right
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.bracket_map
@@ -38,8 +39,8 @@ def get_bracket_map() -> tuple[dict[str, str], dict[str, str]]:
     bracket_map: dict[str, str] = {}
     inverse: dict[str, str] = {}
     for _, _, name in token_data.get("pairs", []):
-        l = f"bracket.l_{name}"
-        r = f"bracket.r_{name}"
+        l = bracket_left(name)
+        r = bracket_right(name)
         bracket_map[l] = r
         inverse[r] = l
     return bracket_map, inverse
@@ -49,13 +50,13 @@ def square_bracket_types() -> tuple[str, str]:
     """从 lexer.bracket_map 推导方括号开/闭 token 类型（配置驱动，不硬编码）。
 
     方括号（[ ]）是 @PrimaryExpr 内部下标 / 块头范围的括号区间，linter 的
-    lookahead 需据此整体跳过（Level 1 括号配对）。类型名来自 [bracket] pairs
-    的 name（如 base/_token.toml 的 ["[", "]", "square_bracket"]），推导得到
-    "bracket.l_square_bracket" / "bracket.r_square_bracket"。
+    lookahead 需据此整体跳过（Level 1 括号配对）。按**字符** "[" 在 [bracket]
+    pairs 中定位配对（字符是词法数据，不依赖配对命名——名字叫 square_bracket
+    或 bracket 均可）。
     """
-    for _, _, name in _bracket_cfg.get("pairs", []):
-        if name == "square_bracket":
-            return f"bracket.l_{name}", f"bracket.r_{name}"
+    for open_c, _, name in _bracket_cfg.get("pairs", []):
+        if open_c == "[":
+            return bracket_left(name), bracket_right(name)
     raise RuntimeError(
-        "lexer.bracket_map 缺少 square_bracket 配对，无法推导方括号 token 类型"
+        "lexer.bracket_map 缺少 '[' 开括号配对，无法推导方括号 token 类型"
     )

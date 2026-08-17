@@ -19,6 +19,7 @@ from typing import Any
 from lexer import Lexer
 
 from core.define import GrammarRule
+from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, macro_type
 
 # ── BlockTokenMap ──
 
@@ -188,7 +189,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         for info in tree.values()
         if isinstance(info, dict) and not info.get("is_block")
         for tok in (info.get("end_case") or set())
-        if isinstance(tok, str) and tok.startswith("keyword.")
+        if isinstance(tok, str) and tok.startswith(KEYWORD_PREFIX)
     )
     for name, info in tree.items():
         if info.get("is_block"):
@@ -231,7 +232,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         bs = getattr(rule, "block_start", "") or ""
         be = getattr(rule, "block_end", "") or ""
         ec = info.get("end_case") or getattr(rule, "end_case", []) or []
-        ec_kw = [e for e in ec if isinstance(e, str) and e.startswith("keyword.")]
+        ec_kw = [e for e in ec if isinstance(e, str) and e.startswith(KEYWORD_PREFIX)]
         has_pair = bool(be) or bool(ec_kw) or kind in _BLOCK_KINDS
         if has_pair and not be:
             # 无 block_end 的块（如 CaseStmt：endcase 在 production 尾）——
@@ -251,31 +252,31 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             tokens = get_start_tokens(prods)
         for tok in tokens:
             scope_kind_map.setdefault(tok, kind)
-            if has_pair and isinstance(tok, str) and tok.startswith("keyword."):
+            if has_pair and isinstance(tok, str) and tok.startswith(KEYWORD_PREFIX):
                 openers.add(tok)
         # block_start / block_end → kind（opener / closer）
         if bs:
             scope_kind_map.setdefault(bs, kind)
-            if isinstance(bs, str) and bs.startswith("keyword."):
+            if isinstance(bs, str) and bs.startswith(KEYWORD_PREFIX):
                 openers.add(bs)
         if be:
             scope_kind_map.setdefault(be, kind)
-            if isinstance(be, str) and be.startswith("keyword."):
+            if isinstance(be, str) and be.startswith(KEYWORD_PREFIX):
                 closers.add(be)
         # end_case 关键字终结符 → kind（closer：语句结束符如 endcase/endmodule）
         for e in ec:
-            if isinstance(e, str) and e.startswith("keyword."):
+            if isinstance(e, str) and e.startswith(KEYWORD_PREFIX):
                 scope_kind_map.setdefault(e, kind)
                 closers.add(e)
         # production 里其余关键字 token → 仅映射 kind，不改变 openers/closers
         # （opener/closer 语义已由 first token / block_start / block_end / end_case 覆盖）
 
     ifdef_set = {
-        "macro.ifdef",
-        "macro.ifndef",
-        "macro.else",
-        "macro.elsif",
-        "macro.endif",
+        macro_type("ifdef"),
+        macro_type("ifndef"),
+        macro_type("else"),
+        macro_type("elsif"),
+        macro_type("endif"),
     }
 
     # ── 语句头 token 集：控制流规则（body 是 @Stmt/@BeginEnd/@ElseChain 引用）
@@ -318,7 +319,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         stmt_headers |= toks
     # 只保留关键字类（控制流语句头都是关键字：if/for/else/always 等），
     # 排除符号类 first token（如 `@` 事件控制、`;` 空语句——它们不是语句头）
-    stmt_headers = {t for t in stmt_headers if t.startswith("keyword.")}
+    stmt_headers = {t for t in stmt_headers if t.startswith(KEYWORD_PREFIX)}
     # 已作块 openers/closers 的（case/generate/function/task/module 等）不重复
     stmt_headers -= openers
     stmt_headers -= closers
@@ -354,7 +355,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             continue
         toks = get_start_tokens(prods)
         decl_headers |= toks
-    decl_headers = {t for t in decl_headers if t.startswith("keyword.")}
+    decl_headers = {t for t in decl_headers if t.startswith(KEYWORD_PREFIX)}
 
     return BlockTokenMap(
         openers=openers,
@@ -561,7 +562,7 @@ class BoundaryScanner:
                     if (
                         not is_cont
                         and line_first_token is not None
-                        and line_first_token.startswith("symbol.")
+                        and line_first_token.startswith(SYMBOL_PREFIX)
                         and not line_first_token.endswith(".dot")
                     ):
                         is_cont = True
@@ -579,7 +580,7 @@ class BoundaryScanner:
                     # 否则 reg a,\n b,\n c; 续行 hdr 逐行指向上一行，缩进递增）。
                     if (
                         last_line_nontrivia is not None
-                        and last_line_nontrivia.startswith("symbol.")
+                        and last_line_nontrivia.startswith(SYMBOL_PREFIX)
                         and not last_line_nontrivia.endswith(".dot")
                         and not last_line_nontrivia.endswith(".comma")
                         and last_line_nontrivia not in self.stmt_end_tokens
@@ -624,7 +625,7 @@ class BoundaryScanner:
                     decl_op_cont = (
                         is_decl
                         and last_line_nontrivia is not None
-                        and last_line_nontrivia.startswith("symbol.")
+                        and last_line_nontrivia.startswith(SYMBOL_PREFIX)
                         and not last_line_nontrivia.endswith(".dot")
                         and last_line_nontrivia not in self.stmt_end_tokens
                     )
@@ -753,7 +754,7 @@ class BoundaryScanner:
 
             # 识别 case 分支项：在 case 深度上遇到标识符或 default
             if case_depth >= 0 and self._current_depth(scope_path) == case_depth + 1:
-                if t.type.startswith("keyword.") or t.type == "keyword.default":
+                if t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default":
                     pending_case_item = True
 
         if line_buf:

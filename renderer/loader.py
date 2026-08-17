@@ -12,7 +12,7 @@ from core.config_registry import declare_cfg
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # renderer.style
 #   #sym:config = [style]
-#   格式: dict — { indent: int|str, max_inline: int, children_field: str }
+#   格式: dict — { indent: int|str, max_inline: int }
 _style_cfg: dict = declare_cfg("renderer.style", {}, __name__, "_style_cfg")
 
 
@@ -51,10 +51,16 @@ def load_layouts(rules_dir: str, layouts: dict) -> None:
 
 def load_style(rules_dir: str) -> dict:
     """加载风格配置：从 ConfigRegistry 获取 base 和 lang 风格。"""
+def load_style(rules_dir: str) -> dict:
+    """加载风格配置：从 ConfigRegistry 获取 base 和 lang 风格。
+
+    返回 { indent_str, max_inline }。children_field 是引擎 AST 协议
+    （core.define.CHILDREN_FIELD），非风格配置——renderer 直接引用常量。
+    默认值（4 空格缩进 / 40 列内联）是通用兜底值，语言包可显式覆盖。
+    """
     result = {
         "indent_str": "    ",
         "max_inline": 40,
-        "children_field": "sub_node",
     }
 
     style = _style_cfg
@@ -67,7 +73,5 @@ def load_style(rules_dir: str) -> dict:
                 result["indent_str"] = val
         if "max_inline" in style:
             result["max_inline"] = style["max_inline"]
-        if "children_field" in style:
-            result["children_field"] = style["children_field"]
 
     return result

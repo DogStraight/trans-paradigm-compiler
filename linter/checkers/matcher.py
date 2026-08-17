@@ -15,11 +15,12 @@ strict 语境约定：
 from __future__ import annotations
 
 from core.define import Token
+from core.token_protocol import TRIVIA_TOKEN_TYPES
 
 from .. import LintDiagnostic, token_span
 
-# 通用词法常量（语言无关，自包含于引用处）
-_TRIVIA = frozenset({"space.fold", "space", "comment", "newline"})
+# trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
+_TRIVIA = TRIVIA_TOKEN_TYPES
 
 # 表达式根（借力 pratt，不内联展开）：按 pratt 标识 / 原子选择器推导识别，不硬编码
 # 规则名（Expression/PrimaryExpr 换语言即失效）。PrimaryExpr 身份由 _is_atom_selector

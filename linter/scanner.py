@@ -21,6 +21,7 @@ import os
 
 from core.define import GrammarRule
 from core.config_registry import ConfigRegistry
+from core.token_protocol import BRACKET_L_PREFIX, BRACKET_R_PREFIX, bracket_left, bracket_right
 from lexer import Lexer
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
@@ -76,8 +77,8 @@ class LinterScanner:
         _raw_pairs = ConfigRegistry._loaded.get("lexer.bracket_map", {}).get("pairs", [])
         _bracket_pairs: dict[str, set[str]] = {}
         for _l, _r, _name in _raw_pairs:
-            _lt = f"bracket.l_{_name}"
-            _rt = f"bracket.r_{_name}"
+            _lt = bracket_left(_name)
+            _rt = bracket_right(_name)
             _openers.add(_lt)
             _closers.add(_rt)
             _bracket_pairs.setdefault(_rt, set()).add(_lt)
@@ -87,10 +88,10 @@ class LinterScanner:
         for _rt, _ls in _bracket_pairs.items():
             self._block_pairs.setdefault(_rt, set()).update(_ls)
         self._bracket_openers = frozenset(
-            t for t in self._block_openers if t.startswith("bracket.")
+            t for t in self._block_openers if t.startswith(BRACKET_L_PREFIX)
         )
         self._bracket_closers = frozenset(
-            t for t in self._block_closers if t.startswith("bracket.")
+            t for t in self._block_closers if t.startswith(BRACKET_R_PREFIX)
         )
         self._all_bracket_openers = self._bracket_openers
         self._all_bracket_closers = self._bracket_closers

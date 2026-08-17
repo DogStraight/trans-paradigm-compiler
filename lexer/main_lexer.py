@@ -9,6 +9,14 @@ in TOML — no hardcoded lexer logic.
 
 from core.define import Token
 from core.config_registry import declare_cfg
+from core.token_protocol import (
+    bracket_left,
+    bracket_right,
+    keyword_type,
+    literal_type,
+    macro_type,
+    symbol_type,
+)
 
 from .lexer_utils import get_token_define_merged, get_number_config
 from .number_fsm import NumberFSM
@@ -16,12 +24,11 @@ from .number_runner import build_number_runner
 from .comment_fsm import CommentFSM
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
-# lexer.macro_config
-#   #sym:config = (root)
-#   格式: dict
-#     { macro_recognition: { directive: { strategy, prefix }, call: { strategy, prefix } },
-#       directives: { keyword: token_type, ... } }
-_macro_cfg: dict = declare_cfg("lexer.macro_config", {}, __name__, "_macro_cfg")
+# preprocessor.macro_config（与 preprocessor/_expand.py 共享同一 key，宏配置
+# 权威归属 preprocessor 段）：
+#   { macro_recognition: { directive: { strategy, prefix }, call: { strategy, prefix } },
+#     directives: { keyword: token_type, ... } }
+_macro_cfg: dict = declare_cfg("preprocessor.macro_config", {}, __name__, "_macro_cfg")
 
 
 class Lexer:
@@ -45,7 +52,7 @@ class Lexer:
         raw = _macro_cfg
         self._macro_dir_cfg: dict = raw.get("macro_recognition", {}).get("directive", {})
         self._macro_call_cfg: dict = raw.get("macro_recognition", {}).get("call", {})
-        self.macro_config = {d: f"macro.{d}" for d in raw.get("directives", {})}
+        self.macro_config = {d: macro_type(d) for d in raw.get("directives", {})}
 
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
         self.indent_level = token_define_dict.get("indent", {}).get("level", 4)
@@ -66,8 +73,8 @@ class Lexer:
         for open_c, close_c, name in bracket_pairs:
             self.open_brackets.add(open_c)
             self.close_brackets.add(close_c)
-            self.bracket_type_map[open_c] = f"bracket.l_{name}"
-            self.bracket_type_map[close_c] = f"bracket.r_{name}"
+            self.bracket_type_map[open_c] = bracket_left(name)
+            self.bracket_type_map[close_c] = bracket_right(name)
         self.bracket_depth: int = 0
 
         self.previous_token_type: str = ""
@@ -90,23 +97,25 @@ class Lexer:
                 self.token_define.get("symbol", {}).get(cat, {}).items()
             ):
                 if isinstance(sym_value, str) and sym_value.isalpha():
-                    self.alpha_tokens.append((sym_value, f"symbol.{cat}.{sym_name}"))
+                    self.alpha_tokens.append(
+                        (sym_value, symbol_type(cat, sym_name))
+                    )
 
         # 2. bracket（来自 pairs 结构）
         for open_c, close_c, name in self.token_define.get("bracket", {}).get(
             "pairs", []
         ):
             if isinstance(open_c, str) and open_c.isalpha():
-                self.alpha_tokens.append((open_c, f"bracket.l_{name}"))
+                self.alpha_tokens.append((open_c, bracket_left(name)))
             if isinstance(close_c, str) and close_c.isalpha():
-                self.alpha_tokens.append((close_c, f"bracket.r_{name}"))
+                self.alpha_tokens.append((close_c, bracket_right(name)))
 
         # 3. literal 精确字面量（排除 string, number）
         for lit_name, lit_value in self.token_define.get("literal", {}).items():
             if lit_name in ("string", "number"):
                 continue
             if isinstance(lit_value, str) and lit_value.isalpha():
-                self.alpha_tokens.append((lit_value, f"literal.{lit_name}"))
+                self.alpha_tokens.append((lit_value, literal_type(lit_name)))
 
     def tokenize(self, lex_text: str) -> list[Token]:
         lex_text_len: int = len(lex_text)
@@ -501,26 +510,26 @@ class Lexer:
         for open_c, close_c, name in self.token_define.get("bracket", {}).get(
             "pairs", []
         ):
-            m[open_c] = f"bracket.l_{name}"
-            m[close_c] = f"bracket.r_{name}"
+            m[open_c] = bracket_left(name)
+            m[close_c] = bracket_right(name)
         # symbol.base
         for name, val in self.token_define.get("symbol", {}).get("base", {}).items():
             if isinstance(val, str):
-                m[val] = f"symbol.base.{name}"
+                m[val] = symbol_type("base", name)
         # symbol.extend
         for name, val in self.token_define.get("symbol", {}).get("extend", {}).items():
             if isinstance(val, str):
-                m[val] = f"symbol.extend.{name}"
+                m[val] = symbol_type("extend", name)
         # literal 精确匹配（排除 string/number 等由 lexer 正则处理的）
         for name, val in self.token_define.get("literal", {}).items():
             if name in ("string", "number"):
                 continue
             if isinstance(val, str):
-                m[val] = f"literal.{name}"
+                m[val] = literal_type(name)
         # keyword（从 token_define["id"]["keyword"] 加载）
         for kw, orig in self.token_define.get("id", {}).get("keyword", {}).items():
             if isinstance(orig, str):
-                m[orig] = f"keyword.{orig}"
+                m[orig] = keyword_type(orig)
         return m
 
     # only use in method tokenize
