@@ -156,7 +156,6 @@ def run_pipeline_on_source(
     transform_enabled: bool | None = None,
     renderer_enabled: bool | None = None,
     stage: str | None = None,
-    stages: list[str] | None = None,
     no_lint: bool | None = None,
     format_output: bool | None = None,
     expand_enhanced: bool = True,
@@ -184,7 +183,8 @@ def run_pipeline_on_source(
     _cfg = _load_pipeline_defaults()
     if out_dir is None:
         out_dir = _cfg.get("out_dir")
-    # 预处理（宏展开）默认保留 None：由 stages 含 preprocess 或配置决定
+    if expand_macros is None:
+        expand_macros = _cfg.get("expand_macros", False)
     if inline_comments is None:
         inline_comments = _cfg.get("inline_comments", False)
     if quiet is None:
@@ -207,23 +207,6 @@ def run_pipeline_on_source(
         undefine = _cfg.get("undefine")
     if check_idempotent is None:
         check_idempotent = _cfg.get("check_idempotent", True)
-
-    # 指令级阶段控制：调用方声明"跑哪些阶段"（如 format = [lex, parse,
-    # normalize, render]），翻译成现有阶段开关——跳过未声明的阶段。
-    # None = 完整管线（现有行为）。
-    if stages is not None:
-        _stage_set = set(stages)
-        no_lint = "lint" not in _stage_set
-        analyzer_enabled = "analyze" in _stage_set
-        transform_enabled = "transform" in _stage_set
-        renderer_enabled = "render" in _stage_set
-        # 预处理（宏展开）是显式阶段：stages 含 preprocess 即展开。
-        # 优先级：显式 expand_macros 参数 > stages(指令) > 配置 > False。
-        if expand_macros is None:
-            expand_macros = "preprocess" in _stage_set
-    # 预处理默认：配置 pipeline.expand_macros，缺省 False
-    if expand_macros is None:
-        expand_macros = _cfg.get("expand_macros", False)
 
     # Quiet-aware logger
     def _log(msg: str, *args, **kwargs) -> None:

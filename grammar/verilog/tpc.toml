@@ -20,11 +20,26 @@ style = { file = "base/_style.toml", section = "style", required = false }
 [linter]
 # 块 opener token → 消歧上下文（语句发现阶段用）
 opener_context = [
-    ["keyword.module", "module_body"],
-    ["keyword.begin", "proc_body"],
-    ["keyword.function", "proc_body"],
-    ["keyword.task", "proc_body"],
-    ["keyword.generate", "gen_body"],
+    [
+        "keyword.module",
+        "module_body",
+    ],
+    [
+        "keyword.begin",
+        "proc_body",
+    ],
+    [
+        "keyword.function",
+        "proc_body",
+    ],
+    [
+        "keyword.task",
+        "proc_body",
+    ],
+    [
+        "keyword.generate",
+        "gen_body",
+    ],
 ]
 # 模块体 / 过程体语句选择器规则名（推导语句叶子集合用）
 module_item_rule = "ModuleItem"
@@ -40,22 +55,33 @@ reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 [plugins]
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check"]
 
-# ── 指令管线定义（main.py 指令 → 阶段序列） ──
-# 每个指令声明自己的管线阶段（stages 列表），main.py 按声明驱动
-# run_pipeline_on_source（stages 参数：跳过未声明阶段）。
-#   format  = preprocess(宏展开) → lex → lint → 归一化 → 渲染（含 formatter），还原宏；
-#             保留 lint（AST 生成需 lint 通过），跳过 analyze/transform
-#   lint    = 只做词法 + 前置 lint（不展开宏）
-#   expand  = 完整管线 + 宏展开（变换展开）
-#   pipeline= 完整管线（默认，不展开宏，由 CLI/配置显式控制）
+# ── 指令定义（main.py 指令 → run_pipeline 参数开关） ──
+# 每个指令声明自己的管线行为（布尔参数开关），main.py 按声明驱动
+# run_pipeline_on_source。用参数开关而非伪阶段列表——宏展开(preprocess)
+# 在前、宏还原在 render 内部，横跨阶段无法用线性 stages 准确表达。
+#   preprocess = 宏展开（还原在 render 阶段）
+#   lint / analyze / transform / render = 各阶段开关
+#   format     = 渲染后过 formatter
 [commands.format]
-stages = ["preprocess", "lex", "lint", "parse", "normalize", "render"]
+preprocess = true
+lint = true
+analyze = false
+transform = false
+render = true
+format = true
 
 [commands.lint]
-stages = ["lex", "lint"]
+lint = true
 
 [commands.expand]
-stages = ["preprocess", "lex", "lint", "parse", "normalize", "analyze", "transform", "render"]
+preprocess = true
+lint = true
+analyze = true
+transform = true
+render = true
 
 [commands.pipeline]
-stages = ["lex", "lint", "parse", "normalize", "analyze", "transform", "render"]
+lint = true
+analyze = true
+transform = true
+render = true

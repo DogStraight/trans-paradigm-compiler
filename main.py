@@ -87,15 +87,15 @@ def _resolve_grammar_dirs() -> tuple[str, list[str]]:
     return rules_dir, ext_dirs
 
 
-def _cmd_format(args: argparse.Namespace) -> None:
-    """tpc format — 按语言包 [commands].format 声明的管线格式化文件。"""
+def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
+    """按语言包 [commands] 指令声明（参数开关）驱动管线。"""
     if not os.path.isfile(args.file):
         print(f"[fatal] File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
     from tests.e2e.run_pipeline import run_pipeline_on_source
 
-    cmd = _load_commands().get("format", {})
+    cmd = _load_commands().get(name, {})
     rules_dir, ext_dirs = _resolve_grammar_dirs()
 
     with open(args.file, "r", encoding="utf-8") as f:
@@ -106,8 +106,12 @@ def _cmd_format(args: argparse.Namespace) -> None:
         input_path=args.file,
         out_dir=None,
         quiet=True,
-        stages=cmd.get("stages"),
-        # expand_macros 由 stages 含 preprocess 决定，不显式传
+        expand_macros=cmd.get("preprocess", False),
+        analyzer_enabled=cmd.get("analyze", True),
+        transform_enabled=cmd.get("transform", True),
+        renderer_enabled=cmd.get("render", True),
+        no_lint=not cmd.get("lint", True),
+        format_output=cmd.get("format", True),
     )
 
     if result["success"]:
@@ -115,36 +119,16 @@ def _cmd_format(args: argparse.Namespace) -> None:
     else:
         print(f"[error] {result.get('error', 'Unknown error')}", file=sys.stderr)
         sys.exit(1)
+
+
+def _cmd_format(args: argparse.Namespace) -> None:
+    """tpc format — 按语言包 [commands].format 声明的参数格式化文件。"""
+    _cmd_run_pipeline("format", args)
 
 
 def _cmd_expand(args: argparse.Namespace) -> None:
-    """tpc expand — 按语言包 [commands].expand 声明的管线展开宏并变换。"""
-    if not os.path.isfile(args.file):
-        print(f"[fatal] File not found: {args.file}", file=sys.stderr)
-        sys.exit(1)
-
-    from tests.e2e.run_pipeline import run_pipeline_on_source
-
-    cmd = _load_commands().get("expand", {})
-    rules_dir, ext_dirs = _resolve_grammar_dirs()
-
-    with open(args.file, "r", encoding="utf-8") as f:
-        source = f.read()
-
-    result = run_pipeline_on_source(
-        source=source,
-        input_path=args.file,
-        out_dir=None,
-        quiet=True,
-        stages=cmd.get("stages"),
-        # expand_macros 由 stages 含 preprocess 决定，不显式传
-    )
-
-    if result["success"]:
-        print(result["output"])
-    else:
-        print(f"[error] {result.get('error', 'Unknown error')}", file=sys.stderr)
-        sys.exit(1)
+    """tpc expand — 按语言包 [commands].expand 声明的参数展开宏并变换。"""
+    _cmd_run_pipeline("expand", args)
 
 
 def _cmd_init(args: argparse.Namespace) -> None:
