@@ -22,11 +22,7 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
-# （不用 newline 作 end_case，避免折行插入的换行被误判为语句结束）
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [NonBlockingAssign.parser.node]
 target = "$1"
@@ -54,10 +50,7 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [BlockingAssign.parser.node]
 target = "$1"
@@ -87,10 +80,7 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [AssignStmt.parser.node]
 target = "$2"

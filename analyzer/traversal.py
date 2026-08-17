@@ -7,11 +7,24 @@ to TOML [RuleName.analyzer] configuration for each node.
 
 from typing import Any
 from core.define import Node
+from core.config_registry import declare_cfg
 from .scope import Scope, Symbol
 from .context import AnalysisContext
 from .diagnostic import Diagnostic
 from .primitives import (
     get_primitive,
+)
+
+# ── 配置需求（来自 tpc.toml） ──────────────────────────
+# analyzer.root_scope
+#   格式: dict — { name: str, kind: str }
+#   根作用域名/种类（默认 "<global>" / "global"）；语言包可在 [analyzer] 段
+#   显式声明（如 root_scope = { name = "<global>", kind = "global" }）。
+_root_scope_cfg: dict = declare_cfg(
+    "analyzer.root_scope",
+    {"name": "<global>", "kind": "global"},
+    __name__,
+    "_root_scope_cfg",
 )
 
 
@@ -49,7 +62,10 @@ class AnalysisTraversal:
 
     def analyze(self, ast: Node) -> Node:
         """对 AST 进行语义分析，返回带 _symbol_ref 的 AST"""
-        self._root_scope = Scope(name="<global>", kind="global")
+        self._root_scope = Scope(
+            name=_root_scope_cfg.get("name", "<global>"),
+            kind=_root_scope_cfg.get("kind", "global"),
+        )
         self._current_scope = self._root_scope
         self._all_symbols.clear()
         self._context = AnalysisContext(root_scope=self._root_scope)

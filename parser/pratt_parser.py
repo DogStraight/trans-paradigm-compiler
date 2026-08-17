@@ -77,11 +77,22 @@ _bit_width_literal_parser = None
 # 布尔真值 token 类型（由 token_category.bool 配置推导）
 _bool_true_type = None
 
+# 原子规则名映射：{token_type: 规则名}，由语言层注入（从 is_atom 单字面 token
+# production 规则推导，如 literal.string → StringLiteral/StringLit）。内置前缀
+# 兜底产出的节点名据此与语言包规则名对齐（A2）——语言定义原子规则即自动对齐，
+# 无规则时才回退内置名。
+_atom_name_map: dict[str, str] = {}
+
+
+def install_atom_name_map(mapping: dict) -> None:
+    """注入原子 token → 规则名映射（保持本模块语言无关）。"""
+    global _atom_name_map
+    _atom_name_map = dict(mapping)
+
 
 def _check(name: str, token) -> bool:
     fn = _token_checks.get(name)
     return fn(token) if fn else False
-
 
 def is_number(token) -> bool:
     return _check("number", token)

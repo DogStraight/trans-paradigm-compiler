@@ -65,7 +65,10 @@ def _get_block_end(rule: GrammarRule) -> str:
     """
     if hasattr(rule, "block_end") and rule.block_end:
         return rule.block_end
-    for item in getattr(rule, "end_case", []):
+    ec = getattr(rule, "effective_end_case", None)
+    if ec is None:
+        ec = getattr(rule, "end_case", [])
+    for item in ec:
         if isinstance(item, str) and not item.startswith("!"):
             return item
     return ""
@@ -102,18 +105,34 @@ def consume_start_token(self, context: ParseContext, start_token: str) -> bool:
     return False
 
 
-def collect_line_comments(self, context: ParseContext, block_node: Node) -> None:
-    """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为 Comment 节点。
+def _derive_comment_node_name(self, comment_token: str) -> str:
+    """从语法树推导注释节点名：production 恰好为 [comment_token] 的规则。
 
+    语法规则名不进引擎代码——verilog 有 [Comment] production=["comment"]，
+    推导得 "Comment"；c4 无注释规则时回退 COMMENT_NODE_NAME（注释节点无
+    渲染布局，静默跳过——现状行为保持）。
+    """
+    for name, rule in self.grammar_rules.items():
+        prods = getattr(rule, "prods", None) or []
+        if prods == [comment_token]:
+            return name
+    return COMMENT_NODE_NAME
+
+
+def collect_line_comments(self, context: ParseContext, block_node: Node) -> None:
+    """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为注释节点。
+
+    注释节点名从语法树自推导（production == [comment] 的规则）。
     文件尾独立注释（comment 后无 newline，如最后一行是注释且无尾随换行）
     同样收集——否则被当句子起点导致 parse truncated（无害但误报）。
     """
+    comment_node_name = _derive_comment_node_name(self, COMMENT_TOKEN_TYPE)
     while context.has_more_tokens():
         cur = context.peek_token()
         if cur and cur.type == COMMENT_TOKEN_TYPE:
             nxt = context.peek_token(offset=1)
             if nxt and nxt.type == NEWLINE_TOKEN_TYPE:
-                comment_node = Node(COMMENT_NODE_NAME)
+                comment_node = Node(comment_node_name)
                 comment_node.add_attr("value", cur.content)
                 block_node.add_sub_node(comment_node)
                 context.advance_token()  # 跳过 comment
@@ -122,7 +141,7 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
             if not nxt:
                 # 文件尾注释（无 trailing newline）：同样收集，避免
                 # parse_sentence 把注释当句子起点而 truncated
-                comment_node = Node(COMMENT_NODE_NAME)
+                comment_node = Node(comment_node_name)
                 comment_node.add_attr("value", cur.content)
                 block_node.add_sub_node(comment_node)
                 context.advance_token()  # 跳过 comment

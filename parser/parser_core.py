@@ -31,8 +31,9 @@ _operator_defs_cfg = declare_cfg("parser.operator_defs", [], __name__, "_operato
 _token_categories_cfg: dict = declare_cfg("parser.token_categories", {}, __name__, "_token_categories_cfg")
 
 # parser.skip_types
-#   #sym:config = (list)
 #   格式: list[str] — 解析时需要跳过的空白/折叠 token 类型
+#   默认值 ["newline", "space.fold"] 是引擎 token 协议的产物（lexer 产出的
+#   空白类型，所有语言通用），语言包可不显式声明；有特殊跳过需求时可覆盖。
 _skip_types_cfg: list[str] = declare_cfg(
     "parser.skip_types", ["newline", "space.fold"], __name__, "_skip_types_cfg"
 )
@@ -221,9 +222,10 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         return None
 
     start = context.token_pointer
-    stop_tokens = (
-        set(getattr(rule, "end_case", [])) if getattr(rule, "end_case", None) else None
-    )
+    _ec = getattr(rule, "effective_end_case", None)
+    if _ec is None:
+        _ec = getattr(rule, "end_case", [])
+    stop_tokens = set(_ec) if _ec else None
 
     try:
         ast_node, consumed = pratt_parser.parse_with_count(
@@ -458,6 +460,20 @@ class Parser:
             key=lambda r: len(r.prods),
             reverse=True,
         )
+        # A2：内置前缀兜底节点名与语言包规则名对齐——从"单字面 token production"
+        # 的 is_atom 规则推导 {token_type: 规则名} 注入 pratt（如 literal.string →
+        # StringLiteral / StringLit，id → Identifier）。语言定义原子规则即自动对齐，
+        # 无对应规则时 pratt 回退内置名（纯兜底）。
+        _atom_names: dict[str, str] = {}
+        for _rule in self.atomic_rules:
+            _prods = _rule.prods or []
+            if (
+                len(_prods) == 1
+                and isinstance(_prods[0], str)
+                and not _prods[0].startswith("@")
+            ):
+                _atom_names.setdefault(_prods[0], _rule.name)
+        pratt_parser.install_atom_name_map(_atom_names)
         # inline comment 锚点记录（渲染后通过锚点匹配回注）
         self._comment_anchors: list[dict] = []
         # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）
@@ -576,9 +592,12 @@ class Parser:
         context = ParseContext(tokens)
 
         try:
-            # 语义路径：根规则路径入栈
-            context.sibling_counter[ROOT_RULE_NAME] = 1
-            context.path_stack.append(f"{ROOT_RULE_NAME}[0]")
+            # 语义路径：根规则路径入栈（根块规则名从语法树自推导——
+            # get_block_rule 优先匿名根块，回退第一个块规则；推导失败
+            # 才用 ROOT_RULE_NAME 回退值）
+            root_name = self.rule_selector.get_block_rule() or ROOT_RULE_NAME
+            context.sibling_counter[root_name] = 1
+            context.path_stack.append(f"{root_name}[0]")
             block_node = self.parse_block(context, start_token="")
             context.path_stack.pop()
             if block_node is None:

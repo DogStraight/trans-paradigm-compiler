@@ -8,6 +8,7 @@
     [RuleName.analyzer]
     scope = { name_attr = "module_name", kind = "module" }
     scope = { kind = "type", name_attr = "type_name" }
+    scope = { kind = "generate", allow_duplicate = true }  # 允许同名声明
 """
 
 from core.define import Node
@@ -45,7 +46,13 @@ def scope_enter(analyzer, node: Node, config: dict) -> None:
         scope_name = node.node_name
 
     kind = scope_meta.get("kind", "block")
-    new_scope = Scope(name=scope_name, kind=kind, parent=current_scope)
+    allow_duplicate = bool(scope_meta.get("allow_duplicate", False))
+    new_scope = Scope(
+        name=scope_name,
+        kind=kind,
+        parent=current_scope,
+        allow_duplicate=allow_duplicate,
+    )
     current_scope.children.append(new_scope)
     analyzer._current_scope = new_scope
 

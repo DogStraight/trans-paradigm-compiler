@@ -2,7 +2,6 @@
 token_base = { file = "base/_token.toml", required = true }
 lexer_base = { file = "base/_lexer.toml", required = true }
 token_lang = { file = "token.toml", required = false }
-macro_config = { file = "base/_macro.toml", required = false }
 pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = false }
 bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
 number = { file = "base/_number.toml", section = "number", required = false }
@@ -11,8 +10,6 @@ number = { file = "base/_number.toml", section = "number", required = false }
 operator_defs = { file = "base/_symbol_level.toml", section = "operator", required = true }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
 rules = { file = ["0*.toml", "0*/*.toml"], required = true }
-# 解析时需要跳过的空白/折叠 token 类型
-skip_types = ["newline", "space.fold"]
 
 [renderer]
 style = { file = "base/_style.toml", section = "style", required = false }
@@ -28,45 +25,27 @@ reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check"]
 
 # ── 指令定义（main.py 指令 → run_pipeline 参数开关） ──
-# 每个指令声明自己的管线行为：布尔参数开关 + 插件能力组别。
+# 默认值 = 完整管线（preprocess/lint/parse/analyze/transform/render 全 true，
+# plugins.formatter=false）——指令只声明**差异项**。
 #   - 管线阶段开关：preprocess(宏展开，还原在 render 内部) / lint /
 #     analyze / transform / render
 #   - 插件能力组别 [commands.<name>.plugins]：formatter = 渲染后过 formatter
 #     （format 是 formatter 插件提供的能力，单独组别开关）
 [commands.format]
-preprocess = true
-lint = true
-parse = true
 analyze = false
 transform = false
-render = true
 
 [commands.format.plugins]
 formatter = true
 
 [commands.lint]
-preprocess = true
-lint = true
 parse = false
-
-[commands.expand]
-preprocess = true
-lint = true
-parse = true
-analyze = true
-transform = true
-render = true
+analyze = false
+transform = false
+render = false
 
 [commands.expand.plugins]
 formatter = true
-
-[commands.pipeline]
-preprocess = true
-lint = true
-parse = true
-analyze = true
-transform = true
-render = true
 
 [commands.pipeline.plugins]
 formatter = true

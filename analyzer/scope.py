@@ -54,17 +54,24 @@ class Symbol:
 
 
 class Scope:
-    """作用域"""
+    """作用域
+
+    allow_duplicate: 允许同名符号声明（合并保留首例不报错）——由语法规则
+    [analyzer.scope] 配置声明（如 generate 各分支互斥、同名实例化合法）。
+    语义由规则字段提供，Scope 只承载，不判断具体作用域种类。
+    """
 
     def __init__(
         self,
         name: str,
         kind: str = "block",
         parent: "Scope | None" = None,
+        allow_duplicate: bool = False,
     ):
         self.name = name
         self.kind = kind 
         self.parent = parent
+        self.allow_duplicate = allow_duplicate
         self.symbols: dict[str, Symbol] = {}
         self.children: list["Scope"] = []
 

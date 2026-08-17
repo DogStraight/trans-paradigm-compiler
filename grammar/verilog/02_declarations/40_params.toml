@@ -24,9 +24,7 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [LocalParamDecl.parser.node]
 param_integer = "$2"
@@ -105,9 +103,7 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [ParamDeclStmt.parser.node]
 param_integer = "$2"

@@ -71,9 +71,10 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
             continue
 
         if name in current_scope.symbols:
-            # generate 作用域内：条件生成分支互斥（elaboration 只展开一个），
-            # 同名声明（如各分支实例化同名模块）合法，合并保留首例不报错。
-            if current_scope.kind != "generate":
+            # 允许重名作用域（由 [analyzer.scope] allow_duplicate 规则字段声明，如
+            # generate 条件生成分支互斥——elaboration 只展开一个，各分支同名声明
+            # 合法）：合并保留首例不报错。
+            if not current_scope.allow_duplicate:
                 analyzer._context.report(
                     f"重复声明 '{name}' 在作用域 '{current_scope.name}'", code="E001"
                 )

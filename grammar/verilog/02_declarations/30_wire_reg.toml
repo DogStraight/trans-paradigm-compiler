@@ -24,10 +24,7 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [WireDecl.parser.node]
 wire_type = "$1"
@@ -72,10 +69,7 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [RegDecl.parser.node]
 reg_type = "$1"
@@ -118,10 +112,7 @@ production = [
     "@DeclaratorList",
     "symbol.base.semicolon",
 ]
-# production 以分号精确收尾 → 语句边界由分号决定，内部折行安全
-end_case = [
-    "symbol.base.semicolon",
-]
+# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [IntegerDecl.parser.node]
 items = "$2"

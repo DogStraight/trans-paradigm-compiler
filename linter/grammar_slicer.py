@@ -19,7 +19,7 @@ def build_slice_tree(rules: dict[str, GrammarRule]) -> dict[str, dict]:
     tree: dict[str, dict] = {}
     for name, rule in rules.items():
         prods_raw = getattr(rule, "production", [])
-        ec = set(getattr(rule, "end_case", []) or [])
+        ec = set(getattr(rule, "effective_end_case", None) or getattr(rule, "end_case", []) or [])
         parsed = []
         for p in prods_raw:
             if isinstance(p, str):

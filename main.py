@@ -18,33 +18,6 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 
-def _load_pipeline_stages() -> list[str]:
-    """从 tpc_config.json 加载管线阶段顺序。"""
-    import json
-    from core.config_registry import _find_user_config
-
-    path = _find_user_config()
-    if path:
-        try:
-            with open(path, encoding="utf-8") as f:
-                cfg = json.load(f)
-            return cfg.get("pipeline", {}).get("stages", _DEFAULT_STAGES)
-        except Exception:
-            pass
-    return _DEFAULT_STAGES
-
-
-_DEFAULT_STAGES = [
-    "lex",
-    "lint",
-    "parse",
-    "normalize",
-    "analyze",
-    "transform",
-    "render",
-]
-
-
 def _load_commands() -> dict:
     """从语言包 tpc.toml 读 [commands] 段（指令 → 管线阶段定义）。
 
@@ -61,6 +34,30 @@ def _load_commands() -> dict:
         return meta.get("commands", {})
     except Exception:
         return {}
+
+
+# 指令默认值 = 完整管线（preprocess/lint/parse/analyze/transform/render 全 true，
+# plugins.formatter=false）。语言包 [commands] 只声明**差异项**。
+_CMD_DEFAULTS: dict = {
+    "preprocess": True,
+    "lint": True,
+    "parse": True,
+    "analyze": True,
+    "transform": True,
+    "render": True,
+    "plugins": {"formatter": False},
+}
+
+
+def _resolve_command(name: str) -> dict:
+    """指令合并默认值：语言包只声明差异项，未声明项取完整管线默认。"""
+    cmd = {k: v for k, v in _CMD_DEFAULTS.items() if k != "plugins"}
+    plugins = dict(_CMD_DEFAULTS["plugins"])
+    raw = _load_commands().get(name, {})
+    plugins.update(raw.get("plugins", {}))
+    cmd.update({k: v for k, v in raw.items() if k != "plugins"})
+    cmd["plugins"] = plugins
+    return cmd
 
 
 def _resolve_grammar_dirs() -> tuple[str, list[str]]:
@@ -95,7 +92,7 @@ def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
 
     from tests.e2e.run_pipeline import run_pipeline_on_source
 
-    cmd = _load_commands().get(name, {})
+    cmd = _resolve_command(name)
     rules_dir, ext_dirs = _resolve_grammar_dirs()
 
     with open(args.file, "r", encoding="utf-8") as f:
@@ -106,7 +103,7 @@ def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
         input_path=args.file,
         out_dir=None,
         quiet=True,
-        expand_macros=cmd.get("preprocess", False),
+        expand_macros=cmd.get("preprocess", True),
         analyzer_enabled=cmd.get("analyze", True),
         transform_enabled=cmd.get("transform", True),
         renderer_enabled=cmd.get("render", True),

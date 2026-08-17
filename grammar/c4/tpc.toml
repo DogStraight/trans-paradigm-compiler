@@ -14,5 +14,3 @@ number = { file = "base/_number.toml", section = "number", required = false }
 operator_defs = { file = "base/_symbol_level.toml", section = "operator", required = true }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
 rules = { file = ["0*.toml"], required = true }
-# 解析时需要跳过的空白/折叠 token 类型
-skip_types = ["newline", "space.fold"]
