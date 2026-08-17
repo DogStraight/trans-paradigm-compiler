@@ -84,9 +84,8 @@ flowchart TD
   排除项），分号只是其中普通成员（不假设分号）——`_find_boundary`/容器 `_skip_to_end`
   共用；discovery 侧 `_derived_end_case` 对非容器规则推导 production 末尾字面 token，
   恢复模块级/过程体内缺分号检测。
-- **上下文 + 深度栈**：块容器按 `opener_context` 配置切上下文（`opener_ctx.get(opener,
-  context)`，上下文名由配置任意定义，不映射 Verilog 结构名）；引用式容器 body 上下文
-  继承当前上下文（不假设 stmt_rule→proc_body）。depth 参数防循环。
+- **上下文 + 深度栈**：块容器递归 body 时上下文标记继承当前上下文（context 仅作
+  DiscoveredNode 归属标记，不参与候选筛选）；depth 参数防循环。
 
 实测示例：
 
@@ -112,7 +111,7 @@ ModuleDecl
 
 ```mermaid
 flowchart TD
-    A[classify tokens, i, context] --> B["收集候选 entries<br/>A 类 keyword_map / B 类 ident_by_ctx<br/>结构统一 {name, paths}"]
+    A[classify tokens, i] --> B["收集候选 entries<br/>A 类 keyword_map / B 类 ident_candidates<br/>结构统一 {name, paths}"]
     B --> C{候选数}
     C -->|1| D[直接返回唯一规则]
     C -->|>1| E[Level 1 变长前瞻<br/>逐 token 缩小候选<br/>公共前缀匹配]
@@ -128,8 +127,9 @@ flowchart TD
 - **A 类**（关键字/具体符号触发）：`keyword_map[type]` → 候选 entries（含 paths）。
   块规则（task/function/module）在构建时**还原 block_start** 到 production 首元素，
   与普通 A 类规则视图统一（prods[0] 都是触发 token），paths 统一从 prods[1:] 计算。
-- **B 类**（标识符触发）：`ident_by_ctx[context]` → 候选 entries（含 paths）。
-  候选从 `statement_entry` 入口选择器沿纯 @ 分派展开的叶子集按上下文归属。
+- **B 类**（标识符触发）：`ident_candidates` → 候选 entries（含 paths）。
+  单一全局集合（**不按上下文分组**——所有块内上下文共享同一组 B 类候选，靠
+  Level 1 前瞻/Level 2 试解析精确筛选）。
 - 两者候选结构一致 `{name, paths}`，`classify` 统一走同一套两级消歧管线；
   唯一候选直接返回，多候选才消歧。
 
@@ -177,34 +177,26 @@ flowchart TD
 
 ---
 
-## 4. 配置驱动（tpc.toml [linter] + TOML 规则）
+## 4. 配置驱动（语法规则字段 + TOML 规则）
 
 ```mermaid
 flowchart LR
     A["grammar/*.toml"] --> B["core/define.py<br/>GrammarRule 字段<br/>is_statement 显式标记"]
     B --> C[grammar_slicer.py<br/>build_slice_tree<br/>production → feature 树]
-    C --> D["lookahead 消歧表<br/>keyword_map / ident_by_ctx"]
+    C --> D["lookahead 消歧表<br/>keyword_map / ident_candidates"]
     C --> E[discovery 递归]
     C --> F[RuleMatcher 检查]
-    G["tpc.toml [linter]"] -->|opener_context| E
-    G -->|module_item_rule/stmt_rule| D
 ```
 
-- **选入字段** `statement_entry = true`：标记 `Stmt`/`TaskStmt`/`ModuleItem` 三个语句入口
-  选择器，是句子注册的开关——其下所有非原子叶子自动成为可发现句子。
-- **is_statement 显式标记**：语句规则在 TOML 直接标 `is_statement = true`（含块规则与
-  入口选择器下的叶子），无推导。入口选择器（Stmt/TaskStmt/ModuleItem）只保留
-  `statement_entry` 作为分发入口标识，不标 is_statement（避免消歧表/parser 冗余候选）。
-- **语句集合 = is_statement 显式收集**（`_statement_rules`）：直接收集规则树中显式
-  `is_statement` 规则全集，不推导收集（原 `_context_leaves`/`_expand_selector` 已删）；
-  B 类 ident 候选注册到**所有**块内上下文（`_ctx_names` 从 opener_context 动态生成），
-  靠 Level 2 试解析精确筛选上下文归属。
-- **入口选择器名必配 + fail-fast**：`module_item_rule`/`stmt_rule` 必须由 tpc.toml
-  显式配置，代码无默认值（不硬编码 `ModuleItem`/`Stmt`——换一套配置即失效）。
-  scanner 读配置缺失即抛错；LookaheadTable 构造校验名字存在于规则树，失效即抛错。
-- **opener_context**：块 opener token → 消歧上下文映射（上下文名由配置任意定义，不映射
-  Verilog 结构名）。双重作用：发现阶段块切上下文（`opener_ctx.get(opener, context)`）+
-  B 类 ident 注册的块内上下文名集合（`_ctx_names`）。
+- **is_statement 显式标记**：语句规则在 TOML 直接标 `is_statement = true`（含块规则），
+  无推导。语句入口选择器（Stmt/TaskStmt/ModuleItem 等纯 @ 分派选择器）不标
+  is_statement（选择器不是句子；标了会导致消歧表/parser 冗余候选）。
+- **语句集合 = is_statement 显式收集**：直接收集规则树中显式 `is_statement` 规则
+  全集，不推导收集；B 类 ident 候选注册到**单一全局集合**（不按上下文分组），
+  靠 Level 1 前瞻/Level 2 试解析精确筛选。
+- **无入口选择器配置**：模块体/过程体入口规则无需任何字段声明（statement_entry/
+  opener_context 已删除）——语句发现从 is_statement 规则 + block_start 结构自推导，
+  语言无关（c4 无任何额外字段即可跑 linter）。
 - **分号假设彻底移除**：句子结束符完全由 `_stmt_ends`（语句规则 production 末尾 +
   end_case）接管，代码不再特指分号类型；原 `semicolon_token_type()` 推导函数已作为
   死代码删除。

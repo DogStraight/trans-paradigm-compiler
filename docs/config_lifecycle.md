@@ -61,6 +61,26 @@ ConfigRegistry.load_all 有缓存（_PIPELINE_SHARED / _loaded）
 → 需新进程 / 显式 reload
 ```
 
+## 语言包参数化（2026-08-18 更新）
+
+`load_all(rules_dir)` 现在**自动按语言包切换声明**：若 `rules_dir` 存在
+tpc.toml 且与当前声明来源（`_entries_source`）不一致，先按该语言包 tpc.toml
+重新生成声明再加载——glob 匹配/文件路径声明都基于当前语言包，而非 import
+期锁定的默认包。因此：
+
+```python
+# 无需先 load_language——直接 load_all(c4 目录) 即切换到 c4 语言包
+ConfigRegistry.load_all("grammar/c4")
+
+# 切回 verilog（插件声明需要 plugins_dir）
+ConfigRegistry.load_all("grammar/verilog", plugins_dir="grammar/verilog/plugins")
+```
+
+例外：rules_dir 无 tpc.toml（临时目录等低层用法）时保持现有声明不变，
+load_all 只换 base 目录（兼容直接 `declare` + `load_all` 的契约）。
+`load_language` 保留（显式单语言选择 API），内部与 `load_all` 共用同一
+`_ensure_entries_for` 逻辑。
+
 ## 为什么用注册制
 
 - 消费模块**声明式**列出自己的配置依赖（key + 默认值），不感知加载细节。

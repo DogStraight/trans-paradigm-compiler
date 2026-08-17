@@ -9,7 +9,9 @@
 
 ## 决策
 
-37 条语句规则在 TOML 直接标 `is_statement = true`；删除 `derive_rule_roles`/`_expand_statement_entry`/`_is_selector_rule`/`_STATEMENT_REF_RE`。入口选择器（Stmt/TaskStmt/ModuleItem）保留 `statement_entry = true` 仅作语义标识，不标 is_statement。块规则（ModuleDecl/FuncDecl/TaskDecl/BeginEnd/GenerateBlock）同样显式标 is_statement。
+37 条语句规则在 TOML 直接标 `is_statement = true`；删除 `derive_rule_roles`/`_expand_statement_entry`/`_is_selector_rule`/`_STATEMENT_REF_RE`。入口选择器（Stmt/TaskStmt/ModuleItem）不标 is_statement。块规则（ModuleDecl/FuncDecl/TaskDecl/BeginEnd/GenerateBlock）同样显式标 is_statement。
+
+（2026-08-18 更新：`statement_entry` 角色值/`body_context`/`[linter]` 集中配置全部删除——语句发现从 is_statement 规则 + block_start 结构自推导，B 类 ident 候选是单一全局集合，不按上下文分组。c4 语言包无任何额外字段即可跑 linter。）
 
 ## 权衡
 

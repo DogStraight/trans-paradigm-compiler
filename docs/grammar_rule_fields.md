@@ -162,14 +162,15 @@ is_statement = true
 
 - **语义**: 该规则是一条可发现的"句子"（模块级或过程体语句）。parser 顶层
   `statement_rule_names`、linter 发现/消歧/检查均消费此字段。
-- **入口选择器**（`Stmt`/`TaskStmt`/`ModuleItem`）：保留 `statement_entry = true` 仅作
-  "语句分发入口"的语义标识，**不标** `is_statement`（选择器不是句子；标了会导致
-  linter 消歧表与 parser 候选出现冗余注册）。
+- **入口选择器**（`Stmt`/`TaskStmt`/`ModuleItem` 等纯 @ 分派选择器）：**不标**
+  `is_statement`（选择器不是句子；标了会导致 linter 消歧表与 parser 候选出现
+  冗余注册）。语句发现从 is_statement 规则 + block_start 结构自推导，无需任何
+  入口角色字段（原 `statement_entry` 角色值/`[linter]` 集中配置已删除）。
 - **块语句**（`ModuleDecl`/`FuncDecl`/`TaskDecl`/`BeginEnd`/`GenerateBlock` 等）同样显式
-  标 `is_statement = true`（与 `is_block = true` 并列）。
-- **上下文归属**：linter 的 B 类 ident 候选按模块/过程上下文分组，由
-  `lookahead._context_leaves` 从入口选择器沿纯 `@` 分派展开（结构遍历，与
-  `is_statement` 无关）。
+  标 `is_statement = true`（与 `is_block = true` 并列）。块体上下文无需声明
+  （原 `body_context`/`opener_context` 已删除——context 不参与候选筛选）。
+- **消歧**：linter 的 B 类 ident 候选注册到**单一全局集合**（不按上下文分组），
+  靠 Level 1 变长前瞻/Level 2 试解析精确筛选。
 
 ### `inline` — 选择器规则自动展平
 
