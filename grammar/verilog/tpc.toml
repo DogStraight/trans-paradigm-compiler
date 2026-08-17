@@ -39,3 +39,23 @@ reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 
 [plugins]
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check"]
+
+# ── 指令管线定义（main.py 指令 → 阶段序列） ──
+# 每个指令声明自己的管线阶段（stages 列表），main.py 按声明驱动
+# run_pipeline_on_source（stages 参数：跳过未声明阶段）。
+#   format  = 归一化 → 渲染（含 formatter），跳过 lint/analyze/transform
+#   lint    = 只做词法 + 前置 lint
+#   expand  = 完整管线 + 宏展开（变换展开）
+#   pipeline= 完整管线（默认）
+[commands.format]
+stages = ["lex", "parse", "normalize", "render"]
+
+[commands.lint]
+stages = ["lex", "lint"]
+
+[commands.expand]
+stages = ["lex", "lint", "parse", "normalize", "analyze", "transform", "render"]
+expand_macros = true
+
+[commands.pipeline]
+stages = ["lex", "lint", "parse", "normalize", "analyze", "transform", "render"]

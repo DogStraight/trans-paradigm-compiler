@@ -45,6 +45,24 @@ _DEFAULT_STAGES = [
 ]
 
 
+def _load_commands() -> dict:
+    """从语言包 tpc.toml 读 [commands] 段（指令 → 管线阶段定义）。
+
+    指令在语言包声明（如 format = { stages = [...], expand_macros = ... }），
+    main.py 按声明驱动 run_pipeline_on_source（stages 参数跳过未声明阶段）。
+    """
+    import tomllib
+    from core.define import DEFAULT_RULES_DIR
+
+    meta_path = os.path.join(_project_root, DEFAULT_RULES_DIR, "tpc.toml")
+    try:
+        with open(meta_path, "rb") as f:
+            meta = tomllib.load(f)
+        return meta.get("commands", {})
+    except Exception:
+        return {}
+
+
 def _resolve_grammar_dirs() -> tuple[str, list[str]]:
     """Resolve and validate grammar directories from tpc.toml metadata."""
     from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
@@ -70,13 +88,14 @@ def _resolve_grammar_dirs() -> tuple[str, list[str]]:
 
 
 def _cmd_format(args: argparse.Namespace) -> None:
-    """tpc format — format a Verilog file through the full pipeline."""
+    """tpc format — 按语言包 [commands].format 声明的管线格式化文件。"""
     if not os.path.isfile(args.file):
         print(f"[fatal] File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
     from tests.e2e.run_pipeline import run_pipeline_on_source
 
+    cmd = _load_commands().get("format", {})
     rules_dir, ext_dirs = _resolve_grammar_dirs()
 
     with open(args.file, "r", encoding="utf-8") as f:
@@ -87,6 +106,38 @@ def _cmd_format(args: argparse.Namespace) -> None:
         input_path=args.file,
         out_dir=None,
         quiet=True,
+        stages=cmd.get("stages"),
+        expand_macros=cmd.get("expand_macros", False),
+    )
+
+    if result["success"]:
+        print(result["output"])
+    else:
+        print(f"[error] {result.get('error', 'Unknown error')}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_expand(args: argparse.Namespace) -> None:
+    """tpc expand — 按语言包 [commands].expand 声明的管线展开宏并变换。"""
+    if not os.path.isfile(args.file):
+        print(f"[fatal] File not found: {args.file}", file=sys.stderr)
+        sys.exit(1)
+
+    from tests.e2e.run_pipeline import run_pipeline_on_source
+
+    cmd = _load_commands().get("expand", {})
+    rules_dir, ext_dirs = _resolve_grammar_dirs()
+
+    with open(args.file, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    result = run_pipeline_on_source(
+        source=source,
+        input_path=args.file,
+        out_dir=None,
+        quiet=True,
+        stages=cmd.get("stages"),
+        expand_macros=cmd.get("expand_macros", True),
     )
 
     if result["success"]:
@@ -171,8 +222,14 @@ Examples:
     sub = parser.add_subparsers(dest="command", required=True)
 
     # format
-    p_fmt = sub.add_parser("format", help="Format a Verilog file")
+    p_fmt = sub.add_parser("format", help="Format a Verilog file (per [commands].format)")
     p_fmt.add_argument("file", help="Path to .v file")
+
+    # expand
+    p_exp = sub.add_parser(
+        "expand", help="Expand macros and transform (per [commands].expand)"
+    )
+    p_exp.add_argument("file", help="Path to .v file")
 
     # lint
     p_lint = sub.add_parser("lint", help="Lint a Verilog file")
@@ -201,6 +258,7 @@ Examples:
 
     dispatch = {
         "format": _cmd_format,
+        "expand": _cmd_expand,
         "lint": _cmd_lint,
         "init": _cmd_init,
         "pipeline": _cmd_pipeline,

@@ -156,6 +156,7 @@ def run_pipeline_on_source(
     transform_enabled: bool | None = None,
     renderer_enabled: bool | None = None,
     stage: str | None = None,
+    stages: list[str] | None = None,
     no_lint: bool | None = None,
     format_output: bool | None = None,
     expand_enhanced: bool = True,
@@ -207,6 +208,16 @@ def run_pipeline_on_source(
         undefine = _cfg.get("undefine")
     if check_idempotent is None:
         check_idempotent = _cfg.get("check_idempotent", True)
+
+    # 指令级阶段控制：调用方声明"跑哪些阶段"（如 format = [lex, parse,
+    # normalize, render]），翻译成现有阶段开关——跳过未声明的阶段。
+    # None = 完整管线（现有行为）。
+    if stages is not None:
+        _stage_set = set(stages)
+        no_lint = "lint" not in _stage_set
+        analyzer_enabled = "analyze" in _stage_set
+        transform_enabled = "transform" in _stage_set
+        renderer_enabled = "render" in _stage_set
 
     # Quiet-aware logger
     def _log(msg: str, *args, **kwargs) -> None:
