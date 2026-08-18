@@ -1,6 +1,6 @@
 """配置加载防护单元测试 — malformed TOML / 缺段 / 可选缺失。
 
-固化 2026-08-09 token.toml 重复 key 事故的防护契约：
+固化 token.toml 重复 key 事故的防护契约：
     - required=False 的文件，TOML 语法损坏（重复 key 等）→ ConfigError（fail-fast，
       不能再静默退化成空表导致"全部 token 变 id"的静默错乱）
     - 文件存在但缺声明的 section → ConfigError（配置声明错误）
@@ -80,7 +80,7 @@ def test_required_missing_file_fails_fast(isolated_registry):
         _declare_and_load(root, "t.reqmiss", "nope.toml", required=True)
 
 
-# ── 来源追踪（2026-08-18，config dump 基础） ──────────────────────────
+# ── 来源追踪（config dump 基础） ──────────────────────────
 
 
 def test_sources_recorded_on_load(isolated_registry):
@@ -130,7 +130,7 @@ def test_resolve_with_sources_returns_pair(isolated_registry):
     assert isinstance(r, dict)
 
 
-# ── 声明结构校验（2026-08-18，schema 化第一步） ──────────────────────
+# ── 声明结构校验（schema 化第一步） ──────────────────────
 
 
 def _write_tpc(tmp_path, content):

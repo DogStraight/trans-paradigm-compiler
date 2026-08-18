@@ -1,6 +1,6 @@
 """parser 包内共享常量。
 
-分层（2026-08-18 审计后收敛）：
+分层（审计后收敛）：
     - token 类型协议（comment/newline/id）：已集中到 core/token_protocol.py，
       此处 re-export 保持既有 import 路径。
     - COMMENT_NODE_NAME / ROOT_RULE_NAME：**语法规则名**——正常情况从语法树

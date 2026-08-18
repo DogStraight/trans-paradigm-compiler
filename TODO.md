@@ -16,12 +16,12 @@
 
 ### P1.3 SV 插件化（SV 语法做成插件，插拔动态适配）
 
-> 来源：2026-08-13 用户方向——SV 基础已内嵌（logic/always_ff/always_comb 在
+> 来源：2026-08-13 方向——SV 基础已内嵌（logic/always_ff/always_comb 在
 > verilog 语言包），但 SV 特性会持续增长（interface/class/struct/assertion 等），
 > 内嵌会让 verilog 语言包膨胀。做成**独立插件**（如 plugins/sv）：
 > 插拔动态适配——verilog 包按需挂载 SV 插件，接口/class 等新特性进插件不进主包。
 >
-> **2026-08-16 更新（用户方向修正）**：SV 产生式量大（1800 Annex A 有 400+ 条
+> **2026-08-16 更新（方向修正）**：SV 产生式量大（1800 Annex A 有 400+ 条
 > vs 1364 的 200 条），插件形式不划算——**开独立语法实例**（grammar/sv/ 类似
 > c4 的语言包）。已先行摘除 verilog 主包内嵌的 SV 特性（见下），SV 实例落地后
 > 从实例恢复。
@@ -50,7 +50,7 @@
 
 ### P1.8 Verilog 语法补全 + 仿真语法插件化（路线 1，发布前置）
 
-> 来源：2026-08-16 用户决策。两条路权衡后选路线 1：
+> 来源：2026-08-16 决策。两条路权衡后选路线 1：
 > ①补全 1364-2005 剩余语法（可综合子集进主包）
 > ②仿真语法拆成独立插件（plugins/sim，按需动态挂载）
 > ③完成后 Verilog 主包纯净可综合 → **发布基线**。
@@ -158,7 +158,7 @@
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
-> 来源：2026-08-16 Sigasi 调研（行为观察 + 公开文档参考）。用户拍板：**放分析层插件**
+> 来源：2026-08-16 Sigasi 调研（行为观察 + 公开文档参考）。**放分析层插件**
 > （不放在 linter——lexer 期已有 pre_scan 符号预检测，但那是给 parser 的提示；
 > 语义层 Symbol 才有 kind 可区分名字种类，且 analyzer 已统一收集 all_symbols）。
 > 检查逻辑语言通用（进引擎原语），pattern 是语言知识（进 TOML），符合铁律。
@@ -218,7 +218,7 @@
 - [x] 恢复 CI（.github/workflows/ci.yml：Windows + Python 3.11/3.12/3.13）
 - [x] 安装可验证（pip install -e ".[test]" + tpc CLI 实测）
 - [x] 补文档（CONTRIBUTING.md / CHANGELOG.md / docs/api.md）
-- [ ] **CLI 指令替换 python main 模式（2026-08-16 用户方向）**：
+- [ ] **CLI 指令替换 python main 模式（2026-08-16 方向）**：
       用 `tpc format` / `tpc lint` / `tpc new component` 等指令替代 `python main.py xxx`；
       为此 README 已删除 Quick start + API 两节（留位置），CLI 落地后补回。
       指令列表对齐 main.py 现有子命令（format/lint/init/pipeline/new），
@@ -227,7 +227,7 @@
 
 ## P4 — LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 
-> 来源：2026-08-14 用户方向。LLVM/MLIR 生态商业价值高（芯片/硬件厂商对
+> 来源：2026-08-14 方向。LLVM/MLIR 生态商业价值高（芯片/硬件厂商对
 > "专有语言 → LLVM"定制付费意愿强），tpc 的配置驱动 + 模型代写正好能压
 > 低这段最贵的前端成本。c4 已实证"语言 → 自定义 IR"（_asm.py 降 c4 VM
 > 汇编），换靶为 LLVM IR 是同一件事。
@@ -253,7 +253,7 @@
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
-> 来源：2026-08-14 用户方向。思路 = 复用已实证的"分段解析 + 并树"
+> 来源：2026-08-14 方向。思路 = 复用已实证的"分段解析 + 并树"
 > （tests/e2e/debug_segment_parse.py，PicoRV32 调试时验证过），把失效判定
 > 从 module 级细化到语法单元级（近似 tree-sitter 的失效激活）。
 > 目标：编辑 → token 级 diff → 延展到语法边界 → 仅重解析受影响单元 → 并树复用。

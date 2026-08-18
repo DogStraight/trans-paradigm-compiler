@@ -96,7 +96,7 @@ class TestMatcherStatement:
 class TestEofProbe:
     """match_rule 在 token 耗尽处的 EOF 报错 + probe（截断试探）静默。
 
-    固化 2026-08-08 修复：残缺语句（缺分号/缺 body）缺失 token 处为 EOF 时
+    固化修复：残缺语句（缺分号/缺 body）缺失 token 处为 EOF 时
     必选元素必须报错（不静默）；但 Level 2 消歧的截断试探（_try_parse）是
     人为截断，EOF 处应静默——否则合法 for 被误判为未识别。
     """

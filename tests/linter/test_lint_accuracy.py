@@ -3,7 +3,7 @@
 复用 tests/e2e/eval_lint_accuracy.evaluate() 的单一判定逻辑，把准确度
 对照实验固化为 pytest 断言——错误样本必须全检出且类别命中期望，合法
 样本必须零误报。任何未来改动把 recall/类别准确率/精确率拉低都会在此
-失败，防止"测试不敏感、回归悄悄发生"（2026-08-03 审计教训）。
+失败，防止"测试不敏感、回归悄悄发生"（审计教训）。
 
 样本集：verilog/tests/lint_err/ref/*.v + expected.json
 """

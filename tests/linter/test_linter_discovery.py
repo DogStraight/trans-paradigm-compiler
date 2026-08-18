@@ -104,7 +104,7 @@ class TestUnrecognized:
 
 
 class TestElseChainDiscovery:
-    """else chain 边界回归（2026-08-17 修复）。
+    """else chain 边界回归。
 
     根因：discovery 容器边界用 _stmt_ends（含 keyword.end）在 then 块 end 截断，
     else chain 被甩成 if 的兄弟节点 → else 块内容漏检 / else 被当未识别语句误报。

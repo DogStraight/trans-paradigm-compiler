@@ -1,6 +1,6 @@
 """tests/core/test_rule_schema.py — GrammarRule 字段 schema 校验测试。
 
-2026-08-18 配置复杂度管理步骤 4：规则字段 schema 化（fail-fast）。
+规则字段 schema 化（fail-fast）。
 覆盖：
     - 未知顶层字段 → GrammarError
     - 未知 parser/renderer 阶段字段 → GrammarError

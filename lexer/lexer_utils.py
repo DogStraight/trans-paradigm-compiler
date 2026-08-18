@@ -93,8 +93,8 @@ def _validate_token_define(td: dict) -> None:
     """token 配置结构性自检（简单校验，fail-fast）。
 
     防护"配置加载失败被静默吞掉 → 空表 → 全部 token 退化为 id"的静默错乱
-    （2026-08-09 token.toml 重复 key 事故：整个 [id.keyword] 表丢失后，
-    module/always/begin 全被当普通 id，linter/parser 全面静默错乱）。
+    （[id.keyword] 表丢失后，module/always/begin 全被当普通 id，linter/parser
+    全面静默错乱）。
 
     只校验 lexer 硬依赖的关键段存在 + 关键字表非空——不校验具体关键字内容
     （语言无关，只拦"结构性退化"）。

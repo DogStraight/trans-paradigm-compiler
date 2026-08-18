@@ -327,7 +327,7 @@ class GrammarRule:
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
 
-    # ── 规则字段 schema（2026-08-18，fail-fast 校验） ──────────────
+    # ── 规则字段 schema（fail-fast 校验） ──────────────────────────
     # 顶层合法字段：引擎字段 + 语言包扩展点（inject/transform）+ 阶段子表。
     # 未知顶层字段（拼写错误/误放字段）→ GrammarError。
     _TOP_LEVEL_FIELDS = _KNOWN_FIELDS | {

@@ -1,6 +1,6 @@
 """pipeline — 管线编排（run_pipeline_on_source）。
 
-从 tests/e2e/run_pipeline.py 提取的正式管线核心（2026-08-18 开源就绪）：
+从 tests/e2e/run_pipeline.py 提取的正式管线核心（CLI 与测试共用）：
 CLI（main.py）与测试共用，故移入正式包，wheel 安装后 CLI 可用。
 
 与测试版的差异：
@@ -527,8 +527,8 @@ def run_pipeline_on_source(
         # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
         # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
         # 了代码结构（impl → ModuleInst、类型端口 → 具体端口），源行号/锚点必然
-        # 漂移，恢复注定找不到位置或误匹配拆坏注释行（曾把含 `spi.slave` 的注释
-        # 从 `.` 处劈开）。但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
+        # 漂移，恢复会误匹配拆坏注释行（如含 `spi.slave` 的注释从 `.` 处劈开）。
+        # 但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
         # 不依赖锚点窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，
         # 宏还原失效。有宏/条件块时降级 only_tpc，无则整个跳过。
         line_anchors = getattr(parser, "_line_comment_anchors", None)
@@ -603,7 +603,7 @@ def run_pipeline_on_source(
         # ── 幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
         # 文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
         # 替代后置 lint：完整 parser 比 linter 近似更强，且不依赖 linter 对
-        # format 后文本的行号/结构敏感（曾误报）。坏文本（如 `= =` 或缺分号）
+        # format 后文本的行号/结构敏感。坏文本（如 `= =` 或缺分号）
         # 会导致第二遍 parse truncated → idempotent=False。
         # 展开路径（宏表/占位符/指令行任一非空）跳过：宏体替换、条件分支选择、
         # 注释锚点漂移都使第二遍内容必然不同——那是展开语义，不是幂等性问题。

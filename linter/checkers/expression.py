@@ -1,6 +1,6 @@
 """checkers/expression.py — 表达式检查器（复用 parser 的 pratt 部分）。
 
-设计（用户决策）：表达式处理完全复用解析器能力，不在代码中固化任何组合逻辑。
+设计：表达式处理完全复用解析器能力，不在代码中固化任何组合逻辑。
     - 运算符链 / 中缀 / 优先级：parse_with_count + parser.operator_defs（配置驱动）。
     - 原子（BitWidthLiteral / SelectExpr / ConcatExpr / ReplicateExpr /
       CallExpr / SysFuncCall / ParenthesizedExpr / 括号）：交给共享 RuleMatcher

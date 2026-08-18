@@ -1,7 +1,7 @@
 # 组件协议（插件层）
 
 > 文档目的：说明插件层协议——`@register_plugin` / transform 钩子 / analyzer 原语 /
-> setup_grammar 组件加载。模型写插件（Python）靠它，避免从既有插件猜协议。
+> setup_grammar 组件加载。插件作者（含模型辅助）写 Python 插件靠它，避免从既有插件猜协议。
 > 来源：2026-08-13 P2.0 文档化。
 
 ## 1. 组件 = 语言包扩展单元

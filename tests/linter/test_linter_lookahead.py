@@ -131,7 +131,7 @@ class TestNonStatement:
 class TestTryParseProbe:
     """Level 2 试解析（_try_parse）的 probe 模式：截断 limit 不因 EOF 误判失败。
 
-    固化 2026-08-08 修复：_try_parse 的 limit 是人为截断的（句子边界+1），
+    固化修复：_try_parse 的 limit 是人为截断的（句子边界+1），
     语句区间在 EOF 处耗尽是正常截断而非残缺——probe 使其不报 EOF 错误，
     否则合法 for 被误判为未识别（曾引发 normal 样本误报回归）。
     """
