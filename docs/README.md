@@ -34,7 +34,7 @@
 - 机制：`config_lifecycle.md`（配置生命周期）、`expression_conventions.md`（表达式约定）、
   `component_protocol.md`（组件协议）、`api.md`（API 参考）
 - 个人思考沉淀（非对齐体系）：`references.md`（对其他语言类工具的借鉴研究）
-- 计划：`linter_refactor_plan.md`
+- 计划：`linter_refactor_plan.md`、`config_complexity_plan.md`（配置复杂度管理：来源追踪/dump/schema）
 
 ## 注释对齐约定（文档 ↔ 代码双向定位）
 

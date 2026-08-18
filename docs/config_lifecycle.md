@@ -99,3 +99,77 @@ load_all 只换 base 目录（兼容直接 `declare` + `load_all` 的契约）�
 - **保持注册制**（不改成显式 config 对象注入）——机制已工作，改动成本高、收益有限。
 - 本文档作为"配置生命周期"权威说明；walkthrough 补一节引用本文档。
 - 已知风险点：import 时序依赖（怪象 1）——用"启动点统一 import"惯例约束，文档化即可。
+
+## 2026-08-18 更新：配置复杂度管理（来源可观测 + 校验 + 调试）
+
+### 1. 按语言包自包含解析（resolve，无全局副作用）
+
+`ConfigRegistry.resolve(rules_dir, ...)` 按指定语言包解析配置，**不写 _loaded、
+不改 _entries、不推模块变量**——纯函数语义，按参数缓存。
+
+```python
+# Lexer 按自己的 rules_dir 解析，不依赖最后一次 load_all 的全局状态
+resolved = ConfigRegistry.resolve("grammar/c4", plugins_dir="grammar/c4/plugins")
+```
+
+**动机**：Lexer 配置（token/数字形态）曾依赖"最后一次 load_all 的语言"——同一进程
+跨语言时串用上一语言配置（c4 的 `0x1F` 被拆成 `0`+`x1F`、`int` 被当 id）。resolve
+让消费方按语言包自包含解析，彻底摆脱隐式全局状态。
+
+**消费方**：`Lexer.__init__`（rules_dir 分支）一次 resolve 取 token/宏/数字形态。
+
+### 2. 配置来源追踪（_sources / resolve_with_sources）
+
+`load_all` 后 `ConfigRegistry._sources` 记录每个 key 的实际来源：
+
+```python
+ConfigRegistry._sources["lexer.number"]
+# → {"file": "grammar/verilog/base/_number.toml", "section": "number"}
+#   {"bare": True} 裸配置 / {"missing": True} 可选缺失
+```
+
+`resolve_with_sources(rules_dir, ...)` 返回 `(loaded, sources)` 对（无全局副作用）。
+
+**动机**：回答"这个配置值从哪来"——本次 Lexer 配置 bug 根因即来源不可见。
+
+### 3. `tpc config dump` 调试命令
+
+```bash
+python main.py config dump                 # 文本：key + 来源 + 值摘要
+python main.py config dump --rules-dir grammar/c4
+python main.py config dump --json          # JSON（ensure_ascii，Windows 兼容）
+```
+
+输出每个配置 key 的来源（文件 + section）与值摘要，服务模型/人调试。
+
+### 4. 配置声明结构校验（schema 化第一步）
+
+`_load_meta_declarations` 解析 tpc.toml 时校验声明结构（fail-fast）：
+
+- 文件式声明：`file` 必须 str/list[str]，`section` str/None，`required` bool，
+  `base` str，无未知字段
+- dict 含声明字段但缺 `file`（如 `{ section = "x" }`）→ 拦截（疑似忘了 file）
+- 合法 bare data（非 dict，或纯数据 dict）通过
+
+### 5. 规则字段 schema 校验（GrammarRule）
+
+`GrammarRule._validate_fields` 在构造时校验（fail-fast）：
+
+- **顶层字段**严格：`_KNOWN_FIELDS | {inject, transform, parser, analyzer, renderer}`
+- **parser/renderer 阶段**严格：parser 含 `scope`（`_resolve_peek` 拷贝产物）
+- **analyzer 阶段宽松**：scope/symbol/ref_collect/identifier_ref/primitives 是引擎
+  字段，其余是插件原语名（开放扩展点，如 check_name_call/resolve_refs）
+- **布尔字段**类型校验（is_statement/is_atom/inline/pratt/is_block）
+
+**附带修复**：`FileManager.load_all_toml` 跳过 `tpc.toml`——其 `[lexer]`/`[parser]`
+等段是配置声明，此前被静默当规则加载（schema 校验后暴露）。
+
+### 6. 配置优先级链（现状，供参考）
+
+```
+编译期默认（declare_cfg default） < 语言包 tpc.toml 声明 < 用户 tpc_config.json
+< CLI 参数（main.py 指令覆盖）
+```
+
+与 PostgreSQL GUC 的"来源优先级链"同构，但 tpc 的覆盖点更少（无会话级/角色级）。
+如需显式化，可扩展 `tpc config dump` 输出优先级层级。
