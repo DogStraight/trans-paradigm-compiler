@@ -1,6 +1,6 @@
 """tests/core/test_errors.py — 统一异常层级测试。
 
-覆盖（TODO P0.1 异常层级统一）：
+覆盖（异常层级统一）：
     - 所有自定义异常继承 TransParadigmError（可按类型统一捕获）
     - core.define re-export ParseError（`from core.define import ParseError` 兼容）
     - ParseError 保留字段（token/rule/path/candidates/context_info）与消息格式

@@ -48,7 +48,7 @@ def test_expanded_path_skips_idempotency():
 
 
 def test_bad_equal_equal_fails_idempotency():
-    """坏输出 `= =`（formatter 曾把 `==` 拆开）第二遍 parse 必然 truncated。
+    """坏输出 `= =`（formatter 把 `==` 拆开）第二遍 parse 必然 truncated。
 
     幂等判据：输出再走一遍完整管线不 truncated。坏输出（`= =`）会让第二遍
     parse 软失败/truncated → 幂等 FAIL。这里直接对坏输出跑管线验证判据命中

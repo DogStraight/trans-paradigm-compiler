@@ -37,8 +37,8 @@ jobs:
         shell: pwsh
 
   # wheel 安装验证：构建 wheel → 装到独立 venv → 从非项目目录运行 CLI。
-  # 防止"editable 模式可用但 wheel 安装后 CLI 失败"（2026-08-18 曾发生：
-  # 管线核心在 tests/ 里、data-files 扁平化多语言包、相对路径在任意目录失效）。
+  # 防止"editable 模式可用但 wheel 安装后 CLI 失败"（管线核心在 tests/ 里、
+  # data-files 扁平化多语言包、相对路径在任意目录失效）。
   wheel-install:
     strategy:
       fail-fast: false

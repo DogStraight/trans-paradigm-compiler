@@ -133,7 +133,7 @@ class TestTryParseProbe:
 
     固化修复：_try_parse 的 limit 是人为截断的（句子边界+1），
     语句区间在 EOF 处耗尽是正常截断而非残缺——probe 使其不报 EOF 错误，
-    否则合法 for 被误判为未识别（曾引发 normal 样本误报回归）。
+    否则合法 for 会被误判为未识别。
     """
 
     def test_try_parse_valid_for_in_truncated_limit(self, scanner, lookahead):
