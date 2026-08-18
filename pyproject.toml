@@ -47,6 +47,10 @@ test = [
     "pytest-timeout>=2.0",
 ]
 
+# main.py 作为顶层模块打包（tpc 命令入口）
+[tool.setuptools]
+py-modules = ["main"]
+
 [tool.setuptools.packages.find]
 include = [
     "core*",
@@ -57,16 +61,19 @@ include = [
     "transform*",
     "renderer*",
     "preprocessor*",
+    "grammar*",
+    "pipeline*",
 ]
 
-# 运行时数据：语法 TOML + 项目配置。
+# 运行时数据：语法 TOML 作为包内数据（package-data）分发，保留目录结构。
 # 注1：语法（grammar/verilog/*.toml）是独立外置资产，可单独发布 / 单独 fork 使用；
 #      此处随引擎捆绑只是便捷形态之一，不是语法的唯一发布方式。
 # 注2：editable/dev 模式从源码树定位（main.py / config 查找逻辑以源码路径为准）；
 #      此处供 sdist/wheel 携带数据，供未来发行使用。
-[tool.setuptools.data-files]
-"grammar" = ["grammar/tpc.toml", "grammar/verilog/**/*.toml", "grammar/verilog/plugins/**/*.toml"]
-"config" = ["config/tpc_config.json"]
+# 注3：不用 data-files——它会扁平化文件（grammar/verilog/ 与 grammar/c4/ 混在一起，
+#      插件目录丢失），多语言包不可用。package-data 保留目录结构。
+[tool.setuptools.package-data]
+"grammar" = ["**/*.toml"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

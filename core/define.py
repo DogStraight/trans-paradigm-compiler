@@ -52,6 +52,11 @@ def _load_tpc_meta() -> dict:
         grammar_dir = grammar_val.get("rules_dir", "")
     else:
         grammar_dir = ""
+    # 用户配置缺失（wheel 安装后无项目 config/tpc_config.json）时回退默认语言包。
+    # root 在 editable（项目根）与 wheel（site-packages）两种模式下都指向
+    # grammar 包所在目录的父级，故 root/grammar/verilog 两种模式均可定位。
+    if not grammar_dir:
+        grammar_dir = "grammar/verilog"
 
     # 步骤 3：加载语法包 tpc.toml（引擎接口配置）
     meta_path = os.path.join(root, grammar_dir, "tpc.toml")

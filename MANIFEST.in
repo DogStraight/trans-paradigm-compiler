@@ -1,0 +1,12 @@
+# MANIFEST.in — sdist 内容控制
+#
+# 目的：排除有版权风险的 IEEE 标准提取文档（Annex A BNF 缓存）与原始 PDF。
+# 这些文件仅供内部开发参考（linter/parser 维护时核对标准 BNF），不随项目分发。
+# 如需标准原文，请从 IEEE 官方渠道获取。
+
+# 排除 IEEE 标准提取缓存（版权归 IEEE）
+exclude docs/ieee1364_2005_annex_a.md
+exclude docs/ieee1800_2023_annex_a.md
+
+# 排除 IEEE 标准原始 PDF（版权归 IEEE）
+recursive-exclude grammar *.pdf

@@ -94,6 +94,11 @@ def _find_grammar_tpc_toml() -> str:
             grammar_dir = g if isinstance(g, str) else g.get("rules_dir", "")
         except (json.JSONDecodeError, KeyError):
             pass
+    # 用户配置缺失（wheel 安装后无项目 config/tpc_config.json）时回退默认语言包。
+    # root 在 editable（项目根）与 wheel（site-packages）两种模式下都指向
+    # grammar 包所在目录的父级，故 root/grammar/verilog 两种模式均可定位。
+    if not grammar_dir:
+        grammar_dir = "grammar/verilog"
     meta_path = os.path.join(root, grammar_dir, "tpc.toml")
     if not os.path.isfile(meta_path):
         raise FileNotFoundError(

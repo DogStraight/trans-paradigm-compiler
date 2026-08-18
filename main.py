@@ -90,7 +90,7 @@ def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
         print(f"[fatal] File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    from tests.e2e.run_pipeline import run_pipeline_on_source
+    from pipeline import run_pipeline_on_source
 
     cmd = _resolve_command(name)
     rules_dir, ext_dirs = _resolve_grammar_dirs()
@@ -238,7 +238,6 @@ def _cmd_pipeline(args: argparse.Namespace) -> None:
 
     sys.argv = [sys.argv[0]] + (args.test_name or [])
     pipeline_main()
-
 
 def _cmd_new_component(args: argparse.Namespace) -> None:
     """tpc new component — scaffold a new component."""
