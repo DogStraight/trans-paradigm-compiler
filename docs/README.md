@@ -29,6 +29,7 @@
 - 架构：`linter_architecture.md`（linter 两阶段发现+扁平检查）、`component_system.md`（组件系统）
 - 决策：`decisions/0001-pre-parse-linter.md`、`decisions/0002-is-statement-explicit.md`、`decisions/0003-config-load-fail-fast.md`、`decisions/0004-branding-trans-paradigm.md`
 - 参考：`config_reference.md`、`grammar_rule_fields.md`、`ieee1364_2005_annex_a.md`、`end_case_audit.md`
+- 审计：`code_quality_audit.md`（2026-08-18 全项目代码质量摸底）、`config_audit.md`（语言知识渗透摸底）
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：`config_lifecycle.md`（配置生命周期）、`expression_conventions.md`（表达式约定）、
   `component_protocol.md`（组件协议）、`api.md`（API 参考）
