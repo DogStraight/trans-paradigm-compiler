@@ -258,106 +258,158 @@ class RuleMatcher:
         # 表达式根（pratt 标识 / 原子选择器推导）→ 交 ExpressionChecker
         is_atom_sel = _is_atom_selector(info, self._tree)
         if info.get("pratt") or is_atom_sel:
-            if is_atom_sel:
-                # @PrimaryExpr（is_atom 规则集合选择器，可推导）只匹配原子操作数
-                # （赋值目标/操作数），不消费运算符——避免 `a <= b` 被当比较表达式
-                # 吞掉（NonBlockingAssign 的 <= 赋值歧义）。@Expression 才完整 pratt。
-                j = i
-                while j < limit and tokens[j].type in _TRIVIA:
-                    j += 1
-                if j >= limit:
-                    return i
-                _, consumed = self.match_atom(tokens, j)
-                if consumed <= 0:
-                    if strict and not silent:
-                        t = tokens[j]
-                        errors.append(
-                            LintDiagnostic(
-                                range=token_span(t),
-                                message=f"expected expression, got '{t.type}'",
-                                severity=1,
-                                code="phase-expr",
-                            )
-                        )
-                        return j + 1
-                    return i
-                return j + consumed
-            # @Expression / pratt 链：先跳过 trivia——从行首 newline 等 trivia
-            # 位置 consume 时，pratt 的 consumed 不含已跳过的 trivia，会与后续
-            # 元素错位（多行表达式 RHS 误报）。
-            j = i
-            while j < limit and tokens[j].type in _TRIVIA:
-                j += 1
-            sub_errors, consumed = self._expr.consume(
-                tokens, j, stop_tokens=self._stop_for(name)
+            return self._match_expr_call(
+                tokens, i, name, info, is_atom_sel, errors, limit, strict, silent
             )
-            if not silent:
-                errors += sub_errors
-            # consume 失败（sub_errors 非空）→ 不推进：ExpressionChecker 失败时
-            # 返回 consumed=1 的错误恢复推进，会令 `@Expression?`（如 `.name()`
-            # 空端口）误判"空表达式匹配成功"并吞掉后续 `)`；optional 语境应
-            # 静默不推进（错误已记录），必选语境由上层回滚报错。
-            if sub_errors:
-                return i
-            return j + consumed
 
         # 块类（@BeginEnd 等）→ 校验 block_start 后跳到块结束
         if info.get("is_block"):
-            # 先校验起始 token：块规则必须由 block_start 触发（如 BeginEnd 的
-            # keyword.begin）。不校验会导致 @BeginEnd 对任意 token（如
-            # `always @(*) endmodule` 的 endmodule）也"跳到结束符"把坏 body
-            # 静默吞掉——@Stmt 位置非块起点时应视为失败，让上层报错。
-            bs = info.get("block_start") or ""
-            if bs:
-                k = _skip(tokens, i, limit)
-                if k >= limit or tokens[k].type != bs:
-                    return i
-            # 优先用 block_end（精确配对结束符，如 BeginEnd 的 keyword.end）：
-            # end_case（如 newline）是"块后分隔符"，`end else` 同行时 newline
-            # 不出现会跳过头（吞掉 else 链直至后续换行/EOF）。无 block_end 回退。
-            be = info.get("block_end") or ""
-            if be:
-                return self._skip_to_end(tokens, i, {be}, limit)
-            ec_block: set[str] = set(info.get("end_case") or ())
-            if ec_block:
-                return self._skip_to_end(tokens, i, ec_block, limit)
-            return i
+            return self._match_block_call(tokens, i, info, limit)
 
         # 语句类（@Stmt / @IfBlock 等嵌套语句）→ strict 语境跳过 end_case（扁平化）
         # strict=False（choice/optional 试探，如 PortList 里的 TypedPortDecl）落到
         # 普通内联匹配，避免"双角色"规则在端口列表被 end_case 错误跳过吞掉内容
         if info.get("is_statement") and strict:
-            # 先验证起始 token，防止非嵌套语句上下文误跳过
-            firsts = self._first_tokens_of_rule(name, set())
-            k = _skip(tokens, i, limit)
-            if k >= limit:
+            return self._match_stmt_call(
+                tokens, i, name, info, errors, limit, strict, silent
+            )
+
+        # 普通子规则（含 is_atom 原子）→ 内联匹配其 production
+        return self._match_plain_call(tokens, i, info, errors, limit, strict, silent)
+
+    def _match_expr_call(
+        self,
+        tokens: list[Token],
+        i: int,
+        name: str,
+        info: dict,
+        is_atom_sel: bool,
+        errors: list,
+        limit: int,
+        strict: bool,
+        silent: bool,
+    ) -> int:
+        """表达式根（@Expression / @PrimaryExpr / pratt 链）→ 交 ExpressionChecker。"""
+        if is_atom_sel:
+            # @PrimaryExpr（is_atom 规则集合选择器，可推导）只匹配原子操作数
+            # （赋值目标/操作数），不消费运算符——避免 `a <= b` 被当比较表达式
+            # 吞掉（NonBlockingAssign 的 <= 赋值歧义）。@Expression 才完整 pratt。
+            j = i
+            while j < limit and tokens[j].type in _TRIVIA:
+                j += 1
+            if j >= limit:
                 return i
-            if firsts and tokens[k].type not in firsts:
-                # 起始不匹配。区分两种"@Stmt 位置非语句开头"：
-                # - 块 opener（begin/fork 等，firsts 未覆盖的块 body）：合法，
-                #   由发现阶段独立发现 BeginEnd 块 → 静默不跳过。
-                # - 其他（块结束符/句子结束符/无关 token）：语句 body 缺失
-                #   （如 `always @(*) endmodule`）→ 报错，不再静默吞掉。
-                if tokens[k].type in self._block_openers:
-                    return i
-                if not silent:
-                    t = tokens[k]
+            _, consumed = self.match_atom(tokens, j)
+            if consumed <= 0:
+                if strict and not silent:
+                    t = tokens[j]
                     errors.append(
                         LintDiagnostic(
                             range=token_span(t),
-                            message=f"expected statement, got '{t.content}'",
+                            message=f"expected expression, got '{t.type}'",
                             severity=1,
-                            code="phase-statement",
+                            code="phase-expr",
                         )
                     )
-                    return k + 1
+                    return j + 1
                 return i
-            ec_stmt: set[str] = set(info.get("end_case") or ())
-            if ec_stmt:
-                return self._skip_to_end(tokens, i, ec_stmt, limit)
+            return j + consumed
+        # @Expression / pratt 链：先跳过 trivia——从行首 newline 等 trivia
+        # 位置 consume 时，pratt 的 consumed 不含已跳过的 trivia，会与后续
+        # 元素错位（多行表达式 RHS 误报）。
+        j = i
+        while j < limit and tokens[j].type in _TRIVIA:
+            j += 1
+        sub_errors, consumed = self._expr.consume(
+            tokens, j, stop_tokens=self._stop_for(name)
+        )
+        if not silent:
+            errors += sub_errors
+        # consume 失败（sub_errors 非空）→ 不推进：ExpressionChecker 失败时
+        # 返回 consumed=1 的错误恢复推进，会令 `@Expression?`（如 `.name()`
+        # 空端口）误判"空表达式匹配成功"并吞掉后续 `)`；optional 语境应
+        # 静默不推进（错误已记录），必选语境由上层回滚报错。
+        if sub_errors:
             return i
+        return j + consumed
 
-        # 普通子规则（含 is_atom 原子）→ 内联匹配其 production
+    def _match_block_call(
+        self, tokens: list[Token], i: int, info: dict, limit: int
+    ) -> int:
+        """块类（@BeginEnd 等）→ 校验 block_start 后跳到块结束。"""
+        # 先校验起始 token：块规则必须由 block_start 触发（如 BeginEnd 的
+        # keyword.begin）。不校验会导致 @BeginEnd 对任意 token（如
+        # `always @(*) endmodule` 的 endmodule）也"跳到结束符"把坏 body
+        # 静默吞掉——@Stmt 位置非块起点时应视为失败，让上层报错。
+        bs = info.get("block_start") or ""
+        if bs:
+            k = _skip(tokens, i, limit)
+            if k >= limit or tokens[k].type != bs:
+                return i
+        # 优先用 block_end（精确配对结束符，如 BeginEnd 的 keyword.end）：
+        # end_case（如 newline）是"块后分隔符"，`end else` 同行时 newline
+        # 不出现会跳过头（吞掉 else 链直至后续换行/EOF）。无 block_end 回退。
+        be = info.get("block_end") or ""
+        if be:
+            return self._skip_to_end(tokens, i, {be}, limit)
+        ec_block: set[str] = set(info.get("end_case") or ())
+        if ec_block:
+            return self._skip_to_end(tokens, i, ec_block, limit)
+        return i
+
+    def _match_stmt_call(
+        self,
+        tokens: list[Token],
+        i: int,
+        name: str,
+        info: dict,
+        errors: list,
+        limit: int,
+        strict: bool,
+        silent: bool,
+    ) -> int:
+        """语句类（@Stmt / @IfBlock 等）→ strict 语境跳过 end_case（扁平化）。"""
+        # 先验证起始 token，防止非嵌套语句上下文误跳过
+        firsts = self._first_tokens_of_rule(name, set())
+        k = _skip(tokens, i, limit)
+        if k >= limit:
+            return i
+        if firsts and tokens[k].type not in firsts:
+            # 起始不匹配。区分两种"@Stmt 位置非语句开头"：
+            # - 块 opener（begin/fork 等，firsts 未覆盖的块 body）：合法，
+            #   由发现阶段独立发现 BeginEnd 块 → 静默不跳过。
+            # - 其他（块结束符/句子结束符/无关 token）：语句 body 缺失
+            #   （如 `always @(*) endmodule`）→ 报错，不再静默吞掉。
+            if tokens[k].type in self._block_openers:
+                return i
+            if not silent:
+                t = tokens[k]
+                errors.append(
+                    LintDiagnostic(
+                        range=token_span(t),
+                        message=f"expected statement, got '{t.content}'",
+                        severity=1,
+                        code="phase-statement",
+                    )
+                )
+                return k + 1
+            return i
+        ec_stmt: set[str] = set(info.get("end_case") or ())
+        if ec_stmt:
+            return self._skip_to_end(tokens, i, ec_stmt, limit)
+        return i
+
+    def _match_plain_call(
+        self,
+        tokens: list[Token],
+        i: int,
+        info: dict,
+        errors: list,
+        limit: int,
+        strict: bool,
+        silent: bool,
+    ) -> int:
+        """普通子规则（含 is_atom 原子）→ 内联匹配其 production。"""
         prods = info.get("prods", [])
         if not prods:
             return i
