@@ -169,9 +169,22 @@ endmodule
 
 ### Preprocessor — source → expanded source
 
-Macro directives are config-declared (`base/_macro.toml`). The module above
-has no macros, so it passes through unchanged; macro expansion and reverse
-mapping are shown in the [Preprocessor](#preprocessor) section.
+Macro directives are config-declared (`base/_macro.toml`): directive
+recognition, expansion, and reverse mapping back to the original text.
+The module above has no macros, so it passes through unchanged. A macro
+block:
+
+```verilog
+`define WIDTH 8
+`ifdef WIDTH
+    reg [`WIDTH-1:0] data;
+`else
+    reg [7:0] data;
+`endif
+```
+
+is expanded, then the original directives are restored in the output — so
+formatted/linted output keeps the `define`/`ifdef` structure intact.
 
 ### Lexer — source → token stream
 
@@ -348,24 +361,6 @@ LEV
 
 The c4 pack is TOML + one plugin script; the engine code is shared with the
 Verilog pack (no c4-specific branches in `core/`/`lexer/`/`parser/`).
-
-## Preprocessor
-
-Verilog macro handling is config-declared (`base/_macro.toml`): directive
-recognition, expansion, and reverse mapping back to the original text:
-
-```verilog
-`define WIDTH 8
-`ifdef WIDTH
-    reg [`WIDTH-1:0] data;
-`else
-    reg [7:0] data;
-`endif
-```
-
-The pipeline expands macros and conditional blocks, then restores the
-original directives in the output — so formatted/linted output keeps the
-`define`/`ifdef` structure intact.
 
 ## Status
 
