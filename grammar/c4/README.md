@@ -11,6 +11,10 @@ rewrite"从口号变事实。
 - [`rswier/c4`](https://github.com/rswier/c4) 的 `c4.c`（~500 行最小自举子集 = 最小完备内核）——**范畴裁剪基线**
 - chibicc（rui314，commit = 特性增量）——实现节奏参照
 
+> **署名**：本语言包对齐 `rswier/c4`（[MIT License](https://github.com/rswier/c4/blob/master/LICENSE)）
+> 的 `c4.c` 行为（词法/表达式/语句/指令集）。仅参考行为与指令集设计，
+> 未复制其源码；c4.c 版权归其作者所有。
+
 ## 状态
 
 范畴：**完整实现**（用户定：本体不大，不裁剪）——覆盖 c4 全量：

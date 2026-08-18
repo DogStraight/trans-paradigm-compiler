@@ -10,6 +10,10 @@
   - 拆出的行无分号 → indent 视为多行续行（相对语句头 +1）
 
 折行只加换行不改 token；幂等性由 test_idempotent 锁。
+
+> **署名**：断点惩罚模型参考 [Verible](https://github.com/chipsalliance/verible)
+> （[Apache License 2.0](https://github.com/chipsalliance/verible/blob/master/LICENSE)）
+> 的折行决策。仅参考机制（惩罚值/断点选择），未复制其代码。
 """
 
 from __future__ import annotations

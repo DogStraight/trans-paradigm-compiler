@@ -158,13 +158,13 @@
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
-> 来源：2026-08-16 Sigasi 调研 + VSIX 解包实证。用户拍板：**放分析层插件**
+> 来源：2026-08-16 Sigasi 调研（行为观察 + 公开文档参考）。用户拍板：**放分析层插件**
 > （不放在 linter——lexer 期已有 pre_scan 符号预检测，但那是给 parser 的提示；
 > 语义层 Symbol 才有 kind 可区分名字种类，且 analyzer 已统一收集 all_symbols）。
 > 检查逻辑语言通用（进引擎原语），pattern 是语言知识（进 TOML），符合铁律。
 > **不适合当前阶段，计入待办。**
 
-> **Sigasi 实证设计（从 vsix 反编译还原，2026-08-16）**：
+> **Sigasi 命名检查机制（行为观察，2026-08-16）**：
 > - 规则 NAMING_CONVENTIONS（前端类别 NAMING_CONVENTION）+ 30 个名字类别参数，
 >   每类一个**正则 pattern**：MODULE_NAME/NET_NAME/VAR_NAME/PORT_NAME/INPUT_NAME/
 >   OUTPUT_NAME/INOUT_NAME/PARAMETER_NAME/PARAMETER_TYPE_NAME/MACRO_NAME/PACKAGE_NAME/

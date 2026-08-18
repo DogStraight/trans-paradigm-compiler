@@ -1,60 +1,74 @@
-# Contributing — 贡献指南
+# Contributing
 
-## 项目概览
+## Project Overview
 
-TransParadigm Compiler (tpc) — 配置驱动的编译器前端。语言知识（token/语法/运算符/
-渲染布局）全部外置在 `grammar/<lang>/` 的 TOML 声明中，引擎（core/lexer/parser/
-analyzer/transform/renderer/linter）语言无关。c4 与 Verilog 是语言无关性的两个实证。
+TransParadigm Compiler (tpc) is a configuration-driven compiler frontend.
+Language knowledge (tokens, grammar, operators, render layout) lives entirely
+in TOML declarations under `grammar/<lang>/`; the engine
+(`core/lexer/parser/analyzer/transform/renderer/linter`) is language-agnostic.
+c4 and Verilog are the two proofs of language-agnosticism.
 
-## 环境准备
+## Environment Setup
 
 ```powershell
-# 开发安装（editable + test 依赖）
+# Dev install (editable + test deps)
 pip install -e ".[test]"
 
-# 跑全量测试（含覆盖率门禁 ≥84%）
+# Run full test suite (with coverage gate >= 84%)
 python -m pytest tests -q --cov
 ```
 
-## 目录结构
+## Directory Layout
 
 ```
-core/        语言无关引擎（规则注册/配置/插件加载）
-lexer/       词法（token 配置驱动 + 数字形态生成器）
-parser/      语法（规则加载/消歧/注入）
-analyzer/    语义（作用域/符号/原语）
-transform/   AST 变换（原语注册 + 插件）
-renderer/    Doc IR + 布局算法 + 原语
-linter/      前置语法检查（发现器/切片/多路径诊断）
-preprocessor/宏/条件编译（primitive + 展开/还原）
-grammar/     语言包（verilog / c4）+ 插件（typed_ports/formatter/...）
-tests/       测试（引擎层/语言层/e2e）
-docs/        设计文档（见下方索引）
+core/        language-agnostic engine (rule registration / config / plugin loading)
+lexer/       lexing (token-config-driven + number-shape generator)
+parser/      parsing (rule loading / disambiguation / injection)
+analyzer/    semantic analysis (scopes / symbols / primitives)
+transform/   AST transforms (primitive registration + plugins)
+renderer/    Doc IR + layout algorithm + primitives
+linter/      pre-parse token linter (discovery / slicing / multi-path diagnostics)
+preprocessor/macros / conditional compilation (primitives + expand/reverse)
+grammar/     language packs (verilog / c4) + plugins (typed_ports/formatter/...)
+pipeline/    pipeline orchestration (run_pipeline_on_source, shared by CLI and tests)
+tests/       tests (engine / language / e2e)
+docs/        design docs (see index below)
 ```
 
-## 开发约定
+## Development Conventions
 
-1. **不编码语言知识**：引擎层不写死任何 token 名/规则名/结构类别。语言知识一律
-   TOML 声明 + 规则推导。改引擎前先自检：是否可用配置/字段替代？
-2. **先补测试再改代码**：每个功能改动带测试；修复 bug 先写失败用例再修。
-3. **TODO 只列未完成待办**：完成历史看 git log + 测试套件，不在 TODO 记完成状态。
-4. **提交信息**：`[feature] 描述` 前缀 + 改动要点 + 验证结果（测试数/覆盖率）。
+1. **No language knowledge in the engine.** The engine must not hardcode any
+   token name / rule name / structural category. Language knowledge is always
+   TOML declarations + rule derivation. Before touching the engine, ask: can
+   this be expressed as config / a rule field instead?
+2. **Tests before code.** Every functional change ships with tests; bug fixes
+   start with a failing test case.
+3. **TODO lists only unfinished work.** Completed history lives in git log +
+   the test suite, not in TODO.
+4. **Commit messages:** `[feature] description` prefix + change summary +
+   verification result (test count / coverage).
 
-## 文档索引
+## Documentation Index
 
-| 文档 | 内容 |
+| Doc | Content |
 |---|---|
-| docs/language_walkthrough.md | 从零搭语言逐层指南（以 c4 为实例） |
-| docs/config_lifecycle.md | 配置生命周期（declare_cfg 时序/坑） |
-| docs/expression_conventions.md | 表达式隐式约定（Pratt/优先级） |
-| docs/component_protocol.md | 插件层协议（组件/槽位/原语） |
-| docs/grammar_rule_fields.md | 语法规则字段说明 |
-| docs/coding_style.md | 代码风格 |
-| docs/decisions/ | ADR（架构决策记录） |
+| docs/language_walkthrough.md | Step-by-step guide to building a language from scratch (c4 as example) |
+| docs/config_lifecycle.md | Config lifecycle (declare_cfg timing / pitfalls) |
+| docs/expression_conventions.md | Expression implicit conventions (Pratt / precedence) |
+| docs/component_protocol.md | Plugin-layer protocol (components / slots / primitives) |
+| docs/grammar_rule_fields.md | Grammar rule field reference |
+| docs/coding_style.md | Code style |
+| docs/decisions/ | ADRs (architecture decision records) |
 
-## 测试规范
+> **Doc alignment note:** the project maintains a bidirectional doc-code index
+> (`MODEL_INDEX.md` + `Doc:` / `Impl:` markers) optimized for model-assisted
+> maintenance. Core maintainers keep it in sync; **external PRs are not
+> required to** — a code change without index updates is fine, maintainers will
+> reconcile.
 
-- 新功能：对应 `tests/<模块>/` 下新增测试文件。
-- 语言包改动：跑 `pytest tests -q --cov` 确认门禁（≥84%）。
-- e2e：`tests/e2e/`（管线/宏还原/保真度/增强渲染）。
-- 幂等性：formatter 改动必须过 `tests/formatter/test_idempotent.py`。
+## Testing Guidelines
+
+- New features: add a test file under `tests/<module>/`.
+- Language-pack changes: run `pytest tests -q --cov` to confirm the gate (>= 84%).
+- e2e: `tests/e2e/` (pipeline / macro reverse / fidelity / enhanced render).
+- Idempotency: formatter changes must pass `tests/formatter/test_idempotent.py`.

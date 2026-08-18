@@ -1,36 +1,56 @@
 # Changelog
 
-所有重要变更按时间倒序记录。版本格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
+All notable changes are listed in reverse chronological order.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### 2026-08-13（P2 工程化收尾）
+### 2026-08-18 (Open-source readiness)
 
-- 文档化 P2.0 四项：config_lifecycle / expression_conventions / component_protocol /
-  c4 最小语言包模板定位
-- 安装验证：`pip install -e ".[test]"` + CLI 实测工作
-- 覆盖率门禁：.coveragerc（omit 入口/回退，fail_under=84，实测 84.57%）
-- 恢复 CI：.github/workflows/ci.yml（Windows + Python 3.11/3.12/3.13）
-- 修复：linter `to_dict` 缩进死代码 → `lsp_diagnostic`（--json 必崩 bug）
-- 删除死代码 core/component_loader.py（被 plugin_loader 取代）
+- **Config complexity management**: config source tracking (`_sources` /
+  `resolve_with_sources`), `tpc config dump` debug command, declaration
+  structure validation, GrammarRule field schema (fail-fast)
+- **Lexer config dependency injection**: token/number configs now follow the
+  language pack (no more cross-language contamination in one process)
+- **Pipeline moved to `pipeline/` package**: `run_pipeline_on_source` shared by
+  CLI and tests; wheel install works from any directory
+- **Packaging fixed**: grammar TOML shipped as package-data (preserves
+  verilog/c4 directory structure); IEEE Annex A docs and PDFs excluded from
+  sdist (copyright)
+- **Docs**: code quality audit, config complexity plan, open-source readiness plan
 
-### 2026-08-13（P1 完成）
+### 2026-08-13 (P2 engineering wrap-up)
 
-- formatter：宽度折行 pass（wrap）、SV 基础覆盖（logic/always_ff/always_comb）、
-  风格参数化（formatter.style）
-- 预处理器 primitives 级单测 19 项
-- 增强渲染验证补充（nested/invert + TypeNestedPort layout）
-- 数字形态配置化：声明→FSM 生成器 + 语言包声明 + signed `'s` + `0'b1` 标准拒绝
+- Documented P2.0 items: config_lifecycle / expression_conventions /
+  component_protocol / c4 minimal language-pack template
+- Install verification: `pip install -e ".[test]"` + CLI smoke test
+- Coverage gate: .coveragerc (omit entry/fallback, fail_under=84, measured 84.57%)
+- Restored CI: .github/workflows/ci.yml (Windows + Python 3.11/3.12/3.13)
+- Fixed: linter `to_dict` dead code → `lsp_diagnostic` (`--json` crash bug)
+- Removed dead code core/component_loader.py (superseded by plugin_loader)
 
-### 2026-08-12（P0 第二语言）
+### 2026-08-13 (P1 complete)
 
-- c4 完整实现（.c → c4 VM 汇编），6 集成测试——语言无关主张实证
-- P0.3 渗透清理：boundary 语言渗透消除（ScopeKind 规则推导）
-- 修复 7 个核心渗透/单语言假设（详见 docs/language_walkthrough.md §7）
+- formatter: width wrap pass, SV base coverage (logic/always_ff/always_comb),
+  style parameterization (formatter.style)
+- Preprocessor primitive-level unit tests (19)
+- Enhanced render verification (nested/invert + TypeNestedPort layout)
+- Number-shape configuration: declaration → FSM generator + language-pack
+  declarations + signed `'s` + `0'b1` standard rejection
+
+### 2026-08-12 (P0 second language)
+
+- c4 full implementation (.c → c4 VM assembly), 6 integration tests — proof of
+  language-agnosticism
+- P0.3 penetration cleanup: boundary language penetration removed (ScopeKind
+  rule derivation)
+- Fixed 7 core penetrations / single-language assumptions (see
+  docs/language_walkthrough.md §7)
 
 ## [0.1.0]
 
-- 初始版本：Verilog 语言包 + 完整管线（lex/parse/analyze/transform/render/lint）
-- formatter 插件（品类对齐/缩进/ifdef/幂等）
-- typed_ports 增强语法（类型端口/impl 绑定/自动连线）
-- 预处理器（宏展开/条件编译还原）
+- Initial release: Verilog language pack + full pipeline
+  (lex/parse/analyze/transform/render/lint)
+- formatter plugin (category alignment / indent / ifdef / idempotency)
+- typed_ports enhanced syntax (typed ports / impl binding / auto-connect)
+- Preprocessor (macro expansion / conditional compilation reverse)
