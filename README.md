@@ -121,6 +121,30 @@ The two paths share the same formatter; `expand_enhanced` only controls
 whether the enhanced AST nodes are expanded (analyze + transform) or preserved
 (rendered directly by their `[Rule.renderer.layout]`).
 
+## Command-line usage
+
+Install (editable + test deps):
+
+```bash
+pip install -e ".[test]"
+```
+
+The `tpc` CLI drives the pipeline per the language pack's `[commands]`
+declarations:
+
+```bash
+tpc format input.v          # format a Verilog file (per [commands].format)
+tpc lint input.v            # pre-parse token lint (exit 1 on diagnostics)
+tpc lint input.v --json     # LSP-compatible JSON diagnostics
+tpc expand input.v          # expand macros + transform (per [commands].expand)
+tpc config dump             # show every config key's source (file + section)
+tpc new component my_feature --lang verilog   # scaffold a plugin component
+```
+
+`tpc config dump` is the debugging entry point for "where does this config
+value come from" — it resolves the language pack and prints each key's source
+file and section (also available as `--json`).
+
 ## How it works
 
 Rules are data, not code. All language specifics live in TOML config files. The engine is generic.
@@ -204,6 +228,51 @@ Rules reference tokens (`keyword.if`, `literal.number`), other rules
 drives lexer, parser, formatter, linter, and renderer. Operators, precedence,
 and rendering live in the same pack (`base/_symbol_level.toml` for Pratt
 priority, `[Rule.renderer.layout]` for Doc IR layout).
+
+## Second language: c4
+
+The same engine, a different language pack. `grammar/c4/` defines a tiny C
+subset (types, expressions, statements, functions) in TOML plus one plugin
+script that lowers the AST to c4 VM assembly — no engine changes:
+
+```c
+int main() { int x; x = 1; return x; }
+```
+
+compiles to c4 VM assembly (LEA/IMM/JMP/ADD/... opcodes):
+
+```asm
+ENT  0
+LEA  0
+PSH
+IMM  1
+SI
+LEA  0
+LI
+LEV
+LEV
+```
+
+This is the language-agnosticism proof: the c4 pack was written as TOML +
+plugin (by a model), and the engine consumed it without modification.
+
+## Preprocessor
+
+Verilog macro handling is config-declared (`base/_macro.toml`): directive
+recognition, expansion, and reverse mapping back to the original text:
+
+```verilog
+`define WIDTH 8
+`ifdef WIDTH
+    reg [`WIDTH-1:0] data;
+`else
+    reg [7:0] data;
+`endif
+```
+
+The pipeline expands macros and conditional blocks, then restores the
+original directives in the output — so formatted/linted output keeps the
+`define`/`ifdef` structure intact.
 
 ## Status
 
