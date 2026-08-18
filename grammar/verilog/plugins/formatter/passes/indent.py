@@ -47,10 +47,28 @@ def run_indent_pass(
         # `if (A)` 后接 `if (B)`）也悬挂；else 链行（行首 else）与 if/end 对齐不
         # 悬挂。begin/end/endcase 等块头尾行走各自逻辑（block_header/footer）。
         # ifdef 块内内容继承悬挂由独立 ifdef pass 处理（indent 不跨指令行）
+        # 多行 if 条件（`if (A &&\n B)`）：续行本身 sst=False，但语句头是
+        # single_stmt_header——续行的下一行（单语句体）仍应悬挂。查语句头
+        # （multi_header_line）的 sst 继承。
         prev = contexts[idx - 1] if idx > 0 else None
+        prev_is_sst = False
+        if prev is not None:
+            if prev.single_stmt_header:
+                prev_is_sst = True
+            elif (
+                prev.multi_line_cont
+                and prev.multi_header_line
+                and prev.block_header_of is None
+            ):
+                # 续行：查语句头是否 single_stmt_header（多行 if 条件的单语句体）。
+                # 排除续行是块头（`B) begin`）——其下一行是块体，不悬挂。
+                for p in contexts:
+                    if p.line_number == prev.multi_header_line:
+                        prev_is_sst = p.single_stmt_header
+                        break
         hanging = (
             prev is not None
-            and prev.single_stmt_header
+            and prev_is_sst
             and not ctx.is_else_header
             and ctx.block_header_of is None
             and ctx.block_footer_of is None
@@ -65,9 +83,15 @@ def run_indent_pass(
             # 模块端口列表结束行（`);`）→ 对齐模块头（0 级）
             target = 0
         elif hanging:
-            # 相对上一行实际缩进 +1（嵌套单语句头可累积，如 if(a)→if(b)→stmt）
-            prev_ln = prev.line_number - 1
-            prev_level = _indent_level(result[prev_ln], indent_width)
+            # 相对上一行实际缩进 +1（嵌套单语句头可累积，如 if(a)→if(b)→stmt）。
+            # prev 是续行（多行 if 条件）时，用语句头缩进 +1——续行本身已 +1，
+            # 再相对续行 +1 会多一级（单语句体应相对 if 头 +1，非续行 +1）。
+            if prev.multi_line_cont and prev.multi_header_line:
+                hdr_ln = prev.multi_header_line - 1
+                prev_level = _indent_level(result[hdr_ln], indent_width)
+            else:
+                prev_ln = prev.line_number - 1
+                prev_level = _indent_level(result[prev_ln], indent_width)
             target = prev_level + 1
         elif ctx.multi_line_cont:
             # 多行语句续行：相对语句头实际缩进 +1（同语句内续行同级，不累积）；

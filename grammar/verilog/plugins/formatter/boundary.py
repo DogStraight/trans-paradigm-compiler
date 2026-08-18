@@ -559,11 +559,14 @@ class BoundaryScanner:
                     # 表达式续行（折行 pass 拆出的续行行尾有分号，但仍属上一语句的
                     # 表达式部分；二次 format 时靠行首运算符识别续行，缩进相对
                     # 语句头 +1）。`.` 是实例端口连接行，不属运算符续行。
+                    # `$`（symbol.base.dollar）是系统任务前缀（`$display` 等），
+                    # 不是运算符——否则 if 单语句体的多行 $display 被误判续行。
                     if (
                         not is_cont
                         and line_first_token is not None
                         and line_first_token.startswith(SYMBOL_PREFIX)
                         and not line_first_token.endswith(".dot")
+                        and not line_first_token.endswith(".dollar")
                     ):
                         is_cont = True
                         op_cont = True
@@ -658,6 +661,11 @@ class BoundaryScanner:
                         )
                     ):
                         multi_active = False
+                        # 续行链结束：重置语句头行号——否则后续被误判为续行的行
+                        # （如 if 单语句体的多行 $display）会继承旧语句头（hdr 错位，
+                        # 二次 format 漂移）。新语句头在 else 分支重新设置。
+                        multi_header_line = 0
+                        multi_depth_extra = 0
                     else:
                         multi_active = True
                         # 只有新语句头才记下 header 行号；续行保持语句头（同级）。
@@ -752,9 +760,16 @@ class BoundaryScanner:
             if t.type in self.stmt_headers:
                 pending_stmt_header = True
 
-            # 识别 case 分支项：在 case 深度上遇到标识符或 default
+            # 识别 case 分支项：在 case 深度上遇到标识符或 default。
+            # 排除控制流语句头（if/for/while 等，stmt_headers）——它们也是
+            # KEYWORD_PREFIX，但 case 分支项是 `3'b100:`/`default:` 值+冒号形态，
+            # 不是语句。否则 case 分支内的 `if (A &&` 被误标 case_item，
+            # indent 按 case_item_hang（depth+1）缩进，二次 format 漂移。
             if case_depth >= 0 and self._current_depth(scope_path) == case_depth + 1:
-                if t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default":
+                if (
+                    t.type not in self.stmt_headers
+                    and (t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default")
+                ):
                     pending_case_item = True
 
         if line_buf:

@@ -94,13 +94,15 @@ def test_format_idempotent_samples(name: str):
 
 
 def test_format_idempotent_picorv32():
-    """PicoRV32 全文件：二次格式化稳定（黄金基准，防止行数/content 漂移）。"""
+    """PicoRV32 全文件：二次格式化稳定（黄金基准，防止行数/content 漂移）。
+
+    读仓库源文件 ref/ref_picorv32.v（不依赖管线生成的 gen/ 产物）——干净
+    clone 后即可运行，黄金基准始终生效。
+    """
     real = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
-        "e2e", "samples", "real", "gen", "gen_picorv32.v",
+        "e2e", "samples", "real", "ref", "ref_picorv32.v",
     )
-    if not os.path.exists(real):
-        pytest.skip("PicoRV32 sample not present")
     with open(real, encoding="utf-8") as f:
         src = f.read()
     once = _fmt(src)
