@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### 2026-08-18 (Engineering gaps)
+
+- **Pipeline split**: `run_pipeline_on_source` 515 lines CC=98 → 173 lines CC=30
+  (per-stage functions + `_PipelineContext`); matcher `_match_call_impl`
+  151 lines CC=48 → 35 lines CC=7 (per-rule-type methods)
+- **Doc: back-references**: 3 → 14, covering all 10 MODEL_INDEX entries
+- **Unused imports**: cleaned 6 real issues (kept re-export compatibility)
+- **Docs hygiene**: one-time plan docs removed after completion (results
+  recorded in CHANGELOG)
+
 ### 2026-08-18 (Open-source readiness)
 
 - **Config complexity management**: config source tracking (`_sources` /

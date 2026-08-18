@@ -34,7 +34,10 @@
 - 机制：`config_lifecycle.md`（配置生命周期）、`expression_conventions.md`（表达式约定）、
   `component_protocol.md`（组件协议）、`api.md`（API 参考）
 - 设计来源：`references.md`（参考项目 → 借鉴点，与 CREDITS.md 互补）
-- 计划：`linter_refactor_plan.md`、`config_complexity_plan.md`（配置复杂度管理：来源追踪/dump/schema）
+- 计划：`linter_refactor_plan.md`（linter 重构计划）
+
+> **一次性计划文档**（评估/清理/改进计划）执行完后删除，成果记入 CHANGELOG——
+> 避免 docs/ 堆积"已完成"的计划文档。
 
 ## 注释对齐约定（文档 ↔ 代码双向定位）
 
