@@ -35,3 +35,46 @@ jobs:
           echo "module m; reg a; endmodule" | Out-File -Encoding utf8 ci_check.v
           tpc format ci_check.v
         shell: pwsh
+
+  # wheel 安装验证：构建 wheel → 装到独立 venv → 从非项目目录运行 CLI。
+  # 防止"editable 模式可用但 wheel 安装后 CLI 失败"（2026-08-18 曾发生：
+  # 管线核心在 tests/ 里、data-files 扁平化多语言包、相对路径在任意目录失效）。
+  wheel-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Install wheel in fresh venv + run CLI (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python -m venv _venv
+          _venv/bin/python -m pip install dist/*.whl
+          cd /tmp
+          _venv/bin/tpc lint "$GITHUB_WORKSPACE/tests/e2e/samples/normal/ref/ref_simple.v"
+          _venv/bin/tpc format "$GITHUB_WORKSPACE/tests/e2e/samples/normal/ref/ref_simple.v" > /dev/null
+
+      - name: Install wheel in fresh venv + run CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m venv _venv
+          $whl = (Get-ChildItem dist -Filter *.whl).FullName
+          _venv\Scripts\python.exe -m pip install $whl
+          cd C:\
+          _venv\Scripts\tpc.exe lint "$env:GITHUB_WORKSPACE\tests\e2e\samples\normal\ref\ref_simple.v"
+          _venv\Scripts\tpc.exe format "$env:GITHUB_WORKSPACE\tests\e2e\samples\normal\ref\ref_simple.v" | Out-Null
