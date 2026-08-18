@@ -364,16 +364,9 @@ Verilog pack (no c4-specific branches in `core/`/`lexer/`/`parser/`).
 
 ## Status
 
-- [x] Verilog core subset (module, always, if/case/for, function/task, expressions, instances)
-- [x] Configurable pipeline — lexer / parser / analyze / transform / render
-- [x] Custom type extensions (typed_ports: `type spi { master/slave }` -> port expansion)
-- [x] Formatter with Wadler-Lindig Doc IR pretty printing
-- [x] Linter — pre-parse, token-level "reverse parser"; shares grammar & parser infra (31/31 recall, 0 FP)
-- [x] Preprocessor (`` `include `` / `define` / `ifdef` / `undef`)
-- [x] Second-language validation — c4 (tiny C) built from TOML + plugin, compiles to VM assembly
-- [x] Model guide artifacts (AGENTS.md + docs/MODEL_INDEX.md)
-- [x] Packaging / CI (pip install, GitHub Actions on 3.11/3.12/3.13)
-- [ ] Error-tolerant formatting mode
+Verilog support is currently a synthesizable subset — not full IEEE 1364.
+The pipeline is validated against real open-source cores (PicoRV32, darkriscv,
+SERV, TV80) — see [docs/e2e_real_projects.md](./docs/e2e_real_projects.md).
 
 Built with Python 3.11+, zero runtime dependencies.
 
@@ -389,8 +382,6 @@ Built with Python 3.11+, zero runtime dependencies.
   template instantiation, overload resolution, elaborate type systems — those
   are engineering volume that TOML config cannot shrink, and they are not
   what this tool is aimed at. C++/Rust-scale grammars are out of scope.
-- **Verilog coverage is a subset**, not full IEEE 1364. Focus: synthesizable core
-  (module/always/if/case/for/function/task/instances) + custom type extensions.
 - **No IDE / LSP** — this is a CLI pipeline, not an editor plugin.
 - **No optimization passes** — transforms are config-driven structural rewrites
   (e.g. type expansion, macro handling), not LLVM-style optimization.
