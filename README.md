@@ -34,9 +34,8 @@ Known limitations below).
 - **Model-friendly.** Onboarding is optimized for model-assisted contributors:
   entry-point index, verification protocol, known landmines. A contributor with
   a model can understand, modify, and verify the pipeline cheaply.
-  **Validated: the c4 language pack was written by a model** (TOML grammar +
-  plugin scripts) and compiles to c4 VM assembly — "rules are data" is
-  consumable by models, not just humans.
+  The c4 language pack was written as TOML grammar + plugin scripts (by a
+  model) and compiles to c4 VM assembly.
 - **Pre-parse token linter.** The linter runs *before* the parser and consumes
   the raw token stream — not an AST. It reuses the same TOML grammar and part of
   the parser machinery (Pratt + shared RuleMatcher), so syntax knowledge never
@@ -253,8 +252,8 @@ LEV
 LEV
 ```
 
-This is the language-agnosticism proof: the c4 pack was written as TOML +
-plugin (by a model), and the engine consumed it without modification.
+The c4 pack is TOML + one plugin script; the engine code is shared with the
+Verilog pack (no c4-specific branches in `core/`/`lexer/`/`parser/`).
 
 ## Preprocessor
 
