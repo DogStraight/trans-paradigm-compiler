@@ -174,6 +174,64 @@ def _cmd_lint(args: argparse.Namespace) -> None:
     sys.exit(1 if diagnostics else 0)
 
 
+def _cmd_config_dump(args: argparse.Namespace) -> None:
+    """tpc config dump — 输出配置 key 的来源（文件+section）与值摘要。
+
+    调试工具：回答"这个配置值从哪来"。按语言包解析（resolve_with_sources，
+    无全局副作用），不依赖最后一次 load_all 的状态。
+    """
+    from core.config_registry import ConfigRegistry
+    from core.define import DEFAULT_RULES_DIR
+
+    rules_dir = args.rules_dir or DEFAULT_RULES_DIR
+    plugins_dir = os.path.join(rules_dir, "plugins")
+    loaded, sources = ConfigRegistry.resolve_with_sources(
+        rules_dir, plugins_dir=plugins_dir
+    )
+
+    if args.json:
+        import json
+
+        out = {}
+        for name in sorted(loaded):
+            src = sources.get(name, {})
+            out[name] = {
+                "source": src,
+                "value": loaded[name],
+            }
+        # ensure_ascii=True：Windows GBK 控制台无法编码非 ASCII（BOM/中文），
+        # 转义为 \uXXXX 保证任何终端可显示（调试工具可读性优先）。
+        print(json.dumps(out, ensure_ascii=True, indent=2 if args.pretty else None))
+        return
+
+    print(f"# Config dump — {rules_dir}")
+    print(f"# {len(loaded)} keys\n")
+    for name in sorted(loaded):
+        src = sources.get(name, {})
+        if src.get("bare"):
+            loc = "<bare data>"
+        elif src.get("missing"):
+            loc = f"<missing> {src.get('file', '')}"
+        else:
+            f = src.get("file")
+            if isinstance(f, list):
+                loc = f"{len(f)} files (first: {f[0]})"
+            else:
+                loc = f or ""
+            if src.get("section"):
+                loc += f" → [{src['section']}]"
+        print(f"{name}")
+        print(f"  source: {loc}")
+        val = loaded[name]
+        if isinstance(val, dict):
+            print(f"  value: dict({len(val)} keys)")
+        elif isinstance(val, list):
+            print(f"  value: list({len(val)} items)")
+        else:
+            print(f"  value: {val!r}")
+        print()
+
+
 def _cmd_pipeline(args: argparse.Namespace) -> None:
     """tpc pipeline — run a single test case (dev use)."""
     from tests.e2e.run_pipeline import main as pipeline_main
@@ -236,6 +294,14 @@ Examples:
     p_comp.add_argument("name", help="Component name (snake_case)")
     p_comp.add_argument("--lang", default="verilog", help="Target language")
 
+    # config
+    p_cfg = sub.add_parser("config", help="Config introspection")
+    cfg_sub = p_cfg.add_subparsers(dest="config_type", required=True)
+    p_dump = cfg_sub.add_parser("dump", help="Dump config keys with sources")
+    p_dump.add_argument("--rules-dir", default=None, help="Language pack dir")
+    p_dump.add_argument("--json", action="store_true", help="JSON output")
+    p_dump.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+
     args = parser.parse_args()
 
     dispatch = {
@@ -249,6 +315,10 @@ Examples:
         dispatch["new"] = {
             "component": _cmd_new_component,
         }[args.new_type]
+    if args.command == "config":
+        dispatch["config"] = {
+            "dump": _cmd_config_dump,
+        }[args.config_type]
 
     dispatch[args.command](args)
 

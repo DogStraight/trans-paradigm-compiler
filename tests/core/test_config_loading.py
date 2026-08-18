@@ -11,7 +11,7 @@ import os
 import pytest
 
 from core.errors import ConfigError
-from core.config_registry import ConfigRegistry
+from core.config_registry import ConfigRegistry, _load_meta_declarations
 
 
 @pytest.fixture
@@ -78,3 +78,101 @@ def test_required_missing_file_fails_fast(isolated_registry):
     root = isolated_registry
     with pytest.raises(ConfigError, match="No such file|未找到|找不到"):
         _declare_and_load(root, "t.reqmiss", "nope.toml", required=True)
+
+
+# ── 来源追踪（2026-08-18，config dump 基础） ──────────────────────────
+
+
+def test_sources_recorded_on_load(isolated_registry):
+    """load_all 后 _sources 记录每个 key 的实际文件 + section。"""
+    root = isolated_registry
+    (root / "src.toml").write_text(
+        '[number]\nbased = [1, 2]\n[other]\nx = 1\n', encoding="utf-8"
+    )
+    ConfigRegistry.declare(
+        "t.src1", file="src.toml", section="number", required=True, base="temp"
+    )
+    ConfigRegistry.declare(
+        "t.src2", file="src.toml", required=True, base="temp"
+    )
+    ConfigRegistry.load_all(root, temp_dir=str(root))
+    assert ConfigRegistry._sources["t.src1"] == {
+        "file": str(root / "src.toml").replace("\\", "/"),
+        "section": "number",
+    }
+    assert ConfigRegistry._sources["t.src2"]["section"] is None
+
+
+def test_sources_bare_and_missing(isolated_registry):
+    """bare data 与缺失文件在 sources 中正确标记。"""
+    root = isolated_registry
+    ConfigRegistry.declare("t.bare", file="", bare_value=[1, 2, 3])
+    ConfigRegistry.declare("t.miss", file="nope.toml", required=False, base="temp")
+    ConfigRegistry.load_all(root, temp_dir=str(root))
+    assert ConfigRegistry._sources["t.bare"] == {"bare": True}
+    assert ConfigRegistry._sources["t.miss"]["missing"] is True
+
+
+def test_resolve_with_sources_returns_pair(isolated_registry):
+    """resolve_with_sources 返回 (loaded, sources)，resolve 保持返回 dict。"""
+    root = isolated_registry
+    (root / "r.toml").write_text('[sec]\na = 1\n', encoding="utf-8")
+    ConfigRegistry.declare(
+        "t.r", file="r.toml", section="sec", required=True, base="temp"
+    )
+    loaded, sources = ConfigRegistry.resolve_with_sources(
+        str(root), temp_dir=str(root)
+    )
+    assert loaded["t.r"] == {"a": 1}
+    assert sources["t.r"]["section"] == "sec"
+    # resolve 兼容：仍返回 dict
+    r = ConfigRegistry.resolve(str(root), temp_dir=str(root))
+    assert isinstance(r, dict)
+
+
+# ── 声明结构校验（2026-08-18，schema 化第一步） ──────────────────────
+
+
+def _write_tpc(tmp_path, content):
+    (tmp_path / "tpc.toml").write_text(content, encoding="utf-8")
+
+
+def test_decl_unknown_field_rejected(tmp_path):
+    """声明含未知字段 → ConfigError（fail-fast）。"""
+    _write_tpc(tmp_path, '[lexer]\nbad = { file = "x.toml", typo = 1 }\n')
+    with pytest.raises(ConfigError, match="未知字段"):
+        _load_meta_declarations(grammar_dir=str(tmp_path))
+
+
+def test_decl_missing_file_rejected(tmp_path):
+    """dict 含声明字段但缺 file → ConfigError（疑似忘了 file）。"""
+    _write_tpc(tmp_path, '[lexer]\nbad = { section = "x" }\n')
+    with pytest.raises(ConfigError, match="缺 file"):
+        _load_meta_declarations(grammar_dir=str(tmp_path))
+
+
+def test_decl_file_type_rejected(tmp_path):
+    """file 类型错误（非 str/list）→ ConfigError。"""
+    _write_tpc(tmp_path, '[lexer]\nbad = { file = 123 }\n')
+    with pytest.raises(ConfigError, match="file 必须是字符串"):
+        _load_meta_declarations(grammar_dir=str(tmp_path))
+
+
+def test_decl_required_type_rejected(tmp_path):
+    """required 类型错误（非 bool）→ ConfigError。"""
+    _write_tpc(tmp_path, '[lexer]\nbad = { file = "x.toml", required = "yes" }\n')
+    with pytest.raises(ConfigError, match="required 必须是布尔值"):
+        _load_meta_declarations(grammar_dir=str(tmp_path))
+
+
+def test_decl_valid_bare_and_file_accepted(tmp_path):
+    """合法 bare data 与文件式声明通过校验。"""
+    _write_tpc(
+        tmp_path,
+        '[analyzer]\nprimitives = ["a", "b"]\n'
+        '[lexer]\nok = { file = "x.toml", section = "s", required = false }\n',
+    )
+    decls = _load_meta_declarations(grammar_dir=str(tmp_path))
+    names = [d[0] for d in decls]
+    assert "analyzer.primitives" in names
+    assert "lexer.ok" in names

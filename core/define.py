@@ -237,9 +237,16 @@ class FileManager:
             return merged
         for fname in sorted(os.listdir(dir_path)):
             # 跳过：下划线前缀（辅助文件）、token.toml（语言词法覆盖，
-            # 由 [lexer] 声明加载）、plugins（语言插件目录，插件 tpc.toml
-            # 不是语法规则——如 asm_gen 的 [transform] 表会污染规则集）
-            if fname.startswith("_") or fname == "token.toml" or fname == "plugins":
+            # 由 [lexer] 声明加载）、tpc.toml（语言包配置入口，[lexer]/
+            # [parser] 等段是配置声明非语法规则）、plugins（语言插件目录，
+            # 插件 tpc.toml 不是语法规则——如 asm_gen 的 [transform] 表会
+            # 污染规则集）
+            if (
+                fname.startswith("_")
+                or fname == "token.toml"
+                or fname == "tpc.toml"
+                or fname == "plugins"
+            ):
                 continue
             fpath = os.path.join(dir_path, fname)
             # 子目录递归
@@ -315,8 +322,70 @@ class GrammarRule:
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
 
+    # ── 规则字段 schema（2026-08-18，fail-fast 校验） ──────────────
+    # 顶层合法字段：引擎字段 + 语言包扩展点（inject/transform）+ 阶段子表。
+    # 未知顶层字段（拼写错误/误放字段）→ GrammarError。
+    _TOP_LEVEL_FIELDS = _KNOWN_FIELDS | {
+        "inject",
+        "transform",
+        "parser",
+        "analyzer",
+        "renderer",
+    }
+    # 各阶段合法字段。analyzer 阶段**宽松**：scope/symbol/ref_collect/
+    # identifier_ref/primitives 是引擎字段，其余是插件原语名（开放扩展点，
+    # 如 check_name_call/resolve_refs/flatten_ports）——不严格校验未知字段。
+    # parser 阶段含 scope：_resolve_peek 会把 analyzer.scope 拷贝到 parser
+    # 顶层（peek = { scope = "analyzer" }），故 scope 是 parser 合法字段。
+    _STAGE_FIELDS = {
+        "parser": {"production", "node", "end_case", "peek", "inline", "is_atom", "pratt", "scope"},
+        "renderer": {"layout", "head", "body", "tail", "override"},
+    }
+    # 布尔字段（类型校验）
+    _BOOL_FIELDS = {"inline", "pratt", "is_atom", "is_block", "is_statement"}
+
+    @classmethod
+    def _validate_fields(cls, name: str, kwargs: dict) -> None:
+        """规则字段 schema 校验（fail-fast）。
+
+        拦截：未知顶层字段、未知 parser/renderer 阶段字段、布尔字段类型错。
+        analyzer 阶段宽松（插件原语开放）。
+        """
+        unknown = set(kwargs) - cls._TOP_LEVEL_FIELDS
+        if unknown:
+            raise GrammarError(
+                f"[grammar] 规则 {name} 含未知顶层字段 {sorted(unknown)}。"
+                f"合法字段: {sorted(cls._TOP_LEVEL_FIELDS)}"
+            )
+        for stage in ("parser", "renderer"):
+            stage_data = kwargs.get(stage)
+            if not isinstance(stage_data, dict):
+                continue
+            unknown_stage = set(stage_data) - cls._STAGE_FIELDS[stage]
+            if unknown_stage:
+                raise GrammarError(
+                    f"[grammar] 规则 {name} 的 [{stage}] 含未知字段 {sorted(unknown_stage)}。"
+                    f"合法字段: {sorted(cls._STAGE_FIELDS[stage])}"
+                )
+        for fld in cls._BOOL_FIELDS:
+            if fld in kwargs and not isinstance(kwargs[fld], bool):
+                raise GrammarError(
+                    f"[grammar] 规则 {name} 的 {fld} 必须是布尔值，"
+                    f"got {type(kwargs[fld]).__name__}"
+                )
+            for stage in ("parser", "analyzer", "renderer"):
+                sd = kwargs.get(stage)
+                if isinstance(sd, dict) and fld in sd and not isinstance(sd[fld], bool):
+                    raise GrammarError(
+                        f"[grammar] 规则 {name} 的 [{stage}].{fld} 必须是布尔值，"
+                        f"got {type(sd[fld]).__name__}"
+                    )
+
     def __init__(self, name: str, **kwargs):
         self.name = name
+
+        # 规则字段 schema 校验（fail-fast）
+        self._validate_fields(name, kwargs)
 
         # end_case 是否被 TOML 显式声明（含 end_case = []）——推导只在未声明时
         # 发生；显式空列表表示"刻意无 end_case"（如 IfBlock/IfStmt 的结构定界）。

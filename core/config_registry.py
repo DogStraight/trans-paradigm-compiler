@@ -102,16 +102,81 @@ def _find_grammar_tpc_toml() -> str:
     return meta_path
 
 
+# 文件式配置声明的合法字段（tpc.toml [xxx] 段内）
+_DECL_FIELDS = {"file", "section", "required", "base", "description"}
+
+
 def _flatten_config(table: dict, prefix: str = "") -> list:
     """Recursively flatten nested config table into (dotted_key, spec) pairs."""
     result = []
     for key, value in table.items():
         full_key = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict) and "file" not in value:
+        # dict 无 file 且不含声明字段 → 递归展开（嵌套 bare data）；
+        # 含声明字段但缺 file（如 { section = "x" }）→ 不展开，作为 spec
+        # 交给 _validate_decl_spec 拦截（疑似忘了 file 的文件式声明）。
+        if (
+            isinstance(value, dict)
+            and "file" not in value
+            and not (set(value) & _DECL_FIELDS)
+        ):
             result.extend(_flatten_config(value, full_key))
         else:
             result.append((full_key, value))
     return result
+
+
+def _validate_decl_spec(config_key: str, spec: Any) -> None:
+    """校验 tpc.toml 配置声明结构（fail-fast，schema 化第一步）。
+
+    文件式声明：spec 必须是 dict 且含 "file"（str 或 list[str]），
+    section/required/base/description 类型合法，无未知字段。
+    bare data：spec 非 dict，或 dict 但无任何声明字段（合法裸配置）。
+
+    防护：声明结构错误（忘了 file、拼错字段、类型错）静默通过会导致
+    配置加载错乱（如文件式声明被当 bare data 注册），fail-fast 拦截。
+    """
+    if not isinstance(spec, dict):
+        return  # 非 dict → 合法 bare data（如 [analyzer] primitives = [...]）
+    unknown = set(spec) - _DECL_FIELDS
+    if unknown:
+        raise ConfigError(
+            f"[config] {config_key}: 声明含未知字段 {sorted(unknown)}。"
+            f"合法字段: {sorted(_DECL_FIELDS)}"
+        )
+    if "file" in spec:
+        f = spec["file"]
+        if isinstance(f, str):
+            pass
+        elif isinstance(f, list) and all(isinstance(x, str) for x in f):
+            pass
+        else:
+            raise ConfigError(
+                f"[config] {config_key}: file 必须是字符串或字符串列表，got {type(f).__name__}"
+            )
+        sec = spec.get("section")
+        if sec is not None and not isinstance(sec, str):
+            raise ConfigError(
+                f"[config] {config_key}: section 必须是字符串或 None，got {type(sec).__name__}"
+            )
+        req = spec.get("required", True)
+        if not isinstance(req, bool):
+            raise ConfigError(
+                f"[config] {config_key}: required 必须是布尔值，got {type(req).__name__}"
+            )
+        base = spec.get("base", "rules")
+        if not isinstance(base, str):
+            raise ConfigError(
+                f"[config] {config_key}: base 必须是字符串，got {type(base).__name__}"
+            )
+    else:
+        # dict 但无 file：若含声明字段（section/required/base/description）则
+        # 疑似"忘了 file 的文件式声明"——拦截；纯数据 dict 是合法 bare data。
+        decl_like = set(spec) & {"section", "required", "base", "description"}
+        if decl_like:
+            raise ConfigError(
+                f"[config] {config_key}: 疑似文件式声明但缺 file 字段"
+                f"（含 {sorted(decl_like)}）。文件式声明需 file = \"...\"。"
+            )
 
 
 def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
@@ -140,6 +205,7 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
         if ns == "grammar":
             continue
         for config_key, spec in _flatten_config({ns: table}):
+            _validate_decl_spec(config_key, spec)
             if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
                 # 文件式配置：file 为字符串路径或列表模式
                 declarations.append(
@@ -173,6 +239,7 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
                     if ns == "grammar":
                         continue
                     for config_key, spec in _flatten_config({ns: table}):
+                        _validate_decl_spec(config_key, spec)
                         if isinstance(spec, dict) and isinstance(
                             spec.get("file"), (str, list)
                         ):
@@ -230,9 +297,12 @@ class ConfigRegistry:
     # （import 期默认包声明）。load_all 时若 rules_dir 与来源不一致，先按该
     # 语言包 tpc.toml 重新生成声明——解决"glob 匹配用默认包、换语言失效"。
     _entries_source: str | None = None
+    # 最近一次 load_all 的配置来源（name → {file, section} 或 {bare: True}）。
+    # 供调试/可观测（tpc config dump）——回答"这个值从哪来"。
+    _sources: dict[str, dict] = {}
     # resolve() 按语言包参数缓存（纯函数语义：同参数结果相同）。
     # 避免每次 Lexer 构造都重新解析全部 TOML 文件（测试中 Lexer 构造频繁）。
-    _resolve_cache: dict[tuple, dict] = {}
+    _resolve_cache: dict[tuple, tuple] = {}
 
     @classmethod
     def declare(
@@ -360,7 +430,7 @@ class ConfigRegistry:
             )
             for name, spec in cls._entries.items()
         ]
-        cls._loaded = cls._resolve_decls(
+        cls._loaded, cls._sources = cls._resolve_decls(
             decls, rules_dir, ext_dirs, plugins_dir, base_dirs
         )
         cls._resolved = True
@@ -414,6 +484,53 @@ class ConfigRegistry:
             frozenset(base_dirs.items()),
         )
         if cache_key in cls._resolve_cache:
+            return cls._resolve_cache[cache_key][0]
+        result, sources = cls._resolve_decls(
+            decls, candidate, ext_dirs, plugins_dir, base_dirs
+        )
+        cls._resolve_cache[cache_key] = (result, sources)
+        return result
+
+    @classmethod
+    def resolve_with_sources(
+        cls,
+        rules_dir: str,
+        ext_dirs: list[str] | None = None,
+        plugins_dir: str = "",
+        **base_dirs: str,
+    ) -> tuple[dict, dict]:
+        """按指定语言包解析配置 + 来源（无全局副作用）。
+
+        与 resolve 相同，但额外返回每个 key 的来源（name → {file, section}
+        或 {bare: True}），供调试/可观测（tpc config dump）。
+        """
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidate = rules_dir
+        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            candidate = os.path.join("grammar", rules_dir)
+        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            decls = [
+                (
+                    name,
+                    spec.get("file", ""),
+                    spec.get("section"),
+                    spec.get("base", "rules"),
+                    spec.get("required", True),
+                    spec.get("description", ""),
+                    spec.get("bare_value"),
+                )
+                for name, spec in cls._entries.items()
+            ]
+            candidate = rules_dir
+        else:
+            decls = _load_meta_declarations(grammar_dir=candidate)
+        cache_key = (
+            candidate,
+            tuple(ext_dirs) if ext_dirs else (),
+            plugins_dir,
+            frozenset(base_dirs.items()),
+        )
+        if cache_key in cls._resolve_cache:
             return cls._resolve_cache[cache_key]
         result = cls._resolve_decls(decls, candidate, ext_dirs, plugins_dir, base_dirs)
         cls._resolve_cache[cache_key] = result
@@ -427,11 +544,15 @@ class ConfigRegistry:
         ext_dirs: list[str] | None,
         plugins_dir: str,
         base_dirs: dict,
-    ) -> dict:
+    ) -> tuple[dict, dict]:
         """按声明列表解析配置（纯函数，不写 _loaded）。
 
         decls: (name, file, section, base, required, description, bare_value) 元组列表。
         供 load_all（用 _entries）与 resolve（用语言包 tpc.toml 声明）共用。
+
+        Returns: (loaded, sources)
+            loaded:  name → 配置值
+            sources: name → {"file": 实际文件路径, "section": section} 或 {"bare": True}
         """
         from core.define import FileManager
 
@@ -452,12 +573,14 @@ class ConfigRegistry:
             bases[key] = bv
 
         loaded: dict[str, Any] = {}
+        sources: dict[str, dict] = {}
         errors: list[str] = []
 
         for name, file_spec, section, base_key, required, _desc, bare in decls:
             # bare data：非文件式配置，值已由 tpc.toml 直接提供
             if bare is not None:
                 loaded[name] = bare
+                sources[name] = {"bare": True}
                 continue
 
             base_dir = bases.get(base_key)
@@ -475,6 +598,7 @@ class ConfigRegistry:
                     raise TypeError(f"file 必须是字符串或列表: {file_spec}")
 
                 merged: Any = None
+                src_files: list[str] = []
                 for fp in paths:
                     # glob 模式：匹配 0 或多个文件
                     matched = _glob_match([fp], base_dir)
@@ -502,10 +626,15 @@ class ConfigRegistry:
                             merged.update(data)
                         else:
                             merged = data
+                        src_files.append(m.replace("\\", "/"))
 
                 if merged is None:
                     raise FileNotFoundError(f"未找到匹配文件: {file_spec}")
                 loaded[name] = merged
+                sources[name] = {
+                    "file": src_files[0] if len(src_files) == 1 else src_files,
+                    "section": section,
+                }
 
             except tomllib.TOMLDecodeError as e:
                 # TOML 语法损坏（重复 key / 格式错误）必须 fail-fast：即使
@@ -524,6 +653,7 @@ class ConfigRegistry:
                     errors.append(f"  [{name}] {loc}: {e}")
                 else:
                     loaded[name] = {}
+                    sources[name] = {"missing": True, "file": file_spec}
             except Exception as e:
                 # 其他异常（缺段/结构不符等）：文件存在但配置结构有问题，属于
                 # 配置声明错误——required=False 也不应静默，统一 fail-fast。
@@ -534,6 +664,8 @@ class ConfigRegistry:
             finally:
                 if name not in loaded:
                     loaded[name] = {}
+                if name not in sources:
+                    sources[name] = {"missing": True, "file": file_spec}
 
         if errors:
             raise ConfigError(
@@ -541,7 +673,7 @@ class ConfigRegistry:
                 + "\n".join(errors)
                 + "\n\n请检查规则目录结构和 TOML 文件内容。"
             )
-        return loaded
+        return loaded, sources
 
     @classmethod
     def get(cls, name: str) -> Any:
@@ -566,6 +698,7 @@ class ConfigRegistry:
         """重置注册表（测试用）。"""
         cls._entries.clear()
         cls._loaded.clear()
+        cls._sources.clear()
         cls._resolved = False
         cls._entries_source = None
         cls._resolve_cache.clear()
