@@ -171,24 +171,10 @@ endmodule
 
 Macro directives are config-declared (`base/_macro.toml`): directive
 recognition, expansion, and reverse mapping back to the original text.
-The module above has no macros, so it passes through unchanged. The same
-module with a macro-defined width:
-
-```verilog
-`define WIDTH 8
-module m(input clk);
-`ifdef WIDTH
-    reg [`WIDTH-1:0] a;
-`else
-    reg [7:0] a;
-`endif
-    always @(posedge clk) a <= 1;
-endmodule
-```
-
-is expanded for parsing, then the original directives are restored in the
-output — so formatted/linted output keeps the `define`/`ifdef` structure
-intact.
+The module above has no macros, so it passes through unchanged; a module
+with macros is expanded to plain text for parsing, then the original
+directives are restored in the output — so formatted/linted output keeps
+the `define`/`ifdef` structure intact.
 
 ### Lexer — source → token stream
 
