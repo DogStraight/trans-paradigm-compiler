@@ -76,6 +76,60 @@ class TestRuleSchema:
         )
         assert rule.parser["scope"]["kind"] == "module"
 
+    def test_node_binding_out_of_range_rejected(self):
+        with pytest.raises(GrammarError, match="越界"):
+            GrammarRule(
+                "Test",
+                parser={"production": ["a", "b"], "node": {"x": "$3"}},
+            )
+
+    def test_node_binding_in_range_ok(self):
+        rule = GrammarRule(
+            "Test",
+            parser={"production": ["a", "b"], "node": {"x": "$2"}},
+        )
+        assert rule.node["x"] == "$2"
+
+    def test_block_rule_binding_uses_stripped_production(self):
+        # 块规则 production 剥离首尾字面 token 后剩 2 个 slot，$2 合法
+        rule = GrammarRule(
+            "Blk",
+            is_block=True,
+            parser={
+                "production": ["kw.start", "a", "b", "kw.end"],
+                "node": {"x": "$2"},
+            },
+        )
+        assert rule.node["x"] == "$2"
+        with pytest.raises(GrammarError, match="越界"):
+            GrammarRule(
+                "Blk2",
+                is_block=True,
+                parser={
+                    "production": ["kw.start", "a", "b", "kw.end"],
+                    "node": {"x": "$3"},
+                },
+            )
+
+    def test_node_binding_path_variant_not_rejected(self):
+        # $N.path 不校验子路径存在性（choice 分支形态差异是设计语义）
+        rule = GrammarRule(
+            "Test",
+            parser={"production": ["@X|@Y"], "node": {"port_type": "$1.port_type"}},
+        )
+        assert rule.node["port_type"] == "$1.port_type"
+
+    def test_node_binding_list_spec_validated(self):
+        # list 规约中的每个 $N 都参与越界校验
+        with pytest.raises(GrammarError, match="越界"):
+            GrammarRule(
+                "Test",
+                parser={
+                    "production": ["a", "b"],
+                    "node": {"items": ["$1", "$3"]},
+                },
+            )
+
 
 class TestLoadAllTomlSkipsTpc:
     """load_all_toml 跳过 tpc.toml（配置段不污染规则集）。"""

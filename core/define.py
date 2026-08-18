@@ -8,6 +8,7 @@ Doc: docs/decisions/0002-is-statement-explicit.md
 """
 
 import json
+import re
 import tomllib
 import os
 from pathlib import Path
@@ -135,6 +136,23 @@ class Node:
         self.node_name = node_name
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def __getattr__(self, name: str):
+        """属性未挂载时的友好报错（替代裸 AttributeError）。
+
+        AST 节点属性由语法 TOML 的 node 绑定（如 cond = "$3"）挂载；
+        访问不存在属性通常意味着：位置捕获匹配失败（slot 为空未挂载）、
+        绑定属性名拼写错误、或 choice 分支形态差异。hasattr / getattr(obj,
+        name, default) 语义不变（AttributeError 被正常捕获）。
+        """
+        existing = ", ".join(sorted(vars(self))) or "(none)"
+        node_name = vars(self).get("node_name", "?")
+        raise AttributeError(
+            f"节点 {node_name!r} 没有属性 {name!r}（现有: {existing}）。"
+            '若该属性来自语法 TOML 的 node 绑定（如 cond = "$3"），'
+            "请检查对应位置捕获是否匹配失败（slot 为空未挂载）"
+            "或绑定属性名拼写。"
+        )
 
     @staticmethod
     def _dump_item(item):
@@ -329,6 +347,9 @@ class GrammarRule:
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "end_case"}
 
+    # node 绑定中 $N 位置捕获规约（用于静态越界校验）
+    _RE_POS_REF = re.compile(r"^\$(\d+)(?:\.|$)")
+
     # ── 规则字段 schema（fail-fast 校验） ──────────────────────────
     # 顶层合法字段：引擎字段 + 语言包扩展点（inject/transform）+ 阶段子表。
     # 未知顶层字段（拼写错误/误放字段）→ GrammarError。
@@ -386,6 +407,50 @@ class GrammarRule:
                     raise GrammarError(
                         f"[grammar] 规则 {name} 的 [{stage}].{fld} 必须是布尔值，"
                         f"got {type(sd[fld]).__name__}"
+                    )
+
+        cls._validate_node_specs(name, kwargs)
+
+    @classmethod
+    def _validate_node_specs(cls, name: str, kwargs: dict) -> None:
+        """node 绑定中 $N 位置捕获的静态越界校验（fail-fast，对齐 ADR-0003）。
+
+        拦截：$N 越界（N > production 顶层 slot 数）→ GrammarError。
+        块规则的 production 已剥离首尾字面 token（parser 块路径单独消费
+        起止符，绑定基于剥离后的内容部分编号，见 __init__），校验使用
+        同一剥离逻辑。
+        不拦截：$N.path 子路径的属性存在性——choice 分支形态差异（同一
+        slot 不同分支挂载不同属性）是设计语义，运行时由 Node.__getattr__
+        给出友好报错 + attribute_binder 诊断。
+        """
+        parser_data = kwargs.get("parser")
+        node_map = parser_data.get("node") if isinstance(parser_data, dict) else None
+        if not isinstance(node_map, dict) or not node_map:
+            return
+        raw_prods = parser_data.get("production") if isinstance(parser_data, dict) else None
+        if not isinstance(raw_prods, list):
+            return
+        prods = list(raw_prods)
+        is_block = kwargs.get("is_block") is True or parser_data.get("is_block") is True
+        if is_block:
+            if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
+                prods.pop(0)
+            if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
+                prods.pop()
+        max_slot = len(prods)
+        for attr, spec in node_map.items():
+            for item in spec if isinstance(spec, list) else [spec]:
+                if not isinstance(item, str):
+                    continue
+                m = cls._RE_POS_REF.match(item)
+                if m is None:
+                    continue
+                idx = int(m.group(1))
+                if not (1 <= idx <= max_slot):
+                    raise GrammarError(
+                        f"[grammar] 规则 {name} 的 node 绑定 {attr} = {item!r} 越界："
+                        f"production 共 {max_slot} 个 slot"
+                        f"（块规则已剥离起止符），不存在 ${idx}。"
                     )
 
     def __init__(self, name: str, **kwargs):
