@@ -155,6 +155,100 @@ Source -> preprocessor -> Lexer -> Parser -> Analyze -> Transform -> Renderer ->
 Each stage is independently configurable: swap a config directory, replace a
 production, inject a transform plugin — the rest of the pipeline stays intact.
 
+## Pipeline stages
+
+Each stage consumes the previous stage's output. The same small module runs
+through every stage below:
+
+```verilog
+module m(input clk);
+    reg a;
+    always @(posedge clk) a <= 1;
+endmodule
+```
+
+### Preprocessor — source → expanded source
+
+Macro directives are config-declared (`base/_macro.toml`). The module above
+has no macros, so it passes through unchanged; macro expansion and reverse
+mapping are shown in the [Preprocessor](#preprocessor) section.
+
+### Lexer — source → token stream
+
+Token types are config-declared (`[id.keyword]`, `[symbol]`, `[bracket]` in
+`base/_token.toml`); the lexer is a generic scanner over that table.
+
+```
+keyword.module 'module'  id 'm'  bracket.l_parentheses '('  keyword.input 'input'
+id 'clk'  bracket.r_parentheses ')'  symbol.base.semicolon ';'  newline '\n'
+keyword.reg 'reg'  id 'a'  symbol.base.semicolon ';'  newline '\n'
+keyword.always 'always'  symbol.base.at '@'  bracket.l_parentheses '('
+keyword.posedge 'posedge'  id 'clk'  bracket.r_parentheses ')'  id 'a'
+symbol.extend.lesser_equal '<='  literal.number '1'  symbol.base.semicolon ';'
+newline '\n'  keyword.endmodule 'endmodule'
+```
+
+### Parser — token stream → AST
+
+Rules reference tokens and other rules (`@Expression`, `@Stmt`); the parser
+is recursive descent + Pratt over the rule table.
+
+```
+Root
+  ModuleDecl
+    RegDecl
+    AlwaysStmt
+```
+
+### Linter — source → diagnostics
+
+Runs *before* the parser on the raw token stream. A missing semicolon:
+
+```verilog
+module m(input clk);
+    reg a
+    always @(posedge clk) a <= 1;
+endmodule
+```
+
+produces:
+
+```
+[phase-statement] expected 'symbol.base.semicolon', got 'keyword.always'
+```
+
+### Analyzer — AST → scopes & symbols
+
+Walks the AST, builds a scope tree and symbol table (config-declared
+`[Rule.analyzer.scope]` / `[Rule.analyzer.symbol]`), and reports semantic
+diagnostics. For the module above it registers the module symbol in the
+global scope:
+
+```
+root_scope: <global> / global
+symbols:   [{'name': 'm', 'kind': 'module', 'scope': '<global>', 'scope_kind': 'global'}]
+diagnostics: []
+```
+
+### Transform — AST → transformed AST
+
+Config-driven structural rewrites (e.g. typed_ports expansion, macro
+handling). The typed_ports example above shows the input/output: `type spi`
++ `impl` binding → standard module instantiation.
+
+### Renderer — AST → text
+
+Doc IR layout is config-declared (`[Rule.renderer.layout]`); the renderer
+walks the AST and emits formatted text. The formatter (indent, alignment,
+wrap) runs on the rendered output:
+
+```verilog
+module m(input clk);
+    reg a;
+    always @(posedge clk) a <= 1;
+endmodule
+```
+
 ## Subsystems
 
 | Directory | Role |
