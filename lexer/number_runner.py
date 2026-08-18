@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 from .number_fsm import NumberFSM  # 回退路径
 from .number_gen import (
     compile_patterns,

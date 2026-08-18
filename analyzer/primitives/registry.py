@@ -10,7 +10,7 @@ Registered primitives are injected into SemanticAnalyzer._walk_node pipeline,
 executed in the order declared in TOML [RuleName.analyzer] configuration.
 """
 
-from typing import Any, Callable
+from typing import Callable
 from core.define import Node
 
 

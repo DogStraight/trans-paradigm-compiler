@@ -5,6 +5,8 @@ grammar_slicer.py — 从语法规则推导切分层级映射。
     读取 GrammarRule 的 structure/production/end_case 字段，
     用 parser.rule_selector.analyze_production_features 解析 production，
     为 linter 构建按语法边界切分所需的层级映射。
+
+Doc: docs/linter_architecture.md
 """
 
 from core.define import GrammarRule

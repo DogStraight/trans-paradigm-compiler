@@ -5,7 +5,7 @@ registry.py — DSL 原语动态注册中心
 无需手动修改 __init__.py 的 dispatch 列表。
 """
 
-from typing import Any, Callable
+from typing import Callable
 
 # 全局注册表：[(key, handler_func), ...]
 # 按注册顺序排列，dispatch 时也按此顺序匹配

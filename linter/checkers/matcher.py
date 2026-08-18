@@ -6,6 +6,9 @@
       （BitWidthLiteral / ConcatExpr / ReplicateExpr / SelectExpr / CallExpr ...），
       原子由 is_atom 规则 production 驱动（参考 parser atomic_rules），不手写。
 
+Doc: docs/linter_architecture.md
+Doc: docs/decisions/0001-pre-parse-linter.md
+
 strict 语境约定：
     - strict=True  — 必选位置（production 顶层）：token 失败报错 + 跳过恢复
     - strict=False — 可选语境（choice/optional/repeat 内）：失败不推进

@@ -7,10 +7,14 @@ CLI（main.py）与测试共用，故移入正式包，wheel 安装后 CLI 可�
 - 去掉 sys.path 插入 / stdout 重定向（测试环境特定）
 - samples 输出目录从 input_path 推断（不依赖 __file__ 定位 tests/）
 - collect_callbacks 改为可选导入（非 verilog 语言不硬依赖 typed_ports 插件）
+
+结构：run_pipeline_on_source 是入口（参数解析 + 阶段编排），每个管线阶段
+拆为独立函数（_stage_*），共享状态通过 _PipelineContext 传递。
 """
 
 import os
 import sys
+from dataclasses import dataclass, field
 from typing import Any
 
 from core.define import Node
@@ -67,6 +71,67 @@ from preprocessor import (
 
 # 模块级共享状态：rules/lexer/renderer/transformer 按 rules_dir 缓存，避免重复初始化
 _PIPELINE_SHARED: dict = {}
+
+
+# ── 管线共享上下文 ──────────────────────────────────────────
+@dataclass
+class _PipelineContext:
+    """管线阶段间共享的状态（替代单函数内的局部变量堆叠）。"""
+
+    source: str
+    input_path: str | None
+    rules_dir: str
+    ext_dirs: list[str] | None
+    quiet: bool
+    stage: str | None
+    expand_macros: bool
+    inline_comments: bool
+    analyzer_enabled: bool
+    transform_enabled: bool
+    renderer_enabled: bool
+    no_lint: bool
+    parse_enabled: bool
+    format_output: bool
+    expand_enhanced: bool
+    include_dirs: list[str] | None
+    predefined: dict[str, str] | None
+    undefine: set[str] | None
+    check_idempotent: bool
+    enable_line_comment_restore: bool
+
+    # 输出目录（由 _resolve_output_paths 填充）
+    gen_dir: str | None = None
+    ast_dir: str | None = None
+    sym_dir: str | None = None
+    lex_dir: str | None = None
+    cb_dir: str | None = None
+    base_name: str = "input"
+    gen_file: str | None = None
+    ast_json: str | None = None
+    sym_json: str | None = None
+    cb_json: str | None = None
+
+    # 共享组件（由 _ensure_shared 填充）
+    rules: Any = None
+    rule_selector: Any = None
+    lexer: Any = None
+    linter: Any = None
+    renderer: Any = None
+
+    # 宏/预处理状态
+    macro_table: dict = field(default_factory=dict)
+    func_macros: dict = field(default_factory=dict)
+    placeholders: dict = field(default_factory=dict)
+    directive_lines: list = field(default_factory=list)
+    restore_stack: Any = None
+    tpc_src_map: dict = field(default_factory=dict)
+
+    # 结果
+    result: dict = field(default_factory=dict)
+
+    def log(self, msg: str, *args, **kwargs) -> None:
+        if not self.quiet:
+            print(msg, *args, **kwargs)
 
 
 # ── Core Pipeline ──
@@ -132,6 +197,419 @@ def _load_pipeline_defaults() -> dict:
     return {}
 
 
+# ── 阶段函数 ──────────────────────────────────────────────
+
+def _resolve_paths(ctx: _PipelineContext) -> None:
+    """解析输出目录与中间文件路径。"""
+    if ctx.input_path and "samples" in ctx.input_path:
+        parts = ctx.input_path.replace("\\", "/").split("/")
+        group = (
+            "normal"
+            if "normal" in parts
+            else ("errors" if "errors" in parts else "normal")
+        )
+        # 从 input_path 推断 samples 目录（.../samples/<group>/ref/file.v）
+        # 不依赖 __file__ 定位 tests/（pipeline 是正式包，不在 tests 下）。
+        samples_dir = os.path.dirname(os.path.dirname(os.path.dirname(ctx.input_path)))
+        ctx.gen_dir = os.path.join(samples_dir, group, "gen")
+        ctx.ast_dir = os.path.join(samples_dir, group, "ast")
+        ctx.sym_dir = os.path.join(samples_dir, group, "symbols")
+        ctx.lex_dir = os.path.join(samples_dir, group, "lex")
+        ctx.cb_dir = os.path.join(samples_dir, group, "trans_callback")
+    else:
+        ctx.gen_dir = ctx.ast_dir = ctx.sym_dir = ctx.lex_dir = ctx.cb_dir = None
+
+    for d in (ctx.gen_dir, ctx.ast_dir, ctx.sym_dir, ctx.lex_dir, ctx.cb_dir):
+        if d:
+            ensure_dir(d)
+
+    if ctx.input_path:
+        stem = os.path.splitext(os.path.basename(ctx.input_path))[0]
+        ctx.base_name = stem.replace("ref_", "")
+    else:
+        ctx.base_name = "input"
+
+    ctx.gen_file = os.path.join(ctx.gen_dir, f"gen_{ctx.base_name}.v") if ctx.gen_dir else None
+    ctx.ast_json = os.path.join(ctx.ast_dir, f"{ctx.base_name}.json") if ctx.ast_dir else None
+    ctx.sym_json = os.path.join(ctx.sym_dir, f"{ctx.base_name}.json") if ctx.sym_dir else None
+    ctx.cb_json = os.path.join(ctx.cb_dir, f"{ctx.base_name}.json") if ctx.cb_dir else None
+
+
+def _ensure_shared(ctx: _PipelineContext) -> None:
+    """初始化/复用按 rules_dir 缓存的共享组件。"""
+    # 配置加载（只执行一次，缓存后跳过）
+    if "_config_loaded" not in _PIPELINE_SHARED:
+        ConfigRegistry.load_all(
+            ctx.rules_dir,
+            ext_dirs=ctx.ext_dirs,
+            plugins_dir=os.path.join(ctx.rules_dir, "plugins"),
+        )
+        _PIPELINE_SHARED["_config_loaded"] = True
+
+    if ctx.rules_dir not in _PIPELINE_SHARED:
+        # 语法规则（含 EXT 注入）
+        rules = setup_grammar(
+            ctx.rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ctx.ext_dirs
+        )
+        stmt_names = [
+            n
+            for n, r in rules.items()
+            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
+        ]
+        rule_selector = RuleSelector(rules, stmt_names)
+        lexer = Lexer(rules_dir=ctx.rules_dir, ext_dirs=ctx.ext_dirs)
+        linter = LinterScanner(rules_dir=ctx.rules_dir, ext_dirs=ctx.ext_dirs)
+        renderer = Renderer(rules_dir=ctx.rules_dir)
+        _PIPELINE_SHARED[ctx.rules_dir] = {
+            "rules": rules,
+            "rule_selector": rule_selector,
+            "lexer": lexer,
+            "linter": linter,
+            "renderer": renderer,
+        }
+    shared = _PIPELINE_SHARED[ctx.rules_dir]
+    ctx.rules = shared["rules"]
+    ctx.rule_selector = shared["rule_selector"]
+    ctx.lexer = shared["lexer"]
+    ctx.linter = shared["linter"]
+    ctx.renderer = shared["renderer"]
+
+
+def _stage_macro_scan(ctx: _PipelineContext) -> None:
+    """宏指令扫描（仅提取宏表，不展开字符串）。"""
+    if not ctx.expand_macros:
+        return
+    (
+        ctx.macro_table,
+        ctx.func_macros,
+        _,
+        ctx.placeholders,
+        ctx.directive_lines,
+        ctx.source,
+    ) = scan_directives(
+        ctx.source,
+        ctx.rules_dir,
+        source_path=ctx.input_path,
+        search_dirs=ctx.include_dirs,
+        predefined=ctx.predefined,
+        undefine=ctx.undefine,
+    )
+    ctx.log(f"[preprocessor] macros defined: {len(ctx.macro_table)}")
+    # 扫描 clean_source 中 tpc marker 的源行号（restore_line_comments 对被吞
+    # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）
+    for _i, _l in enumerate(ctx.source.split("\n"), 1):
+        if "// <tpc:" in _l:
+            _start = _l.find("tpc:")
+            _end = _l.find(">", _start)
+            if _end > _start:
+                ctx.tpc_src_map[_l[_start:_end]] = _i
+
+
+def _stage_expand(ctx: _PipelineContext) -> None:
+    """宏展开（纯文本，在 lex 之前）。"""
+    if ctx.expand_macros and ctx.macro_table:
+        ctx.source, ctx.restore_stack = expand_tokens(
+            ctx.source, ctx.macro_table, func_macros=ctx.func_macros
+        )
+        ctx.log("[preprocessor] macros expanded")
+
+
+def _stage_lex(ctx: _PipelineContext) -> list:
+    """词法分析（tokenize 预处理后的文本）。"""
+    tokens = ctx.lexer.tokenize(ctx.source)
+    if not ctx.quiet and ctx.lex_dir:
+        tok_path = os.path.join(ctx.lex_dir, f"tokens_{ctx.base_name}.txt")
+        with open(tok_path, "w", encoding="utf-8") as f:
+            for tok in tokens:
+                f.write(f"{tok.column},{tok.line}:{tok.type} {tok.content}\n")
+    ctx.log(f"[lexer] tokens: {len(tokens)}")
+    return tokens
+
+
+def _stage_prescan(ctx: _PipelineContext) -> tuple[Any, Any]:
+    """Pre-scan（符号预检测，供 parser 提示）。"""
+    pre_scan_config = load_pre_scan_config(ctx.rules_dir)
+    pre_symbols = pre_scan(ctx.source, pre_scan_config)
+    if pre_symbols:
+        ctx.log(f"[prescan] symbols: {len(pre_symbols)}")
+    return pre_scan_config, pre_symbols
+
+
+def _stage_lint(ctx: _PipelineContext) -> bool:
+    """前置语法检查（失败时截断管线）。返回是否通过。"""
+    if ctx.no_lint:
+        return True
+    lint_errors = ctx.linter.scan(ctx.source)
+    if lint_errors:
+        for err in lint_errors:
+            ctx.log(
+                f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}"
+            )
+        ctx.result["error"] = f"lint failed: {len(lint_errors)} error(s)"
+        return False
+    return True
+
+
+def _stage_parse(
+    ctx: _PipelineContext, pre_scan_config: Any, pre_symbols: Any, tokens: list
+) -> Any | None:
+    """解析。返回 AST（失败返回 None）。"""
+    parser = Parser(
+        rules_dir=ctx.rules_dir,
+        pre_symbols=pre_symbols,
+        rules=ctx.rules,
+        rule_selector=ctx.rule_selector,
+    )
+    parser.pre_hints = pre_scan_config.get("hints", {})
+    try:
+        ast = parser.parse(tokens)
+    except ParseError as e:
+        ctx.result["error"] = str(e)
+        print(f"\n[parser] Parse failed:\n{e}", file=sys.stderr)
+        return None
+    if ast is None:
+        ctx.result["error"] = "parser returned None"
+        ctx.log("[parser] parse failed")
+        return None
+    ctx.result["parser"] = parser
+    return ast
+
+
+def _stage_analyze(ctx: _PipelineContext, ast: Any) -> tuple[Any, Any]:
+    """语义分析。返回 (ast, scope)。"""
+    analyzer = None
+    scope = None
+    if not ctx.expand_enhanced:
+        ctx.log("[pipeline] enhanced-expansion disabled: preserving enhanced syntax")
+    elif ctx.analyzer_enabled:
+        analyzer = AnalysisTraversal(ctx.rules)
+        ast = analyzer.analyze(ast)
+        if analyzer.root_scope is None:
+            ctx.log("[analyzer] warning: no scope produced")
+        else:
+            if not ctx.quiet:
+                if ctx.sym_json:
+                    save_json(
+                        analyzer.root_scope.to_dict(), ctx.sym_json, "symbols", log_fn=ctx.log
+                    )
+                # Dump transform callbacks (_ref_callbacks) to trans_callback/
+                callbacks = collect_callbacks(analyzer.root_scope)
+                if callbacks and ctx.cb_json:
+                    save_json(callbacks, ctx.cb_json, "callbacks", log_fn=ctx.log)
+            ctx.log(f"[symbols] {len(analyzer.all_symbols)} symbols")
+        if analyzer.has_errors:
+            for d in analyzer.diagnostics:
+                ctx.log(f"[analyzer] {d}")
+            if any(d.level == "error" for d in analyzer.diagnostics):
+                ctx.result["error"] = "; ".join(
+                    str(d) for d in analyzer.diagnostics if d.level == "error"
+                )
+                ctx.log("[analyzer] semantic errors, stopping pipeline")
+                return ast, None
+        scope = analyzer.root_scope
+    else:
+        ctx.log("[analyzer] skipped")
+    return ast, scope
+
+
+def _stage_transform(ctx: _PipelineContext, ast: Any, scope: Any) -> Any:
+    """AST 变换。返回变换后的 ast。"""
+    if ctx.transform_enabled and scope is not None:
+        # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
+        mp_entries, rv_entries = get_component_mapping_config()
+        mapping_cfg: dict = {}
+        mapping_cfg.update(mp_entries)
+        mapping_cfg.update(rv_entries)
+        AstTransformer.set_shared("rules", ctx.rules)
+        AstTransformer.set_shared("mapping_cfg", mapping_cfg)
+        transformer = AstTransformer()
+
+        # 一次 transform 完成：映射表构建 + 配置变换
+        ast = transformer.transform(ast, scope)
+
+        # 收集变换统计
+        parts = []
+        for plugin in transformer.plugins:
+            if hasattr(plugin, "stats"):
+                s = plugin.stats
+                for k, v in s.items():
+                    if v:
+                        parts.append(f"{k}={v}")
+        if parts:
+            ctx.log(f"[transform] {' '.join(parts)}")
+    elif ctx.transform_enabled:
+        ctx.log("[transform] skipped (analyzer=None or no scope)")
+    return ast
+
+
+def _restore_comments(ctx: _PipelineContext, content: str, parser: Any) -> str:
+    """注释回插（inline + line + 宏还原 + 条件块）。"""
+    # Inline comment restoration（锚点匹配，宏展开后亦可用）
+    # 展开路径（restore_stack 非空）→ only_tpc：宏 marker（`/*<tpc:macro:N>*/`）
+    # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
+    # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
+    # 但普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——
+    # 只回插 tpc，普通注释跳过（与 line 通道 only_tpc 语义对称）。
+    if ctx.inline_comments:
+        anchors = getattr(parser, "_comment_anchors", None)
+        if anchors:
+            content, n = restore_comments(content, anchors)
+            ctx.log(f"[comments] inline anchor restoration: {n} items")
+    elif ctx.restore_stack:
+        anchors = getattr(parser, "_comment_anchors", None)
+        if anchors:
+            content, n = restore_comments(content, anchors, only_tpc=True)
+            ctx.log(f"[comments] tpc inline marker restoration: {n} items")
+
+    # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
+    # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
+    # 了代码结构（impl → ModuleInst、类型端口 → 具体端口），源行号/锚点必然
+    # 漂移，恢复会误匹配拆坏注释行（如含 `spi.slave` 的注释从 `.` 处劈开）。
+    # 但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
+    # 不依赖锚点窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，
+    # 宏还原失效。有宏/条件块时降级 only_tpc，无则整个跳过。
+    line_anchors = getattr(parser, "_line_comment_anchors", None)
+    if line_anchors and ctx.enable_line_comment_restore:
+        content, n = restore_line_comments(
+            content, line_anchors, tpc_src_map=ctx.tpc_src_map
+        )
+        ctx.log(f"[comments] line anchor restoration: {n} items")
+    elif line_anchors and (ctx.restore_stack or ctx.placeholders):
+        content, n = restore_line_comments(
+            content, line_anchors, tpc_src_map=ctx.tpc_src_map, only_tpc=True
+        )
+        ctx.log(f"[comments] tpc marker restoration: {n} items")
+
+    # Reverse macro protection — 必须放在 line-comment restore 之后：
+    # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进
+    # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
+    # 才能定位 marker 并替换为整行原文残片。
+    if ctx.restore_stack:
+        content = protect_and_reverse(
+            content,
+            restoration_stack=ctx.restore_stack,
+        )
+        ctx.log("[preprocessor] macros reversed")
+
+    # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
+    # 必须放在 line-comment restore 之后：占位符 `// <tpc:cond:N>` 本身是注释行，
+    # 可能被 production skip 吞掉并记入 line_comment_anchors，若先 restore 条件块、
+    # 后回插行注释，占位符会被再次插回而残留。
+    if ctx.placeholders:
+        content = restore_condition_blocks(content, ctx.placeholders)
+        ctx.log(f"[preprocessor] condition blocks restored: {len(ctx.placeholders)}")
+    return content
+
+
+def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
+    """幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
+    文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
+
+    替代后置 lint：完整 parser 比 linter 近似更强，且不依赖 linter 对
+    format 后文本的行号/结构敏感。坏文本（如 `= =` 或缺分号）
+    会导致第二遍 parse truncated → idempotent=False。
+
+    展开路径（宏表/占位符/指令行任一非空）跳过：宏体替换、条件分支选择、
+    注释锚点漂移都使第二遍内容必然不同——那是展开语义，不是幂等性问题。
+    只有非展开路径（内容应稳定）才检查。
+    """
+    expanded_path = bool(ctx.macro_table) or bool(ctx.func_macros) or bool(
+        ctx.placeholders
+    ) or bool(ctx.directive_lines)
+    if not ctx.check_idempotent or expanded_path or not content.strip():
+        return True
+    ctx.log("[idempotency] re-running pipeline on generated output")
+    r2 = run_pipeline_on_source(
+        source=content,
+        input_path=ctx.input_path,
+        quiet=True,
+        expand_macros=ctx.expand_macros,
+        inline_comments=ctx.inline_comments,
+        analyzer_enabled=False,
+        transform_enabled=False,
+        renderer_enabled=True,
+        no_lint=True,
+        format_output=ctx.format_output,
+        expand_enhanced=False,
+        rules_dir=ctx.rules_dir,
+        ext_dirs=ctx.ext_dirs,
+        include_dirs=ctx.include_dirs,
+        predefined=ctx.predefined,
+        undefine=ctx.undefine,
+        check_idempotent=False,
+    )
+    p2 = r2.get("parser")
+    truncated = bool(getattr(p2, "_parse_truncated", False)) if p2 else True
+    idempotent = bool(r2.get("success")) and not truncated
+    if not idempotent:
+        ctx.log(
+            f"[idempotency] FAIL: output re-parse "
+            f"truncated={truncated} success={r2.get('success')}"
+        )
+    return idempotent
+
+
+def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
+    """渲染 + 注释回插 + 格式化 + 输出 + 幂等检查。"""
+    if not ctx.renderer_enabled:
+        print("[renderer] skipped")
+        ctx.result["ast"] = ast
+        return
+
+    content = ctx.renderer.render(ast)
+
+    # Restore directive lines（副作用指令 define/undef/include）
+    if ctx.directive_lines:
+        content = "\n".join(ctx.directive_lines) + "\n" + content
+        ctx.log(f"[preprocessor] directives restored: {len(ctx.directive_lines)}")
+
+    content = _restore_comments(ctx, content, parser)
+
+    # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
+    # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
+    if ctx.format_output and content.strip():
+        content = format_generated(
+            content, ctx.rules, ctx.lexer,
+            rule_selector=ctx.rule_selector, rules_dir=ctx.rules_dir,
+        )
+        ctx.log("[formatter] formatted output")
+
+    # Write output (no header — gen file is raw content for clean diffing)
+    if ctx.gen_file:
+        with open(ctx.gen_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        ctx.log(f"[output] {ctx.gen_file}")
+
+    # Render extra ASTs as separate files
+    extra_asts: list[tuple[str, Node]] = collect_extra_asts()
+    if extra_asts:
+        ctx.log(f"[remapper] extracted {len(extra_asts)} extra AST(s)")
+    extra_outputs: list[tuple[str, str]] = []
+    for out_name, extra_root in extra_asts:
+        extra_content = ctx.renderer.render(extra_root)
+        # extra 输出与主输出一致：format 开启时也过 formatter（否则品类对齐/
+        # 缩进/换行不统一，trans/ 的包装模块文件格式与主文件不一致）
+        if ctx.format_output and extra_content.strip():
+            extra_content = format_generated(
+                extra_content, ctx.rules, ctx.lexer,
+                rule_selector=ctx.rule_selector, rules_dir=ctx.rules_dir,
+            )
+        extra_outputs.append((out_name, extra_content))
+        if ctx.gen_dir:
+            extra_file = os.path.join(ctx.gen_dir, f"gen_{out_name}.v")
+            with open(extra_file, "w", encoding="utf-8") as f:
+                f.write(extra_content)
+            ctx.log(f"[remapper] extra output: {extra_file}")
+
+    ctx.result["output"] = content
+    ctx.result["ast"] = ast
+    ctx.result["extra_asts"] = extra_asts
+    ctx.result["extra_outputs"] = extra_outputs
+    ctx.result["success"] = True
+    ctx.result["idempotent"] = _check_idempotent(ctx, content)
+
+
+# ── 入口 ──────────────────────────────────────────────────
 def run_pipeline_on_source(
     source: str,
     input_path: str | None = None,
@@ -185,6 +663,7 @@ def run_pipeline_on_source(
             for d in ext_dirs
         ]
 
+    # 参数默认值解析（None → 配置默认）
     if out_dir is None:
         out_dir = _cfg.get("out_dir")
     if expand_macros is None:
@@ -213,13 +692,32 @@ def run_pipeline_on_source(
         check_idempotent = _cfg.get("check_idempotent", True)
     if parse_enabled is None:
         parse_enabled = _cfg.get("parse", True)
+    if format_output is None:
+        format_output = _cfg.get("format_output", True)
 
-    # Quiet-aware logger
-    def _log(msg: str, *args, **kwargs) -> None:
-        if not quiet:
-            print(msg, *args, **kwargs)
-
-    result = {
+    ctx = _PipelineContext(
+        source=source,
+        input_path=input_path,
+        rules_dir=rules_dir,
+        ext_dirs=ext_dirs,
+        quiet=quiet,
+        stage=stage,
+        expand_macros=expand_macros,
+        inline_comments=inline_comments,
+        analyzer_enabled=analyzer_enabled,
+        transform_enabled=transform_enabled,
+        renderer_enabled=renderer_enabled,
+        no_lint=no_lint,
+        parse_enabled=parse_enabled,
+        format_output=format_output,
+        expand_enhanced=expand_enhanced,
+        include_dirs=include_dirs,
+        predefined=predefined,
+        undefine=undefine,
+        check_idempotent=check_idempotent,
+        enable_line_comment_restore=enable_line_comment_restore,
+    )
+    ctx.result = {
         "success": False,
         "output": "",
         "ast": None,
@@ -229,421 +727,59 @@ def run_pipeline_on_source(
         "idempotent": True,
     }
 
-    original_source = source
+    # 输出路径 + 共享组件
+    _resolve_paths(ctx)
+    _ensure_shared(ctx)
 
-    # format_output 默认 True：展开/保留两条路都过 formatter（boundary 已支持
-    # curly 块，增强语法缩进可格式化）；显式传 False 可关。
-    if format_output is None:
-        format_output = _cfg.get("format_output", True)
+    # 宏扫描 + 展开
+    _stage_macro_scan(ctx)
+    _stage_expand(ctx)
 
-    # Determine output directory
-    if out_dir is None:
-        if input_path and "samples" in input_path:
-            parts = input_path.replace("\\", "/").split("/")
-            group = (
-                "normal"
-                if "normal" in parts
-                else ("errors" if "errors" in parts else "normal")
-            )
-            # 从 input_path 推断 samples 目录（.../samples/<group>/ref/file.v）
-            # 不依赖 __file__ 定位 tests/（pipeline 是正式包，不在 tests 下）。
-            samples_dir = os.path.dirname(os.path.dirname(os.path.dirname(input_path)))
-            out_dir = os.path.join(samples_dir, group)
-        else:
-            out_dir = None  # 无合法输出目录，跳过文件写入
-    if out_dir:
-        gen_dir = os.path.join(out_dir, "gen")
-        ast_dir = os.path.join(out_dir, "ast")
-        sym_dir = os.path.join(out_dir, "symbols")
-        lex_dir = os.path.join(out_dir, "lex")
-        ensure_dir(gen_dir)
-        ensure_dir(ast_dir)
-        ensure_dir(sym_dir)
-        ensure_dir(lex_dir)
-        cb_dir = os.path.join(out_dir, "trans_callback")
-        ensure_dir(cb_dir)
-    else:
-        gen_dir = ast_dir = sym_dir = lex_dir = cb_dir = None
-
-    # Base filename for intermediate files
-    if input_path:
-        stem = os.path.splitext(os.path.basename(input_path))[0]
-        base_name = stem.replace("ref_", "")
-    else:
-        base_name = "input"
-
-    gen_file = os.path.join(gen_dir, f"gen_{base_name}.v") if gen_dir else None
-    ast_json = os.path.join(ast_dir, f"{base_name}.json") if ast_dir else None
-    sym_json = os.path.join(sym_dir, f"{base_name}.json") if sym_dir else None
-    cb_json = os.path.join(cb_dir, f"{base_name}.json") if cb_dir else None
-
-    # ---- Stage: 配置加载（只执行一次，缓存后跳过）----
-    if "_config_loaded" not in _PIPELINE_SHARED:
-        ConfigRegistry.load_all(
-            rules_dir,
-            ext_dirs=ext_dirs,
-            plugins_dir=os.path.join(rules_dir, "plugins"),
-        )
-        _PIPELINE_SHARED["_config_loaded"] = True
-
-    # ---- Stage: 宏指令扫描（仅提取宏表，不展开字符串）----
-    macro_table = {}
-    func_macros = {}
-    placeholders = {}
-    directive_lines = []
-    restore_stack = None
-    tpc_src_map = None
-    if expand_macros:
-        macro_table, func_macros, _, placeholders, directive_lines, source = scan_directives(
-            source,
-            rules_dir,
-            source_path=input_path,
-            search_dirs=include_dirs,
-            predefined=predefined,
-            undefine=undefine,
-        )
-        _log(f"[preprocessor] macros defined: {len(macro_table)}")
-        # 扫描 clean_source 中 tpc marker 的源行号（restore_line_comments 对被吞
-        # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）
-        tpc_src_map = {}
-        for _i, _l in enumerate(source.split("\n"), 1):
-            if "// <tpc:" in _l:
-                _start = _l.find("tpc:")
-                _end = _l.find(">", _start)
-                if _end > _start:
-                    tpc_src_map[_l[_start:_end]] = _i
-
-    # ---- Stage: Shared pipeline context (rules, lexer, renderer, etc.) ----
-    # 所有按 rules_dir 可复用的组件集中初始化并缓存
-    ctx = _PIPELINE_SHARED
-    if rules_dir not in ctx:
-
-        # 语法规则（含 EXT 注入）
-        rules = setup_grammar(
-            rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ext_dirs
-        )
-        stmt_names = [
-            n
-            for n, r in rules.items()
-            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
-        ]
-        rule_selector = RuleSelector(rules, stmt_names)
-        lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_dirs)
-        linter = LinterScanner(rules_dir=rules_dir, ext_dirs=ext_dirs)
-        renderer = Renderer(rules_dir=rules_dir)
-        ctx[rules_dir] = {
-            "rules": rules,
-            "rule_selector": rule_selector,
-            "lexer": lexer,
-            "linter": linter,
-            "renderer": renderer,
-        }
-    shared = ctx[rules_dir]
-    rules = shared["rules"]
-    rule_selector = shared["rule_selector"]
-    lexer = shared["lexer"]
-    linter = shared["linter"]
-    renderer = shared["renderer"]
-
-    # ---- Stage: 预处理（宏展开，纯文本，在 lex 之前）----
-    if expand_macros and macro_table:
-        source, restore_stack = expand_tokens(
-            source, macro_table, func_macros=func_macros
-        )
-        _log("[preprocessor] macros expanded")
-
-    # ---- Stage: Lexical analysis（tokenize 预处理后的文本）----
-    tokens = lexer.tokenize(source)
-    if not quiet and lex_dir:
-        tok_path = os.path.join(lex_dir, f"tokens_{base_name}.txt")
-        with open(tok_path, "w", encoding="utf-8") as f:
-            for tok in tokens:
-                f.write(f"{tok.column},{tok.line}:{tok.type} {tok.content}\n")
-    _log(f"[lexer] tokens: {len(tokens)}")
+    # 词法
+    tokens = _stage_lex(ctx)
     if stage == "lex":
-        result["success"] = True
-        return result
+        ctx.result["success"] = True
+        return ctx.result
 
-    # ---- Stage: Pre-scan ----
-    pre_scan_config = load_pre_scan_config(rules_dir)
-    pre_symbols = pre_scan(source, pre_scan_config)
-    if pre_symbols:
-        _log(f"[prescan] symbols: {len(pre_symbols)}")
-
-    # ---- Stage: Lint（前置语法检查，失败时截断管线）----
-    if not no_lint:
-        lint_errors = linter.scan(source)
-        if lint_errors:
-            for err in lint_errors:
-                _log(
-                    f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}"
-                )
-            result["error"] = f"lint failed: {len(lint_errors)} error(s)"
-            return result
-
-    # parse 开关：只 lint 不 parse（如 lint 指令：lint 通过即成功）
+    # Pre-scan + lint
+    pre_scan_config, pre_symbols = _stage_prescan(ctx)
+    if not _stage_lint(ctx):
+        return ctx.result
     if not parse_enabled:
-        result["success"] = True
-        return result
+        ctx.result["success"] = True
+        return ctx.result
 
-    # ---- Stage: Parse ----
-    # Instantiate Parser with injected rules and rule_selector
-    parser = Parser(
-        rules_dir=rules_dir,
-        pre_symbols=pre_symbols,
-        rules=rules,
-        rule_selector=rule_selector,
-    )
-    parser.pre_hints = pre_scan_config.get("hints", {})
-
-    # No longer need to manually assign parser.grammar_rules,
-    # statement_rule_names, rule_selector, or atomic_rules — all are set internally.
-
-    try:
-        ast = parser.parse(tokens)
-    except ParseError as e:
-        result["error"] = str(e)
-        print(f"\n[parser] Parse failed:\n{e}", file=sys.stderr)
-        return result
+    # 解析
+    ast = _stage_parse(ctx, pre_scan_config, pre_symbols, tokens)
     if ast is None:
-        result["error"] = "parser returned None"
-        _log("[parser] parse failed")
-        return result
-    result["parser"] = parser
+        return ctx.result
     if stage == "parse":
-        result["success"] = True
-        result["ast"] = ast
-        return result
+        ctx.result["success"] = True
+        ctx.result["ast"] = ast
+        return ctx.result
 
-    # ---- Stage: AST normalization ----
+    # 归一化
     ast = normalize_ast(ast)
+    if not quiet and ctx.ast_json:
+        save_json(ast.dump(), ctx.ast_json, "ast", log_fn=ctx.log)
 
-    if not quiet and ast_json:
-        save_json(ast.dump(), ast_json, "ast", log_fn=_log)
-
-    # ---- Stage: Semantic analysis ----
-    # expand_enhanced=False：保留增强语法路径（格式化增强源码），跳过
-    # analyze/transform——增强节点（TypedPortDecl/TypeDecl 等）不经 expand，
-    # 由 renderer 的增强节点 layout 直出；render() 内部自带 normalize。
-    analyzer = None
-    scope = None
-    if not expand_enhanced:
-        _log("[pipeline] enhanced-expansion disabled: preserving enhanced syntax")
-    elif analyzer_enabled:
-        analyzer = AnalysisTraversal(rules)
-        ast = analyzer.analyze(ast)
-        if analyzer.root_scope is None:
-            _log("[analyzer] warning: no scope produced")
-        else:
-            if not quiet:
-                if sym_json:
-                    save_json(
-                        analyzer.root_scope.to_dict(), sym_json, "symbols", log_fn=_log
-                    )
-                # Dump transform callbacks (_ref_callbacks) to trans_callback/
-                callbacks = collect_callbacks(analyzer.root_scope)
-                if callbacks and cb_json:
-                    save_json(callbacks, cb_json, "callbacks", log_fn=_log)
-            _log(f"[symbols] {len(analyzer.all_symbols)} symbols")
-        if analyzer.has_errors:
-            for d in analyzer.diagnostics:
-                _log(f"[analyzer] {d}")
-            if any(d.level == "error" for d in analyzer.diagnostics):
-                result["error"] = "; ".join(
-                    str(d) for d in analyzer.diagnostics if d.level == "error"
-                )
-                _log("[analyzer] semantic errors, stopping pipeline")
-                return result
-        scope = analyzer.root_scope
-    else:
-        _log("[analyzer] skipped")
+    # 语义分析
+    ast, scope = _stage_analyze(ctx, ast)
+    if ctx.result.get("error"):
+        return ctx.result
     if stage == "analyze":
-        result["success"] = True
-        result["ast"] = ast
-        return result
+        ctx.result["success"] = True
+        ctx.result["ast"] = ast
+        return ctx.result
 
-    # ---- Stage: AST transform ----
-    if transform_enabled and analyzer is not None and scope is not None:
-        # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
-        mp_entries, rv_entries = get_component_mapping_config()
-        mapping_cfg: dict = {}
-        mapping_cfg.update(mp_entries)
-        mapping_cfg.update(rv_entries)
-        AstTransformer.set_shared("rules", rules)
-        AstTransformer.set_shared("mapping_cfg", mapping_cfg)
-        transformer = AstTransformer()
-
-        # 一次 transform 完成：映射表构建 + 配置变换
-        ast = transformer.transform(ast, scope)
-
-        # 收集变换统计
-        parts = []
-        for plugin in transformer.plugins:
-            if hasattr(plugin, "stats"):
-                s = plugin.stats
-                for k, v in s.items():
-                    if v:
-                        parts.append(f"{k}={v}")
-        if parts:
-            _log(f"[transform] {' '.join(parts)}")
-    elif transform_enabled:
-        _log("[transform] skipped (analyzer=None or no scope)")
+    # 变换
+    ast = _stage_transform(ctx, ast, scope)
     if stage == "transform":
-        result["success"] = True
-        result["ast"] = ast
-        return result
+        ctx.result["success"] = True
+        ctx.result["ast"] = ast
+        return ctx.result
 
-    # ---- Stage: 收集虚拟逻辑分发（TransformPlugin 已将提取结果存入共享上下文）----
-    extra_asts: list[tuple[str, Node]] = collect_extra_asts()
-    if extra_asts:
-        _log(f"[remapper] extracted {len(extra_asts)} extra AST(s)")
+    # 渲染
+    _stage_render(ctx, ast, ctx.result.get("parser"))
 
-    # ---- Stage: Render ----
-    if renderer_enabled:
-        content = renderer.render(ast)
-
-        # Restore directive lines（副作用指令 define/undef/include）
-        if directive_lines:
-            content = "\n".join(directive_lines) + "\n" + content
-            _log(f"[preprocessor] directives restored: {len(directive_lines)}")
-
-        # Inline comment restoration（锚点匹配，宏展开后亦可用）
-        # 展开路径（restore_stack 非空）→ only_tpc：宏 marker（`/*<tpc:macro:N>*/`）
-        # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
-        # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
-        # 但普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——
-        # 只回插 tpc，普通注释跳过（与 line 通道 only_tpc 语义对称）。
-        if inline_comments:
-            anchors = getattr(parser, "_comment_anchors", None)
-            if anchors:
-                content, n = restore_comments(content, anchors)
-                _log(f"[comments] inline anchor restoration: {n} items")
-        elif restore_stack:
-            anchors = getattr(parser, "_comment_anchors", None)
-            if anchors:
-                content, n = restore_comments(content, anchors, only_tpc=True)
-                _log(f"[comments] tpc inline marker restoration: {n} items")
-
-        # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
-        # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
-        # 了代码结构（impl → ModuleInst、类型端口 → 具体端口），源行号/锚点必然
-        # 漂移，恢复会误匹配拆坏注释行（如含 `spi.slave` 的注释从 `.` 处劈开）。
-        # 但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
-        # 不依赖锚点窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，
-        # 宏还原失效。有宏/条件块时降级 only_tpc，无则整个跳过。
-        line_anchors = getattr(parser, "_line_comment_anchors", None)
-        if line_anchors and enable_line_comment_restore:
-            content, n = restore_line_comments(
-                content, line_anchors, tpc_src_map=tpc_src_map
-            )
-            _log(f"[comments] line anchor restoration: {n} items")
-        elif line_anchors and (restore_stack or placeholders):
-            content, n = restore_line_comments(
-                content, line_anchors, tpc_src_map=tpc_src_map, only_tpc=True
-            )
-            _log(f"[comments] tpc marker restoration: {n} items")
-
-        # Reverse macro protection — 必须放在 line-comment restore 之后：
-        # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进
-        # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
-        # 才能定位 marker 并替换为整行原文残片。
-        if restore_stack:
-            content = protect_and_reverse(
-                content,
-                restoration_stack=restore_stack,
-            )
-            _log("[preprocessor] macros reversed")
-
-        # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
-        # 必须放在 line-comment restore 之后：占位符 `// <tpc:cond:N>` 本身是注释行，
-        # 可能被 production skip 吞掉并记入 line_comment_anchors，若先 restore 条件块、
-        # 后回插行注释，占位符会被再次插回而残留。
-        if placeholders:
-            content = restore_condition_blocks(content, placeholders)
-            _log(f"[preprocessor] condition blocks restored: {len(placeholders)}")
-
-        # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
-        # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
-        if format_output and content.strip():
-            content = format_generated(
-                content, rules, lexer, rule_selector=shared["rule_selector"], rules_dir=rules_dir
-            )
-            _log("[formatter] formatted output")
-
-        # Write output (no header — gen file is raw content for clean diffing)
-        if gen_file:
-            with open(gen_file, "w", encoding="utf-8") as f:
-                f.write(content)
-            _log(f"[output] {gen_file}")
-
-        # Render extra ASTs as separate files
-        extra_outputs: list[tuple[str, str]] = []
-        for out_name, extra_root in extra_asts:
-            extra_content = renderer.render(extra_root)
-            # extra 输出与主输出一致：format 开启时也过 formatter（否则品类对齐/
-            # 缩进/换行不统一，trans/ 的包装模块文件格式与主文件不一致）
-            if format_output and extra_content.strip():
-                extra_content = format_generated(
-                    extra_content, rules, lexer,
-                    rule_selector=shared["rule_selector"], rules_dir=rules_dir,
-                )
-            extra_outputs.append((out_name, extra_content))
-            if gen_dir:
-                extra_file = os.path.join(gen_dir, f"gen_{out_name}.v")
-                with open(extra_file, "w", encoding="utf-8") as f:
-                    f.write(extra_content)
-                _log(f"[remapper] extra output: {extra_file}")
-
-        result["output"] = content
-        result["ast"] = ast
-        result["extra_asts"] = extra_asts
-        result["extra_outputs"] = extra_outputs
-        result["success"] = True
-
-        # ── 幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
-        # 文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
-        # 替代后置 lint：完整 parser 比 linter 近似更强，且不依赖 linter 对
-        # format 后文本的行号/结构敏感。坏文本（如 `= =` 或缺分号）
-        # 会导致第二遍 parse truncated → idempotent=False。
-        # 展开路径（宏表/占位符/指令行任一非空）跳过：宏体替换、条件分支选择、
-        # 注释锚点漂移都使第二遍内容必然不同——那是展开语义，不是幂等性问题。
-        # 只有非展开路径（内容应稳定）才检查。
-        expanded_path = bool(macro_table) or bool(func_macros) or bool(
-            placeholders
-        ) or bool(directive_lines)
-        if check_idempotent and not expanded_path and content.strip():
-            _log("[idempotency] re-running pipeline on generated output")
-            r2 = run_pipeline_on_source(
-                source=content,
-                input_path=input_path,
-                quiet=True,
-                expand_macros=expand_macros,
-                inline_comments=inline_comments,
-                analyzer_enabled=False,
-                transform_enabled=False,
-                renderer_enabled=True,
-                no_lint=True,
-                format_output=format_output,
-                expand_enhanced=False,
-                rules_dir=rules_dir,
-                ext_dirs=ext_dirs,
-                include_dirs=include_dirs,
-                predefined=predefined,
-                undefine=undefine,
-                check_idempotent=False,
-            )
-            p2 = r2.get("parser")
-            truncated = bool(getattr(p2, "_parse_truncated", False)) if p2 else True
-            result["idempotent"] = bool(r2.get("success")) and not truncated
-            if not result["idempotent"]:
-                _log(
-                    f"[idempotency] FAIL: output re-parse "
-                    f"truncated={truncated} success={r2.get('success')}"
-                )
-        else:
-            result["idempotent"] = True
-    else:
-        print("[renderer] skipped")
-        result["ast"] = ast
-
-    return result
+    return ctx.result

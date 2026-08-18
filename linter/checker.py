@@ -4,6 +4,8 @@
 节点列表（DiscoveredNode）。每个节点在检查阶段被实例化为对应的 Checker，
 统一调用 validate() 做扁平验证。
 
+Doc: docs/linter_architecture.md
+
 架构目标：
     发现一次 → 注册扁平检查器列表 → 逐个 validate → 合并错误
 """

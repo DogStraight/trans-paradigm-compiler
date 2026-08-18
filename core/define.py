@@ -3,6 +3,8 @@
 These types are shared across all pipeline stages — Lexer produces Token,
 Parser consumes Token and produces Node (AST), GrammarRule drives both
 parsing and rendering.
+
+Doc: docs/decisions/0002-is-statement-explicit.md
 """
 
 import json

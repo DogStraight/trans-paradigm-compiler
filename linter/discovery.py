@@ -3,6 +3,9 @@
 把源 token 流"变形"为轻量 AST（DiscoveredNode 列表），每个节点描述
 一种被发现的语法结构及其 token 区间。检查阶段据此实例化对应 Checker。
 
+Doc: docs/linter_architecture.md
+Doc: docs/decisions/0001-pre-parse-linter.md
+
 发现策略（决策 1：动态前瞻逐步缩小范围）：
     - 用块边界维护上下文栈（顶层 CTX_TOP + opener_context 配置的块内上下文）
     - 在上下文中逐 token 扫描：

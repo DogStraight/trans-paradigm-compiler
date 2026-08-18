@@ -254,7 +254,7 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     return ast_node
 
 
-from .rule_selector import RuleSelector, _compute_start_tokens
+from .rule_selector import RuleSelector
 import parser.pratt_parser as pratt_parser
 
 # 导入拆分后的模块方法

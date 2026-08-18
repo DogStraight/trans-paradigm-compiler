@@ -30,7 +30,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 # ── 数字形态状态基类 ──
 # 状态模型：每种形态编译出 (size→base→value) 的链式状态；

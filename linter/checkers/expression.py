@@ -7,6 +7,8 @@
       按 is_atom 规则的 production 内联匹配，参考 parser 的 atomic_rules 流程
       （收集 is_atom 规则、按 production 长度降序逐个尝试），不手写。
 
+Doc: docs/linter_architecture.md
+
 左递归约束：表达式文法暗含（间接）左递归环（@Expression ⇄ @PrimaryExpr ⇄
 @SelectSuffix/@ParenthesizedExpr/...），LL 解析流程无法跳出调用循环，必须由
 pratt 切断。因此 production 内凡遇 @Expression / pratt 规则一律交回 consume
