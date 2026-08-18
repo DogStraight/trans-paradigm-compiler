@@ -7,6 +7,8 @@ in TOML — no hardcoded lexer logic.
 配置通过 ConfigRegistry 声明式加载。
 """
 
+import os
+
 from core.define import Token
 from core.config_registry import declare_cfg
 from core.token_protocol import (
@@ -18,7 +20,7 @@ from core.token_protocol import (
     symbol_type,
 )
 
-from .lexer_utils import get_token_define_merged, get_number_config
+from .lexer_utils import get_number_config
 from .number_fsm import NumberFSM
 from .number_runner import build_number_runner
 from .comment_fsm import CommentFSM
@@ -37,22 +39,44 @@ class Lexer:
     def __init__(
         self,
         token_define_dict: dict | None = None,
+        number_configs: list[dict] | None = None,
         rules_dir: str | None = None,
         ext_dirs: list[str] | None = None,
     ) -> None:
         if rules_dir:
-            token_define_dict = get_token_define_merged(rules_dir, ext_dirs)
-        else:
-            from .lexer_utils import get_token_define
+            # 按语言包自包含解析（一次 resolve）：token 定义 / 宏配置 / 数字形态
+            # 都跟随本实例的 rules_dir，不依赖最后一次 load_all 的全局状态——
+            # 同一进程跨语言（测试/多语言服务）时不会串用上一语言的配置。
+            from core.config_registry import ConfigRegistry
+            from .lexer_utils import merge_token_define, extract_number_configs
 
-            token_define_dict = get_token_define()
+            resolved = ConfigRegistry.resolve(
+                rules_dir,
+                ext_dirs=ext_dirs,
+                plugins_dir=os.path.join(rules_dir, "plugins"),
+            )
+            if token_define_dict is None:
+                token_define_dict = merge_token_define(resolved)
+            raw_macro = resolved.get("preprocessor.macro_config", {}) or {}
+            if number_configs is None:
+                number_configs = extract_number_configs(
+                    resolved.get("lexer.number", {})
+                )
+        else:
+            # 无 rules_dir 的旧路径：直接读 token 文件 + 全局宏配置
+            if token_define_dict is None:
+                from .lexer_utils import get_token_define
+
+                token_define_dict = get_token_define()
+            raw_macro = _macro_cfg
+            if number_configs is None:
+                number_configs = get_number_config()
         self.token_define = token_define_dict
 
         # 宏识别策略与配置
-        raw = _macro_cfg
-        self._macro_dir_cfg: dict = raw.get("macro_recognition", {}).get("directive", {})
-        self._macro_call_cfg: dict = raw.get("macro_recognition", {}).get("call", {})
-        self.macro_config = {d: macro_type(d) for d in raw.get("directives", {})}
+        self._macro_dir_cfg: dict = raw_macro.get("macro_recognition", {}).get("directive", {})
+        self._macro_call_cfg: dict = raw_macro.get("macro_recognition", {}).get("call", {})
+        self.macro_config = {d: macro_type(d) for d in raw_macro.get("directives", {})}
 
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
         self.indent_level = token_define_dict.get("indent", {}).get("level", 4)
@@ -84,8 +108,7 @@ class Lexer:
 
         # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM；
         # 无配置 → 回退旧 NumberFSM（兼容路径）
-        self._number_runner = build_number_runner(get_number_config())
-        pass
+        self._number_runner = build_number_runner(number_configs)
 
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""

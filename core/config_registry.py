@@ -230,6 +230,9 @@ class ConfigRegistry:
     # （import 期默认包声明）。load_all 时若 rules_dir 与来源不一致，先按该
     # 语言包 tpc.toml 重新生成声明——解决"glob 匹配用默认包、换语言失效"。
     _entries_source: str | None = None
+    # resolve() 按语言包参数缓存（纯函数语义：同参数结果相同）。
+    # 避免每次 Lexer 构造都重新解析全部 TOML 文件（测试中 Lexer 构造频繁）。
+    _resolve_cache: dict[tuple, dict] = {}
 
     @classmethod
     def declare(
@@ -345,6 +348,91 @@ class ConfigRegistry:
         语言包，而非 import 期锁定的默认包。调用方无需先 load_language。
         """
         rules_dir = cls._ensure_entries_for(rules_dir)
+        decls = [
+            (
+                name,
+                spec.get("file", ""),
+                spec.get("section"),
+                spec.get("base", "rules"),
+                spec.get("required", True),
+                spec.get("description", ""),
+                spec.get("bare_value"),
+            )
+            for name, spec in cls._entries.items()
+        ]
+        cls._loaded = cls._resolve_decls(
+            decls, rules_dir, ext_dirs, plugins_dir, base_dirs
+        )
+        cls._resolved = True
+
+        # 将真实配置值推入各模块的模块级变量
+        _push_loaded_config()
+
+    @classmethod
+    def resolve(
+        cls,
+        rules_dir: str,
+        ext_dirs: list[str] | None = None,
+        plugins_dir: str = "",
+        **base_dirs: str,
+    ) -> dict:
+        """按指定语言包解析配置（**无全局副作用**）。
+
+        与 load_all 不同：不写 _loaded、不改 _entries、不推模块变量。
+        供"按语言包自包含解析"的消费方使用——如 Lexer 按自己的 rules_dir
+        解析 token/数字形态，不依赖最后一次 load_all 的全局状态（同一进程
+        跨语言时不会串用上一语言的配置）。
+
+        Args:
+            rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
+        """
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidate = rules_dir
+        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            candidate = os.path.join("grammar", rules_dir)
+        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            # 非语言包目录（临时目录等低层契约）：用当前全局声明
+            decls = [
+                (
+                    name,
+                    spec.get("file", ""),
+                    spec.get("section"),
+                    spec.get("base", "rules"),
+                    spec.get("required", True),
+                    spec.get("description", ""),
+                    spec.get("bare_value"),
+                )
+                for name, spec in cls._entries.items()
+            ]
+            candidate = rules_dir
+        else:
+            decls = _load_meta_declarations(grammar_dir=candidate)
+        cache_key = (
+            candidate,
+            tuple(ext_dirs) if ext_dirs else (),
+            plugins_dir,
+            frozenset(base_dirs.items()),
+        )
+        if cache_key in cls._resolve_cache:
+            return cls._resolve_cache[cache_key]
+        result = cls._resolve_decls(decls, candidate, ext_dirs, plugins_dir, base_dirs)
+        cls._resolve_cache[cache_key] = result
+        return result
+
+    @classmethod
+    def _resolve_decls(
+        cls,
+        decls: list[tuple],
+        rules_dir: str,
+        ext_dirs: list[str] | None,
+        plugins_dir: str,
+        base_dirs: dict,
+    ) -> dict:
+        """按声明列表解析配置（纯函数，不写 _loaded）。
+
+        decls: (name, file, section, base, required, description, bare_value) 元组列表。
+        供 load_all（用 _entries）与 resolve（用语言包 tpc.toml 声明）共用。
+        """
         from core.define import FileManager
 
         # 基准目录表
@@ -363,24 +451,21 @@ class ConfigRegistry:
             key = bk.removesuffix("_dir")
             bases[key] = bv
 
-        cls._loaded.clear()
+        loaded: dict[str, Any] = {}
         errors: list[str] = []
 
-        for name, spec in cls._entries.items():
+        for name, file_spec, section, base_key, required, _desc, bare in decls:
             # bare data：非文件式配置，值已由 tpc.toml 直接提供
-            bare = spec.get("bare_value")
             if bare is not None:
-                cls._loaded[name] = bare
+                loaded[name] = bare
                 continue
 
-            base_key = spec.get("base", "rules")
             base_dir = bases.get(base_key)
             if base_dir is None:
                 errors.append(f"  [{name}] base='{base_key}' 未在 load_all() 中提供")
                 continue
 
             try:
-                file_spec = spec["file"]
                 # file 可以是字符串（单文件）或列表（glob 模式）
                 if isinstance(file_spec, str):
                     paths = [file_spec]
@@ -397,7 +482,7 @@ class ConfigRegistry:
                         if "*" not in fp and "?" not in fp:
                             # 字面路径：glob 不匹配也直接尝试（文件缺失交给 FileNotFoundError）
                             matched = [os.path.join(base_dir, fp).replace("\\", "/")]
-                        elif spec["required"]:
+                        elif required:
                             # 通配符无匹配且必选 → 显式报错。避免 fallback 到含 * 的
                             # 字面路径触发 Errno 22，以及静默降级为空表。
                             raise FileNotFoundError(f"glob 未找到匹配文件: {fp}")
@@ -405,14 +490,12 @@ class ConfigRegistry:
                     for m in sorted(matched):
                         content = FileManager.read_file(m.replace("\\", "/"))
                         data = tomllib.loads(content)
-                        if spec["section"]:
+                        if section:
                             # 文件存在但缺声明的段 → 配置声明错误，fail-fast
                             # （不能再静默 `data.get(section, {})` 退化成空表）。
-                            if spec["section"] not in data:
-                                raise KeyError(
-                                    f"文件存在但缺少声明段 [{spec['section']}]"
-                                )
-                            data = data[spec["section"]]
+                            if section not in data:
+                                raise KeyError(f"文件存在但缺少声明段 [{section}]")
+                            data = data[section]
                         if merged is None:
                             merged = data
                         elif isinstance(merged, dict) and isinstance(data, dict):
@@ -422,35 +505,35 @@ class ConfigRegistry:
 
                 if merged is None:
                     raise FileNotFoundError(f"未找到匹配文件: {file_spec}")
-                cls._loaded[name] = merged
+                loaded[name] = merged
 
             except tomllib.TOMLDecodeError as e:
                 # TOML 语法损坏（重复 key / 格式错误）必须 fail-fast：即使
                 # required=False 也不能静默退化成空表——否则下游以空配置继续
                 # 运行（如关键字表丢失 → 全部 token 退化为 id），静默错乱。
-                loc = f"{base_key}:{spec['file']}"
-                if spec["section"]:
-                    loc += f" → [{spec['section']}]"
+                loc = f"{base_key}:{file_spec}"
+                if section:
+                    loc += f" → [{section}]"
                 errors.append(f"  [{name}] {loc}: TOML 语法错误: {e}")
             except FileNotFoundError as e:
                 # 文件缺失：required=True 是错误；required=False 是合法的可选缺失。
-                if spec["required"]:
-                    loc = f"{base_key}:{spec['file']}"
-                    if spec["section"]:
-                        loc += f" → [{spec['section']}]"
+                if required:
+                    loc = f"{base_key}:{file_spec}"
+                    if section:
+                        loc += f" → [{section}]"
                     errors.append(f"  [{name}] {loc}: {e}")
                 else:
-                    cls._loaded[name] = {}
+                    loaded[name] = {}
             except Exception as e:
                 # 其他异常（缺段/结构不符等）：文件存在但配置结构有问题，属于
                 # 配置声明错误——required=False 也不应静默，统一 fail-fast。
-                loc = f"{base_key}:{spec['file']}"
-                if spec["section"]:
-                    loc += f" → [{spec['section']}]"
+                loc = f"{base_key}:{file_spec}"
+                if section:
+                    loc += f" → [{section}]"
                 errors.append(f"  [{name}] {loc}: {e}")
             finally:
-                if name not in cls._loaded:
-                    cls._loaded[name] = {}
+                if name not in loaded:
+                    loaded[name] = {}
 
         if errors:
             raise ConfigError(
@@ -458,11 +541,7 @@ class ConfigRegistry:
                 + "\n".join(errors)
                 + "\n\n请检查规则目录结构和 TOML 文件内容。"
             )
-
-        cls._resolved = True
-
-        # 将真实配置值推入各模块的模块级变量
-        _push_loaded_config()
+        return loaded
 
     @classmethod
     def get(cls, name: str) -> Any:
@@ -489,6 +568,7 @@ class ConfigRegistry:
         cls._loaded.clear()
         cls._resolved = False
         cls._entries_source = None
+        cls._resolve_cache.clear()
 
 
 # 模块级单例（简化 import）

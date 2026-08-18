@@ -3,47 +3,56 @@
 配置通过 ConfigRegistry 声明式加载，不再内部 try/except 吞错误。
 """
 
+import os
 import tomllib
 from core.define import FileManager
-from core.config_registry import declare_cfg
-
-# ── 配置需求（来自 tpc.toml） ──────────────────────────
-# lexer.token_base
-#   #sym:config = (root)
-#   格式: dict — { "token_name": { type, pattern }, ... }
-_token_base_cfg: dict = declare_cfg("lexer.token_base", {}, __name__, "_token_base_cfg")
-
-# lexer.lexer_base
-#   #sym:config = (root)
-#   格式: dict — { "state_name": [{ type, pattern, token }, ...], ... }
-_lexer_base_cfg: dict = declare_cfg("lexer.lexer_base", {}, __name__, "_lexer_base_cfg")
-
-# lexer.token_lang
-#   #sym:config = (root)
-#   格式: dict — 语言专用 token 覆盖（可选）
-_token_lang_cfg: dict = declare_cfg("lexer.token_lang", {}, __name__, "_token_lang_cfg")
-
-# lexer.token_ext
-#   #sym:config = (root)
-#   格式: dict — 增强层 token 覆盖（可选）
-_token_ext_cfg: dict = declare_cfg("lexer.token_ext", {}, __name__, "_token_ext_cfg")
-
-# lexer.number
-#   #sym:config = (root)
-#   格式: dict — 数字字面量形态声明（[[number.based]] 编译为 FSM）
-_number_cfg: dict = declare_cfg("lexer.number", {}, __name__, "_number_cfg")
 
 
-def get_number_config() -> list[dict]:
-    """读取数字形态声明（lexer.number），供 number_gen 编译。
+def merge_token_define(resolved: dict) -> dict:
+    """从已解析配置 dict 合并 token 定义（基础 + 语言覆盖 + 增强层覆盖）。
 
-    Returns: [[number.based]] 形态列表（空 = 使用默认/不启用配置化数字）。
+    resolved: ConfigRegistry.resolve() 的返回（含 "lexer.token_base" 等 key）。
     """
-    raw = _number_cfg or {}
+    base = dict(resolved.get("lexer.token_base", {}))
+    base = _deep_merge(base, dict(resolved.get("lexer.lexer_base", {})))
+    if resolved.get("lexer.token_lang"):
+        base = _deep_merge(base, dict(resolved["lexer.token_lang"]))
+    if resolved.get("lexer.token_ext"):
+        base = _deep_merge(base, dict(resolved["lexer.token_ext"]))
+    _validate_token_define(base)
+    return base
+
+
+def extract_number_configs(raw: dict) -> list[dict]:
+    """从 lexer.number 配置提取 [[number.based]] 形态列表。"""
     based = raw.get("based", [])
     if isinstance(based, list):
         return [b for b in based if isinstance(b, dict)]
     return []
+
+
+def get_number_config(rules_dir: str | None = None) -> list[dict]:
+    """读取数字形态声明（lexer.number），供 number_gen 编译。
+
+    rules_dir 指定时按该语言包解析（跟随语言包，不依赖全局 _loaded 状态）；
+    None 时读全局已加载配置（无 rules_dir 的旧路径）。
+
+    Returns: [[number.based]] 形态列表（空 = 使用默认/不启用配置化数字）。
+    """
+    from core.config_registry import ConfigRegistry
+
+    if rules_dir:
+        raw = ConfigRegistry.resolve(
+            rules_dir, plugins_dir=os.path.join(rules_dir, "plugins")
+        ).get("lexer.number", {}) or {}
+    else:
+        try:
+            raw = ConfigRegistry.get("lexer.number") or {}
+        except (RuntimeError, KeyError):
+            raw = {}
+    return extract_number_configs(raw)
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     """递归合并 override 到 base，override 的值优先"""
     result = base.copy()
@@ -66,16 +75,18 @@ def get_token_define(base_dir: str = "") -> dict:
 def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -> dict:
     """加载 token 定义：基础定义 + 语言覆盖 + 增强层覆盖。
 
-    替代旧的路径拼接 + try/except 模式。
+    按 rules_dir 从 ConfigRegistry.resolve 解析（不依赖全局 _loaded 状态），
+    保证 Lexer 实例的配置跟随其语言包——同一进程跨语言时不会串用上一次
+    load_all 的语言配置。
     """
-    base = dict(_token_base_cfg)
-    base = _deep_merge(base, dict(_lexer_base_cfg))
-    if _token_lang_cfg:
-        base = _deep_merge(base, dict(_token_lang_cfg))
-    if _token_ext_cfg:
-        base = _deep_merge(base, dict(_token_ext_cfg))
-    _validate_token_define(base)
-    return base
+    from core.config_registry import ConfigRegistry
+
+    resolved = ConfigRegistry.resolve(
+        rules_dir,
+        ext_dirs=ext_dirs,
+        plugins_dir=os.path.join(rules_dir, "plugins"),
+    )
+    return merge_token_define(resolved)
 
 
 def _validate_token_define(td: dict) -> None:
