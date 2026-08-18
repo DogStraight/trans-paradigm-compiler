@@ -96,7 +96,7 @@ Expansion is the default pipeline behavior (`expand_enhanced=True`). Save the
 input above to `top.v`, then run it through the pipeline:
 
 ```python
-from tests.e2e.run_pipeline import run_pipeline_on_source
+from pipeline import run_pipeline_on_source
 
 with open("top.v") as f:
     src = f.read()
@@ -237,18 +237,21 @@ Built with Python 3.11+, zero runtime dependencies.
 - **No IDE / LSP** — this is a CLI pipeline, not an editor plugin.
 - **No optimization passes** — transforms are config-driven structural rewrites
   (e.g. type expansion, macro handling), not LLVM-style optimization.
-- **No line wrapping.** The formatter reflows indentation, alignment and
-  line breaks but does not wrap over-long lines to a width limit — long
-  expressions stay on one line (a known trade-off; wrapping moved the
-  operator to line-start, which the token-level linter misread as a new
-  statement).
+- **Line wrapping is width-based, not semantic.** The formatter wraps
+  over-long lines (>100 cols) at safe break points (top-level commas, logical/
+  arithmetic operators, ternary `?`/`:`), using a penalty model (Verible-style)
+  to pick the least-bad break. It does not reflow to a target width like a
+  paragraph formatter — it only breaks lines that exceed the limit, and only
+  at syntactically safe points.
 - **Error tolerance is linter-side.** Syntax errors are caught by the pre-parse
-  linter and block the pipeline; there is no parser-level error recovery.
+  linter and block the pipeline. The parser has soft-failure detection
+  (`_parse_truncated`) that flags incomplete parses, but there is no
+  parser-level error recovery (no skipping to a sync point and continuing).
 
 ## Verification
 
 ```bash
-python -m pytest tests/ -q                # 611 unit tests
+python -m pytest tests/ -q                # 685 unit tests
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
 python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 ```
