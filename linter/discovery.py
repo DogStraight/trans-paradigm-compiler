@@ -572,8 +572,9 @@ class Discovery:
         # 错误恢复近似（非语法判定）：无 production 推导结束符时的最终回退。
         # 句子终止 = depth 0 处的"语句终结符集合"（从 production 机械推导：
         # 所有语句规则末尾字面 token ∪ 块结束符，见 LookaheadTable._stmt_ends，
-        # 对标 yacc panic mode 的同步 token）∪ 行尾 newline（引擎 token 协议
-        # 层的保守回退——语句通常以行分隔，跨行语句由分号等终结符优先终止）。
+        # 对标 yacc panic mode 的同步 token）∪ 行尾 newline（跨语言 C-like 惯例
+        # 近似——语句通常以行分隔，跨行语句由分号等终结符优先终止。此假设不可
+        # 从 production/配置推导，是语言建模残差，显式标注而非伪装成引擎协议）。
         # 替代原硬编码 symbol.base.semicolon / newline / block_ends。
         # depth 跟踪保证括号内分号（for 的 init/cond）不截断。
         terminators = self._lookahead._stmt_ends
