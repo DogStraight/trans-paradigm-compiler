@@ -229,6 +229,22 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
                         else:
                             break
 
+            # 5) FOLLOW 检查（方案 B+）：块规则消费完 block_end 后，下一个 token
+            #    也必须是派生 FOLLOW 中的合法后继——与普通规则统一（不再跳过）。
+            #    块规则自身 production 完整（首尾字面 token），check_end_case 的
+            #    "引用块规则"guard 不触发，走派生 FOLLOW 硬检查。
+            if not self._check_end_case(context, rule):
+                self._record_fail_site(
+                    context,
+                    rule=rule.name,
+                    reason="block FOLLOW mismatch",
+                )
+                self._restore_current_node(old_node, context)
+                context.path_stack.pop()
+                if scope_pushed:
+                    self.scope_stack.pop()
+                return None
+
             self._restore_current_node(old_node, context)
             context.path_stack.pop()
             if scope_pushed:
