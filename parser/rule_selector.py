@@ -311,6 +311,138 @@ def analyze_production_features(production: str) -> dict[str, Any] | None:
         raise GrammarError(f"分析产生式失败 {production}: {str(e)}") from e
 
 
+# ── 生产式还原序列化（feature 树 → production 字符串）─────────────────
+# 与 analyze_production_features 对称：把展开后的树还原为 production 字符串。
+# 用于 EXT inject 的结构化合并——注入不再用字符串正则/子串改 production，
+# 而是 analyze → 树层合并（choice 候选插入）→ serialize 回字符串。
+# 规范化输出（round-trip 语义等价）：token/call 原样，choice/seq 按成员
+# 复合性加括号，repeat/optional/plus 对复合 elem 加括号。实测 466 条真实
+# production 全 round-trip 等价。
+
+
+def serialize_production_tree(feat: dict | None) -> str:
+    """feature 树 → production 字符串（规范化，round-trip 语义等价）。
+
+    feat 是 analyze_production_features 的产出（token/call/choice/seq/
+    repeat/optional/plus）。复合成员（choice/seq）在嵌套位置自动加括号，
+    保证 re-analyze 得到等价树。
+    """
+    if feat is None:
+        return ""
+    typ = feat.get("type")
+    if typ == "token":
+        return feat["token_type"]
+    if typ == "call":
+        return f"@{feat['name']}"
+    if typ == "choice":
+        return "|".join(_serialize_member(a) for a in feat["alternatives"])
+    if typ == "seq":
+        return ",".join(_serialize_member(i) for i in feat["items"])
+    if typ == "repeat":
+        return f"{_serialize_group(feat['elem'])}*"
+    if typ == "optional":
+        return f"{_serialize_group(feat['elem'])}?"
+    if typ == "plus":
+        return f"{_serialize_group(feat['elem'])}+"
+    return ""
+
+
+def _serialize_member(feat: dict | None) -> str:
+    """choice/seq 的成员：复合（choice/seq）加括号，防止被外层分隔符吞并。"""
+    if feat is not None and feat.get("type") in ("choice", "seq"):
+        return f"({serialize_production_tree(feat)})"
+    return serialize_production_tree(feat)
+
+
+def _serialize_group(feat: dict | None) -> str:
+    """repeat/optional/plus 的 elem：复合（choice/seq）加括号，后缀作用于整体。"""
+    if feat is not None and feat.get("type") in ("choice", "seq"):
+        return f"({serialize_production_tree(feat)})"
+    return serialize_production_tree(feat)
+
+
+# ── 树层变换（结构化注入用）─────────────────────────────────────
+# 注入不再用字符串正则/子串改 production，而是 analyze → 树层合并 → serialize
+# 回字符串。以下工具纯树操作，不改入参（新树），供 grammar_inject 编排。
+
+
+def make_call_feature(name: str) -> dict:
+    """构造语法调用 feature：{"type": "call", "name": name}。"""
+    return {"type": "call", "name": name}
+
+
+def insert_choice_candidate(
+    feat: dict | None,
+    candidate: dict,
+    prepend: bool = True,
+) -> dict:
+    """把 candidate 作为 choice 候选并入 feat，返回新树（不改入参）。
+
+    - feat 是 choice → 插入 alternatives（prepend 控制首/尾）
+    - 否则 → 包一层新 choice（[candidate, feat] 或 [feat, candidate]）
+    用于直接注入：@ExtRule 并入目标 production。
+    """
+    if feat is None:
+        return candidate
+    if feat.get("type") == "choice":
+        alts = list(feat["alternatives"])
+        if prepend:
+            alts.insert(0, candidate)
+        else:
+            alts.append(candidate)
+        return {"type": "choice", "alternatives": alts}
+    if prepend:
+        return {"type": "choice", "alternatives": [candidate, feat]}
+    return {"type": "choice", "alternatives": [feat, candidate]}
+
+
+_UNCHANGED = object()
+
+
+def _replace_calls_rec(feat: dict | None, repl: dict) -> Any:
+    """递归替换 call 节点；无变化返回哨兵 _UNCHANGED。"""
+    if feat is None:
+        return _UNCHANGED
+    typ = feat.get("type")
+    if typ == "call":
+        r = repl.get(feat["name"])
+        return r if r is not None else _UNCHANGED
+    if typ in ("repeat", "optional", "plus"):
+        ne = _replace_calls_rec(feat.get("elem"), repl)
+        if ne is _UNCHANGED:
+            return _UNCHANGED
+        return {**feat, "elem": ne}
+    if typ == "choice":
+        field = "alternatives"
+    elif typ == "seq":
+        field = "items"
+    else:
+        return _UNCHANGED
+    new_items = []
+    changed = False
+    for x in feat.get(field, []):
+        nx = _replace_calls_rec(x, repl)
+        if nx is _UNCHANGED:
+            new_items.append(x)
+        else:
+            new_items.append(nx)
+            changed = True
+    if not changed:
+        return _UNCHANGED
+    return {**feat, field: new_items}
+
+
+def replace_calls(feat: dict | None, repl: dict) -> dict | None:
+    """递归把 call[name]（name in repl）替换为 repl[name] 的新树。
+
+    无变化时返回原 feat（同一对象），调用方可借此判断是否 changed。
+    用于传播注入：@Target → (@Ext|@Target) 全树替换。树层 name 精确匹配，
+    天然避免字符串正则的整 token 边界问题（@Stmt 不误伤 @StmtOrNull）。
+    """
+    r = _replace_calls_rec(feat, repl)
+    return feat if r is _UNCHANGED else r
+
+
 if __name__ == "__main__":
     test_cases = [
         "id",

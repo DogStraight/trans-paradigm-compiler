@@ -1,18 +1,23 @@
 """Grammar rule injection — production injection, propagation, and replacement.
 
 Supports target addressing syntax: RuleName.production[N]
+注入改为结构化：analyze → 树层合并（choice 候选插入 / call 替换）→ serialize
+回字符串，替代字符串正则/子串操作。fail-fast 对齐 ADR-0003：target 规则缺失或
+production 无法解析直接报错，不静默降级。
 """
 
-import json
 import re
 from collections.abc import Mapping
 from typing import Any
-from .rule_selector import analyze_production_features
 
-
-def _has_top_level_choice(prod: str) -> bool:
-    feat = analyze_production_features(prod)
-    return feat is not None and feat.get("type") == "choice"
+from core.errors import GrammarError
+from .rule_selector import (
+    analyze_production_features,
+    insert_choice_candidate,
+    make_call_feature,
+    replace_calls,
+    serialize_production_tree,
+)
 
 
 def _parse_target(target: str) -> tuple[str, str, int]:
@@ -23,6 +28,31 @@ def _parse_target(target: str) -> tuple[str, str, int]:
 
 
 _VERBOSE = False
+
+
+def _write_prods(rule: Any, prods: list) -> None:
+    """统一写回 production；块规则同步重算 block_prods（防 stale）。"""
+    object.__setattr__(rule, "production", tuple(prods))
+    if getattr(rule, "is_block", False):
+        _resync_block_parts(rule)
+
+
+def _resync_block_parts(rule: Any) -> None:
+    """块规则 block_start/block_end/block_prods 重算（对齐 core/define 的推导）。"""
+    prods = list(rule.prods)
+    block_start, block_end = "", ""
+    if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
+        block_start = prods[0]
+    if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
+        block_end = prods[-1]
+    bp = list(prods)
+    if block_start:
+        bp = bp[1:]
+    if block_end:
+        bp = bp[:-1]
+    object.__setattr__(rule, "block_start", block_start)
+    object.__setattr__(rule, "block_end", block_end)
+    object.__setattr__(rule, "block_prods", bp)
 
 
 def inject_replace_rule(
@@ -55,22 +85,33 @@ def inject_productions(
     inject_config: Mapping[str, list[str] | dict],
 ) -> None:
     """
-    两层注入：直接注入 + 传播注入。
+    结构化两层注入：直接注入 + 传播注入。
     inject_config: { "ExtRule": ["@TargetRule.production[0]"] }
+
+    - 直接注入：目标 production analyze → 树层插入 @ExtRule 候选 → serialize 回写
+    - 传播注入：引用 @Target 的其它规则 analyze → 树层 call[@Target] 替换为
+      choice[@Ext, @Target] → serialize 回写（全树，name 精确匹配天然整 token 边界）
+    - fail-fast（ADR-0003）：target 规则缺失 / 只支持 production / 解析失败 →
+      GrammarError，不静默跳过。
     """
     for ext_rule_name, target_cfg in inject_config.items():
         alternatives: list[str] = (
             target_cfg if isinstance(target_cfg, list) else target_cfg.get("alts", [])
         )
+        ext_call = make_call_feature(ext_rule_name)
 
+        # ── 第一遍：直接注入（目标 production 并入 @ExtRule 候选）──
         for tgt in alternatives:
             tgt_name, tgt_attr, tgt_idx = _parse_target(tgt)
+            if tgt_attr != "production":
+                raise GrammarError(
+                    f"[inject] 仅支持 production 注入目标（{tgt}），got .{tgt_attr}"
+                )
             if tgt_name not in rules:
-                if _VERBOSE:
-                    print(f"  [inject] target {tgt_name} not found, skip")
-                continue
+                raise GrammarError(
+                    f"[inject] 注入目标规则 {tgt_name} 不存在（EXT {ext_rule_name}）"
+                )
             target_rule = rules[tgt_name]
-
             prods = list(target_rule.prods)
             if not prods:
                 continue
@@ -78,37 +119,43 @@ def inject_productions(
                 prods.append(f"@{ext_rule_name}")
             else:
                 prod = prods[tgt_idx]
-                if isinstance(prod, str):
-                    if _has_top_level_choice(prod):
-                        prod = f"@{ext_rule_name}|{prod}"
-                    else:
-                        prod += f"|@{ext_rule_name}"
-                    prods[tgt_idx] = prod
-            object.__setattr__(target_rule, "production", tuple(prods))
+                feat = analyze_production_features(prod)
+                # 原字符串语义：顶层 choice → ext 前缀；否则 → 后缀。树层等价：
+                # choice → 插 alternatives 首；非 choice → 包新 choice [ext, feat]。
+                new_feat = insert_choice_candidate(
+                    feat,
+                    ext_call,
+                    prepend=feat is not None and feat.get("type") == "choice",
+                )
+                prods[tgt_idx] = serialize_production_tree(new_feat)
+            _write_prods(target_rule, prods)
 
+        # ── 第二遍：传播注入（引用 @Target 的其它规则全树替换）──
         for tgt in alternatives:
             tgt_name, _, _ = _parse_target(tgt)
-            tgt_ref = f"@{tgt_name}"
-            target_ref = f"@{ext_rule_name}"
+            repl = {
+                tgt_name: {
+                    "type": "choice",
+                    "alternatives": [
+                        make_call_feature(ext_rule_name),
+                        make_call_feature(tgt_name),
+                    ],
+                }
+            }
             for other_name, other_rule in rules.items():
                 if other_name in inject_config or other_name == tgt_name:
                     continue
                 other_prods = list(other_rule.prods)
                 changed = False
-                # 规则引用按完整 token 边界匹配，避免误伤 @StmtOrNull 这类
-                # 以目标规则名开头（@Stmt + OrNull）的复合规则名。
-                tgt_pattern = re.compile(
-                    r"(?<![A-Za-z0-9_])" + re.escape(tgt_ref) + r"(?![A-Za-z0-9_])"
-                )
                 for i, prod in enumerate(other_prods):
                     if not isinstance(prod, str):
                         continue
-                    replacement = f"({target_ref}|{tgt_ref})"
-                    if tgt_pattern.search(prod):
-                        prod = tgt_pattern.sub(replacement, prod)
+                    feat = analyze_production_features(prod)
+                    new_feat = replace_calls(feat, repl)
+                    if new_feat is not feat:
+                        other_prods[i] = serialize_production_tree(new_feat)
                         changed = True
-                    other_prods[i] = prod
                 if changed:
-                    object.__setattr__(other_rule, "production", tuple(other_prods))
+                    _write_prods(other_rule, other_prods)
                     if _VERBOSE:
                         print(f"  [inject] propagate {other_name}: {other_prods}")
