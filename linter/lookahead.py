@@ -217,7 +217,11 @@ class LookaheadTable:
                 if last.get("type") == "optional":
                     last = last.get("elem") or {}
                 if last.get("type") == "token" and last["token_type"] not in _TRIVIA:
-                    result.add(last["token_type"])
+                    tt = last["token_type"]
+                    # 多候选 token（keyword.case|casex）拆为精确成员——含 "|"
+                    # 的整串匹配不到实际 token，拆分供 discovery/_skip_to_end
+                    # 与 _skip_to_statement_end 的精确匹配使用。
+                    result.update(tt.split("|"))
         return result
 
     def _build(self) -> None:

@@ -77,12 +77,6 @@ class Discovery:
         self._block_closers = block_closers
         self._bracket_openers = bracket_openers
         self._bracket_closers = bracket_closers
-        # 块结束符集合：作为语句扫描的终止符（替代硬编码 endmodule 等）
-        self._block_ends = frozenset(
-            info["block_end"]
-            for info in tree.values()
-            if isinstance(info, dict) and info.get("block_end")
-        )
         # 属性对开括号推导（配置驱动，不硬编码规则名）：找 production 以
         # "(" + "*" 开头的规则（如 AttrInstance 的 (* ... *)）。_skip_to_end
         # 据此整体跳过属性对，使带属性的语句（如 (* parallel_case *) case ...）
@@ -477,17 +471,15 @@ class Discovery:
     def _statement_end(self, tokens: list[Token], i: int, rule: str, n: int) -> int:
         """确定语句的粗略边界（production 推导结束符）。
 
-        单 token 语句（如 NullStmt 的分号）只消费起始 token，
-        避免句尾跳过在单行文件里延伸吞掉后续语句。
+        结束符从 production 推导（production 即真相）：结尾纯字面 token
+        （如分号）是句子天然结束边界。单字面 token 语句（如 NullStmt 的
+        ';'）结束符即自身——_skip_to_end 从起始位置直接命中，等价于"只
+        消费起始 token"（原 _is_single_token_rule 特判的语义），无需单独分支。
         """
-        if self._is_single_token_rule(rule):
-            return i + 1
-        # 结束符从 production 推导（production 即真相）：结尾纯字面 token
-        # （如分号）是句子天然结束边界。
         ec = self._derived_end_case(rule)
         if ec:
             return self._skip_to_end(tokens, i, ec, n)
-        # 无可推导结束符（容器语句等）→ 跳到分号或行尾
+        # 无可推导结束符（容器语句等）→ 跳到语句终结符集合/行尾
         return self._skip_to_statement_end(tokens, i, n)
 
     def _derived_end_case(self, rule: str) -> set[str]:
@@ -511,36 +503,30 @@ class Discovery:
             return set()
         last = prods[-1]
         if isinstance(last, dict) and last.get("type") == "token":
-            return {last["token_type"]}
-        # 末尾是 call：递归查其 production 是否以分号收尾
+            tt = last["token_type"]
+            # 含 "|" 的多候选 token（如 keyword.case|casex）拆分为精确成员，
+            # 否则 _skip_to_end 的精确匹配扫不到（原 _is_single_token_rule 用
+            # "|" 排除整个规则，导致这类语句边界退化为通用跳过）。
+            return set(tt.split("|"))
+        # 末尾是 call：递归查其 production 是否以语句终结符收尾。语句终结符
+        # 集合 = 所有语句规则末尾字面 token（_stmt_ends）减去块结束符——call
+        # 内部以"语句终结符"收尾即语句边界。Verilog 为分号（symbol.base.
+        # semicolon），语言无关：其他语言的分号类终结符同样被推导，替代硬编码。
         if isinstance(last, dict) and last.get("type") == "call":
             inner = self._tree.get(last.get("name", ""), {})
             iprods = inner.get("prods", [])
             if iprods:
                 ilast = iprods[-1]
+                stmt_terminators = (
+                    self._lookahead._stmt_ends - self._lookahead._block_ends
+                )
                 if (
                     isinstance(ilast, dict)
                     and ilast.get("type") == "token"
-                    and ilast.get("token_type") == "symbol.base.semicolon"
+                    and ilast.get("token_type") in stmt_terminators
                 ):
-                    return {"symbol.base.semicolon"}
+                    return {ilast["token_type"]}
         return set()
-
-    def _is_single_token_rule(self, rule: str) -> bool:
-        """production 只有单个字面 token（如 NullStmt 的 ';'）。
-
-        错误恢复近似（非语法判定）：单 token 语句无内部结构，边界取"下个
-        token 之前"即可，避免句尾跳过在单行文件里延伸吞掉后续语句。
-        """
-        info = self._tree.get(rule, {})
-        prods = info.get("prods", [])
-        if len(prods) != 1:
-            return False
-        first = prods[0]
-        if first.get("type") != "token":
-            return False
-        # 含 "|" 的多 token 候选（如 keyword.case|casex）不算单 token
-        return "|" not in first.get("token_type", "")
 
     def _block_body(
         self,
@@ -584,12 +570,13 @@ class Discovery:
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:
         # 错误恢复近似（非语法判定）：无 production 推导结束符时的最终回退。
-        # 句子终止 = depth 0 处的分号（通用终结符，几乎所有语句以 ; 收尾——
-        # 即使 production 末尾是 call 如 @PortConnection，分号仍在语句尾）或
-        # 行尾（保守回退）。depth 跟踪保证括号内分号（for 的 init/cond）不截断。
-        # 跨行语句（如模块名/参数/实例名分多行的参数化实例化）不被 newline
-        # 截断——分号是唯一可靠终止。对不以分号/行尾结束语句的新语言，此回退
-        # 会错位——由 production 推导（_derived_end_case）优先兜底。
+        # 句子终止 = depth 0 处的"语句终结符集合"（从 production 机械推导：
+        # 所有语句规则末尾字面 token ∪ 块结束符，见 LookaheadTable._stmt_ends，
+        # 对标 yacc panic mode 的同步 token）∪ 行尾 newline（引擎 token 协议
+        # 层的保守回退——语句通常以行分隔，跨行语句由分号等终结符优先终止）。
+        # 替代原硬编码 symbol.base.semicolon / newline / block_ends。
+        # depth 跟踪保证括号内分号（for 的 init/cond）不截断。
+        terminators = self._lookahead._stmt_ends
         depth = 0
         while i < n:
             t = tokens[i]
@@ -597,11 +584,7 @@ class Discovery:
                 depth += 1
             elif t.type in self._bracket_closers:
                 depth = max(0, depth - 1)
-            elif depth == 0 and (
-                t.type == "symbol.base.semicolon"
-                or t.type == "newline"
-                or t.type in self._block_ends
-            ):
+            elif depth == 0 and (t.type in terminators or t.type == "newline"):
                 return i + 1
             i += 1
         return n
