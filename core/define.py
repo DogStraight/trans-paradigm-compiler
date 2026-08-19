@@ -482,14 +482,16 @@ class GrammarRule:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        # is_block 块规则：从 production 首尾字面 token 推导块边界，并剥离出
-        # "内容部分"（parser 块路径单独消费 start/end，node 绑定基于内容部分
-        # 编号，故剥离后 $1/$2 等绑定不变）。
+        # is_block 块规则：block_start/block_end 从 production 首尾字面 token
+        # 推导。方案 B：production 保留完整（生产式即真相，作者可读全形），
+        # 不再剥离——block_prods 存"内容部分"（去首尾）供块路径/linter/FOLLOW
+        # 匹配块头使用，node 绑定基于完整 production 编号（$1 = block_start）。
         #   production = ["keyword.module", "@Identifier", ..., "keyword.endmodule"]
         #   → block_start="keyword.module", block_end="keyword.endmodule",
-        #     prods=["@Identifier", ...]
+        #     block_prods=["@Identifier", ...]（内容部分）
         self.block_start = ""
         self.block_end = ""
+        self.block_prods: list = []
         if getattr(self, "is_block", False) and self.prods:
             prods = list(self.prods)
             # 块起止符推导：production 首尾**字面 token**（非 @call 引用）即视为
@@ -497,10 +499,15 @@ class GrammarRule:
             # 都是 keyword），c4 的 `{`/`}`（bracket）无法推导导致匿名块无限递归。
             # 语言无关化：任何非 @ 字面 token 都可作块起止符。
             if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
-                self.block_start = prods.pop(0)
+                self.block_start = prods[0]
             if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
-                self.block_end = prods.pop()
-            self.production = prods
+                self.block_end = prods[-1]
+            # 内容部分（去首尾字面 token）
+            self.block_prods = list(prods)
+            if self.block_start:
+                self.block_prods = self.block_prods[1:]
+            if self.block_end:
+                self.block_prods = self.block_prods[:-1]
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。

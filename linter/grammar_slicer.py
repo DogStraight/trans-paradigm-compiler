@@ -20,7 +20,14 @@ def build_slice_tree(rules: dict[str, GrammarRule]) -> dict[str, dict]:
     """
     tree: dict[str, dict] = {}
     for name, rule in rules.items():
-        prods_raw = getattr(rule, "production", [])
+        # 块规则用内容部分（block_prods，不含 block_start/block_end）——linter
+        # 匹配块头/定位块 body 基于内容 production（block_start/block_end 另有
+        # 字段）；普通规则用完整 production。方案 B 下块规则 production 保留完整，
+        # 故此处显式取内容部分保持 linter 语义不变。
+        if getattr(rule, "is_block", False):
+            prods_raw = getattr(rule, "block_prods", [])
+        else:
+            prods_raw = getattr(rule, "production", [])
         parsed = []
         for p in prods_raw:
             if isinstance(p, str):

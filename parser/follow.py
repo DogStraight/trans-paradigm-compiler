@@ -24,16 +24,21 @@ from core.define import GrammarRule
 from .rule_selector import analyze_production_features
 
 
-def _rule_trees(rule: GrammarRule) -> list[dict]:
-    """规则 production 列表 → 元素树列表（seq 的 items）。"""
+def _prods_trees(prods: list) -> list[dict]:
+    """production 元素列表 → 元素树列表（seq 的 items）。"""
     trees = []
-    for prod in getattr(rule, "prods", []) or []:
+    for prod in prods or []:
         if not isinstance(prod, str):
             continue
         tree = analyze_production_features(prod)
         if tree is not None:
             trees.append(tree)
     return trees
+
+
+def _rule_trees(rule: GrammarRule) -> list[dict]:
+    """规则 production 列表 → 元素树列表。"""
+    return _prods_trees(getattr(rule, "prods", []) or [])
 
 
 def _elem_calls(elem: dict) -> list[str]:
@@ -213,7 +218,19 @@ def compute_follows(
         语句/原子角色）由调用方回退旧行为。
     """
     names = set(rules)
-    trees = {n: _rule_trees(rules[n]) for n in names}
+    # 块规则用内容部分（block_prods）建模——block_start/block_end 由块路径
+    # 单独消费，不是内容生产式的一部分（body 循环由 body_first 单独注入），
+    # 与剥离形态保持一致，避免块头内部元素 FOLLOW 混入 block_end。
+    trees = {}
+    for n in names:
+        r = rules[n]
+        if getattr(r, "is_block", False):
+            trees[n] = _prods_trees(
+                getattr(r, "block_prods", None)
+                or getattr(r, "prods", []) or []
+            )
+        else:
+            trees[n] = _rule_trees(r)
     first_map, nullable_map = _compute_first_nullable(
         names, trees, rules, operator_members
     )

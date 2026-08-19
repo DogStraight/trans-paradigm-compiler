@@ -246,7 +246,10 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         if kind is None:
             continue  # 非结构边界 kind（如类型系统的 "type"），不进入 scope_kind_map
         info = tree.get(name, {}) or {}
-        prods = info.get("prods") or getattr(rule, "prods", []) or []
+        # 只用 slicer 解析后的 prods（内容部分）。不能回退 rule.prods——方案 B
+        # 下块规则 production 保留完整（字符串列表），与 parsed dict 混用会炸；
+        # 且 GenerateBlock 等无内容 production 的块规则本就走空 prods 分支。
+        prods = info.get("prods") or []
         # 有配对结束符（block_end / production 尾关键字终结符 / 块类别）的规则
         # 才是"块"；always/initial/if/for 等语句头（体是 begin 块或单语句，
         # 无关键字终结符）不在块类别，其 first token 不进 openers。

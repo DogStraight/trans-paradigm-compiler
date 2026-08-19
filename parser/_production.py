@@ -91,10 +91,14 @@ def _try_production(
 
 
 def match_productions(
-    self, context: ParseContext, rule: GrammarRule
+    self, context: ParseContext, rule: GrammarRule, prods: list | None = None
 ) -> list[Node | None] | None:
-    """匹配规则的所有产生式。返回 matched_nodes 列表，失败返回 None。"""
-    prods = rule.prods
+    """匹配规则的所有产生式。返回 matched_nodes 列表，失败返回 None。
+
+    prods 缺省用 rule.prods（普通规则）；块规则块分支传 rule.block_prods
+    （内容部分，block_start/block_end 由块路径单独消费）。
+    """
+    prods = rule.prods if prods is None else prods
     all_matched_nodes: list[Node | None] = []
 
     for i, prod in enumerate(prods):
@@ -172,11 +176,11 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
                 return None
             context.advance_token()
 
-            # 2) 正常匹配 production（如 @BlockLabel?）
+            # 2) 匹配块头内容 production（block_prods，不含 block_start/block_end）
             rule_node = Node(rule.name)
             old_node = context.current_node
             context.update_current_node(rule_node)
-            all_matched = match_productions(self, context, rule)
+            all_matched = match_productions(self, context, rule, rule.block_prods)
             if all_matched is None:
                 self._record_fail_site(
                     context,
