@@ -31,7 +31,13 @@ _VERBOSE = False
 
 
 def _write_prods(rule: Any, prods: list) -> None:
-    """统一写回 production；块规则同步重算 block_prods（防 stale）。"""
+    """统一写回 production；块规则同步重算 block_prods。
+
+    block_prods 是块规则自身 production 去掉首尾字面 token 的元素列表（非递归
+    展开）——子规则 production 变化由规则表动态解析，block_prods 不随子规则同步
+    （这是设计，不是"重算一半"）。_resync_block_parts 只处理"块规则自身 production
+    被改写首尾"的场景。
+    """
     object.__setattr__(rule, "production", tuple(prods))
     if getattr(rule, "is_block", False):
         _resync_block_parts(rule)
