@@ -13,6 +13,8 @@ from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
 from .follow import token_in_follow
 
+import contextlib
+
 # ── production 元素 dispatch 表 ──
 # 取代 getattr(self, f"_parse_{typ}") 的动态查找
 _DISPATCH: dict[str, str] = {
@@ -129,18 +131,14 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
 # ── 规则匹配全流程 ──
 
 
-def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:
-    """尝试匹配一个语法规则的全部逻辑"""
-    # 停点/trace：按规则名或 token 位置过滤（仅真实 Parser 有此方法）
-    trace_fn = getattr(self, "_maybe_trace", None)
-    if trace_fn is not None:
-        trace_fn(context, rule.name)
+@contextlib.contextmanager
+def rule_frame(self, context: ParseContext, rule: GrammarRule):
+    """规则执行帧：作用域 + 语义路径推入，退出自动恢复。
 
-    # Pratt 规则
-    if getattr(rule, "pratt", False):
-        return self._try_pratt_rule(context, rule)
-
-    # 作用域推入
+    收敛 try_rule_productions 原先每个 return 分支的手动
+    path_stack.pop()/scope_stack.pop()（~8 处重复，易漏一处致栈泄漏）。
+    pratt 规则不推帧（原语义：pratt 分支在作用域推入前 return）。
+    """
     rule_parser = getattr(rule, "parser", {})
     scope_def = rule_parser.get("scope") if isinstance(rule_parser, dict) else None
     scope_pushed = False
@@ -152,113 +150,114 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
     # 语义路径
     sn = context.sibling_counter.get(rule.name, 0)
     context.sibling_counter[rule.name] = sn + 1
-    seg = f"{rule.name}[{sn}]"
-    context.path_stack.append(seg)
+    context.path_stack.append(f"{rule.name}[{sn}]")
+    try:
+        yield
+    finally:
+        context.path_stack.pop()
+        if scope_pushed:
+            self.scope_stack.pop()
 
-    # 块规则
-    if getattr(rule, "is_block", False):
-        bs = getattr(rule, "block_start", None)
 
-        if bs:
-            # 有显式 block.start 的块规则（如 BeginEnd）：自行消费起止符
-            # 1) 消费起始符
-            self._skip_tokens(context, tuple(self.skip_types))
-            tok = context.peek_token()
-            if not tok or tok.type != bs:
-                self._record_fail_site(
-                    context,
-                    rule=rule.name,
-                    reason=f"block start mismatch: expected {bs}",
-                )
-                context.path_stack.pop()
-                if scope_pushed:
-                    self.scope_stack.pop()
-                return None
+def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
+    """块规则匹配：起止符消费 + 块头内容 + 块体 + FOLLOW 检查。
+
+    有显式 block_start（如 BeginEnd）：自行消费起止符；匿名块（无 block_start）
+    由 parse_block 处理、结束符由父规则负责。帧清理（path_stack/scope_stack）
+    由调用方 rule_frame 统一处理，本函数只负责节点恢复。
+    """
+    bs = getattr(rule, "block_start", None)
+
+    if not bs:
+        # 匿名块（无 block.start）：由父规则 production 中的 @ 调用触发
+        # 块体由 parse_block 处理，结束符由父规则负责消费
+        return self.parse_block(context, start_token="", rule=rule)
+
+    # 1) 消费起始符
+    self._skip_tokens(context, tuple(self.skip_types))
+    tok = context.peek_token()
+    if not tok or tok.type != bs:
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason=f"block start mismatch: expected {bs}",
+        )
+        return None
+    context.advance_token()
+
+    # 2) 匹配块头内容 production（block_prods，不含 block_start/block_end）
+    rule_node = Node(rule.name)
+    old_node = context.current_node
+    context.update_current_node(rule_node)
+    all_matched = match_productions(self, context, rule, rule.block_prods)
+    if all_matched is None:
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="block header production failed",
+        )
+        assert old_node is not None
+        context.update_current_node(old_node)
+        return None
+    self._bind_attributes(rule_node, rule, all_matched)
+
+    # 3) 解析块体
+    block_body = Node(BLOCK_NODE_NAME)
+    from .block_parser import parse_block_body
+
+    parse_block_body(self, context, block_body, rule)
+    body_children = getattr(block_body, CHILDREN_FIELD, [])
+    for child in body_children:
+        rule_node.add_sub_node(child)
+
+    # 4) 消费结束符
+    be = getattr(rule, "block_end", None) or _get_block_end_for(rule)
+    if be:
+        self._skip_tokens(context, tuple(self.skip_types))
+        tok = context.peek_token()
+        if tok and tok.type == be:
             context.advance_token()
-
-            # 2) 匹配块头内容 production（block_prods，不含 block_start/block_end）
-            rule_node = Node(rule.name)
-            old_node = context.current_node
-            context.update_current_node(rule_node)
-            all_matched = match_productions(self, context, rule, rule.block_prods)
-            if all_matched is None:
-                self._record_fail_site(
-                    context,
-                    rule=rule.name,
-                    reason="block header production failed",
-                )
-                assert old_node is not None
-                context.update_current_node(old_node)
-                context.path_stack.pop()
-                if scope_pushed:
-                    self.scope_stack.pop()
-                return None
-            self._bind_attributes(rule_node, rule, all_matched)
-
-            # 3) 解析块体
-            block_body = Node(BLOCK_NODE_NAME)
-            from .block_parser import parse_block_body
-
-            parse_block_body(self, context, block_body, rule)
-            body_children = getattr(block_body, CHILDREN_FIELD, [])
-            for child in body_children:
-                rule_node.add_sub_node(child)
-
-            # 4) 消费结束符
-            be = getattr(rule, "block_end", None) or _get_block_end_for(rule)
-            if be:
-                self._skip_tokens(context, tuple(self.skip_types))
-                tok = context.peek_token()
-                if tok and tok.type == be:
+            # 结束符后行内注释（`end // comment`）一并消费：
+            # 块规则结束符不走 parse_token，注释若残留会停在 token 流，
+            # 使外层规则的后继检查（FOLLOW）失败回滚。
+            while context.has_more_tokens():
+                nxt = context.peek_token()
+                if nxt and nxt.type == COMMENT_TOKEN_TYPE:
+                    self._comment_anchors.append(
+                        {
+                            "anchor": tok.content,
+                            "text": nxt.content,
+                            "line": nxt.line,
+                            "type": be,
+                        }
+                    )
                     context.advance_token()
-                    # 结束符后行内注释（`end // comment`）一并消费：
-                    # 块规则结束符不走 parse_token，注释若残留会停在 token 流，
-                    # 使外层规则的后继检查（FOLLOW）失败回滚。
-                    while context.has_more_tokens():
-                        nxt = context.peek_token()
-                        if nxt and nxt.type == COMMENT_TOKEN_TYPE:
-                            self._comment_anchors.append(
-                                {
-                                    "anchor": tok.content,
-                                    "text": nxt.content,
-                                    "line": nxt.line,
-                                    "type": be,
-                                }
-                            )
-                            context.advance_token()
-                        else:
-                            break
+                else:
+                    break
 
-            # 5) FOLLOW 检查（方案 B+）：块规则消费完 block_end 后，下一个 token
-            #    也必须是派生 FOLLOW 中的合法后继——与普通规则统一（不再跳过）。
-            #    块规则自身 production 完整（首尾字面 token），check_end_case 的
-            #    "引用块规则"guard 不触发，走派生 FOLLOW 硬检查。
-            if not self._check_end_case(context, rule):
-                self._record_fail_site(
-                    context,
-                    rule=rule.name,
-                    reason="block FOLLOW mismatch",
-                )
-                self._restore_current_node(old_node, context)
-                context.path_stack.pop()
-                if scope_pushed:
-                    self.scope_stack.pop()
-                return None
+    # 5) FOLLOW 检查（方案 B+）：块规则消费完 block_end 后，下一个 token
+    #    也必须是派生 FOLLOW 中的合法后继——与普通规则统一（不再跳过）。
+    #    块规则自身 production 完整（首尾字面 token），check_end_case 的
+    #    "引用块规则"guard 不触发，走派生 FOLLOW 硬检查。
+    if not self._check_end_case(context, rule):
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason="block FOLLOW mismatch",
+        )
+        self._restore_current_node(old_node, context)
+        return None
 
-            self._restore_current_node(old_node, context)
-            context.path_stack.pop()
-            if scope_pushed:
-                self.scope_stack.pop()
-            return rule_node
-        else:
-            # 匿名块（无 block.start）：由父规则 production 中的 @ 调用触发
-            # 块体由 parse_block 处理，结束符由父规则负责消费
-            result = self.parse_block(context, start_token="", rule=rule)
-            context.path_stack.pop()
-            if scope_pushed:
-                self.scope_stack.pop()
-            return result
+    self._restore_current_node(old_node, context)
+    return rule_node
 
+
+def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
+    """普通规则匹配链：production 匹配 → 属性绑定 → FOLLOW 检查 → inline。
+
+    帧清理（path_stack/scope_stack）由调用方 rule_frame 统一处理，本函数
+    只负责节点恢复。
+    """
     self._log_state(
         lambda: f"尝试规则: {rule.name} | {self._debug_token_info(context)}",
         context=context,
@@ -276,9 +275,6 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             rule=rule.name,
             reason="production match failed",
         )
-        context.path_stack.pop()
-        if scope_pushed:
-            self.scope_stack.pop()
         return None
 
     # 属性绑定
@@ -292,25 +288,38 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
             reason="FOLLOW mismatch",
         )
         self._restore_current_node(old_node, context)
-        context.path_stack.pop()
-        if scope_pushed:
-            self.scope_stack.pop()
         return None
 
     # Inline 扁平化
     inline_result = self._try_inline_rule(rule, all_matched_nodes, old_node, context)
     if inline_result is not None:
-        context.path_stack.pop()
-        if scope_pushed:
-            self.scope_stack.pop()
         return inline_result
 
     self._restore_current_node(old_node, context)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
-    context.path_stack.pop()
-    if scope_pushed:
-        self.scope_stack.pop()
     return rule_node
+
+
+def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node | None:
+    """尝试匹配一个语法规则的全部逻辑（薄调度器）。
+
+    三形态分派：pratt / 块（_try_block_rule）/ 普通（_try_plain_rule）。
+    帧管理（作用域 + 语义路径）由 rule_frame 统一收敛——原单函数 ~180 行、
+    8 处重复栈清理（path_stack.pop/scope_stack.pop）易漏，拆后各职责独立。
+    """
+    # 停点/trace：按规则名或 token 位置过滤（仅真实 Parser 有此方法）
+    trace_fn = getattr(self, "_maybe_trace", None)
+    if trace_fn is not None:
+        trace_fn(context, rule.name)
+
+    # Pratt 规则（不推帧，原语义：pratt 分支在作用域推入前 return）
+    if getattr(rule, "pratt", False):
+        return self._try_pratt_rule(context, rule)
+
+    with self._rule_frame(context, rule):
+        if getattr(rule, "is_block", False):
+            return self._try_block_rule(context, rule)
+        return self._try_plain_rule(context, rule)
 
 
 # ── 生产式准备 & 结束符检查 ──

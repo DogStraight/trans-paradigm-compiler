@@ -254,6 +254,9 @@ from .attribute_binder import (
 from ._production import (
     process_production_node,
     match_productions,
+    rule_frame,
+    try_block_rule,
+    try_plain_rule,
     try_rule_productions,
     prepare_production,
     check_end_case,
@@ -331,6 +334,9 @@ class Parser:
     _process_production_node = process_production_node
     _match_productions = match_productions
     _try_rule_productions = try_rule_productions
+    _rule_frame = rule_frame
+    _try_block_rule = try_block_rule
+    _try_plain_rule = try_plain_rule
     _prepare_production = prepare_production
     _check_end_case = check_end_case
 
