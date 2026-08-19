@@ -213,7 +213,7 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
                     context.advance_token()
                     # 结束符后行内注释（`end // comment`）一并消费：
                     # 块规则结束符不走 parse_token，注释若残留会停在 token 流，
-                    # 使外层规则 end_case（如 IfBlock 的 newline）检查失败回滚。
+                    # 使外层规则的后继检查（FOLLOW）失败回滚。
                     while context.has_more_tokens():
                         nxt = context.peek_token()
                         if nxt and nxt.type == COMMENT_TOKEN_TYPE:
@@ -284,12 +284,12 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
     # 属性绑定
     self._bind_attributes(rule_node, rule, all_matched_nodes)
 
-    # end_case 检查
+    # 后继检查（派生 FOLLOW 硬检查）
     if not self._check_end_case(context, rule):
         self._record_fail_site(
             context,
             rule=rule.name,
-            reason="end_case mismatch",
+            reason="FOLLOW mismatch",
         )
         self._restore_current_node(old_node, context)
         context.path_stack.pop()
@@ -397,7 +397,7 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
         if token_in_follow(token.type, follow):
             return True
         self._log_state(
-            f"✗ end_case 不匹配(FOLLOW): 规则 {rule.name} "
+            f"✗ 后继检查(FOLLOW): 规则 {rule.name} "
             f"后继 '{token.content}' (type={token.type}) "
             f"Ln {token.line} 不在派生 FOLLOW 中",
             context=context,

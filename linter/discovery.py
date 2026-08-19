@@ -104,7 +104,15 @@ class Discovery:
             _tok = _prods[0].get("token_type", "")
             if _info.get("is_statement") or _info.get("is_block"):
                 _stmt_block_firsts.add(_tok)
-            elif _tok.startswith(KEYWORD_PREFIX):
+                continue
+            if not _tok.startswith(KEYWORD_PREFIX):
+                continue
+            # 精确化：延续关键字 = production **引用语句/块**的容器延续
+            # （else → @Stmt、default → @StmtOrNull、impl → 块成员）。仅凭
+            # "keyword 起始 + 非语句/块"会把 input/output/parameter/invert 等
+            # 声明规则误当延续——它们在块头内侥幸不触发，但在 body 语境出现
+            # 会被跳过漏检。引用判定复用 _feat_calls_stmt（穿透包装选择器）。
+            if any(self._feat_calls_stmt(f) for f in _prods):
                 _continuation.add(_tok)
         self._continuation_openers = frozenset(
             _continuation - _stmt_block_firsts
@@ -449,8 +457,8 @@ class Discovery:
         （optional/choice/call），结束点由 body 结构决定而非固定 token。用
         matcher 匹配 production 可正确覆盖尾部结构（如 if 的 else chain）；
         回退 _stmt_ends 会在 then 块 keyword.end 处截断、把 else chain 甩出
-        节点（漏检/误报）。匹配失败（无进展/有结构错误）回退 _stmt_ends，
-        让检查阶段报错、discovery 仍能推进。
+        节点（漏检/误报）。匹配失败（无进展/有结构错误）回退 _stmt_ends——
+        错误恢复近似（非语法判定）：让检查阶段报错、discovery 仍能推进。
         """
         matcher = self._lookahead._matcher
         if matcher is not None:
@@ -519,7 +527,11 @@ class Discovery:
         return set()
 
     def _is_single_token_rule(self, rule: str) -> bool:
-        """production 只有单个字面 token（如 NullStmt 的 ';'）。"""
+        """production 只有单个字面 token（如 NullStmt 的 ';'）。
+
+        错误恢复近似（非语法判定）：单 token 语句无内部结构，边界取"下个
+        token 之前"即可，避免句尾跳过在单行文件里延伸吞掉后续语句。
+        """
         info = self._tree.get(rule, {})
         prods = info.get("prods", [])
         if len(prods) != 1:
@@ -571,11 +583,13 @@ class Discovery:
         return start, end
 
     def _skip_to_statement_end(self, tokens: list[Token], i: int, n: int) -> int:
+        # 错误恢复近似（非语法判定）：无 production 推导结束符时的最终回退。
         # 句子终止 = depth 0 处的分号（通用终结符，几乎所有语句以 ; 收尾——
         # 即使 production 末尾是 call 如 @PortConnection，分号仍在语句尾）或
         # 行尾（保守回退）。depth 跟踪保证括号内分号（for 的 init/cond）不截断。
         # 跨行语句（如模块名/参数/实例名分多行的参数化实例化）不被 newline
-        # 截断——分号是唯一可靠终止。
+        # 截断——分号是唯一可靠终止。对不以分号/行尾结束语句的新语言，此回退
+        # 会错位——由 production 推导（_derived_end_case）优先兜底。
         depth = 0
         while i < n:
             t = tokens[i]
