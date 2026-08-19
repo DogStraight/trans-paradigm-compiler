@@ -26,9 +26,6 @@ production = [
     "bracket.r_parentheses",
     "@ForBodyStmt",
 ]
-end_case = [
-    "newline",
-]
 
 [ForLoop.parser.node]
 init = "$3"
@@ -67,9 +64,6 @@ production = [
     "@ForStep",
     "bracket.r_parentheses",
     "@BeginEnd",
-]
-end_case = [
-    "newline",
 ]
 
 [ForLoopBlock.parser.node]
@@ -158,9 +152,6 @@ production = [
     "bracket.r_parentheses",
     "@ForBodyStmt",
 ]
-end_case = [
-    "newline",
-]
 
 [WhileLoop.parser.node]
 condition = "$3"
@@ -186,9 +177,6 @@ production = [
     "bracket.r_parentheses",
     "@ForBodyStmt",
 ]
-end_case = [
-    "newline",
-]
 
 [RepeatLoop.parser.node]
 count = "$3"
@@ -210,9 +198,6 @@ is_statement = true
 production = [
     "keyword.forever",
     "@Stmt",
-]
-end_case = [
-    "newline",
 ]
 
 [ForeverLoop.parser.node]

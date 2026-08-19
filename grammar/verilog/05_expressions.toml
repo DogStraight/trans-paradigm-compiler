@@ -364,20 +364,12 @@ tail = "$2"
 
 
 # ── Expression — 顶层表达式 ──
-# Verilog 表达式的根节点。end_case 列出了可能在表达式后出现的 token，
-# 帮助解析器判断表达式何时结束。
+# Verilog 表达式的根节点。表达式何时结束由 pratt 绑定强度决定
+# （非运算符 token 自然终止中缀循环），无需显式边界声明。
 
 [Expression.parser]
 production = ["@LogicOrExpr"]
 pratt = true
-end_case = [
-    "symbol.base.comma",
-    "symbol.base.semicolon",
-    "bracket.r_parentheses",
-    "bracket.r_square_bracket",
-    "bracket.r_curly_bracket",
-    "symbol.base.colon",
-]
 
 [Expression.parser.node]
 

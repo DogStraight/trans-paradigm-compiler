@@ -38,9 +38,6 @@ production = [
     "@CaseItemList",
     "keyword.endcase",
 ]
-end_case = [
-    "newline",
-]
 
 [CaseStmt.parser.node]
 case_type = "$1"

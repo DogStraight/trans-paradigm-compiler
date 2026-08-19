@@ -80,9 +80,6 @@ production = [
     "keyword.input",
     "@PortTail",
 ]
-end_case = [
-    "newline",
-]
 
 [TaskAnsiInputDecl.parser.node]
 direction = "input"
@@ -199,9 +196,6 @@ production = [
     "@TypeSpecNoReg",
     "@DeclaratorList",
 ]
-end_case = [
-    "newline",
-]
 
 [AnsiInputDecl.parser.node]
 direction = "input"
@@ -244,9 +238,6 @@ production = [
     "@TypeSpec",
     "@DeclaratorList",
 ]
-end_case = [
-    "newline",
-]
 
 [AnsiOutputDecl.parser.node]
 direction = "output"
@@ -288,9 +279,6 @@ production = [
     "keyword.inout",
     "@TypeSpecNoReg",
     "@DeclaratorList",
-]
-end_case = [
-    "newline",
 ]
 
 [AnsiInoutDecl.parser.node]

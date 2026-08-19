@@ -204,15 +204,12 @@ class LookaheadTable:
 
     @staticmethod
     def _rule_end_tokens(info: dict) -> set[str]:
-        """规则 production 末尾字面 token（解包 optional）+ 配置 end_case。
+        """规则 production 末尾字面 token（解包 optional）。
 
-        排除 ! 前缀（排除项）与 trivia（newline 等——trivia 是分隔符，
-        非句子结束 token；end_case 里的 newline 表示"语句后可换行"）。
+        end_case 已移除——语句终点由 production 结构推导（末尾字面 token
+        是句子天然结束边界），块结束符由 block_end 收集另入 _stmt_ends。
         """
-        result = {
-            s for s in (info.get("end_case", []) or [])
-            if not s.startswith("!") and s not in _TRIVIA
-        }
+        result: set[str] = set()
         prods = info.get("prods", [])
         if prods:
             last = prods[-1]
@@ -454,10 +451,6 @@ class LookaheadTable:
                 return pos  # 越界（未闭合）→ 保守
             j += 1
         return pos
-
-    def end_case(self, rule: str) -> set[str]:
-        info = self._tree.get(rule, {})
-        return set(info.get("end_case", set()) or ())
 
     def is_statement(self, rule: str) -> bool:
         info = self._tree.get(rule, {})

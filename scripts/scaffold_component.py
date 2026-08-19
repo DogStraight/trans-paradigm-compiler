@@ -35,7 +35,6 @@ is_statement = true
 
 [<RuleName>.parser]
 production = ["@Identifier", "symbol.base.semicolon"]
-end_case = ["newline"]
 
 [<RuleName>.parser.node]
 name = "$1"

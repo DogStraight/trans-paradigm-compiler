@@ -21,7 +21,6 @@ def build_slice_tree(rules: dict[str, GrammarRule]) -> dict[str, dict]:
     tree: dict[str, dict] = {}
     for name, rule in rules.items():
         prods_raw = getattr(rule, "production", [])
-        ec = set(getattr(rule, "effective_end_case", None) or getattr(rule, "end_case", []) or [])
         parsed = []
         for p in prods_raw:
             if isinstance(p, str):
@@ -43,7 +42,7 @@ def build_slice_tree(rules: dict[str, GrammarRule]) -> dict[str, dict]:
                     parsed.append({"type": "choice", "alternatives": parts})
         tree[name] = {
             "prods": parsed,
-            "end_case": ec,
+            "exclude": set(getattr(rule, "exclude", []) or []),
             "is_block": getattr(rule, "is_block", False),
             "is_statement": getattr(rule, "is_statement", False),
             "is_atom": getattr(rule, "is_atom", False),

@@ -14,9 +14,6 @@ production = [
     "@Identifier?",
     "@PortConnection",
 ]
-end_case = [
-    "newline",
-]
 
 [ImplBinding.parser.node]
 module_name = "$2"
@@ -89,9 +86,6 @@ production = [
     "symbol.extend.arrow",
     "@Identifier",
     "symbol.base.semicolon",
-]
-end_case = [
-    "newline",
 ]
 
 [ImplBindingWithInterface.parser.node]

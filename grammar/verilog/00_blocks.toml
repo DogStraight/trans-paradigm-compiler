@@ -30,7 +30,6 @@ join = "\n"
 production = [
     "comment",
 ]
-end_case = []
 
 [Comment.parser.node]
 value = "$1.value"
@@ -54,9 +53,6 @@ production = [
     "keyword.begin",
     "@BlockLabel?",
     "keyword.end",
-]
-end_case = [
-    "newline",
 ]
 
 [BeginEnd.parser.node]

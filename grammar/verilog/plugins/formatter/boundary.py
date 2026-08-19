@@ -119,12 +119,32 @@ def _same_line_next(tokens: list, idx: int, trivia: frozenset[str]) -> bool:
 # ── 边界 token 集合（由语法规则自动构建）──
 
 
+def _tail_keyword_tokens(info: dict) -> set[str]:
+    """规则 production 末尾的 keyword.* 字面 token（隐式块终结符）。
+
+    非 is_block 规则（如 CaseStmt/EventWaitStmt）的隐式块结束关键字
+    （endcase/endfunction/endtask 等）在 production 末尾字面 token 里，
+    从结构推导而非手写 end_case 字段（end_case 已移除）。
+    """
+    prods = info.get("prods", [])
+    if not prods:
+        return set()
+    result: set[str] = set()
+    last = prods[-1]
+    if isinstance(last, dict) and last.get("type") == "token":
+        tt = last.get("token_type", "")
+        if tt.startswith(KEYWORD_PREFIX) and "|" not in tt:
+            result.add(tt)
+    return result
+
+
 def build_block_tokens(rules: dict) -> BlockTokenMap:
     """从语法规则构建边界 token 集合。
 
     自动推导：
-      - is_block = True 的规则 → 开/闭 token 直接收集
-      - 有 end_case 关键字终结符的规则（如 case/endcase）→ 作为隐式 scope
+      - is_block = True 的规则 → 开/闭 token 直接收集（block_start/block_end）
+      - production 末尾有 keyword.* 字面 token 的规则（如 case/endcase）→
+        作为隐式 scope 的终结符（从结构推导，end_case 已移除）
       - call 链递归解析（如 @CaseKeyword → keyword.case|casex|casez）
       - 每个 opener token 自动关联 ScopeKind
 
@@ -154,7 +174,9 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
     for name, info in tree.items():
         if not info.get("is_block"):
             continue
-        closers |= info.get("end_case", set())
+        be = info.get("block_end") or ""
+        if be:
+            closers.add(be)
         prods = info.get("prods", [])
         if not prods:
             anon_blocks.add(name)
@@ -181,22 +203,21 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
                 seen_parents.add(name)
                 break
 
-    # ── 第二轮：有 end_case 关键字终结符的隐式块（case/function/task 等）──
-    # 终结符从规则推导（非 is_block 规则 end_case 里 keyword.* 的终结符），
-    # 不硬编码 endcase/endfunction 等具体名
+    # ── 第二轮：production 末尾关键字终结符的隐式块（case/function/task 等）──
+    # 终结符从规则 production 推导（非 is_block 规则末尾 keyword.* 字面 token），
+    # 不硬编码 endcase/endfunction 等具体名（end_case 已移除）。
     _END_KEYWORD_MARKERS = frozenset(
         tok
         for info in tree.values()
         if isinstance(info, dict) and not info.get("is_block")
-        for tok in (info.get("end_case") or set())
-        if isinstance(tok, str) and tok.startswith(KEYWORD_PREFIX)
+        for tok in _tail_keyword_tokens(info)
     )
     for name, info in tree.items():
         if info.get("is_block"):
             continue  # 第一轮已处理
-        ec = info.get("end_case", set())
+        ec_tail = _tail_keyword_tokens(info)
         # 只关注有明确关键字终结符的规则
-        if not ec or not ec & _END_KEYWORD_MARKERS:
+        if not ec_tail or not ec_tail & _END_KEYWORD_MARKERS:
             continue
         prods = info.get("prods", [])
         if not prods:
@@ -205,7 +226,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         tokens = _resolve_first_tokens(tree, prods[0])
         if tokens:
             openers |= tokens
-            closers |= ec & _END_KEYWORD_MARKERS  # 只取关键字终结符
+            closers |= ec_tail & _END_KEYWORD_MARKERS  # 只取关键字终结符
 
     # ── 构建 scope_kind_map：从规则 analyzer.scope.kind 推导（结构类别是规则
     #    自身的语义声明，非 formatter 单独映射表）──
@@ -226,13 +247,12 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             continue  # 非结构边界 kind（如类型系统的 "type"），不进入 scope_kind_map
         info = tree.get(name, {}) or {}
         prods = info.get("prods") or getattr(rule, "prods", []) or []
-        # 有配对结束符（block_end / end_case 含关键字 / 块类别）的规则才是"块"；
-        # always/initial/if/for 等语句头的 end_case 是 [newline]（非关键字），且
-        # 不在块类别，其 first token 不进 openers（体是 begin 块或单语句）
+        # 有配对结束符（block_end / production 尾关键字终结符 / 块类别）的规则
+        # 才是"块"；always/initial/if/for 等语句头（体是 begin 块或单语句，
+        # 无关键字终结符）不在块类别，其 first token 不进 openers。
         bs = getattr(rule, "block_start", "") or ""
         be = getattr(rule, "block_end", "") or ""
-        ec = info.get("end_case") or getattr(rule, "end_case", []) or []
-        ec_kw = [e for e in ec if isinstance(e, str) and e.startswith(KEYWORD_PREFIX)]
+        ec_kw = _tail_keyword_tokens(info)
         has_pair = bool(be) or bool(ec_kw) or kind in _BLOCK_KINDS
         if has_pair and not be:
             # 无 block_end 的块（如 CaseStmt：endcase 在 production 尾）——
@@ -263,13 +283,11 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             scope_kind_map.setdefault(be, kind)
             if isinstance(be, str) and be.startswith(KEYWORD_PREFIX):
                 closers.add(be)
-        # end_case 关键字终结符 → kind（closer：语句结束符如 endcase/endmodule）
-        for e in ec:
+        # production 尾关键字终结符 → kind（closer：语句结束符如 endcase/endmodule）
+        for e in ec_kw:
             if isinstance(e, str) and e.startswith(KEYWORD_PREFIX):
                 scope_kind_map.setdefault(e, kind)
                 closers.add(e)
-        # production 里其余关键字 token → 仅映射 kind，不改变 openers/closers
-        # （opener/closer 语义已由 first token / block_start / block_end / end_case 覆盖）
 
     ifdef_set = {
         macro_type("ifdef"),

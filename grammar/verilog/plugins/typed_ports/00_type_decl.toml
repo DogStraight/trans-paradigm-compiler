@@ -13,9 +13,6 @@ production = [
     "@TypeParamList?",
     "@TypeBody",
 ]
-end_case = [
-    "newline",
-]
 
 [TypeDecl.parser.node]
 type_name = "$2"

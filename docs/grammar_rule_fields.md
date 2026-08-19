@@ -19,10 +19,10 @@
 | 本质 | `production` | ✅ 必写 |
 | 本质 | `is_atom` | ✅ 必写（原子规则） |
 | 本质 | `is_block` | ✅ 必写（块解析策略） |
-| 语义边界 | `end_case` | 仅变长/歧义规则 |
+| 语义边界 | `exclude` | 仅消歧规则（负向前瞻） |
 | 增强 | `node` / `analyzer.*` / `renderer.*` | 可选 |
-| 推导 | `block_start` / `block_end` / `is_statement` / `inline` | 不写（框架算） |
-| 移除 | `structure` / `block = {start,end}` / `bound` 括号语义 / `[Rule.bound]` | — |
+| 推导 | `block_start` / `block_end` / `is_statement` / `inline` / FOLLOW | 不写（框架算） |
+| 移除 | `structure` / `block = {start,end}` / `bound` 括号语义 / `[Rule.bound]` / `end_case` | — |
 
 ---
 
@@ -122,18 +122,27 @@ production = [
 - **仅语法块**（`keyword.*` 边界）：括号配对不在此声明，统一走 `[bracket].pairs` 配置
 - **不可推导**: `is_block` 本身（`Root` 等无边界块角色需作者标注）；但起止 token 完全由 production 表达，不再重复手写
 
-### `end_case` — 变长/歧义规则的终止条件（`[Rule.parser]`）
+### 边界后继（已移除 `end_case`）— 派生 FOLLOW + `exclude`
 
-规则匹配完成后，下一个 token 的预期集合；用于变长 production 的终止判定。
+规则的后继合法性由引擎从 production 结构**机械推导**（parser/follow.py 的
+FOLLOW 集，对标 yacc 派生）：规则匹配完后，当前 token ∉ FOLLOW → 拒绝回退。
+语法是唯一真相源，无需手写后继 token 集合（旧 `end_case` 字段已移除）。
 
 ```toml
 [Declarator.parser]
-end_case = ["!symbol.base.dot"]   # 排除式：遇到 dot 不停止
+exclude = ["symbol.base.dot"]   # 负向前瞻：匹配后若后跟 . 即失败回退
 ```
 
-- **消费方**: parser（规则边界）、linter（语句发现器的 `_statement_end`）
-- **何时需要**: 变长 production（`*`/`+`/可选终止）或存在歧义时；定长 production 可省
-- **不可推导**: `!` 排除语法、逗号列表终止等是语言手工微调
+- **`exclude`**（`[Rule.parser]`，列表）— 负向前瞻（非 FOLLOW 数据）：声明器
+  匹配后遇此 token 即失败回退。用途：消歧——如 `@DeclaratorList` 的 repeat
+  贪吃逗号分隔项时，`spi.slave` 类型引用的 `.` 应阻止 Declarator 吞掉类型
+  引用（`input rstn, spi.slave ...` 中 `spi` 不能当第二个 declarator）。该歧义
+  是 Declarator 自身语法不可推导的（FOLLOW 不含 `.`，但无歧义时 `.` 也应
+  拒绝），故独立字段声明，parser 与 linter 共同消费。
+- **消费方**: parser（`check_end_case` FOLLOW 硬检查）、linter（`_statement_end`
+  从 production 推导句子边界）
+- **不需要手写**: 逗号列表、分号、右括号等后继全部由 FOLLOW 推导；`exclude`
+  只用于"显式拒绝某 token"的消歧场景
 
 ---
 

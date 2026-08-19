@@ -11,6 +11,7 @@ from core.define import Node, GrammarRule, CHILDREN_FIELD
 from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
+from .follow import token_in_follow
 
 # ── production 元素 dispatch 表 ──
 # 取代 getattr(self, f"_parse_{typ}") 的动态查找
@@ -334,40 +335,34 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
 
 
 def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
-    """检查当前 token 是否匹配规则的终止条件。"""
+    """检查规则匹配后当前 token 是否为合法后继（派生 FOLLOW 硬性检查）。
+
+    判定顺序：
+      1. 跳过 trivia（newline/space.fold/comment）后取检查 token——FOLLOW
+         是 token 级后继集，trivia 不是语法后继
+      2. 块 body 辅助验证（production 引用块规则、body 由 parse_block 管理
+         的规则）→ 接受——块边界由结构决定，FOLLOW 检查不适用
+      3. 派生 FOLLOW 硬性检查（token ∉ FOLLOW → 拒绝）——parser/follow.py
+         从 production 结构机械推导，语法是唯一真相源
+      4. 无派生 FOLLOW（不可达规则，到不了此检查）→ 接受
+    """
     if not context.has_more_tokens():
         return True
 
-    token = context.peek_token()
-    raw_list = getattr(rule, "effective_end_case", None)
-    if raw_list is None:
-        raw_list = getattr(rule, "end_case", [])
-
-    if token:
-        pass_tokens: list[str] = []
-        fail_tokens: list[str] = []
-        for item in raw_list:
-            if isinstance(item, str) and item.startswith("!"):
-                fail_tokens.append(item[1:])
-            else:
-                pass_tokens.append(item)
-
-        if token.type in fail_tokens:
-            self._log_state(
-                f"✗ end_case(!) 触发: 规则 {rule.name} 遇 '{token.content}' "
-                f"(type={token.type})，反匹配 {fail_tokens}",
-                context=context,
-            )
-            return False
-
-        if pass_tokens and token.type in pass_tokens:
+    # 1. peek 跳过 trivia（不消费 token，检查后指针不动）
+    token = None
+    offset = 0
+    while True:
+        tok = context.peek_token(offset)
+        if tok is None:
             return True
+        if tok.type in self.skip_types or tok.type == COMMENT_TOKEN_TYPE:
+            offset += 1
+            continue
+        token = tok
+        break
 
-    # 无正匹配项则跳过检查
-    if not [t for t in raw_list if not (isinstance(t, str) and t.startswith("!"))]:
-        return True
-
-    # 若 body 由 parse_block 管理，end_case 仅作辅助验证
+    # 2. 若 body 由 parse_block 管理，边界由结构决定，FOLLOW 检查不适用
     for prod in rule.prods:
         feats = analyze_production_features(prod)
         if feats and feats.get("type") == "call":
@@ -375,73 +370,22 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
             if inner and getattr(inner, "is_block", False):
                 return True
 
-    # 定长 production（顶层无 ? * + 后缀）：production 已精确消费规则应占的 token，
-    # 当前 token 是父规则的责任。正匹配项此时仅作日志警告，不拒绝规则。
-    # 这使 end_case 的 "symbol.base.comma" / "bracket.r_parentheses" 等
-    # 可推导项可以从语法规则中安全移除，只在变长 production 中保留硬要求。
-    if not _has_variable_production(rule):
-        if token:
-            self._log_state(
-                f"~ end_case 不匹配(定长production,仅警告): 规则 {rule.name} "
-                f"期望 {raw_list}, 实际 '{token.content}' (type={token.type}) "
-                f"Ln {token.line}",
-                context=context,
-            )
-        return True
-
-    if token:
+    # 3. 派生 FOLLOW 硬性检查
+    follows = getattr(self, "_follows", None)
+    follow = follows.get(rule.name) if follows is not None else None
+    if follow:
+        if token_in_follow(token.type, follow):
+            return True
         self._log_state(
-            f"✗ end_case 不匹配: 规则 {rule.name} "
-            f"期望 {raw_list}, 实际 '{token.content}' (type={token.type}) "
-            f"Ln {token.line}",
+            f"✗ end_case 不匹配(FOLLOW): 规则 {rule.name} "
+            f"后继 '{token.content}' (type={token.type}) "
+            f"Ln {token.line} 不在派生 FOLLOW 中",
             context=context,
         )
-    return False
-
-
-def _has_variable_production(rule: GrammarRule) -> bool:
-    """检查规则的 production 是否需要 end_case 硬性确认终止点。
-
-    production（列表 = 一条产生式的顺序 token 序列）含变长元素（? * +）时，
-    若**最后一个元素是纯字面 token**（如 `localparam integer? ... ;` 的末尾
-    分号），production 已精确消费到句尾——中间 optional 不改变"末尾固定
-    token 已消费"的事实，end_case 正匹配仅为建议（放宽）。只有变长结尾
-    （repeat/optional/plus 或 call/choice 收尾）才需要 end_case 确认何时
-    停止。定长 production（无 ? * +）本就放宽。
-    """
-    prods = getattr(rule, "production", [])
-    if not prods:
         return False
-    has_var = False
-    for prod in prods:
-        if not isinstance(prod, str):
-            continue
-        # 顶层是否有 ? * + 后缀（括号内不算）
-        depth = 0
-        for ch in prod:
-            if ch == '(':
-                depth += 1
-            elif ch == ')':
-                depth -= 1
-            elif depth == 0 and ch in ('?', '*', '+'):
-                has_var = True
-                break
-    if not has_var:
-        return False
-    # 有变长元素：最后一个元素是纯字面 token（非 @call / 非 (choice / 无后缀）
-    # → 已精确消费到句尾，放宽；否则需要 end_case 硬性确认。
-    last = prods[-1]
-    if not isinstance(last, str) or last.startswith(("@", "(")):
-        return True
-    depth = 0
-    for ch in last:
-        if ch == '(':
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-        elif depth == 0 and ch in ('?', '*', '+'):
-            return True
-    return False
+
+    # 4. 无派生 FOLLOW（不可达规则）→ 接受
+    return True
 
 
 # ── 原子解析器：_parse_token / _parse_call / _parse_seq / etc. ──
@@ -612,15 +556,9 @@ def parse_plus(self, node: dict, context: ParseContext) -> Node | None:
 
 
 def _get_block_end_for(rule) -> str:
-    """从规则中提取块结束符 token 类型。"""
+    """从规则提取块结束符（block_end 由 production 首尾字面 token 推导）。"""
     if hasattr(rule, "block_end") and rule.block_end:
         return rule.block_end
-    ec = getattr(rule, "effective_end_case", None)
-    if ec is None:
-        ec = getattr(rule, "end_case", [])
-    for item in ec:
-        if isinstance(item, str) and not item.startswith("!"):
-            return item
     return ""
 
 

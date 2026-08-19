@@ -22,7 +22,6 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [NonBlockingAssign.parser.node]
 target = "$1"
@@ -50,7 +49,6 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [BlockingAssign.parser.node]
 target = "$1"
@@ -80,7 +78,6 @@ production = [
     "@Expression",
     "symbol.base.semicolon",
 ]
-# end_case 由 production 末尾分号推导（effective_end_case），无需显式声明
 
 [AssignStmt.parser.node]
 target = "$2"

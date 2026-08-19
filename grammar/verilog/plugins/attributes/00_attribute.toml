@@ -22,9 +22,6 @@ production = [
     "@AttrInstance",
     "@RegDecl|@WireDecl|@IntegerDecl",
 ]
-end_case = [
-    "newline",
-]
 
 [AttrDecl.parser.node]
 attrs = "$1"
@@ -56,9 +53,6 @@ production = [
     "@AttrInstance",
     "@CtrlStmt|@ProcAssignStmt|@CallStmt|@IfBlock|@IfStmt",
 ]
-end_case = [
-    "newline",
-]
 
 [AttrStmt.parser.node]
 attrs = "$1"
@@ -80,9 +74,6 @@ production = [
     "symbol.base.multiple",
     "@AttrSpecList",
     "symbol.base.multiple",
-    "bracket.r_parentheses",
-]
-end_case = [
     "bracket.r_parentheses",
 ]
 [AttrInstance.parser.node]

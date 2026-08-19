@@ -29,9 +29,6 @@ production = [
     "keyword.initial",
     "@Stmt",
 ]
-end_case = [
-    "newline",
-]
 
 [InitialStmt.parser.node]
 body = "$2"

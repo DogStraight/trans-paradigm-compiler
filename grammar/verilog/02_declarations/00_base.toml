@@ -15,12 +15,18 @@
 # ── Declarator — 声明器 ──
 # 单个声明项: name [range] [= init_value]
 # 例如: data_out [0:7] = 8'h00
-# end_case 使用 "!symbol.base.dot" 排除号段，防止 eat .port_name 语法。
+#
+# exclude: 负向前瞻（非 FOLLOW 数据）——Declarator 匹配到 name 后若后跟
+# `.`（类型引用如 `spi.slave` 的起点），即失败回退。@DeclaratorList 的
+# repeat 会贪吃逗号分隔项（`input rstn, spi.slave ...` 中 `spi` 会被当
+# 第二个 declarator），exclude 阻止它吞掉 TypedPortDecl 的类型引用。
+# 该歧义是 Declarator 自身语法不可推导的（FOLLOW 不含 `.` 但无此歧义时
+# `.` 也应拒绝），故独立字段声明，parser 与 linter 共同消费。
 
 [Declarator]
 [Declarator.parser]
 production = ["@Range?", "@Identifier", "@RangeBracket*", "@Init?"]
-end_case = ["!symbol.base.dot"]
+exclude = ["symbol.base.dot"]
 [Declarator.parser.node]
 packed_range = "$1"
 name = "$2"

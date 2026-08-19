@@ -16,9 +16,6 @@ production = [
     "bracket.r_parentheses",
     "@Stmt|symbol.base.semicolon",
 ]
-end_case = [
-    "newline",
-]
 
 [EventWaitStmt.parser.node]
 sensitivity = "$3"

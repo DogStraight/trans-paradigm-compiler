@@ -113,15 +113,6 @@ class ParseContext:
         pos = self.token_pointer + offset
         return self.tokens[pos] if pos < len(self.tokens) else None
 
-    def check_end_case(self, end_case: list[str]) -> bool:
-        """检查当前 token 是否属于结束符集合（或已无更多 token）"""
-        if not self.has_more_tokens():
-            return True
-        next_token = self.peek_token()
-        if next_token is None:
-            return True
-        return next_token.type in end_case
-
 
 class ScopeEntry:
     """作用域条目"""
@@ -222,10 +213,8 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         return None
 
     start = context.token_pointer
-    _ec = getattr(rule, "effective_end_case", None)
-    if _ec is None:
-        _ec = getattr(rule, "end_case", [])
-    stop_tokens = set(_ec) if _ec else None
+    # 实验：stop_tokens 是否冗余（pratt 中缀循环对非运算符本来就会 break）
+    stop_tokens = None
 
     try:
         ast_node, consumed = pratt_parser.parse_with_count(
@@ -474,6 +463,17 @@ class Parser:
             ):
                 _atom_names.setdefault(_prods[0], _rule.name)
         pratt_parser.install_atom_name_map(_atom_names)
+        # FOLLOW 集派生缓存（parser/follow.py）：check_end_case 的硬性依据。
+        # pratt 运算符成员从 token_category 的 operator 分类读取（语言数据，
+        # 前缀成员如 "symbol.base."），注入 is_atom 规则的 FOLLOW。
+        _op_cfg = _token_categories_cfg.get("operator", {}) if isinstance(
+            _token_categories_cfg, dict
+        ) else {}
+        _op_members = list(_op_cfg.get("types", []) or []) if isinstance(
+            _op_cfg, dict
+        ) else []
+        from .follow import compute_follows
+        self._follows = compute_follows(self.grammar_rules, _op_members)
         # inline comment 锚点记录（渲染后通过锚点匹配回注）
         self._comment_anchors: list[dict] = []
         # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）

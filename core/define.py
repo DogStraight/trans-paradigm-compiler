@@ -312,7 +312,7 @@ class FileManager:
 class GrammarRule:
     """语法规则
 
-    由 TOML 文件加载，除标准的 production/node/end_case 外，
+    由 TOML 文件加载，除标准的 production/node/exclude 外，
     可通过自声明属性附加语义角色，供下游消费（不限于 SemanticAnalyzer）：
 
     ───────────────────────────────────────────────────────────────
@@ -337,7 +337,7 @@ class GrammarRule:
     _KNOWN_FIELDS = {
         "production",
         "node",
-        "end_case",
+        "exclude",
         "inline",
         "pratt",
         "is_atom",
@@ -345,7 +345,7 @@ class GrammarRule:
         "is_statement",
     }
     # 默认值为列表的字段
-    _LIST_FIELDS = {"production", "node", "end_case"}
+    _LIST_FIELDS = {"production", "node", "exclude"}
 
     # node 绑定中 $N 位置捕获规约（用于静态越界校验）
     _RE_POS_REF = re.compile(r"^\$(\d+)(?:\.|$)")
@@ -366,7 +366,7 @@ class GrammarRule:
     # parser 阶段含 scope：_resolve_peek 会把 analyzer.scope 拷贝到 parser
     # 顶层（peek = { scope = "analyzer" }），故 scope 是 parser 合法字段。
     _STAGE_FIELDS = {
-        "parser": {"production", "node", "end_case", "peek", "inline", "is_atom", "pratt", "scope"},
+        "parser": {"production", "node", "exclude", "peek", "inline", "is_atom", "pratt", "scope"},
         "renderer": {"layout", "head", "body", "tail", "override"},
     }
     # 布尔字段（类型校验）
@@ -459,14 +459,6 @@ class GrammarRule:
         # 规则字段 schema 校验（fail-fast）
         self._validate_fields(name, kwargs)
 
-        # end_case 是否被 TOML 显式声明（含 end_case = []）——推导只在未声明时
-        # 发生；显式空列表表示"刻意无 end_case"（如 IfBlock/IfStmt 的结构定界）。
-        self._end_case_declared = "end_case" in kwargs or any(
-            isinstance(kwargs.get(s), dict) and "end_case" in kwargs[s]
-            for s in ("parser", "analyzer", "renderer")
-            if s in kwargs
-        )
-
         # 设置默认值
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
@@ -536,41 +528,6 @@ class GrammarRule:
     def prods(self) -> list:
         """生产式列表的快捷访问"""
         return getattr(self, "production", [])
-
-    @property
-    def effective_end_case(self) -> list:
-        """生效的 end_case：显式声明优先，未声明的语句规则从 production 推导。
-
-        推导规则（B1 收敛）：语句规则（is_statement）未声明 end_case 时，
-        production 最后一个元素是**纯字面 token**（非 @call / 非 (choice /
-        无 ?*+ 后缀，非 trivia）→ 推导为该 token（如末尾 symbol.base.semicolon
-        → ["symbol.base.semicolon"]）。其余情况推导为空列表。
-
-        不推导 newline：历史上 newline 作 end_case 是折行/else-chain 系列 bug
-        的根源（wrap 修复把分号规则从 [newline] 改成 [semicolon]）——newline
-        只允许显式声明，不默认注入。容器语句（production 以 call/choice 收尾）
-        推导为空，与 IfBlock/IfStmt 的"结构定界、无 end_case"一致。
-        """
-        if self._end_case_declared or not self.is_statement:
-            return self.end_case
-        prods = self.prods or []
-        if prods:
-            last = prods[-1]
-            # 纯字面 token：非 @call / 非 (choice / 无顶层 ?*+ 后缀 / 非 trivia
-            if isinstance(last, str) and last and not last.startswith(("@", "(")):
-                depth = 0
-                suffix = False
-                for ch in last:
-                    if ch == "(":
-                        depth += 1
-                    elif ch == ")":
-                        depth -= 1
-                    elif depth == 0 and ch in ("?", "*", "+"):
-                        suffix = True
-                        break
-                if not suffix and last not in ("newline", "space.fold"):
-                    return [last]
-        return []
 
 
 class GrammarRulesRegister:

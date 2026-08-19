@@ -12,9 +12,6 @@ production = [
     "@TypedTypeSpec",
     "@Declarator",
 ]
-end_case = [
-    "newline",
-]
 
 [TypedPortDecl.parser.node]
 type_spec = "$1"

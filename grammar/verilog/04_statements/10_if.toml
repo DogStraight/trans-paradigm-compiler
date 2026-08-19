@@ -23,7 +23,6 @@ production = [
     "@BeginEnd",
     "@ElseChain?",
 ]
-# end_case 不设 newline：if 的结束点由 body 结构 + else chain 决定（linter
 # discovery 按 production 匹配边界），newline 在 `end else` 同行时不出现、
 # 在 else 换行时又过早截断——依赖它定边界是脆弱设计。
 
@@ -60,7 +59,6 @@ production = [
     "@Stmt",
     "@ElseChain?",
 ]
-# end_case 不设 newline（同 IfBlock）：结束点由结构/matcher 决定。
 
 [IfStmt.parser.node]
 condition = "$3"

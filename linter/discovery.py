@@ -467,34 +467,33 @@ class Discovery:
         return self._skip_to_end(tokens, i, self._lookahead._stmt_ends, end)
 
     def _statement_end(self, tokens: list[Token], i: int, rule: str, n: int) -> int:
-        """确定语句的粗略边界（production 推导结束符，其次 end_case）。
+        """确定语句的粗略边界（production 推导结束符）。
 
         单 token 语句（如 NullStmt 的分号）只消费起始 token，
-        避免 end_case=["newline"] 在单行文件里延伸吞掉后续语句。
+        避免句尾跳过在单行文件里延伸吞掉后续语句。
         """
         if self._is_single_token_rule(rule):
             return i + 1
-        # 结束符优先从 production 推导（production 即真相）：结尾纯字面 token
-        # （如分号）是句子天然结束边界，不依赖手写 end_case。
+        # 结束符从 production 推导（production 即真相）：结尾纯字面 token
+        # （如分号）是句子天然结束边界。
         ec = self._derived_end_case(rule)
-        if not ec:
-            ec = self._lookahead.end_case(rule)
         if ec:
             return self._skip_to_end(tokens, i, ec, n)
-        # 无 end_case → 跳到分号或行尾
+        # 无可推导结束符（容器语句等）→ 跳到分号或行尾
         return self._skip_to_statement_end(tokens, i, n)
 
     def _derived_end_case(self, rule: str) -> set[str]:
         """从 production 推导结束符：结尾纯字面 token（非 @、无 ?*+ 后缀）。
 
         仅对非容器规则推导——容器（case/if/for 等含 @Stmt body）内部有分号，
-        结尾字面 token 不是唯一终止，强行推导会截断在内部语句处。容器回退到
-        配置 end_case。返回空集表示无可推导结束符。
+        结尾字面 token 不是唯一终止，强行推导会截断在内部语句处。容器返回
+        空集（回退 _skip_to_statement_end 的通用跳过）。返回空集表示无可
+        推导结束符。
 
         额外：production 末尾是 call（如 ModuleInst 的 @PortConnection 展开
         为 `(...);`）——递归查 call 的 production 是否以分号收尾，是则推导
-        分号。这使跨行语句（模块名/参数/实例名分多行）不被 newline end_case
-        截断（分号是可靠终止，depth 跟踪保证括号内分号不误判）。
+        分号。这使跨行语句（模块名/参数/实例名分多行）以分号为可靠终止
+        （depth 跟踪保证括号内分号不误判）。
         """
         if self._is_nested_container(rule):
             return set()

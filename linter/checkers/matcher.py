@@ -321,7 +321,7 @@ class RuleMatcher:
         while j < limit and tokens[j].type in _TRIVIA:
             j += 1
         sub_errors, consumed = self._expr.consume(
-            tokens, j, stop_tokens=self._stop_for(name)
+            tokens, j
         )
         if not silent:
             errors += sub_errors
@@ -347,14 +347,11 @@ class RuleMatcher:
             if k >= limit or tokens[k].type != bs:
                 return i
         # 优先用 block_end（精确配对结束符，如 BeginEnd 的 keyword.end）：
-        # end_case（如 newline）是"块后分隔符"，`end else` 同行时 newline
-        # 不出现会跳过头（吞掉 else 链直至后续换行/EOF）。无 block_end 回退。
+        # 块边界由结构决定（block_start/block_end 从 production 首尾字面
+        # token 推导），无 block_end 的匿名块不跳过。
         be = info.get("block_end") or ""
         if be:
             return self._skip_to_end(tokens, i, {be}, limit)
-        ec_block: set[str] = set(info.get("end_case") or ())
-        if ec_block:
-            return self._skip_to_end(tokens, i, ec_block, limit)
         return i
 
     def _match_stmt_call(
@@ -368,7 +365,12 @@ class RuleMatcher:
         strict: bool,
         silent: bool,
     ) -> int:
-        """语句类（@Stmt / @IfBlock 等）→ strict 语境跳过 end_case（扁平化）。"""
+        """语句类（@Stmt / @IfBlock 等）→ 验证起始 token，不跳过。
+
+        嵌套语句由发现阶段注册的独立检查器负责（父 checker 区间内遇
+        @Stmt 位置不消费，production 匹配到此自然结束）。原 end_case 跳过
+        已移除——语句终点由结构推导（block_end/句子结束符），非手写数据。
+        """
         # 先验证起始 token，防止非嵌套语句上下文误跳过
         firsts = self._first_tokens_of_rule(name, set())
         k = _skip(tokens, i, limit)
@@ -394,9 +396,6 @@ class RuleMatcher:
                 )
                 return k + 1
             return i
-        ec_stmt: set[str] = set(info.get("end_case") or ())
-        if ec_stmt:
-            return self._skip_to_end(tokens, i, ec_stmt, limit)
         return i
 
     def _match_plain_call(
@@ -434,11 +433,11 @@ class RuleMatcher:
             j = k
         if not silent:
             errors += sub_errs
-        # 内联匹配后检查 end_case 排除项（如 Declarator 的 !symbol.base.dot），
-        # 命中排除 token 视为失败回滚（防止声明器吞掉后续端口/点语法）
+        # 内联匹配后检查 exclude 负向前瞻（如 Declarator 的 symbol.base.dot）：
+        # 命中排除 token 视为失败回滚（防止声明器吞掉后续端口/点语法）。
+        # 注意：exclude 是消歧必需的负向前瞻，与派生 FOLLOW 正交（非后继集）。
         if j > start:
-            ec: list = info.get("end_case") or []
-            exclude = {s[1:] for s in ec if isinstance(s, str) and s.startswith("!")}
+            exclude: set = info.get("exclude") or set()
             if exclude:
                 k = _skip(tokens, j, limit)
                 if k < limit and tokens[k].type in exclude:
@@ -675,12 +674,6 @@ class RuleMatcher:
                 code="phase-statement",
             )
         )
-
-    def _stop_for(self, name: str) -> set[str] | None:
-        """表达式在给定规则上下文下的停止 token 集。"""
-        info = self._tree.get(name, {})
-        ec: set[str] = {s for s in (info.get("end_case") or [])}
-        return ec or None
 
     def _skip_to_end(
         self, tokens: list[Token], i: int, end_set: set[str], limit: int

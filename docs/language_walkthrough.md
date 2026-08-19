@@ -92,7 +92,9 @@ while = "while"
   长的优先）。
 - **运算符**：`base/_symbol_level.toml` 的 `[[operator]]` 数组，顺序 = 优先级从低
   到高；一元用 `position = "prefix"/"postfix"`。
-- **表达式入口**：`Expression` 规则 `pratt = true` + `end_case`（表达式后的停止符）。
+- **表达式入口**：`Expression` 规则 `pratt = true`。表达式何时结束由 pratt 绑定
+  强度决定（非运算符 token 自然终止中缀循环），后继合法性由派生 FOLLOW 校验
+  （见 parser/follow.py），无需手写停止符（旧 `end_case` 已移除）。
 
 ```toml
 # base/_symbol_level.toml —— 优先级（低→高）
@@ -121,12 +123,6 @@ production = ["literal.number"]
 [Expression.parser]
 production = ["@PrimaryExpr"]
 pratt = true
-end_case = [
-    "symbol.base.semicolon",
-    "bracket.r_parentheses",
-    "symbol.base.comma",
-    "symbol.base.colon",
-]
 ```
 
 > 💡 **语言差异 1——块边界推导**：块规则的起止符从 production 首尾**字面 token**
@@ -158,10 +154,10 @@ production = [
 ]
 ```
 
-> 💡 **语言差异 2——语句 end_case 语义**：Verilog 语句用 `end_case=["newline"]`
-> （换行定界），**C 以 `;`/`}` 定界**。若照抄 Verilog 的 newline end_case，
-> 单行多语句（`int x; if(...)...`）会因前一句后面不是换行而解析失败。C 语句的
-> end_case 应为空（production 末尾的 `;` 已定界）。见 §7。
+> 💡 **语言差异 2——语句后继语义（end_case 已移除）**：规则后继由派生 FOLLOW
+> 机械推导——Verilog 语句以 `;`/块结束符为后继，C 以 `;`/`}` 为后继，全部从
+> production 结构自动算出，语言包**无需手写后继 token 集合**。消歧用 `exclude`
+> （负向前瞻）单独声明。见 §7。
 
 ---
 

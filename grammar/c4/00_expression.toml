@@ -187,12 +187,5 @@ ref = "value"
 [Expression.parser]
 production = ["@PrimaryExpr"]
 pratt = true
-end_case = [
-    "symbol.base.semicolon",
-    "bracket.r_parentheses",
-    "bracket.r_square_bracket",
-    "symbol.base.comma",
-    "symbol.base.colon",
-]
 
 [Expression.parser.node]

@@ -36,10 +36,6 @@ production = [
     "symbol.base.semicolon?",
     "keyword.endmodule",
 ]
-end_case = [
-    "keyword.endmodule",
-    "newline",
-]
 
 [ModuleDecl.parser.peek]
 scope = "analyzer"
@@ -150,11 +146,6 @@ production = [
     "@Identifier",
     "symbol.base.equal",
     "@Expression",
-]
-end_case = [
-    "symbol.base.comma",
-    "bracket.r_parentheses",
-    "newline",
 ]
 
 [ParamDecl.parser.node]

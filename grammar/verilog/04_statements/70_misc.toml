@@ -25,9 +25,6 @@ production = [
     "bracket.r_parentheses",
     "symbol.base.semicolon",
 ]
-end_case = [
-    "newline",
-]
 
 
 # ── TaskCallStmt — 裸任务调用（无括号） ──
@@ -43,9 +40,6 @@ is_statement = true
 production = [
     "@Identifier",
     "symbol.base.semicolon",
-]
-end_case = [
-    "newline",
 ]
 
 [TaskCallStmt.parser.node]
@@ -78,9 +72,6 @@ production = [
     "@ArgumentList?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
-]
-end_case = [
-    "newline",
 ]
 
 [SubroutineCall.parser.node]
@@ -134,9 +125,6 @@ is_statement = true
 production = [
     "symbol.base.semicolon",
 ]
-end_case = [
-    "newline",
-]
 
 [NullStmt.parser.node]
 
@@ -153,10 +141,6 @@ layout = ";"
 production = [
     "keyword.generate",
     "keyword.endgenerate",
-]
-end_case = [
-    "keyword.endgenerate",
-    "newline",
 ]
 
 [GenerateBlock.parser.node]
@@ -224,9 +208,6 @@ production = [
     "@ForStep",
     "bracket.r_parentheses",
     "@BeginEnd",
-]
-end_case = [
-    "newline",
 ]
 
 [LoopGen.parser.node]

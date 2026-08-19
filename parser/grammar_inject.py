@@ -1,6 +1,6 @@
 """Grammar rule injection — production injection, propagation, and replacement.
 
-Supports target addressing syntax: RuleName.production[N] / RuleName.end_case
+Supports target addressing syntax: RuleName.production[N]
 """
 
 import json
@@ -38,30 +38,16 @@ def inject_replace_rule(
         new_str = spec.get("new", "")
         if not old_str:
             continue
-        ec_prefix = "end_case = "
-        if old_str.startswith(ec_prefix):
-            current = list(getattr(rule, "end_case", []))
-            old_list = json.loads(old_str[len(ec_prefix) :])
-            if current == old_list:
-                new_list = json.loads(new_str[len(ec_prefix) :])
-                object.__setattr__(rule, "end_case", tuple(new_list))
-                if _VERBOSE:
-                    print(f"  [inject/replace] {rule_name}.end_case -> {new_list}")
-            elif _VERBOSE:
-                print(
-                    f"  [inject/replace] {rule_name}.end_case mismatch: has {current}"
-                )
-        else:
-            prods = list(rule.prods)
-            changed = False
-            for i, prod in enumerate(prods):
-                if isinstance(prod, str) and old_str in prod:
-                    prods[i] = prod.replace(old_str, new_str)
-                    changed = True
-            if changed:
-                object.__setattr__(rule, "production", tuple(prods))
-                if _VERBOSE:
-                    print(f"  [inject/replace] {rule_name}: {prods}")
+        prods = list(rule.prods)
+        changed = False
+        for i, prod in enumerate(prods):
+            if isinstance(prod, str) and old_str in prod:
+                prods[i] = prod.replace(old_str, new_str)
+                changed = True
+        if changed:
+            object.__setattr__(rule, "production", tuple(prods))
+            if _VERBOSE:
+                print(f"  [inject/replace] {rule_name}: {prods}")
 
 
 def inject_productions(
@@ -84,15 +70,6 @@ def inject_productions(
                     print(f"  [inject] target {tgt_name} not found, skip")
                 continue
             target_rule = rules[tgt_name]
-
-            if tgt_attr == "end_case":
-                current = list(getattr(target_rule, "end_case", []))
-                if f"@{ext_rule_name}" not in current:
-                    current.append(f"@{ext_rule_name}")
-                    object.__setattr__(target_rule, "end_case", tuple(current))
-                    if _VERBOSE:
-                        print(f"  [inject] {tgt_name}.end_case += {current}")
-                continue
 
             prods = list(target_rule.prods)
             if not prods:

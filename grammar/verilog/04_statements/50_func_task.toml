@@ -32,10 +32,6 @@ production = [
     "symbol.base.semicolon",
     "keyword.endfunction",
 ]
-end_case = [
-    "keyword.endfunction",
-    "newline",
-]
 
 [FuncDeclANSI.parser.peek]
 scope = "analyzer"
@@ -95,10 +91,6 @@ production = [
     "@Identifier",
     "symbol.base.semicolon",
     "keyword.endfunction",
-]
-end_case = [
-    "keyword.endfunction",
-    "newline",
 ]
 
 [FuncDeclOld.parser.node]
@@ -170,10 +162,6 @@ production = [
     "symbol.base.semicolon",
     "keyword.endtask",
 ]
-end_case = [
-    "keyword.endtask",
-    "newline",
-]
 
 [TaskDeclANSI.parser.peek]
 scope = "analyzer"
@@ -220,10 +208,6 @@ production = [
     "@Identifier",
     "symbol.base.semicolon",
     "keyword.endtask",
-]
-end_case = [
-    "keyword.endtask",
-    "newline",
 ]
 
 [TaskDeclOld.parser.node]
