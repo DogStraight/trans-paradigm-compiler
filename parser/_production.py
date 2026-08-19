@@ -391,11 +391,15 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
         token = tok
         break
 
-    # 2. 若 body 由 parse_block 管理，边界由结构决定，FOLLOW 检查不适用
+    # 2. 若 body 由 parse_block 管理，边界由结构决定，FOLLOW 检查不适用。
+    #    复用 _get_prod_features 缓存（key = rule.name::prod）——原直接
+    #    analyze_production_features 每次运行期重新解析 production 字符串
+    #    （picorv32 单管线 11.7 万次 build_tree，最大热点）。
     for prod in rule.prods:
-        feats = analyze_production_features(prod)
-        if feats and feats.get("type") == "call":
-            inner = self.grammar_rules.get(feats["name"])
+        feats = _get_prod_features(rule, prod)
+        tree = feats["tree"] if feats else None
+        if tree and tree.get("type") == "call":
+            inner = self.grammar_rules.get(tree["name"])
             if inner and getattr(inner, "is_block", False):
                 return True
 
