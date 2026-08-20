@@ -1,6 +1,5 @@
 *.log
 .vscode
-.ruff_cache
 .pytest_cache/
 tests/e2e/samples/*/gen/
 tests/e2e/samples/*/ast/
@@ -11,13 +10,7 @@ tests/e2e/samples/*/.fidelity_cache.json
 __pycache__
 */__pycache__
 parser_debug.log
-grammar_backup/
-parser_baseline/
 _test_*.py
 .github/*.egg-info/
-# 管线运行临时输出
-/tmp/
-# 第三方参考源码（c4/chibicc 等，随时参考不纳入版本控制）
-/reference/
 .coverage
 *.egg-info/
