@@ -133,11 +133,10 @@ stmt = "$1"
 ref = "stmt"
 
 
-# ── WhileLoop / RepeatLoop / ForeverLoop — while/repeat/forever 循环 ──
+# ── WhileLoop / RepeatLoop — while/repeat 循环（forever 已剥离到 plugins/sim） ──
 # 配合 ForLoop 构成完整循环族（IEEE A.6.8）。
 #   while (expr) stmt   — 条件循环（可综合 RTL 常用）
 #   repeat (expr) stmt  — 次数循环（可综合）
-#   forever stmt        — 无限循环（仅仿真，与 always 配合；语法上并入循环族）
 #
 # 被引用于: 04_statements/00_base.toml (CtrlStmt)
 
@@ -187,24 +186,5 @@ line = [
     "repeat (",
     { ref = "count" },
     ") ",
-    { ref = "body" },
-]
-
-
-[ForeverLoop]
-is_statement = true
-
-[ForeverLoop.parser]
-production = [
-    "keyword.forever",
-    "@Stmt",
-]
-
-[ForeverLoop.parser.node]
-body = "$2"
-
-[ForeverLoop.renderer.layout]
-line = [
-    "forever ",
     { ref = "body" },
 ]

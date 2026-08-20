@@ -11,8 +11,7 @@
 #     ├─ InstStmt        : ModuleInst, GenerateBlock, LoopGen
 #     ├─ FuncStmt        : FuncDecl, TaskDecl
 #     ├─ AssignStmt      : AssignStmt (module-level)
-#     ├─ ProcStmt        : AlwaysStmt, InitialStmt (进入过程体)
-#     └─ (initial 仅用于仿真，不可综合)
+#     ├─ ProcStmt        : AlwaysStmt (进入过程体；initial 在 plugins/sim)
 #
 #   Stmt                (过程体语句)
 #     ├─ CtrlStmt        : If, Case, ForLoop, BeginEnd
@@ -27,7 +26,7 @@
 [CtrlStmt]
 [CtrlStmt.parser]
 production = [
-    "@IfBlock|@IfStmt|@CaseStmt|@ForLoopBlock|@ForLoop|@WhileLoop|@RepeatLoop|@ForeverLoop|@BeginEnd|@EventWaitStmt",
+    "@IfBlock|@IfStmt|@CaseStmt|@ForLoopBlock|@ForLoop|@WhileLoop|@RepeatLoop|@BeginEnd",
 ]
 inline = true
 [CtrlStmt.parser.node]
@@ -48,7 +47,7 @@ layout = { ref = "stmt" }
 # ── 过程体内调用/空语句 ──
 [CallStmt]
 [CallStmt.parser]
-production = ["@SubroutineCall|@TaskCallStmt|@SysTaskStmt|@NullStmt"]
+production = ["@SubroutineCall|@TaskCallStmt|@NullStmt"]
 inline = true
 [CallStmt.parser.node]
 stmt = "$1"
@@ -117,12 +116,10 @@ decl = "$1"
 [FuncStmt.renderer]
 layout = { ref = "decl" }
 
-# ── 模块体过程（always / initial） ──
-# initial 仅用于仿真场景（不可综合），但语法解析层面与 always 同级。
-# 若后续需要区分仿真/综合上下文，可通过 analyzer 阶段或单独的语法变体实现过滤。
+# ── 模块体过程（always；initial 已剥离到 plugins/sim） ──
 [ProcStmt]
 [ProcStmt.parser]
-production = ["@AlwaysStmt|@InitialStmt"]
+production = ["@AlwaysStmt"]
 inline = true
 [ProcStmt.parser.node]
 stmt = "$1"

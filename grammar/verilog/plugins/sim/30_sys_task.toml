@@ -1,0 +1,24 @@
+# ============================================================================
+# sim 插件 — 系统任务语句（$ 前缀，如 $display(...)） [仿真/testbench]
+# ============================================================================
+# 独立语句的系统调用: $display(...); $finish; 等。
+# 与 SysFuncCall（表达式原子）区别在于末尾分号，作为独立语句。
+# 函数名允许 signed/unsigned（与声明关键字冲突，同 SysFuncCall）。
+#
+# 挂回：注入 CallStmt 的语句候选（主包 CallStmt 保留调用/空语句）。
+
+[SysTaskStmt.inject]
+targets = ["@CallStmt"]
+
+[SysTaskStmt]
+is_statement = true
+
+[SysTaskStmt.parser]
+production = [
+    "symbol.base.dollar",
+    "(@Identifier|keyword.signed|keyword.unsigned)",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]

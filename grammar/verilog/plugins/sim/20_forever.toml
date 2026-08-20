@@ -1,0 +1,27 @@
+# ============================================================================
+# sim 插件 — forever 循环 [仿真专用][不可综合]
+# ============================================================================
+# forever stmt — 无限循环（仅仿真，与 always 配合）。
+#
+# 挂回：注入 CtrlStmt 的语句候选（主包 CtrlStmt 保留 while/repeat/for）。
+
+[ForeverLoop.inject]
+targets = ["@CtrlStmt"]
+
+[ForeverLoop]
+is_statement = true
+
+[ForeverLoop.parser]
+production = [
+    "keyword.forever",
+    "@Stmt",
+]
+
+[ForeverLoop.parser.node]
+body = "$2"
+
+[ForeverLoop.renderer.layout]
+line = [
+    "forever ",
+    { ref = "body" },
+]

@@ -1,22 +1,17 @@
 # ============================================================================
-# Verilog 语法规则 — initial 过程语句 [仿真专用][不可综合]
+# sim 插件 — initial 过程语句 [仿真专用][不可综合]
 # ============================================================================
 # initial 与 always 相似但不带敏感列表，是仿真入口点。
 # 根据 IEEE 1364，initial 块只执行一次，在仿真 0 时刻启动。
 #
-# ⚠ 作用域说明:
-#   initial 是**仿真专用**构造（不可综合），用于测试激励、初始化、
-#   波形记录等仿真场景。综合工具通常忽略或报错。
-#   本语法解析层面将 initial 作为普通语句处理（与 always 同级），
-#   若需要在综合流程中剔除 initial，应在 analyzer/linter 阶段过滤，
-#   而非语法解析层面。
+# ⚠ 仿真专用：initial 不可综合，用于测试激励/初始化/波形记录。
+#   本插件默认启用（verilog tpc.toml [plugins] enabled），如需纯净可综合
+#   子集可关闭（禁用后含 initial 的源码解析失败——真实 RTL 常混 testbench）。
 #
-# 渲染示例:
-#   initial begin
-#     clk = 1'b0;
-#     rst_n = 1'b0;
-#     #100 rst_n = 1'b1;
-#   end
+# 挂回：注入 ProcStmt 的语句候选（主包 ProcStmt 现只含 @AlwaysStmt）。
+
+[InitialStmt.inject]
+targets = ["@ProcStmt"]
 
 [InitialStmt]
 is_statement = true
