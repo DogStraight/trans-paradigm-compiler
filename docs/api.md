@@ -68,6 +68,8 @@ from lexer.number_runner import ConfigNumberRunner
 
 > 作用：提供**项目级默认参数**，运行时可从控制台（CLI）显式覆盖。
 > `run_pipeline_on_source` 的 `None` 参数会回落到这里的 pipeline 段。
+> 定位顺序（core/_user_config.py）：`$TPC_CONFIG` 显式 > CWD 向上
+> `config/tpc_config.json`（工作区隔离）> `~/.tpc/config.json`（全局 profile）> 内建默认。
 
 ```json
 {

@@ -171,5 +171,12 @@ python main.py config dump --json          # JSON（ensure_ascii，Windows 兼�
 < CLI 参数（main.py 指令覆盖）
 ```
 
+用户 tpc_config.json 的**定位顺序**（core/_user_config.py）：
+
+```
+$TPC_CONFIG env（显式） > CWD 向上 config/tpc_config.json（工作区隔离）
+> ~/.tpc/config.json（全局 profile，一次配置任意工作区享用） > 内建默认
+```
+
 与 PostgreSQL GUC 的"来源优先级链"同构，但 tpc 的覆盖点更少（无会话级/角色级）。
 如需显式化，可扩展 `tpc config dump` 输出优先级层级。
