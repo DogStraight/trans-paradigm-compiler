@@ -71,4 +71,4 @@ docs/        design docs (see index below)
 - New features: add a test file under `tests/<module>/`.
 - Language-pack changes: run `pytest tests -q --cov` to confirm the gate (>= 84%).
 - e2e: `tests/e2e/` (pipeline / macro reverse / fidelity / enhanced render).
-- Idempotency: formatter changes must pass `tests/formatter/test_idempotent.py`.
+- Idempotency: formatter changes must pass `tests/languages/verilog/test_idempotent.py`.

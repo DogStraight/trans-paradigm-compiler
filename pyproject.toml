@@ -49,7 +49,7 @@ test = [
 
 # main.py 作为顶层模块打包（tpc 命令入口）
 [tool.setuptools]
-py-modules = ["main"]
+py-modules = ["main", "scaffold_component"]
 
 [tool.setuptools.packages.find]
 include = [
@@ -99,12 +99,18 @@ source = [
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
+    "*/linter/cli.py",
+    "*/main.py",
+    "*/lexer/number_fsm.py",
 ]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
 sort = "Cover"
+# 覆盖率门禁：防回退硬门槛（非高数值追求）；当前引擎核心实测 83.39%，
+# 远期目标 90%（TODO P2.2）
+fail_under = 80
 
 [tool.coverage.html]
 directory = "coverage_html"

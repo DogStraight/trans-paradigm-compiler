@@ -6,7 +6,6 @@
 
 # 排除 IEEE 标准提取缓存（版权归 IEEE）
 exclude docs/ieee1364_2005_annex_a.md
-exclude docs/ieee1800_2023_annex_a.md
 
 # 排除 IEEE 标准原始 PDF（版权归 IEEE）
 recursive-exclude grammar *.pdf

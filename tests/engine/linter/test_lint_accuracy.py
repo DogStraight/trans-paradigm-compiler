@@ -13,8 +13,10 @@ import sys
 
 import pytest
 
-# 项目根（conftest 已加入，此处幂等兜底；文件位于 tests/<subsys>/，向上三层）
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 项目根（conftest 已加入，此处幂等兜底；文件位于 tests/engine/linter/，向上四层）
+_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

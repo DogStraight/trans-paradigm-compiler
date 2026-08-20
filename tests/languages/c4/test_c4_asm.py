@@ -1,4 +1,4 @@
-"""tests/c4/test_c4_asm.py — c4 第二语言：语法 + 汇编生成集成测试。
+"""tests/languages/c4/test_c4_asm.py — c4 第二语言：语法 + 汇编生成集成测试。
 
 单语言选择模型：fixture 用 load_language("grammar/c4") 初始化 c4 语言包
 （setup_grammar 自动加载 c4 组件 AsmGenPlugin），测试结束恢复 verilog，

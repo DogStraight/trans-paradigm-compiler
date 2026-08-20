@@ -217,7 +217,7 @@ def lang(config_loaded):
 ## 6. 验证
 
 ```bash
-python -m pytest tests/c4/ -q          # c4 集成测试（380 全量回归含此）
+python -m pytest tests/languages/c4/ -q   # c4 集成测试（380 全量回归含此）
 ```
 
 c4 输出示例（`int main(){ int x; x=1; return x; }`）：

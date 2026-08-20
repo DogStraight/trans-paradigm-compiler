@@ -63,7 +63,7 @@ layout = { line = [{ ref = "name" }, ";"] }
 
 def scaffold_component(name: str, lang: str = "verilog") -> None:
     """生成 plugins/<name>/ 组件骨架。"""
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    root = os.path.dirname(os.path.abspath(__file__))
     plugins_dir = os.path.join(root, "grammar", lang, "plugins", name)
     if os.path.isdir(plugins_dir):
         print(f"[scaffold] 已存在: {plugins_dir}")

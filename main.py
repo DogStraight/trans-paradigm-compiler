@@ -241,7 +241,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> None:
 
 def _cmd_new_component(args: argparse.Namespace) -> None:
     """tpc new component — scaffold a new component."""
-    from scripts.scaffold_component import scaffold_component
+    from scaffold_component import scaffold_component
 
     scaffold_component(args.name, args.lang or "verilog")
 

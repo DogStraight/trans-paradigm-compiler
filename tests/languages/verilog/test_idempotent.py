@@ -99,10 +99,10 @@ def test_format_idempotent_picorv32():
     读仓库源文件 ref/ref_picorv32.v（不依赖管线生成的 gen/ 产物）——干净
     clone 后即可运行，黄金基准始终生效。
     """
-    real = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "e2e", "samples", "real", "ref", "ref_picorv32.v",
+    _ROOT = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     )
+    real = os.path.join(_ROOT, "tests", "e2e", "samples", "real", "ref", "ref_picorv32.v")
     with open(real, encoding="utf-8") as f:
         src = f.read()
     once = _fmt(src)

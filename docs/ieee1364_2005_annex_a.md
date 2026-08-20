@@ -4,7 +4,6 @@
 > 版权归 IEEE 所有。**仅供本项目内部开发参考**（linter/parser 维护时核对标准 BNF），
 > **不随项目分发**（已通过 MANIFEST.in 从 sdist 排除，wheel 不含 docs）。
 > 如需标准原文，请从 IEEE 官方渠道获取：https://ieeexplore.ieee.org/document/1620780
-> 生成: `scripts/ieee_grammar_to_md.py`（改 PDF 后重跑即可刷新）
 
 > 来源: `grammar/verilog/IEEE_Std_1364_2005_IEEE_Standard_for_Ver.pdf`
 > 注: pypdf 文本提取对上下标/换行有噪声（如 `real_number\n2 ::=`），以原文 PDF 为准。

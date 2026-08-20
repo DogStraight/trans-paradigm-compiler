@@ -42,7 +42,7 @@ if/else、while、return、块、表达式语句、全局/局部声明、函数�
 - [x] **测试样本 + 组件加载接入 + 验收**（阶段 6）：
       - 组件加载参数化（plugin_loader 支持按语言包扫 plugins/，setup_grammar
         清空并加载当前语言包组件——单语言不混合；handler 幂等加载）
-      - tests/c4/test_c4_asm.py：6 项集成测试（赋值/if-else/while 回跳/调用/
+      - tests/languages/c4/test_c4_asm.py：6 项集成测试（赋值/if-else/while 回跳/调用/
         优先级/守卫），用独立 GrammarRulesRegister 实例避免污染全局单例
       - 修复第二个语言差异：语句 end_case=[newline]（Verilog 换行定界）→ C 以
         ;/} 定界——单行多语句解析失败

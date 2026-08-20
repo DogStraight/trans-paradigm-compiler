@@ -208,4 +208,4 @@ production 是纯 choice of calls（如 `CtrlStmt`、`PrimaryExpr`）→ 自动�
 - `parser/parser_core.py` — `atomic_rules` 原子优先结合、`statement_rule_names` 候选
 - `parser/rule_selector.py` — First set / 候选过滤
 - `linter/lookahead.py` — 语句发现消歧表（消费 is_statement、block.start）
-- `docs/end_case_audit.md` — end_case 严格度审计
+- `parser/follow.py` — 派生 FOLLOW（end_case 移除后的后继合法性推导）

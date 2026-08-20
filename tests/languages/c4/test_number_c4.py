@@ -1,4 +1,4 @@
-"""tests/lexer/test_number_c4.py — c4 数字字面量形态（对齐 c4.c 标准）。
+"""tests/languages/c4/test_number_c4.py — c4 数字字面量形态（对齐 c4.c 标准）。
 
 锚点：rswier/c4（github.com/rswier/c4）的 c4.c next() 只支持三种数字形态：
   非零开头十进制（123）、0x/0X 十六进制（0x1F）、前导 0 八进制（017 / 0）。

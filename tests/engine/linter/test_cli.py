@@ -11,8 +11,10 @@ import pytest
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
-_CLI = os.path.join(os.path.dirname(__file__), "..", "..", "linter", "cli.py")
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+_CLI = os.path.join(_ROOT, "linter", "cli.py")
 
 
 def _run_cli(*args, stdin: str | None = None) -> subprocess.CompletedProcess:

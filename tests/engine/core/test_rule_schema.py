@@ -155,7 +155,9 @@ class TestLoadAllTomlSkipsTpc:
         import shutil
 
         proj_tmp = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            ),
             "grammar",
             "_tmp_schema_test",
         )

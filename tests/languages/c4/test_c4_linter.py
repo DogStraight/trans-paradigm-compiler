@@ -1,4 +1,4 @@
-"""tests/c4/test_c4_linter.py — c4 第二语言：linter 可跑性验证。
+"""tests/languages/c4/test_c4_linter.py — c4 第二语言：linter 可跑性验证。
 
 验证 [linter] 配置下沉后 c4 语言包可直接跑 linter：
     - 语言包参数化：LinterScanner 直接用 c4 rules_dir（无需先 load_language）

@@ -1,4 +1,4 @@
-"""tests/parser/test_real_syntax.py — 真实项目（tv80/darkriscv）暴露的语法缺口回归。
+"""tests/languages/verilog/test_real_syntax.py — 真实项目（tv80/darkriscv）暴露的语法缺口回归。
 
 每个用例对应一个真实样本触发过的解析失败，防回归：
     tv80：位置参数实例化 / 空端口连接 / 非 ANSI 端口列表 / body parameter 声明 /

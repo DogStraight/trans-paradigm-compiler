@@ -1,4 +1,4 @@
-"""tests/analyzer/test_name_check.py — semantic_check 插件：task/function 调用名检查。
+"""tests/languages/verilog/test_name_check.py — semantic_check 插件：task/function 调用名检查。
 
 覆盖通用名称检查（check_name_call 原语）：
     - 定义在前调用 → clean
