@@ -130,6 +130,21 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
     return result
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """递归合并 override 到 base（dict 嵌套合并，非 dict 值后者优先）。
+
+    用于同名配置 key 的多来源合并（多插件 token_ext 等）：浅 update 会让
+    后加载的顶层 key（如 [id]）整体覆盖前一个，深合并保留嵌套结构。
+    """
+    result = base.copy()
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
 def _validate_decl_spec(config_key: str, spec: Any) -> None:
     """校验 tpc.toml 配置声明结构（fail-fast，schema 化第一步）。
 
@@ -254,17 +269,43 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
                                 prefixed = f"{name}/{file_spec}"
                             elif isinstance(file_spec, list):
                                 prefixed = [f"{name}/{f}" for f in file_spec]
-                            declarations.append(
-                                (
+                            # 同名配置 key 合并（多插件 token_ext 等共存）：若已有同
+                            # config_key 的插件声明，file 并入列表——否则扁平同名 key
+                            # 后加载覆盖先加载，只保留一个插件来源（resolve 语义）。
+                            merged_idx = None
+                            for i, d in enumerate(declarations):
+                                if d[0] == config_key and d[3] == "plugins":
+                                    merged_idx = i
+                                    break
+                            if merged_idx is not None:
+                                old = declarations[merged_idx]
+                                old_files = old[1]
+                                if isinstance(old_files, str):
+                                    old_files = [old_files]
+                                new_files = old_files + (
+                                    [prefixed] if isinstance(prefixed, str) else prefixed
+                                )
+                                declarations[merged_idx] = (
                                     config_key,
-                                    prefixed,
-                                    spec.get("section"),
+                                    new_files,
+                                    old[2],
                                     "plugins",
-                                    spec.get("required", False),
-                                    spec.get("description", ""),
+                                    old[4],
+                                    old[5],
                                     None,
                                 )
-                            )
+                            else:
+                                declarations.append(
+                                    (
+                                        config_key,
+                                        prefixed,
+                                        spec.get("section"),
+                                        "plugins",
+                                        spec.get("required", False),
+                                        spec.get("description", ""),
+                                        None,
+                                    )
+                                )
                         else:
                             # 非文件式配置（bare data）——插件 tpc.toml 里也可能有
                             # 裸配置（[namespace].foo 点路径键，如插件自身的开关项）。
@@ -628,7 +669,9 @@ class ConfigRegistry:
                         if merged is None:
                             merged = data
                         elif isinstance(merged, dict) and isinstance(data, dict):
-                            merged.update(data)
+                            # 深合并：多插件同名配置（token_ext 等嵌套结构）合并，
+                            # 浅 update 会让后加载的顶层 key（如 [id]）覆盖前一个。
+                            merged = _deep_merge(merged, data)
                         else:
                             merged = data
                         src_files.append(m.replace("\\", "/"))

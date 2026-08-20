@@ -1,0 +1,31 @@
+# ============================================================================
+# sim 插件 — 仿真语句容器（CtrlStmt 注入统一入口）
+# ============================================================================
+# 所有仿真专用语句（fork/join、#delay、wait、->、disable、force/release、
+# @event 等待、forever）合并到此容器，**只对 CtrlStmt 注入一次**。
+#
+# 背景（引擎边界，见 roadmap）：inject 的传播注入会把引用 @CtrlStmt 的规则
+# 逐条替换为 choice[@Ext, @CtrlStmt]——若每条仿真规则各自 inject @CtrlStmt，
+# 嵌套会按规则数线性加深（9 条 → 9 层），且单例规则表被 _write_prods 污染后
+# 每次 setup_grammar 叠加，全量测试时深到 serialize RecursionError。
+# 合并到单容器后，传播嵌套每次 setup 仅 1 层，安全。
+#
+# 挂回：注入 CtrlStmt（过程体语句候选）。
+
+[SimCtrlStmt.inject]
+targets = ["@CtrlStmt"]
+
+[SimCtrlStmt]
+is_statement = true
+
+[SimCtrlStmt.parser]
+production = [
+    "@ForkBlock|@EventWaitStmt|@ForeverLoop|@DelayControlStmt|@WaitStmt|@EventTrigger|@DisableStmt|@ForceAssign|@ReleaseStmt",
+]
+inline = true
+
+[SimCtrlStmt.parser.node]
+stmt = "$1"
+
+[SimCtrlStmt.renderer]
+layout = { ref = "stmt" }

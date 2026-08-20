@@ -1,0 +1,101 @@
+# ============================================================================
+# sim 插件 — 时序控制语句 [仿真专用]
+# ============================================================================
+# IEEE A.6.5：
+#   delay_control ::= # delay_value | # ( mintypmax_expression )
+#   wait_statement ::= wait ( expression ) statement_or_null
+#   event_trigger ::= -> hierarchical_event_identifier { [ expression ] } ;
+#   disable_statement ::= disable hierarchical_task_identifier ;
+#                       | disable hierarchical_block_identifier ;
+# 均挂回 CtrlStmt（过程体语句候选）。#(expr) 与 -> 带参形式未做（低频）。
+#
+# 挂回：注入 CtrlStmt。
+
+[DelayControlStmt]
+is_statement = true
+
+[DelayControlStmt.parser]
+production = [
+    "symbol.base.pound",
+    "@Number|@Identifier",
+    "@Stmt|symbol.base.semicolon",
+]
+
+[DelayControlStmt.parser.node]
+delay = "$2"
+body = "$3"
+
+[DelayControlStmt.renderer.layout]
+line = [
+    "#",
+    { ref = "delay" },
+    " ",
+    { ref = "body" },
+]
+
+
+[WaitStmt]
+is_statement = true
+
+[WaitStmt.parser]
+production = [
+    "keyword.wait",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt|symbol.base.semicolon",
+]
+
+[WaitStmt.parser.node]
+condition = "$3"
+body = "$5"
+
+[WaitStmt.renderer.layout]
+line = [
+    "wait (",
+    { ref = "condition" },
+    ") ",
+    { ref = "body" },
+]
+
+
+[EventTrigger]
+is_statement = true
+
+[EventTrigger.parser]
+production = [
+    "symbol.extend.point_to",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+
+[EventTrigger.parser.node]
+target = "$2"
+
+[EventTrigger.renderer.layout]
+line = [
+    "-> ",
+    { ref = "target" },
+    ";",
+]
+
+
+[DisableStmt]
+is_statement = true
+
+[DisableStmt.parser]
+production = [
+    "keyword.disable",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+
+[DisableStmt.parser.node]
+target = "$2"
+
+[DisableStmt.renderer.layout]
+line = [
+    "disable ",
+    { ref = "target" },
+    ";",
+]

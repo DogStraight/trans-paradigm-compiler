@@ -6,9 +6,6 @@
 #
 # 挂回：注入 CtrlStmt 的语句候选（主包 CtrlStmt 已不含此规则）。
 
-[EventWaitStmt.inject]
-targets = ["@CtrlStmt"]
-
 [EventWaitStmt]
 is_statement = true
 

@@ -1,0 +1,30 @@
+# ============================================================================
+# sim 插件 — event 声明 [仿真专用]
+# ============================================================================
+# IEEE A.2.1.3 event_declaration ::= event list_of_event_identifiers ;
+# 事件标识符声明，配合 -> 事件触发（EventTrigger）与 @event 等待使用。
+#
+# 挂回：注入 DeclStmt（模块体声明候选）。
+
+[EventDecl.inject]
+targets = ["@DeclStmt"]
+
+[EventDecl]
+is_statement = true
+
+[EventDecl.parser]
+production = [
+    "keyword.event",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+
+[EventDecl.parser.node]
+name = "$2"
+
+[EventDecl.renderer.layout]
+line = [
+    "event ",
+    { ref = "name" },
+    ";",
+]

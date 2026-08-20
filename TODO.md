@@ -24,9 +24,16 @@
 - [ ] **门级/开关原语**（A.3）：and/or/nand/nor/xor/xnor/buf/not + bufif0/bufif1/
       notif0/notif1 + pmos/nmos/tran 系列 —— 综合类，进主包
 - [ ] **UDP**（A.5）：primitive/table/endprimitive —— 综合类（老设计），进主包
-- [ ] **时序控制**（A.6.5）：#delay、wait、@event、-> 事件触发 —— 仿真，进插件
-- [ ] **fork/join 并行块**（A.6.3）：fork/join/join_any/join_none —— 仿真，进插件
-- [ ] **force/release、assign/deassign**（A.6.4）—— 仿真，进插件
+- [x] **时序控制**（A.6.5）：#delay、wait、@event、-> —— 已入 plugins/sim
+      （DelayControlStmt/WaitStmt/EventTrigger；#(expr) 与 -> 带参形式未做，低频）
+- [x] **fork/join 并行块**（A.6.3）：fork/join —— 已入 plugins/sim（ForkBlock；
+      join_any/join_none 是 SV 特性未做）
+- [x] **force/release**（A.6.4）—— 已入 plugins/sim（ForceAssign/ReleaseStmt）
+- [x] **disable**（A.6.4）—— 已入 plugins/sim（DisableStmt）
+- [x] **event 声明**（A.2.1.3）—— 已入 plugins/sim（EventDecl，配 -> 事件触发）
+- [ ] **assign/deassign（过程连续赋值，A.6.4）**—— 未做：与模块级 assign 同
+      keyword.assign 起始，会干扰 linter 的语句发现（assign 被误判为过程规则），
+      低频构造不做（模块级 assign 已覆盖）
 - [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
       仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
 - [ ] config/defparam（A.1.5 / A.2.4）—— 罕见，视需要

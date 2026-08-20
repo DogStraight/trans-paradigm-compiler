@@ -1,2 +1,15 @@
+[lexer]
+token_ext = { file = "_token_ext.toml", required = false }
+
 [grammar]
-files = ["00_initial.toml", "10_event_wait.toml", "20_forever.toml", "30_sys_task.toml"]
+files = [
+    "00_initial.toml",
+    "10_event_wait.toml",
+    "20_forever.toml",
+    "30_sys_task.toml",
+    "40_fork_block.toml",
+    "50_timing.toml",
+    "60_proc_assign.toml",
+    "70_event_decl.toml",
+    "90_sim_ctrl.toml",
+]

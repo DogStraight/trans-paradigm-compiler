@@ -1,0 +1,16 @@
+# _token_ext.toml — sim 插件词法扩展
+#
+# 仿真语法关键字（不可综合）。#（pound）与 ->（point_to）符号已在
+# base/_token.toml 定义，无需重复；join_any/join_none 是 SystemVerilog
+# （1800）特性，1364 仅 join，未加入。
+
+[id]
+[id.keyword]
+fork = "fork"
+join = "join"
+force = "force"
+release = "release"
+deassign = "deassign"
+disable = "disable"
+wait = "wait"
+event = "event"

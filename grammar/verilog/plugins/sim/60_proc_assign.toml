@@ -1,0 +1,61 @@
+# ============================================================================
+# sim 插件 — 强制赋值 / 释放 [仿真专用][不可综合]
+# ============================================================================
+# IEEE A.6.4 procedural_force_release：
+#   force  variable_assignment ;    release variable_lvalue ;
+# 仅实现 force/release（无 token 冲突）。过程连续赋值 assign/deassign 与
+# 模块级 assign（AssignStmt）同 keyword.assign 起始，会干扰 linter 的
+# 语句发现（assign 被误判为过程规则）——低频构造，不做（模块级 assign 已覆盖）。
+# 注：production 不支持 seq+optional（如 "(a b)?"），故 force/release 拆两规则。
+#
+# 挂回：注入 CtrlStmt（过程体语句候选）。
+
+[ForceAssign]
+is_statement = true
+
+[ForceAssign.parser]
+production = [
+    "keyword.force",
+    "@Identifier",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+
+[ForceAssign.parser.node]
+kind = "$1"
+lvalue = "$2"
+value = "$4"
+
+[ForceAssign.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { ref = "lvalue" },
+    " = ",
+    { ref = "value" },
+    ";",
+]
+
+
+[ReleaseStmt]
+is_statement = true
+
+[ReleaseStmt.parser]
+production = [
+    "keyword.release",
+    "@Identifier",
+    "symbol.base.semicolon",
+]
+
+[ReleaseStmt.parser.node]
+kind = "$1"
+lvalue = "$2"
+
+[ReleaseStmt.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { ref = "lvalue" },
+    ";",
+]

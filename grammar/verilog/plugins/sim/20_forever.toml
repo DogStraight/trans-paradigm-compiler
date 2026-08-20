@@ -5,9 +5,6 @@
 #
 # 挂回：注入 CtrlStmt 的语句候选（主包 CtrlStmt 保留 while/repeat/for）。
 
-[ForeverLoop.inject]
-targets = ["@CtrlStmt"]
-
 [ForeverLoop]
 is_statement = true
 

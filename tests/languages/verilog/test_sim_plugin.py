@@ -51,7 +51,7 @@ def _parse(src: str, rules: dict):
 def test_core_excludes_sim_rules():
     """主包规则表不含仿真规则，挂载点无仿真引用（纯净可综合）。"""
     rules = _core_only()
-    for name in SIM_RULES:
+    for name in SIM_RULES + ["SimCtrlStmt"]:
         assert name not in rules, f"{name} 应已剥离出主包"
     assert "@ForeverLoop" not in rules["CtrlStmt"].prods[0]
     assert "@EventWaitStmt" not in rules["CtrlStmt"].prods[0]
@@ -60,12 +60,16 @@ def test_core_excludes_sim_rules():
 
 
 def test_plugin_injects_sim_rules():
-    """sim 插件启用后 4 条规则经 inject 挂回挂载点。"""
+    """sim 插件启用后仿真规则经 SimCtrlStmt 容器挂回（避免传播注入嵌套累积）。"""
     rules = _with_plugins()
-    for name in SIM_RULES:
+    for name in SIM_RULES + ["SimCtrlStmt"]:
         assert name in rules, f"{name} 未从插件加载"
-    assert "@ForeverLoop" in rules["CtrlStmt"].prods[0]
-    assert "@EventWaitStmt" in rules["CtrlStmt"].prods[0]
+    # 挂载点：CtrlStmt 注入容器一次，仿真语句在容器内 choice
+    assert "@SimCtrlStmt" in rules["CtrlStmt"].prods[0]
+    container = rules["SimCtrlStmt"].prods[0]
+    for ref in ["@ForkBlock", "@EventWaitStmt", "@ForeverLoop", "@DelayControlStmt",
+                "@WaitStmt", "@EventTrigger", "@DisableStmt", "@ForceAssign", "@ReleaseStmt"]:
+        assert ref in container, f"{ref} 不在 SimCtrlStmt 容器"
     assert "@SysTaskStmt" in rules["CallStmt"].prods[0]
     assert "@InitialStmt" in rules["ProcStmt"].prods[0]
 

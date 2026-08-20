@@ -1,0 +1,43 @@
+# ============================================================================
+# sim 插件 — fork…join 并行块 [仿真专用][不可综合]
+# ============================================================================
+# IEEE A.6.3 par_block: fork [ : block_identifier ] { statement } join
+# 并行块：分支语句并发执行，全部完成（join）后继续。
+# 仅 1364 的 join 结束符（join_any/join_none 是 SV 特性未做）。
+# 块规则模板同 BeginEnd（block_start=fork / block_end=join 从 production 首尾推导）。
+#
+# 挂回：经 SimCtrlStmt 容器注入 CtrlStmt（见 90_sim_ctrl.toml）。
+
+[ForkBlock.parser]
+production = [
+    "keyword.fork",
+    "@BlockLabel?",
+    "keyword.join",
+]
+
+[ForkBlock.parser.node]
+label = "$1"
+
+[ForkBlock.renderer.head]
+line = [
+    "fork",
+    { opt = { group = [
+    ": ",
+    { ref = "label" },
+] } },
+]
+
+[ForkBlock.renderer.body]
+indent = true
+role = "flatten"
+
+[ForkBlock.renderer.tail]
+text = "join"
+break = 1
+
+[ForkBlock]
+is_block = true
+is_statement = true
+
+[ForkBlock.analyzer]
+scope = { kind = "block" }
