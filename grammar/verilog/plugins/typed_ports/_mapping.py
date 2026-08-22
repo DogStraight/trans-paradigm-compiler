@@ -27,6 +27,9 @@ _type_ports_flat = {
     "fields": {
         "direction": "{$.direction}",
         "name": "items.items[*].name",
+        # 端口位宽（packed_range）随行携带：emit 端按 ref 透传重建 Range 节点。
+        # 捕获数据缺 packed_range 键的端口（无位宽）该字段被跳过，行内不出现。
+        "packed_range": "{$.packed_range}",
     },
 }
 

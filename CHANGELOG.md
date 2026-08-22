@@ -3,7 +3,67 @@
 All notable changes are listed in reverse chronological order.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.0] - 2026-08-22
+
+Alpha 发布——配置驱动语言管线首版：主包纯净可综合 + 仿真插件化 + 第二语言实证。
+发布定义（2026-08-21 定）：0.1.0 = Alpha；语法剩项（门级/UDP/specify）后置非阻塞。
+
+### 首版能力
+
+- **配置驱动语言管线**：语言规则全部在 TOML（`grammar/<lang>/`），引擎为通用骨架；
+  lex/parse/analyze/transform/render/lint/preprocessor 全阶段可配置、可 fork
+- **两个语言包**：`grammar/verilog/`（可综合子集 + 增强语法 typed_ports、formatter、
+  semantic_check、attributes、sim 插件）+ `grammar/c4/`（最小 C 子集 → c4 VM 汇编，
+  语言无关性实证）
+- **前置 token 级 linter**（反解析器，复用同一 TOML 语法，能检查坏代码）
+- **增强语法 typed_ports**：`type` / `type.role` / `impl`（嵌套 / invert / 参数化 /
+  端口位宽闭环），展开 / 保留双路径（expand_enhanced）
+- **formatter 插件**：缩进 / 品类对齐 / 实例端口对齐 / 惩罚模型 wrap / 风格参数化 /
+  幂等保持
+- **预处理器**：宏展开 / 条件编译还原 / 指令原位回插（带参宏、`include 递归、循环检测）
+- **仿真语法插件化（plugins/sim）**：可综合子集进主包、仿真语法进插件 → 主包纯净
+  可综合 = 发布基线
+- **CLI `tpc`**：format / lint / expand / config dump / new component / init /
+  pipeline / --version；版本单一来源（core.__version__，pyproject 锁定一致）
+- **工程化**：CI（Windows/Ubuntu × Python 3.11-3.13）、覆盖率门禁 80%、全局 profile
+  层（`~/.tpc/config.json`，env > 工作区 > 全局 > 内建默认）、配置来源追踪
+  （`tpc config dump`）、wheel 打包保留多语言包目录结构
+- **边界诚实记录**：README Known limitations 4 组 22 条
+
+### 首版内已修（Fixed）
+
+- **role 端口 packed_range 位宽丢失**（接口位宽闭环）：展开路径保留 `[7:0]` 位宽
+- **nested+invert SKIP 泄漏**（L1 防御）：不再向端口列表泄漏字面 `SKIP,`
+- **linter `--json` 崩溃**：`to_dict` 死代码 → `lsp_diagnostic`
+- **未定义 task/function 调用检测**（semantic_check 插件，W002，支持前向引用）
+- **第二语言渗透修复**：7 处 core 单语言假设清理（见 docs/language_walkthrough.md §7）
+
+### 验证基线
+
+769 pytest + e2e 93 绿（FAIL 0）+ lint recall 31/31 零误报 + 覆盖率 ~83%
+（fail_under 80）+ real 组（PicoRV32 / darkriscv / SERV / TV80）。
+
+### 2026-08-21 (typed_ports 接口位宽闭环)
+
+- **role 端口 packed_range 携带（TODO P1.5 完成）**：typed_ports 展开路径不再丢
+  端口位宽——`output [7:0] mosi` 写在 role 端口时展开为 `output [7:0] spi_io_mosi`
+  （此前退化成 1 bit）。覆盖直接引用 / 参数引用（`[DATA_WIDTH-1:0]` 字面透传）/
+  invert / 嵌套类型 / wrapper 模块端口。
+- **nested+invert 组合 SKIP 泄漏防御（L1）**：`slave : spi.slave inner, invert
+  master;` 展开不再向端口列表泄漏字面 `SKIP,`——映射表 `_merge_to_flat` 过滤
+  无端口名空行 + `_expand_primitive` 过滤无产出结果（双保险）。语义缺口（invert
+  对含嵌套引用 role 的嵌套展开端口不参与反转）与边界如实记录于 README Known
+  limitations / TODO.md P1.5（L2-L3 未修）。
+- **emit 原语扩展**（通用能力，引擎无语言知识）：`emit` 支持 `node_name` 键别名
+  与 `{ref = "path"}` 原始值透传；捕获数据（node_name 形态 dict）可直接递归重建
+  AST 节点（如 Range → msb/lsb 表达式树）。
+- **`_process_items` 字段提取修正**：`{$....}` 字段源数据缺键时跳过该字段，
+  不再把字面模板字符串塞进行数据（emit 端 ref 透传缺失 = 无此属性）。
+- **测试**：新增 `tests/languages/verilog/test_typed_ports.py`（位宽场景 + nested+invert
+  SKIP 防御，共 8 项）。
+- **测试输出编码修复（Windows）**：`tests/conftest.py` 在收集前强制
+  stdout/stderr 以 UTF-8 输出——本机活动代码页 GBK(936) 时 Python stdout 默认
+  GBK 编码，中文测试输出（docstring/断言）在 UTF-8 解码侧乱码。
 
 ### 2026-08-18 (Engineering gaps)
 
@@ -56,11 +116,3 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rule derivation)
 - Fixed 7 core penetrations / single-language assumptions (see
   docs/language_walkthrough.md §7)
-
-## [0.1.0]
-
-- Initial release: Verilog language pack + full pipeline
-  (lex/parse/analyze/transform/render/lint)
-- formatter plugin (category alignment / indent / ifdef / idempotency)
-- typed_ports enhanced syntax (typed ports / impl binding / auto-connect)
-- Preprocessor (macro expansion / conditional compilation reverse)

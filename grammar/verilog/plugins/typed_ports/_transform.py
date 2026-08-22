@@ -42,7 +42,7 @@ def build_wrapper(node: Node, ctx) -> Node | None:
     port_items = []
     if ports:
         for p in ports:
-            d = _port_decl(p["direction"], p["name"])
+            d = _port_decl(p["direction"], p["name"], p.get("packed_range"))
             if d:
                 port_items.append(d)
     impl_ports = getattr(impl_block, "ports", None)
@@ -238,7 +238,7 @@ def _port_name(pn) -> str:
     return ""
 
 
-def _port_decl(direction: str, name: str) -> Node | None:
+def _port_decl(direction: str, name: str, packed_range=None) -> Node | None:
     if not name:
         return None
     cls = {"input": "AnsiInputDecl", "inout": "AnsiInoutDecl"}.get(direction, "AnsiOutputDecl")
@@ -249,9 +249,33 @@ def _port_decl(direction: str, name: str) -> Node | None:
     nid = Node("Identifier")
     nid.add_attr("content", name)
     dcl.add_attr("name", nid)
+    pr = _to_range_node(packed_range)
+    if pr is not None:
+        dcl.add_attr("packed_range", pr)
     lst.add_attr("items", [dcl])
     decl.add_attr("items", lst)
     return decl
+
+
+def _to_range_node(packed_range):
+    """把携带的 packed_range 数据重建为 AST Range 节点。
+
+    数据来源是分析器捕获的端口 dict（node_name 形态的纯 JSON 数据），
+    复用 emit 的 dict→Node 重建（含 ref 透传/递归），无需语言知识。
+    输入已是 Node / 非 dict 时原样/置空处理。
+    """
+    if packed_range is None:
+        return None
+    if isinstance(packed_range, Node):
+        return packed_range
+    if isinstance(packed_range, dict):
+        from transform.primitives.node import emit as _emit
+
+        try:
+            return _emit(packed_range, {})
+        except Exception:  # noqa: BLE001 — 重建失败视为无位宽（防御）
+            return None
+    return None
 
 
 def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
@@ -280,6 +304,7 @@ def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
         flat = []
         for pg in raw:
             d = pg.get("direction", "") if isinstance(pg, dict) else getattr(pg, "direction", "")
+            pr = pg.get("packed_range") if isinstance(pg, dict) else None
             items_node = pg.get("items", {}) if isinstance(pg, dict) else getattr(pg, "items", None)
             if not items_node:
                 continue
@@ -287,7 +312,10 @@ def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
             for item in item_list:
                 name = item.get("name", "") if isinstance(item, dict) else _text(item)
                 if name:
-                    flat.append({"direction": d, "name": name})
+                    entry: dict = {"direction": d, "name": name}
+                    if pr:
+                        entry["packed_range"] = pr
+                    flat.append(entry)
         if flat:
             return flat
     return []

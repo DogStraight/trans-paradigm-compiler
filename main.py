@@ -2,16 +2,20 @@
 """
 main.py — TransParadigm Compiler CLI entry point
 
-Usage:
-    python main.py format <file>                  Format a Verilog file
-    python main.py lint <file> [--json]           Lint a Verilog file
-    python main.py pipeline [test_name]           Run a single test
-    python main.py new component <name>           Scaffold a new component
+Usage (installed as `tpc`):
+    tpc format <file>                  Format a Verilog file
+    tpc lint <file> [--json]           Lint a Verilog file
+    tpc pipeline [test_name]           Run a single test
+    tpc new component <name>           Scaffold a new component
+    tpc config dump                    Show config key sources
+    tpc --version                      Show version
 """
 
 import sys
 import os
 import argparse
+
+from core import __version__
 
 _project_root = os.path.dirname(os.path.abspath(__file__))
 if _project_root not in sys.path:
@@ -252,11 +256,19 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py format input.v
-  python main.py lint input.v --json
-  python main.py pipeline counter
-  python main.py new component my_feature --lang verilog
+  tpc format input.v
+  tpc lint input.v --json
+  tpc pipeline counter
+  tpc new component my_feature --lang verilog
+  tpc config dump
         """,
+    )
+    # 顶层 --version：与 subcommand 共存（argparse version action，打印后 exit 0）
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show version and exit",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

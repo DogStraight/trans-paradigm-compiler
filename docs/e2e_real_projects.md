@@ -64,7 +64,7 @@ picorv32 覆盖：多模块、宏条件编译（25 条件块/14 条件宏）、g
 1. 拉取源码 → 提取纯 Verilog 主文件（剔除 testbench/SV 部分）
 2. 跑全管线（`tests/e2e/debug_segment_parse.py` 或 `run_pipeline_on_source`）摸底
 3. 记录卡点：linter 报错 / parser 停点 / 渲染差异
-4. 分类修复：语法缺口（改 grammar） vs 管线缺陷（改核心）——遵守"语言知识外部化"铁律
+4. 分类修复：语法缺口（改 grammar） vs 管线缺陷（改核心）——遵守"语言知识外部化"硬约束
 5. 修复后入 `tests/e2e/samples/real/ref/`，接线 `run_all_tests.py` real 分组
 6. 回归：pytest 全量 + e2e 全组 + 已就位样本不回归
 

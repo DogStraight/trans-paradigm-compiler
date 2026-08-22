@@ -172,7 +172,11 @@ class SemanticMappingPlugin(TransformPlugin):
                     field_str = str(field_template)
                     if field_str.startswith("{$.") and field_str.endswith("}"):
                         field_key = field_str[3:-1]
-                        val = item.get(field_key, field_str)
+                        # 源数据缺该键 → 跳过该字段（不把字面模板字符串
+                        # 塞进行数据，emit 端 ref 透传缺失时按"无此属性"处理）
+                        if field_key not in item:
+                            continue
+                        val = item.get(field_key)
                         for r in records:
                             r[field_name] = val
                     elif "[*]" in field_str:
@@ -347,7 +351,10 @@ class SemanticMappingPlugin(TransformPlugin):
         existing = parent.get(parts[-1], [])
         if not isinstance(existing, list):
             existing = [existing]
-        existing.extend(ports)
+        # 过滤无效行：无端口名的行（如嵌套引用 dict 拍平残留的空行）不应进入
+        # 映射表——expand 端 switch 对空 direction 无匹配分支会返回 SKIP 并
+        # 泄漏进 AST（渲染成字面 "SKIP"）。此处是根因防御（任何来源的空行）。
+        existing.extend(p for p in ports if not (isinstance(p, dict) and not p.get("name")))
         parent[parts[-1]] = existing
 
 

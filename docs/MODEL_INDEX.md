@@ -30,3 +30,4 @@
 | 表达式检查（pratt 复用） | `linter_architecture.md` | `linter/checkers/expression.py` | `tests/test_linter_matcher.py` |
 | 稳健性/畸形输入防御 | `linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/test_linter_robustness.py` |
 | 诊断位置精度（token_span） | `linter_architecture.md` | `linter/__init__.py::token_span` | `tests/test_lint_accuracy.py` |
+| 语义检查插槽（双层规则+post-pass） | `decisions/0004-semantic-check-slot.md`<br>`semantic_checks.md` | 待实现（P1 起：`analyzer/traversal.py` postpass、`analyzer/diagnostic.py` related、`grammar/verilog/plugins/width_check/`） | 待实现（P2 验收：端口位宽变更链上死值） |

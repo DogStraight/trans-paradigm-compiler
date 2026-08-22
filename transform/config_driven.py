@@ -415,6 +415,10 @@ def _expand_primitive(engine, node, config, root_scope):
             return _emit(emit_spec, ctx)
 
         results = _foreach(items, as_name, _do_transform, context)
+        # 兜底防御：SKIP（switch 无匹配分支等"无产出"哨兵）不应并入结果列表
+        # 泄漏进 AST（会渲染成字面 "SKIP"）；此处过滤与 _walk 的 SKIP 语义
+        # （保留原节点）不同——foreach 的原节点已被消费，SKIP = 该行无产出。
+        results = [r for r in results if r is not SKIP]
         return results if results else SKIP
     else:
         if isinstance(emit_spec, dict) and "kind" in emit_spec:

@@ -54,7 +54,7 @@ direction = "input"
 [TypedPortDecl.transform.emit.cases.input.items]
 node = "DeclaratorList"
 items = [
-    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
+    { node = "Declarator", name = "{instance_name.name.content}_{name}", packed_range = { ref = "packed_range" } },
 ]
 
 [TypedPortDecl.transform.emit.cases.output]
@@ -65,7 +65,7 @@ direction = "output"
 [TypedPortDecl.transform.emit.cases.output.items]
 node = "DeclaratorList"
 items = [
-    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
+    { node = "Declarator", name = "{instance_name.name.content}_{name}", packed_range = { ref = "packed_range" } },
 ]
 
 [TypedPortDecl.transform.emit.cases.inout]
@@ -76,7 +76,7 @@ direction = "inout"
 [TypedPortDecl.transform.emit.cases.inout.items]
 node = "DeclaratorList"
 items = [
-    { node = "Declarator", name = "{instance_name.name.content}_{name}" },
+    { node = "Declarator", name = "{instance_name.name.content}_{name}", packed_range = { ref = "packed_range" } },
 ]
 
 [TypedTypeSpec.parser]

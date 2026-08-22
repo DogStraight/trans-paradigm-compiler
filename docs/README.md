@@ -26,13 +26,14 @@
 
 ## 当前文档索引
 
-- 架构：`linter_architecture.md`（linter 两阶段发现+扁平检查）
-- 决策：`decisions/0001-pre-parse-linter.md`、`decisions/0002-is-statement-explicit.md`、`decisions/0003-config-load-fail-fast.md`
-- 参考：`config_reference.md`、`grammar_rule_fields.md`、`ieee1364_2005_annex_a.md`
+- 架构：`linter_architecture.md`（linter 两阶段发现+扁平检查）、`semantic_checks.md`（语义检查插槽：双层规则 + post-pass 链式检查）
+- 决策：`decisions/0001-pre-parse-linter.md`、`decisions/0002-is-statement-explicit.md`、`decisions/0003-config-load-fail-fast.md`、`decisions/0004-semantic-check-slot.md`
+- 参考：`config_reference.md`、`grammar_rule_fields.md`、`ieee1364_2005_annex_a.md`、`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：`config_lifecycle.md`（配置生命周期）、`expression_conventions.md`（表达式约定）、
   `component_protocol.md`（组件协议）、`api.md`（API 参考）、`coding_style.md`（代码风格）、
   `layout_spacing_prompt.md`（renderer layout DSL 原语与空格规则）
+- 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）
 - e2e 样本参考：`e2e_real_projects.md`（real 组测试项目与语法面覆盖）
 - 设计来源：`references.md`（参考项目 → 借鉴点，与 CREDITS.md 互补）
 

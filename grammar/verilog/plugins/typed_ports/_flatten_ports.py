@@ -58,7 +58,7 @@ def _flatten_all_callbacks(scope, dir_spec: str, name_spec: str) -> None:
 
 
 def _flatten_one(ports: list, dir_spec: str, name_spec: str) -> list:
-    """将单个端口列表从嵌套结构拍平为 {direction, name}。"""
+    """将单个端口列表从嵌套结构拍平为 {direction, name}，携带 packed_range。"""
     result = []
     for port in ports:
         if not isinstance(port, dict):
@@ -92,13 +92,20 @@ def _flatten_one(ports: list, dir_spec: str, name_spec: str) -> list:
         else:
             names = [port.get(name_spec, "")] if name_spec else []
 
+        # 位宽（packed_range）随行携带：源数据缺该键（无位宽端口）时不设置，
+        # emit 端 ref 透传缺失时按"无此属性"处理，渲染端 opt 跳过。
+        def _entry(direction: str, name: str) -> dict:
+            entry: dict = {"direction": direction, "name": name}
+            pr = port.get("packed_range") if isinstance(port, dict) else None
+            if pr:
+                entry["packed_range"] = pr
+            return entry
+
         if not names:
-            result.append({"direction": direction, "name": port.get("name", "")})
+            result.append(_entry(direction, port.get("name", "")))
         else:
             for n in names:
                 result.append(
-                    {"direction": direction, "name": n}
-                    if isinstance(n, str)
-                    else {"direction": direction, "name": ""}
+                    _entry(direction, n) if isinstance(n, str) else _entry(direction, "")
                 )
     return result

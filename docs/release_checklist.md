@@ -1,0 +1,78 @@
+# 发布 SOP（release checklist）
+
+> 每次发布走一遍。0.1.0 = Alpha（classifier "3 - Alpha"）；发布定义见 TODO P2.2。
+> 发布基线 = "主包纯净可综合"（可综合子集进主包 + 仿真进 plugins/sim）。
+
+## 0. 发布前置（git 侧）
+
+- [ ] 工作区干净：`git status --short` 无未提交/未跟踪改动（临时脚本除外）
+- [ ] CHANGELOG 已归拢：`[0.1.0] - YYYY-MM-DD` 段含首版条目（首版后：Unreleased → 新版本段）
+- [ ] TODO 发布收尾项全部勾选（P2.2 硬缺口）
+
+## 1. 回归门禁（发布前必须全绿）
+
+```bash
+python -m pytest tests/ -q                      # 单测全绿
+python tests/e2e/run_all_tests.py               # e2e FAIL 0
+python tests/e2e/eval_lint_accuracy.py          # lint recall 31/31、零误报
+python -m pytest tests/ --cov --cov-report=term # 覆盖率 ≥ fail_under（80）
+```
+
+## 2. 版本号核对
+
+- [ ] 版本单一来源 `core/__init__.__version__` 与 `pyproject.toml [project].version` 一致
+      （`tests/engine/core/test_version.py` 锁定；改版本时两处同步改 + 改测试期望？——不，
+      测试断言两者相等，只需同步改两处）
+- [ ] `tpc --version` 输出正确版本
+
+## 3. 构建 sdist / wheel
+
+```bash
+python -m build            # 需 pip install build；产出 dist/trans_paradigm_compiler-0.1.0.tar.gz + .whl
+```
+
+## 4. 验证包内容（不扁平化）
+
+```bash
+python -m zipfile -l dist/*.whl | Select-String 'grammar/(verilog|c4)'
+# 必须保留：
+#   grammar/verilog/tpc.toml + 各规则 TOML + plugins/（typed_ports/formatter/sim/...）
+#   grammar/c4/tpc.toml + 规则 TOML + plugins/
+# 不要出现 data-files 扁平化（grammar/verilog 与 c4 混在一起 = 失败）
+tar -tf dist/*.tar.gz | Select-String 'grammar/'   # sdist 同样核对
+```
+
+## 5. wheel 冒烟（独立 venv，模拟用户安装）
+
+```powershell
+py -3.11 -m venv .venv-smoke
+.venv-smoke\Scripts\pip install dist\*.whl
+.venv-smoke\Scripts\tpc --version
+.venv-smoke\Scripts\tpc format samples\normal\ref\ref_counter.v   # 无报错
+.venv-smoke\Scripts\tpc lint samples\lint_err\ref\ref_e01_missing_endmodule.v  # exit 1
+.venv-smoke\Scripts\tpc lint samples\normal\ref\ref_counter.v     # exit 0
+Remove-Item -Recurse .venv-smoke
+```
+
+> wheel 安装后从任意目录运行：rules_dir 相对路径解析到 site-packages 内
+> grammar 包（pipeline 已处理），不依赖项目 CWD。
+
+## 6. 打 tag + 发布
+
+```bash
+git tag -a v0.1.0 -m "0.1.0 Alpha — configuration-driven language pipeline"
+git push origin v0.1.0
+```
+
+## 7. PyPI 上传（可选）
+
+```bash
+python -m twine check dist/*
+python -m twine upload dist/*   # 需 PyPI 凭证（__token__）
+```
+
+## 8. 发布后
+
+- [ ] CHANGELOG 顶部开新 `## [Unreleased]` 段
+- [ ] 更新 docs/README.md / MODEL_INDEX（若新增知识单元）
+- [ ] 通知/记录（CHANGELOG 首版条目已含基线：pytest 数 / e2e 数 / lint recall）

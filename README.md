@@ -120,13 +120,27 @@ The two paths share the same formatter; `expand_enhanced` only controls
 whether the enhanced AST nodes are expanded (analyze + transform) or preserved
 (rendered directly by their `[Rule.renderer.layout]`).
 
-## Command-line usage
-
-Install (editable + test deps):
+## Quick start
 
 ```bash
-pip install -e ".[test]"
+pip install -e ".[test]"     # editable install + test deps (zero runtime deps)
+
+tpc --version                # 0.1.0
+tpc format input.v           # format a Verilog file (stdout)
+tpc lint input.v             # pre-parse token lint (exit 1 on diagnostics)
+tpc lint input.v --json      # LSP-compatible JSON diagnostics
 ```
+
+Style entry points:
+- **Project defaults** — `config/tpc_config.json` (pipeline stage toggles,
+  `format_output`, macro `define`/`undefine`, include dirs).
+- **Language pack style** — `[formatter.style]` in `grammar/<lang>/base/_style.toml`
+  (`indent_width`, `max_line_width`, …).
+- **Where does this config value come from?** — `tpc config dump`.
+
+Full command reference below; Python API reference in [docs/api.md](./docs/api.md).
+
+## Command-line usage
 
 The `tpc` CLI drives the pipeline per the language pack's `[commands]`
 declarations:
@@ -467,6 +481,16 @@ Honest boundaries — these are structural or deliberate, not hidden bugs.
 - Enhanced syntax (`type` / `type.role` / `impl`) currently requires
   `no_lint=True`: the pre-parse linter targets plain Verilog and does not know
   the enhanced tokens, so it would reject the input before parsing.
+- **`invert` over a role that itself carries nested/ref ports is only
+  partially expanded** (`type wrap { master : spi.master inner, input enable;
+  slave : invert master; }`): the inverted role's nested-expanded ports
+  (`inner_*`) do not participate in the direction inversion — only its plain
+  ports do (`enable`). The pipeline defends against leaking literal `SKIP`
+  into the port list (empty rows are filtered from the mapping table and
+  no-output results are dropped at expand), so output is valid Verilog with the
+  nested-inverted ports silently missing rather than corrupt output. Full
+  expansion needs the inverted role's *merged* port set (plain + refs) at
+  resolve time; tracked in `TODO.md` P1.5.
 - The `GrammarRulesRegister` rule table is a process-global singleton; loading
   two language packs in one process mixes their rules. Tests use independent
   registries, and embedding code that switches languages must do the same.
@@ -489,10 +513,33 @@ Honest boundaries — these are structural or deliberate, not hidden bugs.
   changes are guarded by tests, not by a pack/engine version contract, so
   upgrading the engine can break an older pack.
 
+## Python API
+
+The pipeline entry point is `run_pipeline_on_source` (shared by the CLI and the
+test suite). Minimal embed:
+
+```python
+from pipeline import run_pipeline_on_source
+
+result = run_pipeline_on_source(
+    source=verilog_src,
+    quiet=True,
+    no_lint=True,            # enhanced syntax (type/impl) skips the lint gate today
+    expand_enhanced=True,    # False keeps the enhanced syntax instead of expanding
+)
+print(result["output"])      # rendered / expanded Verilog
+print(result["success"], result.get("error", ""))
+```
+
+Stage-level components (`Lexer` / `Parser` / `AnalysisTraversal` /
+`AstTransformer` / `Renderer` / `LinterScanner`) and the component protocol
+are documented in [docs/api.md](./docs/api.md) and
+[docs/component_protocol.md](./docs/component_protocol.md).
+
 ## Verification
 
 ```bash
-python -m pytest tests/ -q                # 759 unit tests
+python -m pytest tests/ -q                # unit tests (see tests/ for count)
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
 python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 ```

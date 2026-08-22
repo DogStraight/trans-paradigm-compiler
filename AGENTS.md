@@ -10,7 +10,7 @@
 3. 改代码时维护文件头 `Doc:` 反向引用（约定见 `docs/README.md`）
 4. 跑对应测试（`tests/`）；改 linter 用 `tests/e2e/eval_lint_accuracy.py` 验证 recall/误报
 
-## 铁律
+## 硬约束
 
 - **语言知识不进代码**：规则名、token 类型、结构名、表达式形态一律由
   `grammar/` TOML 配置、规则字段、推导提供，引擎不得硬编码任何语言具体知识。

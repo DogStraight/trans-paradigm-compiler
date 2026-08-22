@@ -105,9 +105,33 @@
       去掉"hash 可容忍"例外（判断 salt 逻辑是否与生成 ref 时漂移）
 - [ ] **变换路径注释恢复**：当前禁用（only_tpc 只回插 tpc marker），普通注释
       在展开后丢失——长远应精确恢复而非禁用（锚点漂移的根本解决）
+- [x] **role 端口 packed_range 携带（接口位宽闭环）——已完成（2026-08-21）**：
+      typed_ports 展开路径曾丢 role 端口位宽（`_flatten_ports`/`_mapping` 只带
+      direction+name，emit 的 Declarator 只绑 name）。修复：捕获数据随行携带
+      packed_range → emit 新增 ref 透传 + node_name 形态 dict 递归重建 Range 节点
+      （transform/primitives/node.py::emit / template.py::lookup_value），
+      `_mapping` fields 加 packed_range、`_flatten_ports` 拍平保留、wrapper 路径
+      `_port_decl` 重建位宽。验证：直接引用/参数引用（[DATA_WIDTH-1:0] 字面透传）/
+      invert/嵌套/wrapper 全场景 + tests/languages/verilog/test_typed_ports.py 7 项。
+      > 遗留（nested+invert 组合，L1 已防御 / L2-L3 未修，2026-08-21）：
+      > - **L1 已做**：`slave : spi.slave inner, invert master;` 展开不再泄漏字面
+      >   `SKIP,`——映射表 `_merge_to_flat` 过滤无端口名空行（嵌套引用 dict 拍平
+      >   残留）+ `_expand_primitive` 过滤无产出结果（双保险）。回归测试
+      >   test_nested_invert_no_skip_leak。
+      > - **L2 未修（语义缺口）**：invert 对含嵌套引用的 role，其**嵌套展开端口**
+      >   （inner_* 方向反转）不参与反转——invert 回调的 resolved_ports 在 resolve
+      >   期拿的是目标 role 的**原始**端口数据（含嵌套引用 dict 非展开端口），
+      >   且 `_ref_callbacks` 只含引用类端口（普通端口如 enable 不在内）。需在
+      >   resolve 期用目标 role 的**完整展开端口**（普通端口拍平 + _ref_callbacks
+      >   合并）做 invert 解析（分析器预计算 flat_ports 机制）。README Known
+      >   limitations 已如实记录。
+      > - **L3 未修（前向引用）**：invert 引用的 role 定义在后时其 _ref_callbacks
+      >   尚未构建（primitive 单遍 DFS）——需两遍遍历/pending 重试。
 - [ ] **concat 无折行**：`{a, b, c, ...}` 超宽保持原样，评估加 concat 断点
-- [ ] **fidelity 缓存模式区分**：key 已带 @expand/@plain 后缀防互串，但需确认
-      首次运行后缓存语义正确（不同模式不互相污染）
+- [x] **fidelity 缓存模式区分——确认通过（2026-08-22）**：key 已带 @expand/@plain
+      后缀防互串，且每 group 独立缓存文件（samples/<group>/.fidelity_cache.json），
+      值取历史最高（max(prev, fidelity)）——只有保真度**下降**才报 FAIL，首次运行
+      不误报。实证：normal 组 @plain、real 组 @expand，互不污染。
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
@@ -143,18 +167,46 @@
 
 ### P2.2 发布收尾
 
+> **发布定义（2026-08-21 定）**：0.1.0 = Alpha 发布（classifier 已是 "3 - Alpha"）。
+> 发布基线 = "主包纯净可综合"（可综合子集进主包 + 仿真进 plugins/sim）。
+> 语法剩项（P1.8 门级/UDP/specify/config-defparam）全部后置，非 Alpha 阻塞。
+
 - [x] 覆盖率门禁（pyproject.toml [tool.coverage]：source=引擎包，fail_under=80，
       实测 83.39%；.coveragerc 已并入 pyproject 删除——原 84.57% 是 source=None 全量虚高）
-- [x] 恢复 CI（.github/workflows/ci.yml：Windows + Python 3.11/3.12/3.13）
+- [x] 恢复 CI（.github/workflows/ci.yml：Windows/Ubuntu + Python 3.11/3.12/3.13 矩阵，
+      含 CLI 冒烟 + wheel-install 独立 venv 验证）
 - [x] 安装可验证（pip install -e ".[test]" + tpc CLI 实测）
 - [x] 补文档（CONTRIBUTING.md / CHANGELOG.md / docs/api.md）
-- [ ] **CLI 指令替换 python main 模式**：
-      用 `tpc format` / `tpc lint` / `tpc new component` 等指令替代 `python main.py xxx`；
-      为此 README 已删除 Quick start + API 两节（留位置），CLI 落地后补回。
-      指令列表对齐 main.py 现有子命令（format/lint/init/pipeline/new），
-      pyproject 配置 console_scripts 入口；CLI 用法写回 README 对应节。
+
+**硬缺口（发布前必须）：**
+
+- [x] **版本单一来源 + `tpc --version`——已完成（2026-08-22）**：
+      `core/__init__.__version__ = "0.1.0"`（运行时单一来源）；`tpc --version` 经
+      argparse version action 输出（exit 0）；`tests/engine/core/test_version.py`
+      锁定 core 与 pyproject `[project].version` 一致。
+- [x] **CLI 收尾——已完成（2026-08-22）**：main.py docstring/epilog 迁移到 `tpc`
+      入口；`--help` 正常；退出码契约（lint exit 1 on diagnostics / format 失败
+      exit 1）确认。
+- [x] **README Quick start + API 两节补回——已完成（2026-08-22）**：README 新增
+      Quick start（pip install → tpc --version/format/lint → 风格配置入口）与
+      Python API 节（链接 docs/api.md）。
+- [x] **CHANGELOG 0.1.0 条目——已完成（2026-08-22）**：`[0.1.0] - 2026-08-22` 段
+      归拢全部改动（首版能力/首版内已修/验证基线 + 历史小节，含 sim 插件、
+      typed_ports、全局 profile、README 22 条边界）。
+- [x] **发布基线回归——已完成（2026-08-22）**：pytest 769 全过 + e2e 93（FAIL 0）+
+      lint recall 31/31 零误报 + 覆盖率 83.61%（≥80）+ wheel 冒烟（独立 venv：
+      `tpc --version` 0.1.0 / format 正常 / lint exit 契约正确；wheel 内 grammar/
+      verilog 与 c4 目录 + plugins 完整保留，不扁平化）。
+- [x] **发布 SOP（release checklist）——已完成（2026-08-22）**：
+      docs/release_checklist.md（回归门禁 → 版本核对 → build → 包内容不扁平化
+      验证 → wheel 冒烟 → tag → PyPI 可选 → 发布后收尾）。
+
+**软缺口（非 Alpha 阻塞）：**
+
 - [ ] 覆盖率远期目标 ≥90%（当前 83.39%——source=引擎包真实基线，需补
       transform/renderer 等薄弱区）
+- [ ] 用户视角文档增量：现有 docs/ 偏引擎作者视角（MODEL_INDEX/ADR/
+      component_protocol）；发布只需 README Quick start 补齐，暂不新写用户手册。
 
 ## P4 — LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 

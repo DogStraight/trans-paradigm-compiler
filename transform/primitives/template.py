@@ -10,6 +10,35 @@ from core.define import Node
 _TEMPLATE_RE = re.compile(r"\{([^}]+)\}")
 
 
+def lookup_value(path: str, context: dict[str, Any]) -> Any:
+    """沿点号/下标路径从 context 取原始值（不做字符串化）。
+
+    与 resolve_template 的区别：复杂值（Node/dict/list）原样返回，
+    供 emit 的 ref 透传等需要"拿到对象本身"的场景使用。
+    路径解析失败返回 None。
+    """
+    if path in context:
+        return context[path]
+    parts = re.split(r"\.|\[|\]", path)
+    parts = [p for p in parts if p]
+    val: Any = context
+    try:
+        for p in parts:
+            if isinstance(val, dict):
+                val = val[p]
+            elif isinstance(val, list):
+                val = val[int(p)]
+            elif hasattr(val, p):
+                val = getattr(val, p)
+            elif hasattr(val, "__getitem__"):
+                val = val[p]
+            else:
+                return None
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+        return None
+    return val
+
+
 def resolve_template(template: str, context: dict[str, Any]) -> str:
     """解析模板字符串 {attr.sub_attr}，从 context 中取值"""
 

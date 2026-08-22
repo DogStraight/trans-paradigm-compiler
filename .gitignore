@@ -14,3 +14,7 @@ _test_*.py
 .github/*.egg-info/
 .coverage
 *.egg-info/
+# 发布构建产物（release checklist：python -m build / pip wheel 输出）
+dist/
+build/
+.venv*/
