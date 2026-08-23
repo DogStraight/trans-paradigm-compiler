@@ -6,9 +6,9 @@
 修改作者/邮箱/仓库只需改这里，然后重新打包。
 """
 
-AUTHOR_NAME = "biominescence"
+AUTHOR_NAME = "biominescence"  # 笔名；GitHub 账号为 DogStraight
 AUTHOR_EMAIL = "oho15799293498@outlook.com"
-REPO_URL = "https://github.com/biominescence"
+REPO_URL = "https://github.com/DogStraight/trans-paradigm-compiler"
 LICENSE = "MIT"
 
 
