@@ -235,20 +235,22 @@
 > 正确性组 2026-08-23 已修（除 tests 样板 DRY 结构性重构），提交见 git log。
 
 **中（建议修，AI 味收紧）：**
-- [ ] `transform/_semantic_mapping.py:50-54` docstring 挂在 `__init__` 的 if/else
-      之后（死字符串表达式，函数实际无 docstring）——移到首行压缩为一句或删除
-- [ ] `grammar/verilog/02_declarations/20_body_ports.toml:25-27/72-74/119-121`
-      端口声明注释模板化换词成片——合并为族注释只讲差异
+- [x] `transform/_semantic_mapping.py:50-54` docstring 挂在 `__init__` 的 if/else
+      之后（死字符串表达式）——已移到函数首行（2026-08-23）
+- [x] `grammar/verilog/02_declarations/20_body_ports.toml` 端口声明注释模板化换词
+      成片——已合并为族注释只讲差异（2026-08-23）
 
 **轻成片（可选收紧）：**
-- [ ] `lexer/main_lexer.py` 16 处英文复述标签（`# in case ...` / `# set/reset line
-      info`，含翻译腔与语法错 "this method provide"）——删或改中文
-- [ ] `parser/parser_core.py` ~13 处一行 docstring（ParseContext/ScopeStack 纯复述）——
-      删纯复述，保留带信息的（如 create_snapshot 的 tuple 快 3x）
-- [ ] `core/token_protocol.py:32-44` 5 个构造函数 docstring 同句式模板——整组删除
-      （模块头协议表是单一事实源）
-- [ ] `core/_protocol.py:8-34` "XX 的 attrs 键：存储…" 前缀被分区标题覆盖——省略
-      前缀留实指
+- [x] `lexer/main_lexer.py` 16 处英文复述标签（`# in case ...` / `# set/reset line
+      info`，含翻译腔与语法错 "this method provide"）——已改中文分支标签/删除
+      无信息注释（2026-08-23）
+- [x] `parser/parser_core.py` ~13 处一行 docstring（ParseContext/ScopeStack 纯复述）——
+      已删纯复述，保留带信息的（create_snapshot tuple 3x / peek 不移动指针等）
+      （2026-08-23）
+- [x] `core/token_protocol.py` 5 个构造函数 docstring 同句式模板——已整组删除
+      （模块头协议表是单一事实源）（2026-08-23）
+- [x] `core/_protocol.py` "XX 的 attrs 键：存储…" 前缀被分区标题覆盖——已省略
+      前缀留实指（2026-08-23）
 
 **注释正确性（非 AI 味）：**
 - [x] `analyzer/primitives/registry.py` 过时类名 SemanticAnalyzer（→AnalysisTraversal）
@@ -262,8 +264,8 @@
 - [x] 陈旧模块名：transform/{engine,flow,lookup,node,template}.py 文件头 +
       renderer/__init__.py 结构清单
 - [x] `renderer/loader.py` 重复定义残留；`transform/config_driven.py:254` 死 continue
-- [ ] tests 跨文件 sys.path/UTF-8 样板重复 6-7 处（结构性 DRY，抽公共模块改动面大，
-      暂缓）
+- [x] tests 跨文件 sys.path/UTF-8 样板重复 6-7 处——已抽 tests/_bootstrap.py 公共
+      引导（6 文件统一接入，4 种手抄变体消除）（2026-08-23）
 - [x] `test_rule_schema.py:145-154` 思考残留注释（声称用 monkeypatch 实际未用）
 - [x] grammar 卫生项 8 处：10_if 残缺句 / 50_func_task 孤立分区头 / 00_base 双
       banner+残留批注 / 00_blocks 失效引用 / 10_ansi_ports 注释不符+笔误 /

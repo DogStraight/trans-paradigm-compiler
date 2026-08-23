@@ -103,7 +103,7 @@ class Lexer:
 
         self.previous_token_type: str = ""
 
-        # new line start flag for indent handling
+        # new_line_start：行首标记，缩进处理用
         self.new_line_start = False
 
         # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM；
@@ -164,7 +164,7 @@ class Lexer:
             if text_idx + 1 < lex_text_len:
                 next_char = lex_text[text_idx + 1]
 
-            # in case current char is a newline char
+            # ── newline 分支 ──
             if lex_text[text_idx] in self.newline:
                 start_point += 1
 
@@ -179,7 +179,7 @@ class Lexer:
                 self.new_line_start = True
                 continue
 
-            # in case current char is a space
+            # ── space 分支 ──
             elif lex_text[text_idx] in self.token_define["space"].values():
                 space_content: str = ""
                 while (
@@ -276,7 +276,7 @@ class Lexer:
                         self.new_line_start = False
                     continue
 
-            # in case current char is unsized Verilog literal ('b1, 'd0, 'hFF, 'o7, 's signed)
+            # ── 无尺寸字面量分支（'b1/'d0/'hFF/'o7/'s）──
             elif lex_text[text_idx] == "'" and next_char in "dDbBhHoOsS":
                 self._emit_pending_dedent(tokens)
 
@@ -305,7 +305,7 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # in case current char is a symbol
+            # ── symbol 分支 ──
             elif lex_text[text_idx] in self.token_define["symbol"]["base"].values():
                 # handle possible dedent before actual token
                 self._emit_pending_dedent(tokens)
@@ -330,13 +330,12 @@ class Lexer:
                     current_token.set_content(candidate)
                     current_token.set_type("symbol.extend")
 
-                # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 continue
 
-            # in case current char is a bracket
+            # ── bracket 分支 ──
             elif (
                 lex_text[text_idx] in self.open_brackets
                 or lex_text[text_idx] in self.close_brackets
@@ -360,7 +359,7 @@ class Lexer:
 
             # (comment handled by CommentFSM in earlier branch)
 
-            # in case current char is an id
+            # ── id 分支 ──
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
                 self._emit_pending_dedent(tokens)
 
@@ -376,11 +375,9 @@ class Lexer:
                     text_idx += 1
                     offset += 1
 
-                # set current token line info
                 current_token.set_type("id")
                 current_token.set_content(id_content)
 
-                # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
@@ -437,7 +434,7 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # in case current char is a number
+            # ── number 分支 ──
             elif lex_text[text_idx].isdigit():
                 self._emit_pending_dedent(tokens)
 
@@ -458,18 +455,16 @@ class Lexer:
                     tokens.append(current_token)
                     continue
 
-                # set current token line info
                 current_token.set_type("literal.number")
                 current_token.set_content(number_content)
 
-                # reset line info
                 text_idx = new_idx
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 continue
 
-            # in case current char is in string
+            # ── 字符串分支 ──
             elif lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
                 self._emit_pending_dedent(tokens)
 
@@ -491,24 +486,21 @@ class Lexer:
                     text_idx += 1
                     offset += 1  # 结束引号计入列偏移
 
-                # set current token line info
                 current_token.set_type("literal.string")
                 current_token.set_content(string_content)
 
-                # reset line info
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 continue
 
-            # in case current char has nowhere to put
+            # ── 未识别分支 ──
             else:
                 self._emit_pending_dedent(tokens)
 
                 current_token.set_type("unrecognized")
                 current_token.set_content(lex_text[text_idx])
 
-                # reset line info
                 text_idx += 1
                 start_point += 1
                 current_token = self.refine_type(current_token)
@@ -555,9 +547,9 @@ class Lexer:
                 m[orig] = keyword_type(orig)
         return m
 
-    # only use in method tokenize
+    # 仅供 tokenize 内部调用
     def refine_type(self, _token: Token) -> Token:
-        # this method provide more refined token type #
+        # 粗类型精化：keyword/bracket/symbol 等字母形式查扁平表
         if _token.type == "unrecognized":
             raise ValueError(f"Unexpected token: {_token.content} ")
         if _token.type == "id":

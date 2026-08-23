@@ -45,7 +45,7 @@ class ParseContext:
     """解析上下文，管理解析过程中的所有状态"""
 
     def __init__(self, tokens: list[Token]) -> None:
-        self._snapshot_stack = []  # 添加快照栈
+        self._snapshot_stack = []
         self.tokens = tokens
         self.token_pointer = 0
         self.match_length = 0
@@ -74,7 +74,6 @@ class ParseContext:
         return False  # 异常继续传播
 
     def advance_token(self, count=1):
-        """向前移动token指针"""
         self.token_pointer += count
         self.match_length += count
 
@@ -89,7 +88,6 @@ class ParseContext:
         )
 
     def restore_snapshot(self, snapshot):
-        """恢复到之前的解析状态"""
         (self.token_pointer,
          self.match_length,
          self.current_node,
@@ -97,15 +95,12 @@ class ParseContext:
          self.production_pointer) = snapshot
 
     def update_current_node(self, node: Node) -> None:
-        """更新当前正在构造的 AST 节点。"""
         self.current_node = node
 
     def update_current_rule(self, rule: GrammarRule) -> None:
-        """更新当前正在匹配的语法规则。"""
         self.current_rule = rule
 
     def has_more_tokens(self) -> bool:
-        """判断是否还有未解析的token"""
         return self.token_pointer < len(self.tokens)
 
     def peek_token(self, offset=0) -> Token | None:
@@ -151,18 +146,15 @@ class ScopeStack:
     # ── 作用域管理 ──
 
     def push(self, name: str, kind: str) -> None:
-        """进入新作用域。"""
         self._stack.append(ScopeEntry(name, kind))
 
     def pop(self) -> None:
-        """退出当前作用域。"""
         if len(self._stack) > 1:
             self._stack.pop()
 
     # ── 符号注册与查找 ──
 
     def register(self, name: str, kind: str) -> None:
-        """在当前作用域注册符号。"""
         self._stack[-1].symbols[name] = kind
 
     def lookup(self, name: str) -> str | None:

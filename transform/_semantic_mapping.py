@@ -45,13 +45,14 @@ class SemanticMappingPlugin(TransformPlugin):
     """
 
     def __init__(self, raw_config: dict | None = None):
-        if raw_config is None:
-            raw_config = AstTransformer._shared_ctx.get("mapping_cfg", {})
-        """初始化
+        """初始化语义映射插件。
 
         Args:
-            raw_config: _analyzer.toml 的原始 dict 内容（含 mapping.* 和 resolve.* 等）
+            raw_config: 映射配置；缺省取共享上下文 mapping_cfg（_analyzer.toml
+                的原始内容，含 mapping.* 和 resolve.*）。
         """
+        if raw_config is None:
+            raw_config = AstTransformer._shared_ctx.get("mapping_cfg", {})
         raw = raw_config or {}
         # mapping 条目：从符号构建映射表
         self._mapping_entries: list[dict] = [

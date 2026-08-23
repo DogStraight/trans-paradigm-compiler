@@ -30,17 +30,14 @@ MACRO_PREFIX = "macro."
 
 # ── 构造函数 ──
 def keyword_type(name: str) -> str:
-    """关键字名 → token 类型（keyword.<name>）。"""
     return f"{KEYWORD_PREFIX}{name}"
 
 
 def symbol_type(category: str, name: str) -> str:
-    """符号类别 + 名字 → token 类型（symbol.<cat>.<name>）。"""
     return f"{SYMBOL_PREFIX}{category}.{name}"
 
 
 def bracket_types(name: str) -> tuple[str, str]:
-    """括号配对名 → (左, 右) token 类型。"""
     return f"{BRACKET_L_PREFIX}{name}", f"{BRACKET_R_PREFIX}{name}"
 
 

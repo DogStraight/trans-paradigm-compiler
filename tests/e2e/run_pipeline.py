@@ -4,21 +4,17 @@ TransParadigm Compiler Pipeline - End-to-end compilation with stage control.
 
 管线核心（run_pipeline_on_source / format_generated / _load_pipeline_defaults /
 _PIPELINE_SHARED）已移入正式包 `pipeline/`（2026-08-18 开源就绪：CLI 与测试共用，
-wheel 安装后 CLI 可用）。本文件保留测试 CLI（find_test_file / parse_args / main），
-从 pipeline 导入核心，并保留测试环境特定代码（sys.path 插入 / stdout 重定向）。
+wheel 安装后 CLI 可用）。本文件保留测试 CLI（find_test_file / parse_args / main），从 pipeline 导入核心；
+测试环境引导（项目根 sys.path + stdout UTF-8）统一在 tests/_bootstrap.py。
 """
 
 import sys
 import os
 import argparse
 
-# Add project root to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Force stdout to UTF-8
-sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
+# 项目根 + stdout UTF-8（必须在 import core 之前）
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from tests import _bootstrap  # noqa: E402
 
 # 管线核心（正式包）
 from pipeline import (  # noqa: E402

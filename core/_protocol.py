@@ -5,33 +5,33 @@
 
 # ── 符号属性（sym.attrs 中的 key）──
 ATTR_REF_CALLBACKS = "_ref_callbacks"
-"""符号的 attrs 键：存储引用解析回调列表。"""
+"""存储引用解析回调列表。"""
 
 ATTR_RESOLVED_PORTS = "resolved_ports"
-"""符号的 attrs 键：存储解析后的端口列表。"""
+"""存储解析后的端口列表。"""
 
 ATTR_TYPE_DECL = "_type_decl"
-"""符号的 attrs 键：存储对应的 TypeDecl 节点引用。"""
+"""存储对应的 TypeDecl 节点引用。"""
 
 # ── 映射表（SemanticMappingPlugin 产出的表名）──
 TABLE_TYPE_PORTS_FLAT = "type_ports_flat"
-"""映射表名：类型化端口的扁平端口列表。"""
+"""类型化端口的扁平端口列表。"""
 
 TABLE_IMPL_BINDING = "impl_binding"
-"""映射表名：impl 绑定关系。"""
+"""impl 绑定关系。"""
 
 TABLE_TYPE_MAP = "type_map"
-"""映射表名：类型声明与实现的映射。"""
+"""类型声明与实现的映射。"""
 
 # ── 共享上下文（AstTransformer._shared_ctx 中的 key）──
 CTX_RULES = "rules"
-"""共享上下文 key：语法规则 dict。"""
+"""语法规则 dict。"""
 
 CTX_MAPPING_CFG = "mapping_cfg"
-"""共享上下文 key：映射表配置。"""
+"""映射表配置。"""
 
 CTX_EXTRA_ASTS = "_remapper_extra_asts"
-"""共享上下文 key：额外 AST 输出列表。"""
+"""额外 AST 输出列表。"""
 
 # ── 组件元数据 key（component.toml 字段名）──
 META_NAME = "name"

@@ -23,7 +23,6 @@ ref = "decl"
 
 
 # ── BodyInputDecl — 模块体 input 声明 ──
-# 模块体内的 input 端口声明，以分号结尾。
 # 格式: input [wire] [signed] [range] name1, name2, ... ;
 
 [BodyInputDecl]
@@ -70,7 +69,6 @@ line = [
 
 
 # ── BodyOutputDecl — 模块体 output 声明 ──
-# 模块体内的 output 端口声明，以分号结尾。
 # 格式: output [wire|reg] [signed] [range] name1, name2, ... ;
 
 [BodyOutputDecl]
@@ -117,7 +115,6 @@ line = [
 
 
 # ── BodyInoutDecl — 模块体 inout 声明 ──
-# 模块体内的 inout 端口声明，以分号结尾。
 # 格式: inout [wire] [signed] [range] name1, name2, ... ;
 
 [BodyInoutDecl]

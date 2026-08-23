@@ -25,15 +25,11 @@ import difflib
 import shutil
 from typing import Any
 
-# Add project root to path for importing pipeline（必须在 import core 之前）
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# 项目根 + stdout UTF-8（必须在 import core 之前）
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from tests import _bootstrap  # noqa: E402
 
 from core.define import DEFAULT_EXT_DIRS
-
-# Force stdout to UTF-8
-sys.stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
 
 
 # ── 组别独立参数配置 ─────────────────────────────────
