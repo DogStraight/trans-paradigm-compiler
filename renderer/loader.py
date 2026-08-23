@@ -50,8 +50,6 @@ def load_layouts(rules_dir: str, layouts: dict) -> None:
 
 
 def load_style(rules_dir: str) -> dict:
-    """加载风格配置：从 ConfigRegistry 获取 base 和 lang 风格。"""
-def load_style(rules_dir: str) -> dict:
     """加载风格配置：从 ConfigRegistry 获取 base 和 lang 风格。
 
     返回 { indent_str, max_inline }。children_field 是引擎 AST 协议

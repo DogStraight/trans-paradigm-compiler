@@ -1,5 +1,5 @@
 """
-pipeline.py — AstTransformer + TransformPlugin 基类 + 自动注册
+engine.py — AstTransformer + TransformPlugin 基类 + 自动注册
 
 接收规范化 AST + 符号表，依次执行所有已注册的变换插件。
 插件通过 @register_plugin 装饰器自动注册，管线入口只需创建 AstTransformer()。

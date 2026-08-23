@@ -1,42 +1,40 @@
-"""registry.py — analyzer primitive registry.
+"""registry.py — analyzer primitive 注册表。
 
-Symmetric design to transform/post/engine/registry.py but separate concerns.
-Analyzer primitives handle semantic analysis during AST traversal
-(scope, symbols, reference resolution).
-Transform primitives handle post-phase AST modification
-(expansion, replacement, deletion).
+与 transform/primitives/registry.py 对称设计但职责分离：analyzer 原语在
+AST 遍历期间做语义分析（作用域、符号、引用解析）；transform 原语做
+阶段后 AST 变换（展开、替换、删除）。
 
-Registered primitives are injected into SemanticAnalyzer._walk_node pipeline,
-executed in the order declared in TOML [RuleName.analyzer] configuration.
+注册的原语注入 AnalysisTraversal 的遍历管线，按 TOML [RuleName.analyzer]
+配置中声明的顺序执行。
 """
 
 from typing import Callable
 from core.define import Node
 
 
-# ── Primitive signature ──
+# ── 原语签名 ──
 #
 # AnalyzerPrimitive = Callable[
-#     analyzer: SemanticAnalyzer,    # Analyzer instance (holds scope/errors)
-#     node: Node,                    # Current AST node
-#     config: dict,                  # Analyzer config dictionary for this rule
+#     analyzer: AnalysisTraversal,  # 分析器实例（持有 scope/errors）
+#     node: Node,                    # 当前 AST 节点
+#     config: dict,                  # 本规则的 analyzer 配置字典
 # ] -> None
 #
 # 原语通过副作用修改分析器内部状态（scope、symbols、errors）
 
 AnalyzerPrimitive = Callable[..., None]
 
-# ── Primitive registry ──
+# ── 原语注册表 ──
 
 _primitives: dict[str, AnalyzerPrimitive] = {}
 
 
 def register_primitive(name: str, fn: AnalyzerPrimitive) -> None:
-    """Register an analyzer primitive.
+    """注册一个分析器原语。
 
     Args:
-        name: Primitive name, referenced in TOML configuration.
-        fn: Primitive function, signature per AnalyzerPrimitive.
+        name: 原语名，TOML [RuleName.analyzer] 配置中引用。
+        fn: 原语函数，签名见 AnalyzerPrimitive。
     """
     if name in _primitives:
         raise ValueError(f"Analyzer primitive '{name}' 已注册")
@@ -44,12 +42,12 @@ def register_primitive(name: str, fn: AnalyzerPrimitive) -> None:
 
 
 def get_primitive(name: str) -> AnalyzerPrimitive | None:
-    """Get a registered primitive by name."""
+    """按名称取已注册的原语。"""
     return _primitives.get(name)
 
 
 def has_primitive(name: str) -> bool:
-    """Check if a primitive is registered."""
+    """检查原语是否已注册。"""
     return name in _primitives
 
 

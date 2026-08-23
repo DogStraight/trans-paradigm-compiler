@@ -7,13 +7,14 @@
     renderer.py          — 主类 Renderer（轻量 orchestrator）
     primitives/          — 每个 DSL 原语一个文件
         text.py          — text 原语
-        ref_prim.py      — ref 原语
-        join_prim.py     — join 原语
-        group_prim.py    — group 原语
-        line_prim.py     — line 原语
-        indent_prim.py   — indent 原语
-        opt_prim.py      — opt 原语
+        ref.py           — ref 原语
+        join.py          — join 原语
+        group.py         — group 原语
+        line.py          — line 原语
+        indent.py        — indent 原语
+        opt.py           — opt 原语
         soft_break.py    — soft / break 原语
+        registry.py      — 原语注册表
     node_renderer.py     — 节点级渲染（_render_node / _render_inline / _render_body）
     loader.py            — TOML 布局规则 / 风格 / 配置加载
     doc.py               — Doc IR 类型 + layout 算法（Wadler-Leijen 模型）

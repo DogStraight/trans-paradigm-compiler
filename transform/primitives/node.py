@@ -1,4 +1,4 @@
-"""_ast.py — AST 操作原语
+"""node.py — AST 操作原语
 
 emit    根据规格创建 AST 节点
 replace 替换父节点中的子节点

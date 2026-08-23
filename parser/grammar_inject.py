@@ -1,9 +1,10 @@
-"""Grammar rule injection — production injection, propagation, and replacement.
+"""语法规则注入 — production 注入、传播与替换。
 
-Supports target addressing syntax: RuleName.production[N]
+支持目标寻址语法：RuleName.production[N]。
 注入改为结构化：analyze → 树层合并（choice 候选插入 / call 替换）→ serialize
-回字符串，替代字符串正则/子串操作。fail-fast 对齐 ADR-0003：target 规则缺失或
-production 无法解析直接报错，不静默降级。
+回字符串，替代字符串正则/子串操作。fail-fast 对齐 ADR-0003：inject 路径
+target 规则缺失或 production 无法解析直接报错，不静默降级；replace 路径
+对缺失规则仅警告跳过（软，兼容旧配置）。
 """
 
 import re

@@ -142,17 +142,12 @@ class TestLoadAllTomlSkipsTpc:
         (tmp_path / "00_rules.toml").write_text(
             '[MyRule.parser]\nproduction = ["a"]\n', encoding="utf-8"
         )
-        # 用 FileManager 加载（相对路径需在项目内，这里直接测 load_all_toml 的
-        # 跳过逻辑——通过临时目录的绝对路径）
+        # tmp_path 在项目外，相对路径解析会失败——改为在 grammar/ 下建临时
+        # 目录，直接验证 load_all_toml 对 tpc.toml 的跳过逻辑（[lexer] 配置
+        # 段不进规则集）。
         import os
-
-        # FileManager.load_all_toml 接受相对路径，这里用 monkeypatch 验证跳过
-        # 逻辑：直接检查 load_all_toml 的跳过条件（tpc.toml 在跳过列表）
-        from core.define import FileManager as FM
-
-        # 临时目录不在项目内，get_full_path 会失败——改为验证跳过逻辑本身：
-        # 构造一个项目内临时目录
         import shutil
+        from core.define import FileManager as FM
 
         proj_tmp = os.path.join(
             os.path.dirname(

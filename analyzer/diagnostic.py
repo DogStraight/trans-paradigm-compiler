@@ -1,7 +1,7 @@
-"""diagnostic.py — structured diagnostics
+"""diagnostic.py — 结构化诊断
 
-Compatible with LSP Diagnostic format. Supports severity levels,
-error codes, and position information.
+兼容 LSP Diagnostic 格式，支持级别（severity）、错误码（code）；
+位置通过关联的 AST 节点（node）提供，无独立 position 字段。
 """
 
 from core.define import Node

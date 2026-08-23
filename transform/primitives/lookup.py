@@ -1,4 +1,4 @@
-"""_lookup.py — 查表原语
+"""lookup.py — 查表原语
 
 lookup          从 dict 表中按 key 查找
 lookup_scope    从 Scope 作用域链中按名称查找符号

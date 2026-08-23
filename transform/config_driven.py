@@ -250,8 +250,6 @@ class ConfigDrivenTransform(TransformPlugin):
                         continue
                     if attr_name in ("name", "content", "value") and has_primary:
                         continue
-
-                        continue
                     val = getattr(obj, attr_name)
                     key = f"{prefix}{attr_name}" if prefix else attr_name
                     if isinstance(val, (Node, dict)):

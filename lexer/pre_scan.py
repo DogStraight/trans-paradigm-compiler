@@ -23,7 +23,6 @@ from core.config_registry import declare_cfg
 _pre_scan_cfg: dict = declare_cfg("lexer.pre_scan", {}, __name__, "_pre_scan_cfg")
 
 
-
 # ── 编译缓存 ──
 _CACHE: dict[str, dict] = {}
 
@@ -32,7 +31,8 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
     """从 ConfigRegistry 获取预扫描配置并编译。
 
     Args:
-        rules_dir: 规则目录（保留参数，实际从 Registry 读取）。
+        rules_dir: 规则目录；非 None 时兼作 _CACHE 缓存键（配置内容本身
+            从 Registry 读取，不按目录加载文件）。
 
     Returns:
         编译后的配置字典，可直接传入 pre_scan()。

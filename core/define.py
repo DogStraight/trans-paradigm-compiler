@@ -313,7 +313,7 @@ class GrammarRule:
     """语法规则
 
     由 TOML 文件加载，除标准的 production/node/exclude 外，
-    可通过自声明属性附加语义角色，供下游消费（不限于 SemanticAnalyzer）：
+    可通过自声明属性附加语义角色，供下游消费（不限于 AnalysisTraversal）：
 
     ───────────────────────────────────────────────────────────────
     语义自声明属性 (semantic_analyzer.py 消费)
@@ -596,12 +596,13 @@ class GrammarRulesRegister:
         return rules_dict
 
     def rules_registration(self, rules_dir: str = "") -> dict[str, GrammarRule]:
-        """
-        加载语法规则：优先从目录加载所有 .toml 文件，
-        目录不存在或为空时回退到单文件 rules.toml。
+        """加载语法规则：优先从目录加载所有 .toml 文件（递归，_ 前缀跳过）。
 
-        支持缓存：已加载过的目录跳过磁盘 IO，直接使用 self.rules。
-        :param rules_dir: 规则目录的相对路径
+        目录不存在或为空：返回当前规则表，不报错（空目录不是错误，如 ext
+        目录迁移后残留）。支持缓存：已加载过的目录跳过磁盘 IO。
+
+        Args:
+            rules_dir: 规则目录的相对路径（空串用 FileManager.rules_dir）。
         """
         if rules_dir == "":
             rules_dir = FileManager.rules_dir
