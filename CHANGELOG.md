@@ -72,6 +72,30 @@ fuzz（~8000 轮，不崩溃 / token 保序 / 幂等不变量）。
   semantic-check-slot.md`（双层规则 + post-pass 链式检查）+ `docs/semantic_checks.md`
   + 前置调研 `docs/references/static_checkers_survey.md`。
 
+### 2026-08-23 (发布收尾：GitHub 上线 + CI 首跑三修)
+
+- **GitHub 上线**：仓库 `DogStraight/trans-paradigm-compiler`（public）——dev 分支
+  推送 + tag `v0.1.0`（正式发布锚点）；旧版本 tag（v0.1/v0.11/v0.2.0）降级为
+  milestone-* 里程碑（版本号伪装去除，指针保留）。提交邮箱已关联账号。
+- **CI 首跑三修**（12 任务矩阵首跑暴露 3 类本地测不出的缺陷，均已修）：
+  - `FileManager.get_full_path` 绝对路径 POSIX **翻倍拼接**：`lstrip("/")` 把
+    绝对路径当相对路径拼 `_base_dir`（Windows 靠 Path 盘符替换碰巧正确，
+    Linux 必炸）→ 绝对路径原样透传（normpath），新增 2 个回归测试
+  - ci.yml wheel 冒烟 `cd /tmp` 后相对 `_venv/bin/tpc` 失效（exit 127）→
+    `$GITHUB_WORKSPACE/_venv` 绝对路径
+  - 测试硬编码本机绝对路径 4 处（`e:\project\tpc_compiler\...`，味道审查
+    标记过的边界项）→ `FileManager.get_full_path` 可移植解析
+- **CI 12 任务矩阵全绿**：test + wheel-install ×（3.11/3.12/3.13）×（ubuntu/
+  windows）——含 wheel 安装后从任意目录运行 CLI 验证。
+- **README 切片声明**："Sliceable — take only what you need"（format/lint/
+  expand/全管线独立可用，切片自助、管道整体维护）。
+- **注释味道审查 + 卫生清理**：rubric（`docs/comment_smell_rubric.md`）+
+  前人调研（`docs/references/comment_smell_survey.md`），8 子代理 × ~211 文件
+  全审（全部件"轻"味，人味 6-9/10）；正确性问题 + AI 味收紧 + grammar 卫生
+  全部清理（TODO P2.4 清零），tests 引导样板抽公共模块 `tests/_bootstrap.py`。
+- **注释正确性修复**：过时类名/失效路径/文档漂移/死 docstring/语言渗透措辞
+  （"Verilog file" → "source file"）等 34 处。
+
 ### 2026-08-21 (typed_ports 接口位宽闭环)
 
 - **role 端口 packed_range 携带（TODO P1.5 完成）**：typed_ports 展开路径不再丢

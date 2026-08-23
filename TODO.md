@@ -223,8 +223,12 @@
       （GrammarFuzzer 生成器已就绪，缺接线）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
 - [ ] 引擎编译提速评估（Nuitka 已实证 exe，编译引擎是后手）
-- [ ] CI 接入：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential 门禁
-      （前提：仓库推到 GitHub）
+- [x] CI 接入（2026-08-23）：仓库已推 GitHub（public，dev 分支 + v0.1.0 tag），
+      push/PR 跑 test + wheel-install 矩阵（3 Python × 2 OS，12 任务全绿）；
+      首跑三修（get_full_path POSIX 路径翻倍 / ci.yml wheel 冒烟相对路径 /
+      测试硬编码本机路径）已并入提交
+- [ ] CI 补强（未做）：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential
+      门禁接入
 
 ### P2.4 注释卫生（味道审查 backlog，非发布阻塞，2026-08-23 记录）
 
