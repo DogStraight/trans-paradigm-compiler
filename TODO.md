@@ -208,6 +208,68 @@
 - [ ] 用户视角文档增量：现有 docs/ 偏引擎作者视角（MODEL_INDEX/ADR/
       component_protocol）；发布只需 README Quick start 补齐，暂不新写用户手册。
 
+### P2.3 验证吞吐优化（backlog，非发布阻塞，2026-08-22 记录）
+
+> 动机：验证（fuzz/差分/edge）是"验证附着于配置驱动语言定义"的差异化能力，
+> 但当前吞吐 ~9 iter/s（实测单次迭代 ~110ms：setup_grammar ~40% + 管线内部
+> 幂等复跑 2x 冗余 + 单线程）。模型无机会手动跑大规模验证，快速验证层是
+> "模型写配置 → 自动验证闭环"成立的前提。详见 tests/fuzz/README.md。
+
+- [ ] fuzz harness 吞吐三件套：
+  - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x
+  - [ ] fuzz 模式关闭管线内部幂等复跑（oracle 自管）→ ~1.8x
+  - [ ] multiprocessing 多 worker → ~8x（合计 ~30-40x：100k 轮 ~1 分钟）
+- [ ] 随机合法程序 → 对拍 Verible：接受域从 124 人工语料推到统计意义
+      （GrammarFuzzer 生成器已就绪，缺接线）
+- [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
+- [ ] 引擎编译提速评估（Nuitka 已实证 exe，编译引擎是后手）
+- [ ] CI 接入：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential 门禁
+      （前提：仓库推到 GitHub）
+
+### P2.4 注释卫生（味道审查 backlog，非发布阻塞，2026-08-23 记录）
+
+> 来源：8 子代理 × ~211 文件注释"AI 味"审查（rubric 见 docs/comment_smell_rubric.md，
+> 调研见 docs/references/comment_smell_survey.md）。总判定：全部件"轻"味，0"重"、
+> 2"中"；套话词表命中近零（全部有实指）；人味评分 6-9/10。以下为可执行项——
+> AI 味收紧（可选）与注释正确性（非 AI 味）。
+> 正确性组 2026-08-23 已修（除 tests 样板 DRY 结构性重构），提交见 git log。
+
+**中（建议修，AI 味收紧）：**
+- [ ] `transform/_semantic_mapping.py:50-54` docstring 挂在 `__init__` 的 if/else
+      之后（死字符串表达式，函数实际无 docstring）——移到首行压缩为一句或删除
+- [ ] `grammar/verilog/02_declarations/20_body_ports.toml:25-27/72-74/119-121`
+      端口声明注释模板化换词成片——合并为族注释只讲差异
+
+**轻成片（可选收紧）：**
+- [ ] `lexer/main_lexer.py` 16 处英文复述标签（`# in case ...` / `# set/reset line
+      info`，含翻译腔与语法错 "this method provide"）——删或改中文
+- [ ] `parser/parser_core.py` ~13 处一行 docstring（ParseContext/ScopeStack 纯复述）——
+      删纯复述，保留带信息的（如 create_snapshot 的 tuple 快 3x）
+- [ ] `core/token_protocol.py:32-44` 5 个构造函数 docstring 同句式模板——整组删除
+      （模块头协议表是单一事实源）
+- [ ] `core/_protocol.py:8-34` "XX 的 attrs 键：存储…" 前缀被分区标题覆盖——省略
+      前缀留实指
+
+**注释正确性（非 AI 味）：**
+- [x] `analyzer/primitives/registry.py` 过时类名 SemanticAnalyzer（→AnalysisTraversal）
+      与失效路径 transform/post/engine/registry.py（→transform/primitives/registry.py）
+- [x] `analyzer/diagnostic.py` 空声明 "position information"
+- [x] `core/define.py:600` docstring 与代码不一致（空目录"回退单文件 rules.toml"
+      说法错误）
+- [x] `parser/grammar_inject.py` docstring fail-fast 过度概括 replace 路径
+- [x] `lexer/pre_scan.py:36` "保留参数"半对（实为 _CACHE 缓存键）
+- [x] `main.py` help/docstring 写死 "Verilog file" / ".v file"（语言渗透）→ source file
+- [x] 陈旧模块名：transform/{engine,flow,lookup,node,template}.py 文件头 +
+      renderer/__init__.py 结构清单
+- [x] `renderer/loader.py` 重复定义残留；`transform/config_driven.py:254` 死 continue
+- [ ] tests 跨文件 sys.path/UTF-8 样板重复 6-7 处（结构性 DRY，抽公共模块改动面大，
+      暂缓）
+- [x] `test_rule_schema.py:145-154` 思考残留注释（声称用 monkeypatch 实际未用）
+- [x] grammar 卫生项 8 处：10_if 残缺句 / 50_func_task 孤立分区头 / 00_base 双
+      banner+残留批注 / 00_blocks 失效引用 / 10_ansi_ports 注释不符+笔误 /
+      _symbol_level 死配置+未决问句 / token.toml 框线 / 30_assign 措辞
+- [x] grammar TOML 文件数对账：57 属实（58 是主侧计数错误，非漏审）
+
 ## P4 — LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 
 ### P4.1 LLVM IR 目标插件
