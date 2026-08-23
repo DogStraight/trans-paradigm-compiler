@@ -3,8 +3,8 @@
 main.py — TransParadigm Compiler CLI entry point
 
 Usage (installed as `tpc`):
-    tpc format <file>                  Format a Verilog file
-    tpc lint <file> [--json]           Lint a Verilog file
+    tpc format <file>                  Format a source file
+    tpc lint <file> [--json]           Lint a source file
     tpc pipeline [test_name]           Run a single test
     tpc new component <name>           Scaffold a new component
     tpc config dump                    Show config key sources
@@ -141,7 +141,7 @@ def _cmd_init(args: argparse.Namespace) -> None:
 
 
 def _cmd_lint(args: argparse.Namespace) -> None:
-    """tpc lint — run syntax checker on a Verilog file."""
+    """tpc lint — run syntax checker on a source file."""
     from linter.scanner import LinterScanner
     import json
 
@@ -250,6 +250,79 @@ def _cmd_new_component(args: argparse.Namespace) -> None:
     scaffold_component(args.name, args.lang or "verilog")
 
 
+def _register_subparsers(sub, allow=None) -> None:
+    """注册子命令（可裁剪）。
+
+    allow: 允许的命令名集合（None = 全部）。打包管线（packaging/build_pipeline.py
+    生成的切面入口）用它只挂载需要的命令；main() 注册全部。
+    """
+
+    def want(name: str) -> bool:
+        return allow is None or name in allow
+
+    if want("format"):
+        p_fmt = sub.add_parser("format", help="Format a source file (per [commands].format)")
+        p_fmt.add_argument("file", help="Path to source file")
+
+    if want("expand"):
+        p_exp = sub.add_parser(
+            "expand", help="Expand macros and transform (per [commands].expand)"
+        )
+        p_exp.add_argument("file", help="Path to source file")
+
+    if want("lint"):
+        p_lint = sub.add_parser("lint", help="Lint a source file")
+        p_lint.add_argument("file", nargs="?", help="Path to source file (stdin if omitted)")
+        p_lint.add_argument(
+            "--json", action="store_true", help="LSP-compatible JSON output"
+        )
+        p_lint.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+
+    if want("init"):
+        p_init = sub.add_parser("init", help="Initialize a TransParadigm project config")
+        p_init.add_argument("--lang", default="verilog", help="Target language")
+
+    if want("pipeline"):
+        p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")
+        p_pipe.add_argument("test_name", nargs="*", help="Test case name (e.g., counter)")
+
+    if want("new"):
+        p_new = sub.add_parser("new", help="Scaffold project artifacts")
+        new_sub = p_new.add_subparsers(dest="new_type", required=True)
+        p_comp = new_sub.add_parser("component", help="Scaffold a new component")
+        p_comp.add_argument("name", help="Component name (snake_case)")
+        p_comp.add_argument("--lang", default="verilog", help="Target language")
+
+    if want("config"):
+        p_cfg = sub.add_parser("config", help="Config introspection")
+        cfg_sub = p_cfg.add_subparsers(dest="config_type", required=True)
+        p_dump = cfg_sub.add_parser("dump", help="Dump config keys with sources")
+        p_dump.add_argument("--rules-dir", default=None, help="Language pack dir")
+        p_dump.add_argument("--json", action="store_true", help="JSON output")
+        p_dump.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+
+
+def _dispatch(args) -> None:
+    """按解析结果分发到命令处理函数（与 _register_subparsers 配套）。"""
+    dispatch = {
+        "format": _cmd_format,
+        "expand": _cmd_expand,
+        "lint": _cmd_lint,
+        "init": _cmd_init,
+        "pipeline": _cmd_pipeline,
+    }
+    if args.command == "new":
+        dispatch["new"] = {
+            "component": _cmd_new_component,
+        }[args.new_type]
+    if args.command == "config":
+        dispatch["config"] = {
+            "dump": _cmd_config_dump,
+        }[args.config_type]
+
+    dispatch[args.command](args)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="TransParadigm Compiler — configuration-driven compiler frontend",
@@ -270,68 +343,10 @@ Examples:
         version=f"%(prog)s {__version__}",
         help="Show version and exit",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    # format
-    p_fmt = sub.add_parser("format", help="Format a Verilog file (per [commands].format)")
-    p_fmt.add_argument("file", help="Path to .v file")
-
-    # expand
-    p_exp = sub.add_parser(
-        "expand", help="Expand macros and transform (per [commands].expand)"
-    )
-    p_exp.add_argument("file", help="Path to .v file")
-
-    # lint
-    p_lint = sub.add_parser("lint", help="Lint a Verilog file")
-    p_lint.add_argument("file", nargs="?", help="Path to .v file (stdin if omitted)")
-    p_lint.add_argument(
-        "--json", action="store_true", help="LSP-compatible JSON output"
-    )
-    p_lint.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
-
-    # init
-    p_init = sub.add_parser("init", help="Initialize a TransParadigm project config")
-    p_init.add_argument("--lang", default="verilog", help="Target language")
-
-    # pipeline (dev)
-    p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")
-    p_pipe.add_argument("test_name", nargs="*", help="Test case name (e.g., counter)")
-
-    # new
-    p_new = sub.add_parser("new", help="Scaffold project artifacts")
-    new_sub = p_new.add_subparsers(dest="new_type", required=True)
-    p_comp = new_sub.add_parser("component", help="Scaffold a new component")
-    p_comp.add_argument("name", help="Component name (snake_case)")
-    p_comp.add_argument("--lang", default="verilog", help="Target language")
-
-    # config
-    p_cfg = sub.add_parser("config", help="Config introspection")
-    cfg_sub = p_cfg.add_subparsers(dest="config_type", required=True)
-    p_dump = cfg_sub.add_parser("dump", help="Dump config keys with sources")
-    p_dump.add_argument("--rules-dir", default=None, help="Language pack dir")
-    p_dump.add_argument("--json", action="store_true", help="JSON output")
-    p_dump.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+    _register_subparsers(parser.add_subparsers(dest="command", required=True))
 
     args = parser.parse_args()
-
-    dispatch = {
-        "format": _cmd_format,
-        "expand": _cmd_expand,
-        "lint": _cmd_lint,
-        "init": _cmd_init,
-        "pipeline": _cmd_pipeline,
-    }
-    if args.command == "new":
-        dispatch["new"] = {
-            "component": _cmd_new_component,
-        }[args.new_type]
-    if args.command == "config":
-        dispatch["config"] = {
-            "dump": _cmd_config_dump,
-        }[args.config_type]
-
-    dispatch[args.command](args)
+    _dispatch(args)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,21 @@
+{
+  "//": "功能切面打包规格（packaging/build_pipeline.py 读取）。",
+  "//": "facets: 命令名集合（对应 main.py _register_subparsers 的 allow）——",
+  "//": "       format / lint / expand / config / new / init / pipeline。",
+  "//": "       format+lint+expand+config = 常用切面组合（单 exe 多命令）。",
+  "tpc-fmt": {
+    "facets": ["format"],
+    "file_description": "Configuration-driven Verilog formatter (tpc-fmt)",
+    "product_name": "TransParadigm Verilog Formatter"
+  },
+  "tpc-lint": {
+    "facets": ["lint"],
+    "file_description": "Configuration-driven Verilog linter (tpc-lint)",
+    "product_name": "TransParadigm Verilog Linter"
+  },
+  "tpc": {
+    "facets": ["format", "lint", "expand", "config"],
+    "file_description": "TransParadigm configuration-driven Verilog toolchain (tpc)",
+    "product_name": "TransParadigm Verilog Toolchain"
+  }
+}
