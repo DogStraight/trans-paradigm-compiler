@@ -371,6 +371,14 @@ def _stage_parse(
         ctx.result["error"] = "parser returned None"
         ctx.log("[parser] parse failed")
         return None
+    # 截断 = 失败（不是软成功）：lint 门禁是启发式的，变异/畸形输入可能漏过
+    # lint 后进 parser；此时 parser 软失败只返回部分 AST，若继续渲染会**静默
+    # 丢内容还报 success=True**（fuzz 发现的真实缺陷，2026-08-22）。
+    # formatter wrap pass 与幂等检查本就认 _parse_truncated，入口应一致。
+    if getattr(parser, "_parse_truncated", False):
+        ctx.result["error"] = "parse truncated (unconsumed tokens) — pipeline stopped"
+        ctx.log("[parser] parse truncated, stopping pipeline")
+        return None
     ctx.result["parser"] = parser
     return ast
 

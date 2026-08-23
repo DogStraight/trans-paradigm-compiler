@@ -114,7 +114,7 @@ ref = "ports"
 production = [
     "symbol.base.pound",
     "bracket.l_parentheses",
-    "@ParamDecl",
+    "@ParamDecl?",
     "(symbol.base.comma,@ParamDecl)*",
     "bracket.r_parentheses",
 ]

@@ -279,15 +279,28 @@ def scan_directives(
     # 带参宏 body 含形参占位，形参未绑定时不能预展开，跳过。
     expand_cfg = _get_expand_config()
     max_iter = expand_cfg.get("max_iterations", 128)
+    # 体长上限：防递归宏指数膨胀（fuzz 2026-08-22 发现 MemoryError——
+    # `` `define debug ( `debug ... ) `` 每次迭代体长翻倍，128 轮即
+    # 2^128 长度）。超限宏停止展开（引用保留为未展开 token），软失败不崩溃。
+    max_body_len = expand_cfg.get("max_body_len", 1 << 16)
+    stalled: set[str] = set()
     for _ in range(max_iter):
         changed = False
         for name, body in list(macro_defs.items()):
-            if name in func_macros:
+            if name in func_macros or name in stalled:
+                continue
+            # 直接自引用（`X 出现在 X 自己的体里）：GCC 语义——递归宏引用
+            # 不展开。预判跳过，避免进入翻倍循环。
+            if name in _MACRO_RE.findall(body):
+                stalled.add(name)
                 continue
             new_body = _MACRO_RE.sub(
                 lambda m: macro_defs.get(m.group(1), m.group(0)), body
             )
             if new_body != body:
+                if len(new_body) > max_body_len:
+                    stalled.add(name)  # 传递递归兜底：体积超限即停止
+                    continue
                 changed = True
                 macro_defs[name] = new_body
         if not changed:

@@ -196,7 +196,10 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             rule=rule.name,
             reason="block header production failed",
         )
-        assert old_node is not None
+        # 恢复 previous current_node（允许 None——fuzz 发现：畸形 ANSI 端口
+        # （如 `input [7:0]` 缺端口名）在句子解析上下文里 current_node 可为
+        # None，原 assert 直接崩溃。恢复 None 是合法状态，不得用断言兜错误
+        # 路径——用户输入必须软失败（截断/解析错误），不能崩。）
         context.update_current_node(old_node)
         return None
     self._bind_attributes(rule_node, rule, all_matched)
