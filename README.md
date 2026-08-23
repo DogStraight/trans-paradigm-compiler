@@ -92,6 +92,11 @@ where the language itself stays as data:
   token stream — not an AST. It reuses the same TOML grammar and part of the
   parser machinery, so syntax knowledge never drifts between lint and parse,
   and it can check broken code that would fail AST construction.
+- **Sliceable — take only what you need.** The pipeline is stage-separated:
+  `format`, `lint`, `expand`, and the full pipeline are independently usable.
+  Grab one capability without learning the rest — no need to understand the
+  whole pipeline to use a slice. Slicing is self-service: the pipeline is
+  maintained whole, and how you use your slice is up to you.
 
 **When not to use:** TransParadigm is one way to build a language toolchain,
 not a replacement for general-purpose parser generators. If you just need a
