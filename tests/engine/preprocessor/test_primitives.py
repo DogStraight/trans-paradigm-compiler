@@ -11,6 +11,7 @@ import os
 
 import pytest
 
+from core.define import FileManager
 from preprocessor.primitives.registry import (
     get_primitive,
     get_primitive_kind,
@@ -35,7 +36,7 @@ def _ctx(**kw) -> dict:
         "inc_dirs": [],
         "_include_config": {},
         "_include_stack": set(),
-        "rules_dir": r"e:\project\tpc_compiler\grammar\verilog",
+        "rules_dir": FileManager.get_full_path("grammar/verilog"),
         "directive_lines": [],
     }
     ctx.update(kw)

@@ -5,16 +5,20 @@
 
 import pytest
 
+from core.define import FileManager
 from linter.diagnose import diagnose_all_paths
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
+
+# 语法目录：可移植解析（CI 上无本机绝对路径）
+_RULES_DIR = FileManager.get_full_path("grammar/verilog")
 
 
 class TestDiagnoseAllPaths:
     def test_no_conditions_single_path(self):
         """无条件块 → 单一路径（无 define/undefine）。"""
         src = "module m;\n    reg a;\nendmodule\n"
-        results = diagnose_all_paths(src, rules_dir=r"e:\project\tpc_compiler\grammar\verilog")
+        results = diagnose_all_paths(src, rules_dir=_RULES_DIR)
         assert len(results) == 1
         assert results[0]["define"] == []
         assert results[0]["undefine"] == []
@@ -31,7 +35,7 @@ class TestDiagnoseAllPaths:
             "`endif\n"
             "endmodule\n"
         )
-        results = diagnose_all_paths(src, rules_dir=r"e:\project\tpc_compiler\grammar\verilog")
+        results = diagnose_all_paths(src, rules_dir=_RULES_DIR)
         assert len(results) == 2
         # 一条 define F，一条 undefine F（或 define 空）
         defines = [r["define"] for r in results]
@@ -49,7 +53,7 @@ class TestDiagnoseAllPaths:
             "`endif\n"
             "endmodule\n"
         )
-        results = diagnose_all_paths(src, rules_dir=r"e:\project\tpc_compiler\grammar\verilog")
+        results = diagnose_all_paths(src, rules_dir=_RULES_DIR)
         # 至少一条路径有诊断（bad 分支），一条无（good 分支）
         diag_counts = [len(r["diagnostics"]) for r in results]
         assert any(c > 0 for c in diag_counts), f"应有路径报错: {diag_counts}"
