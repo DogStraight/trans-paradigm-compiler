@@ -231,7 +231,14 @@ class FileManager:
 
     @classmethod
     def get_full_path(cls, relative_path: str) -> str:
-        """Get absolute path from relative path"""
+        """相对项目根解析路径；绝对路径原样返回（规范化）。
+
+        历史：曾对输入统一 lstrip("/") 再拼 _base_dir——绝对路径在 POSIX 上
+        被剥掉前导 / 后当相对路径重复拼接（/workspace + workspace/grammar/...，
+        Windows 因盘符绝对路径被 Path 替换才碰巧正确）。绝对路径必须原样透传。
+        """
+        if os.path.isabs(relative_path):
+            return os.path.normpath(relative_path)
         return str(Path(cls._base_dir) / relative_path.lstrip("/"))
 
     @classmethod

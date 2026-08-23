@@ -169,3 +169,26 @@ class TestLoadAllTomlSkipsTpc:
             assert "MyRule" in merged
         finally:
             shutil.rmtree(proj_tmp, ignore_errors=True)
+
+
+class TestGetFullPathAbsolute:
+    """get_full_path 对绝对路径必须原样返回（回归：POSIX 上曾因 lstrip('/')
+    把绝对路径当相对路径重复拼接 _base_dir，导致 grammar 路径翻倍）。"""
+
+    def test_absolute_path_returned_as_is(self):
+        from core.define import FileManager as FM
+        import os
+
+        abs_path = os.path.join(FM._base_dir, "grammar", "verilog")
+        result = FM.get_full_path(abs_path)
+        assert os.path.isabs(result)
+        assert os.path.normpath(result) == os.path.normpath(abs_path)
+        # 翻倍回归探测：grammar 出现次数不得多于输入
+        assert result.count("grammar") == abs_path.count("grammar")
+
+    def test_relative_path_resolves_under_base_dir(self):
+        from core.define import FileManager as FM
+        import os
+
+        result = FM.get_full_path("grammar/verilog")
+        assert result == os.path.join(FM._base_dir, "grammar", "verilog")

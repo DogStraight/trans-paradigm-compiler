@@ -62,19 +62,19 @@ jobs:
       - name: Install wheel in fresh venv + run CLI (Linux)
         if: runner.os == 'Linux'
         run: |
-          python -m venv _venv
-          _venv/bin/python -m pip install dist/*.whl
+          python -m venv "$GITHUB_WORKSPACE/_venv"
+          "$GITHUB_WORKSPACE/_venv/bin/python" -m pip install dist/*.whl
           cd /tmp
-          _venv/bin/tpc lint "$GITHUB_WORKSPACE/tests/e2e/samples/normal/ref/ref_simple.v"
-          _venv/bin/tpc format "$GITHUB_WORKSPACE/tests/e2e/samples/normal/ref/ref_simple.v" > /dev/null
+          "$GITHUB_WORKSPACE/_venv/bin/tpc" lint "$GITHUB_WORKSPACE/tests/e2e/samples/normal/ref/ref_simple.v"
+          "$GITHUB_WORKSPACE/_venv/bin/tpc" format "$GITHUB_WORKSPACE/tests/e2e/samples/normal/ref/ref_simple.v" > /dev/null
 
       - name: Install wheel in fresh venv + run CLI (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          python -m venv _venv
+          python -m venv "$env:GITHUB_WORKSPACE\_venv"
           $whl = (Get-ChildItem dist -Filter *.whl).FullName
-          _venv\Scripts\python.exe -m pip install $whl
+          & "$env:GITHUB_WORKSPACE\_venv\Scripts\python.exe" -m pip install $whl
           cd C:\
-          _venv\Scripts\tpc.exe lint "$env:GITHUB_WORKSPACE\tests\e2e\samples\normal\ref\ref_simple.v"
-          _venv\Scripts\tpc.exe format "$env:GITHUB_WORKSPACE\tests\e2e\samples\normal\ref\ref_simple.v" | Out-Null
+          & "$env:GITHUB_WORKSPACE\_venv\Scripts\tpc.exe" lint "$env:GITHUB_WORKSPACE\tests\e2e\samples\normal\ref\ref_simple.v"
+          & "$env:GITHUB_WORKSPACE\_venv\Scripts\tpc.exe" format "$env:GITHUB_WORKSPACE\tests\e2e\samples\normal\ref\ref_simple.v" | Out-Null
