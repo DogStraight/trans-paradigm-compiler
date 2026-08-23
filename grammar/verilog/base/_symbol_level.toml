@@ -1,11 +1,6 @@
 # _symbol_level.toml
 # 运算符定义，优先级由数组顺序决定（从低到高）
 
-# [[operator]]
-# symbol = "="
-# arity = 2
-# assoc = "right"
-
 [[operator]]
 symbol = "?"
 arity = 3
@@ -24,7 +19,7 @@ symbol = "and"
 arity = 2
 assoc = "left"
 
-# 如果保留 C 风格逻辑运算符，它们应与 and/or 同级
+# C 风格逻辑运算符（||、&&）与 or/and 同级
 [[operator]]
 symbol = "||"
 arity = 2

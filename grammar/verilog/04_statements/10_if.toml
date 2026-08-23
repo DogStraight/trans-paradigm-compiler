@@ -23,8 +23,8 @@ production = [
     "@BeginEnd",
     "@ElseChain?",
 ]
-# discovery 按 production 匹配边界），newline 在 `end else` 同行时不出现、
-# 在 else 换行时又过早截断——依赖它定边界是脆弱设计。
+# 语句边界由 discovery 按 production 匹配（newline 不作边界依据）：`end else`
+# 同行时 newline 不出现、else 换行时又过早截断——依赖 newline 定边界是脆弱设计。
 
 [IfBlock.parser.node]
 condition = "$3"

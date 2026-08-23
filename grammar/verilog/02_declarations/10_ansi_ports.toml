@@ -73,7 +73,8 @@ ref = "decl"
 
 
 # ── TaskAnsiInputDecl — 任务 ANSI input 端口 ──
-# 任务函数的 input 端口，使用 @PortTail（不含 reg 的 TypeSpecNoReg）。
+# 任务函数的 input 端口，使用 @PortTail（TypeSpec 含可选 reg，与模块 input
+# 的 TypeSpecNoReg 不同——任务 input 允许变量）。
 
 [TaskAnsiInputDecl.parser]
 production = [
@@ -188,7 +189,7 @@ group = [
 
 # ── AnsiInputDecl — 模块 ANSI input 端口 ──
 # 模块 ANSI 风格 input 声明，使用 @TypeSpecNoReg（input 不允许 reg）。
-# 逗号分隔由父规则 PortList 的 (， @AnsiPortDecl)* 管理。
+# 逗号分隔由父规则 PortList 的（, @AnsiPortDecl|@Identifier）* 管理。
 
 [AnsiInputDecl.parser]
 production = [

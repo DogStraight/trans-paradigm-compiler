@@ -237,11 +237,10 @@ role = "flatten"
 text = "endtask"
 break = 2
 
-[TaskDeclOld]
-is_block = true
-is_statement = true
-
-
 # ── TaskDeclOld — 任务声明（旧式风格） ──
 # 格式: task [automatic] name; …端口声明… endtask
 # 与 ANSI 风格的区别是端口在函数体内声明而非括号内。
+
+[TaskDeclOld]
+is_block = true
+is_statement = true

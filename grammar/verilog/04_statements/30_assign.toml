@@ -65,7 +65,7 @@ line = [
 
 # ── AssignStmt — 连续赋值 ──
 # 模块级的 assign 语句，目标可以是 wire 或 reg。
-# 在模块体中连续执行（非过程体内）。
+# 模块级连续赋值（并发驱动，非过程体内顺序执行）。
 
 [AssignStmt]
 is_statement = true
