@@ -180,9 +180,11 @@ def main() -> None:
 
     spec = _load_spec()
     if args.all:
-        targets = list(spec)
+        # 跳过 "//" 注释键（JSON 无注释语法，facets.json 用 "//" 键承载说明；
+        # 不过滤会把注释字符串当切面名传进 build → spec['facets'] 对 str 取下标）
+        targets = [k for k in spec if not k.startswith("//")]
     elif args.target:
-        if args.target not in spec:
+        if args.target not in spec or args.target.startswith("//"):
             sys.exit(f"unknown target {args.target!r}; available: {sorted(spec)}")
         targets = [args.target]
     else:
