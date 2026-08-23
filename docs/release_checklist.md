@@ -48,9 +48,9 @@ tar -tf dist/*.tar.gz | Select-String 'grammar/'   # sdist 同样核对
 py -3.11 -m venv .venv-smoke
 .venv-smoke\Scripts\pip install dist\*.whl
 .venv-smoke\Scripts\tpc --version
-.venv-smoke\Scripts\tpc format samples\normal\ref\ref_counter.v   # 无报错
+.venv-smoke\Scripts\tpc format samples\normal\ref\ref_alu.v   # 无报错
 .venv-smoke\Scripts\tpc lint samples\lint_err\ref\ref_e01_missing_endmodule.v  # exit 1
-.venv-smoke\Scripts\tpc lint samples\normal\ref\ref_counter.v     # exit 0
+.venv-smoke\Scripts\tpc lint samples\normal\ref\ref_alu.v     # exit 0
 Remove-Item -Recurse .venv-smoke
 ```
 
