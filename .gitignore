@@ -18,3 +18,9 @@ _test_*.py
 dist/
 build/
 .venv*/
+# fuzz 产物（失败输入自动保存，不入库）
+tests/fuzz/findings/
+# 差分测试的 Verible 二进制（fetch_verible.ps1 下载，不入库）
+tests/differential/.tools/
+# 打包管线生成的入口脚本（build_pipeline.py 生成，不入库）
+packaging/entries/

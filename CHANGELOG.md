@@ -41,7 +41,36 @@ Alpha 发布——配置驱动语言管线首版：主包纯净可综合 + 仿�
 ### 验证基线
 
 769 pytest + e2e 93 绿（FAIL 0）+ lint recall 31/31 零误报 + 覆盖率 ~83%
-（fail_under 80）+ real 组（PicoRV32 / darkriscv / SERV / TV80）。
+（fail_under 80）+ real 组（PicoRV32 / darkriscv / SERV / TV80）+
+edge 门禁（12 边界语料）+ 差分对拍（124 合法文件 vs Verible，0 假拒）+
+fuzz（~8000 轮，不崩溃 / token 保序 / 幂等不变量）。
+
+### 2026-08-22 (发布准备：验证体系 + 独立 formatter + README 重写)
+
+- **验证体系（tests/fuzz + tests/edge + tests/differential）**：语法驱动 +
+  变异 fuzzing（不变量：不崩溃 / token 保序 / 幂等）；边缘构造门禁（clean 必须
+  成功 / reject 必须失败）；与 verible-verilog-format 差分对拍（接受域 +
+  互操作，二进制经 `tests/differential/fetch_verible.ps1` 获取，gitignored）。
+  fuzz 直接从 grammar TOML 派生生成空间——配置即数据的验证红利。
+- **fuzz 发现的 4 个真实缺陷（均已修复并沉淀 edge 回归）**：
+  - 畸形输入过 lint → parser 截断 → 管线静默 `success=True` 且**丢内容**
+    （`_stage_parse` 现检查 `_parse_truncated`，截断即失败）
+  - `module name #()` 空参数表解析不了（`ParameterList` 的 `@ParamDecl` 改可选）
+  - 畸形 ANSI 函数端口（缺端口名）→ parser `assert` 崩溃（改安全恢复，用户
+    输入永不崩溃）
+  - 自引用宏 → 宏体预展开指数膨胀 `MemoryError`（直接自引用跳过 + 体长上限）
+- **README 全量重写**：按业界 README 结构（首屏定位 + 徽章 + 演示 + Why/
+  when-not + Quick start + 文档分流 + 贡献指南 + 状态），559 → ~350 行；
+  Known limitations 精简为摘要，完整版移入 `docs/known_limitations.md`。
+- **功能切面打包管线（tpc-fmt.exe / tpc-lint.exe，Nuitka）**：按
+  `packaging/facets.json` 切面规格打包单一文件 exe（内置 Python + 引擎 +
+  语法包，~8.3 MB）；`packaging/build_pipeline.py` 生成入口（命令可裁剪，
+  复用 `main._register_subparsers(allow)`）→ Nuitka onefile → SHA256；
+  PE 元数据 + `--credits` + 二进制内嵌署名（`strings -el` 可扫）；
+  文档 `docs/packaging.md`。
+- **语义检查插槽设计落档**（未实现，设计先行）：`docs/decisions/0004-
+  semantic-check-slot.md`（双层规则 + post-pass 链式检查）+ `docs/semantic_checks.md`
+  + 前置调研 `docs/references/static_checkers_survey.md`。
 
 ### 2026-08-21 (typed_ports 接口位宽闭环)
 
