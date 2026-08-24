@@ -103,7 +103,7 @@ def match_productions(
     prods = rule.prods if prods is None else prods
     all_matched_nodes: list[Node | None] = []
 
-    for i, prod in enumerate(prods):
+    for _, prod in enumerate(prods):
         self._log_state(lambda: f"产生式: {prod} | {self._debug_token_info(context)}")
 
         result_node = _try_production(self, context, rule, prod)
@@ -513,7 +513,7 @@ def parse_seq(self, node: dict, context: ParseContext) -> Node | None:
         self._skip_tokens(context, tuple(self.skip_types))
     with context:
         seq_node = Node("seq")
-        for idx, item in enumerate(items):
+        for _, item in enumerate(items):
             result = self._process_production_node(item, context)
             if result is None:
                 return None
@@ -531,7 +531,7 @@ def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
     # newline 使所有分支（纯 token 分支）失配（多行表达式/列表的续行元素）。
     if hasattr(self, "_skip_tokens"):
         self._skip_tokens(context, tuple(self.skip_types))
-    for idx, alt in enumerate(alternatives):
+    for _, alt in enumerate(alternatives):
         context.token_pointer = original_pointer
         with context:
             result = self._process_production_node(alt, context)

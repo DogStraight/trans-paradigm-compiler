@@ -89,6 +89,7 @@ def _parse_pos_spec(spec: str) -> tuple[int, str | None] | None:
 
 def extract_from_spec(self, spec: str, all_matched_nodes: list[Node]) -> Any:
     """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
+    del self  # 模块级函数，self 命名仅为兼容旧调用，实际不使用
     if not isinstance(spec, str):
         return None
     parsed = _parse_pos_spec(spec)

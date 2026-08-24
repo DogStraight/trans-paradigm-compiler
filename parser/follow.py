@@ -175,7 +175,6 @@ def _propagate_seq(
     返回是否有变化。
     """
     changed = False
-    n = len(elems)
     for i, elem in enumerate(elems):
         for member in _elem_calls(elem):
             beta_first: set[str] = set()

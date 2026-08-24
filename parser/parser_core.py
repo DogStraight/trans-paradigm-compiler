@@ -66,6 +66,7 @@ class ParseContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        del exc_val, exc_tb  # context manager 协议签名参数，本实现不消费
         if not self._snapshot_stack:
             return False
         snapshot = self._snapshot_stack.pop()
@@ -186,6 +187,7 @@ class ScopeStack:
 
 def _atom_parser_impl(self, _tokens, idx, context):
     """atom_parser 的实际实现（独立函数避免每次 try_pratt_rule 创建闭包）"""
+    del _tokens  # atom_parser 回调协议签名参数 (tokens, idx)，本实现只用 idx/context
     old_ptr = context.token_pointer
     context.token_pointer = idx
     start_ptr = context.token_pointer

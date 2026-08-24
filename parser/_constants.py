@@ -17,6 +17,16 @@ from core.token_protocol import (
     NEWLINE_TOKEN_TYPE,
 )
 
+# 有意 re-export（保持既有 import 路径），声明为公共导出
+__all__ = [
+    "COMMENT_TOKEN_TYPE",
+    "IDENTIFIER_TOKEN_TYPE",
+    "NEWLINE_TOKEN_TYPE",
+    "BLOCK_NODE_NAME",
+    "ROOT_RULE_NAME",
+    "COMMENT_NODE_NAME",
+]
+
 # parser 内部临时块容器节点名（不泄漏到 AST）
 BLOCK_NODE_NAME = "Block"
 

@@ -6,7 +6,6 @@ infix/prefix/postfix operators with proper precedence and associativity.
 
 from typing import Any
 from core.define import Node, Token
-from core.config_registry import config
 from ._constants import COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 
 
