@@ -111,60 +111,76 @@
 
 ### VAST（C++/MLIR）— 程序分析向塔式 IR 管线（2026-08 深调研）
 
-- 定位：Trail of Bits 出品（DARPA 资助研究），C/C++ 程序分析与插桩的 MLIR 基础设施——"a tower of IRs as MLIR dialects"，为分析场景提供不同抽象层级的 IR 选择
-- **项目印象**：444★/34 forks，Apache-2.0；lib/vast 分 9 个子系统（ABI/CodeGen/Conversion/Dialect/Frontend/Interfaces/server/Target/Tower/Util）；8 个 IR 方言（ABI/Builtin/Core/HighLevel/LowLevel/Meta/Parser/Unsupported）；github.io 文档站 + Compiler Explorer 在线体验；CI（build/linter）全绿
-- **Tower 机制（核心亮点）**：每个 pass 运行后**克隆模块**存入 module_storage，同时记录"转换步骤链"（pass 路径 + 位置变换），每个 operation 的位置编码反向链接（backlink）——从高层 IR 任意节点可回溯它是怎么从源文本一步步变来的。这是 provenance 链的工程化范本
-- **与 tpc 的差异**（各有取舍，非优劣）：
+- 定位：Trail of Bits 出品（DARPA 资助研究），C/C++ 程序分析与插桩的 MLIR 基础设施——"a tower of IRs as MLIR dialects"，为分析场景提供不同抽象层级的 IR 选择。444★/34 forks，Apache-2.0，CI（build/linter）全绿，2026-04 仍在推
 
-| 维度 | VAST | tpc |
-|------|------|-----|
-| 目标 | 程序分析/插桩（分析友好 IR 塔） | 配置驱动工具链（格式化/lint/展开） |
-| IR 组织 | MLIR 方言塔（同源多级） | Doc IR（Wadler-Lindig）+ AST |
-| 转换 | pass 管线 + 模块克隆（重但可回溯） | transform 配置驱动 + 插件原语 |
-| 依赖 | LLVM/MLIR（重） | Python 3.11+ 零外部依赖 |
-| 位置追踪 | 一等公民（loc 编码 backlink） | 解析诊断有 span；Node 缺 token span（TODO P3 前置） |
+**管线结构对比（逐阶段）：**
 
-- **值得参考的部分**：
-  - 🔥 转换步骤链 + 位置反向链接：每个 pass 后记录"从哪来"——对应 tpc TODO P3 的 token span 前置 + 变换路径注释恢复（锚点漂移的根本解决思路），VAST 证明了"转换可追溯"可以做成架构级机制
-  - 💡 同源多级 IR（塔）而非各自为政：分析者按需选层级——与 tpc 的"切片"理念呼应（按阶段取用，而非必须全管线）
-  - 💡 方言分层命名（HighLevel/LowLevel/Core/Meta）对 IR 设计有启发
+| 阶段 | VAST | tpc | 差异点 |
+|------|------|-----|--------|
+| 词法/语法 | 复用 Clang 的 AST（不自己写 lexer/parser） | 自研 lexer（token 定义驱动）+ parser（递归下降+回溯+Pratt） | VAST 站在 Clang 肩上；tpc 语法即数据 |
+| 前端转换 | Frontend/Action.cpp：Clang AST → 首个 MLIR 方言（逐节点转写） | parser 直接产出 AST（`[Rule.parser.node]` 形状声明） | VAST 有显式转写层；tpc AST 形状在 TOML 里声明 |
+| IR 组织 | **方言塔**：8 个方言（HighLevel/LowLevel/Core/Meta/ABI/Builtin/Parser/Unsupported），同源多级、逐级下降 | 单 AST + Doc IR（Wadler-Lindig 渲染） | VAST 每级 IR 独立可分析；tpc 一树贯穿 |
+| 转换机制 | pass 管线 + **每 pass 后克隆模块**存入 module_storage，记录转换步骤链 + 位置反向链接（backlink） | transform 配置驱动 + 插件原语（primitives） | VAST 重但可完全回溯；tpc 轻但转换来源不可追溯 |
+| 转换方向 | Conversion/：FromHL / ToLLVM / ToMem / Parser / ABI（方言间下降/上升） | transform：语义映射 + 配置驱动变换（typed_ports 展开、c4 降级） | 两者都有多向转换；VAST 靠方言对，tpc 靠插件 |
+| 代码生成 | CodeGen + Target + ABI（生成 LLVM IR / 目标相关代码） | renderer：Doc IR → 格式化文本 | VAST 生成代码；tpc 生成格式化文本（不同目标） |
+| 位置追踪 | 一等公民：每个 operation 的 loc 编码 backlink（源→IR 全程可回溯） | 解析诊断有 span；Node 缺 token span（TODO P3 前置） | **最大差距**：VAST 位置即架构；tpc 尚未绑定 |
+
+**亮点（单独说明）：**
+- **Tower 机制**：`lib/vast/Tower/Tower.cpp`——每个 pass 运行后克隆模块、把 pass 路径压入栈、更新 operation 位置使其编码"转换步骤链"。从任意 IR 节点可回答"这个节点从源文本怎么变来的"。这不是某个分析功能，是**架构级 provenance**：任何 pass 自动获得可追溯性，无需各 pass 自己维护
+- 方言塔按抽象层级命名（High→Low→Core→Meta），分析者可取所需层级——分析器不用被迫消化完整 Clang AST
+
+**可实现性评估（tpc 能否做）：**
+- 🔥 转换步骤链：**中可实现，P3 前置**。tpc 的 transform 已是插件原语链，缺的是"记录每步来源"。需先完成 TODO P3.1（Node 绑 token span），再在 transform 管线加"步骤日志"（每原语记录输入/输出节点对）——不动架构，加一层簿记
+- 💡 方言塔多级 IR：**低可实现，不建议**。tpc 的目标是格式化/lint 而非多级分析，一树贯穿更轻；"按需取层"已由切片（format/lint/expand 独立）覆盖
+- 💡 克隆模块：**不实现**。tpc 无内存化 IR 持久需求，克隆成本高收益低
 
 ### Foundry（Rust）— Ethereum 开发工具链（2026-08 深调研）
 
-- 定位：blazing fast、portable、modular 的 Ethereum 应用开发工具链，Rust 编写；forge（构建/测试/fuzz/调试/部署）、cast（链交互瑞士军刀）、anvil（本地节点）、chisel（Solidity REPL）
-- **项目印象**：10570★/2607 forks（今日还在推），Apache-2.0；crates/ 多 crate 组织（anvil 拆 core/rpc/server 子 crate）；`.changelog/` 目录每个 PR 一个 changelog 碎片文件（release 时聚合）——工程组织教科书级；官方文档站 + benchmark 页 + 开发者指南
-- **与 tpc 的差异**（各有取舍，非优劣）：
+- 定位：blazing fast、portable、modular 的 Ethereum 应用开发工具链（Rust）；forge（构建/测试/fuzz/调试/部署）、cast（链交互）、anvil（本地节点）、chisel（Solidity REPL）。10570★/2607 forks，今日仍在推，Apache-2.0
 
-| 维度 | Foundry | tpc |
-|------|---------|-----|
-| 领域 | EVM 智能合约开发（编译+测试+链交互+节点） | 配置驱动语言工具链（格式化/lint/展开） |
-| 语言 | Rust + 重型依赖生态 | Python 3.11+ 零外部依赖 |
-| 组织 | 多 crate 工作区（组件即 crate） | 单包 + 多语言包（grammar/<lang>） |
-| 分发 | foundryup 工具链管理器 + 预编译二进制 | tpc-fmt/tpc-lint/tpc exe（Nuitka 单文件） |
-| 更新 | 持续集成发布（每 PR 一条 changelog 碎片） | 版本化发布 + CHANGELOG 手写 |
+**管线结构对比（逐组件）：**
 
-- **值得参考的部分**：
-  - 🔥 模块化切片实证：forge/cast/anvil/chisel 是四个独立可用的组件，共享核心库——与 tpc 的切片哲学同构，且证明了"工具链按能力切分"在 10k★ 项目里成立
-  - 🔥 碎片化 changelog：每个 PR 一个 `.changelog/*.md`，发布时聚合——解决"手写 changelog 漏记/拖延"的工程化答案（tpc 可评估：文档型仓库是否值得引入，或维持当前手动小节）
-  - 💡 foundryup 工具链管理器（版本切换 + 安装脚本）——tpc 若做多版本分发可参考
-  - 💡 benchmark 公开页（getfoundry.sh/benchmarks）——把性能数据当作品资产
+| 组件 | Foundry | tpc 对应 | 差异点 |
+|------|---------|----------|--------|
+| 编译 | forge：Solidity → solc → ABI/bytecode（封装编译器，非自研） | parser+transform：TOML 文法 → AST → 展开 | Foundry 站在 solc 肩上；tpc 引擎自研 |
+| 测试 | forge test：内置测试框架 + **属性 fuzz**（invariant 测试） | e2e 93 + 差分 124 + fuzz ~8000（独立 harness） | 两者都有 fuzz；Foundry 把它做成产品功能 |
+| 执行 | anvil：本地 EVM 节点（fork 主网、状态快照） | 无（tpc 明确不做仿真/执行） | 领域不同：Foundry 有运行时，tpc 无 |
+| 链交互 | cast：RPC 瑞士军刀（查询/发交易/解码） | 无对应 | 领域不同 |
+| REPL | chisel：Solidity 交互式 REPL | 无对应 | 领域不同 |
+| 共享核心 | crates/ 多 crate：anvil 拆 core/rpc/server，公共库复用 | 单包 + grammar/<lang> 语言包 | **同构**：组件独立、核心共享 |
+
+**亮点（单独说明）：**
+- **模块化切片实证**：forge/cast/anvil/chisel 是四个独立可安装的组件（`foundryup` 管理），共享底层 crate——**"工具链按能力切分"在 10k★ 项目里被验证成立**，且每个切片单独可用、无需理解全栈
+- **碎片化 changelog**：`.changelog/` 目录**每个 PR 一个 md 碎片**，release 时聚合发布说明——解决"手写 changelog 漏记/拖延/合并冲突"，且 changelog 随 PR 评审（reviewer 能看到本次改动说明）
+- benchmark 公开页（getfoundry.sh/benchmarks）：把性能数据当作品资产展示
+
+**可实现性评估（tpc 能否做）：**
+- 🔥 模块化切片：**已实现**（tpc-fmt/tpc-lint/tpc 三 exe + 切片声明），Foundry 只是外部验证了该方向
+- 🔥 碎片化 changelog：**高可实现，低成本**。tpc 可加 `docs/changelog-fragments/<PR>.md` + 发布时聚合脚本（Python 十几行）；或不引入，维持当前手动小节（发布不频繁时手动够用）
+- 💡 foundryup 工具链管理器：**中可实现**。tpc 若做多版本分发（当前 exe 单版本）才值得；零依赖下用脚本实现即可
+- 💡 benchmark 公开页：**高可实现**。tpc 已有 fuzz/edge 数据，发布一个静态 benchmark 页即可
 
 ### vbcc（C）— 1989 年起的可移植 C 编译器（2026-08 深调研）
 
-- 定位：Volker Barthelmann 与 Frank Wille 的可移植 C 编译器（1989 年起，至今维护）；一个编译器支撑 13 个目标后端（6502/832/alpha/bi386/c16x/hc12/i386/m68k/m68ks/ppc/qnice/vidcore/z）
-- **项目印象**：GitHub 镜像（Leffmann/vbcc）25★/12 forks，5 commits（2016-2023 快照）；原作持续维护（官网 + Amiga 社区生态）。109 个 C/H 文件约 2.7MB；优化器是经典单文件大 pass（regs.c 65KB、opt.c 65KB、loop.c 62KB、alias.c 21KB）；doc/ 用 texinfo 写全套手册（vbcc_main + 每后端一册）；自带 vcpr/vprof/vsc/ucpp（预处理器/剖析/源码检查）组件
-- **与 tpc 的差异**（各有取舍，非优劣）：
+- 定位：Volker Barthelmann 与 Frank Wille 的可移植 C 编译器（1989 年起，至今维护）；一个编译器支撑 13 个目标后端（6502/832/alpha/bi386/c16x/hc12/i386/m68k/m68ks/ppc/qnice/vidcore/z）。GitHub 镜像（Leffmann/vbcc）25★/12 forks（2016-2023 快照），原作持续维护
 
-| 维度 | vbcc | tpc |
-|------|------|-----|
-| 定位 | 单语言（C）多目标后端编译器 | 多语言包通用管线（后端即语言包） |
-| 后端抽象 | machines/ 目录一个后端一个目录（含 make.rules） | grammar/<lang>/ 一个语言一个目录（TOML + 插件） |
-| 优化 | 手写 pass（alias/cse/regs/loop/range） | 配置驱动变换（无传统优化器） |
-| 组件 | 自带预处理器/剖析器/源码检查器 | 管线内建 preprocessor/linter/analyzer |
-| 生命周期 | 30+ 年单作者长跑（+Frank Wille 维护） | 2024 起个人项目 |
+**管线结构对比（逐阶段）：**
 
-- **值得参考的部分**：
-  - 🔥 machines/ 目录抽象：一个后端一个目录、通用接口 + 每后端文档——与 tpc 的 grammar/<lang> 语言包组织同构，验证了"多目标=多目录"的极简抽象足够支撑 13 个后端
-  - 💡 单文件大 pass 的克制：不搞过度分层，pass 就是文件——与 tpc"零外部依赖、单包"的克制一致
-  - 💡 30 年单作者长跑：可移植性（13 后端）本身就是项目生命力的来源——tpc 的"多语言包"若扩展，可复刻这种"换后端不换引擎"的生存策略
-  - 📌 优化器是手写 pass（非配置驱动）——与 tpc 定位不同，tpc 的"配置驱动变换"覆盖浅层语义，深层优化不在此设计目标内
+| 阶段 | vbcc | tpc | 差异点 |
+|------|------|-----|--------|
+| 预处理 | 自带 ucpp + vbcc_cpp（集成预处理器） | preprocessor（宏展开/条件编译/反向映射） | 两者都内建；tpc 有反向桥（锚点回插） |
+| 词法/语法 | 手写递归下降 + 语法表（parse_expr.c/statements.c/declaration.c/type_expr.c） | 自研 lexer + 递归下降+回溯+Pratt（语法在 TOML） | 同代设计；tpc 语法外置为数据 |
+| 中间代码 | **IC 三地址码**（ic.c/icn.c：op1/op2/op3 三操作数，流向图 flow.c） | AST + Doc IR（无显式中间码） | vbcc 有经典三地址 IC；tpc 一树贯穿 |
+| 优化 | **手写 pass 序列**：alias.c（别名）/cse.c（公共子表达式）/loop.c（循环）/range.c（区间分析）/regs.c（寄存器分配 65KB）/opt.c（主循环，pass 编号重复至收敛） | 配置驱动变换（无传统优化器） | **最大差异**：vbcc 是经典优化器，tpc 不做深度优化 |
+| 后端 | machines/ 目录：**一个后端一个目录**（含 make.rules + 每后端 texinfo 文档），13 个后端共享前端+优化器 | grammar/<lang>/ 一个语言一个目录（TOML + 插件） | **同构**：都是"多目标=多目录"极简抽象 |
+| 配套工具 | vcpr（剖析）/vprof（性能）/vsc（源码检查）/ucpp | linter（反向解析器）+ analyzer（语义检查） | 都自带配套工具链；vbcc 按独立组件，tpc 内建管线 |
+
+**亮点（单独说明）：**
+- **machines/ 目录抽象**：13 个后端，每个就是一个目录 + 通用接口 + 一册文档——证明"多目标=多目录"的极简抽象足以支撑 13 个不同 ISA（6502 到 PowerPC）
+- **30 年单作者长跑**：可移植性（13 后端）本身就是项目生命力的来源——换目标不换引擎，让编译器活过 3 个十年
+- **单文件大 pass 的克制**：regs.c 65KB、opt.c 65KB——不搞过度分层，pass 就是文件
+
+**可实现性评估（tpc 能否做）：**
+- 🔥 machines/ 目录抽象：**已同构**。tpc 的 grammar/<lang> 就是同款模式（verilog/ + c4/ 两语言包已验证）；可扩展时照抄"每语言一目录 + 独立文档"的组织
+- 💡 手写优化 pass：**不实现**。tpc 定位是配置驱动浅层语义（格式化/lint/展开），深度优化（别名/寄存器分配）超出设计目标，README 已声明边界
+- 💡 配套工具独立组件化（vcpr/vprof/vsc 各自独立）：**中可实现**。tpc 的 linter/analyzer 已内建管线，若要做"切片更细"可参考 vbcc 把工具拆成独立命令（tpc-fmt/tpc-lint 已部分实现）
