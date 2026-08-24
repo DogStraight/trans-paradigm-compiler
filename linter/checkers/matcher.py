@@ -290,6 +290,7 @@ class RuleMatcher:
         silent: bool,
     ) -> int:
         """表达式根（@Expression / @PrimaryExpr / pratt 链）→ 交 ExpressionChecker。"""
+        del name, info  # 内部方法参数，本分支不消费
         if is_atom_sel:
             # @PrimaryExpr（is_atom 规则集合选择器，可推导）只匹配原子操作数
             # （赋值目标/操作数），不消费运算符——避免 `a <= b` 被当比较表达式
@@ -371,6 +372,7 @@ class RuleMatcher:
         @Stmt 位置不消费，production 匹配到此自然结束）。原 end_case 跳过
         已移除——语句终点由结构推导（block_end/句子结束符），非手写数据。
         """
+        del info, strict  # 内部方法参数，本分支不消费
         # 先验证起始 token，防止非嵌套语句上下文误跳过
         firsts = self._first_tokens_of_rule(name, set())
         k = _skip(tokens, i, limit)

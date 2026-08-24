@@ -76,7 +76,7 @@ class LinterScanner:
         # 使 BoundaryChecker 的栈式配对与 matcher 的括号上下文检查正常生效。
         _raw_pairs = ConfigRegistry._loaded.get("lexer.bracket_map", {}).get("pairs", [])
         _bracket_pairs: dict[str, set[str]] = {}
-        for _l, _r, _name in _raw_pairs:
+        for _, _, _name in _raw_pairs:
             _lt = bracket_left(_name)
             _rt = bracket_right(_name)
             _openers.add(_lt)

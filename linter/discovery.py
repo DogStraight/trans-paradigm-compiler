@@ -323,7 +323,7 @@ class Discovery:
                     ):
                         body = self._locate_stmt_body(tokens, i, candidates[0], e)
                         if body is not None:
-                            bs, _, entry = body
+                            bs, _, _ = body
                             # 实验：body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
                             bctx = context
                             if bs < e:
