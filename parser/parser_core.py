@@ -8,6 +8,7 @@ Orchestrates parsing by coordinating:
     - rule_selector: 规则选择 + production 分析 (独立库模块)"""
 
 import sys
+from typing import Any
 from core.define import (
     Node,
     Token,
@@ -305,6 +306,9 @@ def _parse_bit_width_literal(content: str) -> Node | None:
 
 class Parser:
     """语法分析器 — 将 token 流解析为 AST"""
+
+    # 动态挂载属性：wrap 等消费方现场挂 lexer 供超宽行解析（见 pipeline.format_generated）
+    lexer: Any = None
 
     # 日志级别（阈值 _log_level 过滤低级别调用）
     LOG_TRACE = -1

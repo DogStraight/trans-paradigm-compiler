@@ -48,6 +48,7 @@ try:
     from grammar.verilog.plugins.typed_ports._mapping import collect_callbacks
 except ImportError:  # pragma: no cover — 非 verilog 语言包
     def collect_callbacks(scope):  # type: ignore[no-redef]
+        del scope  # fallback：非 verilog 语言无回调，签名与真实函数保持一致
         return {}
 
 # ── 变换器 ──
@@ -82,21 +83,21 @@ class _PipelineContext:
     input_path: str | None
     rules_dir: str
     ext_dirs: list[str] | None
-    quiet: bool
+    quiet: bool | None
     stage: str | None
-    expand_macros: bool
-    inline_comments: bool
-    analyzer_enabled: bool
-    transform_enabled: bool
-    renderer_enabled: bool
-    no_lint: bool
-    parse_enabled: bool
-    format_output: bool
+    expand_macros: bool | None
+    inline_comments: bool | None
+    analyzer_enabled: bool | None
+    transform_enabled: bool | None
+    renderer_enabled: bool | None
+    no_lint: bool | None
+    parse_enabled: bool | None
+    format_output: bool | None
     expand_enhanced: bool
     include_dirs: list[str] | None
     predefined: dict[str, str] | None
     undefine: set[str] | None
-    check_idempotent: bool
+    check_idempotent: bool | None
     enable_line_comment_restore: bool
 
     # 输出目录（由 _resolve_output_paths 填充）
@@ -136,7 +137,7 @@ class _PipelineContext:
 
 # ── Core Pipeline ──
 def format_generated(
-    content: str, rules: Any, lexer: Any, rule_selector: Any = None, rules_dir: str = None
+    content: str, rules: Any, lexer: Any, rule_selector: Any = None, rules_dir: str | None = None
 ) -> str:
     """对生成文本跑 formatter（缩进/品类对齐/实例端口对齐）。
 
@@ -177,7 +178,7 @@ def format_generated(
         return content
 
 
-def _load_pipeline_defaults() -> dict:
+def _load_pipeline_defaults() -> dict[str, Any]:
     """从 tpc_config.json 读 pipeline 段，作为 run_pipeline_on_source 参数默认值。
 
     项目级默认参数（tpc_config.json 提供） + 调用方/CLI 显式传入覆盖
