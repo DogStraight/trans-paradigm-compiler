@@ -13,6 +13,10 @@
 > - 预处理器宏相关完成（带参宏/条件编译还原/指令原位回插 + primitives 单测 19 项）
 > - typed_ports 增强渲染双路径（展开/保留，expand_enhanced）+ nested/invert 验证
 > - 数字形态配置化完成（声明→FSM 生成器 + 语言包声明 + signed 's + 0'b1 标准拒绝）
+> - **旧 NumberFSM 回退路径已移除**（2026-08-24）：number_fsm.py 整删，配置化
+>   成唯一路径；形态缺失由 Lexer 构造 fail-fast（decisions/0003）。回退路径
+>   不可达（所有语言包都声明形态）且带过度匹配 bug（0x1F/0b101/0xFF 被误认
+>   整体）。验证：771 pytest + e2e 93（FAIL 0）+ recall 31/31 全绿
 
 ## P1 — Verilog 实例完善
 

@@ -4,10 +4,10 @@ P2.1 数字形态配置化已完成：
   - 现状 tests/lexer 的数字测试曾只断言 type 不断言 content/token 数，
     存在假阳性（如 test_signed_literal 只查 token[0].type 是 number）。
   - 本文件按语言固化「完整 token 序列 + content」，作为配置驱动数字
-    （number_gen + number_runner）与回退 NumberFSM 的回归基线。
+    （number_gen + number_runner）的回归基线（旧 NumberFSM 回退已移除）。
 
 标注：
-  - ✅ 期望正确行为（配置驱动与回退路径均须保持）
+  - ✅ 期望正确行为（配置驱动路径须保持）
   - 🐛 已知缺陷（当前行为按实际断言）
 """
 

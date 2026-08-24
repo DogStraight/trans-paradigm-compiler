@@ -48,7 +48,7 @@ class _Runner:
         return best
 
 
-# 简单 Verilog 声明（对照现有 NumberFSM 行为）
+# 简单 Verilog 声明（对照配置化 runner 的行为基线）
 VERILOG_CFG = [
     {
         "name": "verilog_width",

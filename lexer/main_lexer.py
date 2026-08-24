@@ -21,7 +21,6 @@ from core.token_protocol import (
 )
 
 from .lexer_utils import get_number_config
-from .number_fsm import NumberFSM
 from .number_runner import build_number_runner
 from .comment_fsm import CommentFSM
 
@@ -106,9 +105,16 @@ class Lexer:
         # new_line_start：行首标记，缩进处理用
         self.new_line_start = False
 
-        # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM；
-        # 无配置 → 回退旧 NumberFSM（兼容路径）
+        # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM（唯一路径）。
+        # 旧 NumberFSM 回退已移除（P2.1 配置化后所有语言包都声明数字形态，
+        # 回退路径不可达且带旧 FSM 的过度匹配 bug：0x1F 被误认整体等）。
+        # 形态缺失 = 配置错误，fail-fast（decisions/0003）。
         self._number_runner = build_number_runner(number_configs)
+        if self._number_runner is None:
+            raise RuntimeError(
+                "[lexer] 数字形态未配置（lexer.number 缺失）——配置化数字是"
+                "唯一路径，请检查语言包 base/_number.toml 是否声明 [[number.based]]"
+            )
 
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""
@@ -280,10 +286,7 @@ class Lexer:
             elif lex_text[text_idx] == "'" and next_char in "dDbBhHoOsS":
                 self._emit_pending_dedent(tokens)
 
-                if self._number_runner is not None:
-                    number_content, new_idx = self._number_runner.run(lex_text, text_idx)
-                else:
-                    number_content, new_idx = NumberFSM.run(lex_text, text_idx)
+                number_content, new_idx = self._number_runner.run(lex_text, text_idx)
                 offset = new_idx - text_idx
 
                 # runner 空结果（如 `'d` 无 value）：防死循环，退化为符号
@@ -438,10 +441,7 @@ class Lexer:
             elif lex_text[text_idx].isdigit():
                 self._emit_pending_dedent(tokens)
 
-                if self._number_runner is not None:
-                    number_content, new_idx = self._number_runner.run(lex_text, text_idx)
-                else:
-                    number_content, new_idx = NumberFSM.run(lex_text, text_idx)
+                number_content, new_idx = self._number_runner.run(lex_text, text_idx)
                 offset = new_idx - text_idx
 
                 # runner 返回空（形态不匹配）：不消费字符，交给后续分支

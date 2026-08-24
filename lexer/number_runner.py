@@ -1,20 +1,20 @@
-"""number_runner.py — 配置驱动的数字解析器
+"""number_runner.py — 配置驱动的数字解析器（唯一路径）
 
-从语言包声明的数字形态（lexer.number）编译 FSM，提供与 NumberFSM.run
-同接口的解析入口。
+从语言包声明的数字形态（lexer.number）编译 FSM，提供数字解析入口。
 
-行为对齐（P2.1 基线锁定的真实行为）：
+行为（P2.1 基线锁定的真实行为）：
   - 多 pattern 最长匹配（size 形态 + 无 size 形态独立编译，取最长 token）
   - Verilog 特有：'h/'d/'b/'o 后允许空格（32'h ffff_ffff）、跨空格 ? 是三元
     运算符（4'b1?0 紧跟才合法）、尾随下划线修剪
   - 与旧 NumberFSM 相同的"多 pattern 各自从 start 走"语义
 
-未配置数字形态时：回退到旧 NumberFSM（兼容路径），保证零配置可用。
+旧 NumberFSM（number_fsm.py）回退路径已移除（P2.1 配置化后所有语言包都
+声明数字形态，回退不可达且带过度匹配 bug：0x1F 被误认整体）。数字形态
+缺失由 Lexer 构造处 fail-fast（decisions/0003）。
 """
 
 from __future__ import annotations
 
-from .number_fsm import NumberFSM  # 回退路径
 from .number_gen import (
     compile_patterns,
     char_category,
@@ -93,10 +93,14 @@ class ConfigNumberRunner:
 
 
 def build_number_runner(configs: list[dict] | None = None):
-    """构建数字解析器。
+    """构建数字解析器（配置驱动唯一路径）。
 
     Args:
-        configs: 数字形态声明列表（[[number.based]]）。None/空 → 回退旧 FSM。
+        configs: 数字形态声明列表（[[number.based]]）。空/None → 返回 None，
+            由 Lexer 构造处 fail-fast 报错（形态缺失 = 配置错误）。
+
+    Returns:
+        ConfigNumberRunner 或 None（形态未声明，调用方负责 fail-fast）。
     """
     if configs:
         return ConfigNumberRunner(configs)
