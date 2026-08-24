@@ -186,11 +186,15 @@ class AsmGenPlugin(TransformPlugin):
 `99_asm_render.toml`：
 ```toml
 [AsmProgram.renderer.body]
-indent = false
+indent = false   # body 项不缩进（顶格）；true=1 级缩进（默认），int=N 级
 
 [AsmLine.renderer.layout]
 ref = "text"
 ```
+
+`renderer.body` 的 `indent` 字段控制 body 子项的缩进级别：
+`true` = 缩进 1 级、`false` = 不缩进（顶格）、整数 = N 级，未声明默认 `true`。
+汇编输出无嵌套块，逐行指令顶格（`indent = false`）。
 
 ---
 

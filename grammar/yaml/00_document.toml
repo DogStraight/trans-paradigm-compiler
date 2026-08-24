@@ -89,10 +89,11 @@ production = ["space.indent", "space.dedent"]
 
 [IndentBlock.parser.node]
 
-# body 缩进由引用方（MappingEntry/SequenceItem 的 {ref="value"}）的
-# _render_inline 处理（Break + Nest），此处 indent = false 避免双重缩进。
+# body 缩进由 body_cfg["indent"] 控制：Document 顶层 indent=false（顶格），
+# IndentBlock 是嵌套块，子项相对引用方（MappingEntry 的 {ref="value"}）
+# 缩进 1 级（4 格），正好补上 YAML 的嵌套层级。
 [IndentBlock.renderer.body]
-indent = false
+indent = true
 
 
 # ── Scalar — 标量（标识符/数字/字符串/布尔/null） ──

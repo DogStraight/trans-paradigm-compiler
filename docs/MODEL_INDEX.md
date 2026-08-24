@@ -32,3 +32,4 @@
 | 诊断位置精度（token_span） | `linter_architecture.md` | `linter/__init__.py::token_span` | `tests/test_lint_accuracy.py` |
 | 语义检查插槽（post-pass 钩子 + related 链） | `decisions/0004-semantic-check-slot.md`<br>`semantic_checks.md` | `analyzer/traversal.py::AnalysisTraversal._run_postpasses`<br>`analyzer/diagnostic.py::Diagnostic.related`<br>`core/plugin_loader.py::_load_postpasses` | `tests/engine/analyzer/test_diagnostic_related.py` |
 | 跨文件语义检查（递归+memo+联动） | `decisions/0005-cross-file-semantic-check.md` | `analyzer/checker.py::ProjectChecker`<br>`grammar/verilog/plugins/inst_check/_inst_check.py`<br>`main.py::_cmd_check`（`tpc check`） | `tests/engine/analyzer/test_checker.py` |
+| renderer body 缩进（`body_cfg["indent"]`） | `language_walkthrough.md`（renderer：布局） | `renderer/node_renderer.py::_body_indent`<br>`renderer/node_renderer.py::render_node`（body 渲染段） | `tests/languages/yaml/test_yaml.py`<br>`tests/languages/c4/test_c4_asm.py`<br>`tests/e2e/test_real_fidelity.py` |

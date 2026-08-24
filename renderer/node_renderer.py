@@ -10,6 +10,18 @@ from .doc import Doc, Empty, Text, Break, Concat, Nest
 from .primitives import eval_expr
 
 
+def _body_indent(body_cfg: dict, indent_spaces: int) -> int:
+    """body_cfg["indent"] → body 缩进格数。
+
+    true = 1 级（indent_spaces 格），false = 0 级（不缩进），int = N 级。
+    未声明时默认 1 级（保持既有"body 恒缩进"行为）。
+    """
+    level = body_cfg.get("indent", 1)
+    if isinstance(level, bool):
+        level = 1 if level else 0
+    return level * indent_spaces
+
+
 def render_node(
     node: Node,
     layout: dict,
@@ -18,9 +30,9 @@ def render_node(
 ) -> Doc:
     """渲染节点为独立块
 
-    不再通过 Prefix 添加第一行缩进；body 的缩进由调用方
-    （render_node / render_inline 的 body 渲染段）通过
-    Break(4) + Nest(4, child_doc) 统一控制。
+    不再通过 Prefix 添加第一行缩进；body 的缩进由 body_cfg["indent"]
+    控制（true=1 级、false=不缩进、int=N 级，默认 1 级），渲染为
+    Break(body_indent) + Nest(body_indent, child_doc)。
 
     Args:
         node: 当前 AST 节点
@@ -47,9 +59,10 @@ def render_node(
     # --- body ---
     if body_cfg:
         body_docs = render_body(node, indent + 1, body_cfg, layout, renderer)
+        body_indent = _body_indent(body_cfg, indent_spaces)
         for bd in body_docs:
-            parts.append(Break(indent_spaces))
-            parts.append(Nest(indent_spaces, bd))
+            parts.append(Break(body_indent))
+            parts.append(Nest(body_indent, bd))
 
     # --- tail ---
     tail_doc = None
@@ -66,8 +79,6 @@ def render_node(
             tb = layout.get("tail_break", 0)
     if tail_doc is not None:
         tb = layout.get("tail_break", tb)
-        if isinstance(tb, bool):
-            tb = 1 if tb else 0
         parts.append(Break())
         parts.append(tail_doc)
         for _ in range(tb - 1):
@@ -86,54 +97,10 @@ def render_inline(
 ) -> Doc:
     """内联渲染节点（用于 ref 在 line/group/join 中引用子节点时）
 
-    与 render_node 逻辑相同（都不加 Prefix），
-    区别只是语义上用于内联上下文，但实现已一致。
+    render_node 的别名：两者实现刻意一致（都不加 Prefix，body 缩进由
+    body_cfg["indent"] 控制）。保持独立入口仅为调用点语义区分。
     """
-    head_expr = layout.get("layout") or layout.get("head")
-    body_cfg = layout.get("body")
-    tail_cfg = layout.get("tail")
-    indent_spaces = len(renderer._INDENT_STR)
-
-    parts: list[Doc] = []
-
-    # --- head（内联：不加前缀）---
-    if head_expr:
-        head_doc = eval_expr(head_expr, node, indent, layout, renderer)
-        if head_doc is not None:
-            parts.append(head_doc)
-
-    # --- body ---
-    if body_cfg:
-        body_docs = render_body(node, indent + 1, body_cfg, layout, renderer)
-        for bd in body_docs:
-            parts.append(Break(indent_spaces))
-            parts.append(Nest(indent_spaces, bd))
-
-    # --- tail ---
-    tail_doc = None
-    tb = 0
-    if isinstance(tail_cfg, str):
-        tail_doc = Text(tail_cfg) if tail_cfg else None
-        tb = layout.get("tail_break", 0)
-    elif isinstance(tail_cfg, dict):
-        if "text" in tail_cfg:
-            tail_doc = Text(tail_cfg["text"]) if tail_cfg.get("text") else None
-            tb = tail_cfg.get("break", 0)
-        else:
-            tail_doc = eval_expr(tail_cfg, node, indent, layout, renderer)
-            tb = layout.get("tail_break", 0)
-    if tail_doc is not None:
-        tb = layout.get("tail_break", tb)
-        if isinstance(tb, bool):
-            tb = 1 if tb else 0
-        parts.append(Break())
-        parts.append(tail_doc)
-        for _ in range(tb - 1):
-            parts.append(Break())
-
-    if parts:
-        return Concat(parts)
-    return Empty()
+    return render_node(node, layout, indent, renderer)
 
 
 def render_body(
@@ -148,6 +115,8 @@ def render_body(
     body_cfg 可指定 source 字段名（如 source = "items"），
     或 items 列表（如 items = ["then_stmt", "else_chain"]），
     从 node 的对应属性获取子节点。
+    body_cfg["indent"] 控制缩进级别（true=1 级 / false=不缩进 / int=N 级，
+    默认 1 级），实际缩进由 render_node/render_inline 的 body 渲染段执行。
     """
     if body_cfg and isinstance(body_cfg, dict):
         source = body_cfg.get("source")

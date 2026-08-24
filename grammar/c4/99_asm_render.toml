@@ -5,6 +5,8 @@
 # AsmLine：渲染 text 字段（单条汇编指令文本）
 
 [AsmProgram.renderer.body]
+# body_cfg["indent"] = false：body 项不缩进（顶格）。汇编无嵌套块，
+# 每条指令一行，顶格输出。
 indent = false
 
 [AsmLine.renderer.layout]
