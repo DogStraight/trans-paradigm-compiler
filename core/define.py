@@ -22,8 +22,18 @@ from core.errors import (
     LintInternalError,
 )
 
+# 错误类 re-export：`from core.define import ParseError` 兼容（见 core/errors.py）
+__all__ = [
+    "ConfigError",
+    "GrammarError",
+    "LexError",
+    "ParseError",
+    "TransformError",
+    "LintInternalError",
+]
+
 # ── 配置文件定位（单一实现在 core/_user_config.py，此处 re-export） ──
-from core._user_config import _CONFIG_CANDIDATES, find_user_config as _find_user_config
+from core._user_config import find_user_config as _find_user_config
 
 
 def _load_tpc_meta() -> dict:

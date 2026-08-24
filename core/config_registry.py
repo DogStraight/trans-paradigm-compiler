@@ -23,7 +23,7 @@ from core.errors import ConfigError
 
 # 配置文件定位：单一实现在 core/_user_config.py（历史：本文件与 core/define.py
 # 各有一份拷贝），re-export 供 main.py / tests 从本模块导入。
-from core._user_config import _CONFIG_CANDIDATES, find_user_config as _find_user_config
+from core._user_config import find_user_config as _find_user_config
 
 
 def _glob_to_regex(pattern: str) -> re.Pattern:
@@ -622,7 +622,7 @@ class ConfigRegistry:
         sources: dict[str, dict] = {}
         errors: list[str] = []
 
-        for name, file_spec, section, base_key, required, _desc, bare in decls:
+        for name, file_spec, section, base_key, required, _, bare in decls:
             # bare data：非文件式配置，值已由 tpc.toml 直接提供
             if bare is not None:
                 loaded[name] = bare
