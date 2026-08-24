@@ -94,7 +94,9 @@ class ParseContext:
          self.current_rule,
          self.production_pointer) = snapshot
 
-    def update_current_node(self, node: Node) -> None:
+    def update_current_node(self, node: Node | None) -> None:
+        # current_node 允许 None（畸形输入恢复 old_node 可为 None——
+        # fuzz 修复，见 _production.py try_block_rule 失败路径注释）
         self.current_node = node
 
     def update_current_rule(self, rule: GrammarRule) -> None:

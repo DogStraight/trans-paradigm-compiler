@@ -363,6 +363,11 @@ class GrammarRule:
     # 默认值为列表的字段
     _LIST_FIELDS = {"production", "node", "exclude"}
 
+    # ── 语法规则可选字段（TOML 动态挂载；类级注解供静态检查/IDE）──
+    # is_statement — [Rule].is_statement = true：语句级规则标记
+    # （linter 语句发现 / parser parse_sentence 候选，见 has_pass_end_case）
+    is_statement: bool | None = None
+
     # node 绑定中 $N 位置捕获规约（用于静态越界校验）
     _RE_POS_REF = re.compile(r"^\$(\d+)(?:\.|$)")
 
@@ -447,7 +452,9 @@ class GrammarRule:
         if not isinstance(raw_prods, list):
             return
         prods = list(raw_prods)
-        is_block = kwargs.get("is_block") is True or parser_data.get("is_block") is True
+        is_block = kwargs.get("is_block") is True or bool(
+            isinstance(parser_data, dict) and parser_data.get("is_block") is True
+        )
         if is_block:
             if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
                 prods.pop(0)

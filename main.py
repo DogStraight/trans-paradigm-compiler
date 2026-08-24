@@ -134,13 +134,6 @@ def _cmd_expand(args: argparse.Namespace) -> None:
     _cmd_run_pipeline("expand", args)
 
 
-def _cmd_init(args: argparse.Namespace) -> None:
-    """tpc init — scaffold a new TransParadigm project config."""
-    from scripts.scaffold_config import scaffold_config
-
-    scaffold_config(args.lang)
-
-
 def _cmd_lint(args: argparse.Namespace) -> None:
     """tpc lint — run syntax checker on a source file."""
     from linter.scanner import LinterScanner
@@ -371,10 +364,6 @@ def _register_subparsers(sub, allow=None) -> None:
         )
         p_check.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
-    if want("init"):
-        p_init = sub.add_parser("init", help="Initialize a TransParadigm project config")
-        p_init.add_argument("--lang", default="verilog", help="Target language")
-
     if want("pipeline"):
         p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")
         p_pipe.add_argument("test_name", nargs="*", help="Test case name (e.g., counter)")
@@ -402,7 +391,6 @@ def _dispatch(args) -> None:
         "expand": _cmd_expand,
         "lint": _cmd_lint,
         "check": _cmd_check,
-        "init": _cmd_init,
         "pipeline": _cmd_pipeline,
     }
     if args.command == "new":

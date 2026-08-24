@@ -7,7 +7,7 @@
 ```
 tpc format <file>         格式化 Verilog 文件（全管线）
 tpc lint <file> [--json]  语法检查（LSP 兼容 JSON）
-tpc init [--lang]         初始化项目配置
+tpc check <file> [--include DIR]  跨文件语义检查（语法 → 语义两阶段）
 tpc pipeline [test]       跑单测（开发用）
 tpc new component <name>  脚手架新组件
 ```

@@ -42,9 +42,7 @@ if TYPE_CHECKING:
 # checker.structure: 跨文件结构提取协议——模块/实例化的规则名、节点字段、
 # 文件扩展名、关键字全部由语言包声明（grammar/<lang>/base/_checker.toml）。
 # 未声明 = 语言包不支持跨文件结构检查（check 退化为 lint+analyze）。
-_checker_cfg: dict = declare_cfg(
-    "checker.structure", {}, __name__, "_checker_cfg"
-)
+_checker_cfg: dict = declare_cfg("checker.structure", {}, __name__, "_checker_cfg")
 
 
 # ── 数据模型 ──────────────────────────────────────────────
@@ -55,9 +53,9 @@ class ModulePort:
     """模块端口声明（声明形态，供实例化联动比对）。"""
 
     name: str
-    direction: str = ""      # input / output / inout（旧风格裸名可空）
-    width_expr: str = ""     # 宽度表达式文本（如 "DATA_W-1:0"、"7:0"；无范围空）
-    decl_node: Node | None = None   # 端口声明节点（related 链定位）
+    direction: str = ""  # input / output / inout（旧风格裸名可空）
+    width_expr: str = ""  # 宽度表达式文本（如 "DATA_W-1:0"、"7:0"；无范围空）
+    decl_node: Node | None = None  # 端口声明节点（related 链定位）
 
 
 @dataclass
@@ -65,7 +63,7 @@ class ModuleParam:
     """模块参数声明。"""
 
     name: str
-    value_expr: str = ""     # 默认值表达式文本（如 "8"、"DATA_W"）
+    value_expr: str = ""  # 默认值表达式文本（如 "8"、"DATA_W"）
 
 
 @dataclass
@@ -74,7 +72,7 @@ class ModuleInfo:
 
     name: str
     file: str
-    node: Node                                       # ModuleDecl 节点（定位）
+    node: Node  # ModuleDecl 节点（定位）
     ports: dict[str, ModulePort] = field(default_factory=dict)
     params: dict[str, ModuleParam] = field(default_factory=dict)
 
@@ -85,13 +83,13 @@ class FileResult:
 
     path: str
     source: str
-    lint_diags: list = field(default_factory=list)   # stage=syntax（LintDiagnostic）
+    lint_diags: list = field(default_factory=list)  # stage=syntax（LintDiagnostic）
     parse_ok: bool = False
     parse_error: str = ""
     ast: Node | None = None
-    analyzer: "AnalysisTraversal | None" = None      # stage=semantic 诊断源
+    analyzer: "AnalysisTraversal | None" = None  # stage=semantic 诊断源
     modules: dict[str, ModuleInfo] = field(default_factory=dict)
-    inst_sites: list = field(default_factory=list)   # ModuleInst 节点
+    inst_sites: list = field(default_factory=list)  # ModuleInst 节点
 
 
 # ── 引擎 ─────────────────────────────────────────────────
@@ -175,7 +173,9 @@ class ProjectChecker:
         plugins_dir = os.path.join(rules_dir, "plugins")
         # 配置加载 + 插件组件发现（postpass/原语注册依赖此步骤；
         # 与 pipeline 一致——pipeline 在模块导入时顶层调用）
-        ConfigRegistry.load_all(rules_dir, ext_dirs=self._ext_dirs, plugins_dir=plugins_dir)
+        ConfigRegistry.load_all(
+            rules_dir, ext_dirs=self._ext_dirs, plugins_dir=plugins_dir
+        )
         from core.plugin_loader import load_all_components
 
         load_all_components()
@@ -413,7 +413,7 @@ class ProjectChecker:
         for p in params:
             if not isinstance(p, Node):
                 continue
-            p = self._unwrap(p)   # 参数声明可能被 optional 包装
+            p = self._unwrap(p)  # 参数声明可能被 optional 包装
             if not isinstance(p, Node):
                 continue
             pn = getattr(p, param_name_field, None) if param_name_field else None
@@ -541,7 +541,10 @@ class ProjectChecker:
             "range": (
                 {
                     "start": {"line": line - 1 if line else 0, "character": col or 0},
-                    "end": {"line": line - 1 if line else 0, "character": (col or 0) + 1},
+                    "end": {
+                        "line": line - 1 if line else 0,
+                        "character": (col or 0) + 1,
+                    },
                 }
                 if line is not None
                 else None
