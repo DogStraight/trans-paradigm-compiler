@@ -30,9 +30,13 @@ context.extra：`module_index`（全工程模块表）与 `inst_sites`（本文�
 import os
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from core.define import Node, DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
+from core.define import Node, GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
 from core.config_registry import declare_cfg
+
+if TYPE_CHECKING:
+    from analyzer.traversal import AnalysisTraversal
 
 # ── 配置需求（来自语言包 tpc.toml [checker]） ──────────────
 # checker.structure: 跨文件结构提取协议——模块/实例化的规则名、节点字段、
@@ -85,7 +89,7 @@ class FileResult:
     parse_ok: bool = False
     parse_error: str = ""
     ast: Node | None = None
-    analyzer: object | None = None                   # AnalysisTraversal（stage=semantic）
+    analyzer: "AnalysisTraversal | None" = None      # stage=semantic 诊断源
     modules: dict[str, ModuleInfo] = field(default_factory=dict)
     inst_sites: list = field(default_factory=list)   # ModuleInst 节点
 
@@ -156,7 +160,6 @@ class ProjectChecker:
         if key in ProjectChecker._SHARED:
             return ProjectChecker._SHARED[key]
         from core.config_registry import ConfigRegistry
-        from core.define import GrammarRulesRegister
         from parser import setup_grammar
         from parser.rule_selector import RuleSelector
         from lexer import Lexer

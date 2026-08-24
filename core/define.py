@@ -132,6 +132,13 @@ BODY_FIELD = "body"
 
 class Node:
 
+    # ── 引擎元数据（可选，非语法结构；dump 过滤下划线前缀）──
+    # 源位置：parser 规则节点创建时挂载（_production.py），语义诊断定位用；
+    # 源文件：跨文件诊断 related 链定位（ProjectChecker 挂载）。
+    _pos_line: int | None = None
+    _pos_col: int | None = None
+    _file: str | None = None
+
     def __init__(self, node_name: str, **kwargs) -> None:
         self.node_name = node_name
         for key, value in kwargs.items():
