@@ -43,6 +43,10 @@ class AnalysisTraversal:
         self._all_symbols: list[Symbol] = []
         self._context = AnalysisContext()
         self._scope_name_node_ids: set[int] = set()
+        # 外部注入的跨文件状态（ProjectChecker 在 analyze() 前写入，
+        # analyze() 创建新 context 后合并进 extra）：原语/postpass 通过
+        # context.extra 读取（如 module_index / inst_sites）。
+        self._external_extra: dict[str, Any] = {}
 
     @staticmethod
     def _load_primitive_order() -> list[str]:
@@ -69,11 +73,29 @@ class AnalysisTraversal:
         self._current_scope = self._root_scope
         self._all_symbols.clear()
         self._context = AnalysisContext(root_scope=self._root_scope)
+        if self._external_extra:
+            self._context.extra.update(self._external_extra)
         self._scope_name_node_ids.clear()
         self._pending_name_refs: list[tuple] = []
         self._walk(ast)
         self._resolve_pending()
+        self._run_postpasses()
         return ast
+
+    def _run_postpasses(self) -> None:
+        """遍历后统一执行插件的 post-pass 钩子（ADR-0004）。
+
+        节点锚定原语在遍历期收集，postpass 在遍历结束后走查跨节点/跨文件
+        状态（赋值链、模块实例化联动等），向 context.report 报诊断。
+        跨文件信息（模块索引等）由调用方（ProjectChecker）注入
+        context.extra。
+        """
+        try:
+            from core.plugin_loader import get_analyzer_postpasses
+        except ImportError:
+            return
+        for fn in get_analyzer_postpasses():
+            fn(self, self._context)
 
     def _resolve_pending(self) -> None:
         """遍历后统一核对暂存的名称引用。

@@ -174,7 +174,9 @@ class Node:
     def dump(self):
         result = {}
         for attr, value in self.__dict__.items():
-            if attr == "node_name" or value is None:
+            # 下划线前缀 = 引擎内部元数据（如 _pos_line/_pos_col 源位置），
+            # 不属于语法结构，不进序列化（避免污染 AST dump/快照）。
+            if attr == "node_name" or attr.startswith("_") or value is None:
                 continue
             if isinstance(value, list) and not value:
                 continue

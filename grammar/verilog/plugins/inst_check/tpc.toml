@@ -1,0 +1,16 @@
+# inst_check 插件 — 模块实例化联动检查（跨文件）
+#
+# 框架（ProjectChecker）注入 context.extra：
+#     module_index — 全工程模块定义表 {模块名: ModuleInfo}
+#     inst_sites   — 本文件的模块实例化点（ModuleInst 节点）
+#
+# 检查项（Verilog 语义规则——插件层语言知识，不进引擎）：
+#     W101  实例化未找到定义的模块（定义文件缺失/模块名拼写错误）
+#     W102  连接了被实例化模块不存在的端口
+#     W103  覆盖了被实例化模块不存在的参数
+#     WC001 字面量连接参数化宽度端口（配置敏感死值，ADR-0004 场景：
+#           端口宽度如 [DATA_W-1:0] 是配置化的，字面量在配置变更时
+#           可能成为死值）
+
+[analyzer]
+postpasses = ["_inst_check.py:run_inst_check"]

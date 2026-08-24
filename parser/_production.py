@@ -187,6 +187,10 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
 
     # 2) 匹配块头内容 production（block_prods，不含 block_start/block_end）
     rule_node = Node(rule.name)
+    if tok is not None:
+        # 源位置元数据（语义诊断定位用）：块规则锚定起始符
+        rule_node._pos_line = tok.line
+        rule_node._pos_col = tok.column
     old_node = context.current_node
     context.update_current_node(rule_node)
     all_matched = match_productions(self, context, rule, rule.block_prods)
@@ -268,6 +272,11 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     context.update_current_rule(rule)
 
     rule_node = Node(rule.name)
+    _start_tok = context.peek_token()
+    if _start_tok is not None:
+        # 源位置元数据（语义诊断定位用）：普通规则锚定 production 首个 token
+        rule_node._pos_line = _start_tok.line
+        rule_node._pos_col = _start_tok.column
     old_node = context.current_node
     context.update_current_node(rule_node)
 

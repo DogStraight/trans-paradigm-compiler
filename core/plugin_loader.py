@@ -68,7 +68,8 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
         raw = tomllib.load(f)
     # 组件判定：有 [grammar] files，或有 [transform] handlers（如 c4 的
     # asm_gen——无语法规则文件，只有代码生成插件），或有 [analyzer] handlers
-    # （纯语义检查插件，如 semantic_check——无语法规则，只有检查原语）。
+    # （纯语义检查插件，如 semantic_check——无语法规则，只有检查原语），
+    # 或有 [analyzer] postpasses（纯 post-pass 联动检查插件，如 inst_check）。
     grammar = raw.get("grammar", {})
     transform = raw.get("transform", {})
     analyzer = raw.get("analyzer", {})
@@ -76,6 +77,7 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
         not grammar.get("files")
         and not transform.get("handlers")
         and not analyzer.get("handlers")
+        and not analyzer.get("postpasses")
     ):
         return None
     comp = {
@@ -134,6 +136,11 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     analyzer_meta = meta.get("analyzer", {})
     info["analyzer"] = _load_python_handlers(
         cdir, analyzer_meta.get("handlers", [])
+    )
+
+    # 2b. Analyzer postpasses（遍历后链式走查钩子，ADR-0004）
+    info["postpasses"] = _load_postpasses(
+        cdir, analyzer_meta.get("postpasses", [])
     )
 
     # 3. Transform handlers
@@ -208,6 +215,43 @@ def get_primitive_order() -> list[str]:
                 _PRIMITIVE_ORDER.append(p)
                 seen.add(p)
     return list(_PRIMITIVE_ORDER)
+
+
+def get_analyzer_postpasses() -> list[Callable]:
+    """Return merged analyzer postpass functions from all loaded components.
+
+    postpass 是遍历结束后的链式走查钩子（ADR-0004）：签名
+    fn(analyzer, context) -> None，可访问 analyzer.all_symbols /
+    context.extra（跨文件模块表等框架注入状态），向 context.report 报诊断。
+    """
+    fns: list[Callable] = []
+    for info in _loaded_components.values():
+        fns.extend(info.get("postpasses", []))
+    return fns
+
+
+def _load_postpasses(cdir: str, postpass_specs: list) -> list[Callable]:
+    """Load postpass functions from '[analyzer] postpasses = ["file.py:fn"]'.
+
+    fail-fast（ADR-0003）：声明了但模块/函数缺失直接报错，不静默降级。
+    """
+    fns: list[Callable] = []
+    for spec in postpass_specs or []:
+        if not isinstance(spec, str) or ":" not in spec:
+            raise ValueError(
+                f"[plugin] postpass 声明格式应为 'file.py:fn'，收到: {spec!r}"
+            )
+        fname, fn_name = spec.split(":", 1)
+        modules = _load_python_handlers(cdir, [fname])
+        if not modules:
+            raise ValueError(f"[plugin] postpass 模块不存在: {fname} ({cdir})")
+        fn = getattr(modules[0], fn_name, None)
+        if fn is None or not callable(fn):
+            raise ValueError(
+                f"[plugin] postpass 函数 {fn_name} 不存在于 {fname} ({cdir})"
+            )
+        fns.append(fn)
+    return fns
 
 
 def _load_python_handlers(cdir: str, handler_files: list[str]) -> list[Any]:

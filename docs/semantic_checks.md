@@ -1,8 +1,11 @@
 # 语义检查插槽架构（semantic checks）
 
-> 决策依据：`decisions/0004-semantic-check-slot.md`（为什么）。本文件是"怎么拼"。
+> 决策依据：`decisions/0004-semantic-check-slot.md`（为什么）、
+> `decisions/0005-cross-file-semantic-check.md`（跨文件扩展 + tpc check）。
+> 本文件是"怎么拼"。
 > 前置调研：`references/static_checkers_survey.md`。
-> 状态：设计定稿，实现分阶段进行（见文末计划）。
+> 状态：**P1 机制层 + P2 窄版 + 跨文件联动已落地**（2026-08-25）；
+> P3 声明式 schema / P4 用户配置层待实现。
 
 ## 1. 定位与边界
 
@@ -19,12 +22,15 @@ analyzer 阶段（符号表已建立）的语义检查插槽。**只做三件事
 ```
 analyzer 遍历（原语按 [RuleName.analyzer] 触发）       ← 已有（check_name_call 范式）
    │
-   ├─ L1 声明层：TOML [[checks]] 规则（规则=数据）       ← 新增
-   ├─ L2 脚本层：@register 原语 / handler 模块          ← 已有机制 + 元数据
+   ├─ L1 声明层：TOML [[checks]] 规则（规则=数据）       ← 待实现（P3）
+   ├─ L2 脚本层：@register 原语 / handler 模块          ← 已有机制（semantic_check 插件）
    │
-   └─ post-pass 钩子（遍历收集 → 结束后链式走查）        ← 新增（机制核心）
+   └─ post-pass 钩子（遍历收集 → 结束后链式走查）        ← 已实现（P1，mechanism）
           │
-          └─ 统一报告管道（Diagnostic + related 链）     ← 已有 Diagnostic + 链字段
+          └─ 统一报告管道（Diagnostic + related 链）     ← 已实现（P1）
+                └─ 跨文件联动（ProjectChecker 注入
+                    module_index / inst_sites）          ← 已实现（ADR-0005，
+                    inst_check 插件：W101/W102/W103/WC001）
 ```
 
 ## 3. 规则声明 schema（L1+L2 合一）
@@ -63,7 +69,7 @@ per_file  = { "tb/**" = { disabled = ["WC001"] } }  # 测试台豁免（Ruff per
 - 诚实边界：测试台死值是**故意的**（测固定宽度），默认 TB 豁免由用户配置决定，不内置假设。
 - 配置加载沿用 fail-fast（ADR-0003）：非法规则 id / severity 直接报错，不静默降级。
 
-## 5. post-pass 钩子协议（机制核心）
+## 5. post-pass 钩子协议（机制核心）✅ 已实现（P1）
 
 现有原语节点锚定，链式检查需要跨节点分析。协议：
 
@@ -71,20 +77,28 @@ per_file  = { "tb/**" = { disabled = ["WC001"] } }  # 测试台豁免（Ruff per
 # 插件 tpc.toml
 [analyzer]
 primitives = ["collect_width_src"]     # 遍历期收集（节点锚定，L2 原语）
-postpasses = ["_chain_walk.py:run"]    # 遍历后走查（新机制）
+postpasses = ["_chain_walk.py:run"]    # 遍历后走查（已实现）
 ```
 
 ```python
 # _chain_walk.py
-def run(analyzer, context, config) -> None:
+def run(analyzer, context) -> None:
     """遍历结束后调用：访问 analyzer.all_symbols / context.extra 中已收集的
     端口、赋值链；沿链走查，向 context.report 报带 related 的诊断。"""
     ...
 ```
 
-- 实现位置：`analyzer/traversal.py`——`analyze()` 的 `_walk()` 之后、`_resolve_pending()` 附近，新增 postpass 阶段。
-- 收集阶段沿用现有原语副作用模式（`context.extra` 传递临时状态，原语不持全局状态——见 `analyzer/context.py` 设计约定）。
-- 这是现有 `_resolve_pending`（遍历后统一核对）模式的通用化，机制已验证。
+- 实现位置：`analyzer/traversal.py::AnalysisTraversal._run_postpasses`——
+  `analyze()` 的 `_walk()` 之后、`_resolve_pending()` 之后执行。
+- 声明解析：`core/plugin_loader.py::_load_postpasses`（`file.py:fn` 格式，
+  fail-fast：模块/函数缺失直接报错）+ `get_analyzer_postpasses()` 合并。
+- 组件判定：`_parse_component_toml` 将 `[analyzer] postpasses` 计入
+  组件标志（纯 postpass 插件如 inst_check 不因无 handlers 被丢弃）。
+- 收集阶段沿用现有原语副作用模式（`context.extra` 传递临时状态）。
+- **跨文件扩展**（ADR-0005）：ProjectChecker 在 analyze() 前把
+  `module_index`（全工程模块表）/`inst_sites`（本文件实例化点）写入
+  `AnalysisTraversal._external_extra`，analyze() 合并进 context.extra——
+  插件 postpass 可直接做跨文件联动比对。
 
 ## 6. 符号宽度表示（width 检查基础）
 
@@ -100,13 +114,13 @@ class WidthExpr:
 - typed_ports 已带 `packed_range` 一路到 AST，宽度信息现成，`WidthExpr` 在其上抽象。
 - 检查规则：`literal` 喂给 `parameterized` 端口 → 可疑（"死值"模式）；`literal` 喂给 `literal` → 正常。
 
-## 7. 链追溯报告（Diagnostic.related）
+## 7. 链追溯报告（Diagnostic.related）✅ 已实现（P1）
 
 ```python
-# analyzer/diagnostic.py 扩展
+# analyzer/diagnostic.py
 class Diagnostic:
     ...
-    related: list[dict]   # LSP relatedInformation: [{location, message}]
+    related: list[tuple[str, Node]]   # [(message, node), ...] — node 可跨文件
 ```
 
 报告形态：
@@ -139,12 +153,17 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 
 ## 10. 分阶段落地计划
 
-| 阶段 | 内容 | 验证 |
+| 阶段 | 内容 | 状态 |
 |---|---|---|
-| P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 单测（钩子/序列化/抑制解析） |
-| P2 | `width_check` 插件窄版：参数化端口 + 字面量 + 单链 | 复现用例：改端口位宽 → 抓到链上死值 |
-| P3 | L1 声明式 schema + 注释驱动测试框架 | WC001 迁到声明层，测试全绿 |
-| P4 | 用户配置层 `[checks]` + per_file 豁免 | e2e |
+| P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 钩子/related **已实现**（2026-08-25）；统一抑制未做（并入 P4） |
+| P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见 ADR-0005 inst_check） |
+| P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（ADR-0005：W101/W102/W103/WC001 + `tpc check` CLI） |
+| P3 | L1 声明式 schema + 注释驱动测试框架 | 待实现 |
+| P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | 待实现 |
 
-> Impl: 待实现（P1 起）——预计落点：`analyzer/traversal.py`（postpass 阶段）、`analyzer/diagnostic.py`（related）、`analyzer/primitives/`（收集原语）、`grammar/verilog/plugins/width_check/`（实例）、`core/plugin_loader.py`（postpasses 声明解析）
-> Test: 待实现——`tests/` 随各阶段新增（P2 验收用例：端口位宽变更链上死值）
+> Impl: analyzer/checker.py::ProjectChecker / analyzer/traversal.py /
+> analyzer/diagnostic.py / core/plugin_loader.py / parser/_production.py /
+> grammar/verilog/plugins/inst_check/ / main.py::_cmd_check
+> Test: tests/engine/analyzer/test_checker.py / test_diagnostic_related.py
+> CLI 验收：`tpc check <file> [--include DIR] [--json]`——语法阶段
+> （stage=syntax）+ 语义阶段（stage=semantic），exit 1 按 error 级。

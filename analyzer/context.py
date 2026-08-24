@@ -40,11 +40,23 @@ class AnalysisContext:
         self.diagnostics: list[Diagnostic] = []
         self.extra: dict[str, Any] = {}
 
-    def report(self, message: str, code: str = "", level: str = "error") -> None:
-        """报告一条诊断信息"""
+    def report(
+        self,
+        message: str,
+        code: str = "",
+        level: str = "error",
+        node: Node | None = None,
+        related: list | None = None,
+    ) -> None:
+        """报告一条诊断信息
+
+        node: 定位节点（缺省 = 当前访问节点）；related: 关联位置链
+        [(message, node), ...]（链级溯源，node 可跨文件）。
+        """
         self.diagnostics.append(Diagnostic(
             message=message,
             code=code,
             level=level,
-            node=self.node,
+            node=node if node is not None else self.node,
+            related=related,
         ))

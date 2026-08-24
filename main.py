@@ -4,7 +4,8 @@ main.py — TransParadigm Compiler CLI entry point
 
 Usage (installed as `tpc`):
     tpc format <file>                  Format a source file
-    tpc lint <file> [--json]           Lint a source file
+    tpc lint <file> [--json]           Lint a source file (syntax only)
+    tpc check <file> [--include DIR]   Cross-file semantic check (syntax then semantic)
     tpc pipeline [test_name]           Run a single test
     tpc new component <name>           Scaffold a new component
     tpc config dump                    Show config key sources
@@ -178,6 +179,82 @@ def _cmd_lint(args: argparse.Namespace) -> None:
     sys.exit(1 if diagnostics else 0)
 
 
+def _cmd_check(args: argparse.Namespace) -> None:
+    """tpc check — 跨文件语义检查（分阶段：语法错误 → 语义错误）。
+
+    单文件入口 + 递归发现被实例化模块的定义文件（同目录/--include），
+    对每个文件跑 analyzer 插件（语义检查 + 跨文件联动），统一报告。
+    """
+    if not os.path.isfile(args.file):
+        print(f"[fatal] File not found: {args.file}", file=sys.stderr)
+        sys.exit(1)
+
+    from analyzer.checker import ProjectChecker
+
+    rules_dir, ext_dirs = _resolve_grammar_dirs()
+    checker = ProjectChecker(
+        rules_dir=rules_dir,
+        ext_dirs=ext_dirs,
+        include_dirs=list(args.include) or None,
+    )
+    report = checker.check(args.file)
+
+    if args.json:
+        import json
+
+        print(json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None))
+    else:
+        _print_check_text(report)
+    sys.exit(report["exit_code"])
+
+
+def _print_check_text(report: dict) -> None:
+    """tpc check 文本输出：按文件分组，语法阶段在前、语义阶段在后。"""
+    total = 0
+    for f in report["files"]:
+        syntax = f["syntax"]
+        semantic = f["semantic"]
+        if not syntax and not semantic:
+            continue
+        total += len(syntax) + len(semantic)
+        rel = os.path.relpath(f["path"])
+        if syntax:
+            print(f"{rel}:")
+            for d in syntax:
+                r = d["range"]
+                if r:
+                    print(
+                        f"  [syntax] Ln {r['start']['line'] + 1}:"
+                        f"{r['start']['character'] + 1}  {d['message']}"
+                    )
+                else:
+                    print(f"  [syntax] {d['message']}")
+        if semantic:
+            if not syntax:
+                print(f"{rel}:")
+            for d in semantic:
+                r = d["range"]
+                pos = (
+                    f"Ln {r['start']['line'] + 1}:{r['start']['character'] + 1}  "
+                    if r
+                    else ""
+                )
+                tag = f"[{d['level']}]" if d.get("level") else "[semantic]"
+                print(f"  {tag}({d['code']}) {pos}{d['message']}")
+                for rel_info in d.get("related", []):
+                    rl = rel_info.get("line")
+                    rc = rel_info.get("column")
+                    pos_s = (
+                        f" at {os.path.basename(rel_info.get('file', ''))}"
+                        f":{rl}:{rc}"
+                        if rl
+                        else ""
+                    )
+                    print(f"      ↳ {rel_info['message']}{pos_s}")
+    if total == 0:
+        print("No issues found.")
+
+
 def _cmd_config_dump(args: argparse.Namespace) -> None:
     """tpc config dump — 输出配置 key 的来源（文件+section）与值摘要。
 
@@ -278,6 +355,22 @@ def _register_subparsers(sub, allow=None) -> None:
         )
         p_lint.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
+    if want("check"):
+        p_check = sub.add_parser(
+            "check", help="Cross-file semantic check (syntax then semantic stages)"
+        )
+        p_check.add_argument("file", help="Path to source file")
+        p_check.add_argument(
+            "--include",
+            action="append",
+            default=[],
+            help="Extra directory to search for module definitions (repeatable)",
+        )
+        p_check.add_argument(
+            "--json", action="store_true", help="LSP-compatible JSON output"
+        )
+        p_check.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+
     if want("init"):
         p_init = sub.add_parser("init", help="Initialize a TransParadigm project config")
         p_init.add_argument("--lang", default="verilog", help="Target language")
@@ -308,6 +401,7 @@ def _dispatch(args) -> None:
         "format": _cmd_format,
         "expand": _cmd_expand,
         "lint": _cmd_lint,
+        "check": _cmd_check,
         "init": _cmd_init,
         "pipeline": _cmd_pipeline,
     }
