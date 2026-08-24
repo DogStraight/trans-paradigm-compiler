@@ -86,6 +86,7 @@ def run_indent_pass(
             # 相对上一行实际缩进 +1（嵌套单语句头可累积，如 if(a)→if(b)→stmt）。
             # prev 是续行（多行 if 条件）时，用语句头缩进 +1——续行本身已 +1，
             # 再相对续行 +1 会多一级（单语句体应相对 if 头 +1，非续行 +1）。
+            assert prev is not None  # hanging 分支已保证 prev 非 None
             if prev.multi_line_cont and prev.multi_header_line:
                 hdr_ln = prev.multi_header_line - 1
                 prev_level = _indent_level(result[hdr_ln], indent_width)

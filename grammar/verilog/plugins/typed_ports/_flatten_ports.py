@@ -22,6 +22,7 @@ def flatten_ports(analyzer, node: Node, config: dict) -> None:
 
     未配置时不处理（向下兼容）。
     """
+    del node  # 原语注册协议签名参数，本原语不消费
     self_cfg = config.get("flatten_ports", {})
     dir_spec = self_cfg.get("direction", "")
     name_spec = self_cfg.get("name", "")

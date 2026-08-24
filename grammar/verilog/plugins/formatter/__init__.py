@@ -14,7 +14,9 @@ import os
 import re
 from typing import Any
 
-from .engine import FormatterEngine, FormatterPass
+from .engine import FormatterEngine
+from .passes.ifdef_annotate import run_ifdef_annotate
+from .passes.wrap_comments import run_wrap_comments
 
 
 # ── 默认品类配置 ──
@@ -123,7 +125,6 @@ def build_engine(
     # 增强，与保真度对比 ref 冲突），由 [formatter.ifdef_annotate].enabled 控制
     try:
         from core.config_registry import ConfigRegistry
-        from .passes.ifdef_annotate import run_ifdef_annotate
         _ia_enabled = bool(ConfigRegistry.get("formatter.ifdef_annotate.enabled"))
     except Exception:  # noqa: BLE001 — 无配置默认关闭
         _ia_enabled = False
@@ -131,7 +132,7 @@ def build_engine(
         engine.register(FormatterPass(
             name="ifdef_annotate",
             kind="handler",
-            handler=lambda lines, ctxs: run_ifdef_annotate(lines),
+            handler=lambda lines, _: run_ifdef_annotate(lines),
         ))
     if categories is None:
         # 品类定义外部化到语言包 tpc.toml（配置驱动）；未加载时 fallback 默认
@@ -170,7 +171,6 @@ def build_engine(
     # [formatter.wrap_comments].enabled 控制
     try:
         from core.config_registry import ConfigRegistry
-        from .passes.wrap_comments import run_wrap_comments
         _wc_enabled = bool(ConfigRegistry.get("formatter.wrap_comments.enabled"))
     except Exception:  # noqa: BLE001 — 无配置默认关闭
         _wc_enabled = False
@@ -178,7 +178,7 @@ def build_engine(
         engine.register(FormatterPass(
             name="wrap_comments",
             kind="handler",
-            handler=lambda lines, ctxs: run_wrap_comments(lines, max_width=mw),
+            handler=lambda lines, _: run_wrap_comments(lines, max_width=mw),
         ))
     return engine
 

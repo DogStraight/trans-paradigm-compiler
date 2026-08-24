@@ -11,12 +11,14 @@ from transform.engine import mark_extra
 
 @register_transform_slot("delete_type_decl")
 def delete_type_decl(node: Node, ctx) -> None:
+    del node, ctx  # 槽位协议签名参数，本槽位无操作
     return None
 
 
 @register_transform_slot("build_wrapper")
 def build_wrapper(node: Node, ctx) -> Node | None:
     """从 TypeDecl + TypeImplDecl 构建包装模块。"""
+    del node  # 槽位协议签名参数，本槽位从 ctx 取数据
     td = ctx.get("type_decl")
     impl_block = ctx.get("impl_block")
     root_scope: Scope | None = ctx.get("root_scope")
@@ -82,6 +84,7 @@ def build_wrapper(node: Node, ctx) -> Node | None:
 @register_transform_slot("expand_typed_port")
 def expand_typed_port(node: Node, ctx) -> Node | None:
     """TypedPortDecl 展开由 ConfigDrivenTransform 的 expand 原语处理。"""
+    del ctx  # 槽位协议签名参数，本槽位不消费
     return node
 
 
@@ -135,6 +138,7 @@ def auto_connect_ports(node: Node, ctx) -> Node:
 
 @register_transform_slot("replace_impl_binding")
 def replace_impl_binding(node: Node, ctx) -> Node:
+    del ctx  # 槽位协议签名参数，本槽位不消费
     ts = getattr(node, "type_spec", None)
     if ts is not None:
         tn = _text(getattr(ts, "type_name", None)) or ""

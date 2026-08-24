@@ -6,7 +6,7 @@ pass 的公共基础设施。避免每个 pass 重复实现同一套分组逻辑
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 from .boundary import LineContext
 
@@ -44,7 +44,7 @@ def group_by_scope(
         depth_groups.setdefault(ctx.scope_depth, []).append(i)
 
     result: list[list[int]] = []
-    for depth, indices in depth_groups.items():
+    for _, indices in depth_groups.items():
         if match_fn is not None:
             matched = [i for i in indices if match_fn(lines[i])]
         else:

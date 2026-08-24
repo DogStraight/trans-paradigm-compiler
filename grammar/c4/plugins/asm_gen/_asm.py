@@ -20,13 +20,6 @@ CHAR, INT, PTR = 0, 1, 2
 # 符号类别
 GLO, FUN, LOC, NUM = "glo", "fun", "loc", "num"
 
-_OPCODE_NAMES = [
-    "LEA", "IMM", "JMP", "JSR", "BZ", "BNZ", "ENT", "ADJ", "LEV",
-    "LI", "LC", "SI", "SC", "PSH",
-    "OR", "XOR", "AND", "EQ", "NE", "LT", "GT", "LE", "GE",
-    "SHL", "SHR", "ADD", "SUB", "MUL", "DIV", "MOD",
-    "OPEN", "READ", "CLOS", "PRTF", "MALC", "FREE", "MSET", "MCMP", "EXIT",
-]
 # 有操作数的指令（对应 c4.c 的 <= ADJ 打印带操作数）
 _HAS_ARG = {"LEA", "IMM", "JMP", "JSR", "BZ", "BNZ", "ENT", "ADJ"}
 
@@ -93,7 +86,9 @@ class _C4Compiler:
         return base + sum(len(x) + 1 for x in self._strings[:idx])
 
     # ── 表达式（值 → a 寄存器）──
-    def expr(self, n: Node, loc: int) -> None:
+    def expr(self, n: Node | None, loc: int) -> None:
+        if n is None:
+            return  # 无操作数（getattr 缺省），静默跳过
         name = n.node_name
         if name == "Number":
             self.emitter.emit("IMM", self._int_value(n))
@@ -523,6 +518,7 @@ class AsmGenPlugin(TransformPlugin):
         return dict(self._stats)
 
     def process(self, ast: Node, root_scope: Scope) -> Node:
+        del root_scope  # TransformPlugin 协议签名参数，本插件不消费
         if ast is None or ast.node_name != "Program":
             return ast
         compiler = _C4Compiler()

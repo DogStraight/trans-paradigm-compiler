@@ -19,6 +19,7 @@ _LITERAL_RE = re.compile(r"^\d+'\s*[hdb]?[0-9a-fA-F_]*$")
 
 def run_inst_check(analyzer, context) -> None:
     """postpass 入口：本文件实例化点 × 全工程模块表 联动检查。"""
+    del analyzer  # postpass 协议签名参数，本 pass 从 context 取数据
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
     for site in inst_sites:

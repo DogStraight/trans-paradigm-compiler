@@ -115,7 +115,7 @@ def _align_group(lines: list[str], group: list[int]) -> None:
     max_name = max(len(r[1][1]) for r in rows)
     max_expr = max(len(r[1][2]) for r in rows)
     max_indent = max(len(r[1][0]) for r in rows)
-    for idx, (indent, name, expr, term) in rows:
+    for idx, (_, name, expr, term) in rows:
         lines[idx] = " " * max_indent + name.ljust(max_name) + "(" + expr.ljust(max_expr) + ")" + term
 
 
@@ -139,6 +139,7 @@ def _align_contiguous_ports(lines: list[str]) -> None:
 
 def run_inst_port_align(lines: list[str], contexts: list[LineContext]) -> list[str]:
     """拆单行多端口 + 连续端口行对齐。"""
+    del contexts  # pass 协议签名参数，本 pass 不消费
     result: list[str] = []
     for line in lines:
         # impl 绑定语句（`impl type.role (ports)`）：`type.role` 会被当端口段拆开

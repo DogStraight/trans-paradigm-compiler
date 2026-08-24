@@ -23,7 +23,7 @@ def _wrap_comment_line(line: str, max_len: int) -> list[str]:
         return [line]
     lead = line[: len(line) - len(s)]
     # 保留 `// ` 前缀（已有空格或补一个）
-    m = s[:2] + (" " if len(s) == 2 or s[2] != " " else s[2:])
+    _ = s[:2] + (" " if len(s) == 2 or s[2] != " " else s[2:])
     # 前缀长度计入：`// ` 之后是文本
     prefix = lead + "// "
     text = s[2:].lstrip()

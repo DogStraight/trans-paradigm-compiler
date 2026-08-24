@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any
 
 from lexer import Lexer
 
@@ -711,7 +710,7 @@ class BoundaryScanner:
                         is_cont,
                         hdr_line,
                         port_list_end,
-                        hdr_extra,
+                        bool(hdr_extra),
                         is_directive,
                     )
                     line_buf = []
@@ -856,6 +855,7 @@ class BoundaryScanner:
             ifdef_branches[-1].extra_openers.append(node)
 
     def _handle_closer(self, t, scope_path, ifdef_branches):
+        del ifdef_branches  # 内部方法参数，本分支不消费
         if self._scope_kind_for_closer(t.type) == ScopeKind.GENERATE:
             return  # endgenerate 不弹栈（generate 未入栈）
         if len(scope_path) > 1:

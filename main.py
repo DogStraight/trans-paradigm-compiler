@@ -98,7 +98,6 @@ def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
     from pipeline import run_pipeline_on_source
 
     cmd = _resolve_command(name)
-    rules_dir, ext_dirs = _resolve_grammar_dirs()
 
     with open(args.file, "r", encoding="utf-8") as f:
         source = f.read()

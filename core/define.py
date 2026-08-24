@@ -149,6 +149,9 @@ class Node:
     _pos_col: int | None = None
     _file: str | None = None
 
+    # 子节点列表（CHILDREN_FIELD，见 add_sub_node / iter_children / renderer）
+    sub_node: list["Node"]
+
     def __init__(self, node_name: str, **kwargs) -> None:
         self.node_name = node_name
         for key, value in kwargs.items():

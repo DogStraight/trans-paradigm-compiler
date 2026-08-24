@@ -107,7 +107,7 @@ class ComponentSlotPlugin(TransformPlugin):
                     self._stats["slots_called"] += 1
             else:
                 remaining.append(node)
-        root.sub_node = remaining
+        root.add_attr("sub_node", remaining)
         return root
 
     def _find_type_impl(self, td: Node) -> Node | None:

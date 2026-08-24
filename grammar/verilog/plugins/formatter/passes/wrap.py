@@ -288,7 +288,6 @@ def _find_break_point(
     尾行超列加重（×2）——尾行还可能继续折，超列更伤。选总惩罚最小者；
     并列时取更靠右的（保留更长前缀，更保守）。
     """
-    stripped = line.lstrip()
     indent = _indent_of(line)
     cont_indent = indent + " " * indent_width
     cands = _break_candidates(line, penalties, parser=parser)
