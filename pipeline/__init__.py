@@ -260,12 +260,20 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         lexer = Lexer(rules_dir=ctx.rules_dir, ext_dirs=ctx.ext_dirs)
         linter = LinterScanner(rules_dir=ctx.rules_dir, ext_dirs=ctx.ext_dirs)
         renderer = Renderer(rules_dir=ctx.rules_dir)
+        # 组件映射配置按 rules_dir 缓存：get_component_mapping_config 读全局
+        # _loaded_components，而其他语言包的 setup_grammar 会 clear+重载它——
+        # 复用本缓存时若再读全局会拿到别的语言包组件（typed_ports mapping 丢失）。
+        mp_entries, rv_entries = get_component_mapping_config()
+        mapping_cfg: dict = {}
+        mapping_cfg.update(mp_entries)
+        mapping_cfg.update(rv_entries)
         _PIPELINE_SHARED[ctx.rules_dir] = {
             "rules": rules,
             "rule_selector": rule_selector,
             "lexer": lexer,
             "linter": linter,
             "renderer": renderer,
+            "mapping_cfg": mapping_cfg,
         }
     shared = _PIPELINE_SHARED[ctx.rules_dir]
     ctx.rules = shared["rules"]
@@ -424,10 +432,9 @@ def _stage_transform(ctx: _PipelineContext, ast: Any, scope: Any) -> Any:
     """AST 变换。返回变换后的 ast。"""
     if ctx.transform_enabled and scope is not None:
         # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
-        mp_entries, rv_entries = get_component_mapping_config()
-        mapping_cfg: dict = {}
-        mapping_cfg.update(mp_entries)
-        mapping_cfg.update(rv_entries)
+        # mapping_cfg 从按 rules_dir 的缓存读（_ensure_shared 已算好），
+        # 不依赖全局 _loaded_components（可能被其他语言包污染）。
+        mapping_cfg = _PIPELINE_SHARED[ctx.rules_dir]["mapping_cfg"]
         AstTransformer.set_shared("rules", ctx.rules)
         AstTransformer.set_shared("mapping_cfg", mapping_cfg)
         transformer = AstTransformer()
