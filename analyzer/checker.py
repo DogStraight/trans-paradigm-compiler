@@ -16,10 +16,13 @@
 - 模块定义表从 AST 提取（端口/参数/宽度声明形态），不依赖符号表——
   联动检查只需要"声明形态 vs 实例化点"的比对。
 
-语言无关边界：本模块**不含任何语言语义知识**——"端口名存在性/参数覆盖
-合法性/字面量宽度 vs 参数化端口"等规则是 grammar/<lang>/plugins/*/
-postpass 的职责。本引擎只提供跨文件上下文，经
-`AnalysisTraversal._external_extra` 注入每个文件的
+语言无关边界：本模块**不含任何语言语义知识**。结构知识（模块/实例化的
+规则名、节点字段、文件扩展名、关键字）全部来自语言包声明的
+`[checker] structure` 配置（grammar/<lang>/base/_checker.toml），未声明
+该段 = 该语言不支持跨文件结构检查（check 退化为 lint+analyze）。
+语义规则（端口/参数存在性、字面量宽度 vs 参数化端口）是
+grammar/<lang>/plugins/*/ postpass 的职责。本引擎只提供跨文件上下文，
+经 `AnalysisTraversal._external_extra` 注入每个文件的
 context.extra：`module_index`（全工程模块表）与 `inst_sites`（本文件
 实例化点列表）。
 """
@@ -29,6 +32,15 @@ import re
 from dataclasses import dataclass, field
 
 from core.define import Node, DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
+from core.config_registry import declare_cfg
+
+# ── 配置需求（来自语言包 tpc.toml [checker]） ──────────────
+# checker.structure: 跨文件结构提取协议——模块/实例化的规则名、节点字段、
+# 文件扩展名、关键字全部由语言包声明（grammar/<lang>/base/_checker.toml）。
+# 未声明 = 语言包不支持跨文件结构检查（check 退化为 lint+analyze）。
+_checker_cfg: dict = declare_cfg(
+    "checker.structure", {}, __name__, "_checker_cfg"
+)
 
 
 # ── 数据模型 ──────────────────────────────────────────────
@@ -98,12 +110,44 @@ class ProjectChecker:
         rules_dir: str = DEFAULT_RULES_DIR,
         ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
         include_dirs: list[str] | None = None,
+        register: "GrammarRulesRegister | None" = None,
     ):
         self._rules_dir = rules_dir
         self._ext_dirs = ext_dirs or []
         self._include_dirs = [os.path.abspath(d) for d in (include_dirs or [])]
+        # 独立规则实例：测试跨语言（c4 等）时传入，避免污染全局单例
+        # （模式同 tests/languages/c4/test_c4_linter.py 的 fixture 注释）。
+        self._register = register
         self._memo: dict[str, FileResult] = {}
         self._module_index: dict[str, ModuleInfo] = {}
+        # 语言包结构协议（全部语言知识来自配置；缺失 = 无跨文件检查）。
+        # 注意：配置在 _ensure_shared（load_all）之后才推入 _checker_cfg，
+        # 因此 __init__ 只置空，check() 里 _ensure_shared 后刷新。
+        self._struct: dict = {}
+        self._fields: dict = {}
+
+    def _refresh_structure(self) -> None:
+        """load_all 后刷新结构协议（_checker_cfg 模块变量被推入真实值）。"""
+        self._struct = _checker_cfg or {}
+        self._fields = (self._struct.get("fields") or {}) if self._struct else {}
+
+    # ── 结构协议读取（语言知识仅来自 grammar/<lang> TOML）──
+
+    def _rule(self, key: str) -> str:
+        """规则名/关键字等标量协议项（如 module_decl_rule）。"""
+        return str(self._struct.get(key) or "")
+
+    def _field(self, key: str) -> str:
+        """节点字段名协议项（如 module_name / ports）。"""
+        return str(self._fields.get(key) or "")
+
+    def _exts(self) -> list[str]:
+        exts = self._struct.get("file_exts") or []
+        return [str(e) for e in exts] if isinstance(exts, list) else []
+
+    def _has_structure(self) -> bool:
+        """语言包是否声明了跨文件结构协议（模块/实例化形态）。"""
+        return bool(self._struct and self._rule("module_decl_rule"))
 
     # ── 共享组件 ──
 
@@ -134,7 +178,9 @@ class ProjectChecker:
         load_all_components()
 
         rules = setup_grammar(
-            rules_dir, GrammarRulesRegister.get_default(), ext_dirs=self._ext_dirs
+            rules_dir,
+            self._register or GrammarRulesRegister.get_default(),
+            ext_dirs=self._ext_dirs,
         )
         stmt_names = [
             n
@@ -145,7 +191,14 @@ class ProjectChecker:
             "rules": rules,
             "rule_selector": RuleSelector(rules, stmt_names),
             "lexer": Lexer(rules_dir=rules_dir, ext_dirs=self._ext_dirs),
-            "linter": LinterScanner(rules_dir=rules_dir, ext_dirs=self._ext_dirs),
+            "linter": LinterScanner(
+                rules_dir=rules_dir,
+                ext_dirs=self._ext_dirs,
+                # 独立 register 必须透传：LinterScanner 内部 setup_grammar
+                # 默认用全局单例 get_default()，跨语言（c4）检查会把 c4 规则
+                # 灌进单例且无法靠 ConfigRegistry 恢复（test_c4_linter 同款坑）。
+                register=self._register or GrammarRulesRegister.get_default(),
+            ),
             "renderer": Renderer(rules_dir=rules_dir),
         }
         ProjectChecker._SHARED[key] = shared
@@ -167,6 +220,7 @@ class ProjectChecker:
         self._memo.clear()
         self._module_index.clear()
         self._ensure_shared()
+        self._refresh_structure()
 
         # 1) 递归发现 + parse（模块索引逐步建立）
         self._discover(entry, set())
@@ -258,7 +312,7 @@ class ProjectChecker:
 
         fr.ast = ast
         fr.modules = self._extract_modules(ast, path)
-        fr.inst_sites = self._collect_nodes(ast, "ModuleInst")
+        fr.inst_sites = self._collect_nodes(ast, self._rule("module_inst_rule"))
         fr.parse_ok = True
         return fr
 
@@ -279,10 +333,14 @@ class ProjectChecker:
 
     def _extract_modules(self, ast: Node, path: str) -> dict[str, ModuleInfo]:
         modules: dict[str, ModuleInfo] = {}
+        if not self._has_structure():
+            return modules  # 语言包未声明结构协议 → 无模块提取
+        decl_rule = self._rule("module_decl_rule")
+        name_field = self._field("module_name")
         for node in self._iter_nodes(ast):
-            if node.node_name != "ModuleDecl":
+            if node.node_name != decl_rule:
                 continue
-            name_node = getattr(node, "module_name", None)
+            name_node = getattr(node, name_field, None)
             if not isinstance(name_node, Node) or not name_node.content:
                 continue
             info = ModuleInfo(name=name_node.content, file=path, node=node)
@@ -293,33 +351,43 @@ class ProjectChecker:
         return modules
 
     def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
-        """从 ModuleDecl 提取端口声明形态（ANSI 风格 + 旧风格裸名）。"""
-        ports_node = self._unwrap(getattr(module_node, "ports", None))
-        items = getattr(ports_node, "items", None) if ports_node else None
+        """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格）。"""
+        f = self._fields
+        ports_field = self._field("ports")
+        items_field = self._field("items")
+        bare_rule = self._field("bare_rule")
+        decl_field = self._field("decl")
+        direction_field = self._field("direction")
+        width_field = self._field("width")
+        name_field = self._field("name")
+        ports_node = self._unwrap(getattr(module_node, ports_field, None))
+        items = getattr(ports_node, items_field, None) if ports_node else None
         if not items:
             return
         for item in items:
             if not isinstance(item, Node):
                 continue
-            if item.node_name == "Identifier":
-                # 旧风格裸名端口（方向/类型在 body 声明，此处仅登记名字）
+            if bare_rule and item.node_name == bare_rule:
+                # 裸名端口（方向/类型在 body 声明，此处仅登记名字）
                 if item.content:
                     info.ports[item.content] = ModulePort(name=item.content)
                 continue
-            # ANSI 风格：AnsiPortDecl inline 展平，item 即 AnsiInput/Output/
-            # InoutDecl（防御：也可能是未展平的 AnsiPortDecl，取其 decl）
-            decl = getattr(item, "decl", None)
+            # ANSI 风格：端口声明规则 inline 展平，item 即具体声明；
+            # 防御：也可能是未展平的包装节点（取其 decl 字段）
+            decl = getattr(item, decl_field, None) if decl_field else None
             if isinstance(decl, Node):
                 item = decl
-            direction = getattr(item, "direction", "") or ""
-            pr = getattr(item, "packed_range", None)
+            direction = ""
+            if direction_field:
+                direction = getattr(item, direction_field, "") or ""
+            pr = getattr(item, width_field, None) if width_field else None
             width = self._render_subtree(pr) if isinstance(pr, Node) else ""
-            dlist = getattr(item, "items", None)
-            d_items = getattr(dlist, "items", None) if dlist else None
+            dlist = getattr(item, items_field, None) if items_field else None
+            d_items = getattr(dlist, items_field, None) if dlist else None
             for d in d_items or []:
                 if not isinstance(d, Node):
                     continue
-                dn = getattr(d, "name", None)
+                dn = getattr(d, name_field, None) if name_field else None
                 if isinstance(dn, Node) and dn.content:
                     d._file = info.file
                     info.ports[dn.content] = ModulePort(
@@ -330,20 +398,25 @@ class ProjectChecker:
                     )
 
     def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
-        params_node = self._unwrap(getattr(module_node, "params", None))
-        params = getattr(params_node, "params", None) if params_node else None
+        f = self._fields
+        params_field = self._field("params")
+        items_field = self._field("items")
+        param_name_field = self._field("param_name")
+        value_field = self._field("value")
+        params_node = self._unwrap(getattr(module_node, params_field, None))
+        params = getattr(params_node, params_field, None) if params_node else None
         if not params:
             return
         for p in params:
             if not isinstance(p, Node):
                 continue
-            p = self._unwrap(p)   # ParamDecl 可能被 optional 包装
+            p = self._unwrap(p)   # 参数声明可能被 optional 包装
             if not isinstance(p, Node):
                 continue
-            pn = getattr(p, "param_name", None)
+            pn = getattr(p, param_name_field, None) if param_name_field else None
             if not isinstance(pn, Node) or not pn.content:
                 continue
-            val = getattr(p, "value", None)
+            val = getattr(p, value_field, None) if value_field else None
             info.params[pn.content] = ModuleParam(
                 name=pn.content,
                 value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
@@ -359,16 +432,25 @@ class ProjectChecker:
     # ── 模块定义文件查找 ──
 
     def _find_module_file(self, module_name: str, from_file: str) -> str | None:
-        """按名字找模块定义文件：同名文件优先，再扫描目录文本匹配。"""
+        """按名字找模块定义文件：同名文件优先，再扫描目录文本匹配。
+
+        扩展名与模块关键字来自语言包结构协议（file_exts / module_keyword）。
+        """
+        exts = self._exts()
+        keyword = self._rule("module_keyword")
         dirs = [os.path.dirname(from_file)] + self._include_dirs
         for d in dirs:
             if not os.path.isdir(d):
                 continue
-            for ext in (".v", ".sv"):
+            for ext in exts:
                 cand = os.path.join(d, module_name + ext)
                 if os.path.isfile(cand):
                     return cand
-        pattern = re.compile(r"\bmodule\s+" + re.escape(module_name) + r"\b")
+        if not keyword:
+            return None
+        pattern = re.compile(
+            r"\b" + re.escape(keyword) + r"\s+" + re.escape(module_name) + r"\b"
+        )
         for d in dirs:
             if not os.path.isdir(d):
                 continue
@@ -377,7 +459,7 @@ class ProjectChecker:
             except OSError:
                 continue
             for fname in names:
-                if not fname.endswith((".v", ".sv")):
+                if not any(fname.endswith(ext) for ext in exts):
                     continue
                 fp = os.path.join(d, fname)
                 try:
@@ -413,9 +495,8 @@ class ProjectChecker:
     def _collect_nodes(root: Node, node_name: str) -> list:
         return [n for n in ProjectChecker._iter_nodes(root) if n.node_name == node_name]
 
-    @staticmethod
-    def _inst_module_name(site: Node) -> str:
-        mn = getattr(site, "module_name", None)
+    def _inst_module_name(self, site: Node) -> str:
+        mn = getattr(site, self._field("module_name"), None)
         if isinstance(mn, Node) and mn.content:
             return mn.content
         return ""

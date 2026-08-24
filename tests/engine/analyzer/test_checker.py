@@ -185,3 +185,60 @@ class TestStageGating:
         assert not f["syntax"]
         assert not f["semantic"]
         assert report["exit_code"] == 0
+
+
+class TestNoStructureProtocol:
+    """语言包未声明 [checker] 结构协议（如 c4）→ check 退化为 lint+analyze：
+
+    不提取模块、不递归、不注入 module_index；通用语法/语义检查照常。
+    验证引擎零语言知识（结构知识全部来自配置，缺配置即无结构行为）。
+    """
+
+    def test_c4_degrades_to_generic(self, tmp_path):
+        from analyzer.checker import ProjectChecker
+        from core.define import GrammarRulesRegister
+
+        c4_checker = ProjectChecker(
+            rules_dir="grammar/c4",
+            register=GrammarRulesRegister(),  # 独立实例，避免污染全局单例
+        )
+        src = tmp_path / "prog.c4"
+        src.write_text(
+            "int main() { int a; a = 1; return a; }", encoding="utf-8"
+        )
+        try:
+            report = c4_checker.check(str(src))
+        finally:
+            # c4 的 load_all 覆盖了全局配置，恢复 verilog 避免污染后续测试
+            # （模式同 tests/languages/c4/test_c4_linter.py 的 fixture teardown）
+            from core.config_registry import ConfigRegistry
+
+            ConfigRegistry.load_language(
+                "grammar/verilog", plugins_dir="grammar/verilog/plugins"
+            )
+        f = report["files"][0]
+        assert f["parse_ok"] or f["syntax"]  # 正常跑完语法阶段
+        assert not f["semantic"]             # c4 无语义插件 → 语义阶段无诊断
+        assert report["modules"] == {}       # 无模块表（未声明结构协议）
+        assert report["exit_code"] in (0, 1)
+
+    def test_no_modules_without_protocol(self, tmp_path):
+        from analyzer.checker import ProjectChecker
+        from core.define import GrammarRulesRegister
+
+        ck = ProjectChecker(
+            rules_dir="grammar/c4",
+            register=GrammarRulesRegister(),  # 独立实例，避免污染全局单例
+        )
+        src = tmp_path / "p.c4"
+        src.write_text("int f() { return 0; }", encoding="utf-8")
+        try:
+            report = ck.check(str(src))
+        finally:
+            from core.config_registry import ConfigRegistry
+
+            ConfigRegistry.load_language(
+                "grammar/verilog", plugins_dir="grammar/verilog/plugins"
+            )
+        assert report["modules"] == {}
+        assert len(report["files"]) == 1
