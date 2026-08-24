@@ -9,7 +9,6 @@ AST 遍历期间做语义分析（作用域、符号、引用解析）；transfo
 """
 
 from typing import Callable
-from core.define import Node
 
 
 # ── 原语签名 ──

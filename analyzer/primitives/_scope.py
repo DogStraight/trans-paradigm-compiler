@@ -64,6 +64,7 @@ def scope_exit(analyzer, node: Node, config: dict) -> None:
     恢复父作用域为当前作用域。
     仅当 TOML 中存在 scope 配置时执行。
     """
+    del node  # 原语注册协议签名参数，本原语不消费
     scope_meta = config.get("scope")
     if not scope_meta:
         return

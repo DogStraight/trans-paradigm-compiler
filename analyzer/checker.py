@@ -355,7 +355,6 @@ class ProjectChecker:
 
     def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
         """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格）。"""
-        f = self._fields
         ports_field = self._field("ports")
         items_field = self._field("items")
         bare_rule = self._field("bare_rule")
@@ -401,9 +400,7 @@ class ProjectChecker:
                     )
 
     def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
-        f = self._fields
         params_field = self._field("params")
-        items_field = self._field("items")
         param_name_field = self._field("param_name")
         value_field = self._field("value")
         params_node = self._unwrap(getattr(module_node, params_field, None))

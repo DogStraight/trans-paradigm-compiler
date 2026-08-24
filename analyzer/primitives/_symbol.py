@@ -170,6 +170,7 @@ def _walk_path(node: Node, path: str) -> Any:
 
 def _extract_names(analyzer, node: Node, name_attr: str) -> list[str]:
     """从节点属性中提取符号名列表，支持列表属性"""
+    del analyzer  # 原语注册协议签名参数，本函数不消费
     names: list[str] = []
     for val in _walk_path(node, name_attr):
         name = _resolve_name_value(val)
