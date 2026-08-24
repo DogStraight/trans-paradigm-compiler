@@ -22,7 +22,7 @@ from core.token_protocol import (
 
 from .lexer_utils import get_number_config
 from .number_runner import build_number_runner
-from .comment_fsm import CommentFSM
+from .comment_runner import CommentRunner
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config（与 preprocessor/_expand.py 共享同一 key，宏配置
@@ -251,12 +251,12 @@ class Lexer:
                 start_point += len(space_content)
                 continue
 
-            # comment — 使用 CommentFSM 解析（完全配置驱动）
+            # comment — 使用 CommentRunner 解析（完全配置驱动）
             elif any(
                 lex_text[text_idx : text_idx + len(s)] in (s,)
-                for s in CommentFSM.get_start_patterns(self.token_define)
+                for s in CommentRunner.get_start_patterns(self.token_define)
             ):
-                result = CommentFSM.run(lex_text, text_idx, self.token_define)
+                result = CommentRunner.run(lex_text, text_idx, self.token_define)
                 if result is not None:
                     comment_content, new_idx, kind = result
                     self._emit_pending_dedent(tokens)
@@ -360,7 +360,7 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # (comment handled by CommentFSM in earlier branch)
+            # (comment handled by CommentRunner in earlier branch)
 
             # ── id 分支 ──
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":

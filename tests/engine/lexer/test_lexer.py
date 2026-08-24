@@ -382,7 +382,7 @@ class TestNegative:
         assert tokens[0].type == expected_type
 
     def test_unclosed_block_comment_at_eof(self, lexer):
-        """未闭合块注释：CommentFSM.run() 中 while pos<len(text) 在 EOF 退出。"""
+        """未闭合块注释：CommentRunner.run() 中 while pos<len(text) 在 EOF 退出。"""
         tokens = lexer.tokenize("/* unclosed")
         assert len(tokens) >= 1
         assert tokens[0].type == "comment"

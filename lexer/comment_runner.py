@@ -1,13 +1,16 @@
 """
-comment_fsm.py — 配置驱动的注释解析器
+comment_runner.py — 配置驱动的注释解析器
 
 完全由 _token.toml 的 [comment] pairs 配置驱动：
     pairs = [
         ["//", "\\n", "line"],
         ["/*", "*/", "block"],
     ]
-"""
 
+与 number_runner.py 同属"配置驱动 runner"系列：从语言包声明构建规则
+并扫描文本。本文件无 FSM 转移表——注释形态简单（起始/结束标记对），
+pairs 直接可读，无需 number 那种"声明→转移表"的编译步骤。
+"""
 
 
 class CommentRule:
@@ -21,7 +24,7 @@ class CommentRule:
         self.end_len = len(end)
 
 
-class CommentFSM:
+class CommentRunner:
     @staticmethod
     def build_rules(token_define: dict) -> list[CommentRule]:
         """从配置构建注释规则列表"""
@@ -43,7 +46,7 @@ class CommentFSM:
     @staticmethod
     def get_start_patterns(token_define: dict) -> list[str]:
         """获取所有注释起始标记，用于 lexer 预判断"""
-        rules = CommentFSM.build_rules(token_define)
+        rules = CommentRunner.build_rules(token_define)
         return [r.start for r in rules]
 
     @staticmethod
@@ -56,7 +59,7 @@ class CommentFSM:
             (content, end_pos, kind) — 注释内容、结束位置、类型
             None — 当前位置不是注释
         """
-        rules = CommentFSM.build_rules(token_define)
+        rules = CommentRunner.build_rules(token_define)
         for rule in rules:
             # 检查是否以起始标记开头
             if text[start : start + rule.start_len] != rule.start:
