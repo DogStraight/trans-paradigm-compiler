@@ -4,47 +4,102 @@
 > 与 `tests/e2e/samples/real/CREDITS.md`（第三方样本署名）互补：
 > 前者管"设计来源"，后者管"代码来源"。
 
-## 项目 → 借鉴点
+## 收录标准与格式
 
-| 项目 | 借鉴点 |
-|------|--------|
-| [cmake-format](https://github.com/cheshirekow/cmakelang) | 多通道递进布局算法、Layout Tree 与 Syntax Tree 并行模式、注释重排、量化布局拒绝准则 |
-| [DmitrySoshnikov/syntax](https://github.com/DmitrySoshnikov/syntax) | "语言无关的语法规则作为独立资产"的可行性验证、运算符优先级声明、多语言输出模式 |
-| [Prettier](https://github.com/prettier/prettier) | "格式化即正确"理念、before/after 代码对比 |
-| [Lark](https://github.com/lark-parser/lark) | Earley 与递归下降的取舍分析、grammar 格式对比 |
-| [Grammar-Kit](https://github.com/JetBrains/Grammar-Kit) | Pin 机制（未采用，启发了 end_case + 回溯组合设计） |
-| [ANTLR](https://github.com/antlr/antlr4) | 工业级 parser generator 的定位差异 |
-| [Tree-sitter](https://github.com/tree-sitter/tree-sitter) | 增量解析与容错解析的思路 |
-| [INRIA Syntax](https://github.com/moosetechnology/syntax) | C/Fortran 领域的配置驱动解析原型 |
-| [textX](https://github.com/textX/textX) | Python 生态的 DSL 工作台，配置驱动理念 |
-| [Spoofax](https://github.com/metaborg/spoofax) | 语言工作台（Java/Eclipse），编译期生成 vs 运行时 TOML；Statix scope graph 约束系统 |
-| Parser Combinators ([pyparsing](https://github.com/pyparsing/pyparsing) / [nom](https://github.com/rust-bakery/nom)) | 语法即代码 vs 配置驱动；Scannerless vs 管线分离；无渲染 vs Doc IR |
-| [parlex](https://github.com/ikhomyakov/parlex) | SLR(1) 运行时歧义消解对 end_case 的启发 |
-| [ModelCC](https://modelcc.ikor.org/) | 模型驱动 parser generator；`@Priority`/`@Associativity` 声明式消歧验证了声明式配置方向 |
-| [MoonBit](https://www.moonbitlang.com/) | 双轨解析（Menhir LR + 手写递归下降并行）；sync 栈错误恢复（不适用：sync 栈是语法知识，配置驱动引擎无法自动推导） |
-| [Taichi](https://github.com/taichi-dev/taichi) | 多级 IR 设计（FrontendIR → LowerAST → SSA IR）的 lower_ast pass 与 normalizer 职责类似 |
-| [lyra](https://github.com/hankhsu1996/lyra) | 架构对比 | SystemVerilog 仿真工具链（C++/Bazel，复用 slang AST），同期活跃的同龄人；多级 IR + 927 case 测试组织可借鉴（详见下方深调研） |
-| [VAST](https://github.com/trailofbits/vast) | 深度参考 | 程序分析向的 MLIR 塔式 IR 管线；Tower 机制（每个 pass 后克隆模块 + 记录转换步骤 + 位置反向链接）是 provenance 链的工程化范本（详见下方深调研） |
-| [Foundry](https://github.com/foundry-rs/foundry) | 架构对比 | Ethereum 开发工具链（Rust，10k+★）；模块化切片（forge/cast/anvil/chisel 独立组件）与碎片化 changelog 是工程组织的范本（详见下方深调研） |
-| [vbcc](https://github.com/Leffmann/vbcc) | 深度参考 | 1989 年起的可移植 C 编译器，13 个目标后端；machines/ 目录一个后端一个目录的极简组织（详见下方深调研） |
-| [sv2v](https://github.com/zachjs/sv2v) | 架构对比 | SystemVerilog→Verilog 转换器（Haskell，748★）；50 个转换 pass 每个一个文件的组织 + 1046 测试用例；作为源到源编译器却未被 awesome-transpilers 收录（详见下方深调研） |
-| [Koine](https://github.com/chrsbats/koine) | 架构对比 | 语法即数据（YAML/JSON/TOML）+ 管道式 + subgrammar 多文件组织；聚焦快速 DSL 原型（详见下方深调研） |
-| [DHParser](https://gitlab.lrz.de/badw-it/DHParser) | 完整 left-recursion 支持、测试驱动语法开发、声明式 AST 变换；错误恢复方案不同（反向解析器 vs post-mortem） |
-| [Langium](https://github.com/eclipse-langium/langium) | grammar DSL 直接生成 AST 类型定义的理念（从 TOML production 推导类型定义） |
-| [RADLR](https://github.com/acweathersby/radlr) | parser 分类报告（LL/RD/RAD 等）及算法复杂度评估（metrics 概念用于调试输出） |
-| [Xtext](https://github.com/eclipse-xtext/xtext) | 语法 DSL 生成 AST 类型定义；Maven 复杂度验证了零依赖方向 |
-| [Parsek](https://github.com/anptrs/parsek) | 组合子+FSM 混合模式（词法 FSM + 解析递归下降） |
-| [wadler-lindig](https://github.com/patrick-kidger/wadler-lindig) | Wadler-Lindig Doc IR 算法（Renderer 的理论源头） |
-| [parsejoy](https://github.com/adewes/parsejoy) | YAML 语法即数据（实验性，未完成） |
-| [MLIR ODS (llvm/llvm-project)](https://github.com/llvm/llvm-project) | 配置驱动 Operation 定义体系（TableGen .td），自动生成 C++ 构造器/验证器/序列化 |
-| [CIRCT (llvm/circt)](https://github.com/llvm/circt) | MLIR-based 硬件编译器，FIRRTL→HW→SV→Verilog 多级下降管线 |
-| [ClangIR / CIR (llvm/llvm-project)](https://clang.llvm.org/docs/ClangIR.html) | Clang 的 MLIR-based 中级 IR，使用 ODS 定义所有操作 |
-| [JetBrains MPS](https://github.com/JetBrains/MPS) | 重量级语言工作台（项目化 DSL + 多目标生成）——天花板参照 |
-| [Ohm](https://github.com/ohmjs/ohm) | JS PEG + 语义操作分离 + 语法 OO 扩展 + 在线可视化编辑器 |
-| [desugar](https://github.com/michaelmillar/desugar) | 逐步 pass 可视化（编译器模拟器方向） |
-| [ldtk](https://github.com/Terran-One/ldtk) | TS 模块化语言开发工具包 |
+**收录范围**：影响 tpc 设计的 parser/编译器/格式化/IR/语言工作台/transpiler/
+provenance 类项目；含"同龄人"（同期同理念项目，作为参照系）。
 
-## 深度参考（增量解析 / provenance / 元编程）
+**颗粒度两级**：
+- **索引级**（下表）：一行——项目 | 关系 | 一句话价值总结（链接在项目名上）
+- **调研级**（下方"深调研"节）：定位 → 管线结构逐阶段对比（列表）→ 亮点单独
+  说明 → 可实现性评估（可做/不做及成本）；仅对深度参考项目展开
+
+**关系取值**：`深度参考`（有深调研节）/ `架构对比`（理念或组织相似，无详情节）/
+`设计参考`（局部借鉴）/ `概念参考`（理念启发）。
+
+**基调**：见贤思齐——先讲对方做得好、值得学的地方；差异用"各有取舍，非优劣"
+表述；不拉踩开源作者。
+
+**新增条目检查**：是否属于上述收录范围？写索引行（统一 3 列）→ 值得深调研则
+加详情节并标 `深度参考` → 检查类别小节是否合适，避免漏类（如 transpiler 类
+曾漏 sv2v）。
+
+## 索引（按类别）
+
+### 解析引擎与语法技术
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [DmitrySoshnikov/syntax](https://github.com/DmitrySoshnikov/syntax) | 设计参考 | "语言无关的语法规则作为独立资产"的可行性验证、运算符优先级声明、多语言输出模式 |
+| [Lark](https://github.com/lark-parser/lark) | 概念参考 | Earley 与递归下降的取舍分析、grammar 格式对比 |
+| [Grammar-Kit](https://github.com/JetBrains/Grammar-Kit) | 设计参考 | Pin 机制（未采用，启发了 end_case + 回溯组合设计） |
+| [ANTLR](https://github.com/antlr/antlr4) | 概念参考 | 工业级 parser generator 的定位差异 |
+| [Tree-sitter](https://github.com/tree-sitter/tree-sitter) | 概念参考 | 增量解析与容错解析的思路 |
+| [INRIA Syntax](https://github.com/moosetechnology/syntax) | 设计参考 | C/Fortran 领域的配置驱动解析原型 |
+| Parser Combinators ([pyparsing](https://github.com/pyparsing/pyparsing) / [nom](https://github.com/rust-bakery/nom)) | 概念参考 | 语法即代码 vs 配置驱动；Scannerless vs 管线分离；无渲染 vs Doc IR |
+| [parlex](https://github.com/ikhomyakov/parlex) | 设计参考 | SLR(1) 运行时歧义消解对 end_case 的启发 |
+| [ModelCC](https://modelcc.ikor.org/) | 设计参考 | 模型驱动 parser generator；`@Priority`/`@Associativity` 声明式消歧验证了声明式配置方向 |
+| [MoonBit](https://www.moonbitlang.com/) | 概念参考 | 双轨解析（Menhir LR + 手写递归下降并行）；sync 栈错误恢复（不适用：sync 栈是语法知识，配置驱动引擎无法自动推导） |
+| [RADLR](https://github.com/acweathersby/radlr) | 设计参考 | parser 分类报告（LL/RD/RAD 等）及算法复杂度评估（metrics 概念用于调试输出） |
+| [Parsek](https://github.com/anptrs/parsek) | 概念参考 | 组合子+FSM 混合模式（词法 FSM + 解析递归下降） |
+| [parsejoy](https://github.com/adewes/parsejoy) | 概念参考 | YAML 语法即数据（实验性，未完成） |
+| [Ohm](https://github.com/ohmjs/ohm) | 概念参考 | JS PEG + 语义操作分离 + 语法 OO 扩展 + 在线可视化编辑器 |
+| [DHParser](https://gitlab.lrz.de/badw-it/DHParser) | 概念参考 | 完整 left-recursion 支持、测试驱动语法开发、声明式 AST 变换；错误恢复方案不同（反向解析器 vs post-mortem） |
+
+### 格式化与渲染
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [cmake-format](https://github.com/cheshirekow/cmakelang) | 设计参考 | 多通道递进布局算法、Layout Tree 与 Syntax Tree 并行模式、注释重排、量化布局拒绝准则 |
+| [Prettier](https://github.com/prettier/prettier) | 概念参考 | "格式化即正确"理念、before/after 代码对比 |
+| [wadler-lindig](https://github.com/patrick-kidger/wadler-lindig) | 概念参考 | Wadler-Lindig Doc IR 算法（Renderer 的理论源头） |
+
+### IR 与编译管线
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [Taichi](https://github.com/taichi-dev/taichi) | 概念参考 | 多级 IR 设计（FrontendIR → LowerAST → SSA IR）的 lower_ast pass 与 normalizer 职责类似 |
+| [MLIR ODS (llvm/llvm-project)](https://github.com/llvm/llvm-project) | 概念参考 | 配置驱动 Operation 定义体系（TableGen .td），自动生成 C++ 构造器/验证器/序列化 |
+| [CIRCT (llvm/circt)](https://github.com/llvm/circt) | 概念参考 | MLIR-based 硬件编译器，FIRRTL→HW→SV→Verilog 多级下降管线 |
+| [ClangIR / CIR (llvm/llvm-project)](https://clang.llvm.org/docs/ClangIR.html) | 概念参考 | Clang 的 MLIR-based 中级 IR，使用 ODS 定义所有操作 |
+| [VAST](https://github.com/trailofbits/vast) | 深度参考 | 程序分析向的 MLIR 塔式 IR 管线；Tower 机制（每个 pass 后克隆模块 + 记录转换步骤 + 位置反向链接）是 provenance 链的工程化范本（详见深调研） |
+| [lyra](https://github.com/hankhsu1996/lyra) | 深度参考 | SystemVerilog 仿真工具链（C++/Bazel，复用 slang AST），同期活跃的同龄人；多级 IR + 927 case 测试组织可借鉴（详见深调研） |
+
+### 语言工作台与 DSL
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [textX](https://github.com/textX/textX) | 概念参考 | Python 生态的 DSL 工作台，配置驱动理念 |
+| [Spoofax](https://github.com/metaborg/spoofax) | 概念参考 | 语言工作台（Java/Eclipse），编译期生成 vs 运行时 TOML；Statix scope graph 约束系统 |
+| [Langium](https://github.com/eclipse-langium/langium) | 设计参考 | grammar DSL 直接生成 AST 类型定义的理念（从 TOML production 推导类型定义） |
+| [Xtext](https://github.com/eclipse-xtext/xtext) | 概念参考 | 语法 DSL 生成 AST 类型定义；Maven 复杂度验证了零依赖方向 |
+| [JetBrains MPS](https://github.com/JetBrains/MPS) | 概念参考 | 重量级语言工作台（项目化 DSL + 多目标生成）——天花板参照 |
+| [ldtk](https://github.com/Terran-One/ldtk) | 概念参考 | TS 模块化语言开发工具包 |
+| [desugar](https://github.com/michaelmillar/desugar) | 概念参考 | 逐步 pass 可视化（编译器模拟器方向） |
+| [rascal](https://github.com/usethesource/rascal) | 深度参考 | 元编程语言：完整 REPL + GLR 解析 + 具体语法模式匹配（详见深调研） |
+| [Koine](https://github.com/chrsbats/koine) | 深度参考 | 语法即数据（YAML/JSON/TOML）+ 管道式 + subgrammar 多文件组织；聚焦快速 DSL 原型（详见深调研） |
+
+### 源到源转换（transpiler）
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [sv2v](https://github.com/zachjs/sv2v) | 深度参考 | SystemVerilog→Verilog 转换器（Haskell，748★）；50 个转换 pass 每个一个文件的组织 + 1046 测试用例；作为源到源编译器却未被 awesome-transpilers 收录（详见深调研） |
+
+### 增量解析与 provenance
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [cairn](https://github.com/eurisko-info-lab/cairn) | 深度参考 | 语言 = Fragment 片段组合 + 内容寻址；双向文法（一个 GrammarSpec 同时生成 parse+print）（详见深调研） |
+| [lvca](https://github.com/joelburget/lvca) | 深度参考 | OCaml provenance：`Provenance.t`（每个节点带 range）是一等公民（详见深调研） |
+
+### 工程组织与后端抽象
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [Foundry](https://github.com/foundry-rs/foundry) | 架构对比 | Ethereum 开发工具链（Rust，10k+★）；模块化切片（forge/cast/anvil/chisel 独立组件）与碎片化 changelog 是工程组织的范本（详见深调研） |
+| [vbcc](https://github.com/Leffmann/vbcc) | 深度参考 | 1989 年起的可移植 C 编译器，13 个目标后端；machines/ 目录一个后端一个目录的极简组织（详见深调研） |
+
+## 深调研（详情）
 
 ### cairn（Scala）— 增量解析
 
