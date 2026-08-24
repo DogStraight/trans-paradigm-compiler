@@ -53,6 +53,9 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [cmake-format](https://github.com/cheshirekow/cmakelang) | 设计参考 | 多通道递进布局算法、Layout Tree 与 Syntax Tree 并行模式、注释重排、量化布局拒绝准则 |
 | [Prettier](https://github.com/prettier/prettier) | 概念参考 | "格式化即正确"理念、before/after 代码对比 |
 | [wadler-lindig](https://github.com/patrick-kidger/wadler-lindig) | 概念参考 | Wadler-Lindig Doc IR 算法（Renderer 的理论源头） |
+| [topiary](https://github.com/topiary/topiary) | 概念参考 | tree-sitter 查询驱动的声明式 formatter（纯规则不写代码）；capture 注解到不了跨行对齐——"封闭式"粒度极限的实证 |
+| [dprint](https://github.com/dprint/dprint) | 概念参考 | 配置驱动插件平台（Rust/wasm 插件）；"配置是选项非布局规则"，语言插件仍需手写 printer |
+| [verible-verilog-format](https://github.com/chipsalliance/verible) | 架构对比 | Google Verilog/SystemVerilog 官方 formatter（token 流 + 布局决策 + 注释锚定）；tpc 差分测试已带其 exe，是高精度目标参照（详见深调研） |
 
 ### IR 与编译管线
 
@@ -271,3 +274,15 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 - 💡 **SV 兼容路线参考**：tpc 的 Verilog 包声明"无 SystemVerilog"（README 边界），若未来要接 SV 特性（interface/struct/enum），sv2v 的降级方案（SV→V-2001）是现成路线图——每特性一个插件原语，逐个接入
 - 💡 **仿真终验**：tpc 用 Verible 差分验证格式正确性；sv2v 用真实仿真（iverilog + tb）验证行为等价——tpc 不做仿真（README 已声明），但差分门禁已覆盖其定位内的验证需求
 - 💡 **bugpoint 最小化工具**：tpc 的 fuzz 已能生成复现用例，若补"自动缩减到最小用例"可参考 sv2v 的 bugpoint（低成本小工具）
+
+### verible-verilog-format（Google）— Verilog 格式化高精度标杆（2026-08 深调研）
+
+- 定位：chipsalliance/verible 的 SystemVerilog 官方 formatter（C++，与 slang/tree-sitter-verilog 并列的活跃解析生态）；tpc 差分测试已带其 exe（tests/differential/.tools/verible/）做格式对照
+- **方法**：token 流 → 语法结构划分（语句/声明/端口组）→ **布局决策**（每 token 间选择换行/空格/对齐，受缩进策略与最大列宽约束）→ 输出；注释挂 token 流随行保留，空行保留可选
+- **亮点（单独说明）**：
+  - **token 级保真**：注释锚定在 token 间隙，换行/空行保留度可配——"保格式/保注释"是设计目标而非后处理
+  - **列对齐是布局决策的一部分**（端口声明、实例化参数对齐），不是文本后处理——对齐进入决策模型
+  - 决策目标明确：换行只在合法断点、缩进连续、对齐组稳定
+- **可实现性评估（tpc 能否做）：**
+  - 💡 **布局决策模型**：tpc 世界 A（Doc IR）缺"对齐"、世界 B（文本 pass）靠行号耦合——verible 的"token 流 + 决策"是第三种形态：结构在 token 间隙上做决策，天然保注释、可对齐。重设计候选之一
+  - 💡 **差分基线复用**：tpc 已与 verible 差分 124 例，重设计后继续以它为 Verilog 高精度目标参照（recall/误报纪律同款）

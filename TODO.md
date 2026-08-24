@@ -305,6 +305,35 @@
 - [ ] **阶段间契约文档评估（低优先）**：tpc 已有 MODEL_INDEX 跳转表，评估是否补
       "阶段间契约"文档（各管线阶段接口的层间边界描述）
 
+## P5 — 渲染器改进（统一缩进模型 + Doc 原语升级 + 布局意图声明化）
+
+> 来源：2026-08-25 renderer 审查（body_cfg["indent"] 死配置/幽灵参数/重复实现）
+> + 框架调研（topiary/dprint/prettier/verible/cmake-format，落 docs/references.md）。
+> 定性：**改进非重写**——Doc IR 内核（Wadler）正确、160 处布局 TOML 是语言知识
+> 存量、验证门禁（real 保真度/差分/幂等）原样承接；缺的是原语丰富度与模型统一。
+> 动手前先写 ADR-0006（边界分析 + 资产盘点 + 迁移策略作为输入文档）。
+
+- [x] **body_cfg["indent"] 生效（第一步已落地，a1b29ed）**：三态（true=1 级
+      默认/false=不缩进/int=N 级）；render_inline 合并为 render_node 别名；
+      tail_break bool 转换删除。yaml 顶层顶格+嵌套 4 格兑现注释意图，
+      verilog 零变化（e2e FAIL 0，保真度无回退）
+- [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
+      缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为
+      单一缩进上下文，明确组合规则与优先级
+- [ ] **Doc IR 原语升级**：补 align（对齐进 Doc 模型）/ fill（流式折行）/
+      lineSuffix（尾注释锚定）+ 注释 attachment 机制（Prettier 生产验证过的
+      原语集）；layout() 算法继承扩展
+- [ ] **布局意图声明化**：语言包声明"结构 → 布局意图"（对齐/紧凑/折行/锚定），
+      引擎推导具体 Doc，消灭手拼 Break/Nest（topiary 封闭式理念——但节点级
+      注解到不了跨行对齐，需多遍引擎：对齐遍/折行遍/注释遍）
+- [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
+      内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
+      带结构行，根治 wrap 拆行后行号漂移
+- [ ] **保真度分级**：规范化程度显式可配（完全重排 / 保留空行 / 仅缩进），
+      解决"规范化 vs 保真"方向矛盾（verible token 级保真为参照）
+- [ ] **兼容与验收约束**：160 处布局 TOML 语义兼容（老语言包零改写）；验证
+      门禁原样承接（real 保真度守卫 / vs Verible 差分 124 例 / 幂等 / e2e）
+
 ## P4 — LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 
 ### P4.1 LLVM IR 目标插件
