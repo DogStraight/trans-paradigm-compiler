@@ -275,7 +275,7 @@ class SemanticMappingPlugin(TransformPlugin):
         self._walk_refs(root, target)
 
     def _walk_refs(
-        self, scope: Scope, target: dict, flatten_fields: dict | None = None
+        self, scope: Scope, target: dict
     ) -> None:
         """递归遍历 scope 树，消费 _ref_callbacks
 
@@ -372,50 +372,3 @@ def _prefix_port_name(port: dict, prefix: str) -> None:
             for item in inner:
                 _prefix_port_name(item, prefix)
 
-
-def _flatten_port(port: dict, fields: dict | None = None) -> list[dict]:
-    """将嵌套结构的端口展开为扁平 {direction, name} 格式
-
-    fields 配置（来自 mapping 条目的字段声明）决定提取路径。
-    默认回退 items.items[*].name 兼容既有配置。
-    """
-    fields = fields or {}
-    dir_spec = fields.get("direction", "{$.direction}")
-    name_spec = fields.get("name", "items.items[*].name")
-
-    direction = ""
-    if dir_spec.startswith("{$.") and dir_spec.endswith("}"):
-        direction = port.get(dir_spec[3:-1], "")
-
-    names: list = []
-    if "[*]" in name_spec:
-        val = port
-        for part in name_spec.replace("[*]", "").split("."):
-            part = part.strip()
-            if isinstance(val, dict):
-                val = val.get(part, {})
-            elif isinstance(val, list):
-                collected = []
-                for v in val:
-                    if isinstance(v, dict):
-                        n = v.get(part, "")
-                        if n:
-                            collected.append(n)
-                    elif isinstance(v, str):
-                        collected.append(v)
-                val = collected
-            else:
-                val = {}
-        names = val if isinstance(val, list) else [val] if val else []
-    else:
-        names = [port.get(name_spec, "")]
-    if not names:
-        return [{"direction": direction, "name": port.get("name", "")}]
-    return [
-        (
-            {"direction": direction, "name": n}
-            if isinstance(n, str)
-            else {"direction": direction, "name": ""}
-        )
-        for n in names
-    ]

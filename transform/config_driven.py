@@ -177,6 +177,7 @@ class ConfigDrivenTransform(TransformPlugin):
         parent_attr: str | None,
     ) -> TransformResult:
         """根据 transform 配置调度变换"""
+        del parent, parent_attr  # 调用链透传参数，本方法不消费
         config = self._configs.get(node.node_name)
         if config is None:
             return SKIP
@@ -310,8 +311,6 @@ def _expand_primitive(engine, node, config, root_scope):
         ↓
         AST 节点追加到模块端口列表
     """
-    from .primitives.flow import make_exists_condition
-
     context = engine._build_context(node)
 
     source_cfg = config.get("source", {})
@@ -384,6 +383,7 @@ def _expand_primitive(engine, node, config, root_scope):
 
         def _do_transform(item: Any, ctx: dict):
             """对 foreach 元素执行变换：emit 或原语调度"""
+            del item  # foreach 回调协议签名参数，本实现从 ctx 取元素
             if isinstance(emit_spec, dict) and "kind" in emit_spec:
                 prim = get_primitive(emit_spec["kind"])
                 if prim:
@@ -451,6 +451,7 @@ def _replace_primitive(engine, node, config, root_scope):
 
 def _delete_primitive(engine, node, config, root_scope):
     """delete 原语：删除节点"""
+    del engine, node, config, root_scope  # 原语注册协议签名参数，本原语无操作
     return None
 
 
@@ -465,6 +466,7 @@ register_primitive("delete", _delete_primitive)
 
 def _emit_primitive(engine, node, config, root_scope):
     """emit 原语：根据规格创建 AST 节点。"""
+    del root_scope  # 原语注册协议签名参数，本原语不消费
     context = engine._build_context(node)
     result = _emit(config, context)
     return result if result is not None else SKIP
