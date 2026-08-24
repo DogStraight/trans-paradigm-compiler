@@ -1,5 +1,5 @@
 """ref 原语 — 子节点引用"""
-from typing import Any
+from typing import Any, List
 from core.define import Node
 from ..doc import Doc, Text, Concat, Empty
 from .registry import register

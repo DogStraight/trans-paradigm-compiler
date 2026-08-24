@@ -113,8 +113,6 @@ class Union(Doc):
 
 # ── 辅助构造器 ──
 
-_EMPTY = Empty()
-
 
 def group(doc: Doc) -> Doc:
     """创建 group：Union(flatten(doc), doc)"""

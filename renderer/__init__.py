@@ -22,7 +22,6 @@
 
 from .renderer import Renderer
 from transform.normalizer import normalize_ast
-from . import loader
 
 __all__ = ["Renderer", "normalize_ast", "get_config_refs"]
 

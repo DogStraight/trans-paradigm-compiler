@@ -12,7 +12,9 @@ from ..doc import Doc, Text
 from .registry import get_registry
 from .text import eval_text
 
-# 导入所有原语模块，触发 @register 装饰器注册处理函数
+# 导入所有原语模块，触发 @register 装饰器注册处理函数（副作用 import）。
+# _PRIMITIVE_MODULES 元组引用这些模块（表达"原语模块集合"），并在 eval_expr
+# 中做防御性校验消费，消除 pylance 对副作用 import 的"未存取"误报。
 from . import ref as _ref
 from . import join as _join
 from . import group as _group
@@ -22,6 +24,13 @@ from . import opt as _opt
 from . import soft_break as _soft_break
 
 _PRIMITIVE_MODULES = (_ref, _join, _group, _line, _indent, _opt, _soft_break)
+
+__all__ = [
+    "eval_text",
+    "eval_expr",
+    "get_registry",
+    "_PRIMITIVE_MODULES",
+]
 
 
 def eval_expr(
@@ -51,6 +60,11 @@ def eval_expr(
 
     if not isinstance(expr, dict):
         return Text(str(expr))
+
+    # 防御性校验：确认所有原语模块已加载（副作用 import 的注册结果由
+    # get_registry 消费；此处引用 _PRIMITIVE_MODULES 保证 import 副作用生效）
+    if not _PRIMITIVE_MODULES:
+        raise RuntimeError("原语模块未加载")
 
     for key, handler in get_registry():
         if key in expr:

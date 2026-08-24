@@ -56,6 +56,7 @@ def load_style(rules_dir: str) -> dict:
     （core.define.CHILDREN_FIELD），非风格配置——renderer 直接引用常量。
     默认值（4 空格缩进 / 40 列内联）是通用兜底值，语言包可显式覆盖。
     """
+    del rules_dir  # 风格从 _style_cfg 读，rules_dir 仅作签名兼容
     result = {
         "indent_str": "    ",
         "max_inline": 40,
