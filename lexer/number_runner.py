@@ -92,7 +92,9 @@ class ConfigNumberRunner:
         return "", start_pos
 
 
-def build_number_runner(configs: list[dict] | None = None):
+def build_number_runner(
+    configs: list[dict] | None = None,
+) -> ConfigNumberRunner | None:
     """构建数字解析器（配置驱动唯一路径）。
 
     Args:

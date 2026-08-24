@@ -40,8 +40,9 @@ def _resolve_path(
 
 
 @register("include")
-def handle_include(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_include(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `include，支持 "..." 和 <...>。"""
+    del prefix, _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析路径
     m = _INCLUDE_RE.match(stripped)
     is_angle = False
     if not m:

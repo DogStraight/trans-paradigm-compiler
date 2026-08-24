@@ -78,7 +78,7 @@ def _join_continuation_lines(source: str, cfg: dict | None = None) -> str:
     return "\n".join(result)
 
 
-def _get_expand_config() -> dict:
+def _get_expand_config() -> dict[str, int]:
     return _expand_cfg
 
 
@@ -228,7 +228,6 @@ def scan_directives(
                 ctx["_inject_lines"].append(line)
             continue
 
-        kind_of = get_primitive_kind(directive_name)
         handler_cfg = _directives_cfg.get(directive_name, {})
         if not handler_cfg.get("enabled", True):
             # 配置禁用：不执行 handler，但原文原位占位保留
@@ -422,7 +421,7 @@ def _expand_func_call(
     body = macro_defs.get(name, "")
     for idx, p in enumerate(params):
         arg = arg_list[idx] if idx < len(arg_list) else ""
-        body = re.sub(rf"\b{re.escape(p)}\b", lambda m: arg, body)
+        body = re.sub(rf"\b{re.escape(p)}\b", lambda _: arg, body)
     return body
 
 

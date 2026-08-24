@@ -7,19 +7,7 @@
 - restore_condition_blocks 接受 {marker → 原文段} 占位 dict，内部转为 line 锚。
 """
 
-from core.config_registry import declare_cfg
 from ._bridge import restore_anchors
-
-# ── 配置需求（来自 tpc.toml） ──────────────────────────
-# preprocessor.reverse
-#   #sym:config = [reverse]
-#   格式: dict
-#     { sync_window_base: int, sync_window_pad: int, offset_tolerance: int }
-_reverse_cfg: dict = declare_cfg(
-    "preprocessor.reverse",
-    {"sync_window_base": 15, "sync_window_pad": 5, "offset_tolerance": 2},
-    __name__, "_reverse_cfg",
-)
 
 
 def _normalize_anchors(anchors: list[dict] | None) -> list[dict]:

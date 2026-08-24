@@ -30,8 +30,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 # ── 数字形态状态基类 ──
 # 状态模型：每种形态编译出 (size→base→value) 的链式状态；
 # 多个形态共享同一套通用字符类别（dec/bin/oct/hex 等）。

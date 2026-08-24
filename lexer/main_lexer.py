@@ -109,12 +109,13 @@ class Lexer:
         # 旧 NumberFSM 回退已移除（P2.1 配置化后所有语言包都声明数字形态，
         # 回退路径不可达且带旧 FSM 的过度匹配 bug：0x1F 被误认整体等）。
         # 形态缺失 = 配置错误，fail-fast（decisions/0003）。
-        self._number_runner = build_number_runner(number_configs)
-        if self._number_runner is None:
+        runner = build_number_runner(number_configs)
+        if runner is None:
             raise RuntimeError(
                 "[lexer] 数字形态未配置（lexer.number 缺失）——配置化数字是"
                 "唯一路径，请检查语言包 base/_number.toml 是否声明 [[number.based]]"
             )
+        self._number_runner = runner
 
     def _build_alpha_tokens(self) -> None:
         """构建字母形式 token 映射列表 (value, type)"""
@@ -258,7 +259,7 @@ class Lexer:
             ):
                 result = CommentRunner.run(lex_text, text_idx, self.token_define)
                 if result is not None:
-                    comment_content, new_idx, kind = result
+                    comment_content, new_idx, _ = result
                     self._emit_pending_dedent(tokens)
                     current_token.set_type("comment")
                     current_token.set_content(comment_content)
@@ -542,7 +543,7 @@ class Lexer:
             if isinstance(val, str):
                 m[val] = literal_type(name)
         # keyword（从 token_define["id"]["keyword"] 加载）
-        for kw, orig in self.token_define.get("id", {}).get("keyword", {}).items():
+        for _, orig in self.token_define.get("id", {}).get("keyword", {}).items():
             if isinstance(orig, str):
                 m[orig] = keyword_type(orig)
         return m

@@ -65,8 +65,9 @@ def _flush_block(ctx, block):
 
 
 @register("ifdef", kind="control")
-def handle_ifdef(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_ifdef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `ifdef COND。"""
+    del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
     cond = stripped[len(prefix) + len("ifdef ") :].strip()
     defined = _is_macro_defined(ctx, cond)
     stack: list = ctx.setdefault("_ifdef_stack", [])
@@ -93,8 +94,9 @@ def handle_ifdef(stripped: str, prefix: str, name: str, ctx: dict) -> None:
 
 
 @register("ifndef", kind="control")
-def handle_ifndef(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_ifndef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `ifndef COND。"""
+    del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
     cond = stripped[len(prefix) + len("ifndef ") :].strip()
     defined = _is_macro_defined(ctx, cond)
     stack: list = ctx.setdefault("_ifdef_stack", [])
@@ -146,21 +148,24 @@ def _switch_branch(ctx: dict, stripped: str, cond, is_else: bool) -> None:
 
 
 @register("else", kind="control")
-def handle_else(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_else(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `else。前面分支都未选中才激活。"""
+    del prefix, _name  # DirectiveHandler 协议签名参数，本 handler 不消费
     _switch_branch(ctx, stripped, None, True)
 
 
 @register("elsif", kind="control")
-def handle_elsif(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_elsif(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `elsif COND。语义同 else + ifdef。"""
+    del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
     cond = stripped[len(prefix) + len("elsif ") :].strip()
     _switch_branch(ctx, stripped, cond, False)
 
 
 @register("endif", kind="control")
-def handle_endif(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_endif(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `endif：flush 当前块，弹出栈帧。"""
+    del prefix, _name  # DirectiveHandler 协议签名参数，本 handler 不消费
     stack: list = ctx.get("_ifdef_stack", [])
     if not stack:
         return

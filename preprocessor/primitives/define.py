@@ -8,7 +8,7 @@ _NAME_RE = re.compile(r"([A-Za-z_]\w*)")
 
 
 @register("define")
-def handle_define(stripped: str, prefix: str, name: str, ctx: dict) -> None:
+def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `define NAME body。
 
     支持两种形态：
@@ -16,6 +16,7 @@ def handle_define(stripped: str, prefix: str, name: str, ctx: dict) -> None:
       function-like:`define NAME(a, b) body    （名字后紧跟 `(`，形参逗号分隔）
     function-like 的形参表写入 ctx["_func_params"]，body 存入 macro_defs。
     """
+    del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析名字
     arg = stripped[len(prefix) + len("define ") :]
     m = _NAME_RE.match(arg)
     if not m:
