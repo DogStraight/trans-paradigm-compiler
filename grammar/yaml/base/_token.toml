@@ -1,0 +1,42 @@
+# _token.toml — yaml（YAML 子集）基础 Token 定义
+#
+# YAML 子集的 token 需求：
+#   - 映射分隔符 `:`（symbol.base.colon）
+#   - 列表标记 `-`（symbol.base.sub，行首时是列表项）
+#   - 标量：裸标识符（localhost/true/null）、数字、引号字符串
+#   - 注释：# 行注释
+#   - 缩进：由 [indent] 配置驱动（见 _lexer.toml）
+
+[space]
+blank_space = " "
+tab = "\t"
+# CRLF 行尾的 \r 部分（\n 由 [newline] 处理）：作为可忽略空白吞掉
+carriage_return = "\r"
+# UTF-8 BOM：作为可忽略字符吞掉
+bom = "\ufeff"
+
+[newline]
+newline = "\n"
+
+# 单字符符号（YAML 子集：映射分隔符 + 列表标记）
+[symbol.base]
+colon = ":"
+sub = "-"
+
+# 多字符符号：YAML 子集无，但 lexer 硬依赖 symbol.extend 段（tokenize 读
+# extend_values），声明空表满足访问。
+[symbol.extend]
+
+# 括号：YAML 子集无括号，但 lexer 硬依赖 bracket 段（_validate_token_define），
+# 声明空 pairs 满足结构性校验（bracket_depth 恒为 0，缩进不受括号抑制）。
+[bracket]
+pairs = []
+
+[literal]
+# 引号字符串（双引号/单引号）
+string = "(\"[^\"]*\")|('[^']*')"
+# 数字（整数/小数）
+number = "-?\\d+(\\.\\d+)?"
+
+[id.id]
+id = "[a-zA-Z_][a-zA-Z0-9_]*"

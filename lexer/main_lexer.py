@@ -151,6 +151,10 @@ class Lexer:
         lex_text_len: int = len(lex_text)
         lex_text = lex_text + "\n"  # add a newline at the end
 
+        # 缩进深度每次 tokenize 重置：每个源文件是独立缩进上下文，
+        # 跨调用残留会导致新文件开头误发 space.dedent（YAML 缩进语言包暴露）。
+        self.indent_deep = 0
+
         # token pos relative
         text_idx: int = 0
         line_number: int = 1

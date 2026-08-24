@@ -1,0 +1,167 @@
+# ============================================================================
+# yaml（YAML 子集）语法规则 — 文档结构
+# ============================================================================
+# 迷你语言包：验证 tpc 的缩进 token 机制（space.indent/space.dedent）。
+#
+# 结构：
+#   Document（根块）→ body 循环解析 MappingEntry / SequenceItem
+#   MappingEntry：key: value（value 标量或缩进块）
+#   SequenceItem：- item（item 标量或缩进块）
+#   IndentBlock：space.indent 开始，body 循环，space.dedent 结束
+#
+# 缩进块归属：`key:` 后无标量时，@Value? 匹配 @IndentBlock（下一行的
+# space.indent），块正确挂在 MappingEntry 的 value 下（嵌套 AST）。
+# 注意：renderer 配置也在此文件（勿单独建 99_*.toml——load_all_toml
+# 加载所有 .toml，同名规则表会被后者整体覆盖，parser 配置丢失）。
+
+# ── Document — 根块（整个文件 = 映射/列表项序列） ──
+
+[Document]
+is_block = true
+
+[Document.parser]
+production = []
+
+[Document.parser.node]
+
+[Document.renderer.body]
+indent = false
+
+
+# ── MappingEntry — key: value ──
+
+[MappingEntry]
+is_statement = true
+
+[MappingEntry.parser]
+production = ["@Scalar", "symbol.base.colon", "@Value?"]
+
+[MappingEntry.parser.node]
+key = "$1"
+value = "$3"
+
+[MappingEntry.renderer.layout]
+line = [
+    { ref = "key" },
+    ": ",
+    { ref = "value" },
+]
+
+
+# ── SequenceItem — - item ──
+
+[SequenceItem]
+is_statement = true
+
+[SequenceItem.parser]
+production = ["symbol.base.sub", "@Value?"]
+
+[SequenceItem.parser.node]
+value = "$2"
+
+[SequenceItem.renderer.layout]
+line = [
+    "- ",
+    { ref = "value" },
+]
+
+
+# ── Value — 标量 或 缩进块 ──
+
+[Value.parser]
+production = ["@Scalar|@IndentBlock"]
+inline = true
+
+[Value.parser.node]
+value = "$1"
+
+
+# ── IndentBlock — 缩进块（space.indent 开始，space.dedent 结束） ──
+
+[IndentBlock]
+is_block = true
+
+# 块边界从 production 首尾字面 token 推导：
+#   block_start = "space.indent"，block_end = "space.dedent"
+# body 由 parse_block_body 循环 parse_sentence 解析子项。
+[IndentBlock.parser]
+production = ["space.indent", "space.dedent"]
+
+[IndentBlock.parser.node]
+
+# body 缩进由引用方（MappingEntry/SequenceItem 的 {ref="value"}）的
+# _render_inline 处理（Break + Nest），此处 indent = false 避免双重缩进。
+[IndentBlock.renderer.body]
+indent = false
+
+
+# ── Scalar — 标量（标识符/数字/字符串/布尔/null） ──
+
+[Scalar.parser]
+production = ["@Identifier|@Number|@StringLit|@BoolLit|@NullLit"]
+inline = true
+
+[Scalar.parser.node]
+value = "$1"
+
+
+# ── 标量原子 ──
+
+# Identifier — 裸标识符（localhost/true/null 等）
+[Identifier.parser]
+is_atom = true
+production = ["id"]
+
+[Identifier.parser.node]
+content = "$1.value"
+
+[Identifier.renderer.layout]
+ref = "content"
+
+
+# Number — 数字字面量
+[Number.parser]
+is_atom = true
+production = ["literal.number"]
+
+[Number.parser.node]
+value = "$1"
+
+[Number.renderer.layout]
+ref = "value"
+
+
+# StringLit — 引号字符串
+[StringLit.parser]
+is_atom = true
+production = ["literal.string"]
+
+[StringLit.parser.node]
+value = "$1"
+
+[StringLit.renderer.layout]
+ref = "value"
+
+
+# BoolLit — 布尔（true/false）
+[BoolLit.parser]
+is_atom = true
+production = ["(keyword.true|keyword.false)"]
+
+[BoolLit.parser.node]
+value = "$1"
+
+[BoolLit.renderer.layout]
+ref = "value"
+
+
+# NullLit — null
+[NullLit.parser]
+is_atom = true
+production = ["keyword.null"]
+
+[NullLit.parser.node]
+value = "$1"
+
+[NullLit.renderer.layout]
+ref = "value"

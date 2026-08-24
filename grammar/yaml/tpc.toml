@@ -1,0 +1,22 @@
+# tpc.toml — yaml（YAML 子集）语法包入口配置
+#
+# 迷你语言包：验证 tpc 的缩进 token 机制（space.indent/space.dedent）。
+# YAML 的块结构完全靠缩进定界（无大括号/end 关键字），是缩进语法的
+# 最纯粹验证样本。
+#
+# 子集范围：
+#   - 映射：key: value（value 为标量或缩进块）
+#   - 列表：- item（item 为标量或缩进块）
+#   - 标量：字符串/数字/布尔/null
+#   - 注释：# 行注释
+#   - 缩进：4 空格 = 1 级（[indent] level = 4）
+
+[lexer]
+token_base = { file = "base/_token.toml", required = true }
+lexer_base = { file = "base/_lexer.toml", required = true }
+token_lang = { file = "token.toml", required = true }
+number = { file = "base/_number.toml", section = "number", required = false }
+
+[parser]
+token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
+rules = { file = ["0*.toml"], required = true }

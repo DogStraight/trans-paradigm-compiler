@@ -1,0 +1,27 @@
+# _number.toml — yaml（YAML 子集）数字字面量形态声明
+#
+# YAML 子集：十进制整数/小数（含负数）。无十六进制/八进制/二进制。
+
+[[number.based]]
+name = "yaml_dec"
+size = { digits = "nonzero" }   # 非零开头十进制（0 由 yaml_zero 提供）
+base_prefix = "none"
+bases = []
+value_digits = { d = "dec" }
+value_allow = []
+
+[[number.based]]
+name = "yaml_zero"
+size = "none"
+base_prefix = "0"
+bases = []
+value_digits = { "0" = "dec" }
+value_allow = []
+
+[[number.based]]
+name = "yaml_neg"
+size = "none"
+base_prefix = "-"
+bases = []
+value_digits = { d = "dec" }
+value_allow = []

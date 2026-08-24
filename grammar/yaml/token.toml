@@ -1,0 +1,8 @@
+# token.toml — yaml（YAML 子集）语言关键字
+#
+# YAML 子集关键字：布尔（true/false）与 null。
+
+[id.keyword]
+true = "true"
+false = "false"
+null = "null"
