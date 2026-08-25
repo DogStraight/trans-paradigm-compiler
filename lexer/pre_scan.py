@@ -20,7 +20,10 @@ from core.config_registry import declare_cfg
 #   #sym:config = [pre_scan]
 #   格式: dict
 #     { context_keywords: list[str],
-#       decl: { kind: { keyword, ... }, ... } }
+#       decl: { kind: { keyword, ... }, ... },
+#       clean: [ { kind, start, end? }, ... ] }
+# clean 条目声明预扫描前的源文本清理形态（注释/字符串剥离）——
+# 语言知识（//、/* */、" 等形态）在配置，引擎不硬编码。
 _pre_scan_cfg: dict = declare_cfg("lexer.pre_scan", {}, __name__, "_pre_scan_cfg")
 
 
@@ -32,8 +35,10 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
     """从 ConfigRegistry 获取预扫描配置并编译。
 
     Args:
-        rules_dir: 规则目录；非 None 时兼作 _CACHE 缓存键（配置内容本身
-            从 Registry 读取，不按目录加载文件）。
+        rules_dir: 规则目录；非 None 时兼作 _CACHE 缓存键，并按该语言包
+            自包含解析（同 Lexer：不依赖最后一次 load_all 的全局状态——
+            同一进程跨语言时不会串用上一语言的 pre_scan 配置。yaml 未
+            声明 pre_scan → 空配置，不残留 verilog 的 decl/clean 规则）。
 
     Returns:
         编译后的配置字典，可直接传入 pre_scan()。
@@ -41,12 +46,56 @@ def load_pre_scan_config(rules_dir: str | None = None) -> dict:
     if rules_dir is not None and rules_dir in _CACHE:
         return _CACHE[rules_dir]
 
-    raw = dict(_pre_scan_cfg)
+    if rules_dir:
+        # 按语言包自包含解析（与 Lexer.__init__ 同模式）
+        from core.config_registry import ConfigRegistry
+        import os
+
+        resolved = ConfigRegistry.resolve(
+            rules_dir,
+            plugins_dir=os.path.join(rules_dir, "plugins"),
+        )
+        raw = dict(resolved.get("lexer.pre_scan", {}) or {})
+    else:
+        raw = dict(_pre_scan_cfg)
 
     result = _compile(raw, rules_dir)
     if rules_dir is not None:
         _CACHE[rules_dir] = result
     return result
+
+
+def _build_clean_regex(entry: dict) -> tuple[re.Pattern, str] | None:
+    """将一条 [[pre_scan.clean]] 声明编译为 (正则, 替换串) 对。
+
+    语言无关：只做通用形态→正则的映射（语言知识在配置）。
+      kind = "line"   → start 到行尾
+      kind = "block"  → start 到 end（可跨行）
+      kind = "string" → start 定界符到配对定界符（不跨行），替换为
+                        定界符对（避免两侧词粘连，如 module "x"( 中
+                        字符串被空串替换后 module 与 ( 不会拼词）
+    """
+    kind = entry.get("kind")
+    start = entry.get("start", "")
+    if not isinstance(start, str) or not start:
+        return None
+    if kind == "line":
+        return re.compile(re.escape(start) + r"[^\n]*"), ""
+    if kind == "block":
+        end = entry.get("end", "")
+        if not isinstance(end, str) or not end:
+            return None
+        return (
+            re.compile(re.escape(start) + r".*?" + re.escape(end), re.DOTALL),
+            "",
+        )
+    if kind == "string":
+        esc = re.escape(start)
+        return (
+            re.compile(esc + r"[^" + esc + r"\n]*" + esc),
+            start + start,
+        )
+    return None
 
 
 def _compile(config: dict, rules_dir: str | None = None) -> dict:
@@ -72,11 +121,21 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
     all_kws = "|".join(cfg.get("keyword", "") for cfg in decls.values())
     fallback = re.compile(rf"\b({all_kws})\s+(\w+)") if all_kws else None
 
+    # 源文本清理正则（[[pre_scan.clean]]，配置驱动——无声明则空列表不清理）
+    clean_patterns: list[tuple[re.Pattern, str]] = []
+    for entry in config.get("clean", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        built = _build_clean_regex(entry)
+        if built is not None:
+            clean_patterns.append(built)
+
     result = {
         "patterns": patterns,
         "fallback": fallback,
         "context_keywords": context_kws,
         "hints": hints,
+        "clean_patterns": clean_patterns,
     }
     if rules_dir is not None:
         _CACHE[rules_dir] = result
@@ -109,15 +168,12 @@ def _build_regex(
 
 
 # ── 文本预处理 ──
-_REMOVE_COMMENTS = [
-    (re.compile(r"//[^\n]*"), ""),
-    (re.compile(r"/\*.*?\*/", re.DOTALL), ""),
-    (re.compile(r'"[^"\n]*"'), '""'),
-]
+# 清理形态（注释/字符串）由配置声明（[[pre_scan.clean]]）构建，引擎不
+# 硬编码任何语言的注释/字符串形态。
 
 
-def _clean_text(text: str) -> str:
-    for pattern, replacement in _REMOVE_COMMENTS:
+def _clean_text(text: str, clean_patterns: list) -> str:
+    for pattern, replacement in clean_patterns:
         text = pattern.sub(replacement, text)
     return text
 
@@ -146,8 +202,9 @@ def pre_scan(
     patterns = config.get("patterns", [])
     fallback = config.get("fallback")
     context_kws = config.get("context_keywords", frozenset())
+    clean_patterns = config.get("clean_patterns", [])
 
-    cleaned = _clean_text(text)
+    cleaned = _clean_text(text, clean_patterns)
     sym: dict[str, str] = {}
 
     for kind, pattern in patterns:

@@ -12,6 +12,26 @@
 #   参与 pre_symbols 消歧，应在插件自己的 tpc.toml 声明 [lexer] pre_scan，
 #   不要往这里加——基础文件只负责基础的 id 槽位。
 
+# ── 源文本清理形态（扫描前的注释/字符串剥离） ──
+# 预扫描把注释/字符串替换为空白，避免其内容被误识别为声明名。
+# 形态是语言知识，在此声明（引擎只做通用正则构建，不硬编码 //、/* */、"）：
+#   kind = "line"   → 行注释（start 到行尾）
+#   kind = "block"  → 块注释（start 到 end，可跨行）
+#   kind = "string" → 字符串字面量（start 定界符到配对定界符，不跨行；
+#                     替换为定界符对，避免两侧词粘连）
+[[pre_scan.clean]]
+kind = "line"
+start = "//"
+
+[[pre_scan.clean]]
+kind = "block"
+start = "/*"
+end = "*/"
+
+[[pre_scan.clean]]
+kind = "string"
+start = '"'
+
 [pre_scan]
 
 # 跟在声明关键词后面但不是声明名的语境关键词
