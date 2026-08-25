@@ -233,6 +233,26 @@
       + 跨阶段数据通道（下划线属性/注释锚点/attachment/变换回调/root_scope/宏 marker）；
       MODEL_INDEX 已登记
 
+### P2.6 tpc-check 外部 checker 插件协议（2026-08-25 记录，Veryl 调研触发，非发布阻塞）
+
+> 拿来主义 + 声明场景：语言包 plugins/ 声明**外部 checker**（官方检查，如
+> `veryl check`/verible/slang），tpc 只**声明自己的检查场景**（官方 checker 的
+> 缺口：格式化保真/变换等价/语法资产一致性）。参考 hdl_checker
+> "Repurposing existing HDL tools" 路线（references.md 已有调研）。
+
+- [ ] **插件声明协议**：`grammar/<lang>/plugins/checker/tpc.toml` 两段——
+      `[checker.external]`（命令 + 输出解析声明，收口稳定接口：JSON 输出/稳定
+      规则 ID，防"后端版本耦合"坑）与 `[checker.scenarios]`（tpc 自管场景：
+      format_fidelity / transform_equivalence / 语法资产一致性）
+- [ ] **诊断归一化**：外部 checker 输出（miette/JSON/文本）转 tpc 统一诊断模型——
+      对齐 P1.9 稳定规则 ID + 机器可读输出结论（verible/slang/svlint 均有 JSON 实证）
+- [ ] **场景声明语法**：检查场景 = TOML 数据（gate 引用 run_all/差分基线），
+      延续"语言知识不进代码"哲学——引擎只做通用场景执行器
+- [ ] 验证路径：`grammar/veryl/plugins/checker/` 先做 veryl 本体验证（官方检查
+      直连 + 自管场景补缺口），再推广 verible/slang
+- 关联：P1.9（诊断模型）为其前置；Veryl 调研落档 references.md（本地镜像
+      `E:\research\veryl`）
+
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
 ### P3.1 前置：AST 节点 token span 绑定（解析期）
