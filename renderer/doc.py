@@ -164,6 +164,44 @@ class Union(Doc):
     broken: Doc
 
 
+@dataclass
+class Pad(Doc):
+    """
+    对齐 padding（Veryl Pad 语义，渲染层深读闭环）。
+
+    无条件输出 width 个空格，计入 fits 宽度。
+    flat/broken 均输出——对齐 padding 参与布局决策（fits 判定），
+    使对齐不再依赖"渲染后处理"（世界 B column_align 的痛点）。
+    """
+
+    width: int = 0
+
+
+@dataclass
+class IfBreakPad(Doc):
+    """
+    断行对齐 padding（Veryl IfBreakPad 语义）。
+
+    仅 broken 模式输出 width 个空格；flat 模式 → 空（0 计 fits）。
+    典型用途：断行后补对齐（`aaaaaaaa   :` 的 ':' 前 padding 只在
+    断行时出现，flat 时不该占位）。
+    """
+
+    width: int = 0
+
+
+@dataclass
+class IfFlatPad(Doc):
+    """
+    扁平对齐 padding（Veryl IfFlatPad 语义）。
+
+    仅 flat 模式输出 width 个空格；broken 模式 → 空。
+    计入 fits 宽度——flat 时对齐占位，超宽可强制 group 断行。
+    """
+
+    width: int = 0
+
+
 # ── 辅助构造器 ──
 
 
@@ -201,6 +239,15 @@ def flatten(doc: Doc) -> Doc:
         case LineSuffix(text):
             # flat 模式：suffix 直接显示（跟在当前行尾）
             return Text(text)
+        case Pad(width):
+            # 恒输出：flat 保留 padding（对齐参与 fits）
+            return Text(" " * width) if width else Empty()
+        case IfBreakPad(_):
+            # 仅 broken 输出：flat 模式消失
+            return Empty()
+        case IfFlatPad(width):
+            # 仅 flat 输出：flat 保留 padding（计入 fits，超宽可强制断行）
+            return Text(" " * width) if width else Empty()
         case Prefix(i, d):
             flat_inner = flatten(d)
             if isinstance(flat_inner, Empty):
@@ -286,8 +333,14 @@ def layout(doc: Doc, max_width: int = 80) -> str:
     return _best(max_width, 0, _resolve_line_suffix(doc))
 
 
-def _best(w: int, k: int, doc: Doc) -> str:
-    """核心布局函数：返回渲染后的字符串"""
+def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
+    """核心布局函数：返回渲染后的字符串
+
+    budget = 本项之后同层兄弟的 flat 宽度（到首个硬 break 为止）。
+    仅 Union 的 flat 判定使用（预算 = w - k - budget）——防止
+    "group 单独 fits、组合 continuation 溢出"（Veryl fits_flat
+    语义）。渲染路径本身不累计列状态（文本宽度事后可量）。
+    """
     match doc:
         case Empty():
             return ""
@@ -306,35 +359,126 @@ def _best(w: int, k: int, doc: Doc) -> str:
 
         case Concat(docs):
             result: list[str] = []
-            for d in docs:
-                s = _best(w, k, d)
+            for i, d in enumerate(docs):
+                # 本项同行的前后兄弟宽度（到首个换行点为止）——
+                # Union 判定预算 = w - k - 前面已占 - 后续将占
+                before_w = 0
+                for sibling in reversed(docs[:i]):
+                    if _has_break(sibling):
+                        break  # 更早的兄弟在换行点之前（不在本行）
+                    before_w += _flat_w(sibling)
+                rest_w = 0
+                for sibling in docs[i + 1 :]:
+                    if _has_break(sibling):
+                        break  # 换行点后的兄弟在新行（不在本行）
+                    rest_w += _flat_w(sibling)
+                s = _best(w, k, d, before_w + rest_w)
                 result.append(s)
             return "".join(result)
 
         case Nest(i, d):
-            return _best(w, k + i, d)
+            return _best(w, k + i, d, budget)
 
         case Align(a, d):
             # 后续行缩进列 = max(当前缩进, 对齐列)；首行不受影响
-            return _best(w, max(k, a), d)
+            return _best(w, max(k, a), d, budget)
 
         case Fill(docs):
             return _fill(w, k, docs)
 
         case Prefix(i, d):
-            return " " * i + _best(w, k + i, d)
+            return " " * i + _best(w, k + i, d, budget)
 
         case Union(flat, broken):
-            # 尝试 flat 版本
-            flat_s = _best(w, k, flat)
+            # flat 判定：flat 版首行宽度 ≤ 剩余预算（w - k - budget，
+            # budget 含本项之后兄弟宽度——continuation 感知）。
+            flat_s = _best(w, k, flat, budget)
             first_line = flat_s.split("\n")[0] if flat_s else ""
-            if len(first_line) <= w - k:
+            if len(first_line) <= w - k - budget:
                 return flat_s
-            # flat 超宽，回退到 broken
-            return _best(w, k, broken)
+            # flat 超宽（含后续 continuation），回退到 broken
+            return _best(w, k, broken, budget)
+
+        case Pad(width):
+            # 恒输出（flat/broken 均输出，对齐参与布局）
+            return " " * width
+
+        case IfBreakPad(width):
+            # 仅 broken 模式输出（Union 选 broken 时走到这里）
+            return " " * width
+
+        case IfFlatPad(_):
+            # 仅 flat 模式输出；broken 模式消失（flat 分支已输出）
+            return ""
 
         case _:
             return ""
+
+
+def _has_hardline(doc: Doc) -> bool:
+    """doc（flat 化后）是否含硬换行（Break/LineBreak）。"""
+    match doc:
+        case Break() | LineBreak():
+            return True
+        case Concat(docs):
+            return any(_has_hardline(d) for d in docs)
+        case Nest(_, d) | Align(_, d) | Prefix(_, d):
+            return _has_hardline(d)
+        case Union(flat, _):
+            return _has_hardline(flat)
+        case Fill(docs):
+            return any(_has_hardline(d) for d in docs)
+        case _:
+            return False
+
+
+def _has_break(doc: Doc) -> bool:
+    """doc 是否含换行点（Line/Break/LineBreak）——Union 首行判定截断用。"""
+    match doc:
+        case Line() | Break() | LineBreak():
+            return True
+        case Concat(docs):
+            return any(_has_break(d) for d in docs)
+        case Nest(_, d) | Align(_, d) | Prefix(_, d):
+            return _has_break(d)
+        case Union(flat, _):
+            return _has_break(flat)
+        case Fill(docs):
+            return any(_has_break(d) for d in docs)
+        case _:
+            return False
+
+
+def _flat_w(doc: Doc) -> int:
+    """doc 的 flat 版本宽度（纯计算，不走 _best——避免 _best↔_flat_width 互递归）。
+
+    flat 版语义：Line → 1 空格；Break/LineBreak 保留（硬换行）；
+    Pad/IfFlatPad 计宽；IfBreakPad 0 宽。
+    """
+    match doc:
+        case Text(s):
+            return len(s)
+        case Line():
+            return 1  # flat 模式：空格
+        case Concat(docs):
+            total = 0
+            for d in docs:
+                total += _flat_w(d)
+                if _has_hardline(d):
+                    break
+            return total
+        case Nest(_, d) | Align(_, d) | Prefix(_, d):
+            return _flat_w(d)
+        case Union(flat, _):
+            return _flat_w(flat)
+        case Fill(docs):
+            return sum(_flat_w(d) for d in docs)
+        case Pad(width) | IfFlatPad(width):
+            return width
+        case IfBreakPad(_):
+            return 0
+        case _:
+            return 0
 
 
 def _flat_width(doc: Doc) -> int:
@@ -408,6 +552,12 @@ def _fits(w: int, doc: Doc) -> bool:
                         col += len(s)
                         if col > w:
                             return False
+                    case Pad(width) | IfFlatPad(width):
+                        col += width
+                        if col > w:
+                            return False
+                    case IfBreakPad(_):
+                        pass  # flat 布局 0 宽
                     case Nest(_, inner):
                         # Nest 不影响 fits（缩进只影响后续行）
                         if not _fits(w - col, inner):
@@ -451,5 +601,11 @@ def _fits(w: int, doc: Doc) -> bool:
             return _fits(w - i, d)
         case Union(flat, _):
             return _fits(w, flat)
+        case Pad(width) | IfFlatPad(width):
+            # 恒输出 / flat 输出：计入宽度
+            return width <= w
+        case IfBreakPad(_):
+            # 仅 broken 输出：flat 布局 0 宽
+            return True
         case _:
             return True
