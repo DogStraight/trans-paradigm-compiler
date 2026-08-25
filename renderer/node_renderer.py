@@ -12,7 +12,7 @@ from .doc import Doc, Empty, Text, Break, Concat, Nest
 from .primitives import eval_expr
 
 
-def _body_indent(body_cfg: dict, indent_spaces: int) -> int:
+def _body_indent(body_cfg: dict, renderer: Any) -> int:
     """body_cfg["indent"] → body 缩进格数。
 
     true = 1 级（indent_spaces 格），false = 0 级（不缩进），int = N 级。
@@ -21,13 +21,12 @@ def _body_indent(body_cfg: dict, indent_spaces: int) -> int:
     level = body_cfg.get("indent", 1)
     if isinstance(level, bool):
         level = 1 if level else 0
-    return level * indent_spaces
+    return renderer._indent(level)
 
 
 def render_node(
     node: Node,
     layout: dict,
-    indent: int,
     renderer: Any,
 ) -> Doc:
     """渲染节点为独立块
@@ -39,7 +38,6 @@ def render_node(
     Args:
         node: 当前 AST 节点
         layout: 该节点的布局配置
-        indent: 当前缩进层级（仅用于传递，不用于 Prefix）
         renderer: Renderer 实例
 
     Returns:
@@ -48,20 +46,19 @@ def render_node(
     head_expr = layout.get("layout") or layout.get("head")
     body_cfg = layout.get("body")
     tail_cfg = layout.get("tail")
-    indent_spaces = len(renderer._INDENT_STR)
 
     parts: list[Doc] = []
 
     # --- head ---
     if head_expr:
-        head_doc = eval_expr(head_expr, node, indent, layout, renderer)
+        head_doc = eval_expr(head_expr, node, layout, renderer)
         if head_doc is not None:
             parts.append(head_doc)
 
     # --- body ---
     if body_cfg:
-        body_docs = render_body(node, indent + 1, body_cfg, layout, renderer)
-        body_indent = _body_indent(body_cfg, indent_spaces)
+        body_docs = render_body(node, body_cfg, layout, renderer)
+        body_indent = _body_indent(body_cfg, renderer)
         for bd in body_docs:
             parts.append(Break(body_indent))
             parts.append(Nest(body_indent, bd))
@@ -77,7 +74,7 @@ def render_node(
             tail_doc = Text(tail_cfg["text"]) if tail_cfg.get("text") else None
             tb = tail_cfg.get("break", 0)
         else:
-            tail_doc = eval_expr(tail_cfg, node, indent, layout, renderer)
+            tail_doc = eval_expr(tail_cfg, node, layout, renderer)
             tb = layout.get("tail_break", 0)
     if tail_doc is not None:
         tb = layout.get("tail_break", tb)
@@ -94,7 +91,6 @@ def render_node(
 def render_inline(
     node: Node,
     layout: dict,
-    indent: int,
     renderer: Any,
 ) -> Doc:
     """内联渲染节点（用于 ref 在 line/group/join 中引用子节点时）
@@ -102,12 +98,11 @@ def render_inline(
     render_node 的别名：两者实现刻意一致（都不加 Prefix，body 缩进由
     body_cfg["indent"] 控制）。保持独立入口仅为调用点语义区分。
     """
-    return render_node(node, layout, indent, renderer)
+    return render_node(node, layout, renderer)
 
 
 def render_body(
     node: Node,
-    indent: int,
     body_cfg: Optional[dict],
     parent_layout: Optional[dict],
     renderer: Any,
@@ -175,7 +170,7 @@ def render_body(
     children_list = [c for c in children if isinstance(c, Node)]
     for i, child in enumerate(children_list):
         merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
-        d = render_node(child, merged, indent, renderer)
+        d = render_node(child, merged, renderer)
         if not isinstance(d, Empty):
             if body_cfg and isinstance(body_cfg, dict):
                 sep = body_cfg.get("sep")

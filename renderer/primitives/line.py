@@ -6,8 +6,8 @@ from .registry import register
 
 
 @register("line")
-def eval_line(expr: dict, node: Node, indent: int,
-              parent_layout: dict | None, renderer: Any) -> Doc | None:
+def eval_line(expr: dict, node: Node, parent_layout: dict | None,
+              renderer: Any) -> Doc | None:
     nest_level = expr.get("nest", 0)
     parts: list[Doc] = []
     pending_nest = 0
@@ -16,7 +16,7 @@ def eval_line(expr: dict, node: Node, indent: int,
     for e in expr["line"]:
         if isinstance(e, dict) and (e.get("soft") or e.get("break")):
             indent_level = e.get("indent", 0)
-            extra_indent = indent_level * len(renderer._INDENT_STR)
+            extra_indent = renderer._indent(indent_level)
             if e.get("break"):
                 parts.append(Break(extra_indent))
             else:
@@ -25,7 +25,7 @@ def eval_line(expr: dict, node: Node, indent: int,
             if indent_level > 0:
                 pending_nest += extra_indent
         else:
-            d = renderer._eval(e, node, indent, parent_layout)
+            d = renderer._eval(e, node, parent_layout)
             if d is not None:
                 if not isinstance(d, Empty):
                     if pending_nest > 0:
@@ -40,5 +40,5 @@ def eval_line(expr: dict, node: Node, indent: int,
     if has_soft:
         doc = group(doc)
     if nest_level:
-        doc = Nest(nest_level * len(renderer._INDENT_STR), doc)
+        doc = Nest(renderer._indent(nest_level), doc)
     return doc

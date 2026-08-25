@@ -19,7 +19,10 @@ def _make_fake_renderer():
         _INDENT_STR = "    "
         _layouts = {}
 
-        def _render_inline(self, child_node, layout_cfg, indent):
+        def _indent(self, level):
+            return level * len(self._INDENT_STR)
+
+        def _render_inline(self, child_node, layout_cfg):
             val = getattr(child_node, "value", None)
             if val is not None:
                 return Text(str(val))
@@ -33,15 +36,15 @@ def _make_fake_renderer():
                 return getattr(node, items_spec, [])
             return []
 
-        def _eval(self, expr, node, indent, parent_layout=None):
-            return eval_expr(expr, node, indent, parent_layout, self)
+        def _eval(self, expr, node, parent_layout=None):
+            return eval_expr(expr, node, parent_layout, self)
 
     return FakeRenderer()
 
 
 def _render_expr(expr, node):
     r = _make_fake_renderer()
-    doc = eval_expr(expr, node, indent=0, parent_layout=None, renderer=r)
+    doc = eval_expr(expr, node, parent_layout=None, renderer=r)
     if doc is None:
         return ""
     return layout(doc)
@@ -58,7 +61,7 @@ def _n(node_name, **kw):
 class TestTextPrimitive:
     def test_str_expr_returns_text(self):
         r = _make_fake_renderer()
-        doc = eval_expr("hello", _n("x"), 0, None, r)
+        doc = eval_expr("hello", _n("x"), None, r)
         assert isinstance(doc, Text)
         assert doc.text == "hello"
 
@@ -67,7 +70,7 @@ class TestTextPrimitive:
 
     def test_non_dict_non_str_fallback(self):
         r = _make_fake_renderer()
-        doc = eval_expr(42, _n("x"), 0, None, r)
+        doc = eval_expr(42, _n("x"), None, r)
         assert isinstance(doc, Text)
         assert doc.text == "42"
 

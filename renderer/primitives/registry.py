@@ -20,7 +20,7 @@ def register(*keys: str) -> Callable:
 
     Usage:
         @register("ref")
-        def eval_ref(expr, node, indent, parent_layout, renderer):
+        def eval_ref(expr, node, parent_layout, renderer):
             ...
     """
     def wrapper(handler: Callable) -> Callable:

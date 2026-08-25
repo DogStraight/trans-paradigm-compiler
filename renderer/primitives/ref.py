@@ -6,8 +6,8 @@ from .registry import register
 
 
 @register("ref")
-def eval_ref(expr: dict, node: Node, indent: int,
-             parent_layout: dict | None, renderer: Any) -> Doc | None:
+def eval_ref(expr: dict, node: Node, parent_layout: dict | None,
+             renderer: Any) -> Doc | None:
     child = getattr(node, expr["ref"], None)
 
     parts: List[Doc] = []
@@ -16,7 +16,7 @@ def eval_ref(expr: dict, node: Node, indent: int,
     if child is not None:
         if isinstance(child, Node):
             merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
-            d = renderer._render_inline(child, merged, indent)
+            d = renderer._render_inline(child, merged)
             if not isinstance(d, Empty):
                 parts.append(d)
 
@@ -24,7 +24,7 @@ def eval_ref(expr: dict, node: Node, indent: int,
             for item in child:
                 if isinstance(item, Node):
                     merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
-                    d = renderer._render_inline(item, merged, indent)
+                    d = renderer._render_inline(item, merged)
                 else:
                     d = Text(str(item))
                 if not isinstance(d, Empty):
@@ -37,7 +37,7 @@ def eval_ref(expr: dict, node: Node, indent: int,
     err_node = getattr(node, "_error", None)
     if isinstance(err_node, Node):
         err_layout = renderer._layouts.get("Error", {})
-        err_doc = renderer._render_inline(err_node, err_layout, indent)
+        err_doc = renderer._render_inline(err_node, err_layout)
         if not isinstance(err_doc, Empty):
             if parts:
                 parts.append(Text(" "))

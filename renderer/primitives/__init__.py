@@ -36,7 +36,6 @@ __all__ = [
 def eval_expr(
     expr: Any,
     node: Node,
-    indent: int,
     parent_layout: dict | None,
     renderer: Any,  # Renderer 实例，用于回调 _render_inline/_render_body 等
 ) -> Doc | None:
@@ -45,7 +44,6 @@ def eval_expr(
     Args:
         expr: TOML 表达式（str / dict / list）
         node: 当前 AST 节点
-        indent: 当前缩进层级
         parent_layout: 父节点的 layout 配置（用于 override）
         renderer: Renderer 实例，提供 _render_inline / _render_body 等方法
 
@@ -56,7 +54,7 @@ def eval_expr(
         return None
 
     if isinstance(expr, str):
-        return eval_text(expr, node, indent, parent_layout, renderer)
+        return eval_text(expr, node, parent_layout, renderer)
 
     if not isinstance(expr, dict):
         return Text(str(expr))
@@ -68,7 +66,7 @@ def eval_expr(
 
     for key, handler in get_registry():
         if key in expr:
-            return handler(expr, node, indent, parent_layout, renderer)
+            return handler(expr, node, parent_layout, renderer)
 
     return None
 

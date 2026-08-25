@@ -213,6 +213,11 @@
 > 动手前先写 ADR-0006（边界分析 + 资产盘点 + 迁移策略作为输入文档）。
 > 第一步已落地（a1b29ed）：body_cfg["indent"] 三态生效 + render_inline 合并 +
 > tail_break 转换删除（测试 tests/engine/renderer/test_renderer_body_indent.py）。
+> 阶段 1 已落地（ADR-0006）：幽灵 indent 参数从原语协议签名/渲染回调链
+> 全部移除（render_node/render_inline/render_body/eval_expr/各原语 handler/
+> Renderer._render_*），缩进换算收敛为 Renderer._indent(level) 唯一换算点
+> （body_cfg["indent"] 与 expr {indent: N} 均以其为单位）；806 pytest +
+> e2e 全绿 + pyright renderer 0 errors。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为

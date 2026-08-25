@@ -8,7 +8,7 @@ from .registry import register
 
 @register("join")
 def eval_join(
-    expr: dict, node: Node, indent: int, parent_layout: dict | None, renderer: Any
+    expr: dict, node: Node, parent_layout: dict | None, renderer: Any
 ) -> Doc | None:
     sep_text = expr["join"].rstrip()
     nest_level = expr.get("nest", 0)
@@ -33,7 +33,7 @@ def eval_join(
     for item in items:
         if isinstance(item, Node):
             merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
-            d = renderer._render_inline(item, merged, indent)
+            d = renderer._render_inline(item, merged)
         else:
             d = Text(str(item))
         if not isinstance(d, Empty):
@@ -70,5 +70,5 @@ def eval_join(
     else:
         doc = group(Concat(result))
     if nest_level:
-        doc = Nest(nest_level * len(renderer._INDENT_STR), doc)
+        doc = Nest(renderer._indent(nest_level), doc)
     return doc

@@ -6,8 +6,8 @@ from .registry import register
 
 
 @register("opt")
-def eval_opt(expr: dict, node: Node, indent: int,
-             parent_layout: dict | None, renderer: Any) -> Doc:
+def eval_opt(expr: dict, node: Node, parent_layout: dict | None,
+             renderer: Any) -> Doc:
     inner = expr["opt"]
 
     # 检查引用是否缺失
@@ -28,5 +28,5 @@ def eval_opt(expr: dict, node: Node, indent: int,
             if getattr(node, ref, None) is None:
                 return Empty()
 
-    inner_doc = renderer._eval(inner, node, indent, parent_layout)
+    inner_doc = renderer._eval(inner, node, parent_layout)
     return inner_doc if inner_doc is not None else Empty()

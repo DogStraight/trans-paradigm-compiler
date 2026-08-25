@@ -59,36 +59,44 @@ class Renderer:
         self._INDENT_STR = style["indent_str"]
         self._MAX_INLINE = style["max_inline"]
 
+    # ── 缩进统一模型（ADR-0006 阶段 1）──
+    # 缩进只有两个来源，均以 _INDENT_STR 为"单位"换算：
+    #   - body_cfg["indent"]（body 段，node_renderer._body_indent 调用）
+    #   - expr {indent: N}（line/soft/break 原语）
+    # _indent(level) 是唯一换算点："N 级 × 单位格数"。
+    def _indent(self, level: int) -> int:
+        """缩进级别 → 空格数（唯一换算点）。"""
+        return level * len(self._INDENT_STR)
+
     # ── 入口 ──
-    def render(self, node: Node, indent: int = 0) -> str:
+    def render(self, node: Node) -> str:
         """渲染完整 AST 为格式化文本"""
         node = normalize_ast(node, self._layouts)
         if not isinstance(node, Node):
             return str(node) if node else ""
-        doc = self._render_node(node, self._layouts.get(node.node_name, {}), indent)
+        doc = self._render_node(node, self._layouts.get(node.node_name, {}))
         return layout(doc, self._MAX_INLINE)
 
     # ── 节点渲染（委托到 node_renderer）──
-    def _render_node(self, node: Node, layout_cfg: dict, indent: int) -> Doc:
-        return render_node(node, layout_cfg, indent, self)
+    def _render_node(self, node: Node, layout_cfg: dict) -> Doc:
+        return render_node(node, layout_cfg, self)
 
-    def _render_inline(self, node: Node, layout_cfg: dict, indent: int) -> Doc:
-        return render_inline(node, layout_cfg, indent, self)
+    def _render_inline(self, node: Node, layout_cfg: dict) -> Doc:
+        return render_inline(node, layout_cfg, self)
 
     def _render_body(
         self,
         node: Node,
-        indent: int,
         body_cfg: dict | None = None,
         parent_layout: dict | None = None,
     ) -> list[Doc]:
-        return render_body(node, indent, body_cfg, parent_layout, self)
+        return render_body(node, body_cfg, parent_layout, self)
 
     def _resolve_items(self, node: Node, items_spec: str | None) -> list[Any]:
         return resolve_items(node, items_spec, self)
 
     # ── DSL 求值（委托到 primitives）──
     def _eval(
-        self, expr: Any, node: Node, indent: int, parent_layout: dict | None = None
+        self, expr: Any, node: Node, parent_layout: dict | None = None
     ) -> Doc | None:
-        return eval_expr(expr, node, indent, parent_layout, self)
+        return eval_expr(expr, node, parent_layout, self)

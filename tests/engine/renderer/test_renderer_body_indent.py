@@ -18,13 +18,16 @@ def _make_fake_renderer():
         _INDENT_STR = "    "
         _children_field = "sub_node"
 
+        def _indent(self, level):
+            return level * len(self._INDENT_STR)
+
         def _get_merged_layout(self, parent_layout, child_name):
             return {"layout": {"ref": "value"}}
 
-        def _eval(self, expr, node, indent, parent_layout=None):
+        def _eval(self, expr, node, parent_layout=None):
             from renderer.primitives import eval_expr
 
-            return eval_expr(expr, node, indent, parent_layout, self)
+            return eval_expr(expr, node, parent_layout, self)
 
     return FakeRenderer()
 
@@ -35,7 +38,7 @@ def _render_body_cfg(body_cfg):
     y = Node("Item", value="y")
     node = Node("Block", sub_node=[x, y])
     fake = _make_fake_renderer()
-    doc = render_node(node, {"body": body_cfg}, 0, fake)
+    doc = render_node(node, {"body": body_cfg}, fake)
     return layout(doc).splitlines()
 
 
