@@ -5,6 +5,8 @@ All language-specific knowledge comes from TOML layout rules.
 The AST normalizer converts parser-internal constructs
 (keyword/symbol/optional/repeat/sequence/first+rest)
 before rendering.
+
+Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：世界 A 入口）
 """
 
 from typing import Any

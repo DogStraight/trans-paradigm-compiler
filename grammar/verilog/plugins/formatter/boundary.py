@@ -8,6 +8,8 @@
   - 从语法规则自动推导 token → ScopeKind 映射
   - ifdef/else/endif 分支感知（分支内独立追踪，endif 处收敛校验）
   - 行级别 scope 快照 + 块头/块尾标记 + 行内注释标记
+
+Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 3 带结构行的骨架）
 """
 
 from __future__ import annotations

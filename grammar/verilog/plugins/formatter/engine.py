@@ -1,6 +1,8 @@
 """engine.py — 格式化 pass 编排引擎
 
 接收从 boundary 扫描得到的行上下文序列，按配置驱动依次执行 pass。
+
+Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 3 世界 B 升级目标）
 """
 
 from __future__ import annotations

@@ -5,6 +5,8 @@ doc.py — Doc IR (漂亮打印机中间表示)
 
 Doc 是纯数据结构，不执行任何渲染逻辑。
 布局算法 `layout(doc, width)` 将 Doc 树渲染为字符串。
+
+Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 2 原语升级的扩展点）
 """
 
 from dataclasses import dataclass
