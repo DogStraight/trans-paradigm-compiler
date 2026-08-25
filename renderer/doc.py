@@ -86,6 +86,57 @@ class Nest(Doc):
 
 
 @dataclass
+class Align(Doc):
+    """
+    绝对列对齐（Prettier align 语义，ADR-0006 阶段 2 新增）。
+
+    除首行外，所有换行的缩进列 = max(当前缩进列, align)。
+    首行不受影响（仍从当前列渲染）。
+    与 Nest（相对偏移）互补：Align 设绝对列，内部嵌套 Nest 仍相对偏移。
+
+    典型用途：跨行对齐（如端口声明 name 列）——group 二元模型表达不了
+    的"组内列宽统一"，由 Align 给出基准列。
+    """
+
+    align: int
+    doc: Doc
+
+
+@dataclass
+class Fill(Doc):
+    """
+    流式折行（Prettier fill 语义，ADR-0006 阶段 2 新增）。
+
+    docs 是 内容/分隔符 交替序列：[item0, sep0, item1, sep1, ...]。
+    逐元素贪心放置：
+      - 分隔符（通常为 Line）：当前行放得下 → 空格；放不下 → 换行 + 缩进
+      - 内容项：放不下时换行后再放
+    与 group（整体二选一）不同：fill 是逐元素决策，可产生"折了几行、
+    其余保持一行"的中间态。
+    """
+
+    docs: list[Doc]
+
+
+@dataclass
+class LineSuffix(Doc):
+    """
+    行尾锚定（Prettier lineSuffix 语义，ADR-0006 阶段 2 新增）。
+
+    内容（通常为行尾注释文本）推迟到"下一个换行点之前"输出：
+      Concat([a, LineSuffix("// note"), b, Line(), c]) →
+      渲染为 "a b // note\nc"（suffix 跨过 b 锚定在行尾）。
+
+    layout() 入口先经 _resolve_line_suffix 重写为
+    Concat 内换行前的 Text，_best 内核无感知。
+    与既有 inline_comment.py 锚点回插互补：前者是 Doc 一等公民，
+    后者是渲染后字符串级后处理。
+    """
+
+    text: str
+
+
+@dataclass
 class Prefix(Doc):
     """
     首行缩进 + 后续行 Nest 的统一原语。
@@ -142,6 +193,14 @@ def flatten(doc: Doc) -> Doc:
             return Concat([flatten(d) for d in docs])
         case Nest(i, d):
             return Nest(i, flatten(d))
+        case Align(a, d):
+            return Align(a, flatten(d))
+        case Fill(docs):
+            # fill 扁平化：分隔符（Line）→ 空格，内容拼接
+            return Concat([flatten(d) for d in docs])
+        case LineSuffix(text):
+            # flat 模式：suffix 直接显示（跟在当前行尾）
+            return Text(text)
         case Prefix(i, d):
             flat_inner = flatten(d)
             if isinstance(flat_inner, Empty):
@@ -163,6 +222,59 @@ def nest(indent: int, doc: Doc) -> Doc:
 # ── Layout 算法 ──
 
 
+def _resolve_line_suffix(doc: Doc) -> Doc:
+    """将 LineSuffix 内容推迟到下一个换行点之前（行尾锚定）。
+
+    规则（Prettier lineSuffix 语义的 Doc 层实现）：
+      - 遍历 Concat 序列，收集挂起的 suffix 文本；
+      - 遇到 Line/Break/LineBreak（换行点）→ 先把挂起 suffix 作为
+        Text 插入到换行前；
+      - 序列结束仍有挂起 → 追加到序列尾（doc 末尾即行尾）；
+      - Nest/Align/Prefix/Union 递归处理；Fill 内不跨项推迟
+        （内容项内 LineSuffix 就地文本化）。
+    """
+    match doc:
+        case LineSuffix(text):
+            return Text(text)  # 顶层孤立 suffix：直接显示
+        case Concat(docs):
+            out: list[Doc] = []
+            pending: list[str] = []
+            for d in docs:
+                if isinstance(d, LineSuffix):
+                    pending.append(d.text)
+                    continue
+                resolved = _resolve_line_suffix(d)
+                if isinstance(resolved, (Line, Break, LineBreak)):
+                    if pending:
+                        out.append(Text("".join(pending)))
+                        pending = []
+                    out.append(resolved)
+                elif isinstance(resolved, Empty):
+                    if pending:
+                        # 子结构为空但 suffix 挂起：保留，等下一个换行点
+                        continue
+                else:
+                    out.append(resolved)
+            if pending:
+                out.append(Text("".join(pending)))
+            return Concat(out)
+        case Nest(i, d):
+            return Nest(i, _resolve_line_suffix(d))
+        case Align(a, d):
+            return Align(a, _resolve_line_suffix(d))
+        case Prefix(i, d):
+            return Prefix(i, _resolve_line_suffix(d))
+        case Union(flat, broken):
+            return Union(
+                _resolve_line_suffix(flat), _resolve_line_suffix(broken)
+            )
+        case Fill(docs):
+            # Fill 内分隔符是换行点：suffix 若在内容项里，就地显示
+            return Fill([_resolve_line_suffix(d) for d in docs])
+        case _:
+            return doc
+
+
 def layout(doc: Doc, max_width: int = 80) -> str:
     """
     宽度感知的 Doc → 字符串渲染。
@@ -171,7 +283,7 @@ def layout(doc: Doc, max_width: int = 80) -> str:
     w = 最大行宽
     k = 当前缩进列
     """
-    return _best(max_width, 0, doc)
+    return _best(max_width, 0, _resolve_line_suffix(doc))
 
 
 def _best(w: int, k: int, doc: Doc) -> str:
@@ -202,6 +314,13 @@ def _best(w: int, k: int, doc: Doc) -> str:
         case Nest(i, d):
             return _best(w, k + i, d)
 
+        case Align(a, d):
+            # 后续行缩进列 = max(当前缩进, 对齐列)；首行不受影响
+            return _best(w, max(k, a), d)
+
+        case Fill(docs):
+            return _fill(w, k, docs)
+
         case Prefix(i, d):
             return " " * i + _best(w, k + i, d)
 
@@ -216,6 +335,47 @@ def _best(w: int, k: int, doc: Doc) -> str:
 
         case _:
             return ""
+
+
+def _flat_width(doc: Doc) -> int:
+    """doc 的 flat 版本宽度（不含换行的行宽）。
+
+    fill 贪心决策用：内容项/分隔符的 flat 宽度 = 渲染后最后一行长度。
+    """
+    s = _best(1 << 30, 0, flatten(doc))
+    return len(s.split("\n")[-1])
+
+
+def _fill(w: int, k: int, docs: list[Doc]) -> str:
+    """Fill 布局：内容/分隔符交替序列的贪心放置。
+
+    docs = [item0, sep0, item1, sep1, ...]。
+    每对 (sep, next_item)：当前行放得下 → sep 呈 flat（空格）；
+    放不下 → sep 呈 broken（换行 + 缩进），next_item 换行后放置。
+    """
+    out: list[str] = []
+    col = 0  # 当前行已用宽度（相对 k）
+    n = len(docs)
+    for i, d in enumerate(docs):
+        if i % 2 == 0:
+            # 内容项
+            flat_w = _flat_width(d)
+            out.append(_best(w, k, d))
+            col += flat_w
+        else:
+            # 分隔符（Line 通常）：放得下 → 空格，放不下 → 换行
+            if i + 1 >= n:
+                out.append(_best(w, k, flatten(d)))
+                continue
+            sep_w = _flat_width(d)
+            nxt_w = _flat_width(docs[i + 1])
+            if col + sep_w + nxt_w <= w - k:
+                out.append(_best(w, k, flatten(d)))
+                col += sep_w
+            else:
+                out.append("\n" + " " * k)
+                col = 0
+    return "".join(out)
 
 
 def _fits(w: int, doc: Doc) -> bool:
@@ -281,6 +441,12 @@ def _fits(w: int, doc: Doc) -> bool:
             return col <= w
         case Nest(_, d):
             return _fits(w, d)
+        case Align(_, d):
+            # Align 只影响后续行缩进，不影响首行 fits 判断
+            return _fits(w, d)
+        case Fill(docs):
+            # Fill 首行 = flat 版本（全在一行）
+            return _fits(w, Concat([flatten(d) for d in docs]))
         case Prefix(i, d):
             return _fits(w - i, d)
         case Union(flat, _):

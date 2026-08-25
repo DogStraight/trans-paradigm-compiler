@@ -218,6 +218,11 @@
 > Renderer._render_*），缩进换算收敛为 Renderer._indent(level) 唯一换算点
 > （body_cfg["indent"] 与 expr {indent: N} 均以其为单位）；806 pytest +
 > e2e 全绿 + pyright renderer 0 errors。
+> 阶段 2 原语集已落地（ADR-0006）：align（绝对列对齐）/ fill（流式折行）/
+> line_suffix（行尾锚定）三个 Doc IR 原语 + TOML 表达式层 + layout() 只加
+> 分支（Wadler 内核不动）；测试 tests/engine/renderer/test_doc_align_fill.py
+> + test_primitives_align_fill.py + test_doc_line_suffix.py；832 pytest 全绿。
+> 注释 attachment 机制（parser 注释 → line_suffix 挂载）留待阶段 4 注释遍。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为

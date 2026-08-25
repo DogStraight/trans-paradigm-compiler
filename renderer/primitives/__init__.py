@@ -22,8 +22,14 @@ from . import line as _line
 from . import indent as _indent
 from . import opt as _opt
 from . import soft_break as _soft_break
+from . import align as _align
+from . import fill as _fill
+from . import line_suffix as _line_suffix
 
-_PRIMITIVE_MODULES = (_ref, _join, _group, _line, _indent, _opt, _soft_break)
+_PRIMITIVE_MODULES = (
+    _ref, _join, _group, _line, _indent, _opt, _soft_break,
+    _align, _fill, _line_suffix,
+)
 
 __all__ = [
     "eval_text",
