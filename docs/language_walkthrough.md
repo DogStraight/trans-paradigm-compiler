@@ -81,6 +81,12 @@ while = "while"
 > 由 `lexer/number_gen.py` 编译为 FSM、`lexer/number_runner.py` 执行。
 > `lexer/number_fsm.py` 仅是**无配置时的回退路径**（旧实现）。
 
+> 注释扫描走 `lexer/capture_runner.py::CaptureRunner`——原始文本捕获模式的
+> 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture
+> mode，`token_type = "comment"`）；heredoc/围栏等同类构造可声明 `[[capture]]`
+> 段（`start`/`end`/`kind`/`token_type`，kind ∈ line/marker/line_match）。
+> 详见 `lexer/capture_runner.py` 文件头与 `tests/engine/lexer/test_capture_runner.py`。
+
 ---
 
 ## 3. 语法规则（parse）

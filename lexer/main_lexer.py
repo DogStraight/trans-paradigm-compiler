@@ -23,7 +23,7 @@ from core.token_protocol import (
 
 from .lexer_utils import get_number_config
 from .number_runner import build_number_runner
-from .comment_runner import CommentRunner
+from .capture_runner import CaptureRunner
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config（与 preprocessor/_expand.py 共享同一 key，宏配置
@@ -88,6 +88,11 @@ class Lexer:
         self.alpha_tokens = []
         self._build_alpha_tokens()
         self.full_token_map: dict[str, str] = self._build_full_token_map()
+        # capture mode 触发标记（注释/heredoc/围栏等，配置驱动）：
+        # 构建一次缓存，避免 tokenize 主循环每轮重建规则表。
+        self._capture_starts: list[str] = CaptureRunner.get_start_patterns(
+            self.token_define
+        )
 
         # 括号配对表 → 开闭集合 + 类型映射
         bracket_pairs: list = self.token_define.get("bracket", {}).get("pairs", [])
@@ -257,33 +262,34 @@ class Lexer:
                 start_point += len(space_content)
                 continue
 
-            # comment — 使用 CommentRunner 解析（完全配置驱动）
+            # capture — 原始文本捕获（CommentRunner 泛化：注释/heredoc/
+            # 围栏等"进入后原样吞字符"构造统一走 CaptureRunner，完全配置驱动）
             elif any(
-                lex_text[text_idx : text_idx + len(s)] in (s,)
-                for s in CommentRunner.get_start_patterns(self.token_define)
+                lex_text.startswith(s, text_idx)
+                for s in self._capture_starts
             ):
-                result = CommentRunner.run(lex_text, text_idx, self.token_define)
+                result = CaptureRunner.run(lex_text, text_idx, self.token_define)
                 if result is not None:
-                    comment_content, new_idx, _ = result
+                    capture_content, new_idx, token_type = result
                     self._emit_pending_dedent(tokens)
-                    current_token.set_type("comment")
-                    current_token.set_content(comment_content)
+                    current_token.set_type(token_type)
+                    current_token.set_content(capture_content)
                     current_token = self.refine_type(current_token)
                     tokens.append(current_token)
                     offset = new_idx - text_idx
                     text_idx = new_idx
-                    # 多行块注释跨行：行号同步前进（此前只平移列、行号不增，
-                    # 注释后的所有 token 行号系统性偏少）；列重算到注释最后一
-                    # 行内（该行注释内容宽度），单行注释仍按列平移 offset。
-                    newlines = comment_content.count("\n")
+                    # 多行捕获跨行：行号同步前进（此前只平移列、行号不增，
+                    # 捕获后的所有 token 行号系统性偏少）；列重算到捕获最后一
+                    # 行内（该行内容宽度），单行捕获仍按列平移 offset。
+                    newlines = capture_content.count("\n")
                     if newlines:
                         line_number += newlines
                         start_point = (
-                            len(comment_content) - comment_content.rfind("\n") - 1
+                            len(capture_content) - capture_content.rfind("\n") - 1
                         )
                     else:
                         start_point += offset
-                    # comments at beginning of line should not affect indentation
+                    # captures at beginning of line should not affect indentation
                     if self.new_line_start:
                         self.new_line_start = False
                     continue
@@ -366,7 +372,7 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # (comment handled by CommentRunner in earlier branch)
+            # (comment/capture handled by CaptureRunner in earlier branch)
 
             # ── id 分支 ──
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
