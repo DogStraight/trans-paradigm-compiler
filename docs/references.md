@@ -197,6 +197,46 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 📌 **simulator/cosim/synthesizer**（内建仿真/协同仿真/综合）：完整工具链
     范畴，tpc 不做（README 已声明），仅作路线观察
 
+- **渲染层深读**（2026-08 三探，`veryl_pretty`/`aligner`/`emitter` 源码）——
+  "tpc 渲染缺口闭环"的对照：
+
+  **Veryl Doc 原语集**（`crates/pretty/src/doc.rs`，Wadler 家族 + 9 扩展）：
+  ```
+  Nil/Text/Concat/Indent/Group          ← Wadler 核心（与 tpc 同源）
+  ForceFlat / Line / Hardline           ← tpc 有等价物（Union flat / Break）
+  DedentHardline(level)                 ← tpc 无：硬换行 + 剥 level*width 尾随空格
+  Comments(CommentDoc[])                ← tpc 半有（LineSuffix 行尾注释）
+  IfBreak(text) / IfBreakPad(w)         ← tpc 无：broken 模式才输出（0 计 fits）
+  Pad(w) / IfFlatPad(w)                 ← tpc 无：对齐 padding 进 Doc 参与 fits
+  Anchored(text, src_line, src_col)     ← tpc 无：sourcemap 锚点（P3.1 前置）
+  ```
+
+  **缺口闭环评估**（对 tpc 渲染层的价值分级）：
+  - 🔥 **Pad/IfBreakPad/IfFlatPad 三件套**（`doc.rs` 三行声明 + `render.rs` 各
+    几行渲染）——"对齐进 Doc IR"的最小实现：`Doc::Pad` 无条件输出且计入
+    `fits_flat`，`IfBreakPad` 仅 broken 输出（断行后补对齐），`IfFlatPad`
+    仅 flat 输出且超宽可强制断行。tpc 世界 B column_align 是"渲染后对齐"
+    （曾破坏 fits 判定、被迫回滚 join 改法），这三件套是"对齐参与布局
+    决策"的参考形态——**低成本高价值，建议 TODO**
+  - 🔥 **fits_flat 带外层 continuation**（`render.rs::fits_flat` 从 outer stack
+    拷贝 `work` 继续算）——解决"fill 模式邻居项各自声明 flat、组合行
+    溢出"（tpc `_fits` 只看单 doc 第一行，正是 tpc wrap 调研记过的坑）——
+    **tpc `_fill`/`_fits` 的直接参考实现**
+  - 💡 **DedentHardline**：对齐 padding 不残留行尾（tpc 对齐后处理需要
+    strip 尾随空格的场景，Veryl 用 Doc 原语表达）
+  - 💡 **两遍式对齐管线**（`emitter::emit` 同一 walker 跑 Align→Build 两遍）：
+    Align 遍按 **18 种语义角色**（IDENTIFIER/TYPE/EXPRESSION/WIDTH/DIRECTION
+    等）收集 `{Location: (max_width - width, PadKind)}`，Build 遍
+    `process_token` 查表注入 Pad——tpc 世界 B column_align 按列组织，
+    Veryl 按**角色分组 + 每组独立 max_width**，且 emitter 的
+    `align_start(kind)/align_finish(kind)` 成对包裹 emit 片段——配置化时
+    可把"角色→列"映射声明进布局 TOML
+  - 💡 **CommentDoc 进 Doc**（`render.rs::render_comments`）：注释带
+    leading_newlines/锚点，`is_line_comment` 终止当前行（参与 fits）——
+    tpc LineSuffix 只覆盖行尾注释，Veryl 把注释做成完整 Doc 公民
+  - 📌 **strip_trailing_whitespace 开关**：build --check 时关掉保字节一致
+    （tpc fidelity 差分同理）；Anchored → sourcemap（P3.1 前置）
+
 ### cairn（Scala）— 增量解析
 
 - 语言 = `Fragment` 片段组合（`provides/requires/excludes`）→ 内容寻址（每个语言/产物有 digest）
