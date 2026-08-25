@@ -74,9 +74,9 @@
       （Verible 的实例对齐含 init 列）。注意 fidelity：real 组（darkriscv
       `integer clocks=0, running=0, ...`、picorv32 `reg [63:0] next_rs1, ...`）会变，
       需重跑 real 组更新基线。
-- [ ] **transform 实例名 hash 稳定性**：`u_spi_master_xxx` 的 salt 无法复现
-      ref（spi_inf X 路径 ratio 0.9862 因 hash 差异）——期望 ratio 到 1.0，
-      去掉"hash 可容忍"例外（判断 salt 逻辑是否与生成 ref 时漂移）
+- [x] **transform 实例名 hash 稳定性（已达成，2026-08-25 实证）**：ref_spi_inf
+      transform 组 P/X 双路径 ratio 均 1.0000（`u_spi_master_acb99d` 与 trans 基线
+      一致）——历史 0.9862 的 salt 差异已随后续提交消除，条目闭环
 - [ ] **变换路径注释恢复**：当前禁用（only_tpc 只回插 tpc marker），普通注释
       在展开后丢失——长远应精确恢复而非禁用（锚点漂移的根本解决）
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
