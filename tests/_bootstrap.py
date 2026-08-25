@@ -26,7 +26,7 @@ if _PROJECT_ROOT not in sys.path:
 # 对象更安全（pytest 捕获 stdout 时不会破坏捕获器）；非 tty/受限环境拒绝则忽略。
 if hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
+        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
     except Exception:  # noqa: BLE001 — 同 conftest 的取舍，忽略
         pass

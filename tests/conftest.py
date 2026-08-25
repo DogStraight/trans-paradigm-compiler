@@ -10,8 +10,8 @@ import pytest
 # reconfigure 仅影响本进程；测试收集/运行的所有中文输出随之正常）。
 if hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
+        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
     except Exception:  # noqa: BLE001 — 非 tty/受限环境可能拒绝，忽略
         pass
 

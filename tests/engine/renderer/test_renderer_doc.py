@@ -1,11 +1,9 @@
 """Renderer Doc IR 单元测试 — layout 算法，不依赖 parser/lexer。"""
 
-import pytest
-from core.define import Node
 from renderer.doc import (
     Doc, Empty, Text, Line, LineBreak, Break,
     Concat, Nest, Prefix, Union,
-    group, flatten, nest, layout,
+    group, flatten, layout,
 )
 
 

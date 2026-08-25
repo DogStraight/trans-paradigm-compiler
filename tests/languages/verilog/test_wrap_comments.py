@@ -11,7 +11,6 @@ import pytest
 
 from grammar.verilog.plugins.formatter.passes.wrap_comments import (
     run_wrap_comments,
-    _wrap_comment_line,
 )
 from grammar.verilog.plugins.formatter import format_source
 from core.define import DEFAULT_RULES_DIR

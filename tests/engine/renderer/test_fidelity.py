@@ -7,8 +7,6 @@ keep_blank：渲染重排内容，但按源结构位置回插空行（LCS 匹配
   - 无空行的源 → 输出不变
 """
 
-import pytest
-
 from renderer.fidelity import keep_blank_lines
 
 

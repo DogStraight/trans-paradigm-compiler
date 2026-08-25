@@ -5,8 +5,6 @@ parser 收集行尾注释时挂到节点 _attached_comments，renderer 用 line_
 双轨并存（restore 去重防重复）。
 """
 
-import pytest
-
 from pipeline import run_pipeline_on_source
 
 
@@ -79,10 +77,8 @@ class TestAttachmentReal:
         with open(ref, encoding="utf-8") as f:
             src = f.read()
         r = _run(src, expand_macros=True)
-        import re
 
         out = r.get("output", "")
-        mods = re.findall(r"^module\s+(\w+)", out, re.M)
         # 注意：缩进的 module（附件影响下不缩进）——断言结构完整
         assert r["success"]
         assert out.count("module ") >= 8

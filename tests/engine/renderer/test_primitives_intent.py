@@ -6,7 +6,7 @@ anchor（行尾锚定）。验证 intent 声明 → Doc 推导，且与等价手
 """
 
 from core.define import Node
-from renderer.doc import Align, Fill, LineSuffix, layout
+from renderer.doc import Align, LineSuffix, layout
 from renderer.primitives import eval_expr, get_registry
 
 from test_renderer_primitives import _make_fake_renderer

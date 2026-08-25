@@ -9,8 +9,6 @@
 
 import os
 
-import pytest
-
 from core.define import FileManager
 from preprocessor.primitives.registry import (
     get_primitive,

@@ -27,7 +27,7 @@ from typing import Any
 
 # 项目根 + stdout UTF-8（必须在 import core 之前）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from tests import _bootstrap  # noqa: E402
+from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + UTF-8）
 
 from core.define import DEFAULT_EXT_DIRS
 

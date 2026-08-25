@@ -11,8 +11,6 @@ index 取 contexts 错位（行号漂移）。修复：拆行 pass 就地同步 
   4. format_source 输出与修复前逐行一致（双跑对比由既有测试锁定）
 """
 
-import pytest
-
 from grammar.verilog.plugins.formatter.boundary import LineContext
 from grammar.verilog.plugins.formatter.engine import FormatterEngine, FormatterPass
 from grammar.verilog.plugins.formatter.passes.inst_port import run_inst_port_align

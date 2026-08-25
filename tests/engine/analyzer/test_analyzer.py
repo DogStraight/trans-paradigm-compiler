@@ -1,6 +1,5 @@
 """Analyzer 单元测试 — Scope/Symbol/Diagnostic，不依赖 parser/lexer。"""
 
-import pytest
 from analyzer.scope import Scope, Symbol
 from analyzer.diagnostic import Diagnostic
 from core.define import Node
@@ -31,15 +30,17 @@ class TestScope:
         s = Scope("m")
         node = Node("id")
         s.declare("x", "reg", node)
-        assert s.resolve("x") is not None
-        assert s.resolve("x").name == "x"
+        x = s.resolve("x")
+        assert x is not None
+        assert x.name == "x"
 
     def test_resolve_parent(self):
         parent = Scope("parent")
         child = Scope("child", parent=parent)
         parent.declare("y", "wire", Node("id"))
-        assert child.resolve("y") is not None
-        assert child.resolve("y").kind == "wire"
+        y = child.resolve("y")
+        assert y is not None
+        assert y.kind == "wire"
 
     def test_resolve_unknown(self):
         s = Scope("m")
@@ -50,7 +51,9 @@ class TestScope:
         child = Scope("child", parent=parent)
         parent.declare("x", "wire", Node("a"))
         child.declare("x", "reg", Node("b"))
-        assert child.resolve("x").kind == "reg"
+        resolved = child.resolve("x")
+        assert resolved is not None
+        assert resolved.kind == "reg"
 
     def test_find_child_scope(self):
         parent = Scope("top")

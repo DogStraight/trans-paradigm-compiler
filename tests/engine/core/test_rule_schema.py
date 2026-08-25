@@ -13,7 +13,7 @@
 import pytest
 
 from core.errors import GrammarError
-from core.define import GrammarRule, FileManager
+from core.define import GrammarRule
 
 
 class TestRuleSchema:

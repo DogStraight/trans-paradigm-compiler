@@ -35,6 +35,7 @@ VERIBLE = (
 
 def _verible_accepts(path: str) -> bool:
     """verible-verilog-format 对文件 exit 0 = 可解析。"""
+    assert VERIBLE is not None  # main() 已守卫缺失二进制
     try:
         r = subprocess.run([VERIBLE, path], capture_output=True, timeout=30)
         return r.returncode == 0

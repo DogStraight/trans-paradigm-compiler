@@ -94,7 +94,7 @@ class TestGenVerilogWidth:
         ],
     )
     def test_accept(self, vrun, src, expected):
-        tok, end = vrun.run(src, 0)
+        tok, _ = vrun.run(src, 0)
         assert tok == expected, f"{src!r} → {tok!r}"
 
     @pytest.mark.parametrize(
@@ -111,7 +111,7 @@ class TestGenVerilogWidth:
 
     def test_incomplete_no_base(self, vrun):
         """8'（有 size 无 base）→ 吃有效前缀 8（size 态是接受态，十进制整数）。"""
-        tok, end = vrun.run("8'", 0)
+        tok, _ = vrun.run("8'", 0)
         assert tok == "8"
 
 

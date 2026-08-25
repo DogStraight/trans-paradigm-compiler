@@ -11,7 +11,7 @@
 import pytest
 
 from core.config_registry import ConfigRegistry
-from core.define import GrammarRulesRegister
+from core.define import GrammarRulesRegister, Node
 from analyzer.scope import Scope
 from parser import setup_grammar
 from parser.rule_selector import RuleSelector
@@ -48,7 +48,7 @@ def c4(config_loaded):
     )
 
 
-def _compile(src: str, c4) -> "object":
+def _compile(src: str, c4) -> Node:
     """c4 源码 → 完整管线 → transform 后 AST（AsmProgram 或原 AST）。"""
     ast = c4["parser"].parse(c4["lexer"].tokenize(src))
     ast = normalize_ast(ast)
@@ -56,7 +56,9 @@ def _compile(src: str, c4) -> "object":
     ast = analyzer.analyze(ast)
     AstTransformer.set_shared("rules", c4["rules"])
     t = AstTransformer()
-    return t.transform(ast, analyzer.root_scope)
+    root = analyzer.root_scope
+    assert root is not None
+    return t.transform(ast, root)
 
 
 def _asm_lines(ast) -> list[str]:

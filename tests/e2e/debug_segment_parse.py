@@ -24,7 +24,7 @@ import argparse
 import contextlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from tests import _bootstrap  # noqa: E402
+from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + UTF-8）
 
 from core.plugin_loader import load_all_components
 
@@ -208,7 +208,7 @@ def main() -> int:
     for idx, (name, seg_text, sl, el) in enumerate(segments, start=1):
         if args.segment and idx != args.segment:
             continue
-        tokens, ast, warns, parser = parse_segment(
+        tokens, ast, warns, _parser = parse_segment(
             lexer, rules, rule_selector, seg_text, pre_symbols, args.verbose, pre_hints
         )
         # 段可能 parse 出空块（0 句子），此时 Root 没有 sub_node 属性

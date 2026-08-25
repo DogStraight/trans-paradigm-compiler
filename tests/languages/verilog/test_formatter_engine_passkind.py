@@ -5,8 +5,6 @@ pass 从"自由 handler 函数"升格为"类型化内建遍"：
   - criterion 量化拒绝准则：不满足 → 跳过该遍（布局决策显式化）
 """
 
-import pytest
-
 from grammar.verilog.plugins.formatter.boundary import LineContext
 from grammar.verilog.plugins.formatter.engine import (
     FormatterEngine,

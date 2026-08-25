@@ -5,7 +5,7 @@
 """
 
 from core.define import Node
-from renderer.doc import Align, Fill, Text, layout
+from renderer.doc import Align, Fill, layout
 from renderer.primitives import eval_expr, get_registry
 
 from test_renderer_primitives import _make_fake_renderer

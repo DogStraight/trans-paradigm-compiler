@@ -1,7 +1,6 @@
 """Lexer 单元测试 — token 化正确性 + 边界条件 + token classifier。"""
 
 import pytest
-from core.define import Token
 
 # ═══════════════════════════════════════════════════════
 # 基础 token 化

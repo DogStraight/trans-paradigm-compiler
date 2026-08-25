@@ -4,12 +4,10 @@
 手动构造 Node + 布局 expr dict，验证渲染原语输出。
 """
 
-import pytest
 from core.define import Node
-from renderer.doc import Doc, layout
+from renderer.doc import layout
 from renderer.primitives import eval_expr
-from renderer.primitives.text import eval_text
-from renderer.doc import Text, Empty
+from renderer.doc import Text
 
 
 def _make_fake_renderer():

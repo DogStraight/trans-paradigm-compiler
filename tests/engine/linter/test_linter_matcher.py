@@ -145,7 +145,7 @@ class TestExpressionChecker:
     def test_trailing_operator_reports(self, scanner):
         # 尾随运算符（a + ;）→ phase-expr
         tokens = _tokens(scanner, "a + ;")
-        errs, consumed = scanner._expr_checker.consume(
+        errs, _ = scanner._expr_checker.consume(
             tokens, 0, stop_tokens={"symbol.base.semicolon"}
         )
         assert any(e.code == "phase-expr" for e in errs)
@@ -153,7 +153,7 @@ class TestExpressionChecker:
     def test_invalid_start_reports(self, scanner):
         # 表达式起点非法 → phase-expr
         tokens = _tokens(scanner, "= b;")
-        errs, consumed = scanner._expr_checker.consume(
+        errs, _ = scanner._expr_checker.consume(
             tokens, 0, stop_tokens={"symbol.base.semicolon"}
         )
         assert any(e.code == "phase-expr" for e in errs)

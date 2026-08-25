@@ -4,7 +4,6 @@
 其余行按 depth 缩进；只改行首空白，token 不丢。
 """
 
-import os
 import pytest
 
 from grammar.verilog.plugins.formatter.boundary import LineContext, ScopeKind

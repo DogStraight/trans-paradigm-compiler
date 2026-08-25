@@ -7,8 +7,6 @@
   3. 保留路径 token 完整；保留路径默认不 format（formatter 不识别增强结构）
 """
 
-import os
-
 import pytest
 
 from tests.e2e.run_pipeline import run_pipeline_on_source

@@ -5,6 +5,8 @@
 换语言配置不影响这些测试。"""
 
 import pytest
+from typing import Any
+
 from core.define import Token, Node
 
 
@@ -39,7 +41,7 @@ _SYNTH_OPS = [
 # ═══════════════════════════════════════════════════════
 
 @pytest.fixture(scope="session")
-def pratt():
+def pratt() -> tuple[Any, Any]:
     """返回 (pratt_module, operator_defs)，分类器已用合成数据安装。"""
     import parser.pratt_parser as pp
     pp.install_token_classifier(_SYNTH_CATEGORIES)
@@ -70,8 +72,9 @@ def _atom(tokens, idx):
     return None, 0
 
 
-def parse(pp, op_defs, tokens, **kwargs):
+def parse(pratt: tuple[Any, Any], tokens: list[Token], **kwargs):
     """辅助：解析 token 列表返回 (ast, consumed)。"""
+    pp, op_defs = pratt
     return pp.parse_with_count(
         tokens, operator_defs=op_defs, atom_parser=_atom, **kwargs
     )
@@ -83,19 +86,19 @@ def parse(pp, op_defs, tokens, **kwargs):
 
 class TestBinaryOps:
     def test_add(self, pratt):
-        ast, c = parse(*pratt, [T("id","a"), op("+"), T("id","b")])
+        ast, c = parse(pratt, [T("id","a"), op("+"), T("id","b")])
         assert ast.node_name == "BinaryOp" and ast.op == "+" and c == 3
 
     def test_sub(self, pratt):
-        ast, c = parse(*pratt, [T("id","a"), op("-"), T("id","b")])
+        ast, c = parse(pratt, [T("id","a"), op("-"), T("id","b")])
         assert ast.node_name == "BinaryOp" and ast.op == "-" and c == 3
 
     def test_mul(self, pratt):
-        ast, c = parse(*pratt, [T("id","a"), op("*"), T("id","b")])
+        ast, c = parse(pratt, [T("id","a"), op("*"), T("id","b")])
         assert ast.node_name == "BinaryOp" and ast.op == "*" and c == 3
 
     def test_div(self, pratt):
-        ast, c = parse(*pratt, [T("id","a"), op("/"), T("id","b")])
+        ast, c = parse(pratt, [T("id","a"), op("/"), T("id","b")])
         assert ast.node_name == "BinaryOp" and ast.op == "/" and c == 3
 
 
@@ -108,26 +111,26 @@ class TestPrecedence:
 
     def test_mul_over_add(self, pratt):
         """a + b * c  →  +(a, *(b, c))"""
-        ast, _ = parse(*pratt, [T("id","a"), op("+"), T("id","b"), op("*"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("+"), T("id","b"), op("*"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "+"
         assert ast.left.node_name == "Ident"
         assert ast.right.node_name == "BinaryOp" and ast.right.op == "*"
 
     def test_add_over_mul_reversed(self, pratt):
         """a * b + c  →  +(*(a, b), c)"""
-        ast, _ = parse(*pratt, [T("id","a"), op("*"), T("id","b"), op("+"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("*"), T("id","b"), op("+"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "+"
         assert ast.left.node_name == "BinaryOp" and ast.left.op == "*"
 
     def test_mul_over_sub(self, pratt):
         """a - b * c  →  -(a, *(b, c))"""
-        ast, _ = parse(*pratt, [T("id","a"), op("-"), T("id","b"), op("*"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("-"), T("id","b"), op("*"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "-"
         assert ast.right.node_name == "BinaryOp" and ast.right.op == "*"
 
     def test_same_precedence_left_assoc(self, pratt):
         """a + b - c  →  -(+ (a, b), c) — 左结合，同级左优先。"""
-        ast, _ = parse(*pratt, [T("id","a"), op("+"), T("id","b"), op("-"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("+"), T("id","b"), op("-"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "-"
         assert ast.left.node_name == "BinaryOp" and ast.left.op == "+"
 
@@ -139,19 +142,19 @@ class TestPrecedence:
 class TestAssociativity:
     def test_minus_left_assoc(self, pratt):
         """a - b - c  →  -(-(a, b), c)"""
-        ast, _ = parse(*pratt, [T("id","a"), op("-"), T("id","b"), op("-"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("-"), T("id","b"), op("-"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "-"
         assert ast.left.node_name == "BinaryOp" and ast.left.op == "-"
 
     def test_mul_left_assoc(self, pratt):
         """a * b * c  →  *(*(a, b), c)"""
-        ast, _ = parse(*pratt, [T("id","a"), op("*"), T("id","b"), op("*"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("*"), T("id","b"), op("*"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "*"
         assert ast.left.node_name == "BinaryOp" and ast.left.op == "*"
 
     def test_pow_right_assoc(self, pratt):
         """a ** b ** c  →  **(a, **(b, c)) — 右结合！"""
-        ast, _ = parse(*pratt, [T("id","a"), op("**"), T("id","b"), op("**"), T("id","c")])
+        ast, _ = parse(pratt, [T("id","a"), op("**"), T("id","b"), op("**"), T("id","c")])
         assert ast.node_name == "BinaryOp" and ast.op == "**"
         assert ast.right.node_name == "BinaryOp" and ast.right.op == "**"
 
@@ -162,31 +165,31 @@ class TestAssociativity:
 
 class TestPrefixUnary:
     def test_not(self, pratt):
-        ast, _ = parse(*pratt, [op("!"), T("id","a")])
+        ast, _ = parse(pratt, [op("!"), T("id","a")])
         assert ast.node_name == "UnaryOp"
         assert ast.op == "!" and ast.position == "prefix"
 
     def test_bitwise_not(self, pratt):
-        ast, _ = parse(*pratt, [op("~"), T("id","a")])
+        ast, _ = parse(pratt, [op("~"), T("id","a")])
         assert ast.node_name == "UnaryOp"
         assert ast.op == "~" and ast.position == "prefix"
 
     def test_double_unary(self, pratt):
         """!!a  →  UnaryOp(!, UnaryOp(!, a))"""
-        ast, _ = parse(*pratt, [op("!"), op("!"), T("id","a")])
+        ast, _ = parse(pratt, [op("!"), op("!"), T("id","a")])
         assert ast.node_name == "UnaryOp" and ast.op == "!"
         assert ast.operand.node_name == "UnaryOp" and ast.operand.op == "!"
 
     def test_unary_in_right_operand(self, pratt):
         """a + !b  →  BinaryOp(+, Ident(a), UnaryOp(!, Ident(b)))"""
-        ast, _ = parse(*pratt, [T("id","a"), op("+"), op("!"), T("id","b")])
+        ast, _ = parse(pratt, [T("id","a"), op("+"), op("!"), T("id","b")])
         assert ast.node_name == "BinaryOp" and ast.op == "+"
         assert ast.left.node_name == "Ident"
         assert ast.right.node_name == "UnaryOp" and ast.right.op == "!"
 
     def test_prefix_binds_tighter_than_infix(self, pratt):
         """!a + b  →  +(!(a), b) — 一元优先级高于二元"""
-        ast, _ = parse(*pratt, [op("!"), T("id","a"), op("+"), T("id","b")])
+        ast, _ = parse(pratt, [op("!"), T("id","a"), op("+"), T("id","b")])
         assert ast.node_name == "BinaryOp" and ast.op == "+"
         assert ast.left.node_name == "UnaryOp" and ast.left.op == "!"
 
@@ -197,32 +200,32 @@ class TestPrefixUnary:
 
 class TestConsumedCount:
     def test_single_ident(self, pratt):
-        _, c = parse(*pratt, [T("id","a")])
+        _, c = parse(pratt, [T("id","a")])
         assert c == 1
 
     def test_single_number(self, pratt):
-        _, c = parse(*pratt, [T("number","42")])
+        _, c = parse(pratt, [T("number","42")])
         assert c == 1
 
     def test_binary_3(self, pratt):
-        _, c = parse(*pratt, [T("id","a"), op("+"), T("id","b")])
+        _, c = parse(pratt, [T("id","a"), op("+"), T("id","b")])
         assert c == 3
 
     def test_chain_5(self, pratt):
-        _, c = parse(*pratt, [T("id","a"), op("+"), T("id","b"), op("+"), T("id","c")])
+        _, c = parse(pratt, [T("id","a"), op("+"), T("id","b"), op("+"), T("id","c")])
         assert c == 5
 
     def test_unary_2(self, pratt):
-        _, c = parse(*pratt, [op("!"), T("id","a")])
+        _, c = parse(pratt, [op("!"), T("id","a")])
         assert c == 2
 
     def test_unary_binary_4(self, pratt):
-        _, c = parse(*pratt, [T("id","a"), op("+"), op("!"), T("id","b")])
+        _, c = parse(pratt, [T("id","a"), op("+"), op("!"), T("id","b")])
         assert c == 4
 
     def test_stop_token(self, pratt):
         """遇到 stop_token 停止，不包括 stop_token。"""
-        ast, c = parse(*pratt, [T("id","a"), op("+"), T("id","b"), T(";",";")],
+        ast, c = parse(pratt, [T("id","a"), op("+"), T("id","b"), T(";",";")],
                        stop_tokens={";"})
         assert c == 3
         assert ast.node_name == "BinaryOp" and ast.op == "+"
@@ -234,21 +237,21 @@ class TestConsumedCount:
 
 class TestEdgeCases:
     def test_single_ident(self, pratt):
-        ast, c = parse(*pratt, [T("id","x")])
+        ast, c = parse(pratt, [T("id","x")])
         assert ast.node_name == "Ident" and c == 1
 
     def test_single_number(self, pratt):
-        ast, c = parse(*pratt, [T("number","99")])
+        ast, c = parse(pratt, [T("number","99")])
         assert ast.node_name == "Num" and c == 1
 
     def test_empty_raises(self, pratt):
         with pytest.raises(ValueError, match="表达式不完整"):
-            parse(*pratt, [])
+            parse(pratt, [])
 
     def test_unknown_token_type_raises(self, pratt):
         """无法识别的 token 类型（既非原子也非运算符）→ ValueError。"""
         with pytest.raises(ValueError):
-            parse(*pratt, [T("unknown","???")])
+            parse(pratt, [T("unknown","???")])
 
 
 # ═══════════════════════════════════════════════════════

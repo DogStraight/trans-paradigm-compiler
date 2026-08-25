@@ -4,8 +4,7 @@
 通过伪造最小 self 对象模拟 Parser 上下文。
 """
 
-import pytest
-from core.define import Node, Token, GrammarRule
+from core.define import Node, Token
 from parser.parser_core import ParseContext
 from parser._production import (
     process_production_node,

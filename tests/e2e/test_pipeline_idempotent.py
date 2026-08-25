@@ -11,11 +11,9 @@ parse 软失败/truncated → idempotent=False。
 import os
 import sys
 
-import pytest
-
 # 项目根 + stdout UTF-8（必须在 import core 之前）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
-from tests import _bootstrap  # noqa: E402
+from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + UTF-8）
 
 from tests.e2e.run_pipeline import run_pipeline_on_source  # noqa: E402
 

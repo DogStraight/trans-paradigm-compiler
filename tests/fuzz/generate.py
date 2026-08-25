@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import os
 import random
-from typing import Any
+from typing import cast
 
-from core.define import GrammarRulesRegister
+from core.define import GrammarRulesRegister, Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES
 from lexer import Lexer
 from linter.grammar_slicer import build_slice_tree
@@ -162,9 +162,9 @@ def mutate_source(src: str, rng: random.Random, token_map: dict[str, str],
         elif op == "replace":
             toks[pos].content = rng.choice(_content_pool(token_map))
         elif op == "insert":
-            toks.insert(pos, rng.choice([_mk_tok(t) for t in
-                                         [";", "begin", "end", "=", "module", "if",
-                                          "always", ")", "(", "1", "clk"]]))
+            toks.insert(pos, cast(Token, rng.choice([_mk_tok(t) for t in
+                                                     [";", "begin", "end", "=", "module", "if",
+                                                      "always", ")", "(", "1", "clk"]])))
         elif op == "swap":
             j = rng.choice(idx)
             toks[pos], toks[j] = toks[j], toks[pos]

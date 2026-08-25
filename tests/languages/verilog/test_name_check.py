@@ -47,10 +47,6 @@ def _diags(ctx, src):
     return [(d.code, d.level, d.message) for d in at.diagnostics]
 
 
-def _codes(diags):
-    return sorted(c for c, _, _ in diags)
-
-
 class TestNameCallCheck:
     """semantic_check 插件：通用名称检查。"""
 

@@ -7,8 +7,6 @@
 
 import os
 
-import pytest
-
 from core import _user_config
 
 

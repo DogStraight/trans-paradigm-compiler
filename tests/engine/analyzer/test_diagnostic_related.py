@@ -1,6 +1,5 @@
 """Diagnostic.related 链（ADR-0004）与 report 扩展的单测。"""
 
-import pytest
 from analyzer.context import AnalysisContext
 from analyzer.diagnostic import Diagnostic
 from core.define import Node

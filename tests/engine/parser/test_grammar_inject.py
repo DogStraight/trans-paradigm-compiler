@@ -54,6 +54,7 @@ class TestDirectInject:
         rules = {"Target": _rule("Target", ["@A|@B"])}
         inject_productions(rules, {"Ext": ["@Target"]})
         feat = analyze_production_features(rules["Target"].production[0])
+        assert feat is not None
         assert feat["type"] == "choice"
         assert [a["name"] for a in feat["alternatives"]] == ["Ext", "A", "B"]
 

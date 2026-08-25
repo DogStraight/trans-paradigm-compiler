@@ -7,7 +7,6 @@
     - 可选文件缺失 → 容忍（合法的可选缺失）
 """
 
-import os
 import pytest
 
 from core.errors import ConfigError

@@ -14,15 +14,10 @@ import argparse
 
 # 项目根 + stdout UTF-8（必须在 import core 之前）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from tests import _bootstrap  # noqa: E402
+from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + UTF-8）
 
 # 管线核心（正式包）
-from pipeline import (  # noqa: E402
-    run_pipeline_on_source,
-    format_generated,
-    _load_pipeline_defaults,
-    _PIPELINE_SHARED,
-)
+from pipeline import run_pipeline_on_source  # noqa: E402
 from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS  # noqa: E402
 
 

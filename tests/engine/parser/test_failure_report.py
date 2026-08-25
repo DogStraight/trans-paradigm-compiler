@@ -6,8 +6,6 @@
     真实 Parser 解析坏输入 → _last_failure_report 非空（集成）
 """
 
-import pytest
-
 from core.define import Token, DEFAULT_RULES_DIR
 from core.debug_report import (
     token_summary,
