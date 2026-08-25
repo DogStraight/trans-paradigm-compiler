@@ -98,7 +98,7 @@ stmt = "$4"
 
 [CaseItem.renderer.layout]
 line = [
-    { join = ", ", items = "values" },
+    { intent = "compact", items = "values", first_soft = false, nest = 0 },
     ": ",
     { ref = "stmt" },
 ]

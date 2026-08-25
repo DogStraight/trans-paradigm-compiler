@@ -155,7 +155,8 @@ line = [
 # always 块中的敏感信号列表，如 `posedge clk or negedge rst_n`。
 # 支持 `*`（自动敏感），以及 `or` / `,` 分隔的边沿表达式。
 # 根据 IEEE 1364-2001，or 和逗号在灵敏度列表中语义等价。
-# join = " or " 以 Verilog 风格的 or 连接多个敏感信号。
+# intent = "compact"：紧凑列表（ADR-0006 阶段 4a）；sep=" or " 保持
+# Verilog 风格事件连接，first_soft=false 无前导空格，nest=0 不折行缩进。
 # $1 可以是 @EdgeSense 或 symbol.base.multiple（即 *）。
 # $2 收集后续的 (or|,, @EdgeSense) 重复对。
 
@@ -172,8 +173,11 @@ items = [
 ]
 
 [SensitivityList.renderer.layout]
-join = " or "
+intent = "compact"
+sep = " or "
 items = "items"
+first_soft = false
+nest = 0
 
 
 # ── EdgeSense — 边沿敏感表达式 ──

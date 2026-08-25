@@ -172,7 +172,7 @@ production = [
 sub_node = ["$2", "$3.items[*].sub_node[1]"]
 
 [ConcatExpr.renderer.layout]
-line = ["{", { join = ",", nest = 1 }, "}"]
+line = ["{", { intent = "compact", first_soft = false }, "}"]
 
 
 # ── ReplicateExpr — 复制表达式 ──
@@ -280,6 +280,8 @@ line = ["$", { ref = "callee" }]
 
 # ── ArgumentList — 函数参数列表 ──
 # 逗号分隔的表达式列表: (expr1, expr2, …)
+# intent = "compact"：紧凑列表（ADR-0006 阶段 4a）；first_soft=false 保持
+# flat 无前导空格，nest=1 折行缩进（等价原 join 形态）。
 
 [ArgumentList.parser]
 production = ["@Expression", "(symbol.base.comma,@Expression)*"]
@@ -288,9 +290,9 @@ production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 items = ["$1", "$2.items[*].sub_node[1]"]
 
 [ArgumentList.renderer.layout]
-join = ", "
+intent = "compact"
 items = "items"
-nest = 1
+first_soft = false
 
 
 # ── 运算符表达式链（Pratt 解析） ──

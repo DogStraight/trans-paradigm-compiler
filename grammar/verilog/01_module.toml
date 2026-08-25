@@ -107,8 +107,9 @@ ref = "ports"
 # ── ParameterList — 参数化列表 ──
 # 模块的 #(…​) 参数化部分，如 `module adder #(WIDTH = 8)`。
 # 生产式: #( ParamDecl , ParamDecl , … )
-# join = ", " 用逗号+空格分隔参数，first_soft = true 在 flat 模式下省略首部空格。
-# nest = 1 在 broken 模式下增加一级缩进。
+# intent = "compact"：紧凑列表（ADR-0006 阶段 4a）——默认 first_soft=true
+# （flat 模式省略首部空格）+ nest=1（broken 模式增加一级缩进），
+# 等价原 join+first_soft+nest 手拼四件套。
 
 [ParameterList.parser]
 production = [

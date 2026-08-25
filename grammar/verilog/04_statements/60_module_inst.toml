@@ -101,8 +101,8 @@ items = [
 ]
 
 [ParamOverrideList.renderer.layout]
-join = ", "
-nest = 1
+intent = "compact"
+first_soft = false
 items = "items"
 
 
@@ -163,7 +163,9 @@ items = [
 ]
 
 [NamedPortList.renderer.layout]
-join = ", "
+intent = "compact"
+first_soft = false
+nest = 0
 items = "items"
 
 

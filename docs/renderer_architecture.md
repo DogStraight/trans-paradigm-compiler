@@ -65,6 +65,14 @@ line_suffix/intent`。注册机制：`@register(key)` 装饰器 → 全局调度
 消灭手拼。词表：`compact`（紧凑列表 = join+first_soft+nest 别名）/ `wrap`
 （流式折行 = fill）/ `align`（对齐）/ `anchor`（行尾锚定 = line_suffix）。
 
+**intent 语言包落地**（2026-08-25 批量迁移）：verilog + c4 共 12 处
+`join` 列表布局迁移为 `intent = "compact"`（ParameterList/PortList/
+TaskPortList/ArgumentList/DeclaratorList/ParamOverrideList/NamedPortList/
+SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
+等价性由全量测试 + e2e ref 对比锁定（877 pytest 全绿）。保留的 join
+形态（语义非列表）：`join = "\n"` 块级连接、`no_soft` 硬拼接、
+`join = ""` 拼接、token 定义误匹配。
+
 ### 布局 TOML 配置形态
 
 每个规则可声明 `[Rule.renderer]`：

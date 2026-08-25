@@ -147,6 +147,8 @@ line = [{ ref = "base" }, { ref = "stars" }]
 
 
 # ArgumentList — 逗号分隔表达式列表
+# intent = "compact"：紧凑列表（ADR-0006 阶段 4a）；first_soft=false 保持
+# flat 无前导空格（`f(a, b)` 而非 `f( a, b)`），nest=0 不折行缩进。
 [ArgumentList.parser]
 production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 
@@ -154,8 +156,10 @@ production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 items = ["$1", "$2.items[*].sub_node[1]"]
 
 [ArgumentList.renderer.layout]
-join = ", "
+intent = "compact"
 items = "items"
+first_soft = false
+nest = 0
 
 
 # ── 表达式结构 ──

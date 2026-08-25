@@ -67,6 +67,8 @@ layout = { line = [
 
 # ── DeclaratorList — 声明器列表 ──
 # 逗号分隔的多个声明器，如 wire a, b, c;
+# intent = "compact"：紧凑列表（ADR-0006 阶段 4a）；first_soft=false 保持
+# flat 模式无前导空格（`wire a, b` 而非 `wire  a, b`），nest=1 折行缩进。
 
 [DeclaratorList]
 [DeclaratorList.parser]
@@ -74,7 +76,7 @@ production = ["@Declarator", "(symbol.base.comma,@Declarator)*"]
 [DeclaratorList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
 [DeclaratorList.renderer]
-layout = { join = ", ", items = "items", nest = 1 }
+layout = { intent = "compact", items = "items", first_soft = false }
 
 
 # ── TypeSpec — 类型描述符 ──

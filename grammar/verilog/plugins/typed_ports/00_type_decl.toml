@@ -62,7 +62,7 @@ layout = { line = [
 ] }
 
 [TypeParamList.renderer]
-layout = { join = ", ", items = "items" }
+layout = { intent = "compact", items = "items", first_soft = false, nest = 0 }
 
 [TypeBody.parser]
 production = [
