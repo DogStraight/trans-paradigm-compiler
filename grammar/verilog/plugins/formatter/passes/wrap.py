@@ -72,6 +72,23 @@ def _indent_of(line: str) -> str:
     return line[: len(line) - len(line.lstrip())]
 
 
+def _derive_cont_ctx(ctx: LineContext) -> LineContext:
+    """折行续行段的派生 context（ADR-0006 阶段 3 带结构行）。
+
+    复制源行 ctx，标记为续行（multi_line_cont=True，
+    multi_header_line=源行号）——折行本身制造了续行，语义与 boundary
+    的"行尾运算符 → 下一行续行"识别一致，二次 format 不漂移。
+    """
+    from dataclasses import replace
+
+    return replace(
+        ctx,
+        multi_line_cont=True,
+        multi_header_line=ctx.line_number,
+        multi_extra=False,
+    )
+
+
 def _is_comment_or_directive(line: str, is_directive: bool = False) -> bool:
     s = line.lstrip()
     if s.startswith("//") or s.startswith("/*") or s.startswith("*"):
@@ -332,25 +349,39 @@ def run_wrap_pass(
     逗号/调用参数逗号/位选择内部可断不可断，全由 AST 结构推导）。解析输入
     就是该行文本，AST 节点 → 字符偏移与行内位置同源，无渲染错位问题。
     未传入/解析失败回退文本括号启发式。
+
+    contexts 就地同步（ADR-0006 阶段 3）：折出的每段派生复制源行 ctx，
+    且标记为续行（multi_line_cont=True, multi_header_line=源行号）——折行
+    本身制造了续行，二次 format 的 boundary 也按同一语义识别（行尾运算符
+    续行），contexts 与 lines 始终对齐，杜绝"拆行后行号漂移"。
     """
     if penalties is None or over_column is None:
         penalties, over_column = _load_wrap_config()
     out: list[str] = []
+    new_ctxs: list[LineContext] = []
     for i, line in enumerate(lines):
         is_cont = i < len(contexts) and contexts[i].multi_line_cont
         is_directive = i < len(contexts) and contexts[i].is_directive
-        out.extend(
-            _wrap_line(
-                line,
-                max_width,
-                indent_width,
-                penalties,
-                over_column,
-                already_cont=is_cont,
-                parser=parser,
-                is_directive=is_directive,
-            )
+        ctx = contexts[i] if i < len(contexts) else None
+        segs = _wrap_line(
+            line,
+            max_width,
+            indent_width,
+            penalties,
+            over_column,
+            already_cont=is_cont,
+            parser=parser,
+            is_directive=is_directive,
         )
+        out.extend(segs)
+        if ctx is not None:
+            new_ctxs.append(ctx)  # 首段保留源行 ctx
+            for _ in segs[1:]:
+                # 续行段：派生复制源行 ctx + 标记为续行（源行号作 header）
+                cont_ctx = _derive_cont_ctx(ctx)
+                new_ctxs.append(cont_ctx)
+    if new_ctxs:
+        contexts[:] = new_ctxs
     return out
 
 

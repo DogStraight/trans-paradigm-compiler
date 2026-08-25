@@ -223,6 +223,12 @@
 > 分支（Wadler 内核不动）；测试 tests/engine/renderer/test_doc_align_fill.py
 > + test_primitives_align_fill.py + test_doc_line_suffix.py；832 pytest 全绿。
 > 注释 attachment 机制（parser 注释 → line_suffix 挂载）留待阶段 4 注释遍。
+> 阶段 3 第一步已落地（ADR-0006）：拆行 pass 就地同步 contexts（inst_port/
+> wrap 拆行按段派生复制源行 ctx + wrap 续行段标记 multi_line_cont），引擎
+> run 增加 contexts 兜底对齐（漏同步 pass 自动按就近行派生），根治"拆行后
+> 行号漂移"（实证：inst_port 拆行后 lines/contexts 错位 +3 → 对齐）；
+> 测试 tests/languages/verilog/test_formatter_context_sync.py（7 用例）；
+> 全量 pytest 全绿 + pyright 0 errors + 双跑对比（既有幂等/保真度）零下降。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为

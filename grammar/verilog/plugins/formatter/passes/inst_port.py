@@ -9,12 +9,15 @@
   1. 拆单行多端口（`.clk(clk), .resetn(resetn), ...` → 每行一个），括号平衡
   2. 连续端口行分组对齐 name / expr 两列（与 ref 格式一致）
 
-不依赖 contexts（行号已由 indent pass 定好；拆分后行数变化）。
+依赖 boundary.py 提供的 RichLineContext 元数据；拆分后**就地同步 contexts**
+（每段派生复制源行 ctx）——根治"拆行后 contexts 与 lines 错位"的行号漂移
+（ADR-0006 阶段 3：带结构行，后续 wrap 按 index 取 contexts 不再拿错行）。
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from ..boundary import LineContext
 
@@ -138,20 +141,36 @@ def _align_contiguous_ports(lines: list[str]) -> None:
 
 
 def run_inst_port_align(lines: list[str], contexts: list[LineContext]) -> list[str]:
-    """拆单行多端口 + 连续端口行对齐。"""
-    del contexts  # pass 协议签名参数，本 pass 不消费
+    """拆单行多端口 + 连续端口行对齐。
+
+    拆行时同步 contexts：每段派生复制源行 ctx（line_number 保持源行号，
+    scope/ifdef 元数据不变），contexts 与 lines 始终同长——根治拆行后
+    行号漂移（后续 wrap 按 index 取 contexts 不再错位）。
+    """
     result: list[str] = []
-    for line in lines:
+    new_ctxs: list[LineContext] = []
+    for i, line in enumerate(lines):
+        ctx = contexts[i] if i < len(contexts) else None
         # impl 绑定语句（`impl type.role (ports)`）：`type.role` 会被当端口段拆开
         # （如 `impl spi.master (.clk(clk),` 拆成 `.master(.clk(clk),)` + `.clk(clk),`），
         # 整行跳过拆分——其后续 `.port(expr)` 行仍走连续端口对齐。
         if line.lstrip().startswith("impl "):
             result.append(line)
+            if ctx is not None:
+                new_ctxs.append(ctx)
             continue
         segs = _split_line_ports(line)
         if segs is not None:
             result.extend(segs)
+            for _ in segs:
+                if ctx is not None:
+                    new_ctxs.append(ctx)  # 派生复制：同一结构上下文的拆分段
         else:
             result.append(line)
+            if ctx is not None:
+                new_ctxs.append(ctx)
+    # 就地同步 contexts（调用方持有同一列表；wrap 后续按 index 取）
+    if new_ctxs:
+        contexts[:] = new_ctxs
     _align_contiguous_ports(result)
     return result
