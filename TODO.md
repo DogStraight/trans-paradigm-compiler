@@ -141,16 +141,27 @@
 > 变成自动检查器（纯 Python 零依赖，挂 CI）；与 P2.3 的关系：P2.3 管验证吞吐，
 > 本项管"约定即门禁"。
 
-- [ ] **`tools/policy/check_hardcode.py`（第一优先，零整改成本预期）**：
-  规则表驱动（编号规则，同 check_architecture 风格），os 扫描 + 正则，零依赖：
-  - [ ] 规则 1（核心卖点机器化）：引擎目录 .py 不得出现语言具体 token（词表从
-        grammar/ 实际 keyword 提取，防硬编码词表漂移）——"语言知识不进代码"
-        从文档约定变成自动门禁
-  - [ ] 规则 2：引擎 .py 不得硬编码 `grammar/verilog` 类相对路径（P2.4 修过的
-        硬编码路径问题防复发）
-  - [ ] 规则 3（可选）：文件头 `Doc:` 反向引用缺失检查（docs/README.md 约定）
-  - [ ] 验证：先本地跑现状（应全干净）→ 零整改接入 CI（test 矩阵加一步
-        `python tools/policy/check_hardcode.py`）
+- [x] **`tools/policy/check_hardcode.py`（已落地）**：规则表驱动，tokenize 精确区分
+      代码字符串/注释/docstring（零依赖），`--root`/`--strict-doc`/`--strict-import`
+      参数；CI 已接入（test 矩阵加 `python tools/policy/check_hardcode.py`）。
+  - [x] 规则 1（gate）：语言 token 不得以字符串字面量出现在引擎代码——词表从
+        grammar/ 实际 [id.keyword] 提取（防硬编码词表漂移），剔除 Python 关键字 +
+        allowlist（引擎协议词表，逐项注明原因：type/repeat/join/end/default/
+        input/output/signed）
+  - [x] 规则 2（gate）：不得硬编码 grammar/<lang> 相对路径字面量——allowlist
+        仅"grammar/verilog"默认语言包引导路径（define.py/config_registry.py 文档化回退）
+  - [x] 规则 3（info，--strict-doc 升 gate）：文件头 Doc: 反向引用缺失检查——
+        现网 83 文件缺失，留独立"Doc 头补齐"任务（见下）
+  - [x] 规则 4（info，--strict-import 升 gate）：引擎代码直接 import grammar.<lang>
+        插件检查——现网发现 pipeline/__init__.py 3 处 verilog 插件直连导入
+        （typed_ports collect_callbacks / formatter build_engine，均 try/except 守卫），
+        留作"插件回调能力化"重构（见 P1.5 上方后续项）
+  - [x] 验证：本地全干净（R1/R2 零违规）+ 17 自测（tests/policy/）+ pyright 0 errors
+- [ ] **Doc: 头补齐（规则 3 前置）**：83 个引擎 .py 补 docstring 末行 Doc: 反向引用
+      （docs/README.md 约定）；补齐后 CI 可开 --strict-doc
+- [ ] **插件回调能力化（规则 4 前置）**：pipeline 直连 grammar.verilog 插件导入改为
+      通用插件能力查找（typed_ports 变换回调 / formatter 能力经插件协议注册），
+      完成后 CI 可开 --strict-import
 
 - [ ] **case 即文档轻量版（第二优先）**：关键用例整理成"每行为一个 case + 显式
       期望"的可读清单（input/expect 声明式组织，参考 e2e samples 目录风格）；

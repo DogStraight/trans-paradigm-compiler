@@ -30,6 +30,10 @@ jobs:
         run: |
           python -m pytest tests -q --cov
 
+      - name: Policy checks (约定即门禁)
+        run: |
+          python tools/policy/check_hardcode.py
+
       - name: Verify CLI works
         run: |
           echo "module m; reg a; endmodule" | Out-File -Encoding utf8 ci_check.v
