@@ -45,6 +45,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [parsejoy](https://github.com/adewes/parsejoy) | 概念参考 | YAML 语法即数据（实验性，未完成） |
 | [Ohm](https://github.com/ohmjs/ohm) | 概念参考 | JS PEG + 语义操作分离 + 语法 OO 扩展 + 在线可视化编辑器 |
 | [DHParser](https://gitlab.lrz.de/badw-it/DHParser) | 概念参考 | 完整 left-recursion 支持、测试驱动语法开发、声明式 AST 变换；错误恢复方案不同（反向解析器 vs post-mortem） |
+| [Veryl](https://github.com/veryl-lang/veryl) | 设计参考 | SystemVerilog 现代超集 HDL（Rust，1026★，2022 起活跃）：语法简化 + 可综合保证 + 类型化 clock/reset + 转译保真——HDL 语法设计的直接参照（详见深调研） |
 
 ### 格式化与渲染
 
@@ -115,6 +116,46 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [vbcc](https://github.com/Leffmann/vbcc) | 深度参考 | 1989 年起的可移植 C 编译器，13 个目标后端；machines/ 目录一个后端一个目录的极简组织（详见深调研） |
 
 ## 深调研（详情）
+
+### Veryl（Rust）— SystemVerilog 现代超集 HDL（2026-08 调研，agent-reach 采集）
+
+- 定位：dalance（svlint 作者）的 HDL 语言设计——SystemVerilog 语法子集 + 语法简化，
+  Veryl 源码转译回**高可读 SV**（transpiler 而非新仿真生态）；1026★，2022 起活跃，
+  HN 主帖 76 points/45 comments（2024-03），2025-2026 连续版本发布（0.16.x）
+- 管线结构：Veryl 源码 → parser（Rust）→ 语义检查 → SV 代码生成；配套 verylup
+  （工具链安装器）/ std（标准库）/ doc（文档仓库）/ tree-sitter-veryl（编辑器语法）
+- **语法设计亮点**（对 tpc 的 verilog 语言包最有参照价值的部分）：
+  - 🔥 **类型化 clock/reset**（`clock`/`reset`/`clock_posedge`/`reset_async_low` 等 8 变体）：
+    极性/同步性从语法中剥离，由**构建期配置**指定——同一代码可生成 ASIC 负异步复位
+    与 FPGA 正同步复位两版。tpc 已有 port roles + `invert`（`slave : invert master`），
+    Veryl 是"角色系统进类型系统"的更强形态：clock/reset 是类型而非 role
+  - 💡 **方向反转内建**：`clock_posedge` 是 `clock` + 极性配置的组合——与 tpc
+    `invert master` 的"角色派生"理念同构，但 Veryl 落在类型声明位而非显式变换
+  - 💡 **default clock/reset**：单时钟模块可省略连接（`always_ff {}` 无参数）——
+    显式性默认值化的思路，tpc 的 opt 省略可参考其"语境默认"而非仅"空省略"
+  - 💡 **语法简化清单**（trailing comma / `if`/`case` 表达式 / `repeat` 连接 /
+    `msb` 记法 / `let` 语句 / `<>` 接口连接 / range 记法 `..` vs `..=`）：
+    "常见惯用法有专用语法"的设计原则——tpc 语法增强的候选方向清单
+- **与 tpc 的差异**（各有取舍，非优劣）：
+
+| 维度 | Veryl | tpc |
+|------|-------|-----|
+| 定位 | 新 HDL 语言（自己设计语法） | 语言流水线（语法即 TOML 资产） |
+| 语法来源 | Rust 手写 parser + 语义检查 | 引擎通用 + grammar/verilog TOML |
+| 语义保证 | 可综合保证 + CDC 检查 + 类型系统 | 分析器扩展点（primitive 配置） |
+| 产出 | 转译 SV（保真、可读） | 格式化/检查为主（非转译语言） |
+
+- **可实现性评估**：
+  - 🔥 **可做（低成本）**：trailing comma 端口列表（列表 join 已在 join 原语层，
+    `[PortList.renderer.layout]` 补尾逗号规则即可）；`msb`/`lsb` 记法（Verilog
+    语法糖，TOML 表达式规则可声明）
+  - 💡 **可做（中成本）**：clock/reset 类型进 verilog 语言包（`[id.keyword]` +
+    port role 扩展 + 分析器检查接线一致性）——tpc 的 port roles 已验证方向，
+    Veryl 提供"类型化"的下一步形态
+  - 📌 **不做**：CDC 检查 / 综合保证 / 内建仿真（Veryl 是完整工具链，tpc 聚焦
+    语法流水线本身；其 CDC 语义检查可在 analyzer primitive 层借鉴，但属大 feature）
+  - 📌 **观察**：Veryl 的"构建期配置驱动代码生成"（clock 极性）与 tpc 的
+    "配置驱动渲染"哲学同源——都是"形态与语义解耦"，路径不同（语言设计 vs 引擎）
 
 ### cairn（Scala）— 增量解析
 
