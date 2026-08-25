@@ -27,8 +27,12 @@
       fork/join/force/wait/event 挂载时为 keyword token；挂载幂等——两次独立加载
       规则集一致无累积；规则剥离/注入/解析断言已有）。注：enabled 声明 base="plugins"
       的配置在无 plugins_dir 时 fail-fast 报错（ADR-0003 设计），卸载验证走规则层
-- [ ] 发布收尾联动：语法补全后跑全量回归 + real 组（SweRV dmi 样本）+ fidelity
-      基线；仿真插件默认关闭不影响可综合子集纯净性
+- [x] 发布收尾联动（验证完成，2026-08-25）：pytest 全量 912 绿（含 real 组
+      test_real_fidelity 门禁）+ e2e 64；sim 插件默认挂载不影响可综合子集纯净性
+      （test_sim_plugin 规则/解析断言）。run_all_tests.py 93 项暴露 2 个**存量**
+      缺陷（023d939 起点同样存在，非本会话引入，已记录 P1.5 待修）：
+      ref_comments 幂等 FAIL（端口列表行内注释致 PortList truncated）+
+      ref_inline_test fidelity 0.8→0.7718 漂移
 
 ### P1.4 折行（wrap）完善
 
@@ -83,6 +87,11 @@
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
 - [ ] **concat 无折行**：`{a, b, c, ...}` 超宽保持原样，评估加 concat 断点
+- [ ] **ref_comments 幂等 FAIL（run_all_tests 存量，2026-08-25 记录）**：
+      `module comments_test(\n input clk // 行内注释,` —— 端口列表行内注释致
+      PortList 匹配失败 truncated → 二遍解析漂移。需查 PortList 注释处理
+- [ ] **ref_inline_test fidelity 漂移（run_all_tests 存量，2026-08-25 记录）**：
+      0.8 → 0.7718（Δ-0.0282）——normal 组样本 fidelity 下降，需查样本/cache 差异
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
