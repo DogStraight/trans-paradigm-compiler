@@ -242,6 +242,12 @@
 > pyright 0 errors；测试 tests/languages/verilog/test_formatter_engine_passkind.py。
 > 注释 attachment（parser 注释 → line_suffix 挂载，替换 inline_comment.py
 > 字符串级回插）留待后续（涉及 parser/pipeline 数据流，独立推进）。
+> 注释 attachment 已落地：parser parse_token 收集行尾注释时挂到节点
+> _attached_comments（下划线属性穿过 normalizer、Node.dump 过滤），
+> renderer render_node 用 line_suffix 原语锚定到语句行尾（Doc 一等公民），
+> 与 inline_comment.py 锚点回插双轨并存（restore 去重防重复）；877 pytest
+> + pyright 0 errors + PicoRV32 real 门禁零回归；测试
+> tests/engine/parser/test_comment_attachment.py（6 用例）。
 > 阶段 5 已落地（ADR-0006）：保真度分级——renderer/fidelity.py::keep_blank_lines
 > （src→out LCS 匹配映射表，空行完全以源为准：结构对应位置回插、不叠加
 > renderer 自产空行）；pipeline 参数 fidelity（full 默认零变化 / keep_blank），

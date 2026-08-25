@@ -8,7 +8,7 @@ Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 1 �
 
 from typing import Any,Optional
 from core.define import Node
-from .doc import Doc, Empty, Text, Break, Concat, Nest
+from .doc import Doc, Empty, Text, Break, Concat, Nest, LineSuffix
 from .primitives import eval_expr
 
 
@@ -82,6 +82,15 @@ def render_node(
         parts.append(tail_doc)
         for _ in range(tb - 1):
             parts.append(Break())
+
+    # --- 注释 attachment（ADR-0006 阶段 4 注释遍）---
+    # parser 收集行尾注释时挂到节点的 _attached_comments；这里用 line_suffix
+    # 原语把注释锚定到节点行尾（Doc 一等公民）。_resolve_line_suffix 把内容
+    # 推迟到下一个换行点之前输出（行尾锚定）。仅当节点有挂载注释时附加。
+    attached = getattr(node, "_attached_comments", None)
+    if attached:
+        for c in attached:
+            parts.append(LineSuffix(" " + c))
 
     if parts:
         return Concat(parts)
