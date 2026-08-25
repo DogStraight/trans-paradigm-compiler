@@ -157,6 +157,11 @@
         （typed_ports collect_callbacks / formatter build_engine，均 try/except 守卫），
         留作"插件回调能力化"重构（见 P1.5 上方后续项）
   - [x] 验证：本地全干净（R1/R2 零违规）+ 17 自测（tests/policy/）+ pyright 0 errors
+  - [x] **pyright strict 门禁（配套）**：`pyrightconfig.strict.json`（unused/调用/可选
+        访问规则，不含 Missing\* strictness 项）扫描全仓库 0 errors；CI 已接入
+        （`npx -y pyright@1.1.413 --project pyrightconfig.strict.json`，版本钉死防
+        默认规则漂移；升级时同步 bump）——清理记录见 git log（1448afc/c8b3821，
+        47 文件 +128/-115）
 - [ ] **Doc: 头补齐（规则 3 前置）**：83 个引擎 .py 补 docstring 末行 Doc: 反向引用
       （docs/README.md 约定）；补齐后 CI 可开 --strict-doc
 - [ ] **插件回调能力化（规则 4 前置）**：pipeline 直连 grammar.verilog 插件导入改为

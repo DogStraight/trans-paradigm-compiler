@@ -34,6 +34,11 @@ jobs:
         run: |
           python tools/policy/check_hardcode.py
 
+      - name: Static type gate (pyright strict)
+        # 版本钉在 1.1.413（与本地验证一致）；升级时同步 bump
+        run: |
+          npx -y pyright@1.1.413 --project pyrightconfig.strict.json
+
       - name: Verify CLI works
         run: |
           echo "module m; reg a; endmodule" | Out-File -Encoding utf8 ci_check.v
