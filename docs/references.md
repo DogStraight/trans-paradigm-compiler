@@ -123,7 +123,8 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   Veryl 源码转译回**高可读 SV**（transpiler 而非新仿真生态）；1026★，2022 起活跃，
   HN 主帖 76 points/45 comments（2024-03），2025-2026 连续版本发布（0.16.x）
 - 管线结构：Veryl 源码 → parser（Rust）→ 语义检查 → SV 代码生成；配套 verylup
-  （工具链安装器）/ std（标准库）/ doc（文档仓库）/ tree-sitter-veryl（编辑器语法）
+  （工具链安装器）/ std（标准库）/ doc（文档仓库）/ tree-sitter-veryl（编辑器语法）；
+  管线架构深读（五段分析/增量缓存/emitter 双模式/aligner PadKind）见下文深读节
 - **语法设计亮点**（对 tpc 的 verilog 语言包最有参照价值的部分）：
   - 🔥 **类型化 clock/reset**（`clock`/`reset`/`clock_posedge`/`reset_async_low` 等 8 变体）：
     极性/同步性从语法中剥离，由**构建期配置**指定——同一代码可生成 ASIC 负异步复位
@@ -156,6 +157,43 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     语法流水线本身；其 CDC 语义检查可在 analyzer primitive 层借鉴，但属大 feature）
   - 📌 **观察**：Veryl 的"构建期配置驱动代码生成"（clock 极性）与 tpc 的
     "配置驱动渲染"哲学同源——都是"形态与语义解耦"，路径不同（语言设计 vs 引擎）
+
+- **管线架构深读**（2026-08 二探，clone 主仓库读源码）——"tpc 管线拟态 Veryl"的对照：
+
+  Veryl 分析管线（`pipeline.rs`，build/check/test/publish/doc/dump/synth 共用）：
+  ```
+  parse → analyze_pass1 → analyze_post_pass1 → analyze_pass2 → analyze_post_pass2
+  ```
+  - **五段分析**：pass1 建符号/类型表 → post_pass1 全局检查（unused 等）→
+    pass2 逐文件 IR/代码生成 → post_pass2 跨文件后检查（组合环检测等）——
+    与 tpc 的 lint/parse/analyze/transform/render 序列是不同切法（Veryl 按
+    "语义阶段"切，tpc 按"语法阶段"切）
+  - 🔥 **内容寻址增量缓存**（`incremental.rs` + `cache` crate）：`.build/cache`
+    下 `manifest.toml` + 每源文件一个 blob（pass1 片段）；keyed on **二进制
+    指纹 + 构建配置**（工具链/配置变更整体失效）；`try_restore` 命中跳过
+    pass2/emit；**错误文件永不缓存**，warm 跑只回放警告（`Cached` diag 与
+    fresh diag 按 key 去重，`drop_cached_duplicates`）——tpc run_all 的
+    fidelity 缓存是"只升不降"，Veryl 是"内容寻址 + 语义去重"，更精确
+  - 🔥 **emitter 双模式**（`emitter.rs`）：`Mode::Align`（pass1 喂 token 给
+    aligner 算列 padding）→ `Mode::Build`（pass2 建 Doc IR 树 + render）——
+    与 tpc 世界 B column_align 两遍式**同构**；且 Veryl 也用 `veryl_pretty::doc::Doc`
+    + `render_with_anchors`（注释锚定）——Doc IR + 对齐 + 注释锚定三者组合
+    与 tpc 渲染器设计撞车，验证了方向
+  - 🔥 **aligner PadKind 三态**（`aligner/src/lib.rs`）：`Always`（恒输出，
+    计入 fits_flat）/ `IfBreak`（布局组断行才输出）/ `IfFlat`（flat 才输出，
+    超宽可强制断行）——**对齐与 Wadler-Lindig fits/break 语义融合**：对齐
+    padding 不是独立的"列对齐后处理"，而是参与布局决策的 Doc 一等公民。
+    tpc 世界 B column_align 目前是"渲染后对齐"（曾破坏 fits 判定），Veryl
+    是"对齐进 Doc IR"——这是 tpc 对齐与 Doc IR 融合的参考形态
+  - 💡 **build --check 差分**（`cmd_build.rs`）：`output != emitter.as_str()` 时
+    `print_diff` 失败退出——与 tpc 幂等/差分门禁同构（tpc 是 fidelity 度量，
+    Veryl 是字节 diff）；bundle target 用 temp dir 暂存后整体比对
+  - 💡 **filelist 拓扑排序**（`sort_filelist`）：`type_dag::toposort()` 按符号
+    依赖图排序输出文件清单——tpc 无此概念（单文件管线），多文件场景可参考
+  - 📌 **sourcemap**：Veryl→SV 位置映射（`sourcemap` crate）——tpc Node 缺
+    token span 的前置（lvca 的 provenance 也指向同一缺口）
+  - 📌 **simulator/cosim/synthesizer**（内建仿真/协同仿真/综合）：完整工具链
+    范畴，tpc 不做（README 已声明），仅作路线观察
 
 ### cairn（Scala）— 增量解析
 
