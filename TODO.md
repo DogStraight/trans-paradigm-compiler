@@ -165,7 +165,12 @@
 - [ ] 随机合法程序 → 对拍 Verible：接受域从 124 人工语料推到统计意义
       （GrammarFuzzer 生成器已就绪，缺接线）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
-- [ ] 引擎编译提速评估（Nuitka 已实证 exe，编译引擎是后手）
+- [x] 引擎编译提速评估（2026-08-25 结论：**不立项**）——Nuitka 编译引擎典型提速
+      1.5-3x（CPU 密集 parser/lexer），但：① P2.3 三件套（缓存/关幂等/
+      multiprocessing）预期 30-40x，远超编译收益且零构建成本；② 编译拖慢开发
+      迭代（改代码重编译 + 堆栈不可读），与"模型写配置→快速验证闭环"目标相悖；
+      ③ onefile 打包（packaging/build_pipeline.py）已实证，发布 exe 天然是编译版
+      ——编译提速作为分发副产品自动获得，无需单独立项
 - [ ] CI 补强（未做）：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential
       门禁接入
 - [x] CI 补强：PR 快速 fuzz（500 轮）+ edge 门禁已接入 test job（fuzz TOKEN-CORRUPT
