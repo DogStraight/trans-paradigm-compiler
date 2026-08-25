@@ -149,6 +149,8 @@ def build_engine(
                 "align_port_names": cat.get("align_port_names", False),
                 "break_distance": cat.get("break_distance", 3),
             },
+            # 量化拒绝准则（ADR-0006 阶段 4b）：参与行少于 2 → 无对齐组可成
+            criterion={"min_group_size": 2},
         ))
     # 实例端口对齐 pass（命令式，跟在品类 pass 之后）
     engine.register(FormatterPass(
@@ -165,6 +167,8 @@ def build_engine(
         handler=lambda lines, ctxs: run_wrap_pass(
             lines, ctxs, max_width=mw, indent_width=iw, parser=parser
         ),
+        # 量化拒绝准则（ADR-0006 阶段 4b）：无超宽行 → 跳过折行遍
+        criterion={"max_width": mw},
     ))
     # 超长注释折行 pass（VeriGood wrapComment 借鉴，默认关闭）——折纯 `//` 注释
     # 到 max_width，续行保留 `// ` 前缀；破坏性最小原则，由
