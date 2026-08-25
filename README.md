@@ -118,12 +118,22 @@ pip install -e ".[test]"     # editable install + test deps
 
 tpc --version                # 0.1.0
 tpc format input.v           # format a Verilog file (stdout)
+tpc format input.v --fidelity keep_blank   # keep source blank lines
 tpc lint input.v             # pre-parse token lint (exit 1 on diagnostics)
 tpc lint input.v --json      # LSP-compatible JSON diagnostics
+tpc check input.v            # cross-file semantic check (syntax then semantic stages)
+tpc check input.v --json     # machine-readable diagnostics (code/severity/range)
 tpc expand input.v           # expand macros + transform (per [commands].expand)
 tpc config dump              # show every config key's source (file + section)
 tpc new component my_feature --lang verilog   # scaffold a plugin component
 ```
+
+`tpc check` runs the syntax stage first, then semantic analysis (scopes,
+symbols, cross-file module checks); diagnostics carry stable codes — see
+[docs/diagnostics.md](./docs/diagnostics.md). Source-level suppressions keep
+generated code honest: `/* tpc-check off <code> */` … `/* tpc-check on */`
+(region) and `// tpc-check: disable-line <code>` (single line) filter
+diagnostics by code without touching the checkers.
 
 `tpc config dump` is the debugging entry point for "where does this config
 value come from" — it resolves the language pack and prints each key's source
@@ -253,6 +263,7 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 | [docs/MODEL_INDEX.md](./docs/MODEL_INDEX.md) | **Read before modifying**: knowledge-unit jump table → doc → impl → test |
 | [docs/api.md](./docs/api.md) | Python API reference (stage-level components) |
 | [docs/component_protocol.md](./docs/component_protocol.md) | Plugin components / slots / primitives / inject |
+| [docs/diagnostics.md](./docs/diagnostics.md) | Diagnostic codes + suppression comments (`tpc check`) |
 | [docs/linter_architecture.md](./docs/linter_architecture.md) | Pre-parse linter architecture |
 | [docs/semantic_checks.md](./docs/semantic_checks.md) | Semantic check slot design (two-layer rules + post-pass) |
 | [docs/known_limitations.md](./docs/known_limitations.md) | Full known-limitations list |
@@ -287,8 +298,9 @@ python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 ```
 
 CI ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) runs the full
-suite with a coverage gate plus a wheel-install smoke test, on
-Python 3.11/3.12/3.13 × Windows/Ubuntu.
+suite with a coverage gate, a wheel-install smoke test, plus two policy gates
+(`check_hardcode` — language knowledge stays out of engine code; pyright strict
+— no unused/dead-code diagnostics), on Python 3.11/3.12/3.13 × Windows/Ubuntu.
 
 ## Contributing
 

@@ -138,8 +138,8 @@
 
 - [ ] 覆盖率远期目标 ≥90%（当前 83.39%——source=引擎包真实基线，需补
       transform/renderer 等薄弱区）
-- [ ] 用户视角文档增量：现有 docs/ 偏引擎作者视角（MODEL_INDEX/ADR/
-      component_protocol）；发布只需 README Quick start 补齐，暂不新写用户手册。
+- [x] 用户视角文档增量：README Quick start 补齐 `tpc check`（跨文件语义检查 +
+      --json）+ suppress 注释说明 + docs/diagnostics.md 入文档表 + CI 双门禁描述
 
 ### P2.3 验证吞吐优化（backlog，非发布阻塞，2026-08-22 记录）
 
