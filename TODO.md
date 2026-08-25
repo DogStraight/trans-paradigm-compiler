@@ -234,6 +234,14 @@
 > 行尾锚定）；ParameterList/PortList/TaskPortList 三处手拼四件套已替换为
 > intent 声明且输出逐字节一致（848 pytest + e2e 全绿 + pyright 0 errors）；
 > 测试 tests/engine/renderer/test_primitives_intent.py（9 用例）。
+> 阶段 4b 已落地（ADR-0006）：多遍引擎——PassKind 枚举化（indent/ifdef/
+> align/wrap/comment/annotate/custom，旧 handler/category 兼容映射）+
+> FormatterPass.criterion 量化拒绝准则（min_group_size/max_span/max_width，
+> 不满足跳过该遍）；wrap 带 max_width 拒绝、品类对齐带 min_group_size 拒绝
+> （纯优化零输出变化）、wrap_comments 升格 COMMENT 内建遍；863 pytest +
+> pyright 0 errors；测试 tests/languages/verilog/test_formatter_engine_passkind.py。
+> 注释 attachment（parser 注释 → line_suffix 挂载，替换 inline_comment.py
+> 字符串级回插）留待后续（涉及 parser/pipeline 数据流，独立推进）。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为
@@ -244,6 +252,8 @@
 - [ ] **布局意图声明化**：语言包声明"结构 → 布局意图"（对齐/紧凑/折行/锚定），
       引擎推导具体 Doc，消灭手拼 Break/Nest（topiary 封闭式理念——但节点级
       注解到不了跨行对齐，需多遍引擎：对齐遍/折行遍/注释遍）
+      （4a intent 原语 + 4b PassKind/criterion 已落地，见上引用块；
+      剩余：注释 attachment、align/wrap intent 存量替换推广）
 - [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
       内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
       带结构行，根治 wrap 拆行后行号漂移
