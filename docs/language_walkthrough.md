@@ -86,7 +86,10 @@ while = "while"
 > mode，`token_type = "comment"`）；字符串定界符由 `[string] delimiters`
 > 声明（delim mode，`token_type = "literal.string"`，引擎不再硬编码引号）；
 > heredoc/围栏等同类构造可声明 `[[capture]]` 段（`start`/`end`/`kind`/
-> `token_type`，kind ∈ line/marker/delim/line_match）。
+> `token_type`，kind ∈ line/marker/delim/line_match/indent_leq）。
+> indent_leq 是 YAML 块标量的列比较终止：`after`（前一显著 token 须在集合，
+> 值位置判定）与 `next_chars`（后随字符须在集合）为触发条件，终止基准 =
+> 触发行物理缩进列。
 > 无尺寸数字触发前缀（如 `'h`）由 `lexer/main_lexer.py::_build_unsized_prefixes`
 > 从 `[[number.based]]` 形态推导（size=none + 单字符 base_prefix），不再硬编码。
 > 详见 `lexer/capture_runner.py` 文件头与 `tests/engine/lexer/test_capture_runner.py`。

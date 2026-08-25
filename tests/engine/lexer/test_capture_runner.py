@@ -113,6 +113,33 @@ class TestBuildRules:
         with pytest.raises(ValueError, match="配置不完整"):
             CaptureRunner.build_rules(td)
 
+    def test_capture_after_and_next_chars_parsed(self):
+        """after（token 类型列表）与 next_chars（字符集）解析进规则。"""
+        td = _make_td(
+            capture_modes=[
+                {
+                    "start": "|",
+                    "kind": "indent_leq",
+                    "token_type": "literal.block_scalar",
+                    "after": ["symbol.base.colon", "symbol.base.sub"],
+                    "next_chars": " \t\n+-",
+                }
+            ]
+        )
+        rules = CaptureRunner.build_rules(td)
+        rule = rules[0]
+        assert rule.after == ("symbol.base.colon", "symbol.base.sub")
+        assert rule.next_set == frozenset(" \t\n+-")
+
+    def test_capture_indent_leq_needs_no_end(self):
+        """indent_leq 无需 end（终止条件是列比较，base_col 运行时传入）。"""
+        td = _make_td(
+            capture_modes=[
+                {"start": "|", "kind": "indent_leq", "token_type": "x"}
+            ]
+        )
+        assert len(CaptureRunner.build_rules(td)) == 1
+
 
 # ═══════════════════════════════════════════════════
 # run 直接测试（三种终止 kind）
@@ -201,6 +228,71 @@ class TestRunDelim:
         td = self._td([""])
         with pytest.raises(ValueError, match="非法条目"):
             CaptureRunner.build_rules(td)
+
+
+class TestRunIndentLeq:
+    """indent_leq kind：YAML 块标量（列比较终止）。"""
+
+    _TD = _make_td(
+        capture_modes=[
+            {"start": "|", "kind": "indent_leq", "token_type": "literal.block_scalar"}
+        ]
+    )
+
+    def test_basic_content(self):
+        """指示符行 + 更深缩进的内容行；剥尾部换行。"""
+        result = CaptureRunner.run("|\n  line1\n  line2\nnext", 0, self._TD, 0)
+        assert result is not None
+        content, pos, token_type = result
+        assert content == "|\n  line1\n  line2"
+        assert token_type == "literal.block_scalar"
+        assert pos == len("|\n  line1\n  line2\n")  # 停在 next 前
+
+    def test_terminates_at_base_col(self):
+        """内容行列 ≤ 基准列即终止（基准=2）。"""
+        result = CaptureRunner.run("|\n    a\n  b\n", 0, self._TD, 2)
+        assert result is not None
+        content, pos, _ = result
+        assert content == "|\n    a"
+        assert pos == len("|\n    a\n")  # 停在 "  b" 前
+
+    def test_blank_lines_are_content(self):
+        """空行（仅空白）是内容。"""
+        result = CaptureRunner.run("|\n  a\n\n  b\nnext", 0, self._TD, 0)
+        assert result is not None
+        content, _, _ = result
+        assert content == "|\n  a\n\n  b"
+
+    def test_eof_termination(self):
+        """无终止行时到 EOF 自然终止。"""
+        result = CaptureRunner.run("|\n  a\n  b", 0, self._TD, 0)
+        assert result is not None
+        content, _, _ = result
+        assert content == "|\n  a\n  b"  # EOF 无尾部换行可剥
+
+    def test_chomping_and_indent_indicators_verbatim(self):
+        """切块（|-/|+）与缩进指示（|2）原样保留。"""
+        result = CaptureRunner.run("|+\n  a\nnext", 0, self._TD, 0)
+        assert result is not None
+        assert result[0] == "|+\n  a"
+        result2 = CaptureRunner.run("|2\n   two\nnext", 0, self._TD, 0)
+        assert result2 is not None
+        assert result2[0] == "|2\n   two"
+
+    def test_crlf_content_verbatim(self):
+        """CRLF 内容原样保留（\r 是 [space] 成员，不吞）。"""
+        result = CaptureRunner.run("|\r\n  a\r\n  b\r\nnext", 0, self._TD, 0)
+        assert result is not None
+        content, _, _ = result
+        assert content == "|\r\n  a\r\n  b\r"  # 剥 \n 后尾 \r 保留
+
+    def test_immediate_termination_empty_block(self):
+        """指示符后立即遇到 ≤ 基准的行 → 空块。"""
+        result = CaptureRunner.run("|\nnext", 0, self._TD, 0)
+        assert result is not None
+        content, pos, _ = result
+        assert content == "|"
+        assert pos == len("|\n")
 
 
 class TestRunMarker:

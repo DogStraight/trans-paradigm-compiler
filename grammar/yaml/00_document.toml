@@ -67,10 +67,10 @@ line = [
 ]
 
 
-# ── Value — 标量 / 缩进块 / 流式集合 / 锚点别名（流式规则见 01_flow.toml） ──
+# ── Value — 标量 / 缩进块 / 流式集合 / 锚点别名 / 块标量（规则见 01_flow.toml） ──
 
 [Value.parser]
-production = ["@Scalar|@IndentBlock|@FlowSeq|@FlowMap|@AnchorValue|@AliasRef"]
+production = ["@Scalar|@IndentBlock|@FlowSeq|@FlowMap|@AnchorValue|@AliasRef|@BlockScalar"]
 inline = true
 
 [Value.parser.node]
@@ -166,4 +166,18 @@ production = ["keyword.null"]
 value = "$1"
 
 [NullLit.renderer.layout]
+ref = "value"
+
+# ── BlockScalar — 块标量（`key: |` / `- >`，lexer 产出 literal.block_scalar） ──
+# 内容为逐字捕获（含指示符与切块/缩进指示符），渲染原样输出。
+# 语法层不做折叠/切块语义展开（见 README 已知边界）。
+
+[BlockScalar.parser]
+is_atom = true
+production = ["literal.block_scalar"]
+
+[BlockScalar.parser.node]
+value = "$1"
+
+[BlockScalar.renderer.layout]
 ref = "value"

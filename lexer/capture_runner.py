@@ -42,16 +42,31 @@ from __future__ import annotations
 class CaptureRule:
     """一种原始捕获模式的匹配规则。"""
 
-    def __init__(self, start: str, end: str, kind: str, token_type: str):
-        self.start = start  # 触发标记，如 "#" / "<<EOF"
-        self.end = end  # 终止标记（marker/line_match 用；line 忽略）
-        self.kind = kind  # "line" | "marker" | "line_match"
+    def __init__(
+        self,
+        start: str,
+        end: str,
+        kind: str,
+        token_type: str,
+        after: tuple[str, ...] = (),
+        next_chars: str = "",
+    ):
+        self.start = start  # 触发标记，如 "#" / "<<EOF" / "|"
+        self.end = end  # 终止标记（marker/line_match/delim 用）
+        self.kind = kind  # "line" | "marker" | "delim" | "line_match" | "indent_leq"
         self.token_type = token_type  # 产出 token 类型，如 "comment"
         self.start_len = len(start)
         self.end_len = len(end)
+        # 触发上下文条件（由调用方 lexer 判定，本类不持有行状态）：
+        # after = 前一个显著 token 类型须在此集合（YAML 块标量：须在
+        #   ":" 或 "-" 值位置）；空 = 不限制。
+        # next_chars = 后随字符须在此集合（YAML 块标量：须后随空白/换行/
+        #   指示符，排除 a | b 的中缀场景）；空 = 不限制。
+        self.after = after
+        self.next_set = frozenset(next_chars)
 
 
-_VALID_KINDS = ("line", "marker", "delim", "line_match")
+_VALID_KINDS = ("line", "marker", "delim", "line_match", "indent_leq")
 
 
 class CaptureRunner:
@@ -114,17 +129,27 @@ class CaptureRunner:
                         "[lexer] [capture] 段配置不完整："
                         f"mode={mode!r}（需要 kind ∈ {_VALID_KINDS} + token_type）"
                     )
-                if kind != "line" and not mode.get("end"):
+                # indent_leq 的终止条件是列比较（base_col 运行时传入），无需 end
+                if kind not in ("line", "indent_leq") and not mode.get("end"):
                     raise ValueError(
                         "[lexer] [capture] 段配置不完整："
                         f"kind={kind!r} 需要非空 end 终止标记，mode={mode!r}"
                     )
+                after = mode.get("after", [])
+                if not isinstance(after, list):
+                    raise ValueError(
+                        "[lexer] [capture] 段配置不完整："
+                        f"after 须为 token 类型列表，mode={mode!r}"
+                    )
+                next_chars = mode.get("next_chars", "")
                 rules.append(
                     CaptureRule(
                         start=str(mode["start"]),
                         end=str(mode.get("end", "")),
                         kind=kind,
                         token_type=str(token_type),
+                        after=tuple(str(t) for t in after),
+                        next_chars=str(next_chars),
                     )
                 )
 
@@ -139,9 +164,12 @@ class CaptureRunner:
 
     @staticmethod
     def run(
-        text: str, start: int, token_define: dict
+        text: str, start: int, token_define: dict, base_col: int = 0
     ) -> tuple[str, int, str] | None:
         """从 start 位置尝试匹配任意 capture mode。
+
+        Args:
+            base_col: 触发行的物理缩进列（indent_leq 的终止基准）。
 
         Returns:
             (content, end_pos, token_type) — 捕获内容、结束位置（消费到的
@@ -150,6 +178,7 @@ class CaptureRunner:
         """
         rules = CaptureRunner.build_rules(token_define)
         newline_set = set(token_define.get("newline", {}).values())
+        space_set = set(token_define.get("space", {}).values())
         for rule in rules:
             # 检查是否以起始标记开头
             if text[start : start + rule.start_len] != rule.start:
@@ -207,6 +236,43 @@ class CaptureRunner:
                             return (content, pos, rule.token_type)
                     content += text[pos]
                     pos += 1
+                return (content, pos, rule.token_type)
+
+            elif rule.kind == "indent_leq":
+                # YAML 块标量：指示符行（start → 行尾含换行）原样入 content，
+                # 然后逐行捕获"列 > base_col"的内容行（含空行——空行是
+                # 内容），遇"非空且列 ≤ base_col"的行终止（该行不消费）。
+                # 终止基准 = 触发行的物理缩进列（base_col，由 lexer 传入
+                # 行首空白宽度）。缩进指示/切块指示（|-/|+/|2）原样保留
+                # （与指示符行一体捕获，不做语义展开）。
+                while pos < len(text) and text[pos] not in newline_set:
+                    content += text[pos]
+                    pos += 1
+                if pos < len(text):  # 指示符行换行
+                    content += text[pos]
+                    pos += 1
+                while pos < len(text):
+                    line_start = pos
+                    # 行首空白 → 物理列（tab 计 1 列，宽容）
+                    p = pos
+                    while p < len(text) and text[p] in space_set:
+                        p += 1
+                    col = p - line_start
+                    # 行尾（不含换行）
+                    eol = p
+                    while eol < len(text) and text[eol] not in newline_set:
+                        eol += 1
+                    if eol > p and col <= base_col:
+                        break  # 终止行（非空、列 ≤ 基准）：不消费
+                    # 内容行（含空行）：整行含换行入 content
+                    if eol < len(text):
+                        eol += 1  # 含换行
+                    content += text[line_start:eol]
+                    pos = eol
+                # 剥一个尾部换行：渲染时节点间 join "\n" 恰好补回，避免
+                # 输出空行（字面块 clip 语义 = 恰好一个尾换行）
+                if content.endswith(tuple(newline_set)):
+                    content = content[:-1]
                 return (content, pos, rule.token_type)
 
         return None

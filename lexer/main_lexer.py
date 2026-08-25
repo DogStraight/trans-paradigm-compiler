@@ -23,7 +23,7 @@ from core.token_protocol import (
 
 from .lexer_utils import get_number_config
 from .number_runner import build_number_runner
-from .capture_runner import CaptureRunner
+from .capture_runner import CaptureRunner, CaptureRule
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config（与 preprocessor/_expand.py 共享同一 key，宏配置
@@ -122,11 +122,15 @@ class Lexer:
         self.alpha_tokens = []
         self._build_alpha_tokens()
         self.full_token_map: dict[str, str] = self._build_full_token_map()
-        # capture mode 触发标记（注释/heredoc/围栏等，配置驱动）：
+        # capture mode 表（注释/字符串/heredoc/块标量等，配置驱动）：
         # 构建一次缓存，避免 tokenize 主循环每轮重建规则表。
-        self._capture_starts: list[str] = CaptureRunner.get_start_patterns(
+        self._capture_rules: list[CaptureRule] = CaptureRunner.build_rules(
             self.token_define
         )
+        self._capture_starts: list[str] = [r.start for r in self._capture_rules]
+        self._capture_start_map: dict[str, CaptureRule] = {
+            r.start: r for r in self._capture_rules
+        }
         # 字符串定界符集合（[string] delimiters，引擎不再硬编码引号）：
         # 字符串分支在主循环后半段（number 之后），只在此命中。
         self._string_delims: set[str] = set(
@@ -153,6 +157,11 @@ class Lexer:
 
         # new_line_start：行首标记，缩进处理用
         self.new_line_start = False
+        # 行状态（capture 触发条件用）：
+        # _line_indent = 当前行物理缩进列（行首空白宽，indent_leq 基准）；
+        # _line_sig = 当前行最近一个显著 token 类型（after 条件用）。
+        self._line_indent = 0
+        self._line_sig: str | None = None
 
         # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM（唯一路径）。
         # 旧 NumberFSM 回退已移除（P2.1 配置化后所有语言包都声明数字形态，
@@ -203,6 +212,8 @@ class Lexer:
         # 缩进深度每次 tokenize 重置：每个源文件是独立缩进上下文，
         # 跨调用残留会导致新文件开头误发 space.dedent（YAML 缩进语言包暴露）。
         self.indent_deep = 0
+        self._line_indent = 0
+        self._line_sig = None
 
         # token pos relative
         text_idx: int = 0
@@ -232,6 +243,9 @@ class Lexer:
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 self.new_line_start = True
+                # 行状态随换行重置
+                self._line_indent = 0
+                self._line_sig = None
                 continue
 
             # ── space 分支 ──
@@ -246,6 +260,9 @@ class Lexer:
                     offset += 1
 
                 # handle indentation only when this line just started
+                if self.new_line_start:
+                    # 记录本行物理缩进列（capture indent_leq 的终止基准）
+                    self._line_indent = len(space_content)
                 if self.new_line_start and self.indent_enable:
                     # empty line (only spaces followed by newline) -> ignore
                     if text_idx < lex_text_len and lex_text[text_idx] in self.newline:
@@ -301,12 +318,13 @@ class Lexer:
                 continue
 
             # capture — 原始文本捕获（CommentRunner 泛化：注释/heredoc/
-            # 围栏等"进入后原样吞字符"构造统一走 CaptureRunner，完全配置驱动）
-            elif any(
-                lex_text.startswith(s, text_idx)
-                for s in self._capture_starts
-            ):
-                result = CaptureRunner.run(lex_text, text_idx, self.token_define)
+            # 围栏/块标量等"进入后原样吞字符"构造统一走 CaptureRunner，
+            # 完全配置驱动；after/next_chars 触发条件由 _match_capture 判定）
+            elif self._match_capture(lex_text, text_idx) is not None:
+                result = CaptureRunner.run(
+                    lex_text, text_idx, self.token_define,
+                    base_col=self._line_indent,
+                )
                 if result is not None:
                     capture_content, new_idx, token_type = result
                     self._emit_pending_dedent(tokens)
@@ -316,19 +334,22 @@ class Lexer:
                     tokens.append(current_token)
                     offset = new_idx - text_idx
                     text_idx = new_idx
-                    # 多行捕获跨行：行号同步前进（此前只平移列、行号不增，
-                    # 捕获后的所有 token 行号系统性偏少）；列重算到捕获最后一
-                    # 行内（该行内容宽度），单行捕获仍按列平移 offset。
-                    newlines = capture_content.count("\n")
+                    # 多行捕获跨行：行号/列按消费的原文跨度记账（此前只平移
+                    # 列、行号不增，捕获后的 token 行号系统性偏少）。
+                    newlines = lex_text.count("\n", text_idx - offset, new_idx)
                     if newlines:
                         line_number += newlines
-                        start_point = (
-                            len(capture_content) - capture_content.rfind("\n") - 1
+                        start_point = new_idx - (
+                            lex_text.rfind("\n", 0, new_idx) + 1
                         )
                     else:
                         start_point += offset
+                    # 捕获终止于行边界（最后一个消费字符是换行）→ 下一个
+                    # token 在行首，置行首标记使缩进机制正确工作。
+                    if new_idx > 0 and lex_text[new_idx - 1] in self.newline:
+                        self.new_line_start = True
                     # captures at beginning of line should not affect indentation
-                    if self.new_line_start:
+                    elif self.new_line_start:
                         self.new_line_start = False
                     continue
 
@@ -601,6 +622,28 @@ class Lexer:
         return m
 
     # 仅供 tokenize 内部调用
+    def _match_capture(self, text: str, pos: int) -> CaptureRule | None:
+        """capture mode 触发匹配：start 前缀 + after + next_chars 条件。
+
+        条件不满足返回 None——调用方（elif 链）不消费，落到后续分支
+        （如 YAML `a | b` 的 `|` 不在值位置，不触发块标量）。
+        """
+        for s in self._capture_starts:
+            if text.startswith(s, pos):
+                rule = self._capture_start_map[s]
+                # after：前一个显著 token 须在集合（值位置判定）
+                if rule.after and self._line_sig not in rule.after:
+                    return None
+                # next_chars：后随字符须在集合（排除中缀场景，如 a | b）
+                nxt = pos + rule.start_len
+                if rule.next_set and (
+                    nxt >= len(text) or text[nxt] not in rule.next_set
+                ):
+                    return None
+                return rule
+        return None
+
+    # 仅供 tokenize 内部调用
     def refine_type(self, _token: Token) -> Token:
         # 粗类型精化：keyword/bracket/symbol 等字母形式查扁平表
         if _token.type == "unrecognized":
@@ -618,4 +661,7 @@ class Lexer:
                 _token.type = full_type
         # else: 保持原有类型（newline / space / literal.string / literal.number / comment 等）
         self.previous_token_type = _token.type
+        # 行内显著 token 记录（capture after 条件用；trivia 不计）
+        if _token.type not in ("newline", "comment"):
+            self._line_sig = _token.type
         return _token

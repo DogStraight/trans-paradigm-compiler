@@ -85,17 +85,22 @@
 
 ## Architecture boundaries
 
-- **Lexer raw-capture modes: single-char delimiters only, no column-aware
-  termination.** The CaptureRunner primitive (`lexer/capture_runner.py`)
-  captures verbatim text until a line end, a literal marker, a full-line
-  match, or a closing delimiter — comments, strings, heredocs, fenced blocks,
-  and similar constructs are config-declared (`[comment] pairs` legacy,
-  `[string] delimiters`, `[[capture]]` new). Two gaps remain:
+- **Lexer raw-capture modes: single-char delimiters, verbatim block scalars.**
+  The CaptureRunner primitive (`lexer/capture_runner.py`) captures verbatim
+  text until a line end, a literal marker, a full-line match, a closing
+  delimiter, or a column comparison (`indent_leq` — YAML block scalars `|`/`>`
+  terminate at content indentation ≤ the trigger line's). Comments, strings,
+  heredocs, fenced blocks, and block scalars are config-declared
+  (`[comment] pairs` legacy, `[string] delimiters`, `[[capture]]` with
+  optional `after`/`next_chars` trigger conditions). Remaining gaps:
   (1) string delimiters are single-character (`"`/`'`) — multi-char
-  delimiters like `"""` or Rust `r#"` need a delimiter-sequence extension,
-  and (2) there is no column-comparison termination (`indent_leq`), which
-  YAML block scalars (`|`/`>`) require — the lexer's indentation model is
-  grid-based level counting, not absolute-column comparison.
+  delimiters like `"""` or Rust `r#"` need a delimiter-sequence extension;
+  (2) block scalar content is captured verbatim — folding (`>`), chomping
+  (`-`/`+`), and indentation indicators are preserved but not semantically
+  expanded, and comments on the indicator line ride along inside the token;
+  (3) trigger conditions are limited to the declarative
+  prev-token-in-set + next-char-in-set pair — richer contextual predicates
+  need a different mechanism.
 - **Parser is classic recursive descent + Pratt (LL-style)** — not LR/GLR, and
   there is no parser-level error recovery (no skip-to-sync-point and
   continue). Syntax errors are caught by the pre-parse linter and block the

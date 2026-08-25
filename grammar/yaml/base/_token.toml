@@ -63,5 +63,28 @@ number = "-?\\d+(\\.\\d+)?"
 [string]
 delimiters = ['"', "'"]
 
+# 块标量（[[capture]] indent_leq mode）——`key: |` / `- >` 的原始文本捕获。
+# 触发条件（language 知识在配置不在引擎）：
+#   after      : 前一个显著 token 须是 ":" 或 "-"（值位置）——排除 `a | b`
+#                中缀场景
+#   next_chars : 后随字符须是空白/换行/切块与缩进指示符（+-/数字）——
+#                排除 `key: |x`（| 直接粘内容）这类非块标量形态
+# 终止条件：内容行缩进 ≤ 触发行缩进（base_col，lexer 运行时传行首空白宽）。
+# 注：指示符行上的注释（`| # c`）随内容一体捕获（非独立 comment token），
+# 缩进/切块指示符（|-/|+/|2）原样保留不做语义展开（见 README 已知边界）。
+[[capture]]
+start = "|"
+kind = "indent_leq"
+token_type = "literal.block_scalar"
+after = ["symbol.base.colon", "symbol.base.sub"]
+next_chars = " \t\r\n+-0123456789"
+
+[[capture]]
+start = ">"
+kind = "indent_leq"
+token_type = "literal.block_scalar"
+after = ["symbol.base.colon", "symbol.base.sub"]
+next_chars = " \t\r\n+-0123456789"
+
 [id.id]
 id = "[a-zA-Z_][a-zA-Z0-9_]*"
