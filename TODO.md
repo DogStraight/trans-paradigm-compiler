@@ -203,8 +203,10 @@
       tpc 差分/fuzz 已覆盖正确性，增量价值是"语义单例文档化"（docs/ 资产，
       配合切片哲学），不新建测试框架
 
-- [ ] **阶段间契约文档评估（低优先）**：tpc 已有 MODEL_INDEX 跳转表，评估是否补
-      "阶段间契约"文档（各管线阶段接口的层间边界描述）
+- [x] **阶段间契约文档（评估结论：值得补，已落地）**：`docs/pipeline_stages.md`
+      ——各阶段输入/输出数据形态 + 阻断语义（lint/parse truncated/analyzer error）
+      + 跨阶段数据通道（下划线属性/注释锚点/attachment/变换回调/root_scope/宏 marker）；
+      MODEL_INDEX 已登记
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 

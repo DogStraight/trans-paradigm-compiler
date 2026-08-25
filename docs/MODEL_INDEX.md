@@ -37,3 +37,4 @@
 | 渲染器工作机制与现状（双世界 + 缺口评估） | `renderer_architecture.md` | `renderer/`（世界 A：Doc IR + 原语）<br>`grammar/verilog/plugins/formatter/`（世界 B：pass 管线） | `tests/engine/renderer/`<br>`tests/languages/`<br>`tests/e2e/` |
 | 引擎约定机器化（check_hardcode 门禁） | `AGENTS.md`（硬约束来源：语言知识不进代码/路径规范/Doc 反向引用）<br>`docs/README.md`（Doc: 约定） | `tools/policy/check_hardcode.py`（规则 1-4：token 字面量/grammar 路径/Doc 头/插件导入） | `tests/policy/test_check_hardcode.py`（17 用例，含真实仓库门禁回归） |
 | 诊断 code 命名空间 + 豁免注释（tpc-check pylance 化） | `diagnostics.md`（code 清单 + suppress 语法）<br>`references.md`（Verilog 静态检查工具群调研） | `analyzer/suppress.py`（豁免过滤）<br>`analyzer/checker.py`（诊断序列化，LSP 兼容）<br>`main.py::_cmd_check`（--json + 豁免接入） | `tests/engine/analyzer/test_check_suppress.py`（13 用例） |
+| 管线阶段契约（层间数据形态 + 阻断语义 + 跨阶段通道） | `pipeline_stages.md` | `pipeline/__init__.py::run_pipeline_on_source`（阶段编排）<br>各阶段 `_stage_*` | 全量 e2e（`tests/e2e/`）+ 注释 attachment 测试 |
