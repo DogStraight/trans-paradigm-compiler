@@ -56,6 +56,8 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [topiary](https://github.com/topiary/topiary) | 概念参考 | tree-sitter 查询驱动的声明式 formatter（纯规则不写代码）；capture 注解到不了跨行对齐——"封闭式"粒度极限的实证 |
 | [dprint](https://github.com/dprint/dprint) | 概念参考 | 配置驱动插件平台（Rust/wasm 插件）；"配置是选项非布局规则"，语言插件仍需手写 printer |
 | [verible-verilog-format](https://github.com/chipsalliance/verible) | 架构对比 | Google Verilog/SystemVerilog 官方 formatter（token 流 + 布局决策 + 注释锚定）；tpc 差分测试已带其 exe，是高精度目标参照（详见深调研） |
+| [istyle-verilog-formatter](https://github.com/thomasrussellmurphy/istyle-verilog-formatter) | 概念参考 | 独立开源 Verilog formatter（C++，~187★，2026 仍活跃）——Astyle 式缩进风格引擎，验证"格式即风格选项"路线 |
+| [verilog-format](https://github.com/ericsonj/verilog-format) | 概念参考 | Java 独立 Verilog formatter（~207★，2019 起维护）：`-s verilog-format.properties` 属性文件驱动选项——"配置是选项非布局规则"的另一实证 |
 
 ### 静态检查（HDL lint）
 
