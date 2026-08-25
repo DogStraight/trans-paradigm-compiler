@@ -29,12 +29,13 @@ indent = false
 
 
 # ── MappingEntry — key: value ──
+# key 可为标量或 merge key（`<<: *defaults`，见 01_flow.toml）
 
 [MappingEntry]
 is_statement = true
 
 [MappingEntry.parser]
-production = ["@Scalar", "symbol.base.colon", "@Value?"]
+production = ["@Scalar|@MergeKey", "symbol.base.colon", "@Value?"]
 
 [MappingEntry.parser.node]
 key = "$1"
@@ -66,10 +67,10 @@ line = [
 ]
 
 
-# ── Value — 标量 或 缩进块 ──
+# ── Value — 标量 / 缩进块 / 流式集合 / 锚点别名（流式规则见 01_flow.toml） ──
 
 [Value.parser]
-production = ["@Scalar|@IndentBlock"]
+production = ["@Scalar|@IndentBlock|@FlowSeq|@FlowMap|@AnchorValue|@AliasRef"]
 inline = true
 
 [Value.parser.node]

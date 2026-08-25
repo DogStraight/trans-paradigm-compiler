@@ -1,0 +1,49 @@
+"""tests/languages/yaml/conftest.py — yaml 语言包共享 fixtures。
+
+yaml fixture：用 load_language("grammar/yaml") 初始化 yaml 语言包（单语言
+选择模型），测试结束恢复 verilog，避免污染其它测试。
+（从 test_yaml.py 提升：test_yaml.py 与 test_yaml_flow.py 共享。）
+"""
+
+import pytest
+
+from core.config_registry import ConfigRegistry
+from core.define import GrammarRulesRegister
+from parser import setup_grammar
+from parser.rule_selector import RuleSelector
+from parser.parser_core import Parser
+from lexer import Lexer
+from renderer import Renderer
+
+
+@pytest.fixture(scope="module")
+def yaml(config_loaded):
+    """初始化 yaml 语言包（单语言选择），测试结束恢复 verilog。"""
+    ConfigRegistry.load_language("grammar/yaml")
+    register = GrammarRulesRegister()  # 独立实例，不污染全局单例
+    rules = setup_grammar("grammar/yaml", register)
+    stmt_names = [
+        n
+        for n, r in rules.items()
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
+    ]
+    rs = RuleSelector(rules, stmt_names)
+    parser = Parser(rules_dir="grammar/yaml", rules=rules, rule_selector=rs, log_file="")
+    lexer = Lexer(rules_dir="grammar/yaml")
+    renderer = Renderer(rules_dir="grammar/yaml")
+    yield {"rules": rules, "parser": parser, "lexer": lexer, "renderer": renderer}
+    # 恢复 verilog
+    ConfigRegistry.load_language(
+        "grammar/verilog", plugins_dir="grammar/verilog/plugins"
+    )
+
+
+def _parse(src: str, yaml):  # pyright: ignore[reportUnusedFunction] — pytest 约定：测试文件经 `from ...conftest import _parse` 导入
+    """YAML 源码 → AST。"""
+    tokens = yaml["lexer"].tokenize(src)
+    return yaml["parser"].parse(tokens)
+
+
+def _node_names(ast) -> list[str]:  # pyright: ignore[reportUnusedFunction] — 同上，测试文件导入
+    """提取 AST 顶层节点名列表。"""
+    return [n.node_name for n in getattr(ast, "sub_node", []) or []]

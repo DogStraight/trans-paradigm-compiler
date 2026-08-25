@@ -1,0 +1,211 @@
+# ============================================================================
+# yaml（YAML 子集）语法规则 — 流式集合 / 锚点别名 / 多文档
+# ============================================================================
+# 补全范围（相对 00_document.toml 的块式映射/列表）：
+#   - 流式集合：`[a, b]` / `{k: v}`，可嵌套、可跨行
+#     （跨行依赖 lexer 既有机制：bracket_depth > 0 时行首缩进不产生
+#      space.indent，newline 由 parser skip_types 跳过）
+#   - 锚点/别名：`&anchor value`（声明）/ `*alias`（引用）
+#   - merge key：`<<: *defaults`（映射键位）
+#   - 多文档：`---`（文档分隔）/ `...`（文档流结束），顶层语句形态
+# 不做（记录于 README 已知边界）：块标量（|/>）、引号转义（引擎字符串
+# 手写循环不支持）、类型标签（!!）、%YAML 指令。
+
+# ── FlowSeq — 流式序列 `[a, b]` ──
+
+[FlowSeq.parser]
+production = [
+    "bracket.l_square_bracket",
+    "@FlowItemList?",
+    "bracket.r_square_bracket",
+]
+
+[FlowSeq.parser.node]
+items = "$2"
+
+[FlowSeq.renderer.layout]
+line = [
+    "[",
+    { join = ", ", items = "items" },
+    "]",
+]
+
+
+# ── FlowItemList — 流式序列元素列表（a, b, ...） ──
+
+[FlowItemList.parser]
+production = [
+    "@FlowValue",
+    "(symbol.base.comma,@FlowValue)*",
+]
+
+[FlowItemList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[FlowItemList.renderer]
+layout = { join = ", ", items = "items" }
+
+
+# ── FlowMap — 流式映射 `{k: v}` ──
+
+[FlowMap.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "@FlowPairList?",
+    "bracket.r_curly_bracket",
+]
+
+[FlowMap.parser.node]
+items = "$2"
+
+[FlowMap.renderer.layout]
+line = [
+    "{",
+    { join = ", ", items = "items" },
+    "}",
+]
+
+
+# ── FlowPairList — 流式映射对列表（k: v, ...） ──
+
+[FlowPairList.parser]
+production = [
+    "@FlowPair",
+    "(symbol.base.comma,@FlowPair)*",
+]
+
+[FlowPairList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[FlowPairList.renderer]
+layout = { join = ", ", items = "items" }
+
+
+# ── FlowPair — 流式映射单对 k: v ──
+
+[FlowPair.parser]
+production = [
+    "@FlowMapKey",
+    "symbol.base.colon",
+    "@FlowValue",
+]
+
+[FlowPair.parser.node]
+key = "$1"
+value = "$3"
+
+[FlowPair.renderer.layout]
+line = [
+    { ref = "key" },
+    ": ",
+    { ref = "value" },
+]
+
+
+# ── FlowMapKey — 流式映射键（标量 或 merge key `<<`） ──
+
+[FlowMapKey]
+inline = true
+
+[FlowMapKey.parser]
+production = ["@Scalar|@MergeKey"]
+
+[FlowMapKey.parser.node]
+key = "$1"
+
+[FlowMapKey.renderer]
+layout = { ref = "key" }
+
+
+# ── MergeKey — merge key `<<` ──
+
+[MergeKey.parser]
+production = ["symbol.extend.merge"]
+
+[MergeKey.renderer.layout]
+line = ["<<"]
+
+
+# ── FlowValue — 流式集合内的值（不含缩进块） ──
+
+[FlowValue]
+inline = true
+
+[FlowValue.parser]
+production = ["@Scalar|@FlowSeq|@FlowMap|@AnchorValue|@AliasRef"]
+
+[FlowValue.parser.node]
+value = "$1"
+
+[FlowValue.renderer]
+layout = { ref = "value" }
+
+
+# ── AnchorValue — 锚点声明 `&name value`（value 为标量/集合/缩进块） ──
+
+[AnchorValue.parser]
+production = [
+    "symbol.base.amp",
+    "id",
+    "@Value",
+]
+
+[AnchorValue.parser.node]
+name = "$2.value"
+value = "$3"
+
+[AnchorValue.renderer.layout]
+line = [
+    "&",
+    { ref = "name" },
+    " ",
+    { ref = "value" },
+]
+
+
+# ── AliasRef — 别名引用 `*name` ──
+
+[AliasRef.parser]
+production = [
+    "symbol.base.star",
+    "id",
+]
+
+[AliasRef.parser.node]
+name = "$2.value"
+
+[AliasRef.renderer.layout]
+line = [
+    "*",
+    { ref = "name" },
+]
+
+
+# ── DocStart — 文档分隔符 `---`（独占一行，顶层语句） ──
+
+[DocStart]
+is_statement = true
+
+[DocStart.parser]
+production = ["symbol.extend.doc_start"]
+
+[DocStart.renderer.layout]
+line = ["---"]
+
+
+# ── DocEnd — 文档流结束符 `...`（独占一行，顶层语句） ──
+
+[DocEnd]
+is_statement = true
+
+[DocEnd.parser]
+production = ["symbol.extend.doc_end"]
+
+[DocEnd.renderer.layout]
+line = ["..."]

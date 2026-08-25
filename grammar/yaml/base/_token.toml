@@ -18,19 +18,41 @@ bom = "\ufeff"
 [newline]
 newline = "\n"
 
-# 单字符符号（YAML 子集：映射分隔符 + 列表标记）
+# 单字符符号：映射分隔符/列表标记 + 流式集合/锚点/别名
+#   comma —— 流式集合分隔符 `[a, b]`
+#   amp   —— 锚点声明 `&anchor`
+#   star  —— 别名引用 `*alias`
+#   lesser—— merge key `<<` 的起始字符
+#   dot   —— 文档结束符 `...` 的起始字符
+# 说明：这些字符在旧子集中均为"unrecognized → ValueError"（fail-fast 词法），
+# 加入后从报错变为可 tokenize，不构成回归。
 [symbol.base]
 colon = ":"
 sub = "-"
+comma = ","
+amp = "&"
+star = "*"
+lesser = "<"
+dot = "."
 
-# 多字符符号：YAML 子集无，但 lexer 硬依赖 symbol.extend 段（tokenize 读
-# extend_values），声明空表满足访问。
+# 多字符符号（从 base 字符贪心最长匹配）
+# 注意：lexer 最长匹配逐字符 probe，中间形态也必须在 extend 表——
+# `---` 需 `--` 命中后才能继续 probe 到 `---`（verilog 的 >>> 同理依赖 >>）。
 [symbol.extend]
+double_dash = "--"  # 中间形态（无独立语义，仅为 --- 的 probe 链）
+double_dot = ".."   # 中间形态（无独立语义，仅为 ... 的 probe 链）
+merge = "<<"        # 合并键（merge key）：`<<: *defaults`
+doc_start = "---"   # 文档分隔符（独占一行）
+doc_end = "..."     # 文档流结束符（独占一行）
 
-# 括号：YAML 子集无括号，但 lexer 硬依赖 bracket 段（_validate_token_define），
-# 声明空 pairs 满足结构性校验（bracket_depth 恒为 0，缩进不受括号抑制）。
+# 括号：流式集合 `[a, b]` / `{k: v}`。
+# bracket_depth 跟踪使括号内换行不触发结构缩进（lexer 既有机制），
+# 流式集合可跨行书写。
 [bracket]
-pairs = []
+pairs = [
+  ["[", "]", "square_bracket"],
+  ["{", "}", "curly_bracket"],
+]
 
 [literal]
 # 引号字符串（双引号/单引号）
