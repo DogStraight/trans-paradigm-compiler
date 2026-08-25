@@ -98,19 +98,24 @@
 - [ ] **行中块注释 attachment 行尾化（低优先，2026-08-25 记录）**：`assign b =
       /* 嵌入注释 */ rst_n;` 的行中块注释被 attachment 渲染到语句行尾（位置错位，
       fidelity 残留差因）——行中注释应保持原位（或走锚点回插），评估修法
-- [ ] **对齐进 Doc IR（Pad 三件套，Veryl 渲染层深读闭环，2026-08-25 记录）**：
+- [x] **对齐进 Doc IR（Pad 三件套，Veryl 渲染层深读闭环，2026-08-25 完成）**：
       tpc 世界 B column_align 是"渲染后对齐"（曾破坏 fits 判定、被迫回滚 join
       改法）；Veryl 用 `Pad`/`IfBreakPad`/`IfFlatPad` 三个 Doc 原语把对齐
-      padding 做成 Doc 一等公民，参与 fits/break 决策（doc.rs 三行声明 +
-      render.rs 几行渲染，实现极小）。价值：① 对齐不再破坏布局决策
-      （Pad 计入 fits_flat，IfFlatPad 超宽可强制断行）② 与 join/opt 原语
-      同层，配置驱动可达。参考：E:\research\veryl\crates\pretty\src\
-      {doc.rs,render.rs} + aligner/src/lib.rs（PadKind 三态）
-- [ ] **fits 带外层 continuation（Veryl 渲染层深读闭环，2026-08-25 记录）**：
+      padding 做成 Doc 一等公民，参与 fits/break 决策。已实现（13f29f1）：
+      `renderer/doc.py` 新增三原语（Pad 无条件输出计入 fits；IfBreakPad 仅
+      broken 输出 0 计 fits；IfFlatPad 仅 flat 输出计入 fits 可强制断行），
+      flatten/_best/_fits 全链路支持 + 9 测试（test_doc_align_fill.py::TestPad）。
+      参考：E:\research\veryl\crates\pretty\src\{doc.rs,render.rs}
+      + aligner/src/lib.rs（PadKind 三态）
+- [x] **fits 带外层 continuation（Veryl 渲染层深读闭环，2026-08-25 完成）**：
       tpc `_fits` 只看单 doc 第一行，fill 模式邻居项各自声明 flat、组合行
       溢出（wrap 调研已记坑）；Veryl `fits_flat` 从 outer stack 拷贝 work
-      继续算到首个 break 机会（render.rs::fits_flat，20 行）——tpc
-      `_fill`/`_fits` 的直接参考实现，修 fill 组合行溢出的正解
+      继续算到首个 break 机会。已实现（13f29f1）：`_best` 加 budget 参数，
+      Concat 对每项预计算同行前后兄弟宽度（到首个换行点），Union 判定预算
+      = w - k - 前面已占 - 后续将占——修复"group 单独 fits、组合溢出"
+      （`'aaaa bbb + XXXX'` w10 溢出→正确断行）；调试记录：col 运行时累积
+      双重计数破坏布局，改纯预算传递；`_flat_w` 纯宽度函数避免互递归死循环。
+      验证：1034 pytest + run_all FAIL 0 + e2e enhanced_render 9/9 无损
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
