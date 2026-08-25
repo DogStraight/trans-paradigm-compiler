@@ -83,8 +83,12 @@ while = "while"
 
 > 注释扫描走 `lexer/capture_runner.py::CaptureRunner`——原始文本捕获模式的
 > 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture
-> mode，`token_type = "comment"`）；heredoc/围栏等同类构造可声明 `[[capture]]`
-> 段（`start`/`end`/`kind`/`token_type`，kind ∈ line/marker/line_match）。
+> mode，`token_type = "comment"`）；字符串定界符由 `[string] delimiters`
+> 声明（delim mode，`token_type = "literal.string"`，引擎不再硬编码引号）；
+> heredoc/围栏等同类构造可声明 `[[capture]]` 段（`start`/`end`/`kind`/
+> `token_type`，kind ∈ line/marker/delim/line_match）。
+> 无尺寸数字触发前缀（如 `'h`）由 `lexer/main_lexer.py::_build_unsized_prefixes`
+> 从 `[[number.based]]` 形态推导（size=none + 单字符 base_prefix），不再硬编码。
 > 详见 `lexer/capture_runner.py` 文件头与 `tests/engine/lexer/test_capture_runner.py`。
 
 ---

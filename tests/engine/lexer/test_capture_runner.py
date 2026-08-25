@@ -15,12 +15,13 @@ import pytest
 
 from lexer.capture_runner import CaptureRunner
 from lexer.lexer_utils import get_number_config
-from lexer.main_lexer import Lexer
+from lexer.main_lexer import Lexer, _build_unsized_prefixes
 
 
 def _make_td(
     capture_modes: list[dict] | None = None,
     comment_pairs: list | None = None,
+    string_delims: list | None = None,
 ) -> dict:
     """构造最小 token_define（dict 形式，直接传 Lexer，不走 merge 校验）。"""
     td: dict = {
@@ -32,6 +33,8 @@ def _make_td(
         "literal": {"string": "(\".*\")"},
         "comment": {"pairs": comment_pairs if comment_pairs is not None else []},
     }
+    if string_delims is not None:
+        td["string"] = {"delimiters": string_delims}
     if capture_modes is not None:
         td["capture"] = capture_modes
     return td
@@ -140,6 +143,66 @@ class TestRunLine:
         assert CaptureRunner.run("abc", 0, td) is None
 
 
+class TestRunDelim:
+    """delim kind：字符串定界符（[string] delimiters）。"""
+
+    def _td(self, delimiters):
+        td = _make_td()
+        td["string"] = {"delimiters": delimiters}
+        return td
+
+    def test_delim_closed(self):
+        """到闭合定界符（消费，含定界符本身）。"""
+        td = self._td(['"'])
+        result = CaptureRunner.run('"abc" tail', 0, td)
+        assert result is not None
+        content, pos, token_type = result
+        assert content == '"abc"'
+        assert pos == 5
+        assert token_type == "literal.string"
+
+    def test_delim_stops_at_newline_without_consuming(self):
+        """未闭合遇换行：不消费换行（字符串不跨行）。"""
+        td = self._td(['"'])
+        result = CaptureRunner.run('"hello\nnext', 0, td)
+        assert result is not None
+        content, pos, _ = result
+        assert content == '"hello'
+        assert pos == len('"hello')  # 停在 \n 前
+
+    def test_delim_unclosed_to_eof(self):
+        td = self._td(['"'])
+        result = CaptureRunner.run('"tail', 0, td)
+        assert result is not None
+        content, _, token_type = result
+        assert content == '"tail'
+        assert token_type == "literal.string"
+
+    def test_single_quote_delim(self):
+        """单引号定界符（yaml/c4）。"""
+        td = self._td(['"', "'"])
+        result = CaptureRunner.run("'hello'", 0, td)
+        assert result is not None
+        content, _, _ = result
+        assert content == "'hello'"
+
+    def test_build_rules_expands_delimiters(self):
+        """[string] delimiters 展开为 delim 规则（token_type = literal.string）。"""
+        td = self._td(['"', "'"])
+        rules = CaptureRunner.build_rules(td)
+        delim_rules = [r for r in rules if r.kind == "delim"]
+        assert [(r.start, r.end, r.token_type) for r in delim_rules] == [
+            ('"', '"', "literal.string"),
+            ("'", "'", "literal.string"),
+        ]
+
+    def test_invalid_delimiter_fails_fast(self):
+        """空定界符 → ValueError（fail-fast）。"""
+        td = self._td([""])
+        with pytest.raises(ValueError, match="非法条目"):
+            CaptureRunner.build_rules(td)
+
+
 class TestRunMarker:
     def test_marker_closed(self):
         td = _make_td(comment_pairs=[["/*", "*/", "block"]])
@@ -209,6 +272,46 @@ class TestRunLineMatch:
 def _lexer_with(td: dict) -> Lexer:
     """自建 token_define 的 Lexer（数字形态复用全局 verilog 配置）。"""
     return Lexer(token_define_dict=td, number_configs=get_number_config())
+
+
+class TestUnsizedPrefixes:
+    """无尺寸数字触发前缀配置化（_build_unsized_prefixes）。"""
+
+    def test_verilog_style_quote_bases(self):
+        """size=none + 单字符前缀：prefix+base 大小写变体。"""
+        configs = [
+            {
+                "size": "none",
+                "base_prefix": "'",
+                "bases": ["d", "b", "o", "h"],
+            }
+        ]
+        chars = _build_unsized_prefixes(configs)
+        assert chars == {"'d", "'D", "'b", "'B", "'o", "'O", "'h", "'H"}
+
+    def test_signed_adds_quote_s(self):
+        configs = [
+            {
+                "size": "none",
+                "base_prefix": "'",
+                "bases": ["d"],
+                "signed": True,
+            }
+        ]
+        chars = _build_unsized_prefixes(configs)
+        assert chars == {"'d", "'D", "'s", "'S"}
+
+    def test_sized_and_multichar_prefix_skipped(self):
+        """带 size 形态与多字符前缀（0x）不产生触发。"""
+        configs = [
+            {"size": {"digits": "nonzero"}, "base_prefix": "'", "bases": ["h"]},
+            {"size": "none", "base_prefix": "0x", "bases": []},
+            {"size": "none", "base_prefix": "none", "bases": []},
+        ]
+        assert _build_unsized_prefixes(configs) == set()
+
+    def test_none_configs_empty(self):
+        assert _build_unsized_prefixes(None) == set()
 
 
 class TestLexerIntegration:

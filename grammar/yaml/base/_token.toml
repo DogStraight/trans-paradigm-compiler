@@ -55,10 +55,13 @@ pairs = [
 ]
 
 [literal]
-# 引号字符串（双引号/单引号）
-string = "(\"[^\"]*\")|('[^']*')"
 # 数字（整数/小数）
 number = "-?\\d+(\\.\\d+)?"
+
+# 字符串定界符（[string] delimiters）——CaptureRunner delim mode。
+# YAML 双/单引号字符串。
+[string]
+delimiters = ['"', "'"]
 
 [id.id]
 id = "[a-zA-Z_][a-zA-Z0-9_]*"

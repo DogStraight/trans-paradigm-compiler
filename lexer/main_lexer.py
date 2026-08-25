@@ -33,6 +33,40 @@ from .capture_runner import CaptureRunner
 _macro_cfg: dict = declare_cfg("preprocessor.macro_config", {}, __name__, "_macro_cfg")
 
 
+def _build_unsized_prefixes(number_configs: list[dict] | None) -> set[str]:
+    """无尺寸数字触发前缀集合（配置驱动，替代硬编码 'd/'h/'b/'o/'s）。
+
+    从 [[number.based]] 形态推导：size = "none"（或 size.digits = "none"）
+    且 base_prefix 为单字符（如 "'"）的形态，收集 prefix+base 组合
+    （大小写变体）；signed 形态另加 prefix+"s"/"S"（如 verilog 的 'sd）。
+
+    多字符前缀（0x 等）与无前缀形态（base_prefix="none"）不参与——
+    它们的触发由 number 分支（isdigit）与 id 分支自然覆盖。
+    """
+    chars: set[str] = set()
+    for cfg in number_configs or []:
+        size = cfg.get("size")
+        is_unsized = size == "none" or (
+            isinstance(size, dict) and size.get("digits") == "none"
+        )
+        prefix = cfg.get("base_prefix")
+        if (
+            not is_unsized
+            or not isinstance(prefix, str)
+            or prefix in ("", "none")
+            or len(prefix) != 1
+        ):
+            continue
+        for base in cfg.get("bases", []) or []:
+            base = str(base)
+            chars.add(prefix + base.lower())
+            chars.add(prefix + base.upper())
+        if cfg.get("signed"):
+            chars.add(prefix + "s")
+            chars.add(prefix + "S")
+    return chars
+
+
 class Lexer:
     token_define: dict = {}
 
@@ -93,6 +127,15 @@ class Lexer:
         self._capture_starts: list[str] = CaptureRunner.get_start_patterns(
             self.token_define
         )
+        # 字符串定界符集合（[string] delimiters，引擎不再硬编码引号）：
+        # 字符串分支在主循环后半段（number 之后），只在此命中。
+        self._string_delims: set[str] = set(
+            token_define_dict.get("string", {}).get("delimiters", [])
+        )
+        # 无尺寸数字触发前缀（'d/'h/'b/'o 等，从 lexer.number 形态推导）：
+        # 替代硬编码 "dDbBhHoOsS"——无 size 形态 + 单字符 base_prefix 的
+        # prefix+base 组合（大小写），signed 形态另加 prefix+s/S。
+        self._unsized_prefixes: set[str] = _build_unsized_prefixes(number_configs)
 
         # 括号配对表 → 开闭集合 + 类型映射
         bracket_pairs: list = self.token_define.get("bracket", {}).get("pairs", [])
@@ -175,11 +218,6 @@ class Lexer:
 
             # reset offset
             offset = 0
-
-            # get next char
-            next_char: str = ""
-            if text_idx + 1 < lex_text_len:
-                next_char = lex_text[text_idx + 1]
 
             # ── newline 分支 ──
             if lex_text[text_idx] in self.newline:
@@ -294,8 +332,13 @@ class Lexer:
                         self.new_line_start = False
                     continue
 
-            # ── 无尺寸字面量分支（'b1/'d0/'hFF/'o7/'s）──
-            elif lex_text[text_idx] == "'" and next_char in "dDbBhHoOsS":
+            # ── 无尺寸字面量分支（'b1/'d0/'hFF/'o7，配置驱动触发）──
+            # 触发集合从 lexer.number 形态推导（无 size + 单字符 base_prefix），
+            # 不再硬编码 'd/'h/'b/'o/'s 字符表——yaml/c4 无 ' 数字形态时
+            # ' 自然落到后续字符串/symbol 分支。
+            elif (
+                lex_text[text_idx:text_idx + 2] in self._unsized_prefixes
+            ):
                 self._emit_pending_dedent(tokens)
 
                 number_content, new_idx = self._number_runner.run(lex_text, text_idx)
@@ -477,26 +520,24 @@ class Lexer:
                 continue
 
             # ── 字符串分支 ──
-            elif lex_text[text_idx] == '"' or lex_text[text_idx] == "'":
+            # 定界符来自 [string] delimiters 配置（delim capture mode），
+            # 扫描逻辑走 CaptureRunner——引擎不再硬编码 "'/ 引号。
+            # 未闭合遇换行不消费（字符串不跨行，修正旧实现的吞换行行为）。
+            elif lex_text[text_idx] in self._string_delims:
                 self._emit_pending_dedent(tokens)
 
-                end_char: str = lex_text[text_idx]
-                string_content: str = ""
-                string_content += lex_text[text_idx]
-                text_idx += 1
-                offset += 1  # 起始引号计入列偏移
-                while (
-                    text_idx < lex_text_len
-                    and lex_text[text_idx] != end_char
-                    and lex_text[text_idx] != "\n"
-                ):
-                    string_content += lex_text[text_idx]
+                result = CaptureRunner.run(lex_text, text_idx, self.token_define)
+                if result is None:  # 防御：delims 集合与 mode 表应一致
                     text_idx += 1
-                    offset += 1
-                if text_idx < lex_text_len:
-                    string_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1  # 结束引号计入列偏移
+                    start_point += 1
+                    current_token.set_content(lex_text[text_idx - 1])
+                    current_token.set_type("unrecognized")
+                    current_token = self.refine_type(current_token)
+                    tokens.append(current_token)
+                    continue
+                string_content, new_idx, _ = result
+                offset = new_idx - text_idx
+                text_idx = new_idx
 
                 current_token.set_type("literal.string")
                 current_token.set_content(string_content)

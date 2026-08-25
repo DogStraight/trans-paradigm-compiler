@@ -85,16 +85,17 @@
 
 ## Architecture boundaries
 
-- **Lexer raw-capture modes cover marker-terminated forms only.** The
-  CaptureRunner primitive (`lexer/capture_runner.py`) captures verbatim text
-  until a line end, a literal marker, or a full-line match — comments,
-  heredocs, fenced blocks, and similar constructs are config-declared
-  (`[comment] pairs` legacy + `[[capture]]` new). Two gaps remain:
-  (1) the string branch still hardcodes `"`/`'` as delimiters in engine code
-  (multi-char delimiters like `"""` or Rust `r#"` need config), and
-  (2) there is no column-comparison termination (`indent_leq`), which YAML
-  block scalars (`|`/`>`) require — the lexer's indentation model is grid-based
-  level counting, not absolute-column comparison.
+- **Lexer raw-capture modes: single-char delimiters only, no column-aware
+  termination.** The CaptureRunner primitive (`lexer/capture_runner.py`)
+  captures verbatim text until a line end, a literal marker, a full-line
+  match, or a closing delimiter — comments, strings, heredocs, fenced blocks,
+  and similar constructs are config-declared (`[comment] pairs` legacy,
+  `[string] delimiters`, `[[capture]]` new). Two gaps remain:
+  (1) string delimiters are single-character (`"`/`'`) — multi-char
+  delimiters like `"""` or Rust `r#"` need a delimiter-sequence extension,
+  and (2) there is no column-comparison termination (`indent_leq`), which
+  YAML block scalars (`|`/`>`) require — the lexer's indentation model is
+  grid-based level counting, not absolute-column comparison.
 - **Parser is classic recursive descent + Pratt (LL-style)** — not LR/GLR, and
   there is no parser-level error recovery (no skip-to-sync-point and
   continue). Syntax errors are caught by the pre-parse linter and block the

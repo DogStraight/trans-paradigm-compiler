@@ -1,17 +1,21 @@
 """capture_runner.py — 配置驱动的原始文本捕获扫描器（CaptureRunner）
 
 抽象原语：从当前字符开始"原样捕获"一段文本（不做 token 化），按终止
-条件结束，产出一个 token。注释（行/块）是 capture mode 表中的一个实例；
-heredoc/围栏代码块/三引号字符串等同类构造均可作为配置项加入——引擎
-不再硬编码任何"捕获类"语言知识（原 CommentRunner 只服务注释，本类为
-其泛化，见 docs/known_limitations.md 的 lexer 原始捕获模式边界）。
+条件结束，产出一个 token。注释（行/块）与引号字符串都是 capture mode
+表中的一个实例；heredoc/围栏代码块等同类构造均可作为配置项加入——
+引擎不再硬编码任何"捕获类"语言知识（原 CommentRunner 只服务注释、原
+字符串分支硬编码 "'/ 定界符，现统一由本类执行）。
 
-配置面（token_define 两段，build_rules 归一化合并）：
+配置面（token_define 三段，build_rules 归一化合并）：
 1. [comment] pairs（legacy 兼容，三个语言包现有声明零改动）：
    pairs = [["#", "\\n", "line"], ["/*", "*/", "block"]]
-   → kind "line" 终止于换行字符集；kind "block" 终止于 end 标记；
-     token_type 固定为 "comment"。
-2. [capture] 段（新，语言包按需声明）：
+   → kind "line" 终止于换行字符集；kind "block" 归一化为 "marker"（到
+     end 标记）；token_type 固定为 "comment"。
+2. [string] delimiters（字符串定界符，引擎不再硬编码 "'/ 引号）：
+   delimiters = ['"', "'"]
+   → 每个定界符展开为 kind "delim" 规则（end = 定界符自身），
+     token_type 固定为 "literal.string"。
+3. [[capture]] 段（新，语言包按需声明）：
    [[capture]]
    start = "<<EOF"
    end = "EOF"
@@ -22,12 +26,14 @@ kind 语义（终止条件）：
 - "line"      : 到换行字符（[newline] 段配置，不硬编码 \\n）或 EOF；
                 换行字符不消费（留给主循环）
 - "marker"    : 到 end 标记（消费）或 EOF（未闭合自然终止）
+- "delim"     : 到 end 定界符（消费，含定界符本身）或换行（不消费——
+                字符串不跨行）或 EOF（未闭合自然终止）
 - "line_match": 到"一行恰好等于 end"处（heredoc/围栏：`<<EOF ... EOF`
                 终止于独立成行的 EOF）；end 后的换行不消费
 
 多行捕获的行号记账由调用方（main_lexer）处理（与既有 comment 分支一致）。
 
-Doc: docs/language_walkthrough.md（注释 token 扫描）
+Doc: docs/language_walkthrough.md（注释/字符串 token 扫描）
 """
 
 from __future__ import annotations
@@ -45,7 +51,7 @@ class CaptureRule:
         self.end_len = len(end)
 
 
-_VALID_KINDS = ("line", "marker", "line_match")
+_VALID_KINDS = ("line", "marker", "delim", "line_match")
 
 
 class CaptureRunner:
@@ -83,7 +89,19 @@ class CaptureRunner:
                 )
             rules.append(CaptureRule(start, end, kind, "comment"))
 
-        # 2. 新 [capture] 段（TOML 数组表 [[capture]] → dict 列表）
+        # 2. [string] delimiters → kind = "delim"，token_type = "literal.string"
+        #    （引擎不再硬编码引号定界符；verilog 只声明 "，yaml/c4 声明 " 与 '）
+        for delim in token_define.get("string", {}).get("delimiters", []) or []:
+            if not isinstance(delim, str) or not delim:
+                raise ValueError(
+                    "[lexer] [string] delimiters 含非法条目: "
+                    f"{delim!r}（须为非空字符串）"
+                )
+            rules.append(
+                CaptureRule(delim, delim, "delim", "literal.string")
+            )
+
+        # 3. 新 [capture] 段（TOML 数组表 [[capture]] → dict 列表）
         modes = token_define.get("capture")
         if isinstance(modes, list):
             for mode in modes:
@@ -155,6 +173,21 @@ class CaptureRunner:
                         pos += rule.end_len
                         return (content, pos, rule.token_type)
                     content += text[pos]
+                    pos += 1
+                return (content, pos, rule.token_type)
+
+            elif rule.kind == "delim":
+                # 到 end 定界符（消费，含定界符本身）或换行（不消费，
+                # 字符串不跨行）或 EOF（未闭合自然终止）
+                while pos < len(text):
+                    ch = text[pos]
+                    if ch == rule.end:
+                        content += ch
+                        pos += 1
+                        return (content, pos, rule.token_type)
+                    if ch in newline_set:
+                        return (content, pos, rule.token_type)
+                    content += ch
                     pos += 1
                 return (content, pos, rule.token_type)
 

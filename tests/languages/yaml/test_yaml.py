@@ -99,6 +99,12 @@ class TestParse:
         entry = ast.sub_node[0]
         assert entry.value.node_name == "StringLit"
 
+    def test_single_quote_string_scalar(self, yaml):
+        """单引号字符串标量（[string] delimiters 含 '，delim capture mode）。"""
+        ast = _parse("name: 'hello'\n", yaml)
+        entry = ast.sub_node[0]
+        assert entry.value.node_name == "StringLit"
+
 
 class TestRender:
     """渲染回 YAML 文本。"""

@@ -56,9 +56,12 @@ pairs = [
 ]
 
 [literal]
-# 字符串 "..." 与字符 '...' 字面量（c4 支持 \n 转义，内容由语法层处理）
-string = "(\".*\")|('.*')"
 number = "\\d+"
+
+# 字符串定界符（[string] delimiters）——CaptureRunner delim mode。
+# c4：双引号字符串 "..." 与单引号字符 '...'（' 不入 symbol，见上注释）。
+[string]
+delimiters = ['"', "'"]
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"
