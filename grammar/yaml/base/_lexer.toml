@@ -10,7 +10,9 @@ pairs = [
 
 [indent]
 enable = true
-level = 4
+# level = "auto"：缩进单位从文件启发式推导（首次结构缩进行锁定，Python 同款）
+# ——YAML 缩进宽度不固定（2/4/6 空格都有），固定网格解析不了 2 空格文件。
+level = "auto"
 
 [token_category]
 # 字面量/操作符分类（Pratt 解析器 token 识别用）

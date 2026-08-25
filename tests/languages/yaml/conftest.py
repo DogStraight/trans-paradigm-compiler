@@ -39,9 +39,19 @@ def yaml(config_loaded):
 
 
 def _parse(src: str, yaml):  # pyright: ignore[reportUnusedFunction] — pytest 约定：测试文件经 `from ...conftest import _parse` 导入
-    """YAML 源码 → AST。"""
-    tokens = yaml["lexer"].tokenize(src)
-    return yaml["parser"].parse(tokens)
+    """YAML 源码 → AST。
+
+    auto 缩进模式：把 lexer 锁定的缩进单位盖到根节点（_indent_unit），
+    renderer.render 读到后按同单位渲染——渲染输出与源文件缩进风格一致
+    （块标量逐字内容相对列对齐不被破坏）。
+    """
+    lexer = yaml["lexer"]
+    tokens = lexer.tokenize(src)
+    ast = yaml["parser"].parse(tokens)
+    unit = getattr(lexer, "_indent_unit", None)
+    if isinstance(unit, int) and unit > 0:
+        ast.add_attr("_indent_unit", unit)
+    return ast
 
 
 def _node_names(ast) -> list[str]:  # pyright: ignore[reportUnusedFunction] — 同上，测试文件导入

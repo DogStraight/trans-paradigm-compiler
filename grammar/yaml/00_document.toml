@@ -50,12 +50,15 @@ line = [
 
 
 # ── SequenceItem — - item ──
+# item 可为标量/缩进块/流式集合/块标量，或行内映射（compact mapping）：
+#   `- name: Test` + 同列对齐的续块（`  run: |` 兄弟成员）
+# 入口 SeqValue：先试 @CompactMap（行内映射），回退普通 @Value。
 
 [SequenceItem]
 is_statement = true
 
 [SequenceItem.parser]
-production = ["symbol.base.sub", "@Value?"]
+production = ["symbol.base.sub", "@SeqValue?"]
 
 [SequenceItem.parser.node]
 value = "$2"
@@ -64,6 +67,43 @@ value = "$2"
 line = [
     "- ",
     { ref = "value" },
+]
+
+
+# ── SeqValue — 序列项值入口（行内映射优先，回退普通值） ──
+
+[SeqValue]
+inline = true
+
+[SeqValue.parser]
+production = ["@CompactMap|@Value"]
+
+[SeqValue.parser.node]
+value = "$1"
+
+[SeqValue.renderer]
+layout = { ref = "value" }
+
+
+# ── CompactMap — 行内映射（compact mapping） ──
+# 第一对（name: Test）与序列指示符同行；其后同列对齐的续块（run: |）
+# 由 @IndentBlock? 吃入 rest（兄弟成员语义）。
+# 歧义分流（无需显式声明，从 MappingEntry 结构自然分出）：
+#   `- name:`        → MappingEntry 的 @Value? 自己吃深缩进块（嵌套值，现有语义）
+#   `- name: Test`   → @Value? 吃行内 Test，对齐续块由 @IndentBlock? 吃（兄弟语义）
+#   `- a`            → MappingEntry 的 colon 匹配失败 → 回退 @Value
+
+[CompactMap.parser]
+production = ["@MappingEntry", "@IndentBlock?"]
+
+[CompactMap.parser.node]
+first = "$1"
+rest = "$2"
+
+[CompactMap.renderer.layout]
+line = [
+    { ref = "first" },
+    { ref = "rest" },
 ]
 
 

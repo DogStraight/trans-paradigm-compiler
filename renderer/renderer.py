@@ -70,12 +70,24 @@ class Renderer:
 
     # ── 入口 ──
     def render(self, node: Node) -> str:
-        """渲染完整 AST 为格式化文本"""
+        """渲染完整 AST 为格式化文本
+
+        若 AST 根节点携带 _indent_unit（auto 缩进模式 lexer 锁定的单位，
+        见 lexer/main_lexer.py），渲染期间按该单位换算缩进——渲染输出与
+        源文件缩进风格一致（块标量逐字内容相对列对齐不被破坏）。
+        """
         node = normalize_ast(node, self._layouts)
         if not isinstance(node, Node):
             return str(node) if node else ""
-        doc = self._render_node(node, self._layouts.get(node.node_name, {}))
-        return layout(doc, self._MAX_INLINE)
+        unit = getattr(node, "_indent_unit", None)
+        saved = self._INDENT_STR
+        if isinstance(unit, int) and unit > 0:
+            self._INDENT_STR = " " * unit
+        try:
+            doc = self._render_node(node, self._layouts.get(node.node_name, {}))
+            return layout(doc, self._MAX_INLINE)
+        finally:
+            self._INDENT_STR = saved
 
     # ── 节点渲染（委托到 node_renderer）──
     def _render_node(self, node: Node, layout_cfg: dict) -> Doc:

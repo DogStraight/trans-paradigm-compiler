@@ -113,7 +113,14 @@ class Lexer:
         self.macro_config = {d: macro_type(d) for d in raw_macro.get("directives", {})}
 
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
-        self.indent_level = token_define_dict.get("indent", {}).get("level", 4)
+        raw_level = token_define_dict.get("indent", {}).get("level", 4)
+        # level = "auto"：缩进单位从文件启发式推导（首次结构缩进行锁定，
+        # Python 同款）——YAML 文件缩进宽度不固定（2/4/6），固定网格无法
+        # 解析 2 空格文件。固定 int 的语言包（verilog/c4 未启用 indent）不变。
+        self.indent_auto = raw_level == "auto"
+        self.indent_level = 4 if self.indent_auto else int(raw_level)
+        # _indent_unit：auto 模式下的锁定单位（None = 未锁定，每次 tokenize 重置）
+        self._indent_unit: int | None = None
         self.indent_deep = 0
         self.blank: list = list(token_define_dict.get("space", {}).values()) + list(
             token_define_dict.get("newline", {}).values()
@@ -131,6 +138,10 @@ class Lexer:
         self._capture_start_map: dict[str, CaptureRule] = {
             r.start: r for r in self._capture_rules
         }
+        # 注释触发标记（auto 缩进锁定跳过注释行用）
+        self._comment_starts: list[str] = [
+            r.start for r in self._capture_rules if r.token_type == "comment"
+        ]
         # 字符串定界符集合（[string] delimiters，引擎不再硬编码引号）：
         # 字符串分支在主循环后半段（number 之后），只在此命中。
         self._string_delims: set[str] = set(
@@ -212,6 +223,7 @@ class Lexer:
         # 缩进深度每次 tokenize 重置：每个源文件是独立缩进上下文，
         # 跨调用残留会导致新文件开头误发 space.dedent（YAML 缩进语言包暴露）。
         self.indent_deep = 0
+        self._indent_unit = None  # auto 模式：每个文件重新推导单位
         self._line_indent = 0
         self._line_sig = None
 
@@ -268,16 +280,33 @@ class Lexer:
                     if text_idx < lex_text_len and lex_text[text_idx] in self.newline:
                         self.new_line_start = True
                     else:
-                        # 行首空格：先判 bracket 深度，再用能否整除判断折行
+                        # 行首空格：先判 bracket 深度，再判网格对齐（auto 模式
+                        # 首次结构缩进行锁定单位，Python 同款启发式）
+                        width = len(space_content)
                         if self.bracket_depth > 0:
                             # 括号内：抑制一切结构缩进（仅用于对齐，非结构变化）
                             current_depth = self.indent_deep
-                        elif len(space_content) % self.indent_level != 0:
+                        elif (
+                            self.indent_auto
+                            and self._indent_unit is None
+                            and not self._starts_comment(lex_text, text_idx)
+                        ):
+                            # 首次结构缩进：锁定单位（注释行不参与锁定——
+                            # 注释缩进不代表文件结构约定）
+                            self._indent_unit = width
+                            current_depth = 1
+                        elif not self._indent_aligned(width):
                             # 不对齐 → 续行折行，保持当前深度
                             current_depth = self.indent_deep
                         else:
                             # 对齐到缩进网格 → 结构深度变化
-                            current_depth = len(space_content) // self.indent_level
+                            unit = (
+                                self._indent_unit if self.indent_auto
+                                else self.indent_level
+                            )
+                            # auto 模式已对齐 ⟹ _indent_unit 非 None（对齐判定前置）
+                            assert unit is not None
+                            current_depth = width // unit
 
                         if current_depth > self.indent_deep:
                             # 结构缩进
@@ -303,7 +332,7 @@ class Lexer:
                             # 同深度：不对齐且括号外才是折行
                             if (
                                 self.bracket_depth == 0
-                                and len(space_content) % self.indent_level != 0
+                                and not self._indent_aligned(width)
                             ):
                                 fold_token = Token(line=line_number, column=start_point)
                                 fold_token.set_type("space.fold")
@@ -620,6 +649,18 @@ class Lexer:
             if isinstance(orig, str):
                 m[orig] = keyword_type(orig)
         return m
+
+    # 仅供 tokenize 内部调用
+    def _indent_aligned(self, width: int) -> bool:
+        """行首空白宽是否对齐当前缩进网格（auto 未锁定 = 不对齐）。"""
+        if self.indent_auto:
+            return self._indent_unit is not None and width % self._indent_unit == 0
+        return width % self.indent_level == 0
+
+    # 仅供 tokenize 内部调用
+    def _starts_comment(self, text: str, idx: int) -> bool:
+        """idx 处（行首空白后）是否以注释标记开头（auto 锁定跳过注释行）。"""
+        return any(text.startswith(s, idx) for s in self._comment_starts)
 
     # 仅供 tokenize 内部调用
     def _match_capture(self, text: str, pos: int) -> CaptureRule | None:

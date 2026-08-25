@@ -90,6 +90,10 @@ while = "while"
 > indent_leq 是 YAML 块标量的列比较终止：`after`（前一显著 token 须在集合，
 > 值位置判定）与 `next_chars`（后随字符须在集合）为触发条件，终止基准 =
 > 触发行物理缩进列。
+> `[indent] level` 支持 `"auto"`：缩进单位从文件启发式推导（首次结构缩进
+> 行锁定，注释行不参与），lexer/main_lexer.py::_indent_aligned/_starts_comment；
+> 锁定单位经 AST 根节点 `_indent_unit` 传递给 renderer（渲染与源文件单位一致，
+> 块标量逐字内容相对列对齐不被破坏）。
 > 无尺寸数字触发前缀（如 `'h`）由 `lexer/main_lexer.py::_build_unsized_prefixes`
 > 从 `[[number.based]]` 形态推导（size=none + 单字符 base_prefix），不再硬编码。
 > 详见 `lexer/capture_runner.py` 文件头与 `tests/engine/lexer/test_capture_runner.py`。

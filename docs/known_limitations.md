@@ -101,6 +101,12 @@
   (3) trigger conditions are limited to the declarative
   prev-token-in-set + next-char-in-set pair — richer contextual predicates
   need a different mechanism.
+- **Indent inference is first-structural-line lock.** The `[indent] level =
+  "auto"` mode (yaml pack) locks the unit at the first structural indent
+  (comment lines excluded, Python-style). Mixed-unit files mis-parse after
+  the lock; the renderer re-indents to the locked unit via the AST-root
+  `_indent_unit` stamp, so block-scalar verbatim content stays aligned only
+  when the source is single-unit.
 - **Parser is classic recursive descent + Pratt (LL-style)** — not LR/GLR, and
   there is no parser-level error recovery (no skip-to-sync-point and
   continue). Syntax errors are caught by the pre-parse linter and block the

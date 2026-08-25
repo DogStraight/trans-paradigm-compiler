@@ -12,7 +12,9 @@ YAML 的块结构**完全靠缩进定界**（无大括号/end 关键字），是
 ## 子集范围
 
 - 映射：`key: value`（value 为标量或缩进块）；key 可为 merge key（`<<: *defaults`）
-- 列表：`- item`（item 为标量或缩进块）
+- 列表：`- item`（item 为标量或缩进块）；**行内映射**（compact mapping）：
+  `- name: Test` + 同列对齐续块（`  run: |` 兄弟成员，见 00_document.toml
+  的 CompactMap/SeqValue 规则）
 - 流式集合：`[a, b]` / `{k: v}`（可嵌套、可跨行，见 01_flow.toml）
 - 块标量：`key: |`（字面）/ `key: >`（折叠），含切块/缩进指示符原样保留
   （见 base/_token.toml 的 [[capture]] indent_leq mode）
@@ -20,7 +22,9 @@ YAML 的块结构**完全靠缩进定界**（无大括号/end 关键字），是
 - 锚点/别名：`&anchor value`（声明）/ `*alias`（引用，仅解析不做展开语义）
 - 多文档：`---`（文档分隔）/ `...`（文档流结束），顶层语句形态
 - 注释：`#` 行注释
-- 缩进：4 空格 = 1 级（`[indent] level = 4`）
+- 缩进：`[indent] level = "auto"`——单位从文件推导（首次结构缩进行锁定，
+  Python 同款），2/4/6 空格文件均可解析；渲染跟随源文件锁定单位（AST
+  根节点 _indent_unit → renderer）
 
 ## 机制验证点
 
@@ -61,5 +65,10 @@ YAML 的块结构**完全靠缩进定界**（无大括号/end 关键字），是
   4 空格缩进网格无关）。
 - **多文档是扁平语句**：`---`/`...` 解析为顶层 DocStart/DocEnd 节点
   （渲染保真），无 per-document 语义隔离。
+- **plain scalar 字符集窄**：bare 值只认字母数字下划线——真实配置值里
+  常见的 `${{ }}`（CI 表达式）、`/`（路径/URL）、`@`（`actions/checkout@v4`）、
+  中缀 `-`（`windows-latest`）都不在字符集内；多词值（`echo hi`）也
+  不支持（值 = 单 token）。这是"解析真实配置文件"的下一个阻塞点
+  （实测 ci.yml 死于 `${{ matrix.os }}`）。
 - 不支持：类型标签（`!!str`）、`%YAML` 指令、多行字符串、plain scalar
-  完整规则（复杂键隐式规则、含 `|`/`>` 等字符的裸标量等）。
+  完整规则（终止条件/复杂键隐式规则等）。
