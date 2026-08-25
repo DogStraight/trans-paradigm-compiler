@@ -57,6 +57,16 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [dprint](https://github.com/dprint/dprint) | 概念参考 | 配置驱动插件平台（Rust/wasm 插件）；"配置是选项非布局规则"，语言插件仍需手写 printer |
 | [verible-verilog-format](https://github.com/chipsalliance/verible) | 架构对比 | Google Verilog/SystemVerilog 官方 formatter（token 流 + 布局决策 + 注释锚定）；tpc 差分测试已带其 exe，是高精度目标参照（详见深调研） |
 
+### 静态检查（HDL lint）
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [verible-verilog-lint](https://github.com/chipsalliance/verible) | 设计参考 | 规则表 + rule-sets 配置 + 规则描述输出（`--print_rule_descriptions`）；与 formatter 同仓库，规则/诊断工程化范本（详见深调研） |
+| [Verilator `--lint-only`](https://github.com/verilator/verilator) | 设计参考 | W 码警告体系（200+ 条）+ `lint_off`/`lint_on` 注释对 suppress——语义级 lint 事实标准（详见深调研） |
+| [slang `--lint-only`](https://github.com/MikePopoloski/slang) | 设计参考 | diagnostics severity 体系 + waiver 文件；unused/suspicious 规则族（详见深调研） |
+| [svlint](https://github.com/dalance/svlint) | 架构对比 | 纯规则化 lint（100+ 规则，`.svlint.toml` 逐条 severity）——与 tpc linter 形态最接近（详见深调研） |
+| [hdl_checker](https://github.com/suoto/hdl_checker) | 概念参考 | "封装既有 HDL 工具做 LSP 诊断"——pylance 式使用场景的架构参照（详见深调研） |
+
 ### IR 与编译管线
 
 | 项目 | 关系 | 一句话价值总结 |
@@ -286,3 +296,49 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 - **可实现性评估（tpc 能否做）：**
   - 💡 **布局决策模型**：tpc 世界 A（Doc IR）缺"对齐"、世界 B（文本 pass）靠行号耦合——verible 的"token 流 + 决策"是第三种形态：结构在 token 间隙上做决策，天然保注释、可对齐。重设计候选之一
   - 💡 **差分基线复用**：tpc 已与 verible 差分 124 例，重设计后继续以它为 Verilog 高精度目标参照（recall/误报纪律同款）
+
+### Verilog 静态检查工具群（2026-08 研判）— tpc-check 的"pylance 化"参照
+
+> 研判动因：把 Verilog 静态检查工具纳入参照系，为 tpc 检查插件体系（linter + analyzer
+> semantic_check/inst_check 插件）提供实现参照；目标场景 = **模型生成 v 文本 → tpc-check
+> 当 pylance 用**（即时诊断、机器可读、可豁免）。以下五个工具覆盖了"诊断模型 / 规则组织 /
+> 配置 / 输出 / suppress / 服务化"六个维度。
+
+#### 各工具定位与存续
+
+| 工具 | 定位 | 存续状态 |
+|------|------|----------|
+| [verible-verilog-lint](https://chipsalliance.github.io/verible/verilog_lint.html)（C++，CHIPS Alliance） | 官方 lint：语法/风格规则 + rule-sets 配置 | 活跃（与 formatter 同仓库持续发版；tpc 差分已带其 exe） |
+| [Verilator `--lint-only`](https://github.com/verilator/verilator)（C++，Veripool） | 仿真器附带语义级 lint：W 码警告体系（WIDTH/LATCH/MULTIDRIVEN/UNOPTFLAT 等 200+ 条） | 极活跃（业界事实标准，持续发版） |
+| [slang `--lint-only`](https://github.com/MikePopoloski/slang)（C++，微软资助） | 解析器生态 + lint：unused/suspicious 规则族；diagnostics severity 体系 | 活跃（SystemVerilog 解析核心） |
+| [svlint](https://github.com/dalance/svlint)（Rust） | 纯规则化风格/错误 lint：100+ 规则，`.svlint.toml` 逐条 severity | 较活跃（0.3.x；低RISC-V ibex 等真实项目采用 `.svlint.toml`） |
+| [hdl_checker](https://github.com/suoto/hdl_checker)（Python） | "Repurposing existing HDL tools"：封装 pyGHDL/verible/slang 等后端 → LSP 诊断服务 | 维护放缓但架构仍有效（编辑器集成参照） |
+
+#### 诊断模型与配置对比（各有取舍，非优劣）
+
+| 维度 | verible-lint | Verilator | slang | svlint | tpc-check 现状 |
+|------|--------------|-----------|-------|--------|----------------|
+| 规则 ID | 规则名（line-length/module-filename）+ 默认启停 | W 码（WIDTH/BLKSEQ…） | diagnostics code + severity | 规则名（explicit_case_default…） | linter 阶段性 code（phase-expr）+ 语义 WC001 等——缺稳定规则命名空间 |
+| severity 配置 | rule-sets（`-rule-set=all/style` 叠加 ±规则） | `.vlt` 文件 + `--Wno-*` | `--diag-*` + waiver 文件 | `.svlint.toml` 逐条 error/warning/hint/info | 语义检查有 primitive 配置；linter 规则从语法推导，无显式规则表 |
+| suppress | 部分规则可 `// verible-format` 类注释 | `/* verilator lint_off/on */` 注释对 + `.vlt` lint_off | WaiverManager（规则名+位置） | 规则级 disable | 无 |
+| 输出格式 | 文本 + `--print_rule_descriptions` + JSON | 文本 | `--diag-format`（文本/JSON） | JSON/GCC/checkstyle 等 | 文本（CLI 打印） |
+| 服务化 | 无（CLI） | 无 | 无 | 无 | 无（CLI）；hdl_checker 参照封装路线 |
+
+#### 亮点（单独说明）
+
+- **Verilator 的 suppress 注释对**：`/* verilator lint_off WIDTH */ … /* verilator lint_on WIDTH */` 是源码内豁免的事实标准形态——对被生成代码（模型输出）尤其关键：生成器知道自己哪里会"故意违规"（如非标缩进），可在生成时内联豁免，检查器按注释对跳过区间。
+- **verible 的规则描述可输出**：`--print_rule_descriptions` 打印全部规则与默认启停——规则体系自身就是文档，IDE/脚本可消费。
+- **svlint 的规则表 + 逐条 severity**：规则全是数据（Rust 规则结构体 + 文档），`.svlint.toml` 按项目覆盖——"规则即配置"与 tpc 配置驱动哲学同构。
+- **hdl_checker 的后端封装**：不自己解析，把成熟工具的输出翻译成 LSP Diagnostic——"检查服务 = 适配器"形态，工具链迭代成本低。
+
+#### 可实现性评估（tpc 能否做；映射到"模型生成 v → tpc-check 当 pylance"）
+
+- 🔥 **稳定规则 ID + 机器可读输出（第一步，低成本）**：给 linter/语义检查诊断建立稳定规则命名空间（`T001` 语法结构 / `WC001` 语义 / `N001` 命名），`tpc check` 增加 `--format json`（纯 stdlib 手写即可）。这是"pylance 式"消费的前提——编辑器/模型/CI 都需要稳定 ID + 结构化输出，verible/slang/svlint 都有 JSON 输出实证。
+- 🔥 **suppress 注释对（第一步，低成本）**：仿 Verilator `lint_off/lint_on`，tpc 实现 `/* tpc-check off <rule> */` 区间豁免（或 `// tpc-check: disable-line` 单行）。模型生成代码场景的刚需——生成器在"故意非标"处内联豁免，门禁不误伤。
+- 💡 **规则表 + severity 配置（第二步）**：检查规则显式化为 TOML 数据（规则 ID → 描述 → 默认 severity → 适用阶段），用户配置覆盖 severity（对齐 svlint `.svlint.toml` / verible rule-sets）。tpc"语言知识进 TOML"哲学在检查侧的落地；P1.7 naming_check 是第一条显式规则（Sigasi 式 pattern 表）。
+- 💡 **waiver 清单（第二步）**：项目级豁免文件（路径/规则/行号），slang WaiverManager 参照——第三方代码目录整体豁免，避免给每个文件加注释。
+- 📌 **LSP 服务化（路线观察）**：hdl_checker 的"封装后端 → LSP Diagnostic"是 pylance 式体验的最终形态；tpc 零依赖下可 stdlib 手写 jsonrpc（几百行），但需真实需求驱动（编辑器接入）再立项。
+- 📌 **语义级警告（WIDTH/LATCH/MULTIDRIVEN 类，不实现）**：Verilator 的宽度/锁存/多驱动检查依赖类型与宽度推断，超出 tpc"配置驱动浅层语义（格式化/lint/展开）"定位，README 已声明边界——作路线观察，若未来做类型推断（analyzer 扩展）再评估。
+- ⚠️ **避坑**：svlint 自研 parser 的维护负担（规则演进受 parser 能力约束）——tpc 复用语法 TOML（规则=语法资产）无此问题，是"反向解析器"路线的优势；hdl_checker 后端版本耦合（verible 输出格式变化即坏）——tpc 若封装外部工具做差分基线即可，不做运行时依赖。
+
+**落地路径小结**：第一步（规则 ID + JSON + suppress）≈ 一个 `tpc check --format json` + 注释豁免机制，纯增量、零外部依赖，即可支撑"模型生成 v → tpc-check 检查"的脚本化闭环；第二步（规则表配置化）与 P1.7 naming_check 合并推进。
