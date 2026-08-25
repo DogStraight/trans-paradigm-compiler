@@ -86,5 +86,28 @@ token_type = "literal.block_scalar"
 after = ["symbol.base.colon", "symbol.base.sub"]
 next_chars = " \t\r\n+-0123456789"
 
+# 裸标量（plain scalar）扫描配置——[plain] 段（lexer plain 分支）：
+# first = 触发字符集（数字走 number 分支；-/:/&/*/引号/# 等由其它分支
+#   处理）；continuation = 续字符集（含空格 → 多词值；词内 -/:@{}[], 等
+#   容忍——真实配置值形态）。
+# stop_space_after：':' 后随空白/行尾即终止（映射分隔），否则是标量一部分
+#   （nginx:1.25 / ./data:/usr/... 的词内冒号）。
+# no_space_after_tokens：前一显著 token 是锚点/别名指示符时遇空格终止
+#   （锚点名/别名名是单词——'&anchor value' 拆两个 token）。
+[plain]
+first = ["A-Z", "a-z", "_", ".", "$", "/", "一-鿿"]
+continuation = [
+  "A-Z", "a-z", "0-9", "_", ".", "$", "/", " ", ":", "@", "+", "#", "~",
+  "{", "}", "[", "]", ",", "-", "=", "&", "*", "'", "!", "<", ">", "(", ")",
+  # CJK 统一表意文字（U+4E00-U+9FFF，中文配置值）+ 常见中文/全角标点
+  "一-鿿", "—", "→", "、", "。", "：", "；", "（", "）", "，",
+]
+stop_space_after = ":"
+no_space_after_tokens = ["symbol.base.amp", "symbol.base.star"]
+# flow 终止符：括号内（流式集合语境）这些字符终止扫描——'{a, b}' 的
+# ','/'}'、'[a, b]' 的 ','/']' 不能吞进 plain（YAML flow 语境规则）；
+# 块语境（括号外）吸收（配置宽容：'name: a, b' / '${{ matrix.os }}'）。
+flow_terminators = ["{", "}", "[", "]", ","]
+
 [id.id]
 id = "[a-zA-Z_][a-zA-Z0-9_]*"

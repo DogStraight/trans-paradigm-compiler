@@ -107,6 +107,13 @@
   the lock; the renderer re-indents to the locked unit via the AST-root
   `_indent_unit` stamp, so block-scalar verbatim content stays aligned only
   when the source is single-unit.
+- **YAML plain scalars are a config-lenient approximation.** The `[plain]`
+  lexer mode (char classes + `stop_space_after`/`no_space_after_tokens`/
+  `flow_terminators`) covers real config value shapes (`${{ }}`, URLs,
+  multi-word, CJK, word-internal `,`/`{}`/`[]` at block level — deviating
+  from YAML 1.2's strict plain rules). Remaining gaps: digit-leading
+  multi-dot values (`1.2.3` splits; the number branch wins), no tab-separated
+  words, values don't span lines, and quotes with escapes are unsupported.
 - **Parser is classic recursive descent + Pratt (LL-style)** — not LR/GLR, and
   there is no parser-level error recovery (no skip-to-sync-point and
   continue). Syntax errors are caught by the pre-parse linter and block the

@@ -28,6 +28,21 @@ production = []
 indent = false
 
 
+# ── Comment — 注释节点 ──
+# production == ["comment"] 使引擎的 _derive_comment_node_name 推导到本规则
+# （有渲染布局 → 注释渲染保真；无此规则时回退无布局节点，注释静默丢弃——
+# c4 现状，yaml 补上后注释参与渲染）。
+
+[Comment.parser]
+production = ["comment"]
+
+[Comment.parser.node]
+value = "$1.value"
+
+[Comment.renderer.layout]
+ref = "value"
+
+
 # ── MappingEntry — key: value ──
 # key 可为标量或 merge key（`<<: *defaults`，见 01_flow.toml）
 
@@ -149,10 +164,10 @@ value = "$1"
 
 # ── 标量原子 ──
 
-# Identifier — 裸标识符（localhost/true/null 等）
+# Identifier — 裸标识符/裸标量（plain scalar，localhost/true/null 等）
 [Identifier.parser]
 is_atom = true
-production = ["id"]
+production = ["id|literal.plain"]
 
 [Identifier.parser.node]
 content = "$1.value"

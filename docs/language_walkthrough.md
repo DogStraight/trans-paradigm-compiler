@@ -94,6 +94,11 @@ while = "while"
 > 行锁定，注释行不参与），lexer/main_lexer.py::_indent_aligned/_starts_comment；
 > 锁定单位经 AST 根节点 `_indent_unit` 传递给 renderer（渲染与源文件单位一致，
 > 块标量逐字内容相对列对齐不被破坏）。
+> 裸标量（plain scalar）由 `[plain]` 段配置（`lexer/main_lexer.py` 的 plain
+> 分支）：first/continuation 字符类（支持 A-Z 范围与 CJK 段）、
+> stop_space_after（':' 后随空白即终止）、no_space_after_tokens（锚点/别名
+> 名单词边界）、flow_terminators（括号内 { } [ ] , 终止、块语境吸收——
+> 配置宽容，YAML flow 语境规则）。
 > 无尺寸数字触发前缀（如 `'h`）由 `lexer/main_lexer.py::_build_unsized_prefixes`
 > 从 `[[number.based]]` 形态推导（size=none + 单字符 base_prefix），不再硬编码。
 > 详见 `lexer/capture_runner.py` 文件头与 `tests/engine/lexer/test_capture_runner.py`。

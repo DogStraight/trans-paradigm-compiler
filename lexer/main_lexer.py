@@ -67,6 +67,27 @@ def _build_unsized_prefixes(number_configs: list[dict] | None) -> set[str]:
     return chars
 
 
+def _parse_char_class(segments: list) -> frozenset[str]:
+    """解析字符类段列表 → 字符集合（[plain] first/continuation 配置）。
+
+    段形态：单字符 "a" / 范围 "A-Z"（len 3 且中间 '-')。fail-fast：
+    非法段直接报错（decisions/0003）。
+    """
+    chars: set[str] = set()
+    for seg in segments:
+        if not isinstance(seg, str) or not seg:
+            raise ValueError(
+                f"[lexer] [plain] 字符类段非法: {seg!r}（须为非空字符串，"
+                "单字符或 A-Z 范围）"
+            )
+        if len(seg) == 3 and seg[1] == "-":
+            for c in range(ord(seg[0]), ord(seg[2]) + 1):
+                chars.add(chr(c))
+        else:
+            chars.update(seg)
+    return frozenset(chars)
+
+
 class Lexer:
     token_define: dict = {}
 
@@ -142,6 +163,11 @@ class Lexer:
         self._comment_starts: list[str] = [
             r.start for r in self._capture_rules if r.token_type == "comment"
         ]
+        # 空白/换行字符集（plain 扫描终止判定用）
+        self._space_set: frozenset[str] = frozenset(
+            token_define_dict.get("space", {}).values()
+        )
+        self._newline_set: frozenset[str] = frozenset(self.newline)
         # 字符串定界符集合（[string] delimiters，引擎不再硬编码引号）：
         # 字符串分支在主循环后半段（number 之后），只在此命中。
         self._string_delims: set[str] = set(
@@ -151,6 +177,46 @@ class Lexer:
         # 替代硬编码 "dDbBhHoOsS"——无 size 形态 + 单字符 base_prefix 的
         # prefix+base 组合（大小写），signed 形态另加 prefix+s/S。
         self._unsized_prefixes: set[str] = _build_unsized_prefixes(number_configs)
+
+        # plain scalar 配置（[plain] 段，YAML 类语言的裸标量扫描）：
+        # first = 触发字符集；continuation = 续字符集（含空格，多词值）；
+        # stop_space_after = 这些字符后随空白/行尾即终止（YAML 的 ':' 映射分隔）；
+        # no_space_after_tokens = 前一个显著 token 在此集合时遇空格终止
+        #   （锚点名/别名名是单词，不吞空格——'&anchor value' 拆两 token）。
+        # 未声明 [plain] 的语言包（verilog/c4）→ 分支永不触发，零影响。
+        plain_cfg = token_define_dict.get("plain", {}) or {}
+        self._plain_first: frozenset[str] = _parse_char_class(
+            plain_cfg.get("first", []) or []
+        )
+        self._plain_cont: frozenset[str] = _parse_char_class(
+            plain_cfg.get("continuation", []) or []
+        )
+        self._plain_stop_space_after: frozenset[str] = frozenset(
+            plain_cfg.get("stop_space_after", "") or ""
+        )
+        self._plain_no_space_tokens: frozenset[str] = frozenset(
+            plain_cfg.get("no_space_after_tokens", []) or []
+        )
+        # flow 终止符：这些字符在括号内（bracket_depth > 0，流式集合语境）
+        # 终止扫描（YAML flow 语境规则）——'{a: 1}' 的 '}' 必须终止 'a'，
+        # 但块语境（depth 0）下吸收（'${{ matrix.os }}' 的 '{}' 是值的一部分）。
+        self._plain_flow_stops: frozenset[str] = frozenset(
+            plain_cfg.get("flow_terminators", []) or []
+        )
+        # fail-fast：触发字符必须是续字符子集（否则扫描空转死循环）
+        if not self._plain_first.issubset(self._plain_cont):
+            missing = "".join(sorted(self._plain_first - self._plain_cont))
+            raise ValueError(
+                "[lexer] [plain] first 字符不在 continuation 内: "
+                + repr(missing)
+                + "（first 须为 continuation 子集）"
+            )
+        # extend 符号优先表（'...' 文档结束符须先于 plain 的 '.' 触发）
+        self._extend_values: list[str] = [
+            v
+            for v in self.token_define.get("symbol", {}).get("extend", {}).values()
+            if isinstance(v, str) and len(v) > 1
+        ]
 
         # 括号配对表 → 开闭集合 + 类型映射
         bracket_pairs: list = self.token_define.get("bracket", {}).get("pairs", [])
@@ -381,6 +447,32 @@ class Lexer:
                     elif self.new_line_start:
                         self.new_line_start = False
                     continue
+
+            # plain scalar — 裸标量（[plain] 配置驱动，YAML plain scalar 近似）：
+            # 单 token 扫描到行尾（含词内空格的多词值），终止规则
+            # （stop_space_after 映射分隔 / no_space_after_tokens 单词边界）
+            # 与字符集全部来自配置。extend 符号优先（'...' 文档结束符先于
+            # plain 的 '.' 触发）。未声明 [plain] 的语言包分支不触发。
+            elif (
+                self._plain_first
+                and lex_text[text_idx] in self._plain_first
+                and not self._extend_symbol_at(lex_text, text_idx)
+            ):
+                self._emit_pending_dedent(tokens)
+
+                scalar_content, new_idx = self._scan_plain_scalar(
+                    lex_text, text_idx
+                )
+                offset = new_idx - text_idx
+                text_idx = new_idx
+                current_token.set_content(scalar_content)
+                # 关键字精化（true/false/null 等经 flat map 升级为 keyword）
+                full = self.full_token_map.get(scalar_content)
+                current_token.set_type(full if full is not None else "literal.plain")
+                start_point += offset
+                current_token = self.refine_type(current_token)
+                tokens.append(current_token)
+                continue
 
             # ── 无尺寸字面量分支（'b1/'d0/'hFF/'o7，配置驱动触发）──
             # 触发集合从 lexer.number 形态推导（无 size + 单字符 base_prefix），
@@ -661,6 +753,60 @@ class Lexer:
     def _starts_comment(self, text: str, idx: int) -> bool:
         """idx 处（行首空白后）是否以注释标记开头（auto 锁定跳过注释行）。"""
         return any(text.startswith(s, idx) for s in self._comment_starts)
+
+    # 仅供 tokenize 内部调用
+    def _extend_symbol_at(self, text: str, idx: int) -> bool:
+        """idx 处是否命中多字符 extend 符号（'...' 优先于 plain 的 '.' 触发）。"""
+        return any(
+            text.startswith(v, idx) for v in self._extend_values
+        )
+
+    # 仅供 tokenize 内部调用
+    def _scan_plain_scalar(self, text: str, idx: int) -> tuple[str, int]:
+        """从 idx 扫描 plain scalar（[plain] 配置驱动，YAML plain scalar 近似）。
+
+        终止规则（配置声明，引擎无 YAML 具体知识）：
+        - 换行 / EOF：终止（不消费）
+        - stop_space_after 字符（如 ':'）后随空白/行尾：终止（映射分隔）
+        - 空格后随 stop_before_comment… 注：注释终止靠"空格 + 注释分支"自然
+          实现——空格不在续字符集时即终止；此处空格在续字符集（多词值），
+          由 stop_before_comment 字符（'#'）判定：空格后随 '#' → 终止
+          （'#' 留给注释分支，`abc#def` 的 '#' 前无空格 → 词内续字符）
+        - no_space_after_tokens：前一个显著 token（锚点/别名名）后遇空格终止
+        返回 (content, new_idx)；content 尾部空白已剥。
+        """
+        content = ""
+        stop_comment_chars = self._comment_starts
+        while idx < len(text):
+            ch = text[idx]
+            if ch in self._newline_set:
+                break
+            nxt = text[idx + 1] if idx + 1 < len(text) else ""
+            # 空格后随注释标记 → 终止（注释留给注释分支）
+            if ch in self._space_set and any(
+                text.startswith(cs, idx + 1) for cs in stop_comment_chars
+            ):
+                break
+            # 前一个显著 token 是锚点/别名 → 空格是单词边界（不吞）
+            if (
+                ch in self._space_set
+                and self._line_sig in self._plain_no_space_tokens
+            ):
+                break
+            # stop_space_after 字符后随空白/行尾 → 终止
+            if ch in self._plain_stop_space_after and (
+                not nxt or nxt in self._space_set or nxt in self._newline_set
+            ):
+                break
+            # flow 语境终止符：括号内（流式集合）遇 { } 终止
+            if ch in self._plain_flow_stops and self.bracket_depth > 0:
+                break
+            if ch not in self._plain_cont:
+                break
+            content += ch
+            idx += 1
+        # 剥尾部空白（多词值行尾的空格不保留）
+        return content.rstrip(" "), idx
 
     # 仅供 tokenize 内部调用
     def _match_capture(self, text: str, pos: int) -> CaptureRule | None:
