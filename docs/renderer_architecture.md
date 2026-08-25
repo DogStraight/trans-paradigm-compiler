@@ -194,7 +194,8 @@ ADR-0006 边界分析提出的五条理论边界，落地后的状态：
    增强，非配置加载主路径。**后续**：可加布局 schema 校验（P3 声明式
    schema 的落点之一）。
 
-6. **c4/yaml 布局未用 intent 迁移**：intent 只替换了 verilog 3 处手拼四件套。
+6. **yaml 布局未用 intent 迁移**：c4 ArgumentList 已随 verilog 批量迁移落地
+   （023d939，共 12 处）；yaml 布局仍用手拼 join/break。
    **后续**：存量逐步迁移（零改写约束下不强制）。
 
 ---

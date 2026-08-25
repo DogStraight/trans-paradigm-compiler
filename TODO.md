@@ -1,7 +1,7 @@
 # TODO（纯待办清单）
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
-> 当前验证基线（2026-08-25）：806 pytest 全绿 + e2e 93（FAIL 0，含 real 保真度守卫）+
+> 当前验证基线（2026-08-25）：877 pytest 全绿 + e2e 64（FAIL 0，含 real 保真度守卫）+
 > lint recall 31/31 零误报 + 覆盖率 83.39%（fail_under 80）+ vs Verible 差分 124 例。
 
 ## P1 — Verilog 实例完善
@@ -253,6 +253,13 @@
 > renderer 自产空行）；pipeline 参数 fidelity（full 默认零变化 / keep_blank），
 > CLI `tpc format --fidelity keep_blank`；871 pytest + pyright 0 errors；
 > 测试 tests/engine/renderer/test_fidelity.py（8 用例）。
+> 阶段 4a 语言包落地（023d939）：verilog + c4 共 12 处 join 列表布局迁移为
+> intent="compact"（ParameterList/PortList/TaskPortList/ArgumentList/
+> DeclaratorList/ParamOverrideList/NamedPortList/SensitivityList/ConcatExpr/
+> CaseItem/AttrSpecList/TypeParamList）——无 first_soft 的迁移显式
+> first_soft=false、无 nest 的显式 nest=0，输出逐字节等价；877 pytest +
+> pyright 0 errors + e2e 全绿。架构文档 docs/renderer_architecture.md
+> 同步落地清单（f1a6a12）。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为
@@ -263,8 +270,8 @@
 - [ ] **布局意图声明化**：语言包声明"结构 → 布局意图"（对齐/紧凑/折行/锚定），
       引擎推导具体 Doc，消灭手拼 Break/Nest（topiary 封闭式理念——但节点级
       注解到不了跨行对齐，需多遍引擎：对齐遍/折行遍/注释遍）
-      （4a intent 原语 + 4b PassKind/criterion 已落地，见上引用块；
-      剩余：注释 attachment、align/wrap intent 存量替换推广）
+      （4a intent 原语 + 4b PassKind/criterion + 注释 attachment 已落地，
+      见上引用块；剩余：align/wrap intent 存量替换推广——c4/yaml）
 - [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
       内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
       带结构行，根治 wrap 拆行后行号漂移
