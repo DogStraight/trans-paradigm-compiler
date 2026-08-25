@@ -119,6 +119,8 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 
 ### Veryl（Rust）— SystemVerilog 现代超集 HDL（2026-08 调研，agent-reach 采集）
 
+- 本地源码镜像：`E:\research\veryl`（主仓库）+ `E:\research\veryl-doc`（官方 book 源），
+  由 `E:\research\README.md` 索引；后续查阅/追更直接读本地，不重复 clone
 - 定位：dalance（svlint 作者）的 HDL 语言设计——SystemVerilog 语法子集 + 语法简化，
   Veryl 源码转译回**高可读 SV**（transpiler 而非新仿真生态）；1026★，2022 起活跃，
   HN 主帖 76 points/45 comments（2024-03），2025-2026 连续版本发布（0.16.x）
