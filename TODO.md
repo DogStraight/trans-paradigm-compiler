@@ -87,11 +87,17 @@
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
 - [ ] **concat 无折行**：`{a, b, c, ...}` 超宽保持原样，评估加 concat 断点
-- [ ] **ref_comments 幂等 FAIL（run_all_tests 存量，2026-08-25 记录）**：
-      `module comments_test(\n input clk // 行内注释,` —— 端口列表行内注释致
-      PortList 匹配失败 truncated → 二遍解析漂移。需查 PortList 注释处理
-- [ ] **ref_inline_test fidelity 漂移（run_all_tests 存量，2026-08-25 记录）**：
-      0.8 → 0.7718（Δ-0.0282）——normal 组样本 fidelity 下降，需查样本/cache 差异
+- [x] **ref_comments 幂等 FAIL + ref_inline_test fidelity（run_all_tests 存量，已修）**：
+      根因链——列表项行尾注释挂项节点在 join 分隔符前渲染（`input clk // 注释,`）+
+      parser 回溯双收集致 attachment 跨节点双挂（双份）+ 端口列表 flat 化行号错位。
+      修复：join 原语提取 item 尾部 LineSuffix 输出在分隔符后（`input clk, // 注释`）+
+      attachment 按 (text, line) 全局去重（_attached_seen）+ restore_line_comments
+      行尾包含去重（bef978a）。结果：ref_comments 幂等恢复 + 注释位置正确
+      （fidelity 0.9422→0.9469）、ref_inline_test 0.7718→0.9317、912 pytest 全绿 +
+      real 组无损、run_all FAIL 0
+- [ ] **行中块注释 attachment 行尾化（低优先，2026-08-25 记录）**：`assign b =
+      /* 嵌入注释 */ rst_n;` 的行中块注释被 attachment 渲染到语句行尾（位置错位，
+      fidelity 残留差因）——行中注释应保持原位（或走锚点回插），评估修法
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
