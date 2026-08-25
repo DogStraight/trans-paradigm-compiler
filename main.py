@@ -114,6 +114,7 @@ def _cmd_run_pipeline(name: str, args: argparse.Namespace) -> None:
         no_lint=not cmd.get("lint", True),
         parse_enabled=cmd.get("parse", True),
         format_output=cmd.get("plugins", {}).get("formatter", False),
+        fidelity=getattr(args, "fidelity", None) or "full",
     )
 
     if result["success"]:
@@ -332,6 +333,11 @@ def _register_subparsers(sub, allow=None) -> None:
     if want("format"):
         p_fmt = sub.add_parser("format", help="Format a source file (per [commands].format)")
         p_fmt.add_argument("file", help="Path to source file")
+        p_fmt.add_argument(
+            "--fidelity", default=None,
+            choices=["full", "keep_blank"],
+            help="Fidelity level (ADR-0006 阶段5): full=完全重排, keep_blank=保留空行",
+        )
 
     if want("expand"):
         p_exp = sub.add_parser(

@@ -99,6 +99,8 @@ class _PipelineContext:
     undefine: set[str] | None
     check_idempotent: bool | None
     enable_line_comment_restore: bool
+    fidelity: str = "full"
+    """保真度分级（ADR-0006 阶段 5）：full 完全重排 / keep_blank 保留空行。"""
 
     # 输出目录（由 _resolve_output_paths 填充）
     gen_dir: str | None = None
@@ -574,6 +576,15 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
 
     content = ctx.renderer.render(ast)
 
+    # 保真度分级（ADR-0006 阶段 5）：keep_blank 按源结构位置回插空行。
+    # 在注释回插/格式化之前做——回插的空行是源空行，后续 restore 与
+    # formatter 基于它继续（formatter 保留空行，不重排空行分布）。
+    if ctx.fidelity == "keep_blank":
+        from renderer.fidelity import keep_blank_lines
+
+        content = keep_blank_lines(ctx.source, content)
+        ctx.log("[renderer] fidelity=keep_blank: blank lines restored")
+
     # Restore directive lines（副作用指令 define/undef/include）
     if ctx.directive_lines:
         content = "\n".join(ctx.directive_lines) + "\n" + content
@@ -648,6 +659,7 @@ def run_pipeline_on_source(
     undefine: set[str] | None = None,
     check_idempotent: bool | None = None,
     enable_line_comment_restore: bool = True,
+    fidelity: str = "full",
 ) -> dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -732,6 +744,7 @@ def run_pipeline_on_source(
         undefine=undefine,
         check_idempotent=check_idempotent,
         enable_line_comment_restore=enable_line_comment_restore,
+        fidelity=fidelity,
     )
     ctx.result = {
         "success": False,

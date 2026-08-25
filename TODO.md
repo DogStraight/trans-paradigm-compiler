@@ -242,6 +242,11 @@
 > pyright 0 errors；测试 tests/languages/verilog/test_formatter_engine_passkind.py。
 > 注释 attachment（parser 注释 → line_suffix 挂载，替换 inline_comment.py
 > 字符串级回插）留待后续（涉及 parser/pipeline 数据流，独立推进）。
+> 阶段 5 已落地（ADR-0006）：保真度分级——renderer/fidelity.py::keep_blank_lines
+> （src→out LCS 匹配映射表，空行完全以源为准：结构对应位置回插、不叠加
+> renderer 自产空行）；pipeline 参数 fidelity（full 默认零变化 / keep_blank），
+> CLI `tpc format --fidelity keep_blank`；871 pytest + pyright 0 errors；
+> 测试 tests/engine/renderer/test_fidelity.py（8 用例）。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为

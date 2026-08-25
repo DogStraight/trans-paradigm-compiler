@@ -133,5 +133,6 @@ LineContext 是 行号+文本+scope 栈，与 AST 无关联；pass 靠行号
 >       阶段 4a 已加 intent）
 > Impl: renderer/primitives/intent.py（布局意图声明：compact/wrap/align/anchor）
 > Impl: renderer/node_renderer.py::render_node（缩进上下文归一；阶段 1 已完成）
-> Impl: grammar/verilog/plugins/formatter/（世界 B 升级目标）
-> Test: tests/engine/renderer/（原语/缩进单测）+ tests/e2e/ + tests/differential/
+> Impl: renderer/fidelity.py::keep_blank_lines（保真度分级；阶段 5 已完成）
+> Impl: grammar/verilog/plugins/formatter/（世界 B 升级目标；阶段 3/4b 已完成）
+> Test: tests/engine/renderer/（原语/缩进/保真度单测）+ tests/e2e/ + tests/differential/
