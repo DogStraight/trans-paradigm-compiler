@@ -312,7 +312,8 @@
       引擎推导具体 Doc，消灭手拼 Break/Nest（topiary 封闭式理念——但节点级
       注解到不了跨行对齐，需多遍引擎：对齐遍/折行遍/注释遍）
       （4a intent 原语 + 4b PassKind/criterion + 注释 attachment 已落地，
-      见上引用块；剩余：align/wrap intent 存量替换推广——c4/yaml）
+      见上引用块；c4/yaml 存量实证无剩余可迁移——c4 ArgumentList 已迁移，
+      yaml 布局无列表 join 形态（固定行+body 循环），迁移不适用，已闭环）
 - [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
       内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
       带结构行，根治 wrap 拆行后行号漂移
