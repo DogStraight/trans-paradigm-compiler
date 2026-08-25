@@ -87,20 +87,23 @@ def check_one(src: str, lexer: Lexer, findings: list, label: str,
     if not out:
         return
 
-    # token 保序（仅对无预处理器指令的纯 Verilog 输入——宏展开/逆映射路径
-    # 已知会改变 token 数（复合宏逆映射不干净），不变量在那里不成立）
-    if any(marker in src for marker in ("`ifdef", "`ifndef", "`define", "`include",
-                                        "`else", "`elsif", "`endif", "`timescale",
-                                        "`resetall", "`celldefine")):
-        return
-    seq_in = _token_seq(src, lexer)
-    seq_out = _token_seq(out, lexer)
-    if seq_in is not None and seq_out is not None and seq_in != seq_out:
-        _save(findings_dir, f"{index:05d}_tokencorrupt_{label}.v", src)
-        findings.append(
-            f"[TOKEN-CORRUPT] {label}: 格式化改变了 token 序列 "
-            f"(in {len(seq_in)} → out {len(seq_out)} tokens)"
-        )
+    # token 保序（仅对语法驱动生成的合法程序断言——格式化契约是"合法输入
+    # 不改内容"。mutation 产物多为畸形：容错解析路径（补分号/重构结构）会
+    # 合法地改变 token 序列，不变量在那里不成立；宏指令路径同理已排除）
+    if label == "gen" and not any(
+        marker in src
+        for marker in ("`ifdef", "`ifndef", "`define", "`include",
+                       "`else", "`elsif", "`endif", "`timescale",
+                       "`resetall", "`celldefine")
+    ):
+        seq_in = _token_seq(src, lexer)
+        seq_out = _token_seq(out, lexer)
+        if seq_in is not None and seq_out is not None and seq_in != seq_out:
+            _save(findings_dir, f"{index:05d}_tokencorrupt_{label}.v", src)
+            findings.append(
+                f"[TOKEN-CORRUPT] {label}: 格式化改变了 token 序列 "
+                f"(in {len(seq_in)} → out {len(seq_out)} tokens)"
+            )
 
     # 幂等
     try:
