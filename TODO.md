@@ -159,6 +159,11 @@
 - [ ] 引擎编译提速评估（Nuitka 已实证 exe，编译引擎是后手）
 - [ ] CI 补强（未做）：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential
       门禁接入
+- [x] CI 补强：PR 快速 fuzz（500 轮）+ edge 门禁已接入 test job（fuzz TOKEN-CORRUPT
+      假阳性已修——不变量限定合法 gen 样本，800 轮 0 findings）；夜间长跑
+      workflow（nightly.yml：cron 03:00 UTC，fuzz 5000 轮 + edge + 全量回归）已建；
+      differential（Verible 对拍）留作 CI 可选 job（依赖 verible 二进制下载，见
+      tests/fuzz/README.md 纪律节）
 
 ### P2.5 引擎约定机器化（边界检查器，2026-08-24 记录，非发布阻塞）
 

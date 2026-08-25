@@ -40,6 +40,14 @@ jobs:
         run: |
           npx -y pyright@1.1.413 --project pyrightconfig.strict.json
 
+      - name: Edge corpus gate
+        run: |
+          python tests/edge/run_edge.py
+
+      - name: Fuzz smoke (PR 快速, 时间预算 ~60s)
+        run: |
+          python tests/fuzz/run_fuzz.py --iters 500
+
       - name: Verify CLI works
         run: |
           echo "module m; reg a; endmodule" | Out-File -Encoding utf8 ci_check.v

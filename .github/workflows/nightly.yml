@@ -1,0 +1,43 @@
+# Nightly — 长跑验证（fuzz 长跑 + edge + 全量回归）
+#
+# 与 PR CI 互补：PR 只跑 fuzz smoke（500 轮），夜间长跑给 fuzz 大轮数预算
+# （5000 轮 ~8min，接受域更广）+ 全量回归。单配置（ubuntu + 3.12）够——
+# 平台差异由 PR CI 矩阵覆盖。
+#
+# 可选 job：differential（与 Verible 对拍）依赖 verible 二进制，见
+# tests/fuzz/README.md 纪律节；接入时用 fetch 步骤或 VERIBLE_FORMAT。
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 每天 UTC 03:00
+  workflow_dispatch:      # 手动触发
+
+jobs:
+  long-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install package (editable + test deps)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Fuzz 长跑（5000 轮，~8min）
+        run: |
+          python tests/fuzz/run_fuzz.py --iters 5000
+
+      - name: Edge corpus gate
+        run: |
+          python tests/edge/run_edge.py
+
+      - name: 全量回归
+        run: |
+          python -m pytest tests -q
