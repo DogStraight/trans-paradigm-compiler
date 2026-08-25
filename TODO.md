@@ -105,6 +105,29 @@
 - [ ] 与 pre_scan 关系确认：pre_scan 是 lexer 期名字收集（parser 提示），
       naming_check 是语义层规范检查，互不冲突，文档注明
 
+### P1.9 tpc-check 诊断模型升级（pylance 化，2026-08-25 研判入册）
+
+> 来源：docs/references.md「Verilog 静态检查工具群」深调研（verible-lint / Verilator
+> `--lint-only` / slang / svlint / hdl_checker）。目标场景：模型生成 v 文本 →
+> tpc-check 当 pylance 用（即时诊断、机器可读、可豁免）。
+> 节奏：开源初期做小而稳——只推第一步低成本项，大项（规则表配置化/LSP）积蓄。
+
+- [ ] 第一步（低成本，纯增量）：
+  - [x] `tpc check --json`（已存在，LSP 兼容诊断结构：stage/severity/code/range）
+  - [x] **suppress 注释机制**（仿 Verilator lint_off/lint_on）：
+        `/* tpc-check off [rules] */`…`/* tpc-check on */` 区间豁免 +
+        `// tpc-check: disable-line [rules]` 单行豁免——输出层过滤（不侵入检查器），
+        豁免后重算 exit_code；模型生成器可在"故意非标"处内联豁免
+        （落地：analyzer/suppress.py + main.py 接入 + 13 自测；端到端实证三种形态）
+  - [x] 规则 ID 文档化：docs/diagnostics.md（linter/semantic 诊断 code 命名空间清单
+        + 豁免注释语法 + 命名约定，仿 verible `--print_rule_descriptions` 的规则即文档思路）
+- [ ] 第二步：检查规则表 + severity 配置（规则 ID → 描述 → 默认 severity → 用户覆盖，
+      对齐 svlint `.svlint.toml` / verible rule-sets；tpc 配置驱动哲学在检查侧的落地），
+      与 P1.7 naming_check 合并推进
+- [ ] 路线观察（不立项）：LSP 服务化（hdl_checker「封装后端 → LSP Diagnostic」参照，
+      零依赖 stdlib 手写 jsonrpc 可行但需编辑器接入需求驱动）；语义级警告
+      （WIDTH/LATCH/MULTIDRIVEN 类需类型推断，超出浅层语义定位）
+
 ## P2 — 工程化收尾（发布准备）
 
 ### P2.2 发布收尾

@@ -192,6 +192,9 @@ def _cmd_check(args: argparse.Namespace) -> None:
     )
     report = checker.check(args.file)
 
+    # 源码内 tpc-check 豁免注释（/* tpc-check off */ 区间 / disable-line 单行）
+    _apply_check_suppressions(report)
+
     if args.json:
         import json
 
@@ -199,6 +202,33 @@ def _cmd_check(args: argparse.Namespace) -> None:
     else:
         _print_check_text(report)
     sys.exit(report["exit_code"])
+
+
+def _apply_check_suppressions(report: dict) -> None:
+    """应用源码内 tpc-check 豁免注释（analyzer/suppress.py），并重算 exit_code。
+
+    豁免面向"检查通过但故意非标"的生成代码——解析失败的文件不豁免
+    （parse_error 是坏文件信号，不掩盖）。
+    """
+    from analyzer.suppress import apply_suppressions, build_suppress_map
+
+    for f in report["files"]:
+        if not f.get("parse_ok", True):
+            continue
+        try:
+            with open(f["path"], encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        smap = build_suppress_map(text)
+        f["syntax"] = apply_suppressions(f["syntax"], smap)
+        f["semantic"] = apply_suppressions(f["semantic"], smap)
+    # 豁免后重算：任一 error 级诊断（severity 1）存在 → exit 1
+    report["exit_code"] = 1 if any(
+        d.get("severity") == 1
+        for f in report["files"]
+        for d in f["syntax"] + f["semantic"]
+    ) else 0
 
 
 def _print_check_text(report: dict) -> None:
