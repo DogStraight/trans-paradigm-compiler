@@ -229,6 +229,11 @@
 > 行号漂移"（实证：inst_port 拆行后 lines/contexts 错位 +3 → 对齐）；
 > 测试 tests/languages/verilog/test_formatter_context_sync.py（7 用例）；
 > 全量 pytest 全绿 + pyright 0 errors + 双跑对比（既有幂等/保真度）零下降。
+> 阶段 4a 已落地（ADR-0006）：intent 原语（布局意图声明：compact 紧凑列表
+> = join+first_soft+nest 别名 / wrap 流式折行 = fill / align 对齐 / anchor
+> 行尾锚定）；ParameterList/PortList/TaskPortList 三处手拼四件套已替换为
+> intent 声明且输出逐字节一致（848 pytest + e2e 全绿 + pyright 0 errors）；
+> 测试 tests/engine/renderer/test_primitives_intent.py（9 用例）。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为

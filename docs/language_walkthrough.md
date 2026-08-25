@@ -203,6 +203,7 @@ ref = "text"
 | `align` | `{ align = 5, doc = { line = [...] } }` | 绝对列对齐：doc 内换行缩进列 = `max(当前缩进列, align × 单位格数)`；首行不受影响（跨行对齐基准列） |
 | `fill` | `{ fill = [{ref="a"}, {soft=true}, {ref="b"}] }` | 流式折行：内容/分隔符交替序列逐元素贪心放置，放得下 → 空格、放不下 → 换行（中间态折行） |
 | `line_suffix` | `{ line_suffix = " // note" }` | 行尾锚定：内容推迟到下一个换行点之前输出（行尾注释锚定） |
+| `intent` | `{ intent = "compact", items = "items" }` | 布局意图声明（ADR-0006 阶段 4a）：`compact`=紧凑列表（join+first_soft+nest 别名）、`wrap`=流式折行（fill）、`align`=对齐、`anchor`=行尾锚定。语言包声明"结构→布局意图"，引擎推导 Doc，消灭手拼 |
 
 ---
 

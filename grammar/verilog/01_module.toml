@@ -126,9 +126,7 @@ params = [
 ]
 
 [ParameterList.renderer.layout]
-join = ", "
-first_soft = true
-nest = 1
+intent = "compact"
 items = "params"
 
 
