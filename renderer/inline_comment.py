@@ -188,6 +188,12 @@ def restore_line_comments(
         if text in existing_lines:
             continue
 
+        # 行尾注释（`code // 注释`）已由 join/attachment 输出（行尾包含注释
+        # 文本）→ 不重复回插——否则"列表分隔符后注释"被 join 输出后又经
+        # line 回插双通道重复。
+        if any(ln.rstrip().endswith(text.strip()) for ln in lines):
+            continue
+
         if not anchor:
             continue
 

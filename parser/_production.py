@@ -475,13 +475,23 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
             # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
             # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过
             # normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
+            # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
+            # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
+            # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
             cur_node = getattr(context, "current_node", None)
             if isinstance(cur_node, Node):
-                attached = getattr(cur_node, "_attached_comments", None)
-                if attached is None:
-                    attached = []
-                    cur_node.add_attr("_attached_comments", attached)
-                attached.append(nxt.content)
+                seen = getattr(self, "_attached_seen", None)
+                if seen is None:
+                    seen = set()
+                    self._attached_seen = seen
+                key = (nxt.content, nxt.line)
+                if key not in seen:
+                    seen.add(key)
+                    attached = getattr(cur_node, "_attached_comments", None)
+                    if attached is None:
+                        attached = []
+                        cur_node.add_attr("_attached_comments", attached)
+                    attached.append(nxt.content)
             context.advance_token()
         else:
             break
