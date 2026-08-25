@@ -1,4 +1,7 @@
-"""join 原语 — 列表连接"""
+"""join 原语 — 列表连接
+
+Doc: docs/renderer_architecture.md（join 列表拼接原语）
+"""
 
 from typing import Any
 from core.define import Node

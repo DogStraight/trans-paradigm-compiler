@@ -1,6 +1,7 @@
 """transform/primitives — 变换引擎原语
 
 提供配置驱动的 AST 变换原语，包括查表、遍历、节点创建/替换、模板解析。
+Doc: docs/language_walkthrough.md（变换原语注册表）
 """
 
 from .registry import (

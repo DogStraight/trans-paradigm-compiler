@@ -1,4 +1,7 @@
-"""line 原语 — 行布局"""
+"""line 原语 — 行布局
+
+Doc: docs/renderer_architecture.md（Line/Break 换行原语）
+"""
 from typing import Any
 from core.define import Node
 from ..doc import Doc, Empty, Line as SoftLine, Break, Concat, Nest, group

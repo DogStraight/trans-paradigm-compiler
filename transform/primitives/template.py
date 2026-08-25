@@ -1,6 +1,7 @@
 """template.py — 模板字符串解析工具
 
 提供 {a.b.c} 模板解析能力，供所有原语复用。
+Doc: docs/language_walkthrough.md（模板类变换原语）
 """
 
 import re

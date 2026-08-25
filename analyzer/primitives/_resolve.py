@@ -18,6 +18,7 @@ Pipeline:
     [RuleName.analyzer]
     primitives = ["resolve_refs"]
     resolve_refs = { refs = [{ marker = "...", ... }] }
+Doc: docs/semantic_checks.md（引用解析原语）
 """
 
 from copy import deepcopy

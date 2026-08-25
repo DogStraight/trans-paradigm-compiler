@@ -10,6 +10,7 @@
     { "ifdef_line", "cond", "negated", "boundary_lines",
       "branches": [ {"cond", "is_else", "active", "lines"}, ... ],
       "cur_branch" }
+Doc: docs/api.md（管线第一阶段：ifdef 族指令；机制文档待补）
 """
 
 from .registry import register

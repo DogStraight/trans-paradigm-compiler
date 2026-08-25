@@ -2,6 +2,7 @@
 
 兼容 LSP Diagnostic 格式，支持级别（severity）、错误码（code）；
 位置通过关联的 AST 节点（node）提供，无独立 position 字段。
+Doc: docs/semantic_checks.md（Diagnostic + related 链）
 """
 
 from core.define import Node

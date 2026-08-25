@@ -3,6 +3,7 @@ registry.py — Transform 原语注册中心
 
 与 analyzer/primitives/registry.py / preprocessor/primitives/registry.py 对称设计。
 每个子系统都在 primitives/registry.py 中定义注册表 + @register 装饰器。
+Doc: docs/language_walkthrough.md（变换原语注册机制）
 """
 
 from __future__ import annotations

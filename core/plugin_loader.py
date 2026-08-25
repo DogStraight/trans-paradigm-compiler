@@ -2,6 +2,7 @@
 
 A component is a self-contained unit of grammar rules + analyzer primitives
 + transform slots, located in grammar/<lang>/plugins/<name>/.
+Doc: docs/component_protocol.md（插件发现/加载）
 """
 
 import importlib.util

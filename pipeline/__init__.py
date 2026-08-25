@@ -10,6 +10,7 @@ CLI（main.py）与测试共用，故移入正式包，wheel 安装后 CLI 可�
 
 结构：run_pipeline_on_source 是入口（参数解析 + 阶段编排），每个管线阶段
 拆为独立函数（_stage_*），共享状态通过 _PipelineContext 传递。
+Doc: docs/api.md（管线 API：run_pipeline_on_source/format_output）
 """
 
 import os

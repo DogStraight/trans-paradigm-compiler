@@ -3,6 +3,7 @@ registry.py — DSL 原语动态注册中心
 
 原语模块通过 @register(key) 装饰器自动注册到全局调度表，
 无需手动修改 __init__.py 的 dispatch 列表。
+Doc: docs/renderer_architecture.md（原语注册机制 @register）
 """
 
 from typing import Callable

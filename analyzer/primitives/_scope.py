@@ -9,6 +9,7 @@
     scope = { name_attr = "module_name", kind = "module" }
     scope = { kind = "type", name_attr = "type_name" }
     scope = { kind = "generate", allow_duplicate = true }  # 允许同名声明
+Doc: docs/semantic_checks.md（作用域原语）
 """
 
 from core.define import Node

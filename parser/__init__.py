@@ -1,3 +1,7 @@
+"""parser/__init__.py — 引擎模块。
+
+Doc: docs/language_walkthrough.md（语法规则：setup_grammar）
+"""
 # parser/__init__.py
 import os
 from core.define import GrammarRule, GrammarRulesRegister, FileManager

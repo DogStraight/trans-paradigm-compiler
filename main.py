@@ -10,6 +10,7 @@ Usage (installed as `tpc`):
     tpc new component <name>           Scaffold a new component
     tpc config dump                    Show config key sources
     tpc --version                      Show version
+Doc: docs/api.md（CLI 入口）
 """
 
 import sys

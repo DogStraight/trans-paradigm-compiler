@@ -6,6 +6,7 @@ cli.py — tpc-lint 命令行入口
     python linter/cli.py input.v --json                   # LSP 兼容 JSON
     python linter/cli.py input.v --json --pretty           # 格式化 JSON
     echo "module m; wire a; endmodule" | python linter/cli.py   # 从 stdin
+Doc: docs/linter_architecture.md（tpc lint 命令）
 """
 
 import sys

@@ -26,6 +26,7 @@
     # 浮点/科学计数：dec [. dec] [e[+-] dec]（C 风格）
 
 语言无关引擎：本生成器不感知任何语言，只把声明编译成表。
+Doc: docs/language_walkthrough.md（数字字面量 DFA）
 """
 
 from __future__ import annotations

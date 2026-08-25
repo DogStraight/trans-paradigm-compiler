@@ -18,6 +18,7 @@ FOLLOW 是派生数据——check_end_case 的硬性依据（token ∉ FOLLOW �
 FOLLOW 成员两种形式：
   精确 token 类型（"id"、"keyword.if"）
   前缀 token 家族（"symbol.base."——以 "." 结尾，匹配整个家族）
+Doc: docs/language_walkthrough.md（规则形态分类）
 """
 
 from core.define import GrammarRule

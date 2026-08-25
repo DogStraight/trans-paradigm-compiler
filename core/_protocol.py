@@ -1,6 +1,7 @@
 """组件系统协议常量 — 统一 magic string，消除静默失败。
 
 所有组件间数据传递的 key 在此声明，拼写错误立刻可见。
+Doc: docs/component_protocol.md（组件元数据协议）
 """
 
 # ── 符号属性（sym.attrs 中的 key）──

@@ -25,6 +25,7 @@ grammar/<lang>/plugins/*/ postpass 的职责。本引擎只提供跨文件上下
 经 `AnalysisTraversal._external_extra` 注入每个文件的
 context.extra：`module_index`（全工程模块表）与 `inst_sites`（本文件
 实例化点列表）。
+Doc: docs/decisions/0005-cross-file-semantic-check.md（跨文件语义检查 ProjectChecker）
 """
 
 import os

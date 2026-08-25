@@ -4,6 +4,7 @@ Pipeline: scan_directives() → expand_tokens() → Lexer
 Both operate on pure text, no token dependency.
 
 指令处理由 primitives/registry.py 的注册表分发，新增指令不修改本文件。
+Doc: docs/api.md（管线第一阶段：宏展开；机制文档待补）
 """
 
 import re

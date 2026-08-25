@@ -1,4 +1,7 @@
-"""RuleSelector — candidate rule filtering based on start token matching."""
+"""RuleSelector — candidate rule filtering based on start token matching.
+
+Doc: docs/language_walkthrough.md（规则选择/语句发现）
+"""
 
 from typing import Any
 from core.define import Token, GrammarRule

@@ -11,6 +11,7 @@
 旧 NumberFSM（number_fsm.py）回退路径已移除（P2.1 配置化后所有语言包都
 声明数字形态，回退不可达且带过度匹配 bug：0x1F 被误认整体）。数字形态
 缺失由 Lexer 构造处 fail-fast（decisions/0003）。
+Doc: docs/language_walkthrough.md（数字形态扫描）
 """
 
 from __future__ import annotations

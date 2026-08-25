@@ -10,6 +10,7 @@ comment_runner.py — 配置驱动的注释解析器
 与 number_runner.py 同属"配置驱动 runner"系列：从语言包声明构建规则
 并扫描文本。本文件无 FSM 转移表——注释形态简单（起始/结束标记对），
 pairs 直接可读，无需 number 那种"声明→转移表"的编译步骤。
+Doc: docs/language_walkthrough.md（注释 token 扫描）
 """
 
 

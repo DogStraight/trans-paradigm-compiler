@@ -7,6 +7,7 @@ engine.py — AstTransformer + TransformPlugin 基类 + 自动注册
 额外输出（多文件分发）：
   TransformPlugin 可调用 mark_extra(name, subtree) 将 AST 子树标记为额外文件，
   render 前调用 collect_extra_asts() 收集，统一渲染。
+Doc: docs/language_walkthrough.md（变换引擎）
 """
 
 from abc import ABC, abstractmethod

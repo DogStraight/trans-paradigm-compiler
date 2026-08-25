@@ -5,6 +5,7 @@ Keyword/symbol/literal/comment/whitespace patterns are all defined
 in TOML — no hardcoded lexer logic.
 
 配置通过 ConfigRegistry 声明式加载。
+Doc: docs/language_walkthrough.md（主扫描器）
 """
 
 import os

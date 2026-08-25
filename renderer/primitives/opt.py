@@ -1,4 +1,7 @@
-"""opt 原语 — 条件可选"""
+"""opt 原语 — 条件可选
+
+Doc: docs/renderer_architecture.md（opt 可选元素原语）
+"""
 from typing import Any
 from core.define import Node
 from ..doc import Doc, Empty

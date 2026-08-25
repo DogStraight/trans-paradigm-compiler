@@ -31,8 +31,9 @@ jobs:
           python -m pytest tests -q --cov
 
       - name: Policy checks (约定即门禁)
+        # --strict-doc：R3（Doc: 头）升 gate——引擎新文件必须带 Doc: 反向引用
         run: |
-          python tools/policy/check_hardcode.py
+          python tools/policy/check_hardcode.py --strict-doc
 
       - name: Static type gate (pyright strict)
         # 版本钉在 1.1.413（与本地验证一致）；升级时同步 bump

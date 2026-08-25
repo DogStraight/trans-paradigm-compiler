@@ -5,6 +5,7 @@
 回字符串，替代字符串正则/子串操作。fail-fast 对齐 ADR-0003：inject 路径
 target 规则缺失或 production 无法解析直接报错，不静默降级；replace 路径
 对缺失规则仅警告跳过（软，兼容旧配置）。
+Doc: docs/language_walkthrough.md（EXT 注入）
 """
 
 import re

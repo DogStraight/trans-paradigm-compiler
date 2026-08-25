@@ -9,6 +9,7 @@
       无法推导时的最后回退，不是语言知识。
     - BLOCK_NODE_NAME：parser 内部临时容器节点名（parse_block 流程挂语句用，
       随后转移到规则节点，不进入最终 AST）——纯引擎内部名，语法无关。
+Doc: docs/language_walkthrough.md（解析常量）
 """
 
 from core.token_protocol import (

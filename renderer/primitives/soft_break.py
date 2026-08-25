@@ -1,4 +1,7 @@
-"""soft / break 原语 — 换行控制"""
+"""soft / break 原语 — 换行控制
+
+Doc: docs/renderer_architecture.md（soft 软换行原语）
+"""
 from typing import Any
 from core.define import Node
 from ..doc import Doc, Line as SoftLine, Break

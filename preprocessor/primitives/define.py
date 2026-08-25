@@ -1,4 +1,7 @@
-"""define — `define NAME body 指令处理器"""
+"""define — `define NAME body 指令处理器
+
+Doc: docs/api.md（管线第一阶段：define 指令；机制文档待补）
+"""
 
 import re
 

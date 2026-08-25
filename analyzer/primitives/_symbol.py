@@ -17,6 +17,7 @@ capture 配置:
     将节点属性提取到符号的 attrs 字典中。
     format: capture = { attr_name = "source_path", ... }
     例如: capture = { ports = "ports" } → 将 node.ports 内容存入 sym.attrs["ports"]
+Doc: docs/semantic_checks.md（符号收集原语）
 """
 
 from typing import Any, Callable

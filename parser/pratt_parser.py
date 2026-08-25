@@ -2,6 +2,7 @@
 
 Loads operator definitions from _symbol_level.toml and handles
 infix/prefix/postfix operators with proper precedence and associativity.
+Doc: docs/language_walkthrough.md（Pratt 表达式解析）
 """
 
 from typing import Any

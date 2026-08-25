@@ -1,6 +1,7 @@
 """include — `include "file" / <file> 指令处理器
 
 支持 "..." 和 <...> 两种格式，含递归展开和循环检测。
+Doc: docs/api.md（管线第一阶段：include 指令；机制文档待补）
 """
 
 import os

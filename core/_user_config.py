@@ -11,6 +11,7 @@ Search order:
 
 全局 profile（~/.tpc/config.json）：提供"一次配置、任意工作区自动享用"的用户级
 默认（工作区/环境仍可覆盖）。新实例启动时按上述顺序自动发现。
+Doc: docs/config_lifecycle.md（用户配置定位）
 """
 
 import os

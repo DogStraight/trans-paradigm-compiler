@@ -4,6 +4,7 @@ foreach    遍历列表，对每个元素执行 callback
 value_map  查表替换值
 condition  条件守卫
 make_exists_condition  创建'属性存在'条件谓词
+Doc: docs/language_walkthrough.md（流程控制变换原语）
 """
 
 from typing import Any, Callable

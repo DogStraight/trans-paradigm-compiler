@@ -29,6 +29,7 @@ SemanticMappingPlugin — 语义映射表构建 + 后处理管线
     1. SemanticMappingPlugin._build_mappings() — 从 scope 树构建原始映射表
     2. SemanticMappingPlugin._run_resolve()     — 执行所有 resolve.* 后处理
     3. ConfigDrivenTransform.process()          — 使用映射表展开类型端口
+Doc: docs/language_walkthrough.md（语义映射）
 """
 
 from typing import Any

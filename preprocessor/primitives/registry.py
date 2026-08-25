@@ -3,6 +3,7 @@ registry.py — 预处理器指令处理器注册中心
 
 与 renderer/primitives/registry.py / analyzer/primitives/registry.py 对称设计。
 每个子系统都在 primitives/registry.py 中定义注册表 + @register 装饰器。
+Doc: docs/api.md（管线第一阶段：指令注册机制；机制文档待补）
 """
 
 from typing import Any, Callable

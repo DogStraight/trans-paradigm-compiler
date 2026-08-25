@@ -3,6 +3,7 @@
 lookup          从 dict 表中按 key 查找
 lookup_scope    从 Scope 作用域链中按名称查找符号
 lookup_child_scope  按 kind+名称查找子作用域中的符号
+Doc: docs/language_walkthrough.md（查找类变换原语）
 """
 
 from typing import Any

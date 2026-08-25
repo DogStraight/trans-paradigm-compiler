@@ -6,6 +6,7 @@
 
 不编码语言知识：条件结构来自 preprocessor 的 condition_blocks，注入参数
 predefined/undefine 直接透传 scan_directives。
+Doc: docs/linter_architecture.md（诊断工具）
 """
 
 from preprocessor._expand import scan_directives, enumerate_conditions

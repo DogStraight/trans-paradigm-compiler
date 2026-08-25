@@ -15,6 +15,7 @@ The engine itself contains no language-specific knowledge.
 Extra output:
     mark_extra(name, subtree)      — called from plugins to mark extra files
     collect_extra_asts()           — called before render to collect extras
+Doc: docs/language_walkthrough.md（语义 + 产出：transform）
 """
 
 from .engine import AstTransformer, TransformPlugin, mark_extra, collect_extra_asts

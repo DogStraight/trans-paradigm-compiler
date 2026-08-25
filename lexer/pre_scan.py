@@ -9,6 +9,7 @@
     from lexer.pre_scan import pre_scan, load_pre_scan_config
     config = load_pre_scan_config(rules_dir)
     symbols = pre_scan(source_code, config)
+Doc: docs/language_walkthrough.md（预扫描：顶层声明收集）
 """
 
 import re

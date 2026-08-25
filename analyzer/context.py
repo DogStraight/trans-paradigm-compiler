@@ -6,6 +6,7 @@ All state is passed through this object; primitives hold no global state.
 Responsibilities:
     Carry current AST node, scope, global state, and diagnostics.
     Primitive signature: prim(analyzer, node, context, config).
+Doc: docs/semantic_checks.md（分析上下文/诊断上报）
 """
 
 from typing import Any

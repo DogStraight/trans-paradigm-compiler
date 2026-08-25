@@ -7,6 +7,7 @@ align 的值为"级别数"（× _INDENT_STR 得绝对列），语义同 Prettier
 align：除首行外所有换行的缩进列 = max(当前缩进列, 对齐列)。
 用于跨行对齐场景（端口声明 name 列等）——group 二元模型表达不了的
 "组内列宽统一"由 Align 给出基准列。
+Doc: docs/renderer_architecture.md（Align 绝对列对齐原语）
 """
 from typing import Any
 from core.define import Node

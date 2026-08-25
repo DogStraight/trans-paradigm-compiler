@@ -16,6 +16,7 @@
     kind:     来源类别（"cond" / "macro"），仅作调试/归组
     # sync 模式额外字段（兼容现状 _restore_lines）：
     body / macro / sync / sync_nth / offset / is_func / args
+Doc: docs/api.md（管线第一阶段：反向桥；机制文档待补）
 """
 
 import re

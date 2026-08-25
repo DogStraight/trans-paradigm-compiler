@@ -16,6 +16,7 @@ lexer 产出的 token 类型遵循统一命名协议，所有消费方必须引�
 
 前缀是**引擎协议**（lexer 按此产出、下游按此消费），不是语言知识——
 语言知识是 keyword.module 这类具体名字。
+Doc: docs/component_protocol.md（token 类型协议）
 """
 
 # ── 前缀常量 ──

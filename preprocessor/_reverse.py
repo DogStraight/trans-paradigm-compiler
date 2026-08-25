@@ -5,6 +5,7 @@
 - protect_and_reverse 接受统一锚列表；旧 sync 记录（含 body/macro/sync 字段、
   无 mode）自动包装为 mode="sync" 锚。
 - restore_condition_blocks 接受 {marker → 原文段} 占位 dict，内部转为 line 锚。
+Doc: docs/api.md（管线第一阶段：反向映射；机制文档待补）
 """
 
 from ._bridge import restore_anchors

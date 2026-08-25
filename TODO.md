@@ -187,8 +187,13 @@
         （`npx -y pyright@1.1.413 --project pyrightconfig.strict.json`，版本钉死防
         默认规则漂移；升级时同步 bump）——清理记录见 git log（1448afc/c8b3821，
         47 文件 +128/-115）
-- [ ] **Doc: 头补齐（规则 3 前置）**：83 个引擎 .py 补 docstring 末行 Doc: 反向引用
-      （docs/README.md 约定）；补齐后 CI 可开 --strict-doc
+- [x] **Doc: 头补齐（规则 3 已升 gate）**：83 个引擎 .py 补 docstring 末行 Doc:
+      反向引用（按子系统映射：renderer→renderer_architecture、linter→
+      linter_architecture、analyzer→semantic_checks/decisions/0005、transform/lexer/
+      parser→language_walkthrough、core→component_protocol/config_lifecycle、
+      pipeline/main→api.md）；CI 已开 `--strict-doc`（新增引擎文件必须带 Doc:）。
+      注：preprocessor 机制无专门架构文档（Doc: 暂指 api.md 管线阶段），后续补
+      preprocessor_architecture.md 再细化
 - [ ] **插件回调能力化（规则 4 前置）**：pipeline 直连 grammar.verilog 插件导入改为
       通用插件能力查找（typed_ports 变换回调 / formatter 能力经插件协议注册），
       完成后 CI 可开 --strict-import

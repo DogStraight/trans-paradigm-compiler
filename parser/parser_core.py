@@ -5,6 +5,7 @@ Orchestrates parsing by coordinating:
     - attribute_binder: $N path extraction and node assembly
     - block_parser: block/body parsing
     - pratt_parser: Pratt expression parsing (独立库模块)
+Doc: docs/language_walkthrough.md（Parser 主引擎：递归下降+回溯）
     - rule_selector: 规则选择 + production 分析 (独立库模块)"""
 
 import sys

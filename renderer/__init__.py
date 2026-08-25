@@ -22,6 +22,7 @@
     node_renderer.py     — 节点级渲染（_render_node / _render_inline / _render_body）
     loader.py            — TOML 布局规则 / 风格 / 配置加载
     doc.py               — Doc IR 类型 + layout 算法（Wadler-Leijen 模型）
+Doc: docs/renderer_architecture.md（渲染器工作机制与现状：双世界 + Doc IR + 原语表）
 """
 
 from .renderer import Renderer

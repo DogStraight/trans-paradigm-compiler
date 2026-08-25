@@ -1,3 +1,7 @@
+"""lexer/__init__.py — 引擎模块。
+
+Doc: docs/language_walkthrough.md（词法层：token 定义驱动）
+"""
 # lexer/__init__.py
 
 """Lexer 模块 — 词法分析与预扫描。

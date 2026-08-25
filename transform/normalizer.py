@@ -15,6 +15,7 @@ Renderer 仅依赖此规范形式。
   - ELIMINATE_TYPES:  需要消除的 parser 内部包装节点
   - CHILDREN_FIELD:   AST 子节点字段名
   - BODY_FIELD:       AST body 字段名
+Doc: docs/language_walkthrough.md（normalizer：结构保留规范化）
 """
 
 from typing import Any

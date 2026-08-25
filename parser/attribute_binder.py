@@ -3,6 +3,7 @@ attribute_binder.py — 属性映射绑定 & 路径提取
 
 职责：将 matched_nodes 按规则 node 映射绑定到 rule_node，
 以及内联规则扁平化（inline）。
+Doc: docs/language_walkthrough.md（node 绑定捕获）
 """
 
 import re

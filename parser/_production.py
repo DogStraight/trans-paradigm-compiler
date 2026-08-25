@@ -5,6 +5,7 @@ _production.py — 生产式解析全流程（合并 rule_matcher + node_parsers
     production 元素 dispatch → _parse_token / _parse_call / _parse_seq / etc.
     _try_production → _match_productions → _try_rule_productions（全流程）
     _prepare_production → _check_end_case（辅助检查）
+Doc: docs/language_walkthrough.md（production 求值引擎）
 """
 
 from core.define import Node, GrammarRule, CHILDREN_FIELD

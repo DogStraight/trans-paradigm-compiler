@@ -4,6 +4,7 @@ config_driven.py — ConfigDrivenTransform 插件
 核心变换引擎，作为 TransformPlugin 注册到 AstTransformer 管线。
 所有变换操作（expand/replace/delete/扩展）都是注册的原语，
 由 primitives/registry.py 的 register_primitive 统一管理。
+Doc: docs/language_walkthrough.md（配置驱动变换）
 """
 
 from typing import Any

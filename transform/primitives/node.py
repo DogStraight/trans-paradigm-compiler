@@ -3,6 +3,7 @@
 emit    根据规格创建 AST 节点
 replace 替换父节点中的子节点
 delete  删除节点（replace 的特化）
+Doc: docs/language_walkthrough.md（节点操作变换原语）
 """
 
 from typing import Any

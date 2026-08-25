@@ -3,6 +3,7 @@ block_parser.py — 块 & 语句级解析
 
 职责：parse_sentence, _resolve_block_rule, _consume_start_token,
 _parse_block_body, parse_block。
+Doc: docs/language_walkthrough.md（块规则解析）
 """
 
 from core.define import Node, GrammarRule

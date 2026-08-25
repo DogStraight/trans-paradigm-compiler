@@ -8,6 +8,7 @@ docs 是 内容/分隔符 交替序列。逐元素贪心放置：
   - 内容项：放不下时换行后再放
 与 group（整体 flat/broken 二选一）不同：fill 可产生"折了几行、其余
 保持一行"的中间态，适合长列表（参数列表、逗号表达式）的自然填充。
+Doc: docs/renderer_architecture.md（Fill 流式折行原语）
 """
 from typing import Any
 from core.define import Node
