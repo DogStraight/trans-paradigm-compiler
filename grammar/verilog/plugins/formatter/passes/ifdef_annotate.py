@@ -19,6 +19,8 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
 _IFDEF_OPEN = ("`ifdef", "`ifndef")
 _IFDEF_ELSE = ("`else",)
 _IFDEF_END = ("`endif",)
@@ -38,7 +40,7 @@ def _extract_name(line: str) -> str | None:
     return None
 
 
-def run_ifdef_annotate(lines: list[str]) -> list[str]:
+def run_ifdef_annotate(lines: Sequence[str]) -> list[str]:
     """给 `` `else `` / `` `endif `` 补配对宏名注释（幂等：已有注释不重复）。"""
     stack: list[str] = []
     result: list[str] = []

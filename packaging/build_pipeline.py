@@ -50,7 +50,6 @@ Facets: %(facets)s
 """
 
 import argparse
-import os
 import sys
 
 sys.path.insert(0, %(root)r)

@@ -32,7 +32,7 @@ class Symbol:
         name: str,
         kind: str,
         decl_node: Node,
-        scope: "Scope",
+        scope: "Scope | None",
         attrs: dict | None = None,
     ):
         self.name = name

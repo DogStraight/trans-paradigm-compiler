@@ -381,6 +381,21 @@ class GrammarRule:
     # （linter 语句发现 / parser parse_sentence 候选，见 has_pass_end_case）
     is_statement: bool | None = None
 
+    # 其余动态挂载字段（__init__ 经 setattr 从 kwargs/parser 阶段表提取；
+    # 类级注解仅供静态检查/IDE，不建运行时类属性——运行时行为零变化）。
+    production: list[str]
+    node: dict
+    exclude: list
+    inline: bool
+    pratt: bool
+    is_atom: bool
+    is_block: bool
+    parser: dict
+    analyzer: dict
+    renderer: dict
+    inject: dict
+    transform: dict
+
     # node 绑定中 $N 位置捕获规约（用于静态越界校验）
     _RE_POS_REF = re.compile(r"^\$(\d+)(?:\.|$)")
 

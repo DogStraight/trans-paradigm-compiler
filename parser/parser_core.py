@@ -310,6 +310,10 @@ class Parser:
     # 动态挂载属性：wrap 等消费方现场挂 lexer 供超宽行解析（见 pipeline.format_generated）
     lexer: Any = None
 
+    # 调试日志文件（FileManager.debug_log_file 非空时在 __init__ 设置；类级
+    # 默认 None 供静态检查，未设置时读取返回 None）
+    debug_log_file: str | None = None
+
     # 日志级别（阈值 _log_level 过滤低级别调用）
     LOG_TRACE = -1
     LOG_DEBUG = 0

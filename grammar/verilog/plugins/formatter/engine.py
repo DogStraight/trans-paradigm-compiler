@@ -14,7 +14,7 @@ Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 3 �
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Callable
 

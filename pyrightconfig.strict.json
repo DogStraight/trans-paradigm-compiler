@@ -1,0 +1,28 @@
+{
+  "include": [
+    "core",
+    "lexer",
+    "parser",
+    "linter",
+    "preprocessor",
+    "analyzer",
+    "transform",
+    "renderer",
+    "pipeline",
+    "main.py",
+    "tools",
+    "tests",
+    "grammar/verilog/plugins",
+    "grammar/c4/plugins"
+  ],
+  "exclude": ["**/__pycache__", "**/dist"],
+  "typeCheckingMode": "basic",
+  "reportUnusedImport": "error",
+  "reportUnusedVariable": "error",
+  "reportUnusedFunction": "error",
+  "reportUnusedClass": "error",
+  "reportUnusedExpression": "error",
+  "reportCallIssue": "error",
+  "reportOptionalMemberAccess": "error",
+  "reportOptionalSubscript": "error"
+}
