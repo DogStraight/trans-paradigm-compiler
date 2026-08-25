@@ -163,3 +163,44 @@ class TestEngineIntegration:
         eng = build_engine([{"name": "decl", "matcher": {"first_token": ["reg"]}}])
         decl = next(p for p in eng._passes if p.name == "decl")
         assert decl.criterion == {"min_group_size": 2}
+
+    def test_comment_kind_maps_directly(self):
+        """wrap_comments 升格为 COMMENT 内建遍（kind="comment"）。"""
+        p = FormatterPass(
+            name="wrap_comments", kind="comment",
+            handler=lambda lines, ctxs: lines,
+            criterion={"max_width": 100},
+        )
+        assert p.pass_kind == PassKind.COMMENT
+
+    def test_comment_pass_engine_dispatch(self):
+        """comment 遍带 handler 时引擎正常执行（handler 优先 dispatch）。"""
+        def _comment_pass(lines, ctxs):
+            return [l + " // c" for l in lines]
+
+        eng = FormatterEngine([
+            FormatterPass(
+                name="wrap_comments", kind="comment", handler=_comment_pass,
+                criterion={"max_width": 0},  # 任何行都超宽 → 运行
+            ),
+        ])
+        out = eng.run(["a"], [_ctx(1)])
+        assert out == ["a // c"]
+
+    def test_comment_criterion_skips(self):
+        """无超宽注释行 → COMMENT 遍被 max_width 拒绝跳过。"""
+        seen = []
+
+        def _comment_pass(lines, ctxs):
+            seen.append(list(lines))
+            return list(lines)
+
+        eng = FormatterEngine([
+            FormatterPass(
+                name="wrap_comments", kind="comment", handler=_comment_pass,
+                criterion={"max_width": 100},
+            ),
+        ])
+        out = eng.run(["// short"], [_ctx(1)])
+        assert out == ["// short"]
+        assert seen == []

@@ -172,7 +172,8 @@ def build_engine(
     ))
     # 超长注释折行 pass（VeriGood wrapComment 借鉴，默认关闭）——折纯 `//` 注释
     # 到 max_width，续行保留 `// ` 前缀；破坏性最小原则，由
-    # [formatter.wrap_comments].enabled 控制
+    # [formatter.wrap_comments].enabled 控制。升格为 COMMENT 内建遍
+    # （ADR-0006 阶段 4b），带 max_width 量化拒绝准则。
     try:
         from core.config_registry import ConfigRegistry
         _wc_enabled = bool(ConfigRegistry.get("formatter.wrap_comments.enabled"))
@@ -181,8 +182,9 @@ def build_engine(
     if _wc_enabled:
         engine.register(FormatterPass(
             name="wrap_comments",
-            kind="handler",
+            kind="comment",
             handler=lambda lines, _: run_wrap_comments(lines, max_width=mw),
+            criterion={"max_width": mw},
         ))
     return engine
 

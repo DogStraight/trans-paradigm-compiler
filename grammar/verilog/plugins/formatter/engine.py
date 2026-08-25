@@ -77,7 +77,9 @@ class FormatterEngine:
             # 量化拒绝准则：不满足 → 跳过该遍（布局决策显式化）
             if p.criterion and not _criterion_met(p.criterion, result, ctxs):
                 continue
-            if p.kind == "handler" and p.handler:
+            # handler 优先（indent/ifdef/inst_port/wrap/comment 等内建遍
+            # 均以 handler 实现）；category 是品类对齐遍（column_align）
+            if p.handler:
                 result = p.handler(result, ctxs)
             elif p.kind == "category" and p.category_cfg:
                 result = _run_category_pass(result, ctxs, p.category_cfg)
