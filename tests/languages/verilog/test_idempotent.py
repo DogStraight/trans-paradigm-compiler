@@ -80,6 +80,28 @@ SAMPLES: dict[str, str] = {
         ");\n"
         "endmodule\n"
     ),
+    "wrap 惩罚折行": (
+        "module m;\n"
+        "    wire very_long_signal_name = condition_a && condition_b && "
+        "condition_c && condition_d && condition_e && condition_f;\n"
+        "endmodule\n"
+    ),
+    "wrap 块头折行": (
+        "module m;\n"
+        "    always @* begin\n"
+        "        if ((tstate[1] || (tstate[2] && wait_n == 1'b0)) "
+        "&& no_read == 1'b0 && write == 1'b0) begin\n"
+        "            q = 1;\n"
+        "        end\n"
+        "    end\n"
+        "endmodule\n"
+    ),
+    "wrap 行尾注释折行": (
+        "module m;\n"
+        "    wire  [`TH+3:0] DPTR = XRES ? { RESMODE , 4'd0 } : "
+        "{ TPTR , XIDATA[10:7] } ; // set SP_RESET when RES == 1\n"
+        "endmodule\n"
+    ),
 }
 
 

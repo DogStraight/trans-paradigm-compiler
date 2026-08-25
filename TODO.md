@@ -39,7 +39,8 @@
       更细断点（长标识符/括号内/块头条件行）
 - [ ] 块头行（`if (...) begin` 超宽条件）折行——当前 wrap 只折分号行，块头不折，
       需 boundary 支持"块头条件续行"识别
-- [ ] wrap 幂等回归测试补强（现有 test_wrap/test_idempotent 覆盖折行场景）
+- [x] wrap 幂等回归测试补强（test_wrap docstring 修正为 P1.6 现状 + test_idempotent
+      SAMPLES 补 3 个 wrap 折行场景：惩罚折行/块头折行/行尾注释折行——统一幂等门禁）
 
 ### P1.6 wrap 升级：惩罚值驱动折行搜索（Verible 参考）
 
