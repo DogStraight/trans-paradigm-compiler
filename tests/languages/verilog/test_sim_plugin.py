@@ -106,3 +106,25 @@ def test_parse_display_with_plugin():
         _with_plugins(),
     )
     assert ast is not None
+
+
+def test_plugin_tokens_registered():
+    """挂载时 token 层注册：仿真关键字是 keyword token（token_ext 随插件生效）。"""
+    lexer = Lexer(rules_dir=DEFAULT_RULES_DIR)
+    for word in ["fork", "join", "force", "release", "wait", "event"]:
+        toks = lexer.tokenize(word)
+        assert len(toks) == 1 and toks[0].type == f"keyword.{word}", (
+            f"{word} 应为 keyword.{word}，实际 {[t.type for t in toks]}"
+        )
+
+
+def test_plugin_reload_no_accumulation():
+    """挂载幂等：两次独立加载规则表大小/集合一致（无残留累积）。"""
+    r1 = _with_plugins()
+    r2 = _with_plugins()
+    assert len(r1) == len(r2), "重复挂载规则数翻倍（残留累积）"
+    assert set(r1) == set(r2)
+    # sim 规则在两个结果里都恰好一份
+    for name in SIM_RULES + ["SimCtrlStmt"]:
+        assert r1[name] is not r2[name], "独立实例应各自持有规则对象"
+        assert name in r2

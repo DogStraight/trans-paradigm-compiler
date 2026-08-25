@@ -23,9 +23,10 @@
 - [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
       仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
 - [ ] config/defparam（A.1.5 / A.2.4）—— 罕见，视需要
-- [ ] 插件骨架验证：plugins/sim/tpc.toml + token_ext/规则，verilog tpc.toml
-      [plugins] enabled 控制挂载；挂载/卸载无残留（插件机制已实证——typed_ports/
-      semantic_check 即插拔模式，验证思路照此）
+- [x] 插件骨架验证：sim 插件挂载/卸载无残留（test_sim_plugin 补 token 层注册断言——
+      fork/join/force/wait/event 挂载时为 keyword token；挂载幂等——两次独立加载
+      规则集一致无累积；规则剥离/注入/解析断言已有）。注：enabled 声明 base="plugins"
+      的配置在无 plugins_dir 时 fail-fast 报错（ADR-0003 设计），卸载验证走规则层
 - [ ] 发布收尾联动：语法补全后跑全量回归 + real 组（SweRV dmi 样本）+ fidelity
       基线；仿真插件默认关闭不影响可综合子集纯净性
 
