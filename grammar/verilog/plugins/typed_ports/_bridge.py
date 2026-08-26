@@ -150,7 +150,12 @@ class ComponentSlotPlugin(TransformPlugin):
                 if rb:
                     result = rb(c, ctx)
                     if result is not None:
-                        new.append(result)
+                        # 注释迁移（注释节点模型步骤 3，P1.5）：impl 绑定 →
+                        # ModuleInst 是 1:1 替换，原 impl 节点的注释（行尾
+                        # `// 实例化注释` 等）随结构迁到生成的实例节点。
+                        from transform.engine import migrate_comments
+
+                        new.append(migrate_comments(c, result))
                         self._stats["slots_called"] += 1
             else:
                 self._process_impls(c, slots)

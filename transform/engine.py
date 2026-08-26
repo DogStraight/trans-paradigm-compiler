@@ -104,3 +104,41 @@ def collect_extra_asts() -> list[tuple[str, Node]]:
     """render 前调用：收集所有插件标记的额外输出。"""
     ctx = AstTransformer.get_shared()
     return ctx.pop(_EXTRA_ASTS_KEY, [])
+
+
+def migrate_comments(old_node: Any, new_node: Any) -> Any:
+    """变换时注释迁移（注释节点模型步骤 3，P1.5）。
+
+    新节点继承被替换节点的注释槽位（_comment_slots：leading/trailing/
+    inline/inline_after）——1:1 替换的通用通道：`impl ... => top; // 注释`
+    变换为 ModuleInst 后注释随结构走（渲染在实例行尾），不依赖锚点回插
+    （变换路径普通注释锚点漂移的问题由此根治）。
+
+    Returns: new_node（便于链式调用 `new.append(migrate_comments(c, result))`）。
+    """
+    if (
+        not isinstance(old_node, Node)
+        or not isinstance(new_node, Node)
+        or new_node is old_node
+    ):
+        return new_node
+    old_slots = getattr(old_node, "_comment_slots", None)
+    new_slots = getattr(new_node, "_comment_slots", None)
+    if old_slots:
+        if new_slots is None:
+            new_node.add_attr("_comment_slots", dict(old_slots))
+        else:
+            for k, v in old_slots.items():
+                if k not in new_slots:
+                    new_slots[k] = v
+                else:
+                    new_slots[k] = new_slots[k] + v
+    # 旧 attachment 通道（行尾注释，ADR-0006 注释遍）同样迁移
+    old_attached = getattr(old_node, "_attached_comments", None)
+    if old_attached:
+        new_attached = getattr(new_node, "_attached_comments", None)
+        if new_attached is None:
+            new_node.add_attr("_attached_comments", list(old_attached))
+        else:
+            new_attached.extend(old_attached)
+    return new_node

@@ -10,7 +10,7 @@ Doc: docs/language_walkthrough.md（配置驱动变换）
 from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
-from .engine import TransformPlugin, AstTransformer, register_plugin
+from .engine import TransformPlugin, AstTransformer, register_plugin, migrate_comments
 from .primitives.registry import (
     TransformResult,
     SKIP,
@@ -91,7 +91,7 @@ class ConfigDrivenTransform(TransformPlugin):
         if isinstance(result, list):
             return result[0] if result else ast
         assert isinstance(result, Node), f"预期 Node，实际 {type(result)}"
-        return result
+        return migrate_comments(ast, result)
 
     # ── 递归遍历核心 ──
 
@@ -130,9 +130,15 @@ class ConfigDrivenTransform(TransformPlugin):
             elif transformed is None:
                 continue  # 删除
             elif isinstance(transformed, list):
-                result.extend(transformed)
+                # 分裂（1:N）：注释迁移到第一个产物（跟随替换位置）
+                migrated = [
+                    migrate_comments(item, t) if i == 0 else t
+                    for i, t in enumerate(transformed)
+                ]
+                result.extend(migrated)
             else:
-                result.append(transformed)
+                # 1:1 替换：新节点继承被替换节点的注释（变换路径注释随结构走）
+                result.append(migrate_comments(item, transformed))
         return result
 
     def _transform_children(self, node: Node, root_scope: Scope) -> None:
@@ -146,9 +152,13 @@ class ConfigDrivenTransform(TransformPlugin):
                 elif result is None:
                     setattr(node, attr_name, None)
                 elif isinstance(result, list):
-                    setattr(node, attr_name, result[0] if result else None)
+                    migrated = [
+                        migrate_comments(val, t) if i == 0 else t
+                        for i, t in enumerate(result)
+                    ]
+                    setattr(node, attr_name, migrated[0] if migrated else None)
                 else:
-                    setattr(node, attr_name, result)
+                    setattr(node, attr_name, migrate_comments(val, result))
             elif isinstance(val, list):
                 new_list: list = []
                 for item in val:
@@ -161,9 +171,13 @@ class ConfigDrivenTransform(TransformPlugin):
                         elif r is None:
                             continue
                         elif isinstance(r, list):
-                            new_list.extend(r)
+                            migrated = [
+                                migrate_comments(item, t) if i == 0 else t
+                                for i, t in enumerate(r)
+                            ]
+                            new_list.extend(migrated)
                         else:
-                            new_list.append(r)
+                            new_list.append(migrate_comments(item, r))
                     else:
                         new_list.append(item)
                 setattr(node, attr_name, new_list)
