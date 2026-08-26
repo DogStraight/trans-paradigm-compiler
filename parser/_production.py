@@ -369,16 +369,15 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                 # 竞争 → 非幂等振荡 + 注释丢失）。`.` 后跟标识符（端口名形态）
                 # 时拼接成 `.o_x` 唯一锚；restore 匹配失败时回退行首 `.` 匹配
                 # （src 未格式化场景行号偏移大，精确锚可能落空）。
+                nxt2 = context.peek_token(offset=1)
                 if (
                     anchor == "."
-                    and context.has_more_tokens()
-                    and context.peek_token(offset=1) is not None
-                    and context.peek_token(offset=1).type
-                    not in (COMMENT_TOKEN_TYPE, "newline")
-                    and context.peek_token(offset=1).content
-                    and context.peek_token(offset=1).content[0].isalpha()
+                    and nxt2 is not None
+                    and nxt2.type not in (COMMENT_TOKEN_TYPE, "newline")
+                    and nxt2.content
+                    and nxt2.content[0].isalpha()
                 ):
-                    anchor = anchor + context.peek_token(offset=1).content
+                    anchor = anchor + nxt2.content
                 self._line_comment_anchors.append(
                     {
                         "text": t.content,
