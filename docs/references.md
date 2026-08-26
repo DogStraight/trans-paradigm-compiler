@@ -31,6 +31,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | 项目 | 关系 | 一句话价值总结 |
 |------|------|----------------|
 | [DmitrySoshnikov/syntax](https://github.com/DmitrySoshnikov/syntax) | 设计参考 | "语言无关的语法规则作为独立资产"的可行性验证、运算符优先级声明、多语言输出模式 |
+| [sv-parser](https://github.com/dalance/sv-parser) | 深度参考 | dalance 的 IEEE 1800-2017 全量 SV parser 库（svlint/svls 地基）；CST 节点 ↔ nom 组合子章节镜像 + build.rs 生成节点枚举 + nom 扩展全家桶（详见深调研） |
 | [Lark](https://github.com/lark-parser/lark) | 概念参考 | Earley 与递归下降的取舍分析、grammar 格式对比 |
 | [Grammar-Kit](https://github.com/JetBrains/Grammar-Kit) | 设计参考 | Pin 机制（未采用，启发了 end_case + 回溯组合设计） |
 | [ANTLR](https://github.com/antlr/antlr4) | 概念参考 | 工业级 parser generator 的定位差异 |
@@ -67,7 +68,9 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [verible-verilog-lint](https://github.com/chipsalliance/verible) | 设计参考 | 规则表 + rule-sets 配置 + 规则描述输出（`--print_rule_descriptions`）；与 formatter 同仓库，规则/诊断工程化范本（详见深调研） |
 | [Verilator `--lint-only`](https://github.com/verilator/verilator) | 设计参考 | W 码警告体系（200+ 条）+ `lint_off`/`lint_on` 注释对 suppress——语义级 lint 事实标准（详见深调研） |
 | [slang `--lint-only`](https://github.com/MikePopoloski/slang) | 设计参考 | diagnostics severity 体系 + waiver 文件；unused/suspicious 规则族（详见深调研） |
-| [svlint](https://github.com/dalance/svlint) | 架构对比 | 纯规则化 lint（100+ 规则，`.svlint.toml` 逐条 severity）——与 tpc linter 形态最接近（详见深调研） |
+| [svlint](https://github.com/dalance/svlint) | 深度参考 | 纯规则化 lint（190+ 规则，`.svlint.toml` 逐条 severity）——与 tpc linter 形态最接近；规则工程化闭环（自动登记/测试/文档）范本（详见深调研） |
+| [svls](https://github.com/dalance/svls) | 设计参考 | svlint 的 LSP 封装（3 源文件）——"检查器 → LSP"库级复用最薄形态（详见深调研） |
+| [flexlint](https://github.com/dalance/flexlint) | 设计参考 | 正则规则 lint（规则 = TOML 正则四元组，无 parser）——第三种 lint 形态与位置断言（详见深调研） |
 | [hdl_checker](https://github.com/suoto/hdl_checker) | 概念参考 | "封装既有 HDL 工具做 LSP 诊断"——pylance 式使用场景的架构参照（详见深调研） |
 
 ### IR 与编译管线
@@ -465,3 +468,226 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 - ⚠️ **避坑**：svlint 自研 parser 的维护负担（规则演进受 parser 能力约束）——tpc 复用语法 TOML（规则=语法资产）无此问题，是"反向解析器"路线的优势；hdl_checker 后端版本耦合（verible 输出格式变化即坏）——tpc 若封装外部工具做差分基线即可，不做运行时依赖。
 
 **落地路径小结**：第一步（规则 ID + JSON + suppress）≈ 一个 `tpc check --format json` + 注释豁免机制，纯增量、零外部依赖，即可支撑"模型生成 v → tpc-check 检查"的脚本化闭环；第二步（规则表配置化）与 P1.7 naming_check 合并推进。
+
+### svlint（Rust）— 规则工程化闭环范本（2026-08 深调研，dalance 作品链第二站，agent-reach + 源码镜像）
+
+- 本地源码镜像：`E:\research\svlint`（浅 clone，v0.9.5）；调研日期 2026-08-26
+- 定位：dalance（Veryl 作者）的 SystemVerilog linter（IEEE1800-2017 Annex A 合规），Rust，
+  **基于 sv-parser**（作者自己的 parser crate）——linter 不自己写 parser，站在生态 parser 肩上
+  （与 verible-verilog-lint 复用同一 verible parser、slang lint 复用 slang parser 同模式）；
+  390★/45 forks，MIT，2019-10 创建，v0.9.5（2025-11）后仍活跃；经 svls 集成编辑器
+- 管线结构：`CLI（clap）→ 配置搜索（SVLINT_CONFIG 环境变量 / 当前目录向上 ancestors 找
+  .svlint.toml）→ textrules 按行检查 → sv-parser 预处理+解析 → syntaxrules 遍历 CST 节点
+  事件流（Enter/Leave）→ Printer 输出`；两阶段规则：TextRule（StartOfFile/Line 事件）与
+  SyntaxRule（AST 事件监听，每条规则自己决定关心哪些 RefNode 类型）
+- **规则工程化闭环（最大亮点，build.rs + mdgen 双生成器）**：
+  - 🔥 **build.rs 目录扫描即登记**：正则提取 `syntaxrules/`/`textrules/` 每文件首个
+    `pub struct` → 生成 4 份代码：模块声明+re-export、配置结构体（逐规则 bool 字段 +
+    `#[serde(deny_unknown_fields)]`）、`enable_all()/gen_*()` 实现、**测试代码**
+    （testcases/{pass,fail}/{rule}.sv 按 80 个 `/` 分隔符切子用例 → 每子用例一个 `#[test]`）——
+    **新增规则 = 放一个文件，登记/配置/测试全自动**，无手工接线
+  - 🔥 **mdgen 文档/规则集生成**：`md/ruleset-*.md`（含 ```toml/```sh/```winbatch 代码块）→
+    生成 `rulesets/*.toml` + `svlint-*`（POSIX wrapper）+ `svlint-*.cmd`（batch wrapper）+
+    `svls-*`（LSP wrapper）——**规则集即独立命令**；规则 + testcases + md/explanation 拼出
+    MANUAL.md（13339 行，每规则 Hint/Reason/Pass&Fail Example/Explanation + See also）
+  - 🔥 **规则命名即分类**（mdgen `partition_syntaxrules`）：`style_`/`tab_` 前缀 → style 类，
+    `prefix_`/`lowercamelcase_`/`uppercamelcase_`/`re_`/`_with_label` → naming 类，其余
+    functional——类别信息编码在规则名里，文档自动分区
+  - 🔥 **RENAMED_SYNTAXRULES 迁移表**：旧规则名 `check_rename` 警告 + `--config-update`
+    `migrate()` 就地改写配置；旧名未迁移导致退出码 1——**强制用户升级配置**，不静默兼容
+  - 🔥 **注释控制 suppress**：`/* svlint off rulename */` / `/* svlint on rulename */` 注释对，
+    `update_ctl_enabled` 在 Enter Comment 节点时正则更新启停表——**与 Verilator lint_off/lint_on
+    同款机制**（references.md 已研判，svlint 是第二个实证）；明确"textrules 不可注释控制"
+    （文本规则不解析注释，设计取舍合理）；pass 测试用例直接演示豁免
+  - 🔥 **插件机制**：`-p libfoo.so` 用 `libloading` 加载动态库，导出 `get_plugin() -> Vec<Rule>`
+    （extern "C"），`pluginrules!` 宏收集规则——**外部规则运行时动态加载**，与 tpc
+    capabilities 协议同类设计（svlint 载体是编译语言动态库，tpc 是 Python 模块）
+  - 💡 **规则参数化**：命名规则的正则（`re_required_*`/`re_forbidden_*`，默认
+    `^[a-z]+[a-z0-9_]*$` 等）、端口前缀（`i_`/`o_`/`u_`/`mod_`/`pkg_`/`ifc_`）、textwidth/
+    indent/copyright 全是 `[option]` 配置项——规则行为由配置注入，规则代码只写判定
+  - 💡 **规则 trait 四件套**：`check/name/hint/reason`——诊断 ID、提示、理由分离，
+    MANUAL 与 `--config-example` 全靠它生成（verible `--print_rule_descriptions` 同款思路）
+  - 💡 **精确定位**：`FailAt(offset,len)` / `FailLocate(Locate)`，诊断精确到节点内子位置；
+    共享工具 `check_regex`/`check_prefix` 被命名/前缀规则族复用
+  - 💡 **输出三模式**：rustc 风格 pretty（`-->` 定位 + `^` 标注 + hint/reason 两行）/
+    `--oneline` 单行 / `--github-actions` workflow command（`::error file=,line=,col=::hint`）——
+    机器可读输出是内置的，不做第二套序列化
+  - 💡 **编码检测**：chardetng 猜编码（GBK 中文注释也能处理，有专门测试）——SV 生态现实
+  - 📌 **parser 复用**：sv-parser crate 提供 CST + NodeEvent 遍历——省下 parser 投入，但
+    规则演进受 parser 能力约束（references.md 避坑已记，tpc 反解析器路线无此问题）
+
+- **与 tpc linter 的差异**（各有取舍，非优劣）：
+
+| 维度 | svlint | tpc linter |
+|------|--------|-----------|
+| 规则载体 | Rust trait 实现（一规则一文件，AST 事件监听） | 反解析器（token 级，复用同一语法 TOML） |
+| parser | 复用 sv-parser crate | 自研（语法即 TOML 数据） |
+| 规则登记 | build.rs 目录扫描自动登记 | checkers/ 手动导入 |
+| 配置 | `.svlint.toml` 逐条 bool + deny_unknown_fields | primitive 配置 + 阶段 code（缺稳定规则命名空间） |
+| 测试生成 | testcases/{pass,fail}/{rule}.sv → build.rs 自动生成 #[test] | pytest 单元 + e2e 差分/fidelity |
+| 文档生成 | mdgen 自动拼 MANUAL.md（13339 行） | MODEL_INDEX + case_catalog（手工维护） |
+| suppress | `/* svlint off/on */` 注释对 | 无（P2.6 规划中） |
+| 插件 | libloading 动态库（get_plugin） | capabilities（Python 模块，已实现） |
+| 定位 | 单语言 SV linter（190+ 规则） | 通用管线 + verilog/c4 语言包 |
+
+- **可实现性评估（tpc 能否做）**：
+  - 🔥 **规则登记自动化**：build.rs 的"目录扫描 → 自动生成配置结构体 + 测试"对 tpc 是
+    低成本高价值——checkers/ 现在手动导入，可改为"语法 TOML 规则段声明 + 自动挂载"
+    （tpc 的规则=语法资产路线下，规则段即数据，登记天然可自动化）
+  - 🔥 **deny_unknown_fields 式 fail-fast 已同构**：tpc ADR-0003 配置 fail-fast 与 svlint
+    `#[serde(deny_unknown_fields)]` 同理念（配置写错规则名直接报错，不静默忽略）——
+    svlint 是 serde 形态的实证
+  - 🔥 **注释 suppress（P2.6 直接参考实现）**：`/* svlint off rulename */` 注释对 +
+    Enter Comment 时更新启停表，就是 tpc 计划中豁免机制的最小形态；"textrules 不可控"
+    的取舍也值得继承（tpc 的 token 级 lint 相当于"语法规则的 textrules"侧）
+  - 💡 **规则命名即分类**：tpc 的语义检查插件（WC001 等）与 linter 阶段 code 可参考
+    svlint 前缀约定（style_/naming_/functional），规则类别进规则名，文档/分组自动
+  - 💡 **规则参数化**：`[option]` 里 regex/prefix 可配置——P1.7 naming_check 的 pattern
+    表可直接参照（正则 + 前缀默认值都在配置里，规则代码只写判定）
+  - 💡 **输出三模式**：`--github-actions` 是零依赖的机器可读输出捷径（workflow command
+    是文本格式），tpc P2.6 的 `--format json` 之外可加同款低成本模式
+  - 📌 **规则集即命令 / MANUAL 自动生成**：tpc 无多规则集需求（单语言包），mdgen 式
+    文档生成可观察——tpc 的 MODEL_INDEX/case_catalog 是手工维护，若规则量增长到
+    百级可参考"规则代码/配置 + 自动拼文档"
+  - 📌 **编码检测 / 多文件 filelist**：tpc 目标 UTF-8 单文件管线（README 边界），观察
+  - ⚠️ **避坑**：svlint 复用 sv-parser 虽省 parser 投入，但规则演进受 parser 能力约束
+    （已有记录）；tpc 反解析器路线（规则=语法资产）无此问题，是两路线各自成立的取舍
+
+### sv-parser（Rust）— CST 章节镜像 + 生成式节点枚举（2026-08 深调研，dalance 作品链第三站）
+
+- 本地源码镜像：`E:\research\sv-parser`（浅 clone）；调研日期 2026-08-26
+- 定位：dalance 的 SystemVerilog parser 库，**完全合规 IEEE 1800-2017 Annex A**；被
+  svlint / svls / morty / svinst 四个工具复用（HDL 生态 parser 地基）；481★，MIT/Apache-2.0
+- **产出是 CST（Concrete Syntax Tree）而非 AST**：`SyntaxTree { node: AnyNode, text: PreprocessedText }`
+  ——保留预处理后文本 + 完整语法树；`RefNode` 变体命名**直接遵循 IEEE Annex A 形式语法**
+  （`ModuleDeclarationNonansi`/`AlwaysConstruct`/`ElaborationSystemTask`……"标准即命名"）
+- **管线结构**：`parse_sv → pp 预处理器（sv-parser-pp）→ nom 组合子 parser（sv-parser-parser）
+  → CST（sv-parser-syntaxtree）`；6-crate workspace（parser / syntaxtree / error / macros / pp / 主库）
+- **最大亮点（对 tpc 的组织价值）**：
+  - 🔥 **章节 ↔ 目录 ↔ 文件三层镜像**：syntaxtree 与 parser 的 `src/` 下**同章节同名目录
+    （source_text/declarations/expressions/instantiations/behavioral_statements/preprocessor/
+    specify_section/udp/primitive_instances/general），同名文件一一对应**（module_items.rs /
+    package_items.rs / system_verilog_source_text.rs 两边都有）——parser 实现与 CST 节点
+    定义按 IEEE 章节同步组织，新增语法特性 = 两边各加一个文件
+  - 🔥 **节点结构 ↔ 组合子函数一一对应**：syntaxtree 侧 `#[derive(Node)]` struct 的 `nodes`
+    元组（`ElaborationSystemTaskFatal { nodes: (Keyword, Option<Paren<...>>, Symbol) }`）与
+    parser 侧 nom 组合子链（`keyword("$fatal") → opt(paren(pair(...))) → symbol(";")`）
+    **逐元素对应**——CST 形状即产生式形状，无 AST 转写层
+  - 🔥 **build.rs 生成 RefNode/AnyNode 大枚举**（syntaxtree/build.rs）：扫描 src 下所有
+    `#[derive(...Node...)]` 注解 → 生成 `RefNode<'a>`（借用）/`AnyNode`（拥有）双枚举 +
+    Display——**与 svlint 规则登记同款"目录扫描即登记"**：新增节点类型自动进遍历枚举，
+    无需手工维护
+  - 🔥 **Node derive 宏**（sv-parser-macros）：自动生成 `Node::next()`（枚举展开变体 /
+    struct 展开 nodes 元组）、`From<&Node> for RefNodes`、`From<Node> for AnyNode`、
+    `TryFrom<Node> for Locate`（**子 Locate 区间合并收缩**——`unwrap_locate!` 的基础）
+  - 🔥 **nom 扩展全家桶集成现场**：`Span = LocatedSpan<&str, SpanInfo>`（nom_locate）+ 
+    `GreedyError`（nom-greedyerror，错误位置精度）+ `nom_packrat::storage!(AnyNode, bool, 1024)`
+    （记忆化 cache）+ 95 处 `#[recursive_parser]`（nom-recursive 左递归标注，表达式/
+    case/声明等递归结构）+ `#[tracable_parser]`（nom-tracable，trace feature gate 编译期
+    开关，`fold("number")` 折叠噪音组合子）——**四个 nom 扩展 crate 都是 dalance 自研、
+    在此自产自销**，验证了扩展的实战价值
+  - 💡 **Leaf = Locate 三元组**（`{offset, line, len}`）：所有非终结符的叶子都是 Locate，
+    `get_str`/`get_str_trim`（跳过 WhiteSpace）从节点取原文；`get_origin` 跨文件定位
+    （预处理展开后映射回源文件）——tpc Node 缺 token span（TODO P3 前置）的现成参考形态
+  - 💡 **空白/注释进树**：`Keyword`/`Symbol` 都带 `(Locate, Vec<WhiteSpace>)`，WhiteSpace =
+    Newline/Space/Comment/CompilerDirective 四变体——**CST 保真（注释/空白/编译器指令
+    都是树节点）**，与 tpc 注释节点模型（槽位约定）解决同一问题，路线不同
+  - 💡 **定界符容器泛型化**：`Paren<T>/Brace<T>/Bracket<T>/ApostropheBrace<T>/List<T,U>`
+    （`List { nodes: (U, Vec<(T,U)>) }` + `contents()`）——括号/逗号列表等重复结构是
+    泛型类型而非每语法点复制
+  - 💡 **EventIter Enter/Leave**：`into_iter().event()` 生成前序遍历事件流（Enter 节点 →
+    展开子节点 → Leave），**svlint 规则接口的地基**（SyntaxRule::check 收到的 NodeEvent）
+  - 💡 **测试双宏**：`test!(parser, "string", Ok((_, _)))` 断言成功/失败模式 +
+    `error_test!(..., 精确位置)` 用 greedyerror 断言**错误落点**——内嵌字符串用例，
+    trace feature 可折叠噪音
+- **与 tpc 的差异**（各有取舍，非优劣）：
+
+| 维度 | sv-parser | tpc parser |
+|------|-----------|-----------|
+| 语法载体 | Rust 类型 + nom 组合子代码（章节镜像目录） | TOML production（grammar/verilog） |
+| 树形态 | CST（保真全部 token/空白/注释） | AST（`[Rule.parser.node]` 形状声明，语言知识留 TOML） |
+| 节点登记 | build.rs 扫描 `#[derive(Node)]` 生成枚举 | 从 TOML production 推导类型 |
+| 错误处理 | GreedyError 精确位置 | 解析诊断 + lint 诊断 |
+| 左递归/记忆化 | nom-recursive + nom-packrat（cache 1024） | 递归下降+回溯+Pratt（end_case 语句边界） |
+| 递归结构 | 95 处 `#[recursive_parser]` 标注 | end_case + 回溯组合设计 |
+| 位置 | Locate 三元组一等公民 | Node 缺 token span（TODO P3 前置） |
+
+- **可实现性评估（tpc 能否做）**：
+  - 🔥 **"目录扫描即登记"已验证同构**：svlint（规则）与 sv-parser（节点枚举）两处都是
+    build.rs 扫描目录生成登记代码——tpc 若把 checkers/ 手动导入改为"TOML 规则段声明 +
+    自动挂载"，方向已被 sv-parser 二次验证
+  - 🔥 **CST 保真路线参考**：sv-parser 的"注释/空白进树"与 tpc 注释节点模型（槽位约定）
+    目标一致（保注释/保空白），sv-parser 走"全保真 CST"，tpc 走"AST + 语义归属"——tpc
+    的变换路径注释迁移（migrate_comments）正是 AST 路线下比 CST 更优的取舍：结构重写时
+    CST 的 WhiteSpace 会随节点丢失，tpc 的语义归属不会
+  - 💡 **Locate 三元组**：tpc Node 补 token span（P3.1 前置）可参考 `{offset, line, len}`
+    极简形态 + `get_str`（区间切片取原文）——零依赖实现成本低
+  - 💡 **章节镜像组织**：tpc grammar/verilog 已按类别分 TOML（typed_ports 等插件目录），
+    sv-parser 的"同章节同名文件双镜像"是 parser 与节点定义同步演进的组织范本（tpc 的
+    TOML 是单侧声明，无镜像需求，但"语法特性 = 一个目录"的颗粒度可参考）
+  - 📌 **nom 扩展生态**：tpc 是自研递归下降+Pratt，无组合子库——nom-tracable（解析 trace
+    调试）对 tpc 是路线观察：tpc 若补"解析决策日志"（P3 调试），可参考其 trace 语义
+  - 📌 **完整 IEEE 合规**：sv-parser 是"标准 Annex A 全量"路线（CST 节点=标准产生式）；
+    tpc verilog 包声明"无 SystemVerilog"（README 边界），不追逐全量合规，各有定位
+
+### svls（Rust）— "检查器 → LSP"的最薄封装（2026-08 深调研，dalance 作品链第四站）
+
+- 本地源码镜像：`E:\research\svls`（浅 clone）；调研日期 2026-08-26
+- 定位：SystemVerilog language server（583★，tower-lsp），**唯一功能是把 svlint 变成 LSP**
+  （README 直白："Linter based on svlint"）；配套 svls-vscode（VSCode 客户端）
+- 核心形态（最大价值）：`backend.rs` 仅 363 行，`lint()` 函数**库级复用 svlint::linter**
+  （`Linter::new` + `textrules_check` + `syntaxrules_check` → `LintFailed` → `Diagnostic::new`），
+  不是封装命令行——**这是 references.md 里 hdl_checker 研判"LSP 服务化是 pylance 式体验
+  最终形态"的更纯粹实证**（hdl_checker 封装外部工具输出，svls 直接复用库 API）
+- 配置双文件：`.svls.toml`（`[verilog] include_paths/defines/plugins` + `[option] linter` 开关）+
+  `.svlint.toml`（规则配置，initialize 时分层搜索）；linter 配置失败降级 `enable_all()`
+- 诊断映射：`LintFailed` → `Diagnostic`（WARNING + 规则名作 code + source "svls"）；
+  解析错误 → ERROR；`did_open/did_change` 全量同步 + `publish_diagnostics`
+- **可实现性评估（tpc P2.6 直接参考）**：
+  - 🔥 **接口形态**：`lint(text, path) -> Vec<Diagnostic>` 就是 LSP 化的全部接口——tpc
+    `tpc-check` 若做 LSP，把诊断模型设计成"位置 + 规则名 + 提示"即可薄封装（tower-lsp
+    是 Rust，tpc 零依赖下 stdlib 手写 jsonrpc 约几百行，references.md 已记）
+  - 💡 **配置降级策略**：linter 配置解析失败 → 降级 enable_all + 弹警告，而非崩溃——
+    tpc ADR-0003 是 fail-fast 硬约束，此处"编辑器场景降级"与"CLI 场景 fail-fast"各有取舍
+    （编辑器里配置坏了不该打不开文件）
+  - 📌 **薄封装验证**：svls 证明"成熟检查器 + 极薄 LSP 壳"是可行形态（3 个源文件），
+    tpc 若做服务化可保持检查器与 LSP 解耦，壳只做 Diagnostic 翻译
+
+### flexlint（Rust）— 正则规则 lint（2026-08 深调研，dalance 早期作品）
+
+- 本地源码镜像：`E:\research\flexlint`（浅 clone）；调研日期 2026-08-26
+- 定位：**规则 = TOML 正则的通用 lint**（28★，2018 年早期作品，0.2.7），无 parser——纯
+  正则匹配 + glob 文件遍历，验证"正则规则"路线的极限
+- **规则四元组 + 位置断言**（`src/lint.rs`）：`pattern`（匹配触发）+ `required`（`find_at`
+  位置断言：匹配点必须命中 required）+ `forbidden`（匹配点不得命中）+ `ignore`（区间跳过，
+  例：`(/\*/?([^/]|[^*]/)*\*/)|(//.*\n)` 注释豁免）+ `hint` + `includes/excludes`（glob）
+- **CheckedState 四态**：Pass / Fail / Skip（ignore 区间内）/ Unmatch（无匹配）——
+  四态显式建模，与 tpc lint 的"命中即报"不同，Unmatch 可表达"规则没触发"的语义
+- 输出双模式：simple（单行）/ pretty（rustc 风格，svlint printer 前身）
+- **第三种 lint 形态对照**（各有取舍，非优劣）：
+
+| 维度 | svlint | flexlint | tpc linter |
+|------|--------|----------|-----------|
+| 规则载体 | Rust trait（AST 事件） | TOML 正则四元组 | 反解析器（token 级，语法 TOML） |
+| parser | sv-parser CST | 无（纯正则） | 自研（语法即数据） |
+| 表达力 | 结构感知（树/上下文） | 正则（行内/区间） | token 序列模式 |
+| 注释豁免 | `/* svlint off */` 注释对 | ignore 正则 | 语法结构判定 |
+| 定位 | SV 专用 190+ 规则 | 任意文本通用 | SV/c4 语言包 |
+
+- **可实现性评估（tpc 能否做）**：
+  - 💡 **ignore 正则即 suppress 的第三种实现**：svlint 用注释对（用户显式豁免）、
+    tpc 用语法结构判定（注释挂树）、flexlint 用 ignore 正则（规则内声明豁免区间）——
+    P2.6 做豁免机制时三种形态可并列参考
+  - 💡 **required/forbidden 位置断言**：`find_at` 起点断言是"正则 + 上下文"的低成本
+    组合，tpc 若做"规则 = 声明式 pattern 表"（P1.7 naming_check 方向）可参考其
+    pattern + 断言分离的字段设计
+  - 📌 **纯正则极限**：flexlint 验证了正则规则的表达能力边界（跨行/嵌套/结构匹配
+    做不到），tpc 反解析器路线（token 级）比它强在结构感知——flexlint 是"最简
+    规则即数据"的基线参照
+
+### 静态检查工具群补充——svls/flexlint 与 tpc 的完整对照
+
+（svls/flexlint 详情见上文两节，这里补充"服务化"维度的三形态收束）：
+- **hdl_checker**（封装外部工具 → LSP）vs **svls**（库级复用 → LSP）vs **tpc 现状**
+  （CLI 文本）：三者对应"检查服务化"的三个渐进形态——封装命令 / 复用库 / 内建管线。
+  tpc 的零依赖内建管线形态上最接近 svls（自己就是检查器），若服务化只需补 LSP 翻译层
