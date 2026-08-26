@@ -13,7 +13,10 @@ import re
 
 
 def restore_comments(
-    rendered: str, comment_anchors: list[dict], only_tpc: bool = False
+    rendered: str,
+    comment_anchors: list[dict],
+    only_tpc: bool = False,
+    only_midline: bool = False,
 ) -> tuple[str, int]:
     """
     通过锚点匹配将 inline comment 回注到渲染文本中。
@@ -22,6 +25,7 @@ def restore_comments(
         anchor: 紧前 token 内容（如 ";"、")"、"="）
         text:   注释文本（如 "// my comment"）
         line:   源行号（0-based）
+        midline: 行中注释标记（P1.5——注释后还有同行代码 token）
 
     策略：
     1. 按源行号排序，保证插入顺序
@@ -35,6 +39,10 @@ def restore_comments(
     在渲染文本定位到错误区域，普通注释（如 `end // case: x` 的 anchor='end'
     通用子串）会错插到端口/参数行——与 line 通道 only_tpc 语义对称，普通注释
     锚点漂移时跳过（丢失但结构合法），tpc marker 仍必须回插（否则宏还原失效）。
+
+    only_midline=True：只回插行中注释（midline=True）。行中注释不挂 attachment
+    （P1.5 行中块注释保持原位），无渲染兜底——inline_comments 开关关闭时也
+    必须回插防丢。
     """
     if not comment_anchors:
         return rendered, 0
@@ -59,6 +67,8 @@ def restore_comments(
 
         if only_tpc and "tpc:" not in comment:
             continue  # 展开路径：普通注释锚点漂移，跳过（tpc marker 仍回插）
+        if only_midline and not c.get("midline"):
+            continue  # 只回插行中注释（行尾注释由 attachment 渲染）
 
         start = max(0, src_line - 1 - 3)
         end = min(len(lines), src_line + 3)

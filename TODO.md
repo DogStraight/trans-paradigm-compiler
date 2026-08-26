@@ -39,7 +39,8 @@
 - [ ] 函数/任务声明类（FuncDecl/TaskDecl）折行特殊处理——函数体声明行以分号
       结尾但块以 endfunction 收，需确认折行时块内声明不截断
 - [ ] wrap 断点：位选择 `[31:25]` 已修（[] 深度跟踪）；三目只断 `:` 后已修；
-      concat `{a, b, ...}` 超宽不折（无顶层断点）——评估是否需要 concat 断点
+      concat `{a, b, ...}` 超宽折行已修（AST 感知 allow_concat，P1.6 惩罚折行
+      实现时顺带完成；边界实证：调用参数内/嵌套/块头条件 0 超宽残留 + 幂等）
 - [ ] picorv32 超宽行 75→73（其余无安全断点保留）——检查剩余 73 行是否需要
       更细断点（长标识符/括号内/块头条件行）
 - [ ] 块头行（`if (...) begin` 超宽条件）折行——当前 wrap 只折分号行，块头不折，
@@ -85,7 +86,11 @@
       合并）；L3 未修——invert 引用的 role 定义在后时 _ref_callbacks 尚未构建
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
-- [ ] **concat 无折行**：`{a, b, c, ...}` 超宽保持原样，评估加 concat 断点
+- [x] **concat 无折行（已闭环）**：`{a, b, c, ...}` 超宽折行——wrap
+      `_top_level_split_points` allow_concat（AST 确认完整语句时放行 `{}` 内
+      逗号断点，`_break_candidates` 的 ast_ok 路径），P1.6 惩罚折行实现时
+      顺带完成。边界实证（2026-08-26）：调用参数内 concat / 嵌套 concat /
+      块头条件 concat 均 0 超宽残留，二次 format 幂等
 - [x] **ref_comments 幂等 FAIL + ref_inline_test fidelity（run_all_tests 存量，已修）**：
       根因链——列表项行尾注释挂项节点在 join 分隔符前渲染（`input clk // 注释,`）+
       parser 回溯双收集致 attachment 跨节点双挂（双份）+ 端口列表 flat 化行号错位。
@@ -94,9 +99,15 @@
       行尾包含去重（bef978a）。结果：ref_comments 幂等恢复 + 注释位置正确
       （fidelity 0.9422→0.9469）、ref_inline_test 0.7718→0.9317、912 pytest 全绿 +
       real 组无损、run_all FAIL 0
-- [ ] **行中块注释 attachment 行尾化（低优先，2026-08-25 记录）**：`assign b =
-      /* 嵌入注释 */ rst_n;` 的行中块注释被 attachment 渲染到语句行尾（位置错位，
-      fidelity 残留差因）——行中注释应保持原位（或走锚点回插），评估修法
+- [x] **行中块注释 attachment 行尾化（已闭环，2026-08-26）**：`assign b =
+      /* 嵌入注释 */ rst_n;` 的行中块注释不再被 attachment 行尾化——parse_token
+      收集注释时打 midline 标（注释后还有同行代码 token → 行中，不挂
+      attachment，只走锚点回插）；restore_comments 加 only_midline 过滤 +
+      pipeline 非展开路径下 inline_comments 关闭时也回插行中注释（防丢）。
+      效果：注释留在 `=` 与 `rst_n` 之间（原位），ref_comments/ref_inline_test
+      fidelity 0.9469/0.9317 → **1.0 完全无损**（两样本闭环）；行尾注释
+      attachment 行为不变。验证 1080 pytest + run_all FAIL 0 + pyright 0 errors；
+      测试 +2（midline 原位/不进 attachment 通道）
 - [x] **对齐进 Doc IR（Pad 三件套，Veryl 渲染层深读闭环，2026-08-25 完成）**：
       tpc 世界 B column_align 是"渲染后对齐"（曾破坏 fits 判定、被迫回滚 join
       改法）；Veryl 用 `Pad`/`IfBreakPad`/`IfFlatPad` 三个 Doc 原语把对齐

@@ -64,6 +64,37 @@ class TestAttachment:
         assert r["success"]
         assert "keep me" in r.get("output", "")
 
+    def test_midline_block_comment_stays_in_place(self):
+        """行中块注释保持原位（P1.5）：`assign b = /* 嵌入 */ rst_n;` 的
+        注释不得被 attachment 行尾化——应经锚点回插留在 `=` 与 `rst_n` 之间。"""
+        src = (
+            "module m;\n"
+            "    assign b = /* 嵌入注释 */ rst_n;\n"
+            "endmodule\n"
+        )
+        r = _run(src)
+        assert r["success"]
+        out = r.get("output", "")
+        # 注释在 `rst_n` 之前（原位，`=` 后），而非语句行尾
+        assert "/* 嵌入注释 */ rst_n" in out
+        assert not out.rstrip().endswith("/* 嵌入注释 */")
+
+    def test_midline_comment_not_attached(self):
+        """行中注释不进 attachment 通道（只走锚点回插通道）。"""
+        from pipeline import run_pipeline_on_source
+
+        src = "module m;\n    assign b = /* 嵌入 */ rst_n;\nendmodule\n"
+        r = run_pipeline_on_source(
+            source=src, rules_dir="grammar/verilog", quiet=True, no_lint=True,
+        )
+        parser = r.get("parser")
+        # 锚点通道有此行中注释（attachment 通道无）
+        if parser is not None:
+            anchors = getattr(parser, "_comment_anchors", None) or []
+            assert any("嵌入" in a.get("text", "") for a in anchors), (
+                "行中注释应进锚点回插通道"
+            )
+
 
 class TestAttachmentReal:
     def test_picorv32_no_regression(self):

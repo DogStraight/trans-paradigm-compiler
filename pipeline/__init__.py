@@ -423,11 +423,20 @@ def _restore_comments(ctx: _PipelineContext, content: str, parser: Any) -> str:
         if anchors:
             content, n = restore_comments(content, anchors)
             ctx.log(f"[comments] inline anchor restoration: {n} items")
-    elif ctx.restore_stack:
+    else:
         anchors = getattr(parser, "_comment_anchors", None)
-        if anchors:
+        if not anchors:
+            pass
+        elif ctx.restore_stack:
             content, n = restore_comments(content, anchors, only_tpc=True)
             ctx.log(f"[comments] tpc inline marker restoration: {n} items")
+        else:
+            # 行中注释回插（P1.5）：行中块注释不挂 attachment（保持原位），
+            # 无渲染兜底——inline_comments 关闭时也回插防丢（行尾注释由
+            # attachment 渲染，不在此列）。
+            content, n = restore_comments(content, anchors, only_midline=True)
+            if n:
+                ctx.log(f"[comments] midline anchor restoration: {n} items")
 
     # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
     # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变

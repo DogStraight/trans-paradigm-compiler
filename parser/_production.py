@@ -470,28 +470,51 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
                     "text": nxt.content,
                     "line": nxt.line,
                     "type": token_type,
+                    # 行中注释标记（P1.5）：注释后还有同行代码 token → True。
+                    # restore_comments 的 only_midline 过滤靠它（行中注释无
+                    # attachment 兜底，inline_comments 开关关闭时也必须回插防丢）。
+                    "midline": False,
                 }
             )
-            # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
-            # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过
-            # normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
-            # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
-            # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
-            # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
-            cur_node = getattr(context, "current_node", None)
-            if isinstance(cur_node, Node):
-                seen = getattr(self, "_attached_seen", None)
-                if seen is None:
-                    seen = set()
-                    self._attached_seen = seen
-                key = (nxt.content, nxt.line)
-                if key not in seen:
-                    seen.add(key)
-                    attached = getattr(cur_node, "_attached_comments", None)
-                    if attached is None:
-                        attached = []
-                        cur_node.add_attr("_attached_comments", attached)
-                    attached.append(nxt.content)
+            # 行中注释判定（P1.5 行中块注释保持原位）：注释之后还有同行的
+            # 非注释 token（如 `assign b = /* 嵌入 */ rst_n;` 的注释在 `=` 与
+            # `rst_n` 之间）→ 行中注释，不挂 attachment——只走锚点回插
+            # （restore_comments 按 anchor 在 `=` 后插回原位）；行尾注释
+            # （注释后无同行代码 token）才 attachment 行尾锚定（line_suffix）。
+            # newline 是独立 token 且与注释同行（行尾注释的正常形态），跳过。
+            is_midline = False
+            off = 1
+            while True:
+                after = context.peek_token(offset=off)
+                if after is None:
+                    break
+                if after.type in (COMMENT_TOKEN_TYPE, "newline"):
+                    off += 1
+                    continue
+                is_midline = after.line == nxt.line
+                break
+            self._comment_anchors[-1]["midline"] = is_midline
+            if not is_midline:
+                # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
+                # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过
+                # normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
+                # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
+                # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
+                # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
+                cur_node = getattr(context, "current_node", None)
+                if isinstance(cur_node, Node):
+                    seen = getattr(self, "_attached_seen", None)
+                    if seen is None:
+                        seen = set()
+                        self._attached_seen = seen
+                    key = (nxt.content, nxt.line)
+                    if key not in seen:
+                        seen.add(key)
+                        attached = getattr(cur_node, "_attached_comments", None)
+                        if attached is None:
+                            attached = []
+                            cur_node.add_attr("_attached_comments", attached)
+                        attached.append(nxt.content)
             context.advance_token()
         else:
             break
