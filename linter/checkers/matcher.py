@@ -96,6 +96,25 @@ class RuleMatcher:
         # 直接调用方（单元测试绕过 scan）与跨文件复用都不串文件。
         self._atom_memo: dict[int, int] = {}
         self._memo_tokens: list | None = None  # 当前 memo 所属 token 流
+        # _is_atom_selector 静态缓存：规则名 → 是否为"纯 @ 分派原子选择器"。
+        # 该判定只读 info/tree（构造后不变），是纯静态函数——cProfile 显示
+        # 298 万次调用（每 _match_call_impl 一次），预计算一次即可。
+        self._atom_selector_cache: dict[str, bool] = {
+            name: _is_atom_selector(info, tree)
+            for name, info in tree.items()
+            if isinstance(info, dict)
+        }
+        # optional call 位置级 memo：_match_call 的 optional 分支（silent=True
+        # 纯函数，无错误副作用）按 (i, name, limit) 缓存匹配结果——同一语句
+        # 区间内同位置同规则的 optional 试探被反复求值（cProfile：_match_call
+        # 295 万次）。token 流身份守卫同 _atom_memo。
+        self._optional_call_memo: dict[tuple, int] = {}
+        self._memo_tokens_opt: list | None = None
+        # _match_call_impl packrat 缓存：key = (i, name, limit, strict, silent)，
+        # value = (匹配结果 j, 本次新增错误快照)。命中时重放错误快照保持
+        # 诊断语义。probe 模式（_probe_eof）不参与缓存。token 流身份守卫同前。
+        self._call_impl_memo: dict[tuple, tuple] = {}
+        self._memo_tokens_impl: list | None = None
 
     # ── 对外接口 ────────────────────────────────
 
@@ -108,6 +127,10 @@ class RuleMatcher:
         """
         self._atom_memo.clear()
         self._memo_tokens = None
+        self._optional_call_memo.clear()
+        self._memo_tokens_opt = None
+        self._call_impl_memo.clear()
+        self._memo_tokens_impl = None
 
     def match_rule(
         self,
@@ -268,9 +291,20 @@ class RuleMatcher:
     ) -> int:
         name = node.get("name", "")
         if node.get("optional"):
+            # optional call：silent=True 纯函数（无错误副作用），同语句区间内
+            # 同位置同规则的 optional 试探被反复求值——按 (i, name, limit)
+            # 记忆化（token 流身份守卫，跨文件/跨测试隔离）。
+            if self._memo_tokens_opt is not tokens:
+                self._optional_call_memo.clear()
+                self._memo_tokens_opt = tokens
+            key = (i, name, limit)
+            cached = self._optional_call_memo.get(key)
+            if cached is not None:
+                return cached if cached > i else i
             j = self._match_call_impl(
                 tokens, i, name, errors, limit, strict=False, silent=True
             )
+            self._optional_call_memo[key] = j
             return j if j > i else i
         return self._match_call_impl(
             tokens, i, name, errors, limit, strict, silent=False
@@ -286,12 +320,55 @@ class RuleMatcher:
         strict: bool,
         silent: bool = False,
     ) -> int:
+        """_match_call_impl 的 packrat 包装层。
+
+        实测（tv80 165KB）：298 万次调用中同 (i, name, limit, strict, silent)
+        重复率 98.1%（唯一 5.7 万）——同一位置同一规则被 choice/optional/嵌套
+        反复求值。匹配本身是纯函数（依赖 tokens/i/name/limit/strict/silent +
+        构造期固定的 tree/block 集合），仅 silent=False 时向 errors 追加诊断
+        （副作用）。缓存 (key → (j, 新增错误快照))，命中时重放错误快照，
+        保持诊断语义与不缓存完全一致。
+
+        probe 模式（_probe_eof=True，lookahead 截断试探）改变 EOF 报错行为，
+        不参与缓存（避免 probe 与真实检查串缓存）。
+        """
+        if self._probe_eof:
+            return self._match_call_impl_raw(
+                tokens, i, name, errors, limit, strict, silent
+            )
+        if self._memo_tokens_impl is not tokens:
+            self._call_impl_memo.clear()
+            self._memo_tokens_impl = tokens
+        key = (i, name, limit, strict, silent)
+        cached = self._call_impl_memo.get(key)
+        if cached is not None:
+            j, errs = cached
+            if errs:
+                errors.extend(errs)
+            return j
+        before = len(errors)
+        j = self._match_call_impl_raw(
+            tokens, i, name, errors, limit, strict, silent
+        )
+        self._call_impl_memo[key] = (j, errors[before:])
+        return j
+
+    def _match_call_impl_raw(
+        self,
+        tokens: list[Token],
+        i: int,
+        name: str,
+        errors: list,
+        limit: int,
+        strict: bool,
+        silent: bool = False,
+    ) -> int:
         info = self._tree.get(name)
         if info is None:
             return i
 
         # 表达式根（pratt 标识 / 原子选择器推导）→ 交 ExpressionChecker
-        is_atom_sel = _is_atom_selector(info, self._tree)
+        is_atom_sel = self._atom_selector_cache.get(name, False)
         if info.get("pratt") or is_atom_sel:
             return self._match_expr_call(
                 tokens, i, name, info, is_atom_sel, errors, limit, strict, silent
