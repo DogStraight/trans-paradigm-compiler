@@ -230,12 +230,82 @@ def restore_line_comments(
                     best_idx = i
                     break
         else:
-            for i in range(start, end):
-                if i in inserted:
-                    continue
-                if anchor in lines[i]:
-                    best_idx = i
-                    break
+            # 短符号锚（`.` 等单字符，如端口行前导）在行内子串匹配会命中
+            # 所有端口行——窗口内第一个命中即插（错位）+ 多注释时窗口被占用
+            # 就丢（非幂等振荡 + 注释丢失，gen_serv_top 实测）。单字符符号
+            # 锚要求**行首锚定**（`stripped.startswith(anchor)`），把匹配收窄
+            # 到"以该符号开头的行"（端口行 `.name(...)` 正是此形态），避免
+            # 命中前一个端口行的行尾 `,` 等。
+            if len(anchor) == 1 and not anchor.isalnum():
+                # 选窗口内**注释前最后一个**（`i < src_line` 且最大）行首锚行
+                # ——注释是端口组间分隔，语义属于前一组（trailing）。下方
+                # 优先会让注释逐轮吸附下一端口行（非幂等振荡）。上方固定方向。
+                best_idx = -1
+                for i in range(start, end):
+                    if i in inserted:
+                        continue
+                    if i >= src_line:
+                        break
+                    stripped = lines[i].lstrip()
+                    if stripped.startswith(anchor):
+                        best_idx = i  # 取最接近 src_line 的上方行
+                # 窗口内无上方候选（注释在端口组开头）→ 回退下方最近
+                if best_idx < 0:
+                    for i in range(src_line, end):
+                        if i in inserted:
+                            continue
+                        stripped = lines[i].lstrip()
+                        if stripped.startswith(anchor):
+                            best_idx = i
+                            break
+                # 窗口内全被占用（多注释竞争）→ 向下扩展扫第一个空闲
+                if best_idx < 0:
+                    for i in range(end, len(lines)):
+                        if i in inserted:
+                            continue
+                        stripped = lines[i].lstrip()
+                        if stripped.startswith(anchor):
+                            best_idx = i
+                            break
+            else:
+                # 精确锚（parser 拼接的 `.o_x` 端口名 / 关键字锚 `input`/`output`
+                # 等）子串匹配。多行匹配的泛锚（`input` 命中所有 input 行）取
+                # **注释前最后一个**（`i < src_line` 且最大）匹配行——注释是
+                # 端口组间分隔（分组注释），语义属于其**前一组**（trailing）。
+                # 偏好下方（leading 语义）会让注释每轮吸附下一端口行、位置
+                # 逐轮下移（非幂等振荡，serv_top 实测）。偏好上方固定方向。
+                best_idx = -1
+                for i in range(start, end):
+                    if i in inserted:
+                        continue
+                    if i >= src_line:
+                        break  # 已越过源行号 → 上方候选到此为止
+                    if anchor in lines[i]:
+                        best_idx = i  # 取最接近 src_line 的上方行（循环到末尾）
+                # 窗口内无上方候选（注释在端口组开头）→ 回退下方最近
+                if best_idx < 0:
+                    for i in range(src_line, end):
+                        if i in inserted:
+                            continue
+                        if anchor in lines[i]:
+                            best_idx = i
+                            break
+                if best_idx < 0 and anchor.startswith("."):
+                    for i in range(start, end):
+                        if i in inserted:
+                            continue
+                        stripped = lines[i].lstrip()
+                        if stripped.startswith("."):
+                            best_idx = i
+                            break
+                    if best_idx < 0:
+                        for i in range(end, len(lines)):
+                            if i in inserted:
+                                continue
+                            stripped = lines[i].lstrip()
+                            if stripped.startswith("."):
+                                best_idx = i
+                                break
 
         if best_idx >= 0:
             # 判断锚点是否在行内容中间（非行首首个 token）

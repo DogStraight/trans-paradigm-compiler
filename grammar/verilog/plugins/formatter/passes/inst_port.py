@@ -121,17 +121,36 @@ def _align_group(lines: list[str], group: list[int]) -> None:
         lines[idx] = " " * max_indent + name.ljust(max_name) + "(" + expr.ljust(max_expr) + ")" + term
 
 
+def _is_comment_line(line: str) -> bool:
+    """注释行（`//` 或 `/*` 起头，行内无端口）——对齐分组的透明行。"""
+    stripped = line.lstrip()
+    return stripped.startswith("//") or stripped.startswith("/*")
+
+
 def _align_contiguous_ports(lines: list[str]) -> None:
-    """连续端口行分组对齐（组间按非端口行分隔）。"""
+    """连续端口行分组对齐（组间按非端口行分隔）。
+
+    注释行（`//State` 等端口组间注释）视为透明：不打断端口连续组——
+    注释是端口组的语义分隔（分组注释），renderer 对它的槽位渲染（前端口
+    trailing / 后端口 leading）每轮可能漂移；若把注释行当组边界，分组
+    边界随注释位置变化 → 对齐列宽每轮不同 → 非幂等振荡。透明处理后
+    无论注释渲染在组内何处，端口行始终同组同列宽，对齐稳定。
+    """
     i = 0
     n = len(lines)
     while i < n:
         if _is_port_line(lines[i]):
             group = [i]
             j = i + 1
-            while j < n and _is_port_line(lines[j]):
-                group.append(j)
-                j += 1
+            while j < n:
+                if _is_port_line(lines[j]):
+                    group.append(j)
+                    j += 1
+                elif _is_comment_line(lines[j]):
+                    # 注释行透明：跳过，不打断组（也不入组参与对齐）
+                    j += 1
+                else:
+                    break
             if len(group) >= 2:
                 _align_group(lines, group)
             i = j

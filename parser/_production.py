@@ -362,11 +362,28 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
                 nxt = context.peek_token()
+                anchor = nxt.content if nxt else None
+                # 锚点精确化（注释节点模型补丁）：端口组间行尾注释（`//Control`）
+                # 后常跟 `.o_port` 形态——首 token 是符号 `.`（独立 token），
+                # restore 窗口内 `anchor='.'` 命中所有端口行（插错位 + 多注释
+                # 竞争 → 非幂等振荡 + 注释丢失）。`.` 后跟标识符（端口名形态）
+                # 时拼接成 `.o_x` 唯一锚；restore 匹配失败时回退行首 `.` 匹配
+                # （src 未格式化场景行号偏移大，精确锚可能落空）。
+                if (
+                    anchor == "."
+                    and context.has_more_tokens()
+                    and context.peek_token(offset=1) is not None
+                    and context.peek_token(offset=1).type
+                    not in (COMMENT_TOKEN_TYPE, "newline")
+                    and context.peek_token(offset=1).content
+                    and context.peek_token(offset=1).content[0].isalpha()
+                ):
+                    anchor = anchor + context.peek_token(offset=1).content
                 self._line_comment_anchors.append(
                     {
                         "text": t.content,
                         "line": t.line,
-                        "anchor": nxt.content if nxt else None,
+                        "anchor": anchor,
                     }
                 )
             else:
