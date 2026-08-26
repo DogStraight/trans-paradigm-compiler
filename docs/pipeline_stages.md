@@ -27,7 +27,9 @@ source(str)
 schedule 内的 pass：kind=analyze 跑一轮 AnalysisTraversal（覆盖 scope）；
 kind=transform 跑一轮 AstTransformer（消费 scope）；kind=check 执行插件
 handler（`fn(state)`，检查/验证/外部工具挂载）。时点由序列器分配（order
-钉号 / after 推导 / 声明序填空），时点冲突 fail-fast。开关映射：
+钉号 / after 推导 / 声明序填空），时点冲突 fail-fast。编排器（声明处理 +
+排序 + `_run_schedule` 执行）在 `schedule.py` 一个文件闭环，schedules /
+mapping_cfg 由管线按 rules_dir 缓存后注入。开关映射：
 `analyzer_enabled`/`transform_enabled` 按 kind 过滤；`expand_enhanced=False`
 跳过整个调度；`stage` 按 pass 名截断。
 

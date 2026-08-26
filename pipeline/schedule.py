@@ -14,8 +14,10 @@ kind 语义（行为模型）：
 后续需要新行为模型时扩展 _KINDS 枚举 + pipeline/__init__.py 执行分支，
 不引入泛化类型（如 custom）。
 
-本模块只做**声明处理与排序**（纯逻辑，可单测）；执行编排在
-pipeline/__init__.py::_run_schedule。
+本模块 = 编排器（一个文件闭环）：声明处理 + 时点排序 + 执行
+（_run_schedule 与 pass 执行器 _run_pass_*）。执行依赖的共享实例
+（schedules / mapping_cfg）由调用方注入，不触碰管线模块状态，
+可独立于 run_pipeline_on_source 复用（如未来 tpc-check 模式）。
 
 fail-fast（ADR-0003）：未知 pass / 重名 / 时点冲突 / after 环 /
 check 缺 handler 全部报 ValueError，不静默降级。
@@ -27,6 +29,17 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from core.plugin_loader import get_pipeline_pass_decls, get_pipeline_schedules
+from core.utils import save_json
+from analyzer import AnalysisTraversal
+from transform import AstTransformer
+
+# 变换回调收集（typed_ports 插件，可选——非 verilog 语言无此插件时跳过）
+try:
+    from grammar.verilog.plugins.typed_ports._mapping import collect_callbacks
+except ImportError:  # pragma: no cover — 非 verilog 语言包
+    def collect_callbacks(scope):  # type: ignore[no-redef]
+        del scope  # fallback：非 verilog 语言无回调，签名与真实函数保持一致
+        return {}
 
 BUILTIN_PASSES: dict[str, dict] = {
     "analyze": {"kind": "analyze"},
@@ -37,6 +50,17 @@ _KINDS = ("analyze", "transform", "check")
 
 DEFAULT_SCHEDULE_NAME = "default"
 DEFAULT_SCHEDULE_ENTRIES = ["analyze", "transform"]
+
+# 编排器公共面（含跨模块使用的私有名——同包兄弟模块 import 的实现契约）
+__all__ = [
+    "PassDecl",
+    "PassState",
+    "build_schedules",
+    "_run_schedule",
+    "_LEGACY_PASS_STAGES",
+    "DEFAULT_SCHEDULE_NAME",
+    "DEFAULT_SCHEDULE_ENTRIES",
+]
 
 
 @dataclass
@@ -219,3 +243,139 @@ def build_schedules() -> dict[str, list[PassDecl]]:
         )
         schedules[DEFAULT_SCHEDULE_NAME] = [resolved[n] for n in ordered]
     return schedules
+
+
+# ── 执行（ADR-0007）────────────────────────────────────────
+
+
+class _ScheduleStop(Exception):
+    """内部控制流：pass 请求终止调度（analyze 报 error 级诊断）。"""
+
+
+def _run_pass_analyze(state: "PassState") -> None:
+    """kind=analyze pass：跑一轮 AnalysisTraversal，覆盖 scope。
+
+    error 级诊断 → 置 ctx.result["error"] 并抛 _ScheduleStop（停调度停管线）。
+    """
+    ctx = state.ctx
+    analyzer = AnalysisTraversal(ctx.rules)
+    state.ast = analyzer.analyze(state.ast)
+    state.analyzer = analyzer
+    state.scope = analyzer.root_scope
+    if analyzer.root_scope is None:
+        ctx.log("[analyzer] warning: no scope produced")
+    else:
+        if not ctx.quiet:
+            if ctx.sym_json:
+                save_json(
+                    analyzer.root_scope.to_dict(), ctx.sym_json, "symbols",
+                    log_fn=ctx.log
+                )
+            # Dump transform callbacks (_ref_callbacks) to trans_callback/
+            callbacks = collect_callbacks(analyzer.root_scope)
+            if callbacks and ctx.cb_json:
+                save_json(callbacks, ctx.cb_json, "callbacks", log_fn=ctx.log)
+        ctx.log(f"[symbols] {len(analyzer.all_symbols)} symbols")
+    if analyzer.has_errors:
+        for d in analyzer.diagnostics:
+            ctx.log(f"[analyzer] {d}")
+        if any(d.level == "error" for d in analyzer.diagnostics):
+            ctx.result["error"] = "; ".join(
+                str(d) for d in analyzer.diagnostics if d.level == "error"
+            )
+            ctx.log("[analyzer] semantic errors, stopping pipeline")
+            raise _ScheduleStop()
+
+
+def _run_pass_transform(
+    state: "PassState", mapping_cfg: dict | None = None
+) -> None:
+    """kind=transform pass：跑一轮 AstTransformer（消费 scope，None 跳过）。
+
+    mapping_cfg 由调用方注入（_ensure_shared 按 rules_dir 缓存构建），
+    不依赖全局 _loaded_components（可能被其他语言包污染）。
+    """
+    ctx = state.ctx
+    if state.scope is None:
+        ctx.log("[transform] skipped (no scope)")
+        return
+    AstTransformer.set_shared("rules", ctx.rules)
+    AstTransformer.set_shared("mapping_cfg", mapping_cfg or {})
+    transformer = AstTransformer()
+    state.transformer = transformer
+
+    # 一次 transform 完成：映射表构建 + 配置变换
+    state.ast = transformer.transform(state.ast, state.scope)
+
+    # 收集变换统计
+    parts = []
+    for plugin in transformer.plugins:
+        if hasattr(plugin, "stats"):
+            s = plugin.stats
+            for k, v in s.items():
+                if v:
+                    parts.append(f"{k}={v}")
+    if parts:
+        ctx.log(f"[transform] {' '.join(parts)}")
+
+
+def _run_pass_check(state: "PassState", decl: "PassDecl") -> None:
+    """kind=check pass：执行插件 handler（fn(state) -> None）。
+
+    语义：检查/验证/外部工具挂载（不改 AST，可读改 scope/extra 产诊断）。
+    """
+    assert decl.handler is not None
+    decl.handler(state)
+
+
+_LEGACY_PASS_STAGES = ("analyze", "transform")
+
+
+def _run_schedule(
+    ctx: Any,
+    ast: Any,
+    scope: Any,
+    schedule_name: str,
+    schedules: dict[str, list[PassDecl]],
+    mapping_cfg: dict | None = None,
+) -> tuple[Any, Any]:
+    """按命名 schedule 执行 pass 序列（ADR-0007）。返回 (ast, scope)。
+
+    - schedules / mapping_cfg 由调用方注入（管线按 rules_dir 缓存的实例）。
+    - expand_enhanced=False → 跳过整个调度（保留增强语法直渲）。
+    - 开关过滤：analyzer_enabled=False 滤 kind=analyze；transform_enabled
+      同理。
+    - stage 命中 pass 名 → 执行该 pass 后截断（legacy "analyze"/
+      "transform" 按内置 pass 名匹配）。
+    - _ScheduleStop → 截断调度（error 已写入 ctx.result）。
+    """
+    if not ctx.expand_enhanced:
+        ctx.log("[pipeline] enhanced-expansion disabled: preserving enhanced syntax")
+        return ast, None
+
+    if schedule_name not in schedules:
+        raise ValueError(
+            f"[pipeline] schedule '{schedule_name}' 未声明"
+            f"（可用: {', '.join(sorted(schedules)) or '(空)'}）"
+        )
+    state = PassState(ast=ast, scope=scope, ctx=ctx)
+    for decl in schedules[schedule_name]:
+        if decl.kind == "analyze" and not ctx.analyzer_enabled:
+            ctx.log(f"[pipeline] pass '{decl.name}' skipped (analyze disabled)")
+            continue
+        if decl.kind == "transform" and not ctx.transform_enabled:
+            ctx.log(f"[pipeline] pass '{decl.name}' skipped (transform disabled)")
+            continue
+        ctx.log(f"[pipeline] pass: {decl.name}")
+        try:
+            if decl.kind == "analyze":
+                _run_pass_analyze(state)
+            elif decl.kind == "transform":
+                _run_pass_transform(state, mapping_cfg)
+            else:
+                _run_pass_check(state, decl)
+        except _ScheduleStop:
+            break
+        if ctx.stage == decl.name:
+            break
+    return state.ast, state.scope

@@ -97,8 +97,9 @@ passes = [
   自定义 pass 管线示例。
 - 门禁：`tests/engine/pipeline/`（新增）+ 全量 `pytest tests/`。
 
-> Impl: `pipeline/schedule.py::build_schedule`
->       `pipeline/schedule.py::PassState`（执行状态）
->       `core/plugin_loader.py::get_pipeline_pass_decls`
->       `pipeline/__init__.py::_run_schedule`
+> Impl: `pipeline/schedule.py`（编排器一体：build_schedules 声明+序列器、
+>       `_run_schedule` 执行、pass 执行器 `_run_pass_*`；共享实例
+>       schedules/mapping_cfg 由调用方注入）
+>       `core/plugin_loader.py::get_pipeline_pass_decls`（收集）
+>       `pipeline/__init__.py`（按 rules_dir 缓存后注入编排器）
 > Test: `tests/engine/pipeline/test_schedule.py`
