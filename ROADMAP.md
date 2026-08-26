@@ -100,33 +100,15 @@
 - [ ] 技术博客/论文："配置驱动语言→IR"（可引用的专业形象）
 - [ ] 从小而垂直的厂商切入（大厂有自研团队，小厂缺人决策快）
 
-## P5 — 渲染器改进（统一缩进模型 + Doc 原语升级 + 布局意图声明化）
+## 渲染器后续（原 P5 六项已全部闭环，2026-08-27 评估删组）
 
-> 来源：2026-08-25 renderer 审查 + 框架调研（topiary/dprint/prettier/verible/
-> cmake-format，落 docs/references.md）。定性：**改进非重写**（Doc IR 内核正确、
-> 160 处布局 TOML 是语言知识存量、门禁原样承接）。
-> 已落地阶段（1-5 + 4a/4b，ADR-0006）：缩进参数收敛、align/fill/line_suffix
-> 原语、intent 声明、多遍引擎 PassKind/criterion、注释 attachment、保真度分级
-> ——完成历史见 git log（a1b29ed/023d939 起）与 ADR-0006，不在此复述。
+> P5 六项改进（统一缩进模型 / Doc IR 原语升级 / 布局意图声明化 / 世界 B
+> 升级 / 保真度分级 / 兼容验收）全部落地：完成历史见 git log（4bc4b3f 起，
+> ADR-0006 阶段 1-5 + 4a/4b；Veryl 渲染层深读闭环 13f29f1 Pad 三件套）。
+> 残留缺口评估见 docs/renderer_architecture.md「功能缺口评估」——B2/B3/B4
+> 部分解决项均明确"接受"（fits 贪心 / 锚点启发式 / indent_only 留待真实
+> 需求驱动）。唯一未闭环后续：
 
-- [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
-      缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为
-      单一缩进上下文，明确组合规则与优先级
-- [ ] **Doc IR 原语升级**：补 align（对齐进 Doc 模型）/ fill（流式折行）/
-      lineSuffix（尾注释锚定）+ 注释 attachment 机制（Prettier 生产验证过的
-      原语集）；layout() 算法继承扩展
-- [ ] **布局意图声明化**：语言包声明"结构 → 布局意图"（对齐/紧凑/折行/锚定），
-      引擎推导具体 Doc，消灭手拼 Break/Nest（topiary 封闭式理念——但节点级
-      注解到不了跨行对齐，需多遍引擎：对齐遍/折行遍/注释遍）
-- [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
-      内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
-      带结构行，根治 wrap 拆行后行号漂移。
-      注（2026-08-27）：inst_port 注释行透明分组 + restore 锚定精确化已闭环
-      （见 P1.5），消除端口组间注释导致的非幂等振荡；serv_top 畸形输入
-      3 轮收敛已由 lexer 修复闭环（2861ce8，未闭合块注释吞换行）。
-      "对齐进 Doc IR 参与 fits 判定"（Pad 三件套已落地 renderer，inst_port
-      仍是渲染后文本 pass）的彻底收敛仍需本升级
-- [ ] **保真度分级**：规范化程度显式可配（完全重排 / 保留空行 / 仅缩进），
-      解决"规范化 vs 保真"方向矛盾（verible token 级保真为参照）
-- [ ] **兼容与验收约束**：160 处布局 TOML 语义兼容（老语言包零改写）；验证
-      门禁原样承接（real 保真度守卫 / vs Verible 差分 124 例 / 幂等 / e2e）
+- [ ] **Layout TOML schema 校验**（renderer_architecture.md 缺口 5）：布局
+      表达式错误（拼错原语键/类型）静默降级为 None，与 ADR-0003 fail-fast
+      精神相悖——可加布局 schema 校验（渲染增强侧，非配置加载主路径）
