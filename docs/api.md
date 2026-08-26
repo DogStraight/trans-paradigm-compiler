@@ -12,16 +12,17 @@ tpc pipeline [test]       跑单测（开发用）
 tpc new component <name>  脚手架新组件
 ```
 
-## 管线（tests/e2e/run_pipeline.py）
+## 管线（pipeline 包）
 
 ```python
-from tests.e2e.run_pipeline import run_pipeline_on_source
+from pipeline import run_pipeline_on_source
 
 result = run_pipeline_on_source(
     source=src,
     expand_macros=True,
     format_output=True,       # formatter 开关（默认 True）
     expand_enhanced=True,     # 增强语法展开/保留（默认 True 展开）
+    schedule="default",       # 编排调度（ADR-0007）：命名 pass 序列
 )
 # result["output"] / result["success"] / result["idempotent"]
 ```
@@ -37,6 +38,7 @@ result = run_pipeline_on_source(
 | parser | `Parser(rules_dir, rules, rule_selector)` / `setup_grammar(rules_dir, register, ext_dirs)` | 语法 |
 | analyzer | `AnalysisTraversal(rules)` / `.analyze(ast)` | 语义 |
 | transform | `AstTransformer()` / `AstTransformer.set_shared(key, val)` / `normalize_ast(ast)` | 变换 |
+| pipeline | `run_pipeline_on_source(source, **kw)` / `format_generated(...)` | 管线入口（阶段编排 + 编排调度 ADR-0007；编排器在 `pipeline/schedule.py`） |
 | renderer | `Renderer(rules_dir)` / `.render(node) -> str` | 渲染 |
 | linter | `LinterScanner(rules_dir)` / `.scan(source) -> list[LintDiagnostic]` / `lsp_diagnostic(d)` | 检查 |
 | preprocessor | `scan_directives(...)` / `expand_tokens(...)` / `restore_condition_blocks(...)` | 宏/条件编译 |
