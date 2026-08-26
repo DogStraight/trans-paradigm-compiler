@@ -10,10 +10,9 @@
 ### P1.8 Verilog 语法补全 + 仿真语法插件化（发布前置）
 
 > 可综合子集进主包、仿真语法进插件（plugins/sim）；完成后主包纯净可综合 = 发布基线。
-> 语法对照：docs/ieee1364_2005_annex_a.md（67 节）。
-> 已落地：A.2.1.3 event 声明 / A.6.3 fork-join / A.6.4 force-release、disable /
-> A.6.5 时序控制（#delay、wait、@event、->）已入 plugins/sim（发布基线事实见
-> docs/release_checklist.md）。
+> 语法对照：docs/ieee1364_2005_annex_a.md（67 节）。已入 plugins/sim 的语法见
+> docs/release_checklist.md（A.2.1.3 event / A.6.3 fork-join / A.6.4 force-release
+> / A.6.5 时序控制）。
 
 - [ ] **门级/开关原语**（A.3）：and/or/nand/nor/xor/xnor/buf/not + bufif0/bufif1/
       notif0/notif1 + pmos/nmos/tran 系列 —— 综合类，进主包
@@ -24,36 +23,21 @@
 - [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
       仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
 - [ ] config/defparam（A.1.5 / A.2.4）—— 罕见，视需要
-- [x] 插件骨架验证：sim 插件挂载/卸载无残留（test_sim_plugin 补 token 层注册断言——
-      fork/join/force/wait/event 挂载时为 keyword token；挂载幂等——两次独立加载
-      规则集一致无累积；规则剥离/注入/解析断言已有）。注：enabled 声明 base="plugins"
-      的配置在无 plugins_dir 时 fail-fast 报错（ADR-0003 设计），卸载验证走规则层
-- [x] 发布收尾联动（验证完成，2026-08-25）：pytest 全量 912 绿（含 real 组
-      test_real_fidelity 门禁）+ e2e 64；sim 插件默认挂载不影响可综合子集纯净性
-      （test_sim_plugin 规则/解析断言）。run_all_tests.py 93 项暴露 2 个**存量**
-      缺陷（023d939 起点同样存在，非本会话引入，已记录 P1.5 待修）：
-      ref_comments 幂等 FAIL（端口列表行内注释致 PortList truncated）+
-      ref_inline_test fidelity 0.8→0.7718 漂移
 
 ### P1.4 折行（wrap）完善
 
 - [ ] 函数/任务声明类（FuncDecl/TaskDecl）折行特殊处理——函数体声明行以分号
       结尾但块以 endfunction 收，需确认折行时块内声明不截断
-- [ ] wrap 断点：位选择 `[31:25]` 已修（[] 深度跟踪）；三目只断 `:` 后已修；
-      concat `{a, b, ...}` 超宽折行已修（AST 感知 allow_concat，P1.6 惩罚折行
-      实现时顺带完成；边界实证：调用参数内/嵌套/块头条件 0 超宽残留 + 幂等）
 - [ ] picorv32 超宽行 75→73（其余无安全断点保留）——检查剩余 73 行是否需要
       更细断点（长标识符/括号内/块头条件行）
 - [ ] 块头行（`if (...) begin` 超宽条件）折行——当前 wrap 只折分号行，块头不折，
       需 boundary 支持"块头条件续行"识别
-- [x] wrap 幂等回归测试补强（test_wrap docstring 修正为 P1.6 现状 + test_idempotent
-      SAMPLES 补 3 个 wrap 折行场景：惩罚折行/块头折行/行尾注释折行——统一幂等门禁）
 
 ### P1.6 wrap 升级：惩罚值驱动折行搜索（Verible 参考）
 
-> 已落地：断点惩罚表（break_penalties）+ over_column_penalty 概念，配置化在
-> [formatter.wrap]（tpc.toml），验证 picorv32 超宽行 75→73→65（见
-> docs/known_limitations.md "Line wrapping is width-based"）。
+> 断点惩罚表（break_penalties）+ over_column_penalty 已配置化在
+> [formatter.wrap]（tpc.toml），见 docs/known_limitations.md "Line wrapping
+> is width-based"。以下为剩余待办。
 
 - [ ] 分区策略概念对齐：tpc 的品类对齐 ≈ kTabularAlignment，但缺"参数列表/
       端口列表/声明"的独立策略——Verible 每种列表一个策略，tpc 可评估
@@ -63,31 +47,6 @@
 
 ### P1.5 已知缺陷收尾
 
-- [x] **多声明品类对齐（Verible kDataDeclaration 参考，已闭环）**：
-      `_extract_semantic_multi` 多单元提取——`reg [1:0] state, next;` 按顶层
-      `,` 拆多对齐单元（类型头只挂首单元、非首单元 indent 置空、单元间
-      term 为逗号、行尾终结符归末单元），同组内所有单元名字列对齐到同一
-      基准（`reg [7:0] a, b;` 与 `reg c;`/`wire w;` 名字列对齐实证）。
-      `_parse_decl_parts` 抽取公共声明解析（init 定位/name 从右往左/concat
-      LHS 保护复用于单/多声明）。run_category_pass 多单元展平算列宽 +
-      按行重组。注释保护：任一单元含 `//`/`/*` token 整行跳过（保留原文，
-      与旧 _is_multidecl 行为一致，防注释当声明拆坏）。fidelity：_strip_all
-      去空白比较，real 组（darkriscv/picorv32 多声明行）无变化；验证 1078
-      pytest + run_all FAIL 0 + pyright 0 errors；测试 +9（多单元提取/init
-      保留/类型头首单元/注释跳过/concat 保护）
-- [x] **transform 实例名 hash 稳定性（已达成，2026-08-25 实证）**：ref_spi_inf
-      transform 组 P/X 双路径 ratio 均 1.0000（`u_spi_master_acb99d` 与 trans 基线
-      一致）——历史 0.9862 的 salt 差异已随后续提交消除，条目闭环
-- [x] **变换路径注释恢复（已闭环，2026-08-26）**：
-      `transform/engine.py::migrate_comments`——1:1/1:N 替换通用通道，新节点
-      继承被替换节点**子树**的注释（_comment_slots + _attached_comments，
-      deep 收集——attachment 可能挂在子节点如 instance_name 的 Identifier）。
-      config_driven（_walk_list/_transform_children/顶层）与 typed_ports
-      _bridge 接入。实证：`impl ... => top; // 注释` → 实例行带注释；
-      `spi.slave spi_io // slave 接口注释` → 展开后第一个端口行带注释
-      （组注释 → 第一个产物）。变换路径普通注释随结构走，only_tpc 通道
-      退居 tpc marker（宏/条件块协议标记）专用。验证 1098 pytest +
-      run_all FAIL 0 + pyright 0 errors；测试 9（test_comment_migrate.py）
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
       （test_nested_invert_no_skip_leak）；L2 未修——invert 对含嵌套引用的 role，
       嵌套展开端口（inner_* 方向反转）不参与反转（invert 回调 resolve 期拿的是
@@ -95,94 +54,10 @@
       合并）；L3 未修——invert 引用的 role 定义在后时 _ref_callbacks 尚未构建
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
-- [x] **concat 无折行（已闭环）**：`{a, b, c, ...}` 超宽折行——wrap
-      `_top_level_split_points` allow_concat（AST 确认完整语句时放行 `{}` 内
-      逗号断点，`_break_candidates` 的 ast_ok 路径），P1.6 惩罚折行实现时
-      顺带完成。边界实证（2026-08-26）：调用参数内 concat / 嵌套 concat /
-      块头条件 concat 均 0 超宽残留，二次 format 幂等
-- [x] **ref_comments 幂等 FAIL + ref_inline_test fidelity（run_all_tests 存量，已修）**：
-      根因链——列表项行尾注释挂项节点在 join 分隔符前渲染（`input clk // 注释,`）+
-      parser 回溯双收集致 attachment 跨节点双挂（双份）+ 端口列表 flat 化行号错位。
-      修复：join 原语提取 item 尾部 LineSuffix 输出在分隔符后（`input clk, // 注释`）+
-      attachment 按 (text, line) 全局去重（_attached_seen）+ restore_line_comments
-      行尾包含去重（bef978a）。结果：ref_comments 幂等恢复 + 注释位置正确
-      （fidelity 0.9422→0.9469）、ref_inline_test 0.7718→0.9317、912 pytest 全绿 +
-      real 组无损、run_all FAIL 0
-- [x] **行中块注释 attachment 行尾化（已闭环，2026-08-26）**：`assign b =
-      /* 嵌入注释 */ rst_n;` 的行中块注释不再被 attachment 行尾化——注释节点
-      模型（与用户讨论的架构方向：注释 = AST 一等节点 + 槽位约定）：
-      - 步骤 1（2e0ed63）：renderer 槽位消费端——_comment_slots
-        （leading 独立行 / trailing 行尾 / inline 同行前置），_attached_comments
-        向后兼容视为 trailing
-      - 步骤 2b-1（d15ab10）：inline 槽位消费端（节点文本前同行）
-      - 步骤 2b-2：parser 行中注释 token 标注定位——inline_after = {锚 token:
-        [(注释, 源行号)]} 挂当前规则节点（`=` 匹配时的 production 节点，
-        确定成功——挂子规则节点会随回溯丢弃）；renderer eval_line 在布局
-        line 文本元素里按锚文本定位插入（`=` 后）；布局无文本锚（pratt 内
-        `+` 等 op 子节点）时 pipeline 渲染后收集未消费 inline_after 补 anchors
-        restore only_midline 回插兜底（双轨不双份）
-      - 效果：`assign b = /* c */ rst_n;` 结构序渲染（`=` 后原位）、尾注
-        `c /* c2 */;` 挂 trailing、ref_comments/ref_inline_test fidelity 1.0
-      验证 1089 pytest + run_all FAIL 0 + pyright 0 errors
 - [ ] **pratt 前缀吞注释（既有缺陷，2026-08-26 记录）**：pratt_parser 前缀
       位置把 COMMENT 当续行分隔跳过（`a + /* c */ b` 的注释静默丢失，不记录
       任何通道）——改动前即如此（非回归）。修法：pratt 跳注释时记录（挂
       当前表达式节点 inline_after 或 anchors），与 2b-2 的 token 标注机制衔接
-- [x] **linter 性能优化——packrat 记忆化（已闭环，2026-08-27，-92%）**：
-      背景：cProfile 定位管线 97% 时间在 linter/checkers/matcher.py（pratt
-      表达式检查对同一 token 位置反复遍历全部 is_atom 规则，71M 次 dict.get）；
-      parser 侧仅占 ~1% 非热点。打点统计证实 _match_call_impl 同
-      (i, name, limit, strict, silent) 重复率 98.1%（唯一 5.7 万/298 万）。
-      - 第 1 轮（bf8f782）：match_atom 按 token 位置缓存 consumed（失败同缓存，
-        packrat 语义）——管线 -34%
-      - 第 2 轮（db14e70）：_match_call_impl 外包 packrat 缓存层（命中重放
-        错误快照保持诊断语义）+ _is_atom_selector 静态预计算 + optional call
-        memo——管线 9.36s → 0.709s（累计 -92%）
-      - 全部 memo 带 token 流身份守卫（_memo_tokens is not tokens 即清空，
-        跨文件/跨测试隔离）；probe 模式（_probe_eof）不参与缓存
-      - 验证：1098 pytest + lint recall 100%/FP 0 + 重复诊断检测 0
-        （错误快照重放无副作用叠加）+ run_all 93 FAIL 0
-- [x] **端口组间注释 restore 锚定 + 对齐透明化（已闭环，2026-08-27）**：
-      背景：fuzz 发现 gen_serv_top 逐轮递减（每轮删内容）+ 2 个 NON-IDEMPOTENT
-      finding。根因：行尾注释锚 `.`（端口行前导符号）命中所有端口行 → 插错位
-      + 多注释竞争窗口占用即丢（p1 21 条 → p2 18 条）；注释行打断 inst_port
-      端口连续组 → 分组边界随注释位置漂移 → 对齐列宽每轮不同。
-      - parser/_production.py：行尾注释锚点精确化——`.` 后跟标识符（端口名
-        形态）时拼接成 `.o_x` 唯一锚
-      - renderer/inline_comment.py：restore 锚匹配稳定化——单字符符号锚行首
-        锚定 + 偏好上方（注释是端口组间分隔，语义属前组）+ 窗口占用向下扩展
-        （防丢）
-      - inst_port.py：注释行视为对齐分组透明行（不打断端口连续组），对齐列宽
-        不随注释位置漂移
-      - 效果：最小复现（3 端口组 + 2 注释）4 轮稳定；gen_serv_top 从无限振荡
-        → 3 轮收敛；fuzz findings 2 → 1（spi_inf 完全稳定；serv_top 为畸形
-        输入有限轮规范化，不丢内容、最终收敛）；注释保真 21/21 逐轮保留
-      - 验证：1098 pytest + run_all 93 FAIL 0 + lint recall 100%/FP 0
-- [x] **未闭合块注释吞掉追加换行（已闭环，2026-08-27）**：`/*` 未闭合时
-      main_lexer.tokenize 的 `lex_text + "\n"`（追加换行确保尾 token 处理）被
-      capture marker 段吞进 token content——`/*` → `/*\n`，下一轮 + 追加 `\n`
-      → `/*\n\n` 无限增长（format 幂等破坏，每轮多一个空行）。修复：
-      capture_runner marker 段 EOF 分支剥尾部换行（与 heredoc line_match 段
-      clip 同款语义）。验证：`/*`/`/*\n`/`// x\n/*` 全部 3 轮幂等 + 合法注释
-      保真 + 151 lexer 测试 + 1098 全量 pytest 全绿
-- [x] **对齐进 Doc IR（Pad 三件套，Veryl 渲染层深读闭环，2026-08-25 完成）**：
-      tpc 世界 B column_align 是"渲染后对齐"（曾破坏 fits 判定、被迫回滚 join
-      改法）；Veryl 用 `Pad`/`IfBreakPad`/`IfFlatPad` 三个 Doc 原语把对齐
-      padding 做成 Doc 一等公民，参与 fits/break 决策。已实现（13f29f1）：
-      `renderer/doc.py` 新增三原语（Pad 无条件输出计入 fits；IfBreakPad 仅
-      broken 输出 0 计 fits；IfFlatPad 仅 flat 输出计入 fits 可强制断行），
-      flatten/_best/_fits 全链路支持 + 9 测试（test_doc_align_fill.py::TestPad）。
-      参考：E:\research\veryl\crates\pretty\src\{doc.rs,render.rs}
-      + aligner/src/lib.rs（PadKind 三态）
-- [x] **fits 带外层 continuation（Veryl 渲染层深读闭环，2026-08-25 完成）**：
-      tpc `_fits` 只看单 doc 第一行，fill 模式邻居项各自声明 flat、组合行
-      溢出（wrap 调研已记坑）；Veryl `fits_flat` 从 outer stack 拷贝 work
-      继续算到首个 break 机会。已实现（13f29f1）：`_best` 加 budget 参数，
-      Concat 对每项预计算同行前后兄弟宽度（到首个换行点），Union 判定预算
-      = w - k - 前面已占 - 后续将占——修复"group 单独 fits、组合溢出"
-      （`'aaaa bbb + XXXX'` w10 溢出→正确断行）；调试记录：col 运行时累积
-      双重计数破坏布局，改纯预算传递；`_flat_w` 纯宽度函数避免互递归死循环。
-      验证：1034 pytest + run_all FAIL 0 + e2e enhanced_render 9/9 无损
 
 ### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
 
@@ -214,15 +89,6 @@
 > tpc-check 当 pylance 用（即时诊断、机器可读、可豁免）。
 > 节奏：开源初期做小而稳——只推第一步低成本项，大项（规则表配置化/LSP）积蓄。
 
-- [ ] 第一步（低成本，纯增量）：
-  - [x] `tpc check --json`（已存在，LSP 兼容诊断结构：stage/severity/code/range）
-  - [x] **suppress 注释机制**（仿 Verilator lint_off/lint_on）：
-        `/* tpc-check off [rules] */`…`/* tpc-check on */` 区间豁免 +
-        `// tpc-check: disable-line [rules]` 单行豁免——输出层过滤（不侵入检查器），
-        豁免后重算 exit_code；模型生成器可在"故意非标"处内联豁免
-        （落地：analyzer/suppress.py + main.py 接入 + 13 自测；端到端实证三种形态）
-  - [x] 规则 ID 文档化：docs/diagnostics.md（linter/semantic 诊断 code 命名空间清单
-        + 豁免注释语法 + 命名约定，仿 verible `--print_rule_descriptions` 的规则即文档思路）
 - [ ] 第二步：检查规则表 + severity 配置（规则 ID → 描述 → 默认 severity → 用户覆盖，
       对齐 svlint `.svlint.toml` / verible rule-sets；tpc 配置驱动哲学在检查侧的落地），
       与 P1.7 naming_check 合并推进
@@ -238,20 +104,15 @@
 
 - [ ] 覆盖率远期目标 ≥90%（当前 83.39%——source=引擎包真实基线，需补
       transform/renderer 等薄弱区）
-- [x] 用户视角文档增量：README Quick start 补齐 `tpc check`（跨文件语义检查 +
-      --json）+ suppress 注释说明 + docs/diagnostics.md 入文档表 + CI 双门禁描述
 
 ### P2.3 验证吞吐优化（backlog，非发布阻塞，2026-08-22 记录）
 
-> 动机：验证（fuzz/差分/edge）是"验证附着于配置驱动语言定义"的差异化能力，
-> 但当前吞吐 ~9 iter/s（实测单次迭代 ~110ms：setup_grammar ~40% + 管线内部
-> 幂等复跑 2x 冗余 + 单线程）。模型无机会手动跑大规模验证，快速验证层是
-> "模型写配置 → 自动验证闭环"成立的前提。详见 tests/fuzz/README.md。
-> CI 已接入（.github/workflows/ci.yml，3 Python × 2 OS 矩阵）。
+> 动机：验证（fuzz/差分/edge）是"验证附着于配置驱动语言定义"的差异化能力；
+> 快速验证层是"模型写配置 → 自动验证闭环"成立的前提。详见 tests/fuzz/README.md。
 > 2026-08-27 更新：linter packrat 记忆化（bf8f782/db14e70，管线 -92%）后
-> fuzz 实测吞吐 ~40 iter/s（800 轮 18-19s / 3000 轮 75-86s）——远超前述
-> 9 iter/s 基线（原测速含 linter 热点），三件套的预期收益相应缩水，
-> 但缓存复用/关幂等/multiprocessing 仍可再叠加 ~10x。
+> fuzz 实测吞吐 ~40 iter/s（800 轮 18-19s / 3000 轮 75-86s）——远超最初
+> ~9 iter/s 基线（原测速含 linter 热点），三件套预期收益缩水，但缓存复用/
+> 关幂等/multiprocessing 仍可再叠加 ~10x。
 
 - [ ] fuzz harness 吞吐三件套：
   - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x
@@ -260,98 +121,29 @@
 - [ ] 随机合法程序 → 对拍 Verible：接受域从 124 人工语料推到统计意义
       （GrammarFuzzer 生成器已就绪，缺接线）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
-- [x] 引擎编译提速评估（2026-08-25 结论：**不立项**）——Nuitka 编译引擎典型提速
-      1.5-3x（CPU 密集 parser/lexer），但：① P2.3 三件套（缓存/关幂等/
-      multiprocessing）预期 30-40x，远超编译收益且零构建成本；② 编译拖慢开发
-      迭代（改代码重编译 + 堆栈不可读），与"模型写配置→快速验证闭环"目标相悖；
-      ③ onefile 打包（packaging/build_pipeline.py）已实证，发布 exe 天然是编译版
-      ——编译提速作为分发副产品自动获得，无需单独立项
 - [ ] CI 补强（未做）：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential
       门禁接入
-- [x] CI 补强：PR 快速 fuzz（500 轮）+ edge 门禁已接入 test job（fuzz TOKEN-CORRUPT
-      假阳性已修——不变量限定合法 gen 样本，800 轮 0 findings）；夜间长跑
-      workflow（nightly.yml：cron 03:00 UTC，fuzz 5000 轮 + edge + 全量回归）已建；
-      differential（Verible 对拍）留作 CI 可选 job（依赖 verible 二进制下载，见
-      tests/fuzz/README.md 纪律节）
-
-### P2.5 引擎约定机器化（边界检查器，2026-08-24 记录，非发布阻塞）
-
-> 把 AGENTS.md 硬约束（语言知识不进代码 / 路径规范 / Doc 反向引用）从"文档约定"
-> 变成自动检查器（纯 Python 零依赖，挂 CI）；与 P2.3 的关系：P2.3 管验证吞吐，
-> 本项管"约定即门禁"。
-
-- [x] **`tools/policy/check_hardcode.py`（已落地）**：规则表驱动，tokenize 精确区分
-      代码字符串/注释/docstring（零依赖），`--root`/`--strict-doc`/`--strict-import`
-      参数；CI 已接入（test 矩阵加 `python tools/policy/check_hardcode.py`）。
-  - [x] 规则 1（gate）：语言 token 不得以字符串字面量出现在引擎代码——词表从
-        grammar/ 实际 [id.keyword] 提取（防硬编码词表漂移），剔除 Python 关键字 +
-        allowlist（引擎协议词表，逐项注明原因：type/repeat/join/end/default/
-        input/output/signed）
-  - [x] 规则 2（gate）：不得硬编码 grammar/<lang> 相对路径字面量——allowlist
-        仅"grammar/verilog"默认语言包引导路径（define.py/config_registry.py 文档化回退）
-  - [x] 规则 3（info，--strict-doc 升 gate）：文件头 Doc: 反向引用缺失检查——
-        现网 83 文件缺失，留独立"Doc 头补齐"任务（见下）
-  - [x] 规则 4（info，--strict-import 升 gate）：引擎代码直接 import grammar.<lang>
-        插件检查——现网发现 pipeline/__init__.py 3 处 verilog 插件直连导入
-        （typed_ports collect_callbacks / formatter build_engine，均 try/except 守卫），
-        留作"插件回调能力化"重构（见 P1.5 上方后续项）
-  - [x] 验证：本地全干净（R1/R2 零违规）+ 17 自测（tests/policy/）+ pyright 0 errors
-  - [x] **pyright strict 门禁（配套）**：`pyrightconfig.strict.json`（unused/调用/可选
-        访问规则，不含 Missing\* strictness 项）扫描全仓库 0 errors；CI 已接入
-        （`npx -y pyright@1.1.413 --project pyrightconfig.strict.json`，版本钉死防
-        默认规则漂移；升级时同步 bump）——清理记录见 git log（1448afc/c8b3821，
-        47 文件 +128/-115）
-- [x] **Doc: 头补齐（规则 3 已升 gate）**：83 个引擎 .py 补 docstring 末行 Doc:
-      反向引用（按子系统映射：renderer→renderer_architecture、linter→
-      linter_architecture、analyzer→semantic_checks/decisions/0005、transform/lexer/
-      parser→language_walkthrough、core→component_protocol/config_lifecycle、
-      pipeline/main→api.md）；CI 已开 `--strict-doc`（新增引擎文件必须带 Doc:）。
-      注：preprocessor 机制无专门架构文档（Doc: 暂指 api.md 管线阶段），后续补
-      preprocessor_architecture.md 再细化
-- [x] **插件回调能力化（规则 4 前置，已闭环）**：`[capabilities]` 能力注册
-      协议（tpc.toml 顶层段，`<能力名> = "file.py:fn"`，入口返回能力 API 面）+
-      `core/plugin_loader.py::_load_capabilities`/`get_capability`（fail-fast 同
-      postpass/pipeline.pass；纯能力组件如 formatter 无语法/变换声明也据此加载）。
-      pipeline 直连清零：schedule.py 变换回调收集 → get_capability("transform_
-      callbacks")（typed_ports `_mapping.py:collect_callbacks`）；__init__.py
-      format_generated → get_capability("formatter")（formatter `_capability.py:
-      build_formatter` 聚合 BoundaryScanner/build_engine/split 入口）。CI 已开
-      `--strict-import`（R4 gate）。验证：9 测试（test_capabilities.py）+
-      全量 1069 pytest + pyright 0 errors + R4 0 违规
-- [x] **case 即文档轻量版（已闭环）**：`docs/case_catalog.md`——语义单例
-      文档化清单，每行为一个 case（输入片段 → 显式期望），按子系统分区
-      （lexer/parser/linter/analyzer/transform/renderer/formatter/preprocessor/
-      pipeline），每 case 标注 e2e samples 样本引用可复跑；不新建测试框架
-      （正确性由差分/fuzz/e2e 覆盖，增量价值 = 语义契约可读）
-
-- [x] **阶段间契约文档（评估结论：值得补，已落地）**：`docs/pipeline_stages.md`
-      ——各阶段输入/输出数据形态 + 阻断语义（lint/parse truncated/analyzer error）
-      + 跨阶段数据通道（下划线属性/注释锚点/attachment/变换回调/root_scope/宏 marker）；
-      MODEL_INDEX 已登记
 
 ### P2.6 tpc-check 外部 checker 插件协议（2026-08-25 记录，Veryl 调研触发，非发布阻塞）
 
 > 拿来主义 + 声明场景：语言包 plugins/ 声明**外部 checker**（官方检查，如
 > `veryl check`/verible/slang），tpc 只**声明自己的检查场景**（官方 checker 的
 > 缺口：格式化保真/变换等价/语法资产一致性）。参考 hdl_checker
-> "Repurposing existing HDL tools" 路线（references.md 已有调研）。
+> "Repurposing existing HDL tools" 路线 + svlint 深调研（规则四件套/suppress
+> 注释对/插件，均落 docs/references.md）。
 
 - [ ] **插件声明协议**：`grammar/<lang>/plugins/checker/tpc.toml` 两段——
       `[checker.external]`（命令 + 输出解析声明，收口稳定接口：JSON 输出/稳定
       规则 ID，防"后端版本耦合"坑）与 `[checker.scenarios]`（tpc 自管场景：
       format_fidelity / transform_equivalence / 语法资产一致性）
 - [ ] **诊断归一化**：外部 checker 输出（miette/JSON/文本）转 tpc 统一诊断模型——
-      对齐 P1.9 稳定规则 ID + 机器可读输出结论（verible/slang/svlint 均有 JSON 实证）；
-      svlint 深调研已落档 references.md（2026-08-27）：规则 trait 四件套
-      check/name/hint/reason + `/* svlint off */` 注释对 suppress + libloading
-      插件 + deny_unknown_fields fail-fast——P1.9 第二步规则表与豁免机制的
-      现成参考实现
+      对齐 P1.9 稳定规则 ID + 机器可读输出结论（verible/slang/svlint 均有 JSON 实证）
 - [ ] **场景声明语法**：检查场景 = TOML 数据（gate 引用 run_all/差分基线），
       延续"语言知识不进代码"哲学——引擎只做通用场景执行器
 - [ ] 验证路径：`grammar/veryl/plugins/checker/` 先做 veryl 本体验证（官方检查
       直连 + 自管场景补缺口），再推广 verible/slang
-- 关联：P1.9（诊断模型）为其前置；Veryl 调研落档 references.md（本地镜像
-      `E:\research\veryl`）
+- 关联：P1.9（诊断模型）为其前置；Veryl/svlint 调研落档 references.md（本地镜像
+      `E:\research\veryl` / `E:\research\svlint`）
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
@@ -399,60 +191,12 @@
 
 ## P5 — 渲染器改进（统一缩进模型 + Doc 原语升级 + 布局意图声明化）
 
-> 来源：2026-08-25 renderer 审查（body_cfg["indent"] 死配置/幽灵参数/重复实现）
-> + 框架调研（topiary/dprint/prettier/verible/cmake-format，落 docs/references.md）。
-> 定性：**改进非重写**——Doc IR 内核（Wadler）正确、160 处布局 TOML 是语言知识
-> 存量、验证门禁（real 保真度/差分/幂等）原样承接；缺的是原语丰富度与模型统一。
-> 动手前先写 ADR-0006（边界分析 + 资产盘点 + 迁移策略作为输入文档）。
-> 第一步已落地（a1b29ed）：body_cfg["indent"] 三态生效 + render_inline 合并 +
-> tail_break 转换删除（测试 tests/engine/renderer/test_renderer_body_indent.py）。
-> 阶段 1 已落地（ADR-0006）：幽灵 indent 参数从原语协议签名/渲染回调链
-> 全部移除（render_node/render_inline/render_body/eval_expr/各原语 handler/
-> Renderer._render_*），缩进换算收敛为 Renderer._indent(level) 唯一换算点
-> （body_cfg["indent"] 与 expr {indent: N} 均以其为单位）；806 pytest +
-> e2e 全绿 + pyright renderer 0 errors。
-> 阶段 2 原语集已落地（ADR-0006）：align（绝对列对齐）/ fill（流式折行）/
-> line_suffix（行尾锚定）三个 Doc IR 原语 + TOML 表达式层 + layout() 只加
-> 分支（Wadler 内核不动）；测试 tests/engine/renderer/test_doc_align_fill.py
-> + test_primitives_align_fill.py + test_doc_line_suffix.py；832 pytest 全绿。
-> 注释 attachment 机制（parser 注释 → line_suffix 挂载）留待阶段 4 注释遍。
-> 阶段 3 第一步已落地（ADR-0006）：拆行 pass 就地同步 contexts（inst_port/
-> wrap 拆行按段派生复制源行 ctx + wrap 续行段标记 multi_line_cont），引擎
-> run 增加 contexts 兜底对齐（漏同步 pass 自动按就近行派生），根治"拆行后
-> 行号漂移"（实证：inst_port 拆行后 lines/contexts 错位 +3 → 对齐）；
-> 测试 tests/languages/verilog/test_formatter_context_sync.py（7 用例）；
-> 全量 pytest 全绿 + pyright 0 errors + 双跑对比（既有幂等/保真度）零下降。
-> 阶段 4a 已落地（ADR-0006）：intent 原语（布局意图声明：compact 紧凑列表
-> = join+first_soft+nest 别名 / wrap 流式折行 = fill / align 对齐 / anchor
-> 行尾锚定）；ParameterList/PortList/TaskPortList 三处手拼四件套已替换为
-> intent 声明且输出逐字节一致（848 pytest + e2e 全绿 + pyright 0 errors）；
-> 测试 tests/engine/renderer/test_primitives_intent.py（9 用例）。
-> 阶段 4b 已落地（ADR-0006）：多遍引擎——PassKind 枚举化（indent/ifdef/
-> align/wrap/comment/annotate/custom，旧 handler/category 兼容映射）+
-> FormatterPass.criterion 量化拒绝准则（min_group_size/max_span/max_width，
-> 不满足跳过该遍）；wrap 带 max_width 拒绝、品类对齐带 min_group_size 拒绝
-> （纯优化零输出变化）、wrap_comments 升格 COMMENT 内建遍；863 pytest +
-> pyright 0 errors；测试 tests/languages/verilog/test_formatter_engine_passkind.py。
-> 注释 attachment（parser 注释 → line_suffix 挂载，替换 inline_comment.py
-> 字符串级回插）留待后续（涉及 parser/pipeline 数据流，独立推进）。
-> 注释 attachment 已落地：parser parse_token 收集行尾注释时挂到节点
-> _attached_comments（下划线属性穿过 normalizer、Node.dump 过滤），
-> renderer render_node 用 line_suffix 原语锚定到语句行尾（Doc 一等公民），
-> 与 inline_comment.py 锚点回插双轨并存（restore 去重防重复）；877 pytest
-> + pyright 0 errors + PicoRV32 real 门禁零回归；测试
-> tests/engine/parser/test_comment_attachment.py（6 用例）。
-> 阶段 5 已落地（ADR-0006）：保真度分级——renderer/fidelity.py::keep_blank_lines
-> （src→out LCS 匹配映射表，空行完全以源为准：结构对应位置回插、不叠加
-> renderer 自产空行）；pipeline 参数 fidelity（full 默认零变化 / keep_blank），
-> CLI `tpc format --fidelity keep_blank`；871 pytest + pyright 0 errors；
-> 测试 tests/engine/renderer/test_fidelity.py（8 用例）。
-> 阶段 4a 语言包落地（023d939）：verilog + c4 共 12 处 join 列表布局迁移为
-> intent="compact"（ParameterList/PortList/TaskPortList/ArgumentList/
-> DeclaratorList/ParamOverrideList/NamedPortList/SensitivityList/ConcatExpr/
-> CaseItem/AttrSpecList/TypeParamList）——无 first_soft 的迁移显式
-> first_soft=false、无 nest 的显式 nest=0，输出逐字节等价；877 pytest +
-> pyright 0 errors + e2e 全绿。架构文档 docs/renderer_architecture.md
-> 同步落地清单（f1a6a12）。
+> 来源：2026-08-25 renderer 审查 + 框架调研（topiary/dprint/prettier/verible/
+> cmake-format，落 docs/references.md）。定性：**改进非重写**（Doc IR 内核正确、
+> 160 处布局 TOML 是语言知识存量、门禁原样承接）。
+> 已落地阶段（1-5 + 4a/4b，ADR-0006）：缩进参数收敛、align/fill/line_suffix
+> 原语、intent 声明、多遍引擎 PassKind/criterion、注释 attachment、保真度分级
+> ——完成历史见 git log（a1b29ed/023d939 起）与 ADR-0006，不在此复述。
 
 - [ ] **统一缩进模型**：清理幽灵 indent 参数（原语协议签名内，只传递不生效）；
       缩进来源归一（style.indent_str / body_cfg["indent"] / expr indent）为
@@ -463,9 +207,6 @@
 - [ ] **布局意图声明化**：语言包声明"结构 → 布局意图"（对齐/紧凑/折行/锚定），
       引擎推导具体 Doc，消灭手拼 Break/Nest（topiary 封闭式理念——但节点级
       注解到不了跨行对齐，需多遍引擎：对齐遍/折行遍/注释遍）
-      （4a intent 原语 + 4b PassKind/criterion + 注释 attachment 已落地，
-      见上引用块；c4/yaml 存量实证无剩余可迁移——c4 ArgumentList 已迁移，
-      yaml 布局无列表 join 形态（固定行+body 循环），迁移不适用，已闭环）
 - [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
       内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
       带结构行，根治 wrap 拆行后行号漂移。

@@ -240,6 +240,22 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 📌 **strip_trailing_whitespace 开关**：build --check 时关掉保字节一致
     （tpc fidelity 差分同理）；Anchored → sourcemap（P3.1 前置）
 
+- **tpc 注释节点模型（设计来源，2026-08 讨论 + 落地）**——与 Veryl 注释机制的对照：
+  - 设计决策（用户参与）：注释是"间隙实体"（token 流中两 token 之间），有挂点
+    （行尾）attachment、无挂点（token 间隙/游离）需位置。挂树方案（attachment 化）
+    覆盖不了无挂载点注释；Veryl 的 token 级附着（`TerminalToken: Token Comments`）
+    解决静态间隙但不解决结构重写；**变换路径注释是语义归属问题**（注释属于概念
+    如 impl/端口组），答案在变换语义里（migrate_comments 声明迁移目标），不在
+    位置机制里
+  - 落地形态：注释 = AST 一等节点 + 槽位约定（leading 独立行 / inline 同行前置 /
+    trailing 行尾锚定 / inline_after token 标注），生产方（parser/变换插件）负责
+    语义归属，消费方（renderer）按槽位渲染——与 Veryl "注释进 Doc 公民"（CommentDoc
+    + leading_newlines）同理念、不同载体（tpc 挂节点槽位，Veryl 挂 token 流）
+  - 时域/频域类比（用户启发）：字符流 = 时域（行号/token 位置，漂移），AST/结构
+    路径 = 频域（结构序，不漂移）；渲染 = 调制、解析 = 解调。注释治本 = 结构
+    附着 + 结构序渲染（tpc 槽位约定即结构序；restore 行号回插是时域兜底，双轨
+    不双份）
+
 ### cairn（Scala）— 增量解析
 
 - 语言 = `Fragment` 片段组合（`provides/requires/excludes`）→ 内容寻址（每个语言/产物有 digest）
