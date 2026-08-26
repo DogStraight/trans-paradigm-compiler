@@ -247,10 +247,11 @@
       build_formatter` 聚合 BoundaryScanner/build_engine/split 入口）。CI 已开
       `--strict-import`（R4 gate）。验证：9 测试（test_capabilities.py）+
       全量 1069 pytest + pyright 0 errors + R4 0 违规
-- [ ] **case 即文档轻量版（第二优先）**：关键用例整理成"每行为一个 case + 显式
-      期望"的可读清单（input/expect 声明式组织，参考 e2e samples 目录风格）；
-      tpc 差分/fuzz 已覆盖正确性，增量价值是"语义单例文档化"（docs/ 资产，
-      配合切片哲学），不新建测试框架
+- [x] **case 即文档轻量版（已闭环）**：`docs/case_catalog.md`——语义单例
+      文档化清单，每行为一个 case（输入片段 → 显式期望），按子系统分区
+      （lexer/parser/linter/analyzer/transform/renderer/formatter/preprocessor/
+      pipeline），每 case 标注 e2e samples 样本引用可复跑；不新建测试框架
+      （正确性由差分/fuzz/e2e 覆盖，增量价值 = 语义契约可读）
 
 - [x] **阶段间契约文档（评估结论：值得补，已落地）**：`docs/pipeline_stages.md`
       ——各阶段输入/输出数据形态 + 阻断语义（lint/parse truncated/analyzer error）
