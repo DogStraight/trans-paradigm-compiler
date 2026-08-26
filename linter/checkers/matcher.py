@@ -86,8 +86,28 @@ class RuleMatcher:
             key=lambda n: len(tree[n].get("prods", [])),
             reverse=True,
         )
+        # match_atom 位置级记忆化（packrat 式）：同一 token 位置 i 的原子匹配
+        # 结果缓存——pratt 表达式检查对同一位置反复遍历全部 is_atom 规则
+        # （choice 失败回溯/嵌套表达式），无缓存时同一 (i, rule) 组合被指数级
+        # 重复求值（cProfile：matcher 占管线 97%）。match_atom 是纯函数
+        # （silent 路径无错误副作用，同输入必同输出），记忆化安全。
+        # key = token 位置 i；value = consumed（0 表示无原子命中——失败同样
+        # 缓存，packrat 语义）。memo 按 token 流身份隔离（_memo_tokens）：
+        # 直接调用方（单元测试绕过 scan）与跨文件复用都不串文件。
+        self._atom_memo: dict[int, int] = {}
+        self._memo_tokens: list | None = None  # 当前 memo 所属 token 流
 
     # ── 对外接口 ────────────────────────────────
+
+    def reset_atom_memo(self) -> None:
+        """清空 match_atom 位置级缓存（含 token 流身份标记）。
+
+        scan() 每次新 token 流前调用；token 流身份守卫（match_atom 内
+        `_memo_tokens is not tokens` 检查）也兜底——直接调用方（单元测试
+        绕过 scan）或跨文件复用都不会串文件命中。
+        """
+        self._atom_memo.clear()
+        self._memo_tokens = None
 
     def match_rule(
         self,
@@ -171,10 +191,23 @@ class RuleMatcher:
         运算符（避免 `a <= b` 赋值 vs 比较歧义）；production 内遇 @Expression /
         pratt 规则由 _match_call_impl 交回 ExpressionChecker.consume（pratt 切断
         左递归环，binding power + stop_tokens 保证终止）。
+
+        记忆化：纯函数（silent 路径不产生错误副作用），同一 (tokens, i) 结果
+        确定——按位置 i 缓存 consumed，拦截 pratt 对同一位置的反复全规则遍历。
+        token 流身份守卫：memo 只对同一 tokens 列表有效（不同文件/不同测试
+        的 token 流位置 i 含义不同），流切换即清空。
         """
+        if self._memo_tokens is not tokens:
+            self._atom_memo.clear()
+            self._memo_tokens = tokens
+        memo = self._atom_memo
+        if i in memo:
+            consumed = memo[i]
+            return (object(), consumed) if consumed > 0 else (None, 0)
         n = len(tokens)
         j = _skip(tokens, i, n)
         if j >= n:
+            memo[i] = 0
             return None, 0
         for name in self._atom_rules:
             trial: list = []
@@ -184,7 +217,9 @@ class RuleMatcher:
             if k > j:
                 # consumed 从 i 起算（含 _skip 跳过的 trivia），保证 pratt
                 # 递归层的 `idx += consumed` 推进到原子之后不错位。
+                memo[i] = k - i
                 return object(), k - i
+        memo[i] = 0
         return None, 0
 
     def _match_token(

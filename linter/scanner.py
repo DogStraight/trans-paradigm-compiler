@@ -199,6 +199,10 @@ class LinterScanner:
         if not tokens:
             return errors
 
+        # match_atom 位置级 memo 按 token 流隔离：scan 可能被复用（同一
+        # scanner 实例扫多文件），新 token 流必须清空，避免跨文件位置串命中。
+        self._matcher.reset_atom_memo()
+
         registry = CheckerRegistry()
 
         # ── P1: 块边界配对 ──────────────────────
