@@ -28,18 +28,14 @@ Doc: docs/decisions/0007-pipeline-schedule.md
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from core.plugin_loader import get_pipeline_pass_decls, get_pipeline_schedules
+from core.plugin_loader import (
+    get_capability,
+    get_pipeline_pass_decls,
+    get_pipeline_schedules,
+)
 from core.utils import save_json
 from analyzer import AnalysisTraversal
 from transform import AstTransformer
-
-# 变换回调收集（typed_ports 插件，可选——非 verilog 语言无此插件时跳过）
-try:
-    from grammar.verilog.plugins.typed_ports._mapping import collect_callbacks
-except ImportError:  # pragma: no cover — 非 verilog 语言包
-    def collect_callbacks(scope):  # type: ignore[no-redef]
-        del scope  # fallback：非 verilog 语言无回调，签名与真实函数保持一致
-        return {}
 
 BUILTIN_PASSES: dict[str, dict] = {
     "analyze": {"kind": "analyze"},
@@ -272,7 +268,11 @@ def _run_pass_analyze(state: "PassState") -> None:
                     log_fn=ctx.log
                 )
             # Dump transform callbacks (_ref_callbacks) to trans_callback/
-            callbacks = collect_callbacks(analyzer.root_scope)
+            # 经能力查找（P2.5）接入——typed_ports 声明
+            # [capabilities] transform_callbacks；非 verilog 语言无此能力
+            # 时 get_capability 返回 None，回调收集降级为空。
+            collect_cbs = get_capability("transform_callbacks")
+            callbacks = collect_cbs(analyzer.root_scope) if collect_cbs else {}
             if callbacks and ctx.cb_json:
                 save_json(callbacks, ctx.cb_json, "callbacks", log_fn=ctx.log)
         ctx.log(f"[symbols] {len(analyzer.all_symbols)} symbols")

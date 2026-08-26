@@ -237,10 +237,16 @@
       pipeline/main→api.md）；CI 已开 `--strict-doc`（新增引擎文件必须带 Doc:）。
       注：preprocessor 机制无专门架构文档（Doc: 暂指 api.md 管线阶段），后续补
       preprocessor_architecture.md 再细化
-- [ ] **插件回调能力化（规则 4 前置）**：pipeline 直连 grammar.verilog 插件导入改为
-      通用插件能力查找（typed_ports 变换回调 / formatter 能力经插件协议注册），
-      完成后 CI 可开 --strict-import
-
+- [x] **插件回调能力化（规则 4 前置，已闭环）**：`[capabilities]` 能力注册
+      协议（tpc.toml 顶层段，`<能力名> = "file.py:fn"`，入口返回能力 API 面）+
+      `core/plugin_loader.py::_load_capabilities`/`get_capability`（fail-fast 同
+      postpass/pipeline.pass；纯能力组件如 formatter 无语法/变换声明也据此加载）。
+      pipeline 直连清零：schedule.py 变换回调收集 → get_capability("transform_
+      callbacks")（typed_ports `_mapping.py:collect_callbacks`）；__init__.py
+      format_generated → get_capability("formatter")（formatter `_capability.py:
+      build_formatter` 聚合 BoundaryScanner/build_engine/split 入口）。CI 已开
+      `--strict-import`（R4 gate）。验证：9 测试（test_capabilities.py）+
+      全量 1069 pytest + pyright 0 errors + R4 0 违规
 - [ ] **case 即文档轻量版（第二优先）**：关键用例整理成"每行为一个 case + 显式
       期望"的可读清单（input/expect 声明式组织，参考 e2e samples 目录风格）；
       tpc 差分/fuzz 已覆盖正确性，增量价值是"语义单例文档化"（docs/ 资产，

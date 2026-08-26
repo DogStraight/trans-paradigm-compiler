@@ -62,7 +62,7 @@ def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
 
 
 def _parse_component_toml(path: str) -> dict[str, Any] | None:
-    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform]/[pipeline] sections."""
+    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform]/[pipeline]/[capabilities]."""
     import tomllib
 
     with open(path, "rb") as f:
@@ -71,17 +71,21 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
     # asm_gen——无语法规则文件，只有代码生成插件），或有 [analyzer] handlers
     # （纯语义检查插件，如 semantic_check——无语法规则，只有检查原语），
     # 或有 [analyzer] postpasses（纯 post-pass 联动检查插件，如 inst_check），
-    # 或有 [pipeline] 段（自定义 pass / schedule 声明，ADR-0007）。
+    # 或有 [pipeline] 段（自定义 pass / schedule 声明，ADR-0007），
+    # 或有 [capabilities] 段（能力声明，P2.5 插件回调能力化——如 formatter
+    # 纯能力插件：无语法/变换/分析声明，只向引擎暴露能力入口）。
     grammar = raw.get("grammar", {})
     transform = raw.get("transform", {})
     analyzer = raw.get("analyzer", {})
     pipeline = raw.get("pipeline", {})
+    capabilities = raw.get("capabilities", {})
     if (
         not grammar.get("files")
         and not transform.get("handlers")
         and not analyzer.get("handlers")
         and not analyzer.get("postpasses")
         and not pipeline
+        and not capabilities
     ):
         return None
     comp = {
@@ -90,6 +94,7 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
         "analyzer": raw.get("analyzer", {}),
         "transform": raw.get("transform", {}),
         "pipeline": pipeline,
+        "capabilities": capabilities,
     }
     return comp
 
@@ -154,6 +159,9 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
 
     # 4. Pipeline pass / schedule 声明（ADR-0007）
     info["pipeline"] = _load_pipeline_decls(cdir, meta.get("pipeline", {}))
+
+    # 5. Capabilities（P2.5 插件回调能力化：能力入口 file.py:fn）
+    info["capabilities"] = _load_capabilities(cdir, meta.get("capabilities", {}))
 
     _loaded_components[name] = info
     return info
@@ -266,6 +274,51 @@ def _load_pipeline_decls(cdir: str, pipeline_meta: dict) -> dict[str, Any]:
             raise ValueError(f"[plugin] pipeline.schedule 缺 name: {s!r} ({cdir})")
         schedules[sname] = s
     return {"passes": passes, "schedules": schedules}
+
+
+def _load_capabilities(cdir: str, caps_meta: dict) -> dict[str, Callable]:
+    """加载组件 [capabilities] 声明（能力名 → 入口函数，file.py:fn）。
+
+    能力入口由插件定义返回形态（如 dict 聚合能力 API 面），引擎只做
+    查找与调用（P2.5 插件回调能力化——pipeline 不再直接 import
+    grammar.<lang> 插件）。fail-fast（ADR-0003）：声明了但模块/函数
+    缺失直接报错。
+    """
+    caps: dict[str, Callable] = {}
+    for name, spec in (caps_meta or {}).items():
+        if not isinstance(spec, str) or ":" not in spec:
+            raise ValueError(
+                f"[plugin] capabilities.{name} 声明格式应为 'file.py:fn'，"
+                f"收到: {spec!r} ({cdir})"
+            )
+        fname, fn_name = spec.split(":", 1)
+        modules = _load_python_handlers(cdir, [fname])
+        if not modules:
+            raise ValueError(
+                f"[plugin] capabilities.{name} 模块不存在: {fname} ({cdir})"
+            )
+        fn = getattr(modules[0], fn_name, None)
+        if fn is None or not callable(fn):
+            raise ValueError(
+                f"[plugin] capabilities.{name} 函数 {fn_name} 不存在于 "
+                f"{fname} ({cdir})"
+            )
+        caps[name] = fn
+    return caps
+
+
+def get_capability(name: str) -> Callable | None:
+    """按名查找已加载组件声明的能力入口函数（P2.5）。
+
+    [capabilities] 声明格式 '<能力名> = "file.py:fn"'，入口函数返回
+    插件定义的能力 API 面（dict 等）。未声明返回 None（调用方降级）；
+    声明期错误（模块/函数缺失）在组件加载时已 fail-fast（ADR-0003）。
+    """
+    for info in _loaded_components.values():
+        caps = info.get("capabilities", {})
+        if name in caps:
+            return caps[name]
+    return None
 
 
 def get_pipeline_pass_decls() -> dict[str, dict]:

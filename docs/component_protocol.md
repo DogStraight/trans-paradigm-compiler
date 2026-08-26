@@ -51,6 +51,14 @@ passes = [
   { name = "analyze" },
   { name = "post_check", after = "transform" },
 ]
+
+# 能力声明（P2.5 插件回调能力化）：引擎按能力名查找，不直接 import
+# grammar.<lang> 插件。入口 = file.py:fn（fn 返回插件定义的能力 API 面，
+# 如 dict 聚合多个函数）。未声明时引擎 get_capability 返回 None（降级）。
+# 纯能力组件（无 grammar/analyzer/transform 声明，如 formatter）也据此被加载。
+[capabilities]
+transform_callbacks = "_mapping.py:collect_callbacks"
+formatter = "_capability.py:build_formatter"
 ```
 
 ## 2. 加载流程（setup_grammar）
@@ -63,6 +71,8 @@ discover_components(plugins_dir)   # 扫描插件目录的 tpc.toml
        analyzer     ← [analyzer].handlers 的 .py（import 执行 @register）
        transform    ← [transform].handlers 的 .py（import 执行 register_plugin）
        pipeline     ← [pipeline] pass/schedule 声明（handler 解析为可调用）
+       capabilities ← [capabilities] 能力入口（file.py:fn 解析为可调用，
+                      get_capability 按名查找——pipeline 不再直连插件）
 ```
 
 语法文件由 `setup_grammar` 合并进规则树；处理器模块被 import（副作用 = 注册）。

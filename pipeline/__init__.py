@@ -52,7 +52,7 @@ from .schedule import (
 )
 
 # ── 语言配置（组件系统收集）──
-from core.plugin_loader import get_component_mapping_config
+from core.plugin_loader import get_capability, get_component_mapping_config
 
 # ── 变换器 ──
 from transform import collect_extra_asts
@@ -150,12 +150,22 @@ def format_generated(
     返回原文本并记录 warning（formatter 是增强 pass，不影响主流程）。
     """
     try:
-        from grammar.verilog.plugins.formatter.boundary import BoundaryScanner
-        from grammar.verilog.plugins.formatter import (
-            build_engine,
-            split_port_close_lines,
-            split_inst_tail_lines,
-        )
+        # formatter 能力经插件协议接入（P2.5 插件回调能力化）：组件在
+        # tpc.toml [capabilities] 声明能力入口，引擎按名查找——pipeline
+        # 不直接 import grammar.<lang> 插件。非 verilog 语言（无 formatter
+        # 组件）时 get_capability 返回 None，跳过格式化（增强 pass）。
+        formatter_entry = get_capability("formatter")
+        if formatter_entry is None:
+            print(
+                "[formatter] skipped (capability 'formatter' not declared)",
+                file=sys.stderr,
+            )
+            return content
+        caps = formatter_entry()
+        BoundaryScanner = caps["BoundaryScanner"]
+        build_engine = caps["build_engine"]
+        split_port_close_lines = caps["split_port_close_lines"]
+        split_inst_tail_lines = caps["split_inst_tail_lines"]
 
         # 先拆粘连行（端口尾行 + 参数化实例化尾行），再扫描，避免 contexts 错位
         lines = split_port_close_lines(content.split("\n"))

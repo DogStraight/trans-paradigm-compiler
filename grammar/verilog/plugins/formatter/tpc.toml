@@ -82,3 +82,9 @@ enabled = false
 # 与保真度对比 ref 冲突）：给 `` `else `` / `` `endif `` 补配对宏名注释。
 [formatter.ifdef_annotate]
 enabled = false
+
+# 插件回调能力化（P2.5）：pipeline format_generated 经能力查找接入
+# formatter 能力面（boundary/engine/split 入口），不直接 import 插件。
+# 本组件无 [grammar]/[analyzer]/[transform] 声明，是纯能力插件。
+[capabilities]
+formatter = "_capability.py:build_formatter"

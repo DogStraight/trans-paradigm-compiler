@@ -17,3 +17,8 @@ slots = [
     "replace_impl_binding",
 ]
 handlers = ["_transform.py", "_bridge.py"]
+
+# 插件回调能力化（P2.5）：pipeline 经能力查找接入变换回调收集，
+# 不直接 import grammar.verilog 插件。
+[capabilities]
+transform_callbacks = "_mapping.py:collect_callbacks"
