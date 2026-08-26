@@ -33,18 +33,6 @@
 - [ ] 块头行（`if (...) begin` 超宽条件）折行——当前 wrap 只折分号行，块头不折，
       需 boundary 支持"块头条件续行"识别
 
-### P1.6 wrap 升级：惩罚值驱动折行搜索（Verible 参考）
-
-> 断点惩罚表（break_penalties）+ over_column_penalty 已配置化在
-> [formatter.wrap]（tpc.toml），见 docs/known_limitations.md "Line wrapping
-> is width-based"。以下为剩余待办。
-
-- [ ] 分区策略概念对齐：tpc 的品类对齐 ≈ kTabularAlignment，但缺"参数列表/
-      端口列表/声明"的独立策略——Verible 每种列表一个策略，tpc 可评估
-      按规则类型区分 wrap/stack 策略
-- [ ] 验证：折行结果对比现有贪心（picorv32 75 超宽行 → 惩罚搜索能否折更多、
-      结构是否更稳）——已部分验证（65 行），完整对比待做
-
 ### P1.5 已知缺陷收尾
 
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
