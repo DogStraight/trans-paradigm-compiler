@@ -256,6 +256,32 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     附着 + 结构序渲染（tpc 槽位约定即结构序；restore 行号回插是时域兜底，双轨
     不双份）
 
+- **SV 覆盖边界（2026-08-27 追读，emitter 发射面 + embed 机制）**——Veryl 不映射
+  完整 SV，只覆盖"现代可综合设计的关键子集"，超出部分透传：
+  - 语言特性全集（language_reference 20 项）全是设计面：module/interface/modport/
+    package/import/enum/struct/typedef/always_ff/always_comb/generics/clock domain/
+    visibility——**无 class、无 assertion/coverage/randomize、无门级原语/UDP/
+    specify**（emitter.rs 无这些 SV 构造的发射代码）
+  - **embed 透传机制**：`embed (inline) sv{{{{ ... }}}}` 原样嵌入 SV 代码块 +
+    `{ident}` 标识符插值，Veryl 对嵌入内容**不解析不检查**（语义错误表只查
+    embed 声明本身的合法性：invalid_embed/unknown_embed_lang/unknown_embed_way）
+    ——"超出关键子集的 SV"是透明区域，边界画在 embed 声明上
+  - emitter 的发射智能（always_ff 隐式事件列表推导/reset 检测、modport 连接
+    展开表、package 前缀抑制、`pkg::*` 成员遮蔽处理）说明 Veryl 的重心在
+    "生成正确 SV"而非"覆盖 SV 全集"
+  - **对 tpc 的启示**：
+    - 💡 **生态验证了边界策略**：连"专职 SV 转译"的 Veryl 都不做 SV 全量映射，
+      tpc 的"2005 全量 + 高频 SV 构造子集"边界成立；Veryl 特性集即 sv_compat
+      插件的现成构造清单（module/interface/modport/package/enum/struct/
+      always_ff/always_comb——与 sv-parser 83 个 CST 文件相比是刻意裁剪的关键面）
+    - 💡 **embed 与 tpc 黑盒同构**：Veryl 对超出部分"透传 + 边界检查"；tpc 解析
+      输入不能透传，但 linter 已有表达式黑盒/块黑盒（skip）机制——sv_compat
+      遇 SVA/class 可"黑盒跳过 + 定位诊断"，哲学同源（透明区域 + 边界检查），
+      tpc 侧无需 Veryl 的发射智能，边界更薄
+    - 📌 **发射面 ≠ 解析面**：Veryl 覆盖 SV 的"发射面"（生成哪些构造）与 tpc
+      需要的"解析面"（接受哪些构造）不同维——tpc 的 sv_compat 只需解析面
+      （parse/format/lint），不需要 Veryl 的 modport 展开/事件列表推导等发射智能
+
 ### cairn（Scala）— 增量解析
 
 - 语言 = `Fragment` 片段组合（`provides/requires/excludes`）→ 内容寻址（每个语言/产物有 digest）
