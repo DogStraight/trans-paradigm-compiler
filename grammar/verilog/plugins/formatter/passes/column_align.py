@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 from ..boundary import LineContext
-from ..grouping import group_by_scope, extract_rows, compute_column_widths
+from ..grouping import group_by_scope, compute_column_widths
 
 
 # 纯数字位宽 `[msb:lsb]`（高位数字右对齐用；含表达式/参数如 `[WIDTH-1:0]` 不匹配）
@@ -140,34 +140,13 @@ def _is_multidecl(rest: list[str]) -> bool:
     return False
 
 
-def _extract_semantic(tokens: list[str]) -> list[str] | None:
-    """从 token 列表提取语义列。
-
-    Returns: [indent, first, opt_type, opt_range, name, opt_array_range, opt_init]
-    无法可靠解析（一行多声明等）返回 None（调用方跳过，保留原文）。
+def _parse_decl_parts(rest: list[str]) -> tuple[str, str, str, str] | None:
+    """解析声明侧（不含 first token）：返回 (opt_type, opt_range, name, init)。
 
     以顶层 `=` 定位 init（`=` 后整体保留），避免 `32'h ffff_ffff` 中
     `ffff_ffff` 被误判为 name 而丢真名（曾丢 LATCHED_IRQ/STACKADDR）。
+    声明侧含拼接/复制表达式（`{a, b} = ...`）时无法可靠解析 → None。
     """
-    if len(tokens) < 2:
-        return None
-    indent = tokens[0]
-    first = tokens[1]
-    rest = list(tokens[2:])
-
-    # 注释行跳过（防 `// comment` 被当声明）
-    if first.startswith("//"):
-        return None
-
-    # 结尾终结符（,;）独立保存，_join_semantic 重组时加回（防丢）
-    term = ""
-    while rest and rest[-1] in (",", ";"):
-        term = rest.pop() + term
-
-    if _is_multidecl(rest):
-        return None
-
-    # 找顶层 =（圆括号/位拼接内忽略；方括号 `[...]` 已被 tokenize 合成单 token 无需 depth）
     eq_idx = -1
     depth = 0
     for k, t in enumerate(rest):
@@ -187,14 +166,12 @@ def _extract_semantic(tokens: list[str]) -> list[str] | None:
         decl = rest
         init = ""
 
-    # 声明侧（`=` 前）含拼接/复制表达式（`assign {a, b} = ...`）：其逗号是
-    # 表达式分隔符，不是多声明分隔——走本路径会把逗号当列分隔吞掉（曾毁掉
-    # concat LHS 的 `{a, b}` → `{a  b}`，fidelity 0.95→0.33）。init 侧的
-    # concat（`param X = {a, b};`）保留在 init 里不丢，无需跳过。
+    # 声明侧含拼接/复制表达式（`assign {a, b} = ...`）：其逗号是表达式
+    # 分隔符，不是多声明分隔——走本路径会把逗号当列分隔吞掉（曾毁掉
+    # concat LHS 的 `{a, b}` → `{a  b}`，fidelity 0.95→0.33）。
     if "{" in decl or "}" in decl:
         return None
 
-    # 声明部分去掉终结符
     d = [t for t in decl if t not in (",", ";")]
     # name = 最后一个标识符（从右往左）
     i = len(d) - 1
@@ -216,7 +193,108 @@ def _extract_semantic(tokens: list[str]) -> list[str] | None:
             opt_range = t
         else:
             opt_type = (opt_type + " " + t).strip() if opt_type else t
+    return opt_type, opt_range, name, init
+
+
+def _extract_semantic(tokens: list[str]) -> list[str] | None:
+    """从 token 列表提取语义列（单声明）。
+
+    Returns: [indent, first, opt_type, opt_range, name, opt_array_range, opt_init]
+    无法可靠解析（一行多声明等）返回 None（调用方跳过，保留原文）。
+
+    多声明的逐单元对齐走 _extract_semantic_multi（P1.5：多声明品类对齐）。
+    """
+    if len(tokens) < 2:
+        return None
+    indent = tokens[0]
+    first = tokens[1]
+    rest = list(tokens[2:])
+
+    # 注释行跳过（防 `// comment` 被当声明）
+    if first.startswith("//"):
+        return None
+
+    # 结尾终结符（,;）独立保存，_join_semantic 重组时加回（防丢）
+    term = ""
+    while rest and rest[-1] in (",", ";"):
+        term = rest.pop() + term
+
+    if _is_multidecl(rest):
+        return None
+
+    parts = _parse_decl_parts(rest)
+    if parts is None:
+        return None
+    opt_type, opt_range, name, init = parts
     return [indent, first, opt_type, opt_range, name, "", init, term]
+
+
+def _extract_semantic_multi(tokens: list[str]) -> list[list[str]] | None:
+    """提取一行的全部语义单元（P1.5 多声明品类对齐）。
+
+    单声明 → [单组]（等价 _extract_semantic）；多声明 → 每声明一组：
+    类型头（first/opt_type）只挂首单元，单元间 term 为逗号、行尾终结符
+    归末单元，非首单元 indent 置空（重组时不重复缩进）。任一单元无法
+    可靠解析 → 返回 None（整行跳过，保守防丢名字）。
+    """
+    if len(tokens) < 2:
+        return None
+    indent = tokens[0]
+    first = tokens[1]
+    rest = list(tokens[2:])
+
+    if first.startswith("//"):
+        return None
+
+    if not _is_multidecl(rest):
+        single = _extract_semantic(tokens)
+        return [single] if single is not None else None
+
+    term = ""
+    while rest and rest[-1] in (",", ";"):
+        term = rest.pop() + term
+
+    # 顶层逗号切分声明单元（圆括号/位拼接内忽略——`(` 内逗号是表达式分隔）
+    units: list[list[str]] = []
+    depth = 0
+    cur: list[str] = []
+    for t in rest:
+        if t in ("(", "{"):
+            depth += 1
+        elif t in (")", "}"):
+            depth -= 1
+        if t == "," and depth == 0:
+            units.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    units.append(cur)
+
+    # 尾注注释保护：`input clk, // 行内注释` / `reg a, /* c */ b;` 的注释
+    # 不是声明单元——任一单元含注释 token（`//`/`/*` 起始）时整行跳过
+    # （保留原文，与旧 _is_multidecl 跳过行为一致）；纯声明多声明行
+    # （无注释）才参与逐单元对齐。
+    for u in units:
+        if any(t.startswith("//") or t.startswith("/*") for t in u):
+            return None
+
+    out: list[list[str]] = []
+    n = len(units)
+    for ui, unit in enumerate(units):
+        if not unit:
+            return None  # 空单元（连续逗号）→ 保守跳过整行
+        parts = _parse_decl_parts(unit)
+        if parts is None:
+            return None
+        opt_type, opt_range, name, init = parts
+        u_first = first if ui == 0 else ""
+        u_type = opt_type if ui == 0 else ""  # 类型头只挂首单元
+        u_term = "," if ui < n - 1 else term
+        out.append(
+            [indent if ui == 0 else "", u_first, u_type, opt_range,
+             name, "", init, u_term]
+        )
+    return out
 
 
 def _join_semantic(cols: list[str], widths: list[int]) -> str:
@@ -256,14 +334,27 @@ def run_category_pass(
 
     groups = group_by_scope(lines, contexts, match_fn, break_distance)
     for group in groups:
-        # 用 _tokenize_bracket_aware + _extract_semantic 提取语义列
-        extract_fn = lambda line: _extract_semantic(_tokenize_bracket_aware(line))  # noqa: E731
-        rows, idxs = extract_rows(result, group, extract_fn)
-        if len(rows) < 2:
+        # 多单元提取（P1.5 多声明品类对齐）：多声明行拆多单元，全部单元
+        # 参与列宽计算；同行的单元重组时拼回一行（" ".join）——首单元带
+        # indent/类型头，后续单元 indent 为空，name 列同基准对齐
+        row_groups: list[list[list[str]]] = []
+        valid: list[int] = []
+        for idx in group:
+            units = _extract_semantic_multi(
+                _tokenize_bracket_aware(result[idx])
+            )
+            if units:
+                row_groups.append(units)
+                valid.append(idx)
+        if len(valid) < 2:
             continue
+        rows = [cols for units in row_groups for cols in units]
         # 位宽列内部右对齐（`[3:0]` → `[ 3:0]`），与 ref 同组内对齐一致
         _align_range_internal(rows)
         widths = compute_column_widths(rows, 5)
-        for ri, cols in enumerate(rows):
-            result[idxs[ri]] = _join_semantic(cols, widths)
+        for gi, idx in enumerate(valid):
+            joined = " ".join(
+                _join_semantic(c, widths) for c in row_groups[gi]
+            )
+            result[idx] = joined
     return result

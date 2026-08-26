@@ -61,19 +61,18 @@
 
 ### P1.5 已知缺陷收尾
 
-- [ ] **多声明品类对齐（Verible kDataDeclaration 参考）**：`reg [1:0] state, next;`
-      被 `_is_multidecl` 跳过（多声明不参与列对齐），同组 `reg [3:0] bit_cnt;`
-      按最大位宽列对齐——两行观感不一致。根因 = 语义列模型只支持单声明，
-      多声明行直接 return None 保留原文。
-      Verible 做法：声明 = 类型头 + 实例列表（kDataDeclaration → kRegisterVariable/
-      kNetVariable 列表），每个实例（含 `state`/`next`）独立参与 kTabularAlignment
-      列对齐，不跳过。tpc 已有对应结构（DeclaratorList.items = Declarator 列表），
-      缺的是 _extract_semantic 对多声明的逐项列提取。
-      方案：column_align 支持多声明——每行按 `,` 顶层分隔拆多个对齐单元，
-      同组内所有单元的名字列对齐到同一基准；`reg a = 1, b = 2` 的 init 列也参与
-      （Verible 的实例对齐含 init 列）。注意 fidelity：real 组（darkriscv
-      `integer clocks=0, running=0, ...`、picorv32 `reg [63:0] next_rs1, ...`）会变，
-      需重跑 real 组更新基线。
+- [x] **多声明品类对齐（Verible kDataDeclaration 参考，已闭环）**：
+      `_extract_semantic_multi` 多单元提取——`reg [1:0] state, next;` 按顶层
+      `,` 拆多对齐单元（类型头只挂首单元、非首单元 indent 置空、单元间
+      term 为逗号、行尾终结符归末单元），同组内所有单元名字列对齐到同一
+      基准（`reg [7:0] a, b;` 与 `reg c;`/`wire w;` 名字列对齐实证）。
+      `_parse_decl_parts` 抽取公共声明解析（init 定位/name 从右往左/concat
+      LHS 保护复用于单/多声明）。run_category_pass 多单元展平算列宽 +
+      按行重组。注释保护：任一单元含 `//`/`/*` token 整行跳过（保留原文，
+      与旧 _is_multidecl 行为一致，防注释当声明拆坏）。fidelity：_strip_all
+      去空白比较，real 组（darkriscv/picorv32 多声明行）无变化；验证 1078
+      pytest + run_all FAIL 0 + pyright 0 errors；测试 +9（多单元提取/init
+      保留/类型头首单元/注释跳过/concat 保护）
 - [x] **transform 实例名 hash 稳定性（已达成，2026-08-25 实证）**：ref_spi_inf
       transform 组 P/X 双路径 ratio 均 1.0000（`u_spi_master_acb99d` 与 trans 基线
       一致）——历史 0.9862 的 salt 差异已随后续提交消除，条目闭环

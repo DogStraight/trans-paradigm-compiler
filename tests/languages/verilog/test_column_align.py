@@ -2,12 +2,14 @@
 
 保护重点：
   1. 带空格数字字面量 init（`32'h ffff_ffff`）不得把 `ffff_ffff` 误判为 name 而丢真名
-  2. 一行多声明/多端口（`input clk, resetn,` / `reg a, b;`）不得丢名字（跳过保留原文）
+  2. 一行多声明/多端口（`input clk, resetn,` / `reg a, b;`）不得丢名字
+     （单组提取跳过保留原文；多单元提取 _extract_semantic_multi 参与对齐）
 """
 
 from grammar.verilog.plugins.formatter.passes.column_align import (
     _tokenize_bracket_aware,
     _extract_semantic,
+    _extract_semantic_multi,
     _is_multidecl,
 )
 
@@ -16,6 +18,12 @@ def _extract(line: str):
     """行文本 → 语义列。"""
     toks = _tokenize_bracket_aware(line)
     return _extract_semantic(toks)
+
+
+def _extract_multi(line: str):
+    """行文本 → 多语义单元（多声明拆多单元）。"""
+    toks = _tokenize_bracket_aware(line)
+    return _extract_semantic_multi(toks)
 
 
 # ── 数据破坏回归：带空格数字 init 不得丢 name ──
@@ -88,6 +96,85 @@ def test_multidecl_wire_skipped():
 
 def test_multidecl_with_init_skipped():
     assert _extract("reg [3:0] a = 1, b = 2;") is None
+
+
+# ── 多声明多单元提取（P1.5 多声明品类对齐）──
+
+def test_multi_simple_two_decls():
+    units = _extract_multi("reg [7:0] a, b;")
+    assert units is not None
+    assert len(units) == 2
+    # 首单元：类型头 + name + 单元间逗号 term
+    assert units[0][1] == "reg"
+    assert units[0][3] == "[7:0]"
+    assert units[0][4] == "a"
+    assert units[0][7] == ","
+    # 次单元：无类型头（对齐起点一致）、行尾分号 term、indent 空（不重复缩进）
+    assert units[1][0] == ""
+    assert units[1][1] == ""
+    assert units[1][4] == "b"
+    assert units[1][7] == ";"
+
+
+def test_multi_three_decls_no_init():
+    units = _extract_multi("wire [3:0] x, y, z;")
+    assert units is not None
+    assert len(units) == 3
+    names = [u[4] for u in units]
+    assert names == ["x", "y", "z"]
+    assert [u[7] for u in units] == [",", ",", ";"]
+
+
+def test_multi_with_init_kept():
+    units = _extract_multi("integer clocks=0, running=0, load=0;")
+    assert units is not None
+    assert len(units) == 3
+    assert units[0][4] == "clocks" and units[0][6] == "= 0"
+    assert units[1][4] == "running" and units[1][6] == "= 0"
+    assert units[2][4] == "load" and units[2][6] == "= 0"
+
+
+def test_multi_input_ports():
+    units = _extract_multi("input clk, resetn,")
+    assert units is not None
+    assert len(units) == 2
+    assert units[0][4] == "clk" and units[0][7] == ","
+    assert units[1][4] == "resetn" and units[1][7] == ","
+
+
+def test_multi_shared_type_header_first_only():
+    units = _extract_multi("output reg [31:0] mem_addr, mem_wdata;")
+    assert units is not None
+    assert len(units) == 2
+    # 类型头（first/opt_type/opt_range）只挂首单元
+    assert units[0][1] == "output"
+    assert units[0][2] == "reg"
+    assert units[0][3] == "[31:0]"
+    assert units[1][1] == "" and units[1][2] == "" and units[1][3] == ""
+
+
+def test_multi_single_decl_returns_one_group():
+    units = _extract_multi("reg [4:0] reg_sh;")
+    assert units is not None
+    assert len(units) == 1
+    assert units[0][4] == "reg_sh"
+
+
+def test_multi_no_name_loss():
+    """多声明全部名字保留（对齐重组的防丢保护）。"""
+    units = _extract_multi("reg [63:0] count_cycle, count_instr;")
+    assert units is not None
+    names = {u[4] for u in units}
+    assert names == {"count_cycle", "count_instr"}
+
+
+def test_multi_concat_lhs_skipped():
+    """声明侧含拼接表达式（`{a, b} = ...`）→ 整行跳过（防逗号吞 token）。"""
+    assert _extract_multi("reg [1:0] {a, b} = 2'b11;") is None
+
+
+def test_multi_comment_skipped():
+    assert _extract_multi("// comment") is None
 
 
 # ── 正常单声明 ──
