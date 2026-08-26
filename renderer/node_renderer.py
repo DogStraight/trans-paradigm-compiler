@@ -86,6 +86,8 @@ def render_node(
     # --- 注释槽位（ADR-0006 注释遍泛化——注释节点模型步骤 1，P1.5）---
     # 节点属性 _comment_slots: {槽位名: [注释文本]}，槽位：
     #   leading  — 节点文本前独立行（`// 前置注释` 在语句上方）
+    #   inline   — 节点文本前同行（行中注释：`/* c */ rst_n`，表达式内 token
+    #              间隙定位——注释挂"注释后第一 token 所属节点"）
     #   trailing — 节点后行尾锚定（line_suffix，原 _attached_comments 行为）
     # 向后兼容：_attached_comments（parser 行尾注释）视为 trailing 槽位。
     slots = getattr(node, "_comment_slots", None)
@@ -104,6 +106,15 @@ def render_node(
                 lead_docs.append(Text(c))
                 lead_docs.append(Break())
             parts = lead_docs + parts
+        inline = slots.get("inline")
+        if inline:
+            # inline 注释同行前置：`Text(comment) + Text(" ")` 插到节点文本
+            # 前（head 前）——表达式内 token 间隙（`assign b = /* c */ rst_n`）。
+            inline_docs: list[Doc] = []
+            for c in inline:
+                inline_docs.append(Text(c))
+                inline_docs.append(Text(" "))
+            parts = inline_docs + parts
         trail = slots.get("trailing")
         if trail:
             for c in trail:

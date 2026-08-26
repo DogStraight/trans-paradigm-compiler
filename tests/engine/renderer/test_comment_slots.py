@@ -68,6 +68,35 @@ class TestTrailingSlot:
         assert out == "// 前置\nx // 行尾"
 
 
+class TestInlineSlot:
+    def test_inline_comment_same_line_before_node(self):
+        """inline 槽位：注释在节点文本前同行（行中注释）。"""
+        node = _stmt("rst_n")
+        node.add_attr("_comment_slots", {"inline": ["/* 嵌入注释 */"]})
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "/* 嵌入注释 */ rst_n"
+
+    def test_inline_in_assign_expr(self):
+        """`assign b = /* c */ rst_n;`：inline 注释在 = 后、RHS 前。"""
+        from renderer.doc import Concat, Text
+
+        rhs = _stmt("rst_n")
+        rhs.add_attr("_comment_slots", {"inline": ["/* 嵌入注释 */"]})
+        rhs_doc = render_node(rhs, {"layout": {"ref": "value"}}, _make_fake_renderer())
+        doc = Concat([Text("assign b = "), rhs_doc])
+        assert layout(doc) == "assign b = /* 嵌入注释 */ rst_n"
+
+    def test_inline_plus_trailing(self):
+        """inline + trailing 同时存在：前置同行 + 行尾锚定。"""
+        node = _stmt("rst_n")
+        node.add_attr(
+            "_comment_slots",
+            {"inline": ["/* 前置 */"], "trailing": ["// 行尾"]},
+        )
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "/* 前置 */ rst_n // 行尾"
+
+
 class TestSlotInBody:
     def test_leading_in_body_indented(self):
         """body 内子节点的 leading 注释继承缩进。"""
