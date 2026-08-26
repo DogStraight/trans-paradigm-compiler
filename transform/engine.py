@@ -106,12 +106,42 @@ def collect_extra_asts() -> list[tuple[str, Node]]:
     return ctx.pop(_EXTRA_ASTS_KEY, [])
 
 
+def _collect_subtree_comments(
+    node: Any, acc_slots: dict, acc_attached: list
+) -> None:
+    """递归收集节点子树的注释（_comment_slots + _attached_comments）。
+
+    替换语义下旧子树整体丢弃，其注释（可能挂在任意层级——如 `spi.slave
+    spi_io // 注释` 的 attachment 挂在 instance_name 的 Identifier 子节点）
+    全部迁移到替换产物，防注释随丢弃子树丢失。
+    """
+    if isinstance(node, Node):
+        slots = getattr(node, "_comment_slots", None)
+        if slots:
+            for k, v in slots.items():
+                acc_slots.setdefault(k, []).extend(v)
+        attached = getattr(node, "_attached_comments", None)
+        if attached:
+            acc_attached.extend(attached)
+        for k, v in list(vars(node).items()):
+            if k.startswith("_"):
+                continue
+            _collect_subtree_comments(v, acc_slots, acc_attached)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_subtree_comments(item, acc_slots, acc_attached)
+    elif isinstance(node, dict):
+        for item in node.values():
+            _collect_subtree_comments(item, acc_slots, acc_attached)
+
+
 def migrate_comments(old_node: Any, new_node: Any) -> Any:
     """变换时注释迁移（注释节点模型步骤 3，P1.5）。
 
-    新节点继承被替换节点的注释槽位（_comment_slots：leading/trailing/
-    inline/inline_after）——1:1 替换的通用通道：`impl ... => top; // 注释`
-    变换为 ModuleInst 后注释随结构走（渲染在实例行尾），不依赖锚点回插
+    新节点继承被替换节点**子树**的注释（_comment_slots 槽位 +
+    _attached_comments 行尾 attachment）——1:1 与 1:N 替换的通用通道：
+    `impl ... => top; // 注释` 变换为 ModuleInst、`spi.slave spi_io // 注释`
+    展开为多个端口后，注释随结构走（渲染在替换产物上），不依赖锚点回插
     （变换路径普通注释锚点漂移的问题由此根治）。
 
     Returns: new_node（便于链式调用 `new.append(migrate_comments(c, result))`）。
@@ -122,23 +152,25 @@ def migrate_comments(old_node: Any, new_node: Any) -> Any:
         or new_node is old_node
     ):
         return new_node
-    old_slots = getattr(old_node, "_comment_slots", None)
+    acc_slots: dict = {}
+    acc_attached: list = []
+    _collect_subtree_comments(old_node, acc_slots, acc_attached)
+    if not acc_slots and not acc_attached:
+        return new_node
     new_slots = getattr(new_node, "_comment_slots", None)
-    if old_slots:
+    if acc_slots:
         if new_slots is None:
-            new_node.add_attr("_comment_slots", dict(old_slots))
+            new_node.add_attr("_comment_slots", dict(acc_slots))
         else:
-            for k, v in old_slots.items():
+            for k, v in acc_slots.items():
                 if k not in new_slots:
                     new_slots[k] = v
                 else:
                     new_slots[k] = new_slots[k] + v
-    # 旧 attachment 通道（行尾注释，ADR-0006 注释遍）同样迁移
-    old_attached = getattr(old_node, "_attached_comments", None)
-    if old_attached:
+    if acc_attached:
         new_attached = getattr(new_node, "_attached_comments", None)
         if new_attached is None:
-            new_node.add_attr("_attached_comments", list(old_attached))
+            new_node.add_attr("_attached_comments", acc_attached)
         else:
-            new_attached.extend(old_attached)
+            new_attached.extend(acc_attached)
     return new_node

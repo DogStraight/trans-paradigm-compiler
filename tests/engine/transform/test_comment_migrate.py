@@ -129,3 +129,28 @@ type spi {
         assert (slots or {}).get("trailing") == ["// spi master 实例化注释"] or (
             attached == ["// spi master 实例化注释"]
         ), f"注释未迁移到实例: {found[0]}"
+
+    def test_subtree_comment_migrated(self):
+        """注释挂在被替换节点子树（如 instance_name 的 Identifier）时也迁移
+        （deep 收集）——`spi.slave spi_io // 注释` 展开为多端口后注释在
+        第一个产物。"""
+        from pipeline import run_pipeline_on_source
+
+        src = """module top(
+    input clk,
+    spi.slave spi_io // slave 接口注释
+);
+endmodule
+
+type spi {
+    slave  : input clk, input mosi, output miso, output cs;
+}
+"""
+        r = run_pipeline_on_source(
+            source=src, rules_dir="grammar/verilog", quiet=True,
+            no_lint=True, format_output=False,
+        )
+        assert r["success"], r.get("error", "")
+        out = r.get("output", "")
+        assert "spi_io_clk" in out, "端口应展开"
+        assert "// slave 接口注释" in out, "子树注释应迁移到第一个产物"

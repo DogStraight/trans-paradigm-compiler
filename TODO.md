@@ -77,14 +77,16 @@
 - [x] **transform 实例名 hash 稳定性（已达成，2026-08-25 实证）**：ref_spi_inf
       transform 组 P/X 双路径 ratio 均 1.0000（`u_spi_master_acb99d` 与 trans 基线
       一致）——历史 0.9862 的 salt 差异已随后续提交消除，条目闭环
-- [ ] **变换路径注释恢复（注释节点模型步骤 3 已落地，剩余合并推进）**：
-      `transform/engine.py::migrate_comments`——1:1 替换通用通道（新节点继承
-      被替换节点的 _comment_slots + _attached_comments），config_driven
-      （_walk_list/_transform_children/顶层）与 typed_ports _bridge impl 替换
-      接入。实证：`impl ... => top; // 注释` 变换后注释出现在生成的实例行
-      （变换路径注释随结构走，此前必丢）。剩余：typed_ports 端口展开
-      （1:N 分裂）注释归属声明（组注释 → 第一个产物或组前）、变换路径
-      only_tpc 通道的普通注释回插退役
+- [x] **变换路径注释恢复（已闭环，2026-08-26）**：
+      `transform/engine.py::migrate_comments`——1:1/1:N 替换通用通道，新节点
+      继承被替换节点**子树**的注释（_comment_slots + _attached_comments，
+      deep 收集——attachment 可能挂在子节点如 instance_name 的 Identifier）。
+      config_driven（_walk_list/_transform_children/顶层）与 typed_ports
+      _bridge 接入。实证：`impl ... => top; // 注释` → 实例行带注释；
+      `spi.slave spi_io // slave 接口注释` → 展开后第一个端口行带注释
+      （组注释 → 第一个产物）。变换路径普通注释随结构走，only_tpc 通道
+      退居 tpc marker（宏/条件块协议标记）专用。验证 1098 pytest +
+      run_all FAIL 0 + pyright 0 errors；测试 9（test_comment_migrate.py）
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
       （test_nested_invert_no_skip_leak）；L2 未修——invert 对含嵌套引用的 role，
       嵌套展开端口（inner_* 方向反转）不参与反转（invert 回调 resolve 期拿的是
