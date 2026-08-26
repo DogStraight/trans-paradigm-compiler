@@ -80,7 +80,7 @@ class TestAttachment:
         assert not out.rstrip().endswith("/* 嵌入注释 */")
 
     def test_midline_comment_not_attached(self):
-        """行中注释不进 attachment 通道（只走锚点回插通道）。"""
+        """行中注释不走 attachment/锚点通道——进 inline_after（token 标注定位）。"""
         from pipeline import run_pipeline_on_source
 
         src = "module m;\n    assign b = /* 嵌入 */ rst_n;\nendmodule\n"
@@ -88,12 +88,15 @@ class TestAttachment:
             source=src, rules_dir="grammar/verilog", quiet=True, no_lint=True,
         )
         parser = r.get("parser")
-        # 锚点通道有此行中注释（attachment 通道无）
+        # 锚点通道无此行中注释；inline_after（挂 AssignStmt，锚 "="）有
         if parser is not None:
             anchors = getattr(parser, "_comment_anchors", None) or []
-            assert any("嵌入" in a.get("text", "") for a in anchors), (
-                "行中注释应进锚点回插通道"
+            assert not any("嵌入" in a.get("text", "") for a in anchors), (
+                "行中注释不应进锚点通道（inline_after 结构序渲染）"
             )
+        # 渲染结果：注释在 `=` 与 `rst_n` 之间（原位）
+        out = r.get("output", "")
+        assert "/* 嵌入 */ rst_n" in out
 
 
 class TestAttachmentReal:

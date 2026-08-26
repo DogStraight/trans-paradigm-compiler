@@ -410,6 +410,43 @@ def _stage_parse(
     return ast
 
 
+def _collect_inline_after_leftover(root: Any, anchors: list) -> None:
+    """收集渲染后未消费的行中注释（注释节点模型 2b-2 兜底）。
+
+    inline_after = {锚 token: [(注释, 源行号)]} 是 token 标注定位——渲染端
+    在布局 line 文本元素里按锚文本匹配。布局无文本锚（如 pratt 表达式内
+    `a + /* c */ b` 的 `+` 在 op 子节点）时渲染端不消费 → 此处补进 anchors
+    （midline 标记），restore only_midline 回插兜底。已消费的（渲染端删了
+    键）不补——双轨不双份。
+    """
+    if isinstance(root, Node):
+        slots = getattr(root, "_comment_slots", None)
+        if slots:
+            ia = slots.get("inline_after")
+            if ia:
+                for anchor, entries in ia.items():
+                    for text, line in entries:
+                        anchors.append(
+                            {
+                                "anchor": anchor,
+                                "text": text,
+                                "line": line,
+                                "midline": True,
+                            }
+                        )
+                del slots["inline_after"]
+        for k, v in list(vars(root).items()):
+            if k.startswith("_"):
+                continue
+            _collect_inline_after_leftover(v, anchors)
+    elif isinstance(root, dict):
+        for v in root.values():
+            _collect_inline_after_leftover(v, anchors)
+    elif isinstance(root, list):
+        for v in root:
+            _collect_inline_after_leftover(v, anchors)
+
+
 def _restore_comments(ctx: _PipelineContext, content: str, parser: Any) -> str:
     """注释回插（inline + line + 宏还原 + 条件块）。"""
     # Inline comment restoration（锚点匹配，宏展开后亦可用）
@@ -534,6 +571,15 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         return
 
     content = ctx.renderer.render(ast)
+
+    # 行中注释未消费兜底（注释节点模型 2b-2）：inline_after 是 token 标注
+    # 定位（渲染端在布局 line 文本元素里找锚），布局无文本锚的场景（如
+    # pratt 表达式内 `a + /* c */ b` 的 `+` 在 op 子节点里）渲染后残留 →
+    # 补进 anchors，restore only_midline 回插兜底（保持结构序优先、
+    # 回插兜底的双轨语义）。
+    anchors = getattr(parser, "_comment_anchors", None)
+    if anchors is not None:
+        _collect_inline_after_leftover(ast, anchors)
 
     # 保真度分级（ADR-0006 阶段 5）：keep_blank 按源结构位置回插空行。
     # 在注释回插/格式化之前做——回插的空行是源空行，后续 restore 与

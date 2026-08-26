@@ -100,14 +100,25 @@
       （fidelity 0.9422→0.9469）、ref_inline_test 0.7718→0.9317、912 pytest 全绿 +
       real 组无损、run_all FAIL 0
 - [x] **行中块注释 attachment 行尾化（已闭环，2026-08-26）**：`assign b =
-      /* 嵌入注释 */ rst_n;` 的行中块注释不再被 attachment 行尾化——parse_token
-      收集注释时打 midline 标（注释后还有同行代码 token → 行中，不挂
-      attachment，只走锚点回插）；restore_comments 加 only_midline 过滤 +
-      pipeline 非展开路径下 inline_comments 关闭时也回插行中注释（防丢）。
-      效果：注释留在 `=` 与 `rst_n` 之间（原位），ref_comments/ref_inline_test
-      fidelity 0.9469/0.9317 → **1.0 完全无损**（两样本闭环）；行尾注释
-      attachment 行为不变。验证 1080 pytest + run_all FAIL 0 + pyright 0 errors；
-      测试 +2（midline 原位/不进 attachment 通道）
+      /* 嵌入注释 */ rst_n;` 的行中块注释不再被 attachment 行尾化——注释节点
+      模型（与用户讨论的架构方向：注释 = AST 一等节点 + 槽位约定）：
+      - 步骤 1（2e0ed63）：renderer 槽位消费端——_comment_slots
+        （leading 独立行 / trailing 行尾 / inline 同行前置），_attached_comments
+        向后兼容视为 trailing
+      - 步骤 2b-1（d15ab10）：inline 槽位消费端（节点文本前同行）
+      - 步骤 2b-2：parser 行中注释 token 标注定位——inline_after = {锚 token:
+        [(注释, 源行号)]} 挂当前规则节点（`=` 匹配时的 production 节点，
+        确定成功——挂子规则节点会随回溯丢弃）；renderer eval_line 在布局
+        line 文本元素里按锚文本定位插入（`=` 后）；布局无文本锚（pratt 内
+        `+` 等 op 子节点）时 pipeline 渲染后收集未消费 inline_after 补 anchors
+        restore only_midline 回插兜底（双轨不双份）
+      - 效果：`assign b = /* c */ rst_n;` 结构序渲染（`=` 后原位）、尾注
+        `c /* c2 */;` 挂 trailing、ref_comments/ref_inline_test fidelity 1.0
+      验证 1089 pytest + run_all FAIL 0 + pyright 0 errors
+- [ ] **pratt 前缀吞注释（既有缺陷，2026-08-26 记录）**：pratt_parser 前缀
+      位置把 COMMENT 当续行分隔跳过（`a + /* c */ b` 的注释静默丢失，不记录
+      任何通道）——改动前即如此（非回归）。修法：pratt 跳注释时记录（挂
+      当前表达式节点 inline_after 或 anchors），与 2b-2 的 token 标注机制衔接
 - [x] **对齐进 Doc IR（Pad 三件套，Veryl 渲染层深读闭环，2026-08-25 完成）**：
       tpc 世界 B column_align 是"渲染后对齐"（曾破坏 fits 判定、被迫回滚 join
       改法）；Veryl 用 `Pad`/`IfBreakPad`/`IfFlatPad` 三个 Doc 原语把对齐
