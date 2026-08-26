@@ -1,8 +1,9 @@
 # TODO（纯待办清单）
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
-> 当前验证基线（2026-08-25）：877 pytest 全绿 + e2e 64（FAIL 0，含 real 保真度守卫）+
-> lint recall 31/31 零误报 + 覆盖率 83.39%（fail_under 80）+ vs Verible 差分 124 例。
+> 当前验证基线（2026-08-26）：1098 pytest 全绿 + run_all 93（FAIL 0，real 组
+> 保真度守卫）+ pyright strict 0 errors（1.1.413）+ lint recall 31/31 零误报 +
+> 覆盖率 83.39%（fail_under 80）+ vs Verible 差分 124 例。
 
 ## P1 — Verilog 实例完善
 
