@@ -4,7 +4,8 @@
 > semantic_checks / component_protocol）；本文档只描述**层间边界**——每个阶段的
 > 输入/输出数据形态、阻断语义、跨阶段数据通道。改管线时先看这里，再进子系统。
 >
-> 更新：2026-08-25（P2.5 阶段间契约评估结论：值得补，轻量版）
+> 更新：2026-08-26（ADR-0007：analyze/transform 改为 schedule 编排的 pass，
+> 见 `decisions/0007-pipeline-schedule.md`）
 
 ## 阶段序列（run_pipeline_on_source）
 
@@ -15,11 +16,19 @@ source(str)
   → prescan                 预扫描（顶层声明符号，parser 提示）
   → lint                    前置 token 级 lint（反向解析器，同语法 TOML）
   → parse                   递归下降+回溯+Pratt → AST（Node 树）
-  → analyze                 语义分析（作用域/符号/类型；插件原语）
-  → transform               语义映射 + 配置驱动变换（插件槽位）
+  → normalize               规范化（消除 optional/repeat/seq 包装）
+  → schedule                编排调度（ADR-0007）：pass 序列，统一锚定在
+                            归一化后；缺省 [analyze, transform]，语言包可声明
+                            [[pipeline.schedule]] 自由排序/多轮/自定义 pass
   → render                  Doc IR → 文本（含注释回插）
   → format（可选）           formatter 插件（世界 B pass 管线）
 ```
+
+schedule 内的 pass：kind=analyze 跑一轮 AnalysisTraversal（覆盖 scope）；
+kind=transform 跑一轮 AstTransformer（消费 scope）；kind=custom 执行插件
+handler（`fn(state)`）。时点由序列器分配（order 钉号 / after 推导 / 声明序
+填空），时点冲突 fail-fast。开关映射：`analyzer_enabled`/`transform_enabled`
+按 kind 过滤；`expand_enhanced=False` 跳过整个调度；`stage` 按 pass 名截断。
 
 ## 阻断语义（哪个阶段失败会停管线）
 
@@ -27,7 +36,7 @@ source(str)
 |------|---------|------|
 | lint | 语法诊断存在（lint gate） | 停（`no_lint=True` 是显式逃生门） |
 | parse | `_parse_truncated`（未消费 token） | 停（部分 AST 不继续渲染——防静默错乱） |
-| analyze | error 级语义诊断 | 停（warning 级继续） |
+| analyze pass | error 级语义诊断 | 停调度停管线（warning 级继续） |
 
 ## 跨阶段数据通道（不是参数，是对象/属性契约）
 

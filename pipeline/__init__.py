@@ -10,7 +10,11 @@ CLI（main.py）与测试共用，故移入正式包，wheel 安装后 CLI 可�
 
 结构：run_pipeline_on_source 是入口（参数解析 + 阶段编排），每个管线阶段
 拆为独立函数（_stage_*），共享状态通过 _PipelineContext 传递。
+analyze/transform 由编排调度执行（ADR-0007，pipeline/schedule.py）：
+归一化后按命名 schedule 跑 pass 序列（缺省 [analyze, transform]），
+时点由序列器分配（order/after/声明序），冲突 fail-fast。
 Doc: docs/api.md（管线 API：run_pipeline_on_source/format_output）
+Doc: docs/decisions/0007-pipeline-schedule.md（编排调度）
 """
 
 import os
@@ -40,6 +44,14 @@ from parser.rule_selector import RuleSelector
 
 # ── 分析器 ──
 from analyzer import AnalysisTraversal
+
+# ── 编排调度（ADR-0007）──
+from .schedule import (
+    PassState,
+    PassDecl,
+    build_schedules,
+    DEFAULT_SCHEDULE_NAME,
+)
 
 # ── 语言配置（组件系统收集）──
 from core.plugin_loader import get_component_mapping_config
@@ -271,6 +283,8 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         mapping_cfg: dict = {}
         mapping_cfg.update(mp_entries)
         mapping_cfg.update(rv_entries)
+        # 编排调度按 rules_dir 缓存（同一原因：声明来自 _loaded_components）。
+        schedules = build_schedules(ctx.rules_dir)
         _PIPELINE_SHARED[ctx.rules_dir] = {
             "rules": rules,
             "rule_selector": rule_selector,
@@ -278,6 +292,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
             "linter": linter,
             "renderer": renderer,
             "mapping_cfg": mapping_cfg,
+            "schedules": schedules,
         }
     shared = _PIPELINE_SHARED[ctx.rules_dir]
     ctx.rules = shared["rules"]
@@ -395,70 +410,127 @@ def _stage_parse(
     return ast
 
 
-def _stage_analyze(ctx: _PipelineContext, ast: Any) -> tuple[Any, Any]:
-    """语义分析。返回 (ast, scope)。"""
-    analyzer = None
-    scope = None
+def _run_pass_analyze(state: "PassState") -> None:
+    """kind=analyze pass：跑一轮 AnalysisTraversal，覆盖 scope。
+
+    error 级诊断 → 置 ctx.result["error"] 并抛 _ScheduleStop（停调度停管线）。
+    """
+    ctx = state.ctx
+    analyzer = AnalysisTraversal(ctx.rules)
+    state.ast = analyzer.analyze(state.ast)
+    state.analyzer = analyzer
+    state.scope = analyzer.root_scope
+    if analyzer.root_scope is None:
+        ctx.log("[analyzer] warning: no scope produced")
+    else:
+        if not ctx.quiet:
+            if ctx.sym_json:
+                save_json(
+                    analyzer.root_scope.to_dict(), ctx.sym_json, "symbols",
+                    log_fn=ctx.log
+                )
+            # Dump transform callbacks (_ref_callbacks) to trans_callback/
+            callbacks = collect_callbacks(analyzer.root_scope)
+            if callbacks and ctx.cb_json:
+                save_json(callbacks, ctx.cb_json, "callbacks", log_fn=ctx.log)
+        ctx.log(f"[symbols] {len(analyzer.all_symbols)} symbols")
+    if analyzer.has_errors:
+        for d in analyzer.diagnostics:
+            ctx.log(f"[analyzer] {d}")
+        if any(d.level == "error" for d in analyzer.diagnostics):
+            ctx.result["error"] = "; ".join(
+                str(d) for d in analyzer.diagnostics if d.level == "error"
+            )
+            ctx.log("[analyzer] semantic errors, stopping pipeline")
+            raise _ScheduleStop()
+
+
+def _run_pass_transform(state: "PassState") -> None:
+    """kind=transform pass：跑一轮 AstTransformer（消费 scope，None 跳过）。"""
+    ctx = state.ctx
+    if state.scope is None:
+        ctx.log("[transform] skipped (no scope)")
+        return
+    # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
+    # mapping_cfg 从按 rules_dir 的缓存读（_ensure_shared 已算好），
+    # 不依赖全局 _loaded_components（可能被其他语言包污染）。
+    mapping_cfg = _PIPELINE_SHARED[ctx.rules_dir]["mapping_cfg"]
+    AstTransformer.set_shared("rules", ctx.rules)
+    AstTransformer.set_shared("mapping_cfg", mapping_cfg)
+    transformer = AstTransformer()
+    state.transformer = transformer
+
+    # 一次 transform 完成：映射表构建 + 配置变换
+    state.ast = transformer.transform(state.ast, state.scope)
+
+    # 收集变换统计
+    parts = []
+    for plugin in transformer.plugins:
+        if hasattr(plugin, "stats"):
+            s = plugin.stats
+            for k, v in s.items():
+                if v:
+                    parts.append(f"{k}={v}")
+    if parts:
+        ctx.log(f"[transform] {' '.join(parts)}")
+
+
+def _run_pass_custom(state: "PassState", decl: "PassDecl") -> None:
+    """kind=custom pass：执行插件 handler（fn(state) -> None）。"""
+    assert decl.handler is not None
+    decl.handler(state)
+
+
+class _ScheduleStop(Exception):
+    """内部控制流：pass 请求终止调度（analyze 报 error 级诊断）。"""
+
+
+_LEGACY_PASS_STAGES = ("analyze", "transform")
+
+
+def _run_schedule(
+    ctx: _PipelineContext, ast: Any, scope: Any, schedule_name: str
+) -> tuple[Any, Any]:
+    """按命名 schedule 执行 pass 序列（ADR-0007）。返回 (ast, scope)。
+
+    - expand_enhanced=False → 跳过整个调度（保留增强语法直渲）。
+    - 开关过滤：analyzer_enabled=False 滤 kind=analyze；transform_enabled
+      同理。
+    - stage 命中 pass 名 → 执行该 pass 后截断（legacy "analyze"/
+      "transform" 按内置 pass 名匹配）。
+    - _ScheduleStop → 截断调度（error 已写入 ctx.result）。
+    """
     if not ctx.expand_enhanced:
         ctx.log("[pipeline] enhanced-expansion disabled: preserving enhanced syntax")
-    elif ctx.analyzer_enabled:
-        analyzer = AnalysisTraversal(ctx.rules)
-        ast = analyzer.analyze(ast)
-        if analyzer.root_scope is None:
-            ctx.log("[analyzer] warning: no scope produced")
-        else:
-            if not ctx.quiet:
-                if ctx.sym_json:
-                    save_json(
-                        analyzer.root_scope.to_dict(), ctx.sym_json, "symbols", log_fn=ctx.log
-                    )
-                # Dump transform callbacks (_ref_callbacks) to trans_callback/
-                callbacks = collect_callbacks(analyzer.root_scope)
-                if callbacks and ctx.cb_json:
-                    save_json(callbacks, ctx.cb_json, "callbacks", log_fn=ctx.log)
-            ctx.log(f"[symbols] {len(analyzer.all_symbols)} symbols")
-        if analyzer.has_errors:
-            for d in analyzer.diagnostics:
-                ctx.log(f"[analyzer] {d}")
-            if any(d.level == "error" for d in analyzer.diagnostics):
-                ctx.result["error"] = "; ".join(
-                    str(d) for d in analyzer.diagnostics if d.level == "error"
-                )
-                ctx.log("[analyzer] semantic errors, stopping pipeline")
-                return ast, None
-        scope = analyzer.root_scope
-    else:
-        ctx.log("[analyzer] skipped")
-    return ast, scope
+        return ast, None
 
-
-def _stage_transform(ctx: _PipelineContext, ast: Any, scope: Any) -> Any:
-    """AST 变换。返回变换后的 ast。"""
-    if ctx.transform_enabled and scope is not None:
-        # 通过共享上下文传递规则和映射配置，插件自动从注册表实例化
-        # mapping_cfg 从按 rules_dir 的缓存读（_ensure_shared 已算好），
-        # 不依赖全局 _loaded_components（可能被其他语言包污染）。
-        mapping_cfg = _PIPELINE_SHARED[ctx.rules_dir]["mapping_cfg"]
-        AstTransformer.set_shared("rules", ctx.rules)
-        AstTransformer.set_shared("mapping_cfg", mapping_cfg)
-        transformer = AstTransformer()
-
-        # 一次 transform 完成：映射表构建 + 配置变换
-        ast = transformer.transform(ast, scope)
-
-        # 收集变换统计
-        parts = []
-        for plugin in transformer.plugins:
-            if hasattr(plugin, "stats"):
-                s = plugin.stats
-                for k, v in s.items():
-                    if v:
-                        parts.append(f"{k}={v}")
-        if parts:
-            ctx.log(f"[transform] {' '.join(parts)}")
-    elif ctx.transform_enabled:
-        ctx.log("[transform] skipped (analyzer=None or no scope)")
-    return ast
+    schedules = _PIPELINE_SHARED[ctx.rules_dir]["schedules"]
+    if schedule_name not in schedules:
+        raise ValueError(
+            f"[pipeline] schedule '{schedule_name}' 未声明"
+            f"（可用: {', '.join(sorted(schedules)) or '(空)'}）"
+        )
+    state = PassState(ast=ast, scope=scope, ctx=ctx)
+    for decl in schedules[schedule_name]:
+        if decl.kind == "analyze" and not ctx.analyzer_enabled:
+            ctx.log(f"[pipeline] pass '{decl.name}' skipped (analyze disabled)")
+            continue
+        if decl.kind == "transform" and not ctx.transform_enabled:
+            ctx.log(f"[pipeline] pass '{decl.name}' skipped (transform disabled)")
+            continue
+        ctx.log(f"[pipeline] pass: {decl.name}")
+        try:
+            if decl.kind == "analyze":
+                _run_pass_analyze(state)
+            elif decl.kind == "transform":
+                _run_pass_transform(state)
+            else:
+                _run_pass_custom(state, decl)
+        except _ScheduleStop:
+            break
+        if ctx.stage == decl.name:
+            break
+    return state.ast, state.scope
 
 
 def _restore_comments(ctx: _PipelineContext, content: str, parser: Any) -> str:
@@ -661,6 +733,7 @@ def run_pipeline_on_source(
     check_idempotent: bool | None = None,
     enable_line_comment_restore: bool = True,
     fidelity: str = "full",
+    schedule: str | None = None,
 ) -> dict[str, Any]:
     """
     Core pipeline: process Verilog source and return results.
@@ -723,6 +796,8 @@ def run_pipeline_on_source(
         parse_enabled = _cfg.get("parse", True)
     if format_output is None:
         format_output = _cfg.get("format_output", True)
+    if schedule is None:
+        schedule = _cfg.get("schedule", DEFAULT_SCHEDULE_NAME)
 
     ctx = _PipelineContext(
         source=source,
@@ -793,18 +868,12 @@ def run_pipeline_on_source(
     if not quiet and ctx.ast_json:
         save_json(ast.dump(), ctx.ast_json, "ast", log_fn=ctx.log)
 
-    # 语义分析
-    ast, scope = _stage_analyze(ctx, ast)
+    # 编排调度（ADR-0007）：schedule 内 pass 序列（analyze/transform/custom），
+    # 统一锚定在归一化后；pass 内报 error 或 stage 命中即截断。
+    ast, scope = _run_schedule(ctx, ast, None, schedule)
     if ctx.result.get("error"):
         return ctx.result
-    if stage == "analyze":
-        ctx.result["success"] = True
-        ctx.result["ast"] = ast
-        return ctx.result
-
-    # 变换
-    ast = _stage_transform(ctx, ast, scope)
-    if stage == "transform":
+    if stage in _LEGACY_PASS_STAGES:
         ctx.result["success"] = True
         ctx.result["ast"] = ast
         return ctx.result

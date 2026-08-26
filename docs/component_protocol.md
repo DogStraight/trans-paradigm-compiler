@@ -37,6 +37,20 @@ handlers = ["_mapping.py", "_flatten_ports.py", "_invert_map.py"]
 [transform]
 slots = ["delete_type_decl", "build_wrapper", "expand_typed_port", ...]
 handlers = ["_transform.py", "_bridge.py"]
+
+# 编排调度（ADR-0007）：自定义 pass + 命名 schedule
+[[pipeline.pass]]
+name = "post_check"
+kind = "custom"               # analyze | transform | custom
+handler = "_check.py:run"     # custom 必需；签名 fn(state) -> None
+
+[[pipeline.schedule]]
+name = "transform_first"      # 调用方 schedule="transform_first" 启用
+passes = [
+  { name = "transform", order = 1 },
+  { name = "analyze" },
+  { name = "post_check", after = "transform" },
+]
 ```
 
 ## 2. 加载流程（setup_grammar）
@@ -48,6 +62,7 @@ discover_components(plugins_dir)   # 扫描插件目录的 tpc.toml
        grammar_files ← [grammar].files 的 .toml
        analyzer     ← [analyzer].handlers 的 .py（import 执行 @register）
        transform    ← [transform].handlers 的 .py（import 执行 register_plugin）
+       pipeline     ← [pipeline] pass/schedule 声明（handler 解析为可调用）
 ```
 
 语法文件由 `setup_grammar` 合并进规则树；处理器模块被 import（副作用 = 注册）。

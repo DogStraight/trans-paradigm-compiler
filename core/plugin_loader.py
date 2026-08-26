@@ -62,7 +62,7 @@ def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
 
 
 def _parse_component_toml(path: str) -> dict[str, Any] | None:
-    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform] sections."""
+    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform]/[pipeline] sections."""
     import tomllib
 
     with open(path, "rb") as f:
@@ -70,15 +70,18 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
     # 组件判定：有 [grammar] files，或有 [transform] handlers（如 c4 的
     # asm_gen——无语法规则文件，只有代码生成插件），或有 [analyzer] handlers
     # （纯语义检查插件，如 semantic_check——无语法规则，只有检查原语），
-    # 或有 [analyzer] postpasses（纯 post-pass 联动检查插件，如 inst_check）。
+    # 或有 [analyzer] postpasses（纯 post-pass 联动检查插件，如 inst_check），
+    # 或有 [pipeline] 段（自定义 pass / schedule 声明，ADR-0007）。
     grammar = raw.get("grammar", {})
     transform = raw.get("transform", {})
     analyzer = raw.get("analyzer", {})
+    pipeline = raw.get("pipeline", {})
     if (
         not grammar.get("files")
         and not transform.get("handlers")
         and not analyzer.get("handlers")
         and not analyzer.get("postpasses")
+        and not pipeline
     ):
         return None
     comp = {
@@ -86,6 +89,7 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
         "grammar": grammar,
         "analyzer": raw.get("analyzer", {}),
         "transform": raw.get("transform", {}),
+        "pipeline": pipeline,
     }
     return comp
 
@@ -147,6 +151,9 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     # 3. Transform handlers
     transform_meta = meta.get("transform", {})
     info["transform"] = _load_python_handlers(cdir, transform_meta.get("handlers", []))
+
+    # 4. Pipeline pass / schedule 声明（ADR-0007）
+    info["pipeline"] = _load_pipeline_decls(cdir, meta.get("pipeline", {}))
 
     _loaded_components[name] = info
     return info
@@ -216,6 +223,65 @@ def get_primitive_order() -> list[str]:
                 _PRIMITIVE_ORDER.append(p)
                 seen.add(p)
     return list(_PRIMITIVE_ORDER)
+
+
+def _load_pipeline_decls(cdir: str, pipeline_meta: dict) -> dict[str, Any]:
+    """加载组件 [pipeline] 声明：pass 定义（handler 解析为可调用）+
+    schedule 原始声明。
+
+    pass handler 格式 `file.py:fn`（与 postpass 一致），fail-fast：
+    声明了但模块/函数缺失直接报错（ADR-0003）。
+    """
+    passes: dict[str, dict] = {}
+    for p in pipeline_meta.get("pass", []) or []:
+        name = p.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"[plugin] pipeline.pass 缺 name: {p!r} ({cdir})")
+        decl = dict(p)
+        handler_spec = decl.get("handler")
+        if handler_spec:
+            if not isinstance(handler_spec, str) or ":" not in handler_spec:
+                raise ValueError(
+                    f"[plugin] pipeline.pass handler 格式应为 'file.py:fn'，"
+                    f"收到: {handler_spec!r} ({cdir})"
+                )
+            fname, fn_name = handler_spec.split(":", 1)
+            modules = _load_python_handlers(cdir, [fname])
+            if not modules:
+                raise ValueError(
+                    f"[plugin] pipeline.pass handler 模块不存在: {fname} ({cdir})"
+                )
+            fn = getattr(modules[0], fn_name, None)
+            if fn is None or not callable(fn):
+                raise ValueError(
+                    f"[plugin] pipeline.pass handler 函数 {fn_name} 不存在于 "
+                    f"{fname} ({cdir})"
+                )
+            decl["_handler"] = fn
+        passes[name] = decl
+    schedules: dict[str, dict] = {}
+    for s in pipeline_meta.get("schedule", []) or []:
+        sname = s.get("name")
+        if not isinstance(sname, str) or not sname:
+            raise ValueError(f"[plugin] pipeline.schedule 缺 name: {s!r} ({cdir})")
+        schedules[sname] = s
+    return {"passes": passes, "schedules": schedules}
+
+
+def get_pipeline_pass_decls() -> dict[str, dict]:
+    """合并所有已加载组件的 pipeline.pass 声明（ADR-0007）。"""
+    merged: dict[str, dict] = {}
+    for info in _loaded_components.values():
+        merged.update(info.get("pipeline", {}).get("passes", {}))
+    return merged
+
+
+def get_pipeline_schedules() -> dict[str, dict]:
+    """合并所有已加载组件的 pipeline.schedule 声明（ADR-0007）。"""
+    merged: dict[str, dict] = {}
+    for info in _loaded_components.values():
+        merged.update(info.get("pipeline", {}).get("schedules", {}))
+    return merged
 
 
 def get_analyzer_postpasses() -> list[Callable]:
