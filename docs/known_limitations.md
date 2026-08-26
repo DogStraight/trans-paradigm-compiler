@@ -35,7 +35,9 @@
 - **Even Verilog-2001 is a subset.** Low-frequency or simulation-boundary
   constructs are omitted: gate/switch primitives (`and`/`or`/`buf`/`tran`...),
   UDP (`primitive`/`table`), `specify` blocks, `config`/`defparam`, and
-  procedural `assign`/`deassign`.
+  procedural `assign`/`deassign` (the latter is additionally ambiguous for
+  linter statement discovery: it shares the `assign` keyword with the
+  module-level continuous assign).
 - **Single-source processing — no design elaboration.** The pipeline processes
   one source (with `include` resolved), not a whole design: no cross-module
   instance graph, no hierarchical name resolution, no elaboration-time

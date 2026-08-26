@@ -32,8 +32,9 @@
 - [ ] 随机合法程序 → 对拍 Verible：接受域从 124 人工语料推到统计意义
       （GrammarFuzzer 生成器已就绪，缺接线）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
-- [ ] CI 补强（未做）：PR 快速 fuzz（~500 轮）+ 夜间长跑 + edge/differential
-      门禁接入
+- [ ] CI 补强（PR 快速 fuzz ✅ / 夜间长跑 ✅ / edge 门禁 ✅ 已接入）：
+      differential 门禁未接入——需 verible 二进制（nightly.yml 已留可选 job，
+      接入时用 fetch 步骤或 VERIBLE_FORMAT）
 
 ### P2.6 tpc-check 外部 checker 插件协议（2026-08-25 记录，Veryl 调研触发，非发布阻塞）
 
