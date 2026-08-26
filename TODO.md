@@ -1,7 +1,7 @@
 # TODO（纯待办清单）
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
-> 当前验证基线（2026-08-26）：1098 pytest 全绿 + run_all 93（FAIL 0，real 组
+> 当前验证基线（2026-08-27）：1098 pytest 全绿 + run_all 93（FAIL 0，real 组
 > 保真度守卫）+ pyright strict 0 errors（1.1.413）+ lint recall 31/31 零误报 +
 > 覆盖率 83.39%（fail_under 80）+ vs Verible 差分 124 例。
 
@@ -128,6 +128,43 @@
       位置把 COMMENT 当续行分隔跳过（`a + /* c */ b` 的注释静默丢失，不记录
       任何通道）——改动前即如此（非回归）。修法：pratt 跳注释时记录（挂
       当前表达式节点 inline_after 或 anchors），与 2b-2 的 token 标注机制衔接
+- [x] **linter 性能优化——packrat 记忆化（已闭环，2026-08-27，-92%）**：
+      背景：cProfile 定位管线 97% 时间在 linter/checkers/matcher.py（pratt
+      表达式检查对同一 token 位置反复遍历全部 is_atom 规则，71M 次 dict.get）；
+      parser 侧仅占 ~1% 非热点。打点统计证实 _match_call_impl 同
+      (i, name, limit, strict, silent) 重复率 98.1%（唯一 5.7 万/298 万）。
+      - 第 1 轮（bf8f782）：match_atom 按 token 位置缓存 consumed（失败同缓存，
+        packrat 语义）——管线 -34%
+      - 第 2 轮（db14e70）：_match_call_impl 外包 packrat 缓存层（命中重放
+        错误快照保持诊断语义）+ _is_atom_selector 静态预计算 + optional call
+        memo——管线 9.36s → 0.709s（累计 -92%）
+      - 全部 memo 带 token 流身份守卫（_memo_tokens is not tokens 即清空，
+        跨文件/跨测试隔离）；probe 模式（_probe_eof）不参与缓存
+      - 验证：1098 pytest + lint recall 100%/FP 0 + 重复诊断检测 0
+        （错误快照重放无副作用叠加）+ run_all 93 FAIL 0
+- [x] **端口组间注释 restore 锚定 + 对齐透明化（已闭环，2026-08-27）**：
+      背景：fuzz 发现 gen_serv_top 逐轮递减（每轮删内容）+ 2 个 NON-IDEMPOTENT
+      finding。根因：行尾注释锚 `.`（端口行前导符号）命中所有端口行 → 插错位
+      + 多注释竞争窗口占用即丢（p1 21 条 → p2 18 条）；注释行打断 inst_port
+      端口连续组 → 分组边界随注释位置漂移 → 对齐列宽每轮不同。
+      - parser/_production.py：行尾注释锚点精确化——`.` 后跟标识符（端口名
+        形态）时拼接成 `.o_x` 唯一锚
+      - renderer/inline_comment.py：restore 锚匹配稳定化——单字符符号锚行首
+        锚定 + 偏好上方（注释是端口组间分隔，语义属前组）+ 窗口占用向下扩展
+        （防丢）
+      - inst_port.py：注释行视为对齐分组透明行（不打断端口连续组），对齐列宽
+        不随注释位置漂移
+      - 效果：最小复现（3 端口组 + 2 注释）4 轮稳定；gen_serv_top 从无限振荡
+        → 3 轮收敛；fuzz findings 2 → 1（spi_inf 完全稳定；serv_top 为畸形
+        输入有限轮规范化，不丢内容、最终收敛）；注释保真 21/21 逐轮保留
+      - 验证：1098 pytest + run_all 93 FAIL 0 + lint recall 100%/FP 0
+- [x] **未闭合块注释吞掉追加换行（已闭环，2026-08-27）**：`/*` 未闭合时
+      main_lexer.tokenize 的 `lex_text + "\n"`（追加换行确保尾 token 处理）被
+      capture marker 段吞进 token content——`/*` → `/*\n`，下一轮 + 追加 `\n`
+      → `/*\n\n` 无限增长（format 幂等破坏，每轮多一个空行）。修复：
+      capture_runner marker 段 EOF 分支剥尾部换行（与 heredoc line_match 段
+      clip 同款语义）。验证：`/*`/`/*\n`/`// x\n/*` 全部 3 轮幂等 + 合法注释
+      保真 + 151 lexer 测试 + 1098 全量 pytest 全绿
 - [x] **对齐进 Doc IR（Pad 三件套，Veryl 渲染层深读闭环，2026-08-25 完成）**：
       tpc 世界 B column_align 是"渲染后对齐"（曾破坏 fits 判定、被迫回滚 join
       改法）；Veryl 用 `Pad`/`IfBreakPad`/`IfFlatPad` 三个 Doc 原语把对齐
@@ -211,6 +248,10 @@
 > 幂等复跑 2x 冗余 + 单线程）。模型无机会手动跑大规模验证，快速验证层是
 > "模型写配置 → 自动验证闭环"成立的前提。详见 tests/fuzz/README.md。
 > CI 已接入（.github/workflows/ci.yml，3 Python × 2 OS 矩阵）。
+> 2026-08-27 更新：linter packrat 记忆化（bf8f782/db14e70，管线 -92%）后
+> fuzz 实测吞吐 ~40 iter/s（800 轮 18-19s / 3000 轮 75-86s）——远超前述
+> 9 iter/s 基线（原测速含 linter 热点），三件套的预期收益相应缩水，
+> 但缓存复用/关幂等/multiprocessing 仍可再叠加 ~10x。
 
 - [ ] fuzz harness 吞吐三件套：
   - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x
@@ -300,7 +341,11 @@
       规则 ID，防"后端版本耦合"坑）与 `[checker.scenarios]`（tpc 自管场景：
       format_fidelity / transform_equivalence / 语法资产一致性）
 - [ ] **诊断归一化**：外部 checker 输出（miette/JSON/文本）转 tpc 统一诊断模型——
-      对齐 P1.9 稳定规则 ID + 机器可读输出结论（verible/slang/svlint 均有 JSON 实证）
+      对齐 P1.9 稳定规则 ID + 机器可读输出结论（verible/slang/svlint 均有 JSON 实证）；
+      svlint 深调研已落档 references.md（2026-08-27）：规则 trait 四件套
+      check/name/hint/reason + `/* svlint off */` 注释对 suppress + libloading
+      插件 + deny_unknown_fields fail-fast——P1.9 第二步规则表与豁免机制的
+      现成参考实现
 - [ ] **场景声明语法**：检查场景 = TOML 数据（gate 引用 run_all/差分基线），
       延续"语言知识不进代码"哲学——引擎只做通用场景执行器
 - [ ] 验证路径：`grammar/veryl/plugins/checker/` 先做 veryl 本体验证（官方检查
@@ -423,7 +468,11 @@
       yaml 布局无列表 join 形态（固定行+body 循环），迁移不适用，已闭环）
 - [ ] **世界 B 升级**：column_align/inst_port/wrap 从手写文本 pass 升级为引擎
       内建遍（量化布局拒绝准则，cmake-format 借鉴）；"行 + 所属 AST 节点"的
-      带结构行，根治 wrap 拆行后行号漂移
+      带结构行，根治 wrap 拆行后行号漂移。
+      注（2026-08-27）：inst_port 注释行透明分组 + restore 锚定精确化已闭环
+      （见 P1.5），消除端口组间注释导致的非幂等振荡；但"对齐进 Doc IR 参与
+      fits 判定"（Pad 三件套已落地 renderer，inst_port 仍是渲染后文本 pass）
+      的彻底收敛仍需本升级——当前剩余 serv_top 畸形输入 3 轮收敛即此根源
 - [ ] **保真度分级**：规范化程度显式可配（完全重排 / 保留空行 / 仅缩进），
       解决"规范化 vs 保真"方向矛盾（verible token 级保真为参照）
 - [ ] **兼容与验收约束**：160 处布局 TOML 语义兼容（老语言包零改写）；验证
