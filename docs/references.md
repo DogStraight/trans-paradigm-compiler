@@ -477,13 +477,13 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 
 - 🔥 **稳定规则 ID + 机器可读输出（第一步，低成本）**：给 linter/语义检查诊断建立稳定规则命名空间（`T001` 语法结构 / `WC001` 语义 / `N001` 命名），`tpc check` 增加 `--format json`（纯 stdlib 手写即可）。这是"pylance 式"消费的前提——编辑器/模型/CI 都需要稳定 ID + 结构化输出，verible/slang/svlint 都有 JSON 输出实证。
 - 🔥 **suppress 注释对（第一步，低成本）**：仿 Verilator `lint_off/lint_on`，tpc 实现 `/* tpc-check off <rule> */` 区间豁免（或 `// tpc-check: disable-line` 单行）。模型生成代码场景的刚需——生成器在"故意非标"处内联豁免，门禁不误伤。
-- 💡 **规则表 + severity 配置（第二步）**：检查规则显式化为 TOML 数据（规则 ID → 描述 → 默认 severity → 适用阶段），用户配置覆盖 severity（对齐 svlint `.svlint.toml` / verible rule-sets）。tpc"语言知识进 TOML"哲学在检查侧的落地；P1.7 naming_check 是第一条显式规则（Sigasi 式 pattern 表）。
+- 💡 **规则表 + severity 配置（第二步）**：检查规则显式化为 TOML 数据（规则 ID → 描述 → 默认 severity → 适用阶段），用户配置覆盖 severity（对齐 svlint `.svlint.toml` / verible rule-sets）。tpc"语言知识进 TOML"哲学在检查侧的落地；P1.9 的 naming_check 是第一条显式规则（Sigasi 式 pattern 表）。
 - 💡 **waiver 清单（第二步）**：项目级豁免文件（路径/规则/行号），slang WaiverManager 参照——第三方代码目录整体豁免，避免给每个文件加注释。
 - 📌 **LSP 服务化（路线观察）**：hdl_checker 的"封装后端 → LSP Diagnostic"是 pylance 式体验的最终形态；tpc 零依赖下可 stdlib 手写 jsonrpc（几百行），但需真实需求驱动（编辑器接入）再立项。
 - 📌 **语义级警告（WIDTH/LATCH/MULTIDRIVEN 类，不实现）**：Verilator 的宽度/锁存/多驱动检查依赖类型与宽度推断，超出 tpc"配置驱动浅层语义（格式化/lint/展开）"定位，README 已声明边界——作路线观察，若未来做类型推断（analyzer 扩展）再评估。
 - ⚠️ **避坑**：svlint 自研 parser 的维护负担（规则演进受 parser 能力约束）——tpc 复用语法 TOML（规则=语法资产）无此问题，是"反向解析器"路线的优势；hdl_checker 后端版本耦合（verible 输出格式变化即坏）——tpc 若封装外部工具做差分基线即可，不做运行时依赖。
 
-**落地路径小结**：第一步（规则 ID + JSON + suppress）≈ 一个 `tpc check --format json` + 注释豁免机制，纯增量、零外部依赖，即可支撑"模型生成 v → tpc-check 检查"的脚本化闭环；第二步（规则表配置化）与 P1.7 naming_check 合并推进。
+**落地路径小结**：第一步（规则 ID + JSON + suppress）≈ 一个 `tpc check --format json` + 注释豁免机制，纯增量、零外部依赖，即可支撑"模型生成 v → tpc-check 检查"的脚本化闭环；第二步（规则表配置化）与 P1.9 naming_check 合并推进。
 
 ### svlint（Rust）— 规则工程化闭环范本（2026-08 深调研，dalance 作品链第二站，agent-reach + 源码镜像）
 
@@ -558,7 +558,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     的取舍也值得继承（tpc 的 token 级 lint 相当于"语法规则的 textrules"侧）
   - 💡 **规则命名即分类**：tpc 的语义检查插件（WC001 等）与 linter 阶段 code 可参考
     svlint 前缀约定（style_/naming_/functional），规则类别进规则名，文档/分组自动
-  - 💡 **规则参数化**：`[option]` 里 regex/prefix 可配置——P1.7 naming_check 的 pattern
+  - 💡 **规则参数化**：`[option]` 里 regex/prefix 可配置——P1.9 naming_check 的 pattern
     表可直接参照（正则 + 前缀默认值都在配置里，规则代码只写判定）
   - 💡 **输出三模式**：`--github-actions` 是零依赖的机器可读输出捷径（workflow command
     是文本格式），tpc P2.6 的 `--format json` 之外可加同款低成本模式
@@ -701,7 +701,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     tpc 用语法结构判定（注释挂树）、flexlint 用 ignore 正则（规则内声明豁免区间）——
     P2.6 做豁免机制时三种形态可并列参考
   - 💡 **required/forbidden 位置断言**：`find_at` 起点断言是"正则 + 上下文"的低成本
-    组合，tpc 若做"规则 = 声明式 pattern 表"（P1.7 naming_check 方向）可参考其
+    组合，tpc 若做"规则 = 声明式 pattern 表"（P1.9 naming_check 方向）可参考其
     pattern + 断言分离的字段设计
   - 📌 **纯正则极限**：flexlint 验证了正则规则的表达能力边界（跨行/嵌套/结构匹配
     做不到），tpc 反解析器路线（token 级）比它强在结构感知——flexlint 是"最简

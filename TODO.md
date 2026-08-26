@@ -59,39 +59,36 @@
       任何通道）——改动前即如此（非回归）。修法：pratt 跳注释时记录（挂
       当前表达式节点 inline_after 或 anchors），与 2b-2 的 token 标注机制衔接
 
-### P1.7 命名约定检查（analyzer 层插件，Sigasi 借鉴）
-
-> 放分析层插件（语义层 Symbol 才有 kind 可区分名字种类）；逻辑进引擎原语，
-> pattern 是语言知识进 TOML。
-
-- [ ] `analyzer/primitives/_naming.py`：`@register("naming_check")` 原语——
-      复用 `_symbol._extract_names` 提取名字 → `re.fullmatch` 检查 →
-      违规报诊断（`_context.report`，code N001，level warning）
-- [ ] 触发零机制改动：声明规则 `[RuleName.analyzer]` 加
-      `primitives = ["naming_check"]`（`_is_primitive_triggered` 对未知原语
-      走 primitives 列表，已支持）
-- [ ] 配置（Sigasi 式）：全局 pattern 表按 kind 分发——TOML 建议
-      `[analyzer.naming]`（或插件 tpc.toml）下 `[analyzer.naming.rules.<kind>]`
-      `pattern` + `match = "positive|negative"`；UI 预设 lowercase/uppercase/
-      IGNORE 可做默认 pattern 快捷值（如 `case = "upper"` 自动展开为
-      `^[A-Z][A-Z0-9_]*$`），RE2→Python re 语法兼容
-- [ ] 30 类 kind 映射：Verilog 声明规则 symbol.kind 对齐 Sigasi 类别
-      （module→MODULE_NAME、wire/reg→NET_NAME、var→VAR_NAME、port→PORT_NAME、
-      parameter→PARAMETER_NAME 等），kind 未配置的规则跳过
-- [ ] 注册：`analyzer/primitives/__init__.py` 加 `from . import _naming`
-- [ ] 与 pre_scan 关系确认：pre_scan 是 lexer 期名字收集（parser 提示），
-      naming_check 是语义层规范检查，互不冲突，文档注明
-
 ### P1.9 tpc-check 诊断模型升级（pylance 化，2026-08-25 研判入册）
 
 > 来源：docs/references.md「Verilog 静态检查工具群」深调研（verible-lint / Verilator
-> `--lint-only` / slang / svlint / hdl_checker）。目标场景：模型生成 v 文本 →
-> tpc-check 当 pylance 用（即时诊断、机器可读、可豁免）。
-> 节奏：开源初期做小而稳——只推第一步低成本项，大项（规则表配置化/LSP）积蓄。
+> `--lint-only` / slang / svlint / hdl_checker）+ svlint 深调研（规则四件套
+> check/name/hint/reason + suppress 注释对 + deny_unknown_fields fail-fast）。
+> 目标场景：模型生成 v 文本 → tpc-check 当 pylance 用（即时诊断、机器可读、可豁免）。
+> 定位：**诊断体系一体**——命名约定检查（原 P1.7）是体系的第一条显式规则，
+> 规则表是它的承载框架；第一步低成本项已完成（--json/suppress/规则 ID 文档）。
 
-- [ ] 第二步：检查规则表 + severity 配置（规则 ID → 描述 → 默认 severity → 用户覆盖，
-      对齐 svlint `.svlint.toml` / verible rule-sets；tpc 配置驱动哲学在检查侧的落地），
-      与 P1.7 naming_check 合并推进
+- [ ] **检查规则表 + severity 配置（框架，第一步规则落地的承载）**：规则 ID →
+      描述 → 默认 severity → 用户覆盖，对齐 svlint `.svlint.toml` / verible
+      rule-sets；tpc 配置驱动哲学在检查侧的落地
+- [ ] **naming_check 作为第一条规则接入规则表**（原 P1.7，验证"规则即数据"路径）：
+  - [ ] `analyzer/primitives/_naming.py`：`@register("naming_check")` 原语——
+        复用 `_symbol._extract_names` 提取名字 → `re.fullmatch` 检查 →
+        违规报诊断（`_context.report`，code N001，level warning）
+  - [ ] 触发零机制改动：声明规则 `[RuleName.analyzer]` 加
+        `primitives = ["naming_check"]`（`_is_primitive_triggered` 对未知原语
+        走 primitives 列表，已支持）
+  - [ ] 配置（Sigasi 式）：全局 pattern 表按 kind 分发——TOML 建议
+        `[analyzer.naming]`（或插件 tpc.toml）下 `[analyzer.naming.rules.<kind>]`
+        `pattern` + `match = "positive|negative"`；UI 预设 lowercase/uppercase/
+        IGNORE 可做默认 pattern 快捷值（如 `case = "upper"` 自动展开为
+        `^[A-Z][A-Z0-9_]*$`），RE2→Python re 语法兼容
+  - [ ] 30 类 kind 映射：Verilog 声明规则 symbol.kind 对齐 Sigasi 类别
+        （module→MODULE_NAME、wire/reg→NET_NAME、var→VAR_NAME、port→PORT_NAME、
+        parameter→PARAMETER_NAME 等），kind 未配置的规则跳过
+  - [ ] 注册：`analyzer/primitives/__init__.py` 加 `from . import _naming`
+  - [ ] 与 pre_scan 关系确认：pre_scan 是 lexer 期名字收集（parser 提示），
+        naming_check 是语义层规范检查，互不冲突，文档注明
 - [ ] 路线观察（不立项）：LSP 服务化（hdl_checker「封装后端 → LSP Diagnostic」参照，
       零依赖 stdlib 手写 jsonrpc 可行但需编辑器接入需求驱动）；语义级警告
       （WIDTH/LATCH/MULTIDRIVEN 类需类型推断，超出浅层语义定位）
