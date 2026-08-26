@@ -203,6 +203,14 @@ class CaptureRunner:
                         return (content, pos, rule.token_type)
                     content += text[pos]
                     pos += 1
+                # 未闭合（EOF 自然终止）：tokenize 会在输入末尾追加换行
+                # （main_lexer 确保尾 token 处理），该追加换行会被 marker
+                # 吞进 content——`/*` → `/*\n`，下一轮 `/*\n` + 追加 `\n`
+                # → `/*\n\n` 无限增长（format 幂等破坏）。剥掉尾部换行：
+                # 未闭合注释的 token 内容不含追加的终止换行，渲染时按
+                # 注释原样输出。
+                if content.endswith(tuple(newline_set)):
+                    content = content[:-1]
                 return (content, pos, rule.token_type)
 
             elif rule.kind == "delim":
