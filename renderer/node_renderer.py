@@ -83,14 +83,31 @@ def render_node(
         for _ in range(tb - 1):
             parts.append(Break())
 
-    # --- 注释 attachment（ADR-0006 阶段 4 注释遍）---
-    # parser 收集行尾注释时挂到节点的 _attached_comments；这里用 line_suffix
-    # 原语把注释锚定到节点行尾（Doc 一等公民）。_resolve_line_suffix 把内容
-    # 推迟到下一个换行点之前输出（行尾锚定）。仅当节点有挂载注释时附加。
-    attached = getattr(node, "_attached_comments", None)
-    if attached:
-        for c in attached:
-            parts.append(LineSuffix(" " + c))
+    # --- 注释槽位（ADR-0006 注释遍泛化——注释节点模型步骤 1，P1.5）---
+    # 节点属性 _comment_slots: {槽位名: [注释文本]}，槽位：
+    #   leading  — 节点文本前独立行（`// 前置注释` 在语句上方）
+    #   trailing — 节点后行尾锚定（line_suffix，原 _attached_comments 行为）
+    # 向后兼容：_attached_comments（parser 行尾注释）视为 trailing 槽位。
+    slots = getattr(node, "_comment_slots", None)
+    if slots is None:
+        attached = getattr(node, "_attached_comments", None)
+        if attached:
+            slots = {"trailing": attached}
+    if slots:
+        lead = slots.get("leading")
+        if lead:
+            # leading 注释独立行：`Text(comment) + Break()`——注释后换行，
+            # 注释前不主动 break（父级 body 的 Break(body_indent) 提供换行+缩进，
+            # 避免双换行）；缩进继承外层 Nest。
+            lead_docs: list[Doc] = []
+            for c in lead:
+                lead_docs.append(Text(c))
+                lead_docs.append(Break())
+            parts = lead_docs + parts
+        trail = slots.get("trailing")
+        if trail:
+            for c in trail:
+                parts.append(LineSuffix(" " + c))
 
     if parts:
         return Concat(parts)
