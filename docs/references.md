@@ -659,6 +659,41 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 📌 **完整 IEEE 合规**：sv-parser 是"标准 Annex A 全量"路线（CST 节点=标准产生式）；
     tpc verilog 包声明"无 SystemVerilog"（README 边界），不追逐全量合规，各有定位
 
+#### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
+
+- 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /
+  udp_ports / udp_body / udp_instantiation 四文件）+ syntaxtree 同名镜像
+- **table 无"行文本"特殊机制**（对 tpc 最关键的实证）：`CombinationalEntry =
+  LevelInputList ":" OutputSymbol ";"`、`SequentialEntry = SeqInputList ":"
+  CurrentState ":" NextState ";"`，body = `keyword("table") → 首条 entry →
+  many_till(entry, keyword("endtable"))`——**分号终结符消解行边界**，换行/空白
+  只是词法间隔。修正此前"UDP table 需引擎新增原始行规则"的评估：tpc 的
+  production 重复（`@Entry+`）+ FOLLOW 即可表达 many_till 形态，无需引擎改动
+- **表符号逐字符硬编码**：`symbol("0"/"1"/"x"/"X"/"?"/"b"/"B"/"r"/"R"/"f"/"F"/
+  "p"/"P"/"n"/"N"/"*")` 全部枚举大小写变体（level_symbol/edge_symbol 的 alt 链）；
+  init_val 甚至把 `1'b0/1'b1/1'bx/1'B0/1'BX...` 全变体硬编码为 keyword。可行的
+  前提是 **parser 输入是字符流（Span = LocatedSpan<&str>），无词法层**——不存在
+  "b 是 identifier"的词法身份问题；这是手写 parser 的机械笨拙面
+- **声明形态**：`primitive name (ports) ; → 端口声明 → table...endtable →
+  endprimitive [: name]`；SV 变体（extern/ANSI/wildcard）超出 1364-2005 范围，
+  tpc 只需 nonansi 一条路径
+- **实例化形态**：`udp_identifier [drive_strength] [delay2] instance (, instance)* ;`，
+  位置连接 `(output, input...)`——**与门级原语共享 drive_strength/delay2 定义**，
+  印证 tpc 把 UDP 与门级原语同批立项、先落 strength/delay 规则的顺序
+- **对 tpc 的启示**：
+  - 🔥 **UDP 是结构化 token 规则，不是引擎难题**：tpc 的 production 可直接表达
+    `[UdpBody] table → @Entry+ endtable`、`[CombEntry] @LevelSymbol+ : @OutputSymbol ;`
+    形态——真正的设计点收窄为一个：**表符号的词法身份**
+  - 💡 **token 流 vs 字符流的范式差（tpc 特有）**：tpc 是 token 驱动——`0/1`
+    （literal.number）、`? * - : ;`（symbol.base 现成 token）直接引用即可；唯
+    **裸字母 b/r/f/p/n/x 是 id token**。候选方案立项时定：(a) production 字面
+    token 增加 content 约束（`id.id` + 内容 ∈ 单字符集）；(b) 接受宽进
+    （UDP 上下文 id 即表符号，lint 兜底报 warning）——比"行文本解析"小得多
+  - 💡 **init_val tpc 反而更优**：sv-parser 的 `1'b0` 全变体 keyword 硬编码在
+    tpc 由 based number token 天然覆盖（大小写/宽度变体零枚举）
+  - 📌 **参考粒度**：UDP 实例化的 `[drive_strength] [delay2]` 前缀与 specify 的
+    路径延迟共享——strength/delay 是 A.2.2.2/A.2.2.3 的独立资产，先于 UDP 落地
+
 ### svls（Rust）— "检查器 → LSP"的最薄封装（2026-08 深调研，dalance 作品链第四站）
 
 - 本地源码镜像：`E:\research\svls`（浅 clone）；调研日期 2026-08-26
