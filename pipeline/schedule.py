@@ -165,7 +165,7 @@ def _sequence_entries(
     return [by_slot[s] for s in sorted(by_slot)]
 
 
-def build_schedules(rules_dir: str) -> dict[str, list[PassDecl]]:
+def build_schedules() -> dict[str, list[PassDecl]]:
     """构建全部 schedule：内置缺省 + 插件声明（经 plugin_loader 合并）。
 
     返回 {schedule 名: [PassDecl 执行序]}。无任何声明时仅含

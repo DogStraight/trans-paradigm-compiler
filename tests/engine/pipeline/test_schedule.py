@@ -7,7 +7,6 @@ pass 声明校验、缺省 schedule 语义、多轮/自由排序。
 import pytest
 
 from pipeline.schedule import (
-    PassDecl,
     PassState,
     build_schedules,
     _sequence_entries,
@@ -121,7 +120,7 @@ class TestBuildSchedules:
         monkeypatch.setattr(
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
         )
-        scheds = build_schedules("dummy")
+        scheds = build_schedules()
         assert set(scheds) == {DEFAULT_SCHEDULE_NAME}
         assert [p.name for p in scheds[DEFAULT_SCHEDULE_NAME]] == [
             "analyze",
@@ -135,7 +134,7 @@ class TestBuildSchedules:
         monkeypatch.setattr(
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
         )
-        scheds = build_schedules("dummy")
+        scheds = build_schedules()
         decls = scheds[DEFAULT_SCHEDULE_NAME]
         assert [d.kind for d in decls] == ["analyze", "transform"]
 
@@ -152,7 +151,7 @@ class TestBuildSchedules:
                 }
             },
         )
-        scheds = build_schedules("dummy")
+        scheds = build_schedules()
         assert [d.name for d in scheds["transform_first"]] == [
             "transform",
             "analyze",
@@ -186,7 +185,7 @@ class TestBuildSchedules:
                 }
             },
         )
-        scheds = build_schedules("dummy")
+        scheds = build_schedules()
         decls = scheds["check"]
         assert decls[0].name == "post_check"
         assert decls[0].handler is fake_handler
@@ -200,7 +199,7 @@ class TestBuildSchedules:
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
         )
         with pytest.raises(ValueError, match="缺 handler"):
-            build_schedules("dummy")
+            build_schedules()
 
     def test_bad_kind_fail_fast(self, monkeypatch):
         monkeypatch.setattr(
@@ -211,7 +210,7 @@ class TestBuildSchedules:
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
         )
         with pytest.raises(ValueError, match="kind 非法"):
-            build_schedules("dummy")
+            build_schedules()
 
     def test_builtin_name_conflict_fail_fast(self, monkeypatch):
         monkeypatch.setattr(
@@ -222,7 +221,7 @@ class TestBuildSchedules:
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
         )
         with pytest.raises(ValueError, match="冲突"):
-            build_schedules("dummy")
+            build_schedules()
 
     def test_pass_name_inferred_kind_from_builtin(self, monkeypatch):
         # 自定义同名内置 kind 的 pass 会被拒；其他名字无 kind 声明报错
@@ -234,7 +233,7 @@ class TestBuildSchedules:
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
         )
         with pytest.raises(ValueError, match="kind 非法"):
-            build_schedules("dummy")
+            build_schedules()
 
 
 # ── PassState 数据总线 ─────────────────────────────────────

@@ -284,7 +284,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         mapping_cfg.update(mp_entries)
         mapping_cfg.update(rv_entries)
         # 编排调度按 rules_dir 缓存（同一原因：声明来自 _loaded_components）。
-        schedules = build_schedules(ctx.rules_dir)
+        schedules = build_schedules()
         _PIPELINE_SHARED[ctx.rules_dir] = {
             "rules": rules,
             "rule_selector": rule_selector,
@@ -796,8 +796,6 @@ def run_pipeline_on_source(
         parse_enabled = _cfg.get("parse", True)
     if format_output is None:
         format_output = _cfg.get("format_output", True)
-    if schedule is None:
-        schedule = _cfg.get("schedule", DEFAULT_SCHEDULE_NAME)
 
     ctx = _PipelineContext(
         source=source,
@@ -870,7 +868,12 @@ def run_pipeline_on_source(
 
     # 编排调度（ADR-0007）：schedule 内 pass 序列（analyze/transform/custom），
     # 统一锚定在归一化后；pass 内报 error 或 stage 命中即截断。
-    ast, scope = _run_schedule(ctx, ast, None, schedule)
+    schedule_name: str = (
+        schedule
+        if schedule is not None
+        else _cfg.get("schedule", DEFAULT_SCHEDULE_NAME)
+    )
+    ast, _ = _run_schedule(ctx, ast, None, schedule_name)
     if ctx.result.get("error"):
         return ctx.result
     if stage in _LEGACY_PASS_STAGES:
