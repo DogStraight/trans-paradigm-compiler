@@ -22,20 +22,24 @@ analyze / transform 的**位置、顺序、轮数**此前硬编码在 `run_pipel
 
 - **操作（primitive）**：现有 analyzer 原语 / transform 操作。操作本身
   **不携带时点**——时点是 pass 级概念。
-- **pass**：命名的执行单元，kind ∈ {analyze, transform, custom}。
+- **pass**：命名的执行单元，kind ∈ {analyze, transform, check}。
   - `analyze` = 跑一轮 `AnalysisTraversal`（复用语言规则），产出/覆盖 scope；
   - `transform` = 跑一轮 `AstTransformer`（消费 scope，None 时跳过）；
-  - `custom` = 插件 handler 脚本（`file.py:fn`，签名 `fn(state) -> None`）。
+  - `check` = 执行插件 handler（`file.py:fn`，签名 `fn(state) -> None`）——
+    检查/验证/外部工具挂载，不改 AST。
+  - **行为模型可扩展**：后续需要新语义（如自定义后处理）时扩展 kind
+    枚举 + `pipeline/__init__.py` 执行分支，不引入泛化类型（曾考虑
+    `custom`，无具体消费方且语义未定义，收窄为 `check`）。
 - **schedule（编排管线）**：命名的 pass 序列。一个语言包可声明多条，
   调用方按名称选择启用；缺省 `default`。
 
 ### 声明（语言包/插件 tpc.toml）
 
 ```toml
-# 自定义 pass（插件声明）
+# 检查 pass（插件声明）
 [[pipeline.pass]]
 name = "post_check"
-kind = "custom"
+kind = "check"
 handler = "_check.py:run"
 
 # 编排管线：条目 = 名字（按声明序）或 { name, order | after }
@@ -61,7 +65,7 @@ passes = [
 1. `order = N` 显式钉号；`after = X` 递归推导为 slot(X)+1；无约束条目按
    声明序顺延。
 2. 约束冲突即报错：同号（两个条目落同一时点）、after 环、after 引用
-   不存在、pass 重名/未知名、custom 缺 handler——全部 fail-fast（ADR-0003）。
+   不存在、pass 重名/未知名、check 缺 handler——全部 fail-fast（ADR-0003）。
 
 ### 执行与兼容映射
 

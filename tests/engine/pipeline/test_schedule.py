@@ -162,7 +162,7 @@ class TestBuildSchedules:
             "transform",
         ]
 
-    def test_custom_pass_with_handler(self, monkeypatch):
+    def test_check_pass_with_handler(self, monkeypatch):
         def fake_handler(state):
             del state
 
@@ -171,7 +171,7 @@ class TestBuildSchedules:
             lambda: {
                 "post_check": {
                     "name": "post_check",
-                    "kind": "custom",
+                    "kind": "check",
                     "_handler": fake_handler,
                 }
             },
@@ -190,10 +190,10 @@ class TestBuildSchedules:
         assert decls[0].name == "post_check"
         assert decls[0].handler is fake_handler
 
-    def test_custom_pass_without_handler_fail_fast(self, monkeypatch):
+    def test_check_pass_without_handler_fail_fast(self, monkeypatch):
         monkeypatch.setattr(
             "pipeline.schedule.get_pipeline_pass_decls",
-            lambda: {"bare": {"name": "bare", "kind": "custom"}},
+            lambda: {"bare": {"name": "bare", "kind": "check"}},
         )
         monkeypatch.setattr(
             "pipeline.schedule.get_pipeline_schedules", lambda: {}
@@ -215,7 +215,7 @@ class TestBuildSchedules:
     def test_builtin_name_conflict_fail_fast(self, monkeypatch):
         monkeypatch.setattr(
             "pipeline.schedule.get_pipeline_pass_decls",
-            lambda: {"analyze": {"name": "analyze", "kind": "custom"}},
+            lambda: {"analyze": {"name": "analyze", "kind": "check"}},
         )
         monkeypatch.setattr(
             "pipeline.schedule.get_pipeline_schedules", lambda: {}

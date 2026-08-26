@@ -19,16 +19,17 @@ source(str)
   → normalize               规范化（消除 optional/repeat/seq 包装）
   → schedule                编排调度（ADR-0007）：pass 序列，统一锚定在
                             归一化后；缺省 [analyze, transform]，语言包可声明
-                            [[pipeline.schedule]] 自由排序/多轮/自定义 pass
+                            [[pipeline.schedule]] 自由排序/多轮/check pass
   → render                  Doc IR → 文本（含注释回插）
   → format（可选）           formatter 插件（世界 B pass 管线）
 ```
 
 schedule 内的 pass：kind=analyze 跑一轮 AnalysisTraversal（覆盖 scope）；
-kind=transform 跑一轮 AstTransformer（消费 scope）；kind=custom 执行插件
-handler（`fn(state)`）。时点由序列器分配（order 钉号 / after 推导 / 声明序
-填空），时点冲突 fail-fast。开关映射：`analyzer_enabled`/`transform_enabled`
-按 kind 过滤；`expand_enhanced=False` 跳过整个调度；`stage` 按 pass 名截断。
+kind=transform 跑一轮 AstTransformer（消费 scope）；kind=check 执行插件
+handler（`fn(state)`，检查/验证/外部工具挂载）。时点由序列器分配（order
+钉号 / after 推导 / 声明序填空），时点冲突 fail-fast。开关映射：
+`analyzer_enabled`/`transform_enabled` 按 kind 过滤；`expand_enhanced=False`
+跳过整个调度；`stage` 按 pass 名截断。
 
 ## 阻断语义（哪个阶段失败会停管线）
 

@@ -475,8 +475,11 @@ def _run_pass_transform(state: "PassState") -> None:
         ctx.log(f"[transform] {' '.join(parts)}")
 
 
-def _run_pass_custom(state: "PassState", decl: "PassDecl") -> None:
-    """kind=custom pass：执行插件 handler（fn(state) -> None）。"""
+def _run_pass_check(state: "PassState", decl: "PassDecl") -> None:
+    """kind=check pass：执行插件 handler（fn(state) -> None）。
+
+    语义：检查/验证/外部工具挂载（不改 AST，可读改 scope/extra 产诊断）。
+    """
     assert decl.handler is not None
     decl.handler(state)
 
@@ -525,7 +528,7 @@ def _run_schedule(
             elif decl.kind == "transform":
                 _run_pass_transform(state)
             else:
-                _run_pass_custom(state, decl)
+                _run_pass_check(state, decl)
         except _ScheduleStop:
             break
         if ctx.stage == decl.name:
@@ -866,7 +869,7 @@ def run_pipeline_on_source(
     if not quiet and ctx.ast_json:
         save_json(ast.dump(), ctx.ast_json, "ast", log_fn=ctx.log)
 
-    # 编排调度（ADR-0007）：schedule 内 pass 序列（analyze/transform/custom），
+    # 编排调度（ADR-0007）：schedule 内 pass 序列（analyze/transform/check），
     # 统一锚定在归一化后；pass 内报 error 或 stage 命中即截断。
     schedule_name: str = (
         schedule

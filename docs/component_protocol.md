@@ -38,11 +38,11 @@ handlers = ["_mapping.py", "_flatten_ports.py", "_invert_map.py"]
 slots = ["delete_type_decl", "build_wrapper", "expand_typed_port", ...]
 handlers = ["_transform.py", "_bridge.py"]
 
-# 编排调度（ADR-0007）：自定义 pass + 命名 schedule
+# 编排调度（ADR-0007）：检查 pass + 命名 schedule
 [[pipeline.pass]]
 name = "post_check"
-kind = "custom"               # analyze | transform | custom
-handler = "_check.py:run"     # custom 必需；签名 fn(state) -> None
+kind = "check"                # analyze | transform | check
+handler = "_check.py:run"     # check 必需；签名 fn(state) -> None
 
 [[pipeline.schedule]]
 name = "transform_first"      # 调用方 schedule="transform_first" 启用

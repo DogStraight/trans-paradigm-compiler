@@ -1,17 +1,24 @@
 """schedule.py — 编排管线（ADR-0007）：pass 声明 + 时点序列器 + 调度构建。
 
 概念：
-    pass      — 命名的执行单元，kind ∈ {analyze, transform, custom}。
+    pass      — 命名的执行单元，kind ∈ {analyze, transform, check}。
                 操作（原语/变换）不携带时点，时点是 pass 级概念。
     schedule  — 命名的 pass 序列（编排管线），调用方按名称启用。
     slot      — 时点号（schedule 内相对位置）。order=N 显式钉号；
                 after=X 由序列器推导为 slot(X)+1；无约束按声明序顺延。
 
+kind 语义（行为模型）：
+    analyze   — 跑一轮 AnalysisTraversal（产出 scope）；
+    transform — 跑一轮 AstTransformer（消费 scope 改 AST）；
+    check     — 执行插件 handler（检查/验证/外部工具挂载，不改 AST）。
+后续需要新行为模型时扩展 _KINDS 枚举 + pipeline/__init__.py 执行分支，
+不引入泛化类型（如 custom）。
+
 本模块只做**声明处理与排序**（纯逻辑，可单测）；执行编排在
 pipeline/__init__.py::_run_schedule。
 
 fail-fast（ADR-0003）：未知 pass / 重名 / 时点冲突 / after 环 /
-custom 缺 handler 全部报 ValueError，不静默降级。
+check 缺 handler 全部报 ValueError，不静默降级。
 
 Doc: docs/decisions/0007-pipeline-schedule.md
 """
@@ -26,7 +33,7 @@ BUILTIN_PASSES: dict[str, dict] = {
     "transform": {"kind": "transform"},
 }
 
-_KINDS = ("analyze", "transform", "custom")
+_KINDS = ("analyze", "transform", "check")
 
 DEFAULT_SCHEDULE_NAME = "default"
 DEFAULT_SCHEDULE_ENTRIES = ["analyze", "transform"]
@@ -37,13 +44,13 @@ class PassDecl:
     """一个已解析的 pass 定义。"""
 
     name: str
-    kind: str  # analyze | transform | custom
-    handler: Callable | None = None  # custom pass 的执行函数（已解析）
+    kind: str  # analyze | transform | check
+    handler: Callable | None = None  # check pass 的执行函数（已解析）
 
 
 @dataclass
 class PassState:
-    """pass 执行状态（调度内线程，custom handler 可读改）。"""
+    """pass 执行状态（调度内线程，check handler 可读改）。"""
 
     ast: Any
     scope: Any | None
@@ -186,12 +193,12 @@ def build_schedules() -> dict[str, list[PassDecl]]:
         if kind not in _KINDS:
             raise ValueError(
                 f"[pipeline] pass '{name}' kind 非法: {kind!r} "
-                f"（应为 analyze/transform/custom）"
+                f"（应为 analyze/transform/check）"
             )
         handler = decl.get("_handler")
-        if kind == "custom" and handler is None:
+        if kind == "check" and handler is None:
             raise ValueError(
-                f"[pipeline] custom pass '{name}' 缺 handler "
+                f"[pipeline] check pass '{name}' 缺 handler "
                 f"（handler = \"file.py:fn\"）"
             )
         resolved[name] = PassDecl(name=name, kind=kind, handler=handler)
