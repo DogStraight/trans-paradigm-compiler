@@ -11,6 +11,19 @@ original authors and projects as noted below.
 | picorv32 | [github.com/YosysHQ/picorv32](https://github.com/YosysHQ/picorv32) | Claire Xenia Wolf | ISC |
 | serv_top | [github.com/olofk/serv](https://github.com/olofk/serv) | Olof Kindgren | ISC |
 | tv80 | [github.com/opencores/tv80](https://github.com/opencores/tv80) | Guy Hutchison | MIT |
+| uart / uart_tx / uart_rx | [github.com/alexforencich/verilog-uart](https://github.com/alexforencich/verilog-uart) | Alex Forencich | MIT |
+| simcells | YosysHQ/yosys `techlibs/common/simcells.v` | Claire Xenia Wolf | ISC |
+| ice40_cells_sim | YosysHQ/yosys `techlibs/ice40/cells_sim.v` | YosysHQ (Claire Xenia Wolf) | ISC（见下注） |
+
+**ice40_cells_sim 许可注**：文件头无版权行，yosys 仓库根 `COPYING` 声明整体 ISC。
+
+**语料边界注**：
+- `ref_ice40_cells_sim.v` 需预定义 `NO_ICE40_DEFAULT_ASSIGNMENTS`（文件自带的
+  Verilog-2005 兼容开关：关闭端口默认赋值宏，空宏走注释锚路径）——见
+  `tests/e2e/test_real_corpus.py` 与 `run_all_tests.py` 的 per-file predefined。
+- yosys `techlibs/common/techmap.v` 已排除：`$demux` 类 yosys 内部 cell 名、
+  `(2**i)'b0` 表达式宽度字面量属 yosys 内部/SV 形态，非 2005/1800 Annex A
+  合法输入（sv-parser 同样拒绝）；其多目标 assign 用法见 test_2005_batch7.py。
 
 Each sample file retains its original copyright header. The full license
 texts are reproduced below for reference.

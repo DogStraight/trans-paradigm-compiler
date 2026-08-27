@@ -82,6 +82,7 @@ production = [
     "@PrimaryExpr",
     "symbol.base.equal",
     "@Expression",
+    "@AssignExtra*",
     "symbol.base.semicolon",
 ]
 
@@ -90,6 +91,7 @@ strength = "$2"
 delay = "$3"
 target = "$4"
 value = "$6"
+extras = "$7.items[*]"
 
 [AssignStmt.renderer.layout]
 line = [
@@ -105,5 +107,27 @@ line = [
     { ref = "target" },
     " = ",
     { ref = "value" },
+    { join = "", items = "extras" },
     ";",
 ]
+
+# ── AssignExtra — 多目标连续赋值的后续目标 ──
+# A.6.1 list_of_net_assignments 的 `, net_assignment` 后缀：
+#   assign a = b, c = d, e = f ;
+# 单独成规则，渲染器按 `", " target " = " value` 组合每个后缀；
+# 语句发现/FOLLOW 由 `,` 触发、`;` 终结，与单目标形态互不干扰。
+
+[AssignExtra.parser]
+production = [
+    "symbol.base.comma",
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+]
+
+[AssignExtra.parser.node]
+target = "$2"
+value = "$4"
+
+[AssignExtra.renderer.layout]
+line = [", ", { ref = "target" }, " = ", { ref = "value" }]

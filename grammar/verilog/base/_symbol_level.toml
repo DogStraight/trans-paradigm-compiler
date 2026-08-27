@@ -41,6 +41,17 @@ symbol = "!="
 arity = 2
 assoc = "left"
 
+# 全等/不全等（IEEE A.8.4 case_equality/case_inequality），与 ==/!= 同级
+[[operator]]
+symbol = "==="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "!=="
+arity = 2
+assoc = "left"
+
 [[operator]]
 symbol = ">"
 arity = 2

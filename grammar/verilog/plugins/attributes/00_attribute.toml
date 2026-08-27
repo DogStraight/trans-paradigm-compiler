@@ -97,6 +97,33 @@ layout = { line = [
 ] }
 
 
+# ── AttrModuleDecl — 模块头属性（(* ... *) module name (...)） ──
+# A.1.1 module_declaration ::= { attribute_instance } module_keyword ...
+# 顶层规则（不被引用），与 ModuleDecl 并列进入 Root flatten——start token
+# 为 `(`（`(*` 属性），与 ModuleDecl 的 keyword.module 不冲突。
+# 挂载位点：顶层（Root 句），不修改 ModuleDecl 本身（插件不启用时核心不变）。
+
+[AttrModuleDecl]
+is_statement = true
+
+[AttrModuleDecl.parser]
+production = [
+    "@AttrInstance",
+    "@ModuleDecl|@MacroModuleDecl",
+]
+
+[AttrModuleDecl.parser.node]
+attrs = "$1"
+module = "$2"
+
+[AttrModuleDecl.renderer]
+layout = { line = [
+    { ref = "attrs" },
+    "\n",
+    { ref = "module" },
+] }
+
+
 # ── AttrInstance — (* attr_spec { , attr_spec } *) ──
 [AttrInstance]
 [AttrInstance.parser]

@@ -755,6 +755,44 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   （类型检查/约束求解）——sv-parser 本身也只到语法层
 - **决策**：2026-08-27 缓行，先玩熟 verilog 全量；立项触发后再细化阶段 A 缺口清单
 
+#### 真实语料实测（2026-08-27，real corpus 回归基线）
+
+- **语料**：`tests/e2e/samples/real/ref/` 扩至 9 文件（归属/许可见 CREDITS.md）：
+  CPU 核 4（darkriscv/picorv32/serv_top/tv80）+ UART×3（alexforencich，MIT）+
+  simcells（yosys，ISC，149 个 UDP/门级仿真单元）+ ice40_cells_sim（yosys，
+  ISC，specify 时序块，需 `-D NO_ICE40_DEFAULT_ASSIGNMENTS`——文件自带的
+  2005 兼容开关）。回归基线 `tests/e2e/test_real_corpus.py`：全量管线 +
+  lint 零诊断 + 幂等 + module 数下限（防静默截断）+ token 保真度 ≥0.80 +
+  sv-parser 差分门禁（无宏文件：假拒 + 互操作）
+- **实测暴露的 4 个缺口（全部修复）**：
+  - 🔥 **`===`/`!==`（A.8.4 case_equality）全缺失**：`base/_token.toml`
+    无 token、CmpOp 无算子、`_symbol_level.toml` operator 表无条目——三处
+    都要补（linter 的 ExpressionChecker 走 operator_defs，parser 走 CmpOp
+    规则，lexer 走 extend 表）。ice40 大量使用
+  - 🔥 **多目标连续赋值（A.6.1 list_of_net_assignments）真实代码实证**：
+    ice40 ~17 处 + yosys techmap；批次 6 因 linter 误判延后，现以独立
+    `AssignExtra` 子规则（`,` target `=` value，自带渲染器）落地，与
+    单目标/strength/delay 前缀共存
+  - 🔥 **模块头属性（A.1.1 `{ attribute_instance } module_declaration`）**：
+    attributes 插件新增顶层 `AttrModuleDecl`（@AttrInstance @ModuleDecl|
+    @MacroModuleDecl，start token `(`，与 ModuleDecl 的 module 关键字不冲突）
+  - 💡 **语句体宏行尾补分号**：非空 body 宏独占一行无分号（ice40
+    `` `SB_DFF_INIT``，body=`initial Q = 0;`）展开为裸 `tpc_marker_N`，
+    裸 id 非合法语句（lint/parser 双拒）。修法：行尾（调用后仅空白）时
+    替换文本补 `;` → `tpc_marker_N;` 按 A.6.9 裸任务调用可解析；anchor
+    marker 保持无分号（还原正则 `\b` 在 `;` 前成边界）。已验证对既有
+    语料零影响（表达式位宏不触发）
+- **语料前沿（未修复，批次 7 候选）**：
+  - 📌 **端口默认值宏**：`input NAME `M`（body=`= 1'b1`）的 token 替换顶掉
+    端口名——ice40 默认配置 lint 报 34 错；走 NO_ICE40 空宏（注释锚）规避。
+    `_bridge.py` 已有 inline+body 区间还原（L140-156，现为死代码），若要
+    默认配置可解析需启用该形态（[marker]body → 还原为调用残片），但
+    渲染后 body 文本必须可定位，属预处理器锚形态再设计
+  - 📌 **yosys 内部 `$cell` 名**：`module $demux` 类（techmap）非 2005/1800
+    Annex A 合法输入（sv-parser 同样拒），techmap 已排除出语料
+- **多目标 assign 坏输入仍炸**：`assign a = ;` lint 恢复病理 ~975 错（批次 6
+  已知），无效输入的错误恢复质量另案（不阻塞合法输入）
+
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 
 - 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /

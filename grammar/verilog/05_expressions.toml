@@ -392,11 +392,13 @@ production = ["symbol.base.add|symbol.base.sub"]
 [AddOp.parser.node]
 op = "$1"
 
-# 比较运算符: == != > < >= <=
+# 比较运算符: == != === !== > < >= <=
 [CmpOp.parser]
 production = [
     "symbol.extend.is_equal",
     "symbol.extend.not_equal",
+    "symbol.extend.case_equal",
+    "symbol.extend.case_not_equal",
     "symbol.base.bigger",
     "symbol.base.lesser",
     "symbol.extend.bigger_equal",

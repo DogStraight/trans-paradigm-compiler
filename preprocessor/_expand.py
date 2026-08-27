@@ -571,7 +571,24 @@ def expand_tokens(
                 )
                 continue
             token = f"tpc_marker_{_next_macro_seq()}"
-            parts[col:end] = token
+            # 独占一行的宏调用（行首 ∧ 行尾）补分号：`tpc_marker_N;` 按裸任务
+            # 调用语句可解析（1364-2005 A.6.9 task_enable），裸 `id` 不是合法
+            # 语句——lint/parser 都会拒（ice40 cells_sim 的 `SB_DFF_INIT 等
+            # 语句体宏独占一行无分号，真实语料实证）。只对"行首 ∧ 行尾"补：
+            # 行尾但非行首（如 `parameter P_D = `D` 后换行 `)`）是构造续行，
+            # 补分号会炸（ref_macro_complex 回归）；表达式位宏（调用后还有
+            # 内容）不补，保持既有行为。已知边界：宏调用独占一行夹在跨行
+            # 表达式中间（`a +` / `` `M`` / `+ b;`）会被误补，语料/真实代码
+            # 均无此形态（属坏风格），可接受。
+            # 注意：anchor 的 marker 保持无分号原文（还原正则 \b 在 `;` 前
+            # 成边界），`;` 只进替换文本。
+            replacement = token
+            if (
+                "".join(parts[:col]).strip() == ""
+                and "".join(parts[end:]).strip() == ""
+            ):
+                replacement += ";"
+            parts[col:end] = replacement
             forward_entries.append(
                 {
                     "marker": token,

@@ -2,9 +2,9 @@
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
-> 当前验证基线（2026-08-27）：1162 pytest 全绿 + e2e 94 组（FAIL 0，real 组
-> 保真度守卫）+ pyright strict 0 errors（1.1.413）+ lint recall 31/31 零误报 +
-> 覆盖率（fail_under 80）+ vs Verible 差分 124 例 + vs sv-parser 差分 92 例
+> 当前验证基线（2026-08-27）：1207 pytest 全绿 + e2e 94 组 + real 语料 9 文件
+> （FAIL 0，保真度守卫）+ pyright 0 errors（1.1.413）+ lint recall 31/31 零误报 +
+> 覆盖率（fail_under 80）+ vs Verible 差分 124 例 + vs sv-parser 差分 98 例
 > （false-reject 0 / bad-interop 0 / lenient-diff 3——typed_ports 增强语法）。
 
 ## P1 — Verilog 实例完善
@@ -59,9 +59,18 @@
 > A.3.1，attributes 插件 AttrInstStmt 注入 InstStmt）。
 > 审查修复（2026-08-27）：转义标识符改配置驱动（`[id.escaped]` 声明，
 > c4 不声明不启用——消除 lexer 硬编码语言知识）；library `-incdir` 拆
-> IncdirClause 子规则（4 层绑定降 2 层）。剩余核对缺口见
-> references.md 审计清单（过程体 event/localparam 声明、#(min:typ:max)、
-> 命名块头声明、层次化 id、三元 ?: 等，批次 7 候选）。
+> IncdirClause 子规则（4 层绑定降 2 层）。
+> 真实语料批次（2026-08-27，real corpus 驱动，见 references.md「真实语料
+> 实测」）：`===`/`!==`（A.8.4，token+CmpOp+operator 表三处缺失）+
+> 多目标连续赋值（A.6.1 list_of_net_assignments，独立 AssignExtra 子规则）
+> + 模块头属性（A.1.1 attribute_instance 前缀 module_declaration，顶层
+> AttrModuleDecl）+ 语句体宏行尾补分号（_expand.py：`tpc_marker_N;` 按
+> A.6.9 裸任务调用可解析）。真实语料扩至 9 文件（+UART×3/simcells/
+> ice40_cells_sim，归属 CREDITS.md），回归基线 test_real_corpus.py
+> （parse/format/lint/幂等/保真/差分门禁，module 数下限防静默截断）。
+> 剩余核对缺口见 references.md 审计清单（过程体 event/localparam 声明、
+> #(min:typ:max)、命名块头声明、层次化 id、三元 ?: 等）+ 真实语料前沿
+> （端口默认值宏 body、yosys `$cell` 内部名，批次 7 候选）。
 
 ### P1.5 已知缺陷收尾
 
