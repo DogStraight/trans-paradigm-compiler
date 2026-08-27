@@ -1,0 +1,194 @@
+# ============================================================================
+# udp 插件 — UDP 声明（IEEE 1364-2005 A.5）
+# ============================================================================
+# udp_declaration ::=
+#   primitive udp_identifier ( udp_port_list ) ;
+#   udp_port_declaration { udp_port_declaration }
+#   [ initial udp_output_port_identifier = init_val ; ]
+#   table udp_table_entries endtable
+#   endprimitive [ : udp_identifier ]
+#
+# 设计（sv-parser 参照，references.md UDP 专题）：
+#   - table 是 token 结构化规则，无"行文本"机制：entry = 符号序列 : 输出
+#     [ : 次态 ] ;——分号终结符消解行边界。
+#   - 表符号 0/1（literal.number）、?（question_mark）、*（multiple）、
+#     -（sub）、:（colon）现成 token 直接引用；裸字母 b/B/r/R/f/F/p/P/n/N
+#     是 id token——语法层宽进（UdpSymbol 接受任意 @Identifier，UDP 上下文
+#     内 id 即表符号），坏表内容的精确诊断由 lint 兜底。
+#   - comb 与 seq entry 合并为单宽松形态：符号+ : 符号 (: 符号)? ;——覆盖
+#     comb（输入 : 输出）与 seq（输入 : 当前态 : 次态）两种。
+#   - initial 语句（seq UDP 专用）与 table 并列于块头固定结构。
+#   - UDP 实例化不建独立规则：udp_instantiation 与 module_instantiation
+#     语法同构（id 名 + 括号连接），主包 ModuleInst 覆盖（解析为模块实例，
+#     AST 语义无差别）。
+#
+# 挂载：UdpDecl 是顶层块规则（is_block + is_statement，parser 根块候选
+# 自动含块规则）。
+
+[UdpDecl]
+is_block = true
+is_statement = true
+
+[UdpDecl.parser]
+production = [
+    "keyword.primitive",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@UdpPortList",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+    "@UdpPortDecl+",
+    "@UdpInitial?",
+    "keyword.table",
+    "@UdpEntry+",
+    "keyword.endtable",
+    "keyword.endprimitive",
+    "(symbol.base.colon,@Identifier)?",
+]
+
+[UdpDecl.parser.node]
+udp_name = "$1"
+ports = "$3"
+port_decls = "$6.items[*]"
+initial = "$7"
+entries = "$9.items[*]"
+# end_label（endprimitive 后的 ": name" 结尾标签）随 block_end 剥离出
+# block_prods，暂不绑定（罕见形态，后续如需渲染再扩展块剥离语义）。
+
+[UdpDecl.renderer.head]
+line = [
+    "primitive ",
+    { ref = "udp_name" },
+    "(",
+    { join = ", ", items = "ports" },
+    ");",
+    { break = true },
+    { join = "\n", items = "port_decls" },
+    { opt = { group = [
+        { break = true },
+        { ref = "initial" },
+    ] } },
+    { break = true },
+    "table",
+    { break = true },
+    { join = "\n", items = "entries" },
+    { break = true },
+    "endtable",
+]
+
+[UdpDecl.renderer.tail]
+text = "endprimitive"
+break = 2
+
+
+# ── UdpPortList / UdpPortDecl ──
+
+[UdpPortList]
+[UdpPortList.parser]
+production = ["@Identifier", "(symbol.base.comma,@Identifier)*"]
+[UdpPortList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[UdpPortList.renderer]
+layout = { join = ", ", items = "items" }
+
+[UdpPortDecl]
+[UdpPortDecl.parser]
+production = [
+    "(@BodyOutputDecl|@BodyInputDecl)",
+]
+[UdpPortDecl.parser.node]
+decl = "$1"
+[UdpPortDecl.renderer]
+layout = { ref = "decl" }
+
+
+# ── UdpInitial — initial 输出端口 = init_val ; ──
+
+[UdpInitial]
+# init_val ::= 1'b0 | 1'b1 | 1'bx | 1 | 0——based number（1'b0）是
+# BitWidthLiteral，纯数字是 Number，两者都收。
+[UdpInitial.parser]
+production = [
+    "keyword.initial",
+    "@Identifier",
+    "symbol.base.equal",
+    "@BitWidthLiteral|@Number",
+    "symbol.base.semicolon",
+]
+[UdpInitial.parser.node]
+out_name = "$2"
+init_val = "$4"
+[UdpInitial.renderer]
+layout = { line = [
+    "initial ",
+    { ref = "out_name" },
+    " = ",
+    { ref = "init_val" },
+    ";",
+] }
+
+
+# ── UdpEntry / UdpSymbol — 表行 ──
+# 宽松形态：符号+ : 符号 (: 符号)? ;
+
+[UdpEntry]
+[UdpEntry.parser]
+production = [
+    "@UdpSymbol",
+    "(@UdpSymbol)*",
+    "symbol.base.colon",
+    "@UdpSymbol",
+    "(symbol.base.colon,@UdpSymbol)?",
+    "symbol.base.semicolon",
+]
+[UdpEntry.parser.node]
+inputs = ["$1", "$2.items[*]"]
+output = "$4"
+next_state = "$5.sub_node[0].sub_node[1]"
+[UdpEntry.renderer]
+layout = { line = [
+    { join = " ", items = "inputs" },
+    " : ",
+    { ref = "output" },
+    { opt = { group = [
+        " : ",
+        { ref = "next_state" },
+    ] } },
+    ";",
+] }
+
+[UdpSymbol]
+[UdpSymbol.parser]
+production = [
+    "@Number|symbol.base.question_mark|symbol.base.multiple|symbol.base.sub|@Identifier|@EdgePair",
+]
+[UdpSymbol.parser.node]
+value = "$1"
+[UdpSymbol.renderer]
+layout = { ref = "value" }
+
+
+# ── EdgePair — 边沿括号对，如 (01) / (0?) ──
+# 宽进说明：标准形态是 ( level_symbol level_symbol ) 两个符号。lexer 的
+# number 正则（\d+）把纯数字组合 "01" 合并为单个 number token，而混合
+# 形态 "0?" 是两个 token——第二个符号设可选，两种形态均覆盖（(01) 单
+# token 吃满、第二符号空；语义由标准约定，不在解析层）。
+
+[EdgePair]
+[EdgePair.parser]
+production = [
+    "bracket.l_parentheses",
+    "@UdpSymbol",
+    "@UdpSymbol?",
+    "bracket.r_parentheses",
+]
+[EdgePair.parser.node]
+s0 = "$2"
+s1 = "$3"
+[EdgePair.renderer]
+layout = { line = [
+    "(",
+    { ref = "s0" },
+    { opt = { ref = "s1" } },
+    ")",
+] }

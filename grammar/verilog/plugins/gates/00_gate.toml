@@ -1,0 +1,210 @@
+# ============================================================================
+# gates 插件 — 门级/开关原语实例化（IEEE 1364-2005 A.3）
+# ============================================================================
+# gate_instantiation 九形态（按 gate 类型分 delay/strength 前缀与端子形态）
+# 合并为单规则（语法层宽进）：GateType [strength] [delay] 实例列表 ;
+#   端子统一 @Expression（net_lvalue ⊂ expression），端子数由实例形态决定
+#   （cmos 4 / 三态与 MOS 3 / n 输入 >=2 / n 输出 >=2 / 开关 2 / 上拉下拉 1）
+#   ——标准约束（端子数/strength 形态）语义层承担，与本包其余语法同哲学。
+#
+# 零依赖设计：StrengthWord/DriveStrength/Delay3/DelayValue/Delay3Paren/
+# MintypmaxExpr 与 nettypes 插件同名同内容（保持同步！），两插件可独立
+# 启用/禁用；合并规则表时后加载覆盖，内容一致无行为差异。
+# PullStrength 是 gates 独有（pulldown/pullup 允许单 strength 值）。
+#
+# and/or/not 的 token 身份：主包 symbol.extend 字母运算符（logic_add/
+# logic_or/logic_not）——gate 类型首 token 直接引用，不改词法。语句发现
+# 只在语句起始位置触发（表达式内 and 由 ExpressionChecker 黑盒消费）。
+#
+# 挂载：注入 InstStmt（模块体实例化分派，与 ModuleInst/GenerateBlock 并列）。
+
+[GateInstantiation.inject]
+targets = ["@InstStmt"]
+
+
+# ── GateType — 26 原语关键字（A.3.4 类型全集） ──
+
+[GateType]
+[GateType.parser]
+production = [
+    "symbol.extend.logic_add|symbol.extend.logic_or|symbol.extend.logic_not|keyword.nand|keyword.nor|keyword.xor|keyword.xnor|keyword.buf|keyword.bufif0|keyword.bufif1|keyword.notif0|keyword.notif1|keyword.nmos|keyword.pmos|keyword.rnmos|keyword.rpmos|keyword.cmos|keyword.rcmos|keyword.tran|keyword.tranif0|keyword.tranif1|keyword.rtran|keyword.rtranif0|keyword.rtranif1|keyword.pullup|keyword.pulldown",
+]
+[GateType.parser.node]
+type_name = "$1"
+[GateType.renderer]
+layout = { ref = "type_name" }
+
+
+# ── strength 体系（与 nettypes 同名同内容，保持同步） ──
+
+[StrengthWord]
+[StrengthWord.parser]
+production = [
+    "keyword.supply0|keyword.supply1|keyword.strong0|keyword.strong1|keyword.pull0|keyword.pull1|keyword.weak0|keyword.weak1|keyword.highz0|keyword.highz1",
+]
+[StrengthWord.parser.node]
+word = "$1"
+[StrengthWord.renderer]
+layout = { ref = "word" }
+
+[DriveStrength]
+[DriveStrength.parser]
+production = [
+    "bracket.l_parentheses",
+    "@StrengthWord",
+    "symbol.base.comma",
+    "@StrengthWord",
+    "bracket.r_parentheses",
+]
+[DriveStrength.parser.node]
+w0 = "$2.word"
+w1 = "$4.word"
+[DriveStrength.renderer]
+layout = { line = ["(", { ref = "w0" }, ", ", { ref = "w1" }, ")"] }
+
+
+# ── PullStrength — ( strength ) 单值变体（pulldown/pullup 专用） ──
+# A.3.2: pulldown_strength ::= ( strength0 , strength1 ) | ( strength1 ,
+# strength0 ) | ( strength0 )——单/双值皆可，语法层宽进。
+
+[PullStrength]
+[PullStrength.parser]
+production = [
+    "bracket.l_parentheses",
+    "@StrengthWord",
+    "(symbol.base.comma,@StrengthWord)?",
+    "bracket.r_parentheses",
+]
+[PullStrength.parser.node]
+w0 = "$2.word"
+w1 = "$3.sub_node[1].word"
+[PullStrength.renderer]
+layout = { line = [
+    "(",
+    { ref = "w0" },
+    { opt = { group = [", ", { ref = "w1" }] } },
+    ")",
+] }
+
+
+# ── delay 体系（与 nettypes 同名同内容，保持同步） ──
+
+[Delay3]
+[Delay3.parser]
+production = ["symbol.base.pound", "@DelayValue|@Delay3Paren"]
+[Delay3.parser.node]
+value = "$2"
+[Delay3.renderer]
+layout = { line = ["#", { ref = "value" }] }
+
+[DelayValue]
+[DelayValue.parser]
+production = ["@Number|@Identifier"]
+[DelayValue.parser.node]
+value = "$1"
+[DelayValue.renderer]
+layout = { ref = "value" }
+
+[Delay3Paren]
+[Delay3Paren.parser]
+production = [
+    "bracket.l_parentheses",
+    "@MintypmaxExpr",
+    "(symbol.base.comma,@MintypmaxExpr)*",
+    "bracket.r_parentheses",
+]
+[Delay3Paren.parser.node]
+exprs = ["$2", "$3.items[*].sub_node[1]"]
+[Delay3Paren.renderer]
+layout = { line = [
+    "(",
+    { join = ", ", items = "exprs" },
+    ")",
+] }
+
+[MintypmaxExpr]
+[MintypmaxExpr.parser]
+production = [
+    "@Expression",
+    "(symbol.base.colon,@Expression,symbol.base.colon,@Expression)?",
+]
+[MintypmaxExpr.parser.node]
+expr = "$1"
+typ = "$2.sub_node[0].sub_node[1]"
+max_expr = "$2.sub_node[0].sub_node[3]"
+[MintypmaxExpr.renderer]
+layout = { line = [
+    { ref = "expr" },
+    { opt = { group = [
+        " : ",
+        { ref = "typ" },
+        " : ",
+        { ref = "max_expr" },
+    ] } },
+] }
+
+
+# ── GateInstantiation — gate_type [strength] [delay] 实例列表 ; ──
+
+[GateInstantiation]
+is_statement = true
+
+[GateInstantiation.parser]
+production = [
+    "@GateType",
+    "(@DriveStrength|@PullStrength)?",
+    "@Delay3?",
+    "@GateInstanceList",
+    "symbol.base.semicolon",
+]
+
+[GateInstantiation.parser.node]
+gate_type = "$1"
+strength = "$2"
+delay = "$3"
+instances = "$4"
+
+[GateInstantiation.renderer.layout]
+line = [
+    { ref = "gate_type" },
+    { opt = { group = [" ", { ref = "strength" }] } },
+    { opt = { group = [" ", { ref = "delay" }] } },
+    " ",
+    { ref = "instances" },
+    ";",
+]
+
+
+# ── GateInstanceList / GateInstance — [name] ( 端子列表 ) ──
+# name_of_gate_instance ::= gate_instance_identifier [ range ]
+
+[GateInstanceList]
+[GateInstanceList.parser]
+production = ["@GateInstance", "(symbol.base.comma,@GateInstance)*"]
+[GateInstanceList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[GateInstanceList.renderer]
+layout = { join = ", ", items = "items" }
+
+[GateInstance]
+[GateInstance.parser]
+production = [
+    "@Identifier?",
+    "@RangeBracket*",
+    "bracket.l_parentheses",
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+    "bracket.r_parentheses",
+]
+[GateInstance.parser.node]
+name = "$1"
+array_range = "$2"
+terminals = ["$4", "$5.items[*].sub_node[1]"]
+[GateInstance.renderer]
+layout = { line = [
+    { opt = { group = [" ", { ref = "name" }] } },
+    { join = "", items = "array_range" },
+    "(",
+    { join = ", ", items = "terminals" },
+    ")",
+] }

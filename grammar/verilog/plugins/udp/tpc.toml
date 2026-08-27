@@ -1,0 +1,7 @@
+[lexer]
+token_ext = { file = "_token_ext.toml", required = false }
+
+[grammar]
+files = [
+    "00_udp.toml",
+]

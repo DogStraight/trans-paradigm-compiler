@@ -25,7 +25,7 @@ continuation = { file = "base/_macro.toml", section = "continuation", required =
 reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 
 [plugins]
-enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs"]
+enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs", "gates", "udp"]
 
 # ── 指令定义（main.py 指令 → run_pipeline 参数开关） ──
 # 默认值 = 完整管线（preprocess/lint/parse/analyze/transform/render 全 true，

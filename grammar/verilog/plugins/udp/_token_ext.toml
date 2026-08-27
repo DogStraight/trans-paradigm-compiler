@@ -1,0 +1,10 @@
+# udp 插件 — 词法扩展（IEEE 1364-2005 A.5 UDP 声明）
+# 表符号（0/1/?/*/-）用主包现成 token（literal.number/question_mark/
+# multiple/sub）；裸字母 b/B/r/R/f/F/p/P/n/N/x/X 是 id token（语法层宽进，
+# sv-parser 参照：表符号按 token 结构化匹配，裸字母不另立词法身份）。
+
+[id.keyword]
+primitive = "primitive"
+endprimitive = "endprimitive"
+table = "table"
+endtable = "endtable"

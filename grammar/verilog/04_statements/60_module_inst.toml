@@ -136,16 +136,40 @@ line = [
 # 实例化的端口连接部分: (.port1(w1), .port2(w2));
 # 括号配对由 [bracket].pairs 配置统一处理。
 
+# 支持命名连接（.port(expr)）与位置连接（expr 列表，A.4.1.1 ordered
+# port connection——UDP 实例/老式模块实例用）。
 [PortConnection.parser]
 production = [
     "bracket.l_parentheses",
-    "@NamedPortList?",
+    "(@NamedPortList|@OrderedPortList)?",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
 ]
 
 [PortConnection.parser.node]
 ports = "$2"
+
+
+# ── OrderedPortList — 位置端口连接（A.4.1.1 ordered port connection） ──
+# 裸表达式列表：foo u1(a, b, c);——UDP 实例/老式模块实例的端口连接形态。
+
+[OrderedPortList.parser]
+production = [
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+]
+
+[OrderedPortList.parser.node]
+items = [
+    "$1",
+    "$2.items[*].sub_node[1]",
+]
+
+[OrderedPortList.renderer.layout]
+intent = "compact"
+first_soft = false
+nest = 0
+items = "items"
 
 
 # ── NamedPortList — 命名端口列表 ──

@@ -49,15 +49,34 @@ def _resync_block_parts(rule: Any) -> None:
     """块规则 block_start/block_end/block_prods 重算（对齐 core/define 的推导）。"""
     prods = list(rule.prods)
     block_start, block_end = "", ""
-    if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
+
+    def _is_lit_tok(p) -> bool:
+        # 与 core/define.py 同款判定：非 @ 且不含组语法字符。
+        return (
+            isinstance(p, str)
+            and not p.startswith("@")
+            and not any(ch in p for ch in "()|,*+?")
+        )
+
+    if prods and _is_lit_tok(prods[0]):
         block_start = prods[0]
-    if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
+    if prods and _is_lit_tok(prods[-1]):
         block_end = prods[-1]
+    elif prods:
+        for p in reversed(prods[:-1]):
+            if _is_lit_tok(p):
+                block_end = p
+                break
     bp = list(prods)
     if block_start:
         bp = bp[1:]
     if block_end:
-        bp = bp[:-1]
+        # 与 core/define.py 同款：剥到 block_end 元素之前（尾组回退场景
+        # block_end 不在尾元素）。
+        idx = len(bp) - 1
+        while idx >= 0 and bp[idx] != block_end:
+            idx -= 1
+        bp = bp[:idx]
     object.__setattr__(rule, "block_start", block_start)
     object.__setattr__(rule, "block_end", block_end)
     object.__setattr__(rule, "block_prods", bp)

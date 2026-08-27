@@ -549,16 +549,40 @@ class GrammarRule:
             # 块边界。原实现硬编码 `keyword.` 前缀（Verilog 渗透——module/begin/end
             # 都是 keyword），c4 的 `{`/`}`（bracket）无法推导导致匿名块无限递归。
             # 语言无关化：任何非 @ 字面 token 都可作块起止符。
-            if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
+            # 纯字面 token 判定：非 @ 开头且不含组语法字符（组/可选/重复
+            # 字符串如 "(symbol.base.colon,@Identifier)?" 不是块边界）。
+            def _is_lit_tok(p) -> bool:
+                return (
+                    isinstance(p, str)
+                    and not p.startswith("@")
+                    and not any(ch in p for ch in "()|,*+?")
+                )
+
+            if prods and _is_lit_tok(prods[0]):
                 self.block_start = prods[0]
-            if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
+            if prods and _is_lit_tok(prods[-1]):
                 self.block_end = prods[-1]
+            elif prods:
+                # 尾元素是组/可选组（如 UDP 的 endprimitive 后接可选的
+                # ": name" 结尾标签——尾元素 "(colon,id)?"）→ 向前取最后一
+                # 个纯字面 token 作 block_end（标准块尾前可有可选标签）。
+                for p in reversed(prods[:-1]):
+                    if _is_lit_tok(p):
+                        self.block_end = p
+                        break
             # 内容部分（去首尾字面 token）
             self.block_prods = list(prods)
             if self.block_start:
                 self.block_prods = self.block_prods[1:]
             if self.block_end:
-                self.block_prods = self.block_prods[:-1]
+                # block_end 可能不在尾元素（如 UDP 的 endprimitive 后接可选
+                # ": name" 标签——block_end 回退推导到倒数第二）→ 剥到
+                # block_end 元素之前（而非固定 -1，否则 block_end 残留进
+                # 块头被 match_productions 消费，块体循环吞掉后续兄弟块）。
+                idx = len(self.block_prods) - 1
+                while idx >= 0 and self.block_prods[idx] != self.block_end:
+                    idx -= 1
+                self.block_prods = self.block_prods[:idx]
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。

@@ -160,7 +160,21 @@ class RuleMatcher:
                     self._report_eof(tokens, limit, errors)
                 break
             before = len(errors)
-            j = self.match(tokens, i, feat, errors, limit, strict=True)
+            if feat.get("type") == "optional":
+                # first 与后续元素重叠（如门级实例 (strength)? 与无名实例
+                # 的 "("）→ overlap 变体：失败且首 token 命中时静默交还
+                # 后续元素，不报 incomplete 不跳过。
+                nxt: frozenset[str] = frozenset()
+                for later in prods[pos + 1 :]:
+                    nxt |= self._first_tokens(later, set())
+                if nxt:
+                    j = self._match_optional_overlap(
+                        tokens, i, feat, errors, limit, nxt
+                    )
+                else:
+                    j = self.match(tokens, i, feat, errors, limit, strict=True)
+            else:
+                j = self.match(tokens, i, feat, errors, limit, strict=True)
             if j <= i:
                 # optional 可不存在；全可选 call（如 TypeSpecNoReg）匹配成功但
                 # 不消费也属合法——两者都跳过继续，仅真正失败（有错误）才回滚
@@ -650,6 +664,30 @@ class RuleMatcher:
                 return k + 1
         return i
 
+    def _match_optional_overlap(
+        self,
+        tokens: list[Token],
+        i: int,
+        node: dict,
+        errors: list,
+        limit: int,
+        next_firsts: frozenset[str],
+    ) -> int:
+        """optional 变体（first 与后续元素重叠时用）：试匹配失败且首 token
+        命中时，**不报 incomplete、不跳过**——该 token 可能是后续元素的合法
+        开头（如门级实例 gate_type (strength)? (terminals) 的括号：strength
+        失败后左括号属于无名实例）。静默交还，后续元素继续匹配。"""
+        inner = node.get("elem", {})
+        trial: list = []
+        j = self.match(tokens, i, inner, trial, limit, strict=False)
+        if j > i:
+            return j
+        ft = self._first_tokens(inner, set())
+        if ft and ft & next_firsts:
+            return i  # 首 token 与后续元素 first 重叠 → 静默（机会留给后续）
+        # 不重叠：走原恢复（报 incomplete + 跳过）
+        return self._match_optional(tokens, i, node, errors, limit)
+
     def _first_tokens(self, feat: dict, visited: set) -> set[str]:
         """递归计算 feature 的必然首 token 类型集合（防环）。"""
         typ = feat.get("type", "")
@@ -674,12 +712,29 @@ class RuleMatcher:
                 prods = info.get("prods", [])
                 if prods and isinstance(prods[0], dict):
                     result |= self._first_tokens(prods[0], visited | {name})
+                # nullable 传播：首元素是可空形态（optional/repeat）时，
+                # first 含"空后下一元素"的 first（如 GateInstance 的
+                # @Identifier? 空 → first 含 "("；否则 overlap 判据漏判）。
+                if prods and isinstance(prods[0], dict):
+                    if prods[0].get("type") in ("optional", "repeat"):
+                        for later in prods[1:]:
+                            result |= self._first_tokens(
+                                later, visited | {name}
+                            )
+                            if later.get("type") not in ("optional", "repeat"):
+                                break
                 return result
             return set()
         if typ == "seq":
             items = feat.get("items", [])
             if items:
-                return self._first_tokens(items[0], visited)
+                result = set()
+                for it in items:
+                    result |= self._first_tokens(it, visited)
+                    # seq 内可空元素后继续收集（同上 nullable 传播）
+                    if it.get("type") not in ("optional", "repeat"):
+                        break
+                return result
             return set()
         if typ == "choice":
             result: set[str] = set()
@@ -710,10 +765,25 @@ class RuleMatcher:
         strict: bool,
     ) -> int:
         start = i
-        for item in node.get("items", []):
+        items = node.get("items", [])
+        for idx, item in enumerate(items):
             if i >= limit:
                 break
-            j = self.match(tokens, i, item, errors, limit, strict)
+            if item.get("type") == "optional":
+                # optional 的 first 与后续元素 first 重叠（如门级实例的
+                # (strength)? 与无名实例的 "("）→ 用 overlap 变体：匹配
+                # 失败且首 token 命中时静默交还后续元素，不报 incomplete。
+                nxt: frozenset[str] = frozenset()
+                for later in items[idx + 1 :]:
+                    nxt |= self._first_tokens(later, set())
+                if nxt:
+                    j = self._match_optional_overlap(
+                        tokens, i, item, errors, limit, nxt
+                    )
+                else:
+                    j = self.match(tokens, i, item, errors, limit, strict)
+            else:
+                j = self.match(tokens, i, item, errors, limit, strict)
             if j <= i:
                 # 某个元素未推进 → seq 整体失败（回滚到起点），
                 # 防止后续元素在未推进位置假匹配（如 Range 的 l_square 失败

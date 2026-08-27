@@ -20,13 +20,19 @@
 > 已入（2026-08-27，批次 2）：procedural assign/deassign（sim 插件，A.6.4，
 > 过程 assign 与模块级 AssignStmt 双候选同构消歧）+ config 声明（plugins/
 > configs，A.1.5 全形态）+ macromodule（主包 MacroModuleDecl 独立规则）。
+> 已入（2026-08-27，批次 3）：门级/开关原语 26 个（plugins/gates，A.3 全组，
+> strength/delay 与 nettypes 同名同步副本 + PullStrength 单值变体）+ UDP
+> 声明（plugins/udp，A.5：comb/seq 表 + initial + edge 括号对，表符号按
+> sv-parser 参照 token 结构化；UDP 实例化复用 ModuleInst）+ 模块实例位置
+> 端口连接（主包 OrderedPortList，A.4.1.1）。
+> 引擎修复：块规则 block_start/end 推导支持尾组回退 + block_prods 剥到
+> block_end 位置；matcher optional 失败恢复对 first 重叠场景静默交还 +
+> first 集 nullable 传播；start_token_map 块首去重；BoundaryChecker opener
+> 前驱排除（:config 类终结形态）。
 
-- [ ] **门级/开关原语**（A.3）：and/or/nand/nor/xor/xnor/buf/not + bufif0/bufif1/
-      notif0/notif1 + pmos/nmos/tran 系列 —— 综合类，进主包
-- [ ] **UDP**（A.5）：primitive/table/endprimitive —— 综合类（老设计），进主包
 - [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
       仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
-- [ ] defparam（A.2.4）—— 与 specify/门级同批
+- [ ] defparam（A.2.4）—— 与 specify 同批
 
 ### P1.5 已知缺陷收尾
 
