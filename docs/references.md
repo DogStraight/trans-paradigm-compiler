@@ -685,6 +685,31 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 📌 **完整 IEEE 合规**：sv-parser 是"标准 Annex A 全量"路线（CST 节点=标准产生式）；
     tpc verilog 包声明"无 SystemVerilog"（README 边界），不追逐全量合规，各有定位
 
+#### 2005 覆盖核对 — 7 缺口实现对照（2026-08-27 追读，tpc 批次 6 立项参照）
+
+tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-2017 全量，2005 是其子集，
+下列结构在 2005 同形）：
+
+| tpc 缺口 | sv-parser 实现 | 对 tpc 的启示 |
+|---|---|---|
+| 转义标识符 `\name`（A.9.3，tpc lexer 崩溃） | `identifier = alt(escaped, simple)`——**escaped 是 identifier 第一候选**；`escaped_identifier_impl = tag("\\") + is_not(" \t\r\n")`（反斜杠后到空白止） | 🔥 词法层并入 identifier（非独立 token 类）；tpc 需 lexer 支持 `\` 起始 id + 规则/渲染透传 |
+| library 声明（A.1.1） | **独立顶层入口** `library_text = many(library_description)`；description = library_declaration \| include_statement \| config_declaration；`library_declaration = library id (, file_path)* [-incdir ...] ;`，file_path 用 `is_not(",; ")` 宽松捕获 | 💡 tpc config 插件只做了 config 声明，library 需独立入口（含 `-incdir` 与 `include` 语句） |
+| continuous assign strength/delay（A.6.1） | **拆两分支**：`continuous_assign_net = assign [drive_strength] [delay3] 网络赋值列表 ;` 与 `continuous_assign_variable = assign [delay_control] 变量赋值列表 ;`——strength/delay 是可选前缀，复用共享 strengths.rs/delays.rs | 🔥 tpc AssignStmt 只裸 `assign`；strength 6 形态（01/10/0z/1z/z1/z0）nettypes/gates 已有同名规则可直接复用 |
+| always 无事件控制（A.6.2） | `always_construct = always_keyword + statement`——**event_control 不是 always 的一部分**，`always #5 ...`/`always begin...end` 的时序/块由 statement 承载 | 🔥 tpc AlwaysStmt 强制 `@EventControl`；应按标准放宽为 `always statement`（时序进 statement 层） |
+| 单索引 range `[3]`（A.2.5） | `unpacked_dimension = alt(range, constant_expression)`——`[a:b]` 与 `[3]` 显式两分支 | 🔥 tpc Range 强制 `[a:b]`；补单表达式分支（声明维与位选 SelectSuffix 已有 `a[3]` 形态） |
+| genvar 列表（A.4.2） | `genvar_declaration = genvar list_of_genvar_identifiers ;`，list = 逗号分隔 | 💡 tpc GenvarDecl 只单标识符；补 `(, @Identifier)*`（同 DeclaratorList 模式） |
+| 实例/门级 attribute 前缀（A.4.1/A.3.1） | **attribute 在模块项层**：`module_or_generate_item_{module,gate,udp,module_item,parameter}` 五分支各包 `many0(attribute_instance)`，而非塞进 instantiation 内部；port connection 层另支持 attribute | 🔥 tpc attributes 插件只挂声明/语句；应按 A.1.4 `{ attribute_instance } module_or_generate_item` 在模块项各分支前缀挂 |
+
+- **共性观察**：sv-parser 对"可选修饰前缀"（strength/delay/attribute）一律在**产生式层用
+  `opt`/`many0` 前置**，不改被修饰规则内部；tpc 同构做法 = 在 production 首元素加
+  `@AttrInstance?`/`@DriveStrength?` 等，无需动引擎
+- **转义标识符是唯一 lexer 层缺口**（其余 6 个都是规则层）：sv-parser 在词法并入
+  identifier，tpc 需在 lexer 增加 `\` 起始 id 分支（当前 `\` 抛 ValueError 崩溃，非软失败）
+- 出处：`sv-parser-parser/src/{general/identifiers.rs, source_text/library_source_text.rs,
+  behavioral_statements/continuous_assignment_and_net_alias_statements.rs + procedural_blocks_
+  and_assignments.rs, declarations/{declaration_ranges.rs, declaration_lists.rs, type_declarations.rs},
+  instantiations/module_instantiation.rs, source_text/module_items.rs}`
+
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 
 - 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /
