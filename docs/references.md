@@ -710,6 +710,26 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   and_assignments.rs, declarations/{declaration_ranges.rs, declaration_lists.rs, type_declarations.rs},
   instantiations/module_instantiation.rs, source_text/module_items.rs}`
 
+#### sv-parser 差分对标（2026-08-27 落地，第二参照系）
+
+- **工具链**：Rust 装到 `D:\rust`（rustup + stable-x86_64-pc-windows-gnu，
+  因本机 VS BuildTools 的 Windows SDK 桌面库缺失 kernel32.lib、msvc target
+  无法链接，改用 GNU host+target 全链路）；parse_sv.exe 编译自 sv-parser
+  仓库 `examples/parse_sv.rs`，44MB，放 `tests/differential/.tools/sv-parser/`
+  （.gitignore 忽略，与 verible 同机制）
+- **门禁脚本**：`tests/differential/run_differential_svparser.py`，三属性：
+  1. **接受域**（假拒检测）：sv-parser 接受 ∧ 2005 子集语料 → tpc 必须接受
+  2. **宽进差异**（记录非失败）：sv-parser 拒 ∧ tpc 收——sv-parser 严格
+     实现 Annex A（如 `wire \a.b;` 须写 `\a.b ;`），tpc 分隔符提前终止
+     直接可解析，是有意取舍；tpc 专属增强语法（typed_ports 的 impl/type）
+     sv-parser 不认也归此类
+  3. **互操作**：tpc 输出必须被 sv-parser 接受（渲染器产出合法代码）
+- **基线（2026-08-27）**：92 文件 → false-reject 0、bad-interop 0、
+  lenient-diff 3（全为 samples/transform 的 typed_ports 增强语法样本）
+- **与 Verible 差分的关系**：同为"语料限定 2005 子集"的接受域检查；sv-parser
+  增量价值 = 纯解析器（Verible 是 formatter）+ 严格 Annex A 暴露宽进差异
+  （实测 escaped_identifier 严格/宽进分歧已由 probe 验证）
+
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 
 - 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /
