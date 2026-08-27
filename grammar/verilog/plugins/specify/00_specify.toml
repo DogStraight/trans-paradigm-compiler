@@ -1,0 +1,481 @@
+# ============================================================================
+# specify 插件 — specify 块（IEEE 1364-2005 A.7）
+# ============================================================================
+# specify_block ::= specify { specify_item } endspecify
+# specify_item ::= specparam_declaration | pulsestyle_declaration |
+#   showcancelled_declaration | path_declaration | system_timing_check
+#
+# 设计（宽进，与全量批次各插件同哲学）：
+#   - SpecifyDecl 是块规则（specify/endspecify），body 由语句循环解析；
+#     specify_item 五类都是 is_statement 规则（自动进块体候选）。
+#   - 路径声明（A.7.2）形态多样（简单/边沿敏感/状态依赖 + polarity +
+#     if/ifnone 前缀）——PathDecl 用 PathToken 宽松序列覆盖：
+#     PathToken = 标识符/数字/逗号/=>/*>/posedge/negedge/+/-/:/./+:/−:/
+#     区间/括号组。嵌套括号组（边沿形态右侧 `(q +: d)`）由 PathParenGroup
+#     递归覆盖，裸括号不作 token（避免 repeat 贪吃吞掉右括号）。
+#   - 状态依赖路径（if (expr) path | ifnone path）独立规则
+#     StateDepPathDecl 包一层——PathDecl 的语句候选 FIRST 集以 `(` 打头，
+#     不能被可选前缀（@PathPrefix?）挡住。
+#   - 时序检查（A.7.5 $setup/$hold/$width 等）与 SysTaskStmt 同形态：
+#     $ + 名字 + ( args ) + ;（名字不注册 sysfunc，宽进）。args 是
+#     TimingCheckArg 列表：timing_check_event（posedge/negedge/edge +
+#     终端 + &&& 条件）或表达式（limit/notifier 等）。
+#   - PathDelayAtom 的 mintypmax（a:b:c）内联 :Expression:Expression 组
+#     （与 nettypes/gates 的 MintypmaxExpr 同语义，保持同步）。
+#
+# 挂载：SpecifyDecl 注入 ModuleItem（模块体顶层成员，non_port_module_item）。
+
+[SpecifyDecl.inject]
+targets = ["@ModuleItem"]
+
+[SpecifyDecl]
+is_block = true
+is_statement = true
+
+[SpecifyDecl.parser]
+production = [
+    "keyword.specify",
+    "keyword.endspecify",
+]
+
+[SpecifyDecl.renderer.head]
+line = ["specify", { break = true }]
+
+[SpecifyDecl.renderer.body]
+indent = true
+role = "flatten"
+
+[SpecifyDecl.renderer.tail]
+text = "endspecify"
+break = 2
+
+
+# ── SpecparamDecl — specparam 参数声明 ──
+# specparam_declaration ::= specparam [ range ] list_of_specparam_assignments ;
+# specparam_assignment ::= specparam_identifier = constant_mintypmax_expression
+#   （mintypmax 形态 a:b:c 由 PathDelayAtom 覆盖；不用主包 DeclaratorList，
+#   其 Init 只吃 @Expression，specparam 的 mintypmax 值会断）。
+
+[SpecparamDecl]
+is_statement = true
+
+[SpecparamDecl.parser]
+production = [
+    "keyword.specparam",
+    "@Range?",
+    "@SpecparamAssignList",
+    "symbol.base.semicolon",
+]
+[SpecparamDecl.parser.node]
+range = "$2"
+items = "$3"
+[SpecparamDecl.renderer.layout]
+line = [
+    "specparam ",
+    { opt = { group = [
+        "[",
+        { ref = "range" },
+        "] ",
+    ] } },
+    { ref = "items" },
+    ";",
+]
+
+[SpecparamAssignList]
+[SpecparamAssignList.parser]
+production = ["@SpecparamAssign", "(symbol.base.comma,@SpecparamAssign)*"]
+[SpecparamAssignList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[SpecparamAssignList.renderer]
+layout = { join = ", ", items = "items" }
+
+[SpecparamAssign]
+[SpecparamAssign.parser]
+production = ["@Identifier", "symbol.base.equal", "@PathDelayAtom"]
+[SpecparamAssign.parser.node]
+name = "$1"
+value = "$3"
+[SpecparamAssign.renderer]
+layout = { line = [
+    { ref = "name" },
+    " = ",
+    { ref = "value" },
+] }
+
+
+# ── PulsestyleDecl / ShowcancelledDecl — 声明类 specify_item ──
+
+[PulsestyleDecl]
+is_statement = true
+
+[PulsestyleDecl.parser]
+production = [
+    "keyword.pulsestyle_onevent|keyword.pulsestyle_ondetect",
+    "@Identifier",
+    "(symbol.base.comma,@Identifier)*",
+    "symbol.base.semicolon",
+]
+[PulsestyleDecl.parser.node]
+kind = "$1"
+outputs = ["$2", "$3.items[*].sub_node[1]"]
+[PulsestyleDecl.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { join = ", ", items = "outputs" },
+    ";",
+]
+
+[ShowcancelledDecl]
+is_statement = true
+
+[ShowcancelledDecl.parser]
+production = [
+    "keyword.showcancelled|keyword.noshowcancelled",
+    "@Identifier",
+    "(symbol.base.comma,@Identifier)*",
+    "symbol.base.semicolon",
+]
+[ShowcancelledDecl.parser.node]
+kind = "$1"
+outputs = ["$2", "$3.items[*].sub_node[1]"]
+[ShowcancelledDecl.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { join = ", ", items = "outputs" },
+    ";",
+]
+
+
+# ── PathDecl — 路径声明（A.7.2 全形态宽进） ──
+# 简单形态：`( a => y ) = delay ;`、`( a, b *> y ) = delay ;`
+# 边沿敏感：`( posedge clk => ( q +: d ) ) = delay ;`（右侧括号组是
+#   PathParenGroup，输出端子 + polarity + data_source 的宽松消费）
+# 状态依赖：if (expr) / ifnone 前缀 → StateDepPathDecl 独立规则包裹。
+
+[PathDecl]
+is_statement = true
+
+[PathDecl.parser]
+production = [
+    "bracket.l_parentheses",
+    "@PathToken",
+    "(@PathToken)*",
+    "bracket.r_parentheses",
+    "symbol.base.equal",
+    "@PathDelayValue",
+    "symbol.base.semicolon",
+]
+[PathDecl.parser.node]
+tokens = ["$2", "$3.items[*]"]
+delay = "$6"
+[PathDecl.renderer.layout]
+line = [
+    "(",
+    { join = " ", items = "tokens", no_soft = true },
+    ") = ",
+    { ref = "delay" },
+    ";",
+]
+
+# ── StateDepIfDecl / StateDepIfnoneDecl — 状态依赖路径（if/ifnone 前缀） ──
+# state_dependent_path_declaration ::= if ( expr ) simple_path_declaration
+#   | ifnone simple_path_declaration。两条独立 is_statement 规则（首元素即
+#   字面 token）——linter 的 _a_prefix_paths 假定 prods[0] 是触发 token、
+#   从 prods[1:] 推导判别路径；若包一层 @PathPrefix call 作 prods[0] 会让
+#   paths 为空（call 非原子 → 截断），Level 2 试解析在残缺 `if` 上误胜出
+#   （if 缺括号门禁 e09 回归）。
+
+[StateDepIfDecl]
+is_statement = true
+
+[StateDepIfDecl.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@PathDecl",
+]
+[StateDepIfDecl.parser.node]
+cond = "$3"
+path = "$5"
+[StateDepIfDecl.renderer]
+layout = { line = [
+    "if (",
+    { ref = "cond" },
+    ") ",
+    { ref = "path" },
+] }
+
+[StateDepIfnoneDecl]
+is_statement = true
+
+[StateDepIfnoneDecl.parser]
+production = ["keyword.ifnone", "@PathDecl"]
+[StateDepIfnoneDecl.parser.node]
+path = "$2"
+[StateDepIfnoneDecl.renderer]
+layout = { line = [
+    "ifnone ",
+    { ref = "path" },
+] }
+
+
+# ── PathToken / PathParenGroup / PathRange — 路径描述宽松 token ──
+# 裸括号不作 PathToken：PathParenGroup 递归消费嵌套括号组（含自身的
+# 右括号），避免 repeat 贪吃吞掉外层右括号；PathRange 覆盖终端区间
+# `a[3:0]`（含单表达式 `a[3]`，Range 只吃 [a:b] 会断）。
+
+[PathToken]
+[PathToken.parser]
+production = [
+    "@Identifier|@Number|symbol.base.comma|symbol.extend.arrow|symbol.extend.star_arrow|keyword.posedge|keyword.negedge|symbol.base.add|symbol.base.sub|symbol.base.multiple|symbol.base.div|symbol.base.mod|symbol.base.colon|symbol.base.dot|symbol.extend.plus_range|symbol.extend.minus_range|@PathRange|@PathParenGroup",
+]
+[PathToken.parser.node]
+value = "$1"
+[PathToken.renderer]
+layout = { ref = "value" }
+
+[PathParenGroup]
+[PathParenGroup.parser]
+production = [
+    "bracket.l_parentheses",
+    "@PathToken",
+    "(@PathToken)*",
+    "bracket.r_parentheses",
+]
+[PathParenGroup.parser.node]
+tokens = ["$2", "$3.items[*]"]
+[PathParenGroup.renderer]
+layout = { line = [
+    "(",
+    { join = " ", items = "tokens", no_soft = true },
+    ")",
+] }
+
+[PathRange]
+[PathRange.parser]
+production = [
+    "bracket.l_square_bracket",
+    "@Expression",
+    "(symbol.base.colon,@Expression)?",
+    "bracket.r_square_bracket",
+]
+[PathRange.parser.node]
+index = "$2"
+range_end = "$3.sub_node[0].sub_node[1]"
+[PathRange.renderer]
+layout = { line = [
+    "[",
+    { ref = "index" },
+    { opt = { group = [
+        ":",
+        { ref = "range_end" },
+    ] } },
+    "]",
+] }
+
+
+# ── PathDelayValue — 路径延迟（A.7.4） ──
+# path_delay_value ::= list_of_path_delay_expressions | ( list_of_path_delay_expressions )
+# 括号形态（(1, 2)）独立 PathDelayParen 规则，避免列表规则在 `(` 处断掉。
+
+[PathDelayValue]
+[PathDelayValue.parser]
+production = ["@PathDelayList|@PathDelayParen"]
+[PathDelayValue.parser.node]
+inner = "$1"
+[PathDelayValue.renderer]
+layout = { ref = "inner" }
+
+[PathDelayList]
+[PathDelayList.parser]
+production = ["@PathDelayAtom", "(symbol.base.comma,@PathDelayAtom)*"]
+[PathDelayList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[PathDelayList.renderer]
+layout = { join = ", ", items = "items" }
+
+[PathDelayParen]
+[PathDelayParen.parser]
+production = [
+    "bracket.l_parentheses",
+    "@PathDelayList",
+    "bracket.r_parentheses",
+]
+[PathDelayParen.parser.node]
+list = "$2"
+[PathDelayParen.renderer]
+layout = { line = [
+    "(",
+    { ref = "list" },
+    ")",
+] }
+
+# path_delay_expression ::= constant_mintypmax_expression——a 或 a:b:c
+# （与 nettypes/gates 的 MintypmaxExpr 同语义，保持同步）。
+[PathDelayAtom]
+[PathDelayAtom.parser]
+production = [
+    "@Expression",
+    "(symbol.base.colon,@Expression,symbol.base.colon,@Expression)?",
+]
+[PathDelayAtom.parser.node]
+expr = "$1"
+typ = "$2.sub_node[0].sub_node[1]"
+max_expr = "$2.sub_node[0].sub_node[3]"
+[PathDelayAtom.renderer]
+layout = { line = [
+    { ref = "expr" },
+    { opt = { group = [
+        " : ",
+        { ref = "typ" },
+        " : ",
+        { ref = "max_expr" },
+    ] } },
+] }
+
+
+# ── TimingCheckDecl — 系统时序检查（A.7.5） ──
+# $setup/$hold/$width/$period 等：$ + 名字 + ( args ) + ;（与 SysTaskStmt
+# 同形态，名字宽进不注册 sysfunc）。args 是 TimingCheckArg 列表：
+#   timing_check_event ::= [timing_check_event_control] specify_terminal_descriptor
+#                          [&&& timing_check_condition]
+#   timing_check_event_control ::= posedge | negedge | edge [ edge_descriptor {,} ]
+#   timing_check_limit / notifier / offsets = 普通表达式。
+# SysTaskStmt（sim 插件）注册在前，普通 $task(...) 仍由它匹配；本规则只
+# 兜住含 timing_check_event 参数的形态（posedge clk 不是表达式）。
+
+[TimingCheckDecl]
+is_statement = true
+
+[TimingCheckDecl.parser]
+production = [
+    "symbol.base.dollar",
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@TimingCheckArgList?",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+[TimingCheckDecl.parser.node]
+check_name = "$2"
+args = "$4"
+[TimingCheckDecl.renderer.layout]
+line = [
+    "$",
+    { ref = "check_name" },
+    "(",
+    { ref = "args" },
+    ");",
+]
+
+[TimingCheckArgList]
+[TimingCheckArgList.parser]
+production = ["@TimingCheckArg", "(symbol.base.comma,@TimingCheckArg)*"]
+[TimingCheckArgList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[TimingCheckArgList.renderer]
+layout = { join = ", ", items = "items" }
+
+[TimingCheckArg]
+[TimingCheckArg.parser]
+production = ["@TimingCheckEvent|@Expression"]
+[TimingCheckArg.parser.node]
+arg = "$1"
+[TimingCheckArg.renderer]
+layout = { ref = "arg" }
+
+[TimingCheckEvent]
+[TimingCheckEvent.parser]
+production = [
+    "@TimingCheckEventControl?",
+    "@SpecifyTerminal",
+    "(symbol.extend.condition_and,@Expression)?",
+]
+[TimingCheckEvent.parser.node]
+control = "$1"
+terminal = "$2"
+condition = "$3.sub_node[0].sub_node[1]"
+[TimingCheckEvent.renderer]
+layout = { line = [
+    { opt = { group = [
+        { ref = "control" },
+        " ",
+    ] } },
+    { ref = "terminal" },
+    { opt = { group = [
+        " &&& ",
+        { ref = "condition" },
+    ] } },
+] }
+
+[TimingCheckEventControl]
+[TimingCheckEventControl.parser]
+production = ["@TimingCheckEdge|@EdgeControlSpec"]
+[TimingCheckEventControl.parser.node]
+edge = "$1"
+[TimingCheckEventControl.renderer]
+layout = { ref = "edge" }
+
+[TimingCheckEdge]
+[TimingCheckEdge.parser]
+production = ["keyword.posedge|keyword.negedge"]
+[TimingCheckEdge.parser.node]
+edge = "$1"
+[TimingCheckEdge.renderer]
+layout = { ref = "edge" }
+
+[EdgeControlSpec]
+[EdgeControlSpec.parser]
+production = ["keyword.edge", "@EdgeSpec?"]
+[EdgeControlSpec.parser.node]
+spec = "$2"
+[EdgeControlSpec.renderer]
+layout = { line = [
+    "edge",
+    { opt = { group = [" ", { ref = "spec" }] } },
+] }
+
+# edge_control_specifier ::= edge [ edge_descriptor { , edge_descriptor } ]
+# edge_descriptor ::= 01 | 10 | z_or_x zero_or_one | zero_or_one z_or_x——
+# `01` 是 number token、`x1` 是 id token、`0x` 拆 number+id，EdgeToken
+# 宽松收集（含逗号），渲染按原样拼接（幂等）。
+[EdgeSpec]
+[EdgeSpec.parser]
+production = [
+    "bracket.l_square_bracket",
+    "@EdgeToken+",
+    "bracket.r_square_bracket",
+]
+[EdgeSpec.parser.node]
+tokens = "$2.items[*]"
+[EdgeSpec.renderer]
+layout = { line = [
+    "[",
+    { join = "", items = "tokens" },
+    "]",
+] }
+
+[EdgeToken]
+[EdgeToken.parser]
+production = ["@Number|@Identifier|symbol.base.comma"]
+[EdgeToken.parser.node]
+value = "$1"
+[EdgeToken.renderer]
+layout = { ref = "value" }
+
+# specify_terminal_descriptor ::= identifier [ [ constant_range_expression ] ]
+[SpecifyTerminal]
+[SpecifyTerminal.parser]
+production = ["@Identifier", "@PathRange?"]
+[SpecifyTerminal.parser.node]
+name = "$1"
+range = "$2"
+[SpecifyTerminal.renderer]
+layout = { line = [
+    { ref = "name" },
+    { opt = { ref = "range" } },
+] }

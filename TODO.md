@@ -29,10 +29,11 @@
 > block_end 位置；matcher optional 失败恢复对 first 重叠场景静默交还 +
 > first 集 nullable 传播；start_token_map 块首去重；BoundaryChecker opener
 > 前驱排除（:config 类终结形态）。
-
-- [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
-      仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
-- [ ] defparam（A.2.4）—— 与 specify 同批
+> 已入（2026-08-27，批次 4）：specify 块（plugins/specify，A.7：specparam
+> 含 mintypmax/范围前缀 + 路径声明简单/全路径/边沿敏感/状态依赖宽进 +
+> 系统时序检查 $setup/$hold/$width 等事件参数/edge 控制/&&& 条件）+
+> defparam（同插件 01_defparam.toml，A.2.4 层级参数覆盖）。引擎无改动
+> （路径描述 no_soft 保单行属语法包渲染声明）。
 
 ### P1.5 已知缺陷收尾
 

@@ -1,0 +1,25 @@
+# specify 插件 — 词法扩展（IEEE 1364-2005 A.7 specify 块）
+# 时序检查的 $setup/$hold 等系统任务名不注册（$ 后 id 匹配，宽进）。
+# edge 关键字是 timing_check_event_control 的 edge_control_specifier 形态
+# （A.7.5.3）；&&& 是 timing_check_condition 的连词（A.7.5.3），最长匹配
+# 优先于 &&（logic_double_and）。
+
+[id.keyword]
+specify = "specify"
+endspecify = "endspecify"
+specparam = "specparam"
+pulsestyle_onevent = "pulsestyle_onevent"
+pulsestyle_ondetect = "pulsestyle_ondetect"
+showcancelled = "showcancelled"
+noshowcancelled = "noshowcancelled"
+ifnone = "ifnone"
+edge = "edge"
+# defparam（A.2.4）与 specify 同批：parameter_override 是模块级声明
+# （non_port_module_item），挂 ModuleItem。
+defparam = "defparam"
+
+# 全路径描述符 *>（最长匹配优先于 * 和 >）
+[symbol.extend]
+star_arrow = "*>"
+# timing_check_condition 连词 &&&（最长匹配优先于 &&）
+condition_and = "&&&"

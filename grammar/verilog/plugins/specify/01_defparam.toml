@@ -1,0 +1,62 @@
+# ============================================================================
+# specify 插件 — defparam 参数覆盖（IEEE 1364-2005 A.2.4，与 A.7 同批）
+# ============================================================================
+# parameter_override ::= defparam list_of_defparam_assignments ;
+# defparam_assignment ::= hierarchical_parameter_identifier = constant_mintypmax_expression
+#
+# 设计：
+#   - DefparamDecl 是模块级语句（non_port_module_item），注入 ModuleItem。
+#   - hierarchical_parameter_identifier（top.u1.WIDTH 形态）由 HierId 覆盖
+#     （Identifier 点链）。
+#   - 值 constant_mintypmax_expression 复用本插件的 PathDelayAtom（a 或
+#     a:b:c，与 nettypes/gates MintypmaxExpr 同语义）。
+
+[DefparamDecl.inject]
+targets = ["@ModuleItem"]
+
+[DefparamDecl]
+is_statement = true
+
+[DefparamDecl.parser]
+production = [
+    "keyword.defparam",
+    "@DefparamAssignList",
+    "symbol.base.semicolon",
+]
+[DefparamDecl.parser.node]
+items = "$2"
+[DefparamDecl.renderer.layout]
+line = [
+    "defparam ",
+    { ref = "items" },
+    ";",
+]
+
+[DefparamAssignList]
+[DefparamAssignList.parser]
+production = ["@DefparamAssign", "(symbol.base.comma,@DefparamAssign)*"]
+[DefparamAssignList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[DefparamAssignList.renderer]
+layout = { join = ", ", items = "items" }
+
+[DefparamAssign]
+[DefparamAssign.parser]
+production = ["@HierId", "symbol.base.equal", "@PathDelayAtom"]
+[DefparamAssign.parser.node]
+target = "$1"
+value = "$3"
+[DefparamAssign.renderer]
+layout = { line = [
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+] }
+
+[HierId]
+[HierId.parser]
+production = ["@Identifier", "(symbol.base.dot,@Identifier)*"]
+[HierId.parser.node]
+parts = ["$1", "$2.items[*].sub_node[1]"]
+[HierId.renderer]
+layout = { join = ".", items = "parts", no_soft = true }
