@@ -6,7 +6,7 @@
 # 被引用于: 04_statements/00_base.toml (DeclStmt → WireDecl|RegDecl|IntegerDecl)
 #
 # ⚠ 已知限制: 当前只支持 wire/reg/integer，不支持 tri/wand/wor/supply0/supply1
-#   等 IEEE 1364 定义的其他线网类型。
+#   等 IEEE 1364 定义的其他线网类型（见 plugins/nettypes 插件）。
 
 # ── WireDecl — wire 声明 ──
 # 格式: wire [signed] [range] name1 [= init], name2, ... ;

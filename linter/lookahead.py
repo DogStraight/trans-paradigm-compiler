@@ -304,10 +304,17 @@ class LookaheadTable:
             return None
         if len(entries) == 1:
             return [entries[0]["name"]]  # 唯一候选，无需消歧
-        return self._resolve_ident(tokens, i, entries)
+        return self._resolve_ident(
+            tokens, i, entries, is_keyword=tok_type in self.keyword_map
+        )
 
     def _resolve_ident(
-        self, tokens: list[Token], i: int, entries: list[dict]
+        self,
+        tokens: list[Token],
+        i: int,
+        entries: list[dict],
+        *,
+        is_keyword: bool = False,
     ) -> list[str] | None:
         """Level 1：变长前瞻逐 token 淘汰候选，直到唯一且完整路径验证。
 
@@ -368,21 +375,46 @@ class LookaheadTable:
             pos += 1
         # 到边界块 / path 候选耗尽
         if not seen:
-            return None  # 无任何判别 token（如 `id;`）→ 无法确认是语句起点
+            # 无判别 token 的 B 类裸 id（`id;`）→ 无法确认语句起点，None。
+            # A 类（keyword 触发）起始 token 即语句特征——残缺声明（`wire ;`
+            # 双候选场景）走 Level 2 试解析：零匹配返回 []（未识别诊断），
+            # 部分匹配返回候选（checker 报精确诊断），不静默漏检。
+            if is_keyword:
+                t_limit = min(limit + 1, n)
+                return self._try_parse(
+                    tokens, i, entries, t_limit, allow_partial=True
+                )
+            return None
         # 试解析的匹配上界需含终止符（分号在 limit 位置，多取一个 token 才能
         # 消费句子结束符，否则 TaskDeclOld 的 `;` 超出区间而失败）
         t_limit = min(limit + 1, n)
         if l2_only:
-            return self._try_parse(tokens, i, path_entries + l2_only, t_limit)
+            return self._try_parse(
+                tokens,
+                i,
+                path_entries + l2_only,
+                t_limit,
+                allow_partial=is_keyword,
+            )
         if len(path_entries) == 1:
             return [path_entries[0]["name"]]
         if not path_entries:
             return []  # path 候选耗尽且无 Level 2 候选 → 未识别
-        # 多候选未收敛 → Level 2 试解析
+        # 多候选未收敛 → Level 2 试解析。全失败保持 []（unrecognized）：
+        # 判别路径完整命中的多候选（如 if 缺右括号的 IfBlock/IfStmt 双候选）
+        # 是"有语句特征但结构残缺"，未识别诊断比精确诊断更贴近根因
+        # （e09/e17 门禁基线）。仅 l2_only 分支（静态前缀无法判别的候选，
+        # 如 wire 声明的 WireDecl/NetDecl 双候选）允许部分匹配报精确诊断。
         return self._try_parse(tokens, i, path_entries, t_limit)
 
     def _try_parse(
-        self, tokens: list[Token], i: int, entries: list[dict], limit: int
+        self,
+        tokens: list[Token],
+        i: int,
+        entries: list[dict],
+        limit: int,
+        *,
+        allow_partial: bool = False,
     ) -> list[str] | None:
         """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。"""
         if self._matcher is None:
@@ -421,8 +453,15 @@ class LookaheadTable:
                 or (errs == best[0] and consumed > best[1])
             ):
                 best = (errs, consumed, name)
-        if best is None or best[0] != 0:
-            return []  # 全失败 → 未识别（discovery 据此报错）
+        if best is None:
+            return []
+        if best[0] != 0:
+            # 全失败：B 类保持 []（未识别诊断，拼错关键字场景）；A 类
+            # （keyword 触发）返回错误最少的候选，让 checker 报精确诊断
+            # （如 \`wire ;\` 报 expected id 而非 unrecognized）。
+            if allow_partial:
+                return [best[2]]
+            return []
         return [best[2]]
 
     def _find_boundary(self, tokens: list[Token], i: int, n: int) -> int:

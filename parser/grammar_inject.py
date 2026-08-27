@@ -88,6 +88,43 @@ def inject_replace_rule(
                 print(f"  [inject/replace] {rule_name}: {prods}")
 
 
+def _already_injected(
+    feat: dict | None, ext: str, tgt: str, anc_exts: frozenset = frozenset()
+) -> bool:
+    """树级幂等判据：call@tgt 的任一 choice 祖先含 call@ext 即视为已注入。
+
+    字符串判据（"@Ext|@Tgt" in prod）在多 ext 注入同一 target 时失配：
+    注入后 call@tgt 被嵌套 choice 包裹（@TimeDecl|(@RealtimeDecl|...@tgt)），
+    中间隔其他 ext 的注入层，"@Ext|@Tgt" 子串不存在 → 重复注入逐 setup
+    累积嵌套、serialize 递归爆栈。祖先链判据沿 choice 链收集 call 名，
+    只要该 ext 已在 tgt 的注入链上即跳过（幂等），且不影响同一 ext 的
+    多 target 传播（test_multiple_targets_propagate：seq 内两个 call@tgt
+    各自独立判）。
+    """
+    if feat is None:
+        return False
+    typ = feat.get("type")
+    if typ == "call":
+        return feat.get("name") == tgt and ext in anc_exts
+    if typ == "choice":
+        alts = feat.get("alternatives", [])
+        names = frozenset(
+            a.get("name")
+            for a in alts
+            if a and a.get("type") == "call"
+        )
+        nxt = anc_exts | names
+        return any(_already_injected(a, ext, tgt, nxt) for a in alts)
+    if typ in ("repeat", "optional", "plus"):
+        return _already_injected(feat.get("elem"), ext, tgt, anc_exts)
+    if typ == "seq":
+        return any(
+            _already_injected(x, ext, tgt, anc_exts)
+            for x in feat.get("items", [])
+        )
+    return False
+
+
 def inject_productions(
     rules: dict[str, Any],
     inject_config: Mapping[str, list[str] | dict],
@@ -127,6 +164,11 @@ def inject_productions(
                 prods.append(f"@{ext_rule_name}")
             else:
                 prod = prods[tgt_idx]
+                # 幂等化：目标 production 已含 @ExtRule（重复 setup_grammar 时
+                # 规则对象被 _loaded_dirs 缓存复用、注入就地改写——无此检查会
+                # 累积注入层，choice 树无限加深最终 serialize 递归爆栈）。
+                if f"@{ext_rule_name}" in prod:
+                    continue
                 feat = analyze_production_features(prod)
                 # 原字符串语义：顶层 choice → ext 前缀；否则 → 后缀。树层等价：
                 # choice → 插 alternatives 首；非 choice → 包新 choice [ext, feat]。
@@ -159,6 +201,11 @@ def inject_productions(
                     if not isinstance(prod, str):
                         continue
                     feat = analyze_production_features(prod)
+                    # 幂等化（树级）：call@tgt 的 choice 祖先链已含本 ext →
+                    # 已注入，跳过——重复注入会把嵌套 choice 逐 setup 加深，
+                    # 最终 serialize 递归爆栈。
+                    if _already_injected(feat, ext_rule_name, tgt_name):
+                        continue
                     new_feat = replace_calls(feat, repl)
                     if new_feat is not feat:
                         other_prods[i] = serialize_production_tree(new_feat)

@@ -1,0 +1,65 @@
+# ============================================================================
+# nettypes 插件 — real/time/realtime 变量声明（IEEE 1364-2005 A.2.1.3）
+# ============================================================================
+# real_declaration ::= real list_of_real_identifiers ;
+# realtime_declaration ::= realtime list_of_real_identifiers ;
+# time_declaration ::= time list_of_variable_identifiers ;
+#
+# list_of_real_identifiers = real_type { , real_type }，
+# real_type = identifier {dimension} | identifier = constant_expression——与
+# 主包 Declarator（name dims? init?）同构，直接复用 @DeclaratorList。
+#
+# 仿真向声明（不可综合）→ 插件承载，与 sim 插件同类。time/realtime 同时
+# 存在于主包 [sysfunc]（$time/$realtime 系统函数），与本插件的关键字不冲突
+# （sysfunc 匹配 $ 后名字，keyword 匹配裸词）。
+#
+# 挂载：模块体（DeclStmt）+ 过程体块内声明（ProcLocalDecl，标准
+# block_item_declaration 含 real/time/realtime）。
+
+[RealDecl.inject]
+targets = ["@DeclStmt", "@ProcLocalDecl"]
+
+[RealtimeDecl.inject]
+targets = ["@DeclStmt", "@ProcLocalDecl"]
+
+[TimeDecl.inject]
+targets = ["@DeclStmt", "@ProcLocalDecl"]
+
+
+# ── RealDecl — real 声明 ──
+
+[RealDecl]
+is_statement = true
+
+[RealDecl.parser]
+production = ["keyword.real", "@DeclaratorList", "symbol.base.semicolon"]
+[RealDecl.parser.node]
+items = "$2"
+[RealDecl.renderer.layout]
+line = ["real ", { ref = "items" }, ";"]
+
+
+# ── RealtimeDecl — realtime 声明 ──
+
+[RealtimeDecl]
+is_statement = true
+
+[RealtimeDecl.parser]
+production = ["keyword.realtime", "@DeclaratorList", "symbol.base.semicolon"]
+[RealtimeDecl.parser.node]
+items = "$2"
+[RealtimeDecl.renderer.layout]
+line = ["realtime ", { ref = "items" }, ";"]
+
+
+# ── TimeDecl — time 声明 ──
+
+[TimeDecl]
+is_statement = true
+
+[TimeDecl.parser]
+production = ["keyword.time", "@DeclaratorList", "symbol.base.semicolon"]
+[TimeDecl.parser.node]
+items = "$2"
+[TimeDecl.renderer.layout]
+line = ["time ", { ref = "items" }, ";"]

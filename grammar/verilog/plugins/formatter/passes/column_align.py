@@ -172,6 +172,13 @@ def _parse_decl_parts(rest: list[str]) -> tuple[str, str, str, str] | None:
     if "{" in decl or "}" in decl:
         return None
 
+    # 声明侧含圆括号（net 声明的 drive/charge strength `(strong1, pull0)` /
+    # `(small)`，nettypes 插件 A.2.2.2）：括号内是强度语义不是列语义，走本
+    # 路径会把 `(strong1, pull0)` 拆坏（逗号粘连 token + name 误判）。
+    # 跳过对齐保留原文。
+    if "(" in decl or ")" in decl:
+        return None
+
     d = [t for t in decl if t not in (",", ";")]
     # name = 最后一个标识符（从右往左）
     i = len(d) - 1

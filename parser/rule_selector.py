@@ -185,7 +185,11 @@ import re
 
 # 预编译正则（避免每次调用 build_tree 重复编译）
 _RE_CALL = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-_RE_TOKEN = re.compile(r"^[a-zA-Z_\.]+$")
+# token 名允许数字（如 keyword.tri0 / keyword.supply1 / keyword.strong0）：
+# 每段以字母/下划线开头、可含数字；单段（"comment"）或多段点结构
+# （symbol.base.equal）均可。原正则禁止数字，Verilog net/strength 关键字
+# （tri0/tri1/supply0/supply1/strong0/pull1/highz0...）无法作为 token 名。
+_RE_TOKEN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$")
 
 SEPARATOR_HANDLERS = [
     ("|", "choice", "alternatives"),  # 分支优先级最高

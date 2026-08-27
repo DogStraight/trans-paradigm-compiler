@@ -14,6 +14,9 @@
 > 语法对照：docs/ieee1364_2005_annex_a.md（67 节）。已入 plugins/sim 的语法见
 > docs/release_checklist.md（A.2.1.3 event / A.6.3 fork-join / A.6.4 force-release
 > / A.6.5 时序控制）。
+> 已入 plugins/nettypes（2026-08-27，批次 1）：net 类型全谱 12 种 + drive/charge
+> strength + vectored/scalared + delay3（值/三值/mintypmax）+ real/time/realtime
+> 声明（A.2.1.3/A.2.2）。wire 扩展形态（strength/delay）走 NetDecl 双候选。
 
 - [ ] **门级/开关原语**（A.3）：and/or/nand/nor/xor/xnor/buf/not + bufif0/bufif1/
       notif0/notif1 + pmos/nmos/tran 系列 —— 综合类，进主包
@@ -21,6 +24,8 @@
 - [ ] **specify 块**（A.7）：specparam、$setup/$hold/$width 等时序检查 —— 时序分析，
       仿真/综合边界，评估放哪（可能单独 plugins/specify 或并入 sim）
 - [ ] config/defparam（A.1.5 / A.2.4）—— 罕见，视需要
+- [ ] macromodule（A.1.2 module_keyword 变体）—— 块起始 choice 与 block_start
+      单 token 推导冲突（引擎限制），与 config 同批做"罕见顶层构造模式"
 
 ### P1.5 已知缺陷收尾
 
