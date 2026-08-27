@@ -72,3 +72,14 @@ delimiters = ['"']
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"
+
+# 转义标识符（IEEE 1364-2005 A.9.3 escaped_identifier）——配置驱动声明：
+# `\` + 非终止符字符序列，到终止符/行尾止（如 `\a.b`、`\my$mod`）。token
+# 类型置 id（保留 `\` 前缀），不受关键字限制（`\always` 是合法名）。
+# 与 sv-parser 差异（各有取舍）：sv-parser 严格"到空白止"（`wire \a.b;`
+# 须写 `\a.b ;`），tpc 宽进——terminators 含语法分隔符使 `wire \a.b;`
+# 直接可解析且幂等；名字内含终止符的极端形态（`\a;b`）不支持。
+[id.escaped]
+prefix = "\\"
+terminators = " \t\r\n,;()[]{}"
+token_type = "id"

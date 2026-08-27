@@ -26,25 +26,42 @@ production = [
     "@Identifier",
     "@FilePathSpec",
     "(symbol.base.comma,@FilePathSpec)*",
-    "(symbol.base.sub,keyword.incdir,@FilePathSpec,(symbol.base.comma,@FilePathSpec)*)?",
+    "@IncdirClause?",
     "symbol.base.semicolon",
 ]
 [LibraryDecl.parser.node]
 lib = "$2"
 paths = ["$3", "$4.items[*].sub_node[1]"]
-incdir = "$5.sub_node[0].sub_node[2]"
-incdirs = ["$5.sub_node[0].sub_node[2]", "$5.sub_node[0].sub_node[3].items[*].sub_node[1]"]
+incdir = "$5.sub_node[0]"
 [LibraryDecl.renderer]
 layout = { line = [
     "library ",
     { ref = "lib" },
     " ",
     { join = ", ", items = "paths" },
-    { opt = { group = [
-        " -incdir ",
-        { join = ", ", items = "incdirs" },
-    ] } },
+    { opt = { ref = "incdir" } },
     ";",
+] }
+
+
+# ── IncdirClause — -incdir file_path { , file_path }（可选段独立规则） ──
+# 独立成规则避免 LibraryDecl 内 4 层 optional→seq→repeat 解包；
+# 子规则内部 dirs 绑定扁平（2 层），渲染自带 "-incdir " 前缀。
+
+[IncdirClause]
+[IncdirClause.parser]
+production = [
+    "symbol.base.sub",
+    "keyword.incdir",
+    "@FilePathSpec",
+    "(symbol.base.comma,@FilePathSpec)*",
+]
+[IncdirClause.parser.node]
+dirs = ["$3", "$4.items[*].sub_node[1]"]
+[IncdirClause.renderer]
+layout = { line = [
+    " -incdir ",
+    { join = ", ", items = "dirs" },
 ] }
 
 

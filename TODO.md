@@ -52,11 +52,14 @@
 > 已入（2026-08-27，批次 6，sv-parser 实现对照见 references.md）：转义
 > 标识符（A.9.3，lexer 支持 `\` 起始 id，修崩溃）+ library 声明/include
 > 语句（A.1.1，configs 插件 01_library.toml）+ continuous assign
-> strength/delay/多赋值列表（A.6.1，AssignStmt 复用 nettypes DriveStrength/
+> strength/delay（A.6.1，AssignStmt 复用 nettypes DriveStrength/
 > Delay3）+ always 无事件控制（A.6.2，AlwaysStmt 放宽 event_control 可选）
 > + 单索引 range `[3]`（A.2.5，Range 补可选 lsb 分支）+ genvar 列表
 > （A.4.2，GenvarDecl 补逗号列表）+ 实例/门级 attribute 前缀（A.4.1/
-> A.3.1，attributes 插件 AttrInstStmt 注入 InstStmt）。剩余核对缺口见
+> A.3.1，attributes 插件 AttrInstStmt 注入 InstStmt）。
+> 审查修复（2026-08-27）：转义标识符改配置驱动（`[id.escaped]` 声明，
+> c4 不声明不启用——消除 lexer 硬编码语言知识）；library `-incdir` 拆
+> IncdirClause 子规则（4 层绑定降 2 层）。剩余核对缺口见
 > references.md 审计清单（过程体 event/localparam 声明、#(min:typ:max)、
 > 命名块头声明、层次化 id、三元 ?: 等，批次 7 候选）。
 
