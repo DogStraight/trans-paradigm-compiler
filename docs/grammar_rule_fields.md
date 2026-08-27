@@ -139,8 +139,13 @@ exclude = ["symbol.base.dot"]   # 负向前瞻：匹配后若后跟 . 即失败�
   引用（`input rstn, spi.slave ...` 中 `spi` 不能当第二个 declarator）。该歧义
   是 Declarator 自身语法不可推导的（FOLLOW 不含 `.`，但无歧义时 `.` 也应
   拒绝），故独立字段声明，parser 与 linter 共同消费。
-- **消费方**: parser（`check_end_case` FOLLOW 硬检查）、linter（`_statement_end`
-  从 production 推导句子边界）
+- **消费方**: parser（`try_plain_rule` 的 exclude 负向前瞻——匹配成功后、FOLLOW
+  检查前，下一个非 trivia token 命中 exclude 即整体回退）、linter
+  （`_statement_end` 从 production 推导句子边界）
+- **与 FOLLOW 的关系**: exclude 必须**先于** FOLLOW 检查——派生 FOLLOW 会注入
+  pratt 运算符家族前缀（`symbol.base.`），家族成员（如 `.`）会被
+  `token_in_follow` 前缀匹配误放行；exclude 是显式拒绝（严格），FOLLOW 是
+  后继集合（宽松），二者正交
 - **不需要手写**: 逗号列表、分号、右括号等后继全部由 FOLLOW 推导；`exclude`
   只用于"显式拒绝某 token"的消歧场景
 

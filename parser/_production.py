@@ -290,6 +290,25 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         )
         return None
 
+    # exclude 负向前瞻（消歧，与 linter matcher 同语义）：规则匹配成功后，
+    # 若下一个非 trivia token 命中 exclude 集（如 Declarator 的
+    # symbol.base.dot，防声明器吞掉 `spi.slave` 点语法/后续端口），整体
+    # 失败回滚。与派生 FOLLOW 正交：FOLLOW 是"后继集合"（宽松），exclude
+    # 是"明确拒绝"（严格）——FOLLOW 含运算符家族前缀（symbol.base.）时
+    # 家族成员会误放行 exclude token，故 exclude 检查必须先于 FOLLOW。
+    _excludes = getattr(rule, "exclude", None) or []
+    if _excludes:
+        self._skip_tokens(context, tuple(self.skip_types))
+        _nxt = context.peek_token()
+        if _nxt is not None and _nxt.type in _excludes:
+            self._record_fail_site(
+                context,
+                rule=rule.name,
+                reason=f"exclude negative lookahead hit {_nxt.type}",
+            )
+            self._restore_current_node(old_node, context)
+            return None
+
     # 属性绑定
     self._bind_attributes(rule_node, rule, all_matched_nodes)
 

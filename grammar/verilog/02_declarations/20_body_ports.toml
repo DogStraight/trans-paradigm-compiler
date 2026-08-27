@@ -181,7 +181,7 @@ is_statement = true
 [TaskInputDecl.parser]
 production = [
     "keyword.input",
-    "@PortTail",
+    "@PortTail|@TaskPortTypeTail",
     "symbol.base.semicolon",
 ]
 
@@ -226,7 +226,7 @@ is_statement = true
 [TaskOutputDecl.parser]
 production = [
     "keyword.output",
-    "@PortTail",
+    "@PortTail|@TaskPortTypeTail",
     "symbol.base.semicolon",
 ]
 
@@ -271,7 +271,7 @@ is_statement = true
 [TaskInoutDecl.parser]
 production = [
     "keyword.inout",
-    "@PortTail",
+    "@PortTail|@TaskPortTypeTail",
     "symbol.base.semicolon",
 ]
 

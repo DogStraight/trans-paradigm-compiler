@@ -32,8 +32,18 @@
 > 已入（2026-08-27，批次 4）：specify 块（plugins/specify，A.7：specparam
 > 含 mintypmax/范围前缀 + 路径声明简单/全路径/边沿敏感/状态依赖宽进 +
 > 系统时序检查 $setup/$hold/$width 等事件参数/edge 控制/&&& 条件）+
-> defparam（同插件 01_defparam.toml，A.2.4 层级参数覆盖）。引擎无改动
-> （路径描述 no_soft 保单行属语法包渲染声明）。
+> defparam（同插件 01_defparam.toml，A.2.4 层级参数覆盖）。路径描述
+> no_soft 保单行属语法包渲染声明。
+> 已入（2026-08-27，批次 5）：function 返回类型（A.2.6 function_range_or_type：
+> integer/real/realtime/time + signed/range 全形态，ANSI/旧式）+ task 端口
+> 类型（A.2.7 task_port_type：任务/函数端口专用 TaskPortTypeTail 分支，
+> 模块端口共用规则不动）+ generate 单语句体（A.4.2：GenBlockOrNull =
+> @ModuleItem|@BeginEnd|;，LoopGen 体放宽，GenerateIfDecl/GenerateCaseDecl
+> 挂 InstStmt 承载 if/case 单语句体与 default 空体）。
+> 引擎修复（批次 5 连带）：parser 实现 exclude 负向前瞻（消歧字段此前仅
+> linter 消费，parser 靠 FOLLOW 不含目标 token 巧合生效；GenerateCaseDecl
+> 引入后运算符家族前缀经 inline 传播进 Declarator FOLLOW，typed_ports
+> 点语法解析回归——exclude 检查现先于 FOLLOW，与 linter 同语义）。
 
 ### P1.5 已知缺陷收尾
 

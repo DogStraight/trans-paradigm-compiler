@@ -155,7 +155,8 @@ scope = { kind = "generate", allow_duplicate = true }
 #
 # 与过程体 for 循环 (ForLoop/ForLoopBlock) 的区别:
 #   - 循环变量为 genvar 类型（编译期整数变量）
-#   - 循环体必须为 begin…end 块（且通常带标签）
+#   - 体为 generate_block（A.4.2）：单条模块项（GenBlockOrNull 的
+#     @ModuleItem 分支，如 `for (i=0;...) adder u (a,b);`）或 begin…end 块
 #   - 体内只能包含生成项（实例化、assign、嵌套 generate 块等）
 #   - 在 elaboration 阶段展开，不消耗仿真时间
 #
@@ -163,6 +164,7 @@ scope = { kind = "generate", allow_duplicate = true }
 #   for (i = 0; i < N; i = i + 1) begin : loop_label
 #     ...实例化/赋值/生成项...
 #   end
+#   for (i = 0; i < N; i = i + 1) adder u (a, b);   ← 单语句体（2005 补齐）
 #
 # 依赖: token.toml (keyword.for)
 #       04_statements/ (ForInit, Expression, ForStep, BeginEnd)
@@ -189,7 +191,7 @@ production = [
     "symbol.base.semicolon",
     "@ForStep",
     "bracket.r_parentheses",
-    "@BeginEnd",
+    "@GenBlockOrNull",
 ]
 
 [LoopGen.parser.node]
@@ -209,3 +211,157 @@ line = [
     ") ",
     { ref = "body" },
 ]
+
+
+# ── GenBlockOrNull — generate 体（A.4.2 generate_block_or_null） ──
+# generate_block ::= module_or_generate_item | begin [: id] { item } end
+# generate_block_or_null ::= generate_block | ;
+# 单条模块项由 @ModuleItem（模块项分发，含实例化/声明/assign/generate
+# 嵌套等）承载，begin…end 由 @BeginEnd，空体为分号。状态依赖生成的
+# if/case 分支体（GenerateIfDecl/GenerateCaseDecl）与循环体共用。
+
+[GenBlockOrNull]
+[GenBlockOrNull.parser]
+production = [
+    "@ModuleItem|@BeginEnd|symbol.base.semicolon",
+]
+[GenBlockOrNull.parser.node]
+inner = "$1"
+[GenBlockOrNull.renderer]
+layout = { ref = "inner" }
+
+
+# ── GenerateIfDecl — 条件生成（A.4.2 if_generate_construct） ──
+# if ( constant_expression ) generate_block_or_null
+# [ else generate_block_or_null ]
+# 与过程体 IfBlock/IfStmt 区分：分支体是模块项/begin/空（GenBlockOrNull），
+# 而非过程语句。挂 InstStmt（模块项级），候选顺序在 IfBlock/IfStmt 之后
+# ——过程体内 if 仍由 IfBlock/IfStmt 消费，generate 区域单语句体由此规则。
+
+[GenerateIfDecl]
+is_statement = true
+
+[GenerateIfDecl.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@GenBlockOrNull",
+    "(keyword.else,@GenBlockOrNull)?",
+]
+
+[GenerateIfDecl.parser.node]
+cond = "$3"
+then_body = "$5"
+else_body = "$6.sub_node[0].sub_node[1]"
+
+[GenerateIfDecl.renderer.layout]
+line = [
+    "if (",
+    { ref = "cond" },
+    ") ",
+    { ref = "then_body" },
+    { opt = { group = [
+        " else ",
+        { ref = "else_body" },
+    ] } },
+]
+
+
+# ── GenerateCaseDecl — 分支生成（A.4.2 case_generate_construct） ──
+# case ( constant_expression ) case_generate_item { case_generate_item } endcase
+# case_generate_item ::= constant_expression { , constant_expression }
+#   : generate_block_or_null | default [ : ] generate_block_or_null
+# 与过程体 CaseStmt 区分：case 项体是模块项/begin/空（GenBlockOrNull），
+# 且 default 冒号可选（A.4.2 与 A.6.7 差异）。
+
+[GenerateCaseDecl]
+is_statement = true
+
+[GenerateCaseDecl.analyzer]
+scope = { kind = "case" }
+
+[GenerateCaseDecl.parser]
+production = [
+    "@CaseKeyword",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@GenCaseItem+",
+    "keyword.endcase",
+]
+
+[GenerateCaseDecl.parser.node]
+case_type = "$1"
+expr = "$3"
+items = "$5.items[*]"
+
+[GenerateCaseDecl.renderer.head]
+line = [
+    { ref = "case_type" },
+    " (",
+    { ref = "expr" },
+    ")",
+]
+
+[GenerateCaseDecl.renderer.body]
+indent = true
+source = "items"
+
+[GenerateCaseDecl.renderer.tail]
+text = "endcase"
+break = 1
+
+[GenCaseItem]
+[GenCaseItem.parser]
+production = [
+    "@GenLabelCaseItem|@GenDefaultCaseItem",
+]
+[GenCaseItem.parser.node]
+inner = "$1"
+[GenCaseItem.renderer]
+layout = { ref = "inner" }
+
+[GenLabelCaseItem]
+[GenLabelCaseItem.parser]
+production = [
+    "@GenCaseLabels",
+    "symbol.base.colon",
+    "@GenBlockOrNull",
+]
+[GenLabelCaseItem.parser.node]
+values = "$1"
+body = "$3"
+[GenLabelCaseItem.renderer]
+layout = { line = [
+    { ref = "values" },
+    ": ",
+    { ref = "body" },
+] }
+
+[GenDefaultCaseItem]
+[GenDefaultCaseItem.parser]
+production = [
+    "keyword.default",
+    "symbol.base.colon?",
+    "@GenBlockOrNull",
+]
+[GenDefaultCaseItem.parser.node]
+body = "$3"
+[GenDefaultCaseItem.renderer]
+layout = { line = [
+    "default: ",
+    { ref = "body" },
+] }
+
+[GenCaseLabels]
+[GenCaseLabels.parser]
+production = [
+    "@Expression",
+    "(symbol.base.comma,@Expression)*",
+]
+[GenCaseLabels.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[GenCaseLabels.renderer]
+layout = { join = ", ", items = "items", no_soft = true }
