@@ -730,6 +730,31 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   增量价值 = 纯解析器（Verible 是 formatter）+ 严格 Annex A 暴露宽进差异
   （实测 escaped_identifier 严格/宽进分歧已由 probe 验证）
 
+#### SV 全量规模估算（2026-08-27，verilog-2005 全量后的延伸研判）
+
+- **实测口径**：verilog 包现 259 条 parser 规则（核心 144 + 插件 115，
+  typed_ports 增强 16 条）覆盖 1364-2005 Annex A ≈110-120 条生产式 →
+  规则/生产式比率 ≈2.3（含子规则/分发器/节点绑定）
+- **sv-parser 侧**：CST 节点 1057 个 enum variant ↔ 1800-2017 Annex A
+  ≈450-500 条生产式 → SV 全量折算 tpc 规则 ≈1050-1150，净新增 ≈800-900 条
+- **加速因素**：基建已付（block/inline/inject/FOLLOW/linter 消歧/renderer
+  DSL/差分工具链）；sv-parser 差分即 oracle，覆盖驱动是"喂语料→修误拒"
+  机械循环；~40 种 SV 标识符由通用 Identifier+语义层吸收，边际成本≈0；
+  边际速率 35-45 规则/周（均值 30 被前期基建拉低）
+- **减速因素**：SVA（assertion 声明+语句 ≈100+ 节点，自有运算符族
+  `##`/`[*]`/`[->]`、局部变量、递归属性——需新 pratt 族 + linter 消歧，
+  per-规则成本 ×1.5-2）；类型系统（net_and_variable_types 67 + type_
+  declarations 27 + class_items 32，交叉引用深）；SV 预处理器扩展是引擎级
+  工作；歧义战场（cast-vs-ternary、`'{}` vs 拼接、接口作用域）会重演
+  typed_ports `.` exclude 战役
+- **结论**：语法层全量（sv-parser 差分全绿 + lint recall 保持）8-12 个月；
+  阶段 A SV 核心子集 3-4 个月；SVA/class/constraint 是最大三块。对照：
+  sv-parser 作者单人从零做到 1800-2017 全量花数年——我们有配置化基建 +
+  差分 oracle，速度不是一个量级，但语言复杂度体量实打实
+- **口径边界**：以上只到语法层（解析接受 + CST），不含 analyzer 语义层
+  （类型检查/约束求解）——sv-parser 本身也只到语法层
+- **决策**：2026-08-27 缓行，先玩熟 verilog 全量；立项触发后再细化阶段 A 缺口清单
+
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 
 - 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /

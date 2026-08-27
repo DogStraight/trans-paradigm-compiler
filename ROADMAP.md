@@ -113,3 +113,21 @@
 - [ ] **Layout TOML schema 校验**（renderer_architecture.md 缺口 5）：布局
       表达式错误（拼错原语键/类型）静默降级为 None，与 ADR-0003 fail-fast
       精神相悖——可加布局 schema 校验（渲染增强侧，非配置加载主路径）
+
+## SystemVerilog 语言包（远期 backlog，2026-08-27 评估）
+
+> Verilog-2005 全量（P1.8 批次 1-6 + 审查修复）后的自然延伸；当前决策：
+> **缓行**——先稳定/玩熟 verilog 全量。规模估算与分期依据见
+> docs/references.md「SV 全量规模估算」：语法层全量对标 sv-parser
+> （IEEE 1800-2017 Annex A）≈ 净增 800-900 条规则、8-12 个月；
+> SV 核心子集（综合常用面）3-4 个月；SVA/class/constraint 是最大三块。
+> 触发条件：verilog 验证闭环稳定、P1.8 批次 7 候选缺口清完后立项；
+> 立项时从本文件移回 TODO.md。
+
+- [ ] 阶段 A：SV 核心——2-state/logic、struct/enum/typedef、always_comb/ff/latch、
+      接口+modport、package+import、generate 增强、`.name`/`.*` 端口、尺寸字面量
+- [ ] 阶段 B：OOP/约束——class、继承、constraint、rand
+- [ ] 阶段 C：最长尾——SVA 断言、covergroup、checker、randsequence
+      （+ pratt 运算符族/引擎扩展）
+- [ ] 阶段 D：收尾——SV 预处理器扩展（宏带参/双反引号）、sv-parser 差分清零、
+      lint 精度、渲染打磨
