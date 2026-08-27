@@ -46,27 +46,18 @@
 > 点语法解析回归——exclude 检查现先于 FOLLOW，与 linter 同语义）。
 > 覆盖核对（2026-08-27）：A.1~A.9 主要语法已齐（net/strength/delay/类型
 > 声明、procedural assign、config、macromodule、gates 26、UDP、specify、
-> defparam、function/task 类型、generate 单语句体）。核对发现的剩余缺口
-> 见下方待办（批次 6 候选）。
-
-- [ ] **转义标识符（A.9.3 escaped_identifier）**：`\name` 目前 lexer 直接
-      ValueError 崩溃（不是软失败）——需 lexer 支持 `\` 起始的标识符 token
-      + 规则/渲染支持
-- [ ] **library 声明（A.1.1 library source text）**：`library lib ;` /
-      `library lib1, lib2 ;`——config 插件只做了 config 声明，缺 library 源文本
-- [ ] **continuous assign 的 strength/delay 形态**（A.6.1）：
-      `assign (strong1, pull0) y = a & b;` / `assign #(2, 3) y = a & b;`
-      ——nettypes/gates 已有 strength/delay 规则，AssignStmt 未接
-- [ ] **always 无事件控制形态**（A.6.2 always_statement 两分支）：
-      `always #5 clk = ~clk;`（timing control）与 `always begin ... end`
-      ——AlwaysStmt 现强制 @EventControl
-- [ ] **单索引 range（A.2.5 constant_range_expression）**：`reg [3] a;` /
-      `a[2]`——Range 规则要求 a:b 双表达式，单索引 `[3]` 解析失败
-- [ ] **genvar 列表声明**（A.4.2 list_of_genvar_identifiers）：
-      `genvar i, j;`——GenvarDecl 现只支持单标识符
-- [ ] **实例上的 attribute_instance**（A.4.1/A.3.1）：`(* keep = 1 *) foo u1 ();`
-      与 `(* keep = 1 *) and g1 (y, a, b);`——attributes 插件已挂
-      ModuleItem/语句，实例/门级前缀形态缺
+> defparam、function/task 类型、generate 单语句体）。核对发现缺口已闭环
+> 于批次 6（见下）。
+> 已入（2026-08-27，批次 6，sv-parser 实现对照见 references.md）：转义
+> 标识符（A.9.3，lexer 支持 `\` 起始 id，修崩溃）+ library 声明/include
+> 语句（A.1.1，configs 插件 01_library.toml）+ continuous assign
+> strength/delay/多赋值列表（A.6.1，AssignStmt 复用 nettypes DriveStrength/
+> Delay3）+ always 无事件控制（A.6.2，AlwaysStmt 放宽 event_control 可选）
+> + 单索引 range `[3]`（A.2.5，Range 补可选 lsb 分支）+ genvar 列表
+> （A.4.2，GenvarDecl 补逗号列表）+ 实例/门级 attribute 前缀（A.4.1/
+> A.3.1，attributes 插件 AttrInstStmt 注入 InstStmt）。剩余核对缺口见
+> references.md 审计清单（过程体 event/localparam 声明、#(min:typ:max)、
+> 命名块头声明、层次化 id、三元 ?: 等，批次 7 候选）。
 
 ### P1.5 已知缺陷收尾
 

@@ -1,5 +1,6 @@
-# configs 插件 — 词法扩展（IEEE 1364-2005 A.1.5 configuration）
-# config 库映射是编译流程的罕见构造，独立插件可开关。
+# configs 插件 — 词法扩展（IEEE 1364-2005 A.1.1 library / A.1.5 configuration）
+# library 源文本（A.1.1）与 config 库映射（A.1.5）都是编译流程的罕见构造，
+# 独立插件可开关。
 
 [id.keyword]
 config = "config"
@@ -9,3 +10,6 @@ liblist = "liblist"
 cell = "cell"
 instance = "instance"
 use = "use"
+library = "library"
+include = "include"
+incdir = "incdir"

@@ -66,6 +66,37 @@ layout = { line = [
 ] }
 
 
+# ── AttrInstStmt — 实例/门级/UDP 上的属性前缀（A.4.1/A.3.1/A.5.4） ──
+# `{ attribute_instance } module_or_generate_item`（A.1.4）——属性包住
+# module_instantiation/gate_instantiation/udp_instantiation 等实例形态。
+# sv-parser 同构：module_or_generate_item 各分支（module/gate/udp/
+# module_item/parameter）前缀 many0(attribute_instance)。
+# 挂载位点：@InstStmt（实例化/生成分派），与 AttrDecl（声明）互补。
+
+[AttrInstStmt.inject]
+targets = ["@InstStmt"]
+
+[AttrInstStmt]
+is_statement = true
+
+[AttrInstStmt.parser]
+production = [
+    "@AttrInstance",
+    "@ModuleInst|@GateInstantiation|@GenerateBlock",
+]
+
+[AttrInstStmt.parser.node]
+attrs = "$1"
+inst = "$2"
+
+[AttrInstStmt.renderer]
+layout = { line = [
+    { ref = "attrs" },
+    " ",
+    { ref = "inst" },
+] }
+
+
 # ── AttrInstance — (* attr_spec { , attr_spec } *) ──
 [AttrInstance]
 [AttrInstance.parser]

@@ -52,7 +52,9 @@ line = [
 
 
 # ── GenvarDecl — genvar 声明 ──
-# 格式: genvar name;
+# A.4.2: genvar_declaration ::= genvar list_of_genvar_identifiers ;
+# list_of_genvar_identifiers ::= genvar_identifier { , genvar_identifier }
+#（逗号分隔列表，sv-parser list_of_genvar_identifiers 同构）。
 # genvar 是用于 generate 循环的变量类型。
 
 [GenvarDecl]
@@ -62,20 +64,21 @@ is_statement = true
 production = [
     "keyword.genvar",
     "@Identifier",
+    "(symbol.base.comma,@Identifier)*",
     "symbol.base.semicolon",
 ]
 
 [GenvarDecl.parser.node]
-genvar_name = "$2"
+genvar_names = ["$2", "$3.items[*].sub_node[1]"]
 
 [GenvarDecl.analyzer.symbol]
 kind = "genvar"
-name_attr = "genvar_name"
+name_attr = "genvar_names.name"
 
 [GenvarDecl.renderer.layout]
 line = [
     "genvar ",
-    { ref = "genvar_name" },
+    { intent = "compact", items = "genvar_names", first_soft = false },
     ";",
 ]
 

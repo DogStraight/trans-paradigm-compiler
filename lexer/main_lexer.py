@@ -559,6 +559,37 @@ class Lexer:
 
             # (comment/capture handled by CaptureRunner in earlier branch)
 
+            # ── 转义标识符分支（IEEE 1364-2005 A.9.3 escaped_identifier）──
+            # `\` + 非空白字符序列，到空白或语法分隔符止（`,;()[]{}`），如
+            # `\a.b`、`\my$mod`。token 类型置 id（保留 `\` 前缀），refine_type
+            # 的 keyword 精化不适用——转义标识符显式不受关键字限制
+            # （`\always` 是合法名）。
+            # 与 sv-parser 差异（各有取舍）：sv-parser 严格"到空白止"
+            # （`wire \a.b;` 须写 `\a.b ;`），tpc 宽进——分隔符提前终止使
+            # 业界常见写法 `wire \a.b;` 直接可解析且幂等；名字内含分隔符
+            # 的极端形态（`\a;b`）不支持，记录为已知限制。
+            elif lex_text[text_idx] == "\\":
+                self._emit_pending_dedent(tokens)
+
+                id_content = "\\"
+                text_idx += 1
+                offset += 1
+                while (
+                    text_idx < lex_text_len
+                    and lex_text[text_idx] not in " \t\r\n,;()[]{}"
+                ):
+                    id_content += lex_text[text_idx]
+                    text_idx += 1
+                    offset += 1
+
+                current_token.set_type("id")
+                current_token.set_content(id_content)
+
+                start_point += offset
+                current_token = self.refine_type(current_token)
+                tokens.append(current_token)
+                continue
+
             # ── id 分支 ──
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
                 self._emit_pending_dedent(tokens)

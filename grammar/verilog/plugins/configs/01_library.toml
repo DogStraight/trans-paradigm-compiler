@@ -1,0 +1,83 @@
+# ============================================================================
+# configs 插件 — library 源文本（IEEE 1364-2005 A.1.1，与 A.1.5 同批）
+# ============================================================================
+# library_text ::= { library_description }
+# library_description ::= library_declaration | include_statement | config_declaration
+# library_declaration ::=
+#   library library_identifier { , library_identifier } file_path_spec { , file_path_spec }
+#   [ -incdir file_path_spec { , file_path_spec } ] ;
+# include_statement ::= include file_path_spec ;
+#
+# 设计（sv-parser library_source_text 同构）：
+#   - LibraryDecl / IncludeDecl 是 is_statement 规则，顶层语句循环自动发现
+#     （与 ConfigDecl 同机制，不 inject——library 源文本是编译流程入口，
+#     不与模块体声明混用）。
+#   - `-incdir` 在 tpc 词法拆成 `-`(symbol.base.sub) + `incdir`(keyword)
+#     两 token（符号分支先吃 `-`），production 用两 token 序列表达。
+#   - file_path_spec 宽松：字符串字面量或裸路径 token（标识符/点链），
+#     与 sv-parser 的 file_path_spec_non_literal（is_not(",; ")）同宽进。
+
+[LibraryDecl]
+is_statement = true
+
+[LibraryDecl.parser]
+production = [
+    "keyword.library",
+    "@Identifier",
+    "@FilePathSpec",
+    "(symbol.base.comma,@FilePathSpec)*",
+    "(symbol.base.sub,keyword.incdir,@FilePathSpec,(symbol.base.comma,@FilePathSpec)*)?",
+    "symbol.base.semicolon",
+]
+[LibraryDecl.parser.node]
+lib = "$2"
+paths = ["$3", "$4.items[*].sub_node[1]"]
+incdir = "$5.sub_node[0].sub_node[2]"
+incdirs = ["$5.sub_node[0].sub_node[2]", "$5.sub_node[0].sub_node[3].items[*].sub_node[1]"]
+[LibraryDecl.renderer]
+layout = { line = [
+    "library ",
+    { ref = "lib" },
+    " ",
+    { join = ", ", items = "paths" },
+    { opt = { group = [
+        " -incdir ",
+        { join = ", ", items = "incdirs" },
+    ] } },
+    ";",
+] }
+
+
+# ── IncludeDecl — include file_path_spec ; ──
+
+[IncludeDecl]
+is_statement = true
+
+[IncludeDecl.parser]
+production = [
+    "keyword.include",
+    "@FilePathSpec",
+    "symbol.base.semicolon",
+]
+[IncludeDecl.parser.node]
+path = "$2"
+[IncludeDecl.renderer]
+layout = { line = [
+    "include ",
+    { ref = "path" },
+    ";",
+] }
+
+
+# ── FilePathSpec — 库文件路径（字符串或裸路径，宽进） ──
+
+[FilePathSpec]
+[FilePathSpec.parser]
+production = [
+    "literal.string|@Identifier",
+    "(symbol.base.dot,@Identifier)*",
+]
+[FilePathSpec.parser.node]
+path = ["$1", "$2.items[*].sub_node[1]"]
+[FilePathSpec.renderer]
+layout = { join = ".", items = "path", no_soft = true }

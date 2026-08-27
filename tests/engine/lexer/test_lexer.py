@@ -360,10 +360,19 @@ class TestNegative:
             "\\",  # bare backslash
         ],
     )
-    def test_trailing_backslash_raises_value_error(self, lexer, src):
-        """孤立的尾部反斜杠（无法归类到任何 token 类型）→ ValueError。"""
-        with pytest.raises(ValueError, match="Unexpected token"):
-            lexer.tokenize(src)
+    def test_trailing_backslash_is_escaped_identifier(self, lexer, src):
+        """尾部反斜杠是转义标识符起点（A.9.3）——扫描为 id 而非崩溃。
+
+        批次 6 前孤立的 `\\` 无法归类抛 ValueError；转义标识符支持后，
+        `\\` + 到空白/行尾止是合法 escaped_identifier（`\\` 裸名也合法，
+        sv-parser escaped_identifier_impl 同构：tag("\\\\") + is_not(" \t\r\n")）。
+        """
+        toks = lexer.tokenize(src)
+        assert toks, "应产出 token（而非崩溃）"
+        # 末尾 token 是转义标识符（`\` + 到空白/行尾止）
+        last = toks[-1]
+        assert last.type == "id"
+        assert last.content.startswith("\\")
 
     # ── 结构不完整（FSM 可自然终止，不抛异常）──
 

@@ -66,6 +66,10 @@ line = [
 # ── AssignStmt — 连续赋值 ──
 # 模块级的 assign 语句，目标可以是 wire 或 reg。
 # 模块级连续赋值（并发驱动，非过程体内顺序执行）。
+# A.6.1: continuous_assign ::= assign [ drive_strength ] [ delay3 ]
+#   list_of_net_assignments ;  |  assign [ delay_control ] list_of_variable_assignments ;
+# strength/delay 是可选前缀（nettypes/gates 插件的 DriveStrength/Delay3
+# 同名规则，插件默认启用；仅引用非定义，主包不重复声明）。
 
 [AssignStmt]
 is_statement = true
@@ -73,6 +77,8 @@ is_statement = true
 [AssignStmt.parser]
 production = [
     "keyword.assign",
+    "@DriveStrength?",
+    "@Delay3?",
     "@PrimaryExpr",
     "symbol.base.equal",
     "@Expression",
@@ -80,12 +86,22 @@ production = [
 ]
 
 [AssignStmt.parser.node]
-target = "$2"
-value = "$4"
+strength = "$2"
+delay = "$3"
+target = "$4"
+value = "$6"
 
 [AssignStmt.renderer.layout]
 line = [
     "assign ",
+    { opt = { group = [
+    { ref = "strength" },
+    " ",
+] } },
+    { opt = { group = [
+    { ref = "delay" },
+    " ",
+] } },
     { ref = "target" },
     " = ",
     { ref = "value" },

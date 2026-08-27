@@ -146,19 +146,27 @@ layout = { line = ["= ", { ref = "value" }] }
 
 # ── Range — 范围 [msb:lsb] ──
 # Verilog 的范围声明 [msb:lsb]，如 [7:0]、[WIDTH-1:0]。
-# 括号配对由 [bracket].pairs 配置统一处理。
+# A.2.5 constant_range_expression ::= constant_expression |
+#   constant_part_select_range——单表达式 `[3]` 也是合法维/选择形态，
+#   Range 补可选 lsb 分支（`3` 或 `3:0`，sv-parser unpacked_dimension
+#   同构：alt(range, expression)）。括号配对由 [bracket].pairs 处理。
 
 [Range]
 [Range.parser]
 production = [
     "bracket.l_square_bracket",
     "@Expression",
-    "symbol.base.colon",
-    "@Expression",
+    "(symbol.base.colon,@Expression)?",
     "bracket.r_square_bracket",
 ]
 [Range.parser.node]
 msb = "$2"
-lsb = "$4"
+lsb = "$3.sub_node[0].sub_node[1]"
 [Range.renderer]
-layout = { line = [{ ref = "msb" }, ":", { ref = "lsb" }] }
+layout = { line = [
+    { ref = "msb" },
+    { opt = { group = [
+        ":",
+        { ref = "lsb" },
+    ] } },
+] }

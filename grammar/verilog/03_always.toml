@@ -35,8 +35,11 @@
 #   end
 
 # ── AlwaysStmt — always 过程语句 ──
-# Verilog 的 always 过程语句：always + @EventControl（事件控制）+ @Stmt。
-# 事件控制统一走 EventControl 分发器（标准 event_control 四种形态）。
+# Verilog 的 always 过程语句：always + [@EventControl] + @Stmt。
+# A.6.2: always_statement ::= always statement——event_control 不是 always
+# 的一部分，`always #5 clk = ~clk;`（timing control 语句）与
+# `always begin ... end` 的时序/块由 statement 承载（sv-parser 同构）。
+# event_control 可选：有 @(...) 时走 EventControl 分发器，无则直接跟语句。
 # renderer.body.role = "direct" 表示体内容直出（不额外包装）。
 # renderer.override.BeginEnd.tail_break = 2 当体内是 begin…end 时，end 后多空一行。
 
@@ -49,21 +52,23 @@ scope = { kind = "always" }
 [AlwaysStmt.parser]
 production = [
     "keyword.always",
-    "@EventControl",
+    "@EventControl?",
     "@Stmt",
 ]
 
 [AlwaysStmt.parser.node]
 always_kw = "$1"
-event_control = "$2"
+event_control = "$2.sub_node[0]"
 body = "$3"
 
 [AlwaysStmt.renderer.layout]
 line = [
     { ref = "always_kw" },
     " ",
+    { opt = { group = [
     { ref = "event_control" },
     " ",
+] } },
     { ref = "body" },
 ]
 

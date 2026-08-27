@@ -76,6 +76,7 @@ TOKEN_ALLOWLIST: dict[str, str] = {
     "signed": "number 配置字段（cfg.get('signed')，[number] 数字词法配置）",
     "config": "CLI 子命令名（tpc config dump/show——工程命令，与 configs 插件关键字同名）",
     "table": "transform 映射表键名（mapping table 的 'table' 字段，与 udp 插件关键字同名）",
+    "include": "preprocessor 指令配置键名（_directives_cfg['include']，宏/包含指令配置协议，与 configs 插件 library 的 include 语句同名）",
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认
