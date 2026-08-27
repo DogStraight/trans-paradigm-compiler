@@ -1,0 +1,203 @@
+# ============================================================================
+# configs 插件 — config 声明（IEEE 1364-2005 A.1.5）
+# ============================================================================
+# config_declaration ::=
+#   config config_identifier ;
+#   design_statement { config_rule_statement } endconfig
+# design_statement ::= design { [library_identifier.]cell_identifier } ;
+# config_rule_statement ::= default liblist ; | instance inst_name liblist ;
+#   | instance inst_name use ; | cell [lib.]cell liblist ; | cell [lib.]cell use ;
+#
+# 设计（块头内嵌 body 结构）：
+#   - ConfigDecl 是顶层块规则（config/endconfig），design + 规则语句作为
+#     block_prods 的固定结构由块头匹配整体消费——body 循环为空。
+#   - DesignStmt/DefaultStmt/InstanceStmt/CellStmt 不挂 is_statement：
+#     linter 的语句起始推导（_stmt_block_firsts）不收它们，keyword.default
+#     保持 case 项的延续语义（default 后跟冒号不被误判为 config 子句）；
+#     config 体内结构由块级 checker 按 block_prods 整体检查（缺 design
+#     语句等仍报错），体内语句不做逐句发现（罕见构造，可接受）。
+#   - parser 侧：块头匹配消费全部结构，无需语句候选注册。
+#
+# 禁用本插件：config/design/liblist 等回归 id token，config 语法失效。
+
+[ConfigDecl]
+is_block = true
+is_statement = true
+
+[ConfigDecl.parser]
+production = [
+    "keyword.config",
+    "@Identifier",
+    "symbol.base.semicolon",
+    "@DesignStmt",
+    "(@DefaultStmt|@InstanceStmt|@CellStmt)*",
+    "keyword.endconfig",
+]
+
+# $4 是 repeat 组：paren 组 analyze 后是纯 choice，repeat 项直接是分支
+# 节点（DefaultStmt/InstanceStmt/CellStmt），无组包装。
+[ConfigDecl.parser.node]
+config_name = "$1"
+design = "$3"
+rules = "$4.items[*]"
+
+[ConfigDecl.renderer.head]
+line = [
+    "config ",
+    { ref = "config_name" },
+    ";",
+    { break = true },
+    { ref = "design" },
+    { break = true },
+    { join = "\n", items = "rules" },
+]
+
+[ConfigDecl.renderer.tail]
+text = "endconfig"
+break = 2
+
+
+# ── DesignStmt — design { [library.]cell } ; ──
+
+[DesignStmt]
+[DesignStmt.parser]
+production = ["keyword.design", "@CellRefList", "symbol.base.semicolon"]
+[DesignStmt.parser.node]
+cells = "$2"
+[DesignStmt.renderer]
+layout = { line = ["design ", { join = ", ", items = "cells" }, ";"] }
+
+
+# ── CellRefList / CellRef — [library.]cell 列表 ──
+
+[CellRefList]
+[CellRefList.parser]
+production = ["@CellRef", "(symbol.base.comma,@CellRef)*"]
+[CellRefList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+[CellRefList.renderer]
+layout = { join = ", ", items = "items" }
+
+[CellRef]
+[CellRef.parser]
+production = ["(@Identifier,symbol.base.dot)?", "@Identifier"]
+# $1 是 optional 节点（组带 ?）：sub_node[0] 解包组（seq），组内
+# [Identifier, dot]——library 取 seq.sub_node[0]（Identifier）。
+[CellRef.parser.node]
+library = "$1.sub_node[0].sub_node[0]"
+cell_name = "$2"
+[CellRef.renderer]
+layout = { line = [
+    { opt = { group = [
+        { ref = "library" },
+        ".",
+    ] } },
+    { ref = "cell_name" },
+] }
+
+
+# ── DefaultStmt — default liblist { library } ; ──
+
+[DefaultStmt]
+[DefaultStmt.parser]
+production = ["keyword.default", "@LiblistClause", "symbol.base.semicolon"]
+[DefaultStmt.parser.node]
+liblist = "$2"
+[DefaultStmt.renderer]
+layout = { line = ["default ", { ref = "liblist" }, ";"] }
+
+
+# ── LiblistClause — liblist { library_identifier } ──
+
+[LiblistClause]
+[LiblistClause.parser]
+production = ["keyword.liblist", "@Identifier", "(@Identifier)*"]
+[LiblistClause.parser.node]
+libs = ["$2", "$3.items[*]"]
+# 标准 BNF：liblist { library_identifier }——空格分隔（非逗号），
+# 渲染保持标准形态（幂等二次 parse 一致）。
+[LiblistClause.renderer]
+layout = { line = ["liblist ", { join = " ", items = "libs" }] }
+
+
+# ── InstanceStmt — instance inst_name ( liblist | use ) ; ──
+
+[InstanceStmt]
+[InstanceStmt.parser]
+production = [
+    "keyword.instance",
+    "@InstName",
+    "@LiblistClause|@UseClause",
+    "symbol.base.semicolon",
+]
+[InstanceStmt.parser.node]
+inst = "$2"
+clause = "$3"
+[InstanceStmt.renderer]
+layout = { line = [
+    "instance ",
+    { ref = "inst" },
+    " ",
+    { ref = "clause" },
+    ";",
+] }
+
+
+# ── InstName — topmodule{.instance} ──
+
+[InstName]
+[InstName.parser]
+production = ["@Identifier", "(symbol.base.dot,@Identifier)*"]
+[InstName.parser.node]
+parts = ["$1", "$2.items[*].sub_node[1]"]
+[InstName.renderer]
+layout = { join = ".", items = "parts", no_soft = true }
+
+
+# ── CellStmt — cell [library.]cell ( liblist | use ) ; ──
+
+[CellStmt]
+[CellStmt.parser]
+production = [
+    "keyword.cell",
+    "@CellRef",
+    "@LiblistClause|@UseClause",
+    "symbol.base.semicolon",
+]
+[CellStmt.parser.node]
+cell_ref = "$2"
+clause = "$3"
+[CellStmt.renderer]
+layout = { line = [
+    "cell ",
+    { ref = "cell_ref" },
+    " ",
+    { ref = "clause" },
+    ";",
+] }
+
+
+# ── UseClause — use [library.]cell[:config] ──
+
+[UseClause]
+[UseClause.parser]
+production = [
+    "keyword.use",
+    "@CellRef",
+    "(symbol.base.colon,keyword.config)?",
+]
+# $3 是 optional 节点：sub_node[0] 解包组（seq[colon, keyword.config]），
+# is_config 取 seq.sub_node[1]（keyword token）——layout 的 ":" 与它拼出
+# ":config"（直接绑组节点会渲染出双冒号）。
+[UseClause.parser.node]
+cell_ref = "$2"
+is_config = "$3.sub_node[0].sub_node[1]"
+[UseClause.renderer]
+layout = { line = [
+    "use ",
+    { ref = "cell_ref" },
+    { opt = { group = [
+        ":",
+        { ref = "is_config" },
+    ] } },
+] }

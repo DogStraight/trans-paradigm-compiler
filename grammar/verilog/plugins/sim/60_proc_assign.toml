@@ -1,14 +1,18 @@
 # ============================================================================
 # sim 插件 — 强制赋值 / 释放 [仿真专用][不可综合]
 # ============================================================================
-# IEEE A.6.4 procedural_force_release：
-#   force  variable_assignment ;    release variable_lvalue ;
-# 仅实现 force/release（无 token 冲突）。过程连续赋值 assign/deassign 与
-# 模块级 assign（AssignStmt）同 keyword.assign 起始，会干扰 linter 的
-# 语句发现（assign 被误判为过程规则）——低频构造，不做（模块级 assign 已覆盖）。
-# 注：production 不支持 seq+optional（如 "(a b)?"），故 force/release 拆两规则。
+# IEEE A.6.4 procedural_continuous_assignments：
+#   assign   variable_assignment ;     deassign variable_lvalue ;
+#   force    variable_assignment ;     release  variable_lvalue ;
 #
-# 挂回：注入 CtrlStmt（过程体语句候选）。
+# 挂回：SimCtrlStmt 容器（90_sim_ctrl.toml 统一注入 CtrlStmt）。
+# 消歧说明（procedural assign）：过程 assign 与模块级 AssignStmt 的 token
+# 形态完全相同（keyword.assign lvalue = expr ;），语法层由 ProcAssign 与
+# AssignStmt 双候选各自匹配——模块级走 ModuleItem 的 AssignStmt、过程体走
+# SimCtrlStmt 的 ProcAssign；linter 对 keyword.assign 双候选试解析，两规则
+# 语法同构，检查结果一致，无歧义影响（与"低频不做"旧注记不同，2005 全量
+# 目标下按标准补全）。deassign 是独立关键字（本插件 _token_ext.toml），
+# 无 token 冲突。
 
 [ForceAssign]
 is_statement = true
@@ -53,6 +57,63 @@ kind = "$1"
 lvalue = "$2"
 
 [ReleaseStmt.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { ref = "lvalue" },
+    ";",
+]
+
+
+# ── ProcAssign — 过程连续赋值（assign variable_assignment ;） ──
+# 与主包 AssignStmt（模块级）token 形态同构；语义差异（过程连续赋值可被
+# deassign 解除）由上下文承载，语法层无区分必要。
+
+[ProcAssign]
+is_statement = true
+
+[ProcAssign.parser]
+production = [
+    "keyword.assign",
+    "@PrimaryExpr",
+    "symbol.base.equal",
+    "@Expression",
+    "symbol.base.semicolon",
+]
+
+[ProcAssign.parser.node]
+kind = "$1"
+target = "$2"
+value = "$4"
+
+[ProcAssign.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { ref = "target" },
+    " = ",
+    { ref = "value" },
+    ";",
+]
+
+
+# ── DeassignStmt — 解除过程连续赋值（deassign variable_lvalue ;） ──
+
+[DeassignStmt]
+is_statement = true
+
+[DeassignStmt.parser]
+production = [
+    "keyword.deassign",
+    "@PrimaryExpr",
+    "symbol.base.semicolon",
+]
+
+[DeassignStmt.parser.node]
+kind = "$1"
+lvalue = "$2"
+
+[DeassignStmt.renderer.layout]
 line = [
     { ref = "kind" },
     " ",

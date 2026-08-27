@@ -60,6 +60,7 @@ inout = "inout"
 
 # 模块
 module = "module"
+macromodule = "macromodule"
 
 # 边沿
 posedge = "posedge"

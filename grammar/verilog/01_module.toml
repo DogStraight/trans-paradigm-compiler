@@ -84,6 +84,69 @@ is_block = true
 is_statement = true
 
 
+# ── MacroModuleDecl — macromodule 声明（A.1.2 module_keyword 变体） ──
+# 与 ModuleDecl 同构（可综合的 module 别名，1985 年遗留关键字）。独立规则
+# 而非 production 首元素 choice：块起始推导只支持纯单 token（"keyword.module|
+# keyword.macromodule" 会让 block_start 变成组合字符串，块定界失配）。
+# 语义/渲染/分析配置与 ModuleDecl 对齐，渲染保真（head 保留 macromodule）。
+
+[MacroModuleDecl.parser]
+production = [
+    "keyword.macromodule",
+    "@Identifier",
+    "@ParameterList?",
+    "@PortParens?",
+    "symbol.base.semicolon?",
+    "keyword.endmodule",
+]
+
+[MacroModuleDecl.parser.peek]
+scope = "analyzer"
+
+[MacroModuleDecl.parser.node]
+module_name = "$1"
+params = "$2"
+ports = "$3"
+
+[MacroModuleDecl.analyzer.scope]
+name_attr = "module_name"
+kind = "module"
+
+[MacroModuleDecl.renderer.head]
+line = [
+    "macromodule ",
+    { ref = "module_name" },
+    { opt = { group = [
+    " #(",
+    { ref = "params" },
+    { soft = true },
+    ")",
+] } },
+    "(",
+    { opt = { group = [
+    { opt = { ref = "ports" } },
+    { opt = { group = [
+    { break = true },
+], ref = "ports" } },
+], ref = "ports" } },
+    ")",
+    ";",
+    { break = true },
+]
+
+[MacroModuleDecl.renderer.body]
+indent = true
+role = "flatten"
+
+[MacroModuleDecl.renderer.tail]
+text = "endmodule"
+break = 2
+
+[MacroModuleDecl]
+is_block = true
+is_statement = true
+
+
 # ── PortParens — 端口括号 ──
 # 模块名的端口列表括号：(port1, port2, …)
 # inline = true 表示 AST 中此节点被展平，直接暴露内部 ports。

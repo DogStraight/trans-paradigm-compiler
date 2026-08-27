@@ -94,6 +94,12 @@ def build_start_token_map_names(
             continue
         starts = _compute_start_tokens(feat, grammar_rules, set())
         for tok in starts:
+            # 去重：块规则的 production 首字面 token 与 block_start 相同
+            # （如 ConfigDecl 的 keyword.config）→ 上面已注册，不再重复。
+            # 重复候选使同一规则被连续试两次（第一次的失败状态影响第二次
+            # 的匹配判定），产生"尝试过 X, X"的误报失败现场。
+            if tok == bs:
+                continue
             if tok not in name_map:
                 name_map[tok] = []
             name_map[tok].append(name)

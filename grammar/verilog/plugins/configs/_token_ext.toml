@@ -1,0 +1,11 @@
+# configs 插件 — 词法扩展（IEEE 1364-2005 A.1.5 configuration）
+# config 库映射是编译流程的罕见构造，独立插件可开关。
+
+[id.keyword]
+config = "config"
+endconfig = "endconfig"
+design = "design"
+liblist = "liblist"
+cell = "cell"
+instance = "instance"
+use = "use"

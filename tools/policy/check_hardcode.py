@@ -74,6 +74,7 @@ TOKEN_ALLOWLIST: dict[str, str] = {
     "input": "管线阶段字段（输入文件名 ctx.base_name）",
     "output": "管线结果字段（ctx.result['output']）",
     "signed": "number 配置字段（cfg.get('signed')，[number] 数字词法配置）",
+    "config": "CLI 子命令名（tpc config dump/show——工程命令，与 configs 插件关键字同名）",
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认

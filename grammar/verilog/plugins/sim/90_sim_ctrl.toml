@@ -20,7 +20,7 @@ is_statement = true
 
 [SimCtrlStmt.parser]
 production = [
-    "@ForkBlock|@EventWaitStmt|@ForeverLoop|@DelayControlStmt|@WaitStmt|@EventTrigger|@DisableStmt|@ForceAssign|@ReleaseStmt",
+    "@ForkBlock|@EventWaitStmt|@ForeverLoop|@DelayControlStmt|@WaitStmt|@EventTrigger|@DisableStmt|@ForceAssign|@ReleaseStmt|@ProcAssign|@DeassignStmt",
 ]
 inline = true
 

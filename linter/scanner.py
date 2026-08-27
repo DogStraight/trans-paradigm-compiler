@@ -36,6 +36,53 @@ from .checkers.statement import StatementChecker
 from .checkers.expression import ExpressionChecker
 
 
+def _derive_opener_prev_excludes(tree: dict) -> dict[str, frozenset[str]]:
+    """语法推导块 opener 的非起始前驱 token 集（供 BoundaryChecker）。
+
+    production 树中 (symbol.base.colon, keyword.X) 相邻 token 对（X 是块
+    opener）→ X 的前驱排除 colon：该位置的 X 是子句终结形态（如 config
+    插件的 use 子句 use lib.cell:config），不是块起始。BoundaryChecker
+    压栈时命中排除即不压——避免 :config 被当 config 块 opener 造成
+    unclosed 误报。推导是通用结构（不硬编码关键字名），语言知识留 TOML。
+    """
+    excludes: dict[str, set[str]] = {}
+
+    def walk(feat):
+        """返回 feature 可能的末尾 token 集合（call 截断）。"""
+        if feat is None:
+            return {None}
+        typ = feat.get("type")
+        if typ == "token":
+            return {feat.get("token_type", "")}
+        if typ == "call":
+            return {None}
+        if typ == "seq":
+            ends = {None}
+            for item in feat.get("items", []):
+                starts = walk(item)
+                for e in ends:
+                    for st in starts:
+                        if st and e == "symbol.base.colon" and st.startswith("keyword."):
+                            excludes.setdefault(st, set()).add(e)
+                ends = starts
+            return ends
+        if typ in ("repeat", "optional", "plus"):
+            return walk(feat.get("elem")) | {None}
+        if typ == "choice":
+            acc = set()
+            for alt in feat.get("alternatives", []):
+                acc |= walk(alt)
+            return acc
+        return {None}
+
+    for info in tree.values():
+        if not isinstance(info, dict):
+            continue
+        for prod in info.get("prods", []):
+            walk(prod)
+    return {k: frozenset(v) for k, v in excludes.items()}
+
+
 class LinterScanner:
     def __init__(
         self,
@@ -214,6 +261,7 @@ class LinterScanner:
                     self._block_openers,
                     self._block_closers,
                     self._block_pairs,
+                    opener_prev_exclude=_derive_opener_prev_excludes(self._tree),
                 )
             )
 

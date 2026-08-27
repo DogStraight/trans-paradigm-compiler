@@ -29,24 +29,34 @@ class BoundaryChecker(Checker):
         block_openers: frozenset[str],
         block_closers: frozenset[str],
         block_pairs: dict[str, set[str]],
+        opener_prev_exclude: dict[str, frozenset[str]] | None = None,
     ) -> None:
         self.start = start
         self.end = end
         self._block_openers = block_openers
         self._block_closers = block_closers
         self._block_pairs = block_pairs
+        # opener 前驱排除（语法推导）：前驱命中排除集的 opener 是终结形态
+        # （如 use lib.cell:config 的 :config）非块起始，不压栈。
+        self._opener_prev_exclude = opener_prev_exclude or {}
 
     def validate(self, tokens: list[Token]) -> list[LintDiagnostic]:
         errors: list[LintDiagnostic] = []
         stack: list[tuple[str, int]] = []
+        prev: str | None = None
         for idx in range(self.start, min(self.end, len(tokens))):
             t = tokens[idx]
             if t.type in _TRIVIA:
                 continue
             if t.type in self._block_openers:
-                stack.append((t.type, idx))
+                # 前驱排除（语法推导）：终结形态的 opener（如 use 子句的
+                # :config）不压栈——其前驱命中排除集时它不是块起始。
+                if prev not in self._opener_prev_exclude.get(t.type, ()):
+                    stack.append((t.type, idx))
+                prev = t.type
                 continue
             if t.type not in self._block_closers:
+                prev = t.type
                 continue
             if not stack:
                 errors.append(
