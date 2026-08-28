@@ -204,7 +204,9 @@ def _propagate_seq(
 
 
 def compute_follows(
-    rules: dict[str, GrammarRule], operator_members: list[str] | None = None
+    rules: dict[str, GrammarRule],
+    operator_members: list[str] | None = None,
+    trace: bool = False,
 ) -> dict[str, frozenset[str]]:
     """计算所有规则的 FOLLOW 集。
 
@@ -212,11 +214,21 @@ def compute_follows(
         rules: 语法规则表（规则名 → GrammarRule，production 为块剥离后形态）
         operator_members: pratt 运算符 token 成员（来自 token_category 的
             operator 分类 types；前缀成员以 "." 结尾）。None = 不注入。
+        trace: 配置推导可视化（C8，2026-08-28）——输出阶段汇总（语句/原子/
+            运算符注入）与每条规则最终 FOLLOW 到 stderr。默认 False 零影响；
+            语法规则变化导致解析回归时，`FOLLOW(X)` 的内容可见（来自语句
+            循环注入 / pratt 运算符 / 方程传播），配合规则生产式定位来源。
 
     Returns:
         {规则名: frozenset[token 成员]}。FOLLOW 为空的规则（不可达且无
         语句/原子角色）由调用方回退旧行为。
     """
+    if trace:
+        import sys as _sys
+
+        def _t(msg: str) -> None:
+            print(f"[follow-trace] {msg}", file=_sys.stderr)
+
     names = set(rules)
     # 块规则用内容部分（block_prods）建模——block_start/block_end 由块路径
     # 单独消费，不是内容生产式的一部分（body 循环由 body_first 单独注入），
@@ -242,6 +254,12 @@ def compute_follows(
     inline_rules = {n for n in names if getattr(rules[n], "inline", False)}
     block_rules = {n for n in names if getattr(rules[n], "is_block", False)}
 
+    if trace:
+        _t(
+            f"rules={len(names)} statements={len(statements)} "
+            f"atoms={len(atoms)} inline={len(inline_rules)} block={len(block_rules)}"
+        )
+
     # 块结束符集合（语句循环的后继之一）
     block_ends: set[str] = set()
     for n in block_rules:
@@ -254,6 +272,9 @@ def compute_follows(
     for s in statements:
         stmt_first |= first_map.get(s, set())
 
+    if trace:
+        _t(f"stmt_first={sorted(stmt_first)} block_ends={sorted(block_ends)}")
+
     # 语句循环注入
     for s in statements:
         follows[s] |= stmt_first | block_ends
@@ -262,6 +283,8 @@ def compute_follows(
     if operator_members:
         for a in atoms:
             follows[a] |= set(operator_members)
+        if trace:
+            _t(f"operator injection: {len(atoms)} atoms <- {sorted(operator_members)}")
 
     # 主体方程不动点
     changed = True
@@ -290,6 +313,10 @@ def compute_follows(
             for member in _elem_calls(elem):
                 if member in follows:
                     follows[member] |= fi
+
+    if trace:
+        for n in sorted(follows):
+            _t(f"FOLLOW({n}) = {sorted(follows[n])}")
 
     return {n: frozenset(s) for n, s in follows.items()}
 
