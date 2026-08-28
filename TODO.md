@@ -89,14 +89,16 @@
 
 ### P1.5 已知缺陷收尾
 
-- [ ] **宏展开路径条件编译还原不完整（2026-08-28 interop 门禁暴露）**：
-      darkriscv 输出 `ifdef` 89 个 vs 源 101 个（缺 12：__INTERRUPT__×3 /
+- [ ] **宏展开路径条件编译还原不完整（2026-08-28 修复中，interop 门禁暴露）**：
+      darkriscv 输出 `ifdef` 曾 89 个 vs 源 101 个（缺 12：__INTERRUPT__×3 /
       __COPROCESSOR__×2 / __EBREAK__×2 / __DBNZ__×2 / __CSR__×1 /
-      MODEL_TECH×1 / SIMULATION×1——全是未定义条件），sv-parser 预处理
-      失败（源文件 sv-parser 接受，输出被拒 → 还原保真问题非语法问题）。
-      interop 门禁拆分后 darkriscv 因此豁免（test_real_corpus.py
-      _SVPARSER_INTEROP_SKIP）。待查：条件编译占位符还原对嵌套/未命中
-      分支的 ifdef 指令行覆盖。
+      MODEL_TECH×1 / SIMULATION×1——全是未定义条件）。已修（inline_comment.py
+      4 项：tpc 占位不静默丢失 + 独立行插入 + 相邻标记顺序 + 插入后动态更新
+      插值锚点）：**ifdef 101/101 全还原、无占位残留、lint 零诊断**。残余：
+      表达式链内相邻条件块（IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）还原位置
+      依赖插值定位（渲染行距非线性 + 锚点稀疏），嵌套位置仍有偏差 →
+      sv-parser 仍拒（interop 豁免保留）。根治需 active 内容 marker 化
+      （_flush_block 改造）或 token span 映射（P3.1 前置），另案。
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
       （test_nested_invert_no_skip_leak）；L2 未修——invert 对含嵌套引用的 role，
       嵌套展开端口（inner_* 方向反转）不参与反转（invert 回调 resolve 期拿的是

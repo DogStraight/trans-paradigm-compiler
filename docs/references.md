@@ -898,13 +898,23 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   123KB / ice40 167KB 输出全过）。豁免 2 文件（`_SVPARSER_INTEROP_SKIP`）：
   tv80（sv-parser 源侧解析失败 3768:7 `else`，对拍不可靠）+ darkriscv
   （见下缺陷）
-- 🔥 **新缺陷：宏展开路径条件编译还原不完整（darkriscv，interop 暴露）**：
+- 🔥 **宏展开路径条件编译还原不完整（darkriscv，interop 暴露，2026-08-28 修复）**：
   darkriscv 源 sv-parser 接受（101 `ifdef` + 177 `define`），tpc 输出被拒
-  （Preprocess 错误）——输出 `ifdef` 仅 89 个，缺 12 个全为**未定义条件**
+  （Preprocess 错误）——输出 `ifdef` 曾仅 89 个，缺 12 个全为**未定义条件**
   （__INTERRUPT__×3 / __COPROCESSOR__×2 / __EBREAK__×2 / __DBNZ__×2 /
-  __CSR__×1 / MODEL_TECH×1 / SIMULATION×1）。展开-还原路径对未命中分支的
-  嵌套 ifdef 指令行覆盖不全（待查根因，TODO P1.5 已记录）；修复前 darkriscv
-  从 interop 豁免
+  __CSR__×1 / MODEL_TECH×1 / SIMULATION×1）。三层根因：① tpc 占位注释在
+  渲染中被 pratt/line 通道收集后，restore 的退化分支 target 行被占则**静默
+  丢失**（条件块整块消失）；② 相邻占位锚互相引用（后块锚 = 前块占位文本）
+  导致独立插值**顺序错乱**（端口组 INTERRUPT/SIMULATION/COPROCESSOR 互换）；
+  ③ 嵌套块头/块尾占位（如 __RV32E__ 的 endif）独立插值时锚点静态、块头
+  插入后未更新 → **块尾错位**。修法（inline_comment.py 4 项通用改进）：
+  tpc 占位不静默丢失（退化强制独立行插入）+ 相邻标记顺序插入（源行距 ≤8
+  跟随上次插入）+ 插入后动态更新插值锚点 + 循环级 center 初始化。**结果：
+  ifdef 101/101 全还原、无占位残留、lint 零诊断**；残余：表达式链内相邻
+  条件块（IFPC 三目链 EBREAK/INTERRUPT/DBNZ）还原位置依赖插值（渲染行距
+  非线性 + 锚点稀疏），嵌套位置仍有偏差 → sv-parser 仍拒（interop 豁免
+  保留）。根治需 active 内容 marker 化（_flush_block 改造）或 token span
+  映射（P3.1 前置），另案。
 - **pratt 前缀吞注释（P1.5 修复）**：pratt 前缀位置把 COMMENT 当续行分隔
   跳过（`a + /* c */ b` 的 `/* c */`、`- /* c */ a`、`cond ? /* c */ a : b`
   静默丢失，不进任何通道）。修法：`parse_with_count`/`parse_expression`

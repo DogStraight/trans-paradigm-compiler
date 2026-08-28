@@ -465,7 +465,9 @@ def _restore_comments(ctx: _PipelineContext, content: str, parser: Any) -> str:
         if not anchors:
             pass
         elif ctx.restore_stack:
-            content, n = restore_comments(content, anchors, only_tpc=True)
+            content, n = restore_comments(
+                content, anchors, only_tpc=True, tpc_src_map=ctx.tpc_src_map
+            )
             ctx.log(f"[comments] tpc inline marker restoration: {n} items")
         else:
             # 行中注释回插（P1.5）：行中块注释不挂 attachment（保持原位），

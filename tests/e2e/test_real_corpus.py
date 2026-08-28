@@ -186,12 +186,13 @@ def test_svparser_accept_domain(name: str, corpus_results):
 # sv-parser 互操作豁免（interop 覆盖宏文件后不构成对拍样本，原因见注释）：
 # - ref_tv80_core.v: sv-parser 源侧解析失败（3768:7 `else`），源都被拒则
 #   tpc 输出接受与否无法归因——对拍不可靠，豁免。
-# - ref_darkriscv.v: tpc 条件编译展开-还原不完整（输出 `ifdef` 89 个 vs 源
-#   101 个），sv-parser 预处理阶段失败（Preprocess 错误）——已知缺口
-#   （P1.5 宏还原保真，见 TODO），修复前豁免并保持门禁在其余文件上生效。
+# - ref_darkriscv.v: 条件编译还原已修至 ifdef 101/101 全还原（无占位残留），
+#   但表达式链内相邻条件块还原位置依赖插值定位，嵌套位置仍有偏差 →
+#   sv-parser 预处理仍拒（已知限制，见 TODO P1.5；根治需 active 内容
+#   marker 化或 token span 映射）。
 _SVPARSER_INTEROP_SKIP: dict[str, str] = {
     "ref_tv80_core.v": "sv-parser 源侧解析失败，对拍不可靠",
-    "ref_darkriscv.v": "tpc 条件编译还原不完整（输出 ifdef 89/源 101），sv-parser 预处理失败——TODO 已记录",
+    "ref_darkriscv.v": "条件编译还原嵌套位置有插值精度残余，sv-parser 预处理失败——TODO P1.5 已记录",
 }
 
 
