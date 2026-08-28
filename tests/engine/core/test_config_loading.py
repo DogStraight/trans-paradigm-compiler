@@ -15,17 +15,15 @@ from core.config_registry import ConfigRegistry, _load_meta_declarations
 
 @pytest.fixture
 def isolated_registry(tmp_path):
-    """隔离 ConfigRegistry：保存/恢复全局注册表状态，避免破坏 conftest 的共享配置。"""
-    saved = (
-        dict(ConfigRegistry._entries),
-        dict(ConfigRegistry._loaded),
-        ConfigRegistry._resolved,
-    )
+    """隔离 ConfigRegistry：reset 后测试自行声明/加载。
+
+    不再手动 save/restore（旧 workaround 只还原 _entries/_loaded/_resolved
+    三字段，漏 _entries_source，且与 conftest 的 autouse 全局还原机制时序
+    交错导致状态残留）；全局还原由 core/global_state.py 机制兜底——
+    每个测试结束后自动还原到 verilog 基线。
+    """
     ConfigRegistry.reset()
     yield tmp_path
-    ConfigRegistry._entries = saved[0]
-    ConfigRegistry._loaded = saved[1]
-    ConfigRegistry._resolved = saved[2]
 
 
 def _declare_and_load(

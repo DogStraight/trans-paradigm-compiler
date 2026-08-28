@@ -2,10 +2,11 @@
 
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
-> 当前验证基线（2026-08-27）：1208 pytest 全绿 + e2e 94 组 + real 语料 9 文件
-> （FAIL 0，保真度守卫）+ pyright 0 errors（1.1.413）+ lint recall 31/31 零误报 +
-> 覆盖率（fail_under 80）+ vs Verible 差分 136 例 + vs sv-parser 差分 98 例
-> （false-reject 0 / bad-interop 0 / lenient-diff 3——typed_ports 增强语法）。
+> 当前验证基线（2026-08-28）：1222 pytest 全绿（顺序无关，core/global_state
+> 测试隔离机制）+ e2e 94 组 + real 语料 9 文件（FAIL 0，保真度守卫）+
+> pyright 0 errors（1.1.413）+ lint recall 31/31 零误报 + 覆盖率（fail_under
+> 80）+ vs Verible 差分 136 例 + vs sv-parser 差分 98 例（false-reject 0 /
+> bad-interop 0 / lenient-diff 3——typed_ports 增强语法）。
 
 ## P1 — Verilog 实例完善
 

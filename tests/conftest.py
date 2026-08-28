@@ -2,6 +2,8 @@
 
 import sys
 import os
+from collections.abc import Iterator
+
 import pytest
 
 # Windows 控制台/管道编码：DSH 等宿主以 UTF-8 解码子进程输出，而本机活动代码页
@@ -25,20 +27,42 @@ from lexer import Lexer
 
 
 # ═══════════════════════════════════════════════════════
-# ConfigRegistry 初始化：必须先 import 所有模块（触发 declare_cfg），
-# 再调用 load_all()（触发 _push_loaded_config 将配置值推入模块变量）。
+# 全局状态隔离（顺序无关）：session 拍基线快照，每个测试后还原。
+# 引擎存在多处全局可变单例（GrammarRulesRegister / ConfigRegistry /
+# plugin_loader / pipeline._PIPELINE_SHARED / ProjectChecker._SHARED +
+# 各模块 _xxx_cfg 配置变量），测试顺序会导致状态残留污染（此前靠各测试
+# "独立实例"逐处 workaround，仍偶发顺序敏感）。机制见 core/global_state.py。
 # ═══════════════════════════════════════════════════════
 
 
-@pytest.fixture(scope="session")
-def config_loaded() -> None:
-    """确保 ConfigRegistry 加载完毕，各模块 _*_cfg 变量已推入。"""
+@pytest.fixture(scope="session", autouse=True)
+def _global_state_baseline() -> dict:
+    """session 基线：加载 verilog 配置并拍全局状态快照（隔离锚点）。"""
     from core.config_registry import ConfigRegistry
+    from core.define import GrammarRulesRegister
+    from core.global_state import snapshot
 
     ConfigRegistry.load_all(
         DEFAULT_RULES_DIR,
         plugins_dir=os.path.join(DEFAULT_RULES_DIR, "plugins"),
     )
+    GrammarRulesRegister.get_default().rules_registration(DEFAULT_RULES_DIR)
+    return snapshot()
+
+
+@pytest.fixture(autouse=True)
+def _restore_global_state(_global_state_baseline: dict) -> Iterator[None]:
+    """每个测试结束后把全局状态还原到 verilog 基线 → 测试顺序无关。"""
+    yield
+    from core.global_state import restore
+
+    restore(_global_state_baseline)
+
+
+@pytest.fixture(scope="session")
+def config_loaded(_global_state_baseline: dict) -> None:
+    """确保 verilog 配置已加载（session 基线快照已含，兼容既有引用）。"""
+    return None
 
 
 # ═══════════════════════════════════════════════════════

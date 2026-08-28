@@ -253,16 +253,16 @@ def _resolve_paths(ctx: _PipelineContext) -> None:
 
 def _ensure_shared(ctx: _PipelineContext) -> None:
     """初始化/复用按 rules_dir 缓存的共享组件。"""
-    # 配置加载（只执行一次，缓存后跳过）
-    if "_config_loaded" not in _PIPELINE_SHARED:
+    # 配置加载与组件构建统一按 rules_dir 键控：原 _config_loaded 是全局
+    # 标记（第一个语言决定配置，后续语言跳过加载——多语言进程的机制缺陷，
+    # 2026-08-28 与测试隔离机制一并修复）。
+    if ctx.rules_dir not in _PIPELINE_SHARED:
         ConfigRegistry.load_all(
             ctx.rules_dir,
             ext_dirs=ctx.ext_dirs,
             plugins_dir=os.path.join(ctx.rules_dir, "plugins"),
         )
-        _PIPELINE_SHARED["_config_loaded"] = True
 
-    if ctx.rules_dir not in _PIPELINE_SHARED:
         # 语法规则（含 EXT 注入）
         rules = setup_grammar(
             ctx.rules_dir, GrammarRulesRegister.get_default(), ext_dirs=ctx.ext_dirs

@@ -799,6 +799,33 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
 - **多目标 assign 坏输入仍炸**：`assign a = ;` lint 恢复病理 ~975 错（批次 6
   已知），无效输入的错误恢复质量另案（不阻塞合法输入）
 
+#### 测试隔离机制（2026-08-28，顺序无关从机制上修复）
+
+- **背景**：引擎多处全局可变单例，同一进程多语言/多配置测试顺序导致状态
+  残留污染——此前靠各测试"独立 GrammarRulesRegister() 实例"逐处 workaround
+  （c4/sim_plugin/analyzer 5 处），仍偶发顺序敏感（批次 5/6 全量 intermittently
+  挂 test_error_category_always_hit 等）
+- **全局状态清单**：GrammarRulesRegister._default_instance（注册表只增不重置）、
+  ConfigRegistry 类变量（_entries/_loaded/_entries_source/_sources/_resolved +
+  load_all 推送进各模块的 _xxx_cfg 模块变量）、plugin_loader
+  （_loaded_components/_transform_slots/_PRIMITIVE_ORDER，含 Python handler
+  module 引用）、pipeline._PIPELINE_SHARED、ProjectChecker._SHARED
+- **机制**：`core/global_state.py` snapshot()/restore()——session 基线
+  fixture 拍 verilog 快照，每测试后 autouse restore 还原。轻量状态 deepcopy
+  （注册表 ~2.5ms + 配置 ~2ms/测试），共享缓存 clear 重建
+- 🔥 **共享引用污染教训（实测复现）**：restore 把快照对象**直接赋给全局**
+  时，下一测试原地 clear/改写全局（isolated_registry 的 ConfigRegistry.
+  reset() 即清空共享引用）→ **污染快照对象本身**，后续 restore 还原的是被
+  污染的快照（现象：cfg_loaded 变 0 项、_entries 变 1 项）。修法：restore
+  一律 deepcopy 再赋值，快照保持不可变
+- **连带清理**：test_config_loading 的 isolated_registry 旧 workaround
+  （手动 save/restore 三字段，漏 _entries_source，且与新机制时序交错）删除，
+  统一走 autouse 还原；pipeline._config_loaded 全局标记（第一个语言决定配置）
+  改 rules_dir 键控
+- **验证**：双向顺序（c4→verilog / verilog→c4）278 测试结果一致；
+  全量 1222 passed + 6 skipped；子集组合（core+classifier 曾挂）73 passed；
+  c4 等"独立实例"workaround 保留无害（机制兜底）
+
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 
 - 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /
