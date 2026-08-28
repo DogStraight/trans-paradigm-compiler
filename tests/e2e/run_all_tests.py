@@ -160,6 +160,11 @@ def run_all(
 
         out_dir = os.path.join(base_dir, "samples", group)
 
+        # transform 分支不设置 effective_expand（该组无展开模式比较），
+        # 提前初始化避免"possibly unbound"（pyright，运行期 transform 分支
+        # 在保真度段前 continue，恒有绑定）
+        effective_expand = False
+
         # 日志抑制
         old_stdout = sys.stdout
         old_stderr = sys.stderr
