@@ -116,28 +116,3 @@
       合并）；L3 未修——invert 引用的 role 定义在后时 _ref_callbacks 尚未构建
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
-
-### P1.9 tpc-check 诊断体系（semantic_check 插槽架构，ADR-0004/0005）
-
-> 2026-08-28 更新（0.1.1 第二目标「诊断链插件」规划）：verilog 静态检查闭环 =
-> **三层面 + 跨文件易错点 + 用户自定义自由度**：
->   1. 语法层 = 现 linter 部件（token 级反解析器，已就绪）
->   2. 语义层 = 注册类 pass（semantic_check 插槽 post-pass 钩子，已落地机制；
->      inst_check W101-103/WC001 已跨文件）
->   3. 自定义检查层 = 用户自由度（capabilities Python 模块协议已实现，缺"注册 +
->      文档示例"）；**名称检查作为第一个用户自定义参考示例**
-> 架构参照：svlint 深调研（2026-08-28，references.md 补"诊断链插件深度调研"）——
-> SyntaxRule（节点事件监听 + 配置注入）与 semantic_check 插槽同构、命名规则族
-> （prefix_*/re_required_*/re_forbidden_* ~80 配置字段按 kind 分发）是名称检查
-> 蓝本；svlint 跨文件仅 filelist 批处理（无符号表），tpc 语义层的跨文件易错点是
-> 差异化能力。
-> 已落地：机制层（post-pass 钩子 + 统一报告管道 + related 链）、跨文件联动
-> （inst_check：W101/W102/W103/WC001）、名称调用检查（check_name_call：W002）、
-> --json/suppress。**L1 声明式规则表 + 命名约定检查 + P4 用户配置层已闭环**
-> （2026-08-28：check_registry.py 加载校验 + checks.py 执行器 + name_check
-> 插件 NC001-NC010 + config/tpc_config.json checks 段 enabled/overrides/
-> per_file；规则=数据，kind 分发 + pattern 判定 + handler 兜底 + 用户覆盖）。
-> 剩余（诊断链三层面收口）：
-
-- [ ] **注释驱动测试框架**：样例源文件内 `// ruleid: NC001` /
-      `// ok: NC001` 注释断言，引擎校验命中集合（Semgrep 式，零代码测试）

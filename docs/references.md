@@ -636,6 +636,11 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     执行时应用。overrides 提升到 error → `tpc check` exit_code 变 1（门禁
     生效）。per_file 用 pathlib.PurePath.match 尾部语义（`tb/*.sv` /
     `**/tb_*.v`），符号文件来自 ProjectChecker 注入的 `node._file`。
+  - ✅ **注释驱动测试框架已落地（2026-08-28）**：Semgrep 式零代码测试的 tpc
+    落地——样例源文件内嵌 `// ruleid: X`（必须命中）/ `// ok: X`（不得命中）
+    注释，`analyzer/check_test.py::run_comment_driven` 运行检查后断言命中集合
+    （失败报告带行号与段内诊断）。样例资产 = name_check 插件 `cases/*.sv`
+    （新增样例 = 新增断言，规则行为变化时随样例自动更新语义）。
 
 - **与 tpc linter 的差异**（各有取舍，非优劣）：
 

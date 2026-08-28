@@ -4,7 +4,8 @@
 > `--json` 机器可读输出；源码内豁免注释见文末（P1.9 第一步，仿 Verilator
 > lint_off/lint_on）。来源调研见 `references.md`「Verilog 静态检查工具群」。
 >
-> 更新：2026-08-25（P1.9 第一步：suppress 注释落地）
+> 更新：2026-08-25（P1.9 第一步：suppress 注释落地）；2026-08-28
+> （NC001-NC010 命名约定登记，声明式规则 P3）
 
 ## 诊断协议
 
@@ -39,7 +40,8 @@
 ## 语义阶段（analyzer 插件）
 
 前缀约定：`E` = error 级、`W` = warning 级、`WC` = 跨文件检查（ADR-0005，
-inst_check 插件）。
+inst_check 插件）、`NC` = 命名约定检查（name_check 插件，声明式规则
+[[checks]]，P3）。
 
 | code | level | 来源 | 含义 |
 |------|-------|------|------|
@@ -50,6 +52,21 @@ inst_check 插件）。
 | `W102` | error | inst_check 插件 | 实例化连接了不存在的端口 |
 | `W103` | error | inst_check 插件 | 实例化覆盖了不存在的参数 |
 | `WC001` | warning | inst_check 插件 | 字面量连接参数化宽度端口（配置变更时可能成为死值） |
+| `NC001` | warning | name_check 插件（声明式） | module 名不符合小写下划线约定 |
+| `NC002` | warning | name_check 插件（声明式） | 实例名不符合小写下划线约定 |
+| `NC003` | warning | name_check 插件（声明式） | wire 名不符合小写下划线约定 |
+| `NC004` | warning | name_check 插件（声明式） | reg 名不符合小写下划线约定 |
+| `NC005` | warning | name_check 插件（声明式） | 端口名不符合小写下划线约定 |
+| `NC006` | warning | name_check 插件（声明式） | parameter 名不符合大写下划线约定 |
+| `NC007` | warning | name_check 插件（声明式） | localparam 名不符合大写下划线约定 |
+| `NC008` | warning | name_check 插件（声明式） | genvar 名不符合大写下划线约定 |
+| `NC009` | warning | name_check 插件（声明式） | 函数名不符合小写下划线约定 |
+| `NC010` | warning | name_check 插件（声明式） | 任务名不符合小写下划线约定 |
+
+> NC 系列规则声明在 `grammar/verilog/plugins/name_check/rules/naming.toml`
+> （`[[checks]]` 规则=数据），severity 可由用户配置
+> （`config/tpc_config.json` checks.overrides）覆盖——本表为默认值。
+> 规则 id 全集随规则表加载（`core/check_registry.py`），新增规则时同步本表。
 
 ## 豁免注释（suppress）
 

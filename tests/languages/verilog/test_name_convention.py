@@ -510,3 +510,42 @@ class TestHandlerFallback:
         )
         with pytest.raises((ValueError, FileNotFoundError)):
             self._run_with_plugin(ctx, "module a;\nendmodule\n", tmp_path)
+
+
+class TestCommentDrivenCases:
+    """注释驱动测试（Semgrep 式零代码测试）：插件 cases/ 目录样例全过。
+
+    样例源文件内嵌 `// ruleid: X`（必须命中）/ `// ok: X`（不得命中）
+    注释，框架（analyzer/check_test.py）运行 ProjectChecker 后断言命中
+    集合。新增样例 = 新增断言（零代码），规则行为变化时随样例自动更新
+    语义。cases/ 目录：grammar/verilog/plugins/name_check/cases/*.sv。
+    """
+
+    def test_name_check_cases(self, config_loaded):
+        import glob
+        import tempfile
+        import shutil
+
+        from analyzer.check_test import run_comment_driven
+        from analyzer.checker import ProjectChecker
+
+        cases_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))))),
+            "grammar", "verilog", "plugins", "name_check", "cases",
+        )
+        samples = sorted(glob.glob(os.path.join(cases_dir, "*.sv")))
+        assert samples, f"cases 目录无样例: {cases_dir}"
+
+        checker = ProjectChecker(rules_dir="grammar/verilog")
+        all_failures = []
+        for sample in samples:
+            # check 需要独立文件（ProjectChecker 按路径解析）
+            tmp = tempfile.mkdtemp()
+            dst = os.path.join(tmp, os.path.basename(sample))
+            shutil.copy(sample, dst)
+            fails = run_comment_driven(checker, dst)
+            if fails:
+                all_failures.append(f"--- {os.path.basename(sample)} ---")
+                all_failures.extend(fails)
+        assert not all_failures, "\n".join(all_failures)

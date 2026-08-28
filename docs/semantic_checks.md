@@ -5,7 +5,7 @@
 > 本文件是"怎么拼"。
 > 前置调研：`references/static_checkers_survey.md`。
 > 状态：**P1 机制层 + P2 窄版 + 跨文件联动 + P3 声明式规则表 + P4 用户配置层
-> 已落地**（2026-08-25 P1/P2/P2.5；2026-08-28 P3/P4）；注释驱动测试框架待做。
+> + L1 注释驱动测试已落地**（2026-08-25 P1/P2/P2.5；2026-08-28 P3/P4/L1 测试）。
 
 ## 1. 定位与边界
 
@@ -183,9 +183,15 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 - 声明层与脚本层规则**自动获得**同一套豁免（解析发生在报告出口，不区分规则来源）。
 - 注释 token 由 preprocessor/lexer 现有注释识别承接。
 
-## 9. 测试框架（按层）
+## 9. 测试框架（按层）✅ L1 注释驱动已实现（2026-08-28）
 
-- **L1 声明层**：注释驱动测试（Semgrep 式）——样例源文件内 `// ruleid: WC001`（必须命中）/ `// ok: WC001`（不得命中），引擎断言命中集合，零代码。
+- **L1 声明层**：注释驱动测试（Semgrep 式）**已实现**——样例源文件内嵌
+  `// ruleid: NC001`（必须命中）/ `// ok: NC001`（不得命中）注释，
+  `analyzer/check_test.py::run_comment_driven(checker, path)` 运行检查后
+  断言命中集合（失败报告：`L{行}: ruleid X 未命中` / `ok X 意外命中`）。
+  样例资产 = name_check 插件 `cases/*.sv`（零代码测试：新增样例 = 新增
+  断言；规则行为变化时随样例自动更新语义）。测试入口：
+  `tests/languages/verilog/test_name_convention.py::TestCommentDrivenCases`。
 - **L2 脚本层**：RuleTester 式断言——valid/invalid 用例 + 期望诊断逐字段断言（messageId/level/位置/related 链）。
 
 ## 10. 分阶段落地计划
@@ -195,7 +201,7 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 | P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 钩子/related **已实现**（2026-08-25）；统一抑制未做（并入 P4） |
 | P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见 ADR-0005 inst_check） |
 | P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（ADR-0005：W101/W102/W103/WC001 + `tpc check` CLI） |
-| P3 | L1 声明式 schema + 注释驱动测试框架 | **声明式 schema 已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据）；注释驱动测试框架未做（后续） |
+| P3 | L1 声明式 schema + 注释驱动测试框架 | **已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据；注释驱动测试 analyzer/check_test.py + cases/ 样例） |
 | P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | **已实现**（2026-08-28：config/tpc_config.json checks 段——enabled/overrides/per_file，fail-fast 校验；统一抑制由 analyzer/suppress.py 覆盖，声明式规则自动获得豁免） |
 
 > Impl: analyzer/checks.py（声明式执行器）/ core/check_registry.py（规则表加载校验）/
