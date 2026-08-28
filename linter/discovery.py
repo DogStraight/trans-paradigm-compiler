@@ -30,6 +30,9 @@ from .lookahead import LookaheadTable
 # 通用词法常量（引擎 token 协议，单一事实源 core/token_protocol.py）
 _TRIVIA = TRIVIA_TOKEN_TYPES
 
+# discovery 递归深度上限（坏输入收敛防御，见 _discover_range 注释）
+_MAX_DISCOVER_DEPTH = 64
+
 
 def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
     """从语法树推导属性对开括号（如 (* ... *)）。
@@ -191,6 +194,13 @@ class Discovery:
         （表达式/字面量等黑盒）。句子结束边界由 production 推导（见
         _statement_end），不依赖 end_case 手写值。
         """
+        # 递归深度上限（纵深防御，2026-08-28 坏输入收敛）：容器递归与自身
+        # 区间重叠等病态输入曾触发 ~978 层递归（受 Python 递归上限约束，
+        # 每层注册同一区间节点 → `assign a = ;` 977 条重复诊断）。正常
+        # 语句嵌套深度远小于此（begin/end 逐层 +1），阈值截断只影响病态
+        # 输入——被截断的子树由检查阶段兜底（缺失区间不注册，不吞错）。
+        if depth > _MAX_DISCOVER_DEPTH:
+            return []
         nodes: list[DiscoveredNode] = []
         i = start
         while i < end:
@@ -328,7 +338,17 @@ class Discovery:
                             bs, _, _ = body
                             # 实验：body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
                             bctx = context
-                            if bs < e:
+                            # body 起点必须**严格在规则起点之后**（2026-08-28
+                            # 坏输入收敛根因防御）：容器的 body 结构上位于
+                            # 头部 token 之后（if/for 的 body 在 `if (x)` 后），
+                            # body 起点 == 规则起点意味着"body"即规则自身——
+                            # inline 语句分派器（如 SimCtrlStmt = choice of
+                            # 语句规则）的 _locate_stmt_body 返回 choice 起点
+                            # == 规则起点，递归区间与自身完全重叠 → 每层注册
+                            # 同一节点直至递归上限（`assign a = ;` 977 条
+                            # 重复诊断）。语义上语句分派器的嵌套语句由后续
+                            # 扫描独立发现（扁平化策略），不递归。
+                            if i < bs < e:
                                 node.children = self._discover_range(
                                     tokens, bs, e, bctx, depth + 1
                                 )

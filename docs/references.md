@@ -800,8 +800,10 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
     渲染后 body 文本必须可定位，属预处理器锚形态再设计
   - 📌 **yosys 内部 `$cell` 名**：`module $demux` 类（techmap）非 2005/1800
     Annex A 合法输入（sv-parser 同样拒），techmap 已排除出语料
-- **多目标 assign 坏输入仍炸**：`assign a = ;` lint 恢复病理 ~975 错（批次 6
-  已知），无效输入的错误恢复质量另案（不阻塞合法输入）
+- **多目标 assign 坏输入收敛（2026-08-28 已修，见「引擎增益：坏输入收敛」）**：
+  `assign a = ;` / `b + ;` 曾 ~978 条重复诊断（同一区间节点递归注册至
+  Python 递归上限），现收敛到 1-3 条精确诊断（phase-expr/phase-statement），
+  漏检样本 `assign = b;` 同时检出
 
 #### A 类缺口修复（2026-08-28，test_2005_batch8.py）
 
@@ -919,9 +921,34 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   无遮挡时 Level 1 静态判别仍生效；`assign a = b` 缺分号（A 类）→ allow_
   partial 返回候选（checker 报精确诊断）；`foo bar` 拼错（B 类）→ [] 未识别
   （不吞错）。行为快照之外的语义意图层，防同类回归
+
+#### 引擎增益：坏输入收敛（2026-08-28，discovery 递归爆炸根治）
+
+- **现象**：`assign a = ;` / `b + ;` 产生 ~978 条诊断，其中 977 条是重复的
+  `unexpected 'assign'`（同一区间节点注册 ~978 次）
+- **根因链（三层，逐层定位）**：
+  1. **inline 语句分派器自递归**：SimCtrlStmt（inline 分派器，production 单
+     choice of 9 个语句规则）被判嵌套容器，`_locate_stmt_body` 返回 body
+     起点 == 规则起点（choice 第一分支 ForkBlock 是块）→ 递归区间与自身
+     完全重叠 → 每层注册同一节点直至 Python 递归上限（~978 层）。修法：
+     body 起点必须**严格在规则起点后**（`i < bs < e`）+ `_discover_range`
+     递归深度上限（`_MAX_DISCOVER_DEPTH=64`，纵深防御）
+  2. **假推进胜出**：allow_partial 的 best 选择用 consumed 加分，但错误恢复
+     的 skip 推进是假推进——SimCtrlStmt（choice 失败 strict 报错+跳过 1
+     token）consumed=1 胜过 AssignStmt（表达式失败不推进 consumed=0）。
+     修法：consumed 加分仅作用于 errs==0（完整匹配），errs>0 保持注册顺序
+  3. **inline 分派器候选噪音**：SimCtrlStmt 的 first = 9 分支 first 并集，
+     `assign` 触发它；choice 内 strict=False 使 ProcAssign 的 @PrimaryExpr
+     失败不推进、后续元素继续 → 假成功（errs=0），`assign = b;` 被误分类
+     漏检。修法：inline 分派器不注册为消歧候选（分支各自 is_statement 已
+     注册）；grammar_slicer 补提取 inline 字段
+- **验证**：`assign a = ;` 978→1（phase-expr）、`assign = b;` 0→3（检出）、
+  `b + ;` 978→1；lint accuracy 31/31 0 FP 保持（e08/e10/e11/e16/e22 全 HIT）；
+  契约测试 TestDiagnosticConvergence（诊断数量有界）+ 正常输入零诊断
 - **后续候选**：per-rule 匹配策略声明化（最长匹配从引擎全局默认变成配置可
-  表达）、matcher._probe_eof 试探语境状态治理、错误恢复诊断收敛（坏输入
-  976 条病理，已在 TODO M 级）
+  表达）、matcher._probe_eof 试探语境状态治理、错误恢复的 strict=False
+  "失败不推进但后续元素继续"容错语义（假成功的深层机制，本次以分派器排除
+  规避，未根治 matcher 层）
 
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 

@@ -54,6 +54,7 @@ def build_slice_tree(rules: dict[str, GrammarRule]) -> dict[str, dict]:
             "is_statement": getattr(rule, "is_statement", False),
             "is_atom": getattr(rule, "is_atom", False),
             "pratt": getattr(rule, "pratt", False),
+            "inline": getattr(rule, "inline", False),
             "block_start": getattr(rule, "block_start", "") or "",
             "block_end": getattr(rule, "block_end", "") or "",
         }

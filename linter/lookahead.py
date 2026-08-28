@@ -260,6 +260,21 @@ class LookaheadTable:
             prods = info.get("prods")
             if not prods:
                 continue  # 空 production 的 block 块（GenerateBlock 等）由边界检查处理
+            # inline 语句分派器（production 单 choice of calls，如 SimCtrlStmt
+            # = @ForkBlock|@EventWaitStmt|...）不注册为消歧候选（2026-08-28
+            # 坏输入收敛）：分派器的 first = 各分支 first 并集，注册产生消歧
+            # 噪音——`assign` 触发 SimCtrlStmt（分支 ProcAssign 的 first），
+            # choice 内 strict=False 使 @PrimaryExpr 失败不推进、后续元素继续
+            # 假成功（errs=0），`assign = b;` 被误分类为 SimCtrlStmt 漏检。
+            # 分派器只服务 parser 的注入点（@CtrlStmt），分支各自是
+            # is_statement 已注册（ProcAssign/DeassignStmt 等），linter 直接
+            # 命中分支即可。
+            if (
+                info.get("inline")
+                and len(prods) == 1
+                and prods[0].get("type") == "choice"
+            ):
+                continue
             firsts = _rule_first(name, self._tree)
             if not firsts:
                 continue
@@ -506,10 +521,16 @@ class LookaheadTable:
                 f"  L2 {name}: errs={errs} consumed={consumed}"
                 + (f" first_err={trial[0].message[:60]!r}" if trial else "")
             )
-            if (
-                best is None
-                or errs < best[0]
-                or (errs == best[0] and consumed > best[1])
+            # best 选择：errs 最少优先；**仅 errs==0（完整匹配）时**用
+            # consumed 加分（2026-08-28 坏输入收敛）：errs>0 的错误恢复
+            # 推进（skip 跳过坏 token）是假推进——SimCtrlStmt（inline 分派
+            # 器，choice 失败 strict 报错+跳过 1 token）凭 consumed=1 胜过
+            # AssignStmt（表达式失败不推进 consumed=0），`assign a = ;`
+            # 被误分类为 SimCtrlStmt、phase-expr 期望不命中。errs>0 时保持
+            # 注册顺序（keyword_map[assign] 首位 AssignStmt 胜，checker 报
+            # 精确诊断）。
+            if best is None or errs < best[0] or (
+                errs == best[0] and errs == 0 and consumed > best[1]
             ):
                 best = (errs, consumed, name)
         if best is None:
