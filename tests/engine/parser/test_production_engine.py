@@ -14,6 +14,7 @@ from parser._production import (
     parse_repeat,
     parse_optional,
     parse_plus,
+    collect_following_comments,
 )
 
 
@@ -29,6 +30,7 @@ def _fake_self(extra: dict | None = None) -> object:
         "_debug_token_info": lambda ctx: "",
         "_process_production_node": process_production_node,
         "_parse_token": parse_token,
+        "_collect_following_comments": collect_following_comments,
         "_parse_seq": parse_seq,
         "_parse_choice": parse_choice,
         "_parse_repeat": parse_repeat,

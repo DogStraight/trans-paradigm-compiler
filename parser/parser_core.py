@@ -278,6 +278,7 @@ from ._production import (
     parse_optional,
     parse_plus,
     repeat_loop,
+    collect_following_comments,
 )
 
 from .block_parser import (
@@ -341,6 +342,7 @@ class Parser:
 
     # _production (合并 rule_matcher + node_parsers)
     _parse_token = parse_token
+    _collect_following_comments = collect_following_comments
     _parse_call = parse_call
     _parse_seq = parse_seq
     _parse_choice = parse_choice

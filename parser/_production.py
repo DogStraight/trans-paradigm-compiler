@@ -8,7 +8,7 @@ _production.py — 生产式解析全流程（合并 rule_matcher + node_parsers
 Doc: docs/language_walkthrough.md（production 求值引擎）
 """
 
-from core.define import Node, GrammarRule, CHILDREN_FIELD
+from core.define import Node, Token, GrammarRule, CHILDREN_FIELD
 from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
@@ -495,96 +495,111 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     parsed_node.add_attr("value", current_token.content)
     context.advance_token()
 
-    # 收集紧随当前 token 的 inline comment
-    while True:
-        nxt = context.peek_token(offset=0)
-        if nxt and nxt.type == COMMENT_TOKEN_TYPE:
-            # 行中注释判定（注释节点模型 2b-2）：注释之后还有同行的非注释
-            # token（如 `assign b = /* 嵌入 */ rst_n;` 的注释在 `=` 与 `rst_n`
-            # 之间）→ 行中注释，进 pending 队列——由下一个规则节点（parse_call
-            # 成功）挂 inline 槽位、或下一终结符挂 trailing（结构序渲染，
-            # 替代锚点回插）；不进 _comment_anchors（防 restore 双份）。
-            # newline 是独立 token 且与注释同行（行尾注释的正常形态），跳过。
-            is_midline = False
-            off = 1
-            while True:
-                after = context.peek_token(offset=off)
-                if after is None:
-                    break
-                if after.type in (COMMENT_TOKEN_TYPE, "newline"):
-                    off += 1
-                    continue
-                is_midline = after.line == nxt.line
-                break
-            if is_midline:
-                if after is not None and after.type.startswith("symbol"):
-                    # 尾注归属：注释后第一个 token 是终结符（`;`/`)`/`,` 等），
-                    # 无后续规则节点可挂（如 `assign b = c /* c2 */;` 的注释在
-                    # `c` 与 `;` 之间）→ 挂当前节点 trailing 槽位。
-                    cur_node = getattr(context, "current_node", None)
-                    if isinstance(cur_node, Node):
-                        slots = getattr(cur_node, "_comment_slots", None)
-                        if slots is None:
-                            slots = {}
-                            cur_node.add_attr("_comment_slots", slots)
-                        slots.setdefault("trailing", []).append(nxt.content)
-                else:
-                    # 行中归属（注释节点模型 2b-2，token 标注定位）：注释在
-                    # `= /* c */ rst_n` 的 `=` 与 `rst_n` 之间——挂**当前规则
-                    # 节点**（匹配注释前 token 的 production 节点，确定成功）
-                    # 的 inline_after 槽位（{锚 token: [(注释, 源行号)]}），
-                    # 渲染端在布局 line 元素序列里按锚 token 文本定位插入
-                    # （`=` 后）；布局无文本锚（如 pratt 表达式内的 `+`）时
-                    # 渲染后未消费 → pipeline 兜底补 anchors 回插。
-                    # 不挂子规则节点：子规则匹配可能回溯重建，注释会随丢弃
-                    # 节点丢失（曾挂 parse_call 返回节点 → 回溯丢）。
-                    cur_node = getattr(context, "current_node", None)
-                    if isinstance(cur_node, Node):
-                        slots = getattr(cur_node, "_comment_slots", None)
-                        if slots is None:
-                            slots = {}
-                            cur_node.add_attr("_comment_slots", slots)
-                        ia = slots.setdefault("inline_after", {})
-                        ia.setdefault(current_token.content, []).append(
-                            (nxt.content, nxt.line)
-                        )
-            else:
-                self._comment_anchors.append(
-                    {
-                        "anchor": current_token.content,
-                        "text": nxt.content,
-                        "line": nxt.line,
-                        "type": token_type,
-                    }
-                )
-                # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
-                # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过
-                # normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
-                # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
-                # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
-                # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
-                cur_node = getattr(context, "current_node", None)
-                if isinstance(cur_node, Node):
-                    seen = getattr(self, "_attached_seen", None)
-                    if seen is None:
-                        seen = set()
-                        self._attached_seen = seen
-                    key = (nxt.content, nxt.line)
-                    if key not in seen:
-                        seen.add(key)
-                        attached = getattr(cur_node, "_attached_comments", None)
-                        if attached is None:
-                            attached = []
-                            cur_node.add_attr("_attached_comments", attached)
-                        attached.append(nxt.content)
-            context.advance_token()
-        else:
-            break
+    # 收集紧随当前 token 的 inline comment（注释节点模型 2b-2，C5 重构提取）
+    self._collect_following_comments(context, current_token, token_type)
 
     self._log_state(
         lambda: f"token {token_type} ok | {self._debug_token_info(context)}"
     )
     return parsed_node
+
+
+def collect_following_comments(
+    self, context: ParseContext, current_token: Token, token_type: str
+) -> None:
+    """收集紧随 token 的行内注释（注释节点模型 2b-2，C5 重构 2026-08-28）。
+
+    三通道归属（与 renderer 注释模型对应）：
+      - 行中注释（注释后同行有非注释 token）：后跟终结符（`;`/`)`/`,`）→
+        挂当前节点 trailing 槽位（无后续规则节点可挂）；后跟代码 → 挂
+        inline_after 槽位（{锚 token: [(注释, 源行号)]}，token 标注定位，
+        渲染端按锚文本插入，无文本锚时 pipeline 兜底 anchors 回插）
+      - 行尾注释（注释后 newline）→ _comment_anchors（锚点回插）+ attachment
+        （ADR-0006 阶段 4，renderer line_suffix 渲染），按 (text, line) 全局
+        去重（parser 回溯双收集 + current_node 回溯变化防渲染双份）
+    不挂子规则节点：子规则匹配可能回溯重建，注释会随丢弃节点丢失。
+    """
+    while True:
+        nxt = context.peek_token(offset=0)
+        if not (nxt and nxt.type == COMMENT_TOKEN_TYPE):
+            break
+        # 行中注释判定（注释节点模型 2b-2）：注释之后还有同行的非注释
+        # token（如 `assign b = /* 嵌入 */ rst_n;` 的注释在 `=` 与 `rst_n`
+        # 之间）→ 行中注释，进 pending 队列——由下一个规则节点（parse_call
+        # 成功）挂 inline 槽位、或下一终结符挂 trailing（结构序渲染，
+        # 替代锚点回插）；不进 _comment_anchors（防 restore 双份）。
+        # newline 是独立 token 且与注释同行（行尾注释的正常形态），跳过。
+        is_midline = False
+        off = 1
+        while True:
+            after = context.peek_token(offset=off)
+            if after is None:
+                break
+            if after.type in (COMMENT_TOKEN_TYPE, "newline"):
+                off += 1
+                continue
+            is_midline = after.line == nxt.line
+            break
+        if is_midline:
+            if after is not None and after.type.startswith("symbol"):
+                # 尾注归属：注释后第一个 token 是终结符（`;`/`)`/`,` 等），
+                # 无后续规则节点可挂（如 `assign b = c /* c2 */;` 的注释在
+                # `c` 与 `;` 之间）→ 挂当前节点 trailing 槽位。
+                cur_node = getattr(context, "current_node", None)
+                if isinstance(cur_node, Node):
+                    slots = getattr(cur_node, "_comment_slots", None)
+                    if slots is None:
+                        slots = {}
+                        cur_node.add_attr("_comment_slots", slots)
+                    slots.setdefault("trailing", []).append(nxt.content)
+            else:
+                # 行中归属（注释节点模型 2b-2，token 标注定位）：注释在
+                # `= /* c */ rst_n` 的 `=` 与 `rst_n` 之间——挂**当前规则
+                # 节点**（匹配注释前 token 的 production 节点，确定成功）
+                # 的 inline_after 槽位（{锚 token: [(注释, 源行号)]}），
+                # 渲染端在布局 line 元素序列里按锚 token 文本定位插入
+                # （`=` 后）；布局无文本锚（如 pratt 表达式内的 `+`）时
+                # 渲染后未消费 → pipeline 兜底补 anchors 回插。
+                cur_node = getattr(context, "current_node", None)
+                if isinstance(cur_node, Node):
+                    slots = getattr(cur_node, "_comment_slots", None)
+                    if slots is None:
+                        slots = {}
+                        cur_node.add_attr("_comment_slots", slots)
+                    ia = slots.setdefault("inline_after", {})
+                    ia.setdefault(current_token.content, []).append(
+                        (nxt.content, nxt.line)
+                    )
+        else:
+            self._comment_anchors.append(
+                {
+                    "anchor": current_token.content,
+                    "text": nxt.content,
+                    "line": nxt.line,
+                    "type": token_type,
+                }
+            )
+            # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
+            # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过
+            # normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
+            # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
+            # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
+            # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
+            cur_node = getattr(context, "current_node", None)
+            if isinstance(cur_node, Node):
+                seen = getattr(self, "_attached_seen", None)
+                if seen is None:
+                    seen = set()
+                    self._attached_seen = seen
+                key = (nxt.content, nxt.line)
+                if key not in seen:
+                    seen.add(key)
+                    attached = getattr(cur_node, "_attached_comments", None)
+                    if attached is None:
+                        attached = []
+                        cur_node.add_attr("_attached_comments", attached)
+                    attached.append(nxt.content)
+        context.advance_token()
 
 
 def parse_call(self, node: dict, context: ParseContext) -> Node | None:
