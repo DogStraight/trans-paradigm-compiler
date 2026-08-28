@@ -125,49 +125,62 @@ def restore_comments(
 
     # tpc 占位标记：独立行插入（插值定位尽力，退化 src_line 窗口），绝不丢失
     if tpc_pending:
-        # 已渲染 marker（渲染行号）→ 源行号映射，作插值锚点（同
-        # restore_line_comments._interp_tpc_line 机制；inline 通道先于 line
-        # 通道执行，锚点来自 AST 内联渲染的 marker，如 /*<tpc:macro:N>*/）
-        rendered_tpc: dict[str, int] = {}
-        for i, l in enumerate(lines, 1):
-            m = re.search(r"// <(tpc:[^>]+)>", l)
-            if m:
-                rendered_tpc[m.group(1)] = i
-        rendered_tpc_src: dict[str, int] = {}
-        if tpc_src_map:
-            rendered_tpc_src = {
-                k: tpc_src_map[k] for k in rendered_tpc if k in tpc_src_map
-            }
-            # 相邻 tpc 标记顺序插入（同 restore_line_comments）：表达式链内
-            # 连续条件块（如 darkriscv IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）
-            # 独立插值会分散错位，相邻标记跟随上次插入位置保持结构
-            last_tpc_pos: int | None = None
-            last_tpc_src: int = -100
-            for src_line, comment in tpc_pending:
-                if last_tpc_pos is not None and src_line - last_tpc_src <= 8:
-                    ins = min(last_tpc_pos + 1, len(lines))
-                else:
-                    center = _interp_tpc_line(
-                        src_line, rendered_tpc_src, rendered_tpc
-                    )
-                    ins = min(center, len(lines))
-                # 在插值中心附近找插入行（前插独立注释行，跳过已占用行）
-                guard = 0
-                while ins < len(lines) and ins in occupied and guard < len(lines):
-                    ins += 1
-                    guard += 1
-                indent = ""
-                if lines:
-                    ref = lines[min(ins, len(lines) - 1)]
-                    indent = " " * (len(ref) - len(ref.lstrip()))
-                lines.insert(ins, indent + comment)
-                # insert 后：已占用行号 >= ins 的 +1
-                occupied = {o + 1 if o >= ins else o for o in occupied}
-                occupied.add(ins)
-                last_tpc_pos = ins
-                last_tpc_src = src_line
+        # 插值锚点（C4 收敛自 _scan_rendered_tpc；顺带修复 for 循环误缩进
+        # 在 `if tpc_src_map:` 内——锚点映射为空时占位循环不执行的缺陷）
+        rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map)
+        # 相邻 tpc 标记顺序插入（同 restore_line_comments）：表达式链内
+        # 连续条件块（如 darkriscv IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）
+        # 独立插值会分散错位，相邻标记跟随上次插入位置保持结构
+        last_tpc_pos: int | None = None
+        last_tpc_src: int = -100
+        for src_line, comment in tpc_pending:
+            if last_tpc_pos is not None and src_line - last_tpc_src <= 8:
+                ins = min(last_tpc_pos + 1, len(lines))
+            else:
+                center = _interp_tpc_line(
+                    src_line, rendered_tpc_src, rendered_tpc
+                )
+                ins = min(center, len(lines))
+            # 在插值中心附近找插入行（前插独立注释行，跳过已占用行）
+            guard = 0
+            while ins < len(lines) and ins in occupied and guard < len(lines):
+                ins += 1
+                guard += 1
+            indent = ""
+            if lines:
+                ref = lines[min(ins, len(lines) - 1)]
+                indent = " " * (len(ref) - len(ref.lstrip()))
+            lines.insert(ins, indent + comment)
+            # insert 后：已占用行号 >= ins 的 +1
+            occupied = {o + 1 if o >= ins else o for o in occupied}
+            occupied.add(ins)
+            last_tpc_pos = ins
+            last_tpc_src = src_line
 
     return "\n".join(lines), len(unique)
+
+
+def _scan_rendered_tpc(
+    lines: list[str], tpc_src_map: dict | None
+) -> tuple[dict[str, int], dict[str, int]]:
+    """扫描已渲染 tpc marker → 插值锚点（C4 位置桥收敛，2026-08-28）。
+
+    返回 (rendered_tpc, rendered_tpc_src)：
+      rendered_tpc:     marker → 渲染行号（1-based），扫描 `// <tpc:...>`
+      rendered_tpc_src: marker → 源行号（tpc_src_map，插值用 (源行, 渲染行) 对）
+    restore_comments / restore_line_comments 两处共用，消除重复实现。
+    """
+    rendered_tpc: dict[str, int] = {}
+    for i, l in enumerate(lines, 1):
+        m = re.search(r"// <(tpc:[^>]+)>", l)
+        if m:
+            rendered_tpc[m.group(1)] = i
+    rendered_tpc_src: dict[str, int] = {}
+    if tpc_src_map:
+        rendered_tpc_src = {
+            k: tpc_src_map[k] for k in rendered_tpc if k in tpc_src_map
+        }
+    return rendered_tpc, rendered_tpc_src
 
 
 def _interp_tpc_line(src_line: int, rendered_tpc_src: dict, rendered_tpc: dict) -> int:
@@ -247,14 +260,8 @@ def restore_line_comments(
     last_tpc_src: int = -100
 
     # 已随 AST 渲染的 tpc: marker（位置精确）——作为被吞 marker 的插值锚点
-    rendered_tpc: dict[str, int] = {}  # marker -> render_line(1-based)
-    for i, l in enumerate(lines, 1):
-        m = re.search(r"// <(tpc:[^>]+)>", l)
-        if m:
-            rendered_tpc[m.group(1)] = i
-    rendered_tpc_src: dict[str, int] = {}
-    if tpc_src_map:
-        rendered_tpc_src = {k: tpc_src_map[k] for k in rendered_tpc if k in tpc_src_map}
+    # （C4 收敛自 _scan_rendered_tpc）
+    rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map)
 
     def _note_tpc_inserted(pos: int, src_line: int, text: str) -> None:
         """tpc 标记插入后更新插值锚点（2026-08-28 darkriscv 块尾占位修复）：
