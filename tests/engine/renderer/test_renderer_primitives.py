@@ -21,12 +21,14 @@ def _make_fake_renderer():
             return level * len(self._INDENT_STR)
 
         def _render_inline(self, child_node, layout_cfg):
+            del layout_cfg  # fake renderer 桩方法，不消费布局配置
             val = getattr(child_node, "value", None)
             if val is not None:
                 return Text(str(val))
             return Text(child_node.node_name)
 
         def _get_merged_layout(self, parent_layout, child_name):
+            del parent_layout, child_name  # fake renderer 桩方法
             return {}
 
         def _resolve_items(self, node, items_spec):
@@ -50,6 +52,42 @@ def _render_expr(expr, node):
 
 def _n(node_name, **kw):
     return Node(node_name, **kw)
+
+
+# ═══════════════════════════════════════════════════════
+# suffix_when 原语
+# ═══════════════════════════════════════════════════════
+
+class TestSuffixWhenPrimitive:
+    def test_condition_hit_appends_suffix(self):
+        node = _n("Identifier", content=r"\$_BUF_")
+        expr = {"suffix_when": {"startswith": "\\"}, "attr": "content", "text": " "}
+        assert _render_expr(expr, node) == " "
+
+    def test_condition_miss_returns_empty(self):
+        node = _n("Identifier", content="plain_name")
+        expr = {"suffix_when": {"startswith": "\\"}, "attr": "content", "text": " "}
+        assert _render_expr(expr, node) == ""
+
+    def test_custom_text(self):
+        node = _n("Identifier", content=r"\esc")
+        expr = {"suffix_when": {"startswith": "\\"}, "text": "; "}
+        assert _render_expr(expr, node) == "; "
+
+    def test_default_attr_is_content(self):
+        node = _n("Identifier", content=r"\esc")
+        expr = {"suffix_when": {"startswith": "\\"}}
+        assert _render_expr(expr, node) == " "
+
+    def test_non_string_attr_returns_empty(self):
+        node = _n("Identifier", content=42)
+        expr = {"suffix_when": {"startswith": "\\"}}
+        assert _render_expr(expr, node) == ""
+
+    def test_missing_attr_returns_empty(self):
+        node = _n("Identifier")
+        expr = {"suffix_when": {"startswith": "\\"}}
+        assert _render_expr(expr, node) == ""
 
 
 # ═══════════════════════════════════════════════════════

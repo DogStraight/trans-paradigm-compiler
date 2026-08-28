@@ -232,26 +232,30 @@ def run_inst_port_align(lines: list[str], contexts: list[LineContext], parser: A
 
 def _iter_port_groups_ast(lines: list[str]):
     """扫描端口组（AST 路径）：`.name(` 起始的连续行，跨行端口首行也入组，
-    其续行（更深缩进且非端口形态的行）透明跳过。yield (start, end)
-    [start, end) 端口行索引区间（end 为组后第一行）。"""
+    其续行（未闭合端口 expr 的后续片段，可多行）透明跳过。
+    yield (start, end) [start, end) 端口行索引区间（end 为组后第一行）。"""
     i = 0
     n = len(lines)
     while i < n:
         if _is_port_line(lines[i]) or _is_unclosed_port_line(lines[i]):
             start = i
+            in_unclosed = _is_unclosed_port_line(lines[i])
             j = i + 1
             while j < n:
-                if _is_port_line(lines[j]) or _is_unclosed_port_line(lines[j]):
+                if _is_port_line(lines[j]):
+                    in_unclosed = False
+                    j += 1
+                elif _is_unclosed_port_line(lines[j]):
+                    in_unclosed = True
                     j += 1
                 elif _is_comment_line(lines[j]):
                     j += 1  # 注释行透明（与文本路径同语义）
                 elif (
-                    j > 0
-                    and _is_unclosed_port_line(lines[j - 1])
+                    in_unclosed
                     and lines[j].strip()
                     and not lines[j].lstrip().startswith((".", "`"))
                 ):
-                    # 跨行端口首行后的续行（expr 后续片段），组内透明
+                    # 未闭合端口续行（expr 后续片段，可多行链），组内透明
                     j += 1
                 else:
                     break
@@ -262,10 +266,12 @@ def _iter_port_groups_ast(lines: list[str]):
 
 
 def _find_instance_block(lines: list[str], g_start: int, g_end: int):
-    """从端口组向上找实例头行（行尾 `(` 且非 `.name(` 形态），向下找 `);` 尾行。
+    """从端口组向上找实例头行（行尾 `(` 且非 `.name(` 形态），向下按括号
+    深度找 `);` 尾行（跨行端口表达式内的 `)` 不误判为实例尾）。
 
     Returns: (head_idx, tail_idx) 或 None（找不到完整块）。
     """
+    del g_end  # 尾行由括号深度扫描定位，g_end 仅作签名兼容（组区间上界）
     # 头：组前最近的非空非注释行，行尾 `(` 且非端口形态
     head = None
     i = g_start - 1
@@ -279,14 +285,22 @@ def _find_instance_block(lines: list[str], g_start: int, g_end: int):
         i -= 1
     if head is None:
         return None
-    # 尾：组后到第一个 `);` 行（中间允许续行/注释透明）
-    j = g_end
+    # 尾：从 head 起累计 `(`/`)` 深度（端口表达式的嵌套括号已含在内），
+    # 深度归零且行尾 `);` → 实例尾行。跨行 concat 端口的 `)` 只使深度
+    # 下降不归零，不会误判为尾。
+    depth = 0
+    j = head
     while j < len(lines):
-        s = lines[j].rstrip()
-        if s.endswith(");") or s.strip() == ");":
+        s = lines[j]
+        for ch in s:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+        if depth == 0 and s.rstrip().endswith(");"):
             return head, j
-        if s.strip() and not _is_comment_line(s) and not _PORT_NAME_RE.search(s):
-            return None  # 组后出现非端口非尾行 → 块不完整
+        if depth < 0:
+            return None  # 括号提前失衡 → 块不完整
         j += 1
     return None
 
@@ -303,21 +317,20 @@ def _max_pos_line(node: Any) -> int:
 
 
 def _parse_instance_ports(
-    parser: Any, block_lines: list[str], head_line: str
+    parser: Any, block_lines: list[str]
 ):
     """包装解析实例块，返回每个 NamedPortConnect 的 span。
 
-    包装：`module _tpc_p;\n<head_line>\n<block_lines>\nendmodule`。
+    block_lines[0] 即实例头行（`mod inst (`）。包装：
+    `module _tpc_p;\n<block_lines>\nendmodule`。
     Returns: list[(start_off, end_off)]（相对 block_lines 的行偏移，
-    含 head_line 行——head 为偏移 0），解析失败返回 None。
+    head 为偏移 0），解析失败返回 None。
     """
     import contextlib
     import io as _io
 
     wrapped = (
         "module _tpc_p;\n"
-        + head_line
-        + "\n"
         + "\n".join(block_lines)
         + "\nendmodule\n"
     )
@@ -418,7 +431,7 @@ def _align_with_ast(lines: list[str], parser: Any) -> None:
             continue
         head_idx, tail_idx = block
         block_lines = lines[head_idx : tail_idx + 1]
-        spans = _parse_instance_ports(parser, block_lines, lines[head_idx])
+        spans = _parse_instance_ports(parser, block_lines)
         if spans is None:
             # 解析失败（宏调用/非纯结构）→ 文本路径
             _align_group(lines, [i for i in group if _is_port_line(lines[i])])

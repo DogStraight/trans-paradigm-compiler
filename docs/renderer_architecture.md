@@ -57,9 +57,14 @@ AST (parse/normalize 后)
 
 ### 布局原语（renderer/primitives/，TOML 可声明）
 
-13 个注册原语：`text/ref/join/group/line/indent/opt/soft/break/align/fill/
-line_suffix/intent`。注册机制：`@register(key)` 装饰器 → 全局调度表 →
+14 个注册原语：`text/ref/join/group/line/indent/opt/soft/break/align/fill/
+line_suffix/intent/suffix_when`。注册机制：`@register(key)` 装饰器 → 全局调度表 →
 `eval_expr` 按 key 分派。
+
+**suffix_when 值条件后缀**（2026-08-28）：节点属性值满足条件（startswith）时
+追加后缀文本，条件不命中返回 None（line 原语跳过）。典型用途：转义标识符
+空白终止（IEEE A.9.3，`\\$_BUF_ (` 而非 `\\$_BUF_(`）。引擎零语言知识：
+条件与后缀都是布局 TOML 数据。
 
 **intent 意图层**（阶段 4a）：语言包声明"结构 → 布局意图"，引擎推导 Doc，
 消灭手拼。词表：`compact`（紧凑列表 = join+first_soft+nest 别名）/ `wrap`

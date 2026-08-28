@@ -16,7 +16,7 @@
 输出零变化。
 
 条件不命中 / 属性非字符串 → 返回 None（line 原语跳过）。
-Doc: docs/decisions/0007-pipeline-schedule.md（同批输出缺陷修复，见 ADR 附注）
+Doc: docs/renderer_architecture.md（布局原语：suffix_when 值条件后缀）
 """
 
 from typing import Any
