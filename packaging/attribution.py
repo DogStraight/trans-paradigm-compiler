@@ -8,6 +8,9 @@
 
 AUTHOR_NAME = "biominescence"  # 笔名；GitHub 账号为 DogStraight
 AUTHOR_EMAIL = "oho15799293498@outlook.com"
+# AI 协作者（模型辅助开发，0.1.0 起署名）：本项目的语法包/引擎/验证
+# 大量由 deepseek-v4-flash 协作完成，正式列入署名。
+AI_CO_AUTHOR = "deepseek-v4-flash"
 REPO_URL = "https://github.com/DogStraight/trans-paradigm-compiler"
 LICENSE = "MIT"
 
@@ -16,6 +19,7 @@ def credits_text(prog: str, version: str) -> str:
     return (
         f"{prog} {version} — TransParadigm Verilog toolchain\n"
         f"Author: {AUTHOR_NAME} <{AUTHOR_EMAIL}>\n"
+        f"AI Co-author: {AI_CO_AUTHOR}\n"
         f"Source: {REPO_URL}\n"
         f"License: {LICENSE}\n"
     )

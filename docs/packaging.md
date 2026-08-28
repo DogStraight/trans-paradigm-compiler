@@ -59,11 +59,14 @@ C 代码，误报率显著更低。本机验证 MSVC Build Tools 14.44。
 ```
 tpc-fmt 0.1.0 — TransParadigm Verilog toolchain
 Author: biominescence <oho15799293498@outlook.com>
+AI Co-author: deepseek-v4-flash
 Source: https://github.com/DogStraight/trans-paradigm-compiler
 License: MIT
 ```
 
 署名单一来源：`packaging/attribution.py`（改作者/邮箱/仓库只改这里，重新打包）。
+AI 协作者（deepseek-v4-flash，0.1.0 起署名）：项目语法包/引擎/验证由模型
+辅助开发，作为协作者正式列入署名（pyproject.toml authors 同步）。
 
 ## 产物验证（2026-08-22 实测）
 

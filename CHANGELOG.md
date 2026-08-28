@@ -3,6 +3,14 @@
 All notable changes are listed in reverse chronological order.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **署名加入 AI 协作者**：`packaging/attribution.py`（单一来源）与
+  `pyproject.toml` authors 增加 `deepseek-v4-flash`（AI 协作者）——
+  `--credits` 输出与 PE 版权信息同步（`AI Co-author: deepseek-v4-flash`）。
+
 ## [0.1.0] - 2026-08-22
 
 Alpha 发布——配置驱动语言管线首版：主包纯净可综合 + 仿真插件化 + 第二语言实证。

@@ -40,6 +40,7 @@ from core import __version__  # noqa: E402
 from attribution import (  # noqa: E402 — 同目录模块（packaging/ 非包）
     AUTHOR_NAME,
     AUTHOR_EMAIL,
+    AI_CO_AUTHOR,
     REPO_URL,
     credits_text,
 )
@@ -128,7 +129,7 @@ def _nuitka_cmd(name: str, spec: dict, entry: str) -> list[str]:
         f"--product-version={__version__}",
         f"--file-version={__version__}",
         f"--copyright=Copyright (c) {__version__} {AUTHOR_NAME} "
-        f"<{AUTHOR_EMAIL}> — Source: {REPO_URL}",
+        f"<{AUTHOR_EMAIL}> — AI Co-author: {AI_CO_AUTHOR} — Source: {REPO_URL}",
         entry,
     ]
 

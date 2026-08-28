@@ -9,7 +9,10 @@ description = "Configuration-driven language pipeline — write language rules i
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [{ name = "biominescence", email = "oho15799293498@outlook.com" }]
+authors = [
+    { name = "biominescence", email = "oho15799293498@outlook.com" },
+    { name = "deepseek-v4-flash" },  # AI 协作者（模型辅助开发，0.1.0 起署名）
+]
 keywords = [
     "compiler",
     "parser",
