@@ -193,16 +193,25 @@ def _atom_parser_impl(self, _tokens, idx, context):
     old_ptr = context.token_pointer
     context.token_pointer = idx
     start_ptr = context.token_pointer
+    # 最长匹配（2026-08-28，层次化引用交错形态）：原子候选按 production
+    # 长度降序尝试，取**消费最多**者——`a[0].b` 时 SelectExpr（吃 a[0]）
+    # 有进展但残留 `.b`，HierExpr（吃 a[0].b）更长胜出；`a[0]` 纯下标两
+    # 者等长，先试的 SelectExpr 胜（等长取先，AST 形状稳定）。原"第一个
+    # 有进展即返回"使 SelectExpr 先命中 → 交错形态残留 token 致语句失败。
+    best_node = None
+    best_consumed = 0
     for rule in self.atomic_rules:
         snapshot = context.create_snapshot()
         node = self._try_rule_productions(context, rule)
-        if node is not None:
-            consumed = context.token_pointer - start_ptr
-            context.token_pointer = old_ptr
-            return node, consumed
+        consumed = context.token_pointer - start_ptr
+        if node is not None and consumed > best_consumed:
+            best_node = node
+            best_consumed = consumed
         context.restore_snapshot(snapshot)
     context.token_pointer = old_ptr
-    return None, 0
+    if best_node is None:
+        return None, 0
+    return best_node, best_consumed
 
 
 def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:

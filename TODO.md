@@ -76,8 +76,14 @@
 > + 参数覆盖 mintypmax（A.4.3/A.8.2，NamedParamOverride 值位改
 > MintypmaxExpr：#(.P(1:2:3))）。
 > 核对澄清（2026-08-28 实测）：三元 `?:`、过程体 event/localparam 声明、
-> 命名块头声明**已支持**（此前 TODO 摘要误列）；`a[0].b` / `a.b[0].c`
-> 交错形态（成员在下标后）超 2005 hierarchical_identifier，暂不支持（少见）。
+> 命名块头声明**已支持**（此前 TODO 摘要误列）。
+> 层次化引用交错形态（2026-08-28，batch9）：`a[0].b` / `a.b[0].c` /
+> mem[i].field（成员与下标任意交错）以**形式化宽进**支持——语法接受 +
+> 保真渲染，继承链语义解析（a[0] 是哪个实例、b 是不是其成员）明确不承担
+> （综合/仿真工具职责）。实现：HierExpr production 改交错 + HierMember/
+> HierSuffix 段包装 + SelectExpr exclude dot + 原子最长匹配（parser/linter
+> 双轨）+ lookahead Level 1 回退修复（连带修复既有缺陷 `a.b <= x` NBA
+> 目标位误判未识别）。
 > 剩余核对缺口 + 真实语料前沿（端口默认值宏 body、yosys `$cell` 内部名）
 > 见 references.md。
 

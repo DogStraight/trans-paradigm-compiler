@@ -814,9 +814,24 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
 - 💡 **typed_ports 共存验证**：表达式位新增 `.` 能力后，端口列表类型引用
   （`spi.slave spi_io`）不受影响（声明位 exclude 消歧仍生效，test_typed_ports
   8 例全过）——批量回归的必要检查点
-- 📌 **交错形态限制**：`a[0].b` / `a.b[0].c`（成员在下标后）超 2005
-  hierarchical_identifier（标准 = 成员链后接下标链），暂不支持（少见，
-  记录不修）
+- **交错形态形式化宽进（2026-08-28 追加，test_2005_batch9.py）**：`a[0].b` /
+  `a.b[0].c` / `mem[i].field`（成员与下标任意交错）此前记录"超 2005 暂不
+  支持"，按"tpc 只做形式化解析、继承链语义解析不承担"的定位改支持。实现
+  三件套：① HierExpr production 改交错（`@Identifier (@HierMember|@HierSuffix)*`，
+  HierMember 渲染 `.b`、HierSuffix 渲染 `[0]`，parts 空分隔 join 保序——
+  纯 TOML 声明，引擎零硬编码）；② SelectExpr `exclude = ["symbol.base.dot"]`
+  （纯下标不吞成员访问，回滚给 HierExpr；Verilog 无 `.` 运算符，误伤面为零）；
+  ③ 原子**最长匹配**（parser._atom_parser_impl + linter match_atom：遍历全
+  部 is_atom 规则取消费最多者，等长取先——`a[0]` 纯下标仍走 SelectExpr，
+  AST 形状稳定）
+- 🔥 **连带修复既有缺陷（lookahead Level 2 候选集）**：`always @(*) a.b <= x;`
+  （NBA target 为层级引用）此前误判未识别——Level 1 判别路径被 `.` 挡住、
+  path 候选全淘汰，而 l2_only 分支只试 `path_entries + l2_only`（path 已空
+  → 漏掉被淘汰的真候选 NBA）。修法：l2_only 分支改试**原始 entries**（试
+  解析取"错误最少 + 消费最多"者，errs=0 的静态正确候选天然胜出，不依赖
+  候选顺序）。L356 无条件回退（allow_partial=False）保持不变——if 缺括号
+  等静态可判别多候选仍报未识别（e09/e17 门禁基线），拼错语句（`foo bar;`）
+  仍走 Level 2 报未识别（不吞错）
 - **无括号系统任务语句（A.6.2/A.9 sys_task_enable）**：SysTaskStmt 括号
   整体可选（`$ name (args?)? ;`），`$finish;`/`$stop;` 可解析；args 绑定
   `$3.sub_node[0].sub_node[1]`（opt 组解包，同 MintypmaxExpr 模式）；

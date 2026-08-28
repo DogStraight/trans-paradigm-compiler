@@ -355,9 +355,11 @@ class LookaheadTable:
             path_entries = kept
             if not path_entries and not l2_only:
                 # Level 1 判别路径被操作数内部内容挡住（如拼接 lvalue
-                # `{a,b} = expr;` 的 {..}，起点非 id）→ 回退 Level 2 对原始
-                # 候选完整 production 试解析（判别不了不等于未识别；残缺语句
-                # 试解析仍零匹配返回 []，不吞错）。
+                # `{a,b} = expr;` 的起点非 id）→ 回退 Level 2 对原始
+                # 候选完整 production 试解析（判别不了不等于未识别；残缺
+                # 语句试解析仍零匹配返回 []，不吞错）。allow_partial=False：
+                # 静态可判别的多候选（如 if 缺括号的 IfBlock/IfStmt）保持
+                # [] 未识别诊断（e09/e17 门禁基线）。
                 t_limit = min(limit + 1, n)
                 return self._try_parse(tokens, i, entries, t_limit)
             # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
@@ -389,10 +391,17 @@ class LookaheadTable:
         # 消费句子结束符，否则 TaskDeclOld 的 `;` 超出区间而失败）
         t_limit = min(limit + 1, n)
         if l2_only:
+            # 用**原始** entries 试解析（2026-08-28，a[0].b 交错形态暴露的
+            # 既有缺陷）：Level 1 淘汰是"seen 与判别路径前缀失配"，但层级
+            # 引用 `.`/拼接 `{..}` 等操作数内部 token 会误淘汰真候选——
+            # 原 `path_entries + l2_only` 在 path_entries 全淘汰时只试
+            # l2_only，`mem[i].field <= x` / `a.b <= x`（NBA target 为层级
+            # 引用）被误判未识别。试解析取"错误最少 + 消费最多"者，静态
+            # 判别正确的候选（errs=0）天然胜出，不依赖候选顺序。
             return self._try_parse(
                 tokens,
                 i,
-                path_entries + l2_only,
+                entries,
                 t_limit,
                 allow_partial=is_keyword,
             )

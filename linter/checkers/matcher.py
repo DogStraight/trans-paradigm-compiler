@@ -246,17 +246,23 @@ class RuleMatcher:
         if j >= n:
             memo[i] = 0
             return None, 0
+        # 最长匹配（2026-08-28，层次化引用交错形态，与 parser._atom_parser_impl
+        # 同语义）：遍历全部 is_atom 规则取消费最多者（等长取先——_atom_rules
+        # production 长度降序，`a[0]` 纯下标先试的 SelectExpr 胜）。原"第一个
+        # 有进展即返回"使 SelectExpr 先命中 `a[0]` → `a[0].b` 残留 `.b` 报错。
+        best_k = j
         for name in self._atom_rules:
             trial: list = []
             k = self._match_call_impl(
                 tokens, j, name, trial, n, strict=False, silent=True
             )
-            if k > j:
-                # consumed 从 i 起算（含 _skip 跳过的 trivia），保证 pratt
-                # 递归层的 `idx += consumed` 推进到原子之后不错位。
-                memo[i] = k - i
-                return object(), k - i
-        memo[i] = 0
+            if k > best_k:
+                best_k = k
+        memo[i] = best_k - i
+        if best_k > j:
+            # consumed 从 i 起算（含 _skip 跳过的 trivia），保证 pratt
+            # 递归层的 `idx += consumed` 推进到原子之后不错位。
+            return object(), best_k - i
         return None, 0
 
     def _match_token(

@@ -135,6 +135,11 @@ layout = { line = [{ ref = "left" }, { ref = "op" }, { ref = "right" }] }
 
 [SelectExpr.parser]
 is_atom = true
+# exclude 负向前瞻（2026-08-28，层次化引用交错形态）：`a[0].b` 时 SelectExpr
+# 匹配 `a[0]` 后遇 `.` 明确拒绝（纯下标表达式不含成员访问）→ 失败回滚让
+# PrimaryExpr choice 试 HierExpr（吃 a[0].b）。Verilog 无 `.` 运算符，
+# SelectExpr 后跟 `.` 只可能是层级成员引用，误伤面为零。
+exclude = ["symbol.base.dot"]
 production = [
     "@Identifier",
     "bracket.l_square_bracket",
@@ -202,29 +207,51 @@ line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"]
 
 
 # ── HierExpr — 层次化引用表达式 ──
-# A.9.3 hierarchical_identifier：a.b.c[0]（层级成员链 + 可选下标链）。
+# A.9.3 hierarchical_identifier：a.b.c[0]（层级成员链 + 下标链）。
 # 与 SelectExpr（a[0]）/Identifier 并列的表达式原子；放在 SelectExpr
 # 之后、Identifier 之前——a[0] 优先走 SelectExpr，a.b 走本规则。
 # 真实代码高频（模块实例层级引用 top.u1.q、assign x = a.b 等），
 # 2026-08-28 真实语料缺口修复（A 类）。
+# 形式化宽进（2026-08-28）：成员与下标**任意交错**（a[0].b / a.b[0].c /
+# mem[i].field）——tpc 只做语法接受 + 保真渲染，不做"a[0] 是哪个实例、
+# b 是不是其成员"的继承链语义解析（那是综合/仿真工具的职责）。段经
+# HierMember（渲染 .b）/HierSuffix（渲染 [0]）包装，parts 空分隔 join
+# 保序输出；纯下标 a[0] 由 SelectExpr 先匹配（等长取先），交错形态由
+# 本规则在 SelectExpr 无进展/残留时接管（原子最长匹配，见 parser 与
+# linter matcher）。
+
+[HierMember.parser]
+production = ["symbol.base.dot", "@Identifier"]
+
+[HierMember.parser.node]
+name = "$2"
+
+[HierMember.renderer]
+layout = { line = [".", { ref = "name" }] }
+
+
+[HierSuffix.parser]
+production = ["bracket.l_square_bracket", "@SelectSuffix", "bracket.r_square_bracket"]
+
+[HierSuffix.parser.node]
+index = "$2"
+
+[HierSuffix.renderer]
+layout = { line = ["[", { ref = "index" }, "]"] }
+
 
 [HierExpr.parser]
 is_atom = true
 production = [
     "@Identifier",
-    "(symbol.base.dot,@Identifier)*",
-    "(bracket.l_square_bracket,@SelectSuffix,bracket.r_square_bracket)*",
+    "(@HierMember|@HierSuffix)*",
 ]
 
 [HierExpr.parser.node]
-parts = ["$1", "$2.items[*].sub_node[1]"]
-suffixes = "$3.items"
+parts = ["$1", "$2.items"]
 
 [HierExpr.renderer]
-layout = { line = [
-    { join = ".", items = "parts", no_soft = true },
-    { ref = "suffixes" },
-] }
+layout = { join = "", items = "parts", no_soft = true }
 
 
 # ── PrimaryExpr — 初等表达式（原子选择器） ──
