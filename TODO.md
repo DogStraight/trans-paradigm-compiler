@@ -133,13 +133,11 @@
 > 差异化能力。
 > 已落地：机制层（post-pass 钩子 + 统一报告管道 + related 链）、跨文件联动
 > （inst_check：W101/W102/W103/WC001）、名称调用检查（check_name_call：W002）、
-> --json/suppress。**L1 声明式规则表 + 命名约定检查已闭环**（2026-08-28，
-> P3：check_registry.py 加载校验 + checks.py 执行器 + name_check 插件
-> NC001-NC010；规则=数据，kind 分发 + pattern 判定 + handler 兜底）。
-> 剩余（对应 semantic_checks.md 状态行的 P4 用户配置层 + 诊断链三层面收口）：
+> --json/suppress。**L1 声明式规则表 + 命名约定检查 + P4 用户配置层已闭环**
+> （2026-08-28：check_registry.py 加载校验 + checks.py 执行器 + name_check
+> 插件 NC001-NC010 + config/tpc_config.json checks 段 enabled/overrides/
+> per_file；规则=数据，kind 分发 + pattern 判定 + handler 兜底 + 用户覆盖）。
+> 剩余（诊断链三层面收口）：
 
-- [ ] **P4 用户配置层**：`tpc.toml [checks]`（enabled/overrides/per_file 豁免
-      + 统一抑制收口，semantic_checks.md §4 设计已定）——L1 声明层已就绪，
-      用户"配置优先"覆盖（规则选择/severity 提升/TB 豁免）待接
-- [ ] **注释驱动测试框架**（P3 收尾）：样例源文件内 `// ruleid: NC001` /
+- [ ] **注释驱动测试框架**：样例源文件内 `// ruleid: NC001` /
       `// ok: NC001` 注释断言，引擎校验命中集合（Semgrep 式，零代码测试）

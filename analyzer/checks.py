@@ -26,7 +26,7 @@ import os
 import re
 from typing import Any, Callable
 
-from core.check_registry import get_rules_for_kind
+from core.check_registry import get_rules_for_kind, load_user_check_config
 from core.define import Node
 
 # handler 缓存：{插件目录: {规则 id: (module, fn)}}——handler 是插件
@@ -43,6 +43,11 @@ def check_rules_pass(analyzer, context) -> None:
     无规则表（语言包未声明 rules/）时零开销返回。
     规则表定位：analyzer._rules_dir（grammar/<lang>/）下的 plugins/；
     未指定（None）用默认包。
+
+    P4 用户配置（config/tpc_config.json checks 段）在此应用：
+        enabled   未列出 = 关闭（"不选即关"）；缺省 = 全部启用
+        overrides severity 覆盖（如 NC001 → error）
+        per_file  文件 glob 豁免（disabled 列表）
     """
     symbols = getattr(analyzer, "all_symbols", None) or []
     if not symbols:
@@ -51,6 +56,12 @@ def check_rules_pass(analyzer, context) -> None:
     rules_dir = getattr(analyzer, "_rules_dir", None)
     if rules_dir:
         plugins_dir = os.path.join(rules_dir, "plugins")
+    user_cfg = load_user_check_config(plugins_dir=plugins_dir)
+    enabled = user_cfg.get("enabled")
+    overrides = user_cfg.get("overrides", {})
+    per_file = user_cfg.get("per_file", {})
+    file_ctx = _file_context(symbols)
+
     # 规则表按插件目录加载（语言包 rules/）；缓存由 check_registry 管理
     for sym in symbols:
         rules = get_rules_for_kind(sym.kind, plugins_dir=plugins_dir)
@@ -60,7 +71,81 @@ def check_rules_pass(analyzer, context) -> None:
         if not name:
             continue
         for rule in rules:
+            rid = rule.get("id", "")
+            if enabled is not None and rid not in enabled:
+                continue  # "不选即关"
+            if _disabled_for_file(rid, sym, file_ctx, per_file):
+                continue  # per_file 豁免
+            rule = _with_override(rule, overrides.get(rid))
             _apply_rule(sym, rule, name, context)
+
+
+def _file_context(symbols) -> str | None:
+    """取符号文件的代表路径（per_file glob 匹配用）。
+
+    ProjectChecker 路径给节点挂了 _file；单文件 analyze 无文件上下文
+    （None = 不参与 per_file 豁免）。取第一个有 _file 的符号。
+    """
+    for sym in symbols:
+        node = getattr(sym, "decl_node", None)
+        f = getattr(node, "_file", None)
+        if f:
+            return f
+    return None
+
+
+def _disabled_for_file(rid: str, sym, file_ctx: str | None, per_file: dict) -> bool:
+    """per_file glob 豁免：符号文件匹配 glob → disabled 含 rid → 跳过。"""
+    if not per_file or not file_ctx:
+        return False
+    for glob_pat, spec in per_file.items():
+        disabled = (spec or {}).get("disabled", [])
+        if rid not in disabled:
+            continue
+        if _glob_match(glob_pat, file_ctx):
+            return True
+    return False
+
+
+def _glob_match(glob_pat: str, path: str) -> bool:
+    """文件 glob 匹配（路径尾部语义，同 pathlib.PurePath.match）。
+
+    pattern 是相对 glob（如 `tb/*.sv`、`**/tb_*.v`）——匹配文件路径的
+    尾部（不要求从根锚定），符合 Ruff per-file-ignores 语义。`**` 递归
+    段通配。Windows 路径反斜杠归一为 `/`。
+    """
+    from pathlib import PurePosixPath
+
+    pat = glob_pat.replace("\\", "/").strip("/")
+    norm = path.replace("\\", "/")
+    if not pat:
+        return False
+    # ** 递归：拆成前缀段 + 尾部模式，任一尾部匹配即豁免
+    if "**" in pat:
+        head, _, tail = pat.partition("**")
+        head = head.strip("/")
+        tail = tail.strip("/")
+        if tail:
+            return PurePosixPath(norm).match("*" + tail) or (
+                PurePosixPath(norm).match(tail) if "/" in tail else PurePosixPath(norm).name == tail
+            )
+        # 纯 ** 前缀：匹配任意深度的尾部段
+        return PurePosixPath(norm).match(head + "*")
+    # 相对 glob：路径尾部匹配（把 pattern 作为尾部后缀，前面任意）
+    return PurePosixPath(norm).match(pat) or PurePosixPath(norm).match(
+        "*" + ("/" + pat if "/" in pat else "")
+    )
+
+
+def _with_override(rule: dict, override: dict | None) -> dict:
+    """应用用户 severity 覆盖（规则副本，不改全局表）。"""
+    if not override:
+        return rule
+    merged = dict(rule)
+    sev = override.get("severity")
+    if sev:
+        merged["severity"] = sev
+    return merged
 
 
 def _apply_rule(sym, rule: dict, name: str, context) -> None:

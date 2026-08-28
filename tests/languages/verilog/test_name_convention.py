@@ -286,6 +286,160 @@ class TestNoRulesLanguage:
         assert at.diagnostics == []
 
 
+class TestUserCheckConfig:
+    """P4 用户配置层：config/tpc_config.json 的 checks 段（enabled/overrides/per_file）。
+
+    经 $TPC_CONFIG 注入临时配置文件（find_user_config 优先级链第一档），
+    _USER_CONFIG_CACHE 每个测试前清理（缓存按配置路径键控）。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from core import check_registry
+
+        check_registry._USER_CONFIG_CACHE.clear()
+        yield
+        check_registry._USER_CONFIG_CACHE.clear()
+
+    def _run_cfg(self, ctx, src, checks: dict, monkeypatch, tmp_path):
+        """$TPC_CONFIG → 临时 config.json（checks 段）→ 分析。"""
+        import json
+
+        cfg = tmp_path / "tpc_config.json"
+        cfg.write_text(json.dumps({"checks": checks}), encoding="utf-8")
+        monkeypatch.setenv("TPC_CONFIG", str(cfg))
+        rules, parser, lexer = ctx
+        tokens = lexer.tokenize(src)
+        ast = parser.parse(tokens)
+        assert not parser._parse_truncated
+        at = AnalysisTraversal(rules)
+        at.analyze(ast)
+        return [(d.code, d.level, d.message) for d in at.diagnostics]
+
+    def test_enabled_filters(self, ctx, monkeypatch, tmp_path):
+        """enabled 只启用列出的规则（不选即关）。"""
+        src = (
+            "module Mux2x1 (\n"
+            "  input wire A_IN,\n"
+            "  output wire Y_OUT\n"
+            ");\n"
+            "  assign Y_OUT = A_IN;\n"
+            "endmodule\n"
+        )
+        # 只启用 NC001（module 命名）——NC005（端口）被关闭
+        diags = self._run_cfg(ctx, src, {"enabled": ["NC001"]}, monkeypatch, tmp_path)
+        codes = {c for c, _, _ in diags}
+        assert "NC001" in codes
+        assert "NC005" not in codes
+
+    def test_enabled_empty_disables_all(self, ctx, monkeypatch, tmp_path):
+        """enabled = [] → 全部规则关闭（"不选即关"）。"""
+        src = "module Mux2x1;\nendmodule\n"
+        diags = self._run_cfg(ctx, src, {"enabled": []}, monkeypatch, tmp_path)
+        assert diags == []
+
+    def test_override_severity(self, ctx, monkeypatch, tmp_path):
+        """overrides 提升 severity：NC001 warning → error。"""
+        src = "module Mux2x1;\nendmodule\n"
+        diags = self._run_cfg(
+            ctx,
+            src,
+            {"overrides": {"NC001": {"severity": "error"}}},
+            monkeypatch,
+            tmp_path,
+        )
+        assert ("NC001", "error") in {(c, l) for c, l, _ in diags}
+
+    def test_override_downgrade(self, ctx, monkeypatch, tmp_path):
+        """overrides 降级：NC001 → info。"""
+        src = "module Mux2x1;\nendmodule\n"
+        diags = self._run_cfg(
+            ctx,
+            src,
+            {"overrides": {"NC001": {"severity": "info"}}},
+            monkeypatch,
+            tmp_path,
+        )
+        assert ("NC001", "info") in {(c, l) for c, l, _ in diags}
+
+    def test_per_file_disabled(self, ctx, monkeypatch, tmp_path):
+        """per_file glob 豁免：符号文件匹配 → disabled 规则跳过。"""
+        import json
+
+        src = "module Mux2x1;\nendmodule\n"
+        tb_dir = tmp_path / "tb"
+        tb_dir.mkdir()
+        fpath = tb_dir / "tb_top.sv"
+        fpath.write_text(src, encoding="utf-8")
+        # 用户配置：per_file 豁免 tb/*.sv 的 NC001
+        cfg = tmp_path / "tpc_config.json"
+        cfg.write_text(
+            json.dumps(
+                {"checks": {"per_file": {"tb/*.sv": {"disabled": ["NC001"]}}}}
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("TPC_CONFIG", str(cfg))
+        from analyzer.checker import ProjectChecker
+
+        checker = ProjectChecker(rules_dir="grammar/verilog")
+        report = checker.check(str(fpath))
+        sem = [d for f in report["files"] for d in f["semantic"]]
+        assert not any(d["code"] == "NC001" for d in sem), "tb/*.sv 应豁免 NC001"
+
+    def test_per_file_not_matched(self, ctx, monkeypatch, tmp_path):
+        """per_file glob 不匹配 → 不豁免（NC001 仍报）。"""
+        import json
+
+        src = "module Mux2x1;\nendmodule\n"
+        rtl_dir = tmp_path / "rtl"
+        rtl_dir.mkdir()
+        fpath = rtl_dir / "rtl_top.sv"
+        fpath.write_text(src, encoding="utf-8")
+        cfg = tmp_path / "tpc_config.json"
+        cfg.write_text(
+            json.dumps(
+                {"checks": {"per_file": {"tb/*.sv": {"disabled": ["NC001"]}}}}
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("TPC_CONFIG", str(cfg))
+        from analyzer.checker import ProjectChecker
+
+        checker = ProjectChecker(rules_dir="grammar/verilog")
+        report = checker.check(str(fpath))
+        sem = [d for f in report["files"] for d in f["semantic"]]
+        assert any(d["code"] == "NC001" for d in sem), "rtl/top.sv 不应豁免"
+
+    def test_invalid_enabled_ref_failfast(self, ctx, monkeypatch, tmp_path):
+        """enabled 引用不存在的规则 id → fail-fast。"""
+        import json
+
+        from core.errors import ConfigError
+
+        cfg = tmp_path / "tpc_config.json"
+        cfg.write_text(
+            json.dumps({"checks": {"enabled": ["NOPE"]}}), encoding="utf-8"
+        )
+        monkeypatch.setenv("TPC_CONFIG", str(cfg))
+        with pytest.raises(ConfigError):
+            self._run_cfg(
+                ctx, "module m;\nendmodule\n", {"enabled": ["NOPE"]},
+                monkeypatch, tmp_path,
+            )
+
+    def test_invalid_override_severity_failfast(self, ctx, monkeypatch, tmp_path):
+        """overrides severity 非法 → fail-fast。"""
+        from core.errors import ConfigError
+
+        with pytest.raises(ConfigError):
+            self._run_cfg(
+                ctx, "module m;\nendmodule\n",
+                {"overrides": {"NC001": {"severity": "fatal"}}},
+                monkeypatch, tmp_path,
+            )
+
+
 class TestHandlerFallback:
     """L2 脚本 handler 兜底（规则带 handler 字段，pattern 判定不足时）。
 

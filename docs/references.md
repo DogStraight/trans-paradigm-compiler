@@ -628,6 +628,14 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     （[[checks]] 是 check_registry 数据非语法规则，ext_dirs 直指 plugins 时
     _resolve_peek 崩）+ _resolve_peek 非 dict 防御。tpc check 端到端出 NC 诊断
     （warning 级 exit 0，区间豁免注释同样生效）。
+  - ✅ **P4 用户配置层已落地（2026-08-28）**：svlint `.svlint.toml` 逐条 bool
+    配置注入的 tpc 落地——`config/tpc_config.json` 的 `checks` 段
+    （enabled 不选即关 / overrides severity 提升降级 / per_file glob 豁免），
+    `core/check_registry.py::load_user_check_config` 读取 + fail-fast 校验
+    （引用不存在的规则 id / severity 非法直接报错），`analyzer/checks.py`
+    执行时应用。overrides 提升到 error → `tpc check` exit_code 变 1（门禁
+    生效）。per_file 用 pathlib.PurePath.match 尾部语义（`tb/*.sv` /
+    `**/tb_*.v`），符号文件来自 ProjectChecker 注入的 `node._file`。
 
 - **与 tpc linter 的差异**（各有取舍，非优劣）：
 

@@ -4,8 +4,8 @@
 > `decisions/0005-cross-file-semantic-check.md`（跨文件扩展 + tpc check）。
 > 本文件是"怎么拼"。
 > 前置调研：`references/static_checkers_survey.md`。
-> 状态：**P1 机制层 + P2 窄版 + 跨文件联动 + P3 声明式规则表已落地**
-> （2026-08-25 P1/P2/P2.5；2026-08-28 P3）；P4 用户配置层待实现。
+> 状态：**P1 机制层 + P2 窄版 + 跨文件联动 + P3 声明式规则表 + P4 用户配置层
+> 已落地**（2026-08-25 P1/P2/P2.5；2026-08-28 P3/P4）；注释驱动测试框架待做。
 
 ## 1. 定位与边界
 
@@ -22,7 +22,8 @@ analyzer 阶段（符号表已建立）的语义检查插槽。**只做三件事
 ```
 analyzer 遍历（原语按 [RuleName.analyzer] 触发）       ← 已有（check_name_call 范式）
    │
-   ├─ L1 声明层：TOML [[checks]] 规则（规则=数据）       ← 待实现（P3）
+   ├─ L1 声明层：TOML [[checks]] 规则（规则=数据）       ← 已实现（P3）
+   │        └─ 用户配置层：config/tpc_config.json checks 段 ← 已实现（P4）
    ├─ L2 脚本层：@register 原语 / handler 模块          ← 已有机制（semantic_check 插件）
    │
    └─ post-pass 钩子（遍历收集 → 结束后链式走查）        ← 已实现（P1，mechanism）
@@ -76,17 +77,34 @@ pattern 缺省或判定不足时调用脚本（返回 str = 诊断消息，None 
 非法 / pattern 非法正则 / kind 缺失 / handler 模块缺失 → 直接报错
 （ADR-0003）。
 
-## 4. 用户配置层（`tpc.toml [checks]`）
+## 4. 用户配置层（`config/tpc_config.json` 的 checks 段）✅ 已实现（P4，2026-08-28）
 
-```toml
-[checks]
-enabled   = ["WC001", "W002"]          # 未列出 = 关闭（Semgrep"不选即关"）
-overrides = { WC001 = { severity = "error" } }   # severity 提升（ESLint off/warn/error 式）
-per_file  = { "tb/**" = { disabled = ["WC001"] } }  # 测试台豁免（Ruff per-file-ignores 式）
+> 设计文档原文是 `tpc.toml [checks]`；实现适配项目实际用户配置形态
+> （core/_user_config.py 定位的 `config/tpc_config.json`，JSON）。
+
+```json
+{
+  "checks": {
+    "enabled": ["NC001", "NC005"],
+    "overrides": { "NC001": { "severity": "error" } },
+    "per_file": { "tb/*.sv": { "disabled": ["NC001"] } }
+  }
+}
 ```
 
+- `enabled`：未列出 = 关闭（Semgrep"不选即关"）；缺省（无 checks 段或
+  无 enabled）→ 全部规则启用（向后兼容 P3 行为）。
+- `overrides`：severity 提升/降级（ESLint off/warn/error 式）——提升到
+  error 后 `tpc check` exit_code 变 1（门禁生效）。
+- `per_file`：文件 glob 豁免（Ruff per-file-ignores 式）——`tb/*.sv` /
+  `**/tb_*.v` 尾部匹配（pathlib.PurePath.match 语义），符号文件来自
+  ProjectChecker 注入的 `node._file`；单文件 analyze 无文件上下文时不参与。
 - 诚实边界：测试台死值是**故意的**（测固定宽度），默认 TB 豁免由用户配置决定，不内置假设。
-- 配置加载沿用 fail-fast（ADR-0003）：非法规则 id / severity 直接报错，不静默降级。
+- 配置加载沿用 fail-fast（ADR-0003）：enabled/overrides/per_file 引用
+  不存在的规则 id、severity 非法 → 直接报错，不静默降级。
+- 实现：`core/check_registry.py::load_user_check_config`（读取 + 校验，
+  按配置路径缓存）+ `analyzer/checks.py::check_rules_pass`（执行时应用：
+  enabled 过滤 / severity 覆盖 / per_file 豁免）。
 
 ## 5. post-pass 钩子协议（机制核心）✅ 已实现（P1）
 
@@ -177,8 +195,8 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 | P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 钩子/related **已实现**（2026-08-25）；统一抑制未做（并入 P4） |
 | P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见 ADR-0005 inst_check） |
 | P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（ADR-0005：W101/W102/W103/WC001 + `tpc check` CLI） |
-| P3 | L1 声明式 schema + 注释驱动测试框架 | **声明式 schema 已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据）；注释驱动测试框架未做（并入 P4 后） |
-| P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | 待实现 |
+| P3 | L1 声明式 schema + 注释驱动测试框架 | **声明式 schema 已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据）；注释驱动测试框架未做（后续） |
+| P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | **已实现**（2026-08-28：config/tpc_config.json checks 段——enabled/overrides/per_file，fail-fast 校验；统一抑制由 analyzer/suppress.py 覆盖，声明式规则自动获得豁免） |
 
 > Impl: analyzer/checks.py（声明式执行器）/ core/check_registry.py（规则表加载校验）/
 > analyzer/checker.py::ProjectChecker / analyzer/traversal.py /

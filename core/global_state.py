@@ -64,6 +64,11 @@ def snapshot() -> dict:
         "check_rule_keys": set(
             __import__("core.check_registry", fromlist=["_CHECK_RULES"])._CHECK_RULES
         ),
+        # 用户检查配置缓存（_USER_CONFIG_CACHE）：按配置文件路径键控，
+        # 测试用 $TPC_CONFIG 注入后残留会串——快照键集合，restore 清空。
+        "check_user_cfg_keys": set(
+            __import__("core.check_registry", fromlist=["_USER_CONFIG_CACHE"])._USER_CONFIG_CACHE
+        ),
     }
 
 
@@ -107,6 +112,10 @@ def restore(snap: dict) -> None:
     for k in list(_check_reg._CHECK_RULES):
         if k not in snap["check_rule_keys"]:
             del _check_reg._CHECK_RULES[k]
+    # 用户检查配置缓存：清空基线后新增的键（防 $TPC_CONFIG 注入残留）
+    for k in list(_check_reg._USER_CONFIG_CACHE):
+        if k not in snap["check_user_cfg_keys"]:
+            del _check_reg._USER_CONFIG_CACHE[k]
 
     # 按需重建的键控共享缓存：清空即可（不深拷贝大组件对象）
     _PIPELINE_SHARED.clear()
