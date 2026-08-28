@@ -84,12 +84,22 @@
 - [ ] 条件编译（`ifdef/ifndef`）下编辑，会改变展开结果 → 整段缓存失效，需处理
 - [ ] 宏定义本身的编辑（`define` 行改）→ 所有用到该宏的 token 全部失效，不是局部问题
 
-## P4 — LLVM IR 前端桥（v0.2 商业向候选，非收尾）
+## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 
-### P4.1 LLVM IR 目标插件
+### P4.1 多后端输出机制 + LLVM IR 目标插件
 
-- [ ] c4 增加 LLVM IR 输出插件（类比 `_asm.py`，c4 AST → LLVM IR 文本：
-      define/load/store/br/icmp 等基础指令集）
+> 多后端输出（2026-08-28 立项，合并入 P4）：引擎级"换插件换目标"能力——
+> 语言包声明**多个输出插件**（如 c4: asm_gen + llvm_ir），引擎按目标参数
+> 选择后端、可并存输出。现状：c4 仅 asm_gen 一个 TransformPlugin
+> （@register_plugin 注册、process 守卫根节点按语言区分），多后端 = 引擎
+> 支持同语言多输出插件声明 + 目标选择/并存；LLVM IR 是第一个落地目标，
+> 也是"同一语言多目标并存"的首个验证场景。
+
+- [ ] **多后端输出机制（引擎级）**：语言包可声明多个输出插件（transform
+      handlers 列表扩展 + 目标参数选择后端），同一 AST 并存输出多后端产物
+      （如 c4 同时出 VM 汇编 + LLVM IR）
+- [ ] **c4 增加 LLVM IR 输出插件**：类比 `_asm.py`（@register_plugin），
+      c4 AST → LLVM IR 文本（define/load/store/br/icmp 等基础指令集）
 - [ ] 与现有 c4 VM 汇编输出并存（同一语言多目标，验证"换插件换目标"）
 - [ ] 验证：c4 小程序（if/while/函数调用）编译为 LLVM IR，`lli`/`clang` 可执行
 
