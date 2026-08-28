@@ -9,8 +9,9 @@ CREDITS.md）的全管线回归守卫：parse + format + lint + 幂等 + 保真 
 - UART×3：alexforencich/verilog-uart（MIT，无宏，可差分）
 - simcells：yosys techlibs（ISC），149 个 UDP/门级仿真单元
 - ice40_cells_sim：yosys techlibs（ISC），specify 时序块 + 多目标 assign +
-  `===` + 模块头属性；需预定义 NO_ICE40_DEFAULT_ASSIGNMENTS（文件自带的
-  Verilog-2005 兼容开关，见 CREDITS.md）
+  `===` + 模块头属性；默认配置（M1，2026-08-28：端口默认值宏
+  `` `ICE40_DEFAULT_ASSIGNMENT_1`` body=`= 1'b1` 走 inline+body 锚还原，
+  无需 NO_ICE40 预定义）
 
 特性覆盖画像：specify（ice40）、UDP/门级原语（simcells/darkriscv/tv80）、
 多目标 assign / `===`（ice40，test_2005_batch7 修复）、模块头属性（ice40）、
@@ -50,7 +51,7 @@ _REF_DIR = os.path.join(_REAL_DIR, "ref")
 # "语料边界注"，如 yosys techmap 的 $cell 内部名）。
 _MANIFEST: dict[str, tuple[list[str], int, dict[str, str]]] = {
     "ref_darkriscv.v": (["宏", "门级", "UDP", "系统任务"], 1, {}),
-    "ref_ice40_cells_sim.v": (["specify", "多目标assign", "===", "模块属性", "宏"], 50, {"NO_ICE40_DEFAULT_ASSIGNMENTS": "1"}),
+    "ref_ice40_cells_sim.v": (["specify", "多目标assign", "===", "模块属性", "宏"], 50, {}),
     "ref_picorv32.v": (["宏", "生成", "任务"], 8, {}),
     "ref_serv_top.v": (["生成"], 1, {}),
     "ref_simcells.v": (["UDP", "门级", "系统任务"], 149, {}),

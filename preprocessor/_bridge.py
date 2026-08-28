@@ -138,8 +138,12 @@ def restore_anchors(
                     changed = True
             elif mode == "inline":
                 # 行内 marker + body 区间替换：按操作栈机械撤销展开——
-                # 找到 marker（`/*<marker>*/`）后，其后若存在操作栈记录的 body，
-                # 把 [marker, body结束] 整体替换为宏调用原文残片（body 不再残留）。
+                # 找到 marker（`/*<marker>*/`）后，body 有两条定位路径：
+                #   1. marker 后（展开原文顺序：`/*<marker>*/= 1'b1` 保留在
+                #      clean_source，parser 跳过注释看到端口默认值；渲染端
+                #      行尾锚定把 marker 挪到行尾后 body 仍在 marker 前同行）
+                #   2. marker 前同行（渲染行尾锚定形态：`= 1'b1 /*<marker>*/,`）
+                # 两种都替换 [body..marker] 整体为宏调用原文残片（body 不残留）。
                 marker_text = f"/*<{marker}>*/"
                 m_pos = result.find(marker_text)
                 if m_pos < 0:
@@ -150,6 +154,13 @@ def restore_anchors(
                     if b_pos >= 0:
                         b_end = b_pos + len(body)
                         result = result[:m_pos] + fragment + result[b_end:]
+                        changed = True
+                        continue
+                    # marker 前同行（行尾锚定形态）：body 被渲染挪到 marker 前
+                    line_start = result.rfind("\n", 0, m_pos) + 1
+                    b_pos = result.rfind(body, line_start, m_pos)
+                    if b_pos >= 0:
+                        result = result[:b_pos] + fragment + result[m_pos + len(marker_text):]
                         changed = True
                         continue
                 # 无 body 或 body 渲染后不可定位：仅替换 marker（保守，body 残留）

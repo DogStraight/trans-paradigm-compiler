@@ -808,10 +808,10 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
 - **语料**：`tests/e2e/samples/real/ref/` 扩至 9 文件（归属/许可见 CREDITS.md）：
   CPU 核 4（darkriscv/picorv32/serv_top/tv80）+ UART×3（alexforencich，MIT）+
   simcells（yosys，ISC，149 个 UDP/门级仿真单元）+ ice40_cells_sim（yosys，
-  ISC，specify 时序块，需 `-D NO_ICE40_DEFAULT_ASSIGNMENTS`——文件自带的
-  2005 兼容开关）。回归基线 `tests/e2e/test_real_corpus.py`：全量管线 +
-  lint 零诊断 + 幂等 + module 数下限（防静默截断）+ token 保真度 ≥0.80 +
-  sv-parser 差分门禁（无宏文件：假拒 + 互操作）
+  ISC，specify 时序块，**默认配置**——端口默认值宏 M1 闭环后无需
+  NO_ICE40 预定义，见下文）。回归基线 `tests/e2e/test_real_corpus.py`：
+  全量管线 + lint 零诊断 + 幂等 + module 数下限（防静默截断）+ token
+  保真度 ≥0.80 + sv-parser 差分门禁（无宏文件：假拒 + 互操作）
 - **实测暴露的 4 个缺口（全部修复）**：
   - 🔥 **`===`/`!==`（A.8.4 case_equality）全缺失**：`base/_token.toml`
     无 token、CmpOp 无算子、`_symbol_level.toml` operator 表无条目——三处
@@ -836,12 +836,20 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
     `==` 单独成 token → 重组为 `d ! == e`（破坏运算符语义，输出会被
     sv-parser 拒）。修法：等号序列前导 `!` 弹出并入（`!=`/`!==` 单 token）
     + 对齐场景回归测试。批次 7 测试未抓到的原因：单行场景不触发列对齐
-- **语料前沿（未修复，批次 7 候选）**：
-  - 📌 **端口默认值宏**：`input NAME `M`（body=`= 1'b1`）的 token 替换顶掉
-    端口名——ice40 默认配置 lint 报 34 错；走 NO_ICE40 空宏（注释锚）规避。
-    `_bridge.py` 已有 inline+body 区间还原（L140-156，现为死代码），若要
-    默认配置可解析需启用该形态（[marker]body → 还原为调用残片），但
-    渲染后 body 文本必须可定位，属预处理器锚形态再设计
+- **语料前沿（已修复，2026-08-28 批次 10 / M1）**：
+  - 🔥 **端口默认值宏**：`input NAME `M`（body=`= 1'b1`）此前 token 替换顶掉
+    端口名——ice40 默认配置 lint 报 34 错，只能走 NO_ICE40 空宏（注释锚）
+    规避。修法（预处理器锚形态再设计，`_expand.py` + `_bridge.py`）：
+    赋值后缀宏（body 以 `=` 开头）改 **inline+body 区间还原**——展开时
+    marker 注释 + body 原文保留在源码（parser 跳过注释看到 `input NAME
+    = 1'b1`，Declarator @Init? 兜住端口默认值），还原时按 [marker..body]
+    区间替换回宏调用原文残片。**渲染行尾锚定实证**：渲染端把 marker 挪到
+    行尾（`= 1'b1 /*<marker>*/,`），与"marker 后找 body"原文顺序相反——
+    inline 分支补"marker 前同行 rfind body"定位。ice40 默认配置全管线
+    success + lint 零诊断 + 43 处宏使用（含 `ICE40_DEFAULT_ASSIGNMENT_V(v)`
+    带参形态 6 处）全还原 + sv-parser 互操作接受（sv-parser 自己展开
+    `= 1'b1` 端口默认值，1800 合法）。语料门禁改为默认配置
+    （test_real_corpus.py / run_all_tests.py 预定义清空）。
   - 📌 **yosys 内部 `$cell` 名**：`module $demux` 类（techmap）非 2005/1800
     Annex A 合法输入（sv-parser 同样拒），techmap 已排除出语料
 - **多目标 assign 坏输入收敛（2026-08-28 已修，见「引擎增益：坏输入收敛」）**：

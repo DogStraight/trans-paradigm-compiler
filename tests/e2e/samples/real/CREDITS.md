@@ -18,9 +18,10 @@ original authors and projects as noted below.
 **ice40_cells_sim 许可注**：文件头无版权行，yosys 仓库根 `COPYING` 声明整体 ISC。
 
 **语料边界注**：
-- `ref_ice40_cells_sim.v` 需预定义 `NO_ICE40_DEFAULT_ASSIGNMENTS`（文件自带的
-  Verilog-2005 兼容开关：关闭端口默认赋值宏，空宏走注释锚路径）——见
-  `tests/e2e/test_real_corpus.py` 与 `run_all_tests.py` 的 per-file predefined。
+- `ref_ice40_cells_sim.v` 使用**默认配置**（不预定义 NO_ICE40_DEFAULT_ASSIGNMENTS）：
+  端口默认值宏（`input NAME `ICE40_DEFAULT_ASSIGNMENT_1`，body=`= 1'b1`）走
+  inline+body 锚还原（M1，2026-08-28）——`tests/e2e/test_real_corpus.py` 的
+  per-file predefined 为空。
 - yosys `techlibs/common/techmap.v` 已排除：`$demux` 类 yosys 内部 cell 名、
   `(2**i)'b0` 表达式宽度字面量属 yosys 内部/SV 形态，非 2005/1800 Annex A
   合法输入（sv-parser 同样拒绝）；其多目标 assign 用法见 test_2005_batch7.py。

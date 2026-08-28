@@ -4,8 +4,8 @@
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
 > 0.1.1 目标 1「全量 Verilog 2005 语法包验证 + 缺口闭环」状态（2026-08-28）：
 > 语法层已闭环（批次 1-6 + A 类 3 缺口 + 交错形态 + 真实语料 9 文件门禁）；
-> 剩余打磨项：端口默认值宏（ice40 默认配置，M1）、darkriscv 条件编译嵌套
-> 位置精度（已修至 ifdef 全还原，见 P1.5）。
+> 端口默认值宏已闭环（批次 10 / M1，ice40 默认配置门禁，见下）；剩余打磨项：
+> darkriscv 条件编译嵌套位置精度（已修至 ifdef 全还原，见 P1.5）。
 > 当前验证基线（2026-08-28）：1273 pytest 全绿（顺序无关，core/global_state
 > 测试隔离机制）+ e2e 94 组 + real 语料 9 文件（FAIL 0，保真度守卫）+
 > pyright 0 errors（1.1.413）+ lint recall 31/31 零误报 + 覆盖率（fail_under
@@ -88,8 +88,14 @@
 > HierSuffix 段包装 + SelectExpr exclude dot + 原子最长匹配（parser/linter
 > 双轨）+ lookahead Level 1 回退修复（连带修复既有缺陷 `a.b <= x` NBA
 > 目标位误判未识别）。
-> 剩余核对缺口 + 真实语料前沿（端口默认值宏 body、yosys `$cell` 内部名）
-> 见 references.md。
+> 端口默认值宏（2026-08-28，batch10 / M1，ice40 默认配置）：`input NAME `M`
+> （body=`= 1'b1`，端口默认值位）此前 token 锚顶掉默认值 → 34 错只能靠
+> NO_ICE40 空宏规避；现改 inline+body 区间还原（赋值后缀宏 body 以 `=`
+> 开头 → marker 注释 + body 原文保留，Declarator @Init? 兜住端口默认值，
+> 还原按 [marker..body] 区间替换回宏调用残片；inline 分支补渲染行尾锚定
+> 形态的 marker 前同行定位）。ice40 默认配置全绿 + sv-parser 互操作接受，
+> 语料门禁预定义清空（test_2005_batch10.py）。
+> 剩余核对缺口 + 真实语料前沿（yosys `$cell` 内部名）见 references.md。
 
 ### P1.5 已知缺陷收尾
 

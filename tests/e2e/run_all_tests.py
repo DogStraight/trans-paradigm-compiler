@@ -49,11 +49,9 @@ GROUP_PARAMS: dict[str, dict] = {
     "real": {"expand_macros": True},
 }
 
-# real 组个别文件需预定义宏（真实项目常带 -D 开关，如 ice40 cells_sim 的
-# Verilog-2005 兼容开关 NO_ICE40_DEFAULT_ASSIGNMENTS——关闭端口默认赋值宏）。
-REAL_PREDEFINED: dict[str, dict[str, str]] = {
-    "ref_ice40_cells_sim": {"NO_ICE40_DEFAULT_ASSIGNMENTS": "1"},
-}
+# real 组个别文件需预定义宏（真实项目常带 -D 开关）。ice40 cells_sim 已用
+# 默认配置（M1，2026-08-28：端口默认值宏 inline+body 锚还原），无需预定义。
+REAL_PREDEFINED: dict[str, dict[str, str]] = {}
 
 
 def discover_tests(
