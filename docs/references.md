@@ -565,6 +565,40 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 📌 **parser 复用**：sv-parser crate 提供 CST + NodeEvent 遍历——省下 parser 投入，但
     规则演进受 parser 能力约束（references.md 避坑已记，tpc 反解析器路线无此问题）
 
+- **诊断链插件深度调研（2026-08-28 补，源码镜像 E:\research\svlint 直读）**——0.1.1
+  第二目标（诊断链插件：语法层 linter / 语义层 pass / 自定义检查层 + 跨文件易错点 +
+  名称检查示例）的规则架构参照：
+  - 🔥 **规则接口 = 节点事件监听 + 配置注入**：`SyntaxRule::check(&mut self, syntax_tree,
+    event: &NodeEvent, config: &ConfigOption) -> SyntaxRuleResult`（Pass/FailAt/FailLocate）
+    ——每条规则在 Enter 事件按 RefNode 类型匹配（如 `ModuleAnsiHeader`），`unwrap_node!`
+    取子节点、共享工具（check_prefix/check_regex）判定。**与 tpc semantic_check 插槽
+    （post-pass 钩子）架构同构**——svlint 是"事件监听 + 配置注入"规则形态规模化
+    （~190 条）的实证
+  - 🔥 **配置扁平注入（ConfigOption serde 结构）**：~80 个规则选项字段（prefix_*×7 +
+    re_required_*×30 + re_forbidden_*×30 + 其他）是**单一扁平结构**，serde 反序列化 +
+    `deny_unknown_fields` + 默认值函数——**规则代码只写判定，规则行为全由配置注入**
+    （规则读 `option.prefix_module` 等）。tpc 的 [[checks]] schema / pattern 表可直接
+    参照此形态（配置与规则代码分离）
+  - 🔥 **命名规则族 = 按 kind 分发的完整实证**：prefix_module/prefix_input/... +
+    lowercamelcase_module/... + re_required_*（module/function/task/genvar/instance/
+    port_input/port_output/... 30 类）——**正是 P1.9 名称检查的蓝本**：kind → 正则/
+    前缀配置（默认值如 `^[a-z]+[a-z0-9_]*$`），规则代码 = kind 匹配 + 判定
+  - 📌 **跨文件现状**：`-f/--filelist`（sv_filelist_parser：files/incdirs/defines +
+    `--dump-filelist`）——**跨文件 = 批处理 + filelist 宏/incdir 展开，规则是单文件
+    per-run，无跨文件符号表**。tpc 语义层（作用域链 + inst_check 已跨文件）的
+    "跨文件易错点"是**差异化能力**（svlint 无）
+  - 💡 **规则 trait 四件套实证**：check/name/hint/reason——hint 接收 config（提示随
+    配置动态生成，如"Prefix `module` identifier with \"i_\""），MANUAL 自动拼
+  - 💡 **插件形态对照**：pluginrules! 宏 + Rule enum（Text/Syntax 指针）+ get_plugin()
+    extern "C" 动态库——tpc capabilities（Python 模块）同类设计，Python 载体零编译
+    更轻；**自定义检查层（用户自由度）tpc 已有协议基础，缺的是"注册 + 文档示例"**
+  - 📌 **tpc 三层映射**：语法层 = 现 linter（token 级反解析器，svlint 无对应）；
+    语义层 = semantic_check 插槽（= svlint SyntaxRule 同构，tpc 的 analyzer 作用域
+    链是其超集）；自定义层 = capabilities + 名称检查示例（svlint naming 规则族为蓝本）
+  - **可实现性**：名称检查（P1.9 命名约定）直接参照 svlint naming 族——配置扁平化
+    （pattern 表）+ kind 分发 + 判定分离，规则代码 ~20 行/条；语义 pass 沿用插槽架构
+    补"节点事件遍历"（analyzer 已有作用域链遍历基础）
+
 - **与 tpc linter 的差异**（各有取舍，非优劣）：
 
 | 维度 | svlint | tpc linter |

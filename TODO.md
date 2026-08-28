@@ -107,18 +107,29 @@
 
 ### P1.9 tpc-check 诊断体系（semantic_check 插槽架构，ADR-0004/0005）
 
-> 2026-08-27 更新：原"规则表 + naming_check 接入"路径已变轨——诊断体系落地
-> 为 semantic_check 插槽架构（docs/semantic_checks.md；ADR-0004 为什么、
-> 0005 跨文件）。已落地：机制层（post-pass 钩子 + 统一报告管道 + related
-> 链）、跨文件联动（inst_check：W101/W102/W103/WC001）、名称调用检查
-> （check_name_call：W002）、--json/suppress。剩余两条（对应
-> semantic_checks.md 状态行的 P3 声明式 schema / P4 用户配置层）：
+> 2026-08-28 更新（0.1.1 第二目标「诊断链插件」规划）：verilog 静态检查闭环 =
+> **三层面 + 跨文件易错点 + 用户自定义自由度**：
+>   1. 语法层 = 现 linter 部件（token 级反解析器，已就绪）
+>   2. 语义层 = 注册类 pass（semantic_check 插槽 post-pass 钩子，已落地机制；
+>      inst_check W101-103/WC001 已跨文件）
+>   3. 自定义检查层 = 用户自由度（capabilities Python 模块协议已实现，缺"注册 +
+>      文档示例"）；**名称检查作为第一个用户自定义参考示例**
+> 架构参照：svlint 深调研（2026-08-28，references.md 补"诊断链插件深度调研"）——
+> SyntaxRule（节点事件监听 + 配置注入）与 semantic_check 插槽同构、命名规则族
+> （prefix_*/re_required_*/re_forbidden_* ~80 配置字段按 kind 分发）是名称检查
+> 蓝本；svlint 跨文件仅 filelist 批处理（无符号表），tpc 语义层的跨文件易错点是
+> 差异化能力。
+> 已落地：机制层（post-pass 钩子 + 统一报告管道 + related 链）、跨文件联动
+> （inst_check：W101/W102/W103/WC001）、名称调用检查（check_name_call：W002）、
+> --json/suppress。剩余（对应 semantic_checks.md 状态行的 P3 声明式 schema /
+> P4 用户配置层 + 诊断链三层面收口）：
 
 - [ ] **TOML 规则表（L1 声明层 + P4 用户配置层）**：[[checks]] schema
       （id/category/severity/scope/message/handler）目前只在文档定义，实际
       规则是 postpasses 脚本（inst_check）——"规则 = 数据"待落地，tpc.toml
       [checks] 用户覆盖一并
-- [ ] **命名约定检查（原 P1.7）**：Sigasi 式 pattern 表按 kind 分发（30 类
-      kind 映射：module→MODULE_NAME、wire/reg→NET_NAME 等）+ 用户可配
-      pattern/match——未实现（注意 _name_check.py 是名称调用检查 W002，
-      非命名约定）
+- [ ] **命名约定检查（原 P1.7，诊断链自定义层首个示例）**：Sigasi/svlint 式
+      pattern 表按 kind 分发（30 类 kind 映射：module→MODULE_NAME、wire/reg→
+      NET_NAME 等）+ 用户可配 pattern/match——svlint naming 族（~80 配置字段
+      扁平注入 + 规则代码只写判定）为直接蓝本（注意 _name_check.py 是名称调用
+      检查 W002，非命名约定）
