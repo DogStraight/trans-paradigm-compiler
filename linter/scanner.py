@@ -92,10 +92,14 @@ class LinterScanner:
         enable_phase1: bool = True,
         enable_phase2: bool = True,
         register=None,
+        trace_discovery: bool | None = None,
     ):
         """register: GrammarRulesRegister 实例。默认全局单例；多语言场景
         （如 c4 测试）应传独立实例——单例的 self.rules 累积多目录规则，
-        切语言时旧语言规则会混入新语言规则表。"""
+        切语言时旧语言规则会混入新语言规则表。
+        trace_discovery: 消歧决策 trace 开关（None = 环境变量
+        TPC_LINT_TRACE；True/False 显式覆盖）——classify 返回非预期结果
+        时输出 Level 1/Level 2 决策过程到 stderr 定位。"""
         self._rules_dir = rules_dir
         ext_list = ext_dirs or []
         ConfigRegistry.load_all(
@@ -167,6 +171,7 @@ class LinterScanner:
             self._all_bracket_openers,
             self._all_bracket_closers,
             matcher=self._matcher,
+            trace=trace_discovery,
         )
 
         self.enable_phase0 = enable_phase0

@@ -67,11 +67,13 @@ class Discovery:
         bracket_openers: frozenset[str],
         bracket_closers: frozenset[str],
         matcher=None,
+        trace: bool | None = None,
     ) -> None:
         self._tree = tree
         self._lookahead = LookaheadTable(
             tree,
             matcher=matcher,
+            trace=trace,
         )
         self._block_openers = block_openers
         self._block_closers = block_closers

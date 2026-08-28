@@ -24,6 +24,9 @@ B 类消歧 = 动态两级（变长前瞻 + 试解析兜底）：
 
 from __future__ import annotations
 
+import os
+import sys
+
 from core.define import Token
 
 from core.utils import square_bracket_types
@@ -32,6 +35,12 @@ from core.token_protocol import TRIVIA_TOKEN_TYPES
 # trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
 _TRIVIA = TRIVIA_TOKEN_TYPES
 from .grammar_slicer import _collect_first_start_tokens
+
+# 消歧决策 trace 开关（环境变量兜底，命令行/测试可传 trace=True 显式开启）：
+# 输出 Level 1（seen 序列/候选淘汰/分支决策）与 Level 2（各候选试解析的
+# errs/consumed、best 选择）到 stderr——classify 返回非预期结果时定位
+# "为什么"，与 parser 的 set_trace 同风格。默认关闭，零行为影响。
+_TRACE_ENV = os.environ.get("TPC_LINT_TRACE", "").strip() not in ("", "0")
 
 # 方括号开/闭类型（从 lexer.bracket_map 推导，构造期配置已加载）。
 # 模块级惰性缓存：_feat_token_paths 等模块级函数与实例方法共用。
@@ -164,9 +173,12 @@ class LookaheadTable:
         self,
         tree: dict,
         matcher=None,
+        trace: bool | None = None,
     ) -> None:
         self._tree = tree
         self._matcher = matcher
+        # 消歧 trace（默认环境变量 TPC_LINT_TRACE；显式传值覆盖）
+        self._trace = _TRACE_ENV if trace is None else trace
         # 块结束符集合（从块规则 block_end 收集，Level 1 前瞻边界）
         self._block_ends = frozenset(
             info["block_end"]
@@ -282,6 +294,11 @@ class LookaheadTable:
         """
         return {p for p in _build_prefix_paths(prods[1:], self._tree) if p}
 
+    def _trace_out(self, msg: str) -> None:
+        """消歧决策 trace（stderr，ASCII）。默认关闭。"""
+        if self._trace:
+            print(f"[lint-trace] {msg}", file=sys.stderr)
+
     def classify(self, tokens: list[Token], i: int) -> list[str] | None:
         """统一两级消歧：A/B 类候选都走同一套管线。
 
@@ -301,12 +318,21 @@ class LookaheadTable:
         elif tok_type == "id":
             entries = self.ident_candidates
         if not entries:
+            self._trace_out(f"classify pos={i} tok={tok_type} -> None (no candidates)")
             return None
         if len(entries) == 1:
+            self._trace_out(
+                f"classify pos={i} tok={tok_type} -> [{entries[0]['name']}] (unique)"
+            )
             return [entries[0]["name"]]  # 唯一候选，无需消歧
-        return self._resolve_ident(
+        self._trace_out(
+            f"classify pos={i} tok={tok_type} entries={[e['name'] for e in entries]}"
+        )
+        result = self._resolve_ident(
             tokens, i, entries, is_keyword=tok_type in self.keyword_map
         )
+        self._trace_out(f"classify pos={i} tok={tok_type} -> {result}")
+        return result
 
     def _resolve_ident(
         self,
@@ -352,7 +378,13 @@ class LookaheadTable:
                     for p in entry.get("paths", ())
                 ):
                     kept.append(entry)
+            dropped = [e["name"] for e in path_entries if e not in kept]
             path_entries = kept
+            self._trace_out(
+                f"  L1 pos={pos} tok={tokens[pos].type} seen={seen} "
+                f"kept={[e['name'] for e in path_entries]}"
+                + (f" dropped={dropped}" if dropped else "")
+            )
             if not path_entries and not l2_only:
                 # Level 1 判别路径被操作数内部内容挡住（如拼接 lvalue
                 # `{a,b} = expr;` 的起点非 id）→ 回退 Level 2 对原始
@@ -361,6 +393,7 @@ class LookaheadTable:
                 # 静态可判别的多候选（如 if 缺括号的 IfBlock/IfStmt）保持
                 # [] 未识别诊断（e09/e17 门禁基线）。
                 t_limit = min(limit + 1, n)
+                self._trace_out("  L1 -> all path candidates dropped, fallback L2")
                 return self._try_parse(tokens, i, entries, t_limit)
             # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
             if (
@@ -371,8 +404,12 @@ class LookaheadTable:
                     for p in path_entries[0].get("paths", ())
                 )
             ):
+                self._trace_out(
+                    f"  L1 -> unique path hit {path_entries[0]['name']}"
+                )
                 return [path_entries[0]["name"]]
             if not path_entries:
+                self._trace_out("  L1 -> path exhausted (l2_only remains), break")
                 break  # 只剩需试解析的候选 → 走 Level 2
             pos += 1
         # 到边界块 / path 候选耗尽
@@ -383,9 +420,11 @@ class LookaheadTable:
             # 部分匹配返回候选（checker 报精确诊断），不静默漏检。
             if is_keyword:
                 t_limit = min(limit + 1, n)
+                self._trace_out("  L1 -> no discriminant token (keyword), L2 allow_partial")
                 return self._try_parse(
                     tokens, i, entries, t_limit, allow_partial=True
                 )
+            self._trace_out("  L1 -> no discriminant token (bare id) -> None")
             return None
         # 试解析的匹配上界需含终止符（分号在 limit 位置，多取一个 token 才能
         # 消费句子结束符，否则 TaskDeclOld 的 `;` 超出区间而失败）
@@ -398,6 +437,10 @@ class LookaheadTable:
             # l2_only，`mem[i].field <= x` / `a.b <= x`（NBA target 为层级
             # 引用）被误判未识别。试解析取"错误最少 + 消费最多"者，静态
             # 判别正确的候选（errs=0）天然胜出，不依赖候选顺序。
+            self._trace_out(
+                f"  L1 -> boundary, L2 on all {len(entries)} entries "
+                f"(allow_partial={is_keyword})"
+            )
             return self._try_parse(
                 tokens,
                 i,
@@ -406,8 +449,10 @@ class LookaheadTable:
                 allow_partial=is_keyword,
             )
         if len(path_entries) == 1:
+            self._trace_out(f"  L1 -> boundary, single survivor {path_entries[0]['name']}")
             return [path_entries[0]["name"]]
         if not path_entries:
+            self._trace_out("  L1 -> boundary, no survivors -> unrecognized []")
             return []  # path 候选耗尽且无 Level 2 候选 → 未识别
         # 多候选未收敛 → Level 2 试解析。全失败保持 []（unrecognized）：
         # 判别路径完整命中的多候选（如 if 缺右括号的 IfBlock/IfStmt 双候选）
@@ -451,11 +496,16 @@ class LookaheadTable:
             try:
                 j = matcher.match_rule(tokens, j, prods, trial, limit)
             except Exception:
+                self._trace_out(f"  L2 {name} EXC (skipped)")
                 continue
             finally:
                 matcher._probe_eof = old_probe
             errs = len(trial)
             consumed = j - i
+            self._trace_out(
+                f"  L2 {name}: errs={errs} consumed={consumed}"
+                + (f" first_err={trial[0].message[:60]!r}" if trial else "")
+            )
             if (
                 best is None
                 or errs < best[0]
@@ -463,14 +513,20 @@ class LookaheadTable:
             ):
                 best = (errs, consumed, name)
         if best is None:
+            self._trace_out("  L2 -> no candidate matched")
             return []
         if best[0] != 0:
             # 全失败：B 类保持 []（未识别诊断，拼错关键字场景）；A 类
             # （keyword 触发）返回错误最少的候选，让 checker 报精确诊断
             # （如 \`wire ;\` 报 expected id 而非 unrecognized）。
             if allow_partial:
+                self._trace_out(
+                    f"  L2 -> best {best[2]} errs={best[0]} (allow_partial)"
+                )
                 return [best[2]]
+            self._trace_out(f"  L2 -> all fail errs={best[0]} -> unrecognized []")
             return []
+        self._trace_out(f"  L2 -> {best[2]} (errs=0 consumed={best[1]})")
         return [best[2]]
 
     def _find_boundary(self, tokens: list[Token], i: int, n: int) -> int:

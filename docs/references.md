@@ -900,6 +900,29 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   全量 1222 passed + 6 skipped；子集组合（core+classifier 曾挂）73 passed；
   c4 等"独立实例"workaround 保留无害（机制兜底）
 
+#### 引擎增益：消歧 trace + 候选集契约（2026-08-28，a[0].b 修复复盘驱动）
+
+- **动机**：交错形态修复暴露的 3 个引擎缺陷（match_atom 首个命中、lookahead
+  l2_only 候选集、`a.b <= x` 误判）全是**消歧/匹配策略层**的隐式协议——定位
+  全靠手动脚本复现 + monkeypatch 打印，成本高。复盘结论：语法知识已数据化，
+  **解析策略层是下一个该增益的面**（消歧/匹配/恢复仍是引擎代码里的隐式协议）
+- **消歧决策 trace（linter/lookahead.py）**：`[lint-trace]` 输出到 stderr——
+  classify 入口（token/候选集）、Level 1 每步（seen 序列/kept/dropped/分支
+  决策：命中/回退/break）、Level 2 每候选（errs/consumed/first_err）与 best
+  选择。开关：构造参数 `trace`（LookaheadTable/Discovery/LinterScanner 透传）
+  或环境变量 `TPC_LINT_TRACE=1`（模块导入时读取，进程启动设置）。默认关闭
+  零行为影响。与 parser 的 set_trace 同风格，定位 classify 非预期返回时
+  一眼看到淘汰过程
+- **消歧候选集契约测试（test_linter_lookahead.py TestLevel2CandidateSet）**：
+  固化语义意图——`a.b <= x` / `mem[i].field <= x`（操作数内部 token 挡判别
+  路径）→ 仍分类为 NBA；`a[0].b = 1` → BlockingAssign；`a <= x` / `a = x`
+  无遮挡时 Level 1 静态判别仍生效；`assign a = b` 缺分号（A 类）→ allow_
+  partial 返回候选（checker 报精确诊断）；`foo bar` 拼错（B 类）→ [] 未识别
+  （不吞错）。行为快照之外的语义意图层，防同类回归
+- **后续候选**：per-rule 匹配策略声明化（最长匹配从引擎全局默认变成配置可
+  表达）、matcher._probe_eof 试探语境状态治理、错误恢复诊断收敛（坏输入
+  976 条病理，已在 TODO M 级）
+
 #### UDP 处理专题（2026-08-27 追读，P1.8 UDP 立项的落地参照）
 
 - 出处：`sv-parser-parser/src/udp_declaration_and_instantiation/`（udp_declaration /

@@ -106,6 +106,48 @@ class TestUnrecognized:
         assert _classify_at(lookahead, tokens, "if") == []
 
 
+class TestLevel2CandidateSet:
+    """Level 2 候选集契约（2026-08-28 引擎增益，a[0].b 交错形态暴露后固化）。
+
+    Level 1 判别路径被**操作数内部 token**（层级引用 `.`、拼接 `{..}` 等）
+    挡住时，path 候选被误淘汰——l2_only 分支必须用原始 entries 试解析，
+    让 errs=0 的静态正确候选胜出；同时保持"结构残缺/拼错 → [] 未识别"
+    的门禁基线（allow_partial 仅 A 类 keyword 触发时放宽）。
+    """
+
+    def test_nba_target_hier_ident(self, scanner, lookahead):
+        """`a.b <= x`：NBA target 为层级引用（既有缺陷回归）→ NonBlockingAssign。"""
+        tokens = _tokens(scanner, "module m; always @(*) begin a.b <= x; end endmodule")
+        assert _classify_at(lookahead, tokens, "a") == ["NonBlockingAssign"]
+
+    def test_nba_target_arraymember(self, scanner, lookahead):
+        """`mem[i].field <= x`：下标+成员交错 → NonBlockingAssign（本批暴露）。"""
+        tokens = _tokens(scanner, "module m; always @(*) begin mem[i].field <= x; end endmodule")
+        assert _classify_at(lookahead, tokens, "mem") == ["NonBlockingAssign"]
+
+    def test_blocking_target_interleaved(self, scanner, lookahead):
+        """`a[0].b = 1`：交错形态阻塞赋值 target → BlockingAssign。"""
+        tokens = _tokens(scanner, "module m; always @(*) begin a[0].b = 1; end endmodule")
+        assert _classify_at(lookahead, tokens, "a") == ["BlockingAssign"]
+
+    def test_plain_assign_still_distinguishes(self, scanner, lookahead):
+        """`a <= x` / `a = x` 无操作数内部 token：Level 1 静态判别仍生效。"""
+        tokens = _tokens(scanner, "module m; always @(*) begin a <= x; b = y; end endmodule")
+        assert _classify_at(lookahead, tokens, "a") == ["NonBlockingAssign"]
+        assert _classify_at(lookahead, tokens, "b") == ["BlockingAssign"]
+
+    def test_a_class_missing_semicolon_precise(self, scanner, lookahead):
+        """A 类 keyword（assign 缺分号）：allow_partial 返回候选让 checker 报
+        精确诊断（phase-statement），不降级为未识别。"""
+        tokens = _tokens(scanner, "module m; assign a = b endmodule")
+        assert _classify_at(lookahead, tokens, "assign") == ["AssignStmt"]
+
+    def test_b_class_typo_keeps_unrecognized(self, scanner, lookahead):
+        """B 类拼错（foo bar;）：Level 2 全失败 → [] 未识别（不吞错）。"""
+        tokens = _tokens(scanner, "module m; foo bar; endmodule")
+        assert _classify_at(lookahead, tokens, "foo") == []
+
+
 class TestNonStatement:
     """非语句起点 → 返回 None（与 [] 的"未识别"区分）。"""
 
