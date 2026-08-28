@@ -74,6 +74,21 @@
 
 ### P1.5 已知缺陷收尾
 
+- [ ] **interop 门禁覆盖宏文件（2026-08-28 调查遗留）**：test_svparser_accept_
+      domain_and_interop 对含宏语料整体跳过，互操作半边（tpc 输出→sv-parser）
+      对宏文件可行却未覆盖——skip 掩盖了 4 个缺陷（均已修，见下）。拆门禁：
+      accept_domain 仅无宏文件（现状），interop 覆盖全语料（含宏文件，tv80 源
+      sv-parser 拒收豁免）。当前 9 文件 interop 实测：除 tv80（源拒豁免）与
+      darkriscv（sv-parser 预处理器限制）外全绿。
+- [ ] **无括号系统任务语句语法缺口（2026-08-28 实测发现）**：`$finish;`
+      等无括号形态 parse 失败（SysTaskStmt production 要求括号；SysFuncBare
+      是表达式版）。A.6.2/A.9 系统任务语句允许无括号形态。
+- [x] **formatter inst_port 破坏 concat 端口连接（2026-08-28 已修，AST 辅助）**：
+      `.RADDR({pd(RADDR_10), pd(RADDR_9), ...})` 被 `_port_parse` 单行括号
+      平衡误判（深度未归零时把行尾当表达式结束，重写时伪补 `)`）。修：
+      未闭合哨兵（`_UNCLOSED`）+ parser 注入 AST 辅助（实例块包装解析拿
+      端口 span，跨行端口参与 name 列对齐、expr 保留原文）；无 parser 时
+      未闭合行保守跳过。ice40 interop 绿。
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
       （test_nested_invert_no_skip_leak）；L2 未修——invert 对含嵌套引用的 role，
       嵌套展开端口（inner_* 方向反转）不参与反转（invert 回调 resolve 期拿的是

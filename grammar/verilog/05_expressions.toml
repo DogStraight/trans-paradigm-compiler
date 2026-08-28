@@ -85,7 +85,10 @@ content = "$1.value"
 identifier_ref = true
 
 [Identifier.renderer.layout]
-ref = "content"
+line = [
+  { ref = "content" },
+  { suffix_when = { startswith = "\\" }, attr = "content", text = " " },
+]
 
 
 # ── ParenthesizedExpr — 括号表达式 ──

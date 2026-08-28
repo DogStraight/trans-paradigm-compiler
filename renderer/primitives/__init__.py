@@ -27,10 +27,21 @@ from . import align as _align
 from . import fill as _fill
 from . import line_suffix as _line_suffix
 from . import intent as _intent
+from . import suffix_when as _suffix_when
 
 _PRIMITIVE_MODULES = (
-    _ref, _join, _group, _line, _indent, _opt, _soft_break,
-    _align, _fill, _line_suffix, _intent,
+    _ref,
+    _join,
+    _group,
+    _line,
+    _indent,
+    _opt,
+    _soft_break,
+    _align,
+    _fill,
+    _line_suffix,
+    _intent,
+    _suffix_when,
 )
 
 __all__ = [

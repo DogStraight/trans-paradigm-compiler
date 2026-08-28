@@ -39,7 +39,11 @@ def test_escaped_identifier_lexer():
 
 
 def test_escaped_identifier_decl_use():
-    """转义名在声明/引用/赋值中端到端可解析且幂等。"""
+    """转义名在声明/引用/赋值中端到端可解析且幂等。
+
+    2026-08-28：渲染补空白终止（IEEE A.9.3 转义标识符须以空白止，
+    否则转义名后紧跟 ``(`` 会把名字读到括号里去）——断言更新为带终止空格形态。
+    """
     src = r"""module \my$mod ;
     wire \a.b ;
     assign \a.b = 1'b0;
@@ -47,9 +51,9 @@ endmodule
 """
     r = _run(src)
     assert r["success"], r.get("error", "")
-    assert r"module \my$mod();" in r["output"]
-    assert r"wire \a.b;" in r["output"]
-    assert r"assign \a.b = 1'b0;" in r["output"]
+    assert r"module \my$mod ();" in r["output"]
+    assert r"wire \a.b ;" in r["output"]
+    assert r"assign \a.b  = 1'b0;" in r["output"]
     assert r["idempotent"]
 
 
@@ -62,7 +66,7 @@ endmodule
 """
     r = _run(src)
     assert r["success"], r.get("error", "")
-    assert r"wire \always;" in r["output"]
+    assert r"wire \always ;" in r["output"]
     assert r["idempotent"]
 
 
@@ -75,7 +79,8 @@ endmodule
 """
     r = _run(src)
     assert r["success"], r.get("error", "")
-    assert r"wire \a.b, \c.d, \e;" in r["output"]
+    assert r"wire \a.b , \c.d , \e ;" in r["output"]
+    assert r"assign \a.b  = \c.d ;" in r["output"]
     assert r["idempotent"]
 
 

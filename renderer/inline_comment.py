@@ -67,6 +67,12 @@ def restore_comments(
 
         if only_tpc and "tpc:" not in comment:
             continue  # 展开路径：普通注释锚点漂移，跳过（tpc marker 仍回插）
+        if only_tpc and comment in rendered:
+            # marker 已内联渲染（AST 路径）：如 ice40 端口列表内的
+            # /*<tpc:macro:N>*/ 既是列表结构被锚点收集、又作为块注释节点
+            # 随 AST 渲染——内联位置是权威位置，锚点回插会双份（宏还原后
+            # 同一 fragment 出现两次）。marker 编号唯一，全局判存在即可。
+            continue
         if only_midline and not c.get("midline"):
             continue  # 只回插行中注释（行尾注释由 attachment 渲染）
 
@@ -182,9 +188,7 @@ def restore_line_comments(
             rendered_tpc[m.group(1)] = i
     rendered_tpc_src: dict[str, int] = {}
     if tpc_src_map:
-        rendered_tpc_src = {
-            k: tpc_src_map[k] for k in rendered_tpc if k in tpc_src_map
-        }
+        rendered_tpc_src = {k: tpc_src_map[k] for k in rendered_tpc if k in tpc_src_map}
 
     for c in sorted(unique, key=lambda x: x["line"]):
         text = c["text"]

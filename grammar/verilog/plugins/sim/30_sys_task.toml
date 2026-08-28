@@ -22,3 +22,14 @@ production = [
     "bracket.r_parentheses",
     "symbol.base.semicolon",
 ]
+
+# 2026-08-28 修复：剥离时原样搬移未带 node/renderer——SysTaskStmt 在 AST 中
+# 存在但渲染为空（$display/$finish/$readmemh 等系统任务语句静默丢失，
+# ice40 `if (INIT_FILE != "") $readmemh(...)` 分支被渲染成空行）。
+# 参照 SysFuncCall（05_expressions.toml）补绑定与布局，末尾多分号。
+[SysTaskStmt.parser.node]
+callee = "$2"
+args = "$4"
+
+[SysTaskStmt.renderer.layout]
+line = ["$", { ref = "callee" }, "(", { ref = "args" }, ")", ";"]

@@ -152,11 +152,12 @@ def build_engine(
             # 量化拒绝准则（ADR-0006 阶段 4b）：参与行少于 2 → 无对齐组可成
             criterion={"min_group_size": 2},
         ))
-    # 实例端口对齐 pass（命令式，跟在品类 pass 之后）
+    # 实例端口对齐 pass（命令式，跟在品类 pass 之后；parser 注入 = AST 辅助：
+    # 跨行端口（concat 多行展开等）表达式范围由实例块解析确定）
     engine.register(FormatterPass(
         name="inst_port",
         kind="handler",
-        handler=run_inst_port_align,
+        handler=lambda lines, ctxs: run_inst_port_align(lines, ctxs, parser=parser),
     ))
     # 宽度控制折行 pass（最后：拆行改变行数，后续无依赖它的 pass；
     # 续行缩进由 wrap 自己管理——indent 的 contexts 对拆出的新行无效）
