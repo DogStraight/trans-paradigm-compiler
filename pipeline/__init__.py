@@ -60,7 +60,10 @@ from transform.normalizer import normalize_ast
 
 # ── 渲染器 ──
 from renderer.renderer import Renderer
-from renderer.inline_comment import restore_comments, restore_line_comments
+from renderer.comment_restore import (
+    collect_inline_after_leftover,
+    restore_all_comments,
+)
 
 # ── Linter（前置语法检查）──
 from linter.scanner import LinterScanner
@@ -69,8 +72,6 @@ from linter.scanner import LinterScanner
 from preprocessor import (
     scan_directives,
     expand_tokens,
-    protect_and_reverse,
-    restore_condition_blocks,
 )
 
 # 模块级共享状态：rules/lexer/renderer/transformer 按 rules_dir 缓存，避免重复初始化
@@ -410,113 +411,6 @@ def _stage_parse(
     return ast
 
 
-def _collect_inline_after_leftover(root: Any, anchors: list) -> None:
-    """收集渲染后未消费的行中注释（注释节点模型 2b-2 兜底）。
-
-    inline_after = {锚 token: [(注释, 源行号)]} 是 token 标注定位——渲染端
-    在布局 line 文本元素里按锚文本匹配。布局无文本锚（如 pratt 表达式内
-    `a + /* c */ b` 的 `+` 在 op 子节点）时渲染端不消费 → 此处补进 anchors
-    （midline 标记），restore only_midline 回插兜底。已消费的（渲染端删了
-    键）不补——双轨不双份。
-    """
-    if isinstance(root, Node):
-        slots = getattr(root, "_comment_slots", None)
-        if slots:
-            ia = slots.get("inline_after")
-            if ia:
-                for anchor, entries in ia.items():
-                    for text, line in entries:
-                        anchors.append(
-                            {
-                                "anchor": anchor,
-                                "text": text,
-                                "line": line,
-                                "midline": True,
-                            }
-                        )
-                del slots["inline_after"]
-        for k, v in list(vars(root).items()):
-            if k.startswith("_"):
-                continue
-            _collect_inline_after_leftover(v, anchors)
-    elif isinstance(root, dict):
-        for v in root.values():
-            _collect_inline_after_leftover(v, anchors)
-    elif isinstance(root, list):
-        for v in root:
-            _collect_inline_after_leftover(v, anchors)
-
-
-def _restore_comments(ctx: _PipelineContext, content: str, parser: Any) -> str:
-    """注释回插（inline + line + 宏还原 + 条件块）。"""
-    # Inline comment restoration（锚点匹配，宏展开后亦可用）
-    # 展开路径（restore_stack 非空）→ only_tpc：宏 marker（`/*<tpc:macro:N>*/`）
-    # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
-    # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
-    # 但普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——
-    # 只回插 tpc，普通注释跳过（与 line 通道 only_tpc 语义对称）。
-    if ctx.inline_comments:
-        anchors = getattr(parser, "_comment_anchors", None)
-        if anchors:
-            content, n = restore_comments(content, anchors)
-            ctx.log(f"[comments] inline anchor restoration: {n} items")
-    else:
-        anchors = getattr(parser, "_comment_anchors", None)
-        if not anchors:
-            pass
-        elif ctx.restore_stack:
-            content, n = restore_comments(
-                content, anchors, only_tpc=True, tpc_src_map=ctx.tpc_src_map
-            )
-            ctx.log(f"[comments] tpc inline marker restoration: {n} items")
-        else:
-            # 行中注释回插（P1.5）：行中块注释不挂 attachment（保持原位），
-            # 无渲染兜底——inline_comments 关闭时也回插防丢（行尾注释由
-            # attachment 渲染，不在此列）。
-            content, n = restore_comments(content, anchors, only_midline=True)
-            if n:
-                ctx.log(f"[comments] midline anchor restoration: {n} items")
-
-    # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
-    # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
-    # 了代码结构（impl → ModuleInst、类型端口 → 具体端口），源行号/锚点必然
-    # 漂移，恢复会误匹配拆坏注释行（如含 `spi.slave` 的注释从 `.` 处劈开）。
-    # 但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
-    # 不依赖锚点窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，
-    # 宏还原失效。有宏/条件块时降级 only_tpc，无则整个跳过。
-    line_anchors = getattr(parser, "_line_comment_anchors", None)
-    if line_anchors and ctx.enable_line_comment_restore:
-        content, n = restore_line_comments(
-            content, line_anchors, tpc_src_map=ctx.tpc_src_map
-        )
-        ctx.log(f"[comments] line anchor restoration: {n} items")
-    elif line_anchors and (ctx.restore_stack or ctx.placeholders):
-        content, n = restore_line_comments(
-            content, line_anchors, tpc_src_map=ctx.tpc_src_map, only_tpc=True
-        )
-        ctx.log(f"[comments] tpc marker restoration: {n} items")
-
-    # Reverse macro protection — 必须放在 line-comment restore 之后：
-    # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进
-    # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
-    # 才能定位 marker 并替换为整行原文残片。
-    if ctx.restore_stack:
-        content = protect_and_reverse(
-            content,
-            restoration_stack=ctx.restore_stack,
-        )
-        ctx.log("[preprocessor] macros reversed")
-
-    # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
-    # 必须放在 line-comment restore 之后：占位符 `// <tpc:cond:N>` 本身是注释行，
-    # 可能被 production skip 吞掉并记入 line_comment_anchors，若先 restore 条件块、
-    # 后回插行注释，占位符会被再次插回而残留。
-    if ctx.placeholders:
-        content = restore_condition_blocks(content, ctx.placeholders)
-        ctx.log(f"[preprocessor] condition blocks restored: {len(ctx.placeholders)}")
-    return content
-
-
 def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
     """幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
     文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
@@ -581,7 +475,7 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
     # 回插兜底的双轨语义）。
     anchors = getattr(parser, "_comment_anchors", None)
     if anchors is not None:
-        _collect_inline_after_leftover(ast, anchors)
+        collect_inline_after_leftover(ast, anchors)
 
     # 保真度分级（ADR-0006 阶段 5）：keep_blank 按源结构位置回插空行。
     # 在注释回插/格式化之前做——回插的空行是源空行，后续 restore 与
@@ -597,7 +491,17 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         content = "\n".join(ctx.directive_lines) + "\n" + content
         ctx.log(f"[preprocessor] directives restored: {len(ctx.directive_lines)}")
 
-    content = _restore_comments(ctx, content, parser)
+    content = restore_all_comments(
+        content,
+        comment_anchors=getattr(parser, "_comment_anchors", None),
+        line_anchors=getattr(parser, "_line_comment_anchors", None),
+        inline_comments=ctx.inline_comments,
+        restoration_stack=ctx.restore_stack,
+        placeholders=ctx.placeholders,
+        tpc_src_map=ctx.tpc_src_map,
+        enable_line_comment_restore=ctx.enable_line_comment_restore,
+        log_fn=ctx.log,
+    )
 
     # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
     # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
