@@ -641,6 +641,11 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     注释，`analyzer/check_test.py::run_comment_driven` 运行检查后断言命中集合
     （失败报告带行号与段内诊断）。样例资产 = name_check 插件 `cases/*.sv`
     （新增样例 = 新增断言，规则行为变化时随样例自动更新语义）。
+  - ✅ **跨文件名称检查（NC011，2026-08-28）**：svlint module-filename 规则的
+    tpc 落地——模块名与文件名一致性，handler 兜底形态（pattern 表达不了
+    文件上下文，L2 脚本读 ProjectChecker 注入的 `node._file` 判定）。多模块
+    同文件防御：任一模块名匹配文件名即视为文件命名正确，其余不误报；
+    全部不匹配才逐个报。单文件 analyze（无 _file）跳过不误报。
 
 - **与 tpc linter 的差异**（各有取舍，非优劣）：
 

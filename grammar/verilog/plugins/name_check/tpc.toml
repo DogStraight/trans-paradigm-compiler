@@ -8,3 +8,6 @@
 # 声明了 [analyzer] postpasses 空列表仅为占位说明：实际执行由框架
 # AnalysisTraversal._run_postpasses 内置调用声明式执行器（无需本插件
 # 注册 postpass）。插件目录存在即被 check_registry 扫描 rules/*.toml。
+#
+# 跨文件规则（NC011 模块名-文件名一致性）是 handler 兜底形态（L2 脚本）：
+# pattern 正则表达不了"文件名"上下文，由脚本读 context.extra 判定。

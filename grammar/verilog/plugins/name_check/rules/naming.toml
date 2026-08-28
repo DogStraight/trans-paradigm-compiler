@@ -111,3 +111,14 @@ scope = ["rtl", "tb"]
 message = "任务名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "task"
 pattern = "^[a-z][a-z0-9_]*$"
+
+# ── 跨文件命名（handler 兜底：pattern 表达不了文件上下文） ───────────
+
+[[checks]]
+id = "NC011"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "模块名 '{name}' 与文件名不一致（期望 {file_base}）"
+kind = "module"
+handler = "_filename_check.py:check_module_filename"

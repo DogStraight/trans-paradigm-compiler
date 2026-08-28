@@ -521,9 +521,8 @@ class TestCommentDrivenCases:
     语义。cases/ 目录：grammar/verilog/plugins/name_check/cases/*.sv。
     """
 
-    def test_name_check_cases(self, config_loaded):
+    def test_name_check_cases(self, config_loaded, tmp_path):
         import glob
-        import tempfile
         import shutil
 
         from analyzer.check_test import run_comment_driven
@@ -540,11 +539,11 @@ class TestCommentDrivenCases:
         checker = ProjectChecker(rules_dir="grammar/verilog")
         all_failures = []
         for sample in samples:
-            # check 需要独立文件（ProjectChecker 按路径解析）
-            tmp = tempfile.mkdtemp()
-            dst = os.path.join(tmp, os.path.basename(sample))
+            # check 需要独立文件（ProjectChecker 按路径解析；保留原文件名
+            # ——NC011 模块名-文件名一致性按样例文件基名判定）
+            dst = tmp_path / os.path.basename(sample)
             shutil.copy(sample, dst)
-            fails = run_comment_driven(checker, dst)
+            fails = run_comment_driven(checker, str(dst))
             if fails:
                 all_failures.append(f"--- {os.path.basename(sample)} ---")
                 all_failures.extend(fails)

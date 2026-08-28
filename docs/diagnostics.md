@@ -62,10 +62,13 @@ inst_check 插件）、`NC` = 命名约定检查（name_check 插件，声明式
 | `NC008` | warning | name_check 插件（声明式） | genvar 名不符合大写下划线约定 |
 | `NC009` | warning | name_check 插件（声明式） | 函数名不符合小写下划线约定 |
 | `NC010` | warning | name_check 插件（声明式） | 任务名不符合小写下划线约定 |
+| `NC011` | warning | name_check 插件（handler 跨文件） | 模块名与文件名不一致（svlint module-filename 蓝本，多模块同文件防御） |
 
 > NC 系列规则声明在 `grammar/verilog/plugins/name_check/rules/naming.toml`
 > （`[[checks]]` 规则=数据），severity 可由用户配置
 > （`config/tpc_config.json` checks.overrides）覆盖——本表为默认值。
+> NC001-NC010 纯声明式（pattern 正则）；NC011 是 handler 兜底形态
+> （`_filename_check.py`，读 ProjectChecker 注入的 `node._file` 判定）。
 > 规则 id 全集随规则表加载（`core/check_registry.py`），新增规则时同步本表。
 
 ## 豁免注释（suppress）
