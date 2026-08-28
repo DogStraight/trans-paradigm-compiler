@@ -62,11 +62,15 @@ Author: biominescence <oho15799293498@outlook.com>
 AI Co-author: deepseek-v4-flash
 Source: https://github.com/DogStraight/trans-paradigm-compiler
 License: MIT
+Implementation: core engine, grammar packages and verification
+  suites co-developed with deepseek-v4-flash (AI co-author).
 ```
 
 署名单一来源：`packaging/attribution.py`（改作者/邮箱/仓库只改这里，重新打包）。
-AI 协作者（deepseek-v4-flash，0.1.0 起署名）：项目语法包/引擎/验证由模型
-辅助开发，作为协作者正式列入署名（pyproject.toml authors 同步）。
+署名结构（2026-08-28 定稿）：主作者 biominescence（方向/决策/发布/维护），
+deepseek-v4-flash 为 AI 协作者——核心引擎、语法包与验证套件由模型协作
+实现（README Attribution 段与 --credits 同步，披露充分但不越界）。
+pyproject.toml authors 同步两条目。
 
 ## 产物验证（2026-08-22 实测）
 

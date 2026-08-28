@@ -352,6 +352,15 @@ frictions): [docs/known_limitations.md](./docs/known_limitations.md).
 
 MIT — see [LICENSE](./LICENSE). Fork and adapt freely; private modifications allowed.
 
+## Attribution
+
+Maintainer: **biominescence** — project direction, architecture decisions,
+release and maintenance.
+
+Core implementation (grammar packages, engine modules, verification suites)
+was carried out in collaboration with **deepseek-v4-flash** as an AI
+co-author. See `tpc --credits` for the single-source attribution.
+
 ## README provenance
 
 This README was written with model assistance. The descriptions of the

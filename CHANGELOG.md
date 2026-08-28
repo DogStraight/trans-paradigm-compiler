@@ -7,9 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **署名加入 AI 协作者**：`packaging/attribution.py`（单一来源）与
-  `pyproject.toml` authors 增加 `deepseek-v4-flash`（AI 协作者）——
-  `--credits` 输出与 PE 版权信息同步（`AI Co-author: deepseek-v4-flash`）。
+- **署名加入 AI 协作者（方案 A 定稿）**：主作者 biominescence（方向/决策/
+  发布/维护）+ AI 协作者 `deepseek-v4-flash`（核心引擎、语法包与验证套件
+  协作实现）——`packaging/attribution.py`（单一来源）`--credits` 输出
+  `AI Co-author` + `Implementation` 行、`pyproject.toml` authors 两条目、
+  PE 版权信息、README `Attribution` 段同步。披露充分但不越界：模型署名
+  留在协作者/实现层，作者（责任人）仍为自然人。
 
 ## [0.1.0] - 2026-08-22
 

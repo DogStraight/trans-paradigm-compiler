@@ -22,4 +22,6 @@ def credits_text(prog: str, version: str) -> str:
         f"AI Co-author: {AI_CO_AUTHOR}\n"
         f"Source: {REPO_URL}\n"
         f"License: {LICENSE}\n"
+        f"Implementation: core engine, grammar packages and verification\n"
+        f"  suites co-developed with {AI_CO_AUTHOR} (AI co-author).\n"
     )
