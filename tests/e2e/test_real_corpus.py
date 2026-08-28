@@ -166,12 +166,12 @@ def _sv_parser_accepts(path: str) -> bool:
 
 @pytest.mark.skipif(SV_PARSER is None, reason="parse_sv 二进制未找到（tests/differential/.tools/sv-parser/）")
 @pytest.mark.parametrize("name", sorted(_MANIFEST))
-def test_svparser_accept_domain_and_interop(name: str, corpus_results):
-    """sv-parser 差分门禁（仅无宏文件）：假拒检测 + 互操作。
+def test_svparser_accept_domain(name: str, corpus_results):
+    """sv-parser 假拒检测（仅无宏文件）。
 
     sv-parser 是 IEEE 1800-2017 全量；无宏的 2005 语料被 sv-parser 接受时，
-    tpc 必须接受（假拒 = 真缺陷）；tpc 渲染输出必须被 sv-parser 接受。
-    宏文件两边预处理器语义不同，不构成对拍样本（同 run_differential_svparser）。
+    tpc 必须接受（假拒 = 真缺陷）。宏文件两边预处理器语义不同（sv-parser
+    1800 / tpc 2005），不构成对拍样本（同 run_differential_svparser）。
     """
     result, source, output, _ = corpus_results(name)
     if _has_macro(source):
@@ -180,8 +180,36 @@ def test_svparser_accept_domain_and_interop(name: str, corpus_results):
     assert _sv_parser_accepts(os.path.join(_REF_DIR, name)), (
         f"{name}: sv-parser 拒收（语料问题，非 tpc 缺陷——先核对语料）"
     )
-
     assert result["success"], f"{name}: tpc 管线失败（假拒嫌疑）"
+
+
+# sv-parser 互操作豁免（interop 覆盖宏文件后不构成对拍样本，原因见注释）：
+# - ref_tv80_core.v: sv-parser 源侧解析失败（3768:7 `else`），源都被拒则
+#   tpc 输出接受与否无法归因——对拍不可靠，豁免。
+# - ref_darkriscv.v: tpc 条件编译展开-还原不完整（输出 `ifdef` 89 个 vs 源
+#   101 个），sv-parser 预处理阶段失败（Preprocess 错误）——已知缺口
+#   （P1.5 宏还原保真，见 TODO），修复前豁免并保持门禁在其余文件上生效。
+_SVPARSER_INTEROP_SKIP: dict[str, str] = {
+    "ref_tv80_core.v": "sv-parser 源侧解析失败，对拍不可靠",
+    "ref_darkriscv.v": "tpc 条件编译还原不完整（输出 ifdef 89/源 101），sv-parser 预处理失败——TODO 已记录",
+}
+
+
+@pytest.mark.skipif(SV_PARSER is None, reason="parse_sv 二进制未找到（tests/differential/.tools/sv-parser/）")
+@pytest.mark.parametrize("name", sorted(_MANIFEST))
+def test_svparser_interop(name: str, corpus_results):
+    """sv-parser 互操作门禁（全语料，除豁免）：tpc 渲染输出必须被接受。
+
+    tpc 输出 = tpc 自渲染文本（宏展开后还原原文 + 格式化），被 sv-parser
+    接受说明渲染器产出在 IEEE 1800-2017 语义下合法——对宏文件同样成立
+    （宏结构由 sv-parser 自己的预处理器再处理，实测 picorv32/ice40 通过）。
+    豁免集合见 _SVPARSER_INTEROP_SKIP（源侧/还原侧对拍不可靠）。
+    """
+    result, source, output, _ = corpus_results(name)
+    if name in _SVPARSER_INTEROP_SKIP:
+        pytest.skip(f"{name}: {_SVPARSER_INTEROP_SKIP[name]}")
+
+    assert result["success"], f"{name}: tpc 管线失败（输出不存在，互操作无从谈起）"
     tmp = os.path.join(_REF_DIR, name + ".tpc_out.v")
     try:
         with open(tmp, "w", encoding="utf-8") as f:

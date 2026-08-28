@@ -221,6 +221,9 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             self.operator_defs,
             atom_parser=lambda t, i: _atom_parser_impl(self, t, i, context),
             stop_tokens=stop_tokens,
+            # 前缀位置跳过的行内注释（`a + /* c */ b`）经 sink 进锚点通道，
+            # 渲染后 midline 回插防丢（P1.5 修复 pratt 吞注释）。
+            comment_sink=lambda c: self._comment_anchors.append(c),
         )
     except ValueError as e:
         self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")

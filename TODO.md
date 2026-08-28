@@ -83,21 +83,14 @@
 
 ### P1.5 已知缺陷收尾
 
-- [ ] **interop 门禁覆盖宏文件（2026-08-28 调查遗留）**：test_svparser_accept_
-      domain_and_interop 对含宏语料整体跳过，互操作半边（tpc 输出→sv-parser）
-      对宏文件可行却未覆盖——skip 掩盖了 4 个缺陷（均已修，见下）。拆门禁：
-      accept_domain 仅无宏文件（现状），interop 覆盖全语料（含宏文件，tv80 源
-      sv-parser 拒收豁免）。当前 9 文件 interop 实测：除 tv80（源拒豁免）与
-      darkriscv（sv-parser 预处理器限制）外全绿。
-- [ ] **无括号系统任务语句语法缺口（2026-08-28 实测发现）**：`$finish;`
-      等无括号形态 parse 失败（SysTaskStmt production 要求括号；SysFuncBare
-      是表达式版）。A.6.2/A.9 系统任务语句允许无括号形态。
-- [x] **formatter inst_port 破坏 concat 端口连接（2026-08-28 已修，AST 辅助）**：
-      `.RADDR({pd(RADDR_10), pd(RADDR_9), ...})` 被 `_port_parse` 单行括号
-      平衡误判（深度未归零时把行尾当表达式结束，重写时伪补 `)`）。修：
-      未闭合哨兵（`_UNCLOSED`）+ parser 注入 AST 辅助（实例块包装解析拿
-      端口 span，跨行端口参与 name 列对齐、expr 保留原文）；无 parser 时
-      未闭合行保守跳过。ice40 interop 绿。
+- [ ] **宏展开路径条件编译还原不完整（2026-08-28 interop 门禁暴露）**：
+      darkriscv 输出 `ifdef` 89 个 vs 源 101 个（缺 12：__INTERRUPT__×3 /
+      __COPROCESSOR__×2 / __EBREAK__×2 / __DBNZ__×2 / __CSR__×1 /
+      MODEL_TECH×1 / SIMULATION×1——全是未定义条件），sv-parser 预处理
+      失败（源文件 sv-parser 接受，输出被拒 → 还原保真问题非语法问题）。
+      interop 门禁拆分后 darkriscv 因此豁免（test_real_corpus.py
+      _SVPARSER_INTEROP_SKIP）。待查：条件编译占位符还原对嵌套/未命中
+      分支的 ifdef 指令行覆盖。
 - [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
       （test_nested_invert_no_skip_leak）；L2 未修——invert 对含嵌套引用的 role，
       嵌套展开端口（inner_* 方向反转）不参与反转（invert 回调 resolve 期拿的是
@@ -105,10 +98,6 @@
       合并）；L3 未修——invert 引用的 role 定义在后时 _ref_callbacks 尚未构建
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
-- [ ] **pratt 前缀吞注释（既有缺陷，2026-08-26 记录）**：pratt_parser 前缀
-      位置把 COMMENT 当续行分隔跳过（`a + /* c */ b` 的注释静默丢失，不记录
-      任何通道）——改动前即如此（非回归）。修法：pratt 跳注释时记录（挂
-      当前表达式节点 inline_after 或 anchors），与 2b-2 的 token 标注机制衔接
 
 ### P1.9 tpc-check 诊断体系（semantic_check 插槽架构，ADR-0004/0005）
 

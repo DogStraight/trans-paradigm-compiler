@@ -729,6 +729,10 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
 - **与 Verible 差分的关系**：同为"语料限定 2005 子集"的接受域检查；sv-parser
   增量价值 = 纯解析器（Verible 是 formatter）+ 严格 Annex A 暴露宽进差异
   （实测 escaped_identifier 严格/宽进分歧已由 probe 验证）
+- **real corpus 门禁拆分（2026-08-28）**：`test_svparser_accept_domain_and_
+  interop` 拆为 accept-domain（假拒检测，仅无宏文件）与 interop（tpc 输出→
+  sv-parser，覆盖全语料）——宏文件互操作半边此前整体跳过，实测 picorv32/
+  ice40 输出 sv-parser 可接受（纳入门禁），darkriscv/tv80 豁免（见下）
 
 #### SV 全量规模估算（2026-08-27，verilog-2005 全量后的延伸研判）
 
@@ -823,6 +827,36 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   `#(Mode)` 保持 @Expression
 - **核对澄清**：三元 `?:`、过程体 event/localparam、命名块头声明经实测
   **已支持**（TODO 摘要误列）——清单以实测为准
+
+#### S 级修复批次（2026-08-28，interop 门禁拆分 + pratt 吞注释）
+
+- **interop 门禁覆盖宏文件（P1.5）**：`test_svparser_accept_domain_and_interop`
+  拆为两门禁——accept-domain（假拒检测）仅无宏文件（两边预处理器语义不同，
+  不构成对拍样本）；interop（tpc 输出→sv-parser）覆盖全语料（tpc 自渲染
+  文本由 sv-parser 自己的预处理器再处理，宏结构合法即接受，实测 picorv32
+  123KB / ice40 167KB 输出全过）。豁免 2 文件（`_SVPARSER_INTEROP_SKIP`）：
+  tv80（sv-parser 源侧解析失败 3768:7 `else`，对拍不可靠）+ darkriscv
+  （见下缺陷）
+- 🔥 **新缺陷：宏展开路径条件编译还原不完整（darkriscv，interop 暴露）**：
+  darkriscv 源 sv-parser 接受（101 `ifdef` + 177 `define`），tpc 输出被拒
+  （Preprocess 错误）——输出 `ifdef` 仅 89 个，缺 12 个全为**未定义条件**
+  （__INTERRUPT__×3 / __COPROCESSOR__×2 / __EBREAK__×2 / __DBNZ__×2 /
+  __CSR__×1 / MODEL_TECH×1 / SIMULATION×1）。展开-还原路径对未命中分支的
+  嵌套 ifdef 指令行覆盖不全（待查根因，TODO P1.5 已记录）；修复前 darkriscv
+  从 interop 豁免
+- **pratt 前缀吞注释（P1.5 修复）**：pratt 前缀位置把 COMMENT 当续行分隔
+  跳过（`a + /* c */ b` 的 `/* c */`、`- /* c */ a`、`cond ? /* c */ a : b`
+  静默丢失，不进任何通道）。修法：`parse_with_count`/`parse_expression`
+  增 `comment_sink` 回调（语言无关，默认 None），前缀跳注释时记录
+  `{anchor: 注释前 token, text, line, midline: True}` 条目进 parser
+  `_comment_anchors`——渲染后 restore only_midline 回插（注释节点模型 2b-2
+  兜底路径，与 `assign b = /* 嵌入 */ rst_n` 的 inline_after 双轨互补；
+  `=` 等文本锚场景渲染端可直接消费，pratt 表达式内无文本锚场景走回插）。
+  实测 5 形态保留（中缀后/赋值 RHS/一元前缀/三目分支/case 表达式），
+  `a /* c */ + b`（中缀前，外层机制收集）回归守卫
+- 📌 **同行多注释局限（既有边界，非本次引入）**：`cond ? /* 真 */ a :
+  /* 假 */ b` 同行两注释受 restore 单行单插局限（第一条占行后第二条退化
+  行尾）——修复前 pratt 吞注释是直接丢失，属能力边界，记录不修
 
 #### 测试隔离机制（2026-08-28，顺序无关从机制上修复）
 

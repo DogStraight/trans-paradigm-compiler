@@ -180,11 +180,17 @@ def parse_expression(
     unary_prefix_rbp: int,
     atom_parser=None,
     stop_tokens: set | None = None,
+    comment_sink=None,
 ) -> tuple[Node, int]:
     """递归解析表达式，返回 (Node, 新索引)
 
     atom_parser: (tokens, idx) → (node, consumed) | None 原子规则回调
     stop_tokens: set[str | None] 遇到这些 token 类型时停止中缀循环
+    comment_sink: Callable[[dict], None] | None 前缀位置跳过的行内注释
+        回调（条目 {anchor, text, line, midline}，与 parser._comment_anchors
+        同构）——pratt 表达式内的注释（`a + /* c */ b` 的 `/* c */`）被本
+        循环跳过时经此通道记录，渲染后锚点回插防丢（注释节点模型 2b-2
+        兜底路径）。语言无关：引擎不收集，由调用方决定去向。
     """
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
@@ -196,11 +202,30 @@ def parse_expression(
     # 续行、行尾运算符（wrap 折行 `&&` 留行尾）后接操作数等，newline 是续行
     # 分隔符。表达式"结束"仍由中缀循环控制（遇 newline 非运算符自然 break），
     # 前缀跳过不吞掉结束信号——`expr1\n expr2` 在 expr1 的中缀循环即退出。
+    # 注释不纳入 AST 但不得静默丢失（P1.5）：跳过时经 comment_sink 记录，
+    # 锚 = 注释前最后一个 token（与 parse_token 行中注释语义一致，连续注释
+    # 共用同一锚，restore 去重兜底）。无 sink 或锚不可得（前无 token /
+    # 预解析 Node）时保持原行为跳过（Node 前的注释由外层规则收集）。
+    _anchor_tok = tokens[idx - 1] if idx > 0 else None
     while (
         idx < len(tokens)
         and isinstance(tokens[idx], Token)
         and tokens[idx].type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
     ):
+        if (
+            tokens[idx].type == COMMENT_TOKEN_TYPE
+            and comment_sink is not None
+            and isinstance(_anchor_tok, Token)
+            and _anchor_tok.content
+        ):
+            comment_sink(
+                {
+                    "anchor": _anchor_tok.content,
+                    "text": tokens[idx].content,
+                    "line": tokens[idx].line,
+                    "midline": True,
+                }
+            )
         idx += 1
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
@@ -247,6 +272,7 @@ def parse_expression(
                     unary_prefix_rbp,
                     atom_parser,
                     stop_tokens,
+                    comment_sink,
                 )
                 node = Node("UnaryOp", op=op, operand=right, position="prefix")
             else:
@@ -298,6 +324,7 @@ def parse_expression(
                 unary_prefix_rbp,
                 atom_parser,
                 stop_tokens,
+                comment_sink,
             )
             node = Node("BinaryOp", op=op, left=node, right=right_node)
         elif arity == 3:
@@ -317,6 +344,7 @@ def parse_expression(
                 unary_prefix_rbp,
                 atom_parser,
                 stop_tokens,
+                comment_sink,
             )
             if idx >= len(tokens) or tokens[idx].content != second_sym:
                 raise ValueError(f"缺少三元运算符的第二个符号: {second_sym}")
@@ -333,6 +361,7 @@ def parse_expression(
                 unary_prefix_rbp,
                 atom_parser,
                 stop_tokens,
+                comment_sink,
             )
             node = Node(
                 "TernaryOp",
@@ -356,6 +385,7 @@ def parse_with_count(
     operator_defs: list | None = None,
     atom_parser=None,
     stop_tokens: set | None = None,
+    comment_sink=None,
 ) -> tuple[Node | None, int]:
     """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
 
@@ -380,6 +410,7 @@ def parse_with_count(
         unary_prefix_rbp,
         atom_parser,
         stop_tokens,
+        comment_sink,
     )
     if ast is None:
         return None, 0
