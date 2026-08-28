@@ -368,6 +368,35 @@ class LookaheadTable:
         l2_only: list[dict] = [e for e in entries if not e.get("paths")]
         path_entries: list[dict] = [e for e in entries if e.get("paths")]
         seen: list[str] = []
+        # C2 重构（2026-08-28）：消歧决策状态机化——Level 1 扫描（逐 token
+        # 淘汰，循环内提前决策）与循环后决策（按 seen/l2_only/path 存活状态
+        # 分表）分离，替代原单函数 ~110 行的分支串。
+        early = self._level1_scan(
+            tokens, i, n, limit, entries, l2_only, path_entries, seen
+        )
+        if early is not None:
+            return early  # 循环内已决策（fallback L2 / 唯一命中）
+        return self._level1_decide(
+            tokens, i, n, limit, entries, l2_only, path_entries, seen, is_keyword
+        )
+
+    def _level1_scan(
+        self,
+        tokens: list[Token],
+        i: int,
+        n: int,
+        limit: int,
+        entries: list[dict],
+        l2_only: list[dict],
+        path_entries: list[dict],
+        seen: list[str],
+    ) -> list[str] | None:
+        """Level 1 变长前瞻扫描：逐 token 淘汰候选。
+
+        返回 None = 未决策（循环自然结束/break，由 _level1_decide 收尾）；
+        返回 list = 循环内已决策（fallback Level 2 / 唯一 path 命中）。
+        path_entries/seen 就地更新（decide 消费最终存活状态）。
+        """
         pos = i + 1
         while pos < limit:
             if tokens[pos].type in _TRIVIA:
@@ -394,7 +423,7 @@ class LookaheadTable:
                 ):
                     kept.append(entry)
             dropped = [e["name"] for e in path_entries if e not in kept]
-            path_entries = kept
+            path_entries[:] = kept
             self._trace_out(
                 f"  L1 pos={pos} tok={tokens[pos].type} seen={seen} "
                 f"kept={[e['name'] for e in path_entries]}"
@@ -427,7 +456,28 @@ class LookaheadTable:
                 self._trace_out("  L1 -> path exhausted (l2_only remains), break")
                 break  # 只剩需试解析的候选 → 走 Level 2
             pos += 1
-        # 到边界块 / path 候选耗尽
+        return None
+
+    def _level1_decide(
+        self,
+        tokens: list[Token],
+        i: int,
+        n: int,
+        limit: int,
+        entries: list[dict],
+        l2_only: list[dict],
+        path_entries: list[dict],
+        seen: list[str],
+        is_keyword: bool,
+    ) -> list[str] | None:
+        """Level 1 循环后决策（C2 重构）：按 seen/l2_only/path 存活状态分表。
+
+        三段：
+          - 无判别 token（seen 空）→ 裸 id None / keyword L2 allow_partial
+          - 有 l2_only 候选 → L2 试解析**原始** entries（操作数内部 token 可
+            能误淘汰真候选，见下）
+          - 仅 path 候选 → 唯一返回 / 空 [] / 多候选 L2
+        """
         if not seen:
             # 无判别 token 的 B 类裸 id（`id;`）→ 无法确认语句起点，None。
             # A 类（keyword 触发）起始 token 即语句特征——残缺声明（`wire ;`
@@ -435,12 +485,15 @@ class LookaheadTable:
             # 部分匹配返回候选（checker 报精确诊断），不静默漏检。
             if is_keyword:
                 t_limit = min(limit + 1, n)
-                self._trace_out("  L1 -> no discriminant token (keyword), L2 allow_partial")
+                self._trace_out(
+                    "  L1 -> no discriminant token (keyword), L2 allow_partial"
+                )
                 return self._try_parse(
                     tokens, i, entries, t_limit, allow_partial=True
                 )
             self._trace_out("  L1 -> no discriminant token (bare id) -> None")
             return None
+
         # 试解析的匹配上界需含终止符（分号在 limit 位置，多取一个 token 才能
         # 消费句子结束符，否则 TaskDeclOld 的 `;` 超出区间而失败）
         t_limit = min(limit + 1, n)
@@ -464,7 +517,9 @@ class LookaheadTable:
                 allow_partial=is_keyword,
             )
         if len(path_entries) == 1:
-            self._trace_out(f"  L1 -> boundary, single survivor {path_entries[0]['name']}")
+            self._trace_out(
+                f"  L1 -> boundary, single survivor {path_entries[0]['name']}"
+            )
             return [path_entries[0]["name"]]
         if not path_entries:
             self._trace_out("  L1 -> boundary, no survivors -> unrecognized []")
@@ -504,17 +559,15 @@ class LookaheadTable:
                 j += 1
             # probe 模式：本试探的 limit 是人为截断的（句子边界+1），语句区间
             # 在 EOF 处耗尽是正常截断而非残缺——EOF 报错会把截断试探误判为匹配
-            # 失败（合法 for 被报未识别）。试探语境置 True，真实检查不受影响。
+            # 失败（合法 for 被报未识别）。上下文管理器（C1 重构）：退出必恢复
+            # 实例状态（即使匹配内部抛异常），消除裸 try/finally 的污染风险。
             matcher = self._matcher
-            old_probe = matcher._probe_eof
-            matcher._probe_eof = True
             try:
-                j = matcher.match_rule(tokens, j, prods, trial, limit)
+                with matcher.probe_mode():
+                    j = matcher.match_rule(tokens, j, prods, trial, limit)
             except Exception:
                 self._trace_out(f"  L2 {name} EXC (skipped)")
                 continue
-            finally:
-                matcher._probe_eof = old_probe
             errs = len(trial)
             consumed = j - i
             self._trace_out(

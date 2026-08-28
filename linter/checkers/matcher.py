@@ -17,6 +17,8 @@ strict 语境约定：
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from core.define import Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES
 
@@ -117,6 +119,34 @@ class RuleMatcher:
         self._memo_tokens_impl: list | None = None
 
     # ── 对外接口 ────────────────────────────────
+
+    @contextmanager
+    def probe_mode(self):
+        """probe 截断试探模式（C1 重构，2026-08-28）：EOF 不报错 + 绕过缓存。
+
+        lookahead._try_parse 用 `with matcher.probe_mode():` 包裹——上下文
+        退出必恢复实例状态（即使匹配内部抛异常），消除"手动设置/恢复"裸
+        try/finally 的污染风险（实例可变状态跨调用残留会让真实检查误入
+        probe 语义：EOF 不报错、缓存绕过）。
+        """
+        old = self._probe_eof
+        self._probe_eof = True
+        try:
+            yield
+        finally:
+            self._probe_eof = old
+
+    def _memo_for(self, memo_attr: str, tokens_attr: str, tokens: list[Token]) -> dict:
+        """按 token 流身份返回 memo dict（token 流切换即清空）。
+
+        三层 packrat 缓存（_atom_memo/_optional_call_memo/_call_impl_memo）
+        的守卫逻辑统一收口：`_memo_tokens_X is not tokens` → clear + 换身份。
+        直接调用方（单元测试绕过 scan）或跨文件复用都不串文件命中。
+        """
+        if getattr(self, tokens_attr) is not tokens:
+            getattr(self, memo_attr).clear()
+            setattr(self, tokens_attr, tokens)
+        return getattr(self, memo_attr)
 
     def reset_atom_memo(self) -> None:
         """清空 match_atom 位置级缓存（含 token 流身份标记）。
@@ -234,10 +264,7 @@ class RuleMatcher:
         token 流身份守卫：memo 只对同一 tokens 列表有效（不同文件/不同测试
         的 token 流位置 i 含义不同），流切换即清空。
         """
-        if self._memo_tokens is not tokens:
-            self._atom_memo.clear()
-            self._memo_tokens = tokens
-        memo = self._atom_memo
+        memo = self._memo_for("_atom_memo", "_memo_tokens", tokens)
         if i in memo:
             consumed = memo[i]
             return (object(), consumed) if consumed > 0 else (None, 0)
@@ -314,17 +341,17 @@ class RuleMatcher:
             # optional call：silent=True 纯函数（无错误副作用），同语句区间内
             # 同位置同规则的 optional 试探被反复求值——按 (i, name, limit)
             # 记忆化（token 流身份守卫，跨文件/跨测试隔离）。
-            if self._memo_tokens_opt is not tokens:
-                self._optional_call_memo.clear()
-                self._memo_tokens_opt = tokens
+            opt_memo = self._memo_for(
+                "_optional_call_memo", "_memo_tokens_opt", tokens
+            )
             key = (i, name, limit)
-            cached = self._optional_call_memo.get(key)
+            cached = opt_memo.get(key)
             if cached is not None:
                 return cached if cached > i else i
             j = self._match_call_impl(
                 tokens, i, name, errors, limit, strict=False, silent=True
             )
-            self._optional_call_memo[key] = j
+            opt_memo[key] = j
             return j if j > i else i
         return self._match_call_impl(
             tokens, i, name, errors, limit, strict, silent=False
@@ -356,11 +383,9 @@ class RuleMatcher:
             return self._match_call_impl_raw(
                 tokens, i, name, errors, limit, strict, silent
             )
-        if self._memo_tokens_impl is not tokens:
-            self._call_impl_memo.clear()
-            self._memo_tokens_impl = tokens
+        impl_memo = self._memo_for("_call_impl_memo", "_memo_tokens_impl", tokens)
         key = (i, name, limit, strict, silent)
-        cached = self._call_impl_memo.get(key)
+        cached = impl_memo.get(key)
         if cached is not None:
             j, errs = cached
             if errs:
@@ -370,7 +395,7 @@ class RuleMatcher:
         j = self._match_call_impl_raw(
             tokens, i, name, errors, limit, strict, silent
         )
-        self._call_impl_memo[key] = (j, errors[before:])
+        impl_memo[key] = (j, errors[before:])
         return j
 
     def _match_call_impl_raw(
