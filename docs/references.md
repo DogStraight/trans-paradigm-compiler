@@ -518,6 +518,16 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 
 **落地路径小结**：第一步（规则 ID + JSON + suppress）≈ 一个 `tpc check --format json` + 注释豁免机制，纯增量、零外部依赖，即可支撑"模型生成 v → tpc-check 检查"的脚本化闭环；第二步（规则表配置化）与 P1.9 naming_check 合并推进。
 
+#### 诊断链多维对标结论（2026-08-28 定稿，0.1.1 第二目标）
+
+- **svlint 是对齐/参照工具，不是依赖**——主路径自研（诊断链三层面 + 跨文件易错点），svlint 提供规则工程化蓝图与规则清单，不引入运行时依赖（与 P2.6"封装外部工具做差分基线即可"判断一致）
+- **"最好的对标"分维度**，无单一最佳：
+  - 🔥 **规则工程化形态** → svlint：SyntaxRule 接口（节点监听 + 配置注入）、命名规则族 30 类按 kind 分发、suppress 注释对、插件——**自定义检查层/名称检查的组织形态蓝本**
+  - 🔥 **语义级易错点** → Verilator `--lint-only`：W 码 200+（WIDTH/LATCH/MULTIDRIVEN/UNOPTFLAT）——**语义层 pass 的易错点清单与判定方向**（svlint 无语义层，这块给不了）
+  - 💡 **规则集稳定/文档** → verible-verilog-lint：rule-sets 配置 + `--print_rule_descriptions` + 稳定规则名——**规则 ID 命名空间与文档形态参照**
+- **映射到诊断链三层面**：语法层 = 现 linter（自研，无对标）；语义层 = semantic_check 插槽 + Verilator W 码清单参照；自定义层 = capabilities + 名称检查示例（svlint naming 族蓝本）
+- **落地节奏**：结论先行，实现逐步推进（名称检查示例 → 规则表 schema → 语义易错点规则）；svlint/verible 规则清单按需移植，Verilator 语义检查作路线观察（类型推断超当前定位，README 边界已声明）
+
 ### svlint（Rust）— 规则工程化闭环范本（2026-08 深调研，dalance 作品链第二站，agent-reach + 源码镜像）
 
 - 本地源码镜像：`E:\research\svlint`（浅 clone，v0.9.5）；调研日期 2026-08-26
