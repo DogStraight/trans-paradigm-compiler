@@ -116,3 +116,13 @@
       合并）；L3 未修——invert 引用的 role 定义在后时 _ref_callbacks 尚未构建
       （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
       已记录。
+
+## P1.10 跨文件静态工具调研 → 检查集合扩展（2026-08-29 登记）
+
+> 方向：0.1.1 目标 2 检查链（NC001-NC011 命名族 + 跨文件 handler 兜底）已闭环；
+> 下一批检查项对照经典跨文件静态工具（Verilator --lint-only / Spyglass /
+> Veryl check / svlint / Verible 等）的检查集合，重点吸收跨文件类检查；
+> 工具调研结论落 docs/references.md，本条目只留待办方向。
+
+- [ ] 经典跨文件静态工具调研：检查项清单 → 与 tpc 声明式规则模型
+      （kind 分发 + handler 兜底）映射评估 → 立项补齐检查规则族
