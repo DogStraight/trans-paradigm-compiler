@@ -133,15 +133,13 @@
 > 差异化能力。
 > 已落地：机制层（post-pass 钩子 + 统一报告管道 + related 链）、跨文件联动
 > （inst_check：W101/W102/W103/WC001）、名称调用检查（check_name_call：W002）、
-> --json/suppress。剩余（对应 semantic_checks.md 状态行的 P3 声明式 schema /
-> P4 用户配置层 + 诊断链三层面收口）：
+> --json/suppress。**L1 声明式规则表 + 命名约定检查已闭环**（2026-08-28，
+> P3：check_registry.py 加载校验 + checks.py 执行器 + name_check 插件
+> NC001-NC010；规则=数据，kind 分发 + pattern 判定 + handler 兜底）。
+> 剩余（对应 semantic_checks.md 状态行的 P4 用户配置层 + 诊断链三层面收口）：
 
-- [ ] **TOML 规则表（L1 声明层 + P4 用户配置层）**：[[checks]] schema
-      （id/category/severity/scope/message/handler）目前只在文档定义，实际
-      规则是 postpasses 脚本（inst_check）——"规则 = 数据"待落地，tpc.toml
-      [checks] 用户覆盖一并
-- [ ] **命名约定检查（原 P1.7，诊断链自定义层首个示例）**：Sigasi/svlint 式
-      pattern 表按 kind 分发（30 类 kind 映射：module→MODULE_NAME、wire/reg→
-      NET_NAME 等）+ 用户可配 pattern/match——svlint naming 族（~80 配置字段
-      扁平注入 + 规则代码只写判定）为直接蓝本（注意 _name_check.py 是名称调用
-      检查 W002，非命名约定）
+- [ ] **P4 用户配置层**：`tpc.toml [checks]`（enabled/overrides/per_file 豁免
+      + 统一抑制收口，semantic_checks.md §4 设计已定）——L1 声明层已就绪，
+      用户"配置优先"覆盖（规则选择/severity 提升/TB 豁免）待接
+- [ ] **注释驱动测试框架**（P3 收尾）：样例源文件内 `// ruleid: NC001` /
+      `// ok: NC001` 注释断言，引擎校验命中集合（Semgrep 式，零代码测试）

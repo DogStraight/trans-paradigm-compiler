@@ -108,6 +108,13 @@ primitives = [
     "attach_invert_map",
 ]
 
+# role 独立子作用域：master/slave 的端口声明（AnsiInputDecl 等）是 role
+# 成员，各 role 作用域隔离——同名端口（master/slave 都有 clk）不冲突
+# （2026-08-28：_extract_names 修复后端口符号开始收集，暴露此缺陷）。
+[TypeRole.analyzer.scope]
+kind = "role"
+name_attr = "role_name"
+
 [TypeRole.analyzer.symbol]
 kind = "role"
 name_attr = "role_name"

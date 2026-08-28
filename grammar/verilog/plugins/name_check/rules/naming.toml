@@ -1,0 +1,113 @@
+# ============================================================================
+# name_check 插件 — 命名约定检查（L1 声明式规则，第一个自定义示例）
+# ============================================================================
+# 诊断链自定义层（用户自由度）的参考实现：规则=数据——本文件是纯声明式
+# [[checks]] 规则表（无 handler 脚本），引擎通用执行器按符号 kind 分发 +
+# pattern 正则判定（analyzer/checks.py + core/check_registry.py）。
+#
+# 蓝本：svlint naming 规则族（~30 类 kind → 正则/前缀默认值，配置注入、
+# 规则代码只写判定）——见 docs/references.md「svlint 诊断链深度调研」。
+#
+# 默认 pattern 取 svlint 风格宽松默认（小写下划线），用户可在 tpc.toml
+# [checks] overrides 覆盖（P4 用户配置层）。kind 键对应语法 TOML
+# [*.analyzer.symbol] kind 声明（module/port/wire/reg/parameter/
+# localparam/genvar/function/task/module_instance）。
+# ============================================================================
+
+# ── 模块 / 实例命名（小写下划线） ──────────────────────────────────
+
+[[checks]]
+id = "NC001"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "module 名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "module"
+pattern = "^[a-z][a-z0-9_]*$"
+
+[[checks]]
+id = "NC002"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "实例名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "module_instance"
+pattern = "^[a-z][a-z0-9_]*$"
+
+# ── 网络 / 变量命名（小写下划线） ──────────────────────────────────
+
+[[checks]]
+id = "NC003"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "网络名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "wire"
+pattern = "^[a-z][a-z0-9_]*$"
+
+[[checks]]
+id = "NC004"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "寄存器名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "reg"
+pattern = "^[a-z][a-z0-9_]*$"
+
+[[checks]]
+id = "NC005"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "端口名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "port"
+pattern = "^[a-z][a-z0-9_]*$"
+
+# ── 参数 / 常量命名（大写下划线） ──────────────────────────────────
+
+[[checks]]
+id = "NC006"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "参数 '{name}' 不符合大写下划线约定（{pattern}）"
+kind = "parameter"
+pattern = "^[A-Z][A-Z0-9_]*$"
+
+[[checks]]
+id = "NC007"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "局部参数 '{name}' 不符合大写下划线约定（{pattern}）"
+kind = "localparam"
+pattern = "^[A-Z][A-Z0-9_]*$"
+
+[[checks]]
+id = "NC008"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "genvar '{name}' 不符合大写下划线约定（{pattern}）"
+kind = "genvar"
+pattern = "^[A-Z][A-Z0-9_]*$"
+
+# ── 子程序命名（小写下划线） ──────────────────────────────────────
+
+[[checks]]
+id = "NC009"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "函数名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "function"
+pattern = "^[a-z][a-z0-9_]*$"
+
+[[checks]]
+id = "NC010"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "任务名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "task"
+pattern = "^[a-z][a-z0-9_]*$"

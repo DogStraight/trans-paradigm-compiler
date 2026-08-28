@@ -42,9 +42,11 @@ is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$2.items"
 
-[BodyInputDecl.analyzer.symbol]
-kind = "port"
-name_attr = "items.name"
+# 非 ANSI 端口方向声明（output Q;）不声明符号：方向是端口属性，信号的
+# 类型符号由 body 的 RegDecl/WireDecl 声明（同一信号只一个权威符号）。
+# 此前 Body*Decl 声明 kind=port 符号，与 RegDecl 的 kind=reg 符号同名 →
+# E001 重复声明（tv80 非 ANSI 风格真实语料，2026-08-28 _extract_names
+# 修复后暴露）。符号收集的语义对齐：方向声明 = 属性，类型声明 = 符号。
 
 [BodyInputDecl.renderer.layout]
 line = [
@@ -88,10 +90,6 @@ is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$2.items"
 
-[BodyOutputDecl.analyzer.symbol]
-kind = "port"
-name_attr = "items.name"
-
 [BodyOutputDecl.renderer.layout]
 line = [
     "output",
@@ -133,10 +131,6 @@ port_type = "$2.port_type"
 is_signed = "$2.is_signed"
 packed_range = "$2.packed_range"
 items = "$2.items"
-
-[BodyInoutDecl.analyzer.symbol]
-kind = "port"
-name_attr = "items.name"
 
 [BodyInoutDecl.renderer.layout]
 line = [

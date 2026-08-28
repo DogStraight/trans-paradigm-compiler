@@ -59,6 +59,11 @@ def snapshot() -> dict:
         "component_keys": set(plugin_loader._loaded_components),
         "transform_slot_keys": set(plugin_loader._transform_slots),
         "primitive_order": list(plugin_loader._PRIMITIVE_ORDER),
+        # 声明式检查规则表（core/check_registry._CHECK_RULES）：纯数据，
+        # 快照键集合即可——restore 移除污染新增键（跨语言测试残留）。
+        "check_rule_keys": set(
+            __import__("core.check_registry", fromlist=["_CHECK_RULES"])._CHECK_RULES
+        ),
     }
 
 
@@ -95,6 +100,13 @@ def restore(snap: dict) -> None:
         if k not in snap["transform_slot_keys"]:
             del plugin_loader._transform_slots[k]
     plugin_loader._PRIMITIVE_ORDER[:] = snap["primitive_order"]
+
+    # 声明式检查规则表：移除基线后新增的键（规则表是静态数据，基线键
+    # 内容保留——测试不改其内部，只防跨语言残留）
+    _check_reg = __import__("core.check_registry", fromlist=["_CHECK_RULES"])
+    for k in list(_check_reg._CHECK_RULES):
+        if k not in snap["check_rule_keys"]:
+            del _check_reg._CHECK_RULES[k]
 
     # 按需重建的键控共享缓存：清空即可（不深拷贝大组件对象）
     _PIPELINE_SHARED.clear()

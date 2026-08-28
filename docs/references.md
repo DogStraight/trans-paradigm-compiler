@@ -608,6 +608,26 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - **可实现性**：名称检查（P1.9 命名约定）直接参照 svlint naming 族——配置扁平化
     （pattern 表）+ kind 分发 + 判定分离，规则代码 ~20 行/条；语义 pass 沿用插槽架构
     补"节点事件遍历"（analyzer 已有作用域链遍历基础）
+  - ✅ **P3 声明式规则表已落地（2026-08-28）**：svlint"配置注入 + 判定分离"实证的
+    tpc 落地——`[[checks]]` 规则=数据（插件 `rules/*.toml`），引擎零语言知识：
+    `core/check_registry.py`（加载/校验 fail-fast：id 重复/severity 非法/pattern
+    非法正则/kind 缺失/handler 缺失直接报错）+ `analyzer/checks.py::check_rules_pass`
+    （遍历后按符号 kind 分发，re.match pattern 判定，message {var} 插值，L2 handler
+    脚本 `file.py:fn` 兜底）。第一个自定义示例 = name_check 插件 NC001-NC010
+    （module/instance/wire/reg/port/parameter/localparam/genvar/function/task 十族，
+    小写 vs 大写下划线 pattern）。连带修复 4 项：① 语义层符号收集对列表容器节点
+    （DeclaratorList 包装的 `items.name` 形态）失效的隐性缺陷（_symbol.py 兜底
+    展开 Node.items 列表）——此前所有 DeclaratorList 声明（端口/reg/wire/参数）
+    的符号从未进表，语义层符号收集形同虚设；② 端口符号开始收集后暴露 typed_ports
+    缺 role 子作用域（master/slave 同名端口在 type 作用域冲突，TypeRole 补独立
+    scope）；③ role scope 加入后 flatten_ports 原语只遍历 current_scope 子树漏掉
+    type 层符号的 _ref_callbacks（invert 展开残留嵌套 → 变换器过滤空行全丢），
+    改从根遍历；④ 非 ANSI 端口方向声明（`output Q;`）与类型声明（`reg Q;`）是
+    同一信号两部分——Body*Decl 不再声明符号（方向=属性，类型=符号权威），tv80
+    真实语料 E001 清零；⑤ FileManager.load_all_toml 跳过插件 `rules/` 子目录
+    （[[checks]] 是 check_registry 数据非语法规则，ext_dirs 直指 plugins 时
+    _resolve_peek 崩）+ _resolve_peek 非 dict 防御。tpc check 端到端出 NC 诊断
+    （warning 级 exit 0，区间豁免注释同样生效）。
 
 - **与 tpc linter 的差异**（各有取舍，非优劣）：
 

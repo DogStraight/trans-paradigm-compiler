@@ -228,6 +228,10 @@ def compute_follows(
 
         def _t(msg: str) -> None:
             print(f"[follow-trace] {msg}", file=_sys.stderr)
+    else:
+
+        def _t(msg: str) -> None:  # pyright: ignore[reportUnusedFunction] — trace 关闭时的兜底定义
+            del msg  # trace 关闭：调用点在 if trace 内不执行，兜底空操作
 
     names = set(rules)
     # 块规则用内容部分（block_prods）建模——block_start/block_end 由块路径

@@ -305,6 +305,14 @@ class FileManager:
             fpath = os.path.join(dir_path, fname)
             # 子目录递归
             if os.path.isdir(fpath) and "." not in fname:
+                # 插件声明式检查规则表目录（rules/）：[[checks]] 数组是
+                # check_registry 数据（core/check_registry.py 加载），非语法
+                # 规则——ext_dirs 直接指向 plugins/ 时（如 LinterScanner
+                # ext_dirs=["grammar/verilog/plugins"]）递归扫到会把顶层
+                # checks list 当规则表值加载（_resolve_peek 崩，2026-08-28
+                # name_check 插件新增后暴露）。
+                if fname == "rules":
+                    continue
                 sub = cls.load_all_toml(
                     os.path.join(dir_relative_path, fname).replace("\\", "/")
                 )
@@ -647,6 +655,10 @@ class GrammarRulesRegister:
 
         for rule_name, rule_dict in rules_dict.items():
             if rule_name == "file_rules":
+                continue
+            if not isinstance(rule_dict, dict):
+                # 非 dict 规则值（如顶层 list 数据被误并入——规则表/协议
+                # 数据等）跳过，不参与 peek 解析（防御，2026-08-28）
                 continue
             parser = rule_dict.get("parser")
             if not isinstance(parser, dict):

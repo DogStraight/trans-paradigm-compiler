@@ -326,7 +326,7 @@ class ProjectChecker:
         from analyzer import AnalysisTraversal
 
         shared = self._ensure_shared()
-        analyzer = AnalysisTraversal(shared["rules"])
+        analyzer = AnalysisTraversal(shared["rules"], rules_dir=self._rules_dir)
         # 跨文件上下文注入（analyze() 重建 context 后合并进 extra）
         analyzer._external_extra["module_index"] = self._module_index
         analyzer._external_extra["inst_sites"] = fr.inst_sites

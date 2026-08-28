@@ -36,8 +36,15 @@ class AnalysisTraversal:
     依次执行注册的分析器原语。
     """
 
-    def __init__(self, grammar_rules: dict[str, Any]):
+    def __init__(
+        self,
+        grammar_rules: dict[str, Any],
+        rules_dir: str | None = None,
+    ):
         self._rules = grammar_rules
+        # 语言包目录（可选）：声明式检查规则表（[[checks]]）按语言包插件
+        # 目录定位（grammar/<lang>/plugins/rules/*.toml）。None = 默认包。
+        self._rules_dir = rules_dir
         self._primitive_order = self._load_primitive_order()
         self._root_scope: Scope | None = None
         self._current_scope: Scope | None = None
@@ -90,6 +97,11 @@ class AnalysisTraversal:
         状态（赋值链、模块实例化联动等），向 context.report 报诊断。
         跨文件信息（模块索引等）由调用方（ProjectChecker）注入
         context.extra。
+
+        声明式规则（L1 [[checks]]，规则=数据）紧随插件 postpass 执行：
+        对遍历收集的符号表按 kind 分发 pattern/handler 判定——与插件
+        postpass 同形态，但规则行为全在语言包 TOML（core/check_registry），
+        引擎只做通用执行（analyzer/checks.py）。
         """
         try:
             from core.plugin_loader import get_analyzer_postpasses
@@ -97,6 +109,10 @@ class AnalysisTraversal:
             return
         for fn in get_analyzer_postpasses():
             fn(self, self._context)
+        # 声明式规则执行器（无规则表时零开销返回）
+        from analyzer.checks import check_rules_pass
+
+        check_rules_pass(self, self._context)
 
     def _resolve_pending(self) -> None:
         """遍历后统一核对暂存的名称引用。

@@ -4,8 +4,8 @@
 > `decisions/0005-cross-file-semantic-check.md`（跨文件扩展 + tpc check）。
 > 本文件是"怎么拼"。
 > 前置调研：`references/static_checkers_survey.md`。
-> 状态：**P1 机制层 + P2 窄版 + 跨文件联动已落地**（2026-08-25）；
-> P3 声明式 schema / P4 用户配置层待实现。
+> 状态：**P1 机制层 + P2 窄版 + 跨文件联动 + P3 声明式规则表已落地**
+> （2026-08-25 P1/P2/P2.5；2026-08-28 P3）；P4 用户配置层待实现。
 
 ## 1. 定位与边界
 
@@ -33,29 +33,48 @@ analyzer 遍历（原语按 [RuleName.analyzer] 触发）       ← 已有（che
                     inst_check 插件：W101/W102/W103/WC001）
 ```
 
-## 3. 规则声明 schema（L1+L2 合一）
+## 3. 规则声明 schema（L1+L2 合一）✅ 已落地（P3，2026-08-28）
+
+规则表 = 语言包插件目录 `rules/*.toml`（`[[checks]]` 数组，规则=数据），
+引擎通用执行器（`core/check_registry.py` 加载校验 + `analyzer/checks.py`
+遍历后按符号 kind 分发判定）。第一个自定义示例：
+`grammar/verilog/plugins/name_check/rules/naming.toml`（NC001-NC010，
+svlint naming 族蓝本）。
 
 ```toml
-# grammar/verilog/plugins/width_check/rules/width_literal.toml
+# grammar/verilog/plugins/name_check/rules/naming.toml
 [[checks]]
-id = "WC001"
-category = "width"          # 类别前缀 = 分类（clang-tidy/Ruff 共识）
-severity = "warning"        # error / warning / info
-scope = ["rtl", "tb"]       # 作用域（rtl/tb/模块名/文件 glob，后续细化）
-message = "literal {size}'h{value} feeds parameterized port {port} (width {width_expr}); use symbolic width"
-handler = "_width_check.py:check_width_literal"   # L2 脚本实现；纯声明式规则可缺省，靠 pattern 匹配
+id = "NC001"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+kind = "module"                    # 分发键：符号种类（module/wire/reg/port/…）
+message = "module 名 '{name}' 不符合小写下划线约定（{pattern}）"
+pattern = "^[a-z][a-z0-9_]*$"      # 声明式判定：正则匹配符号名
+# handler = "_h.py:check_no_t_suffix"  # L2 脚本兜底（可选，复杂判定）
 ```
 
 字段说明：
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `id` | str | 全局唯一（前缀=分类，如 WC=width check） |
+| `id` | str | 全局唯一（前缀=分类，如 NC=naming check） |
 | `category` | str | 分类：width / naming / race / cdc / style… |
 | `severity` | enum | error / warning / info |
-| `scope` | list | 适用作用域；与用户配置 per_file 叠加 |
-| `message` | str | 模板，`{var}` 插值（对应 ESLint meta.messages / Semgrep $VAR） |
-| `handler` | str | 脚本层实现引用 `模块:函数`；缺省 = 纯声明式（后期支持 pattern 字段） |
+| `scope` | list | 适用作用域；与用户配置 per_file 叠加（P4） |
+| `kind` | str | **分发键**：符号种类（module/wire/reg/port/parameter/function/task/module_instance/genvar…，对应语法 TOML `[*.analyzer.symbol] kind`） |
+| `message` | str | 模板，`{var}` 插值（name/kind/pattern/id/severity） |
+| `pattern` | str | 声明式判定：正则匹配符号名；缺省 = 仅靠 kind 分发（handler 兜底） |
+| `handler` | str | L2 脚本实现引用 `模块:函数`（`file.py:fn`，fn(symbol, rule, context) -> str\|None）；缺省 = 纯声明式 |
+
+执行器（`analyzer/checks.py::check_rules_pass`，零语言知识）：
+遍历后对 `analyzer.all_symbols` 按 `sym.kind` 查规则表（kind 分发），
+`re.match(pattern, sym.name)` 判定；不匹配 → `context.report(message
+插值, code=id, level=severity, node=sym.decl_node)`。handler 兜底：
+pattern 缺省或判定不足时调用脚本（返回 str = 诊断消息，None = 通过）。
+规则表加载（`core/check_registry.py`）fail-fast：id 重复 / severity
+非法 / pattern 非法正则 / kind 缺失 / handler 模块缺失 → 直接报错
+（ADR-0003）。
 
 ## 4. 用户配置层（`tpc.toml [checks]`）
 
@@ -158,12 +177,15 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 | P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 钩子/related **已实现**（2026-08-25）；统一抑制未做（并入 P4） |
 | P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见 ADR-0005 inst_check） |
 | P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（ADR-0005：W101/W102/W103/WC001 + `tpc check` CLI） |
-| P3 | L1 声明式 schema + 注释驱动测试框架 | 待实现 |
+| P3 | L1 声明式 schema + 注释驱动测试框架 | **声明式 schema 已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据）；注释驱动测试框架未做（并入 P4 后） |
 | P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | 待实现 |
 
-> Impl: analyzer/checker.py::ProjectChecker / analyzer/traversal.py /
+> Impl: analyzer/checks.py（声明式执行器）/ core/check_registry.py（规则表加载校验）/
+> analyzer/checker.py::ProjectChecker / analyzer/traversal.py /
 > analyzer/diagnostic.py / core/plugin_loader.py / parser/_production.py /
-> grammar/verilog/plugins/inst_check/ / main.py::_cmd_check
-> Test: tests/engine/analyzer/test_checker.py / test_diagnostic_related.py
+> grammar/verilog/plugins/inst_check/ / grammar/verilog/plugins/name_check/ /
+> main.py::_cmd_check
+> Test: tests/engine/analyzer/test_checker.py / test_diagnostic_related.py /
+> tests/languages/verilog/test_name_convention.py
 > CLI 验收：`tpc check <file> [--include DIR] [--json]`——语法阶段
 > （stage=syntax）+ 语义阶段（stage=semantic），exit 1 按 error 级。

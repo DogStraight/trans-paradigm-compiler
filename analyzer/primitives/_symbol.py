@@ -178,8 +178,17 @@ def _extract_names(analyzer, node: Node, name_attr: str) -> list[str]:
         if name:
             names.append(name)
     if not names:
-        # 兜底：属性指向列表，从各元素提取名称
+        # 兜底：属性指向列表，从各元素提取名称。
+        # 支持两种容器形态：
+        #   1. 裸 list（node.items = [Node, ...]）
+        #   2. 列表容器节点（node.items = DeclaratorList，其 items 字段是
+        #      list——Declarator 等声明列表在 parser 端是 Node 包装，
+        #      name_attr = "items.name" 的 items 实际是容器 Node）
         val = getattr(node, name_attr.split(".")[0], None)
+        if isinstance(val, Node):
+            container_items = getattr(val, "items", None)
+            if isinstance(container_items, list):
+                val = container_items
         if isinstance(val, list):
             fallback_attrs = ["param_name", "name"]
             for item in val:

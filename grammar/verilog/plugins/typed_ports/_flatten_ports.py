@@ -33,7 +33,15 @@ def flatten_ports(analyzer, node: Node, config: dict) -> None:
     if scope is None:
         return
 
-    _flatten_all_callbacks(scope, dir_spec, name_spec)
+    # 拍平范围 = 整棵作用域树（从根出发），不限于 current_scope 子树：
+    # role 独立子作用域（2026-08-28 加入）后，slave 符号声明在 type 父作用域，
+    # current_scope 已是 role 子作用域——只遍历子树会漏掉 type 层符号的
+    # _ref_callbacks（invert 展开残留嵌套结构，变换器 _merge_to_flat 过滤空行
+    # 全丢）。符号表本就全量可查，从根遍历天然覆盖所有 role。
+    root = scope
+    while root.parent is not None:
+        root = root.parent
+    _flatten_all_callbacks(root, dir_spec, name_spec)
 
 
 def _flatten_all_callbacks(scope, dir_spec: str, name_spec: str) -> None:

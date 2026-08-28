@@ -1,0 +1,10 @@
+# name_check 插件 — 命名约定检查（L1 声明式规则，第一个自定义示例）
+#
+# 规则=数据：本插件无 handler 脚本、无语法规则、无 postpass——全部检查
+# 行为声明在 rules/naming.toml（[[checks]] 数组：kind 分发 + pattern 正则
+# + message 模板）。引擎通用执行器（analyzer/checks.py + core/check_registry.py）
+# 在 analyzer 遍历后按符号 kind 分发判定，零语言知识进代码。
+#
+# 声明了 [analyzer] postpasses 空列表仅为占位说明：实际执行由框架
+# AnalysisTraversal._run_postpasses 内置调用声明式执行器（无需本插件
+# 注册 postpass）。插件目录存在即被 check_registry 扫描 rules/*.toml。
