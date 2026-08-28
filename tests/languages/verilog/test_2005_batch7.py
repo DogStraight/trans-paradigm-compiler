@@ -82,6 +82,26 @@ def test_case_equality_precedence():
         assert r["idempotent"]
 
 
+def test_case_inequality_survives_column_align():
+    """formatter 列对齐不拆 `!==`/`!=`（2026-08-28 审查发现：对齐前被拆成
+    `d ! == e`，重组后运算符语义破坏；column_align 已并入前导 `!`）。"""
+    src = """module m;
+    wire a = b !== c;
+    wire long_name = d !== e;
+    wire x = f != g;
+    wire y = h === i;
+endmodule
+"""
+    r = _run(src)
+    assert r["success"], r.get("error", "")
+    # 列对齐后 wire 与名字间空格可变（对齐填充），运算符本体断言用去空白比较
+    flat = "".join(r["output"].split())
+    for expect in ("wirea=b!==c;", "wirelong_name=d!==e;", "wirex=f!=g;", "wirey=h===i;"):
+        assert expect in flat, f"缺少 {expect!r}，输出: {r['output']}"
+    assert "! == " not in r["output"]
+    assert r["idempotent"]
+
+
 # ── 多目标连续赋值（A.6.1 list_of_net_assignments）─────────────────────
 
 

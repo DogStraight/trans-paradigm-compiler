@@ -106,11 +106,27 @@ def _run_file(name: str, predefined: dict[str, str]):
     return result, source, result.get("output", ""), log
 
 
+@pytest.fixture(scope="module")
+def corpus_results():
+    """module 级结果缓存：每个文件只跑一次全管线，各 parametrize 测试共享
+
+    （修复前 9 文件 × 4 测试 = 36 次全管线 ~100s；ice40 154KB / simcells
+    91KB 全管线昂贵）。
+    """
+    cache: dict[str, tuple] = {}
+
+    def _get(name: str):
+        if name not in cache:
+            cache[name] = _run_file(name, _MANIFEST[name][2])
+        return cache[name]
+
+    return _get
+
+
 @pytest.mark.parametrize("name", sorted(_MANIFEST))
-def test_file_parses_clean(name: str):
+def test_file_parses_clean(name: str, corpus_results):
     """全量管线 success + lint 零诊断 + 无占位符残留 + 幂等。"""
-    _, min_modules, predefined = _MANIFEST[name]
-    result, source, output, log = _run_file(name, predefined)
+    result, source, output, log = corpus_results(name)
     assert result["success"], (
         f"{name}: pipeline failed: {result.get('error', '')}\n{log[:2000]}"
     )
@@ -120,10 +136,10 @@ def test_file_parses_clean(name: str):
 
 
 @pytest.mark.parametrize("name", sorted(_MANIFEST))
-def test_module_count_intact(name: str):
+def test_module_count_intact(name: str, corpus_results):
     """module 数不低于 manifest 下限（防静默截断/占位符吞模块）。"""
-    _, min_modules, predefined = _MANIFEST[name]
-    result, _, output, _ = _run_file(name, predefined)
+    result, _, output, _ = corpus_results(name)
+    min_modules = _MANIFEST[name][1]
     count = output.count("module ")
     assert count >= min_modules, (
         f"{name}: 产出 {count} 个 module，低于下限 {min_modules}"
@@ -131,10 +147,9 @@ def test_module_count_intact(name: str):
 
 
 @pytest.mark.parametrize("name", sorted(_MANIFEST))
-def test_fidelity_above_threshold(name: str):
+def test_fidelity_above_threshold(name: str, corpus_results):
     """token 级保真度不低于阈值（格式化差异可容忍，内容丢失不可）。"""
-    _, min_modules, predefined = _MANIFEST[name]
-    result, source, output, _ = _run_file(name, predefined)
+    result, source, output, _ = corpus_results(name)
     ref_flat = _strip_all(source)
     out_flat = _strip_all(output)
     ratio = difflib.SequenceMatcher(None, ref_flat, out_flat).ratio()
@@ -151,16 +166,14 @@ def _sv_parser_accepts(path: str) -> bool:
 
 @pytest.mark.skipif(SV_PARSER is None, reason="parse_sv 二进制未找到（tests/differential/.tools/sv-parser/）")
 @pytest.mark.parametrize("name", sorted(_MANIFEST))
-def test_svparser_accept_domain_and_interop(name: str):
+def test_svparser_accept_domain_and_interop(name: str, corpus_results):
     """sv-parser 差分门禁（仅无宏文件）：假拒检测 + 互操作。
 
     sv-parser 是 IEEE 1800-2017 全量；无宏的 2005 语料被 sv-parser 接受时，
     tpc 必须接受（假拒 = 真缺陷）；tpc 渲染输出必须被 sv-parser 接受。
     宏文件两边预处理器语义不同，不构成对拍样本（同 run_differential_svparser）。
     """
-    _, min_modules, predefined = _MANIFEST[name]
-    with open(os.path.join(_REF_DIR, name), encoding="utf-8") as f:
-        source = f.read()
+    result, source, output, _ = corpus_results(name)
     if _has_macro(source):
         pytest.skip(f"{name}: 含宏指令，不构成对拍样本")
 
@@ -168,7 +181,6 @@ def test_svparser_accept_domain_and_interop(name: str):
         f"{name}: sv-parser 拒收（语料问题，非 tpc 缺陷——先核对语料）"
     )
 
-    result, _, output, _ = _run_file(name, predefined)
     assert result["success"], f"{name}: tpc 管线失败（假拒嫌疑）"
     tmp = os.path.join(_REF_DIR, name + ".tpc_out.v")
     try:

@@ -84,11 +84,16 @@ def _tokenize_bracket_aware(line: str) -> list[str]:
             buf.append(ch)
         elif ch == "=" and in_bracket == 0:
             # 连续等号（`==`/`===`）是单个运算符，不拆成多个 `=` token
-            # （防 `a == b` 被拆成 `a = = b`，重组后破坏运算符语义）
+            # （防 `a == b` 被拆成 `a = = b`，重组后破坏运算符语义）；
+            # `!=`/`!==` 同理——前导 `!` 已进 buf，弹出并入等号 token
+            # （防 `d !== e` 被拆成 `d ! == e`，2026-08-28 真实语料审查发现）。
             j = i
             while j < n and stripped[j] == "=":
                 j += 1
             eq = stripped[i:j]
+            if buf and buf[-1] == "!":
+                buf.pop()
+                eq = "!" + eq
             if buf:
                 tokens.append("".join(buf))
                 buf = []
