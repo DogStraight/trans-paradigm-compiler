@@ -69,9 +69,17 @@
 > A.6.9 裸任务调用可解析）。真实语料扩至 9 文件（+UART×3/simcells/
 > ice40_cells_sim，归属 CREDITS.md），回归基线 test_real_corpus.py
 > （parse/format/lint/幂等/保真/差分门禁，module 数下限防静默截断）。
-> 剩余核对缺口见 references.md 审计清单（过程体 event/localparam 声明、
-> #(min:typ:max)、命名块头声明、层次化 id、三元 ?: 等）+ 真实语料前沿
-> （端口默认值宏 body、yosys `$cell` 内部名，批次 7 候选）。
+> 缺口批次（2026-08-28，A 类 3 缺口，test_2005_batch8.py）：层次化 id
+> 表达式位（A.9.3 hierarchical_identifier，HierExpr 原子：a.b / a.b.c /
+> a.b[3:0]，typed_ports 端口点语法共存验证）+ 无括号系统任务语句
+> （A.6.2/A.9 sys_task_enable，SysTaskStmt 括号整体可选：$finish; / $stop;）
+> + 参数覆盖 mintypmax（A.4.3/A.8.2，NamedParamOverride 值位改
+> MintypmaxExpr：#(.P(1:2:3))）。
+> 核对澄清（2026-08-28 实测）：三元 `?:`、过程体 event/localparam 声明、
+> 命名块头声明**已支持**（此前 TODO 摘要误列）；`a[0].b` / `a.b[0].c`
+> 交错形态（成员在下标后）超 2005 hierarchical_identifier，暂不支持（少见）。
+> 剩余核对缺口 + 真实语料前沿（端口默认值宏 body、yosys `$cell` 内部名）
+> 见 references.md。
 
 ### P1.5 已知缺陷收尾
 

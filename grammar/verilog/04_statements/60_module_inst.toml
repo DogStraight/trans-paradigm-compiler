@@ -107,14 +107,16 @@ items = "items"
 
 
 # ── NamedParamOverride — 命名参数覆盖 ──
-# 格式: .param_name(expr)
+# 格式: .param_name(expr) / .param_name(1:2:3)
+# 值用 MintypmaxExpr（nettypes 插件；expr [ : expr : expr ]，单值兼容）——
+# A.8.2 mintypmax_expression，`#(.P(1:2:3))` 形态（2026-08-28 A 类缺口）。
 
 [NamedParamOverride.parser]
 production = [
     "symbol.base.dot",
     "@Identifier",
     "bracket.l_parentheses",
-    "@Expression",
+    "@MintypmaxExpr",
     "bracket.r_parentheses",
 ]
 

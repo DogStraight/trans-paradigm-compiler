@@ -201,13 +201,39 @@ value = "$4"
 line = ["{", { ref = "count" }, "{", { ref = "value" }, "}", "}"]
 
 
+# ── HierExpr — 层次化引用表达式 ──
+# A.9.3 hierarchical_identifier：a.b.c[0]（层级成员链 + 可选下标链）。
+# 与 SelectExpr（a[0]）/Identifier 并列的表达式原子；放在 SelectExpr
+# 之后、Identifier 之前——a[0] 优先走 SelectExpr，a.b 走本规则。
+# 真实代码高频（模块实例层级引用 top.u1.q、assign x = a.b 等），
+# 2026-08-28 真实语料缺口修复（A 类）。
+
+[HierExpr.parser]
+is_atom = true
+production = [
+    "@Identifier",
+    "(symbol.base.dot,@Identifier)*",
+    "(bracket.l_square_bracket,@SelectSuffix,bracket.r_square_bracket)*",
+]
+
+[HierExpr.parser.node]
+parts = ["$1", "$2.items[*].sub_node[1]"]
+suffixes = "$3.items"
+
+[HierExpr.renderer]
+layout = { line = [
+    { join = ".", items = "parts", no_soft = true },
+    { ref = "suffixes" },
+] }
+
+
 # ── PrimaryExpr — 初等表达式（原子选择器） ──
-# 表达式的最底层: 字面量、标识符、选择、括号、复制、拼接、调用。
+# 表达式的最底层: 字面量、标识符、选择、层次引用、括号、复制、拼接、调用。
 # 所有运算符操作的起点。
 
 [PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@StringLiteral|@SelectExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
+    "@BitWidthLiteral|@Number|@StringLiteral|@SelectExpr|@HierExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
 

@@ -799,6 +799,31 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
 - **多目标 assign 坏输入仍炸**：`assign a = ;` lint 恢复病理 ~975 错（批次 6
   已知），无效输入的错误恢复质量另案（不阻塞合法输入）
 
+#### A 类缺口修复（2026-08-28，test_2005_batch8.py）
+
+- **层次化 id 表达式位（A.9.3 hierarchical_identifier）**：此前 `a.b` 在
+  表达式/赋值位 lint 拒——`HierId` 只在 specify/defparam 存在，表达式原子
+  未接。修法：`05_expressions.toml` 新增 `HierExpr` 原子（`@Identifier
+  (dot,@Identifier)* ([suffix])*`，成员链 + 下标链），PrimaryExpr choice 中
+  置于 SelectExpr 之后（`a[0]` 优先 SelectExpr，`a.b` 走 HierExpr）；
+  renderer 用 HierId 同款 `join="."`（parts 含 head，防 `a.b` 渲染成 `ab`）
+- 💡 **typed_ports 共存验证**：表达式位新增 `.` 能力后，端口列表类型引用
+  （`spi.slave spi_io`）不受影响（声明位 exclude 消歧仍生效，test_typed_ports
+  8 例全过）——批量回归的必要检查点
+- 📌 **交错形态限制**：`a[0].b` / `a.b[0].c`（成员在下标后）超 2005
+  hierarchical_identifier（标准 = 成员链后接下标链），暂不支持（少见，
+  记录不修）
+- **无括号系统任务语句（A.6.2/A.9 sys_task_enable）**：SysTaskStmt 括号
+  整体可选（`$ name (args?)? ;`），`$finish;`/`$stop;` 可解析；args 绑定
+  `$3.sub_node[0].sub_node[1]`（opt 组解包，同 MintypmaxExpr 模式）；
+  `$display(...)` 带参形态回归
+- **参数覆盖 mintypmax（A.4.3/A.8.2）**：`#(.P(1:2:3))` 此前挂（974 lint
+  病理）——NamedParamOverride 值位 `@Expression` 改 `@MintypmaxExpr`
+  （nettypes 插件，expr [ : expr : expr ]，单值天然兼容）；位置参数
+  `#(Mode)` 保持 @Expression
+- **核对澄清**：三元 `?:`、过程体 event/localparam、命名块头声明经实测
+  **已支持**（TODO 摘要误列）——清单以实测为准
+
 #### 测试隔离机制（2026-08-28，顺序无关从机制上修复）
 
 - **背景**：引擎多处全局可变单例，同一进程多语言/多配置测试顺序导致状态
