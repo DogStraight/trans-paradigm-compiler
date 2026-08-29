@@ -30,6 +30,7 @@ items       = "items"         # 列表容器 items 字段（PortList/DeclaratorL
 decl        = "decl"          # 端口声明包装字段（inline 规则防御穿透）
 direction   = "direction"     # 端口方向字段（input/output/inout）
 width       = "packed_range"  # 端口宽度表达式字段（TypeSpec 上）
+port_type   = "port_type"     # 端口数据类型/网络类型字段（wire/tri/reg，层 2）
 name        = "name"          # 声明器名字段（Declarator.name）
 param_name  = "param_name"    # 参数名字段（ParamDecl 上）
 value       = "value"         # 表达式值字段（参数默认值/端口连接值）

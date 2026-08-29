@@ -65,6 +65,7 @@ class ModulePort:
     name: str
     direction: str = ""  # input / output / inout（旧风格裸名可空）
     width_expr: str = ""  # 宽度表达式文本（如 "DATA_W-1:0"、"7:0"；无范围空）
+    net_type: str = ""  # 数据类型/网络类型（wire/tri/reg/...；协议字段声明）
     decl_node: Node | None = None  # 端口声明节点（related 链定位）
 
 
@@ -462,6 +463,7 @@ class ProjectChecker:
         decl_field = self._field("decl")
         direction_field = self._field("direction")
         width_field = self._field("width")
+        port_type_field = self._field("port_type")
         name_field = self._field("name")
         ports_node = self._unwrap(getattr(module_node, ports_field, None))
         items = getattr(ports_node, items_field, None) if ports_node else None
@@ -485,6 +487,8 @@ class ProjectChecker:
                 direction = getattr(item, direction_field, "") or ""
             pr = getattr(item, width_field, None) if width_field else None
             width = self._render_subtree(pr) if isinstance(pr, Node) else ""
+            pt = getattr(item, port_type_field, None) if port_type_field else None
+            net_type = self._render_subtree(pt) if isinstance(pt, Node) else ""
             dlist = getattr(item, items_field, None) if items_field else None
             d_items = getattr(dlist, items_field, None) if dlist else None
             for d in d_items or []:
@@ -497,6 +501,7 @@ class ProjectChecker:
                         name=dn.content,
                         direction=direction,
                         width_expr=width,
+                        net_type=net_type,
                         decl_node=d,
                     )
 

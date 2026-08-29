@@ -19,7 +19,6 @@ _LITERAL_RE = re.compile(r"^\d+'\s*[hdb]?[0-9a-fA-F_]*$")
 
 def run_inst_check(analyzer, context) -> None:
     """postpass 入口：本文件实例化点 × 全工程模块表 联动检查。"""
-    del analyzer  # postpass 协议签名参数，本 pass 从 context 取数据
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
     # elaboration 层 2（ADR-0008）：实例化点端口连接展开——未连接端口判定
@@ -43,6 +42,11 @@ def run_inst_check(analyzer, context) -> None:
         _check_ports(context, site, info, related_def)
         _check_params(context, site, info, related_def)
         _check_missing_ports(context, site, info, related_def, conn_by_inst)
+
+    # inout 端口须 tri（对标 svlint inout_with_tri = Veryl missing_tri，
+    # 调研重合刚需第 4 条）——本文件模块定义的 inout 端口检查（遍历
+    # 本文件 AST，避免跨文件重复报）。
+    _check_inout_tri(analyzer, context)
 
     # elaboration 层 3（ADR-0008）：多驱动检查（对标 Verilator MULTIDRIVEN
     # / Spyglass W415——同一信号被多个实例 output 连接）。
@@ -167,6 +171,50 @@ def _find_signal_node(connections, sig):
             if s == sig:
                 return conn.inst_node
     return None
+
+
+def _check_inout_tri(analyzer, context) -> None:
+    """inout 端口须 tri（对标 svlint inout_with_tri = Veryl missing_tri）。
+
+    本文件模块定义的 inout 端口，其网络类型须为 tri（inout 是三态总线，
+    wire 默认单驱动语义与 inout 冲突）。遍历本文件 AST 的 inout 端口
+    声明节点（AnsiInoutDecl/BodyInoutDecl），检查其 port_type 是否为
+    tri。语言知识（tri 是 inout 期望类型）集中在插件层。
+    """
+    root = getattr(analyzer, "_ast", None)
+    if root is None:
+        return
+    inout_rules = {"AnsiInoutDecl", "BodyInoutDecl"}
+    for node in _iter_nodes(root):
+        if node.node_name not in inout_rules:
+            continue
+        pt = getattr(node, "port_type", None)
+        net_type = ""
+        if isinstance(pt, Node):
+            net_type = getattr(pt, "content", "") or ""
+            if not net_type:
+                # keyword.wire 等 token 节点 content 为空，用节点名取末段
+                net_type = getattr(pt, "node_name", "").split(".")[-1]
+        elif isinstance(pt, str):
+            net_type = pt.split(".")[-1]
+        if net_type and net_type != "tri":
+            context.report(
+                f"inout 端口数据类型应为 tri（当前 {net_type}——"
+                "三态总线语义）",
+                code="W106",
+                level="warning",
+                node=node,
+            )
+
+
+def _iter_nodes(root):
+    """DFS 迭代整棵 AST。"""
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in node.iter_children():
+            stack.append(child)
 
 
 def _check_params(context, site, info, related_def) -> None:

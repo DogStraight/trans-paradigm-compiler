@@ -567,3 +567,48 @@ class TestMultiDriverCheck:
             [d for f in report["files"] for d in f["semantic"]], "W105"
         )
         assert len(w105) == 1
+
+
+# ── inout 端口须 tri W106（svlint inout_with_tri = Veryl missing_tri） ──
+
+
+class TestInoutTriCheck:
+    """inout 端口数据类型须为 tri（三态总线语义）。"""
+
+    def test_inout_wire_reported(self, checker, tmp_path):
+        src = tmp_path / "t.sv"
+        src.write_text(
+            "module t (inout wire [7:0] d);\n"  # wire 不是 tri
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(src))
+        w106 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W106"
+        )
+        assert len(w106) == 1
+        assert "wire" in w106[0]["message"]
+
+    def test_inout_tri_clean(self, checker, tmp_path):
+        src = tmp_path / "t.sv"
+        src.write_text(
+            "module t (inout tri [7:0] d);\n"  # tri 正确
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(src))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W106" not in codes
+
+    def test_input_output_not_affected(self, checker, tmp_path):
+        """input/output 端口不检查 tri（仅 inout）。"""
+        src = tmp_path / "t.sv"
+        src.write_text(
+            "module t (input wire a, output wire y);\n"
+            "  assign y = a;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(src))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W106" not in codes
