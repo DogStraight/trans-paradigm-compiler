@@ -73,6 +73,13 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [svls](https://github.com/dalance/svls) | 设计参考 | svlint 的 LSP 封装（3 源文件）——"检查器 → LSP"库级复用最薄形态（详见深调研） |
 | [flexlint](https://github.com/dalance/flexlint) | 设计参考 | 正则规则 lint（规则 = TOML 正则四元组，无 parser）——第三种 lint 形态与位置断言（详见深调研） |
 | [hdl_checker](https://github.com/suoto/hdl_checker) | 概念参考 | "封装既有 HDL 工具做 LSP 诊断"——pylance 式使用场景的架构参照（详见深调研） |
+| [SpyGlass](https://www.synopsys.com/verification/static-verification/spyglass-rtl-datasheet.html)（Synopsys，商业） | 设计参考 | 业界 RTL lint 天花板：Rule→Goal→Sub-Methodology 三层规则组织 + SGDC 约束压误报 + waiver 体系（详见深调研"第三路"） |
+
+### 商业 EDA 工具链（方法论参照）
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [Synopsys](https://www.synopsys.com/)（VCS / Design Compiler / SDC） | 概念参考 | 商业 EDA 巨头 Verilog 工具链方法论：VCS 编译型前端三步法、DC elaborate 跨文件语义分析、SDC 声明式约束成行业接口标准——"约束/配置即数据"的工业级先例（详见深调研） |
 
 ### IR 与编译管线
 
@@ -1743,3 +1750,61 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 **结论**：真实误报率在语义规则（W 族）已压到低水平（W105 10 / W201 31
 中还有宏深水区成分）；**瓶颈在命名类默认策略**（决策项）+ 宏展开完整
 性（W002/W105，P3 增量解析前置）。check 宏展开使真实工程可用了。
+
+### Synopsys（商业 EDA 工具链）— 方法论参照（2026-08 调研，agent-reach + web 检索）
+
+- 定位：1986 年创立、总部 Sunnyvale 的 EDA 巨头（NASDAQ: SNPS），与 Cadence 构成
+  行业双寡头。对 tpc 的相关面是 Verilog 工具链三件套——**VCS**（编译型仿真）、
+  **Design Compiler**（综合）、**SpyGlass**（lint/CDC 静态检查，见上"第三路"
+  深调研），外加 **SDC**（声明式约束，行业事实标准）。**核心工具全部闭源商业
+  授权**，官方 GitHub 开源存在度极低（`org:synopsys` 仅 1 个仓库；synopsys-sig/
+  blackducksoftware 是 Black Duck 收购资产，SCA 扫描方向，与 HDL 无关）——
+  **无代码可 fork，只做方法论参照**
+- 存续状态：公司持续活跃扩张——2024-01 宣布 350 亿美元收购 Ansys（物理仿真扩展）、
+  2025-12 NVIDIA 投资 20 亿美元（GPU 加速仿真/设计）、2023-11 加入 RISC-V
+  （ARC-V 嵌入式核）；但工具无公开版本、无社区，<1.0 版本号概念不适用
+- 管线结构逐阶段对比（各自前端形态，各有取舍非优劣）：
+
+| 维度 | Synopsys 工具 | tpc |
+|------|---------------|-----|
+| 仿真前端 | VCS 三步法：analyze → elaborate → compile（产出 simv 原生可执行；增量编译只重编变更模块） | preprocess → lint → parse → analyze → transform → render |
+| 综合前端 | DC：analyze + elaborate（全层次展开 + 参数具体化）→ compile → write | 单文件管线为主；inst_check 是"微型 elaboration"（跨模块端口/实例检查） |
+| 静态检查 | SpyGlass：parse → Rule→Goal→Sub-Methodology 三层规则引擎 → 层级化报告；SGDC 约束压误报 + .awl waiver | linter（前置 token 级）+ semantic_check 插槽（P1.9 规则表待落地） |
+| 约束/配置面 | SDC（Tcl 子集声明式约束）+ 各工具 Tcl setup 文件 | TOML 配置 + grammar 规则数据 |
+
+- **亮点单独说明**：
+  - 💡 **SDC 是"声明式约束即接口"的行业级先例**：Synopsys 把时序/面积/功耗约束
+    做成 Tcl 子集声明语言，全行业（Intel Quartus、Microchip、对手工具）采纳为
+    输入接口——商业 EDA 里"设计意图以数据形态跨工具传递"被验证可规模化。
+    tpc 的"语法/布局/检查全是 TOML 数据"哲学同源，路径不同（工业接口 vs 引擎
+    设计）；SDC 的成功佐证配置驱动方向在 EDA 域的长期价值
+  - 💡 **Rule→Goal→Sub-Methodology 规则组织**（SpyGlass）：数千条规则按 goal
+    （lint_rtl / CDC / Constraints / DFT / Power / TXV）分组、methodology 子集化、
+    severity Fatal/Error/Warning/Info——tpc P1.9 规则表可加 `goal` 字段
+    （对齐已有 `group`/`severity` 提案，见上"实现路径提示"）
+  - 💡 **SGDC 约束压误报**：CDC 类高误报规则靠"设计约束声明"过滤假阳性——
+    tpc 跨文件规则（inst_check W 系列）缺"连接约束"层，SGDC 式约束声明是降
+    误报的参考形态（P1.9 后置；related 链已可承载约束链溯源）
+  - 📌 **VCS 增量编译 / DC elaborate**：与 P3 增量解析同方向——elaboration 是
+    跨文件语义分析的工业级形态；VCS"只重编变更模块"= P3.2"受影响单元重解析"
+    的商业实证
+  - 📌 **Ansys/NVIDIA 动向**：EDA 工具向"物理仿真 + GPU 加速"扩展——tpc 定位
+    "语言流水线"而非全工具链，不追（README 边界已声明）
+- **可实现性评估**：
+  - 🔥 **可做（低成本）**：规则表 `goal` 字段（lint_rtl 式 goal 分组，与
+    `group`/`severity` 一并进 P1.9 规则表 schema）
+  - 💡 **可做（中成本）**：约束声明层——`[[checks]]` 或 analyzer 参数化约束
+    TOML，供跨文件规则降误报（P1.9 后置，先验证 inst_check 误报样本）
+  - 📌 **不做**：全 LRM 前端（VCS/DC 级解析）与仿真/综合——tpc 明确定位
+    可综合子集 + 格式化/检查，商业级 parser 规模超出配置驱动引擎的合理范围
+    （README Known limitations）；CDC 类深度语义检查同判远期（survey 已定）
+  - ❌ **不借鉴**：闭源工具内部实现（无公开代码，无从借鉴）；Tcl 配置面
+    （tpc 用 TOML 承载"规则即数据"，Tcl 是运行时脚本语言，形态不匹配）
+- 来源：[Wikipedia Synopsys](https://en.wikipedia.org/wiki/Synopsys)、
+  [VCS 三步法仿真流程](https://blog.csdn.net/weixin_45791458/article/details/143470583)、
+  [DC analyze/elaborate 对比](https://blog.csdn.net/weixin_29230649/article/details/158856394)、
+  [SDC 定义（Intel Quartus 术语表）](https://www.intel.la/content/www/xl/es/programmable/quartushelp/19.1/reference/glossary/def_sdc.htm)、
+  [SDC 与 STA（EcrioniX）](https://ecrionix.org/sta/sdc/)、
+  [NVIDIA 20 亿美元投资（The Register）](https://www.theregister.com/2025/12/01/nvidia_synopsys_2b/)、
+  [Synopsys 收购 Ansys（CNBC）](https://www.cnbc.com/2024/01/16/synopsys-to-acquire-ansys-in-35-billion-graphics-software-deal.html)、
+  [Synopsys 加入 RISC-V（The Register）](https://www.theregister.com/2023/11/07/synopsys_joins_riscv_party_with/)
