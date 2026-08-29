@@ -465,12 +465,19 @@ def expand_tokens(
     *,
     prefix: str = "`",
     func_macros: dict[str, list[str]] | None = None,
+    semantic: bool = False,
 ) -> tuple[str, list[dict]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚。
 
     用正则搜索 `NAME，向左扫同步词，记录位置后替换宏体。
     带参宏（func_macros 中登记的名字）识别 `NAME( ... ) 调用并做形参替换。
     不再依赖 Token 流或 Lexer。
+
+    semantic=True（check 语义分析用，2026-08-29）：语句体宏（token 锚
+    形态）改为**宏体展开**——`tpc_marker_N` 保真锚只服务渲染还原，check
+    不需要还原、需要宏体语义（否则宏体内语句不可分析 + marker 被当
+    未解析引用报 W002）。渲染路径（format/expand 命令）保持默认
+    semantic=False（marker 锚 + 还原原文，保真不变）。
 
     锚形态（统一位置桥，见 _bridge）：
       line   整行占位：独占整行的宏调用（`debug(...)`）、行首空体宏
@@ -593,6 +600,10 @@ def expand_tokens(
                 )
                 continue
             token = f"tpc_marker_{_next_macro_seq()}"
+            if semantic:
+                # check 语义展开：宏体替换（body 原文含分号），不建还原锚
+                parts[col:end] = body
+                continue
             # 独占一行的宏调用（行首 ∧ 行尾）补分号：`tpc_marker_N;` 按裸任务
             # 调用语句可解析（1364-2005 A.6.9 task_enable），裸 `id` 不是合法
             # 语句——lint/parser 都会拒（ice40 cells_sim 的 `SB_DFF_INIT 等

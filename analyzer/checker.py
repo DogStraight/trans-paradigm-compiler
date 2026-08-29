@@ -392,7 +392,11 @@ class ProjectChecker:
                 undefine=None,
             )
             if macro_table:
-                clean, _ = expand_tokens(clean, macro_table, func_macros=func_macros)
+                # semantic=True：语句体宏展开宏体（check 需语义，不要保真锚
+                # marker——否则宏体不可分析 + marker 被 W002 误报）
+                clean, _ = expand_tokens(
+                    clean, macro_table, func_macros=func_macros, semantic=True
+                )
             return clean
         except Exception:  # noqa: BLE001 — 展开失败回退原文（lint 兜底）
             return source
