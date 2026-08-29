@@ -1625,3 +1625,31 @@ Union 布局预算不同 → 输出差异。失败尝试的内部递归副作用
 回归风险大），或改缓存粒度到无副作用层（原子 token 匹配，收益有限）。
 按"行为差异即回退"约定，改动已还原（git checkout），parser 保持无记忆化。
 后续若做，需先定 path 编号语义变更的接受度。
+
+#### 编译版（Nuitka onefile）管线速度实测（2026-08-29）
+
+动机：picorv32（3049 行）解释版 format 4-5s，问编译版量级。环境：Nuitka
+4.1.2 + MinGW，`packaging/build_pipeline.py tpc` 全切面 onefile（8.5MB）。
+
+实测（同一当前代码，picorv32 format，预热后）：
+- **总量**：exe 5.06s vs 解释 4.49s——**编译版反而慢 ~12%**
+- **净计算**（扣启动）：exe 启动固定 0.81s（onefile 解包 + Nuitka 运行时，
+  解释版 0.10s）→ format 净 4.25s vs 4.39s、check 净 1.27s vs 1.34s——
+  **编译净收益仅 3-5%，可忽略**
+- 输出逐字节一致（131143B）
+
+机制：解析/渲染是 match/case 结构模式匹配 + 动态分发 + 数据驱动（TOML
+配置加载、节点属性访问）为主——Nuitka 编译成 C 后这些结构无数量级收益；
+onefile 解包启动固定开销 ~0.7s 吃掉全部编译收益。
+
+结论（诚实）：**编译版价值在分发（无 Python 环境部署），不在速度**。速度
+优化应继续走算法层（渲染器记忆化已做；parser 需先重构 path 计数语义）。
+若未来要编译版速度，方向是减小启动面（onedir 模式省解包）+ 热循环改
+C 扩展/原生，均另案。
+
+附带修复（同次构建暴露）：打包漏插件 postpass .py——checks/ 聚类后新
+插件的 `_*.py` 经 load_postpasses 动态 import，Nuitka 静态收集看不到、
+include-data-dir 不保证携带 .py → exe 启动即崩（ValueError postpass 模块
+不存在）。build_pipeline 显式 `--include-data-files` 逐个携带插件 .py +
+构建后 smoke test（format/lint/check 各跑样本，任一失败即构建失败）——
+防静默坏包（0.1.0 exe 能跑只因当时无 checks 插件）。

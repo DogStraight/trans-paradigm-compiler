@@ -115,6 +115,20 @@ def _generate_entry(name: str, spec: dict) -> str:
 
 def _nuitka_cmd(name: str, spec: dict, entry: str) -> list[str]:
     rules_dir = os.path.join(_ROOT, _RULES_REL)
+    # 插件 postpass/transform .py 显式 include：这些脚本经 load_postpasses
+    # 动态 import（importlib 按路径加载），Nuitka 静态收集看不到——实测
+    # include-data-dir 不保证携带 .py（checks/ 聚类后新插件的 postpass 曾
+    # 整体缺失 → exe 启动即崩 ValueError postpass 模块不存在）。逐个
+    # --include-data-files 显式携带（含 checks/syntax 等聚类子目录）。
+    data_files: list[str] = []
+    for root, dirs, fnames in os.walk(rules_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(("__", "."))]
+        for fn in fnames:
+            if fn.endswith(".py"):
+                src = os.path.join(root, fn)
+                rel = os.path.relpath(src, _ROOT)
+                # Nuitka 要求单参数 `--include-data-files=src=dest`（分开传报错）
+                data_files.append(f"--include-data-files={src}={rel}")
     return [
         sys.executable, "-m", "nuitka", "--onefile",
         # 正确性优先：Nuitka 模块缓存会串旧入口编译产物（实测：换入口后
@@ -123,6 +137,7 @@ def _nuitka_cmd(name: str, spec: dict, entry: str) -> list[str]:
         "--output-dir=dist",
         f"--output-filename={name}.exe",
         f"--include-data-dir={rules_dir}={_RULES_REL}",
+        *data_files,
         f"--company-name={AUTHOR_NAME}",
         f"--product-name={spec['product_name']}",
         f"--file-description={spec['file_description']}",
@@ -169,6 +184,35 @@ def build(name: str, spec: dict, dry_run: bool = False) -> None:
         f.write("\n".join(lines) + "\n")
     print(f"   done: {exe} ({os.path.getsize(exe) / 1e6:.1f} MB)")
     print(f"   sha256: {digest}")
+    _smoke_test(name, exe, spec, dry_run)
+
+
+def _smoke_test(name: str, exe: str, spec: dict, dry_run: bool) -> None:
+    """构建后冒烟：对样本文件跑 exe 的各切面命令，任一失败即构建失败。
+
+    防静默坏包（实测教训：checks/ 插件 postpass .py 打包缺失 → exe 启动
+    即崩，但构建本身成功）。样本用无宏的真实语料（serv_top，1 module 纯
+    generate——lint/format/check 三命令都能过）。
+    """
+    if dry_run:
+        return
+    facets = spec["facets"]
+    sample = os.path.join(_ROOT, "tests", "e2e", "samples", "real", "ref", "ref_serv_top.v")
+    probes = []
+    if "format" in facets:
+        probes.append(("format", ["format", sample]))
+    if "lint" in facets:
+        probes.append(("lint", ["lint", sample]))
+    if "check" in facets:
+        probes.append(("check", ["check", sample]))
+    for tag, argv in probes:
+        r = subprocess.run([exe, *argv], cwd=_ROOT, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(
+                f"smoke test failed for {name} {tag} (exit {r.returncode}):\n"
+                f"{r.stdout[-1200:]}\n{r.stderr[-1200:]}"
+            )
+        print(f"   smoke {tag}: OK")
 
 
 def main() -> None:
