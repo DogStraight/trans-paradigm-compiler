@@ -39,11 +39,11 @@ analyzer 遍历（原语按 [RuleName.analyzer] 触发）       ← 已有（che
 规则表 = 语言包插件目录 `rules/*.toml`（`[[checks]]` 数组，规则=数据），
 引擎通用执行器（`core/check_registry.py` 加载校验 + `analyzer/checks.py`
 遍历后按符号 kind 分发判定）。第一个自定义示例：
-`grammar/verilog/plugins/name_check/rules/naming.toml`（NC001-NC010，
+`grammar/verilog/plugins/checks/name_check/rules/naming.toml`（NC001-NC010，
 svlint naming 族蓝本）。
 
 ```toml
-# grammar/verilog/plugins/name_check/rules/naming.toml
+# grammar/verilog/plugins/checks/name_check/rules/naming.toml
 [[checks]]
 id = "NC001"
 category = "naming"
@@ -207,7 +207,7 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 > Impl: analyzer/checks.py（声明式执行器）/ core/check_registry.py（规则表加载校验）/
 > analyzer/checker.py::ProjectChecker / analyzer/traversal.py /
 > analyzer/diagnostic.py / core/plugin_loader.py / parser/_production.py /
-> grammar/verilog/plugins/inst_check/ / grammar/verilog/plugins/name_check/ /
+> grammar/verilog/plugins/checks/inst_check/ / grammar/verilog/plugins/checks/name_check/ /
 > main.py::_cmd_check
 > Test: tests/engine/analyzer/test_checker.py / test_diagnostic_related.py /
 > tests/languages/verilog/test_name_convention.py

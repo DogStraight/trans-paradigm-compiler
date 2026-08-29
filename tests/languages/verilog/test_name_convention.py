@@ -518,7 +518,7 @@ class TestCommentDrivenCases:
     样例源文件内嵌 `// ruleid: X`（必须命中）/ `// ok: X`（不得命中）
     注释，框架（analyzer/check_test.py）运行 ProjectChecker 后断言命中
     集合。新增样例 = 新增断言（零代码），规则行为变化时随样例自动更新
-    语义。cases/ 目录：grammar/verilog/plugins/name_check/cases/*.sv。
+    语义。cases/ 目录：grammar/verilog/plugins/checks/name_check/cases/*.sv。
     """
 
     def test_name_check_cases(self, config_loaded, tmp_path):
@@ -528,13 +528,18 @@ class TestCommentDrivenCases:
         from analyzer.check_test import run_comment_driven
         from analyzer.checker import ProjectChecker
 
-        cases_dir = os.path.join(
+        # cases/ 随组件所在位置（聚类目录支持）：从插件根递归定位
+        plugins_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
                 os.path.abspath(__file__))))),
-            "grammar", "verilog", "plugins", "name_check", "cases",
+            "grammar", "verilog", "plugins",
         )
-        samples = sorted(glob.glob(os.path.join(cases_dir, "*.sv")))
-        assert samples, f"cases 目录无样例: {cases_dir}"
+        matches = glob.glob(
+            os.path.join(plugins_dir, "**", "name_check", "cases", "*.sv"),
+            recursive=True,
+        )
+        assert matches, f"cases 目录无样例: {plugins_dir}/**/name_check/cases"
+        samples = sorted(matches)
 
         checker = ProjectChecker(rules_dir="grammar/verilog")
         all_failures = []

@@ -38,7 +38,7 @@ ADR-0004 定了 analyzer 阶段语义检查插槽（双层规则 + post-pass 链
   `AnalysisTraversal._external_extra` 注入每个文件的
   `context.extra`：`module_index`（全工程模块表）与 `inst_sites`（本
   文件实例化点）。**"端口存在性/参数存在性/宽度联动"等 Verilog 语义
-  规则是插件（`grammar/verilog/plugins/inst_check/`）的 postpass**，
+  规则是插件（`grammar/verilog/plugins/checks/inst_check/`）的 postpass**，
   引擎零语言知识。
 
 ### 3. 语法有错 → 语义跳过
