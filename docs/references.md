@@ -1517,3 +1517,25 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
     HDL Checker Unused，用真符号表避免词频误报）
   3. 或 **未驱动/未连接端口**（对标 Spyglass UndrivenInTerm + slang undriven-
     port）——跨文件，与候选 1 可合并为"端口完整性"族
+
+#### 规则实现进度（2026-08-29，P1.10 落地）
+
+- **elaboration 底座**（ADR-0008，提交 3acae77）：层 2 `_elaborate_connections`
+  （实例化点端口连接展开，Named/Ordered 双形态）+ 层 3 `_build_signal_graph`
+  （全工程信号驱动/负载图，output=input 方向由语言包 `output_dirs`/
+  `input_dirs`/`inout_dirs` 声明），注入 `context.extra`（connections/
+  signal_graph/方向集）。
+- **UN001 未使用声明**（a22f081，unused_check 插件）：语义层符号表引用计数
+  ——遍历 AST 收集 `_symbol_ref`，声明后零引用的 wire/reg/integer 报未使用。
+  排除声明标识符（`_collect_self_decl_ids` 处理 `wire a, b;` 共享声明节点）/
+  端口（接口非内部信号）/`_` 前缀豁免；**parameter/localparam 豁免**（接口
+  预留/条件编译常见，对标 Verilator UNUSEDPARAM 默认关闭）。analyzer 存
+  `_ast` 供 postpass 遍历。
+- **W104 未连接端口**（57d6e83，inst_check 扩展）：跨文件端口完整性——
+  elaboration 层 2 连接展开 + 模块端口方向判定，input/output 端口实例化
+  未连接报 W104（inout 悬空豁免，三态可能有意）。对标 Veryl missing_port/
+  Verilator PINMISSING。
+- **NC012/NC013 命名补全**（随 a22f081）：integer/type 符号命名规则（NC 族
+  原缺这两个 kind）。
+- **三层捕获能力验证**：语法声明式（NC 族）/ 语义符号表（UN001）/ 跨文件
+  handler（W104）各有一个真实规则，三层机制全被真实规则消费过。
