@@ -49,12 +49,12 @@ class TestSymbolWidthTableA1:
         assert t["a"] == "7:0"
 
     def test_scalar_no_range(self, checker):
-        """wire a（无范围）→ "1"（标量 1 bit）。"""
+        """wire a（无范围）→ ""（标量；数值 = 1 bit 经 table_width_to_num）。"""
         t = _width_table(
             checker,
             "module t;\n  wire a;\n  assign a = 1'b0;\nendmodule\n",
         )
-        assert t["a"] == "1"
+        assert t["a"] == ""
 
     def test_multi_declarator_by_name(self, checker):
         """wire [3:0] x, y → 两个都 "3:0"（多声明符共享 decl_node 按名对齐）。"""
@@ -88,7 +88,7 @@ class TestSymbolWidthTableA1:
             "endmodule\n",
         )
         assert t["d"] == "7:0"
-        assert t["q"] == "1"
+        assert t["q"] == ""  # 标量
 
     def test_body_port_width(self, checker):
         """旧式 body 端口：宽度由类型声明符号承载（方向声明=属性，
@@ -104,7 +104,7 @@ class TestSymbolWidthTableA1:
             "endmodule\n",
         )
         assert t["a"] == "7:0"
-        assert t["b"] == "1"
+        assert t["b"] == ""  # 标量
 
     def test_integer_fixed_32(self, checker):
         """integer i → "32"（固定位宽，语言知识）。"""
@@ -171,3 +171,78 @@ class TestWidthEvalA2:
         assert literal_width("12'hFFF") == 12
         assert literal_width("'hFF") is None  # unsized 自动位宽
         assert literal_width("5") is None  # unsized 自定尺寸
+
+
+def _all_nodes(ast):
+    yield ast
+    for ch in ast.iter_children():
+        yield from _all_nodes(ch)
+
+
+def _rhs_widths(checker, src_text: str) -> dict:
+    """check 源码，返回 {AssignStmt RHS 文本: 推断宽度}。"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".sv", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(src_text)
+        path = f.name
+    try:
+        checker.check(path)
+        fr = checker._memo[os.path.abspath(path)]
+        from grammar.verilog.plugins.checks.width_check import _width_check as wc
+
+        table = fr.analyzer._width_table
+        out = {}
+        for n in _all_nodes(fr.ast):
+            if n.node_name == "AssignStmt":
+                val = getattr(n, "value", None)
+                out[wc.node_text(val)] = wc.infer_expr_width(val, table)
+        return out
+    finally:
+        os.unlink(path)
+
+
+_SRC_A3 = (
+    "module t;\n"
+    "  wire [7:0] a;\n"
+    "  wire [3:0] b;\n"
+    "  wire [11:0] c;\n"
+    "  wire [7:0] x;\n"
+    "  wire [7:0] y;\n"
+    "  assign c = {a, b[3:0]};\n"
+    "  assign c = b[0];\n"
+    "  assign c = b[3:0];\n"
+    "  assign c = {4{a[3:0]}};\n"
+    "  assign c = ~a;\n"
+    "  assign c = a + b;\n"
+    "  assign c = a <= b;\n"
+    "  assign c = a << 2;\n"
+    "  assign c = x ? a : b;\n"
+    "  assign c = 4'd1;\n"
+    "  assign c = $signed(a);\n"
+    "  assign c = a & b;\n"
+    "  assign c = z;\n"
+    "endmodule\n"
+)
+
+
+class TestWidthInferA3:
+    """A3 表达式宽度推断（AssignStmt RHS 集成）。"""
+
+    def test_infer(self, checker):
+        w = _rhs_widths(checker, _SRC_A3)
+        assert w["{a,b[3:0]}"] == 12  # 拼接和
+        assert w["b[0]"] == 1  # 位选单索引
+        assert w["b[3:0]"] == 4  # 位选范围
+        assert w["{4{a[3:0]}}"] == 16  # 复制 count×宽
+        assert w["~a"] == 8  # 一元同宽
+        assert w["a+b"] == 8  # 算术 max
+        assert w["a<=b"] == 1  # 比较 1 bit
+        assert w["a<<2"] == 8  # 移位 LHS 宽
+        assert w["x?a:b"] == 8  # 三目 max
+        assert w["4'd1"] == 4  # sized 字面量
+        assert w["$signed(a)"] == 8  # 系统函数同宽
+        assert w["a&b"] == 8  # 位运算 max
+        assert w["z"] is None  # 未知符号保守

@@ -31,16 +31,29 @@ def run_width_check(analyzer, context) -> None:
 def symbol_width_table(analyzer) -> dict[str, str]:
     """A1：符号宽度表 {符号名 → 宽度表达式文本}。
 
-    无范围标量 → "1"（1 bit）；integer → "32"（固定位宽）。
-    宽度文本保持原样（"7:0" / "WIDTH-1:0" / "3"），数值求值属 A2。
+    原始文本原样保留：""（无范围标量）/ "7:0" / "WIDTH-1:0" / "32"。
+    数值转换用 table_width_to_num（A3 消费；空 = 标量 1 bit——与
+    eval_width_text 的 "1"→2（单表达式 [1]）语义区分开）。
     """
     table: dict[str, str] = {}
     for sym in getattr(analyzer, "all_symbols", None) or []:
         if sym.kind not in _WIDTH_KINDS:
             continue
-        w = extract_width(sym)
-        table[sym.name] = w or "1"
+        table[sym.name] = extract_width(sym)
     return table
+
+
+def table_width_to_num(text: str | None) -> int | None:
+    """A1 宽度表文本 → 数值（空 = 标量 1 bit；None = 查不到 → None 保守）。
+
+    区分：表值 ""（标量 1 bit）与查表 None（符号未知——不推断，防误报）
+    与 eval_width_text 的 "1"→2（单表达式 [1]）语义。
+    """
+    if text is None:
+        return None
+    if text == "":
+        return 1
+    return eval_width_text(text)
 
 
 def extract_width(sym) -> str:
@@ -100,19 +113,60 @@ def _unwrap_optional(node):
 
 
 def node_text(node) -> str:
-    """Node → 源码文本（content 优先；token 节点文本在 value；合成二元
-    节点 op 是 str 属性插 left/right 间；否则按子节点绑定序拼接）。
+    """Node → 源码文本（通用文本化：content 优先；token 节点文本在 value；
+    合成/结构节点按类型补结构字符——拼接 {}、复制 {{n{}}、位选 []、
+    一元 op 前缀、三目 ?:、调用 $f(args)、二元 op 紧凑插入）。
 
     iter_children 的 vars 遍历按 parser.node 绑定顺序（Python dict
-    保序）——表达式树（BinaryOp left/right、Range msb/lsb 等）可可靠
-    还原文本（宽度表达式原样保留，A2 求值）。
+    保序）——未显式处理的节点按子节点绑定序拼接。A4 诊断消息复用。
     """
     if not isinstance(node, Node):
         return str(node) if node else ""
     c = getattr(node, "content", None)
     if isinstance(c, str) and c:
         return c
+    name = node.node_name
+    if name == "ConcatExpr":
+        parts = [node_text(ch) for ch in getattr(node, "sub_node", None) or []]
+        return "{" + ",".join(p for p in parts if p) + "}"
+    if name == "ReplicateExpr":
+        cnt = node_text(getattr(node, "count", None))
+        val = node_text(getattr(node, "value", None))
+        return f"{{{cnt}{{{val}}}}}" if cnt and val else ""
+    if name == "UnaryOp":
+        op = getattr(node, "op", "") or ""
+        return f"{op}{node_text(getattr(node, 'operand', None))}"
+    if name == "BinaryOp":
+        op = getattr(node, "op", "") or ""
+        lt = node_text(getattr(node, "left", None))
+        rt = node_text(getattr(node, "right", None))
+        return f"{lt}{op}{rt}" if lt and rt else ""
+    if name == "TernaryOp":
+        cd = node_text(getattr(node, "cond", None))
+        tv = node_text(getattr(node, "true_val", None))
+        fv = node_text(getattr(node, "false_val", None))
+        return f"{cd}?{tv}:{fv}" if cd and tv and fv else ""
+    if name == "SelectExpr":
+        base = node_text(getattr(node, "base", None))
+        suf = _suffix_text(getattr(node, "first_suffix", None))
+        extra = "".join(
+            _suffix_text(s)
+            for s in getattr(node, "extra_suffixes", None) or []
+        )
+        return f"{base}[{suf}]{extra}" if base and suf else ""
+    if name == "HierExpr":
+        parts = [node_text(p) for p in getattr(node, "parts", None) or []]
+        return "".join(p for p in parts if p)
+    if name == "SysFuncCall":
+        callee = node_text(getattr(node, "callee", None))
+        args = _args_text(node)
+        return f"${callee}({args})"
+    if name == "CallExpr":
+        callee = node_text(getattr(node, "callee", None))
+        args = _args_text(node)
+        return f"{callee}({args})"
     # token 节点（literal.number / symbol.* 等）：文本在 value 属性
+    # （放在显式分派之后——业务属性 value（如 ReplicateExpr.value）不能被误当）
     v = getattr(node, "value", None)
     if isinstance(v, str) and v:
         return v
@@ -120,20 +174,37 @@ def node_text(node) -> str:
         t = node_text(v)
         if t:
             return t
-    # 合成二元节点（pratt 表达式：op 是 str 属性，插 left/right 之间）
-    op = getattr(node, "op", None)
-    left = getattr(node, "left", None)
-    right = getattr(node, "right", None)
-    if isinstance(op, str) and isinstance(left, Node) and isinstance(right, Node):
-        lt, rt = node_text(left), node_text(right)
-        if lt and rt:
-            return f"{lt}{op}{rt}"
     parts = []
     for child in node.iter_children():
         t = node_text(child)
         if t:
             parts.append(t)
     return "".join(parts)
+
+
+def _suffix_text(suffix) -> str:
+    """SelectSuffix → 内部文本（index / index:msb / index+:w，不含 []）。"""
+    if not isinstance(suffix, Node):
+        return ""
+    idx = node_text(getattr(suffix, "index", None))
+    rs = getattr(suffix, "range_suffix", None)
+    if isinstance(rs, Node) and getattr(rs, "sub_node", None):
+        sub = [s for s in rs.sub_node if hasattr(s, "node_name")] or []
+        if len(sub) >= 2:
+            op = node_text(sub[0])
+            val = node_text(sub[1])
+            return f"{idx}{op}{val}"
+    return idx
+
+
+def _args_text(node) -> str:
+    """ArgumentList → "a, b" 文本。"""
+    args = getattr(node, "args", None)
+    if not isinstance(args, Node):
+        return ""
+    items = getattr(args, "items", None) or []
+    parts = [node_text(it) for it in items if isinstance(it, Node)]
+    return ",".join(p for p in parts if p)
 
 
 # ── A2 常量宽度求值器 ────────────────────────────────────
@@ -284,4 +355,179 @@ def literal_width(text: str) -> int | None:
         return None  # 'hFF 自动位宽
     if w.isdigit():
         return int(w)
+    return None
+
+
+# ── A3 表达式宽度推断 ────────────────────────────────────
+# 遍历表达式 AST 节点 → 宽度（Verilog 宽度语义，IEEE 1364-2005 5.5 节，
+# 插件层语言知识）。原子查符号宽度表（A1）+ 字面量（A2）；结构节点
+# （拼接/复制/位选/层次）与运算合成节点（UnaryOp/BinaryOp/TernaryOp）
+# 递归推断。未知/跨模块/函数返回宽度 → 保守 None（不误报）。
+
+# 二元运算按结果宽度分派（语言知识）
+_ARITH_OPS = {"+", "-", "*", "/", "%"}
+_CMP_OPS = {"==", "!=", "===", "!==", "<", "<=", ">", ">="}
+_SHIFT_OPS = {"<<", ">>"}
+_BIT_OPS = {"&", "|", "^", "~&", "~|", "~^", "^~"}
+_LOGIC_OPS = {"&&", "||"}
+# 一元归约（结果 1 bit）vs 一元保持（! ~ 同宽）
+_REDUCTION_OPS = {"&", "|", "^", "~&", "~|", "~^", "^~"}
+
+
+def infer_expr_width(node, width_table: dict) -> int | None:
+    """A3：表达式节点 → 宽度（纯函数；未知 → None 保守）。
+
+    原子：Identifier（查宽度表）/ Number|BitWidthLiteral（字面量位宽）
+    / StringLiteral（保守 None）
+    结构：ParenthesizedExpr（内层）/ SelectExpr（位选：索引 1、范围
+    abs+1、+:/-: 切片宽度——最内层 suffix 决定）/ ConcatExpr（和）/
+    ReplicateExpr（count×宽）/ HierExpr（末段下标 1，纯成员链查末段名）
+    运算：UnaryOp（归约 → 1，! ~ → 同宽）/ BinaryOp（算术 max、比较 1、
+    移位 LHS、位运算 max、逻辑 1）/ TernaryOp（max 分支）
+    调用：$signed/$unsigned（同参数宽）；其他/用户函数 → None
+    """
+    if not isinstance(node, Node):
+        return None
+    name = node.node_name
+
+    if name == "Identifier":
+        return table_width_to_num(
+            width_table.get(getattr(node, "content", "") or "")
+        )
+    if name in ("Number", "BitWidthLiteral"):
+        return literal_width(node_text(node))
+    if name == "StringLiteral":
+        return None  # 字符串宽度语义罕见，保守
+    if name == "ParenthesizedExpr":
+        return infer_expr_width(getattr(node, "expr", None), width_table)
+    if name == "SelectExpr":
+        return _select_width(node, width_table)
+    if name == "ConcatExpr":
+        return _sum_width(getattr(node, "sub_node", None) or [], width_table)
+    if name == "ReplicateExpr":
+        count = eval_const_expr(node_text(getattr(node, "count", None)))
+        vw = infer_expr_width(getattr(node, "value", None), width_table)
+        if count is None or vw is None:
+            return None
+        return count * vw
+    if name == "HierExpr":
+        return _hier_width(node, width_table)
+    if name == "UnaryOp":
+        op = getattr(node, "op", "")
+        if op in _REDUCTION_OPS:
+            return 1  # 一元归约 → 1 bit
+        return infer_expr_width(getattr(node, "operand", None), width_table)
+    if name == "BinaryOp":
+        return _binary_width(node, width_table)
+    if name == "TernaryOp":
+        tw = infer_expr_width(getattr(node, "true_val", None), width_table)
+        fw = infer_expr_width(getattr(node, "false_val", None), width_table)
+        if tw is None or fw is None:
+            return None
+        return max(tw, fw)
+    if name == "SysFuncCall":
+        callee = node_text(getattr(node, "callee", None))
+        if callee in ("signed", "unsigned"):
+            # 单参数系统函数：宽度不变（仅改符号性）
+            return _first_arg_width(node, width_table)
+        return None
+    if name == "CallExpr":
+        return None  # 用户函数返回宽度需函数表（C 阶段）
+    return None
+
+
+def _binary_width(node, width_table: dict) -> int | None:
+    """BinaryOp 宽度（按 op 分派）。"""
+    op = getattr(node, "op", "") or ""
+    left = infer_expr_width(getattr(node, "left", None), width_table)
+    right = infer_expr_width(getattr(node, "right", None), width_table)
+    if op in _CMP_OPS or op in _LOGIC_OPS:
+        return 1
+    if op in _SHIFT_OPS:
+        return left  # 移位结果宽 = LHS 宽
+    if left is None or right is None:
+        return None
+    if op in _ARITH_OPS or op in _BIT_OPS:
+        return max(left, right)
+    return None
+
+
+def _select_width(node, width_table: dict) -> int | None:
+    """SelectExpr：链式后缀最内层决定宽度（索引 1 / 范围 abs+1 / 切片宽）。
+
+    base 宽度不参与（越界判定属 C 阶段 SELRANGE）。extra_suffixes 为空时
+    用 first_suffix；链式（arr[i][j]）取最后一个 suffix。
+    """
+    suffixes = [getattr(node, "first_suffix", None)]
+    suffixes.extend(getattr(node, "extra_suffixes", None) or [])
+    suffixes = [s for s in suffixes if isinstance(s, Node)]
+    if not suffixes:
+        return None
+    return _suffix_width(suffixes[-1], width_table)
+
+
+def _suffix_width(suffix, width_table: dict) -> int | None:
+    """SelectSuffix → 宽度：纯索引 1；range_suffix（seq）按运算符分派。"""
+    rs = getattr(suffix, "range_suffix", None)
+    if not isinstance(rs, Node) or not getattr(rs, "sub_node", None):
+        return 1  # 纯索引 → 1 bit
+    sub = [s for s in rs.sub_node if hasattr(s, "node_name")] or []
+    if len(sub) < 2:
+        return 1
+    op = node_text(sub[0])  # ":" / "+:" / "-:"
+    val = eval_const_expr(node_text(sub[1]))
+    if op == ":":
+        idx = eval_const_expr(node_text(getattr(suffix, "index", None)))
+        if idx is None or val is None:
+            return None
+        return abs(idx - val) + 1
+    if op in (":+", "+:", "-:"):
+        # 切片 a[base +: width] / a[base -: width]：宽度 = width
+        return val
+    return 1
+
+
+def _sum_width(items: list, width_table: dict) -> int | None:
+    """拼接元素宽度和（任一 None → None）。"""
+    total = 0
+    for it in items:
+        w = infer_expr_width(it, width_table)
+        if w is None:
+            return None
+        total += w
+    return total
+
+
+def _hier_width(node, width_table: dict) -> int | None:
+    """HierExpr（a / a.b / a[0].b）：单段查表；末段带下标 → 1；
+    纯成员链查末段名。跨模块成员宽度查表不到 → None（保守）。"""
+    parts = getattr(node, "parts", None) or []
+    if not parts:
+        return None
+    last = parts[-1]
+    if not isinstance(last, Node):
+        return None
+    if last.node_name == "Identifier":
+        # 单段（a）或末段是标识符：查宽度表
+        return table_width_to_num(
+            width_table.get(getattr(last, "content", "") or "")
+        )
+    if last.node_name == "HierSuffix":
+        return 1  # 末段下标选择 → 1 bit
+    if last.node_name == "HierMember":
+        return table_width_to_num(
+            width_table.get(getattr(getattr(last, "name", None), "content", "") or "")
+        )
+    return None
+
+
+def _first_arg_width(node, width_table: dict) -> int | None:
+    """SysFuncCall 首参数宽度（$signed/$unsigned 单参数）。"""
+    args = getattr(node, "args", None)
+    if not isinstance(args, Node):
+        return None
+    items = getattr(args, "items", None) or []
+    for it in items:
+        if isinstance(it, Node):
+            return infer_expr_width(it, width_table)
     return None
