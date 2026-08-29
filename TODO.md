@@ -161,16 +161,10 @@
 - [x] ~~锁存风险：LC001 组合 always if 无 else~~（已完成，d5148d3）
 - [ ] 位宽一致性（对标 WIDTH/width-trunc 家族，2026-08-29 分期立项；
       实现位置 = 语义插件 grammar/verilog/plugins/checks/width_check/：
-      求值器+推断器+规则都在插件层，语言知识不进引擎）：
-  - [ ] **A5 评测扩充**：width_check cases（pos/neg）+ check_accuracy 位宽
-        样例 + pytest 门禁
-  - [ ] **A3 表达式宽度推断**：原子（查表/字面量）→ 拼接（和）/复制（×n）
-        /位选（1 或范围）/一元（同宽）/二元（算术 max、比较 1、移位
-        LHS、位运算 max）/三目（max）
-  - [ ] **A4 WIDTH 赋值对比**：assign/阻塞/非阻塞/端口连接 LHS vs RHS
-        宽度——RHS>LHS 截断报 W201（warning）；扩展不报；先 sized 域
-  - [ ] **A5 评测扩充**：width_check cases（pos/neg）+ check_accuracy 位宽
-        样例 + pytest 门禁
+      求值器+推断器+规则都在插件层，语言知识不进引擎。
+      **阶段 A 常量宽度域已闭环**（A1 符号宽度表 + A2 常量求值器 +
+      A3 表达式宽度推断 + A4 WIDTH 赋值对比 W201 + A5 评测扩充 31 case
+      100% recall / 0 FP，真实语料 0 误报；完成历史 git log）：
   - [ ] **B1 模块参数表**：ParamDecl 默认值 + 实例化覆盖（#(.P(v))/#(v)）
         解析 → 参数值表
   - [ ] **B2 参数化宽度求值**：宽度文本含参数名 → 代入折叠（WIDTH-1:0）
