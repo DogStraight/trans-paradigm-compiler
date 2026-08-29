@@ -152,6 +152,10 @@ def _validate_rule(entry: dict, path: str, seen_ids: set[str]) -> None:
     if not entry.get("message"):
         raise ConfigError(f"[checks] {path}: 规则 '{rid}' 缺 message（报告模板）")
 
+    default = entry.get("default", True)
+    if not isinstance(default, bool):
+        raise ConfigError(f"[checks] {path}: 规则 '{rid}' default 应为布尔值")
+
 
 def get_check_rules(plugins_dir: str = "") -> list[dict[str, Any]]:
     """返回已加载的规则表（未加载时自动加载）。"""

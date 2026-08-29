@@ -140,6 +140,7 @@ class ProjectChecker:
         include_dirs: list[str] | None = None,
         register: "GrammarRulesRegister | None" = None,
         expand_macros: bool = True,
+        enabled_rules: list[str] | None = None,
     ):
         self._rules_dir = rules_dir
         self._ext_dirs = ext_dirs or []
@@ -147,6 +148,9 @@ class ProjectChecker:
         # 宏展开（真实工程含 `ifdef/`define；无宏文件 scan_directives 空表
         # 零影响）。默认开——check 语义对齐 run_pipeline（展开后分析）。
         self._expand_macros = expand_macros
+        # 显式规则启用集（None = 语言包 default + 用户配置；评测/测试用
+        # 注入——如 check_accuracy 的 focus 规则，含默认关闭的 NC 族）。
+        self._enabled_rules = enabled_rules
         # 独立规则实例：测试跨语言（c4 等）时传入，避免污染全局单例
         # （模式同 tests/languages/c4/test_c4_linter.py 的 fixture 注释）。
         self._register = register
@@ -458,6 +462,9 @@ class ProjectChecker:
 
         shared = self._ensure_shared()
         analyzer = AnalysisTraversal(shared["rules"], rules_dir=self._rules_dir)
+        # 显式规则启用集（默认关闭的规则——如 NC 族——测试/评测注入）
+        if self._enabled_rules is not None:
+            analyzer._checks_enabled = list(self._enabled_rules)
         # 跨文件上下文注入（analyze() 重建 context 后合并进 extra）
         analyzer._external_extra["module_index"] = self._module_index
         analyzer._external_extra["inst_sites"] = fr.inst_sites

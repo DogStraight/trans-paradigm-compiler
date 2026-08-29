@@ -1751,6 +1751,33 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 中还有宏深水区成分）；**瓶颈在命名类默认策略**（决策项）+ 宏展开完整
 性（W002/W105，P3 增量解析前置）。check 宏展开使真实工程可用了。
 
+#### 命名规则配置面设计（2026-08-29，默认关已落地，前后缀下一期）
+
+背景：试水实测 NC 族默认全开 + 小写下划线 pattern 对真实代码（混合
+风格）~1300 条误报海啸。用户定调（2026-08-29）：命名风格主轴 = 蛇形 +
+大小驼峰；比风格更有价值的是**前后缀语义约定**（防错）。
+
+**已落地（提交 e93ab9f 等）**：
+- `[[checks]] default = false`：NC 族默认关闭（规则=数据，语言包声明）
+- 启用语义（analyzer/checks.py）：显式 enabled = "不选即关"（P4 不变）；
+  缺省 = default=true 的规则 ∪ overrides/per_file **引用即启用**（per_file
+  豁免对默认关闭的规则才有意义）；ProjectChecker.enabled_rules 注入
+  （评测/测试显式启用）
+- NC001/NC002 模块/实例 pattern 放宽为 **PascalCase 或 snake_case**
+  （行业惯例；真实语料 picorv32/serv 均 Pascal）
+- 默认关后真实语料 NC 诊断归零（默认体验不刷屏；启用才按团队约定查）
+
+**配置面设计（下一期）**：
+- 风格表（per kind）：module/instance = pascal|snake；wire/reg/port =
+  snake|camel；parameter/localparam/genvar = upper_snake；function/task/
+  integer/type = snake|camel——pattern 或规则数据声明
+- 前后缀约定（真正防错）：端口方向后缀 `_i`/`_o`/`_io`（防接错方向）、
+  低有效 `_n`（防逻辑反）、时钟/复位前缀 `clk_`/`rst_`、信号类型后缀
+  `_w`/`_r`——声明式（前缀表+后缀表+允许/要求），handler 或 pattern 组合
+- 豁免完善：`_` 前缀（已有）、单字母（i/j/k 循环）、`tpc_` 引擎前缀
+- 默认策略：风格弱约束（只报混用）/前后缀强约束（声明了才查）——0.1.1
+  默认 NC 关（本次已落地），启用走 P4 用户配置
+
 ### Synopsys（商业 EDA 工具链）— 方法论参照（2026-08 调研，agent-reach + web 检索）
 
 - 定位：1986 年创立、总部 Sunnyvale 的 EDA 巨头（NASDAQ: SNPS），与 Cadence 构成

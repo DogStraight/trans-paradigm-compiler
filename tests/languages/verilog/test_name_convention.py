@@ -128,7 +128,31 @@ class TestNamingRuleTable:
 
 
 class TestNamingCheck:
-    """名称检查端到端（NC 码诊断）。"""
+    """名称检查端到端（NC 码诊断）。
+
+    NC 族规则默认关闭（语言包 default=false，2026-08-29 试水策略）——
+    本类测试显式启用全部命名规则（TPC_CONFIG enabled）验证规则行为。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _enable_all_naming(self, monkeypatch, tmp_path):
+        import json
+
+        from core import check_registry
+
+        ids = [
+            r["id"]
+            for r in check_registry.get_check_rules()
+            if r.get("category") == "naming"
+        ]
+        cfg = tmp_path / "tpc_config.json"
+        cfg.write_text(
+            json.dumps({"checks": {"enabled": ids}}), encoding="utf-8"
+        )
+        monkeypatch.setenv("TPC_CONFIG", str(cfg))
+        check_registry._USER_CONFIG_CACHE.clear()
+        yield
+        check_registry._USER_CONFIG_CACHE.clear()
 
     def test_clean_names_no_diag(self, ctx):
         """全小写下划线 → 零诊断。"""
@@ -144,10 +168,10 @@ endmodule
 
     def test_module_uppercase_nc001(self, ctx):
         """module 名大写 → NC001。"""
-        src = "module Mux2x1;\nendmodule\n"
+        src = "module mIxEd;\nendmodule\n"
         diags = _diags(ctx, src)
         assert ("NC001", "warning") in {(c, l) for c, l, _ in diags}
-        assert any("Mux2x1" in m for _, _, m in diags)
+        assert any("mIxEd" in m for _, _, m in diags)
 
     def test_port_uppercase_nc005(self, ctx):
         """端口名大写 → NC005（module 合规不误报）。"""
@@ -228,7 +252,7 @@ endmodule
         """实例名小写合规；大写违规 NC002。"""
         src = (
             "module m;\n"
-            "  adder U_ADD ();\n"
+            "  adder u_ADD ();\n"
             "endmodule\n"
             "module adder;\n"
             "endmodule\n"
@@ -319,7 +343,7 @@ class TestUserCheckConfig:
     def test_enabled_filters(self, ctx, monkeypatch, tmp_path):
         """enabled 只启用列出的规则（不选即关）。"""
         src = (
-            "module Mux2x1 (\n"
+            "module mIxEd (\n"
             "  input wire A_IN,\n"
             "  output wire Y_OUT\n"
             ");\n"
@@ -334,13 +358,13 @@ class TestUserCheckConfig:
 
     def test_enabled_empty_disables_all(self, ctx, monkeypatch, tmp_path):
         """enabled = [] → 全部规则关闭（"不选即关"）。"""
-        src = "module Mux2x1;\nendmodule\n"
+        src = "module mIxEd;\nendmodule\n"
         diags = self._run_cfg(ctx, src, {"enabled": []}, monkeypatch, tmp_path)
         assert diags == []
 
     def test_override_severity(self, ctx, monkeypatch, tmp_path):
         """overrides 提升 severity：NC001 warning → error。"""
-        src = "module Mux2x1;\nendmodule\n"
+        src = "module mIxEd;\nendmodule\n"
         diags = self._run_cfg(
             ctx,
             src,
@@ -352,7 +376,7 @@ class TestUserCheckConfig:
 
     def test_override_downgrade(self, ctx, monkeypatch, tmp_path):
         """overrides 降级：NC001 → info。"""
-        src = "module Mux2x1;\nendmodule\n"
+        src = "module mIxEd;\nendmodule\n"
         diags = self._run_cfg(
             ctx,
             src,
@@ -366,7 +390,7 @@ class TestUserCheckConfig:
         """per_file glob 豁免：符号文件匹配 → disabled 规则跳过。"""
         import json
 
-        src = "module Mux2x1;\nendmodule\n"
+        src = "module mIxEd;\nendmodule\n"
         tb_dir = tmp_path / "tb"
         tb_dir.mkdir()
         fpath = tb_dir / "tb_top.sv"
@@ -391,7 +415,7 @@ class TestUserCheckConfig:
         """per_file glob 不匹配 → 不豁免（NC001 仍报）。"""
         import json
 
-        src = "module Mux2x1;\nendmodule\n"
+        src = "module mIxEd;\nendmodule\n"
         rtl_dir = tmp_path / "rtl"
         rtl_dir.mkdir()
         fpath = rtl_dir / "rtl_top.sv"
@@ -541,7 +565,16 @@ class TestCommentDrivenCases:
         assert matches, f"cases 目录无样例: {plugins_dir}/**/name_check/cases"
         samples = sorted(matches)
 
-        checker = ProjectChecker(rules_dir="grammar/verilog")
+        from core.check_registry import get_check_rules
+
+        checker = ProjectChecker(
+            rules_dir="grammar/verilog",
+            enabled_rules=[
+                r["id"]
+                for r in get_check_rules()
+                if r.get("category") == "naming"
+            ],
+        )
         all_failures = []
         for sample in samples:
             # check 需要独立文件（ProjectChecker 按路径解析；保留原文件名

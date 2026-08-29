@@ -20,14 +20,21 @@ from analyzer.checker import ProjectChecker  # noqa: E402
 
 @pytest.fixture(scope="module")
 def checker():
-    return ProjectChecker(rules_dir="grammar/verilog")
+    # 注释驱动框架测试验证"规则命中/未命中"——启用全部规则（含默认
+    # 关闭的 NC 族），不受语言包默认策略影响
+    from core.check_registry import get_check_rules
+
+    return ProjectChecker(
+        rules_dir="grammar/verilog",
+        enabled_rules=[r["id"] for r in get_check_rules()],
+    )
 
 
 class TestParseDirectives:
     def test_ruleid_and_ok(self):
         src = (
             "// ruleid: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n"
             "// ok: NC005\n"
             "module good;\n"
@@ -58,7 +65,7 @@ class TestRunCommentDriven:
         p = tmp_path / "sample.sv"
         p.write_text(
             "// ruleid: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n",
             encoding="utf-8",
         )
@@ -93,7 +100,7 @@ class TestRunCommentDriven:
         p = tmp_path / "sample.sv"
         p.write_text(
             "// ok: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n",
             encoding="utf-8",
         )
@@ -106,7 +113,7 @@ class TestRunCommentDriven:
         p = tmp_path / "sample.sv"
         p.write_text(
             "// ruleid: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n"
             "// ok: NC005\n"
             "module good;\n"
@@ -119,7 +126,7 @@ class TestRunCommentDriven:
         """指令与代码同行（模块声明行）→ 诊断计入该段。"""
         p = tmp_path / "sample.sv"
         p.write_text(
-            "module Mux2x1; // ruleid: NC001\n"
+            "module mIxEd; // ruleid: NC001\n"
             "endmodule\n",
             encoding="utf-8",
         )
@@ -131,7 +138,12 @@ class TestCrossFileNaming:
 
     @pytest.fixture(scope="class")
     def checker(self):
-        return ProjectChecker(rules_dir="grammar/verilog")
+        from core.check_registry import get_check_rules
+
+        return ProjectChecker(
+            rules_dir="grammar/verilog",
+            enabled_rules=[r["id"] for r in get_check_rules()],
+        )
 
     def _check(self, checker, tmp_path, fname, src):
         p = tmp_path / fname
@@ -148,7 +160,7 @@ class TestCrossFileNaming:
         """文件名与模块名不一致 → NC011。"""
         codes = self._check(
             checker, tmp_path, "adder.sv",
-            "module Mux2x1;\nendmodule\n",
+            "module mIxEd;\nendmodule\n",
         )
         assert "NC011" in codes
 
@@ -182,7 +194,7 @@ class TestCrossFileNaming:
         p = tmp_path / "sample.sv"
         p.write_text(
             "// ruleid: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n",
             encoding="utf-8",
         )
@@ -217,7 +229,7 @@ class TestCrossFileNaming:
         p = tmp_path / "sample.sv"
         p.write_text(
             "// ok: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n",
             encoding="utf-8",
         )
@@ -230,7 +242,7 @@ class TestCrossFileNaming:
         p = tmp_path / "sample.sv"
         p.write_text(
             "// ruleid: NC001\n"
-            "module Mux2x1;\n"
+            "module mIxEd;\n"
             "endmodule\n"
             "// ok: NC005\n"
             "module good;\n"
@@ -243,7 +255,7 @@ class TestCrossFileNaming:
         """指令与代码同行（模块声明行）→ 诊断计入该段。"""
         p = tmp_path / "sample.sv"
         p.write_text(
-            "module Mux2x1; // ruleid: NC001\n"
+            "module mIxEd; // ruleid: NC001\n"
             "endmodule\n",
             encoding="utf-8",
         )

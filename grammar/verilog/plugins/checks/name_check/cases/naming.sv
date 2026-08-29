@@ -17,7 +17,7 @@ module naming (
   reg BAD_REG;
 endmodule
 
-// 第二个模块（同文件）：文件命名已由 naming 匹配，Mux2x1 不误报 NC011
-// （多模块同文件防御）——只断言 NC001 命名违规。
-module Mux2x1; // ruleid: NC001
+// 第二个模块（同文件）：文件命名已由 naming 匹配，mIxEd 不误报 NC011
+// （多模块同文件防御）——只断言 NC001 命名违规（混合大小写非 snake/pascal）。
+module mIxEd; // ruleid: NC001
 endmodule

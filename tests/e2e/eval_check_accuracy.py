@@ -66,6 +66,9 @@ def evaluate(checker, table=None) -> tuple[list[dict], dict]:
     if table is None:
         table = _load_table()
     focus: set[str] = set(table.get("focus", []))
+    # focus 规则显式启用（含默认关闭的 NC 族——评测验证"启用后"的
+    # 检出能力，不受语言包默认策略影响）
+    checker._enabled_rules = sorted(focus)
 
     rows = []
     stats = {

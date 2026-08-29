@@ -26,7 +26,11 @@ import os
 import re
 from typing import Any, Callable
 
-from core.check_registry import get_rules_for_kind, load_user_check_config
+from core.check_registry import (
+    get_check_rules,
+    get_rules_for_kind,
+    load_user_check_config,
+)
 from core.define import Node
 
 # handler 缓存：{插件目录: {规则 id: (module, fn)}}——handler 是插件
@@ -62,6 +66,31 @@ def check_rules_pass(analyzer, context) -> None:
     per_file = user_cfg.get("per_file", {})
     file_ctx = _file_context(symbols)
 
+    # 规则启用集（2026-08-29 默认策略）：
+    #   显式 enabled  → "不选即关"（P4 语义不变）
+    #   缺省          → default=true 的规则 ∪ 被 overrides/per_file 引用的
+    #                   规则（引用即启用——per_file 豁免对默认关闭的规则
+    #                   才有意义；NC 族 default=false 默认不跑）
+    #   ProjectChecker.enabled_rules 注入（analyzer._checks_enabled，评测/
+    #   测试显式启用）优先于用户配置
+    injected = getattr(analyzer, "_checks_enabled", None)
+    if injected is not None:
+        active = set(injected)
+    elif enabled is not None:
+        active = set(enabled)
+    else:
+        referenced = set(overrides) | {
+            rid
+            for spec in per_file.values()
+            for rid in (spec or {}).get("disabled", [])
+        }
+        active = {
+            r.get("id", "")
+            for r in get_check_rules(plugins_dir=plugins_dir)
+            if r.get("default", True)
+        }
+        active |= referenced
+
     # 规则表按插件目录加载（语言包 rules/）；缓存由 check_registry 管理
     for sym in symbols:
         rules = get_rules_for_kind(sym.kind, plugins_dir=plugins_dir)
@@ -72,8 +101,8 @@ def check_rules_pass(analyzer, context) -> None:
             continue
         for rule in rules:
             rid = rule.get("id", "")
-            if enabled is not None and rid not in enabled:
-                continue  # "不选即关"
+            if rid not in active:
+                continue  # 未启用（默认关 / 不选即关）
             if _disabled_for_file(rid, sym, file_ctx, per_file):
                 continue  # per_file 豁免
             rule = _with_override(rule, overrides.get(rid))
