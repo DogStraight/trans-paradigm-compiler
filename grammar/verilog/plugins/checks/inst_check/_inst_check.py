@@ -22,6 +22,9 @@ def run_inst_check(analyzer, context) -> None:
     del analyzer  # postpass 协议签名参数，本 pass 从 context 取数据
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
+    # elaboration 层 2（ADR-0008）：实例化点端口连接展开——未连接端口判定
+    connections = context.extra.get("connections", []) or []
+    conn_by_inst = {c.inst_name: c for c in connections}
     for site in inst_sites:
         mod_name = _text(getattr(site, "module_name", None))
         if not mod_name:
@@ -39,6 +42,7 @@ def run_inst_check(analyzer, context) -> None:
         related_def = [("模块 '%s' 定义处" % mod_name, info.node)]
         _check_ports(context, site, info, related_def)
         _check_params(context, site, info, related_def)
+        _check_missing_ports(context, site, info, related_def, conn_by_inst)
 
 
 def _check_ports(context, site, info, related_def) -> None:
@@ -77,6 +81,42 @@ def _check_ports(context, site, info, related_def) -> None:
                     node=conn,
                     related=related,
                 )
+
+
+def _check_missing_ports(
+    context, site, info, related_def, conn_by_inst
+) -> None:
+    """未连接端口检查（对标 Veryl missing_port / Verilator PINMISSING）。
+
+    模块的 input/output 端口在实例化时未连接 → 报未连接。判定基于
+    elaboration 层 2 的连接展开（connects 键 = 已连接端口名）+ 模块
+    端口方向（module_index 端口声明）：
+    - input/output 未连接 → W104（输入悬空/输出悬空都是设计错误范式）
+    - inout 未连接不报（三态悬空可能是有意设计，保守豁免）
+    位置连接（ordered）无法按名匹配，跳过（需按序对端口表，留给后续）。
+    """
+    conn = conn_by_inst.get(_text(getattr(site, "inst_name", None)))
+    if conn is None:
+        return
+    connected = set(conn.connects.keys())
+    # 语言知识：端口方向值（input/output/inout）来自语言包 checker 结构
+    # 协议（本插件读 context.extra 注入的方向集——由引擎按协议注入）。
+    out_dirs = set(context.extra.get("output_dirs", []) or [])
+    in_dirs = set(context.extra.get("input_dirs", []) or [])
+    check_dirs = in_dirs | out_dirs
+    for pname, port in info.ports.items():
+        if not port.direction or port.direction not in check_dirs:
+            continue
+        if pname in connected:
+            continue
+        context.report(
+            f"实例化 '{info.name}' 未连接端口 '{pname}'"
+            f"（{port.direction} 端口悬空）",
+            code="W104",
+            level="warning",
+            node=site,
+            related=related_def,
+        )
 
 
 def _check_params(context, site, info, related_def) -> None:

@@ -426,6 +426,10 @@ class ProjectChecker:
         analyzer._external_extra["connections"] = fr.connections
         # elaboration 层 3（ADR-0008）：全工程信号驱动/负载图
         analyzer._external_extra["signal_graph"] = self._signal_graph
+        # 端口方向值集（插件规则消费：未连接端口/驱动负载判定；语言包声明）
+        analyzer._external_extra["output_dirs"] = sorted(self._dirs("output_dirs"))
+        analyzer._external_extra["input_dirs"] = sorted(self._dirs("input_dirs"))
+        analyzer._external_extra["inout_dirs"] = sorted(self._dirs("inout_dirs"))
         analyzer.analyze(fr.ast)
         fr.analyzer = analyzer
 

@@ -246,7 +246,6 @@ class TestNoStructureProtocol:
 
 # ── elaboration 层 2：端口连接展开（ADR-0008） ──────────────
 
-
 class TestElaborationConnections:
     """层 2 端口连接展开：NamedPortList / OrderedPortList → PortConnection。
 
@@ -431,3 +430,77 @@ class TestElaborationSignalGraph:
             if fr.analyzer is not None:
                 assert "signal_graph" in fr.analyzer._external_extra
                 assert "connections" in fr.analyzer._external_extra
+
+
+# ── 跨文件端口完整性：未连接端口 W104（elaboration 层 2 之上） ──
+
+
+class TestMissingPortCheck:
+    """未连接端口检查（对标 Veryl missing_port / Verilator PINMISSING）。
+
+    模块 input/output 端口在实例化时未连接 → W104；已连接/未用的 inout
+    不报。依赖 elaboration 层 2 连接展开 + 模块端口方向。
+    """
+
+    def test_missing_input_reported(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x;\n"
+            "  adder u1 (.a(x), .y());\n"  # b 未连接
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w104 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W104"
+        )
+        assert any("b" in d["message"] for d in w104)
+
+    def test_all_connected_no_w104(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y, z;\n"
+            "  adder u1 (.a(x), .b(y), .y(z));\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W104" not in codes
+
+    def test_output_unconnected_reported(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y;\n"
+            "  adder u1 (.a(x), .b(y));\n"  # output y 未连接
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w104 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W104"
+        )
+        assert any("y" in d["message"] for d in w104)
+
+    def test_inout_unconnected_exempt(self, checker, tmp_path):
+        (tmp_path / "mem.sv").write_text(
+            "module mem (input wire a, inout wire d);\nendmodule\n",
+            encoding="utf-8",
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n  wire x;\n  mem m1 (.a(x));\nendmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w104 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W104"
+        )
+        # inout d 未连接不报；input a 已连接
+        assert not any("d" in d["message"] for d in w104)

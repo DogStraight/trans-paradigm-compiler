@@ -50,10 +50,10 @@ class TestUnusedCheck:
         assert any("unused_a" in m for m in msgs)
         assert not any("used_b" in m for m in msgs)
 
-    def test_unused_reg_and_param_reported(self, checker, tmp_path):
+    def test_unused_reg_reported_param_exempt(self, checker, tmp_path):
         src = tmp_path / "t.sv"
         src.write_text(
-            "module t #(parameter W = 8);\n"  # W 未使用
+            "module t #(parameter W = 8);\n"  # W 未使用（参数豁免）
             "  reg r_unused;\n"
             "  reg r_used;\n"
             "  always @(*) r_used = r_used;\n"
@@ -68,8 +68,9 @@ class TestUnusedCheck:
             if d.get("code") == "UN001"
         ]
         joined = " ".join(msgs)
-        assert "W" in joined or "r_unused" in joined
+        assert "r_unused" in joined
         assert "r_used" not in joined
+        assert "W" not in joined  # 参数未使用豁免
 
     def test_port_not_reported(self, checker, tmp_path):
         src = tmp_path / "t.sv"

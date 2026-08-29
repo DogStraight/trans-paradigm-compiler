@@ -17,6 +17,7 @@ module_inst_rule = "ModuleInst"    # 模块实例化规则名（递归发现 + �
 module_keyword   = "module"        # 模块声明关键字（定义文件文本扫描兜底）
 file_exts        = [".v", ".sv"]   # 源文件扩展名（定义文件查找）
 output_dirs      = ["output"]      # 端口方向 = 驱动（层 3 信号图判定）
+input_dirs       = ["input"]       # 端口方向 = 负载（层 3 信号图判定）
 inout_dirs       = ["inout"]       # 端口方向 = 双向（驱动 + 负载）
 
 # 节点字段（语法 TOML node 绑定名）

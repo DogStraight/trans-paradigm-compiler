@@ -17,7 +17,9 @@ from core.define import Node
 
 # 插件层语言知识：内部信号 kind（声明后应被引用）；其余 kind（port/
 # module/function/task/...）不参与未使用判定。
-_INTERNAL_KINDS = {"wire", "reg", "integer", "parameter", "localparam"}
+# parameter/localparam 不查：参数未使用在模块接口场景常见（预留接口/
+# 条件编译），误报率高（对标 Verilator UNUSEDPARAM 默认关闭）。
+_INTERNAL_KINDS = {"wire", "reg", "integer"}
 
 
 def run_unused_check(analyzer, context) -> None:
