@@ -137,6 +137,35 @@
 - 关联：P1.9（诊断模型）为其前置；Veryl/svlint 调研落档 references.md（本地镜像
       `E:\research\veryl` / `E:\research\svlint`）
 
+### P2.7 elaboration 底座（2026-08-29 登记，跨文件检查引擎级前置）
+
+> 触发：P1.10 主流 lint 调研结论——Verilator/slang/Spyglass 的跨文件检查
+> （端口连接/未使用/多驱动/位宽）全是"**elaboration 后**"视角（全设计编译 +
+> 实例树展开 + 驱动/负载图）；tpc 目前只有第一层雏形（ProjectChecker 的
+> module_index 注册表 + inst_sites + inst_check W101/W102/W103），缺连接
+> 关系展开 / 驱动负载图 / 层次展开。没有这个底座，P1.10 核心集合里的
+> 未使用类/多驱动/端口完整性/位宽匹配全做不了。
+>
+> **三层定义**：
+> 1. **design-unit 注册表 + 依赖排序**（已有雏形：module_index；补依赖
+>    拓扑序，参照 HDL Checker database/parsers 思路）——"有哪些模块"
+> 2. **端口连接关系展开**（缺）：实例化点连接信号 → 模块端口 → 信号名
+>    解析（跨文件信号是什么，谁连谁）——"模块怎么连"
+> 3. **驱动/负载图 + 层次展开**（缺）：哪个信号被哪个实例驱动/被哪些实例
+>    读取（UNUSED/UNDRIVEN/MULTIDRIVEN 的地基）；实例树 top→子→孙
+>    （PINMISSING/PINNOTFOUND 到 MULTIDRIVEN 的必经层）——"信号怎么走"
+>
+> 原则：延续"语言知识不进代码"——elaboration 是**通用引擎机制**（配置驱动：
+> 语言包 TOML 声明模块/端口/实例化的结构形态，checker.py 的 _struct 协议
+> 已开此头）；跨文件检查规则仍走插件（kind 分发 + handler 兜底）。
+> 触发条件：P1.10 规则实现进入语义层/跨文件阶段时立项（先语法层声明式
+> 规则，再需要 elaboration 时启动）。
+
+- [ ] 层 1 补全：design-unit 注册表 + 依赖拓扑排序（HDL Checker 参照）
+- [ ] 层 2：端口连接关系展开（实例连接信号 → 端口 → 信号解析）
+- [ ] 层 3：驱动/负载图 + 实例树层次展开
+- [ ] 验证：接 P1.10 跨文件规则（未使用/多驱动/端口完整性）验证底座完备
+
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
 ### P3.1 前置：AST 节点 token span 绑定（解析期）

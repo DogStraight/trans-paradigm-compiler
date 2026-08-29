@@ -1457,6 +1457,11 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   符号解析规则（kind 分发 + handler 兜底，handler 拿两文件符号表对比）。
   规则 TOML 可加 `group`（syntax/semantic/custom）与 `severity` 字段
   （对齐 slang 子系统分组 + Spyglass Rule→Goal 分级思想）。
+  **2026-08-29 升级命名**：① 即"**elaboration 底座**"（ROADMAP P2.7）——
+  Verilator/slang/Spyglass 的跨文件检查全是 elaboration 后视角；tpc 现有
+  第一层雏形（module_index + inst_sites + inst_check），缺连接关系展开/
+  驱动负载图/层次展开三层。无此底座，未使用/多驱动/端口完整性/位宽匹配
+  全做不了。
 
 #### 重合核心集合 + 特化赛道 + 映射评估（P1.10 结论）
 
