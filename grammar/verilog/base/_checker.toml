@@ -20,6 +20,7 @@ output_dirs      = ["output"]      # 端口方向 = 驱动（层 3 信号图判�
 input_dirs       = ["input"]       # 端口方向 = 负载（层 3 信号图判定）
 inout_dirs       = ["inout"]       # 端口方向 = 双向（驱动 + 负载）
 assign_rule      = "AssignStmt"    # 连续赋值规则名（层 3 信号图 assign 驱动收集）
+body_port_rules  = ["BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl"]  # 模块体端口声明（旧式端口方向/宽度补全）
 
 # 节点字段（语法 TOML node 绑定名）
 [checker.fields]
@@ -41,3 +42,4 @@ port_name   = "port_name"     # 命名端口连接 .p(..) 的端口名字段（N
 assign_target       = "target"  # 赋值目标字段（AssignStmt/AssignExtra 上，层 3）
 assign_extras       = "extras"  # 多目标后缀数组字段（AssignStmt 上，层 3）
 assign_extra_target = "target"  # AssignExtra 的目标字段（层 3）
+body_direction      = "direction"  # body 端口方向字段（Body*Decl 上）

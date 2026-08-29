@@ -10,6 +10,7 @@
 - 实例化一个定义缺失的模块（W101，定义文件未找到）
 """
 
+import os
 import re
 
 from core.define import Node
@@ -131,15 +132,20 @@ def _check_missing_ports(
 def _check_multi_driver(analyzer, context, connections) -> None:
     """多驱动检查（对标 Verilator MULTIDRIVEN / Spyglass W415）。
 
-    基于 elaboration 层 3 信号图（context.extra["signal_graph"]）：
+    基于 elaboration 层 3 信号图（context.extra["signal_graph"]，键 =
+    (模块, 信号名)——跨模块同名信号隔离，2026-08-29 修复 ice40 误报）：
     信号被 ≥2 个驱动源驱动（实例 output 连接 / 本文件 assign 连续赋值
     目标）→ 多驱动错误范式（并发驱动汇聚）。
-    归属：本文件有 assign 驱动的信号报在 assign 目标处（本文件内部
-    信号）；否则报在本文件实例连接处（避免每文件重复报同一跨文件信号）。
+    归属：驱动源含本文件（assign 或实例连接）才报——避免跨文件重复；
+    本文件 assign 目标优先定位，否则实例连接处。
     """
     signal_graph = context.extra.get("signal_graph", {}) or {}
     if not signal_graph:
         return
+    this_file = ""
+    for conn in connections:
+        this_file = os.path.basename(conn.file)
+        break
     # 本文件 assign 驱动目标 → 信号名 → 节点（归属判定 + 定位）
     assign_nodes = _collect_assign_targets(analyzer)
     # 本文件出现的信号（连接展开里的连接信号名）
@@ -147,13 +153,16 @@ def _check_multi_driver(analyzer, context, connections) -> None:
     for conn in connections:
         local_sigs.update(conn.connects.values())
         local_sigs.update(conn.ordered)
-    for sig, entry in signal_graph.items():
+    for (_mod, sig), entry in signal_graph.items():
         drivers = entry.get("drivers", [])
         if len(drivers) < 2:
             continue
+        # 归属：驱动源含本文件才报（避免每文件重复报同一跨文件信号）
+        if this_file and not any(d.startswith(this_file + ":") for d in drivers):
+            continue
         node = assign_nodes.get(sig)
         if node is None and sig not in local_sigs:
-            continue  # 跨文件多驱动由信号驱动所在文件报（避免重复）
+            continue  # 信号未在本文件连接/赋值（驱动在别处）——跳过
         if node is None:
             node = _find_signal_node(connections, sig)
         driver_desc = ", ".join(drivers)

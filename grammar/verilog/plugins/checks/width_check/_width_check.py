@@ -134,12 +134,14 @@ def _module_params(context) -> dict[str, dict[str, str]]:
 # 走本函数（递归下降，ident 查表递归求值）。
 
 
-def eval_expr_params(text: str, params: dict[str, str]) -> int | None:
+def eval_expr_params(
+    text: str, params: dict[str, str], _seen: frozenset | None = None
+) -> int | None:
     """常量表达式 + 参数表 → 数值。
 
     "8" → 8；"WIDTH-1"（WIDTH=8）→ 7；"DATA_W/2"（DATA_W=16）→ 8；
     "A+B"（A=2,B=3）→ 5；"W"（W="DATA_W/2", DATA_W=16）→ 8（链式）；
-    含未知标识符 → None。
+    含未知标识符/循环引用（WIDTH=WIDTH）→ None。
     """
     toks = _expr_tokenize(text)
     if toks is None:
@@ -212,7 +214,11 @@ def eval_expr_params(text: str, params: dict[str, str]) -> int | None:
             v = params.get(t[1])
             if v is None:
                 return None  # 未知标识符（非本模块参数/信号）
-            return eval_expr_params(v, params)  # 参数值递归求值（链式）
+            if _seen is not None and t[1] in _seen:
+                return None  # 循环引用（WIDTH=WIDTH）防递归死循环
+            return eval_expr_params(
+                v, params, frozenset(_seen or ()) | {t[1]}
+            )  # 参数值递归求值（链式；环防护）
         return None
 
     v = parse_expr()
@@ -306,6 +312,11 @@ def _check_one(node, context, table: dict) -> None:
     if lw is None or rw is None:
         return  # 任一侧未知 → 保守不报（sized 域）
     if rw > lw:
+        # 自引用位选（a[x:y] = a / a[x:y] = a + ... 且主信号同基）：
+        # 截断的是自身位（显式部分赋值语义），无害——不报
+        # （2026-08-29 修复：picorv32 active[3:1] = active 误报）。
+        if _self_select_assign(node):
+            return
         lhs_t = node_text(getattr(node, "target", None))
         rhs_t = node_text(getattr(node, "value", None))
         context.report(
@@ -315,6 +326,29 @@ def _check_one(node, context, table: dict) -> None:
             level="warning",
             node=node,
         )
+
+
+def _self_select_assign(node) -> bool:
+    """LHS 是位选且与 RHS 主信号同基（a[x:y] = a…）→ 截断无害。
+
+    RHS 取主信号（Identifier/HierExpr 单段）文本，与 LHS SelectExpr 的
+    base 比较；相同 → True。
+    """
+    lhs = getattr(node, "target", None)
+    rhs = getattr(node, "value", None)
+    if not isinstance(lhs, Node) or lhs.node_name != "SelectExpr":
+        return False
+    base = getattr(lhs, "base", None)
+    base_name = getattr(base, "content", "") if isinstance(base, Node) else ""
+    if not base_name:
+        return False
+    if isinstance(rhs, Node) and rhs.node_name == "Identifier":
+        return getattr(rhs, "content", "") == base_name
+    if isinstance(rhs, Node) and rhs.node_name == "HierExpr":
+        parts = getattr(rhs, "parts", None) or []
+        if parts and isinstance(parts[0], Node):
+            return getattr(parts[0], "content", "") == base_name
+    return False
 
 
 def _iter_nodes(root: Node):
@@ -408,13 +442,35 @@ def symbol_width_table(analyzer) -> dict[str, str]:
     原始文本原样保留：""（无范围标量）/ "7:0" / "WIDTH-1:0" / "32"。
     数值转换用 table_width_to_num（A3 消费；空 = 标量 1 bit——与
     eval_width_text 的 "1"→2（单表达式 [1]）语义区分开）。
+    内嵌 "_arrays" 键：数组符号集（Declarator.array_range 非空——存储器
+    word 选择宽度 = word 宽，非位选 1；2026-08-29 修复 ice40 误报）。
     """
     table: dict[str, str] = {}
+    arrays: set[str] = set()
     for sym in getattr(analyzer, "all_symbols", None) or []:
         if sym.kind not in _WIDTH_KINDS:
             continue
         table[sym.name] = extract_width(sym)
+        if _is_array_symbol(sym):
+            arrays.add(sym.name)
+    table["_arrays"] = arrays  # type: ignore[assignment]
     return table
+
+
+def _is_array_symbol(sym) -> bool:
+    """符号是否为数组（存储器）：Declarator.array_range 非空。"""
+    node = sym.decl_node
+    items = getattr(node, "items", None)
+    if not isinstance(items, Node):
+        return False
+    for it in getattr(items, "items", None) or []:
+        if not isinstance(it, Node):
+            continue
+        if getattr(getattr(it, "name", None), "content", "") != sym.name:
+            continue
+        ar = getattr(it, "array_range", None)
+        return isinstance(ar, Node) and bool(getattr(ar, "items", None))
+    return False
 
 
 def table_width_to_num(text: str | None) -> int | None:
@@ -834,17 +890,29 @@ def _binary_width(node, width_table: dict) -> int | None:
 
 
 def _select_width(node, width_table: dict) -> int | None:
-    """SelectExpr：链式后缀最内层决定宽度（索引 1 / 范围 abs+1 / 切片宽）。
+    """SelectExpr：链式后缀最内层决定宽度。
 
-    base 宽度不参与（越界判定属 C 阶段 SELRANGE）。extra_suffixes 为空时
-    用 first_suffix；链式（arr[i][j]）取最后一个 suffix。
+    范围/切片 → _suffix_width；纯索引 → 数组（存储器）word 选择返回
+    word 宽（查表），向量位选 1 bit（base 宽度不参与越界判定属 C1）。
     """
     suffixes = [getattr(node, "first_suffix", None)]
     suffixes.extend(getattr(node, "extra_suffixes", None) or [])
     suffixes = [s for s in suffixes if isinstance(s, Node)]
     if not suffixes:
         return None
-    return _suffix_width(suffixes[-1], width_table)
+    last = suffixes[-1]
+    rs = getattr(last, "range_suffix", None)
+    if _range_info(rs) is None:
+        # 纯索引：数组 word 选择（宽 = word 宽）vs 向量位选（1 bit）
+        base = getattr(node, "base", None)
+        bn = getattr(base, "content", "") if isinstance(base, Node) else ""
+        arrays = width_table.get("_arrays") or set()
+        if bn in arrays:
+            return table_width_to_num_params(
+                width_table.get(bn), width_table.get("_params")
+            )
+        return 1
+    return _suffix_width(last, width_table)
 
 
 def _suffix_width(suffix, width_table: dict) -> int | None:

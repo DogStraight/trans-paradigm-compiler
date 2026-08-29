@@ -139,10 +139,14 @@ class ProjectChecker:
         ext_dirs: list[str] | None = DEFAULT_EXT_DIRS,
         include_dirs: list[str] | None = None,
         register: "GrammarRulesRegister | None" = None,
+        expand_macros: bool = True,
     ):
         self._rules_dir = rules_dir
         self._ext_dirs = ext_dirs or []
         self._include_dirs = [os.path.abspath(d) for d in (include_dirs or [])]
+        # 宏展开（真实工程含 `ifdef/`define；无宏文件 scan_directives 空表
+        # 零影响）。默认开——check 语义对齐 run_pipeline（展开后分析）。
+        self._expand_macros = expand_macros
         # 独立规则实例：测试跨语言（c4 等）时传入，避免污染全局单例
         # （模式同 tests/languages/c4/test_c4_linter.py 的 fixture 注释）。
         self._register = register
@@ -320,6 +324,12 @@ class ProjectChecker:
         fr = FileResult(path=path, source=source)
         shared = self._ensure_shared()
 
+        # 宏展开（真实工程含 `ifdef/`define；对齐 run_pipeline 语义——
+        # scan_directives 提取宏表 + expand_tokens 纯文本展开，lex/lint/
+        # parse 全在展开后文本上）。无宏文件空表零影响。
+        if self._expand_macros:
+            source = self._expand_source(source, path)
+
         # 阶段 1：语法检查（token 级）。有错 → 语义阶段跳过（用户决策）。
         fr.lint_diags = shared["linter"].scan(source)
         if fr.lint_diags:
@@ -362,6 +372,30 @@ class ProjectChecker:
             mod.insts.append(conn)
         fr.parse_ok = True
         return fr
+
+    def _expand_source(self, source: str, path: str) -> str:
+        """宏展开（scan_directives 提取宏表 + expand_tokens 纯文本展开）。
+
+        与 run_pipeline 的 _stage_macro_scan/_stage_expand 同语义；无宏
+        文件空表 → 原样返回。诊断行号基于展开后文本（宏 span 反向映射
+        属 P3.3 范畴，语义正确性优先）。
+        """
+        try:
+            from preprocessor import expand_tokens, scan_directives
+
+            macro_table, func_macros, _, _, _, clean = scan_directives(
+                source,
+                self._rules_dir,
+                source_path=path,
+                search_dirs=self._include_dirs,
+                predefined=None,
+                undefine=None,
+            )
+            if macro_table:
+                clean, _ = expand_tokens(clean, macro_table, func_macros=func_macros)
+            return clean
+        except Exception:  # noqa: BLE001 — 展开失败回退原文（lint 兜底）
+            return source
 
     def _elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:
         """层 2：实例化点端口连接展开（ADR-0008）。
@@ -456,7 +490,7 @@ class ProjectChecker:
         return modules
 
     def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
-        """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格）。"""
+        """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格 + body 声明）。"""
         ports_field = self._field("ports")
         items_field = self._field("items")
         bare_rule = self._field("bare_rule")
@@ -468,6 +502,8 @@ class ProjectChecker:
         ports_node = self._unwrap(getattr(module_node, ports_field, None))
         items = getattr(ports_node, items_field, None) if ports_node else None
         if not items:
+            # 无端口列表（纯 body 端口声明）也补 body（旧式风格）
+            self._fill_body_ports(info, module_node)
             return
         for item in items:
             if not isinstance(item, Node):
@@ -504,6 +540,48 @@ class ProjectChecker:
                         net_type=net_type,
                         decl_node=d,
                     )
+        # body 端口声明（旧式 `input [7:0] x;` 在模块体）→ 按名补方向/宽度
+        # （2026-08-29 修复：tv80 旧式端口方向/宽度缺失——影响 W104 方向
+        # 判定与 B3 端口连接宽度）。
+        self._fill_body_ports(info, module_node)
+
+    def _fill_body_ports(self, info: ModuleInfo, module_node: Node) -> None:
+        """body 端口声明补全：方向/宽度按名回填裸名端口或补登记。"""
+        rules = self._struct.get("body_port_rules") or []
+        if not rules:
+            return
+        direction_field = self._field("body_direction") or "direction"
+        width_field = self._field("width")
+        items_field = self._field("items")
+        name_field = self._field("name")
+        for node in self._iter_nodes(module_node):
+            if node.node_name not in rules:
+                continue
+            direction = getattr(node, direction_field, "") or ""
+            pr = getattr(node, width_field, None)
+            width = self._render_subtree(pr) if isinstance(pr, Node) else ""
+            dlist = getattr(node, items_field, None)
+            d_items = getattr(dlist, items_field, None) if dlist else None
+            for d in d_items or []:
+                if not isinstance(d, Node):
+                    continue
+                dn = getattr(d, name_field, None)
+                if not (isinstance(dn, Node) and dn.content):
+                    continue
+                p = info.ports.get(dn.content)
+                if p is None:
+                    d._file = info.file
+                    info.ports[dn.content] = ModulePort(
+                        name=dn.content,
+                        direction=direction,
+                        width_expr=width,
+                        decl_node=d,
+                    )
+                else:
+                    p.direction = p.direction or direction
+                    p.width_expr = p.width_expr or width
+                    if p.decl_node is None:
+                        p.decl_node = d
 
     def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
         params_field = self._field("params")
@@ -531,20 +609,19 @@ class ProjectChecker:
     def _build_signal_graph(self) -> dict:
         """层 3：全工程信号驱动/负载图（ADR-0008）。
 
-        汇总所有文件的端口连接展开 + 连续赋值目标，按连接信号名建立：
-            signal → {"drivers": [驱动源标识], "loads": [负载源标识]}
+        汇总所有文件的端口连接展开 + 连续赋值目标，按 **(模块, 信号名)**
+        建立（2026-08-29 修复：跨模块同名信号隔离——真实语料 ice40 的
+        SB_LUT4/ICESTORM_LC/SB_MAC16 各有端口 O，按裸信号名合并会误报
+        多驱动）：
+            (module, signal) → {"drivers": [驱动源标识], "loads": [..]}
         驱动源两类（语言知识全部来自配置协议）：
         - 实例 output/inout 端口连接该信号 → 实例驱动（"file:inst"）
         - 本文件连续赋值目标（assign_rule 协议 + 多目标 AssignExtra）→
-          assign 驱动（"file:assign#N"，N 为文件内语句序号——同信号两个
-          assign 是两条驱动，不因文件级去重而漏报）
-        负载判定 = 实例 input/inout 端口连接；方向未知（旧式裸名）仅记
-        负载（保守：不误报驱动）。层 2 只展开"实例连接信号 vs 端口"，
-        信号名解析（哪个信号是本模块内部声明）交给上层规则 handler。
-        输出注入 context.extra["signal_graph"]，供 UNUSED/UNDRIVEN/
-        MULTIDRIVEN 类规则消费。
+          assign 驱动（"file:assign#N"）
+        驱动/负载源标识含文件名，消费方按"驱动源所在文件"归属（避免
+        跨文件重复报）。输出注入 context.extra["signal_graph"]。
         """
-        graph: dict[str, dict] = {}
+        graph: dict[tuple, dict] = {}
         out_dirs = self._dirs("output_dirs")
         inout_dirs = self._dirs("inout_dirs")
         assign_rule = self._rule("assign_rule")
@@ -552,10 +629,10 @@ class ProjectChecker:
         extras_field = self._field("assign_extras")
         extra_target_field = self._field("assign_extra_target")
 
-        def _ensure(sig: str) -> dict:
-            if sig not in graph:
-                graph[sig] = {"drivers": [], "loads": []}
-            return graph[sig]
+        def _ensure(key: tuple) -> dict:
+            if key not in graph:
+                graph[key] = {"drivers": [], "loads": []}
+            return graph[key]
 
         for fr in self._memo.values():
             # 连续赋值驱动（模块级 assign 并发驱动；多目标 AssignExtra 展开）
@@ -565,6 +642,7 @@ class ProjectChecker:
                     if node.node_name != assign_rule:
                         continue
                     assign_idx += 1
+                    mod_name = self._module_of(fr, node)
                     inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
                     for tgt in self._iter_assign_targets(
                         node, target_field, extras_field, extra_target_field
@@ -572,16 +650,17 @@ class ProjectChecker:
                         sig = self._render_subtree(tgt)
                         if not sig or not _is_signal_expr(sig):
                             continue
-                        entry = _ensure(sig)
+                        entry = _ensure((mod_name, sig))
                         if inst_ref not in entry["drivers"]:
                             entry["drivers"].append(inst_ref)
             for conn in fr.connections:
+                mod_name = self._module_of(fr, conn.inst_node)
                 inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
                 mod = self._module_index.get(conn.module_name)
                 for port_name, sig in conn.connects.items():
                     if not sig or not _is_signal_expr(sig):
                         continue
-                    entry = _ensure(sig)
+                    entry = _ensure((mod_name, sig))
                     direction = ""
                     if mod is not None and port_name in mod.ports:
                         direction = mod.ports[port_name].direction
@@ -600,10 +679,39 @@ class ProjectChecker:
                     if not sig or not _is_signal_expr(sig):
                         continue
                     # 位置连接：方向靠模块端口表按序匹配；未知方向保守记负载
-                    entry = _ensure(sig)
+                    entry = _ensure((mod_name, sig))
                     if inst_ref not in entry["loads"]:
                         entry["loads"].append(inst_ref)
         return graph
+
+    def _module_of(self, fr, node) -> str:
+        """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
+
+        嵌套模块罕见——用子树包含判定（模块声明节点是否含目标节点）。
+        """
+        if fr.ast is None or node is None:
+            return ""
+        decl_rule = self._rule("module_decl_rule")
+        name_field = self._field("module_name")
+        for mnode in self._iter_nodes(fr.ast):
+            if mnode.node_name != decl_rule:
+                continue
+            if self._subtree_contains(mnode, node):
+                nm = getattr(mnode, name_field, None)
+                return nm.content if isinstance(nm, Node) else ""
+        return ""
+
+    @staticmethod
+    def _subtree_contains(root: Node, target: Node) -> bool:
+        """target 是否在 root 子树内（含自身）。"""
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            if node is target:
+                return True
+            for child in node.iter_children():
+                stack.append(child)
+        return False
 
     def _iter_assign_targets(
         self, node: Node, target_field: str, extras_field: str, extra_target_field: str

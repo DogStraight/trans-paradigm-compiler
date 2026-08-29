@@ -361,11 +361,12 @@ class TestElaborationSignalGraph:
         checker.check(str(top))
         graph = checker._signal_graph
         # x/y 连 input a/b → 负载（u1 读取）；z 连 output y → 驱动（u1 驱动）
+        # 键 = (模块名, 信号名)——跨模块同名信号隔离（2026-08-29 修复）
         # inst_ref 格式 = "文件名:实例名"
-        assert "u1" in [r.split(":")[-1] for r in graph["x"]["loads"]]
-        assert "u1" in [r.split(":")[-1] for r in graph["y"]["loads"]]
-        assert "u1" in [r.split(":")[-1] for r in graph["z"]["drivers"]]
-        assert "u1" not in [r.split(":")[-1] for r in graph["z"]["loads"]]
+        assert "u1" in [r.split(":")[-1] for r in graph[("top", "x")]["loads"]]
+        assert "u1" in [r.split(":")[-1] for r in graph[("top", "y")]["loads"]]
+        assert "u1" in [r.split(":")[-1] for r in graph[("top", "z")]["drivers"]]
+        assert "u1" not in [r.split(":")[-1] for r in graph[("top", "z")]["loads"]]
 
     def test_inout_both(self, checker, tmp_path):
         (tmp_path / "mem.sv").write_text(
@@ -378,8 +379,8 @@ class TestElaborationSignalGraph:
         )
         checker.check(str(top))
         graph = checker._signal_graph
-        insts_d = [r.split(":")[-1] for r in graph["bus"]["drivers"]]
-        insts_l = [r.split(":")[-1] for r in graph["bus"]["loads"]]
+        insts_d = [r.split(":")[-1] for r in graph[("top", "bus")]["drivers"]]
+        insts_l = [r.split(":")[-1] for r in graph[("top", "bus")]["loads"]]
         assert "m1" in insts_d
         assert "m1" in insts_l
 
@@ -395,9 +396,9 @@ class TestElaborationSignalGraph:
         )
         checker.check(str(top))
         graph = checker._signal_graph
-        assert "1'b0" not in graph
-        assert "8'hFF" not in graph
-        assert "u1" in [r.split(":")[-1] for r in graph["z"]["drivers"]]
+        assert ("top", "1'b0") not in graph
+        assert ("top", "8'hFF") not in graph
+        assert "u1" in [r.split(":")[-1] for r in graph[("top", "z")]["drivers"]]
 
     def test_multi_driver_detected(self, checker, tmp_path):
         """同一信号被两个实例 output 连接 → 多驱动（MULTIDRIVEN 地基）。"""
@@ -413,7 +414,7 @@ class TestElaborationSignalGraph:
         )
         checker.check(str(top))
         graph = checker._signal_graph
-        assert len(graph["s"]["drivers"]) == 2
+        assert len(graph[("top", "s")]["drivers"]) == 2
 
     def test_signal_graph_injected_in_context(self, checker, tmp_path):
         """信号图经 context.extra 注入（postpass 可消费）。"""
