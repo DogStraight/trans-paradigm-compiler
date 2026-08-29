@@ -121,3 +121,53 @@ class TestSymbolWidthTableA1:
             "module t;\n  reg [4:0] r;\n  always @(*) r = r;\nendmodule\n",
         )
         assert t["r"] == "4:0"
+
+
+class TestWidthEvalA2:
+    """A2 常量宽度求值器（纯函数）。"""
+
+    def test_range_width(self):
+        from grammar.verilog.plugins.checks.width_check._width_check import (
+            eval_width_text,
+        )
+
+        assert eval_width_text("7:0") == 8
+        assert eval_width_text("0:7") == 8  # 反向范围 abs
+        assert eval_width_text("15:8") == 8
+        assert eval_width_text("3") == 4  # 单表达式 [n] = n+1
+        assert eval_width_text("") == 1  # 标量
+
+    def test_const_arith(self):
+        from grammar.verilog.plugins.checks.width_check._width_check import (
+            eval_const_expr,
+            eval_width_text,
+        )
+
+        assert eval_const_expr("2*4-1") == 7
+        assert eval_const_expr("(8-2)*3") == 18
+        assert eval_const_expr("-5+10") == 5
+        assert eval_const_expr("10/3") == 3
+        assert eval_const_expr("7%3") == 1
+        assert eval_width_text("7-1:0") == 7  # 常量折叠后 6:0 → 7 位
+
+    def test_parameterized_returns_none(self):
+        from grammar.verilog.plugins.checks.width_check._width_check import (
+            eval_const_expr,
+            eval_width_text,
+        )
+
+        assert eval_width_text("WIDTH-1:0") is None  # 参数化（B 阶段）
+        assert eval_const_expr("WIDTH") is None
+        assert eval_const_expr("DATA_W/2") is None
+        assert eval_width_text("2*W-1:0") is None
+
+    def test_literal_width(self):
+        from grammar.verilog.plugins.checks.width_check._width_check import (
+            literal_width,
+        )
+
+        assert literal_width("8'd5") == 8
+        assert literal_width("4'b1010") == 4
+        assert literal_width("12'hFFF") == 12
+        assert literal_width("'hFF") is None  # unsized 自动位宽
+        assert literal_width("5") is None  # unsized 自定尺寸

@@ -134,3 +134,154 @@ def node_text(node) -> str:
         if t:
             parts.append(t)
     return "".join(parts)
+
+
+# ── A2 常量宽度求值器 ────────────────────────────────────
+# 宽度表达式文本 → 数值（纯函数）。常量域：纯数字表达式可求值；
+# 含标识符（参数名等）→ None（参数化留 B 阶段）。手写递归下降求值
+# （不用 eval——源码文本求值有 RCE 风险）。
+
+
+def eval_width_text(text: str) -> int | None:
+    """A2：宽度表达式文本 → 数值。
+
+    "7:0" → 8（abs(msb-lsb)+1）、"0:7" → 8、"3" → 4（单表达式惯例
+    [n:0]）、"" → 1（标量）；含参数/未知 → None（B 阶段参数化求值）。
+    """
+    text = (text or "").strip()
+    if not text:
+        return 1
+    if ":" in text:
+        msb_s, lsb_s = text.split(":", 1)
+        msb = eval_const_expr(msb_s)
+        lsb = eval_const_expr(lsb_s)
+        if msb is None or lsb is None:
+            return None
+        return abs(msb - lsb) + 1
+    v = eval_const_expr(text)
+    if v is None:
+        return None
+    return v + 1  # 单表达式 [n] = n+1 位（惯例 [n:0]）
+
+
+def eval_const_expr(text: str) -> int | None:
+    """A2：常量表达式求值（数字 + 括号 + 一元 +/- + 四则 * / %）。
+
+    纯数字域 → 数值；含标识符/未知字符 → None（参数化留 B 阶段）。
+    递归下降：expr → term(+-) → factor(* / %) → 一元/括号/数字。
+    """
+    toks = _const_tokenize(text)
+    if toks is None:
+        return None
+    pos = 0
+
+    def peek() -> tuple:
+        return toks[pos] if pos < len(toks) else ("eof", "")
+
+    def advance() -> tuple:
+        nonlocal pos
+        t = toks[pos]
+        pos += 1
+        return t
+
+    def parse_expr():
+        left = parse_term()
+        if left is None:
+            return None
+        while peek()[0] in ("+", "-"):
+            op = advance()[0]
+            right = parse_term()
+            if right is None:
+                return None
+            left = left + right if op == "+" else left - right
+        return left
+
+    def parse_term():
+        left = parse_factor()
+        if left is None:
+            return None
+        while peek()[0] in ("*", "/", "%"):
+            op = advance()[0]
+            right = parse_factor()
+            if right is None:
+                return None
+            if op == "*":
+                left = left * right
+            elif op == "/":
+                if right == 0:
+                    return None
+                left = left // right
+            else:
+                if right == 0:
+                    return None
+                left = left % right
+        return left
+
+    def parse_factor():
+        t = peek()
+        if t[0] == "-":
+            advance()
+            v = parse_factor()
+            return -v if v is not None else None
+        if t[0] == "+":
+            advance()
+            return parse_factor()
+        if t[0] == "(":
+            advance()
+            v = parse_expr()
+            if v is None or peek()[0] != ")":
+                return None
+            advance()
+            return v
+        if t[0] == "num":
+            advance()
+            return t[1]
+        return None
+
+    v = parse_expr()
+    if v is None or peek()[0] != "eof":
+        return None
+    return v
+
+
+def _const_tokenize(text: str) -> list | None:
+    """数字表达式 tokenize：数字/括号/四则/一元；标识符或未知 → None。"""
+    toks: list = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch.isdigit():
+            j = i
+            while j < n and text[j].isdigit():
+                j += 1
+            toks.append(("num", int(text[i:j])))
+            i = j
+            continue
+        if ch in "+-*/%()":
+            toks.append((ch, ch))
+            i += 1
+            continue
+        return None  # 标识符/未知字符 → 常量域外（参数化）
+    toks.append(("eof", ""))
+    return toks
+
+
+def literal_width(text: str) -> int | None:
+    """A2：字面量文本 → 位宽（"8'd5" → 8、"4'b1010" → 4）。
+
+    unsized（"'hFF" 自动位宽、"5" 自定尺寸）→ None——宽度取决于上下文
+    （Verilog 自定尺寸语义，B 阶段精化；先保守不推断，避免误报）。
+    """
+    t = (text or "").strip()
+    if "'" not in t:
+        return None  # unsized 常数（自定尺寸）
+    w = t.split("'", 1)[0].strip()
+    if not w:
+        return None  # 'hFF 自动位宽
+    if w.isdigit():
+        return int(w)
+    return None
