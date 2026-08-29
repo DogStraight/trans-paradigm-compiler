@@ -246,3 +246,133 @@ class TestWidthInferA3:
         assert w["$signed(a)"] == 8  # 系统函数同宽
         assert w["a&b"] == 8  # 位运算 max
         assert w["z"] is None  # 未知符号保守
+
+
+class TestWidthAssignA4:
+    """A4 WIDTH 赋值宽度对比（截断报 W201，扩展/未知不报）。"""
+
+    def _check(self, checker, src_text: str) -> list:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".sv", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src_text)
+            path = f.name
+        try:
+            report = checker.check(path)
+            out = []
+            for f in report["files"]:
+                for d in f["semantic"]:
+                    if d.get("code") == "W201":
+                        out.append(d["message"])
+            return out
+        finally:
+            os.unlink(path)
+
+    def test_truncation_reported(self, checker):
+        """RHS 12 位 → LHS 8 位（assign）报 W201。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire [11:0] c;\n"
+            "  assign a = c;\n"
+            "endmodule\n",
+        )
+        assert len(msgs) == 1
+        assert "12 位" in msgs[0] and "8 位" in msgs[0]
+
+    def test_expansion_not_reported(self, checker):
+        """RHS 8 位 → LHS 12 位（扩展）不报。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire [11:0] c;\n"
+            "  assign c = a;\n"
+            "endmodule\n",
+        )
+        assert msgs == []
+
+    def test_blocking_nonblocking(self, checker):
+        """阻塞/非阻塞赋值同样检查。"""
+        src = (
+            "module t (\n"
+            "  input wire clk_i,\n"
+            "  input wire [7:0] a_i,\n"
+            "  output reg [3:0] q_r\n"
+            ");\n"
+            "  always @(*) q_r = a_i;\n"  # 阻塞：8 → 4 截断
+            "  always @(posedge clk_i) q_r <= a_i;\n"  # 非阻塞：8 → 4 截断
+            "endmodule\n"
+        )
+        msgs = self._check(checker, src)
+        assert len(msgs) == 2
+
+    def test_equal_width_clean(self, checker):
+        """等宽赋值不报。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire [7:0] b;\n"
+            "  assign a = b;\n"
+            "endmodule\n",
+        )
+        assert msgs == []
+
+    def test_expr_rhs(self, checker):
+        """表达式 RHS：a + c（max(8,12)=12 > 8）截断。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire [3:0] b;\n"
+            "  wire [11:0] c;\n"
+            "  assign a = a + c;\n"
+            "endmodule\n",
+        )
+        assert len(msgs) == 1
+
+    def test_part_select_lhs(self, checker):
+        """位选 LHS：a[3:0] = c（4 < 12）截断。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire [11:0] c;\n"
+            "  assign a[3:0] = c;\n"
+            "endmodule\n",
+        )
+        assert len(msgs) == 1
+        assert "4 位" in msgs[0]
+
+    def test_unsized_rhs_clean(self, checker):
+        """unsized 常数/未知符号（RHS None）→ 保守不报。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire z;\n"
+            "  assign a = 1'b0;\n"  # 1 位扩展不报
+            "  assign a = a + 1;\n"  # 1 unsized → RHS None
+            "  assign a = z;\n"  # z 未声明 → None
+            "endmodule\n",
+        )
+        assert msgs == []
+
+    def test_multi_target(self, checker):
+        """多目标 assign：c→a 截断 + a→b 截断（b 4 位）共 2 条。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [7:0] a;\n"
+            "  wire [3:0] b;\n"
+            "  wire [11:0] c;\n"
+            "  assign a = c, b = a;\n"
+            "endmodule\n",
+        )
+        assert len(msgs) == 2
+        assert any("a = c" in m for m in msgs)
+        assert any("b = a" in m for m in msgs)

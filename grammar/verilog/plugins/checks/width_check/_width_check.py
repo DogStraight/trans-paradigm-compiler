@@ -20,12 +20,61 @@ _INTEGER_WIDTH = "32"
 
 
 def run_width_check(analyzer, context) -> None:
-    """postpass 入口：A1 构建符号宽度表（后续阶段挂接点）。
+    """postpass 入口：A1 宽度表 + A4 WIDTH 赋值对比（后续阶段挂接点）。"""
+    table = symbol_width_table(analyzer)
+    analyzer._width_table = table
+    _check_assignment_widths(analyzer, context, table)
 
-    A1 阶段不产诊断（纯基础设施）——宽度表挂 analyzer 供后续阶段
-    （求值器/推断器/规则）消费。
-    """
-    analyzer._width_table = symbol_width_table(analyzer)
+
+# ── A4 WIDTH 赋值对比 ────────────────────────────────────
+# assign/阻塞/非阻塞赋值的 LHS vs RHS 宽度：RHS>LHS 截断报 W201（warning）；
+# RHS<LHS 扩展不报（Verilog 扩展是安全的，Verilator WIDTH 也只在截断报
+# 严重问题）；任一侧未知（unsized 常数/参数化/跨模块）→ 保守不报。
+# 对标：Verilator WIDTH / WIDTHEXPAND（仅截断）/ slang width-*。
+
+_ASSIGN_RULES = {"AssignStmt", "BlockingAssign", "NonBlockingAssign"}
+
+
+def _check_assignment_widths(analyzer, context, table: dict) -> None:
+    root = getattr(analyzer, "_ast", None)
+    if root is None:
+        return
+    for node in _iter_nodes(root):
+        if node.node_name not in _ASSIGN_RULES:
+            continue
+        _check_one(node, context, table)
+        if node.node_name == "AssignStmt":
+            # 多目标连续赋值：assign a = x, b = y;
+            for ex in getattr(node, "extras", None) or []:
+                if isinstance(ex, Node):
+                    _check_one(ex, context, table)
+
+
+def _check_one(node, context, table: dict) -> None:
+    lw = infer_expr_width(getattr(node, "target", None), table)
+    rw = infer_expr_width(getattr(node, "value", None), table)
+    if lw is None or rw is None:
+        return  # 任一侧未知 → 保守不报（sized 域）
+    if rw > lw:
+        lhs_t = node_text(getattr(node, "target", None))
+        rhs_t = node_text(getattr(node, "value", None))
+        context.report(
+            f"赋值宽度截断：RHS {rw} 位 → LHS {lw} 位"
+            f"（{lhs_t} = {rhs_t}）",
+            code="W201",
+            level="warning",
+            node=node,
+        )
+
+
+def _iter_nodes(root: Node):
+    """DFS 迭代整棵 AST。"""
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in node.iter_children():
+            stack.append(child)
 
 
 def symbol_width_table(analyzer) -> dict[str, str]:
@@ -187,13 +236,10 @@ def _suffix_text(suffix) -> str:
     if not isinstance(suffix, Node):
         return ""
     idx = node_text(getattr(suffix, "index", None))
-    rs = getattr(suffix, "range_suffix", None)
-    if isinstance(rs, Node) and getattr(rs, "sub_node", None):
-        sub = [s for s in rs.sub_node if hasattr(s, "node_name")] or []
-        if len(sub) >= 2:
-            op = node_text(sub[0])
-            val = node_text(sub[1])
-            return f"{idx}{op}{val}"
+    info = _range_info(getattr(suffix, "range_suffix", None))
+    if info is not None:
+        op, val_node = info
+        return f"{idx}{node_text(op)}{node_text(val_node)}"
     return idx
 
 
@@ -467,15 +513,13 @@ def _select_width(node, width_table: dict) -> int | None:
 
 
 def _suffix_width(suffix, width_table: dict) -> int | None:
-    """SelectSuffix → 宽度：纯索引 1；range_suffix（seq）按运算符分派。"""
-    rs = getattr(suffix, "range_suffix", None)
-    if not isinstance(rs, Node) or not getattr(rs, "sub_node", None):
+    """SelectSuffix → 宽度：纯索引 1；range_suffix 按运算符分派。"""
+    info = _range_info(getattr(suffix, "range_suffix", None))
+    if info is None:
         return 1  # 纯索引 → 1 bit
-    sub = [s for s in rs.sub_node if hasattr(s, "node_name")] or []
-    if len(sub) < 2:
-        return 1
-    op = node_text(sub[0])  # ":" / "+:" / "-:"
-    val = eval_const_expr(node_text(sub[1]))
+    op, val_node = info
+    op = node_text(op)  # ":" / "+:" / "-:"
+    val = eval_const_expr(node_text(val_node))
     if op == ":":
         idx = eval_const_expr(node_text(getattr(suffix, "index", None)))
         if idx is None or val is None:
@@ -485,6 +529,21 @@ def _suffix_width(suffix, width_table: dict) -> int | None:
         # 切片 a[base +: width] / a[base -: width]：宽度 = width
         return val
     return 1
+
+
+def _range_info(rs):
+    """range_suffix → (op, value_node)｜None（兼容 list 与 seq 两形态）。
+
+    SelectSuffix 的 $2 组合捕获实测为 list（[':', Number]）；部分形态为
+    seq 节点（sub_node）。op 元素可能是 str（token 文本）或 Node。
+    """
+    if isinstance(rs, list) and len(rs) >= 2:
+        return rs[0], rs[1]
+    if isinstance(rs, Node) and getattr(rs, "sub_node", None):
+        sub = list(getattr(rs, "sub_node", None) or [])
+        if len(sub) >= 2:
+            return sub[0], sub[1]
+    return None
 
 
 def _sum_width(items: list, width_table: dict) -> int | None:
