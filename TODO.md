@@ -144,8 +144,9 @@
 > TypeSpecNoReg net 位补 tri（`inout tri` 语法缺口，连带暴露 test_inout_tri_clean
 > 假阳性盲区）、命名规则 `_` 前缀豁免。修复后 18 期望码全命中 + 0 FP。
 > 详情落 docs/references.md「试水检出准确度评测」。
-> 下一步：位宽一致性（需 analyzer 宽度传播扩展）或继续试水（扩样本/真实
-> 工程语料评测）。
+> 下一步：位宽一致性分期启动（阶段 A 常量宽度域，2026-08-29 立项；
+> 设计：语义插件位置实现 求值器+推断器+规则——宽度语义是语言知识，
+> 进 grammar/verilog/plugins/checks/width_check/，引擎零改动面）。
 
 - [x] ~~工具调研：svlint / Veryl / Verilator / Verible / slang / Spyglass /
       HDL Checker / flexlint 检查项清单~~（已完成，落档 references.md）
@@ -158,5 +159,23 @@
 - [x] ~~分支完整性：CC001 case 无 default~~（已完成，1f94fbc）
 - [x] ~~端口类型：W106 inout 须 tri~~（已完成，5067e8b）
 - [x] ~~锁存风险：LC001 组合 always if 无 else~~（已完成，d5148d3）
-- [ ] 位宽一致性（对标 WIDTH/width-trunc——需宽度传播系统，独立大工程）
+- [ ] 位宽一致性（对标 WIDTH/width-trunc 家族，2026-08-29 分期立项；
+      实现位置 = 语义插件 grammar/verilog/plugins/checks/width_check/：
+      求值器+推断器+规则都在插件层，语言知识不进引擎）：
+  - [ ] **A2 常量宽度求值器**：宽度文本（"7:0"→8、"3"→4、无范围→1）→
+        数值；字面量宽度（8'd5→8；unsized 常数域暂保守）——纯函数
+  - [ ] **A3 表达式宽度推断**：原子（查表/字面量）→ 拼接（和）/复制（×n）
+        /位选（1 或范围）/一元（同宽）/二元（算术 max、比较 1、移位
+        LHS、位运算 max）/三目（max）
+  - [ ] **A4 WIDTH 赋值对比**：assign/阻塞/非阻塞/端口连接 LHS vs RHS
+        宽度——RHS>LHS 截断报 W201（warning）；扩展不报；先 sized 域
+  - [ ] **A5 评测扩充**：width_check cases（pos/neg）+ check_accuracy 位宽
+        样例 + pytest 门禁
+  - [ ] **B1 模块参数表**：ParamDecl 默认值 + 实例化覆盖（#(.P(v))/#(v)）
+        解析 → 参数值表
+  - [ ] **B2 参数化宽度求值**：宽度文本含参数名 → 代入折叠（WIDTH-1:0）
+  - [ ] **B3 跨模块参数传播**（例化链）+ 评测
+  - [ ] **C1 SELRANGE 位选越界**（W202）
+  - [ ] **C2 自赋值宽度变化**（W203，a = a + 1 类）
+  - [ ] **C3 $signed/$unsigned 符号语义 + unsized 常数精化**
 - [ ] ~~always 写法（裸 always）~~（评估：边界模糊/仿真代码大量合法使用，误报高，不做）

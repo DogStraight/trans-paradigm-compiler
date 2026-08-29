@@ -1,0 +1,20 @@
+# width_check 插件 — 位宽一致性检查（P1.10 核心集合：位宽家族，分期立项）
+#
+# 分期（2026-08-29 立项，TODO P1.10）：
+#     A1 符号宽度表（本阶段）——从 analyzer.all_symbols 提取每符号宽度
+#       表达式文本（wire/reg/integer/ANSI+body 端口；类型级 packed_range
+#       优先，声明符级按 Declarator 名对齐；无范围标量 = 1 bit）
+#     A2 常量宽度求值器（宽度文本 → 数值）
+#     A3 表达式宽度推断（原子/拼接/复制/位选/运算/三目）
+#     A4 WIDTH 赋值对比规则（LHS vs RHS 截断报 W201）
+#     B  参数化宽度（模块参数表 + 实例化覆盖 + 折叠）
+#     C  进阶（SELRANGE 位选越界 / 自赋值宽度 / $signed 符号语义）
+#
+# 实现位置哲学：宽度语义是**语言知识**，求值器+推断器+规则全部在本插件
+# 层（grammar/verilog/plugins/checks/），引擎只提供符号表/AST 遍历/
+# context.report——不破"语言知识不进代码"硬约束。
+#
+# 对标：Verilator WIDTH/WIDTHEXPAND/WIDTHTRUNC/SELRANGE 家族。
+
+[analyzer]
+postpasses = ["_width_check.py:run_width_check"]
