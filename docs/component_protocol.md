@@ -97,6 +97,21 @@ discover_components(plugins_dir)   # 递归扫描插件目录树的 tpc.toml
 纯规则组件（如 `name_check`：空 tpc.toml + `rules/*.toml`）不是 discover
 组件，由 check_registry 递归发现（`rules/` 目录随组件所在位置任意深度）。
 
+**verilog 当前组织（建议性约定，非引擎强制）**：
+
+```
+plugins/
+├── syntax/        # 纯语法插件（[grammar] files 注入，如 sim/specify/gates…）
+├── checks/        # 检查插件（语义检查/postpass/规则表，如 name_check…）
+└── <根目录>       # 混合型/增强型插件（语法+语义+变换联动，如 typed_ports）
+                   # 与纯能力插件（如 formatter——无语法/分析/变换声明）
+```
+
+根目录是**合法且刻意保留**的位置：混合型插件（如 typed_ports，语法增强
+牵动 analyzer/transform 多阶段）归任何单一功能类都不准确，留在根目录；
+纯能力插件（formatter）同样无单一功能类可归。分类目录是可选组织方式，
+引擎不规定枚举，新插件可自由选择根目录或任一分类目录。
+
 
 ## 3. transform 槽位（@register_transform_slot）
 
