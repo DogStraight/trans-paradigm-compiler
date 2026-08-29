@@ -7,6 +7,31 @@
 > `docs/references.md`，不进本文件。
 > P 编号沿用拆分前的原始编号（与 git 历史、交叉引用对应），不重新编号。
 
+## 语言包战略（2026-08-29 定调）
+
+> **主体语言包 = 两个**：Verilog-2005（已闭环，P1.8）+ C23（未来主体）。
+> 这两个标准实现后无其他语言包主体需求；其他语言（如 SystemVerilog）
+> 如需只做**核心包**（不追全量标准）。c4 定位不变：第二语言验证
+> （语言无关性）+ "从零搭语言"模板 + C 核心语法管线支持的子集起步
+> （≠ C23——完整 C 是数量级更大的工程，见下）。
+
+## C23 语言包（远期主体，2026-08-29 登记）
+
+> 主体需求（见上"语言包战略"）。规模认知：c4（rswier/c4 最小自举子集）
+> 只是 C 核心语法的管线支持验证，C23 全量（ISO/IEC 9899:2024）是独立
+> 大工程——立项前需先做规模估算（对照 C23 语法规范，类似 SV 估算：
+> 语法层 + 语义层 + 预处理）。**预处理器是最大难点**：tpc 现预处理器是
+> Verilog 简化版（`ifdef/define` 为主），C 预处理器需 `#if` 表达式求值、
+> 参数化宏、`#`/`##` 字符串化与粘贴、可变参数宏等大幅扩展；条件编译
+> 反向映射的精度要求（darkriscv 嵌套位置残余教训）在 C 上只会更严。
+> 触发条件：C 核心子集（≈c4 范畴 + 常用面）立项启动后从本文件移回 TODO。
+
+- [ ] C23 规模估算：语法/语义/预处理三层工作量 + 分期（对照 ISO 9899:2024）
+- [ ] 阶段 A：C 核心——完整声明/表达式/语句（c4 基础上补全）、函数原型、
+      struct/union/enum/typedef、指针运算、作用域语义
+- [ ] 阶段 B：预处理器扩展——`#if` 表达式、参数化宏、`#`/`##`、可变参数宏
+- [ ] 阶段 C：常用库头兼容面 + lint 精度 + 渲染打磨
+
 ## P2 — 工程化收尾（发布准备）
 
 ### P2.2 发布收尾
@@ -132,20 +157,23 @@
       表达式错误（拼错原语键/类型）静默降级为 None，与 ADR-0003 fail-fast
       精神相悖——可加布局 schema 校验（渲染增强侧，非配置加载主路径）
 
-## SystemVerilog 语言包（远期 backlog，2026-08-27 评估）
+## SystemVerilog 语言包（远期 backlog，2026-08-27 评估；战略调整 2026-08-29）
 
 > Verilog-2005 全量（P1.8 批次 1-6 + 审查修复）后的自然延伸；当前决策：
 > **缓行**——先稳定/玩熟 verilog 全量。规模估算与分期依据见
 > docs/references.md「SV 全量规模估算」：语法层全量对标 sv-parser
 > （IEEE 1800-2017 Annex A）≈ 净增 800-900 条规则、8-12 个月；
 > SV 核心子集（综合常用面）3-4 个月；SVA/class/constraint 是最大三块。
+> **战略调整（2026-08-29）**：语言包主体收敛为 verilog2005 + C23，SV
+> 不在主体需求内——如需只做**核心包**（阶段 A 综合常用面），不再追全量
+> （SVA/class/constraint 等阶段 B/C 移出范围，除非未来需求驱动）。
 > 触发条件：verilog 验证闭环稳定、P1.8 批次 7 候选缺口清完后立项；
 > 立项时从本文件移回 TODO.md。
 
-- [ ] 阶段 A：SV 核心——2-state/logic、struct/enum/typedef、always_comb/ff/latch、
-      接口+modport、package+import、generate 增强、`.name`/`.*` 端口、尺寸字面量
-- [ ] 阶段 B：OOP/约束——class、继承、constraint、rand
-- [ ] 阶段 C：最长尾——SVA 断言、covergroup、checker、randsequence
-      （+ pratt 运算符族/引擎扩展）
+- [ ] 阶段 A：SV 核心（= 未来若做 SV 的核心包范围）——2-state/logic、
+      struct/enum/typedef、always_comb/ff/latch、接口+modport、
+      package+import、generate 增强、`.name`/`.*` 端口、尺寸字面量
+- [ ] ~~阶段 B：OOP/约束——class、继承、constraint、rand~~（战略调整移出）
+- [ ] ~~阶段 C：最长尾——SVA 断言、covergroup、checker、randsequence~~（战略调整移出）
 - [ ] 阶段 D：收尾——SV 预处理器扩展（宏带参/双反引号）、sv-parser 差分清零、
       lint 精度、渲染打磨
