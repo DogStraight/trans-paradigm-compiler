@@ -108,6 +108,13 @@
 > 已声明；global_state 进程内隔离天然兼容，实测 1386+8 与串行一致）——
 > 300s → ~110s（~3x，16 逻辑核实测；瓶颈 = 大文件真实语料测试 + 每 worker
 > 语法加载固定开销，进一步加速需语法表跨 worker 缓存，见 fuzz 三件套）。
+> 2026-08-29 更新：渲染器 doc 布局记忆化（renderer/doc.py，per-layout 缓存
+> _flat_w/_has_hardline/_has_break——无缓存时 _best 的 Concat 兄弟预算对同一
+> 子树 O(n²) 重复全遍历，picorv32 实测 _flat_w 200 万次/_has_hardline 1000
+> 万次调用）——单遍管线 10.15s → 4.37s（-57%，渲染占单遍比从 ~60% 降至
+> ~36%），全量并发回归 110s → 78s。下一个热点 = parser（无解析路径记忆化，
+> 单遍 ~50%；linter 已有 packrat 先例 bf8f782/db14e70，parser 记忆化需处理
+> 回溯/节点构造副作用，独立工程）。
 
 - [ ] fuzz harness 吞吐三件套：
   - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x
