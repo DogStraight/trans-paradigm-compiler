@@ -1535,6 +1535,14 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   elaboration 层 2 连接展开 + 模块端口方向判定，input/output 端口实例化
   未连接报 W104（inout 悬空豁免，三态可能有意）。对标 Veryl missing_port/
   Verilator PINMISSING。
+- **W105 多驱动**（394ec51，inst_check 扩展）：elaboration 层 3 信号图
+  drivers≥2 报多驱动（error 级）；本文件信号去重防跨文件重复报。对标
+  Verilator MULTIDRIVEN / Spyglass W415。
+- **CC001 case 完整性**（1f94fbc，case_check 插件）：case 无 default 分支
+  报警告（组合逻辑未覆盖全分支 → 锁存/仿真综合不一致风险）；嵌套 case/
+  casex/casez 全覆盖。对标 svlint case_default / Verible case-missing-
+  default / Verilator CASEINCOMPLETE / slang case-* / Spyglass W527。
+  Verilog-2005 无 unique/priority 限定，不处理 unique 豁免。
 - **NC012/NC013 命名补全**（随 a22f081）：integer/type 符号命名规则（NC 族
   原缺这两个 kind）。
 - **三层捕获能力验证**：语法声明式（NC 族）/ 语义符号表（UN001）/ 跨文件
