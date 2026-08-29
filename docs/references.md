@@ -1560,3 +1560,46 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   原缺这两个 kind）。
 - **三层捕获能力验证**：语法声明式（NC 族）/ 语义符号表（UN001）/ 跨文件
   handler（W104）各有一个真实规则，三层机制全被真实规则消费过。
+
+#### 试水检出准确度评测（2026-08-29，0.1.1 试水第一弹）
+
+试水 = 构建测试检验规则检出准确性。新评测体系（与既有 linter 评测
+eval_lint_accuracy.py 并列，analyzer 层）：
+
+- **标注样本集** `tests/e2e/samples/check_accuracy/`：26 case（15 正样例 +
+  11 负样例），覆盖 7 类核心规则 + 边界变体（共享声明 `wire a, b;` 只报
+  未用者 / casez / 电平敏感 always / 双实例 output 汇聚）+ **复合小工程**
+  `project_bus_ctrl`（3 文件，同含未使用信号 + 缺连端口 + 多驱动 +
+  case 无 default 4 类缺陷，验证真实工程形态的跨文件检出）。
+- **评测脚本** `tests/e2e/eval_check_accuracy.py`：逐 case 跑 ProjectChecker，
+  按"期望码集合 ⊆ 实际码集合"判定（pos：漏检 = MISS / 期望外 = FP；
+  neg：focus 内任意检出 = FP），输出 recall/FP/precision + 逐规则明细。
+- **pytest 门禁** `tests/e2e/test_check_accuracy.py`：断言 recall=100% +
+  FP=0 + 样本全可解析（与 --json 输出单一来源判定）。
+
+首测基线（80% recall / 3 FP）暴露 3 个真实缺陷，修复后 100% / 0 FP：
+
+1. **W105 全漏检——assign 驱动缺位**（信号图只收实例 output 连接，连续
+   赋值 LHS 不进 drivers）。修复：引擎 `_build_signal_graph` 按协议
+   （`assign_rule`/`assign_target`/`assign_extras`/`assign_extra_target`，
+   语言知识仍全在配置）收集 assign 驱动（"file:assign#N" 按语句编号，
+   同信号两条 assign 不因文件级去重漏报）；插件 `_check_multi_driver`
+   归属判定扩展（本文件 assign 目标优先定位）。插件侧取目标信号名用
+   `_sig_text`（穿透 PrimaryExpr 合成包装取首段 content + 信号名形态
+   过滤，与引擎 renderer 渲染同语义——`_text` 对合成节点返回空是本轮
+   首个调试发现）。
+2. **`inout tri` 语法缺口**（PARSE-ERR）：`TypeSpecNoReg` net 类型位只有
+   `keyword.wire`，`inout tri a` 无法解析（12 种 net 类型中仅 wire 进主
+   包）。修复：主包 token 声明加 `tri`（三态总线可综合，与 wire 同待遇；
+   nettypes 插件 token 重复声明合并无害）+ `TypeSpecNoReg`/`TypeSpec`
+   net 位加 `keyword.tri`。**连带暴露既有测试盲区**：test_inout_tri_clean
+   用 `inout tri [7:0] d`——解析失败 → 语义跳过 → 断言"无 W106"假通过。
+   评测集的 parse_fail 检测把这类假阳性显形。
+3. **命名规则不豁免 `_` 前缀**（负样例 `wire _dummy;` 报 NC003）：`_` 前缀
+   是 Verilog 社区"故意不用/占位"约定（UN001 已豁免），命名约定应一致。
+   修复：naming.toml 全部 pattern 前缀加 `_?`（数据层改动，零引擎知识）。
+
+试水结论：评测体系把"规则能检出"从单元测试的孤例证明升级为**带标注的
+正/负样例集合证明**，且样本构造时对"命名合规/文件一致"等旁路规则的要求
+本身就是规则的交叉验证。当前 7 类核心规则（18 期望码）100% recall +
+0 FP（26 case 全绿）。

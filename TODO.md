@@ -137,7 +137,15 @@
 > 表 / 跨文件 handler）各被真实规则验证。评估：always 写法类（裸 always）
 > 边界模糊/误报高（仿真代码大量合法使用），**不做**；位宽一致性需完整
 > 类型/宽度传播系统（Verilator WIDTH 家族级，独立大工程）。
-> 下一步：位宽一致性（需 analyzer 宽度传播扩展）或先试水暴露。
+> 试水评测（2026-08-29，第一弹）：构建检出准确性评测集——26 case（15 正样例
+> + 11 负样例，含复合小工程 project_bus_ctrl）+ eval_check_accuracy.py +
+> test_check_accuracy.py 门禁（recall=100% + FP=0 断言）。首测 80% recall /
+> 3 FP 暴露并修复 3 缺陷：W105 信号图补 assign 驱动收集（协议驱动）、
+> TypeSpecNoReg net 位补 tri（`inout tri` 语法缺口，连带暴露 test_inout_tri_clean
+> 假阳性盲区）、命名规则 `_` 前缀豁免。修复后 18 期望码全命中 + 0 FP。
+> 详情落 docs/references.md「试水检出准确度评测」。
+> 下一步：位宽一致性（需 analyzer 宽度传播扩展）或继续试水（扩样本/真实
+> 工程语料评测）。
 
 - [x] ~~工具调研：svlint / Veryl / Verilator / Verible / slang / Spyglass /
       HDL Checker / flexlint 检查项清单~~（已完成，落档 references.md）
