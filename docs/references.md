@@ -297,8 +297,10 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   Veryl 走向 Rust 把语法当代码精雕（单科 95），tpc 走向 TOML 把语法当资产
   （全科 80）。tpc 与 pyverilog 的亲缘比 Veryl 更近——共享"语法是描述不是
   代码"的核心信念，只是载体从 PLY 文法变成 TOML + 引擎。两作者（dalance /
-  Takamaeda-Yamazaki）同为日本人、同在 HDL 工具窄域，日本学术/开源圈在
-  HDL 工具链的持续贡献是真实生态现象（客观陈述，非优劣判断）。
+  Takamaeda-Yamazaki）同为日本人，日本学术/开源圈在 HDL 工具链的持续贡献
+  是真实生态现象（客观陈述，非优劣判断）。**tpc 工具链定位面向整个语言
+  生态（ROADMAP「工具链定位」），Verilog 是第一个应用实例而非领域绑定**——
+  与 Veryl/pyverilog 的 HDL 亲缘是路线源头关系，不是身份绑定。
 
 ### cairn（Scala）— 增量解析
 
