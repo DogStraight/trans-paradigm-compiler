@@ -47,6 +47,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [Ohm](https://github.com/ohmjs/ohm) | 概念参考 | JS PEG + 语义操作分离 + 语法 OO 扩展 + 在线可视化编辑器 |
 | [DHParser](https://gitlab.lrz.de/badw-it/DHParser) | 概念参考 | 完整 left-recursion 支持、测试驱动语法开发、声明式 AST 变换；错误恢复方案不同（反向解析器 vs post-mortem） |
 | [Veryl](https://github.com/veryl-lang/veryl) | 设计参考 | SystemVerilog 现代超集 HDL（Rust，1026★，2022 起活跃）：语法简化 + 可综合保证 + 类型化 clock/reset + 转译保真——HDL 语法设计的直接参照（详见深调研） |
+| [pyverilog](https://github.com/PyHDI/Pyverilog) | 概念参考 | Takamaeda-Yamazaki（日本学者）的 Python HDL 工具包：PLY（Lex/Yacc 风格）LALR 文法声明做 Verilog 解析——"语法即声明、Verilog 工具不必手写解析器"的早期代表（与 Veryl 同作者国别、同 HDL 工具窄域；设计来源追溯见深调研「路线亲缘」） |
 
 ### 格式化与渲染
 
@@ -281,6 +282,23 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
     - 📌 **发射面 ≠ 解析面**：Veryl 覆盖 SV 的"发射面"（生成哪些构造）与 tpc
       需要的"解析面"（接受哪些构造）不同维——tpc 的 sv_compat 只需解析面
       （parse/format/lint），不需要 Veryl 的 modport 展开/事件列表推导等发射智能
+
+- **路线亲缘（2026-08-29 收束）**：与 Veryl 的整体定位对比——"Veryl 在单科目
+  拿 95 分（SV 语义深度/性能），tpc 尽可能在所有科目拿 80 分（语法资产化/
+  多语言/保真还原/配置驱动形态/差分验证）"。80 分科目多是"机制"而非"积累"
+  （语义深度 60-70 分是规则积累量小，可填规则补涨；Veryl 的 95 分绑定
+  dalance 个人 Rust 语义工程，不可复制也不可迁移）。关键性质：**tpc 的 80 分
+  绑定在配置资产 + 验证纪律上，可复制、可演进、可被模型协作放大**——与
+  "单科 95 绑定专才"是不同性质的可演进性。
+- **共同启发源（2026-08-29）**：tpc 与 Veryl 的路线源头可追溯到
+  [pyverilog](https://github.com/PyHDI/Pyverilog)（Takamaeda-Yamazaki，日本
+  学者）：PLY（Lex/Yacc 风格）LALR 文法声明做 Verilog 解析——"语法即声明、
+  Verilog 工具不必手写解析器"的早期代表。同一颗"声明式语法"种子分叉：
+  Veryl 走向 Rust 把语法当代码精雕（单科 95），tpc 走向 TOML 把语法当资产
+  （全科 80）。tpc 与 pyverilog 的亲缘比 Veryl 更近——共享"语法是描述不是
+  代码"的核心信念，只是载体从 PLY 文法变成 TOML + 引擎。两作者（dalance /
+  Takamaeda-Yamazaki）同为日本人、同在 HDL 工具窄域，日本学术/开源圈在
+  HDL 工具链的持续贡献是真实生态现象（客观陈述，非优劣判断）。
 
 ### cairn（Scala）— 增量解析
 
