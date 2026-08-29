@@ -50,6 +50,10 @@
 - [ ] c17 插件：bugfix 增量（requires c11）
 - [ ] c23 插件：`typeof`/`auto`/属性/`#elifdef`/`nullptr`（requires c17）
 - [ ] 标准等效验证：enabled 组合 → 语法接受域断言（对标各标准语法规范）
+- [ ] **注入机制补"改"路径**（C 标准插件族前置，研判见 references.md
+      「注入 vs 替换机制研判」）：标准演进含"改"（如 C23 语义变化），现
+      inject_replace_rule 是字符串子串补丁（仅 production、软失败）——统一
+      `[inject]` 声明面（add/replace/remove），replace 升树层结构化 + fail-fast
 
 ## P2 — 工程化收尾（发布准备）
 
