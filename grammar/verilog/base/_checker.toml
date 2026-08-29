@@ -19,6 +19,7 @@ file_exts        = [".v", ".sv"]   # 源文件扩展名（定义文件查找）
 output_dirs      = ["output"]      # 端口方向 = 驱动（层 3 信号图判定）
 input_dirs       = ["input"]       # 端口方向 = 负载（层 3 信号图判定）
 inout_dirs       = ["inout"]       # 端口方向 = 双向（驱动 + 负载）
+assign_rule      = "AssignStmt"    # 连续赋值规则名（层 3 信号图 assign 驱动收集）
 
 # 节点字段（语法 TOML node 绑定名）
 [checker.fields]
@@ -37,3 +38,6 @@ value       = "value"         # 表达式值字段（参数默认值/端口连�
 bare_rule   = "Identifier"    # 裸名端口节点名（旧风格端口，无方向/宽度）
 connects    = "ports"         # 实例化点端口连接列表字段（ModuleInst 上，层 2）
 port_name   = "port_name"     # 命名端口连接 .p(..) 的端口名字段（NamedPortConnect）
+assign_target       = "target"  # 赋值目标字段（AssignStmt/AssignExtra 上，层 3）
+assign_extras       = "extras"  # 多目标后缀数组字段（AssignStmt 上，层 3）
+assign_extra_target = "target"  # AssignExtra 的目标字段（层 3）

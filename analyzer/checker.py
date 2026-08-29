@@ -531,20 +531,26 @@ class ProjectChecker:
     def _build_signal_graph(self) -> dict:
         """层 3：全工程信号驱动/负载图（ADR-0008）。
 
-        汇总所有文件的端口连接展开，按连接信号名建立：
-            signal → {"drivers": [实例标识], "loads": [实例标识]}
-        判定依据 = 被连接端口的模块方向（module_index 端口方向）：
-        - output 端口连接该信号 → 实例驱动该信号（drivers）
-        - input 端口连接该信号 → 实例读取该信号（loads）
-        - inout 双向（drivers + loads 都记）；方向未知（旧式裸名）仅记 loads
-          （保守：不误报驱动）。层 2 只展开"实例连接信号 vs 端口"，信号
-          名解析（哪个信号是本模块内部声明）交给上层规则 handler。
+        汇总所有文件的端口连接展开 + 连续赋值目标，按连接信号名建立：
+            signal → {"drivers": [驱动源标识], "loads": [负载源标识]}
+        驱动源两类（语言知识全部来自配置协议）：
+        - 实例 output/inout 端口连接该信号 → 实例驱动（"file:inst"）
+        - 本文件连续赋值目标（assign_rule 协议 + 多目标 AssignExtra）→
+          assign 驱动（"file:assign#N"，N 为文件内语句序号——同信号两个
+          assign 是两条驱动，不因文件级去重而漏报）
+        负载判定 = 实例 input/inout 端口连接；方向未知（旧式裸名）仅记
+        负载（保守：不误报驱动）。层 2 只展开"实例连接信号 vs 端口"，
+        信号名解析（哪个信号是本模块内部声明）交给上层规则 handler。
         输出注入 context.extra["signal_graph"]，供 UNUSED/UNDRIVEN/
         MULTIDRIVEN 类规则消费。
         """
         graph: dict[str, dict] = {}
         out_dirs = self._dirs("output_dirs")
         inout_dirs = self._dirs("inout_dirs")
+        assign_rule = self._rule("assign_rule")
+        target_field = self._field("assign_target")
+        extras_field = self._field("assign_extras")
+        extra_target_field = self._field("assign_extra_target")
 
         def _ensure(sig: str) -> dict:
             if sig not in graph:
@@ -552,6 +558,23 @@ class ProjectChecker:
             return graph[sig]
 
         for fr in self._memo.values():
+            # 连续赋值驱动（模块级 assign 并发驱动；多目标 AssignExtra 展开）
+            if assign_rule and fr.ast is not None:
+                assign_idx = 0
+                for node in self._iter_nodes(fr.ast):
+                    if node.node_name != assign_rule:
+                        continue
+                    assign_idx += 1
+                    inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
+                    for tgt in self._iter_assign_targets(
+                        node, target_field, extras_field, extra_target_field
+                    ):
+                        sig = self._render_subtree(tgt)
+                        if not sig or not _is_signal_expr(sig):
+                            continue
+                        entry = _ensure(sig)
+                        if inst_ref not in entry["drivers"]:
+                            entry["drivers"].append(inst_ref)
             for conn in fr.connections:
                 inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
                 mod = self._module_index.get(conn.module_name)
@@ -581,6 +604,20 @@ class ProjectChecker:
                     if inst_ref not in entry["loads"]:
                         entry["loads"].append(inst_ref)
         return graph
+
+    def _iter_assign_targets(
+        self, node: Node, target_field: str, extras_field: str, extra_target_field: str
+    ):
+        """按协议提取赋值语句的驱动目标节点（主目标 + 多目标后缀）。"""
+        tgt = getattr(node, target_field, None)
+        if isinstance(tgt, Node):
+            yield tgt
+        for ex in getattr(node, extras_field, None) or []:
+            if not isinstance(ex, Node):
+                continue
+            et = getattr(ex, extra_target_field, None)
+            if isinstance(et, Node):
+                yield et
 
     def _render_subtree(self, node: Node) -> str:
         """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""

@@ -49,8 +49,9 @@ def run_inst_check(analyzer, context) -> None:
     _check_inout_tri(analyzer, context)
 
     # elaboration 层 3（ADR-0008）：多驱动检查（对标 Verilator MULTIDRIVEN
-    # / Spyglass W415——同一信号被多个实例 output 连接）。
-    _check_multi_driver(context, connections)
+    # / Spyglass W415——同一信号被多个驱动源驱动：实例 output 连接 +
+    # 模块级 assign 连续赋值目标）。
+    _check_multi_driver(analyzer, context, connections)
 
 
 def _check_ports(context, site, info, related_def) -> None:
@@ -127,17 +128,20 @@ def _check_missing_ports(
         )
 
 
-def _check_multi_driver(context, connections) -> None:
+def _check_multi_driver(analyzer, context, connections) -> None:
     """多驱动检查（对标 Verilator MULTIDRIVEN / Spyglass W415）。
 
     基于 elaboration 层 3 信号图（context.extra["signal_graph"]）：
-    信号被 ≥2 个实例 output 连接 → 多驱动错误范式（跨实例汇聚）。
-    只报"当前文件内出现"的信号（信号在本文件 connections 里有连接），
-    避免每文件重复报同一跨文件多驱动。
+    信号被 ≥2 个驱动源驱动（实例 output 连接 / 本文件 assign 连续赋值
+    目标）→ 多驱动错误范式（并发驱动汇聚）。
+    归属：本文件有 assign 驱动的信号报在 assign 目标处（本文件内部
+    信号）；否则报在本文件实例连接处（避免每文件重复报同一跨文件信号）。
     """
     signal_graph = context.extra.get("signal_graph", {}) or {}
     if not signal_graph:
         return
+    # 本文件 assign 驱动目标 → 信号名 → 节点（归属判定 + 定位）
+    assign_nodes = _collect_assign_targets(analyzer)
     # 本文件出现的信号（连接展开里的连接信号名）
     local_sigs: set[str] = set()
     for conn in connections:
@@ -147,13 +151,14 @@ def _check_multi_driver(context, connections) -> None:
         drivers = entry.get("drivers", [])
         if len(drivers) < 2:
             continue
-        if sig not in local_sigs:
-            continue  # 跨文件多驱动由信号所在文件报（避免重复）
-        # 定位：找本文件连接该信号的实例节点
-        node = _find_signal_node(connections, sig)
+        node = assign_nodes.get(sig)
+        if node is None and sig not in local_sigs:
+            continue  # 跨文件多驱动由信号驱动所在文件报（避免重复）
+        if node is None:
+            node = _find_signal_node(connections, sig)
         driver_desc = ", ".join(drivers)
         context.report(
-            f"信号 '{sig}' 被多个实例驱动（{len(drivers)} 个: {driver_desc}）"
+            f"信号 '{sig}' 被多个驱动源驱动（{len(drivers)} 个: {driver_desc}）"
             "——多驱动错误范式",
             code="W105",
             level="error",
@@ -161,10 +166,54 @@ def _check_multi_driver(context, connections) -> None:
         )
 
 
+def _collect_assign_targets(analyzer) -> dict:
+    """本文件连续赋值目标：AssignStmt.target / AssignExtra.target → 节点。
+
+    语言知识（AssignStmt 形态）在本插件层（与 _check_inout_tri 同款）。
+    目标信号名 = 合成包装（PrimaryExpr）下首个有 content 的叶子——与引擎
+    侧信号图（renderer 渲染 + 简单信号名过滤）同语义，仅收集标识符形态
+    （位选/拼接等复杂目标引擎侧不进图，此处也不收集，避免归属误判）。
+    """
+    root = getattr(analyzer, "_ast", None)
+    out: dict[str, Node] = {}
+    if root is None:
+        return out
+    for node in _iter_nodes(root):
+        if node.node_name != "AssignStmt":
+            continue
+        tgt = getattr(node, "target", None)
+        sig = _sig_text(tgt)
+        if sig and sig not in out:
+            out[sig] = tgt if isinstance(tgt, Node) else node
+        for ex in getattr(node, "extras", None) or []:
+            et = getattr(ex, "target", None)
+            esig = _sig_text(et)
+            if esig and esig not in out:
+                out[esig] = et if isinstance(et, Node) else ex
+    return out
+
+
+_SIG_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _sig_text(node) -> str:
+    """赋值目标 → 简单信号名（标识符形态；合成包装穿透取首段 content）。"""
+    if not isinstance(node, Node):
+        return ""
+    content = getattr(node, "content", "") or ""
+    if content and _SIG_RE.match(content):
+        return content
+    for child in node.iter_children():
+        t = _sig_text(child)
+        if t:
+            return t
+    return ""
+
+
 def _find_signal_node(connections, sig):
     """找本文件连接该信号的实例节点（定位用）。"""
     for conn in connections:
-        for pname, s in conn.connects.items():
+        for s in conn.connects.values():
             if s == sig:
                 return conn.inst_node
         for s in conn.ordered:

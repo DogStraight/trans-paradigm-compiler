@@ -12,6 +12,8 @@
 # [checks] overrides 覆盖（P4 用户配置层）。kind 键对应语法 TOML
 # [*.analyzer.symbol] kind 声明（module/port/wire/reg/parameter/
 # localparam/genvar/function/task/module_instance）。
+# `_` 前缀豁免（pattern 前缀 `_?`）：与 unused_check 的 `_` 约定一致
+# （下划线前缀 = 显式"故意不用/占位"），命名检查不误报占位符号。
 # ============================================================================
 
 # ── 模块 / 实例命名（小写下划线） ──────────────────────────────────
@@ -23,7 +25,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "module 名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "module"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 [[checks]]
 id = "NC002"
@@ -32,7 +34,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "实例名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "module_instance"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 # ── 网络 / 变量命名（小写下划线） ──────────────────────────────────
 
@@ -43,7 +45,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "网络名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "wire"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 [[checks]]
 id = "NC004"
@@ -52,7 +54,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "寄存器名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "reg"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 [[checks]]
 id = "NC005"
@@ -61,7 +63,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "端口名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "port"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 # ── 参数 / 常量命名（大写下划线） ──────────────────────────────────
 
@@ -72,7 +74,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "参数 '{name}' 不符合大写下划线约定（{pattern}）"
 kind = "parameter"
-pattern = "^[A-Z][A-Z0-9_]*$"
+pattern = "^_?[A-Z][A-Z0-9_]*$"
 
 [[checks]]
 id = "NC007"
@@ -81,7 +83,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "局部参数 '{name}' 不符合大写下划线约定（{pattern}）"
 kind = "localparam"
-pattern = "^[A-Z][A-Z0-9_]*$"
+pattern = "^_?[A-Z][A-Z0-9_]*$"
 
 [[checks]]
 id = "NC008"
@@ -90,7 +92,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "genvar '{name}' 不符合大写下划线约定（{pattern}）"
 kind = "genvar"
-pattern = "^[A-Z][A-Z0-9_]*$"
+pattern = "^_?[A-Z][A-Z0-9_]*$"
 
 # ── 子程序命名（小写下划线） ──────────────────────────────────────
 
@@ -101,7 +103,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "函数名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "function"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 [[checks]]
 id = "NC010"
@@ -110,7 +112,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "任务名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "task"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 # ── 跨文件命名（handler 兜底：pattern 表达不了文件上下文） ───────────
 
@@ -132,7 +134,7 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "整型变量名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "integer"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"
 
 [[checks]]
 id = "NC013"
@@ -141,4 +143,4 @@ severity = "warning"
 scope = ["rtl", "tb"]
 message = "类型名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "type"
-pattern = "^[a-z][a-z0-9_]*$"
+pattern = "^_?[a-z][a-z0-9_]*$"

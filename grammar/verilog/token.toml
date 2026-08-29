@@ -75,7 +75,11 @@ automatic = "automatic"
 static = "static"
 
 # Verilog 关键字
+# net 类型（A.2.1.3）：wire/tri 可综合核心进主包（端口 net 类型位共用）；
+# 其余 10 种（triand/trior/tri0/tri1/trireg/uwire/wand/wor/supply0/supply1）
+# 由 nettypes 插件 _token_ext.toml 声明（合并无害，同 gates 插件实证）。
 wire = "wire"
+tri = "tri"
 reg = "reg"
 integer = "integer"
 begin = "begin"

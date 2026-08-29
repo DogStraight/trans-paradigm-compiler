@@ -80,12 +80,14 @@ layout = { intent = "compact", items = "items", first_soft = false }
 
 
 # ── TypeSpec — 类型描述符 ──
-# 端口/声明的类型部分: (wire|reg)? signed? [range]?
+# 端口/声明的类型部分: (wire|reg|tri)? signed? [range]?
 # 用于 output/端口体声明（output 允许 reg）等场景。
+# net 类型位 wire/tri 主包（tri 三态总线可综合，inout/output 双向常用）；
+# 其余 net 类型由 nettypes 插件扩展（NetDecl 承接完整声明形态）。
 
 [TypeSpec]
 [TypeSpec.parser]
-production = ["(keyword.wire|keyword.reg)?", "keyword.signed?", "@Range?"]
+production = ["(keyword.wire|keyword.reg|keyword.tri)?", "keyword.signed?", "@Range?"]
 [TypeSpec.parser.node]
 port_type = "$1"
 is_signed = "$2"
@@ -100,10 +102,12 @@ layout = { line = [
 
 # ── TypeSpecNoReg — input/inout 专用类型描述符（不含 reg） ──
 # 与 TypeSpec 的区别是不含 keyword.reg，因为 input/inout 不能声明为 reg。
+# net 类型位 wire/tri（tri 三态总线——inout 默认语义；A.2.1.3 net_type
+# 全谱其余类型由 nettypes 插件扩展）。
 
 [TypeSpecNoReg]
 [TypeSpecNoReg.parser]
-production = ["keyword.wire?", "keyword.signed?", "@Range?"]
+production = ["(keyword.wire|keyword.tri)?", "keyword.signed?", "@Range?"]
 [TypeSpecNoReg.parser.node]
 port_type = "$1"
 is_signed = "$2"
