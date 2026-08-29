@@ -1193,3 +1193,24 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   **树层结构化**（feature 树精确寻址替换/删除，非字符串子串），并统一 fail-fast。
   触发条件：C 标准插件族立项（届时"改"需求真实出现）或 verilog 插件出现同类
   需求时，从 ROADMAP 移回 TODO 立项
+
+### 用户标定打包入口研判（2026-08-29，多语言分发前置）
+
+- **触发**：语言包战略收敛为 verilog2005 + C23 后，"用户分发自己的语言包"
+  （forkable 主张的兑现）成为自然延伸——用户把语法配置调试稳定、需求测试
+  完成后编译打包。盘点发现现有打包管线**没有"用户标定"的声明面**
+- **现状盘点（packaging/）**：
+  - `facets.json`：**开发者硬编码**的四个预置切面（tpc-fmt/tpc-lint/tpc-check/
+    tpc），切面 = 命令名集合（main.py `_register_subparsers(sub, allow)` 裁剪）
+  - `build_pipeline.py`：读 facets.json → 生成入口脚本（entries/）→ Nuitka
+    onefile（PE 署名 + SHA256）——**`_RULES_REL = "grammar/verilog"` 硬编码**，
+    c4 打包不了、未来 C 语言包更不行
+  - 结论：**Nuitka 编译是显式的，但"用户如何声明打包"这个需求侧面完全没体现**
+- **设计方向（未立项）**：打包规格跟随语言包——`grammar/<lang>/tpc.toml`
+  新增 `[packaging]` 段（target/description/facets），facets 缺省取该语言包
+  `[commands]` 段已有的键（零重复）；build_pipeline 改为**扫描语言包声明**
+  （`python packaging/build_pipeline.py` 无参 = 全部，`--lang <lang>` = 单个），
+  `_RULES_REL` 硬编码消失，入口生成用该语言包 rules_dir（与调试时 main.py
+  行为一致）。与插件聚类/渲染插件同哲学：一切可声明、可组合、用户标定
+- **优先级**：低于 C 语言包——当前仅 verilog 一个语言包要打包，硬编码还能撑；
+  触发条件 = C 核心基线立项（多语言共存）或出现"非 verilog 打包"需求

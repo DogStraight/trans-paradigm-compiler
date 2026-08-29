@@ -55,6 +55,24 @@
       inject_replace_rule 是字符串子串补丁（仅 production、软失败）——统一
       `[inject]` 声明面（add/replace/remove），replace 升树层结构化 + fail-fast
 
+## 用户标定打包入口（中长期，2026-08-29 登记；多语言分发前置）
+
+> 语言包战略的兑现侧：用户把语法配置调试稳定、需求测试完成后编译打包的
+> 优雅方案（forkable 主张的落地）。现状：facets.json 开发者硬编码 + 
+> `_RULES_REL = "grammar/verilog"` 写死——**无"用户标定"声明面**，c4/未来
+> C 语言包打包不了。设计方向（研判见 references.md「用户标定打包入口
+> 研判」）：打包规格跟随语言包——`grammar/<lang>/tpc.toml` 新增
+> `[packaging]` 段（target/description/facets，facets 缺省取 [commands]
+> 键零重复）；build_pipeline 改为扫描语言包声明（无参=全部，--lang=单个），
+> `_RULES_REL` 硬编码消失。与插件聚类/渲染插件同哲学：一切可声明、可组合、
+> 用户标定。优先级低于 C 语言包（当前单语言硬编码还能撑）。
+> 触发条件：C 核心基线立项（多语言共存）或出现"非 verilog 打包"需求。
+
+- [ ] `[packaging]` 段声明（target/description/facets，缺省取 [commands] 键）
+- [ ] build_pipeline 扫描语言包声明（--lang / 无参=全部），去掉 `_RULES_REL` 硬编码
+- [ ] 入口生成用该语言包 rules_dir（与调试时 main.py 行为一致）
+- [ ] 多语言打包验证：verilog + c4 各自声明、各自出 exe
+
 ## P2 — 工程化收尾（发布准备）
 
 ### P2.2 发布收尾
