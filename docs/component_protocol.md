@@ -64,7 +64,7 @@ formatter = "_capability.py:build_formatter"
 ## 2. 加载流程（setup_grammar）
 
 ```
-discover_components(plugins_dir)   # 扫描插件目录的 tpc.toml
+discover_components(plugins_dir)   # 递归扫描插件目录树的 tpc.toml
   → _resolve_dependencies(metas)   # 按依赖排序（meta 里声明 deps）
   → load_component(meta)           # 逐个：
        grammar_files ← [grammar].files 的 .toml
@@ -76,6 +76,18 @@ discover_components(plugins_dir)   # 扫描插件目录的 tpc.toml
 ```
 
 语法文件由 `setup_grammar` 合并进规则树；处理器模块被 import（副作用 = 注册）。
+
+### 聚类目录（用户自定义分类，引擎不规定枚举）
+
+`plugins/` 下**任意深度子目录**均可作为分类容器（如 `plugins/checks/name_check`、
+`plugins/syntax/sim`），任何含 tpc.toml 的目录是一个组件；不含 tpc.toml 的
+目录只是分类容器被跳过。组件名 = tpc.toml 所在目录的 basename（依赖/配置/
+启用列表仍按组件名引用，聚类不改变引用名）。分类名由用户自由组织，引擎
+不规定枚举值。重名组件（不同分类下同名）→ fail-fast。
+
+纯规则组件（如 `name_check`：空 tpc.toml + `rules/*.toml`）不是 discover
+组件，由 check_registry 递归发现（`rules/` 目录随组件所在位置任意深度）。
+
 
 ## 3. transform 槽位（@register_transform_slot）
 

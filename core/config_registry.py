@@ -199,6 +199,25 @@ def _validate_decl_spec(config_key: str, spec: Any) -> None:
             )
 
 
+def _find_plugin_tpc(package_dir: str, name: str) -> tuple[str, str]:
+    """在 plugins/ 目录树递归查找组件 <name>/tpc.toml（聚类目录支持）。
+
+    返回 (tpc 绝对路径, 相对 plugins/ 的目录路径，如 "name" 或 "checks/name")。
+    未找到返回 ("", "")——enabled 列表引用未安装组件时静默跳过（与平铺时代
+    行为一致：组件缺失不阻断配置声明收集）。
+    """
+    plugins_dir = os.path.join(package_dir, "plugins")
+    if not os.path.isdir(plugins_dir):
+        return "", ""
+    for root, dirs, files in os.walk(plugins_dir):
+        dirs[:] = [d for d in dirs if not d.startswith("_")]
+        if os.path.basename(root) != name or "tpc.toml" not in files:
+            continue
+        rel = os.path.relpath(root, plugins_dir).replace("\\", "/")
+        return os.path.join(root, "tpc.toml"), rel
+    return "", ""
+
+
 def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
     """Read [config.*] declarations from grammar package tpc.toml files.
 
@@ -250,8 +269,8 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
         if isinstance(enabled, list):
             package_dir = os.path.dirname(core_path)
             for name in enabled:
-                plugin_tpc = os.path.join(package_dir, "plugins", name, "tpc.toml")
-                if not os.path.isfile(plugin_tpc):
+                plugin_tpc, rel_dir = _find_plugin_tpc(package_dir, name)
+                if not plugin_tpc:
                     continue
                 with open(plugin_tpc, encoding="utf-8") as f:
                     plugin_meta = tomllib.loads(f.read())
@@ -266,9 +285,9 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
                             file_spec = spec["file"]
                             prefixed = file_spec
                             if isinstance(file_spec, str):
-                                prefixed = f"{name}/{file_spec}"
+                                prefixed = f"{rel_dir}/{file_spec}"
                             elif isinstance(file_spec, list):
-                                prefixed = [f"{name}/{f}" for f in file_spec]
+                                prefixed = [f"{rel_dir}/{f}" for f in file_spec]
                             # 同名配置 key 合并（多插件 token_ext 等共存）：若已有同
                             # config_key 的插件声明，file 并入列表——否则扁平同名 key
                             # 后加载覆盖先加载，只保留一个插件来源（resolve 语义）。

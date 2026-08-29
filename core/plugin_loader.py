@@ -42,22 +42,39 @@ _PRIMITIVE_ORDER: list[str] = []
 
 
 def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
-    """Scan plugins/ directories for tpc.toml with component sections."""
+    """递归扫描 plugins/ 目录树，收集所有含 tpc.toml 的组件目录。
+
+    聚类目录支持（用户自定义分类，引擎不规定枚举值）：plugins/ 下任意
+    深度子目录均可作为分类容器（如 plugins/checks/name_check），任何含
+    tpc.toml 的目录都是一个组件；不含 tpc.toml 的目录只是分类容器被
+    跳过。组件名 = tpc.toml 所在目录的 basename（与既有引用兼容：依赖/
+    配置/启用列表均按组件名引用）。重名组件（不同分类下同名）→ fail-fast
+    （ADR-0003）。
+    """
     comp_dir = _get_component_dir(plugins_dir)
     if not comp_dir or not os.path.isdir(comp_dir):
         return []
     result = []
-    for name in sorted(os.listdir(comp_dir)):
-        cdir = os.path.join(comp_dir, name)
-        if not os.path.isdir(cdir) or name.startswith("_"):
+    seen_names: dict[str, str] = {}
+    for root, dirs, files in os.walk(comp_dir):
+        # 跳过私有目录（_ 前缀，如 __pycache__）
+        dirs[:] = [d for d in dirs if not d.startswith("_")]
+        if "tpc.toml" not in files:
             continue
+        cdir = root
         toml_path = os.path.join(cdir, "tpc.toml")
-        if not os.path.isfile(toml_path):
-            continue
+        name = os.path.basename(cdir)
+        if name in seen_names:
+            raise ValueError(
+                f"Component name conflict: '{name}' in {seen_names[name]} "
+                f"and {cdir}"
+            )
+        seen_names[name] = cdir
         meta = _parse_component_toml(toml_path)
         if meta:
             meta["_dir"] = cdir
             result.append(meta)
+    result.sort(key=lambda m: m[META_NAME])
     return result
 
 

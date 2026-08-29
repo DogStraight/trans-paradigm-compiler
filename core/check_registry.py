@@ -40,25 +40,24 @@ _SEVERITIES = {"error", "warning", "info"}
 
 
 def discover_rule_files(plugins_dir: str = "") -> list[str]:
-    """扫描插件目录下的 `rules/*.toml`（每个插件可选一个 rules/ 目录）。
+    """递归扫描插件目录树下的 `rules/*.toml`（聚类目录支持）。
 
     plugins_dir 非空时用指定语言包的 plugins/（单语言选择）；空时用默认包。
-    返回规则文件路径列表（排序稳定）。
+    返回规则文件路径列表（排序稳定）。与 plugin_loader.discover_components
+    同语义：任意深度子目录均可作为聚类容器，rules/ 目录随组件所在位置。
     """
     comp_dir = _resolve_plugins_dir(plugins_dir)
     if not comp_dir or not os.path.isdir(comp_dir):
         return []
     files: list[str] = []
-    for name in sorted(os.listdir(comp_dir)):
-        cdir = os.path.join(comp_dir, name)
-        if not os.path.isdir(cdir) or name.startswith("_"):
+    for root, dirs, fnames in os.walk(comp_dir):
+        # 跳过私有目录（_ 前缀，如 __pycache__）
+        dirs[:] = [d for d in dirs if not d.startswith("_")]
+        if os.path.basename(root) != "rules":
             continue
-        rules_dir = os.path.join(cdir, "rules")
-        if not os.path.isdir(rules_dir):
-            continue
-        for fname in sorted(os.listdir(rules_dir)):
+        for fname in sorted(fnames):
             if fname.endswith(".toml"):
-                files.append(os.path.join(rules_dir, fname))
+                files.append(os.path.join(root, fname))
     return files
 
 
