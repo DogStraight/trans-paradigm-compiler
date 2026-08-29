@@ -104,6 +104,10 @@
 > fuzz 实测吞吐 ~40 iter/s（800 轮 18-19s / 3000 轮 75-86s）——远超最初
 > ~9 iter/s 基线（原测速含 linter 热点），三件套预期收益缩水，但缓存复用/
 > 关幂等/multiprocessing 仍可再叠加 ~10x。
+> 2026-08-29 更新：全量 pytest 回归并发化（pytest-xdist `-n auto`，test extra
+> 已声明；global_state 进程内隔离天然兼容，实测 1386+8 与串行一致）——
+> 300s → ~110s（~3x，16 逻辑核实测；瓶颈 = 大文件真实语料测试 + 每 worker
+> 语法加载固定开销，进一步加速需语法表跨 worker 缓存，见 fuzz 三件套）。
 
 - [ ] fuzz harness 吞吐三件套：
   - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x

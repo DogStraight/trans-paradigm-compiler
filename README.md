@@ -293,9 +293,15 @@ plugin scripts — no engine code required to add or modify a language (see
 
 ```bash
 python -m pytest tests/ -q                # unit tests (see tests/ for count)
+python -m pytest tests/ -q -n auto        # 并发全量回归（pytest-xdist，~3x 加速）
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
 python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
+python tests/e2e/eval_check_accuracy.py     # analyzer rule accuracy gate (recall 100% / FP 0)
 ```
+
+并发前提是测试顺序无关：每个测试后经 `core/global_state` 还原全局状态
+（tests/conftest.py），xdist 每 worker 独立进程内隔离天然兼容（已实测
+1386 passed + 8 skipped 与串行一致）。
 
 CI ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) runs the full
 suite with a coverage gate, a wheel-install smoke test, plus two policy gates

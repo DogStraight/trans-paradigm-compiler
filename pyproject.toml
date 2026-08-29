@@ -47,6 +47,7 @@ test = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "pytest-timeout>=2.0",
+    "pytest-xdist>=3.6",  # 并发回归：pytest -n auto（进程级并行；global_state 进程内隔离天然兼容）
 ]
 
 # main.py 作为顶层模块打包（tpc 命令入口）

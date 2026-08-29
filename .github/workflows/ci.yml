@@ -27,8 +27,10 @@ jobs:
           pip install -e ".[test]"
 
       - name: Run full test suite with coverage gate
+        # -n auto：pytest-xdist 进程级并行（test extra 已含；global_state
+        # 进程内隔离天然兼容）。实测 ~3x 加速（300s → 110s，16 逻辑核）。
         run: |
-          python -m pytest tests -q --cov
+          python -m pytest tests -q -n auto --cov
 
       - name: Policy checks (约定即门禁)
         # --strict-doc：R3（Doc: 头）升 gate——引擎新文件必须带 Doc: 反向引用
