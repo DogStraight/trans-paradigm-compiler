@@ -20,10 +20,196 @@ _INTEGER_WIDTH = "32"
 
 
 def run_width_check(analyzer, context) -> None:
-    """postpass 入口：A1 宽度表 + A4 WIDTH 赋值对比（后续阶段挂接点）。"""
+    """postpass 入口：A1 宽度表 + B1 参数表 + A4 WIDTH 赋值对比。"""
     table = symbol_width_table(analyzer)
+    # B1 模块参数表：全工程两层结构 → 当前文件模块单层（本文件模块的
+    # 宽度求值只用自己模块的参数；跨模块传播 B3）。内嵌 "_params" 键
+    # 供 infer 查表（符号名不会与 "_params" 冲突——参数不在宽度表）。
+    params_all = _module_params(context)
+    params = _file_params(analyzer, params_all)
+    analyzer._param_table = params
+    table["_params"] = params
     analyzer._width_table = table
     _check_assignment_widths(analyzer, context, table)
+
+
+def _file_params(analyzer, module_params: dict) -> dict[str, str]:
+    """当前文件各模块参数合并（单层；多模块同名参数取先——罕见，保守）。"""
+    out: dict[str, str] = {}
+    root = getattr(analyzer, "_ast", None)
+    if root is None:
+        return out
+    for node in _iter_nodes(root):
+        if node.node_name != "ModuleDecl":
+            continue
+        mn = getattr(getattr(node, "module_name", None), "content", "")
+        if mn and mn in module_params:
+            out.update(module_params[mn])
+    return out
+
+
+# ── B1 模块参数表 ────────────────────────────────────────
+# 参数化宽度（WIDTH-1:0）求值需要模块参数值。来源：模块定义 ParamDecl
+# 默认值（module_index 的 ModuleParam.value_expr）。实例化覆盖
+# （#(.P(v))）对模块内宽度的传播属 B3（跨模块视角）。
+
+
+def _module_params(context) -> dict[str, dict[str, str]]:
+    """{模块名: {参数名: 值表达式文本}}——全工程模块定义参数默认值。"""
+    module_index = context.extra.get("module_index", {}) or {}
+    out: dict[str, dict[str, str]] = {}
+    for mname, info in module_index.items():
+        params = getattr(info, "params", None) or {}
+        out[mname] = {p.name: p.value_expr for p in params.values()}
+    return out
+
+
+# ── B2 参数化宽度求值（符号化常量求值） ───────────────────
+# eval_expr_params：常量表达式 + 参数表 → 数值（标识符查参数表，值可含
+# 嵌套参数链）。与 A2 eval_const_expr 的关系：纯数字域走 A2；含标识符
+# 走本函数（递归下降，ident 查表递归求值）。
+
+
+def eval_expr_params(text: str, params: dict[str, str]) -> int | None:
+    """常量表达式 + 参数表 → 数值。
+
+    "8" → 8；"WIDTH-1"（WIDTH=8）→ 7；"DATA_W/2"（DATA_W=16）→ 8；
+    "A+B"（A=2,B=3）→ 5；"W"（W="DATA_W/2", DATA_W=16）→ 8（链式）；
+    含未知标识符 → None。
+    """
+    toks = _expr_tokenize(text)
+    if toks is None:
+        return None
+    pos = 0
+
+    def peek() -> tuple:
+        return toks[pos] if pos < len(toks) else ("eof", "")
+
+    def advance() -> tuple:
+        nonlocal pos
+        t = toks[pos]
+        pos += 1
+        return t
+
+    def parse_expr():
+        left = parse_term()
+        if left is None:
+            return None
+        while peek()[0] in ("+", "-"):
+            op = advance()[0]
+            right = parse_term()
+            if right is None:
+                return None
+            left = left + right if op == "+" else left - right
+        return left
+
+    def parse_term():
+        left = parse_factor()
+        if left is None:
+            return None
+        while peek()[0] in ("*", "/", "%"):
+            op = advance()[0]
+            right = parse_factor()
+            if right is None:
+                return None
+            if op == "*":
+                left = left * right
+            elif op == "/":
+                if right == 0:
+                    return None
+                left = left // right
+            else:
+                if right == 0:
+                    return None
+                left = left % right
+        return left
+
+    def parse_factor():
+        t = peek()
+        if t[0] == "-":
+            advance()
+            v = parse_factor()
+            return -v if v is not None else None
+        if t[0] == "+":
+            advance()
+            return parse_factor()
+        if t[0] == "(":
+            advance()
+            v = parse_expr()
+            if v is None or peek()[0] != ")":
+                return None
+            advance()
+            return v
+        if t[0] == "num":
+            advance()
+            return t[1]
+        if t[0] == "ident":
+            advance()
+            v = params.get(t[1])
+            if v is None:
+                return None  # 未知标识符（非本模块参数/信号）
+            return eval_expr_params(v, params)  # 参数值递归求值（链式）
+        return None
+
+    v = parse_expr()
+    if v is None or peek()[0] != "eof":
+        return None
+    return v
+
+
+def eval_width_text_params(text: str, params: dict[str, str]) -> int | None:
+    """宽度文本 + 参数表 → 数值（B2）。
+
+    先纯常量（A2 eval_width_text）；含参数 → 符号化求值：
+    "WIDTH-1:0"（WIDTH=8）→ 8；"3"（单表达式）→ 4；"" → 1。
+    """
+    v = eval_width_text(text)
+    if v is not None:
+        return v
+    if ":" in text:
+        msb_s, lsb_s = text.split(":", 1)
+        msb = eval_expr_params(msb_s, params)
+        lsb = eval_expr_params(lsb_s, params)
+        if msb is None or lsb is None:
+            return None
+        return abs(msb - lsb) + 1
+    v2 = eval_expr_params(text, params)
+    if v2 is None:
+        return None
+    return v2 + 1  # 单表达式 [n] = n+1 位
+
+
+def _expr_tokenize(text: str) -> list | None:
+    """常量表达式 tokenize（数字/标识符/括号/四则/一元；未知字符 None）。"""
+    toks: list = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch.isdigit():
+            j = i
+            while j < n and text[j].isdigit():
+                j += 1
+            toks.append(("num", int(text[i:j])))
+            i = j
+            continue
+        if ch.isalpha() or ch == "_":
+            j = i
+            while j < n and (text[j].isalnum() or text[j] == "_"):
+                j += 1
+            toks.append(("ident", text[i:j]))
+            i = j
+            continue
+        if ch in "+-*/%()":
+            toks.append((ch, ch))
+            i += 1
+            continue
+        return None
+    toks.append(("eof", ""))
+    return toks
 
 
 # ── A4 WIDTH 赋值对比 ────────────────────────────────────
@@ -103,6 +289,15 @@ def table_width_to_num(text: str | None) -> int | None:
     if text == "":
         return 1
     return eval_width_text(text)
+
+
+def table_width_to_num_params(text: str | None, params: dict | None) -> int | None:
+    """B2：宽度表文本 + 参数表 → 数值（参数化宽度求值版）。"""
+    if text is None:
+        return None
+    if text == "":
+        return 1
+    return eval_width_text_params(text, params or {})
 
 
 def extract_width(sym) -> str:
@@ -437,8 +632,9 @@ def infer_expr_width(node, width_table: dict) -> int | None:
     name = node.node_name
 
     if name == "Identifier":
-        return table_width_to_num(
-            width_table.get(getattr(node, "content", "") or "")
+        return table_width_to_num_params(
+            width_table.get(getattr(node, "content", "") or ""),
+            width_table.get("_params"),
         )
     if name in ("Number", "BitWidthLiteral"):
         return literal_width(node_text(node))
@@ -568,14 +764,16 @@ def _hier_width(node, width_table: dict) -> int | None:
         return None
     if last.node_name == "Identifier":
         # 单段（a）或末段是标识符：查宽度表
-        return table_width_to_num(
-            width_table.get(getattr(last, "content", "") or "")
+        return table_width_to_num_params(
+            width_table.get(getattr(last, "content", "") or ""),
+            width_table.get("_params"),
         )
     if last.node_name == "HierSuffix":
         return 1  # 末段下标选择 → 1 bit
     if last.node_name == "HierMember":
-        return table_width_to_num(
-            width_table.get(getattr(getattr(last, "name", None), "content", "") or "")
+        return table_width_to_num_params(
+            width_table.get(getattr(getattr(last, "name", None), "content", "") or ""),
+            width_table.get("_params"),
         )
     return None
 

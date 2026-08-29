@@ -376,3 +376,105 @@ class TestWidthAssignA4:
         assert len(msgs) == 2
         assert any("a = c" in m for m in msgs)
         assert any("b = a" in m for m in msgs)
+
+
+class TestWidthEvalParamsB2:
+    """B2 参数化宽度求值（符号化常量求值）。"""
+
+    def test_eval_expr_params(self):
+        from grammar.verilog.plugins.checks.width_check._width_check import (
+            eval_expr_params,
+        )
+
+        assert eval_expr_params("8", {}) == 8  # 纯数字
+        assert eval_expr_params("WIDTH-1", {"WIDTH": "8"}) == 7
+        assert eval_expr_params("DATA_W/2", {"DATA_W": "16"}) == 8
+        assert eval_expr_params("A+B", {"A": "2", "B": "3"}) == 5
+        assert eval_expr_params("(W-1)*2", {"W": "8"}) == 14
+        assert eval_expr_params("W", {"W": "DATA_W/2", "DATA_W": "16"}) == 8  # 链式
+        assert eval_expr_params("X", {}) is None  # 未知标识符
+        assert eval_expr_params("WIDTH", {"WIDTH": "8"}) == 8
+
+    def test_eval_width_text_params(self):
+        from grammar.verilog.plugins.checks.width_check._width_check import (
+            eval_width_text_params,
+        )
+
+        assert eval_width_text_params("WIDTH-1:0", {"WIDTH": "8"}) == 8
+        assert eval_width_text_params("DATA_W-1:0", {"DATA_W": "16"}) == 16
+        assert eval_width_text_params("7:0", {}) == 8  # 纯常量优先
+        assert eval_width_text_params("", {}) == 1  # 标量
+        assert eval_width_text_params("UNKNOWN-1:0", {}) is None  # 未知参数
+
+
+class TestWidthParametricB2:
+    """B2 集成：参数化宽度的符号求值与 W201。"""
+
+    def _check(self, checker, src_text: str) -> list:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".sv", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src_text)
+            path = f.name
+        try:
+            report = checker.check(path)
+            out = []
+            for f in report["files"]:
+                for d in f["semantic"]:
+                    if d.get("code") == "W201":
+                        out.append(d["message"])
+            return out
+        finally:
+            os.unlink(path)
+
+    def test_parameterized_width_inferred(self, checker):
+        """reg [WIDTH-1:0] q（WIDTH=8）→ 宽度 8；q = 16 位 → 截断报 W201。"""
+        msgs = self._check(
+            checker,
+            "module t #(parameter WIDTH = 8);\n"
+            "  reg [WIDTH-1:0] q;\n"
+            "  wire [15:0] c;\n"
+            "  always @(*) q = c;\n"  # 16 → 8 截断（参数化宽度求值后）
+            "endmodule\n",
+        )
+        assert len(msgs) == 1
+        assert "16 位" in msgs[0] and "8 位" in msgs[0]
+
+    def test_parameterized_equal_width_clean(self, checker):
+        """参数化等宽赋值不报。"""
+        msgs = self._check(
+            checker,
+            "module t #(parameter WIDTH = 8);\n"
+            "  reg [WIDTH-1:0] q;\n"
+            "  wire [WIDTH-1:0] a;\n"
+            "  always @(*) q = a;\n"
+            "endmodule\n",
+        )
+        assert msgs == []
+
+    def test_parameterized_unknown_clean(self, checker):
+        """参数无默认值（外部实例化提供）→ 本模块内无法求值 → 保守不报。"""
+        msgs = self._check(
+            checker,
+            "module t #(parameter WIDTH);\n"  # 无默认值
+            "  reg [WIDTH-1:0] q;\n"
+            "  wire [15:0] c;\n"
+            "  always @(*) q = c;\n"
+            "endmodule\n",
+        )
+        assert msgs == []
+
+    def test_param_expr_width(self, checker):
+        """参数表达式宽度：DATA_W/2 位。"""
+        msgs = self._check(
+            checker,
+            "module t #(parameter DATA_W = 16);\n"
+            "  reg [DATA_W/2-1:0] q;\n"  # 8 位
+            "  wire [15:0] c;\n"
+            "  always @(*) q = c;\n"  # 16 → 8 截断
+            "endmodule\n",
+        )
+        assert len(msgs) == 1
+        assert "8 位" in msgs[0]
