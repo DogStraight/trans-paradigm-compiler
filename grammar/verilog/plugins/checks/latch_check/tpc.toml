@@ -1,0 +1,17 @@
+# latch_check 插件 — 锁存风险检查（组合 always 内 if 无 else，P1.10）
+#
+# 对标（重合刚需）：
+#     svlint explicit_if_else / implicit_case_default /
+#     Verilator LATCH / Veryl uncovered_branch / slang inferred-latch
+#
+# 检查项（Verilog 语义规则——插件层语言知识，不进引擎）：
+#     LC001  组合 always（@* 或电平敏感）内 if 无 else——条件不满足时
+#            信号保持（推断锁存，仿真/综合不一致风险）。
+#            时序 always（posedge/negedge）内 if 无 else 是合法复位写法，
+#            不报（如 `if (rst_n) q <= 0;` 无 else 是标准）。
+#
+# 有限版：只查"if 无 else 分支"这一可静态判定的锁存形态，不做完整
+# 控制流路径分析（完整 LATCH 推断需数据流，属 analyzer 深度扩展）。
+
+[analyzer]
+postpasses = ["_latch_check.py:run_latch_check"]
