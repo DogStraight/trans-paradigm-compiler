@@ -1,5 +1,5 @@
 {
-    "focus": ["UN001", "W104", "W105", "CC001", "W106", "LC001", "NC012", "NC013", "W201"],
+    "focus": ["UN001", "W104", "W105", "CC001", "W106", "LC001", "NC012", "NC013", "W201", "W202"],
     "pos": {
         "UN001_unused_decl": {
             "entry": "top.sv",
@@ -90,6 +90,16 @@
             "entry": "top.sv",
             "expect": ["W201"],
             "desc": "位选 LHS（4 位）← 12 位截断应检出"
+        },
+        "W202_select_oob": {
+            "entry": "top.sv",
+            "expect": ["W202"],
+            "desc": "位选范围越界（8 位信号选 [15:0]）应检出"
+        },
+        "W202_index_oob": {
+            "entry": "top.sv",
+            "expect": ["W202"],
+            "desc": "单索引越界（vec[8]，合法 0-7）应检出"
         }
     },
     "neg": {
@@ -144,6 +154,10 @@
         "W201_unsized_clean": {
             "entry": "top.sv",
             "desc": "unsized 常数 RHS / 等宽赋值不应误报 W201"
+        },
+        "W202_in_bounds": {
+            "entry": "top.sv",
+            "desc": "范围内位选 / 反向范围 / 变量索引不应误报 W202"
         }
     }
 }

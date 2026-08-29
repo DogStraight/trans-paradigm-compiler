@@ -159,18 +159,8 @@
 - [x] ~~分支完整性：CC001 case 无 default~~（已完成，1f94fbc）
 - [x] ~~端口类型：W106 inout 须 tri~~（已完成，5067e8b）
 - [x] ~~锁存风险：LC001 组合 always if 无 else~~（已完成，d5148d3）
-- [ ] 位宽一致性（对标 WIDTH/width-trunc 家族，2026-08-29 分期立项；
-      实现位置 = 语义插件 grammar/verilog/plugins/checks/width_check/：
-      求值器+推断器+规则都在插件层，语言知识不进引擎。
-      **阶段 A 常量宽度域已闭环**（A1 符号宽度表 + A2 常量求值器 +
-      A3 表达式宽度推断 + A4 WIDTH 赋值对比 W201 + A5 评测扩充 31 case
-      100% recall / 0 FP，真实语料 0 误报；完成历史 git log）。
-      **B 阶段已闭环**（B1 模块参数默认值表 + B2 符号化常量求值
-      eval_expr_params 链式参数 + B3 跨模块参数传播：实例化覆盖
-      #(.P(v)) 覆盖后参数求值端口宽度、调用者参数引用、连接截断 W201，
-      真实语料仍 0 误报）：
-  - [ ] **C1 SELRANGE 位选越界**（W202）
-  - [ ] **C1 SELRANGE 位选越界**（W202）
-  - [ ] **C2 自赋值宽度变化**（W203，a = a + 1 类）
-  - [ ] **C3 $signed/$unsigned 符号语义 + unsized 常数精化**
+- [ ] 位宽一致性（对标 WIDTH/width-trunc 家族——**A/B/C1 已闭环**：W201
+      赋值/端口连接截断、W202 位选越界；C2 自赋值/C3 unsized 精化评估
+      不做（与 W201 重叠 + 合法累加器误报风险）；完成历史 git log +
+      references.md「位宽一致性落档」）
 - [ ] ~~always 写法（裸 always）~~（评估：边界模糊/仿真代码大量合法使用，误报高，不做）

@@ -568,3 +568,111 @@ class TestWidthPortConnB3:
             "endmodule\n",
         )
         assert any("adder.a_i 8 位" in m and "12 位" in m for m in msgs)
+
+
+class TestSelectRangeC1:
+    """C1 SELRANGE：位选/下标/切片越界报 W202。"""
+
+    def _codes(self, checker, src_text: str) -> list:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".sv", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src_text)
+            path = f.name
+        try:
+            report = checker.check(path)
+            return [
+                (d.get("code"), d.get("message"))
+                for f in report["files"]
+                for d in f["semantic"]
+                if d.get("code") == "W202"
+            ]
+        finally:
+            os.unlink(path)
+
+    def test_range_out_of_bounds(self, checker):
+        """vec[15:0]（vec [7:0]）→ W202。"""
+        diags = self._codes(
+            checker,
+            "module t;\n"
+            "  wire [7:0] vec;\n"
+            "  wire [15:0] c;\n"
+            "  assign c = vec[15:0];\n"
+            "endmodule\n",
+        )
+        assert len(diags) == 1
+        assert "vec[15:0]" in diags[0][1] and "8 位" in diags[0][1]
+
+    def test_index_out_of_bounds(self, checker):
+        """vec[8]（8 位）→ W202；vec[7] 合法。"""
+        diags = self._codes(
+            checker,
+            "module t;\n"
+            "  wire [7:0] vec;\n"
+            "  wire c;\n"
+            "  assign c = vec[8];\n"  # 越界
+            "  assign c = vec[7];\n"  # 合法
+            "endmodule\n",
+        )
+        assert len(diags) == 1
+        assert "vec[8]" in diags[0][1]
+
+    def test_in_bounds_clean(self, checker):
+        """范围内位选/反向范围不报。"""
+        diags = self._codes(
+            checker,
+            "module t;\n"
+            "  wire [7:0] vec;\n"
+            "  wire [7:0] c;\n"
+            "  assign c = vec[3:0];\n"  # 范围内
+            "  assign c = vec[0:7];\n"  # 反向范围 max=7 合法
+            "endmodule\n",
+        )
+        assert diags == []
+
+    def test_variable_index_clean(self, checker):
+        """变量索引（i）保守不报。"""
+        diags = self._codes(
+            checker,
+            "module t (\n"
+            "  input wire [3:0] i,\n"
+            "  output wire [7:0] o\n"
+            ");\n"
+            "  wire [7:0] vec;\n"
+            "  assign vec = 8'd0;\n"
+            "  assign o = vec[i];\n"
+            "endmodule\n",
+        )
+        assert diags == []
+
+    def test_parameterized_base(self, checker):
+        """参数化 base 宽度：mem[15]（mem [WIDTH-1:0], WIDTH=8）→ W202。"""
+        diags = self._codes(
+            checker,
+            "module t #(parameter WIDTH = 8);\n"
+            "  wire [WIDTH-1:0] mem;\n"
+            "  wire c;\n"
+            "  assign mem = 8'd0;\n"
+            "  assign c = mem[15];\n"  # 越界
+            "  assign c = mem[7];\n"  # 合法
+            "endmodule\n",
+        )
+        assert len(diags) == 1
+        assert "mem[15]" in diags[0][1]
+
+    def test_slice_bounds(self, checker):
+        """切片 vec[0+:8] 合法；vec[4+:8] 越界（4+8>8）。"""
+        diags = self._codes(
+            checker,
+            "module t;\n"
+            "  wire [7:0] vec;\n"
+            "  wire [7:0] c;\n"
+            "  assign vec = 8'd0;\n"
+            "  assign c = vec[0+:8];\n"  # 0..7 合法
+            "  assign c = vec[4+:8];\n"  # 4..11 越界
+            "endmodule\n",
+        )
+        assert len(diags) == 1
+        assert "vec[4+:8]" in diags[0][1]

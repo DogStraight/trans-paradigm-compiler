@@ -1675,3 +1675,34 @@ PyPy 的 JIT 收益有限、字典/字符串部分无收益拖累整体）；短
 风险。**CPython 保持现状，算法层仍是提速主线**（渲染缓存 -57% 实证；
 parser 记忆化待 path 语义重构）。附带数据：真实语料 9 文件 = 100k token，
 check 吞吐 7k tok/s（5 万行 ≈ 45s），format 热吞吐 5.4k tok/s。
+
+#### 位宽一致性落档（2026-08-29，A/B/C1 闭环）
+
+实现位置 = 语义插件 `grammar/verilog/plugins/checks/width_check/`
+（求值器+推断器+规则全在插件层，引擎零改动——"语言知识不进代码"的
+又一次验证；6 提交 1c04652..7b4f167 + C1 提交）。
+
+- **A 常量宽度域**：A1 符号宽度表（类型级/声明符级/多声明符按名对齐，
+  integer 固定 32；body 端口宽度走类型声明符号——方向=属性、类型=符号
+  设计）；A2 常量求值器（`eval_width_text`/`eval_const_expr` 手写递归
+  下降防 RCE/`literal_width`）；A3 表达式宽度推断（原子/拼接/复制/位选/
+  一元/二元按 op 分派/三目/$signed 同宽，未知保守 None）；A4 **W201**
+  赋值截断（assign/阻塞/非阻塞/多目标，扩展与未知不报）；A5 评测扩充。
+- **B 参数化宽度**：B1 模块参数默认值表；B2 符号化常量求值
+  （`eval_expr_params` 链式参数 `W=DATA_W/2` 递归）；B3 跨模块参数传播
+  （实例化覆盖 `#(.P(v))` 覆盖后参数表三层合并：调用者参数→模块默认→
+  site 覆盖；端口连接截断复用 W201；命名连接覆盖，ordered 留后续）。
+- **C1 SELRANGE**：**W202** 位选/下标/切片越界（error 级；常量索引才判，
+  变量索引保守跳过；参数化 base 求值后判定）。
+- **C2/C3 评估不做**：C2 自赋值宽度变化与 W201 重叠（截断已报），且
+  `a=a+1` 累加器合法用法普遍（Verilator 对 unsized 常数自赋值也不报）；
+  C3 unsized 精化（自定尺寸语义）是 Verilator 最复杂部分，按 32 位默认
+  会误报合法累加器——当前保守实现（unsized→None 不报）是合理基线，
+  $signed/$unsigned 已在 A3 支持（同宽）。
+- **节点形态知识**（B/C 调试积累）：token 文本在 value 属性；pratt 合成
+  BinaryOp(op 为 str)；`ReplicateExpr.value` 业务属性勿当 token；
+  `SelectSuffix.range_suffix` 实测 list（非 seq 节点）。
+- **验证**：38 测试全绿；评测 34 case（20 pos + 14 neg）23 期望码 100%
+  recall / 0 FP；全量 1418 passed + 8 skipped；真实语料（picorv32/
+  darkriscv/tv80/uart/ice40）W201+W202 均 0 误报——保守策略（sized 域 +
+  未知跳过）在真实代码上零误伤。

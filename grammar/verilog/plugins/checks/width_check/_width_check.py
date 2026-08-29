@@ -33,6 +33,68 @@ def run_width_check(analyzer, context) -> None:
     analyzer._width_table = table
     _check_assignment_widths(analyzer, context, table)
     _check_port_connections(analyzer, context, table, params_all)
+    _check_select_ranges(analyzer, context, table)
+
+
+# ── C1 SELRANGE：位选/下标越界（W202） ─────────────────────
+# 位选/下标/切片索引超出符号宽度 → 越界报 W202（error——越界是硬错误，
+# 仿真/综合行为未定义）。常量索引才可判（变量索引保守跳过）。
+# 对标：Verilator SELRANGE / slang index-out-of-bounds。
+
+
+def _check_select_ranges(analyzer, context, table: dict) -> None:
+    root = getattr(analyzer, "_ast", None)
+    if root is None:
+        return
+    for node in _iter_nodes(root):
+        if node.node_name != "SelectExpr":
+            continue
+        base = getattr(node, "base", None)
+        base_name = getattr(base, "content", "") if isinstance(base, Node) else ""
+        bw = table_width_to_num_params(table.get(base_name), table.get("_params"))
+        if bw is None:
+            continue  # base 宽度未知（跨模块/未声明/参数化未知）保守
+        suffixes = [getattr(node, "first_suffix", None)]
+        suffixes.extend(getattr(node, "extra_suffixes", None) or [])
+        for sf in suffixes:
+            if isinstance(sf, Node):
+                _check_suffix_bounds(sf, bw, base_name, context)
+
+
+def _check_suffix_bounds(sf, bw: int, base_name: str, context) -> None:
+    idx = eval_const_expr(node_text(getattr(sf, "index", None)))
+    info = _range_info(getattr(sf, "range_suffix", None))
+    if info is None:
+        # 纯索引 [idx]：idx ∈ [0, bw-1]
+        if idx is not None and idx >= bw:
+            context.report(
+                f"位选越界：{base_name}[{idx}] 超出 {bw} 位范围",
+                code="W202",
+                level="error",
+                node=sf,
+            )
+        return
+    op, val_node = info
+    op = node_text(op)
+    val = eval_const_expr(node_text(val_node))
+    if idx is None or val is None:
+        return  # 变量索引/宽度保守
+    if op == ":":
+        if max(idx, val) >= bw:
+            context.report(
+                f"位选越界：{base_name}[{idx}:{val}] 超出 {bw} 位范围",
+                code="W202",
+                level="error",
+                node=sf,
+            )
+    elif op in (":+", "+:", "-:"):
+        if idx >= bw or idx + val > bw:
+            context.report(
+                f"切片越界：{base_name}[{idx}{op}{val}] 超出 {bw} 位范围",
+                code="W202",
+                level="error",
+                node=sf,
+            )
 
 
 def _file_params(analyzer, module_params: dict) -> dict[str, str]:
