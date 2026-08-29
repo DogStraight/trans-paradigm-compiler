@@ -1,0 +1,13 @@
+# case_check 插件 — case 完整性检查（P1.10 核心集合：分支完整性/锁存预防）
+#
+# 对标（5 工具重合刚需）：
+#     svlint case_default / Verible case-missing-default /
+#     Verilator CASEINCOMPLETE / slang case-* / Spyglass W527
+#
+# 检查项（Verilog 语义规则——插件层语言知识，不进引擎）：
+#     CC001  case 无 default 分支（组合逻辑未覆盖全分支 → 锁存风险/仿真
+#           综合不一致）。Verilog-2005 无 unique/priority 限定（SV 才有），
+#           故不处理 unique 豁免；casex/casez 也检查（default 仍应显式）。
+
+[analyzer]
+postpasses = ["_case_check.py:run_case_check"]
