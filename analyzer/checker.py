@@ -48,6 +48,15 @@ _checker_cfg: dict = declare_cfg("checker.structure", {}, __name__, "_checker_cf
 
 # ── 数据模型 ──────────────────────────────────────────────
 
+# 连接表达式是否为"简单信号名"（层 3 建图过滤：常量/拼接/带位选的复杂
+# 表达式不入驱动/负载图——信号解析交给上层规则，此处只记简单标识符）。
+_SIGNAL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _is_signal_expr(text: str) -> bool:
+    """简单信号名（标识符形态）→ True；常量/拼接/位选/层次引用 → False。"""
+    return bool(_SIGNAL_RE.match(text.strip()))
+
 
 @dataclass
 class ModulePort:
@@ -76,6 +85,20 @@ class ModuleInfo:
     node: Node  # ModuleDecl 节点（定位）
     ports: dict[str, ModulePort] = field(default_factory=dict)
     params: dict[str, ModuleParam] = field(default_factory=dict)
+    # elaboration 层 2/3（ADR-0008）：模块的端口连接展开 + 实例树
+    insts: list = field(default_factory=list)  # 模块内实例化点（已展开连接）
+
+
+@dataclass
+class PortConnection:
+    """层 2：一个实例化点的端口连接（展开后）。"""
+
+    inst_name: str  # 实例名（如 u1）
+    module_name: str  # 被实例化模块名
+    inst_node: Node  # ModuleInst 节点（定位）
+    file: str
+    connects: dict[str, str] = field(default_factory=dict)  # 端口名 → 连接信号名
+    ordered: list[str] = field(default_factory=list)  # 位置连接信号（有序）
 
 
 @dataclass
@@ -91,6 +114,7 @@ class FileResult:
     analyzer: "AnalysisTraversal | None" = None  # stage=semantic 诊断源
     modules: dict[str, ModuleInfo] = field(default_factory=dict)
     inst_sites: list = field(default_factory=list)  # ModuleInst 节点
+    connections: list = field(default_factory=list)  # PortConnection（层 2）
 
 
 # ── 引擎 ─────────────────────────────────────────────────
@@ -123,6 +147,8 @@ class ProjectChecker:
         self._register = register
         self._memo: dict[str, FileResult] = {}
         self._module_index: dict[str, ModuleInfo] = {}
+        # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
+        self._signal_graph: dict = {}
         # 语言包结构协议（全部语言知识来自配置；缺失 = 无跨文件检查）。
         # 注意：配置在 _ensure_shared（load_all）之后才推入 _checker_cfg，
         # 因此 __init__ 只置空，check() 里 _ensure_shared 后刷新。
@@ -147,6 +173,11 @@ class ProjectChecker:
     def _exts(self) -> list[str]:
         exts = self._struct.get("file_exts") or []
         return [str(e) for e in exts] if isinstance(exts, list) else []
+
+    def _dirs(self, key: str) -> set[str]:
+        """端口方向值集合（层 3 信号图判定；语言包声明，引擎零语言知识）。"""
+        vals = (self._struct.get(key) or []) if self._struct else []
+        return {str(v) for v in vals} if isinstance(vals, list) else set()
 
     def _has_structure(self) -> bool:
         """语言包是否声明了跨文件结构协议（模块/实例化形态）。"""
@@ -228,6 +259,9 @@ class ProjectChecker:
 
         # 1) 递归发现 + parse（模块索引逐步建立）
         self._discover(entry, set())
+
+        # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
+        self._signal_graph = self._build_signal_graph()
 
         # 2) 每个文件跑语义分析（postpass 拿到完整 module_index）
         for fr in self._memo.values():
@@ -317,8 +351,66 @@ class ProjectChecker:
         fr.ast = ast
         fr.modules = self._extract_modules(ast, path)
         fr.inst_sites = self._collect_nodes(ast, self._rule("module_inst_rule"))
+        fr.connections = self._elaborate_connections(path, fr.inst_sites)
+        # 层 1 补充：模块内实例挂回 ModuleInfo（实例树展开的入口）
+        for conn in fr.connections:
+            mod = fr.modules.get(conn.module_name)
+            if mod is None:
+                # 被实例化模块可能定义在别的文件（本文件只有实例化点）
+                continue
+            mod.insts.append(conn)
         fr.parse_ok = True
         return fr
+
+    def _elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:
+        """层 2：实例化点端口连接展开（ADR-0008）。
+
+        从 ModuleInst 节点提取端口连接 → (端口名, 连接信号名) 映射：
+        - NamedPortList（命名连接 .p(sig)）→ 按 port_name 收集
+        - OrderedPortList（位置连接 a,b,c）→ 按序收集
+        连接信号名 = 端口连接表达式的文本（信号/拼接/常量；解析交给
+        上层规则 handler，此处只展开结构）。语言无关：端口连接节点形态
+        由结构协议声明（connects_field/value_field/ordered_rule）。
+        """
+        if not self._has_structure():
+            return []
+        out: list[PortConnection] = []
+        ports_field = self._field("connects") or "ports"
+        value_field = self._field("value")
+        conn_name_field = self._field("port_name")
+        items_field = self._field("items")
+        for site in inst_sites:
+            mod_name = self._inst_module_name(site)
+            inst_name_node = getattr(site, self._field("inst_name"), None)
+            inst_name = (
+                inst_name_node.content
+                if isinstance(inst_name_node, Node) and inst_name_node.content
+                else ""
+            )
+            conn = PortConnection(
+                inst_name=inst_name,
+                module_name=mod_name,
+                inst_node=site,
+                file=path,
+            )
+            ports_node = self._unwrap(getattr(site, ports_field, None))
+            items = getattr(ports_node, items_field, None) if ports_node else None
+            for item in items or []:
+                if not isinstance(item, Node):
+                    continue
+                # 命名连接：.port_name(value) 形态（NamedPortConnect 有 port_name）
+                pn = getattr(item, conn_name_field, None) if conn_name_field else None
+                pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
+                if pn_text:
+                    val = getattr(item, value_field, None) if value_field else None
+                    conn.connects[pn_text] = self._render_subtree(val) if isinstance(
+                        val, Node
+                    ) else ""
+                    continue
+                # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
+                conn.ordered.append(self._render_subtree(item))
+            out.append(conn)
+        return out
 
     def _analyze(self, fr: FileResult) -> None:
         if fr.ast is None:
@@ -330,6 +422,10 @@ class ProjectChecker:
         # 跨文件上下文注入（analyze() 重建 context 后合并进 extra）
         analyzer._external_extra["module_index"] = self._module_index
         analyzer._external_extra["inst_sites"] = fr.inst_sites
+        # elaboration 层 2（ADR-0008）：本文件实例化点端口连接展开
+        analyzer._external_extra["connections"] = fr.connections
+        # elaboration 层 3（ADR-0008）：全工程信号驱动/负载图
+        analyzer._external_extra["signal_graph"] = self._signal_graph
         analyzer.analyze(fr.ast)
         fr.analyzer = analyzer
 
@@ -423,8 +519,62 @@ class ProjectChecker:
                 value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
             )
 
+    def _build_signal_graph(self) -> dict:
+        """层 3：全工程信号驱动/负载图（ADR-0008）。
+
+        汇总所有文件的端口连接展开，按连接信号名建立：
+            signal → {"drivers": [实例标识], "loads": [实例标识]}
+        判定依据 = 被连接端口的模块方向（module_index 端口方向）：
+        - output 端口连接该信号 → 实例驱动该信号（drivers）
+        - input 端口连接该信号 → 实例读取该信号（loads）
+        - inout 双向（drivers + loads 都记）；方向未知（旧式裸名）仅记 loads
+          （保守：不误报驱动）。层 2 只展开"实例连接信号 vs 端口"，信号
+          名解析（哪个信号是本模块内部声明）交给上层规则 handler。
+        输出注入 context.extra["signal_graph"]，供 UNUSED/UNDRIVEN/
+        MULTIDRIVEN 类规则消费。
+        """
+        graph: dict[str, dict] = {}
+        out_dirs = self._dirs("output_dirs")
+        inout_dirs = self._dirs("inout_dirs")
+
+        def _ensure(sig: str) -> dict:
+            if sig not in graph:
+                graph[sig] = {"drivers": [], "loads": []}
+            return graph[sig]
+
+        for fr in self._memo.values():
+            for conn in fr.connections:
+                inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
+                mod = self._module_index.get(conn.module_name)
+                for port_name, sig in conn.connects.items():
+                    if not sig or not _is_signal_expr(sig):
+                        continue
+                    entry = _ensure(sig)
+                    direction = ""
+                    if mod is not None and port_name in mod.ports:
+                        direction = mod.ports[port_name].direction
+                    if direction in out_dirs:
+                        if inst_ref not in entry["drivers"]:
+                            entry["drivers"].append(inst_ref)
+                    elif direction in inout_dirs:
+                        if inst_ref not in entry["drivers"]:
+                            entry["drivers"].append(inst_ref)
+                        if inst_ref not in entry["loads"]:
+                            entry["loads"].append(inst_ref)
+                    else:  # input / 未知 → 负载
+                        if inst_ref not in entry["loads"]:
+                            entry["loads"].append(inst_ref)
+                for sig in conn.ordered:
+                    if not sig or not _is_signal_expr(sig):
+                        continue
+                    # 位置连接：方向靠模块端口表按序匹配；未知方向保守记负载
+                    entry = _ensure(sig)
+                    if inst_ref not in entry["loads"]:
+                        entry["loads"].append(inst_ref)
+        return graph
+
     def _render_subtree(self, node: Node) -> str:
-        """把 AST 子树渲染回文本（宽度表达式等）。"""
+        """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""
         try:
             return self._ensure_shared()["renderer"].render(node).strip()
         except Exception:

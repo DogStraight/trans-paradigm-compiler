@@ -16,10 +16,13 @@ module_decl_rule = "ModuleDecl"    # 模块声明规则名（提取模块定义�
 module_inst_rule = "ModuleInst"    # 模块实例化规则名（递归发现 + 联动检查）
 module_keyword   = "module"        # 模块声明关键字（定义文件文本扫描兜底）
 file_exts        = [".v", ".sv"]   # 源文件扩展名（定义文件查找）
+output_dirs      = ["output"]      # 端口方向 = 驱动（层 3 信号图判定）
+inout_dirs       = ["inout"]       # 端口方向 = 双向（驱动 + 负载）
 
 # 节点字段（语法 TOML node 绑定名）
 [checker.fields]
 module_name = "module_name"   # 模块名 / 被实例化模块名字段
+inst_name   = "inst_name"     # 实例名（ModuleInst 上）
 ports       = "ports"         # 端口列表字段（ModuleDecl/ModuleInst 上）
 params      = "params"        # 参数列表字段（ModuleDecl 上）
 items       = "items"         # 列表容器 items 字段（PortList/DeclaratorList 等）
@@ -28,5 +31,7 @@ direction   = "direction"     # 端口方向字段（input/output/inout）
 width       = "packed_range"  # 端口宽度表达式字段（TypeSpec 上）
 name        = "name"          # 声明器名字段（Declarator.name）
 param_name  = "param_name"    # 参数名字段（ParamDecl 上）
-value       = "value"         # 表达式值字段（参数默认值等）
+value       = "value"         # 表达式值字段（参数默认值/端口连接值）
 bare_rule   = "Identifier"    # 裸名端口节点名（旧风格端口，无方向/宽度）
+connects    = "ports"         # 实例化点端口连接列表字段（ModuleInst 上，层 2）
+port_name   = "port_name"     # 命名端口连接 .p(..) 的端口名字段（NamedPortConnect）

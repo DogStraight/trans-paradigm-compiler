@@ -242,3 +242,192 @@ class TestNoStructureProtocol:
             )
         assert report["modules"] == {}
         assert len(report["files"]) == 1
+
+
+# ── elaboration 层 2：端口连接展开（ADR-0008） ──────────────
+
+
+class TestElaborationConnections:
+    """层 2 端口连接展开：NamedPortList / OrderedPortList → PortConnection。
+
+    验证连接结构从 AST 展开（端口名 → 连接信号名），经 context.extra
+    注入插件可消费；位置连接按序收集。
+    """
+
+    def test_named_connections_expanded(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y, z;\n"
+            "  adder u1 (.a(x), .b(y), .y(z));\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        # 连接展开挂在 FileResult.connections（checker._memo 内部状态）
+        conns = _collect_connections(checker)
+        assert len(conns) == 1
+        c = conns[0]
+        assert c["inst_name"] == "u1"
+        assert c["module_name"] == "adder"
+        assert c["connects"] == {"a": "x", "b": "y", "y": "z"}
+
+    def test_ordered_connections_expanded(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y, z;\n"
+            "  adder u2 (x, y, z);\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        conns = _collect_connections(checker)
+        assert len(conns) == 1
+        assert conns[0]["ordered"] == ["x", "y", "z"]
+        assert conns[0]["connects"] == {}
+
+    def test_mixed_named_and_unconnected(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, z;\n"
+            "  adder u3 (.a(x), .y(z));\n"  # b 未连接（.b() 缺省）
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        conns = _collect_connections(checker)
+        assert conns[0]["connects"] == {"a": "x", "y": "z"}
+
+    def test_connections_injected_for_each_file(self, checker, tmp_path):
+        """顶层文件与模块定义文件各自有连接注入（模块文件内实例化也展开）。"""
+        (tmp_path / "child.sv").write_text(
+            "module child;\n  wire c;\nendmodule\n", encoding="utf-8"
+        )
+        (tmp_path / "mid.sv").write_text(
+            "module mid;\n  child m1 ();\nendmodule\n", encoding="utf-8"
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n  mid t1 ();\nendmodule\n", encoding="utf-8"
+        )
+        checker.check(str(top))
+        conns = _collect_connections(checker)
+        by_inst = {c["inst_name"]: c for c in conns}
+        # top 文件实例化 mid；mid 文件实例化 child——两处都展开
+        assert by_inst["t1"]["module_name"] == "mid"
+        assert by_inst["m1"]["module_name"] == "child"
+
+
+def _collect_connections(checker):
+    """从 checker._memo（FileResult.connections）收集连接展开（测试内联访问）。"""
+    out = []
+    for fr in checker._memo.values():
+        for c in fr.connections:
+            out.append(
+                {
+                    "inst_name": c.inst_name,
+                    "module_name": c.module_name,
+                    "connects": dict(c.connects),
+                    "ordered": list(c.ordered),
+                }
+            )
+    return out
+
+
+# ── elaboration 层 3：驱动/负载图（ADR-0008） ──────────────
+
+
+class TestElaborationSignalGraph:
+    """层 3 全工程信号驱动/负载图：output 连接=驱动，input 连接=负载。
+
+    验证 signal_graph 按端口方向正确分类驱动源/负载，供 UNUSED/
+    UNDRIVEN/MULTIDRIVEN 规则消费。
+    """
+
+    def test_output_drives_input_loads(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y, z;\n"
+            "  adder u1 (.a(x), .b(y), .y(z));\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        graph = checker._signal_graph
+        # x/y 连 input a/b → 负载（u1 读取）；z 连 output y → 驱动（u1 驱动）
+        # inst_ref 格式 = "文件名:实例名"
+        assert "u1" in [r.split(":")[-1] for r in graph["x"]["loads"]]
+        assert "u1" in [r.split(":")[-1] for r in graph["y"]["loads"]]
+        assert "u1" in [r.split(":")[-1] for r in graph["z"]["drivers"]]
+        assert "u1" not in [r.split(":")[-1] for r in graph["z"]["loads"]]
+
+    def test_inout_both(self, checker, tmp_path):
+        (tmp_path / "mem.sv").write_text(
+            "module mem (inout wire [7:0] d);\nendmodule\n", encoding="utf-8"
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n  wire [7:0] bus;\n  mem m1 (.d(bus));\nendmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        graph = checker._signal_graph
+        insts_d = [r.split(":")[-1] for r in graph["bus"]["drivers"]]
+        insts_l = [r.split(":")[-1] for r in graph["bus"]["loads"]]
+        assert "m1" in insts_d
+        assert "m1" in insts_l
+
+    def test_constant_not_in_graph(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] z;\n"
+            "  adder u1 (.a(1'b0), .b(8'hFF), .y(z));\n"  # 常量不建图
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        graph = checker._signal_graph
+        assert "1'b0" not in graph
+        assert "8'hFF" not in graph
+        assert "u1" in [r.split(":")[-1] for r in graph["z"]["drivers"]]
+
+    def test_multi_driver_detected(self, checker, tmp_path):
+        """同一信号被两个实例 output 连接 → 多驱动（MULTIDRIVEN 地基）。"""
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] a, b, s;\n"
+            "  adder u1 (.a(a), .b(b), .y(s));\n"
+            "  adder u2 (.a(a), .b(b), .y(s));\n"  # s 被双驱动
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        graph = checker._signal_graph
+        assert len(graph["s"]["drivers"]) == 2
+
+    def test_signal_graph_injected_in_context(self, checker, tmp_path):
+        """信号图经 context.extra 注入（postpass 可消费）。"""
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n  wire [7:0] x, y, z;\n"
+            "  adder u1 (.a(x), .b(y), .y(z));\nendmodule\n",
+            encoding="utf-8",
+        )
+        checker.check(str(top))
+        # 注入发生在 analyze 的 _external_extra（analyze() 重建 context 合并）
+        for fr in checker._memo.values():
+            if fr.analyzer is not None:
+                assert "signal_graph" in fr.analyzer._external_extra
+                assert "connections" in fr.analyzer._external_extra
