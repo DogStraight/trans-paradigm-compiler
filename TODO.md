@@ -124,13 +124,17 @@
 > 重合范围 → 核心集合（高频刚需）**，**再划各工具特化赛道 → 选择性吸取**
 > （差异化候选）。差异化方向已定 = **跨文件类**（实例化端口与模块定义不匹配
 > 等——只有 tpc 跨文件 handler 能做，svlint/Verible 单文件做不了）。
-> 本次交付 = **调研 + 规则清单**（映射评估：可做/成本），规则实现留下一步。
-> 调研结论落 docs/references.md，本条目只留待办方向。
+> 调研已完成（2026-08-29，三路并行）：svlint 159 条/Veryl 114 项/flexlint 框架
+> + Verilator 136 码/Verible ~60 条 + slang/Spyglass/HDL Checker——结论落
+> docs/references.md「主流 lint 机制调研」+「重合核心集合 + 特化赛道 + 映射
+> 评估」：核心集合 10 类（命名/未使用/位宽/锁存/case/always/端口/实例化/多
+> 驱动/宏卫生），跨文件差异化候选 = 实例化端口连接 / 未使用声明 / 端口完整性。
+> 下一步：规则实现（声明式优先，语义层 + 跨文件 handler 渐进）。
 
-- [ ] 工具调研：svlint（190+ 规则分类，本地镜像 E:\research\svlint）/ Veryl check /
-      Verilator W 码（200+，--lint-only）/ Verible rule-sets / slang / Spyglass /
-      flexlint（本地镜像）——各工具检查项清单
-- [ ] 重合核心集合：多工具共有的检查项（高频刚需）→ tpc 声明式规则优先移植
-- [ ] 特化赛道：各工具独有检查项 → 选择性吸取（差异化候选，含跨文件类）
-- [ ] 映射评估：规则清单 → tpc 规则模型（kind 分发 + handler 兜底）可做/成本
-- [ ] 1-2 条差异化自定义规则立项（跨文件类为核心样例）
+- [x] ~~工具调研：svlint / Veryl / Verilator / Verible / slang / Spyglass /
+      HDL Checker / flexlint 检查项清单~~（已完成，落档 references.md）
+- [x] ~~重合核心集合 + 特化赛道 + 映射评估~~（已完成，10 类核心集合）
+- [ ] 规则实现：语法层声明式优先（命名族扩展/排版族/keyword 禁用/always 写法）
+- [ ] 语义层检查 pass：未使用类（符号表引用计数，避免词频误报）
+- [ ] 跨文件 handler：design-unit 注册表 + 依赖排序基建 → 端口连接/实例化检查
+- [ ] 1-2 条差异化自定义规则实现（跨文件类为核心样例，验证三层捕获能力）

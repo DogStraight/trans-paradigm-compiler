@@ -1245,3 +1245,270 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
     多语言分发需求（external）——由 `[packaging] bundle` 标定
 - **优先级**：低于 C 语言包——当前仅 verilog 一个语言包要打包，硬编码还能撑；
   触发条件 = C 核心基线立项（多语言共存）或出现"非 verilog 打包"需求
+
+### 主流 lint 机制调研（2026-08-29，P1.10，规则库充实输入）
+
+> 目的：调研市场主流 lint 工具的检查项清单 → 划"重合核心集合"（高频刚需）+
+> "特化赛道"（差异化候选）→ 映射到 tpc 声明式规则模型。方法：三路并行
+> （本地镜像直读 svlint/Veryl/flexlint + web 调研 Verilator/Verible +
+> slang/Spyglass/HDL Checker）。原始抽取数据：`E:\research\svlint_rule_dump.txt`
+> （155 条 name/hint/reason）、`E:\research\veryl_errors2.txt`（114 项）。
+
+#### 第一路：svlint（159 条）+ Veryl check（114 项）+ flexlint（框架）
+
+- **svlint 159 条**（155 syntaxrules + 4 textrules）——全部**单文件** AST 事件监听
+  （NodeEvent Enter/Leave），无真正多文件符号表检查；仅 4 条 filename 匹配
+  （`*_matches_filename`）与 1 条文件内状态（`default_nettype_wire_at_end`）
+  需要文件级上下文。**"未使用/宽度/端口连接"svlint 完全没有**——这是 tpc
+  语义层/handler 的差异化空间。主要类别：
+  - 命名/标识符 ~80 条：`prefix_*`（input/output/inout/instance/module/package…）、
+    camelcase、`re_forbidden_*`/`re_required_*`（26+26 对象，可配置正则，配 `.*`
+    即整体禁用该特性）、`*_matches_filename`（4 条）
+  - 端口/方向 6 条：`input_with_var`/`output_with_var`/`inout_with_tri`/
+    `interface_port_with_modport`
+  - 宽度/参数 7 条：`parameter_explicit_type`/`parameter_type_twostate`/
+    `parameter_default_value`/`enum_with_type`/`unpacked_array` 等
+  - 风格/空白 ~25 条：`style_keyword_*`（11 条空格规范）、`style_operator_*`（7 条）、
+    `style_commaleading`/`style_indent`/`tab_character`/`style_trailingwhitespace`
+    + 4 条 textrules（`style_textwidth`/`style_semicolon`/`style_directives`/
+    `header_copyright`）
+  - 结构/声明 15 条：ANSI 头强制、generate 关键字/标签、genvar 位置、
+    `parameter_in_generate`/`parameter_in_package`、`loop_variable_declaration`、
+    `multiline_if_begin`/`multiline_for_begin` 等
+  - 时钟/进程 ~12 条：always_ff/latch/comb 的阻塞/非阻塞赋值禁令、
+    `keyword_forbidden_always*`、`loop_statement_in_always_*`、
+    `sequential_block_in_always_*`
+  - 综合意图 11 条：`case_default`/`explicit_if_else`/`implicit_case_default`、
+    `operator_case_equality`（`===` 不可综合）、`operator_incdec` 等
+  - 指令/宏 2 条：`default_nettype_none`/`default_nettype_wire_at_end`
+- **Veryl check 114 项**（13 条 Warning，其余 Error）——analyzer 两趟式
+  （pass1 符号收集 → post_pass1 跨文件解析 → pass2 IR + 12 checker →
+  post_pass2 unused/组合环）。**对 tpc 最相关的四类**：
+  - 未使用类 3 项（W）：`unused_variable`/`unused_return`/`unassign_variable`——
+    单文件但需两趟（符号+引用表）→ 对应 tpc"可注册检查 pass"语义层
+  - 端口/实例化 10 项：`missing_port`/`unknown_port`/`unknown_param`/
+    `missing_default_argument`——**跨文件**（端口表可跨文件）→ handler 兜底首选
+  - 宽度/类型 16 项：`mismatch_assignment`（W）/`mismatch_type`/
+    `mismatch_function_arg`——**跨文件**（类型可跨文件）
+  - 赋值/控制流/时钟域：`multiple_assignment`/`combinational_loop`（SSA 数据流）/
+    `uncovered_branch`（≈svlint case_default 语义版）/`missing_clock_signal` 等
+- **flexlint**——无内置规则的纯正则 lint 框架（`.flexlint.toml` schema：
+  pattern/required/forbidden/ignore/includes/excludes），**与 tpc `[[checks]]`
+  pattern 层同构**。自带示例 4 条（if-with-begin/else-with-begin/always
+  forbidden/if-with-brace）。**正则层能力 = tpc 声明式 pattern 覆盖上限参照**；
+  正则不可表达 = case_default（需知道有无 default 臂）、always 族（需类型×
+  运算符配对）、端口/模块结构、所有 Veryl 语义项（无符号表/作用域/类型概念）
+- **交叉观察**：
+  - 重合（高频刚需）：always 写法约束（三层各一）、分支完整性/锁存（case
+    default/if-else/uncovered_branch）、可配置命名规则（re_*/prefix_*/camelcase）、
+    inout 须 tri（svlint `inout_with_tri` = Veryl `missing_tri` 同一条）、宏卫生
+  - svlint 独有：空格规范族（Veryl 有 formatter 故无）、ANSI 头强制、genvar
+    位置、参数 2-state、filename 匹配
+  - **跨文件差异化方向**（tpc handler 兜底）：符号解析（undefined/ambiguous/
+    invisible）、实例化端口连接（missing/unknown port/param）、宽度/类型不匹配、
+    未使用类、数据流类（combinational_loop/multiple_assignment）
+- **对 tpc 的落点（三层分工）**：
+  - pattern 层可全量覆盖：flexlint 全部 + svlint 文本类 + 正则命名族 +
+    keyword_forbidden_* + 空白/排版
+  - token 级（tpc linter 已有 token 流）：style_keyword_*/style_operator_*
+    空格规范、multiline_*、eventlist_*
+  - 语义层检查 pass（Veryl 模式）：宽度/未使用/端口连接/实例化——其中
+    符号解析、端口连接、宽度匹配三类跨文件项需 **handler 脚本兜底**
+  - 一句话：pattern 表达"长得对不对"，handler 表达"连得通不通、用没用、
+    宽不宽"
+
+> 待补：第二路（Verilator W 码 / Verible rule-sets）+ 第三路（slang/Spyglass/
+> HDL Checker）完成后合并，再出"重合核心集合 + 特化赛道 + 映射评估"结论。
+
+#### 第二路：Verilator W 码（136 个）+ Verible 规则（~60 条）
+
+- **Verilator 现行 master 共 136 个警告码**（历史码已移除，非 200+）——预处理器 +
+  elaboration + 数据流的**语义级 lint**，业界事实标准。类别精选：
+  - 位宽/数值：WIDTH（汇总码 =WIDTHEXPAND+WIDTHTRUNC+WIDTHXZEXPAND）、
+    WIDTHTRUNC（隐式截断）、WIDTHCONCAT、REALCVT、ENUMITEMWIDTH——语义层核心
+  - 锁存：LATCH（组合 always 未全路径赋值→推断锁存）、NOLATCH、ALWCOMBORDER
+  - 多驱动：MULTIDRIVEN（跨文件驱动源集合）、MULTIDRIVENPROC、BLKANDNBLK
+    （混用阻塞/非阻塞）、ASSIGNIN（对 input 赋值）
+  - 未优化/环：UNOPTFLAT（循环依赖禁优化）、DIDNOTCONVERGE（组合震荡）、IFDEPTH
+  - 时序：TIMESCALEMOD（跨文件）、STMTDLY/ASSIGNDLY/COMBDLY、BLKSEQ
+  - 常量：CMPCONST、UNSIGNED、INFINITELOOP、ZEROREPL
+  - case：CASEINCOMPLETE（unique 枚举全覆盖语义）、CASEOVERLAP、CASEWITHX
+  - **实例化/端口/层次（跨模块核心）**：PINMISSING、PINNOTFOUND、PORTSHORT、
+    IMPLICIT（隐式声明）、MODDUP、MODMISSING、MULTITOP、DECLFILENAME、
+    HIERPARAM——全设计 elaboration 后检查
+  - 声明/生命周期：IMPLICITSTATIC、VARHIDDEN、SIMILARNAME、PARAMNODEFAULT
+  - 流程语义：IGNOREDRETURN、NORETURN、SIDEEFFECT、PROCASSINIT、CONTASSINIT
+  - 宏/预处理器：REDEFMACRO（跨文件宏表）、DEFOVERRIDE、PREPROCZERO、
+    IMPORTSTAR、BSSPACE
+  - 风格/文件：MISINDENT、EOFNEWLINE、GENUNNAMED、ASCRANGE、UNUSEDSIGNAL/
+    UNUSEDPARAM/UNUSEDGENVAR
+- **Verible 约 60 条规则**（43 条默认启用）——单文件、非预处理、纯语法/样式，
+  **README 自述明确不做语义分析**（preprocessing/multi-file/AST 连通性不在其列）。
+  机制分层：AST 级 ~48 / Token 级 5 / 行级 2 / 文本结构级 5。类别：
+  - 组合/时序：always-comb（禁 always @*）、always-comb-blocking、
+    always-ff-non-blocking、case-missing-default、module-begin-block
+  - 命名风格（全部 RE2 正则参数化）：signal/enum/parameter/interface/macro/
+    struct-union/constraint/dff/port-name 等 12 条
+  - 文件组织：module-filename、package-filename、one-module-per-file、
+    posix-eof（文件名级"伪跨文件"）
+  - 排版：line-length、no-tabs、no-trailing-spaces
+  - 实例化：module-port、module-parameter、forbid-defparam
+  - 显式化：explicit-*-lifetime/type、typedef-enums/structs-unions、
+    packed/unpacked-dimensions-range-ordering
+  - 可读性：explicit-begin、mismatched-labels、suggest-parentheses、
+    forbid-consecutive-null-statements
+  - 验证环境：create-object-name-match、plusarg-assignment、
+    invalid-system-task-function、uvm-macro-semicolon
+- **交叉观察**：
+  - 共有 10 组：BLKSEQ↔always-ff-non-blocking、DEFPARAM↔forbid-defparam、
+    ENDLABEL↔mismatched-labels、EOFNEWLINE↔posix-eof、GENUNNAMED↔generate-label、
+    CASEINCOMPLETE↔case-missing-default（Verilator 更强：含 unique 全覆盖语义）、
+    DECLFILENAME↔module-filename、WIDTHTRUNC↔truncated-numeric-literal、
+    VARHIDDEN↔instance-shadowing、MODDUP↔one-module-per-file
+  - Verilator 独有 = 全部需 elaboration/数据流的语义类（WIDTH 家族/LATCH/
+    MULTIDRIVEN/PIN*/UNOPTFLAT/UNUSED*）；Verible 独有 = 风格/命名/排版 +
+    autofix/waiver 体系
+  - **跨文件方向**：Verible 真跨文件 = 无（单文件设计），仅文件名级伪跨文件
+    （module-filename 等 4 条）；跨文件检查（端口连接/模块解析/隐式声明/
+    多驱动/宏重定义/timescale/未使用）**全落在 Verilator 侧**——tpc 语义层
+    （analyzer 符号/类型/作用域）是差异化承接点
+- **对 tpc 的映射**：
+  - 语法层 ≈ Verible 全套风格规则 + Verilator 纯语法码（ENDLABEL/GENUNNAMED/
+    EOFNEWLINE/ASCRANGE…）；Verible 机制分层可映射 tpc 语法层细分（行级→纯文本、
+    Token 级→token 规则、AST 级→pattern 规则）
+  - 语义层 ≈ Verilator 语义类（WIDTH/LATCH/MULTIDRIVEN/IMPLICIT/PIN*/UNUSED*）
+    ——tpc 相对 Verible 的差异化空间，覆盖跨文件清单
+  - 自定义层（handler）≈ UNOPTFLAT 环检测、DIDNOTCONVERGE、SVA NEVERMATCH、
+    dff-name-style 流水线链检查
+  - 工程借鉴：Verilator"汇总码"开关关系（WIDTH→3 子码）与默认开关分组、
+    Verible ruleset（default/all/none）+ 参数化正则 + waiver/autofix 体系——
+    适合 tpc 规则库 TOML 结构（默认开关字段、规则分组、pattern 参数化）
+
+> 第三路（slang/Spyglass/HDL Checker）完成后合并，再出"重合核心集合 +
+> 特化赛道 + 映射评估"结论。
+
+#### 第三路：slang + Spyglass + HDL Checker
+
+- **slang**（MikePopoloski，C++，全设计编译）——两级 lint：`slang` 驱动器警告系统
+  （-W<name>/-Wno-<name>/-Wextra）+ slang-tidy（独立 linter，Checks:/CheckConfigs:
+  配置，类 .clang-tidy，style-*/synthesis-* 两组）。子系统分族：
+  - Analysis（lint 核心，编译+elaboration 全设计视角）：unused 族（net/variable/
+    port/parameter/typedef/genvar/import…）、unused-but-set、undriven-net/port、
+    inferred-latch/inferred-comb、shadow-*、missing-return、case 族（enum-dup-
+    overlap-unreachable-incomplete…）、**net-inconsistent**（实例连接 vs 端口声明，
+    跨文件）、multi-write/read-write、mixed-var-assigns/multiple-cont-assigns/
+    multiple-always-assigns（多驱动）、missing-top（跨文件）
+  - Declarations：**unconnected-input/output/inout-port**（实例 vs 模块定义，跨文件）、
+    null-port、empty-connection、implicit-net、implicit-port-type-mismatch（跨文件）、
+    unknown-library（跨文件）、**undefined-param-override**（跨文件）、
+    static-init-*、unnamed-generate
+  - Expressions：width-trunc/expand、**port-width-trunc/expand**（跨文件）、
+    implicit-conv/sign-conversion、index-oob/range-oob/reversed-range、
+    divide-by-zero、unsigned-arith-shift、优先级族（bitwise-rel-precedence、
+    consecutive-comparison `x<y<z`）、unsized-concat
+  - Lookup/Statements：**redefinition/duplicate-definition**（跨文件同名定义）、
+    dup-import、**upward-name**（跨模块层次）、case-default、unused-result、
+    empty-statement/dangling-else/misleading-indentation、nested-comment、
+    newline-eof、redef-macro
+  - slang-tidy：enforce-port-prefix/suffix（_i/_o/_io）、module-instantiation-
+    prefix（i_）、only-ansi-port-decl、no-casex、no-defparam、no-legacy-generate、
+    always-comb-nonblocking、generate-named；synthesis 组：no-latches-on-design、
+    register-has-no-reset、always-ff-assignment-outside-conditional 等
+- **Spyglass**（Synopsys，商业，业界 RTL lint"黄金标准"）——Rule→Goal→
+  Sub-Methodology 三层（lint_rtl 默认 goal：连接性+仿真相关+不可综合+结构性；
+  CDC/Constraints/DFT/Power/TXV 子方法论）；SGDC 约束 + waiver(.awl) +
+  severity Fatal/Error/Warning/Info。类别：
+  - 多驱动：W415（跨实例汇聚，ifdef 分支同时使能）
+  - 锁存：W442aL（latch 推断）
+  - **端口/网络连接（lint_rtl 核心，跨模块）**：W287a（实例输入未驱动）、
+    UndrivenInTerm/UnloadedNet/UndrivenNUnloaded、W433（多 top）、
+    W546（重复 design unit）、W701（include 未使用）
+  - 位宽/算术：W164a/b（赋值截断/扩展）、W316/W376/W328、W313/W348（Verilint 兼容）
+  - 综合质量：SYNTH_5159、W415a（if 分支双赋值）、W527（悬空 else）、
+    W192/W193（空块）、W189/W208（translate_off 嵌套）
+  - 时钟（lint 内建）：Clock_sync05/06（多时钟域采样/组合）、setup_quasi_static
+  - **CDC（独立方法论，高成本）**：AC_unsync/sync/conv/glitch/cdc/datahold/fifo、
+    Ar_unsync/sync/asyncdeassert（复位域）、Reset_sync——依赖时钟域划分+同步
+    结构识别+跨域路径分析，结果靠 SGDC 约束压误报
+- **HDL Checker**（suoto，Python，227★）——**LSP 包装器**，委托 GHDL/ModelSim/
+  Vivado 做检查，自带少量正则静态检查 + 自研 design-unit 解析器。价值点：
+  - 内建检查：Unused signal/constant/generic（**词频式判定有误报，README 自述
+    caveat——tpc 用真符号表应做精确引用计数，避坑**）、Comment tags
+    （TODO/FIXME/XXX，token 级零成本）
+  - **跨文件资产（tpc 最值得借鉴）**：design-unit 提取（module/entity/package
+    注册）、依赖图与编译顺序（include/import/class → 拓扑排序）、库归属推断
+  - 确认差异化：hdl_checker **不自己做端口连接/实例化正确性检查**——正是 tpc
+    可做深的地方
+- **交叉观察（三路合并）**：
+  - 高频刚需（第一优先级，语义层符号表可表达）：未使用声明/端口/参数（slang
+    unused-* / Spyglass 未驱动 / HDL Checker Unused）、位宽不匹配（width-trunc/
+    W164）、多驱动（multiple-always/W415）、锁存推断（inferred-latch/W442）、
+    case 完整性（case-*/W527）、隐式声明（implicit-net）、注释标签
+    （TODO/FIXME，零成本）
+  - 跨文件差异化（需多文件输入，handler 兜底）：端口连接（slang unconnected-
+    port / Spyglass W287a）、连接位宽（port-width-*/W164）、实例输入未驱动
+    （W287a）、参数覆盖不存在（undefined-param-override）、符号解析
+    （unknown-library/W546/W433/redefinition）、include 未使用（W701）
+  - CDC/时序（远期高成本，机制可挂但需独立图分析 + SGDC 式约束）：
+    AC_/Ar_/Clock_ 族——slang 不做时钟域建模，印证 CDC 是独立高成本层；
+    建议先做"同步器/时钟端口命名"可正则化约定（低成本实际价值），全量复刻进远期
+- **实现路径提示（跨文件检查两步走）**：① design-unit 注册表 + 依赖排序
+  （参照 HDL Checker database/parsers 思路，引擎基建）；② 端口连接/实例化/
+  符号解析规则（kind 分发 + handler 兜底，handler 拿两文件符号表对比）。
+  规则 TOML 可加 `group`（syntax/semantic/custom）与 `severity` 字段
+  （对齐 slang 子系统分组 + Spyglass Rule→Goal 分级思想）。
+
+#### 重合核心集合 + 特化赛道 + 映射评估（P1.10 结论）
+
+- **重合核心集合（高频刚需，多工具共有，第一优先级）**：
+  1. 命名/风格族（svlint prefix_*/camelcase ↔ Verible 12 命名规则 ↔ Veryl
+     invalid_identifier ↔ slang-tidy port-prefix）——tpc NC 族已覆盖大半，
+     补 port 前缀/实例前缀可配置化
+  2. 未使用类（Veryl unused_variable ↔ Verilator UNUSEDSIGNAL ↔ slang unused-*
+     ↔ HDL Checker Unused）——语义层符号表，tpc 最高价值增量
+  3. 位宽不匹配（Verilator WIDTH ↔ slang width-trunc ↔ Spyglass W164）——
+     语义层类型宽度，增量大但需宽度传播
+  4. 锁存推断（Verilator LATCH ↔ slang inferred-latch ↔ Spyglass W442 ↔
+     svlint case_default/explicit_if_else）——语义层控制流
+  5. case 完整性（svlint case_default ↔ Verible case-missing-default ↔
+     Verilator CASEINCOMPLETE ↔ slang case-* ↔ Spyglass W527）
+  6. always 写法（svlint keyword_forbidden_always ↔ Verible always-comb ↔
+     Verilator BLKSEQ ↔ slang always-ff-blocking）——语法层可做
+  7. 端口命名/方向（svlint prefix_input/output ↔ Verible port-name-suffix ↔
+     Veryl invalid_direction ↔ slang-tidy port-prefix）——语法层
+  8. 实例化端口连接（Veryl missing_port/unknown_port ↔ Verilator PINMISSING/
+     PINNOTFOUND ↔ slang unconnected-port ↔ Spyglass W287a）——**跨文件，
+     handler 兜底，tpc 差异化**
+  9. 多驱动（Verilator MULTIDRIVEN ↔ slang multiple-always ↔ Spyglass W415）——
+     跨进程驱动分析，语义层
+  10. 宏/指令卫生（svlint default_nettype ↔ Verilator REDEFMACRO ↔ slang
+      redef-macro ↔ Spyglass W701）——跨文件宏表
+- **特化赛道（单工具独有，选择性吸取）**：
+  - Verible 独有：autofix/waiver 体系、line-length/no-tabs 排版族、typedef-
+    enums/structs-unions、packed/unpacked 维序——**排版族零成本入语法层**
+  - svlint 独有：空格规范族（style_keyword_*/style_operator_*）、ANSI 头强制、
+    genvar 位置、参数 2-state——**语法层零成本**
+  - Verilator 独有：UNOPTFLAT 环检测、DIDNOTCONVERGE、SVA NEVERMATCH、
+    CMPCONST/UNSIGNED 常量分析——自定义层（handler），中成本
+  - Spyglass 独有：CDC 方法论（AC_/Ar_/Clock_ 族）——远期高成本，先做可正则化
+    的同步器/时钟命名约定
+  - HDL Checker 独有：design-unit 注册表 + 依赖排序思路——**跨文件引擎基建，
+     直接借鉴**
+- **映射评估（→ tpc 规则模型）**：
+  - 语法层 pattern 可全量覆盖：命名族（NC 扩展）、排版族、keyword 禁用、
+    always 写法、宏卫生——**零 handler，纯声明式，成本低**
+  - 语义层检查 pass（analyzer 符号表/类型/驱动分析）：未使用类、锁存推断、
+    多驱动、位宽（需宽度传播）——**中成本，需 analyzer 扩展**
+  - 自定义层 handler 兜底（跨文件）：端口连接、实例化、符号解析——**差异化
+    核心，需 design-unit 注册表 + 依赖排序基建（HDL Checker 思路）**
+  - 规则 TOML 结构建议：加 `group`（syntax/semantic/custom）字段 + 默认开关
+    （对齐 Verible ruleset / Verilator 汇总码开关）
+- **1-2 条差异化自定义规则立项候选（跨文件类为核心样例）**：
+  1. **实例化端口连接检查**（候选）：实例连接端口 vs 模块定义端口——不匹配/
+    缺失/多余，跨文件 handler 兜底（对标 Veryl missing_port/unknown_port +
+    Verilator PINMISSING/PINNOTFOUND + Spyglass W287a）
+  2. **未使用声明检查**（候选）：wire/reg/parameter 声明后未使用——语义层
+    符号表引用计数（对标 Veryl unused_variable + Verilator UNUSEDSIGNAL +
+    HDL Checker Unused，用真符号表避免词频误报）
+  3. 或 **未驱动/未连接端口**（对标 Spyglass UndrivenInTerm + slang undriven-
+    port）——跨文件，与候选 1 可合并为"端口完整性"族
