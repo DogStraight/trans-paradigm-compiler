@@ -6,3 +6,10 @@ description = "c4 AST → c4 VM 汇编文本"
 
 [transform]
 handlers = ["_asm.py"]
+
+# 渲染插件覆盖式声明（[render] handler = "file.py:fn"）：语言包 tpc.toml
+# [plugins].render 启用后，管线渲染阶段直接调用 handler 产出最终文本
+# （汇编），跳过主管线源端渲染——输出唯一性，覆盖式（与 analyze/transform
+# 的叠加式不同）。c4 的目标是中间表示而非源端还原，故声明为渲染插件。
+[render]
+handler = "_asm.py:render_asm"

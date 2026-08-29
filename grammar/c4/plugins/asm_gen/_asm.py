@@ -529,3 +529,26 @@ class AsmGenPlugin(TransformPlugin):
             asm.add_sub_node(ln)
         self._stats["asm_lines"] = len(compiler.emitter.code)
         return asm
+
+
+def render_asm(ast: Node, ctx: Any = None) -> str:
+    """渲染插件覆盖式入口（[render] handler）：AST → c4 VM 汇编文本。
+
+    与 AsmGenPlugin 的职责边界：AsmGenPlugin 是变换插件（Program →
+    AsmProgram 节点，叠加式，供 AST 层测试/检查复用）；render_asm 是渲染
+    插件入口（覆盖式）——管线渲染阶段直接调用，产出最终汇编文本，不走
+    主管线源端渲染。输入为变换后 AST：AsmProgram（含 AsmLine 行节点）或
+    Program（变换被跳过时现场编译）。
+    """
+    if not isinstance(ast, Node):
+        return ""
+    if ast.node_name == "AsmProgram":
+        lines = [ln.text for ln in getattr(ast, "sub_node", []) or []]
+        return "\n".join(lines) + ("\n" if lines else "")
+    # 变换未跑（如 stage 截断/analyze-transform 关闭）：现场编译兜底
+    if ast.node_name == "Program":
+        compiler = _C4Compiler()
+        emitter = compiler.compile_program(ast)
+        lines = emitter.lines()
+        return "\n".join(lines) + ("\n" if lines else "")
+    return ""

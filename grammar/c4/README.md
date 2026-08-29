@@ -39,6 +39,11 @@ if/else、while、return、块、表达式语句、全局/局部声明、函数�
 - [x] **汇编生成**（阶段 5）：AsmGenPlugin（c4 编译逻辑：符号表/表达式/语句/
       函数 → c4 VM 指令，跳转回填）+ renderer 逐行渲染——`int main(){...}`
       全管线（lex→parse→analyze→transform→render）产出完整汇编，374 回归无破坏
+- [x] **渲染插件覆盖式**（2026-08-29）：asm_gen 组件声明 `[render]` handler
+      （`_asm.py:render_asm`），c4 tpc.toml `[plugins].render = "asm_gen"` 启用——
+      渲染阶段由 handler 直接产出汇编文本（覆盖主管线源端渲染，输出唯一性；
+      与 analyze/transform 的叠加式不同）。管线 `_stage_render` 检测到启用即
+      跳过源端还原/注释回插/格式化/幂等（中间表示无源端语义）。
 - [x] **测试样本 + 组件加载接入 + 验收**（阶段 6）：
       - 组件加载参数化（plugin_loader 支持按语言包扫 plugins/，setup_grammar
         清空并加载当前语言包组件——单语言不混合；handler 幂等加载）

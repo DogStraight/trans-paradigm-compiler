@@ -124,6 +124,8 @@ class _PipelineContext:
     lexer: Any = None
     linter: Any = None
     renderer: Any = None
+    render_handler: Any = None  # 渲染插件覆盖式入口（[plugins].render 声明，
+    #                           启用后直接产出最终文本，跳过主管线渲染）
 
     # 宏/预处理状态
     macro_table: dict = field(default_factory=dict)
@@ -214,6 +216,35 @@ def _load_pipeline_defaults() -> dict[str, Any]:
     return {}
 
 
+def _resolve_render_handler(rules_dir: str):
+    """解析渲染插件覆盖式入口：语言包 tpc.toml `[plugins].render` → 组件 handler。
+
+    渲染插件 = 覆盖式输出（与 analyze/transform 叠加式不同）：产出中间
+    表示（如 c4 asm_gen → 汇编文本），启用后管线渲染阶段直接调用 handler
+    产出最终文本，跳过主管线源端渲染（输出唯一性）。未声明 → None（主管线
+    源端渲染）。fail-fast（ADR-0003）：声明的组件不存在 / 无 [render] handler
+    直接报错，不静默降级。
+    """
+    import tomllib
+    from core.plugin_loader import get_render_handler
+
+    tpc_path = os.path.join(rules_dir, "tpc.toml")
+    if not os.path.isfile(tpc_path):
+        return None
+    with open(tpc_path, "rb") as f:
+        meta = tomllib.load(f)
+    comp_name = (meta.get("plugins") or {}).get("render")
+    if not comp_name:
+        return None
+    handler = get_render_handler(comp_name)
+    if handler is None:
+        raise ValueError(
+            f"[pipeline] 语言包 {rules_dir} 声明 [plugins].render = "
+            f"{comp_name!r}，但该组件不存在或无 [render] handler"
+        )
+    return handler
+
+
 # ── 阶段函数 ──────────────────────────────────────────────
 
 def _resolve_paths(ctx: _PipelineContext) -> None:
@@ -286,6 +317,11 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         mapping_cfg.update(rv_entries)
         # 编排调度按 rules_dir 缓存（同一原因：声明来自 _loaded_components）。
         schedules = build_schedules()
+        # 渲染插件覆盖式（[plugins].render = 组件名）：渲染插件产出中间表示
+        # （如 c4 asm_gen → 汇编文本），启用后**直接不走主管线源端渲染**——
+        # 渲染阶段由插件 handler 接管（覆盖式；与 analyze/transform 的叠加式
+        # 不同）。未声明 → None（主管线源端渲染）。
+        render_handler = _resolve_render_handler(ctx.rules_dir)
         _PIPELINE_SHARED[ctx.rules_dir] = {
             "rules": rules,
             "rule_selector": rule_selector,
@@ -294,6 +330,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
             "renderer": renderer,
             "mapping_cfg": mapping_cfg,
             "schedules": schedules,
+            "render_handler": render_handler,
         }
     shared = _PIPELINE_SHARED[ctx.rules_dir]
     ctx.rules = shared["rules"]
@@ -301,6 +338,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
     ctx.lexer = shared["lexer"]
     ctx.linter = shared["linter"]
     ctx.renderer = shared["renderer"]
+    ctx.render_handler = shared["render_handler"]
 
 
 def _stage_macro_scan(ctx: _PipelineContext) -> None:
@@ -460,10 +498,30 @@ def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
 
 
 def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
-    """渲染 + 注释回插 + 格式化 + 输出 + 幂等检查。"""
+    """渲染 + 注释回插 + 格式化 + 输出 + 幂等检查。
+
+    渲染插件覆盖式分支：语言包声明 [plugins].render 时，渲染阶段由插件
+    handler 接管（产出中间表示文本，如 c4 汇编）——**不走主管线源端渲染**，
+    直接输出 handler 结果（覆盖式；输出唯一性）。注释回插/保真度/格式化
+    等源端还原步骤对中间表示无意义，一并跳过。
+    """
     if not ctx.renderer_enabled:
         print("[renderer] skipped")
         ctx.result["ast"] = ast
+        return
+
+    if ctx.render_handler is not None:
+        content = ctx.render_handler(ast, ctx)
+        ctx.log("[renderer] render plugin: output via handler")
+        # Write output (no header — raw content for clean diffing)
+        if ctx.gen_file:
+            with open(ctx.gen_file, "w", encoding="utf-8") as f:
+                f.write(content)
+            ctx.log(f"[output] {ctx.gen_file}")
+        ctx.result["output"] = content
+        ctx.result["ast"] = ast
+        ctx.result["success"] = True
+        ctx.result["idempotent"] = True  # 中间表示输出无源端幂等语义
         return
 
     content = ctx.renderer.render(ast)

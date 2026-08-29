@@ -59,6 +59,13 @@ passes = [
 [capabilities]
 transform_callbacks = "_mapping.py:collect_callbacks"
 formatter = "_capability.py:build_formatter"
+
+# 渲染插件声明（覆盖式输出）：语言包 tpc.toml [plugins].render = "组件名"
+# 启用后，管线渲染阶段直接调用 handler 产出最终文本（如 c4 汇编），跳过
+# 主管线源端渲染——输出唯一性，覆盖式（与 analyze/transform 的叠加式不同）。
+# handler 签名：fn(ast, ctx) -> str（ctx 提供 log 等）。未声明 = 主管线源端渲染。
+[render]
+handler = "_asm.py:render_asm"
 ```
 
 ## 2. 加载流程（setup_grammar）
@@ -73,6 +80,8 @@ discover_components(plugins_dir)   # 递归扫描插件目录树的 tpc.toml
        pipeline     ← [pipeline] pass/schedule 声明（handler 解析为可调用）
        capabilities ← [capabilities] 能力入口（file.py:fn 解析为可调用，
                       get_capability 按名查找——pipeline 不再直连插件）
+       render       ← [render].handler（file.py:fn 解析为可调用，渲染插件
+                      覆盖式入口——语言包 [plugins].render 启用后接管渲染）
 ```
 
 语法文件由 `setup_grammar` 合并进规则树；处理器模块被 import（副作用 = 注册）。

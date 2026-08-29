@@ -14,3 +14,8 @@ number = { file = "base/_number.toml", section = "number", required = false }
 operator_defs = { file = "base/_symbol_level.toml", section = "operator", required = true }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
 rules = { file = ["0*.toml"], required = true }
+
+# 渲染插件覆盖式：c4 目标是中间表示（汇编）而非源端还原——渲染阶段由
+# asm_gen 组件接管（[render] handler），不走主管线源端渲染。
+[plugins]
+render = "asm_gen"
