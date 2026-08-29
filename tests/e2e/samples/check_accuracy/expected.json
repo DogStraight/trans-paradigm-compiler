@@ -1,5 +1,5 @@
 {
-    "focus": ["UN001", "W104", "W105", "CC001", "W106", "LC001", "NC012", "NC013"],
+    "focus": ["UN001", "W104", "W105", "CC001", "W106", "LC001", "NC012", "NC013", "W201"],
     "pos": {
         "UN001_unused_decl": {
             "entry": "top.sv",
@@ -75,6 +75,21 @@
             "entry": "bus_ctrl.sv",
             "expect": ["UN001", "W104", "W105", "CC001"],
             "desc": "复合小工程：未使用信号 + 缺连端口 + 多驱动 + case 无 default"
+        },
+        "W201_trunc_assign": {
+            "entry": "top.sv",
+            "expect": ["W201"],
+            "desc": "assign 12 位 → 8 位截断应检出"
+        },
+        "W201_trunc_blocking": {
+            "entry": "top.sv",
+            "expect": ["W201"],
+            "desc": "阻塞赋值 8 位 → 4 位截断应检出"
+        },
+        "W201_part_select": {
+            "entry": "top.sv",
+            "expect": ["W201"],
+            "desc": "位选 LHS（4 位）← 12 位截断应检出"
         }
     },
     "neg": {
@@ -121,6 +136,14 @@
         "W105_single_inst_and_load": {
             "entry": "top.sv",
             "desc": "单实例 output 驱动 + 顶层读取不应误报 W105"
+        },
+        "W201_expansion": {
+            "entry": "top.sv",
+            "desc": "8 位 → 12 位扩展不应误报 W201"
+        },
+        "W201_unsized_clean": {
+            "entry": "top.sv",
+            "desc": "unsized 常数 RHS / 等宽赋值不应误报 W201"
         }
     }
 }
