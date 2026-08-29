@@ -1,0 +1,126 @@
+{
+    "focus": ["UN001", "W104", "W105", "CC001", "W106", "LC001", "NC012", "NC013"],
+    "pos": {
+        "UN001_unused_decl": {
+            "entry": "top.sv",
+            "expect": ["UN001"],
+            "desc": "未使用的 wire/reg/integer 声明应检出"
+        },
+        "W104_missing_port": {
+            "entry": "top.sv",
+            "expect": ["W104"],
+            "desc": "实例化缺连 output 端口应检出（inout 豁免）"
+        },
+        "W104_ordered_missing": {
+            "entry": "top.sv",
+            "expect": ["W104"],
+            "desc": "位置连接缺连 output 端口应检出"
+        },
+        "W105_multi_assign": {
+            "entry": "top.sv",
+            "expect": ["W105"],
+            "desc": "两个 assign 驱动同一信号应检出"
+        },
+        "W105_inst_and_assign": {
+            "entry": "top.sv",
+            "expect": ["W105"],
+            "desc": "assign 与实例 output 驱动同一信号（跨文件）应检出"
+        },
+        "CC001_case_no_default": {
+            "entry": "top.sv",
+            "expect": ["CC001"],
+            "desc": "case 无 default 分支应检出"
+        },
+        "W106_inout_wire": {
+            "entry": "top.sv",
+            "expect": ["W106"],
+            "desc": "inout 端口非 tri 应检出"
+        },
+        "LC001_latch_risk": {
+            "entry": "top.sv",
+            "expect": ["LC001"],
+            "desc": "组合 always 内 if 无 else 应检出"
+        },
+        "NC012_bad_integer": {
+            "entry": "top.sv",
+            "expect": ["NC012"],
+            "desc": "integer 命名不符合小写下划线应检出"
+        },
+        "NC013_bad_type": {
+            "entry": "top.sv",
+            "expect": ["NC013"],
+            "desc": "type 命名不符合小写下划线应检出"
+        },
+        "UN001_shared_decl": {
+            "entry": "top.sv",
+            "expect": ["UN001"],
+            "desc": "共享声明 wire a, b; 中只报未使用的那个"
+        },
+        "W105_two_inst_output": {
+            "entry": "top.sv",
+            "expect": ["W105"],
+            "desc": "两个实例 output 连接同一信号应检出"
+        },
+        "LC001_level_sensitive": {
+            "entry": "top.sv",
+            "expect": ["LC001"],
+            "desc": "电平敏感 always（@(a or b)）内 if 无 else 应检出"
+        },
+        "CC001_casez_no_default": {
+            "entry": "top.sv",
+            "expect": ["CC001"],
+            "desc": "casez 无 default 分支应检出"
+        },
+        "project_bus_ctrl": {
+            "entry": "bus_ctrl.sv",
+            "expect": ["UN001", "W104", "W105", "CC001"],
+            "desc": "复合小工程：未使用信号 + 缺连端口 + 多驱动 + case 无 default"
+        }
+    },
+    "neg": {
+        "UN001_used_signal": {
+            "entry": "top.sv",
+            "desc": "信号被驱动+引用/端口/参数/下划线前缀均不应误报 UN001"
+        },
+        "W104_fully_connected": {
+            "entry": "top.sv",
+            "desc": "全部端口已连接不应误报 W104"
+        },
+        "W105_single_driver": {
+            "entry": "top.sv",
+            "desc": "单驱动信号不应误报 W105"
+        },
+        "CC001_case_with_default": {
+            "entry": "top.sv",
+            "desc": "case 含 default 不应误报 CC001"
+        },
+        "W106_inout_tri": {
+            "entry": "top.sv",
+            "desc": "inout tri 不应误报 W106"
+        },
+        "LC001_no_latch": {
+            "entry": "top.sv",
+            "desc": "if 有 else / 时序 always 无 else 均不应误报 LC001"
+        },
+        "NC012_good_integer": {
+            "entry": "top.sv",
+            "desc": "integer 命名合规不应误报 NC012"
+        },
+        "NC013_good_type": {
+            "entry": "top.sv",
+            "desc": "type 命名合规不应误报 NC013"
+        },
+        "UN001_underscore_exempt": {
+            "entry": "top.sv",
+            "desc": "_ 前缀信号不应误报 UN001"
+        },
+        "UN001_param_exempt": {
+            "entry": "top.sv",
+            "desc": "parameter 未使用不应误报 UN001"
+        },
+        "W105_single_inst_and_load": {
+            "entry": "top.sv",
+            "desc": "单实例 output 驱动 + 顶层读取不应误报 W105"
+        }
+    }
+}
