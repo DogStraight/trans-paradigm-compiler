@@ -49,6 +49,7 @@ class AnalysisTraversal:
         self._root_scope: Scope | None = None
         self._current_scope: Scope | None = None
         self._all_symbols: list[Symbol] = []
+        self._ast: Node | None = None  # 最近一次 analyze 的 AST（postpass 可遍历）
         self._context = AnalysisContext()
         self._scope_name_node_ids: set[int] = set()
         # 外部注入的跨文件状态（ProjectChecker 在 analyze() 前写入，
@@ -74,6 +75,7 @@ class AnalysisTraversal:
 
     def analyze(self, ast: Node) -> Node:
         """对 AST 进行语义分析，返回带 _symbol_ref 的 AST"""
+        self._ast = ast
         self._root_scope = Scope(
             name=_root_scope_cfg.get("name", "<global>"),
             kind=_root_scope_cfg.get("kind", "global"),

@@ -122,3 +122,23 @@ scope = ["rtl", "tb"]
 message = "模块名 '{name}' 与文件名不一致（期望 {file_base}）"
 kind = "module"
 handler = "_filename_check.py:check_module_filename"
+
+# ── 补充符号 kind（P1.10 核心集合：命名族补全，svlint 命名规则对照） ──
+
+[[checks]]
+id = "NC012"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "整型变量名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "integer"
+pattern = "^[a-z][a-z0-9_]*$"
+
+[[checks]]
+id = "NC013"
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "类型名 '{name}' 不符合小写下划线约定（{pattern}）"
+kind = "type"
+pattern = "^[a-z][a-z0-9_]*$"

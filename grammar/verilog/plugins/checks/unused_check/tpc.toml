@@ -1,0 +1,19 @@
+# unused_check 插件 — 未使用声明检查（语义层，P1.10 核心集合第一优先级）
+#
+# 框架（analyzer + ProjectChecker）提供：
+#     analyzer.all_symbols — 全部符号（symbol_declare 收集，kind 区分）
+#     AST 节点 _symbol_ref — identifier_resolve 解析引用时挂的符号引用
+#
+# 检查项（Verilog 语义规则——插件层语言知识，不进引擎）：
+#     UN001  声明后从未被引用的 wire/reg/integer/parameter/localparam
+#           （对标 Veryl unused_variable / Verilator UNUSEDSIGNAL /
+#            HDL Checker Unused——用真符号表引用计数，避免词频式误报）
+#     UN002  声明后从未被赋值的变量（unassigned，可选后续扩展）
+#
+# 引用判定：遍历本文件 AST 收集所有 _symbol_ref → 统计每符号引用次数；
+# 声明了但引用次数 0 的内部信号（非端口）→ 未使用。端口是接口不是
+# 内部信号，不报；`_` 前缀符号豁免（对齐 Veryl #[allow(unused_variable)]
+# 的 `_` 约定）。
+
+[analyzer]
+postpasses = ["_unused_check.py:run_unused_check"]
