@@ -1543,6 +1543,13 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   casex/casez 全覆盖。对标 svlint case_default / Verible case-missing-
   default / Verilator CASEINCOMPLETE / slang case-* / Spyglass W527。
   Verilog-2005 无 unique/priority 限定，不处理 unique 豁免。
+- **W106 inout 须 tri**（5067e8b，inst_check 扩展）：inout 端口数据类型须
+  tri（三态总线语义）；端口 net_type 提取（结构协议 port_type 字段 +
+  ModulePort.net_type）+ 遍历本文件 AST 的 inout 声明（避免跨文件重复报）。
+  对标 svlint inout_with_tri = Veryl missing_tri（完全重合）。
+- **评估不做**：always 写法类（裸 always 无事件控制）——仿真代码大量合法
+  使用（`always begin` 无限循环），误报高，不做（对标 svlint
+  keyword_forbidden_always 需 always_comb 语义，Verilog-2005 无）。
 - **NC012/NC013 命名补全**（随 a22f081）：integer/type 符号命名规则（NC 族
   原缺这两个 kind）。
 - **三层捕获能力验证**：语法声明式（NC 族）/ 语义符号表（UN001）/ 跨文件
