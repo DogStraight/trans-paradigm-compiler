@@ -79,7 +79,7 @@ def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
 
 
 def _parse_component_toml(path: str) -> dict[str, Any] | None:
-    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform]/[pipeline]/[capabilities]."""
+    """Parse plugin tpc.toml's [grammar]/[analyzer]/[transform]/[pipeline]/[capabilities]/[render]."""
     import tomllib
 
     with open(path, "rb") as f:
@@ -90,12 +90,14 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
     # 或有 [analyzer] postpasses（纯 post-pass 联动检查插件，如 inst_check），
     # 或有 [pipeline] 段（自定义 pass / schedule 声明，ADR-0007），
     # 或有 [capabilities] 段（能力声明，P2.5 插件回调能力化——如 formatter
-    # 纯能力插件：无语法/变换/分析声明，只向引擎暴露能力入口）。
+    # 纯能力插件：无语法/变换/分析声明，只向引擎暴露能力入口），
+    # 或有 [render] 段（渲染插件声明——覆盖式输出，见 pipeline 渲染分支）。
     grammar = raw.get("grammar", {})
     transform = raw.get("transform", {})
     analyzer = raw.get("analyzer", {})
     pipeline = raw.get("pipeline", {})
     capabilities = raw.get("capabilities", {})
+    render = raw.get("render", {})
     if (
         not grammar.get("files")
         and not transform.get("handlers")
@@ -103,6 +105,7 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
         and not analyzer.get("postpasses")
         and not pipeline
         and not capabilities
+        and not render.get("handler")
     ):
         return None
     comp = {
@@ -112,6 +115,7 @@ def _parse_component_toml(path: str) -> dict[str, Any] | None:
         "transform": raw.get("transform", {}),
         "pipeline": pipeline,
         "capabilities": capabilities,
+        "render": render,
     }
     return comp
 
@@ -179,6 +183,10 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
 
     # 5. Capabilities（P2.5 插件回调能力化：能力入口 file.py:fn）
     info["capabilities"] = _load_capabilities(cdir, meta.get("capabilities", {}))
+
+    # 6. Render handler（渲染插件覆盖式：[render] handler = "file.py:fn"，
+    #    产出最终文本；管线渲染阶段检测到启用则跳过主管线源端渲染）
+    info["render"] = _load_render_handler(cdir, meta.get("render", {}))
 
     _loaded_components[name] = info
     return info
@@ -389,6 +397,48 @@ def _load_postpasses(cdir: str, postpass_specs: list) -> list[Callable]:
             )
         fns.append(fn)
     return fns
+
+
+def _load_render_handler(cdir: str, render_meta: dict) -> Callable | None:
+    """加载组件 [render] 段声明的渲染入口（`handler = "file.py:fn"`）。
+
+    渲染插件覆盖式（与 analyze/transform 的叠加式不同）：启用后管线渲染
+    阶段直接调用该 handler 产出最终文本（如 c4 汇编），跳过主管线源端
+    渲染。未声明 [render] 段 → None（主管线渲染）。fail-fast（ADR-0003）：
+    声明了但模块/函数缺失直接报错。
+    """
+    handler_spec = render_meta.get("handler") if render_meta else None
+    if not handler_spec:
+        return None
+    if not isinstance(handler_spec, str) or ":" not in handler_spec:
+        raise ValueError(
+            f"[plugin] render.handler 声明格式应为 'file.py:fn'，"
+            f"收到: {handler_spec!r} ({cdir})"
+        )
+    fname, fn_name = handler_spec.split(":", 1)
+    modules = _load_python_handlers(cdir, [fname])
+    if not modules:
+        raise ValueError(
+            f"[plugin] render.handler 模块不存在: {fname} ({cdir})"
+        )
+    fn = getattr(modules[0], fn_name, None)
+    if fn is None or not callable(fn):
+        raise ValueError(
+            f"[plugin] render.handler 函数 {fn_name} 不存在于 {fname} ({cdir})"
+        )
+    return fn
+
+
+def get_render_handler(name: str) -> Callable | None:
+    """按组件名取已加载组件的渲染入口（[render] handler，file.py:fn）。
+
+    未声明 [render] 段或组件不存在 → None（主管线渲染，调用方降级）。
+    声明期错误（模块/函数缺失）在组件加载时已 fail-fast（ADR-0003）。
+    """
+    info = _loaded_components.get(name)
+    if info is None:
+        return None
+    return info.get("render")
 
 
 def _load_python_handlers(cdir: str, handler_files: list[str]) -> list[Any]:
