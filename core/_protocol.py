@@ -42,6 +42,7 @@ META_REQUIRES = "requires"
 META_GRAMMAR = "grammar"
 META_ANALYZER = "analyzer"
 META_TRANSFORM = "transform"
+META_RENDER = "render"
 
 # ── 分析器原语名称（builtins 组件注册）──
 PRIMITIVE_SCOPE_ENTER = "scope_enter"
