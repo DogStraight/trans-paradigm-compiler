@@ -1789,7 +1789,7 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 | 位宽 | W201/W202 | ✅ 主流程闭环 | ① ordered 端口连接未参与覆盖参数/宽度检查（B3 只做命名连接）② 跨模块成员宽度（a.b 查表不到 → 保守 None）③ 算法性有意截断无法区分 |
 | 锁存 | LC001 | ✅ 闭环（有限版） | 只查"if 无 else"；完整控制流路径分析不做（记录） |
 | case | CC001 | ✅ 闭环 | 无（casex/casez 覆盖） |
-| always 写法 | — | 评估不做 | 仿真代码合法使用误报高（记录） |
+| always 写法 | — | 评估不做（2026-08-29 调研修订：裸 always 禁用法仍不做；阻塞/非阻塞纪律族改为"可做+默认关"，见下"三主题实现机制调研"） | 仿真代码合法使用误报高（记录） |
 | 端口 | W104 | ✅ 闭环 | 位置连接（ordered）无法按名匹配——未连接判定跳过 ordered（代码注释明确） |
 | 实例化 | W101-103/WC001 | ✅ 闭环 | W103 对单元库定义不完整的代码报（合理检出） |
 | 多驱动 | W105 | ✅ 闭环 | 无（跨模块同名已修，语义展开后真实语料归零） |
@@ -1866,3 +1866,87 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   [NVIDIA 20 亿美元投资（The Register）](https://www.theregister.com/2025/12/01/nvidia_synopsys_2b/)、
   [Synopsys 收购 Ansys（CNBC）](https://www.cnbc.com/2024/01/16/synopsys-to-acquire-ansys-in-35-billion-graphics-software-deal.html)、
   [Synopsys 加入 RISC-V（The Register）](https://www.theregister.com/2023/11/07/synopsys_joins_riscv_party_with/)
+
+#### 位宽 / 锁存 / always 写法——三主题实现机制调研（2026-08-29，源码级）
+
+- 定位：P1.10 调研停留在"规则族清单"层（谁有哪条规则）；本次下沉到**实现机制**层
+  （怎么算宽度、怎么判锁存、怎么管 always 写法）。来源：Verilator（warnings.rst、
+  V3Active.cpp、V3Width 三段式、LATCH 引入提交 a117002）、slang（diagnostics.txt、
+  OperatorExpressions.cpp、Analysis 数据流层）、Yosys（proc_dlatch.cc/proc_dff.cc）、
+  svlint（ruleset-simsynth + 规则说明）、Verible（style_lint.md + always-* 规则源码）、
+  Icarus（iverilog(1)）、SpyGlass（闭源，仅规则形态可见）
+
+**一、位宽分析——实现机制对比**
+
+| 工具 | 机制 | 关键设计 |
+|---|---|---|
+| Verilator | V3Width.cpp（表达式宽度推断）+ V3WidthSel.cpp（select/索引宽度）+ V3WidthCommit.cpp（转换插入）三段式 | 自定宽/上下文定宽两遍（IEEE 5.5）；WIDTH 汇总码 = WIDTHEXPAND/WIDTHTRUNC/WIDTHXZEXPAND；**unsized 常量最小宽度追踪**（够容纳即不报）；WIDTHCONCAT（concat/复制内未定宽项） |
+| slang | AST 类型传播 + 每表达式 `getEffectiveWidth`（有效宽） | width-expand/trunc（隐式转换）、**port-width-expand/trunc（端口连接独立成码）**、unsized-concat、range-width-oob；有效宽含 unsized 常量前导 X/Z 修剪（`'0` 全零匹配）；`group conversion` 诊断分组 |
+| Icarus | elaboration 期宽度检查 | `-gstrict-expr-width`（unsized 常量不截断到 32，严格模式报错）+ `+width-cap`（unsized 表达式宽度上限）；默认宽松 |
+| SpyGlass | W164a/b（赋值截断/扩展分码） | 闭源仅形态可见 |
+| tpc 现状 | A1 符号宽度表 + A2 常量求值 + A3 infer_expr_width（5.5 语义） | W201（赋值/端口截断）；unsized 常量 → 保守 None（无最小宽度追踪） |
+
+**二、锁存检测——实现机制对比**
+
+| 工具 | 机制 | 关键设计 |
+|---|---|---|
+| Verilator | V3Active.cpp `LatchDetectGraph`：按组合 always 建控制流图（if/else 顶点），**逐被赋值变量遍历"全路径是否都赋值"** | LATCH（建议 always_latch）；always_latch 无锁存 → NOLATCH（期望反转）；ALWCOMBORDER（先读后写→状态保持暗示） |
+| slang | Analysis 层数据流分析（DataFlowAnalysis/DriverTracker/ValueDriver） | inferred-latch "not assigned on all control paths"；另有 inferred-comb |
+| Yosys | proc → proc_dlatch：进程同步类型判定（电平敏感无边沿）+ 赋值 mux 树**反馈位（hold=自身）**判定 | `-latches info/warn/error` 政策；always_comb 推断锁存 → error、always_latch 无锁存 → error（对称反转） |
+| SpyGlass | W442aL（latch 推断） | 闭源仅形态可见 |
+| tpc 现状 | LC001 有限版：组合 always 内 if 无 else | 只覆盖 if 形态；case 多臂/嵌套/全路径判定不做 |
+
+**三、always 写法——实现机制对比**
+
+| 工具 | 规则 | 机制 |
+|---|---|---|
+| Verilator | BLKSEQ（时序块阻塞赋值，**默认关** style 码）、BLKANDNBLK（混用阻塞/非阻塞，5.038 后收敛为"无法证明子位不重叠且阻塞赋值在组合逻辑"才报）、ALWNEVER（always @* 无读取变量→永不执行）、CASEINCOMPLETE | 语义 AST 分析；BLKANDNBLK 做子位重叠证明（建议 split_var） |
+| svlint | blocking_assignment_in_always_ff/_latch、non_blocking_assignment_in_always_comb、general_always_no_edge、case_default、keyword_forbidden_* | 语法规则 + **LRM 条款引证**（每条挂 IEEE1800 章节）+ companion 规则互引；ruleset-simsynth 专门收"仿真/综合不一致"族 |
+| Verible | always-comb（禁 always @*，**带 autofix**）、always-comb-blocking、always-ff-non-blocking、case-missing-default | 语法层 CST matcher |
+| SpyGlass | W527（悬空 else）、W415a（if 分支双赋值） | 闭源仅形态可见 |
+| tpc 现状 | 评估不做（2026-08-29 记录：裸 always 仿真合法误报高） | — |
+
+**四、亮点单独说明**
+
+- 🔥 **锁存全路径判定是最值得搬的算法**：Verilator 图遍历（逐变量×路径覆盖）与 slang
+  数据流是同一判定的两种实现，都比"if 无 else"精确——覆盖 if-else-if 链、case 臂、
+  嵌套。tpc LC001 升级路径明确：analyzer 语句树 + 被赋值变量集合×路径覆盖（信号图已
+  有 (module, signal) 键，缺语句级控制流）。Yosys 反馈位判定是综合视角，互补（各有
+  取舍非优劣）
+- 🔥 **unsized 常量最小宽度追踪**（Verilator WIDTH 抑制 / slang 有效宽 X/Z 修剪）：
+  `'0`/`3'd0` 的语义差别——tpc 现在 unsized → 保守 None，是压 W201 误报的低风险增量
+- 💡 **端口连接宽度独立成码**（slang port-width-*、SpyGlass W164a/b 分截断/扩展）：
+  W201 端口检查可拆方向码，对齐主流
+- 💡 **期望反转 + 政策化上报**（NOLATCH / yosys `-latches` 政策）：有意锁存（总线保持）
+  是高频合理用法——"保留报 + 降级 info + lint_off"优于"关掉"；tpc `default` 字段
+  机制已可承载（0b83b7e）
+- 💡 **默认关 + style 分类是"合法但易错"写法的标准处置**：Verilator BLKSEQ 明确默认关、
+  svlint 独立 ruleset-simsynth、slang-tidy synthesis 组——tpc 之前"always 写法评估
+  不做（误报高）"应修订为"**可做 + 默认关**"（与 NC 家族同构）；但须细分：裸 always
+  无事件控制（仿真合法循环）主流也没禁（svlint 仅提示升级），保持不做；可做的是
+  阻塞/非阻塞纪律族（2005 可表达）
+- 💡 **svlint LRM 条款引证 / Verible autofix**：规则 message 挂 IEEE 条款号（tpc 可加
+  `lrm` 字段）；autofix 超出 tpc lint 定位不搬，但"修复建议文本"值得学
+- 📌 ALWNEVER（always @* 无读取变量→永不执行）低频有趣，远期候选
+
+**五、可实现性评估（对 tpc）**
+
+- 🔥 可做（低成本）：W201 低位宽抑制——unsized 常量最小宽度追踪（`'0` 全零/前导 X
+  修剪），压误报，插件层
+- 🔥 可做（中成本）：LC001 升级全路径判定——Verilator 式控制流图，覆盖 case/嵌套，
+  analyzer 语句层；三大主题里机制价值最高的一个
+- 🔥 可做（低成本，默认关）：always 写法风格族——时序块阻塞赋值（BLKSEQ 类）、
+  混用阻塞/非阻塞（BLKANDNBLK 简化版）、case 无 default（CC001 已有部分覆盖）；
+  语法层纯结构规则，零 handler
+- 💡 可做（低成本）：W201 截断/扩展方向分码；规则 message 加 `lrm` 条款字段
+- 📌 不做：WIDTHCONCAT 类（2005 concat 内 unsized 项 = 32 位合法，误报面大）、
+  ALWNEVER（低频）、autofix（超出 lint 定位）、Yosys 式综合视角锁存（tpc 无综合后端）
+- 来源：[Verilator warnings 文档](https://verilator.org/guide/latest/warnings.html)、
+  [LATCH/NOLATCH 引入提交 a117002](https://github.com/verilator/verilator/commit/a11700271fc0c681bb1869bf6a299ff594c4028a)、
+  [slang diagnostics.txt](https://github.com/MikePopoloski/slang/blob/master/scripts/diagnostics.txt)、
+  [slang OperatorExpressions.cpp](https://github.com/MikePopoloski/slang/blob/master/source/ast/expressions/OperatorExpressions.cpp)、
+  [yosys proc_dlatch.cc](https://github.com/YosysHQ/yosys/blob/main/passes/proc/proc_dlatch.cc)、
+  [svlint ruleset-simsynth](https://github.com/dalance/svlint/blob/master/md/ruleset-simsynth.md)、
+  [svlint general_always_no_edge](https://github.com/dalance/svlint/blob/master/md/syntaxrules-explanation-general_always_no_edge.md)、
+  [verible style_lint.md](https://github.com/chipsalliance/verible/blob/master/doc/style_lint.md)、
+  [iverilog(1) manpage](https://man.freebsd.org/cgi/man.cgi?query=iverilog&sektion=1)
