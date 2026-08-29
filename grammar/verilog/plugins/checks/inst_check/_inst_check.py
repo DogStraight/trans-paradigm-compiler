@@ -44,6 +44,10 @@ def run_inst_check(analyzer, context) -> None:
         _check_params(context, site, info, related_def)
         _check_missing_ports(context, site, info, related_def, conn_by_inst)
 
+    # elaboration 层 3（ADR-0008）：多驱动检查（对标 Verilator MULTIDRIVEN
+    # / Spyglass W415——同一信号被多个实例 output 连接）。
+    _check_multi_driver(context, connections)
+
 
 def _check_ports(context, site, info, related_def) -> None:
     """命名端口连接 × 模块端口表。"""
@@ -117,6 +121,52 @@ def _check_missing_ports(
             node=site,
             related=related_def,
         )
+
+
+def _check_multi_driver(context, connections) -> None:
+    """多驱动检查（对标 Verilator MULTIDRIVEN / Spyglass W415）。
+
+    基于 elaboration 层 3 信号图（context.extra["signal_graph"]）：
+    信号被 ≥2 个实例 output 连接 → 多驱动错误范式（跨实例汇聚）。
+    只报"当前文件内出现"的信号（信号在本文件 connections 里有连接），
+    避免每文件重复报同一跨文件多驱动。
+    """
+    signal_graph = context.extra.get("signal_graph", {}) or {}
+    if not signal_graph:
+        return
+    # 本文件出现的信号（连接展开里的连接信号名）
+    local_sigs: set[str] = set()
+    for conn in connections:
+        local_sigs.update(conn.connects.values())
+        local_sigs.update(conn.ordered)
+    for sig, entry in signal_graph.items():
+        drivers = entry.get("drivers", [])
+        if len(drivers) < 2:
+            continue
+        if sig not in local_sigs:
+            continue  # 跨文件多驱动由信号所在文件报（避免重复）
+        # 定位：找本文件连接该信号的实例节点
+        node = _find_signal_node(connections, sig)
+        driver_desc = ", ".join(drivers)
+        context.report(
+            f"信号 '{sig}' 被多个实例驱动（{len(drivers)} 个: {driver_desc}）"
+            "——多驱动错误范式",
+            code="W105",
+            level="error",
+            node=node,
+        )
+
+
+def _find_signal_node(connections, sig):
+    """找本文件连接该信号的实例节点（定位用）。"""
+    for conn in connections:
+        for pname, s in conn.connects.items():
+            if s == sig:
+                return conn.inst_node
+        for s in conn.ordered:
+            if s == sig:
+                return conn.inst_node
+    return None
 
 
 def _check_params(context, site, info, related_def) -> None:

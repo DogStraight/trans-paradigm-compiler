@@ -504,3 +504,66 @@ class TestMissingPortCheck:
         )
         # inout d 未连接不报；input a 已连接
         assert not any("d" in d["message"] for d in w104)
+
+
+# ── 多驱动检查 W105（elaboration 层 3 信号图之上） ──────────
+
+
+class TestMultiDriverCheck:
+    """多驱动检查（对标 Verilator MULTIDRIVEN / Spyglass W415）。
+
+    同一信号被多个实例 output 连接 → W105（error 级）。基于层 3
+    signal_graph 的 drivers 集合。
+    """
+
+    def test_multi_driver_reported(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] a, b, s;\n"
+            "  adder u1 (.a(a), .b(b), .y(s));\n"
+            "  adder u2 (.a(a), .b(b), .y(s));\n"  # s 被双驱动
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w105 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W105"
+        )
+        assert len(w105) == 1
+        assert "s" in w105[0]["message"]
+
+    def test_single_driver_no_w105(self, checker, tmp_path):
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] a, b, s;\n"
+            "  adder u1 (.a(a), .b(b), .y(s));\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W105" not in codes
+
+    def test_cross_file_multi_driver_reported_once(self, checker, tmp_path):
+        """跨文件多驱动：信号在两个文件分别被驱动 → 报一次（所在文件）。"""
+        (tmp_path / "drv.sv").write_text(
+            "module drv (output wire q);\nendmodule\n", encoding="utf-8"
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire s;\n"
+            "  drv d1 (.q(s));\n"
+            "  drv d2 (.q(s));\n"  # 同文件双驱动
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w105 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W105"
+        )
+        assert len(w105) == 1
