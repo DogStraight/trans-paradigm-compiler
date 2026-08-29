@@ -132,11 +132,12 @@
 > 规则实现进度（2026-08-29）：elaboration 底座完成（ADR-0008，层2 连接展开 +
 > 层3 信号图，提交 3acae77）；已实现 UN001 未使用声明（a22f081）、W104 未连接
 > 端口（57d6e83）、W105 多驱动（394ec51）、CC001 case 完整性（1f94fbc）、
-> W106 inout 须 tri（5067e8b）、NC012/NC013 命名补全（随 a22f081）——6 类核心
-> 集合 + 三层捕获能力（语法声明式 / 语义符号表 / 跨文件 handler）各被真实规则
-> 验证。评估：always 写法类（裸 always）边界模糊/误报高（仿真代码大量合法
-> 使用），**不做**；锁存推断/位宽一致性需 analyzer 深度扩展（控制流/宽度传播）。
-> 下一步：锁存/位宽（需 analyzer 扩展）或先试水暴露。
+> W106 inout 须 tri（5067e8b）、LC001 锁存风险（d5148d3）、NC012/NC013 命名
+> 补全（随 a22f081）——7 类核心集合 + 三层捕获能力（语法声明式 / 语义符号
+> 表 / 跨文件 handler）各被真实规则验证。评估：always 写法类（裸 always）
+> 边界模糊/误报高（仿真代码大量合法使用），**不做**；位宽一致性需完整
+> 类型/宽度传播系统（Verilator WIDTH 家族级，独立大工程）。
+> 下一步：位宽一致性（需 analyzer 宽度传播扩展）或先试水暴露。
 
 - [x] ~~工具调研：svlint / Veryl / Verilator / Verible / slang / Spyglass /
       HDL Checker / flexlint 检查项清单~~（已完成，落档 references.md）
@@ -148,6 +149,6 @@
 - [x] ~~多驱动：W105~~（已完成，394ec51）
 - [x] ~~分支完整性：CC001 case 无 default~~（已完成，1f94fbc）
 - [x] ~~端口类型：W106 inout 须 tri~~（已完成，5067e8b）
-- [ ] 锁存推断规则（对标 LATCH/uncovered_branch——需控制流分析，语义层）
-- [ ] 位宽一致性（对标 WIDTH/width-trunc——需宽度传播，中成本）
+- [x] ~~锁存风险：LC001 组合 always if 无 else~~（已完成，d5148d3）
+- [ ] 位宽一致性（对标 WIDTH/width-trunc——需宽度传播系统，独立大工程）
 - [ ] ~~always 写法（裸 always）~~（评估：边界模糊/仿真代码大量合法使用，误报高，不做）

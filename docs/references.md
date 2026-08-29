@@ -1547,6 +1547,12 @@ tpc 覆盖核对发现 7 个剩余缺口，逐一追 sv-parser 实现（1800-201
   tri（三态总线语义）；端口 net_type 提取（结构协议 port_type 字段 +
   ModulePort.net_type）+ 遍历本文件 AST 的 inout 声明（避免跨文件重复报）。
   对标 svlint inout_with_tri = Veryl missing_tri（完全重合）。
+- **LC001 锁存风险**（d5148d3，latch_check 插件）：组合 always（@* 或电平
+  敏感，无 posedge/negedge）内 if 无 else → 锁存风险（条件不满足时信号
+  保持，仿真/综合不一致）。时序 always 内 if 无 else 是合法复位写法
+  （`if (!rst_n) q <= 0;`），豁免。有限版：只查"if 无 else"可静态判定
+  形态，不做完整控制流路径分析。对标 svlint explicit_if_else /
+  Verilator LATCH / Veryl uncovered_branch / slang inferred-latch。
 - **评估不做**：always 写法类（裸 always 无事件控制）——仿真代码大量合法
   使用（`always begin` 无限循环），误报高，不做（对标 svlint
   keyword_forbidden_always 需 always_comb 语义，Verilog-2005 无）。
