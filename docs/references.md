@@ -1653,3 +1653,25 @@ include-data-dir 不保证携带 .py → exe 启动即崩（ValueError postpass 
 不存在）。build_pipeline 显式 `--include-data-files` 逐个携带插件 .py +
 构建后 smoke test（format/lint/check 各跑样本，任一失败即构建失败）——
 防静默坏包（0.1.0 exe 能跑只因当时无 checks 插件）。
+
+#### PyPy JIT 实测（2026-08-29，结论：不切换）
+
+动机：理论分析 PyPy 的 JIT（去虚拟化/内联/逃逸分析）应命中 tpc 的"对象图
+遍历 + 动态分派"负载（解析器/语义分析），预期 2-4x。环境：PyPy 7.3.20
+（Python 3.11.13，winget 安装，tomllib 可用）。
+
+实测（同一当前代码）：
+- **长任务**（5 万行合成工程 check，316,891 tokens）：PyPy **36.2s** vs
+  CPython 45.3s——**快 22%**（8.8k vs 7.0k tok/s；两遍稳定，JIT 预热后）
+- **短任务**（真实语料 9 文件 format，每文件独立进程）：PyPy 3.3k tok/s vs
+  CPython 5.4k tok/s——**慢 38%**（JIT 预热 + PyPy 启动开销 > 短任务本身）
+
+机制：长任务 JIT 预热后仅 +22%（低于理论 2-4x——match/case 结构匹配在
+PyPy 的 JIT 收益有限、字典/字符串部分无收益拖累整体）；短任务每次进程
+冷启动 + 预热期收不回成本 → 净损失。
+
+结论（诚实）：**PyPy 不适合 tpc 的实际使用形态**（单文件 CLI 命令为主、
+短任务占多数）；22% 的长任务收益不值得引入版本滞后（3.11 线）与生态
+风险。**CPython 保持现状，算法层仍是提速主线**（渲染缓存 -57% 实证；
+parser 记忆化待 path 语义重构）。附带数据：真实语料 9 文件 = 100k token，
+check 吞吐 7k tok/s（5 万行 ≈ 45s），format 热吞吐 5.4k tok/s。
