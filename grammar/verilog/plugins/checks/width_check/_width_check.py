@@ -20,7 +20,7 @@ _INTEGER_WIDTH = "32"
 
 
 def run_width_check(analyzer, context) -> None:
-    """postpass 入口：A1 宽度表 + B1 参数表 + A4 WIDTH 赋值对比。"""
+    """postpass 入口：A1 宽度表 + B1 参数表 + A4 赋值 + B3 端口连接宽度。"""
     table = symbol_width_table(analyzer)
     # B1 模块参数表：全工程两层结构 → 当前文件模块单层（本文件模块的
     # 宽度求值只用自己模块的参数；跨模块传播 B3）。内嵌 "_params" 键
@@ -31,6 +31,7 @@ def run_width_check(analyzer, context) -> None:
     table["_params"] = params
     analyzer._width_table = table
     _check_assignment_widths(analyzer, context, table)
+    _check_port_connections(analyzer, context, table, params_all)
 
 
 def _file_params(analyzer, module_params: dict) -> dict[str, str]:
@@ -261,6 +262,81 @@ def _iter_nodes(root: Node):
         yield node
         for child in node.iter_children():
             stack.append(child)
+
+
+# ── B3 跨模块参数传播：实例化点端口连接宽度 ──────────────────
+# 被实例化模块的端口宽度可能含参数（[WIDTH-1:0]）——求值用**覆盖后**
+# 参数表：本文件参数（调用者上下文，覆盖值可能引用）→ 模块默认 →
+# 实例化点覆盖（最高优先）。连接表达式宽度（本文件信号/字面量/拼接）
+# vs 端口宽度：连接 > 端口 → 截断报 W201（对标 Verilator WIDTH 端口
+# 连接同码）。
+
+
+def _check_port_connections(analyzer, context, table: dict, params_all: dict) -> None:
+    module_index = context.extra.get("module_index", {}) or {}
+    inst_sites = context.extra.get("inst_sites", []) or []
+    caller_params = table.get("_params", {}) or {}
+    for site in inst_sites:
+        mod_name = node_text(getattr(site, "module_name", None))
+        if not mod_name:
+            continue
+        info = module_index.get(mod_name)
+        if info is None:
+            continue
+        ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
+        nl = _unwrap(getattr(site, "ports", None))
+        conns = getattr(nl, "items", None) if nl else None
+        for conn in conns or []:
+            if not isinstance(conn, Node) or conn.node_name != "NamedPortConnect":
+                continue
+            pn = node_text(getattr(conn, "port_name", None))
+            if not pn:
+                continue
+            port = info.ports.get(pn)
+            if port is None:
+                continue
+            pw = (
+                eval_width_text_params(port.width_expr, ov_params)
+                if port.width_expr
+                else 1
+            )
+            val = getattr(conn, "value", None)
+            cw = infer_expr_width(val, table)
+            if pw is None or cw is None:
+                continue
+            if cw > pw:
+                context.report(
+                    f"端口连接宽度截断：{mod_name}.{pn} {pw} 位 ← 连接 {cw} 位"
+                    f"（{node_text(val)}）",
+                    code="W201",
+                    level="warning",
+                    node=conn,
+                )
+
+
+def _override_params(site, module_defaults: dict, caller_params: dict) -> dict:
+    """实例化点覆盖后参数表：调用者参数 → 模块默认 → site 覆盖（最高）。"""
+    out = dict(caller_params)
+    out.update(module_defaults or {})
+    po = getattr(site, "params", None)
+    pl = getattr(po, "params", None) if isinstance(po, Node) else None
+    items = getattr(pl, "items", None) if isinstance(pl, Node) else None
+    for item in items or []:
+        if not isinstance(item, Node) or item.node_name != "NamedParamOverride":
+            continue
+        pn = node_text(getattr(item, "param_name", None))
+        pv = node_text(getattr(item, "value", None))
+        if pn and pv:
+            out[pn] = pv
+    return out
+
+
+def _unwrap(node):
+    """穿透 parser 的 optional 包装节点（与 analyzer/checker.py 同款）。"""
+    while isinstance(node, Node) and node.node_name == "optional":
+        sub = getattr(node, "sub_node", None) or []
+        node = sub[0] if sub else None
+    return node
 
 
 def symbol_width_table(analyzer) -> dict[str, str]:

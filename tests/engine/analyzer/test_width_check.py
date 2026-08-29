@@ -478,3 +478,93 @@ class TestWidthParametricB2:
         )
         assert len(msgs) == 1
         assert "8 位" in msgs[0]
+
+
+class TestWidthPortConnB3:
+    """B3 跨模块参数传播：实例化点端口连接宽度（覆盖后参数求值）。"""
+
+    def _check_top(self, checker, tmp_path, top_src: str) -> list:
+        (tmp_path / "adder.sv").write_text(
+            "module adder #(parameter WIDTH = 8) (\n"
+            "    input  wire [WIDTH-1:0] a_i,\n"
+            "    output wire [WIDTH-1:0] y_o\n"
+            ");\n"
+            "    assign y_o = a_i;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(top_src, encoding="utf-8")
+        report = checker.check(str(top))
+        out = []
+        for f in report["files"]:
+            for d in f["semantic"]:
+                if d.get("code") == "W201":
+                    out.append(d["message"])
+        return out
+
+    def test_override_shrinks_port(self, checker, tmp_path):
+        """覆盖 WIDTH=4：16 位信号连 4 位端口 → 截断报 W201。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  wire [15:0] big_sig;\n"
+            "  adder #(.WIDTH(4)) u_adder (\n"
+            "    .a_i(big_sig),\n"
+            "    .y_o()\n"
+            "  );\n"
+            "  assign big_sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert any("adder.a_i 4 位" in m and "16 位" in m for m in msgs)
+
+    def test_default_param_port(self, checker, tmp_path):
+        """无覆盖（WIDTH=8 默认）：16 位连 8 位端口 → 截断。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  wire [15:0] big_sig;\n"
+            "  adder u_adder (.a_i(big_sig), .y_o());\n"
+            "  assign big_sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert any("adder.a_i 8 位" in m and "16 位" in m for m in msgs)
+
+    def test_override_expands_no_report(self, checker, tmp_path):
+        """覆盖 WIDTH=16：等宽连接不报。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  wire [15:0] sig;\n"
+            "  adder #(.WIDTH(16)) u_adder (.a_i(sig), .y_o());\n"
+            "  assign sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert msgs == []
+
+    def test_caller_param_reference(self, checker, tmp_path):
+        """覆盖值引用调用者参数：#(.WIDTH(INNER_W))，INNER_W 来自本文件。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top #(parameter INNER_W = 4);\n"
+            "  wire [15:0] big_sig;\n"
+            "  adder #(.WIDTH(INNER_W)) u_adder (.a_i(big_sig), .y_o());\n"
+            "  assign big_sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert any("adder.a_i 4 位" in m and "16 位" in m for m in msgs)
+
+    def test_sized_literal_conn(self, checker, tmp_path):
+        """连接字面量：12 位连 8 位端口（无覆盖）→ 截断。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  adder u_adder (.a_i(12'hFFF), .y_o());\n"
+            "endmodule\n",
+        )
+        assert any("adder.a_i 8 位" in m and "12 位" in m for m in msgs)
