@@ -10,6 +10,7 @@ Doc: docs/renderer_architecture.md（Doc IR 原语与 layout 算法）/ docs/dec
 """
 
 from dataclasses import dataclass
+from typing import cast
 
 # ── Doc 类型 ──
 
@@ -438,7 +439,7 @@ def _has_hardline(doc: Doc) -> bool:
     """
     key = (id(doc), 1)
     if key in _LAYOUT_CACHE:
-        return _LAYOUT_CACHE[key]
+        return cast(bool, _LAYOUT_CACHE[key])
     match doc:
         case Break() | LineBreak():
             result = True
@@ -463,7 +464,7 @@ def _has_break(doc: Doc) -> bool:
     """
     key = (id(doc), 2)
     if key in _LAYOUT_CACHE:
-        return _LAYOUT_CACHE[key]
+        return cast(bool, _LAYOUT_CACHE[key])
     match doc:
         case Line() | Break() | LineBreak():
             result = True
@@ -493,7 +494,7 @@ def _flat_w(doc: Doc) -> int:
     """
     key = (id(doc), 0)
     if key in _LAYOUT_CACHE:
-        return _LAYOUT_CACHE[key]
+        return cast(int, _LAYOUT_CACHE[key])
     match doc:
         case Text(s):
             result = len(s)

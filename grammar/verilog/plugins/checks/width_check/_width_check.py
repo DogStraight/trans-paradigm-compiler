@@ -28,7 +28,8 @@ def run_width_check(analyzer, context) -> None:
     params_all = _module_params(context)
     params = _file_params(analyzer, params_all)
     analyzer._param_table = params
-    table["_params"] = params
+    # _params 是内部元数据键（参数表），非符号宽度——类型注解豁免
+    table["_params"] = params  # type: ignore[assignment]
     analyzer._width_table = table
     _check_assignment_widths(analyzer, context, table)
     _check_port_connections(analyzer, context, table, params_all)
