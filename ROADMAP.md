@@ -69,9 +69,11 @@
 > 触发条件：C 核心基线立项（多语言共存）或出现"非 verilog 打包"需求。
 
 - [ ] `[packaging]` 段声明（target/description/facets，缺省取 [commands] 键）
+- [ ] `bundle` 方式可选：`embedded`（语法包打进 exe，自包含单文件）/
+      `external`（语法包外置，引擎原生 + 语法可换，同一二进制多语言/版本）
 - [ ] build_pipeline 扫描语言包声明（--lang / 无参=全部），去掉 `_RULES_REL` 硬编码
 - [ ] 入口生成用该语言包 rules_dir（与调试时 main.py 行为一致）
-- [ ] 多语言打包验证：verilog + c4 各自声明、各自出 exe
+- [ ] 多语言打包验证：verilog + c4 各自声明、各自出 exe（embedded + external 各验证）
 
 ## P2 — 工程化收尾（发布准备）
 
