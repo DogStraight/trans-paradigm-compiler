@@ -133,20 +133,21 @@
 > 层3 信号图，提交 3acae77）；已实现 UN001 未使用声明（a22f081）、W104 未连接
 > 端口（57d6e83）、W105 多驱动（394ec51）、CC001 case 完整性（1f94fbc）、
 > W106 inout 须 tri（5067e8b）、LC001 锁存风险（d5148d3）、NC012/NC013 命名
-> 补全（随 a22f081）——7 类核心集合 + 三层捕获能力（语法声明式 / 语义符号
-> 表 / 跨文件 handler）各被真实规则验证。评估：always 写法类（裸 always）
-> 边界模糊/误报高（仿真代码大量合法使用），**不做**；位宽一致性需完整
-> 类型/宽度传播系统（Verilator WIDTH 家族级，独立大工程）。
+> 补全（随 a22f081）、W201 赋值/端口连接截断 + W202 位选越界（width_check
+> 插件，1c04652..c6c8587）——**核心集合 10 类全落地**（8 类实现 + 2 类评估
+> 不做：always 写法/unsized 精化，理由见 references.md「位宽一致性落档」），
+> 三层捕获能力（语法声明式 / 语义符号表 / 跨文件 handler）各被真实规则
+> 验证。
 > 试水评测（2026-08-29，第一弹）：构建检出准确性评测集——26 case（15 正样例
 > + 11 负样例，含复合小工程 project_bus_ctrl）+ eval_check_accuracy.py +
 > test_check_accuracy.py 门禁（recall=100% + FP=0 断言）。首测 80% recall /
 > 3 FP 暴露并修复 3 缺陷：W105 信号图补 assign 驱动收集（协议驱动）、
 > TypeSpecNoReg net 位补 tri（`inout tri` 语法缺口，连带暴露 test_inout_tri_clean
 > 假阳性盲区）、命名规则 `_` 前缀豁免。修复后 18 期望码全命中 + 0 FP。
-> 详情落 docs/references.md「试水检出准确度评测」。
-> 下一步：位宽一致性分期启动（阶段 A 常量宽度域，2026-08-29 立项；
-> 设计：语义插件位置实现 求值器+推断器+规则——宽度语义是语言知识，
-> 进 grammar/verilog/plugins/checks/width_check/，引擎零改动面）。
+> 评测已扩至 34 case（+W201/W202），23 期望码 100% recall / 0 FP。
+> 详情落 docs/references.md「试水检出准确度评测」+「位宽一致性落档」。
+> P1.10 已全闭环；后续方向：位宽相关进阶（ordered 端口连接覆盖、跨模块
+> 成员宽度）或试水第二弹（真实工程误报率评测）。
 
 - [x] ~~工具调研：svlint / Veryl / Verilator / Verible / slang / Spyglass /
       HDL Checker / flexlint 检查项清单~~（已完成，落档 references.md）
@@ -159,8 +160,7 @@
 - [x] ~~分支完整性：CC001 case 无 default~~（已完成，1f94fbc）
 - [x] ~~端口类型：W106 inout 须 tri~~（已完成，5067e8b）
 - [x] ~~锁存风险：LC001 组合 always if 无 else~~（已完成，d5148d3）
-- [ ] 位宽一致性（对标 WIDTH/width-trunc 家族——**A/B/C1 已闭环**：W201
-      赋值/端口连接截断、W202 位选越界；C2 自赋值/C3 unsized 精化评估
-      不做（与 W201 重叠 + 合法累加器误报风险）；完成历史 git log +
-      references.md「位宽一致性落档」）
+- [x] ~~位宽一致性：W201 赋值/端口连接截断 + W202 位选越界（width_check
+      插件 A/B/C1 闭环；C2/C3 评估不做——理由 references.md「位宽一致性
+      落档」）~~（已完成，1c04652..c6c8587）
 - [ ] ~~always 写法（裸 always）~~（评估：边界模糊/仿真代码大量合法使用，误报高，不做）
