@@ -700,6 +700,8 @@ class ProjectChecker:
                         continue
                     assign_idx += 1
                     mod_name = self._module_of(fr, node)
+                    if not self._in_active_generate(fr, node):
+                        continue  # 所在 generate 互斥分支未选中（2026-08-29）
                     inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
                     for tgt in self._iter_assign_targets(
                         node, target_field, extras_field, extra_target_field
@@ -712,6 +714,8 @@ class ProjectChecker:
                             entry["drivers"].append(inst_ref)
             for conn in fr.connections:
                 mod_name = self._module_of(fr, conn.inst_node)
+                if not self._in_active_generate(fr, conn.inst_node):
+                    continue  # 实例化点所在 generate 分支未选中
                 inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
                 mod = self._module_index.get(conn.module_name)
                 for port_name, sig in conn.connects.items():
@@ -740,6 +744,110 @@ class ProjectChecker:
                     if inst_ref not in entry["loads"]:
                         entry["loads"].append(inst_ref)
         return graph
+
+    def _in_active_generate(self, fr, node) -> bool:
+        """节点是否在**选中**的 generate 互斥分支内（对齐 Verilator）。
+
+        Verilator 在 V3Param::visit(AstGenIf) 求值 generate 条件，未选中
+        分支的 AST 物理删除（deleteTree）——后续多驱动检测只看到选中分支
+        的驱动源。tpc 不展开 generate，信号图平铺收集会同时计入互斥分支
+        （如 picorv32 `generate if (ENABLE_MUL) 实例 else assign`：两个
+        分支都驱动 pcpi_mul_ready → 8 条 W105 假阳性，Verilator 0 报）。
+
+        本方法：沿祖先链找 GenerateBlock→IfBlock，条件可求值（模块参数
+        表）且节点不在选中分支 → False（跳过该驱动源）；条件不可判 →
+        True 保守保留（不因无法判定而漏报真多驱动）。
+        """
+        if fr.ast is None or node is None:
+            return True
+        # 模块参数表（头部 + body 参数，_fill_params 已合并）→ 求值环境
+        mod_name = self._module_of(fr, node)
+        info = self._module_index.get(mod_name)
+        params: dict[str, str] = {}
+        if info is not None:
+            params = {p.name: p.value_expr for p in info.params.values()}
+        # 找节点所在模块声明，沿其子树内 generate 结构判定
+        decl_rule = self._rule("module_decl_rule")
+        for mnode in self._iter_nodes(fr.ast):
+            if mnode.node_name != decl_rule:
+                continue
+            if not self._subtree_contains(mnode, node):
+                continue
+            return self._branch_active(mnode, node, params)
+        return True
+
+    def _branch_active(self, mod_node: Node, target: Node, params: dict) -> bool:
+        """模块内 target 是否处于选中的 generate 分支（递归沿祖先）。
+
+        遍历模块子树找 GenerateBlock→IfBlock/ElseIfBlock；若 target 在某
+        个条件分支块内，求值 condition（参数表），判定该分支是否选中；
+        未选中 → False。else-if 链递归（ElseIfBlock 与 IfBlock 同构）。
+        多个嵌套 generate 全部选中才 True。条件不可判 → True 保守保留
+        （不因无法判定而漏报真多驱动，对齐 Verilator V3Param 语义的
+        保守侧）。
+        """
+        for gnode in self._iter_nodes(mod_node):
+            if gnode.node_name != "GenerateBlock":
+                continue
+            for sub in getattr(gnode, "sub_node", None) or []:
+                if not isinstance(sub, Node):
+                    continue
+                if sub.node_name == "IfBlock" and self._subtree_contains(sub, target):
+                    return self._if_branch_active(sub, target, params)
+                # ElseIfBlock 也可能直接挂在 GenerateBlock 下（罕见）
+                if sub.node_name == "ElseIfBlock" and self._subtree_contains(sub, target):
+                    return self._if_branch_active(sub, target, params)
+        return True
+
+    def _if_branch_active(self, ifb: Node, target: Node, params: dict) -> bool:
+        """IfBlock/ElseIfBlock：target 所在分支是否选中（else-if 链递归）。
+
+        - target 在 then 分支 → 条件为真才选中
+        - target 在 else 分支（else_chain 内）→ 条件为假**且**后续链判定
+        - else_chain 是 ElseIfBlock → 递归（其 then/else 判定）
+        - else_chain 是 ElseBlockBranch（最终 else）→ 前面全假才选中
+        """
+        in_then = self._subtree_contains(getattr(ifb, "then_stmt", None), target)
+        cond_val = self._eval_gen_cond(ifb, params)
+        if in_then:
+            return cond_val is True if cond_val is not None else True
+        # else 分支：条件为假 + 链内判定
+        if cond_val is not None and cond_val:
+            return False  # 条件为真，else 分支未选中
+        chain = getattr(ifb, "else_chain", None)
+        if not isinstance(chain, Node):
+            return True  # 无 else → 条件为假时无分支；保守保留
+        if chain.node_name == "ElseIfBlock":
+            return self._if_branch_active(chain, target, params)
+        # ElseBlockBranch（最终 else）：前面条件全假 → 选中
+        return self._subtree_contains(chain, target)
+
+    def _eval_gen_cond(self, ifb: Node, params: dict):
+        """IfBlock.condition → 布尔｜None（不可判）。
+
+        条件文本（HierExpr/Identifier/常量表达式）→ 查参数表 → 数值求值
+        转布尔。不可判（无参数值/非纯常量/引用未定义）→ None 保守。
+        """
+        cond = getattr(ifb, "condition", None)
+        text = self._render_subtree(cond) if isinstance(cond, Node) else ""
+        text = (text or "").strip()
+        if not text:
+            return None
+        if text.isdigit():
+            return int(text) != 0
+        if text in params:
+            v = params[text].strip()
+            if v.isdigit():
+                return int(v) != 0
+            return None  # 参数值本身非纯数字 → 不可判
+        # 含运算的简单常量表达式（1+0 / 0 && 1 等）——求值器在 width_check
+        # 插件层（语言知识），引擎层只处理纯标识符/数字；复杂表达式保守
+        try:
+            if re.fullmatch(r"[0-9+\-*/()<>=!&| ]+", text):
+                return bool(eval(text, {"__builtins__": {}}, {}))
+        except Exception:
+            return None
+        return None
 
     def _module_of(self, fr, node) -> str:
         """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。

@@ -604,6 +604,112 @@ class TestMultiDriverCheck:
         )
         assert len(w105) == 1
 
+    # ── generate 互斥分支（对齐 Verilator V3Param，2026-08-29） ──
+
+    def test_generate_mutual_exclusion_no_w105(self, checker, tmp_path):
+        """generate if/else 互斥分支：两个分支驱动同一信号不报 W105。
+
+        对齐 Verilator：V3Param 求值 generate 条件后未选中分支的 AST
+        物理删除，多驱动检测只看到选中分支（picorv32 pcpi_mul_ready 形态，
+        8 条假阳性；Verilator 0 报 MULTIDRIVEN）。
+        """
+        (tmp_path / "drv.sv").write_text(
+            "module drv (input clk, output reg q);\n"
+            "  always @(posedge clk) q <= 1'b1;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top (input clk, output wire sig);\n"
+            "  parameter P = 1;\n"
+            "  wire s;\n"
+            "  generate\n"
+            "    if (P) begin : g_inst\n"
+            "      drv u (.clk(clk), .q(s));\n"
+            "    end else begin : g_assign\n"
+            "      assign s = 1'b0;\n"
+            "    end\n"
+            "  endgenerate\n"
+            "  assign sig = s;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W105" not in codes
+
+    def test_generate_elseif_chain_no_w105(self, checker, tmp_path):
+        """generate if/else if/else 三链：中间分支不选中时不报。
+
+        picorv32 的 ENABLE_FAST_MUL → ENABLE_MUL → else 三链形态。
+        """
+        (tmp_path / "drv.sv").write_text(
+            "module drv (input clk, output reg q);\n"
+            "  always @(posedge clk) q <= 1'b1;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top (input clk, output wire sig);\n"
+            "  parameter FAST = 0;\n"
+            "  parameter MUL = 0;\n"
+            "  wire s;\n"
+            "  generate\n"
+            "    if (FAST) begin : g_fast\n"
+            "      drv u1 (.clk(clk), .q(s));\n"
+            "    end else if (MUL) begin : g_mul\n"
+            "      drv u2 (.clk(clk), .q(s));\n"
+            "    end else begin : g_assign\n"
+            "      assign s = 1'b0;\n"
+            "    end\n"
+            "  endgenerate\n"
+            "  assign sig = s;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W105" not in codes
+
+    def test_generate_selected_branch_true_multi_driver_reported(
+        self, checker, tmp_path
+    ):
+        """generate 选中分支内两个实例驱动同一信号 → 仍报 W105。
+
+        互斥过滤只去未选中分支的驱动源，选中分支内的真多驱动必须保留。
+        """
+        (tmp_path / "drv.sv").write_text(
+            "module drv (input clk, output reg q);\n"
+            "  always @(posedge clk) q <= 1'b1;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top (input clk, output wire sig);\n"
+            "  parameter P = 1;\n"
+            "  wire s;\n"
+            "  generate\n"
+            "    if (P) begin : g_inst\n"
+            "      drv u1 (.clk(clk), .q(s));\n"
+            "      drv u2 (.clk(clk), .q(s));\n"  # 选中分支内双驱动
+            "    end else begin : g_assign\n"
+            "      assign s = 1'b0;\n"
+            "    end\n"
+            "  endgenerate\n"
+            "  assign sig = s;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w105 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W105"
+        )
+        assert len(w105) == 1
+        assert "s" in w105[0]["message"]
+
 
 # ── inout 端口须 tri W106（svlint inout_with_tri = Veryl missing_tri） ──
 

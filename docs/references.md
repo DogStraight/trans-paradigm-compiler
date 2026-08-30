@@ -1816,9 +1816,10 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 | W103 单元库参数 | 79 → **0**（ice40） | ✅ **模块体参数提取缺口（真 bug，已修）**——SB_RAM40_4K 参数在模块体（`parameter P = v;`）非头部 #(..) 列表，_fill_params 只收头部 → module_index 参数空 → 79 条"覆盖不存在参数"全 FP；此前落档"合理检出/语料不完整"系未查根因。修复：_fill_body_params 扫 ParamDeclStmt | 闭环（对标测试 2026-08-29 推翻旧结论） |
 | W104 函数参数误当端口 | 8（tv80） | ✅ **函数/任务局部 input 被 _fill_body_ports 全子树遍历误收**（AddSub4 的 A/B/Sub/Carry_In 与模块体端口同节点名 BodyInputDecl）→ 8 条假 W104；Verilator 0 报 PINMISSING。修复：跳过 FuncDecl/FuncDeclOld/TaskDecl 子树 | 闭环（对标测试 2026-08-29） |
 | CC001 全覆盖误报 | 7（ice40 4 + tv80 3） | ✅ **只看"有无 default 关键字"不看覆盖完整性**——`case(cc)` 8 值全覆盖 / `case(WRITE_MODE)` 2 位 0-3 全覆盖无锁存风险，Verilator 0 报 CASEINCOMPLETE。修复：复用 latch_check _case_covered 判据（常量全覆盖不报） | 闭环（对齐 Verilator CASEINCOMPLETE，2026-08-29） |
+| W105 generate 互斥分支 | 8（picorv32） | ✅ **generate if/else 互斥分支被信号图同时计入驱动**——Verilator V3Param 展开后未选中分支物理删除（deleteTree），多驱动只看到选中分支。修复：_in_active_generate 沿祖先链求值 generate 条件（参数表），未选中分支驱动跳过；不可判保守保留。详见下"generate 互斥分支机制调研" | 闭环（对齐 Verilator V3Param，2026-08-29；此前标"层 3 未展开已知边界"系未查机制） |
 | NC 命名 | ~1300 → 0 | ✅ 默认关已处理（0b83b7e） | 闭环 |
 
-**三、当前真实误报率（对标测试后，2026-08-29）**：语义规则 W201 30 → 10（ice40 20 条跨模块同名污染已修）+ W103 79 → 0 + W104 8 → 0（tv80 函数参数误收已修）+ CC001 7 → 0 + W105 0（picorv32 8 条为 generate 互斥分支，见下"试水第四弹"）+ NC 0（默认关）+ LC001 25（单元库有意锁存，Verilator 对无实例化库单元跳过、simcells 22 条共识）；已知边界 = 算法性截断 10 + generate 互斥 W105（elaboration 层 3 未展开）+ UN001 粒度（Verilator 按位/参数细化）+ AW 族默认关。
+**三、当前真实误报率（对标测试后，2026-08-29）**：语义规则 W201 30 → 10（ice40 20 条跨模块同名污染已修）+ W103 79 → 0 + W104 8 → 0（tv80 函数参数误收已修）+ CC001 7 → 0 + W105 8 → 0（picorv32 generate 互斥已修）+ NC 0（默认关）+ LC001 25（单元库有意锁存，Verilator 对无实例化库单元跳过、simcells 22 条共识）；已知边界 = 算法性截断 10 + UN001 粒度（Verilator 按位/参数细化）+ AW 族默认关 + serv_top 语料不完整（W101，缺子模块）。
 
 #### 试水第四弹：对标测试（2026-08-29，Verilator 二进制 oracle）
 
@@ -2156,3 +2157,66 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   记录为已知边界（scope 差异或工具行为差异）
 - 阶段：① 装 Verilator 验证可跑 → ② 写对拍 harness（eval_benchmark.py）
   → ③ 真实语料 + 评测集对拍 → ④ 差异逐条处置 → ⑤ 结论落档
+
+#### 试水第四弹执行结果（2026-08-29，Verilator 二进制全量对拍）
+
+- 工具落地：MSYS2（winget）+ mingw-w64-x86_64-verilator 5.050（pacman）。
+  verilator 是 perl 包装脚本，直接调 verilator_bin 会因 MSYS 路径前缀失败
+  （/mingw64/share/verilator 找不到）；须在非 login bash 下跑（-lc 的
+  login shell 环境 ulimit/exec 失败）——harness 写临时 .sh 承载。
+- harness：`tests/e2e/eval_benchmark.py`——工程分组双跑（uart 三文件一组，
+  其余单文件）+ W 码↔tpc 码映射表（W2T）+ 三态判定（共识/仅 tpc FP 候选/
+  仅 V 漏报候选）。三个关键判据修正：
+  - **lint_off 抑制识别**：picorv32 源码第 20-23 行 `verilator lint_off
+    WIDTH/PINMISSING/CASEOVERLAP/CASEINCOMPLETE`——"Verilator 不报"是
+    被作者主动关闭不是判断差异；44 条 tpc 诊断正确归"抑制"而非 FP 候选
+    （此前"picorv32 10 条 W201 与 Verilator 一致"的源码级推断在此被
+    二进制实证修正：一致是**默认判断**一致，非实际输出一致）
+  - **条件编译行号偏移**（P3.3 已知坑实证）：simcells 580-596 的 ifdef
+    块使展开后 token 行号 ≠ 源行号（偏移 16）——tpc 报展开后行号、
+    Verilator 报源行号；含条件编译文件按**码族数量对齐**（simcells 22
+    条 LC001 = LATCH 22 条由此正确识别为共识）
+  - **parse 失败标定**：darkriscv parse_ok=False（P1.5 条件编译嵌套位置
+    未根治）→ 0 诊断是"假干净"不算 MISS，标 TPC-PARSE-FAIL
+- 真实语料 7 工程结果：
+  - **共识 44 条**：UN001↔UNUSEDSIGNAL 21（tv80 13 + picorv32 8）、
+    LC001↔LATCH 22（simcells 单元库锁存模型，Verilator 同报）、
+    UN001↔UNUSEDPARAM 1
+  - **修复 5 个真 bug（114 条 FP → 0，其中 2 条推翻旧落档）**：
+    W201 跨模块同名符号污染（ice40 20）/ W103 模块体参数提取缺口
+    （ice40 79）/ W104 函数参数误当端口（tv80 8）/ CC001 全覆盖误报
+    （7）/ **W105 generate 互斥分支（picorv32 8）**
+  - 剩余差异全部判明类别：仅 V 326 = AW 族默认关（BLKSEQ/COMBDLY）+
+    UN001 语义粒度（Verilator 按位/参数报）+ 单元库未消费信号跳过
+    （ice40 din_0 有意锁存，Verilator 对无实例化库单元跳过 LATCH）；
+    仅 tpc 14 = serv_top W101 13+W105 2（语料不完整缺子模块，Verilator
+    同 MODMISSING 硬错误跳过）+ ice40 LC001 3（有意锁存）
+- 评测集 34 case 对拍：共识 11 条（W201 trunc×3/W202 oob×2/W104×2/
+  LC001×2/UN001×1/CC001×1）核心检出一致；仅 tpc 10 条多为**正样例的
+  正确检出**（W105/W106/UN001 是 tpc 规则语义，Verilator 无对应或判定
+  不同）；仅 V 26 条为 UN001 粒度/行号错位/性能类——语义设计差异非缺陷
+
+#### generate 互斥分支机制调研（2026-08-29，Verilator 源码级）
+
+- 背景：picorv32 `generate if (ENABLE_MUL) 实例 else assign` 互斥分支
+  被 tpc 信号图同时计入驱动 → 8 条 W105 假阳性（Verilator 0 报）。
+- Verilator 机制（V3Param.cpp:3255-3276 `visit(AstGenIf*)`）：
+  - 管线顺序：linkParse → linkDotPrimary → linkLValue → **V3Param**
+    （参数折叠 + generate 展开）→ linkDotParamed → V3Width →
+    V3WidthCommit → ...
+  - 展开逻辑：求值 condp（widthGenerateParamsEdit 定宽 +
+    constifyGenerateParamsEdit 常量折叠）→ 若为 AstConst：
+    `keepp = (isZero ? elsesp : thensp); keepp->unlinkFrBackWithNext();
+    nodep->replaceWith(keepp); nodep->deleteTree()`——**未选中分支随
+    GenIf 一起物理删除**，后续多驱动检测（V3Width/V3LinkLValue 之后）
+    只看到选中分支的驱动源。条件不可判 → 报错"Generate If condition
+    must evaluate to constant"（Verilator 要求 generate 条件可判）
+  - genfor 在 AstGenBlock::visit 展开（GenForUnroller）；gencase 类似
+- tpc 对齐实现（analyzer/checker.py）：信号图收集驱动时 `_in_active_
+  generate` 沿祖先链找 GenerateBlock→IfBlock/ElseIfBlock，条件用模块
+  参数表求值（头部 + body 参数已合并），未选中分支的 assign/实例驱动
+  跳过；**条件不可判 → True 保守保留**（不因无法判定漏报真多驱动，
+  与 Verilator"报错"比是保守侧，避免引入语言知识外的求值器）
+- 验证：最小复现 P=1/P=0 双跑 0 报、else-if 三链（ENABLE_FAST_MUL →
+  ENABLE_MUL → else）0 报、**选中分支内真多驱动仍报**（u1+u2 双实例）、
+  picorv32 8 条 W105 全消；3 个新测试进 test_checker.py
