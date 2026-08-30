@@ -1714,6 +1714,42 @@ check 吞吐 7k tok/s（5 万行 ≈ 45s），format 热吞吐 5.4k tok/s。
   darkriscv/tv80/uart/ice40）W201+W202 均 0 误报——保守策略（sized 域 +
   未知跳过）在真实代码上零误伤。
 
+#### 参数覆盖后模块内位宽截断：漏检边界对拍（2026-08-31，W201 漏检非误报）
+
+用户场景：模块 A 内**固定位宽**变量 ← **参数位宽**变量赋值，外层实例化
+覆盖参数——异常截断只在覆盖后出现，默认参数下不截断：
+
+```verilog
+module A;
+  parameter W = 4;              // 默认下 x 4 位 == y 4 位，不截断
+  reg [3:0] y;
+  wire [W-1:0] x;
+  assign y = x;                 // 外层覆盖 W=16 后：16→4 截断
+endmodule
+module B;
+  A #(.W(16)) u_a();            // 覆盖点
+endmodule
+```
+
+- **实测结果（tpc）**：不报（漏检）。对照组：默认 W=8（不覆盖也截断）
+  → 正常报 W201；端口版（y 是 output、外层连接）→ 只报 UN001 无 W201。
+- **实测结果（Verilator 5.050 对拍）**：`%Warning-WIDTHTRUNC ... In
+  instance 'B.u_a' ... Assign RHS's VARREF 'x' generates 16 bits`——
+  能报，靠 elaboration 每实例化点独立展开重算。
+- **根因（源码级）**：模块内赋值检查 `_check_assignment_widths` 的参数
+  表 = `_file_params`（B1 模块**默认**参数值，`run_width_check` L29）——
+  B3 的实例化覆盖合并（`_override_params`，调用者参数→模块默认→site
+  覆盖）**只在实例化点端口连接宽度检查用**（`_check_port_connections`），
+  **不回传被实例化模块内部**的赋值。即：覆盖参数传播到"端口连接"层，
+  未传播到"模块内部赋值"层。
+- **修复方向（若立项）**：B3 检查点扩展——对被实例化模块**内部赋值**
+  也用覆盖参数表重算（module_index 有目标模块 node 可走查，同 hier
+  插件 2080 行已具备的底座；或按 inst_site 展开成"参数化实例视图"）。
+  代价：多实例化点 × 多赋值，需缓存；跨文件模块内部符号表可复用
+  （`ModuleInfo.node` 走查 + 宽度表按模块隔离已就绪）。
+- **性质**：真漏检（Verilator 共识），非误报——归"已知边界"，等
+  elaboration 底座（P2.7 层 3 实例树展开）或实例化视图化后处理。
+
 #### 试水第二弹：真实开源工程误报率评测（2026-08-29）
 
 动机：0.1.1 暴露前的最后拼图——拿真实开源工程（9 语料：darkriscv/
