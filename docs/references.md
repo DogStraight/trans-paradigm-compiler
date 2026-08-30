@@ -1639,6 +1639,48 @@ parser 骨架（~36%）与 iter_children 遍历本身——且 P3.5 前置 P3.1
 span 绑定（解析器接口稳定后下沉才不白做）。elaboration 层 3 在
 模块映射预计算后已是 O(树) 常数级，不再值得桥接。
 
+#### 实例树深度实测：verilog-ethernet（2026-08-31，P2.7 全量规模评估）
+
+动机：上一节结论"elaboration 层 3 已是 O(树) 常数级、不值得 Rust"的
+前提是全量实例树展开（P2.7 层 3 扩展）的增量规模未知——用户点名
+Verilog 以太网协议栈（Alex Forencich verilog-ethernet，3.1k stars，
+rtl/ 98 核心模块：udp/ip/arp/eth_mac/eth_phy 分层 + example/ 25 个
+FPGA 顶层），实测其实例树深度，回答"补齐 P2.7 后 elaboration 占比
+会到多少"。
+
+实测（全文件 parse，287 文件：rtl + example 全部）：
+- 模块定义 114（7 文件解析失败：6 个参数化宏生成模块 arp_eth_rx 等 +
+  fpga.v 顶层 Xilinx 原语 PLL_BASE 截断——tpc 的 Verilog-2005 子集边界）
+- 未定义目标全为**库模块**（Xilinx 原语 BUFG/IDDR/ODDR + axis_fifo/
+  arbiter/sync_reset 等 lib/ 组件）——属正常，实例树统计不受影响
+- **实例树最大深度 7**（fpga → fpga_core → eth_mac_1g_gmii_fifo →
+  eth_mac_1g_gmii → gmii_phy_if → ssio_sdr_out → oddr → altddio_out）
+- 典型协议栈链深度 6-7（fpga → fpga_core → udp_complete_64 →
+  ip_complete_64 → arp → arp_cache → lfsr）
+- 模块直接实例数分布：{0:45, 1:19, 2:16, 3:15, 5:7, 6:4, 7:1, 8:2,
+  22:1, 64:1, 73:1, 189:1, 415:1}——**尾部大扇出**（22/64/73/189/415
+  实例的模块，如 eth_mac_quad_wrapper 等 wrapper/quad 级），扇出比
+  深度更显著
+
+结论（回答"全量 elaboration 占比"）：
+- **深度 7 是真实上限量级**——比当前语料（1-2 层）深 3-4 倍，但
+  仍是常数级小深度（Verilog 层次天然有限，协议栈/SoC 一般不超 8-10
+  层）；**真正的规模因子是扇出**（415 实例的 quad wrapper）——全量
+  实例树节点数 ≈ Σ(每层扇出) 可达数千，elaboration 成本从 O(单层
+  连接) 变为 O(实例树节点 × 端口连接)。按此估算全量后
+  `_build_signal_graph` ~2-5s（当前 0.96s 的 2-5×），占总时间
+  12-25%——**仍是次要热点，但不再是"不值得优化"的量级**；且深度
+  展开的增量主要在"信号沿端口穿透"而非"建图本身"。
+- **对 P2.7 的意义**：层 3 扩展（实例树层次展开）的真实收益 = 深层
+  多驱动/未驱动判定（如 quad wrapper 内多层信号汇聚），verilog-
+  ethernet 的 7 层 + 415 扇出是**合格的压力测试语料**——比现有 7
+  工程（最深 1-2 层）更能暴露 elaboration 深层缺口，可纳入 benchmark
+  语料候选（需先解决 fpga.v 的 Xilinx 原语解析边界 + lib/ 依赖）。
+- **对 P3.5 的意义**：elaboration 全量后 ~2-5s 中，"信号沿端口穿透"
+  是纯数据流遍历（Python dict/list 操作），桥接 Rust 的收益比 parser
+  骨架小（无语法回朔）；维持结论——Rust 对象仍是 parser，elaboration
+  优先吃算法层（预计算已吃 -35%，深度展开时再 profile）。
+
 #### parser packrat 记忆化尝试（2026-08-29，已回退）
 
 背景：渲染器记忆化后（见 ROADMAP P2.3 更新），parser 是单遍管线最大热点
