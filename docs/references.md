@@ -1681,6 +1681,37 @@ FPGA 顶层），实测其实例树深度，回答"补齐 P2.7 后 elaboration �
   骨架小（无语法回朔）；维持结论——Rust 对象仍是 parser，elaboration
   优先吃算法层（预计算已吃 -35%，深度展开时再 profile）。
 
+#### 实例树层次展开：驱动穿透实现（2026-08-31，P2.7 层 3 扩展闭环）
+
+- 定位：P2.7 层 3 扩展——信号图从"实例→信号"单层升级为"驱动源穿透
+  到被实例化模块内部真实驱动源"（对齐 Verilator elaboration 后视角：
+  MULTIDRIVEN 按实际驱动者判，非按实例原子判）。
+- **实现（analyzer/checker.py）**：
+  - `_build_module_insts()`：per-module 实例表（{模块: [(实例名, 目标
+    模块, PortConnection)]}，从层 2 connections 按 _module_of 归组）
+  - `_port_sources()`：模块内端口驱动源（**限定 ModuleInfo.node 子树**
+    ——探针暴露同文件多模块同名 assign 污染；裸源 = assign#N / proc /
+    inst:{实例}:{子端口}，缓存跨实例化点复用）
+  - `_resolve_port_drivers()`：递归穿透拼实例路径（inst 子引用下钻）；
+    返回 (源列表, 模块是否定义) 区分**悬空**（定义但无驱动 → 不记，
+    对齐 Verilator）与**黑盒**（未定义 → 原子实例源兜底，保守）
+  - `_build_signal_graph` 消费：output 连接驱动源 = 穿透结果（带路径），
+    inout 双向不变，input 负载不变
+- **验证**：3 层探针（top→mid→leaf）穿透路径正确（`u_mid/u_leaf:
+  assign#1`）、悬空 output 不记驱动（修复了原子源误报 W105）、单链
+  不误报；测试 +1（test_dangling_output_not_driver）、3 个既有断言
+  更新（驱动源从原子 `u1` 变 `u1:assign#N` 穿透路径）；全量 1468
+  passed；benchmark 真实语料 7 工程对拍数字与基线逐项一致（共识 44/
+  抑制 34/范围外 156）——穿透零新增误报/漏报。
+- **verilog-ethernet 实测**：udp_complete 入口 17 模块 1291 信号图键、
+  **123 条穿透驱动源**（两层路径 ip_inst/ip_eth_rx_inst:assign#29）；
+  W105 9 条全在 axis_fifo 内部 generate 互斥分支（OUTPUT_FIFO_ENABLE
+  求值缺口）——**stash 对拍确认穿透前即存在，既有已知边界**（generate
+  求值未覆盖 begin 标签 else 分支形态），与本次改动无关。
+- **边界**：位置连接（ordered）output 驱动仍保守记负载（方向未知）；
+  参数覆盖沿穿透链的宽度求值未做（端口宽度含参数时穿透源照记，宽度
+  判定归 width_check B3/B4）——均为"需要时再做"。
+
 #### parser packrat 记忆化尝试（2026-08-29，已回退）
 
 背景：渲染器记忆化后（见 ROADMAP P2.3 更新），parser 是单遍管线最大热点

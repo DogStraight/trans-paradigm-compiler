@@ -360,13 +360,40 @@ class TestElaborationSignalGraph:
         )
         checker.check(str(top))
         graph = checker._signal_graph
-        # x/y 连 input a/b → 负载（u1 读取）；z 连 output y → 驱动（u1 驱动）
+        # x/y 连 input a/b → 负载（u1 读取）；z 连 output y → 驱动
+        # （P2.7 层 3 穿透：驱动源 = adder 内部 assign 驱动 y，带实例路径）
         # 键 = (模块名, 信号名)——跨模块同名信号隔离（2026-08-29 修复）
-        # inst_ref 格式 = "文件名:实例名"
+        # inst_ref 格式 = "文件名:实例名"（负载侧）/ "路径:assign#N"（驱动穿透）
         assert "u1" in [r.split(":")[-1] for r in graph[("top", "x")]["loads"]]
         assert "u1" in [r.split(":")[-1] for r in graph[("top", "y")]["loads"]]
-        assert "u1" in [r.split(":")[-1] for r in graph[("top", "z")]["drivers"]]
+        assert any("u1:assign" in r for r in graph[("top", "z")]["drivers"])
         assert "u1" not in [r.split(":")[-1] for r in graph[("top", "z")]["loads"]]
+
+    def test_dangling_output_not_driver(self, checker, tmp_path):
+        """悬空 output 端口（模块内无驱动）→ 不记驱动源（P2.7 层 3）。
+
+        对齐 Verilator elaboration：output 无驱动 = 悬空，不贡献驱动；
+        此前原子实例源会误记为驱动（与 assign 冲突误报 W105）。
+        """
+        (tmp_path / "drv.sv").write_text(
+            "module drv (output wire q);\nendmodule\n", encoding="utf-8"
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire s;\n"
+            "  drv d1 (.q(s));\n"
+            "  assign s = 1'b0;\n"  # 唯一真实驱动
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        graph = checker._signal_graph
+        assert graph[("top", "s")]["drivers"] == ["top.sv:assign#1"]
+        w105 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W105"
+        )
+        assert len(w105) == 0
 
     def test_inout_both(self, checker, tmp_path):
         (tmp_path / "mem.sv").write_text(
@@ -398,7 +425,7 @@ class TestElaborationSignalGraph:
         graph = checker._signal_graph
         assert ("top", "1'b0") not in graph
         assert ("top", "8'hFF") not in graph
-        assert "u1" in [r.split(":")[-1] for r in graph[("top", "z")]["drivers"]]
+        assert any("u1:assign" in r for r in graph[("top", "z")]["drivers"])
 
     def test_multi_driver_detected(self, checker, tmp_path):
         """同一信号被两个实例 output 连接 → 多驱动（MULTIDRIVEN 地基）。"""
@@ -585,16 +612,19 @@ class TestMultiDriverCheck:
         assert "W105" not in codes
 
     def test_cross_file_multi_driver_reported_once(self, checker, tmp_path):
-        """跨文件多驱动：信号在两个文件分别被驱动 → 报一次（所在文件）。"""
+        """跨文件多驱动：信号被两个实例驱动（穿透到内部 assign）→ 报一次。"""
         (tmp_path / "drv.sv").write_text(
-            "module drv (output wire q);\nendmodule\n", encoding="utf-8"
+            "module drv (output wire q);\n"
+            "  assign q = 1'b0;\n"  # 有真实驱动源（穿透到 assign）
+            "endmodule\n",
+            encoding="utf-8",
         )
         top = tmp_path / "top.sv"
         top.write_text(
             "module top;\n"
             "  wire s;\n"
             "  drv d1 (.q(s));\n"
-            "  drv d2 (.q(s));\n"  # 同文件双驱动
+            "  drv d2 (.q(s));\n"  # 两个实例都穿透驱动 s → 多驱动
             "endmodule\n",
             encoding="utf-8",
         )
