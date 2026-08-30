@@ -1950,3 +1950,60 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   [svlint general_always_no_edge](https://github.com/dalance/svlint/blob/master/md/syntaxrules-explanation-general_always_no_edge.md)、
   [verible style_lint.md](https://github.com/chipsalliance/verible/blob/master/doc/style_lint.md)、
   [iverilog(1) manpage](https://man.freebsd.org/cgi/man.cgi?query=iverilog&sektion=1)
+
+#### 知名 AGENTS.md/指令文件范式调研（2026-08-29，见贤思齐）
+
+- 定位：调研业界对"agent 指令文件（AGENTS.md/CLAUDE.md）怎么写才有效"的成熟
+  共识，反哺 tpc 自己的 AGENTS.md（刚连续补了多条范式，正需要"指令文件自身的
+  纪律"）。来源：agents.md 开放规范（agentpatterns-ai，Linux Foundation 旗下
+  Agentic AI Foundation 治理，60k+ 项目采用）、Anthropic 官方 CLAUDE.md 指南、
+  Tembo 综述（2026-06）、sqlite AGENTS.md 实例（125 行）、"AGENTS.md 作目录
+  而非百科"模式文档（引用 OpenAI Harness 工程结论）
+
+**一、来源对比**
+
+| 来源 | 核心主张 | 与 tpc 现状的关系 |
+|---|---|---|
+| agents.md 开放规范 | 项目导向非文档：含"项目是什么(2-3 句)/约定位置/非显然约束/起步步骤"，不含"约定本身/架构文档/流程步骤"（一律链接）；~100 行指针 | tpc 已部分指针式（MODEL_INDEX/docs/decisions 链接）；行为范式内联但文件 ~100 行在预算内 |
+| Anthropic CLAUDE.md 指南 | 文件进 system prompt 故须精简；渐进披露（拆分子文档再引用）；只加真实痛点（"Each addition should solve a real problem"）；持续维护非一次性 | "只加真实痛点"与我们按实际摩擦加范式一致；渐进披露 tpc 部分采用（references.md 承接调研） |
+| Tembo 综述 | 命令优先于散文（"Run pnpm test" 优于"我们有完整测试策略"）；写告诉新同事的话；**不复制 linter**（一行"风格由 linter 强制"胜过四十条规则）；漂移警告（引用已删脚本比没有更糟）；从小处开始按证据增长；提交进 git | "不复制 linter/门禁"对我们有新意：测试门禁/工具强制的项不必在 AGENTS.md 重复 |
+| sqlite AGENTS.md | 125 行实例：项目性质+非显然约束（public domain/不收 agentic 代码/Fossil 非 Git）→ 构建/测试命令（可复制）→ 单行架构管线 → **"不要编辑生成文件"表**（含再生成命令）→ 编码约定 → 参考链接 | "不要编辑生成文件"与"语言知识不进代码"同构（改 grammar TOML 不改引擎）——同是"改源头不改产物" |
+| TOC 模式（OpenAI Harness） | 单体文件四败：上下文挤占/注意稀释/范围不可验/即腐；解法=指针图+版本化 docs；**规则生命周期元数据 Source/Applicability/Expiry**；"已能正确做就删"（Anthropic 同：agent 无指令也做对 → 删或转 hook）；机械保鲜（CI 断链/未引用检测） | 生命周期元数据对我们有新意；"已能正确做就删"与不留向后兼容/完成即删同向，但只管到代码没管到指令文件本身 |
+
+**二、亮点单独说明**
+
+- 🔥 **指令文件的删除谓词（"已能正确做就删"）**：Anthropic/TOC 模式共识——指令
+  文件自身需要修剪纪律：某条指令 agent 没有它也稳定做对 → 删掉或转 hook；过期
+  指令比没有更糟（Tembo 漂移警告）。tpc 的"完成即删/不留向后兼容"管 TODO 与
+  代码，**没管 AGENTS.md 自身**——刚连加多条范式后正需要这条
+- 🔥 **规则生命周期元数据（Source/Applicability/Expiry）**：每条规则带"为什么加
+  /何时适用/何时可删"，删除从开放判断变封闭谓词——与我们"不留向后兼容"同纪律
+  的指令文件版
+- 💡 **不复制 linter/门禁**："风格由 linter 强制，修它报的就行"——AGENTS.md 不
+  重复测试门禁/工具已强制的项，省上下文预算
+- 💡 **命令优先于散文**：能写命令不写描述（sqlite 构建/测试节直接可复制）——tpc
+  的"运行/测试"节已是命令式，保持
+- 📌 **上下文预算**（ETH Zurich 评测：指令文件使推理成本平均 +20%）：文件保持
+  ~100 行量级；后续范式沉淀优先进 references.md 而非 AGENTS.md（已在做）
+- 📌 **"改源头不改产物"**（sqlite 生成文件表）：tpc 已有更严版本（语言知识不进
+  代码 + 引擎零硬编码门禁），无需新增
+
+**三、可实现性评估（对 tpc AGENTS.md）**
+
+- 🔥 可做（低成本）：新增"指令文件修剪"纪律——某条范式 agent 无指令也稳定执行
+  即删（与 TODO 完成即删并列，进 AGENTS.md 协作行为范式）
+- 💡 可做（低成本）：给现有范式块补"何时可删"一行（删除谓词，与不留向后兼容
+  同构）
+- 💡 可做（中成本）：行为范式迁 docs/ 的 conventions 文件、AGENTS.md 只留索引
+  （指针化）——个人项目暂不必要（文件仍在 ~100 行预算内），观察增长再动
+- 📌 不做：逐条三字段元数据（Source/Applicability/Expiry 标注）——对 ~6 条范式
+  过重，"何时可删"单行已够
+- ❌ 不借鉴：自动生成指令文件（Tembo 明确反对：生成物缺最重要的架构决策）；
+  monorepo 嵌套 AGENTS.md（tpc 单仓单文件）
+- 来源：[agents.md 开放规范](https://agents.md)、
+  [Anthropic: Using CLAUDE.md files](https://claude.com/blog/using-claude-md-files)、
+  [Tembo: What Is AGENTS.md? How to Write One in 2026](https://www.tembo.io/blog/agents-md)、
+  [sqlite AGENTS.md（GitHub 镜像）](https://github.com/sqlite/sqlite/blob/master/AGENTS.md)、
+  [AGENTS.md as Table of Contents, Not Encyclopedia](https://github.com/agentpatterns-ai/website/blob/main/instructions/agents-md-as-table-of-contents.md)、
+  [OpenAI Harness Engineering](https://openai.com/index/harness-engineering/)、
+  [ETH Zurich 评测（上下文成本）](https://arxiv.org/abs/2602.11988v2)
