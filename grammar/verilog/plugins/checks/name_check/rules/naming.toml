@@ -164,3 +164,46 @@ scope = ["rtl", "tb"]
 message = "类型名 '{name}' 不符合小写下划线约定（{pattern}）"
 kind = "type"
 pattern = "^_?[a-z][a-z0-9_]*$"
+
+# ── 前后缀语义约定（2026-08-29 配置面，防错；handler 兜底） ───────────
+# 比风格更有价值的是前后缀语义（防接错方向/防类型混淆）。蓝本：svlint
+# prefix_input/output/inout（require 模式 + 可配置前缀）+ 类型后缀扩展。
+# 规则数据声明式：direction_suffix / kind_suffix 表；`_` 前缀豁免。
+# `_n` 低有效 / clk_/rst_ 前缀不做——2005 无 clock/reset 符号 kind，
+# 需用途分析（事件控制/复位条件），主流 svlint 亦无（references.md
+# 「命名规则配置面设计」）。
+
+[[checks]]
+id = "NC014"
+default = false
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "端口 '{name}' 方向后缀不一致（声明 {direction}，后缀表示另一方向）"
+kind = "port"
+handler = "_prefix_suffix_check.py:check_direction_suffix"
+direction_suffix = { input = "_i", output = "_o", inout = "_io" }
+# require = true 时未按本方向后缀命名也报（强约定模式）
+
+[[checks]]
+id = "NC015"
+default = false
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "信号 '{name}' 类型后缀不一致（声明 {kind}，后缀表示另一类型）"
+kind = "wire"
+handler = "_prefix_suffix_check.py:check_kind_suffix"
+kind_suffix = { wire = "_w", reg = "_r" }
+# require = true 时未按本类型后缀命名也报（强约定模式）
+
+[[checks]]
+id = "NC016"
+default = false
+category = "naming"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "信号 '{name}' 类型后缀不一致（声明 {kind}，后缀表示另一类型）"
+kind = "reg"
+handler = "_prefix_suffix_check.py:check_kind_suffix"
+kind_suffix = { wire = "_w", reg = "_r" }
