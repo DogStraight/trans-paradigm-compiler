@@ -1706,11 +1706,28 @@ FPGA 顶层），实测其实例树深度，回答"补齐 P2.7 后 elaboration �
 - **verilog-ethernet 实测**：udp_complete 入口 17 模块 1291 信号图键、
   **123 条穿透驱动源**（两层路径 ip_inst/ip_eth_rx_inst:assign#29）；
   W105 9 条全在 axis_fifo 内部 generate 互斥分支（OUTPUT_FIFO_ENABLE
-  求值缺口）——**stash 对拍确认穿透前即存在，既有已知边界**（generate
-  求值未覆盖 begin 标签 else 分支形态），与本次改动无关。
+  求值缺口）——**stash 对拍确认穿透前即存在**，随即修复（见下"generate
+  `!参数` 条件求值"）。
 - **边界**：位置连接（ordered）output 驱动仍保守记负载（方向未知）；
   参数覆盖沿穿透链的宽度求值未做（端口宽度含参数时穿透源照记，宽度
   判定归 width_check B3/B4）——均为"需要时再做"。
+
+#### generate `!参数` 条件求值补全（2026-08-31，W105 误报 9→0）
+
+- 定位：verilog-ethernet axis_fifo `generate if (!OUTPUT_FIFO_ENABLE)
+  ... else begin : output_fifo` 形态 9 条 W105 误报（Verilator 0 报
+  MULTIDRIVEN）。根因：`_eval_gen_cond` 对 `!参数` 返回 None（含标识符
+  的表达式不匹配纯数字正则 → 不可判）→ `expand_if` 整块按当前活性
+  展开 → 双分支全 active → else 分支 assign 被误计驱动源。
+- **修复（analyzer/checker.py）**：`_eval_gen_cond` 增 `!参数名` 分支
+  （`re.fullmatch(r"!\s*([A-Za-z_]\w*)")` → 参数值数字 → `int(v)==0`）。
+  顺带清理 `_branch_active` 重复定义（L1061 死代码，被 L1085 覆盖）。
+- **验证**：verilog-ethernet 9 条 W105 → **0**；回归测试 +2
+  （`!EN` else 不报 / `!EN` 选中分支内真双驱动仍报）；真实语料对拍
+  数字与基线逐项一致（共识 44 含 picorv32 W105 8 条不变——修复
+  精确零误伤）；全量 1468 → 1470 passed（+2）。
+- **边界**：`!参数` 只处理纯数字参数值；`!参数` 值含表达式（如
+  `!WIDTH/2`）仍不可判 → 保守全 active（不误伤真多驱动）。
 
 #### parser packrat 记忆化尝试（2026-08-29，已回退）
 

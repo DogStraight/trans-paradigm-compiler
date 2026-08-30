@@ -169,8 +169,8 @@
 > 不记驱动对齐 Verilator；黑盒模块未定义 → 原子源兜底）。verilog-
 > ethernet 实测 17 模块 123 条穿透驱动源（两层路径如
 > ip_inst/ip_eth_rx_inst:assign#29）。真实语料 7 工程对拍数字与基线
-> 逐项一致（穿透零新增误报/漏报）；W105 的 generate 求值缺口
-> （axis_fifo OUTPUT_FIFO_ENABLE else 分支）为既有已知边界。
+> 逐项一致（穿透零新增误报/漏报）；axis_fifo generate `!参数` 求值
+> 缺口 9 条误报已修（见 references.md「generate `!参数` 条件求值」）。
 
 - [x] ~~层 1 补全：design-unit 注册表 + 依赖拓扑排序~~（module_index 既有）
 - [x] ~~层 2：端口连接关系展开（实例连接信号 → 端口 → 信号解析）~~（3acae77）

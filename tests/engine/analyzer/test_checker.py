@@ -740,6 +740,62 @@ class TestMultiDriverCheck:
         assert len(w105) == 1
         assert "s" in w105[0]["message"]
 
+    def test_generate_not_param_else_no_w105(self, checker, tmp_path):
+        """generate `if (!PARAM)` else 互斥分支：不报 W105（2026-08-31 补）。
+
+        axis_fifo `if (!OUTPUT_FIFO_ENABLE) ... else begin : output_fifo`
+        形态——此前 `!参数` 条件不可判 → 双分支全 active → 9 条误报。
+        """
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top (output wire sig);\n"
+            "  parameter EN = 0;\n"
+            "  wire s;\n"
+            "  generate\n"
+            "    if (!EN) begin : g_a\n"
+            "      assign s = 1'b0;\n"
+            "    end else begin : g_b\n"
+            "      assign s = 1'b1;\n"
+            "    end\n"
+            "  endgenerate\n"
+            "  assign sig = s;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w105 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W105"
+        )
+        assert len(w105) == 0
+
+    def test_generate_not_param_true_branch_multi_driver_reported(
+        self, checker, tmp_path
+    ):
+        """`if (!EN)` 选中分支（EN=0 → !EN 真）内真双驱动 → 仍报 W105。"""
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top (output wire sig);\n"
+            "  parameter EN = 0;\n"
+            "  wire s;\n"
+            "  generate\n"
+            "    if (!EN) begin : g_a\n"
+            "      assign s = 1'b0;\n"
+            "      assign s = 1'b1;\n"  # 选中分支内真双驱动
+            "    end else begin : g_b\n"
+            "      assign s = 1'b0;\n"
+            "    end\n"
+            "  endgenerate\n"
+            "  assign sig = s;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w105 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W105"
+        )
+        assert len(w105) == 1
+        assert "s" in w105[0]["message"]
+
 
 # ── inout 端口须 tri W106（svlint inout_with_tri = Veryl missing_tri） ──
 

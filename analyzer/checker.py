@@ -1066,30 +1066,6 @@ class ProjectChecker:
         未选中 → False。else-if 链递归（ElseIfBlock 与 IfBlock 同构）。
         多个嵌套 generate 全部选中才 True。条件不可判 → True 保守保留
         （不因无法判定而漏报真多驱动，对齐 Verilator V3Param 语义的
-        保守侧）。注：信号图构建走 _precompute_generate_active 的 O(1)
-        查表路径，本方法保留供其他调用方（精度等价）。
-        """
-        for gnode in self._iter_nodes(mod_node):
-            if gnode.node_name != "GenerateBlock":
-                continue
-            for sub in getattr(gnode, "sub_node", None) or []:
-                if not isinstance(sub, Node):
-                    continue
-                if sub.node_name == "IfBlock" and self._subtree_contains(sub, target):
-                    return self._if_branch_active(sub, target, params)
-                # ElseIfBlock 也可能直接挂在 GenerateBlock 下（罕见）
-                if sub.node_name == "ElseIfBlock" and self._subtree_contains(sub, target):
-                    return self._if_branch_active(sub, target, params)
-        return True
-
-    def _branch_active(self, mod_node: Node, target: Node, params: dict) -> bool:
-        """模块内 target 是否处于选中的 generate 分支（递归沿祖先）。
-
-        遍历模块子树找 GenerateBlock→IfBlock/ElseIfBlock；若 target 在某
-        个条件分支块内，求值 condition（参数表），判定该分支是否选中；
-        未选中 → False。else-if 链递归（ElseIfBlock 与 IfBlock 同构）。
-        多个嵌套 generate 全部选中才 True。条件不可判 → True 保守保留
-        （不因无法判定而漏报真多驱动，对齐 Verilator V3Param 语义的
         保守侧）。
         """
         for gnode in self._iter_nodes(mod_node):
@@ -1146,6 +1122,14 @@ class ProjectChecker:
             if v.isdigit():
                 return int(v) != 0
             return None  # 参数值本身非纯数字 → 不可判
+        # 一元 ! 参数（`!OUTPUT_FIFO_ENABLE` 等，2026-08-31 补：axis_fifo
+        # generate else 分支此前不可判 → 双分支全 active → 9 条 W105 误报）
+        m = re.fullmatch(r"!\s*([A-Za-z_][A-Za-z0-9_]*)", text)
+        if m and m.group(1) in params:
+            v = params[m.group(1)].strip()
+            if v.isdigit():
+                return int(v) == 0
+            return None
         # 含运算的简单常量表达式（1+0 / 0 && 1 等）——求值器在 width_check
         # 插件层（语言知识），引擎层只处理纯标识符/数字；复杂表达式保守
         try:
