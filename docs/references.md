@@ -2220,3 +2220,66 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 - 验证：最小复现 P=1/P=0 双跑 0 报、else-if 三链（ENABLE_FAST_MUL →
   ENABLE_MUL → else）0 报、**选中分支内真多驱动仍报**（u1+u2 双实例）、
   picorv32 8 条 W105 全消；3 个新测试进 test_checker.py
+
+#### 试水第四弹扩展：三工具对照（2026-08-29 立项，Verilator + Verible + svlint）
+
+- 定位：Verilator 单 oracle 对拍完成后，对照测试扩展到 **Verible lint**
+  （已捆绑 tests/differential/.tools/verible/verible-verilog-lint.exe，
+  零安装）与 **svlint**（Rust，规则集与 tpc 重合最高 159 条；本机 rustup
+  无 toolchain，先 `rustup default stable` 再 `cargo install svlint`，
+  编译耗时几分钟，后台装）。三个 oracle 覆盖不同检查维度：
+  - Verilator：语义最强（位宽/锁存/未使用/多驱动）——已闭环
+  - Verible lint：语法/风格向（~60 条，case 缺 default/命名/宏卫生），
+    tpc 差分测试已带其 exe，规则 ID 稳定（verible-verilog-lint --rules）
+  - svlint：规则工程化范本（159 条，命名族/宽度族/锁存族全谱），
+    与 tpc 规则集重合最高——此前调研的"蓝本"落地为 oracle 实证
+- 差异归一化：三 oracle 各自的规则 ID → tpc 规则码映射表（svlint 规则
+  名如 explicit_case_default / verilator width_*；Verible 规则名如
+  case-missing-default / line-length）；判定模型沿用 Verilator 对拍
+  （共识/仅 tpc/仅 oracle），lint_off 抑制识别 + 条件编译行号偏移处理
+  复用
+- 边界如实：三工具输出格式不同（Verilator %Warning / Verible 文本 /
+  svlint miette JSON）需分别解析；svlint 需要 cargo 装（~5-10 分钟）；
+  Verible 默认规则集与 tpc 重合度低（风格向），对照重点在 case/命名
+- 阶段：① 装 svlint（后台）② Verible lint 规则清单 + 探针 ③
+  eval_benchmark.py 扩展多 oracle ④ 三工具真实语料 + 评测集对拍
+  ⑤ 差异处置三选 + 落档
+
+#### 试水第四弹扩展执行结果：三工具对照（2026-08-29）
+
+- 工具落地：
+  - **Verible**（已捆绑 tests/differential/.tools/verible/verible-verilog-lint.exe
+    v0.0-4141，零安装）；输出 `file:line:col-col: msg [Style: x] [rule]`，
+    `--help_rules=all` 列 60 条规则；`--ruleset=all` 全开
+  - **svlint**（用户提供预编译 v0.9.5，E:\research\svlint\release\bin\
+    svlint.exe；cargo install 因 Rust 1.98 与旧依赖 build script 不兼容
+    失败——proc-macro2/winapi 等）；输出 miette ANSI 彩色格式
+    （`Fail: rule` + `--> file:line:col`），须 strip \x1b 转义再解析；
+    无 CLI 规则开关，默认全开 155 条规则，靠解析时映射表过滤
+- harness 扩展（eval_benchmark.py）：_ORACLES 注册表（run 函数 + 码映射
+  表 + 范围外码集），--oracle=name 可重复；_tpc_diags_all 覆盖文件组
+  全部文件（oracle 扫全目录 vs entry 递归漏扫独立文件——project_bus_ctrl
+  的 reg_if 不被 arbiter 依赖导致 CC001 漏报，修复后共识达成）
+- 真实语料三工具对照结果（共识 66 = Verilator 44 + svlint 22）：
+  | oracle | 共识 | 仅 tpc | 仅 oracle | 范围外 | 结论 |
+  |---|---|---|---|---|---|
+  | Verilator | 44 | 18 | 326 | 156 | 语义最强（位宽/锁存/未使用/多驱动），已闭环 |
+  | Verible | 0 | 40 | 575 | 0 | 纯风格向（port-name-suffix/one-module-per-file），无语义重叠；默认规则集差异 = tpc NC 默认关 vs Verible 默认开 |
+  | svlint | 22 | 62 | 8 | 999 | CC001 族语义重叠（22 条共识）；其余 999 风格规则范围外 |
+  - svlint 共识 22 = explicit_case_default ↔ CC001（case 完整性双工具
+    验证一致）；explicit_if_else 是风格规则（SV 要求显式 always_* +
+    完整 if-else，时序也报）**不映射 LC001**（避免把风格差异当语义共识）
+  - **能力域差异（重要结论）**：svlint 155 条规则无 unused/多驱动/端口
+    完整性/锁存语义规则——单文件语法风格 lint，**不做跨文件语义**；
+    tpc 的 UN001/W101/W104/W105/LC001 语义层 svlint 无对应 = 非漏报，
+    是能力域差异。印证 P1.10 调研定论：**跨文件类（实例化端口/未使用/
+    端口完整性）只有 tpc 能做**（svlint/Verible 单文件做不了）
+  - inout_with_tri 严格度差异：svlint 要求 inout 必须显式 tri（裸 inout
+    报），tpc W106 只报显式非 tri（裸 inout 默认 net 合法三态，Verilog-
+    2005 宽容侧）——规则严格度选择非 bug
+  - Verible 对 picorv32/tv80 ORACLE-SKIP（预处理宏 PICORV32_REGS 未定义
+    报错——Verible 宏处理比 Verilator 严格），harness 标 SKIP 不当漏报
+- 评测集三工具对照：Verible 共识 3（case-missing-default↔CC001）、svlint
+  共识 4（explicit_case_default↔CC001）——case 完整性三工具一致；tpc 的
+  语义规则（LC001/W104/W105/W201/W202/UN001）svlint/Verible 无对应 =
+  能力域差异

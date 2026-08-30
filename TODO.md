@@ -29,6 +29,27 @@
 - [x] ~~真实语料 + 评测集对拍，逐差异处置三选~~（完成：4 bug 修复 + 边界落档）
 - [x] ~~结论落档 references.md + 全量回归绿~~（完成：1464 passed + 8 skipped，hardcode gate PASS）
 
+## 三工具对照测试（2026-08-29 立项，Verilator + Verible + svlint，方案见 references.md「试水第四弹扩展」）
+
+> Verilator 单 oracle 对拍闭环后，对照扩展到 Verible lint（已捆绑，零安装）
+> 与 svlint（用户提供预编译 v0.9.5）。**已全闭环（2026-08-29）**：
+> harness _ORACLES 注册表（run + 码映射 + 范围外码集）、--oracle=name 可
+> 重复、_tpc_diags_all 全文件覆盖（修复 entry 递归漏扫独立文件）。真实
+> 语料三工具共识 66（Verilator 44 + svlint 22）；**关键结论**：svlint/
+> Verible 是单文件语法风格 lint，跨文件语义（UN001/W101/W104/W105/LC001
+> 锁存语义）无对应规则 = 能力域差异非漏报，印证"跨文件类只有 tpc 能做"。
+> 细节见 references.md「试水第四弹扩展执行结果」。
+
+- [x] ~~svlint 安装（用户提供预编译 v0.9.5；cargo install 因 Rust 1.98
+      与旧依赖 build script 不兼容失败）~~（完成）
+- [x] ~~Verible lint 规则清单 + 输出格式探针~~（完成：60 条规则，
+      `file:line:col-col: msg [rule]`）
+- [x] ~~eval_benchmark.py 扩展多 oracle~~（完成：_ORACLES 注册表 +
+      --oracle=name + _tpc_diags_all）
+- [x] ~~三工具真实语料 + 评测集对拍，差异处置三选~~（完成：共识 66、
+      能力域差异落档）
+- [x] ~~结论落档 references.md + 全量回归绿~~（完成）
+
 ## P1 — Verilog 实例完善
 
 ### P1.8 Verilog 语法补全 + 仿真语法插件化（发布前置）

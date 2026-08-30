@@ -1,24 +1,29 @@
-"""eval_benchmark.py — 对标测试（试水第四弹）：tpc check vs Verilator lint。
+"""eval_benchmark.py — 对标测试（试水第四弹）：tpc check vs 多 oracle lint。
 
-同一输入分别跑 tpc 检查链与 Verilator --lint-only -Wall，按"可比码族"
-映射表对齐诊断，输出差异分类：
+同一输入分别跑 tpc 检查链与参考工具（Verilator / Verible / svlint），
+按"可比码族"映射表对齐诊断，输出差异分类：
 
-    共识    — tpc 报 & Verilator 报（同文件近似同行）
-    仅 tpc  — tpc 报、Verilator 不报 → FP 候选（需人工查证）
-    仅 Verilator — Verilator 报、tpc 不报 → 漏报候选 / scope 差异
-    范围外  — Verilator 的 W 码不在可比码族内（性能/风格/仿真类，
-              计数但不参与对拍判定——落档说明，不混入结论）
+    共识    — tpc 报 & oracle 报（同文件近似同行）
+    仅 tpc  — tpc 报、oracle 不报 → FP 候选（需人工查证）
+    仅 oracle — oracle 报、tpc 不报 → 漏报候选 / scope 差异
+    范围外  — oracle 的码不在可比码族内（性能/风格/仿真类，计数不判定）
 
-输入集（工程分组，Verilator 需要完整实例树）：
+输入集（工程分组，oracle 需要完整实例树）：
     real  — tests/e2e/samples/real/ref/（uart 三文件一组，其余单文件）
     acc   — tests/e2e/samples/check_accuracy/cases/（每 case 一个工程）
 
-行对齐：tpc 诊断 line 是 0-based（LSP），Verilator 是 1-based → +1；
+行对齐：tpc 诊断 line 是 0-based（LSP），oracle 是 1-based → +1；
 按 ±2 行容差匹配（诊断常落在声明行 vs 使用行）。
 
+oracle 选择（--oracle 可重复；缺省全部可用项）：
+    verilator — 语义最强（位宽/锁存/未使用/多驱动），MSYS2
+    verible   — 语法/风格向（case 缺 default/命名/宏卫生），已捆绑
+    svlint    — 规则工程化范本（159 条），cargo 安装
+
 用法:
-    python tests/e2e/eval_benchmark.py            # 真实语料
+    python tests/e2e/eval_benchmark.py            # 真实语料（全部 oracle）
     python tests/e2e/eval_benchmark.py --acc      # 评测集
+    python tests/e2e/eval_benchmark.py --oracle=verible   # 单 oracle
     python tests/e2e/eval_benchmark.py --json     # 完整 JSON
 """
 
@@ -156,6 +161,152 @@ def _run_verilator(files: list[str]) -> tuple[list[dict], list[str]]:
     return warnings, errors
 
 
+# ── Verible lint oracle ─────────────────────────────────────────
+# 已捆绑 tests/differential/.tools/verible/verible-verilog-lint.exe。
+# 输出格式：file:line:col-col: msg [Style: xxx] [rule-name]（1-based）。
+_VERIBLE_BIN = os.path.join(
+    "tests", "differential", ".tools", "verible", "verible-verilog-lint.exe"
+)
+_VERIBLE_RE = re.compile(
+    r"^([^:]+):(\d+):(\d+)(?:-\d+)?:\s+(.*?)\s*\[.*\]\s*\[([a-z0-9-]+)\]$"
+)
+# Verible 规则名 → tpc 规则码（重叠子集；风格向规则不映射 = 范围外）
+VERIBLE2T = {
+    "case-missing-default": "CC001",
+    "always-comb-blocking": "AW002",    # 组合逻辑 NBA
+    "always-ff-non-blocking": "AW001",  # 时序逻辑阻塞赋值
+    "generate-label": "NC001",          # generate 块未命名（命名族）
+    "generate-label-prefix": "NC001",
+    "module-filename": "NC001",         # 文件名≠模块名（命名族）
+    "one-module-per-file": "NC001",
+    "legacy-generate-region": "NC001",
+    "legacy-genvar-declaration": "NC001",
+    "macro-name-style": "NC001",
+    "port-name-suffix": "NC014",        # 端口后缀（对齐 tpc 方向后缀）
+    "signal-name-style": "NC001",
+    "parameter-name-style": "NC001",
+    "parameter-type-name-style": "NC001",
+}
+
+
+def _run_verible(files: list[str]) -> tuple[list[dict], list[str]]:
+    """跑 verible-verilog-lint --ruleset=all，返回 (diagnostics, errors)。"""
+    if not os.path.exists(_VERIBLE_BIN):
+        return [], ["verible 未捆绑"]
+    proc = subprocess.run(
+        [_VERIBLE_BIN, "--ruleset=all", *files],
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=180,
+    )
+    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    diags, errors = [], []
+    for line in out.splitlines():
+        m = _VERIBLE_RE.match(line.strip())
+        if m:
+            fpath, ln, col, msg, rule = m.groups()
+            diags.append({
+                "code": rule, "file": os.path.basename(fpath),
+                "line": int(ln), "col": int(col), "msg": msg.strip(),
+            })
+            continue
+        if line.strip():
+            errors.append(line.strip())
+    return diags, errors
+
+
+# ── svlint oracle ───────────────────────────────────────────────
+# 预编译二进制（用户提供，E:\research\svlint\release\bin\svlint.exe）。
+# 输出 miette 格式：`Fail: rule_name` 块 + `--> file:line:col`（1-based）。
+_SVLINT_BIN = r"E:\research\svlint\release\bin\svlint.exe"
+_SVLINT_FAIL_RE = re.compile(r"^Fail:\s*([a-z0-9_]+)")
+_SVLINT_POS_RE = re.compile(r"^-->\s+([^:]+):(\d+):(\d+)")
+# svlint 规则名 → tpc 规则码（重叠子集；命名族宽进，其余按语义精确映射）
+SVLINT2T = {
+    "explicit_case_default": "CC001",
+    "case_default": "CC001",
+    "blocking_assignment_in_always_ff": "AW001",
+    "non_blocking_assignment_in_always_comb": "AW002",
+    "generate_label": "NC001",
+    "instance_parameter_interface": "W103",
+    "port_name_suffix": "NC014",
+    "name_style": "NC001",
+    "signal_name_style": "NC001",
+    "parameter_name_style": "NC001",
+    "width_mismatch": "W201",
+    "width_truncation": "W201",
+    "inout_with_tri": "W106",
+    "unused_signal": "UN001",
+    "unused_parameter": "UN001",
+    "multi_driven": "W105",
+    "missing_port": "W104",
+}
+# svlint 规则（不映射 tpc，进范围外计数不判定）——语义差异说明：
+# explicit_if_else 是风格规则（SV 要求显式 always_* + 完整 if-else，
+# 时序 always 也报），tpc LC001 只报组合锁存语义——规则定位不同，
+# 不映射（避免把风格差异误判为漏报）。
+_SVLINT_SCOPE_OUT = {
+    "explicit_if_else",
+    "header_copyright",
+    "style_indent",
+    "module_identifier_matches_filename",
+    "default_nettype_none",
+    "explicit_parameter_storage_type",
+    "explicit_function_task_parameter_type",
+}
+
+
+def _run_svlint(files: list[str]) -> tuple[list[dict], list[str]]:
+    """跑 svlint，返回 (diagnostics, errors)。
+
+    miette 输出（ANSI 彩色）：`Fail: rule_name` 后跟 `--> file:line:col`
+    定位块 + `|` 代码框 + hint/reason。先 strip ANSI 转义再解析。
+    规则名不在 SVLINT2T 的（风格/版权/命名规则）→ 范围外，由 _classify
+    的 scope_out 处理。
+    """
+    if not os.path.exists(_SVLINT_BIN):
+        return [], ["svlint 未找到: %s" % _SVLINT_BIN]
+    proc = subprocess.run(
+        [_SVLINT_BIN, *files],
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=180,
+    )
+    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    # 去 ANSI 颜色码（\x1b[...m）
+    out = re.sub(r"\x1b\[[0-9;]*m", "", out)
+    diags, errors = [], []
+    cur_rule = None
+    for line in out.splitlines():
+        m = _SVLINT_FAIL_RE.match(line.strip())
+        if m:
+            cur_rule = m.group(1)
+            continue
+        p = _SVLINT_POS_RE.match(line.strip())
+        if p and cur_rule:
+            fpath, ln, col = p.groups()
+            diags.append({
+                "code": cur_rule, "file": os.path.basename(fpath),
+                "line": int(ln), "col": int(col), "msg": "",
+            })
+            cur_rule = None
+            continue
+        # miette 代码框（| / ^ / =）、hint/reason、空行 → 忽略；
+        # Warning（无 config）→ 忽略；其余（真错误）→ errors
+        s = line.strip()
+        if not s or s.startswith(("|", "^", "=", "hint", "reason", "Warning",
+                                  "note", "error", "Error")):
+            continue
+        errors.append(s)
+    return diags, errors
+
+
+# oracle 注册表：name → (run 函数, 码映射表, 范围外码集)
+_ORACLES = {
+    "verilator": (_run_verilator, W2T, _SCOPE_OUT),
+    "verible": (_run_verible, VERIBLE2T, set()),
+    "svlint": (_run_svlint, SVLINT2T, _SVLINT_SCOPE_OUT),
+}
+
+
 def _tpc_diags(checker, entry: str) -> tuple[list[dict], bool]:
     """跑 tpc check，返回 (诊断列表, parse_ok)。"""
     report = checker.check(entry)
@@ -172,6 +323,37 @@ def _tpc_diags(checker, entry: str) -> tuple[list[dict], bool]:
                 continue
             line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
             out.append({"code": code, "file": base, "line": line0 + 1})
+    return out, parse_ok
+
+
+def _tpc_diags_all(checker, files: list[str]) -> tuple[list[dict], bool]:
+    """跑 tpc check 覆盖文件组**全部**文件（oracle 扫全目录对齐）。
+
+    与 _tpc_diags 的差异：oracle（Verible/svlint）对每个输入文件独立扫，
+    而 tpc 从 entry 递归只能发现 entry 依赖链上的模块——多文件工程里
+    entry 不依赖的独立文件（如 project_bus_ctrl 的 reg_if 不被 arbiter
+    依赖）tpc 会漏扫。对每个文件分别 check 并合并诊断（文件级去重）。
+    """
+    out: list[dict] = []
+    parse_ok = True
+    seen: set[tuple] = set()
+    for path in files:
+        report = checker.check(path)
+        for f in report.get("files", []):
+            if not f.get("parse_ok") or f.get("syntax"):
+                parse_ok = False
+                continue
+            base = os.path.basename(f["path"])
+            for d in f.get("semantic", []):
+                code = d.get("code")
+                if not code:
+                    continue
+                line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
+                key = (code, base, line0 + 1)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append({"code": code, "file": base, "line": line0 + 1})
     return out, parse_ok
 
 
@@ -219,34 +401,40 @@ def _file_has_cond(files: list[str]) -> bool:
     return False
 
 
-def _classify(tpc_diags, vw: list[dict], lint_offs: dict[str, set] | None = None,
-              has_cond: bool = False) -> dict:
-    """按可比码族对齐两侧诊断，返回差异分类。
+def _classify(tpc_diags, ow: list[dict], lint_offs: dict[str, set] | None = None,
+              has_cond: bool = False, w2t: dict | None = None,
+              scope_out: set | None = None) -> dict:
+    """按可比码族对齐两侧诊断（tpc vs 单个 oracle），返回差异分类。
+
+    w2t: oracle 码 → tpc 码映射表（缺省 W2T）；scope_out: oracle 范围外
+    码集（缺省 _SCOPE_OUT）——只计数不判定。
 
     lint_offs: {file: 被抑制的 tpc 码集}——被抑制的 tpc 诊断不进
-    "仅 tpc（FP 候选）"（Verilator 不报是源码 lint_off 主动关闭，
+    "仅 tpc（FP 候选）"（oracle 不报是源码 lint_off 主动关闭，
     不是判断差异），单独计为"抑制（作者主动关）"。
 
     has_cond: 文件含条件编译（ifdef 等）→ 展开后行号 ≠ 源行号
     （P3.3），按行对齐不可靠：改为**同文件同码族按数量对齐**
     （共识 = 两侧数量一致；仅一侧多出 = 对应候选）。
     """
+    w2t = w2t or W2T
+    scope_out = scope_out if scope_out is not None else _SCOPE_OUT
     lint_offs = lint_offs or {}
     tpc_by_code: dict[str, list[dict]] = {}
     for d in tpc_diags:
         tpc_by_code.setdefault(d["code"], []).append(d)
-    v_by_tpc: dict[str, list[dict]] = {}   # tpc 码 -> verilator warnings（映射后）
+    v_by_tpc: dict[str, list[dict]] = {}   # tpc 码 -> oracle diagnostics（映射后）
     v_scope_out: list[dict] = []
-    for w in vw:
-        if w["code"] in _SCOPE_OUT:
+    for w in ow:
+        if w["code"] in scope_out:
             v_scope_out.append(w)
             continue
-        tcode = W2T.get(w["code"])
+        tcode = w2t.get(w["code"])
         if tcode:
             v_by_tpc.setdefault(tcode, []).append(w)
 
     consensus, only_tpc, only_v, suppressed = [], [], [], []
-    # 共识 / 仅 tpc：对每个 tpc 诊断找 Verilator 对应
+    # 共识 / 仅 tpc：对每个 tpc 诊断找 oracle 对应
     matched_v = set()
     if has_cond:
         # 条件编译文件：行号不可比（展开后 vs 源，P3.3）——按码族数量对齐：
@@ -257,7 +445,7 @@ def _classify(tpc_diags, vw: list[dict], lint_offs: dict[str, set] | None = None
             for i, d in enumerate(diags):
                 if i < len(vlist):
                     matched_v.add(i)
-                    consensus.append({"tpc": d, "verilator": vlist[i]})
+                    consensus.append({"tpc": d, "oracle": vlist[i]})
                 elif code in lint_offs.get(d["file"], set()):
                     suppressed.append(d)
                 else:
@@ -270,13 +458,13 @@ def _classify(tpc_diags, vw: list[dict], lint_offs: dict[str, set] | None = None
                             if i not in matched_v and _near(d, w)), None)
                 if hit is not None:
                     matched_v.add(vlist.index(hit))
-                    consensus.append({"tpc": d, "verilator": hit})
+                    consensus.append({"tpc": d, "oracle": hit})
                 elif code in lint_offs.get(d["file"], set()):
                     # 源码 lint_off 主动关闭该族 → 作者明确不想要，非 FP 候选
                     suppressed.append(d)
                 else:
                     only_tpc.append(d)
-    # 仅 Verilator：未匹配的（含扩展侧单独归一类）
+    # 仅 oracle：未匹配的（含扩展侧单独归一类）
     v_unmatched = [
         w for i, (code, w) in enumerate(
             (c, w) for c, ws in v_by_tpc.items() for w in ws
@@ -321,68 +509,91 @@ def _acc_groups() -> list[dict]:
     return groups
 
 
-def run(checker, groups, label: str) -> tuple[list[dict], dict]:
+def run(checker, groups, label: str,
+        oracles: list[str] | None = None) -> tuple[list[dict], dict]:
+    """对每个工程跑 tpc + 选定 oracle(s)，返回 (rows, summary)。
+
+    oracles: 选定的 oracle 名列表（缺省全部可用项）。每 oracle 独立
+    classify（共识/仅 tpc/仅 oracle），rows 每工程每 oracle 一行。
+    """
+    oracles = oracles or list(_ORACLES.keys())
     rows = []
     stats = {
-        "groups": 0, "verilator_skip": 0, "tpc_parse_fail": 0,
+        "groups": 0, "oracle_skip": 0, "tpc_parse_fail": 0,
         "consensus": 0, "only_tpc": 0, "only_v": 0, "suppressed": 0,
         "v_scope_out": 0, "v_expand": 0,
+        "per_oracle": {o: {"consensus": 0, "only_tpc": 0, "only_v": 0,
+                           "suppressed": 0, "scope_out": 0}
+                       for o in oracles},
     }
     for g in groups:
         stats["groups"] += 1
-        vw, verr = _run_verilator(g["files"])
-        if verr and not vw:
-            # Verilator 硬错误（如 MODMISSING 缺子模块）→ 无法对拍，跳过
-            stats["verilator_skip"] += 1
-            rows.append({"name": g["name"], "verdict": "VERILATOR-SKIP",
-                         "v_errors": verr})
-            continue
         entry = g.get("entry", g["files"][0])
-        tpc, tpc_parse_ok = _tpc_diags(checker, entry)
-        if not tpc and not vw and tpc_parse_ok:
-            rows.append({"name": g["name"], "verdict": "CLEAN-BOTH"})
-            continue
+        # tpc 检查覆盖文件组全部文件（oracle 扫全目录对齐；entry 递归
+        # 会漏扫 entry 不依赖的独立文件）
+        tpc, tpc_parse_ok = _tpc_diags_all(checker, g["files"])
         if not tpc_parse_ok:
             # tpc 解析失败（如 darkriscv 条件编译嵌套位置，P1.5）→
             # 0 诊断是"假干净"，不能当 MISS/共识，标为无法对拍
             stats["tpc_parse_fail"] += 1
-            rows.append({"name": g["name"], "verdict": "TPC-PARSE-FAIL",
-                         "v": vw})
+            rows.append({"name": g["name"], "verdict": "TPC-PARSE-FAIL"})
             continue
         lint_offs = _file_lint_offs(g["files"])
         has_cond = _file_has_cond(g["files"])
-        cls = _classify(tpc, vw, lint_offs, has_cond)
-        cls["v_errors"] = verr
-        verdict = "OK"
-        if cls["only_tpc"]:
-            verdict = "FP-CANDIDATE"
-        elif cls["only_v"]:
-            verdict = "MISS-CANDIDATE"
-        stats["consensus"] += len(cls["consensus"])
-        stats["only_tpc"] += len(cls["only_tpc"])
-        stats["only_v"] += len(cls["only_v"])
-        stats["suppressed"] += len(cls["suppressed"])
-        stats["v_scope_out"] += len(cls["v_scope_out"])
-        stats["v_expand"] += len(cls["v_expand"])
-        rows.append({"name": g["name"], "verdict": verdict,
-                     "tpc": tpc, "v": vw, **cls})
+        for oname in oracles:
+            run_fn, w2t, scope_out = _ORACLES[oname]
+            ow, oerr = run_fn(g["files"])
+            if oerr and not ow:
+                # oracle 硬错误（MODMISSING 缺子模块/未安装）→ 无法对拍
+                stats["oracle_skip"] += 1
+                rows.append({"name": g["name"], "oracle": oname,
+                             "verdict": "ORACLE-SKIP", "o_errors": oerr})
+                continue
+            if not tpc and not ow:
+                rows.append({"name": g["name"], "oracle": oname,
+                             "verdict": "CLEAN-BOTH"})
+                continue
+            cls = _classify(tpc, ow, lint_offs, has_cond, w2t, scope_out)
+            cls["o_errors"] = oerr
+            verdict = "OK"
+            if cls["only_tpc"]:
+                verdict = "FP-CANDIDATE"
+            elif cls["only_v"]:
+                verdict = "MISS-CANDIDATE"
+            po = stats["per_oracle"][oname]
+            po["consensus"] += len(cls["consensus"])
+            po["only_tpc"] += len(cls["only_tpc"])
+            po["only_v"] += len(cls["only_v"])
+            po["suppressed"] += len(cls["suppressed"])
+            po["scope_out"] += len(cls["v_scope_out"])
+            stats["consensus"] += len(cls["consensus"])
+            stats["only_tpc"] += len(cls["only_tpc"])
+            stats["only_v"] += len(cls["only_v"])
+            stats["suppressed"] += len(cls["suppressed"])
+            stats["v_scope_out"] += len(cls["v_scope_out"])
+            stats["v_expand"] += len(cls["v_expand"])
+            rows.append({"name": g["name"], "oracle": oname,
+                         "verdict": verdict, "tpc": tpc,
+                         "oracle_diags": ow, **cls})
     summary = {
         "输入工程数": stats["groups"],
-        "Verilator 跳过（硬错误）": stats["verilator_skip"],
+        "oracle 跳过（硬错误/未安装）": stats["oracle_skip"],
+        "tpc 解析失败": stats["tpc_parse_fail"],
         "共识（双方同报）": stats["consensus"],
         "仅 tpc（FP 候选）": stats["only_tpc"],
-        "仅 Verilator（漏报/scope 候选）": stats["only_v"],
+        "仅 oracle（漏报/scope 候选）": stats["only_v"],
         "tpc 被源码 lint_off 抑制": stats["suppressed"],
-        "Verilator 范围外码（计数不判定）": stats["v_scope_out"],
-        "Verilator 扩展侧 WIDTHEXPAND": stats["v_expand"],
+        "oracle 范围外码（计数不判定）": stats["v_scope_out"],
+        "oracle 扩展侧 WIDTHEXPAND": stats["v_expand"],
         "groups": stats["groups"],
-        "verilator_skip": stats["verilator_skip"],
+        "oracle_skip": stats["oracle_skip"],
         "consensus": stats["consensus"],
         "only_tpc": stats["only_tpc"],
         "only_v": stats["only_v"],
         "suppressed": stats["suppressed"],
         "v_scope_out": stats["v_scope_out"],
         "v_expand": stats["v_expand"],
+        "per_oracle": stats["per_oracle"],
     }
     return rows, summary
 
@@ -392,42 +603,60 @@ def main() -> None:
     os.chdir(_ROOT)
     checker = ProjectChecker(rules_dir="grammar/verilog")
     use_acc = "--acc" in sys.argv
+    # --oracle=name 可重复；缺省全部注册 oracle
+    oracles = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--oracle=")]
+    if not oracles:
+        oracles = list(_ORACLES.keys())
     groups = _acc_groups() if use_acc else [
         {**g, "files": [os.path.join(_REAL_DIR, f) for f in g["files"]],
          "entry": os.path.join(_REAL_DIR, g["files"][0])}
         for g in _GROUPS
     ]
-    rows, summary = run(checker, groups, "acc" if use_acc else "real")
+    rows, summary = run(checker, groups, "acc" if use_acc else "real",
+                        oracles=oracles)
 
     if "--json" in sys.argv:
         print(json.dumps({"rows": rows, "summary": summary},
                          ensure_ascii=False, indent=2))
         return
 
+    oracle_label = "+".join(oracles)
     print("=" * 100)
-    print(f"对标测试：tpc check vs Verilator ({'评测集' if use_acc else '真实语料'})")
+    print(f"对标测试：tpc check vs {oracle_label} "
+          f"({'评测集' if use_acc else '真实语料'})")
     print("=" * 100)
     for r in rows:
         tag = r.get("verdict", "")
         extra = ""
         if "consensus" in r:
             extra = (f"共识={len(r['consensus'])} 仅tpc={len(r['only_tpc'])} "
-                     f"仅V={len(r['only_v'])} 抑制={len(r['suppressed'])} "
-                     f"范围外={len(r['v_scope_out'])} 扩展={len(r['v_expand'])}")
-        print(f"{r['name']:<24}{tag:<16}{extra}")
+                     f"仅{oracle_label}={len(r['only_v'])} "
+                     f"抑制={len(r['suppressed'])} 范围外={len(r['v_scope_out'])}")
+        name = r["name"]
+        if r.get("oracle"):
+            name = f"{r['name']}[{r['oracle']}]"
+        print(f"{name:<30}{tag:<16}{extra}")
     print("=" * 100)
     for k, v in summary.items():
+        if k == "per_oracle":
+            for o, po in v.items():
+                print(f"  {o:<12}共识={po['consensus']} 仅tpc={po['only_tpc']} "
+                      f"仅o={po['only_v']} 抑制={po['suppressed']} "
+                      f"范围外={po['scope_out']}")
+            continue
         print(f"{k:<36}{v}")
 
-    # 差异明细（仅 tpc / 仅 Verilator）
+    # 差异明细（仅 tpc / 仅 oracle）
     print("\n── 仅 tpc 报（FP 候选）──")
     for r in rows:
         for d in r.get("only_tpc", []):
-            print(f"  {r['name']:<24}{d['code']:<8}{d['file']}:{d['line']}")
-    print("\n── 仅 Verilator 报（漏报/scope 候选）──")
+            o = f"[{r['oracle']}]" if r.get("oracle") else ""
+            print(f"  {r['name']}{o:<30}{d['code']:<8}{d['file']}:{d['line']}")
+    print(f"\n── 仅 oracle 报（漏报/scope 候选）──")
     for r in rows:
         for w in r.get("only_v", []):
-            print(f"  {r['name']:<24}{w['code']:<14}{w['file']}:{w['line']} {w['msg'][:60]}")
+            o = f"[{r['oracle']}]" if r.get("oracle") else ""
+            print(f"  {r['name']}{o:<30}{w['code']:<20}{w['file']}:{w['line']} {w['msg'][:50]}")
 
 
 if __name__ == "__main__":
