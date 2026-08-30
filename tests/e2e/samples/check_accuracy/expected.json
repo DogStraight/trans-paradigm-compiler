@@ -28,8 +28,8 @@
         },
         "CC001_case_no_default": {
             "entry": "top.sv",
-            "expect": ["CC001"],
-            "desc": "case 无 default 分支应检出"
+            "expect": ["CC001", "LC001"],
+            "desc": "case 无 default 分支应检出 CC001；2 位选择器只覆盖 3 值未全覆盖 → 锁存风险 LC001"
         },
         "W106_inout_wire": {
             "entry": "top.sv",
@@ -68,8 +68,8 @@
         },
         "CC001_casez_no_default": {
             "entry": "top.sv",
-            "expect": ["CC001"],
-            "desc": "casez 无 default 分支应检出"
+            "expect": ["CC001", "LC001"],
+            "desc": "casez 无 default 分支应检出 CC001；单臂未覆盖全部值 → 锁存风险 LC001"
         },
         "project_bus_ctrl": {
             "entry": "bus_ctrl.sv",
