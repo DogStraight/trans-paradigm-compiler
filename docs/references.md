@@ -2320,3 +2320,98 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   声明）——全量 315s → ~87s（3.6x）；coverage 须 `-n 0` 关并发
   （xdist 每 worker 独立计数失真 61% < fail_under 80），CONTRIBUTING/
   release_checklist 已更新命令
+
+##### slang-tidy 追查（2026-08-29，bin 里找不到？→ 官方从未打包）
+
+- **结论：官方 release 从未包含 slang-tidy**。GitHub API 实测 v11.0 三个
+  asset（slang-windows-x86_64.zip / linux / macos tar.gz）都**只打包
+  slang.exe 单个 driver**；zip 内全部条目逐一核对只有 slang.exe。不是
+  找错地方，是发布流程没打这个工具。
+- 源码在 `tools/tidy/`（CMake 目标 `slang_tidy`，输出名 slang-tidy，
+  SLANG_INCLUDE_TOOLS 默认 ON 一起编）。**本机 WinLibs 工具链自编成功**
+  （cmake 4.4.1 + gcc 16.1 + ninja，FetchContent 自动拉 fmt/mimalloc）：
+  `E:\research\slang-11.0\build-tidy\bin\slang-tidy.exe`（13MB，v11.0.0）。
+- **22 个检查全部默认 ENABLED**：style 13（always-comb-non-blocking /
+  always-ff-blocking / enforce-port-prefix/suffix / enforce-module-inst-
+  antiation-prefix / generate-named / no-dot-star/var/implicit-port 连接 /
+  no-legacy-generate / no-old-always-syntax / only-ansi-port-decl /
+  always-comb-named）+ synthesis 9（no-latches-on-design / only-assigned-
+  on-reset / register-has-no-reset / xilinx-do-not-care / cast-signed-
+  index / always-ff-assignment-outside-conditional / unused-sensitive-
+  signal / undriven-range / loop-before-reset）。
+- 输出：`[CheckName] PASS/WARN/FAIL` + `file:line:col: severity:
+  [STYLE-N]/[SYNTHESIS-N] message`（diag code 形如 STYLE-4 旧 always 语法、
+  SYNTHESIS-3 锁存）。配置仿 .clang-tidy（`Checks:`/`CheckConfigs:` 段 +
+  `--config-file`/`--print-descriptions`）。
+- **与 tpc 交叉点实测**：NoLatchesOnDesign 用 AnalysisManager 驱动分析
+  （getDrivers + `DriverSource::AlwaysLatch`），**只查显式 `always_latch`
+  块**；`always @*` 部分赋值推断锁存走 slang 编译诊断 `InferredLatch`
+  （即已接入的 -Winferred-latch）→ 两者互补不重复。tpc LC001 覆盖的是
+  后者（推断锁存），口径 = slang 编译诊断而非 tidy 检查。
+- 完整编译型工具（parseAllSources + createCompilation + runAnalysis），
+  单文件不完整语料编译失败即退出；与 slang --lint-only 同类，跨文件语义
+  检查在真实语料单文件上不触发（四工具结论不受影响）。风格类（旧 always
+  语法/端口前后缀/实例前缀）单文件可跑，与 tpc 命名/风格规则可交叉验证。
+
+##### slang-tidy 完成度源码级评估（2026-08-29，与对照组对比）
+
+- **时间线**：v3.0（2023-03）引入，官方标注 "currently experimental"；
+  v7.0（2024-09）才"加了一批新检查"；v8.1（2025-05）仍在修 crash；
+  v11.0 至今 22 检查，未摘 experimental 帽子。多数检查为社区 PR
+  （@Sustrak 框架 / @JoelSole-Semidyn 检查 / @spomata 复位族）。
+- **框架层完成度高**（成熟产品水准）：仿 .clang-tidy 配置（Checks/
+  CheckConfigs 段 + glob/组/severity 覆盖 + skip-file/path）、
+  REGISTER+TidyFactory+TidyKind 插件注册、TidyDiags.h 诊断码集中管理、
+  --print-descriptions/--dump-config/--code CLI 完备。底座是 slang
+  AnalysisManager（getDrivers/ValueDriver/DriverSource）——真正深度的
+  语义信息，NoLatches/UndrivenRange/复位族全部建在驱动分析之上，这是
+  对照组（svlint 纯 AST 模式）没有的。
+- **检查实现层完成度低**（玩具级）：
+  - **4 个复位族检查是同一 visitor 复制粘贴**（OnlyAssignedOnReset /
+    RegisterHasNoReset / AlwaysFFAssignmentOutsideConditional /
+    LoopBeforeResetCheck，ConditionalStatement + LookupIdentifier 同一套）
+  - reset 识别 = **字符串子串匹配**（LookupIdentifier exactMatching=false
+    走 `name.find(name)`），非符号级；只认顶层一元 `~`/`!` 条件，
+    `if (rst == 1'b0)` 形式不识别
+  - UndrivenRange 假设 drivers 已按位序排列做线性扫描，偏移处理脆弱
+  - CastSignedIndex 一个 handle 函数 5 行；XilinxDoNotCare 用
+    SyntaxPrinter 重打文本再找 '?'（字符串扫描）
+  - 风格类 EnforcePortSuffix ends_with 匹配合理但直白
+- **测试层浅**：24 测试文件 ~125 case，多数检查仅正反例各 1（如
+  NoLatchesOnDesignTest 2 case），单文件片段无真实工程回归；对比 slang
+  主库数千 case 差一个量级。
+- **结论**：框架先于规则成熟的典型——基建是工业级、规则与测试是
+  实验级，官方自标 experimental 名副其实。与 svlint（159 规则 6 年）/
+  Verible（~60 规则 8 年）/Verilator（136 W 码 30 年）比，规则数与测试
+  深度差一个量级；但 AnalysisManager 底座让 NoLatches 口径（DriverSource
+  级）比 svlint 纯语法模式高级，未来可期。对 tpc：检查实现深度（跨文件
+  符号/generate 活性预计算）与测试深度（1467 + 24 注入器）已超它；可借鉴
+  的是框架层（TidyKind 注册分类、诊断码集中管理、.clang-tidy 风格配置面）。
+
+##### 不卫生宏体检测可行性（2026-08-29，原型验证 14/14）
+
+- **背景**：checker 现为"一刀切全展开"（semantic=True 宏体替换，宏节点
+  不入 AST）。原意图是带宏节点进 parse，但残缺片段宏（`= 1'b1`、
+  `[3:0]`、`begin`/`end` 半截）会破坏语法边界让 parse 失败 → 只能全展开。
+  设想：先做**宏体形态分类**（完整语法单元 vs 残缺片段），完整单元宏将来
+  可保留为 MacroCall AST 节点，残缺宏维持原位展开。
+- **方案：包装解析法 + 首 token 预过滤**（原型 tests/_proto_macro_hygiene.py
+  验证 14/14 正确）：
+  - 包装解析：宏体放进四种最小语法上下文试解析——语句位（module m;
+    initial begin <body> end endmodule）、声明位（module m; <body>
+    endmodule）、表达式位（module m; reg x; initial x = <body>;
+    endmodule）、端口位（module m; input x <body>; endmodule）。任一
+    成功 → 该形态完整单元；全失败 → 残缺片段。
+  - **首 token 续接预过滤**（原型暴露的关键）：裸包装会把 `= 1'b1`
+    （input x = 1'b1 恰好合法）、`+ 4`（一元正号）误判为完整——以
+    `= [ ( , . + - * / & | ^ ~ ! ? :` 等续接 token 开头直接判残缺，
+    消除上下文侥幸接受。
+  - 实测：`initial Q = 0;`/`assign y = 1'b1;`/`if...else`/`reg` 声明
+    → 完整语句；`1'b1`/`empty_statement` → 完整表达式；`= 1'b1`/
+    `[3:0]`/`+ 4`/`begin`/`end`/`, .q(q)`/`else y = 2;` → 残缺片段。
+- **推论（宏节点进 AST 前置）**：完整单元宏可保留 MacroCall 节点（宏调用
+  + 展开体子节点），残缺宏维持展开——比"全展开"精确，展开量大幅下降；
+  宏边界不再丢失（P3.3 行号反向映射也受益）。
+- **设计约束**：包装模板是语言语法知识，不能硬编码进 Python——按
+  proc_assign_rules 先例进 grammar TOML 协议字段（如 macro_hygiene_
+  wrappers），引擎读配置（语言知识不进代码）。
