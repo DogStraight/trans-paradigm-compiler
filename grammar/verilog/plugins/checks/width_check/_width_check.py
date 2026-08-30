@@ -383,6 +383,20 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
             continue
         ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
         nl = _unwrap(getattr(site, "ports", None))
+        if nl is None:
+            continue
+        if nl.node_name == "OrderedPortList":
+            # 位置连接：第 i 个连接表达式 ↔ 模块第 i 个端口（声明序），
+            # 覆盖参数走 B3 三层合并（2026-08-29 补齐——tv80/旧风格实例）
+            ordered_ports = list(info.ports.values())
+            for i, val in enumerate(getattr(nl, "items", None) or []):
+                if i >= len(ordered_ports):
+                    break
+                if not isinstance(val, Node):
+                    continue
+                _check_conn_width(context, mod_name, ordered_ports[i], val,
+                                  table, ov_params)
+            continue
         conns = getattr(nl, "items", None) if nl else None
         for conn in conns or []:
             if not isinstance(conn, Node) or conn.node_name != "NamedPortConnect":
@@ -393,23 +407,29 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
             port = info.ports.get(pn)
             if port is None:
                 continue
-            pw = (
-                eval_width_text_params(port.width_expr, ov_params)
-                if port.width_expr
-                else 1
-            )
-            val = getattr(conn, "value", None)
-            cw = infer_expr_width(val, table)
-            if pw is None or cw is None:
-                continue
-            if cw > pw:
-                context.report(
-                    f"端口连接宽度截断：{mod_name}.{pn} {pw} 位 ← 连接 {cw} 位"
-                    f"（{node_text(val)}）",
-                    code="W201",
-                    level="warning",
-                    node=conn,
-                )
+            _check_conn_width(context, mod_name, port,
+                              getattr(conn, "value", None), table, ov_params)
+
+
+def _check_conn_width(context, mod_name: str, port, val, table: dict,
+                      ov_params: dict) -> None:
+    """单条端口连接宽度对比：连接 > 端口 → 截断报 W201。"""
+    pw = (
+        eval_width_text_params(port.width_expr, ov_params)
+        if getattr(port, "width_expr", None)
+        else 1
+    )
+    cw = infer_expr_width(val, table)
+    if pw is None or cw is None:
+        return
+    if cw > pw:
+        context.report(
+            f"端口连接宽度截断：{mod_name}.{port.name} {pw} 位 ← 连接 {cw} 位"
+            f"（{node_text(val)}）",
+            code="W201",
+            level="warning",
+            node=val,
+        )
 
 
 def _override_params(site, module_defaults: dict, caller_params: dict) -> dict:

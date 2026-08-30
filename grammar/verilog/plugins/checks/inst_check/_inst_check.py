@@ -103,12 +103,19 @@ def _check_missing_ports(
     端口方向（module_index 端口声明）：
     - input/output 未连接 → W104（输入悬空/输出悬空都是设计错误范式）
     - inout 未连接不报（三态悬空可能是有意设计，保守豁免）
-    位置连接（ordered）无法按名匹配，跳过（需按序对端口表，留给后续）。
+    位置连接（ordered）按声明序对端口表匹配（2026-08-29 补齐——此前
+    整体跳过，全端口误报未连接；tv80/旧风格实例用得多）。
     """
     conn = conn_by_inst.get(_text(getattr(site, "inst_name", None)))
     if conn is None:
         return
     connected = set(conn.connects.keys())
+    ordered = conn.ordered or []
+    if ordered:
+        # 位置连接：第 i 个连接信号 ↔ 模块第 i 个端口（声明序）
+        ordered_ports = list(info.ports.keys())
+        for i in range(min(len(ordered), len(ordered_ports))):
+            connected.add(ordered_ports[i])
     # 语言知识：端口方向值（input/output/inout）来自语言包 checker 结构
     # 协议（本插件读 context.extra 注入的方向集——由引擎按协议注入）。
     out_dirs = set(context.extra.get("output_dirs", []) or [])

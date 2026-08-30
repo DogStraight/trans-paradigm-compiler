@@ -506,6 +506,41 @@ class TestMissingPortCheck:
         # inout d 未连接不报；input a 已连接
         assert not any("d" in d["message"] for d in w104)
 
+    def test_ordered_missing_reported(self, checker, tmp_path):
+        """位置连接按声明序匹配：缺连 output → W104（2026-08-29 补齐）。"""
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y;\n"
+            "  adder u1 (x, y);\n"  # a=x, b=y；output y 未连接
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        w104 = _find(
+            [d for f in report["files"] for d in f["semantic"]], "W104"
+        )
+        assert any("未连接端口 'y'" in d["message"] for d in w104)
+        # 已连接的 a/b 不得误报
+        assert not any("未连接端口 'a'" in d["message"] for d in w104)
+        assert not any("未连接端口 'b'" in d["message"] for d in w104)
+
+    def test_ordered_all_connected_clean(self, checker, tmp_path):
+        """位置连接全覆盖 → 不报 W104。"""
+        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top;\n"
+            "  wire [7:0] x, y, z;\n"
+            "  adder u1 (x, y, z);\n"  # a=x, b=y, y=z 全连
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W104" not in codes
+
 
 # ── 多驱动检查 W105（elaboration 层 3 信号图之上） ──────────
 

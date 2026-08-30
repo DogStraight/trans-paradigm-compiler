@@ -621,6 +621,48 @@ class TestWidthPortConnB3:
         )
         assert any("adder.a_i 8 位" in m and "12 位" in m for m in msgs)
 
+    def test_ordered_conn_width(self, checker, tmp_path):
+        """位置连接按声明序匹配端口：16 位连 8 位端口 → 截断 W201。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  wire [15:0] big_sig;\n"
+            "  wire [7:0] out_sig;\n"
+            "  adder u_adder (big_sig, out_sig);\n"  # a_i=big_sig, y_o=out_sig
+            "  assign big_sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert any("adder.a_i 8 位" in m and "16 位" in m for m in msgs)
+
+    def test_ordered_override_param(self, checker, tmp_path):
+        """位置连接 + 覆盖参数（#(.WIDTH(4))）：覆盖后端口宽参与判定。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  wire [15:0] big_sig;\n"
+            "  wire [3:0] out_sig;\n"
+            "  adder #(.WIDTH(4)) u_adder (big_sig, out_sig);\n"
+            "  assign big_sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert any("adder.a_i 4 位" in m and "16 位" in m for m in msgs)
+
+    def test_ordered_override_expands_clean(self, checker, tmp_path):
+        """位置连接 + 覆盖 WIDTH=16：等宽连接不报。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  wire [15:0] sig;\n"
+            "  wire [15:0] out_sig;\n"
+            "  adder #(.WIDTH(16)) u_adder (sig, out_sig);\n"
+            "  assign sig = 16'd0;\n"
+            "endmodule\n",
+        )
+        assert msgs == []
+
     def test_unsized_literal_conn(self, checker, tmp_path):
         """unsized 常量最小宽度超出端口 → 截断（slang port-width-trunc 同思路）。"""
         msgs = self._check_top(
