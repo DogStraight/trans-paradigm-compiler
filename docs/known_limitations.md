@@ -25,23 +25,29 @@
   for secondary development: `docs/MODEL_INDEX.md` (jump table) and
   `docs/component_protocol.md` (components/slots/primitives/inject).
 - **Not a behavioral verifier.** The pipeline checks well-formedness against
-  your rules (syntax, structure, naming) — it does not simulate, synthesize,
-  or elaborate the design, and it cannot tell you whether the hardware is
-  correct. It is a front-end / spec-enforcement tool, not a correctness prover.
-- **No SystemVerilog.** The pack targets a Verilog-2001 synthesizable subset.
+  your rules (syntax, structure, naming, cross-module consistency) — it does
+  not simulate or synthesize the design, and it cannot tell you whether the
+  hardware is correct. It is a front-end / spec-enforcement tool, not a
+  correctness prover.
+- **No SystemVerilog.** The pack targets Verilog-2005 (IEEE 1364-2005).
   SV constructs (`interface`, `class`, `always_ff`/`always_comb`, assertions,
-  `package`, UVM) are out of current scope. Adding SV would be a separate
-  grammar pack, not an engine change.
-- **Even Verilog-2001 is a subset.** Low-frequency or simulation-boundary
-  constructs are omitted: gate/switch primitives (`and`/`or`/`buf`/`tran`...),
-  UDP (`primitive`/`table`), `specify` blocks, `config`/`defparam`, and
-  procedural `assign`/`deassign` (the latter is additionally ambiguous for
-  linter statement discovery: it shares the `assign` keyword with the
-  module-level continuous assign).
-- **Single-source processing — no design elaboration.** The pipeline processes
-  one source (with `include` resolved), not a whole design: no cross-module
-  instance graph, no hierarchical name resolution, no elaboration-time
-  generate semantics.
+  `package`, UVM) are out of current scope. Adding SV is a **core + plugin
+  increments** roadmap item (ROADMAP「SystemVerilog 语言包」), not an engine
+  change.
+- **Verilog-2005 coverage is complete for the standard surface; the pack
+  splits synthesizable core vs. simulation/library plugins.** The main pack
+  covers the synthesizable subset; simulation/library syntax lives in
+  plugins (gates 26, UDP, `specify`, `config`, `defparam`, procedural
+  `assign`/`deassign`, nettypes) — see ROADMAP P1.8. Remaining gaps are
+  documented in TODO P1.5 (darkriscv nested conditional-compile position
+  precision, typed_ports `invert` L2/L3) and references.md.
+- **Elaboration is per-project, not full-design.** Cross-module checking
+  (module registry, port-connection expansion, signal drive/load graph,
+  instance-tree driver penetration) covers the checked entry + discovered
+  dependencies (ADR-0008, P2.7). It is not a full-design elaboration:
+  no elaboration-time generate semantics for unselected branches beyond the
+  built-in evaluator, no numerical width propagation (Verilator-style), no
+  CDC analysis.
 - **Deep semantics live in plugin code, not TOML.** Config drives syntax,
   rendering, and shallow semantics (scopes/symbols/name resolution). A
   genuinely new semantic capability is an engine primitive / plugin script;
@@ -82,8 +88,11 @@
   (macro expansion / transform) content changes by design, so output is not
   idempotence-checked there.
 - **Validation is sample-driven, not exhaustive.** Correctness rests on a
-  curated corpus (unit tests, real cores, recall gates). There is no fuzzing,
-  property-based, or differential testing against reference tools yet.
+  curated corpus (unit tests, real cores, recall gates). Differential testing
+  against reference tools exists for the Verilog pack (sv-parser 97 files /
+  Verible 136 files / four-tool lint consensus — see TODO「三工具对照测试」),
+  and a fuzz harness is wired into CI, but fuzz coverage of random legal
+  programs is not yet statistical (P2.3 fuzz throughput items).
 
 ## Architecture boundaries
 
@@ -130,8 +139,10 @@
 - **No IDE / LSP** — this is a CLI pipeline, not an editor plugin.
 - **No optimization passes** — transforms are config-driven structural rewrites
   (e.g. type expansion, macro handling), not LLVM-style optimization.
-- **No incremental parsing** — every run is a full re-parse of the source
-  (incremental/re-parse is a roadmap item, not implemented).
+- **No incremental parsing** — every run is a full re-parse of the source.
+  Incremental parsing + incremental check (span binding, invalidation,
+  re-parse) is a roadmap item (ROADMAP P3.1/P3.2/P3.4, v0.2 core), not
+  implemented.
 
 ## Engineering frictions (usage & secondary development)
 

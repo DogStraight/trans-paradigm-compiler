@@ -43,13 +43,13 @@ picorv32 覆盖：多模块、宏条件编译（25 条件块/14 条件宏）、g
 
 ### 4. 人造盲区样本（真实项目覆盖不了的语法）
 
-真实项目基本不会用以下语法，需要人造样本补覆盖：
+真实项目基本不会用以下语法（P1.8 已入插件支持，但真实语料覆盖不到），
+需要人造样本补覆盖验证插件面：
 
 - `casex` / `casez`
 - `for`/`while` 生成循环
-- `specify` 块 / UDP / primitive
+- `specify` 块 / UDP / primitive（plugins/gates、plugins/udp、plugins/specify）
 - 带参宏、`` `include ``
-- 结构化过程声明（SV 语法，若后续支持）
 
 ## 明确排除
 

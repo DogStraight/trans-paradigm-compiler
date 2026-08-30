@@ -324,9 +324,12 @@ suite with a coverage gate, a wheel-install smoke test, plus two policy gates
 
 **Experimental — Alpha, not yet published to PyPI.** Version 0.1.0.
 
-Verilog support is a synthesizable subset — not full IEEE 1364. The pipeline
-is validated against real open-source cores (PicoRV32, darkriscv, SERV, TV80) —
-see [docs/e2e_real_projects.md](./docs/e2e_real_projects.md).
+Verilog support targets IEEE 1364-2005 (Verilog-2005), with the
+synthesizable core in the main pack and simulation/library syntax in plugins
+(gates, UDP, `specify`, `config`/`defparam`, nettypes). The pipeline is
+validated against real open-source cores (PicoRV32, darkriscv, SERV, TV80,
+UART, ice40/simcells cell libraries) plus differential checks against
+sv-parser and Verible — see [docs/e2e_real_projects.md](./docs/e2e_real_projects.md).
 
 Built with Python 3.11+, zero runtime dependencies.
 
@@ -340,11 +343,15 @@ Summary:
   engineering volume. Implementing a well-chosen subset is the recommended
   path for large languages.
 - **Not a behavioral verifier.** Checks well-formedness against your rules —
-  no simulation, synthesis, or elaboration; not a correctness prover.
-- **No SystemVerilog; Verilog-2001 is itself a subset** (no gate primitives,
-  UDP, `specify`, `config`/`defparam`, procedural `assign`/`deassign`).
-- **Single-source processing — no design elaboration**: no cross-module
-  instance graph, no hierarchical names, no elaboration-time generate.
+  no simulation, synthesis, or full-design elaboration; not a correctness
+  prover. (Cross-module check infrastructure — module registry, connection
+  expansion, signal graph, instance-tree driver penetration — exists, see
+  docs/decisions/0008-elaboration-foundation.md.)
+- **No SystemVerilog** (`interface`, `class`, `always_ff`, assertions,
+  `package`, UVM are out of scope; core + plugin increments is a roadmap item).
+- **Elaboration is per-project, not full-design** — no elaboration-time
+  generate semantics beyond the built-in branch evaluator, no numerical width
+  propagation, no CDC.
 - **No IDE / LSP; no incremental parsing; interpreter-bound throughput**
   (~19k tok/s combined; fine for single files and small/medium projects).
 - **Deep semantics live in plugin code, not TOML** — config drives syntax,
