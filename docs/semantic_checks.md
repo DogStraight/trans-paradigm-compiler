@@ -213,3 +213,165 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 > tests/languages/verilog/test_name_convention.py
 > CLI 验收：`tpc check <file> [--include DIR] [--json]`——语法阶段
 > （stage=syntax）+ 语义阶段（stage=semantic），exit 1 按 error 级。
+
+## 11. 编写检查规则（双路径实操指南）
+
+自定义 checker 层保留**两条路径**，按检查复杂度选择：
+
+```
+路径 1：简单检查 = 操作组合（声明式，零代码）
+        TOML [[checks]]：kind 分发 + pattern 正则 + message 模板
+        → 适用：命名/风格/形态类，判定 = 单一操作（正则匹配）
+路径 2：精细操作 = 类插件能力（脚本，需代码能力）
+        handler 函数（symbol, rule, context）或 postpass 函数（analyzer, context）
+        → 适用：跨节点/跨文件/需符号表走查的语义判定
+```
+
+两条路径**共用同一报告管道**（Diagnostic + related 链 + 统一抑制
+`tpc-disable[CODE]`），规则来源不影响豁免/输出形态。
+
+### 11.1 路径 1：声明式规则（操作组合，零代码）
+
+适合"判定可表达为单一正则/形态匹配"的检查。三步：
+
+**① 建插件目录**（或复用已有插件）：
+
+```
+grammar/verilog/plugins/checks/<name>/
+├── tpc.toml          # 插件声明（可只有注释）
+└── rules/            # 规则表（[[checks]] 数组，规则=数据）
+    ├── <name>.toml
+    └── _*.py         # 仅路径 2 需要
+```
+
+**② 声明规则**（rules/<name>.toml）：
+
+```toml
+[[checks]]
+id = "NC012"                    # 全局唯一，前缀=分类
+category = "naming"
+severity = "warning"            # error / warning / info
+scope = ["rtl", "tb"]
+kind = "integer"                # 分发键：符号种类（见下"kind 全集"）
+message = "integer 名 '{name}' 不符合小写下划线约定（{pattern}）"
+pattern = "^[a-z][a-z0-9_]*$"   # 判定操作：正则匹配符号名
+```
+
+**③ 生效**：插件目录存在即被 `check_registry` 扫描 `rules/*.toml`，
+引擎 `analyzer/checks.py::check_rules_pass` 在遍历后按符号 kind 分发、
+`re.match(pattern, name)` 判定、不匹配 → report（message 插值
+`{name}/{kind}/{pattern}/{id}/{severity}`）。**零引擎改动、零脚本。**
+
+kind 全集（对应语法 TOML `[*.analyzer.symbol] kind`）：
+`module / wire / reg / integer / port / parameter / localparam /
+function / task / module_instance / genvar / type / ...`
+
+### 11.2 路径 2：脚本层（handler / postpass，需代码能力）
+
+适合"判定需要跨节点/跨文件/符号表走查"的检查（pattern 表达不了的
+上下文）。两种脚本形态：
+
+**形态 A：handler 兜底**（规则声明里 `handler` 字段引用，判定挂单符号）
+
+```toml
+[[checks]]
+id = "NC011"
+kind = "module"
+message = "占位（handler 自管消息时用不到）"
+# pattern 缺省 → 全符号进 handler
+handler = "_filename_check.py:check_module_filename"
+```
+
+```python
+# grammar/verilog/plugins/checks/name_check/rules/_filename_check.py
+def check_module_filename(symbol, rule, context) -> str | None:
+    """签名：fn(symbol, rule, context) -> str | None。
+    - 返回 str = 诊断消息（完整文本，不走 {var} 插值）
+    - 返回 None = 通过
+    symbol：analyzer 符号对象（.name / .kind / .decl_node / .scope）
+    rule：  [[checks]] 规则 dict（可读自定义字段）
+    context：报告 + 上下文（.report(msg, code, level, node, related) /
+             .extra 跨文件数据：module_index / inst_sites / connections /
+             signal_graph / 端口方向集）
+    """
+    node = getattr(symbol, "decl_node", None)
+    fpath = getattr(node, "_file", None)   # ProjectChecker 注入的文件上下文
+    if not fpath:
+        return None  # 无文件上下文（单文件 analyze）→ 跳过
+    ...
+    return f"模块名 '{symbol.name}' 与文件名不一致"
+```
+
+**形态 B：postpass**（插件级，遍历结束后整棵树/全工程走查）
+
+```toml
+# 插件 tpc.toml
+[analyzer]
+postpasses = ["_chain_walk.py:run"]    # file.py:fn 格式
+```
+
+```python
+def run(analyzer, context) -> None:
+    """签名：fn(analyzer, context) -> None。
+    analyzer：遍历后状态（.all_symbols / ._ast / 自建收集）
+    context：报告 + 跨文件数据（同 handler）
+    典型用途：跨节点链走查（赋值链/驱动分析）、跨文件联动（实例化点 ×
+    模块表比对）、信号图消费（多驱动/未驱动判定）。
+    """
+    root = getattr(analyzer, "_ast", None)
+    for node in _iter_nodes(root):   # DFS 整棵 AST
+        ...
+        context.report(msg, code="W2XX", level="warning",
+                       node=node, related=[("定义处", other_node)])
+```
+
+### 11.3 从零到一：写一条 L2 规则的标准流程
+
+以"检查实例化端口连接"为例（跨文件，必须走 postpass）：
+
+1. **选形态**：跨文件 → postpass（需要 module_index，handler 拿不到）
+2. **建插件**：`grammar/verilog/plugins/checks/<name>/`，tpc.toml 声明
+   `[analyzer] postpasses = ["_<name>.py:run"]`
+3. **写脚本**：读 `context.extra["module_index"]`（{模块名: ModuleInfo}，
+   ModuleInfo 含 ports/params/node）+ `context.extra["inst_sites"]`
+   （本文件实例化点），遍历比对，`context.report` 报诊断
+4. **声明规则表**（可选）：纯 postpass 插件可不声明 `[[checks]]`（如
+   inst_check 的 W101-103）；要接统一抑制/用户配置才声明（规则表挂
+   `tpc-disable[CODE]` 豁免自动生效）
+5. **测试**：L1 注释驱动（`// ruleid: X` / `// ok: X`，见第 9 章）或
+   L2 断言式（tests/engine/analyzer/test_checker.py 形态）
+6. **注册回归**：真实语料（tests/e2e/samples/real/ref/）+ 对拍门禁
+   （eval_benchmark.py）——新规则必须过"零误报/零漏报"量化评估
+
+### 11.4 现有插件蓝本（按复杂度排序，抄结构用）
+
+| 插件 | 路径 | 形态 | 学习点 |
+|---|---|---|---|
+| name_check | L1 | 纯声明式（NC001-010）+ handler 兜底（NC011） | rules/*.toml 声明 + _filename_check.py 最小 handler |
+| width_check | L2 | postpass（run_width_check）+ 内部模块化 | 最大最全的插件：宽度表/求值器/跨模块穿透（B3/B4），看它如何组织函数 |
+| inst_check | L2 | postpass（run_inst_check） | 跨文件联动最小形态：module_index + inst_sites 消费 |
+| latch_check | L2 | postpass（run_latch_check） | 控制流分析：路径覆盖/变量集合 |
+| hier_check | L2 | postpass（服务型，run_hier_check） | 纯服务插件（无报告），被 width_check 回调——插件间协作示例 |
+
+### 11.5 接口契约速查
+
+```
+handler  : fn(symbol, rule, context) -> str | None
+postpass : fn(analyzer, context) -> None
+context.report(message, code, level, node, related)   # related = [(msg, node)]
+context.extra: module_index / inst_sites / connections / signal_graph /
+               output_dirs / input_dirs / inout_dirs（ProjectChecker 注入）
+symbol:     .name / .kind / .decl_node / .scope
+analyzer:   .all_symbols / ._ast（postpass 内遍历用）
+文件上下文: 符号 decl_node._file（ProjectChecker 注入；单文件 analyze 无）
+fail-fast:  插件 tpc.toml 的 postpasses 引用缺失模块/函数 → 加载即报错
+```
+
+### 11.6 选择路径的判据
+
+| 判定复杂度 | 路径 | 理由 |
+|---|---|---|
+| 单符号名/形态 | L1 声明式 | 正则即可，零代码，注释驱动测试免费 |
+| 需符号表/跨节点走查 | L2 handler | 单符号上下文足够，写一个函数 |
+| 需跨文件/全工程联动 | L2 postpass | module_index/inst_sites 只在 postpass 可得 |
+| 需要多次遍历/复杂分析 | L2 postpass + 内部函数化 | 参考 width_check 的分层组织 |
