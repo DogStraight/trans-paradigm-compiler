@@ -55,12 +55,14 @@ def _check_select_ranges(analyzer, context, table: dict) -> None:
     root = getattr(analyzer, "_ast", None)
     if root is None:
         return
-    for node in _iter_nodes(root):
+    for node, module in _iter_nodes_with_module(root):
         if node.node_name != "SelectExpr":
             continue
         base = getattr(node, "base", None)
         base_name = getattr(base, "content", "") if isinstance(base, Node) else ""
-        bw = table_width_to_num_params(table.get(base_name), table.get("_params"))
+        bw = table_width_to_num_params(
+            _lookup_width(table, module, base_name), table.get("_params")
+        )
         if bw is None:
             continue  # base 宽度未知（跨模块/未声明/参数化未知）保守
         suffixes = [getattr(node, "first_suffix", None)]
@@ -305,20 +307,20 @@ def _check_assignment_widths(analyzer, context, table: dict) -> None:
     root = getattr(analyzer, "_ast", None)
     if root is None:
         return
-    for node in _iter_nodes(root):
+    for node, module in _iter_nodes_with_module(root):
         if node.node_name not in _ASSIGN_RULES:
             continue
-        _check_one(node, context, table)
+        _check_one(node, context, table, module)
         if node.node_name == "AssignStmt":
             # 多目标连续赋值：assign a = x, b = y;
             for ex in getattr(node, "extras", None) or []:
                 if isinstance(ex, Node):
-                    _check_one(ex, context, table)
+                    _check_one(ex, context, table, module)
 
 
-def _check_one(node, context, table: dict) -> None:
-    lw = infer_expr_width(getattr(node, "target", None), table)
-    rw = infer_expr_width(getattr(node, "value", None), table)
+def _check_one(node, context, table: dict, module: str = "") -> None:
+    lw = infer_expr_width(getattr(node, "target", None), table, module)
+    rw = infer_expr_width(getattr(node, "value", None), table, module)
     if lw is None or rw is None:
         return  # 任一侧未知 → 保守不报（sized 域）
     if rw > lw:
@@ -371,6 +373,26 @@ def _iter_nodes(root: Node):
             stack.append(child)
 
 
+_MODULE_DECL_RULES = ("ModuleDecl", "MacroModuleDecl")
+
+
+def _iter_nodes_with_module(root: Node):
+    """DFS 迭代 (node, 模块名)——ModuleDecl 子树内节点带其模块名。
+
+    多模块文件内符号查表需要模块上下文（跨模块同名符号污染修复，
+    2026-08-29 对标测试暴露）。非模块内/未知模块 → ""。
+    """
+    stack = [(root, "")]
+    while stack:
+        node, mod = stack.pop()
+        if node.node_name in _MODULE_DECL_RULES:
+            mn = getattr(node, "module_name", None)
+            mod = getattr(mn, "content", "") if isinstance(mn, Node) else ""
+        yield node, mod
+        for child in node.iter_children():
+            stack.append((child, mod))
+
+
 # ── B3 跨模块参数传播：实例化点端口连接宽度 ──────────────────
 # 被实例化模块的端口宽度可能含参数（[WIDTH-1:0]）——求值用**覆盖后**
 # 参数表：本文件参数（调用者上下文，覆盖值可能引用）→ 模块默认 →
@@ -383,6 +405,13 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
     caller_params = table.get("_params", {}) or {}
+    # 实例化点 → 所属模块（连接表达式是本模块信号，查表要带模块上下文
+    # 防跨模块同名污染；2026-08-29 对标测试暴露）
+    site_module: dict[int, str] = {}
+    root = getattr(analyzer, "_ast", None)
+    if root is not None:
+        for node, module in _iter_nodes_with_module(root):
+            site_module[id(node)] = module
     for site in inst_sites:
         mod_name = node_text(getattr(site, "module_name", None))
         if not mod_name:
@@ -390,6 +419,7 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
         info = module_index.get(mod_name)
         if info is None:
             continue
+        caller_mod = site_module.get(id(site), "")
         ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
         nl = _unwrap(getattr(site, "ports", None))
         if nl is None:
@@ -404,7 +434,7 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
                 if not isinstance(val, Node):
                     continue
                 _check_conn_width(context, mod_name, ordered_ports[i], val,
-                                  table, ov_params)
+                                  table, ov_params, caller_mod)
             continue
         conns = getattr(nl, "items", None) if nl else None
         for conn in conns or []:
@@ -417,18 +447,19 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
             if port is None:
                 continue
             _check_conn_width(context, mod_name, port,
-                              getattr(conn, "value", None), table, ov_params)
+                              getattr(conn, "value", None), table, ov_params,
+                              caller_mod)
 
 
 def _check_conn_width(context, mod_name: str, port, val, table: dict,
-                      ov_params: dict) -> None:
+                      ov_params: dict, caller_mod: str = "") -> None:
     """单条端口连接宽度对比：连接 > 端口 → 截断报 W201。"""
     pw = (
         eval_width_text_params(port.width_expr, ov_params)
         if getattr(port, "width_expr", None)
         else 1
     )
-    cw = infer_expr_width(val, table)
+    cw = infer_expr_width(val, table, caller_mod)
     if pw is None or cw is None:
         return
     if cw > pw:
@@ -474,17 +505,54 @@ def symbol_width_table(analyzer) -> dict[str, str]:
     eval_width_text 的 "1"→2（单表达式 [1]）语义区分开）。
     内嵌 "_arrays" 键：数组符号集（Declarator.array_range 非空——存储器
     word 选择宽度 = word 宽，非位选 1；2026-08-29 修复 ice40 误报）。
+
+    多模块隔离（2026-08-29 对标测试暴露）：同名符号跨模块宽度不同时，
+    平面键被后声明者覆盖（SB_MAC16 的 [15:0] D 污染 20 个 SB_DFF 的
+    标量 D，20 条 W201 全 FP——Verilator 对这些 0 报）。加模块限定键
+    (scope.name, sym_name)；查表走 _lookup_width 优先限定键，平面键
+    仅作无模块上下文（测试直接构造表）的回退。
     """
     table: dict[str, str] = {}
     arrays: set[str] = set()
+    arrays_by_module: dict[str, set] = {}
     for sym in getattr(analyzer, "all_symbols", None) or []:
         if sym.kind not in _WIDTH_KINDS:
             continue
         table[sym.name] = extract_width(sym)
         if _is_array_symbol(sym):
             arrays.add(sym.name)
+        # 模块限定键：符号所属模块作用域（端口/声明都在模块 scope 下）
+        mod = ""
+        if sym.scope is not None and sym.scope.kind == "module":
+            mod = sym.scope.name or ""
+        table[(mod, sym.name)] = extract_width(sym)  # type: ignore[index]
+        if _is_array_symbol(sym):
+            arrays_by_module.setdefault(mod, set()).add(sym.name)
     table["_arrays"] = arrays  # type: ignore[assignment]
+    table["_arrays_by_module"] = arrays_by_module  # type: ignore[assignment]
     return table
+
+
+def _lookup_width(table: dict, module: str, name: str):
+    """查宽度表：模块限定键优先，平面键回退（无模块上下文/测试表）。
+
+    多模块文件内查符号宽度必须带模块名——否则同名符号跨模块污染
+    （对标测试 2026-08-29：SB_MAC16 D 污染 SB_DFF D）。
+    """
+    if module:
+        v = table.get((module, name))
+        if v is not None:
+            return v
+    return table.get(name)
+
+
+def _lookup_arrays(table: dict, module: str) -> set:
+    """数组符号集查表：模块限定集优先，平面集回退。"""
+    if module:
+        s = table.get("_arrays_by_module")
+        if isinstance(s, dict) and module in s:
+            return s[module]  # type: ignore[return-value]
+    return table.get("_arrays") or set()
 
 
 def _is_array_symbol(sym) -> bool:
@@ -880,7 +948,7 @@ _LOGIC_OPS = {"&&", "||"}
 _REDUCTION_OPS = {"&", "|", "^", "~&", "~|", "~^", "^~"}
 
 
-def infer_expr_width(node, width_table: dict) -> int | None:
+def infer_expr_width(node, width_table: dict, module: str = "") -> int | None:
     """A3：表达式节点 → 宽度（纯函数；未知 → None 保守）。
 
     原子：Identifier（查宽度表）/ Number|BitWidthLiteral（字面量位宽）
@@ -891,6 +959,9 @@ def infer_expr_width(node, width_table: dict) -> int | None:
     运算：UnaryOp（归约 → 1，! ~ → 同宽）/ BinaryOp（算术 max、比较 1、
     移位 LHS、位运算 max、逻辑 1）/ TernaryOp（max 分支）
     调用：$signed/$unsigned（同参数宽）；其他/用户函数 → None
+
+    module：当前模块名（多模块文件内符号查表用限定键，防跨模块同名
+    污染——2026-08-29 对标测试暴露 SB_MAC16 D 污染 SB_DFF D）。
     """
     if not isinstance(node, Node):
         return None
@@ -898,7 +969,7 @@ def infer_expr_width(node, width_table: dict) -> int | None:
 
     if name == "Identifier":
         return table_width_to_num_params(
-            width_table.get(getattr(node, "content", "") or ""),
+            _lookup_width(width_table, module, getattr(node, "content", "") or ""),
             width_table.get("_params"),
         )
     if name in ("Number", "BitWidthLiteral"):
@@ -906,19 +977,19 @@ def infer_expr_width(node, width_table: dict) -> int | None:
     if name == "StringLiteral":
         return None  # 字符串宽度语义罕见，保守
     if name == "ParenthesizedExpr":
-        return infer_expr_width(getattr(node, "expr", None), width_table)
+        return infer_expr_width(getattr(node, "expr", None), width_table, module)
     if name == "SelectExpr":
-        return _select_width(node, width_table)
+        return _select_width(node, width_table, module)
     if name == "ConcatExpr":
-        return _sum_width(getattr(node, "sub_node", None) or [], width_table)
+        return _sum_width(getattr(node, "sub_node", None) or [], width_table, module)
     if name == "ReplicateExpr":
         count = eval_const_expr(node_text(getattr(node, "count", None)))
-        vw = infer_expr_width(getattr(node, "value", None), width_table)
+        vw = infer_expr_width(getattr(node, "value", None), width_table, module)
         if count is None or vw is None:
             return None
         return count * vw
     if name == "HierExpr":
-        return _hier_width(node, width_table)
+        return _hier_width(node, width_table, module)
     if name == "UnaryOp":
         op = getattr(node, "op", "")
         if op in _REDUCTION_OPS:
@@ -926,12 +997,12 @@ def infer_expr_width(node, width_table: dict) -> int | None:
         if op == "!":
             return 1  # 逻辑非 → 1 bit（IEEE 1364-2005 5.5.2 逻辑运算；
             # 2026-08-29 对拍 Verilator：!x 结果 1 位，此前按操作数宽误报）
-        return infer_expr_width(getattr(node, "operand", None), width_table)
+        return infer_expr_width(getattr(node, "operand", None), width_table, module)
     if name == "BinaryOp":
-        return _binary_width(node, width_table)
+        return _binary_width(node, width_table, module)
     if name == "TernaryOp":
-        tw = infer_expr_width(getattr(node, "true_val", None), width_table)
-        fw = infer_expr_width(getattr(node, "false_val", None), width_table)
+        tw = infer_expr_width(getattr(node, "true_val", None), width_table, module)
+        fw = infer_expr_width(getattr(node, "false_val", None), width_table, module)
         if tw is None or fw is None:
             return None
         return max(tw, fw)
@@ -939,18 +1010,18 @@ def infer_expr_width(node, width_table: dict) -> int | None:
         callee = node_text(getattr(node, "callee", None))
         if callee in ("signed", "unsigned"):
             # 单参数系统函数：宽度不变（仅改符号性）
-            return _first_arg_width(node, width_table)
+            return _first_arg_width(node, width_table, module)
         return None
     if name == "CallExpr":
         return None  # 用户函数返回宽度需函数表（C 阶段）
     return None
 
 
-def _binary_width(node, width_table: dict) -> int | None:
+def _binary_width(node, width_table: dict, module: str = "") -> int | None:
     """BinaryOp 宽度（按 op 分派）。"""
     op = getattr(node, "op", "") or ""
-    left = infer_expr_width(getattr(node, "left", None), width_table)
-    right = infer_expr_width(getattr(node, "right", None), width_table)
+    left = infer_expr_width(getattr(node, "left", None), width_table, module)
+    right = infer_expr_width(getattr(node, "right", None), width_table, module)
     if op in _CMP_OPS or op in _LOGIC_OPS:
         return 1
     if op in _SHIFT_OPS:
@@ -962,7 +1033,7 @@ def _binary_width(node, width_table: dict) -> int | None:
     return None
 
 
-def _select_width(node, width_table: dict) -> int | None:
+def _select_width(node, width_table: dict, module: str = "") -> int | None:
     """SelectExpr：链式后缀最内层决定宽度。
 
     范围/切片 → _suffix_width；纯索引 → 数组（存储器）word 选择返回
@@ -979,16 +1050,17 @@ def _select_width(node, width_table: dict) -> int | None:
         # 纯索引：数组 word 选择（宽 = word 宽）vs 向量位选（1 bit）
         base = getattr(node, "base", None)
         bn = getattr(base, "content", "") if isinstance(base, Node) else ""
-        arrays = width_table.get("_arrays") or set()
+        arrays = _lookup_arrays(width_table, module)
         if bn in arrays:
             return table_width_to_num_params(
-                width_table.get(bn), width_table.get("_params")
+                _lookup_width(width_table, module, bn),
+                width_table.get("_params"),
             )
         return 1
-    return _suffix_width(last, width_table)
+    return _suffix_width(last, width_table, module)
 
 
-def _suffix_width(suffix, width_table: dict) -> int | None:
+def _suffix_width(suffix, width_table: dict, module: str = "") -> int | None:
     """SelectSuffix → 宽度：纯索引 1；range_suffix 按运算符分派。"""
     info = _range_info(getattr(suffix, "range_suffix", None))
     if info is None:
@@ -1022,18 +1094,18 @@ def _range_info(rs):
     return None
 
 
-def _sum_width(items: list, width_table: dict) -> int | None:
+def _sum_width(items: list, width_table: dict, module: str = "") -> int | None:
     """拼接元素宽度和（任一 None → None）。"""
     total = 0
     for it in items:
-        w = infer_expr_width(it, width_table)
+        w = infer_expr_width(it, width_table, module)
         if w is None:
             return None
         total += w
     return total
 
 
-def _hier_width(node, width_table: dict) -> int | None:
+def _hier_width(node, width_table: dict, module: str = "") -> int | None:
     """HierExpr（a / a.b / a[0].b）：单段查表；末段带下标 → 1；
     纯成员链查末段名（本地表）；查不到且为多段链 → 回调 hier 插件做
     跨模块成员宽度解析（2026-08-29 补齐——a.b 中 a 是实例时按需解析）。
@@ -1047,14 +1119,17 @@ def _hier_width(node, width_table: dict) -> int | None:
     if last.node_name == "Identifier":
         # 单段（a）或末段是标识符：查宽度表
         return table_width_to_num_params(
-            width_table.get(getattr(last, "content", "") or ""),
+            _lookup_width(width_table, module, getattr(last, "content", "") or ""),
             width_table.get("_params"),
         )
     if last.node_name == "HierSuffix":
         return 1  # 末段下标选择 → 1 bit
     if last.node_name == "HierMember":
         w = table_width_to_num_params(
-            width_table.get(getattr(getattr(last, "name", None), "content", "") or ""),
+            _lookup_width(
+                width_table, module,
+                getattr(getattr(last, "name", None), "content", "") or "",
+            ),
             width_table.get("_params"),
         )
         if w is not None or len(parts) < 2:
@@ -1067,7 +1142,7 @@ def _hier_width(node, width_table: dict) -> int | None:
     return None
 
 
-def _first_arg_width(node, width_table: dict) -> int | None:
+def _first_arg_width(node, width_table: dict, module: str = "") -> int | None:
     """SysFuncCall 首参数宽度（$signed/$unsigned 单参数）。"""
     args = getattr(node, "args", None)
     if not isinstance(args, Node):
@@ -1075,5 +1150,5 @@ def _first_arg_width(node, width_table: dict) -> int | None:
     items = getattr(args, "items", None) or []
     for it in items:
         if isinstance(it, Node):
-            return infer_expr_width(it, width_table)
+            return infer_expr_width(it, width_table, module)
     return None

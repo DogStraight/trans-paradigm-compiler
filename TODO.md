@@ -12,6 +12,23 @@
 > 80）+ vs Verible 差分 136 例 + vs sv-parser 差分 98 例（false-reject 0 /
 > bad-interop 0 / lenient-diff 3——typed_ports 增强语法）。
 
+## 对标测试（2026-08-29 立项，Verilator oracle，方案见 references.md「试水第四弹」）
+
+> 变异注入器（试水第三弹）验证"错误能检出"后，用 Verilator 二进制当 oracle
+> 对拍输出一致性。**已全闭环（2026-08-29）**：MSYS2+Verilator 5.050 装好、
+> eval_benchmark.py 落地（W 码映射 + lint_off 抑制识别 + 条件编译行号偏移
+> 处理 + parse 失败标定）、真实语料 7 工程 + 评测集 34 case 对拍完成。
+> 结果：共识 44 条（UN001/LC001 族）+ 修复 4 个真 bug（106 条 FP → 0：
+> W201 跨模块同名污染 / W103 模块体参数缺口 / W104 函数参数误收 /
+> CC001 全覆盖误报——前 2 条推翻旧落档）；剩余差异全部判明类别（AW 族
+> 默认关 / UN001 粒度 / generate 互斥 W105 层 3 边界 / 语料不完整）。
+> 细节见 references.md「试水第四弹」+ 缺口表更新。
+
+- [x] ~~MSYS2 + Verilator 安装，验证 `verilator --lint-only` 可跑~~（完成）
+- [x] ~~eval_benchmark.py：同一输入双跑 + W 码↔tpc 规则码映射 + 差异归一化~~（完成）
+- [x] ~~真实语料 + 评测集对拍，逐差异处置三选~~（完成：4 bug 修复 + 边界落档）
+- [x] ~~结论落档 references.md + 全量回归绿~~（完成：1464 passed + 8 skipped，hardcode gate PASS）
+
 ## P1 — Verilog 实例完善
 
 ### P1.8 Verilog 语法补全 + 仿真语法插件化（发布前置）

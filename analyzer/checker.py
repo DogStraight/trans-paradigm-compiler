@@ -557,7 +557,14 @@ class ProjectChecker:
         self._fill_body_ports(info, module_node)
 
     def _fill_body_ports(self, info: ModuleInfo, module_node: Node) -> None:
-        """body 端口声明补全：方向/宽度按名回填裸名端口或补登记。"""
+        """body 端口声明补全：方向/宽度按名回填裸名端口或补登记。
+
+        只扫模块体顶层声明，**跳过函数/任务子树**——函数参数（input
+        [3:0] A）与模块体端口同节点名（BodyInputDecl），全子树遍历会把
+        函数局部 input 误当模块端口（2026-08-29 对标测试暴露：tv80_alu
+        的 AddSub4 函数参数 A/B/Sub/Carry_In 被误登记为模块端口，8 条
+        W104 假阳性；Verilator 0 报 PINMISSING）。
+        """
         rules = self._struct.get("body_port_rules") or []
         if not rules:
             return
@@ -565,34 +572,44 @@ class ProjectChecker:
         width_field = self._field("width")
         items_field = self._field("items")
         name_field = self._field("name")
-        for node in self._iter_nodes(module_node):
-            if node.node_name not in rules:
+        _FUNC_OR_TASK = ("FuncDecl", "FuncDeclOld", "TaskDecl", "FunctionDecl",
+                         "TaskDeclStmt")
+        stack = list(module_node.iter_children())
+        while stack:
+            node = stack.pop()
+            if not isinstance(node, Node):
                 continue
-            direction = getattr(node, direction_field, "") or ""
-            pr = getattr(node, width_field, None)
-            width = self._render_subtree(pr) if isinstance(pr, Node) else ""
-            dlist = getattr(node, items_field, None)
-            d_items = getattr(dlist, items_field, None) if dlist else None
-            for d in d_items or []:
-                if not isinstance(d, Node):
-                    continue
-                dn = getattr(d, name_field, None)
-                if not (isinstance(dn, Node) and dn.content):
-                    continue
-                p = info.ports.get(dn.content)
-                if p is None:
-                    d._file = info.file
-                    info.ports[dn.content] = ModulePort(
-                        name=dn.content,
-                        direction=direction,
-                        width_expr=width,
-                        decl_node=d,
-                    )
-                else:
-                    p.direction = p.direction or direction
-                    p.width_expr = p.width_expr or width
-                    if p.decl_node is None:
-                        p.decl_node = d
+            if node.node_name in _FUNC_OR_TASK:
+                continue  # 函数/任务子树整体跳过（参数非模块端口）
+            if node.node_name in rules:
+                direction = getattr(node, direction_field, "") or ""
+                pr = getattr(node, width_field, None)
+                width = self._render_subtree(pr) if isinstance(pr, Node) else ""
+                dlist = getattr(node, items_field, None)
+                d_items = getattr(dlist, items_field, None) if dlist else None
+                for d in d_items or []:
+                    if not isinstance(d, Node):
+                        continue
+                    dn = getattr(d, name_field, None)
+                    if not (isinstance(dn, Node) and dn.content):
+                        continue
+                    p = info.ports.get(dn.content)
+                    if p is None:
+                        d._file = info.file
+                        info.ports[dn.content] = ModulePort(
+                            name=dn.content,
+                            direction=direction,
+                            width_expr=width,
+                            decl_node=d,
+                        )
+                    else:
+                        p.direction = p.direction or direction
+                        p.width_expr = p.width_expr or width
+                        if p.decl_node is None:
+                            p.decl_node = d
+            # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
+            for child in node.iter_children():
+                stack.append(child)
 
     def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
         params_field = self._field("params")
@@ -600,22 +617,51 @@ class ProjectChecker:
         value_field = self._field("value")
         params_node = self._unwrap(getattr(module_node, params_field, None))
         params = getattr(params_node, params_field, None) if params_node else None
-        if not params:
-            return
-        for p in params:
-            if not isinstance(p, Node):
+        if params:
+            for p in params:
+                if not isinstance(p, Node):
+                    continue
+                p = self._unwrap(p)  # 参数声明可能被 optional 包装
+                if not isinstance(p, Node):
+                    continue
+                pn = getattr(p, param_name_field, None) if param_name_field else None
+                if not isinstance(pn, Node) or not pn.content:
+                    continue
+                val = getattr(p, value_field, None) if value_field else None
+                info.params[pn.content] = ModuleParam(
+                    name=pn.content,
+                    value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
+                )
+        # 模块体内参数声明（`parameter P = v;` 语句形态，非头部 #(..) 列表）：
+        # ice40 单元库 SB_RAM40_4K 等大量使用 body 参数——只收头部参数会让
+        # W103（覆盖不存在参数）误报（2026-08-29 对标测试暴露，79 条 FP）。
+        # 扫描 module_node 子树内全部 ParamDeclStmt（含 generate/ifdef 内）。
+        self._fill_body_params(info, module_node)
+
+    def _fill_body_params(self, info: ModuleInfo, module_node: Node) -> None:
+        """扫描模块体 ParamDeclStmt，补 body 参数进 module_index。
+
+        ParamDeclStmt → items(DeclaratorList) → Declarator(name, init)。
+        头部参数已填过（同名保留头部——body 同名参数属重复声明，取先）。
+        """
+        for node in self._iter_nodes(module_node):
+            if node.node_name != "ParamDeclStmt":
                 continue
-            p = self._unwrap(p)  # 参数声明可能被 optional 包装
-            if not isinstance(p, Node):
-                continue
-            pn = getattr(p, param_name_field, None) if param_name_field else None
-            if not isinstance(pn, Node) or not pn.content:
-                continue
-            val = getattr(p, value_field, None) if value_field else None
-            info.params[pn.content] = ModuleParam(
-                name=pn.content,
-                value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
-            )
+            items = getattr(node, "items", None)
+            dl = getattr(items, "items", None) if isinstance(items, Node) else None
+            for d in dl or []:
+                if not isinstance(d, Node) or d.node_name != "Declarator":
+                    continue
+                name_node = getattr(d, "name", None)
+                if not isinstance(name_node, Node) or not name_node.content:
+                    continue
+                if name_node.content in info.params:
+                    continue  # 头部已填（body 同名重复声明，取先）
+                val = getattr(d, "init", None)
+                info.params[name_node.content] = ModuleParam(
+                    name=name_node.content,
+                    value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
+                )
 
     def _build_signal_graph(self) -> dict:
         """层 3：全工程信号驱动/负载图（ADR-0008）。

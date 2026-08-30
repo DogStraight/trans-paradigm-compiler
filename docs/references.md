@@ -1812,11 +1812,50 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 | W105 宏条件分支 | 0 | ✅ 已修（语义展开顺带修复） | 闭环 |
 | W201 移位截断 | ~11 → 10（picorv32） | 对拍修正（2026-08-29，V3Width 源码级）：`a = b >> 32`（64→32）**Verilator 也报** WIDTHTRUNC——widthBad 判据对 sized 表达式只看全宽，最小宽度抑制仅限 unsized 常量；"Verilator 也不报"系此前未经对拍的误判。10 条 = 显式取位/算法性但主流同样报 | 保留报（与 Verilator 一致）；已修 `!` 逻辑非宽度 bug（pcpi_timeout 4→1，IEEE 5.5 逻辑运算 1 位，1 条真误报） |
 | W201 算法性截断 | picorv32 部分 | 真截断但算法有意（64 位除法窄寄存器逐步） | 保留报（用户判断）或降 info |
-| W201 单元库 | 20（ice40） | yosys 仿真单元参数化端口（Q=D 16→1） | 已知边界不修 |
-| W103 单元库参数 | 79（ice40） | **合理检出**（SB_RAM40_4K 定义确实无参数——语料自身不完整） | 非误报保留 |
+| W201 单元库 | 20 → **0**（ice40） | ✅ **跨模块同名符号污染（真 bug，已修）**——SB_MAC16 的 `[15:0] D` 污染 20 个 SB_DFF 的标量 D，20 条 W201 全 FP；此前落档"已知边界不修"系未查根因。修复：宽度表按模块作用域隔离（_lookup_width 限定键） | 闭环（对标测试 2026-08-29 推翻旧结论） |
+| W103 单元库参数 | 79 → **0**（ice40） | ✅ **模块体参数提取缺口（真 bug，已修）**——SB_RAM40_4K 参数在模块体（`parameter P = v;`）非头部 #(..) 列表，_fill_params 只收头部 → module_index 参数空 → 79 条"覆盖不存在参数"全 FP；此前落档"合理检出/语料不完整"系未查根因。修复：_fill_body_params 扫 ParamDeclStmt | 闭环（对标测试 2026-08-29 推翻旧结论） |
+| W104 函数参数误当端口 | 8（tv80） | ✅ **函数/任务局部 input 被 _fill_body_ports 全子树遍历误收**（AddSub4 的 A/B/Sub/Carry_In 与模块体端口同节点名 BodyInputDecl）→ 8 条假 W104；Verilator 0 报 PINMISSING。修复：跳过 FuncDecl/FuncDeclOld/TaskDecl 子树 | 闭环（对标测试 2026-08-29） |
+| CC001 全覆盖误报 | 7（ice40 4 + tv80 3） | ✅ **只看"有无 default 关键字"不看覆盖完整性**——`case(cc)` 8 值全覆盖 / `case(WRITE_MODE)` 2 位 0-3 全覆盖无锁存风险，Verilator 0 报 CASEINCOMPLETE。修复：复用 latch_check _case_covered 判据（常量全覆盖不报） | 闭环（对齐 Verilator CASEINCOMPLETE，2026-08-29） |
 | NC 命名 | ~1300 → 0 | ✅ 默认关已处理（0b83b7e） | 闭环 |
 
-**三、当前真实误报率（修复后）**：语义规则 W201 30（单元库 20 + picorv32 10——移位/算法性类均与 Verilator 对拍一致，保留报）+ W105 0 + W002 0 + NC 0（默认关）；已知边界 = 单元库 20 + 显式取位/算法性 10。
+**三、当前真实误报率（对标测试后，2026-08-29）**：语义规则 W201 30 → 10（ice40 20 条跨模块同名污染已修）+ W103 79 → 0 + W104 8 → 0（tv80 函数参数误收已修）+ CC001 7 → 0 + W105 0（picorv32 8 条为 generate 互斥分支，见下"试水第四弹"）+ NC 0（默认关）+ LC001 25（单元库有意锁存，Verilator 对无实例化库单元跳过、simcells 22 条共识）；已知边界 = 算法性截断 10 + generate 互斥 W105（elaboration 层 3 未展开）+ UN001 粒度（Verilator 按位/参数细化）+ AW 族默认关。
+
+#### 试水第四弹：对标测试（2026-08-29，Verilator 二进制 oracle）
+
+- 定位：变异注入器（第三弹）验证"错误能检出"，本弹验证"与成熟工具输出
+  一致性"——同一输入分别跑 tpc check 与 Verilator --lint-only -Wall，
+  差异按处置三选落地。**从源码级判据（W201 对拍 V3Width）升级为二进制
+  全量对拍**。
+- 工具链：MSYS2 装 Verilator 5.050（winget 装 MSYS2 → pacman 装
+  mingw-w64-x86_64-verilator；verilator 是 perl 包装脚本，须在非 login
+  bash 下跑——harness 用临时 .sh 承载，直接调 verilator_bin 会因 MSYS
+  路径前缀失败）。
+- 实现：`tests/e2e/eval_benchmark.py`——工程分组喂双侧 + W 码↔tpc 码
+  映射表（W2T）+ 三态判定（共识/仅 tpc FP 候选/仅 V 漏报候选）+
+  **lint_off 抑制识别**（picorv32 源码 lint_off WIDTH——"Verilator 不报"
+  是被抑制不是判断一致，44 条 tpc 诊断正确归为"抑制"非 FP）+
+  **条件编译行号偏移处理**（ifdef 展开后行号 ≠ 源行号，P3.3 已知坑；
+  含条件编译文件按码族数量对齐，simcells 22 条 LC001=LATCH 22 条共识
+  由此正确识别）+ parse 失败标 TPC-PARSE-FAIL（darkriscv P1.5，0 诊断
+  是假干净不算 MISS）。
+- 结果（真实语料 7 工程）：
+  - **共识 44 条**：UN001↔UNUSEDSIGNAL 21（tv80 13 + picorv32 8）、
+    LC001↔LATCH 22（simcells 单元库锁存）、UN001↔UNUSEDPARAM 1
+  - **修复 4 个真 bug（106 条 FP → 0）**：W201 跨模块同名符号污染
+    （ice40 20）+ W103 模块体参数提取缺口（ice40 79）+ W104 函数参数
+    误当端口（tv80 8）+ CC001 全覆盖误报（ice40 4 + tv80 3）——前 2 条
+    **推翻此前"已知边界/合理检出"落档**（未查根因）
+  - **剩余差异全部判明类别**：仅 V 326 = AW 族默认关（BLKSEQ/COMBDLY）
+    + UN001 语义粒度（Verilator 按位/参数报）+ 单元库未消费信号跳过
+    （ice40 din_0 有意锁存，Verilator 对无实例化模块跳过 LATCH）；
+    仅 tpc 26 = serv_top W101 13+W105 2（语料不完整缺子模块，Verilator
+    同 MODMISSING）+ picorv32 W105 8（generate if/else 互斥分支被信号
+    图同时计入驱动 = 层 3 未做 generate 展开的已知边界）+ ice40 LC001 3
+    （有意锁存，LATCH_INPUT_VALUE 参数语义）
+- 边界如实：Verilator 全设计 elaboration 视角 vs tpc 单文件+跨文件局部；
+  评测集对拍（--acc）34 case 待跑（单文件 case Verilator 需 -Wall 过滤
+  性能类，另行评估）；svlint（cargo）列为可选项未装
+
 
 ### Synopsys（商业 EDA 工具链）— 方法论参照（2026-08 调研，agent-reach + web 检索）
 
@@ -2087,3 +2126,33 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   的"错误必须真实"由门禁反向保证
 - 扩展点：注入器表追加即可（每检查多基座变体、真实语料注入、W101-103/
   W106/WC001/LC 类后续）；fuzz（解析稳健性）为独立轨
+
+#### 试水第四弹：对标测试（2026-08-29 立项，Verilator oracle）
+
+- 定位：变异注入器（第三弹）验证"错误能检出"，对标测试验证"与成熟工具
+  输出的一致性"——同一输入分别跑 tpc check 与 Verilator lint，差异按
+  处置三选落地。对拍验证（AGENTS.md 范式）从"源码级判据"（W201 对拍
+  V3Width）升级为"二进制 oracle 全量对拍"。
+- 工具选型（2026-08-29 实测环境）：
+  - **Verilator（MSYS2，主 oracle）**：语义检查最强，覆盖 W 族（位宽）/
+    LATCH/UNUSED/CASE 类，与 tpc 检查链重合度最高；本机未装，winget 装
+    MSYS2 后 pacman 装 mingw-w64-x86_64-verilator
+  - Verible lint（已捆绑 tests/differential/.tools/verible/，零安装）：
+    语法/风格向，~60 条，与 tpc 规则集重合低，作辅助参照
+  - svlint（未装，cargo 可用）：规则集与 tpc 重合最高（159 条），但
+    cargo install 编译耗时，列为后续可选项（如需安装再评估）
+- 输入集：真实语料 9 文件（tests/e2e/samples/real/ref/）+ 评测集
+  （tests/e2e/samples/check_accuracy/ 34 case）+ mutation 基座/变异体
+- 差异归一化：tpc 规则码 ↔ Verilator W 码映射表（W201↔WIDTHTRUNC、
+  LC001↔LATCH、UN001↔UNUSED、W105↔MULTIDRIVEN、CC001↔CASEINCOMPLETE、
+  W104↔PINMISSING 等）；按 文件/行/规则 对齐
+- 判定：两者都报 = 共识；仅 tpc 报 = FP 候选（查是否真误报）；仅
+  verilator 报 = 漏报候选（规则缺口 or scope 外，逐条判）
+- 边界如实：Verilator 是全设计 elaboration 视角，tpc 是单文件+跨文件
+  局部；Verilator 的仿真/综合语义码（UNOPTFLAT/UNOPTIMIZED 等）超出
+  lint 范围，先过滤不比对；Verilator 默认警告面宽（含性能类），用
+  -Wall + 过滤表收敛到可比子集
+- 处置三选：修（真缺口） / 降级（误报面大，参照 NC/AW 默认关先例） /
+  记录为已知边界（scope 差异或工具行为差异）
+- 阶段：① 装 Verilator 验证可跑 → ② 写对拍 harness（eval_benchmark.py）
+  → ③ 真实语料 + 评测集对拍 → ④ 差异逐条处置 → ⑤ 结论落档
