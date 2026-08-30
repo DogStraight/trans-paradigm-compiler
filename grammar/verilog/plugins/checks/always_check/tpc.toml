@@ -1,0 +1,27 @@
+# always_check 插件 — always 写法风格检查（P1.10 十类：always 写法）
+#
+# 对标（三路横跨，references.md「三主题实现机制调研」always 写法一节）：
+#     Verilator BLKSEQ / BLKANDNBLK（语义 AST 分析，5.038 后按子位重叠
+#     证明收敛）、svlint blocking_assignment_in_always_ff / _latch /
+#     non_blocking_assignment_in_always_comb（LRM 条款引证）、
+#     Verible always-ff-non-blocking（语法层 CST matcher）、
+#     SpyGlass W527/W415a。
+#
+# 检查项（Verilog 语义规则——插件层语言知识，不进引擎）：
+#     AW001  时序 always（posedge/negedge）内阻塞赋值（=）——时序块惯例
+#           用非阻塞（<=），阻塞赋值存在仿真竞态/综合差异风险
+#            （对齐 Verilator BLKSEQ / svlint blocking_assignment_in_always_ff）。
+#     AW002  同一 always 块内同一信号混用阻塞（=）与非阻塞（<=）赋值——
+#           仿真结果随调度未定义（对齐 Verilator BLKANDNBLK 简化版：
+#           只做同块同信号判定，不做跨块子位重叠证明）。
+#
+# **默认关闭**（default = false）：写法纪律是团队约定，仿真代码合法用例
+# 多（真实语料误报面大）——与 NC 命名族同策略（0b83b7e 的 default 字段
+# 机制），按需启用（P4 用户配置 enabled，或 per_file/overrides 引用即
+# 启用）。0.1.1 默认不刷屏。
+#
+# 注：裸 always 无事件控制（仿真无限循环）不做——Verilog-2005 无
+# always_comb/always_ff 语义，误报高（调研结论，见 references.md）。
+
+[analyzer]
+postpasses = ["_always_check.py:run_always_check"]

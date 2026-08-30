@@ -1,0 +1,32 @@
+# ============================================================================
+# always_check 插件 — always 写法风格检查（L2 结构规则，postpass 实现）
+# ============================================================================
+# 规则=数据：AW001/AW002 的元数据（id/category/severity/default）声明在
+# 此 [[checks]] 表（引擎注册表统一管理：default 字段参与激活逻辑、
+# 用户配置 enabled/overrides/per_file 引用校验）；实际判定由
+# _always_check.py postpass 执行（结构规则：时序判定/赋值运算符收集，
+# 非符号级 kind 分发——kind 取哨兵值 "__postpass__"，声明式符号分发
+# 永不命中，规则只由 postpass 触发）。
+#
+# **默认关闭**（default = false）：写法纪律属团队约定，真实代码合法用例
+# 多——与 NC 命名族同策略（0b83b7e），按需启用（P4 用户配置 enabled，
+# 或 per_file/overrides 引用即启用）。0.1.1 默认不刷屏。
+# ============================================================================
+
+[[checks]]
+id = "AW001"
+default = false
+category = "style"
+severity = "warning"
+scope = ["rtl", "tb"]
+kind = "__postpass__"
+message = "时序 always 内阻塞赋值（建议用非阻塞 <=，避免仿真竞态；Verilator BLKSEQ / svlint blocking_assignment_in_always_ff 同规则）"
+
+[[checks]]
+id = "AW002"
+default = false
+category = "style"
+severity = "warning"
+scope = ["rtl", "tb"]
+kind = "__postpass__"
+message = "同一 always 内信号混用阻塞（=）与非阻塞（<=）赋值（仿真调度未定义；Verilator BLKANDNBLK 同规则，简化为同块同信号判定）"

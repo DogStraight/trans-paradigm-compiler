@@ -39,6 +39,43 @@ from core.define import Node
 _HANDLER_CACHE: dict[str, dict[str, tuple[Any, Callable]]] = {}
 
 
+def plugins_dir_of(analyzer) -> str:
+    """analyzer 的语言包插件目录（无 rules_dir 时为空串）。"""
+    rules_dir = getattr(analyzer, "_rules_dir", None)
+    if not rules_dir:
+        return ""
+    return os.path.join(rules_dir, "plugins")
+
+
+def active_rule_ids(analyzer) -> set:
+    """当前启用的规则 id 集合（postpass 插件复用同一激活逻辑）。
+
+    注入（analyzer._checks_enabled，评测/测试显式启用）> 用户配置显式
+    enabled（"不选即关"）> default=true 的规则 ∪ 被 overrides/per_file
+    引用的规则（引用即启用）。规则 id 全量来自 [[checks]] 注册表。
+    """
+    injected = getattr(analyzer, "_checks_enabled", None)
+    if injected is not None:
+        return set(injected)
+    pdir = plugins_dir_of(analyzer)
+    user_cfg = load_user_check_config(plugins_dir=pdir)
+    enabled = user_cfg.get("enabled")
+    if enabled is not None:
+        return set(enabled)
+    referenced = set(user_cfg.get("overrides", {})) | {
+        rid
+        for spec in user_cfg.get("per_file", {}).values()
+        for rid in (spec or {}).get("disabled", [])
+    }
+    active = {
+        r.get("id", "")
+        for r in get_check_rules(plugins_dir=pdir)
+        if r.get("default", True)
+    }
+    active |= referenced
+    return active
+
+
 def check_rules_pass(analyzer, context) -> None:
     """postpass 入口：遍历后对所有符号按 kind 分发声明式规则。
 
@@ -56,40 +93,12 @@ def check_rules_pass(analyzer, context) -> None:
     symbols = getattr(analyzer, "all_symbols", None) or []
     if not symbols:
         return
-    plugins_dir = ""
-    rules_dir = getattr(analyzer, "_rules_dir", None)
-    if rules_dir:
-        plugins_dir = os.path.join(rules_dir, "plugins")
+    plugins_dir = plugins_dir_of(analyzer)
     user_cfg = load_user_check_config(plugins_dir=plugins_dir)
-    enabled = user_cfg.get("enabled")
     overrides = user_cfg.get("overrides", {})
     per_file = user_cfg.get("per_file", {})
     file_ctx = _file_context(symbols)
-
-    # 规则启用集（2026-08-29 默认策略）：
-    #   显式 enabled  → "不选即关"（P4 语义不变）
-    #   缺省          → default=true 的规则 ∪ 被 overrides/per_file 引用的
-    #                   规则（引用即启用——per_file 豁免对默认关闭的规则
-    #                   才有意义；NC 族 default=false 默认不跑）
-    #   ProjectChecker.enabled_rules 注入（analyzer._checks_enabled，评测/
-    #   测试显式启用）优先于用户配置
-    injected = getattr(analyzer, "_checks_enabled", None)
-    if injected is not None:
-        active = set(injected)
-    elif enabled is not None:
-        active = set(enabled)
-    else:
-        referenced = set(overrides) | {
-            rid
-            for spec in per_file.values()
-            for rid in (spec or {}).get("disabled", [])
-        }
-        active = {
-            r.get("id", "")
-            for r in get_check_rules(plugins_dir=plugins_dir)
-            if r.get("default", True)
-        }
-        active |= referenced
+    active = active_rule_ids(analyzer)
 
     # 规则表按插件目录加载（语言包 rules/）；缓存由 check_registry 管理
     for sym in symbols:
