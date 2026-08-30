@@ -2007,3 +2007,50 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   [AGENTS.md as Table of Contents, Not Encyclopedia](https://github.com/agentpatterns-ai/website/blob/main/instructions/agents-md-as-table-of-contents.md)、
   [OpenAI Harness Engineering](https://openai.com/index/harness-engineering/)、
   [ETH Zurich 评测（上下文成本）](https://arxiv.org/abs/2602.11988v2)
+
+#### 层次引用（a.b）解析机制调研（2026-08-29，见贤思齐 → 层次展开能力设计）
+
+- 定位：TODO「位宽跨模块成员宽度」的前置调研——主流工具如何解析层次引用
+  `a.b`（a = 实例，b = 被实例化模块的端口/内部成员），为 tpc 设计"专门的
+  分析器插件能力"（用户定调 2026-08-29）。来源：slang（HierarchicalReference
+  .cpp / Lookup.cpp）、Verilator（V3LinkDot.cpp）、Yosys（hierarchy pass）、
+  tpc 自身 analyzer 结构核对
+
+**一、逐工具机制对比**
+
+| 工具 | 机制 | 关键设计 |
+|---|---|---|
+| slang | Instance 符号带 InstanceBodySymbol（模块全部成员入 body）；层次引用 = Lookup **逐段下钻** instance → body → member，宽度/方向取解析到的符号类型；`result.path` 记录遍历链 | 实例即符号对象、成员即其符号表——**按需解析，无显式"展开"** |
+| Verilator | V3LinkDot `VSymGraph`：按层次建符号表（cell 名 + 模块名作用域树）；`findDotted` 逐段解析，未命中**沿层次上溯**（先 cellnames 后 modname） | **全量 elaboration**（模块实例化为 cell）；宽度来自解析后实际 VarRef 声明 |
+| Yosys | hierarchy pass：cell 类型解析 + 模块树展开（综合视角） | 面向综合的层级展开，非 lint 语义 |
+| tpc 现状 | HierExpr 纯成员链查**当前文件宽度表**（单模块视角）；`a` 是实例时查表不到 → 保守 None | 缺"实例 → 模块 → 成员"解析链 |
+
+**二、亮点单独说明**
+
+- 🔥 **slang 按需解析（实例即符号、成员即符号表）与 tpc 最同构**：tpc 已有
+  module_index（端口表 + 参数 + **ModuleInfo.node 可走查内部成员声明**）+
+  inst_sites（实例点）+ B3 三层参数合并——数据全齐，缺的只是"解析链"本身
+- 🔥 **解析链 = 实例头 → 模块端口表（含覆盖参数）→ 内部成员（走查目标模块
+  AST 声明）**：`a.b.c` 递归（a 实例 → 模块 N；b 若是 N 的实例再下钻 c）
+- 💡 **Verilator 上溯回退**（当前模块找不到向上找）：SV 层次语义，2005 可综合
+  子集少见，tpc 单文件视角暂不需要
+- 📌 **全量 elaboration（Verilator）对 lint 过重**：tpc 按需解析即可，不实例化
+
+**三、可实现性评估（tpc 层次展开能力设计）**
+
+- 🔥 **可做（中成本）——hier 解析器插件（独立 postpass，语言知识留插件层）**：
+  - per-module 实例表：module → {inst_name: (module_name, 实例点 site)}（本文件
+    inst_sites 按模块归组；内部成员声明从 ModuleInfo.node 子树走查声明节点）
+  - 链式解析 `a.b.c`：头段 a 查当前模块实例表 → module_index[模块].ports[b]
+    （宽度表达式 + B3 覆盖参数合并）→ 非端口则走查目标模块 node 内部声明 →
+    若是实例再下钻；解析结果 (width, direction, 模块链)
+  - 消费方：width_check `_hier_width` 查不到本地表时回调 hier 解析器（替代
+    保守 None）；direction 供未来跨模块悬空/驱动判定增量
+- 💡 可做（低成本追加）：`a.b` 方向跨模块（input/output）——与未连接端口/
+  驱动检查同族，后续规则可消费
+- 📌 不做：上溯解析（SV 层次语义）、interface/class 成员（SV 特性）、全量
+  elaboration（Verilator 式）、综合层级展开（Yosys 式）
+- 来源：[slang Lookup.cpp](https://github.com/MikePopoloski/slang/blob/master/source/ast/Lookup.cpp)、
+  [slang HierarchicalReference.cpp](https://github.com/MikePopoloski/slang/blob/master/source/ast/HierarchicalReference.cpp)、
+  [Verilator V3LinkDot.cpp](https://github.com/verilator/verilator/blob/master/src/V3LinkDot.cpp)、
+  [Yosys hierarchy pass](https://github.com/YosysHQ/yosys/blob/main/passes/hierarchy/hierarchy.cc)
