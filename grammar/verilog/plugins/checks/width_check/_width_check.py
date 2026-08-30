@@ -285,7 +285,8 @@ def _expr_tokenize(text: str) -> list | None:
 # ── A4 WIDTH 赋值对比 ────────────────────────────────────
 # assign/阻塞/非阻塞赋值的 LHS vs RHS 宽度：RHS>LHS 截断报 W201（warning）；
 # RHS<LHS 扩展不报（Verilog 扩展是安全的，Verilator WIDTH 也只在截断报
-# 严重问题）；任一侧未知（unsized 常数/参数化/跨模块）→ 保守不报。
+# 严重问题）；unsized 常量按最小宽度参与（'0 自适应、'hFF→8、5→3）；
+# 参数化/跨模块等真未知 → 保守不报。
 # 对标：Verilator WIDTH / WIDTHEXPAND（仅截断）/ slang width-*。
 
 _ASSIGN_RULES = {"AssignStmt", "BlockingAssign", "NonBlockingAssign"}
@@ -780,18 +781,58 @@ def _const_tokenize(text: str) -> list | None:
 def literal_width(text: str) -> int | None:
     """A2：字面量文本 → 位宽（"8'd5" → 8、"4'b1010" → 4）。
 
-    unsized（"'hFF" 自动位宽、"5" 自定尺寸）→ None——宽度取决于上下文
-    （Verilog 自定尺寸语义，B 阶段精化；先保守不推断，避免误报）。
+    unsized 常量按**最小宽度**追踪（Verilator WIDTH 同思路：够容纳则不报、
+    容纳不下报截断；对标 references.md「三主题实现机制调研」位宽一节）：
+      - '0/'1/'x/'z 填充常量 → 0（自适应上下文宽度，永不截断）
+      - 数值 0（"0"/'d0/'h0）→ 0（任何宽度都容纳）
+      - 其余 unsized（"'hFF"→8、"5"→3、"255"→8）→ 容纳该值所需最小位数
+    含 x/z 位（"'hFFx"）或未知形态 → None（保守不推断，避免误报）。
     """
     t = (text or "").strip()
+    if not t:
+        return None
     if "'" not in t:
-        return None  # unsized 常数（自定尺寸）
+        # unsized 十进制整数：最小位宽 = 容纳值所需位数（0 → 0 自适应）
+        digits = t.replace("_", "")
+        if digits.startswith("-"):
+            digits = digits[1:]
+        if not digits.isdigit():
+            return None
+        v = int(digits, 10)
+        return _min_bits(v)
     w = t.split("'", 1)[0].strip()
-    if not w:
-        return None  # 'hFF 自动位宽
     if w.isdigit():
-        return int(w)
-    return None
+        return int(w)  # sized："8'd5" → 8
+    # unsized 带基数常量（'hFF / 'b101 / 'd5 / '0 / 'shFF…）
+    body = t.split("'", 1)[1]
+    if not body:
+        return None
+    if body[0] in "sS":
+        body = body[1:]  # signed 前缀（'shFF）——最小位宽同无符号
+    if not body:
+        return None
+    if len(body) == 1 and body in "01xXzZ":
+        return 0  # 填充常量：'0/'1/'x/'z 自适应上下文
+    base_ch = body[0].lower()
+    if base_ch not in "bohd":
+        return None  # 未知形态
+    digits = body[1:].replace("_", "")
+    if not digits:
+        return None
+    if any(c in "xXzZ" for c in digits):
+        return None  # 含未知位 → 保守（宽度无法精确）
+    try:
+        v = int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
+    except ValueError:
+        return None
+    return _min_bits(v)
+
+
+def _min_bits(v: int) -> int:
+    """非负整数 → 容纳所需最小位数（0 → 0：任意宽度都容纳）。"""
+    if v <= 0:
+        return 0
+    return v.bit_length()
 
 
 # ── A3 表达式宽度推断 ────────────────────────────────────

@@ -169,8 +169,25 @@ class TestWidthEvalA2:
         assert literal_width("8'd5") == 8
         assert literal_width("4'b1010") == 4
         assert literal_width("12'hFFF") == 12
-        assert literal_width("'hFF") is None  # unsized 自动位宽
-        assert literal_width("5") is None  # unsized 自定尺寸
+        # unsized 最小宽度追踪（Verilator WIDTH 同思路）
+        assert literal_width("'hFF") == 8  # 255 需 8 位
+        assert literal_width("5") == 3  # 101 需 3 位
+        assert literal_width("255") == 8
+        assert literal_width("'b101") == 3
+        assert literal_width("'o17") == 4  # 15 需 4 位
+        assert literal_width("'d255") == 8
+        assert literal_width("'shFF") == 8  # signed 前缀同宽
+        assert literal_width("0") == 0  # 自适应
+        assert literal_width("'0") == 0  # 填充常量自适应
+        assert literal_width("'1") == 0
+        assert literal_width("'x") == 0
+        assert literal_width("'hF_F") == 8  # 0xFF=255 → 8 位（下划线忽略）
+        # 含 x/z 位 → 保守 None
+        assert literal_width("'hFFx") is None
+        assert literal_width("'b1x0") is None
+        # 未知形态 → None
+        assert literal_width("foo") is None
+        assert literal_width("") is None
 
 
 def _all_nodes(ast):
@@ -349,18 +366,37 @@ class TestWidthAssignA4:
         assert "4 位" in msgs[0]
 
     def test_unsized_rhs_clean(self, checker):
-        """unsized 常数/未知符号（RHS None）→ 保守不报。"""
+        """unsized 常数最小宽度容纳 / 未知符号 → 不报。"""
         msgs = self._check(
             checker,
             "module t;\n"
             "  wire [7:0] a;\n"
             "  wire z;\n"
             "  assign a = 1'b0;\n"  # 1 位扩展不报
-            "  assign a = a + 1;\n"  # 1 unsized → RHS None
+            "  assign a = a + 1;\n"  # 1 最小宽 1 位 ≤ 8 → RHS 8 位不报
+            "  assign a = '0;\n"  # 填充常量自适应不报
+            "  assign a = 5;\n"  # 5 最小宽 3 位 ≤ 8 → 扩展不报
             "  assign a = z;\n"  # z 未声明 → None
             "endmodule\n",
         )
         assert msgs == []
+
+    def test_unsized_truncation_reported(self, checker):
+        """unsized 常量最小宽度超出 LHS → 报 W201（Verilator 同思路）。"""
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [3:0] a;\n"
+            "  wire [7:0] b;\n"
+            "  assign a = 'h1F;\n"  # 31 需 5 位 > 4 → 截断
+            "  assign a = 300;\n"  # 300 需 9 位 > 4 → 截断
+            "  assign b = 'hFF;\n"  # 255 需 8 位 == 8 → 不报
+            "endmodule\n",
+        )
+        assert len(msgs) == 2
+        joined = " | ".join(msgs)
+        assert "5 位" in joined and "4 位" in joined  # 'h1F → 截断
+        assert "9 位" in joined and "4 位" in joined  # 300 → 截断
 
     def test_multi_target(self, checker):
         """多目标 assign：c→a 截断 + a→b 截断（b 4 位）共 2 条。"""
@@ -568,6 +604,18 @@ class TestWidthPortConnB3:
             "endmodule\n",
         )
         assert any("adder.a_i 8 位" in m and "12 位" in m for m in msgs)
+
+    def test_unsized_literal_conn(self, checker, tmp_path):
+        """unsized 常量最小宽度超出端口 → 截断（slang port-width-trunc 同思路）。"""
+        msgs = self._check_top(
+            checker,
+            tmp_path,
+            "module top;\n"
+            "  adder u_adder (.a_i(300), .y_o());\n"  # 300 需 9 位 > 8 → 截断
+            "  adder u_fit (.a_i(5), .y_o());\n"  # 5 需 3 位 ≤ 8 → 不报
+            "endmodule\n",
+        )
+        assert any("adder.a_i 8 位" in m and "9 位" in m for m in msgs)
 
 
 class TestSelectRangeC1:
