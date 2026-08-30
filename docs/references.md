@@ -1611,6 +1611,34 @@ eval_lint_accuracy.py 并列，analyzer 层）：
 本身就是规则的交叉验证。当前 7 类核心规则（18 期望码）100% recall +
 0 FP（26 case 全绿）。
 
+#### elaboration 层 3 热点：_module_of 全树扫描 → per-file 映射（2026-08-31）
+
+背景：用户问 elaboration 是否值得 Rust/PyO3 下沉——先 profile 定位
+（picorv32 单次 check，cProfile）：`_build_signal_graph`（elaboration
+层 3）cumtime 8.33s / 21.6s ≈ **39% 第一大热点**，其中 `_module_of`
+仅 76 次调用就 7.5s——每次对**新节点**都遍历全 AST 的 ModuleDecl +
+`_subtree_contains` 子树包含判定 = O(N×树) 平方级（251 万次
+`iter_children`）。
+
+修复（analyzer/checker.py）：`_module_of` 改 per-file 预计算
+`{id(节点): 模块名}`（`_precompute_module_map`，一次 DFS O(树)、查询
+O(1)）——与 `_in_active_generate` 同款手法（2026-08-29 先例 103s→
+秒级）。`_subtree_contains` 的 generate 求值调用保留（那些是局部子树
+判定，非全树扫描）。
+
+实测（同一环境）：**21.6s → 14.1s（-35%）**，`_build_signal_graph`
+掉出热点前 12；剩余热点 = parser 5.1s（~36%）+ iter_children 3.8s +
+_analyze 3.6s。全量 1467 passed + 8 skipped、hardcode gate PASS、
+benchmark 对拍数字与基线逐项一致（共识 44/抑制 34/范围外 156）——
+语义零回归。
+
+结论（回答"elaboration 是否上 Rust"）：**elaboration 慢是算法缺陷
+（O(N×树) 平方级），不是 Python 慢**——Python 层预计算即 -35%，零
+风险。Rust/PyO3 下沉（P3.5 已立项）的正确对象是**剩余真热点**：
+parser 骨架（~36%）与 iter_children 遍历本身——且 P3.5 前置 P3.1
+span 绑定（解析器接口稳定后下沉才不白做）。elaboration 层 3 在
+模块映射预计算后已是 O(树) 常数级，不再值得桥接。
+
 #### parser packrat 记忆化尝试（2026-08-29，已回退）
 
 背景：渲染器记忆化后（见 ROADMAP P2.3 更新），parser 是单遍管线最大热点

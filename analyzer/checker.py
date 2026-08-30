@@ -263,7 +263,6 @@ class ProjectChecker:
         entry = os.path.abspath(entry_path)
         self._memo.clear()
         self._module_index.clear()
-        self._module_of_cache = {}  # _module_of memo（2026-08-29 性能修复）
         self._ensure_shared()
         self._refresh_structure()
 
@@ -999,34 +998,46 @@ class ProjectChecker:
     def _module_of(self, fr, node) -> str:
         """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
 
-        嵌套模块罕见——用子树包含判定（模块声明节点是否含目标节点）。
-        带 checker 级 memo（(id(fr), id(node)) → 模块名）：信号图构建对
-        每个过程赋值/实例节点调用，全树扫描是 O(节点×树) 平方级——
-        picorv32 的 W105 过程赋值驱动收集（2026-08-29）后单次 check
-        103s，memo 后恢复秒级（2026-08-29 性能回归修复）。check() 每次
-        clear 本缓存（与 _memo 同生命周期）。
+        per-file 预计算映射（2026-08-31 性能修复）：一次 DFS 建立
+        {id(节点): 模块名}，查询 O(1)。此前逐节点全树扫描
+        `_subtree_contains` 是 O(N×树) 平方级——elaboration 层 3
+        `_build_signal_graph` 对每个 assign/过程块/实例节点调用，picorv32
+        实测 76 次调用 7.5s（占单次 check 21.6s 的 35%，profile 定位）。
+        与 `_in_active_generate` 预计算同款手法（2026-08-29 先例：
+        103s → 秒级）。映射挂在 fr 上，check() 每文件重建（AST 不变，
+        一次构建全文件复用）。
         """
         if fr.ast is None or node is None:
             return ""
-        memo = getattr(self, "_module_of_cache", None)
+        memo = getattr(fr, "_module_map", None)
         if memo is None:
-            memo = {}
-            self._module_of_cache = memo
-        key = (id(fr), id(node))
-        if key in memo:
-            return memo[key]
+            memo = self._precompute_module_map(fr)
+            fr._module_map = memo
+        return memo.get(id(node), "")
+
+    def _precompute_module_map(self, fr) -> dict:
+        """per-file 预计算 {id(node): 模块名}（一次 DFS，O(树)）。
+
+        栈元素 = (node, 当前模块名)；ModuleDecl 进入时更新模块名，
+        子树内节点继承。嵌套模块罕见（SV 特性），内层覆盖外层名——
+        与 _iter_nodes_with_module 同语义。
+        """
+        mapping: dict[int, str] = {}
         decl_rule = self._rule("module_decl_rule")
         name_field = self._field("module_name")
-        result = ""
-        for mnode in self._iter_nodes(fr.ast):
-            if mnode.node_name != decl_rule:
-                continue
-            if self._subtree_contains(mnode, node):
-                nm = getattr(mnode, name_field, None)
-                result = nm.content if isinstance(nm, Node) else ""
-                break
-        memo[key] = result
-        return result
+        root = fr.ast
+        if root is None:
+            return mapping
+        stack = [(root, "")]
+        while stack:
+            node, mod = stack.pop()
+            if node.node_name == decl_rule:
+                nm = getattr(node, name_field, None)
+                mod = nm.content if isinstance(nm, Node) else ""
+            mapping[id(node)] = mod
+            for child in node.iter_children():
+                stack.append((child, mod))
+        return mapping
 
     @staticmethod
     def _subtree_contains(root: Node, target: Node) -> bool:
