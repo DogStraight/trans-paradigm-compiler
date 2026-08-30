@@ -1,0 +1,23 @@
+# hier_check 插件 — 层次引用解析器（服务型 postpass，跨模块成员宽度）
+#
+# 能力（2026-08-29 立项，对标 references.md「层次引用解析机制调研」）：
+#     解析 HierExpr 纯成员链 `a.b.c`（a = 实例，b/c = 被实例化模块的
+#     端口或内部成员）→ 跨模块成员宽度。slang 式**按需解析**（实例即
+#     符号、成员即符号表），不做 Verilator 式全量 elaboration。
+#
+# 数据来源（全部已就绪，缺的只是解析链）：
+#     module_index —— 模块端口表（宽度表达式/方向）+ 参数默认值 +
+#                     ModuleInfo.node（可走查内部成员声明）
+#     inst_sites 形态 —— 本文件 ModuleInst（inst_name/module_name/params）
+#     参数合并 —— B3 三层（调用者参数 → 模块默认 → 实例覆盖，最高优先）
+#
+# 服务方式：run_hier_check 建当前文件 per-module 实例表 + 节点→模块映射
+# 挂 analyzer；width_check 的 _hier_width 查本地表不到时回调
+# resolve_member_width（模块级 import 本插件——同语言包插件互引，引擎
+# 零语言知识；本插件对 width 仅函数级 import，避免循环）。
+#
+# 边界：含下标段（a.b[i] 的 HierSuffix）→ 保守 None；上溯解析（SV 层次
+# 语义）、interface/class 成员、全量 elaboration 不做（调研结论）。
+
+[analyzer]
+postpasses = ["_hier_check.py:run_hier_check"]

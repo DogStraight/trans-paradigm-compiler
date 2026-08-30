@@ -31,6 +31,15 @@ def run_width_check(analyzer, context) -> None:
     # _params 是内部元数据键（参数表），非符号宽度——类型注解豁免
     table["_params"] = params  # type: ignore[assignment]
     analyzer._width_table = table
+    # _hier 解析器：跨模块成员宽度（a.b 中 a 是实例）——hier_check 插件
+    # 服务（2026-08-29，references.md「层次引用解析机制调研」）；同语言
+    # 包插件互引，引擎零语言知识
+    try:
+        from grammar.verilog.plugins.checks.hier_check import _hier_check as hier
+
+        table["_hier"] = lambda n: hier.resolve_member_width(n, analyzer, context)
+    except ImportError:
+        table["_hier"] = None  # type: ignore[assignment]
     _check_assignment_widths(analyzer, context, table)
     _check_port_connections(analyzer, context, table, params_all)
     _check_select_ranges(analyzer, context, table)
@@ -1026,7 +1035,9 @@ def _sum_width(items: list, width_table: dict) -> int | None:
 
 def _hier_width(node, width_table: dict) -> int | None:
     """HierExpr（a / a.b / a[0].b）：单段查表；末段带下标 → 1；
-    纯成员链查末段名。跨模块成员宽度查表不到 → None（保守）。"""
+    纯成员链查末段名（本地表）；查不到且为多段链 → 回调 hier 插件做
+    跨模块成员宽度解析（2026-08-29 补齐——a.b 中 a 是实例时按需解析）。
+    """
     parts = getattr(node, "parts", None) or []
     if not parts:
         return None
@@ -1042,10 +1053,17 @@ def _hier_width(node, width_table: dict) -> int | None:
     if last.node_name == "HierSuffix":
         return 1  # 末段下标选择 → 1 bit
     if last.node_name == "HierMember":
-        return table_width_to_num_params(
+        w = table_width_to_num_params(
             width_table.get(getattr(getattr(last, "name", None), "content", "") or ""),
             width_table.get("_params"),
         )
+        if w is not None or len(parts) < 2:
+            return w
+        # 本地表查不到的多段链 → 跨模块成员宽度（hier 插件按需解析）
+        hier = width_table.get("_hier")
+        if hier is not None:
+            return hier(node)
+        return None
     return None
 
 
