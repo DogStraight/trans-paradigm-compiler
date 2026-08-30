@@ -44,7 +44,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [RADLR](https://github.com/acweathersby/radlr) | 设计参考 | parser 分类报告（LL/RD/RAD 等）及算法复杂度评估（metrics 概念用于调试输出） |
 | [Parsek](https://github.com/anptrs/parsek) | 概念参考 | 组合子+FSM 混合模式（词法 FSM + 解析递归下降） |
 | [parsejoy](https://github.com/adewes/parsejoy) | 概念参考 | YAML 语法即数据（实验性，未完成） |
-| [Ohm](https://github.com/ohmjs/ohm) | 概念参考 | JS PEG + 语义操作分离 + 语法 OO 扩展 + 在线可视化编辑器 |
+| [Ohm](https://github.com/ohmjs/ohm) | 深度参考 | JS PEG + 语法/语义完全分离 + 语义惰性求值 + 增量解析（packrat memo 区间失效）——P3.4 增量 check 的现成参照（详见深调研） |
 | [DHParser](https://gitlab.lrz.de/badw-it/DHParser) | 概念参考 | 完整 left-recursion 支持、测试驱动语法开发、声明式 AST 变换；错误恢复方案不同（反向解析器 vs post-mortem） |
 | [Veryl](https://github.com/veryl-lang/veryl) | 设计参考 | SystemVerilog 现代超集 HDL（Rust，1026★，2022 起活跃）：语法简化 + 可综合保证 + 类型化 clock/reset + 转译保真——HDL 语法设计的直接参照（详见深调研） |
 | [pyverilog](https://github.com/PyHDI/Pyverilog) | 概念参考 | Takamaeda-Yamazaki（日本学者）的 Python HDL 工具包：PLY（Lex/Yacc 风格）LALR 文法声明做 Verilog 解析——"语法即声明、Verilog 工具不必手写解析器"的早期代表（与 Veryl 同作者国别、同 HDL 工具窄域；设计来源追溯见深调研「路线亲缘」） |
@@ -349,6 +349,64 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 💡 transpiler 的 `state_set` 状态化模板输出（tpc transform 是配置驱动，状态化输出思路可借鉴）
   - 💡 文档先行 + 边界自明的写法（README 明确写"不适合什么"，值得学习）
   - 📌 技术路线差异观察：基于现成 PEG 库可快速成型，自研引擎控制力更强但投入更大——两种路线各有适用场景，Koine 在它的目标场景（快速 DSL 原型）下路线是自洽的
+
+### ohm-js（JavaScript）— 声明式语法 + 语义惰性求值（2026-08-31 深调研，agent-reach + 源码镜像）
+
+- 定位：基于 PEG 的解析工具箱（5.5k stars，MIT）。核心主张 = **语法与语义完全分离**：
+  grammar 只做识别（纯声明），semantic actions 独立定义（操作/属性），
+  语义**惰性求值**（只有结果被需要才执行，失败分支/未提及子表达式不跑）。
+  monorepo（compiler/runtime/semantics/cli 分包），ohm 语法**自举**
+  （`ohm-grammar.ohm` 描述自己）。
+- **与 tpc 的差异**（各有取舍，非优劣）：
+
+| 维度 | ohm-js | tpc |
+|------|--------|-----|
+| 语法形态 | **单文件 DSL**（`Arithmetic { Expr = "1 + 1" }`，PEG 变体，大小写区分 syntactic/lexical 规则，隐式空白跳过） | **多文件 TOML**（结构协议：production/node 绑定/布局/符号，无隐式空白——token 显式） |
+| 语义附着 | **独立 Semantics 对象**（wrapper 装饰 CST，操作/属性按规则名分发，惰性 + 记忆化） | **node 字段绑定**（`cond = "$3"` 语法 TOML 显式命名子节点）+ analyzer 符号表 + postpass 插件 |
+| CST 节点 | **通用极简树**（只有 matchLength + children，无语言特定字段；访问靠 `childAt(i)` 位置） | **字段丰富**（语法绑定命名子节点，renderer/analyzer 直接按名取） |
+| 语法扩展 | **OOP 继承**（grammar 继承 supergrammar，规则 override，extend = `新体 \| 旧体`） | **inject 声明式**（`[inject] targets` 挂载，requires 依赖链） |
+| 左递归 | ✅ 支持（PEG 变体，左结合运算符自然写） | 无（递归下降 + Pratt 处理运算符优先级） |
+| 增量解析 | ✅ **内置**（`replaceInputRange` 维护 packrat memo 表，编辑→局部失效） | 无（P3 增量解析是 v0.2 roadmap，未实现） |
+| 错误恢复 | 报错但**不可恢复继续**（PEG 特性） | linter 前置（token 级坏输入诊断）+ parser 截断即失败 |
+| 位置模型 | **Interval**（源码区间，CST 节点自带 matchLength → 区间可算） | `_pos_line/_pos_col`（parser 挂载）+ token span（P3.1 未做） |
+| 语义执行 | 惰性（操作只在需要时跑，访问者式前后控制） | 遍历期符号收集 + postpass 链式走查（主动全跑） |
+
+- **亮点单独说明**：
+  - 🔥 **语义惰性求值**：操作/属性只在结果被需要时执行——回溯分支的语义
+    不跑、未提及子表达式不跑。tpc 的 postpass 是全量主动跑（每文件全树
+    遍历），ohm 的"按需语义"对性能是天然优势（也是 CodeQL path-problem
+    的声明式 cousin）
+  - 🔥 **增量解析 = packrat memo 表维护**：`replaceInputRange` 只失效
+    受影响区间（`clearObsoleteEntries(pos, startIdx)`）——这正是 tpc
+    P3.2/P3.4 增量 check 缺失的**引擎级机制**（tpc 目前是"全量重解析"，
+    P3 只规划了 span 绑定 + 失效传播，未定 memo 表方案；ohm 给了现成
+    参照）
+  - 💡 **属性级记忆化失效**（`_forgetMemoizedResultFor`）：语义操作结果
+    缓存可按属性逐条失效——tpc 增量语义（P3.4）可借鉴"按规则/属性
+    失效"而非全量重跑
+  - 💡 **CST 通用树 + wrapper 分层**：节点零语义字段、语义全在 wrapper
+    ——与 tpc"node 绑定字段"相反但各有取舍：ohm 换通用性（同一 CST
+    多语义复用），tpc 换直接性（renderer/analyzer 免包装）
+  - 📌 **左递归 PEG 支持**：tpc 用 Pratt 处理优先级（`05_expressions.toml`
+    运算符表），ohm 用左递归规则——两种方案都能表达左结合，tpc 的
+    Pratt 与"运算符=配置数据"哲学更贴合
+- **可实现性评估**：
+  - 🔥 **可做（低成本）**：P3.4 增量 check 的"按属性/规则失效"语义——
+    ohm `_forgetMemoizedResultFor` 思路，tpc 规则声明失效键时参考
+  - 💡 **可做（中成本）**：P3.2 增量重解析的 memo 表方案——ohm
+    `replaceInputRange` 的区间失效是现成参照（tpc 需先 P3.1 span 绑定）
+  - 📌 **路线观察**：ohm 证明"声明式语法 + 惰性语义"在 JS 生态可规模化
+    （5.5k stars，编辑器/解释器/编译器多场景）；tpc 的 TOML 多文件
+    结构协议在"语言知识不进代码"上走得更彻底（ohm 语义仍是 JS 代码），
+    ohm 的语法 DSL 单文件形态对"语法即数据"是另一种取舍
+  - ❌ **不借鉴**：PEG 变体语法形态本身（tpc 的 production 声明式已覆盖
+    同等表达力且与渲染/符号体系集成）；惰性语义执行器（tpc 的 postpass
+    主动模型与"语言知识不进代码"更匹配，惰性需 JS 闭包式语义对象，与
+    TOML 规则模型不兼容）
+- 来源：GitHub [ohmjs/ohm](https://github.com/ohmjs/ohm)（5.5k★，MIT），
+  源码镜像 `E:\research\ohm-src\ohm-main`（doc/philosophy.md、
+  doc/syntax-reference.md、packages/ohm-js/src/Matcher.js、Semantics.js、
+  nodes.js）
 
 ### lyra（C++）— SystemVerilog 仿真工具链（2026-08 深调研，与 tpc 同期活跃的同龄人）
 
