@@ -2063,3 +2063,27 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   [slang HierarchicalReference.cpp](https://github.com/MikePopoloski/slang/blob/master/source/ast/HierarchicalReference.cpp)、
   [Verilator V3LinkDot.cpp](https://github.com/verilator/verilator/blob/master/src/V3LinkDot.cpp)、
   [Yosys hierarchy pass](https://github.com/YosysHQ/yosys/blob/main/passes/hierarchy/hierarchy.cc)
+
+#### 试水第三弹：变异注入器（2026-08-29，检查能力：错误类型 → 检出）
+
+- 定位：手写精度样本（34 条）与真实语料之外，**系统化生成错误例子检验
+  检查能力**——从正确基座程序化注入单个特定错误（变异测试），验证对应
+  检查必然检出、注入不引发其他检查误报。与 fuzz 的关系：随机 fuzz 无
+  ground truth 测不了检出；错误注入 = 有标签的定向 fuzz（先拆清
+  "检查能力 vs 解析稳健性"：解析稳健性另轨，Verilator fuzzer 式）。
+- 实现：`tests/e2e/mutation/`（injectors.py 注入器表 + eval_mutation.py
+  运行器 + test_mutation.py 门禁）：
+  - 注入器 = {正确基座 base（目标检查必须干净）, 单错误注入变换 mutate,
+    目标检查, 默认关规则 enable, 合法连带 allowed_extra}
+  - 运行语义：基座零诊断断言 → 注入后目标必检出（recall）→ 诊断 ⊆
+    {目标} ∪ allowed_extra（无他检误报）→ 变异不破坏语法
+  - 已覆盖 13 条注入（9 个检查）：W201 赋值/端口截断、W202 越界、
+    LC001 if 删 else / case default 删赋值、CC001 删 default（连带
+    LC001）、W104 命名删连/位置缺连、W105 双 assign/双实例 output、
+    UN001 加未用声明、NC014 方向后缀改错、AW001 时序块改用 =
+- 结果：**13/13 recall、基座 0 不干净、注入后 0 多余诊断、0 解析失败**；
+  全量 1464 pytest 绿。中途发现 2 条注入器自身错误（有 default 的 case
+  删臂不产生锁存 = 注入错误不成立；追加行落在 endmodule 外）——注入器
+  的"错误必须真实"由门禁反向保证
+- 扩展点：注入器表追加即可（每检查多基座变体、真实语料注入、W101-103/
+  W106/WC001/LC 类后续）；fuzz（解析稳健性）为独立轨
