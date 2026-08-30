@@ -15,7 +15,9 @@ c4 and Verilog are the two proofs of language-agnosticism.
 pip install -e ".[test]"
 
 # Run full test suite (with coverage gate >= 84%)
-python -m pytest tests -q --cov
+# 默认已并发（pyproject addopts -n auto）；coverage 须 -n 0 关并发
+# （xdist 每 worker 独立计数失真）
+python -m pytest tests -q -n 0 --cov
 ```
 
 ## Directory Layout

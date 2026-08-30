@@ -2283,3 +2283,40 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   共识 4（explicit_case_default↔CC001）——case 完整性三工具一致；tpc 的
   语义规则（LC001/W104/W105/W201/W202/UN001）svlint/Verible 无对应 =
   能力域差异
+
+#### 试水第四弹扩展：四工具对照完成（2026-08-29，+slang oracle）
+
+- slang v11.0 落地：用户下载 slang-windows-x86_64.zip（E:\research\slang\
+  slang.exe）+ 源码 tar（E:\research\slang-11.0，scripts/diagnostics.txt
+  警告名全集）。--lint-only + 显式 -W 开启 + --diag-json 输出（JSON 数组，
+  optionName + location file:line:col）。release 无 slang-tidy 二进制
+  （独立构建目标），用 slang --lint-only 替代。
+- 警告名映射（SLANG2T）：width-trunc/port-width-trunc/port-width-expand
+  →W201、index-oob/range-oob/range-width-oob→W202、inferred-latch→LC001、
+  case-incomplete/case-none→CC001、unused-* 族→UN001
+- 结果：**评测集共识 5**（W201_trunc_assign/trunc_blocking/W202_index_oob
+  等——位宽/越界族与 tpc 一致，第四 oracle 独立验证）；真实语料 0 共识
+  （slang 语义警告需完整 elaboration 顶层，lint-only 对单文件大设计不
+  触发）；仅 tpc = CC/LC/UN/端口族 slang 无对应 = 能力域差异实证。
+  slang 无 multi-driven 警告（多驱动是 error 级或不做）。
+- **W105 过程赋值驱动修复 + 性能回归（2026-08-29 注入器暴露）**：
+  - 信号图原只收「连续赋值 + 实例 output」——`always @* y = c;` +
+    `assign y = d;` 双驱动漏检。修复：收集过程赋值驱动（proc_assign_
+    rules 协议字段），驱动源 = **过程块**（同一 always 内多赋值算一个
+    驱动者，防同块分支赋值假阳性——picorv32 14 条假 W105 由此消除；
+    不同块或 always+assign 才冲突，对标 Verilator MULTIDRIVEN）
+  - 性能：过程赋值收集使 picorv32 单次 check 103s（_module_of/_in_active_
+    generate 每节点全树扫描 = O(节点×树) 平方级）→ 预计算 generate 活性
+    映射（_precompute_generate_active，单栈迭代 O(树) 查询 O(1)）→
+    **5.8s（17.7x）**。过程赋值按块收集后同块多赋值不再每赋值一次
+    _module_of，进一步提速
+- **变异注入器 13 → 24 条（9 → 11 检查）**：W201 拼接/一元截断、
+  W202 切片/+:越界、LC001 case default 删赋值/嵌套 if、CC001 casez、
+  W105 always+assign（暴露上述修复）、W106 inout（新覆盖）、AW002 混用
+  （新覆盖）、W104 inout 豁免负向（expect="clean" 机制新增）。门禁反向
+  修正 5 处注入器自身设计错误（slice 越界算错/AW002 语义理解错/base 不
+  干净 ×2/负向语义）。24/24 recall、0 FP、0 解析失败
+- **并发测试默认开启**：pyproject addopts 加 `-n auto`（xdist 依赖本已
+  声明）——全量 315s → ~87s（3.6x）；coverage 须 `-n 0` 关并发
+  （xdist 每 worker 独立计数失真 61% < fail_under 80），CONTRIBUTING/
+  release_checklist 已更新命令

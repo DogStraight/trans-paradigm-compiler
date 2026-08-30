@@ -20,6 +20,8 @@ output_dirs      = ["output"]      # 端口方向 = 驱动（层 3 信号图判�
 input_dirs       = ["input"]       # 端口方向 = 负载（层 3 信号图判定）
 inout_dirs       = ["inout"]       # 端口方向 = 双向（驱动 + 负载）
 assign_rule      = "AssignStmt"    # 连续赋值规则名（层 3 信号图 assign 驱动收集）
+proc_assign_rules = ["BlockingAssign", "NonBlockingAssign"]  # 过程赋值（always/initial 内）驱动收集（W105 多驱动；2026-08-29 注入器暴露 always+assign 双驱动漏检）
+proc_block_rules = ["AlwaysStmt", "InitialStmt"]  # 过程块规则名（同一块内多赋值 = 一个驱动源；2026-08-29 防同块多赋值假阳性）
 body_port_rules  = ["BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl"]  # 模块体端口声明（旧式端口方向/宽度补全）
 
 # 节点字段（语法 TOML node 绑定名）

@@ -12,10 +12,10 @@
 ## 1. 回归门禁（发布前必须全绿）
 
 ```bash
-python -m pytest tests/ -q                      # 单测全绿
+python -m pytest tests/ -q                      # 单测全绿（默认并发）
 python tests/e2e/run_all_tests.py               # e2e FAIL 0
 python tests/e2e/eval_lint_accuracy.py          # lint recall 31/31、零误报
-python -m pytest tests/ --cov --cov-report=term # 覆盖率 ≥ fail_under（80）
+python -m pytest tests/ -n 0 --cov --cov-report=term # 覆盖率 ≥ fail_under（80；-n 0 关并发防 xdist 计数失真）
 ```
 
 ## 2. 版本号核对

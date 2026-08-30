@@ -263,6 +263,7 @@ class ProjectChecker:
         entry = os.path.abspath(entry_path)
         self._memo.clear()
         self._module_index.clear()
+        self._module_of_cache = {}  # _module_of memo（2026-08-29 性能修复）
         self._ensure_shared()
         self._refresh_structure()
 
@@ -712,6 +713,55 @@ class ProjectChecker:
                         entry = _ensure((mod_name, sig))
                         if inst_ref not in entry["drivers"]:
                             entry["drivers"].append(inst_ref)
+            # 过程赋值驱动（always/initial 内阻塞/非阻塞赋值目标）——
+            # 2026-08-29 注入器暴露：`always @* y = c;` + `assign y = d;`
+            # 双驱动此前漏检（信号图只收连续赋值 + 实例 output）。
+            # 对标 Verilator MULTIDRIVEN（过程 + 连续驱动同判）。
+            # 驱动源 = **过程块**（同一 always 内多赋值算一个驱动者——
+            # 如 always @(posedge clk) 内分支赋值同一 reg 合法；不同块或
+            # always+assign 才冲突）。
+            proc_rules = self._struct.get("proc_assign_rules") or []
+            proc_blocks = self._struct.get("proc_block_rules") or []
+            if proc_rules and proc_blocks and fr.ast is not None:
+                # 一次遍历建 赋值节点 → 所属过程块节点 映射
+                assign_block: dict[int, Node] = {}
+                todo = [(fr.ast, None)]
+                while todo:
+                    node, blk = todo.pop()
+                    if node is None:
+                        continue
+                    if node.node_name in proc_blocks:
+                        blk = node
+                    if node.node_name in proc_rules:
+                        assign_block[id(node)] = blk
+                    for child in node.iter_children():
+                        todo.append((child, blk))
+                # 按 过程块 → 信号 收集驱动（块内多赋值去重为同一驱动源）
+                block_sigs: dict[int, tuple] = {}
+                for node in self._iter_nodes(fr.ast):
+                    if node.node_name not in proc_rules:
+                        continue
+                    blk = assign_block.get(id(node))
+                    if blk is None:
+                        continue
+                    if not self._in_active_generate(fr, node):
+                        continue
+                    tgt = getattr(node, target_field, None)
+                    sig = self._render_subtree(tgt) if isinstance(tgt, Node) else ""
+                    if not sig or not _is_signal_expr(sig):
+                        continue
+                    if id(blk) not in block_sigs:
+                        block_sigs[id(blk)] = (blk, set())
+                    block_sigs[id(blk)][1].add(sig)
+                block_idx = 0
+                for blk_node, sigs in block_sigs.values():
+                    block_idx += 1
+                    mod_name = self._module_of(fr, blk_node)
+                    inst_ref = f"{os.path.basename(fr.path)}:always#{block_idx}"
+                    for sig in sigs:
+                        entry = _ensure((mod_name, sig))
+                        if inst_ref not in entry["drivers"]:
+                            entry["drivers"].append(inst_ref)
             for conn in fr.connections:
                 mod_name = self._module_of(fr, conn.inst_node)
                 if not self._in_active_generate(fr, conn.inst_node):
@@ -754,26 +804,123 @@ class ProjectChecker:
         （如 picorv32 `generate if (ENABLE_MUL) 实例 else assign`：两个
         分支都驱动 pcpi_mul_ready → 8 条 W105 假阳性，Verilator 0 报）。
 
-        本方法：沿祖先链找 GenerateBlock→IfBlock，条件可求值（模块参数
-        表）且节点不在选中分支 → False（跳过该驱动源）；条件不可判 →
-        True 保守保留（不因无法判定而漏报真多驱动）。
+        实现：per-file 预计算 {id(node): bool}（一次 DFS 维护 generate
+        条件栈，O(树)）；查询 O(1)。此前每节点全树扫描定位 generate +
+        _subtree_contains 判定分支是 O(节点×树) 平方级——picorv32 过程
+        赋值驱动收集（2026-08-29）后单次 check 103s，预计算后恢复秒级。
         """
         if fr.ast is None or node is None:
             return True
-        # 模块参数表（头部 + body 参数，_fill_params 已合并）→ 求值环境
-        mod_name = self._module_of(fr, node)
-        info = self._module_index.get(mod_name)
-        params: dict[str, str] = {}
-        if info is not None:
-            params = {p.name: p.value_expr for p in info.params.values()}
-        # 找节点所在模块声明，沿其子树内 generate 结构判定
+        memo = getattr(fr, "_gen_active_map", None)
+        if memo is None:
+            memo = self._precompute_generate_active(fr)
+            fr._gen_active_map = memo
+        return memo.get(id(node), True)
+
+    def _precompute_generate_active(self, fr) -> dict:
+        """per-file 预计算 {id(node): bool}——节点是否在选中的 generate 分支。
+
+        单栈迭代（无递归）：栈元素 = (node, stack, params)。普通节点标记
+        活性后子节点入栈；GenerateBlock 内 IfBlock/ElseIfBlock 求值条件，
+        then/else 分支以「追加/弹出活性」展开入栈（else-if 链循环）。
+        节点活性 = 所在分支全部选中。O(树)，查询 O(1)。纯迭代实现避免
+        深 AST/嵌套 generate 递归爆栈（picorv32 等大文件，2026-08-29）。
+        """
+        active: dict[int, bool] = {}
         decl_rule = self._rule("module_decl_rule")
-        for mnode in self._iter_nodes(fr.ast):
-            if mnode.node_name != decl_rule:
+        root = fr.ast
+        if root is None:
+            return active
+
+        def expand_if(ifb, stack: list, params: dict, todo: list) -> None:
+            """IfBlock/ElseIfBlock：条件求值，then/else 分支展开入栈。
+
+            else-if 链：外层条件为假时进入链，链内条件独立求值但活性
+            叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
+            → 整块按当前活性展开（保守）。纯迭代无递归。
+            """
+            # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
+            base = list(stack)
+            cur = ifb
+            while isinstance(cur, Node) and cur.node_name in (
+                "IfBlock", "ElseIfBlock"
+            ):
+                cond_val = self._eval_gen_cond(cur, params)
+                then_node = getattr(cur, "then_stmt", None)
+                chain = getattr(cur, "else_chain", None)
+                if cond_val is None:
+                    todo.append((cur, base, params))
+                    return
+                # then 分支：base（外层全假）+ 本条件真
+                todo.append((then_node, base + [cond_val], params))
+                if isinstance(chain, Node) and chain.node_name in (
+                    "IfBlock", "ElseIfBlock"
+                ):
+                    # 进入链：外层再加"本条件假"
+                    base = base + [not cond_val]
+                    cur = chain
+                    continue
+                # 最终 else：base（外层全假）+ 本条件假
+                todo.append((chain, base + [not cond_val], params))
+                return
+
+        todo = []
+        for child in root.iter_children():
+            todo.append((child, [], {}))
+        while todo:
+            node, stack, params = todo.pop()
+            if node is None:
                 continue
-            if not self._subtree_contains(mnode, node):
+            active[id(node)] = all(stack)
+            if node.node_name == "GenerateBlock":
+                for sub in getattr(node, "sub_node", None) or []:
+                    if not isinstance(sub, Node):
+                        continue
+                    if sub.node_name in ("IfBlock", "ElseIfBlock"):
+                        # GenerateBlock 内的条件分支：求值展开（互斥）
+                        expand_if(sub, stack, params, todo)
+                    else:
+                        todo.append((sub, stack, params))
                 continue
-            return self._branch_active(mnode, node, params)
+            # 普通 IfBlock/ElseIfBlock（always 内 if 等）：非 generate
+            # 条件——按普通子节点遍历（不展开互斥，活性继承当前栈）
+            if node.node_name == decl_rule:
+                info = self._module_index.get(
+                    getattr(getattr(node, "module_name", None), "content", "")
+                    or ""
+                )
+                params2: dict[str, str] = {}
+                if info is not None:
+                    params2 = {p.name: p.value_expr for p in info.params.values()}
+                for child in node.iter_children():
+                    todo.append((child, [], params2))
+                continue
+            for child in node.iter_children():
+                todo.append((child, stack, params))
+        return active
+
+    def _branch_active(self, mod_node: Node, target: Node, params: dict) -> bool:
+        """模块内 target 是否处于选中的 generate 分支（递归沿祖先）。
+
+        遍历模块子树找 GenerateBlock→IfBlock/ElseIfBlock；若 target 在某
+        个条件分支块内，求值 condition（参数表），判定该分支是否选中；
+        未选中 → False。else-if 链递归（ElseIfBlock 与 IfBlock 同构）。
+        多个嵌套 generate 全部选中才 True。条件不可判 → True 保守保留
+        （不因无法判定而漏报真多驱动，对齐 Verilator V3Param 语义的
+        保守侧）。注：信号图构建走 _precompute_generate_active 的 O(1)
+        查表路径，本方法保留供其他调用方（精度等价）。
+        """
+        for gnode in self._iter_nodes(mod_node):
+            if gnode.node_name != "GenerateBlock":
+                continue
+            for sub in getattr(gnode, "sub_node", None) or []:
+                if not isinstance(sub, Node):
+                    continue
+                if sub.node_name == "IfBlock" and self._subtree_contains(sub, target):
+                    return self._if_branch_active(sub, target, params)
+                # ElseIfBlock 也可能直接挂在 GenerateBlock 下（罕见）
+                if sub.node_name == "ElseIfBlock" and self._subtree_contains(sub, target):
+                    return self._if_branch_active(sub, target, params)
         return True
 
     def _branch_active(self, mod_node: Node, target: Node, params: dict) -> bool:
@@ -853,18 +1000,33 @@ class ProjectChecker:
         """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
 
         嵌套模块罕见——用子树包含判定（模块声明节点是否含目标节点）。
+        带 checker 级 memo（(id(fr), id(node)) → 模块名）：信号图构建对
+        每个过程赋值/实例节点调用，全树扫描是 O(节点×树) 平方级——
+        picorv32 的 W105 过程赋值驱动收集（2026-08-29）后单次 check
+        103s，memo 后恢复秒级（2026-08-29 性能回归修复）。check() 每次
+        clear 本缓存（与 _memo 同生命周期）。
         """
         if fr.ast is None or node is None:
             return ""
+        memo = getattr(self, "_module_of_cache", None)
+        if memo is None:
+            memo = {}
+            self._module_of_cache = memo
+        key = (id(fr), id(node))
+        if key in memo:
+            return memo[key]
         decl_rule = self._rule("module_decl_rule")
         name_field = self._field("module_name")
+        result = ""
         for mnode in self._iter_nodes(fr.ast):
             if mnode.node_name != decl_rule:
                 continue
             if self._subtree_contains(mnode, node):
                 nm = getattr(mnode, name_field, None)
-                return nm.content if isinstance(nm, Node) else ""
-        return ""
+                result = nm.content if isinstance(nm, Node) else ""
+                break
+        memo[key] = result
+        return result
 
     @staticmethod
     def _subtree_contains(root: Node, target: Node) -> bool:

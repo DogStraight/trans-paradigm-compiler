@@ -82,6 +82,10 @@ include = [
 minversion = "8.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+# 默认并发（pytest-xdist，进程级并行；global_state 进程内隔离天然兼容）：
+# 全量 315s → ~88s（~3.6x）。coverage 场景须显式 -n 0 关并发
+# （xdist 每 worker 独立计数会失真，实测 61% < fail_under 80）。
+addopts = "-n auto"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

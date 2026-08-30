@@ -299,11 +299,114 @@ def _run_svlint(files: list[str]) -> tuple[list[dict], list[str]]:
     return diags, errors
 
 
+# ── slang oracle ────────────────────────────────────────────────
+# slang v11.0（用户下载 E:\research\slang\slang.exe，源码 E:\research\
+# slang-11.0）。--lint-only + 显式 -W 开启警告；--diag-json 输出
+# [{severity, message, optionName, location: "file:line:col", ...}]。
+# 警告名全集见 scripts/diagnostics.txt（width-trunc/port-width-trunc/
+# inferred-latch/case-incomplete/index-oob/unused-* 族）。
+_SLANG_BIN = r"E:\research\slang\slang.exe"
+# slang 警告名 → tpc 规则码（重叠子集；语义精确映射）
+SLANG2T = {
+    "width-trunc": "W201",          # 隐式转换截断
+    "port-width-trunc": "W201",     # 端口连接截断
+    "port-width-expand": "W201",    # 端口连接扩展（tpc 只报截断）
+    "index-oob": "W202",            # 位选越界
+    "range-oob": "W202",            # 范围越界
+    "range-width-oob": "W202",
+    "inferred-latch": "LC001",      # 锁存
+    "case-incomplete": "CC001",     # case 未全覆盖
+    "case-none": "CC001",           # case 无匹配无 default
+    "unused-net": "UN001",          # 未使用 net
+    "unused-variable": "UN001",     # 未使用变量
+    "unused-parameter": "UN001",    # 未使用参数
+    "unused-port": "UN001",
+    "unused-but-set-port": "UN001",
+    "unused-but-set-variable": "UN001",
+    "unused-typedef": "UN001",
+    "unused-genvar": "UN001",
+}
+# 开启的警告（-W 逐个；对应 tpc 语义面的子集）
+_SLANG_WARNS = [
+    "width-trunc", "port-width-trunc", "port-width-expand",
+    "index-oob", "range-oob", "range-width-oob",
+    "inferred-latch", "case-incomplete", "case-none",
+    "unused-net", "unused-variable", "unused-parameter",
+    "unused-port", "unused-but-set-port", "unused-but-set-variable",
+    "unused-typedef", "unused-genvar",
+]
+_SLANG_JSON_RE = re.compile(
+    r'"location":\s*"([^"]+)"'
+)
+
+
+def _run_slang(files: list[str]) -> tuple[list[dict], list[str]]:
+    """跑 slang --lint-only，返回 (diagnostics, errors)。
+
+    --diag-json - 输出 JSON 数组到 stdout（{severity, message,
+    optionName, location: "file:line:col"}）。location 是 1-based 行/列。
+    """
+    if not os.path.exists(_SLANG_BIN):
+        return [], ["slang 未找到: %s" % _SLANG_BIN]
+    args = [_SLANG_BIN, "--std=1364-2005", "--lint-only", "--diag-json", "-"]
+    for w in _SLANG_WARNS:
+        args.append("-W" + w)
+    args.extend(files)
+    proc = subprocess.run(
+        args, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=180,
+    )
+    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    diags, errors = [], []
+    # 从合并输出提取 JSON 数组段（stdout 的 [ ... ]）
+    import json as _json
+    start = out.find("[")
+    end = out.rfind("]")
+    arr = []
+    if start != -1 and end > start:
+        try:
+            arr = _json.loads(out[start:end + 1])
+        except Exception:
+            errors.append("JSON parse fail: %s" % out[start:start + 200])
+    for item in arr:
+        if not isinstance(item, dict):
+            continue
+        oname = item.get("optionName", "")
+        loc = item.get("location", "") or ""
+        m = re.match(r"^(.+):(\d+):(\d+)$", loc)
+        if not m:
+            errors.append("location parse fail: %s" % loc)
+            continue
+        fpath, ln, col = m.groups()
+        diags.append({
+            "code": oname, "file": os.path.basename(fpath),
+            "line": int(ln), "col": int(col),
+            "msg": item.get("message", ""),
+        })
+    for line in out.splitlines():
+        if "Build succeeded" in line or "Build failed" in line:
+            continue
+        s = line.strip()
+        if not s:
+            continue
+        # JSON 数组段内的行（[{},:] 等）不算错误
+        if s in ("[", "]", "{", "}", "},", "{", "],"):
+            continue
+        if s.startswith(('"', "{")) and s.endswith((",", "")):
+            continue
+        if "symbolPath" in s or '"optionName"' in s or '"location"' in s \
+                or '"message"' in s or '"severity"' in s:
+            continue
+        errors.append(s)
+    return diags, errors
+
+
 # oracle 注册表：name → (run 函数, 码映射表, 范围外码集)
 _ORACLES = {
     "verilator": (_run_verilator, W2T, _SCOPE_OUT),
     "verible": (_run_verible, VERIBLE2T, set()),
     "svlint": (_run_svlint, SVLINT2T, _SVLINT_SCOPE_OUT),
+    "slang": (_run_slang, SLANG2T, set()),
 }
 
 
@@ -329,17 +432,43 @@ def _tpc_diags(checker, entry: str) -> tuple[list[dict], bool]:
 def _tpc_diags_all(checker, files: list[str]) -> tuple[list[dict], bool]:
     """跑 tpc check 覆盖文件组**全部**文件（oracle 扫全目录对齐）。
 
-    与 _tpc_diags 的差异：oracle（Verible/svlint）对每个输入文件独立扫，
-    而 tpc 从 entry 递归只能发现 entry 依赖链上的模块——多文件工程里
-    entry 不依赖的独立文件（如 project_bus_ctrl 的 reg_if 不被 arbiter
-    依赖）tpc 会漏扫。对每个文件分别 check 并合并诊断（文件级去重）。
+    与 _tpc_diags 的差异：oracle（Verible/svlint/slang）对每个输入文件
+    独立扫，而 tpc 从 entry 递归只能发现 entry 依赖链上的模块——多文件
+    工程里 entry 不依赖的独立文件（如 project_bus_ctrl 的 reg_if 不被
+    arbiter 依赖）tpc 会漏扫。
+
+    实现：对 entry 跑**一次** check（全量编译覆盖依赖链），再对 entry
+    未覆盖的独立文件补 check（避免对每文件重复全量编译——picorv32 单次
+    check ~95s，N 文件 × N 次会数分钟超时）。
     """
     out: list[dict] = []
     parse_ok = True
     seen: set[tuple] = set()
+    # entry = 文件组第一个文件；一次 check 覆盖其依赖链
+    entry = files[0]
+    report = checker.check(entry)
+    covered_paths = {os.path.abspath(f["path"]) for f in report.get("files", [])}
+    for f in report.get("files", []):
+        if not f.get("parse_ok") or f.get("syntax"):
+            parse_ok = False
+            continue
+        base = os.path.basename(f["path"])
+        for d in f.get("semantic", []):
+            code = d.get("code")
+            if not code:
+                continue
+            line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
+            key = (code, base, line0 + 1)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"code": code, "file": base, "line": line0 + 1})
+    # 补查 entry 未覆盖的独立文件（不在依赖链的）
     for path in files:
-        report = checker.check(path)
-        for f in report.get("files", []):
+        if os.path.abspath(path) in covered_paths:
+            continue
+        r2 = checker.check(path)
+        for f in r2.get("files", []):
             if not f.get("parse_ok") or f.get("syntax"):
                 parse_ok = False
                 continue

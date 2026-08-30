@@ -76,6 +76,7 @@ def evaluate(checker) -> tuple[list[dict], dict]:
         target = inj["target"]
         enabled = sorted(default_on | set(inj.get("enable", [])))
         checker._enabled_rules = enabled
+        expect_clean = inj.get("expect") == "clean"  # 负向注入：mutate 后不报
         tmpdir = tempfile.mkdtemp(prefix="tpc_mut_")
         try:
             base_codes = _check_src(checker, inj["base"], tmpdir)
@@ -103,21 +104,31 @@ def evaluate(checker) -> tuple[list[dict], dict]:
 
             entry = per_target.setdefault(target, {"total": 0, "hit": 0})
             entry["total"] += 1
-            if target in codes:
+            if expect_clean:
+                # 负向：变异后目标检查必须不报（验证豁免面不误报）
+                if target not in codes:
+                    entry["hit"] += 1
+                    stats["recall_hit"] += 1
+                else:
+                    stats["recall_miss"] += 1
+            elif target in codes:
                 entry["hit"] += 1
                 stats["recall_hit"] += 1
             else:
                 stats["recall_miss"] += 1
 
-            extras = codes - {target} - set(inj.get("allowed_extra", []))
-            if extras:
-                stats["extra_fp"] += 1
-            verdict = "HIT" if target in codes and not extras else (
-                "MISS" if target not in codes else "FP-EXTRA"
-            )
+            if expect_clean:
+                extras = codes - set(inj.get("allowed_extra", []))
+                verdict = "HIT" if not extras else "FP-EXTRA"
+            else:
+                extras = codes - {target} - set(inj.get("allowed_extra", []))
+                verdict = "HIT" if target in codes and not extras else (
+                    "MISS" if target not in codes else "FP-EXTRA"
+                )
             rows.append({
                 "id": inj["id"],
                 "target": target,
+                "expect": inj.get("expect", "hit"),
                 "verdict": verdict,
                 "codes": sorted(codes),
                 "allowed_extra": sorted(inj.get("allowed_extra", [])),
