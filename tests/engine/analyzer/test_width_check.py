@@ -398,6 +398,22 @@ class TestWidthAssignA4:
         assert "5 位" in joined and "4 位" in joined  # 'h1F → 截断
         assert "9 位" in joined and "4 位" in joined  # 300 → 截断
 
+    def test_logical_not_width_one(self, checker):
+        """`!x` 逻辑非结果 1 位（IEEE 5.5）——1 位 LHS 不报截断。
+
+        对拍 Verilator（V3Width widthBad：!x 结果 1 位）；此前按操作数
+        宽误报（picorv32 pcpi_timeout = !pcpi_timeout_counter 4→1）。
+        """
+        msgs = self._check(
+            checker,
+            "module t;\n"
+            "  wire [3:0] cnt;\n"
+            "  wire timeout;\n"
+            "  assign timeout = !cnt;\n"  # 逻辑非 → 1 位，等宽不报
+            "endmodule\n",
+        )
+        assert msgs == []
+
     def test_multi_target(self, checker):
         """多目标 assign：c→a 截断 + a→b 截断（b 4 位）共 2 条。"""
         msgs = self._check(

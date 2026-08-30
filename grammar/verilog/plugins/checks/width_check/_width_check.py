@@ -894,6 +894,9 @@ def infer_expr_width(node, width_table: dict) -> int | None:
         op = getattr(node, "op", "")
         if op in _REDUCTION_OPS:
             return 1  # 一元归约 → 1 bit
+        if op == "!":
+            return 1  # 逻辑非 → 1 bit（IEEE 1364-2005 5.5.2 逻辑运算；
+            # 2026-08-29 对拍 Verilator：!x 结果 1 位，此前按操作数宽误报）
         return infer_expr_width(getattr(node, "operand", None), width_table)
     if name == "BinaryOp":
         return _binary_width(node, width_table)
