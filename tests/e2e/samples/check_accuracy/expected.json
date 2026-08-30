@@ -91,6 +91,11 @@
             "expect": ["W201"],
             "desc": "位选 LHS（4 位）← 12 位截断应检出"
         },
+        "W201_param_override_trunc": {
+            "entry": "top.sv",
+            "expect": ["W201"],
+            "desc": "模块内固定位宽 ← 参数位宽赋值，外层覆盖参数后截断应检出（B4）"
+        },
         "W202_select_oob": {
             "entry": "top.sv",
             "expect": ["W202"],
@@ -154,6 +159,10 @@
         "W201_unsized_clean": {
             "entry": "top.sv",
             "desc": "unsized 常数 RHS / 等宽赋值不应误报 W201"
+        },
+        "W201_param_override_clean": {
+            "entry": "top.sv",
+            "desc": "外层覆盖参数但覆盖后不截断不应误报 W201（B4）"
         },
         "W202_in_bounds": {
             "entry": "top.sv",

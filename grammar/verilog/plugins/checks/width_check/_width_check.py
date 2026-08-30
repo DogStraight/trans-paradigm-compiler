@@ -17,6 +17,8 @@ from core.define import Node
 _WIDTH_KINDS = {"wire", "reg", "integer", "port"}
 # integer = 32 位有符号（IEEE 1364-2005 A.2.1.3；语言知识，插件层）
 _INTEGER_WIDTH = "32"
+# B4 走查目标模块 node 的声明节点形态（与 hier_check _DECL_RULES 同款）
+_DECL_NODE_RULES = {"WireDecl", "RegDecl"}
 
 
 def run_width_check(analyzer, context) -> None:
@@ -42,6 +44,7 @@ def run_width_check(analyzer, context) -> None:
         table["_hier"] = None  # type: ignore[assignment]
     _check_assignment_widths(analyzer, context, table)
     _check_port_connections(analyzer, context, table, params_all)
+    _check_inst_internal_widths(analyzer, context, table, params_all)
     _check_select_ranges(analyzer, context, table)
 
 
@@ -487,6 +490,162 @@ def _override_params(site, module_defaults: dict, caller_params: dict) -> dict:
         if pn and pv:
             out[pn] = pv
     return out
+
+
+# ── B4 实例化覆盖 → 目标模块内部赋值重算（2026-08-31 补） ──────
+# B3 只查"端口连接宽度"（外层表达式 vs 端口宽度），**不回传被实例化
+# 模块内部**的赋值——用户场景：模块 A 内 `reg [3:0] y; wire [W-1:0] x;
+# assign y = x;` 默认 W=4 不截断，外层 `A #(.W(16))` 覆盖后 16→4 截断，
+# 模块定义处检查（用默认参数）漏检。Verilator 靠 elaboration 每实例化
+# 点独立展开能报（WIDTHTRUNC In instance 'B.u_a'）。
+#
+# 本步：对有**有效覆盖**（覆盖值 ≠ 模块默认值）的实例化点，用覆盖后
+# 参数表重算目标模块内部赋值截断。符号宽度表从 ModuleInfo.node 走查
+# （跨文件目标模块无 analyzer 符号表）；不设 _hier 回调——跨文件层次
+# 引用宽度求值留给 hier 插件，此处保守 None 防误判。
+# 仅当目标模块内部存在**参数化宽度**（含字母的宽度表达式）才重算——
+# 固定宽度模块覆盖参数不影响内部赋值，跳过省遍历（单元库空壳模块）。
+
+
+def _check_inst_internal_widths(analyzer, context, table: dict, params_all: dict) -> None:
+    """B4：实例化点覆盖参数 → 目标模块内部赋值截断重算（W201）。"""
+    module_index = context.extra.get("module_index", {}) or {}
+    inst_sites = context.extra.get("inst_sites", []) or []
+    caller_params = table.get("_params", {}) or {}
+    for site in inst_sites:
+        mod_name = node_text(getattr(site, "module_name", None))
+        if not mod_name:
+            continue
+        info = module_index.get(mod_name)
+        if info is None or getattr(info, "node", None) is None:
+            continue
+        defaults = params_all.get(mod_name, {})
+        if not _override_changes_params(site, defaults):
+            continue  # 无覆盖或覆盖值 == 默认 → 模块定义处检查已覆盖，跳过
+        ov_params = _override_params(site, defaults, caller_params)
+        _recheck_module_assigns(info, site, ov_params, context)
+
+
+def _override_changes_params(site, defaults: dict) -> bool:
+    """site 是否有参数覆盖且覆盖值 ≠ 模块默认值（有效覆盖判据）。"""
+    po = getattr(site, "params", None)
+    pl = getattr(po, "params", None) if isinstance(po, Node) else None
+    items = getattr(pl, "items", None) if isinstance(pl, Node) else None
+    for item in items or []:
+        if not isinstance(item, Node) or item.node_name != "NamedParamOverride":
+            continue
+        pn = node_text(getattr(item, "param_name", None))
+        pv = node_text(getattr(item, "value", None))
+        if pn and pv and pv != defaults.get(pn):
+            return True
+    return False
+
+
+def _module_width_table(info) -> dict:
+    """目标模块符号宽度表（从 ModuleInfo.node 走查，B4 用）。
+
+    端口宽度取 checker 已提取的 width_expr（ANSI + body 端口已合并）；
+    内部声明走查 WireDecl/RegDecl/IntegerDecl（类型级 packed_range 优先、
+    声明符级按名对齐——与 A1 extract_width 同判据）；数组符号集随表。
+    返回表只含符号宽度文本 + "_arrays"，_params 由调用方按覆盖表设置。
+    """
+    table: dict[str, str] = {}
+    arrays: set[str] = set()
+    for pname, port in (getattr(info, "ports", None) or {}).items():
+        table[pname] = getattr(port, "width_expr", None) or ""
+    node = getattr(info, "node", None)
+    if node is None:
+        table["_arrays"] = arrays  # type: ignore[assignment]
+        return table
+    for n in _iter_nodes(node):
+        if n.node_name == "IntegerDecl":
+            for it in _declarator_names(n):
+                table[it] = _INTEGER_WIDTH
+            continue
+        if n.node_name not in _DECL_NODE_RULES:
+            continue
+        type_w = range_text(getattr(n, "packed_range", None))
+        items = getattr(n, "items", None)
+        if not isinstance(items, Node):
+            continue
+        for it in getattr(items, "items", None) or []:
+            if not isinstance(it, Node):
+                continue
+            nm = getattr(getattr(it, "name", None), "content", "")
+            if not nm:
+                continue
+            w2 = range_text(getattr(it, "packed_range", None))
+            table[nm] = w2 or type_w or ""
+            if _declarator_is_array(it):
+                arrays.add(nm)
+    table["_arrays"] = arrays  # type: ignore[assignment]
+    return table
+
+
+def _declarator_names(decl_node: Node) -> list[str]:
+    """声明节点 items → 声明符名列表。"""
+    items = getattr(decl_node, "items", None)
+    if not isinstance(items, Node):
+        return []
+    return [
+        getattr(getattr(it, "name", None), "content", "")
+        for it in getattr(items, "items", None) or []
+        if isinstance(it, Node) and getattr(getattr(it, "name", None), "content", "")
+    ]
+
+
+def _declarator_is_array(declarator: Node) -> bool:
+    """声明符是否含 array_range（存储器/数组）。"""
+    return isinstance(getattr(declarator, "array_range", None), Node)
+
+
+def _recheck_module_assigns(info, site, ov_params: dict, context) -> None:
+    """目标模块内部赋值用覆盖参数表重算截断（B4 核心）。"""
+    node = getattr(info, "node", None)
+    if node is None:
+        return
+    sub_table = _module_width_table(info)
+    # 无参数化宽度（全部固定宽度）→ 覆盖参数不影响内部赋值，跳过
+    if not any(_is_parameterized_text(t) for t in sub_table.values()):
+        return
+    sub_table["_params"] = ov_params  # type: ignore[assignment]
+    inst_name = node_text(getattr(site, "inst_name", None))
+    for n in _iter_nodes(node):
+        if n.node_name not in _ASSIGN_RULES:
+            continue
+        _recheck_one(n, info, site, inst_name, sub_table, context)
+        if n.node_name == "AssignStmt":
+            for ex in getattr(n, "extras", None) or []:
+                if isinstance(ex, Node):
+                    _recheck_one(ex, info, site, inst_name, sub_table, context)
+
+
+def _is_parameterized_text(text: str) -> bool:
+    """宽度文本含字母 → 参数化（非纯数字/范围形态）。"""
+    return any(ch.isalpha() for ch in text)
+
+
+def _recheck_one(node, info, site, inst_name: str, sub_table: dict, context) -> None:
+    """单条内部赋值重算：RHS > LHS → 报 W201（主 node = 实例化点）。"""
+    lw = infer_expr_width(getattr(node, "target", None), sub_table, info.name)
+    rw = infer_expr_width(getattr(node, "value", None), sub_table, info.name)
+    if lw is None or rw is None:
+        return  # 任一侧未知 → 保守不报（与 A4 同策略）
+    if rw <= lw:
+        return
+    if _self_select_assign(node):
+        return
+    lhs_t = node_text(getattr(node, "target", None))
+    rhs_t = node_text(getattr(node, "value", None))
+    node._file = info.file  # related 跨文件定位（checker 同款）
+    context.report(
+        f"实例化 '{info.name}'（参数覆盖后）模块内赋值宽度截断："
+        f"RHS {rw} 位 → LHS {lw} 位（{lhs_t} = {rhs_t}）",
+        code="W201",
+        level="warning",
+        node=site,
+        related=[("模块内赋值处", node)],
+    )
 
 
 def _unwrap(node):
