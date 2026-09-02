@@ -191,6 +191,10 @@
 
 ### P3.2 失效判定 + 增量重解析
 
+> 设计思考落档：references.md「增量解析设计思考」——双向映射 / 结构锚定
+> 补头补尾 / merge 校验 + 全量回退 / 缓存选址（.code_cache 内容寻址 vs
+> temp，key 含语法版本签名）。
+
 - [ ] token 级 diff：新旧 token 流对比，标记变更 token（复用 lexer）
 - [ ] 变更 token → 延展到语法边界（沿 `is_statement`/`is_block` 规则向外，到完整可重解析单元）
 - [ ] 仅重解析受影响单元（`ParseContext` 从边界起始 token 驱动）
@@ -274,6 +278,10 @@
 > rules 先例进 grammar TOML 协议字段（如 macro_hygiene_wrappers），引擎读配置。
 > 与 P3.1（span 绑定）相关：宏节点入 AST 后 span 语义要区分"宏调用位"与
 > "展开体位"。
+> 与 P3.2 一体（2026-09-02 注）：宏节点保留 = 增量 diff 的结构对齐前提
+> （全展开使 AST 与源文本错位，涉及宏的编辑无法局部定位）——入 AST 与
+> 增量解析同批设计，卫生检查（形态分类）是其代价（references.md「增量
+> 解析设计思考」）。
 
 - [ ] 宏体形态分类器：包装解析（stmt/decl/expr/port 四包裹）+ 首 token 续接
       预过滤 → 完整语句/完整声明/完整表达式/残缺片段
