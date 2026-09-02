@@ -3,7 +3,7 @@
 覆盖：NC014 端口方向后缀不一致（input data_o 防接反）、NC015/016 类型
 后缀不一致（wire x_r / reg q_w 防类型混淆）、`_` 前缀豁免、默认关零
 刷屏、require 模式经规则数据开启后生效。蓝本 svlint prefix_input/
-output/inout（references.md「命名规则配置面设计」）。
+output/inout（decisions/0004「落地演进」）。
 """
 
 import os

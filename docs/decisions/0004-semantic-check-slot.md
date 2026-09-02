@@ -62,5 +62,41 @@
 - P3：把 WC001 从脚本层迁到声明层，注释驱动测试全绿。
 - P4：e2e 验证 `[checks]` 配置生效与 per_file 豁免。
 
-> Impl: 待实现（P1 起，见 docs/semantic_checks.md 机制设计）
-> Test: 待实现（tests/ 下随各阶段新增）
+## 落地演进（2026-08-29 追加，自 references.md「命名规则配置面设计」迁入）
+
+P1-P4 全部落地后，声明式规则机制的策略演进（数据决策，非固定策略）：
+
+### NC 命名规则默认关（e93ab9f）
+
+- 背景：试水实测 NC 族默认全开 + 小写下划线 pattern 对真实代码（混合
+  风格）~1300 条误报海啸。用户定调：命名风格主轴 = 蛇形 + 大小驼峰；
+  比风格更有价值的是**前后缀语义约定**（防错）。
+- `[[checks]] default = false`：NC 族默认关闭（规则=数据，语言包声明）。
+- 启用语义（analyzer/checks.py）：显式 enabled = "不选即关"（P4 不变）；
+  缺省 = default=true 的规则 ∪ overrides/per_file **引用即启用**（per_file
+  豁免对默认关闭的规则才有意义）；ProjectChecker.enabled_rules 注入。
+- NC001/NC002 pattern 放宽为 PascalCase 或 snake_case（行业惯例；真实
+  语料 picorv32/serv 均 Pascal）。
+- 默认关后真实语料 NC 诊断归零（默认体验不刷屏；启用才按团队约定查）。
+
+### 前后缀语义约定（NC014-016，防错）
+
+- 声明式表 + handler（name_check/rules/_prefix_suffix_check.py）：
+  - **NC014 端口方向后缀**：`direction_suffix` 表（input→_i / output→_o /
+    inout→_io）——名字以某方向后缀结尾但声明方向不同 → 方向可能接反
+    （防错核心，强约束）；`require = true` 时未按本方向后缀命名也报。
+  - **NC015/NC016 类型后缀**：`kind_suffix` 表（wire→_w / reg→_r）。
+  - 豁免：`_` 前缀（占位/故意不用约定，与 unused_check 同语义）。
+  - 默认关，启用走 P4 用户配置 enabled。
+- **评估不做**：低有效 `_n`、时钟/复位前缀 `clk_`/`rst_`——Verilog-2005
+  无 clock/reset 符号 kind，用途判定需事件控制/复位条件分析（主流 svlint
+  亦无此类规则）；用户可按团队约定自写 pattern 规则（配置面扩展点）。
+- 默认策略（0.1.1）：风格弱约束（只报混用）/前后缀强约束（声明了才查）。
+
+> Impl: analyzer/checks.py::check_rules_pass（kind 分发执行器）
+> Impl: core/check_registry.py（规则表加载/用户配置校验）
+> Impl: analyzer/checker.py::ProjectChecker（跨文件检查引擎）
+> Impl: grammar/verilog/plugins/checks/name_check/（NC 族 + rules/ + cases/）
+> Test: tests/engine/analyzer/test_check_test.py + tests/languages/verilog/
+>       test_name_convention.py
+> 机制设计见 docs/semantic_checks.md（架构"怎么拼"）

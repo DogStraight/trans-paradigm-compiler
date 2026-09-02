@@ -1902,41 +1902,10 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 中还有宏深水区成分）；**瓶颈在命名类默认策略**（决策项）+ 宏展开完整
 性（W002/W105，P3 增量解析前置）。check 宏展开使真实工程可用了。
 
-#### 命名规则配置面设计（2026-08-29，默认关已落地，前后缀下一期）
+#### 命名规则配置面设计（2026-08-29）— 已并入 ADR-0004「落地演进」
 
-背景：试水实测 NC 族默认全开 + 小写下划线 pattern 对真实代码（混合
-风格）~1300 条误报海啸。用户定调（2026-08-29）：命名风格主轴 = 蛇形 +
-大小驼峰；比风格更有价值的是**前后缀语义约定**（防错）。
-
-**已落地（提交 e93ab9f 等）**：
-- `[[checks]] default = false`：NC 族默认关闭（规则=数据，语言包声明）
-- 启用语义（analyzer/checks.py）：显式 enabled = "不选即关"（P4 不变）；
-  缺省 = default=true 的规则 ∪ overrides/per_file **引用即启用**（per_file
-  豁免对默认关闭的规则才有意义）；ProjectChecker.enabled_rules 注入
-  （评测/测试显式启用）
-- NC001/NC002 模块/实例 pattern 放宽为 **PascalCase 或 snake_case**
-  （行业惯例；真实语料 picorv32/serv 均 Pascal）
-- 默认关后真实语料 NC 诊断归零（默认体验不刷屏；启用才按团队约定查）
-
-**配置面（2026-08-29 落地）**：
-- 前后缀语义约定（防错）——声明式表 + handler（name_check/rules/
-  _prefix_suffix_check.py）：
-  - **NC014 端口方向后缀**：`direction_suffix` 表（input→_i / output→_o /
-    inout→_io）——名字以某方向后缀结尾但声明方向不同 → 方向可能接反
-    （防错核心，强约束）；规则数据 `require = true` 时未按本方向后缀命名
-    也报（强约定模式）
-  - **NC015/NC016 类型后缀**：`kind_suffix` 表（wire→_w / reg→_r）——
-    wire 带 _r / reg 带 _w → 类型可能混淆；require 模式补本类型后缀要求
-  - 豁免：`_` 前缀（占位/故意不用约定，与 unused_check 同语义）
-  - 默认关（default=false），启用走 P4 用户配置 enabled（NC 族机制已有）
-- **评估不做**：低有效 `_n`、时钟/复位前缀 `clk_`/`rst_`——Verilog-2005
-  无 clock/reset 符号 kind，用途判定需事件控制/复位条件分析（主流 svlint
-  亦无此类规则，仅端口 prefix_input/output/inout）；用户可按团队约定自写
-  pattern 规则（配置面扩展点）
-- 风格表（per kind）与豁免完善（单字母/`tpc_` 前缀）：后续按需，配置面
-  机制已就绪
-- 默认策略：风格弱约束（只报混用）/前后缀强约束（声明了才查）——0.1.1
-  默认 NC 关，启用走 P4 用户配置
+> NC 默认关 + 前后缀约定（NC014-016）设计已并入
+> `docs/decisions/0004-semantic-check-slot.md`「落地演进」章节。
 
 #### 核心检查项目缺口集合 + 剩余误报源评估（2026-08-29 盘点）
 

@@ -22,8 +22,7 @@ L2 脚本 handler（name_check 插件）：前后缀语义约定（防错，2026
 
 豁免：`_` 前缀（占位/故意不用约定，与 unused_check 同语义）。
 不做：`_n` 低有效 / clk_/rst_ 前缀——2005 无 clock/reset 符号 kind，
-用途需事件控制/复位条件分析（主流 svlint 亦无，见 references.md
-「命名规则配置面设计」）。
+用途需事件控制/复位条件分析（主流 svlint 亦无，见 ADR-0004「落地演进」）。
 
 签名：fn(symbol, rule, context) -> str | None（None = 通过）。
 """
