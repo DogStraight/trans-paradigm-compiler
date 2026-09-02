@@ -187,7 +187,7 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 
 - **L1 声明层**：注释驱动测试（Semgrep 式）**已实现**——样例源文件内嵌
   `// ruleid: NC001`（必须命中）/ `// ok: NC001`（不得命中）注释，
-  `analyzer/check_test.py::run_comment_driven(checker, path)` 运行检查后
+  `tests/_check_test.py::run_comment_driven(checker, path)` 运行检查后
   断言命中集合（失败报告：`L{行}: ruleid X 未命中` / `ok X 意外命中`）。
   样例资产 = name_check 插件 `cases/*.sv`（零代码测试：新增样例 = 新增
   断言；规则行为变化时随样例自动更新语义）。测试入口：
@@ -201,7 +201,7 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 | P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 钩子/related **已实现**（2026-08-25）；统一抑制未做（并入 P4） |
 | P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见 ADR-0005 inst_check） |
 | P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（ADR-0005：W101/W102/W103/WC001 + `tpc check` CLI） |
-| P3 | L1 声明式 schema + 注释驱动测试框架 | **已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据；注释驱动测试 analyzer/check_test.py + cases/ 样例） |
+| P3 | L1 声明式 schema + 注释驱动测试框架 | **已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据；注释驱动测试 tests/_check_test.py + cases/ 样例） |
 | P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | **已实现**（2026-08-28：config/tpc_config.json checks 段——enabled/overrides/per_file，fail-fast 校验；统一抑制由 analyzer/suppress.py 覆盖，声明式规则自动获得豁免） |
 
 > Impl: analyzer/checks.py（声明式执行器）/ core/check_registry.py（规则表加载校验）/

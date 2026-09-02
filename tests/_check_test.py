@@ -1,4 +1,4 @@
-"""check_test.py — 注释驱动测试框架（Semgrep 式 ruleid:/ok: 断言，零代码测试）。
+"""_check_test.py — 注释驱动测试框架（Semgrep 式 ruleid:/ok: 断言，零代码测试）。
 
 声明式规则（[[checks]]）的测试形态：样例源文件内嵌指令注释，引擎校验
 "注释标记的代码段是否按预期命中/未命中规则"——测试编写零代码，规则
@@ -13,7 +13,7 @@
 诊断按起始行（0-based）归属：落在段内（指令行之后）即计入该段。
 
 用法（pytest）：
-    from analyzer.check_test import run_comment_driven
+    from tests._check_test import run_comment_driven
     failures = run_comment_driven(ProjectChecker(...), sample_path)
     assert not failures, "\\n".join(failures)
 

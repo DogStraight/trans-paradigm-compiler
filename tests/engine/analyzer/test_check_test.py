@@ -1,7 +1,7 @@
 """tests/engine/analyzer/test_check_test.py — 注释驱动测试框架（ruleid:/ok:）。
 
 Semgrep 式零代码测试：样例源文件内嵌 `// ruleid: X` / `// ok: X` 注释，
-框架（analyzer/check_test.py）运行检查后断言命中集合。本测试验证：
+框架（tests/_check_test.py）运行检查后断言命中集合。本测试验证：
     - parse_directives 解析（ruleid/ok/多规则/区间归属）
     - 端到端：样例文件（违反/合规命名）→ 断言命中/未命中
     - 失败报告形态（ruleid 未命中 / ok 意外命中）
@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from analyzer.check_test import parse_directives, run_comment_driven  # noqa: E402
+from tests._check_test import parse_directives, run_comment_driven  # noqa: E402
 from analyzer.checker import ProjectChecker  # noqa: E402
 
 

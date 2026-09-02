@@ -540,7 +540,7 @@ class TestCommentDrivenCases:
     """注释驱动测试（Semgrep 式零代码测试）：插件 cases/ 目录样例全过。
 
     样例源文件内嵌 `// ruleid: X`（必须命中）/ `// ok: X`（不得命中）
-    注释，框架（analyzer/check_test.py）运行 ProjectChecker 后断言命中
+    注释，框架（tests/_check_test.py）运行 ProjectChecker 后断言命中
     集合。新增样例 = 新增断言（零代码），规则行为变化时随样例自动更新
     语义。cases/ 目录：grammar/verilog/plugins/checks/name_check/cases/*.sv。
     """
@@ -549,7 +549,7 @@ class TestCommentDrivenCases:
         import glob
         import shutil
 
-        from analyzer.check_test import run_comment_driven
+        from tests._check_test import run_comment_driven
         from analyzer.checker import ProjectChecker
 
         # cases/ 随组件所在位置（聚类目录支持）：从插件根递归定位
