@@ -106,7 +106,6 @@ source = [
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
-    "*/linter/cli.py",
     "*/main.py",
     "*/lexer/number_fsm.py",
 ]
