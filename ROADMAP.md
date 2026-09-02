@@ -62,8 +62,9 @@
 - [ ] c17 插件：bugfix 增量（requires c11）
 - [ ] c23 插件：`typeof`/`auto`/属性/`#elifdef`/`nullptr`（requires c17）
 - [ ] 标准等效验证：enabled 组合 → 语法接受域断言（对标各标准语法规范）
-- [ ] **注入机制补"改"路径**（C 标准插件族前置，研判见 references.md
-      「注入 vs 替换机制研判」）：标准演进含"改"（如 C23 语义变化），现
+- [ ] **注入机制补"改"路径**（C 标准插件族前置，研判见
+      `docs/decisions/0010-c-langpack-prerequisites.md`，draft）：标准演进含
+      "改"（如 C23 语义变化），现
       inject_replace_rule 是字符串子串补丁（仅 production、软失败）——统一
       `[inject]` 声明面（add/replace/remove），replace 升树层结构化 + fail-fast
 
@@ -72,8 +73,8 @@
 > 语言包战略的兑现侧：用户把语法配置调试稳定、需求测试完成后编译打包的
 > 优雅方案（forkable 主张的落地）。现状：facets.json 开发者硬编码 + 
 > `_RULES_REL = "grammar/verilog"` 写死——**无"用户标定"声明面**，c4/未来
-> C 语言包打包不了。设计方向（研判见 references.md「用户标定打包入口
-> 研判」）：打包规格跟随语言包——`grammar/<lang>/tpc.toml` 新增
+> C 语言包打包不了。设计方向（研判见 `docs/decisions/0010-c-langpack-
+> prerequisites.md`，draft）：打包规格跟随语言包——`grammar/<lang>/tpc.toml` 新增
 > `[packaging]` 段（target/description/facets，facets 缺省取 [commands]
 > 键零重复）；build_pipeline 改为扫描语言包声明（无参=全部，--lang=单个），
 > `_RULES_REL` 硬编码消失。与插件聚类/渲染插件同哲学：一切可声明、可组合、
