@@ -52,8 +52,10 @@ NAV_FILES: tuple[str, ...] = (
     "docs/MODEL_INDEX.md",
 )
 
-# 代码 Doc: 头目标形态（D1 只认 docs/ 前缀的引用）
-_DOC_HEADER_RE = re.compile(r"^Doc:\s*(docs/[A-Za-z0-9_./-]+\.md)\s*$", re.MULTILINE)
+# 代码 Doc: 头目标形态（D1 只认 docs/ 前缀的引用）。两种真实形态：
+# 纯行 `Doc: docs/xxx.md` 与带尾注 `Doc: docs/xxx.md（说明）`（仓库主流
+# 99/114 处）——只提取路径部分，不要求行尾，允许中文注释/说明跟随。
+_DOC_HEADER_RE = re.compile(r"^Doc:\s*(docs/[A-Za-z0-9_./-]+\.md)", re.MULTILINE)
 
 # 文档内 Impl:/Test: 引用行
 _IMPL_TEST_RE = re.compile(r"^>\s*(?:Impl|Test):\s*(.+)$", re.MULTILINE)

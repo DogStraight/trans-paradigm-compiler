@@ -2765,3 +2765,27 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
   CI policy step。同步层二期再落（`tools/doc_sync.py`：rename/delete
   列出引用点 + --dry-run 机械替换）。
 
+**同步层设计（2026-09-02 用户确认立项，门禁 D1/D2 落地后）**
+
+> 门禁层（check_doc_refs）解决"断链被发现"；同步层解决"改名/删除时
+> 调用点一起改"——`tools/doc_sync.py`，复用 check_doc_refs 的引用解析
+> （同一组正则 + `_resolve_nav_target`），保证"门禁认的引用 = 同步层改的
+> 引用"，两边不漂移。
+
+- 子命令（全部默认 --dry-run 只报告，--apply 才落盘）：
+  - `refs <target>`：列出某 docs 文件被谁引用（代码 Doc: / 导航索引 /
+    文档正文 / README / skills / TOML），每处 文件:行 + 引用形态
+  - `rename <old> <new> [--apply]`：改 docs 文件路径 → 同步改全部引用点
+    （`Doc: docs/old` / `./docs/old` 链接 / 裸名 `old.md` / `docs/old` 前缀）
+  - `delete <target> [--apply]`：删除 docs 文件 → 先列引用点，--apply 时
+    同步清引用并 git rm（引用含非机械可改处则拒绝并提示人工）
+- 机械可改的引用形态（与门禁 D1/D2 的解析范围一致）：
+  - 代码文件头 `Doc: docs/...`（行内整路径，机械可改）
+  - 导航索引/正文里的 `docs/...`、`./docs/...`、裸 `xxx.md`（docs 根内
+    文件名唯一时）——裸名只改"唯一指向该文件"的引用，歧义时跳过留人工
+- 明确不做（同门禁边界）：`Impl:`/`Test:` 里 `::符号` 部分、正文叙述
+  引用（`references.md「章节」` 锚点语义）、CHANGELOG 历史条目（历史
+  不篡改，delete 时跳过）。
+- 与门禁闭环：rename/delete 后用 `check_doc_refs.py` 验证 D1/D2 仍绿——
+  同步层不绕过门禁，只是把"人工 grep 同步"变成"半自动 + 门禁兜底"。
+

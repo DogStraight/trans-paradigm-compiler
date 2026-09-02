@@ -91,6 +91,25 @@ def test_d1_subdir_docs_target(tmp_path: Path) -> None:
     assert _results(root)["D1"].violations == []
 
 
+def test_d1_doc_header_with_trailing_note(tmp_path: Path) -> None:
+    # 带中文尾注的 Doc: 头（仓库主流形态）目标缺失也要报
+    root = _make_tree(
+        tmp_path,
+        code={"core/a.py": '"""模块。\n\nDoc: docs/ghost.md（CLI 入口）\n"""\nx = 1\n'},
+    )
+    viol = _results(root)["D1"].violations
+    assert len(viol) == 1 and "ghost.md" in viol[0].message
+
+
+def test_d1_doc_header_with_trailing_note_exists(tmp_path: Path) -> None:
+    root = _make_tree(
+        tmp_path,
+        docs={"docs/api.md": "# API\n"},
+        code={"core/a.py": '"""模块。\n\nDoc: docs/api.md（CLI 入口）\n"""\nx = 1\n'},
+    )
+    assert _results(root)["D1"].violations == []
+
+
 # ── D2：导航索引条目存在性（gate）──────────────────────────────────────────
 
 def test_d2_flags_missing_nav_entry(tmp_path: Path) -> None:
