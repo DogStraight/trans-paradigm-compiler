@@ -27,7 +27,7 @@
 ## 当前文档索引
 
 - 架构：`linter_architecture.md`（linter 两阶段发现+扁平检查）、`semantic_checks.md`（语义检查插槽：双层规则 + post-pass 链式检查）
-- 决策：`decisions/0001-pre-parse-linter.md`、`decisions/0002-is-statement-explicit.md`、`decisions/0003-config-load-fail-fast.md`、`decisions/0004-semantic-check-slot.md`
+- 决策：`decisions/README.md`（ADR 编号规则 + 模板；0001-0008 各条见 MODEL_INDEX 登记）
 - 参考：`grammar_rule_fields.md`（语法规则字段）、`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
 - 边界：`known_limitations.md`（已知边界完整版——README 的 Known limitations 是其摘要）
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
@@ -63,7 +63,7 @@ Doc: docs/linter_architecture.md   # 文件级引用（稳定，不随章节锚�
 
 ```markdown
 > Impl: linter/scanner.py::LinterScanner.scan
-> Test: tests/test_linter_discovery.py
+> Test: tests/engine/linter/test_linter_discovery.py
 ```
 
 ### 3. 跳转表（`MODEL_INDEX.md`）

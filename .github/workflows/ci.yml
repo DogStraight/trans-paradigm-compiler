@@ -36,8 +36,11 @@ jobs:
         # --strict-doc：R3（Doc: 头）升 gate——引擎新文件必须带 Doc: 反向引用
         # --strict-import：R4 升 gate——引擎代码不得直接 import grammar.<lang>
         #   插件（P2.5 插件回调能力化完成：pipeline 直连已清零）
+        # check_doc_refs：文档调用点门禁（D1/D2 gate）——代码 Doc: 头与导航
+        #   索引引用的文档必须存在（docs 增删改防断链）
         run: |
           python tools/policy/check_hardcode.py --strict-doc --strict-import
+          python tools/policy/check_doc_refs.py
 
       - name: Static type gate (pyright strict)
         # 版本钉在 1.1.413（与本地验证一致）；升级时同步 bump

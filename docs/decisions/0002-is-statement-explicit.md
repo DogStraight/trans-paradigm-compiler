@@ -26,4 +26,4 @@
 
 > Impl: grammar/verilog/**/*.toml（is_statement = true）
 > Impl: core/define.py（规则字段解析）
-> Test: tests/test_linter_lookahead.py
+> Test: tests/engine/linter/test_linter_lookahead.py

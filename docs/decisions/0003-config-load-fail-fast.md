@@ -25,8 +25,8 @@ token.toml 重复 key 事故：`[id.keyword]` 出现重复键 → TOML 解析失
 
 ## 验证
 
-tests/test_config_loading.py（4 个，save/restore 隔离注册表）；325 pytest 全过。
+tests/engine/core/test_config_loading.py（4 个，save/restore 隔离注册表）；325 pytest 全过。
 
 > Impl: core/config_registry.py::ConfigRegistry.load_all
 > Impl: lexer/lexer_utils.py::get_token_define_merged
-> Test: tests/test_config_loading.py
+> Test: tests/engine/core/test_config_loading.py

@@ -19,6 +19,8 @@ source/_sources + 推送进各模块的 _xxx_cfg 模块变量）、plugin_loader
   clear 不深拷贝（组件对象重、可能含不可拷贝引用；键控缓存重建成本低）。
 - ConfigRegistry._resolve_cache 保留（纯函数缓存：键 = 语言参数，同参数
   结果恒定，不受污染影响）。
+
+Doc: docs/references.md（测试隔离机制：顺序无关从机制上修复，2026-08-28）
 """
 
 from __future__ import annotations

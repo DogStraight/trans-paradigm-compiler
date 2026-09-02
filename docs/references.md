@@ -2734,3 +2734,34 @@ LC001（真风险）、W101（跨文件定义缺失——单文件语料预期�
 - 验证计划：**下个版本发布时实测标定**——变量（文件 token 数 N、变动
   比例 r、单元边界簿记常数）扫参拟合反超点曲线，阈值落为可测参数
   （数据决策，延续"不拍脑袋"纪律）。
+
+**文档调用点门禁设计（2026-09-02 用户发起，docs 精简后立项）**
+
+> 背景：docs 精简（35→29 文件，删 config_reference / e2e_real_projects /
+> case_catalog / comment_smell_rubric / comment_smell_survey / ieee1364
+> annex）暴露文档管理痛点——文档增删改时调用点
+> （代码 `Doc:` 头 114 处 / MODEL_INDEX 与 docs-README 索引 / `Impl:`/`Test:`
+> 42 处）全靠人工 grep 核对；check_hardcode 的 R3 只查 `Doc:` 头**格式**
+> （正则存在），不查**目标文件存在**——删文档门禁照样绿（本次实证）。
+> 目标：机械可判的引用完整性 → 自动门禁，语义判断（符号级/章节锚点）
+> 留给人工/模型。
+
+- 分两层：**门禁层**（只读校验，进 CI，与 check_hardcode 并列）+ **同步层**
+  （rename/delete 辅助写操作，二期，不进 CI）。
+- 门禁规则（D1/D2 gate + D3/D4 警告）：
+  - D1 代码 `Doc:` 头 → 目标 docs 文件存在（补 check_hardcode R3 缺口）
+  - D2 导航索引（MODEL_INDEX / docs-README / README 文档表）→ 条目文件存在
+  - D3 docs 内 `Impl:`/`Test:` → 文件级存在（`::` 符号部分 info 不 gate）
+  - D4 新增 docs 文件未登记任何导航 → 警告（孤儿提醒，不阻断）
+- 明确不做（边界纪律，与"语言知识不进代码"同构——语义判断不进工具）：
+  符号级存在性（须 import 代码，脆且重）；CHANGELOG 历史条目自动改；
+  正文叙述引用自动替换（`references.md「章节」` 含锚点语义）。
+- 引用形态盘点：代码 `Doc: docs/...` 114 处 + 裸文件名 3 处（tests/fuzz、
+  tools/policy——指向非 docs 目标，D1 只认 `docs/` 前缀）；docs 导航多为
+  **裸文件名**（MODEL_INDEX `case_catalog.md` 形态）→ D2 按 docs 目录内
+  文件名匹配，不假设 `docs/` 前缀；README 是 `./docs/` 相对链接形态。
+- 落点：`tools/policy/check_doc_refs.py`（纯 stdlib，参照 check_hardcode
+  的 Finding/RuleResult/--root/exit-code 结构）+ `tests/policy/` 单测 +
+  CI policy step。同步层二期再落（`tools/doc_sync.py`：rename/delete
+  列出引用点 + --dry-run 机械替换）。
+

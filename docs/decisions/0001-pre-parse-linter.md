@@ -24,6 +24,6 @@ linter 前置于 parser（`config/tpc_config.json` stages: `lex → lint → par
 > Impl: linter/scanner.py::LinterScanner.scan
 > Impl: linter/discovery.py::Discovery.discover
 > Impl: linter/checkers/matcher.py::RuleMatcher
-> Test: tests/test_linter_discovery.py
-> Test: tests/test_linter_matcher.py
+> Test: tests/engine/linter/test_linter_discovery.py
+> Test: tests/engine/linter/test_linter_matcher.py
 > Test: tests/e2e/eval_lint_accuracy.py

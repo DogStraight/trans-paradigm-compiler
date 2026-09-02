@@ -16,20 +16,20 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 前置 token 级 linter（反解析器） | `decisions/0001-pre-parse-linter.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/test_linter_discovery.py`<br>`tests/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
-| is_statement 显式声明 | `decisions/0002-is-statement-explicit.md` | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/test_linter_lookahead.py` |
-| 配置加载 fail-fast | `decisions/0003-config-load-fail-fast.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::get_token_define_merged` | `tests/test_config_loading.py` |
-| Linter 两阶段架构（发现+扁平检查） | `linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/test_linter_checker.py` |
+| 前置 token 级 linter（反解析器） | `decisions/0001-pre-parse-linter.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/engine/linter/test_linter_discovery.py`<br>`tests/engine/linter/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
+| is_statement 显式声明 | `decisions/0002-is-statement-explicit.md` | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/engine/linter/test_linter_lookahead.py` |
+| 配置加载 fail-fast | `decisions/0003-config-load-fail-fast.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::get_token_define_merged` | `tests/engine/core/test_config_loading.py` |
+| Linter 两阶段架构（发现+扁平检查） | `linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/engine/linter/test_linter_checker.py` |
 
 ## 待补充（新增知识单元时在此登记）
 
 | 知识单元 | 文档位置 | 实现位置 | 验证位置 |
 |----------|----------|----------|----------|
-| 动态两级消歧（lookahead） | `linter_architecture.md` | `linter/lookahead.py::LookaheadTable.classify` | `tests/test_linter_lookahead.py` |
-| 语法切片（grammar_slicer） | `linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree` | `tests/test_linter_slicer.py` |
-| 表达式检查（pratt 复用） | `linter_architecture.md` | `linter/checkers/expression.py` | `tests/test_linter_matcher.py` |
-| 稳健性/畸形输入防御 | `linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/test_linter_robustness.py` |
-| 诊断位置精度（token_span） | `linter_architecture.md` | `linter/__init__.py::token_span` | `tests/test_lint_accuracy.py` |
+| 动态两级消歧（lookahead） | `linter_architecture.md` | `linter/lookahead.py::LookaheadTable.classify` | `tests/engine/linter/test_linter_lookahead.py` |
+| 语法切片（grammar_slicer） | `linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree` | `tests/engine/linter/test_linter_slicer.py` |
+| 表达式检查（pratt 复用） | `linter_architecture.md` | `linter/checkers/expression.py` | `tests/engine/linter/test_linter_matcher.py` |
+| 稳健性/畸形输入防御 | `linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/engine/linter/test_linter_robustness.py` |
+| 诊断位置精度（token_span） | `linter_architecture.md` | `linter/__init__.py::token_span` | `tests/engine/linter/test_lint_accuracy.py` |
 | 语义检查插槽（post-pass 钩子 + related 链） | `decisions/0004-semantic-check-slot.md`<br>`semantic_checks.md` | `analyzer/traversal.py::AnalysisTraversal._run_postpasses`<br>`analyzer/diagnostic.py::Diagnostic.related`<br>`core/plugin_loader.py::_load_postpasses` | `tests/engine/analyzer/test_diagnostic_related.py` |
 | 声明式检查规则表（[[checks]] 规则=数据，P3/P4） | `semantic_checks.md`（§3/§4/§9）<br>`references.md`（svlint 诊断链调研） | `core/check_registry.py`（加载/校验/用户配置）<br>`analyzer/checks.py`（kind 分发执行器）<br>`grammar/verilog/plugins/checks/name_check/`（NC001-NC011 + cases/ 样例 + `_filename_check.py` 跨文件 handler）<br>`analyzer/check_test.py`（注释驱动测试） | `tests/languages/verilog/test_name_convention.py`（30 用例）<br>`tests/engine/analyzer/test_check_test.py`（19 用例） |
 | 检查规则编写指南（L1 声明式 + L2 handler/postpass 双路径） | `semantic_checks.md`（§11 实操指南 + 接口契约） | `grammar/verilog/plugins/checks/`（蓝本：name_check L1 / width_check postpass / inst_check 跨文件 / hier_check 服务型） | `tests/engine/analyzer/test_checker.py`<br>`.agents/skills/checker-rule-authoring/SKILL.md`（模型可加载指令包，随项目发布） |
@@ -39,6 +39,7 @@
 | 渲染器改进路线（ADR-0006） | `decisions/0006-renderer-improve-roadmap.md` | `renderer/doc.py::layout`（内核扩展点）<br>`renderer/primitives/registry.py`（原语注册）<br>`renderer/node_renderer.py::render_node`（缩进上下文）<br>`grammar/verilog/plugins/formatter/`（世界 B） | `tests/engine/renderer/`（原语/缩进单测）<br>`tests/e2e/` + `tests/differential/`（门禁） |
 | 渲染器工作机制与现状（双世界 + 缺口评估） | `renderer_architecture.md` | `renderer/`（世界 A：Doc IR + 原语）<br>`grammar/verilog/plugins/formatter/`（世界 B：pass 管线） | `tests/engine/renderer/`<br>`tests/languages/`<br>`tests/e2e/` |
 | 引擎约定机器化（check_hardcode 门禁） | `AGENTS.md`（硬约束来源：语言知识不进代码/路径规范/Doc 反向引用）<br>`docs/README.md`（Doc: 约定） | `tools/policy/check_hardcode.py`（规则 1-4：token 字面量/grammar 路径/Doc 头/插件导入） | `tests/policy/test_check_hardcode.py`（17 用例，含真实仓库门禁回归） |
+| 文档调用点引用完整性（check_doc_refs 门禁） | `docs/README.md`（Doc: 约定 + 导航索引）<br>`references.md`（文档调用点门禁设计，2026-09-02） | `tools/policy/check_doc_refs.py`（D1/D2 gate：Doc: 头 + 导航索引目标存在；D3/D4 info：Impl/Test 文件级 + 孤儿提醒） | `tests/policy/test_check_doc_refs.py`（20 用例，含真实仓库门禁回归） |
 | 诊断 code 命名空间 + 豁免注释（tpc-check pylance 化） | `diagnostics.md`（code 清单 + suppress 语法）<br>`references.md`（Verilog 静态检查工具群调研） | `analyzer/suppress.py`（豁免过滤）<br>`analyzer/checker.py`（诊断序列化，LSP 兼容）<br>`main.py::_cmd_check`（--json + 豁免接入） | `tests/engine/analyzer/test_check_suppress.py`（13 用例） |
 | 管线阶段契约（层间数据形态 + 阻断语义 + 跨阶段通道） | `pipeline_stages.md` | `pipeline/__init__.py::run_pipeline_on_source`（阶段编排）<br>各阶段 `_stage_*` | 全量 e2e（`tests/e2e/`）+ 注释 attachment 测试 |
 | 分析/变换时点配置化 + 编排调度（ADR-0007） | `decisions/0007-pipeline-schedule.md` | `pipeline/schedule.py`（编排器一体：`build_schedules` 声明+序列器、`_run_schedule` 执行、`_run_pass_*` 执行器）<br>`core/plugin_loader.py::get_pipeline_pass_decls`（收集）<br>`pipeline/__init__.py`（按 rules_dir 缓存 schedules/mapping_cfg 后注入） | `tests/engine/pipeline/test_schedule.py`（26 用例） |
