@@ -104,11 +104,7 @@ def run_comment_driven(checker: Any, path: str) -> list[str]:
         start, end = d["line"], region_map[d["line"]]
         # 段内诊断：指令行本身（同行的声明/代码）到段结束前
         # （下一个指令行不包含——那是下一段的起点）。
-        region_codes = {
-            code
-            for line, code in diags
-            if start <= line < end
-        }
+        region_codes = {code for line, code in diags if start <= line < end}
         for rule in d["rules"]:
             if d["type"] == "ruleid":
                 if rule not in region_codes:

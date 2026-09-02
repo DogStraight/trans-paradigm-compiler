@@ -696,7 +696,7 @@ class ProjectChecker:
         # inst:{实例名}:{子端口}）——路径由调用方拼，跨实例化点可复用缓存
         src_cache: dict = {}
 
-        def _port_sources(module: str, port: str, seen: set) -> tuple[list, bool]:
+        def _port_sources(module: str, port: str, seen: set) -> tuple[list | None, bool]:
             """模块内端口驱动源（裸源，无路径）→ (sources, 模块是否定义)。
 
             遍历**目标模块子树**（ModuleInfo.node）而非文件全树——同文件
@@ -784,7 +784,7 @@ class ProjectChecker:
                 if src.startswith("inst:"):
                     _, iname, iport = src.split(":", 2)
                     inst_mod = ""
-                    for i_name, i_mod, _c in module_insts.get(module, []):
+                    for i_name, i_mod, _ in module_insts.get(module, []):
                         if i_name == iname:
                             inst_mod = i_mod
                             break
@@ -838,8 +838,9 @@ class ProjectChecker:
             proc_blocks = self._struct.get("proc_block_rules") or []
             if proc_rules and proc_blocks and fr.ast is not None:
                 # 一次遍历建 赋值节点 → 所属过程块节点 映射
-                assign_block: dict[int, Node] = {}
-                todo = [(fr.ast, None)]
+                # （blk 可为 None：赋值不在任何过程块内，如模块级 assign）
+                assign_block: dict[int, Node | None] = {}
+                todo: list[tuple[Node | None, Node | None]] = [(fr.ast, None)]
                 while todo:
                     node, blk = todo.pop()
                     if node is None:
@@ -851,7 +852,7 @@ class ProjectChecker:
                     for child in node.iter_children():
                         todo.append((child, blk))
                 # 按 过程块 → 信号 收集驱动（块内多赋值去重为同一驱动源）
-                block_sigs: dict[int, tuple] = {}
+                block_sigs: dict[int, tuple[Node, set[str]]] = {}
                 for node in self._iter_nodes(fr.ast):
                     if node.node_name not in proc_rules:
                         continue
@@ -895,7 +896,7 @@ class ProjectChecker:
                         # 驱动）→ 不记（对齐 Verilator elaboration）；黑盒
                         # （模块未定义）→ 原子源兜底（保守）。
                         pen, pen_defined = _resolve_port_drivers(
-                            conn.module_name, port_name, inst_ref, frozenset()
+                            conn.module_name, port_name, inst_ref, set()
                         )
                         if pen:
                             for s in pen:
@@ -1184,8 +1185,10 @@ class ProjectChecker:
         return mapping
 
     @staticmethod
-    def _subtree_contains(root: Node, target: Node) -> bool:
-        """target 是否在 root 子树内（含自身）。"""
+    def _subtree_contains(root: Node | None, target: Node) -> bool:
+        """target 是否在 root 子树内（含自身）。root 为 None 时 False。"""
+        if root is None:
+            return False
         stack = [root]
         while stack:
             node = stack.pop()

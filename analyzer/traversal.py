@@ -56,6 +56,9 @@ class AnalysisTraversal:
         # analyze() 创建新 context 后合并进 extra）：原语/postpass 通过
         # context.extra 读取（如 module_index / inst_sites）。
         self._external_extra: dict[str, Any] = {}
+        # 显式规则启用集（默认关闭的规则——如 NC 族——由测试/评测注入，
+        # checks.py 经 getattr 读取）：None = 全部规则默认开关生效
+        self._checks_enabled: list[str] | None = None
 
     @staticmethod
     def _load_primitive_order() -> list[str]:
