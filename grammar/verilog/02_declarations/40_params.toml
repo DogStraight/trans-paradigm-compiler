@@ -2,7 +2,7 @@
 # Verilog 语法规则 — 参数声明
 # ============================================================================
 # 本文件定义模块体内的参数声明（localparam 和 genvar）。
-# 注意: parameter 声明在 01_module.toml 的 ParamDecl 中定义。
+# 注意: parameter 声明在 01_module/00_base.toml 的 ParamDecl 中定义。
 #
 # 被引用于: 04_statements/00_base.toml (DeclStmt → LocalParamDecl|GenvarDecl)
 

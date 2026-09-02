@@ -4,7 +4,7 @@
 # 本文件定义模块 ANSI 风格端口列表（括号内，无分号）和任务 ANSI 端口。
 # ANSI 端口即在 module/task/function 头部括号内直接声明的端口。
 #
-# 被引用于: 01_module.toml (PortParens → PortList)
+# 被引用于: 01_module/ (PortParens → PortList)
 
 # ── PortList — 模块端口列表 ──
 # 支持 ANSI 风格（`input clk, output [3:0] data`）与非 ANSI 旧风格裸名字

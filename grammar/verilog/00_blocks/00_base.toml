@@ -8,7 +8,7 @@
 #   BlockLabel — begin 块的前导标签（`: label_name`）
 #
 # 依赖: token.toml (comment / keyword.begin / keyword.end / symbol.base.colon)
-# 被引用于: 04_statements/ (CtrlStmt), 03_always.toml, plugins/sim/00_initial.toml 等
+# 被引用于: 04_statements/ (CtrlStmt)、03_always/、plugins/sim/00_initial.toml 等
 
 # ── Root — 顶层根节点 ──
 # 整个源文件的容器。所有 TopLevel 规则（ModuleDecl、Comment 等）解析后由
