@@ -267,7 +267,6 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 | [docs/linter_architecture.md](./docs/linter_architecture.md) | Pre-parse linter architecture |
 | [docs/semantic_checks.md](./docs/semantic_checks.md) | Semantic check slot design (two-layer rules + post-pass) |
 | [docs/known_limitations.md](./docs/known_limitations.md) | Full known-limitations list |
-| [docs/e2e_real_projects.md](./docs/e2e_real_projects.md) | Real-core validation corpus |
 | [docs/release_checklist.md](./docs/release_checklist.md) | Release SOP |
 | [docs/language_walkthrough.md](./docs/language_walkthrough.md) | Build a language from zero (c4 as the worked example) |
 
@@ -329,7 +328,8 @@ synthesizable core in the main pack and simulation/library syntax in plugins
 (gates, UDP, `specify`, `config`/`defparam`, nettypes). The pipeline is
 validated against real open-source cores (PicoRV32, darkriscv, SERV, TV80,
 UART, ice40/simcells cell libraries) plus differential checks against
-sv-parser and Verible — see [docs/e2e_real_projects.md](./docs/e2e_real_projects.md).
+sv-parser and Verible — real-core samples live in
+[`tests/e2e/samples/real/`](./tests/e2e/samples/real/).
 
 Built with Python 3.11+, zero runtime dependencies.
 

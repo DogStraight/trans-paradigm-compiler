@@ -741,7 +741,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | 规则登记 | build.rs 目录扫描自动登记 | checkers/ 手动导入 |
 | 配置 | `.svlint.toml` 逐条 bool + deny_unknown_fields | primitive 配置 + 阶段 code（缺稳定规则命名空间） |
 | 测试生成 | testcases/{pass,fail}/{rule}.sv → build.rs 自动生成 #[test] | pytest 单元 + e2e 差分/fidelity |
-| 文档生成 | mdgen 自动拼 MANUAL.md（13339 行） | MODEL_INDEX + case_catalog（手工维护） |
+| 文档生成 | mdgen 自动拼 MANUAL.md（13339 行） | MODEL_INDEX（手工维护） |
 | suppress | `/* svlint off/on */` 注释对 | 无（P2.6 规划中） |
 | 插件 | libloading 动态库（get_plugin） | capabilities（Python 模块，已实现） |
 | 定位 | 单语言 SV linter（190+ 规则） | 通用管线 + verilog/c4 语言包 |
@@ -763,7 +763,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   - 💡 **输出三模式**：`--github-actions` 是零依赖的机器可读输出捷径（workflow command
     是文本格式），tpc P2.6 的 `--format json` 之外可加同款低成本模式
   - 📌 **规则集即命令 / MANUAL 自动生成**：tpc 无多规则集需求（单语言包），mdgen 式
-    文档生成可观察——tpc 的 MODEL_INDEX/case_catalog 是手工维护，若规则量增长到
+    文档生成可观察——tpc 的 MODEL_INDEX 是手工维护，若规则量增长到
     百级可参考"规则代码/配置 + 自动拼文档"
   - 📌 **编码检测 / 多文件 filelist**：tpc 目标 UTF-8 单文件管线（README 边界），观察
   - ⚠️ **避坑**：svlint 复用 sv-parser 虽省 parser 投入，但规则演进受 parser 能力约束
