@@ -1,9 +1,3 @@
-"""lexer/__init__.py — 引擎模块。
-
-Doc: docs/language_walkthrough.md（词法层：token 定义驱动）
-"""
-# lexer/__init__.py
-
 """Lexer 模块 — 词法分析与预扫描。
 
 导出:
@@ -11,6 +5,8 @@ Doc: docs/language_walkthrough.md（词法层：token 定义驱动）
     pre_scan                 — 顶层声明预扫描函数
     load_pre_scan_config     — 加载并编译预扫描 TOML 配置
     get_config_refs          — 扫描本部件配置需求
+
+Doc: docs/language_walkthrough.md（词法层：token 定义驱动）
 """
 
 from core.config_registry import _CONFIG_DECLARATIONS

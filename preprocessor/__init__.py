@@ -1,8 +1,8 @@
-"""Preprocessor — TOML-driven Verilog macro expansion and reversal.
+"""Preprocessor — TOML-driven macro expansion and reversal（语言无关）。
 
 Architecture:
     Source → Preprocessor (expand) → Lexer → Parser → ... → Renderer → Reverse
-Doc: docs/api.md（管线第一阶段：宏展开/反向映射；机制文档待补）
+Doc: docs/api.md（管线第一阶段：宏展开/反向映射）
 """
 
 from core.config_registry import _CONFIG_DECLARATIONS

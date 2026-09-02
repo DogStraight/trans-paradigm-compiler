@@ -1,16 +1,7 @@
-"""transform/ — post-phase AST transform pipeline.
+"""transform — AST 变换（AST → AST，配置驱动 + 插件扩展）。
 
-Files:
-    normalizer.py          — AST normalization (parser output → canonical form)
-    engine.py              — AstTransformer + TransformPlugin base class
-    config_driven.py       — ConfigDrivenTransform (transform engine)
-    _semantic_mapping.py   — SemanticMappingPlugin (mapping table builder)
-    registry.py            — primitive registry (legacy re-export)
-    primitives/            — transform primitives
-
-Language-specific plugins are registered by component handlers
-(grammar/<lang>/ext/_components/*/).
-The engine itself contains no language-specific knowledge.
+The engine itself contains no language-specific knowledge; language-specific
+plugins are registered via component handlers (grammar/<lang>/plugins/).
 
 Extra output:
     mark_extra(name, subtree)      — called from plugins to mark extra files

@@ -1,6 +1,6 @@
 """preprocessor/primitives/__init__.py — 引擎模块。
 
-Doc: docs/api.md（管线第一阶段：指令原语注册表；机制文档待补）
+Doc: docs/api.md（管线第一阶段：指令原语注册表）
 """
 # preprocessor/primitives/ — 预处理器指令处理器原语
 #

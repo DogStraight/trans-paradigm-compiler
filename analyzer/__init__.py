@@ -1,11 +1,4 @@
-"""analyzer/ — semantic analysis framework
-
-Modules (5):
-    context.py     — AnalysisContext: data bus between primitives
-    traversal.py   — AnalysisTraversal: AST walk + primitive dispatch
-    scope.py       — Scope / Symbol: scope chain + symbol table
-    diagnostic.py  — Diagnostic: structured diagnostics
-    primitives/    — primitive registry and built-in primitives
+"""analyzer — 语义分析框架（AST → 作用域/符号/诊断）。
 
 Design principles:
     Language-agnostic — no language-specific logic in this directory

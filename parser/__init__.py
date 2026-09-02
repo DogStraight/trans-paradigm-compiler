@@ -1,8 +1,7 @@
-"""parser/__init__.py — 引擎模块。
+"""parser — 语法解析（递归下降 + Pratt + 规则选择），tokens → AST。
 
 Doc: docs/language_walkthrough.md（语法规则：setup_grammar）
 """
-# parser/__init__.py
 import os
 from core.define import GrammarRule, GrammarRulesRegister, FileManager
 from .parser_core import Parser

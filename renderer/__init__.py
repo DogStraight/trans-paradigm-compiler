@@ -1,27 +1,7 @@
-"""Renderer — AST + 布局规则驱动的代码生成器
+"""Renderer — AST + 布局规则驱动的代码生成器（AST → 文本）。
 
-只包含 DSL 原语（text/ref/join/group/line/indent/opt），
-所有语言特定知识来自 TOML 布局规则。
-
-模块结构:
-    renderer.py          — 主类 Renderer（轻量 orchestrator）
-    primitives/          — 每个 DSL 原语一个文件
-        text.py          — text 原语
-        ref.py           — ref 原语
-        join.py          — join 原语
-        group.py         — group 原语
-        line.py          — line 原语
-        indent.py        — indent 原语
-        opt.py           — opt 原语
-        soft_break.py    — soft / break 原语
-        align.py         — align 原语（绝对列对齐，ADR-0006 阶段 2）
-        fill.py          — fill 原语（流式折行，ADR-0006 阶段 2）
-        line_suffix.py   — line_suffix 原语（行尾锚定，ADR-0006 阶段 2）
-        intent.py        — intent 原语（布局意图声明，ADR-0006 阶段 4a）
-        registry.py      — 原语注册表
-    node_renderer.py     — 节点级渲染（_render_node / _render_inline / _render_body）
-    loader.py            — TOML 布局规则 / 风格 / 配置加载
-    doc.py               — Doc IR 类型 + layout 算法（Wadler-Leijen 模型）
+只包含 DSL 原语（text/ref/join/group/line/indent/opt/align/fill/
+line_suffix/intent 等），所有语言特定知识来自 TOML 布局规则。
 Doc: docs/renderer_architecture.md（渲染器工作机制与现状：双世界 + Doc IR + 原语表）
 """
 
