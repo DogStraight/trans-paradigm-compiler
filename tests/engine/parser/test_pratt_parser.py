@@ -33,6 +33,7 @@ _SYNTH_OPS = [
     (3, {"symbol": "**", "arity": 2, "assoc": "right"}),   # 右结合
     (5, {"symbol": "!",  "arity": 1, "assoc": "left", "position": "prefix"}),  # 前缀一元
     (5, {"symbol": "~",  "arity": 1, "assoc": "left", "position": "prefix"}),  # 前缀一元
+    (1, {"symbol": "?",  "arity": 3, "assoc": "left", "second": ":"}),  # 三目（合成，注释挂载测试用）
 ]
 
 
@@ -303,3 +304,111 @@ class TestLanguageNeutrality:
             assert not pp.is_bool(T("number", "1"))
         finally:
             pp.install_token_classifier(_SYNTH_CATEGORIES)
+
+
+# ═══════════════════════════════════════════════════════
+# 注释挂载（ADR-0013 决策 5）：operator 间隙注释上挂表达式节点
+# ═══════════════════════════════════════════════════════
+
+def C(text: str) -> Token:
+    """快速构造注释 token（line=0 与相邻代码同行 → midline 判定成立）。"""
+    return Token(type="comment", content=text, line=0, column=0)
+
+
+def C_eol(text: str, line: int) -> Token:
+    """行尾注释 token（指定行号，供行尾判定测试）。"""
+    return Token(type="comment", content=text, line=line, column=0)
+
+
+def parse_with_comments(pratt, tokens, comment_sink=None):
+    """辅助：解析含注释 token 的表达式，返回 (ast, consumed, sink_entries)。"""
+    pp, op_defs = pratt
+    seen = []
+    ast, c = pp.parse_with_count(
+        tokens, operator_defs=op_defs, atom_parser=_atom,
+        comment_sink=comment_sink or (lambda e: seen.append(e)),
+    )
+    return ast, c, seen
+
+
+class TestOperatorGapCommentMount:
+    """operator 间隙行中注释挂 BinaryOp/UnaryOp/TernaryOp 节点（ADR-0013
+    决策 5，纯合成数据语言无关验证——不依赖 verilog 语法）。"""
+
+    def test_infix_gap_mounted_on_binary_op(self, pratt):
+        """`a + /* c */ b`：注释挂 BinaryOp inline_after（锚 `+`）。"""
+        ast, c, seen = parse_with_comments(
+            pratt,
+            [T("id", "a"), op("+"), C("/* c */"), T("id", "b")],
+        )
+        assert ast.node_name == "BinaryOp" and c == 4
+        slots = getattr(ast, "_comment_slots", None)
+        assert slots == {"inline_after": {"+": [("/* c */", 0)]}}
+        assert seen == [], "operator 间隙注释应上挂节点，不进 sink"
+
+    def test_multiple_gaps_each_mounted(self, pratt):
+        """`a + /* c1 */ b * /* c2 */ c`：每层 operator 各自挂载。"""
+        ast, c, seen = parse_with_comments(
+            pratt,
+            [T("id", "a"), op("+"), C("/* c1 */"), T("id", "b"),
+             op("*"), C("/* c2 */"), T("id", "c")],
+        )
+        assert ast.node_name == "BinaryOp" and ast.op == "+"
+        assert ast.op == "+"
+        outer = getattr(ast, "_comment_slots", None)
+        assert outer == {"inline_after": {"+": [("/* c1 */", 0)]}}
+        inner = getattr(ast.right, "_comment_slots", None)
+        assert inner == {"inline_after": {"*": [("/* c2 */", 0)]}}
+
+    def test_prefix_unary_gap_mounted(self, pratt):
+        """`! /* c */ a`：注释挂 UnaryOp（锚 `!`；`!` 是合成前缀一元）。"""
+        ast, c, seen = parse_with_comments(
+            pratt, [op("!"), C("/* c */"), T("id", "a")]
+        )
+        assert ast.node_name == "UnaryOp" and c == 3
+        slots = getattr(ast, "_comment_slots", None)
+        assert slots == {"inline_after": {"!": [("/* c */", 0)]}}
+
+    def test_ternary_both_gaps_mounted(self, pratt):
+        """`c ? /* 真 */ a : /* 假 */ b`：op1/op2 间隙各自挂载。"""
+        ast, c, seen = parse_with_comments(
+            pratt,
+            [T("id", "c"), op("?"), C("/* 真 */"), T("id", "a"),
+             T(":", ":"), C("/* 假 */"), T("id", "b")],
+        )
+        assert ast.node_name == "TernaryOp"
+        slots = getattr(ast, "_comment_slots", None)
+        assert slots == {
+            "inline_after": {
+                "?": [("/* 真 */", 0)],
+                ":": [("/* 假 */", 0)],
+            }
+        }
+
+    def test_line_end_comment_not_mounted(self, pratt):
+        """行尾注释（注释后换行）不上挂——走 sink（行中断行会吞代码）。
+
+        line 约定：注释在 0 行、换行 1 行、续行操作数 2 行——注释与后随
+        代码不同行 → 行尾判定（其余测试 T/op/C 均 line=0 同行 → midline）。
+        """
+        a = Token(type="id", content="a", line=0, column=0)
+        plus = Token(type="op.+", content="+", line=0, column=0)
+        cmt = C_eol("// 行尾", 0)
+        nl = Token(type="newline", content="\n", line=1, column=0)
+        b = Token(type="id", content="b", line=2, column=0)
+        ast, c, seen = parse_with_comments(
+            pratt, [a, plus, cmt, nl, b]
+        )
+        assert ast.node_name == "BinaryOp"
+        assert not hasattr(ast, "_comment_slots"), "行尾注释不挂 inline_after"
+        assert any("行尾" in e["text"] for e in seen), "行尾注释走 sink"
+
+    def test_no_sink_when_none_given(self, pratt):
+        """comment_sink=None（linter 场景）：行中注释仍挂节点，行尾跳过不崩。"""
+        ast, c, seen = parse_with_comments(
+            pratt,
+            [T("id", "a"), op("+"), C("/* c */"), T("id", "b")],
+            comment_sink=None,
+        )
+        slots = getattr(ast, "_comment_slots", None)
+        assert slots == {"inline_after": {"+": [("/* c */", 0)]}}
