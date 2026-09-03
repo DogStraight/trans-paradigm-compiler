@@ -120,6 +120,14 @@ line 原语的锚匹配：除 layout 字符串元素外，**ref 元素求值后�
 
 ## 实施记录（分阶段，每阶段独立验证 + 提交）
 
+### 阶段 0（已实现，2026-09-04，3e155b7）：删指纹回注老机制
+
+作者决策：`--inline-comments`（70085f4 源 token 指纹 + 渲染后全量回插）
+不稳定且消耗大，删除。范围：pipeline inline_comments 参数/字段/配置键、
+restore_all_comments 全量回插分支（固定两态：展开 only_tpc / 非展开
+only_midline）、tests/e2e CLI 与 run_all 模式、docs/api.md 配置说明。
+验证：renderer/pipeline/注释/e2e 220 + policy 39 + run_all OK。
+
 ### 阶段 A（已实现，2026-09-04，c8334aa + 766d600 + 813d47e）
 
 pratt operator 间隙注释上挂表达式节点（决策 5）——核心缺口闭环：
@@ -151,7 +159,7 @@ _line_comment_anchors 441→335，picorv32 端口组注释被候选规则回溯�
 4 次）。restore 端本就按 (text,line) 去重保留首条锚——收集端同语义
 去重，渲染行为完全等价。
 
-### 阶段 B 调研结论（2026-09-04，待语义决策）
+### 阶段 B 调研结论（2026-09-04，作者决策已定）
 
 `_line_comment_anchors`（prepare_production 吞注释，real 语料 unique
 335 条）形态实测：**独占行注释 322 : 行尾 13**——即绝大多数是列表
@@ -167,10 +175,15 @@ _line_comment_anchors 441→335，picorv32 端口组注释被候选规则回溯�
    trailing 还是后一组 leading 需人工判定（restore 现有启发式偏
    trailing/上方，未必正确）。
 
-**处置建议**：阶段 B 不并入阶段 A 的"锚 token 定位"模式（那些注释
-无单一锚 token 语义）；单独设计"列表内独立行注释的容器挂载"（复用
-Comment 节点形态，repeat/seq 需容器引用）或维持 restore 通道并明确
-为已知边界。挂载方案待与作者定调后另立小节，不阻塞阶段 C/D。
+**作者决策（2026-09-04）**：注释**全进树**，无例外——行注释与块注释
+（独占行形态）作为 **Comment 节点**挂载（结构清晰、可作一等子节点），
+行内注释/行尾注释作为**语法节点元信息**（_comment_slots/inline_after
+等）；同时**删除指纹回注老机制**（`--inline-comments`，70085f4 遗留，
+不稳定且消耗大，已随 3e155b7 删除）。阶段 B 的独占行注释按此决策应
+挂载为 Comment 节点——技术路径：吞注释时挂到**容器节点**（含列表的
+block/规则节点）的 sub_node 作为 Comment 子节点，而非 parser 级旁路
+列表；回溯稳定性问题以"成功确认后挂载/容器级收集"解决（实现详见
+阶段 B 实现小节，待落地后补）。
 
 ## 权衡
 
