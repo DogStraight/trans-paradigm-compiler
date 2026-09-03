@@ -4,7 +4,7 @@ module inline_test(input wire clk, /* port comment */ output reg led);
         if (!clk) /* if comment */ begin
             led <= 1'b0;
         end else /* else comment */ begin
-            led <= ~led; /* stmt comment */
+            led <= ~led + /* 中缀注释 */ 1'b0; /* stmt comment */
         end
     end
 endmodule
