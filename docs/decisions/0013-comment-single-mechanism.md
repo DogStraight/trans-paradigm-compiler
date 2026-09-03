@@ -413,12 +413,54 @@ darkriscv/tv80/ice40 宏与条件块）101 测试通过 + run_all real 9/9 +
 - 既有注释测试全绿（不丢注释/不漂移/幂等）：
   `test_comment_attachment.py` / `test_comment_slots.py` /
   `test_comment_migrate.py` / `test_pratt_comment_keep.py` /
-  `test_comment_restore.py`（新增 e2e 门禁，样本级直接断言文本，
-  补 pratt operator 间隙注释用例——此前 e2e 样本无此形态）。
-- e2e 样本：`run_all_tests.py normal comments|inline_test`（保真 1.0）。
-- 全量回归：pytest tests/ + real corpus（保真度守卫）。
+  `test_comment_restore.py` + `test_comment_container.py`（B1 门禁，
+  容器项间/首元素前/块结束符注释 + 幂等）。
+- e2e 样本：`run_all_tests.py normal comments|inline_test` + normal
+  全组 32 + real 全组 9（保真 1.0）。
+- 全量回归：pytest tests/ 1540 passed + real corpus（保真度守卫）。
 
-> Impl: 待实现（parser/parser_core.py::Parser 注释收集收敛 →
-> parser/_production.py::collect_following_comments 扩展 pratt 上挂 →
-> parser/pratt_parser.py::parse_expression 收集接口 → renderer 消费端）
-> Test: tests/e2e/test_comment_restore.py（新增）+ 既有 4 个注释测试文件
+## 实施状态（2026-09-05，B1 系列完成）
+
+| 阶段 | 内容 | 提交 |
+|---|---|---|
+| 阶段 A | pratt operator 间隙注释挂 BinaryOp/TernaryOp/UnaryOp（行中 inline_after 锚=op）+ renderer line.py ref 锚消费 + migrate 修复 | c8334aa / 766d600 / 813d47e / aedfa2f / 756dcdf / c00279f / 1e582f6 / a116b2f / b6e50dc |
+| 阶段 0 | 指纹回注删除（老机制不稳定） | 3e155b7 |
+| B2 | join 识别 Comment 项独立行渲染 | d34100a |
+| B1 | 容器项间独占注释行号窗口上浮（Comment 迭代项） | c8b3a57 |
+| B1.1 | 块结束符行尾注释挂 trailing | cb53d75 |
+| B1.2 | 删除 line 通道普通注释回插 | b8ec648 |
+| B1.3 | 容器首元素前独占注释挂 Comment 子节点 | 9733c9f |
+| B1.4 | 删除 inline 通道 midline 回插（④达成）+ join 分隔符锚 | c02f6d7 |
+| B1.5 | restore 函数清理为纯 tpc 通道 | 05524a3 |
+
+目标五条达成情况：
+- ① 吞注释位置收敛 + 注释进树：pratt op 间隙（A）、容器项间（B1）、
+  首元素前（B1.3）、块结束符行尾（B1.1）、block body（既有 collect）；
+  独立行注释 = Comment 节点（容器 items / 首元素 sub_node / block body），
+  行内/行尾 = 节点元信息（inline_after / trailing）
+- ② pratt 注释挂表达式节点：行中 ✓（A）；行尾 op 间隙注释维持
+  comment_sink 语义（ADR 决策 5 记录的边界——多行表达式 broken 行尾
+  渲染语义未立项）
+- ③ renderer 布局锚消费：line.py 文本/ref 锚（A）+ join 注释段（B2）+
+  join 分隔符锚（B1.4）
+- ④ 普通注释 restore 通道删除：调用面（B1.2 line / B1.4 inline）+
+  函数体纯 tpc（B1.5）；tpc marker 独立通道维持（作者决策）
+- ⑤ inline_after/trailing/leading 槽兼容 + migrate_comments 迁移：
+  测试全绿
+
+已知边界（ADR 决策 5 / 实施记录，均非本机制违背）：
+- pratt op 后**行尾**注释（`|| // bgeu`）→ comment_sink（展开场景
+  普通不回 → darkriscv ~5 条丢）
+- 宏展开后行号漂移的 attachment 行尾注释（darkriscv/tv80 少数）
+- `(//RF` 行内实例端口组注释（行内形态）
+- restore_line_comments 函数体已纯 tpc（无普通残留）
+
+> Impl: parser/pratt_parser.py（_skip_gap_comments/_mount_op_comments）+
+> parser/_production.py（_is_line_only_comment/_lift_gap_comments/
+> _claim_head_comments/try_block_rule trailing/行首规则领挂）+
+> parser/attribute_binder.py（list-spec keep_comments）+
+> renderer/primitives/join.py（Comment 段/首段 Break/sub_node 首 Comment/
+> 分隔符锚）+ renderer/comment_restore.py + renderer/inline_comment.py
+> （纯 tpc 通道）
+> Test: tests/e2e/test_comment_restore.py + test_comment_container.py +
+> 既有 4 个注释测试文件
