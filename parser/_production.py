@@ -231,13 +231,14 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             while context.has_more_tokens():
                 nxt = context.peek_token()
                 if nxt and nxt.type == COMMENT_TOKEN_TYPE:
-                    self._comment_anchors.append(
+                    self._record_anchor(
                         {
                             "anchor": tok.content,
                             "text": nxt.content,
                             "line": nxt.line,
                             "type": be,
-                        }
+                        },
+                        "inline",
                     )
                     context.advance_token()
                 else:
@@ -397,12 +398,13 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                     and nxt2.content[0].isalpha()
                 ):
                     anchor = anchor + nxt2.content
-                self._line_comment_anchors.append(
+                self._record_anchor(
                     {
                         "text": t.content,
                         "line": t.line,
                         "anchor": anchor,
-                    }
+                    },
+                    "line",
                 )
             else:
                 break
@@ -571,13 +573,14 @@ def collect_following_comments(
                         (nxt.content, nxt.line)
                     )
         else:
-            self._comment_anchors.append(
+            self._record_anchor(
                 {
                     "anchor": current_token.content,
                     "text": nxt.content,
                     "line": nxt.line,
                     "type": token_type,
-                }
+                },
+                "inline",
             )
             # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
             # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过

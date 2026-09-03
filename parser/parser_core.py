@@ -231,8 +231,10 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             atom_parser=lambda t, i: _atom_parser_impl(self, t, i, context),
             stop_tokens=stop_tokens,
             # 前缀位置跳过的行内注释（`a + /* c */ b`）经 sink 进锚点通道，
-            # 渲染后 midline 回插防丢（P1.5 修复 pratt 吞注释）。
-            comment_sink=lambda c: self._comment_anchors.append(c),
+            # 渲染后 midline 回插防丢（P1.5 修复 pratt 吞注释；ADR-0013
+            # 阶段 A 后 operator 间隙注释已挂节点，sink 仅收无 operator
+            # 上下文的残余前缀注释）。
+            comment_sink=lambda c: self._record_anchor(c, "inline"),
         )
     except ValueError as e:
         self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")
@@ -503,6 +505,12 @@ class Parser:
         self._comment_anchors: list[dict] = []
         # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）
         self._line_comment_anchors: list[dict] = []
+        # 锚点收集去重（按通道分 key 空间）：parser 回溯会对同一注释重复进入
+        # 收集点（候选规则逐一尝试、production 多次 skip），restore 端本就按
+        # (text, line) 去重保留首条——收集端同语义去重，消除冗余条目。
+        # 两个锚点列表 restore 时各自独立去重，跨列表不去重（语义保等）。
+        self._anchor_seen_inline: set[tuple[str, int]] = set()
+        self._anchor_seen_line: set[tuple[str, int]] = set()
 
     def _log_indent(self, context: ParseContext | None = None) -> str:
         """根据当前解析嵌套深度生成缩进前缀"""
@@ -606,11 +614,36 @@ class Parser:
         else:
             context.update_current_node(old_node)
 
+    def _record_anchor(self, entry: dict, target: str = "inline") -> None:
+        """锚点条目收集去重：按 (text, line) 只记首条。
+
+        parser 回溯会对同一注释重复进入收集点（候选规则逐一尝试、production
+        多次 skip、parse_token 双收集）——restore 端本就按 (text, line) 去重
+        保留首条锚，收集端同语义去重消除冗余（real 语料实测 _line_comment_
+        anchors 441→335、_comment_anchors 447→427，均为回溯重复）。
+
+        target: "inline" → _comment_anchors；"line" → _line_comment_anchors。
+        两个列表 restore 时各自独立去重，跨列表不去重（语义保等）。
+        """
+        key = (entry["text"], entry["line"])
+        if target == "line":
+            if key in self._anchor_seen_line:
+                return
+            self._anchor_seen_line.add(key)
+            self._line_comment_anchors.append(entry)
+        else:
+            if key in self._anchor_seen_inline:
+                return
+            self._anchor_seen_inline.add(key)
+            self._comment_anchors.append(entry)
+
     def parse(self, tokens: list[Token]) -> Node | None:
         """解析器的入口：token 流 → AST"""
         # 每次 parse 重置状态
         self._comment_anchors = []
         self._line_comment_anchors = []
+        self._anchor_seen_inline = set()
+        self._anchor_seen_line = set()
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False
