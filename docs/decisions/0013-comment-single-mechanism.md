@@ -120,12 +120,28 @@ line 原语的锚匹配：除 layout 字符串元素外，**ref 元素求值后�
 
 ## 实施记录（分阶段，每阶段独立验证 + 提交）
 
-### 阶段 A（已实现，2026-09-04，c8334aa）
+### 阶段 A（已实现，2026-09-04，c8334aa + 766d600 + 813d47e）
 
 pratt operator 间隙注释上挂表达式节点（决策 5）——核心缺口闭环：
 注释从"只存在于 parser._comment_anchors"升为 BinaryOp/TernaryOp/UnaryOp
 节点 `_comment_slots.inline_after`；renderer line 原语锚匹配扩展 ref
 属性值。验证全绿（注释/pratt/linter/real 语料 + run_all）。
+
+补充验证（2026-09-04）：
+- 合成层语言无关单测（766d600）：pratt_parser 直接以纯 token 流验证
+  infix/多间隙嵌套/前缀一元/三目 op1+op2 双锚挂载、行尾注释不上挂走
+  sink、sink=None（linter 场景）不崩——不依赖 verilog 语法。
+- 复杂形态探针：括号内 `(a + /* c */ b)`、三目链中段、一元套括号、
+  选择表达式后、长表达式折行——全部结构序消费（anchors 空、位置精确、
+  幂等）。
+- 同语句双机制叠加：`assign x = /* =后 */ a + /* +后 */ b`——parse_token
+  间隙（挂 AssignStmt）与 pratt operator 间隙（挂 BinaryOp）产同一
+  `_comment_slots.inline_after` 协议，renderer 同一消费，幂等 ✓。
+- migrate_comments dict 槽位修复（813d47e）：阶段 A 引入 inline_after
+  dict 后，变换替换含注释表达式子树时原实现 extend(dict) 丢注释内容。
+- 已知边界（非回归）：pratt 内 `//` 行尾注释（`a + // 行尾\n b`）错插
+  吞代码——阶段 A 前后行为一致（既有 restore 边界缺陷，references.md
+  「同行多注释局限」相邻），目标④删 restore 通道后的处置另议。
 
 ### 阶段 B 前置（已实现，2026-09-04，756dcdf）
 
