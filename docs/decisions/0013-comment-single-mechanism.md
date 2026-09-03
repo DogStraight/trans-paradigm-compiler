@@ -36,19 +36,28 @@ parser 唯一生产、renderer 唯一消费，普通注释不再走渲染后字�
 tpc marker（`/*<tpc:macro:N>*/` 等预处理器占位）是跨阶段产物，生命周期
 不同，维持独立通道（见"范围边界"）。
 
-### 1. 唯一数据面：注释 = 节点元信息 + 节点内 gap 标签
+### 1. 唯一数据面：注释 = 节点元信息 + 节点内位置
 
 每条源注释挂在某个 AST 节点的元信息属性上（沿用 `_comment_slots`
-下划线属性族，normalizer 保留、dump 过滤），携带**节点内位置标签**而非
-token 文本锚：
+下划线属性族，normalizer 保留、dump 过滤），携带**节点内位置**而非
+"走 parser 旁路列表"。
 
-- `before_first` — 节点首元素前（行首独立注释并入下一条语句 leading
-  槽位语义，见决策 4）
-- `between_element_i_and_i+1` — 节点内第 i 与第 i+1 个元素之间
-- `after_element_i` — 节点第 i 个元素后（行尾/行中）
+**实现细则（2026-09-04 落地前修订）**：ADR 原拟"gap 标签（before_first /
+between_element_i / after_element_i）"以 layout 元素序为坐标——但 parser
+只有 **production 元素序**（token/@call 序列），renderer 只有 **layout
+元素序**（TOML 声明，可重排/省略/合并 token），两者不同构；无 P3.1
+token span 绑定前，parser 无法生产 layout 元素序标签。**唯一可由 parser
+生产、renderer 可解的坐标 = 锚 token 内容**（注释前 token），即现存
+`inline_after` 协议：`_comment_slots["inline_after"] = {锚token内容: [(注释,
+源行号)]}`。消费端 = renderer 在该节点 layout 元素序列里定位锚（见决策
+3）。文本重复歧义（同行多同文 token）与"锚不在 layout 字符串元素里"
+为已知边界（P3.1 span 绑定后升 gap 标签消歧，另案，与 references.md
+「pratt 前缀吞注释」边界同源）。
 
-不再按 token 文本键控（消灭"锚文本重复歧义/锚不在布局里就落回时域"）。
-`//` 行注释的"必须断行"语义由注释文本自身携带，renderer 消费时执行。
+`//` 行注释的"必须断行"语义：行尾形态（注释后同行无代码）**不挂
+inline_after**（行中断行会吞后续代码）——行尾注释走 trailing/attachment
+槽位（LineSuffix 行尾锚定），与现状一致（`parser/_production.py`
+collect_following_comments 的 is_midline 判定即此分界）。
 
 ### 2. 唯一生产点：所有吞注释位置走同一例程
 
@@ -59,13 +68,16 @@ parser 在**每个会吞注释的位置**调用同一个"把注释交给当前�
 - production 边界 skip（现 `prepare_production` 吞注释的位置，改挂节点
   而非 `_line_comment_anchors`）
 - pratt 前缀位与 operator 消费后（现 `comment_sink` → anchors，改收集
-  到将构造的表达式节点）
+  到将构造的表达式节点——**阶段 A 落地点**，见决策 5）
 
-### 3. 唯一消费点：renderer 按 layout 元素序列 + gap 标签渲染
+### 3. 唯一消费点：renderer 按锚定位插入
 
-renderer 只消费同一份元信息：在节点 layout 元素序列中按 gap 标签插入
-注释。删除普通注释的 `restore_comments` / `restore_line_comments` 通道
-（`renderer/inline_comment.py` 仅保留 tpc marker 用途的 only_tpc 分支）。
+renderer 只消费同一份元信息：在该节点 layout 元素序列中按**锚 token
+内容**定位插入点（line 原语消费 inline_after：元素文本含锚即后插，
+消费后删槽防双份）。删除普通注释的 `restore_comments` /
+`restore_line_comments` 通道（`renderer/inline_comment.py` 仅保留 tpc
+marker 用途的 only_tpc 分支；`comment_restore.collect_inline_after_leftover`
+随结构轨全覆盖后移除）。
 
 ### 4. "最内层"精确定义 + 独立行注释形态
 
@@ -74,8 +86,9 @@ renderer 只消费同一份元信息：在节点 layout 元素序列中按 gap �
   对 `+` 与 `b` 之间 → BinaryOp。
 - **结构上不相关就上挂**：间隙两侧不属于同一最内层节点（`;` 后接下条
   语句、端口列表 `,` 分隔的两个端口）→ 挂共同祖先（容器/块节点），
-  gap 标签 = `between_child_i_and_i+1`。现 `_comment_anchors` 的
-  "语义属于前一组（trailing）"启发式即此规则的模糊版，落为显式标签。
+  锚 = 前 token（如 `;`/`,` 本身无更小节点，挂语句/列表节点 trailing
+  语义）。现 `_comment_anchors` 的"语义属于前一组（trailing）"启发式即
+  此规则的模糊版，落为显式归属。
 - **独立行注释保留 Comment 一等子节点形态**（block 层子节点，结构序
   天然保序、变换随子树走）；元信息槽位只管行中/行尾/间隙注释，不并入
   leading 槽位（决策 2026-09-04）。
@@ -84,9 +97,13 @@ renderer 只消费同一份元信息：在节点 layout 元素序列中按 gap �
 
 operator 间隙注释（`a + /* c */ b`、`cond ? /* 真 */ a : b`、一元前缀
 `- /* c */ a`）在 pratt 循环跳过时收集，于 BinaryOp / TernaryOp /
-UnaryOp 节点构造完成后挂到该节点（gap = op 与 right/operand 之间）。
-renderer 在这些节点的布局消费 op 间隙注释（决策 2026-09-04：挂表达式
-节点本身，不逐级上挂语句节点）。
+UnaryOp 节点构造完成后挂到该节点 `_comment_slots["inline_after"]`，
+锚 = operator token 内容（`+`/`?`/`:`/`-`）。renderer 消费端需扩展
+line 原语的锚匹配：除 layout 字符串元素外，**ref 元素求值后若为单一
+文本且含锚也命中**（BinaryOp layout `line=[{ref=left}," ",{ref=op}," ",
+{ref=right}]` 的 op 是 ref 不是字符串元素——这正是"pratt 内注释无文本
+锚"的根源，扩展后结构序轨即可覆盖，无需 anchors 回插兜底）。（决策
+2026-09-04：挂表达式节点本身，不逐级上挂语句节点。）
 
 ### 范围边界
 

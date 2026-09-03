@@ -168,6 +168,95 @@ def parse_number_literal(token: Token) -> Node:
 
 
 # ── Pratt 解析核心 ──
+def _skip_gap_comments(
+    tokens: list[Token],
+    idx: int,
+    anchor: str,
+    comment_sink=None,
+) -> tuple[int, list[tuple[str, int]]]:
+    """跳过 operator 消费后、操作数解析前的 trivia，收集行中注释（ADR-0013 决策 5）。
+
+    语义：`a + /* c */ b` 的 `/* c */` 位于 operator（`+`）与右操作数之间
+    ——由消费 operator 的调用点在递归操作数前先行跳过并收集，注释随即将构造
+    的 BinaryOp/TernaryOp/UnaryOp 节点上挂（inline_after，锚 = operator）。
+    与 parse_expression 入口的前缀 while 互补：入口 while 处理"表达式开头"
+    的注释（无 operator 上下文）；本函数处理"operator 间隙"的注释。
+
+    行中/行尾判定（与 parser collect_following_comments 同语义）：
+      - 行中（注释后同行有代码）→ 返回收集，调用方挂节点 inline_after；
+      - 行尾（注释后即换行，`//` 行注释典型形态）→ 维持 comment_sink
+        现状语义（行尾注释不挂 inline_after——行中断行会吞后续代码）。
+        注意：sink 条目按旧 pratt 前缀 while 语义标 midline=True（错插
+        由既有 restore 边界处理，不在此改动——见 references.md「同行
+        多注释局限」相邻边界）。
+
+    Returns: (新 idx, 行中注释 [(text, line)] 列表)
+    """
+    collected: list[tuple[str, int]] = []
+    while idx < len(tokens):
+        t = tokens[idx]
+        if not isinstance(t, Token):
+            break
+        if t.type == COMMENT_TOKEN_TYPE:
+            # 注释后跳过注释/换行，找第一个代码 token 判同行（midline）
+            off = 1
+            nxt = None
+            while idx + off < len(tokens):
+                cand = tokens[idx + off]
+                if isinstance(cand, Token) and cand.type in (
+                    COMMENT_TOKEN_TYPE,
+                    NEWLINE_TOKEN_TYPE,
+                ):
+                    off += 1
+                    continue
+                nxt = cand
+                break
+            if nxt is not None and getattr(nxt, "line", -1) == t.line:
+                collected.append((t.content, t.line))
+            elif comment_sink is not None and anchor:
+                comment_sink(
+                    {
+                        "anchor": anchor,
+                        "text": t.content,
+                        "line": t.line,
+                        "midline": True,
+                    }
+                )
+            idx += 1
+            continue
+        if t.type == NEWLINE_TOKEN_TYPE:
+            idx += 1
+            continue
+        break
+    return idx, collected
+
+
+def _mount_op_comments(
+    node: Node,
+    op: str,
+    gap_comments: list[tuple[str, int]],
+) -> None:
+    """将 operator 间隙行中注释挂到表达式节点（ADR-0013 决策 5）。
+
+    `_comment_slots["inline_after"][op] = [(text, line), ...]`——与
+    parse_token 侧 collect_following_comments 的 inline_after 协议一致
+    （锚 = 注释前 token 内容），renderer line 原语按锚定位消费。
+    空列表不挂（无属性噪音）。语言无关：`_comment_slots` 是引擎协议
+    （下划线属性，normalizer 保留、dump 过滤）。
+    """
+    if not gap_comments:
+        return
+    slots = getattr(node, "_comment_slots", None)
+    if slots is None:
+        slots = {}
+        node.add_attr("_comment_slots", slots)
+    ia = slots.setdefault("inline_after", {})
+    existing = ia.setdefault(op, [])
+    for entry in gap_comments:
+        if entry not in existing:
+            existing.append(entry)
+
+
 def parse_expression(
     tokens: list[Token],
     idx: int,
@@ -260,6 +349,11 @@ def parse_expression(
             if props.get("arity") == 1 and props.get("position") == "prefix":
                 op = token.content
                 idx += 1
+                # 前缀一元 operator 间隙注释（`- /* c */ a`）：跳过并收集，
+                # 挂到将构造的 UnaryOp（ADR-0013 决策 5）
+                idx, gap_comments = _skip_gap_comments(
+                    tokens, idx, op, comment_sink
+                )
                 right, idx = parse_expression(
                     tokens,
                     idx,
@@ -275,6 +369,7 @@ def parse_expression(
                     comment_sink,
                 )
                 node = Node("UnaryOp", op=op, operand=right, position="prefix")
+                _mount_op_comments(node, op, gap_comments)
             else:
                 raise ValueError(f"不支持的前缀运算符: {token.content}")
         elif is_none(token):
@@ -312,6 +407,9 @@ def parse_expression(
             idx += 1
             assoc = props.get("assoc", "left")
             right_rbp = lbp - 1 if assoc == "right" else lbp
+            # operator 间隙注释（`a + /* c */ b`）：跳过并收集，挂到将构造
+            # 的 BinaryOp（ADR-0013 决策 5）——原由 RHS 递归入口 while sink
+            idx, gap_comments = _skip_gap_comments(tokens, idx, op, comment_sink)
             right_node, idx = parse_expression(
                 tokens,
                 idx,
@@ -327,11 +425,15 @@ def parse_expression(
                 comment_sink,
             )
             node = Node("BinaryOp", op=op, left=node, right=right_node)
+            _mount_op_comments(node, op, gap_comments)
         elif arity == 3:
             second_sym = props.get("second")
             if not second_sym:
                 raise ValueError(f"三元运算符缺少第二个符号: {op}")
             idx += 1
+            # 三目 op1（`?`）间隙注释（`cond ? /* 真 */ a : b`）：
+            # 跳过并收集，挂到将构造的 TernaryOp
+            idx, gap_comments1 = _skip_gap_comments(tokens, idx, op, comment_sink)
             middle, idx = parse_expression(
                 tokens,
                 idx,
@@ -349,6 +451,11 @@ def parse_expression(
             if idx >= len(tokens) or tokens[idx].content != second_sym:
                 raise ValueError(f"缺少三元运算符的第二个符号: {second_sym}")
             idx += 1
+            # 三目 op2（`:`）间隙注释（`cond ? a : /* 假 */ b`）：
+            # 跳过并收集，挂到将构造的 TernaryOp
+            idx, gap_comments2 = _skip_gap_comments(
+                tokens, idx, second_sym, comment_sink
+            )
             right, idx = parse_expression(
                 tokens,
                 idx,
@@ -371,6 +478,8 @@ def parse_expression(
                 true_val=middle,
                 false_val=right,
             )
+            _mount_op_comments(node, op, gap_comments1)
+            _mount_op_comments(node, second_sym, gap_comments2)
         else:
             raise ValueError(f"不支持的运算符元数: {arity}")
 

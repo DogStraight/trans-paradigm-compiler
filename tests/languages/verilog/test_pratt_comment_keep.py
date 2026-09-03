@@ -2,10 +2,13 @@
 
 P1.5 修复（pratt 前缀吞注释）：pratt 前缀位置跳过行内注释（`a + /* c */ b`
 的 `/* c */`、`- /* c */ a`、`cond ? /* c */ a : b`）时曾直接丢弃——注释
-不纳 AST 也不进任何通道，渲染后丢失。修复：前缀跳注释经 comment_sink 进
-parser._comment_anchors（midline 条目，锚 = 注释前 token），渲染后
-restore only_midline 回插兜底（注释节点模型 2b-2 双轨语义，与
-`assign b = /* 嵌入 */ rst_n` 的 inline_after 路径互补）。
+不纳 AST 也不进任何通道，渲染后丢失。修复（P1.5）：前缀跳注释经
+comment_sink 进 parser._comment_anchors（midline 条目，锚 = 注释前
+token），渲染后 restore only_midline 回插兜底。
+ADR-0013 决策 5（2026-09-04 落地）：operator 间隙注释在 pratt 循环跳过时
+收集，挂到 BinaryOp/TernaryOp/UnaryOp 节点 `_comment_slots["inline_after"]`
+（锚 = operator）——注释进 AST 元信息，renderer 结构序消费（line 原语 ref
+属性锚匹配），锚点通道不再收 operator 间隙注释。
 
 覆盖形态：
     - 中缀右操作数前：`a + /* c */ b`
@@ -103,20 +106,20 @@ def test_comment_survives_idempotent_rerun():
     assert _flat(r2.get("output", "")) == _flat(out1)
 
 
-def test_comment_recorded_in_anchor_channel():
-    """pratt 吞掉的注释进锚点通道（midline 条目，锚 = 注释前 token）。"""
+def test_comment_mounted_on_binary_op():
+    """pratt operator 间隙注释挂 BinaryOp 节点（ADR-0013 决策 5）——
+    不再进锚点通道：注释 = AST 节点元信息（inline_after，锚 = operator），
+    renderer 结构序消费（layout 里 ref op 元素后），渲染后锚点通道为空。"""
     src = "module m;\n    assign x = a + /* 锚点 */ b;\nendmodule\n"
     r = _run(src)
     parser = r.get("parser")
     if parser is None:
         pytest.skip("parser 未挂到结果")
+    # 锚点通道无此注释（结构序轨优先，双轨不双份）
     anchors = getattr(parser, "_comment_anchors", None) or []
     hits = [a for a in anchors if "锚点" in a.get("text", "")]
-    assert hits, "pratt 跳过注释应记录到锚点通道"
-    entry = hits[0]
-    assert entry.get("midline") is True
-    assert entry.get("anchor") == "+"
-    # 渲染后回插（输出含注释）且锚点通道条目仍可查（双轨去重不删源）
+    assert not hits, "pratt operator 间隙注释不应进锚点通道（挂 BinaryOp 节点）"
+    # 渲染后注释保留在 + 与 b 之间
     assert "/*锚点*/b" in _flat(r.get("output", ""))
 
 
@@ -133,3 +136,73 @@ def test_comment_kept_in_case_expression():
     r = _run(src)
     assert r["success"]
     assert "a&&/*与*/b" in _flat(r.get("output", ""))
+
+
+def _find_node(node, name, out=None):
+    """深度收集指定节点名（属性树 + 子节点）。"""
+    if out is None:
+        out = []
+    if node is None:
+        return out
+    if getattr(node, "node_name", None) == name:
+        out.append(node)
+    import core.define as _cd
+
+    for k, v in list(vars(node).items()):
+        if k.startswith("_"):
+            continue
+        if isinstance(v, _cd.Node):
+            _find_node(v, name, out)
+        elif isinstance(v, list):
+            for item in v:
+                if isinstance(item, _cd.Node):
+                    _find_node(item, name, out)
+    return out
+
+
+def test_operator_gap_comment_mounted_on_expr_node():
+    """operator 间隙注释挂表达式节点元信息（ADR-0013 决策 5）：
+    `a + /* c */ b` → BinaryOp._comment_slots.inline_after['+']；
+    `- /* c */ a` → UnaryOp；`cond ? /* 真 */ a : /* 假 */ b` → TernaryOp
+    （op1 '?' 与 op2 ':' 各自锚）。渲染前（analyzer/transform 关闭）断言
+    节点元信息，而非仅渲染文本。"""
+    from pipeline import run_pipeline_on_source
+
+    cases = [
+        (
+            "module m;\n    assign x = a + /* 锚 */ b;\nendmodule\n",
+            "BinaryOp",
+            {"inline_after": {"+": [("/* 锚 */", 2)]}},
+        ),
+        (
+            "module m;\n    assign x = - /* 负 */ a;\nendmodule\n",
+            "UnaryOp",
+            {"inline_after": {"-": [("/* 负 */", 2)]}},
+        ),
+        (
+            "module m;\n    assign x = c ? /* 真 */ a : /* 假 */ b;\nendmodule\n",
+            "TernaryOp",
+            {
+                "inline_after": {
+                    "?": [("/* 真 */", 2)],
+                    ":": [("/* 假 */", 2)],
+                }
+            },
+        ),
+    ]
+    for src, node_name, expect_slots in cases:
+        r = run_pipeline_on_source(
+            source=src, rules_dir="grammar/verilog", quiet=True, no_lint=True,
+            renderer_enabled=False, analyzer_enabled=False,
+            transform_enabled=False, format_output=False, expand_macros=False,
+        )
+        assert not r.get("error"), r.get("error", "")  # renderer-off 时 success 恒 False（render 阶段置位）
+        found = _find_node(r.get("ast"), node_name)
+        assert found, f"{node_name} 未解析出"
+        mounted = [
+            getattr(n, "_comment_slots", None) for n in found
+            if getattr(n, "_comment_slots", None)
+        ]
+        assert any(s == expect_slots for s in mounted), (
+            f"{node_name} 注释未按 ADR-0013 挂载: {mounted!r}"
+        )
