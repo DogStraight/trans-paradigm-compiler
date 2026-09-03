@@ -373,9 +373,25 @@ ref_inline_test identical）；real corpus（展开场景 midline 本就 only_tp
 
 **目标④达成**：普通注释的 restore_comments / restore_line_comments
 回插通道全部删除（line 通道 B1.2、inline 通道 B1.4）——仅剩 tpc marker
-独立 only_tpc 通道（宏/条件块还原依赖）。restore_comments /
-restore_line_comments 函数内 only_midline/普通分支成过渡残留
-（不可达，待后续清理——与 tpc 插值逻辑交织，未深清）。
+独立 only_tpc 通道（宏/条件块还原依赖）。
+
+### 阶段 B1.5 清理 restore 函数普通分支残留（2026-09-05，工作区待提交）
+
+restore_comments / restore_line_comments 原 only_tpc / only_midline
+参数与其普通注释分支（only_tpc=False 窗口匹配、midline 过滤等）在
+B1.2/B1.4 后无调用方（恒 tpc 语义）——删除参数与普通分支，函数**只
+处理 tpc marker**（`/*<tpc:*>` 宏 marker / `// <tpc:*>` 条件占位）：
+- restore_comments：删 only_tpc/only_midline 参数与 only_midline 过滤，
+  普通注释条目（无 `tpc:`）直接 continue；tpc 块注释 marker 的锚窗口
+  路径保留（原逻辑服务 tpc 非 midline 条目）
+- restore_line_comments：删 only_tpc 参数与 is_tpc=False 普通锚匹配
+  大段（短符号锚/精确锚/端口行首锚定的 ~80 行），保留 tpc 词边界匹配
+  + 插值定位 + 相邻顺序保持
+- comment_restore 调用同步（不再传 only_tpc=True）
+
+验证：tpc 还原面（macro_reverse / real_fidelity / real_corpus 的
+darkriscv/tv80/ice40 宏与条件块）101 测试通过 + run_all real 9/9 +
+全量 pytest 1540 全绿。
 
 ## 权衡
 

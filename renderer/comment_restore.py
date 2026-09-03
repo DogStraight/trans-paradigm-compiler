@@ -46,24 +46,24 @@ def restore_all_comments(
     log = log_fn or (lambda m: None)
     restore_stack = bool(restoration_stack)
 
-    # Inline comment restoration：仅展开路径 only_tpc——宏 marker
-    # （`/*<tpc:macro:N>*/`）是块注释，被 parse_token 收集进
-    # _comment_anchors，不回注则 protect_and_reverse 找不到 marker 宏调用
-    # 丢失（tv80 `TV80DELAY`）；普通注释锚点漂移（渲染行号与源行号错位）
-    # 会错插到端口/参数行——只回插 tpc，普通注释跳过。
+    # Inline comment restoration：仅展开路径——宏 marker（`/*<tpc:macro:N>*/`）
+    # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
+    # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
+    # 普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——普通
+    # 注释进树结构序渲染，不在此回插（restore_comments 恒 tpc 语义）。
     if comment_anchors and restore_stack:
         content, n = restore_comments(
-            content, comment_anchors, only_tpc=True, tpc_src_map=tpc_src_map
+            content, comment_anchors, tpc_src_map=tpc_src_map
         )
         log(f"[comments] tpc inline marker restoration: {n} items")
 
-    # Line comment restoration：恒 only_tpc（见函数 docstring——普通独占行
+    # Line comment restoration：恒 tpc 语义（见函数 docstring——普通独占行
     # 注释已全部进树，不再时域回插）。tpc marker（宏/条件块还原依赖）是
     # 唯一性插值定位、不依赖锚点窗口，仍必须回插——否则 protect_and_reverse
     # 找不到 marker，宏还原失效。有宏/条件块时回插，无则整个跳过。
     if line_anchors and (restore_stack or placeholders):
         content, n = restore_line_comments(
-            content, line_anchors, tpc_src_map=tpc_src_map, only_tpc=True
+            content, line_anchors, tpc_src_map=tpc_src_map
         )
         log(f"[comments] tpc marker restoration: {n} items")
 

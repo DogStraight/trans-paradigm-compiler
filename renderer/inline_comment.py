@@ -15,8 +15,6 @@ import re
 def restore_comments(
     rendered: str,
     comment_anchors: list[dict],
-    only_tpc: bool = False,
-    only_midline: bool = False,
     tpc_src_map: dict | None = None,
 ) -> tuple[str, int]:
     """
@@ -35,15 +33,10 @@ def restore_comments(
     4. 一行仅插入一条注释
     5. 匹配失败则退化到窗口最后一行行尾追加
 
-    only_tpc=True：只回插 tpc marker（`/*<tpc:*>`，宏/条件块还原依赖），跳过
-    普通注释。宏展开/变换路径渲染行号与源行号错位（展开改变行数），±3 窗口
-    在渲染文本定位到错误区域，普通注释（如 `end // case: x` 的 anchor='end'
-    通用子串）会错插到端口/参数行——与 line 通道 only_tpc 语义对称，普通注释
-    锚点漂移时跳过（丢失但结构合法），tpc marker 仍必须回插（否则宏还原失效）。
-
-    only_midline=True：只回插行中注释（midline=True）。行中注释不挂 attachment
-    （P1.5 行中块注释保持原位），无渲染兜底——非展开路径默认回插防丢
-    （旧 `--inline-comments` 指纹全量回注开关已删除，2026-09-04）。
+    ADR-0013 目标④（2026-09-05）：普通注释回插通道已删除（注释进树结构
+    序渲染）——本函数**只处理 tpc marker**（`/*<tpc:*>` 宏 marker /
+    `// <tpc:cond:N>` 条件块占位，宏/条件块还原依赖）。普通注释条目
+    直接跳过。原 only_tpc / only_midline 参数删除（调用方恒 tpc 语义）。
 
     tpc 占位标记（midline 行注释，如表达式中间的条件块占位 `// <tpc:cond:N>`，
     2026-08-28 darkriscv 还原修复）：独立行插入 + 插值定位，不参与普通注释
@@ -75,17 +68,15 @@ def restore_comments(
         comment = c["text"]
         src_line = c["line"]
 
-        if only_tpc and "tpc:" not in comment:
-            continue  # 展开路径：普通注释锚点漂移，跳过（tpc marker 仍回插）
-        if only_tpc and comment in rendered:
+        if "tpc:" not in comment:
+            continue  # 普通注释进树结构序渲染，不再回插（ADR-0013 目标④）
+        if comment in rendered:
             # marker 已内联渲染（AST 路径）：如 ice40 端口列表内的
             # /*<tpc:macro:N>*/ 既是列表结构被锚点收集、又作为块注释节点
             # 随 AST 渲染——内联位置是权威位置，锚点回插会双份（宏还原后
             # 同一 fragment 出现两次）。marker 编号唯一，全局判存在即可。
             continue
-        if only_midline and not c.get("midline"):
-            continue  # 只回插行中注释（行尾注释由 attachment 渲染）
-        if "tpc:" in comment and c.get("midline"):
+        if c.get("midline"):
             # tpc 占位标记（行注释）：独立行插入（见函数 docstring），
             # 不参与普通注释锚点窗口/单行单插竞争——收集到最后统一处理
             tpc_pending.append((src_line, comment))
@@ -210,7 +201,6 @@ def restore_line_comments(
     rendered: str,
     anchors: list[dict],
     tpc_src_map: dict | None = None,
-    only_tpc: bool = False,
 ) -> tuple[str, int]:
     """基于锚点的行注释回插。
 
@@ -228,10 +218,11 @@ def restore_line_comments(
     3. 在锚点所在行之前插入注释行
     4. (text, line) 去重，处理回溯导致的重复收集
 
-    only_tpc=True：只回插 tpc marker（`// <tpc:*>`，宏/条件块还原依赖），
-    跳过普通注释。变换路径禁用普通注释恢复（锚点漂移会误匹配拆坏注释行），
-    但宏 marker 是唯一性插值定位、不依赖锚点窗口，仍必须回插——否则
-    protect_and_reverse 找不到 marker，宏还原失效。
+    ADR-0013 目标④（2026-09-05）：普通注释回插通道已删除（注释进树结构
+    序渲染）——本函数**只处理 tpc marker**（`// <tpc:*>`，宏/条件块还原
+    依赖），普通注释条目直接跳过。宏 marker 是唯一性插值定位、不依赖锚点
+    窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，宏还原失效。
+    原 only_tpc 参数删除（调用方恒 tpc 语义）。
     """
     if not anchors:
         return rendered, 0
@@ -277,13 +268,9 @@ def restore_line_comments(
         text = c["text"]
         anchor = c["anchor"]
         src_line = c["line"]
-        is_tpc = "tpc:" in text
-        # 退化分支（锚失败）引用的 center：统一初始化（tpc 分支下方覆盖；
-        # pyright 不推断跨分支 is_tpc 一致性，循环级初始化消除 possibly-unbound）
-        center = src_line
 
-        if only_tpc and not is_tpc:
-            continue  # 变换路径：普通注释锚点漂移，跳过（tpc marker 仍回插）
+        if "tpc:" not in text:
+            continue  # 普通独占行注释进树结构序渲染，不再回插（ADR-0013 目标④）
 
         if text in existing_lines:
             continue
@@ -297,119 +284,36 @@ def restore_line_comments(
         if not anchor:
             continue
 
-        if is_tpc:
-            if last_tpc_pos is not None and src_line - last_tpc_src <= 8:
-                # 相邻 tpc 标记（源行距 ≤ 8）：顺序插入（见循环前注释）
-                ins = min(last_tpc_pos + 1, len(lines))
-                indent = ""
-                if lines:
-                    ref = lines[min(ins, len(lines) - 1)]
-                    indent = " " * (len(ref) - len(ref.lstrip()))
-                lines.insert(ins, indent + text)
-                inserted = {j + 1 if j >= ins else j for j in inserted}
-                inserted.add(ins)
-                last_tpc_pos = ins
-                last_tpc_src = src_line
-                _note_tpc_inserted(ins, src_line, text)
-                continue
-            # 被吞 tpc marker：用已渲染 marker 分段线性插值定位
-            center = _interp_tpc_line(src_line, rendered_tpc_src, rendered_tpc)
-            start = max(0, center - 5)
-            end = min(len(lines), center + 5)
-        else:
-            start = max(0, src_line - 1 - 1)  # line-2
-            end = min(len(lines), src_line + 2)  # line+2
+        if last_tpc_pos is not None and src_line - last_tpc_src <= 8:
+            # 相邻 tpc 标记（源行距 ≤ 8）：顺序插入（见循环前注释）
+            ins = min(last_tpc_pos + 1, len(lines))
+            indent = ""
+            if lines:
+                ref = lines[min(ins, len(lines) - 1)]
+                indent = " " * (len(ref) - len(ref.lstrip()))
+            lines.insert(ins, indent + text)
+            inserted = {j + 1 if j >= ins else j for j in inserted}
+            inserted.add(ins)
+            last_tpc_pos = ins
+            last_tpc_src = src_line
+            _note_tpc_inserted(ins, src_line, text)
+            continue
+        # 被吞 tpc marker：用已渲染 marker 分段线性插值定位
+        center = _interp_tpc_line(src_line, rendered_tpc_src, rendered_tpc)
+        start = max(0, center - 5)
+        end = min(len(lines), center + 5)
 
+        # tpc marker anchor 用词边界匹配：避免 'cpuregs' 误匹配
+        # 'cpuregs_wrdata'（子串，如 TESTBUG_001 被插到 case 分支），
+        # 只匹配完整 token 出现（'cpuregs[' 等）。
         best_idx = -1
-
-        if is_tpc:
-            # tpc marker anchor 用词边界匹配：避免 'cpuregs' 误匹配
-            # 'cpuregs_wrdata'（子串，如 TESTBUG_001 被插到 case 分支），
-            # 只匹配完整 token 出现（'cpuregs[' 等）。
-            anchor_re = re.compile(rf"\b{re.escape(anchor)}\b")
-            for i in range(start, end):
-                if i in inserted:
-                    continue
-                if anchor_re.search(lines[i]):
-                    best_idx = i
-                    break
-        else:
-            # 短符号锚（`.` 等单字符，如端口行前导）在行内子串匹配会命中
-            # 所有端口行——窗口内第一个命中即插（错位）+ 多注释时窗口被占用
-            # 就丢（非幂等振荡 + 注释丢失，gen_serv_top 实测）。单字符符号
-            # 锚要求**行首锚定**（`stripped.startswith(anchor)`），把匹配收窄
-            # 到"以该符号开头的行"（端口行 `.name(...)` 正是此形态），避免
-            # 命中前一个端口行的行尾 `,` 等。
-            if len(anchor) == 1 and not anchor.isalnum():
-                # 选窗口内**注释前最后一个**（`i < src_line` 且最大）行首锚行
-                # ——注释是端口组间分隔，语义属于前一组（trailing）。下方
-                # 优先会让注释逐轮吸附下一端口行（非幂等振荡）。上方固定方向。
-                best_idx = -1
-                for i in range(start, end):
-                    if i in inserted:
-                        continue
-                    if i >= src_line:
-                        break
-                    stripped = lines[i].lstrip()
-                    if stripped.startswith(anchor):
-                        best_idx = i  # 取最接近 src_line 的上方行
-                # 窗口内无上方候选（注释在端口组开头）→ 回退下方最近
-                if best_idx < 0:
-                    for i in range(src_line, end):
-                        if i in inserted:
-                            continue
-                        stripped = lines[i].lstrip()
-                        if stripped.startswith(anchor):
-                            best_idx = i
-                            break
-                # 窗口内全被占用（多注释竞争）→ 向下扩展扫第一个空闲
-                if best_idx < 0:
-                    for i in range(end, len(lines)):
-                        if i in inserted:
-                            continue
-                        stripped = lines[i].lstrip()
-                        if stripped.startswith(anchor):
-                            best_idx = i
-                            break
-            else:
-                # 精确锚（parser 拼接的 `.o_x` 端口名 / 关键字锚 `input`/`output`
-                # 等）子串匹配。多行匹配的泛锚（`input` 命中所有 input 行）取
-                # **注释前最后一个**（`i < src_line` 且最大）匹配行——注释是
-                # 端口组间分隔（分组注释），语义属于其**前一组**（trailing）。
-                # 偏好下方（leading 语义）会让注释每轮吸附下一端口行、位置
-                # 逐轮下移（非幂等振荡，serv_top 实测）。偏好上方固定方向。
-                best_idx = -1
-                for i in range(start, end):
-                    if i in inserted:
-                        continue
-                    if i >= src_line:
-                        break  # 已越过源行号 → 上方候选到此为止
-                    if anchor in lines[i]:
-                        best_idx = i  # 取最接近 src_line 的上方行（循环到末尾）
-                # 窗口内无上方候选（注释在端口组开头）→ 回退下方最近
-                if best_idx < 0:
-                    for i in range(src_line, end):
-                        if i in inserted:
-                            continue
-                        if anchor in lines[i]:
-                            best_idx = i
-                            break
-                if best_idx < 0 and anchor.startswith("."):
-                    for i in range(start, end):
-                        if i in inserted:
-                            continue
-                        stripped = lines[i].lstrip()
-                        if stripped.startswith("."):
-                            best_idx = i
-                            break
-                    if best_idx < 0:
-                        for i in range(end, len(lines)):
-                            if i in inserted:
-                                continue
-                            stripped = lines[i].lstrip()
-                            if stripped.startswith("."):
-                                best_idx = i
-                                break
+        anchor_re = re.compile(rf"\b{re.escape(anchor)}\b")
+        for i in range(start, end):
+            if i in inserted:
+                continue
+            if anchor_re.search(lines[i]):
+                best_idx = i
+                break
 
         if best_idx >= 0:
             # 判断锚点是否在行内容中间（非行首首个 token）
@@ -428,9 +332,8 @@ def restore_line_comments(
                 # 后续 inserted 偏移 +2
                 inserted = {j + 2 if j >= best_idx else j for j in inserted}
                 inserted.add(best_idx + 1)
-                if is_tpc:
-                    last_tpc_pos, last_tpc_src = best_idx + 1, src_line
-                    _note_tpc_inserted(best_idx + 1, src_line, text)
+                last_tpc_pos, last_tpc_src = best_idx + 1, src_line
+                _note_tpc_inserted(best_idx + 1, src_line, text)
             else:
                 # 锚点在行首 → 整行前插（标准路径）
                 indent = " " * (len(lines[best_idx]) - len(lines[best_idx].lstrip()))
@@ -438,36 +341,26 @@ def restore_line_comments(
                 lines.insert(best_idx, comment_line)
                 inserted = {j + 1 if j >= best_idx else j for j in inserted}
                 inserted.add(best_idx)
-                if is_tpc:
-                    last_tpc_pos, last_tpc_src = best_idx, src_line
-                    _note_tpc_inserted(best_idx, src_line, text)
+                last_tpc_pos, last_tpc_src = best_idx, src_line
+                _note_tpc_inserted(best_idx, src_line, text)
         else:
-            if is_tpc:
-                # tpc 占位标记（2026-08-28 darkriscv 端口列表修复）：锚匹配
-                # 失败（如锚 = 下一条注释文本，渲染后形态变化）时退化到
-                # 插值中心前插独立行——restore_anchors 按 marker 整行替换
-                # 还原，不静默丢失（普通注释保持跳过：连续注释块锚指向注释
-                # 文本渲染后不存在，跳过合理；tpc 占位是唯一 marker，丢失
-                # 即条件块结构缺失——darkriscv 端口列表内 3 个 ifdef 缺失
-                # 的根因）。
-                ins = min(center, len(lines))
-                guard = 0
-                while ins < len(lines) and ins in inserted and guard < len(lines):
-                    ins += 1
-                    guard += 1
-                indent = ""
-                if lines:
-                    ref = lines[min(ins, len(lines) - 1)]
-                    indent = " " * (len(ref) - len(ref.lstrip()))
-                lines.insert(ins, indent + text)
-                inserted = {j + 1 if j >= ins else j for j in inserted}
-                inserted.add(ins)
-                last_tpc_pos, last_tpc_src = ins, src_line
-                _note_tpc_inserted(ins, src_line, text)
-            # 退化：锚点没找到。不追加到窗口末尾——那会把注释塞进文件尾
-            # （如 endmodule 之后），污染结构导致重新解析 truncated；直接跳过，
-            # 注释丢失但结构合法。常见于连续注释块（锚点指向下一条注释文本，
-            # 渲染后不存在，如模块头注释组）。
-            continue
+            # tpc 占位标记（2026-08-28 darkriscv 端口列表修复）：锚匹配
+            # 失败（如锚 = 下一条注释文本，渲染后形态变化）时退化到
+            # 插值中心前插独立行——restore_anchors 按 marker 整行替换
+            # 还原，不静默丢失。
+            ins = min(center, len(lines))
+            guard = 0
+            while ins < len(lines) and ins in inserted and guard < len(lines):
+                ins += 1
+                guard += 1
+            indent = ""
+            if lines:
+                ref = lines[min(ins, len(lines) - 1)]
+                indent = " " * (len(ref) - len(ref.lstrip()))
+            lines.insert(ins, indent + text)
+            inserted = {j + 1 if j >= ins else j for j in inserted}
+            inserted.add(ins)
+            last_tpc_pos, last_tpc_src = ins, src_line
+            _note_tpc_inserted(ins, src_line, text)
 
     return "\n".join(lines), len(unique)

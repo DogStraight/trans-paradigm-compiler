@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **restore 函数清理为纯 tpc 通道（ADR-0013 阶段 B1.5）**：restore_comments /
+  restore_line_comments 删除 only_tpc/only_midline 参数与普通注释分支
+  （B1.2/B1.4 后无调用方，恒 tpc 语义）——函数只处理 tpc marker
+  （`/*<tpc:*>` 宏 marker / `// <tpc:*>` 条件占位，宏/条件块还原依赖），
+  普通注释条目直接跳过。tpc 还原面 101 测试 + run_all real 9/9 + 全量
+  pytest 1540 全绿。
+
 - **删除 inline 通道 midline 回插（ADR-0013 目标④达成，B1.4）**：
   行中注释回插兜底实测纯冗余（normal 组禁用前后输出一致，仅 join 分隔
   符形态 1 条需补渲染）——join 原语消费容器节点 inline_after 中锚=分隔
