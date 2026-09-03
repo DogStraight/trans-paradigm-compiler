@@ -56,7 +56,6 @@ def restore_all_comments(
     *,
     comment_anchors: list | None,
     line_anchors: list | None,
-    inline_comments: bool | None,
     restoration_stack: Any | None,
     placeholders: dict | None,
     tpc_src_map: dict | None,
@@ -67,12 +66,15 @@ def restore_all_comments(
 
     参数为 pipeline 上下文的显式投影（C3 重构）——决策逻辑与 pipeline 解耦：
     - comment_anchors/line_anchors: parser 收集的锚点列表
-    - inline_comments: 行内注释全量回插开关（None = 关闭）
     - restoration_stack: 宏展开还原栈（非空 = 展开路径）
     - placeholders: 条件块占位映射
     - tpc_src_map: 源行号 → 渲染行号插值锚点
     - enable_line_comment_restore: line 通道普通注释恢复开关（None = 关闭）
     - log_fn: 日志回调（默认静默）
+
+    注：旧 `--inline-comments` 指纹回注开关已删除（2026-09-04，老机制不稳定
+    且消耗大）——inline 通道仅两态：展开路径 only_tpc（marker 回插）、
+    非展开 only_midline（行中注释回插兜底）。
     """
     log = log_fn or (lambda m: None)
     restore_stack = bool(restoration_stack)
@@ -83,25 +85,19 @@ def restore_all_comments(
     # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
     # 但普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——
     # 只回插 tpc，普通注释跳过（与 line 通道 only_tpc 语义对称）。
-    if inline_comments:
-        if comment_anchors:
-            content, n = restore_comments(content, comment_anchors)
-            log(f"[comments] inline anchor restoration: {n} items")
+    if not comment_anchors:
+        pass
+    elif restore_stack:
+        content, n = restore_comments(
+            content, comment_anchors, only_tpc=True, tpc_src_map=tpc_src_map
+        )
+        log(f"[comments] tpc inline marker restoration: {n} items")
     else:
-        if not comment_anchors:
-            pass
-        elif restore_stack:
-            content, n = restore_comments(
-                content, comment_anchors, only_tpc=True, tpc_src_map=tpc_src_map
-            )
-            log(f"[comments] tpc inline marker restoration: {n} items")
-        else:
-            # 行中注释回插（P1.5）：行中块注释不挂 attachment（保持原位），
-            # 无渲染兜底——inline_comments 关闭时也回插防丢（行尾注释由
-            # attachment 渲染，不在此列）。
-            content, n = restore_comments(content, comment_anchors, only_midline=True)
-            if n:
-                log(f"[comments] midline anchor restoration: {n} items")
+        # 行中注释回插（P1.5）：行中块注释不挂 attachment（保持原位），
+        # 无渲染兜底——回插防丢（行尾注释由 attachment 渲染，不在此列）。
+        content, n = restore_comments(content, comment_anchors, only_midline=True)
+        if n:
+            log(f"[comments] midline anchor restoration: {n} items")
 
     # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
     # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变

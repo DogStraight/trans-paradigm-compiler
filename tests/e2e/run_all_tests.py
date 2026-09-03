@@ -11,7 +11,6 @@ Usage:
     python run_all_tests.py -v                 # verbose output
     python run_all_tests.py --json             # JSON report
     python run_all_tests.py --expand-macros    # enable macro expansion
-    python run_all_tests.py --inline-comments  # enable inline comment injection
     python run_all_tests.py --no-semantic      # skip analyzer + transform stages
     python run_all_tests.py --no-lint          # skip linter pre-check
 """
@@ -118,7 +117,6 @@ def _save_fidelity_cache(base_dir: str, group: str, cache: dict) -> None:
 def run_all(
     verbose: bool = False,
     json_out: bool = False,
-    inline_comments: bool = False,
     expand_macros: bool = False,
     no_semantic: bool = False,
     no_lint: bool = False,
@@ -183,7 +181,6 @@ def run_all(
                     out_dir=out_dir,
                     expand_macros=effective_expand,
                     predefined=REAL_PREDEFINED.get(name),
-                    inline_comments=inline_comments,
                     quiet=True,
                     analyzer_enabled=not no_semantic,
                     transform_enabled=not no_semantic,
@@ -217,7 +214,6 @@ def run_all(
                     input_path=path,
                     out_dir=p_out_dir,
                     expand_macros=False,
-                    inline_comments=inline_comments,
                     quiet=True,
                     analyzer_enabled=not no_semantic,
                     transform_enabled=not no_semantic,
@@ -397,7 +393,6 @@ def run_all(
 if __name__ == "__main__":
     verbose = "-v" in sys.argv or "--verbose" in sys.argv
     json_out = "--json" in sys.argv
-    inline_comments = "--inline-comments" in sys.argv
     expand_macros = "--expand-macros" in sys.argv
     no_semantic = "--no-semantic" in sys.argv
     no_lint = "--no-lint" in sys.argv
@@ -419,7 +414,6 @@ if __name__ == "__main__":
     ok = run_all(
         verbose=verbose,
         json_out=json_out,
-        inline_comments=inline_comments,
         expand_macros=expand_macros,
         no_semantic=no_semantic,
         no_lint=no_lint,

@@ -92,11 +92,6 @@ def parse_args() -> argparse.Namespace:
         "--expand-macros", action="store_true", help="Expand `define macros"
     )
     parser.add_argument(
-        "--inline-comments",
-        action="store_true",
-        help="Re-inject inline comment fingerprints",
-    )
-    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress log output and skip JSON/symbol file saves",
@@ -176,7 +171,6 @@ def main() -> None:
         input_path=src_file,
         out_dir=args.out_dir,
         expand_macros=args.expand_macros,
-        inline_comments=args.inline_comments,
         quiet=args.quiet,
         analyzer_enabled=args.analyzer and not args.no_semantic,
         transform_enabled=args.transform and not args.no_semantic,

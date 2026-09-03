@@ -10,7 +10,6 @@
         "renderer": true,
         "lint": true,
         "expand_macros": false,
-        "inline_comments": false,
         "format_output": true,
         "check_idempotent": true,
         "quiet": false,

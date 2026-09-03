@@ -42,8 +42,8 @@ def restore_comments(
     锚点漂移时跳过（丢失但结构合法），tpc marker 仍必须回插（否则宏还原失效）。
 
     only_midline=True：只回插行中注释（midline=True）。行中注释不挂 attachment
-    （P1.5 行中块注释保持原位），无渲染兜底——inline_comments 开关关闭时也
-    必须回插防丢。
+    （P1.5 行中块注释保持原位），无渲染兜底——非展开路径默认回插防丢
+    （旧 `--inline-comments` 指纹全量回注开关已删除，2026-09-04）。
 
     tpc 占位标记（midline 行注释，如表达式中间的条件块占位 `// <tpc:cond:N>`，
     2026-08-28 darkriscv 还原修复）：独立行插入 + 插值定位，不参与普通注释

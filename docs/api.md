@@ -80,7 +80,7 @@ from lexer.number_runner import ConfigNumberRunner
     "stage": null,
     "out_dir": null,
     "analyzer": true, "transform": true, "renderer": true, "lint": true,
-    "expand_macros": false, "inline_comments": false,
+    "expand_macros": false,
     "format_output": true, "check_idempotent": true, "quiet": false,
     "include_dirs": [], "define": {}, "undefine": []
   }

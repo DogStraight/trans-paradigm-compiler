@@ -90,7 +90,6 @@ class _PipelineContext:
     quiet: bool | None
     stage: str | None
     expand_macros: bool | None
-    inline_comments: bool | None
     analyzer_enabled: bool | None
     transform_enabled: bool | None
     renderer_enabled: bool | None
@@ -472,7 +471,6 @@ def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
         input_path=ctx.input_path,
         quiet=True,
         expand_macros=ctx.expand_macros,
-        inline_comments=ctx.inline_comments,
         analyzer_enabled=False,
         transform_enabled=False,
         renderer_enabled=True,
@@ -553,7 +551,6 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         content,
         comment_anchors=getattr(parser, "_comment_anchors", None),
         line_anchors=getattr(parser, "_line_comment_anchors", None),
-        inline_comments=ctx.inline_comments,
         restoration_stack=ctx.restore_stack,
         placeholders=ctx.placeholders,
         tpc_src_map=ctx.tpc_src_map,
@@ -611,7 +608,6 @@ def run_pipeline_on_source(
     input_path: str | None = None,
     out_dir: str | None = None,
     expand_macros: bool | None = None,
-    inline_comments: bool | None = None,
     quiet: bool | None = None,
     analyzer_enabled: bool | None = None,
     transform_enabled: bool | None = None,
@@ -666,8 +662,6 @@ def run_pipeline_on_source(
         out_dir = _cfg.get("out_dir")
     if expand_macros is None:
         expand_macros = _cfg.get("expand_macros", False)
-    if inline_comments is None:
-        inline_comments = _cfg.get("inline_comments", False)
     if quiet is None:
         quiet = _cfg.get("quiet", False)
     if analyzer_enabled is None:
@@ -701,7 +695,6 @@ def run_pipeline_on_source(
         quiet=quiet,
         stage=stage,
         expand_macros=expand_macros,
-        inline_comments=inline_comments,
         analyzer_enabled=analyzer_enabled,
         transform_enabled=transform_enabled,
         renderer_enabled=renderer_enabled,
