@@ -438,9 +438,9 @@ darkriscv/tv80/ice40 宏与条件块）101 测试通过 + run_all real 9/9 +
   首元素前（B1.3）、块结束符行尾（B1.1）、block body（既有 collect）；
   独立行注释 = Comment 节点（容器 items / 首元素 sub_node / block body），
   行内/行尾 = 节点元信息（inline_after / trailing）
-- ② pratt 注释挂表达式节点：行中 ✓（A）；行尾 op 间隙注释维持
-  comment_sink 语义（ADR 决策 5 记录的边界——多行表达式 broken 行尾
-  渲染语义未立项）
+- ② pratt 注释挂表达式节点：行中 ✓（A）；行尾 op 间隙注释 ✓（方向 B
+  ——挂后续 RHS 子节点 leading，ADR-0014 ②，darkriscv `|| // bgeu` 5 条
+  + 全量保留）
 - ③ renderer 布局锚消费：line.py 文本/ref 锚（A）+ join 注释段（B2）+
   join 分隔符锚（B1.4）
 - ④ 普通注释 restore 通道删除：调用面（B1.2 line / B1.4 inline）+
@@ -449,10 +449,7 @@ darkriscv/tv80/ice40 宏与条件块）101 测试通过 + run_all real 9/9 +
   测试全绿
 
 已知边界（ADR 决策 5 / 实施记录，均非本机制违背）：
-- pratt op 后**行尾**注释（`|| // bgeu`）→ comment_sink（展开场景
-  普通不回 → darkriscv ~5 条丢）
 - 宏展开后行号漂移的 attachment 行尾注释（darkriscv/tv80 少数）
-- `(//RF` 行内实例端口组注释（行内形态）
 - restore_line_comments 函数体已纯 tpc（无普通残留）
 
 > Impl: parser/pratt_parser.py（_skip_gap_comments/_mount_op_comments）+

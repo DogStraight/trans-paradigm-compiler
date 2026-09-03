@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **pratt op 行尾注释挂 RHS leading（ADR-0014 ②方向 B）**：operator 间隙
+  的行尾注释（`a || // bgeu\n b`）不再走 comment_sink（渲染重排后锚匹配
+  失败 → 丢），`_skip_gap_comments` 返回 eol 注释并挂后续 RHS 子节点
+  `_comment_slots["leading"]`——`//` 注释必处行尾、随操作数独立断行机械
+  安全；BinaryOp 挂 right、Ternary 挂 true_val/false_val、Unary 前缀挂
+  operand。darkriscv BMUX `|| // bgeu/bltu/bge/blt/bne` 5 条 + 全量
+  保留不降（源/输出注释 403/403）。关键坑：操作数可来自外部 atom_parser
+  （linter ExpressionChecker 返回 object() 占位）——挂载须 Node 守卫，
+  否则 linter 表达式解析抛异常 → 语句 unrecognized 误报。
+
+- **容器开括号同行 line comment 领为 head Comment（ADR-0014 ①）**：
+  `sub u (//RF interface\n .port...` 与 `(` 同行非独占行，B1/B1.3 不收；
+  `_claim_head_comments` 增第二来源（`_comment_anchors` 中紧前 token type
+  以 `bracket.l_` 开头、line < 规则末行的条目）挂 Comment 子节点——
+  serv_top 55/55（此前唯一丢的 `(//RF interface`）。
+
 - **restore 函数清理为纯 tpc 通道（ADR-0013 阶段 B1.5）**：restore_comments /
   restore_line_comments 删除 only_tpc/only_midline 参数与普通注释分支
   （B1.2/B1.4 后无调用方，恒 tpc 语义）——函数只处理 tpc marker

@@ -1,6 +1,7 @@
-# ADR-0014 — 注释遗留边界实施方案（ADR-0013 续作，draft）
+# ADR-0014 — 注释遗留边界实施方案（ADR-0013 续作，accepted）
 
-Status: draft（未立项设计详案 = 下一 session 的接力起点；立项实现后升 accepted）
+Status: accepted（① `(//RF` 容器头注释、② pratt op 行尾注释方向 B 已立项实现，
+2026-09-04 落地；实施记录见 ADR-0013 目标五条达成情况 + CHANGELOG）
 
 关联：ADR-0013（注释单机制，已实现）。本 ADR 承接其记录的三个遗留边界中
 可立项的两个（① `(//RF` 行内容器头注释；② pratt op 行尾注释方向 B），
@@ -105,3 +106,24 @@ ADR-0013 已闭环（b1bf8b2）。遗留边界（0013「已知边界」表）：
 
 `probe_cmt.py` / `probe_ast.py` / `probe_ast2.py` / `probe_shapes.py`
 （仓库根，未 commit）——已删或下 session 首删。
+
+## 7. 实施记录（2026-09-04，①② 落地）
+
+- ① 容器开括号同行 line comment → head Comment：`_claim_head_comments`
+  增第二来源——`_comment_anchors`（inline 通道）中非 tpc、type 以
+  `BRACKET_L_PREFIX`（`bracket.l_`，语言无关）开头、line < 规则末行的
+  条目，同款挂 Comment 子节点；挂后从 `_comment_anchors` 移除 + 记
+  `_anchor_seen_inline`。serv_top 55/55（此前唯一丢的 `(//RF interface`）。
+  未改 `_is_line_only_comment` / `prepare_production` 全局语义（避免撞
+  B1 已上浮场景与 B1.2 删除回归）。提交 08673be。
+- ② pratt op 行尾注释 → RHS leading（方向 B）：`_skip_gap_comments`
+  返回三元组 (idx, midline, eol)——行尾注释不再走 comment_sink，返回
+  eol；BinaryOp 挂 right、Ternary 挂 true_val/false_val（`?`/`:` 间隙）、
+  Unary 前缀挂 operand 的 `_comment_slots["leading"]`。darkriscv
+  `|| // bgeu/bltu/bge/blt/bne` 5 条 + 全量保留不降；渲染成行尾保留
+  （`a || // c\n b`），比方案预期更自然。关键坑：操作数可能来自外部
+  atom_parser（linter ExpressionChecker 返回 object() 占位）——挂载须
+  Node 守卫（isinstance），否则 linter 表达式解析抛 AttributeError →
+  语句 unrecognized（实测 darkriscv 50 误报）。提交 65a73a9。
+- 验证：注释门禁 7 文件全绿 + run_all normal/real 全 OK + 全量
+  `pytest -n 4` 全绿；ADR-0013 已知边界表 ①② 行删除。
