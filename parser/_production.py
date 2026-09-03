@@ -312,6 +312,13 @@ def _claim_head_comments(
     的规则**成功时领取挂 Comment 子节点（sub_node 首位，独立行注释 =
     Comment 节点，ADR 模型；renderer join 拆段渲染）。
 
+    ADR-0014（①）第二来源：容器**开括号同行**的行内 line comment
+    （`sub u (//RF interface\n .port...`）——与 `(` 同行非独占行，B1/B1.3
+    窗口不收；行尾注释进 inline 通道（_comment_anchors）、渲染 restore 只
+    处理 tpc marker → 不进树即丢。按"紧前 token type 以 bracket.l_ 开头"
+    识别容器开括号锚（BRACKET_L_PREFIX，语言无关），与 B1.3 同判据（首
+    元素前形态）、同窗口（line < 本规则匹配末行）领取挂 Comment 子节点。
+
     嵌套安全：
     - 行中开始的规则（如 AnsiInputDecl 内 DeclaratorList 的 declarator）
       不领（_starts_line=False）；
@@ -323,34 +330,63 @@ def _claim_head_comments(
       迭代项场景由 B1 上浮为 Comment 迭代项，claim 只处理其后的首元素
       前残留——两者 mark 互斥不双份）；行尾漏网（line_only=False）不领。
     """
-    if not getattr(self, "_line_comment_anchors", None):
-        return
-    anchors = self._line_comment_anchors
-    lift = [
-        e
-        for e in anchors
-        if e.get("line_only")
-        and "tpc:" not in e.get("text", "")
-        and e.get("line", -1) < end_line
-    ]
-    if not lift:
-        return
-    from .block_parser import _derive_comment_node_name, _make_comment_node
-
-    cmt_name = getattr(self, "_gap_comment_node_name", None)
-    if cmt_name is None:
-        cmt_name = _derive_comment_node_name(self, COMMENT_TOKEN_TYPE)
-        self._gap_comment_node_name = cmt_name
     subs = getattr(node, "sub_node", None)
     if subs is None:
         subs = []
         setattr(node, "sub_node", subs)
-    for e in sorted(lift, key=lambda x: x.get("line", 0)):
-        cmt = _make_comment_node(cmt_name, e["text"])
-        subs.insert(0, cmt)
-        mark = getattr(self, "_mark_comment_collected", None)
-        if mark is not None:
-            mark(e["text"], e.get("line", 0))
+
+    def _insert(cmt_list: list[dict]) -> None:
+        from .block_parser import _derive_comment_node_name, _make_comment_node
+
+        cmt_name = getattr(self, "_gap_comment_node_name", None)
+        if cmt_name is None:
+            cmt_name = _derive_comment_node_name(self, COMMENT_TOKEN_TYPE)
+            self._gap_comment_node_name = cmt_name
+        for e in sorted(cmt_list, key=lambda x: x.get("line", 0)):
+            cmt = _make_comment_node(cmt_name, e["text"])
+            subs.insert(0, cmt)
+
+    # 来源 1（line 通道，B1.3 既有）：独占行注释
+    if getattr(self, "_line_comment_anchors", None):
+        anchors = self._line_comment_anchors
+        lift = [
+            e
+            for e in anchors
+            if e.get("line_only")
+            and "tpc:" not in e.get("text", "")
+            and e.get("line", -1) < end_line
+        ]
+        if lift:
+            _insert(lift)
+            mark = getattr(self, "_mark_comment_collected", None)
+            if mark is not None:
+                for e in lift:
+                    mark(e["text"], e.get("line", 0))
+
+    # 来源 2（inline 通道，ADR-0014 ①）：容器开括号起始的行尾注释
+    from core.token_protocol import BRACKET_L_PREFIX
+
+    if getattr(self, "_comment_anchors", None):
+        anchors2 = self._comment_anchors
+        lift2 = [
+            e
+            for e in anchors2
+            if "tpc:" not in e.get("text", "")
+            and e.get("type", "").startswith(BRACKET_L_PREFIX)
+            and e.get("line", -1) < end_line
+        ]
+        if lift2:
+            _insert(lift2)
+            # 从 inline 通道消除：restore 对普通注释本就跳过（ADR-0013
+            # 目标④）——消除是防 pipeline 其它消费路径 + 与 _anchor_seen_
+            # inline 一致防回溯重录/外层规则双份（与 line 通道 mark 同语义）
+            seen = set((e["text"], e.get("line", 0)) for e in lift2)
+            self._anchor_seen_inline.update(seen)
+            self._comment_anchors[:] = [
+                e
+                for e in self._comment_anchors
+                if (e["text"], e.get("line", 0)) not in seen
+            ]
 
 
 def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
