@@ -272,6 +272,27 @@ line 通道时域回插；`(//RF` 行内实例端口组注释为既有 restore �
 NamedPortList / DeclaratorList / CaseItemList 项间独占注释 → Comment
 节点进 items + 独立行渲染 + 幂等，5 测试）。
 
+### 阶段 B1.1 块结束符行尾注释进树（2026-09-05，工作区待提交）
+
+**缺口**：块规则（BeginEnd/CaseStmt 等）结束符（`end`/`endcase`）后的
+行尾注释（`end // case: 8'b00001010`）在 try_block_rule 只记 inline
+anchor——restore_comments 仅回 midline/tpc（非展开 only_midline /
+展开 only_tpc 均跳过行尾普通注释）→ 行尾注释**永远丢**（tv80 实测 139
+条 eol 缺失，非宏/宏场景均丢）。
+
+**修法**：try_block_rule 消费 block_end 后注释时，**行尾形态**（注释与
+结束符同行）挂块规则节点 `_comment_slots["trailing"]`（render_node
+LineSuffix 结构序渲染，与 attachment 同轨）；独占形态（结束符后新行）
+保持现状 inline anchor（属下一元素前）。
+
+**实测收益**（expand 渲染）：tv80 eol 缺失 139 → 5（+134 保留；总注释
+保留 509 → 670，src 724）；serv_top 54/55、picorv32 100/100 保持。
+残余 5 条为宏条件区语句行尾注释（attachment 在宏展开路径的行号漂移
+缺陷，既有边界，非本修复范围）。
+
+**门禁**：tests/e2e/test_comment_container.py::TestBlockEndComments
+（2 测试：end 行尾注释保留 + 幂等）。
+
 ## 权衡
 
 - 付出：parser 收集协议重构（吞注释位置收敛单例程）+ pratt 注释收集

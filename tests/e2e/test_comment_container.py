@@ -175,3 +175,47 @@ class TestContainerGapComments:
             for c in ("// State", "// Control", "// group b", "// state one"):
                 if c in out1:
                     assert out1.count(c) == 1, f"{c!r} 重复出现: {out1.count(c)} 次"
+
+
+_BLOCK_END = (
+    "module m;\n"
+    "    reg [1:0] sel;\n"
+    "    reg q;\n"
+    "    always @* begin\n"
+    "        case (sel)\n"
+    "            2'b00: begin\n"
+    "                q = 1'b0;\n"
+    "            end // case zero\n"
+    "            2'b01: begin\n"
+    "                q = 1'b1;\n"
+    "            end // case one\n"
+    "            default: q = 1'b0;\n"
+    "        endcase\n"
+    "    end\n"
+    "endmodule\n"
+)
+
+
+class TestBlockEndComments:
+    """块结束符（end/endcase 等）后行尾注释进树（ADR-0013：块结束符行尾
+    注释挂块规则节点 trailing 槽，结构序渲染——此前只记 inline anchor，
+    restore 只回 midline/tpc 不回行尾普通注释 → 丢失，tv80 实测 134 条）。"""
+
+    def test_end_line_comment_kept(self):
+        """`end // case zero` 行尾注释保留在 end 行尾（format 开/关）。"""
+        for fmt in (False, True):
+            out, ast = _run(_BLOCK_END, fmt)
+            lines = out.splitlines()
+            for c in ("case zero", "case one"):
+                assert c in out, f"[fmt={fmt}] 注释 {c!r} 丢失"
+                ci = next(i for i, l in enumerate(lines) if c in l)
+                assert lines[ci].strip().startswith("end //"), \
+                    f"[fmt={fmt}] {c!r} 未锚定 end 行尾: {lines[ci]!r}"
+
+    def test_block_end_comment_idempotent(self):
+        """格式化输出再次格式化不变。"""
+        out1, _ = _run(_BLOCK_END, True)
+        out2, _ = _run(out1, True)
+        assert out1 == out2
+        assert out1.count("case zero") == 1
+        assert out1.count("case one") == 1

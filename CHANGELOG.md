@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **块结束符行尾注释进树（ADR-0013 阶段 B1.1）**：块规则结束符
+  （`end`/`endcase`）后的行尾注释（`end // case: x`）此前只记 inline
+  anchor——restore 仅回 midline/tpc 不回行尾普通注释 → 丢失。现挂块
+  规则节点 trailing 槽（LineSuffix 结构序渲染）。real 语料收益：tv80
+  注释保留 509→670（eol 缺失 139→5）。门禁：
+  tests/e2e/test_comment_container.py::TestBlockEndComments。
+
 - **容器项间独占行注释进树（ADR-0013 阶段 B1）**：repeat 列表容器
   （PortList/NamedPortList/DeclaratorList/CaseItemList 等）迭代项间的独占
   行注释按**源行号窗口**上浮为 Comment 迭代项进容器 items（结构序），

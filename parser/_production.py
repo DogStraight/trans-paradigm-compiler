@@ -231,15 +231,29 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             while context.has_more_tokens():
                 nxt = context.peek_token()
                 if nxt and nxt.type == COMMENT_TOKEN_TYPE:
-                    self._record_anchor(
-                        {
-                            "anchor": tok.content,
-                            "text": nxt.content,
-                            "line": nxt.line,
-                            "type": be,
-                        },
-                        "inline",
-                    )
+                    if nxt.line == tok.line:
+                        # 行尾形态（`end // comment` 同行）→ 挂块规则节点
+                        # trailing 槽（结构序渲染 LineSuffix，ADR-0013 注释
+                        # 节点元信息）。仅记 inline anchor 的话 restore 只
+                        # 回 midline/tpc（宏/非宏均不回行尾普通注释）→ 注释
+                        # 丢失（tv80 `end // case: ...` 203 条实测）。
+                        slots = getattr(rule_node, "_comment_slots", None)
+                        if slots is None:
+                            slots = {}
+                            rule_node.add_attr("_comment_slots", slots)
+                        slots.setdefault("trailing", []).append(nxt.content)
+                    else:
+                        # 独占形态（结束符后新行注释）→ 现状：inline anchor
+                        # 记录（restore 窗口回插），注释不属于本块结束行。
+                        self._record_anchor(
+                            {
+                                "anchor": tok.content,
+                                "text": nxt.content,
+                                "line": nxt.line,
+                                "type": be,
+                            },
+                            "inline",
+                        )
                     context.advance_token()
                 else:
                     break
