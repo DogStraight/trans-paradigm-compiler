@@ -111,6 +111,15 @@ def _derive_comment_node_name(self, comment_token: str) -> str:
     return COMMENT_NODE_NAME
 
 
+def _make_comment_node(comment_node_name: str, content: str) -> Node:
+    """构造注释节点：挂 `_comment` 引擎标记（语言无关——renderer 列表
+    容器识别独占行注释用；下划线属性 dump 过滤、normalizer 保留）。"""
+    comment_node = Node(comment_node_name)
+    comment_node.add_attr("value", content)
+    comment_node.add_attr("_comment", True)
+    return comment_node
+
+
 def collect_line_comments(self, context: ParseContext, block_node: Node) -> None:
     """收集行尾注释（comment → newline），挂到 block_node.sub_node 作为注释节点。
 
@@ -124,8 +133,7 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
         if cur and cur.type == COMMENT_TOKEN_TYPE:
             nxt = context.peek_token(offset=1)
             if nxt and nxt.type == NEWLINE_TOKEN_TYPE:
-                comment_node = Node(comment_node_name)
-                comment_node.add_attr("value", cur.content)
+                comment_node = _make_comment_node(comment_node_name, cur.content)
                 block_node.add_sub_node(comment_node)
                 context.advance_token()  # 跳过 comment
                 context.advance_token()  # 跳过 newline
@@ -133,8 +141,7 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
             if not nxt:
                 # 文件尾注释（无 trailing newline）：同样收集，避免
                 # parse_sentence 把注释当句子起点而 truncated
-                comment_node = Node(comment_node_name)
-                comment_node.add_attr("value", cur.content)
+                comment_node = _make_comment_node(comment_node_name, cur.content)
                 block_node.add_sub_node(comment_node)
                 context.advance_token()  # 跳过 comment
                 continue

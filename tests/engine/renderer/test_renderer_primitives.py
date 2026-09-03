@@ -179,6 +179,72 @@ class TestJoinPrimitive:
         assert _render_expr(expr, node) == ""
 
 
+def _cmt(text):
+    """构造独占行注释节点（_comment 引擎标记，ADR-0013 阶段 B）。"""
+    c = _n("Comment", value=text)
+    c.add_attr("_comment", True)
+    return c
+
+
+class TestJoinCommentItem:
+    """独占行注释混入 join items 独立行渲染（ADR-0013 阶段 B2）。
+
+    _comment 引擎标记（parser collect_line_comments 挂）——注释是列表
+    项间分隔，不参与 join 分隔符：注释前项尾随分隔符归属其行尾、
+    注释独立行（前后换行）、注释后项为新段首（无分隔符）。
+    """
+
+    def test_comment_mid_breaks_list(self):
+        a = _n("id", value="input a")
+        c = _cmt("// Look-Ahead Interface")
+        b = _n("id", value="output b")
+        node = _n("List", items=[a, c, b])
+        expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        out = _render_expr(expr, node)
+        assert out == " input a,\n    // Look-Ahead Interface\n    output b"
+
+    def test_comment_at_tail_no_trailing_blank(self):
+        a = _n("id", value="a")
+        b = _n("id", value="b")
+        c = _cmt("// tail")
+        node = _n("List", items=[a, b, c])
+        expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        out = _render_expr(expr, node)
+        assert out == " a, b,\n    // tail"
+        assert not out.endswith("\n\n")
+
+    def test_comment_at_head(self):
+        c = _cmt("// head")
+        a = _n("id", value="a")
+        b = _n("id", value="b")
+        node = _n("List", items=[c, a, b])
+        expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        out = _render_expr(expr, node)
+        assert out == " // head\n    a, b"
+
+    def test_consecutive_comments_each_line(self):
+        c1 = _cmt("// c1")
+        c2 = _cmt("// c2")
+        a = _n("id", value="a")
+        node = _n("List", items=[c1, c2, a])
+        expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        out = _render_expr(expr, node)
+        assert out == " // c1\n    // c2\n    a"
+
+    def test_no_comment_regression(self):
+        a = _n("id", value="a")
+        b = _n("id", value="b")
+        node = _n("List", items=[a, b])
+        expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        assert _render_expr(expr, node) == " a, b"
+
+    def test_comment_item_alone(self):
+        c = _cmt("// only")
+        node = _n("List", items=[c])
+        expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        assert _render_expr(expr, node) == " // only"
+
+
 # ═══════════════════════════════════════════════════════
 # group 原语
 # ═══════════════════════════════════════════════════════
