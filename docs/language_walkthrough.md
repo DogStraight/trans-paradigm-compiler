@@ -79,7 +79,6 @@ while = "while"
 
 > 数字形态由配置驱动（P2.1）：`base/_number.toml` 声明 `[[number.based]]` 形态，
 > 由 `lexer/number_gen.py` 编译为 FSM、`lexer/number_runner.py` 执行。
-> `lexer/number_fsm.py` 仅是**无配置时的回退路径**（旧实现）。
 
 > 注释扫描走 `lexer/capture_runner.py::CaptureRunner`——原始文本捕获模式的
 > 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture

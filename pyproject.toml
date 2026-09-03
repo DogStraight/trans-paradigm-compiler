@@ -107,7 +107,6 @@ omit = [
     "*/tests/*",
     "*/__pycache__/*",
     "*/main.py",
-    "*/lexer/number_fsm.py",
 ]
 
 [tool.coverage.report]

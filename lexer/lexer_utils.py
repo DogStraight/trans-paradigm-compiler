@@ -6,8 +6,6 @@ Doc: docs/decisions/0003-config-load-fail-fast.md
 """
 
 import os
-import tomllib
-from core.define import FileManager
 
 
 def merge_token_define(resolved: dict) -> dict:
@@ -64,14 +62,6 @@ def _deep_merge(base: dict, override: dict) -> dict:
         else:
             result[key] = val
     return result
-
-
-def get_token_define(base_dir: str = "") -> dict:
-    """（向后兼容）直接读取 token.toml 文件。新代码应使用 ConfigRegistry。"""
-    if not base_dir:
-        base_dir = FileManager.token_define_file
-    token_content = FileManager.read_file(base_dir)
-    return tomllib.loads(token_content)
 
 
 def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -> dict:

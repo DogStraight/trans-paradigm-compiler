@@ -21,7 +21,6 @@ from core.token_protocol import (
     symbol_type,
 )
 
-from .lexer_utils import get_number_config
 from .number_runner import build_number_runner
 from .capture_runner import CaptureRunner, CaptureRule
 
@@ -118,14 +117,16 @@ class Lexer:
                     resolved.get("lexer.number", {})
                 )
         else:
-            # 无 rules_dir 的旧路径：直接读 token 文件 + 全局宏配置
+            # 无 rules_dir：token/number 配置由调用方直传（测试自建定义）；
+            # 宏配置回退全局声明式 _macro_cfg。旧版 get_token_define/
+            # get_number_config 文件读取兜底已移除（无调用方，统一 ConfigRegistry）。
             if token_define_dict is None:
-                from .lexer_utils import get_token_define
-
-                token_define_dict = get_token_define()
+                raise ValueError(
+                    "Lexer 无 rules_dir 时必须显式传 token_define_dict（否则无 token "
+                    "定义可用）。旧版 get_token_define 文件读取兜底已移除，配置加载"
+                    "统一走 ConfigRegistry。"
+                )
             raw_macro = _macro_cfg
-            if number_configs is None:
-                number_configs = get_number_config()
         self.token_define = token_define_dict
 
         # 宏识别策略与配置

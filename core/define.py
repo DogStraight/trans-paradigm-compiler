@@ -246,7 +246,6 @@ class FileManager:
     _base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     rules_file: str = ""
     rules_dir: str = DEFAULT_RULES_DIR
-    token_define_file: str = ""
     lookup_file: str = ""
     cg_rules_dir: str = ""
     debug_log_file: str | None = None

@@ -120,7 +120,6 @@ def run_all(
     expand_macros: bool = False,
     no_semantic: bool = False,
     no_lint: bool = False,
-    enable_diff: bool = False,
     group_filter: str | None = None,
     name_filter: str | None = None,
 ) -> bool:
@@ -393,7 +392,6 @@ if __name__ == "__main__":
     expand_macros = "--expand-macros" in sys.argv
     no_semantic = "--no-semantic" in sys.argv
     no_lint = "--no-lint" in sys.argv
-    enable_diff = "--diff" in sys.argv  # kept for backward compat, no longer needed
 
     pos_args = [a for a in sys.argv[1:] if not a.startswith("-")]
     group_filter = pos_args[0] if len(pos_args) >= 1 else None
@@ -414,7 +412,6 @@ if __name__ == "__main__":
         expand_macros=expand_macros,
         no_semantic=no_semantic,
         no_lint=no_lint,
-        enable_diff=enable_diff,
         group_filter=group_filter,
         name_filter=name_filter,
     )
