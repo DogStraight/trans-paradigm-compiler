@@ -185,6 +185,26 @@ block/规则节点）的 sub_node 作为 Comment 子节点，而非 parser 级�
 列表；回溯稳定性问题以"成功确认后挂载/容器级收集"解决（实现详见
 阶段 B 实现小节，待落地后补）。
 
+### 阶段 B 技术方案（2026-09-04，renderer 缺口已实测）
+
+独占行注释的宿主是 **repeat 列表容器**（PortList.items /
+DeclaratorList.items / 语句列表等），容器规则成功后确定。实现分两段：
+
+**B1 parser 侧**：repeat/seq 迭代间隙被吞的独占行注释（comment→newline
+形态，即"独立行注释"判定同 collect_line_comments），在容器规则**确认
+成功后**转为 Comment 子节点插入容器 items 对应位置（源序保持）。回溯
+稳定性：吞注释暂存容器级 pending，容器成功后按 token 位置归位；失败
+回滚时 pending 随容器丢弃。这替代 `_line_comment_anchors` 旁路列表。
+
+**B2 renderer 侧**（缺口已实测）：join/intent 原语的 items 列表现把
+Comment 节点当普通项用分隔符连接（`input a, // comment, output b` 错）——
+需识别 Comment 节点：不参与分隔符、独立行渲染（`// comment` 独占行，
+不吞后续项）。Comment 已有布局（ref=value），join 遇 Comment 项插入
+Break 而非分隔符。
+
+验证门槛：real 语料 335 条独占行注释渲染位置与 restore 现状一致
+（保真不降）+ 幂等 + 既有注释测试全绿。
+
 ## 权衡
 
 - 付出：parser 收集协议重构（吞注释位置收敛单例程）+ pratt 注释收集
