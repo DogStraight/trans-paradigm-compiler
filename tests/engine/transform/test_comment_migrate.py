@@ -61,6 +61,52 @@ class TestMigrateComments:
         assert out is not None and out.node_name == "ModuleInst"
         assert not hasattr(out, "_comment_slots")
 
+    def test_inline_after_dict_migrated(self):
+        """inline_after（dict 槽位，ADR-0013 阶段 A pratt 挂载形态）迁移：
+        {锚 token: [(注释, 源行号)]} 按键合并，注释不丢（曾 extend(dict) 把
+        keys 当列表扩展，注释内容丢失）。"""
+        old = _stmt("expr")
+        old.add_attr(
+            "_comment_slots", {"inline_after": {"+": [("/* c */", 2)]}}
+        )
+        new = Node("ModuleInst")
+        migrate_comments(old, new)
+        assert new._comment_slots == {"inline_after": {"+": [("/* c */", 2)]}}
+
+    def test_inline_after_dict_merged_into_existing(self):
+        """dict 槽位与 new 节点已有 dict 合并（锚 keys 并集，entries 保留）。"""
+        old = _stmt("expr")
+        old.add_attr(
+            "_comment_slots", {"inline_after": {"+": [("/* 旧 */", 3)]}}
+        )
+        new = Node("ModuleInst")
+        new.add_attr(
+            "_comment_slots", {"inline_after": {"=": [("/* 新 */", 1)]}}
+        )
+        migrate_comments(old, new)
+        assert new._comment_slots == {
+            "inline_after": {
+                "=": [("/* 新 */", 1)],
+                "+": [("/* 旧 */", 3)],
+            }
+        }
+
+    def test_mixed_slot_shapes_migrated(self):
+        """list 槽位（trailing）+ dict 槽位（inline_after）同树迁移。"""
+        old = _stmt("expr")
+        old.add_attr("_comment_slots", {"trailing": ["// 尾"]})
+        inner = _stmt("inner")
+        inner.add_attr(
+            "_comment_slots", {"inline_after": {"*": [("/* 深 */", 4)]}}
+        )
+        old.add_sub_node(inner)
+        new = Node("ModuleInst")
+        migrate_comments(old, new)
+        assert new._comment_slots == {
+            "trailing": ["// 尾"],
+            "inline_after": {"*": [("/* 深 */", 4)]},
+        }
+
 
 class TestImplCommentMigrationE2E:
     """管线路径：impl 行尾注释变换后出现在生成的实例节点（变换路径注释

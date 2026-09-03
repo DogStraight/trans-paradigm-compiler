@@ -114,12 +114,27 @@ def _collect_subtree_comments(
     替换语义下旧子树整体丢弃，其注释（可能挂在任意层级——如 `spi.slave
     spi_io // 注释` 的 attachment 挂在 instance_name 的 Identifier 子节点）
     全部迁移到替换产物，防注释随丢弃子树丢失。
+
+    槽位值两形态（ADR-0013 阶段 A 后均存在）：
+      - list（leading/inline/trailing）：直接扩展
+      - dict（inline_after = {锚 token: [(注释, 源行号)]}）：按键合并
+        （锚 keys 合并去重，entries 按 (text, line) 去重）
     """
     if isinstance(node, Node):
         slots = getattr(node, "_comment_slots", None)
         if slots:
             for k, v in slots.items():
-                acc_slots.setdefault(k, []).extend(v)
+                if isinstance(v, dict):
+                    merged = acc_slots.setdefault(k, {})
+                    for anchor, entries in v.items():
+                        cur = merged.setdefault(anchor, [])
+                        for e in entries:
+                            if e not in cur:
+                                cur.append(e)
+                elif isinstance(v, list):
+                    acc_slots.setdefault(k, []).extend(v)
+                else:
+                    acc_slots.setdefault(k, []).append(v)
         attached = getattr(node, "_attached_comments", None)
         if attached:
             acc_attached.extend(attached)
@@ -165,6 +180,14 @@ def migrate_comments(old_node: Any, new_node: Any) -> Any:
             for k, v in acc_slots.items():
                 if k not in new_slots:
                     new_slots[k] = v
+                elif isinstance(v, dict):
+                    # inline_after 字典合并（锚 keys + entries 去重）
+                    merged = new_slots[k]
+                    for anchor, entries in v.items():
+                        cur = merged.setdefault(anchor, [])
+                        for e in entries:
+                            if e not in cur:
+                                cur.append(e)
                 else:
                     new_slots[k] = new_slots[k] + v
     if acc_attached:
