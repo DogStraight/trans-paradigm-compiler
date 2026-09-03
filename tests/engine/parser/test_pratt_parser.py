@@ -385,8 +385,12 @@ class TestOperatorGapCommentMount:
             }
         }
 
-    def test_line_end_comment_not_mounted(self, pratt):
-        """行尾注释（注释后换行）不上挂——走 sink（行中断行会吞代码）。
+    def test_line_end_comment_mounted_on_rhs_leading(self, pratt):
+        """行尾注释（注释后换行）挂后续 RHS leading（ADR-0014 方向 B）。
+
+        旧语义：行尾注释走 sink（行中断行会吞代码）。方向 B：挂 RHS
+        子节点 leading——`//` 注释在重排表达式内必处行尾，只能随操作数
+        独立断行，机械安全（`a || // c\\n b` → right(b) leading）。
 
         line 约定：注释在 0 行、换行 1 行、续行操作数 2 行——注释与后随
         代码不同行 → 行尾判定（其余测试 T/op/C 均 line=0 同行 → midline）。
@@ -400,8 +404,14 @@ class TestOperatorGapCommentMount:
             pratt, [a, plus, cmt, nl, b]
         )
         assert ast.node_name == "BinaryOp"
-        assert not hasattr(ast, "_comment_slots"), "行尾注释不挂 inline_after"
-        assert any("行尾" in e["text"] for e in seen), "行尾注释走 sink"
+        assert not hasattr(ast, "_comment_slots"), "行尾注释不挂 op inline_after"
+        # 挂 RHS（right = Ident b）leading
+        rhs = getattr(ast, "right", None)
+        slots = getattr(rhs, "_comment_slots", None) if rhs is not None else None
+        assert slots and slots.get("leading") == ["// 行尾"], (
+            f"行尾注释应挂 RHS leading: {slots!r}"
+        )
+        assert seen == [], "行尾注释不再走 sink（方向 B 挂 RHS leading）"
 
     def test_no_sink_when_none_given(self, pratt):
         """comment_sink=None（linter 场景）：行中注释仍挂节点，行尾跳过不崩。"""

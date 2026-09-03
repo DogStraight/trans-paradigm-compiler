@@ -206,3 +206,70 @@ def test_operator_gap_comment_mounted_on_expr_node():
         assert any(s == expect_slots for s in mounted), (
             f"{node_name} 注释未按 ADR-0013 挂载: {mounted!r}"
         )
+
+
+# ── 方向 B：operator 行尾注释（ADR-0014 ②，darkriscv BMUX 5 条） ──
+# `a || // c\n b`——`//` 行尾注释在 operator 间隙：渲染重排后无安全落点，
+# 方向 B 挂后续 RHS 子节点 leading（_comment_slots["leading"]），输出强制
+# 断行 `a || // c\nb`——机械安全（// 必在行尾），语义近似（注释在 op 与
+# 下段之间）。
+
+
+def test_binary_op_eol_comment_kept():
+    """BinaryOp 行尾注释保留且落在 op 与 RHS 之间（darkriscv `|| // bgeu`）。"""
+    src = "module m;\n    assign x = a || // 条件\n        b;\nendmodule\n"
+    r = _run(src)
+    assert r["success"]
+    out = r.get("output", "")
+    assert "// 条件" in out
+    assert "a || // 条件" in out  # 注释留 op 行尾
+    assert "b" in out
+
+
+def test_ternary_colon_eol_comment_kept():
+    """Ternary `:` 后行尾注释保留（tv80/darkriscv `: // misc` 存活形态）。"""
+    src = "module m;\n    assign x = c ? a : // 假分支\n        b;\nendmodule\n"
+    r = _run(src)
+    assert r["success"]
+    out = r.get("output", "")
+    assert "// 假分支" in out
+    assert "c ? a : // 假分支" in out
+
+
+def test_operator_eol_comment_mounted_on_rhs_leading():
+    """行尾注释挂后续 RHS 子节点 leading（ADR-0014 方向 B 元信息断言）——
+    BinaryOp `a || // c\n b` → right（b）leading 槽含注释。"""
+    from pipeline import run_pipeline_on_source
+
+    src = "module m;\n    assign x = a || // 方向B\n        b;\nendmodule\n"
+    r = run_pipeline_on_source(
+        source=src, rules_dir="grammar/verilog", quiet=True, no_lint=True,
+        renderer_enabled=False, analyzer_enabled=False,
+        transform_enabled=False, format_output=False, expand_macros=False,
+    )
+    assert not r.get("error"), r.get("error", "")
+    # BinaryOp.right 的 leading 槽含该注释
+    bins = _find_node(r.get("ast"), "BinaryOp")
+    assert bins, "BinaryOp 未解析出"
+    found = False
+    for n in bins:
+        right = getattr(n, "right", None)
+        slots = getattr(right, "_comment_slots", None) if right is not None else None
+        if slots and "leading" in slots and any(
+            "方向B" in c for c in slots["leading"]
+        ):
+            found = True
+            break
+    assert found, "行尾注释未挂到 RHS leading 槽"
+
+
+def test_operator_eol_comment_idempotent():
+    """方向 B 输出再走一遍管线注释仍保留（幂等，防振荡）。"""
+    src = "module m;\n    assign x = a || // 幂等B\n        b;\nendmodule\n"
+    r1 = _run(src)
+    assert r1["success"]
+    out1 = r1.get("output", "")
+    assert "// 幂等B" in out1
+    r2 = _run(out1)
+    assert r2["success"]
+    assert "// 幂等B" in r2.get("output", "")
