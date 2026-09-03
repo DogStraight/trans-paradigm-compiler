@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **删除 inline 通道 midline 回插（ADR-0013 目标④达成，B1.4）**：
+  行中注释回插兜底实测纯冗余（normal 组禁用前后输出一致，仅 join 分隔
+  符形态 1 条需补渲染）——join 原语消费容器节点 inline_after 中锚=分隔
+  符的行中注释（`clk, /* c */ output`）后，restore_all_comments 移除
+  midline 分支、pipeline collect_inline_after_leftover 删除——普通注释
+  restore_comments/restore_line_comments 回插通道全部删除（line B1.2 +
+  inline B1.4），仅剩 tpc marker 独立 only_tpc 通道（宏/条件块还原依赖）。
+
 - **容器首元素前独占注释进树（ADR-0013 阶段 B1.3）**：B1.2 删除 line
   通道后，容器**首元素前**独占注释（`module m (\n // head\n input a`）
   无兜底丢失——行首规则成功时领前置独占注释挂 Comment 子节点（sub_node

@@ -60,10 +60,7 @@ from transform.normalizer import normalize_ast
 
 # ── 渲染器 ──
 from renderer.renderer import Renderer
-from renderer.comment_restore import (
-    collect_inline_after_leftover,
-    restore_all_comments,
-)
+from renderer.comment_restore import restore_all_comments
 
 # ── Linter（前置语法检查）──
 from linter.scanner import LinterScanner
@@ -522,15 +519,6 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         return
 
     content = ctx.renderer.render(ast)
-
-    # 行中注释未消费兜底（注释节点模型 2b-2）：inline_after 是 token 标注
-    # 定位（渲染端在布局 line 文本元素里找锚），布局无文本锚的场景（如
-    # pratt 表达式内 `a + /* c */ b` 的 `+` 在 op 子节点里）渲染后残留 →
-    # 补进 anchors，restore only_midline 回插兜底（保持结构序优先、
-    # 回插兜底的双轨语义）。
-    anchors = getattr(parser, "_comment_anchors", None)
-    if anchors is not None:
-        collect_inline_after_leftover(ast, anchors)
 
     # 保真度分级（ADR-0006 阶段 5）：keep_blank 按源结构位置回插空行。
     # 在注释回插/格式化之前做——回插的空行是源空行，后续 restore 与

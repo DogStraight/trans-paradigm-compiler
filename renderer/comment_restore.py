@@ -9,46 +9,8 @@ Doc: docs/decisions/0006-renderer-improve-roadmap.md（注释 attachment 双轨�
 
 from typing import Any, Callable
 
-from core.define import Node
 from preprocessor._reverse import protect_and_reverse, restore_condition_blocks
 from .inline_comment import restore_comments, restore_line_comments
-
-
-def collect_inline_after_leftover(root: Any, anchors: list) -> None:
-    """收集渲染后未消费的行中注释（注释节点模型 2b-2 兜底）。
-
-    inline_after = {锚 token: [(注释, 源行号)]} 是 token 标注定位——渲染端
-    在布局 line 文本元素里按锚文本匹配。布局无文本锚（如 pratt 表达式内
-    `a + /* c */ b` 的 `+` 在 op 子节点）时渲染端不消费 → 此处补进 anchors
-    （midline 标记），restore only_midline 回插兜底。已消费的（渲染端删了
-    键）不补——双轨不双份。
-    """
-    if isinstance(root, Node):
-        slots = getattr(root, "_comment_slots", None)
-        if slots:
-            ia = slots.get("inline_after")
-            if ia:
-                for anchor, entries in ia.items():
-                    for text, line in entries:
-                        anchors.append(
-                            {
-                                "anchor": anchor,
-                                "text": text,
-                                "line": line,
-                                "midline": True,
-                            }
-                        )
-                del slots["inline_after"]
-        for k, v in list(vars(root).items()):
-            if k.startswith("_"):
-                continue
-            collect_inline_after_leftover(v, anchors)
-    elif isinstance(root, dict):
-        for v in root.values():
-            collect_inline_after_leftover(v, anchors)
-    elif isinstance(root, list):
-        for v in root:
-            collect_inline_after_leftover(v, anchors)
 
 
 def restore_all_comments(
@@ -70,36 +32,30 @@ def restore_all_comments(
     - tpc_src_map: 源行号 → 渲染行号插值锚点
     - log_fn: 日志回调（默认静默）
 
-    注：旧 `--inline-comments` 指纹回注开关已删除（2026-09-04，老机制不稳定
-    且消耗大）——inline 通道仅两态：展开路径 only_tpc（marker 回插）、
-    非展开 only_midline（行中注释回插兜底）。line 通道普通注释回插已删除
-    （2026-09-05，ADR-0013 阶段 B1/B1.1 后普通独占行注释全部进树——容器
-    项间 Comment 迭代项 / 块结束符 trailing / block body Comment 节点；
-    41 文件实测 restore 开/关差仅 1 条且为锚点错插缺陷，删除净改善）——
-    line 通道仅剩 only_tpc（宏/条件块 marker 回插，还原依赖）。
+    注：普通注释回插通道已全部删除（ADR-0013 单机制——注释进树结构序
+    渲染，不再时域回插）：
+      - inline 通道仅剩展开路径 only_tpc（marker 回插，宏还原依赖）；
+        非展开路径行中注释由 renderer 布局锚消费渲染（line.py 文本/ref
+        锚 + join 分隔符锚，ADR-0013 ③），midline 回插兜底实测纯冗余
+        （normal 组禁用前后输出一致）——2026-09-05 删除；
+      - line 通道仅剩 only_tpc（宏/条件块 marker 回插）——普通独占行
+        注释全部进树（容器项间 Comment 迭代项 / 首元素前 Comment 子节点
+        / 块结束符 trailing / block body Comment 节点），41 文件实测
+        restore 开/关差仅 1 条且为锚点错插缺陷，删除净改善。
     """
     log = log_fn or (lambda m: None)
     restore_stack = bool(restoration_stack)
 
-    # Inline comment restoration（锚点匹配，宏展开后亦可用）
-    # 展开路径（restore_stack 非空）→ only_tpc：宏 marker（`/*<tpc:macro:N>*/`）
-    # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
-    # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
-    # 但普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——
-    # 只回插 tpc，普通注释跳过（与 line 通道 only_tpc 语义对称）。
-    if not comment_anchors:
-        pass
-    elif restore_stack:
+    # Inline comment restoration：仅展开路径 only_tpc——宏 marker
+    # （`/*<tpc:macro:N>*/`）是块注释，被 parse_token 收集进
+    # _comment_anchors，不回注则 protect_and_reverse 找不到 marker 宏调用
+    # 丢失（tv80 `TV80DELAY`）；普通注释锚点漂移（渲染行号与源行号错位）
+    # 会错插到端口/参数行——只回插 tpc，普通注释跳过。
+    if comment_anchors and restore_stack:
         content, n = restore_comments(
             content, comment_anchors, only_tpc=True, tpc_src_map=tpc_src_map
         )
         log(f"[comments] tpc inline marker restoration: {n} items")
-    else:
-        # 行中注释回插（P1.5）：行中块注释不挂 attachment（保持原位），
-        # 无渲染兜底——回插防丢（行尾注释由 attachment 渲染，不在此列）。
-        content, n = restore_comments(content, comment_anchors, only_midline=True)
-        if n:
-            log(f"[comments] midline anchor restoration: {n} items")
 
     # Line comment restoration：恒 only_tpc（见函数 docstring——普通独占行
     # 注释已全部进树，不再时域回插）。tpc marker（宏/条件块还原依赖）是

@@ -90,6 +90,22 @@ def eval_join(
     # 分隔符之后、折行点之前（`input clk, // 注释`——注释在逗号后行尾，flat 与
     # broken 均正确）；换行分隔（语句块 join="\n"）保持 item 内（`stmt; // 注释`）。
     inline_sep = not is_newline_sep and not no_sep and not no_soft
+
+    # 容器节点 inline_after 中锚=分隔符的行中注释（ADR-0013 ③补全：
+    # `input clk, /* c */ output`——`,` 是 join 分隔符非布局 line 文本元素，
+    # line.py 锚消费不到 → join 组装时插到分隔符后）。按收集序（= 分隔符
+    # 序）逐 sep 分配，pop 直接作用于节点槽（消费即删，防 pipeline
+    # leftover 双份）；注释多于分隔符的残余留给 leftover 兜底。
+    sep_anchor = ""
+    if sep_text:
+        sep_anchor = sep_text.rstrip()
+    sep_ia: list = []
+    _node_slots = getattr(node, "_comment_slots", None)
+    if _node_slots and sep_anchor:
+        _ia = _node_slots.get("inline_after") or {}
+        if sep_anchor in _ia:
+            sep_ia = _ia[sep_anchor]
+
     pending_suffix: list[LineSuffix] = []
     result: list[Doc] = []
     if prefix:
@@ -146,6 +162,13 @@ def eval_join(
                 result.append(Text(sep_text))
             else:
                 result.append(Text(sep_text))
+                if sep_ia:
+                    # 分隔符后行中注释（`clk, /* c */ output`）——注释随
+                    # 分隔符输出（折行前）；sep 文本已 rstrip（", "→","），
+                    # 注释前补空格
+                    _t, _ln = sep_ia.pop(0)
+                    result.append(Text(" " + _t))
+                    result.append(Text(" "))
             if inline_sep:
                 result.extend(pending_suffix)
                 pending_suffix = []
@@ -158,6 +181,14 @@ def eval_join(
             result.extend(suffixes)
     if pending_suffix:
         result.extend(pending_suffix)
+
+    # 分隔符行中注释槽清理：消费空键即删（未消费残余留给 leftover 兜底）
+    if _node_slots is not None and sep_anchor:
+        _ia = _node_slots.get("inline_after")
+        if _ia and sep_anchor in _ia and not _ia[sep_anchor]:
+            del _ia[sep_anchor]
+            if not _ia:
+                del _node_slots["inline_after"]
 
     if suffix:
         result.append(Text(suffix))

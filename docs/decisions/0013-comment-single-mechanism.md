@@ -321,8 +321,9 @@ ctx 字段 / run_pipeline_on_source 签名 / run_all_tests 传参同步删除
 | B1.1 | 块结束符行尾注释挂 trailing（cb53d75） | tv80 509→670 |
 | B1.2 | 删除 line 通道普通注释回插（目标④主体） | 41 文件差 1（错插），删除净改善 |
 | B1.3 | 容器首元素前独占注释挂 Comment 子节点 | head comment 保留 + 幂等 |
+| B1.4 | 删除 inline 通道 midline 回插（目标④完成）+ join 分隔符锚 | normal 组零丢失、corpus 无变化 |
 
-### 阶段 B1.3 容器首元素前独占注释进树（2026-09-05，工作区待提交）
+### 阶段 B1.3 容器首元素前独占注释进树（2026-09-05，提交 9733c9f）
 
 **回归暴露**：B1.2 删除 line 通道普通回插后，容器**首元素前**的独占
 注释（`module m (\n // head\n input a`——首元素非 repeat 迭代项，不在
@@ -350,9 +351,31 @@ B1 行号窗口）无兜底 → 丢失（实测 `// head comment` 渲染后消�
 （2 测试：模块头/实例端口首元素前注释保留 + 幂等）；join 首注释段
 Break 语义测试期望更新（test_comment_at_head 等 3 用例）。
 
-目标④剩余：inline 通道 only_midline（行中注释回插兜底）与 tpc 通道
-保留——行中注释（pratt/中缀 `/* c */` 无布局文本锚形态）仍走 restore
-midline 兜底，tpc marker 独立通道维持（作者决策）。
+### 阶段 B1.4 删除 inline 通道 midline 回插（目标④达成，2026-09-05，工作区待提交）
+
+**度量**（正确 patch——直接替换 comment_restore 模块内 restore_comments
+引用，前次实验 patch 错对象无效）：normal 组 32 文件禁用 midline 回插
+后仅 ref_inline_test 1 条丢（`/* port comment */`——PortList join 分隔
+符 `,` 后的行中注释，`,` 非布局 line 文本元素 line.py 锚消费不到）。
+
+**渲染补全（③）**：join 原语消费容器节点 inline_after 中锚=分隔符的
+行中注释——按收集序（= 分隔符序）逐 sep 分配插到分隔符后（折行前），
+pop 直接作用于节点槽（消费即删防 leftover 双份），残余留给兜底。
+
+**删除**：restore_all_comments 移除非展开路径 midline 分支（inline 通道
+仅剩展开路径 only_tpc）+ pipeline collect_inline_after_leftover 调用与
+函数删除（渲染后补锚无消费通道）。
+
+**验证**：normal 32 文件 midline 删除前后输出一致（ref_comments /
+ref_inline_test identical）；real corpus（展开场景 midline 本就 only_tpc
+过滤）缺失数前后完全一致（serv_top 1 / picorv32 0 / tv80 13 / darkriscv
+12，均为既有边界）；全量 pytest 1540 + run_all normal 32/real 9 OK。
+
+**目标④达成**：普通注释的 restore_comments / restore_line_comments
+回插通道全部删除（line 通道 B1.2、inline 通道 B1.4）——仅剩 tpc marker
+独立 only_tpc 通道（宏/条件块还原依赖）。restore_comments /
+restore_line_comments 函数内 only_midline/普通分支成过渡残留
+（不可达，待后续清理——与 tpc 插值逻辑交织，未深清）。
 
 ## 权衡
 
