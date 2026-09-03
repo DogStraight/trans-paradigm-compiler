@@ -98,6 +98,35 @@ class TestAttachment:
         out = r.get("output", "")
         assert "/* 嵌入 */ rst_n" in out
 
+    def test_block_body_comment_no_line_anchor_leftover(self):
+        """block body 独立行注释收为 Comment 节点后，line 通道不残留冗余条目
+        （ADR-0013 单机制：注释进树 = 结构序渲染，prepare_production 回溯
+        曾重复吞进 _line_comment_anchors——restore existing_lines 本会跳过，
+        条目纯冗余，collect 时清除）。"""
+        src = (
+            "module m;\n"
+            "    always @(*) begin\n"
+            "        // TOP comment\n"
+            "        x = 1;\n"
+            "    end\n"
+            "    // module body comment\n"
+            "    wire a;\n"
+            "endmodule\n"
+        )
+        r = _run(src)
+        assert r["success"]
+        parser = r.get("parser")
+        if parser is not None:
+            la = getattr(parser, "_line_comment_anchors", None) or []
+            assert not any("TOP comment" in a.get("text", "") for a in la), (
+                "收为 Comment 节点的注释不应残留 line_anchor"
+            )
+            assert not any("module body comment" in a.get("text", "") for a in la)
+        # 注释仍由 Comment 节点渲染（结构序，不丢）
+        out = r.get("output", "")
+        assert "TOP comment" in out
+        assert "module body comment" in out
+
 
 class TestAttachmentReal:
     def test_picorv32_no_regression(self):

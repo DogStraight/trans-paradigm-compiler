@@ -205,6 +205,28 @@ Break 而非分隔符。
 验证门槛：real 语料 335 条独占行注释渲染位置与 restore 现状一致
 （保真不降）+ 幂等 + 既有注释测试全绿。
 
+### 阶段 B 实施进展（2026-09-04）
+
+**B2 已完成（d34100a）**：join 识别 `_comment` 标记项独立行渲染——
+parser collect_line_comments 构造 Comment 节点挂 `_comment` 引擎标记
+（语言无关下划线属性），join 遇注释项作段分隔（前项逗号归属行尾 /
+注释独立行 / 后项新段首 / 尾注释无空行）。6 单测 + renderer/yaml/
+verilog 538 全绿。
+
+**双捕获冗余消除（进行中）**：real 语料实测 line_comment_anchors
+441 raw → 250 unique，其中 **171 条已在 AST 有 Comment 节点**（block
+body 独立行注释被 collect_line_comments 收走，但 prepare_production
+回溯先吞进 line_anchors——restore existing_lines 本会跳过已渲染注释，
+条目纯冗余）。修法：collect_line_comments 收 Comment 时
+`_mark_comment_collected` 登记 seen + 移除已存在的 line_anchor 条目。
+量测：441 → 132（消除 70%），real fidelity 门禁 47 passed 无保真下降。
+
+**B1 待设计**：34 条真容器缺口（端口列表/实例端口组间，serv_top 26 条）
+——注释在 repeat 结束后被上层声明规则吞（PortList repeat 的 seq
+`comma` 前遇注释失败→repeat 提前结束，注释成上层残留），收集点不在
+repeat 层。需"repeat 遇独占行注释续行"核心语义设计（见调研结论障碍
+1/2），或维持 restore 通道作为已知边界。与作者对齐中。
+
 ## 权衡
 
 - 付出：parser 收集协议重构（吞注释位置收敛单例程）+ pratt 注释收集

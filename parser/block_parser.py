@@ -135,6 +135,11 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
             if nxt and nxt.type == NEWLINE_TOKEN_TYPE:
                 comment_node = _make_comment_node(comment_node_name, cur.content)
                 block_node.add_sub_node(comment_node)
+                # ADR-0013 单机制：注释已成 Comment 节点（结构序渲染）——
+                # 登记 line 通道 seen，防 prepare_production 回溯再吞进
+                # _line_comment_anchors（双轨冗余，restore existing_lines
+                # 本会跳过已渲染注释，登记后彻底不产生冗余条目）
+                self._mark_comment_collected(cur.content, cur.line)
                 context.advance_token()  # 跳过 comment
                 context.advance_token()  # 跳过 newline
                 continue
@@ -143,6 +148,7 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
                 # parse_sentence 把注释当句子起点而 truncated
                 comment_node = _make_comment_node(comment_node_name, cur.content)
                 block_node.add_sub_node(comment_node)
+                self._mark_comment_collected(cur.content, cur.line)
                 context.advance_token()  # 跳过 comment
                 continue
         break

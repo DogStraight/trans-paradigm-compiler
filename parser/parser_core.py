@@ -637,6 +637,18 @@ class Parser:
             self._anchor_seen_inline.add(key)
             self._comment_anchors.append(entry)
 
+    def _mark_comment_collected(self, text: str, line: int) -> None:
+        """注释已成 Comment 节点（collect_line_comments 收走）——从 line
+        通道消除该注释的冗余簿记：prepare_production 回溯可能已先吞进
+        _line_comment_anchors（此时注释由 Comment 节点结构序承载，restore
+        existing_lines 本会跳过——条目纯冗余），登记 seen 防后续重复 +
+        移除已存在的条目。ADR-0013 单机制：注释进树后不再走时域回插。"""
+        key = (text, line)
+        self._anchor_seen_line.add(key)
+        self._line_comment_anchors[:] = [
+            e for e in self._line_comment_anchors if (e["text"], e["line"]) != key
+        ]
+
     def parse(self, tokens: list[Token]) -> Node | None:
         """解析器的入口：token 流 → AST"""
         # 每次 parse 重置状态
