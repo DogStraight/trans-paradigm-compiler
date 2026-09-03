@@ -10,7 +10,7 @@ Doc: docs/language_walkthrough.md（production 求值引擎）
 
 from core.define import Node, Token, GrammarRule, CHILDREN_FIELD
 from .parser_core import ParseContext
-from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
+from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
 from .follow import token_in_follow
 
@@ -358,6 +358,27 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 # ── 生产式准备 & 结束符检查 ──
 
 
+def _is_line_only_comment(context: ParseContext, t: Token) -> bool:
+    """独占行注释判定：注释 token 之前（跳过空白/缩进 token）是换行或文件首。
+
+    用于区分：
+      - 独占行注释（`\n // State\n`）→ 进树为 Comment 节点（ADR-0013 B1）
+      - 行尾注释漏网（`port, // c\n`——collect_following_comments 因中间
+        trivia token 未收走而残留到 production skip）→ 保持 line 通道回插
+    """
+    idx = context.token_pointer
+    i = idx - 1
+    while i >= 0:
+        prev = context.tokens[i]
+        if prev.type == NEWLINE_TOKEN_TYPE:
+            return True
+        if prev.type in ("space.fold", "space") or prev.type.startswith("space"):
+            i -= 1
+            continue
+        return False
+    return True
+
+
 def prepare_production(self, context: ParseContext, features: dict) -> bool:
     """为匹配产生式做准备：跳过空白/注释。"""
     ftype = features["type"] if "type" in features else None
@@ -379,6 +400,13 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         while context.has_more_tokens():
             t = context.peek_token()
             if t and t.type == COMMENT_TOKEN_TYPE:
+                # 独占行标记（B1 上浮判据）：advance 前判定——向前扫描
+                # 注释前一个非空白 token（newline/文件首 = 独占行）。
+                # 独占行且非 tpc marker 的注释由所在列表容器的 repeat
+                # 上浮为 Comment 迭代项（行号窗口，见 _repeat_loop）；
+                # tpc marker（`// <tpc:*>`）排除——宏/条件块还原依赖
+                # only_tpc 通道，不进树。
+                line_only = _is_line_only_comment(context, t)
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
                 nxt = context.peek_token()
@@ -403,6 +431,7 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                         "text": t.content,
                         "line": t.line,
                         "anchor": anchor,
+                        "line_only": line_only,
                     },
                     "line",
                 )
@@ -666,21 +695,103 @@ def parse_choice(self, node: dict, context: ParseContext) -> Node | None:
     return None
 
 
+def _lift_gap_comments(
+    self, nodes: list, last_end_line: int | None, end_line: int
+) -> None:
+    """repeat 迭代项间独占行注释上浮为 Comment 迭代项（ADR-0013 B1）。
+
+    列表容器（PortList / NamedPortList / DeclaratorList / CaseItemList 等）
+    迭代项之间（如 `input a, // State\n output b` 的 `,` 与下一端口之间）
+    的独占行注释，此前被 production skip（prepare_production）吞进
+    _line_comment_anchors、渲染后时域回插。现按**源行号窗口**归属：
+
+      上一迭代匹配末行 < 注释行 <= 本次迭代匹配末行 → 注释在本次迭代
+      内容之前（项间）→ 上浮为 Comment 迭代项，插在本次迭代结果之前
+      （nodes 序列即容器 items 源序——renderer join 识别 _comment 项
+      作独立行段渲染）。
+
+    行号窗口解决"嵌套失败迭代吞注释"的归属错位：`input a, // State\n
+    output b` 的 `// State` 在 a 的 DeclaratorList 尝试 `, b` 时被吞
+    （Declarator 不匹配 output，失败回滚）——注释行在 a 行与 b 行之间，
+    由 PortList 的 b 迭代窗口（a 行, b 行] 收走，挂 b 前（源序正确）；
+    b 行尾逗号后的 `// Data` 行 > b 行，留给 c 迭代。排除非独占行
+    （line_only=False，行尾漏网保持 line 通道）与 tpc marker（only_tpc
+    通道，宏/条件块还原依赖）。
+    """
+    if not getattr(self, "_line_comment_anchors", None):
+        return
+    anchors = self._line_comment_anchors
+    if last_end_line is None:
+        lo = -1
+    else:
+        lo = last_end_line
+    lift = [
+        e
+        for e in anchors
+        if e.get("line_only")
+        and "tpc:" not in e.get("text", "")
+        and e.get("line", -1) > lo
+        and e.get("line", -1) <= end_line
+    ]
+    if not lift:
+        return
+    from .block_parser import _derive_comment_node_name, _make_comment_node
+
+    cmt_name = getattr(self, "_gap_comment_node_name", None)
+    if cmt_name is None:
+        cmt_name = _derive_comment_node_name(self, COMMENT_TOKEN_TYPE)
+        self._gap_comment_node_name = cmt_name
+    for e in lift:
+        cmt = _make_comment_node(cmt_name, e["text"])
+        nodes.append(cmt)
+        # 从 line 通道移除 + 登记 seen（_mark_comment_collected）：注释已由
+        # Comment 节点结构序承载，防止后续回溯 re-吞再 append 冗余条目。
+        # restore_line_comments 另有 existing_lines 已渲染跳过（双保险）——
+        # 若绑定未保留 Comment（非 list-spec 消费的 repeat）则注释未渲染，
+        # line 条目仍在可 restore 兜底回插。
+        mark = getattr(self, "_mark_comment_collected", None)
+        if mark is not None:
+            mark(e["text"], e.get("line", 0))
+
+
 def _repeat_loop(
     self,
     elem: dict,
     context: ParseContext,
     min_count: int = 0,
     max_count: int | None = None,
+    lift_gap_comments: bool = True,
 ) -> list[Node | None] | None:
-    """循环匹配 elem，返回压平后的节点列表。"""
+    """循环匹配 elem，返回压平后的节点列表。
+
+    lift_gap_comments（ADR-0013 B1）：迭代项间独占行注释上浮为 Comment
+    迭代项——仅列表容器 repeat（parse_repeat/parse_plus，项有容器 items
+    消费端）。parse_optional（单值槽，如 PortParens 的 `@PortList?`）不
+    lift：上浮的 Comment 会挤占 optional 的单个内容槽（PortList 被丢弃、
+    端口丢失）——optional 内注释保持 line 通道时域回插。
+    """
     nodes = []
+    # B1 窗口下界：repeat 进入时的源行——本 repeat 之前元素吞的独占注释
+    # （行 <= 起点行）不归属本容器；嵌套 repeat（如端口 AnsiOutputDecl 内
+    # 的 DeclaratorList）起点行在内层，不会误收外层迭代项间注释。
+    start_tok = context.peek_token()
+    last_end_line: int | None = start_tok.line if start_tok else 0
     while True:
         snapshot = context.create_snapshot()
         result = self._process_production_node(elem, context)
         if result is None:
             context.restore_snapshot(snapshot)
             break
+        # B1：迭代成功——行号窗口内独占行注释上浮为 Comment 迭代项
+        # （插本次迭代结果之前）。匹配末行 = 本次迭代消费的最后一个
+        # token 的源行（失败迭代回滚不更新窗口下界，其吞的注释由后续
+        # 成功迭代按行号窗口收走）。
+        if lift_gap_comments:
+            tokens = context.tokens
+            ptr = context.token_pointer
+            end_line = tokens[ptr - 1].line if ptr > 0 else 0
+            _lift_gap_comments(self, nodes, last_end_line, end_line)
+            last_end_line = end_line
         nodes.append(result)
         if max_count is not None and len(nodes) >= max_count:
             break
@@ -704,7 +815,9 @@ def parse_optional(self, node: dict, context: ParseContext) -> Node | None:
     """可选（零次或一次）"""
     elem = node["elem"]
     self._log_state(lambda: f"解析可选节点 | {self._debug_token_info(context)}")
-    nodes = _repeat_loop(self, elem, context, min_count=0, max_count=1)
+    nodes = _repeat_loop(
+        self, elem, context, min_count=0, max_count=1, lift_gap_comments=False
+    )
     optional_node = Node("optional")
     if nodes and nodes[0] is not None:
         optional_node.add_sub_node(nodes[0])

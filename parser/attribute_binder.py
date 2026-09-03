@@ -21,11 +21,16 @@ _RE_INDEX_PATH = re.compile(r"^(\w*)\[(\d+|\*)\]$")
 _BIND_DIAG = 0
 
 
-def get_attr_by_path(obj: Any, path: str) -> Any:
+def get_attr_by_path(obj: Any, path: str, keep_comments: bool = False) -> Any:
     """递归路径提取，支持：
     - value.content      → 嵌套属性
     - items[0]           → 列表索引
     - items[*]           → 列表 map
+
+    keep_comments（ADR-0013 B1）：list-spec 提取（列表容器 items 绑定）
+    时，repeat 迭代项间上浮的 Comment 迭代项（`_comment` 引擎标记）无
+    sub_node 等结构路径可解——解析为 None 时保留 Comment 项自身，使其
+    进入容器 items（renderer join 识别 _comment 项作独立行段渲染）。
     """
     if obj is None or not path:
         return obj
@@ -46,26 +51,29 @@ def get_attr_by_path(obj: Any, path: str) -> Any:
                 return None
             results = []
             for item in sub:
-                val = get_attr_by_path(item, rest)
-                if val is not None:
-                    if isinstance(val, list):
-                        results.extend(val)
-                    else:
-                        results.append(val)
+                val = get_attr_by_path(item, rest, keep_comments)
+                if val is None:
+                    if keep_comments and getattr(item, "_comment", False):
+                        results.append(item)
+                    continue
+                if isinstance(val, list):
+                    results.extend(val)
+                else:
+                    results.append(val)
             return results if results else None
         else:
             idx = int(index_spec)
             if isinstance(sub, list) and 0 <= idx < len(sub):
-                return get_attr_by_path(sub[idx], rest)
+                return get_attr_by_path(sub[idx], rest, keep_comments)
             return None
 
     sub = getattr(obj, first, None)
     if sub is not None:
-        return get_attr_by_path(sub, rest)
+        return get_attr_by_path(sub, rest, keep_comments)
     if isinstance(obj, list):
         results = []
         for item in obj:
-            val = get_attr_by_path(item, path)
+            val = get_attr_by_path(item, path, keep_comments)
             if val is not None:
                 if isinstance(val, list):
                     results.extend(val)
@@ -88,7 +96,9 @@ def _parse_pos_spec(spec: str) -> tuple[int, str | None] | None:
         return None
 
 
-def extract_from_spec(self, spec: str, all_matched_nodes: list[Node]) -> Any:
+def extract_from_spec(
+    self, spec: str, all_matched_nodes: list[Node], keep_comments: bool = False
+) -> Any:
     """从属性映射规约中提取值，例如 "$3" 或 "$4.items"；非 $ 引用直接作为字面值返回"""
     del self  # 模块级函数，self 命名仅为兼容旧调用，实际不使用
     if not isinstance(spec, str):
@@ -100,7 +110,7 @@ def extract_from_spec(self, spec: str, all_matched_nodes: list[Node]) -> Any:
     if 0 <= pos < len(all_matched_nodes):
         sub = all_matched_nodes[pos]
         if path:
-            return get_attr_by_path(sub, path)
+            return get_attr_by_path(sub, path, keep_comments)
         return sub
     return None
 
@@ -133,7 +143,11 @@ def bind_attributes(
         if isinstance(spec, list):
             merged = []
             for item_spec in spec:
-                extracted = extract_from_spec(self, item_spec, all_matched_nodes)
+                # list-spec（列表容器 items 绑定）保留 Comment 迭代项
+                # （ADR-0013 B1：repeat 项间独占注释进 items）
+                extracted = extract_from_spec(
+                    self, item_spec, all_matched_nodes, keep_comments=True
+                )
                 if extracted is not None:
                     if isinstance(extracted, list):
                         merged.extend(extracted)

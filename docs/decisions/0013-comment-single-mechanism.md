@@ -227,6 +227,51 @@ body 独立行注释被 collect_line_comments 收走，但 prepare_production
 repeat 层。需"repeat 遇独占行注释续行"核心语义设计（见调研结论障碍
 1/2），或维持 restore 通道作为已知边界。与作者对齐中。
 
+### 阶段 B1 实现记录（2026-09-05，工作区待提交）
+
+**设计收敛（实测驱动，推翻草案的 iter 级 pending 方案）**：草案 A/B
+（repeat 迭代前检查、迭代内 slice 上浮）实测错位——注释在**嵌套失败
+迭代**（如 `input a, // State\n output b` 的 `// State` 在 a 的
+DeclaratorList 尝试 `, b` 时被 Declarator 规则吞）被吞，iter 级 slice
+把注释归错迭代（Data 型注释被挂到前一端口前）。规则级 pending 领取
+（挂 leading 槽）也被内层 DeclaratorList 抢领错位。
+
+**定案：行号窗口上浮（_repeat_loop）**：
+1. `prepare_production` 吞注释时判定**独占行**（`_is_line_only_comment`
+   向前扫描前一非空白 token 是否 newline/文件首），line 通道条目附加
+   `line_only` 标记；tpc marker（`// <tpc:*>`）排除（only_tpc 通道，
+   宏/条件块还原依赖，不进树）。
+2. `_repeat_loop`（parse_repeat/parse_plus，**parse_optional 不 lift**——
+   optional 单值槽上浮会挤占内容致端口丢失）每次迭代成功后，按**源行号
+   窗口**（上一迭代匹配末行 < 注释行 ≤ 本次迭代匹配末行）取 line 通道
+   独占行注释，上浮为 Comment 迭代项插本次迭代结果之前（nodes 源序即
+   容器 items 序）；`_mark_comment_collected` 移除条目防 restore 双份
+   （restore existing_lines 已渲染跳过另有兜底）。
+3. 绑定层 list-spec 提取 `keep_comments`：`items[*].sub_node[N]` 遇
+   `_comment` 标记项解析 None 时保留 Comment 项自身进容器 items——
+   renderer join（B2）识别 `_comment` 项独立行段渲染。
+
+窗口语义解决嵌套失败迭代的归属错位：注释行在 a 行与 b 行之间 → 由
+PortList 的 b 迭代窗口收走（挂 b 前）；b 行尾逗号后的注释行 > b 行 →
+留给 c 迭代。行号固定只落一窗口（区间递增不重叠）→ 不重复上浮。
+repeat 起点行作下界：本 repeat 之前元素（repeat 外）吞的注释不归属
+容器，且嵌套 repeat（DeclaratorList）起点行在内层不误收外层项间注释。
+
+**实测收益**（expand_macros=True 渲染，B1 前宏场景 line 通道 only_tpc
+不回普通注释 → 容器注释丢失）：
+- serv_top：26 → 54 条保留（55 源注释，唯一缺失为 `(//RF interface`
+  行内形态，非独占行——B1 范围外既有边界）；
+- tv80_core：480 → 509（+29）；
+- picorv32：100 → 100（无损失）。
+
+**已知边界**：容器**首元素前**的独占注释（如 `module m (// ok` 后首端口
+前）与行内/行尾形态不进 B1（optional 不 lift / line_only=False），仍走
+line 通道时域回插；`(//RF` 行内实例端口组注释为既有 restore 边界。
+
+**新增门禁**：tests/e2e/test_comment_container.py（PortList /
+NamedPortList / DeclaratorList / CaseItemList 项间独占注释 → Comment
+节点进 items + 独立行渲染 + 幂等，5 测试）。
+
 ## 权衡
 
 - 付出：parser 收集协议重构（吞注释位置收敛单例程）+ pratt 注释收集

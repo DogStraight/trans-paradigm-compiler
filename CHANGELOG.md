@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **容器项间独占行注释进树（ADR-0013 阶段 B1）**：repeat 列表容器
+  （PortList/NamedPortList/DeclaratorList/CaseItemList 等）迭代项间的独占
+  行注释按**源行号窗口**上浮为 Comment 迭代项进容器 items（结构序），
+  renderer join 独立行段渲染——替代宏展开场景（line 通道 only_tpc 不回
+  普通注释）的注释丢失。real 语料收益：serv_top 26→54 保留、tv80 480→509。
+  实现：parser 吞注释记录独占行标记 + `_repeat_loop` 行号窗口上浮 +
+  绑定 list-spec 保留 Comment 项；tpc marker 与行内/行尾形态保持既有通道。
+  门禁：tests/e2e/test_comment_container.py（5 测试）。
+
 - **署名加入 AI 协作者（方案 A 定稿）**：主作者 biominescence（方向/决策/
   发布/维护）+ AI 协作者 `deepseek-v4-flash`（核心引擎、语法包与验证套件
   协作实现）——`packaging/attribution.py`（单一来源）`--credits` 输出
