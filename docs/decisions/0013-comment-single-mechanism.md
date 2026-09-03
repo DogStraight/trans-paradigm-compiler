@@ -118,6 +118,44 @@ line 原语的锚匹配：除 layout 字符串元素外，**ref 元素求值后�
   无 `/* */` 注释 token 防护。单机制落地后 formatter 消费/绕行注释的
   方式需同步评审（列入实现前置检查）。
 
+## 实施记录（分阶段，每阶段独立验证 + 提交）
+
+### 阶段 A（已实现，2026-09-04，c8334aa）
+
+pratt operator 间隙注释上挂表达式节点（决策 5）——核心缺口闭环：
+注释从"只存在于 parser._comment_anchors"升为 BinaryOp/TernaryOp/UnaryOp
+节点 `_comment_slots.inline_after`；renderer line 原语锚匹配扩展 ref
+属性值。验证全绿（注释/pratt/linter/real 语料 + run_all）。
+
+### 阶段 B 前置（已实现，2026-09-04，756dcdf）
+
+锚点收集端去重（`_record_anchor`，按通道分 key 空间）：parser 回溯对
+同一注释重复收集（real 语料实测 _comment_anchors 447→427、
+_line_comment_anchors 441→335，picorv32 端口组注释被候选规则回溯收集
+4 次）。restore 端本就按 (text,line) 去重保留首条锚——收集端同语义
+去重，渲染行为完全等价。
+
+### 阶段 B 调研结论（2026-09-04，待语义决策）
+
+`_line_comment_anchors`（prepare_production 吞注释，real 语料 unique
+335 条）形态实测：**独占行注释 322 : 行尾 13**——即绝大多数是列表
+结构内（端口组间/参数列表/语句列表）的独立行注释（如 picorv32
+`// Look-Ahead Interface`），与 block 层 Comment 一等节点同构但**缺
+容器节点可挂**（repeat/seq 结构内无 block_node）。改挂节点有两个硬
+障碍（2026-09-04 探针确认）：
+1. **回溯语境挂载目标不稳定**：prepare_production 在每个 production
+   尝试前吞注释（候选规则逐一尝试 ×4），current_node 是尝试中的
+   rule_node、可能失败回滚——注释不能挂到未确认成功的节点（这正是
+   parser 级列表存在的理由）。
+2. **归属语义需逐类定义**：独占行注释在两组之间，语义属前一组
+   trailing 还是后一组 leading 需人工判定（restore 现有启发式偏
+   trailing/上方，未必正确）。
+
+**处置建议**：阶段 B 不并入阶段 A 的"锚 token 定位"模式（那些注释
+无单一锚 token 语义）；单独设计"列表内独立行注释的容器挂载"（复用
+Comment 节点形态，repeat/seq 需容器引用）或维持 restore 通道并明确
+为已知边界。挂载方案待与作者定调后另立小节，不阻塞阶段 C/D。
+
 ## 权衡
 
 - 付出：parser 收集协议重构（吞注释位置收敛单例程）+ pratt 注释收集
