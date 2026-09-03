@@ -219,8 +219,11 @@ class TestJoinCommentItem:
         b = _n("id", value="b")
         node = _n("List", items=[c, a, b])
         expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
+        # 首项即注释段（容器首元素前独占注释）：独占行语义——注释前硬
+        # Break（first_soft 空格会把注释贴到父上下文行尾，如
+        # `module m( // head`），注释独立行 + nest 缩进。
         out = _render_expr(expr, node)
-        assert out == " // head\n    a, b"
+        assert out == "\n    // head\n    a, b"
 
     def test_consecutive_comments_each_line(self):
         c1 = _cmt("// c1")
@@ -229,7 +232,7 @@ class TestJoinCommentItem:
         node = _n("List", items=[c1, c2, a])
         expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
         out = _render_expr(expr, node)
-        assert out == " // c1\n    // c2\n    a"
+        assert out == "\n    // c1\n    // c2\n    a"
 
     def test_no_comment_regression(self):
         a = _n("id", value="a")
@@ -242,7 +245,7 @@ class TestJoinCommentItem:
         c = _cmt("// only")
         node = _n("List", items=[c])
         expr = {"join": ", ", "items": "items", "first_soft": True, "nest": 1}
-        assert _render_expr(expr, node) == " // only"
+        assert _render_expr(expr, node) == "\n    // only"
 
 
 # ═══════════════════════════════════════════════════════

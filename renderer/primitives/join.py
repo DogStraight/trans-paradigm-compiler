@@ -65,6 +65,16 @@ def eval_join(
                 d = renderer._render_inline(item, merged)
                 rendered.append((d, [], True))
                 continue
+            # 节点 sub_node 首部 Comment（ADR-0013 B1.3：容器首元素前独占
+            # 注释挂首元素 Comment 子节点）——join 布局内拆为注释段 +
+            # 节点主体（注释独立行渲染）。item 主体渲染不引 sub_node
+            # （layout 引绑定属性），Comment 不会被 render_node 重复渲染。
+            head_cmts = []
+            subs = getattr(item, "sub_node", None)
+            while subs and getattr(subs[0], "_comment", False):
+                head_cmts.append(subs.pop(0))
+            for c in head_cmts:
+                rendered.append((Text(getattr(c, "value", "")), [], True))
             merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
             d = renderer._render_inline(item, merged)
         else:
@@ -104,8 +114,13 @@ def eval_join(
                     if inline_sep and not no_sep and not no_soft and not is_newline_sep:
                         result.append(Text(sep_text))
                     result.append(Break())
-                elif first_soft and inline_sep:
-                    result.append(SoftLine())
+                else:
+                    # 列表首项即注释段（容器首元素前独占注释 / B2 头注释）：
+                    # 独占行语义——注释前强制 Break（first_soft 的空格会把
+                    # 注释贴到父上下文行尾，如 `module m( // head`），
+                    # 换行分隔/硬拼场景无 SoftLine 概念则跳过（父已有换行）。
+                    if not is_newline_sep and not no_sep and not no_soft:
+                        result.append(Break())
             result.append(body)
             if i < n_rendered - 1:
                 result.append(Break())  # 注释后还有项 → Break；注释在尾则无

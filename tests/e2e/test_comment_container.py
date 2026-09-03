@@ -219,3 +219,59 @@ class TestBlockEndComments:
         assert out1 == out2
         assert out1.count("case zero") == 1
         assert out1.count("case one") == 1
+
+
+_HEAD_COMMENT = (
+    "module m (\n"
+    "    // head comment\n"
+    "    input wire a,\n"
+    "    output wire b\n"
+    ");\n"
+    "endmodule\n"
+)
+
+_INST_HEAD = (
+    "module top;\n"
+    "    wire x;\n"
+    "    sub u (\n"
+    "        // first port group\n"
+    "        .clk (x),\n"
+    "        .q   (x)\n"
+    "    );\n"
+    "endmodule\n"
+    "module sub(input clk, output q);\n"
+    "endmodule\n"
+)
+
+
+class TestContainerHeadComments:
+    """容器首元素前独占注释（B1.3）：行首规则领挂 Comment 子节点。
+
+    B1.2 删除 line 通道普通回插后，容器**首元素前**的独占注释（`module m
+    (\n // head\n input a`——首元素非 repeat 迭代项，不在 B1 行号窗口）
+    无兜底 → 丢失。行首开始的首元素规则成功时领前置独占注释挂 Comment
+    子节点（sub_node 首位），join 拆段独立行渲染。"""
+
+    def test_module_port_head_comment(self):
+        """模块头首端口前独占注释：独立行渲染 + 幂等。"""
+        for fmt in (False, True):
+            out, ast = _run(_HEAD_COMMENT, fmt)
+            assert "head comment" in out, f"[fmt={fmt}] 注释丢失"
+            lines = out.splitlines()
+            ci = next(i for i, l in enumerate(lines) if "head comment" in l)
+            assert lines[ci].strip().startswith("//"), f"[fmt={fmt}] 未独立行: {lines[ci]!r}"
+            assert any("input wire" in l for l in lines[ci + 1:ci + 3]), \
+                f"[fmt={fmt}] 注释后应为首端口"
+        out1, _ = _run(_HEAD_COMMENT, True)
+        out2, _ = _run(out1, True)
+        assert out1 == out2
+
+    def test_named_port_list_head_comment(self):
+        """实例端口列表首连接前独占注释：保留。"""
+        for fmt in (False, True):
+            out, _ast = _run(_INST_HEAD, fmt)
+            assert "first port group" in out, f"[fmt={fmt}] 注释丢失"
+        out1, _ = _run(_INST_HEAD, True)
+        out2, _ = _run(out1, True)
+        assert out1 == out2
+        assert out1.count("first port group") == 1

@@ -659,6 +659,9 @@ class Parser:
         # attachment 去重集合（collect_following_comments 惰性创建）——
         # 跨 parse 复用 Parser 时残留会误跳过同 (text,line) 注释
         self._attached_seen = set()
+        # repeat 迭代深度（B1.3 claim 协调，_repeat_loop 维护）——
+        # 跨 parse 复用 Parser 时残留会误判 claim 上下文
+        self._repeat_iter_depth = 0
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False

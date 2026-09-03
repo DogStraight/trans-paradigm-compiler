@@ -320,6 +320,35 @@ ctx 字段 / run_pipeline_on_source 签名 / run_all_tests 传参同步删除
 | B1 | 容器项间独占注释行号窗口上浮（c8b3a57） | serv_top 26→54、tv80 +29 |
 | B1.1 | 块结束符行尾注释挂 trailing（cb53d75） | tv80 509→670 |
 | B1.2 | 删除 line 通道普通注释回插（目标④主体） | 41 文件差 1（错插），删除净改善 |
+| B1.3 | 容器首元素前独占注释挂 Comment 子节点 | head comment 保留 + 幂等 |
+
+### 阶段 B1.3 容器首元素前独占注释进树（2026-09-05，工作区待提交）
+
+**回归暴露**：B1.2 删除 line 通道普通回插后，容器**首元素前**的独占
+注释（`module m (\n // head\n input a`——首元素非 repeat 迭代项，不在
+B1 行号窗口）无兜底 → 丢失（实测 `// head comment` 渲染后消失）。
+
+**修法**（_starts_line + _claim_head_comments）：
+1. 行首开始的规则（`_starts_line`：规则入口 token 前一非空白/非注释
+   token 是 newline）成功时，把 line 通道中"行 < 本规则匹配末行"的独占
+   注释领挂 **Comment 子节点**（sub_node 首位——ADR 模型独立行注释 =
+   Comment 节点，非 leading 元信息）；
+2. 领窗口 = 匹配**末行**（规则入口 peek 可能捕获被吞的注释 token，行号
+   偏小；规则内容之后的注释如 b 行尾逗号后 `// Data` 行 > b 末行留给
+   后续规则，源序正确）；
+3. **repeat 迭代深度协调**：迭代项规则（行首）在 _repeat_loop 迭代内
+   （_repeat_iter_depth > 0）不 claim——迭代项间注释由 B1
+   _lift_gap_comments 上浮为 Comment 迭代项（ADR 模型优先，mark 互斥
+   不双份）；optional 单值槽（PortParens `@PortList?`）不算迭代项上下文
+   （否则首元素 claim 被误拦）；首元素前注释由**容器首元素规则**领
+   （行 < repeat 起点，B1 窗口外）✓；
+4. renderer join：item sub_node 首部 Comment 拆为注释段独立行渲染
+   （与 B2 is_comment 段同语义；首注释段前硬 Break——first_soft 空格
+   会把注释贴到父行尾如 `module m( // head`）。
+
+**门禁**：tests/e2e/test_comment_container.py::TestContainerHeadComments
+（2 测试：模块头/实例端口首元素前注释保留 + 幂等）；join 首注释段
+Break 语义测试期望更新（test_comment_at_head 等 3 用例）。
 
 目标④剩余：inline 通道 only_midline（行中注释回插兜底）与 tpc 通道
 保留——行中注释（pratt/中缀 `/* c */` 无布局文本锚形态）仍走 restore

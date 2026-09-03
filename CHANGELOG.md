@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **容器首元素前独占注释进树（ADR-0013 阶段 B1.3）**：B1.2 删除 line
+  通道后，容器**首元素前**独占注释（`module m (\n // head\n input a`）
+  无兜底丢失——行首规则成功时领前置独占注释挂 Comment 子节点（sub_node
+  首位），join 拆段独立行渲染（首注释段硬 Break）。repeat 迭代深度协调
+  保证与 B1（迭代项间 Comment 迭代项）互斥不双份。门禁：
+  tests/e2e/test_comment_container.py::TestContainerHeadComments。
+
 - **删除 line 通道普通注释回插（ADR-0013 阶段 B1.2，目标④主体）**：
   B1/B1.1 后普通独占行注释全部进树（容器项间 Comment 迭代项 / 块结束符
   trailing / block body Comment 节点）——41 文件实测 restore 开/关输出差

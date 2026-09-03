@@ -275,6 +275,84 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     return rule_node
 
 
+def _starts_line(self, context: ParseContext, tok_idx: int) -> bool:
+    """tokens[tok_idx] 是否行首 token（前一非空白/非注释 token 是换行）。
+
+    向前跳过 space.* 与注释（被 production skip 吞掉的注释 token 仍留在
+    tokens 流中——`( // head\n input` 的 input 前是已吞注释，行首判定
+    需越过它再看 newline）。tok_idx = 规则入口时 peek 的 token 索引
+    （匹配完成后 pointer 已移动，不能取当前 token_pointer）。
+    """
+    if tok_idx < 0:
+        return False
+    i = tok_idx - 1
+    while i >= 0:
+        prev = context.tokens[i]
+        if prev.type == NEWLINE_TOKEN_TYPE:
+            return True
+        if prev.type in ("space.fold", "space") or prev.type.startswith("space"):
+            i -= 1
+            continue
+        if prev.type == COMMENT_TOKEN_TYPE:
+            i -= 1
+            continue
+        return False
+    return True
+
+
+def _claim_head_comments(
+    self, context: ParseContext, node: Node, end_line: int
+) -> None:
+    """行首规则成功：领规则内容之前的独占行注释挂节点 Comment 子节点。
+
+    ADR-0013（B1 兜底）：repeat 列表容器**首元素前**的独占行注释
+    （`module m (\n // head\n input a`）不在 repeat 迭代窗口（首元素非
+    repeat 迭代项），line 通道普通回插删除后无兜底 → 丢失。此类注释被
+    production skip 吞进 line 通道（行 < 首元素匹配范围）——由**行首开始
+    的规则**成功时领取挂 Comment 子节点（sub_node 首位，独立行注释 =
+    Comment 节点，ADR 模型；renderer join 拆段渲染）。
+
+    嵌套安全：
+    - 行中开始的规则（如 AnsiInputDecl 内 DeclaratorList 的 declarator）
+      不领（_starts_line=False）；
+    - 领窗口 = 注释行 < 本规则**匹配末行**——规则内容之后的注释（如 b 行
+      尾逗号后的 `// Data`，行 > b 末行）留给后续行首规则（c），源序
+      正确；规则入口 peek 可能捕获被吞的注释 token（行号偏小），故不用
+      入口行；
+    - B1 repeat 上浮 / 已领注释 mark 移除不在列表 → 不重复领（repeat
+      迭代项场景由 B1 上浮为 Comment 迭代项，claim 只处理其后的首元素
+      前残留——两者 mark 互斥不双份）；行尾漏网（line_only=False）不领。
+    """
+    if not getattr(self, "_line_comment_anchors", None):
+        return
+    anchors = self._line_comment_anchors
+    lift = [
+        e
+        for e in anchors
+        if e.get("line_only")
+        and "tpc:" not in e.get("text", "")
+        and e.get("line", -1) < end_line
+    ]
+    if not lift:
+        return
+    from .block_parser import _derive_comment_node_name, _make_comment_node
+
+    cmt_name = getattr(self, "_gap_comment_node_name", None)
+    if cmt_name is None:
+        cmt_name = _derive_comment_node_name(self, COMMENT_TOKEN_TYPE)
+        self._gap_comment_node_name = cmt_name
+    subs = getattr(node, "sub_node", None)
+    if subs is None:
+        subs = []
+        setattr(node, "sub_node", subs)
+    for e in sorted(lift, key=lambda x: x.get("line", 0)):
+        cmt = _make_comment_node(cmt_name, e["text"])
+        subs.insert(0, cmt)
+        mark = getattr(self, "_mark_comment_collected", None)
+        if mark is not None:
+            mark(e["text"], e.get("line", 0))
+
+
 def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """普通规则匹配链：production 匹配 → 属性绑定 → FOLLOW 检查 → inline。
 
@@ -289,6 +367,7 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
 
     rule_node = Node(rule.name)
     _start_tok = context.peek_token()
+    _start_idx = context.token_pointer
     if _start_tok is not None:
         # 源位置元数据（语义诊断定位用）：普通规则锚定 production 首个 token
         rule_node._pos_line = _start_tok.line
@@ -340,10 +419,26 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     # Inline 扁平化
     inline_result = self._try_inline_rule(rule, all_matched_nodes, old_node, context)
     if inline_result is not None:
+        # 行首规则领前置独占注释（B1.3 兜底，容器首元素前形态）——
+        # 仅非 repeat 迭代上下文（repeat 迭代项间注释由 _lift_gap_comments
+        # 上浮为 Comment 迭代项，claim 不抢）。inline 弃 rule_node，挂返回
+        # 的 inner（Comment 子节点随 inner 进 AST，join 拆段渲染）。
+        if _starts_line(self, context, _start_idx) and not getattr(
+            self, "_repeat_iter_depth", 0
+        ):
+            _ptr = context.token_pointer
+            _end = context.tokens[_ptr - 1].line if _ptr > 0 else 0
+            _claim_head_comments(self, context, inline_result, _end)
         return inline_result
 
     self._restore_current_node(old_node, context)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
+    if _starts_line(self, context, _start_idx) and not getattr(
+        self, "_repeat_iter_depth", 0
+    ):
+        _ptr = context.token_pointer
+        _end = context.tokens[_ptr - 1].line if _ptr > 0 else 0
+        _claim_head_comments(self, context, rule_node, _end)
     return rule_node
 
 
@@ -792,7 +887,19 @@ def _repeat_loop(
     last_end_line: int | None = start_tok.line if start_tok else 0
     while True:
         snapshot = context.create_snapshot()
-        result = self._process_production_node(elem, context)
+        # repeat 迭代深度（B1.3 协调）：迭代项规则（行首）在迭代内匹配，
+        # try_plain_rule 的 claim 跳过（迭代项间注释由 _lift_gap_comments
+        # 上浮为 Comment 迭代项，ADR 模型优先）；容器首元素（非 repeat）
+        # 不在迭代内 → claim 处理首元素前注释。仅 lift 场景标记深度
+        # （optional 的单值槽不算迭代项上下文——PortParens `@PortList?`
+        # 的首元素 claim 需放行）。
+        if lift_gap_comments:
+            self._repeat_iter_depth = getattr(self, "_repeat_iter_depth", 0) + 1
+        try:
+            result = self._process_production_node(elem, context)
+        finally:
+            if lift_gap_comments:
+                self._repeat_iter_depth = getattr(self, "_repeat_iter_depth", 1) - 1
         if result is None:
             context.restore_snapshot(snapshot)
             break
