@@ -644,6 +644,9 @@ class Parser:
         self._line_comment_anchors = []
         self._anchor_seen_inline = set()
         self._anchor_seen_line = set()
+        # attachment 去重集合（collect_following_comments 惰性创建）——
+        # 跨 parse 复用 Parser 时残留会误跳过同 (text,line) 注释
+        self._attached_seen = set()
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False
