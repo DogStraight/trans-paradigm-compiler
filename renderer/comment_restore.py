@@ -59,7 +59,6 @@ def restore_all_comments(
     restoration_stack: Any | None,
     placeholders: dict | None,
     tpc_src_map: dict | None,
-    enable_line_comment_restore: bool | None,
     log_fn: Callable[[str], None] | None = None,
 ) -> str:
     """注释回插编排（inline + line + 宏还原 + 条件块）。
@@ -69,12 +68,15 @@ def restore_all_comments(
     - restoration_stack: 宏展开还原栈（非空 = 展开路径）
     - placeholders: 条件块占位映射
     - tpc_src_map: 源行号 → 渲染行号插值锚点
-    - enable_line_comment_restore: line 通道普通注释恢复开关（None = 关闭）
     - log_fn: 日志回调（默认静默）
 
     注：旧 `--inline-comments` 指纹回注开关已删除（2026-09-04，老机制不稳定
     且消耗大）——inline 通道仅两态：展开路径 only_tpc（marker 回插）、
-    非展开 only_midline（行中注释回插兜底）。
+    非展开 only_midline（行中注释回插兜底）。line 通道普通注释回插已删除
+    （2026-09-05，ADR-0013 阶段 B1/B1.1 后普通独占行注释全部进树——容器
+    项间 Comment 迭代项 / 块结束符 trailing / block body Comment 节点；
+    41 文件实测 restore 开/关差仅 1 条且为锚点错插缺陷，删除净改善）——
+    line 通道仅剩 only_tpc（宏/条件块 marker 回插，还原依赖）。
     """
     log = log_fn or (lambda m: None)
     restore_stack = bool(restoration_stack)
@@ -99,19 +101,11 @@ def restore_all_comments(
         if n:
             log(f"[comments] midline anchor restoration: {n} items")
 
-    # Line comment restoration（列表结构内被 production skip 吞掉的注释，渲染后回插）
-    # 变换路径（expand_enhanced=True 增强展开）禁用普通注释恢复：变换改变
-    # 了代码结构（impl → ModuleInst、类型端口 → 具体端口），源行号/锚点必然
-    # 漂移，恢复会误匹配拆坏注释行（如含 `spi.slave` 的注释从 `.` 处劈开）。
-    # 但 tpc marker（宏/条件块还原依赖）是唯一性插值定位、
-    # 不依赖锚点窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，
-    # 宏还原失效。有宏/条件块时降级 only_tpc，无则整个跳过。
-    if line_anchors and enable_line_comment_restore:
-        content, n = restore_line_comments(
-            content, line_anchors, tpc_src_map=tpc_src_map
-        )
-        log(f"[comments] line anchor restoration: {n} items")
-    elif line_anchors and (restore_stack or placeholders):
+    # Line comment restoration：恒 only_tpc（见函数 docstring——普通独占行
+    # 注释已全部进树，不再时域回插）。tpc marker（宏/条件块还原依赖）是
+    # 唯一性插值定位、不依赖锚点窗口，仍必须回插——否则 protect_and_reverse
+    # 找不到 marker，宏还原失效。有宏/条件块时回插，无则整个跳过。
+    if line_anchors and (restore_stack or placeholders):
         content, n = restore_line_comments(
             content, line_anchors, tpc_src_map=tpc_src_map, only_tpc=True
         )

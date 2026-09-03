@@ -222,9 +222,6 @@ def run_all(
                     no_lint=no_lint,
                     ext_dirs=DEFAULT_EXT_DIRS,
                     expand_enhanced=eh,
-                    # 变换路径禁用注释恢复：变换改变结构后锚点漂移，
-                    # 恢复注定找不到位置或误匹配拆坏注释行
-                    enable_line_comment_restore=not eh,
                 )
                 if mode == "P":
                     ref_text = source  # 增强语法保留：对比输入

@@ -101,7 +101,6 @@ class _PipelineContext:
     predefined: dict[str, str] | None
     undefine: set[str] | None
     check_idempotent: bool | None
-    enable_line_comment_restore: bool
     fidelity: str = "full"
     """保真度分级（ADR-0006 阶段 5）：full 完全重排 / keep_blank 保留空行。"""
 
@@ -554,7 +553,6 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         restoration_stack=ctx.restore_stack,
         placeholders=ctx.placeholders,
         tpc_src_map=ctx.tpc_src_map,
-        enable_line_comment_restore=ctx.enable_line_comment_restore,
         log_fn=ctx.log,
     )
 
@@ -623,7 +621,6 @@ def run_pipeline_on_source(
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
     check_idempotent: bool | None = None,
-    enable_line_comment_restore: bool = True,
     fidelity: str = "full",
     schedule: str | None = None,
 ) -> dict[str, Any]:
@@ -706,7 +703,6 @@ def run_pipeline_on_source(
         predefined=predefined,
         undefine=undefine,
         check_idempotent=check_idempotent,
-        enable_line_comment_restore=enable_line_comment_restore,
         fidelity=fidelity,
     )
     ctx.result = {

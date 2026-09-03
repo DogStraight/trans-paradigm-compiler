@@ -293,6 +293,38 @@ LineSuffix 结构序渲染，与 attachment 同轨）；独占形态（结束符
 **门禁**：tests/e2e/test_comment_container.py::TestBlockEndComments
 （2 测试：end 行尾注释保留 + 幂等）。
 
+### 阶段 B1.2 删除 line 通道普通注释回插（目标④，2026-09-05，工作区待提交）
+
+**度量**（删除决策数据）：41 文件（normal 32 + real 9）渲染
+`enable_line_comment_restore` 开/关对照——输出注释行差仅 **1 条**
+（tv80），且该条是 restore **锚点错插缺陷**（`// Outputs` 被插进
+`reg [7:0] Q;` 声明中间）——删除后该注释不恢复但结构干净（净改善）。
+B1/B1.1 后普通独占行注释全部进树（容器项间 Comment 迭代项 / 块结束符
+trailing / block body Comment 节点），line 通道普通回插残余归零。
+
+**删除**：restore_all_comments 移除 `enable_line_comment_restore`
+参数与全量普通回插分支——line 通道恒 only_tpc（宏/条件块 marker 回插，
+protect_and_reverse / restore_condition_blocks 还原依赖）；pipeline
+ctx 字段 / run_pipeline_on_source 签名 / run_all_tests 传参同步删除
+（不留兼容垫片）。
+
+**待后续清理**：restore_line_comments 函数体仅剩 only_tpc 调用路径，
+函数内普通注释窗口回插分支（is_tpc=False 路径）成过渡残留（改动面大
+且与 tpc 插值逻辑交织，本轮未深清——功能不可达）。
+
+### 阶段 B 小结（2026-09-05）
+
+| 项 | 内容 | 实测 |
+|---|---|---|
+| B2 | join 识别 Comment 项独立行渲染（d34100a） | verilog/yaml 538 全绿 |
+| B1 | 容器项间独占注释行号窗口上浮（c8b3a57） | serv_top 26→54、tv80 +29 |
+| B1.1 | 块结束符行尾注释挂 trailing（cb53d75） | tv80 509→670 |
+| B1.2 | 删除 line 通道普通注释回插（目标④主体） | 41 文件差 1（错插），删除净改善 |
+
+目标④剩余：inline 通道 only_midline（行中注释回插兜底）与 tpc 通道
+保留——行中注释（pratt/中缀 `/* c */` 无布局文本锚形态）仍走 restore
+midline 兜底，tpc marker 独立通道维持（作者决策）。
+
 ## 权衡
 
 - 付出：parser 收集协议重构（吞注释位置收敛单例程）+ pratt 注释收集

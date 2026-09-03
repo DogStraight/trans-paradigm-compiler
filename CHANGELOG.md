@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **删除 line 通道普通注释回插（ADR-0013 阶段 B1.2，目标④主体）**：
+  B1/B1.1 后普通独占行注释全部进树（容器项间 Comment 迭代项 / 块结束符
+  trailing / block body Comment 节点）——41 文件实测 restore 开/关输出差
+  仅 1 条且为锚点错插缺陷，删除净改善。restore_all_comments 移除
+  enable_line_comment_restore 参数与全量普通回插分支，line 通道恒
+  only_tpc（宏/条件块 marker 还原依赖）；pipeline/run_all 同步删除。
+
 - **块结束符行尾注释进树（ADR-0013 阶段 B1.1）**：块规则结束符
   （`end`/`endcase`）后的行尾注释（`end // case: x`）此前只记 inline
   anchor——restore 仅回 midline/tpc 不回行尾普通注释 → 丢失。现挂块
