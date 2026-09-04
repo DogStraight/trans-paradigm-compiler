@@ -2,9 +2,9 @@
 
 > 引擎机制：检查 = analyzer postpass 钩子 / analyzer 原语 / L1 声明式 `[[checks]]`
 > 规则表（见 `.agents/skills/checker-rule-authoring/SKILL.md` 双路径）。诊断
-> 协议（code/severity/range/suppress）见 `docs/diagnostics.md`。
-> 本表 = **每个 check 插件负责什么 + 各自诊断 code** 的就近权威（按插件索引）；
-> diagnostics.md 是 code 全集按 code 索引的协议表，两处互补。
+> code/severity/range 协议与 `--json` 输出见 `main.py::_cmd_check` + `analyzer/
+> checker.py`（LSP 兼容序列化）；豁免注释语法见 `analyzer/suppress.py` docstring。
+> 本表 = 每个 check 插件负责什么 + 各自诊断 code 的就近权威（code 全集按插件索引）。
 
 ## 插件清单（每 check 负责的部分）
 
@@ -21,5 +21,5 @@
 | `semantic_check/` | analyzer 原语 | 通用名称/引用解析（`check_name_call` 等基础，W001/W002 由 analyzer 基础 primitives 发） | （analyzer 基础） |
 
 > 新增 check：在 `checks/` 下建插件目录 + 按 SKILL 双路径实现，code 登记进
-> 本表与 `docs/diagnostics.md`（协议表）。分类容器（本目录下的子目录）不要求
+> 本表（诊断 code 就近权威）。分类容器（本目录下的子目录）不要求
 > 每插件独立成目录——纯规则组件（`rules/`）随位置任意深度。

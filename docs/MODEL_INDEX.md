@@ -67,7 +67,7 @@
 | 声明式检查规则表（`[[checks]]` 规则=数据，P3/P4） | `semantic_checks.md`（§3/§4/§9）<br>`references.md`（svlint 诊断链调研） | `core/check_registry.py`（加载/校验/用户配置）<br>`analyzer/checks.py`（kind 分发执行器）<br>`grammar/verilog/plugins/checks/name_check/`（NC001-NC011 + cases/ 样例 + `_filename_check.py` 跨文件 handler）<br>`tests/_check_test.py`（注释驱动测试） | `tests/languages/verilog/test_name_convention.py`（30 用例）<br>`tests/engine/analyzer/test_check_test.py`（19 用例） |
 | 检查规则编写指南（L1 声明式 + L2 handler/postpass 双路径） | `semantic_checks.md`（§11 实操指南 + 接口契约） | `grammar/verilog/plugins/checks/`（蓝本：name_check L1 / width_check postpass / inst_check 跨文件 / hier_check 服务型） | `tests/engine/analyzer/test_checker.py`<br>`.agents/skills/checker-rule-authoring/SKILL.md`（模型可加载指令包，随项目发布） |
 | 跨文件语义检查（递归 + memo + 联动） | `decisions/0005-cross-file-semantic-check.md` | `analyzer/checker.py::ProjectChecker`<br>`grammar/verilog/plugins/checks/inst_check/_inst_check.py`<br>`main.py::_cmd_check`（`tpc check`） | `tests/engine/analyzer/test_checker.py` |
-| 诊断 code 命名空间 + 豁免注释（tpc-check pylance 化） | `diagnostics.md`（code 清单 + suppress 语法）<br>`references.md`（Verilog 静态检查工具群调研） | `analyzer/suppress.py`（豁免过滤）<br>`analyzer/checker.py`（诊断序列化，LSP 兼容）<br>`main.py::_cmd_check`（--json + 豁免接入） | `tests/engine/analyzer/test_check_suppress.py`（13 用例） |
+| 诊断 code 命名空间 + 豁免注释（tpc-check pylance 化） | `grammar/verilog/plugins/checks/README.md`（code 就近按插件索引）<br>`analyzer/suppress.py`（豁免语法 docstring）<br>`references.md`（Verilog 静态检查工具群调研） | `analyzer/suppress.py`（豁免过滤）<br>`analyzer/checker.py`（诊断序列化，LSP 兼容）<br>`main.py::_cmd_check`（--json + 豁免接入） | `tests/engine/analyzer/test_check_suppress.py`（13 用例） |
 
 ### transform — AST 变换（配置驱动 + 插件）
 
