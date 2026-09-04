@@ -12,6 +12,35 @@
 > 80）+ vs Verible 差分 136 例 + vs sv-parser 差分 98 例（false-reject 0 /
 > bad-interop 0 / lenient-diff 3——typed_ports 增强语法）。
 
+## 0.1.1 目标 2 — 检查链收尾（2026-09-05 立项，三目标）
+
+> 对标结论：references.md「P1.10 结论」（重合核心集 10 项 + 特化赛道 + 映射
+> 评估）+「诊断链多维对标结论」（0.1.1 第二目标定稿）。
+> 现状（2026-09-05 盘点）：30 诊断码 / 8 检查族已实现（name NC001-16 / inst
+> W101-106+WC001 / width W201-2 / latch LC001 / case CC001 / unused UN001 /
+> always AW001-2）；eval_check_accuracy 强检 focus 10 码 @ 34 case recall
+> 100% + FP 0。重合核心集实现 ~9/10（宏卫生族缺）；强检面只盖 30 码中 10 个；
+> 独到项批判吸收仅 svlint prefix 族已入（NC014-16）；自场景自定义规则范例 0。
+
+- [ ] **T1 重合核心集补全 + 强检扩面**：
+      - 宏/指令卫生族（对标 Verilator REDEFMACRO / slang redef-macro /
+        svlint default_nettype——跨文件宏表）：是否进 0.1.1 待作者定
+      - eval_check_accuracy focus 扩到核心全集：inst 族 W101/W102/W103/WC001
+        + always AW001/AW002 + 相关 NC（NC001-11 / 14-16，与
+        test_name_convention.py 分工核对）——每新增码补 pos/neg case，
+        验收 recall=100% + FP=0
+- [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价，取舍清单待作者拍板）：
+      - 零成本语法层候选：Verible 排版族（line-length/no-tabs）、svlint
+        空格族（style_*）/ ANSI 头 / 参数 2-state——先定"落 linter 还是
+        check 链"架构再动
+      - 中成本（Verilator UNOPTFLAT/CMPCONST）与远期（Spyglass CDC）——
+        明确 0.1.2+（方向注 ROADMAP，不立项）
+- [ ] **T3 首个自场景自定义规则范例**：
+      - 定痛点规则方向：无对标、作者工作流真实痛点（P1.10 候选是对标驱动的
+        inst_check，非此；痛点由作者拍板）
+      - 实现 + eval 门禁 + 走 checker-rule-authoring SKILL 完整流程，作为
+        自定义规则范例
+
 ## 文档工程（2026-09-04 立项，使用复盘 6 类文档框架）
 
 > 已完成（提交 5f4e812/301cdda/后续）：MODEL_INDEX 按子系统重组（两表合并 +
