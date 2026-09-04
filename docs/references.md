@@ -557,6 +557,112 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   设计内不折类型（concat 无顶层安全断点/多声明对齐/宏 `debug`/块头 case 分支/双层
   括号首段无更早断点）——无"应折未折"的普通表达式，剩余是"无安全断点"的固有上限
 
+### 静态检查器功能调研（2026-08-22，decisions/0004 前置调研）
+
+> 原 `docs/references/static_checkers_survey.md`（2026-09-04 并入本文件，消除
+> references/ 目录与 references.md 同名）。性质：设计来源记录（references）——
+> `decisions/0004-semantic-check-slot.md` 的前置调研，决定 tpc 语义检查系统
+> "做什么（功能矩阵）"与"怎么学（规则架构）"。后续扩展见本文件「Verilog
+> 静态检查工具群研判」「主流 lint 机制调研（P1.10 三路）」「svlint 深调研」。
+> 规则引擎部分经 web 检索核实，来源 URL 附各节末。
+
+#### 一、Verilog/HDL 静态检查器功能矩阵
+
+| 类别 | Verilator | Verible | SVLint | Slang/iverilog | SpyGlass/Questa |
+|---|---|---|---|---|---|
+| 宽度/截断/扩展 | ✅ WIDTH（elaboration 后按具体参数值查） | ❌ | ⚠️ 部分 | ⚠️ 诊断级 | ✅ 全套 |
+| 未连接信号 | ✅ UNDRIVEN | ❌ | ❌ | ❌ | ✅ |
+| 未使用信号 | ✅ UNUSED/UNUSEDSIGNAL | ❌ | ❌ | ❌ | ✅ |
+| 推断锁存器/组合环 | ✅ LATCH/UNOPTFLAT | ❌ | ❌ | ❌ | ✅ |
+| case 完整性 | ✅ CASEINCOMPLETE/CASEOVERLAP | ❌ | ❌ | ❌ | ✅ |
+| 隐式声明 | ✅ IMPLICIT | ❌ | ⚠️ | ⚠️ | ✅ |
+| 命名/风格 | ⚠️ 少量 | ✅ 主场（module-filenames、line-length、no-tabs、always-comb/ff 等） | ⚠️ | ❌ | ⚠️ |
+| CDC/跨时钟 | ❌ | ❌ | ❌ | ❌ | ✅ 主场 |
+| 复位/DFT/功耗 | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 可综合性 | ⚠️ 部分 | ❌ | ❌ | ❌ | ✅ |
+| **配置化参数敏感性** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **链级溯源报告** | ❌ 单点 | ❌ | ❌ | ❌ | ⚠️ 层级化，不跨语句链 |
+
+**各工具要点**（HDL 工具细节的扩展见下「Verilog 静态检查工具群研判」+「主流
+lint 机制调研」）：Verilator `--lint-only` 的 W 系列警告最接近"真静态检查"，
+宽度检查在 elaboration 后拿**具体参数值**查截断（`DATA_W=16` 时 `16'hFFFF`
+合法）——结构上无"配置可能变"概念；Verible 是风格/结构规则主场（规则 + 抑制
+`// verilog_lint: waive rule-name`）；SVLint 语法/结构为主（`.svlint.toml`
+实例：OpenTitan/ibex）；Slang/Icarus 是编译器前端诊断；SpyGlass/Questa 商业
+天花板（lint/CDC/RDC/Reset/DFT/power 全套），无跨语句链溯源。**两行独有洞察**：
+全工具无"配置化参数敏感性"与"链级溯源"——正是 tpc 语义检查差异化（P2/P3
+声明式规则表 + WC001 赋值链）的支撑。
+
+来源：Verilator warnings 文档 / [Verible verilog-lint](https://chipsalliance.github.io/verible/verilog_lint.html) +
+default_rules.h / [SVLint crate](https://docs.rs/crate/svlint/0.4.14) + OpenTitan
+`.svlint.toml` / VC SpyGlass CDC、RDC 数据手册。
+
+#### 二、可定制规则引擎架构对比（Semgrep / CodeQL / ESLint / clang-tidy / Ruff）
+
+> 调研目标：tpc 要"规则=配置/数据、复杂检查=脚本"——业界五个代表性系统怎么设计。
+
+**1. Semgrep — 纯声明式 YAML 规则引擎**：纯配置（YAML `rules:` 列表，无用户
+脚本，复杂逻辑靠声明式算子组合）。Schema：`id`/`message`（`$VAR` 元变量
+插值）/`severity`/`languages`/`patterns`/`fix`/`metadata`（cwe/owasp/
+category）/`paths`/`mode`（search/taint/join）。匹配：AST 模式匹配（写目标
+语言代码片段），元变量 `$X`/`$...ARGS`/省略号 + 布尔算子
+`pattern-either/-inside/-not/-regex` + 元变量约束；`mode: taint` 数据流
+（Pro 给路径链）。抑制：`// nosemgrep[: rule-id]`/文件级/`paths.exclude`/
+不选即关。扩展：Registry 规则包（`--config p/...`，规则=YAML 文件）。
+测试：`semgrep test` 文件内 `// ruleid:`/`// ok:` 注释驱动断言（零代码）。
+报告：行/列/命中片段/插值 message + `--json`/SARIF/`--autofix`。
+
+**2. CodeQL — 声明式逻辑查询语言（数据流/溯源天花板）**：写 QL（Datalog+OO），
+`.ql` 即规则（`from/where/select` 查关系数据库：AST/符号表/CFG/数据流/SSA）。
+Schema 元数据在注释头：`@kind`（problem/path-problem/alert）/`@severity`/
+`@precision`——path-problem 多 source/sink 列，报告器据此画数据流路径。
+匹配：谓词/量词/递归库实体；数据流继承 `TaintTracking::Configuration` 覆写
+source/sink/sanitizer/step，库完成跨过程/跨文件路径计算。抑制：查询套件
+选择 + Code Scanning inline `// codeql[<id>]`。测试：`codeql test run` 对
+`.expected` 快照。报告：SARIF，**path-problem 完整 source→中间步→sink 路径**
+（五者中溯源最强）。
+
+**3. ESLint — 规则即 JS 代码（visitor + 数据配置的双层模型）**：双层——规则 =
+JS 模块（`meta` + `create(context)` 返回 AST visitor）；配置 = 数据
+（`rules: {"id": ["error", options]}`）。Schema（meta）：`type`/`docs`
+（recommended）/`schema`（JSON Schema 校验 options，fail-fast）/`messages`
+（模板字典 `{{placeholder}}`，messageId+data 插值）/`fixable`/
+`defaultOptions`——**严重度不在规则里而在配置中**（off/warn/error）。
+匹配：AST visitor + esquery 选择器 + scope/类型 API。抑制：`eslint-disable*`
+族 + overrides/ignorePatterns。扩展：npm 插件包。测试：**RuleTester**
+（valid/invalid 用例 + 期望诊断逐字段断言：messageId/type/line/data/fix），
+事实标准。报告：`context.report`；无内置数据流。
+
+**4. clang-tidy — 规则=编译器内 C++ 代码，配置=YAML 文件**：check 编译进
+二进制（用户一般不现场写）；`.clang-tidy` YAML（`Checks`/`WarningsAsErrors`/
+`HeaderFilterRegex`/`CheckOptions`）。命名空间前缀即分类（bugprone-/
+readability-/modernize-/...）。匹配：C++ AST matcher（`callExpr(...)`）+ check
+回调语义判断。抑制：`// NOLINT`/`NOLINT(check-name)`/`NOLINTNEXTLINE`/
+`NOLINTBEGIN...END`。扩展：无市场（`ClangTidyModuleRegistry` 自建）。
+测试：lit 测试（`// CHECK-NOTES:/CHECK-MESSAGES:` 期望注释）。报告：clang
+诊断格式 + notes + fix-it；单翻译单元，无跨过程数据流路径。
+
+**5. Ruff — 配置驱动的内置规则 + Rust 插件生态（对比参考）**：纯配置（TOML）
+启用，规则 Rust 编译进二进制。Schema：code（F401）/name/category/fixable/
+preview；配置 `lint.select`/`ignore`/`extend-select`/**`per-file-ignores`**
+（glob → 规则列表）/`exclude`。抑制：`# noqa[: F401]`/`# ruff: noqa`/
+`per-file-ignores`。扩展：Rust 插件 API（0.9+，早期）。测试：insta snapshot。
+报告：诊断 code+位置，`--fix`；定位快速 lint。
+
+**对比表**：
+
+| 维度 | Semgrep | CodeQL | ESLint | clang-tidy | Ruff |
+|---|---|---|---|---|---|
+| 声明方式 | 纯配置 YAML | 声明式查询语言 QL | 双层：规则=JS，配置=数据 | 规则=C++ 编译期，启用=配置 | 规则=Rust 编译期，启用=TOML |
+| 复杂判定 | 声明式算子组合 | 谓词/数据流库 | visitor + 自研分析 | AST matcher + 回调 | 内置规则（插件 API） |
+| 测试框架 | 注释驱动 ruleid/ok | `.expected` 快照 | RuleTester 逐字段断言 | lit CHECK-* 注释 | snapshot |
+| 报告溯源 | 单点（Pro 路径） | path-problem 完整链 | 单点 | notes | 单点 |
+| 抑制 | nosemgrep 注释/配置 | 套件选择 + inline | disable 注释族 | NOLINT 注释族 | noqa 注释/per-file |
+
+（注：本调研的 L1 声明式规则表、注释驱动测试、per_file 豁免分别对位
+tpc `[[checks]]` schema / `tests/_check_test.py` / `config` per_file——见
+`analyzer/semantic_checks.md`。）
+
 ### Verilog 静态检查工具群（2026-08 研判）— tpc-check 的"pylance 化"参照
 
 > 研判动因：把 Verilog 静态检查工具纳入参照系，为 tpc 检查插件体系（linter + analyzer

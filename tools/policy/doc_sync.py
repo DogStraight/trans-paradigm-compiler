@@ -16,7 +16,7 @@ _resolve_nav_target），保证"门禁认的引用 = 同步层改的引用"，�
 机械可改形态（与门禁 D1/D2 解析范围一致）：
 - 代码文件头 `Doc: docs/...`（行内整路径）
 - 导航索引/正文里的 `docs/...`、`./docs/...`、子目录前缀
-  `decisions/...`、`references/...`、裸文件名 `xxx.md`
+  `decisions/...`、裸文件名 `xxx.md`
 明确不做（同门禁边界）：`Impl:`/`Test:` 的 `::符号`、正文叙述锚点
 （`references.md「章节」`）、CHANGELOG 历史条目。
 
@@ -216,8 +216,8 @@ def _replacement_for(ref: Ref, new_doc: str) -> str | None:
     # 裸名（无斜杠）：新文档仍在 docs 根 → basename；否则全路径
     if "/" not in old_text and not old_text.startswith("docs/"):
         return new_bare if "/" not in new_bare else new_doc
-    # 子目录前缀（decisions/ references/）或 docs/ 全路径
-    if old_text.startswith(("decisions/", "references/")):
+    # 子目录前缀（decisions/）或 docs/ 全路径
+    if old_text.startswith("decisions/"):
         return new_bare  # 保留子目录前缀风格
     if old_text.startswith("docs/"):
         return new_doc

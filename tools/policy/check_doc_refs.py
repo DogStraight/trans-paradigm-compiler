@@ -13,7 +13,7 @@
 
 引用形态（实测盘点）：
 - 代码 Doc: 头 114 处为 `Doc: docs/...` 完整路径（docs/ 前缀可含
-  decisions//references/ 子路径）；3 处裸名（tests/fuzz/README.md、
+  decisions/ 子路径）；3 处裸名（tests/fuzz/README.md、
   AGENTS.md）指向非 docs 目标 → D1 只认 `docs/` 前缀。
 - 导航索引形态不一：README 用 `./docs/xxx.md` markdown 链接；
   docs/README 与 MODEL_INDEX 多写裸文件名（`case_catalog.md`）或
@@ -47,10 +47,13 @@ from typing import Iterator, Sequence
 
 # ── 扫描范围 ────────────────────────────────────────────────────────────────
 # 导航索引文件（D2 的验证源；相对仓库根）。
+# docs/gaps/README.md 是缺口档案登记表：gap 档在表中登记即被索引引用
+# （D4 不报孤儿）——2026-09-04 缺口聚合档批量建档后确立。
 NAV_FILES: tuple[str, ...] = (
     "README.md",
     "docs/README.md",
     "docs/MODEL_INDEX.md",
+    "docs/gaps/README.md",
 )
 
 # 代码 Doc: 头目标形态（D1 只认 docs/ 前缀的引用）。两种真实形态：
@@ -67,10 +70,10 @@ _PATH_CANDIDATE_RE = re.compile(r"[A-Za-z0-9_./-]+\.(?:py|toml)")
 # 导航索引里的完整路径链接形态（README: ./docs/xxx.md 或 docs/xxx.md）
 _DOC_LINK_RE = re.compile(r"\.?/?(?:docs/[A-Za-z0-9_./-]+\.md)")
 
-# 导航索引里反引号包裹的裸文件名 / docs 子路径（decisions/references/gaps
+# 导航索引里反引号包裹的裸文件名 / docs 子路径（decisions/gaps
 # 是 docs 下的并列子目录，均可用子路径引用登记）
 _BARE_REF_RE = re.compile(
-    r"`((?:decisions|references|gaps)/[A-Za-z0-9_./-]+\.md|[\w-]+\.md)`"
+    r"`((?:decisions|gaps)/[A-Za-z0-9_./-]+\.md|[\w-]+\.md)`"
 )
 
 # ── 引擎目录（D1 扫描范围：引擎 + 测试 + 工具 + 插件代码都可能有 Doc: 头）──
@@ -160,18 +163,18 @@ def _resolve_nav_target(candidate: str, root: Path) -> str | None:
     """把导航索引里的候选引用解析为 docs 相对路径；非 docs 引用返回 None。
 
     形态 1: `docs/xxx.md` / `./docs/xxx.md` → docs/ 下路径
-    形态 2: `decisions/xxx.md` / `references/xxx.md` / `gaps/xxx.md` → docs/ 下路径
+    形态 2: `decisions/xxx.md` / `gaps/xxx.md` → docs/ 下路径
     形态 3: 裸文件名 `xxx.md` → docs/ 目录内按文件名查（唯一命中）
     非 docs（AGENTS.md / tests/... / grammar/...）→ None（跳过）
     """
     cand = candidate.lstrip("./")
     if cand.startswith("docs/"):
         return cand
-    if cand.startswith(("decisions/", "references/", "gaps/")):
+    if cand.startswith(("decisions/", "gaps/")):
         return f"docs/{cand}"
     if "/" in cand:
         return None  # 其它目录引用（tests/ grammar/ 等），非 docs 目标
-    # 裸文件名：docs/ 下按文件名找（可能有 decisions/references 同名冲突，
+    # 裸文件名：docs/ 下按文件名找（可能有 decisions/ 等子目录同名，
     # 取 docs 根优先，其次任意唯一命中；多命中取第一个并视为存在）
     docs_dir = root / "docs"
     if docs_dir.is_dir():

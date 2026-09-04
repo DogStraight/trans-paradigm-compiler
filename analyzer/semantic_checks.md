@@ -3,7 +3,7 @@
 > 决策依据：`decisions/0004-semantic-check-slot.md`（为什么）、
 > `decisions/0005-cross-file-semantic-check.md`（跨文件扩展 + tpc check）。
 > 本文件是"怎么拼"。
-> 前置调研：`references/static_checkers_survey.md`。
+> 前置调研：`references.md`「静态检查器功能调研」节。
 > 状态：**P1 机制层 + P2 窄版 + 跨文件联动 + P3 声明式规则表 + P4 用户配置层
 > + L1 注释驱动测试已落地**（2026-08-25 P1/P2/P2.5；2026-08-28 P3/P4/L1 测试）。
 

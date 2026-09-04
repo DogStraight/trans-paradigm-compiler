@@ -1,6 +1,6 @@
 # Docs 导航
 
-> 文档分层：**decisions/（为什么）→ architecture/（怎么拼）→ references/（是什么）**。
+> 文档分层：**decisions/（为什么）→ architecture/（怎么拼）→ references.md（外部调研/设计来源落档）**。
 > 模型/人维护前，先查 `MODEL_INDEX.md` 跳转表定位，再读对应条目。
 > ⚠ 分层只适用于**协作方文档**；个人思考沉淀不在其列，见下方"读者维度"。
 
@@ -17,7 +17,7 @@
 |------|------|------|
 | `decisions/` | 协作方（改造者+模型） | 为什么这么定（ADR，讨论痕迹沉淀） |
 | `architecture/` | 协作方 | 系统怎么拼起来 |
-| `references/` | 分两类（见读者维度） | 事实参考 / 设计来源记录 |
+| `references.md` | 作者本人（见读者维度） | 外部调研/设计来源落档（不对齐；`references.md「章节」`被各处引用） |
 | 根目录文档 | 混合 | 各子系统架构说明（现有 .md 暂留原处，逐步归位） |
 
 ## 读者维度
@@ -38,7 +38,7 @@
   （analyzer 语义检查插槽已就近 `analyzer/semantic_checks.md`，见 analyzer/README）
   （renderer 世界 A 架构已就近 `renderer/renderer_architecture.md`，见 renderer/README）
 - 决策：`decisions/README.md`（ADR 编号规则 + 模板；0001-0008 各条见 MODEL_INDEX 登记）
-- 参考：`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
+- 参考：`references.md`（外部调研/设计来源落档：静态检查器功能调研见其「静态检查器功能调研」节）
   （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）
 - 边界：已知边界完整清单 2026-09-04 按部件拆入 `gaps/`（见下"缺口档案"）；
   README 的 Known limitations 是其顶层摘要

@@ -3,7 +3,7 @@
 - 状态：未立项（backlog，非发布阻塞）
 - 关联：ROADMAP P2.6（宽泛条目侧链接本文件）
 - 参照：`docs/references.md`（Veryl/svlint 深调研 + 静态检查工具群段）、
-  `docs/references/static_checkers_survey.md`（检查器功能矩阵 + 规则引擎架构）
+  `docs/references.md`「静态检查器功能调研」（检查器功能矩阵 + 规则引擎架构）
 - 前置：P1.9 稳定规则 ID + 机器可读输出（诊断模型）
 
 ## 缺口是什么
@@ -17,7 +17,7 @@ tpc 目前的检查能力 = 自研（linter 语法层 + analyzer 语义层/声�
 
 ## 为什么是缺口（影响面）
 
-- 自研覆盖面有限：静态检查矩阵（static_checkers_survey）里 Verilator 的
+- 自研覆盖面有限：静态检查矩阵（references.md「静态检查器功能调研」）里 Verilator 的
   WIDTH/UNDRIVEN 类、Verible 的风格规则族、svlint 的 100+ 规则，tpc 全量
   自研不现实——外部工具接入是低成本补覆盖的路径。
 - 每语言生态有"官方 checker"（Veryl 自带 `veryl check`），tpc 语言包若不能
@@ -55,4 +55,4 @@ tpc 目前的检查能力 = 自研（linter 语法层 + analyzer 语义层/声�
 - ROADMAP P2.6（本缺口，backlog）
 - ROADMAP P1.9 / 稳定规则 ID + 机器可读输出（前置）
 - `docs/references.md`：Veryl / svlint / 静态检查工具群深调研（参照源）
-- `docs/references/static_checkers_survey.md`：检查器功能矩阵 + 规则引擎架构
+- `docs/references.md`「静态检查器功能调研」：检查器功能矩阵 + 规则引擎架构
