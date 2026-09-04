@@ -37,6 +37,7 @@
   （linter 两阶段架构已就近 `linter/linter_architecture.md`，见 linter/README）
   （analyzer 语义检查插槽已就近 `analyzer/semantic_checks.md`，见 analyzer/README）
   （renderer 世界 A 架构已就近 `renderer/renderer_architecture.md`，见 renderer/README）
+  （引擎总览叙事 `engine_overview.md`：跨子系统一条线 + 全局骨架，改任何子系统前先读）
 - 决策：`decisions/README.md`（ADR 编号规则 + 模板 + 状态流；现存
   decisions/0003-0005/0007/0011 见 MODEL_INDEX 登记，已删 ADR 历史 git log）
 - 参考：`references.md`（外部调研/设计来源落档：静态检查器功能调研见其「静态检查器功能调研」节）

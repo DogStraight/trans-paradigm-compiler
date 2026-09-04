@@ -5,7 +5,8 @@
 
 ## 改任何子系统前
 
-1. 先查 `docs/MODEL_INDEX.md` 跳转表：知识单元 → 文档位置 → 实现（Impl）→ 验证（Test）
+1. 先读 `docs/engine_overview.md`（引擎一条线，建立全景）再查 `docs/MODEL_INDEX.md`
+   跳转表：知识单元 → 文档位置 → 实现（Impl）→ 验证（Test）
 2. 读对应 `docs/decisions/`（为什么，ADR）与架构文档（怎么拼）
 3. 改代码时维护文件头 `Doc:` 反向引用（约定见 `policy/doc-alignment.md`）
 4. 跑对应测试（`tests/`）；改 linter 用 `tests/e2e/eval_lint_accuracy.py` 验证 recall/误报
