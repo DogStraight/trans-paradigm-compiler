@@ -17,7 +17,7 @@
 > `{ join = ", ", items = "x", nest = 1 }`（折行后缩进级，单位 `_INDENT_STR`）、
 > `{ join = ", ", items = "x", first_soft = true }`（首项前软换行）。
 > 完整 14 原语目录（含 break/align/fill/indent/line_suffix/suffix_when…）见
-> `docs/renderer_architecture.md`。
+> `renderer/renderer_architecture.md`。
 
 ## 核心原则
 

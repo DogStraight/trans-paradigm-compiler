@@ -1,6 +1,6 @@
 """ref 原语 — 子节点引用
 
-Doc: docs/renderer_architecture.md（ref 节点引用原语）
+Doc: renderer/renderer_architecture.md（ref 节点引用原语）
 """
 from typing import Any, List
 from core.define import Node

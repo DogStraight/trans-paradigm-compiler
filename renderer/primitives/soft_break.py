@@ -1,6 +1,6 @@
 """soft / break 原语 — 换行控制
 
-Doc: docs/renderer_architecture.md（soft 软换行原语）
+Doc: renderer/renderer_architecture.md（soft 软换行原语）
 """
 from typing import Any
 from core.define import Node

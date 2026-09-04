@@ -3,7 +3,7 @@ primitives/__init__.py — DSL 原语求值器
 
 将 TOML 布局表达式求值为 Doc IR。
 每个原语对应一个文件，通过 @register() 装饰器自动注册到调度中心。
-Doc: docs/renderer_architecture.md（布局原语注册表）
+Doc: renderer/renderer_architecture.md（布局原语注册表）
 """
 
 from typing import Any

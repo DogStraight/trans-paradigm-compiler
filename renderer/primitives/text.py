@@ -1,6 +1,6 @@
 """text 原语 — 字面量文本
 
-Doc: docs/renderer_architecture.md（text 字面量原语）
+Doc: renderer/renderer_architecture.md（text 字面量原语）
 """
 from typing import Any
 from core.define import Node

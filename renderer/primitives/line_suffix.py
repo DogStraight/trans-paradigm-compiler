@@ -7,7 +7,7 @@ TOML 形态：
 经 _resolve_line_suffix 重写为换行前的 Text。
 与既有 inline_comment.py 锚点回插互补：前者是 Doc 一等公民，
 后者是渲染后字符串级后处理。
-Doc: docs/renderer_architecture.md（LineSuffix 行尾锚定原语）
+Doc: renderer/renderer_architecture.md（LineSuffix 行尾锚定原语）
 """
 from typing import Any
 from core.define import Node

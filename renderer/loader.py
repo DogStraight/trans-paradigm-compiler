@@ -3,7 +3,7 @@ loader.py — TOML 布局规则 / 风格加载
 
 从 TOML 规则目录加载 layout 定义和风格参数。
 风格参数通过 ConfigRegistry 声明式加载。
-Doc: docs/renderer_architecture.md（布局 TOML 加载）
+Doc: renderer/renderer_architecture.md（布局 TOML 加载）
 """
 
 import tomllib

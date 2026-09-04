@@ -1,6 +1,6 @@
 """group 原语 — flat/broken 二象性
 
-Doc: docs/renderer_architecture.md（group/flatten 二象性）
+Doc: renderer/renderer_architecture.md（group/flatten 二象性）
 """
 
 from typing import Any

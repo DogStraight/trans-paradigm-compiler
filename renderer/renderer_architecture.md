@@ -1,23 +1,24 @@
-# 渲染器架构（Renderer Architecture）
+# 渲染器架构：世界 A Doc IR（Renderer Architecture — World A）
 
-> **本文档是渲染器当前状态的权威说明**——新 session 接手渲染器改动前必读。
-> 决策背景见 `decisions/0006-renderer-improve-roadmap.md`（ADR-0006，改进路线
-> 全部六阶段已落地）；本文档描述落地后的实际工作机制与剩余边界。
+> **本文档是渲染器世界 A 的权威说明**——新 session 接手 `renderer/` 改动前必读。
+> 双世界：世界 A（本目录，Doc IR 声明式）→ 本文档；世界 B（Verilog formatter
+> 文本行 pass 管线，`grammar/verilog/plugins/formatter/`）→
+> `grammar/verilog/plugins/formatter/README.md`（2026-09-04 由原 docs 双世界
+> 合版拆分，两文档互相指针）。
+> 决策背景见 `docs/decisions/0006-renderer-improve-roadmap.md`（ADR-0006，
+> 改进路线全部六阶段已落地）；本文档描述世界 A 落地后的实际工作机制与剩余边界。
 >
 > 更新时间：2026-08-25（ADR-0006 六阶段 + 注释 attachment 全部完成后）。
 
-## 一句话定位
+## 一句话定位（世界 A）
 
-tpc 的渲染器是**双世界**结构：
+世界 A（本目录 `renderer/`）：AST + 布局 TOML → **Doc IR**（Wadler-Lindig 漂亮
+打印机）→ 文本。yaml/c4/verilog 的 `renderer` 布局配置走这条路。
 
-- **世界 A**（`renderer/`）：AST + 布局 TOML → **Doc IR**（Wadler-Lindig 漂亮
-  打印机）→ 文本。yaml/c4/verilog 的 `renderer` 布局配置走这条路。
-- **世界 B**（`grammar/verilog/plugins/formatter/`）：**文本行 pass 管线**，
-  操作裸 `list[str]` + 行上下文（LineContext）。verilog 的 `format_source`
-  与管线 `format_output` 走这条路（缩进/品类对齐/端口对齐/折行）。
-
-两世界共享验证门禁（real 保真度 / vs Verible 差分 / 幂等），但**原语集与
-布局模型互不相通**——世界 A 是 Doc IR 声明式，世界 B 是命令式行 pass。
+> 双世界关系：世界 B（Verilog formatter pass 管线）见
+> `grammar/verilog/plugins/formatter/README.md`。两世界共享验证门禁（real
+> 保真度 / vs Verible 差分 / 幂等），但**原语集与布局模型互不相通**——世界 A
+> 是 Doc IR 声明式，世界 B 是命令式行 pass。
 
 ---
 
@@ -117,57 +118,24 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
 
 ---
 
-## 世界 B：Verilog formatter 插件（grammar/verilog/plugins/formatter/）
+## 世界 B：见 formatter 插件 README
 
-### 数据流
+> 渲染世界 B（Verilog formatter 文本行 pass 管线）已拆分就近
+> `grammar/verilog/plugins/formatter/README.md`（2026-09-04，原 docs 双世界
+> 合版拆分）——数据流 / 引擎内建遍 / 带结构行 / 边界扫描 / 世界 B 边界与
+> 验证见该 README。
 
-```
-源文本
-  → split_port_close_lines / split_inst_tail_lines（拆粘连行）
-  → BoundaryScanner.scan（token 流 → 每行 LineContext）
-  → FormatterEngine.run（按配置依次执行 pass）
-    → indent（缩进重排，最前）
-    → ifdef（条件编译块内容缩进）
-    → category（品类对齐：port_dir/declaration/parameter/...）
-    → inst_port（实例端口对齐）
-    → wrap（宽度折行，最后）
-  → 清理行尾尾随空格
-```
+## 功能缺口评估（世界 A，对照 ADR-0006 五条边界）
 
-### 引擎内建遍（阶段 4b）
-
-- `PassKind` 枚举：indent/ifdef/align/wrap/comment/annotate/custom——pass
-  从"自由 handler 函数"升格为"类型化内建遍"。
-- `criterion` 量化拒绝准则：`min_group_size`/`max_span`/`max_width`，运行前
-  检查、不满足跳过该遍（布局决策显式化，cmake-format 借鉴方向）。
-- 实际接入：wrap 带 `max_width` 拒绝、品类对齐带 `min_group_size` 拒绝、
-  wrap_comments 升格 COMMENT 遍（均默认关闭或纯优化）。
-
-### 带结构行（阶段 3）
-
-- 拆行 pass（inst_port/wrap）就地同步 contexts：拆出的每段派生复制源行 ctx，
-  wrap 续行段标记 `multi_line_cont`——根治"拆行后行号漂移"。
-- 引擎 run 后兜底对齐：漏同步的 pass 自动按就近行派生补齐。
-
-### 边界扫描（boundary.py）
-
-token 流单次遍历 → 每行 LineContext：scope 栈/块头块尾/ifdef 分支/单语句头/
-多行续行/端口列表结束/指令行。**结构 token 全部从语法规则推导**（`is_block`/
-`analyzer.scope.kind`/production 尾关键字终结符），零硬编码语言知识。
-
----
-
-## 功能缺口评估（对照 ADR-0006 五条边界）
-
-ADR-0006 边界分析提出的五条理论边界，落地后的状态：
+ADR-0006 边界分析提出的五条理论边界，世界 A 相关四条落地后的状态
+（B5 世界 B 行上下文已随世界 B 拆分到 formatter README）：
 
 | 边界 | 状态 | 说明 |
 |------|------|------|
 | B1 缩进无统一模型 | ✅ 已解决 | `_indent()` 唯一换算点 + 幽灵参数清零 |
 | B2 group 二元全局表达不了对齐 | 🔶 部分解决 | 新增 `Align`/`Fill` 原语（对齐/中间态折行可表达），但 **layout 的 fits 仍只测第一行、贪心**——全局最优折行（多候选枚举）未实现 |
 | B3 注释非一等公民 | 🔶 部分解决 | `LineSuffix` + attachment 路径（Doc 一等公民），但**锚点回插仍是字符串级启发式**（±3 行窗口，漂移即丢）——attachment 未完全替换它 |
-| B4 规范化 vs 保真矛盾 | 🔶 部分解决 | `fidelity=keep_blank` 保留空行，但**仅空行维度**——verible 的"保留折行/仅缩进"分级未实现（indent_only 是配置缺口） |
-| B5 世界 B 行上下文与 AST 分离 | ✅ 已解决 | 带结构行（拆行同步 contexts + 引擎兜底），行号漂移根治 |
+| B4 规范化 vs 保真矛盾 | 🔶 部分解决 | `fidelity=keep_blank` 保留空行，但**仅空行维度**——indent_only 分级缺口：世界 A 无实现，世界 B indent pass 等价能力见 formatter README |
 
 ### 仍存在的功能缺口（按可接受性排序）
 
@@ -190,7 +158,7 @@ ADR-0006 边界分析提出的五条理论边界，落地后的状态：
 4. **世界 A/B 原语不互通**：Doc IR 的 align/fill 与世界 B 的 column_align/
    wrap 是两套实现。**接受**：各有取舍——世界 A 声明式（跨语言通用），
    世界 B 命令式（Verilog 高精度，Verible 参照）。统一是"多遍引擎"方向
-   （阶段 4b 已铺 PassKind 基础），非当前必须。
+   （阶段 4b 已铺 PassKind 基础），非当前必须（世界 B 侧见 formatter README）。
 
 **不可接受/需后续关注：**
 
@@ -206,20 +174,22 @@ ADR-0006 边界分析提出的五条理论边界，落地后的状态：
 
 ---
 
-## 验证基线（当前事实）
+## 验证基线（当前事实，世界 A）
 
 - **877 pytest 全绿**（806 存量 → 877，含 71 个渲染器相关新测试）。
 - e2e：real 保真度（PicoRV32 8 module）/ vs Verible 差分 124 例 / 幂等，
   全部通过。
-- pyright（renderer + formatter + 相关测试）：0 errors。
+- pyright（renderer + 相关测试）：0 errors。
 - 测试分布：`tests/engine/renderer/`（原语/缩进/保真度）、
   `tests/languages/{yaml,c4,verilog}/`（语言包渲染）、`tests/e2e/`（门禁）、
   `tests/engine/parser/test_comment_attachment.py`（attachment）。
+- 世界 B（formatter）验证见 `grammar/verilog/plugins/formatter/README.md`。
 
 ## 改渲染器前的检查清单
 
-1. 查本文件（工作机制）+ `decisions/0006`（为什么）。
-2. 改世界 A：动 `renderer/`；改世界 B：动 `grammar/verilog/plugins/formatter/`。
+1. 查本文件（世界 A 工作机制）+ `docs/decisions/0006`（为什么）；改世界 B 先查
+   `grammar/verilog/plugins/formatter/README.md`。
+2. 改世界 A 动 `renderer/`；改世界 B 动 `grammar/verilog/plugins/formatter/`。
 3. 新增布局原语：`@register` + 更新 `primitives/__init__.py` 的
    `_PRIMITIVE_MODULES` + 文档本表。
 4. 语言知识不进代码：规则名/布局意图一律在 grammar TOML。

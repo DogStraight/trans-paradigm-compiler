@@ -2,7 +2,9 @@
 
 > AST + 布局规则（`grammar/` TOML renderer 段）→ 文本。Doc IR + 原语 = 世界 A；
 > Verilog formatter pass 管线 = 世界 B（在 `grammar/verilog/plugins/formatter/`）。
-> 双世界关系与缺口见 `docs/renderer_architecture.md`。
+> 双世界：世界 A 架构见 `renderer/renderer_architecture.md`（Doc IR + 原语 +
+> 缺口）；世界 B（formatter pass 管线）见
+> `grammar/verilog/plugins/formatter/README.md`。
 
 | 文件 | 一句话 |
 |------|--------|

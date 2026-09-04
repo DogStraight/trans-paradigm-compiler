@@ -81,12 +81,12 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 渲染器工作机制与现状（双世界 + 缺口评估） | `renderer_architecture.md` | `renderer/`（世界 A：Doc IR + 原语）<br>`grammar/verilog/plugins/formatter/`（世界 B：pass 管线） | `tests/engine/renderer/`<br>`tests/languages/`<br>`tests/e2e/` |
+| 世界 A 工作机制与现状（Doc IR + 原语 + 缺口评估；双世界关系见文） | `renderer/renderer_architecture.md` | `renderer/`（世界 A：Doc IR + 原语）<br>`grammar/verilog/plugins/formatter/`（世界 B：pass 管线，见其 README） | `tests/engine/renderer/`<br>`tests/languages/`<br>`tests/e2e/` |
 | 渲染器改进路线（ADR-0006） | `decisions/0006-renderer-improve-roadmap.md` | `renderer/doc.py::layout`（内核扩展点）<br>`renderer/primitives/registry.py`（原语注册）<br>`renderer/node_renderer.py::render_node`（缩进上下文）<br>`grammar/verilog/plugins/formatter/`（世界 B） | `tests/engine/renderer/`（原语/缩进单测）<br>`tests/e2e/` + `tests/differential/`（门禁） |
-| Doc IR（漂亮打印机中间表示）+ layout 布局 | `renderer_architecture.md` | `renderer/doc.py` | `tests/engine/renderer/test_renderer_doc.py` |
-| 布局原语（registry + 各原语实现） | `renderer_architecture.md` | `renderer/primitives/` | `tests/engine/renderer/test_renderer_primitives.py`<br>`tests/engine/renderer/test_primitives_*.py` |
+| Doc IR（漂亮打印机中间表示）+ layout 布局 | `renderer/renderer_architecture.md` | `renderer/doc.py` | `tests/engine/renderer/test_renderer_doc.py` |
+| 布局原语（registry + 各原语实现） | `renderer/renderer_architecture.md` | `renderer/primitives/` | `tests/engine/renderer/test_renderer_primitives.py`<br>`tests/engine/renderer/test_primitives_*.py` |
 | renderer body 缩进（`body_cfg["indent"]`） | `language_walkthrough.md`（renderer：布局） | `renderer/node_renderer.py::_body_indent`<br>`renderer/node_renderer.py::render_node`（body 渲染段） | `tests/languages/yaml/test_yaml.py`<br>`tests/languages/c4/test_c4_asm.py`<br>`tests/e2e/test_real_fidelity.py` |
-| 保真度分级（ADR-0006 阶段 5） | `renderer_architecture.md` | `renderer/fidelity.py` | `tests/engine/renderer/test_fidelity.py` |
+| 保真度分级（ADR-0006 阶段 5） | `renderer/renderer_architecture.md` | `renderer/fidelity.py` | `tests/engine/renderer/test_fidelity.py` |
 | 注释槽位消费（leading/trailing/inline/LineSuffix） | `decisions/0006`（注释遍路线） | `renderer/node_renderer.py` | `tests/engine/renderer/test_comment_slots.py` |
 
 ### preprocessor — 宏展开 / 反向映射
@@ -116,7 +116,7 @@
 |----------|----------|------------------|------------------|
 | 从零搭一门语言（教程，c4 实例） | `language_walkthrough.md` | `grammar/c4/**` | `tests/languages/c4/` |
 | 语言包与插件目录约定 / 语法扩展工作流 | `language_walkthrough.md` | `grammar/{verilog,c4,yaml}/` + `plugins/` | `tests/languages/` |
-| 渲染世界 B：Verilog formatter（pass 管线） | `renderer_architecture.md` | `grammar/verilog/plugins/formatter/` | `tests/languages/verilog/test_formatter*.py` |
+| 渲染世界 B：Verilog formatter（pass 管线） | `grammar/verilog/plugins/formatter/README.md` | `grammar/verilog/plugins/formatter/` | `tests/languages/verilog/test_formatter*.py` |
 
 ### 跨子系统（横切机制）
 

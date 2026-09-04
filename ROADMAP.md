@@ -339,11 +339,12 @@
 > P5 六项改进（统一缩进模型 / Doc IR 原语升级 / 布局意图声明化 / 世界 B
 > 升级 / 保真度分级 / 兼容验收）全部落地：完成历史见 git log（4bc4b3f 起，
 > ADR-0006 阶段 1-5 + 4a/4b；Veryl 渲染层深读闭环 13f29f1 Pad 三件套）。
-> 残留缺口评估见 docs/renderer_architecture.md「功能缺口评估」——B2/B3/B4
+> 残留缺口评估见 renderer/renderer_architecture.md「功能缺口评估」（世界 A）+
+> grammar/verilog/plugins/formatter/README.md「世界 B 边界」（世界 B）——B2/B3/B4
 > 部分解决项均明确"接受"（fits 贪心 / 锚点启发式 / indent_only 留待真实
 > 需求驱动）。唯一未闭环后续：
 
-- [ ] **Layout TOML schema 校验**（renderer_architecture.md 缺口 5）：布局
+- [ ] **Layout TOML schema 校验**（renderer/renderer_architecture.md 缺口 5）：布局
       表达式错误（拼错原语键/类型）静默降级为 None，与 ADR-0003 fail-fast
       精神相悖——可加布局 schema 校验（渲染增强侧，非配置加载主路径）
 

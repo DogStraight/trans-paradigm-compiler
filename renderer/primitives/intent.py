@@ -10,7 +10,7 @@
   - anchor   行尾锚定：LineSuffix(text)——尾注释锚定
 
 存量布局 TOML 零改写：intent 是新增声明，不改变 layout/body/tail 语义。
-Doc: docs/renderer_architecture.md（intent 布局意图声明：compact/wrap/align/anchor）
+Doc: renderer/renderer_architecture.md（intent 布局意图声明：compact/wrap/align/anchor）
 """
 from typing import Any
 from core.define import Node

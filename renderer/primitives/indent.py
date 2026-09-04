@@ -1,6 +1,6 @@
 """indent 原语 — 缩进
 
-Doc: docs/renderer_architecture.md（缩进统一模型）
+Doc: renderer/renderer_architecture.md（缩进统一模型）
 """
 from typing import Any
 from core.define import Node

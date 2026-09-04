@@ -1,6 +1,6 @@
 """opt 原语 — 条件可选
 
-Doc: docs/renderer_architecture.md（opt 可选元素原语）
+Doc: renderer/renderer_architecture.md（opt 可选元素原语）
 """
 from typing import Any
 from core.define import Node

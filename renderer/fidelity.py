@@ -12,7 +12,7 @@ keep_blank 实现（src → out 匹配映射表）：
      不匹配（重排区）→ 不保留 renderer 自身产生的空行（0）
   效果：结构重排后，源中相邻结构间的空行在输出对应位置保留，
   且不叠加渲染器产生的空行。
-Doc: docs/renderer_architecture.md（保真度分级：keep_blank 空行回插）
+Doc: renderer/renderer_architecture.md（保真度分级：keep_blank 空行回插）
 """
 
 from __future__ import annotations

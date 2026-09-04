@@ -2,7 +2,7 @@
 
 只包含 DSL 原语（text/ref/join/group/line/indent/opt/align/fill/
 line_suffix/intent 等），所有语言特定知识来自 TOML 布局规则。
-Doc: docs/renderer_architecture.md（渲染器工作机制与现状：双世界 + Doc IR + 原语表）
+Doc: renderer/renderer_architecture.md（渲染器工作机制与现状：双世界 + Doc IR + 原语表）
 """
 
 from .renderer import Renderer
