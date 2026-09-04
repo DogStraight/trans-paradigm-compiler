@@ -67,8 +67,11 @@ _PATH_CANDIDATE_RE = re.compile(r"[A-Za-z0-9_./-]+\.(?:py|toml)")
 # 导航索引里的完整路径链接形态（README: ./docs/xxx.md 或 docs/xxx.md）
 _DOC_LINK_RE = re.compile(r"\.?/?(?:docs/[A-Za-z0-9_./-]+\.md)")
 
-# 导航索引里反引号包裹的裸文件名 / docs 子路径
-_BARE_REF_RE = re.compile(r"`((?:decisions|references)/[A-Za-z0-9_./-]+\.md|[\w-]+\.md)`")
+# 导航索引里反引号包裹的裸文件名 / docs 子路径（decisions/references/gaps
+# 是 docs 下的并列子目录，均可用子路径引用登记）
+_BARE_REF_RE = re.compile(
+    r"`((?:decisions|references|gaps)/[A-Za-z0-9_./-]+\.md|[\w-]+\.md)`"
+)
 
 # ── 引擎目录（D1 扫描范围：引擎 + 测试 + 工具 + 插件代码都可能有 Doc: 头）──
 _SCAN_EXCLUDE_DIRS: tuple[str, ...] = (
@@ -157,14 +160,14 @@ def _resolve_nav_target(candidate: str, root: Path) -> str | None:
     """把导航索引里的候选引用解析为 docs 相对路径；非 docs 引用返回 None。
 
     形态 1: `docs/xxx.md` / `./docs/xxx.md` → docs/ 下路径
-    形态 2: `decisions/xxx.md` / `references/xxx.md` → docs/ 下路径
+    形态 2: `decisions/xxx.md` / `references/xxx.md` / `gaps/xxx.md` → docs/ 下路径
     形态 3: 裸文件名 `xxx.md` → docs/ 目录内按文件名查（唯一命中）
     非 docs（AGENTS.md / tests/... / grammar/...）→ None（跳过）
     """
     cand = candidate.lstrip("./")
     if cand.startswith("docs/"):
         return cand
-    if cand.startswith(("decisions/", "references/")):
+    if cand.startswith(("decisions/", "references/", "gaps/")):
         return f"docs/{cand}"
     if "/" in cand:
         return None  # 其它目录引用（tests/ grammar/ 等），非 docs 目标

@@ -132,6 +132,7 @@
 
 ### P2.6 tpc-check 外部 checker 插件协议（2026-08-25 记录，Veryl 调研触发，非发布阻塞）
 
+> 📎 详细缺口档案：`docs/gaps/gap-tpc-check-external-checker.md`（背景/参照/可实现性/关联条目——ROADMAP 只留待办）
 > 拿来主义 + 声明场景：语言包 plugins/ 声明**外部 checker**（官方检查，如
 > `veryl check`/verible/slang），tpc 只**声明自己的检查场景**（官方 checker 的
 > 缺口：格式化保真/变换等价/语法资产一致性）。参考 hdl_checker

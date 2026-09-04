@@ -36,6 +36,9 @@
   `layout_spacing_prompt.md`（renderer layout DSL 原语与空格规则）
 - 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）、`packaging.md`（功能切面打包管线：facets.json 规格 → 单文件 exe，构建/署名/验证）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
+- 缺口档案：`docs/gaps/README.md`（缺口文件规约 + 模板 + 分工）；
+  `gaps/gap-tpc-check-external-checker.md`（试点：tpc-check 外部 checker 协议，ROADMAP P2.6）——
+  每个缺口一个 `gaps/gap-*.md` 详细档案，宽泛条目在 TODO/ROADMAP 链过来
 - 地图/索引：各引擎子包目录 `README.md`（部件就近说明：每文件一句话，随目录同步）、
   `MODEL_INDEX.md`（知识单元跳转：文档 → 实现 → 验证，动手前查）
 - 设计来源：`references.md`（参考项目 → 借鉴点，与 CREDITS.md 互补）
