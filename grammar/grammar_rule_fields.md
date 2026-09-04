@@ -192,21 +192,6 @@ production 是纯 choice of calls（如 `CtrlStmt`、`PrimaryExpr`）→ 自动�
 
 ---
 
-## 五、本次变更（从旧字段迁移）
-
-| 旧字段 | 新状态 | 说明 |
-|--------|--------|------|
-| `structure = { is_atom = true }` | `[Rule] is_atom = true` | 展平到顶层 |
-| `structure = { is_block = true }` | `[Rule] is_block = true` | 展平到顶层 |
-| `structure = { is_statement = true }` | `[Rule] is_statement = true` | 显式标记，无推导 |
-| `bound = { start, end }`（语法块） | 删除 | 起止 token 写回 `production` 首尾，由 `is_block` 推导 `block_start/end` |
-| `bound = { start, end }`（括号配对） | 删除 | 走 `[bracket].pairs` |
-| `[Rule.bound]` 顶层 table | 删除 | 单一写法 |
-| `block = { start, end }` | 删除 | 同 bound 处理，production 推导 |
-| `structure` 字段本身 | 删除 | 展平为顶层标记 |
-
----
-
 ## 相关
 
 - `core/define.py` — GrammarRule 字段定义
