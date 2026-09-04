@@ -58,7 +58,7 @@ docs/        design docs (see index below)
 | docs/config_lifecycle.md | Config lifecycle (declare_cfg timing / pitfalls) |
 | parser/expression_conventions.md | Expression implicit conventions (Pratt / precedence) |
 | docs/component_protocol.md | Plugin-layer protocol (components / slots / primitives) |
-| docs/grammar_rule_fields.md | Grammar rule field reference |
+| grammar/grammar_rule_fields.md | Grammar rule field reference |
 | docs/coding_style.md | Code style |
 | docs/decisions/ | ADRs (architecture decision records) |
 

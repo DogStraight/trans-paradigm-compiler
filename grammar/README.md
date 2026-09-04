@@ -2,6 +2,8 @@
 
 > 引擎语言无关的载体：语言包（TOML 语法规则 + 插件目录）。从零搭一门语言教程见
 > `docs/language_walkthrough.md`（c4 实例）。
+> 语法规则字段参考（schema/字段含义/常见形态）见 `grammar/grammar_rule_fields.md`；
+> 加语法结构见 `.agents/skills/grammar-extension/SKILL.md`。
 
 ## 语言包
 

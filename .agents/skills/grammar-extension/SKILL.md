@@ -145,7 +145,7 @@ python tests/e2e/run_all_tests.py                 # e2e 93 组（FAIL 0）
 
 ## 参考
 
-- `docs/grammar_rule_fields.md` — 字段参考
+- `grammar/grammar_rule_fields.md` — 字段参考
 - `parser/expression_conventions.md` — 表达式（Pratt，不走 BNF 翻译）
 - `docs/config_lifecycle.md` — 配置三阶段（import 注册→load 推送→运行读取）
 - `docs/language_walkthrough.md` — 从零搭一门语言（c4 实例）

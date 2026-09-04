@@ -35,7 +35,8 @@
 
 - 架构：`linter_architecture.md`（linter 两阶段发现+扁平检查）、`semantic_checks.md`（语义检查插槽：双层规则 + post-pass 链式检查）
 - 决策：`decisions/README.md`（ADR 编号规则 + 模板；0001-0008 各条见 MODEL_INDEX 登记）
-- 参考：`grammar_rule_fields.md`（语法规则字段）、`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
+- 参考：`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
+  （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）
 - 边界：`known_limitations.md`（已知边界完整版——README 的 Known limitations 是其摘要）
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：`config_lifecycle.md`（配置生命周期）、`component_protocol.md`（组件协议）
