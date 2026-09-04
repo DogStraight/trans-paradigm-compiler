@@ -1,20 +1,17 @@
 """transform 注释迁移测试（注释节点模型步骤 3，P1.5）。
 
-migrate_comments：新节点继承被替换节点的注释（_comment_slots 槽位 +
-_attached_comments 行尾 attachment）——变换路径注释随结构走
-（impl → ModuleInst 后注释出现在生成的实例节点上）。
+migrate_comments：新节点继承被替换节点的注释（_comment_slots 槽位）——
+变换路径注释随结构走（impl → ModuleInst 后注释出现在生成的实例节点上）。
 """
 
 from core.define import Node
 from transform.engine import migrate_comments
 
 
-def _stmt(text: str, slots=None, attached=None) -> Node:
+def _stmt(text: str, slots=None) -> Node:
     n = Node("Stmt", value=text)
     if slots:
         n.add_attr("_comment_slots", slots)
-    if attached:
-        n.add_attr("_attached_comments", attached)
     return n
 
 
@@ -25,12 +22,6 @@ class TestMigrateComments:
         out = migrate_comments(old, new)
         assert out is new
         assert new._comment_slots == {"trailing": ["// 实例化注释"]}
-
-    def test_attached_migrated(self):
-        old = _stmt("impl", attached=["// 行尾"])
-        new = Node("ModuleInst")
-        migrate_comments(old, new)
-        assert new._attached_comments == ["// 行尾"]
 
     def test_slots_merged_into_existing(self):
         old = _stmt("impl", slots={"trailing": ["// 旧注释"]})
@@ -48,7 +39,6 @@ class TestMigrateComments:
         out = migrate_comments(old, new)
         assert out is new
         assert not hasattr(new, "_comment_slots")
-        assert not hasattr(new, "_attached_comments")
 
     def test_same_node_noop(self):
         n = _stmt("x", slots={"trailing": ["// c"]})
@@ -154,10 +144,7 @@ type spi {
         def deep(obj):
             if isinstance(obj, Node):
                 if obj.node_name == "ModuleInst":
-                    found.append(
-                        (getattr(obj, "_comment_slots", None),
-                         getattr(obj, "_attached_comments", None))
-                    )
+                    found.append(getattr(obj, "_comment_slots", None))
                 for k, v in list(vars(obj).items()):
                     if k.startswith("_"):
                         continue
@@ -171,10 +158,10 @@ type spi {
 
         deep(ast)
         assert found, "变换后应有 ModuleInst"
-        slots, attached = found[0]
-        assert (slots or {}).get("trailing") == ["// spi master 实例化注释"] or (
-            attached == ["// spi master 实例化注释"]
-        ), f"注释未迁移到实例: {found[0]}"
+        slots = found[0]
+        assert (slots or {}).get("trailing") == ["// spi master 实例化注释"], (
+            f"注释未迁移到实例: {found[0]}"
+        )
 
     def test_subtree_comment_migrated(self):
         """注释挂在被替换节点子树（如 instance_name 的 Identifier）时也迁移

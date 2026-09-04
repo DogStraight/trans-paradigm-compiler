@@ -690,9 +690,10 @@ def collect_following_comments(
         挂当前节点 trailing 槽位（无后续规则节点可挂）；后跟代码 → 挂
         inline_after 槽位（{锚 token: [(注释, 源行号)]}，token 标注定位，
         渲染端按锚文本插入，无文本锚时 pipeline 兜底 anchors 回插）
-      - 行尾注释（注释后 newline）→ _comment_anchors（锚点回插）+ attachment
-        （ADR-0006 阶段 4，renderer line_suffix 渲染），按 (text, line) 全局
-        去重（parser 回溯双收集 + current_node 回溯变化防渲染双份）
+      - 行尾注释（注释后 newline）→ 挂当前节点 _comment_slots["trailing"]
+        （renderer LineSuffix 结构序渲染）+ _comment_anchors（tpc marker
+        还原通道），按 (text, line) 全局去重（parser 回溯双收集 +
+        current_node 回溯变化防渲染双份）
     不挂子规则节点：子规则匹配可能回溯重建，注释会随丢弃节点丢失。
     """
     while True:
@@ -756,26 +757,27 @@ def collect_following_comments(
                 },
                 "inline",
             )
-            # 注释 attachment（ADR-0006 阶段 4 注释遍）：同步挂到当前节点，
-            # renderer 用 line_suffix 渲染为 Doc 一等公民。下划线属性穿过
-            # normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
+            # 行尾注释（ADR-0013 目标④后普通注释进树结构序渲染）：挂当前
+            # 节点 _comment_slots["trailing"]，render_node 用 LineSuffix 渲染
+            # 为 Doc 一等公民（与块结束符行尾/终结符尾注同槽）。下划线属性
+            # 穿过 normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
             # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
             # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
             # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
             cur_node = getattr(context, "current_node", None)
             if isinstance(cur_node, Node):
-                seen = getattr(self, "_attached_seen", None)
+                seen = getattr(self, "_trailing_seen", None)
                 if seen is None:
                     seen = set()
-                    self._attached_seen = seen
+                    self._trailing_seen = seen
                 key = (nxt.content, nxt.line)
                 if key not in seen:
                     seen.add(key)
-                    attached = getattr(cur_node, "_attached_comments", None)
-                    if attached is None:
-                        attached = []
-                        cur_node.add_attr("_attached_comments", attached)
-                    attached.append(nxt.content)
+                    slots = getattr(cur_node, "_comment_slots", None)
+                    if slots is None:
+                        slots = {}
+                        cur_node.add_attr("_comment_slots", slots)
+                    slots.setdefault("trailing", []).append(nxt.content)
         context.advance_token()
 
 

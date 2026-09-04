@@ -1,8 +1,8 @@
-"""注释 attachment 测试（ADR-0006 阶段 4 注释遍）。
+"""行尾注释结构序渲染测试（ADR-0013 trailing 槽）。
 
-parser 收集行尾注释时挂到节点 _attached_comments，renderer 用 line_suffix
-原语锚定到语句行尾（Doc 一等公民），与 inline_comment.py 字符串级回插
-双轨并存（restore 去重防重复）。
+parser 收集行尾注释时挂到节点 _comment_slots["trailing"]，renderer 用
+LineSuffix 渲染锚定到语句行尾（Doc 一等公民）；restore 只处理 tpc
+marker，普通注释不再字符串级回插（ADR-0013 目标④）。
 """
 
 from pipeline import run_pipeline_on_source

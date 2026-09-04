@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **行尾注释统一为 `_comment_slots["trailing"]`（A2 双轨消除）**：parser
+  `collect_following_comments` 行尾注释挂载从 `_attached_comments` 并入
+  `_comment_slots["trailing"]`（renderer 同 LineSuffix 渲染）——消除
+  "attachment 属性 + trailing 槽"双轨（ADR-0013 阶段 A 前遗留，读侧
+  靠向后兼容分支 + transform 迁移双轨为代价）。删除：node_renderer
+  attached 兼容分支、transform/engine `_collect_subtree_comments`/
+  `migrate_comments` 的 acc_attached 通道、去重集合 `_attached_seen` 改名
+  `_trailing_seen`、2 个 legacy 测试。`_comment_anchors` 记录保留（tpc
+  marker 还原通道，不受影响）。验证：注释专项 94 + normal 32/32 + real
+  9/9 保真不降 + 全量 pytest 1542 全绿。
+
 - **pratt op 行尾注释挂 RHS leading（ADR-0014 ②方向 B）**：operator 间隙
   的行尾注释（`a || // bgeu\n b`）不再走 comment_sink（渲染重排后锚匹配
   失败 → 丢），`_skip_gap_comments` 返回 eol 注释并挂后续 RHS 子节点

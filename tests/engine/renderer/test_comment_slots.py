@@ -2,8 +2,7 @@
 
 节点属性 _comment_slots: {槽位名: [注释文本]}：
   leading  — 节点文本前独立行（`// 前置注释` 在语句上方）
-  trailing — 节点后行尾锚定（line_suffix，原 _attached_comments 行为）
-向后兼容：_attached_comments（parser 行尾注释）视为 trailing 槽位。
+  trailing — 节点后行尾锚定（LineSuffix 渲染行尾注释）
 
 不加载 TOML，直接构造 Node + layout dict，走 render_node。
 """
@@ -44,18 +43,11 @@ class TestLeadingSlot:
 
 class TestTrailingSlot:
     def test_trailing_comment_line_end(self):
-        """trailing 槽位：行尾锚定（等价原 _attached_comments 行为）。"""
+        """trailing 槽位：行尾注释锚定语句行尾。"""
         node = _stmt("x")
         node.add_attr("_comment_slots", {"trailing": ["// 行尾注释"]})
         out = _render(node, {"layout": {"ref": "value"}})
         assert out == "x // 行尾注释"
-
-    def test_legacy_attached_comments_still_works(self):
-        """向后兼容：_attached_comments（parser 行尾注释）仍走 trailing。"""
-        node = _stmt("x")
-        node.add_attr("_attached_comments", ["// legacy"])
-        out = _render(node, {"layout": {"ref": "value"}})
-        assert out == "x // legacy"
 
     def test_both_slots(self):
         """leading + trailing 同时存在：前置独立行 + 行尾锚定。"""

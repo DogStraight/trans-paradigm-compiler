@@ -88,13 +88,8 @@ def render_node(
     #   leading  — 节点文本前独立行（`// 前置注释` 在语句上方）
     #   inline   — 节点文本前同行（行中注释：`/* c */ rst_n`，表达式内 token
     #              间隙定位——注释挂"注释后第一 token 所属节点"）
-    #   trailing — 节点后行尾锚定（line_suffix，原 _attached_comments 行为）
-    # 向后兼容：_attached_comments（parser 行尾注释）视为 trailing 槽位。
+    #   trailing — 节点后行尾锚定（LineSuffix 渲染行尾注释）
     slots = getattr(node, "_comment_slots", None)
-    if slots is None:
-        attached = getattr(node, "_attached_comments", None)
-        if attached:
-            slots = {"trailing": attached}
     if slots:
         lead = slots.get("leading")
         if lead:
