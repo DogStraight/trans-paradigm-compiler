@@ -12,6 +12,34 @@
 > 80）+ vs Verible 差分 136 例 + vs sv-parser 差分 98 例（false-reject 0 /
 > bad-interop 0 / lenient-diff 3——typed_ports 增强语法）。
 
+## 文档工程（2026-09-04 立项，使用复盘 6 类文档框架）
+
+> 背景：引擎 27k 行 / 9 子包 / 144 文件，规模已超单文件指引可覆盖；作者数月
+> 使用复盘出 6 类文档框架（未完成项目 / 开放讨论暂存 / 部件地图 / 调研暂存 /
+> README / 制度）。调查结论——不新增文档类，给现有层补边界与缺环，主要缺口：
+> ① MODEL_INDEX 跳转表组织退化（主表仅 4 行，30+ 已实现知识单元全堆
+>   「待补充」表，第一站失灵）
+> ② 无"部件地图"（引擎子包 0 目录级 README；文件级职责只散在模块 docstring
+>   首行，无目录级聚合视图）
+> ③ 文档分层约定漂移（docs/README 声明 decisions→architecture→references
+>   三层，但 architecture/ 未建、19 篇散根目录，"逐步归位"悬空）
+> ④ 开放讨论暂存缺升级路径（draft ADR 与更轻想法前置态无状态流，防堆积）
+> 治理原则：部件地图/跳转表只做"指向权威源"的薄层，不重复存正文；读者正交
+> 维度（作者/模型/外部）不混文件。
+
+- [ ] **MODEL_INDEX 修复**：两表合并 + 按子系统分节（lexer/parser/linter/
+      preprocessor/analyzer/transform/renderer/core+pipeline/语言包）+ 主表标
+      "已实现"、待补充表只留真 pending + 补 parser/analyzer 主干条目
+      （递归下降/Pratt/块规则、作用域/符号/类型）——新 session 3 跳内定位
+- [ ] **部件地图（第 3 类）**：集中单文档 `docs/component_map.md`——引擎 9
+      子包一句话职责 + 每文件一句话（权威源 = 模块 docstring 首行，地图一行
+      指过去，不重复正文）；登记 MODEL_INDEX + Doc: 约定
+- [ ] **文档分层落地**：明确根目录 19 篇架构/机制文档 = architecture 层（建
+      architecture/ 目录归位或明确"根目录即架构层"，消除 README 声明 vs 现状
+      漂移）；doc_sync 批量同步 Doc:/Impl: 引用 + check_doc_refs 验证
+- [ ] **开放讨论暂存状态流**：给 decisions draft ADR 补"开放 → 拍板 → 升
+      accepted / 废弃"状态流说明（衔接 AGENTS 落档分流），防暂存堆积
+
 ## 对标测试（2026-08-29 立项，Verilator oracle，方案见 references.md「试水第四弹」）
 
 > 变异注入器（试水第三弹）验证"错误能检出"后，用 Verilator 二进制当 oracle
