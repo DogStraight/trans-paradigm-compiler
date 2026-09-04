@@ -24,3 +24,5 @@ tests/fuzz/findings/
 tests/differential/.tools/
 # 打包管线生成的入口脚本（build_pipeline.py 生成，不入库）
 packaging/entries/
+# 讨论草稿暂存区（_drafts/，untracked——整理落档到 decisions/references/gaps/policy 后删原稿）
+_drafts/
