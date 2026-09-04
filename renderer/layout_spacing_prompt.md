@@ -9,10 +9,15 @@
 | `opt(inner)` | `{ opt = { ... } }` | 属性缺失时整体消失 |
 | `group(inner)` | `{ group = [...] }` | 可选折行组（宽度不够时整体换行） |
 | `line([...])` | `{ line = [...] }` | 顺序拼接，无自动空格，不折行 |
-| `join(sep, items)` | `{ join = ", ", items = "field" }` | 用分隔符连接列表 |
-| `soft` | `{ soft = true }` | 软换行提示（group 折行时生效） |
-| `nest(n)` | `{ nest = 1 }` | 换行后增加缩进（单位：`_INDENT_STR`） |
-| `first_soft` | `{ first_soft = true }` | join 首项前加软换行 |
+| `soft` | `{ soft = true }` | 软换行提示（group 折行时生效；可带 `indent`） |
+| `join(sep, items)` | `{ join = ", ", items = "field" }` | 分隔符拼接列表（**保留形态**：`\n` 块级 / `no_soft` 硬拼 / `""` 拼接） |
+| `intent` | `{ intent = "compact", items = "field" }` | 布局意图（ADR-0006 阶段 4a）：`compact` = 可折行列表（列表布局首选，等价 `join+first_soft+nest` 手拼四件套） |
+
+> `nest` / `first_soft` 不是独立原语，是 `join`/`intent` 的列表参数：
+> `{ join = ", ", items = "x", nest = 1 }`（折行后缩进级，单位 `_INDENT_STR`）、
+> `{ join = ", ", items = "x", first_soft = true }`（首项前软换行）。
+> 完整 14 原语目录（含 break/align/fill/indent/line_suffix/suffix_when…）见
+> `docs/renderer_architecture.md`。
 
 ## 核心原则
 
@@ -112,8 +117,12 @@ layout = { line = [
 ## 快速验证
 
 ```powershell
-# 跑一个涉及端口声明的用例
-python .\verilog\run_pipeline.py ref_counter
-# 检查 output 中的空格：`input wire clk` 而非 `input  wireclk`
-Get-Content .\verilog\gen\gen_counter.v
+# 回归门禁：空格/折行断言在渲染测试 + e2e ref 对比内
+python -m pytest tests/engine/renderer/ tests/languages/verilog/ -q
+python tests/e2e/run_all_tests.py            # e2e 全量 ref 对比（FAIL 0）
+
+# 肉眼检查：渲染含端口声明的样例并落盘（samples/<group>/gen/）
+python tests/e2e/run_pipeline.py ref_simple
+Get-Content tests/e2e/samples/normal/gen/gen_simple.v
+# 查方向/括号前空格：`input [7:0] a` 而非 `input[7:0]a` / 双空格粘连
 ```

@@ -118,8 +118,8 @@ inline = true
 - analyzer：`[Rule.analyzer] scope = { kind, name_attr }` 自动声明符号
   （symbol_declare 机制取代手写 symbol 配置）；primitive 原语走
   `analyzer/primitives/`
-- renderer：`layout`（text/ref/opt/group/line/join/nest DSL）——见
-  `docs/component_protocol.md`、`docs/layout_spacing_prompt.md`
+- renderer：`layout`（text/ref/opt/group/line/join/intent/nest DSL）——见
+  `docs/component_protocol.md`、`renderer/layout_spacing_prompt.md`
 
 ## 验证
 

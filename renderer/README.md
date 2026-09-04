@@ -17,3 +17,6 @@
 
 > 注释渲染：独立行 = Comment 节点；行内/行尾 = `_comment_slots`
 > （leading/trailing/inline/inline_after），见 `docs/MODEL_INDEX.md`「跨子系统」。
+
+> 布局空格纪律：`line` 直接拼接无自动空格 / opt+group 空格写在开头 /
+> 括号前空格括号后无空格——见 `renderer/layout_spacing_prompt.md`。
