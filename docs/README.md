@@ -36,6 +36,8 @@
   `layout_spacing_prompt.md`（renderer layout DSL 原语与空格规则）
 - 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）、`packaging.md`（功能切面打包管线：facets.json 规格 → 单文件 exe，构建/署名/验证）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
+- 地图/索引：`component_map.md`（部件地图：子包 + 每文件一句话，读码前先扫）、
+  `MODEL_INDEX.md`（知识单元跳转：文档 → 实现 → 验证，动手前查）
 - 设计来源：`references.md`（参考项目 → 借鉴点，与 CREDITS.md 互补）
 
 > **一次性计划文档**（评估/清理/改进计划）执行完后删除，成果记入 CHANGELOG——
