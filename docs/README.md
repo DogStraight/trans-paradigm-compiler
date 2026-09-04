@@ -45,10 +45,12 @@
   README 的 Known limitations 是其顶层摘要
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：`config_lifecycle.md`（配置生命周期）、`component_protocol.md`（组件协议）
-- 规约（该怎么做）：`coding_style.md`（代码风格：注释语言/分区标题/命名）
+- 制度（该怎么做）：代码规约/发布 SOP/文档对齐约定已就近 `tools/policy/`
+  （`tools/policy/coding-style.md` 代码风格 / `tools/policy/release-checklist.md`
+  发布 SOP / `tools/policy/doc-alignment.md` Doc: 对齐约定——与门禁工具同层，
+  见 tools/policy/README）
   （表达式书写约定已就近 `parser/expression_conventions.md`，见 parser/README）
   （renderer layout 空格纪律已就近 `renderer/layout_spacing_prompt.md`，见 renderer/README）
-- 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）
   （功能切面打包已就近 `packaging/packaging.md`，facets.json 规格随目录）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
 - 缺口档案：`docs/gaps/README.md`（缺口文件规约 + 模板 + 分工）；
@@ -63,37 +65,6 @@
 > **一次性计划文档**（评估/清理/改进计划）执行完后删除，成果记入 CHANGELOG——
 > 避免 docs/ 堆积"已完成"的计划文档。
 
-## 注释对齐约定（文档 ↔ 代码双向定位）
-
-目的：模型维护时**直接跳转**到实现/验证位置，不做模糊搜索。
-
-### 1. 代码 → 文档（`Doc:`）
-
-每个模块文件头 docstring 末行声明对应文档条目：
-
-```python
-"""
-scanner.py — 两阶段 Linter 编排器。
-
-Doc: linter/linter_architecture.md   # 文件级引用（稳定，不随章节锚点漂移）
-"""
-```
-
-### 2. 文档 → 代码（`Impl:` / `Test:`）
-
-文档关键章节/ADR 条目声明实现与验证位置，精确到符号：
-
-```markdown
-> Impl: linter/scanner.py::LinterScanner.scan
-> Test: tests/engine/linter/test_linter_discovery.py
-```
-
-### 3. 跳转表（`MODEL_INDEX.md`）
-
-所有对齐条目的汇总表——模型改造前的第一站。新增对齐时同步更新该表。
-
-### 维护规则
-
-- **新增知识单元**（新模块/新决策/新机制）：三处同步——文件头 `Doc:`、文档 `Impl:`、`MODEL_INDEX.md` 一行。
-- 引用的是"知识单元"级对齐（模块/关键符号），**不是每行注释**——避免成为新的维护负担。
-- 符号重命名后更新 `Impl:` 与 `MODEL_INDEX.md`（grep `::` 可全量核对）。
+> 注释对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）2026-09-05
+> 就近 `tools/policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
+> 只保留导航与分层说明。

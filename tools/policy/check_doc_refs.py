@@ -33,7 +33,7 @@
 
 退出码：0 = 门禁规则全干净；1 = 存在门禁违规（D1/D2）。
 
-Doc: docs/README.md
+Doc: tools/policy/doc-alignment.md
 """
 
 from __future__ import annotations
