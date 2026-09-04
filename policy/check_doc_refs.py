@@ -85,6 +85,7 @@ _SCAN_EXCLUDE_DIRS: tuple[str, ...] = (
     "dist",
     "build",
     "coverage_html",
+    "_drafts",  # 讨论草稿暂存区（untracked，不参与门禁）
 )
 
 

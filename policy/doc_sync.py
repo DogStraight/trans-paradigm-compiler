@@ -50,6 +50,7 @@ _SYNC_EXCLUDE_DIRS: tuple[str, ...] = (
     "build",
     "coverage_html",
     "packaging",
+    "_drafts",  # 讨论草稿暂存区（untracked，不参与门禁/同步）
 )
 _SYNC_EXCLUDE_FILES: tuple[str, ...] = ("CHANGELOG.md",)
 
