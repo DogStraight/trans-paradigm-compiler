@@ -33,8 +33,10 @@
 
 ## 当前文档索引
 
-- 架构：`semantic_checks.md`（语义检查插槽：双层规则 + post-pass 链式检查）
+- 架构：各子系统架构文档已就近子包（见下方注记；协作方"怎么拼"进 MODEL_INDEX）
   （linter 两阶段架构已就近 `linter/linter_architecture.md`，见 linter/README）
+  （analyzer 语义检查插槽已就近 `analyzer/semantic_checks.md`，见 analyzer/README）
+  （renderer 世界 A 架构已就近 `renderer/renderer_architecture.md`，见 renderer/README）
 - 决策：`decisions/README.md`（ADR 编号规则 + 模板；0001-0008 各条见 MODEL_INDEX 登记）
 - 参考：`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
   （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）

@@ -99,4 +99,4 @@ P1-P4 全部落地后，声明式规则机制的策略演进（数据决策，�
 > Impl: grammar/verilog/plugins/checks/name_check/（NC 族 + rules/ + cases/）
 > Test: tests/engine/analyzer/test_check_test.py + tests/languages/verilog/
 >       test_name_convention.py
-> 机制设计见 docs/semantic_checks.md（架构"怎么拼"）
+> 机制设计见 analyzer/semantic_checks.md（架构"怎么拼"）

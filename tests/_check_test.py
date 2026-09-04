@@ -17,7 +17,7 @@
     failures = run_comment_driven(ProjectChecker(...), sample_path)
     assert not failures, "\\n".join(failures)
 
-Doc: docs/semantic_checks.md（注释驱动测试框架）
+Doc: analyzer/semantic_checks.md（注释驱动测试框架）
 """
 
 from __future__ import annotations

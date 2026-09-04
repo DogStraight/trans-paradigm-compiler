@@ -6,7 +6,7 @@ AST 遍历期间做语义分析（作用域、符号、引用解析）；transfo
 
 注册的原语注入 AnalysisTraversal 的遍历管线，按 TOML [RuleName.analyzer]
 配置中声明的顺序执行。
-Doc: docs/semantic_checks.md（原语注册机制）
+Doc: analyzer/semantic_checks.md（原语注册机制）
 """
 
 from typing import Callable

@@ -7,7 +7,7 @@
     [RuleName.analyzer]
     identifier_ref = true       — 从 content/name 属性取引用名
     identifier_ref = "attr"     — 从指定属性取引用名（如 type_name）
-Doc: docs/semantic_checks.md（标识符引用解析原语）
+Doc: analyzer/semantic_checks.md（标识符引用解析原语）
 """
 
 from core.define import Node

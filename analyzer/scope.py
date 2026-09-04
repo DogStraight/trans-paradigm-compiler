@@ -1,6 +1,6 @@
 """Scope (scope chain) and Symbol (declared identifier) types.
 
-Doc: docs/semantic_checks.md（作用域/符号模型）
+Doc: analyzer/semantic_checks.md（作用域/符号模型）
 """
 
 from core.define import Node

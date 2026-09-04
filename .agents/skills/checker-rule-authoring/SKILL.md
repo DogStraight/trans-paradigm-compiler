@@ -10,7 +10,7 @@ argument-hint: '描述要新增/修改的检查规则，如 "加一条检查 out
 > 适用：在**已有语言包**上新增或修改检查规则。两条路径：
 > **L1 声明式**（TOML `[[checks]]`，零代码，规则=数据）与
 > **L2 脚本层**（handler/postpass，需代码能力）。
-> 完整架构见 `docs/semantic_checks.md`（第 11 章实操指南 + 接口契约）。
+> 引擎机制（schema / post-pass 协议 / related 链）见 `analyzer/semantic_checks.md`。
 
 ## 两条路径选择（先读这条）
 
@@ -170,7 +170,8 @@ python tools/policy/check_hardcode.py                       # 语言知识不进
 
 ## 参考
 
-- `docs/semantic_checks.md` — 架构 + schema + postpass 协议 + 第 11 章实操
+- `analyzer/semantic_checks.md` — 引擎机制：架构 + schema + postpass 协议
+  （实操见本 SKILL）
 - `grammar/verilog/plugins/checks/` — 现有插件目录（蓝本）
 - `docs/decisions/0004-semantic-check-slot.md`「落地演进」— 默认开关先例（NC 族）
 - `docs/MODEL_INDEX.md` — 知识单元跳转表

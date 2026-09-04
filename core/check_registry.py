@@ -1,11 +1,11 @@
 """check_registry.py — 声明式检查规则表（[[checks]]，规则=数据）。
 
-诊断链自定义层的 L1 声明层（ADR-0004 / semantic_checks.md §3）：
+诊断链自定义层的 L1 声明层（ADR-0004 / analyzer/semantic_checks.md §3）：
 规则以 TOML `[[checks]]` 数组声明在语言包插件目录的 `rules/*.toml`，
 引擎只做加载/校验/分发——规则行为（pattern/kind 匹配、message 模板、
 severity）全部来自数据，零语言知识进代码。
 
-规则 schema（字段说明见 docs/semantic_checks.md §3）：
+规则 schema（字段说明见 analyzer/semantic_checks.md §3）：
     [[checks]]
     id = "NC001"                 # 全局唯一（前缀=分类）
     category = "naming"          # 分类：width / naming / race / cdc / style…
@@ -20,7 +20,7 @@ severity）全部来自数据，零语言知识进代码。
 
 fail-fast（ADR-0003）：id 重复 / severity 非法 / pattern 非法正则 /
 kind 缺失 → 直接报错，不静默降级。
-Doc: docs/semantic_checks.md（语义检查插槽：L1 声明层）
+Doc: analyzer/semantic_checks.md（语义检查插槽：L1 声明层）
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ def get_rule(rule_id: str, plugins_dir: str = "") -> dict[str, Any] | None:
 
 # ── P4 用户配置层（config/tpc_config.json 的 checks 段）──────────────
 #
-# 语义（semantic_checks.md §4，Ruff/Semgrep 共识）：
+# 语义（analyzer/semantic_checks.md §4，Ruff/Semgrep 共识）：
 #     enabled   = ["NC001", ...]              # 未列出 = 关闭（"不选即关"）
 #     overrides = { "NC001": { "severity": "error" } }   # severity 提升/降级
 #     per_file  = { "tb/**": { "disabled": ["NC001"] } } # 文件 glob 豁免

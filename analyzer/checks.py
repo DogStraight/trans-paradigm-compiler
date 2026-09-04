@@ -17,7 +17,7 @@
        声明式 pattern 判定不足以表达时由脚本做复杂判定；脚本签名
        fn(symbol, rule, context) -> str | None（返回 None = 通过，
        返回消息文本 = 报诊断；消息可含 {var} 由引擎统一插值）
-Doc: docs/semantic_checks.md（L1 声明式 schema + 执行器）
+Doc: analyzer/semantic_checks.md（L1 声明式 schema + 执行器）
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 Built-in analyzer primitives (scope, symbol, identifier, resolve) are
 loaded here as regular imports — not through the component system.
 Language-specific primitives are injected via components.
-Doc: docs/semantic_checks.md（分析原语注册表）
+Doc: analyzer/semantic_checks.md（分析原语注册表）
 """
 
 from .registry import (

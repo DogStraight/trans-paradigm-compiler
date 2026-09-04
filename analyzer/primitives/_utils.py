@@ -2,7 +2,7 @@
 
 本文件提供各原语可复用的通用操作：scope 查找、模板解析、名称提取等。
 不包含任何原语注册，只导出纯函数。
-Doc: docs/semantic_checks.md（分析原语工具）
+Doc: analyzer/semantic_checks.md（分析原语工具）
 """
 
 import re

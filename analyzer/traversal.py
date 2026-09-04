@@ -3,7 +3,7 @@
 Primitive-driven semantic analysis pipeline.
 Walks the AST and executes registered analyzer primitives according
 to TOML [RuleName.analyzer] configuration for each node.
-Doc: docs/semantic_checks.md（AnalysisTraversal + post-pass 钩子）
+Doc: analyzer/semantic_checks.md（AnalysisTraversal + post-pass 钩子）
 """
 
 from typing import Any

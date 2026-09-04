@@ -14,5 +14,5 @@
 | `suppress.py` | 诊断豁免注释（Verilator lint_off 借鉴） |
 | `primitives/` | 语义检查原语（symbol 声明/引用核对等） |
 
-> 语义检查插槽总述见 `docs/semantic_checks.md`；加检查规则见
+> 语义检查插槽总述见 `analyzer/semantic_checks.md`；加检查规则见
 > `.agents/skills/checker-rule-authoring/SKILL.md`（L1 声明式 / L2 handler-postpass）。
