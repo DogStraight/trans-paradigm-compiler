@@ -21,7 +21,7 @@
 | 语义边界 | `exclude` | 仅消歧规则（负向前瞻） |
 | 框架标记 | `is_statement` | 语句规则显式标 true |
 | 增强 | `node` / `analyzer.*` / `renderer.*` | 可选 |
-| 推导（不写） | `block_start` / `block_end` / `inline` / FOLLOW | 框架算 |
+| 推导（不写） | `inline` / FOLLOW | 框架算 |
 
 > 已移除的历史字段（`structure` / `bound` / `block = {start,end}` / `end_case`）
 > 不再出现——见正文各处「已移除」注记。
@@ -98,31 +98,6 @@ is_block = true
 ---
 
 ## 二、语义边界字段
-
-> `block = { start, end }` **已移除**：块的起止 token 是语法结构本身，直接写进
-> `production` 首尾（如 `ModuleDecl` 的 `keyword.module` / `keyword.endmodule`），
-> 由框架在 `is_block` 时从 production 首尾字面 token 推导 `block_start` / `block_end`。
-
-### `block_start` / `block_end` — 语法块边界（推导字段）
-
-块规则的起止符配对，用于块解析与边界识别。**不手写**：`is_block = true` 时从 `production` 首尾字面 token 推导。
-
-```toml
-[ModuleDecl.parser]
-production = [
-    "keyword.module",        # ← 推导为 block_start
-    "@Identifier",
-    "@ParameterList?",
-    "@PortParens?",
-    "symbol.base.semicolon?",
-    "keyword.endmodule",     # ← 推导为 block_end
-]
-```
-
-- **消费方**: parser（块解析路径）、linter（发现器起始 token 注册、边界配对检查）
-- **推导规则**: `is_block = true` 且 `production` 首元素是 `keyword.*` 字面 token → 首为 `block_start`、尾为 `block_end`；推导后从 `production` 剥离出"内容部分"（parser 块路径单独消费起止符，node 绑定 `$N` 基于内容部分，剥离后不变）
-- **仅语法块**（`keyword.*` 边界）：括号配对不在此声明，统一走 `[bracket].pairs` 配置
-- **不可推导**: `is_block` 本身（`Root` 等无边界块角色需作者标注）；但起止 token 完全由 production 表达，不再重复手写
 
 ### 边界后继（已移除 `end_case`）— 派生 FOLLOW + `exclude`
 
