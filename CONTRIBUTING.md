@@ -55,9 +55,9 @@ docs/        design docs (see index below)
 | Doc | Content |
 |---|---|
 | docs/language_walkthrough.md | Step-by-step guide to building a language from scratch (c4 as example) |
-| docs/config_lifecycle.md | Config lifecycle (declare_cfg timing / pitfalls) |
+| core/config_lifecycle.md | Config lifecycle (declare_cfg timing / pitfalls) |
 | parser/expression_conventions.md | Expression implicit conventions (Pratt / precedence) |
-| docs/component_protocol.md | Plugin-layer protocol (components / slots / primitives) |
+| core/component_protocol.md | Plugin-layer protocol (components / slots / primitives) |
 | grammar/grammar_rule_fields.md | Grammar rule field reference |
 | policy/coding-style.md | Code style |
 | docs/decisions/ | ADRs (architecture decision records) |

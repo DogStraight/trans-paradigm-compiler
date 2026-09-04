@@ -71,7 +71,7 @@ token 流单次遍历 → 每行 LineContext：scope 栈/块头块尾/ifdef 分�
 | `grouping.py` | 格式化行分组工具 |
 | `style.py` | formatter 风格参数加载 |
 | `passes/` | 内建 pass 族（`indent`/`ifdef`/`ifdef_annotate`/`column_align`/`inst_port`/`wrap`/`wrap_comments`） |
-| `_capability.py` | 能力入口（`[capabilities]` 声明，见 `docs/component_protocol.md`） |
+| `_capability.py` | 能力入口（`[capabilities]` 声明，见 `core/component_protocol.md`） |
 
 ## 验证
 

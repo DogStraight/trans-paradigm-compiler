@@ -119,7 +119,7 @@ inline = true
   （symbol_declare 机制取代手写 symbol 配置）；primitive 原语走
   `analyzer/primitives/`
 - renderer：`layout`（text/ref/opt/group/line/join/intent/nest DSL）——见
-  `docs/component_protocol.md`、`renderer/layout_spacing_prompt.md`
+  `core/component_protocol.md`、`renderer/layout_spacing_prompt.md`
 
 ## 验证
 
@@ -147,7 +147,7 @@ python tests/e2e/run_all_tests.py                 # e2e 93 组（FAIL 0）
 
 - `grammar/grammar_rule_fields.md` — 字段参考
 - `parser/expression_conventions.md` — 表达式（Pratt，不走 BNF 翻译）
-- `docs/config_lifecycle.md` — 配置三阶段（import 注册→load 推送→运行读取）
+- `core/config_lifecycle.md` — 配置三阶段（import 注册→load 推送→运行读取）
 - `docs/language_walkthrough.md` — 从零搭一门语言（c4 实例）
 - `grammar/c4/` — 最小语言包模板
 

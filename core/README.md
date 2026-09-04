@@ -16,5 +16,5 @@
 | `global_state.py` | 引擎全局状态快照/还原（测试隔离，顺序无关） |
 | `_user_config.py` / `utils.py` | 用户项目配置定位 / 通用工具 |
 
-> 配置机制见 `docs/config_lifecycle.md`；组件协议见 `docs/component_protocol.md`。
+> 配置机制见 `core/config_lifecycle.md`；组件协议见 `core/component_protocol.md`。
 > 配置错误一律 fail-fast（ADR-0003），不静默降级。

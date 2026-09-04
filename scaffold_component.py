@@ -25,7 +25,7 @@ slots = []
 handlers = []
 """,
     "00_<name>.toml": """# <NAME> 语法规则（组件）
-# 通过 inject 挂到基础语法（见 docs/component_protocol.md）
+# 通过 inject 挂到基础语法（见 core/component_protocol.md）
 
 [<RuleName>.inject]
 targets = ["@ModuleItem"]
@@ -44,7 +44,7 @@ layout = { line = [{ ref = "name" }, ";"] }
 """,
     "_handler.py": '''"""<NAME> 组件处理器。
 
-三种注册方式（见 docs/component_protocol.md）：
+三种注册方式（见 core/component_protocol.md）：
   - transform 槽位：@register_transform_slot("name")
   - analyzer 原语：register_primitive("name", fn)
   - transform 插件：@register_plugin 类（TransformPlugin 子类）

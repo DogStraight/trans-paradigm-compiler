@@ -7,7 +7,7 @@ pipeline 不再直接 import grammar.verilog 插件；组件通过 tpc.toml
 本模块用绝对导入：_load_python_handlers 以 spec_from_file_location
 加载，无包上下文、不支持相对导入（与 typed_ports 模块同风格）。
 
-Doc: docs/component_protocol.md（组件协议：[capabilities] 段）
+Doc: core/component_protocol.md（组件协议：[capabilities] 段）
 """
 
 from grammar.verilog.plugins.formatter import (

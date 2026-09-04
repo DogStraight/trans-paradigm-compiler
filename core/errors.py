@@ -14,7 +14,7 @@ TransParadigmError，调用方可按类型捕获并统一处理；未继承该�
 
 历史：ParseError 原定义于 core/define.py（纯 Exception），迁移至此纳入统一
 层级；core/define.py 保留 re-export，`from core.define import ParseError` 兼容。
-Doc: docs/component_protocol.md（引擎异常体系）
+Doc: core/component_protocol.md（引擎异常体系）
 """
 
 

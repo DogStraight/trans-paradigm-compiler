@@ -1,6 +1,6 @@
 """core/utils.py — 通用工具函数
 
-Doc: docs/component_protocol.md（引擎通用工具）
+Doc: core/component_protocol.md（引擎通用工具）
 """
 
 import os

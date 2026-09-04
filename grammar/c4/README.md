@@ -91,9 +91,9 @@ c4 是**模型/开发者"从零搭新语言"的起步模板**：
 
 配套文档：
 - docs/language_walkthrough.md（从零搭语言逐层指南）
-- docs/component_protocol.md（插件层协议）
+- core/component_protocol.md（插件层协议）
 - parser/expression_conventions.md（表达式隐式约定）
-- docs/config_lifecycle.md（配置生命周期时序）
+- core/config_lifecycle.md（配置生命周期时序）
 
 ## 待办
 

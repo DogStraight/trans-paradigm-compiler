@@ -7,7 +7,7 @@
 
 Token 需具备 content / type / line / column 属性（parser 与 linter
 共用 core.define.Token，字段一致）。
-Doc: docs/component_protocol.md（失败现场报告）
+Doc: core/component_protocol.md（失败现场报告）
 """
 
 from __future__ import annotations

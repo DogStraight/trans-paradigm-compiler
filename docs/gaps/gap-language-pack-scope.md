@@ -14,7 +14,7 @@
    做**精选子集**（Verilog 包本身就是可综合子集，仿真构造移插件）。
 2. **配置有学习曲线**（接受）：语法包横跨五类配置面（语法 production/节点
    `$N` 绑定/analyzer 钩子/transform 输出/renderer layout），各有隐式约定。
-   二次开发入口：`docs/MODEL_INDEX.md` + `docs/component_protocol.md`。
+   二次开发入口：`docs/MODEL_INDEX.md` + `core/component_protocol.md`。
 3. **非行为验证器**（接受）：校验良构（语法/结构/命名/跨模块一致），不仿真/
    不综合，不判断硬件正确性——前端/规范执行工具，非正确性证明器。
 4. **无 SystemVerilog**（backlog）：包目标 Verilog-2005；SV 构造
