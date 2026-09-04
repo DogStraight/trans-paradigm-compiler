@@ -1,7 +1,9 @@
 # Fuzz / 差分 / 边缘构造验证（tests/fuzz, tests/edge, tests/differential）
 
-> 动机（known_limitations 原话）："Validation is sample-driven, not exhaustive…
-> no fuzzing, property-based, or differential testing yet"——本目录补齐这三块。
+> 动机（原 docs/known_limitations.md 边界，2026-09-04 拆入
+> `docs/gaps/gap-verification-engineering.md`）："Validation is sample-driven,
+> not exhaustive… no fuzzing, property-based, or differential testing yet"——
+> 本目录补齐这三块。
 > 语法是数据 → fuzzer 直接从 grammar TOML 驱动，无需手写生成器。
 
 ## 目录

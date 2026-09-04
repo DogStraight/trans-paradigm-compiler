@@ -52,8 +52,20 @@
 
 ## 当前档案
 
+> 聚合档（2026-09-04，原 `docs/known_limitations.md` 按部件拆入）：部件维度的
+> 边界/缺口合集，条目级状态（接受/待闭环）+ 关联在档内标注；逐缺口单独立项
+> 时再拆独立档。
+
 | 缺口文件 | 关联条目 | 主题 |
 |----------|----------|------|
 | `gap-tpc-check-external-checker.md` | ROADMAP P2.6 | tpc-check 外部 checker 插件协议（接入 veryl/verible/slang + 自管场景） |
+| `gap-lexer-capture-boundaries.md` | 原 known_limitations | lexer 捕获边界（多字符定界符/块标量折叠/触发条件） |
+| `gap-parser-linter-approximation.md` | 原 known_limitations | parser/linter 错误处理近似（无恢复 + 启发式） |
+| `gap-preprocessor-macro-boundaries.md` | 原 known_limitations | 宏覆盖缺口（type macros/复合嵌套反向映射） |
+| `gap-renderer-comment-fidelity.md` | 原 known_limitations | renderer 注释回插保真（±3 行锚点启发式） |
+| `gap-formatter-line-behavior.md` | 原 known_limitations | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
+| `gap-language-pack-scope.md` | 原 known_limitations | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |
+| `gap-semantic-elaboration-boundaries.md` | 原 known_limitations | 语义/插件契约（elaboration/invert 嵌套/单例/版本） |
+| `gap-verification-engineering.md` | 原 known_limitations | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
 
 > 新增缺口文件时：本表加一行 + `docs/README` gaps 索引补登记；闭环删除时同步移除。
