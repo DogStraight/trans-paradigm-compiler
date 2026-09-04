@@ -5,10 +5,11 @@
 > 文本行 pass 管线，`grammar/verilog/plugins/formatter/`）→
 > `grammar/verilog/plugins/formatter/README.md`（2026-09-04 由原 docs 双世界
 > 合版拆分，两文档互相指针）。
-> 决策背景见 `docs/decisions/0006-renderer-improve-roadmap.md`（ADR-0006，
-> 改进路线全部六阶段已落地）；本文档描述世界 A 落地后的实际工作机制与剩余边界。
+> 决策背景：改进路线（原 ADR-0006，六阶段）已全部落地——2026-09-04 ADR 收敛
+> 删除，决策历史 git log 可追溯；本文档描述世界 A 落地后的实际工作机制与剩余边界。
 >
-> 更新时间：2026-08-25（ADR-0006 六阶段 + 注释 attachment 全部完成后）。
+> 更新时间：2026-08-25（ADR-0006 六阶段 + 注释 attachment 完成）；2026-09-04
+> （注释单机制同步，见下）。
 
 ## 一句话定位（世界 A）
 
@@ -99,15 +100,20 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
   不再传递无效 indent。
 - `body_cfg["indent"]` 与 expr `{indent: N}` 均以 `_INDENT_STR` 为单位。
 
-### 注释处理（双轨）
+### 注释处理（单机制，2026-09-04 注释单机制落地）
 
-- **AST 路径**：`collect_line_comments` → Comment 节点 → 原生渲染。
-- **锚点路径**（列表结构内被 production skip 吞掉的注释）：parser 收集
-  `_comment_anchors`/`_line_comment_anchors` → `inline_comment.py` 渲染后
-  字符串级回插（锚点窗口启发式）。
-- **attachment 路径**（阶段 4 注释遍）：parser `parse_token` 收集行尾注释
-  时挂到节点 `_attached_comments` → renderer 用 `line_suffix` 原语锚定到
-  语句行尾（Doc 一等公民）。与锚点回插双轨并存（restore 去重防重复）。
+注释单机制（原 ADR-0013/0014，已收敛删除）确立：普通注释**必须进树**
+（Comment 节点 / 节点 `_comment_slots`），渲染端 restore 已纯 tpc marker
+通道——锚点回插作为普通注释通道已删除（原"双轨"描述作废）。形态：
+
+- **独立行注释 = Comment 节点**：`collect_line_comments` + 容器项间/首元素
+  前独占注释上浮（`_claim_head_comments`）→ join 拆独立行段渲染。
+- **行内/行尾 = 节点 `_comment_slots`**：`trailing`（node_renderer →
+  LineSuffix 行尾）/ `inline_after`（line.py 遇锚元素插后删槽，join 消费
+  锚=分隔符条目）/ `leading`（node_renderer 前置）。
+- **pratt 表达式内注释**：operator 间隙行中 → `_mount_op_comments` 挂
+  BinaryOp/TernaryOp/UnaryOp `inline_after[op]`（此前唯一的旁路丢注释位）。
+- 机制细节与测试门禁见 `docs/MODEL_INDEX.md`「注释单机制设计」知识单元。
 
 ### 保真度分级（阶段 5）
 
@@ -134,7 +140,7 @@ ADR-0006 边界分析提出的五条理论边界，世界 A 相关四条落地�
 |------|------|------|
 | B1 缩进无统一模型 | ✅ 已解决 | `_indent()` 唯一换算点 + 幽灵参数清零 |
 | B2 group 二元全局表达不了对齐 | 🔶 部分解决 | 新增 `Align`/`Fill` 原语（对齐/中间态折行可表达），但 **layout 的 fits 仍只测第一行、贪心**——全局最优折行（多候选枚举）未实现 |
-| B3 注释非一等公民 | 🔶 部分解决 | `LineSuffix` + attachment 路径（Doc 一等公民），但**锚点回插仍是字符串级启发式**（±3 行窗口，漂移即丢）——attachment 未完全替换它 |
+| B3 注释非一等公民 | ✅ 已解决 | 注释单机制（原 ADR-0013/0014）：普通注释全进树（Comment 节点 / 槽位 / 表达式挂载）；锚点回插仅剩 tpc marker 内部通道（原 ±3 行启发式普通注释路径已删） |
 | B4 规范化 vs 保真矛盾 | 🔶 部分解决 | `fidelity=keep_blank` 保留空行，但**仅空行维度**——indent_only 分级缺口：世界 A 无实现，世界 B indent pass 等价能力见 formatter README |
 
 ### 仍存在的功能缺口（按可接受性排序）
@@ -146,10 +152,10 @@ ADR-0006 边界分析提出的五条理论边界，世界 A 相关四条落地�
    `Align`/`Fill` 原语兜底。**接受**：Doc IR 内核保持简单，复杂折行交给
    世界 B 的惩罚模型。
 
-2. **锚点回插仍是启发式**：`inline_comment.py` ±3 行窗口匹配，注释密集时
-   可能错位（only_tpc 路径已跳过普通注释规避）。attachment 是前进方向但
-   未完全覆盖块结束符注释。**接受**：real 保真度门禁（8 module + 关键构造）
-   锁定现状，攻击面在可测范围内。
+2. **tpc marker 通道锚点回插**：`inline_comment.py` 现只处理 tpc marker
+   内部标记（宏/指令占位还原）——普通注释已全进树（单机制）；marker 通道
+   仍锚点窗口回插（内部标记非用户注释，漂移风险低）。**接受**：real
+   保真度门禁（8 module + 关键构造）锁定现状，攻击面在可测范围内。
 
 3. **fidelity 只有空行维度**：`indent_only`（仅缩进）是配置缺口——但世界 B
    的 formatter 已能单独跑 indent pass，等价能力存在。**接受**：管线级

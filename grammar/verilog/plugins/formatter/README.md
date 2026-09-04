@@ -4,7 +4,8 @@
 > → 本文档；世界 A（Doc IR 声明式渲染，`renderer/`）→
 > `renderer/renderer_architecture.md`（2026-09-04 由原 docs/renderer_architecture.md
 > 双世界合版拆分，两文档互相指针）。
-> 决策背景见 `docs/decisions/0006-renderer-improve-roadmap.md`（ADR-0006）。
+> 决策背景：改进路线（原 ADR-0006）已落地，2026-09-04 ADR 收敛删除，
+> 决策历史 git log 可追溯。
 
 ## 一句话定位
 
