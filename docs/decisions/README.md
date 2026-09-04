@@ -5,6 +5,26 @@
 > 落档分流（AGENTS.md）：设计/研判（含未立项设计详案）建 ADR；外部项目调研
 > 落 references.md；执行结果落 CHANGELOG + 测试。
 
+## 状态流：讨论 → 决策（防堆积、防蒸发）
+
+开放讨论（还没到"可立项设计输入"阶段的取舍/想法）与 ADR 的关系：
+
+- **未成型讨论不进 decisions/**——decisions/ 是决策记录，不是草稿箱。物理承载 =
+  作者与模型的协作会话/会话笔记。**成型判据**：形成可立项的「问题 + 候选方案 +
+  取舍」→ 建 draft ADR（未立项设计输入，常作 ROADMAP 项详案）。
+- **防蒸发**：讨论中已探明的机制事实（如 0014 §2 机制速查，"本次实测确认、不应
+  再次考古"的结论）即便未立项，也随 draft ADR 固化——避免下个 session 重复源码
+  考古。
+
+draft ADR 生命周期（三出路，避免"僵尸 draft"堆积）：
+- **立项实现** → `Status: accepted`，`Impl:`/`Test:` 补实。
+- **被推翻 / 不采纳** → `Status: superseded by NNNN-xxx`（保留历史，不删除）。
+- **长期搁置**（不立项也不推翻）→ 把方向注记并入 ROADMAP 对应条目后**删除**
+  （decisions/ 不堆未立项详案；历史在 git log 可追溯，与 TODO"完成即删"同纪律）。
+
+> 关联：落档分流见 AGENTS.md（调研→references / 设计→ADR / 执行→CHANGELOG）；
+> 删除判据见 `decisions/0011-doc-governance.md`。
+
 ## 编号规则
 
 - 文件名：`NNNN-<kebab-case-主题>.md`，`NNNN` 从 `0001` 递增，逆序展示（最新在上）。
