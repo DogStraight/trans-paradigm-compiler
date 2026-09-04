@@ -3,7 +3,7 @@ node_renderer.py — AST 节点级渲染逻辑
 
 将单个 AST 节点渲染为 Doc IR，处理 head/body/tail 三段式布局。
 
-Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 1 缩进上下文归一）
+Doc: renderer/renderer_architecture.md（世界 A 节点级渲染）
 """
 
 from typing import Any,Optional

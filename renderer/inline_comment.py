@@ -6,7 +6,7 @@ inline_comment.py — 基于锚点的注释回注
 2. 锚点路径（列表结构内）：prepare_production 收集锚点 → restore_line_comments 渲染后回插
 行内注释由 parse_token（锚点路径）收集。
 
-Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 2 注释 attachment 的目标替换对象）
+Doc: renderer/renderer_architecture.md（注释单机制：tpc marker 通道）
 """
 
 import re

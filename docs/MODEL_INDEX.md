@@ -48,9 +48,9 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 前置 token 级 linter（反解析器总述） | `decisions/0001-pre-parse-linter.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/engine/linter/test_linter_discovery.py`<br>`tests/engine/linter/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
+| 前置 token 级 linter（反解析器总述） | `linter/linter_architecture.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/engine/linter/test_linter_discovery.py`<br>`tests/engine/linter/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
 | Linter 两阶段架构（发现 + 扁平检查） | `linter/linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/engine/linter/test_linter_checker.py` |
-| is_statement 显式声明 | `decisions/0002-is-statement-explicit.md` | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/engine/linter/test_linter_lookahead.py` |
+| is_statement 显式声明 | `linter/linter_architecture.md`（is_statement 显式标记） | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/engine/linter/test_linter_lookahead.py` |
 | 动态两级消歧（lookahead） | `linter/linter_architecture.md` | `linter/lookahead.py::LookaheadTable.classify` | `tests/engine/linter/test_linter_lookahead.py` |
 | 语法切片（grammar_slicer） | `linter/linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree` | `tests/engine/linter/test_linter_slicer.py` |
 | 表达式检查（pratt 复用） | `linter/linter_architecture.md` | `linter/checkers/expression.py` | `tests/engine/linter/test_linter_matcher.py` |
@@ -82,19 +82,19 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 世界 A 工作机制与现状（Doc IR + 原语 + 缺口评估；双世界关系见文） | `renderer/renderer_architecture.md` | `renderer/`（世界 A：Doc IR + 原语）<br>`grammar/verilog/plugins/formatter/`（世界 B：pass 管线，见其 README） | `tests/engine/renderer/`<br>`tests/languages/`<br>`tests/e2e/` |
-| 渲染器改进路线（ADR-0006） | `decisions/0006-renderer-improve-roadmap.md` | `renderer/doc.py::layout`（内核扩展点）<br>`renderer/primitives/registry.py`（原语注册）<br>`renderer/node_renderer.py::render_node`（缩进上下文）<br>`grammar/verilog/plugins/formatter/`（世界 B） | `tests/engine/renderer/`（原语/缩进单测）<br>`tests/e2e/` + `tests/differential/`（门禁） |
+| 渲染器改进路线（ADR-0006，六阶段落地；决策历史 git log） | `renderer/renderer_architecture.md`（缺口评估源自 ADR-0006） | `renderer/doc.py::layout`（内核扩展点）<br>`renderer/primitives/registry.py`（原语注册）<br>`renderer/node_renderer.py::render_node`（缩进上下文）<br>`grammar/verilog/plugins/formatter/`（世界 B） | `tests/engine/renderer/`（原语/缩进单测）<br>`tests/e2e/` + `tests/differential/`（门禁） |
 | Doc IR（漂亮打印机中间表示）+ layout 布局 | `renderer/renderer_architecture.md` | `renderer/doc.py` | `tests/engine/renderer/test_renderer_doc.py` |
 | 布局原语（registry + 各原语实现） | `renderer/renderer_architecture.md` | `renderer/primitives/` | `tests/engine/renderer/test_renderer_primitives.py`<br>`tests/engine/renderer/test_primitives_*.py` |
 | renderer body 缩进（`body_cfg["indent"]`） | `language_walkthrough.md`（renderer：布局） | `renderer/node_renderer.py::_body_indent`<br>`renderer/node_renderer.py::render_node`（body 渲染段） | `tests/languages/yaml/test_yaml.py`<br>`tests/languages/c4/test_c4_asm.py`<br>`tests/e2e/test_real_fidelity.py` |
 | 保真度分级（ADR-0006 阶段 5） | `renderer/renderer_architecture.md` | `renderer/fidelity.py` | `tests/engine/renderer/test_fidelity.py` |
-| 注释槽位消费（leading/trailing/inline/LineSuffix） | `decisions/0006`（注释遍路线） | `renderer/node_renderer.py` | `tests/engine/renderer/test_comment_slots.py` |
+| 注释槽位消费（leading/trailing/inline/LineSuffix） | `renderer/renderer_architecture.md`（注释处理节） | `renderer/node_renderer.py` | `tests/engine/renderer/test_comment_slots.py` |
 
 ### preprocessor — 宏展开 / 反向映射
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 宏展开（strip 指令 + `` `NAME `` 引用展开） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py` | `tests/engine/preprocessor/test_primitives.py` + `tests/languages/verilog/test_macro*.py` |
-| 宏反向（统一位置桥：锚 + 残片回插） | `decisions/0006`（还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
+| 宏反向（统一位置桥：锚 + 残片回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
 
 ### core + pipeline — 引擎骨架 / 配置 / 编排
 
@@ -122,16 +122,8 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 注释节点模型（P1.5：注释 = AST 一等节点 + 槽位约定） | `decisions/0006-renderer-improve-roadmap.md`（注释遍路线）<br>`references.md`（Veryl CommentDoc/注释机制对照） | `renderer/node_renderer.py`（_comment_slots 槽位消费）<br>`renderer/primitives/line.py`（inline_after 锚 token 定位）<br>`parser/_production.py`（行中注释挂载 + 行尾 trailing）<br>`transform/engine.py::migrate_comments`（变换注释迁移）<br>`pipeline/__init__.py`（未消费 inline_after 兜底回插） | `tests/engine/renderer/test_comment_slots.py`<br>`tests/engine/parser/test_comment_attachment.py`<br>`tests/engine/transform/test_comment_migrate.py` |
-| 注释单机制设计（ADR-0013：源注释 = AST 节点元信息 + Comment 节点，普通注释锚点回插已删，tpc marker 独立通道；ADR-0014 续作：遗留边界闭环 ①②） | `decisions/0013-comment-single-mechanism.md`<br>`decisions/0014-comment-leftover-plan.md`（遗留边界 ①② 实施 + 机制速查） | 已实现（pratt op 间隙行中注释挂表达式节点 / 容器项间与首元素前独占注释 Comment 节点 / 块结束符与行尾 trailing / join 注释段与分隔符锚消费 / restore 纯 tpc） | `tests/e2e/test_comment_restore.py` + `test_comment_container.py`（门禁）<br>注释测试 4 文件（`test_comment_attachment`/`test_comment_slots`/`test_comment_migrate`/`test_pratt_comment_keep`） |
-
-### 待立项（draft ADR 登记，未实现）
-
-| 知识单元 | 文档位置 | 实现位置 | 验证位置 |
-|----------|----------|----------|----------|
-| 增量解析设计（P3.1-P3.6 共同输入，ADR-0009 draft） | `decisions/0009-incremental-parse-design.md` | 待实现（双向映射/结构锚定/merge 校验/缓存选址设计见 ADR） | ROADMAP P3.1-P3.6（立项后补测试） |
-| C 语言包前置研判（注入 vs 替换 + 用户标定打包，ADR-0010 draft） | `decisions/0010-c-langpack-prerequisites.md` | 待实现（`[inject]` mode 声明面 + `[packaging]` 段设计见 ADR） | ROADMAP C 语言包 / 用户标定打包条目 |
-| 多后端输出设计（P4.1 蓝图，ADR-0012 draft） | `decisions/0012-multibackend-output.md` | 待实现（Renderer.layout_dirs + plugin_loader target 识别设计见 ADR） | ROADMAP P4.1（立项后补测试） |
+| 注释节点模型（P1.5：注释 = AST 一等节点 + 槽位约定） | `renderer/renderer_architecture.md`（注释处理节）<br>`references.md`（Veryl CommentDoc/注释机制对照） | `renderer/node_renderer.py`（_comment_slots 槽位消费）<br>`renderer/primitives/line.py`（inline_after 锚 token 定位）<br>`parser/_production.py`（行中注释挂载 + 行尾 trailing）<br>`transform/engine.py::migrate_comments`（变换注释迁移）<br>`pipeline/__init__.py`（未消费 inline_after 兜底回插） | `tests/engine/renderer/test_comment_slots.py`<br>`tests/engine/parser/test_comment_attachment.py`<br>`tests/engine/transform/test_comment_migrate.py` |
+| 注释单机制设计（源注释 = AST 节点元信息 + Comment 节点，普通注释锚点回插已删，tpc marker 独立通道；遗留边界 ①② 闭环） | `renderer/renderer_architecture.md`（注释处理节）<br>`references.md`（Veryl 对照） | 已实现（pratt op 间隙行中注释挂表达式节点 / 容器项间与首元素前独占注释 Comment 节点 / 块结束符与行尾 trailing / join 注释段与分隔符锚消费 / restore 纯 tpc） | `tests/e2e/test_comment_restore.py` + `test_comment_container.py`（门禁）<br>注释测试 4 文件（`test_comment_attachment`/`test_comment_slots`/`test_comment_migrate`/`test_pratt_comment_keep`） |
 
 ## 维护规则
 

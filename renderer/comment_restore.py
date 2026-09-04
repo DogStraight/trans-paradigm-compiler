@@ -4,7 +4,7 @@
 的决策编排是 renderer 职责——pipeline 只做 ctx 取值和调用。参数显式化后
 成为可独立测试的纯函数（log_fn 回调注入，不依赖 pipeline 上下文对象）。
 
-Doc: docs/decisions/0006-renderer-improve-roadmap.md（注释 attachment 双轨）
+Doc: renderer/renderer_architecture.md（注释单机制：restore 纯 tpc）
 """
 
 from typing import Any, Callable

@@ -6,7 +6,7 @@ The AST normalizer converts parser-internal constructs
 (keyword/symbol/optional/repeat/sequence/first+rest)
 before rendering.
 
-Doc: renderer/renderer_architecture.md（世界 A 入口）/ docs/decisions/0006-renderer-improve-roadmap.md（改进路线）
+Doc: renderer/renderer_architecture.md（世界 A 入口）
 """
 
 from typing import Any

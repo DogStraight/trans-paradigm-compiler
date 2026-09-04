@@ -37,7 +37,8 @@
   （linter 两阶段架构已就近 `linter/linter_architecture.md`，见 linter/README）
   （analyzer 语义检查插槽已就近 `analyzer/semantic_checks.md`，见 analyzer/README）
   （renderer 世界 A 架构已就近 `renderer/renderer_architecture.md`，见 renderer/README）
-- 决策：`decisions/README.md`（ADR 编号规则 + 模板；0001-0008 各条见 MODEL_INDEX 登记）
+- 决策：`decisions/README.md`（ADR 编号规则 + 模板 + 状态流；现存
+  decisions/0003-0005/0007/0011 见 MODEL_INDEX 登记，已删 ADR 历史 git log）
 - 参考：`references.md`（外部调研/设计来源落档：静态检查器功能调研见其「静态检查器功能调研」节）
   （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）
 - 边界：已知边界完整清单 2026-09-04 按部件拆入 `gaps/`（见下"缺口档案"）；

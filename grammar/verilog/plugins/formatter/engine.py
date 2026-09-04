@@ -9,7 +9,7 @@
     min_group_size/max_span、折行遍 max_width），引擎运行前检查、
     不满足则跳过该遍（布局决策显式化，cmake-format 借鉴方向）。
 
-Doc: docs/decisions/0006-renderer-improve-roadmap.md（改进路线：阶段 3 世界 B 升级目标）
+Doc: grammar/verilog/plugins/formatter/README.md（引擎内建遍）
 """
 
 from __future__ import annotations
