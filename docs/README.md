@@ -44,7 +44,8 @@
 - 规约（该怎么做）：`coding_style.md`（代码风格：注释语言/分区标题/命名）
   （表达式书写约定已就近 `parser/expression_conventions.md`，见 parser/README）
   （renderer layout 空格纪律已就近 `renderer/layout_spacing_prompt.md`，见 renderer/README）
-- 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）、`packaging.md`（功能切面打包管线：facets.json 规格 → 单文件 exe，构建/署名/验证）
+- 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）
+  （功能切面打包已就近 `packaging/packaging.md`，facets.json 规格随目录）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
 - 缺口档案：`docs/gaps/README.md`（缺口文件规约 + 模板 + 分工）；
   `gaps/gap-tpc-check-external-checker.md`（试点：tpc-check 外部 checker 协议，ROADMAP P2.6）——
