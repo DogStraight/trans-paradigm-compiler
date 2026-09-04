@@ -12,11 +12,16 @@ model-friendly configuration; forkable pipeline
 ![python](https://img.shields.io/badge/python-3.11%2B-orange)
 ![status](https://img.shields.io/badge/status-experimental-yellow)
 
-**Write language rules in TOML — the engine is a generic, forkable pipeline.**
-Lexer, parser, and a pre-parse linter are fully configuration-driven; analyzer
-and transform are plugin extension points; the renderer formats via
-config-declared layouts. Adding a language (or extending one) is writing TOML
-plus optional plugin scripts — no engine code.
+**A config-driven language pipeline: formatter, linter, checker, macro
+expander, and language extensions — all described in TOML files, none
+hardcoded in the engine.**
+
+For a Verilog user that means: format messy code, lint files that do not even
+parse (the linter runs before the parser), and cross-check module ports across
+files. Because the rules are data, the same engine serves other languages —
+`grammar/c4/` turns a C subset into VM assembly with zero engine changes — and
+a language can be extended without a second parser: the example below adds a
+`type` system to Verilog.
 
 ```verilog
 // Define a custom type with roles, then use it in a module port
@@ -129,8 +134,9 @@ tpc new component my_feature --lang verilog   # scaffold a plugin component
 ```
 
 `tpc check` runs the syntax stage first, then semantic analysis (scopes,
-symbols, cross-file module checks); diagnostics carry stable codes — see
-[docs/diagnostics.md](./docs/diagnostics.md). Source-level suppressions keep
+symbols, cross-file module checks); diagnostics carry stable codes, indexed
+per check plugin in `grammar/verilog/plugins/checks/README.md`. Source-level
+suppressions keep
 generated code honest: `/* tpc-check off <code> */` … `/* tpc-check on */`
 (region) and `// tpc-check: disable-line <code>` (single line) filter
 diagnostics by code without touching the checkers.
@@ -147,7 +153,7 @@ Style entry points:
   `grammar/<lang>/base/_style.toml` (`indent_width`, `max_line_width`, …).
 - **Where does this config value come from?** — `tpc config dump`.
 
-Python API reference in [docs/api.md](./docs/api.md).
+Python API reference in [api.md](./api.md).
 
 ## Example: a Verilog type extension
 
@@ -259,29 +265,32 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 
 | Document | Contents |
 |----------|----------|
+| [docs/engine_overview.md](./docs/engine_overview.md) | **Engine overview**: one-line walk of the pipeline — read before any subsystem change |
 | [docs/README.md](./docs/README.md) | Doc navigation & alignment conventions (`Doc:`/`Impl:`/`Test:`) |
 | [docs/MODEL_INDEX.md](./docs/MODEL_INDEX.md) | **Read before modifying**: knowledge-unit jump table → doc → impl → test |
-| [docs/api.md](./docs/api.md) | Python API reference (stage-level components) |
-| [docs/component_protocol.md](./docs/component_protocol.md) | Plugin components / slots / primitives / inject |
-| [docs/diagnostics.md](./docs/diagnostics.md) | Diagnostic codes + suppression comments (`tpc check`) |
-| [docs/linter_architecture.md](./docs/linter_architecture.md) | Pre-parse linter architecture |
-| [docs/semantic_checks.md](./docs/semantic_checks.md) | Semantic check slot design (two-layer rules + post-pass) |
-| [docs/known_limitations.md](./docs/known_limitations.md) | Full known-limitations list |
-| [docs/release_checklist.md](./docs/release_checklist.md) | Release SOP |
+| [api.md](./api.md) | Python API reference (stage-level components) |
+| [core/component_protocol.md](./core/component_protocol.md) | Plugin components / slots / primitives / inject |
+| [core/config_lifecycle.md](./core/config_lifecycle.md) | Config lifecycle (declare_cfg registration → load → read) |
+| [linter/linter_architecture.md](./linter/linter_architecture.md) | Pre-parse linter architecture |
+| [analyzer/semantic_checks.md](./analyzer/semantic_checks.md) | Semantic check slot design (two-layer rules + post-pass) |
+| [docs/pipeline_stages.md](./docs/pipeline_stages.md) | Stage contracts: data shapes, blocking semantics, cross-stage channels |
+| [docs/gaps/README.md](./docs/gaps/README.md) | Known limitations (component gap files) |
+| [policy/release-checklist.md](./policy/release-checklist.md) | Release SOP |
 | [docs/language_walkthrough.md](./docs/language_walkthrough.md) | Build a language from zero (c4 as the worked example) |
 
 ## Project structure
 
 | Directory | Role |
 |-----------|------|
-| `grammar/` | Language rules as data — `verilog/` and `c4/` TOML packs |
-| `lexer/` | Lexing: token-definition-driven scanning |
-| `parser/` | Syntax: recursive descent + Pratt + rule selection |
-| `linter/` | Pre-parse, token-level lint (reverse parser, reuses the same TOML grammar) |
+| `grammar/` | Language rules as data — `verilog/`, `c4/` (and `yaml/`) TOML packs |
 | `preprocessor/` | Macro expansion / reverse mapping |
+| `lexer/` | Lexing: token-definition-driven scanning |
+| `linter/` | Pre-parse, token-level lint (reverse parser, reuses the same TOML grammar) |
+| `parser/` | Syntax: recursive descent + Pratt + rule selection |
 | `analyzer/` | Semantic analysis: scopes, symbols, types (extensible primitives) |
 | `transform/` | Semantic mapping + config-driven transformations |
 | `renderer/` | Doc IR → formatted output (Wadler-Lindig) |
+| `pipeline/` | Orchestration: stage sequencing (`run_pipeline_on_source`) + pass scheduling |
 | `core/` | Engine skeleton: config registry, errors, plugin loading |
 
 A language pack is a set of TOML files under `grammar/<lang>/` plus optional
@@ -292,20 +301,22 @@ plugin scripts — no engine code required to add or modify a language (see
 
 ```bash
 python -m pytest tests/ -q                # unit tests (see tests/ for count)
-python -m pytest tests/ -q -n auto        # 并发全量回归（pytest-xdist，~3x 加速）
+python -m pytest tests/ -q -n auto        # concurrent full regression (pytest-xdist, ~3×)
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
 python tests/e2e/eval_lint_accuracy.py      # linter accuracy gate (recall 100%)
 python tests/e2e/eval_check_accuracy.py     # analyzer rule accuracy gate (recall 100% / FP 0)
 ```
 
-并发前提是测试顺序无关：每个测试后经 `core/global_state` 还原全局状态
-（tests/conftest.py），xdist 每 worker 独立进程内隔离天然兼容（已实测
-1386 passed + 8 skipped 与串行一致）。
+Tests are order-independent — each test restores global state via
+`core/global_state` (see `tests/conftest.py`), so pytest-xdist workers behave
+identically to a serial run.
 
-CI ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) runs the full
-suite with a coverage gate, a wheel-install smoke test, plus two policy gates
-(`check_hardcode` — language knowledge stays out of engine code; pyright strict
-— no unused/dead-code diagnostics), on Python 3.11/3.12/3.13 × Windows/Ubuntu.
+CI ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) runs the full suite
+with a coverage gate, a wheel-install smoke test, plus policy gates
+(`check_hardcode` — language knowledge stays out of engine code; `check_doc_refs`
+— doc ↔ code references stay valid; pyright strict — no unused/dead-code
+diagnostics), an edge-corpus gate, and a fuzz-smoke job, on
+Python 3.11/3.12/3.13 × Windows/Ubuntu.
 
 ## Contributing
 
@@ -345,8 +356,8 @@ Summary:
 - **Not a behavioral verifier.** Checks well-formedness against your rules —
   no simulation, synthesis, or full-design elaboration; not a correctness
   prover. (Cross-module check infrastructure — module registry, connection
-  expansion, signal graph, instance-tree driver penetration — exists, see
-  docs/decisions/0008-elaboration-foundation.md.)
+  expansion, signal graph, instance-tree driver penetration — exists in
+  analyzer/checker.py::ProjectChecker.)
 - **No SystemVerilog** (`interface`, `class`, `always_ff`, assertions,
   `package`, UVM are out of scope; core + plugin increments is a roadmap item).
 - **Elaboration is per-project, not full-design** — no elaboration-time
@@ -359,7 +370,7 @@ Summary:
   engine primitives / plugin scripts.
 
 Full list (correctness boundaries, architecture boundaries, engineering
-frictions): [docs/known_limitations.md](./docs/known_limitations.md).
+frictions, split by component into gap files): [docs/gaps/README.md](./docs/gaps/README.md).
 
 ## License
 
@@ -382,4 +393,7 @@ revision, but if you find any statement that does not match the actual code,
 please open an issue with a correction — precise documentation is preferred
 over polished claims.
 
-[Design docs](./docs/) · [Known limitations](./docs/known_limitations.md)
+> Last synced against the codebase: **2026-09-05** (structure table, CI gate list,
+> documentation index, version).
+
+[Design docs](./docs/) · [Known limitations](./docs/gaps/README.md)
