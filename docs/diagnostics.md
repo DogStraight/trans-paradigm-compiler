@@ -41,7 +41,10 @@
 
 前缀约定：`E` = error 级、`W` = warning 级、`WC` = 跨文件检查（ADR-0005，
 inst_check 插件）、`NC` = 命名约定检查（name_check 插件，声明式规则
-[[checks]]，P3）。
+[[checks]]，P3）、`W2xx` = 位宽（width_check）、`LC` = 锁存（latch_check）、
+`UN` = 未使用（unused_check）、`CC` = case 完整性（case_check）、
+`AW` = always 写法风格（always_check，默认关）。code 全集与各插件职责的
+按插件索引视图见 `grammar/verilog/plugins/checks/README.md`。
 
 | code | level | 来源 | 含义 |
 |------|-------|------|------|
@@ -63,6 +66,16 @@ inst_check 插件）、`NC` = 命名约定检查（name_check 插件，声明式
 | `NC009` | warning | name_check 插件（声明式） | 函数名不符合小写下划线约定 |
 | `NC010` | warning | name_check 插件（声明式） | 任务名不符合小写下划线约定 |
 | `NC011` | warning | name_check 插件（handler 跨文件） | 模块名与文件名不一致（svlint module-filename 蓝本，多模块同文件防御） |
+| `W104` | warning | inst_check 插件 | 实例化端口悬空未连接 |
+| `W105` | error | inst_check 插件 | 信号被多驱动源驱动（多驱动范式） |
+| `W106` | warning | inst_check 插件 | inout 端口数据类型应为 tri（三态总线语义） |
+| `W201` | warning | width_check 插件（postpass） | 赋值/端口连接位宽截断 |
+| `W202` | error | width_check 插件（postpass） | 位选/下标/切片索引越界（SELRANGE 对标） |
+| `LC001` | warning | latch_check 插件（postpass） | 组合逻辑推断锁存（保持路径未全赋值） |
+| `UN001` | warning | unused_check 插件（postpass） | 内部信号声明未使用（wire/reg/integer） |
+| `CC001` | warning | case_check 插件（postpass） | case 无 default 分支（组合未覆盖全分支） |
+| `AW001` | warning | always_check 插件（postpass，默认关） | 时序 always 内阻塞赋值（应非阻塞） |
+| `AW002` | warning | always_check 插件（postpass，默认关） | 同 always 块同信号混用阻塞/非阻塞赋值 |
 
 > NC 系列规则声明在 `grammar/verilog/plugins/checks/name_check/rules/naming.toml`
 > （`[[checks]]` 规则=数据），severity 可由用户配置
