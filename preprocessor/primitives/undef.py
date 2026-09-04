@@ -1,6 +1,6 @@
 """undef — `undef NAME 指令处理器
 
-Doc: docs/api.md（管线第一阶段：undef 指令）
+Doc: api.md（管线第一阶段：undef 指令）
 """
 
 from .registry import register

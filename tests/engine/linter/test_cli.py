@@ -5,7 +5,7 @@ linter/cli.py 已删除（与 main.py _cmd_lint 功能重复的劣化实现—�
 本测试用 subprocess 跑真实进程，覆盖 CLI 级行为（文件/stdin/--json/
 退出码）。
 
-Doc: docs/api.md（CLI 入口）
+Doc: api.md（CLI 入口）
 """
 
 import os

@@ -125,7 +125,7 @@ line 原语的锚匹配：除 layout 字符串元素外，**ref 元素求值后�
 作者决策：`--inline-comments`（70085f4 源 token 指纹 + 渲染后全量回插）
 不稳定且消耗大，删除。范围：pipeline inline_comments 参数/字段/配置键、
 restore_all_comments 全量回插分支（固定两态：展开 only_tpc / 非展开
-only_midline）、tests/e2e CLI 与 run_all 模式、docs/api.md 配置说明。
+only_midline）、tests/e2e CLI 与 run_all 模式、api.md 配置说明。
 验证：renderer/pipeline/注释/e2e 220 + policy 39 + run_all OK。
 
 ### 阶段 A（已实现，2026-09-04，c8334aa + 766d600 + 813d47e）
