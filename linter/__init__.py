@@ -1,6 +1,6 @@
 """TransParadigm Linter — 共享 TOML 语法的轻量错误扫描器。
 
-Doc: docs/linter_architecture.md
+Doc: linter/linter_architecture.md
 """
 
 from dataclasses import dataclass

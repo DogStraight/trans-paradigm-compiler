@@ -13,7 +13,7 @@ scanner.py — 两阶段 Linter 编排器。
 
 每层可独立开关。LinterScanner(...) 构造时通过 enable_phase0/1/2 控制。
 
-Doc: docs/linter_architecture.md
+Doc: linter/linter_architecture.md
 Doc: docs/decisions/0001-pre-parse-linter.md
 """
 

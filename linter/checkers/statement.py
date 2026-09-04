@@ -9,7 +9,7 @@ RuleMatcher（matcher.py），错误信息精准（token 位置知道期望值�
     - 遇嵌套 @Stmt / @BeginEnd → 用 end_case 跳过（嵌套语句由发现阶段
       注册的独立检查器负责）
     - 仅内联匹配"普通子规则"（非表达式、非语句、非块的 call）
-Doc: docs/linter_architecture.md（P2 语句检查器）
+Doc: linter/linter_architecture.md（P2 语句检查器）
 """
 
 from __future__ import annotations

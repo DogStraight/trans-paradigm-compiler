@@ -5,5 +5,5 @@
     macro_token.py — 未定义宏等非法 token（迁移原 P0）
     statement.py   — 语句结构（从 production 编译）
     expression.py  — 表达式（借力 parser pratt）
-Doc: docs/linter_architecture.md（检查器注册表）
+Doc: linter/linter_architecture.md（检查器注册表）
 """

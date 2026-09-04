@@ -1,6 +1,6 @@
 # 管线阶段契约（Pipeline Stages）
 
-> 各阶段**内部**机制见子系统架构文档（linter_architecture / renderer_architecture /
+> 各阶段**内部**机制见子系统架构文档（linter/linter_architecture / renderer_architecture /
 > semantic_checks / component_protocol）；本文档只描述**层间边界**——每个阶段的
 > 输入/输出数据形态、阻断语义、跨阶段数据通道。改管线时先看这里，再进子系统。
 >
@@ -61,7 +61,7 @@ mapping_cfg 由管线按 rules_dir 缓存后注入。开关映射：
 
 ## 相关文档
 
-- 各阶段内部：`linter_architecture.md`（lint）、`semantic_checks.md`（analyze）、
+- 各阶段内部：`linter/linter_architecture.md`（lint）、`semantic_checks.md`（analyze）、
   `renderer_architecture.md`（render + 双世界）、`component_protocol.md`（插件协议）
 - 数据通道测试：`tests/engine/parser/test_comment_attachment.py`、
   `tests/engine/renderer/`（原语/保真度）

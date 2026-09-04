@@ -49,14 +49,14 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 前置 token 级 linter（反解析器总述） | `decisions/0001-pre-parse-linter.md` | `linter/scanner.py::LinterScanner.scan`<br>`linter/discovery.py::Discovery.discover`<br>`linter/checkers/matcher.py::RuleMatcher` | `tests/engine/linter/test_linter_discovery.py`<br>`tests/engine/linter/test_linter_matcher.py`<br>`tests/e2e/eval_lint_accuracy.py` |
-| Linter 两阶段架构（发现 + 扁平检查） | `linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/engine/linter/test_linter_checker.py` |
+| Linter 两阶段架构（发现 + 扁平检查） | `linter/linter_architecture.md` | `linter/scanner.py`<br>`linter/checker.py::CheckerRegistry` | `tests/engine/linter/test_linter_checker.py` |
 | is_statement 显式声明 | `decisions/0002-is-statement-explicit.md` | `grammar/verilog/**/*.toml`（`is_statement = true`）<br>`core/define.py` | `tests/engine/linter/test_linter_lookahead.py` |
-| 动态两级消歧（lookahead） | `linter_architecture.md` | `linter/lookahead.py::LookaheadTable.classify` | `tests/engine/linter/test_linter_lookahead.py` |
-| 语法切片（grammar_slicer） | `linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree` | `tests/engine/linter/test_linter_slicer.py` |
-| 表达式检查（pratt 复用） | `linter_architecture.md` | `linter/checkers/expression.py` | `tests/engine/linter/test_linter_matcher.py` |
-| 稳健性 / 畸形输入防御 | `linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/engine/linter/test_linter_robustness.py` |
-| 诊断位置精度（token_span） | `linter_architecture.md` | `linter/__init__.py::token_span` | `tests/engine/linter/test_lint_accuracy.py` |
-| 条件编译多路径诊断（diagnose） | `linter_architecture.md` | `linter/diagnose.py` | `tests/engine/linter/test_diagnose.py` |
+| 动态两级消歧（lookahead） | `linter/linter_architecture.md` | `linter/lookahead.py::LookaheadTable.classify` | `tests/engine/linter/test_linter_lookahead.py` |
+| 语法切片（grammar_slicer） | `linter/linter_architecture.md` | `linter/grammar_slicer.py::build_slice_tree` | `tests/engine/linter/test_linter_slicer.py` |
+| 表达式检查（pratt 复用） | `linter/linter_architecture.md` | `linter/checkers/expression.py` | `tests/engine/linter/test_linter_matcher.py` |
+| 稳健性 / 畸形输入防御 | `linter/linter_architecture.md` | `linter/scanner.py::LinterScanner.scan` | `tests/engine/linter/test_linter_robustness.py` |
+| 诊断位置精度（token_span） | `linter/linter_architecture.md` | `linter/__init__.py::token_span` | `tests/engine/linter/test_lint_accuracy.py` |
+| 条件编译多路径诊断（diagnose） | `linter/linter_architecture.md` | `linter/diagnose.py` | `tests/engine/linter/test_diagnose.py` |
 ### analyzer — 语义分析（作用域/符号/类型 + 检查插槽）
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |

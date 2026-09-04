@@ -2,7 +2,7 @@
 
 从规则树（build_slice_tree 产物）预计算，供发现阶段（discovery）使用：
 
-Doc: docs/linter_architecture.md
+Doc: linter/linter_architecture.md
 
     1. keyword_map  — 具体 token 类型 → 规则名列表（A 类：关键字/具体符号触发）
     2. ident_candidates — 标识符触发的规则（B 类），每条含判别前缀路径集，

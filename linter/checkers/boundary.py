@@ -4,7 +4,7 @@
     - unmatched  — 无对应开始的结束符
     - mismatched — 结束符与上一个开始符类型不匹配
     - unclosed   — 文件结束时仍有未闭合的块
-Doc: docs/linter_architecture.md（P1 块/括号边界配对）
+Doc: linter/linter_architecture.md（P1 块/括号边界配对）
 """
 
 from __future__ import annotations

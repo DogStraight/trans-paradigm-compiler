@@ -6,7 +6,7 @@
       （BitWidthLiteral / ConcatExpr / ReplicateExpr / SelectExpr / CallExpr ...），
       原子由 is_atom 规则 production 驱动（参考 parser atomic_rules），不手写。
 
-Doc: docs/linter_architecture.md
+Doc: linter/linter_architecture.md
 Doc: docs/decisions/0001-pre-parse-linter.md
 
 strict 语境约定：

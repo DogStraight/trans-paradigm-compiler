@@ -33,7 +33,8 @@
 
 ## 当前文档索引
 
-- 架构：`linter_architecture.md`（linter 两阶段发现+扁平检查）、`semantic_checks.md`（语义检查插槽：双层规则 + post-pass 链式检查）
+- 架构：`semantic_checks.md`（语义检查插槽：双层规则 + post-pass 链式检查）
+  （linter 两阶段架构已就近 `linter/linter_architecture.md`，见 linter/README）
 - 决策：`decisions/README.md`（ADR 编号规则 + 模板；0001-0008 各条见 MODEL_INDEX 登记）
 - 参考：`references/static_checkers_survey.md`（静态检查器功能调研：Verilog/HDL 矩阵 + 规则引擎架构对比）
   （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）
@@ -67,7 +68,7 @@
 """
 scanner.py — 两阶段 Linter 编排器。
 
-Doc: docs/linter_architecture.md   # 文件级引用（稳定，不随章节锚点漂移）
+Doc: linter/linter_architecture.md   # 文件级引用（稳定，不随章节锚点漂移）
 """
 ```
 

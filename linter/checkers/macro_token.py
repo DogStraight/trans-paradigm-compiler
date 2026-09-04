@@ -1,7 +1,7 @@
 """checkers/macro_token.py — 非法 token 检查器（迁移原 P0）。
 
 检测 token 流中不应存在的 token 类型（如未展开的宏）。
-Doc: docs/linter_architecture.md（P0 非法 token 检查）
+Doc: linter/linter_architecture.md（P0 非法 token 检查）
 """
 
 from __future__ import annotations

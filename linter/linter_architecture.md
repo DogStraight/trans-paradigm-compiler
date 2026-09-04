@@ -245,6 +245,7 @@ flowchart LR
 | `linter/discovery.py` | 递归发现器：容器 children（块式+引用式+包装穿透）、容器边界=body 终止符（`_stmt_ends`）、块 body 生成式分析、结束符推导、上下文/深度 |
 | `linter/lookahead.py` | 前瞻消歧表 + A/B 统一动态两级消歧（块规则还原 block_start、公共前缀匹配、变长前瞻 + 试解析；表达式黑盒按 pratt 标识、入口选择器名校验 fail-fast、is_statement 显式收集、上下文名动态生成、`_stmt_ends` 句子结束符推导；`[` 括号配对跳过操作数延续、`@Range?` first 集） |
 | `linter/grammar_slicer.py` | build_slice_tree：GrammarRule → feature 树 |
+| `linter/diagnose.py` | 条件编译多路径诊断：枚举各条件路径逐条 lint，汇总全路径诊断 |
 | `linter/checkers/statement.py` | 语句检查器（块规则先消费 block_start + 多候选取优） |
 | `linter/checkers/matcher.py` | 共享规则匹配器（token/choice/optional/repeat/call；表达式根按 pratt 标识 + `_is_atom_selector` 推导识别、@PrimaryExpr 原子走 `match_atom`（is_atom 规则 production 驱动）、choice/@Expression 先跳 trivia） |
 | `linter/checkers/expression.py` | 表达式检查器（pratt + 原子，含 part-select） |
