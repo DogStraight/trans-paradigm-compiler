@@ -45,14 +45,24 @@
   先看再定要不要抄、怎么抄。
 - 调研外部项目时，**不拉踩开源作者**：先讲对方做得好、值得学的地方；差异用
   "各有取舍，非优劣"表述，不用评分式/压人式语气。
-- **落档分流（内容类别决定落点，防 references.md 负重）**：
-  - **外部项目调研** → `docs/references.md`（设计来源追溯），格式：定位 →
-    管线结构逐阶段对比（列表）→ 亮点单独说明 → 可实现性评估。
-  - **设计/研判**（含未立项设计详案）→ `docs/decisions/` 新建 ADR
-    （`Status: draft` = 未立项设计输入；立项实现后升 `accepted`）。
-  - **执行记录/修复结果** → 代码 + 测试断言 + CHANGELOG，不落 references
-    （"为什么/推翻了什么"的结论层可留 ADR）。
-  - **规则行为预期** → 测试断言（数据决策），文档不重复。
+- **文档放置速查（写/归档文档先判类；防污染与负重）**：
+  - 决策（为什么）→ `docs/decisions/`（ADR），**≤10 决策点**：已完成删、
+    长期 draft 方向注 ROADMAP 后删；删除前机制先落部件文档（历史 git log）。
+  - 机制/架构（怎么拼）→ 就近引擎子包（`<pkg>/README.md` + 架构详述，如
+    linter/linter_architecture.md、renderer/renderer_architecture.md、
+    analyzer/semantic_checks.md）。
+  - 描述性（是什么/怎么用/清单）→ **不就地 docs/**：就近 docstring / 子包
+    README / 插件 README（layout/expression/grammar 字段已就地）；docs 只留
+    协作方知识（为什么/怎么拼/制度/索引/gaps/教程）。
+  - 制度（该怎么做/流程/约定）→ `policy/`（coding-style / release-checklist /
+    doc-alignment，与门禁工具同层）。
+  - 外部调研/设计来源 → `docs/references.md`——**只调研记录**（格式：定位 →
+    管线对比 → 亮点 → 可实现性）；tpc 自身执行/落地/评测**不落**此。
+  - 能力缺口/已知边界 → `docs/gaps/gap-*.md`（+ gaps/README 登记表）。
+  - 执行记录/修复结果 → 代码 + 测试断言 + CHANGELOG（"为什么/推翻了什么"的
+    结论层可留 ADR）。规则行为预期 → 测试断言，文档不重复。
+  - 已删/过时内容 → git log 追，不留兼容垫片；删除先证后删（`decisions/0011`
+    判据全表：A 代码/B 注释/C 文档）。
 - **先落档后动手**：调研/设计结论先按上述分流落档再立项实现，落档是动手的
   前置——不边做边定。
 - 借鉴点标注层级：🔥 直接借鉴 / 💡 启发 / 📌 路线观察；"不实现"也要写明原因。
