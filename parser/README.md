@@ -18,3 +18,5 @@
 
 > 入口：`Parser.parse`；改注释机制相关挂载（行中/trailing/leading）先进
 > `_production.py::collect_following_comments` / `pratt_parser.py`。
+> 表达式系统约定（`[[operator]]` 数组顺序=优先级 / is_atom / 一元-二元/三目 /
+> 结合性）见 `parser/expression_conventions.md`。

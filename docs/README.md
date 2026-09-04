@@ -39,8 +39,8 @@
 - 边界：`known_limitations.md`（已知边界完整版——README 的 Known limitations 是其摘要）
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：`config_lifecycle.md`（配置生命周期）、`component_protocol.md`（组件协议）
-- 规约（该怎么做）：`coding_style.md`（代码风格：注释语言/分区标题/命名）、
-  `expression_conventions.md`（表达式书写约定）
+- 规约（该怎么做）：`coding_style.md`（代码风格：注释语言/分区标题/命名）
+  （表达式书写约定已就近 `parser/expression_conventions.md`，见 parser/README）
 - 布局参考：`layout_spacing_prompt.md`（renderer layout DSL 原语与空格规则）
 - 流程：`release_checklist.md`（发布 SOP：回归门禁 → 版本核对 → build → 包内容验证 → wheel 冒烟 → tag → PyPI 可选）、`packaging.md`（功能切面打包管线：facets.json 规格 → 单文件 exe，构建/署名/验证）
 - 验证（fuzz/差分/边缘）：`tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，不变量：不崩溃/token 保序/幂等）、`tests/edge/run_edge.py`（边缘语料门禁）、`tests/differential/run_differential.py`（与 verible-verilog-format 对拍，可选依赖）
