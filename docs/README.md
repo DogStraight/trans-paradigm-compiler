@@ -45,10 +45,10 @@
   README 的 Known limitations 是其顶层摘要
 - 教程：`language_walkthrough.md`（从零搭一门语言，以 c4 为实例——外部贡献者/模型上手参考）
 - 机制：`config_lifecycle.md`（配置生命周期）、`component_protocol.md`（组件协议）
-- 制度（该怎么做）：代码规约/发布 SOP/文档对齐约定已就近 `tools/policy/`
-  （`tools/policy/coding-style.md` 代码风格 / `tools/policy/release-checklist.md`
-  发布 SOP / `tools/policy/doc-alignment.md` Doc: 对齐约定——与门禁工具同层，
-  见 tools/policy/README）
+- 制度（该怎么做）：代码规约/发布 SOP/文档对齐约定已就近 `policy/`
+  （`policy/coding-style.md` 代码风格 / `policy/release-checklist.md`
+  发布 SOP / `policy/doc-alignment.md` Doc: 对齐约定——与门禁工具同层，
+  见 policy/README）
   （表达式书写约定已就近 `parser/expression_conventions.md`，见 parser/README）
   （renderer layout 空格纪律已就近 `renderer/layout_spacing_prompt.md`，见 renderer/README）
   （功能切面打包已就近 `packaging/packaging.md`，facets.json 规格随目录）
@@ -66,5 +66,5 @@
 > 避免 docs/ 堆积"已完成"的计划文档。
 
 > 注释对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）2026-09-05
-> 就近 `tools/policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
+> 就近 `policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
 > 只保留导航与分层说明。

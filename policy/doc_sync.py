@@ -5,11 +5,11 @@
 _resolve_nav_target），保证"门禁认的引用 = 同步层改的引用"，两边不漂移。
 
 子命令（全部默认 --dry-run 只报告，--apply 才落盘）：
-  python tools/policy/doc_sync.py refs <target>
+  python policy/doc_sync.py refs <target>
       列出某 docs 文件被谁引用（代码 Doc: / 导航索引 / 文档正文 / TOML）
-  python tools/policy/doc_sync.py rename <old> <new> [--apply]
+  python policy/doc_sync.py rename <old> <new> [--apply]
       改 docs 文件路径 → 同步改全部引用点；最后 git rm/mv 提示由用户执行
-  python tools/policy/doc_sync.py delete <target> [--apply]
+  python policy/doc_sync.py delete <target> [--apply]
       删除 docs 文件：--apply 时清理机械可清的引用（Doc: 头行 / 独占
       表格行）+ 删文件；含正文叙述/行内并列引用则拒绝并列出人工清单
 
@@ -298,7 +298,7 @@ def cmd_rename(root: Path, old: str, new: str, apply: bool) -> int:
     os.makedirs(new_path.parent, exist_ok=True)
     os.replace(old_path, new_path)
     print(f"[rename] 已移动 {old_doc} → {new_doc}")
-    print("[rename] 请 git add -A && python tools/policy/check_doc_refs.py 验证")
+    print("[rename] 请 git add -A && python policy/check_doc_refs.py 验证")
     return 0
 
 
@@ -363,7 +363,7 @@ def cmd_delete(root: Path, target: str, apply: bool) -> int:
 
     os.remove(target_path)
     print(f"[delete] 已删除 {target_doc}（同步清理 {len(removable)} 个引用文件）")
-    print("[delete] 请 git add -A && python tools/policy/check_doc_refs.py 验证")
+    print("[delete] 请 git add -A && python policy/check_doc_refs.py 验证")
     return 0
 
 
@@ -390,7 +390,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_del.add_argument("--apply", action="store_true")
 
     args = parser.parse_args(argv)
-    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent.parent
+    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
 
     if args.cmd == "refs":
         return cmd_refs(root, args.target)

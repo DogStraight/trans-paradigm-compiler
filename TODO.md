@@ -76,7 +76,7 @@
 
 > 可综合子集进主包、仿真语法进插件（plugins/sim）；完成后主包纯净可综合 = 发布基线。
 > 语法对照：IEEE 1364-2005 Annex A（67 节）。已入 plugins/sim 的语法见
-> tools/policy/release-checklist.md（A.2.1.3 event / A.6.3 fork-join / A.6.4 force-release
+> policy/release-checklist.md（A.2.1.3 event / A.6.3 fork-join / A.6.4 force-release
 > / A.6.5 时序控制）。
 > 已入 plugins/nettypes（2026-08-27，批次 1）：net 类型全谱 12 种 + drive/charge
 > strength + vectored/scalared + delay3（值/三值/mintypmax）+ real/time/realtime

@@ -11,8 +11,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-_SYNC_PATH = Path(__file__).resolve().parent.parent.parent / "tools" / "policy" / "doc_sync.py"
-_GATE_PATH = Path(__file__).resolve().parent.parent.parent / "tools" / "policy" / "check_doc_refs.py"
+_SYNC_PATH = Path(__file__).resolve().parent.parent.parent / "policy" / "doc_sync.py"
+_GATE_PATH = Path(__file__).resolve().parent.parent.parent / "policy" / "check_doc_refs.py"
 
 
 def _load(module_name: str, path: Path):

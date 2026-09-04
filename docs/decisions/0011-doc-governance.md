@@ -18,7 +18,7 @@ docs 精简（35→29 文件）暴露文档管理痛点——文档增删改时�
 
 ## 决策
 
-### 1. 文档调用点门禁（已实现：tools/policy/check_doc_refs.py）
+### 1. 文档调用点门禁（已实现：policy/check_doc_refs.py）
 
 分两层：**门禁层**（只读校验，进 CI，与 check_hardcode 并列）+ **同步层**
 （rename/delete 辅助写操作，不进 CI）。门禁规则：
@@ -32,7 +32,7 @@ docs 精简（35→29 文件）暴露文档管理痛点——文档增删改时�
 符号级存在性（须 import 代码，脆且重）；CHANGELOG 历史条目自动改；正文
 叙述引用自动替换（`references.md「章节」` 含锚点语义）。
 
-### 2. 同步层（已实现：tools/policy/doc_sync.py）
+### 2. 同步层（已实现：policy/doc_sync.py）
 
 门禁层解决"断链被发现"；同步层解决"改名/删除时调用点一起改"——复用
 check_doc_refs 的引用解析（同一组正则 + `_resolve_nav_target`），保证
@@ -101,6 +101,6 @@ diff 等价 / 权威源存在 / 目标不存在）。说不出判据的删除不
   （15 用例），含真实仓库 D1/D2 零违规回归。
 - 删除判据：清理任务收尾用判据表复盘，未命中判据的删除回滚或补证据。
 
-> Impl: tools/policy/check_doc_refs.py（D1-D4）
-> Impl: tools/policy/doc_sync.py（refs/rename/delete）
+> Impl: policy/check_doc_refs.py（D1-D4）
+> Impl: policy/doc_sync.py（refs/rename/delete）
 > Test: tests/policy/test_check_doc_refs.py / test_doc_sync.py

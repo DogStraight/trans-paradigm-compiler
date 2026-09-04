@@ -14,9 +14,9 @@ renderer/pipeline）+ main.py；grammar/ 下的语言插件代码（plugins/*.py
 语言侧代码，允许含语言知识，不在扫描范围。
 
 用法：
-  python tools/policy/check_hardcode.py             # 门禁规则 1/2
-  python tools/policy/check_hardcode.py --strict-doc --strict-import
-  python tools/policy/check_hardcode.py --root <dir>   # 指定扫描根（测试用）
+  python policy/check_hardcode.py             # 门禁规则 1/2
+  python policy/check_hardcode.py --strict-doc --strict-import
+  python policy/check_hardcode.py --root <dir>   # 指定扫描根（测试用）
 
 退出码：0 = 门禁规则全干净；1 = 存在门禁违规（规则 1/2 或 strict 升格的规则）。
 
@@ -293,7 +293,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="只输出违规与结论")
     args = parser.parse_args(argv)
 
-    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent.parent
+    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
     report = collect_findings(root)
     results = report.results
 

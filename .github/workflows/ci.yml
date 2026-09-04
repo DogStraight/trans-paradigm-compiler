@@ -39,8 +39,8 @@ jobs:
         # check_doc_refs：文档调用点门禁（D1/D2 gate）——代码 Doc: 头与导航
         #   索引引用的文档必须存在（docs 增删改防断链）
         run: |
-          python tools/policy/check_hardcode.py --strict-doc --strict-import
-          python tools/policy/check_doc_refs.py
+          python policy/check_hardcode.py --strict-doc --strict-import
+          python policy/check_doc_refs.py
 
       - name: Static type gate (pyright strict)
         # 版本钉在 1.1.413（与本地验证一致）；升级时同步 bump

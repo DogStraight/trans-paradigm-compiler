@@ -132,7 +132,7 @@ python -m pytest tests/engine/analyzer/test_checker.py -q   # L2 断言式
 python -m pytest tests/e2e/test_check_accuracy.py -q        # L1 注释驱动门禁
 python -m pytest tests/ -q -n auto                          # 全量
 python tests/e2e/eval_benchmark.py --oracle=verilator       # 对拍（新规则必跑）
-python tools/policy/check_hardcode.py                       # 语言知识不进代码门禁
+python policy/check_hardcode.py                       # 语言知识不进代码门禁
 ```
 
 - **新规则必须过"零误报/零漏报"量化评估**（真实语料 7 工程 + 评测集）

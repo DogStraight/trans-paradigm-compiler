@@ -1,4 +1,4 @@
-# tools/policy/ — 制度与门禁工具
+# policy/ — 制度与门禁工具
 
 > 制度（"该怎么做"）文档与机器化门禁工具同层（2026-09-05 制度文档归拢）——
 > 制度由工具强制，工具是制度的执行者；引用入口：模型看 `AGENTS.md`、
@@ -17,9 +17,9 @@
 
 | 工具 | 强制 | 运行 |
 |------|------|------|
-| `check_hardcode.py` | 硬编码规范（路径/语言知识不进代码） | `python tools/policy/check_hardcode.py` |
-| `check_doc_refs.py` | 文档调用点完整性（D1/D2 gate + D3/D4 info） | `python tools/policy/check_doc_refs.py` |
-| `doc_sync.py` | rename/delete 文档时引用同步层 | `python tools/policy/doc_sync.py rename/delete ...` |
+| `check_hardcode.py` | 硬编码规范（路径/语言知识不进代码） | `python policy/check_hardcode.py` |
+| `check_doc_refs.py` | 文档调用点完整性（D1/D2 gate + D3/D4 info） | `python policy/check_doc_refs.py` |
+| `doc_sync.py` | rename/delete 文档时引用同步层 | `python policy/doc_sync.py rename/delete ...` |
 
 > 关联：制度机器化不重复写进 `AGENTS.md`（门禁强制的项由工具报，AGENTS 只
-> 留范式）；`tools/policy/` 无 `__init__.py`（命令行工具，非包）。
+> 留范式）；`policy/` 无 `__init__.py`（命令行工具，非包）。

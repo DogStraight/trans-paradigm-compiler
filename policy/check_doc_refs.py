@@ -28,12 +28,12 @@
 - 不改正文叙述引用（`references.md「章节」` 含锚点语义）。
 
 用法：
-  python tools/policy/check_doc_refs.py             # 门禁规则 D1/D2
-  python tools/policy/check_doc_refs.py --root <dir>   # 指定扫描根（测试用）
+  python policy/check_doc_refs.py             # 门禁规则 D1/D2
+  python policy/check_doc_refs.py --root <dir>   # 指定扫描根（测试用）
 
 退出码：0 = 门禁规则全干净；1 = 存在门禁违规（D1/D2）。
 
-Doc: tools/policy/doc-alignment.md
+Doc: policy/doc-alignment.md
 """
 
 from __future__ import annotations
@@ -386,7 +386,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="只输出违规与结论")
     args = parser.parse_args(argv)
 
-    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent.parent
+    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
     report = collect_findings(root)
     results = report.results
 

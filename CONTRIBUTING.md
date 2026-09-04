@@ -59,7 +59,7 @@ docs/        design docs (see index below)
 | parser/expression_conventions.md | Expression implicit conventions (Pratt / precedence) |
 | docs/component_protocol.md | Plugin-layer protocol (components / slots / primitives) |
 | grammar/grammar_rule_fields.md | Grammar rule field reference |
-| tools/policy/coding-style.md | Code style |
+| policy/coding-style.md | Code style |
 | docs/decisions/ | ADRs (architecture decision records) |
 
 > **Doc alignment note:** the project maintains a bidirectional doc-code index

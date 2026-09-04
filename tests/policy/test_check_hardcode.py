@@ -11,7 +11,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-_CHECKER_PATH = Path(__file__).resolve().parent.parent.parent / "tools" / "policy" / "check_hardcode.py"
+_CHECKER_PATH = Path(__file__).resolve().parent.parent.parent / "policy" / "check_hardcode.py"
 
 
 def _load_checker():

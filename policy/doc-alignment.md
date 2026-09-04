@@ -1,7 +1,7 @@
 # 文档对齐约定（文档 ↔ 代码双向定位）
 
 > 制度：原 `docs/README.md`「注释对齐约定」段，2026-09-05 抽出与门禁工具同层
-> （`tools/policy/`）——制度由工具强制：`check_doc_refs.py`（D1/D2/D3/D4 门禁）+
+> （`policy/`）——制度由工具强制：`check_doc_refs.py`（D1/D2/D3/D4 门禁）+
 > `doc_sync.py`（rename/delete 引用同步）。目的：模型维护时**直接跳转**到
 > 实现/验证位置，不做模糊搜索。
 
