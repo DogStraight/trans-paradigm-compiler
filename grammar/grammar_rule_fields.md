@@ -1,8 +1,7 @@
 # 语法规则字段设计
 
-> 状态: 已定稿（2026-08-01）
-> 目标: 明确 GrammarRule 字段的语义、职责边界与正交度，收敛到最小复杂度
-> 变更: 本次将 structure 展平、bound 更名 block、is_statement/is_block 转推导
+> 本文档描述 GrammarRule 字段的**现有结构**（语义/职责边界/正交度，最小复杂度）。
+> 设计哲学见下；权威字段定义在 `core/define.py`。
 
 ## 设计哲学
 
@@ -17,12 +16,15 @@
 | 分类 | 字段 | 作者是否必写 |
 |------|------|-------------|
 | 本质 | `production` | ✅ 必写 |
-| 本质 | `is_atom` | ✅ 必写（原子规则） |
-| 本质 | `is_block` | ✅ 必写（块解析策略） |
+| 本质 | `is_atom` / `is_block` | ✅ 必写（解析策略标注） |
+| 本质 | `pratt`（`[Rule.parser]`） | 表达式规则标注 |
 | 语义边界 | `exclude` | 仅消歧规则（负向前瞻） |
+| 框架标记 | `is_statement` | 语句规则显式标 true |
 | 增强 | `node` / `analyzer.*` / `renderer.*` | 可选 |
-| 推导 | `block_start` / `block_end` / `is_statement` / `inline` / FOLLOW | 不写（框架算） |
-| 移除 | `structure` / `block = {start,end}` / `bound` 括号语义 / `[Rule.bound]` / `end_case` | — |
+| 推导（不写） | `block_start` / `block_end` / `inline` / FOLLOW | 框架算 |
+
+> 已移除的历史字段（`structure` / `bound` / `block = {start,end}` / `end_case`）
+> 不再出现——见正文各处「已移除」注记。
 
 ---
 
@@ -97,8 +99,8 @@ is_block = true
 
 ## 二、语义边界字段
 
-> `block = { start, end }` **已移除**（2026-08-01 重构）：块的起止 token 是语法结构本身，
-> 直接写进 `production` 首尾（如 `ModuleDecl` 的 `keyword.module` / `keyword.endmodule`），
+> `block = { start, end }` **已移除**：块的起止 token 是语法结构本身，直接写进
+> `production` 首尾（如 `ModuleDecl` 的 `keyword.module` / `keyword.endmodule`），
 > 由框架在 `is_block` 时从 production 首尾字面 token 推导 `block_start` / `block_end`。
 
 ### `block_start` / `block_end` — 语法块边界（推导字段）
