@@ -10,6 +10,7 @@
 | `traversal.py` | AnalysisTraversal（遍历 + post-pass 钩子调度） |
 | `diagnostic.py` | 结构化诊断 + related 链 |
 | `checker.py` | ProjectChecker（跨文件语义检查引擎） |
+| `report_html.py` | check 报告 → HTML（诊断的呈现视图，CLI `--html`） |
 | `checks.py` | L1 声明式检查规则执行器（规则 = 数据） |
 | `suppress.py` | 诊断豁免注释（Verilator lint_off 借鉴） |
 | `primitives/` | 语义检查原语（symbol 声明/引用核对等） |

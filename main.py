@@ -196,7 +196,12 @@ def _cmd_check(args: argparse.Namespace) -> None:
     # 源码内 tpc-check 豁免注释（/* tpc-check off */ 区间 / disable-line 单行）
     _apply_check_suppressions(report)
 
-    if args.json:
+    if args.html:
+        from analyzer.report_html import render_html_report
+
+        with open(args.html, "w", encoding="utf-8") as fh:
+            fh.write(render_html_report(report))
+    elif args.json:
         import json
 
         print(json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None))
@@ -399,6 +404,9 @@ def _register_subparsers(sub, allow=None) -> None:
             "--json", action="store_true", help="LSP-compatible JSON output"
         )
         p_check.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+        p_check.add_argument(
+            "--html", metavar="FILE", help="Write an HTML report to FILE"
+        )
 
     if want("pipeline"):
         p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")

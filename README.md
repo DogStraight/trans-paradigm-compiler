@@ -128,6 +128,7 @@ tpc lint input.v             # pre-parse token lint (exit 1 on diagnostics)
 tpc lint input.v --json      # LSP-compatible JSON diagnostics
 tpc check input.v            # cross-file semantic check (syntax then semantic stages)
 tpc check input.v --json     # machine-readable diagnostics (code/severity/range)
+tpc check input.v --html report.html   # human-readable HTML report
 tpc expand input.v           # expand macros + transform (per [commands].expand)
 tpc config dump              # show every config key's source (file + section)
 tpc new component my_feature --lang verilog   # scaffold a plugin component
