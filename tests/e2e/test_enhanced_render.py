@@ -13,13 +13,15 @@ from tests.e2e.run_pipeline import run_pipeline_on_source
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
-# 增强语法样本（typed_ports）：模块端口用类型引用 + type 定义 + impl 绑定 + TypeImplDecl
+# 增强语法样本（typed_ports）：模块端口用类型引用 + type 定义 + TypeImplDecl。
+# 注：本样本专注渲染/展开机制（P1.4），不写模块内 impl 绑定——impl 绑定是
+# typed_ports 语义检查域（见 test_typed_ports_check.py），`=> top` 类写法为
+# 历史偏离已不再使用。
 ENHANCED_SRC = """module top(
     input clk,
     spi.slave spi_io
 );
     spi_master u0 (.clk(clk));
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {
@@ -64,8 +66,6 @@ def test_preserve_path_keeps_enhanced_syntax():
     assert "type spi" in out
     assert "master : input clk, input miso, output mosi, output cs;" in out
     assert "slave : input clk, input mosi, output miso, output cs;" in out
-    # impl 绑定保留（括号 + `=>` 箭头）
-    assert "impl spi.master (.clk(clk)) => top;" in out
     # TypeImplDecl 保留（body 内容渲染）
     assert "impl [master] ( input clk, output sck) {" in out
     assert "wire [7:0] data;" in out
@@ -120,7 +120,6 @@ NESTED_SRC = """module top(
     input clk,
     spi.slave spi_io
 );
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {

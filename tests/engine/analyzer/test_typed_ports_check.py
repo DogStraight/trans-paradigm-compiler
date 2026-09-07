@@ -3,9 +3,14 @@
 组件内 postpass（_check.py）三族检查：
     A 表述完整：type/role 引用存在（TP001/TP002）、显式端口归属（TP003）、
       type 良构（role 端口不重复 TP004 / invert 悬空 TP002 / 自反 TP006）
-    B/C 连接正确 + 单驱动：后续检查点（待扩）
+    B 连接正确：interface_ref 未命中端口实例（TP010）、类型不匹配（TP011）、
+      role 不同向（TP012）
+    C 单驱动：待扩
 pos/neg 各验证：坏输入被 TPxxx error 拦下（analyze 报错阻断展开）；好输入
 零 TP 诊断。TP 诊断是 error 级 → ProjectChecker report semantic 阶段可观测。
+
+正确写法基准 = ref_spi_inf 同向：模块端口 `type.role name`（接口实例）+
+impl `type.role ... => name` **同 role**（impl 驱动同名 role 视角的线组）。
 """
 
 import os
@@ -41,26 +46,51 @@ def _tp_codes(report):
     }
 
 
-# ── 好输入基线（零 TP）──────────────────────────────
+# ── 同向基线（ref_spi_inf 形态）────────────────────────
 
 
-GOOD_SRC = """module top(
-    input clk,
-    spi.slave spi_io
-);
-    impl spi.master (.clk(clk)) => spi_io;
-endmodule
+def _spi_master_impl() -> str:
+    """`spi.master spi_io` 端口实例 + `impl spi.master => spi_io`（同向正确）。"""
+    return (
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk), .mosi(data), .cs(cs_n)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi, output cs;\n"
+        "    slave  : input clk, input mosi, output cs;\n"
+        "}\n"
+    )
 
-type spi {
-    master : input clk, output [7:0] mosi, output cs;
-    slave  : input clk, input [7:0] mosi, output cs;
-}
-"""
 
-
-def test_good_input_no_tp(checker, tmp_path):
+def test_good_master_same_role_clean(checker, tmp_path):
+    """同向 master：spi.master 实例 + impl spi.master → 零 TP。"""
     src = tmp_path / "t.sv"
-    src.write_text(GOOD_SRC, encoding="utf-8")
+    src.write_text(_spi_master_impl(), encoding="utf-8")
+    report = checker.check(str(src))
+    assert _tp_codes(report) == set()
+
+
+def test_good_slave_same_role_clean(checker, tmp_path):
+    """同向 slave：spi.slave 实例 + impl spi.slave → 零 TP。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.slave spi_io\n"
+        ");\n"
+        "    impl spi.slave (.clk(clk), .mosi(data), .cs(cs_n)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi, output cs;\n"
+        "    slave  : input clk, input mosi, output cs;\n"
+        "}\n",
+        encoding="utf-8",
+    )
     report = checker.check(str(src))
     assert _tp_codes(report) == set()
 
@@ -74,7 +104,7 @@ def test_impl_ref_missing_type(checker, tmp_path):
     src.write_text(
         "module top(\n"
         "    input clk,\n"
-        "    spi.slave spi_io\n"
+        "    spi.master spi_io\n"
         ");\n"
         "    impl nosuch.master (.clk(clk)) => spi_io;\n"
         "endmodule\n"
@@ -95,7 +125,7 @@ def test_impl_ref_missing_role(checker, tmp_path):
     src.write_text(
         "module top(\n"
         "    input clk,\n"
-        "    spi.slave spi_io\n"
+        "    spi.master spi_io\n"
         ");\n"
         "    impl spi.bogus (.clk(clk)) => spi_io;\n"
         "endmodule\n"
@@ -103,6 +133,44 @@ def test_impl_ref_missing_role(checker, tmp_path):
         "type spi {\n"
         "    master : input clk;\n"
         "    slave  : input clk;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP002" in _tp_codes(report)
+
+
+def test_typed_port_ref_missing_type(checker, tmp_path):
+    """端口实例引用不存在的 type → TP001。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    nosuch.master spi_io\n"
+        ");\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP001" in _tp_codes(report)
+
+
+def test_typed_port_ref_missing_role(checker, tmp_path):
+    """端口实例引用 type 存在但 role 不存在 → TP002。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.bogus spi_io\n"
+        ");\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk;\n"
         "}\n",
         encoding="utf-8",
     )
@@ -119,7 +187,7 @@ def test_impl_typo_port_reported(checker, tmp_path):
     src.write_text(
         "module top(\n"
         "    input clk,\n"
-        "    spi.slave spi_io\n"
+        "    spi.master spi_io\n"
         ");\n"
         "    impl spi.master (.clk(clk), .mosi_typo(data)) => spi_io;\n"
         "endmodule\n"
@@ -137,20 +205,7 @@ def test_impl_typo_port_reported(checker, tmp_path):
 def test_impl_valid_ports_clean(checker, tmp_path):
     """impl 显式连接端口 ∈ 定义端口集 → 不报 TP003。"""
     src = tmp_path / "t.sv"
-    src.write_text(
-        "module top(\n"
-        "    input clk,\n"
-        "    spi.slave spi_io\n"
-        ");\n"
-        "    impl spi.master (.clk(clk), .mosi(data), .cs(cs_n)) => spi_io;\n"
-        "endmodule\n"
-        "\n"
-        "type spi {\n"
-        "    master : input clk, output mosi, output cs;\n"
-        "    slave  : input clk, input mosi, output cs;\n"
-        "}\n",
-        encoding="utf-8",
-    )
+    src.write_text(_spi_master_impl(), encoding="utf-8")
     report = checker.check(str(src))
     assert "TP003" not in _tp_codes(report)
 
@@ -164,7 +219,7 @@ def test_role_duplicate_port_reported(checker, tmp_path):
     src.write_text(
         "module top(\n"
         "    input clk,\n"
-        "    spi.slave spi_io\n"
+        "    spi.master spi_io\n"
         ");\n"
         "    impl spi.master (.clk(clk)) => spi_io;\n"
         "endmodule\n"
@@ -185,7 +240,7 @@ def test_invert_missing_role_reported(checker, tmp_path):
     src.write_text(
         "module top(\n"
         "    input clk,\n"
-        "    spi.slave spi_io\n"
+        "    spi.master spi_io\n"
         ");\n"
         "    impl spi.master (.clk(clk)) => spi_io;\n"
         "endmodule\n"
@@ -206,7 +261,7 @@ def test_invert_self_reported(checker, tmp_path):
     src.write_text(
         "module top(\n"
         "    input clk,\n"
-        "    spi.slave spi_io\n"
+        "    spi.master spi_io\n"
         ");\n"
         "    impl spi.master (.clk(clk)) => spi_io;\n"
         "endmodule\n"
@@ -219,3 +274,95 @@ def test_invert_self_reported(checker, tmp_path):
     )
     report = checker.check(str(src))
     assert "TP006" in _tp_codes(report)
+
+
+# ── B：interface_ref 解析 + 类型匹配 + role 同向 ──────
+
+
+def test_impl_ref_module_name_reported(checker, tmp_path):
+    """impl `=> 模块名`（历史偏离错误写法）→ TP010。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk)) => top;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi;\n"
+        "    slave  : input clk, input mosi;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP010" in _tp_codes(report)
+
+
+def test_impl_ref_unknown_name_reported(checker, tmp_path):
+    """impl `=> 未声明名` → TP010。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk)) => nosuch_inst;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi;\n"
+        "    slave  : input clk, input mosi;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP010" in _tp_codes(report)
+
+
+def test_impl_type_mismatch_reported(checker, tmp_path):
+    """impl spi 绑定 sci 类型实例 → TP011（spi 端口不能连 sci）。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl sci.master (.clk(clk)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi;\n"
+        "    slave  : input clk, input mosi;\n"
+        "}\n"
+        "\n"
+        "type sci {\n"
+        "    master : input clk, output tx;\n"
+        "    slave  : input clk, input tx;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP011" in _tp_codes(report)
+
+
+def test_impl_role_mismatch_reported(checker, tmp_path):
+    """impl master 绑定 slave 实例 → TP012（role 不同向）。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.slave spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi;\n"
+        "    slave  : input clk, input mosi;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP012" in _tp_codes(report)

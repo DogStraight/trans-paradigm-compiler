@@ -103,9 +103,10 @@ class TestImplCommentMigrationE2E:
     随结构走——此前变换路径普通注释必丢）。"""
 
     SRC = """module top(
-    input clk
+    input clk,
+    spi.master spi_io
 );
-    impl spi.master (.clk(clk)) => top; // spi master 实例化注释
+    impl spi.master (.clk(clk)) => spi_io; // spi master 实例化注释
 endmodule
 
 type spi {

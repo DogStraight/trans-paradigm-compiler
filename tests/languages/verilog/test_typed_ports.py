@@ -20,7 +20,6 @@ RANGED_SRC = """module top(
     input clk,
     spi.slave spi_io
 );
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {
@@ -60,7 +59,6 @@ PARAM_RANGE_SRC = """module top(
     input clk,
     spi.slave spi_io
 );
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi (parameter DATA_WIDTH = 8) {
@@ -83,7 +81,6 @@ INVERT_SRC = """module top(
     input clk,
     spi.slave spi_io
 );
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {
@@ -109,7 +106,6 @@ NESTED_SRC = """module top(
     input clk,
     wrap.slave w_io
 );
-    impl wrap.master (.clk(clk)) => top;
 endmodule
 
 type spi {
@@ -139,7 +135,6 @@ WRAPPER_SRC = """module top(
     input clk,
     spi.master spi_io
 );
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {
@@ -168,7 +163,6 @@ NO_RANGE_SRC = """module top(
     input clk,
     spi.slave spi_io
 );
-    impl spi.master (.clk(clk)) => top;
 endmodule
 
 type spi {
@@ -192,7 +186,6 @@ NESTED_INVERT_SRC = """module top(
     input clk,
     wrap.slave w_io
 );
-    impl wrap.master (.clk(clk)) => top;
 endmodule
 
 type spi {

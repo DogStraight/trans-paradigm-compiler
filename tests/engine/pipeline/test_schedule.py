@@ -255,10 +255,10 @@ class TestPipelineIntegration:
 
     ENHANCED_SRC = """module top(
     input clk,
-    spi.slave spi_io
+    spi.master spi_io
 );
     spi_master u0 (.clk(clk));
-    impl spi.master (.clk(clk)) => top;
+    impl spi.master (.clk(clk)) => spi_io;
 endmodule
 
 type spi {
