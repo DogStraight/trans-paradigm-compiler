@@ -1,110 +1,231 @@
 {
-    "focus": ["UN001", "W104", "W105", "CC001", "W106", "LC001", "NC012", "NC013", "W201", "W202"],
+    "focus": [
+        "UN001",
+        "W104",
+        "W105",
+        "CC001",
+        "W106",
+        "LC001",
+        "NC012",
+        "NC013",
+        "W201",
+        "W202",
+        "TP001",
+        "TP003",
+        "TP004",
+        "TP010",
+        "TP011",
+        "TP012",
+        "TP020"
+    ],
     "pos": {
         "UN001_unused_decl": {
             "entry": "top.sv",
-            "expect": ["UN001"],
+            "expect": [
+                "UN001"
+            ],
             "desc": "未使用的 wire/reg/integer 声明应检出"
         },
         "W104_missing_port": {
             "entry": "top.sv",
-            "expect": ["W104"],
+            "expect": [
+                "W104"
+            ],
             "desc": "实例化缺连 output 端口应检出（inout 豁免）"
         },
         "W104_ordered_missing": {
             "entry": "top.sv",
-            "expect": ["W104"],
+            "expect": [
+                "W104"
+            ],
             "desc": "位置连接缺连 output 端口应检出"
         },
         "W105_multi_assign": {
             "entry": "top.sv",
-            "expect": ["W105"],
+            "expect": [
+                "W105"
+            ],
             "desc": "两个 assign 驱动同一信号应检出"
         },
         "W105_inst_and_assign": {
             "entry": "top.sv",
-            "expect": ["W105"],
+            "expect": [
+                "W105"
+            ],
             "desc": "assign 与实例 output 驱动同一信号（跨文件）应检出"
         },
         "CC001_case_no_default": {
             "entry": "top.sv",
-            "expect": ["CC001", "LC001"],
+            "expect": [
+                "CC001",
+                "LC001"
+            ],
             "desc": "case 无 default 分支应检出 CC001；2 位选择器只覆盖 3 值未全覆盖 → 锁存风险 LC001"
         },
         "W106_inout_wire": {
             "entry": "top.sv",
-            "expect": ["W106"],
+            "expect": [
+                "W106"
+            ],
             "desc": "inout 端口非 tri 应检出"
         },
         "LC001_latch_risk": {
             "entry": "top.sv",
-            "expect": ["LC001"],
+            "expect": [
+                "LC001"
+            ],
             "desc": "组合 always 内 if 无 else 应检出"
         },
         "NC012_bad_integer": {
             "entry": "top.sv",
-            "expect": ["NC012"],
+            "expect": [
+                "NC012"
+            ],
             "desc": "integer 命名不符合小写下划线应检出"
         },
         "NC013_bad_type": {
             "entry": "top.sv",
-            "expect": ["NC013"],
+            "expect": [
+                "NC013"
+            ],
             "desc": "type 命名不符合小写下划线应检出"
         },
         "UN001_shared_decl": {
             "entry": "top.sv",
-            "expect": ["UN001"],
+            "expect": [
+                "UN001"
+            ],
             "desc": "共享声明 wire a, b; 中只报未使用的那个"
         },
         "W105_two_inst_output": {
             "entry": "top.sv",
-            "expect": ["W105"],
+            "expect": [
+                "W105"
+            ],
             "desc": "两个实例 output 连接同一信号应检出"
         },
         "LC001_level_sensitive": {
             "entry": "top.sv",
-            "expect": ["LC001"],
+            "expect": [
+                "LC001"
+            ],
             "desc": "电平敏感 always（@(a or b)）内 if 无 else 应检出"
         },
         "CC001_casez_no_default": {
             "entry": "top.sv",
-            "expect": ["CC001", "LC001"],
+            "expect": [
+                "CC001",
+                "LC001"
+            ],
             "desc": "casez 无 default 分支应检出 CC001；单臂未覆盖全部值 → 锁存风险 LC001"
         },
         "project_bus_ctrl": {
             "entry": "bus_ctrl.sv",
-            "expect": ["UN001", "W104", "W105", "CC001"],
+            "expect": [
+                "UN001",
+                "W104",
+                "W105",
+                "CC001"
+            ],
             "desc": "复合小工程：未使用信号 + 缺连端口 + 多驱动 + case 无 default"
         },
         "W201_trunc_assign": {
             "entry": "top.sv",
-            "expect": ["W201"],
+            "expect": [
+                "W201"
+            ],
             "desc": "assign 12 位 → 8 位截断应检出"
         },
         "W201_trunc_blocking": {
             "entry": "top.sv",
-            "expect": ["W201"],
+            "expect": [
+                "W201"
+            ],
             "desc": "阻塞赋值 8 位 → 4 位截断应检出"
         },
         "W201_part_select": {
             "entry": "top.sv",
-            "expect": ["W201"],
+            "expect": [
+                "W201"
+            ],
             "desc": "位选 LHS（4 位）← 12 位截断应检出"
         },
         "W201_param_override_trunc": {
             "entry": "top.sv",
-            "expect": ["W201"],
+            "expect": [
+                "W201"
+            ],
             "desc": "模块内固定位宽 ← 参数位宽赋值，外层覆盖参数后截断应检出（B4）"
         },
         "W202_select_oob": {
             "entry": "top.sv",
-            "expect": ["W202"],
+            "expect": [
+                "W202"
+            ],
             "desc": "位选范围越界（8 位信号选 [15:0]）应检出"
         },
         "W202_index_oob": {
             "entry": "top.sv",
-            "expect": ["W202"],
+            "expect": [
+                "W202"
+            ],
             "desc": "单索引越界（vec[8]，合法 0-7）应检出"
+        },
+        "TP001_impl_missing_type": {
+            "entry": "top.sv",
+            "expect": [
+                "TP001"
+            ],
+            "desc": "impl 引用不存在的 type 应检出（TP001）"
+        },
+        "TP001_port_missing_type": {
+            "entry": "top.sv",
+            "expect": [
+                "TP001"
+            ],
+            "desc": "端口实例引用不存在的 type 应检出（TP001）"
+        },
+        "TP003_typo_port": {
+            "entry": "top.sv",
+            "expect": [
+                "TP003"
+            ],
+            "desc": "impl 显式连接 typo 端口（不在 role 定义端口集）应检出（TP003）"
+        },
+        "TP004_role_dup_port": {
+            "entry": "top.sv",
+            "expect": [
+                "TP004"
+            ],
+            "desc": "同一 role 内端口名重复应检出（TP004）"
+        },
+        "TP010_impl_ref_module_name": {
+            "entry": "top.sv",
+            "expect": [
+                "TP010"
+            ],
+            "desc": "impl 绑定 => 模块名（未命中端口实例）应检出（TP010）"
+        },
+        "TP011_type_mismatch": {
+            "entry": "top.sv",
+            "expect": [
+                "TP011"
+            ],
+            "desc": "impl 绑定跨类型实例（spi 连 sci）应检出（TP011）"
+        },
+        "TP012_role_mismatch": {
+            "entry": "top.sv",
+            "expect": [
+                "TP012"
+            ],
+            "desc": "impl role 与端口实例 role 不同向应检出（TP012）"
+        },
+        "TP020_multi_impl_same_instance": {
+            "entry": "top.sv",
+            "expect": [
+                "TP020"
+            ],
+            "desc": "同一接口实例被多个 impl 绑定（多驱动）应检出（TP020）"
         }
     },
     "neg": {
@@ -167,6 +288,10 @@
         "W202_in_bounds": {
             "entry": "top.sv",
             "desc": "范围内位选 / 反向范围 / 变量索引不应误报 W202"
+        },
+        "TP_clean_same_role": {
+            "entry": "top.sv",
+            "desc": "同向 master impl + 完整 type 定义 → 零 TP 误报"
         }
     }
 }

@@ -5,7 +5,8 @@
       type 良构（role 端口不重复 TP004 / invert 悬空 TP002 / 自反 TP006）
     B 连接正确：interface_ref 未命中端口实例（TP010）、类型不匹配（TP011）、
       role 不同向（TP012）
-    C 单驱动：待扩
+    C 单驱动：同一接口实例被多个 impl 绑定 → TP020（多驱动预检，对齐
+      展开后 W105）
 pos/neg 各验证：坏输入被 TPxxx error 拦下（analyze 报错阻断展开）；好输入
 零 TP 诊断。TP 诊断是 error 级 → ProjectChecker report semantic 阶段可观测。
 
@@ -366,3 +367,59 @@ def test_impl_role_mismatch_reported(checker, tmp_path):
     )
     report = checker.check(str(src))
     assert "TP012" in _tp_codes(report)
+
+
+# ── C：单驱动（多 impl 绑定同一接口实例）──────────────
+
+
+def test_multi_impl_same_instance_reported(checker, tmp_path):
+    """同一接口实例被两个 impl 绑定 → TP020（多驱动预检）。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk)) => spi_io;\n"
+        "    impl spi.master (.clk(clk), .cs(cs_n)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi, output cs;\n"
+        "    slave  : input clk, input mosi, output cs;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP020" in _tp_codes(report)
+
+
+def test_single_impl_same_instance_clean(checker, tmp_path):
+    """同一接口实例只被一个 impl 绑定 → 不报 TP020。"""
+    src = tmp_path / "t.sv"
+    src.write_text(_spi_master_impl(), encoding="utf-8")
+    report = checker.check(str(src))
+    assert "TP020" not in _tp_codes(report)
+
+
+def test_multi_impl_distinct_instances_clean(checker, tmp_path):
+    """两个 impl 绑两个不同实例（每组线单驱动）→ 不报 TP020。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io,\n"
+        "    spi.master spi_io2\n"
+        ");\n"
+        "    impl spi.master (.clk(clk)) => spi_io;\n"
+        "    impl spi.master (.clk(clk), .cs(cs_n)) => spi_io2;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input clk, output mosi, output cs;\n"
+        "    slave  : input clk, input mosi, output cs;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert "TP020" not in _tp_codes(report)

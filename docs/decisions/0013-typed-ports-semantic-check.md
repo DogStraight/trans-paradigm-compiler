@@ -83,12 +83,24 @@
   单一所有权/唯一驱动 → C；SV interface/modport（type≈interface、role≈
   modport 同构）方向匹配检查作对拍参照。
 
-## 验证
+## 验证（2026-09-07 已实现，三族全落地）
 
-- 11 检查点各 pos/neg case（坏输入被拦、好输入零误报）。
-- TP error 阻断展开测试（analyze 报 error → transform 不产出错误模块）。
-- 新码进 eval_check_accuracy focus（pos/neg case，recall + FP 量化）。
-- 全量 pytest 回归绿 + policy 门禁（check_doc_refs / check_hardcode）零命中。
+- A 表述完整：TP001 type 悬空 / TP002 role+invert 悬空 / TP003 显式端口 typo /
+  TP004 role 端口重名 / TP006 invert 自反
+- B 连接正确：TP010 impl `=>` 未命中端口实例（拦 `=> top` 历史错误写法）/
+  TP011 类型不匹配（spi 连 sci）/ TP012 role 不同向（ref_spi_inf 同向基准）
+- C 单驱动：TP020 同一接口实例被多个 impl 绑定（多驱动预检，对齐展开后 W105，
+  不另造语义）
+- 各码 pos/neg case（18 单测：坏输入被拦、好输入零误报）；TP error 阻断展开
+  已验证（analyze 报 error → 展开不产出错误模块，schedule `_ScheduleStop`）。
+- 新码进 eval_check_accuracy focus（8 pos + 1 neg 样本，recall 100% + FP 0）。
+- 全量 pytest 1566 绿 + policy 门禁（check_doc_refs / check_hardcode）零命中。
+- 既有 `=> top` 历史错误样例已修正（test_typed_ports/test_enhanced_render 删
+  误导 impl 行保 TypedPortDecl 展开断言、test_comment_migrate/test_schedule 改
+  同向 `=> 实例`）；TypedTypeSpec 即时 identifier_ref 移除（前向引用 W001 误报
+  → 交 TP001 postpass 全量核对）。
 
-> Impl: grammar/verilog/plugins/typed_ports/（analyzer primitives/handler，待实现）
-> Test: tests/engine/analyzer/（typed_ports 语义检查，待实现）
+> Impl: `grammar/verilog/plugins/typed_ports/_check.py::run_tp_check`（组件内
+> analyzer postpass；tpc.toml `[analyzer] postpasses` 挂载）
+> Test: `tests/engine/analyzer/test_typed_ports_check.py`（18 用例）+
+> `tests/e2e/samples/check_accuracy/`（TP* pos/neg 样本，expected.json focus）

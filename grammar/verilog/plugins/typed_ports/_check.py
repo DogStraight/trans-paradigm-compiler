@@ -10,14 +10,15 @@
       type 定义良构（role 内端口名不重复、invert 无环）
     B 连接正确（类型化 + 方向）：impl 绑定 interface_ref 解析（一组线）、
       类型匹配（spi 端口不能连 sci）、role 同向（ref_spi_inf 同向基准）
-    C 单驱动（一个端口一种驱动方式）：auto_connect 与显式连接不重复驱动同一
-      端口；驱动方式互斥
+    C 单驱动（一个端口一种驱动方式）：同一接口实例被多个 impl 绑定 =
+      多驱动预检（对齐展开后 W105，不另造语义）
 
 诊断码：
     A: TP001 type 引用悬空 / TP002 role+invert 悬空 / TP003 显式端口 typo /
        TP004 role 端口重名 / TP006 invert 自反
     B: TP010 interface_ref 未命中端口实例（=> 模块名 = 历史错误写法）/
        TP011 类型不匹配（spi 连 sci）/ TP012 role 不同向
+    C: TP020 同一接口实例被多个 impl 绑定（多驱动）
 
 语义模型（与展开对齐，读 analyzer scope 树 + AST，不重建）：
     type X { role: <ports>; ... }         TypeDecl → scope kind=type
@@ -63,6 +64,10 @@ def run_tp_check(analyzer, context) -> None:
     # A/B/C 族：AST 走查 impl 绑定 / typed 端口引用（引用点 × 类型表）。
     # DFS 带当前模块名上下文（impl 的 interface_ref 只在所属模块实例表内查）。
     _walk_ast(ast, context, type_scopes, module_insts, None)
+
+    # C 族：单驱动预检——同一模块内同一接口实例被多个 impl 绑定 →
+    # 展开后同线被多实例 output 驱动（与 W105 展开后行为一致，只提前定位）。
+    _check_multi_impl_binding(context, ast, module_insts)
 
 
 # ── A 族：type 定义良构 ────────────────────────────────
@@ -247,6 +252,67 @@ def _check_impl_instance_match(context, node: Node, impl_type: str, impl_role: s
             related=[("端口实例 '%s' 声明处" % getattr(inst_sym, "name", ""),
                       getattr(inst_sym, "decl_node", None))],
         )
+
+
+# ── C 族：单驱动（多 impl 绑定同一接口实例）───────────
+
+
+def _check_multi_impl_binding(context, ast, module_insts) -> None:
+    """C 族单驱动预检：同一模块内同一接口实例被多个 impl 绑定。
+
+    语义对齐展开后 W105（signal_graph 多驱动）：两个 impl 绑定同一实例
+    （=> spi_io），展开后都连到 spi_io 展开的线、各自 output 驱动 → 同一
+    线被多驱动源驱动。本预检只提前定位（模块级早期错误），判定与展开后
+    一致，不另造展开后查不到的语义（作者 2026-09-07 定）。
+    """
+    # {模块名: {实例名: [impl 节点, ...]}}——只统计绑定命中实例的 impl
+    bindings: dict[str, dict[str, list[Node]]] = {}
+    _collect_impl_bindings(ast, bindings, module_insts, None)
+    for mod_name, inst_map in bindings.items():
+        insts = module_insts.get(mod_name, {}) or {}
+        for iface, nodes in inst_map.items():
+            if len(nodes) < 2:
+                continue
+            inst_sym = insts.get(iface)
+            desc = f"接口实例 '{iface}'" + (
+                "" if inst_sym is None else
+                f"（{inst_sym[0]}.{inst_sym[1]}）"
+            )
+            context.report(
+                f"模块 '{mod_name}' 中 {desc} 被 {len(nodes)} 个 impl 同时绑定"
+                "——多驱动冲突（展开后同一线被多实例 output 驱动；一个接口"
+                "实例只应被一个 impl 驱动）",
+                code="TP020", level="error",
+                node=nodes[1],
+                related=[("另一 impl 绑定处", nodes[0])],
+            )
+
+
+def _collect_impl_bindings(node, bindings: dict, module_insts: dict,
+                           current_mod) -> None:
+    """DFS 收集 ImplBindingWithInterface 的 (模块名, interface_ref) → impl 节点。
+
+    只登记 interface_ref 命中本模块端口实例的绑定（悬空 ref 已在 B 族 TP010
+    报；未命中实例的 impl 不参与多驱动统计——它绑不到线）。
+    """
+    if isinstance(node, Node):
+        nn = node.node_name
+        if nn == "ModuleDecl":
+            mname = _text(getattr(node, "module_name", None)) or current_mod
+            for child in node.iter_children():
+                _collect_impl_bindings(child, bindings, module_insts, mname)
+            return
+        if nn == "ImplBindingWithInterface":
+            iface = _text(getattr(node, "interface_ref", None))
+            mod = current_mod or ""
+            insts = module_insts.get(mod, {}) or {}
+            if iface and iface in insts:
+                bindings.setdefault(mod, {}).setdefault(iface, []).append(node)
+        for child in node.iter_children():
+            _collect_impl_bindings(child, bindings, module_insts, current_mod)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_impl_bindings(item, bindings, module_insts, current_mod)
 
 
 # ── 共享辅助 ───────────────────────────────────────────
