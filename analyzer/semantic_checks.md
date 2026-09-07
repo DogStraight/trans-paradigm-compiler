@@ -137,6 +137,49 @@ def run(analyzer, context) -> None:
   `AnalysisTraversal._external_extra`，analyze() 合并进 context.extra——
   插件 postpass 可直接做跨文件联动比对。
 
+### 5.1 何时上 postpass（vs 遍历期原语）——时序决策
+
+postpass 在 analyze 遍历结束后跑（scope 树全量、符号全声明），是"需要查完整
+scope 再决策"逻辑的**权威时机**。判断标准一句：
+
+> 逻辑是否依赖"遍历还没遇到的符号"？依赖 → 上 postpass（或声明式 checks），
+> 不要放遍历期原语。
+
+遍历期自定义原语（`@register` + 规则级 `primitives` 列表 / 配置同名键）只在
+走到该节点时跑一次，单遍 DFS 无 deferral——遍历期"回头查别的 type/role 符号"
+必然撞后置定义/无回调（typed_ports invert 的 L3 缺陷即此根因，2026-09-08
+修复为 postpass 递归展开）。postpass 用途两类：**检查**（§5 主体，报诊断）与
+**语义数据产出**（写 `sym.attrs` 供下游消费，见 5.3）。
+
+`tpc.toml [analyzer] postpasses` 列表**有序**——依赖上游产出的 postpass 须排在
+其后（typed_ports 的 `_expand_ports` 先于 `_check`，check 读 expander 数据）。
+
+### 5.2 原语触发与配置层级
+
+- **原语触发只认规则级** `[RuleName.analyzer]`（`config.get("primitives")`）。
+- 引擎标准原语（scope_enter/scope_exit/symbol_declare/identifier_resolve）由
+  **配置键存在**触发（`traversal._is_primitive_triggered` 特判），不走 primitives
+  列表；primitives 列表只触发"引擎不认识的自定义原语"。
+- 自定义原语两种写法等价：`primitives = ["foo"]` + 独立 `[foo]` 段，或配置里
+  直接同名键 `foo = {...}`（键即原语名且触发）。
+- 组件级 `tpc.toml [analyzer]` 只放 handlers/postpasses/primitive_order；
+  **组件级 `primitives` 无消费者**（曾误写，2026-09-08 删）——别写回去。
+- 符号声明时序：`symbol_declare` 在遍历序里先于 `scope_enter`，role 符号落在
+  type 父作用域（非自己的子作用域）——遍历期想从子作用域向上查会踩。
+
+### 5.3 sym.attrs 黑板：postpass 产出结构化数据供下游
+
+`sym.attrs` 跨阶段存活（analyze 写、transform 读），是组件自己的黑板。范式：
+组件 postpass 从 raw 捕获（如 `symbol_declare` 的 `capture.ports`）递归展开出
+**结构化结果写自有键**，下游（组件 `_check`/`_transform`、引擎
+`_semantic_mapping._apply_entry`）统一读该键。typed_ports `_expand_ports`
+先例：role 端口集（nested + invert 对侧）→ `sym.attrs["resolved_ports"]`
+= [{direction, name, packed_range}]；引擎只做通用判断（`attr=="ports"` 且有
+resolved_ports），语言语义全在组件。
+
+**删中间层/兜底的安全前提**：postpass 对健康输入全覆盖，且**无条件写键**
+（空展开也写 `[]`）——否则下游被迫留 raw/旧数据回退，双实现漂移回归。
+
 ## 6. 符号宽度表示（width 检查基础）
 
 ```python
