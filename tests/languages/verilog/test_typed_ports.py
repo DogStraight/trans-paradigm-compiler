@@ -225,3 +225,48 @@ def test_nested_invert_no_skip_leak():
     assert _dir_of("w_io_inner_cs") == "input"          # slave: cs 反转后 input
     # 普通端口方向反转（master enable input → slave output）
     assert _dir_of("w_io_enable") == "output"
+
+
+BACKWARD_DEF_SRC = """module top(
+    input clk,
+    wrap.slave w_io
+);
+endmodule
+
+type wrap {
+    slave  : invert master;
+    master : spi.master inner, input enable;
+}
+
+type spi {
+    master : input clk, output [7:0] mosi, output cs;
+    slave  : invert master;
+}
+"""
+
+
+def test_backward_def_invert_expands():
+    """invert 目标 role 后置定义（P1.5 L3 已修）：wrap.slave 声明在
+    master 之前，analyze 单趟 DFS 时 master 符号尚未就绪——旧的即时
+    resolve 会返回 None 而漏展开；新 postpass（_expand_ports）在 scope
+    完整后递归展开，后置定义同样得到正确对侧结果。
+
+    展开 = 嵌套取对侧（wrap.master 的 spi.master inner → spi.slave：
+    output inner_clk / input inner_mosi[7:0] / input inner_cs）+
+    enable 反（output）。
+    """
+    r = _run(src=BACKWARD_DEF_SRC)
+    assert r["success"], r.get("error", "")
+    out = r["output"]
+    assert "SKIP" not in out
+
+    def _dir_of(sig: str) -> str:
+        line = next((ln for ln in out.splitlines() if sig in ln), "")
+        return line.split()[0] if line else ""
+
+    # wrap.slave（后置）展开：nested 对侧 + enable 反转
+    assert _dir_of("w_io_inner_clk") == "output"
+    assert _dir_of("w_io_inner_mosi") == "input"
+    assert "[7:0]" in next(ln for ln in out.splitlines() if "w_io_inner_mosi" in ln)
+    assert _dir_of("w_io_inner_cs") == "input"
+    assert _dir_of("w_io_enable") == "output"
