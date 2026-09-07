@@ -123,6 +123,16 @@ class SemanticMappingPlugin(TransformPlugin):
         # 提取源数据
         source_cfg = entry.get("source", {})
         source_data = sym.attrs.get(source_cfg.get("attr", ""), [])
+        # resolved_ports 优先：role 端口集若已有组件递归展开的完整结果
+        # （sym.attrs["resolved_ports"]，含 nested/invert 对侧展开），直接用——
+        # 它已是扁平 {direction, name, packed_range} 行，fields 提取兼容。
+        # raw ports（声明捕获，含 nested/invert 标记）是回退。引擎只做通用
+        # 判断（attr=="ports" 且有 resolved_ports），语言知识在组件侧。
+        if (
+            source_cfg.get("attr") == "ports"
+            and sym.attrs.get("resolved_ports")
+        ):
+            source_data = sym.attrs.get("resolved_ports")
         if not isinstance(source_data, list):
             source_data = [source_data] if source_data else []
 
@@ -148,15 +158,34 @@ class SemanticMappingPlugin(TransformPlugin):
 
         # 按 items 逐项处理
         if source_cfg.get("items", False):
-            items_result, values = self._process_items(entry, source_data)
-            if items_result:
-                self._set_nested(self._tables[table], key, items_result)
-            if values:
-                self._set_nested(
-                    self._tables[table],
-                    key,
-                    values[0] if len(values) == 1 else values,
-                )
+            # resolved_ports 优先路径：源数据已是成品扁平行
+            # {direction, name, packed_range?}（组件递归展开的完整端口集，
+            # 含 nested/invert 对侧展开），直接透传注入映射表，不走字段
+            # 模板提取（那套 items.items[*].name 是给 raw 声明结构用的）。
+            if source_cfg.get("attr") == "ports" and sym.attrs.get("resolved_ports"):
+                items_result = []
+                for row in source_data:
+                    if not isinstance(row, dict) or not row.get("name"):
+                        continue
+                    entry_row: dict = {
+                        "direction": row.get("direction", ""),
+                        "name": row.get("name", ""),
+                    }
+                    if row.get("packed_range") is not None:
+                        entry_row["packed_range"] = row["packed_range"]
+                    items_result.append(entry_row)
+                if items_result:
+                    self._set_nested(self._tables[table], key, items_result)
+            else:
+                items_result, values = self._process_items(entry, source_data)
+                if items_result:
+                    self._set_nested(self._tables[table], key, items_result)
+                if values:
+                    self._set_nested(
+                        self._tables[table],
+                        key,
+                        values[0] if len(values) == 1 else values,
+                    )
 
     def _process_items(self, entry: dict, source_data: list) -> tuple[list, list]:
         """处理 items 模式的数据提取"""
@@ -320,6 +349,15 @@ class SemanticMappingPlugin(TransformPlugin):
         变换器不再感知 direction/invert_map——只合并已处理好的端口数据。
         """
         for sym in scope.symbols.values():
+            # role 若有组件递归展开的 resolved_ports（含 nested/invert 对侧，
+            # 已在 _apply_entry 完整注入 type_ports_flat）→ 跳过本处 _ref_callbacks
+            # merge，避免 analyze 固化的旧/坏回调数据重复叠加（P1.5 invert L2/L3
+            # 修复后 analyze 侧 _ref_callbacks 不再作展开权威）。
+            if (
+                getattr(sym, "kind", "") == "role"
+                and sym.attrs.get("resolved_ports")
+            ):
+                continue
             callbacks = sym.attrs.get("_ref_callbacks", [])
             if not isinstance(callbacks, list):
                 continue

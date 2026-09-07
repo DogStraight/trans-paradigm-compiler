@@ -129,7 +129,7 @@ type spi {
 
 type wrap {
     master : spi.master inner, input enable;
-    slave  : spi.slave inner, invert master;
+    slave  : invert master;
 }
 """
 
@@ -146,7 +146,7 @@ def test_nested_preserve_renders_nested_port():
     assert r["success"], r.get("error", "")
     out = r["output"]
     assert "spi.master inner" in out
-    assert "spi.slave inner" in out
+    assert "invert master" in out  # slave 用 invert 引用（非重复直写 nested）
 
 
 def test_nested_preserve_renders_invert():

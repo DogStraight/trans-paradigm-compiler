@@ -7,9 +7,13 @@ files = ["00_type_decl.toml", "06_typed_decl.toml", "10_impl_binding.toml"]
 [analyzer]
 primitives = ["resolve_refs", "flatten_ports", "attach_invert_map"]
 handlers = ["_mapping.py", "_flatten_ports.py", "_invert_map.py"]
+# role 端口集递归展开 postpass（P1.5 invert L2/L3）：analyze 遍历结束后对每个
+# role 递归展开完整端口集（nested + invert 对侧），写 sym.attrs["resolved_ports"]，
+# 下游统一读——修复 analyze 即时 resolve 的嵌套不反转/后置定义缺陷。须先于
+# _check（其 _role_flat_ports 读 resolved_ports 优先）。
+postpasses = ["_expand_ports.py:run_expand_ports", "_check.py:run_tp_check"]
 # 增强语法语义检查 postpass（ADR-0013：typed_ports 组件内，TPxxx error →
 # analyze 报错 → 阻断展开）。语言知识（type/role/impl 形态）全在 _check.py。
-postpasses = ["_check.py:run_tp_check"]
 
 [transform]
 slots = [

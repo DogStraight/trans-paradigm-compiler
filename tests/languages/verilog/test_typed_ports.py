@@ -195,22 +195,33 @@ type spi {
 
 type wrap {
     master : spi.master inner, input enable;
-    slave  : spi.slave inner, invert master;
+    slave  : invert master;
 }
 """
 
 
 def test_nested_invert_no_skip_leak():
-    """nested+invert 组合：展开不再泄漏字面 SKIP（L1 防御）。
+    """nested+invert 组合（P1.5 L2 已修）：invert 含嵌套的 role，嵌套端口
+    取对侧角色完整展开（inner_* 方向反转），不再静默缺失/泄漏 SKIP。
 
-    映射表过滤空行（嵌套引用 dict 拍平残留）+ expand 端过滤无产出结果。
-    诚实边界（TODO P1.5 遗留）：invert 对含嵌套引用的 role，其嵌套展开
-    端口（inner_* 方向反转）仍不参与反转——本测试只保证不泄漏 SKIP，
-    不断言 invert 部分的 inner_* 展开完整。
+    wrap.slave = invert master，master 含 `spi.master inner`（input clk /
+    output mosi[7:0] / output cs）+ input enable → slave 展开 = 嵌套取对侧
+    spi.slave（output inner_clk / input inner_mosi[7:0] / input inner_cs）+
+    enable 反（output）。
     """
     r = _run(src=NESTED_INVERT_SRC)
     assert r["success"], r.get("error", "")
     out = r["output"]
     assert "SKIP" not in out
-    assert "w_io_inner_mosi" in out
-    assert "w_io_enable" in out
+    # 嵌套端口取对侧角色展开（方向反转 + 位宽保留）——用行方向前缀判断，
+    # 不依赖列对齐空格数
+    def _dir_of(sig: str) -> str:
+        line = next((ln for ln in out.splitlines() if sig in ln), "")
+        return line.split()[0] if line else ""
+
+    assert _dir_of("w_io_inner_clk") == "output"       # spi.slave: clk 是 output
+    assert _dir_of("w_io_inner_mosi") == "input"        # slave: mosi 是 input
+    assert "[7:0]" in next(ln for ln in out.splitlines() if "w_io_inner_mosi" in ln)
+    assert _dir_of("w_io_inner_cs") == "input"          # slave: cs 反转后 input
+    # 普通端口方向反转（master enable input → slave output）
+    assert _dir_of("w_io_enable") == "output"
