@@ -128,6 +128,7 @@
 | 注释节点模型（P1.5：注释 = AST 一等节点 + 槽位约定） | `renderer/renderer_architecture.md`（注释处理节）<br>`references.md`（Veryl CommentDoc/注释机制对照） | `renderer/node_renderer.py`（_comment_slots 槽位消费）<br>`renderer/primitives/line.py`（inline_after 锚 token 定位）<br>`parser/_production.py`（行中注释挂载 + 行尾 trailing）<br>`transform/engine.py::migrate_comments`（变换注释迁移）<br>`pipeline/__init__.py`（未消费 inline_after 兜底回插） | `tests/engine/renderer/test_comment_slots.py`<br>`tests/engine/parser/test_comment_attachment.py`<br>`tests/engine/transform/test_comment_migrate.py` |
 | 注释单机制设计（源注释 = AST 节点元信息 + Comment 节点，普通注释锚点回插已删，tpc marker 独立通道；遗留边界 ①② 闭环） | `renderer/renderer_architecture.md`（注释处理节）<br>`references.md`（Veryl 对照） | 已实现（pratt op 间隙行中注释挂表达式节点 / 容器项间与首元素前独占注释 Comment 节点 / 块结束符与行尾 trailing / join 注释段与分隔符锚消费 / restore 纯 tpc） | `tests/e2e/test_comment_restore.py` + `test_comment_container.py`（门禁）<br>注释测试 4 文件（`test_comment_attachment`/`test_comment_slots`/`test_comment_migrate`/`test_pratt_comment_keep`） |
 | 文档工程缺口方向（引擎叙事 / 术语表 / 变更记录义务，ADR-0012 draft） | `decisions/0012-doc-engineering-gaps.md` | 待实现 | 待实现 |
+| 中段治理方向（时点管线完整化 + 中间产物可视化 + pass 契约校验，ADR-0015 draft） | `decisions/0015-middle-stage-governance.md` | 待实现（0.1.2 起步：可视化管道） | 待实现 |
 
 ## 维护规则
 
