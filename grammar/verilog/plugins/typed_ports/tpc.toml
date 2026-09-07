@@ -7,6 +7,9 @@ files = ["00_type_decl.toml", "06_typed_decl.toml", "10_impl_binding.toml"]
 [analyzer]
 primitives = ["resolve_refs", "flatten_ports", "attach_invert_map"]
 handlers = ["_mapping.py", "_flatten_ports.py", "_invert_map.py"]
+# 增强语法语义检查 postpass（ADR-0013：typed_ports 组件内，TPxxx error →
+# analyze 报错 → 阻断展开）。语言知识（type/role/impl 形态）全在 _check.py。
+postpasses = ["_check.py:run_tp_check"]
 
 [transform]
 slots = [

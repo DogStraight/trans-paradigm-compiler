@@ -88,13 +88,19 @@ endmodule
 
 def test_hier_ident_typed_ports_coexist():
     """typed_ports 点语法（端口列表类型引用 spi.slave）不受影响——表达式位
-    新增 `.` 能力不能破坏声明/端口位的既有解析。"""
+    新增 `.` 能力不能破坏声明/端口位的既有解析。
+
+    语法共存用保留路径（expand_enhanced=False）：本测试验证的是声明位
+    `spi.slave` 的 parse/渲染与表达式位 `.` 共存，非 typed_ports 语义
+    （无 type 定义片段在展开路径会触发 TP001——缺 type 的语义检查归
+    analyzer postpass，见 ADR-0013）。
+    """
     src = """module top (
     spi.slave spi_io
 );
 endmodule
 """
-    r = _run(src)
+    r = _run(src, expand_enhanced=False)
     assert r["success"], r.get("error", "")
     assert "spi.slave" in r["output"]
 

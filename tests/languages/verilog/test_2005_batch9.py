@@ -143,9 +143,14 @@ def test_plain_hier_unchanged():
 
 
 def test_typed_ports_coexist():
-    """typed_ports 声明位点语法（spi.slave）不受表达式位增强影响。"""
+    """typed_ports 声明位点语法（spi.slave）不受表达式位增强影响。
+
+    语法共存用保留路径（expand_enhanced=False）：本测试只验证声明位
+    `spi.slave` 的 parse/渲染，不做 typed_ports 语义（无 type 定义片段
+    在展开路径会触发 TP001——见 ADR-0013 analyzer postpass）。
+    """
     src = "module spi (spi.slave spi_io);\nendmodule\n"
-    r = _run(src)
+    r = _run(src, expand_enhanced=False)
     assert r["success"]
     assert "spi.slavespi_io" in _flat(r.get("output", ""))
 

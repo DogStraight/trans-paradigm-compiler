@@ -90,8 +90,10 @@ production = [
 type_name = "$1"
 role_name = "$3"
 
-[TypedTypeSpec.analyzer]
-identifier_ref = "type_name"
+# 注意：type_name 不做 identifier_ref 即时解析——type 定义常在模块之后
+# （合法前向引用，增强语法样例惯例），即时 resolve 必然误报 W001。type/role
+# 引用存在性由组件内语义检查 postpass（_check.py，TP001/TP002）在遍历结束后
+# 全量核对（scope 树已建满，无前向引用问题）。
 
 [TypedTypeSpec.renderer]
 layout = { line = [
