@@ -32,9 +32,11 @@ type spi {
 
 module top(
     input clk,
-    spi.slave spi_io
+    spi.master spi_io
 );
-    impl spi.master (.clk(clk)) => spi_io;
+    // impl binds a driver for this type.role; => auto-connects the role's
+    // ports to the interface wires (spi_io_sclk, spi_io_miso, ...)
+    impl spi.master => spi_io;
 endmodule
 ```
 
@@ -43,14 +45,13 @@ Run the pipeline and `type spi { ... }` expands to standard Verilog:
 ```verilog
 module top(
     input    clk,
-    output   spi_io_sclk,
-    output   spi_io_miso,
-    input    spi_io_mosi,
-    input    spi_io_cs
+    input    spi_io_sclk,
+    input    spi_io_miso,
+    output   spi_io_mosi,
+    output   spi_io_cs
 );
 
     spi_master u_spi_master_acb99d (
-        .clk (clk        ),
         .sclk(spi_io_sclk),
         .miso(spi_io_miso),
         .mosi(spi_io_mosi),
