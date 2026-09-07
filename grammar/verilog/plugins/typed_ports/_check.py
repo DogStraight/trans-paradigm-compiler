@@ -403,16 +403,13 @@ def _role_flat_ports(tsc, rsym) -> list[dict]:
     """role 符号 → 扁平端口列表 [{direction, name, packed_range?}]。
 
     读序与 _transform._resolved_ports 对齐（组件内共享语义，不重复造）：
-    resolved_ports（分析期拍平） > _ref_callbacks[].resolved_ports（invert/
-    nested 展开后）> raw ports（Ansi 声明拍平）。保证检查与展开消费同一数据。
+    resolved_ports（组件 postpass 递归展开的完整端口集）> raw ports（Ansi
+    声明拍平，兜底）。健康 role 都有 resolved_ports（含空展开 []），
+    _ref_callbacks 中间层已随旧原语链删除（P1.5 step 2）。
     """
     rp = getattr(rsym, "attrs", {}).get("resolved_ports")
     if rp:
         return rp
-    for cb in getattr(rsym, "attrs", {}).get("_ref_callbacks", []) or []:
-        cb_rp = cb.get("resolved_ports")
-        if cb_rp:
-            return cb_rp
     raw = getattr(rsym, "attrs", {}).get("ports", []) or []
     flat = []
     for pg in raw:

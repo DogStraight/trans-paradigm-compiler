@@ -296,14 +296,11 @@ def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
             continue
         if role_name and sym.name != role_name:
             continue
+        # resolved_ports = 组件 postpass（_expand_ports）递归展开的完整端口集；
+        # 无则回退 raw 声明拍平（健康 role 都有 resolved_ports，含空展开 []）。
         rp = sym.attrs.get("resolved_ports", [])
         if rp:
             return rp
-        cbs = sym.attrs.get("_ref_callbacks", [])
-        for cb in cbs:
-            rp = cb.get("resolved_ports", [])
-            if rp:
-                return rp
         raw = sym.attrs.get("ports", [])
         flat = []
         for pg in raw:

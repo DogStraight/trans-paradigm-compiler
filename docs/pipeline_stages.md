@@ -49,7 +49,7 @@ mapping_cfg 由管线按 rules_dir 缓存后注入。开关映射：
 | 下划线属性 | parser → analyzer/transform/renderer | `_` 前缀属性穿过 normalizer（`attr_name.startswith("_")` continue）；`Node.dump` 过滤下划线 |
 | 注释锚点 | parser `_comment_anchors`/`_line_comment_anchors` → render 回插 | 列表结构内被 production skip 吞掉的注释，渲染后按锚点窗口回插（±3 行启发式） |
 | 注释 attachment | parser `_attached_comments` → renderer line_suffix | 行尾注释挂节点，Doc 一等公民渲染（与锚点回插双轨，restore 去重） |
-| 变换回调 | analyzer `_ref_callbacks` → transform | 插件收集的回调表（typed_ports 等），transform 期消费 |
+| 语义映射表 | analyze `resolved_ports`/raw → SemanticMappingPlugin | `type_ports_flat` 等映射表（typed_ports 组件 postpass 递归展开供源），ConfigDrivenTransform 消费 |
 | root_scope | analyzer → transform | 语义作用域根（transform 需 scope 非 None 才运行） |
 | 宏 marker | preprocessor → render | `// <tpc:macro:N>` 标记残留于 clean_source，render 时还原 |
 

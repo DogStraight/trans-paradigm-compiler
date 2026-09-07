@@ -26,7 +26,7 @@ from typing import Any
 
 from core.define import Node
 
-# 方向反转映射（与 _invert_map.invert_map 同语义——集中一处避免漂移）
+# 方向反转映射（_invert_map.py 旧原语已删，本常量集中定义普通端口逐项取反）
 _DIR_INV = {"input": "output", "output": "input", "inout": "inout"}
 
 _ANSI = ("AnsiInputDecl", "AnsiOutputDecl", "AnsiInoutDecl")
@@ -47,9 +47,12 @@ def run_expand_ports(analyzer, context) -> None:
         for sym in tsc.symbols.values():
             if getattr(sym, "kind", "") != "role":
                 continue
-            ports = _expand_role(type_scopes, tname, sym.name)
-            if ports:
-                sym.attrs["resolved_ports"] = ports
+            # 无条件写键（空展开也写 []）：所有 role 一致带 resolved_ports，
+            # 下游消费点（_check/_transform/_semantic_mapping）只读此键即可，
+            # 不再需要 _ref_callbacks 中间层回退（P1.5 step 2 清理）。
+            sym.attrs["resolved_ports"] = _expand_role(
+                type_scopes, tname, sym.name
+            )
 
 
 # ── 递归展开核心 ─────────────────────────────────────

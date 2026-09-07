@@ -31,8 +31,9 @@ token_ext = { file = "_token_ext.toml", required = false }
 files = ["00_type_decl.toml", "06_typed_decl.toml", "10_impl_binding.toml"]
 
 [analyzer]
-primitives = ["resolve_refs", "flatten_ports", "attach_invert_map"]
-handlers = ["_mapping.py", "_flatten_ports.py", "_invert_map.py"]
+handlers = ["_mapping.py"]   # mapping_entries（SemanticMappingPlugin 消费）
+# analyzer 原语/处理器 = 通用协议（引擎原语 resolve_refs 等按规则级
+# primitives 触发；typed_ports 现经 postpass 递归展开 role 端口，不走原语链）
 
 [transform]
 slots = ["delete_type_decl", "build_wrapper", "expand_typed_port", ...]
@@ -56,8 +57,8 @@ passes = [
 # grammar.<lang> 插件。入口 = file.py:fn（fn 返回插件定义的能力 API 面，
 # 如 dict 聚合多个函数）。未声明时引擎 get_capability 返回 None（降级）。
 # 纯能力组件（无 grammar/analyzer/transform 声明，如 formatter）也据此被加载。
+# （typed_ports 原 transform_callbacks 能力已随旧 analyze 原语链删除，P1.5 step 2）
 [capabilities]
-transform_callbacks = "_mapping.py:collect_callbacks"
 formatter = "_capability.py:build_formatter"
 
 # 渲染插件声明（覆盖式输出）：语言包 tpc.toml [plugins].render = "组件名"
@@ -202,13 +203,19 @@ ConfigDrivenTransform 消费映射表
 Renderer 产出格式化输出
 ```
 
-### `_ref_callbacks` 协议（analyzer ↔ transformer 关键通道）
+### `_ref_callbacks` 协议（analyzer ↔ transformer 可选通道）
 
-1. **Analyzer**（`_resolve.py`）：把回调写入 `sym.attrs["_ref_callbacks"]`
-2. **Collector**（`_mapping.py`）：`collect_callbacks()` 从作用域树读取
-3. **Transformer**（`_semantic_mapping.py`）：从回调构建映射表
+1. **Analyzer**（`analyzer/primitives/_resolve.py` `resolve_refs` 原语）：把回调写
+   入 `sym.attrs["_ref_callbacks"]`（按规则级 `primitives` 配置触发）
+2. **Collector**：原 `typed_ports/_mapping.py:collect_callbacks`（trans_callback
+   dump 能力）——typed_ports 自 P1.5 step 2 改用 postpass 递归展开 role 端口后
+   不再产出/消费 `_ref_callbacks`，collect_callbacks 能力已删
+3. **Transformer**（`_semantic_mapping.py` `_apply_refs`）：从回调合并映射表
+   （resolve_entries 声明 kind=apply_refs 才触发）
 
-所有此类魔数键集中在 `core/_protocol.py` 定义，**禁止在代码里写裸字符串**。
+该通道当前无活跃组件（typed_ports 是唯一曾用者，已迁移）；引擎机制保留，未来
+语言若需"引用解析 → 回调"可复用。所有此类魔数键集中在 `core/_protocol.py` 定义，
+**禁止在代码里写裸字符串**。
 
 ## 8. 脚手架
 

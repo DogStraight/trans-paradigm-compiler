@@ -76,10 +76,10 @@ class TestPureCapabilityComponent:
 
 
 class TestVerilogCapabilities:
-    def test_formatter_and_callbacks_available(self):
-        """verilog 插件经 load_all_components 加载后，formatter /
-        transform_callbacks 能力应可用（format_generated 与 analyze pass
-        的回调收集经它们接入）。"""
+    def test_formatter_available(self):
+        """verilog 插件经 load_all_components 加载后，formatter 能力应可用
+        （format_generated 经能力接入）。typed_ports 的 transform_callbacks
+        能力已随旧 analyze 原语链删除（P1.5 step 2——_ref_callbacks 不再产出）。"""
         load_all_components()
         f = get_capability("formatter")
         assert f is not None
@@ -91,9 +91,6 @@ class TestVerilogCapabilities:
             "split_inst_tail_lines",
         ):
             assert callable(caps[key])
-
-        t = get_capability("transform_callbacks")
-        assert t is not None
 
     def test_format_generated_via_capability(self):
         """format_generated 经能力查找格式化（format_output=True 管线 e2e 路径）。"""

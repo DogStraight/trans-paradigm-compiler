@@ -48,7 +48,7 @@ token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体�
 | normalize | 消除 optional/repeat/seq 包装（AST 归一） | `parser/`（normalizer） | 让后续阶段看到统一节点形态，不感知 TOML 组合写法 | `MODEL_INDEX` parser 行 |
 | schedule | 编排 pass：analyze → transform（check 可插） | `pipeline/schedule.py` + `pipeline/__init__.py::run_pipeline_on_source` | analyze 先建语义（作用域/符号），transform 消费语义做变换（顺序因果） | `decisions/0007-pipeline-schedule.md` + `docs/pipeline_stages.md` |
 | analyze pass | 作用域/符号/类型 + 语义检查插槽 | `analyzer/`（scope/traversal/checks/primitives） | 跨 token/AST 的语义层 | `analyzer/semantic_checks.md` |
-| transform pass | 配置驱动变换 + 插件（typed_ports 展开等） | `transform/`（engine 插件） | 消费 analyze 建的映射表（`_ref_callbacks` 通道） | `core/component_protocol.md` |
+| transform pass | 配置驱动变换 + 插件（typed_ports 展开等） | `transform/`（engine 插件） | 消费 analyze 建的语义映射表（`type_ports_flat` 等，组件 postpass 展开供源） | `core/component_protocol.md` |
 | renderer | Doc IR 布局 → 文本（注释回插） | `renderer/`（doc/renderer/node_renderer/primitives） | 世界 A：引擎源端渲染 | `renderer/renderer_architecture.md` |
 | format?（可选） | formatter 插件 pass 管线 | `grammar/verilog/plugins/formatter/` | 世界 B：覆盖式/精排（语言包声明启用） | `grammar/verilog/plugins/formatter/README.md` |
 

@@ -101,12 +101,10 @@ ports = [
     "$4.items[*].sub_node[1]",
 ]
 
-[TypeRole.analyzer]
-primitives = [
-    "resolve_refs",
-    "flatten_ports",
-    "attach_invert_map",
-]
+# role 端口集展开由组件 postpass（_expand_ports.py）在 analyze 遍历结束后统一
+# 递归完成（nested + invert 对侧，写 resolved_ports）；raw sym.attrs["ports"]
+# 捕获保留（_expand_ports 数据源）。不再配 resolve_refs/flatten_ports/
+# attach_invert_map（P1.5 step 2 清理旧原语链）。
 
 # role 独立子作用域：master/slave 的端口声明（AnsiInputDecl 等）是 role
 # 成员，各 role 作用域隔离——同名端口（master/slave 都有 clk）不冲突
@@ -121,35 +119,6 @@ name_attr = "role_name"
 
 [TypeRole.analyzer.symbol.capture]
 ports = "ports"
-
-[TypeRole.analyzer.resolve_refs]
-name_attr = "role_name"
-
-[[TypeRole.analyzer.resolve_refs.refs]]
-marker = "type_spec"
-kind = "nested"
-scope_mode = "child"
-scope_kind = "type"
-key = "{type_spec.type_name}"
-role_key = "{type_spec.role_name}"
-
-[TypeRole.analyzer.resolve_refs.refs.meta]
-prefix = "instance_name"
-
-[[TypeRole.analyzer.resolve_refs.refs]]
-marker = "target_role"
-kind = "invert"
-scope_mode = "self"
-role_key = "{target_role}"
-
-[TypeRole.analyzer.flatten_ports]
-direction = "{$.direction}"
-name = "items.items[*].name"
-
-[TypeRole.analyzer.attach_invert_map.invert_map]
-input = "output"
-output = "input"
-inout = "inout"
 
 [TypePortDecl]
 inline = true

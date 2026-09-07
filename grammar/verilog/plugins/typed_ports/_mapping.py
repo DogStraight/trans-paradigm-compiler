@@ -6,10 +6,7 @@ Consumed by SemanticMappingPlugin (first stage of transform pipeline).
 This file is the typed_ports component's language config entry point.
 """
 
-from core._protocol import (
-    TABLE_TYPE_PORTS_FLAT,
-    ATTR_REF_CALLBACKS,
-)
+from core._protocol import TABLE_TYPE_PORTS_FLAT
 
 # ── Language info ──
 LANG = "verilog"
@@ -33,33 +30,10 @@ _type_ports_flat = {
     },
 }
 
-# ── 变换回调消费方 ──
-_apply_refs = {"kind": "apply_refs"}
-
 mapping_entries: dict = {
     TABLE_TYPE_PORTS_FLAT: _type_ports_flat,
 }
 
-resolve_entries: dict = {
-    "apply_type_refs": _apply_refs,
-}
-
-
-def collect_callbacks(scope) -> dict:
-    """Recursively collect _ref_callbacks from all symbols in the scope tree.
-
-    Output format (trans_callback/{name}.json):
-        { "type_name.role_name": [{ "kind": "nested|invert", ... }] }
-    """
-    result: dict = {}
-
-    def _walk(s):
-        for sym in s.symbols.values():
-            cbs = sym.attrs.get(ATTR_REF_CALLBACKS, [])
-            if cbs:
-                result[f"{s.name}.{sym.name}"] = cbs
-        for child in s.children:
-            _walk(child)
-
-    _walk(scope)
-    return result
+# resolve_entries（apply_refs 后处理）与 collect_callbacks（trans_callback dump）
+# 已随旧 analyze 原语链删除（P1.5 step 2）——role 端口展开现由 _expand_ports
+# postpass 写 resolved_ports，SemanticMappingPlugin._apply_entry 直接注入。
