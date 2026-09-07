@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **typed_ports 增强语法语义检查（T3，ADR-0013 三族）**：新增组件内 analyzer
+  postpass `_check.py`（挂 typed_ports `[analyzer] postpasses`）——A 表述完整
+  TP001 type 悬空 / TP002 role+invert 悬空 / TP003 显式端口 typo / TP004 role
+  端口重名 / TP006 invert 自反；B 连接正确 TP010 impl `=>` 未命中端口实例
+  （拦 `=> top` 历史错误写法）/ TP011 类型不匹配（spi 连 sci）/ TP012 role
+  不同向（ref_spi_inf 同向基准）；C 单驱动 TP020 同一接口实例被多 impl 绑定
+  （多驱动预检，对齐展开后 W105）。TP 恒开 error 级，analyze 报错即阻断展开
+  （复用 schedule `_ScheduleStop`，坏输入不产出错误模块）。顺带修：TypedTypeSpec
+  即时 identifier_ref 在 type 后置（合法前向引用）时误报 W001 → 移除，交 TP001
+  postpass 全量核对；既有 `=> top` 错误样例修正（test_typed_ports/
+  test_enhanced_render 删误导 impl 行保 TypedPortDecl 展开断言、
+  test_comment_migrate/test_schedule 改同向 `=> 实例`）。验证：18 单测 +
+  eval_check_accuracy 8 TP pos + 1 neg 样本（recall 100% + FP 0）+ 全量 pytest
+  1566 绿 + policy 门禁零命中。
+
 - **行尾注释统一为 `_comment_slots["trailing"]`（A2 双轨消除）**：parser
   `collect_following_comments` 行尾注释挂载从 `_attached_comments` 并入
   `_comment_slots["trailing"]`（renderer 同 LineSuffix 渲染）——消除

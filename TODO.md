@@ -35,18 +35,6 @@
         check 链"架构再动
       - 中成本（Verilator UNOPTFLAT/CMPCONST）与远期（Spyglass CDC）——
         明确 0.1.2+（方向注 ROADMAP，不立项）
-- [ ] **T3 typed_ports 增强语法语义检查**（首个自场景自定义规则范例，ADR-0013，
-      2026-09-07 立项）：
-      - 痛点 = 增强语法（type/role/impl）主流工具不识别，良构性只有 tpc 能保；
-        现状 handler 全防御性静默，坏输入产出错误展开（无诊断）
-      - 检查三族 11 点（详 ADR-0013）：A 表述完整（type/role/invert 引用存在、
-        端口归属、无重复无环）/ B 连接正确（类型匹配 spi≠sci、方向一致、实例
-        角色对齐 master↔slave）/ C 单驱动（一物理端口单驱动，新行为走新语法）
-      - 架构：诊断放 typed_ports 组件内（analyzer primitives，恒开 error 不
-        可关，code 前缀 TPxxx）；TP error → 阻断展开（硬门禁非软报告）
-      - 实现 + 11 检查点 pos/neg cases + 阻断测试 + eval 门禁，走
-        checker-rule-authoring SKILL 完整流程作为自定义规则范例
-
 ## 文档工程（2026-09-04 立项，使用复盘 6 类文档框架）
 
 > 已完成（提交 5f4e812/301cdda/后续）：MODEL_INDEX 按子系统重组（两表合并 +
