@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **typed_ports invert 嵌套/后置定义修复（TODO P1.5 L2/L3）**：新增组件内
+  analyzer postpass `_expand_ports.py`——analyze 遍历结束后（scope 完整）对
+  每个 role 从 raw 声明递归展开完整端口集（nested 递归 + invert 取对侧角色），
+  写 `sym.attrs["resolved_ports"]`。修复 L2（invert 含嵌套 role 时嵌套端口静默
+  缺失——现取对侧角色展开，`inner_*` 方向反转 + 位宽保留）与 L3（invert 目标
+  role 后置定义时单趟 DFS 取不到符号漏展开）。下游 `_semantic_mapping`：
+  `_apply_entry` 对 attr==ports 且含 resolved_ports 的 role 直接注入扁平行，
+  `_walk_refs` 跳过有 resolved_ports 的 role（避开 analyze 旧回调的坏 invert
+  数据）。测试样本修正（`wrap.slave` 由混用重复 `spi.slave inner, invert
+  master` 改干净 `invert master`，展开不再重 `inner_*`）+ 新增 L3 后置定义
+  pos 测试（`test_backward_def_invert_expands`）。验证：typed_ports 相关 36 +
+  全量 pytest 1566 绿 + policy 双门禁 PASS。
+
+- **README top type-spi 示例修正（0.1.1 发布准备）**：示例原 `spi.slave
+  spi_io` + `impl spi.master => spi_io` 混角色绑定会被 T3 检查（TP012 同角色 /
+  TP003）拦为发布反例；改同角色 `spi.master spi_io` + `impl spi.master =>
+  spi_io`，展开块方向同步，抽取验证可运行。
+
 - **typed_ports 增强语法语义检查（T3，ADR-0013 三族）**：新增组件内 analyzer
   postpass `_check.py`（挂 typed_ports `[analyzer] postpasses`）——A 表述完整
   TP001 type 悬空 / TP002 role+invert 悬空 / TP003 显式端口 typo / TP004 role

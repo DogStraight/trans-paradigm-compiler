@@ -65,7 +65,7 @@
 | `gap-renderer-comment-fidelity.md` | 原 known_limitations | renderer 注释回插保真（±3 行锚点启发式） |
 | `gap-formatter-line-behavior.md` | 原 known_limitations | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
 | `gap-language-pack-scope.md` | 原 known_limitations | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |
-| `gap-semantic-elaboration-boundaries.md` | 原 known_limitations | 语义/插件契约（elaboration/invert 嵌套/单例/版本） |
+| `gap-semantic-elaboration-boundaries.md` | 原 known_limitations | 语义/插件契约（elaboration/单例/版本） |
 | `gap-verification-engineering.md` | 原 known_limitations | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
 
 > 新增缺口文件时：本表加一行 + `docs/README` gaps 索引补登记；闭环删除时同步移除。

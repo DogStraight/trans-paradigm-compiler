@@ -23,7 +23,7 @@
 5. **Verilog-2005 标准面已齐；可综合核心 vs 仿真/库插件**（接受 + 余量跟踪）：
    主包覆盖可综合子集；仿真/库语法在插件（gates 26/UDP/specify/config/
    defparam/过程 assign/NetTypes）。剩余 gap 在 TODO P1.5（darkriscv 嵌套条件
-   编译位置精度、typed_ports invert L2/L3）与 references.md。
+   编译位置精度）与 references.md。
 6. **yaml 缩进推断锁**（接受 + 摩擦）：`[indent] level="auto"` 首结构行锁定
    单位；混单位文件锁定后错解析；渲染器经 AST-root `_indent_unit` 戳重缩进到
    锁定单位——块标量逐字内容仅在源单单位时保持对齐。
@@ -62,5 +62,5 @@
 ## 关联条目
 
 - ROADMAP「SystemVerilog 语言包（远期 backlog）」「P1.8」
-- TODO P1.5（darkriscv 嵌套条件编译位置精度 / typed_ports invert）
+- TODO P1.5（darkriscv 嵌套条件编译位置精度）
 - 原 `docs/known_limitations.md`（Scope 类全部 + yaml 相关）

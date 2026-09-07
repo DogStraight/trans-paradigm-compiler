@@ -190,13 +190,6 @@
       依赖插值定位（渲染行距非线性 + 锚点稀疏），嵌套位置仍有偏差 →
       sv-parser 仍拒（interop 豁免保留）。根治需 active 内容 marker 化
       （_flush_block 改造）或 token span 映射（P3.1 前置），另案。
-- [ ] **invert 嵌套引用遗留（typed_ports，L2/L3）**：L1 已防御
-      （test_nested_invert_no_skip_leak）；L2 未修——invert 对含嵌套引用的 role，
-      嵌套展开端口（inner_* 方向反转）不参与反转（invert 回调 resolve 期拿的是
-      目标 role 原始端口数据，需用完整展开端口解析：普通端口拍平 + _ref_callbacks
-      合并）；L3 未修——invert 引用的 role 定义在后时 _ref_callbacks 尚未构建
-      （primitive 单遍 DFS，需两遍遍历/pending 重试）。README Known limitations
-      已记录。
 
 ## P1.10 主流 lint 机制调研 → 规则清单（2026-08-29 立项）
 
