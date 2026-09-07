@@ -100,5 +100,7 @@ parser 能前置（单输入单消费：token 流入一个 parser，入口前可
 
 > Impl: 待实现（起步候选：pipeline/schedule.py 时点序列器扩展 + 中间产物 dump 管道）
 > Test: 待实现
-> 关联: ADR-0007（pass 级时点）；讨论稿 _drafts/freedom-reverse-principle.md
-> （已并入本 ADR，原稿删）
+> 关联: ADR-0007（pass 级时点）；前置调研 `references.md`「知名编译器中段治理机制
+> （LLVM + GCC）」（2026-09-08：时点"粒度×位置"两维 / 校验按声明自动选验 + 可选
+> 可插 / 可视化事件式回调 + 列出式入口 / 缓存按产物单元 + 失效传播，支撑本 ADR
+> 形态取舍；讨论草稿 _drafts/freedom-reverse-principle.md 已并入后删除）

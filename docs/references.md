@@ -91,6 +91,8 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [ClangIR / CIR (llvm/llvm-project)](https://clang.llvm.org/docs/ClangIR.html) | 概念参考 | Clang 的 MLIR-based 中级 IR，使用 ODS 定义所有操作 |
 | [VAST](https://github.com/trailofbits/vast) | 深度参考 | 程序分析向的 MLIR 塔式 IR 管线；Tower 机制（每个 pass 后克隆模块 + 记录转换步骤 + 位置反向链接）是 provenance 链的工程化范本（详见深调研） |
 | [lyra](https://github.com/hankhsu1996/lyra) | 深度参考 | SystemVerilog 仿真工具链（C++/Bazel，复用 slang AST），同期活跃的同龄人；多级 IR + 927 case 测试组织可借鉴（详见深调研） |
+| [LLVM](https://llvm.org/) | 深度参考 | 中段治理范本：New PassManager 管线字符串声明 + AnalysisManager 按需缓存/失效传播 + IR verifier 结构自检（详见深调研） |
+| [GCC](https://gcc.gnu.org/) | 深度参考 | 中段治理另一范式：passes.def 静态声明序 + opt_pass 前置属性契约 + verify 固定收尾 + -fdump-* 可视化（详见深调研） |
 
 ### 语言工作台与 DSL
 
@@ -455,6 +457,70 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 - 🔥 **价值定位修正：这套思路给"变换器插件的作者"效果更好**。Tower 的"每步记录来源"对 tpc 引擎本身不是必需（tpc 目标是格式化/lint，不需要全链回溯），但对**写 transform 插件的人**是刚需：插件作者改语言行为时，最痛的是"我的原语对节点做了什么、为什么结果不对"。给 transform 插件层加"步骤日志"（每原语记录输入/输出节点对 + 来源）≈ VAST 的轻量版，且只服务插件作者，不拖累主路径
 - 方言塔多级 IR：**不实现**（目标不同；"按需取层"已由切片覆盖）
 - 克隆模块：**不实现**（无内存化 IR 持久需求）
+
+### 知名编译器中段治理机制（LLVM + GCC，2026-09-08 深调研，ADR-0015 前置）
+
+> 调研动因：ADR-0015（中段治理方向：时点管线完整化 + 中间产物可视化 + pass 契约
+> 校验）的抽象化输入。只聚焦**治理机制**（pass 时点/依赖声明、中间产物机械校验、
+> 可观察性、分析缓存），不采 IR 语法本身。采集：agent-reach（github/web）+ 源码检索。
+
+#### LLVM — New PassManager / AnalysisManager / IR verifier
+
+- 定位：中段治理"可编排优先"的范本——pass 是 CRTP mixin（无继承接口），管线用字符串
+  名声明（`opt -passes='function(foo,loop(bar)),module(baz)'`，
+  `PassBuilder::parsePassPipeline`），`require<analysis>` 可强制预计算。
+
+**机制要点（对 ADR-0015 三个抽象）：**
+
+| 治理问题 | LLVM 机制 | 关键设计 |
+|---|---|---|
+| 时点/依赖声明 | AnalysisKey + `AM.getResult<A>()`（运行时按需拉取）；`PreservedAnalyses` 声明"破坏/保留哪些分析" | 依赖运行时按需，非静态表；失效靠 pass 返回的 PA 沿依赖链传播 |
+| 分析缓存 | AnalysisManager 以 IR 单元地址为 key 缓存；invalidate() 传递失效 | "避免重复分析"是 AM 存在的首要理由；内层 pass 不允许触发外层分析（防二次方） |
+| 产物机械校验 | `verifyModule/verifyFunction`（IR verifier，自建 DT 不信任缓存）；`-verify-each` 走 instrumentation 回调（非真 pass）每 pass 后验，坏即报"after pass X" | 结构性自检是**可插拔环节**：输入/每 pass 后/管线结尾/调试期任意插（默认结尾 verify，`-disable-verify` 逃生门） |
+| 可观察性 | -print-before/after-all（断点式全量）、-print-changed（只报变化 diff，低噪声首选）、-debug-pass-manager（调度轨迹）、-time-passes；全挂 PassInstrumentationCallbacks | 可视化 = **事件总线式 instrumentation**，pass 代码零感知；默认低噪声、可按 pass 过滤 |
+
+**对 ADR-0015 可参考点：**
+- 时点分"粒度（module→function→loop）× 位置"两维建模；管线用声明式名字序列（可平移 TOML 把 pass 顺序当数据写）
+- pass 契约 = "影响面声明 + 校验比对"（pass 声明破坏了哪些分析 → 校验环节比对实际改动）
+- verifier 要能独立自证（自算所需 DT），坏时点校验器不能建立在"缓存一定准"假设上
+- 可视化做"每时点发回调"的观察者机制，不掺 pass 本体（事件总线）
+
+#### GCC — passes.def 静态声明 / opt_pass 契约 / verify 固定收尾 + -fdump
+
+- 定位：中段治理"可观测/可校验优先"的范本——pass 顺序是**编译期数据**（passes.def 宏
+  清单 + sub 嵌套，gen-pass-instances.awk 展开），运行时只做 gate 动态裁剪（每函数判定，
+  `-Og/-O0` 选不同子序列）。
+
+**机制要点：**
+
+| 治理问题 | GCC 机制 | 关键设计 |
+|---|---|---|
+| 时点/依赖声明 | passes.def 声明序（数据非代码）；opt_pass 声明 properties_required/provided/destroyed；gate() 每函数动态（失败连带跳过整组） | 依赖不显式声明 = "声明序 + 前置属性断言"；执行前 verify_curr_properties 断言、执行后按 provided/destroyed 记账 |
+| 产物机械校验 | `TODO_verify_il` 无条件注入每个 pass 收尾 → 按 curr_properties 分派 verify_gimple/verify_ssa/verify_flow_info/verify_loop_structure；--enable-checking/-fchecking 门控 | verifier 是 **pass manager 固定收尾环节**（非 pass 各自的事）；校验内容由"声称输出的 IL 属性"自动决定；成本显式门控（默认关） |
+| 可观察性 | -fdump-passes（列全部 pass + 开关态，是启用开关的发现入口）；dump 文件 `源.编号.相位.pass名`；pass 名既是 dump 名又是 CLI 开关名；star 名静默；-fdump-noaddr/unnumbered 可比性 | dump 生命周期挂 manager 骨架（开→逐函数写→关），pass 只 dump_printf——可视化是横切机制；30 年演化的自带调试基础设施 |
+| 多遍 | 同 pass 类多实例（构造实参区分，passes.def 重复出现），实例号进 dump/禁用接口（-fdisable-tree-ccp1） | "类 + 构造参数 + 实例编号"，精确定位"第几次" |
+
+**对 ADR-0015 可参考点：**
+- "可配置"可以是"数据化声明 + 显式契约"，不必是"运行时可重排"——静态表也能支撑极强可视化/校验（对照 LLVM 编排优先）
+- pass 声明前置属性/输出属性 → manager 前置断言 + 后置记账，比事后 verify 更早暴露次序错（契约前置）
+- dump 启用从"列出"来（-fdump-passes 先列后拼开关）→ tpc 可做"列出全部时点+状态"命令
+
+#### 两相对照（编排优先 vs 可观测/可校验优先）
+
+| 维度 | LLVM | GCC |
+|---|---|---|
+| 时点声明 | 运行时字符串管线（可编排） | 编译期静态表 + gate 裁剪（可枚举） |
+| 依赖 | AnalysisKey 运行时按需 + PreservedAnalyses 失效 | 声明序 + 前置属性断言 |
+| 校验 | verifier 可插任意时点（instrumentation） | verify 固定收尾（manager 骨架注入） |
+| 可视化 | -print-*/debug-pass-manager/timing 事件回调 | -fdump-* pass 绑定 + 可比性设施（去地址/diff） |
+| 对 tpc 侧重 | 可编排 + 低耦合声明（TOML 管线 + 影响面契约 + 事件式可视化） | 可观测 + 契约（静态声明序 + 前置属性记账 + 列出式 dump 入口） |
+
+**收敛（ADR-0015 抽象化输入）：**
+1. 时点 = "粒度 × 位置"两维（承接时点线模型；GCC 三级 list+sub 嵌套可借鉴）
+2. 校验做"可选、可插、按声明自动选验什么"——LLVM 任意时点插 + GCC 按 IL 属性自动分派
+   （tpc 对应"按产物契约自动选校验器"；成本门控 + 逃生门，对齐粒度自选）
+3. 可视化做事件回调 + 低噪声 diff + 列出式入口（-fdump-passes 模式）——不改 pass 本体
+4. 缓存按产物单元 + 失效传播（AnalysisManager 模型），但 verifier 不依赖缓存（独立自证）
 
 ### Foundry（Rust）— Ethereum 开发工具链（2026-08 深调研）
 
