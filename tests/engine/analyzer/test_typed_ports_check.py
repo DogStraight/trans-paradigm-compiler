@@ -1,4 +1,4 @@
-"""test_typed_ports_check.py — typed_ports 增强语法语义检查（TP 族，ADR-0013）。
+"""test_typed_ports_check.py — typed_ports 增强语法语义检查（TP 族）。
 
 组件内 postpass（_check.py）三族检查：
     A 表述完整：type/role 引用存在（TP001/TP002）、显式端口归属（TP003）、

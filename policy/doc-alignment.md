@@ -36,6 +36,21 @@ Doc: linter/linter_architecture.md   # 文件级引用（稳定，不随章节�
 - 引用的是"知识单元"级对齐（模块/关键符号），**不是每行注释**——避免成为新的维护负担。
 - 符号重命名后更新 `Impl:` 与 `MODEL_INDEX.md`（grep `::` 可全量核对）。
 
+## 引用纪律（锚稳定机制，不锚 ADR）
+
+**`docs/decisions/`（ADR）是经常变动的部分**——accepted 完成即删、编号可复用、
+长期 draft 并入 ROADMAP 后删（历史 git log）。因此：
+
+- 代码 `Doc:` 头 / `MODEL_INDEX` 导航 / 正文叙述引用一律指向**稳定的机制文档**
+  （子包架构文档、README、policy 制度），**不引 `decisions/NNNN-*.md` 作锚**。
+- 机制文档要提"为什么/决策出处"时，**内联简短说明**（事故/动机一句话），不写
+  "见 ADR-NNNN" 委托编号——ADR 删了委托就断。
+- ADR 文件内部（如 `superseded by NNNN`）与 `decisions/README.md` 属例外
+  （同层引用）。
+- 归档已删 ADR 时：把机制文档里的 "决策依据见 ADR-NNNN" 改为内联"为什么"，
+  Doc:/导航改指机制落点；正文里的 `（ADR-NNNN）` 决策标签可保留为历史编号
+  （git log 可追）或改指机制，不新增此类引用。
+
 ## 门禁与同步
 
 - `check_doc_refs.py`：D1（Doc: 目标存在）/D2（导航索引条目存在）gate +

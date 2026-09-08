@@ -12,7 +12,7 @@ handlers = ["_mapping.py"]
 # _invert_map.py 移除），analyze 只保留声明捕获（raw ports 供 _expand_ports 消费）。
 # 须先于 _check（其 _role_flat_ports 读 resolved_ports 优先）。
 postpasses = ["_expand_ports.py:run_expand_ports", "_check.py:run_tp_check"]
-# 增强语法语义检查 postpass（ADR-0013：typed_ports 组件内，TPxxx error →
+# 增强语法语义检查 postpass（typed_ports 组件内，TPxxx error →
 # analyze 报错 → 阻断展开）。语言知识（type/role/impl 形态）全在 _check.py。
 
 [transform]

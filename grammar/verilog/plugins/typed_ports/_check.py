@@ -1,11 +1,11 @@
 """_check.py — typed_ports 增强语法语义检查（TPxxx，组件内 analyzer postpass）。
 
 增强语法（type/role/impl）的语义良构检查：主流工具不识别这套语法，良构性
-只有 tpc 自己能保证（ADR-0013）。坏输入（引用悬空/类型错配/方向冲突/表述
+只有 tpc 自己能保证。坏输入（引用悬空/类型错配/方向冲突/表述
 残缺）在展开前被拦成 error 级诊断 → analyze pass 阻断 transform，不静默产出
 错误展开。
 
-检查维度三族（ADR-0013「检查点候选」）：
+检查维度三族：
     A 表述完整（语法自洽可还原）：type/role/invert 引用存在、显式端口归属、
       type 定义良构（role 内端口名不重复、invert 无环）
     B 连接正确（类型化 + 方向）：impl 绑定 interface_ref 解析（一组线）、

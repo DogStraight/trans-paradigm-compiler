@@ -4,6 +4,10 @@
 > 每条 ADR 是讨论痕迹的沉淀——模型维护时通过 `Impl:`/`Test:` 直接跳转到代码，无需模糊搜索。
 > 落档分流（AGENTS.md）：设计/研判（含未立项设计详案）建 ADR；外部项目调研
 > 落 references.md；执行结果落 CHANGELOG + 测试。
+> **引用纪律**：decisions/ 是经常变动的部分（accepted 完成即删、编号可复用、
+> draft 并入 ROADMAP 后删）——代码 Doc:/导航/正文不引 ADR 作锚，引稳定的机制
+> 文档；机制文档内联"为什么"，不写"见 ADR-NNNN"（详见 policy/doc-alignment.md
+> 「引用纪律」）。
 
 ## 状态流：讨论 → 决策（防堆积、防蒸发）
 

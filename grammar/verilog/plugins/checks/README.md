@@ -20,7 +20,7 @@
 | `hier_check/` | postpass（服务型） | 层次引用解析（供其它检查用，无自身诊断） | — |
 | `semantic_check/` | analyzer 原语 | 通用名称/引用解析（`check_name_call` 等基础，W001/W002 由 analyzer 基础 primitives 发） | （analyzer 基础） |
 
-> **组件内检查（非 checks/ 族）**：`../typed_ports/_check.py`（ADR-0013，增强
+> **组件内检查（非 checks/ 族）**：`../typed_ports/_check.py`（增强
 > 语法语义良构，恒开 error 阻断展开）——A 表述完整 TP001-004/006、B 连接正确
 > TP010-012、C 单驱动 TP020。code 权威在 typed_ports 组件（增强语法语义契约，
 > 不是通用 Verilog 检查族，故不落 checks/）。
