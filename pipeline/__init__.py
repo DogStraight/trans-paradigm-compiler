@@ -306,10 +306,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         # 组件映射配置按 rules_dir 缓存：get_component_mapping_config 读全局
         # _loaded_components，而其他语言包的 setup_grammar 会 clear+重载它——
         # 复用本缓存时若再读全局会拿到别的语言包组件（typed_ports mapping 丢失）。
-        mp_entries, rv_entries = get_component_mapping_config()
-        mapping_cfg: dict = {}
-        mapping_cfg.update(mp_entries)
-        mapping_cfg.update(rv_entries)
+        mapping_cfg = get_component_mapping_config()
         # 编排调度按 rules_dir 缓存（同一原因：声明来自 _loaded_components）。
         schedules = build_schedules()
         # 渲染插件覆盖式（[plugins].render = 组件名）：渲染插件产出中间表示

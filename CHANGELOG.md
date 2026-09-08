@@ -7,6 +7,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **typed_ports resolve_refs 原语链整体移除（P1.5 step 2 A+B）**：role 端口展开
+  统一走 postpass 递归（`_expand_ports` → `resolved_ports` → `_apply_entry` 直接
+  注入）后，旧"analyze 即时 resolve"双实现链冗余，分两步删净：
+  - A（组件内，69948f6）：typed_ports 停用 resolve_refs/flatten_ports/
+    attach_invert_map 配置与 handler（删 `_flatten_ports.py`/`_invert_map.py`）、
+    `_check`/`_transform` 去 `_ref_callbacks` 回退、删 collect_callbacks 能力与
+    resolve_entries 声明
+  - B（引擎级，本提交）：删引擎 resolve_refs built-in 原语
+    （`analyzer/primitives/_resolve.py`）与其专属工具（`_utils.py` 整体）、
+    `_semantic_mapping` 的 apply_refs 后处理链（_run_resolve/_apply_refs/
+    _walk_refs/_merge_to_flat）、`_protocol` 冗余常量（ATTR_REF_CALLBACKS +
+    3 原语名）、plugin_loader 的 resolve_entries 收集与 pipeline 组装简化
+  - 文档同步：component_protocol 语义映射通道节改"已移除"、transform/README、
+    引擎注册示例（已删 `_flatten_ports.py`）换真实 `check_name_call`
+  验证：引擎专项 346 + 全量 pytest 1567 绿 + policy 双门禁 PASS + pylance 改动
+  零诊断。
+
 - **typed_ports invert 嵌套/后置定义修复（TODO P1.5 L2/L3）**：新增组件内
   analyzer postpass `_expand_ports.py`——analyze 遍历结束后（scope 完整）对
   每个 role 从 raw 声明递归展开完整端口集（nested 递归 + invert 取对侧角色），

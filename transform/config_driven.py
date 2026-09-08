@@ -312,13 +312,14 @@ class ConfigDrivenTransform(TransformPlugin):
 def _expand_primitive(engine, node, config, root_scope):
     """expand 原语：lookup + foreach + emit
 
-    消费 type_ports_flat 表（含常规端口 + _apply_refs 展开的回调端口），
-    对每条扁平端口 { direction, name } 做 foreach → switch → emit AST 节点。
+    消费 type_ports_flat 表（组件 postpass 展开的完整端口集，经 resolved_ports
+    注入），对每条扁平端口 { direction, name } 做 foreach → switch → emit AST
+    节点。
 
     数据流：
         type_ports_flat["spi"]["slave"] = [
-            { "direction": "output", "name": "miso" },   # 常规端口
-            { "direction": "input",  "name": "clk" },    # 来自 _apply_refs
+            { "direction": "output", "name": "miso" },
+            { "direction": "input",  "name": "clk" },    # 嵌套/对侧已含（前缀化）
             ...
         ]
         ↓

@@ -418,7 +418,7 @@ class GrammarRule:
     }
     # 各阶段合法字段。analyzer 阶段**宽松**：scope/symbol/ref_collect/
     # identifier_ref/primitives 是引擎字段，其余是插件原语名（开放扩展点，
-    # 如 check_name_call/resolve_refs/flatten_ports）——不严格校验未知字段。
+    # 如 check_name_call）——不严格校验未知字段。
     # parser 阶段含 scope：_resolve_peek 会把 analyzer.scope 拷贝到 parser
     # 顶层（peek = { scope = "analyzer" }），故 scope 是 parser 合法字段。
     _STAGE_FIELDS = {

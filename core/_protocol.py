@@ -5,9 +5,6 @@ Doc: core/component_protocol.md（组件元数据协议）
 """
 
 # ── 符号属性（sym.attrs 中的 key）──
-ATTR_REF_CALLBACKS = "_ref_callbacks"
-"""存储引用解析回调列表。"""
-
 ATTR_RESOLVED_PORTS = "resolved_ports"
 """存储解析后的端口列表。"""
 
@@ -49,6 +46,3 @@ PRIMITIVE_SCOPE_ENTER = "scope_enter"
 PRIMITIVE_SCOPE_EXIT = "scope_exit"
 PRIMITIVE_SYMBOL_DECLARE = "symbol_declare"
 PRIMITIVE_IDENTIFIER_RESOLVE = "identifier_resolve"
-PRIMITIVE_RESOLVE_REFS = "resolve_refs"
-PRIMITIVE_FLATTEN_PORTS = "flatten_ports"
-PRIMITIVE_ATTACH_INVERT_MAP = "attach_invert_map"

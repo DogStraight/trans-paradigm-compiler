@@ -158,7 +158,7 @@ python main.py config dump --json          # JSON（ensure_ascii，Windows 兼�
 - **顶层字段**严格：`_KNOWN_FIELDS | {inject, transform, parser, analyzer, renderer}`
 - **parser/renderer 阶段**严格：parser 含 `scope`（`_resolve_peek` 拷贝产物）
 - **analyzer 阶段宽松**：scope/symbol/ref_collect/identifier_ref/primitives 是引擎
-  字段，其余是插件原语名（开放扩展点，如 check_name_call/resolve_refs）
+  字段，其余是插件原语名（开放扩展点，如 check_name_call）
 - **布尔字段**类型校验（is_statement/is_atom/inline/pratt/is_block）
 
 **附带修复**：`FileManager.load_all_toml` 跳过 `tpc.toml`——其 `[lexer]`/`[parser]`

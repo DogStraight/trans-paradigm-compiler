@@ -229,19 +229,19 @@ def get_transform_slots() -> dict[str, Callable]:
     return dict(_transform_slots)
 
 
-def get_component_mapping_config() -> tuple[dict, dict]:
-    """Collect mapping_entries and resolve_entries from all loaded components."""
+def get_component_mapping_config() -> dict:
+    """Collect mapping_entries from all loaded components.
+
+    组件 .py 模块暴露 mapping_entries（表定义），SemanticMappingPlugin 消费。
+    （resolve_entries/apply_refs 后处理已随 resolve_refs 原语链删除，P1.5 step 2 B）
+    """
     mapping_entries: dict = {}
-    resolve_entries: dict = {}
     for info in _loaded_components.values():
         for mod in info.get("analyzer", []):
             entries = getattr(mod, "mapping_entries", None)
             if entries:
                 mapping_entries.update(entries)
-            resolves = getattr(mod, "resolve_entries", None)
-            if resolves:
-                resolve_entries.update(resolves)
-    return mapping_entries, resolve_entries
+    return mapping_entries
 
 
 def get_primitive_order() -> list[str]:

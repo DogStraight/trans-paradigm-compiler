@@ -36,13 +36,13 @@ ConfigDrivenTransform（`config_driven.py`）再消费表做 expand/replace/dele
 跳过 `_process_items` 字段模板提取（那是给 raw 声明结构的）。引擎只做通用判断，
 语言语义在组件 postpass。
 
-### resolve_entries（apply_refs 后处理）——当前无用户
+### resolve_entries / apply_refs —— 已删除（P1.5 step 2 B）
 
-`resolve_entries`（`kind=apply_refs`）驱动 `_run_resolve` 后处理（消费旧
-`_ref_callbacks` 合并映射表）。typed_ports 迁移到 resolved_ports 路径后已删
-声明——`_resolve_entries` 空则引擎空转无害。机制保留在引擎
-（`core/component_protocol.md` `_ref_callbacks` 协议节），未来语言若需
-"引用解析→回调"可复用。
+引擎曾提供 `resolve_entries`（`kind=apply_refs`）后处理（消费 `_ref_callbacks`
+合并映射表）与 analyzer `resolve_refs` 原语链。typed_ports 迁移到 postpass 递归
+展开（resolved_ports → `_apply_entry` 直接注入）后该通道无用户，引擎侧机制随
+`analyzer/primitives/_resolve.py`/`_utils.py` 一并移除（不再有 _run_resolve/
+_apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路。
 
 ### 消费（ConfigDrivenTransform）
 

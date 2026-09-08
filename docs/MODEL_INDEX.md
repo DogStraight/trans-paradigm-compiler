@@ -77,7 +77,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 变换引擎（AstTransformer + 插件自动注册） | `language_walkthrough.md`（变换引擎） | `transform/engine.py::AstTransformer` | `tests/engine/transform/test_comment_migrate.py` + `tests/languages/*`（c4_asm/typed_ports 集成） |
-| 配置驱动变换 + 语义映射 | `transform/README.md`（语义映射机制：建表/resolved_ports 优先/resolve_entries/消费）<br>`language_walkthrough.md`（端到端教程） | `transform/config_driven.py`<br>`transform/_semantic_mapping.py` | `tests/languages/verilog/test_typed_ports*.py`<br>`tests/languages/c4/test_c4_asm.py` |
+| 配置驱动变换 + 语义映射 | `transform/README.md`（语义映射机制：建表/resolved_ports 优先注入/消费；resolve_entries 已删）<br>`language_walkthrough.md`（端到端教程） | `transform/config_driven.py`<br>`transform/_semantic_mapping.py` | `tests/languages/verilog/test_typed_ports*.py`<br>`tests/languages/c4/test_c4_asm.py` |
 | 结构保留规范化 | `language_walkthrough.md`（normalizer：结构保留规范化） | `transform/normalizer.py` | `tests/engine/parser/test_pratt_parser.py`（normalize 后断言）等 |
 
 ### renderer — Doc IR + 布局（世界 A）· 语言插件世界 B 见 grammar 节

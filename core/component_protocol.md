@@ -32,8 +32,9 @@ files = ["00_type_decl.toml", "06_typed_decl.toml", "10_impl_binding.toml"]
 
 [analyzer]
 handlers = ["_mapping.py"]   # mapping_entries（SemanticMappingPlugin 消费）
-# analyzer 原语/处理器 = 通用协议（引擎原语 resolve_refs 等按规则级
-# primitives 触发；typed_ports 现经 postpass 递归展开 role 端口，不走原语链）
+# analyzer 原语/处理器 = 通用协议：引擎内置原语（scope/symbol/identifier）由
+# 规则级 config 键触发；自定义原语/检查按 primitives 列表或同名键触发；组件加工
+# 经 postpass 递归展开（typed_ports _expand_ports 先例，写 resolved_ports）
 
 [transform]
 slots = ["delete_type_decl", "build_wrapper", "expand_typed_port", ...]
@@ -133,14 +134,14 @@ def expand_typed_port(node: Node, ctx) -> Node | None:
 ## 4. analyzer 原语
 
 ```python
-# grammar/verilog/plugins/typed_ports/_flatten_ports.py
-from analyzer.primitives.registry import register
+# grammar/verilog/plugins/checks/semantic_check/_name_check.py
 from core.define import Node
+from analyzer.primitives.registry import register
 
-@register("flatten_ports")
-def flatten_ports(analyzer, node: Node, config: dict) -> None:
+@register("check_name_call")
+def check_name_call(analyzer, node: Node, config: dict) -> None:
     """签名固定：analyzer（遍历器）/ node（当前 AST 节点）/ config（规则 analyzer 配置）"""
-    self_cfg = config.get("flatten_ports", {})
+    self_cfg = config.get("check_name_call") or {}
     ...
 ```
 
@@ -203,19 +204,17 @@ ConfigDrivenTransform 消费映射表
 Renderer 产出格式化输出
 ```
 
-### `_ref_callbacks` 协议（analyzer ↔ transformer 可选通道）
+### 语义映射数据通道（analyze → transform）
 
-1. **Analyzer**（`analyzer/primitives/_resolve.py` `resolve_refs` 原语）：把回调写
-   入 `sym.attrs["_ref_callbacks"]`（按规则级 `primitives` 配置触发）
-2. **Collector**：原 `typed_ports/_mapping.py:collect_callbacks`（trans_callback
-   dump 能力）——typed_ports 自 P1.5 step 2 改用 postpass 递归展开 role 端口后
-   不再产出/消费 `_ref_callbacks`，collect_callbacks 能力已删
-3. **Transformer**（`_semantic_mapping.py` `_apply_refs`）：从回调合并映射表
-   （resolve_entries 声明 kind=apply_refs 才触发）
+- analyze 侧：组件 postpass 在 scope 完整后递归展开语义数据，写符号自有键
+  （如 typed_ports `resolved_ports` = [{direction,name,packed_range}]）
+- transform 侧：SemanticMappingPlugin 读 `sym.attrs`（mapping_entries 的
+  source.attr）建 `type_ports_flat` 表，ConfigDrivenTransform 消费展开
+- 历史：曾有过 `resolve_refs` 原语 → `_ref_callbacks` → `_semantic_mapping`
+  `_apply_refs` 的回调通道（typed_ports 旧机制）；P1.5 step 2 已整体移除
+  （analyze 后置 postpass 递归展开替代），不再使用——别走回头路
 
-该通道当前无活跃组件（typed_ports 是唯一曾用者，已迁移）；引擎机制保留，未来
-语言若需"引用解析 → 回调"可复用。所有此类魔数键集中在 `core/_protocol.py` 定义，
-**禁止在代码里写裸字符串**。
+所有此类魔数键集中在 `core/_protocol.py` 定义，**禁止在代码里写裸字符串**。
 
 ## 8. 脚手架
 
