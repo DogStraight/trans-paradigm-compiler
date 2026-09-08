@@ -44,7 +44,7 @@
 | 数字字面量 DFA（`[[number.based]]` 配置驱动） | `language_walkthrough.md`（数字字面量 DFA） | `lexer/number_gen.py`<br>`lexer/number_runner.py` | `tests/engine/lexer/test_number_gen.py`<br>`tests/engine/lexer/test_number_baseline.py` |
 | 原始文本捕获（注释/字符串/块标量） | `language_walkthrough.md`（注释/字符串 token 扫描） | `lexer/capture_runner.py` | `tests/engine/lexer/test_capture_runner.py` |
 | 顶层声明预扫描 | `language_walkthrough.md`（预扫描：顶层声明收集） | `lexer/pre_scan.py` | `tests/engine/lexer/test_lexer.py` |
-| 配置加载 fail-fast | `decisions/0003-config-load-fail-fast.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::merge_token_define` | `tests/engine/core/test_config_loading.py` |
+| 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::merge_token_define` | `tests/engine/core/test_config_loading.py` |
 
 ### linter — 前置 token 级 lint（反解析器，复用同一 TOML 语法）
 
@@ -103,7 +103,7 @@
 
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
-| 配置加载 fail-fast | `decisions/0003-config-load-fail-fast.md` | `core/config_registry.py::ConfigRegistry.load_all` | `tests/engine/core/test_config_loading.py` |
+| 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all` | `tests/engine/core/test_config_loading.py` |
 | 配置生命周期（注册 → 解析 → 消费） | `core/config_lifecycle.md` | `core/config_registry.py` | `tests/engine/core/test_config_loading.py` |
 | 组件协议 + 插件加载 | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py`<br>`core/_protocol.py`（magic string 常量） | `tests/engine/core/test_plugin_cluster.py` |
 | 插件回调能力化（P2.5：`[capabilities]`） | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py::_load_capabilities`<br>`core/plugin_loader.py::get_capability`<br>`grammar/verilog/plugins/{typed_ports,formatter}/tpc.toml`（声明） | `tests/engine/core/test_capabilities.py`（9 用例） |

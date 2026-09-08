@@ -3,6 +3,16 @@
 > 文档目的：解释 `declare_cfg` 注册制配置的三阶段时序，以及由此产生的常见怪象
 > 与规避方式。来源：2026-08-12 c4 第二语言过程踩了 3 个修复（walkthrough #1/#2/#3）。
 
+## fail-fast（配置损坏不静默降级）
+
+配置加载对损坏**不静默降级**（原 ADR-0003 决策，2026-09-08 归档迁入）：
+`TOMLDecodeError` / 缺声明 section / 非"文件缺失"异常一律 fail-fast 报错
+（仅 `FileNotFoundError` + required=False 容忍）；token define 有结构自检
+（`lexer_utils._validate_token_define` 关键段存在校验）。动机：2026-07-26
+token.toml 重复 key 事故——解析失败被 `except` 当"可选缺失"静默存空表 → token
+全退化为 id → linter 全面崩溃。**静默错乱是"假绿"温床**——配置损坏在入口暴露，
+不运行期难查。实现见 `config_registry.py::ConfigRegistry.load_all` 异常分类。
+
 ## 三阶段时序
 
 ```

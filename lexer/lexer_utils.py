@@ -2,7 +2,7 @@
 
 配置通过 ConfigRegistry 声明式加载，不再内部 try/except 吞错误。
 
-Doc: docs/decisions/0003-config-load-fail-fast.md
+Doc: core/config_lifecycle.md
 """
 
 import os

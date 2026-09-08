@@ -17,4 +17,4 @@
 | `_user_config.py` / `utils.py` | 用户项目配置定位 / 通用工具 |
 
 > 配置机制见 `core/config_lifecycle.md`；组件协议见 `core/component_protocol.md`。
-> 配置错误一律 fail-fast（ADR-0003），不静默降级。
+> 配置错误一律 fail-fast（core/config_lifecycle.md），不静默降级。
