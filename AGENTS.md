@@ -119,4 +119,5 @@
 ## 运行
 
 - 入口：`main.py`（CLI）
-- 测试：`pytest tests/`，零运行时依赖，无第三方包
+- 快速回归：`pytest -m smoke`（~33s，功能域代表层，日常改动先跑；分层见 `tests/README.md`）
+- 全量测试：`pytest tests/`（零运行时依赖，无第三方包）

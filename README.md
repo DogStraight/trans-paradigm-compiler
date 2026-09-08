@@ -301,6 +301,7 @@ plugin scripts — no engine code required to add or modify a language (see
 ## Verification
 
 ```bash
+python -m pytest -m smoke                # fast regression layer (~33s, per-domain reps, see tests/README.md)
 python -m pytest tests/ -q                # unit tests (see tests/ for count)
 python -m pytest tests/ -q -n auto        # concurrent full regression (pytest-xdist, ~3×)
 python tests/e2e/run_all_tests.py           # pipeline E2E + fidelity (FAIL 0)
