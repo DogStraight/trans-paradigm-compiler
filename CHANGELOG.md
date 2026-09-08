@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-09
+
+注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
+检查与清理（T3/invert/resolve_refs 链删除）+ 检查链收尾推进 + 测试 smoke
+快速层（217 用例）与并发回归修复。基线：pytest 1575 全绿 / smoke 217 /
+real 语料 9 文件 FAIL 0 / lint recall 31/31 零误报。
+
 ### Changed
 
 - **测试分层：smoke 快速回归层 + 全量**：全量测试重（串行 ~32min / 并行
