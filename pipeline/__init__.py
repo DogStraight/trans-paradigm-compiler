@@ -12,7 +12,6 @@ CLI（main.py）与测试共用，故移入正式包，wheel 安装后 CLI 可�
 analyze/transform 由编排调度执行（pipeline/schedule.py——
 编排器一个文件闭环：声明处理 + 时点排序 + _run_schedule 执行，
 共享实例由本模块按 rules_dir 缓存后注入）。
-Doc: api.md（管线 API：run_pipeline_on_source/format_output）
 Doc: docs/pipeline_stages.md（编排调度）
 """
 

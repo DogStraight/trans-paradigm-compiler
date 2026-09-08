@@ -20,7 +20,7 @@ agent-reach/web 采集）：Diátaxis 分类法、CPython devguide（blurb 变�
   制度/调研/索引），已有自建 8 类分流，且多出 decisions/gaps/policy/research
   这些 Diátaxis 完全不管的治理维度。tpc 现有映射：tutorial≈language_walkthrough；
   how-to≈.agents SKILL（读者是模型）；reference≈grammar_rule_fields/MODEL_INDEX/
-  api.md；explanation≈decisions + 子包架构文档。
+  （组件协议 core/component_protocol.md）；explanation≈decisions + 子包架构文档。
 - **tpc 治理已上游**：就近化 + MODEL_INDEX 三方跳转（doc→impl→test）+ 内部
   引用门禁，在 OSS 里属前列。真正缺口集中在一个高信号项 + 几个治理死角
   （见决策）。

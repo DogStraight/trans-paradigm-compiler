@@ -2,7 +2,7 @@
 
 Architecture:
     Source → Preprocessor (expand) → Lexer → Parser → ... → Renderer → Reverse
-Doc: api.md（管线第一阶段：宏展开/反向映射）
+Doc: preprocessor/README.md
 """
 
 from core.config_registry import _CONFIG_DECLARATIONS

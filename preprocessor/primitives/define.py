@@ -1,6 +1,6 @@
 """define — `define NAME body 指令处理器
 
-Doc: api.md（管线第一阶段：define 指令）
+Doc: preprocessor/README.md
 """
 
 import re

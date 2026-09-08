@@ -155,7 +155,7 @@ Style entry points:
   `grammar/<lang>/base/_style.toml` (`indent_width`, `max_line_width`, …).
 - **Where does this config value come from?** — `tpc config dump`.
 
-Python API reference in [api.md](./api.md).
+Python API 参考：各模块用法见就近 docstring（main.py / pipeline / 各子包 README）。
 
 ## Example: a Verilog type extension
 
@@ -270,7 +270,6 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 | [docs/engine_overview.md](./docs/engine_overview.md) | **Engine overview**: one-line walk of the pipeline — read before any subsystem change |
 | [docs/README.md](./docs/README.md) | Doc navigation & alignment conventions (`Doc:`/`Impl:`/`Test:`) |
 | [docs/MODEL_INDEX.md](./docs/MODEL_INDEX.md) | **Read before modifying**: knowledge-unit jump table → doc → impl → test |
-| [api.md](./api.md) | Python API reference (stage-level components) |
 | [core/component_protocol.md](./core/component_protocol.md) | Plugin components / slots / primitives / inject |
 | [core/config_lifecycle.md](./core/config_lifecycle.md) | Config lifecycle (declare_cfg registration → load → read) |
 | [linter/linter_architecture.md](./linter/linter_architecture.md) | Pre-parse linter architecture |

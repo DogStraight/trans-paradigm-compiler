@@ -39,7 +39,7 @@ token 是 token 级 lint 与 parser 的输入，AST 是语义与变换的载体�
 
 | 站 | 数据形态 / 动作 | 负责 | 为什么在这 | 深入读 |
 |---|---|---|---|---|
-| CLI 入口 | 命令分发（format/lint/check/pipeline/new/config dump） | `main.py` | 从语言包 `tpc.toml [commands]` 读指令声明（指令 = 完整管线默认上的差异项） | `api.md` |
+| CLI 入口 | 命令分发（format/lint/check/pipeline/new/config dump） | `main.py` | 从语言包 `tpc.toml [commands]` 读指令声明（指令 = 完整管线默认上的差异项） | （CLI 用法见 `main.py` docstring） |
 | 配置加载 | 语言包配置解析（fail-fast） | `core/config_registry.py`（declare_cfg 注册制） | 所有阶段行为由配置驱动，先于任何阶段加载 | `core/config_lifecycle.md` |
 | 预处理器 | 宏展开 + 条件块占位（str→str） | `preprocessor/`（`_expand.py`/`_reverse.py`/`_bridge.py`） | 宏是文本层机制，先于 token 化处理；反向映射供注释/诊断还原 | `MODEL_INDEX` preprocessor 行 |
 | lexer | str → token 流（token/数字形态配置驱动） | `lexer/`（`main_lexer.py` 等） | 词法边界：把源切成 token 再谈结构 | `MODEL_INDEX` lexer 行 |
