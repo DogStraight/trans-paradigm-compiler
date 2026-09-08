@@ -8,7 +8,7 @@
     stage=semantic — analyzer 插件产出（parse 成功后，符号级 + 跨文件
                      联动检查，阶段 2）
 
-决策（用户拍板 + ADR-0001/0004）：
+决策（用户拍板，机制见 analyzer/semantic_checks.md）：
 - 语法有错的文件**跳过语义阶段**（parser 只解析合法输入，不基于残缺
   AST 报语义误报）。
 - 递归带 memo（文件级去重）与环防护（模块 A 文件实例化 B、B 文件实例
@@ -25,7 +25,7 @@ grammar/<lang>/plugins/*/ postpass 的职责。本引擎只提供跨文件上下
 经 `AnalysisTraversal._external_extra` 注入每个文件的
 context.extra：`module_index`（全工程模块表）与 `inst_sites`（本文件
 实例化点列表）。
-Doc: docs/decisions/0005-cross-file-semantic-check.md（跨文件语义检查 ProjectChecker）
+Doc: analyzer/semantic_checks.md（跨文件语义检查 ProjectChecker；ADR-0005 已归档）
 """
 
 import os

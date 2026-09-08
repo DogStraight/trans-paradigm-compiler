@@ -1,9 +1,8 @@
 # 语义检查插槽架构（semantic checks）
 
-> 决策依据：`decisions/0004-semantic-check-slot.md`（为什么）、
-> `decisions/0005-cross-file-semantic-check.md`（跨文件扩展 + tpc check）。
-> 本文件是"怎么拼"。
-> 前置调研：`references.md`「静态检查器功能调研」节。
+> 本文件 = 语义检查插槽"怎么拼"（机制权威）。决策依据：2026-08 前置调研
+> （references.md「静态检查器功能调研」）+ 分阶段落地演进（P1-P4 + 跨文件，
+> 见 §10；原 ADR-0004/0005 已归档，历史 git log 追）。
 > 状态：**P1 机制层 + P2 窄版 + 跨文件联动 + P3 声明式规则表 + P4 用户配置层
 > + L1 注释驱动测试已落地**（2026-08-25 P1/P2/P2.5；2026-08-28 P3/P4/L1 测试）。
 
@@ -30,8 +29,8 @@ analyzer 遍历（原语按 [RuleName.analyzer] 触发）       ← 已有（che
           │
           └─ 统一报告管道（Diagnostic + related 链）     ← 已实现（P1）
                 └─ 跨文件联动（ProjectChecker 注入
-                    module_index / inst_sites）          ← 已实现（ADR-0005，
-                    inst_check 插件：W101/W102/W103/WC001）
+                    module_index / inst_sites）          ← 已实现（inst_check
+                    插件：W101/W102/W103/WC001）
 ```
 
 ## 3. 规则声明 schema（L1+L2 合一）✅ 已落地（P3，2026-08-28）
@@ -242,8 +241,8 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | P1 | 机制层：post-pass 钩子 + `Diagnostic.related` + 统一抑制 | 钩子/related **已实现**（2026-08-25）；统一抑制未做（并入 P4） |
-| P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见 ADR-0005 inst_check） |
-| P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（ADR-0005：W101/W102/W103/WC001 + `tpc check` CLI） |
+| P2 | `width_check` 窄版：参数化端口 + 字面量 + 单链 | **已实现**（WC001，跨文件版见下 P2.5 inst_check） |
+| P2.5 | 跨文件联动：递归发现 + 模块表 + inst_check 插件 | **已实现**（W101/W102/W103/WC001 + `tpc check` CLI） |
 | P3 | L1 声明式 schema + 注释驱动测试框架 | **已实现**（2026-08-28：check_registry + checks.py + name_check 插件 NC001-NC010，rules/*.toml 规则=数据；注释驱动测试 tests/_check_test.py + cases/ 样例） |
 | P4 | 用户配置层 `[checks]` + per_file 豁免 + 统一抑制 | **已实现**（2026-08-28：config/tpc_config.json checks 段——enabled/overrides/per_file，fail-fast 校验；统一抑制由 analyzer/suppress.py 覆盖，声明式规则自动获得豁免） |
 
