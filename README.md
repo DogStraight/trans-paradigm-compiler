@@ -7,7 +7,7 @@ compiler frontend; context-sensitive grammar; language workbench; DSL extension;
 model-friendly configuration; forkable pipeline
 -->
 
-![version](https://img.shields.io/badge/version-0.1.0-blue)
+![version](https://img.shields.io/badge/version-0.1.1-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11%2B-orange)
 ![status](https://img.shields.io/badge/status-experimental-yellow)
@@ -122,7 +122,7 @@ Requirements: Python 3.11+ (zero runtime dependencies).
 git clone https://github.com/DogStraight/trans-paradigm-compiler && cd trans-paradigm-compiler
 pip install -e ".[test]"     # editable install + test deps
 
-tpc --version                # 0.1.0
+tpc --version                # 0.1.1
 tpc format input.v           # format a Verilog file (stdout)
 tpc format input.v --fidelity keep_blank   # keep source blank lines
 tpc lint input.v             # pre-parse token lint (exit 1 on diagnostics)
@@ -334,7 +334,7 @@ Python 3.11/3.12/3.13 × Windows/Ubuntu.
 
 ## Status
 
-**Experimental — Alpha, not yet published to PyPI.** Version 0.1.0.
+**Experimental — Alpha, not yet published to PyPI.** Version 0.1.1.
 
 Verilog support targets IEEE 1364-2005 (Verilog-2005), with the
 synthesizable core in the main pack and simulation/library syntax in plugins

@@ -6,7 +6,7 @@ pyproject.toml 的 [project].version 与此保持一致
 Doc: core/component_protocol.md（引擎骨架/组件协议）
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .define import Node, Token, FileManager, GrammarRule, GrammarRulesRegister
 

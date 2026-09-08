@@ -57,7 +57,7 @@ C 代码，误报率显著更低。本机验证 MSVC Build Tools 14.44。
 3. **`--credits` 命令**：零逆向成本直接打印。
 
 ```
-tpc-fmt 0.1.0 — TransParadigm Verilog toolchain
+tpc-fmt 0.1.1 — TransParadigm Verilog toolchain
 Author: biominescence <oho15799293498@outlook.com>
 AI Co-author: deepseek-v4-flash
 Source: https://github.com/DogStraight/trans-paradigm-compiler
