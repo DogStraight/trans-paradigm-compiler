@@ -60,7 +60,7 @@ pattern = "^[a-z][a-z0-9_]*$"   # 判定操作：正则匹配符号名
 - ⚠ **pattern 缺省** = 全符号进 handler（L2 兜底）。
 - ⚠ **默认开关是数据决策**：误报面大的规则 `default = false`
   （NC/AW 族先例）；误报可接受的默认开（W 族先例）——参考
-  `docs/decisions/0004-semantic-check-slot.md`「落地演进」。
+  `analyzer/semantic_checks.md`「规则默认策略」。
 
 ## L2 handler（单符号脚本兜底）
 
@@ -173,5 +173,5 @@ python policy/check_hardcode.py                       # 语言知识不进代码
 - `analyzer/semantic_checks.md` — 引擎机制：架构 + schema + postpass 协议
   （实操见本 SKILL）
 - `grammar/verilog/plugins/checks/` — 现有插件目录（蓝本）
-- `docs/decisions/0004-semantic-check-slot.md`「落地演进」— 默认开关先例（NC 族）
+- `analyzer/semantic_checks.md`「规则默认策略」— 默认开关先例（NC 族）
 - `docs/MODEL_INDEX.md` — 知识单元跳转表

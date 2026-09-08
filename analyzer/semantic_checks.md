@@ -267,3 +267,26 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
   （模型可加载指令包，随项目发布；本架构 §3/§5 是其机制底稿）。
 - 插件清单（每 check 插件负责什么 + 诊断 code 就近权威）→
   `grammar/verilog/plugins/checks/README.md`。
+
+## 12. 规则默认策略（数据决策演进，原 ADR-0004 落地演进迁入）
+
+**默认开关是数据决策**（非固定策略）：误报面大的规则默认关（NC/AW 先例），
+误报可接受的默认开（W 族先例）。
+
+### NC 命名规则默认关（e93ab9f）
+- 背景：NC 族默认全开 + 小写下划线 pattern 对真实混合风格代码 ~1300 误报海啸。
+  命名风格主轴 = 蛇形 + 大小驼峰；比风格更有价值的是**前后缀语义约定**（防错）。
+- `[[checks]] default = false`；启用语义（checks.py）：显式 enabled = "不选即关"；
+  缺省 = default=true 的规则 ∪ overrides/per_file **引用即启用**。
+- NC001/002 pattern 放宽为 PascalCase | snake_case（真实语料 picorv32/serv 均 Pascal）。
+- 默认关后真实语料 NC 诊断归零（默认体验不刷屏；启用才按团队约定查）。
+
+### 前后缀语义约定（NC014-016，防错）
+- NC014 端口方向后缀：`direction_suffix` 表（input→_i / output→_o / inout→_io）
+  ——名字方向后缀与声明方向不符 → 可能接反（强约束）；`require=true` 时未按
+  方向后缀命名也报。
+- NC015/016 类型后缀（wire→_w / reg→_r）。豁免 `_` 前缀。
+- 实现：name_check/rules/_prefix_suffix_check.py（handler）。
+- 评估不做：低有效 `_n`、时钟/复位前缀 `clk_`/`rst_`（无 clock/reset 符号 kind，
+  需事件控制/复位条件分析；用户可按团队约定自写 pattern）。
+- 默认策略（0.1.1）：风格弱约束（只报混用）/ 前后缀强约束（声明了才查）。

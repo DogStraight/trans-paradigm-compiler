@@ -623,11 +623,11 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
   设计内不折类型（concat 无顶层安全断点/多声明对齐/宏 `debug`/块头 case 分支/双层
   括号首段无更早断点）——无"应折未折"的普通表达式，剩余是"无安全断点"的固有上限
 
-### 静态检查器功能调研（2026-08-22，decisions/0004 前置调研）
+### 静态检查器功能调研（2026-08-22，语义检查插槽前置调研）
 
 > 原 `docs/references/static_checkers_survey.md`（2026-09-04 并入本文件，消除
 > references/ 目录与 references.md 同名）。性质：设计来源记录（references）——
-> `decisions/0004-semantic-check-slot.md` 的前置调研，决定 tpc 语义检查系统
+> 语义检查插槽（`analyzer/semantic_checks.md`）的前置调研，决定 tpc 语义检查系统
 > "做什么（功能矩阵）"与"怎么学（规则架构）"。后续扩展见本文件「Verilog
 > 静态检查工具群研判」「主流 lint 机制调研（P1.10 三路）」「svlint 深调研」。
 > 规则引擎部分经 web 检索核实，来源 URL 附各节末。
