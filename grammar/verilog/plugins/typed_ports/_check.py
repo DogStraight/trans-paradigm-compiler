@@ -61,9 +61,13 @@ def run_tp_check(analyzer, context) -> None:
     for tname, tsc in type_scopes.items():
         _check_type_wellformed(context, tname, tsc)
 
+    # type 内 impl 定义端口表 {type: {role: set(端口名)}}——TP003 白名单需含
+    # impl 私有端口（role 接口 + clk/rst_n 等驱动端口的超集，见 ref_spi_inf）。
+    impl_ports = _collect_type_impl_ports(ast)
+
     # A/B/C 族：AST 走查 impl 绑定 / typed 端口引用（引用点 × 类型表）。
     # DFS 带当前模块名上下文（impl 的 interface_ref 只在所属模块实例表内查）。
-    _walk_ast(ast, context, type_scopes, module_insts, None)
+    _walk_ast(ast, context, type_scopes, module_insts, impl_ports, None)
 
     # C 族：单驱动预检——同一模块内同一接口实例被多个 impl 绑定 →
     # 展开后同线被多实例 output 驱动（与 W105 展开后行为一致，只提前定位）。
@@ -124,7 +128,7 @@ def _check_type_wellformed(context, tname: str, tsc) -> None:
 # ── A/B/C 族：AST 走查（带模块上下文）─────────────────
 
 
-def _walk_ast(node, context, type_scopes, module_insts, current_mod) -> None:
+def _walk_ast(node, context, type_scopes, module_insts, impl_ports, current_mod) -> None:
     """DFS AST，记录当前模块名，对 impl/typed 端口引用点做检查。
 
     ModuleDecl 进入时更新 current_mod（其端口列表 TypedPortDecl 与体内
@@ -134,24 +138,24 @@ def _walk_ast(node, context, type_scopes, module_insts, current_mod) -> None:
         nn = node.node_name
         if nn == "ModuleDecl":
             mname = _text(getattr(node, "module_name", None)) or current_mod
-            _walk_ast_children(node, context, type_scopes, module_insts, mname)
+            _walk_ast_children(node, context, type_scopes, module_insts, impl_ports, mname)
             return
         if nn == "ImplBindingWithInterface":
-            _check_impl_binding(context, node, type_scopes, module_insts, current_mod)
+            _check_impl_binding(context, node, type_scopes, module_insts, impl_ports, current_mod)
         elif nn == "ImplBinding":
-            _check_impl_binding(context, node, type_scopes, module_insts, current_mod)
+            _check_impl_binding(context, node, type_scopes, module_insts, impl_ports, current_mod)
         elif nn == "TypedPortDecl":
             _check_typed_port_decl(context, node, type_scopes)
         # 递归子节点（保持当前模块上下文）
-        _walk_ast_children(node, context, type_scopes, module_insts, current_mod)
+        _walk_ast_children(node, context, type_scopes, module_insts, impl_ports, current_mod)
     elif isinstance(node, list):
         for item in node:
-            _walk_ast(item, context, type_scopes, module_insts, current_mod)
+            _walk_ast(item, context, type_scopes, module_insts, impl_ports, current_mod)
 
 
-def _walk_ast_children(node, context, type_scopes, module_insts, current_mod) -> None:
+def _walk_ast_children(node, context, type_scopes, module_insts, impl_ports, current_mod) -> None:
     for child in node.iter_children():
-        _walk_ast(child, context, type_scopes, module_insts, current_mod)
+        _walk_ast(child, context, type_scopes, module_insts, impl_ports, current_mod)
 
 
 # ── A 族：typed 端口引用点 ────────────────────────────
@@ -173,7 +177,7 @@ def _check_typed_port_decl(context, node: Node, type_scopes: dict) -> None:
 
 
 def _check_impl_binding(context, node: Node, type_scopes: dict,
-                        module_insts: dict, current_mod) -> None:
+                        module_insts: dict, impl_ports: dict, current_mod) -> None:
     """ImplBinding 绑定检查：type/role 引用存在 + interface_ref 解析 +
     类型匹配 + role 同向 + 显式端口归属。
 
@@ -216,10 +220,15 @@ def _check_impl_binding(context, node: Node, type_scopes: dict,
             _check_impl_instance_match(context, node, tname, rname,
                                        inst_type, inst_role, inst_sym)
 
-    # 显式端口名归属：impl 连接的端口名 ∈ type.role 定义端口集
+    # 显式端口名归属：impl 连接端口 ∈ (role 定义端口集 ∪ impl 定义私有端口集)。
+    # impl 是 role 端口的超集——role 接口端口 + impl 私有端口（clk/rst_n/data 等
+    # 驱动/数据端口）；绑定连接私有端口合法（ref_spi_inf：`impl spi.master
+    # (.clk(clk), .rst_n(rstn), ...) => spi_io`）。真 typo = 既不在 role 集也
+    # 不在 impl 定义端口集（否则 typo 会被当新端口展开）。
     defined = {
         p.get("name", "") for p in _role_flat_ports(tsc, _role_sym(tsc, rname))
     }
+    defined |= impl_ports.get(tname, {}).get(rname, set())
     for conn in _collect_connects(getattr(node, "ports", None)):
         pn = _text(getattr(conn, "port_name", None))
         if pn and pn not in defined:
@@ -313,6 +322,64 @@ def _collect_impl_bindings(node, bindings: dict, module_insts: dict,
     elif isinstance(node, list):
         for item in node:
             _collect_impl_bindings(item, bindings, module_insts, current_mod)
+
+
+def _collect_type_impl_ports(node, out=None, cur_type: str = "") -> dict:
+    """收集 type 内 TypeImplDecl[role] 的定义端口名：{type: {role: set(names)}}。
+
+    impl 定义端口 = role 接口端口 + impl 私有端口（clk/rst_n/data 等驱动/数据
+    端口，见 ref_spi_inf 的 impl[master]）——impl 是 role 端口的超集。TP003 的
+    合法端口白名单须含私有端口（模块级 `impl T.role (...) => iface` 绑定会连
+    私有端口，误当 typo 会把合法 impl 阻断，ref_spi_inf 展开即被 TP003 拦）。
+    与 _transform.build_wrapper 端口合并语义对齐（role resolved + impl 私有去重）。
+    """
+    if out is None:
+        out = {}
+    if isinstance(node, Node):
+        nn = node.node_name
+        if nn == "TypeDecl":
+            tname = _text(getattr(node, "type_name", None))
+            for child in node.iter_children():
+                _collect_type_impl_ports(child, out, tname)
+            return
+        if nn == "TypeImplDecl" and cur_type:
+            rname = _text(getattr(node, "role_name", None))
+            names = _impl_decl_port_names(getattr(node, "ports", None))
+            if rname:
+                out.setdefault(cur_type, {}).setdefault(rname, set()).update(names)
+        for child in node.iter_children():
+            _collect_type_impl_ports(child, out, cur_type)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_type_impl_ports(item, out, cur_type)
+    return out
+
+
+def _impl_decl_port_names(ports_node) -> set:
+    """TypeImplDecl.ports（PortList items = Ansi*Decl 列表）→ 端口名集合。
+
+    端口名取法对齐 _transform._port_name：Ansi 声明的 DeclaratorList 内每个
+    Declarator 的 name。TypedPortDecl 嵌套属 role 接口（已在 role 端口集），
+    无需重复计入。
+    """
+    names: set[str] = set()
+    items = getattr(ports_node, "items", None)
+    if not isinstance(items, list):
+        return names
+    for ip in items:
+        if getattr(ip, "node_name", "") not in (
+            "AnsiInputDecl", "AnsiOutputDecl", "AnsiInoutDecl",
+        ):
+            continue
+        dcl_list = getattr(ip, "items", None)
+        dl_items = getattr(dcl_list, "items", None) if dcl_list is not None else None
+        if not isinstance(dl_items, list):
+            continue
+        for dcl in dl_items:
+            nm = _text(getattr(dcl, "name", None))
+            if nm:
+                names.add(nm)
+    return names
 
 
 # ── 共享辅助 ───────────────────────────────────────────
