@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **测试分层：smoke 快速回归层 + 全量**：全量测试重（串行 ~32min / 并行
+  ~6min），新增 `@pytest.mark.smoke` 分层（pyproject markers 注册）——每组
+  功能域挑代表测试（engine 9 子系统 + verilog/c4/yaml + e2e + policy 门禁），
+  `python -m pytest -m smoke` 217 用例 ~37s 做日常快速回归；全量留发布/大改后。
+  real_corpus 抽 `ref_uart_rx` 做轻量真实语料代表（`_SMOKE_CORPUS` 参数级
+  打标，module 缓存只跑 1 次全管线）。组别表与代表维护规约见 tests/README.md。
+- **pytest timeout 60→120s，修复并行 worker crash**：并行（`-n auto`）CPU
+  争抢使真实语料全管线慢 ~2.5x（tv80 单跑 24s → 并行 60.63s），越过 60s
+  阈值触发 pytest-timeout → thread 方法与 xdist worker 交互崩溃
+  （`Not properly terminated`；串行无争抢不触发，全量并行曾崩 3 个
+  tv80/ice40 断言）。放宽到 120s 留争抢余量。
+  验证：smoke 217 绿（37s）+ crash 高发组（real_corpus/real_fidelity/
+  check_accuracy/mutation/comment_container）并行 60 passed + 8 skipped 无崩溃。
+
 - **typed_ports resolve_refs 原语链整体移除（P1.5 step 2 A+B）**：role 端口展开
   统一走 postpass 递归（`_expand_ports` → `resolved_ports` → `_apply_entry` 直接
   注入）后，旧"analyze 即时 resolve"双实现链冗余，分两步删净：

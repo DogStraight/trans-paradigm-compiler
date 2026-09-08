@@ -13,9 +13,12 @@
 yaml fixture / _parse / _node_names 见同目录 conftest.py。
 """
 
+import pytest
+
 from tests.languages.yaml.conftest import _parse, _node_names
 
 
+@pytest.mark.smoke  # smoke：yaml 组代表（plain scalar，YAML 核心形态）
 class TestPlainValueForms:
     """真实配置值的常见形态。"""
 

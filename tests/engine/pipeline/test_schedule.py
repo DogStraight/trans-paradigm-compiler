@@ -17,6 +17,7 @@ from pipeline.schedule import (
 # ── 序列器纯逻辑 ──────────────────────────────────────────
 
 
+@pytest.mark.smoke  # smoke：pipeline 组代表（序列器纯逻辑：order/after/冲突 fail-fast）
 class TestSequenceEntries:
     def test_declaration_order_default(self):
         names = _sequence_entries(
@@ -112,6 +113,7 @@ class TestSequenceEntries:
 # ── 调度构建（含内置 + 插件声明） ──────────────────────────
 
 
+@pytest.mark.smoke  # smoke：pipeline 组代表（schedule 构建：默认/缺省语义）
 class TestBuildSchedules:
     def test_default_schedule_without_declarations(self, monkeypatch):
         monkeypatch.setattr(

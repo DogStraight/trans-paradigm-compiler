@@ -7,6 +7,7 @@ import pytest
 # ═══════════════════════════════════════════════════════
 
 
+@pytest.mark.smoke  # smoke：lexer 组代表（基础 token 化）
 class TestTokenizeBasic:
     """基础 Verilog 结构的 token 化正确性。"""
 

@@ -4,10 +4,14 @@
 手动构造 Node + 布局 expr dict，验证渲染原语输出。
 """
 
+import pytest
+
 from core.define import Node
 from renderer.doc import layout
 from renderer.primitives import eval_expr
 from renderer.doc import Text
+
+pytestmark = pytest.mark.smoke  # smoke：renderer 组代表（渲染原语，fake renderer 纯内存）
 
 
 def _make_fake_renderer():

@@ -1,8 +1,12 @@
 """Analyzer 单元测试 — Scope/Symbol/Diagnostic，不依赖 parser/lexer。"""
 
+import pytest
+
 from analyzer.scope import Scope, Symbol
 from analyzer.diagnostic import Diagnostic
 from core.define import Node
+
+pytestmark = pytest.mark.smoke  # smoke：analyzer 组代表（Scope/Symbol 核心，纯单元）
 
 
 class TestScope:

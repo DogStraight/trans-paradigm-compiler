@@ -1,0 +1,58 @@
+# tests/ — 测试分层
+
+配置驱动的语言流水线（引擎）测试树。零运行时依赖；pytest 默认并行
+（`-n auto`，见 pyproject addopts），串行/收集用 `-n 0`。
+
+## 分层
+
+| 层 | 命令 | 规模 | 定位 |
+|----|------|------|------|
+| smoke（快速层） | `python -m pytest -m smoke` | 217 用例 / ~37s | 各功能域代表测试，日常/改动后快速回归 |
+| 全量 | `python -m pytest tests/` | 1575 用例 / 并行 ~6min、串行 ~32min | 发布/大改后完整回归 |
+
+smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆盖由全量兜底。
+改动节奏建议：小改动跑 smoke（+ 涉及子系统专项）；结构性/跨子系统改动跑全量。
+
+## smoke 组别与代表（`@pytest.mark.smoke`）
+
+| 组别 | 代表 | 打标粒度 |
+|------|------|----------|
+| core（配置 fail-fast） | `engine/core/test_config_loading.py` | 模块级 |
+| lexer（基础 token 化） | `engine/lexer/test_lexer.py::TestTokenizeBasic` | 类级 |
+| parser（Pratt 框架） | `engine/parser/test_pratt_parser.py` | 模块级（纯合成零依赖） |
+| linter（P1 边界） | `engine/linter/test_linter_boundary.py::TestNormalBoundary` | 类级 |
+| analyzer（Scope/Symbol） | `engine/analyzer/test_analyzer.py` | 模块级（纯单元） |
+| transform（注释迁移） | `engine/transform/test_comment_migrate.py::TestMigrateComments` | 类级 |
+| renderer（渲染原语） | `engine/renderer/test_renderer_primitives.py` | 模块级（fake renderer 纯内存） |
+| preprocessor（宏指令） | `engine/preprocessor/test_primitives.py` | 模块级 |
+| pipeline（时点序列） | `engine/pipeline/test_schedule.py::TestSequenceEntries` + `TestBuildSchedules` | 类级 |
+| languages/verilog | `languages/verilog/test_real_syntax.py` | 模块级（真实项目语法缺口回归） |
+| languages/c4（第二语言） | `languages/c4/test_c4_asm.py::TestC4Assembly` | 类级 |
+| languages/yaml | `languages/yaml/test_yaml_plain.py::TestPlainValueForms` | 类级 |
+| e2e real_corpus | `test_real_corpus.py` 的 `ref_uart_rx.v`（非 sv-parser 断言） | 参数级（`_SMOKE_CORPUS`） |
+| e2e macro_reverse | `test_macro_reverse.py::test_func_macro_basic_reversed` | 函数级 |
+| e2e comment_restore | `test_comment_restore.py::TestCommentsSample::test_all_comments_survive` | 函数级 |
+| e2e comment_container | `test_comment_container.py::TestBlockEndComments::test_end_line_comment_kept` | 函数级 |
+| e2e enhanced_render | `test_enhanced_render.py::test_expand_path_emits_basic_verilog` | 函数级 |
+| e2e command_params | `test_command_params.py::test_commands_declared_as_params` | 函数级 |
+| e2e pipeline_idempotent | `test_pipeline_idempotent.py::test_non_expanded_idempotent` | 函数级 |
+| policy（D1-D4 门禁） | `policy/test_check_doc_refs.py` | 模块级（含真仓库回归） |
+
+## 代表维护规约
+
+- **新增/改动功能**：若属某组核心路径，把该组代表性测试标 `@pytest.mark.smoke`
+  （测试文件顶部注释标组归属）；边缘行为不必进 smoke（全量兜底）。
+- **smoke 预算 ~1 分钟**：总时长超预算时，优先收窄过重代表
+  （整文件 → 类级 → 参数级子采样，参考 real_corpus `_SMOKE_CORPUS`/`_corpus_params`）。
+- **真实语料子采样**：real_corpus 全 9 语料昂贵（tv80/ice40 单断言 20~60s），
+  smoke 只抽轻量 `ref_uart_rx`——module 级结果缓存保证只跑它 1 次全管线，
+  3 个非 sv-parser 断言共享；sv-parser 差分断言不进 smoke（外部二进制 + 慢）。
+- marker 注册见 pyproject `[tool.pytest.ini_options].markers`。
+
+## 并发注意
+
+- 全局 `timeout=120`（pyproject）：并行 CPU 争抢使真实语料全管线慢 ~2.5x
+  （tv80 单跑 24s → 并行 60s+）。60s 阈值在并行下触发 pytest-timeout → thread
+  与 xdist worker 交互崩溃（`Not properly terminated`；串行无争抢不触发）。
+- 串行验证用 `-n 0`（规避 xdist 收集/并行争抢）；真实语料行为用
+  `python -m pytest tests/e2e/test_real_corpus.py` 并行复现。

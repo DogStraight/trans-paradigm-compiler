@@ -11,6 +11,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 _CHECKER_PATH = (
     Path(__file__).resolve().parent.parent.parent / "policy" / "check_doc_refs.py"
 )
@@ -26,6 +28,8 @@ def _load_checker():
 
 
 checker = _load_checker()
+
+pytestmark = pytest.mark.smoke  # smoke：policy 组代表（D1-D4 文档门禁，含真仓库回归）
 
 
 def _make_tree(tmp_path: Path, *, docs: dict[str, str] | None = None,

@@ -16,6 +16,8 @@ Comment 迭代项进容器 items（结构序），renderer join 独立行段渲�
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
 from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
 
@@ -201,6 +203,7 @@ class TestBlockEndComments:
     注释挂块规则节点 trailing 槽，结构序渲染——此前只记 inline anchor，
     restore 只回 midline/tpc 不回行尾普通注释 → 丢失，tv80 实测 134 条）。"""
 
+    @pytest.mark.smoke  # smoke：e2e comment_container 组代表（块结束符行尾注释）
     def test_end_line_comment_kept(self):
         """`end // case zero` 行尾注释保留在 end 行尾（format 开/关）。"""
         for fmt in (False, True):

@@ -61,6 +61,20 @@ _MANIFEST: dict[str, tuple[list[str], int, dict[str, str]]] = {
     "ref_uart_tx.v": (["实例化", "参数"], 1, {}),
 }
 
+# 快速回归层（smoke）代表：轻量真实语料（单 module 无宏）。real_corpus 全
+# 9 语料昂贵（tv80/ice40/simcells 单断言 20~60s），smoke 只抽 uart_rx 全管线
+# 冒烟（module 级缓存：只跑 uart_rx 一次全管线，3 个非 sv-parser 断言共享）。
+_SMOKE_CORPUS = {"ref_uart_rx.v"}
+
+
+def _corpus_params() -> list:
+    """语料参数：smoke 代表语料打 smoke mark，其余普通参数。"""
+    return [
+        pytest.param(name, marks=pytest.mark.smoke) if name in _SMOKE_CORPUS else name
+        for name in sorted(_MANIFEST)
+    ]
+
+
 _FIDELITY_THRESHOLD = 0.80
 
 # sv-parser 二进制定位（与 run_differential_svparser.py 同机制）
@@ -124,7 +138,7 @@ def corpus_results():
     return _get
 
 
-@pytest.mark.parametrize("name", sorted(_MANIFEST))
+@pytest.mark.parametrize("name", _corpus_params())
 def test_file_parses_clean(name: str, corpus_results):
     """全量管线 success + lint 零诊断 + 无占位符残留 + 幂等。"""
     result, source, output, log = corpus_results(name)
@@ -136,7 +150,7 @@ def test_file_parses_clean(name: str, corpus_results):
     assert result.get("idempotent", False) is True, f"{name}: 非幂等"
 
 
-@pytest.mark.parametrize("name", sorted(_MANIFEST))
+@pytest.mark.parametrize("name", _corpus_params())
 def test_module_count_intact(name: str, corpus_results):
     """module 数不低于 manifest 下限（防静默截断/占位符吞模块）。"""
     result, _, output, _ = corpus_results(name)
@@ -147,7 +161,7 @@ def test_module_count_intact(name: str, corpus_results):
     )
 
 
-@pytest.mark.parametrize("name", sorted(_MANIFEST))
+@pytest.mark.parametrize("name", _corpus_params())
 def test_fidelity_above_threshold(name: str, corpus_results):
     """token 级保真度不低于阈值（格式化差异可容忍，内容丢失不可）。"""
     result, source, output, _ = corpus_results(name)

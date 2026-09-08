@@ -89,8 +89,16 @@ addopts = "-n auto"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
-timeout = 60
+# 并行（-n auto）下 CPU 争抢使真实语料全管线慢 ~2.5x（tv80/ice40 等单跑
+# 24~60s → 并行 60~150s）。60s 阈值在并行下触发 pytest-timeout，thread 方法
+# 与 xdist worker 交互导致 worker crash（"Not properly terminated"，串行无
+# 争抢不触发）。放宽到 120s 留争抢余量（各测试均有界，无真死锁测试）。
+timeout = 120
 timeout_method = "thread"
+# 快速回归层：pytest -m smoke（各组代表测试，日常秒级验证；全量留发布/大改后）
+markers = [
+    "smoke: 快速回归层——各功能域代表测试（pytest -m smoke 运行）",
+]
 
 [tool.coverage.run]
 source = [

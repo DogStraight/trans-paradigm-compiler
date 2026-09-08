@@ -15,6 +15,8 @@ from parser.rule_selector import RuleSelector
 from core.define import GrammarRulesRegister
 from lexer import Lexer
 
+pytestmark = pytest.mark.smoke  # smoke：verilog 组代表（真实项目语法缺口回归）
+
 
 @pytest.fixture(scope="module")
 def parser(config_loaded):

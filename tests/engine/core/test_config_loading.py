@@ -12,6 +12,8 @@ import pytest
 from core.errors import ConfigError
 from core.config_registry import ConfigRegistry, _load_meta_declarations
 
+pytestmark = pytest.mark.smoke  # smoke：core 组代表（配置 fail-fast 契约）
+
 
 @pytest.fixture
 def isolated_registry(tmp_path):

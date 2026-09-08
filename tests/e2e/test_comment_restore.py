@@ -67,6 +67,7 @@ def _for_each_out(src, fn):
 
 
 class TestCommentsSample:
+    @pytest.mark.smoke  # smoke：e2e comment_restore 组代表（注释不丢失硬门禁）
     def test_all_comments_survive(self):
         """ref_comments.v：每条注释文本都出现在输出（不丢失）。"""
         src = _read("ref_comments.v")

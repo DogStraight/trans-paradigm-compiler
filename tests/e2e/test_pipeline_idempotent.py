@@ -11,6 +11,8 @@ parse 软失败/truncated → idempotent=False。
 import os
 import sys
 
+import pytest
+
 # 项目根 + stdout UTF-8（必须在 import core 之前）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
 from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + UTF-8）
@@ -28,6 +30,7 @@ def _run(path: str, **kw) -> dict:
     return run_pipeline_on_source(source=src, input_path=path, quiet=True, **kw)
 
 
+@pytest.mark.smoke  # smoke：e2e pipeline_idempotent 组代表（非展开路径幂等）
 def test_non_expanded_idempotent():
     """非展开路径：normal 样例输出可再次被管线稳定处理。"""
     r = _run(_NORMAL_ALU)

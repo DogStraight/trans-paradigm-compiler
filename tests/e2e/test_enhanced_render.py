@@ -43,6 +43,7 @@ def _run(**kw):
     )
 
 
+@pytest.mark.smoke  # smoke：e2e enhanced_render 组代表（增强语法展开渲染）
 def test_expand_path_emits_basic_verilog():
     """展开路径（默认）：增强端口展开为基础端口声明，type 定义被消费。"""
     r = _run()

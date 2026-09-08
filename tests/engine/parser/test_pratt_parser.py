@@ -9,6 +9,8 @@ from typing import Any
 
 from core.define import Token, Node
 
+pytestmark = pytest.mark.smoke  # smoke：parser 组代表（Pratt 框架，纯合成零依赖）
+
 
 # ═══════════════════════════════════════════════════════
 # 合成测试数据

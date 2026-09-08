@@ -4,6 +4,8 @@ migrate_comments：新节点继承被替换节点的注释（_comment_slots 槽�
 变换路径注释随结构走（impl → ModuleInst 后注释出现在生成的实例节点上）。
 """
 
+import pytest
+
 from core.define import Node
 from transform.engine import migrate_comments
 
@@ -15,6 +17,7 @@ def _stmt(text: str, slots=None) -> Node:
     return n
 
 
+@pytest.mark.smoke  # smoke：transform 组代表（注释迁移纯函数）
 class TestMigrateComments:
     def test_slots_migrated(self):
         old = _stmt("impl", slots={"trailing": ["// 实例化注释"]})

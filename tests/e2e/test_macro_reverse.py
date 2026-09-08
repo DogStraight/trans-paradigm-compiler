@@ -90,6 +90,7 @@ def test_macro_roundtrip_fidelity(name):
 # ── 特定宏还原断言 ──────────────────────────────────────────
 
 
+@pytest.mark.smoke  # smoke：e2e macro_reverse 组代表（function-like 宏还原）
 def test_func_macro_basic_reversed():
     """function-like 宏调用还原：assign z = `MIN(x, y);"""
     _, _, out, _ = _run("ref_pp_func_macro_basic.v")

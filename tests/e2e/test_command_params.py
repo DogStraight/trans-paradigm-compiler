@@ -7,12 +7,15 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from tests.e2e.run_pipeline import run_pipeline_on_source
 from main import _load_commands, _resolve_command
 
 
+@pytest.mark.smoke  # smoke：e2e command_params 组代表（[commands] 声明 + 参数组合）
 def test_commands_declared_as_params():
     # [commands] 只声明差异项（默认 = 完整管线全 true）；_resolve_command 合并默认。
     cmds = _load_commands()

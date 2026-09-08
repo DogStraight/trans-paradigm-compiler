@@ -28,6 +28,7 @@ def _err_msgs(errs):
 # ═══════════════════════════════════════════════════════
 
 
+@pytest.mark.smoke  # smoke：linter 组代表（P1 边界：合法结构零误报）
 class TestNormalBoundary:
     """合法 Verilog 块结构不应产生 P1 错误。"""
 

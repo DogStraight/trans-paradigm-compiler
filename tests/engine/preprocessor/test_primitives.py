@@ -9,12 +9,16 @@
 
 import os
 
+import pytest
+
 from core.define import FileManager
 from preprocessor.primitives.registry import (
     get_primitive,
     get_primitive_kind,
     list_primitives,
 )
+
+pytestmark = pytest.mark.smoke  # smoke：preprocessor 组代表（宏指令 handler）
 
 # ── 公共 fixture ──────────────────────────────
 

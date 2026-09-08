@@ -66,6 +66,7 @@ def _asm_lines(ast) -> list[str]:
     return [ln.text.strip() for ln in getattr(ast, "sub_node", []) or []]
 
 
+@pytest.mark.smoke  # smoke：c4 组代表（第二语言：语法+汇编生成集成）
 class TestC4Assembly:
     def test_program_generates_asm(self, c4):
         ast = _compile("int main() { int x; x = 1; return x; }", c4)
