@@ -119,7 +119,7 @@ Requirements: Python 3.11+ (zero runtime dependencies).
 > **Not yet on PyPI** — install from source. See [Status](#status).
 
 ```bash
-git clone <this-repo> && cd tpc_compiler
+git clone https://github.com/DogStraight/trans-paradigm-compiler && cd trans-paradigm-compiler
 pip install -e ".[test]"     # editable install + test deps
 
 tpc --version                # 0.1.0
