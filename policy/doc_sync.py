@@ -23,7 +23,7 @@ _resolve_nav_target），保证"门禁认的引用 = 同步层改的引用"，�
 闭环：rename/delete 后用 check_doc_refs.py 验证 D1/D2 仍绿——同步层
 不绕过门禁，只把"人工 grep 同步"变成"半自动 + 门禁兜底"。
 
-Doc: docs/decisions/0011-doc-governance.md
+Doc: policy/doc-alignment.md
 """
 
 from __future__ import annotations

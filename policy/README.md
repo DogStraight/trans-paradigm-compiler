@@ -9,9 +9,8 @@
 | 文档 | 制度 | 门禁工具 |
 |------|------|----------|
 | `coding-style.md` | 代码风格（注释语言/分区标题/命名） | `check_hardcode.py`（规则 1-4） |
-| `doc-alignment.md` | 文档↔代码对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步） | `check_doc_refs.py` / `doc_sync.py` |
+| `doc-alignment.md` | 文档↔代码对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）+ 引用纪律（锚机制不锚 ADR）+ 删除判据（先证后删） | `check_doc_refs.py` / `doc_sync.py` |
 | `release-checklist.md` | 发布 SOP（回归门禁 → 版本 → build → 包验证 → wheel 冒烟 → tag） | （人走流程，发布收尾） |
-| 设计依据与删除判据 | `docs/decisions/0011-doc-governance.md`（ADR-0011） | `check_doc_refs.py` / `doc_sync.py` |
 
 ## 门禁工具
 

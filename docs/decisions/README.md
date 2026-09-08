@@ -27,7 +27,7 @@ draft ADR 生命周期（三出路，避免"僵尸 draft"堆积）：
   （decisions/ 不堆未立项详案；历史在 git log 可追溯，与 TODO"完成即删"同纪律）。
 
 > 关联：落档分流见 AGENTS.md（调研→references / 设计→ADR / 执行→CHANGELOG）；
-> 删除判据见 `decisions/0011-doc-governance.md`。
+> 删除判据见 `policy/doc-alignment.md`。
 
 ## 编号规则
 
