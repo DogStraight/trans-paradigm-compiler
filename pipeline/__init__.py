@@ -9,11 +9,11 @@ CLI（main.py）与测试共用，故移入正式包，wheel 安装后 CLI 可�
 
 结构：run_pipeline_on_source 是入口（参数解析 + 阶段编排），每个管线阶段
 拆为独立函数（_stage_*），共享状态通过 _PipelineContext 传递。
-analyze/transform 由编排调度执行（ADR-0007，pipeline/schedule.py——
+analyze/transform 由编排调度执行（pipeline/schedule.py——
 编排器一个文件闭环：声明处理 + 时点排序 + _run_schedule 执行，
 共享实例由本模块按 rules_dir 缓存后注入）。
 Doc: api.md（管线 API：run_pipeline_on_source/format_output）
-Doc: docs/decisions/0007-pipeline-schedule.md（编排调度）
+Doc: docs/pipeline_stages.md（编排调度）
 """
 
 import os

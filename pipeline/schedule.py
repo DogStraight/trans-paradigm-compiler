@@ -1,4 +1,4 @@
-"""schedule.py — 编排管线（ADR-0007）：pass 声明 + 时点序列器 + 调度构建。
+"""schedule.py — 编排管线（pass 声明 + 时点序列器 + 调度构建）。
 
 概念：
     pass      — 命名的执行单元，kind ∈ {analyze, transform, check}。
@@ -19,10 +19,10 @@ kind 语义（行为模型）：
 （schedules / mapping_cfg）由调用方注入，不触碰管线模块状态，
 可独立于 run_pipeline_on_source 复用（如未来 tpc-check 模式）。
 
-fail-fast（ADR-0003）：未知 pass / 重名 / 时点冲突 / after 环 /
-check 缺 handler 全部报 ValueError，不静默降级。
+fail-fast（不静默降级，见 core/config_lifecycle.md）：未知 pass / 重名 / 时点
+冲突 / after 环 / check 缺 handler 全部报 ValueError，不静默降级。
 
-Doc: docs/decisions/0007-pipeline-schedule.md
+Doc: docs/pipeline_stages.md
 """
 
 from dataclasses import dataclass, field

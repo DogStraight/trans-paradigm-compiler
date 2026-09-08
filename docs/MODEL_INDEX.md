@@ -111,7 +111,7 @@
 | 引擎约定机器化（check_hardcode 门禁） | `AGENTS.md`（硬约束：语言知识不进代码/路径规范/Doc 反向引用）<br>`docs/README.md`（Doc: 约定） | `policy/check_hardcode.py`（规则 1-4） | `tests/policy/test_check_hardcode.py`（17 用例） |
 | 文档治理（调用点门禁 + 同步层 + 删除判据，ADR-0011） | `policy/doc-alignment.md`（Doc: 约定）<br>`docs/README.md`（导航索引）<br>`decisions/0011-doc-governance.md`（设计 + 删除判据全表） | `policy/check_doc_refs.py`（D1/D2 gate + D3/D4 info）<br>`policy/doc_sync.py`（refs/rename/delete 同步层） | `tests/policy/test_check_doc_refs.py`（24 用例）<br>`tests/policy/test_doc_sync.py`（15 用例） |
 | 管线阶段契约（层间数据形态 + 阻断语义 + 跨阶段通道） | `pipeline_stages.md` | `pipeline/__init__.py::run_pipeline_on_source`（阶段编排）<br>各阶段 `_stage_*` | 全量 e2e（`tests/e2e/`）+ 注释 attachment 测试 |
-| 分析/变换时点配置化 + 编排调度（ADR-0007） | `decisions/0007-pipeline-schedule.md` | `pipeline/schedule.py`（编排器一体：`build_schedules` + `_run_schedule` + `_run_pass_*`）<br>`core/plugin_loader.py::get_pipeline_pass_decls`（收集）<br>`pipeline/__init__.py`（按 rules_dir 缓存后注入） | `tests/engine/pipeline/test_schedule.py`（26 用例） |
+| 分析/变换时点配置化 + 编排调度 | `docs/pipeline_stages.md`（编排调度节）<br>`pipeline/schedule.py`（机制自述 docstring） | `pipeline/schedule.py`（编排器一体：`build_schedules` + `_run_schedule` + `_run_pass_*`）<br>`core/plugin_loader.py::get_pipeline_pass_decls`（收集）<br>`pipeline/__init__.py`（按 rules_dir 缓存后注入） | `tests/engine/pipeline/test_schedule.py`（26 用例） |
 
 ### grammar 语言包与插件（语言知识 = 数据）
 

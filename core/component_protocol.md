@@ -40,7 +40,7 @@ handlers = ["_mapping.py"]   # mapping_entries（SemanticMappingPlugin 消费）
 slots = ["delete_type_decl", "build_wrapper", "expand_typed_port", ...]
 handlers = ["_transform.py", "_bridge.py"]
 
-# 编排调度（ADR-0007）：检查 pass + 命名 schedule
+# 编排调度（schedule.py，pipeline_stages.md）：检查 pass + 命名 schedule
 [[pipeline.pass]]
 name = "post_check"
 kind = "check"                # analyze | transform | check

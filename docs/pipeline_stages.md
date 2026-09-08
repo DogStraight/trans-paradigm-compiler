@@ -5,8 +5,8 @@
 > core/component_protocol）；本文档只描述**层间边界**——每个阶段的
 > 输入/输出数据形态、阻断语义、跨阶段数据通道。改管线时先看这里，再进子系统。
 >
-> 更新：2026-08-26（ADR-0007：analyze/transform 改为 schedule 编排的 pass，
-> 见 `decisions/0007-pipeline-schedule.md`）
+> 更新：2026-08-26：analyze/transform 改为 schedule 编排的 pass（编排调度
+> 机制见 pipeline/schedule.py + 本文档编排调度节；原 ADR-0007 已归档）
 
 ## 阶段序列（run_pipeline_on_source）
 

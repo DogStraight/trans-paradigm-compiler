@@ -28,7 +28,7 @@ result = run_pipeline_on_source(
     expand_macros=True,
     format_output=True,       # formatter 开关（默认 True）
     expand_enhanced=True,     # 增强语法展开/保留（默认 True 展开）
-    schedule="default",       # 编排调度（ADR-0007）：命名 pass 序列
+    schedule="default",       # 编排调度（见 pipeline/schedule.py + pipeline_stages.md）：命名 pass 序列
 )
 # result["output"] / result["success"] / result["idempotent"]
 ```

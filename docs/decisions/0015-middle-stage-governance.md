@@ -2,8 +2,9 @@
 
 - Status: draft（未立项设计输入，方向已明；落地起步 = 0.1.2 可视化管道）
 - Date: 2026-09-08
-- 承接: ADR-0007（pass 级时点已实现）；0007 明示"层内时点（analyzer 原语
-  顺序 / transform 插件顺序）不在本决策范围"——**本 ADR 的深化目标正是该范围**。
+- 承接: pass 级时点编排（`pipeline/schedule.py` + `docs/pipeline_stages.md`；原
+  ADR-0007 已归档，git log 追）。其 pass 级时点已实现，明示"层内时点（analyzer
+  原语顺序 / transform 插件顺序）不在本决策范围"——**本 ADR 的深化目标正是该范围**。
 
 ## 背景
 
