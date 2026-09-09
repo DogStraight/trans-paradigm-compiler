@@ -14,6 +14,14 @@ real 语料 9 文件 FAIL 0 / lint recall 31/31 零误报。
 
 ### Changed
 
+- **删除一次性调试工具 debug_segment_parse.py**（分段解析 + 并树）：仅一次
+  picorv32 大文件调试会话使用，无引用/无测试/未进正式管线（"并树"能力从未
+  落地），git 历史 4 次提交全为被动清理。删除判据 A1。全项目同类审计（对照
+  scaffold 判据：无真实使用/无测试/机制脱节）结论：其余候选均保留——
+  run_all_tests（发布门禁，2026-09-09 靠它抓 TP003 误报）/ eval_benchmark
+  （oracle 对拍工作流）/ _proto_macro_hygiene（ROADMAP 立项原型）/
+  run_differential_svparser（全语料差分扫描，test_real_corpus 覆盖固定语料）。
+
 - **删除 `new component` 脚手架（scaffold_component.py）**：CLI 子命令从未被
   真实组件使用（全部组件手写演进），无测试覆盖，且模板停在已删原语链时代
   （`[analyzer] primitives`），与当前组件协议（postpasses / 声明式 checks）
