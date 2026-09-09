@@ -2,7 +2,7 @@
 
 > 制度（"该怎么做"）文档与机器化门禁工具同层（2026-09-05 制度文档归拢）——
 > 制度由工具强制，工具是制度的执行者；引用入口：模型看 `AGENTS.md`、
-> 人看 `CONTRIBUTING.md`。
+> 人看 `README.md` 的 Contributing 节（链 AGENTS + MODEL_INDEX + 门禁）。
 
 ## 制度文档
 

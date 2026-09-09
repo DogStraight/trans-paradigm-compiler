@@ -27,5 +27,9 @@ packaging/entries/
 # 讨论草稿暂存区（_drafts/，untracked——整理落档到 decisions/references/gaps/policy 后删原稿）
 _drafts/
 
+# 本机 agent 工作流技能（作者 + 协作者本机使用；随项目分发的工作流指引已落 docs /
+# grammar 插件 README / core/component_protocol）
+.agents/
+
 # pytest 运行临时输出（Tee 重定向产物，不入库）
 pytest_*.txt

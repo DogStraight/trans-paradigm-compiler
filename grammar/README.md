@@ -3,7 +3,7 @@
 > 引擎语言无关的载体：语言包（TOML 语法规则 + 插件目录）。从零搭一门语言教程见
 > `docs/language_walkthrough.md`（c4 实例）。
 > 语法规则字段参考（schema/字段含义/常见形态）见 `grammar/grammar_rule_fields.md`；
-> 加语法结构见 `.agents/skills/grammar-extension/SKILL.md`。
+> 加语法结构/扩展组件的工作流见 `core/component_protocol.md`（inject 挂载 + 组件协议）。
 
 ## 语言包
 
@@ -22,5 +22,6 @@
 | `checks/` | 检查规则插件族：name/width/latch/unused/inst/hier/case/always/semantic（NC/W/AW 等码族） |
 | `typed_ports/` | 自定义类型化端口（impl/type 声明 + 展开变换） |
 
-> 加语法结构见 `.agents/skills/grammar-extension/SKILL.md`；加检查规则见
-> `.agents/skills/checker-rule-authoring/SKILL.md`（工作流指令包，随项目发布）。
+> 加语法结构见 `core/component_protocol.md`（inject 挂载 + 组件协议）；加检查规则见
+> `grammar/verilog/plugins/checks/`（L1 声明式 [[checks]] 规则表 + L2 handler 脚本，
+> name_check 为最小示例）。
