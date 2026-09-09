@@ -211,6 +211,77 @@ def test_impl_valid_ports_clean(checker, tmp_path):
     assert "TP003" not in _tp_codes(report)
 
 
+def test_impl_private_ports_binding_clean(checker, tmp_path):
+    """impl 私有端口绑定（∉ role 集、∈ impl 定义块）→ 零 TP。
+
+    ref_spi_inf 形态回归（fix f66a99c）：type 内 impl[master] 除 role 接口
+    端口（miso/sck/mosi/cs）还带私有驱动端口（clk/rst_n）；模块级 `impl
+    spi.master (.clk(clk), .rst_n(rst_n)) => spi_io` 连私有端口合法——TP003
+    白名单 = role 端口 ∪ impl 定义端口。修复前私有端口被误当 typo 报 TP003
+    → 阻断合法展开（run_all ref_spi_inf 展开空）。
+    """
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    input rst_n,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk), .rst_n(rst_n)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input miso, output sck, mosi, cs;\n"
+        "    slave  : invert master;\n"
+        "    impl[master](\n"
+        "        input clk,\n"
+        "        input rst_n\n"
+        "    ) {\n"
+        "        wire q;\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    assert _tp_codes(report) == set()
+
+
+def test_impl_private_port_typo_still_reported(checker, tmp_path):
+    """私有端口白名单只豁免 impl 定义端口；真 typo 仍报 TP003。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "module top(\n"
+        "    input clk,\n"
+        "    spi.master spi_io\n"
+        ");\n"
+        "    impl spi.master (.clk(clk), .mosi_typo(data)) => spi_io;\n"
+        "endmodule\n"
+        "\n"
+        "type spi {\n"
+        "    master : input miso, output mosi, output cs;\n"
+        "    slave  : invert master;\n"
+        "    impl[master](\n"
+        "        input clk\n"
+        "    ) {\n"
+        "        wire q;\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    # .clk 是 impl 定义私有端口（豁免）；.mosi_typo 不在 role 也不在 impl
+    # 定义端口集 → 仍按 typo 报 TP003（白名单加宽不漏真 typo）
+    tp_codes = _tp_codes(report)
+    assert "TP003" in tp_codes
+    msgs = [
+        d.get("message", "")
+        for f in report["files"]
+        for d in f["semantic"]
+        if str(d.get("code", "")).startswith("TP")
+    ]
+    assert any("mosi_typo" in m for m in msgs), f"TP003 应指向 typo 端口 mosi_typo，实际: {msgs}"
+
+
 # ── A：type 定义良构 ─────────────────────────────────
 
 
