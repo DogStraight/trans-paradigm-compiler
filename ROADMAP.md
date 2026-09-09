@@ -93,8 +93,8 @@
 
 > 0.1.0 Alpha 已发布（2026-08-22，release_checklist 走完）；以下为软缺口。
 
-- [ ] 覆盖率远期目标 ≥90%（当前 83.39%——source=引擎包真实基线，需补
-      transform/renderer 等薄弱区）
+- [ ] 覆盖率远期目标 ≥90%（当前 85.33%，2026-09-09 0.1.1 发布门禁实测
+      `-n 0 --cov`；source=引擎包真实基线，需补 transform/renderer 等薄弱区）
 
 ### P2.3 验证吞吐优化（backlog，非发布阻塞，2026-08-22 记录）
 
@@ -122,8 +122,9 @@
   - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x
   - [ ] fuzz 模式关闭管线内部幂等复跑（oracle 自管）→ ~1.8x
   - [ ] multiprocessing 多 worker → ~8x（合计 ~30-40x：100k 轮 ~1 分钟）
-- [ ] 随机合法程序 → 对拍 Verible：接受域从 124 人工语料推到统计意义
-      （GrammarFuzzer 生成器已就绪，缺接线）
+- [ ] 随机合法程序 → 对拍 Verible：接受域从人工语料推到统计意义
+      （GrammarFuzzer 生成器已由 run_fuzz.py 接线并进 CI——2026-09-09 核对，
+      原"缺接线"注已过时；剩余 = 生成大批合法程序做 Verible 接受域统计对拍）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
 - [ ] CI 补强（PR 快速 fuzz ✅ / 夜间长跑 ✅ / edge 门禁 ✅ 已接入）：
       differential 门禁未接入——需 verible 二进制（nightly.yml 已留可选 job，
@@ -150,35 +151,6 @@
       直连 + 自管场景补缺口），再推广 verible/slang
 - 关联：P1.9（诊断模型）为其前置；Veryl/svlint 调研落档 references.md（本地镜像
       `E:\research\veryl` / `E:\research\svlint`）
-
-### P2.7 elaboration 底座（2026-08-29 登记 → 已实现，提交 3acae77）
-
-> 触发：P1.10 主流 lint 调研结论——Verilator/slang/Spyglass 的跨文件检查
-> （端口连接/未使用/多驱动/位宽）全是"**elaboration 后**"视角（全设计编译 +
-> 实例树展开 + 驱动/负载图）；tpc 目前只有第一层雏形（ProjectChecker 的
-> module_index 注册表 + inst_sites + inst_check W101/W102/W103），缺连接
-> 关系展开 / 驱动负载图 / 层次展开。没有这个底座，P1.10 核心集合里的
-> 未使用类/多驱动/端口完整性/位宽匹配全做不了。
->
-> **状态（2026-08-29）**：层 1（module_index + 依赖发现，既有）+ 层 2
-> （端口连接展开 _elaborate_connections）+ 层 3（信号驱动/负载图
-> _build_signal_graph）已实现，ADR-0008 落档。跨文件规则已验证消费：
-> W104 未连接端口（57d6e83）。
-> **层 3 扩展（2026-08-31 已实现）**：实例树层次展开——实例 output
-> 驱动源穿透到被实例化模块内部真实驱动源（模块内 assign/过程赋值目标
-> = 端口 → "路径:assign#N"；更深实例 output → 递归穿透；悬空 output
-> 不记驱动对齐 Verilator；黑盒模块未定义 → 原子源兜底）。verilog-
-> ethernet 实测 17 模块 123 条穿透驱动源（两层路径如
-> ip_inst/ip_eth_rx_inst:assign#29）。真实语料 7 工程对拍数字与基线
-> 逐项一致（穿透零新增误报/漏报）；axis_fifo generate `!参数` 求值
-> 缺口 9 条误报已修（见 references.md「generate `!参数` 条件求值」）。
-
-- [x] ~~层 1 补全：design-unit 注册表 + 依赖拓扑排序~~（module_index 既有）
-- [x] ~~层 2：端口连接关系展开（实例连接信号 → 端口 → 信号解析）~~（3acae77）
-- [x] ~~层 3：驱动/负载图~~（3acae77，单层实例→信号）
-- [x] ~~层 3 扩展：实例树层次展开（top→子→孙，MULTIDRIVEN 深层）~~（2026-08-31，
-      驱动穿透 + 悬空/黑盒处置，见 references.md「实例树层次展开」）
-- [x] ~~验证：接 P1.10 跨文件规则~~（W104 未连接端口已验证）
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
