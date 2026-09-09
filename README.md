@@ -132,7 +132,6 @@ tpc check input.v --json     # machine-readable diagnostics (code/severity/range
 tpc check input.v --html report.html   # human-readable HTML report
 tpc expand input.v           # expand macros + transform (per [commands].expand)
 tpc config dump              # show every config key's source (file + section)
-tpc new component my_feature --lang verilog   # scaffold a plugin component
 ```
 
 `tpc check` runs the syntax stage first, then semantic analysis (scopes,

@@ -216,15 +216,7 @@ Renderer 产出格式化输出
 
 所有此类魔数键集中在 `core/_protocol.py` 定义，**禁止在代码里写裸字符串**。
 
-## 8. 脚手架
-
-```bash
-python main.py new component my_feature --lang verilog
-```
-
-生成 `plugins/my_feature/`（tpc.toml + 00_xxx.toml + _handler.py 骨架）。
-
-## 9. 写新组件的最小步骤
+## 8. 写新组件的最小步骤
 
 1. `plugins/<name>/tpc.toml`：声明语法文件 + 处理器 + 槽位/原语。
 2. `plugins/<name>/00_xxx.toml`：语法规则（`inject` 挂到基础语法）。
@@ -232,7 +224,7 @@ python main.py new component my_feature --lang verilog
 4. 语言包 tpc.toml `[plugins] enabled = ["<name>", ...]` 挂载。
 5. `setup_grammar` 自动发现加载；`get_component_grammar_files` 取语法文件。
 
-## 10. 常见坑
+## 9. 常见坑
 
 | 坑 | 现象 | 修法 |
 |---|---|---|

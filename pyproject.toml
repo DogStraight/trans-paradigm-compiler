@@ -52,7 +52,7 @@ test = [
 
 # main.py 作为顶层模块打包（tpc 命令入口）
 [tool.setuptools]
-py-modules = ["main", "scaffold_component"]
+py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 include = [

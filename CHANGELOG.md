@@ -14,6 +14,13 @@ real 语料 9 文件 FAIL 0 / lint recall 31/31 零误报。
 
 ### Changed
 
+- **删除 `new component` 脚手架（scaffold_component.py）**：CLI 子命令从未被
+  真实组件使用（全部组件手写演进），无测试覆盖，且模板停在已删原语链时代
+  （`[analyzer] primitives`），与当前组件协议（postpasses / 声明式 checks）
+  脱节。删除判据 A1（无真实使用）+ A5（结构不一致）。连带删 main.py `new`
+  子命令、README quick start 示例、pyproject py-modules、
+  component_protocol §8 脚手架节。
+
 - **测试分层：smoke 快速回归层 + 全量**：全量测试重（串行 ~32min / 并行
   ~6min），新增 `@pytest.mark.smoke` 分层（pyproject markers 注册）——每组
   功能域挑代表测试（engine 9 子系统 + verilog/c4/yaml + e2e + policy 门禁），

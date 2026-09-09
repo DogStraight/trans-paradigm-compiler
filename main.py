@@ -7,7 +7,6 @@ Usage (installed as `tpc`):
     tpc lint <file> [--json]           Lint a source file (syntax only)
     tpc check <file> [--include DIR]   Cross-file semantic check (syntax then semantic)
     tpc pipeline [test_name]           Run a single test
-    tpc new component <name>           Scaffold a new component
     tpc config dump                    Show config key sources
     tpc --version                      Show version
 """
@@ -348,12 +347,6 @@ def _cmd_pipeline(args: argparse.Namespace) -> None:
     sys.argv = [sys.argv[0]] + (args.test_name or [])
     pipeline_main()
 
-def _cmd_new_component(args: argparse.Namespace) -> None:
-    """tpc new component — scaffold a new component."""
-    from scaffold_component import scaffold_component
-
-    scaffold_component(args.name, args.lang or "verilog")
-
 
 def _register_subparsers(sub, allow=None) -> None:
     """注册子命令（可裁剪）。
@@ -411,13 +404,6 @@ def _register_subparsers(sub, allow=None) -> None:
         p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")
         p_pipe.add_argument("test_name", nargs="*", help="Test case name (e.g., counter)")
 
-    if want("new"):
-        p_new = sub.add_parser("new", help="Scaffold project artifacts")
-        new_sub = p_new.add_subparsers(dest="new_type", required=True)
-        p_comp = new_sub.add_parser("component", help="Scaffold a new component")
-        p_comp.add_argument("name", help="Component name (snake_case)")
-        p_comp.add_argument("--lang", default="verilog", help="Target language")
-
     if want("config"):
         p_cfg = sub.add_parser("config", help="Config introspection")
         cfg_sub = p_cfg.add_subparsers(dest="config_type", required=True)
@@ -436,10 +422,6 @@ def _dispatch(args) -> None:
         "check": _cmd_check,
         "pipeline": _cmd_pipeline,
     }
-    if args.command == "new":
-        dispatch["new"] = {
-            "component": _cmd_new_component,
-        }[args.new_type]
     if args.command == "config":
         dispatch["config"] = {
             "dump": _cmd_config_dump,
@@ -457,7 +439,6 @@ Examples:
   tpc format input.v
   tpc lint input.v --json
   tpc pipeline counter
-  tpc new component my_feature --lang verilog
   tpc config dump
         """,
     )
