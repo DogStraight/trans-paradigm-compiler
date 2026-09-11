@@ -49,6 +49,8 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [Veryl](https://github.com/veryl-lang/veryl) | 设计参考 | SystemVerilog 现代超集 HDL（Rust，1026★，2022 起活跃）：语法简化 + 可综合保证 + 类型化 clock/reset + 转译保真——HDL 语法设计的直接参照（详见深调研） |
 | [pyverilog](https://github.com/PyHDI/Pyverilog) | 概念参考 | Takamaeda-Yamazaki（日本学者）的 Python HDL 工具包：PLY（Lex/Yacc 风格）LALR 文法声明做 Verilog 解析——"语法即声明、Verilog 工具不必手写解析器"的早期代表（与 Veryl 同作者国别、同 HDL 工具窄域；设计来源追溯见深调研「路线亲缘」） |
 
+| 宏处理机制对照（[Lean 4](https://github.com/leanprover/lean4) / [Clang](https://github.com/llvm/llvm-project) / Verible / GLR） | 深度参考 | 结构宏进树（Lean syntax + macro scope 卫生）/ 编辑/格式化不展开宏 + raw 进 CST（Verible）/ 全展开 + 双位置 + 旁路记录表（Clang）——宏体入树（ADR-0016）的机制输入（详见深调研） |
+
 ### 格式化与渲染
 
 | 项目 | 关系 | 一句话价值总结 |
@@ -521,6 +523,51 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
    （tpc 对应"按产物契约自动选校验器"；成本门控 + 逃生门，对齐粒度自选）
 3. 可视化做事件回调 + 低噪声 diff + 列出式入口（-fdump-passes 模式）——不改 pass 本体
 4. 缓存按产物单元 + 失效传播（AnalysisManager 模型），但 verifier 不依赖缓存（独立自证）
+
+### 宏处理机制对照（Lean 4 / Verible / Clang / GLR，2026-09-11 深调研，ADR-0016 前置）
+
+> 调研动因：ADR-0016（宏体入树——raw 源区间权威 + 展开分级投影 + 对应层）的机制
+> 输入。只聚焦**宏在管线中的处理位置与信息保全**（宏进不进 AST、位置/对应关系如何
+> 存、展开时机），不采其语法/类型系统本身。
+
+#### Lean 4（C++ 自举 + Lean 自写 elaborator）— syntax 树级结构宏
+
+- `Macro = Syntax → MacroM Syntax`：宏是 **syntax 树节点**（带 kind），parser 只圈边界，
+  内容理解延迟到 elaboration 展开
+- 卫生 = macro scope（`MacroScope := Nat`，进宏作用域 bump；引号引入标识符 mangle 上
+  scope，elaboration 期再解析防捕获）
+- 位置全程携带：`Syntax.ident` 带 SourceInfo（original / synthetic / canonical）
+- 增量：非增量 parser，是命令级 snapshot 缓存（`MacroExpandedSnapshot`）+ 文件级 olean
+  缓存；纪律 "Limit ref variability"
+- 💡 启示：结构宏天然 syntax 进树，parser 不解析宏体只圈边界
+
+#### Verible（C++，Google）— 同生态最接近：格式化不展开宏，raw 进 CST
+
+- 格式化模式**不展开宏**：`filter_branches = false`，注释 "we want to emit all tokens"
+- 宏调用 raw 进 CST（`kMacroCall` 节点）；宏参数/定义体是 **unlexed 文本**
+  （`PP_define_body`、lexer `PP_MACRO_FORMALS` 状态：原文累积 + 括号平衡，不拆 token）
+- 格式化对宏只处理**边界**（`MacroCallReshaper` 换行/缩进/间距）；`uvm_begin/end` 宏块缩进
+- 语义检查对宏内 = 递归 lex raw 文本（`RecursiveLexText`）
+- 🔥 启示：Verilog formatter "宏 raw 当渲染单元 + 只格式化边界" 成熟可行——**渲染权威
+  = raw**
+
+#### Clang（C++）— 全展开 + 双位置 + 旁路记录表（文本宏专用架构）
+
+- **全展开**（语义需要）；Token 的 SourceLocation 编码**双位置**：spelling location（字符
+  原始出处）+ expansion location（宏展开点）——"capturing both the ultimate instantiation
+  point and the source of the original character data"
+- **PreprocessingRecord**（PPCallbacks 子类）：预处理时回调记录实体流——MacroExpansion
+  （SourceRange + →定义回链）/ MacroDefinitionRecord / InclusionDirective；支持"源范围 →
+  命中的展开"反向查询；可序列化进 PCH/AST
+- Token 本身是"源位置 + 长度"指向 source buffer——**raw 从不复制存储，按位置切片**
+- 🔥 启示：**不存两棵树**，用"展开主结构 + 旁路事件表（源位置锚定）"拿到全部信息；
+  源位置是唯一真源，raw 需要时从源缓冲切
+
+#### GLR 解析森林（Elkhound / SDF3）— 歧义路径保留后期裁剪
+
+- "歧义路径保留后期裁剪"处理的是**语法歧义**（packed parse forest），**非宏**；与宏双路
+  "形似"（都保留多份）但机制不同——仅思想来源
+- 📌 路线观察：不适用于 tpc 宏场景（tpc 宏是文本替换语义，非歧义保留）
 
 ### Foundry（Rust）— Ethereum 开发工具链（2026-08 深调研）
 
