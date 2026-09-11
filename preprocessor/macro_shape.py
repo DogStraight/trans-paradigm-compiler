@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from typing import Any
 
 from core.config_registry import declare_cfg
 
@@ -43,6 +44,13 @@ def get_shape_config(cfg: dict | None = None) -> tuple[dict, list[str]]:
     return wrappers, leads
 
 
+def _wrapper_tpl(spec: object) -> str:
+    """取包裹模板（兼容旧字符串形态与 {tpl, pick, ...} 表形态）。"""
+    if isinstance(spec, dict):
+        return spec.get("tpl") or ""
+    return spec if isinstance(spec, str) else ""
+
+
 def classify_macro_body(
     body: str, probe: Callable[[str], bool], cfg: dict | None = None
 ) -> tuple[str, str]:
@@ -63,7 +71,7 @@ def classify_macro_body(
             return KIND_FRAGMENT, f"首 token 续接（{head}）"
 
     for key, kind in _PROBE_ORDER:
-        tpl = wrappers.get(key)
+        tpl = _wrapper_tpl(wrappers.get(key))
         if not tpl:
             continue
         # 用 replace 而非 format：宏体可能含 `{`/`}`（如拼接 `{a,b}`），
@@ -76,6 +84,42 @@ def classify_macro_body(
 # ── 片段解析探测（懒构造 + 按 rules_dir 缓存） ──
 
 _probe_cache: dict[str, Callable[[str], bool]] = {}
+_ast_cache: dict[str, Callable[[str], tuple]] = {}
+_env_cache: dict[str, tuple] = {}
+
+
+def _build_env(rules_dir: str) -> tuple:
+    """构造共享解析环境（rules / selector / lexer / pre_scan 配置），按 rules_dir
+    缓存（重复调用幂等，与管线共享组件初始化一致）。"""
+    env = _env_cache.get(rules_dir)
+    if env is not None:
+        return env
+
+    from core.config_registry import ConfigRegistry
+    from core.define import GrammarRulesRegister
+    from core.plugin_loader import load_all_components
+    from lexer import Lexer, load_pre_scan_config
+    from parser import setup_grammar
+    from parser.rule_selector import RuleSelector
+
+    ConfigRegistry.load_all(
+        rules_dir, ext_dirs=None, plugins_dir=os.path.join(rules_dir, "plugins")
+    )
+    load_all_components()
+    rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dirs=None)
+    stmt_names = [
+        name
+        for name, rule in rules.items()
+        if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+    ]
+    env = (
+        rules,
+        RuleSelector(rules, stmt_names),
+        Lexer(rules_dir=rules_dir),
+        load_pre_scan_config(rules_dir),
+    )
+    _env_cache[rules_dir] = env
+    return env
 
 
 def build_parse_probe(rules_dir: str) -> Callable[[str], bool]:
@@ -89,26 +133,9 @@ def build_parse_probe(rules_dir: str) -> Callable[[str], bool]:
     if cached is not None:
         return cached
 
-    from core.config_registry import ConfigRegistry
-    from core.define import GrammarRulesRegister
-    from core.plugin_loader import load_all_components
-    from lexer import Lexer, load_pre_scan_config, pre_scan
-    from parser import Parser, setup_grammar
-    from parser.rule_selector import RuleSelector
-
-    ConfigRegistry.load_all(
-        rules_dir, ext_dirs=None, plugins_dir=os.path.join(rules_dir, "plugins")
-    )
-    load_all_components()
-    rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dirs=None)
-    stmt_names = [
-        name
-        for name, rule in rules.items()
-        if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
-    ]
-    selector = RuleSelector(rules, stmt_names)
-    lexer = Lexer(rules_dir=rules_dir)
-    pre_cfg = load_pre_scan_config(rules_dir)
+    rules, selector, lexer, pre_cfg = _build_env(rules_dir)
+    from lexer import pre_scan
+    from parser import Parser
 
     def probe(text: str) -> bool:
         try:
@@ -126,3 +153,78 @@ def build_parse_probe(rules_dir: str) -> Callable[[str], bool]:
 
     _probe_cache[rules_dir] = probe
     return probe
+
+
+def build_parse_ast(rules_dir: str) -> Callable[[str], tuple]:
+    """构造"片段 → (parser, ast)"解析函数（懒构造 + 缓存，与 probe 共用环境）。"""
+    cached = _ast_cache.get(rules_dir)
+    if cached is not None:
+        return cached
+
+    rules, selector, lexer, pre_cfg = _build_env(rules_dir)
+    from lexer import pre_scan
+    from parser import Parser
+
+    def parse_ast(text: str) -> tuple:
+        parser = Parser(
+            rules_dir=rules_dir,
+            pre_symbols=pre_scan(text, pre_cfg),
+            rules=rules,
+            rule_selector=selector,
+        )
+        parser.pre_hints = pre_cfg.get("hints", {})
+        return parser, parser.parse(lexer.tokenize(text))
+
+    _ast_cache[rules_dir] = parse_ast
+    return parse_ast
+
+
+def _first_child_named(node: Any, name: str) -> Any | None:
+    for child in node.iter_children():
+        if child.node_name == name:
+            return child
+    return None
+
+
+def extract_macro_body(
+    body: str, shape_key: str, parse_ast: Callable[[str], tuple], cfg: dict | None = None
+) -> Any | None:
+    """按包裹配置（`pick` / `skip_head` / `skip_tail`）钻取宏体子树。
+
+    步骤：模板填入宏体 → 解析 → 按 `pick` 节点名路径逐层钻取容器 → 取容器
+    children 去掉 `skip_head` 头 / `skip_tail` 尾 → 合成 `MacroBody` 包装节点
+    （children = 宏体对应的顶层单元）。失败返回 None。
+
+    提取路径是**语言语法知识**（随包裹模板结构定），由语言包 `[macro_shape.wrappers.
+    <key>]` 声明，引擎只做通用钻取。
+    """
+    from core.define import Node
+
+    wrappers, _ = get_shape_config(cfg)
+    spec = wrappers.get(shape_key)
+    if not isinstance(spec, dict):
+        return None
+    tpl = spec.get("tpl") or ""
+    pick = spec.get("pick") or ""
+    if not tpl or not pick:
+        return None
+
+    _parser, ast = parse_ast(tpl.replace("{b}", body))
+    if ast is None:
+        return None
+    node = ast
+    for seg in pick.split("."):
+        node = _first_child_named(node, seg)
+        if node is None:
+            return None
+
+    children = list(node.iter_children())
+    head = int(spec.get("skip_head", 0) or 0)
+    tail = int(spec.get("skip_tail", 0) or 0)
+    kept = children[head : len(children) - tail] if tail else children[head:]
+    if not kept:
+        return None
+    wrap = Node("MacroBody")
+    for child in kept:
+        wrap.add_sub_node(child)
+    return wrap

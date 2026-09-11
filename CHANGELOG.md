@@ -44,6 +44,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   token 流区间）互补 = ADR-0016「raw 源区间权威」的节点级表达（P3.3 双向映射
   基础）。测试加“源文本切片 == `` `NAME ``”强校验。
 
+- **宏体子树提取器（0.1.2 阶段 4b-1）**：`preprocessor/macro_shape.py` 新增
+  `build_parse_ast` + `extract_macro_body`——按语言包
+  `[macro_shape.wrappers.<key>]` 的 `pick`（节点名路径）+ `skip_head`/`skip_tail`
+  钻取宏体对应节点，合成 `MacroBody` 包装节点；wrapper 配置升级为嵌套表
+  （`tpl` + 提取路径），提取路径属语言语法知识（进配置），引擎只做通用钻取。
+  测试 `tests/engine/preprocessor/test_macro_body_extract.py`（4 形态 + 多单元 +
+  残缺回退，标 smoke）。**尚未接入管线**（挂载到 MacroCall 节点 = 4b-2）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

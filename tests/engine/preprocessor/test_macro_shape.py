@@ -55,7 +55,8 @@ def test_config_loaded_from_language_pack() -> None:
     """包装模板与续接首 token 集来自语言包 TOML（语言知识不进代码）。"""
     wrappers, leads = get_shape_config()
     assert set(wrappers) == {"stmt", "decl", "expr", "port"}
-    assert all("{b}" in tpl for tpl in wrappers.values())
+    assert all("{b}" in (w.get("tpl") or "") for w in wrappers.values())
+    assert all(w.get("pick") for w in wrappers.values()), "wrapper 缺提取路径 pick"
     assert leads, "continue_leads 未从语言包加载"
 
 
@@ -66,7 +67,7 @@ def test_classification_is_config_driven() -> None:
 
     custom = {
         "continue_leads": [],
-        "wrappers": {"decl": "module m;\n{b}\nendmodule"},
+        "wrappers": {"decl": {"tpl": "module m;\n{b}\nendmodule"}},
     }
     kind2, basis2 = classify_macro_body("wire a;", _PROBE, cfg=custom)
     assert kind2 == KIND_DECL, basis2

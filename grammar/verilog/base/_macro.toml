@@ -103,8 +103,24 @@ continue_leads = [
     "!", "?", ":", "&&", "||", "==", "!=", "<", ">",
 ]
 
-[macro_shape.wrappers]
-stmt = "module m;\ninitial begin\n{b}\nend\nendmodule"
-decl = "module m;\n{b}\nendmodule"
-expr = "module m;\nreg x;\ninitial begin\nx = {b};\nend\nendmodule"
-port = "module m;\ninput x {b};\nendmodule"
+[macro_shape.wrappers.stmt]
+tpl = "module m;\ninitial begin\n{b}\nend\nendmodule"
+pick = "ModuleDecl.InitialStmt.BeginEnd"
+
+[macro_shape.wrappers.decl]
+tpl = "module m;\n{b}\nendmodule"
+pick = "ModuleDecl"
+# 去掉尾部固定部分（module 名 Identifier）
+skip_tail = 1
+
+[macro_shape.wrappers.expr]
+tpl = "module m;\nreg x;\ninitial begin\nx = {b};\nend\nendmodule"
+pick = "ModuleDecl.InitialStmt.BeginEnd.BlockingAssign"
+# 去掉头部固定部分（LHS）
+skip_head = 1
+
+[macro_shape.wrappers.port]
+tpl = "module m;\ninput x {b};\nendmodule"
+pick = "ModuleDecl.BodyInputDecl.DeclaratorList.Declarator"
+# 去掉头部固定部分（端口名 + 默认值重复占位）
+skip_head = 2
