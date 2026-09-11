@@ -54,8 +54,36 @@ parser 能前置（单输入单消费：token 流入一个 parser，入口前可
 - **已定（2026-09-11）**：锚定层级 = **插件实例化对象**（不是插件声明/类本身）。
   时点在**插件注册时声明**默认值，**允许实例化后覆写**——同一变换可注册多次
   （多实例各带时点，如 typed_ports 展开在两个时点各注册一次），与“校验粒度
-  作者自选”衔接。
+  作者自选”衔接。- **统一调度（2026-09-11 作者定调）**：analyze 与 transform 在调度层**统一**
+  为同一种"加工单元"——一般情况下**分析产出一个分析结果或一个执行回调，随后
+  跟一个执行**（分析与执行不再是两类 pass，而是同一单元序列里的角色）。
+  时点**不由单元自定，而由调度器统一生成**：输入 = 当前管线配置 + 单元实例的
+  声明参数（与 pass 级 `order`/`after` → slot 的推导同源）。
+- **配置品类（作者倾向）**：注册 API 的本质 = **插件在管线配置中如何表示**——
+  取**显式 + 带参数**的配置品类（TOML 里显式声明单元实例及其参数/时点声明），
+  不用隐式约定（装饰器登记 / 命名前缀推断）。
+- **时点生成带诊断**（2026-09-11）：冲突 / `after` 环 / 未知引用 / 循环依赖 →
+  诊断 + fail-fast（不静默降级，与 `core/config_lifecycle.md` 一致）。
 
+#### 配置品类草案（待作者确认后落地）
+
+```toml
+# 语言包 tpc.toml：显式声明加工单元实例（类型 + 参数 + 时点声明）
+[pipeline.units.typed_ports_expand]        # 实例名（同一变换可多实例）
+type   = "transform"                       # 单元类型（analyze | transform | check）
+impl   = "typed_ports.formatter"           # 实现引用（插件内 handler/slot 名）
+after  = "analyze.body"                    # 时点声明（after= 或 order=，与 pass 级同构）
+params = { mode = "expand" }               # 显式参数（带参数品类）
+
+[pipeline.units.typed_ports_check]
+type   = "analyze"                         # 同一变换的第二实例（不同时点）
+impl   = "typed_ports._check"
+after  = "typed_ports_expand"
+params = { strict = true }
+```
+
+> 要点：`type`（角色）+ `impl`（实现）+ 时点声明 + `params`（参数）四项显式；
+> 时点由调度器结合"管线配置 + 所有单元实例声明"统一生成并诊断。
 ### 2. 中间产物可视化管道（0.1.2，宏入树之后）
 
 - 时点 = 可视化断点：每阶段快照可 dump / 可追踪来源。已有点：symbols/ast dump
