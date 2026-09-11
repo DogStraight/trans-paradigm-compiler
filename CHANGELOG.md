@@ -38,6 +38,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/engine/linter/test_macro_sync.py` 锁定（函数对象同一 + 配置单源 +
   已定义宏不误报 / 未定义仍报），防未来路径私自复制实现（标 smoke）。
 
+- **宏调用源区间元数据（0.1.2 阶段 4a）**：展开阶段记录宏调用在**源文本**中的
+  位置（`_expand.py` token 锚加 `line`/`col`/`end_col`），宏边界节点化时挂到
+  MacroCall 节点 `_src_span`（`core/define.py` 声明）。与 `_tok_span`（展开后
+  token 流区间）互补 = ADR-0016「raw 源区间权威」的节点级表达（P3.3 双向映射
+  基础）。测试加“源文本切片 == `` `NAME ``”强校验。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

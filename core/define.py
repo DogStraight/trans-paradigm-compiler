@@ -152,6 +152,10 @@ class Node:
     # 挂载（_production.py），供增量重解析（P3.2）结构对齐定位；下划线前缀
     # = 引擎元数据，不进 dump/序列化（同 _pos_line）。
     _tok_span: tuple[int, int] | None = None
+    # 源文本区间（行, 起列, 止列）：宏调用在**原始源文本**中的位置（展开前的
+    # 行/列），由展开阶段记录、宏边界节点化时挂载。与 _tok_span（展开后 token
+    # 流位置）互补 = ADR-0016「raw 源区间权威」的节点级表达（P3.3 双向映射基础）。
+    _src_span: tuple[int, int, int] | None = None
 
     # 子节点列表（CHILDREN_FIELD，见 add_sub_node / iter_children / renderer）
     sub_node: list["Node"]

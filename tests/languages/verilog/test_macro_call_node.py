@@ -79,3 +79,28 @@ def test_no_macro_when_expansion_disabled() -> None:
     res = run_pipeline_on_source(source=src, quiet=True, no_lint=True)
     assert res["success"], res.get("error")
     assert _find(res["ast"], "MacroCall") == []
+
+
+def test_macro_src_span_points_at_source_call() -> None:
+    """`_src_span` 精确指向**源文本**中的宏调用原文（ADR-0016 raw 源区间权威）。
+
+    强校验：用 (line, col, end_col) 切源文本行，切片必须等于 `` `NAME ``。
+    """
+    res = _run()
+    lines = _SRC.split("\n")
+    calls = {c._macro_name: c for c in _find(res["ast"], "MacroCall")}
+    assert set(calls) == {"W", "BODY"}
+    for name, node in calls.items():
+        assert node._src_span is not None, name
+        line, col, end_col = node._src_span
+        assert lines[line - 1][col:end_col] == f"`{name}", (name, node._src_span)
+
+
+def test_macro_call_has_both_spans() -> None:
+    """宏调用位 = 双区间：`_tok_span`（展开后 token 流）+ `_src_span`（源文本）。"""
+    res = _run()
+    for node in _find(res["ast"], "MacroCall"):
+        assert node._tok_span is not None
+        assert node._src_span is not None
+        tok_start, tok_end = node._tok_span
+        assert 0 <= tok_start < tok_end
