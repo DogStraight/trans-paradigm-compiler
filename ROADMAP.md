@@ -176,13 +176,8 @@
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
-### P3.1 前置：AST 节点 token span 绑定（解析期）
-
-- [ ] `_production.py` 构造 `rule_node` 时记录 token 范围（起止 `token_pointer`），
-      存为 `rule_node.tok_span`（`Node` 用 `**kwargs` 接受任意属性，不改 `core/define.py`）
-- [ ] 回溯（snapshot/restore）时 tok_span 正确回滚
-- [ ] 方案 B（可选）：`pratt_parser.py` 原子（Number/Identifier 等）也绑 token 位置，
-      粒度细化到表达式层
+> **0.1.2 立项项已移入 TODO**：P3.1（span 绑定）+ P3.6（宏体入树）→ `TODO.md`
+> 「0.1.2」节；设计见 `docs/decisions/0016-macro-body-into-ast.md`。
 
 ### P3.2 失效判定 + 增量重解析
 
@@ -260,7 +255,8 @@
 - [ ] 条件编译（`ifdef/ifndef`）下编辑，会改变展开结果 → 整段缓存失效，需处理
 - [ ] 宏定义本身的编辑（`define` 行改）→ 所有用到该宏的 token 全部失效，不是局部问题
 
-### P3.6 宏体形态分类 + 宏节点进 AST（2026-08-29 登记，v0.2 候选）
+### P3.6 宏体形态分类 + 宏节点进 AST（**0.1.2 立项**：见 TODO「0.1.2」+ ADR-0016；
+本节详案保留至实施项登记完成后清理）
 
 > 现状：checker 宏展开是"一刀切全展开"（semantic=True 宏体替换，宏节点不入
 > AST）。原意图带宏节点进 parse，但**残缺片段宏**（`= 1'b1`、`[3:0]`、
