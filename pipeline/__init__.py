@@ -45,13 +45,14 @@ from parser.rule_selector import RuleSelector
 # ── 编排调度（ADR-0007）：编排器在 schedule.py（声明+排序+执行）──
 from .schedule import (
     build_schedules,
+    build_unit_schedule,
     _run_schedule,
     _LEGACY_PASS_STAGES,
     DEFAULT_SCHEDULE_NAME,
 )
 
 # ── 语言配置（组件系统收集）──
-from core.plugin_loader import get_capability, get_component_mapping_config
+from core.plugin_loader import get_capability, get_component_mapping_config, get_pipeline_units
 
 # ── 变换器 ──
 from transform import collect_extra_asts
@@ -308,6 +309,11 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         mapping_cfg = get_component_mapping_config()
         # 编排调度按 rules_dir 缓存（同一原因：声明来自 _loaded_components）。
         schedules = build_schedules()
+        # 加工单元声明（ADR-0015 §1，5b-2）：存在时以**单元序列**替代默认
+        # schedule 的 pass 序列（统一调度：analyze/transform/check 同列）。
+        unit_seq = build_unit_schedule(get_pipeline_units())
+        if unit_seq is not None:
+            schedules[DEFAULT_SCHEDULE_NAME] = unit_seq
         # 渲染插件覆盖式（[plugins].render = 组件名）：渲染插件产出中间表示
         # （如 c4 asm_gen → 汇编文本），启用后**直接不走主管线源端渲染**——
         # 渲染阶段由插件 handler 接管（覆盖式；与 analyze/transform 的叠加式

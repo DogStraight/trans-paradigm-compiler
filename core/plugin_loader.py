@@ -307,7 +307,23 @@ def _load_pipeline_decls(cdir: str, pipeline_meta: dict) -> dict[str, Any]:
         uname = u.get("name")
         if not isinstance(uname, str) or not uname:
             raise ValueError(f"[plugin] pipeline.units 缺 name: {u!r} ({cdir})")
-        units[uname] = {k: v for k, v in u.items() if k != "name"}
+        udecl = {k: v for k, v in u.items() if k != "name"}
+        # 非内置 impl（含 ':'）→ 解析为 handler（与 pass handler 同格式，fail-fast）。
+        impl = udecl.get("impl", "")
+        if isinstance(impl, str) and ":" in impl and not impl.startswith("builtin."):
+            fname, fn_name = impl.split(":", 1)
+            modules = _load_python_handlers(cdir, [fname])
+            if not modules:
+                raise ValueError(
+                    f"[plugin] pipeline.units impl 模块不存在: {fname} ({cdir})"
+                )
+            fn = getattr(modules[0], fn_name, None)
+            if fn is None or not callable(fn):
+                raise ValueError(
+                    f"[plugin] pipeline.units impl 函数 {fn_name} 不存在于 {fname} ({cdir})"
+                )
+            udecl["_handler"] = fn
+        units[uname] = udecl
     return {"passes": passes, "schedules": schedules, "units": units}
 
 

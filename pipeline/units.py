@@ -20,6 +20,9 @@ from typing import Any
 
 VALID_TYPES = ("analyze", "transform", "check")
 
+# 内置单元 impl 约定（粗粒度执行器；细粒度拆解见 5b-3）
+BUILTIN_IMPLS = frozenset({"builtin.analyze", "builtin.transform"})
+
 
 @dataclass
 class UnitInstance:
@@ -143,3 +146,20 @@ def build_unit_sequence(decls: dict[str, dict] | None) -> list[UnitInstance]:
     入口：`core.plugin_loader.get_pipeline_units()` 的汇总结果（或测试直接喂）。
     """
     return assign_points(parse_units(decls or {}))
+
+
+def validate_sequence(units: list[UnitInstance]) -> None:
+    """**粗粒度限定**（5b-2）：`type='analyze'/'transform'` 单元各至多 1 个。
+
+    理由：粗粒度下这两类单元各对应一个内置黑盒执行器（跑完整
+    `AnalysisTraversal` / `AstTransformer`），重复声明 = 整段重复执行，与
+    “同一变换多实例各带时点”的语义不符。多实例目前限于 `check` 类；
+    同一变换的真正多实例（多时点）需**细粒度拆解**（5b-3）。
+    """
+    for utype in ("analyze", "transform"):
+        count = sum(1 for u in units if u.type == utype)
+        if count > 1:
+            raise ValueError(
+                f"[pipeline] 粗粒度限定：type='{utype}' 单元至多 1 个"
+                f"（当前 {count} 个）——多实例需细粒度拆解（5b-3）"
+            )

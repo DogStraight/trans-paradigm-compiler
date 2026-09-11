@@ -79,6 +79,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `pipeline/units.py` 新增 `build_unit_sequence`（声明 → 有序单元序列，时点由
   调度器统一生成）。**执行接入（替代 pass 序列）= 5b-2**。
 
+- **单元序列接入调度（0.1.2 阶段 5b-2，粗粒度）**：`schedule.build_unit_schedule`
+  把 `[pipeline] units` 声明构建为**可执行单元序列**（`PassDecl`——与 pass 执行层
+  同构，直接复用 `_run_schedule` 分派）；`impl` 约定 `builtin.analyze` /
+  `builtin.transform` → 内置执行器，其余 → 加载时解析的 handler（check 类）。
+  `_ensure_shared` 接入：units 声明存在时**替代默认 schedule 的 pass 序列**
+  （统一调度：analyze / transform / check 同列）。**粗粒度限定**：
+  `analyze`/`transform` 单元各至多 1 个（内置黑盒执行器不可重复跑），多实例限
+  `check` 类——同一变换多时点需细粒度拆解（5b-3）。无声明时走原路径（零回归）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

@@ -244,6 +244,34 @@ def build_schedules() -> dict[str, list[PassDecl]]:
 # ── 执行（ADR-0007）────────────────────────────────────────
 
 
+def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
+    """把 `[pipeline] units` 声明构建为**可执行单元序列**（粗粒度，5b-2）。
+
+    返回 None = 无声明（调用方回落 pass 序列）。impl 约定：
+      `builtin.analyze` / `builtin.transform` → 内置执行器（由 `kind` 驱动）；
+      其余 → 加载时已解析的 handler（`_handler`，check 类）。
+    单元与 pass 在执行层同构（都是 `PassDecl`：name/kind/handler）→ 直接复用
+    `_run_schedule` 的分派，无需另写执行器。
+    """
+    if not unit_decls:
+        return None
+    from .units import BUILTIN_IMPLS, build_unit_sequence, validate_sequence
+
+    units = build_unit_sequence(unit_decls)
+    validate_sequence(units)
+
+    out: list[PassDecl] = []
+    for u in units:
+        decl = unit_decls.get(u.name) or {}
+        handler = decl.get("_handler")
+        if u.impl not in BUILTIN_IMPLS and handler is None:
+            raise ValueError(
+                f"[pipeline] unit '{u.name}' impl 未解析为 handler: {u.impl!r}"
+            )
+        out.append(PassDecl(name=u.name, kind=u.type, handler=handler))
+    return out
+
+
 class _ScheduleStop(Exception):
     """内部控制流：pass 请求终止调度（analyze 报 error 级诊断）。"""
 

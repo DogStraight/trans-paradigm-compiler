@@ -151,3 +151,88 @@ class TestBuildSequence:
 
         assert build_unit_sequence(None) == []
         assert build_unit_sequence({}) == []
+
+
+class TestValidateSequence:
+    def test_ok(self) -> None:
+        from pipeline.units import validate_sequence
+
+        validate_sequence(
+            [_u("a", type="analyze"), _u("b", type="transform"), _u("c", type="check")]
+        )
+
+    def test_too_many_analyze(self) -> None:
+        from pipeline.units import validate_sequence
+
+        with pytest.raises(ValueError, match="粗粒度限定"):
+            validate_sequence([_u("a", type="analyze"), _u("b", type="analyze")])
+
+
+class TestBuildUnitSchedule:
+    """units 声明 → 可执行序列（PassDecl，与 pass 执行层同构）。"""
+
+    def test_no_decl_returns_none(self) -> None:
+        from pipeline.schedule import build_unit_schedule
+
+        assert build_unit_schedule({}) is None
+
+    def test_builtin_units(self) -> None:
+        from pipeline.schedule import build_unit_schedule
+
+        seq = build_unit_schedule(
+            {
+                "analyze": {"type": "analyze", "impl": "builtin.analyze"},
+                "transform": {
+                    "type": "transform",
+                    "impl": "builtin.transform",
+                    "after": "analyze",
+                },
+            }
+        )
+        assert seq is not None
+        assert [(d.name, d.kind) for d in seq] == [
+            ("analyze", "analyze"),
+            ("transform", "transform"),
+        ]
+        assert seq[0].handler is None and seq[1].handler is None
+
+    def test_check_unit_uses_handler(self) -> None:
+        from pipeline.schedule import build_unit_schedule
+
+        def _fn(state) -> None:  # noqa: ANN001
+            return None
+
+        seq = build_unit_schedule(
+            {
+                "analyze": {"type": "analyze", "impl": "builtin.analyze"},
+                "extra_check": {
+                    "type": "check",
+                    "impl": "p.py:fn",
+                    "after": "analyze",
+                    "_handler": _fn,
+                },
+            }
+        )
+        assert seq is not None
+        assert seq[1].kind == "check" and seq[1].handler is _fn
+
+    def test_coarse_grained_limit(self) -> None:
+        from pipeline.schedule import build_unit_schedule
+
+        with pytest.raises(ValueError, match="粗粒度限定"):
+            build_unit_schedule(
+                {
+                    "t1": {"type": "transform", "impl": "builtin.transform"},
+                    "t2": {
+                        "type": "transform",
+                        "impl": "builtin.transform",
+                        "after": "t1",
+                    },
+                }
+            )
+
+    def test_unresolved_impl_diagnostic(self) -> None:
+        from pipeline.schedule import build_unit_schedule
+
+        with pytest.raises(ValueError, match="未解析为 handler"):
+            build_unit_schedule({"c": {"type": "check", "impl": "p.py:fn"}})
