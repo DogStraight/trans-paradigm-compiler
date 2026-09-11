@@ -32,6 +32,7 @@ Doc: docs/language_walkthrough.md（语义映射）
 """
 
 from typing import Any
+from core._protocol import ROW_ORIGIN
 from core.define import Node
 from analyzer.scope import Scope
 from transform.engine import TransformPlugin, AstTransformer, register_plugin
@@ -59,6 +60,8 @@ class SemanticMappingPlugin(TransformPlugin):
             v for v in raw.values() if isinstance(v, dict) and "trigger" in v
         ]
         self._tables: dict[str, Any] = {}
+        # 行来源（可视化管道，ADR-0015 §2）：{table: {key: [{name, origin}, ...]}}
+        self._origins: dict[str, dict[str, list[dict]]] = {}
         self._root_scope: Scope | None = None
 
     @property
@@ -71,6 +74,7 @@ class SemanticMappingPlugin(TransformPlugin):
     def process(self, ast: Node, root_scope: Scope) -> Node:
         """遍历 scope 树，构建映射表"""
         self._tables.clear()
+        self._origins.clear()
         self._root_scope = root_scope
         if not self._mapping_entries:
             return ast
@@ -79,6 +83,23 @@ class SemanticMappingPlugin(TransformPlugin):
         self._build_mappings(root_scope)
 
         return ast
+
+    def describe(self) -> dict:
+        """自述映射表形状 + 行来源（可视化管道，ADR-0015 §2）。
+
+        引擎不解析内容，只收集进单元执行轨迹的 `artifacts` 落盘。
+        来源仅覆盖携带 ROW_ORIGIN 的行（展开侧提供溯源时才有）。
+        """
+        if not self._tables:
+            return {}
+        out: dict = {}
+        for table, content in self._tables.items():
+            sources = self._origins.get(table, {})
+            out[table] = {
+                "rows": _count_rows(content),
+                "sources": {k: sources[k] for k in sorted(sources)},
+            }
+        return out
 
     # ── 映射表构建 ──
 
@@ -154,6 +175,7 @@ class SemanticMappingPlugin(TransformPlugin):
             # 模板提取（那套 items.items[*].name 是给 raw 声明结构用的）。
             if source_cfg.get("attr") == "ports" and sym.attrs.get("resolved_ports"):
                 items_result = []
+                origins: list[dict] = []
                 for row in source_data:
                     if not isinstance(row, dict) or not row.get("name"):
                         continue
@@ -164,8 +186,16 @@ class SemanticMappingPlugin(TransformPlugin):
                     if row.get("packed_range") is not None:
                         entry_row["packed_range"] = row["packed_range"]
                     items_result.append(entry_row)
+                    # 行来源（展开侧协议的溯源字段）→ 旁路收集，不进表数据
+                    origin = row.get(ROW_ORIGIN)
+                    if origin:
+                        origins.append(
+                            {"name": entry_row["name"], "origin": origin}
+                        )
                 if items_result:
                     self._set_nested(self._tables[table], key, items_result)
+                    if origins:
+                        self._origins.setdefault(table, {})[key] = origins
             else:
                 items_result, values = self._process_items(entry, source_data)
                 if items_result:
@@ -249,4 +279,13 @@ class SemanticMappingPlugin(TransformPlugin):
         for p in parts[:-1]:
             parent = parent.setdefault(p, {})
         parent[parts[-1]] = value
+
+
+def _count_rows(node: Any) -> int:
+    """统计映射表嵌套结构中的行数（表叶子列表的元素总数）。"""
+    if isinstance(node, list):
+        return sum(len(x) if isinstance(x, list) else 1 for x in node)
+    if isinstance(node, dict):
+        return sum(_count_rows(v) for v in node.values())
+    return 0
 

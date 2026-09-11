@@ -407,9 +407,9 @@ def _run_schedule(
             else:
                 _run_pass_check(state, decl)
         except _ScheduleStop:
-            state.trace.append(_trace_entry(index, decl, state.extra, _extra_before))
+            state.trace.append(_trace_entry(index, decl, state, _extra_before))
             break
-        state.trace.append(_trace_entry(index, decl, state.extra, _extra_before))
+        state.trace.append(_trace_entry(index, decl, state, _extra_before))
         if ctx.stage == decl.name:
             break
     # 单元执行轨迹（阶段 6 可视化）：谁在哪个时点跑了、向黑板（extra）写了哪些键。
@@ -419,13 +419,23 @@ def _run_schedule(
 
 
 def _trace_entry(
-    index: int, decl: "PassDecl", extra: dict, before: set
+    index: int, decl: "PassDecl", state: "PassState", before: set
 ) -> dict:
-    """单元执行轨迹条目（时点 = index，按执行序）。"""
-    return {
+    """单元执行轨迹条目（时点 = index，按执行序）
+
+    extra_added = 本次写入黑板（PassState.extra）的键；
+    artifacts  = 插件自述的中间产物/来源（transform 类，非空才带）——
+                 同为实现 ADR-0015 §2「时点 = 可视化断点」。
+    """
+    entry = {
         "index": index,
         "name": decl.name,
         "kind": decl.kind,
-        "extra_added": sorted(set(extra) - before),
-        "extra_keys": sorted(extra),
+        "extra_added": sorted(set(state.extra) - before),
+        "extra_keys": sorted(state.extra),
     }
+    if decl.kind == "transform" and state.transformer is not None:
+        described = state.transformer.describe_plugins()
+        if described:
+            entry["artifacts"] = described
+    return entry

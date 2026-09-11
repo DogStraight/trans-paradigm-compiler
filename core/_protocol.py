@@ -11,6 +11,14 @@ ATTR_RESOLVED_PORTS = "resolved_ports"
 ATTR_TYPE_DECL = "_type_decl"
 """存储对应的 TypeDecl 节点引用。"""
 
+# ── 展开行字段（映射表来源追踪）──
+ROW_ORIGIN = "origin"
+"""展开行的来源路径（可视化管道：映射表来源追踪，ADR-0015 §2）。
+
+由展开侧（组件，如 typed_ports `_expand_ports`）写入 `resolved_ports` 行，
+引擎侧（SemanticMappingPlugin）按此键收集来源做可视化，不解析语义——
+引擎只认协议字段名，不懂段含义（语言知识不进引擎）。"""
+
 # ── 映射表（SemanticMappingPlugin 产出的表名）──
 TABLE_TYPE_PORTS_FLAT = "type_ports_flat"
 """类型化端口的扁平端口列表。"""

@@ -5,7 +5,7 @@
 
 | 文件 | 一句话 |
 |------|--------|
-| `engine.py` | AstTransformer + TransformPlugin 基类 + 自动注册（注释迁移 `migrate_comments`） |
+| `engine.py` | AstTransformer + TransformPlugin 基类 + 自动注册（注释迁移 `migrate_comments`；插件自述 `describe()`） |
 | `config_driven.py` | 配置驱动变换（原语扩展：emit/expand/delete 等） |
 | `_semantic_mapping.py` | 语义映射表构建 + 后处理管线 |
 | `normalizer.py` | 统一的 AST 规范化层（结构保留） |
@@ -50,6 +50,19 @@ _apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路
 `key="{type_spec.type_name}.{type_spec.role_name}"` → expand 时按表展开端口 AST。
 行契约 `{direction, name, packed_range}` 是 transform 与下游的稳定面——改表结构
 须连带改 config_driven 的 expand 消费与 emit。
+
+### 行来源追踪（0.1.2 阶段 6，可视化管道）
+
+`resolved_ports` 行携带 `origin`（协议字段 `core/_protocol.ROW_ORIGIN`）——
+展开链 + 源端口锚点，如 `spi.slave > invert(spi.master) > #miso`；嵌套叠加
+`nested(实例:类型.角色)` / `rename(实例)` / `opposite(...)` 段（终点恒为 `#端口名`）。
+`_apply_entry` 旁路收集成 `{table: {key: [{name, origin}]}}`（不进表数据），
+插件 `describe()` 自述 → 调度层记进 trace 条目的 `artifacts` → dump 模式落
+`symbols/trace.json`。回答“_这行从哪来_”（ADR-0015 §2），分流插件复杂后的调试。
+
+- 引擎只认协议字段名与自述容器，不解析段含义（语言知识在组件侧）；
+- 新增插件想让中间产物可见 → 覆写 `TransformPlugin.describe()`（默认空 dict
+   = 不自述，可选能力）。
 
 > 组件协议（tpc.toml 结构/加载链/capabilities）见 `core/component_protocol.md`；
 > 从零搭语言的端到端教程见 `docs/language_walkthrough.md`。

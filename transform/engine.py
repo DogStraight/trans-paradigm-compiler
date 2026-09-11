@@ -45,6 +45,15 @@ class TransformPlugin(ABC):
         """变换统计，子类可覆盖"""
         return {}
 
+    def describe(self) -> dict:
+        """插件自述中间产物 / 来源（可视化管道，ADR-0015 §2）。
+
+        返回结构由插件自定（自由 dict）；引擎只做容器与落盘（收集进
+        trace 条目的 `artifacts`），不解析内容——语言知识不进引擎。
+        默认空 dict = 无自述（可选能力，见 ADR-0015 可选纪律设施）。
+        """
+        return {}
+
 
 class AstTransformer:
     """后阶段变换管线，依次执行所有已注册的插件"""
@@ -80,6 +89,19 @@ class AstTransformer:
             plugin._transformer = self
             ast = plugin.process(ast, root_scope)
         return ast
+
+    def describe_plugins(self) -> dict[str, dict]:
+        """收集所有插件的自述（仅非空者），键 = 插件类名。
+
+        可视化管道：调度层把结果记进单元执行轨迹（trace 条目的
+        `artifacts`），供 dump / 追踪中间产物与来源。
+        """
+        out: dict[str, dict] = {}
+        for plugin in self._plugins:
+            info = plugin.describe()
+            if info:
+                out[type(plugin).__name__] = info
+        return out
 
 
 # ── 额外 AST 输出（多文件分发）──

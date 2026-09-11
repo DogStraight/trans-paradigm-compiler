@@ -93,6 +93,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `extra` 写了哪些键）→ `ctx.result["trace"]`；`sym_json` 指定时同目录落
   `trace.json`。ADR-0015 §2「时点 = 可视化断点」首项落地（配对隐式，但产物可视）。
 
+- **映射表来源追踪（0.1.2 阶段 6 可视化）**：`resolved_ports` 行携带 `origin`
+  （展开链 + 源端口锚点，`spi.slave > invert(spi.master) > #miso`；嵌套叠加
+  `nested(实例:类型.角色)`/`rename(实例)`/`opposite(...)` 段）→ SemanticMappingPlugin
+  旁路收集 → 插件 `describe()` 自述 → trace 条目 `artifacts`（落 `trace.json`）。
+  回答「这行从哪来」；引擎只认协议字段名与自述容器（`TransformPlugin.describe()`
+  默认空 = 可选能力），不解析段语义。测试 `tests/languages/verilog/test_mapping_origin.py`。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

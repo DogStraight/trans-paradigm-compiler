@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core._protocol import ROW_ORIGIN
 from core.define import Node
 
 # 方向反转映射（_invert_map.py 旧原语已删，本常量集中定义普通端口逐项取反）
@@ -35,7 +36,9 @@ _ANSI = ("AnsiInputDecl", "AnsiOutputDecl", "AnsiInoutDecl")
 def run_expand_ports(analyzer, context) -> None:
     """postpass 入口：遍历 scope 树，对每个 role 递归展开完整端口集。
 
-    产出：sym.attrs["resolved_ports"] = [{direction, name, packed_range?}, ...]
+    产出：sym.attrs["resolved_ports"] = [{direction, name, packed_range?, origin}, ...]
+          origin = 展开路径链（`spi.slave > invert(spi.master) > #miso`），
+          供映射表来源追踪（ADR-0015 §2），非消费字段。
     幂等：同一 scope 树多次跑结果一致（从 raw ports 重新展开，不依赖残留）。
     """
     del context  # postpass 协议签名参数，本 postpass 不消费诊断通道
@@ -50,8 +53,11 @@ def run_expand_ports(analyzer, context) -> None:
             # 无条件写键（空展开也写 []）：所有 role 一致带 resolved_ports，
             # 下游消费点（_check/_transform/_semantic_mapping）只读此键即可，
             # 不再需要 _ref_callbacks 中间层回退（P1.5 step 2 清理）。
+            # 每行携带 origin（来源路径链，ADR-0015 §2 映射表来源追踪）：
+            # `spi.slave > invert(spi.master) > #miso` —— 展开段序列 +
+            # 源端口名，供可视化管道回答“这行从哪来”。
             sym.attrs["resolved_ports"] = _expand_role(
-                type_scopes, tname, sym.name
+                type_scopes, tname, sym.name, (), f"{tname}.{sym.name}"
             )
 
 
@@ -59,52 +65,76 @@ def run_expand_ports(analyzer, context) -> None:
 
 
 def _expand_role(type_scopes: dict, type_name: str, role_name: str,
-                 _stack: tuple = ()) -> list[dict]:
+                 _stack: tuple = (), chain: str = "") -> list[dict]:
     """按 role 定义体展开端口集（非反转视角）。
 
     定义体若是纯 `invert X` → 取 X 的取反（invert_role）；否则普通展开：
     Ansi 端口原方向；TypeNestedPort → 递归展开目标 role + 实例名前缀。
+
+    chain: 展开路径链（可视化溯源）；空则自建起点段 `类型.角色`。
     """
     key = ("e", type_name, role_name)
     if key in _stack:
         return []
     _stack = _stack + (key,)
+    chain = chain or f"{type_name}.{role_name}"
     raw = _role_raw_ports(type_scopes, type_name, role_name)
     if raw is None:
         return []
     # 纯 invert 声明：`slave: invert master` → invert_role(master)
     if len(raw) == 1 and raw[0].get("node_name") == "TypeInvertPort":
-        return _invert_role(type_scopes, type_name,
-                            raw[0].get("target_role", ""), _stack)
+        target = raw[0].get("target_role", "")
+        return _invert_role(type_scopes, type_name, target, _stack,
+                            f"{chain} > invert({type_name}.{target})")
     out: list[dict] = []
     for p in raw:
         nn = p.get("node_name", "")
         if nn in _ANSI:
-            _append_ansi(out, p)
+            _append_ansi(out, p, chain=chain)
         elif nn == "TypeNestedPort":
             ts = p.get("type_spec") or {}
             tname = ts.get("type_name", "")
             rname = ts.get("role_name", "")
             prefix = p.get("instance_name", "")
-            for e in _expand_role(type_scopes, tname, rname, _stack):
-                e2 = dict(e)
-                if prefix and e2.get("name"):
-                    e2["name"] = f"{prefix}_{e2['name']}"
+            for e in _expand_role(type_scopes, tname, rname, _stack,
+                                 f"{chain} > nested({prefix}:{tname}.{rname})"):
+                e2 = _rename_port(e, prefix)
                 out.append(e2)
         elif nn == "TypeInvertPort":
             # role 体内混用 invert Z（非纯反转定义）→ 该项取 Z 的对侧
-            out.extend(_invert_role(type_scopes, type_name,
-                                    p.get("target_role", ""), _stack))
+            target = p.get("target_role", "")
+            out.extend(_invert_role(type_scopes, type_name, target, _stack,
+                                    f"{chain} > invert({type_name}.{target})"))
     return out
 
 
+def _rename_port(entry: dict, prefix: str) -> dict:
+    """嵌套端口实例名前缀化（name 与 origin 同步）。
+
+    origin 保持"展开链 … > #源端口名"形态：rename 段插在 `#` 之前，
+    终点恒为源端口锚点（改名事实由 rename 段表达）。
+    """
+    e2 = dict(entry)
+    if prefix and e2.get("name"):
+        e2["name"] = f"{prefix}_{e2['name']}"
+        o = e2.get(ROW_ORIGIN)
+        if o:
+            head, sep, tail = o.rpartition(" > #")
+            e2[ROW_ORIGIN] = (
+                f"{head} > rename({prefix}){sep}{tail}" if sep
+                else f"{o} > rename({prefix})"
+            )
+    return e2
+
+
 def _invert_role(type_scopes: dict, type_name: str, role_name: str,
-                 _stack: tuple = ()) -> list[dict]:
+                 _stack: tuple = (), chain: str = "") -> list[dict]:
     """取 role 的对侧端口集：普通端口方向反转 + 嵌套取对侧角色展开。"""
     key = ("i", type_name, role_name)
     if key in _stack:
         return []
     _stack = _stack + (key,)
+    chain = chain or f"{type_name}.{role_name}"
     raw = _role_raw_ports(type_scopes, type_name, role_name)
     if raw is None:
         return []
@@ -112,27 +142,26 @@ def _invert_role(type_scopes: dict, type_name: str, role_name: str,
     for p in raw:
         nn = p.get("node_name", "")
         if nn in _ANSI:
-            _append_ansi(out, p, invert=True)
+            _append_ansi(out, p, invert=True, chain=chain)
         elif nn == "TypeNestedPort":
             ts = p.get("type_spec") or {}
             tname = ts.get("type_name", "")
             rname = ts.get("role_name", "")
             prefix = p.get("instance_name", "")
-            sub = _opposite_expand(type_scopes, tname, rname, _stack)
+            sub = _opposite_expand(type_scopes, tname, rname, _stack,
+                                   f"{chain} > opposite({prefix}:{tname}.{rname})")
             for e in sub:
-                e2 = dict(e)
-                if prefix and e2.get("name"):
-                    e2["name"] = f"{prefix}_{e2['name']}"
-                out.append(e2)
+                out.append(_rename_port(e, prefix))
         elif nn == "TypeInvertPort":
             # 混用 invert（罕见）：目标 Z 的对侧 = 展开 Z 的定义（若纯反转已含）
-            out.extend(_expand_role(type_scopes, type_name,
-                                    p.get("target_role", ""), _stack))
+            target = p.get("target_role", "")
+            out.extend(_expand_role(type_scopes, type_name, target, _stack,
+                                    f"{chain} > invert({type_name}.{target})"))
     return out
 
 
 def _opposite_expand(type_scopes: dict, type_name: str, role_name: str,
-                     _stack: tuple) -> list[dict]:
+                     _stack: tuple, chain: str = "") -> list[dict]:
     """嵌套 role 的对侧展开：找 T 内显式对侧 Y（`Y: invert X` 纯声明）→
     展开 Y（其定义已含方向反转）；找不到 → 递归 invert_role(T.X)。"""
     tsc = type_scopes.get(type_name)
@@ -143,17 +172,20 @@ def _opposite_expand(type_scopes: dict, type_name: str, role_name: str,
             rs = _role_raw_ports(type_scopes, type_name, rname)
             if (len(rs) == 1 and rs[0].get("node_name") == "TypeInvertPort"
                     and rs[0].get("target_role", "") == role_name):
-                return _expand_role(type_scopes, type_name, rname, _stack)
-    return _invert_role(type_scopes, type_name, role_name, _stack)
+                return _expand_role(type_scopes, type_name, rname, _stack,
+                                    f"{chain} > via({type_name}.{rname})")
+    return _invert_role(type_scopes, type_name, role_name, _stack, chain)
 
 
 # ── 辅助 ─────────────────────────────────────────────
 
 
-def _append_ansi(out: list[dict], p: dict, invert: bool = False) -> None:
+def _append_ansi(out: list[dict], p: dict, invert: bool = False,
+                 chain: str = "") -> None:
     """把一个 Ansi 端口声明项追加到 out（方向可选反转）。
 
     p: {direction, items:{items:[{name, packed_range?}]}, packed_range?}
+    行携带 origin（来源链 + `#端口名`）；chain 空则不加（无溯源要求的调用）。
     """
     d = p.get("direction", "")
     if invert:
@@ -167,6 +199,8 @@ def _append_ansi(out: list[dict], p: dict, invert: bool = False) -> None:
         pr = p.get("packed_range")
         if pr:
             entry["packed_range"] = pr
+        if chain:
+            entry[ROW_ORIGIN] = f"{chain} > #{nm}"
         out.append(entry)
 
 
