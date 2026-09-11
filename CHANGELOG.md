@@ -31,6 +31,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/languages/verilog/test_macro_call_node.py`（4 断言，标 smoke）。
   注：宏体子树进节点 + 渲染改源区间还原 = ADR-0016 终态，归阶段 4。
 
+- **宏处理单一来源门禁（0.1.2 阶段 3）**：侦察确认 linter（`linter/scanner.py`）
+  与管线（`pipeline/__init__.py`）调用**同一**
+  `preprocessor._expand.expand_tokens`，形态配置由 `preprocessor/macro_shape.py`
+  单一读取语言包 `[macro_shape]`——无第二实现/副本。新增
+  `tests/engine/linter/test_macro_sync.py` 锁定（函数对象同一 + 配置单源 +
+  已定义宏不误报 / 未定义仍报），防未来路径私自复制实现（标 smoke）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
