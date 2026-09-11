@@ -465,6 +465,7 @@ def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) ->
             new = Node("MacroCall", content=value.content)
             new._macro_name = _extract_macro_name(entry.get("fragment", ""))
             new._macro_marker = value.content
+            new._macro_fragment = entry.get("fragment", "") or ""
             if entry.get("line") is not None:
                 new._src_span = (
                     entry["line"],

@@ -124,3 +124,22 @@ def test_macro_body_not_in_children() -> None:
     res = _run()
     for node in _find(res["ast"], "MacroCall"):
         assert list(node.iter_children()) == []
+
+
+def test_macro_fragment_is_raw_source_slice() -> None:
+    """渲染走 raw 源区间：`_macro_fragment` == 源区间切片，节点直接输出它。
+
+    ADR-0016「渲染直接走源区间」——不再依赖事后 marker 文本替换（事后替换
+    对 token 锚已找不到 marker，保留作安全网）。
+    """
+    res = _run()
+    lines = _SRC.split("\n")
+    calls = _find(res["ast"], "MacroCall")
+    assert len(calls) == 2
+    for node in calls:
+        line, col, end_col = node._src_span
+        assert node._macro_fragment == lines[line - 1][col:end_col]
+        assert node._macro_fragment.startswith("`")
+    out = res["output"]
+    assert "tpc_marker" not in out
+    assert "`W" in out and "`BODY" in out

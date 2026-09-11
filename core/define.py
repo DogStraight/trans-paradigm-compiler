@@ -160,6 +160,9 @@ class Node:
     # 不占 children（sub_node）——渲染与语义遍历均不进入，故行为面零变化；
     # 供增量/双向映射与后续阶段（4c）消费。
     _macro_body: object | None = None
+    # 宏调用原文（含前缀与实参，如 `` `MIN(x,y) ``）：渲染时由 MacroCall 节点直接
+    # 输出（走 raw 源区间，ADR-0016）——替代“marker 占位 + 事后文本替换”。
+    _macro_fragment: str | None = None
 
     # 子节点列表（CHILDREN_FIELD，见 add_sub_node / iter_children / renderer）
     sub_node: list["Node"]
