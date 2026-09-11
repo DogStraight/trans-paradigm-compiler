@@ -156,6 +156,10 @@ class Node:
     # 行/列），由展开阶段记录、宏边界节点化时挂载。与 _tok_span（展开后 token
     # 流位置）互补 = ADR-0016「raw 源区间权威」的节点级表达（P3.3 双向映射基础）。
     _src_span: tuple[int, int, int] | None = None
+    # 宏体子树（仅 MacroCall 节点）：完整单元宏的展开体结构（MacroBody 包装）。
+    # 不占 children（sub_node）——渲染与语义遍历均不进入，故行为面零变化；
+    # 供增量/双向映射与后续阶段（4c）消费。
+    _macro_body: object | None = None
 
     # 子节点列表（CHILDREN_FIELD，见 add_sub_node / iter_children / renderer）
     sub_node: list["Node"]
@@ -224,6 +228,11 @@ class Node:
             seen.update(id(c) for c in getattr(self, CHILDREN_FIELD))
             yield from getattr(self, CHILDREN_FIELD)
         for attr_name in vars(self):
+            # `_macro_body` = 宏展开体附属子树（MacroCall 专用）：结构可见
+            # （直接属性访问），但不参与遍历——渲染/语义遍历均不进入，
+            # 实现"宏调用位 vs 展开体位"分离且行为面零变化（ADR-0016）。
+            if attr_name == "_macro_body":
+                continue
             val = getattr(self, attr_name)
             if isinstance(val, Node):
                 if id(val) not in seen:

@@ -104,3 +104,23 @@ def test_macro_call_has_both_spans() -> None:
         assert node._src_span is not None
         tok_start, tok_end = node._tok_span
         assert 0 <= tok_start < tok_end
+
+
+def test_macro_body_attached() -> None:
+    """完整单元宏的展开体子树挂在 `_macro_body`（MacroBody 包装，含标记）。"""
+    res = _run()
+    calls = {c._macro_name: c for c in _find(res["ast"], "MacroCall")}
+    w = calls["W"]  # `define W 8 → 完整表达式
+    assert w._macro_body is not None
+    assert w._macro_body.node_name == "MacroBody"
+    assert w._macro_body._from_expansion is True
+    b = calls["BODY"]  # `define BODY x = 1'b1; → 完整语句
+    assert b._macro_body is not None
+    assert [k.node_name for k in b._macro_body.iter_children()] == ["BlockingAssign"]
+
+
+def test_macro_body_not_in_children() -> None:
+    """子树**不占 children**（渲染/语义遍历不进入）→ 行为面零变化。"""
+    res = _run()
+    for node in _find(res["ast"], "MacroCall"):
+        assert list(node.iter_children()) == []

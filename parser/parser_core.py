@@ -380,6 +380,7 @@ class Parser:
         pre_symbols: dict[str, str] | None = None,
         rules: dict[str, GrammarRule] | None = None,
         rule_selector: "RuleSelector | None" = None,
+        silent: bool = False,
     ) -> None:
         """初始化解析器。
 
@@ -394,6 +395,9 @@ class Parser:
         """
         self.grammar_rules: dict[str, GrammarRule] = {}
         self.verbose = verbose
+        # silent：探测性解析（宏体形态分类/提取等）全静默——不输出 WARN/失败报告，
+        # 避免污染宿主解析流程的日志与门禁断言（真实语料无 WARN 断言）。
+        self.silent = silent
         # 失败现场：token_index → {rule, reason, path}（按位置聚合，有界）
         self._fail_sites: dict[int, dict] = {}
         # 最近一次失败现场报告（退出前保留，供测试/程序化访问）
@@ -456,7 +460,9 @@ class Parser:
         # 日志级别阈值：无文件且非 verbose → 只留 WARN+（stderr 可见），
         # 修复旧实现把 _log_state 整体替换为空 lambda 导致 WARN 也被吞的问题。
         # verbose → 全级别（TRACE 起）；有日志文件 → INFO 起写文件。
-        if getattr(self, "debug_log_file", None) is None and not self.verbose:
+        if self.silent:
+            self._log_level = self.LOG_ERROR + 1
+        elif getattr(self, "debug_log_file", None) is None and not self.verbose:
             self._log_level = self.LOG_WARN
         elif self.verbose:
             self._log_level = self.LOG_TRACE
@@ -749,4 +755,5 @@ class Parser:
             },
         )
         self._last_failure_report = report
-        print(render_failure_report(report), file=sys.stderr)
+        if not getattr(self, "silent", False):
+            print(render_failure_report(report), file=sys.stderr)

@@ -144,6 +144,7 @@ def build_parse_probe(rules_dir: str) -> Callable[[str], bool]:
                 pre_symbols=pre_scan(text, pre_cfg),
                 rules=rules,
                 rule_selector=selector,
+                silent=True,
             )
             parser.pre_hints = pre_cfg.get("hints", {})
             ast = parser.parse(lexer.tokenize(text))
@@ -171,6 +172,7 @@ def build_parse_ast(rules_dir: str) -> Callable[[str], tuple]:
             pre_symbols=pre_scan(text, pre_cfg),
             rules=rules,
             rule_selector=selector,
+            silent=True,
         )
         parser.pre_hints = pre_cfg.get("hints", {})
         return parser, parser.parse(lexer.tokenize(text))

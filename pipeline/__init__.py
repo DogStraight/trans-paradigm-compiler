@@ -451,7 +451,7 @@ def _extract_macro_name(fragment: str) -> str:
     return m.group(1) if m else ""
 
 
-def _rewrite_marker_nodes(value: Any, table: dict) -> Any:
+def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) -> Any:
     """递归把 marker 标识符节点改写为 MacroCall（含 attrs 内嵌节点）。"""
     from core.define import CHILDREN_FIELD, Node
 
@@ -475,21 +475,65 @@ def _rewrite_marker_nodes(value: Any, table: dict) -> Any:
                 meta_val = getattr(value, meta, None)
                 if meta_val is not None:
                     setattr(new, meta, meta_val)
+            if body_provider is not None:
+                body_node = body_provider(new._macro_name)
+                if body_node is not None:
+                    new._macro_body = body_node
             return new
         children = getattr(value, CHILDREN_FIELD, None)
         if isinstance(children, list):
             for i, child in enumerate(children):
-                children[i] = _rewrite_marker_nodes(child, table)
+                children[i] = _rewrite_marker_nodes(child, table, body_provider)
         for attr, val in list(vars(value).items()):
             if attr.startswith("_") or attr in ("node_name", CHILDREN_FIELD):
                 continue
-            value.__dict__[attr] = _rewrite_marker_nodes(val, table)
+            value.__dict__[attr] = _rewrite_marker_nodes(val, table, body_provider)
         return value
     if isinstance(value, list):
-        return [_rewrite_marker_nodes(v, table) for v in value]
+        return [_rewrite_marker_nodes(v, table, body_provider) for v in value]
     if isinstance(value, dict):
-        return {k: _rewrite_marker_nodes(v, table) for k, v in value.items()}
+        return {k: _rewrite_marker_nodes(v, table, body_provider) for k, v in value.items()}
     return value
+
+
+def _make_macro_body_provider(ctx: _PipelineContext) -> Any:
+    """构造 `macro_name → MacroBody 子树` 提供者（懒解析 + 按宏名缓存）。
+
+    完整单元宏（形态分类器判定）→ 提取展开体子树；残缺片段 → None（保持文本级
+    处理）。子树只挂 `MacroCall._macro_body`（**不进 children**）→ 渲染与语义
+    遍历不进入，行为面零变化。
+    """
+    from preprocessor.macro_shape import (
+        KIND_DECL,
+        KIND_EXPR,
+        KIND_STMT,
+        build_parse_ast,
+        build_parse_probe,
+        classify_macro_body,
+        extract_macro_body,
+    )
+
+    key_of_kind = {KIND_STMT: "stmt", KIND_DECL: "decl", KIND_EXPR: "expr"}
+    probe = build_parse_probe(ctx.rules_dir)
+    parse_ast = build_parse_ast(ctx.rules_dir)
+    cache: dict[str, Any] = {}
+
+    def provider(macro_name: str) -> Any:
+        if macro_name in cache:
+            return cache[macro_name]
+        node = None
+        body = (ctx.macro_table or {}).get(macro_name)
+        if body:
+            kind, _basis = classify_macro_body(body, probe)
+            shape_key = key_of_kind.get(kind)
+            if shape_key:
+                node = extract_macro_body(body, shape_key, parse_ast)
+                if node is not None:
+                    node._from_expansion = True
+        cache[macro_name] = node
+        return node
+
+    return provider
 
 
 def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
@@ -508,7 +552,7 @@ def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
     }
     if not table:
         return ast
-    return _rewrite_marker_nodes(ast, table)
+    return _rewrite_marker_nodes(ast, table, _make_macro_body_provider(ctx))
 
 
 def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:

@@ -52,6 +52,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   测试 `tests/engine/preprocessor/test_macro_body_extract.py`（4 形态 + 多单元 +
   残缺回退，标 smoke）。**尚未接入管线**（挂载到 MacroCall 节点 = 4b-2）。
 
+- **宏体子树挂载 + 探测静默（0.1.2 阶段 4b-2）**：完整单元宏的展开体子树
+  （`MacroBody`）挂到 `MacroCall._macro_body`——**不占 children**（`Node.iter_children`
+  显式排除）→ 渲染与语义遍历均不进入，**行为面零变化**（全量逐字节不变）。
+  `Parser` 新增 `silent` 开关（签名末位，向后兼容）：探测性解析（形态分类 /
+  宏体提取）全静默（含失败报告），不污染宿主日志与“真实语料无 WARN”门禁。
+  测试加“子树已挂 + 不占 children”断言。剩 4c：渲染改区间/源区间还原。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
