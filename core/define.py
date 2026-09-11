@@ -148,6 +148,10 @@ class Node:
     _pos_line: int | None = None
     _pos_col: int | None = None
     _file: str | None = None
+    # token 范围（半开 [start, end)，token 流索引）：parser 规则节点解析成功时
+    # 挂载（_production.py），供增量重解析（P3.2）结构对齐定位；下划线前缀
+    # = 引擎元数据，不进 dump/序列化（同 _pos_line）。
+    _tok_span: tuple[int, int] | None = None
 
     # 子节点列表（CHILDREN_FIELD，见 add_sub_node / iter_children / renderer）
     sub_node: list["Node"]

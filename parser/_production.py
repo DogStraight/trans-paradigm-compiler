@@ -176,6 +176,7 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
 
     # 1) 消费起始符
     self._skip_tokens(context, tuple(self.skip_types))
+    _start_idx = context.token_pointer
     tok = context.peek_token()
     if not tok or tok.type != bs:
         self._record_fail_site(
@@ -272,6 +273,8 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         return None
 
     self._restore_current_node(old_node, context)
+    # token 范围（半开 [start, end)）：含 block_start..block_end
+    rule_node._tok_span = (_start_idx, context.token_pointer)
     return rule_node
 
 
@@ -468,6 +471,8 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         return inline_result
 
     self._restore_current_node(old_node, context)
+    # token 范围（半开 [start, end)）：匹配起始指针 + 结束指针，供增量定位
+    rule_node._tok_span = (_start_idx, context.token_pointer)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
     if _starts_line(self, context, _start_idx) and not getattr(
         self, "_repeat_iter_depth", 0

@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **parser token span 绑定（P3.1 / 0.1.2 阶段 0）**：解析成功的规则节点/块节点挂
+  `_tok_span`（半开 `[start, end)` token 流索引；`core/define.py` 声明 +
+  `parser/_production.py` try_plain_rule / try_block_rule 成功返回前写入），供
+  增量重解析（P3.2）结构对齐定位。下划线前缀 = 引擎元数据，不进 dump/序列化。
+  测试 `tests/languages/verilog/test_tok_span.py`（区间合法 / 父子包含 /
+  dump 排除 / 回溯确定，4 断言，标 smoke）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

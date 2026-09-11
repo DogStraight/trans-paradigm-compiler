@@ -19,7 +19,6 @@
 > 通过才进下一阶段；阶段完成即删本行。不含：C 语言包（松散活动，不立项）、P3.2/
 > P3.4 增量、P3.5 Rust 下沉、P4 多后端。
 
-- [ ] 阶段 0 — P3.1 span 绑定（前置）：`rule_node.tok_span` + 回溯回滚（可选 pratt 原子）
 - [ ] 阶段 1 — 宏体形态分类器（包装解析 stmt/decl/expr/port 四包裹 + 首 token 续接
       预过滤；原型 `tests/_proto_macro_hygiene.py` 14/14 转正）
 - [ ] 阶段 2 — MacroCall 节点入 AST + 包装模板进 grammar TOML 协议字段

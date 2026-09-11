@@ -7,8 +7,8 @@
 
 | 层 | 命令 | 规模 | 定位 |
 |----|------|------|------|
-| smoke（快速层） | `python -m pytest -m smoke` | 217 用例 / ~37s | 各功能域代表测试，日常/改动后快速回归 |
-| 全量 | `python -m pytest tests/` | 1575 用例 / 并行 ~6min、串行 ~32min | 发布/大改后完整回归 |
+| smoke（快速层） | `python -m pytest -m smoke` | 221 用例 / ~37s | 各功能域代表测试，日常/改动后快速回归 |
+| 全量 | `python -m pytest tests/` | 1581 用例 / 并行 ~6min、串行 ~32min | 发布/大改后完整回归 |
 
 smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆盖由全量兜底。
 改动节奏建议：小改动跑 smoke（+ 涉及子系统专项）；结构性/跨子系统改动跑全量。
@@ -26,7 +26,7 @@ smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆�
 | renderer（渲染原语） | `engine/renderer/test_renderer_primitives.py` | 模块级（fake renderer 纯内存） |
 | preprocessor（宏指令） | `engine/preprocessor/test_primitives.py` | 模块级 |
 | pipeline（时点序列） | `engine/pipeline/test_schedule.py::TestSequenceEntries` + `TestBuildSchedules` | 类级 |
-| languages/verilog | `languages/verilog/test_real_syntax.py` | 模块级（真实项目语法缺口回归） |
+| languages/verilog | `languages/verilog/test_real_syntax.py` + `test_tok_span.py` | 模块级 |
 | languages/c4（第二语言） | `languages/c4/test_c4_asm.py::TestC4Assembly` | 类级 |
 | languages/yaml | `languages/yaml/test_yaml_plain.py::TestPlainValueForms` | 类级 |
 | e2e real_corpus | `test_real_corpus.py` 的 `ref_uart_rx.v`（非 sv-parser 断言） | 参数级（`_SMOKE_CORPUS`） |
