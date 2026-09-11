@@ -873,6 +873,15 @@ def run_pipeline_on_source(
         ctx, ast, None, schedule_name,
         _shared["schedules"], _shared["mapping_cfg"],
     )
+    # 单元执行轨迹落盘（阶段 6 可视化）：与 symbols/ast dump 同目录（trace.json）。
+    _trace = ctx.result.get("trace")
+    if _trace and ctx.sym_json:
+        save_json(
+            {"trace": _trace},
+            os.path.join(os.path.dirname(ctx.sym_json), "trace.json"),
+            "trace",
+            log_fn=ctx.log,
+        )
     if ctx.result.get("error"):
         return ctx.result
     if stage in _LEGACY_PASS_STAGES:

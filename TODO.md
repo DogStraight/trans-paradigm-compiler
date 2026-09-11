@@ -23,7 +23,8 @@
       （声明面 + 序列构建）+ 5b-2 ✅（**粗粒度统一编排**：units 替代默认 schedule）；
       剩 **5b-3 细粒度拆解**（`AstTransformer`/`AnalysisTraversal` 按插件独立执行 →
       同一变换多时点）
-- [ ] 阶段 6 — 中间产物可视化（黑板变更日志 + 映射表来源追踪 + transform 中间产物）
+- [ ] 阶段 6 — 中间产物可视化：✅ 单元执行轨迹（`ctx.result["trace"]` +
+      `trace.json`，含黑板键变更）；剩 映射表来源追踪 / transform 中间产物 dump
 - [ ] 阶段 7 — pass 契约校验（produces/requires 声明 + 机械校验；校验点 = 阶段检查点）
 - [ ] 阶段 8 — 检查链遗留补全（本文件「0.1.1 目标 2」T1/T2 并入本版）
 - [ ] 阶段 9 — 真实语料终验（ice40/picorv32 + 全量门禁 + 保真度不退化）

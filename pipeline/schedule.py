@@ -78,6 +78,9 @@ class PassState:
     analyzer: Any | None = None  # 最近一轮 analyze 的 AnalysisTraversal
     transformer: Any | None = None  # 最近一轮 transform 的 AstTransformer
     extra: dict = field(default_factory=dict)  # pass 间自定义通道
+    # 单元执行轨迹（阶段 6 可视化：时点 = 可视化断点）——每单元一条
+    # {index, name, kind, extra_added, extra_keys}
+    trace: list[dict] = field(default_factory=list)
 
 
 def _sequence_entries(
@@ -387,7 +390,7 @@ def _run_schedule(
             f"（可用: {', '.join(sorted(schedules)) or '(空)'}）"
         )
     state = PassState(ast=ast, scope=scope, ctx=ctx)
-    for decl in schedules[schedule_name]:
+    for index, decl in enumerate(schedules[schedule_name]):
         if decl.kind == "analyze" and not ctx.analyzer_enabled:
             ctx.log(f"[pipeline] pass '{decl.name}' skipped (analyze disabled)")
             continue
@@ -395,6 +398,7 @@ def _run_schedule(
             ctx.log(f"[pipeline] pass '{decl.name}' skipped (transform disabled)")
             continue
         ctx.log(f"[pipeline] pass: {decl.name}")
+        _extra_before = set(state.extra)
         try:
             if decl.kind == "analyze":
                 _run_pass_analyze(state)
@@ -403,7 +407,25 @@ def _run_schedule(
             else:
                 _run_pass_check(state, decl)
         except _ScheduleStop:
+            state.trace.append(_trace_entry(index, decl, state.extra, _extra_before))
             break
+        state.trace.append(_trace_entry(index, decl, state.extra, _extra_before))
         if ctx.stage == decl.name:
             break
+    # 单元执行轨迹（阶段 6 可视化）：谁在哪个时点跑了、向黑板（extra）写了哪些键。
+    # 配对（分析→执行）隐式为设计，但**产物必须可视化**（ADR-0015 §2 硬要求）。
+    ctx.result["trace"] = state.trace
     return state.ast, state.scope
+
+
+def _trace_entry(
+    index: int, decl: "PassDecl", extra: dict, before: set
+) -> dict:
+    """单元执行轨迹条目（时点 = index，按执行序）。"""
+    return {
+        "index": index,
+        "name": decl.name,
+        "kind": decl.kind,
+        "extra_added": sorted(set(extra) - before),
+        "extra_keys": sorted(extra),
+    }

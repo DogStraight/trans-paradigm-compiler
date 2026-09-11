@@ -88,6 +88,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `analyze`/`transform` 单元各至多 1 个（内置黑盒执行器不可重复跑），多实例限
   `check` 类——同一变换多时点需细粒度拆解（5b-3）。无声明时走原路径（零回归）。
 
+- **单元执行轨迹（0.1.2 阶段 6 可视化切片）**：`PassState.trace` 逐单元记录
+  `{index, name, kind, extra_added, extra_keys}`（谁在哪个时点跑了、向黑板
+  `extra` 写了哪些键）→ `ctx.result["trace"]`；`sym_json` 指定时同目录落
+  `trace.json`。ADR-0015 §2「时点 = 可视化断点」首项落地（配对隐式，但产物可视）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
