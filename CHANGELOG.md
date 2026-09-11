@@ -65,6 +65,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   事后替换**保留为安全网**（对已节点化的 token 锚找不到 marker → 静默跳过；
   未节点化场景仍可救回）。全量 1611 逐字节不变。**阶段 4（管线后端适配）完成**。
 
+- **加工单元实例 + 统一时点生成（0.1.2 阶段 5a）**：新增 `pipeline/units.py`——
+  `UnitInstance`（`type`/`impl`/`after|order`/`params` 显式带参数配置品类，
+  ADR-0015 §1）+ `parse_units`（fail-fast 校验）+ `assign_points`（**时点由调度器
+  统一生成**：order 钉号 / after 推导 / 声明序填空，与 pass 级同构；冲突 / 环 /
+  未知引用→诊断）。支持同变换多实例（不同时点/参数）。**纯新增，零执行变化**
+  （执行接入 = 5b）。测试 `tests/engine/pipeline/test_units.py`（14 断言，标 smoke）。
+  连带：`check_hardcode` TOKEN_ALLOWLIST 加 `impl`（配置字段名，非语言知识）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
