@@ -73,6 +73,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   （执行接入 = 5b）。测试 `tests/engine/pipeline/test_units.py`（14 断言，标 smoke）。
   连带：`check_hardcode` TOKEN_ALLOWLIST 加 `impl`（配置字段名，非语言知识）。
 
+- **加工单元声明面（`[pipeline] units`，0.1.2 阶段 5b-1）**：`core/plugin_loader`
+  新增 `pipeline.units` 声明加载（项 = `{name, type, impl, after|order, params}`，
+  显式 + 带参数；缺 name / 非表 → fail-fast）+ `get_pipeline_units()` 汇总；
+  `pipeline/units.py` 新增 `build_unit_sequence`（声明 → 有序单元序列，时点由
+  调度器统一生成）。**执行接入（替代 pass 序列）= 5b-2**。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

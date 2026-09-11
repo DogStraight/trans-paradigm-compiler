@@ -135,3 +135,11 @@ def assign_points(units: list[UnitInstance]) -> list[UnitInstance]:
     for u in units:
         u.point = point_of[u.name]
     return sorted(units, key=lambda u: u.point)
+
+
+def build_unit_sequence(decls: dict[str, dict] | None) -> list[UnitInstance]:
+    """从声明（`[pipeline] units` 汇总表）构建**有序单元序列**（时点已生成）。
+
+    入口：`core.plugin_loader.get_pipeline_units()` 的汇总结果（或测试直接喂）。
+    """
+    return assign_points(parse_units(decls or {}))

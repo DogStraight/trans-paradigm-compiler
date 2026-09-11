@@ -298,7 +298,17 @@ def _load_pipeline_decls(cdir: str, pipeline_meta: dict) -> dict[str, Any]:
         if not isinstance(sname, str) or not sname:
             raise ValueError(f"[plugin] pipeline.schedule 缺 name: {s!r} ({cdir})")
         schedules[sname] = s
-    return {"passes": passes, "schedules": schedules}
+    # 加工单元实例（ADR-0015 §1）：显式 + 带参数的配置品类。
+    # 项形态：{ name, type, impl, after|order?, params? }（name 提到 dict 键）。
+    units: dict[str, dict] = {}
+    for u in pipeline_meta.get("units", []) or []:
+        if not isinstance(u, dict):
+            raise ValueError(f"[plugin] pipeline.units 项须为表: {u!r} ({cdir})")
+        uname = u.get("name")
+        if not isinstance(uname, str) or not uname:
+            raise ValueError(f"[plugin] pipeline.units 缺 name: {u!r} ({cdir})")
+        units[uname] = {k: v for k, v in u.items() if k != "name"}
+    return {"passes": passes, "schedules": schedules, "units": units}
 
 
 def _load_capabilities(cdir: str, caps_meta: dict) -> dict[str, Callable]:
@@ -359,6 +369,14 @@ def get_pipeline_schedules() -> dict[str, dict]:
     merged: dict[str, dict] = {}
     for info in _loaded_components.values():
         merged.update(info.get("pipeline", {}).get("schedules", {}))
+    return merged
+
+
+def get_pipeline_units() -> dict[str, dict]:
+    """合并所有已加载组件的 pipeline.units 声明（ADR-0015 §1 加工单元实例）。"""
+    merged: dict[str, dict] = {}
+    for info in _loaded_components.values():
+        merged.update(info.get("pipeline", {}).get("units", {}))
     return merged
 
 

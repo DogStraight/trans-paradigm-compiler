@@ -20,8 +20,9 @@
 > P3.4 增量、P3.5 Rust 下沉、P4 多后端。
 
 - [ ] 阶段 5 — 管线时点编排时点化：5a ✅（`pipeline/units.py`：单元实例 +
-      调度器统一生成时点 + 诊断）；剩 **5b 执行器改单元序列驱动**（替代 analyze/
-      transform 两类 pass）+ **5c 语言包声明面**（`[pipeline.units.*]` 显式带参数）
+      调度器统一生成时点 + 诊断）+ 5b-1 ✅（`[pipeline] units` 声明加载 +
+      `build_unit_sequence`）；剩 **5b-2 执行器改单元序列驱动**（替代 analyze/
+      transform 两类 pass）
 - [ ] 阶段 6 — 中间产物可视化（黑板变更日志 + 映射表来源追踪 + transform 中间产物）
 - [ ] 阶段 7 — pass 契约校验（produces/requires 声明 + 机械校验；校验点 = 阶段检查点）
 - [ ] 阶段 8 — 检查链遗留补全（本文件「0.1.1 目标 2」T1/T2 并入本版）

@@ -99,3 +99,55 @@ class TestAssignPoints:
     def test_unknown_ref_diagnostic(self) -> None:
         with pytest.raises(ValueError, match="未声明单元"):
             assign_points([_u("a", after="zz")])
+
+
+class TestDeclarationLoading:
+    """插件 `[pipeline] units` 声明加载（显式 + 带参数的配置品类）。"""
+
+    def test_load_units_from_plugin_decl(self) -> None:
+        from core.plugin_loader import _load_pipeline_decls
+
+        out = _load_pipeline_decls(
+            "/tmp",
+            {
+                "units": [
+                    {"name": "u1", "type": "analyze", "impl": "a.b", "params": {"k": 1}}
+                ]
+            },
+        )
+        assert out["units"] == {
+            "u1": {"type": "analyze", "impl": "a.b", "params": {"k": 1}}
+        }
+
+    def test_load_units_missing_name(self) -> None:
+        from core.plugin_loader import _load_pipeline_decls
+
+        with pytest.raises(ValueError, match="缺 name"):
+            _load_pipeline_decls("/tmp", {"units": [{"type": "analyze"}]})
+
+    def test_load_units_not_table(self) -> None:
+        from core.plugin_loader import _load_pipeline_decls
+
+        with pytest.raises(ValueError, match="须为表"):
+            _load_pipeline_decls("/tmp", {"units": ["x"]})  # type: ignore[list-item]
+
+
+class TestBuildSequence:
+    """声明 → 有序单元序列（时点由调度器统一生成）。"""
+
+    def test_build_from_decl(self) -> None:
+        from pipeline.units import build_unit_sequence
+
+        seq = build_unit_sequence(
+            {
+                "a": {"type": "analyze", "impl": "builtin.analyze"},
+                "b": {"type": "transform", "impl": "builtin.transform", "after": "a"},
+            }
+        )
+        assert [(u.name, u.point) for u in seq] == [("a", 0), ("b", 1)]
+
+    def test_build_empty(self) -> None:
+        from pipeline.units import build_unit_sequence
+
+        assert build_unit_sequence(None) == []
+        assert build_unit_sequence({}) == []
