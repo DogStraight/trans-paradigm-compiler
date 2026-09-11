@@ -81,13 +81,6 @@ def build_wrapper(node: Node, ctx) -> Node | None:
     return mod
 
 
-@register_transform_slot("expand_typed_port")
-def expand_typed_port(node: Node, ctx) -> Node | None:
-    """TypedPortDecl 展开由 ConfigDrivenTransform 的 expand 原语处理。"""
-    del ctx  # 槽位协议签名参数，本槽位不消费
-    return node
-
-
 @register_transform_slot("auto_connect_ports")
 def auto_connect_ports(node: Node, ctx) -> Node:
     impl = ctx.get("impl_node")

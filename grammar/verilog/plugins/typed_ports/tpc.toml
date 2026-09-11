@@ -16,10 +16,12 @@ postpasses = ["_expand_ports.py:run_expand_ports", "_check.py:run_tp_check"]
 # analyze 报错 → 阻断展开）。语言知识（type/role/impl 形态）全在 _check.py。
 
 [transform]
+# 槽位声明（声明面；触发契约配置化见 5b-3c——目前由 _bridge.py 调用）：
+# delete_type_decl / build_wrapper（TypeDecl 段）；auto_connect_ports /
+# replace_impl_binding（ImplBinding 段）。
 slots = [
     "delete_type_decl",
     "build_wrapper",
-    "expand_typed_port",
     "auto_connect_ports",
     "replace_impl_binding",
 ]

@@ -37,7 +37,7 @@ handlers = ["_mapping.py"]   # mapping_entries（SemanticMappingPlugin 消费）
 # 经 postpass 递归展开（typed_ports _expand_ports 先例，写 resolved_ports）
 
 [transform]
-slots = ["delete_type_decl", "build_wrapper", "expand_typed_port", ...]
+slots = ["delete_type_decl", "build_wrapper", "auto_connect_ports", "replace_impl_binding"]
 handlers = ["_transform.py", "_bridge.py"]
 
 # 编排调度（schedule.py，pipeline_stages.md）：检查 pass + 命名 schedule
@@ -122,14 +122,17 @@ plugins/
 from core.plugin_loader import register_transform_slot
 from core.define import Node
 
-@register_transform_slot("expand_typed_port")
-def expand_typed_port(node: Node, ctx) -> Node | None:
-    """节点级变换：返回新节点（替换）或 None（删除）或原节点（不动）。"""
+@register_transform_slot("build_wrapper")
+def build_wrapper(node: Node, ctx) -> Node | None:
+    """节点级变换：返回新节点（替换）、None（删除）或原节点（原地改）。"""
     return node
 ```
 
 - 槽位名在 tpc.toml `[transform].slots` 声明，处理器文件在 `[transform].handlers`。
 - 节点级钩子签名：`(node, ctx) -> Node | None`。
+- 触发与接回由组件内插件负责（typed_ports 先例：`_bridge.py` 扫 TypeDecl /
+  ImplBinding 调槽位、`mark_extra` 产额外文件、1:1 替换时 `migrate_comments`）；
+  触发契约配置化（槽位独立成单元/时点）见 5b-3c。
 
 ## 4. analyzer 原语
 
