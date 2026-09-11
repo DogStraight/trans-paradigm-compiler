@@ -502,7 +502,7 @@ class _C4Compiler:
         return [c for c in ch if isinstance(c, Node) and c.node_name == "ParamDecl"]
 
 
-@register_plugin
+@register_plugin(name="asm_gen.codegen")
 class AsmGenPlugin(TransformPlugin):
     """c4 → c4 VM 汇编生成插件。
 

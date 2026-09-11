@@ -61,11 +61,16 @@ __all__ = [
 
 @dataclass
 class PassDecl:
-    """一个已解析的 pass 定义。"""
+    """一个已解析的 pass 定义。
+
+    handler 仅 check 类使用；plugin 仅 transform 类使用（插件限定名，
+    非空 = 本单元只跑该插件，插件级单元，ADR-0015 §1）。
+    """
 
     name: str
     kind: str  # analyze | transform | check
     handler: Callable | None = None  # check pass 的执行函数（已解析）
+    plugin: str | None = None  # transform 单元绑定的插件限定名
 
 
 @dataclass
@@ -248,25 +253,54 @@ def build_schedules() -> dict[str, list[PassDecl]]:
 
 
 def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
-    """把 `[pipeline] units` 声明构建为**可执行单元序列**（粗粒度，5b-2）。
+    """把 `[pipeline] units` 声明构建为**可执行单元序列**。
 
-    返回 None = 无声明（调用方回落 pass 序列）。impl 约定：
+    返回 None = 无声明（调用方回落 pass 序列）。impl 三形态（5b-3a）：
       `builtin.analyze` / `builtin.transform` → 内置执行器（由 `kind` 驱动）；
-      其余 → 加载时已解析的 handler（`_handler`，check 类）。
-    单元与 pass 在执行层同构（都是 `PassDecl`：name/kind/handler）→ 直接复用
-    `_run_schedule` 的分派，无需另写执行器。
+      `file.py:fn` → 加载时已解析的 handler（check 类）；
+      其余 → 变换插件限定名（插件级单元：本单元只跑该插件）。
+    单元与 pass 在执行层同构（都是 `PassDecl`）→ 直接复用 `_run_schedule`
+    的分派，无需另写执行器。
     """
     if not unit_decls:
         return None
-    from .units import BUILTIN_IMPLS, build_unit_sequence, validate_sequence
+    from transform.engine import get_plugin_index
+
+    from .units import (
+        BUILTIN_IMPLS,
+        IMPL_PLUGIN,
+        build_unit_sequence,
+        classify_impl,
+        validate_sequence,
+    )
 
     units = build_unit_sequence(unit_decls)
     validate_sequence(units)
+    plugin_index = get_plugin_index()
 
     out: list[PassDecl] = []
     for u in units:
         decl = unit_decls.get(u.name) or {}
         handler = decl.get("_handler")
+        impl_kind = classify_impl(u.impl)
+        if impl_kind == IMPL_PLUGIN:
+            if u.type != "transform":
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' impl 是插件名（{u.impl!r}），"
+                    f"但 type={u.type!r}（插件单元目前限 transform）"
+                )
+            if u.impl not in plugin_index:
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' 引用了未注册的变换插件: "
+                    f"{u.impl!r}（可用: {', '.join(sorted(plugin_index)) or '(空)'}）"
+                )
+            if u.params:
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' 插件单元暂不支持 params"
+                    f"（实例化参数覆写留待后续）"
+                )
+            out.append(PassDecl(name=u.name, kind=u.type, plugin=u.impl))
+            continue
         if u.impl not in BUILTIN_IMPLS and handler is None:
             raise ValueError(
                 f"[pipeline] unit '{u.name}' impl 未解析为 handler: {u.impl!r}"
@@ -319,12 +353,14 @@ def _run_pass_analyze(state: "PassState") -> None:
 
 
 def _run_pass_transform(
-    state: "PassState", mapping_cfg: dict | None = None
+    state: "PassState", mapping_cfg: dict | None = None, plugin: str | None = None
 ) -> None:
     """kind=transform pass：跑一轮 AstTransformer（消费 scope，None 跳过）。
 
     mapping_cfg 由调用方注入（_ensure_shared 按 rules_dir 缓存构建），
     不依赖全局 _loaded_components（可能被其他语言包污染）。
+    plugin 非空（插件限定名）→ 只跑该插件（插件级单元，ADR-0015 §1）；
+    缺省 → 跑全部已注册插件（粗粒度，现行为）。
     """
     ctx = state.ctx
     if state.scope is None:
@@ -332,7 +368,15 @@ def _run_pass_transform(
         return
     AstTransformer.set_shared("rules", ctx.rules)
     AstTransformer.set_shared("mapping_cfg", mapping_cfg or {})
-    transformer = AstTransformer()
+    if plugin is None:
+        transformer = AstTransformer()
+    else:
+        from transform.engine import get_plugin_index
+
+        cls = get_plugin_index().get(plugin)
+        if cls is None:
+            raise ValueError(f"[pipeline] 未知变换插件: {plugin!r}")
+        transformer = AstTransformer(plugins=[cls()])
     state.transformer = transformer
 
     # 一次 transform 完成：映射表构建 + 配置变换
@@ -403,7 +447,7 @@ def _run_schedule(
             if decl.kind == "analyze":
                 _run_pass_analyze(state)
             elif decl.kind == "transform":
-                _run_pass_transform(state, mapping_cfg)
+                _run_pass_transform(state, mapping_cfg, decl.plugin)
             else:
                 _run_pass_check(state, decl)
         except _ScheduleStop:

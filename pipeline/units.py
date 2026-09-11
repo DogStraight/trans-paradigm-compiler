@@ -20,8 +20,26 @@ from typing import Any
 
 VALID_TYPES = ("analyze", "transform", "check")
 
-# 内置单元 impl 约定（粗粒度执行器；细粒度拆解见 5b-3）
+# 内置单元 impl 约定（粗粒度执行器；插件级细粒度见 5b-3）
 BUILTIN_IMPLS = frozenset({"builtin.analyze", "builtin.transform"})
+
+# impl 引用形态（ADR-0015 §1：插件实例化对象是一等单元 → 可寻址）
+IMPL_BUILTIN = "builtin"
+IMPL_HANDLER = "handler"
+IMPL_PLUGIN = "plugin"
+
+
+def classify_impl(impl: str) -> str:
+    """判定 impl 引用形态（只判形态，存在性由调度层校验）。
+
+    `builtin.*` → 内置执行器；含 `:` → `file.py:fn` 处理器引用；
+    其余 → 变换插件限定名（`transform.engine.get_plugin_index()`）。
+    """
+    if impl.startswith("builtin."):
+        return IMPL_BUILTIN
+    if ":" in impl:
+        return IMPL_HANDLER
+    return IMPL_PLUGIN
 
 
 @dataclass
@@ -54,6 +72,11 @@ def parse_units(decls: dict[str, dict]) -> list[UnitInstance]:
             )
         if not impl:
             raise ValueError(f"[pipeline] unit '{name}' 缺 impl")
+        if classify_impl(impl) == IMPL_BUILTIN and impl not in BUILTIN_IMPLS:
+            raise ValueError(
+                f"[pipeline] unit '{name}' impl 非内置执行器: {impl!r}"
+                f"（合法: {sorted(BUILTIN_IMPLS)}）"
+            )
         after = decl.get("after")
         order = decl.get("order")
         if after is not None and order is not None:
@@ -149,17 +172,24 @@ def build_unit_sequence(decls: dict[str, dict] | None) -> list[UnitInstance]:
 
 
 def validate_sequence(units: list[UnitInstance]) -> None:
-    """**粗粒度限定**（5b-2）：`type='analyze'/'transform'` 单元各至多 1 个。
+    """序列限定（5b-3a）：粗粒度与插件级共存规则。
 
-    理由：粗粒度下这两类单元各对应一个内置黑盒执行器（跑完整
-    `AnalysisTraversal` / `AstTransformer`），重复声明 = 整段重复执行，与
-    “同一变换多实例各带时点”的语义不符。多实例目前限于 `check` 类；
-    同一变换的真正多实例（多时点）需**细粒度拆解**（5b-3）。
+    - `analyze`：至多 1 个（分析遍历是一个整体，多实例无意义）；
+    - `transform`：要么单个 `builtin.transform`（粗粒度：跑全部插件），
+      要么全为插件单元（细粒度：每插件一个时点）；**两者混用**会重复
+      执行（插件被跑两次）→ fail-fast。
+    - `check`：不限个数（可多实例）。同一插件多单元 = 同一变换多时点。
     """
-    for utype in ("analyze", "transform"):
-        count = sum(1 for u in units if u.type == utype)
-        if count > 1:
-            raise ValueError(
-                f"[pipeline] 粗粒度限定：type='{utype}' 单元至多 1 个"
-                f"（当前 {count} 个）——多实例需细粒度拆解（5b-3）"
-            )
+    analyze_count = sum(1 for u in units if u.type == "analyze")
+    if analyze_count > 1:
+        raise ValueError(
+            f"[pipeline] type='analyze' 单元至多 1 个（当前 {analyze_count} 个）"
+        )
+    tf_units = [u for u in units if u.type == "transform"]
+    builtin_tf = [u for u in tf_units if u.impl in BUILTIN_IMPLS]
+    if builtin_tf and len(tf_units) > 1:
+        raise ValueError(
+            f"[pipeline] transform 单元 '{builtin_tf[0].name}'（builtin.transform）"
+            "与其余 transform 单元共存会重复执行——要么单个 builtin.transform，"
+            "要么全部用插件单元（impl = 插件限定名）"
+        )

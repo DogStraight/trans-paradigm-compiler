@@ -64,5 +64,18 @@ _apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路
 - 新增插件想让中间产物可见 → 覆写 `TransformPlugin.describe()`（默认空 dict
    = 不自述，可选能力）。
 
+### 插件身份面（0.1.2 5b-3a）
+
+插件以**限定名**注册：引擎插件（`SemanticMappingPlugin` / `ConfigDrivenTransform`）
+默认取类名；语言插件用 `<组件名>.<单元名>`（`typed_ports.bridge`、`asm_gen.codegen`）
+——管线配置 `[pipeline.units.<name>].impl` 按此名引用，`get_plugin_index()` 查询、
+未知名 fail-fast。索引同名**首胜**（同一插件文件被多路径 import 时类对象不同，是
+既有常态）；`_plugin_registry`（执行序）语义不变。
+
+声明插件单元后，该单元**只跑该插件**（`AstTransformer(plugins=[...])`）——同一
+变换可声明多次（多时点/多实例），每单元在 trace 中独立可见。未声明 units 的语言
+包仍走 `builtin.transform`（跑全部插件，现行为零变化）。插件实例化参数覆写
+（`params`）尚未实现 → 声明即 fail-fast（不静默忽略）。
+
 > 组件协议（tpc.toml 结构/加载链/capabilities）见 `core/component_protocol.md`；
 > 从零搭语言的端到端教程见 `docs/language_walkthrough.md`。

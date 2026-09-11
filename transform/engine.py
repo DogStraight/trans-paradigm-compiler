@@ -18,18 +18,50 @@ from analyzer.scope import Scope
 # ── 全局注册表 ──
 
 _plugin_registry: list[type["TransformPlugin"]] = []
+# 限定名 → 类（插件身份面，ADR-0015 §1：插件实例化对象是一等单元，
+# 需可寻址 → 管线配置按名引用）与注册序（缺省执行序）。
+_plugin_index: dict[str, type["TransformPlugin"]] = {}
 
 
-def register_plugin(cls: type["TransformPlugin"]) -> type["TransformPlugin"]:
-    """装饰器：注册一个变换插件类。
+def register_plugin(
+    cls: type["TransformPlugin"] | None = None, *, name: str | None = None
+):
+    """装饰器：注册一个变换插件类（可带限定名）。
 
     Usage:
-        @register_plugin
-        class MyPlugin(TransformPlugin):
-            def process(self, ast, root_scope): ...
+        @register_plugin                        # 名 = 类名
+        class MyPlugin(TransformPlugin): ...
+
+        @register_plugin(name="typed_ports.bridge")   # 显式限定名
+        class ComponentSlotPlugin(TransformPlugin): ...
+
+    重名 → 索引取**首个注册者**（同一插件文件被多路径 import 时类对象不同名同，
+    是既有常态，不报错）；`_plugin_registry` 保留全部注册（不动现状执行序）。
     """
-    _plugin_registry.append(cls)
-    return cls
+
+    def _register(klass: type["TransformPlugin"]) -> type["TransformPlugin"]:
+        qname = name or klass.__name__
+        # 索引：首胜（按名引用取注册序首个）；registry：照旧全注册
+        _plugin_index.setdefault(qname, klass)
+        _plugin_registry.append(klass)
+        return klass
+
+    if cls is not None:
+        return _register(cls)
+    return _register
+
+
+def get_plugin_index() -> dict[str, type["TransformPlugin"]]:
+    """已注册插件（限定名 → 类），供管线配置按名引用 + fail-fast 校验。"""
+    return dict(_plugin_index)
+
+
+def plugin_name_of(cls: type["TransformPlugin"]) -> str:
+    """类 → 限定名（未登记的类回落类名）。"""
+    for qname, k in _plugin_index.items():
+        if k is cls:
+            return qname
+    return cls.__name__
 
 
 class TransformPlugin(ABC):
@@ -91,7 +123,7 @@ class AstTransformer:
         return ast
 
     def describe_plugins(self) -> dict[str, dict]:
-        """收集所有插件的自述（仅非空者），键 = 插件类名。
+        """收集所有插件的自述（仅非空者），键 = 插件限定名。
 
         可视化管道：调度层把结果记进单元执行轨迹（trace 条目的
         `artifacts`），供 dump / 追踪中间产物与来源。
@@ -100,7 +132,7 @@ class AstTransformer:
         for plugin in self._plugins:
             info = plugin.describe()
             if info:
-                out[type(plugin).__name__] = info
+                out[plugin_name_of(type(plugin))] = info
         return out
 
 

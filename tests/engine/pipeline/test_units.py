@@ -164,7 +164,7 @@ class TestValidateSequence:
     def test_too_many_analyze(self) -> None:
         from pipeline.units import validate_sequence
 
-        with pytest.raises(ValueError, match="粗粒度限定"):
+        with pytest.raises(ValueError, match="至多 1 个"):
             validate_sequence([_u("a", type="analyze"), _u("b", type="analyze")])
 
 
@@ -217,9 +217,10 @@ class TestBuildUnitSchedule:
         assert seq[1].kind == "check" and seq[1].handler is _fn
 
     def test_coarse_grained_limit(self) -> None:
+        """builtin.transform 与其余 transform 单元共存 → 重复执行 fail-fast。"""
         from pipeline.schedule import build_unit_schedule
 
-        with pytest.raises(ValueError, match="粗粒度限定"):
+        with pytest.raises(ValueError, match="重复执行"):
             build_unit_schedule(
                 {
                     "t1": {"type": "transform", "impl": "builtin.transform"},

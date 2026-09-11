@@ -30,7 +30,7 @@ def _get_slots():
     return get_transform_slots()
 
 
-@register_plugin
+@register_plugin(name="typed_ports.bridge")
 class ComponentSlotPlugin(TransformPlugin):
     """将组件的 transform 槽位作为 TransformPlugin 运行。
 

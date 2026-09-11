@@ -100,6 +100,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   回答「这行从哪来」；引擎只认协议字段名与自述容器（`TransformPlugin.describe()`
   默认空 = 可选能力），不解析段语义。测试 `tests/languages/verilog/test_mapping_origin.py`。
 
+- **插件身份面 + 插件级单元（0.1.2 阶段 5b-3a）**：插件以限定名注册（引擎插件 =
+  类名，语言插件 = `<组件名>.<单元名>`，如 `typed_ports.bridge`）；
+  `transform.engine.get_plugin_index()` 查询，索引同名首胜（`_plugin_registry`
+  执行序语义不变）。`[pipeline.units.*].impl` 新增第三形态**插件限定名** → 该单元
+  只跑该插件（同一变换可多时点）；未知插件 / 非 transform 类型 / `params` 非空
+  均 fail-fast。序列限定改为：`analyze` ≤1；`transform` 要么单个
+  `builtin.transform`，要么全为插件单元（混用重复执行 → fail-fast）。未声明
+  units 的语言包零行为变化。测试 `tests/engine/transform/test_plugin_index.py`、
+  `tests/engine/pipeline/test_unit_plugin_schedule.py`。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
