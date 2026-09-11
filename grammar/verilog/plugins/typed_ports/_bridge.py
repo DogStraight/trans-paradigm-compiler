@@ -30,12 +30,13 @@ def _get_slots():
     return get_transform_slots()
 
 
-@register_plugin(name="typed_ports.bridge")
+@register_plugin(name="typed_ports.bridge", requires=["scope"])
 class ComponentSlotPlugin(TransformPlugin):
     """将组件的 transform 槽位作为 TransformPlugin 运行。
 
     本插件遍历 AST，对每个节点检查是否有对应槽位名称的规则配置，
-    若有则调用槽位处理函数。
+    若有则调用槽位处理函数。契约 `requires=["scope"]`（读符号表构建
+    type_map，ADR-0015 §3）。
     """
 
     def __init__(self):

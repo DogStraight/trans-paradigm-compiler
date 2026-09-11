@@ -502,9 +502,14 @@ class _C4Compiler:
         return [c for c in ch if isinstance(c, Node) and c.node_name == "ParamDecl"]
 
 
-@register_plugin(name="asm_gen.codegen")
+@register_plugin(
+    name="asm_gen.codegen", requires=["scope"], produces=["extra_asts"]
+)
 class AsmGenPlugin(TransformPlugin):
     """c4 → c4 VM 汇编生成插件。
+
+    契约：`requires=["scope"]`（读符号表）；`produces=["extra_asts"]`
+    （经 `mark_extra` 产出额外输出文件）。ADR-0015 §3。
 
     process 守卫：仅当根节点是 c4 的 Program（is_block 根块）时生成汇编；
     其它语言 AST 原样返回。

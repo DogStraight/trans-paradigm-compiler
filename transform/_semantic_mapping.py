@@ -38,11 +38,12 @@ from analyzer.scope import Scope
 from transform.engine import TransformPlugin, AstTransformer, register_plugin
 
 
-@register_plugin
+@register_plugin(produces=["mapping_tables"])
 class SemanticMappingPlugin(TransformPlugin):
     """语义映射表构建插件
 
-    由组件 mapping_entries 联合驱动。
+    由组件 mapping_entries 联合驱动；产出语义映射表（`mapping_tables`，
+    契约见 ADR-0015 §3）供 `ConfigDrivenTransform` 消费。
     """
 
     def __init__(self, raw_config: dict | None = None):

@@ -21,20 +21,29 @@ _plugin_registry: list[type["TransformPlugin"]] = []
 # 限定名 → 类（插件身份面，ADR-0015 §1：插件实例化对象是一等单元，
 # 需可寻址 → 管线配置按名引用）与注册序（缺省执行序）。
 _plugin_index: dict[str, type["TransformPlugin"]] = {}
+# 插件契约（ADR-0015 §3）：限定名 → {produces, requires}——**插件侧注册时声明**，
+# 显式平铺列表（同语法 production 列表风格）。未声明 = 不参与校验（可选能力）。
+_plugin_contracts: dict[str, dict[str, list[str]]] = {}
 
 
 def register_plugin(
-    cls: type["TransformPlugin"] | None = None, *, name: str | None = None
+    cls: type["TransformPlugin"] | None = None,
+    *,
+    name: str | None = None,
+    produces: list[str] | None = None,
+    requires: list[str] | None = None,
 ):
-    """装饰器：注册一个变换插件类（可带限定名）。
+    """装饰器：注册一个变换插件类（可带限定名 + 契约声明）。
 
     Usage:
-        @register_plugin                        # 名 = 类名
+        @register_plugin                        # 名 = 类名，无契约
         class MyPlugin(TransformPlugin): ...
 
-        @register_plugin(name="typed_ports.bridge")   # 显式限定名
+        @register_plugin(name="typed_ports.bridge", requires=["scope"])
         class ComponentSlotPlugin(TransformPlugin): ...
 
+    契约（produces/requires）= 显式平铺名列表（引擎只做机械核验，不懂语义）；
+    **不含时点**——时点只在管线配置（`[pipeline.units.*]`）里编排（ADR-0015 §1）。
     重名 → 索引取**首个注册者**（同一插件文件被多路径 import 时类对象不同名同，
     是既有常态，不报错）；`_plugin_registry` 保留全部注册（不动现状执行序）。
     """
@@ -44,11 +53,22 @@ def register_plugin(
         # 索引：首胜（按名引用取注册序首个）；registry：照旧全注册
         _plugin_index.setdefault(qname, klass)
         _plugin_registry.append(klass)
+        contract = {
+            "produces": list(produces or []),
+            "requires": list(requires or []),
+        }
+        if contract["produces"] or contract["requires"]:
+            _plugin_contracts.setdefault(qname, contract)
         return klass
 
     if cls is not None:
         return _register(cls)
     return _register
+
+
+def get_plugin_contracts() -> dict[str, dict[str, list[str]]]:
+    """已注册插件的契约声明（限定名 → {produces, requires}），无声明者不在内。"""
+    return {k: dict(v) for k, v in _plugin_contracts.items()}
 
 
 def get_plugin_index() -> dict[str, type["TransformPlugin"]]:

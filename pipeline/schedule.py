@@ -65,12 +65,14 @@ class PassDecl:
 
     handler 仅 check 类使用；plugin 仅 transform 类使用（插件限定名，
     非空 = 本单元只跑该插件，插件级单元，ADR-0015 §1）。
+    impl = 原始 impl 引用（builtin.* / file.py:fn / 插件名），供契约查询。
     """
 
     name: str
     kind: str  # analyze | transform | check
     handler: Callable | None = None  # check pass 的执行函数（已解析）
     plugin: str | None = None  # transform 单元绑定的插件限定名
+    impl: str | None = None  # 原始 impl 引用（契约查询用）
 
 
 @dataclass
@@ -229,7 +231,14 @@ def build_schedules() -> dict[str, list[PassDecl]]:
                 f"[pipeline] check pass '{name}' 缺 handler "
                 f"（handler = \"file.py:fn\"）"
             )
-        resolved[name] = PassDecl(name=name, kind=kind, handler=handler)
+        # 内置 pass 填 impl（= 内置执行器引用）→ trace 可见 + 契约校验可查；
+        # 插件 pass 声明里给了 impl 则沿用（契约同样生效）。
+        impl = decl.get("impl") or (
+            f"builtin.{name}" if name in BUILTIN_PASSES else None
+        )
+        resolved[name] = PassDecl(
+            name=name, kind=kind, handler=handler, impl=impl
+        )
 
     # 2. schedule 声明：序列化
     schedules: dict[str, list[PassDecl]] = {}
@@ -299,14 +308,56 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
                     f"[pipeline] unit '{u.name}' 插件单元暂不支持 params"
                     f"（实例化参数覆写留待后续）"
                 )
-            out.append(PassDecl(name=u.name, kind=u.type, plugin=u.impl))
+            out.append(PassDecl(name=u.name, kind=u.type, plugin=u.impl, impl=u.impl))
             continue
         if u.impl not in BUILTIN_IMPLS and handler is None:
             raise ValueError(
                 f"[pipeline] unit '{u.name}' impl 未解析为 handler: {u.impl!r}"
             )
-        out.append(PassDecl(name=u.name, kind=u.type, handler=handler))
+        out.append(
+            PassDecl(name=u.name, kind=u.type, handler=handler, impl=u.impl)
+        )
     return out
+
+
+# 内置单元契约（引擎级产物名，非语言知识）：analyze 产出 scope。
+_BUILTIN_UNIT_CONTRACTS: dict[str, dict[str, list[str]]] = {
+    "builtin.analyze": {"produces": ["scope"], "requires": []},
+}
+
+
+def _contract_of(decl: "PassDecl") -> dict[str, list[str]] | None:
+    """单元契约（无声明 → None = 不参与校验，ADR-0015 §3 可选能力）。
+
+    插件单元 → 插件注册时的 produces/requires 声明（插件侧）；
+    内置执行器 → 引擎内置契约（`_BUILTIN_UNIT_CONTRACTS`）。
+    """
+    if decl.plugin:
+        from transform.engine import get_plugin_contracts
+
+        return get_plugin_contracts().get(decl.plugin)
+    if decl.impl:
+        return _BUILTIN_UNIT_CONTRACTS.get(decl.impl)
+    return None
+
+
+def _check_contract(decl: "PassDecl", available: set[str]) -> None:
+    """时点边界契约校验（ADR-0015 §3）：requires 未满足 → fail-fast。
+
+    校验点 = 单元执行前（阶段检查点/物化即校验，非消费闸）；通过后把该单元
+    声明的 produces 并入可用集（供后续单元引用）。无契约声明 → 跳过。
+    """
+    contract = _contract_of(decl)
+    if not contract:
+        return
+    missing = [r for r in contract.get("requires", []) if r not in available]
+    if missing:
+        raise ValueError(
+            f"[pipeline] unit '{decl.name}' requires 未满足: {', '.join(missing)}"
+            f"（应由该单元之前声明 produces 的单元提供；"
+            f"当前可用: {', '.join(sorted(available)) or '(空)'}）"
+        )
+    available.update(contract.get("produces", []))
 
 
 class _ScheduleStop(Exception):
@@ -434,6 +485,7 @@ def _run_schedule(
             f"（可用: {', '.join(sorted(schedules)) or '(空)'}）"
         )
     state = PassState(ast=ast, scope=scope, ctx=ctx)
+    available: set[str] = set()  # 已可用产物（契约校验，ADR-0015 §3）
     for index, decl in enumerate(schedules[schedule_name]):
         if decl.kind == "analyze" and not ctx.analyzer_enabled:
             ctx.log(f"[pipeline] pass '{decl.name}' skipped (analyze disabled)")
@@ -442,6 +494,7 @@ def _run_schedule(
             ctx.log(f"[pipeline] pass '{decl.name}' skipped (transform disabled)")
             continue
         ctx.log(f"[pipeline] pass: {decl.name}")
+        _check_contract(decl, available)
         _extra_before = set(state.extra)
         try:
             if decl.kind == "analyze":
@@ -478,6 +531,8 @@ def _trace_entry(
         "extra_added": sorted(set(state.extra) - before),
         "extra_keys": sorted(state.extra),
     }
+    if decl.impl:
+        entry["impl"] = decl.impl
     if decl.kind == "transform" and state.transformer is not None:
         described = state.transformer.describe_plugins()
         if described:

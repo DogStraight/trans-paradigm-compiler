@@ -77,5 +77,23 @@ _apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路
 包仍走 `builtin.transform`（跑全部插件，现行为零变化）。插件实例化参数覆写
 （`params`）尚未实现 → 声明即 fail-fast（不静默忽略）。
 
+### 插件契约（0.1.2 阶段 7，ADR-0015 §3）
+
+插件在**注册时**声明它需要/产出什么（显式平铺名列表，同语法 `production` 列表
+风格；引擎只做机械核验，不懂语义；**不含时点**——时点归管线配置）：
+
+```python
+@register_plugin(name="typed_ports.bridge", requires=["scope"])
+@register_plugin(produces=["mapping_tables"])
+@register_plugin(requires=["mapping_tables"])
+```
+
+校验点 = **时点边界**（单元执行前，物化即校验）：该单元的 `requires` 必须已被
+初始集 ∪ 前面单元声明的 `produces` 覆盖，否则 fail-fast（诊断列出缺失名与当前
+可用集）；通过后其 `produces` 并入可用集。**无声明 = 不参与校验**（可选、附加，
+粒度作者自选）。内置执行器契约在 `pipeline/schedule.py` 的
+`_BUILTIN_UNIT_CONTRACTS`（`builtin.analyze` 产出 `scope`；`builtin.transform`
+是黑盒跑全部插件，不声明）。
+
 > 组件协议（tpc.toml 结构/加载链/capabilities）见 `core/component_protocol.md`；
 > 从零搭语言的端到端教程见 `docs/language_walkthrough.md`。

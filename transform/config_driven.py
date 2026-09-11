@@ -27,9 +27,13 @@ from .primitives.flow import foreach as _foreach
 from .primitives.node import emit as _emit
 
 
-@register_plugin
+@register_plugin(requires=["mapping_tables"])
 class ConfigDrivenTransform(TransformPlugin):
     """配置驱动的 AST 变换插件
+
+    消费语义映射表（`SemanticMappingPlugin` 产出）——契约声明
+    `requires=["mapping_tables"]`（ADR-0015 §3：插件级声明，引擎只做机械核验；
+    **时点不在插件侧**，由管线配置编排）。
 
     用法:
         AstTransformer.set_shared("rules", grammar_rules)

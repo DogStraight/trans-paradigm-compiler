@@ -26,3 +26,11 @@
 
 序列限定：`analyze` 至多 1；`transform` 要么单个 `builtin.transform`，要么全为
 插件单元（混用会重复执行 → fail-fast）；`check` 不限（可多实例）。
+
+### 契约校验（时点边界，ADR-0015 §3）
+
+每个单元执行前校验其 `requires` 是否已被满足（初始集 ∪ 前面单元 `produces`），
+未满足 → fail-fast 并列出缺失名与当前可用集；通过后并入其 `produces`。
+来源：插件单元取**插件注册时的声明**（`register_plugin(produces=..., requires=...)`，
+见 `transform/README.md`）；内置执行器取 `_BUILTIN_UNIT_CONTRACTS`。
+**无声明 = 不校验**（可选能力）；插件不管时点，时点只在本节配置里编排。

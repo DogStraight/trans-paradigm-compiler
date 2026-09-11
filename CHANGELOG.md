@@ -110,6 +110,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   units 的语言包零行为变化。测试 `tests/engine/transform/test_plugin_index.py`、
   `tests/engine/pipeline/test_unit_plugin_schedule.py`。
 
+- **插件契约校验（0.1.2 阶段 7 切片）**：插件注册时声明 `produces` / `requires`
+  （显式平铺名列表，**不含时点**——时点归管线配置，ADR-0015 §1/§3 2026-09-11
+  作者定调）；调度层在**时点边界**（单元执行前）核验 requires 是否已被前面的
+  单元满足 → 未满足 fail-fast（列缺失名 + 当前可用集），通过后并入 produces。
+  真实声明：`SemanticMappingPlugin` 产 `mapping_tables`、`ConfigDrivenTransform`
+  依赖它、`typed_ports.bridge`/`asm_gen.codegen` 依赖 `scope`；内置执行器契约在
+  `_BUILTIN_UNIT_CONTRACTS`。**无声明 = 不校验**（可选、附加）。测试
+  `tests/engine/pipeline/test_contract_check.py`。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
