@@ -53,7 +53,7 @@
 
 0. **P3.1 span 绑定**（前置）：`rule_node.tok_span`（起止 token_pointer）+ 回溯回滚；
    可选 pratt 原子绑位置
-1. 形态分类器（原型 `tests/_proto_macro_hygiene.py` 14/14 转正）
+1. 形态分类器（✅ 已实现：`preprocessor/macro_shape.py` + `tests/engine/preprocessor/test_macro_shape.py`）
 2. MacroCall 节点入 AST + 包装模板进 grammar TOML 协议字段
 3. linter 同步（形态判定同一份配置，避免双实现漂移）
 4. 管线后端适配：宏调用位 vs 展开体位 span 语义区分、语义检查穿透展开体
@@ -71,5 +71,7 @@
   保留是增量 diff 结构对齐的前提；P3.5（Rust 下沉）依赖 P3.1 接口稳定。
 - 相关：ADR-0015（管线时点化——宏入树带来的管线后端变动与其一并实现）。
 
-> Impl: 待实现（parser/`_production.py` + 预处理器 + grammar TOML 协议字段）
-> Test: 待实现（`tests/_proto_macro_hygiene.py` 转正 + 真实语料）
+> Impl: `core/define.py`（`Node._tok_span`）+ `parser/_production.py`（span 写入，阶段 0）；
+>   `preprocessor/macro_shape.py`（形态分类器，阶段 1）；其余待实现
+> Test: `tests/languages/verilog/test_tok_span.py`（阶段 0）+
+>   `tests/engine/preprocessor/test_macro_shape.py`（阶段 1）；真实语料待阶段 9

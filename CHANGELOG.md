@@ -14,6 +14,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   测试 `tests/languages/verilog/test_tok_span.py`（区间合法 / 父子包含 /
   dump 排除 / 回溯确定，4 断言，标 smoke）。
 
+- **宏体形态分类器（0.1.2 阶段 1）**：`preprocessor/macro_shape.py` —— 宏体放进
+  语言包声明的四类最小语法上下文（`[macro_shape].wrappers`：stmt/decl/expr/port）
+  包裹解析：能完整解析 → 完整单元（语句/声明/表达式）；全失败 → 残缺片段；另配
+  `continue_leads` 首 token 续接预过滤（防 `= 1'b1` 被端口模板误收）。模板与续接集
+  是**语言语法知识**（进 grammar TOML），引擎只做通用包裹解析。本阶段只产出分类，
+  不接消费点（阶段 2 由 MacroCall 节点消费）。测试
+  `tests/engine/preprocessor/test_macro_shape.py`（16 样本 + 配置驱动断言，标 smoke）。
+  原型 `tests/_proto_macro_hygiene.py` 已转正删除（验证使命完成）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

@@ -90,3 +90,21 @@ silent = false
 sync_window_base = 15
 sync_window_pad = 5
 offset_tolerance = 2
+
+# ── [macro_shape] 宏体形态分类（包装解析） ──
+# 宏体放入 wrappers 模板包裹，能完整解析 → 完整语法单元（将来可保留为 AST 节点）；
+# 全部失败 → 残缺片段（只能原位文本级展开）。模板是**语言语法知识**，引擎只做
+# 通用包裹解析（语言知识不进代码，见 ADR-0016）。
+# continue_leads：以此开头的宏体是“残缺续段”（依赖前置上下文）——首 token
+# 预过滤，防包裹模板的宽松接受（如 `+ 4` 被当一元正号、`= 1'b1` 被当端口默认值）。
+[macro_shape]
+continue_leads = [
+    "=", "[", "(", ",", ".", "+", "-", "*", "/", "&", "|", "^", "~",
+    "!", "?", ":", "&&", "||", "==", "!=", "<", ">",
+]
+
+[macro_shape.wrappers]
+stmt = "module m;\ninitial begin\n{b}\nend\nendmodule"
+decl = "module m;\n{b}\nendmodule"
+expr = "module m;\nreg x;\ninitial begin\nx = {b};\nend\nendmodule"
+port = "module m;\ninput x {b};\nendmodule"

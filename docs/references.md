@@ -1785,8 +1785,8 @@ tpc `[[checks]]` schema / `tests/_check_test.py` / `config` per_file——见
   `[3:0]`、`begin`/`end` 半截）会破坏语法边界让 parse 失败 → 只能全展开。
   设想：先做**宏体形态分类**（完整语法单元 vs 残缺片段），完整单元宏将来
   可保留为 MacroCall AST 节点，残缺宏维持原位展开。
-- **方案：包装解析法 + 首 token 预过滤**（原型 tests/_proto_macro_hygiene.py
-  验证 14/14 正确）：
+- **方案：包装解析法 + 首 token 预过滤**（已落地 `preprocessor/macro_shape.py`
+  + `tests/engine/preprocessor/test_macro_shape.py`，0.1.2 阶段 1）：
   - 包装解析：宏体放进四种最小语法上下文试解析——语句位（module m;
     initial begin <body> end endmodule）、声明位（module m; <body>
     endmodule）、表达式位（module m; reg x; initial x = <body>;

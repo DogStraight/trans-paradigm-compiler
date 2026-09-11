@@ -263,8 +263,8 @@
 > `begin`/`end` 半截）会破坏语法边界让 parse 失败 → 只能全展开。方案：先做
 > **宏体形态分类**（完整语法单元 vs 残缺片段），完整单元宏保留为 MacroCall
 > AST 节点（宏调用 + 展开体子节点），残缺宏维持原位展开——宏边界不丢失
-> （P3.3 行号反向映射也受益），展开量大幅下降。**可行性已原型验证 14/14**
-> （包装解析法 + 首 token 续接预过滤，tests/_proto_macro_hygiene.py；
+> （P3.3 行号反向映射也受益），展开量大幅下降。**形态分类器已实现**
+> （`preprocessor/macro_shape.py`，0.1.2 阶段 1；包装模板配置化 `[macro_shape]`；
 > 详案落 docs/references.md「不卫生宏体检测可行性」）。
 > 设计约束：包装模板是语言语法知识，不能硬编码进 Python——按 proc_assign_
 > rules 先例进 grammar TOML 协议字段（如 macro_hygiene_wrappers），引擎读配置。

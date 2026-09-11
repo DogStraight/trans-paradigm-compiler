@@ -1,0 +1,128 @@
+"""preprocessor/macro_shape.py — 宏体形态分类（完整语法单元 vs 残缺片段）。
+
+**包装解析**：宏体放进语言包声明的若干最小语法上下文（wrappers：stmt/decl/expr/
+port），能完整解析 → 完整语法单元；全部失败 → 残缺片段。
+
+用途：宏体入树（ADR-0016）的**投影粒度**选择前置——完整单元宏可走 token 级替换
+（独立成 AST 节点），残缺片段走文本级投影。本模块只**产出分类**（0.1.2 阶段 1），
+不接消费点（阶段 2 由 MacroCall 节点消费）。
+
+包装模板与续接首 token 集是**语言语法知识**——由语言包 `[macro_shape]` 声明
+（`grammar/<lang>/base/*.toml`），引擎只做通用包裹解析，语言知识不进代码。
+
+Doc: docs/decisions/0016-macro-body-into-ast.md（宏体入树决策）
+"""
+from __future__ import annotations
+
+import os
+from collections.abc import Callable
+
+from core.config_registry import declare_cfg
+
+_shape_cfg: dict = declare_cfg("preprocessor.macro_shape", {}, __name__, "_shape_cfg")
+
+# 形态判定常量
+KIND_STMT = "完整语句"
+KIND_DECL = "完整声明"
+KIND_EXPR = "完整表达式"
+KIND_FRAGMENT = "残缺片段"
+
+# 探测顺序：外层包裹优先（语句 > 声明 > 表达式）——更"外层"的语法上下文先判定
+_PROBE_ORDER: tuple[tuple[str, str], ...] = (
+    ("stmt", KIND_STMT),
+    ("decl", KIND_DECL),
+    ("expr", KIND_EXPR),
+)
+
+
+def get_shape_config(cfg: dict | None = None) -> tuple[dict, list[str]]:
+    """读取形态分类配置 → (wrappers 模板表, continue_leads 续接首 token 集)。"""
+    cfg = _shape_cfg if cfg is None else cfg
+    wrappers = cfg.get("wrappers") or {}
+    leads = list(cfg.get("continue_leads") or [])
+    return wrappers, leads
+
+
+def classify_macro_body(
+    body: str, probe: Callable[[str], bool], cfg: dict | None = None
+) -> tuple[str, str]:
+    """分类宏体形态，返回 `(判定, 依据)`；判定 ∈ KIND_* 四值。
+
+    body  — 宏体源文本（`` `define NAME body `` 的 body 部分）
+    probe — 片段解析探测：接收完整源码片段，能完整解析返回 True
+    cfg   — 形态配置（缺省取语言包 `[macro_shape]`）
+    """
+    wrappers, leads = get_shape_config(cfg)
+    stripped = body.lstrip()
+
+    # 首 token 续接预过滤：以符号开头的宏体依赖前置上下文（残缺续段），
+    # 包裹模板的宽松接受会误判（如 `+ 4` 被当一元正号、`= 1'b1` 被当端口默认值）。
+    for lead in leads:
+        if stripped.startswith(lead):
+            head = stripped.split()[0][:12] if stripped.split() else stripped[:12]
+            return KIND_FRAGMENT, f"首 token 续接（{head}）"
+
+    for key, kind in _PROBE_ORDER:
+        tpl = wrappers.get(key)
+        if not tpl:
+            continue
+        # 用 replace 而非 format：宏体可能含 `{`/`}`（如拼接 `{a,b}`），
+        # str.format 会把花括号当占位符抛错。
+        if probe(tpl.replace("{b}", body)):
+            return kind, f"{key} 包裹解析成功"
+    return KIND_FRAGMENT, "全部包裹失败"
+
+
+# ── 片段解析探测（懒构造 + 按 rules_dir 缓存） ──
+
+_probe_cache: dict[str, Callable[[str], bool]] = {}
+
+
+def build_parse_probe(rules_dir: str) -> Callable[[str], bool]:
+    """构造"片段能否完整解析"探测函数（懒构造，按 rules_dir 缓存）。
+
+    探测 = 片段作为完整源码走 lexer + parser，无截断/异常 → True。构造过程与管线
+    共享组件初始化一致（重复调用幂等）。消费方（阶段 2+）若已有共享组件，可自行
+    注入等价 probe，避免重建。
+    """
+    cached = _probe_cache.get(rules_dir)
+    if cached is not None:
+        return cached
+
+    from core.config_registry import ConfigRegistry
+    from core.define import GrammarRulesRegister
+    from core.plugin_loader import load_all_components
+    from lexer import Lexer, load_pre_scan_config, pre_scan
+    from parser import Parser, setup_grammar
+    from parser.rule_selector import RuleSelector
+
+    ConfigRegistry.load_all(
+        rules_dir, ext_dirs=None, plugins_dir=os.path.join(rules_dir, "plugins")
+    )
+    load_all_components()
+    rules = setup_grammar(rules_dir, GrammarRulesRegister.get_default(), ext_dirs=None)
+    stmt_names = [
+        name
+        for name, rule in rules.items()
+        if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+    ]
+    selector = RuleSelector(rules, stmt_names)
+    lexer = Lexer(rules_dir=rules_dir)
+    pre_cfg = load_pre_scan_config(rules_dir)
+
+    def probe(text: str) -> bool:
+        try:
+            parser = Parser(
+                rules_dir=rules_dir,
+                pre_symbols=pre_scan(text, pre_cfg),
+                rules=rules,
+                rule_selector=selector,
+            )
+            parser.pre_hints = pre_cfg.get("hints", {})
+            ast = parser.parse(lexer.tokenize(text))
+        except Exception:  # noqa: BLE001 — 探测语义：任何失败都等于"不可完整解析"
+            return False
+        return ast is not None and not getattr(parser, "_parse_truncated", False)
+
+    _probe_cache[rules_dir] = probe
+    return probe
