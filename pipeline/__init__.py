@@ -440,6 +440,71 @@ def _stage_parse(
     return ast
 
 
+# ── 宏边界节点化（P3.6 / ADR-0016 阶段 2） ──
+
+
+def _extract_macro_name(fragment: str) -> str:
+    """从宏调用原文提取宏名（`` `NAME `` / `` `NAME(...) ``）→ NAME。"""
+    import re
+
+    m = re.match(r"[^\w]*(\w+)", fragment.lstrip())
+    return m.group(1) if m else ""
+
+
+def _rewrite_marker_nodes(value: Any, table: dict) -> Any:
+    """递归把 marker 标识符节点改写为 MacroCall（含 attrs 内嵌节点）。"""
+    from core.define import CHILDREN_FIELD, Node
+
+    if isinstance(value, Node):
+        if (
+            value.node_name == "Identifier"
+            and isinstance(getattr(value, "content", None), str)
+            and value.content in table
+        ):
+            entry = table[value.content]
+            new = Node("MacroCall", content=value.content)
+            new._macro_name = _extract_macro_name(entry.get("fragment", ""))
+            new._macro_marker = value.content
+            for meta in ("_pos_line", "_pos_col", "_tok_span", "_file"):
+                meta_val = getattr(value, meta, None)
+                if meta_val is not None:
+                    setattr(new, meta, meta_val)
+            return new
+        children = getattr(value, CHILDREN_FIELD, None)
+        if isinstance(children, list):
+            for i, child in enumerate(children):
+                children[i] = _rewrite_marker_nodes(child, table)
+        for attr, val in list(vars(value).items()):
+            if attr.startswith("_") or attr in ("node_name", CHILDREN_FIELD):
+                continue
+            value.__dict__[attr] = _rewrite_marker_nodes(val, table)
+        return value
+    if isinstance(value, list):
+        return [_rewrite_marker_nodes(v, table) for v in value]
+    if isinstance(value, dict):
+        return {k: _rewrite_marker_nodes(v, table) for k, v in value.items()}
+    return value
+
+
+def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
+    """宏边界节点化：marker 标识符 → MacroCall 节点（P3.6 / ADR-0016 阶段 2）。
+
+    展开阶段把宏调用替换为 `tpc_marker_N` 标识符（format 路径），parser 建成
+    Identifier 节点。本阶段按锚表（restore_stack 的 token 锚）把这类节点改写为
+    MacroCall（带 `_macro_name`/`_macro_marker` 元数据），使宏边界在 AST 中结构化
+    可见——P3.2 增量 diff / P3.3 双向映射的前提。渲染与分析声明在语言包对齐
+    Identifier，本阶段行为不变（语义化后续阶段）。
+    """
+    table = {
+        e["marker"]: e
+        for e in (ctx.restore_stack or [])
+        if e.get("mode") == "token" and e.get("marker")
+    }
+    if not table:
+        return ast
+    return _rewrite_marker_nodes(ast, table)
+
+
 def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
     """幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
     文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
@@ -725,6 +790,8 @@ def run_pipeline_on_source(
     ast = _stage_parse(ctx, pre_scan_config, pre_symbols, tokens)
     if ast is None:
         return ctx.result
+    # 宏边界节点化（P3.6 / ADR-0016 阶段 2）：marker 标识符 → MacroCall 节点
+    ast = _stage_macro_nodes(ctx, ast)
     if stage == "parse":
         ctx.result["success"] = True
         ctx.result["ast"] = ast

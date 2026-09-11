@@ -91,6 +91,17 @@ line = [
 ]
 
 
+# ── MacroCall — 宏调用边界节点（引擎展开保留） ──
+# 展开阶段宏调用被替换为 tpc_marker_N 标识符；引擎在 parse 后把该标识符节点改写
+# 为 MacroCall（宏边界进 AST，见 ADR-0016 阶段 2）。渲染/分析声明与 Identifier
+# 对齐 = 本阶段行为不变；语义化（宏调用非标识符引用）留后续阶段。
+[MacroCall.renderer.layout]
+line = [{ ref = "content" }]
+
+[MacroCall.analyzer]
+identifier_ref = true
+
+
 # ── ParenthesizedExpr — 括号表达式 ──
 # 括号包裹的子表达式，如 (a + b)。
 # 作用是改变运算符优先级或提高可读性。

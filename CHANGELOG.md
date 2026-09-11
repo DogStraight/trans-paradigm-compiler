@@ -23,6 +23,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/engine/preprocessor/test_macro_shape.py`（16 样本 + 配置驱动断言，标 smoke）。
   原型 `tests/_proto_macro_hygiene.py` 已转正删除（验证使命完成）。
 
+- **宏边界节点化（0.1.2 阶段 2）**：parse 后按锚表把宏调用的 `tpc_marker_N`
+  标识符改写为 **MacroCall 节点**（带 `_macro_name` / `_macro_marker` 元数据），
+  宏边界在 AST 中结构化可见——P3.2 增量 diff / P3.3 双向映射的前提。语言包声明
+  `[MacroCall.renderer.layout]` + `[MacroCall.analyzer]` 与 Identifier 对齐，
+  渲染与分析**行为零变化**（输出逐字节不变）。测试
+  `tests/languages/verilog/test_macro_call_node.py`（4 断言，标 smoke）。
+  注：宏体子树进节点 + 渲染改源区间还原 = ADR-0016 终态，归阶段 4。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
