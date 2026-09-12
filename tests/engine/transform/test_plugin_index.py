@@ -3,7 +3,8 @@
 ADR-0015 §1：单元粒度 = **插件实例化对象** → 插件须可寻址（管线配置
 `[pipeline.units.<name>].impl` 按限定名引用）。本文件锁：
     - 引擎插件以类名为限定名注册（`SemanticMappingPlugin` 等）；
-    - 语言插件用 `<组件名>.<单元名>`（`typed_ports.bridge`、`asm_gen.codegen`）；
+    - 引擎插件可用语义限定名（`slot_runner` = 通用槽位执行器）；
+    - 语言插件用 `<组件名>.<单元名>`（`asm_gen.codegen`）；
     - 索引同名首胜（同源码多路径 import 是既有常态，不报错）；
     - `_plugin_registry`（执行序）语义不变。
 """
@@ -19,13 +20,13 @@ def test_engine_plugins_registered_by_qualname() -> None:
     assert "ConfigDrivenTransform" in idx
 
 
-def test_language_plugin_uses_component_qualified_name() -> None:
-    """语言插件限定名 = `<组件名>.<单元名>`（verilog typed_ports 桥）。"""
-    import grammar.verilog.plugins.typed_ports._bridge  # noqa: F401
+def test_engine_slot_runner_registered() -> None:
+    """通用槽位执行器（引擎插件，语言无关）：语义限定名 `slot_runner`。"""
+    from transform import slot_runner  # noqa: F401
 
     idx = get_plugin_index()
-    assert "typed_ports.bridge" in idx
-    assert plugin_name_of(idx["typed_ports.bridge"]) == "typed_ports.bridge"
+    assert "slot_runner" in idx
+    assert plugin_name_of(idx["slot_runner"]) == "slot_runner"
 
 
 def test_c4_plugin_uses_component_qualified_name() -> None:

@@ -128,6 +128,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   （遍历/接回的通用执行器见 5b-3c-2）。另：删死槽位 `expand_typed_port`
   （no-op，A1/A3）。测试 `tests/engine/core/test_transform_slot_decls.py`。
 
+- **槽位执行面（0.1.2 阶段 5b-3c-2）**：新增引擎通用槽位执行器
+  `transform/slot_runner.py`（限定名 `slot_runner`；契约 `requires=["scope"]` /
+  `produces=["slot_transforms"]`）——按 `[[transform.slots]]` 声明机械执行：遍历
+  （`walk`）→ 触发（`on`）→ ctx（声明 + 固有通道 `root_scope` +
+  `[transform.ctx_channels]` 派生通道）→ 调 handler → 按 `result` 接回
+  （extra / none / replace（1:1 替换 + 注释迁移）/ remove）。新配置品类
+  `[transform.ctx_channels]`：通道构造声明式（如 `type_map = { symbol_kind =
+  "typed_port", attr = "type_name" }`），引擎不认识 kind/attr 语义。
+  **typed_ports 桥插件 `_bridge.py` 退役删除**（`handlers = ["_transform.py"]`），
+  不留双路径。等价判据：typed_ports 全组 54 + e2e 122（保真/互操作）+ 全量 1678
+  全绿。测试 `tests/engine/core/test_transform_slot_decls.py`（含 ctx 通道校验）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

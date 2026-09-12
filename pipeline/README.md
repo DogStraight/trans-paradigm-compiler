@@ -22,7 +22,7 @@
 |------|-----|------|
 | 内置执行器 | `builtin.analyze` / `builtin.transform` | 跑整段分析 / 全部插件（粗粒度） |
 | 处理器引用 | `mypass.py:fn` | 加载时解析的 handler（check 类） |
-| 插件限定名 | `SemanticMappingPlugin` / `typed_ports.bridge` | 该单元**只跑该插件**（插件级，5b-3a） |
+| 插件限定名 | `SemanticMappingPlugin` / `slot_runner` | 该单元**只跑该插件**（插件级，5b-3a） |
 
 序列限定：`analyze` 至多 1；`transform` 要么单个 `builtin.transform`，要么全为
 插件单元（混用会重复执行 → fail-fast）；`check` 不限（可多实例）。

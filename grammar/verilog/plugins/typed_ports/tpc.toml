@@ -16,11 +16,16 @@ postpasses = ["_expand_ports.py:run_expand_ports", "_check.py:run_tp_check"]
 # analyze 报错 → 阻断展开）。语言知识（type/role/impl 形态）全在 _check.py。
 
 [transform]
-handlers = ["_transform.py", "_bridge.py"]
+handlers = ["_transform.py"]
 
-# 槽位契约声明（5b-3c 声明面）：每槽位声明在哪触发（on）、怎么遍历（walk）、
+# ctx 通道声明：引擎按声明从 scope 树派生槽位 ctx（语言知识就地，引擎不认识
+# kind/attr 语义）。type_map = {接口实例名: 类型名}（auto_connect_ports 自动连线用）。
+[transform.ctx_channels]
+type_map = { symbol_kind = "typed_port", attr = "type_name" }
+
+# 槽位契约声明（5b-3c）：每槽位声明在哪触发（on）、怎么遍历（walk）、
 # ctx 从哪来、结果怎么接回（result）。**时点不在此声明**——归管线配置
-# （[pipeline.units.*]）。执行仍由 _bridge.py 调用（5b-3c-2 接管遍历/接回）。
+# （[pipeline.units.*]）。执行 = 引擎 SlotRunnerPlugin（transform/slot_runner.py）。
 [[transform.slots]]
 name = "build_wrapper"
 on = "TypeDecl"

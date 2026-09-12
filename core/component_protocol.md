@@ -37,8 +37,13 @@ handlers = ["_mapping.py"]   # mapping_entries（SemanticMappingPlugin 消费）
 # 经 postpass 递归展开（typed_ports _expand_ports 先例，写 resolved_ports）
 
 [transform]
-slots = ["delete_type_decl", "build_wrapper", "auto_connect_ports", "replace_impl_binding"]
-handlers = ["_transform.py", "_bridge.py"]
+handlers = ["_transform.py"]          # 槽位 handler（@register_transform_slot）
+
+[transform.ctx_channels]              # 槽位 ctx 通道：引擎按声明从 scope 派生
+# type_map = { symbol_kind = "typed_port", attr = "type_name" }
+
+[[transform.slots]]                   # 槽位触发契约（触发/遍历/ctx/结果接回）
+# name/on/walk/result/ctx —— 见 §3
 
 # 编排调度（schedule.py，pipeline_stages.md）：检查 pass + 命名 schedule
 [[pipeline.pass]]
@@ -140,13 +145,21 @@ result = "extra"                # extra / none / replace（1:1 替换+注释迁�
 ctx = { type_decl = "$node", impl_block = "TypeImplDecl" }   # $node = 触发节点自身
 ```
 
-- `ctx` 的引擎固有通道（`root_scope` / `type_map`）自动注入，不需声明。
+- `ctx` 固有通道：`root_scope`（analyze 产物）自动注入；其余按声明从 scope 树
+  派生（**语言知识就地**，引擎不认识 kind/attr 语义）：
+
+```toml
+[transform.ctx_channels]
+type_map = { symbol_kind = "typed_port", attr = "type_name" }   # {符号名: attrs[attr]}
+```
+
 - **时点不在此声明**：归管线配置 `[pipeline.units.*]`（ADR-0015 §1）。
-- 本步（5b-3c-1）只落**声明面**（解析 + fail-fast 校验：槽位名已注册 / `walk`·
-  `result` 取值合法 / `on`·`ctx` 形态）；按声明遍历/调用/接回的**执行面**见 5b-3c-2。
-- 触发与接回由组件内插件负责（typed_ports 先例：`_bridge.py` 扫 TypeDecl /
-  ImplBinding 调槽位、`mark_extra` 产额外文件、1:1 替换时 `migrate_comments`）；
-  触发契约配置化（槽位独立成单元/时点）见 5b-3c。
+- **执行 = 引擎 `SlotRunnerPlugin`**（`transform/slot_runner.py`，语言无关）：按
+  声明遍历（`walk`）→ 触发（`on`）→ 构造 ctx（声明 + 通道）→ 调 handler →
+  按 `result` 接回（`extra` 不接回、handler 自 mark_extra / `none` 原地 /
+  `replace` 1:1 替换 + `migrate_comments` / `remove` 从父列表移除）。组件不再需要
+  自己的桥插件（typed_ports `_bridge.py` 已删）。加载期 fail-fast：槽位名未注册 /
+  `walk`·`result` 取值非法 / `ctx` 形态非法。
 
 ## 4. analyzer 原语
 

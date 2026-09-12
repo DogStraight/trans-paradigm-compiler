@@ -2,8 +2,8 @@
 
 槽位从"桥内硬编码触发"走向**声明式**：`[[transform.slots]]` 声明触发节点
 （`on`）/ 遍历形态（`walk`）/ ctx 来源（`ctx`）/ 结果接回（`result`）；
-**时点不在此声明**（归 `[pipeline.units.*]`）。本步只落声明面 —— 执行仍由
-`_bridge.py` 调用（执行面 5b-3c-2）。
+**时点不在此声明**（归 `[pipeline.units.*]`）。报告面的执行 = 引擎
+`SlotRunnerPlugin`（`transform/slot_runner.py`）——组件不再需要自己的桥插件。
 """
 
 import re
@@ -12,12 +12,16 @@ from pathlib import Path
 
 import pytest
 
-from core.plugin_loader import _load_transform_slot_decls, register_transform_slot
+from core.plugin_loader import (
+    _load_transform_ctx_channels,
+    _load_transform_slot_decls,
+    register_transform_slot,
+)
 
 _ROOT = Path(__file__).resolve().parents[3]
 _TP_DIR = _ROOT / "grammar" / "verilog" / "plugins" / "typed_ports"
 _TOML = _TP_DIR / "tpc.toml"
-_BRIDGE = _TP_DIR / "_bridge.py"
+_HANDLERS = _TP_DIR / "_transform.py"
 
 # 校验逻辑测试用的探针槽位名（不动真实槽位注册面）
 PROBE = "test_slot_decl_probe"
@@ -69,11 +73,24 @@ def test_toml_declares_four_slots_with_contract() -> None:
     assert ric["result"] == "replace"
 
 
-def test_bridge_calls_match_declared_slots() -> None:
-    """防漂移：桥实际调用的槽位名 == TOML 声明的槽位名集合。"""
-    src = _BRIDGE.read_text(encoding="utf-8")
-    called = set(re.findall(r'slots\.get\("([^"]+)"\)', src))
-    assert called == set(_DECLARED)
+def test_declared_slots_match_registered_handlers() -> None:
+    """防漂移：TOML 声明的槽位名 == `_transform.py` 注册的槽位名集合。"""
+    src = _HANDLERS.read_text(encoding="utf-8")
+    registered = set(re.findall(r'@register_transform_slot\("([^"]+)"\)', src))
+    assert registered == set(_DECLARED)
+
+
+def test_typed_ports_declares_ctx_channel() -> None:
+    """ctx 通道声明（type_map 的构造方式在语言包，引擎不认识 kind/attr 语义）。"""
+    chans = _load_transform_ctx_channels("test-cdir", _TOML_RAW["transform"])
+    assert chans == {"type_map": {"symbol_kind": "typed_port", "attr": "type_name"}}
+
+
+def test_ctx_channel_requires_kind_and_attr() -> None:
+    with pytest.raises(ValueError, match="缺 symbol_kind"):
+        _load_transform_ctx_channels("c", {"ctx_channels": {"m": {"attr": "a"}}})
+    with pytest.raises(ValueError, match="缺 attr"):
+        _load_transform_ctx_channels("c", {"ctx_channels": {"m": {"symbol_kind": "k"}}})
 
 
 def _load(decls: list) -> dict:

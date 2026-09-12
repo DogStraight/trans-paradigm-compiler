@@ -6,6 +6,7 @@
 | 文件 | 一句话 |
 |------|--------|
 | `engine.py` | AstTransformer + TransformPlugin 基类 + 自动注册（注释迁移 `migrate_comments`；插件自述 `describe()`） |
+| `slot_runner.py` | 通用槽位执行器（按 `[[transform.slots]]` 声明驱动组件槽位） |
 | `config_driven.py` | 配置驱动变换（原语扩展：emit/expand/delete 等） |
 | `_semantic_mapping.py` | 语义映射表构建 + 后处理管线 |
 | `normalizer.py` | 统一的 AST 规范化层（结构保留） |
@@ -64,10 +65,26 @@ _apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路
 - 新增插件想让中间产物可见 → 覆写 `TransformPlugin.describe()`（默认空 dict
    = 不自述，可选能力）。
 
+### 槽位执行（SlotRunnerPlugin，5b-3c-2）
+
+组件不再写自己的桥插件：槽位的触发/遍历/ctx/接回全由**声明**描述
+（`core/component_protocol.md` §3），由引擎 `slot_runner.py` 机械执行：
+
+```
+遍历（walk: top|recursive）→ 触发（on: 节点名）→ ctx（声明 + 固有通道 root_scope
++ [transform.ctx_channels] 派生的通道）→ 调 handler → 接回（result: extra|none|
+replace（1:1 替换 + 注释迁移）|remove）
+```
+
+**语言知识全在声明里**（触发节点名 / 遍历形态 / ctx 来源 / 结果形态 / 通道的
+符号 kind 与 attr）；引擎只按名匹配、按声明执行——组件退役了自己的桥
+（typed_ports `_bridge.py` 已删）。本插件与声明同源：注册名 `slot_runner`，
+契约 `requires=["scope"]` / `produces=["slot_transforms"]`。
+
 ### 插件身份面（0.1.2 5b-3a）
 
-插件以**限定名**注册：引擎插件（`SemanticMappingPlugin` / `ConfigDrivenTransform`）
-默认取类名；语言插件用 `<组件名>.<单元名>`（`typed_ports.bridge`、`asm_gen.codegen`）
+插件以**限定名**注册：引擎插件默认取类名（`SemanticMappingPlugin`）、可用语义名
+（`slot_runner`）；语言插件用 `<组件名>.<单元名>`（`asm_gen.codegen`）
 ——管线配置 `[pipeline.units.<name>].impl` 按此名引用，`get_plugin_index()` 查询、
 未知名 fail-fast。索引同名**首胜**（同一插件文件被多路径 import 时类对象不同，是
 既有常态）；`_plugin_registry`（执行序）语义不变。
@@ -83,7 +100,7 @@ _apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路
 风格；引擎只做机械核验，不懂语义；**不含时点**——时点归管线配置）：
 
 ```python
-@register_plugin(name="typed_ports.bridge", requires=["scope"])
+@register_plugin(name="asm_gen.codegen", requires=["scope"])
 @register_plugin(produces=["mapping_tables"])
 @register_plugin(requires=["mapping_tables"])
 ```

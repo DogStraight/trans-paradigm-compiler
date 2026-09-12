@@ -10,7 +10,7 @@ import os
 import sys
 from typing import Any, Callable
 
-from core._protocol import META_NAME, META_REQUIRES
+from core._protocol import META_NAME, META_REQUIRES, SLOT_CTX_SELF
 
 def _get_component_dir(plugins_dir: str = "") -> str:
     """Resolve component directory.
@@ -179,6 +179,8 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     info["transform"] = _load_python_handlers(cdir, transform_meta.get("handlers", []))
     # 3b. Transform 槽位契约声明（5b-3c 声明面；须在 handlers import 之后校验）
     info["slot_decls"] = _load_transform_slot_decls(cdir, transform_meta)
+    # 3c. Transform ctx 通道声明（槽位 ctx 派生数据的声明式构造）
+    info["ctx_channels"] = _load_transform_ctx_channels(cdir, transform_meta)
 
     # 4. Pipeline pass / schedule 声明（ADR-0007）
     info["pipeline"] = _load_pipeline_decls(cdir, meta.get("pipeline", {}))
@@ -231,10 +233,9 @@ def get_transform_slots() -> dict[str, Callable]:
     return dict(_transform_slots)
 
 
-# 槽位契约声明取值空间（5b-3c）：遍历形态 / 结果接回形态 / ctx 特殊来源。
+# 槽位契约声明取值空间（5b-3c）：遍历形态 / 结果接回形态。
 _SLOT_WALKS = ("top", "recursive")
 _SLOT_RESULTS = ("extra", "none", "replace", "remove")
-_SLOT_CTX_SELF = "$node"
 
 
 def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dict]:
@@ -299,10 +300,10 @@ def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dic
                 f"({cdir})"
             )
         for src in ctx.values():
-            if src.startswith("$") and src != _SLOT_CTX_SELF:
+            if src.startswith("$") and src != SLOT_CTX_SELF:
                 raise ValueError(
                     f"[plugin] transform.slots '{name}' ctx 特殊来源非法: {src!r}"
-                    f"（合法: {_SLOT_CTX_SELF} 或节点名）({cdir})"
+                    f"（合法: {SLOT_CTX_SELF} 或节点名）({cdir})"
                 )
         slots[name] = {
             "name": name,
@@ -319,6 +320,44 @@ def get_transform_slot_decls() -> dict[str, dict]:
     merged: dict[str, dict] = {}
     for info in _loaded_components.values():
         merged.update(info.get("slot_decls", {}))
+    return merged
+
+
+def _load_transform_ctx_channels(cdir: str, transform_meta: dict) -> dict[str, dict]:
+    """解析组件 `[transform.ctx_channels]` 声明 → {通道名: {symbol_kind, attr}}。
+
+    通道 = 引擎按声明从 scope 树派生、注入槽位 ctx 的数据（引擎不认识
+    kind/attr 的含义，只做机械收集）：
+        type_map = { symbol_kind = "typed_port", attr = "type_name" }
+    """
+    out: dict[str, dict] = {}
+    raw = transform_meta.get("ctx_channels", {}) or {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"[plugin] transform.ctx_channels 须为表 ({cdir})")
+    for name, decl in raw.items():
+        if not isinstance(decl, dict):
+            raise ValueError(
+                f"[plugin] transform.ctx_channels '{name}' 须为表 ({cdir})"
+            )
+        kind = decl.get("symbol_kind")
+        attr = decl.get("attr")
+        if not isinstance(kind, str) or not kind:
+            raise ValueError(
+                f"[plugin] transform.ctx_channels '{name}' 缺 symbol_kind ({cdir})"
+            )
+        if not isinstance(attr, str) or not attr:
+            raise ValueError(
+                f"[plugin] transform.ctx_channels '{name}' 缺 attr ({cdir})"
+            )
+        out[name] = {"symbol_kind": kind, "attr": attr}
+    return out
+
+
+def get_transform_ctx_channels() -> dict[str, dict]:
+    """合并已加载组件的 ctx 通道声明（通道名 → {symbol_kind, attr}）。"""
+    merged: dict[str, dict] = {}
+    for info in _loaded_components.values():
+        merged.update(info.get("ctx_channels", {}))
     return merged
 
 

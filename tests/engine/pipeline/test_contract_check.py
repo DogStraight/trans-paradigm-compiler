@@ -140,13 +140,13 @@ def test_builtin_transform_has_no_contract() -> None:
 
 
 def test_real_plugins_declare_contracts() -> None:
-    from grammar.verilog.plugins.typed_ports import _bridge  # noqa: F401
-    from transform import _semantic_mapping, config_driven  # noqa: F401
+    from transform import _semantic_mapping, config_driven, slot_runner  # noqa: F401
 
     contracts = get_plugin_contracts()
     assert contracts["SemanticMappingPlugin"]["produces"] == ["mapping_tables"]
     assert contracts["ConfigDrivenTransform"]["requires"] == ["mapping_tables"]
-    assert contracts["typed_ports.bridge"]["requires"] == ["scope"]
+    assert contracts["slot_runner"]["requires"] == ["scope"]
+    assert contracts["slot_runner"]["produces"] == ["slot_transforms"]
 
 
 def test_plugin_registration_rejects_without_timepoint() -> None:

@@ -19,6 +19,10 @@ ROW_ORIGIN = "origin"
 引擎侧（SemanticMappingPlugin）按此键收集来源做可视化，不解析语义——
 引擎只认协议字段名，不懂段含义（语言知识不进引擎）。"""
 
+# ── 变换槽位（[[transform.slots]] 声明）──
+SLOT_CTX_SELF = "$node"
+"""槽位 ctx 来源特殊值：触发节点自身（其余值 = 子树内首个同名节点）。"""
+
 # ── 映射表（SemanticMappingPlugin 产出的表名）──
 TABLE_TYPE_PORTS_FLAT = "type_ports_flat"
 """类型化端口的扁平端口列表。"""
