@@ -1,17 +1,31 @@
-"""column_align 语义列提取——数据破坏回归测试。
+"""column_align 语义列提取与重组——数据破坏回归测试。
 
 保护重点：
   1. 带空格数字字面量 init（`32'h ffff_ffff`）不得把 `ffff_ffff` 误判为 name 而丢真名
   2. 一行多声明/多端口（`input clk, resetn,` / `reg a, b;`）不得丢名字
      （单组提取跳过保留原文；多单元提取 _extract_semantic_multi 参与对齐）
+  3. **重组输出**：多声明行的后续声明符以 `, ` 单分隔紧跟（不参与列填充/
+     不累积漂移——ref 基准风格 `reg dout, din_0, din_1;`；旧实现逐单元补
+     `width+1` 前缀致 226 处漂移，e2e `_strip_all` 抹空白天然失明）
 """
 
+import re
+
+from core.define import DEFAULT_RULES_DIR
+from grammar.verilog.plugins.formatter import format_source
 from grammar.verilog.plugins.formatter.passes.column_align import (
     _tokenize_bracket_aware,
     _extract_semantic,
     _extract_semantic_multi,
     _is_multidecl,
 )
+
+# 漂移形态：逗号后 2+ 空格接标识符（正确重组 = `, ` 单空格）
+_DRIFT_RE = re.compile(r",\s{2,}[A-Za-z_$][\w$]*\s*[,;]")
+
+
+def _fmt(src: str) -> str:
+    return format_source(src, DEFAULT_RULES_DIR)
 
 
 def _extract(line: str):
@@ -175,6 +189,52 @@ def test_multi_concat_lhs_skipped():
 
 def test_multi_comment_skipped():
     assert _extract_multi("// comment") is None
+
+
+# ── 重组输出：多声明行后续声明符 `, ` 单分隔（P1.5 漂移回归）──
+
+def test_multidecl_recombine_single_space():
+    """最小复现（gap 档）：第二声明符落 `, ` 单分隔，不累积填充。"""
+    out = _fmt("module m;\n    reg a, b;\n    reg ccc, ddd;\nendmodule\n")
+    assert "    reg   a, b;" in out
+    assert "    reg   ccc, ddd;" in out
+    assert not _DRIFT_RE.search(out)
+
+
+def test_multidecl_recombine_range_and_idempotent():
+    """带位宽多声明：单分隔 + 名字全保留 + 幂等。"""
+    src = "module m;\n    reg [7:0] a, b;\n    reg [7:0] cccc, dddd;\nendmodule\n"
+    once = _fmt(src)
+    assert "    reg  [7:0] a, b;" in once
+    assert "    reg  [7:0] cccc, dddd;" in once
+    assert not _DRIFT_RE.search(once)
+    for name in ("a", "b", "cccc", "dddd"):
+        assert re.search(rf"\b{name}\b", once), f"名字丢失: {name}"
+    assert _fmt(once) == once  # 幂等（二次格式化不再变）
+
+
+def test_multidecl_recombine_three_units_with_init():
+    """三单元带 init：init 保留、逗号单分隔、名字不丢。"""
+    src = "module m;\n    reg a = 1, b = 2, c = 3;\n    reg dd = 4, ee = 5, ff = 6;\nendmodule\n"
+    out = _fmt(src)
+    assert not _DRIFT_RE.search(out)
+    for name in ("a", "b", "c", "dd", "ee", "ff"):
+        assert re.search(rf"\b{name}\b", out), f"名字丢失: {name}"
+
+
+def test_multidecl_port_list_single_space():
+    """端口列表多声明（ref 形态 `input C, R, D`）：单分隔。"""
+    out = _fmt(
+        "module n (\n"
+        "    input clk, rst_n,\n"
+        "    input C, R, D,\n"
+        "    output y\n"
+        ");\n"
+        "endmodule\n"
+    )
+    assert "clk, rst_n," in out
+    assert "C, R, D," in out
+    assert not _DRIFT_RE.search(out)
 
 
 # ── 正常单声明 ──

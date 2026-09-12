@@ -56,6 +56,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **多声明器重组漂移（formatter，P1.5 缺陷）**：`column_align` 重组多声明行时，
+  后续声明符不再逐单元补 `width+1` 列前缀（`_join_semantic(pad_columns=False)`），
+  改 `, ` 单分隔紧跟——名字列不再随上一单元长度累积漂移；首单元仍参与列对齐
+  （ref 基准风格 `reg dout, din_0, din_1;`，与 Verible 单行多声明形态一致）。
+  实测真实语料漂移（`,\s{4,}<ident>`）**226 → 0**（simcells 146 / cells_sim 46 /
+  picorv32 28 / tv80 6；更严格的 `,\s{2,}` 同为 0）。门禁补
+  `test_column_align.py` 重组输出断言（旧用例只测提取，e2e `_strip_all` 抹空白
+  天然失明）；全量 1814 passed / e2e FAIL 0 / 差分 136 文件 0 findings。
 - **linter choice 匹配的 trivia 泄漏**（`linter/checkers/matcher.py::_match_choice`）：
   试分支时起点会前移到首个非 trivia token，失败返回却沿用了这个**内部起点**，
   于是被跳过的 trivia 被上层当成"已消费"（`seq`/`repeat`/`optional` 的 `j > i`

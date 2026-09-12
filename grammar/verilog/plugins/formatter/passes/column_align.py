@@ -128,7 +128,8 @@ def _is_multidecl(rest: list[str]) -> bool:
     """检测一行多声明/多端口（括号外逗号分隔多个标识符，如 `reg a, b;`、
     `input clk, resetn,`）。行尾终结符逗号（`param = 1,`）不算。
 
-    当前语义列模型只支持单声明；多声明行直接跳过（保留原文），防丢名字。
+    单组提取（`_extract_semantic`）据此跳过（防丢名字）；多声明行的
+    逐单元对齐走 `_extract_semantic_multi`。
     """
     depth = 0
     for k, t in enumerate(rest):
@@ -248,6 +249,10 @@ def _extract_semantic_multi(tokens: list[str]) -> list[list[str]] | None:
     类型头（first/opt_type）只挂首单元，单元间 term 为逗号、行尾终结符
     归末单元，非首单元 indent 置空（重组时不重复缩进）。任一单元无法
     可靠解析 → 返回 None（整行跳过，保守防丢名字）。
+
+    重组形态（run_category_pass）：首单元参与列对齐（与单声明同）；后续
+    单元按 `, ` 单分隔紧跟（不参与填充）——ref 基准风格 `reg dout,
+    din_0, din_1;`，与 Verible 单行多声明形态一致。
     """
     if len(tokens) < 2:
         return None
@@ -309,7 +314,7 @@ def _extract_semantic_multi(tokens: list[str]) -> list[list[str]] | None:
     return out
 
 
-def _join_semantic(cols: list[str], widths: list[int]) -> str:
+def _join_semantic(cols: list[str], widths: list[int], pad_columns: bool = True) -> str:
     # 第 8 列为结尾终结符（,;），不参与对齐，直接追加
     term = cols[7] if len(cols) >= 8 else ""
     body = cols[1:7] if len(cols) >= 8 else cols[1:]
@@ -320,6 +325,13 @@ def _join_semantic(cols: list[str], widths: list[int]) -> str:
         # name 列从"内容起点"（前 3 列后）开始但不填充自身，
         # 终结符（`,`/`;`）紧跟 name（ref 端口/声明的 name 起始列对齐风格）
         if j <= 3:
+            if not pad_columns:
+                # 多声明行的后续声明单元：跳过列宽填充——前缀空列不再
+                # 补 `width+1` 空格（旧实现致名字列随上一单元长度漂移，
+                # 226 处实测）；非空列防御性保留（正常提取下恒空）。
+                if val:
+                    parts.append(val + " ")
+                continue
             if val:
                 parts.append(val + " " * (w - len(val) + 1))
             else:
@@ -347,8 +359,8 @@ def run_category_pass(
     groups = group_by_scope(lines, contexts, match_fn, break_distance)
     for group in groups:
         # 多单元提取（P1.5 多声明品类对齐）：多声明行拆多单元，全部单元
-        # 参与列宽计算；同行的单元重组时拼回一行（" ".join）——首单元带
-        # indent/类型头，后续单元 indent 为空，name 列同基准对齐
+        # 参与列宽计算（首单元的类型头列宽；后续空列随全组最宽值）；
+        # 重组时首单元参与对齐，后续单元 `, ` 单分隔（见下）。
         row_groups: list[list[list[str]]] = []
         valid: list[int] = []
         for idx in group:
@@ -365,8 +377,13 @@ def run_category_pass(
         _align_range_internal(rows)
         widths = compute_column_widths(rows, 5)
         for gi, idx in enumerate(valid):
-            joined = " ".join(
-                _join_semantic(c, widths) for c in row_groups[gi]
+            units = row_groups[gi]
+            # 重组：首单元带 indent/类型头、参与列对齐；后续声明单元以
+            # `, ` 单分隔紧跟（pad_columns=False——不参与填充，名字列不再
+            # 随上一单元长度漂移；ref 基准风格 / Verible 单行多声明形态）。
+            joined = _join_semantic(units[0], widths) + "".join(
+                " " + _join_semantic(c, widths, pad_columns=False)
+                for c in units[1:]
             )
             result[idx] = joined
     return result
