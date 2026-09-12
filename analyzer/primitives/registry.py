@@ -30,13 +30,19 @@ _primitives: dict[str, AnalyzerPrimitive] = {}
 
 
 def register_primitive(name: str, fn: AnalyzerPrimitive) -> None:
-    """注册一个分析器原语。
+    """注册一个分析器原语（幂等：同名同函数重复注册不报错）。
 
     Args:
         name: 原语名，TOML [RuleName.analyzer] 配置中引用。
         fn: 原语函数，签名见 AnalyzerPrimitive。
+
+    幂等理由：组件 handler 模块可被**补注册**（注册副作用一次性，但注册表
+    可能被外部清理——如测试隔离还原；见 plugin_loader 的 handler 缓存模型）。
+    同名但不同函数仍报错（真正的冲突）。
     """
     if name in _primitives:
+        if _primitives[name] is fn:
+            return
         raise ValueError(f"Analyzer primitive '{name}' 已注册")
     _primitives[name] = fn
 

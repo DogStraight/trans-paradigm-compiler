@@ -1,8 +1,8 @@
 """tests/e2e/test_check_accuracy.py — analyzer 规则检出准确度门禁（0.1.1 试水）。
 
-对 tests/e2e/samples/check_accuracy/ 下全部标注样本（26 case：15 正样例 +
-11 负样例，覆盖 P1.10 核心检查集 UN001/W104/W105/CC001/W106/LC001/
-NC012/NC013）跑 ProjectChecker，断言：
+对 tests/e2e/samples/check_accuracy/ 下全部标注样本（56 case：35 正样例 +
+21 负样例，覆盖 UN001 / W101-W106 / WC001 / W201-W202 / CC001 / LC001 /
+AW001-AW002 / NC012-NC013 / TP 族）跑 ProjectChecker，断言：
 
     recall = 100%   — 正样例期望规则码全部检出（漏检 = MISS）
     FP = 0          — 负样例零误报 + 正样例无期望外规则码

@@ -16,7 +16,13 @@
         "TP010",
         "TP011",
         "TP012",
-        "TP020"
+        "TP020",
+        "W101",
+        "W102",
+        "W103",
+        "WC001",
+        "AW001",
+        "AW002"
     ],
     "pos": {
         "UN001_unused_decl": {
@@ -226,6 +232,48 @@
                 "TP020"
             ],
             "desc": "同一接口实例被多个 impl 绑定（多驱动）应检出（TP020）"
+        },
+        "W101_unknown_module": {
+            "entry": "top.sv",
+            "expect": [
+                "W101"
+            ],
+            "desc": "实例化未找到定义的模块（定义文件缺失/模块名拼写错误）应检出"
+        },
+        "W102_unknown_port": {
+            "entry": "top.sv",
+            "expect": [
+                "W102"
+            ],
+            "desc": "端口连接名不存在应检出（related 链带模块定义处，跨文件）"
+        },
+        "W103_unknown_param": {
+            "entry": "top.sv",
+            "expect": [
+                "W103"
+            ],
+            "desc": "参数覆盖名不存在应检出"
+        },
+        "WC001_literal_to_param_port": {
+            "entry": "top.sv",
+            "expect": [
+                "WC001"
+            ],
+            "desc": "字面量连接参数化宽度端口（配置敏感死值）应检出"
+        },
+        "AW001_blocking_in_timing": {
+            "entry": "top.sv",
+            "expect": [
+                "AW001"
+            ],
+            "desc": "时序 always 内阻塞赋值应检出（AW 族默认关，评测显式启用）"
+        },
+        "AW002_mixed_assign": {
+            "entry": "top.sv",
+            "expect": [
+                "AW002"
+            ],
+            "desc": "同一 always 内同一信号混用 = 与 <= 应检出（组合块，不牵连 AW001）"
         }
     },
     "neg": {
@@ -292,6 +340,26 @@
         "TP_clean_same_role": {
             "entry": "top.sv",
             "desc": "同向 master impl + 完整 type 定义 → 零 TP 误报"
+        },
+        "W102_fully_connected": {
+            "entry": "top.sv",
+            "desc": "端口全连接（名字与定义一致）不应误报 W102"
+        },
+        "W103_valid_override": {
+            "entry": "top.sv",
+            "desc": "参数覆盖名合法不应误报 W103"
+        },
+        "WC001_clean_signal": {
+            "entry": "top.sv",
+            "desc": "参数化端口连信号（非字面量）不应误报 WC001"
+        },
+        "AW001_clean_nonblocking": {
+            "entry": "top.sv",
+            "desc": "时序 always 内非阻塞赋值不应误报 AW001"
+        },
+        "AW002_single_op": {
+            "entry": "top.sv",
+            "desc": "组合 always 纯阻塞赋值不应误报 AW002"
         }
     }
 }

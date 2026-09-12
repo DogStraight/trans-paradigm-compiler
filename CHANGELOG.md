@@ -167,6 +167,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   [--html OUT] [--json OUT]`。渲染器只做通用值树渲染（不认识具体键名，
   不引入插件知识）。测试 `tests/engine/pipeline/test_trace_report_html.py`。
 
+- **检查精度评测扩面（0.1.2 阶段 8 / T1）**：`eval_check_accuracy` 的 focus
+  补入已实现但未入评测的码——inst 族 `W101`/`W102`/`W103`/`WC001`（跨文件）
+  与 always 族 `AW001`/`AW002`（默认关，评测显式启用）。样本 26 → **56 case**
+  （35 正 / 21 负），recall **100%**（40 期望码全命中）+ FP **0** + parse_err 0。
+  顺带修正 `UN001_used_signal` 样本（时序块阻塞赋值 → 非阻塞，避免顺带触发
+  新启用的 AW001）。
+- **修复：组件 handler 注册面失同步（补注册）**：模块体已 exec 过（`sys.modules`
+  缓存不重跑）但注册表被外部清理（测试隔离还原 `/` 热重载）时，`[[transform.slots]]`
+  的加载期校验会误报"槽位未注册"。修：校验缺名时**补注册一次**（重新 exec 本组件
+  handlers），并把 `register_primitive` 改为**同名同函数幂等**（不同函数仍报冲突）。
+
 - **修复（5b-3c-2 回归）**：`slot_runner` 的 `result = "extra"` 误将 handler
   返回值接回 AST → `build_wrapper` 的 wrapper 模块被内联进主输出
   （`ref_spi_inf` 展开保真 0.43）。现改为**不接回**（额外产物由 handler 侧

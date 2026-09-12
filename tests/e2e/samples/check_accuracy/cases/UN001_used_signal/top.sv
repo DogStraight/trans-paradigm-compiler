@@ -18,6 +18,6 @@ module top (
         end
     end
     always @(posedge clk_i) begin
-        loop_i = loop_i + 1;
+        loop_i <= loop_i + 1;
     end
 endmodule

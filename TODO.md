@@ -49,12 +49,12 @@
 > 独到项批判吸收仅 svlint prefix 族已入（NC014-16）；自场景自定义规则范例 0。
 
 - [ ] **T1 重合核心集补全 + 强检扩面**：
+      - ✅ inst 族 W101/W102/W103/WC001 + always 族 AW001/AW002 已入评测
+        （focus 扩到 23 码，56 case：35 正 / 21 负，recall 100% + FP 0）
+      - 剩：NC001-011 / NC014-016 入评测（与 `test_name_convention.py` 分工核对
+        后按 kind 合并样本：一个 case 可期望多码）
       - 宏/指令卫生族（对标 Verilator REDEFMACRO / slang redef-macro /
-        svlint default_nettype——跨文件宏表）：是否进 0.1.1 待作者定
-      - eval_check_accuracy focus 扩到核心全集：inst 族 W101/W102/W103/WC001
-        + always AW001/AW002 + 相关 NC（NC001-11 / 14-16，与
-        test_name_convention.py 分工核对）——每新增码补 pos/neg case，
-        验收 recall=100% + FP=0
+        svlint default_nettype——跨文件宏表）：**待作者定**是否本版做
 - [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价，取舍清单待作者拍板）：
       - 零成本语法层候选：Verible 排版族（line-length/no-tabs）、svlint
         空格族（style_*）/ ANSI 头 / 参数 2-state——先定"落 linter 还是

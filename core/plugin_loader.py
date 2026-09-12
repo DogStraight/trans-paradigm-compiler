@@ -268,6 +268,12 @@ def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dic
                 f"[plugin] transform.slots 槽位名重复: {name!r} ({cdir})"
             )
         if name not in _transform_slots:
+            # 注册副作用是一次性的（模块体已 exec 过），但注册表可能被外部
+            # 清理（测试隔离还原 _transform_slots / 热重载）→ 两者失同步。
+            # 补注册一次（重新 exec 本组件 handlers；注册为幂等——
+            # register_transform_slot 覆盖式、register_primitive 同名同函数幂等）。
+            _reload_component_handlers(cdir, transform_meta.get("handlers", []))
+        if name not in _transform_slots:
             raise ValueError(
                 f"[plugin] transform.slots 槽位 {name!r} 未注册（须由 "
                 f"[transform].handlers 的模块 @register_transform_slot）({cdir})"
@@ -321,6 +327,24 @@ def get_transform_slot_decls() -> dict[str, dict]:
     for info in _loaded_components.values():
         merged.update(info.get("slot_decls", {}))
     return merged
+
+
+def _reload_component_handlers(cdir: str, handler_files: list[str]) -> None:
+    """强制重新执行组件 handler 模块（补注册副作用；调用方保证注册幂等）。
+
+    用于"模块体已 exec 但注册表被外部清理"的失同步场景——重 exec 会重跑
+    模块级 `@register_*`（slot 覆盖式；primitive 同名同函数幂等）。
+    """
+    for hf in handler_files or []:
+        hpath = os.path.join(cdir, hf)
+        if not os.path.isfile(hpath):
+            continue
+        mod_name = f"_comp_{os.path.basename(cdir)}_{hf.replace('.', '_')}"
+        spec = importlib.util.spec_from_file_location(mod_name, hpath)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[mod_name] = mod
+            spec.loader.exec_module(mod)
 
 
 def _load_transform_ctx_channels(cdir: str, transform_meta: dict) -> dict[str, dict]:
