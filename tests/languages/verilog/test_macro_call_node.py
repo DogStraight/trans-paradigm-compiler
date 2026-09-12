@@ -1,14 +1,21 @@
-"""宏边界节点化（0.1.2 阶段 2-A）：marker 标识符 → MacroCall 节点，输出不变。
+"""宏边界节点化（0.1.2 阶段 2-A）：锚节点 → MacroCall 节点，输出不变。
 
-展开阶段宏调用被替换为 `tpc_marker_N` 标识符；引擎在 parse 后按锚表把 Identifier
-节点改写为 MacroCall（带 `_macro_name`），使宏边界在 AST 结构化可见（P3.2 增量
-diff / P3.3 双向映射前提）。本阶段渲染/分析声明与 Identifier 对齐 → 输出不变。
+展开阶段宏调用被替换为带宏前缀的锚名（`` `<锚名> ``，锚名协议见
+core/token_protocol：保留前缀 + marker + 盐 + 序号）；引擎在 parse 后按锚表把
+锚节点改写为 MacroCall（带 `_macro_name`），使宏边界在 AST 结构化可见
+（P3.2 增量 diff / P3.3 双向映射前提）。本阶段渲染/分析声明与 Identifier
+对齐 → 输出不变。
 """
 import pytest
 
+from core.token_protocol import ANCHOR_MARK, RESERVED_PREFIX
 from pipeline import run_pipeline_on_source
+from preprocessor._expand import _load_config
 
 pytestmark = pytest.mark.smoke
+
+# 源码级宏前缀（`` ` ``）由语言配置给出，不是 token 类型前缀 macro.
+MACRO_TEXT_PREFIX, _ = _load_config()
 
 _SRC = (
     "module m;\n"
@@ -49,17 +56,32 @@ def test_macro_call_nodes_created() -> None:
     calls = _find(res["ast"], "MacroCall")
     assert len(calls) == 2, [c._macro_name for c in calls]
     assert {c._macro_name for c in calls} == {"W", "BODY"}
+    # 锚名形态：宏调用文本（宏前缀 + 保留前缀 + marker + 盐 + 序号）
     for c in calls:
-        assert c._macro_marker.startswith("tpc_marker_")
+        marker = c._macro_marker
+        assert marker.startswith(
+            f"{MACRO_TEXT_PREFIX}{RESERVED_PREFIX}{ANCHOR_MARK}_"
+        ), marker
+        # 盐（8 位十六进制）+ 序号：两处锚序号不同 → 锚名互不相同
+        tail = marker.rsplit("_", 1)[-1]
+        assert tail.isdigit(), marker
+    assert len({c._macro_marker for c in calls}) == 2
+
+
+def test_anchor_deterministic_per_source() -> None:
+    """同一源文本两次运行 → 锚名完全相同（盐可复现，非内置 hash()）。"""
+    first = {c._macro_marker for c in _find(_run()["ast"], "MacroCall")}
+    second = {c._macro_marker for c in _find(_run()["ast"], "MacroCall")}
+    assert first == second
 
 
 def test_no_plain_identifier_left_for_marker() -> None:
-    """marker 不再以普通 Identifier 形态留在 AST（边界已节点化）。"""
+    """锚不再以普通 Identifier 形态留在 AST（边界已节点化）。"""
     res = _run()
     leftover = [
         n
         for n in _find(res["ast"], "Identifier")
-        if str(getattr(n, "content", "")).startswith("tpc_marker_")
+        if RESERVED_PREFIX in str(getattr(n, "content", ""))
     ]
     assert leftover == []
 

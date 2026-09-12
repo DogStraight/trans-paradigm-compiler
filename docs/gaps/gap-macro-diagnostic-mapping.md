@@ -76,6 +76,10 @@
 - 另：`_stage_expand`（pipeline）也会把 `ctx.source` 换成展开后文本，
   `_stage_lint` 扫的是展开后文本——但 `tpc lint` 命令不经过管线（直扫 raw），
   故诊断行号回源只需修 analyzer 侧。
+  （2026-09-13 补：`_stage_lint` 现按 ADR-0017 决策 4 把**锚表**交给 linter
+  （`scanner.scan(source, anchors=ctx.restore_stack)`），linter 在 token 层把锚
+  换成展开体——展开体 token 的位置映射到**锚位置**，故展开路径诊断的落点是锚位
+  （展开后坐标），与本档 (a)/(b) 的"回源"目标是同一张表要解决的问题。）
 
 ### 切片（每片独立可验证）
 

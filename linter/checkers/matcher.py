@@ -612,6 +612,12 @@ class RuleMatcher:
         limit: int,
         strict: bool,
     ) -> int:
+        # 失败路径必须返回**原位置**：试分支的内部起点会前移到首个非 trivia
+        # token（见下），若失败时沿用该内部位置，被跳过的 trivia 就被计入
+        # "已消费"——上层 seq/repeat/optional 的 `j > i` 判据全部据此误判为
+        # 推进，下游随之错位（如 Identifier 的 production 含 token 备选后，
+        # 端口列表把逗号后的换行当消费，第二个端口项被跳过 → 块头提前收尾）。
+        orig = i
         best_i = i
         best_errs: list | None = None
         # 先跳过 trivia：choice 从第一个非 trivia token 开始尝试分支，避免
@@ -630,7 +636,7 @@ class RuleMatcher:
                         code="phase-statement",
                     )
                 )
-            return i
+            return orig
         for alt in node.get("alternatives", []):
             trial: list = []
             j = self.match(tokens, i, alt, trial, limit, strict=False)
@@ -659,7 +665,7 @@ class RuleMatcher:
                     )
                 )
                 return j + 1
-        return i
+        return orig
 
     def _match_optional(
         self,

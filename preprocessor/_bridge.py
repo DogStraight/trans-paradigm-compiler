@@ -167,12 +167,17 @@ def restore_anchors(
                 result = result.replace(marker_text, fragment)
                 changed = True
             elif mode == "token":
-                # 唯一 token（tpc_marker_N）：随 AST 确定渲染（标识符节点），
-                # 全词匹配（\b）精确还原——避免 tpc_marker_1 误匹配 tpc_marker_10
-                # 的子串；多锚互不干扰，不依赖注释通道启发式。
-                pat = re.compile(rf"\b{re.escape(marker)}\b")
+                # 唯一 token 锚（`<锚名>，见 core/token_protocol）：随 AST 确定
+                # 渲染，整串匹配精确还原。锚名以宏前缀开头（非词字符），
+                # `\b` 在其前不成立（需前一字符是词字符）——改用负向环视
+                # (?!\w) 排除"锚名是更长锚名前缀"（..._1 不误匹配 ..._10）。
+                # 唯一性守卫：锚文本在结果中必须恰好出现一次才回插——0 次
+                # 说明渲染路径已用残片直出（MacroCall._macro_fragment），
+                # 不动作；多次说明锚名不唯一（用户文本里恰含锚名），保留
+                # 占位可见，不做静默错还原。
+                pat = re.compile(rf"{re.escape(marker)}(?!\w)")
                 new_result, count = pat.subn(fragment, result)
-                if count:
+                if count == 1:
                     result = new_result
                     changed = True
             else:  # sync

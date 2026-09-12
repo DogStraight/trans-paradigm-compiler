@@ -5,7 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **linter choice 匹配的 trivia 泄漏**（`linter/checkers/matcher.py::_match_choice`）：
+  试分支时起点会前移到首个非 trivia token，失败返回却沿用了这个**内部起点**，
+  于是被跳过的 trivia 被上层当成"已消费"（`seq`/`repeat`/`optional` 的 `j > i`
+  判据全部据此误判），下游 token 流错位。表现为：任一规则 production 含 token
+  备选（如 `Identifier` 声明 `["id|macro.call"]`）后，真实代码在**宏无关**的端口
+  列表上开始误报（`module m (input clk, output data);` → 2 条 `phase-statement`，
+  块头匹配提前收尾、端口项被当语句）。修法：失败路径返回原位置。
+  实测：536 例 linter+verilog 回归全绿；全量 1774 passed。
+
 ### Added
+
+- **宏展开锚名协议 + linter 锚窗口拼接**（ADR-0017 决策 3/4）：展开期锚改为
+  **宏调用文本形态**（`` `<锚名> ``，lexer 自然归为 `macro.call`——不为锚新造
+  词法形态），锚名 = 保留前缀 `__tpc_` + `marker` + **源文本 sha256 盐** + 序号
+  （`core/token_protocol`；不用内置 `hash()`：PYTHONHASHSEED 会破坏跨进程可复现；
+  还原侧加**唯一性守卫**：命中次数 ≠ 1 则不回插，保留占位可见）。linter 入口按
+  锚表做 **token 级窗口拼接**（`linter/scanner.py::_splice_anchor_windows`）：
+  锚不进检查（否则 P0 报未定义宏）、展开体进检查（判"宏展开是否符合语法"）。
+  为什么不是文本级展开：文本替换跨注释边界，宏体自带行尾注释时会吞掉宏调用
+  **同行的后续 token**（实测 darkriscv 81 条 `phase-unrecognized` → token 拼接 0 条）。
+  语法侧 `Identifier` 接受 `macro.call`，一处数据改动覆盖 ≈83 个标识符槽位。
+  测试 `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/守卫）、
+  `tests/engine/linter/test_anchor_splice.py`（拼接语义）、
+  `tests/languages/verilog/test_macro_body_comment.py`（体注释不吞后续 token）。
 
 - **语言包↔引擎契约（`[engine] api`，缺口队列 ⑤）**：`grammar/<lang>/tpc.toml`
   可声明 `[engine] api = "0.1"`（该包构建所依据的引擎 API 线）；引擎 major.minor

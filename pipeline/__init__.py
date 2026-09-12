@@ -399,10 +399,15 @@ def _stage_prescan(ctx: _PipelineContext) -> tuple[Any, Any]:
 
 
 def _stage_lint(ctx: _PipelineContext) -> bool:
-    """前置语法检查（失败时截断管线）。返回是否通过。"""
+    """前置语法检查（失败时截断管线）。返回是否通过。
+
+    检查对象是展开后的 ctx.source，并把锚表交给 linter：展开后宏调用已是锚
+    （`` `<锚名> ``），linter 按锚表在 token 层拼接展开体（锚不进检查、展开体
+    进检查）——即"检查完全展开形态"（ADR-0017 决策 1）。
+    """
     if ctx.no_lint:
         return True
-    lint_errors = ctx.linter.scan(ctx.source)
+    lint_errors = ctx.linter.scan(ctx.source, anchors=ctx.restore_stack)
     if lint_errors:
         for err in lint_errors:
             ctx.log(

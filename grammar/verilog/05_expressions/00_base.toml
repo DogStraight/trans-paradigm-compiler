@@ -72,10 +72,14 @@ ref = "value"
 # Verilog 标识符，匹配 [a-z_A-Z][a-z_A-Z0-9]*。
 # 是表达式中最基本的原子节点。
 # analyzer 中 identifier_ref = true 表示此节点参与符号引用分析。
+#
+# 备选 macro.call：宏展开锚（`<锚名>，见 core/token_protocol）在 lex 阶段即
+# 归为宏 token，标识符槽位一并接受——宏落在语法位（类型/位宽等）时不必逐
+# 槽位声明 @MacroCall（宏边界进 AST 由管线按锚表改写，见 pipeline 宏边界节点化）。
 
 [Identifier.parser]
 is_atom = true
-production = ["id"]
+production = ["id|macro.call"]
 inline = false
 
 [Identifier.parser.node]
