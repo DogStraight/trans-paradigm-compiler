@@ -59,13 +59,20 @@
 
 
 - [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) 行映射**跨两级**
-      ——`scan_directives`（raw→clean，条件编译删行，实测 18→14）与
-      `expand_tokens`（clean→展开后，多行宏体拉长）各产一张表后复合；
+      ——`scan_directives`（raw→clean）与 `expand_tokens`（clean→展开后）各产一张表后复合；
       `_expand_source` 返回复合表 → `FileResult` 存表 → 2 处诊断
       （`_syntax_diag`/`_semantic_diag`）换算 + 不可映射时保守回退；随后
-      (b) 由同一张表反查宏归因（诊断加 `"macro": "<NAME>"`）。**测试为重心**
-      （单行/多行/嵌套/带参/条件编译 × 映射断言）；不做列级。
-      验收：各形态行号正确 + 不可映射明确回退 + 全量门禁绿。
+      (b) 由同一张表反查宏归因（诊断加 `"macro": "<NAME>"`）。**测试为重心**；不做列级。
+      **硬约束（gap 档明载）**：映射可能不准时，宁保留“展开后行号”（诚实）也不给错误的
+      “源行号”——故 raw→clean 那一级必须与接线**同批落地**，不半接。
+      切片进度：**① ✅ expand 级映射**（`expand_tokens` 第 4 返回值 `line_map` =
+      展开行→clean 行；已接消费者：管线 lint 日志回源；`test_macro_regions` 含断言）。
+      **② 待做（机制已探明，下轮直接动手）**：
+      - `scan_directives` 的 `clean_source = "\n".join(ctx["_inject_lines"])` —— 每条原始行
+        经分支（directive 处理 / 行首宏 / inactive 分支收集）归入 `_inject_lines`；
+        续行（行尾 `\`）多行合一 → 映射是**多→1**，需在每条原始行处理处记一次。
+      - 复合后接 check 路径：`FileResult` 加字段 + `_syntax_diag`/`_semantic_diag` 换算。
+      验收：各形态行号正确（单行/多行/嵌套/带参/条件编译 × 断言）+ 不可映射明确回退。
 - [ ] **⑥（最后）formatter 多声明器正确对齐**（`gap-formatter-line-behavior`
       item4，已定：**实现正确对齐**，不走保守回退）：重组时按「名字列同基准」
       计算后缀填充（参照 Verible kDataDeclaration），消除真实语料 226 处漂移。
