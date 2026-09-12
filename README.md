@@ -130,6 +130,7 @@ tpc lint input.v --json      # LSP-compatible JSON diagnostics
 tpc check input.v            # cross-file semantic check (syntax then semantic stages)
 tpc check input.v --json     # machine-readable diagnostics (code/severity/range)
 tpc check input.v --html report.html   # human-readable HTML report
+tpc trace input.v --html trace.html     # pipeline unit trace as HTML
 tpc expand input.v           # expand macros + transform (per [commands].expand)
 tpc config dump              # show every config key's source (file + section)
 ```

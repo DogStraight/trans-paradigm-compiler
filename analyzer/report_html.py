@@ -21,7 +21,9 @@ _SEVERITY_META: dict[int, tuple[str, str]] = {
     3: ("info", "sev-info"),
 }
 
-_CSS = """\
+# 报告样式（共享给其它报告视图：pipeline/report_html.py 的时点轨迹页）——
+# 同一视觉语言（badge / file 卡片 / table），单一样式来源避免重复维护。
+REPORT_CSS = """\
 :root { color-scheme: light dark; }
 body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 2rem;
        max-width: 1000px; }
@@ -144,7 +146,7 @@ def render_html_report(report: dict) -> str:
     title = "tpc check report"
     return (
         "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
-        f"<title>{title}</title><style>{_CSS}</style></head><body>"
+        f"<title>{title}</title><style>{REPORT_CSS}</style></head><body>"
         f"<h1>{title}</h1>"
         f'<div class="summary">{summary}</div>'
         f"{body_html}"

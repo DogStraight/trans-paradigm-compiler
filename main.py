@@ -133,6 +133,71 @@ def _cmd_expand(args: argparse.Namespace) -> None:
     _cmd_run_pipeline("expand", args)
 
 
+def _cmd_trace(args: argparse.Namespace) -> None:
+    """tpc trace — 时点管线执行轨迹（ADR-0015 §2 可视化产物）。
+
+    跑完整管线（参数同 [commands].expand），取 `ctx.result["trace"]`：每单元
+    一条（时点 index / kind / impl / 黑板键 / 插件自述 artifacts）。
+    默认打印文本摘要；`--html`/`--json` 落文件（HTML 与 `tpc check --html`
+    同一视觉语言）。
+    """
+    if not os.path.isfile(args.file):
+        print(f"[fatal] File not found: {args.file}", file=sys.stderr)
+        sys.exit(1)
+
+    from pipeline import run_pipeline_on_source
+    from pipeline.report_html import render_trace_html
+
+    cmd = _resolve_command("expand")
+    with open(args.file, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    result = run_pipeline_on_source(
+        source=source,
+        input_path=args.file,
+        out_dir=None,
+        quiet=True,
+        expand_macros=cmd.get("preprocess", True),
+        analyzer_enabled=cmd.get("analyze", True),
+        transform_enabled=cmd.get("transform", True),
+        renderer_enabled=cmd.get("render", True),
+        no_lint=not cmd.get("lint", True),
+        parse_enabled=cmd.get("parse", True),
+        format_output=cmd.get("plugins", {}).get("formatter", False),
+    )
+    trace = result.get("trace") or []
+
+    if args.html:
+        with open(args.html, "w", encoding="utf-8") as fh:
+            fh.write(render_trace_html(trace, source_path=args.file))
+        print(f"[trace] html: {args.html}")
+    if args.json:
+        import json
+
+        with open(args.json, "w", encoding="utf-8") as fh:
+            json.dump({"trace": trace}, fh, ensure_ascii=False, indent=2)
+        print(f"[trace] json: {args.json}")
+    if not args.html and not args.json:
+        for e in trace:
+            bits = []
+            if e.get("impl"):
+                bits.append(f"impl={e['impl']}")
+            if e.get("slot"):
+                bits.append(f"slot={e['slot']}")
+            if e.get("extra_added"):
+                bits.append("黑板+" + ",".join(e["extra_added"]))
+            if e.get("artifacts"):
+                bits.append("artifacts:" + ",".join(e["artifacts"].keys()))
+            print(
+                f"#{e.get('index')} {e.get('name')} [{e.get('kind')}] "
+                + " ".join(bits)
+            )
+
+    if not result["success"]:
+        print(f"[error] {result.get('error', 'Unknown error')}", file=sys.stderr)
+        sys.exit(1)
+
+
 def _cmd_lint(args: argparse.Namespace) -> None:
     """tpc lint — run syntax checker on a source file."""
     from linter.scanner import LinterScanner
@@ -400,6 +465,18 @@ def _register_subparsers(sub, allow=None) -> None:
             "--html", metavar="FILE", help="Write an HTML report to FILE"
         )
 
+    if want("trace"):
+        p_tr = sub.add_parser(
+            "trace", help="Pipeline unit trace (analyze/transform/check) as text or HTML"
+        )
+        p_tr.add_argument("file", help="Path to source file")
+        p_tr.add_argument(
+            "--html", metavar="FILE", help="Write an HTML report to FILE"
+        )
+        p_tr.add_argument(
+            "--json", metavar="FILE", help="Write trace JSON to FILE"
+        )
+
     if want("pipeline"):
         p_pipe = sub.add_parser("pipeline", help="Run a test case (dev)")
         p_pipe.add_argument("test_name", nargs="*", help="Test case name (e.g., counter)")
@@ -418,6 +495,7 @@ def _dispatch(args) -> None:
     dispatch = {
         "format": _cmd_format,
         "expand": _cmd_expand,
+        "trace": _cmd_trace,
         "lint": _cmd_lint,
         "check": _cmd_check,
         "pipeline": _cmd_pipeline,

@@ -158,6 +158,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/languages/verilog/test_comment_body_head.py`；记录
   `docs/gaps/gap-renderer-comment-fidelity.md`。
 
+- **时点轨迹 HTML 报告（`tpc trace --html`）**：新增 `pipeline/report_html.py`
+  （`render_trace_html`）——吃 `ctx.result["trace"]`（ADR-0015 §2 可视化产物），
+  渲染单文件 HTML（内联 CSS、零依赖）；与 `tpc check --html` 同一视觉语言
+  （`analyzer/report_html.REPORT_CSS` 提为共享常量，单一样式来源）。页面 =
+  每单元卡片（时点/`kind` 徽标/`impl`/黑板键）+ **artifacts** 自述
+  （槽位调用计数、映射表行来源链）。新增 CLI 子命令 `tpc trace FILE
+  [--html OUT] [--json OUT]`。渲染器只做通用值树渲染（不认识具体键名，
+  不引入插件知识）。测试 `tests/engine/pipeline/test_trace_report_html.py`。
+
 - **修复（5b-3c-2 回归）**：`slot_runner` 的 `result = "extra"` 误将 handler
   返回值接回 AST → `build_wrapper` 的 wrapper 模块被内联进主输出
   （`ref_spi_inf` 展开保真 0.43）。现改为**不接回**（额外产物由 handler 侧

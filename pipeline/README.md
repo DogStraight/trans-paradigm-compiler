@@ -9,6 +9,7 @@
 | `__init__.py` | 管线编排（`run_pipeline_on_source`，阶段序列化执行） |
 | `schedule.py` | 编排调度：pass 声明 + 时点序列器 + 调度构建 |
 | `units.py` | 加工单元实例 + 统一时点生成（`[pipeline.units.*]` 声明 → 单元序列） |
+| `report_html.py` | 时点轨迹 HTML 报告（`tpc trace --html`，与 check 报告同一视觉语言） |
 
 ## 加工单元（units，ADR-0015 §1）
 
@@ -49,3 +50,16 @@ after = "analyze"
 来源：插件单元取**插件注册时的声明**（`register_plugin(produces=..., requires=...)`，
 见 `transform/README.md`）；内置执行器取 `_BUILTIN_UNIT_CONTRACTS`。
 **无声明 = 不校验**（可选能力）；插件不管时点，时点只在本节配置里编排。
+
+### 时点轨迹报告（可视化产物）
+
+`tpc trace FILE [--html OUT] [--json OUT]`：跑完整管线后取 `ctx.result["trace"]`
+（ADR-0015 §2），默认打印文本摘要；`--html` 落单文件 HTML（内联 CSS、零依赖），
+与 `tpc check --html` 同一视觉语言（共享 `analyzer/report_html.REPORT_CSS`）。
+
+页面内容 = 每单元一张卡片（时点 `#index` / `name` / `kind` 徽标 / `impl` /
+黑板新增键） + **artifacts**（插件 `describe()` 自述的自由结构：`slot_runner`
+的槽位调用计数、`SemanticMappingPlugin` 的映射表行数与**行来源链**，如
+`spi.slave > invert(spi.master) > #miso`）。渲染器只做**通用值树渲染**
+（dict → 表格 / list-of-dict → 带表头表格 / 深层 dict → 紧凑缩进行），
+不认识任何具体键名——不引入插件/语言知识（同 TOML 规则姿态）。
