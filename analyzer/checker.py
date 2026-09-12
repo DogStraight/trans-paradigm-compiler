@@ -221,14 +221,29 @@ class ProjectChecker(_StructureBase):
         """展开坐标（0-based）→ 原始源坐标（0-based）；无表/不可映射时原样保留。
 
         行表来自 ``_expand_source`` 的两级复合（展开→clean→原始）；None/越界
-        一律回退展开行号——映射可能不准时宁保留诚实偏移，不给错误的源行号
-        （gap-macro-diagnostic-mapping 硬约束）。
+        一律回退展开行号——映射可能不准时宁保留诚实偏移，不给错误的源行号。
         """
         lm = fr.line_map
         if not lm or line0 is None or not (0 <= line0 < len(lm)):
             return line0
         src = lm[line0]
         return src - 1 if src is not None else line0
+
+    @staticmethod
+    def _macro_of_line(fr: FileResult, line0: int | None) -> str:
+        """诊断行（展开坐标 0-based）落在某宏展开区间 → 宏名；否则空串。
+
+        区间表由 `_expand_source` 在语义展开时换算（展开行区间 + 宏调用
+        原始行）；未展开/顿路径无表 → 恒空。归因是**行级**的（宏体多行
+        则其内诊断均归该宏）。
+        """
+        if line0 is None or not fr.macro_regions:
+            return ""
+        line1 = line0 + 1
+        for r in fr.macro_regions:
+            if r["line_start"] <= line1 <= r["line_end"]:
+                return str(r["name"])
+        return ""
 
     @staticmethod
     def _syntax_diag(fr: FileResult, d) -> dict:
@@ -246,7 +261,7 @@ class ProjectChecker(_StructureBase):
             }
         else:
             rng = None
-        return {
+        out = {
             "stage": "syntax",
             "file": fr.path,
             "severity": 1,
@@ -254,6 +269,10 @@ class ProjectChecker(_StructureBase):
             "message": d.message,
             "range": rng,
         }
+        macro = ProjectChecker._macro_of_line(fr, span[0].line) if span else ""
+        if macro:
+            out["macro"] = macro
+        return out
 
     @staticmethod
     def _semantic_diag(fr: FileResult, d) -> dict:
@@ -282,6 +301,10 @@ class ProjectChecker(_StructureBase):
             "level": d.level,
             "range": rng,
         }
+        if line is not None and same_file:
+            macro = ProjectChecker._macro_of_line(fr, (line - 1) if line else 0)
+            if macro:
+                out["macro"] = macro
         related = []
         for msg, rnode in d.related:
             rl = getattr(rnode, "_pos_line", None)

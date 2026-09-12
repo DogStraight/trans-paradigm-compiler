@@ -66,7 +66,6 @@
 | `gap-language-pack-scope.md` | 原 known_limitations | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |
 | `gap-semantic-elaboration-boundaries.md` | 原 known_limitations | 语义/插件契约（elaboration/单例/版本） |
 | `gap-verification-engineering.md` | 原 known_limitations | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
-| `gap-macro-diagnostic-mapping.md` | TODO.md「0.1.2 目标」 | 宏展开与诊断位置对应（行号回源 + 宏归因，成本已评估） |
 
 > **2026-09-12 全员实测体检**：十档逐条实测核对（非照文档推断），状态修正已
 > 就地落在每档 `- 状态：`；实测确认仍开放且可动手的六项已按序进入

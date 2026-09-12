@@ -37,9 +37,6 @@
       全绿（e2e 98 组 FAIL 0 / lint recall 31-31 / check 34-34 / 差分 findings 0）；
       ✅ transform 展开路径注释漂移已修（`join` 拆段加判据）；剩 覆盖率门禁
       （发布时跑，串行 ~32min）
-- [ ] **检查链宏位置映射**（2026-09-12 识别）：(a) 诊断行号回源（映射表 + 保守
-      回退，**测试为重心**）；(b) 诊断宏归因（依赖 (a)，由同一张表反查）。
-      现状/成本账/切片见 `docs/gaps/gap-macro-diagnostic-mapping.md`
 
 ## 缺口闭环队列（2026-09-12 体检后立项，逐项完成）
 
@@ -51,29 +48,10 @@
 > 属多周特性，留 ROADMAP P2.6）。编号是 ID 不是顺序，完成的不重编。
 >
 > **执行顺序（按难度易→难，2026-09-13 实测排序）**：**③ → ② → ⑥**
-> （①④⑤ 已闭环；⑥ 按作者指定排最后）。③ 于 2026-09-13 先以"槽位声明"落地后
-> **被推翻重开**（实测覆盖率 54/135 vs 撤销后 50/135——槽位机制只买到 4 个位置，
-> 且部分槽位会静默错渲染），新形态 = 外层展开 + 渲染侧 raw 拼接（ADR-0017 决策 2/3/4）。
-> ② 实测**最大**（行映射跨 `_join_continuation_lines` + `scan_directives`
-> + `expand_tokens` 三处溯源，非原估一张表）。
+> （①④⑤ 已闭环；③、② 已于 2026-09-13 闭环，历史在 git log + CHANGELOG；
+> 剩 ⑥，按作者指定排最后）。
 
 
-- [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) 行映射**跨两级**
-      ——`scan_directives`（raw→clean）与 `expand_tokens`（clean→展开后）各产一张表后复合；
-      `_expand_source` 返回复合表 → `FileResult` 存表 → 2 处诊断
-      （`_syntax_diag`/`_semantic_diag`）换算 + 不可映射时保守回退；随后
-      (b) 由同一张表反查宏归因（诊断加 `"macro": "<NAME>"`）。**测试为重心**；不做列级。
-      **硬约束（gap 档明载）**：映射可能不准时，宁保留“展开后行号”（诚实）也不给错误的
-      “源行号”——故 raw→clean 那一级必须与接线**同批落地**，不半接。
-      切片进度：**① ✅ expand 级映射**（`expand_tokens` 第 4 返回值 `line_map` = 展开行→clean 行；
-      已接消费者：管线 lint 日志回源；`test_macro_regions` 含断言）。
-      **② ✅ scan 级映射 + check 接线（2026-09-13）**：`scan_directives` 第 7 返回值
-      `clean_to_raw`（行+行号对账本，覆盖续行合并/条件压缩/include 不可映射）；
-      `_expand_source` 两级复合 → `FileResult.line_map` → `_syntax_diag`/`_semantic_diag`
-      换算 + 不可映射保守回退；形态覆盖测试 `test_scan_line_map.py`（6）/
-      `test_diag_line_map.py`（4）。**剩 (b) 宏归因**（诊断加 `"macro": "<NAME>"`，
-      由区间表反查）。验收：各形态行号正确（单行/多行/嵌套/带参/条件编译 × 断言）
-      + 不可映射明确回退。
 - [ ] **⑥（最后）formatter 多声明器正确对齐**（`gap-formatter-line-behavior`
       item4，已定：**实现正确对齐**，不走保守回退）：重组时按「名字列同基准」
       计算后缀填充（参照 Verible kDataDeclaration），消除真实语料 226 处漂移。

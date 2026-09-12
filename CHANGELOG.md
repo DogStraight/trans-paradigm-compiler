@@ -14,6 +14,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   宏/条件编译文件的诊断行号从“展开后行号”回到**原始源行号**；不可映射时保守
   回退展开行号（不给错误回填）。管线 lint 日志行号同步两级回源。实测：7 处
   调用点同步；`ifdef` 压缩/续行合并/include 三类形态断言全绿。
+- **诊断宏归因（check 链，P3.3 (b)）**：`_expand_source` 把宏区间表
+  （`expand_tokens` semantic 产出的字符区间）换算为**展开行区间**（+ 宏调用
+  原始行）存 `FileResult.macro_regions`；`_syntax_diag`/`_semantic_diag` 对落在
+  宏展开区间的诊断加 `"macro": "<NAME>"` 字段——宏体触发的诊断可按宏归类/
+  抑制，调用行锚点供 IDE 跳转。未展开/顿路径无表 → 不产字段。
 - **解析侧改吃真展开**（2026-09-13）：解析输入由保真锚形态切到 `expand_tokens(semantic=True)`
   的展开文本——语法结构直接由展开文本判定（类型位宏 `` input `NT d `` 不再需要任何
   语法槽位），宏调用原文由**区间表 + `_verbatim_text`** 挂在覆盖节点上供渲染还原

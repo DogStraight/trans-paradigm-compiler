@@ -21,6 +21,7 @@
 Doc: analyzer/semantic_checks.md（跨文件语义检查）
 """
 
+import bisect
 import os
 import re
 from dataclasses import dataclass, field
@@ -113,6 +114,10 @@ class FileResult:
     # 映射（include 拼接行）；空表 = 未展开（诊断行号原样）。两级复合：
     # scan_directives（原始→clean）+ expand_tokens（clean→展开后）。
     line_map: list = field(default_factory=list)
+    # 宏区间（语义展开）：[{name, line_start, line_end, call_line}]——宏体铺进
+    # 文本的展开行区间（1-based）+ 宏调用原文行（1-based，不可映射 None）；
+    # 诊断归因（加 "macro" 字段）反查用。顿路径（非 semantic）空表。
+    macro_regions: list = field(default_factory=list)
 
 
 # ── 引擎 ─────────────────────────────────────────────────
@@ -184,9 +189,9 @@ class _StructureBase:
         # 宏展开（真实工程含 `ifdef/`define；对齐 run_pipeline 语义——
         # scan_directives 提取宏表 + expand_tokens 纯文本展开，lex/lint/
         # parse 全在展开后文本上）。无宏文件空表零影响。同时接收行映射
-        # （展开行→原始源行），供两阶段诊断回源。
+        # （展开行→原始源行）与宏区间表（展开行区间，诊断归因用）。
         if self._expand_macros:
-            source, fr.line_map = self._expand_source(source, path)
+            source, fr.line_map, fr.macro_regions = self._expand_source(source, path)
 
         # 阶段 1：语法检查（token 级）。有错 → 语义阶段跳过（用户决策）。
         fr.lint_diags = shared["linter"].scan(source)
@@ -232,15 +237,17 @@ class _StructureBase:
         return fr
 
 
-    def _expand_source(self, source: str, path: str) -> tuple[str, list]:
+    def _expand_source(self, source: str, path: str) -> tuple[str, list, list]:
         """宏展开（scan_directives 提取宏表 + expand_tokens 纯文本展开）。
 
         与 run_pipeline 的 _stage_macro_scan/_stage_expand 同语义；无宏
-        文件空表 → 原样返回。返回 (展开文本, 行映射)：行映射 =
+        文件空表 → 原样返回。返回 (展开文本, 行映射, 宏区间表)：行映射 =
         **展开行（0-based）→ 原始源行（1-based）**，由两级变换的行表复合
         （scan_directives 删条件编译行 → clean；expand_tokens 铺多行宏体
         → 展开后）；不可映射（include 拼接行）为 None，消费方保守回退
-        展开行号，不做错误回填（gap-macro-diagnostic-mapping）。
+        展开行号，不做错误回填（映射可能不准时宁保留诚实偏移）。宏区间表
+        （语义展开时 = _macro_line_spans 产出）：宏体铺进的展开行区间 +
+        宏调用原始行，诊断归因（加 "macro" 字段）反查用。
         """
         try:
             from preprocessor import expand_tokens, scan_directives
@@ -256,17 +263,49 @@ class _StructureBase:
             if macro_table:
                 # semantic=True：语句体宏展开宏体（check 需语义，不要保真锚
                 # marker——否则宏体不可分析 + marker 被 W002 误报）
-                clean, _, _, exp_to_clean = expand_tokens(
+                clean, _, regions, exp_to_clean = expand_tokens(
                     clean, macro_table, func_macros=func_macros, semantic=True
                 )
                 exp_to_raw = [
                     clean_to_raw[c - 1] if 1 <= c <= len(clean_to_raw) else None
                     for c in exp_to_clean
                 ]
-                return clean, exp_to_raw
-            return clean, clean_to_raw
+                spans = self._macro_line_spans(clean, regions, clean_to_raw)
+                return clean, exp_to_raw, spans
+            return clean, clean_to_raw, []
         except Exception:  # noqa: BLE001 — 展开失败回退原文（lint 兜底）
-            return source, []
+            return source, [], []
+
+    @staticmethod
+    def _macro_line_spans(text: str, regions: list, clean_to_raw: list) -> list:
+        """宏区间（字符偏移）→ 展开行区间（诊断宏归因用）。
+
+        regions 来自 expand_tokens(semantic=True)：offset/end_offset 为展开
+        文本的绝对字符偏移。行号由行首偏移表二分求得；call_line = 宏调用
+        原文行（clean 坐标经行表回源；不可映射为 None）。
+        """
+        line_starts = [0]
+        line_starts += [i + 1 for i, ch in enumerate(text) if ch == "\n"]
+        out = []
+        for r in regions:
+            start = bisect.bisect_right(line_starts, r["offset"])
+            tail = r["end_offset"] - 1 if r["end_offset"] > r["offset"] else r["offset"]
+            end = bisect.bisect_right(line_starts, tail)
+            src_line = r.get("src_line")
+            call_line = (
+                clean_to_raw[src_line - 1]
+                if isinstance(src_line, int) and 1 <= src_line <= len(clean_to_raw)
+                else None
+            )
+            out.append(
+                {
+                    "name": r["name"],
+                    "line_start": start,
+                    "line_end": end,
+                    "call_line": call_line,
+                }
+            )
+        return out
 
 
     def _elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:

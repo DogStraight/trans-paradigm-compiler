@@ -5,7 +5,6 @@
 （多→1，含 inactive 分支丢弃）、include 拼接行（None 不可映射）。
 
 Doc: preprocessor/_expand.py::scan_directives
-Doc: docs/gaps/gap-macro-diagnostic-mapping.md
 """
 
 from preprocessor._expand import scan_directives

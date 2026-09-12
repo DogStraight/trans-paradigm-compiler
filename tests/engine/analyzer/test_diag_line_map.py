@@ -1,12 +1,12 @@
-"""宏/条件编译文件的诊断行号回源（TODO ② (a)）。
+"""宏/条件编译文件的诊断行号回源与宏归因（TODO ② (a)+(b)）。
 
 两级复合链：scan_directives（原始→clean，条件压缩删行）→ expand_tokens
 （clean→展开后，多行宏体拉长）→ FileResult.line_map → 两处诊断换算；
-不可映射时保守回退展开行号（不给错误的源行号）。
+不可映射时保守回退展开行号（不给错误的源行号）。宏归因：诊断行落在宏
+展开区间（FileResult.macro_regions）→ 诊断加 "macro": "<NAME>"。
 
 Doc: analyzer/structure.py::_expand_source
 Doc: analyzer/checker.py::_map_diag_line
-Doc: docs/gaps/gap-macro-diagnostic-mapping.md
 """
 
 import os
@@ -73,7 +73,7 @@ def test_multiline_macro_body_shifts_subsequent_lines(checker, tmp_path):
 
 
 def test_plain_file_lines_unchanged(checker, tmp_path):
-    """无宏无指令：行号原样（映射恒等链，不产生偏移）。"""
+    """无宏无指令：行号原样（映射恒等链，不产生偏移）；诊断无 macro 归因。"""
     src = tmp_path / "t.sv"
     src.write_text(
         "module m;\n"             # 1
@@ -83,6 +83,30 @@ def test_plain_file_lines_unchanged(checker, tmp_path):
     )
     report = checker.check(str(src))
     assert 2 in _un001_lines(report)
+    diags = [d for f in report["files"] for d in f["semantic"]]
+    assert diags and all("macro" not in d for d in diags)
+
+
+def test_macro_attribution_inside_body(checker, tmp_path):
+    """(b) 宏体内诊断：带 "macro" 归因，行号回源到宏调用行。"""
+    src = tmp_path / "t.sv"
+    src.write_text(
+        "`define DECL wire unused_in_macro;\n"  # 1
+        "module m;\n"                           # 2
+        "  `DECL\n"                             # 3 ← 宏调用（体在第 3 行展开）
+        "endmodule\n",                          # 4
+        encoding="utf-8",
+    )
+    report = checker.check(str(src))
+    hits = [
+        d
+        for f in report["files"]
+        for d in f["semantic"]
+        if d.get("code") == "UN001" and d.get("range")
+    ]
+    assert hits, report
+    assert hits[0].get("macro") == "DECL"
+    assert hits[0]["range"]["start"]["line"] + 1 == 3  # 宏调用源行
 
 
 def test_line_map_table_contract(checker, tmp_path):
