@@ -1,17 +1,31 @@
-"""宏落在类型位（语法位）——parser 直产 MacroCall 节点，不硬解析宏内容。
+"""宏落在类型位——**待外层展开机制支持**（当前 xfail，机制就位后翻正）。
 
-ADR-0017 验证 1/2 的闸门：`` input `NT d ``（NT=wire）/ `` output `PT q ``
-（PT=reg [7:0]）/ `` input `T d ``（T=[7:0]）解析成功，树中出现宏节点（宏名 +
-源区间），与宏无关的节点照常产出，输出保留宏调用原文。
+需求（ADR-0017 验证 1/2）：`` input `NT d ``（NT=wire）/ `` output `PT q ``
+（PT=reg [7:0]）/ `` input `T d ``（T=[7:0]）应解析成功，且树中出现宏节点
+（宏名 + 源区间），与宏无关的节点照常产出，输出保留宏调用原文。
 
-Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 2/3）
-Doc: grammar/verilog/02_declarations/00_base.toml（TypeSpec/TypeSpecNoReg 槽位）
+**当前有意不支持**（不是遗漏）：语言包不为宏保留语法槽位——宏位置本质上是
+**文本任意**的，逐槽位声明 `@MacroCall` 既补不齐（结构词 / 运算符 / 分隔符位
+根本没有槽位可声明；位置覆盖量化见 `_drafts/probe_macro_anywhere.py` 的
+"任一 token 换成等价宏、输出不变"不变量），又会在 layout 自带字面量的槽位
+静默错渲染（range 子槽会多套一对 `[]`）。
+
+支持路径 = **外层（管线）展开 + 渲染侧 raw 拼接**（ADR-0017 决策 3）：展开后
+`` input `NT d `` 就是 `input wire d`，语法包现有产生式直接成立，无需任何
+槽位声明。届时去掉本文件的 xfail 标记即可。
+
+Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 3）
+Doc: docs/gaps/gap-preprocessor-macro-boundaries.md（条目 1）
 """
 import pytest
 
 from pipeline import run_pipeline_on_source
 
 pytestmark = pytest.mark.smoke
+
+_XFAIL = pytest.mark.xfail(
+    strict=True, reason="待外层展开 + 渲染侧 raw 拼接机制（ADR-0017 决策 3）"
+)
 
 
 def _find(node, name: str) -> list:
@@ -28,9 +42,7 @@ def _find(node, name: str) -> list:
 
 
 def _run(src: str, **kw) -> dict:
-    return run_pipeline_on_source(
-        source=src, quiet=True, expand_macros=True, **kw
-    )
+    return run_pipeline_on_source(source=src, quiet=True, expand_macros=True, **kw)
 
 
 # 三种形态：宏体分别覆盖 net 类型 / 类型 + 位宽 / 纯位宽
@@ -42,6 +54,7 @@ _PT = "`define PT reg [7:0]\nmodule m;\n  output `PT q;\nendmodule\n"
 @pytest.mark.parametrize(
     "src,name", [(_T, "T"), (_NT, "NT"), (_PT, "PT")], ids=["T", "NT", "PT"]
 )
+@_XFAIL
 def test_type_position_macro_parses_to_macro_node(src: str, name: str) -> None:
     """类型位宏：解析成功 + 树含 MacroCall（宏名 + 源区间切出宏调用原文）。"""
     res = _run(src)
@@ -49,43 +62,24 @@ def test_type_position_macro_parses_to_macro_node(src: str, name: str) -> None:
     calls = _find(res["ast"], "MacroCall")
     assert [c._macro_name for c in calls] == [name]
     node = calls[0]
-    assert node._src_span is not None
     line, col, end_col = node._src_span
     assert src.split("\n")[line - 1][col:end_col] == f"`{name}"
     assert node._macro_fragment == f"`{name}"
 
 
 @pytest.mark.parametrize("src", [_T, _NT, _PT], ids=["T", "NT", "PT"])
+@_XFAIL
 def test_type_position_macro_output_fidelity(src: str) -> None:
     """输出保真：宏调用原文回填，无锚残留。"""
-    out = _run(src)["output"]
+    res = _run(src)
+    assert res["success"], res.get("error")
+    out = res["output"]
     assert "`__tpc_" not in out, out
     assert "tpc_marker" not in out, out
 
 
-def test_unrelated_nodes_still_produced() -> None:
-    """无关部分照常产出：模块名/端口名/方向等节点不因宏位而丢失。"""
-    res = _run(_PT)
-    assert {n.node_name for n in _find(res["ast"], "ModuleDecl")} == {"ModuleDecl"}
-    assert {n.content for n in _find(res["ast"], "Identifier")} == {"m", "q"}
-    # 端口的字段照常绑定（方向 + 宏节点 + 声明器）
-    decl = _find(res["ast"], "BodyOutputDecl")
-    assert len(decl) == 1 and decl[0].direction == "output"
-    assert "`PT" in res["output"]
-
-
-def test_linter_checks_expansion_not_anchor() -> None:
-    """linter 检查展开形态：`` input `NT d `` 展开为 `input wire d` → 零诊断。"""
-    from core.define import DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR
-    from linter.scanner import LinterScanner
-
-    scanner = LinterScanner(DEFAULT_RULES_DIR, ext_dirs=DEFAULT_EXT_DIRS)
-    assert scanner.scan(_NT) == []
-    assert scanner.scan(_PT) == []
-
-
 def test_hand_written_forms_unaffected() -> None:
-    """手写形态不受影响：无宏 → 无 MacroCall 节点，类型/位宽照常渲染。"""
+    """手写形态不受影响（宏不在语法里，与宏无关的肯定路径必须一直是绿的）。"""
     src = "module m;\n  input wire [7:0] d;\n  output reg [7:0] q;\nendmodule\n"
     res = _run(src)
     assert res["success"], res.get("error")
@@ -93,14 +87,3 @@ def test_hand_written_forms_unaffected() -> None:
     flat = " ".join(res["output"].split())
     assert "input wire [7:0] d;" in flat
     assert "output reg [7:0] q;" in flat
-
-
-def test_macro_in_sub_slot_not_supported() -> None:
-    """已知边界：**宏子槽**（`` input wire `T d ``，T=[7:0]）不做。
-
-    子槽 layout 自带字面 `[` `]`，而宏残片可能含方括号 → 会多套一对（静默错
-    渲染）。宁可停不可静默错：保持解析失败。若将来支持，须同时解决该槽位的
-    渲染（见 gap-preprocessor-macro-boundaries 登记）。
-    """
-    src = "`define T [7:0]\nmodule m;\n  input wire `T d;\nendmodule\n"
-    assert _run(src)["success"] is False

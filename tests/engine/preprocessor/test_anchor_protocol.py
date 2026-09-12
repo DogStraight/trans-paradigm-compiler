@@ -16,10 +16,6 @@ from core.token_protocol import (
     anchor_salt,
 )
 from preprocessor._bridge import restore_anchors
-from preprocessor._expand import _load_config
-
-# 源码级宏前缀（`` ` ``）由语言配置给出，不是 token 类型前缀 macro.
-MACRO_TEXT_PREFIX, _ = _load_config()
 
 
 class TestAnchorSalt:
@@ -68,10 +64,14 @@ class TestAnchorName:
         """锚名带用户不可能主动使用的保留前缀（用户若用须报保留名占用）。"""
         assert anchor_name(1, "deadbeef").startswith(RESERVED_PREFIX)
 
-    def test_anchor_text_is_macro_call_form(self) -> None:
-        """锚以宏调用文本形态出现（宏前缀 + 锚名）→ lexer 归为 macro.call。"""
-        text = f"{MACRO_TEXT_PREFIX}{anchor_name(1, 'deadbeef')}"
-        assert text.startswith(MACRO_TEXT_PREFIX + RESERVED_PREFIX)
+    def test_anchor_name_is_plain_identifier(self) -> None:
+        """锚是**普通标识符**形态：语言包不认识宏，解析照常接受。
+
+        锚不给语言包留语法槽位（宏位置本质是文本任意的，逐槽位声明补不齐且
+        某些槽位会静默错渲染，见 ADR-0017 决策 3）。
+        """
+        name = anchor_name(1, "deadbeef")
+        assert name.isidentifier(), name
 
 
 class TestTokenRestoreGuard:
@@ -88,7 +88,7 @@ class TestTokenRestoreGuard:
         ]
 
     def _marker(self, seq: int = 1) -> str:
-        return f"{MACRO_TEXT_PREFIX}{anchor_name(seq, 'deadbeef')}"
+        return anchor_name(seq, "deadbeef")
 
     def test_restore_single_hit(self) -> None:
         marker = self._marker()
@@ -118,14 +118,14 @@ class TestTokenRestoreGuard:
 
 
 @pytest.mark.parametrize("seq", [1, 99, 12345])
-def test_anchor_text_lexes_as_macro_call(config_loaded, seq: int) -> None:
-    """锚文本在 lexer 中归为 macro.call（宏落语法位的前提，ADR-0017）。"""
+def test_anchor_lexes_as_identifier(config_loaded, seq: int) -> None:
+    """锚在 lexer 中归为 `id`（与普通标识符同形，语言包不做宏特化）。"""
     from core.define import DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR
     from lexer import Lexer
 
-    text = f"{MACRO_TEXT_PREFIX}{anchor_name(seq, anchor_salt('src'))}"
+    text = anchor_name(seq, anchor_salt("src"))
     tokens = Lexer(rules_dir=DEFAULT_RULES_DIR, ext_dirs=DEFAULT_EXT_DIRS).tokenize(
         text
     )
-    assert tokens[0].type == "macro.call", tokens[0].type
+    assert tokens[0].type == "id", tokens[0].type
     assert tokens[0].content == text

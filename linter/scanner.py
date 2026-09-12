@@ -229,91 +229,20 @@ class LinterScanner:
                 closer_to_openers.setdefault(be, set()).add(bs)
         return openers, closers, closer_to_openers, opener_to_rule
 
-    # ── 锚窗口拼接（展开路径检查）──
-
-    def _splice_anchor_windows(
-        self, tokens: list[Token], anchors: list[dict]
-    ) -> list[Token]:
-        """把锚 token 原位换成其宏展开体 token（检查对象 = 完全展开形态）。
-
-        锚（`` `<锚名> ``，见 core/token_protocol）是引擎占位、不是用户宏：
-        P0 会把它当未定义宏（误报），而它代表的宏体又必须真被检查（宏落语法位
-        时"展开后是否符合语法"正是展开路径要判的事）→ 锚不进检查、展开体进。
-
-        为什么 token 级拼接而非文本级展开（semantic=True）：文本替换会跨注释
-        边界——宏体自带行尾注释时（实测 darkriscv `` `define LUI 7'b01101_11
-        // lui rd,imm `` 形态），宏调用**同行的后续内容**（如 `;`）落进注释里，
-        语句丢分号 → 发现器级联失守（实测 81 条误报）。token 级拼接不跨 token
-        边界，无此问题。
-
-        展开体 token 位置映射到锚位置（体首行列偏移到锚列，后续行按体相对行号
-        平移）：诊断落点 = 锚位置（展开后坐标）；反向映射到源文件行属宏诊断
-        行号映射缺口（docs/gaps/gap-macro-diagnostic-mapping.md）。
-        体词法失败（残缺片段）→ 保留原锚 token（保守，不静默丢内容）。
-
-        窗口只带展开体的**语法 token**，体自带的注释不进窗口：注释是 trivia，
-        对"是否符合语法"无贡献（渲染路径按 `_macro_fragment` 原文还原，无信息
-        丢失），却会踩 linter 已知边界——多行 RHS 表达式内出现注释时发现器
-        级联失守（实测 darkriscv：保留注释 26 条 phase-unrecognized，去掉 0 条；
-        该边界与语义展开文本下的 81 条同源，见 docs/gaps）。
-        """
-        table: dict[str, dict] = {}
-        for entry in anchors:
-            if entry.get("mode") != "token":
-                continue
-            marker = entry.get("marker")
-            if marker and entry.get("body"):
-                table[marker] = entry
-        if not table:
-            return tokens
-
-        spliced: list[Token] = []
-        for tok in tokens:
-            entry = (
-                table.get(tok.content)
-                if tok.type.startswith("macro.") and tok.content in table
-                else None
-            )
-            if entry is None:
-                spliced.append(tok)
-                continue
-            try:
-                body_tokens = self.lexer.tokenize(entry["body"])
-            except Exception:  # noqa: BLE001 — 片段不可词法化则保守保留锚
-                spliced.append(tok)
-                continue
-            base = tok.line - 1
-            for bt in body_tokens:
-                if bt.type == COMMENT_TOKEN_TYPE:
-                    continue
-                if bt.line == 1:
-                    bt.column += tok.column
-                bt.line += base
-                spliced.append(bt)
-        return spliced
-
     def scan(
         self,
         source: str,
         *,
         predefined: dict[str, str] | None = None,
         undefine: set[str] | None = None,
-        anchors: list[dict] | None = None,
     ) -> list[LintDiagnostic]:
-        """扫源文本产出诊断。
-
-        anchors：调用方（管线）传入的锚表——展开后的源文本里宏调用已被替换为
-        锚（`` `<锚名> ``，见 core/token_protocol），锚代表的宏展开体必须被检查，
-        锚本身不该被检查（P0 会把它当未定义宏）。传 None 时只用本函数自身展开
-        产生的锚（`tpc lint` 直扫 raw 源即此路径）。
-        """
+        """扫源文本产出诊断。"""
         errors: list = []
         macro_defs, func_macros, _, _, _, clean_source = scan_directives(
             source, self._rules_dir, predefined=predefined, undefine=undefine
         )
-        own_anchors: list[dict] = []
         if macro_defs:
-            lex_source, own_anchors = expand_tokens(
+            lex_source, _ = expand_tokens(
                 clean_source, macro_defs, prefix=self._macro_prefix,
                 func_macros=func_macros,
             )
@@ -339,11 +268,6 @@ class LinterScanner:
             ]
         if not tokens:
             return errors
-
-        # 锚窗口拼接：宏展开体进检查、锚本身不进（见 _splice_anchor_windows）
-        tokens = self._splice_anchor_windows(
-            tokens, [*(anchors or []), *own_anchors]
-        )
 
         # match_atom 位置级 memo 按 token 流隔离：scan 可能被复用（同一
         # scanner 实例扫多文件），新 token 流必须清空，避免跨文件位置串命中。

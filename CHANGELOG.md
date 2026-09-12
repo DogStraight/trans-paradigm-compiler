@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **语法文件中的宏知识全部撤销**（ADR-0017 决策 2/3 推翻重定，2026-09-13）：
+  `[Identifier.parser]` 的 `macro.call` 备选、`[MacroCall.parser]`/`.parser.node`、
+  `TypeSpec`/`TypeSpecNoReg` 首元素的 `@MacroCall` 槽位，全部删除；
+  展开锚形态回退为**普通标识符**（`__tpc_marker_<salt>_<n>`，保留命名空间 +
+  盐 + 序号 + 还原唯一性守卫不变）。linter 的锚窗口拼接随之删除（锚不再是宏
+  token，拼接已无对象）；`_stage_lint`/`_rewrite_marker_nodes` 回到单形态。
+
+  **依据（实测）**：宏位置本质上是**文本任意**的，逐槽位声明补不齐——新增的
+  位置覆盖自查不变量（任一 token 换成等价宏、格式化输出必须不变）：逐槽位声明
+  **54/135 = 40%**，撤销语法声明后 **50/135 = 37%**，即整套槽位机制只买到 4 个
+  位置；且 layout 自带字面量的槽位（如 range 子槽的 `[` `]`）会多套一对（静默
+  错渲染）。新方向 = **外层展开 + 渲染侧 raw 拼接**（宏调用视为不可拆原子文本）。
+  验收标尺 `tools/check_macro_coverage.py`；类型位需求以 6 个
+  `xfail(strict=True)` 钉在 `tests/languages/verilog/test_macro_type_slot.py`。
+
 ### Fixed
 
 - **linter choice 匹配的 trivia 泄漏**（`linter/checkers/matcher.py::_match_choice`）：
@@ -18,33 +35,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **宏落类型位（语法位）——类型槽位声明**（ADR-0017 决策 2/3 收尾）：
-  `[TypeSpec]`/`[TypeSpecNoReg]` 首元素加 `@MacroCall` 备选 +
-  `[MacroCall.parser]` 规则——宏是**整体替换类型片段**的文本，锚必然落在首元素
-  位，故一处声明覆盖三例：`` input `NT d ``（NT=wire）/ `` output `PT q ``
-  （PT=`reg [7:0]`）/ `` input `T d ``（T=`[7:0]`）→ 均解析成功、树中出现
-  MacroCall（宏名 + 源区间）、输出保留宏调用原文；手写形态不变。
-  `pipeline/__init__.py::_attach_macro_meta` 统一两种进树形态（语法位 parser
-  直产 / 标识符位改写）的锚表元数据挂载。
-  **宏子槽**（`` input wire `T d ``）有意不做：子槽 layout 自带字面 `[` `]`，
-  宏残片可能含方括号 → 会多套一对（静默错渲染），宁可停不可静默错；登记
-  `docs/gaps/gap-preprocessor-macro-boundaries.md` 条目 1b。
-  测试 `tests/languages/verilog/test_macro_type_slot.py`（三例 + 保真 + linter
-  零诊断 + 手写形态 + 子槽边界，10 断言）。
+- **宏展开锚名协议**（`core/token_protocol.py`）：锚名 = 保留前缀 `__tpc_` +
+  `marker` + **源文本 sha256 盐** + 序号（不用内置 `hash()`：PYTHONHASHSEED 会
+  破坏跨进程可复现）；还原侧加**唯一性守卫**（命中次数 ≠ 1 则不回插，保留占位
+  可见，不静默错还原）。锚仍是**普通标识符**形态（语言包不认识宏）。
+  测试 `tests/engine/preprocessor/test_anchor_protocol.py`。
 
-- **宏展开锚名协议 + linter 锚窗口拼接**（ADR-0017 决策 3/4）：展开期锚改为
-  **宏调用文本形态**（`` `<锚名> ``，lexer 自然归为 `macro.call`——不为锚新造
-  词法形态），锚名 = 保留前缀 `__tpc_` + `marker` + **源文本 sha256 盐** + 序号
-  （`core/token_protocol`；不用内置 `hash()`：PYTHONHASHSEED 会破坏跨进程可复现；
-  还原侧加**唯一性守卫**：命中次数 ≠ 1 则不回插，保留占位可见）。linter 入口按
-  锚表做 **token 级窗口拼接**（`linter/scanner.py::_splice_anchor_windows`）：
-  锚不进检查（否则 P0 报未定义宏）、展开体进检查（判"宏展开是否符合语法"）。
-  为什么不是文本级展开：文本替换跨注释边界，宏体自带行尾注释时会吞掉宏调用
-  **同行的后续 token**（实测 darkriscv 81 条 `phase-unrecognized` → token 拼接 0 条）。
-  语法侧 `Identifier` 接受 `macro.call`，一处数据改动覆盖 ≈83 个标识符槽位。
-  测试 `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/守卫）、
-  `tests/engine/linter/test_anchor_splice.py`（拼接语义）、
-  `tests/languages/verilog/test_macro_body_comment.py`（体注释不吞后续 token）。
+- **`tools/check_macro_coverage.py`（宏位置覆盖自查）**：不变量 = "把任一 token
+  换成等价宏（`` `define M <原 token 原文> ``），格式化输出必须不变（宏调用原文
+  原样保留、不被展开/重排）"，输出覆盖率 + 失败面（按 token 类型）。把"宏的位置
+  支持"从"声明了哪些槽位"变成可测数字（ADR-0017 决策 3/4 的验收标尺）；不进
+  日常门禁，人工/按需跑。
 
 - **语言包↔引擎契约（`[engine] api`，缺口队列 ⑤）**：`grammar/<lang>/tpc.toml`
   可声明 `[engine] api = "0.1"`（该包构建所依据的引擎 API 线）；引擎 major.minor

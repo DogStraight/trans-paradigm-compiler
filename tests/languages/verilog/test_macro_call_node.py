@@ -10,12 +10,8 @@ import pytest
 
 from core.token_protocol import ANCHOR_MARK, RESERVED_PREFIX
 from pipeline import run_pipeline_on_source
-from preprocessor._expand import _load_config
 
 pytestmark = pytest.mark.smoke
-
-# 源码级宏前缀（`` ` ``）由语言配置给出，不是 token 类型前缀 macro.
-MACRO_TEXT_PREFIX, _ = _load_config()
 
 _SRC = (
     "module m;\n"
@@ -56,12 +52,10 @@ def test_macro_call_nodes_created() -> None:
     calls = _find(res["ast"], "MacroCall")
     assert len(calls) == 2, [c._macro_name for c in calls]
     assert {c._macro_name for c in calls} == {"W", "BODY"}
-    # 锚名形态：宏调用文本（宏前缀 + 保留前缀 + marker + 盐 + 序号）
+    # 锚名形态：保留前缀 + marker + 盐 + 序号（普通标识符形态，语言包不认识宏）
     for c in calls:
         marker = c._macro_marker
-        assert marker.startswith(
-            f"{MACRO_TEXT_PREFIX}{RESERVED_PREFIX}{ANCHOR_MARK}_"
-        ), marker
+        assert marker.startswith(f"{RESERVED_PREFIX}{ANCHOR_MARK}_"), marker
         # 盐（8 位十六进制）+ 序号：两处锚序号不同 → 锚名互不相同
         tail = marker.rsplit("_", 1)[-1]
         assert tail.isdigit(), marker

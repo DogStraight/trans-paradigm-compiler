@@ -399,15 +399,10 @@ def _stage_prescan(ctx: _PipelineContext) -> tuple[Any, Any]:
 
 
 def _stage_lint(ctx: _PipelineContext) -> bool:
-    """前置语法检查（失败时截断管线）。返回是否通过。
-
-    检查对象是展开后的 ctx.source，并把锚表交给 linter：展开后宏调用已是锚
-    （`` `<锚名> ``），linter 按锚表在 token 层拼接展开体（锚不进检查、展开体
-    进检查）——即"检查完全展开形态"（ADR-0017 决策 1）。
-    """
+    """前置语法检查（失败时截断管线）。返回是否通过。"""
     if ctx.no_lint:
         return True
-    lint_errors = ctx.linter.scan(ctx.source, anchors=ctx.restore_stack)
+    lint_errors = ctx.linter.scan(ctx.source)
     if lint_errors:
         for err in lint_errors:
             ctx.log(
@@ -485,22 +480,15 @@ def _attach_macro_meta(node: Any, entry: dict, body_provider: Any) -> Any:
 
 
 def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) -> Any:
-    """递归处理锚节点（含 attrs 内嵌节点），使宏边界在树中为 MacroCall。
+    """递归把锚标识符节点改写为 MacroCall（含 attrs 内嵌节点）。
 
-    锚在源码里以宏调用形态出现（`` `<锚名> ``），按槽位声明分两种进树方式：
-      - **语法位**（槽位声明 `@MacroCall`，如类型位）→ parser 直产 MacroCall
-        节点（ADR-0017 决策 2），此处只补锚表元数据；位置元数据保留 parser 绑定。
-      - **表达式/标识符位**（`Identifier` 的 `macro.call` 备选）→ parser 产
-        Identifier 节点，此处改写为 MacroCall 并保留原位置元数据。
+    锚是普通标识符（`__tpc_marker_<salt>_<n>`，语言包不认识宏），parser 把它
+    建成 Identifier 节点；本阶段按锚表改写为 MacroCall 并挂元数据（宏名/原文
+    残片/源区间/宏体子树），宏边界于是在树中结构化可见（ADR-0016 阶段 2）。
     """
     from core.define import CHILDREN_FIELD, Node
 
     if isinstance(value, Node):
-        if value.node_name == "MacroCall":
-            marker = getattr(value, "content", None)
-            entry = table.get(marker) if isinstance(marker, str) else None
-            if entry is not None:
-                return _attach_macro_meta(value, entry, body_provider)
         if (
             value.node_name == "Identifier"
             and isinstance(getattr(value, "content", None), str)

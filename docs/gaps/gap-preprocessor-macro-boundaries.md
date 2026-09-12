@@ -1,9 +1,14 @@
 # Gap — preprocessor 宏覆盖缺口（type macros / 复合嵌套反向映射）
 
-- 状态：条目 1（类型位宏）**已闭环**（2026-09-13，commit 待记）——按
-  `docs/decisions/0017-macro-in-syntax-position.md`：锚复用 lexer 宏识别 +
-  类型槽位声明 `@MacroCall`（parser 直产宏节点）+ linter 锚窗口拼接。
-  剩余：**宏子槽**（条目 1b，见下）；条目 2 实测未复现失败（见下），待另寻形态
+- 状态：条目 1（类型位宏）**待闭环**（2026-09-13：先以"逐槽位声明"落地后
+  按作者裁定**推翻重开**——实测槽位机制只买到 4 个位置（54/135 → 撤销后
+  50/135）且部分槽位静默错渲染）→ 新形态 = **外层展开 + 渲染侧 raw 拼接**
+  （`docs/decisions/0017-macro-in-syntax-position.md` 决策 2/3/4）；
+  验收标尺 = `tools/check_macro_coverage.py`（当前 37%）
+- 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
+  部件拆入本档）；`docs/decisions/0017-macro-in-syntax-position.md`
+- 参照：C 预处理器（对象/函数宏 + 条件编译）的成熟形态；Verible/clang-format
+  对带宏文本的格式化策略（宏调用当不可拆原子文本）
 - 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
   部件拆入本档）；`docs/decisions/0017-macro-in-syntax-position.md`
 - 参照：C 预处理器（对象/函数宏 + 条件编译）的成熟形态
@@ -30,23 +35,13 @@
    - **根因**：展开锚曾是**标识符**；`id` 不是合法的 net_type / 类型 / 位宽。
      手写 `input wire d` 合法是因为 `wire` 是关键字，而 marker 是 id。
      故缺口 = "代理 token 在非表达式槽位不合法"。
-   - **✅ 已闭环（2026-09-13）**：锚改为**宏调用文本形态**（`` `<锚名> ``，lexer
-     归为 `macro.call`，不为锚新造词法形态）；`[TypeSpec]`/`[TypeSpecNoReg]`
-     首元素加 `@MacroCall` 备选（宏是**整体替换类型片段**的文本 → 锚必然落在
-     首元素位，故一处声明覆盖三例）；parser 直产 MacroCall（宏名 + 源区间），
-     渲染按 `_macro_fragment` 直出原文。实测三例均：解析成功 + 树含宏节点 +
-     输出保留 `` `NT d `` 原文 + 手写形态不变。
-     `tests/languages/verilog/test_macro_type_slot.py`。
-   - ADR-0016 阶段 4 的 marker 代理机制已被本修法替换（锚即宏调用形态）。
-   - 触发面（实测枚举）：宏体为 net_type（`wire`/`tri`）、类型（`reg`）、
-     或**完整位宽**（`[7:0]`）且落点在端口/声明的类型槽 → 已支持。宏体为表达式
-     （`` `W `` + `[`W-1:0] d`）不受影响。
-1b. **宏子槽未支持**（2026-09-13 登记）：`` input wire `T d ``（T=`[7:0]`）——
-   子槽（Range/signed）的 layout 自带字面 `[` `]`，而宏残片可能含方括号 → 会多套
-   一对（静默错渲染）。**宁可停不可静默错**，故有意不加备选（照旧解析失败）。
-   若将来支持：要么让该槽位的 layout 能识别"ref 是宏节点则不出字面括号"，
-   要么把方括号收进 Range 自己的 layout（现由调用方槽位加）。代价：宏体为
-   `signed` 的子槽同属此类，同理未支持。
+   - **待闭环（2026-09-13 重开）**：方向 = 外层展开（宏位置退化为"展开后文本
+     是否合法"）+ 渲染侧 raw 拼接；**语言包不留任何宏声明**（逐槽位声明已撤销，
+     实测只多买 4 个位置：40% / 37%，且 layout 自带字面量的槽位会多套一对）。
+     当前状态：`` input `NT d `` 等仍解析失败，需求以 6 个 `xfail(strict=True)`
+     钉在 `tests/languages/verilog/test_macro_type_slot.py`。
+   - 附带事实：语义展开（`semantic=True` 铺宏体）会**跨注释边界**吞掉宏调用同行
+     的后续 token（darkriscv 实测 81 条误报来源）；外层展开路线需同时解决这一点。
 2. **嵌套调用反向映射**（2026-09-12 实测**未复现失败**）：
    - 对象宏嵌套 `` `define B (`A + 1) `` → 保真 0.983；
    - 函数宏嵌套 `` `define V(y) `W(y)*2 `` → 保真 0.986；

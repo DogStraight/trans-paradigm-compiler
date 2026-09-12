@@ -73,13 +73,13 @@ ref = "value"
 # 是表达式中最基本的原子节点。
 # analyzer 中 identifier_ref = true 表示此节点参与符号引用分析。
 #
-# 备选 macro.call：宏展开锚（`<锚名>，见 core/token_protocol）在 lex 阶段即
-# 归为宏 token，标识符槽位一并接受——宏落在语法位（类型/位宽等）时不必逐
-# 槽位声明 @MacroCall（宏边界进 AST 由管线按锚表改写，见 pipeline 宏边界节点化）。
+# 语言包**不认识宏**：宏由外层（预处理器/管线）处理——展开阶段把宏调用替换为
+# 锚（`__tpc_marker_<salt>_<n>`，形态与普通标识符相同），解析照常；宏边界节点
+# 由管线按锚表就树改写（见 pipeline 宏边界节点化）。
 
 [Identifier.parser]
 is_atom = true
-production = ["id|macro.call"]
+production = ["id"]
 inline = false
 
 [Identifier.parser.node]
@@ -95,18 +95,12 @@ line = [
 ]
 
 
-# ── MacroCall — 宏调用边界节点（引擎展开保留） ──
-# 展开阶段宏调用被替换为锚（`` `<锚名> ``，锚名协议见 core/token_protocol）；
-# lexer 依既有宏识别规则把锚归为 macro.call。宏落在语法位（类型/位宽等槽位）时，
-# 该槽位声明 `@MacroCall` 备选即可接受——parser **直产** MacroCall 节点，
-# 不硬解析宏内容、不引入恢复（ADR-0017 决策 2）。
-# 渲染直接输出宏调用原文（`_macro_fragment` = raw 源区间切片，由管线按锚表挂载）。
-[MacroCall.parser]
-production = ["macro.call"]
-
-[MacroCall.parser.node]
-content = "$1.value"
-
+# ── MacroCall — 宏调用边界节点（引擎层，语言包不声明 parser 规则） ──
+# 宏边界节点由**外层**（管线）就树产生（ADR-0016 阶段 2 / ADR-0017），语言包里
+# 只声明它怎么渲染：直接输出宏调用原文（`_macro_fragment` = raw 源区间切片）。
+# 语言包不得为宏保留语法槽位——宏位置本质上是**文本任意**的，逐槽位声明
+# 既补不齐（结构词/运算符/分隔符位无槽可声明），又会在某些槽位静默错渲染
+# （槽位 layout 自带字面量时多套一对括号），见 ADR-0017 决策 3。
 [MacroCall.renderer.layout]
 line = [{ ref = "_macro_fragment" }]
 

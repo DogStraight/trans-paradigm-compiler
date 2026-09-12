@@ -50,10 +50,27 @@
 > 待办。未入队的 backlog：`gap-tpc-check-external-checker`（前置已核实满足，但
 > 属多周特性，留 ROADMAP P2.6）。编号是 ID 不是顺序，完成的不重编。
 >
-> **执行顺序（按难度易→难，2026-09-13 实测排序）**：**② → ⑥**
-> （①③④⑤ 已闭环；⑥ 按作者指定排最后）。排序依据 = 改动面 × 是否还需新决策：
+> **执行顺序（按难度易→难，2026-09-13 实测排序）**：**③ → ② → ⑥**
+> （①④⑤ 已闭环；⑥ 按作者指定排最后）。③ 于 2026-09-13 先以"槽位声明"落地后
+> **被推翻重开**（实测覆盖率 54/135 vs 撤销后 50/135——槽位机制只买到 4 个位置，
+> 且部分槽位会静默错渲染），新形态 = 外层展开 + 渲染侧 raw 拼接（ADR-0017 决策 2/3/4）。
 > ② 实测**最大**（行映射跨 `_join_continuation_lines` + `scan_directives`
-> + `expand_tokens` 三处溯源，非原估一张表），故后置。
+> + `expand_tokens` 三处溯源，非原估一张表）。
+
+- [ ] **③ 宏任意位置支持（外层展开 + 渲染侧 raw 拼接）**
+      （`docs/decisions/0017-macro-in-syntax-position.md`；
+      `docs/gaps/gap-preprocessor-macro-boundaries.md` 条目 1）：
+      语言包**不为宏保留语法槽位**——宏位置本质文本任意，逐槽位声明补不齐
+      （结构词/运算符/分隔符位无槽可声明）且部分槽位 layout 自带字面量会多套一对
+      （静默错渲染）。改由外层处理：① 展开在解析前铺宏体文本（任意位置退化为
+      "展开后文本在该位置是否语法合法"，由现有语法自己判定，无需声明）；
+      ② 宏边界节点由管线就树产生；③ **渲染侧遇宏节点走 raw 分支**（宏调用视为
+      不可拆原子文本；无法证明可安全重排时整段原样输出，参照 Verible/clang-format）。
+      验收：`python tools/check_macro_coverage.py` 覆盖率上升且不回退（当前 37%）+
+      `tests/languages/verilog/test_macro_type_slot.py` 的 6 个 strict-xfail 翻正 +
+      全量门禁/e2e/误报基线不退化。
+      切片建议：展开铺文本 + 宏区间表 → 渲染 raw 拼接 → 撤锚（`restore_anchors`
+      通道退役）。
 
 - [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) 行映射**跨两级**
       ——`scan_directives`（raw→clean，条件编译删行，实测 18→14）与

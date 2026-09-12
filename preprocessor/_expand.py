@@ -602,15 +602,18 @@ def expand_tokens(
                     }
                 )
                 continue
-            token = f"{prefix}{anchor_name(_next_macro_seq(), salt)}"
+            token = anchor_name(_next_macro_seq(), salt)
             if semantic:
                 # check 语义展开：宏体替换（body 原文含分号），不建还原锚
                 parts[col:end] = body
                 continue
-            # 锚形态 = 宏调用原文（`<锚名>）：lexer 归为 macro.call，语法位可
-            # 声明"此处接受宏"（宏落语法位，ADR-0017），不再需要独立词法形态。
-            # 独占一行的宏调用（行首 ∧ 行尾）补分号：`<锚名>;` 按裸任务
-            # 调用语句可解析（1364-2005 A.6.9 task_enable），裸宏调用不是合法
+            # 锚形态 = 普通标识符（`__tpc_marker_<salt>_<n>`，保留命名空间）：
+            # 语言包不认识宏，锚与标识符同形 → 表达式/标识符槽位照常解析。
+            # 宏的**位置**由外层（扩展/raw 拼接）处理，不给语言包留语法槽位
+            # （宏位置本质上是文本任意的，逐槽位声明补不齐且可能错渲染，
+            # 见 ADR-0017 决策 3）。
+            # 独占一行的宏调用（行首 ∧ 行尾）补分号：锚名 + `;` 按裸任务
+            # 调用语句可解析（1364-2005 A.6.9 task_enable），裸标识符不是合法
             # 语句——lint/parser 都会拒（ice40 cells_sim 的 `SB_DFF_INIT 等
             # 语句体宏独占一行无分号，真实语料实证）。只对"行首 ∧ 行尾"补：
             # 行尾但非行首（如 `parameter P_D = `D` 后换行 `)`）是构造续行，
@@ -634,10 +637,6 @@ def expand_tokens(
                     "mode": "token",
                     "kind": "macro",
                     "is_func": is_func,
-                    # 展开体原文（实参已代入）：token 锚窗口拼接用——检查器
-                    # （lint 展开路径）需要判"这个宏展开是否符合语法"，按本字段
-                    # 把锚 token 换成展开体 token 序列（见 linter.scanner）。
-                    "body": body,
                     # 源文本位置（展开前行/起列/止列）：宏调用在 raw 源上的区间，
                     # 供宏边界节点（MacroCall）双向映射用（ADR-0016）。
                     "line": line_no,

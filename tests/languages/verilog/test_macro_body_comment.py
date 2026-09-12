@@ -3,16 +3,15 @@
 形态：`` `define LUI 7'b01101_11 // lui rd,imm ``——宏体自带行尾注释，且宏调用
 **同行还有内容**（`` ... ==`LUI; ``）。
 
-钉住两件事：
-1. 锚不进检查：展开后宏调用是锚（`` `<锚名> ``，macro token），linter 必须按
-   锚表把它换成展开体（token 级窗口拼接），否则 P0 报未定义宏、管线失败。
-2. 窗口拼接不跨 token 边界：宏调用后的 `;` 保留（文本级铺宏体会把同行后续
-   内容吞进宏体注释里，实测 darkriscv 因此 81 条 phase-unrecognized 级联——
-   真实语料上的守卫是 tests/e2e/test_real_corpus.py::test_file_parses_clean
-   [ref_darkriscv.v]）。
+钉住的不变量：**宏调用同行的后续内容不被吞**（输出保留 `;`、管线成功）。
+它是**外层展开路线（ADR-0017 决策 3）的迁移守卫**：文本级铺宏体会跨注释边界，
+把宏调用同行的 `;` 落进宏体注释里 → 语句丢分号 → 发现器级联失守（darkriscv 实测
+81 条 `phase-unrecognized`）。谁改走文本展开而不做 raw 拼接，这里会红。
 
-Doc: linter/scanner.py::_splice_anchor_windows
-Doc: docs/decisions/0017-macro-in-syntax-position.md
+当前实现（锚 + `restore_anchors`）天然满足该不变量——锚不会把宏体铺进文本。
+
+Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 3/4）
+Doc: docs/gaps/gap-preprocessor-macro-boundaries.md（条目 1）
 """
 import pytest
 

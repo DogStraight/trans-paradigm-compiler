@@ -51,66 +51,58 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 1. **句级语法检查前移到 linter 的展开路径**。带宏的语法检查由**前置 linter** 在
    **宏展开后的文本**上完成——linter 本就有 skip/近似能力，正是这类检查该待的
    层（"静态解析不对宏位负责，展开后再检查"）。
-2. **parser 只产宏节点，不承担宏位解析，也不引入恢复**。宏落在语法位时，parser
-   **不尝试硬解析**、也不需要 panic/skip 机制——**直接产出宏节点**（宏名 +
-   源区间），使该构造的其余部分照常解析、整份文件不再被一个宏拖垮。
-3. **实现形态：锚复用 lexer 的宏识别 + 槽位声明走 `Identifier` 备选**（已实现）。
-   - **锚不是新词法形态**：lex 阶段本就把 `` `NAME `` 识别为宏 token，故展开期的
-     锚直接写成**宏调用文本**（`` `<锚名> ``），lexer 自然归为 `macro.call`——
-     不为锚新造词法面（此前 `tpc_marker_N` 与 `id` 同形，才需要另想办法区分）。
-   - **锚名协议**（`core/token_protocol.py`）：保留前缀 `__tpc_` + `marker` + 盐 + 序号。
-     盐 = 源文本 sha256 前 8 位（**不用内置 `hash()`**：PYTHONHASHSEED 随机化会
-     破坏跨进程可复现）→ 文件间不撞、文件内序号互异、用户代码撞不出来。
-     还原侧加**唯一性守卫**（命中次数 ≠ 1 不回插，保留占位可见，不静默错还原）。
-   - **槽位声明**：`[Identifier.parser] production = ["id|macro.call"]`——宏出现在
-     "标识符可出现"的槽位时被该备选接受；parser 仍产 Identifier 节点，宏边界由
-     管线按锚表改写为 `MacroCall`（ADR-0016 阶段 2 成果不回退）。
-     比原候选甲（逐槽位补 `@MacroNode`）少 83 处数据改动，比候选乙（parser 宽容）
-     保持"失败即失败"的严格语义。代价：`macro.call` 于是能在**所有** `@Identifier`
-     槽位通过——与"宏可出现在哪"这一语言知识相比偏宽，由 linter 展开路径兜底语义。
-   - **类型位槽位声明已补**（`grammar/verilog/02_declarations/00_base.toml`）：
-     `TypeSpec`/`TypeSpecNoReg` 首元素加 `@MacroCall` 备选——宏是**整体替换类型
-     片段**的文本，锚必然落在首元素位，故一处声明覆盖三例（`` input `NT d `` /
-     `` output `PT q `` / `` input `T d ``；实测三例均解析成功、树含宏节点、输出
-     保留原文）。**宏子槽**（`` input wire `T d ``）有意不做：子槽 layout 自带
-     字面 `[` `]`，宏残片可能含方括号 → 多套一对（静默错渲染）；宁可停不可静默错
-     （登记 `docs/gaps/gap-preprocessor-macro-boundaries.md` 条目 1b）。
+2. **语言包不为宏保留任何语法槽位**（2026-09-13 定稿，**推翻本 ADR 初稿的
+   "槽位声明"路线**）。宏的位置本质上是**文本任意**的，逐槽位声明 `@MacroCall`：
+   - **补不齐**：结构词（`module`/`begin`/`end`）、运算符、逗号/分号/括号位
+     根本没有"槽位"可声明——它们就是 parser 用来决定怎么解析的 token。
+     位置覆盖量化（不变量：把任一 token 换成等价宏
+     `` `define M <原 token 原文> ``，格式化输出必须不变；
+     `_drafts/probe_macro_anywhere.py`）：逐槽位声明 **54/135 = 40%** → 撤销
+     语法声明后 **50/135 = 37%**——即整套槽位机制只买到 4 个位置，代价/收益
+     不成立。
+   - **会静默错渲染**：某些槽位的 layout 自带字面量（如 range 子槽的 `[` `]`），
+     宏残片可能已含这些字符 → 多套一对；判据不显然（取决于该槽位 layout 形态），
+     越补越像掩盖边界。
+   故 `Identifier` 的 `macro.call` 备选、`MacroCall.parser`、
+   `TypeSpec`/`TypeSpecNoReg` 的 `@MacroCall` 均**已撤销**。
 
-4. **linter 检查的是完全展开形态：锚不进检查、展开体进检查**（已实现）。
-   展开路径的检查对象必须是**宏展开后的语法形态**——带锚则判的是锚名而非展开
-   内容（类型位宏展开成 `wire` 才可判），且锚是引擎占位、会被 P0 当未定义宏。
-   实现形态按"锚表 + token 级窗口拼接"（`linter/scanner.py::_splice_anchor_windows`）：
-   锚 token 原位换成展开体 token 序列（位置映射到锚位置），**不改 linter 内部的
-   检查器与既有测试面**。
-   **为什么不是文本级展开**（`expand_tokens(semantic=True)` 铺宏体文本）：文本替换
-   跨注释边界——宏体自带行尾注释时（实测 darkriscv `` `define LUI 7'b01101_11
-   // lui rd,imm ``），宏调用**同行的后续 token**（`;`）被吞进注释，语句丢分号
-   → 发现器级联失守（**实测 81 条 phase-unrecognized**；同一份文件 check 链
-   `analyzer/structure.py::_expand_source` 走文本展开，今天就有这 81 条）。
-   token 级拼接不跨 token 边界，无此问题（实测同一文件降到 0）。
-   残余：darkriscv 上仍有 26 条与"体注释"同进同出（去注释即 0），但单条多行
-   表达式/三元的 9 个最小变体均 0 条——**相关性已测、机制未定**，待钉死触发
-   条件（登记 `docs/gaps/gap-parser-linter-approximation.md`）。
-4. **parser 不做通用错误恢复**。`gap-parser-linter-approximation` 的"无恢复"
+3. **宏由外层（预处理器/管线）处理；MacroCall 是引擎级节点，语言包只声明它怎么
+   渲染**。展开在解析之前发生（`expand_tokens(semantic=True)` 铺宏体文本）——
+   **宏在任意位置都退化为"展开后的文本在该位置是否语法合法"**，由既有语法自己
+   判定，不需要任何声明：`` input `NT d ``（NT=wire）展开就是 `input wire d`，
+   现有产生式直接成立——所以"类型位槽位声明"是伪需求。宏边界节点（宏名 + raw
+   源区间）由管线就树产生/改写（ADR-0016 阶段 2 的机制，`pipeline/__init__.py`），
+   语言包对它的唯一认知是渲染方式（`[MacroCall.renderer.layout]` 输出
+   `_macro_fragment`）。
+
+4. **渲染侧：遇宏节点走 raw 分支拼接**——输出宏调用原文，不把展开内容重新
+   格式化。带宏文本的对齐/格式化参照前人做法（Verible / clang-format：宏调用
+   视为**不可拆的原子文本**，无法证明可安全重排时整段原样输出 verbatim）。
+   实现细节待定：宏区间与"可渲染单元"不重合时（如宏残片已含槽位自己的字面量），
+   取最小可证明正确的**原样输出**范围——宁可原样，不可静默重排。
+
+5. **parser 不做通用错误恢复**。`gap-parser-linter-approximation` 的"无恢复"
    对**非宏输入仍然成立**（真语法错仍是"linter 前置 + truncation 双保险"）；
-   本决策只新增"宏位可解析为宏节点"这一条语法路径，不改其它失败语义。
+   本决策只改宏的**处理位置**（外层展开 + 渲染 raw 拼接），不改其它失败语义。
 
 ## 权衡
 
 **付出**：
-- 语言包需在宏可出现的槽位补 `@MacroNode`（**数据**改动，逐槽位；这也是它该在
-  的地方——"宏允许出现在哪些语法槽"是语言知识）；
-- 展开期新增占位 token 形态，与现有 marker 机制（服务渲染还原 / 宏边界节点化 /
-  ADR-0016 阶段 2、4）并存或替换，需分切片迁移并保行为不回退；
-- linter 展开路径要划清与 raw 检查的分工（哪些诊断在 raw、哪些在展开文本上）。
+- 展开在解析前发生（铺宏体文本）→ 渲染侧必须有 **raw 拼接** 才能把宏调用原文还回去
+  （宏区间 ↔ 输出文本的对应），这是本决策真正的成本所在；
+- 宏区间与"可渲染单元"不重合的形态（宏残片含槽位字面量）需定下原样输出的边界
+  规则（决策 4 末条）；
+- 迁移期间锚（`__tpc_marker_*`）与展开并存，需分切片迁移并保行为不回退
+  （锚仍在用：`restore_anchors` 是当前输出的还原通道）。
 
 **被拒绝的备选**：
-- **parser panic + skip 到后界**（本 ADR 初稿方案）：把跳过能力搬进 parser，与
-  "跳过能力已在 linter"重复建设，且让 parser 承担语法近似——偏离其"纯解析"定位；
+- **逐槽位声明 `@MacroCall`/`@MacroNode`**（本 ADR 第二稿方案，2026-09-13 实测后
+  推翻）：宏位置文本任意 → 补不齐（37% → 40% 实测）+ 部分槽位静默错渲染；
+- **parser panic + skip 到后界**（初稿方案）：把跳过能力搬进 parser，与
+  "跳过能力已在 linter"重复建设，且让 parser 承担语法近似；
 - **给 marker 找合法形态 / 体前缀判定改 inline**：治标（只治一类槽位），且牺牲
   ADR-0016 阶段 2 的 MacroCall 节点成果；
-- **维持现状（判为已知边界）**：无真实语料消费，但"一个宏废掉整份文件"的代价
-  与触发概率不匹配。
+- **维持现状（判为已知边界）**：一个宏废掉整份文件的代价与触发概率不匹配。
 
 **边界（本决策不做）**：
 - 不做列级定位；不做通用 LR/GLR 式恢复；**宏位之外**的错误行为一律不变
@@ -119,24 +111,23 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 ## 验证
 
 1. **语法位宏可解析**：`` input `NT d `` / `` output `PT q `` / `` input `T d ``
-   → 解析成功，且树中出现**宏节点**（宏名 + 源区间）；
-2. **无关部分照常产出**：同一文件里与宏无关的节点数不减少
-   （对照基线：现状 0 类节点 → 目标 ≥ 全好样本的 15 类节点）；
+   → 解析成功，且树中出现**宏节点**（宏名 + 源区间）——当前 6 个用例以
+   `xfail(strict=True)` 钉在 `tests/languages/verilog/test_macro_type_slot.py`，
+   机制就位后翻正（strict 保证翻正必须被看到）；
+2. **位置覆盖可量**：把"任一 token 换成等价宏"做成不变量（
+   `_drafts/probe_macro_anywhere.py`，历史：逐槽位 40% / 当前 37%），
+   机制就位后上升且不回退——这是"其他位置能不能同样处理"的**可验证答案**；
 3. **非宏真错误行为不变**：块体内 `assign = 1;` 仍阻断（比对现状）；
-4. **linter 展开路径**：带宏的句级语法问题可被检出（相对"整文件截断"是能力提升）；
+4. **宏定位不改失败语义**：真语法错仍是 linter 前置 + truncation 双保险；
 5. 全量回归 + e2e FAIL 0 + 真实语料保真不降 + 误报基线无增长。
 
-> Impl: `core/token_protocol.py`（锚名协议：保留前缀/盐/序号）·
-> `preprocessor/_expand.py`（锚写成宏调用文本 + 锚表带展开体）·
-> `preprocessor/_bridge.py`（还原唯一性守卫）·
-> `linter/scanner.py::_splice_anchor_windows`（token 级锚窗口拼接）·
-> `pipeline/__init__.py::_attach_macro_meta`（两种进树形态挂锚表元数据）·
-> `grammar/verilog/05_expressions/00_base.toml`（`Identifier` 接受 `macro.call` +
-> `[MacroCall.parser]`）· `grammar/verilog/02_declarations/00_base.toml`
-> （`TypeSpec`/`TypeSpecNoReg` 类型位 `@MacroCall`）
-> Test: `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/守卫）·
-> `tests/engine/linter/test_anchor_splice.py`（拼接语义）·
-> `tests/languages/verilog/test_macro_type_slot.py`（类型位三例 + 子槽边界）·
-> `tests/languages/verilog/test_macro_call_node.py`（锚名形态/可复现）·
-> `tests/languages/verilog/test_macro_body_comment.py`（体注释不吞后续 token）·
-> 真实语料守卫 `tests/e2e/test_real_corpus.py::test_file_parses_clean[ref_darkriscv.v]`
+> Impl: 待实现（外层展开铺宏体 + 渲染侧 raw 拼接 + 位置覆盖不变量的门禁）。
+> 已落地部分：锚名协议（保留前缀/盐/序号/还原唯一性守卫，
+> `core/token_protocol.py` + `preprocessor/_bridge.py`）——它是**当前**输出还原
+> （`restore_anchors`）的载体，服务本决策的决策 4；语法侧已**撤销全部宏声明**
+> （`Identifier` 备选 / `MacroCall.parser` / `TypeSpec` 的 `@MacroCall`）。
+> Test: `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/还原守卫）·
+> `tests/languages/verilog/test_macro_type_slot.py`（6 个 xfail = 目标需求）·
+> `tests/languages/verilog/test_macro_call_node.py`（宏边界节点）·
+> `tests/languages/verilog/test_macro_body_comment.py`（宏调用后同行内容不被吞——
+> 文本展开路线的守卫）
