@@ -123,3 +123,6 @@
 - 全量测试：`pytest tests/`（零运行时依赖，无第三方包）
 - 增量覆盖率：`python tools/check_coverage_delta.py`（只看本次改动的引擎文件，
   自动跑对应测试目录，几十秒；全量 `--cov` 留发布时）
+- 真实语料误报基线：`python tests/e2e/eval_diag_baseline.py`（诊断条数增长即
+  失败，卡在 `tests/policy/test_diag_baseline.py`；查证哪些是误报用
+  `eval_benchmark.py`，需外部 oracle）

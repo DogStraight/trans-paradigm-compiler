@@ -251,6 +251,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   的全局 `fail_under=80` 会把"只统计改动文件"误判为失败（须显式
   `--cov-fail-under=0`，是否达标改由脚本按文件判定）。默认只报告不失败：
   smoke/局部测试未必走到改动文件的全部路径，硬卡会误伤，要卡用 `--fail-under`。
+
+- **真实语料误报基线（门禁体系改进）**：`tests/e2e/eval_diag_baseline.py` +
+  `tests/e2e/samples/real/diag_baseline.json` —— 把真实语料（9 个工程，分组口径
+  复用 `eval_benchmark._GROUPS`）上的诊断**按码计条数**固化成基线，新增门禁
+  `tests/policy/test_diag_baseline.py` 卡"只许减不许增"。动机：规则默认开/关是
+  数据决策，但真实语料的误报面此前只有人工量化、无留痕——规则改动引发的误报
+  增长只能靠人偶然发现。基线**不依赖 oracle**（"增长即需解释"与判定对错无关；
+  查证哪些是误报仍用 `eval_benchmark.py`，它需外部工具故不进日常门禁）。
+  门禁另含两项自洽校验：`total` 必须等于 `counts` 之和（防手改漂移）、基线
+  非空（防清空后静默通过）。首个基线：**132 条 / 7 个码**
+  （CC001 22 / LC001 25 / UN001 22 / W101 13 / W104 10 / W105 2 / W201 38）。
+  代价：全量测试 +约 33s（真实语料必须实跑；smoke 层不含 policy，不受影响）。
+  门禁有效性已回退验证：把基线调小模拟增长后，精准报出 `W105: 0 → 2 (+2)`。
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
