@@ -77,14 +77,6 @@ def render_node(
     Returns:
         Doc IR
     """
-    # 引擎级 raw 拼接（ADR-0017 决策 4）：带 `_verbatim_text` 的节点整体直出该
-    # 文本——不走布局、不遍历子节点。宏区间的"原样输出"落点（宏调用视为不可拆
-    # 原子文本）；语言包对宏零知识，本规则是引擎协议。
-    # 文本可能含换行（多行构造原样输出）：后续行保留其原有缩进（不做重排）。
-    verbatim = getattr(node, "_verbatim_text", None)
-    if verbatim is not None:
-        return Text(verbatim)
-
     head_expr = layout.get("layout") or layout.get("head")
     body_cfg = layout.get("body")
     tail_cfg = layout.get("tail")
@@ -100,6 +92,16 @@ def render_node(
         LineSuffix(" " + c) for c in (slots.get("head_trailing") or [])
     ]
     trail_docs = [LineSuffix(" " + c) for c in (slots.get("trailing") or [])]
+
+    # 引擎级 raw 拼接（ADR-0017 决策 4）：带 `_verbatim_text` 的节点整体直出该
+    # 文本——不走布局、不遍历子节点（宏调用视为不可拆原子文本；语言包对宏零知识，
+    # 本规则是引擎协议）。注释槽仍要输出（附着注释在节点 span 之外，不丢内容）。
+    # 文本可能含换行（多行构造原样输出）：后续行保留其原有缩进（不做重排）。
+    verbatim = getattr(node, "_verbatim_text", None)
+    if verbatim is not None:
+        return _insert_before_trailing_break(
+            Text(verbatim), [*head_trail_docs, *trail_docs]
+        )
 
     # --- head ---
     if head_expr:

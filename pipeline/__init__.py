@@ -382,12 +382,18 @@ def _stage_expand(ctx: _PipelineContext) -> None:
     由 `restore_anchors` 原位还原，不受本切换影响。
     """
     if ctx.expand_macros and ctx.macro_table:
-        # 切片 ② 进行中：暂仍走锚路径（semantic=False），`macro_regions` 为空 →
-        # `_stage_macro_splice` 空转。切到 semantic=True 的阻塞项见 TODO ③：
-        # ① ANSI 端口形态下内部节点无 `_tok_span` → 自述判据升到 `ModuleDecl`
-        #    （整模块被冻住，格式化为 Verbatim）→ 需先补齐区间采集；
-        # ② 宏边界节点契约从 MacroCall 壳改为"区间表 + `_verbatim_text` 标记"，
-        #    相关测试与文档需同步。
+        # 切片 ② 暂仍走锚路径（semantic=False）：`macro_regions` 为空 →
+        # `_stage_macro_splice` 空转。切 semantic=True 已验证的进展与剩余阻塞
+        # 见 TODO ③：
+        #   [已 验 证] 区域表 + 自述判据选出窄节点（`Number` 而非整个 `ModuleDecl`），
+        #   位置覆盖 37% → 63%（tools/check_macro_coverage.py）；宏体尾部行注释
+        #   补换行后保真通过。
+        #   [阻 塞] 真展开后 **linter 的输入变成展开态**，darkriscv 解码器段
+        #   26 条 "unrecognized statement" 误报——内联展开把多行宏体铺成一条
+        #   语句，linter 的语句匹配对多行语句无解；锚路径下 linter 看到的是
+        #   标记 token，所以此前被掩盖。修法是给 linter 一个"跳过集"
+        #   （macro_regions 的展开态字符区间 → 落在区间内的诊断丢弃），
+        #   与渲染侧 raw 拼接是两件独立的事。
         ctx.source, ctx.restore_stack, ctx.macro_regions = expand_tokens(
             ctx.source,
             ctx.macro_table,
@@ -595,9 +601,13 @@ def _token_offsets(text: str, tokens: list) -> list[int]:
 
 
 def _node_spans(root: Any) -> list[tuple[Any, int, int]]:
-    """收集所有带 `_tok_span` 的节点（半开 token 区间）。"""
-    from core.define import CHILDREN_FIELD
+    """收集所有带 `_tok_span` 的节点（半开 token 区间）。
 
+    必须用 `Node.iter_children()`：它同时产出 `sub_node` 子节点**与属性挂载的
+    节点**（`Range.msb`/`BodyInputDecl.packed_range` 这类）——只走 `sub_node`
+    会漏掉表达式内部的窄节点，自述判据于是无窄节点可停，一路升到 `ModuleDecl`
+    （整模块被冻成 Verbatim，实测卡住切片 ② 的就是这个遍历漏项）。
+    """
     out: list[tuple[Any, int, int]] = []
     stack = [root]
     while stack:
@@ -605,9 +615,7 @@ def _node_spans(root: Any) -> list[tuple[Any, int, int]]:
         span = getattr(n, "_tok_span", None)
         if span is not None:
             out.append((n, span[0], span[1]))
-        children = getattr(n, CHILDREN_FIELD, None)
-        if isinstance(children, list):
-            stack.extend(children)
+        stack.extend(n.iter_children())
     return out
 
 
@@ -637,8 +645,19 @@ def _renders_as_itself(
         rendered = ctx.renderer.render(node)
     except Exception:  # noqa: BLE001 — 隔离渲染失败 → 按不自述处理
         return False
+    # 注：节点的**附着注释**在它 span 之外（渲染含、切片不含）——比较前从渲染
+    # 结果里去掉注释文本，否则带行尾注释的节点会被误判不自述而升到粗层。
+    rendered = _strip_comments(rendered)
     strip = lambda s: "".join(s.split())  # noqa: E731 — 局部判据
-    return strip(rendered) == strip(expanded[start:end])
+    return strip(rendered) == strip(_strip_comments(expanded[start:end]))
+
+
+def _strip_comments(text: str) -> str:
+    """去掉行注释与块注释文本（自述比较用：注释不参与结构比较）。"""
+    import re
+
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"//[^\n]*", "", text)
 
 
 def _verbatim_from_span(

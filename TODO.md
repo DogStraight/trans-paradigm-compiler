@@ -75,10 +75,19 @@
       渲染器 `_verbatim_text` 钩子（`renderer/node_renderer.py`，引擎级 raw 拼接，
       语言包零宏知识）+ 管线 `_stage_macro_splice`（最小**自述**包含节点整段原样
       输出）+ 宏体末行注释补换行（防吞同行后续内容，`test_macro_body_comment` 抓到的）。
-      · 阻塞 1：**ANSI 端口形态下内部节点无 `_tok_span`**（实测包含链只剩 `ModuleDecl`）
-      → 自述判据升到整模块（整模块被冻成 Verbatim）→ 需先补区间采集或改判据；
-      · 阻塞 2：宏边界契约从 `MacroCall` 壳改为"区间表 + `_verbatim_text` 标记"，
-      `test_macro_call_node.py` 四条与文档需同步。
+      · 阻塞 1（**旧阻塞，已解决**）：原判为“ANSI 端口形态下内部节点无 `_tok_span`”——
+      实测为误诊：`_node_spans` 只走了 `sub_node`，**漏掉属性挂载节点**（`Range`/`Number`）。
+      改用 `Node.iter_children()` 后自述判据选到 `Number`（窄节点），不再升到 `ModuleDecl`。
+      · 阻塞 2（**未做**）：宏边界契约从 `MacroCall` 壳改为“区间表 + `_verbatim_text` 标记”，
+      `test_macro_call_node.py` 四条与相关文档需同步（本轮回退后仍待随 ② 一起落）。
+      · 阻塞 3（**决定性，新确定**）：真展开后 **linter 输入就是展开态**（你这边的目标设计），
+      darkriscv 解码器段 26 条 `unrecognized statement` 误报——机制已定：内联展开把**多行
+      宏体**铺成一条跳多行的语句，linter 的语句匹配对多行语句无解；锚路径下 linter 看到的
+      是标记 token，所以此前被掩盖。修法 = 给 linter 一个**跳过集**（`ctx.macro_regions`
+      的展开态字符区间 → 落在区间内的诊断丢弃），与渲染侧 raw 拼接是**两件独立的事**。
+      探针实测（`semantic=True` 临时验证后回退）：覆盖率 **37% → 63%**；
+      `test_macro_type_slot.py` 的 3 个 fidelity 由 xfail 转 XPASS；批 7 `;;` 用例形态
+      变化（`` `BODY2; `` → 调用点分号成空语句独占一行，与手写 `;;` **同形** = 忠实展开）。
       已实测坑（切片② 必须带上的）：宏体自带行尾注释 → 文本铺体会吞掉宏调用同行的
       后续 token（darkriscv 81 条误报同源）；切分层规则前先过 `test_macro_body_comment`。
       → ③ 撤锚（`restore_anchors` 通道退役）。
