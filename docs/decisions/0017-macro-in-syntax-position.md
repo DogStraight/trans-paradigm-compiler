@@ -78,8 +78,19 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 4. **渲染侧：遇宏节点走 raw 分支拼接**——输出宏调用原文，不把展开内容重新
    格式化。带宏文本的对齐/格式化参照前人做法（Verible / clang-format：宏调用
    视为**不可拆的原子文本**，无法证明可安全重排时整段原样输出 verbatim）。
-   实现细节待定：宏区间与"可渲染单元"不重合时（如宏残片已含槽位自己的字面量），
-   取最小可证明正确的**原样输出**范围——宁可原样，不可静默重排。
+   **规则（2026-09-13 实测后定）**：取**最小的 `is_statement` 包含节点**，该节点
+   整段按**源文本原样输出**（节点保留、只加引擎标记，不替换成 MacroCall——避免
+   影响分析遍历）。
+   - 为什么不是"精确对齐的节点级折叠"：实测 6 例中 4 例精确对齐到节点
+     （`Range`/`Number`/`BlockingAssign`/`RegDecl`，`_drafts/probe_region_alignment.py`），
+     但**精确对齐不等于可安全替换**——`` input `T d ``（T=`[7:0]`）精确对齐到
+     `Range`，而 `Range.renderer` 只出 `msb : lsb`、方括号由**槽位 layout** 加，
+     宏展开体却自带 `[` `]` → 节点级替换会渲染成 `` input [`T] d ``（多套一对）。
+   - `is_statement` 是**语言包声明**（引擎只读、不硬编码）→ 规则与 layout 无关，
+     可证明不臆造文本：类型位三例落到 `BodyInputDecl`/`BodyOutputDecl` 声明上
+     → 原样输出 `` input `NT d; `` ✓；语句体/声明体宏落到各自语句/声明上 ✓。
+   - 粒度代价：含宏的**声明内部**不重排（对齐/空白保持原样）——这是"宁可原样，
+     不可静默重排"的直接结果。
 
 5. **parser 不做通用错误恢复**。`gap-parser-linter-approximation` 的"无恢复"
    对**非宏输入仍然成立**（真语法错仍是"linter 前置 + truncation 双保险"）；
