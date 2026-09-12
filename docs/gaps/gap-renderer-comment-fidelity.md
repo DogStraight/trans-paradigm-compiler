@@ -71,8 +71,14 @@ endmodule
 - 影响量化：`ref_spi_inf` 展开路径含注释口径字符相似度 ≈ 0.73（代码结构 1:1），
   `run_all_tests.py` 的 `_strip_all` 口径仍过阈值（X:OK）→ 门禁不报。
 
-**修法方向（未实施）**：渲染层保证 body 段首项 Comment 渲染在 head 之后
-（可对齐 `join.py` 对"容器首部 Comment 拆段"的处理，ADR-0013 B1.3）。
+**修法（已实施 2026-09-12）**：`renderer/primitives/join.py` 的"容器首部
+Comment 拆段"（ADR-0013 B1.3）加判据——**只拆非分段节点**（列表项，无
+head/body/tail）；分段节点（`ModuleDecl` 等）的 body 首注释归
+`render_node` 的 body 段渲染（head 之后）。效果：最小复现正确、
+`ref_spi_inf` 展开路径注释回到 ref 位置（第 11 行）；回归
+`tests/languages/verilog/test_comment_body_head.py`。
+· 附带修正：旧实现对分段节点执行 `subs.pop(0)` 就地改 AST（渲染不该改树），
+加判据后不再触发。
 
 ## 关联条目
 

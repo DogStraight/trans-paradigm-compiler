@@ -69,10 +69,20 @@ def eval_join(
             # 注释挂首元素 Comment 子节点）——join 布局内拆为注释段 +
             # 节点主体（注释独立行渲染）。item 主体渲染不引 sub_node
             # （layout 引绑定属性），Comment 不会被 render_node 重复渲染。
-            head_cmts = []
+            #
+            # ⚠ 只对**非分段节点**（无 head/body/tail 的列表项，如
+            # Declarator/端口项）拆：**分段节点**（ModuleDecl 等有
+            # head/body/tail）的 sub_node 就是它的 body，首部 Comment 属
+            # body 首注释，归 render_node 的 body 段渲染——若在此拆出，
+            # 注释会渲染到节点 head 之前（`// 注释` 漂到 `module` 声明前；
+            # 缺陷记录见 docs/gaps/gap-renderer-comment-fidelity.md）。
+            item_layout = renderer._layouts.get(item.node_name, {})
+            segmented = any(k in item_layout for k in ("head", "body", "tail"))
+            head_cmts: list[Node] = []
             subs = getattr(item, "sub_node", None)
-            while subs and getattr(subs[0], "_comment", False):
-                head_cmts.append(subs.pop(0))
+            if not segmented:
+                while subs and getattr(subs[0], "_comment", False):
+                    head_cmts.append(subs.pop(0))
             for c in head_cmts:
                 rendered.append((Text(getattr(c, "value", "")), [], True))
             merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)

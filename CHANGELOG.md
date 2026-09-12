@@ -148,6 +148,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   语言包仍走整包槽位执行（现行为零变化）。测试
   `tests/engine/pipeline/test_unit_slot_schedule.py`。
 
+- **修复：模块体首注释被渲染到 `module` 声明之前（渲染层）**：
+  `renderer/primitives/join.py` 的"容器首部 Comment 拆段"（ADR-0013 B1.3）
+  会把 item `sub_node` 首部 Comment 摘出前置——对 `ModuleDecl` 这类**分段节点**
+  （有 head/body/tail）则漂到 head 之前（顶格）。修：拆段只作用于**非分段节点**
+  （列表项）；分段节点的 body 首注释归 `render_node` 的 body 段渲染。
+  触发条件：模块体**首个元素**是注释。最小复现 12 行（与宏/typed_ports 无关）；
+  `ref_spi_inf` 展开路径注释回到 ref 位置（第 11 行）。回归
+  `tests/languages/verilog/test_comment_body_head.py`；记录
+  `docs/gaps/gap-renderer-comment-fidelity.md`。
+
 - **修复（5b-3c-2 回归）**：`slot_runner` 的 `result = "extra"` 误将 handler
   返回值接回 AST → `build_wrapper` 的 wrapper 模块被内联进主输出
   （`ref_spi_inf` 展开保真 0.43）。现改为**不接回**（额外产物由 handler 侧
