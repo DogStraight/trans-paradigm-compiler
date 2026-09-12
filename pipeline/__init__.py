@@ -107,6 +107,10 @@ class _PipelineContext:
     # （锚形态在结构位是普通标识符：`input <锚> d` 无产生式可匹配）。
     # 解析侧仍吃锚形态（宏不出口法层），两个消费者输入由此分开。
     lint_source: str = ""
+    # raw 解析模式（ADR 0018）：解析输入 = 扫指令后的**原文**（宏调用保持
+    # `` `NAME ``），不做替身替换——空体宏由占位阶段改 trivia，非空体宏由
+    # 解析器通配当元素。锚机制由此退到只剩渲染/诊断的旧路径用途。
+    parse_raw: bool = False
 
     # 输出目录（由 _resolve_output_paths 填充）
     gen_dir: str | None = None
@@ -397,6 +401,11 @@ def _stage_expand(ctx: _PipelineContext) -> None:
                 func_macros=ctx.func_macros,
                 semantic=True,
             )
+        if ctx.parse_raw:
+            # raw 解析模式（ADR 0018）：不做替身替换——ctx.source 保持扫指令后的
+            # 原文（宏调用可见），解析器见 `macro.call` 走通配/占位。
+            ctx.log("[preprocessor] macros kept raw (parse_raw)")
+            return
         ctx.source, ctx.restore_stack, ctx.macro_regions = expand_tokens(
             ctx.source,
             ctx.macro_table,
@@ -939,6 +948,7 @@ def run_pipeline_on_source(
     input_path: str | None = None,
     out_dir: str | None = None,
     expand_macros: bool | None = None,
+    parse_raw: bool | None = None,
     quiet: bool | None = None,
     analyzer_enabled: bool | None = None,
     transform_enabled: bool | None = None,
@@ -1037,6 +1047,7 @@ def run_pipeline_on_source(
         undefine=undefine,
         check_idempotent=check_idempotent,
         fidelity=fidelity,
+        parse_raw=bool(parse_raw),
     )
     ctx.result = {
         "success": False,

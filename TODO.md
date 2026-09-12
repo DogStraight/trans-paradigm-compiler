@@ -93,11 +93,16 @@
       在锚形态下无产生式可匹配（1 条误报），展开态通过。
       · 剩余 = **解析侧宏占位协议**（目标态第 3/4 条）：**决策已落 `docs/decisions/0018`**
       ——解析输入改"扫指令后的原文"（宏调用保持 `` `NAME ``）+ 引擎级通配"宏 token 满足
-      当前位置任意元素"，锚收缩为空体宏占位。改动前基线已量：真实语料 9 个文件中
-      **4 个 raw 解析失败**（darkriscv / ice40_cells_sim / picorv32 / tv80_core；
-      `_drafts/probe_raw_parse.py` 口径）——通配协议要消化的就是这 4 个面。
-      `test_macro_type_slot.py` 6 个 xfail 卡在这里（lint 侧已通），xfail 原因已同步。
-      实现点（下一步）：`parser/_production.py` 的 token / call 匹配点加 `macro.call` 通配。
+      当前位置任意元素"，锚收缩为空体宏占位。
+      **已落的三片**：① 空体宏占位 token（`macro.placeholder` 进 trivia 协议 +
+      `_stage_macro_placeholders` + parser skip 集追加）；② 原子位通配
+      （`parser/parser_core.py::_atom_parser_impl` → `MacroCall` 节点）；③ **raw 解析模式**
+      （`parse_raw=True`：只建宏表、不做替身替换）。
+      实测（`_drafts/probe_raw_parse.py` = 9 个真实语料）：raw 解析失败 **4 → 2**
+      （darkriscv ✅、tv80_core ✅ 已通；剩 ice40_cells_sim 宏在端口列表结构位、
+      picorv32 `if` 位点疑级联）。
+      **下一步**：结构位通配（`parser/_production.py::match_productions` 的 token 匹配点，
+      `prepare_production` 已定位）；然后 `test_macro_type_slot.py` 6 个 xfail 翻正。
       · 另两条实测（gap-parser-linter-approximation 素材）：linter `scan()` 内部自带
       `scan_directives+expand_tokens`（锚形态）——喂别的东西即二次展开；lint 吃 raw 原文
       会冒 61 条 MH002 宏重定义告警（真诊断，会挡门禁）。

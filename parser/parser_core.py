@@ -475,6 +475,13 @@ class Parser:
                 self.statement_rule_names,
             )
         self.skip_types = list(_skip_types_cfg)
+        # 引擎协议 trivia 恒定跳过：宏占位 token（空体宏展开为空的"跳过/占位"
+        # 形态，ADR 0018 决策 0）不是语言知识——它由引擎协议产生（占位阶段），
+        # 因此不放进语言配置 skip_types，而在引擎侧统一追加。
+        from core.token_protocol import PLACEHOLDER_TOKEN_TYPE
+
+        if PLACEHOLDER_TOKEN_TYPE not in self.skip_types:
+            self.skip_types.append(PLACEHOLDER_TOKEN_TYPE)
 
         # 日志级别阈值：无文件且非 verbose → 只留 WARN+（stderr 可见），
         # 修复旧实现把 _log_state 整体替换为空 lambda 导致 WARN 也被吞的问题。
