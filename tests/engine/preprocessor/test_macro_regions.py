@@ -18,7 +18,7 @@ _RULES = "grammar/verilog"
 
 def _expand(src: str) -> tuple[str, list[dict]]:
     """展开（语义模式）→ (展开文本, 区间表)。"""
-    table, func_macros, _, _, _, clean = scan_directives(src, _RULES)
+    table, func_macros, _, _, _, clean, _ = scan_directives(src, _RULES)
     expanded, _anchors, regions, _line_map = expand_tokens(
         clean, table, func_macros=func_macros, semantic=True
     )
@@ -124,7 +124,7 @@ def test_body_trailing_comment_gets_newline() -> None:
 
 def test_regions_only_in_semantic_mode() -> None:
     """默认（渲染路径）不产区间表——那条路径用锚还原，两者不混。"""
-    table, func_macros, _, _, _, clean = scan_directives(
+    table, func_macros, _, _, _, clean, _ = scan_directives(
         "`define V 1'b1\nmodule m;\n  assign a = `V;\nendmodule\n", _RULES
     )
     expanded, anchors, regions, _line_map = expand_tokens(

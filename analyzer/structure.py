@@ -109,6 +109,10 @@ class FileResult:
     modules: dict[str, ModuleInfo] = field(default_factory=dict)
     inst_sites: list = field(default_factory=list)  # ModuleInst 节点
     connections: list = field(default_factory=list)  # PortConnection（层 2）
+    # 展开行（0-based，索引展开后文本）→ 原始源行（1-based）；None = 不可
+    # 映射（include 拼接行）；空表 = 未展开（诊断行号原样）。两级复合：
+    # scan_directives（原始→clean）+ expand_tokens（clean→展开后）。
+    line_map: list = field(default_factory=list)
 
 
 # ── 引擎 ─────────────────────────────────────────────────
@@ -179,9 +183,10 @@ class _StructureBase:
 
         # 宏展开（真实工程含 `ifdef/`define；对齐 run_pipeline 语义——
         # scan_directives 提取宏表 + expand_tokens 纯文本展开，lex/lint/
-        # parse 全在展开后文本上）。无宏文件空表零影响。
+        # parse 全在展开后文本上）。无宏文件空表零影响。同时接收行映射
+        # （展开行→原始源行），供两阶段诊断回源。
         if self._expand_macros:
-            source = self._expand_source(source, path)
+            source, fr.line_map = self._expand_source(source, path)
 
         # 阶段 1：语法检查（token 级）。有错 → 语义阶段跳过（用户决策）。
         fr.lint_diags = shared["linter"].scan(source)
@@ -227,17 +232,20 @@ class _StructureBase:
         return fr
 
 
-    def _expand_source(self, source: str, path: str) -> str:
+    def _expand_source(self, source: str, path: str) -> tuple[str, list]:
         """宏展开（scan_directives 提取宏表 + expand_tokens 纯文本展开）。
 
         与 run_pipeline 的 _stage_macro_scan/_stage_expand 同语义；无宏
-        文件空表 → 原样返回。诊断行号基于展开后文本（宏 span 反向映射
-        属 P3.3 范畴，语义正确性优先）。
+        文件空表 → 原样返回。返回 (展开文本, 行映射)：行映射 =
+        **展开行（0-based）→ 原始源行（1-based）**，由两级变换的行表复合
+        （scan_directives 删条件编译行 → clean；expand_tokens 铺多行宏体
+        → 展开后）；不可映射（include 拼接行）为 None，消费方保守回退
+        展开行号，不做错误回填（gap-macro-diagnostic-mapping）。
         """
         try:
             from preprocessor import expand_tokens, scan_directives
 
-            macro_table, func_macros, _, _, _, clean = scan_directives(
+            macro_table, func_macros, _, _, _, clean, clean_to_raw = scan_directives(
                 source,
                 self._rules_dir,
                 source_path=path,
@@ -248,12 +256,17 @@ class _StructureBase:
             if macro_table:
                 # semantic=True：语句体宏展开宏体（check 需语义，不要保真锚
                 # marker——否则宏体不可分析 + marker 被 W002 误报）
-                clean, _, _, _ = expand_tokens(
+                clean, _, _, exp_to_clean = expand_tokens(
                     clean, macro_table, func_macros=func_macros, semantic=True
                 )
-            return clean
+                exp_to_raw = [
+                    clean_to_raw[c - 1] if 1 <= c <= len(clean_to_raw) else None
+                    for c in exp_to_clean
+                ]
+                return clean, exp_to_raw
+            return clean, clean_to_raw
         except Exception:  # noqa: BLE001 — 展开失败回退原文（lint 兜底）
-            return source
+            return source, []
 
 
     def _elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:

@@ -113,6 +113,9 @@ class _PipelineContext:
     parse_raw: bool = False
     # 展开行→源行映射（诊断回源）：由 `_stage_expand` 的语义展开填充。
     line_map: list[int] = field(default_factory=list)
+    # clean 行→原始源行映射（由 `_stage_macro_scan` 的 scan_directives 填充；
+    # 与 line_map 复合得到 展开行→原始源行，供 lint 日志回源）。
+    clean_line_map: list = field(default_factory=list)
 
     # 输出目录（由 _resolve_output_paths 填充）
     gen_dir: str | None = None
@@ -362,6 +365,7 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
         ctx.placeholders,
         ctx.directive_lines,
         ctx.source,
+        ctx.clean_line_map,
     ) = scan_directives(
         ctx.source,
         ctx.rules_dir,
@@ -474,12 +478,15 @@ def _stage_lint(ctx: _PipelineContext) -> bool:
     lint_errors = ctx.linter.scan(ctx.lint_source or ctx.source)
     if lint_errors:
         for err in lint_errors:
-            # 诊断行号回源（展开态行 → 源行）：lint 输入是真展开文本，宏体
-            # 多行时行号会漂；line_map 不可用时（未展开/无宏）退为原行号。
+            # 诊断行号回源（展开态行 → clean 行 → 原始源行）：lint 输入是真
+            # 展开文本，宏体多行/条件压缩时行号会漂；映射不可用（未展开/
+            # 无宏）时逐级退化为原行号。
             ln = err.range[0].line + 1
             src_ln = ln
             if ctx.line_map and 1 <= ln <= len(ctx.line_map):
                 src_ln = ctx.line_map[ln - 1]
+                if 1 <= src_ln <= len(ctx.clean_line_map):
+                    src_ln = ctx.clean_line_map[src_ln - 1] or src_ln
             ctx.log(f"[linter] {err.message} at L{src_ln}:{err.range[0].character}")
         ctx.result["error"] = f"lint failed: {len(lint_errors)} error(s)"
         return False

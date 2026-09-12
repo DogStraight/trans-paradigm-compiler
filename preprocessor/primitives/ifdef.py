@@ -10,6 +10,9 @@
     { "ifdef_line", "cond", "negated", "boundary_lines",
       "branches": [ {"cond", "is_else", "active", "lines"}, ... ],
       "cur_branch" }
+行账本：branches[].lines / boundary_lines 存 (原始行号, 文本) 对——条件
+压缩会改变行数，clean→raw 行映射必须逐行记账；边界行行号取自
+ctx["_cur_line_no"]（scan_directives 主循环维护，测试直调 handler 时为 None）。
 Doc: preprocessor/README.md
 """
 
@@ -31,12 +34,17 @@ def _new_branch(cond, is_else, active):
 
 
 def _make_placeholder(ctx, lines):
-    """把一段原文压缩成唯一注释占位，记录映射后返回占位注释行。"""
+    """把一段原文压缩成唯一注释占位，返回 (归属行号, 占位注释行)。
+
+    lines 为 (原始行号, 文本) 账本对；占位行本身是注释（无 token），归属
+    取段内首个已知行号，全未知（直接调用 handler 的测试路径）为 None。
+    """
     seq = ctx.get("_cond_seq", 0)
     ctx["_cond_seq"] = seq + 1
     ph_id = f"tpc:cond:{seq}"
-    ctx.setdefault("_cond_placeholders", {})[ph_id] = "\n".join(lines)
-    return f"// <{ph_id}>"
+    ctx.setdefault("_cond_placeholders", {})[ph_id] = "\n".join(t for _, t in lines)
+    anchor = next((n for n, _ in lines if n is not None), None)
+    return anchor, f"// <{ph_id}>"
 
 
 def _flush_block(ctx, block):
@@ -80,7 +88,7 @@ def handle_ifdef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         "negated": False,
         "depth": len(stack),
         "parent_branch": parent_branch,
-        "boundary_lines": [stripped],
+        "boundary_lines": [(ctx.get("_cur_line_no"), stripped)],
         "branches": [branch],
         "cur_branch": branch,
     }
@@ -109,7 +117,7 @@ def handle_ifndef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
         "negated": True,
         "depth": len(stack),
         "parent_branch": parent_branch,
-        "boundary_lines": [stripped],
+        "boundary_lines": [(ctx.get("_cur_line_no"), stripped)],
         "branches": [branch],
         "cur_branch": branch,
     }
@@ -130,7 +138,7 @@ def _switch_branch(ctx: dict, stripped: str, cond, is_else: bool) -> None:
         return
     frame = stack[-1]
     block = frame["block"]
-    block["boundary_lines"].append(stripped)
+    block["boundary_lines"].append((ctx.get("_cur_line_no"), stripped))
     if not frame["found_active"]:
         if cond is None:
             active = True  # else：前面全未选中
@@ -171,7 +179,7 @@ def handle_endif(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     if not stack:
         return
     block = stack[-1]["block"]
-    block["boundary_lines"].append(stripped)
+    block["boundary_lines"].append((ctx.get("_cur_line_no"), stripped))
     out = _flush_block(ctx, block)
     stack.pop()
     if stack:

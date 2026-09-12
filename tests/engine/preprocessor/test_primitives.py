@@ -159,9 +159,9 @@ class TestIfdef:
         """endif 后非管线内容压缩成占位。"""
         ctx = _ctx(macro_defs={})
         _call("ifdef", "`ifdef F", ctx)
-        # 给 active 分支加内容
+        # 给 active 分支加内容（账本对：原始行号 + 文本）
         block = ctx["_cond_blocks"][0]
-        block["branches"][0]["lines"].append("    code = 1;")
+        block["branches"][0]["lines"].append((2, "    code = 1;"))
         _call("endif", "`endif", ctx)
         # 占位生成（inactive ifdef 行 + 内容压缩成占位）
         assert ctx["_cond_placeholders"], "应生成条件占位"

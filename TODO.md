@@ -65,14 +65,15 @@
       (b) 由同一张表反查宏归因（诊断加 `"macro": "<NAME>"`）。**测试为重心**；不做列级。
       **硬约束（gap 档明载）**：映射可能不准时，宁保留“展开后行号”（诚实）也不给错误的
       “源行号”——故 raw→clean 那一级必须与接线**同批落地**，不半接。
-      切片进度：**① ✅ expand 级映射**（`expand_tokens` 第 4 返回值 `line_map` =
-      展开行→clean 行；已接消费者：管线 lint 日志回源；`test_macro_regions` 含断言）。
-      **② 待做（机制已探明，下轮直接动手）**：
-      - `scan_directives` 的 `clean_source = "\n".join(ctx["_inject_lines"])` —— 每条原始行
-        经分支（directive 处理 / 行首宏 / inactive 分支收集）归入 `_inject_lines`；
-        续行（行尾 `\`）多行合一 → 映射是**多→1**，需在每条原始行处理处记一次。
-      - 复合后接 check 路径：`FileResult` 加字段 + `_syntax_diag`/`_semantic_diag` 换算。
-      验收：各形态行号正确（单行/多行/嵌套/带参/条件编译 × 断言）+ 不可映射明确回退。
+      切片进度：**① ✅ expand 级映射**（`expand_tokens` 第 4 返回值 `line_map` = 展开行→clean 行；
+      已接消费者：管线 lint 日志回源；`test_macro_regions` 含断言）。
+      **② ✅ scan 级映射 + check 接线（2026-09-13）**：`scan_directives` 第 7 返回值
+      `clean_to_raw`（行+行号对账本，覆盖续行合并/条件压缩/include 不可映射）；
+      `_expand_source` 两级复合 → `FileResult.line_map` → `_syntax_diag`/`_semantic_diag`
+      换算 + 不可映射保守回退；形态覆盖测试 `test_scan_line_map.py`（6）/
+      `test_diag_line_map.py`（4）。**剩 (b) 宏归因**（诊断加 `"macro": "<NAME>"`，
+      由区间表反查）。验收：各形态行号正确（单行/多行/嵌套/带参/条件编译 × 断言）
+      + 不可映射明确回退。
 - [ ] **⑥（最后）formatter 多声明器正确对齐**（`gap-formatter-line-behavior`
       item4，已定：**实现正确对齐**，不走保守回退）：重组时按「名字列同基准」
       计算后缀填充（参照 Verible kDataDeclaration），消除真实语料 226 处漂移。

@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **诊断行号回源（check 链，P3.3 (a)）**：`scan_directives` 新增第 7 返回值
+  `clean_to_raw`（行+行号对账本：续行合并取段首行、条件压缩按实际归属、include
+  拼接行 `None` 不可映射），与 `expand_tokens` 的展开级映射两级复合后经
+  `FileResult.line_map` 进入 `_syntax_diag`/`_semantic_diag`（含 related）换算——
+  宏/条件编译文件的诊断行号从“展开后行号”回到**原始源行号**；不可映射时保守
+  回退展开行号（不给错误回填）。管线 lint 日志行号同步两级回源。实测：7 处
+  调用点同步；`ifdef` 压缩/续行合并/include 三类形态断言全绿。
 - **解析侧改吃真展开**（2026-09-13）：解析输入由保真锚形态切到 `expand_tokens(semantic=True)`
   的展开文本——语法结构直接由展开文本判定（类型位宏 `` input `NT d `` 不再需要任何
   语法槽位），宏调用原文由**区间表 + `_verbatim_text`** 挂在覆盖节点上供渲染还原

@@ -511,9 +511,9 @@ def _file_lint_offs(files: list[str]) -> dict[str, set]:
     return out
 
 
-# 条件编译指令（ifdef/ifndef/else/elsif/endif）——展开后 token 行号与
-# 源行号偏移（P3.3 已知坑：语义诊断行号在展开后 token 流上，未映射回
-# 源文本）。含条件编译的文件按码族数量对齐（行号不可比），否则按行对齐。
+# 条件编译指令（ifdef/ifndef/else/elsif/endif）——历史 P3.3 行号偏移留下的
+# 粗对齐模式：check 链行号回源已落地（2026-09-13），但本模式在 benchmark
+# 全量重验前暂保留（码族数量对齐不依赖行号，不影响判定力）。
 _COND_RE = re.compile(r"`(ifdef|ifndef|else|elsif|endif)\b")
 
 
@@ -542,9 +542,9 @@ def _classify(tpc_diags, ow: list[dict], lint_offs: dict[str, set] | None = None
     "仅 tpc（FP 候选）"（oracle 不报是源码 lint_off 主动关闭，
     不是判断差异），单独计为"抑制（作者主动关）"。
 
-    has_cond: 文件含条件编译（ifdef 等）→ 展开后行号 ≠ 源行号
-    （P3.3），按行对齐不可靠：改为**同文件同码族按数量对齐**
-    （共识 = 两侧数量一致；仅一侧多出 = 对应候选）。
+    has_cond: 文件含条件编译（ifdef 等）→ 历史 P3.3 行号偏移留下的粗对齐
+    模式（行号回源已落地，暂保留至 benchmark 重验）：同文件同码族按数量
+    对齐（共识 = 两侧数量一致；仅一侧多出 = 对应候选）。
     """
     w2t = w2t or W2T
     scope_out = scope_out if scope_out is not None else _SCOPE_OUT
@@ -566,7 +566,7 @@ def _classify(tpc_diags, ow: list[dict], lint_offs: dict[str, set] | None = None
     # 共识 / 仅 tpc：对每个 tpc 诊断找 oracle 对应
     matched_v = set()
     if has_cond:
-        # 条件编译文件：行号不可比（展开后 vs 源，P3.3）——按码族数量对齐：
+        # 条件编译文件：历史 P3.3 行号偏移留下的粗对齐——按码族数量对齐：
         # 同码族两侧数量一致 → 全部共识；数量差 → 多出侧为候选
         # （码族级判定，不逐条匹配位置）。
         for code, diags in tpc_by_code.items():

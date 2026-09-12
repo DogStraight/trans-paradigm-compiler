@@ -217,22 +217,42 @@ class ProjectChecker(_StructureBase):
     # ── 诊断序列化（LSP 兼容 + stage 字段）──
 
     @staticmethod
+    def _map_diag_line(fr: FileResult, line0: int | None) -> int | None:
+        """展开坐标（0-based）→ 原始源坐标（0-based）；无表/不可映射时原样保留。
+
+        行表来自 ``_expand_source`` 的两级复合（展开→clean→原始）；None/越界
+        一律回退展开行号——映射可能不准时宁保留诚实偏移，不给错误的源行号
+        （gap-macro-diagnostic-mapping 硬约束）。
+        """
+        lm = fr.line_map
+        if not lm or line0 is None or not (0 <= line0 < len(lm)):
+            return line0
+        src = lm[line0]
+        return src - 1 if src is not None else line0
+
+    @staticmethod
     def _syntax_diag(fr: FileResult, d) -> dict:
         span = getattr(d, "range", None)
+        if span:
+            rng = {
+                "start": {
+                    "line": ProjectChecker._map_diag_line(fr, span[0].line),
+                    "character": span[0].character,
+                },
+                "end": {
+                    "line": ProjectChecker._map_diag_line(fr, span[1].line),
+                    "character": span[1].character,
+                },
+            }
+        else:
+            rng = None
         return {
             "stage": "syntax",
             "file": fr.path,
             "severity": 1,
             "code": getattr(d, "code", "parse-error"),
             "message": d.message,
-            "range": (
-                {
-                    "start": {"line": span[0].line, "character": span[0].character},
-                    "end": {"line": span[1].line, "character": span[1].character},
-                }
-                if span
-                else None
-            ),
+            "range": rng,
         }
 
     @staticmethod
@@ -241,6 +261,18 @@ class ProjectChecker(_StructureBase):
         line = getattr(node, "_pos_line", None)
         col = getattr(node, "_pos_col", None)
         sev = {"error": 1, "warning": 2, "info": 3}.get(d.level, 2)
+        # 行号回源：仅对本文件节点用行表（跨文件节点行号属另一文件坐标系）
+        same_file = getattr(node, "_file", None) in (None, fr.path)
+        if line is not None:
+            line0 = (line - 1) if line else 0
+            if same_file:
+                line0 = ProjectChecker._map_diag_line(fr, line0)
+            rng = {
+                "start": {"line": line0, "character": col or 0},
+                "end": {"line": line0, "character": (col or 0) + 1},
+            }
+        else:
+            rng = None
         out = {
             "stage": "semantic",
             "file": fr.path,
@@ -248,22 +280,16 @@ class ProjectChecker(_StructureBase):
             "code": d.code or "semantic",
             "message": d.message,
             "level": d.level,
-            "range": (
-                {
-                    "start": {"line": line - 1 if line else 0, "character": col or 0},
-                    "end": {
-                        "line": line - 1 if line else 0,
-                        "character": (col or 0) + 1,
-                    },
-                }
-                if line is not None
-                else None
-            ),
+            "range": rng,
         }
         related = []
         for msg, rnode in d.related:
             rl = getattr(rnode, "_pos_line", None)
             rc = getattr(rnode, "_pos_col", None)
+            if rl is not None and getattr(rnode, "_file", None) in (None, fr.path):
+                mapped = ProjectChecker._map_diag_line(fr, rl - 1)
+                if mapped is not None:
+                    rl = mapped + 1
             related.append(
                 {
                     "message": msg,

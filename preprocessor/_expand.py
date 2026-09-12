@@ -40,24 +40,32 @@ _directives_cfg: dict = declare_cfg("preprocessor.directives", {}, __name__, "_d
 _continuation_cfg: dict = declare_cfg("preprocessor.continuation", {}, __name__, "_continuation_cfg")
 
 
-def _join_continuation_lines(source: str, cfg: dict | None = None) -> str:
-    """合并反斜杠延续行。
+def _join_continuation_lines(
+    source: str, cfg: dict | None = None
+) -> tuple[str, list[int]]:
+    """合并反斜杠延续行，并产出行映射。
 
     行尾为 continuation 字符时，与下一行合并为同一逻辑行。
     合并后的行若仍以 continuation 结尾，继续合并（支持链式折行）。
     cfg 支持:
         enabled: bool (default True)
         character: str (default "\\")
+
+    Returns: (joined_source, join_map)
+        join_map — **合并后行号（1-based）→ 原始行号（1-based）**：续段是
+        首行的物理延伸，映射取合并段首行（诊断位置以段首行为准）。
     """
     if cfg is None:
         cfg = dict(_continuation_cfg)
     if not cfg.get("enabled", True):
-        return source
+        return source, list(range(1, source.count("\n") + 2))
     char = cfg.get("character", "\\")
     lines = source.split("\n")
     result: list[str] = []
+    join_map: list[int] = []
     i = 0
     while i < len(lines):
+        jno = i + 1
         line = lines[i]
         stripped = line.rstrip()
         if stripped.endswith(char) and i + 1 < len(lines):
@@ -77,7 +85,8 @@ def _join_continuation_lines(source: str, cfg: dict | None = None) -> str:
         else:
             result.append(line)
             i += 1
-    return "\n".join(result)
+        join_map.append(jno)
+    return "\n".join(result), join_map
 
 
 def _get_expand_config() -> dict[str, int]:
@@ -121,7 +130,7 @@ def _build_macro_re(prefix: str) -> re.Pattern:
 # ── 纯文本展开（新方案）──
 
 
-def _inject_directive_marker(ctx: dict, stack: list, line: str) -> None:
+def _inject_directive_marker(ctx: dict, stack: list, jno: int, line: str) -> None:
     """active 指令行（define/undef/include）原位占位。
 
     指令行从 token 流剥离（不进入 clean_source），但在原位置插入
@@ -129,6 +138,7 @@ def _inject_directive_marker(ctx: dict, stack: list, line: str) -> None:
     restore_anchors 原位回插，实现指令行位置保真（不再堆到文件头）。
     原文存**完整行（含前导缩进）**——还原要恢复原文形态，剥缩进会让
     嵌套 ifdef 内的 define 还原后顶格（ref 里 define 有 2/4 空格缩进）。
+    占位行按 (原始行号, 文本) 入账本——1:1 替换不改变行数，行映射照常。
     """
     seq = ctx["_directive_seq"]
     ctx["_directive_seq"] = seq + 1
@@ -137,9 +147,9 @@ def _inject_directive_marker(ctx: dict, stack: list, line: str) -> None:
     if stack:
         branch = stack[-1].get("cur_branch")
         if branch is not None:
-            branch["lines"].append(f"// <{marker}>")
+            branch["lines"].append((jno, f"// <{marker}>"))
     else:
-        ctx["_inject_lines"].append(f"// <{marker}>")
+        ctx["_inject_lines"].append((jno, f"// <{marker}>"))
 
 
 def scan_directives(
@@ -151,16 +161,29 @@ def scan_directives(
     search_dirs: list[str] | None = None,
     predefined: dict[str, str] | None = None,
     undefine: set[str] | None = None,
-) -> tuple[dict[str, str], dict[str, list[str]], list[dict], dict[str, str], list[str], str]:
+) -> tuple[
+    dict[str, str],
+    dict[str, list[str]],
+    list[dict],
+    dict[str, str],
+    list[str],
+    str,
+    list[int | None],
+]:
     """扫描源文件中的宏指令，构建宏表并返回清洗后的源码。
 
-    Returns: (macro_defs, func_macros, condition_blocks, placeholders, directive_lines, clean_source)
+    Returns: (macro_defs, func_macros, condition_blocks, placeholders,
+              directive_lines, clean_source, clean_to_raw)
         macro_defs:      name → body（object-like 全展开；function-like 保留形参占位）
         func_macros:     name → [形参列表]（function-like 宏）
         condition_blocks: 条件块结构列表（每块含 branches/cond/active/lines）
         placeholders:    {占位 id → 原文段}，渲染后由 restore_condition_blocks 替换回
         directive_lines:  副作用指令行原文（define/include/undef）
         clean_source:     去掉指令行、inactive 分支压缩成占位后的源码
+        clean_to_raw:     clean 行（1-based）→ 原始源行（1-based）；续行合并
+                          取段首行、增删行按实际归属记账；include 拼接行不属
+                          本源文件 → None（不可映射，消费方保守回退）。诊断
+                          回源时与 `expand_tokens` 的展开级映射复合使用。
     """
     prefix, directives_set = _load_config()
     _MACRO_RE = _build_macro_re(prefix)
@@ -198,10 +221,13 @@ def scan_directives(
     }
 
     # ── 预合并延续行（反斜杠折行）──
-    source = _join_continuation_lines(source)
+    # 账本：每条输出行携带其**原始行号**（行与行号成对入列表）——clean 行数
+    # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
+    source, join_map = _join_continuation_lines(source)
     lines = source.split("\n")
 
-    for line in lines:
+    for jno, line in enumerate(lines, 1):
+        ctx["_cur_line_no"] = jno  # 控制指令 handler 记账用（边界行归属）
         stripped = line.strip()
         stack: list = ctx.get("_ifdef_stack", [])
 
@@ -210,9 +236,9 @@ def scan_directives(
             if stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:
-                    branch["lines"].append(line)
+                    branch["lines"].append((jno, line))
             elif _is_ifdef_active(ctx):
-                ctx["_inject_lines"].append(line)
+                ctx["_inject_lines"].append((jno, line))
             continue
 
         # 从行首提取 directive 关键字（`define foo → "define"）
@@ -225,20 +251,20 @@ def scan_directives(
             if stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:
-                    branch["lines"].append(line)
+                    branch["lines"].append((jno, line))
             elif _is_ifdef_active(ctx):
-                ctx["_inject_lines"].append(line)
+                ctx["_inject_lines"].append((jno, line))
             continue
 
         handler_cfg = _directives_cfg.get(directive_name, {})
         if not handler_cfg.get("enabled", True):
             # 配置禁用：不执行 handler，但原文原位占位保留
             if _is_ifdef_active(ctx):
-                _inject_directive_marker(ctx, stack, line)
+                _inject_directive_marker(ctx, stack, jno, line)
             elif stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:
-                    branch["lines"].append(line)
+                    branch["lines"].append((jno, line))
             continue
 
         # 指令关键字 → op（预定义操作）绑定，kind 以 op 对应处理器为准
@@ -258,12 +284,12 @@ def scan_directives(
             handler = get_primitive(op)
             if handler:
                 handler(stripped, prefix, directive_name, ctx)
-            _inject_directive_marker(ctx, stack, line)
+            _inject_directive_marker(ctx, stack, jno, line)
         elif stack:
             # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
             branch = stack[-1].get("cur_branch")
             if branch is not None:
-                branch["lines"].append(line)
+                branch["lines"].append((jno, line))
 
     macro_defs = ctx["macro_defs"]
     func_macros = ctx["_func_params"]
@@ -271,10 +297,25 @@ def scan_directives(
     placeholders = dict(ctx.get("_cond_placeholders", {}))
     placeholders.update(ctx.get("_directive_placeholders", {}))
     directive_lines = ctx["directive_lines"]
-    clean_source = "\n".join(ctx["_inject_lines"])
+    inject_lines = ctx["_inject_lines"]
+    clean_source = "\n".join(text for _, text in inject_lines)
+    # clean 行（1-based）→ 原始行（1-based）：合并段取首行；include 拼接行
+    # 不属于本源文件 → None（不可映射，消费方保守回退展开行号）
+    clean_to_raw = [
+        join_map[jno - 1] if jno and 1 <= jno <= len(join_map) else None
+        for jno, _ in inject_lines
+    ]
 
     if not macro_defs:
-        return {}, func_macros, condition_blocks, placeholders, directive_lines, clean_source
+        return (
+            {},
+            func_macros,
+            condition_blocks,
+            placeholders,
+            directive_lines,
+            clean_source,
+            clean_to_raw,
+        )
 
     # ---- Fully expand macro bodies (for reverser) ----
     # 带参宏 body 含形参占位，形参未绑定时不能预展开，跳过。
@@ -307,7 +348,15 @@ def scan_directives(
         if not changed:
             break
 
-    return macro_defs, func_macros, condition_blocks, placeholders, directive_lines, clean_source
+    return (
+        macro_defs,
+        func_macros,
+        condition_blocks,
+        placeholders,
+        directive_lines,
+        clean_source,
+        clean_to_raw,
+    )
 
 
 # ── 多路径诊断：条件块叶路径枚举 ──
@@ -467,7 +516,7 @@ def expand_tokens(
     prefix: str = "`",
     func_macros: dict[str, list[str]] | None = None,
     semantic: bool = False,
-) -> tuple[str, list[dict], list[dict]]:
+) -> tuple[str, list[dict], list[dict], list[int]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
     用正则搜索 `NAME，向左扫同步词，记录位置后替换宏体。

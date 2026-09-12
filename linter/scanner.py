@@ -238,7 +238,7 @@ class LinterScanner:
     ) -> list[LintDiagnostic]:
         """扫源文本产出诊断。"""
         errors: list = []
-        macro_defs, func_macros, _, _, _, clean_source = scan_directives(
+        macro_defs, func_macros, _, _, _, clean_source, _ = scan_directives(
             source, self._rules_dir, predefined=predefined, undefine=undefine
         )
         if macro_defs:

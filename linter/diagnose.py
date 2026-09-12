@@ -31,7 +31,7 @@ def diagnose_all_paths(
     LinterScanner.scan 的诊断结果。
     """
     # 基础扫描：拿条件块结构（不展开）
-    _, _, blocks, _, _, _ = scan_directives(
+    _, _, blocks, _, _, _, _ = scan_directives(
         source,
         rules_dir,
         source_path=source_path,

@@ -1,6 +1,7 @@
 # Gap — 宏展开与诊断位置对应（(a) 行号映射 / (b) 宏归因）
 
-- 状态：**立项中**（TODO「缺口闭环队列」②，2026-09-12 排队；切片见下「可实现性」）
+- 状态：**部分闭环**——(a) 行号回源已完成（2026-09-13，见下「完成记录」）；
+  (b) 宏归因待做（TODO「缺口闭环队列」②）
 - 关联：TODO.md「0.1.2 目标」节下的「检查链宏位置映射」条目
 - 参照：`docs/decisions/0016-macro-body-into-ast.md`（raw 源区间权威 + 对应层）、
   P3.3 双向映射
@@ -30,9 +31,10 @@
 
 ## 为什么是缺口（影响面）
 
-- (a) 作者**已明示且有意推迟**——`analyzer/structure.py::_expand_source` docstring：
-  「诊断行号基于展开后文本（宏 span 反向映射属 **P3.3** 范畴，**语义正确性优先**）」。
-  所以它不是疏漏，是权衡：映射**可能不准**时，诚实的"展开后行号"优于错误的"源行号"。
+- (a) 作者**已明示且有意推迟**（2026-09-13 已实现回源）：`analyzer/structure.py::_expand_source`
+  原 docstring 记「诊断行号基于展开后文本（宏 span 反向映射属 **P3.3** 范畴，
+  **语义正确性优先**）」——不是疏漏，是权衡：映射**可能不准**时，诚实的“展开后
+  行号”优于错误的“源行号”。该权衡仍是实现的硬约束（不可映射 → 保守回退）。
 - (b) 影响诊断可用性：宏密集工程（tv80 / darkriscv / ice40）里宏体触发的诊断
   无法定位到宏调用点，也无法"忽略某宏体内的问题"。
 
@@ -80,6 +82,18 @@
   （`scanner.scan(source, anchors=ctx.restore_stack)`），linter 在 token 层把锚
   换成展开体——展开体 token 的位置映射到**锚位置**，故展开路径诊断的落点是锚位
   （展开后坐标），与本档 (a)/(b) 的"回源"目标是同一张表要解决的问题。）
+
+### 完成记录（2026-09-13，(a) 落地）
+
+- `expand_tokens` 第 4 返回值（展开行 → clean 行）与 `scan_directives` 第 7 返回值
+  `clean_to_raw`（clean 行 → 原始行；行+行号对账本，续行合并取段首行、条件压缩按
+  实际归属、include 拼接行 `None` 不可映射）**两级复合**。
+- 接线：`_expand_source` 复合 → `FileResult.line_map`（展开行 0-based → 原始行
+  1-based）→ `_syntax_diag`/`_semantic_diag`（含 related）换算；不可映射/越界
+  保守回退展开行号。管线 lint 日志行号随之两级回源（`ctx.clean_line_map`）。
+- 形态覆盖测试：`tests/engine/preprocessor/test_scan_line_map.py`（6）+
+  `tests/engine/analyzer/test_diag_line_map.py`（4）。
+- 剩 (b)：诊断加 `"macro": "<NAME>"`（由区间表反查，区间需换算到展开行区间）。
 
 ### 切片（每片独立可验证）
 
