@@ -411,7 +411,36 @@ def parse_expression(
         ):
             break
         if not is_operator(token):
-            break
+            # 续行（**行首运算符**）：`ALL0\n + ALL1` 的 `+` 在行首——上面
+            # "遇 newline 非运算符自然 break" 会把表达式截在 `ALL0`，语句
+            # 匹配器随后要求 `;` 却遇到 `+` → 整句判不出（多行语句误报根因，
+            # linter 与 parser 共用本函数，两侧同病）。
+            # 判据：跳过 trivia（换行/注释）后若下一个显著 token 是**中缀**
+            # 运算符 → 表达式续行（行首中缀运算符不可能是语句起点，语句级
+            # 换行终止语义不变量保留）；否则维持 break（`expr1\n expr2`）。
+            if isinstance(token, Token) and token.type in (
+                COMMENT_TOKEN_TYPE,
+                NEWLINE_TOKEN_TYPE,
+            ):
+                k = idx
+                while (
+                    k < len(tokens)
+                    and isinstance(tokens[k], Token)
+                    and tokens[k].type
+                    in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
+                ):
+                    k += 1
+                if (
+                    k < len(tokens)
+                    and is_operator(tokens[k])
+                    and tokens[k].content in infix_attrs
+                ):
+                    idx = k
+                    token = tokens[idx]
+                else:
+                    break
+            else:
+                break
         op = token.content
         if op not in infix_attrs:
             break
