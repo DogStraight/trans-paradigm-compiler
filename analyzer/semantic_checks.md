@@ -256,17 +256,15 @@ WC001 warning: literal 16'hFFFF feeds parameterized port DATA_OUT (width DATA_W)
 > CLI 验收：`tpc check <file> [--include DIR] [--json]`——语法阶段
 > （stage=syntax）+ 语义阶段（stage=semantic），exit 1 按 error 级。
 
-## 11. 编写检查规则：实操在 SKILL，插件清单在 checks/README
+## 11. 编写检查规则：实操在 checks/README，本架构只述机制
 
 本架构文档只述引擎机制（§3 schema / §5 post-pass 协议 / §7 related 链 /
-§8 统一抑制 / §9 测试框架）；**加规则/写规则的实操**由两份就近文档承载，
-不在此重复：
+§8 统一抑制 / §9 测试框架）；实操与清单都就近在插件目录，不在此重复：
 
 - 双路径实操（L1 声明式 `[[checks]]` / L2 handler-postpass：目录结构、步骤、
-  接口契约、选择判据）→ `.agents/skills/checker-rule-authoring/SKILL.md`
-  （模型可加载指令包，随项目发布；本架构 §3/§5 是其机制底稿）。
-- 插件清单（每 check 插件负责什么 + 诊断 code 就近权威）→
-  `grammar/verilog/plugins/checks/README.md`。
+  接口契约、选择判据）→ `grammar/verilog/plugins/checks/README.md`
+  「编写检查规则」节（本架构 §3/§5 是其机制底稿）。
+- 插件清单（每 check 插件负责什么 + 诊断 code 就近权威）→ 同文件「插件清单」节。
 
 ## 12. 规则默认策略（数据决策演进，原 ADR-0004 落地演进迁入）
 
