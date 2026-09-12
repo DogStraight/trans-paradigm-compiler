@@ -291,6 +291,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   真实缺口只剩：入口曾是单个（已补：`check(paths)` 多入口，跨目录工程需要）、
   以及语料侧缺文件。教训：根因必须落到实测（逐条打印诊断），不能停在
   "看代码猜机制"——本轮因未验证连下了两次错结论。
+
+### Changed
+
+- **结构提取底座独立（`analyzer/structure.py`）**：原 `analyzer/checker.py`
+  （1375 行）三重职责拆分——结构提取底座（elaboration 三层，33 方法 / 995 行）
+  移入 `analyzer/structure.py` 的 `_StructureBase`；`checker.py` 只留检查门面
+  （`ProjectChecker(_StructureBase)`，6 方法 / 238 行）。收益：① 语言包
+  `[structure] protocol` 的**声明点**随底座迁出，门面不再声明结构协议
+  （注册点分离）；② 文件名不再暗示"分析器必然实现检查插件"。外部 API 与行为
+  零变化（`from analyzer.checker import ProjectChecker` 全部调用方未动；全量
+  1735 passed + 8 skipped）。本轮用继承实现文件级分离，**组合式依赖注入推迟**
+  到出现第二个真实消费方时再做。
+- **验证体系强化（本版）**：规则覆盖门禁（声明码 vs 采样码，含反向校验）、
+  数字单源门禁（文档禁止硬编码样本统计）、真实语料误报基线（只许降不许升）、
+  增量覆盖率工具、门禁有效性变异抽查（4/4 期望变红）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
