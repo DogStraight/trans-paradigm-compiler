@@ -410,6 +410,7 @@ def _stage_expand(ctx: _PipelineContext) -> None:
             ctx.source,
             ctx.macro_table,
             func_macros=ctx.func_macros,
+            semantic=True,
         )
         ctx.log("[preprocessor] macros expanded")
 

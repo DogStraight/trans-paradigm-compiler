@@ -19,15 +19,6 @@ from pipeline import run_pipeline_on_source
 
 pytestmark = pytest.mark.smoke
 
-# 当前阻塞在**解析侧**（lint 已改吃真展开，见 `pipeline._stage_expand`）：
-# 解析输入仍是锚形态，而锚在结构位（类型/关键字位）是普通标识符，无产生式
-# 可匹配（实测 `input <锚> d;` → parse truncated）。解钕 = 目标态第 3/4 条：
-# 解析输入改 raw + 引擎级宏占位协议（宏 token 满足当前位置任意元素），
-# 锚收缩为空体宏专用。届时去掉本标记即可。
-_XFAIL = pytest.mark.xfail(
-    strict=True,
-    reason="解析侧待宏占位协议：锚形态在结构位无产生式可匹配",
-)
 
 
 def _find(node, name: str) -> list:
@@ -56,7 +47,6 @@ _PT = "`define PT reg [7:0]\nmodule m;\n  output `PT q;\nendmodule\n"
 @pytest.mark.parametrize(
     "src,name", [(_T, "T"), (_NT, "NT"), (_PT, "PT")], ids=["T", "NT", "PT"]
 )
-@_XFAIL
 def test_type_position_macro_parses(src: str, name: str) -> None:
     """类型位宏：解析成功（无需任何语法槽位），且树中不出现宏专用节点。"""
     res = _run(src)
@@ -65,7 +55,6 @@ def test_type_position_macro_parses(src: str, name: str) -> None:
 
 
 @pytest.mark.parametrize("src", [_T, _NT, _PT], ids=["T", "NT", "PT"])
-@_XFAIL
 def test_type_position_macro_output_fidelity(src: str) -> None:
     """输出保真：宏调用原文回填，无锚残留，且整个输出**幂等**。"""
     res = _run(src)

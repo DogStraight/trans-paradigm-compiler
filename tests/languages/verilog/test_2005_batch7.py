@@ -212,16 +212,34 @@ endmodule
 
 
 def test_statement_body_macro_with_semicolon():
-    """调用后已有分号不受影响（picorv32 `assert 式）。"""
+    """宏体带分号 + 调用后已有分号：与手写等价形态“格式同形”（picorv32 `assert 式）。
+
+    外层展开后 `` `BODY2; `` 就是 `q = 1;;`（宏体语句 + 调用点自己的空语句）——
+    语句列表对手写 `;;` 同样分行。宏路径与手写路径必须同形：调用点的分号不丢、
+    不重，切分与手写一致。
+    """
     src = """module m;
 `define BODY2 q = 1;
 `BODY2;
 endmodule
 """
+    hand = """module m;
+q = 1;;
+endmodule
+"""
     r = _run(src, expand_macros=True)
+    h = _run(hand, expand_macros=True)
     assert r["success"], r.get("error", "")
-    assert "`BODY2;" in r["output"]
+    assert h["success"], h.get("error", "")
     assert "tpc_marker" not in r["output"]
+
+    def _norm(text: str) -> list[str]:
+        keep = [ln.strip() for ln in text.split("\n") if ln.strip()]
+        return [ln for ln in keep if not ln.startswith("`define")]
+
+    assert _norm(r["output"]) == [
+        ln.replace("q = 1;", "`BODY2") for ln in _norm(h["output"])
+    ]
 
 
 def test_expression_macro_mid_line_unchanged():
