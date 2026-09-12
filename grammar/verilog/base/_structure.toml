@@ -1,17 +1,17 @@
 # ============================================================================
-# checker 结构提取协议 — tpc check 跨文件检查的 AST 形态声明
+# 结构提取协议 — tpc check 跨文件检查的 AST 形态声明
 # ============================================================================
-# tpc check 引擎（analyzer/checker.py）零语言知识：模块/实例化的规则名、
+# tpc 结构提取底座（analyzer/checker.py）零语言知识：单元/实例化的规则名、
 # 节点字段、文件扩展名、关键字全部由语言包在此声明，引擎只读配置。
 #
-# 未声明本段 = 该语言包不支持跨文件结构检查（tpc check 退化为通用
-# lint + analyze，不提取模块、不递归、不注入 module_index）。
+# 未声明本段 = 该语言包不支持结构提取（tpc check 退化为通用 lint +
+# analyze，不提取单元、不递归、不注入 module_index）。
 #
 # 字段名对应语法 TOML 的 [*.parser.node] 绑定（如 [ModuleDecl.parser.node]
 # 的 module_name/ports/params），改动语法绑定名时同步本文件。
 # ============================================================================
 
-[checker]
+[structure]
 module_decl_rule = "ModuleDecl"    # 模块声明规则名（提取模块定义表）
 module_inst_rule = "ModuleInst"    # 模块实例化规则名（递归发现 + 联动检查）
 module_keyword   = "module"        # 模块声明关键字（定义文件文本扫描兜底）
@@ -25,7 +25,7 @@ proc_block_rules = ["AlwaysStmt", "InitialStmt"]  # 过程块规则名（同一�
 body_port_rules  = ["BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl"]  # 模块体端口声明（旧式端口方向/宽度补全）
 
 # 节点字段（语法 TOML node 绑定名）
-[checker.fields]
+[structure.fields]
 module_name = "module_name"   # 模块名 / 被实例化模块名字段
 inst_name   = "inst_name"     # 实例名（ModuleInst 上）
 ports       = "ports"         # 端口列表字段（ModuleDecl/ModuleInst 上）

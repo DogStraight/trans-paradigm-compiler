@@ -188,7 +188,7 @@ class TestStageGating:
 
 
 class TestNoStructureProtocol:
-    """语言包未声明 [checker] 结构协议（如 c4）→ check 退化为 lint+analyze：
+    """语言包未声明 [structure] 结构协议（如 c4）→ check 退化为 lint+analyze：
 
     不提取模块、不递归、不注入 module_index；通用语法/语义检查照常。
     验证引擎零语言知识（结构知识全部来自配置，缺配置即无结构行为）。

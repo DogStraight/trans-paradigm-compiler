@@ -45,7 +45,9 @@ def collect(checker=None) -> dict[str, int]:
         checker = ProjectChecker(rules_dir="grammar/verilog")
     counts: dict[str, int] = {}
     for group in _GROUPS:
-        entry = os.path.join(_REAL_DIR, group["files"][0])
+        # 整组喂（多入口）：一次 check 共享 module_index，跨目录的工程才
+        # 能互相看见单元定义（单入口只搜索入口所在目录 + include 目录）。
+        entry = [os.path.join(_REAL_DIR, f) for f in group["files"]]
         report = checker.check(entry)
         for f in report.get("files", []):
             for d in f.get("semantic", []):

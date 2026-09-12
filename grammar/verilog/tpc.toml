@@ -13,8 +13,8 @@ token_categories = { file = "base/_lexer.toml", section = "token_category", requ
 # 04_statements/05_expressions，每目录内 00_base.toml + 细分小节文件）
 rules = { file = ["0*/*.toml"], required = true }
 
-[checker]
-structure = { file = "base/_checker.toml", section = "checker", required = false }
+[structure]
+protocol = { file = "base/_structure.toml", section = "structure", required = false }
 
 [renderer]
 style = { file = "base/_style.toml", section = "style", required = false }

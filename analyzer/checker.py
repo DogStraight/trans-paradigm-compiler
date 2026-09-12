@@ -16,10 +16,19 @@
 - 模块定义表从 AST 提取（端口/参数/宽度声明形态），不依赖符号表——
   联动检查只需要"声明形态 vs 实例化点"的比对。
 
-语言无关边界：本模块**不含任何语言语义知识**。结构知识（模块/实例化的
+本文件住着**三类职责**（按去向分区，便于后续拆分）：
+  1. **结构提取底座**（elaboration）——协议读取、递归发现、单元提取、层 2
+     端口连接展开、层 3 信号驱动/负载图、generate 条件求值。它是**通用设施**：
+     消费方不止检查，各 postpass/插件都读它注入的 context.extra
+     （`module_index` / `inst_sites` / 信号图）。
+  2. **工程检查编排**——check 入口、共享资源加载、诊断分阶段汇总。
+  3. 纯 AST 小工具（`_iter_nodes` / `_subtree_contains` 等）——待有第二个
+     消费方时再外移，避免提前抽象。
+
+语言无关边界：本模块**不含任何语言语义知识**。结构知识（单元/实例化的
 规则名、节点字段、文件扩展名、关键字）全部来自语言包声明的
-`[checker] structure` 配置（grammar/<lang>/base/_checker.toml），未声明
-该段 = 该语言不支持跨文件结构检查（check 退化为 lint+analyze）。
+`[structure] protocol` 配置（grammar/<lang>/base/_structure.toml），未声明
+该段 = 该语言不支持结构提取（check 退化为 lint+analyze）。
 语义规则（端口/参数存在性、字面量宽度 vs 参数化端口）是
 grammar/<lang>/plugins/*/ postpass 的职责。本引擎只提供跨文件上下文，
 经 `AnalysisTraversal._external_extra` 注入每个文件的
@@ -39,11 +48,11 @@ from core.config_registry import declare_cfg
 if TYPE_CHECKING:
     from analyzer.traversal import AnalysisTraversal
 
-# ── 配置需求（来自语言包 tpc.toml [checker]） ──────────────
-# checker.structure: 跨文件结构提取协议——模块/实例化的规则名、节点字段、
-# 文件扩展名、关键字全部由语言包声明（grammar/<lang>/base/_checker.toml）。
-# 未声明 = 语言包不支持跨文件结构检查（check 退化为 lint+analyze）。
-_checker_cfg: dict = declare_cfg("checker.structure", {}, __name__, "_checker_cfg")
+# ── 配置需求（来自语言包 tpc.toml [structure]） ────────────
+# structure.protocol: 结构提取协议——单元/实例化的规则名、节点字段、
+# 文件扩展名、关键字全部由语言包声明（grammar/<lang>/base/_structure.toml）。
+# 未声明 = 语言包不支持结构提取（check 退化为 lint+analyze）。
+_structure_cfg: dict = declare_cfg("structure.protocol", {}, __name__, "_structure_cfg")
 
 
 # ── 数据模型 ──────────────────────────────────────────────
@@ -159,14 +168,14 @@ class ProjectChecker:
         # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
         self._signal_graph: dict = {}
         # 语言包结构协议（全部语言知识来自配置；缺失 = 无跨文件检查）。
-        # 注意：配置在 _ensure_shared（load_all）之后才推入 _checker_cfg，
+        # 注意：配置在 _ensure_shared（load_all）之后才推入 _structure_cfg，
         # 因此 __init__ 只置空，check() 里 _ensure_shared 后刷新。
         self._struct: dict = {}
         self._fields: dict = {}
 
     def _refresh_structure(self) -> None:
-        """load_all 后刷新结构协议（_checker_cfg 模块变量被推入真实值）。"""
-        self._struct = _checker_cfg or {}
+        """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。"""
+        self._struct = _structure_cfg or {}
         self._fields = (self._struct.get("fields") or {}) if self._struct else {}
 
     # ── 结构协议读取（语言知识仅来自 grammar/<lang> TOML）──
@@ -250,8 +259,16 @@ class ProjectChecker:
 
     # ── 入口 ──
 
-    def check(self, entry_path: str) -> dict:
-        """检查入口文件及其递归可达的模块定义文件。
+    def check(self, entry_path: str | list[str]) -> dict:
+        """检查入口文件（可多入口）及其递归可达的定义文件。
+
+        Args:
+            entry_path: 入口文件路径；或**多入口列表**（同一工程的多个顶层
+                文件）。多入口共享 module_index 与层 2/3 图——单元定义的
+                发现范围是「入口所在目录 + include 目录」（`_find_module_file`
+                先找同名文件、再在该目录内做关键字文本扫描兜底），所以
+                **跨目录**的工程或分布在多目录的顶层文件必须一次 check；
+                分别 check 时各自的索引互不可见，对方的单元会报成未知单元。
 
         Returns:
             dict: {
@@ -260,15 +277,19 @@ class ProjectChecker:
                 "exit_code": 0 | 1,
             }
         """
-        entry = os.path.abspath(entry_path)
+        raw = [entry_path] if isinstance(entry_path, str) else list(entry_path)
+        entries = [os.path.abspath(p) for p in raw]
         self._memo.clear()
         self._module_index.clear()
         self._fr_by_module_cache = None  # P2.7 层 3：穿透查模块文件缓存随 check 重建
         self._ensure_shared()
         self._refresh_structure()
 
-        # 1) 递归发现 + parse（模块索引逐步建立）
-        self._discover(entry, set())
+        # 1) 递归发现 + parse（模块索引逐步建立；多入口共享 seen，
+        #    重复入口不会重复 parse）
+        seen: set[str] = set()
+        for entry in entries:
+            self._discover(entry, seen)
 
         # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
         self._signal_graph = self._build_signal_graph()
