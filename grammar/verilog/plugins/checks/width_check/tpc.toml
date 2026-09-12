@@ -1,6 +1,6 @@
 # width_check 插件 — 位宽一致性检查（P1.10 核心集合：位宽家族，分期立项）
 #
-# 分期（2026-08-29 立项，TODO P1.10）：
+# 分期（2026-08-29 立项，调研见 references.md「主流 lint 机制调研」）：
 #     A1 符号宽度表（本阶段）——从 analyzer.all_symbols 提取每符号宽度
 #       表达式文本（wire/reg/integer/ANSI+body 端口；类型级 packed_range
 #       优先，声明符级按 Declarator 名对齐；无范围标量 = 1 bit）
