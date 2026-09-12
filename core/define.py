@@ -21,6 +21,7 @@ from core.errors import (
     TransformError,
     LintInternalError,
 )
+from core.engine_compat import check_engine_compat
 
 # 错误类 re-export：`from core.define import ParseError` 兼容（见 core/errors.py）
 __all__ = [
@@ -80,6 +81,8 @@ def _load_tpc_meta() -> dict:
                 meta = tomllib.loads(f.read())
         except tomllib.TOMLDecodeError as e:
             raise ConfigError(f"[config] {grammar_dir}/tpc.toml parse failed: {e}")
+    # 引擎 API 兼容校验（[engine] 段，fail-fast；import 期即拦）
+    check_engine_compat(meta, grammar_dir or meta_path)
 
     # 步骤 4：插件目录由 tpc.toml [plugins] enabled 管理（config_registry 自动发现）
     ext_dirs: list[str] = []
@@ -90,9 +93,9 @@ def _load_tpc_meta() -> dict:
         "rules_dir": grammar_dir,
         "ext_dirs": ext_dirs,
     }
-    # tpc.toml 中其他 engine config 补入
+    # tpc.toml 中其他 engine config 补入（[engine] 已单独校验，不入配置）
     for k, v in meta.items():
-        if k != "grammar":
+        if k not in ("grammar", "engine"):
             merged.setdefault(k, v)
 
     if "grammar" not in merged:

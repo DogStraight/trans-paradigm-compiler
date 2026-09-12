@@ -1,3 +1,8 @@
+[engine]
+# 本包构建所依据的引擎 API 线（major.minor）——引擎不匹配即加载 fail-fast
+# （契约语义见 core/engine_compat.py，校验点见 core/config_lifecycle.md）。
+api = "0.1"
+
 [lexer]
 token_base = { file = "base/_token.toml", required = true }
 lexer_base = { file = "base/_lexer.toml", required = true }

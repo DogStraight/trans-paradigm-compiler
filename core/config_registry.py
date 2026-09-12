@@ -20,6 +20,7 @@ import tomllib
 from typing import Any, TypeVar
 
 from core.errors import ConfigError
+from core.engine_compat import check_engine_compat
 
 # 配置文件定位：单一实现在 core/_user_config.py（历史：本文件与 core/define.py
 # 各有一份拷贝），re-export 供 main.py / tests 从本模块导入。
@@ -240,8 +241,11 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
         core_path = _find_grammar_tpc_toml()
     with open(core_path, encoding="utf-8") as f:
         meta = tomllib.loads(f.read())
+    # 引擎 API 兼容校验（[engine] 段，fail-fast）——该段是包与引擎的契约声明，
+    # 不是配置声明，下面注册时跳过（否则会被当 bare data 注册进配置中心）
+    check_engine_compat(meta, grammar_dir or core_path)
     for ns, table in meta.items():
-        if ns == "grammar":
+        if ns in ("grammar", "engine"):
             continue
         for config_key, spec in _flatten_config({ns: table}):
             _validate_decl_spec(config_key, spec)

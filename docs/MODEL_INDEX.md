@@ -104,6 +104,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all` | `tests/engine/core/test_config_loading.py` |
+| 语言包↔引擎契约（`[engine] api`） | `core/config_lifecycle.md`（包↔引擎契约节） | `core/engine_compat.py`<br>`core/config_registry.py::_load_meta_declarations`<br>`core/define.py::_load_tpc_meta` | `tests/engine/core/test_engine_compat.py`（15 用例） |
 | 配置生命周期（注册 → 解析 → 消费） | `core/config_lifecycle.md` | `core/config_registry.py` | `tests/engine/core/test_config_loading.py` |
 | 组件协议 + 插件加载 | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py`<br>`core/_protocol.py`（magic string 常量） | `tests/engine/core/test_plugin_cluster.py` |
 | 插件回调能力化（P2.5：`[capabilities]`） | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py::_load_capabilities`<br>`core/plugin_loader.py::get_capability`<br>`grammar/verilog/plugins/{typed_ports,formatter}/tpc.toml`（声明） | `tests/engine/core/test_capabilities.py`（9 用例） |

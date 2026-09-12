@@ -13,6 +13,28 @@ token.toml 重复 key 事故——解析失败被 `except` 当"可选缺失"静�
 全退化为 id → linter 全面崩溃。**静默错乱是"假绿"温床**——配置损坏在入口暴露，
 不运行期难查。实现见 `config_registry.py::ConfigRegistry.load_all` 异常分类。
 
+## 包↔引擎契约：`[engine] api`（2026-09-13）
+
+`grammar/<lang>/tpc.toml` 可声明：
+
+```toml
+[engine]
+api = "0.1"      # 该包构建所依据的引擎 API 线（major.minor）
+```
+
+语义：语言包依赖引擎语义（FOLLOW 推导 / inject / 节点绑定 / 组件协议），0.x 期
+minor 变动即可能破坏旧包——声明后引擎 major.minor 不匹配即**拒绝加载**
+（`ConfigError`，fail-fast），替掉"升级引擎后包静默坏掉"的隐式契约。
+**未声明 = 不校验**（纯增量：ad-hoc 包与测试夹具不受影响）。
+
+校验点两处（不同入口，都不可省）：`_load_meta_declarations`（`load_all` /
+`resolve` 路径）与 `core/define.py::_load_tpc_meta`（import 期默认包）。
+`[engine]` **不是配置声明**——注册时跳过（否则会被当 bare data 进配置中心）。
+契约实现见 `core/engine_compat.py`，回归 `tests/engine/core/test_engine_compat.py`。
+
+内置三包均声明当前线；引擎 minor 变更时 `test_builtin_packs_declare_current_engine_line`
+会失败——这是**故意的**，逼一次三包语义复核。
+
 ## 三阶段时序
 
 ```

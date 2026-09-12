@@ -1,7 +1,8 @@
 # Gap — 语义/插件契约边界（elaboration / 深语义 / 注册表 / 版本）
 
-- 状态：接受（1/2 范围设计选择）；**item5 立项中**（TODO「缺口闭环队列」⑤，
-  2026-09-12 排队）；3/4 为文档约定
+- 状态：接受（1/2 范围设计选择）；**item5 已闭环**（2026-09-13：`[engine].api`
+  声明 + 加载 fail-fast，见 `core/engine_compat.py` / `core/config_lifecycle.md`）；
+  3/4 为文档约定
 - 关联：原 `docs/known_limitations.md` Scope/Engineering 边界（2026-09-04 按
   部件拆入本档）；ADR-0008；`grammar/verilog/plugins/typed_ports/`
 - 参照：Verilator 的 elaboration/宽度传播模型
@@ -24,8 +25,12 @@
    语言包混合规则；测试用独立注册表，嵌入式切换语言须同样处理。
 4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；
    插件作者应把注入语句归组到容器规则（`plugins/sim` 的 `SimCtrlStmt`）。
-5. **语言包未版本钉住引擎**（工程摩擦）：包依赖引擎语义（FOLLOW 推导/inject/
-   节点绑定）；引擎改动靠测试守门，非包/引擎版本契约——升级引擎可能破坏旧包。
+5. ~~**语言包未版本钉住引擎**（工程摩擦）：包依赖引擎语义（FOLLOW 推导/inject/
+   节点绑定）；引擎改动靠测试守门，非包/引擎版本契约——升级引擎可能破坏旧包。~~
+   **已闭环（2026-09-13）**：`grammar/<lang>/tpc.toml` 可声明 `[engine] api = "0.1"`
+   （该包构建所依据的引擎 API 线），引擎 major.minor 不匹配即加载 fail-fast
+   （`ConfigError`）；未声明 = 不校验（纯增量）。内置三包均声明，回归
+   `tests/engine/core/test_engine_compat.py`（15 例）。
 
 ## 为什么是边界（影响面）
 
@@ -40,8 +45,8 @@
 ## 可实现性
 
 - 3/4：文档约定（独立 registry/容器规则），已有测试与 sim 插件先例。
-- 5：若需版本契约 → pack 声明 engine 兼容范围 + 加载 fail-fast 校验（低成本
-  扩展，未立项）。
+- 5：✅ 已闭环（2026-09-13）——`[engine].api` 声明 + 双入口 fail-fast 校验；
+  未采用"兼容范围区间语法"（0.x 期只需 API 线精确匹配，区间属过度设计）。
 - 1/2：不改（范围）。
 
 ## 关联条目

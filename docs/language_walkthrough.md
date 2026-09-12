@@ -16,11 +16,18 @@
 
 ```
 grammar/<lang>/
-├── tpc.toml          # 语言包入口：声明 [lexer]/[parser]/[renderer]/... 各配置指向的文件
+├── tpc.toml          # 语言包入口：声明 [engine]/[lexer]/[parser]/[renderer]/... 各配置指向的文件
 ├── token.toml        # 语言关键字（[id.keyword]）
 ├── base/             # 基础 token / lexer / operator / style 配置
 ├── 00_*.toml ...     # 语法规则文件（数字前缀排序，parser.rules 按此加载）
 └── plugins/          # 语言插件（analyzer primitives / transform 槽位）
+```
+
+`tpc.toml` 建议声明包与引擎的契约（可省，省了就不校验）：
+
+```toml
+[engine]
+api = "0.1"   # 本包构建所依据的引擎 API 线（major.minor）；不匹配即加载 fail-fast
 ```
 
 **单语言选择模型**：管线一次只用一种语言。初始化时选定：

@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **语言包↔引擎契约（`[engine] api`，缺口队列 ⑤）**：`grammar/<lang>/tpc.toml`
+  可声明 `[engine] api = "0.1"`（该包构建所依据的引擎 API 线）；引擎 major.minor
+  不匹配即**加载 fail-fast**（`ConfigError`），替掉"升级引擎后包静默坏掉"的隐式
+  契约。未声明 = 不校验（纯增量）。双入口校验（`_load_meta_declarations` 的
+  `load_all`/`resolve` 路径 + `core/define.py::_load_tpc_meta` 的 import 期默认包）；
+  该段不进配置中心。内置 verilog/c4/yaml 三包均声明；引擎 minor 变更时
+  `test_engine_compat.py` 的"三包声明当前线"断言会失败（故意，逼一次复核）。
+  实现 `core/engine_compat.py`，契约文档 `core/config_lifecycle.md`。
+
 - **parser token span 绑定（P3.1 / 0.1.2 阶段 0）**：解析成功的规则节点/块节点挂
   `_tok_span`（半开 `[start, end)` token 流索引；`core/define.py` 声明 +
   `parser/_production.py` try_plain_rule / try_block_rule 成功返回前写入），供
