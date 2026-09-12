@@ -33,7 +33,10 @@
         "NC008",
         "NC009",
         "NC010",
-        "NC011"
+        "NC011",
+        "NC014",
+        "NC015",
+        "NC016"
     ],
     "pos": {
         "UN001_unused_decl": {
@@ -326,6 +329,27 @@
                 "NC010"
             ],
             "desc": "function MyFunc（NC009）/ task MyTask（NC010）名违规"
+        },
+        "NC014_direction_suffix": {
+            "entry": "top.sv",
+            "expect": [
+                "NC014"
+            ],
+            "desc": "端口名后缀指向另一方向（input data_o / output data_i）—— 方向可能接反"
+        },
+        "NC015_wire_suffix": {
+            "entry": "top.sv",
+            "expect": [
+                "NC015"
+            ],
+            "desc": "wire 名以 reg 后缀 _r 结尾（result_r / temp_r）—— 类型可能混淆"
+        },
+        "NC016_reg_suffix": {
+            "entry": "top.sv",
+            "expect": [
+                "NC016"
+            ],
+            "desc": "reg 名以 wire 后缀 _w 结尾（y_w）—— 类型可能混淆。注：用模块内 reg 声明（ANSI 端口 reg 归 NC005 端口命名，不属 NC016 覆盖面）"
         }
     },
     "neg": {
@@ -420,6 +444,10 @@
         "NC_param_clean": {
             "entry": "top.sv",
             "desc": "parameter/localparam/genvar 全大写下划线合规 → 零 NC 误报"
+        },
+        "NC_suffix_clean": {
+            "entry": "top.sv",
+            "desc": "端口方向后缀（_i/_o）+ 类型后缀（_w/_r）与声明一致 → 零 NC014-016 误报"
         }
     }
 }

@@ -197,6 +197,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   修为 `genvar_names.content`；补回归测试 `test_genvar_lowercase_nc008`
   （已回退验证：修复前精准失败）。
 
+- **检查精度评测补全命名族（0.1.2 阶段 8 / T1 完）**：NC014-016（前后缀语义
+  约定：方向后缀防接反 / 类型后缀防混淆，handler 判定）入评测——1 正样例 +
+  1 负样例，样本 63 → **67 case**（44 正 / 24 负），focus 34 → **37 码**，
+  recall **100%**（54 期望码全命中）+ FP **0**。至此全部命名族 NC001-NC016
+  均在强检面内。样本用模块内 `reg` 声明而非 ANSI 端口 reg——后者符号 kind 归
+  `port`（由 NC005 覆盖），评测描述已注明分界。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

@@ -45,14 +45,13 @@
 > 现状（2026-09-05 盘点，09-11 更新 focus/样本数）：30 诊断码 / 8 检查族已实现
 > （name NC001-16 / inst W101-106+WC001 / width W201-2 / latch LC001 / case
 > CC001 / unused UN001 / always AW001-2）；eval_check_accuracy 强检 focus
-> 34 码 @ 63 case recall 100% + FP 0。重合核心集实现 ~9/10（宏卫生族缺）；
+> 37 码 @ 67 case recall 100% + FP 0。重合核心集实现 ~9/10（宏卫生族缺）；
 > 独到项批判吸收仅 svlint prefix 族已入（NC014-16）；自场景自定义规则范例 0。
 
 - [ ] **T1 重合核心集补全 + 强检扩面**：
-      - 剩：NC014-016（prefix/suffix 族）入评测——按 kind 合并样本（一个 case
-        可期望多码），先读 handler 确认后缀触发条件
-      - 宏/指令卫生族（对标 Verilator REDEFMACRO / slang redef-macro /
+      - 剩：宏/指令卫生族（对标 Verilator REDEFMACRO / slang redef-macro /
         svlint default_nettype——跨文件宏表）：**待作者定**是否本版做
+      - 评测现盖 37 码 @ 67 case（含全部命名族 NC001-016）
 - [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价，取舍清单待作者拍板）：
       - 零成本语法层候选：Verible 排版族（line-length/no-tabs）、svlint
         空格族（style_*）/ ANSI 头 / 参数 2-state——先定"落 linter 还是
