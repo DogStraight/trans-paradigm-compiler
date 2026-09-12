@@ -19,7 +19,7 @@ _RULES = "grammar/verilog"
 def _expand(src: str) -> tuple[str, list[dict]]:
     """展开（语义模式）→ (展开文本, 区间表)。"""
     table, func_macros, _, _, _, clean = scan_directives(src, _RULES)
-    expanded, _anchors, regions = expand_tokens(
+    expanded, _anchors, regions, _line_map = expand_tokens(
         clean, table, func_macros=func_macros, semantic=True
     )
     return expanded, regions
@@ -60,10 +60,12 @@ def test_multi_line_body_spans_lines() -> None:
     """
     src = "module m;\n  wire a;\n  assign a = `M;\nendmodule\n"
     body = "1'b1 +\n  1'b0"
-    expanded, _anchors, regions = expand_tokens(
+    expanded, _anchors, regions, line_map = expand_tokens(
         src, {"M": body}, semantic=True
     )
     assert len(regions) == 1
+    # 多行宏体：输出行数 > 源行数，映射里 3 行（源行 3）占 3 个输出行位
+    assert line_map.count(3) == 1 + body.count("\n")
     r = regions[0]
     assert r["body"] == body
     assert _slice(expanded, r) == body
@@ -125,7 +127,9 @@ def test_regions_only_in_semantic_mode() -> None:
     table, func_macros, _, _, _, clean = scan_directives(
         "`define V 1'b1\nmodule m;\n  assign a = `V;\nendmodule\n", _RULES
     )
-    expanded, anchors, regions = expand_tokens(clean, table, func_macros=func_macros)
+    expanded, anchors, regions, _line_map = expand_tokens(
+        clean, table, func_macros=func_macros
+    )
     assert regions == []
     assert anchors, "渲染路径应产锚"
     assert "__tpc_marker_" in expanded

@@ -248,7 +248,7 @@ class _StructureBase:
             if macro_table:
                 # semantic=True：语句体宏展开宏体（check 需语义，不要保真锚
                 # marker——否则宏体不可分析 + marker 被 W002 误报）
-                clean, _, _ = expand_tokens(
+                clean, _, _, _ = expand_tokens(
                     clean, macro_table, func_macros=func_macros, semantic=True
                 )
             return clean

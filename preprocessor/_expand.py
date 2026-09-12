@@ -486,7 +486,10 @@ def expand_tokens(
       sync   行内非空体宏（如 `assign z = `MIN(x, y);`）→ 保留 body 替换，
              记录同步词字段，由同步词窗口启发式回插（兼容现状）。
 
-    Returns: (expanded_source, restoration_stack, macro_regions)
+    Returns: (expanded_source, restoration_stack, macro_regions, line_map)
+        line_map — **展开后行号（1-based）→ 源（clean）行号**：诊断回源用。
+            逐行就地替换 → 输出行数只可能因宏体含换行而增加，一行源行对应
+            一串连续输出行，故 list[int] 足够（无需完整区间表）。
         restoration_stack — 统一锚列表（渲染路径还原用），每项含 marker/fragment/mode。
         macro_regions — **宏区间表**（仅 semantic=True 有意义）：每条"宏体被铺进
             文本"的调用一项，含它在**源文本**里的区间（`src_line`/`src_col`/
@@ -699,4 +702,11 @@ def expand_tokens(
             macro_regions.append(entry)
         base += len(line_text) + 1
 
-    return "\n".join(lines), restoration_stack, macro_regions
+    # 行映射（诊断回源）：**展开后行号（1-based）→ 源（clean）行号**。
+    # 依据：本函数逐行就地替换，输出行数只可能因宏体含换行而增加
+    # （`lines[i] = "".join(parts)` 内嵌 \n）→ 一行源行对应一串连续输出行。
+    out_to_src: list[int] = []
+    for _src_no, _text in enumerate(lines, 1):
+        out_to_src.extend([_src_no] * (_text.count("\n") + 1))
+
+    return "\n".join(lines), restoration_stack, macro_regions, out_to_src

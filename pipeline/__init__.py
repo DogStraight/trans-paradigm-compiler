@@ -111,6 +111,8 @@ class _PipelineContext:
     # `` `NAME ``），不做替身替换——空体宏由占位阶段改 trivia，非空体宏由
     # 解析器通配当元素。锚机制由此退到只剩渲染/诊断的旧路径用途。
     parse_raw: bool = False
+    # 展开行→源行映射（诊断回源）：由 `_stage_expand` 的语义展开填充。
+    line_map: list[int] = field(default_factory=list)
 
     # 输出目录（由 _resolve_output_paths 填充）
     gen_dir: str | None = None
@@ -395,7 +397,12 @@ def _stage_expand(ctx: _PipelineContext) -> None:
         # "宏体铺进去之后语法是否成立"；锚形态只有表达式位可匹配，结构位（类型/关键
         # 字位）无产生式可对（实测 `input `NT d` 在锚形态下 1 条误报、展开态通过）。
         if not ctx.lint_source:
-            ctx.lint_source, _, _ = expand_tokens(
+            (
+                ctx.lint_source,
+                _,
+                _,
+                ctx.line_map,
+            ) = expand_tokens(
                 ctx.source,
                 ctx.macro_table,
                 func_macros=ctx.func_macros,
@@ -406,7 +413,7 @@ def _stage_expand(ctx: _PipelineContext) -> None:
             # 原文（宏调用可见），解析器见 `macro.call` 走通配/占位。
             ctx.log("[preprocessor] macros kept raw (parse_raw)")
             return
-        ctx.source, ctx.restore_stack, ctx.macro_regions = expand_tokens(
+        ctx.source, ctx.restore_stack, ctx.macro_regions, _ = expand_tokens(
             ctx.source,
             ctx.macro_table,
             func_macros=ctx.func_macros,
@@ -467,9 +474,13 @@ def _stage_lint(ctx: _PipelineContext) -> bool:
     lint_errors = ctx.linter.scan(ctx.lint_source or ctx.source)
     if lint_errors:
         for err in lint_errors:
-            ctx.log(
-                f"[linter] {err.message} at L{err.range[0].line}:{err.range[0].character}"
-            )
+            # 诊断行号回源（展开态行 → 源行）：lint 输入是真展开文本，宏体
+            # 多行时行号会漂；line_map 不可用时（未展开/无宏）退为原行号。
+            ln = err.range[0].line + 1
+            src_ln = ln
+            if ctx.line_map and 1 <= ln <= len(ctx.line_map):
+                src_ln = ctx.line_map[ln - 1]
+            ctx.log(f"[linter] {err.message} at L{src_ln}:{err.range[0].character}")
         ctx.result["error"] = f"lint failed: {len(lint_errors)} error(s)"
         return False
     return True
