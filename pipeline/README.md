@@ -24,8 +24,23 @@
 | 处理器引用 | `mypass.py:fn` | 加载时解析的 handler（check 类） |
 | 插件限定名 | `SemanticMappingPlugin` / `slot_runner` | 该单元**只跑该插件**（插件级，5b-3a） |
 
+另一类是**槽位级单元**（5b-3c-3）：用 `slot` 字段声明（与 `impl` 互斥），只跑该槽位
+（引擎 `slot_runner` 单槽位执行）——槽位各自独立时点：
+
+```toml
+[[pipeline.units.analyze]]
+type = "analyze"
+impl = "builtin.analyze"
+
+[[pipeline.units.wrapper]]
+type = "transform"
+slot = "build_wrapper"          # [[transform.slots]] 里声明的槽位名
+after = "analyze"
+```
+
 序列限定：`analyze` 至多 1；`transform` 要么单个 `builtin.transform`，要么全为
-插件单元（混用会重复执行 → fail-fast）；`check` 不限（可多实例）。
+插件/槽位单元（混用会重复执行 → fail-fast）；`check` 不限（可多实例）。
+**槽位单元的契约**沿用承担它的插件（`slot_runner`：`requires=["scope"]` / `produces=["slot_transforms"]`）。
 
 ### 契约校验（时点边界，ADR-0015 §3）
 

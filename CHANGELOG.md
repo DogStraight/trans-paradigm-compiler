@@ -140,6 +140,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   不留双路径。等价判据：typed_ports 全组 54 + e2e 122（保真/互操作）+ 全量 1678
   全绿。测试 `tests/engine/core/test_transform_slot_decls.py`（含 ctx 通道校验）。
 
+- **槽位级单元（0.1.2 阶段 5b-3c-3）**：槽位可各自声明时点——
+  `[[pipeline.units.<name>]] slot = "<槽位名>"`（与 `impl` 互斥）→ 该单元只跑该
+  槽位（`SlotRunnerPlugin(only_slot=...)`）；未知槽位 / 非 transform 类型 /
+  `slot`·`impl` 并存 → fail-fast。槽位单元的契约沿用承担它的插件（`slot_runner`：
+  `requires=["scope"]` / `produces=["slot_transforms"]`）。未声明槽位单元的
+  语言包仍走整包槽位执行（现行为零变化）。测试
+  `tests/engine/pipeline/test_unit_slot_schedule.py`。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

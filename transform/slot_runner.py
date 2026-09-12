@@ -37,7 +37,9 @@ class SlotRunnerPlugin(TransformPlugin):
     时点归管线配置（`[pipeline.units.*]`）。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, only_slot: str | None = None) -> None:
+        """only_slot 非空 → 只跑该槽位（槽位级单元：每槽位一个独立时点）。"""
+        self._only_slot = only_slot
         self._stats = {"slots_called": 0}
         self._per_slot: dict[str, int] = {}
 
@@ -62,6 +64,11 @@ class SlotRunnerPlugin(TransformPlugin):
 
         decls = get_transform_slot_decls()
         handlers = get_transform_slots()
+        if self._only_slot is not None:
+            only = decls.get(self._only_slot)
+            if only is None:
+                raise ValueError(f"[transform] 未知槽位: {self._only_slot!r}")
+            decls = {self._only_slot: only}
         if not decls or not handlers or root_scope is None:
             return ast
         base_ctx: dict[str, Any] = {"root_scope": root_scope}

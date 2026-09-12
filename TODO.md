@@ -23,9 +23,9 @@
       （声明面 + 序列构建）+ 5b-2 ✅（**粗粒度统一编排**：units 替代默认 schedule）
       + 5b-3a ✅（插件身份面：限定名注册 + `get_plugin_index` + `impl` 第三形态
       「插件限定名」→ 单插件单元 + fail-fast）；
-      剩 5b-3b 插件实例化参数覆写（`params`）；5b-3c **槽位级拆解**
-      （声明面 ✅ + 执行面 ✅：引擎 `SlotRunnerPlugin` 按声明跑到接回，桥退役；
-      剩 5b-3c-3 接入 units 时点）——设计稿 `_drafts/5b-3c-slot-units-design.md`
+      剩 5b-3b 插件实例化参数覆写（`params`）；5b-3c **槽位级拆解** ✅ 全部
+      （声明面 + 执行面 + 槽位级单元 `slot = "..."` 接入 units 时点）——
+      设计稿 `_drafts/5b-3c-slot-units-design.md`
 - [ ] 阶段 6 — 中间产物可视化：✅ 单元执行轨迹（`ctx.result["trace"]` +
       `trace.json`）；✅ 映射表来源追踪（行 `origin` → 插件 `describe()` →
       trace `artifacts`）；剩 transform 侧更多插件自述（出口已具备，按需补）

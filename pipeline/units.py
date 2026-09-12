@@ -44,14 +44,20 @@ def classify_impl(impl: str) -> str:
 
 @dataclass
 class UnitInstance:
-    """一个加工单元实例（显式声明：类型 / 实现 / 时点声明 / 参数）。"""
+    """一个加工单元实例（显式声明：类型 / 实现 / 时点声明 / 参数）。
+
+    `impl` 与 `slot` 互斥：前者引用插件/内置执行器/处理器；后者是**槽位级单元**
+    （`[[transform.slots]]` 声明的槽位，由引擎 `slot_runner` 单槽位执行 → 各自
+    独立时点，ADR-0015 §1）。
+    """
 
     name: str
     type: str
-    impl: str
+    impl: str = ""
     after: str | None = None
     order: int | None = None
     params: dict[str, Any] = field(default_factory=dict)
+    slot: str | None = None
     point: int = -1  # 调度器生成的时点号（assign_points 填充）
 
 
@@ -66,13 +72,22 @@ def parse_units(decls: dict[str, dict]) -> list[UnitInstance]:
             raise ValueError(f"[pipeline] unit '{name}' 声明须为表: {decl!r}")
         utype = decl.get("type", "")
         impl = decl.get("impl", "")
+        slot = decl.get("slot")
         if utype not in VALID_TYPES:
             raise ValueError(
                 f"[pipeline] unit '{name}' type 非法: {utype!r}（合法: {VALID_TYPES}）"
             )
-        if not impl:
-            raise ValueError(f"[pipeline] unit '{name}' 缺 impl")
-        if classify_impl(impl) == IMPL_BUILTIN and impl not in BUILTIN_IMPLS:
+        if slot is not None:
+            if not isinstance(slot, str) or not slot:
+                raise ValueError(f"[pipeline] unit '{name}' slot 须为非空字符串")
+            if impl:
+                raise ValueError(
+                    f"[pipeline] unit '{name}' slot 与 impl 互斥"
+                    f"（槽位单元用 slot；插件/执行器用 impl）"
+                )
+        elif not impl:
+            raise ValueError(f"[pipeline] unit '{name}' 缺 impl 或 slot")
+        if impl and classify_impl(impl) == IMPL_BUILTIN and impl not in BUILTIN_IMPLS:
             raise ValueError(
                 f"[pipeline] unit '{name}' impl 非内置执行器: {impl!r}"
                 f"（合法: {sorted(BUILTIN_IMPLS)}）"
@@ -93,6 +108,7 @@ def parse_units(decls: dict[str, dict]) -> list[UnitInstance]:
                 after=after,
                 order=order,
                 params=dict(decl.get("params") or {}),
+                slot=slot,
             )
         )
     return units
@@ -172,13 +188,13 @@ def build_unit_sequence(decls: dict[str, dict] | None) -> list[UnitInstance]:
 
 
 def validate_sequence(units: list[UnitInstance]) -> None:
-    """序列限定（5b-3a）：粗粒度与插件级共存规则。
+    """序列限定（5b-3a/5b-3c-3）：粗粒度与细粒度共存规则。
 
     - `analyze`：至多 1 个（分析遍历是一个整体，多实例无意义）；
     - `transform`：要么单个 `builtin.transform`（粗粒度：跑全部插件），
-      要么全为插件单元（细粒度：每插件一个时点）；**两者混用**会重复
-      执行（插件被跑两次）→ fail-fast。
-    - `check`：不限个数（可多实例）。同一插件多单元 = 同一变换多时点。
+      要么全为插件/槽位单元（细粒度：各自一个时点）；**两者混用**会重复
+      执行（插件/槽位被跑两次）→ fail-fast。
+    - `check`：不限个数（可多实例）。同一插件/槽位多单元 = 同一变换多时点。
     """
     analyze_count = sum(1 for u in units if u.type == "analyze")
     if analyze_count > 1:
@@ -191,5 +207,5 @@ def validate_sequence(units: list[UnitInstance]) -> None:
         raise ValueError(
             f"[pipeline] transform 单元 '{builtin_tf[0].name}'（builtin.transform）"
             "与其余 transform 单元共存会重复执行——要么单个 builtin.transform，"
-            "要么全部用插件单元（impl = 插件限定名）"
+            "要么全部用插件/槽位单元"
         )

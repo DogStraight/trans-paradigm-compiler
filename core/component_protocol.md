@@ -160,6 +160,9 @@ type_map = { symbol_kind = "typed_port", attr = "type_name" }   # {符号名: at
   `replace` 1:1 替换 + `migrate_comments` / `remove` 从父列表移除）。组件不再需要
   自己的桥插件（typed_ports `_bridge.py` 已删）。加载期 fail-fast：槽位名未注册 /
   `walk`·`result` 取值非法 / `ctx` 形态非法。
+- **槽位级单元（5b-3c-3）**：槽位可在管线配置里各自声明时点——
+  `[[pipeline.units.<name>]] slot = "<槽位名>"`（与 `impl` 互斥）→ 该单元只跑该
+  槽位（`SlotRunnerPlugin(only_slot=...)`）；未声明则整包按声明序跑（现行为）。
 
 ## 4. analyzer 原语
 

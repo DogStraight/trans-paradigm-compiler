@@ -64,8 +64,10 @@ class PassDecl:
     """一个已解析的 pass 定义。
 
     handler 仅 check 类使用；plugin 仅 transform 类使用（插件限定名，
-    非空 = 本单元只跑该插件，插件级单元，ADR-0015 §1）。
-    impl = 原始 impl 引用（builtin.* / file.py:fn / 插件名），供契约查询。
+    非空 = 本单元只跑该插件，插件级单元，ADR-0015 §1）；slot 非空 = 槽位级
+    单元（只跑该槽位，由引擎 `slot_runner` 承担，5b-3c-3）。
+    impl = 原始 impl 引用（builtin.* / file.py:fn / 插件名 / `slot:<槽位名>`），
+    供契约查询与 trace。
     """
 
     name: str
@@ -73,6 +75,7 @@ class PassDecl:
     handler: Callable | None = None  # check pass 的执行函数（已解析）
     plugin: str | None = None  # transform 单元绑定的插件限定名
     impl: str | None = None  # 原始 impl 引用（契约查询用）
+    slot: str | None = None  # 槽位级单元绑定的槽位名
 
 
 @dataclass
@@ -274,6 +277,7 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
     if not unit_decls:
         return None
     from transform.engine import get_plugin_index
+    from core.plugin_loader import get_transform_slot_decls
 
     from .units import (
         BUILTIN_IMPLS,
@@ -286,11 +290,33 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
     units = build_unit_sequence(unit_decls)
     validate_sequence(units)
     plugin_index = get_plugin_index()
+    slot_decls = get_transform_slot_decls()
 
     out: list[PassDecl] = []
     for u in units:
         decl = unit_decls.get(u.name) or {}
         handler = decl.get("_handler")
+        if u.slot:
+            # 槽位级单元（5b-3c-3）：只跑该槽位（引擎 slot_runner 单槽位执行）
+            if u.type != "transform":
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' 声明 slot={u.slot!r}，"
+                    f"但 type={u.type!r}（槽位单元限 transform）"
+                )
+            if u.slot not in slot_decls:
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' 引用了未声明的槽位: "
+                    f"{u.slot!r}（可用: {', '.join(sorted(slot_decls)) or '(空)'}）"
+                )
+            out.append(
+                PassDecl(
+                    name=u.name,
+                    kind=u.type,
+                    slot=u.slot,
+                    impl=f"slot:{u.slot}",
+                )
+            )
+            continue
         impl_kind = classify_impl(u.impl)
         if impl_kind == IMPL_PLUGIN:
             if u.type != "transform":
@@ -329,13 +355,15 @@ _BUILTIN_UNIT_CONTRACTS: dict[str, dict[str, list[str]]] = {
 def _contract_of(decl: "PassDecl") -> dict[str, list[str]] | None:
     """单元契约（无声明 → None = 不参与校验，ADR-0015 §3 可选能力）。
 
+    槽位级单元 → 承担它的 `slot_runner` 插件契约；
     插件单元 → 插件注册时的 produces/requires 声明（插件侧）；
     内置执行器 → 引擎内置契约（`_BUILTIN_UNIT_CONTRACTS`）。
     """
-    if decl.plugin:
+    if decl.plugin or decl.slot:
         from transform.engine import get_plugin_contracts
 
-        return get_plugin_contracts().get(decl.plugin)
+        qname = decl.plugin or "slot_runner"
+        return get_plugin_contracts().get(qname)
     if decl.impl:
         return _BUILTIN_UNIT_CONTRACTS.get(decl.impl)
     return None
@@ -404,14 +432,18 @@ def _run_pass_analyze(state: "PassState") -> None:
 
 
 def _run_pass_transform(
-    state: "PassState", mapping_cfg: dict | None = None, plugin: str | None = None
+    state: "PassState",
+    mapping_cfg: dict | None = None,
+    plugin: str | None = None,
+    slot: str | None = None,
 ) -> None:
     """kind=transform pass：跑一轮 AstTransformer（消费 scope，None 跳过）。
 
     mapping_cfg 由调用方注入（_ensure_shared 按 rules_dir 缓存构建），
     不依赖全局 _loaded_components（可能被其他语言包污染）。
+    slot 非空 → 只跑该槽位（槽位级单元，5b-3c-3）；
     plugin 非空（插件限定名）→ 只跑该插件（插件级单元，ADR-0015 §1）；
-    缺省 → 跑全部已注册插件（粗粒度，现行为）。
+    两者皆空 → 跑全部已注册插件（粗粒度，现行为）。
     """
     ctx = state.ctx
     if state.scope is None:
@@ -419,7 +451,11 @@ def _run_pass_transform(
         return
     AstTransformer.set_shared("rules", ctx.rules)
     AstTransformer.set_shared("mapping_cfg", mapping_cfg or {})
-    if plugin is None:
+    if slot is not None:
+        from transform.slot_runner import SlotRunnerPlugin
+
+        transformer = AstTransformer(plugins=[SlotRunnerPlugin(only_slot=slot)])
+    elif plugin is None:
         transformer = AstTransformer()
     else:
         from transform.engine import get_plugin_index
@@ -500,7 +536,7 @@ def _run_schedule(
             if decl.kind == "analyze":
                 _run_pass_analyze(state)
             elif decl.kind == "transform":
-                _run_pass_transform(state, mapping_cfg, decl.plugin)
+                _run_pass_transform(state, mapping_cfg, decl.plugin, decl.slot)
             else:
                 _run_pass_check(state, decl)
         except _ScheduleStop:
