@@ -50,6 +50,14 @@ def collect(checker=None) -> dict[str, int]:
         entry = [os.path.join(_REAL_DIR, f) for f in group["files"]]
         report = checker.check(entry)
         for f in report.get("files", []):
+            # syntax（linter 产出）也计数：此前只统计 semantic，导致 linter
+            # 侧的误报面无门禁（darkriscv 26 条 phase-unrecognized 长期无人
+            # 统计即此因）。前缀区分两类码，互不干扰。
+            for d in f.get("syntax", []):
+                code = d.get("code")
+                if code:
+                    key = f"syntax:{code}"
+                    counts[key] = counts.get(key, 0) + 1
             for d in f.get("semantic", []):
                 code = d.get("code")
                 if code:
