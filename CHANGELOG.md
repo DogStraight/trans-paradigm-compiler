@@ -18,6 +18,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **宏落类型位（语法位）——类型槽位声明**（ADR-0017 决策 2/3 收尾）：
+  `[TypeSpec]`/`[TypeSpecNoReg]` 首元素加 `@MacroCall` 备选 +
+  `[MacroCall.parser]` 规则——宏是**整体替换类型片段**的文本，锚必然落在首元素
+  位，故一处声明覆盖三例：`` input `NT d ``（NT=wire）/ `` output `PT q ``
+  （PT=`reg [7:0]`）/ `` input `T d ``（T=`[7:0]`）→ 均解析成功、树中出现
+  MacroCall（宏名 + 源区间）、输出保留宏调用原文；手写形态不变。
+  `pipeline/__init__.py::_attach_macro_meta` 统一两种进树形态（语法位 parser
+  直产 / 标识符位改写）的锚表元数据挂载。
+  **宏子槽**（`` input wire `T d ``）有意不做：子槽 layout 自带字面 `[` `]`，
+  宏残片可能含方括号 → 会多套一对（静默错渲染），宁可停不可静默错；登记
+  `docs/gaps/gap-preprocessor-macro-boundaries.md` 条目 1b。
+  测试 `tests/languages/verilog/test_macro_type_slot.py`（三例 + 保真 + linter
+  零诊断 + 手写形态 + 子槽边界，10 断言）。
+
 - **宏展开锚名协议 + linter 锚窗口拼接**（ADR-0017 决策 3/4）：展开期锚改为
   **宏调用文本形态**（`` `<锚名> ``，lexer 自然归为 `macro.call`——不为锚新造
   词法形态），锚名 = 保留前缀 `__tpc_` + `marker` + **源文本 sha256 盐** + 序号

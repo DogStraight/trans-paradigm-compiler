@@ -68,9 +68,13 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
      比原候选甲（逐槽位补 `@MacroNode`）少 83 处数据改动，比候选乙（parser 宽容）
      保持"失败即失败"的严格语义。代价：`macro.call` 于是能在**所有** `@Identifier`
      槽位通过——与"宏可出现在哪"这一语言知识相比偏宽，由 linter 展开路径兜底语义。
-   - **类型位槽位声明仍待补**：`TypeSpec`/`TypeSpecNoReg` 的首元素是关键字选择
-     （`keyword.wire|keyword.reg|...?`），不引用 `@Identifier`，故 `` input `NT d ``
-     （NT=wire）尚未通过——这是本决策剩余的数据改动。
+   - **类型位槽位声明已补**（`grammar/verilog/02_declarations/00_base.toml`）：
+     `TypeSpec`/`TypeSpecNoReg` 首元素加 `@MacroCall` 备选——宏是**整体替换类型
+     片段**的文本，锚必然落在首元素位，故一处声明覆盖三例（`` input `NT d `` /
+     `` output `PT q `` / `` input `T d ``；实测三例均解析成功、树含宏节点、输出
+     保留原文）。**宏子槽**（`` input wire `T d ``）有意不做：子槽 layout 自带
+     字面 `[` `]`，宏残片可能含方括号 → 多套一对（静默错渲染）；宁可停不可静默错
+     （登记 `docs/gaps/gap-preprocessor-macro-boundaries.md` 条目 1b）。
 
 4. **linter 检查的是完全展开形态：锚不进检查、展开体进检查**（已实现）。
    展开路径的检查对象必须是**宏展开后的语法形态**——带锚则判的是锚名而非展开
@@ -123,10 +127,13 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 > `preprocessor/_expand.py`（锚写成宏调用文本 + 锚表带展开体）·
 > `preprocessor/_bridge.py`（还原唯一性守卫）·
 > `linter/scanner.py::_splice_anchor_windows`（token 级锚窗口拼接）·
-> `grammar/verilog/05_expressions/00_base.toml`（`Identifier` 接受 `macro.call`）
+> `pipeline/__init__.py::_attach_macro_meta`（两种进树形态挂锚表元数据）·
+> `grammar/verilog/05_expressions/00_base.toml`（`Identifier` 接受 `macro.call` +
+> `[MacroCall.parser]`）· `grammar/verilog/02_declarations/00_base.toml`
+> （`TypeSpec`/`TypeSpecNoReg` 类型位 `@MacroCall`）
 > Test: `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/守卫）·
 > `tests/engine/linter/test_anchor_splice.py`（拼接语义）·
+> `tests/languages/verilog/test_macro_type_slot.py`（类型位三例 + 子槽边界）·
 > `tests/languages/verilog/test_macro_call_node.py`（锚名形态/可复现）·
 > `tests/languages/verilog/test_macro_body_comment.py`（体注释不吞后续 token）·
 > 真实语料守卫 `tests/e2e/test_real_corpus.py::test_file_parses_clean[ref_darkriscv.v]`
-> 剩余：`TypeSpec`/`TypeSpecNoReg` 类型位槽位声明（本 ADR 决策 3 末条）

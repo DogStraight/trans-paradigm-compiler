@@ -462,35 +462,56 @@ def _extract_macro_name(fragment: str) -> str:
     return m.group(1) if m else ""
 
 
+def _attach_macro_meta(node: Any, entry: dict, body_provider: Any) -> Any:
+    """给宏边界节点挂锚表元数据（宏名 / 锚文本 / 原文残片 / 源区间 / 宏体子树）。
+
+    渲染按 `_macro_fragment`（raw 源区间切片）直出宏调用原文，故元数据必须挂全；
+    缺摘要时节点渲染为空（内容丢失），不是可接受的降级。
+    """
+    node._macro_name = _extract_macro_name(entry.get("fragment", ""))
+    node._macro_marker = entry.get("marker", "")
+    node._macro_fragment = entry.get("fragment", "") or ""
+    if entry.get("line") is not None:
+        node._src_span = (
+            entry["line"],
+            entry.get("col", 0),
+            entry.get("end_col", 0),
+        )
+    if body_provider is not None:
+        body_node = body_provider(node._macro_name)
+        if body_node is not None:
+            node._macro_body = body_node
+    return node
+
+
 def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) -> Any:
-    """递归把 marker 标识符节点改写为 MacroCall（含 attrs 内嵌节点）。"""
+    """递归处理锚节点（含 attrs 内嵌节点），使宏边界在树中为 MacroCall。
+
+    锚在源码里以宏调用形态出现（`` `<锚名> ``），按槽位声明分两种进树方式：
+      - **语法位**（槽位声明 `@MacroCall`，如类型位）→ parser 直产 MacroCall
+        节点（ADR-0017 决策 2），此处只补锚表元数据；位置元数据保留 parser 绑定。
+      - **表达式/标识符位**（`Identifier` 的 `macro.call` 备选）→ parser 产
+        Identifier 节点，此处改写为 MacroCall 并保留原位置元数据。
+    """
     from core.define import CHILDREN_FIELD, Node
 
     if isinstance(value, Node):
+        if value.node_name == "MacroCall":
+            marker = getattr(value, "content", None)
+            entry = table.get(marker) if isinstance(marker, str) else None
+            if entry is not None:
+                return _attach_macro_meta(value, entry, body_provider)
         if (
             value.node_name == "Identifier"
             and isinstance(getattr(value, "content", None), str)
             and value.content in table
         ):
-            entry = table[value.content]
             new = Node("MacroCall", content=value.content)
-            new._macro_name = _extract_macro_name(entry.get("fragment", ""))
-            new._macro_marker = value.content
-            new._macro_fragment = entry.get("fragment", "") or ""
-            if entry.get("line") is not None:
-                new._src_span = (
-                    entry["line"],
-                    entry.get("col", 0),
-                    entry.get("end_col", 0),
-                )
+            _attach_macro_meta(new, table[value.content], body_provider)
             for meta in ("_pos_line", "_pos_col", "_tok_span", "_file"):
                 meta_val = getattr(value, meta, None)
                 if meta_val is not None:
                     setattr(new, meta, meta_val)
-            if body_provider is not None:
-                body_node = body_provider(new._macro_name)
-                if body_node is not None:
-                    new._macro_body = body_node
             return new
         children = getattr(value, CHILDREN_FIELD, None)
         if isinstance(children, list):

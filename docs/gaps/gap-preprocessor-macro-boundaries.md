@@ -1,11 +1,11 @@
 # Gap — preprocessor 宏覆盖缺口（type macros / 复合嵌套反向映射）
 
-- 状态：**立项中**（TODO「缺口闭环队列」③）：修法已定并路由到
-  `docs/decisions/0017-macro-in-syntax-position.md`——**检查前移 linter 展开
-  路径 + parser 直产宏节点**（parser 不做恢复）；嵌套反向映射实测未复现
-  失败（见下），待确认形态后再论
+- 状态：条目 1（类型位宏）**已闭环**（2026-09-13，commit 待记）——按
+  `docs/decisions/0017-macro-in-syntax-position.md`：锚复用 lexer 宏识别 +
+  类型槽位声明 `@MacroCall`（parser 直产宏节点）+ linter 锚窗口拼接。
+  剩余：**宏子槽**（条目 1b，见下）；条目 2 实测未复现失败（见下），待另寻形态
 - 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
-  部件拆入本档）
+  部件拆入本档）；`docs/decisions/0017-macro-in-syntax-position.md`
 - 参照：C 预处理器（对象/函数宏 + 条件编译）的成熟形态
 
 ## 缺口是什么
@@ -27,14 +27,26 @@
    - ✅ 语句位/整声明位可用：`` `define REG_DECL reg [7:0] r0; `` + 体内
      `` `REG_DECL ``（保真 0.972）；`` `define WIRE_DECL wire d `` +
      `input `WIRE_DECL` 也可用（marker 恰好落在端口名位，即"碰巧合法"）。
-   - **根因**：展开锚 `tpc_marker_N` 是一个**标识符**；`id` 不是合法的
-     net_type / 类型 / 位宽。手写 `input wire d` 合法是因为 `wire` 是关键字，
-     而 marker 是 id。故缺口 = "代理 token 在非表达式槽位不合法"。
-   - ADR-0016 **阶段 4 已完成但未覆盖此案**（marker 代理仍是展开机制），
-     故不能算已被吸收。
+   - **根因**：展开锚曾是**标识符**；`id` 不是合法的 net_type / 类型 / 位宽。
+     手写 `input wire d` 合法是因为 `wire` 是关键字，而 marker 是 id。
+     故缺口 = "代理 token 在非表达式槽位不合法"。
+   - **✅ 已闭环（2026-09-13）**：锚改为**宏调用文本形态**（`` `<锚名> ``，lexer
+     归为 `macro.call`，不为锚新造词法形态）；`[TypeSpec]`/`[TypeSpecNoReg]`
+     首元素加 `@MacroCall` 备选（宏是**整体替换类型片段**的文本 → 锚必然落在
+     首元素位，故一处声明覆盖三例）；parser 直产 MacroCall（宏名 + 源区间），
+     渲染按 `_macro_fragment` 直出原文。实测三例均：解析成功 + 树含宏节点 +
+     输出保留 `` `NT d `` 原文 + 手写形态不变。
+     `tests/languages/verilog/test_macro_type_slot.py`。
+   - ADR-0016 阶段 4 的 marker 代理机制已被本修法替换（锚即宏调用形态）。
    - 触发面（实测枚举）：宏体为 net_type（`wire`/`tri`）、类型（`reg`）、
-     或**完整位宽**（`[7:0]`）且落点在端口/声明的类型槽。宏体为表达式
+     或**完整位宽**（`[7:0]`）且落点在端口/声明的类型槽 → 已支持。宏体为表达式
      （`` `W `` + `[`W-1:0] d`）不受影响。
+1b. **宏子槽未支持**（2026-09-13 登记）：`` input wire `T d ``（T=`[7:0]`）——
+   子槽（Range/signed）的 layout 自带字面 `[` `]`，而宏残片可能含方括号 → 会多套
+   一对（静默错渲染）。**宁可停不可静默错**，故有意不加备选（照旧解析失败）。
+   若将来支持：要么让该槽位的 layout 能识别"ref 是宏节点则不出字面括号"，
+   要么把方括号收进 Range 自己的 layout（现由调用方槽位加）。代价：宏体为
+   `signed` 的子槽同属此类，同理未支持。
 2. **嵌套调用反向映射**（2026-09-12 实测**未复现失败**）：
    - 对象宏嵌套 `` `define B (`A + 1) `` → 保真 0.983；
    - 函数宏嵌套 `` `define V(y) `W(y)*2 `` → 保真 0.986；
