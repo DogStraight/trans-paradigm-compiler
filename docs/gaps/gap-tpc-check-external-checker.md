@@ -4,7 +4,10 @@
 - 关联：ROADMAP P2.6（宽泛条目侧链接本文件）
 - 参照：`docs/references.md`（Veryl/svlint 深调研 + 静态检查工具群段）、
   `docs/references.md`「静态检查器功能调研」（检查器功能矩阵 + 规则引擎架构）
-- 前置：P1.9 稳定规则 ID + 机器可读输出（诊断模型）
+- 前置：P1.9 稳定规则 ID + 机器可读输出（诊断模型）——**2026-09-12 核实已满足**
+  （`main.py::_cmd_check` 有 `--json` + 稳定诊断码 + suppress 注释；声明式规则表
+  + `tests/policy/test_rule_coverage.py` 守可达性；TODO/ROADMAP 已无 P1.9 条目）。
+  本档因此**不再受前置阻塞**，属多周特性，留在 ROADMAP P2.6 未入队列
 
 ## 缺口是什么
 

@@ -69,4 +69,8 @@
 | `gap-verification-engineering.md` | 原 known_limitations | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
 | `gap-macro-diagnostic-mapping.md` | TODO.md「0.1.2 目标」 | 宏展开与诊断位置对应（行号回源 + 宏归因，成本已评估） |
 
+> **2026-09-12 全员实测体检**：十档逐条实测核对（非照文档推断），状态修正已
+> 就地落在每档 `- 状态：`；实测确认仍开放且可动手的六项已按序进入
+> `TODO.md`「缺口闭环队列」逐项完成。本表**不复制状态**，避免第三处漂移。
+
 > 新增缺口文件时：本表加一行 + `docs/README` gaps 索引补登记；闭环删除时同步移除。

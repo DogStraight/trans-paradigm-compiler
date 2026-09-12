@@ -1,6 +1,7 @@
 # Gap — 语义/插件契约边界（elaboration / 深语义 / 注册表 / 版本）
 
-- 状态：接受（设计/工程摩擦）
+- 状态：接受（1/2 范围设计选择）；**item5 立项中**（TODO「缺口闭环队列」⑤，
+  2026-09-12 排队）；3/4 为文档约定
 - 关联：原 `docs/known_limitations.md` Scope/Engineering 边界（2026-09-04 按
   部件拆入本档）；ADR-0008；`grammar/verilog/plugins/typed_ports/`
 - 参照：Verilator 的 elaboration/宽度传播模型

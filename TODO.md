@@ -41,16 +41,44 @@
       回退，**测试为重心**）；(b) 诊断宏归因（依赖 (a)，由同一张表反查）。
       现状/成本账/切片见 `docs/gaps/gap-macro-diagnostic-mapping.md`
 
-## 缺口体检发现（2026-09-12，全员核实）
+## 缺口闭环队列（2026-09-12 体检后立项，逐项完成）
 
-> 对 `docs/gaps/` 十档逐条实测核对（不是照文档推断）；本节点只记**新识别的
-> 真实待办**，各档状态修正已就地落在档案里。
+> 来源：`docs/gaps/` 十档全员**实测**体检（提交 `0abfa67`）。此处只列实测确认
+> 仍开放且可动手的缺口，按序逐项完成；**完成即删本行**（历史在 git log），现状/
+> 成本账在各自档案（本文件不复述）。体检判为「接受/范围/设计选择」的档**不入队**
+> ——parser 无恢复、语言包范围、语义契约 1-2、验证边界 2-4-7，那些是取舍不是
+> 待办。未入队的 backlog：`gap-tpc-check-external-checker`（前置已核实满足，但
+> 属多周特性，留 ROADMAP P2.6）。
 
-- [ ] **formatter 多声明器对齐破坏输出**（用户可见缺陷）：`reg a, b;` 类行的
-      第二个及之后声明符被推到远处且逐行不一致（真实语料 226 处命中，
-      ice40 simcells 146 / cells_sim 46 / picorv32 28 / tv80 6）。复现、根因、
-      门禁盲区与两条修法（保守回退 / 正确对齐，**动代码前先选路**）见
-      `docs/gaps/gap-formatter-line-behavior.md`「多声明器对齐破坏格式化」。
+- [ ] **① lexer `delim` 类定界符**（`gap-lexer-capture-boundaries` item1）：
+      先补「`delim` 的 end 须单字符」fail-fast 校验（堵住 `"""` 静默不终止的
+      路径，零行为变化），再实现定界符序列（`CaptureRule` 起止分离，覆盖
+      Rust `r#"` 形态）。验收：非法配置 fail-fast + 多字符定界符用例过 +
+      全量门禁绿。
+- [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) `semantic=True`
+      展开产出行映射表 → `FileResult` 存表 → 2 处诊断（`_syntax_diag`/
+      `_semantic_diag`）换算 + 不可映射时保守回退；随后 (b) 由同一张表反查宏
+      归因（诊断加 `"macro": "<NAME>"`）。**测试为重心**（单行/多行/嵌套/
+      带参/条件编译 × 映射断言）；不做列级。验收：各形态行号正确 + 不可映射
+      明确回退 + 全量门禁绿。
+- [ ] **③ 宏落点类型位**（`gap-preprocessor-macro-boundaries`）：宏体为类型
+      形态且落点在**端口类型位**时失败（`input `PTYPE d` → 留 marker、parse
+      truncated）；语句位已可用。形态有限（端口/参数类型），按槽位补。
+      验收：端口类型位用例过 + 语句位不回归 + 全量门禁绿。
+- [ ] **④ renderer 注释 attachment 覆盖块结束符注释**
+      （`gap-renderer-comment-fidelity` 剩余项）：补全后锚点回插可退居纯兜底
+      （仅 `only_tpc marker` 通道）。验收：块结束符注释用例过 + real 保真度
+      不降 + 全量门禁绿。
+- [ ] **⑤ 语言包声明引擎兼容范围**（`gap-semantic-elaboration-boundaries` item5）：
+      pack 声明 engine 兼容范围 + 加载时 fail-fast 校验，替掉“引擎升级可能
+      静默破坏旧包”的隐式契约。验收：版本不匹配 fail-fast + 现有包声明后加载
+      照常 + 全量门禁绿。
+- [ ] **⑥（最后）formatter 多声明器正确对齐**（`gap-formatter-line-behavior`
+      item4，已定：**实现正确对齐**，不走保守回退）：重组时按「名字列同基准」
+      计算后缀填充（参照 Verible kDataDeclaration），消除真实语料 226 处漂移。
+      须**先补门禁再改实现**（`test_column_align.py` 只测提取不测重组输出；
+      e2e `_strip_all` 抹空白天然失明）。验收：多声明行输出对齐一致 +
+      真实语料 226 处漂移消失 + 全量门禁绿。
 
 ## 0.1.1 目标 2 — 检查链收尾（2026-09-05 立项，三目标）
 

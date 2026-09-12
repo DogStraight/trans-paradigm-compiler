@@ -1,8 +1,9 @@
 # Gap — renderer 注释回插保真（锚点启发式，±3 行窗口）
 
-- 状态：**部分闭环**（2026-09-12："模块体首注释漂到 module 声明前"已修，提交
-  `5ad5bb4` + 回归 `tests/languages/verilog/test_comment_body_head.py`）；
-  剩余 = attachment 覆盖块结束符注释（前进方向）
+- 状态：**立项中**（TODO「缺口闭环队列」④，2026-09-12 排队）：已部分闭环
+  （2026-09-12："模块体首注释漂到 module 声明前"已修，提交 `5ad5bb4` +
+  回归 `tests/languages/verilog/test_comment_body_head.py`）；在队项 =
+  attachment 覆盖块结束符注释
 - 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
   部件拆入本档）；`renderer/renderer_architecture.md`「功能缺口」B3/缺口 2
 - 参照：prettier/verible 的注释槽位模型
