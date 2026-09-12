@@ -119,6 +119,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `_BUILTIN_UNIT_CONTRACTS`。**无声明 = 不校验**（可选、附加）。测试
   `tests/engine/pipeline/test_contract_check.py`。
 
+- **槽位契约声明面（0.1.2 阶段 5b-3c-1）**：`[[transform.slots]]` 从「无人读的
+  名字列表」变为**槽位契约声明**——每槽位声明触发节点（`on`）/ 遍历形态
+  （`walk` = top|recursive）/ ctx 来源（`ctx`，`$node` = 触发节点）/ 结果接回
+  （`result` = extra|none|replace|remove）；**时点不在此声明**（归
+  `[pipeline.units.*]`）。加载期 fail-fast：槽位名未注册 / 取值非法 → 报错。
+  typed_ports 四个槽位已按此声明（`tpc.toml`），执行仍由 `_bridge.py` 调用
+  （遍历/接回的通用执行器见 5b-3c-2）。另：删死槽位 `expand_typed_port`
+  （no-op，A1/A3）。测试 `tests/engine/core/test_transform_slot_decls.py`。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

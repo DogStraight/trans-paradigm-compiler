@@ -177,6 +177,8 @@ def load_component(meta: dict[str, Any]) -> dict[str, Any]:
     # 3. Transform handlers
     transform_meta = meta.get("transform", {})
     info["transform"] = _load_python_handlers(cdir, transform_meta.get("handlers", []))
+    # 3b. Transform 槽位契约声明（5b-3c 声明面；须在 handlers import 之后校验）
+    info["slot_decls"] = _load_transform_slot_decls(cdir, transform_meta)
 
     # 4. Pipeline pass / schedule 声明（ADR-0007）
     info["pipeline"] = _load_pipeline_decls(cdir, meta.get("pipeline", {}))
@@ -227,6 +229,97 @@ def register_transform_slot(name: str):
 
 def get_transform_slots() -> dict[str, Callable]:
     return dict(_transform_slots)
+
+
+# 槽位契约声明取值空间（5b-3c）：遍历形态 / 结果接回形态 / ctx 特殊来源。
+_SLOT_WALKS = ("top", "recursive")
+_SLOT_RESULTS = ("extra", "none", "replace", "remove")
+_SLOT_CTX_SELF = "$node"
+
+
+def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dict]:
+    """解析组件 `[[transform.slots]]` 槽位契约声明 → {槽位名: 契约}。
+
+    契约字段（语言知识就地，引擎只按声明里的名字匹配，不内置语言知识）：
+        name   槽位名（须与 `@register_transform_slot` 注册名一致 → fail-fast）
+        on     触发节点名（字符串或字符串列表）
+        walk   遍历形态：`top`（根 sub_node 顶层）/ `recursive`（整树递归）
+        ctx    ctx 取值声明 `{键 = "$node" | "<节点名>"}`（`$node` = 触发节点
+               自身；节点名 = 该子树里首个同名节点）；引擎固有通道
+               （`root_scope` / `type_map`）自动注入，不需声明
+        result 结果接回：`extra`（额外输出文件）/ `none`（原地改）/ `replace`
+               （1:1 替换 + 注释迁移）/ `remove`（从父列表移除）
+
+    本步只落**声明面**（解析 + 校验）；按声明遍历/调用/接回的**执行面**见 5b-3c-2。
+    """
+    slots: dict[str, dict] = {}
+    for decl in transform_meta.get("slots", []) or []:
+        if not isinstance(decl, dict):
+            raise ValueError(
+                f"[plugin] transform.slots 项须为表（[[transform.slots]]）: "
+                f"{decl!r} ({cdir})"
+            )
+        name = decl.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"[plugin] transform.slots 缺 name: {decl!r} ({cdir})")
+        if name in slots:
+            raise ValueError(
+                f"[plugin] transform.slots 槽位名重复: {name!r} ({cdir})"
+            )
+        if name not in _transform_slots:
+            raise ValueError(
+                f"[plugin] transform.slots 槽位 {name!r} 未注册（须由 "
+                f"[transform].handlers 的模块 @register_transform_slot）({cdir})"
+            )
+        on = decl.get("on")
+        on_list = [on] if isinstance(on, str) else list(on or [])
+        if not on_list or not all(isinstance(o, str) and o for o in on_list):
+            raise ValueError(
+                f"[plugin] transform.slots '{name}' on 须为非空节点名或其列表 "
+                f"({cdir})"
+            )
+        walk = decl.get("walk", "top")
+        if walk not in _SLOT_WALKS:
+            raise ValueError(
+                f"[plugin] transform.slots '{name}' walk 非法: {walk!r}"
+                f"（合法: {_SLOT_WALKS}）({cdir})"
+            )
+        result = decl.get("result", "none")
+        if result not in _SLOT_RESULTS:
+            raise ValueError(
+                f"[plugin] transform.slots '{name}' result 非法: {result!r}"
+                f"（合法: {_SLOT_RESULTS}）({cdir})"
+            )
+        ctx = decl.get("ctx", {}) or {}
+        if not isinstance(ctx, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in ctx.items()
+        ):
+            raise ValueError(
+                f"[plugin] transform.slots '{name}' ctx 须为 {{键 = 来源}} 字符串表 "
+                f"({cdir})"
+            )
+        for src in ctx.values():
+            if src.startswith("$") and src != _SLOT_CTX_SELF:
+                raise ValueError(
+                    f"[plugin] transform.slots '{name}' ctx 特殊来源非法: {src!r}"
+                    f"（合法: {_SLOT_CTX_SELF} 或节点名）({cdir})"
+                )
+        slots[name] = {
+            "name": name,
+            "on": on_list,
+            "walk": walk,
+            "ctx": dict(ctx),
+            "result": result,
+        }
+    return slots
+
+
+def get_transform_slot_decls() -> dict[str, dict]:
+    """合并已加载组件的槽位契约声明（槽位名 → 契约，5b-3c 声明面）。"""
+    merged: dict[str, dict] = {}
+    for info in _loaded_components.values():
+        merged.update(info.get("slot_decls", {}))
+    return merged
 
 
 def get_component_mapping_config() -> dict:

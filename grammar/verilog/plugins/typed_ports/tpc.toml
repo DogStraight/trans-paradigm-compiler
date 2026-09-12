@@ -16,13 +16,33 @@ postpasses = ["_expand_ports.py:run_expand_ports", "_check.py:run_tp_check"]
 # analyze 报错 → 阻断展开）。语言知识（type/role/impl 形态）全在 _check.py。
 
 [transform]
-# 槽位声明（声明面；触发契约配置化见 5b-3c——目前由 _bridge.py 调用）：
-# delete_type_decl / build_wrapper（TypeDecl 段）；auto_connect_ports /
-# replace_impl_binding（ImplBinding 段）。
-slots = [
-    "delete_type_decl",
-    "build_wrapper",
-    "auto_connect_ports",
-    "replace_impl_binding",
-]
 handlers = ["_transform.py", "_bridge.py"]
+
+# 槽位契约声明（5b-3c 声明面）：每槽位声明在哪触发（on）、怎么遍历（walk）、
+# ctx 从哪来、结果怎么接回（result）。**时点不在此声明**——归管线配置
+# （[pipeline.units.*]）。执行仍由 _bridge.py 调用（5b-3c-2 接管遍历/接回）。
+[[transform.slots]]
+name = "build_wrapper"
+on = "TypeDecl"
+walk = "top"
+result = "extra"
+ctx = { type_decl = "$node", impl_block = "TypeImplDecl" }
+
+[[transform.slots]]
+name = "delete_type_decl"
+on = "TypeDecl"
+walk = "top"
+result = "remove"
+
+[[transform.slots]]
+name = "auto_connect_ports"
+on = ["ImplBinding", "ImplBindingWithInterface"]
+walk = "recursive"
+result = "none"
+ctx = { impl_node = "$node" }
+
+[[transform.slots]]
+name = "replace_impl_binding"
+on = ["ImplBinding", "ImplBindingWithInterface"]
+walk = "recursive"
+result = "replace"

@@ -128,8 +128,22 @@ def build_wrapper(node: Node, ctx) -> Node | None:
     return node
 ```
 
-- 槽位名在 tpc.toml `[transform].slots` 声明，处理器文件在 `[transform].handlers`。
-- 节点级钩子签名：`(node, ctx) -> Node | None`。
+- 槽位契约在 tpc.toml `[[transform.slots]]` 声明（槽位 handler 文件在
+  `[transform].handlers`）：
+
+```toml
+[[transform.slots]]
+name = "build_wrapper"          # 槽位名（须与 @register_transform_slot 注册名一致）
+on = "TypeDecl"                 # 触发节点名（或名列表）
+walk = "top"                    # top（根 sub_node 顶层）/ recursive（整树递归）
+result = "extra"                # extra / none / replace（1:1 替换+注释迁移）/ remove
+ctx = { type_decl = "$node", impl_block = "TypeImplDecl" }   # $node = 触发节点自身
+```
+
+- `ctx` 的引擎固有通道（`root_scope` / `type_map`）自动注入，不需声明。
+- **时点不在此声明**：归管线配置 `[pipeline.units.*]`（ADR-0015 §1）。
+- 本步（5b-3c-1）只落**声明面**（解析 + fail-fast 校验：槽位名已注册 / `walk`·
+  `result` 取值合法 / `on`·`ctx` 形态）；按声明遍历/调用/接回的**执行面**见 5b-3c-2。
 - 触发与接回由组件内插件负责（typed_ports 先例：`_bridge.py` 扫 TypeDecl /
   ImplBinding 调槽位、`mark_extra` 产额外文件、1:1 替换时 `migrate_comments`）；
   触发契约配置化（槽位独立成单元/时点）见 5b-3c。
