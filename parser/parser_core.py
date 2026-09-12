@@ -210,6 +210,25 @@ def _atom_parser_impl(self, _tokens, idx, context):
         context.restore_snapshot(snapshot)
     context.token_pointer = old_ptr
     if best_node is None:
+        # 宏通配（ADR 0018 决策 2）：非空体宏调用出现在**原子位**时当作一个
+        # 原子（宏节点）——语言包零宏知识（不声明任何槽位），合法性由 linter
+        # 的真展开检查兜底（分工见 ADR）。空体宏已由占位阶段改为 trivia。
+        from core.define import Node
+        from core.token_protocol import MACRO_CALL_TOKEN_TYPE, TRIVIA_TOKEN_TYPES
+
+        toks = context.tokens
+        j = start_ptr
+        while j < len(toks) and toks[j].type in TRIVIA_TOKEN_TYPES:
+            j += 1
+        if j < len(toks) and toks[j].type == MACRO_CALL_TOKEN_TYPE:
+            tok = toks[j]
+            node = Node("MacroCall", content=tok.content)
+            node._macro_fragment = tok.content
+            node._macro_name = str(tok.content).lstrip("`").split("(")[0]
+            node._tok_span = (j, j + 1)
+            # consumed 从 idx 起算（含跳过的 trivia），与 pratt 的
+            # `idx += consumed` 推进约定一致。
+            return node, j + 1 - start_ptr
         return None, 0
     return best_node, best_consumed
 
