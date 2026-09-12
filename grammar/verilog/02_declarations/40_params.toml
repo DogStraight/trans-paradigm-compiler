@@ -71,9 +71,11 @@ production = [
 [GenvarDecl.parser.node]
 genvar_names = ["$2", "$3.items[*].sub_node[1]"]
 
+# 名字取 genvar_names.content：列表元素是裸 Identifier 节点（名字在
+# content，无 name 字段），故不能沿用 "items.name" 形态。
 [GenvarDecl.analyzer.symbol]
 kind = "genvar"
-name_attr = "genvar_names.name"
+name_attr = "genvar_names.content"
 
 [GenvarDecl.renderer.layout]
 line = [

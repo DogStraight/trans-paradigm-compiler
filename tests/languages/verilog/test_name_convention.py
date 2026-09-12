@@ -248,6 +248,18 @@ endmodule
         )
         assert _diags(ctx, src) == []
 
+    def test_genvar_lowercase_nc008(self, ctx):
+        """genvar 小写 → NC008。
+
+        回归锁定：GenvarDecl 的符号名在 `genvar_names.content`（列表元素是
+        裸 Identifier 节点），曾误配 `genvar_names.name` → 符号从未注册 →
+        NC008 永不触发（规则形同死配置）。
+        """
+        src = "module m;\n  genvar i;\nendmodule\n"
+        diags = _diags(ctx, src)
+        assert ("NC008", "warning") in {(c, l) for c, l, _ in diags}
+        assert any("i" in m for _, _, m in diags)
+
     def test_instance_lowercase_ok(self, ctx):
         """实例名小写合规；大写违规 NC002。"""
         src = (

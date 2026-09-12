@@ -22,7 +22,18 @@
         "W103",
         "WC001",
         "AW001",
-        "AW002"
+        "AW002",
+        "NC001",
+        "NC002",
+        "NC003",
+        "NC004",
+        "NC005",
+        "NC006",
+        "NC007",
+        "NC008",
+        "NC009",
+        "NC010",
+        "NC011"
     ],
     "pos": {
         "UN001_unused_decl": {
@@ -274,6 +285,47 @@
                 "AW002"
             ],
             "desc": "同一 always 内同一信号混用 = 与 <= 应检出（组合块，不牵连 AW001）"
+        },
+        "NC_module_style": {
+            "entry": "top.sv",
+            "expect": [
+                "NC001",
+                "NC011"
+            ],
+            "desc": "module 名 `mIxEd` 违反 PascalCase/snake_case（NC001）；且与文件名 top.sv 不一致（NC011）"
+        },
+        "NC_signal_style": {
+            "entry": "top.sv",
+            "expect": [
+                "NC003",
+                "NC004",
+                "NC005"
+            ],
+            "desc": "wire DATA_BUS（NC003）/ reg Q_BAD（NC004）/ 端口 A_IN+Y_OUT（NC005）违规——同一文件多 kind 分发"
+        },
+        "NC_param_style": {
+            "entry": "top.sv",
+            "expect": [
+                "NC006",
+                "NC007",
+                "NC008"
+            ],
+            "desc": "parameter/localparam/genvar 均小写（大写下划线族违规）"
+        },
+        "NC_instance_style": {
+            "entry": "top.sv",
+            "expect": [
+                "NC002"
+            ],
+            "desc": "实例名 u_ADD 违规（module 名 adder 合规，不误报 NC001）"
+        },
+        "NC_subroutine_style": {
+            "entry": "top.sv",
+            "expect": [
+                "NC009",
+                "NC010"
+            ],
+            "desc": "function MyFunc（NC009）/ task MyTask（NC010）名违规"
         }
     },
     "neg": {
@@ -360,6 +412,14 @@
         "AW002_single_op": {
             "entry": "top.sv",
             "desc": "组合 always 纯阻塞赋值不应误报 AW002"
+        },
+        "NC_style_clean": {
+            "entry": "top.sv",
+            "desc": "module/端口/wire 全小写下划线合规 → 零 NC 误报"
+        },
+        "NC_param_clean": {
+            "entry": "top.sv",
+            "desc": "parameter/localparam/genvar 全大写下划线合规 → 零 NC 误报"
         }
     }
 }

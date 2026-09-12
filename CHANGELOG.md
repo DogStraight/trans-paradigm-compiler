@@ -185,6 +185,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   由 0.1.2 阶段 9 真实语料终验（`tests/e2e/run_all_tests.py`）抓到，测试
   `tests/engine/pipeline/test_unit_slot_schedule.py`。
 
+- **检查精度评测扩面（0.1.2 阶段 8 / T1 续）**：NC 族（命名风格）入评测——
+  `NC001`-`NC011` 按 kind 合并为 5 个正样例（module/信号/参数/实例/子程序）+
+  2 个负样例，样本 56 → **63 case**（40 正 / 23 负），focus 23 → **34 码**，
+  recall **100%**（51 期望码全命中）+ FP **0** + parse_err 0。
+
+- **修复：GenvarDecl 符号从未注册（NC008 形同死配置）**：`name_attr` 误配
+  `genvar_names.name`——该列表元素是裸 `Identifier` 节点（名字在 `content`，
+  无 `name` 字段），`_walk_path` 取不到即丢弃，符号静默不注册，导致 `genvar`
+  命名检查永不触发（既有测试只断言“大写合规零诊断”，未覆盖违规检出）。
+  修为 `genvar_names.content`；补回归测试 `test_genvar_lowercase_nc008`
+  （已回退验证：修复前精准失败）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

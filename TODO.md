@@ -42,17 +42,15 @@
 
 > 对标结论：references.md「P1.10 结论」（重合核心集 10 项 + 特化赛道 + 映射
 > 评估）+「诊断链多维对标结论」（0.1.1 第二目标定稿）。
-> 现状（2026-09-05 盘点）：30 诊断码 / 8 检查族已实现（name NC001-16 / inst
-> W101-106+WC001 / width W201-2 / latch LC001 / case CC001 / unused UN001 /
-> always AW001-2）；eval_check_accuracy 强检 focus 10 码 @ 34 case recall
-> 100% + FP 0。重合核心集实现 ~9/10（宏卫生族缺）；强检面只盖 30 码中 10 个；
+> 现状（2026-09-05 盘点，09-11 更新 focus/样本数）：30 诊断码 / 8 检查族已实现
+> （name NC001-16 / inst W101-106+WC001 / width W201-2 / latch LC001 / case
+> CC001 / unused UN001 / always AW001-2）；eval_check_accuracy 强检 focus
+> 34 码 @ 63 case recall 100% + FP 0。重合核心集实现 ~9/10（宏卫生族缺）；
 > 独到项批判吸收仅 svlint prefix 族已入（NC014-16）；自场景自定义规则范例 0。
 
 - [ ] **T1 重合核心集补全 + 强检扩面**：
-      - ✅ inst 族 W101/W102/W103/WC001 + always 族 AW001/AW002 已入评测
-        （focus 扩到 23 码，56 case：35 正 / 21 负，recall 100% + FP 0）
-      - 剩：NC001-011 / NC014-016 入评测（与 `test_name_convention.py` 分工核对
-        后按 kind 合并样本：一个 case 可期望多码）
+      - 剩：NC014-016（prefix/suffix 族）入评测——按 kind 合并样本（一个 case
+        可期望多码），先读 handler 确认后缀触发条件
       - 宏/指令卫生族（对标 Verilator REDEFMACRO / slang redef-macro /
         svlint default_nettype——跨文件宏表）：**待作者定**是否本版做
 - [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价，取舍清单待作者拍板）：
