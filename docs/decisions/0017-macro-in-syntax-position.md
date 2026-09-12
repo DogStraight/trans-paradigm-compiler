@@ -88,6 +88,9 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
    → 发现器级联失守（**实测 81 条 phase-unrecognized**；同一份文件 check 链
    `analyzer/structure.py::_expand_source` 走文本展开，今天就有这 81 条）。
    token 级拼接不跨 token 边界，无此问题（实测同一文件降到 0）。
+   残余：darkriscv 上仍有 26 条与"体注释"同进同出（去注释即 0），但单条多行
+   表达式/三元的 9 个最小变体均 0 条——**相关性已测、机制未定**，待钉死触发
+   条件（登记 `docs/gaps/gap-parser-linter-approximation.md`）。
 4. **parser 不做通用错误恢复**。`gap-parser-linter-approximation` 的"无恢复"
    对**非宏输入仍然成立**（真语法错仍是"linter 前置 + truncation 双保险"）；
    本决策只新增"宏位可解析为宏节点"这一条语法路径，不改其它失败语义。
