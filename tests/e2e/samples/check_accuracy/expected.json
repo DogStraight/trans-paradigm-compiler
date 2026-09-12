@@ -36,7 +36,9 @@
         "NC011",
         "NC014",
         "NC015",
-        "NC016"
+        "NC016",
+        "TP002",
+        "TP006"
     ],
     "pos": {
         "UN001_unused_decl": {
@@ -350,6 +352,20 @@
                 "NC016"
             ],
             "desc": "reg 名以 wire 后缀 _w 结尾（y_w）—— 类型可能混淆。注：用模块内 reg 声明（ANSI 端口 reg 归 NC005 端口命名，不属 NC016 覆盖面）"
+        },
+        "TP006_invert_self": {
+            "entry": "top.sv",
+            "expect": [
+                "TP006"
+            ],
+            "desc": "role 的 invert 指向自身（slave : invert slave）—— 反转须指向另一 role"
+        },
+        "TP002_invert_dangling": {
+            "entry": "top.sv",
+            "expect": [
+                "TP002"
+            ],
+            "desc": "role 的 invert 引用不存在的 target（invert nosuchrole）—— 悬空引用"
         }
     },
     "neg": {
