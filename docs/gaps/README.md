@@ -59,7 +59,7 @@
 | 缺口文件 | 关联条目 | 主题 |
 |----------|----------|------|
 | `gap-tpc-check-external-checker.md` | ROADMAP P2.6 | tpc-check 外部 checker 插件协议（接入 veryl/verible/slang + 自管场景） |
-| `gap-lexer-capture-boundaries.md` | 原 known_limitations | lexer 捕获边界（多字符定界符/块标量折叠/触发条件） |
+| `gap-lexer-capture-boundaries.md` | 原 known_limitations | lexer 捕获边界（块标量折叠/触发条件；多字符定界符 2026-09-12 已闭环） |
 | `gap-parser-linter-approximation.md` | 原 known_limitations | parser/linter 错误处理近似（无恢复 + 启发式） |
 | `gap-preprocessor-macro-boundaries.md` | 原 known_limitations | 宏覆盖缺口（type macros/复合嵌套反向映射） |
 | `gap-renderer-comment-fidelity.md` | 原 known_limitations | renderer 注释回插保真（±3 行锚点启发式） |

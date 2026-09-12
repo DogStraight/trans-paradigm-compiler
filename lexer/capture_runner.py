@@ -215,16 +215,19 @@ class CaptureRunner:
 
             elif rule.kind == "delim":
                 # 到 end 定界符（消费，含定界符本身）或换行（不消费，
-                # 字符串不跨行）或 EOF（未闭合自然终止）
+                # 字符串不跨行）或 EOF（未闭合自然终止）。
+                # end 按**长度**比较（与 marker/line_match 同构）：此前用
+                # `ch == rule.end` 单字符比较，多字符定界符（`"""`）永不
+                # 匹配 → 静默吞到行尾/EOF（把后续 token 一起吃掉）。
+                end_len = rule.end_len
                 while pos < len(text):
-                    ch = text[pos]
-                    if ch == rule.end:
-                        content += ch
-                        pos += 1
+                    if text[pos : pos + end_len] == rule.end:
+                        content += rule.end
+                        pos += end_len
                         return (content, pos, rule.token_type)
-                    if ch in newline_set:
+                    if text[pos] in newline_set:
                         return (content, pos, rule.token_type)
-                    content += ch
+                    content += text[pos]
                     pos += 1
                 return (content, pos, rule.token_type)
 

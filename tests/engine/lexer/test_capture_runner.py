@@ -213,6 +213,37 @@ class TestRunDelim:
         content, _, _ = result
         assert content == "'hello'"
 
+    def test_delim_multi_char_closed(self):
+        """多字符定界符（`\"\"\"`）：终止判定按长度比较。
+
+        曾按单字符比较（`ch == rule.end`）→ 永不匹配，静默吞到行尾/EOF
+        （把后续 token 一起吃进字符串）。
+        """
+        td = self._td(['"""'])
+        result = CaptureRunner.run('"""abc""" tail', 0, td)
+        assert result is not None
+        content, pos, token_type = result
+        assert content == '"""abc"""'
+        assert pos == 9  # 不吞后面的 tail
+        assert token_type == "literal.string"
+
+    def test_delim_multi_char_stops_at_newline(self):
+        """多字符定界符未闭合遇换行：同样不跨行。"""
+        td = self._td(['"""'])
+        result = CaptureRunner.run('"""abc\nnext', 0, td)
+        assert result is not None
+        content, pos, _ = result
+        assert content == '"""abc'
+        assert pos == 6
+
+    def test_delim_multi_char_longest_start_wins(self):
+        """`"` 与 `\"\"\"` 并存：长 start 优先（不把 `\"\"\"` 拆成 `"`+`"`）。"""
+        td = self._td(['"', '"""'])
+        rules = CaptureRunner.build_rules(td)
+        assert [r.start for r in rules if r.kind == "delim"] == ['"""', '"']
+        result = CaptureRunner.run('"""abc"""', 0, td)
+        assert result is not None and result[0] == '"""abc"""'
+
     def test_build_rules_expands_delimiters(self):
         """[string] delimiters 展开为 delim 规则（token_type = literal.string）。"""
         td = self._td(['"', "'"])
@@ -427,6 +458,18 @@ class TestLexerIntegration:
         assert heredoc.content == "<<EOF\nrun $a / #b\n"
         # heredoc 后正常 token 继续
         assert types[-2] == "literal.number"
+
+    def test_multi_char_delimiter_keeps_trailing_tokens(self, config_loaded):
+        """多字符字符串定界符：闭合后行内后续 token 不被吞掉（集成）。"""
+        td = _make_td(string_delims=['"""'])
+        lexer = _lexer_with(td)
+        tokens = lexer.tokenize('x = """ab""" y')
+        types = [t.type for t in tokens]
+        assert "literal.string" in types
+        s = next(t for t in tokens if t.type == "literal.string")
+        assert s.content == '"""ab"""'
+        # 后续 y 仍被识别为 id（曾整行被吞进字符串）
+        assert any(t.type == "id" and t.content == "y" for t in tokens)
 
     def test_heredoc_token_line_accounting(self, config_loaded):
         """多行捕获后，后续 token 行号正确（行号记账）。"""

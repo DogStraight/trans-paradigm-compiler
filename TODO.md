@@ -48,13 +48,8 @@
 > 成本账在各自档案（本文件不复述）。体检判为「接受/范围/设计选择」的档**不入队**
 > ——parser 无恢复、语言包范围、语义契约 1-2、验证边界 2-4-7，那些是取舍不是
 > 待办。未入队的 backlog：`gap-tpc-check-external-checker`（前置已核实满足，但
-> 属多周特性，留 ROADMAP P2.6）。
+> 属多周特性，留 ROADMAP P2.6）。编号沿用立项序号，完成的不重编。
 
-- [ ] **① lexer `delim` 类定界符**（`gap-lexer-capture-boundaries` item1）：
-      先补「`delim` 的 end 须单字符」fail-fast 校验（堵住 `"""` 静默不终止的
-      路径，零行为变化），再实现定界符序列（`CaptureRule` 起止分离，覆盖
-      Rust `r#"` 形态）。验收：非法配置 fail-fast + 多字符定界符用例过 +
-      全量门禁绿。
 - [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) `semantic=True`
       展开产出行映射表 → `FileResult` 存表 → 2 处诊断（`_syntax_diag`/
       `_semantic_diag`）换算 + 不可映射时保守回退；随后 (b) 由同一张表反查宏
@@ -112,11 +107,13 @@
 > `tests/e2e/eval_diag_baseline.py` + `tests/policy/test_diag_baseline.py`——
 > 诊断条数只许减不许增（首个基线 132 条 / 7 码）。
 > **本节点短期项已清空**；中长期项（变异抽查、跨文件语料基座）见 ROADMAP 同名节。
-- [ ] 增量覆盖率：全量 `--cov` 串行 ~32min 只在发布时跑，平时新增代码覆盖率
-      是盲区 → 日常只对改动文件跑 `--cov=<changed>`
-- [ ] 真实语料误报基线：评测集误报有门禁，真实语料（ice40/picorv32 + 7 工程）
-      误报目前人工量化、无留存基线 → 多 oracle 共识计数 + baseline.json +
-      阈值卡（"默认开关是数据决策"需要可追踪依据）
+
+- [ ] **e2e 发布门禁变红（2 FAIL，2026-09-12 引入）**：`ref_v06_nettype_restored`
+      / `ref_v07_macro_redef_same`（MH 族正样本，`e67193f` 加入 `lint_err/ref/`）
+      在该组 `expand_macros=False` 下指令行未展开 → `parse truncated`。
+      `policy/release-checklist.md` 要求 FAIL 0，现为红（实测：无本次改动同样
+      失败，非回归）。处置三选：按样例开 expand（real 组 `REAL_PREDEFINED`
+      有先例）/ 移组到 `macro` / 移出（评测集 33 正样本已覆盖）。
 
 ## 文档工程（2026-09-04 立项，使用复盘 6 类文档框架）
 

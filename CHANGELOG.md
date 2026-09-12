@@ -292,6 +292,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   以及语料侧缺文件。教训：根因必须落到实测（逐条打印诊断），不能停在
   "看代码猜机制"——本轮因未验证连下了两次错结论。
 
+### Fixed
+
+- **`delim` 类多字符定界符静默失效**（`lexer/capture_runner.py`）：终止判定原为
+  `ch == rule.end` 单字符比较，而配置层只校验"非空字符串"（即声称支持任意长度）
+  ——配 `"""` 会永不匹配、静默吞到行尾/EOF（把后续 token 一起吞进字符串）。改为
+  按长度比较（与 `marker`/`line_match` 同构）：同起同止多字符（`"""`）与起止
+  不同形态（`[[capture]] kind="delim"` + `r#"`/`"#`）均可用。顺带删除
+  `lexer/main_lexer.py` 中不可达的"字符串分支" + `_string_delims`（A1 死码；
+  清空该集合后 verilog/c4/yaml 三包字符串 token 完全不变，已实测）。回归
+  `tests/engine/lexer/test_capture_runner.py`（+4 用例）；全量 1739 passed。
+
 ### Changed
 
 - **结构提取底座独立（`analyzer/structure.py`）**：原 `analyzer/checker.py`

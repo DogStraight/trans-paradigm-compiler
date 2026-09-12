@@ -174,11 +174,6 @@ class Lexer:
             token_define_dict.get("space", {}).values()
         )
         self._newline_set: frozenset[str] = frozenset(self.newline)
-        # 字符串定界符集合（[string] delimiters，引擎不再硬编码引号）：
-        # 字符串分支在主循环后半段（number 之后），只在此命中。
-        self._string_delims: set[str] = set(
-            token_define_dict.get("string", {}).get("delimiters", [])
-        )
         # 无尺寸数字触发前缀（'d/'h/'b/'o 等，从 lexer.number 形态推导）：
         # 替代硬编码 "dDbBhHoOsS"——无 size 形态 + 单字符 base_prefix 的
         # prefix+base 组合（大小写），signed 形态另加 prefix+s/S。
@@ -483,7 +478,7 @@ class Lexer:
             # ── 无尺寸字面量分支（'b1/'d0/'hFF/'o7，配置驱动触发）──
             # 触发集合从 lexer.number 形态推导（无 size + 单字符 base_prefix），
             # 不再硬编码 'd/'h/'b/'o/'s 字符表——yaml/c4 无 ' 数字形态时
-            # ' 自然落到后续字符串/symbol 分支。
+            # ' 自然落到后续 capture（delim 规则）/symbol 分支。
             elif (
                 lex_text[text_idx:text_idx + 2] in self._unsized_prefixes
             ):
@@ -698,34 +693,6 @@ class Lexer:
                 current_token.set_content(number_content)
 
                 text_idx = new_idx
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── 字符串分支 ──
-            # 定界符来自 [string] delimiters 配置（delim capture mode），
-            # 扫描逻辑走 CaptureRunner——引擎不再硬编码 "'/ 引号。
-            # 未闭合遇换行不消费（字符串不跨行，修正旧实现的吞换行行为）。
-            elif lex_text[text_idx] in self._string_delims:
-                self._emit_pending_dedent(tokens)
-
-                result = CaptureRunner.run(lex_text, text_idx, self.token_define)
-                if result is None:  # 防御：delims 集合与 mode 表应一致
-                    text_idx += 1
-                    start_point += 1
-                    current_token.set_content(lex_text[text_idx - 1])
-                    current_token.set_type("unrecognized")
-                    current_token = self.refine_type(current_token)
-                    tokens.append(current_token)
-                    continue
-                string_content, new_idx, _ = result
-                offset = new_idx - text_idx
-                text_idx = new_idx
-
-                current_token.set_type("literal.string")
-                current_token.set_content(string_content)
-
                 start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
