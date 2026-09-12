@@ -78,19 +78,29 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 4. **渲染侧：遇宏节点走 raw 分支拼接**——输出宏调用原文，不把展开内容重新
    格式化。带宏文本的对齐/格式化参照前人做法（Verible / clang-format：宏调用
    视为**不可拆的原子文本**，无法证明可安全重排时整段原样输出 verbatim）。
-   **规则（2026-09-13 实测后定）**：取**最小的 `is_statement` 包含节点**，该节点
-   整段按**源文本原样输出**（节点保留、只加引擎标记，不替换成 MacroCall——避免
-   影响分析遍历）。
-   - 为什么不是"精确对齐的节点级折叠"：实测 6 例中 4 例精确对齐到节点
-     （`Range`/`Number`/`BlockingAssign`/`RegDecl`，`_drafts/probe_region_alignment.py`），
-     但**精确对齐不等于可安全替换**——`` input `T d ``（T=`[7:0]`）精确对齐到
-     `Range`，而 `Range.renderer` 只出 `msb : lsb`、方括号由**槽位 layout** 加，
-     宏展开体却自带 `[` `]` → 节点级替换会渲染成 `` input [`T] d ``（多套一对）。
-   - `is_statement` 是**语言包声明**（引擎只读、不硬编码）→ 规则与 layout 无关，
-     可证明不臆造文本：类型位三例落到 `BodyInputDecl`/`BodyOutputDecl` 声明上
-     → 原样输出 `` input `NT d; `` ✓；语句体/声明体宏落到各自语句/声明上 ✓。
-   - 粒度代价：含宏的**声明内部**不重排（对齐/空白保持原样）——这是"宁可原样，
-     不可静默重排"的直接结果。
+   **规则（2026-09-13 两轮实测后定，分层）**——先定"宏区间 → 可替换单元"，
+   再按可证性分级：
+   1. **区间 == 单个绑进属性的 token**（如 net 类型位）→ 该属性值换成宏调用原文，
+      周围照常格式化；
+   2. **区间 == 某个节点** 且该节点**自述**（把节点单独渲染一遍，与其对应源切片
+      按空白归一比较相等）→ 用原文替换该节点的输出；
+   3. 其余 → 最小 `is_statement` 包含节点**整段 verbatim**（节点保留 + 引擎标记，
+      不替换成 MacroCall——避免影响分析遍历）。
+   - **为什么不直接"最小 `is_statement` 节点整段 verbatim"**（本轮先定的粗规则，
+     实测推翻）：范围太粗，实测（`_drafts/probe_verbatim_scope.py`，9 形态）——
+     宏在 `if` 条件里 → verbatim = `IfStmt`（20 tok，含 else 两分支）；宏在
+     `@(...)` 里 → `AlwaysStmt`（10 tok，含块体）。远超宏的实际影响面，与
+     "带宏文本仍做对齐/格式化"相反。
+   - **自述检查为什么能拦住所知唯一的坑**：`` input `T d ``（T=`[7:0]`）的区间
+     精确落在 `Range` 节点上，但 `Range.renderer` 只出 `msb : lsb`（方括号由
+     **槽位 layout** 加），宏展开体却自带 `[` `]` → 节点级替换会渲染成
+     `` input [`T] d ``。自述比较：`Range` 自述 = `7:0` ≠ 源切片 `[7:0]` → 判为
+     不自述 → 自动落回第 3 层 ✓（无需先改语言包 layout）。
+   - 分层实测分布（9 形态）：6 例有精确节点（`Range`/`Number`/`ParenthesizedExpr`/
+     `SensitivityList`/`BlockingAssign`，其中 `Range` 不自述），3 例无精确节点
+     （net 类型 token 单独 / `reg [7:0]`、`wire [7:0]` 跨"类型 token + Range 元素"）。
+   - 粒度代价（第 3 层）：含宏的整条声明不重排（对齐/空白保持原样）——这是
+     "宁可原样，不可静默重排"的直接结果；实测该层只落单行声明形态。
 
 5. **parser 不做通用错误恢复**。`gap-parser-linter-approximation` 的"无恢复"
    对**非宏输入仍然成立**（真语法错仍是"linter 前置 + truncation 双保险"）；
