@@ -1,7 +1,9 @@
 # Gap — preprocessor 宏覆盖缺口（type macros / 复合嵌套反向映射）
 
-- 状态：**立项中**（TODO「缺口闭环队列」③，2026-09-12 排队）：只立项
-  **类型位宏**；嵌套反向映射实测未复现失败（见下），待确认形态后再论
+- 状态：**立项中**（TODO「缺口闭环队列」③）：修法已定并路由到
+  `docs/decisions/0017-macro-in-syntax-position.md`——**检查前移 linter 展开
+  路径 + parser 直产宏节点**（parser 不做恢复）；嵌套反向映射实测未复现
+  失败（见下），待确认形态后再论
 - 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
   部件拆入本档）
 - 参照：C 预处理器（对象/函数宏 + 条件编译）的成熟形态
@@ -56,18 +58,17 @@
 
 ## 可实现性
 
-- 类型位宏：**修法待选**（"代理 token 在类型槽不合法"有两种解法，取舍不同）：
-  - **A. 体前缀判定 → inline 形态**：宏体以类型/net_type/位宽前缀开头时，
-    不用 `tpc_marker_N`，改走既有的"行内注释锚 + 体原文"形态
-    （`/*<tpc:macro:N>*/` + body，注释是 trivia、parser 跳过，`=` 后缀宏
-    已在用这条通道）。前缀表由语言包声明（`[expand] inline_body_prefixes`，
-    顺带把现硬编码在引擎里的 `=` 判定搬进 TOML——语言知识归位）。
-    代价：这些宏**不再产 `MacroCall` 节点**（阶段 2 成果，P3.2/P3.3 前提）。
-  - **B. 全量 inline**：所有非空体宏都走 inline → 一次修好所有位置，但
-    `MacroCall` 节点全面消失，等于回退阶段 2。
-  - **C. 判为已知边界**：无真实语料消费（ice40/picorv32/tv80/darkriscv 均通过），
-    等真有工程要求再做。
-  - 倾向 A（牺牲面最小、与既有 `=` 先例同构）；选路后先补失败门禁再改实现。
+- 类型位宏：**已选路（2026-09-13，作者定）**——见
+  `docs/decisions/0017-macro-in-syntax-position.md`：
+  ① **句级语法检查前移到 linter 展开路径**（linter 本就有 skip/近似能力，
+     带宏的语法检查归它）；
+  ② **parser 直产宏节点**（宏名 + 源区间），不做硬解析、也不引入恢复机制；
+  ③ 实现形态：展开期改为产**占位 token**（类型由语言包声明），语言包声明
+     `[MacroNode.parser] production = ["<占位 token>"]` 并在"宏可出现"的槽位加
+     `@MacroNode` 备选（"宏能出现在哪"是语言知识，归语言包）。
+  被拒备选：**parser panic + skip 到后界**（与"跳过能力已在 linter"重复建设，
+  且让 parser 承担语法近似）/ 体前缀判定改 inline（只治一类且牺牲 MacroCall）/
+  全量 inline（回退阶段 2）/ 维持已知边界（代价不对称）。
 - 嵌套反向映射：**先确认形态是否真的失败**（当前实测通过），确认后再谈
   保留调用树/区间锚的方案——不确认就不动展开器。
 - 验证：`tests/languages/verilog/test_macro*.py` + real 语料宏还原门禁

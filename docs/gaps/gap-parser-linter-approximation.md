@@ -1,8 +1,12 @@
 # Gap — parser/linter 错误处理近似（无解析器恢复 + 启发式边界）
 
-- 状态：接受（设计选择，标注源码；非待闭环）
+- 状态：接受（设计选择，标注源码；非待闭环）——2026-09-13 复核：**不变**。
+  唯一的例外情形（宏落在语法位）**不靠恢复解决**：按
+  `docs/decisions/0017-macro-in-syntax-position.md`，parser 直产宏节点、
+  句级检查前移到 linter 展开路径——"跳过能力已在 linter"，不必在 parser 重建。
 - 关联：原 `docs/known_limitations.md` Architecture/Correctness 边界
-  （2026-09-04 按部件拆入本档）；`linter/linter_architecture.md`（已知边界表）
+  （2026-09-04 按部件拆入本档）；`linter/linter_architecture.md`（已知边界表）；
+  `docs/decisions/0017-macro-in-syntax-position.md`（宏位路径）
 - 参照：yacc/antlr 的错误恢复（skip-to-sync）、svlint/verible 对坏输入的容错
 
 ## 边界是什么
@@ -12,6 +16,12 @@
 拦截并阻断管线；若畸形输入漏过 linter，parser truncation **也阻断管线**
 （2026-08-22 fuzz 发现：截断解析曾渲染部分输出并报 `success=True`——静默
 内容丢失，已修）。
+
+> **2026-09-13 复核（宏语法位）**：本条的"无恢复"**不变**。宏落在语法位时
+> （实测一个端口类型位为展开锚 → 整棵树 0 节点）**不用恢复去解决**——按
+> ADR-0017：parser 直产宏节点（宏位可解析为节点）、句级检查前移到 linter 展开
+> 路径（跳过能力本就在 linter）。故"真语法错 = linter 前置 + truncation 双保险"
+> 这条分工保持原样。
 
 **linter 启发式不可避免**：前置 linter 工作在坏代码上，错误恢复是对开放
 坏输入集的有限近似。少数兜底（语句结束 = 分号/行尾、容器结束 = 派生

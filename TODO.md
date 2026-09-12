@@ -63,10 +63,16 @@
       (b) 由同一张表反查宏归因（诊断加 `"macro": "<NAME>"`）。**测试为重心**
       （单行/多行/嵌套/带参/条件编译 × 映射断言）；不做列级。
       验收：各形态行号正确 + 不可映射明确回退 + 全量门禁绿。
-- [ ] **③ 宏落点类型位**（`gap-preprocessor-macro-boundaries`）：宏体为类型
-      形态且落点在**端口类型位**时失败（`input `PTYPE d` → 留 marker、parse
-      truncated）；语句位已可用。形态有限（端口/参数类型），按槽位补。
-      验收：端口类型位用例过 + 语句位不回归 + 全量门禁绿。
+- [ ] **③ 宏落在语法位**（`gap-preprocessor-macro-boundaries`；修法已定，见
+      `docs/decisions/0017-macro-in-syntax-position.md`）：展开锚是标识符、在
+      类型/网类型/位宽槽位不合法 → 现状**一个坏项废掉整份文件**（实测：全好
+      15 类节点 vs 任一坏项 0 节点）。三步：
+      ① **句级语法检查前移 linter 展开路径**（linter 已有 skip/近似能力）；
+      ② **parser 直产宏节点**（宏名 + 源区间），不硬解析、不引入恢复；
+      ③ 实现：展开期产**占位 token**（语言包声明类型）+ 语言包
+      `[MacroNode.parser] production = [...]` 与"宏可出现"槽位的 `@MacroNode` 备选。
+      验收：语法位宏可解析且树含宏节点 + 无关部分节点数不减少 + 非宏真错误行为
+      不变 + linter 展开路径能报带宏句级语法问题 + 全量门禁绿。
 - [ ] **⑥（最后）formatter 多声明器正确对齐**（`gap-formatter-line-behavior`
       item4，已定：**实现正确对齐**，不走保守回退）：重组时按「名字列同基准」
       计算后缀填充（参照 Verible kDataDeclaration），消除真实语料 226 处漂移。
