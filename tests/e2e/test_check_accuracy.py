@@ -1,18 +1,19 @@
-"""tests/e2e/test_check_accuracy.py — analyzer 规则检出准确度门禁（0.1.1 试水）。
+"""tests/e2e/test_check_accuracy.py — analyzer 规则检出准确度门禁。
 
-对 tests/e2e/samples/check_accuracy/ 下全部标注样本（69 case：45 正样例 +
-24 负样例，覆盖 UN001 / W101-W106 / WC001 / W201-W202 / CC001 / LC001 /
-AW001-AW002 / NC001-NC016 / TP 族——声明式 + 插件源码共 39 个已定义码
-全覆盖）跑 ProjectChecker，断言：
+对 tests/e2e/samples/check_accuracy/ 下全部标注样本跑 ProjectChecker，断言：
 
     recall = 100%   — 正样例期望规则码全部检出（漏检 = MISS）
     FP = 0          — 负样例零误报 + 正样例无期望外规则码
     parse_err = 0   — 样本全部可解析（语义阶段不被跳过）
 
+**样本规模与覆盖码不在此处写死**：数值由 `sample_stats()` 从 expected.json
+现算（历史教训：case 数/期望码数在 docstring、CHANGELOG、TODO 各写一遍，
+改一处漏一处，同一轮错了三次）；"无已实现却无样本的规则"由
+`tests/policy/test_rule_coverage.py` 守卫，"文档数字不漂移"由
+`tests/policy/test_doc_stats.py` 守卫。
+
 判定逻辑与 tests/e2e/eval_check_accuracy.py 的 evaluate() 单一来源
-（--json 打印与 pytest 断言共享同一实现）。试水期基线：18 期望码全命中
-（2026-08-29 首测 80%→修复 W105 信号图 assign 驱动 + TypeSpecNoReg tri
-缺口后达 100%）。
+（--json 打印与 pytest 断言共享同一实现）。
 """
 
 import os

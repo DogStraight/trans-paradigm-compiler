@@ -37,6 +37,28 @@ _CASES_DIR = os.path.join(_SAMPLE_DIR, "cases")
 _EXPECT_PATH = os.path.join(_SAMPLE_DIR, "expected.json")
 
 
+def sample_stats() -> dict[str, int]:
+    """样本规模与覆盖面的**唯一自动来源**（文档引用本函数，不写死数字）。
+
+    动机：同一事实多处陈述会漂移——case 数/期望码数曾在 docstring、
+    CHANGELOG、TODO 各写一遍，改一处漏一处（0.1.2 收尾轮同一轮错了三次）。
+    故规模数字从 expected.json 现算，文档只引用来源。
+
+    Returns: pos / neg / case（正+负）/ focus（focus 码数）/ expect_codes
+             （期望码条目总数——一个 case 可期望多码）
+    """
+    table = _load_table()
+    pos = table.get("pos", {})
+    neg = table.get("neg", {})
+    return {
+        "pos": len(pos),
+        "neg": len(neg),
+        "case": len(pos) + len(neg),
+        "focus": len(table.get("focus", [])),
+        "expect_codes": sum(len(m.get("expect", [])) for m in pos.values()),
+    }
+
+
 def _load_table() -> dict:
     with open(_EXPECT_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
