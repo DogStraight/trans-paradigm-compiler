@@ -121,7 +121,9 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 4. **宏定位不改失败语义**：真语法错仍是 linter 前置 + truncation 双保险；
 5. 全量回归 + e2e FAIL 0 + 真实语料保真不降 + 误报基线无增长。
 
-> Impl: 待实现（外层展开铺宏体 + 渲染侧 raw 拼接 + 位置覆盖不变量的门禁）。
+> Impl: 切片 ① ✅ **宏区间表**（`preprocessor/_expand.py::expand_tokens` 第三返回值：
+> 源区间 + 展开结果字符区间；测试 `tests/engine/preprocessor/test_macro_regions.py`）
+> → 切片 ② 渲染侧 raw 拼接 → 切片 ③ 撤锚。
 > 已落地部分：锚名协议（保留前缀/盐/序号/还原唯一性守卫，
 > `core/token_protocol.py` + `preprocessor/_bridge.py`）——它是**当前**输出还原
 > （`restore_anchors`）的载体，服务本决策的决策 4；语法侧已**撤销全部宏声明**

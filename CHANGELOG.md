@@ -35,6 +35,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **宏区间表**（ADR-0017 决策 3 切片 ①）：`expand_tokens(..., semantic=True)` 第三
+  返回值 = 每条被铺进文本的宏调用一项，含**源区间**（`src_line`/`src_col`/
+  `src_end_col`）与**展开结果字符区间**（`offset`/`end_offset`，含宏体、名字、
+  是否带参）。它是外层处理宏的单一事实源：渲染侧 raw 拼接与诊断宏归因都靠它
+  定位"哪些内容来自哪条宏"。用字符偏移而非行/列——宏体含换行会让展开结果行数
+  变化，偏移天然稳定。默认（渲染路径）为空表，与锚还原不混。
+  三处调用面同步改为三返回值。测试
+  `tests/engine/preprocessor/test_macro_regions.py`（单行/类型位/含换行体/带参宏/
+  同行双宏偏移累加/非语义模式空表/非活跃分支不登记，10 断言）。
+
 - **宏展开锚名协议**（`core/token_protocol.py`）：锚名 = 保留前缀 `__tpc_` +
   `marker` + **源文本 sha256 盐** + 序号（不用内置 `hash()`：PYTHONHASHSEED 会
   破坏跨进程可复现）；还原侧加**唯一性守卫**（命中次数 ≠ 1 则不回插，保留占位

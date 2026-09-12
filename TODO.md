@@ -69,8 +69,10 @@
       验收：`python tools/check_macro_coverage.py` 覆盖率上升且不回退（当前 37%）+
       `tests/languages/verilog/test_macro_type_slot.py` 的 6 个 strict-xfail 翻正 +
       全量门禁/e2e/误报基线不退化。
-      切片建议：展开铺文本 + 宏区间表 → 渲染 raw 拼接 → 撤锚（`restore_anchors`
-      通道退役）。
+      切片进度：**① ✅ 宏区间表**（`expand_tokens(semantic=True)` 第三返回值 = 每条
+      宏调用的源区间 + 展开结果字符区间；`tests/engine/preprocessor/test_macro_regions.py`
+      10 断言）→ ② 渲染 raw 拼接（含对齐/格式化的前人做法参照）→ ③ 撤锚
+      （`restore_anchors` 通道退役）。
 
 - [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) 行映射**跨两级**
       ——`scan_directives`（raw→clean，条件编译删行，实测 18→14）与

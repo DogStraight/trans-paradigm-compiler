@@ -371,7 +371,7 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
 def _stage_expand(ctx: _PipelineContext) -> None:
     """宏展开（纯文本，在 lex 之前）。"""
     if ctx.expand_macros and ctx.macro_table:
-        ctx.source, ctx.restore_stack = expand_tokens(
+        ctx.source, ctx.restore_stack, _ = expand_tokens(
             ctx.source, ctx.macro_table, func_macros=ctx.func_macros
         )
         ctx.log("[preprocessor] macros expanded")

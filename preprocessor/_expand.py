@@ -467,18 +467,17 @@ def expand_tokens(
     prefix: str = "`",
     func_macros: dict[str, list[str]] | None = None,
     semantic: bool = False,
-) -> tuple[str, list[dict]]:
-    """在源码文本中展开宏调用（纯文本层），并注册统一锚。
+) -> tuple[str, list[dict], list[dict]]:
+    """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
     用正则搜索 `NAME，向左扫同步词，记录位置后替换宏体。
     带参宏（func_macros 中登记的名字）识别 `NAME( ... ) 调用并做形参替换。
     不再依赖 Token 流或 Lexer。
 
     semantic=True（check 语义分析用，2026-08-29）：语句体宏（token 锚
-    形态）改为**宏体展开**——`tpc_marker_N` 保真锚只服务渲染还原，check
-    不需要还原、需要宏体语义（否则宏体内语句不可分析 + marker 被当
-    未解析引用报 W002）。渲染路径（format/expand 命令）保持默认
-    semantic=False（marker 锚 + 还原原文，保真不变）。
+    形态）改为**宏体展开**——锚只服务渲染还原，check 不需要还原、需要宏体
+    语义（否则宏体内语句不可分析 + 锚被当未解析引用报 W002）。渲染路径
+    （format/expand 命令）保持默认 semantic=False（锚 + 还原原文，保真不变）。
 
     锚形态（统一位置桥，见 _bridge）：
       line   整行占位：独占整行的宏调用（`debug(...)`）、行首空体宏
@@ -487,8 +486,14 @@ def expand_tokens(
       sync   行内非空体宏（如 `assign z = `MIN(x, y);`）→ 保留 body 替换，
              记录同步词字段，由同步词窗口启发式回插（兼容现状）。
 
-    Returns: (expanded_source, restoration_stack)
-        restoration_stack — 统一锚列表，每项含 marker/fragment/mode 等。
+    Returns: (expanded_source, restoration_stack, macro_regions)
+        restoration_stack — 统一锚列表（渲染路径还原用），每项含 marker/fragment/mode。
+        macro_regions — **宏区间表**（仅 semantic=True 有意义）：每条"宏体被铺进
+            文本"的调用一项，含它在**源文本**里的区间（`src_line`/`src_col`/
+            `src_end_col`）与它在**展开结果**里的字符区间（`offset`/`end_offset`）。
+            它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
+            哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
+            semantic=False 时为空表（那条路径用锚还原）。
     """
     _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
     func_macros = func_macros or {}
@@ -498,6 +503,8 @@ def expand_tokens(
     salt = anchor_salt(source)
 
     _macro_seq = 0
+    # 宏区间表：按行收集 → 行处理完算行内列 → 全部行完算绝对字符偏移
+    regions_by_line: dict[int, list[dict]] = {}
 
     def _next_macro_seq() -> int:
         nonlocal _macro_seq
@@ -506,6 +513,8 @@ def expand_tokens(
 
     for line_no, line in enumerate(lines, 1):
         macro_matches: list[tuple[int, int, str, str, bool, str]] = []
+        # 本行被“铺宏体”的调用（原起列, 原止列, 名字, 是否带参, 宏体）
+        line_regions: list[tuple[int, int, str, bool, str]] = []
         consumed_until = -1
         for m in _MACRO_RE.finditer(line):
             if m.start() < consumed_until:
@@ -604,8 +613,10 @@ def expand_tokens(
                 continue
             token = anchor_name(_next_macro_seq(), salt)
             if semantic:
-                # check 语义展开：宏体替换（body 原文含分号），不建还原锚
+                # check 语义展开：宏体替换（body 原文含分号），不建还原锚，
+                # 只记宏区间（源区间 + 展开后区间，供外层定位/raw 拼接）
                 parts[col:end] = body
+                line_regions.append((col, end, name, is_func, body))
                 continue
             # 锚形态 = 普通标识符（`__tpc_marker_<salt>_<n>`，保留命名空间）：
             # 语言包不认识宏，锚与标识符同形 → 表达式/标识符槽位照常解析。
@@ -647,4 +658,35 @@ def expand_tokens(
         restoration_stack.extend(reversed(forward_entries))
         lines[line_no - 1] = "".join(parts)
 
-    return "\n".join(lines), restoration_stack
+        if line_regions:
+            # 展开后行内列 = 原列 + 左侧各宏替换的长度增量（按原列升序累加）
+            delta = 0
+            pending: list[dict] = []
+            for s_col, s_end, name, is_func, body in sorted(line_regions):
+                pending.append(
+                    {
+                        "name": name,
+                        "fragment": line[s_col:s_end],
+                        "is_func": is_func,
+                        "body": body,
+                        "src_line": line_no,
+                        "src_col": s_col,
+                        "src_end_col": s_end,
+                        "in_line_col": s_col + delta,
+                        "in_line_len": len(body),
+                    }
+                )
+                delta += len(body) - (s_end - s_col)
+            regions_by_line[line_no] = pending
+
+    # 行内列 → 展开结果的绝对字符区间（消费方按 offset 定位 token/节点）
+    macro_regions: list[dict] = []
+    base = 0
+    for idx, line_text in enumerate(lines, 1):
+        for entry in regions_by_line.get(idx, ()):
+            entry["offset"] = base + entry.pop("in_line_col")
+            entry["end_offset"] = entry["offset"] + entry.pop("in_line_len")
+            macro_regions.append(entry)
+        base += len(line_text) + 1
+
+    return "\n".join(lines), restoration_stack, macro_regions
