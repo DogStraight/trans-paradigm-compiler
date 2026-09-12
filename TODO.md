@@ -52,8 +52,8 @@
       - **MH 族（宏/指令卫生，2026-09-11 立项，作者已批本版做）**：
         MH001 `` `default_nettype `` 未复位（文件末尾生效值非 wire）+ MH002 宏重定义
         未 `` `undef ``（对齐 Verilator：**值不同才报**）。判定与分层依据见
-        references「宏/指令卫生族 + 排版族归属补充调研」；落 check 链 handler
-        （需文件级/宏表状态），样本入评测
+        references「宏/指令卫生族 + 排版族归属补充调研」；**落 linter 层**
+        （指令级/宏表状态，与 `checkers/macro_token.py` 同族），样本入评测
       - 评测现盖 37 码 @ 67 case（含全部命名族 NC001-016）
 - [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价）：
       - ✅ 架构依据已定（09-11）：svlint 自身分界（textrules=解析前 / syntaxrules

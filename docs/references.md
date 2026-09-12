@@ -1602,8 +1602,11 @@ tpc `[[checks]]` schema / `tests/_check_test.py` / `config` per_file——见
 - svlint MANUAL 自述：155 条语法规则里**只有 4 条 filename 匹配 + 1 条文件内状态
   （`default_nettype_wire_at_end`）需要文件级上下文**——印证这两条属"消费文件
   级状态"而非 pattern/符号检查。
-- 落点判断：均需文件级/宏表状态，pattern 与符号 kind 都表达不了 → **check 链
-  handler**（tpc preprocessor 已有宏表，`default_nettype` 末尾生效值需文件级扫描）。
+- 落点判断（侦察 tpc 实现后修正）：均需**指令级/宏表状态**，pattern 与符号 kind
+  都表达不了。tpc 的对应层是 **linter**——它已在解析前消费指令与宏表（`scanner.py`
+  调 `scan_directives`/`expand_tokens`），且 `checkers/macro_token.py` 已有同族检查
+  （undefined-macro）。tpc linter 相当于 svlint textrules + syntaxrules 的 token 级
+  并集，故**不需要另起 check 链 handler**。
 - ⚠ 边界取舍：`default_nettype` 跨文件泄漏的完整语义需"编译单元"概念，svlint 也
   只做单文件末尾检查 → tpc 同样只做单文件，跨文件留 gap 记录。
 
