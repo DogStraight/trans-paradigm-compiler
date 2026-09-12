@@ -1,9 +1,10 @@
 # Gap — renderer 注释回插保真（锚点启发式，±3 行窗口）
 
-- 状态：**立项中**（TODO「缺口闭环队列」④，2026-09-12 排队）：已部分闭环
-  （2026-09-12："模块体首注释漂到 module 声明前"已修，提交 `5ad5bb4` +
-  回归 `tests/languages/verilog/test_comment_body_head.py`）；在队项 =
-  attachment 覆盖块结束符注释
+- 状态：**已闭环（2026-09-13）**——本档两类缺陷均已修：
+  ① "模块体首注释漂到 module 声明前"（2026-09-12，提交 `5ad5bb4` +
+  回归 `tests/languages/verilog/test_comment_body_head.py`）；
+  ② 块结束符/模块头行尾注释漂移（2026-09-13，见下「修复记录」+ 回归
+  `tests/engine/parser/test_comment_attachment.py::TestBlockEndTrailing`）
 - 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
   部件拆入本档）；`renderer/renderer_architecture.md`「功能缺口」B3/缺口 2
 - 参照：prettier/verible 的注释槽位模型
@@ -88,29 +89,37 @@ head/body/tail）；分段节点（`ModuleDecl` 等）的 body 首注释归
 · 附带修正：旧实现对分段节点执行 `subs.pop(0)` 就地改 AST（渲染不该改树），
 加判据后不再触发。
 
-## 剩余缺陷：块结束符/模块头的行尾注释漂移（2026-09-13 实测）
+## 修复记录：块结束符/模块头的行尾注释漂移（2026-09-13）
 
 **最小复现**（`run_pipeline_on_source`，renderer 开、无宏）：
 
-| 输入 | 实测输出 | 判定 |
+| 输入 | 修复前 | 修复后 |
 |---|---|---|
-| `x = 1; // stmt tail` | `x = 1; // stmt tail` | ✓ 原位 |
-| `wire a; // wire tail` | `wire a; // wire tail` | ✓ 原位 |
-| `end // blk tail` | `end` ⏎ `    // blk tail` | ✗ 挪到下一行 |
-| `endmodule // eom tail` | `endmodule` ⏎ `// eom tail` | ✗ 挪到下一行 |
-| `module m; // mod tail` | …`endmodule` ⏎ `// mod tail` | ✗ **漂到文件末尾** |
+| `end // blk tail` | `end` ⏎ `    // blk tail` | `end // blk tail` |
+| `endmodule // eom tail` | `endmodule` ⏎ `// eom tail` | `endmodule // eom tail` |
+| `module m; // mod tail` | 漂到**文件末尾** | `module m(); // mod tail` |
 
-即：**语句/声明行**的行尾注释由 attachment 原位渲染（LineSuffix 生效）；
-**块结束符与模块头**的行尾注释虽已进树（`renderer/comment_restore.py`
-docstring 说"块结束符 trailing …全部进树"属实），但**渲染位置不保**——
-被刷到后续行，模块头那条更会漂过 `endmodule` 落到文件末。症结是
-"进树 ≠ 原位渲染"：树里是独立 Comment 节点，而非该行的行尾槽位。
+**根因**（AST 侧本是正确的——注释确实挂上了槽位，问题全在渲染）：
 
-**修法方向**：给块结束符/模块头所在分段节点的 tail 段补行尾注释槽位
-（与语句行的 attachment 语义对齐），使尾注释挂在 `end`/`endmodule`/`module` 行。
+1. **尾随 break 之后**：`render_node` 把 `_comment_slots["trailing"]` 的
+   `LineSuffix` 追加在 tail 的 `tail_break` 空行 break **之后**；LineSuffix 只在
+   下一个换行点前落地 → 后缀掉到下一行（`BeginEnd.tail_break = 2` 正好触发）。
+2. **模块头是另一个子问题**：`module m; // c` 的注释挂在 `ModuleDecl.trailing`
+   上，而它的 tail 是 `endmodule` → 注释随 tail 输出（漂到模块末）。
+   且 `ModuleDecl.renderer.head` 自身以 `{ break = true }` 收尾、整体被 group
+   包成 `Union`（flat/broken 两支同构），所以"插到 head 后"仍会落到下一行。
 
-**门禁为何没拦住**：e2e 保真度用 `_strip_all`（抹掉空白与换行）比对——
-`end//blk tail` 与 `end⏎//blk tail` 判等，位置漂移天然失明。
+**修法**：
+
+- parser：`try_block_rule` 在**块体解析前**把此刻挂上的 `trailing` 迁到
+  `head_trailing`（块头那行的注释，不属于块尾）。
+- renderer：`trailing` 在 tail 的尾随 break **之前**输出；`head_trailing`
+  经新增 `_insert_before_trailing_break`（Doc 小工具，递归到 `Union` 两支）
+  插到 head 末尾换行点之前。
+
+**门禁为何一直没拦住**：e2e 保真度用 `_strip_all`（抹掉空白与换行）比对——
+`end//c` 与 `end⏎//c` 判等，位置漂移天然失明。故新增**逐行位置敏感**的
+`TestBlockEndTrailing`（3 例）专锁这一类。
 
 ## 关联条目
 

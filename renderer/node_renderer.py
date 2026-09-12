@@ -8,8 +8,42 @@ Doc: renderer/renderer_architecture.md（世界 A 节点级渲染）
 
 from typing import Any,Optional
 from core.define import Node
-from .doc import Doc, Empty, Text, Break, Concat, Nest, LineSuffix
+from .doc import (
+    Doc,
+    Empty,
+    Text,
+    Break,
+    Line,
+    LineBreak,
+    Concat,
+    Nest,
+    Union,
+    LineSuffix,
+)
 from .primitives import eval_expr
+
+
+def _insert_before_trailing_break(doc: Doc, extra: list[Doc]) -> Doc:
+    """把 extra（行尾注释 LineSuffix）插到 doc **末尾换行点之前**。
+
+    分段布局常以 `{ break = true }` / `tail_break` 收尾（如
+    `ModuleDecl.renderer.head`、`tail_break = 2`）——LineSuffix 只在下一个
+    换行点前落地，追加在 break 之后会掉到下一行。`head` 又常被 group 包成
+    `Union`（flat/broken 两支同构、都以 break 收尾），故两支都插。
+    （2026-09-13 修复：块结束符 / 块头行尾注释漂移。）
+    """
+    if not extra:
+        return doc
+    if isinstance(doc, Concat) and doc.docs:
+        last = doc.docs[-1]
+        if isinstance(last, (Line, Break, LineBreak)):
+            return Concat([*doc.docs[:-1], *extra, last])
+    if isinstance(doc, Union):
+        flat = _insert_before_trailing_break(doc.flat, extra)
+        broken = _insert_before_trailing_break(doc.broken, extra)
+        if flat is not doc.flat or broken is not doc.broken:
+            return Union(flat, broken)
+    return Concat([doc, *extra])
 
 
 def _body_indent(body_cfg: dict, renderer: Any) -> int:
@@ -49,11 +83,25 @@ def render_node(
 
     parts: list[Doc] = []
 
+    # 注释槽位提前取出：head_trailing 须紧跟 head 输出，trailing 须在 tail 的
+    # 尾随空行 break **之前**输出。LineSuffix 只在"下一个换行点"前落地，
+    # 追加在 break 之后会掉到下一行——这是块结束符/块头行尾注释漂移的根因
+    # （`end // c`、`endmodule // c`、`module m; // c`，2026-09-13 实测）。
+    slots = getattr(node, "_comment_slots", None) or {}
+    head_trail_docs = [
+        LineSuffix(" " + c) for c in (slots.get("head_trailing") or [])
+    ]
+    trail_docs = [LineSuffix(" " + c) for c in (slots.get("trailing") or [])]
+
     # --- head ---
     if head_expr:
         head_doc = eval_expr(head_expr, node, layout, renderer)
         if head_doc is not None:
-            parts.append(head_doc)
+            # head 布局常以 break 收尾（`ModuleDecl.renderer.head`）→ 行尾注释
+            # 须插到该 break 之前，否则落到下一行
+            parts.append(
+                _insert_before_trailing_break(head_doc, head_trail_docs)
+            )
 
     # --- body ---
     if body_cfg:
@@ -64,6 +112,7 @@ def render_node(
             parts.append(Nest(body_indent, bd))
 
     # --- tail ---
+    # （trail_docs 已在函数开头取出：须在 tail 的尾随空行 break 之前输出）
     tail_doc = None
     tb = 0
     if isinstance(tail_cfg, str):
@@ -80,15 +129,19 @@ def render_node(
         tb = layout.get("tail_break", tb)
         parts.append(Break())
         parts.append(tail_doc)
+        parts.extend(trail_docs)
         for _ in range(tb - 1):
             parts.append(Break())
+    elif trail_docs:
+        parts.extend(trail_docs)
 
     # --- 注释槽位（ADR-0006 注释遍泛化——注释节点模型步骤 1，P1.5）---
     # 节点属性 _comment_slots: {槽位名: [注释文本]}，槽位：
     #   leading  — 节点文本前独立行（`// 前置注释` 在语句上方）
     #   inline   — 节点文本前同行（行中注释：`/* c */ rst_n`，表达式内 token
     #              间隙定位——注释挂"注释后第一 token 所属节点"）
-    #   trailing — 节点后行尾锚定（LineSuffix 渲染行尾注释）
+    #   trailing — 节点后行尾锚定（LineSuffix 渲染行尾注释）——已在上面 tail
+    #              段按"换行前落地"输出，此处不重复
     slots = getattr(node, "_comment_slots", None)
     if slots:
         lead = slots.get("leading")
@@ -110,10 +163,6 @@ def render_node(
                 inline_docs.append(Text(c))
                 inline_docs.append(Text(" "))
             parts = inline_docs + parts
-        trail = slots.get("trailing")
-        if trail:
-            for c in trail:
-                parts.append(LineSuffix(" " + c))
 
     if parts:
         return Concat(parts)

@@ -128,6 +128,46 @@ class TestAttachment:
         assert "module body comment" in out
 
 
+class TestBlockEndTrailing:
+    """块结束符 / 模块头 的行尾注释必须留在本行（不漂到下一行）。
+
+    回归 2026-09-13 实测缺陷：这三处的注释**已挂** `_comment_slots["trailing"]`
+    （AST 正确），但 renderer 把 LineSuffix 追加在 tail 的尾随空行 break **之后**
+    → 后缀落到下一行；`module m; // c` 更漂过 `endmodule` 到文件末
+    （`BeginEnd.tail_break = 2` / ModuleDecl 同理触发）。
+
+    这些断言**逐行位置敏感**——e2e 的 `_strip_all` 抹掉空白与换行后
+    `end//c` 与 `end⏎//c` 判等，对该缺陷天然失明，故在此单独锁。
+    """
+
+    def test_block_end_trailing_stays_on_line(self):
+        src = (
+            "module m;\n"
+            "    always @* begin\n"
+            "        x = 1;\n"
+            "    end // blk tail\n"
+            "endmodule\n"
+        )
+        r = _run(src)
+        assert r["success"]
+        assert "end // blk tail" in r.get("output", "")
+
+    def test_endmodule_trailing_stays_on_line(self):
+        src = "module m;\n    wire a;\nendmodule // eom tail\n"
+        r = _run(src)
+        assert r["success"]
+        assert "endmodule // eom tail" in r.get("output", "")
+
+    def test_module_head_trailing_stays_on_head_line(self):
+        """模块头行尾注释须留在 module 行（曾漂过 endmodule 到文件末尾）。"""
+        src = "module m; // mod tail\n    wire a;\nendmodule\n"
+        r = _run(src)
+        assert r["success"]
+        out = r.get("output", "")
+        head = next(ln for ln in out.split("\n") if ln.startswith("module"))
+        assert "mod tail" in head, out
+
+
 class TestAttachmentReal:
     def test_picorv32_no_regression(self):
         """PicoRV32 真实项目：attachment 后 8 module 全产出（保真度门禁）。"""

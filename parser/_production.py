@@ -210,6 +210,14 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         return None
     self._bind_attributes(rule_node, rule, all_matched)
 
+    # 2b) 块头行尾注释迁槽（`module m; // c`，2026-09-13）
+    # 块体解析**之前**挂到本节点的 trailing 属于"块头那一行"，不是块尾：
+    # 渲染时 trailing 随 tail（`endmodule`/`end`）输出，注释会漂到块末。
+    # 迁到 head_trailing，renderer 紧跟 head 输出（同行行尾）。
+    _head_slots = getattr(rule_node, "_comment_slots", None)
+    if _head_slots and _head_slots.get("trailing"):
+        _head_slots["head_trailing"] = _head_slots.pop("trailing")
+
     # 3) 解析块体
     block_body = Node(BLOCK_NODE_NAME)
     from .block_parser import parse_block_body

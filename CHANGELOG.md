@@ -303,6 +303,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **块结束符/模块头行尾注释漂移**（renderer + parser，缺口队列 ④）：语句行尾
+  注释能原位渲染，但 `end // c` / `endmodule // c` 被挪到下一行、`module m; // c`
+  更漂过 `endmodule` 落到文件末尾（AST 侧本已正确挂上 `_comment_slots`，问题全在
+  渲染顺序）：① `render_node` 把 `trailing` 的 LineSuffix 追加在 tail 的
+  `tail_break` 空行 break **之后**——LineSuffix 只在下一个换行点前落地，故掉到
+  下一行；② 模块头注释挂在 `ModuleDecl.trailing`，而它的 tail 是 `endmodule`，
+  且 head 布局自身以 `{ break = true }` 收尾并被 group 包成 `Union`。修法：parser
+  在块体解析前把块头那行的 trailing 迁到 `head_trailing`；renderer 把 trailing
+  输出在 tail 尾随 break 之前、`head_trailing` 经新增 `_insert_before_trailing_break`
+  （Doc 小工具，递归进 `Union` 两支）插到 head 末尾换行点之前。回归
+  `tests/engine/parser/test_comment_attachment.py::TestBlockEndTrailing`（3 例，
+  **逐行位置敏感**）——e2e 保真度用 `_strip_all` 抹掉空白与换行，对该缺陷天然
+  失明，故须单独锁。
+
 - **`delim` 类多字符定界符静默失效**（`lexer/capture_runner.py`）：终止判定原为
   `ch == rule.end` 单字符比较，而配置层只校验"非空字符串"（即声称支持任意长度）
   ——配 `"""` 会永不匹配、静默吞到行尾/EOF（把后续 token 一起吞进字符串）。改为
