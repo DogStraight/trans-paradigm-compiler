@@ -20,7 +20,7 @@ Doc: linter/linter_architecture.md
 import os
 
 from core.define import GrammarRule
-from core.config_registry import ConfigRegistry
+from core.config_registry import ConfigRegistry, declare_cfg
 from core.token_protocol import BRACKET_L_PREFIX, BRACKET_R_PREFIX, bracket_left, bracket_right
 from lexer import Lexer
 from parser import setup_grammar
@@ -31,9 +31,20 @@ from .grammar_slicer import build_slice_tree
 from .discovery import Discovery
 from .checker import CheckerRegistry
 from .checkers.boundary import BoundaryChecker
+from .checkers.macro_hygiene import MacroHygieneChecker
 from .checkers.macro_token import MacroTokenChecker
 from .checkers.statement import StatementChecker
 from .checkers.expression import ExpressionChecker
+
+# linter.macro_hygiene
+#   #sym:config = [macro_hygiene]
+#   格式: dict — { enabled, define_directive, undef_directive,
+#                  nettype_directive, nettype_restore, continuation }
+# 语言包未声明（或 enabled=false）→ MH 检查器不注册（零开销）。
+# 关键字缺省 → 对应子检查自行跳过（见 MacroHygieneChecker）。
+_macro_hygiene_cfg: dict = declare_cfg(
+    "linter.macro_hygiene", {}, __name__, "_macro_hygiene_cfg"
+)
 
 
 def _derive_opener_prev_excludes(tree: dict) -> dict[str, frozenset[str]]:
@@ -273,6 +284,12 @@ class LinterScanner:
         # ── P0: 非法 token 检查 ─────────────────
         if self.enable_phase0:
             registry.add(MacroTokenChecker(0, len(tokens)))
+            # 宏/指令卫生（MH 族）：扫**原始源码**（指令行已从 token 流剥离）
+            if _macro_hygiene_cfg.get("enabled", True):
+                prefix, _directives = _load_config()
+                registry.add(
+                    MacroHygieneChecker(source, prefix, _macro_hygiene_cfg)
+                )
 
         # ── P2: 语句发现 + 扁平检查 ─────────────
         # discovery 产出多层级树（children 嵌套）；深度优先遍历把每个节点

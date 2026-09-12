@@ -204,6 +204,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   均在强检面内。样本用模块内 `reg` 声明而非 ANSI 端口 reg——后者符号 kind 归
   `port`（由 NC005 覆盖），评测描述已注明分界。
 
+- **宏/指令卫生族（MH 族，0.1.2 阶段 8 / T1 完）**：`linter/checkers/macro_hygiene.py`
+  在解析前扫**原始源码行**（指令行已被预处理剥离，不进 token 流）——`MH001`
+  nettype 指令未复位（对标 svlint `default_nettype_wire_at_end`：文件末尾生效值
+  非 `wire` 即报，防跨文件泄漏）、`MH002` 宏以**不同值**重定义未先 `undef`
+  （对标 Verilator `REDEFMACRO`：值相同不报）。关键字/前缀/复位值/续行符全部
+  来自语言包 `[linter.macro_hygiene]`，未声明该段的语言包（如 c4）不注册检查器
+  （零开销零误报）；多行宏体因值不确定不参与比较（保守优先）。linter 准确度
+  评测样本 31 正 / 5 负 → **33 正 / 7 负**（负样本锁"已复位"与"同值重定义"
+  两个边界），recall 100% + 误报 0。测试
+  `tests/engine/linter/test_linter_macro_hygiene.py`（13 项）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

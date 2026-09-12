@@ -28,6 +28,7 @@ flowchart LR
     C --> D{scan 编排}
     D --> E[P1 块边界配对<br/>BoundaryChecker]
     D --> F[P0 非法 token<br/>MacroTokenChecker]
+    D --> M[MH 宏/指令卫生<br/>MacroHygieneChecker]
     D --> G[P2 发现 + 扁平检查]
     G --> H[Discovery 递归发现<br/>多层级节点树]
     H --> I[深度优先遍历<br/>每节点注册独立 StatementChecker]
@@ -43,6 +44,11 @@ flowchart LR
 `scan()` 三个阶段：
 - **P1 块边界配对**：`BoundaryChecker` 检查括号/块起止符配对（栈式）。
 - **P0 非法 token 检查**：`MacroTokenChecker` 检查未展开的宏等非法 token。
+- **MH 宏/指令卫生**（同 P0 组，文件级）：`MacroHygieneChecker` 扫**原始源码行**
+  （指令行已被预处理剥离，不进 token 流）——nettype 指令未复位（MH001，防
+  跨文件泄漏）、宏以不同值重定义未 undef（MH002，对齐 Verilator REDEFMACRO：
+  值相同不报）。关键字/前缀/复位值全部来自语言包 `[linter.macro_hygiene]`，
+  未声明该段的语言包不注册检查器。
 - **P2 语句发现 + 扁平检查**：Discovery 产出多层级节点树 → 深度优先遍历，把每个节点
   （含 children）注册为独立 `StatementChecker` → 扁平验证。
 
@@ -255,4 +261,5 @@ flowchart LR
 | `linter/checkers/expression.py` | 表达式检查器（pratt + 原子，含 part-select） |
 | `linter/checkers/boundary.py` | 块/括号边界配对（P1） |
 | `linter/checkers/macro_token.py` | 非法 token 检查（P0） |
+| `linter/checkers/macro_hygiene.py` | 宏/指令卫生检查（MH001/MH002，文件级） |
 | `linter/checker.py` | Checker 协议 + 注册表 + DiscoveredNode |

@@ -27,6 +27,9 @@ continuation = { file = "base/_macro.toml", section = "continuation", required =
 reverse = { file = "base/_macro.toml", section = "reverse", required = false }
 macro_shape = { file = "base/_macro.toml", section = "macro_shape", required = false }
 
+[linter]
+macro_hygiene = { file = "base/_macro.toml", section = "macro_hygiene", required = false }
+
 [plugins]
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs", "gates", "udp", "specify"]
 

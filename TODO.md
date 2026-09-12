@@ -42,19 +42,13 @@
 
 > 对标结论：references.md「P1.10 结论」（重合核心集 10 项 + 特化赛道 + 映射
 > 评估）+「诊断链多维对标结论」（0.1.1 第二目标定稿）。
-> 现状（2026-09-05 盘点，09-11 更新 focus/样本数）：30 诊断码 / 8 检查族已实现
+> 现状（2026-09-05 盘点，09-12 更新）：30 诊断码 / 8 检查族已实现
 > （name NC001-16 / inst W101-106+WC001 / width W201-2 / latch LC001 / case
-> CC001 / unused UN001 / always AW001-2）；eval_check_accuracy 强检 focus
-> 37 码 @ 67 case recall 100% + FP 0。重合核心集实现 ~9/10（宏卫生族缺）；
-> 独到项批判吸收仅 svlint prefix 族已入（NC014-16）；自场景自定义规则范例 0。
+> CC001 / unused UN001 / always AW001-2）+ MH 族（宏/指令卫生，linter 层）；
+> check 链强检 focus 37 码 @ 67 case，linter 强检 33 正 / 7 负，均 recall 100%
+> + 误报 0。重合核心集 10/10 已实现；独到项批判吸收仅 svlint prefix 族已入
+> （NC014-16）；自场景自定义规则范例 0。
 
-- [ ] **T1 重合核心集补全 + 强检扩面**：
-      - **MH 族（宏/指令卫生，2026-09-11 立项，作者已批本版做）**：
-        MH001 `` `default_nettype `` 未复位（文件末尾生效值非 wire）+ MH002 宏重定义
-        未 `` `undef ``（对齐 Verilator：**值不同才报**）。判定与分层依据见
-        references「宏/指令卫生族 + 排版族归属补充调研」；**落 linter 层**
-        （指令级/宏表状态，与 `checkers/macro_token.py` 同族），样本入评测
-      - 评测现盖 37 码 @ 67 case（含全部命名族 NC001-016）
 - [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价）：
       - ✅ 架构依据已定（09-11）：svlint 自身分界（textrules=解析前 / syntaxrules
         =AST）→ 排版/空格族整体落 **linter 层**；依据见 references「宏/指令卫生族 +

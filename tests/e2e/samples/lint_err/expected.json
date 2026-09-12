@@ -31,13 +31,17 @@
     "ref_e28_for_missing_first_semi.v": { "desc": "for 缺第一个分号",             "expect": ["phase-unrecognized"] },
     "ref_e29_while_missing_rparen.v":  { "desc": "while 缺右括号",               "expect": ["phase-statement", "phase1-boundary"] },
     "ref_e30_ifgen_missing_semi.v":    { "desc": "模块项 if-generate 体内缺分号", "expect": ["phase-statement"] },
-    "ref_e31_casegen_missing_endcase.v": { "desc": "模块项 case-generate 缺 endcase", "expect": ["phase-statement", "phase1-boundary"] }
+    "ref_e31_casegen_missing_endcase.v": { "desc": "模块项 case-generate 缺 endcase", "expect": ["phase-statement", "phase1-boundary"] },
+    "ref_e32_nettype_unrestored.v": { "desc": "nettype 指令设 none 后未复位（MH001）", "expect": ["MH001"] },
+    "ref_e33_macro_redef.v":       { "desc": "宏以不同值重定义未先 undef（MH002）", "expect": ["MH002"] }
   },
   "valid": {
     "ref_v01_wire_assign.v":    { "desc": "合法：wire+assign" },
     "ref_v02_always_posedge.v": { "desc": "合法：always+if/else" },
     "ref_v03_initial.v":        { "desc": "合法：initial" },
     "ref_v04_vector_select.v":  { "desc": "合法：位选 data[0]" },
-    "ref_v05_module_inst.v":    { "desc": "合法：模块实例化" }
+    "ref_v05_module_inst.v":    { "desc": "合法：模块实例化" },
+    "ref_v06_nettype_restored.v": { "desc": "合法：nettype 指令已复位 wire（不报 MH001）" },
+    "ref_v07_macro_redef_same.v": { "desc": "合法：宏同值重定义（不报 MH002，对齐 Verilator REDEFMACRO）" }
   }
 }

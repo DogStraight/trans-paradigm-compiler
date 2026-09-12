@@ -29,6 +29,23 @@ prefix = "`"
 strategy = "prefix"
 prefix = "`"
 
+# ── [macro_hygiene] 宏/指令卫生检查参数（MH 族，linter 层）──
+#
+# linter 在解析前做指令级卫生检查（配置驱动，引擎零语言知识）：
+#   - MH001：文件末尾生效的 nettype 指令值未复位（跨文件泄漏风险）
+#   - MH002：宏重定义未先 undef（对齐 Verilator REDEFMACRO：值不同才报）
+#
+# 各字段是**指令关键字**（与 [directives] 同源），引擎按关键字匹配指令行。
+[macro_hygiene]
+enabled = true
+define_directive = "define"
+undef_directive = "undef"
+nettype_directive = "default_nettype"
+nettype_restore = "wire"
+# 续行符（与 [continuation] 同源）：宏体以其结尾表示跨行 → 值不确定，
+# MH002 不参与比较（宁可漏报不误报）。
+continuation = "\\"
+
 # ── [directives] 指令关键字表 ──
 #
 # macro_recognition 识别出一个宏 token 后，查此表判定类别：

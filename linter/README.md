@@ -7,7 +7,7 @@
 |------|--------|
 | `scanner.py` | 两阶段 Linter 编排器（发现 + 扁平检查） |
 | `discovery.py` | 发现阶段：token 流 → 自动注册的扁平检查器列表 |
-| `checkers/` | 扁平检查器族（`matcher.py` 规则匹配 / `expression.py` pratt 复用） |
+| `checkers/` | 扁平检查器族（`matcher.py` 规则匹配 / `expression.py` pratt 复用 / `macro_hygiene.py` 宏指令卫生） |
 | `checker.py` | 扁平检查器协议、注册表与轻量 AST 节点 |
 | `lookahead.py` | 动态两级前瞻消歧表 |
 | `grammar_slicer.py` | 从语法规则推导切分层级映射 |
