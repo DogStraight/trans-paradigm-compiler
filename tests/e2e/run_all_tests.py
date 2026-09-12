@@ -52,6 +52,14 @@ GROUP_PARAMS: dict[str, dict] = {
 # 默认配置（M1，2026-08-28：端口默认值宏 inline+body 锚还原），无需预定义。
 REAL_PREDEFINED: dict[str, dict[str, str]] = {}
 
+# 含宏指令的**合法对照样例**：组别默认 expand_macros=False 时指令行留在源里 →
+# parser 无法解析（parse truncated），而 ref_v* 的判定要求管线成功。按样例开
+# 展开——配对负样本（ref_e32/ref_e33，MH001/MH002）仍在该组确认 linter 命中，
+# 配对语义不变（2026-09-13：此前 2 FAIL 长期未被发现，因未跑 e2e 全量）。
+MACRO_DIRECTIVE_LEGAL_SAMPLES: frozenset[str] = frozenset(
+    {"ref_v06_nettype_restored", "ref_v07_macro_redef_same"}
+)
+
 
 def discover_tests(
     base_dir: str, group_filter: str | None = None, name_filter: str | None = None
@@ -173,7 +181,11 @@ def run_all(
             else:
                 # 组别独立参数：宏展开按 GROUP_PARAMS 配置，CLI --expand-macros 可覆盖
                 params = GROUP_PARAMS.get(group, {})
-                effective_expand = params.get("expand_macros", False) or expand_macros
+                effective_expand = (
+                    params.get("expand_macros", False)
+                    or expand_macros
+                    or name in MACRO_DIRECTIVE_LEGAL_SAMPLES
+                )
                 result: dict[str, Any] = run_pipeline_on_source(
                     source=source,
                     input_path=path,

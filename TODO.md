@@ -108,13 +108,6 @@
 > 诊断条数只许减不许增（首个基线 132 条 / 7 码）。
 > **本节点短期项已清空**；中长期项（变异抽查、跨文件语料基座）见 ROADMAP 同名节。
 
-- [ ] **e2e 发布门禁变红（2 FAIL，2026-09-12 引入）**：`ref_v06_nettype_restored`
-      / `ref_v07_macro_redef_same`（MH 族正样本，`e67193f` 加入 `lint_err/ref/`）
-      在该组 `expand_macros=False` 下指令行未展开 → `parse truncated`。
-      `policy/release-checklist.md` 要求 FAIL 0，现为红（实测：无本次改动同样
-      失败，非回归）。处置三选：按样例开 expand（real 组 `REAL_PREDEFINED`
-      有先例）/ 移组到 `macro` / 移出（评测集 33 正样本已覆盖）。
-
 ## 文档工程（2026-09-04 立项，使用复盘 6 类文档框架）
 
 > 已完成（提交 5f4e812/301cdda/后续）：MODEL_INDEX 按子系统重组（两表合并 +
