@@ -11,7 +11,9 @@
 3. 改代码时维护文件头 `Doc:` 反向引用（约定见 `policy/doc-alignment.md`）
 4. 跑对应测试（`tests/`）；改 linter 用 `tests/e2e/eval_lint_accuracy.py` 验证 recall/误报
 5. 写代码守规约（非门禁软规约）：注释语言/分区标题/命名 →
-   `policy/coding-style.md`；表达式书写约定 → `parser/expression_conventions.md`
+   `policy/coding-style.md`；表达式书写约定 → `parser/expression_conventions.md`；
+   **改过哪个 py 文件就清哪个文件的静态诊断** → `policy/pylance-cleanup.md`
+   （agent 侧 Pylance MCP 逐文件查，清零判据见该文）
 
 ## 硬约束
 
