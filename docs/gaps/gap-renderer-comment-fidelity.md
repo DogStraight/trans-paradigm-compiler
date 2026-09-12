@@ -88,6 +88,30 @@ head/body/tail）；分段节点（`ModuleDecl` 等）的 body 首注释归
 · 附带修正：旧实现对分段节点执行 `subs.pop(0)` 就地改 AST（渲染不该改树），
 加判据后不再触发。
 
+## 剩余缺陷：块结束符/模块头的行尾注释漂移（2026-09-13 实测）
+
+**最小复现**（`run_pipeline_on_source`，renderer 开、无宏）：
+
+| 输入 | 实测输出 | 判定 |
+|---|---|---|
+| `x = 1; // stmt tail` | `x = 1; // stmt tail` | ✓ 原位 |
+| `wire a; // wire tail` | `wire a; // wire tail` | ✓ 原位 |
+| `end // blk tail` | `end` ⏎ `    // blk tail` | ✗ 挪到下一行 |
+| `endmodule // eom tail` | `endmodule` ⏎ `// eom tail` | ✗ 挪到下一行 |
+| `module m; // mod tail` | …`endmodule` ⏎ `// mod tail` | ✗ **漂到文件末尾** |
+
+即：**语句/声明行**的行尾注释由 attachment 原位渲染（LineSuffix 生效）；
+**块结束符与模块头**的行尾注释虽已进树（`renderer/comment_restore.py`
+docstring 说"块结束符 trailing …全部进树"属实），但**渲染位置不保**——
+被刷到后续行，模块头那条更会漂过 `endmodule` 落到文件末。症结是
+"进树 ≠ 原位渲染"：树里是独立 Comment 节点，而非该行的行尾槽位。
+
+**修法方向**：给块结束符/模块头所在分段节点的 tail 段补行尾注释槽位
+（与语句行的 attachment 语义对齐），使尾注释挂在 `end`/`endmodule`/`module` 行。
+
+**门禁为何没拦住**：e2e 保真度用 `_strip_all`（抹掉空白与换行）比对——
+`end//blk tail` 与 `end⏎//blk tail` 判等，位置漂移天然失明。
+
 ## 关联条目
 
 - `renderer/renderer_architecture.md`（世界 A：注释处理双轨 + 缺口 B3/2）
