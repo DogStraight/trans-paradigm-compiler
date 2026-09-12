@@ -4,7 +4,7 @@
 在解析流里它不该顶替任何语法元素，只该被**跳过**——换成 trivia 类占位 token
 （内容保留调用原文供渲染回插）。非空体宏不动，留给通配协议。
 
-Doc: docs/decisions/0018-parse-side-macro-placeholder.md（决策 0）
+Doc: core/token_protocol.py（`macro.placeholder` 协议常量与 trivia 集合）
 """
 import pytest
 

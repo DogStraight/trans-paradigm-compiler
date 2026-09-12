@@ -60,8 +60,7 @@
 |----------|----------|------|
 | `gap-tpc-check-external-checker.md` | ROADMAP P2.6 | tpc-check 外部 checker 插件协议（接入 veryl/verible/slang + 自管场景） |
 | `gap-lexer-capture-boundaries.md` | 原 known_limitations | lexer 捕获边界（块标量折叠/触发条件；多字符定界符 2026-09-12 已闭环） |
-| `gap-parser-linter-approximation.md` | 原 known_limitations | parser/linter 错误处理近似（无恢复 + 启发式） |
-| `gap-preprocessor-macro-boundaries.md` | 原 known_limitations | 宏覆盖缺口（type macros/复合嵌套反向映射；**类型位宏 2026-09-13 已闭环**，剩宏子槽 + 嵌套形态待认定） |
+| `gap-parser-linter-approximation.md` | 原 known_limitations | parser/linter 错误处理近似（无恢复 + 启发式；2026-09-13 复核保持接受） |
 | `gap-renderer-comment-fidelity.md` | 原 known_limitations | renderer 注释回插保真（±3 行锚点启发式） |
 | `gap-formatter-line-behavior.md` | 原 known_limitations | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
 | `gap-language-pack-scope.md` | 原 known_limitations | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |

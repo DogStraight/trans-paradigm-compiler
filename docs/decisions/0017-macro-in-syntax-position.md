@@ -3,7 +3,7 @@
 - Status: accepted（决策 3/4 已实现；语法位槽位声明按语言包逐槽位推进）
 - Date: 2026-09-13
 - 关联：ADR-0016（宏体入树：raw 源区间权威 + 对应层）；
-  `docs/gaps/gap-preprocessor-macro-boundaries.md`（触发面实测）；
+  `docs/gaps/gap-parser-linter-approximation.md`（linter 近似面）；
   `docs/gaps/gap-parser-linter-approximation.md`（"无恢复"定调**不变**，本决策只新增
   "宏位可解析为宏节点"这一条语法路径）
 

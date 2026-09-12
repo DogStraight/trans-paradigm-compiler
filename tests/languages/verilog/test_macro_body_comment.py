@@ -11,7 +11,7 @@
 当前实现（锚 + `restore_anchors`）天然满足该不变量——锚不会把宏体铺进文本。
 
 Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 3/4）
-Doc: docs/gaps/gap-preprocessor-macro-boundaries.md（条目 1）
+Doc: preprocessor/_expand.py（宏体末行注释补换行，防吞调用同行后续 token）
 """
 import pytest
 

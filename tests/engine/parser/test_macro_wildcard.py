@@ -1,8 +1,8 @@
-"""宏 token 通配（ADR 0018 决策 2）：非空体宏在原子位当原子。
+"""宏 token 通配（原子位）：非空体宏在原子位当原子。
 
 语言包零宏知识（不声明任何槽位）；合法性由 linter 的真展开检查兜底，
-parser 只负责结构（分工见 docs/decisions/0018-parse-side-macro-placeholder.md）。
-空体宏不走通配——它们由占位阶段改成 trivia 跳过（决策 0）。
+parser 只负责结构（分工见 CHANGELOG.md「解析侧改吃真展开」）。
+空体宏不走通配——它们由占位阶段改成 trivia 跳过。
 """
 import pytest
 

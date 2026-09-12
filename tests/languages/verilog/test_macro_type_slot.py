@@ -11,7 +11,7 @@ linter 侧吃**真展开态**（反向解析器看真语法结构）：展开后
 无产生式可匹配（曾在此处误报）。
 
 Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 2/3/4）
-Doc: docs/gaps/gap-preprocessor-macro-boundaries.md（条目 1）
+Doc: docs/gaps/gap-parser-linter-approximation.md（linter 近似面）；CHANGELOG.md（解析侧切真展开）
 """
 import pytest
 
