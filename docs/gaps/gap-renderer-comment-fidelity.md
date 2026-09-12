@@ -34,6 +34,20 @@ production skip 吞掉的注释，渲染后按锚点窗口（±3 行启发式）
   e2e 注释样例（`tests/e2e/samples/normal/ref/ref_comments.v` 类）。
 - 当前：接受现状（见 renderer_architecture 缺口 2，接受理由完整）。
 
+## 具体观察（2026-09-12，0.1.2 阶段 9 真实语料终验）
+
+- 样本：`tests/e2e/samples/transform/ref/ref_spi_inf.v`（impl 绑定声明前的两条
+  行注释）。
+- 现象：**展开路径**下这两条注释漂移到输出文件头部（本位为 ModuleInst 前、
+  4 空格缩进）；保留路径（`expand_enhanced=False`）位置正确。
+- **A/B 已证既有**：改造前提交 `55123f4`（typed_ports 桥插件时代）行为完全
+  相同（注释同样落在输出第 0/1 行）→ 非 5b-3c 槽位改造引入。
+- 影响量化：代码结构 1:1（同 37 行）；含注释口径字符相似度 ≈ 0.73，
+  `run_all_tests.py` 的 `_strip_all` 口径下仍过阈值（X:OK）→ 门禁不报，
+  但“注释不乱跑”的用户预期受影响。
+- 待办：见 `TODO.md` 0.1.2 阶段 9 注 ——— 修法候选：让回插失败时至少停在
+  “丢弃”（现状行为描述与实际不符，需先定位是 attachment 槽还是锚回插）。
+
 ## 关联条目
 
 - `renderer/renderer_architecture.md`（世界 A：注释处理双轨 + 缺口 B3/2）

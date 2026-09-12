@@ -126,12 +126,16 @@ class SlotRunnerPlugin(TransformPlugin):
                 )
                 if result == "remove":
                     continue  # 不接回（从父列表移除）
-                if result == "replace" and isinstance(out, Node) and out is not item:
+                if result == "extra":
+                    # 额外产物由 handler 自己出（`mark_extra`）——返回值**不接回**
+                    # AST（typed_ports build_wrapper 先例：wrapper 是独立文件）。
+                    new.append(item)
+                elif result == "replace" and isinstance(out, Node) and out is not item:
                     new.append(migrate_comments(item, out))  # 1:1 替换：注释随迁
-                elif isinstance(out, Node):
-                    new.append(out)
+                elif result == "none" and isinstance(out, Node):
+                    new.append(out)  # 原地变换：接回 handler 返回值
                 else:
-                    new.append(item)  # extra / 无返回值 → 原节点保留
+                    new.append(item)
                 continue
             if recursive:
                 self._walk_recursive(item, decl, fn, base_ctx)

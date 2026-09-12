@@ -156,6 +156,34 @@ def test_result_remove_drops_node(monkeypatch) -> None:
     assert [c.node_name for c in root.sub_node] == ["Keep"]
 
 
+def test_result_extra_does_not_rewire_ast(monkeypatch) -> None:
+    """extra：额外产物由 handler 自出（mark_extra），返回值**不接回** AST。
+
+    回归（2026-09-12 e2e 抓到）：返回值若接回，`build_wrapper` 的 wrapper 模块
+    会被内联进主输出（保真度 0.43）——桥原本丢弃返回值。
+    """
+    _install(
+        monkeypatch,
+        {"wrap": _decl("wrap", result="extra")},
+        {"wrap": lambda n, c: Node("Wrapper")},
+    )
+    root = _tree("T")
+    SlotRunnerPlugin().process(root, SCOPE)
+    assert [c.node_name for c in root.sub_node] == ["T"]
+
+
+def test_result_none_keeps_returned_node(monkeypatch) -> None:
+    """none：原地变换——接回 handler 返回值。"""
+    _install(
+        monkeypatch,
+        {"swap": _decl("swap", result="none")},
+        {"swap": lambda n, c: Node("Rewired")},
+    )
+    root = _tree("T")
+    SlotRunnerPlugin().process(root, SCOPE)
+    assert [c.node_name for c in root.sub_node] == ["Rewired"]
+
+
 def test_result_replace_migrates_comments(monkeypatch) -> None:
     def _fn(node, ctx):  # noqa: ANN001, ANN201
         return Node("New")

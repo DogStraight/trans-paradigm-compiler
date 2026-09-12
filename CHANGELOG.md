@@ -148,6 +148,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   语言包仍走整包槽位执行（现行为零变化）。测试
   `tests/engine/pipeline/test_unit_slot_schedule.py`。
 
+- **修复（5b-3c-2 回归）**：`slot_runner` 的 `result = "extra"` 误将 handler
+  返回值接回 AST → `build_wrapper` 的 wrapper 模块被内联进主输出
+  （`ref_spi_inf` 展开保真 0.43）。现改为**不接回**（额外产物由 handler 侧
+  `mark_extra` 自出，同桥时代语义）；补单测锁 `extra` 不重接 / `none` 接回返回值。
+  由 0.1.2 阶段 9 真实语料终验（`tests/e2e/run_all_tests.py`）抓到，测试
+  `tests/engine/pipeline/test_unit_slot_schedule.py`。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义
