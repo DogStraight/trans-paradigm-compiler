@@ -12,8 +12,13 @@
 （`[comment] pairs`、`[string] delimiters`、`[[capture]]` 含可选
 `after`/`next_chars` 触发）。三个具体缺口：
 
-1. **定界符限单字符**（`"`/`'`）：多字符定界符（`"""`、Rust `r#"`）需定界符
-   序列扩展。
+1. **`delim` 类定界符限单字符**（`"`/`'`）：多字符定界符（`"""`）需定界符
+   序列扩展。实测（2026-09-12）：`marker`/`line_match` 类已用
+   `text[pos:pos+end_len]` 支持多字符 `end`，**唯 `delim` 类**的终止判定是
+   `ch == rule.end`（单字符比较）——配 `"""` 会**静默**永不终止（退化为"到
+   行尾"，不报错）。这同时是 fail-fast 缺口：要么实现定界符序列（含起止
+   不同的 `r#"` 形态需扩 `CaptureRule`），要么先在 `build_rules` 加"delim 须
+   单字符"校验堵住静默路径。
 2. **块标量内容原样捕获**：折叠（`>`）、chomping（`-`/`+`）、缩进指示符被
    保留但不做语义展开；指示符行注释随 token 一起带走。
 3. **触发条件限声明式二元组**：prev-token-in-set + next-char-in-set 对，

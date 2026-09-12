@@ -1,11 +1,18 @@
 # Gap — renderer 注释回插保真（锚点启发式，±3 行窗口）
 
-- 状态：接受（real 保真度门禁锁定现状；attachment 是前进方向）
+- 状态：**部分闭环**（2026-09-12："模块体首注释漂到 module 声明前"已修，提交
+  `5ad5bb4` + 回归 `tests/languages/verilog/test_comment_body_head.py`）；
+  剩余 = attachment 覆盖块结束符注释（前进方向）
 - 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
   部件拆入本档）；`renderer/renderer_architecture.md`「功能缺口」B3/缺口 2
 - 参照：prettier/verible 的注释槽位模型
 
 ## 缺口是什么
+
+> **2026-09-12 更新**：本档记录的"模块体首注释漂到 module 声明前"具体缺陷
+> **已修**（提交 `5ad5bb4`，`join.py` 拆段加"只拆非分段节点"判据）——复现、
+> 定位与修法见下「最小复现与触发条件」节。缺口剩余部分 = attachment 覆盖
+> 块结束符注释（前进方向），以及展开路径的其余锚点漂移风险。
 
 注释回插是 **best-effort**：注释经锚点映射回插。保留路径精确；展开路径
 （宏展开、transform）锚点可能漂移——注释可能被丢弃而非冒险破坏结构，是刻意
