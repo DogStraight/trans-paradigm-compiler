@@ -35,6 +35,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **渲染器引擎级 raw 拼接钩子**（ADR-0017 决策 4 切片 ② 的一部分，已就位未启用）：
+  节点带 `_verbatim_text`（引擎标记）时整体直出该文本——不走布局、不遍历子节点，
+  宏调用于是成为不可拆的原子文本；**语言包对宏零知识**（规则在引擎）。
+  另修：语义展开时宏体**末行含行注释**则拼接末尾补一个换行——不补的话宏调用
+  **同行的后续 token**（`;`）落进注释被吞，语句丢分号（darkriscv 实测 81 条
+  `phase-unrecognized` 的同一根因）。
+  测试 `tests/engine/renderer/test_verbatim_node.py`（3 断言）+
+  `test_macro_regions.py::test_body_trailing_comment_gets_newline`。
+
 - **宏区间表**（ADR-0017 决策 3 切片 ①）：`expand_tokens(..., semantic=True)` 第三
   返回值 = 每条被铺进文本的宏调用一项，含**源区间**（`src_line`/`src_col`/
   `src_end_col`）与**展开结果字符区间**（`offset`/`end_offset`，含宏体、名字、

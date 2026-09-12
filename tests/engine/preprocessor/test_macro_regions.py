@@ -103,6 +103,23 @@ def test_two_macros_one_line_offsets_accumulate() -> None:
     assert regions[0]["offset"] < regions[1]["offset"]
 
 
+def test_body_trailing_comment_gets_newline() -> None:
+    """宏体末行含行注释 → 拼接时末尾补换行（防吞同行后续内容）。
+
+    不补的话 `` assign a = `V; `` 展开成 `assign a = 1'b1 // note;`——`;` 落进
+    注释里，语句丢分号（darkriscv 实测 81 条误报的来源）。补换行后后续内容回到
+    下一行，解析照常（Verilog 不看行）。
+    """
+    src = "`define V 1'b1 // note\nmodule m;\n  assign a = `V;\nendmodule\n"
+    expanded, regions = _expand(src)
+    assert len(regions) == 1
+    r = regions[0]
+    assert r["body"].endswith("\n"), r["body"]
+    assert r["fragment"] == "`V"
+    # 宏调用同行的 `;` 不在注释里（没被吞）
+    assert ";" in expanded.split("// note")[1].split("\n")[1]
+
+
 def test_regions_only_in_semantic_mode() -> None:
     """默认（渲染路径）不产区间表——那条路径用锚还原，两者不混。"""
     table, func_macros, _, _, _, clean = scan_directives(

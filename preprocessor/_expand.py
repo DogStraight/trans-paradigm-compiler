@@ -490,7 +490,9 @@ def expand_tokens(
         restoration_stack — 统一锚列表（渲染路径还原用），每项含 marker/fragment/mode。
         macro_regions — **宏区间表**（仅 semantic=True 有意义）：每条"宏体被铺进
             文本"的调用一项，含它在**源文本**里的区间（`src_line`/`src_col`/
-            `src_end_col`）与它在**展开结果**里的字符区间（`offset`/`end_offset`）。
+            `src_end_col`）与它在**展开结果**里的字符区间（`offset`/`end_offset`），
+            以及 `name`/`fragment`（宏调用原文）/`body`（实际铺进的内容；宏体末行
+            含行注释时末尾补了一个换行，见下）。
             它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
             semantic=False 时为空表（那条路径用锚还原）。
@@ -615,8 +617,16 @@ def expand_tokens(
             if semantic:
                 # check 语义展开：宏体替换（body 原文含分号），不建还原锚，
                 # 只记宏区间（源区间 + 展开后区间，供外层定位/raw 拼接）
-                parts[col:end] = body
-                line_regions.append((col, end, name, is_func, body))
+                #
+                # 宏体**末行含行注释**（如 `define LUI 7'b01 // lui rd,imm）时
+                # 补一个换行：否则宏调用**同行的后续内容**（`... ==`LUI;` 的 `;`）
+                # 落进注释里被吞掉 → 语句丢分号 → 发现器级联失守（darkriscv
+                # 实测 81 条）。补换行让被注释吞掉的部分回到下一行，解析照常
+                # （Verilog 不看行）；输出侧不受影响（渲染走宏调用原文）。
+                tail = body.rsplit("\n", 1)[-1]
+                spliced = body + "\n" if "//" in tail else body
+                parts[col:end] = spliced
+                line_regions.append((col, end, name, is_func, spliced))
                 continue
             # 锚形态 = 普通标识符（`__tpc_marker_<salt>_<n>`，保留命名空间）：
             # 语言包不认识宏，锚与标识符同形 → 表达式/标识符槽位照常解析。

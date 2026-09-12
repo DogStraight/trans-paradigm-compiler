@@ -70,9 +70,18 @@
       `tests/languages/verilog/test_macro_type_slot.py` 的 6 个 strict-xfail 翻正 +
       全量门禁/e2e/误报基线不退化。
       切片进度：**① ✅ 宏区间表**（`expand_tokens(semantic=True)` 第三返回值 = 每条
-      宏调用的源区间 + 展开结果字符区间；`tests/engine/preprocessor/test_macro_regions.py`
-      10 断言）→ ② 渲染 raw 拼接（含对齐/格式化的前人做法参照）→ ③ 撤锚
-      （`restore_anchors` 通道退役）。
+      宏调用的源区间 + 展开结果字符区间；`tests/engine/preprocessor/test_macro_regions.py`）
+      → **② 进行中（已探测出阻塞项，本轮退回锚路径）**：部件已就位但未过门禁——
+      渲染器 `_verbatim_text` 钩子（`renderer/node_renderer.py`，引擎级 raw 拼接，
+      语言包零宏知识）+ 管线 `_stage_macro_splice`（最小**自述**包含节点整段原样
+      输出）+ 宏体末行注释补换行（防吞同行后续内容，`test_macro_body_comment` 抓到的）。
+      · 阻塞 1：**ANSI 端口形态下内部节点无 `_tok_span`**（实测包含链只剩 `ModuleDecl`）
+      → 自述判据升到整模块（整模块被冻成 Verbatim）→ 需先补区间采集或改判据；
+      · 阻塞 2：宏边界契约从 `MacroCall` 壳改为"区间表 + `_verbatim_text` 标记"，
+      `test_macro_call_node.py` 四条与文档需同步。
+      已实测坑（切片② 必须带上的）：宏体自带行尾注释 → 文本铺体会吞掉宏调用同行的
+      后续 token（darkriscv 81 条误报同源）；切分层规则前先过 `test_macro_body_comment`。
+      → ③ 撤锚（`restore_anchors` 通道退役）。
 
 - [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) 行映射**跨两级**
       ——`scan_directives`（raw→clean，条件编译删行，实测 18→14）与

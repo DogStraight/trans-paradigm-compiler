@@ -77,6 +77,14 @@ def render_node(
     Returns:
         Doc IR
     """
+    # 引擎级 raw 拼接（ADR-0017 决策 4）：带 `_verbatim_text` 的节点整体直出该
+    # 文本——不走布局、不遍历子节点。宏区间的"原样输出"落点（宏调用视为不可拆
+    # 原子文本）；语言包对宏零知识，本规则是引擎协议。
+    # 文本可能含换行（多行构造原样输出）：后续行保留其原有缩进（不做重排）。
+    verbatim = getattr(node, "_verbatim_text", None)
+    if verbatim is not None:
+        return Text(verbatim)
+
     head_expr = layout.get("layout") or layout.get("head")
     body_cfg = layout.get("body")
     tail_cfg = layout.get("tail")

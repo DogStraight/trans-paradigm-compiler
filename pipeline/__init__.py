@@ -100,6 +100,8 @@ class _PipelineContext:
     check_idempotent: bool | None
     fidelity: str = "full"
     """保真度分级（ADR-0006 阶段 5）：full 完全重排 / keep_blank 保留空行。"""
+    macro_regions: list[dict] = field(default_factory=list)
+    """宏区间表（ADR-0017 决策 3）：值体宏在展开文本里的字符区间 + 源区间。"""
 
     # 输出目录（由 _resolve_output_paths 填充）
     gen_dir: str | None = None
@@ -369,10 +371,27 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
 
 
 def _stage_expand(ctx: _PipelineContext) -> None:
-    """宏展开（纯文本，在 lex 之前）。"""
+    """宏展开（纯文本，在 lex 之前）。
+
+    **语义展开**（`semantic=True`）：值体宏（非空体、非 `=` 前缀）把宏体文本
+    铺进流，解析器看的是真实文本——宏落在任意语法位置都退化为"展开后在该位置
+    是否语法合法"，由现有语法自己判定，语言包不需要任何宏声明（ADR-0017
+    决策 3）。宏区间表存到 `ctx.macro_regions`，供 `_stage_macro_splice` 做
+    渲染侧 raw 拼接（决策 4）。
+    整行宏 / 空体宏 / 赋值后缀宏 / 指令行仍走 line/inline/sync 锚，
+    由 `restore_anchors` 原位还原，不受本切换影响。
+    """
     if ctx.expand_macros and ctx.macro_table:
-        ctx.source, ctx.restore_stack, _ = expand_tokens(
-            ctx.source, ctx.macro_table, func_macros=ctx.func_macros
+        # 切片 ② 进行中：暂仍走锚路径（semantic=False），`macro_regions` 为空 →
+        # `_stage_macro_splice` 空转。切到 semantic=True 的阻塞项见 TODO ③：
+        # ① ANSI 端口形态下内部节点无 `_tok_span` → 自述判据升到 `ModuleDecl`
+        #    （整模块被冻住，格式化为 Verbatim）→ 需先补齐区间采集；
+        # ② 宏边界节点契约从 MacroCall 壳改为"区间表 + `_verbatim_text` 标记"，
+        #    相关测试与文档需同步。
+        ctx.source, ctx.restore_stack, ctx.macro_regions = expand_tokens(
+            ctx.source,
+            ctx.macro_table,
+            func_macros=ctx.func_macros,
         )
         ctx.log("[preprocessor] macros expanded")
 
@@ -557,10 +576,158 @@ def _make_macro_body_provider(ctx: _PipelineContext) -> Any:
     return provider
 
 
+# ── 宏区间 raw 拼接（ADR-0017 决策 3/4） ──
+
+
+def _token_offsets(text: str, tokens: list) -> list[int]:
+    """每 token 在 text 中的起始字符偏移（lexer：1-based line / 0-based column）。"""
+    line_start: list[int] = []
+    base = 0
+    for ln in text.split("\n"):
+        line_start.append(base)
+        base += len(ln) + 1
+    return [
+        line_start[t.line - 1] + t.column
+        if 0 <= t.line - 1 < len(line_start)
+        else -1
+        for t in tokens
+    ]
+
+
+def _node_spans(root: Any) -> list[tuple[Any, int, int]]:
+    """收集所有带 `_tok_span` 的节点（半开 token 区间）。"""
+    from core.define import CHILDREN_FIELD
+
+    out: list[tuple[Any, int, int]] = []
+    stack = [root]
+    while stack:
+        n = stack.pop()
+        span = getattr(n, "_tok_span", None)
+        if span is not None:
+            out.append((n, span[0], span[1]))
+        children = getattr(n, CHILDREN_FIELD, None)
+        if isinstance(children, list):
+            stack.extend(children)
+    return out
+
+
+def _renders_as_itself(
+    node: Any,
+    ctx: _PipelineContext,
+    expanded: str,
+    offsets: list[int],
+    tokens: list,
+    lo: int,
+    hi: int,
+) -> bool:
+    """节点**自述**：单独渲染（空白归一）== 它在展开文本里的切片（空白归一）。
+
+    拦的是"节点 span 覆盖了由**外层 layout** 输出的字面量"这一类：`Range` 的
+    span 含它匹配的 `[` `]`，但 `Range.renderer` 只出 `msb : lsb`（方括号由槽位
+    layout 出）→ 自述比较不等 → 落回粗粒度层，不会渲染出多套的括号。
+    渲染异常按不自述处理（保守）。
+    """
+    if lo >= hi:
+        return False
+    start = offsets[lo]
+    end = offsets[hi - 1] + len(tokens[hi - 1].content)
+    if start < 0 or end < start:
+        return False
+    try:
+        rendered = ctx.renderer.render(node)
+    except Exception:  # noqa: BLE001 — 隔离渲染失败 → 按不自述处理
+        return False
+    strip = lambda s: "".join(s.split())  # noqa: E731 — 局部判据
+    return strip(rendered) == strip(expanded[start:end])
+
+
+def _verbatim_from_span(
+    expanded: str,
+    offsets: list[int],
+    tokens: list,
+    lo: int,
+    hi: int,
+    regions: list[dict],
+) -> str:
+    """节点 token 区间的"原样文本"：展开文本切片，其中的宏区间换成宏调用原文。"""
+    start = offsets[lo]
+    end = offsets[hi - 1] + len(tokens[hi - 1].content)
+    text = expanded[start:end]
+    for r in sorted(
+        (r for r in regions if start <= r["offset"] and r["end_offset"] <= end),
+        key=lambda r: r["offset"],
+        reverse=True,
+    ):
+        text = (
+            text[: r["offset"] - start]
+            + r["fragment"]
+            + text[r["end_offset"] - start:]
+        )
+    return text
+
+
+def _stage_macro_splice(ctx: _PipelineContext, ast: Any, tokens: list) -> Any:
+    """宏区间 → 可替换单元（ADR-0017 决策 4）→ 引擎标记 `_verbatim_text`。
+
+    解析看的是展开后文本（`_stage_expand` 语义展开），宏区间落在它的字符区间上。
+    本阶段把每条区间映射到 token 范围，取**最小自述包含节点**（从最小包含一路
+    往上，第一个渲染结果等于自己切片者），挂 `_verbatim_text` = 该节点的展开切片
+    （其中的宏区间换成宏调用原文）。
+
+    判据只用"自述"（可证：替换的是节点自己渲染出来的那段文本），不依赖语言包的
+    `is_statement` 等声明：ANSI 端口声明没标 `is_statement`，按那类标记会一路升到
+    `ModuleDecl`（整个模块被冻住，已实测）；自述判据会自动停在最窄的可证节点上
+    （`Number`/`ParenthesizedExpr` 这类窄节点命中，`Range` 不自述则升到自述的父节点）。
+    已带 `_verbatim_text` 的节点不重复处理（粗层已覆盖细层）。
+    """
+    regions = ctx.macro_regions or []
+    if not regions or ast is None:
+        return ast
+
+    expanded = ctx.source
+    offsets = _token_offsets(expanded, tokens)
+    spans = _node_spans(ast)
+
+    for r in regions:
+        idxs = [
+            i for i, off in enumerate(offsets) if r["offset"] <= off < r["end_offset"]
+        ]
+        if not idxs:
+            continue
+        lo, hi = idxs[0], idxs[-1] + 1
+
+        enclosing = sorted(
+            ((n, a, b) for n, a, b in spans if a <= lo and hi <= b),
+            key=lambda x: x[2] - x[1],
+        )
+        target: Any = None
+        text: str | None = None
+        for node, a, b in enclosing:
+            if not _renders_as_itself(
+                node, ctx, expanded, offsets, tokens, a, b
+            ):
+                continue
+            target = node
+            text = _verbatim_from_span(
+                expanded, offsets, tokens, a, b, regions
+            )
+            break
+        if target is None or text is None:
+            continue
+        if getattr(target, "_verbatim_text", None) is not None:
+            continue
+        target._verbatim_text = text
+        ctx.log(
+            f"[macro] raw splice: {r['name']} → "
+            f"{getattr(target, 'node_name', '?')}"
+        )
+    return ast
+
+
 def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
     """宏边界节点化：marker 标识符 → MacroCall 节点（P3.6 / ADR-0016 阶段 2）。
 
-    展开阶段把宏调用替换为 `tpc_marker_N` 标识符（format 路径），parser 建成
+    展开阶段把宏调用替换为锚标识符（format 路径），parser 建成
     Identifier 节点。本阶段按锚表（restore_stack 的 token 锚）把这类节点改写为
     MacroCall（带 `_macro_name`/`_macro_marker` 元数据），使宏边界在 AST 中结构化
     可见——P3.2 增量 diff / P3.3 双向映射的前提。渲染与分析声明在语言包对齐
@@ -861,6 +1028,8 @@ def run_pipeline_on_source(
     ast = _stage_parse(ctx, pre_scan_config, pre_symbols, tokens)
     if ast is None:
         return ctx.result
+    # 宏边界 raw 拼接（ADR-0017 决策 3/4）：区间 → 分层选替换单元 → 引擎标记
+    ast = _stage_macro_splice(ctx, ast, tokens)
     # 宏边界节点化（P3.6 / ADR-0016 阶段 2）：marker 标识符 → MacroCall 节点
     ast = _stage_macro_nodes(ctx, ast)
     if stage == "parse":
