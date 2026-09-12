@@ -57,59 +57,6 @@
 > ② 实测**最大**（行映射跨 `_join_continuation_lines` + `scan_directives`
 > + `expand_tokens` 三处溯源，非原估一张表）。
 
-- [ ] **③ 宏任意位置支持（外层展开 + 渲染侧 raw 拼接）**
-      （`docs/decisions/0017-macro-in-syntax-position.md`；
-      `docs/gaps/gap-preprocessor-macro-boundaries.md` 条目 1）：
-      语言包**不为宏保留语法槽位**——宏位置本质文本任意，逐槽位声明补不齐
-      （结构词/运算符/分隔符位无槽可声明）且部分槽位 layout 自带字面量会多套一对
-      （静默错渲染）。改由外层处理：① 展开在解析前铺宏体文本（任意位置退化为
-      "展开后文本在该位置是否语法合法"，由现有语法自己判定，无需声明）；
-      ② 宏边界节点由管线就树产生；③ **渲染侧遇宏节点走 raw 分支**（宏调用视为
-      不可拆原子文本；无法证明可安全重排时整段原样输出，参照 Verible/clang-format）。
-      验收：`python tools/check_macro_coverage.py` 覆盖率上升且不回退（当前 37%）+
-      `tests/languages/verilog/test_macro_type_slot.py` 的 6 个 strict-xfail 翻正 +
-      全量门禁/e2e/误报基线不退化。
-      切片进度：**① ✅ 宏区间表**（`expand_tokens(semantic=True)` 第三返回值 = 每条
-      宏调用的源区间 + 展开结果字符区间；`tests/engine/preprocessor/test_macro_regions.py`）
-      → **② 进行中（已探测出阻塞项，本轮退回锚路径）**：部件已就位但未过门禁——
-      渲染器 `_verbatim_text` 钩子（`renderer/node_renderer.py`，引擎级 raw 拼接，
-      语言包零宏知识）+ 管线 `_stage_macro_splice`（最小**自述**包含节点整段原样
-      输出）+ 宏体末行注释补换行（防吞同行后续内容，`test_macro_body_comment` 抓到的）。
-      · 阻塞 1（**旧阻塞，已解决**）：原判为“ANSI 端口形态下内部节点无 `_tok_span`”——
-      实测为误诊：`_node_spans` 只走了 `sub_node`，**漏掉属性挂载节点**（`Range`/`Number`）。
-      改用 `Node.iter_children()` 后自述判据选到 `Number`（窄节点），不再升到 `ModuleDecl`。
-      · 阻塞 2（**已了结**）：宏边界契约已从 `MacroCall` 壳改为“区间表 + `_verbatim_text`”，
-      旧契约测试 `test_macro_call_node.py` 随撤销一并删除（`70fb81d`）。
-      · 阻塞 3（**已解决，2026-09-13**）：原判“解析器吃不下展开文本”——真根因是
-      **pratt 中缀循环“遇 newline 非运算符自然 break”**：行首运算符续行（`ALL0\n + ALL1`）
-      被截在 `ALL0` → 语句匹配器要求 `;` 却遇 `+` → 整句判不出（`phase-unrecognized`）。
-      修法：跳过 trivia 后若下一个显著 token 是**中缀运算符** → 续行（`parser/pratt_parser.py`
-      中缀循环；不变量“语句级换行终止”有专测 `tests/engine/linter/test_multiline_continuation.py`）。
-      验收：最小复现 3 → 0；check 路径 darkriscv `parse_ok=True syntax=0`（原 26 条误报），
-      语义阶段**首次跑通**（+9 条 UN001 真诊断，源文件自带 `// unused` 注释佐证；
-      诊断基线 132 → 141）。
-      · **lint 输入已改真展开**（目标态第 1 条已落）：`ctx.lint_source`（semantic=True，
-      铺宏体）+ `ctx.source`（锚形态，解析/渲染侧本轮不动）——结构位（`` input `NT d ``）
-      在锚形态下无产生式可匹配（1 条误报），展开态通过。
-      · 剩余 = **解析侧宏占位协议**（目标态第 3/4 条）：**决策已落 `docs/decisions/0018`**
-      ——解析输入改"扫指令后的原文"（宏调用保持 `` `NAME ``）+ 引擎级通配"宏 token 满足
-      当前位置任意元素"，锚收缩为空体宏占位。
-      **已落的三片**：① 空体宏占位 token（`macro.placeholder` 进 trivia 协议 +
-      `_stage_macro_placeholders` + parser skip 集追加）；② 原子位通配
-      （`parser/parser_core.py::_atom_parser_impl` → `MacroCall` 节点）；③ **raw 解析模式**
-      （`parse_raw=True`：只建宏表、不做替身替换）。
-      实测（`_drafts/probe_raw_parse.py` = 9 个真实语料）：raw 解析失败 **4 → 2**
-      （darkriscv ✅、tv80_core ✅ 已通；剩 ice40_cells_sim 宏在端口列表结构位、
-      picorv32 `if` 位点疑级联）。
-      **下一步**：结构位通配（`parser/_production.py::match_productions` 的 token 匹配点，
-      `prepare_production` 已定位）；然后 `test_macro_type_slot.py` 6 个 xfail 翻正。
-      · 另两条实测（gap-parser-linter-approximation 素材）：linter `scan()` 内部自带
-      `scan_directives+expand_tokens`（锚形态）——喂别的东西即二次展开；lint 吃 raw 原文
-      会冒 61 条 MH002 宏重定义告警（真诊断，会挡门禁）。
-      覆盖率口径：`semantic=True` 实测 **37% → 63%**（解析侧真展开落地后按此验收）。
-      已实测坑（切片② 必须带上的）：宏体自带行尾注释 → 文本铺体会吞掉宏调用同行的
-      后续 token（darkriscv 81 条误报同源）；切分层规则前先过 `test_macro_body_comment`。
-      → ③ 撤锚（`restore_anchors` 通道退役）。
 
 - [ ] **② 宏诊断位置映射**（`gap-macro-diagnostic-mapping`）：(a) 行映射**跨两级**
       ——`scan_directives`（raw→clean，条件编译删行，实测 18→14）与
