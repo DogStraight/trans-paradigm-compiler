@@ -4,7 +4,8 @@
 - 关联：TODO.md「0.1.2 目标」节下的「检查链宏位置映射」条目
 - 参照：`docs/decisions/0016-macro-body-into-ast.md`（raw 源区间权威 + 对应层）、
   P3.3 双向映射
-- 实测：2026-09-12（下节「事实基础」均可复现）
+- 实测：2026-09-12（下节「事实基础」均可复现）；**2026-09-13 补测纠正切片**
+  （行映射需跨 `scan_directives` + `expand_tokens` 两级，原切片只算了一级）
 
 ## 缺口是什么
 
@@ -54,19 +55,39 @@
 - `semantic=True` 分支目前是 `continue`（`_expand.py` L605-608）→ **不建任何锚**，
   这是 (a) 的前置改动点。
 - 诊断产出**只有 2 处**（`analyzer/checker.py`）：`_syntax_diag`（取 `span[0].line`）
-  与 `_semantic_diag`（取 `node._pos_line`）→ 接线集中。
+  与 `_semantic_diag`（取 `node._pos_line`）→ 接线集中。linter 侧不受影响
+  （`tpc lint` 直扫 raw 源，`main.py::_cmd_lint` → `scanner.scan(source)`）。
 - 回归面小：现有行号断言几乎不含宏（`test_linter_macro_hygiene` 走 raw 源、
   `test_lexer` 与宏无关）；`tests/e2e/samples/real/diag_baseline.json` 只记**条数**，
   不受行号影响。
 
+### 事实基础（2026-09-13 补测，纠正上面切片的前提）
+
+> 上面只算了 `expand_tokens` 一级，**漏了前面的 `scan_directives`** —— 后者也会
+> 改行数（实测同一份样本：**源 18 行 → clean 14 行 → 展开后 14 行**）。
+
+- `analyzer/structure.py::_expand_source` 是**两级链**：
+  `scan_directives(source) → clean` 再 `expand_tokens(clean, semantic=True)`。
+- `scan_directives` 的删行来源：① `ifdef/else/endif` 折成一行占位
+  （`// <tpc:cond:N>`，实测 5 行 → 1 行）；② inactive 分支内容不保留。
+  `define` 行则保持占位（1:1，不掉行）。
+- 所以 "展开后行 → 源行" 需要 **两张表复合**：
+  `src = map_scan[ map_expand[out_line] ]`，两张表分别由两个变换产出。
+- 另：`_stage_expand`（pipeline）也会把 `ctx.source` 换成展开后文本，
+  `_stage_lint` 扫的是展开后文本——但 `tpc lint` 命令不经过管线（直扫 raw），
+  故诊断行号回源只需修 analyzer 侧。
+
 ### 切片（每片独立可验证）
 
 1. **(a) 行级映射**
-   - `expand_tokens(semantic=True)` 产出行映射（复用逐行结构）→ ~15 行
-   - `_expand_source` 返回 `(clean, line_map)`；`FileResult` 存表 → ~8 行
+   - `expand_tokens` 产出行映射（逐行结构累加）→ ~15 行
+     （clean → 展开后；同起同止变换，只被多行宏体拉长）
+   - **`scan_directives` 产出行映射**（raw → clean，条件编译删行）→ ~25 行
+     ⚠ 这是原切片漏掉的一级，不做则条件编译文件的回源行号仍是错的
+   - `_expand_source` 复合两表并返回；`FileResult` 存表 → ~12 行
    - 诊断 2 处换算 + **无法映射时保守回退**（保持展开后行号并标记）→ ~10 行
    - 测试：**形态覆盖是重心**——单行宏 / 多行宏 / 嵌套宏 / 带参宏 / 条件编译
-     × 映射断言 → ~60 行
+     （活跃 + 非活跃分支）/ 两表复合 × 映射断言 → ~80 行
    - 验收：各形态行号正确 + 不可映射时明确回退 + 全量门禁绿
 2. **(b) 宏归因**（依赖 (a)）
    - 诊断落点查 (a) 表 → 落在某宏展开区间则加 `"macro": "<NAME>"` 字段 → ~30 行
