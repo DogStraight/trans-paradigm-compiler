@@ -1582,6 +1582,51 @@ tpc `[[checks]]` schema / `tests/_check_test.py` / `config` per_file——见
   [verible style_lint.md](https://github.com/chipsalliance/verible/blob/master/doc/style_lint.md)、
   [iverilog(1) manpage](https://man.freebsd.org/cgi/man.cgi?query=iverilog&sektion=1)
 
+#### 宏/指令卫生族 + 排版族归属补充调研（2026-09-11，T1 收尾 / T2 前置）
+
+- 背景：T1 重合核心集第 10 项（宏/指令卫生）与 T2 零成本语法层候选，都卡在
+  "落 linter 还是 check 链"这一前置决策上。存量调研只有规则清单，缺**精确判定
+  边界**与**分层依据**，本补充定向补齐（来源：svlint MANUAL 全量规则说明、
+  Verilator warnings 全表）。
+
+**一、宏/指令卫生：三家精确判定**
+
+| 工具 | 规则 | 判定 | 关键边界 |
+|---|---|---|---|
+| svlint | `default_nettype_none` | 文件须出现 `` `default_nettype none `` | 单文件、只看"是否声明" |
+| svlint | `default_nettype_wire_at_end` | **文件末尾生效值须为 `wire`** | 单文件末尾状态；防跨文件泄漏 |
+| Verilator | `REDEFMACRO` | 宏重定义**且值不同**才报 | 同值重定义不报；跨文件与 `+define+` 参与 |
+| Verilator | `DEFOVERRIDE` | 代码 define 覆盖命令行 define | 与 REDEFMACRO **分码**，不合并 |
+| slang | `redef-macro` | 同类（重定义即报） | 未给"值相同"例外 |
+
+- svlint MANUAL 自述：155 条语法规则里**只有 4 条 filename 匹配 + 1 条文件内状态
+  （`default_nettype_wire_at_end`）需要文件级上下文**——印证这两条属"消费文件
+  级状态"而非 pattern/符号检查。
+- 落点判断：均需文件级/宏表状态，pattern 与符号 kind 都表达不了 → **check 链
+  handler**（tpc preprocessor 已有宏表，`default_nettype` 末尾生效值需文件级扫描）。
+- ⚠ 边界取舍：`default_nettype` 跨文件泄漏的完整语义需"编译单元"概念，svlint 也
+  只做单文件末尾检查 → tpc 同样只做单文件，跨文件留 gap 记录。
+
+**二、排版/空格族：svlint 自身给出的分层（T2 归属依据）**
+
+- svlint MANUAL 明确两段式：**`textrules` 在任何解析之前**（文件当任意文本，
+  不要求是合法 SV）；**`syntaxrules` 走 AST 事件遍历**。这个分界可直接映射到 tpc
+  的 linter（解析前/token 级）与 check 链（AST/符号级）。
+- 候选规则归属对照：
+
+| 候选 | svlint 归属 | Verible 机制层 | tpc 落点建议 |
+|---|---|---|---|
+| 行长（line-length） | `textrules`（`style_textwidth`，默认 80） | 行级 | **linter**（原文行级，零解析依赖） |
+| 尾随空格 | `textrules` | 文本结构级 | **linter** |
+| 分号前空格 / 指令缩进 / 版权头 | `textrules` | 文本结构级 | **linter** |
+| tab 字符 / 缩进倍数 | `syntaxrules`（`tab_character`/`style_indent`） | Token 级 | **linter**（token 含原文与位置） |
+| 空格规范族（`style_keyword_*`/`style_operator_*`） | `syntaxrules` | Token 级 | **linter**（token 邻接关系） |
+
+- 结论：**排版/空格族整体落 linter 层**——token 流已具备原文与位置，与 svlint 的
+  "解析前"定位一致；check 链留给需符号表/文件级状态的规则（含宏卫生族）。
+- 另注：Verible 的 `line-length`/`no-tabs`/`no-trailing-spaces` 属其"行级/Token 级"
+  少数派（48 条 AST 规则之外），与上表判断一致。
+
 #### 知名 AGENTS.md/指令文件范式调研（2026-08-29，见贤思齐）
 
 - 定位：调研业界对"agent 指令文件（AGENTS.md/CLAUDE.md）怎么写才有效"的成熟
