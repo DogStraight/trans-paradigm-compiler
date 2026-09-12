@@ -80,15 +80,21 @@
       改用 `Node.iter_children()` 后自述判据选到 `Number`（窄节点），不再升到 `ModuleDecl`。
       · 阻塞 2（**未做**）：宏边界契约从 `MacroCall` 壳改为“区间表 + `_verbatim_text` 标记”，
       `test_macro_call_node.py` 四条与相关文档需同步（本轮回退后仍待随 ② 一起落）。
-      · 阻塞 3（**决定性，新确定**）：真展开后 **linter 输入就是展开态**（你这边的目标设计），
-      darkriscv 解码器段 26 条 `unrecognized statement` 误报。**实测澄清**（别写成“锚路径
-      掩盖了它”）：check 路径**从来就是展开态**（`analyzer/checker.py` 自 b543b97 起
-      `expand_tokens(semantic=True)`），实测 `ProjectChecker` 对 darkriscv 现在仍给出**同样的
-      26 条** syntax 诊断；这 26 条一直没被统计过——`eval_diag_baseline.py` 只数
-      `f["semantic"]`（不看 syntax），真实语料测试又走 format 路径（linter 吃 marker）→ 0。
-      修法 = linter **跳过集**（`ctx.macro_regions` 展开态字符区间内诊断丢弃），可同时把
-      check 路径的 26 → 0；**不要**改成“lint 原文”（作者明确要求 linter 看完全展开态）。
-      待办：最小复现未缩出（早前 9 变体全 0），“多行语句匹配不上”仍是假设——落跳过集前先确认真实触发物。
+      · 阻塞 3（**决定性，2026-09-13 实测**）：把 format 路径的**解析输入**切真展开后，
+      **lint 门禁先过**（拆分设计验证有效：`ctx.lint_source`=保真锚形态、`ctx.source`=真展开，
+      实测 darkriscv lint 0 误报），但**解析侧失败**："parse truncated (unconsumed tokens)"
+      整管线中断（darkriscv）。⇒ 切片 ② 的剩余阻塞 = **解析器吃不下某处展开文本**，最小点未定位。
+      · 顺带实测清楚的 linter 近似面（gap-parser-linter-approximation 的素材）：
+      ① linter 自己的 `scan()` 内部就做 `scan_directives+expand_tokens`（**锚形态是它的内部
+      约定**）——喂真展开文本 = 二次展开；
+      ② **多行语句是它的盲区**：`XSIMM <= ALL0\n + ALL1\n + IDATAX;`（无宏、无三元）就报 3 条
+      `phase-unrecognized`——`_statement_end` 兜底 `_skip_to_statement_end` 在 depth 0 把
+      newline 当语句边界（`linter/discovery.py:610`）→ 切片残缺 → 语句匹配失败；
+      ③ 两种 lint 输入各有误报面：锚形态 = darkriscv 0 条 / 类型位宏 1 条（标识符落进类型槽位）；
+      真展开 = 类型位 OK / darkriscv 26 条（②的多行语句面）；
+      ④ check 路径（`analyzer/structure.py::_parse_file`）自 b543b97 起一直把**真展开**文本
+      喂 linter → 那 26 条一直在，只是 `eval_diag_baseline.py` 只统计 `semantic` 不看 syntax；
+      ⑤ lint 吃 raw 原文会冒出 61 条 MH002 宏重定义告警（真诊断，但会挡住 lint 门禁）。
       探针实测（`semantic=True` 临时验证后回退）：覆盖率 **37% → 63%**；
       `test_macro_type_slot.py` 的 3 个 fidelity 由 xfail 转 XPASS；批 7 `;;` 用例形态
       变化（`` `BODY2; `` → 调用点分号成空语句独占一行，与手写 `;;` **同形** = 忠实展开）。
