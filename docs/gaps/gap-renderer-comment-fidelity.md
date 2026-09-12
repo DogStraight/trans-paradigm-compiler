@@ -34,19 +34,45 @@ production skip 吞掉的注释，渲染后按锚点窗口（±3 行启发式）
   e2e 注释样例（`tests/e2e/samples/normal/ref/ref_comments.v` 类）。
 - 当前：接受现状（见 renderer_architecture 缺口 2，接受理由完整）。
 
-## 具体观察（2026-09-12，0.1.2 阶段 9 真实语料终验）
+## 最小复现与触发条件（2026-09-12，0.1.2 阶段 9 定位收敛）
 
-- 样本：`tests/e2e/samples/transform/ref/ref_spi_inf.v`（impl 绑定声明前的两条
-  行注释）。
-- 现象：**展开路径**下这两条注释漂移到输出文件头部（本位为 ModuleInst 前、
-  4 空格缩进）；保留路径（`expand_enhanced=False`）位置正确。
-- **A/B 已证既有**：改造前提交 `55123f4`（typed_ports 桥插件时代）行为完全
-  相同（注释同样落在输出第 0/1 行）→ 非 5b-3c 槽位改造引入。
-- 影响量化：代码结构 1:1（同 37 行）；含注释口径字符相似度 ≈ 0.73，
-  `run_all_tests.py` 的 `_strip_all` 口径下仍过阈值（X:OK）→ 门禁不报，
-  但“注释不乱跑”的用户预期受影响。
-- 待办：见 `TODO.md` 0.1.2 阶段 9 注 ——— 修法候选：让回插失败时至少停在
-  “丢弃”（现状行为描述与实际不符，需先定位是 attachment 槽还是锚回插）。
+**最小复现**（12 行，与宏/typed_ports 无关）：
+
+```verilog
+module m(
+    input clk,
+    output reg [7:0] d
+);
+    // 注释 A
+    // 注释 B
+    sub_mod u_sub ( .clk(clk), .d(d) );
+
+    always @(posedge clk) begin
+        d <= d + 1;
+    end
+endmodule
+```
+
+渲染结果把两条注释放到了 `module m(...)` **声明之前**（顶格）。
+
+**触发条件**（变体实测）：模块体**第一个元素是注释** → 漂到 module 前；
+注释在任一成员**之后**（如同在 assign 后）→ 位置正确。
+
+**定位范围**：
+
+- parser 侧**正确**：`ModuleDecl.sub_node` 首位挂 Comment 子节点
+  （`_claim_head_comments`，ADR-0013 B1.3 模型）；
+- **渲染入参结构与对照场景同构**（`[Comment, Comment, X, AlwaysStmt]`），但
+  `X = ModuleInst` 时渲染到 module 前、`X = ImplBindingWithInterface` 时正确
+  → 问题在**渲染层的 head/body 分段**（`ModuleDecl.renderer.{head,body,tail}`，
+  body `role = "flatten"`），与 parser/transform 无关；
+- 与 formatter 无关（`format_output=False` 同样漂移）；
+- 既有性：改造前提交 `55123f4`（typed_ports 桥插件时代）行为相同。
+- 影响量化：`ref_spi_inf` 展开路径含注释口径字符相似度 ≈ 0.73（代码结构 1:1），
+  `run_all_tests.py` 的 `_strip_all` 口径仍过阈值（X:OK）→ 门禁不报。
+
+**修法方向（未实施）**：渲染层保证 body 段首项 Comment 渲染在 head 之后
+（可对齐 `join.py` 对"容器首部 Comment 拆段"的处理，ADR-0013 B1.3）。
 
 ## 关联条目
 
