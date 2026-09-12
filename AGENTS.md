@@ -121,8 +121,8 @@
 - 入口：`main.py`（CLI）
 - 快速回归：`pytest -m smoke`（~12s，功能域代表层，日常改动先跑；分层见 `tests/README.md`）
 - 全量测试：`pytest tests/`（零运行时依赖，无第三方包）
-- 增量覆盖率：`python tools/check_coverage_delta.py`（只看本次改动的引擎文件，
-  自动跑对应测试目录，几十秒；全量 `--cov` 留发布时）
-- 真实语料误报基线：`python tests/e2e/eval_diag_baseline.py`（诊断条数增长即
-  失败，卡在 `tests/policy/test_diag_baseline.py`；查证哪些是误报用
-  `eval_benchmark.py`，需外部 oracle）
+- 开发自查工具（都不进日常门禁，人工/按需跑）：
+  - 增量覆盖率 `tools/check_coverage_delta.py`（只看改动文件，几十秒）
+  - 真实语料误报基线 `tests/e2e/eval_diag_baseline.py`（增长即失败；查证误报用
+    `eval_benchmark.py`，需外部 oracle）
+  - 门禁有效性抽查 `tools/check_gate_efficacy.py`（真实事故变异，期望门禁变红）
