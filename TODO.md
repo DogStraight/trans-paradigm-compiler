@@ -78,26 +78,26 @@
       · 阻塞 1（**旧阻塞，已解决**）：原判为“ANSI 端口形态下内部节点无 `_tok_span`”——
       实测为误诊：`_node_spans` 只走了 `sub_node`，**漏掉属性挂载节点**（`Range`/`Number`）。
       改用 `Node.iter_children()` 后自述判据选到 `Number`（窄节点），不再升到 `ModuleDecl`。
-      · 阻塞 2（**未做**）：宏边界契约从 `MacroCall` 壳改为“区间表 + `_verbatim_text` 标记”，
-      `test_macro_call_node.py` 四条与相关文档需同步（本轮回退后仍待随 ② 一起落）。
-      · 阻塞 3（**决定性，2026-09-13 实测**）：把 format 路径的**解析输入**切真展开后，
-      **lint 门禁先过**（拆分设计验证有效：`ctx.lint_source`=保真锚形态、`ctx.source`=真展开，
-      实测 darkriscv lint 0 误报），但**解析侧失败**："parse truncated (unconsumed tokens)"
-      整管线中断（darkriscv）。⇒ 切片 ② 的剩余阻塞 = **解析器吃不下某处展开文本**，最小点未定位。
-      · 顺带实测清楚的 linter 近似面（gap-parser-linter-approximation 的素材）：
-      ① linter 自己的 `scan()` 内部就做 `scan_directives+expand_tokens`（**锚形态是它的内部
-      约定**）——喂真展开文本 = 二次展开；
-      ② **多行语句是它的盲区**：`XSIMM <= ALL0\n + ALL1\n + IDATAX;`（无宏、无三元）就报 3 条
-      `phase-unrecognized`——`_statement_end` 兜底 `_skip_to_statement_end` 在 depth 0 把
-      newline 当语句边界（`linter/discovery.py:610`）→ 切片残缺 → 语句匹配失败；
-      ③ 两种 lint 输入各有误报面：锚形态 = darkriscv 0 条 / 类型位宏 1 条（标识符落进类型槽位）；
-      真展开 = 类型位 OK / darkriscv 26 条（②的多行语句面）；
-      ④ check 路径（`analyzer/structure.py::_parse_file`）自 b543b97 起一直把**真展开**文本
-      喂 linter → 那 26 条一直在，只是 `eval_diag_baseline.py` 只统计 `semantic` 不看 syntax；
-      ⑤ lint 吃 raw 原文会冒出 61 条 MH002 宏重定义告警（真诊断，但会挡住 lint 门禁）。
-      探针实测（`semantic=True` 临时验证后回退）：覆盖率 **37% → 63%**；
-      `test_macro_type_slot.py` 的 3 个 fidelity 由 xfail 转 XPASS；批 7 `;;` 用例形态
-      变化（`` `BODY2; `` → 调用点分号成空语句独占一行，与手写 `;;` **同形** = 忠实展开）。
+      · 阻塞 2（**已了结**）：宏边界契约已从 `MacroCall` 壳改为“区间表 + `_verbatim_text`”，
+      旧契约测试 `test_macro_call_node.py` 随撤销一并删除（`70fb81d`）。
+      · 阻塞 3（**已解决，2026-09-13**）：原判“解析器吃不下展开文本”——真根因是
+      **pratt 中缀循环“遇 newline 非运算符自然 break”**：行首运算符续行（`ALL0\n + ALL1`）
+      被截在 `ALL0` → 语句匹配器要求 `;` 却遇 `+` → 整句判不出（`phase-unrecognized`）。
+      修法：跳过 trivia 后若下一个显著 token 是**中缀运算符** → 续行（`parser/pratt_parser.py`
+      中缀循环；不变量“语句级换行终止”有专测 `tests/engine/linter/test_multiline_continuation.py`）。
+      验收：最小复现 3 → 0；check 路径 darkriscv `parse_ok=True syntax=0`（原 26 条误报），
+      语义阶段**首次跑通**（+9 条 UN001 真诊断，源文件自带 `// unused` 注释佐证；
+      诊断基线 132 → 141）。
+      · **lint 输入已改真展开**（目标态第 1 条已落）：`ctx.lint_source`（semantic=True，
+      铺宏体）+ `ctx.source`（锚形态，解析/渲染侧本轮不动）——结构位（`` input `NT d ``）
+      在锚形态下无产生式可匹配（1 条误报），展开态通过。
+      · 剩余 = **解析侧宏占位协议**（目标态第 3/4 条）：解析输入改 raw + 引擎级“宏 token
+      满足当前位置任意元素”，锚收缩到空体宏专用；`test_macro_type_slot.py` 的 6 个 xfail
+      正卡在这里（lint 已通 / parse 未通），xfail 原因已同步。
+      · 另两条实测（gap-parser-linter-approximation 素材）：linter `scan()` 内部自带
+      `scan_directives+expand_tokens`（锚形态）——喂别的东西即二次展开；lint 吃 raw 原文
+      会冒 61 条 MH002 宏重定义告警（真诊断，会挡门禁）。
+      覆盖率口径：`semantic=True` 实测 **37% → 63%**（解析侧真展开落地后按此验收）。
       已实测坑（切片② 必须带上的）：宏体自带行尾注释 → 文本铺体会吞掉宏调用同行的
       后续 token（darkriscv 81 条误报同源）；切分层规则前先过 `test_macro_body_comment`。
       → ③ 撤锚（`restore_anchors` 通道退役）。

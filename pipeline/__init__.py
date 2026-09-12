@@ -102,6 +102,11 @@ class _PipelineContext:
     """保真度分级（ADR-0006 阶段 5）：full 完全重排 / keep_blank 保留空行。"""
     macro_regions: list[dict] = field(default_factory=list)
     """宏区间表（ADR-0017 决策 3）：值体宏在展开文本里的字符区间 + 源区间。"""
+    # lint 专用展开文本（semantic=True，铺宏体）：linter 是反向解析器，
+    # 它要看的是**真语法结构**——宏体铺进去有没有破坏语法只有展开态能判
+    # （锚形态在结构位是普通标识符：`input <锚> d` 无产生式可匹配）。
+    # 解析侧仍吃锚形态（宏不出口法层），两个消费者输入由此分开。
+    lint_source: str = ""
 
     # 输出目录（由 _resolve_output_paths 填充）
     gen_dir: str | None = None
@@ -382,18 +387,16 @@ def _stage_expand(ctx: _PipelineContext) -> None:
     由 `restore_anchors` 原位还原，不受本切换影响。
     """
     if ctx.expand_macros and ctx.macro_table:
-        # 切片 ② 暂仍走锚路径（semantic=False）：`macro_regions` 为空 →
-        # `_stage_macro_splice` 空转。切 semantic=True 已验证的进展与剩余阻塞
-        # 见 TODO ③：
-        #   [已 验 证] 区域表 + 自述判据选出窄节点（`Number` 而非整个 `ModuleDecl`），
-        #   位置覆盖 37% → 63%（tools/check_macro_coverage.py）；宏体尾部行注释
-        #   补换行后保真通过。
-        #   [阻 塞] 真展开后 **linter 的输入变成展开态**，darkriscv 解码器段
-        #   26 条 "unrecognized statement" 误报——内联展开把多行宏体铺成一条
-        #   语句，linter 的语句匹配对多行语句无解；锚路径下 linter 看到的是
-        #   标记 token，所以此前被掩盖。修法是给 linter 一个"跳过集"
-        #   （macro_regions 的展开态字符区间 → 落在区间内的诊断丢弃），
-        #   与渲染侧 raw 拼接是两件独立的事。
+        # lint 输入 = **真展开态**（semantic=True）：linter 是反向解析器，要验的是
+        # "宏体铺进去之后语法是否成立"；锚形态只有表达式位可匹配，结构位（类型/关键
+        # 字位）无产生式可对（实测 `input `NT d` 在锚形态下 1 条误报、展开态通过）。
+        if not ctx.lint_source:
+            ctx.lint_source, _, _ = expand_tokens(
+                ctx.source,
+                ctx.macro_table,
+                func_macros=ctx.func_macros,
+                semantic=True,
+            )
         ctx.source, ctx.restore_stack, ctx.macro_regions = expand_tokens(
             ctx.source,
             ctx.macro_table,
@@ -427,7 +430,7 @@ def _stage_lint(ctx: _PipelineContext) -> bool:
     """前置语法检查（失败时截断管线）。返回是否通过。"""
     if ctx.no_lint:
         return True
-    lint_errors = ctx.linter.scan(ctx.source)
+    lint_errors = ctx.linter.scan(ctx.lint_source or ctx.source)
     if lint_errors:
         for err in lint_errors:
             ctx.log(

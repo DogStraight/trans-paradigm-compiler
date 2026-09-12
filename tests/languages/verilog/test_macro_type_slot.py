@@ -1,20 +1,16 @@
-"""宏落在类型位——**待外层展开机制支持**（当前 xfail，机制就位后翻正）。
+"""宏落在类型位（`` input `NT d `` / `` output `PT q `` / `` input `T d ``）。
 
-需求（ADR-0017 验证 1/2）：`` input `NT d ``（NT=wire）/ `` output `PT q ``
-（PT=reg [7:0]）/ `` input `T d ``（T=[7:0]）应解析成功，且树中出现宏节点
-（宏名 + 源区间），与宏无关的节点照常产出，输出保留宏调用原文。
+**语言包不为宏保留语法槽位**（ADR-0017 决策 2）：宏位置本质上是**文本任意**
+的，逐槽位声明 `@MacroCall` 既补不齐（结构词 / 运算符 / 分隔符位根本没有槽位
+可声明），又会在 layout 自带字面量的槽位静默错渲染（range 子槽会多套一对
+`[]`）。位置覆盖量化见 `tools/check_macro_coverage.py` 的不变量：“任一 token
+换成等价宏、输出不变”。
 
-**当前有意不支持**（不是遗漏）：语言包不为宏保留语法槽位——宏位置本质上是
-**文本任意**的，逐槽位声明 `@MacroCall` 既补不齐（结构词 / 运算符 / 分隔符位
-根本没有槽位可声明；位置覆盖量化见 `_drafts/probe_macro_anywhere.py` 的
-"任一 token 换成等价宏、输出不变"不变量），又会在 layout 自带字面量的槽位
-静默错渲染（range 子槽会多套一对 `[]`）。
+linter 侧吃**真展开态**（反向解析器看真语法结构）：展开后 `` input `NT d ``
+就是 `input wire d`，现有产生式直接成立——锚形态在类型位是普通标识符，
+无产生式可匹配（曾在此处误报）。
 
-支持路径 = **外层（管线）展开 + 渲染侧 raw 拼接**（ADR-0017 决策 3）：展开后
-`` input `NT d `` 就是 `input wire d`，语法包现有产生式直接成立，无需任何
-槽位声明。届时去掉本文件的 xfail 标记即可。
-
-Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 3）
+Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 2/3/4）
 Doc: docs/gaps/gap-preprocessor-macro-boundaries.md（条目 1）
 """
 import pytest
@@ -23,8 +19,14 @@ from pipeline import run_pipeline_on_source
 
 pytestmark = pytest.mark.smoke
 
+# 当前阻塞在**解析侧**（lint 已改吃真展开，见 `pipeline._stage_expand`）：
+# 解析输入仍是锚形态，而锚在结构位（类型/关键字位）是普通标识符，无产生式
+# 可匹配（实测 `input <锚> d;` → parse truncated）。解钕 = 目标态第 3/4 条：
+# 解析输入改 raw + 引擎级宏占位协议（宏 token 满足当前位置任意元素），
+# 锚收缩为空体宏专用。届时去掉本标记即可。
 _XFAIL = pytest.mark.xfail(
-    strict=True, reason="待外层展开 + 渲染侧 raw 拼接机制（ADR-0017 决策 3）"
+    strict=True,
+    reason="解析侧待宏占位协议：锚形态在结构位无产生式可匹配",
 )
 
 
@@ -55,27 +57,27 @@ _PT = "`define PT reg [7:0]\nmodule m;\n  output `PT q;\nendmodule\n"
     "src,name", [(_T, "T"), (_NT, "NT"), (_PT, "PT")], ids=["T", "NT", "PT"]
 )
 @_XFAIL
-def test_type_position_macro_parses_to_macro_node(src: str, name: str) -> None:
-    """类型位宏：解析成功 + 树含 MacroCall（宏名 + 源区间切出宏调用原文）。"""
+def test_type_position_macro_parses(src: str, name: str) -> None:
+    """类型位宏：解析成功（无需任何语法槽位），且树中不出现宏专用节点。"""
     res = _run(src)
     assert res["success"], res.get("error")
-    calls = _find(res["ast"], "MacroCall")
-    assert [c._macro_name for c in calls] == [name]
-    node = calls[0]
-    line, col, end_col = node._src_span
-    assert src.split("\n")[line - 1][col:end_col] == f"`{name}"
-    assert node._macro_fragment == f"`{name}"
+    assert _find(res["ast"], "MacroCall") == []
 
 
 @pytest.mark.parametrize("src", [_T, _NT, _PT], ids=["T", "NT", "PT"])
 @_XFAIL
 def test_type_position_macro_output_fidelity(src: str) -> None:
-    """输出保真：宏调用原文回填，无锚残留。"""
+    """输出保真：宏调用原文回填，无锚残留，且整个输出**幂等**。"""
     res = _run(src)
     assert res["success"], res.get("error")
     out = res["output"]
     assert "`__tpc_" not in out, out
     assert "tpc_marker" not in out, out
+    name = src.split("\n")[0].removeprefix("`define ").split(" ")[0]
+    assert f"`{name}" in out, out
+    again = _run(out)
+    assert again["success"], again.get("error")
+    assert again["output"] == out, (out, again["output"])
 
 
 def test_hand_written_forms_unaffected() -> None:
