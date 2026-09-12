@@ -405,6 +405,30 @@ def _stage_expand(ctx: _PipelineContext) -> None:
         ctx.log("[preprocessor] macros expanded")
 
 
+def _stage_macro_placeholders(tokens: list, macro_table: dict) -> list:
+    """空体宏 → 占位 token（ADR 0018 决策 0）。
+
+    空体宏展开为空（`` `TV80DELAY ``：`rd_n <= `TV80DELAY 1'b1;` ≡
+    `rd_n <= 1'b1;`）——在解析流里不该顶替任何元素，只该被跳过。
+    改成 trivia 类占位 token（内容保留调用原文，渲染回插）。
+
+    非空体宏不动：由后续的通配协议处理（宏 token 满足任意元素）。
+    锚路径下本阶段基本空转（流里已无 `macro.call`）；宏表为空（未开
+    宏处理）时直接返回，无副作用。
+    """
+    from core.token_protocol import MACRO_CALL_TOKEN_TYPE, PLACEHOLDER_TOKEN_TYPE
+
+    if not macro_table:
+        return tokens
+    for tok in tokens:
+        if getattr(tok, "type", None) != MACRO_CALL_TOKEN_TYPE:
+            continue
+        body = macro_table.get(str(tok.content).lstrip("`"))
+        if body is not None and not body.strip():
+            tok.type = PLACEHOLDER_TOKEN_TYPE
+    return tokens
+
+
 def _stage_lex(ctx: _PipelineContext) -> list:
     """词法分析（tokenize 预处理后的文本）。"""
     tokens = ctx.lexer.tokenize(ctx.source)
@@ -1034,6 +1058,8 @@ def run_pipeline_on_source(
 
     # 词法
     tokens = _stage_lex(ctx)
+    # 空体宏 → 占位/跳过（ADR 0018 决策 0；锚路径下无 macro.call，空转）
+    tokens = _stage_macro_placeholders(tokens, ctx.macro_table)
     if stage == "lex":
         ctx.result["success"] = True
         return ctx.result

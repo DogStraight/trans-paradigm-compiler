@@ -92,9 +92,21 @@ def anchor_name(seq: int, salt: str) -> str:
 COMMENT_TOKEN_TYPE = "comment"
 NEWLINE_TOKEN_TYPE = "newline"
 IDENTIFIER_TOKEN_TYPE = "id"
+MACRO_CALL_TOKEN_TYPE = "macro.call"
+# 占位 token：宏调用在解析流里的“跳过/占位”形态（**空体宏**——展开为空，
+# 如 `` `TV80DELAY ``：原地不占任何语法位置，像 trivia 一样被跳过）。
+# 内容保留调用原文，供渲染回插。它是引擎协议（解析侧按 trivia 消费），
+# 不携带语言知识：哪些宏是空体由预处理宏表（引擎级信息）判定。
+PLACEHOLDER_TOKEN_TYPE = "macro.placeholder"
 
-# trivia token 类型集合（空白/折叠/注释/换行）：linter/parser 跳过用。
+# trivia token 类型集合（空白/折叠/注释/换行/宏占位）：linter/parser 跳过用。
 # 单一事实源——历史曾在 linter 4 个文件各定义一份（A8 去重）。
 TRIVIA_TOKEN_TYPES = frozenset(
-    {"space.fold", "space", COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE}
+    {
+        "space.fold",
+        "space",
+        COMMENT_TOKEN_TYPE,
+        NEWLINE_TOKEN_TYPE,
+        PLACEHOLDER_TOKEN_TYPE,
+    }
 )
