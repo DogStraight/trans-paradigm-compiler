@@ -49,6 +49,10 @@
 **L1 和 L2 共用同一报告管道**（Diagnostic + related 链 + 统一抑制
 `tpc-disable[CODE]`）——规则来源不影响豁免/输出形态。
 
+> **完整可运行范例**：`custom_rules_example/`——两条规则各走一条路径
+> （EX001 postpass / EX002 handler），含照抄四步、默认关约定与样本配置，
+> 动笔前先读它的 README.md。
+
 ### 目录结构
 
 ```

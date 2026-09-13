@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **自定义规则范例（0.1.2 阶段 8 / T2 收尾）**：新增 `grammar/verilog/plugins/
+  checks/custom_rules_example/`——两条规则各走一条路径的可运行范例（EX001
+  非 ANSI 端口声明=**postpass 路径** / EX002 parameter integer 类型提示=
+  **handler 路径**），`default=false`（默认关，对默认诊断面零影响）；配套
+  对照样本（pos×2 + neg×1）与 `focus` 条目（评测启用，recall/误报面纳入门禁）；
+  目录 README 含照抄四步与启用方式；`checks/README.md` 双路径节加指引。防误报
+  回归：函数/任务子树跳过（先例 `_fill_body_ports`——旧式函数参数与模块体
+  端口同节点名）。测试 `test_custom_rules_example.py`（7）。
+  \* T2 批判式吸收三态落定：排版卫生族已入（ST001-003）；空格规范族**不采纳**
+  （与 formatter 列对齐协调成本 + 品味性强）；ANSI 头/参数 2-state 走范例
+  路径（本条目）。
 - **排版卫生族（ST001-003）+ 诊断阻断性（0.1.2 阶段 8 / T2 首项）**：linter 层
   解析前行级检查——尾随空白（ST001）/ 制表符（ST002）/ 行长超限（ST003，上限
   引用语言包 `[style_check].max_line_width`，与 formatter 折行阈值同值约定）；

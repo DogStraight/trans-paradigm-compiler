@@ -1,0 +1,19 @@
+# custom_rules_example — EX002 规则声明（L2 handler 路径示范）
+#
+# 形态与 checks/name_check 的 rules/naming.toml 同构：[[checks]] 数组按
+# 符号 kind 分发——本规则无 pattern（全 parameter 符号进 handler），
+# handler（_param_type.py）返回消息文本或 None（引擎统一 {name} 插值）。
+#
+# 判定语义（1364 语境变体）：parameter 声明使用 integer 类型 → 提示。
+# 蓝本 svlint `parameter_type_twostate`（references.md 特化赛道"参数
+# 2-state"）——SV 环境可自行扩类型表（如加 real/realtime，或反向白名单）。
+
+[[checks]]
+id = "EX002"
+default = false
+category = "style"
+severity = "warning"
+scope = ["rtl", "tb"]
+message = "参数 '{name}' 使用 integer 类型（4-state、位宽随实现）——建议显式位宽 [msb:lsb]"
+kind = "parameter"
+handler = "_param_type.py:check_param_type"

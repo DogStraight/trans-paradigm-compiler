@@ -38,7 +38,9 @@
         "NC015",
         "NC016",
         "TP002",
-        "TP006"
+        "TP006",
+        "EX001",
+        "EX002"
     ],
     "pos": {
         "UN001_unused_decl": {
@@ -366,6 +368,20 @@
                 "TP002"
             ],
             "desc": "role 的 invert 引用不存在的 target（invert nosuchrole）—— 悬空引用"
+        },
+        "EX001_non_ansi_header": {
+            "entry": "top.sv",
+            "expect": [
+                "EX001"
+            ],
+            "desc": "非 ANSI 端口声明（旧式 body 端口）应检出（范例规则，custom_rules_example）"
+        },
+        "EX002_param_integer": {
+            "entry": "top.sv",
+            "expect": [
+                "EX002"
+            ],
+            "desc": "parameter integer 类型应检出（范例规则，custom_rules_example）"
         }
     },
     "neg": {
@@ -464,6 +480,10 @@
         "NC_suffix_clean": {
             "entry": "top.sv",
             "desc": "端口方向后缀（_i/_o）+ 类型后缀（_w/_r）与声明一致 → 零 NC014-016 误报"
+        },
+        "EX_style_clean": {
+            "entry": "top.sv",
+            "desc": "ANSI 头 + 参数无 integer 类型 → 零 EX 误报（范例规则，custom_rules_example）"
         }
     }
 }

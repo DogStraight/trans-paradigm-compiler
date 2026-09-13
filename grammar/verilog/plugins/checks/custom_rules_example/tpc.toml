@@ -1,0 +1,20 @@
+# custom_rules_example 插件 — 自定义规则范例（照抄模板，非产品规则）
+#
+# 目的：给出"用户如何加自己的检查规则"的**完整可运行范例**——两条规则各走
+# 一条路径（配合 `checks/README.md`「编写检查规则」双路径实操）：
+#
+#     EX001  非 ANSI 端口声明（旧式 body 端口）→ L2 postpass 路径
+#     EX002  parameter integer 类型提示          → L2 handler 路径（rules/ 声明）
+#
+# 照抄四步（详见本目录 README.md）：
+#   1. 判路径：符号名正则 → L1 pattern；单符号上下文 → handler；
+#      结构/跨文件 → postpass（哪条路径看判定需要什么数据）
+#   2. 复制本目录改组件名 → 语言包 [plugins] enabled 加名
+#   3. 规则码自定（本范例用 EX 前缀）；**default = false 起步**（默认零影响）
+#   4. 配样本（tests/e2e/samples/check_accuracy/）+ 故意破坏验证检出
+#
+# **默认关**：两条规则 default=false——只在显式启用（enabled/overrides/
+# 评测 focus）时生效，默认诊断面零影响。
+
+[analyzer]
+postpasses = ["_ansi_header.py:run_ansi_header_check"]
