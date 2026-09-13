@@ -647,8 +647,8 @@ def expand_tokens(
                 # 赋值后缀宏（body 以 `=` 开头，如 ice40 `ICE40_DEFAULT_ASSIGNMENT_1`
                 # body=`= 1'b1`，端口默认值位 `input NAME `M`）：token 替换会把
                 # `= 1'b1` 顶成 `tpc_marker_N` 标识符——`input NAME tpc_marker_N`
-                # 两个相邻 id，linter/parser 双拒（ice40 默认配置 34 错，见
-                # references.md「语料前沿」M1）。改用 inline+body 区间还原：
+                # 两个相邻 id，linter/parser 双拒（ice40 默认配置 34 错，M1）。
+                # 改用 inline+body 区间还原：
                 # marker 注释 + body 原文保留在源码（parser 跳过注释看到
                 # `input NAME = 1'b1`，Declarator @Init? 兜住端口默认值），
                 # 还原时按 [marker..body] 区间替换回宏调用原文残片。

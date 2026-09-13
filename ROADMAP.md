@@ -129,7 +129,7 @@
 > ~36%），全量并发回归 110s → 78s。下一个热点 = parser（单遍 ~50%）；packrat
 > 失败记忆化尝试已回退——rule_frame 的 sibling_counter 在失败尝试也递增，
 > 缓存跳过失败子规则计数 → path 编号变化 → 渲染输出差异（picorv32 实测，
-> 93 文件对拍；详见 references.md「parser packrat 记忆化尝试」），等价实现
+> 93 文件对拍），等价实现
 > 需先重构 path 计数语义（改变现有输出，另行评估）。
 
 - [ ] fuzz harness 吞吐三件套：
@@ -333,8 +333,7 @@
 ## SystemVerilog 语言包（远期 backlog，2026-08-27 评估；定位修正 2026-08-29）
 
 > Verilog-2005 全量（P1.8 批次 1-6 + 审查修复）后的自然延伸；当前决策：
-> **缓行**——先稳定/玩熟 verilog 全量。规模估算与分期依据见
-> docs/references.md「SV 全量规模估算」：语法层全量对标 sv-parser
+> **缓行**——先稳定/玩熟 verilog 全量。规模估算与分期：语法层全量对标 sv-parser
 > （IEEE 1800-2017 Annex A）≈ 净增 800-900 条规则、8-12 个月；
 > SV 核心子集（综合常用面）3-4 个月；SVA/class/constraint 是最大三块。
 > **定位修正（2026-08-29）**：SV 不在**个人**主体需求内（个人主体 =

@@ -6,7 +6,7 @@
 # pattern 正则判定（analyzer/checks.py + core/check_registry.py）。
 #
 # 蓝本：svlint naming 规则族（~30 类 kind → 正则/前缀默认值，配置注入、
-# 规则代码只写判定）——见 docs/references.md「svlint 诊断链深度调研」。
+# 规则代码只写判定）——见 docs/references.md svlint 深调研节。
 #
 # 默认 pattern：信号/变量/子程序取小写下划线（snake_case）；模块/实例
 # 放宽为 PascalCase 或 snake_case（行业惯例模块名两者皆常见——真实语料

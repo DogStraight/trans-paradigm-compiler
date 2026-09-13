@@ -88,7 +88,7 @@
       world A·B / inject / fragment 等术语集中定义（文档工程对标遗留，中低成本；
       落点待定：docs 教程层或独立文件）
 
-## 对标测试（2026-08-29 立项，Verilator oracle，方案见 references.md「试水第四弹」）
+## 对标测试（2026-08-29 立项，Verilator oracle）
 
 > 变异注入器（试水第三弹）验证"错误能检出"后，用 Verilator 二进制当 oracle
 > 对拍输出一致性。**已全闭环（2026-08-29）**：MSYS2+Verilator 5.050 装好、
@@ -98,14 +98,14 @@
 > W201 跨模块同名污染 / W103 模块体参数缺口 / W104 函数参数误收 /
 > CC001 全覆盖误报——前 2 条推翻旧落档）；剩余差异全部判明类别（AW 族
 > 默认关 / UN001 粒度 / generate 互斥 W105 层 3 边界 / 语料不完整）。
-> 细节见 references.md「试水第四弹」+ 缺口表更新。
+> 细节见 `tests/e2e/eval_benchmark.py` + CHANGELOG。
 
 - [x] ~~MSYS2 + Verilator 安装，验证 `verilator --lint-only` 可跑~~（完成）
 - [x] ~~eval_benchmark.py：同一输入双跑 + W 码↔tpc 规则码映射 + 差异归一化~~（完成）
 - [x] ~~真实语料 + 评测集对拍，逐差异处置三选~~（完成：4 bug 修复 + 边界落档）
 - [x] ~~结论落档 references.md + 全量回归绿~~（完成：1464 passed + 8 skipped，hardcode gate PASS）
 
-## 三工具对照测试（2026-08-29 立项，Verilator + Verible + svlint，方案见 references.md「试水第四弹扩展」）
+## 三工具对照测试（2026-08-29 立项，Verilator + Verible + svlint）
 
 > Verilator 单 oracle 对拍闭环后，对照扩展到 Verible lint（已捆绑，零安装）
 > 与 svlint（用户提供预编译 v0.9.5）。**已全闭环（2026-08-29）**：
@@ -117,7 +117,7 @@
 > **四工具扩展（2026-08-29）**：+slang v11.0 oracle（评测集共识 5，
 > 位宽/越界族验证）；变异注入器 13→24 条（+W106/AW002，W105 过程赋值
 > 驱动修复暴露）；并发测试默认开启（addopts -n auto，全量 87s）。
-> 细节见 references.md「试水第四弹扩展执行结果」。
+> 细节见 `tests/e2e/eval_benchmark.py` + CHANGELOG。
 
 - [x] ~~svlint 安装（用户提供预编译 v0.9.5；cargo install 因 Rust 1.98
       与旧依赖 build script 不兼容失败）~~（完成）
@@ -185,8 +185,7 @@
 > 审查修复（2026-08-27）：转义标识符改配置驱动（`[id.escaped]` 声明，
 > c4 不声明不启用——消除 lexer 硬编码语言知识）；library `-incdir` 拆
 > IncdirClause 子规则（4 层绑定降 2 层）。
-> 真实语料批次（2026-08-27，real corpus 驱动，见 references.md「真实语料
-> 实测」）：`===`/`!==`（A.8.4，token+CmpOp+operator 表三处缺失）+
+> 真实语料批次（2026-08-27，real corpus 驱动）：`===`/`!==`（A.8.4，token+CmpOp+operator 表三处缺失）+
 > 多目标连续赋值（A.6.1 list_of_net_assignments，独立 AssignExtra 子规则）
 > + 模块头属性（A.1.1 attribute_instance 前缀 module_declaration，顶层
 > AttrModuleDecl）+ 语句体宏行尾补分号（_expand.py：`tpc_marker_N;` 按
@@ -228,23 +227,4 @@
       表达式链内相邻条件块（IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）还原位置
       依赖插值定位（渲染行距非线性 + 锚点稀疏），嵌套位置仍有偏差 →
       sv-parser 仍拒（interop 豁免保留）。根治需 active 内容 marker 化
-      （_flush_block 改造）或 token span 映射（P3.1 前置），另案。
-
-- [ ] 位宽进阶：ordered 端口连接覆盖、跨模块成员宽度（方向来自 P1.10 调研，
-      结论见 references.md「主流 lint 机制调研」/「位宽一致性落档」）
-- [ ] 试水第二弹：真实工程误报率评测（同上）
-
-
-## references.md 执行/验证记录类清理（2026-09-02 立项，负重治理收尾）
-
-> references.md 设计类已全部迁出（ADR-0009/0010/0011/0012 + 命名并入
-> 0004，2878→2563 行）。剩余执行/验证记录类（试水弹、位宽落档、引擎增益、
-> 性能实测等 ~700 行，嵌在各调研大节下）按删除判据 C1/B5 逐节处置：
-> 结果已进测试/CHANGELOG 的压缩为小结或删除，保留"为什么/推翻了什么"
-> 结论层。每节核对 ROADMAP/TODO 回指后处置，独立提交。
-
-- [ ] 试水弹系列（第一/二/三/四弹 + 扩展执行结果）压缩为小结或删除
-- [ ] 位宽一致性落档（W201/W202 A/B/C1）保留结论层、压缩过程层
-- [ ] 引擎增益/性能实测（elaboration 热点、实例树实测、packrat/Nuitka/PyPy）压缩为结论
-- [ ] sv-parser 调研节下的执行子节（真实语料实测/A 类/S 级修复）核对后处置
-- [ ] 治理收尾验证：references.md 定位描述同步（docs/README）+ 全量门禁绿
+      （_flush_block 改造）或 token span 映射（P3.1 已落地，前置就绪），另案。
