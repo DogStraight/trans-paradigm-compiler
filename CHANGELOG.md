@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **排版卫生族（ST001-003）+ 诊断阻断性（0.1.2 阶段 8 / T2 首项）**：linter 层
+  解析前行级检查——尾随空白（ST001）/ 制表符（ST002）/ 行长超限（ST003，上限
+  引用语言包 `[style_check].max_line_width`，与 formatter 折行阈值同值约定）；
+  子检查各自开关，未声明该段语言包不注册。配套引入 `LintDiagnostic.blocking`
+  （区分"语法阻断"与"卫生提示"）——ST 为 blocking=False/severity=2：**不跳过
+  语义分析**（structure）、**不计失败退出**（checker / lint CLI） 、**不截断
+  管线**（_stage_lint 按码汇总一行，不逐条）。真实语料基线显式更新（+5407 条
+  ST，真诊断非误报；semantic 面持平）。测试：`test_linter_style.py`（11）+ 
+  checker 非阻断语义用例（≥=2 退出码/语义不跳）。
 - **trace 报告时间轴呈现（0.1.2 阶段 6 收尾切片）**：`tpc trace --html` 页面
   重排为"管道条 + 单列左轴"——顶部**执行管道条**（单元节点链，箭头标上游
   `produced` 流；节点/卡片锚链互通）；卡片区左侧一条轴 + 轴节点（按 kind

@@ -167,8 +167,8 @@ class ProjectChecker(_StructureBase):
         files = []
         any_error = False
         for path, fr in self._memo.items():
-            if fr.lint_diags:
-                any_error = True  # 语法错误（stage=syntax）→ exit 1
+            if any(d.blocking for d in fr.lint_diags):
+                any_error = True  # 语法错误（stage=syntax，阻断类）→ exit 1
             semantic = []
             if fr.analyzer is not None:
                 for d in fr.analyzer.diagnostics:
@@ -264,7 +264,7 @@ class ProjectChecker(_StructureBase):
         out = {
             "stage": "syntax",
             "file": fr.path,
-            "severity": 1,
+            "severity": getattr(d, "severity", 1),
             "code": getattr(d, "code", "parse-error"),
             "message": d.message,
             "range": rng,

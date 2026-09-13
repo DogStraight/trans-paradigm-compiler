@@ -41,6 +41,7 @@ from .checkers.macro_hygiene import MacroHygieneChecker
 from .checkers.macro_token import MacroTokenChecker
 from .checkers.statement import StatementChecker
 from .checkers.expression import ExpressionChecker
+from .checkers.style import StyleChecker
 
 # linter.macro_hygiene
 #   #sym:config = [macro_hygiene]
@@ -50,6 +51,16 @@ from .checkers.expression import ExpressionChecker
 # 关键字缺省 → 对应子检查自行跳过（见 MacroHygieneChecker）。
 _macro_hygiene_cfg: dict = declare_cfg(
     "linter.macro_hygiene", {}, __name__, "_macro_hygiene_cfg"
+)
+
+# linter.style_check
+#   #sym:config = [style_check]
+#   格式: dict — { enabled, trailing_whitespace, tab_character, max_line_width }
+# 语言包未声明（或 enabled=false）→ ST 检查器不注册（零开销）——
+# 与 MH 的区别：ST 子检查以布尔开关驱动（无“关键字缺省即空转”形态），
+# 故缺省取 False（未声明的语言包明确不检，而非注册后空转）。
+_style_check_cfg: dict = declare_cfg(
+    "linter.style_check", {}, __name__, "_style_check_cfg"
 )
 
 
@@ -297,6 +308,10 @@ class LinterScanner:
                 registry.add(
                     MacroHygieneChecker(source, prefix, _macro_hygiene_cfg)
                 )
+            # 排版卫生（ST 族）：扫**原始源码行**（排版事实在字符层，
+            # token 化不提供尾随空白/行长信息）
+            if _style_check_cfg.get("enabled", False):
+                registry.add(StyleChecker(source, _style_check_cfg))
 
         # ── P2: 语句发现 + 扁平检查 ─────────────
         # discovery 产出多层级树（children 嵌套）；深度优先遍历把每个节点

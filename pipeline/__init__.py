@@ -472,23 +472,39 @@ def _stage_prescan(ctx: _PipelineContext) -> tuple[Any, Any]:
 
 
 def _stage_lint(ctx: _PipelineContext) -> bool:
-    """前置语法检查（失败时截断管线）。返回是否通过。"""
+    """前置语法检查（**阻断类**失败时截断管线）。返回是否通过。
+
+    阻断类（blocking=True，语法结构错）→ 逐条日志 + 截断；
+    卫生/风格提示（blocking=False，如 ST 族）→ 汇总一行日志、不阻断。
+    """
     if ctx.no_lint:
         return True
     lint_errors = ctx.linter.scan(ctx.lint_source or ctx.source)
-    if lint_errors:
-        for err in lint_errors:
-            # 诊断行号回源（展开态行 → clean 行 → 原始源行）：lint 输入是真
-            # 展开文本，宏体多行/条件压缩时行号会漂；映射不可用（未展开/
-            # 无宏）时逐级退化为原行号。
-            ln = err.range[0].line + 1
-            src_ln = ln
-            if ctx.line_map and 1 <= ln <= len(ctx.line_map):
-                src_ln = ctx.line_map[ln - 1]
-                if 1 <= src_ln <= len(ctx.clean_line_map):
-                    src_ln = ctx.clean_line_map[src_ln - 1] or src_ln
-            ctx.log(f"[linter] {err.message} at L{src_ln}:{err.range[0].character}")
-        ctx.result["error"] = f"lint failed: {len(lint_errors)} error(s)"
+    if not lint_errors:
+        return True
+    blocking = [e for e in lint_errors if e.blocking]
+    notes = [e for e in lint_errors if not e.blocking]
+    for err in blocking:
+        # 诊断行号回源（展开态行 → clean 行 → 原始源行）：lint 输入是真
+        # 展开文本，宏体多行/条件压缩时行号会漂；映射不可用（未展开/
+        # 无宏）时逐级退化为原行号。
+        ln = err.range[0].line + 1
+        src_ln = ln
+        if ctx.line_map and 1 <= ln <= len(ctx.line_map):
+            src_ln = ctx.line_map[ln - 1]
+            if 1 <= src_ln <= len(ctx.clean_line_map):
+                src_ln = ctx.clean_line_map[src_ln - 1] or src_ln
+        ctx.log(f"[linter] {err.message} at L{src_ln}:{err.range[0].character}")
+    if notes:
+        # 卫生类按码汇总（真实语料可达数千条，逐条会淹没过程日志；
+        # 逐条定位是 `tpc lint` / `tpc check` 的输出职责）。
+        by_code: dict[str, int] = {}
+        for e in notes:
+            by_code[e.code] = by_code.get(e.code, 0) + 1
+        pairs = ", ".join(f"{c}×{n}" for c, n in sorted(by_code.items()))
+        ctx.log(f"[linter] style notes: {len(notes)} 处（{pairs}）——不阻断管线")
+    if blocking:
+        ctx.result["error"] = f"lint failed: {len(blocking)} error(s)"
         return False
     return True
 

@@ -1,7 +1,7 @@
 {
   "_note": "真实语料诊断计数基线（按码计条数）。增长即需解释：先确认是修复带来的真诊断还是误报回归；确需更新时用 --update 并说明原因。",
   "corpus": "tests/e2e/samples/real/ref（工程分组同 eval_benchmark._GROUPS）",
-  "total": 141,
+  "total": 5548,
   "counts": {
     "CC001": 22,
     "LC001": 25,
@@ -9,6 +9,9 @@
     "W101": 13,
     "W104": 10,
     "W105": 2,
-    "W201": 38
+    "W201": 38,
+    "syntax:ST001": 781,
+    "syntax:ST002": 4449,
+    "syntax:ST003": 177
   }
 }

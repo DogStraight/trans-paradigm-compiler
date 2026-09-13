@@ -17,12 +17,21 @@ class Position:
 
 @dataclass
 class LintDiagnostic:
-    """LSP Diagnostic 兼容的错误诊断。"""
+    """LSP Diagnostic 兼容的错误诊断。
+
+    `blocking` 区分两类诊断的消费语义（structure/checker 两个消费面）：
+
+    - True（缺省，语法类）：token 级结构错误（phase-*/boundary/表达式）——
+      解析/语义不可靠，消费方跳过语义阶段并计 exit 1；
+    - False（卫生/风格类，如 ST 族）：不影响解析的提示（排版/空白）——
+      不阻断语义分析、不计失败退出。
+    """
     range: tuple[Position, Position]  # (start, end)
-    severity: int = 1                 # 1=Error
+    severity: int = 1                 # 1=Error, 2=Warning
     code: str = "parse-error"
     source: str = "tpc-lint"
     message: str = ""
+    blocking: bool = True
 
 
 def token_pos(t: Token) -> Position:

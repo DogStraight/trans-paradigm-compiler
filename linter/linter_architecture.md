@@ -29,6 +29,7 @@ flowchart LR
     D --> E[P1 块边界配对<br/>BoundaryChecker]
     D --> F[P0 非法 token<br/>MacroTokenChecker]
     D --> M[MH 宏/指令卫生<br/>MacroHygieneChecker]
+    D --> N[ST 排版卫生<br/>StyleChecker]
     D --> G[P2 发现 + 扁平检查]
     G --> H[Discovery 递归发现<br/>多层级节点树]
     H --> I[深度优先遍历<br/>每节点注册独立 StatementChecker]
@@ -49,6 +50,23 @@ flowchart LR
   跨文件泄漏）、宏以不同值重定义未 undef（MH002，对齐 Verilator REDEFMACRO：
   值相同不报）。关键字/前缀/复位值全部来自语言包 `[linter.macro_hygiene]`，
   未声明该段的语言包不注册检查器。
+- **ST 排版卫生**（同 P0 组，文件级）：`StyleChecker` 扫**原始源码行**——
+  尾随空白（ST001）/ 制表符（ST002；尾随制表符归 ST001 不双报）/ 行长超限
+  （ST003，上限 `[style_check].max_line_width`，与 formatter 折行阈值同值
+  约定）。子检查各自开关，未声明该段（或 enabled=false）的语言包不注册；
+  v1 边界：ST002 按行扫（字符串内 tab 同样计入）、行长按字符数计（tab 计 1）。
+
+**诊断阻断性（`LintDiagnostic.blocking`）——两类消费语义**：
+
+- **阻断类**（缺省 True；phase-*/boundary/表达式及 MH 指令卫生）：语法/结构
+  不可靠 → 消费方跳过语义分析、计失败退出、截断管线；
+- **非阻断类**（False；ST 族）：不影响解析的提示（severity=2）→ 不跳过、
+  不计失败、不截断。
+
+四个消费面统一判据：`analyzer/structure.py`（阻断类才跳语义）、
+`analyzer/checker.py`（阻断类才计 exit 1）、`pipeline/__init__.py::_stage_lint`
+（阻断类才截断；非阻断按码汇总一行日志，不逐条）与 `tpc lint` 退出码
+（main.py）。
 - **P2 语句发现 + 扁平检查**：Discovery 产出多层级节点树 → 深度优先遍历，把每个节点
   （含 children）注册为独立 `StatementChecker` → 扁平验证。
 

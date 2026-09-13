@@ -186,6 +186,24 @@ class TestStageGating:
         assert not f["semantic"]
         assert report["exit_code"] == 0
 
+    def test_style_diags_do_not_skip_semantic(self, checker, proj):
+        """卫生/风格类（ST，blocking=False）不阻断语义：带尾随空格的文件
+        仍产出语义诊断，且不计失败退出（severity=2）。"""
+        f = proj / "styled.sv"
+        f.write_text(
+            "module styled (\n  input wire a,\n  output wire y\n);\n"
+            "  wire unused_sig;  \n"  # 行尾空格 → ST001
+            "  assign y = a;\nendmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(f))
+        fr = report["files"][0]
+        st = _find(fr["syntax"], "ST001")
+        assert st, "尾随空格应产 ST001"
+        assert st[0]["severity"] == 2, "风格提示为 warning 级"
+        assert _find(fr["semantic"], "UN001"), "卫生类诊断不应阻断语义"
+        assert report["exit_code"] == 0, "风格提示不计失败退出"
+
 
 class TestNoStructureProtocol:
     """语言包未声明 [structure] 结构协议（如 c4）→ check 退化为 lint+analyze：

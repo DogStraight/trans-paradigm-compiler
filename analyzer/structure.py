@@ -193,9 +193,11 @@ class _StructureBase:
         if self._expand_macros:
             source, fr.line_map, fr.macro_regions = self._expand_source(source, path)
 
-        # 阶段 1：语法检查（token 级）。有错 → 语义阶段跳过（用户决策）。
+        # 阶段 1：语法检查（token 级）。有**阻断类**诊断 → 语义阶段跳过
+        # （用户决策——保留原语义“语法错则语义不可靠”）；卫生/风格类
+        # （blocking=False，如 ST 族排版提示）不影响解析，继续跑。
         fr.lint_diags = shared["linter"].scan(source)
-        if fr.lint_diags:
+        if any(d.blocking for d in fr.lint_diags):
             return fr
 
         # 解析

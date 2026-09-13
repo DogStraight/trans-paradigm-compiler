@@ -23,7 +23,9 @@
       `trace.json`）；✅ 映射表来源追踪（行 `origin` → 插件 `describe()` →
       trace `artifacts`）；✅ trace 页时间轴呈现（管道条 + 左轴节点 +
       依赖回指）；剩 transform 侧更多插件自述（出口已具备，按需补）
-- [ ] 阶段 8 — 检查链遗留补全（本文件「0.1.1 目标 2」T1/T2 并入本版）
+- [ ] 阶段 8 — 检查链遗留补全：✅ T1（评测 focus 全码入 + 每码有样本，
+      recall 100% / FP 0，实测 09-13）；T2 见「0.1.1 目标 2」节（排版族已落地，
+      剩「自定义规则范例」）
 - [ ] 阶段 9 — 真实语料终验（ice40/picorv32 + 全量门禁 + 保真度不退化）：✅ 首轮
       全绿（e2e 98 组 FAIL 0 / lint recall 31-31 / check 34-34 / 差分 findings 0）；
       ✅ transform 展开路径注释漂移已修（`join` 拆段加判据）；剩 覆盖率门禁
@@ -39,14 +41,19 @@
 > **强检面已达"全部已定义码"**：check 链与 linter 各自有门禁保证不出现
 > "已实现却无样本"的规则（`tests/policy/test_rule_coverage.py`）。规模数字
 > 不在本文件复述（由 eval 输出与 `sample_stats()` 现算）。
-> 重合核心集 10/10 已实现；独到项批判吸收仅 svlint prefix 族已入
-> （NC014-16）；自场景自定义规则范例 0。
+> 重合核心集 10/10 已实现；独到项批判吸收已入 svlint prefix 族
+> （NC014-16）+ 排版卫生族（ST001-003，09-13）；自场景自定义规则范例 0
+> （ANSI 头 / 参数 2-state 待写，见下）。
 
-- [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价）：
-      - ✅ 架构依据已定（09-11）：svlint 自身分界（textrules=解析前 / syntaxrules
+- [ ] **T2 独到项批判式吸收**（references「特化赛道」已定价；取舍已拍 09-13）：
+      - ✅ 架构依据（09-11）：svlint 自身分界（textrules=解析前 / syntaxrules
         =AST）→ 排版/空格族整体落 **linter 层**；依据见 references「宏/指令卫生族 +
-        排版族归属补充调研」。剩：待作者拍取舍清单（Verible 排版族 / svlint 空格族 /
-        ANSI 头 / 参数 2-state）后立项
+        排版族归属补充调研」
+      - ✅ 排版卫生族已落地（ST001-003，linter 层解析前；blocking=False
+        非阻断——语义/退出码/管线三个消费面统一判据；真实语料基线已更新）
+      - ❌ 空格规范族不采纳（与 formatter 列对齐协调成本 + 品味性强，09-13 拍）
+      - □ 剩：ANSI 头 / 参数 2-state → 写成「自场景自定义规则范例」（补
+        「自定义规则范例 0」缺口；形式：可运行示例 + 测试，默认不加载）
       - 中成本（Verilator UNOPTFLAT/CMPCONST）与远期（Spyglass CDC）——
         明确 0.1.2+（方向注 ROADMAP，不立项）
 ## 门禁体系改进（2026-09-12 起，长期过程；不立决议文件，按需推进）

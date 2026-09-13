@@ -235,7 +235,9 @@ def _cmd_lint(args: argparse.Namespace) -> None:
                 f"Ln {end.line + 1}:{end.character + 1}  {d.message}"
             )
 
-    sys.exit(1 if diagnostics else 0)
+    # 退出码只由**阻断类**诊断决定（语法结构错）；卫生/风格提示
+    # （blocking=False，如 ST 族）列出但不计失败（与 check 的 exit 语义一致）。
+    sys.exit(1 if any(d.blocking for d in diagnostics) else 0)
 
 
 def _cmd_check(args: argparse.Namespace) -> None:

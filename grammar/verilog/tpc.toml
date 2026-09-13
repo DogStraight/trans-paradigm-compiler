@@ -34,6 +34,7 @@ macro_shape = { file = "base/_macro.toml", section = "macro_shape", required = f
 
 [linter]
 macro_hygiene = { file = "base/_macro.toml", section = "macro_hygiene", required = false }
+style_check = { file = "base/_style_check.toml", section = "style_check", required = false }
 
 [plugins]
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs", "gates", "udp", "specify"]

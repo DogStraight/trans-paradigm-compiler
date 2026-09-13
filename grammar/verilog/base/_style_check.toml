@@ -1,0 +1,18 @@
+# _style_check.toml — 排版卫生检查参数（ST 族，linter 层）
+#
+# linter 在解析前按**原始源码行**检查排版事实（模型见 references.md
+# 「宏/指令卫生族 + 排版族归属补充调研」：svlint 将排版/空白族划在
+# 解析前与 token 级两段，tpc 对应统一落 linter 层）：
+#   - ST001  尾随空白（行尾空格/制表符）
+#   - ST002  制表符（行内缩进/缝隙；尾随制表符计入 ST001）
+#   - ST003  行长超限（max_line_width，0 = 不检）
+#
+# 三个子检查独立开关；整个段缺省（或 enabled=false）→ 不注册（零开销）。
+[style_check]
+enabled = true
+trailing_whitespace = true
+tab_character = true
+# 与 plugins/formatter [formatter.style] max_line_width 同值约定：
+# lint 判"超长"与 formatter 折行阈值是同一根标准（改一处须同步；formatter
+# 折行允许带惩罚的少量超出，lint 是硬阈值，此处不做补偿）。
+max_line_width = 100

@@ -93,7 +93,12 @@ def test_valid_samples_all_clear(accuracy) -> None:
 
 
 def test_normal_samples_no_diagnostic() -> None:
-    """normal/ref 全部合法样本零诊断（零误报回归保护，含 28 个真实样例）。"""
+    """normal/ref 全部合法样本零**阻断类**诊断（零误报回归保护，含 28 个真实样例）。
+
+    卫生/风格提示（blocking=False，如 ST 族）不计——真实输入带尾随空格/
+    tab 属常态，报它们是特性非误报；这一面的正确性由真实语料计数基线
+    （eval_diag_baseline）守护。
+    """
     normal_dir = os.path.join(_ROOT, "tests", "e2e", "samples", "normal", "ref")
     files = sorted(f for f in os.listdir(normal_dir) if f.endswith(".v"))
     assert files, "normal/ref 样本为空"
@@ -102,7 +107,7 @@ def test_normal_samples_no_diagnostic() -> None:
     for fname in files:
         with open(os.path.join(normal_dir, fname), encoding="utf-8") as f:
             src = f.read()
-        errs = scanner.scan(src)
+        errs = [e for e in scanner.scan(src) if e.blocking]
         if errs:
             flagged.append((fname, [(e.code, e.message[:50]) for e in errs]))
     assert flagged == [], f"normal 样本出现诊断: {flagged}"
