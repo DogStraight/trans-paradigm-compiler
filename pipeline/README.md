@@ -43,6 +43,12 @@ after = "analyze"
 插件/槽位单元（混用会重复执行 → fail-fast）；`check` 不限（可多实例）。
 **槽位单元的契约**沿用承担它的插件（`slot_runner`：`requires=["scope"]` / `produces=["slot_transforms"]`）。
 
+**实例化参数（`params`，5b-3b）**：插件单元可用 `params`（表）覆写插件**构造器
+关键字参数**（执行层 `cls(**params)`）——同一插件可在多个单元注册为不同实例
+（各自参数与时点），如 `SemanticMappingPlugin` 的 `raw_config` 覆写；与构造器
+签名不匹配 → 加载期 fail-fast（报签名错误）。槽位 / 内置执行器 / handler 单元
+无实例化参数，声明 `params` 即 fail-fast。参数随单元进 trace 条目（可视化）。
+
 ### 契约校验（时点边界）
 
 每个单元执行前校验其 `requires` 是否已被满足（初始集 ∪ 前面单元 `produces`），

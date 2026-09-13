@@ -92,7 +92,10 @@ replace（1:1 替换 + 注释迁移）|remove）
 声明插件单元后，该单元**只跑该插件**（`AstTransformer(plugins=[...])`）——同一
 变换可声明多次（多时点/多实例），每单元在 trace 中独立可见。未声明 units 的语言
 包仍走 `builtin.transform`（跑全部插件，现行为零变化）。插件实例化参数覆写
-（`params`）尚未实现 → 声明即 fail-fast（不静默忽略）。
+（`params`，5b-3b）：单元 `params` 表 = 插件**构造器关键字参数**（执行层
+`cls(**params)`，如 `raw_config`/`rules`/`tables` 覆写）——同一插件可多实例
+（各自参数与时点）；签名不匹配加载期 fail-fast。槽位/内置/handler 单元无
+实例化参数，声明即 fail-fast。
 
 ### 插件契约（0.1.2 阶段 7，ADR-0015 §3）
 

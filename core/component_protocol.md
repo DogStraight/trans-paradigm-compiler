@@ -163,6 +163,9 @@ type_map = { symbol_kind = "typed_port", attr = "type_name" }   # {符号名: at
 - **槽位级单元（5b-3c-3）**：槽位可在管线配置里各自声明时点——
   `[[pipeline.units.<name>]] slot = "<槽位名>"`（与 `impl` 互斥）→ 该单元只跑该
   槽位（`SlotRunnerPlugin(only_slot=...)`）；未声明则整包按声明序跑（现行为）。
+- **插件单元实例化参数（5b-3b）**：`impl = "<插件限定名>"` 的单元可带 `params`
+  （表）= 插件**构造器关键字参数**覆写（同一插件可多实例）；签名不匹配加载期
+  fail-fast。槽位/内置/handler 单元不支持 `params`（声明即 fail-fast）。
 
 ## 4. analyzer 原语
 

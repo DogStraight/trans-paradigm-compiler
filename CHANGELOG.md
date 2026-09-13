@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **插件单元实例化参数（`params`，0.1.2 阶段 5b-3b）**：`[[pipeline.units.*]]`
+  的 `params` 表 = 插件**构造器关键字参数**（执行层 `cls(**params)`）——同一插件
+  可注册为多个实例（各自参数与时点，如 `SemanticMappingPlugin` 的 `raw_config`
+  覆写）；加载期按构造器签名核验（`inspect.signature` bind），未知参数 / 缺必需
+  参数 → fail-fast；槽位 / 内置 / handler 单元声明 `params` → fail-fast。trace
+  条目带 `params`（可视化）。测试 `tests/engine/pipeline/test_unit_params.py`。
 - **诊断行号回源（check 链，P3.3 (a)）**：`scan_directives` 新增第 7 返回值
   `clean_to_raw`（行+行号对账本：续行合并取段首行、条件压缩按实际归属、include
   拼接行 `None` 不可映射），与 `expand_tokens` 的展开级映射两级复合后经

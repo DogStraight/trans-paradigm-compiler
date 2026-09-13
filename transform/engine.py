@@ -11,7 +11,7 @@ Doc: docs/language_walkthrough.md（变换引擎）
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar, TypeVar, overload
 from core.define import Node
 from analyzer.scope import Scope
 
@@ -26,13 +26,36 @@ _plugin_index: dict[str, type["TransformPlugin"]] = {}
 _plugin_contracts: dict[str, dict[str, list[str]]] = {}
 
 
+_T = TypeVar("_T", bound="TransformPlugin")
+
+
+@overload
+def register_plugin(
+    cls: type[_T],
+    *,
+    name: str | None = None,
+    produces: list[str] | None = None,
+    requires: list[str] | None = None,
+) -> type[_T]: ...
+
+
+@overload
+def register_plugin(
+    cls: None = None,
+    *,
+    name: str | None = None,
+    produces: list[str] | None = None,
+    requires: list[str] | None = None,
+) -> Callable[[type[_T]], type[_T]]: ...
+
+
 def register_plugin(
     cls: type["TransformPlugin"] | None = None,
     *,
     name: str | None = None,
     produces: list[str] | None = None,
     requires: list[str] | None = None,
-):
+) -> Any:
     """装饰器：注册一个变换插件类（可带限定名 + 契约声明）。
 
     Usage:

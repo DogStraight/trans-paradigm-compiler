@@ -67,7 +67,8 @@ class PassDecl:
     非空 = 本单元只跑该插件，插件级单元，ADR-0015 §1）；slot 非空 = 槽位级
     单元（只跑该槽位，由引擎 `slot_runner` 承担，5b-3c-3）。
     impl = 原始 impl 引用（builtin.* / file.py:fn / 插件名 / `slot:<槽位名>`），
-    供契约查询与 trace。
+    供契约查询与 trace；params = 插件单元实例化参数（构造器关键字参数覆写，
+    5b-3b；空 = 默认构造）。
     """
 
     name: str
@@ -76,6 +77,7 @@ class PassDecl:
     plugin: str | None = None  # transform 单元绑定的插件限定名
     impl: str | None = None  # 原始 impl 引用（契约查询用）
     slot: str | None = None  # 槽位级单元绑定的槽位名
+    params: dict[str, Any] = field(default_factory=dict)  # 插件构造参数覆写（5b-3b）
 
 
 @dataclass
@@ -263,6 +265,28 @@ def build_schedules() -> dict[str, list[PassDecl]]:
 
 # ── 执行（ADR-0007）────────────────────────────────────────
 
+def _validate_plugin_params(
+    unit_name: str, plugin: str, cls: type, params: dict
+) -> None:
+    """插件实例化参数核验（5b-3b，加载期 fail-fast）。
+
+    插件参数的唯一形态 = **构造器关键字参数**（执行层 `cls(**params)`）。
+    与构造器签名不匹配（未知参数 / 缺必需参数）→ 报签名错误，不静默忽略；
+    无法取签名（C 扩展等）→ 跳过，留给执行期构造暴露。
+    """
+    import inspect
+
+    try:
+        sig = inspect.signature(cls)
+    except (TypeError, ValueError):
+        return
+    try:
+        sig.bind(**params)
+    except TypeError as exc:
+        raise ValueError(
+            f"[pipeline] unit '{unit_name}' params 与插件 '{plugin}' 构造器"
+            f"不匹配: {exc}"
+        ) from exc
 
 def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
     """把 `[pipeline] units` 声明构建为**可执行单元序列**。
@@ -270,7 +294,8 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
     返回 None = 无声明（调用方回落 pass 序列）。impl 三形态（5b-3a）：
       `builtin.analyze` / `builtin.transform` → 内置执行器（由 `kind` 驱动）；
       `file.py:fn` → 加载时已解析的 handler（check 类）；
-      其余 → 变换插件限定名（插件级单元：本单元只跑该插件）。
+      其余 → 变换插件限定名（插件级单元：本单元只跑该插件），可带 `params`
+      （插件构造器关键字参数覆写，5b-3b，签名核验 fail-fast）。
     单元与 pass 在执行层同构（都是 `PassDecl`）→ 直接复用 `_run_schedule`
     的分派，无需另写执行器。
     """
@@ -303,6 +328,11 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
                     f"[pipeline] unit '{u.name}' 声明 slot={u.slot!r}，"
                     f"但 type={u.type!r}（槽位单元限 transform）"
                 )
+            if u.params:
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' 槽位单元不支持 params"
+                    f"（运行器固定单槽位执行，无实例化参数）"
+                )
             if u.slot not in slot_decls:
                 raise ValueError(
                     f"[pipeline] unit '{u.name}' 引用了未声明的槽位: "
@@ -330,15 +360,27 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
                     f"{u.impl!r}（可用: {', '.join(sorted(plugin_index)) or '(空)'}）"
                 )
             if u.params:
-                raise ValueError(
-                    f"[pipeline] unit '{u.name}' 插件单元暂不支持 params"
-                    f"（实例化参数覆写留待后续）"
+                _validate_plugin_params(
+                    u.name, u.impl, plugin_index[u.impl], u.params
                 )
-            out.append(PassDecl(name=u.name, kind=u.type, plugin=u.impl, impl=u.impl))
+            out.append(
+                PassDecl(
+                    name=u.name,
+                    kind=u.type,
+                    plugin=u.impl,
+                    impl=u.impl,
+                    params=u.params,
+                )
+            )
             continue
         if u.impl not in BUILTIN_IMPLS and handler is None:
             raise ValueError(
                 f"[pipeline] unit '{u.name}' impl 未解析为 handler: {u.impl!r}"
+            )
+        if u.params:
+            raise ValueError(
+                f"[pipeline] unit '{u.name}' 内置/处理器单元不支持 params"
+                f"（实例化参数覆写仅插件单元）"
             )
         out.append(
             PassDecl(name=u.name, kind=u.type, handler=handler, impl=u.impl)
@@ -436,13 +478,15 @@ def _run_pass_transform(
     mapping_cfg: dict | None = None,
     plugin: str | None = None,
     slot: str | None = None,
+    params: dict | None = None,
 ) -> None:
     """kind=transform pass：跑一轮 AstTransformer（消费 scope，None 跳过）。
 
     mapping_cfg 由调用方注入（_ensure_shared 按 rules_dir 缓存构建），
     不依赖全局 _loaded_components（可能被其他语言包污染）。
     slot 非空 → 只跑该槽位（槽位级单元，5b-3c-3）；
-    plugin 非空（插件限定名）→ 只跑该插件（插件级单元，ADR-0015 §1）；
+    plugin 非空（插件限定名）→ 只跑该插件（插件级单元，ADR-0015 §1），
+    `params` 非空 → 作为插件**构造器关键字参数**实例化（5b-3b）；
     两者皆空 → 跑全部已注册插件（粗粒度，现行为）。
     """
     ctx = state.ctx
@@ -463,7 +507,14 @@ def _run_pass_transform(
         cls = get_plugin_index().get(plugin)
         if cls is None:
             raise ValueError(f"[pipeline] 未知变换插件: {plugin!r}")
-        transformer = AstTransformer(plugins=[cls()])
+        try:
+            instance = cls(**(params or {}))
+        except TypeError as exc:
+            raise ValueError(
+                f"[pipeline] 插件 '{plugin}' 实例化失败"
+                f"（params={params!r}）: {exc}"
+            ) from exc
+        transformer = AstTransformer(plugins=[instance])
     state.transformer = transformer
 
     # 一次 transform 完成：映射表构建 + 配置变换
@@ -471,9 +522,9 @@ def _run_pass_transform(
 
     # 收集变换统计
     parts = []
-    for plugin in transformer.plugins:
-        if hasattr(plugin, "stats"):
-            s = plugin.stats
+    for plg in transformer.plugins:
+        if hasattr(plg, "stats"):
+            s = plg.stats
             for k, v in s.items():
                 if v:
                     parts.append(f"{k}={v}")
@@ -536,7 +587,9 @@ def _run_schedule(
             if decl.kind == "analyze":
                 _run_pass_analyze(state)
             elif decl.kind == "transform":
-                _run_pass_transform(state, mapping_cfg, decl.plugin, decl.slot)
+                _run_pass_transform(
+                    state, mapping_cfg, decl.plugin, decl.slot, decl.params
+                )
             else:
                 _run_pass_check(state, decl)
         except _ScheduleStop:
@@ -557,6 +610,7 @@ def _trace_entry(
     """单元执行轨迹条目（时点 = index，按执行序）
 
     extra_added = 本次写入黑板（PassState.extra）的键；
+    params     = 插件实例化参数（非空才带，5b-3b）；
     artifacts  = 插件自述的中间产物/来源（transform 类，非空才带）——
                  同为实现 ADR-0015 §2「时点 = 可视化断点」。
     """
@@ -569,6 +623,8 @@ def _trace_entry(
     }
     if decl.impl:
         entry["impl"] = decl.impl
+    if decl.params:
+        entry["params"] = decl.params
     if decl.kind == "transform" and state.transformer is not None:
         described = state.transformer.describe_plugins()
         if described:

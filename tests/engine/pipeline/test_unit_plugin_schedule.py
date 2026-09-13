@@ -72,11 +72,28 @@ def test_plugin_impl_requires_transform_type() -> None:
         )
 
 
-def test_plugin_unit_params_fail_fast() -> None:
-    """插件实例化参数覆写尚未实现 → 显式报错（不静默忽略）。"""
+def test_plugin_unit_params_matching_signature_accepted() -> None:
+    """params 与插件构造器签名匹配 → 进 PassDecl（5b-3b）。"""
     from pipeline.schedule import build_unit_schedule
 
-    with pytest.raises(ValueError, match="暂不支持 params"):
+    seq = build_unit_schedule(
+        {
+            "t": {
+                "type": "transform",
+                "impl": "SemanticMappingPlugin",
+                "params": {"raw_config": {"x": {}}},
+            }
+        }
+    )
+    assert seq is not None
+    assert seq[0].params == {"raw_config": {"x": {}}}
+
+
+def test_plugin_unit_params_signature_mismatch_fail_fast() -> None:
+    """params 与构造器签名不匹配（未知参数）→ 加载期 fail-fast。"""
+    from pipeline.schedule import build_unit_schedule
+
+    with pytest.raises(ValueError, match="构造器不匹配"):
         build_unit_schedule(
             {
                 "t": {

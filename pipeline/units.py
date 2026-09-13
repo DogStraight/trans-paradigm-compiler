@@ -64,7 +64,8 @@ class UnitInstance:
 def parse_units(decls: dict[str, dict]) -> list[UnitInstance]:
     """解析 `[pipeline.units.<name>]` 声明 → 单元实例列表（保持声明序）。
 
-    fail-fast：声明非表 / type 非法 / 缺 impl / order 与 after 并存 / order 非法。
+    fail-fast：声明非表 / type 非法 / 缺 impl / order 与 after 并存 / order 非法
+    / params 非表或键非字符串。
     """
     units: list[UnitInstance] = []
     for name, decl in (decls or {}).items():
@@ -100,6 +101,13 @@ def parse_units(decls: dict[str, dict]) -> list[UnitInstance]:
             not isinstance(order, int) or isinstance(order, bool) or order < 0
         ):
             raise ValueError(f"[pipeline] unit '{name}' order 须为非负整数: {order!r}")
+        params = decl.get("params") or {}
+        if not isinstance(params, dict):
+            raise ValueError(f"[pipeline] unit '{name}' params 须为表: {params!r}")
+        if any(not isinstance(k, str) for k in params):
+            raise ValueError(
+                f"[pipeline] unit '{name}' params 键须为字符串: {params!r}"
+            )
         units.append(
             UnitInstance(
                 name=name,
@@ -107,7 +115,7 @@ def parse_units(decls: dict[str, dict]) -> list[UnitInstance]:
                 impl=impl,
                 after=after,
                 order=order,
-                params=dict(decl.get("params") or {}),
+                params=dict(params),
                 slot=slot,
             )
         )
