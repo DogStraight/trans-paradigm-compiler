@@ -1,26 +1,27 @@
 # Gap — 验证与工程边界（sample-driven / 吞吐 / IDE / 增量 / hash / 覆盖）
 
 - 状态：接受（技术权衡/门禁事实）+ 已跟踪（incremental → ROADMAP P3.x）
-- 关联：ROADMAP P2.3 / P3.1 / P3.2 / P3.4
+- 关联：ROADMAP P2.3 / P3.2 / P3.4（P3.1 span 绑定已实施——0.1.2 阶段 0）
 - 参照：编译器的增量编译/LSP 服务模型
 
 ## 边界是什么
 
 1. **验证 sample 驱动非穷举**（接受 + 摩擦）：正确性依赖精选语料（单元/真实
    核/recall 门禁）。差分测试存在（sv-parser 98 文件 / Verible 136 / 四工具
-   lint 共识）；fuzz harness 接入 CI，但随机合法程序的 fuzz 覆盖**未统计化**
-   （P2.3 fuzz 吞吐项）。
+   lint 共识——Verilator/Verible/svlint/slang）；fuzz harness + 生成器已进
+   CI，但随机合法程序对 Verible 的**接受域统计对拍**未做（P2.3 backlog）。
 2. **吞吐解释器受限**（接受）：31 文件 / ~5.2k token 语料实测 lexer ~183k
    tok/s、parser ~21k tok/s、合并 ~19k tok/s——比原生编译器慢 50–500×，解释型
    Python + 通用回溯的固有成本。适合单文件/中小工程，非整仓库/超大文件工具。
 3. **无 IDE/LSP**（接受）：CLI 管线，非编辑器插件（LSP 是另一分发形态）。
 4. **无优化 pass**（接受）：transform 是配置驱动结构重写（类型展开/宏处理），
    非 LLVM 式优化。
-5. **无增量解析**（已跟踪）：每次运行全量重解析。增量解析 + 增量检查（span
-   绑定/失效/重解析）是 ROADMAP P3.1/P3.2/P3.4（v0.2 core）。
-6. **Transform 包装实例名带 hash 后缀**（摩擦）：`u_spi_master_acb99d` 由
-   `md5(模块名 + 接口 + 类型 + role)[:6]` 生成（`typed_ports/_transform.py`）——
-   同输入可复现（确定性派生名），非"不稳定"；摩擦点：golden 里出现不可读魔法串，
+5. **无增量解析**（已跟踪）：每次运行全量重解析。span 绑定（P3.1）已实施
+   （0.1.2 阶段 0）；增量解析 + 增量检查是 ROADMAP P3.2/P3.4（v0.2 core）。
+6. **Transform 包装实例名带 hash 后缀**（摩擦）：未显式命名时
+   `u_spi_master_acb99d` 由 `md5(模块名 + 接口 + 类型 + role)[:6]` 生成
+   （`typed_ports/_transform.py`；impl 绑定可给显式实例名覆盖）——同输入可
+   复现（确定性派生名），非"不稳定"；摩擦点：golden 里出现不可读魔法串，
    盐组成一改即全量失效。若要 golden 可读，可改派生名形态（如
    `u_<module>_<role>`）——需求驱动、非必须。
 7. **测试/覆盖门禁真实但非穷尽**（门禁事实）：覆盖 ~83%（`fail_under` 80），
@@ -40,8 +41,10 @@
 
 ## 可实现性
 
-- 1：P2.3 fuzz 吞吐 → 随机合法程序统计覆盖（见 ROADMAP/TODO 对应条目）。
-- 5：ROADMAP P3.1/P3.2/P3.4（v0.2 core）——增量解析 + 增量检查，非短期。
+- 1：P2.3（吞吐 + 接受域统计对拍）→ 随机合法程序统计覆盖（见
+  ROADMAP/TODO 对应条目）。
+- 5：ROADMAP P3.2/P3.4（v0.2 core）——增量解析 + 增量检查（前置 P3.1 已
+  实施），非短期。
 - 2/3/4：接受（工具定位/范围）。
 - 6：命名已是确定性的——若要 golden 可读，改派生名形态即可（见条目 6）；
   需求驱动、非必须。
@@ -49,5 +52,5 @@
 
 ## 关联条目
 
-- ROADMAP P2.3（fuzz 吞吐）、P3.1/P3.2/P3.4（增量，v0.2 core）
+- ROADMAP P2.3（fuzz 吞吐）、P3.2/P3.4（增量，v0.2 core）
 - `tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，动机引自此边界）

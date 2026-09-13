@@ -20,9 +20,10 @@
    （interface/class/always_ff/assertion/package/UVM）不在当前范围。加 SV =
    **core + plugin 增量**路线项（ROADMAP「SystemVerilog 语言包」），非引擎改动。
 5. **Verilog-2005 标准面已齐；可综合核心 vs 仿真/库插件**（接受 + 余量跟踪）：
-   主包覆盖可综合子集；仿真/库语法在插件（gates 26/UDP/specify/config/
-   defparam/过程 assign/NetTypes）。剩余余量（darkriscv 嵌套条件编译位置精度等）
-   与 references.md 跟踪。
+   主包覆盖可综合子集；仿真/库语法在 `plugins/syntax/`（gates 26/UDP/
+   specify（含 defparam）/configs/nettypes/attributes + sim（initial/fork/
+   过程 assign 等））。剩余余量（darkriscv 嵌套条件编译位置精度等）与
+   references.md 跟踪。
 6. **yaml 缩进推断锁**（接受 + 摩擦）：`[indent] level="auto"` 首结构行锁定
    单位；混单位文件锁定后错解析；渲染器经 AST-root `_indent_unit` 戳重缩进到
    锁定单位——块标量逐字内容仅在源单单位时保持对齐。
