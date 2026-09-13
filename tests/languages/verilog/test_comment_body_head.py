@@ -4,7 +4,7 @@
 拆段"逻辑（ADR-0013 B1.3）摘出前置 → 渲染到 `module` 声明**之前**（顶格）。
 修法：拆段只作用于**非分段节点**（无 head/body/tail 的列表项）。
 
-记录：`docs/gaps/gap-renderer-comment-fidelity.md`（最小复现 + 触发条件）。
+记录：`CHANGELOG.md`「修复：模块体首注释被渲染到 `module` 声明之前」。
 """
 
 import pytest

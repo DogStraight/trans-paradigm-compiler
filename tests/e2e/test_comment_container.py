@@ -201,7 +201,7 @@ _BLOCK_END = (
 class TestBlockEndComments:
     """块结束符（end/endcase 等）后行尾注释进树（ADR-0013：块结束符行尾
     注释挂块规则节点 trailing 槽，结构序渲染——此前只记 inline anchor，
-    restore 只回 midline/tpc 不回行尾普通注释 → 丢失，tv80 实测 134 条）。"""
+    restore 不回普通注释（仅 tpc marker）→ 丢失，tv80 实测 134 条）。"""
 
     @pytest.mark.smoke  # smoke：e2e comment_container 组代表（块结束符行尾注释）
     def test_end_line_comment_kept(self):

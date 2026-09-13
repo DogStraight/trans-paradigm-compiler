@@ -75,7 +75,7 @@ def eval_join(
             # head/body/tail）的 sub_node 就是它的 body，首部 Comment 属
             # body 首注释，归 render_node 的 body 段渲染——若在此拆出，
             # 注释会渲染到节点 head 之前（`// 注释` 漂到 `module` 声明前；
-            # 缺陷记录见 docs/gaps/gap-renderer-comment-fidelity.md）。
+            # 回归 `tests/languages/verilog/test_comment_body_head.py`）。
             item_layout = renderer._layouts.get(item.node_name, {})
             segmented = any(k in item_layout for k in ("head", "body", "tail"))
             head_cmts: list[Node] = []
@@ -104,8 +104,8 @@ def eval_join(
     # 容器节点 inline_after 中锚=分隔符的行中注释（ADR-0013 ③补全：
     # `input clk, /* c */ output`——`,` 是 join 分隔符非布局 line 文本元素，
     # line.py 锚消费不到 → join 组装时插到分隔符后）。按收集序（= 分隔符
-    # 序）逐 sep 分配，pop 直接作用于节点槽（消费即删，防 pipeline
-    # leftover 双份）；注释多于分隔符的残余留给 leftover 兜底。
+    # 序）逐 sep 分配，pop 直接作用于节点槽（消费即删——B1.4 已删 leftover
+    # 回插通道，残余不再兜底）。
     sep_anchor = ""
     if sep_text:
         sep_anchor = sep_text.rstrip()
@@ -192,7 +192,7 @@ def eval_join(
     if pending_suffix:
         result.extend(pending_suffix)
 
-    # 分隔符行中注释槽清理：消费空键即删（未消费残余留给 leftover 兜底）
+    # 分隔符行中注释槽清理：消费空键即删（B1.4 已删 leftover 回插通道）
     if _node_slots is not None and sep_anchor:
         _ia = _node_slots.get("inline_after")
         if _ia and sep_anchor in _ia and not _ia[sep_anchor]:

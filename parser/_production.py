@@ -243,17 +243,17 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
                     if nxt.line == tok.line:
                         # 行尾形态（`end // comment` 同行）→ 挂块规则节点
                         # trailing 槽（结构序渲染 LineSuffix，ADR-0013 注释
-                        # 节点元信息）。仅记 inline anchor 的话 restore 只
-                        # 回 midline/tpc（宏/非宏均不回行尾普通注释）→ 注释
-                        # 丢失（tv80 `end // case: ...` 203 条实测）。
+                        # 节点元信息）。仅记 anchor 的话 restore 不回普通
+                        # 注释（仅 tpc marker）→ 丢失（tv80 `end // case:
+                        # ...` 203 条实测）。
                         slots = getattr(rule_node, "_comment_slots", None)
                         if slots is None:
                             slots = {}
                             rule_node.add_attr("_comment_slots", slots)
                         slots.setdefault("trailing", []).append(nxt.content)
                     else:
-                        # 独占形态（结束符后新行注释）→ 现状：inline anchor
-                        # 记录（restore 窗口回插），注释不属于本块结束行。
+                        # 独占形态（结束符后新行注释）→ 记 anchor 条目
+                        # （restore 仅 tpc marker），注释不属于本块结束行。
                         self._record_anchor(
                             {
                                 "anchor": tok.content,
@@ -522,7 +522,8 @@ def _is_line_only_comment(context: ParseContext, t: Token) -> bool:
     用于区分：
       - 独占行注释（`\n // State\n`）→ 进树为 Comment 节点（ADR-0013 B1）
       - 行尾注释漏网（`port, // c\n`——collect_following_comments 因中间
-        trivia token 未收走而残留到 production skip）→ 保持 line 通道回插
+        trivia token 未收走而残留到 production skip）→ 留 line 通道
+        条目（宏/条件块 marker 还原通道）
     """
     idx = context.token_pointer
     i = idx - 1
@@ -702,7 +703,7 @@ def collect_following_comments(
       - 行中注释（注释后同行有非注释 token）：后跟终结符（`;`/`)`/`,`）→
         挂当前节点 trailing 槽位（无后续规则节点可挂）；后跟代码 → 挂
         inline_after 槽位（{锚 token: [(注释, 源行号)]}，token 标注定位，
-        渲染端按锚文本插入，无文本锚时 pipeline 兜底 anchors 回插）
+        渲染端按锚文本插入）
       - 行尾注释（注释后 newline）→ 挂当前节点 _comment_slots["trailing"]
         （renderer LineSuffix 结构序渲染）+ _comment_anchors（tpc marker
         还原通道），按 (text, line) 全局去重（parser 回溯双收集 +
@@ -748,8 +749,7 @@ def collect_following_comments(
                 # 节点**（匹配注释前 token 的 production 节点，确定成功）
                 # 的 inline_after 槽位（{锚 token: [(注释, 源行号)]}），
                 # 渲染端在布局 line 元素序列里按锚 token 文本定位插入
-                # （`=` 后）；布局无文本锚（如 pratt 表达式内的 `+`）时
-                # 渲染后未消费 → pipeline 兜底补 anchors 回插。
+                # （`=` 后）。
                 cur_node = getattr(context, "current_node", None)
                 if isinstance(cur_node, Node):
                     slots = getattr(cur_node, "_comment_slots", None)

@@ -12,8 +12,8 @@
 | `renderer.py` | Renderer 主类（AST + 布局规则驱动 → 文本） |
 | `node_renderer.py` | 节点级渲染（含 `_comment_slots` 槽位消费：leading/trailing/inline） |
 | `loader.py` | TOML 布局规则 / 风格加载 |
-| `inline_comment.py` | 锚点注释回注（纯 tpc marker 通道） |
-| `comment_restore.py` | 注释回插编排 |
+| `inline_comment.py` | tpc marker 回插（纯内部通道；普通注释全进树） |
+| `comment_restore.py` | tpc 还原编排（marker 回插 + 宏/条件块还原） |
 | `fidelity.py` | 保真度分级 |
 | `primitives/` | Doc 原语（text/break/line/join/align/line_suffix/suffix_when…） |
 

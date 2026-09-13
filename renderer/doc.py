@@ -130,8 +130,8 @@ class LineSuffix(Doc):
 
     layout() 入口先经 _resolve_line_suffix 重写为
     Concat 内换行前的 Text，_best 内核无感知。
-    与既有 inline_comment.py 锚点回插互补：前者是 Doc 一等公民，
-    后者是渲染后字符串级后处理。
+    与 inline_comment.py（现仅 tpc marker 内部通道）互补：前者是 Doc
+    一等公民，后者是渲染后字符串级后处理。
     """
 
     text: str

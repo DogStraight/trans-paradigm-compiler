@@ -251,10 +251,9 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             self.operator_defs,
             atom_parser=lambda t, i: _atom_parser_impl(self, t, i, context),
             stop_tokens=stop_tokens,
-            # 前缀位置跳过的行内注释（`a + /* c */ b`）经 sink 进锚点通道，
-            # 渲染后 midline 回插防丢（P1.5 修复 pratt 吞注释；ADR-0013
-            # 阶段 A 后 operator 间隙注释已挂节点，sink 仅收无 operator
-            # 上下文的残余前缀注释）。
+            # 前缀位置跳过的行内注释（`a + /* c */ b`）经 sink 记录（P1.5
+            # 修复 pratt 吞注释；ADR-0013 阶段 A 后 operator 间隙注释已挂
+            # 节点 inline_after，sink 仅收无 operator 上下文的残余前缀注释）。
             comment_sink=lambda c: self._record_anchor(c, "inline"),
         )
     except ValueError as e:
@@ -535,9 +534,11 @@ class Parser:
         ) else []
         from .follow import compute_follows
         self._follows = compute_follows(self.grammar_rules, _op_members)
-        # inline comment 锚点记录（渲染后通过锚点匹配回注）
+        # inline comment 锚点记录（restore 仅 tpc marker——普通注释进树，
+        # 不再回插）
         self._comment_anchors: list[dict] = []
-        # line comment 锚点（列表结构内被 production skip 吞掉的注释，渲染后回插）
+        # line comment 锚点（列表结构内被 production skip 吞掉的注释；
+        # restore 仅 tpc marker 通道）
         self._line_comment_anchors: list[dict] = []
         # 锚点收集去重（按通道分 key 空间）：parser 回溯会对同一注释重复进入
         # 收集点（候选规则逐一尝试、production 多次 skip），restore 端本就按

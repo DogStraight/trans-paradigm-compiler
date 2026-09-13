@@ -52,7 +52,6 @@
 | `gap-tpc-check-external-checker.md` | tpc-check 外部 checker 插件协议（接入 veryl/verible/slang + 自管场景；ROADMAP P2.6） |
 | `gap-lexer-capture-boundaries.md` | lexer 捕获边界（块标量折叠/chomping 不语义化、触发条件限声明式） |
 | `gap-parser-linter-approximation.md` | parser/linter 错误处理近似（无恢复 + 启发式） |
-| `gap-renderer-comment-fidelity.md` | renderer 注释回插保真（展开路径锚点 ±3 行启发式，best-effort） |
 | `gap-formatter-line-behavior.md` | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
 | `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |

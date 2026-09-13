@@ -8,8 +8,8 @@
 样本（tests/e2e/samples/normal/ref/）：
 - ref_comments.v      文件头/行内/行尾/独立行/嵌入 注释形态
 - ref_inline_test.v   端口/声明/if/else/语句 注释 + pratt operator 间隙注释
-  （`led <= ~led + /* 中缀注释 */ 1'b0;` —— P1.5 修复后 pratt 表达式内
-  注释唯一仍走锚点回插轨的形态，见 docs/references.md「pratt 前缀吞注释」）
+  （`led <= ~led + /* 中缀注释 */ 1'b0;`——pratt 表达式内注释挂
+  `inline_after[op]`，line.py 按锚 token 定位渲染）
 
 断言策略：
 1. 每条源注释文本都出现在输出中（不丢失）；

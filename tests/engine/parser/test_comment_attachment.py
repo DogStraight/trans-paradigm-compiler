@@ -44,7 +44,7 @@ class TestAttachment:
         assert b_line.endswith("// b comment")
 
     def test_no_duplicate(self):
-        """attachment + 锚点回插不重复（restore 去重）。"""
+        """行尾注释不重复输出（restore 仅 tpc marker——普通注释不回插）。"""
         src = "module m;\n    wire a; // only once\nendmodule\n"
         r = _run(src, format_output=True)
         out = r.get("output", "")

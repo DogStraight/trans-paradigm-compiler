@@ -1,8 +1,9 @@
-"""comment_restore.py — 注释回插编排（C3 重构，2026-08-28）。
+"""comment_restore.py — tpc 还原编排（marker 回插 + 宏/条件块还原；
+C3 重构，2026-08-28）。
 
-从 pipeline/__init__.py 拆出：注释回插（inline + line + 宏还原 + 条件块）
-的决策编排是 renderer 职责——pipeline 只做 ctx 取值和调用。参数显式化后
-成为可独立测试的纯函数（log_fn 回调注入，不依赖 pipeline 上下文对象）。
+从 pipeline/__init__.py 拆出：tpc 还原（inline/line marker 回插 + 宏还原 +
+条件块）的决策编排是 renderer 职责——pipeline 只做 ctx 取值和调用。参数
+显式化后成为可独立测试的纯函数（log_fn 回调注入，不依赖 pipeline 上下文对象）。
 
 Doc: renderer/renderer_architecture.md（注释单机制：restore 纯 tpc）
 """
@@ -23,7 +24,7 @@ def restore_all_comments(
     tpc_src_map: dict | None,
     log_fn: Callable[[str], None] | None = None,
 ) -> str:
-    """注释回插编排（inline + line + 宏还原 + 条件块）。
+    """tpc 还原编排（marker 回插 + 宏还原 + 条件块）。
 
     参数为 pipeline 上下文的显式投影（C3 重构）——决策逻辑与 pipeline 解耦：
     - comment_anchors/line_anchors: parser 收集的锚点列表

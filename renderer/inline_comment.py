@@ -1,10 +1,12 @@
 """
-inline_comment.py — 基于锚点的注释回注
+inline_comment.py — tpc marker 回插（渲染后字符串级后处理）
 
-两条互补路径：
-1. AST 路径（block body）：collect_line_comments → Comment 节点 → Renderer 原生渲染
-2. 锚点路径（列表结构内）：prepare_production 收集锚点 → restore_line_comments 渲染后回插
-行内注释由 parse_token（锚点路径）收集。
+普通注释已全部进树（注释单机制：Comment 节点 / 节点 `_comment_slots`，
+渲染端结构序精确输出）——本模块只剩 **tpc marker 内部通道**：宏 marker
+（`/*<tpc:macro:N>*/`）与条件块占位（`// <tpc:cond:N>`）被 production
+吞掉时经锚点收集，渲染后回插/插值定位，供 `protect_and_reverse` /
+`restore_condition_blocks` 找到标记（宏/条件块还原依赖）。标记是内部编号、
+非用户注释，锚点漂移风险低。
 
 Doc: renderer/renderer_architecture.md（注释单机制：tpc marker 通道）
 """

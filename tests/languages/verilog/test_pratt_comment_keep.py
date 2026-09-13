@@ -4,7 +4,7 @@ P1.5 修复（pratt 前缀吞注释）：pratt 前缀位置跳过行内注释（
 的 `/* c */`、`- /* c */ a`、`cond ? /* c */ a : b`）时曾直接丢弃——注释
 不纳 AST 也不进任何通道，渲染后丢失。修复（P1.5）：前缀跳注释经
 comment_sink 进 parser._comment_anchors（midline 条目，锚 = 注释前
-token），渲染后 restore only_midline 回插兜底。
+token）。
 ADR-0013 决策 5（2026-09-04 落地）：operator 间隙注释在 pratt 循环跳过时
 收集，挂到 BinaryOp/TernaryOp/UnaryOp 节点 `_comment_slots["inline_after"]`
 （锚 = operator）——注释进 AST 元信息，renderer 结构序消费（line 原语 ref
@@ -45,7 +45,7 @@ def test_infix_rhs_comment_kept():
 
 
 def test_assign_rhs_prefix_comment_kept():
-    """赋值 RHS 前缀注释保留（锚 = `=`，回插到 `=` 与 `b` 之间）。"""
+    """赋值 RHS 前缀注释保留（锚 = `=`，渲染在 `=` 与 `b` 之间）。"""
     src = "module m;\n    assign x = /* 前缀 */ b;\nendmodule\n"
     r = _run(src)
     assert r["success"]

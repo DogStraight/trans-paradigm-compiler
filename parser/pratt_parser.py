@@ -298,8 +298,9 @@ def parse_expression(
     comment_sink: Callable[[dict], None] | None 前缀位置跳过的行内注释
         回调（条目 {anchor, text, line, midline}，与 parser._comment_anchors
         同构）——pratt 表达式内的注释（`a + /* c */ b` 的 `/* c */`）被本
-        循环跳过时经此通道记录，渲染后锚点回插防丢（注释节点模型 2b-2
-        兜底路径）。语言无关：引擎不收集，由调用方决定去向。
+        循环跳过时经此通道记录（ADR-0013 决策 5 后 operator 间隙注释已挂
+        节点 inline_after；此通道承接无 operator 上下文的残余）。语言
+        无关：引擎不收集，由调用方决定去向。
     """
     if idx >= len(tokens):
         raise ValueError("表达式不完整")

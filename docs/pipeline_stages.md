@@ -21,7 +21,7 @@ source(str)
   → schedule                编排调度（ADR-0007）：pass 序列，统一锚定在
                             归一化后；缺省 [analyze, transform]，语言包可声明
                             [[pipeline.schedule]] 自由排序/多轮/check pass
-  → render                  Doc IR → 文本（含注释回插）
+  → render                  Doc IR → 文本（含 tpc marker 还原）
   → format（可选）           formatter 插件（世界 B pass 管线）
 ```
 
@@ -47,8 +47,8 @@ mapping_cfg 由管线按 rules_dir 缓存后注入。开关映射：
 | 通道 | 生产者 → 消费者 | 契约 |
 |------|----------------|------|
 | 下划线属性 | parser → analyzer/transform/renderer | `_` 前缀属性穿过 normalizer（`attr_name.startswith("_")` continue）；`Node.dump` 过滤下划线 |
-| 注释锚点 | parser `_comment_anchors`/`_line_comment_anchors` → render 回插 | 列表结构内被 production skip 吞掉的注释，渲染后按锚点窗口回插（±3 行启发式） |
-| 注释 attachment | parser `_attached_comments` → renderer line_suffix | 行尾注释挂节点，Doc 一等公民渲染（与锚点回插双轨，restore 去重） |
+| 注释锚点 | parser `_comment_anchors`/`_line_comment_anchors` → render（tpc marker 还原通道） | 普通注释全部进树（Comment 节点/`_comment_slots`）结构序渲染；锚点条目仅宏/条件块 marker 渲染后回插（还原依赖） |
+| 注释槽位 | parser `_comment_slots`（trailing/leading/inline_after）→ renderer | 行尾/行中/前置注释挂节点，结构序渲染（LineSuffix / line.py 锚 token / join 分隔符锚） |
 | 语义映射表 | analyze `resolved_ports`/raw → SemanticMappingPlugin | `type_ports_flat` 等映射表（typed_ports 组件 postpass 递归展开供源），ConfigDrivenTransform 消费 |
 | root_scope | analyzer → transform | 语义作用域根（transform 需 scope 非 None 才运行） |
 | 宏 marker | preprocessor → render | `// <tpc:macro:N>` 标记残留于 clean_source，render 时还原 |

@@ -19,7 +19,7 @@ def eval_line(expr: dict, node: Node, parent_layout: dict | None,
     # 行中注释 token 标注定位（注释节点模型 2b-2）：inline_after = {锚 token:
     # [(注释, 源行号)]}，锚 token 是注释前的 token（如 `assign b = /* c */ rst_n`
     # 的 `=`）。在布局 line 元素序列里，遇到含锚 token 的文本元素 → 后插注释
-    # （`=` 后输出）。消费后**删除节点槽位**（pipeline 兜底靠"残留判断"防双份）。
+    # （`=` 后输出）。消费后**删除节点槽位**（防重复消费）。
     node_slots = getattr(node, "_comment_slots", None) or {}
     ia_slots: dict = node_slots.get("inline_after", {}) or {}
     # ref 属性锚命中后：注释已自带前后空格（" +c+ "），吸收紧跟的纯空格

@@ -26,7 +26,7 @@ tpc 是**配置驱动的语言流水线**：语言知识全部写在 `grammar/` 
   → schedule   编排 pass 序列（analyze/transform/check）
       analyze   作用域/符号/类型 + 语义检查（语义诊断）
       transform 配置驱动变换（语义映射消费）
-  → renderer   Doc IR → 文本            (Node → Doc → str，含注释回插)
+  → renderer   Doc IR → 文本            (Node → Doc → str，含 tpc marker 还原)
   → format?    formatter 插件（世界 B pass 管线，可选）
 ```
 
