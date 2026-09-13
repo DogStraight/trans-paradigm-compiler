@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **阶段 9 终验（0.1.2 收尾）**：覆盖率门禁 **86.81%**（≥ fail_under 80；
+  串行 `-n 0` 全量 1851 passed / 8 skipped）；e2e 102 组 **FAIL 0**（66 OK /
+  36 预期 ERR）；lint recall 33/33、零误报；eval_check_accuracy recall 100%
+  （FP 0）；`check_hardcode --strict-doc --strict-import` 与 `check_doc_refs`
+  全绿。终验抓到一处潜伏门禁违规并修复：`main.py` 的 `Doc:` 头在 api.md
+  删除时遗漏重指（`R3` strict 升 gate 后暴露）——补 `Doc: README.md`。
 - **自定义规则范例（0.1.2 阶段 8 / T2 收尾）**：新增 `grammar/verilog/plugins/
   checks/custom_rules_example/`——两条规则各走一条路径的可运行范例（EX001
   非 ANSI 端口声明=**postpass 路径** / EX002 parameter integer 类型提示=

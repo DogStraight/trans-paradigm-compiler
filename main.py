@@ -9,6 +9,8 @@ Usage (installed as `tpc`):
     tpc pipeline [test_name]           Run a single test
     tpc config dump                    Show config key sources
     tpc --version                      Show version
+
+Doc: README.md（Quick start：CLI 子命令用法）
 """
 
 import sys

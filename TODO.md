@@ -23,10 +23,6 @@
       `trace.json`）；✅ 映射表来源追踪（行 `origin` → 插件 `describe()` →
       trace `artifacts`）；✅ trace 页时间轴呈现（管道条 + 左轴节点 +
       依赖回指）；剩 transform 侧更多插件自述（出口已具备，按需补）
-- [ ] 阶段 9 — 真实语料终验（ice40/picorv32 + 全量门禁 + 保真度不退化）：✅ 首轮
-      全绿（e2e 98 组 FAIL 0 / lint recall 31-31 / check 34-34 / 差分 findings 0）；
-      ✅ transform 展开路径注释漂移已修（`join` 拆段加判据）；剩 覆盖率门禁
-      （发布时跑，串行 ~32min）
 
 ## 门禁体系改进（2026-09-12 起，长期过程；不立决议文件，按需推进）
 
