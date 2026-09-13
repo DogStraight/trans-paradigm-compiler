@@ -4,10 +4,10 @@
 - 关联：ROADMAP P2.6（宽泛条目侧链接本文件）
 - 参照：`docs/references.md`（Veryl/svlint 深调研 + 静态检查工具群段）、
   `docs/references.md`「静态检查器功能调研」（检查器功能矩阵 + 规则引擎架构）
-- 前置：P1.9 稳定规则 ID + 机器可读输出（诊断模型）——**2026-09-12 核实已满足**
-  （`main.py::_cmd_check` 有 `--json` + 稳定诊断码 + suppress 注释；声明式规则表
-  + `tests/policy/test_rule_coverage.py` 守可达性；TODO/ROADMAP 已无 P1.9 条目）。
-  本档因此**不再受前置阻塞**，属多周特性，留在 ROADMAP P2.6 未入队列
+- 前置：P1.9 稳定规则 ID + 机器可读输出（诊断模型）——**已满足**（
+  `main.py::_cmd_check` 有 `--json` + 稳定诊断码 + suppress 注释；声明式规则表
+  + `tests/policy/test_rule_coverage.py` 守可达性）。本档不受前置阻塞，属多周
+  特性，留在 ROADMAP P2.6 未入队列
 
 ## 缺口是什么
 
@@ -55,7 +55,6 @@ tpc 目前的检查能力 = 自研（linter 语法层 + analyzer 语义层/声�
 
 ## 关联条目
 
-- ROADMAP P2.6（本缺口，backlog）
-- ROADMAP P1.9 / 稳定规则 ID + 机器可读输出（前置）
+- ROADMAP P2.6（本缺口，backlog；前置 P1.9 已满足）
 - `docs/references.md`：Veryl / svlint / 静态检查工具群深调研（参照源）
 - `docs/references.md`「静态检查器功能调研」：检查器功能矩阵 + 规则引擎架构

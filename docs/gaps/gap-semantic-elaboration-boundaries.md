@@ -1,15 +1,13 @@
 # Gap — 语义/插件契约边界（elaboration / 深语义 / 注册表 / 版本）
 
-- 状态：接受（1/2 范围设计选择）；**item5 已闭环**（2026-09-13：`[engine].api`
-  声明 + 加载 fail-fast，见 `core/engine_compat.py` / `core/config_lifecycle.md`）；
-  3/4 为文档约定
-- 关联：原 `docs/known_limitations.md` Scope/Engineering 边界（2026-09-04 按
-  部件拆入本档）；ADR-0008；`grammar/verilog/plugins/typed_ports/`
+- 状态：接受（1/2 范围设计选择；3/4 文档约定）
+- 关联：`analyzer/checker.py::ProjectChecker`（elaboration 三层）；
+  `grammar/verilog/plugins/typed_ports/`；`core/config_lifecycle.md`
 - 参照：Verilator 的 elaboration/宽度传播模型
 
 ## 边界是什么
 
-1. **Elaboration 按工程非全设计**（接受；ADR-0008 三层已落地于 `3acae77`）：
+1. **Elaboration 按工程非全设计**（接受）：
    跨模块检查（模块注册表/端口连接展开/信号驱动负载图/实例树驱动穿透）覆盖
    被检入口 + **按实例化链发现**的依赖文件。未覆盖：
    - 同工程但既不在依赖链、也不在「入口所在目录 / include 目录」内的文件
@@ -25,17 +23,11 @@
    语言包混合规则；测试用独立注册表，嵌入式切换语言须同样处理。
 4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；
    插件作者应把注入语句归组到容器规则（`plugins/sim` 的 `SimCtrlStmt`）。
-5. ~~**语言包未版本钉住引擎**（工程摩擦）：包依赖引擎语义（FOLLOW 推导/inject/
-   节点绑定）；引擎改动靠测试守门，非包/引擎版本契约——升级引擎可能破坏旧包。~~
-   **已闭环（2026-09-13）**：`grammar/<lang>/tpc.toml` 可声明 `[engine] api = "0.1"`
-   （该包构建所依据的引擎 API 线），引擎 major.minor 不匹配即加载 fail-fast
-   （`ConfigError`）；未声明 = 不校验（纯增量）。内置三包均声明，回归
-   `tests/engine/core/test_engine_compat.py`（15 例）。
 
 ## 为什么是边界（影响面）
 
 1/2 是"前端规范执行而非全设计语义"的定位延伸（elaboration 深度留给自研
-插件/外部工具）；3/4/5 是嵌入/多语言/升级场景的工程摩擦。
+插件/外部工具）；3/4 是嵌入/多语言场景的工程摩擦。
 
 ## 成熟解法参照（见贤思齐）
 
@@ -45,13 +37,8 @@
 ## 可实现性
 
 - 3/4：文档约定（独立 registry/容器规则），已有测试与 sim 插件先例。
-- 5：✅ 已闭环（2026-09-13）——`[engine].api` 声明 + 双入口 fail-fast 校验；
-  未采用"兼容范围区间语法"（0.x 期只需 API 线精确匹配，区间属过度设计）。
 - 1/2：不改（范围）。
 
 ## 关联条目
 
-- ADR-0008（elaboration per-project，P2.7）
 - `grammar/verilog/plugins/typed_ports/` + `analyzer/checker.py::ProjectChecker`
-- 原 `docs/known_limitations.md`（Scope elaboration/deep-semantics +
-  Engineering invert/singleton/inject/version-pin）

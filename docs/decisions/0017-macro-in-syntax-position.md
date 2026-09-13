@@ -1,11 +1,9 @@
 # ADR-0017: 宏落在语法位——检查前移 linter 展开路径 + parser 直产宏节点
 
-- Status: accepted（决策 3/4 已实现；语法位槽位声明按语言包逐槽位推进）
+- Status: accepted（决策 2/3/4 已落地；决策 5 为稳定立场）
 - Date: 2026-09-13
-- 关联：ADR-0016（宏体入树：raw 源区间权威 + 对应层）；
-  `docs/gaps/gap-parser-linter-approximation.md`（linter 近似面）；
-  `docs/gaps/gap-parser-linter-approximation.md`（"无恢复"定调**不变**，本决策只新增
-  "宏位可解析为宏节点"这一条语法路径）
+- 关联：`docs/gaps/gap-parser-linter-approximation.md`（linter 近似面，"无恢复"
+  定调**不变**，本决策只新增 "宏位可解析为宏节点" 这一条语法路径）
 
 ## 背景
 
@@ -71,7 +69,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
    **宏在任意位置都退化为"展开后的文本在该位置是否语法合法"**，由既有语法自己
    判定，不需要任何声明：`` input `NT d ``（NT=wire）展开就是 `input wire d`，
    现有产生式直接成立——所以"类型位槽位声明"是伪需求。宏边界节点（宏名 + raw
-   源区间）由管线就树产生/改写（ADR-0016 阶段 2 的机制，`pipeline/__init__.py`），
+   源区间）由管线就树产生/改写（`pipeline/__init__.py::_rewrite_marker_nodes`），
    语言包对它的唯一认知是渲染方式（`[MacroCall.renderer.layout]` 输出
    `_macro_fragment`）。
 
@@ -90,9 +88,10 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
      （**整个模块被冻成 Verbatim**，实测 `ref_macro_sync.v`）。自述判据与语言包
      标记无关，自动停在最窄的可证节点上（`Number`/`ParenthesizedExpr` 这类窄节点
      命中）。
-   - **已知阻碍（切片 ② 在途）**：ANSI 端口形态下内部节点**没有 `_tok_span`**
-     （实测包含链只剩 `ModuleDecl`）→ 自述判据无从选中窄节点 → 需先补齐区间采集，
-     再切换 semantic 展开（当前管线仍走锚路径，`macro_regions` 空转）。
+   - **区间采集与 raw 拼接均已落地**：节点 `_tok_span` 已补齐
+     （`tests/languages/verilog/test_tok_span.py`）；解析侧已切 semantic 展开，
+     渲染侧走区间表 + `_verbatim_text`（`` pipeline/__init__.py `` 宏区间拼接，
+     守卫 `tests/engine/renderer/test_verbatim_node.py`）——本决策的切片 ①/② 均实现。
    - 粒度代价：命中粗层时含宏的整条声明不重排（对齐/空白保持原样）——这是
      "宁可原样，不可静默重排"的直接结果。
 
@@ -116,7 +115,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 - **parser panic + skip 到后界**（初稿方案）：把跳过能力搬进 parser，与
   "跳过能力已在 linter"重复建设，且让 parser 承担语法近似；
 - **给 marker 找合法形态 / 体前缀判定改 inline**：治标（只治一类槽位），且牺牲
-  ADR-0016 阶段 2 的 MacroCall 节点成果；
+  宏边界节点化（MacroCall）成果；
 - **维持现状（判为已知边界）**：一个宏废掉整份文件的代价与触发概率不匹配。
 
 **边界（本决策不做）**：
@@ -126,23 +125,23 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 ## 验证
 
 1. **语法位宏可解析**：`` input `NT d `` / `` output `PT q `` / `` input `T d ``
-   → 解析成功，且树中出现**宏节点**（宏名 + 源区间）——当前 6 个用例以
-   `xfail(strict=True)` 钉在 `tests/languages/verilog/test_macro_type_slot.py`，
-   机制就位后翻正（strict 保证翻正必须被看到）；
-2. **位置覆盖可量**：把"任一 token 换成等价宏"做成不变量（
-   `_drafts/probe_macro_anywhere.py`，历史：逐槽位 40% / 当前 37%），
-   机制就位后上升且不回退——这是"其他位置能不能同样处理"的**可验证答案**；
+   → 解析成功（6 例，`tests/languages/verilog/test_macro_type_slot.py`；曾以
+   strict-xfail 钉住目标需求，已翻正）；
+2. **位置覆盖可量**：把"任一 token 换成等价宏"做成不变量
+   （`tools/check_macro_coverage.py`；当前 **63.7%（86/135）**），不得回退
+   ——这是"其他位置能不能同样处理"的**可验证答案**；
 3. **非宏真错误行为不变**：块体内 `assign = 1;` 仍阻断（比对现状）；
 4. **宏定位不改失败语义**：真语法错仍是 linter 前置 + truncation 双保险；
 5. 全量回归 + e2e FAIL 0 + 真实语料保真不降 + 误报基线无增长。
 
-> Impl: 切片 ① ✅ **宏区间表**（`preprocessor/_expand.py::expand_tokens` 第三返回值：
+> Impl: 宏区间表（`preprocessor/_expand.py::expand_tokens` 第三返回值：
 > 源区间 + 展开结果字符区间；测试 `tests/engine/preprocessor/test_macro_regions.py`）
-> → 切片 ② 渲染侧 raw 拼接 → 切片 ③ 撤锚。
-> 已落地部分：锚名协议（保留前缀/盐/序号/还原唯一性守卫，
-> `core/token_protocol.py` + `preprocessor/_bridge.py`）——它是**当前**输出还原
-> （`restore_anchors`）的载体，服务本决策的决策 4；语法侧已**撤销全部宏声明**
-> （`Identifier` 备选 / `MacroCall.parser` / `TypeSpec` 的 `@MacroCall`）。
+> → 渲染侧 raw 拼接（`pipeline/__init__.py` 宏区间拼接 + 引擎标记 `_verbatim_text`）
+> → 解析侧已切语义展开；锚保留为空体宏/行级占位（`restore_anchors`，撤锚随
+> 空体宏形态收敛）。锚名协议（前缀/盐/序号/还原唯一性守卫，
+> `core/token_protocol.py` + `preprocessor/_bridge.py`）服务当前输出还原；
+> 语法侧已**撤销全部宏声明**（`Identifier` 备选 / `MacroCall.parser` /
+> `TypeSpec` 的 `@MacroCall`）。
 > Test: `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/还原守卫）·
 > `tests/languages/verilog/test_macro_type_slot.py`（6 个 xfail = 目标需求）·
 > `tests/languages/verilog/test_macro_call_node.py`（宏边界节点）·

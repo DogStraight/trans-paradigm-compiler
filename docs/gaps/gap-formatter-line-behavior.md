@@ -1,9 +1,7 @@
 # Gap — formatter（世界 B）行行为边界（宽度折行 / 保留行 / 对齐 / 幂等）
 
-- 状态：**已核**（2026-09-13）：多声明器对齐缺陷已修复闭环（历史在 git log +
-  CHANGELOG）；余下为按现状**接受**的边界（设计选择/空档）
-- 关联：原 `docs/known_limitations.md` Correctness/Engineering 边界（2026-09-04
-  按部件拆入本档）；`grammar/verilog/plugins/formatter/README.md`（世界 B 架构）
+- 状态：接受（设计选择 + 空档；见下各条）
+- 关联：`grammar/verilog/plugins/formatter/README.md`（世界 B 架构）
 - 参照：verible-verilog-format / clang-format 的折行与对齐策略
 
 ## 边界是什么
@@ -15,16 +13,14 @@
    style。
 3. **幂等只在保留路径保证**（接受）：展开路径（宏展开/transform）内容按设计
    变化，不幂等检查。
-4. **宽度折行留下部分超长结构不折**（摩擦，**2026-09-12 实测确认**）：无顶层
-   安全断点的超长行不折——179 字符单标识符行原样保留；有 `+`/`,` 断点的
-   超长行正常折（在 96 列断行）。属可接受空档（输出合法）。
-5. **折行后带注释行的 init 重拼空格**（摩擦，**2026-09-13 实测，既存**，HEAD
-   同现）：带行尾注释的长行首遍被列对齐跳过（注释保护），wrap 拆行后**无注释
-   的头段**在二遍 format_source 里进入列对齐——init token 重拼
-   （`_parse_decl_parts` 的 `" ".join`）给 concat 内 `,` 前补一格
-   （`{ RESMODE, 4'd0 }` → `{ RESMODE , 4'd0 }`；darkriscv 实测 2 行）；二遍后
-   收敛（t2 == t3，非振荡），输出合法、仅空白差异。深挖需给 init 重拼加标点
-   邻接规则（会牵动所有 init 行的空白输出，需单独评估影响面）。
+4. **宽度折行留下部分超长结构不折**（摩擦）：无顶层安全断点的超长行不折——
+   179 字符单标识符行原样保留；有 `+`/`,` 断点的超长行正常折（在 96 列断行）。
+   属可接受空档（输出合法）。
+5. **折行后带注释行的 init 重拼空格**（摩擦，既存）：带行尾注释的长行首遍被
+   列对齐跳过（注释保护），wrap 拆行后**无注释的头段**在二遍 format_source 里
+   进入列对齐——init token 重拼（`_parse_decl_parts` 的 `" ".join`）给 concat
+   内 `,` 前补一格（`{ RESMODE, 4'd0 }` → `{ RESMODE , 4'd0 }`）；二遍后收敛
+   （t2 == t3，非振荡），输出合法、仅空白差异。
 
 ## 为什么是边界（影响面）
 
@@ -45,20 +41,12 @@
 - 4：wrap pass 增加"拼接体无安全断点"的兜底（如逗号/运算符后强制断点）。
 - 5：init token 重拼加标点邻接规则（`{`/`,`/`}` 邻接不补空格）；改动牵动
   所有 init 行空白输出，需单独评估影响面后再动。
-- 1/2/3：设计选择，不改（接受；如需段落式重排属新能力，非修复）。
-- 验证：`tests/languages/verilog/test_formatter*.py` + vs Verible 差分 + e2e
-  幂等门禁。
+- 1/2/3：设计选择，不改（如需段落式重排属新能力，非修复）。
 
 ## 关联条目
 
-- `grammar/verilog/plugins/formatter/README.md`（世界 B：数据流/带结构行/
-  引擎内建遍）
+- `grammar/verilog/plugins/formatter/README.md`（世界 B：数据流/带结构行/引擎内建遍）
 - 实现：`grammar/verilog/plugins/formatter/passes/column_align.py::run_category_pass`
-  （多声明重组：首单元参与列对齐 + 后续 `, ` 单分隔）
-- 门禁：`tests/languages/verilog/test_column_align.py`（提取 + **重组输出**
-  断言——漂移形态 `,\s{2,}<ident>`）
-- 修复记录：2026-09-13（CHANGELOG「多声明器重组漂移」；真实语料漂移
-  `,\s{4,}<ident>` 226 → 0）
-- 原 `docs/known_limitations.md`（Correctness line wrapping / preserves /
-  idempotence + Engineering column-align / wrap-leaves）
-- 差分对拍：`tests/differential/run_differential.py`
+- 门禁：`tests/languages/verilog/test_formatter*.py` + `test_column_align.py`
+  （含重组输出断言，漂移形态 `,\s{2,}<ident>`）+ vs Verible 差分（
+  `tests/differential/run_differential.py`）+ e2e 幂等门禁

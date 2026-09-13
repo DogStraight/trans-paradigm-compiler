@@ -30,7 +30,7 @@
   B4 编辑残留 / B5 过时注记）、C 文档（C1 一次性完成 / C2 漂移 / C3 重复 /
   C4 版权）；说不出判据不删。反判据：调研/决策记录（references.md / ADR）、
   个人思考沉淀、CHANGELOG 历史——这些不是删除对象。
-- 文档分层只对协作方文档生效（decisions/architecture 进 MODEL_INDEX）；
+- 文档分层只对协作方文档生效（decisions + 机制文档进 MODEL_INDEX）；
   个人思考沉淀（`references.md` 等）不对齐，别给它套对齐约定。
 
 ## 协作行为范式（后来 session 必须继承）
@@ -49,8 +49,8 @@
 - 调研外部项目时，**不拉踩开源作者**：先讲对方做得好、值得学的地方；差异用
   "各有取舍，非优劣"表述，不用评分式/压人式语气。
 - **文档放置速查（写/归档文档先判类；防污染与负重）**：
-  - 决策（为什么）→ `docs/decisions/`（ADR），**≤10 决策点**：已完成删、
-    长期 draft 方向注 ROADMAP 后删；删除前机制先落部件文档（历史 git log）。
+  - 决策（为什么）→ `docs/decisions/`（ADR），**≤10 决策点**：只在决策成立时
+    建档、完成即删（未立项设计输入不进 ADR）；删除前机制先落部件文档（历史 git log）。
   - 机制/架构（怎么拼）→ 就近引擎子包（`<pkg>/README.md` + 架构详述，如
     linter/linter_architecture.md、renderer/renderer_architecture.md、
     analyzer/semantic_checks.md）。
@@ -64,8 +64,8 @@
   - 能力缺口/已知边界 → `docs/gaps/gap-*.md`（+ gaps/README 登记表）。
   - 执行记录/修复结果 → 代码 + 测试断言 + CHANGELOG（"为什么/推翻了什么"的
     结论层可留 ADR）。规则行为预期 → 测试断言，文档不重复。
-  - 已删/过时内容 → git log 追，不留兼容垫片；删除先证后删（`decisions/0011`
-    判据全表：A 代码/B 注释/C 文档）。
+  - 已删/过时内容 → git log 追，不留兼容垫片；删除先证后删（判据全表见
+    `policy/doc-alignment.md`「删除判据」）。
   - 讨论草稿/未成型中间产物 → `_drafts/`（根目录暂存区：**不进 git**、门禁
     排除；整理按上述分流落正式位后删原稿，不重复留档）。
 - **先落档后动手**：调研/设计结论先按上述分流落档再立项实现，落档是动手的

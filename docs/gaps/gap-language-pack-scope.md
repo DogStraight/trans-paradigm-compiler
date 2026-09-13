@@ -1,8 +1,7 @@
 # Gap — 语言包范围与 yaml 边界（规模 / SV / 插件划分 / 增强语法）
 
-- 状态：范围声明（刻意选择，多数已跟踪 TODO/ROADMAP）
-- 关联：原 `docs/known_limitations.md` Scope 类（2026-09-04 按部件拆入本档）；
-  ROADMAP「SystemVerilog 语言包」「P1.8」；`grammar/yaml/`
+- 状态：范围声明（刻意选择）
+- 关联：ROADMAP「SystemVerilog 语言包」；`grammar/yaml/`
 - 参照：Language server/编译器前端对大型语法的工程组织（Clang 分层）
 
 ## 边界是什么
@@ -22,8 +21,8 @@
    **core + plugin 增量**路线项（ROADMAP「SystemVerilog 语言包」），非引擎改动。
 5. **Verilog-2005 标准面已齐；可综合核心 vs 仿真/库插件**（接受 + 余量跟踪）：
    主包覆盖可综合子集；仿真/库语法在插件（gates 26/UDP/specify/config/
-   defparam/过程 assign/NetTypes）。剩余 gap 在 TODO P1.5（darkriscv 嵌套条件
-   编译位置精度）与 references.md。
+   defparam/过程 assign/NetTypes）。剩余余量（darkriscv 嵌套条件编译位置精度等）
+   与 references.md 跟踪。
 6. **yaml 缩进推断锁**（接受 + 摩擦）：`[indent] level="auto"` 首结构行锁定
    单位；混单位文件锁定后错解析；渲染器经 AST-root `_indent_unit` 戳重缩进到
    锁定单位——块标量逐字内容仅在源单单位时保持对齐。
@@ -32,11 +31,9 @@
    配置值形态（`${{}}`/URL/多词/CJK/词内 `,{}[]`）——偏离 YAML 1.2 严格
    plain 规则。剩余 gap：数字引导多点多值（`1.2.3` 拆分，number 分支赢）、
    无 tab 分隔词、值不跨行、带转义引号不支持。
-8. **增强语法 linted 非豁免**（事实，含历史纠正）：前置 linter 共享 parser
-   规则表（含插件语法），合法 `type`/`type.role`/`impl` 构造过 lint 门禁
-   （2026-08-22 验证全 typed_ports 形态）。`no_lint=True` 是逃生门但不需要。
-   *（历史：本文档早期版本声称增强语法需 `no_lint=True`——已过时，linter
-   早就加载插件语法。）*
+8. **增强语法 linted 非豁免**（事实）：前置 linter 共享 parser 规则表（含插件
+   语法），合法 `type`/`type.role`/`impl` 构造过 lint 门禁；`no_lint=True`
+   是逃生门但不需要。
 
 ## 为什么是范围（影响面）
 
@@ -54,13 +51,12 @@
 ## 可实现性
 
 - 4：ROADMAP「SystemVerilog 语言包」（远期 backlog）——core+plugin 增量路径。
-- 5：剩余 gap 沿 TODO P1.5/P1.8 闭环（语法/位置精度）。
+- 5：剩余余量（语法/位置精度）按需处理。
 - 6/7：yaml 包专项（如需）：7 的 `1.2.3` 拆分需 plain 分支优先级重排（number
   vs plain 消歧）；6 的混单位是捕获层约定，改动需 yaml 语料门禁。
 - 1/2/3/8：不改（范围/文档事实）。
 
 ## 关联条目
 
-- ROADMAP「SystemVerilog 语言包（远期 backlog）」「P1.8」
-- TODO P1.5（darkriscv 嵌套条件编译位置精度）
-- 原 `docs/known_limitations.md`（Scope 类全部 + yaml 相关）
+- ROADMAP「SystemVerilog 语言包（远期 backlog）」
+- `grammar/yaml/`（6/7 的消费方）

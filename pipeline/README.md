@@ -11,7 +11,7 @@
 | `units.py` | 加工单元实例 + 统一时点生成（`[pipeline.units.*]` 声明 → 单元序列） |
 | `report_html.py` | 时点轨迹 HTML 报告（`tpc trace --html`，与 check 报告同一视觉语言） |
 
-## 加工单元（units，ADR-0015 §1）
+## 加工单元（units）
 
 `[pipeline.units.<name>]` 显式声明加工单元实例（`type` / `impl` / `after`|`order` /
 `params`），时点由调度器统一生成（与 pass 级同构：钉号 → 声明序填空 → `after`
@@ -43,7 +43,7 @@ after = "analyze"
 插件/槽位单元（混用会重复执行 → fail-fast）；`check` 不限（可多实例）。
 **槽位单元的契约**沿用承担它的插件（`slot_runner`：`requires=["scope"]` / `produces=["slot_transforms"]`）。
 
-### 契约校验（时点边界，ADR-0015 §3）
+### 契约校验（时点边界）
 
 每个单元执行前校验其 `requires` 是否已被满足（初始集 ∪ 前面单元 `produces`），
 未满足 → fail-fast 并列出缺失名与当前可用集；通过后并入其 `produces`。
@@ -54,7 +54,7 @@ after = "analyze"
 ### 时点轨迹报告（可视化产物）
 
 `tpc trace FILE [--html OUT] [--json OUT]`：跑完整管线后取 `ctx.result["trace"]`
-（ADR-0015 §2），默认打印文本摘要；`--html` 落单文件 HTML（内联 CSS、零依赖），
+，默认打印文本摘要；`--html` 落单文件 HTML（内联 CSS、零依赖），
 与 `tpc check --html` 同一视觉语言（共享 `analyzer/report_html.REPORT_CSS`）。
 
 页面内容 = 每单元一张卡片（时点 `#index` / `name` / `kind` 徽标 / `impl` /

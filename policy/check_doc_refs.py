@@ -1,8 +1,8 @@
 """check_doc_refs.py — 文档调用点引用完整性门禁（docs 管理机器化）。
 
 把"文档增删改时调用点同步"从人工 grep 变成可执行检查（纯 Python 零依赖，
-挂 CI）。设计来源：docs/decisions/0011-doc-governance.md（ADR-0011，
-2026-09-02）。
+挂 CI）。设计来源：文档治理决策（原 ADR-0011，2026-09-02；判据见
+`policy/doc-alignment.md`）。
 
   规则 D1 [gate]  代码 Doc: 头 → 目标 docs 文件存在
                 （补 check_hardcode R3 的缺口：R3 只查 Doc: 头格式存在，

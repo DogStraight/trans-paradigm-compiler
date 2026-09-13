@@ -1,4 +1,4 @@
-"""pipeline/units.py — 加工单元实例 + 统一时点生成（ADR-0015 §1）。
+"""pipeline/units.py — 加工单元实例 + 统一时点生成。
 
 **统一调度**：analyze 与 transform 不再是两类 pass，而是**同一种加工单元实例**
 （`type` 表达角色）——"分析产出一个分析结果或一个执行回调，随后跟一个执行"。
@@ -9,9 +9,9 @@
 冲突 / `after` 环 / 未知引用 → 诊断 + fail-fast（不静默降级）。
 
 **配对（分析 → 执行）隐式**（时点相邻 + `scope`/`extra` 通道），但产物必须
-**可视化**（§2 可视化管道与其绑定）。
+**可视化**（`pipeline/README.md`「时点轨迹报告」）。
 
-Doc: docs/decisions/0015-middle-stage-governance.md
+Doc: pipeline/README.md
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ VALID_TYPES = ("analyze", "transform", "check")
 # 内置单元 impl 约定（粗粒度执行器；插件级细粒度见 5b-3）
 BUILTIN_IMPLS = frozenset({"builtin.analyze", "builtin.transform"})
 
-# impl 引用形态（ADR-0015 §1：插件实例化对象是一等单元 → 可寻址）
+# impl 引用形态（插件实例化对象是一等单元 → 可寻址）
 IMPL_BUILTIN = "builtin"
 IMPL_HANDLER = "handler"
 IMPL_PLUGIN = "plugin"

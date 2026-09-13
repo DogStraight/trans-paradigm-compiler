@@ -1,29 +1,19 @@
 # Gap — renderer 注释回插保真（锚点启发式，±3 行窗口）
 
-- 状态：**已闭环（2026-09-13）**——本档两类缺陷均已修：
-  ① "模块体首注释漂到 module 声明前"（2026-09-12，提交 `5ad5bb4` +
-  回归 `tests/languages/verilog/test_comment_body_head.py`）；
-  ② 块结束符/模块头行尾注释漂移（2026-09-13，见下「修复记录」+ 回归
-  `tests/engine/parser/test_comment_attachment.py::TestBlockEndTrailing`）
-- 关联：原 `docs/known_limitations.md` Correctness boundaries（2026-09-04 按
-  部件拆入本档）；`renderer/renderer_architecture.md`「功能缺口」B3/缺口 2
+- 状态：接受（best-effort：保留路径精确，展开路径残余漂移风险）
+- 关联：`renderer/renderer_architecture.md`（注释处理双轨 + 缺口 B3/2）
 - 参照：prettier/verible 的注释槽位模型
 
-## 缺口是什么
+## 边界是什么
 
-> **2026-09-12 更新**：本档记录的"模块体首注释漂到 module 声明前"具体缺陷
-> **已修**（提交 `5ad5bb4`，`join.py` 拆段加"只拆非分段节点"判据）——复现、
-> 定位与修法见下「最小复现与触发条件」节。缺口剩余部分 = attachment 覆盖
-> 块结束符注释（前进方向），以及展开路径的其余锚点漂移风险。
+注释回插是 **best-effort**：保留路径精确（注释挂 AST 槽位，见
+`renderer/renderer_architecture.md` 注释处理节）；展开路径（宏展开、transform）
+锚点可能漂移——注释可能被丢弃而非冒险破坏结构，是刻意取舍。
+双轨：attachment（行尾/块边界 trailing 等挂节点，模块头注释经
+`_insert_before_trailing_break` 落位）+ 锚点回插兜底（`inline_comment.py`：被
+production skip 吞掉的结构内注释按锚点窗口 ±3 行启发式回插；restore 去重防重复）。
 
-注释回插是 **best-effort**：注释经锚点映射回插。保留路径精确；展开路径
-（宏展开、transform）锚点可能漂移——注释可能被丢弃而非冒险破坏结构，是刻意
-取舍。机制细节（世界 A）：锚点路径 `inline_comment.py` 在列表结构内被
-production skip 吞掉的注释，渲染后按锚点窗口（±3 行启发式）回插；attachment
-路径（阶段 4 注释遍）把行尾注释挂节点（Doc 一等公民）但未完全覆盖块结束符
-注释——与锚点回插双轨并存（restore 去重防重复）。
-
-## 为什么是缺口（影响面）
+## 为什么是边界（影响面）
 
 注释密集源码（条件编译块、宏展开后、transform 后）可能错位/丢弃——攻击面
 在 real 保真度门禁（8 module + 关键构造）可测范围内；跨文件/宏复杂场景是
@@ -38,91 +28,13 @@ production skip 吞掉的注释，渲染后按锚点窗口（±3 行启发式）
 
 ## 可实现性
 
-- 补 attachment 覆盖块结束符注释 → 锚点回插仅剩 only_tpc marker 通道。
+- 继续补 attachment 覆盖（变换路径注释迁移）→ 锚点回插退居纯兜底。
 - 验证：`tests/engine/parser/test_comment_attachment.py` + real 保真度门禁 +
   e2e 注释样例（`tests/e2e/samples/normal/ref/ref_comments.v` 类）。
 - 当前：接受现状（见 renderer_architecture 缺口 2，接受理由完整）。
 
-## 最小复现与触发条件（2026-09-12，0.1.2 阶段 9 定位收敛）
-
-**最小复现**（12 行，与宏/typed_ports 无关）：
-
-```verilog
-module m(
-    input clk,
-    output reg [7:0] d
-);
-    // 注释 A
-    // 注释 B
-    sub_mod u_sub ( .clk(clk), .d(d) );
-
-    always @(posedge clk) begin
-        d <= d + 1;
-    end
-endmodule
-```
-
-渲染结果把两条注释放到了 `module m(...)` **声明之前**（顶格）。
-
-**触发条件**（变体实测）：模块体**第一个元素是注释** → 漂到 module 前；
-注释在任一成员**之后**（如同在 assign 后）→ 位置正确。
-
-**定位范围**：
-
-- parser 侧**正确**：`ModuleDecl.sub_node` 首位挂 Comment 子节点
-  （`_claim_head_comments`，ADR-0013 B1.3 模型）；
-- **渲染入参结构与对照场景同构**（`[Comment, Comment, X, AlwaysStmt]`），但
-  `X = ModuleInst` 时渲染到 module 前、`X = ImplBindingWithInterface` 时正确
-  → 问题在**渲染层的 head/body 分段**（`ModuleDecl.renderer.{head,body,tail}`，
-  body `role = "flatten"`），与 parser/transform 无关；
-- 与 formatter 无关（`format_output=False` 同样漂移）；
-- 既有性：改造前提交 `55123f4`（typed_ports 桥插件时代）行为相同。
-- 影响量化：`ref_spi_inf` 展开路径含注释口径字符相似度 ≈ 0.73（代码结构 1:1），
-  `run_all_tests.py` 的 `_strip_all` 口径仍过阈值（X:OK）→ 门禁不报。
-
-**修法（已实施 2026-09-12）**：`renderer/primitives/join.py` 的"容器首部
-Comment 拆段"（ADR-0013 B1.3）加判据——**只拆非分段节点**（列表项，无
-head/body/tail）；分段节点（`ModuleDecl` 等）的 body 首注释归
-`render_node` 的 body 段渲染（head 之后）。效果：最小复现正确、
-`ref_spi_inf` 展开路径注释回到 ref 位置（第 11 行）；回归
-`tests/languages/verilog/test_comment_body_head.py`。
-· 附带修正：旧实现对分段节点执行 `subs.pop(0)` 就地改 AST（渲染不该改树），
-加判据后不再触发。
-
-## 修复记录：块结束符/模块头的行尾注释漂移（2026-09-13）
-
-**最小复现**（`run_pipeline_on_source`，renderer 开、无宏）：
-
-| 输入 | 修复前 | 修复后 |
-|---|---|---|
-| `end // blk tail` | `end` ⏎ `    // blk tail` | `end // blk tail` |
-| `endmodule // eom tail` | `endmodule` ⏎ `// eom tail` | `endmodule // eom tail` |
-| `module m; // mod tail` | 漂到**文件末尾** | `module m(); // mod tail` |
-
-**根因**（AST 侧本是正确的——注释确实挂上了槽位，问题全在渲染）：
-
-1. **尾随 break 之后**：`render_node` 把 `_comment_slots["trailing"]` 的
-   `LineSuffix` 追加在 tail 的 `tail_break` 空行 break **之后**；LineSuffix 只在
-   下一个换行点前落地 → 后缀掉到下一行（`BeginEnd.tail_break = 2` 正好触发）。
-2. **模块头是另一个子问题**：`module m; // c` 的注释挂在 `ModuleDecl.trailing`
-   上，而它的 tail 是 `endmodule` → 注释随 tail 输出（漂到模块末）。
-   且 `ModuleDecl.renderer.head` 自身以 `{ break = true }` 收尾、整体被 group
-   包成 `Union`（flat/broken 两支同构），所以"插到 head 后"仍会落到下一行。
-
-**修法**：
-
-- parser：`try_block_rule` 在**块体解析前**把此刻挂上的 `trailing` 迁到
-  `head_trailing`（块头那行的注释，不属于块尾）。
-- renderer：`trailing` 在 tail 的尾随 break **之前**输出；`head_trailing`
-  经新增 `_insert_before_trailing_break`（Doc 小工具，递归到 `Union` 两支）
-  插到 head 末尾换行点之前。
-
-**门禁为何一直没拦住**：e2e 保真度用 `_strip_all`（抹掉空白与换行）比对——
-`end//c` 与 `end⏎//c` 判等，位置漂移天然失明。故新增**逐行位置敏感**的
-`TestBlockEndTrailing`（3 例）专锁这一类。
-
 ## 关联条目
 
 - `renderer/renderer_architecture.md`（世界 A：注释处理双轨 + 缺口 B3/2）
-- 原 `docs/known_limitations.md`（Correctness：comment restoration best-effort）
-- attachment 测试：`tests/engine/parser/test_comment_attachment.py`
+- 门禁：`tests/engine/parser/test_comment_attachment.py`（含逐行位置敏感用例）
+  + `tests/languages/verilog/test_comment_body_head.py` + real 保真度门禁

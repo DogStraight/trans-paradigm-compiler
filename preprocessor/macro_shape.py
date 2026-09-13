@@ -3,14 +3,14 @@
 **包装解析**：宏体放进语言包声明的若干最小语法上下文（wrappers：stmt/decl/expr/
 port），能完整解析 → 完整语法单元；全部失败 → 残缺片段。
 
-用途：宏体入树（ADR-0016）的**投影粒度**选择前置——完整单元宏可走 token 级替换
-（独立成 AST 节点），残缺片段走文本级投影。本模块只**产出分类**（0.1.2 阶段 1），
-不接消费点（阶段 2 由 MacroCall 节点消费）。
+用途：宏体入树的**投影粒度**选择前置——完整单元宏可走 token 级替换（独立成
+AST 节点），残缺片段走文本级投影。本模块只**产出分类**；消费点由管线宏边界
+处理（见 `preprocessor/README.md` + `pipeline/README.md`）。
 
 包装模板与续接首 token 集是**语言语法知识**——由语言包 `[macro_shape]` 声明
 （`grammar/<lang>/base/*.toml`），引擎只做通用包裹解析，语言知识不进代码。
 
-Doc: docs/decisions/0016-macro-body-into-ast.md（宏体入树决策）
+Doc: preprocessor/README.md
 """
 from __future__ import annotations
 

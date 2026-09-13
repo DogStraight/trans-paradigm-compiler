@@ -153,7 +153,7 @@ ctx = { type_decl = "$node", impl_block = "TypeImplDecl" }   # $node = 触发节
 type_map = { symbol_kind = "typed_port", attr = "type_name" }   # {符号名: attrs[attr]}
 ```
 
-- **时点不在此声明**：归管线配置 `[pipeline.units.*]`（ADR-0015 §1）。
+- **时点不在此声明**：归管线配置 `[pipeline.units.*]`（见 pipeline/README.md）。
 - **执行 = 引擎 `SlotRunnerPlugin`**（`transform/slot_runner.py`，语言无关）：按
   声明遍历（`walk`）→ 触发（`on`）→ 构造 ctx（声明 + 通道）→ 调 handler →
   按 `result` 接回（`extra` 不接回、handler 自 mark_extra / `none` 原地 /

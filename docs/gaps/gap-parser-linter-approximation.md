@@ -1,12 +1,9 @@
 # Gap — parser/linter 错误处理近似（无解析器恢复 + 启发式边界）
 
-- 状态：接受（设计选择，标注源码；非待闭环）——2026-09-13 复核：**不变**。
-  唯一的例外情形（宏落在语法位）**不靠恢复解决**：按
-  `docs/decisions/0017-macro-in-syntax-position.md`，parser 直产宏节点、
-  句级检查前移到 linter 展开路径——"跳过能力已在 linter"，不必在 parser 重建。
-- 关联：原 `docs/known_limitations.md` Architecture/Correctness 边界
-  （2026-09-04 按部件拆入本档）；`linter/linter_architecture.md`（已知边界表）；
-  `docs/decisions/0017-macro-in-syntax-position.md`（宏位路径）
+- 状态：接受（设计选择，标注源码；非待闭环）。宏落语法位的情形不走 parser
+  恢复：宏边界节点由管线就树产生、句级检查前移 linter 展开路径（跳过能力本
+  就在 linter，不必在 parser 重建）。
+- 关联：`linter/linter_architecture.md`（已知边界表）
 - 参照：yacc/antlr 的错误恢复（skip-to-sync）、svlint/verible 对坏输入的容错
 
 ## 边界是什么
@@ -17,27 +14,10 @@
 （2026-08-22 fuzz 发现：截断解析曾渲染部分输出并报 `success=True`——静默
 内容丢失，已修）。
 
-> **2026-09-13 复核（宏语法位）**：本条的"无恢复"**不变**。宏落在语法位时
-> （实测一个端口类型位为展开锚 → 整棵树 0 节点）**不用恢复去解决**——按
-> ADR-0017：parser 直产宏节点（宏位可解析为节点）、句级检查前移到 linter 展开
-> 路径（跳过能力本就在 linter）。故"真语法错 = linter 前置 + truncation 双保险"
-> 这条分工保持原样。
-
 **linter 启发式不可避免**：前置 linter 工作在坏代码上，错误恢复是对开放
 坏输入集的有限近似。少数兜底（语句结束 = 分号/行尾、容器结束 = 派生
 `_stmt_ends`、单 token 规则形态）是显式"语言约定近似"，不能完全从语法
 推导——已在源码标注。
-
-> **2026-09-13 复核（展开体注释与 26 条——已闭环，不再计为缺口）**：darkriscv 的
-> 81 条 `phase-unrecognized` 与"去掉体注释即 0"的 26 条均已定位并修复，机制不再未定：
-> ① 81 条 = 文本铺宏体**跨注释边界**吞掉宏调用同行后续 token（`expand_tokens` 对体末行
-> 含行注释时补换行 `\n`，`test_macro_body_comment` 守着）；
-> ② 26 条 = pratt 中缀循环"遇 newline 非运算符自然 break"把**行首运算符续行**
-> （`ALL0\n + ALL1`）截断，语句匹配器要 `;` 却遇 `+` → 整句判不出——修法 = 跳过 trivia
-> 后下一个显著 token 是中缀运算符则续行（见 CHANGELOG「pratt 行首运算符续行」，含
-> "语句级换行终止"不变量专测）——与宏无关，无宏也触发。
-> 验收：最小复现 3→0；darkriscv `syntax 26→0` 且语义阶段首次跑通（+9 条 UN001 真
-> 诊断）。锚窗口拼接的绕道已随**真展开**路径退役。
 
 ## 为什么接受（影响面）
 
@@ -62,8 +42,5 @@
 
 ## 关联条目
 
-- `linter/linter_architecture.md`「已知边界问题」表（多行 RHS / `@*` 敏感列表
-  等，TODO 后置）
-- 原 `docs/known_limitations.md`（Correctness linter heuristics / Architecture
-  parser no recovery）
+- `linter/linter_architecture.md`「已知边界问题」表（多行 RHS / `@*` 敏感列表等）
 - lint recall 门禁：`tests/e2e/eval_lint_accuracy.py`

@@ -107,7 +107,7 @@ class _PipelineContext:
     # （锚形态在结构位是普通标识符：`input <锚> d` 无产生式可匹配）。
     # 解析侧仍吃锚形态（宏不出口法层），两个消费者输入由此分开。
     lint_source: str = ""
-    # raw 解析模式（ADR 0018）：解析输入 = 扫指令后的**原文**（宏调用保持
+    # raw 解析模式：解析输入 = 扫指令后的**原文**（宏调用保持
     # `` `NAME ``），不做替身替换——空体宏由占位阶段改 trivia，非空体宏由
     # 解析器通配当元素。锚机制由此退到只剩渲染/诊断的旧路径用途。
     parse_raw: bool = False
@@ -413,7 +413,7 @@ def _stage_expand(ctx: _PipelineContext) -> None:
                 semantic=True,
             )
         if ctx.parse_raw:
-            # raw 解析模式（ADR 0018）：不做替身替换——ctx.source 保持扫指令后的
+            # raw 解析模式：不做替身替换——ctx.source 保持扫指令后的
             # 原文（宏调用可见），解析器见 `macro.call` 走通配/占位。
             ctx.log("[preprocessor] macros kept raw (parse_raw)")
             return
@@ -427,7 +427,7 @@ def _stage_expand(ctx: _PipelineContext) -> None:
 
 
 def _stage_macro_placeholders(tokens: list, macro_table: dict) -> list:
-    """空体宏 → 占位 token（ADR 0018 决策 0）。
+    """空体宏 → 占位 token。
 
     空体宏展开为空（`` `TV80DELAY ``：`rd_n <= `TV80DELAY 1'b1;` ≡
     `rd_n <= 1'b1;`）——在解析流里不该顶替任何元素，只该被跳过。
@@ -526,7 +526,7 @@ def _stage_parse(
     return ast
 
 
-# ── 宏边界节点化（P3.6 / ADR-0016 阶段 2） ──
+# ── 宏边界节点化（P3.6） ──
 
 
 def _extract_macro_name(fragment: str) -> str:
@@ -564,7 +564,7 @@ def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) ->
 
     锚是普通标识符（`__tpc_marker_<salt>_<n>`，语言包不认识宏），parser 把它
     建成 Identifier 节点；本阶段按锚表改写为 MacroCall 并挂元数据（宏名/原文
-    残片/源区间/宏体子树），宏边界于是在树中结构化可见（ADR-0016 阶段 2）。
+    残片/源区间/宏体子树），宏边界于是在树中结构化可见。
     """
     from core.define import CHILDREN_FIELD, Node
 
@@ -799,7 +799,7 @@ def _stage_macro_splice(ctx: _PipelineContext, ast: Any, tokens: list) -> Any:
 
 
 def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
-    """宏边界节点化：marker 标识符 → MacroCall 节点（P3.6 / ADR-0016 阶段 2）。
+    """宏边界节点化：marker 标识符 → MacroCall 节点（P3.6）。
 
     展开阶段把宏调用替换为锚标识符（format 路径），parser 建成
     Identifier 节点。本阶段按锚表（restore_stack 的 token 锚）把这类节点改写为
@@ -1088,7 +1088,7 @@ def run_pipeline_on_source(
 
     # 词法
     tokens = _stage_lex(ctx)
-    # 空体宏 → 占位/跳过（ADR 0018 决策 0；锚路径下无 macro.call，空转）
+    # 空体宏 → 占位/跳过（锚路径下无 macro.call，空转）
     tokens = _stage_macro_placeholders(tokens, ctx.macro_table)
     if stage == "lex":
         ctx.result["success"] = True
@@ -1108,7 +1108,7 @@ def run_pipeline_on_source(
         return ctx.result
     # 宏边界 raw 拼接（ADR-0017 决策 3/4）：区间 → 分层选替换单元 → 引擎标记
     ast = _stage_macro_splice(ctx, ast, tokens)
-    # 宏边界节点化（P3.6 / ADR-0016 阶段 2）：marker 标识符 → MacroCall 节点
+    # 宏边界节点化（P3.6）：marker 标识符 → MacroCall 节点
     ast = _stage_macro_nodes(ctx, ast)
     if stage == "parse":
         ctx.result["success"] = True

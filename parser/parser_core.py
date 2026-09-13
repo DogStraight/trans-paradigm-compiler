@@ -210,9 +210,9 @@ def _atom_parser_impl(self, _tokens, idx, context):
         context.restore_snapshot(snapshot)
     context.token_pointer = old_ptr
     if best_node is None:
-        # 宏通配（ADR 0018 决策 2）：非空体宏调用出现在**原子位**时当作一个
+        # 宏通配（引擎协议）：非空体宏调用出现在**原子位**时当作一个
         # 原子（宏节点）——语言包零宏知识（不声明任何槽位），合法性由 linter
-        # 的真展开检查兜底（分工见 ADR）。空体宏已由占位阶段改为 trivia。
+        # 的真展开检查兜底。空体宏已由占位阶段改为 trivia。
         from core.define import Node
         from core.token_protocol import MACRO_CALL_TOKEN_TYPE, TRIVIA_TOKEN_TYPES
 
@@ -478,7 +478,7 @@ class Parser:
             )
         self.skip_types = list(_skip_types_cfg)
         # 引擎协议 trivia 恒定跳过：宏占位 token（空体宏展开为空的"跳过/占位"
-        # 形态，ADR 0018 决策 0）不是语言知识——它由引擎协议产生（占位阶段），
+        # 形态）不是语言知识——它由引擎协议产生（占位阶段），
         # 因此不放进语言配置 skip_types，而在引擎侧统一追加。
         from core.token_protocol import PLACEHOLDER_TOKEN_TYPE
 

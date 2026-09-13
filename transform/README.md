@@ -59,7 +59,7 @@ _apply_refs）。role 端口展开只走 resolved_ports 路径，别走回头路
 `nested(实例:类型.角色)` / `rename(实例)` / `opposite(...)` 段（终点恒为 `#端口名`）。
 `_apply_entry` 旁路收集成 `{table: {key: [{name, origin}]}}`（不进表数据），
 插件 `describe()` 自述 → 调度层记进 trace 条目的 `artifacts` → dump 模式落
-`symbols/trace.json`。回答“_这行从哪来_”（ADR-0015 §2），分流插件复杂后的调试。
+`symbols/trace.json`。回答“_这行从哪来_”，分流插件复杂后的调试。
 
 - 引擎只认协议字段名与自述容器，不解析段含义（语言知识在组件侧）；
 - 新增插件想让中间产物可见 → 覆写 `TransformPlugin.describe()`（默认空 dict

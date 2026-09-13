@@ -711,7 +711,7 @@ def expand_tokens(
                     "kind": "macro",
                     "is_func": is_func,
                     # 源文本位置（展开前行/起列/止列）：宏调用在 raw 源上的区间，
-                    # 供宏边界节点（MacroCall）双向映射用（ADR-0016）。
+                    # 供宏边界节点（MacroCall）双向映射用。
                     "line": line_no,
                     "col": col,
                     "end_col": end,
