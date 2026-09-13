@@ -502,14 +502,13 @@ class _C4Compiler:
         return [c for c in ch if isinstance(c, Node) and c.node_name == "ParamDecl"]
 
 
-@register_plugin(
-    name="asm_gen.codegen", requires=["scope"], produces=["extra_asts"]
-)
+@register_plugin(name="asm_gen.codegen", requires=["scope"])
 class AsmGenPlugin(TransformPlugin):
     """c4 → c4 VM 汇编生成插件。
 
-    契约：`requires=["scope"]`（读符号表）；`produces=["extra_asts"]`
-    （经 `mark_extra` 产出额外输出文件）。ADR-0015 §3。
+    契约：`requires=["scope"]`（读符号表）；不声明 produces——产出 = 替换
+    AST（AsmProgram 主输出），额外文件通道（`mark_extra`）由使用方按需接入。
+    ADR-0015 §3。
 
     process 守卫：仅当根节点是 c4 的 Program（is_block 根块）时生成汇编；
     其它语言 AST 原样返回。
@@ -545,6 +544,7 @@ def render_asm(ast: Node, ctx: Any = None) -> str:
     主管线源端渲染。输入为变换后 AST：AsmProgram（含 AsmLine 行节点）或
     Program（变换被跳过时现场编译）。
     """
+    del ctx  # render handler 协议签名参数，本入口不消费
     if not isinstance(ast, Node):
         return ""
     if ast.node_name == "AsmProgram":

@@ -186,6 +186,8 @@ def _cmd_trace(args: argparse.Namespace) -> None:
                 bits.append(f"slot={e['slot']}")
             if e.get("extra_added"):
                 bits.append("黑板+" + ",".join(e["extra_added"]))
+            if e.get("produced"):
+                bits.append("产物:" + ",".join(e["produced"]))
             if e.get("artifacts"):
                 bits.append("artifacts:" + ",".join(e["artifacts"].keys()))
             print(

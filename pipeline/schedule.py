@@ -91,7 +91,8 @@ class PassState:
     transformer: Any | None = None  # 最近一轮 transform 的 AstTransformer
     extra: dict = field(default_factory=dict)  # pass 间自定义通道
     # 单元执行轨迹（阶段 6 可视化：时点 = 可视化断点）——每单元一条
-    # {index, name, kind, extra_added, extra_keys}
+    # {index, name, kind, impl?, slot?, params?, produced?, extra_added,
+    #  extra_keys, artifacts?}
     trace: list[dict] = field(default_factory=list)
 
 
@@ -414,8 +415,9 @@ def _contract_of(decl: "PassDecl") -> dict[str, list[str]] | None:
 def _check_contract(decl: "PassDecl", available: set[str]) -> None:
     """时点边界契约校验（ADR-0015 §3）：requires 未满足 → fail-fast。
 
-    校验点 = 单元执行前（阶段检查点/物化即校验，非消费闸）；通过后把该单元
-    声明的 produces 并入可用集（供后续单元引用）。无契约声明 → 跳过。
+    校验点 = 单元执行前（阶段检查点，非消费闸）；produces 不在此并入——
+    执行后按**物化登记**并入（`_collect_produced` / `_verify_produced`，
+    阶段 7 切片 2：来源 = 本管线实际产出）。无契约声明 → 跳过。
     """
     contract = _contract_of(decl)
     if not contract:
@@ -427,7 +429,75 @@ def _check_contract(decl: "PassDecl", available: set[str]) -> None:
             f"（应由该单元之前声明 produces 的单元提供；"
             f"当前可用: {', '.join(sorted(available)) or '(空)'}）"
         )
-    available.update(contract.get("produces", []))
+
+
+def _shapes_of(decl: "PassDecl") -> dict[str, dict] | None:
+    """单元的形状声明（插件注册期 `shapes=`；槽位单元取 `slot_runner`）。"""
+    if decl.plugin or decl.slot:
+        from transform.engine import get_plugin_shapes
+
+        qname = decl.plugin or "slot_runner"
+        return get_plugin_shapes().get(qname)
+    return None
+
+
+def _collect_produced(decl: "PassDecl", state: "PassState") -> dict:
+    """单元执行后的物化产物（名 → 对象，对象可为 None）。
+
+    - 内置 analyze → `scope`（执行本身承接；None = 空分析，与既有
+      "no scope produced" 警告语义一致，不升格 fail-fast）；
+    - 插件/槽位单元 → 插件在 process 内经 `note_produced` 的登记；
+    - 其余（builtin.transform / handler）→ 空，不参与契约。
+    """
+    if decl.impl == "builtin.analyze":
+        return {"scope": state.scope}
+    if (decl.plugin or decl.slot) and state.transformer is not None:
+        return state.transformer.produced()
+    return {}
+
+
+def _verify_produced(
+    decl: "PassDecl", contract: dict[str, list[str]] | None, produced: dict
+) -> None:
+    """执行后物化核验（阶段 7 切片 2）：声明须真产出，形状须合声明。
+
+    - 真产出：声明的 produces 必须全部出现在物化登记中（缺 → fail-fast；
+      未产出不得声明，声明不空转）；物化未声明的产物也 fail-fast
+      （契约双向一致：声明 = 物化；无契约单元不受此限）；
+    - 形状：单元可声明 `shapes`（`type`=dict/list、`non_empty`）——
+      引擎机械核验对象（注册期已 fail-fast 校验 spec 合法性）。
+    """
+    if not contract:
+        return
+    declared = contract.get("produces", [])
+    missing = [p for p in declared if p not in produced]
+    if missing:
+        raise ValueError(
+            f"[pipeline] unit '{decl.name}' 声明的产物未物化: {', '.join(missing)}"
+            f"（生产方须在 process 内经 note_produced 登记；未产出不得声明 produces）"
+        )
+    extra = sorted(p for p in produced if p not in declared)
+    if extra:
+        raise ValueError(
+            f"[pipeline] unit '{decl.name}' 物化了未声明的产物: {', '.join(extra)}"
+            f"（契约双向一致：声明 = 物化；补 produces 声明或不登记）"
+        )
+    for name, spec in (_shapes_of(decl) or {}).items():
+        if name not in declared:
+            continue  # 注册期已 fail-fast；此处防御
+        obj = produced.get(name)
+        want = spec.get("type")
+        if want is not None and not isinstance(
+            obj, dict if want == "dict" else list
+        ):
+            raise ValueError(
+                f"[pipeline] unit '{decl.name}' 产物 '{name}' 形状不符: "
+                f"声明 {want}，实得 {type(obj).__name__}"
+            )
+        if spec.get("non_empty") and not obj:
+            raise ValueError(
+                f"[pipeline] unit '{decl.name}' 产物 '{name}' 声明 non_empty，实为空"
+            )
 
 
 class _ScheduleStop(Exception):
@@ -490,6 +560,8 @@ def _run_pass_transform(
     两者皆空 → 跑全部已注册插件（粗粒度，现行为）。
     """
     ctx = state.ctx
+    # 本单元 transformer（跳过/未跑 = None，防上单元产物/自述残留）
+    state.transformer = None
     if state.scope is None:
         ctx.log("[transform] skipped (no scope)")
         return
@@ -595,7 +667,14 @@ def _run_schedule(
         except _ScheduleStop:
             state.trace.append(_trace_entry(index, decl, state, _extra_before))
             break
-        state.trace.append(_trace_entry(index, decl, state, _extra_before))
+        # 执行后：物化核验（真产出 + 形状，阶段 7 切片 2）→ 产物并入可用集
+        produced = _collect_produced(decl, state)
+        _verify_produced(decl, _contract_of(decl), produced)
+        if produced:
+            available.update(produced)
+        state.trace.append(
+            _trace_entry(index, decl, state, _extra_before, produced)
+        )
         if ctx.stage == decl.name:
             break
     # 单元执行轨迹（阶段 6 可视化）：谁在哪个时点跑了、向黑板（extra）写了哪些键。
@@ -605,12 +684,17 @@ def _run_schedule(
 
 
 def _trace_entry(
-    index: int, decl: "PassDecl", state: "PassState", before: set
+    index: int,
+    decl: "PassDecl",
+    state: "PassState",
+    before: set,
+    produced: dict | None = None,
 ) -> dict:
     """单元执行轨迹条目（时点 = index，按执行序）
 
     extra_added = 本次写入黑板（PassState.extra）的键；
     params     = 插件实例化参数（非空才带，5b-3b）；
+    produced   = 本单元物化登记（非空才带，阶段 7）——按实际产出记录；
     artifacts  = 插件自述的中间产物/来源（transform 类，非空才带）——
                  同为实现 ADR-0015 §2「时点 = 可视化断点」。
     """
@@ -625,6 +709,8 @@ def _trace_entry(
         entry["impl"] = decl.impl
     if decl.params:
         entry["params"] = decl.params
+    if produced:
+        entry["produced"] = sorted(produced)
     if decl.kind == "transform" and state.transformer is not None:
         described = state.transformer.describe_plugins()
         if described:

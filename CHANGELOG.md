@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **pass 契约校验切片 2：物化核验 + 形状（0.1.2 阶段 7 收官）**：`produces`
+  不再按声明空转——单元执行后核验**物化登记**（生产方在 `process` 内
+  `note_produced(name, obj)`）：声明未物化 / 物化未声明均 fail-fast（声明 =
+  物化，双向一致）；可用集按**实际登记**并入（来源核验）。可另声明**形状**
+  （`register_plugin(shapes={"名": {"type": "dict"|"list", "non_empty": bool}})`
+  ——注册期 fail-fast 校验 spec，执行后机械核验对象）。trace 条目带 `produced`
+  （文本与 HTML 报告同显）；跳过单元不再读到上一单元的 transformer
+  （`_run_pass_transform` 入口重置，核验/自述来源可靠）。声明对齐：
+  `asm_gen.codegen` 去除未物化的 `extra_asts` 声明（实际产出 = 替换 AST 主输出）。
+  测试 `tests/engine/pipeline/test_contract_check.py`（+8，共 13）。
 - **插件单元实例化参数（`params`，0.1.2 阶段 5b-3b）**：`[[pipeline.units.*]]`
   的 `params` 表 = 插件**构造器关键字参数**（执行层 `cls(**params)`）——同一插件
   可注册为多个实例（各自参数与时点，如 `SemanticMappingPlugin` 的 `raw_config`

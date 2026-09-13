@@ -22,9 +22,6 @@
 - [ ] 阶段 6 — 中间产物可视化：✅ 单元执行轨迹（`ctx.result["trace"]` +
       `trace.json`）；✅ 映射表来源追踪（行 `origin` → 插件 `describe()` →
       trace `artifacts`）；剩 transform 侧更多插件自述（出口已具备，按需补）
-- [ ] 阶段 7 — pass 契约校验：✅ 切片 1（插件注册时声明 produces/requires
-      平铺列表 + 时点边界核验 + fail-fast；真实声明 4 插件）；剩 形状完整校验
-      （产物是否真产出、形状是否合声明）——按需补
 - [ ] 阶段 8 — 检查链遗留补全（本文件「0.1.1 目标 2」T1/T2 并入本版）
 - [ ] 阶段 9 — 真实语料终验（ice40/picorv32 + 全量门禁 + 保真度不退化）：✅ 首轮
       全绿（e2e 98 组 FAIL 0 / lint recall 31-31 / check 34-34 / 差分 findings 0）；

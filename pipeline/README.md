@@ -51,10 +51,17 @@ after = "analyze"
 
 ### 契约校验（时点边界）
 
-每个单元执行前校验其 `requires` 是否已被满足（初始集 ∪ 前面单元 `produces`），
-未满足 → fail-fast 并列出缺失名与当前可用集；通过后并入其 `produces`。
-来源：插件单元取**插件注册时的声明**（`register_plugin(produces=..., requires=...)`，
-见 `transform/README.md`）；内置执行器取 `_BUILTIN_UNIT_CONTRACTS`。
+每个单元**执行前**校验其 `requires` 是否已被前面单元的**物化产物**满足，
+未满足 → fail-fast 并列出缺失名与当前可用集；**执行后**校验其声明的 `produces`
+**真产出**——生产方须在 `process` 内经 `note_produced(name, obj)` 登记，
+未产出不得声明、物化未声明也报错（契约双向一致：声明 = 物化）；通过后产物
+（来源 = 本管线实际登记）并入可用集。产物可另声明**形状**
+（`register_plugin(shapes={"名": {"type": "dict"|"list", "non_empty": true}})`），
+引擎机械核验（注册期 fail-fast 校验 spec 合法性）。内置 analyze 的 `scope`
+由执行本身承接（`None` = 空分析，保持既有警告语义）。
+来源：插件单元取**插件注册时的声明**（`register_plugin(produces=..., requires=...,
+shapes=...)`，见 `transform/README.md`）；内置执行器取
+`_BUILTIN_UNIT_CONTRACTS`。
 **无声明 = 不校验**（可选能力）；插件不管时点，时点只在本节配置里编排。
 
 ### 时点轨迹报告（可视化产物）
@@ -64,7 +71,7 @@ after = "analyze"
 与 `tpc check --html` 同一视觉语言（共享 `analyzer/report_html.REPORT_CSS`）。
 
 页面内容 = 每单元一张卡片（时点 `#index` / `name` / `kind` 徽标 / `impl` /
-黑板新增键） + **artifacts**（插件 `describe()` 自述的自由结构：`slot_runner`
+`slot` / 产物 `produced` / 黑板新增键） + **artifacts**（插件 `describe()` 自述的自由结构：`slot_runner`
 的槽位调用计数、`SemanticMappingPlugin` 的映射表行数与**行来源链**，如
 `spi.slave > invert(spi.master) > #miso`）。渲染器只做**通用值树渲染**
 （dict → 表格 / list-of-dict → 带表头表格 / 深层 dict → 紧凑缩进行），

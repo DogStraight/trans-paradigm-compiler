@@ -79,6 +79,9 @@ class SlotRunnerPlugin(TransformPlugin):
             if fn is None:
                 continue  # 加载期已 fail-fast（声明须与注册名一致）；此处防御
             ast = self._run(ast, decl, fn, base_ctx)
+        # 物化登记（契约校验，阶段 7）：产出 = 本插件承接的槽位变换
+        # （早退路径未承接任何槽位 = 未产出，单元化时会被真产出核验拦下）
+        self.note_produced("slot_transforms")
         return ast
 
     # ── 遍历 / 触发 / 接回 ──

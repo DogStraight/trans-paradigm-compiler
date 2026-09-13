@@ -38,7 +38,10 @@ from analyzer.scope import Scope
 from transform.engine import TransformPlugin, AstTransformer, register_plugin
 
 
-@register_plugin(produces=["mapping_tables"])
+@register_plugin(
+    produces=["mapping_tables"],
+    shapes={"mapping_tables": {"type": "dict"}},
+)
 class SemanticMappingPlugin(TransformPlugin):
     """语义映射表构建插件
 
@@ -77,12 +80,11 @@ class SemanticMappingPlugin(TransformPlugin):
         self._tables.clear()
         self._origins.clear()
         self._root_scope = root_scope
-        if not self._mapping_entries:
-            return ast
-
-        # 从 scope 树构建映射表
-        self._build_mappings(root_scope)
-
+        if self._mapping_entries:
+            # 从 scope 树构建映射表
+            self._build_mappings(root_scope)
+        # 物化登记（契约校验，阶段 7）：产出 = 映射表（可能为空表）
+        self.note_produced("mapping_tables", self._tables)
         return ast
 
     def describe(self) -> dict:

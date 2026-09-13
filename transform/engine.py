@@ -24,9 +24,46 @@ _plugin_index: dict[str, type["TransformPlugin"]] = {}
 # 插件契约（ADR-0015 §3）：限定名 → {produces, requires}——**插件侧注册时声明**，
 # 显式平铺列表（同语法 production 列表风格）。未声明 = 不参与校验（可选能力）。
 _plugin_contracts: dict[str, dict[str, list[str]]] = {}
+# 产物形状声明（阶段 7 切片 2）：限定名 → {产物名: 形状 spec}——引擎机械核验
+# （type=dict/list、non_empty），不懂语义；可选能力。
+_plugin_shapes: dict[str, dict[str, dict]] = {}
 
 
 _T = TypeVar("_T", bound="TransformPlugin")
+
+# 形状 spec 支持的机械核验 token（引擎不懂语义，只做类型/非空检查）。
+_SHAPE_TYPES = ("dict", "list")
+
+
+def _validate_shapes(
+    qname: str, produces: list[str], shapes: dict[str, dict]
+) -> None:
+    """形状声明核验（注册期 fail-fast）：键须在 produces；spec 键/取值合法。"""
+    for pname, spec in shapes.items():
+        if pname not in produces:
+            raise ValueError(
+                f"[transform] 插件 '{qname}' shapes 键 {pname!r} 不在 produces 声明中"
+            )
+        if not isinstance(spec, dict):
+            raise ValueError(
+                f"[transform] 插件 '{qname}' shapes[{pname!r}] 须为表: {spec!r}"
+            )
+        unknown = set(spec) - {"type", "non_empty"}
+        if unknown:
+            raise ValueError(
+                f"[transform] 插件 '{qname}' shapes[{pname!r}] 未知键: "
+                f"{', '.join(sorted(unknown))}（支持 type/non_empty）"
+            )
+        stype = spec.get("type")
+        if stype is not None and stype not in _SHAPE_TYPES:
+            raise ValueError(
+                f"[transform] 插件 '{qname}' shapes[{pname!r}].type 非法: {stype!r}"
+                f"（支持 {_SHAPE_TYPES}）"
+            )
+        if "non_empty" in spec and not isinstance(spec["non_empty"], bool):
+            raise ValueError(
+                f"[transform] 插件 '{qname}' shapes[{pname!r}].non_empty 须为布尔"
+            )
 
 
 @overload
@@ -36,6 +73,7 @@ def register_plugin(
     name: str | None = None,
     produces: list[str] | None = None,
     requires: list[str] | None = None,
+    shapes: dict[str, dict] | None = None,
 ) -> type[_T]: ...
 
 
@@ -46,6 +84,7 @@ def register_plugin(
     name: str | None = None,
     produces: list[str] | None = None,
     requires: list[str] | None = None,
+    shapes: dict[str, dict] | None = None,
 ) -> Callable[[type[_T]], type[_T]]: ...
 
 
@@ -55,6 +94,7 @@ def register_plugin(
     name: str | None = None,
     produces: list[str] | None = None,
     requires: list[str] | None = None,
+    shapes: dict[str, dict] | None = None,
 ) -> Any:
     """装饰器：注册一个变换插件类（可带限定名 + 契约声明）。
 
@@ -66,6 +106,8 @@ def register_plugin(
         class ComponentSlotPlugin(TransformPlugin): ...
 
     契约（produces/requires）= 显式平铺名列表（引擎只做机械核验，不懂语义）；
+    `shapes` = 可选的产物形状声明（`{产物名: {"type": "dict"|"list",
+    "non_empty": bool}}`，键须在 produces；注册期 fail-fast，执行后核验）。
     **不含时点**——时点只在管线配置（`[pipeline.units.*]`）里编排（ADR-0015 §1）。
     重名 → 索引取**首个注册者**（同一插件文件被多路径 import 时类对象不同名同，
     是既有常态，不报错）；`_plugin_registry` 保留全部注册（不动现状执行序）。
@@ -73,6 +115,8 @@ def register_plugin(
 
     def _register(klass: type["TransformPlugin"]) -> type["TransformPlugin"]:
         qname = name or klass.__name__
+        if shapes:
+            _validate_shapes(qname, list(produces or []), shapes)
         # 索引：首胜（按名引用取注册序首个）；registry：照旧全注册
         _plugin_index.setdefault(qname, klass)
         _plugin_registry.append(klass)
@@ -82,6 +126,10 @@ def register_plugin(
         }
         if contract["produces"] or contract["requires"]:
             _plugin_contracts.setdefault(qname, contract)
+        if shapes:
+            _plugin_shapes.setdefault(
+                qname, {k: dict(v) for k, v in shapes.items()}
+            )
         return klass
 
     if cls is not None:
@@ -92,6 +140,11 @@ def register_plugin(
 def get_plugin_contracts() -> dict[str, dict[str, list[str]]]:
     """已注册插件的契约声明（限定名 → {produces, requires}），无声明者不在内。"""
     return {k: dict(v) for k, v in _plugin_contracts.items()}
+
+
+def get_plugin_shapes() -> dict[str, dict[str, dict]]:
+    """已注册插件的产物形状声明（限定名 → {产物名: spec}），无声明者不在内。"""
+    return {k: {n: dict(s) for n, s in v.items()} for k, v in _plugin_shapes.items()}
 
 
 def get_plugin_index() -> dict[str, type["TransformPlugin"]]:
@@ -129,6 +182,15 @@ class TransformPlugin(ABC):
         """
         return {}
 
+    def note_produced(self, name: str, obj: Any = None) -> None:
+        """登记物化产物（契约校验，阶段 7）：声明 `produces` 的生产方在
+        `process` 内调用（未产出不得声明）；`obj` 供形状核验（可选）。
+
+        无 transformer（直接 process 的单元测试）时空操作。
+        """
+        if self._transformer is not None:
+            self._transformer.note_produced(name, obj)
+
 
 class AstTransformer:
     """后阶段变换管线，依次执行所有已注册的插件"""
@@ -141,6 +203,8 @@ class AstTransformer:
         else:
             # 从全局注册表自动实例化所有插件
             self._plugins = [cls() for cls in _plugin_registry]
+        # 物化登记（契约校验，阶段 7 切片 2）：产物名 → 对象（可为 None）
+        self._produced: dict[str, Any] = {}
 
     @classmethod
     def set_shared(cls, key: str, value: Any) -> None:
@@ -158,6 +222,17 @@ class AstTransformer:
     @property
     def plugins(self) -> list[TransformPlugin]:
         return list(self._plugins)
+
+    def note_produced(self, name: str, obj: Any = None) -> None:
+        """登记物化产物（插件经 `TransformPlugin.note_produced` 调用；契约校验用）。
+
+        引擎只记录名与对象（形状核验用），不懂语义（ADR-0015 §3 姿态）。
+        """
+        self._produced[name] = obj
+
+    def produced(self) -> dict[str, Any]:
+        """本 transformer 生命周期内登记的物化产物（名 → 对象，对象可为 None）。"""
+        return dict(self._produced)
 
     def transform(self, ast: Node, root_scope: Scope) -> Node:
         for plugin in self._plugins:

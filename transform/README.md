@@ -108,10 +108,23 @@ replace（1:1 替换 + 注释迁移）|remove）
 @register_plugin(requires=["mapping_tables"])
 ```
 
-校验点 = **时点边界**（单元执行前，物化即校验）：该单元的 `requires` 必须已被
-初始集 ∪ 前面单元声明的 `produces` 覆盖，否则 fail-fast（诊断列出缺失名与当前
-可用集）；通过后其 `produces` 并入可用集。**无声明 = 不参与校验**（可选、附加，
-粒度作者自选）。内置执行器契约在 `pipeline/schedule.py` 的
+校验点 = **时点边界**：**执行前**核验 `requires` 已被前面单元的**物化产物**
+覆盖（否则 fail-fast，诊断列出缺失名与当前可用集）；**执行后**核验声明的
+`produces` **真产出**——生产方须在 `process` 内 `self.note_produced(name, obj)`
+登记，未产出不得声明、物化未声明也报错（声明 = 物化，双向一致）；产物可另
+声明**形状**（注册时 `shapes=`，引擎机械核验 `type`=dict/list、`non_empty`）：
+
+```python
+@register_plugin(produces=["mapping_tables"],
+                 shapes={"mapping_tables": {"type": "dict"}})
+class MyPlugin(TransformPlugin):
+    def process(self, ast, root_scope):
+        ...
+        self.note_produced("mapping_tables", self._tables)
+```
+
+**无声明 = 不参与校验**（可选、附加，粒度作者自选）。内置执行器契约在
+`pipeline/schedule.py` 的
 `_BUILTIN_UNIT_CONTRACTS`（`builtin.analyze` 产出 `scope`；`builtin.transform`
 是黑盒跑全部插件，不声明）。
 

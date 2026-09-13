@@ -1,7 +1,8 @@
 """report_html.py — 时点管线执行轨迹的 HTML 报告（可视化产物的呈现视图）。
 
 吃 `run_pipeline_on_source(...)["trace"]`（ADR-0015 §2 可视化管道：每单元一条
-`{index, name, kind, impl?, slot?, extra_added, extra_keys, artifacts?}`），
+`{index, name, kind, impl?, slot?, params?, produced?, extra_added, extra_keys,
+artifacts?}`），
 渲染为单文件 HTML（内联 CSS、零依赖、纯 stdlib）——与 `tpc check --html`
 （`analyzer/report_html.py`）同一视觉语言（badge / file 卡片 / table）。
 
@@ -113,6 +114,13 @@ def _unit_card(entry: dict) -> str:
         )
     if entry.get("slot"):
         rows.append(f'<tr><td class="key">slot</td><td>{_esc(entry["slot"])}</td></tr>')
+    produced = entry.get("produced") or []
+    if produced:
+        rows.append(
+            '<tr><td class="key">产物</td><td>'
+            + ", ".join(f"<code>{_esc(k)}</code>" for k in produced)
+            + "</td></tr>"
+        )
     added = entry.get("extra_added") or []
     keys = entry.get("extra_keys") or []
     rows.append(
