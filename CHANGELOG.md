@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **trace 报告时间轴呈现（0.1.2 阶段 6 收尾切片）**：`tpc trace --html` 页面
+  重排为"管道条 + 单列左轴"——顶部**执行管道条**（单元节点链，箭头标上游
+  `produced` 流；节点/卡片锚链互通）；卡片区左侧一条轴 + 轴节点（按 kind
+  着色）；卡片新增**依赖行**：`requires` 名机械回指上游产出该名的单元（名字
+  等值匹配，纯数据不认识语义；无上游记录时只显名字）。trace 条目补
+  `requires` 字段（非空才带）。报告固定浅色皮肤（`color-scheme: light` + 显式
+  body 底色）：此前深色模式浏览器会把背景/文字反转，与浅色设计的 badge/表格
+  元素混搭。测试 `test_trace_report_html.py`（+4）。
 - **pass 契约校验切片 2：物化核验 + 形状（0.1.2 阶段 7 收官）**：`produces`
   不再按声明空转——单元执行后核验**物化登记**（生产方在 `process` 内
   `note_produced(name, obj)`）：声明未物化 / 物化未声明均 fail-fast（声明 =

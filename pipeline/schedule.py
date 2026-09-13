@@ -694,6 +694,7 @@ def _trace_entry(
 
     extra_added = 本次写入黑板（PassState.extra）的键；
     params     = 插件实例化参数（非空才带，5b-3b）；
+    requires   = 单元声明的 requires（非空才带，阶段 7）——报告侧画依赖链；
     produced   = 本单元物化登记（非空才带，阶段 7）——按实际产出记录；
     artifacts  = 插件自述的中间产物/来源（transform 类，非空才带）——
                  同为实现 ADR-0015 §2「时点 = 可视化断点」。
@@ -709,6 +710,9 @@ def _trace_entry(
         entry["impl"] = decl.impl
     if decl.params:
         entry["params"] = decl.params
+    contract = _contract_of(decl)
+    if contract and contract.get("requires"):
+        entry["requires"] = list(contract["requires"])
     if produced:
         entry["produced"] = sorted(produced)
     if decl.kind == "transform" and state.transformer is not None:

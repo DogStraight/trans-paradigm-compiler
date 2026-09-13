@@ -173,9 +173,11 @@ def test_producer_before_consumer_satisfies(probes) -> None:
     )
     assert ast is not None
     assert any("pass: c" in m for m in ctx.logs)
-    # trace 记录物化产物（来源核验：可用集 = 实际产出）
+    # trace 记录物化产物与依赖声明（来源核验：可用集 = 实际产出）
     assert ctx.result["trace"][0]["produced"] == ["thing"]
     assert "produced" not in ctx.result["trace"][1]
+    assert ctx.result["trace"][1]["requires"] == ["thing"]
+    assert "requires" not in ctx.result["trace"][0]  # 无声明不带（非空才带）
 
 
 def test_analyze_disabled_leaves_scope_unavailable(probes) -> None:

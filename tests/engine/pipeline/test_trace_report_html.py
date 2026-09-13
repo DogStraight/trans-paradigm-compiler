@@ -1,7 +1,8 @@
 """时点轨迹 HTML 报告（pipeline/report_html.py）渲染测试。
 
 锁：单元卡片（name/kind/impl/黑板键）/ artifacts 通用值树渲染（dict → 表格、
-list-of-dict → 带表头表格、深层 dict → 紧凑行）/ HTML 转义 / 空 trace 提示。
+list-of-dict → 带表头表格、深层 dict → 紧凑行）/ HTML 转义 / 空 trace 提示 /
+执行管道条（单元链 + 产物流标签）/ 左轴节点 / 依赖行（requires 回指上游）。
 """
 
 from pipeline.report_html import render_trace_html
@@ -115,3 +116,43 @@ def test_uses_shared_report_css() -> None:
     out = render_trace_html([])
     assert REPORT_CSS[:40] in out
     assert ".badge" in out and ".file" in out
+
+
+def test_pipe_chain_and_produced_labels() -> None:
+    """顶部执行管道条：单元节点链（锚链到卡片）+ 箭头上标上游产物流。"""
+    out = render_trace_html(
+        [
+            _entry(index=0, name="analyze", kind="analyze", produced=["scope"]),
+            _entry(index=1, name="map", kind="transform", requires=["scope"]),
+        ]
+    )
+    assert 'class="pipe"' in out
+    assert 'href="#unit-0"' in out and 'href="#unit-1"' in out
+    assert "<small>scope</small>" in out  # 箭头上游产物标签
+
+
+def test_requires_linked_to_upstream_producer() -> None:
+    """依赖行：requires 名机械回指上游产出该名的单元锚（名字等值匹配）。"""
+    out = render_trace_html(
+        [
+            _entry(index=0, name="p", kind="transform", produced=["thing"]),
+            _entry(index=1, name="c", kind="transform", requires=["thing"]),
+        ]
+    )
+    assert (
+        '依赖</td><td><a href="#unit-0">#0</a> <code>thing</code></td>' in out
+    )
+
+
+def test_requires_without_producer_renders_name_only() -> None:
+    """requires 无上游产出记录（防御路径）→ 只显示名字，不做链接。"""
+    out = render_trace_html([_entry(index=0, name="c", requires=["ghost"])])
+    assert '<tr><td class="key">依赖</td><td><code>ghost</code></td></tr>' in out
+
+
+def test_axis_nodes_carry_kind_color() -> None:
+    """左轴：容器带轴样式；节点按 kind 着色；卡片带锚 id（管道条跳转目标）。"""
+    out = render_trace_html([_entry(index=2, kind="check")])
+    assert 'class="trace"' in out
+    assert '<div class="tnode k-check"></div>' in out
+    assert 'id="unit-2"' in out

@@ -24,9 +24,9 @@ _SEVERITY_META: dict[int, tuple[str, str]] = {
 # 报告样式（共享给其它报告视图：pipeline/report_html.py 的时点轨迹页）——
 # 同一视觉语言（badge / file 卡片 / table），单一样式来源避免重复维护。
 REPORT_CSS = """\
-:root { color-scheme: light dark; }
+:root { color-scheme: light; }   /* 报告元素均为浅色设计：固定浅色，不做深色反转 */
 body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 2rem;
-       max-width: 1000px; }
+       max-width: 1000px; background: #fff; color: #1a1a1a; }
 h1 { font-size: 1.3rem; }
 .summary { display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap; }
 .badge { padding: .15rem .6rem; border-radius: 999px; font-size: .85rem; }
