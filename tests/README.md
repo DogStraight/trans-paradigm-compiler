@@ -69,6 +69,28 @@ smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆�
 单用例级乱序会把作用域反复拆开重建（那是 fixture 语义问题，不是隔离缺口）。
 跨文件顺序才是 xdist 分发可变面。
 
+### 进程级隔离（对照工具）
+
+```bash
+python tools/check_test_isolation.py --compare            # 全量：每文件一进程 + 单进程对照
+python tools/check_test_isolation.py --compare -m smoke   # 快速层（nightly 跑这档）
+python tools/check_test_isolation.py --granularity test tests/e2e/test_real_fidelity.py
+```
+
+把选中集切块（默认每文件一块）在**全新解释器**里各跑一遍，再与**单进程共享档**
+（刻意 `-n 0`：xdist 会把文件分到不同 worker，那样“共享”名不副实）对照，列出
+两个方向的差异：
+
+- **只在共享档失败** = 进程内状态泄漏 / 顺序污染（补 `core/global_state.py` 登记表，
+  或改 fixture 作用域）；
+- **只在隔离档失败** = 该用例隐式依赖同进程里其它文件留下的状态（CI 分片、单文件
+  重跑、换 `--dist` 时同样会爆）。
+
+细节：不用 `pytest-forked`（它走 `os.fork`，Windows 没有）；`--granularity test`
+是单用例一进程（最强隔离，慢）；全量隔离档与并行全量同量级（分钟级），
+共享档单进程要跑全集（近十分钟）——故工具不进日常门禁，自保用例见
+`tests/policy/test_check_test_isolation.py`（含“真能报出差异”的负例）。
+
 ## 并发注意
 
 - 全局 `timeout=120`（pyproject）：并行 CPU 争抢使真实语料全管线慢 ~2.5x

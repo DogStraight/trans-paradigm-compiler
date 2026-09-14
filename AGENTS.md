@@ -128,3 +128,5 @@
   - 真实语料误报基线 `tests/e2e/eval_diag_baseline.py`（增长即失败；查证误报用
     `eval_benchmark.py`，需外部 oracle）
   - 门禁有效性抽查 `tools/check_gate_efficacy.py`（真实事故变异，期望门禁变红）
+  - 进程级隔离对照 `tools/check_test_isolation.py`（每文件一进程 vs 单进程共享档，
+    差异即"换跑法就变脸"：判据见 `tests/README.md`）

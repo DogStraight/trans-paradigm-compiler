@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **测试隔离 L4：进程级隔离对照**：新增 `tools/check_test_isolation.py`——把选中集
+  切块（默认每文件一块）在**全新解释器**里各跑一遍，再与**单进程共享档**对照，
+  把"换一种跑法就变脸"分成两类并指名到位：只在共享档失败 = 进程内状态泄漏/顺序
+  污染（补 `core/global_state.py` 登记表或改 fixture 作用域）；只在隔离档失败 =
+  该用例隐式依赖同进程里其它文件留下的状态。**不用 `pytest-forked`**：它走
+  `os.fork`，Windows 没有（实测 `hasattr(os, "fork")` 为 False），CI 矩阵含
+  windows-latest——故用子进程实现（跨平台、零新依赖）。附带 `--granularity
+  file|test`（单用例一进程 = 最强隔离）、`--jobs`、`--random-hashseed`。
+  nightly 加快速层对照档；工具不进日常门禁（全量要起上百个解释器）。
+  自保用例 `tests/policy/test_check_test_isolation.py`（13 例，含"真能报出差异"
+  的端到端负例与路径/省略形态判据）。验证（全量 1901 用例，两次独立跑一致）：
+  隔离档 144 块 **0 失败（~2 分钟，jobs=16）**，单进程共享档 1893 passed /
+  8 skipped（~9 分钟），两档一致——即全库已无进程内状态耦合（幽灵 flake 那一类）。
 - **测试隔离 L3：顺序可控（把偶发变必现）**：①`pytest addopts` 显式
   `--dist loadfile`（一个文件固定在同一 worker，模块级 fixture 与"安装态按模块
   还原"语义绑定在同一进程）。②`tests/conftest.py` 新增零依赖的顺序随机化 hook

@@ -49,3 +49,10 @@ jobs:
           TPC_SHUFFLE_SEED: "1"
         run: |
           python -m pytest tests -q
+
+      - name: 进程级隔离对照档（快速层）
+        # 每文件一个全新解释器 + 单进程共享档对照：只在共享档失败 = 进程内状态
+        # 泄漏/顺序污染；只在隔离档失败 = 隐式依赖同进程其它文件的状态。
+        # 全量档要起上百个解释器（分钟级起），本档只跑快速层。
+        run: |
+          python tools/check_test_isolation.py --compare -m smoke
