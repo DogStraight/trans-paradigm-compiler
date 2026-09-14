@@ -25,13 +25,15 @@ from __future__ import annotations
 import argparse
 import contextlib
 import difflib
+import importlib
 import io
 import os
 import sys
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
-from tests import _bootstrap  # noqa: E402,F401  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + stdout UTF-8）
+# 副作用导入（项目根已在 sys.path）：导入即完成 stdout/stderr UTF-8 重配置
+importlib.import_module("tests._bootstrap")
 from pipeline import _PIPELINE_SHARED, run_pipeline_on_source  # noqa: E402
 from core.config_registry import ConfigRegistry  # noqa: E402
 from core import plugin_loader  # noqa: E402

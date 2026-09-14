@@ -105,7 +105,7 @@ def _ensure_clean_tree() -> bool:
     return True
 
 
-def _run_mutation(m: dict[str, str], index: int) -> tuple[bool, str]:
+def _run_mutation(m: dict[str, str]) -> tuple[bool, str]:
     """施加变异 → 跑测试 → 还原。返回 (门禁是否如期变红, 说明)。"""
     path = os.path.join(_ROOT, m["file"])
     if not os.path.isfile(path):
@@ -168,7 +168,7 @@ def main() -> int:
     print(f"[info] 抽查 {len(selected)} 条变异（每条跑一次相关测试，约一分钟）\n")
     for i, m in selected:
         print(f"[{i}/{len(_MUTATIONS)}] {m['file']}")
-        ok, note = _run_mutation(m, i)
+        ok, note = _run_mutation(m)
         print(f"        {note}")
         if not ok:
             failures.append(f"{m['file']}（期望 {m['test']} 变红）：{note}")

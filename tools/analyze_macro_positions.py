@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import io
 import os
 import sys
@@ -28,7 +29,8 @@ from collections import Counter
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
-from tests import _bootstrap  # noqa: E402,F401  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + stdout UTF-8）
+# 副作用导入（项目根已在 sys.path）：导入即完成 stdout/stderr UTF-8 重配置
+importlib.import_module("tests._bootstrap")
 from core.define import DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR  # noqa: E402
 from core.token_protocol import TRIVIA_TOKEN_TYPES  # noqa: E402
 from lexer import Lexer  # noqa: E402

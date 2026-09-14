@@ -223,7 +223,7 @@ def main() -> int:
             print(f)
         return 0
 
-    cov, _label = _run_cov(files)
+    cov, _ = _run_cov(files)
     return _report(files, cov, args.fail_under)
 
 
