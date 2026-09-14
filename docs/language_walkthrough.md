@@ -243,15 +243,17 @@ ref = "text"
 @pytest.fixture(scope="module")
 def lang(config_loaded):
     ConfigRegistry.load_language("grammar/c4")
-    register = GrammarRulesRegister()      # ⚠ 独立实例，勿用 get_default() 单例
+    register = GrammarRulesRegister()      # 独立实例：不依赖全局单例状态
     rules = setup_grammar("grammar/c4", register)
     ...
     yield ctx
     ConfigRegistry.load_language("grammar/verilog", plugins_dir="grammar/verilog/plugins")
 ```
 
-> ⚠ 测试隔离：用独立 `GrammarRulesRegister` 实例，否则第二语言规则污染全局
-> 单例缓存，其它语言测试的规则树会混合。
+> ⚠ 测试隔离：语言装载会写进程级单例（注册表/配置/安装态）。仓库内测试由
+> `core/global_state.py` + conftest 自动还原（每测试还测试级状态、每模块还
+> 语言安装态）；自建测试环境时用 `snapshot()`/`restore()` 收尾，或用上例的
+> 独立 `GrammarRulesRegister` 实例避免依赖全局单例。
 
 ---
 

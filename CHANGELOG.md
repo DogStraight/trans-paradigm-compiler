@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **测试隔离：全局态登记表 + 覆盖门禁 + 两层还原（L1）**：`core/global_state.py`
+  的覆盖从手工表 → 五张登记表（`TRACKED` 测试级 / `INSTALL_STATE` 语言安装态 /
+  `CONTENT_ADDRESSED` / `CONSTANT` / `COVERED_ELSEWHERE`）+ 自动发现模块级/类级
+  可变容器，`tests/policy/test_global_state_coverage.py` 断言发现集 ⊆ 登记集
+  （新增全局态不登记即红）。`restore()` 分两层：测试级每测试还原（派生缓存、
+  共享上下文、深度计数器、注册表新增项），安装态每模块还原（pratt 安装态、
+  插件/原语注册表——逐测试擦除会打断模块级 fixture 装载的语言）。每测试还原后
+  立即 `assert_clean` 比对基线指纹。过程中的两处修正：keywise 还原改为
+  "去掉新增 + 补回被删基线键"（原先只删不补，会把语言重注册清掉的基线项永久
+  丢失）；快照前预热全部登记条目的按需导入（导入有注册副作用，否则快照内容
+  依赖触发顺序，快照与还原读到不同集合）。全量 1862 passed / 8 skipped。
 - **阶段 9 终验（0.1.2 收尾）**：覆盖率门禁 **86.81%**（≥ fail_under 80；
   串行 `-n 0` 全量 1851 passed / 8 skipped）；e2e 102 组 **FAIL 0**（66 OK /
   36 预期 ERR）；lint recall 33/33、零误报；eval_check_accuracy recall 100%

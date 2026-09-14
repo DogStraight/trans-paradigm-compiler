@@ -24,7 +24,8 @@
 3. **全局可变单例（注册表/配置/组件表）**（工程摩擦，机制已备）：
    GrammarRulesRegister / ConfigRegistry / plugin_loader 进程级、只增不重置
    ——同进程多语言/多配置切换需独立实例或经 `core/global_state.py`
-   snapshot/restore 清理（测试已自动化：conftest 每测试还原，顺序无关）。
+   snapshot/restore 清理（测试已自动化：conftest 每测试还原测试级状态、
+   每模块还原语言安装态，顺序无关）。
 4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；
    插件作者应把注入语句归组到容器规则（`plugins/syntax/sim/` 的
    `SimCtrlStmt`）。

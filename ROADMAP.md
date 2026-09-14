@@ -173,11 +173,6 @@
 > **隐式契约**会随规模（加语言包 / 检查族）复发；性质 = 把"记得做"门禁化。
 > 非发布阻塞，长期逐条做。
 
-- [ ] **`global_state` 清单检测**（最可能复发）：扫描 core / pipeline / analyzer
-      模块级可变全局（单例/表/缓存），与 `core/global_state.snapshot()` 覆盖比对——
-      防新增全局态漏登记 → 顺序污染回归（历史复现：mapping_cfg 跨语言包串、
-      批次 5/6 偶挂）。`module_vars` 已自动发现（`_CONFIG_DECLARATIONS` 遍历），
-      缺的是非 config 全局态
 - [ ] **smoke 覆盖检测**：新增/改动功能文件未标 `@pytest.mark.smoke` 时提示，
       或输出"未进层"清单供人工判断（现状纯靠人记得标 + 顶部注释标组）
 - [ ] **检查链门禁补齐**（系统 2）：`inst_check` 功能专测（W101/W102/W103 现无

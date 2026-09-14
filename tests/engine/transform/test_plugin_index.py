@@ -30,7 +30,14 @@ def test_engine_slot_runner_registered() -> None:
 
 
 def test_c4_plugin_uses_component_qualified_name() -> None:
-    from grammar.c4.plugins.asm_gen import _asm  # noqa: F401
+    # 注册是 import 期副作用（@register_plugin），而模块导入有缓存 → 前序测试
+    # 导入过就不会重放；且插件注册表属"语言安装态"，模块结束即被还原。
+    # 因此显式 reload 重放注册，不依赖跨模块的注册残留。
+    import importlib
+
+    from grammar.c4.plugins.asm_gen import _asm
+
+    importlib.reload(_asm)
 
     idx = get_plugin_index()
     assert "asm_gen.codegen" in idx

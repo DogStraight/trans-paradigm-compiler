@@ -52,11 +52,30 @@ def _global_state_baseline() -> dict:
 
 @pytest.fixture(autouse=True)
 def _restore_global_state(_global_state_baseline: dict) -> Iterator[None]:
-    """每个测试结束后把全局状态还原到 verilog 基线 → 测试顺序无关。"""
+    """每个测试结束后把**测试级**全局状态还原到基线 → 测试顺序无关。
+
+    - 测试级 = 派生缓存 / 注册表新增项 / 共享上下文 / 深度计数器（见
+      `core/global_state.py` 的 TRACKED）。
+    - 语言安装态（INSTALL_STATE）不在此列：模块级 fixture 构造 Parser 装载
+      语言后就合法拥有该状态，逐测试擦除会让同模块后续测试误解析——它由
+      `_restore_install_state` 在模块结束时收尾。
+    - 还原后立即 assert_clean：把"还原机制自身漏项"当场变红（实测抓到两处：
+      keywise 还原不补被删基线键、快照内容依赖导入顺序）。
+    """
+    yield
+    from core.global_state import assert_clean, restore
+
+    restore(_global_state_baseline, scope="test")
+    assert_clean(_global_state_baseline)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_install_state(_global_state_baseline: dict) -> Iterator[None]:
+    """模块结束时还原语言安装态 → 跨模块不串味（模块内由 fixture 自管）。"""
     yield
     from core.global_state import restore
 
-    restore(_global_state_baseline)
+    restore(_global_state_baseline, scope="install")
 
 
 @pytest.fixture(scope="session")
