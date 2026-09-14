@@ -7,10 +7,12 @@
 
 1. 先读 `docs/engine_overview.md`（引擎一条线，建立全景）再查 `docs/MODEL_INDEX.md`
    跳转表：知识单元 → 文档位置 → 实现（Impl）→ 验证（Test）
-2. 读对应 `docs/decisions/`（为什么，ADR）与架构文档（怎么拼）
-3. 改代码时维护文件头 `Doc:` 反向引用（约定见 `policy/doc-alignment.md`）
-4. 跑对应测试（`tests/`）；改 linter 用 `tests/e2e/eval_lint_accuracy.py` 验证 recall/误报
-5. 写代码守规约（非门禁软规约）：注释语言/分区标题/命名 →
+2. 查 `docs/gaps/README.md` 对应部件档案：边界/接受项在这——先确认"这算不算
+   要改"，避免把刻意接受的设计当 bug 修、或重复调研已否掉的方向
+3. 读对应 `docs/decisions/`（为什么，ADR）与架构文档（怎么拼）
+4. 改代码时维护文件头 `Doc:` 反向引用（约定见 `policy/doc-alignment.md`）
+5. 跑对应测试（`tests/`）；改 linter 用 `tests/e2e/eval_lint_accuracy.py` 验证 recall/误报
+6. 写代码守规约（非门禁软规约）：注释语言/分区标题/命名 →
    `policy/coding-style.md`；表达式书写约定 → `parser/expression_conventions.md`；
    **改过哪个 py 文件就清哪个文件的静态诊断** → `policy/pylance-cleanup.md`
    （agent 侧 Pylance MCP 逐文件查，清零判据见该文）

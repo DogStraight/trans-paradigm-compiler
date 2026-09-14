@@ -21,11 +21,18 @@
    符号/名字解析）；真正新语义能力 = 引擎原语/插件脚本；表达式树形态
    （`UnaryOp`/`BinaryOp`）+ 内建前缀运算符是引擎约定，语言包须对齐非全自由
    数据。
-3. **全局可变单例（注册表/配置/组件表）**（工程摩擦，机制已备）：
-   GrammarRulesRegister / ConfigRegistry / plugin_loader 进程级、只增不重置
-   ——同进程多语言/多配置切换需独立实例或经 `core/global_state.py`
-   snapshot/restore 清理（测试已自动化：conftest 每测试还原测试级状态、
-   每模块还原语言安装态，顺序无关）。
+3. **全局可变单例（注册表/配置/组件表）**（工程摩擦，机制已备）：三张表进程级、
+   跨语言会累积——正确性靠**作用域过滤 + 缓存键一致性**，不靠"别的语言不引用"：
+   - 语言切换重建：`core/define.py::GrammarRulesRegister.begin_language`
+     （rules_dir 变更即 reset；否则累积规则会被 `parser/rule_selector.py`
+     当根规则选中）
+   - 插件作用域：`core/plugin_loader.py::_active_components`（装载时固定）→
+     `transform/engine.py::active_plugin_classes`（只跑当前语言组件）
+   - 缓存复用回切：`pipeline/__init__.py::_ensure_language_config`
+     （`_PIPELINE_SHARED` 命中时把 ConfigRegistry 切回当前语言）
+   测试侧清理走 `core/global_state.py` snapshot/restore（conftest 每测试还原
+   测试级状态、每模块还原语言安装态，顺序无关）；进程级隔离对照见
+   `tools/check_test_isolation.py`。
 4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；
    插件作者应把注入语句归组到容器规则（`plugins/syntax/sim/` 的
    `SimCtrlStmt`）。
@@ -43,10 +50,12 @@
 
 ## 可实现性
 
-- 3/4：机制已备（全局状态快照/还原 `core/global_state.py`；注入归组容器
-  规则），已有测试与 sim 插件先例。
+- 3/4：机制已备（语言作用域重建/过滤 + 缓存回切见边界 3；测试侧快照/还原
+  `core/global_state.py`；注入归组容器规则），已有测试与 sim 插件先例。
 - 1/2：不改（范围）。
 
 ## 关联条目
 
 - `grammar/verilog/plugins/typed_ports/` + `analyzer/checker.py::ProjectChecker`
+- 边界 3 机制：`tests/engine/core/test_language_switch.py`（语言切换作用域门禁）、
+  `tools/check_test_isolation.py`（进程级隔离对照）
