@@ -11,16 +11,20 @@
 2. **保留行结构**（接受）：重新缩进/对齐/折超长，但**永不合并行、不插空行**——
    输出结构源于输入既有行。风格配置编码并经保真基线校验，非硬编码单一 house
    style。
-3. **幂等只在保留路径保证**（接受）：展开路径（宏展开/transform）内容按设计
-   变化，不幂等检查。
-4. **宽度折行留下部分超长结构不折**（摩擦）：无顶层安全断点的超长行不折——
-   179 字符单标识符行原样保留；有 `+`/`,` 断点的超长行正常折（在 96 列断行）。
-   属可接受空档（输出合法）。
-5. **折行后带注释行的 init 重拼空格**（摩擦，既存）：带行尾注释的长行首遍被
-   列对齐跳过（注释保护），wrap 拆行后**无注释的头段**在二遍 format_source 里
-   进入列对齐——init token 重拼（`_parse_decl_parts` 的 `" ".join`）给 concat
-   内 `,` 前补一格（`{ RESMODE, 4'd0 }` → `{ RESMODE , 4'd0 }`）；二遍后收敛
-   （t2 == t3，非振荡），输出合法、仅空白差异。
+3. **幂等只在保留路径保证**（接受）：展开路径（宏表 / 占位符 / 指令行非空，
+   `pipeline._check_idempotent` 判据）内容按设计变化，不幂等检查；其余路径
+   （含 transform 输出）要求可被管线再次稳定解析。
+4. **宽度折行留下部分超长结构不折**（摩擦）：无顶层安全断点的超长行不折
+   ——单标识符行 / 超长字符串行原样保留；续行 / 端口列表 / 注释 / 指令行
+   按设计跳过（ice40 语料未折超长行以此类为主）；有 `+`/`,` 断点的超长行
+   正常折，断点列按惩罚模型选取（实测首段 5–97 列不等，非固定列）。属可
+   接受空档（输出合法）。
+5. **折行头段的 init 重拼空格**（摩擦，既存）：列对齐的 init 重拼
+   （`_parse_decl_parts` 的 `" ".join`）给 concat 内 `,` 前补一格；wrap 拆行
+   时只对头段做 concat 空格清理（` ,` → `,`）、尾段不清理。清理只在拆行
+   那一遍生效——二遍头段（行已短、不再拆）重入列对齐，重拼的补格留存
+   （`{ RESMODE, 4'd0 }` → `{ RESMODE , 4'd0 }`，darkriscv 实测 2 行：
+   t1 → t2）；二遍后收敛（t2 == t3，非振荡），输出合法、仅空白差异。
 
 ## 为什么是边界（影响面）
 
@@ -32,7 +36,7 @@
 
 ## 成熟解法参照（见贤思齐）
 
-- clang-format 对声明器列表/超长表达式的折行（`binpack`/`AlwaysBreakAfter`）
+- clang-format 对超长表达式/参数列表的折行（`binpack`/`AlwaysBreakAfter`）
   是对齐 4 的参照方向（世界 B pass 内，非引擎改动）。
 - verible 差分门禁（`tests/differential/run_differential.py`）已是对拍裁判。
 
@@ -47,6 +51,7 @@
 
 - `grammar/verilog/plugins/formatter/README.md`（世界 B：数据流/带结构行/引擎内建遍）
 - 实现：`grammar/verilog/plugins/formatter/passes/column_align.py::run_category_pass`
-- 门禁：`tests/languages/verilog/test_formatter*.py` + `test_column_align.py`
-  （含重组输出断言，漂移形态 `,\s{2,}<ident>`）+ vs Verible 差分（
-  `tests/differential/run_differential.py`）+ e2e 幂等门禁
+- 门禁：`tests/languages/verilog/test_wrap.py`（折行）+ `test_column_align.py`
+  （含重组输出断言，漂移形态 `,\s{2,}<ident>`）+ `test_idempotent.py` + vs
+  Verible 差分（`tests/differential/run_differential.py`）+ e2e 幂等门禁
+  （`tests/e2e/test_pipeline_idempotent.py`）
