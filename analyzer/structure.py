@@ -25,7 +25,7 @@ import bisect
 import os
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from core.define import Node
 from core.config_registry import declare_cfg
@@ -125,6 +125,15 @@ class FileResult:
 
 class _StructureBase:
     """结构提取底座（elaboration）。字段初始化见 ProjectChecker.__init__。"""
+
+    # 门面（ProjectChecker）持有的共享状态与共享组件入口——底座各方法直接
+    # 访问，初始化在门面 __init__ / _ensure_shared（两者共用同一对象）。
+    _memo: dict[str, FileResult]
+    _module_index: dict[str, ModuleInfo]
+    _rules_dir: str
+    _include_dirs: list[str]
+    _expand_macros: bool
+    _ensure_shared: Callable[[], dict]
 
     def _refresh_structure(self) -> None:
         """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。"""

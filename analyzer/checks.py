@@ -31,7 +31,6 @@ from core.check_registry import (
     get_rules_for_kind,
     load_user_check_config,
 )
-from core.define import Node
 
 # handler 缓存：{插件目录: {规则 id: (module, fn)}}——handler 是插件
 # 目录内脚本（_name_check.py:check_module），跨 analyze 复用模块对象
@@ -112,7 +111,7 @@ def check_rules_pass(analyzer, context) -> None:
             rid = rule.get("id", "")
             if rid not in active:
                 continue  # 未启用（默认关 / 不选即关）
-            if _disabled_for_file(rid, sym, file_ctx, per_file):
+            if _disabled_for_file(rid, file_ctx, per_file):
                 continue  # per_file 豁免
             rule = _with_override(rule, overrides.get(rid))
             _apply_rule(sym, rule, name, context)
@@ -132,7 +131,7 @@ def _file_context(symbols) -> str | None:
     return None
 
 
-def _disabled_for_file(rid: str, sym, file_ctx: str | None, per_file: dict) -> bool:
+def _disabled_for_file(rid: str, file_ctx: str | None, per_file: dict) -> bool:
     """per_file glob 豁免：符号文件匹配 glob → disabled 含 rid → 跳过。"""
     if not per_file or not file_ctx:
         return False
