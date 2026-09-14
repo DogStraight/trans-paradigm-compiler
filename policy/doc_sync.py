@@ -128,7 +128,7 @@ def collect_refs(root: Path, target: str) -> list[Ref]:
         def overlaps(start: int, end: int) -> bool:
             return any(s < end and start < e for s, e, _ in collected)
 
-        def add(start: int, end: int, text_val: str, tgt: str, full: str) -> None:
+        def add(start: int, end: int, text_val: str, tgt: str | None) -> None:
             if overlaps(start, end):
                 return
             collected.append((start, end, Ref(rel.as_posix(), _line_of(text, start),
@@ -143,7 +143,7 @@ def collect_refs(root: Path, target: str) -> list[Ref]:
                 tgt = m.group(1)
                 if tgt != target:
                     continue
-                add(m.start(1), m.end(1), m.group(0).strip(), tgt, m.group(0))
+                add(m.start(1), m.end(1), m.group(0).strip(), tgt)
 
         # 形态 2/3 仅对 .md/.toml（导航索引/文档正文/TOML 注释）
         if not is_code:
@@ -154,7 +154,7 @@ def collect_refs(root: Path, target: str) -> list[Ref]:
                 tgt = gate._resolve_nav_target(m.group(0), root)
                 if tgt != target:
                     continue
-                add(m.start(), m.end(), m.group(0), tgt, m.group(0))
+                add(m.start(), m.end(), m.group(0), tgt)
 
             # 形态 3：反引号裸名 / 子目录前缀（替换区间 = group(1) 内部，保留反引号）
             for m in gate._BARE_REF_RE.finditer(text):
@@ -166,7 +166,7 @@ def collect_refs(root: Path, target: str) -> list[Ref]:
                 tgt = gate._resolve_nav_target(cand, root)
                 if tgt != target:
                     continue
-                add(m.start(1), m.end(1), cand, tgt, cand)
+                add(m.start(1), m.end(1), cand, tgt)
         refs.extend(r for _, _, r in collected)
     return refs
 
@@ -253,7 +253,7 @@ def _apply_replacements(root: Path, refs: Sequence[Ref], new_doc: str) -> list[R
 
 # ── 输出 ────────────────────────────────────────────────────────────────────
 
-def _print_refs(refs: Sequence[Ref], root: Path) -> None:
+def _print_refs(refs: Sequence[Ref]) -> None:
     if not refs:
         print("  无引用点（可直接改名/删除）")
         return
@@ -266,7 +266,7 @@ def _print_refs(refs: Sequence[Ref], root: Path) -> None:
 
 def cmd_refs(root: Path, target: str) -> int:
     print(f"[refs] {target} 的引用点：")
-    _print_refs(collect_refs(root, target), root)
+    _print_refs(collect_refs(root, target))
     return 0
 
 
@@ -284,7 +284,7 @@ def cmd_rename(root: Path, old: str, new: str, apply: bool) -> int:
 
     refs = collect_refs(root, old_doc)
     print(f"[rename] {old_doc} → {new_doc}（引用点 {len(refs)} 处）")
-    _print_refs(refs, root)
+    _print_refs(refs)
     if not apply:
         print("[rename] dry-run：加 --apply 落盘；落盘后请 git add -A 并跑 check_doc_refs.py 验证")
         return 0
@@ -292,7 +292,7 @@ def cmd_rename(root: Path, old: str, new: str, apply: bool) -> int:
     manual = _apply_replacements(root, refs, new_doc)
     if manual:
         print(f"[rename] 以下 {len(manual)} 处无法机械替换，请人工处理：")
-        _print_refs(manual, root)
+        _print_refs(manual)
     # 移动文件本身
     os.makedirs(old_path.parent, exist_ok=True)
     new_path = root / new_doc
@@ -314,7 +314,7 @@ def cmd_delete(root: Path, target: str, apply: bool) -> int:
 
     refs = collect_refs(root, target_doc)
     print(f"[delete] {target_doc} 的引用点 {len(refs)} 处：")
-    _print_refs(refs, root)
+    _print_refs(refs)
     if not apply:
         print("[delete] dry-run：加 --apply 清理机械可清引用并删除文件")
         return 0
@@ -350,7 +350,7 @@ def cmd_delete(root: Path, target: str, apply: bool) -> int:
             manual.append(ref)
     if manual:
         print(f"[delete] 以下 {len(manual)} 处引用非机械可清，请人工处理后再删：")
-        _print_refs(manual, root)
+        _print_refs(manual)
         print("[delete] 未做任何改动（原子拒绝，避免部分提交状态）")
         return 1
 

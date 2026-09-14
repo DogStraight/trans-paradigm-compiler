@@ -289,7 +289,9 @@ def rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
         except SyntaxError:
             continue
         for node in ast.walk(tree):
-            func = node.func if isinstance(node, ast.Call) else None
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
             if (
                 isinstance(func, ast.Attribute)
                 and func.attr == "chdir"
