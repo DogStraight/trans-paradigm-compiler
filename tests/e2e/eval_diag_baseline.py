@@ -124,7 +124,7 @@ def main() -> int:
         return 2
     data = load_baseline()
     baseline: dict[str, int] = data.get("counts", {})
-    grew, shrank, same = compare(current, baseline)
+    grew, shrank, _ = compare(current, baseline)
 
     if args.json:
         print(json.dumps(

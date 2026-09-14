@@ -19,11 +19,10 @@ docstring、CHANGELOG、TODO 各写一遍，**同一轮错了三次**，全靠�
 故 `test_patterns_match_known_samples` 用典型样本串反证模式仍然有效。
 """
 
+import importlib
 import os
 import re
 import sys
-
-import pytest
 
 _ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,7 +30,7 @@ _ROOT = os.path.dirname(
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 # 纳管清单（相对仓库根）。新增"声明规模数字"的文件时显式加入。
 _TARGETS = [

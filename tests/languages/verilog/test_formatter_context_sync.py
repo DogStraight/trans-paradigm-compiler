@@ -98,6 +98,7 @@ class TestEngineFallback:
         """漏同步的拆行 pass 后，引擎按最近 ctx 派生补齐（后续 pass 可观察）。"""
 
         def _split_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（恶意 pass 故意不同步）
             # 恶意 pass：拆行但不同步 contexts（模拟未来漏同步的 pass）
             out = []
             for l in lines:
@@ -125,6 +126,7 @@ class TestEngineFallback:
         """行数变少（合并）时 contexts 截断对齐。"""
 
         def _merge_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（合并遍不需 contexts）
             return [lines[0]]
 
         eng = FormatterEngine([

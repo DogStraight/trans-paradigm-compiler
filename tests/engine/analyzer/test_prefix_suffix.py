@@ -133,6 +133,7 @@ class TestPrefixSuffix:
 
     def test_require_mode_via_rule_data(self, checker, tmp_path):
         """require = true 时无后缀也报（规则数据开启强约定）。"""
+        del checker, tmp_path  # fixture 依赖声明（本用例只查规则数据）
         from core import check_registry
 
         rules = check_registry.get_check_rules()

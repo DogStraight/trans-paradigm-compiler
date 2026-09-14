@@ -17,6 +17,7 @@ class _Ctx:
     rules: dict = {}
 
     def log(self, _msg: str) -> None:
+        del _msg  # log 协议签名参数（本桩不打日志）
         return None
 
 
@@ -24,6 +25,7 @@ class _Probe(TransformPlugin):
     seen: list[str] = []
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         _Probe.seen.append("probe")
         return ast
 
@@ -32,6 +34,7 @@ class _Other(TransformPlugin):
     seen: list[str] = []
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         _Other.seen.append("other")
         return ast
 

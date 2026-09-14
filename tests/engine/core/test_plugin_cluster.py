@@ -146,7 +146,7 @@ class TestPluginConfigDeclarations:
     def test_find_plugin_tpc_recursive(self, tmp_path):
         from core.config_registry import _find_plugin_tpc
 
-        plugins = _make_cluster_tree(tmp_path)
+        _make_cluster_tree(tmp_path)
         tpc, rel = _find_plugin_tpc(str(tmp_path), "clu_sim")
         assert tpc.endswith(os.path.join("syntax", "clu_sim", "tpc.toml"))
         assert rel == "syntax/clu_sim"
@@ -215,4 +215,5 @@ class TestVerilogFlatRegression:
             "[XRule]\nproduction = 'XRule : ;'\n", encoding="utf-8"
         )
         meta = _parse_component_toml(str(deep / "tpc.toml"))
+        assert meta is not None
         assert meta["name"] == "comp"

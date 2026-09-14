@@ -5,13 +5,15 @@
 """
 import pytest
 
+from typing import Any
+
 from pipeline.units import UnitInstance, assign_points, parse_units
 
 pytestmark = pytest.mark.smoke
 
 
 def _u(name: str, **kw) -> UnitInstance:
-    base = {"type": "transform", "impl": f"impl_{name}"}
+    base: dict[str, Any] = {"type": "transform", "impl": f"impl_{name}"}
     base.update(kw)
     return UnitInstance(name=name, **base)
 
@@ -200,6 +202,7 @@ class TestBuildUnitSchedule:
         from pipeline.schedule import build_unit_schedule
 
         def _fn(state) -> None:  # noqa: ANN001
+            del state  # check handler 协议签名参数
             return None
 
         seq = build_unit_schedule(

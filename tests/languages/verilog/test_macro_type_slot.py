@@ -49,6 +49,7 @@ _PT = "`define PT reg [7:0]\nmodule m;\n  output `PT q;\nendmodule\n"
 )
 def test_type_position_macro_parses(src: str, name: str) -> None:
     """类型位宏：解析成功（无需任何语法槽位），且树中不出现宏专用节点。"""
+    del name  # parametrize 提供的用例标签（只用于 id）
     res = _run(src)
     assert res["success"], res.get("error")
     assert _find(res["ast"], "MacroCall") == []

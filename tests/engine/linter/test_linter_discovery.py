@@ -13,6 +13,7 @@ from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
 
 @pytest.fixture(scope="module")
 def scanner(config_loaded):
+    del config_loaded  # fixture 依赖声明（配置加载）
     from linter.scanner import LinterScanner
 
     return LinterScanner(DEFAULT_RULES_DIR, ext_dirs=DEFAULT_EXT_DIRS)

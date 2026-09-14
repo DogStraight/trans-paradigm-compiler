@@ -15,6 +15,7 @@ class _Ctx:
     rules: dict = {}
 
     def log(self, _msg: str) -> None:
+        del _msg  # log 协议签名参数（本桩不打日志）
         return None
 
 
@@ -50,7 +51,7 @@ def _decl(name: str, result: str = "none", walk: str = "top", on=("T",)) -> dict
 def test_slot_unit_builds_passdecl(monkeypatch) -> None:
     from pipeline.schedule import build_unit_schedule
 
-    _install(monkeypatch, {"probe_slot": _decl("probe_slot")}, {"probe_slot": lambda n, c: n})
+    _install(monkeypatch, {"probe_slot": _decl("probe_slot")}, {"probe_slot": lambda n, _: n})
     seq = build_unit_schedule({"s1": {"type": "transform", "slot": "probe_slot"}})
     assert seq is not None
     assert [(d.name, d.kind, d.slot, d.impl) for d in seq] == [
@@ -99,8 +100,12 @@ def test_missing_impl_and_slot_fails() -> None:
 
 
 def test_slot_unit_uses_slot_runner_contract(monkeypatch) -> None:
+    import importlib
+
     from pipeline.schedule import _contract_of, build_unit_schedule
-    from transform import slot_runner  # noqa: F401
+
+    # slot_runner 模块：导入即注册契约（副作用导入，名称本身不用）
+    importlib.import_module("transform.slot_runner")
 
     _install(monkeypatch, {"probe_slot": _decl("probe_slot")}, {})
     seq = build_unit_schedule({"s1": {"type": "transform", "slot": "probe_slot"}})
@@ -119,7 +124,7 @@ def test_only_slot_runs_single_slot(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"a": _decl("a"), "b": _decl("b")},
-        {"a": lambda n, c: seen.append("a") or n, "b": lambda n, c: seen.append("b") or n},
+        {"a": lambda n, _: seen.append("a") or n, "b": lambda n, _: seen.append("b") or n},
     )
     root = _tree("T")
     SlotRunnerPlugin(only_slot="a").process(root, SCOPE)
@@ -131,7 +136,7 @@ def test_full_runner_runs_all_declared_slots(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"a": _decl("a"), "b": _decl("b")},
-        {"a": lambda n, c: seen.append("a") or n, "b": lambda n, c: seen.append("b") or n},
+        {"a": lambda n, _: seen.append("a") or n, "b": lambda n, _: seen.append("b") or n},
     )
     SlotRunnerPlugin().process(_tree("T"), SCOPE)
     assert seen == ["a", "b"]
@@ -140,7 +145,7 @@ def test_full_runner_runs_all_declared_slots(monkeypatch) -> None:
 def test_unknown_only_slot_fails(monkeypatch) -> None:
     import pytest
 
-    _install(monkeypatch, {"a": _decl("a")}, {"a": lambda n, c: n})
+    _install(monkeypatch, {"a": _decl("a")}, {"a": lambda n, _: n})
     with pytest.raises(ValueError, match="未知槽位"):
         SlotRunnerPlugin(only_slot="nope").process(_tree("T"), SCOPE)
 
@@ -149,7 +154,7 @@ def test_result_remove_drops_node(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"drop": _decl("drop", result="remove")},
-        {"drop": lambda n, c: None},
+        {"drop": lambda *_: None},
     )
     root = _tree("T", "Keep")
     SlotRunnerPlugin().process(root, SCOPE)
@@ -165,7 +170,7 @@ def test_result_extra_does_not_rewire_ast(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"wrap": _decl("wrap", result="extra")},
-        {"wrap": lambda n, c: Node("Wrapper")},
+        {"wrap": lambda *_: Node("Wrapper")},
     )
     root = _tree("T")
     SlotRunnerPlugin().process(root, SCOPE)
@@ -177,7 +182,7 @@ def test_result_none_keeps_returned_node(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"swap": _decl("swap", result="none")},
-        {"swap": lambda n, c: Node("Rewired")},
+        {"swap": lambda *_: Node("Rewired")},
     )
     root = _tree("T")
     SlotRunnerPlugin().process(root, SCOPE)
@@ -186,6 +191,7 @@ def test_result_none_keeps_returned_node(monkeypatch) -> None:
 
 def test_result_replace_migrates_comments(monkeypatch) -> None:
     def _fn(node, ctx):  # noqa: ANN001, ANN201
+        del node, ctx  # 槽位 handler 协议签名参数
         return Node("New")
 
     _install(
@@ -205,7 +211,7 @@ def test_recursive_walk_visits_nested(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"deep": _decl("deep", walk="recursive", on=("T",))},
-        {"deep": lambda n, c: seen.append(n.node_name) or n},
+        {"deep": lambda n, _: seen.append(n.node_name) or n},
     )
     root = Node("Root")
     inner = Node("Inner")
@@ -220,7 +226,7 @@ def test_run_pass_transform_slot_path(monkeypatch) -> None:
     _install(
         monkeypatch,
         {"probe_slot": _decl("probe_slot", on=("ProbeNode",))},
-        {"probe_slot": lambda n, c: seen.append(n.node_name) or n},
+        {"probe_slot": lambda n, _: seen.append(n.node_name) or n},
     )
     from pipeline.schedule import PassState, _run_pass_transform
 

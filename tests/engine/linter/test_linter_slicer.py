@@ -17,6 +17,7 @@ from linter.grammar_slicer import build_slice_tree, _collect_first_start_tokens
 
 @pytest.fixture(scope="module")
 def tree(config_loaded):
+    del config_loaded  # fixture 依赖声明（配置加载）
     rules = setup_grammar(
         DEFAULT_RULES_DIR,
         GrammarRulesRegister.get_default(),

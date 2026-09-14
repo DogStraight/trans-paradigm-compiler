@@ -22,6 +22,7 @@ def _make_fake_renderer():
             return level * len(self._INDENT_STR)
 
         def _get_merged_layout(self, parent_layout, child_name):
+            del parent_layout, child_name  # renderer 协议签名参数
             return {"layout": {"ref": "value"}}
 
         def _eval(self, expr, node, parent_layout=None):

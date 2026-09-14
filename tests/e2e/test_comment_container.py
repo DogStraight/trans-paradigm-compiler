@@ -13,13 +13,14 @@ Comment 迭代项进容器 items（结构序），renderer join 独立行段渲�
 4. 幂等：格式化的输出再次格式化不变。
 """
 
+import importlib
 import os
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 from tests.e2e.run_pipeline import run_pipeline_on_source  # noqa: E402
 
@@ -138,7 +139,7 @@ class TestContainerGapComments:
             out, ast = _run(_MODULE_PORTS, fmt)
             _assert_comment_kept_standalone(out, "// State", f"fmt={fmt}", "a,", "output")
             _assert_comment_kept_standalone(out, "// Data", f"fmt={fmt}", "b,", "output")
-        _out, ast = _run(_MODULE_PORTS, True)
+        _, ast = _run(_MODULE_PORTS, True)
         _assert_ast_items(ast, "PortList", ["// State", "// Data"])
 
     def test_named_port_list_comments(self):
@@ -147,7 +148,7 @@ class TestContainerGapComments:
             out, ast = _run(_INST_PORTS, fmt)
             _assert_comment_kept_standalone(out, "// Control", f"fmt={fmt}", "clk", ".en")
             _assert_comment_kept_standalone(out, "// Data", f"fmt={fmt}", ".en", ".q")
-        _out, ast = _run(_INST_PORTS, True)
+        _, ast = _run(_INST_PORTS, True)
         _assert_ast_items(ast, "NamedPortList", ["// Control", "// Data"])
 
     def test_declarator_list_comments(self):
@@ -155,7 +156,7 @@ class TestContainerGapComments:
         for fmt in (False, True):
             out, ast = _run(_DECLARATORS, fmt)
             _assert_comment_kept_standalone(out, "// group b", f"fmt={fmt}", "a,", "b,")
-        _out, ast = _run(_DECLARATORS, True)
+        _, ast = _run(_DECLARATORS, True)
         _assert_ast_items(ast, "DeclaratorList", ["// group b"])
 
     def test_case_item_comments(self):
@@ -164,7 +165,7 @@ class TestContainerGapComments:
             out, ast = _run(_CASE_ITEMS, fmt)
             _assert_comment_kept_standalone(out, "// state one", f"fmt={fmt}", "1'b0;", "2'b01")
             _assert_comment_kept_standalone(out, "// state two", f"fmt={fmt}", "1'b1;", "default")
-        _out, ast = _run(_CASE_ITEMS, True)
+        _, ast = _run(_CASE_ITEMS, True)
         _assert_ast_items(ast, "CaseItemList", ["// state one", "// state two"])
 
     def test_idempotent(self):
@@ -207,7 +208,7 @@ class TestBlockEndComments:
     def test_end_line_comment_kept(self):
         """`end // case zero` 行尾注释保留在 end 行尾（format 开/关）。"""
         for fmt in (False, True):
-            out, ast = _run(_BLOCK_END, fmt)
+            out, _ = _run(_BLOCK_END, fmt)
             lines = out.splitlines()
             for c in ("case zero", "case one"):
                 assert c in out, f"[fmt={fmt}] 注释 {c!r} 丢失"
@@ -258,7 +259,7 @@ class TestContainerHeadComments:
     def test_module_port_head_comment(self):
         """模块头首端口前独占注释：独立行渲染 + 幂等。"""
         for fmt in (False, True):
-            out, ast = _run(_HEAD_COMMENT, fmt)
+            out, _ = _run(_HEAD_COMMENT, fmt)
             assert "head comment" in out, f"[fmt={fmt}] 注释丢失"
             lines = out.splitlines()
             ci = next(i for i, l in enumerate(lines) if "head comment" in l)
@@ -272,7 +273,7 @@ class TestContainerHeadComments:
     def test_named_port_list_head_comment(self):
         """实例端口列表首连接前独占注释：保留。"""
         for fmt in (False, True):
-            out, _ast = _run(_INST_HEAD, fmt)
+            out, _ = _run(_INST_HEAD, fmt)
             assert "first port group" in out, f"[fmt={fmt}] 注释丢失"
         out1, _ = _run(_INST_HEAD, True)
         out2, _ = _run(out1, True)

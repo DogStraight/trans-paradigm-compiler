@@ -160,7 +160,7 @@ def _check_multi_driver(analyzer, context, connections) -> None:
     for conn in connections:
         local_sigs.update(conn.connects.values())
         local_sigs.update(conn.ordered)
-    for (_mod, sig), entry in signal_graph.items():
+    for (_, sig), entry in signal_graph.items():
         drivers = entry.get("drivers", [])
         if len(drivers) < 2:
             continue

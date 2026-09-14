@@ -43,12 +43,12 @@ class TestHierarchy:
 
     def test_trans_paradigm_error_unified_catch(self):
         for exc in (ConfigError("x"), ParseError("x"), GrammarError("x")):
+            caught = False
             try:
                 raise exc
             except TransParadigmError:
-                pass  # 统一按类型捕获生效
-            else:
-                raise AssertionError(f"{exc} 未被 TransParadigmError 捕获")
+                caught = True  # 统一按类型捕获生效
+            assert caught, f"{exc} 未被 TransParadigmError 捕获"
 
     def test_define_reexports_parse_error(self):
         # core.define re-export，保持 `from core.define import ParseError` 兼容

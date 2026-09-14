@@ -175,7 +175,7 @@ class TestRealWorkflowFiles:
         root = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."
         )
-        for rel, _name in self._FILES:
+        for rel, _ in self._FILES:
             path = os.path.join(root, rel)
             with open(path, encoding="utf-8") as f:
                 src = f.read()

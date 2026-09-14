@@ -29,6 +29,7 @@ def c4(config_loaded):
     用独立 GrammarRulesRegister 实例，避免污染全局单例（get_default() 的
     rules 缓存被 c4 规则污染后，后续 verilog 测试规则树会混合）。
     """
+    del config_loaded  # fixture 依赖声明（配置加载）
     ConfigRegistry.load_language("grammar/c4")
     register = GrammarRulesRegister()  # 独立实例，不污染全局单例
     rules = setup_grammar("grammar/c4", register)
@@ -107,6 +108,7 @@ class TestC4Assembly:
         assert any(l.strip() == "ADD" for l in lines)
 
     def test_guard_non_c4_untouched(self, c4):
+        del c4  # fixture 依赖声明（本用例只测非 c4 根节点原样返回）
         # 守卫：非 Program 根节点（其它语言）原样返回，不生成汇编
         from core.define import Node
 

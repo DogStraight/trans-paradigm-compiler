@@ -440,6 +440,7 @@ class TestUnsizedPrefixes:
 class TestLexerIntegration:
     def test_heredoc_content_not_tokenized(self, config_loaded):
         """heredoc 内容里 # $ / 原样保留，不触发注释/符号/unrecognized。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         td = _make_td(
             capture_modes=[
                 {
@@ -461,6 +462,7 @@ class TestLexerIntegration:
 
     def test_multi_char_delimiter_keeps_trailing_tokens(self, config_loaded):
         """多字符字符串定界符：闭合后行内后续 token 不被吞掉（集成）。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         td = _make_td(string_delims=['"""'])
         lexer = _lexer_with(td)
         tokens = lexer.tokenize('x = """ab""" y')
@@ -473,6 +475,7 @@ class TestLexerIntegration:
 
     def test_heredoc_token_line_accounting(self, config_loaded):
         """多行捕获后，后续 token 行号正确（行号记账）。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         td = _make_td(
             capture_modes=[
                 {
@@ -492,6 +495,7 @@ class TestLexerIntegration:
 
     def test_legacy_comment_and_capture_coexist(self, config_loaded):
         """legacy [comment] 与新 [capture] 段共存，互不干扰。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         td = _make_td(
             comment_pairs=[["#", "\n", "line"]],
             capture_modes=[
@@ -511,6 +515,7 @@ class TestLexerIntegration:
 
     def test_block_comment_multiline_accounting(self, config_loaded):
         """legacy 块注释多行记账保持等价（回归：既有行为）。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         td = _make_td(comment_pairs=[["/*", "*/", "block"]])
         lexer = _lexer_with(td)
         tokens = lexer.tokenize("/* a\nb */\nx = 1\n")

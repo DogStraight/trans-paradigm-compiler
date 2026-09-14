@@ -92,6 +92,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:
     真正可变的维度是**跨文件顺序**（xdist worker 拿到哪些文件、按什么序跑，
     正是幽灵 flake 的来源），本 hook 抖的就是它。种子固定 → 失败可复现。
     """
+    del config  # pytest hook 协议签名（本 hook 只用 items 重排）
     seed = os.environ.get("TPC_SHUFFLE_SEED")
     if not seed:
         return
@@ -110,6 +111,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:
 @pytest.fixture(scope="session")
 def config_loaded(_global_state_baseline: dict) -> None:
     """确保 verilog 配置已加载（session 基线快照已含，兼容既有引用）。"""
+    del _global_state_baseline  # fixture 依赖声明（快照由自动 fixture 还原）
     return None
 
 
@@ -121,6 +123,7 @@ def config_loaded(_global_state_baseline: dict) -> None:
 @pytest.fixture(scope="session")
 def lexer(config_loaded) -> Lexer:
     """已配置的 Lexer 实例，全局共享。"""
+    del config_loaded  # fixture 依赖声明（配置已由 config_loaded 加载）
     return Lexer(rules_dir=DEFAULT_RULES_DIR)
 
 
@@ -132,6 +135,7 @@ def lexer(config_loaded) -> Lexer:
 @pytest.fixture(scope="session")
 def pratt(config_loaded):
     """已配置的 Pratt 解析器模块 + operator_defs + token classifier。"""
+    del config_loaded  # fixture 依赖声明（配置已由 config_loaded 加载）
     import parser.pratt_parser as pp
 
     from core.config_registry import ConfigRegistry

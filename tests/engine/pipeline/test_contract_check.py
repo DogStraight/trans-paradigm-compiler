@@ -34,22 +34,26 @@ class _Ctx:
 
 class _Producer(TransformPlugin):
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # TransformPlugin.process 协议签名参数
         self.note_produced("thing", None)
         return ast
 
 
 class _Consumer(TransformPlugin):
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         return ast
 
 
 class _NeedsScope(TransformPlugin):
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         return ast
 
 
 class _Plain(TransformPlugin):
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         return ast
 
 
@@ -57,6 +61,7 @@ class _Liar(TransformPlugin):
     """声明 produces 但 process 不登记物化 → 执行后核验应拦下。"""
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         return ast
 
 
@@ -64,6 +69,7 @@ class _ShapeDict(TransformPlugin):
     """形状声明 dict + 物化 dict → 通过。"""
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         self.note_produced("obj", {"k": 1})
         return ast
 
@@ -72,6 +78,7 @@ class _ShapeBad(TransformPlugin):
     """形状声明 dict + 物化 list → 形状核验应拦下。"""
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         self.note_produced("obj", [1, 2])
         return ast
 
@@ -80,6 +87,7 @@ class _ShapeEmpty(TransformPlugin):
     """声明 non_empty + 物化空 dict → 核验应拦下。"""
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         self.note_produced("obj2", {})
         return ast
 
@@ -88,6 +96,7 @@ class _ExtraNoter(TransformPlugin):
     """物化未声明的产物 → 契约双向核验应拦下。"""
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         self.note_produced("thing", None)
         self.note_produced("bonus", None)
         return ast
@@ -154,6 +163,7 @@ def _run(schedules, ctx=None, **kw):  # noqa: ANN001, ANN002, ANN003
 
 
 def test_missing_requirement_fails_fast(probes) -> None:
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
     with pytest.raises(ValueError, match="requires 未满足: thing"):
@@ -161,9 +171,10 @@ def test_missing_requirement_fails_fast(probes) -> None:
 
 
 def test_producer_before_consumer_satisfies(probes) -> None:
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
-    (ast, _scope), ctx = _run(
+    (ast, _), ctx = _run(
         {
             "s": [
                 PassDecl("p", "transform", impl="test.prod", plugin="test.prod"),
@@ -182,6 +193,7 @@ def test_producer_before_consumer_satisfies(probes) -> None:
 
 def test_analyze_disabled_leaves_scope_unavailable(probes) -> None:
     """analyze 被开关过滤 → 其 produces（scope）不并入可用集 → 依赖它的单元报错。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
     ctx = _Ctx()
@@ -205,9 +217,10 @@ def test_analyze_disabled_leaves_scope_unavailable(probes) -> None:
 
 def test_undeclared_contract_skips_check(probes) -> None:
     """无 produces/requires 声明 → 不参与校验（可选能力，零影响）。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
-    (ast, _scope), _ctx = _run(
+    (ast, _), _ = _run(
         {"s": [PassDecl("p", "transform", impl="test.plain", plugin="test.plain")]}
     )
     assert ast is not None
@@ -226,6 +239,7 @@ def test_builtin_transform_has_no_contract() -> None:
 
 def test_declared_produce_not_materialized_fails_fast(probes) -> None:
     """声明 produces 但未物化登记 → 执行后核验 fail-fast（声明不空转）。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
     with pytest.raises(ValueError, match="声明的产物未物化: ghost"):
@@ -234,6 +248,7 @@ def test_declared_produce_not_materialized_fails_fast(probes) -> None:
 
 def test_producer_note_extra_product_fails_fast(probes) -> None:
     """物化未声明的产物 → 契约双向核验 fail-fast（声明 = 物化）。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
     with pytest.raises(ValueError, match="未声明的产物: bonus"):
@@ -242,6 +257,7 @@ def test_producer_note_extra_product_fails_fast(probes) -> None:
 
 def test_shape_mismatch_fails_fast(probes) -> None:
     """形状声明 dict 但物化 list → 执行后形状核验 fail-fast。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
     with pytest.raises(ValueError, match="形状不符: 声明 dict"):
@@ -258,6 +274,7 @@ def test_shape_mismatch_fails_fast(probes) -> None:
 
 def test_shape_non_empty_fails_fast(probes) -> None:
     """声明 non_empty 但物化空 → 形状核验 fail-fast。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
     with pytest.raises(ValueError, match="non_empty，实为空"):
@@ -277,9 +294,10 @@ def test_shape_non_empty_fails_fast(probes) -> None:
 
 def test_shape_declaration_passes(probes) -> None:
     """形状声明 dict + 物化 dict → 通过。"""
+    del probes  # fixture 依赖声明（注册探针插件）
     from pipeline.schedule import PassDecl
 
-    (ast, _scope), _ctx = _run(
+    (ast, _), _ = _run(
         {"s": [PassDecl("s", "transform", impl="test.shape_ok", plugin="test.shape_ok")]}
     )
     assert ast is not None
@@ -291,6 +309,7 @@ def test_shape_spec_validated_at_register() -> None:
 
     class _X(TransformPlugin):
         def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+            del root_scope  # 协议签名参数
             return ast
 
     before = len(engine._plugin_registry)
@@ -312,7 +331,15 @@ def test_shape_spec_validated_at_register() -> None:
 
 
 def test_real_plugins_declare_contracts() -> None:
-    from transform import _semantic_mapping, config_driven, slot_runner  # noqa: F401
+    import importlib
+
+    # 三个真实插件模块：导入即注册（副作用导入，名称本身不用）
+    for _mod in (
+        "transform._semantic_mapping",
+        "transform.config_driven",
+        "transform.slot_runner",
+    ):
+        importlib.import_module(_mod)
     from transform.engine import get_plugin_shapes
 
     contracts = get_plugin_contracts()

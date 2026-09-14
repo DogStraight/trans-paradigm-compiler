@@ -19,7 +19,7 @@ _RULES = "grammar/verilog"
 def _expand(src: str) -> tuple[str, list[dict]]:
     """展开（语义模式）→ (展开文本, 区间表)。"""
     table, func_macros, _, _, _, clean, _ = scan_directives(src, _RULES)
-    expanded, _anchors, regions, _line_map = expand_tokens(
+    expanded, _, regions, _ = expand_tokens(
         clean, table, func_macros=func_macros, semantic=True
     )
     return expanded, regions
@@ -60,7 +60,7 @@ def test_multi_line_body_spans_lines() -> None:
     """
     src = "module m;\n  wire a;\n  assign a = `M;\nendmodule\n"
     body = "1'b1 +\n  1'b0"
-    expanded, _anchors, regions, line_map = expand_tokens(
+    expanded, _, regions, line_map = expand_tokens(
         src, {"M": body}, semantic=True
     )
     assert len(regions) == 1
@@ -127,7 +127,7 @@ def test_regions_only_in_semantic_mode() -> None:
     table, func_macros, _, _, _, clean, _ = scan_directives(
         "`define V 1'b1\nmodule m;\n  assign a = `V;\nendmodule\n", _RULES
     )
-    expanded, anchors, regions, _line_map = expand_tokens(
+    expanded, anchors, regions, _ = expand_tokens(
         clean, table, func_macros=func_macros
     )
     assert regions == []

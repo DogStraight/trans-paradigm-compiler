@@ -19,6 +19,7 @@ from core.define import DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
 @pytest.fixture(scope="module")
 def p0_scanner(config_loaded):
     """已配置的 LinterScanner 实例（只开 P0 非法 token 检查）。"""
+    del config_loaded  # fixture 依赖声明（配置加载）
     from linter.scanner import LinterScanner
 
     ls = LinterScanner(

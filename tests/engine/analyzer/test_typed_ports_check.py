@@ -29,14 +29,6 @@ def checker():
     return ProjectChecker(rules_dir="grammar/verilog")
 
 
-def _codes(report):
-    return {
-        d.get("code")
-        for f in report["files"]
-        for d in f["semantic"]
-    }
-
-
 def _tp_codes(report):
     """仅 TP 族诊断码（过滤 W001 等既有 warning）。"""
     return {

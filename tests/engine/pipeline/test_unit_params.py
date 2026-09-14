@@ -18,6 +18,7 @@ class _Ctx:
     rules: dict = {}
 
     def log(self, _msg: str) -> None:
+        del _msg  # log 协议签名参数（本桩不打日志）
         return None
 
 
@@ -30,10 +31,12 @@ class _ParamProbe(TransformPlugin):
         _ParamProbe.inits.append({"tag": tag, "mode": mode})
 
     def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+        del root_scope  # 协议签名参数
         return ast
 
 
 def _register(engine, order: int) -> None:  # noqa: ANN001
+    del order  # 调用点签名保持一致（本 helper 不读 order）
     engine.register_plugin(_ParamProbe, name="test.params")
 
 

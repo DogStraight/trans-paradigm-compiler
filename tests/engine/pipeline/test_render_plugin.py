@@ -11,8 +11,6 @@ handler = "file.py:fn"` 声明入口。管线渲染阶段检测到 → 直接调
 与 analyze/transform 的叠加式不同——渲染是一次管线唯一的最终输出。
 """
 
-import os
-
 import pytest
 
 from core.plugin_loader import get_render_handler, load_all_components
@@ -108,6 +106,7 @@ class TestRenderPluginPipeline:
 class TestRenderPluginFailFast:
     def test_missing_component_fail_fast(self, tmp_path, monkeypatch):
         """语言包声明 [plugins].render 但组件不存在 → 报错（ADR-0003）。"""
+        del monkeypatch  # fixture 依赖声明（本用例不用环境变量）
         from pipeline import _resolve_render_handler
 
         lang = tmp_path / "lang"
@@ -121,6 +120,7 @@ class TestRenderPluginFailFast:
 
     def test_plugin_without_render_decl_fail_fast(self, tmp_path, monkeypatch):
         """声明引用存在的组件但该组件无 [render] handler → 报错。"""
+        del monkeypatch  # fixture 依赖声明（本用例不用环境变量）
         from pipeline import _resolve_render_handler
 
         lang = tmp_path / "lang2"
@@ -152,8 +152,10 @@ class TestRenderHandlerDirect:
 
     def test_render_asm_compile_fallback(self):
         """render_asm 接收 Program（变换未跑）→ 现场编译兜底。"""
+        from typing import Any, cast
+
         from grammar.c4.plugins.asm_gen._asm import render_asm
 
         # 经完整管线 transform 前的 Program 较难手工构造，验证 None 守卫
-        assert render_asm(None) == ""
-        assert render_asm("not a node") == ""
+        assert render_asm(cast(Any, None)) == ""
+        assert render_asm(cast(Any, "not a node")) == ""

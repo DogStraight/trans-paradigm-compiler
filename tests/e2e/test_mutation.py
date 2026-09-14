@@ -20,7 +20,7 @@ from tests.e2e.eval_mutation import evaluate
 
 
 def _gate(checker) -> dict:
-    rows, summary = evaluate(checker)
+    _, summary = evaluate(checker)
     assert summary["base_dirty"] == 0, f"基座不干净: {summary['base_dirty']}"
     assert summary["recall_miss"] == 0, f"目标检查漏检: {summary['recall_miss']}"
     assert summary["extra_fp"] == 0, f"注入后多余诊断: {summary['extra_fp']}"

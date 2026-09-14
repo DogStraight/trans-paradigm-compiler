@@ -30,6 +30,7 @@ CREDITS.md）的全管线回归守卫：parse + format + lint + 幂等 + 保真 
 """
 
 import difflib
+import importlib
 import io
 import contextlib
 import os
@@ -39,7 +40,7 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 from tests.e2e.run_pipeline import run_pipeline_on_source  # noqa: E402
 
@@ -141,7 +142,7 @@ def corpus_results():
 @pytest.mark.parametrize("name", _corpus_params())
 def test_file_parses_clean(name: str, corpus_results):
     """全量管线 success + lint 零诊断 + 无占位符残留 + 幂等。"""
-    result, source, output, log = corpus_results(name)
+    result, _, output, log = corpus_results(name)
     assert result["success"], (
         f"{name}: pipeline failed: {result.get('error', '')}\n{log[:2000]}"
     )
@@ -153,7 +154,7 @@ def test_file_parses_clean(name: str, corpus_results):
 @pytest.mark.parametrize("name", _corpus_params())
 def test_module_count_intact(name: str, corpus_results):
     """module 数不低于 manifest 下限（防静默截断/占位符吞模块）。"""
-    result, _, output, _ = corpus_results(name)
+    _, _, output, _ = corpus_results(name)
     min_modules = _MANIFEST[name][1]
     count = output.count("module ")
     assert count >= min_modules, (
@@ -164,7 +165,7 @@ def test_module_count_intact(name: str, corpus_results):
 @pytest.mark.parametrize("name", _corpus_params())
 def test_fidelity_above_threshold(name: str, corpus_results):
     """token 级保真度不低于阈值（格式化差异可容忍，内容丢失不可）。"""
-    result, source, output, _ = corpus_results(name)
+    _, source, output, _ = corpus_results(name)
     ref_flat = _strip_all(source)
     out_flat = _strip_all(output)
     ratio = difflib.SequenceMatcher(None, ref_flat, out_flat).ratio()
@@ -188,7 +189,7 @@ def test_svparser_accept_domain(name: str, corpus_results):
     tpc 必须接受（假拒 = 真缺陷）。宏文件两边预处理器语义不同（sv-parser
     1800 / tpc 2005），不构成对拍样本（同 run_differential_svparser）。
     """
-    result, source, output, _ = corpus_results(name)
+    result, source, _, _ = corpus_results(name)
     if _has_macro(source):
         pytest.skip(f"{name}: 含宏指令，不构成对拍样本")
 
@@ -221,7 +222,7 @@ def test_svparser_interop(name: str, corpus_results):
     （宏结构由 sv-parser 自己的预处理器再处理，实测 picorv32/ice40 通过）。
     豁免集合见 _SVPARSER_INTEROP_SKIP（源侧/还原侧对拍不可靠）。
     """
-    result, source, output, _ = corpus_results(name)
+    result, _, output, _ = corpus_results(name)
     if name in _SVPARSER_INTEROP_SKIP:
         pytest.skip(f"{name}: {_SVPARSER_INTEROP_SKIP[name]}")
 

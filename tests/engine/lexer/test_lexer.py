@@ -484,6 +484,7 @@ class TestCrlfBomSupport:
 @pytest.fixture(scope="module")
 def classifier(config_loaded):
     """加载 Pratt 解析器的 token classifier（需要 parser.token_categories 配置）。"""
+    del config_loaded  # fixture 依赖声明（配置加载）
     from core.config_registry import ConfigRegistry
     import parser.pratt_parser as pp
 

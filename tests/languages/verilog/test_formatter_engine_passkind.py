@@ -32,7 +32,7 @@ class TestPassKind:
 
     def test_handler_kind_maps_custom(self):
         """旧 kind="handler" → PassKind.CUSTOM（兼容映射）。"""
-        p = FormatterPass(name="x", kind="handler", handler=lambda l, c: l)
+        p = FormatterPass(name="x", kind="handler", handler=lambda l, _: l)
         assert p.pass_kind == PassKind.CUSTOM
 
     def test_category_kind_maps_align(self):
@@ -51,6 +51,7 @@ class TestCriterion:
         seen = []
 
         def _spy_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             seen.append(list(lines))
             return [l + "!" for l in lines]
 
@@ -69,6 +70,7 @@ class TestCriterion:
         seen = []
 
         def _spy_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             seen.append(list(lines))
             return [l + "!" for l in lines]
 
@@ -87,6 +89,7 @@ class TestCriterion:
         seen = []
 
         def _spy_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             seen.append(list(lines))
             return [l + "!" for l in lines]
 
@@ -104,6 +107,7 @@ class TestCriterion:
         seen = []
 
         def _spy_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             seen.append(list(lines))
             return list(lines)
 
@@ -122,6 +126,7 @@ class TestCriterion:
         seen = []
 
         def _spy_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             seen.append(list(lines))
             return list(lines)
 
@@ -166,7 +171,7 @@ class TestEngineIntegration:
         """wrap_comments 升格为 COMMENT 内建遍（kind="comment"）。"""
         p = FormatterPass(
             name="wrap_comments", kind="comment",
-            handler=lambda lines, ctxs: lines,
+            handler=lambda lines, _: lines,
             criterion={"max_width": 100},
         )
         assert p.pass_kind == PassKind.COMMENT
@@ -174,6 +179,7 @@ class TestEngineIntegration:
     def test_comment_pass_engine_dispatch(self):
         """comment 遍带 handler 时引擎正常执行（handler 优先 dispatch）。"""
         def _comment_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             return [l + " // c" for l in lines]
 
         eng = FormatterEngine([
@@ -190,6 +196,7 @@ class TestEngineIntegration:
         seen = []
 
         def _comment_pass(lines, ctxs):
+            del ctxs  # handler 协议签名参数（本探针只用 lines）
             seen.append(list(lines))
             return list(lines)
 

@@ -19,6 +19,7 @@ from analyzer.traversal import AnalysisTraversal
 
 @pytest.fixture(scope="module")
 def ctx(config_loaded):
+    del config_loaded  # fixture 依赖声明（配置加载）
     rules = setup_grammar(DEFAULT_RULES_DIR, GrammarRulesRegister.get_default())
     stmt_names = [
         n

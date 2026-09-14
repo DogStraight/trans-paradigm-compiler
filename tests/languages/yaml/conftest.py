@@ -15,10 +15,15 @@ from parser.parser_core import Parser
 from lexer import Lexer
 from renderer import Renderer
 
+# 测试文件经 `from tests.languages.yaml.conftest import _parse` 导入这两个
+# 助手——显式导出清单（Pylance 的"未存取函数"不接受 ignore 抑制）
+__all__ = ["_parse", "_node_names"]
+
 
 @pytest.fixture(scope="module")
 def yaml(config_loaded):
     """初始化 yaml 语言包（单语言选择），测试结束恢复 verilog。"""
+    del config_loaded  # fixture 依赖声明（配置加载）
     ConfigRegistry.load_language("grammar/yaml")
     register = GrammarRulesRegister()  # 独立实例，不污染全局单例
     rules = setup_grammar("grammar/yaml", register)
@@ -38,7 +43,7 @@ def yaml(config_loaded):
     )
 
 
-def _parse(src: str, yaml):  # pyright: ignore[reportUnusedFunction] — pytest 约定：测试文件经 `from ...conftest import _parse` 导入
+def _parse(src: str, yaml):
     """YAML 源码 → AST。
 
     auto 缩进模式：把 lexer 锁定的缩进单位盖到根节点（_indent_unit），
@@ -54,6 +59,6 @@ def _parse(src: str, yaml):  # pyright: ignore[reportUnusedFunction] — pytest 
     return ast
 
 
-def _node_names(ast) -> list[str]:  # pyright: ignore[reportUnusedFunction] — 同上，测试文件导入
+def _node_names(ast) -> list[str]:
     """提取 AST 顶层节点名列表。"""
     return [n.node_name for n in getattr(ast, "sub_node", []) or []]

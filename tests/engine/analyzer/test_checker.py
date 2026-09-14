@@ -281,7 +281,7 @@ class TestElaborationConnections:
             "endmodule\n",
             encoding="utf-8",
         )
-        report = checker.check(str(top))
+        checker.check(str(top))
         # 连接展开挂在 FileResult.connections（checker._memo 内部状态）
         conns = _collect_connections(checker)
         assert len(conns) == 1

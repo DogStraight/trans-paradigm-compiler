@@ -48,7 +48,7 @@ endmodule
 def _run(src: str) -> list[str]:
     r = run_pipeline_on_source(source=src, quiet=True, no_lint=True)
     assert r["success"], r.get("error", "")
-    return (r.get("output") or "").splitlines()
+    return [str(ln) for ln in (r.get("output") or "").splitlines()]
 
 
 def _comment_lines(lines: list[str], text: str = "注释 A") -> list[int]:

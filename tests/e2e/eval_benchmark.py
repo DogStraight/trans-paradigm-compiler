@@ -335,11 +335,6 @@ _SLANG_WARNS = [
     "unused-port", "unused-but-set-port", "unused-but-set-variable",
     "unused-typedef", "unused-genvar",
 ]
-_SLANG_JSON_RE = re.compile(
-    r'"location":\s*"([^"]+)"'
-)
-
-
 def _run_slang(files: list[str]) -> tuple[list[dict], list[str]]:
     """跑 slang --lint-only，返回 (diagnostics, errors)。
 
@@ -410,30 +405,11 @@ _ORACLES = {
 }
 
 
-def _tpc_diags(checker, entry: str) -> tuple[list[dict], bool]:
-    """跑 tpc check，返回 (诊断列表, parse_ok)。"""
-    report = checker.check(entry)
-    out = []
-    parse_ok = True
-    for f in report.get("files", []):
-        if not f.get("parse_ok") or f.get("syntax"):
-            parse_ok = False
-            continue
-        base = os.path.basename(f["path"])
-        for d in f.get("semantic", []):
-            code = d.get("code")
-            if not code:
-                continue
-            line0 = (d.get("range") or {}).get("start", {}).get("line", 0)
-            out.append({"code": code, "file": base, "line": line0 + 1})
-    return out, parse_ok
-
-
 def _tpc_diags_all(checker, files: list[str]) -> tuple[list[dict], bool]:
     """跑 tpc check 覆盖文件组**全部**文件（oracle 扫全目录对齐）。
 
-    与 _tpc_diags 的差异：oracle（Verible/svlint/slang）对每个输入文件
-    独立扫，而 tpc 从 entry 递归只能发现 entry 依赖链上的模块——多文件
+    oracle（Verible/svlint/slang）对每个输入文件独立扫，而 tpc 从 entry
+    递归只能发现 entry 依赖链上的模块——多文件
     工程里 entry 不依赖的独立文件（如 project_bus_ctrl 的 reg_if 不被
     arbiter 依赖）tpc 会漏扫。
 
@@ -595,7 +571,7 @@ def _classify(tpc_diags, ow: list[dict], lint_offs: dict[str, set] | None = None
                     only_tpc.append(d)
     # 仅 oracle：未匹配的（含扩展侧单独归一类）
     v_unmatched = [
-        w for i, (code, w) in enumerate(
+        w for i, (_, w) in enumerate(
             (c, w) for c, ws in v_by_tpc.items() for w in ws
         ) if i not in matched_v
     ]
@@ -646,6 +622,7 @@ def run(checker, groups, label: str,
     classify（共识/仅 tpc/仅 oracle），rows 每工程每 oracle 一行。
     """
     oracles = oracles or list(_ORACLES.keys())
+    del label  # 调用方保留的标签（本函数不打日志）
     rows = []
     stats = {
         "groups": 0, "oracle_skip": 0, "tpc_parse_fail": 0,
@@ -657,7 +634,6 @@ def run(checker, groups, label: str,
     }
     for g in groups:
         stats["groups"] += 1
-        entry = g.get("entry", g["files"][0])
         # tpc 检查覆盖文件组全部文件（oracle 扫全目录对齐；entry 递归
         # 会漏扫 entry 不依赖的独立文件）
         tpc, tpc_parse_ok = _tpc_diags_all(checker, g["files"])

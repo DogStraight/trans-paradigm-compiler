@@ -11,6 +11,7 @@
 - 基线自洽校验：`total` 必须等于 `counts` 之和，防手改后两处不一致。
 """
 
+import importlib
 import os
 import sys
 
@@ -22,7 +23,7 @@ _ROOT = os.path.dirname(
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 
 @pytest.fixture(scope="module")

@@ -17,6 +17,7 @@ from lexer import Lexer
 @pytest.fixture(scope="module")
 def c4_lexer(config_loaded):
     """初始化 c4 语言包，测试结束恢复 verilog。"""
+    del config_loaded  # fixture 依赖声明（配置加载）
     ConfigRegistry.load_language("grammar/c4")
     lex = Lexer(rules_dir="grammar/c4")
     yield lex

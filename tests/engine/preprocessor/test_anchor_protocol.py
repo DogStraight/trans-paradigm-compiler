@@ -120,6 +120,7 @@ class TestTokenRestoreGuard:
 @pytest.mark.parametrize("seq", [1, 99, 12345])
 def test_anchor_lexes_as_identifier(config_loaded, seq: int) -> None:
     """锚在 lexer 中归为 `id`（与普通标识符同形，语言包不做宏特化）。"""
+    del config_loaded  # fixture 依赖声明（配置加载）
     from core.define import DEFAULT_EXT_DIRS, DEFAULT_RULES_DIR
     from lexer import Lexer
 

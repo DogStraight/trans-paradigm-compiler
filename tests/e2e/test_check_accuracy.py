@@ -16,11 +16,12 @@
 （--json 打印与 pytest 断言共享同一实现）。
 """
 
+import importlib
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 from analyzer.checker import ProjectChecker  # noqa: E402
 from tests.e2e.eval_check_accuracy import evaluate  # noqa: E402

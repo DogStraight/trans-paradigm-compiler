@@ -11,10 +11,11 @@ wheel 安装后 CLI 可用）。本文件保留测试 CLI（find_test_file / par
 import sys
 import os
 import argparse
+import importlib
 
 # 项目根 + stdout UTF-8（必须在 import core 之前）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport] — 副作用导入（sys.path + UTF-8）
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 # 管线核心（正式包）
 from pipeline import run_pipeline_on_source  # noqa: E402

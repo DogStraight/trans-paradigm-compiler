@@ -13,7 +13,11 @@ from transform.engine import TransformPlugin, get_plugin_index, plugin_name_of
 
 
 def test_engine_plugins_registered_by_qualname() -> None:
-    from transform import _semantic_mapping, config_driven  # noqa: F401
+    import importlib
+
+    # 两个插件模块：导入即注册（副作用导入，名称本身不用）
+    importlib.import_module("transform._semantic_mapping")
+    importlib.import_module("transform.config_driven")
 
     idx = get_plugin_index()
     assert "SemanticMappingPlugin" in idx
@@ -22,7 +26,10 @@ def test_engine_plugins_registered_by_qualname() -> None:
 
 def test_engine_slot_runner_registered() -> None:
     """通用槽位执行器（引擎插件，语言无关）：语义限定名 `slot_runner`。"""
-    from transform import slot_runner  # noqa: F401
+    import importlib
+
+    # slot_runner 模块：导入即注册（副作用导入，名称本身不用）
+    importlib.import_module("transform.slot_runner")
 
     idx = get_plugin_index()
     assert "slot_runner" in idx
@@ -50,10 +57,12 @@ def test_duplicate_name_first_wins_and_registry_order_kept() -> None:
 
     class DupA(TransformPlugin):
         def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+            del root_scope  # 协议签名参数
             return ast
 
     class DupB(TransformPlugin):
         def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+            del root_scope  # 协议签名参数
             return ast
 
     order = len(engine._plugin_registry)
@@ -70,6 +79,7 @@ def test_duplicate_name_first_wins_and_registry_order_kept() -> None:
 def test_plugin_name_of_falls_back_to_class_name() -> None:
     class Unregistered(TransformPlugin):
         def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+            del root_scope  # 协议签名参数
             return ast
 
     assert plugin_name_of(Unregistered) == "Unregistered"

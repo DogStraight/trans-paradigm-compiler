@@ -27,11 +27,12 @@ from parser.parser_core import Parser  # noqa: E402
 from parser.rule_selector import RuleSelector  # noqa: E402
 from lexer import Lexer  # noqa: E402
 from analyzer.traversal import AnalysisTraversal  # noqa: E402
-from core.check_registry import load_check_rules, get_check_rules, get_rules_for_kind  # noqa: E402
+from core.check_registry import get_check_rules, get_rules_for_kind  # noqa: E402
 
 
 @pytest.fixture(scope="module")
 def ctx(config_loaded):
+    del config_loaded  # fixture 依赖声明（配置加载）
     rules = setup_grammar(DEFAULT_RULES_DIR, GrammarRulesRegister.get_default())
     stmt_names = [
         n
@@ -64,12 +65,14 @@ class TestNamingRuleTable:
     """规则表加载 + 校验（fail-fast）。"""
 
     def test_rules_loaded(self, config_loaded):
+        del config_loaded  # fixture 依赖声明（配置加载）
         rules = get_check_rules()
         ids = {r["id"] for r in rules}
         assert {"NC001", "NC005", "NC006"} <= ids  # module/port/parameter 族在
         assert len(rules) >= 10
 
     def test_kind_dispatch(self, config_loaded):
+        del config_loaded  # fixture 依赖声明（配置加载）
         module_rules = get_rules_for_kind("module")
         assert any(r["id"] == "NC001" for r in module_rules)
         param_rules = get_rules_for_kind("parameter")
@@ -78,13 +81,14 @@ class TestNamingRuleTable:
         assert not any(r["id"] == "NC001" for r in get_rules_for_kind("port"))
 
     def test_id_unique(self, config_loaded):
+        del config_loaded  # fixture 依赖声明（配置加载）
         rules = get_check_rules()
         ids = [r["id"] for r in rules]
         assert len(ids) == len(set(ids)), "规则 id 必须全局唯一"
 
     def test_invalid_severity_failfast(self, tmp_path, config_loaded):
         """severity 非法 → fail-fast 报错（ADR-0003）。"""
-        from core.check_registry import _CHECK_RULES, load_check_rules
+        del config_loaded  # fixture 依赖声明（配置加载）
         from core.errors import ConfigError
 
         # 临时插件目录：构造非法规则文件
@@ -105,6 +109,7 @@ class TestNamingRuleTable:
 
     def test_invalid_pattern_failfast(self, config_loaded):
         """pattern 非法正则 → fail-fast。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         from core.check_registry import _validate_rule
         from core.errors import ConfigError
 
@@ -117,6 +122,7 @@ class TestNamingRuleTable:
 
     def test_missing_kind_failfast(self, config_loaded):
         """缺 kind（分发键）→ fail-fast。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
         from core.check_registry import _validate_rule
         from core.errors import ConfigError
 
@@ -317,6 +323,7 @@ class TestNoRulesLanguage:
         src = "int main() { int a; a = 1; return a; }"
         tokens = lexer.tokenize(src)
         ast = parser.parse(tokens)
+        assert ast is not None
         at = AnalysisTraversal(rules, rules_dir="grammar/c4")
         at.analyze(ast)
         assert at.diagnostics == []
@@ -400,6 +407,7 @@ class TestUserCheckConfig:
 
     def test_per_file_disabled(self, ctx, monkeypatch, tmp_path):
         """per_file glob 豁免：符号文件匹配 → disabled 规则跳过。"""
+        del ctx  # fixture 依赖声明（本用例直连 ProjectChecker）
         import json
 
         src = "module mIxEd;\nendmodule\n"
@@ -425,6 +433,7 @@ class TestUserCheckConfig:
 
     def test_per_file_not_matched(self, ctx, monkeypatch, tmp_path):
         """per_file glob 不匹配 → 不豁免（NC001 仍报）。"""
+        del ctx  # fixture 依赖声明（本用例直连 ProjectChecker）
         import json
 
         src = "module mIxEd;\nendmodule\n"
@@ -558,6 +567,7 @@ class TestCommentDrivenCases:
     """
 
     def test_name_check_cases(self, config_loaded, tmp_path):
+        del config_loaded  # fixture 依赖声明（配置加载）
         import glob
         import shutil
 

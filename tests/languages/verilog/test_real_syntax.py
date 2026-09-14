@@ -20,6 +20,7 @@ pytestmark = pytest.mark.smoke  # smoke：verilog 组代表（真实项目语法
 
 @pytest.fixture(scope="module")
 def parser(config_loaded):
+    del config_loaded  # fixture 依赖声明（配置加载）
     rules = setup_grammar(DEFAULT_RULES_DIR, GrammarRulesRegister.get_default())
     stmt_names = [
         n
@@ -37,6 +38,7 @@ def parser(config_loaded):
 
 @pytest.fixture(scope="module")
 def lex(config_loaded):
+    del config_loaded  # fixture 依赖声明（配置加载）
     return Lexer(rules_dir=DEFAULT_RULES_DIR)
 
 

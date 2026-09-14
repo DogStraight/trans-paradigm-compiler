@@ -151,6 +151,7 @@ class TestParserFailSite:
         assert "failure site" in captured.err
 
     def test_dump_falls_back_to_nearest_site(self, capsys):
+        del capsys  # fixture 依赖声明（本用例不断言捕获输出）
         p = self._mk_parser()
         tokens = [_tk("a", "a", 1, 0), _tk("b", "b", 1, 2), _tk("c", "c", 1, 4)]
         ctx = ParseContext(tokens)
@@ -169,6 +170,7 @@ class TestParserFailSite:
 
 class TestParserIntegration:
     def _build_parser(self, config_loaded):
+        del config_loaded  # fixture 依赖声明（配置加载）
         from core.define import GrammarRulesRegister
         from parser import setup_grammar
         from parser.rule_selector import RuleSelector

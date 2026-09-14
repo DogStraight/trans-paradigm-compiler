@@ -22,6 +22,7 @@ KNOWN_GAPS：已定义但尚无样本的显式登记，**带上限**（照 linte
 
 import ast
 import glob
+import importlib
 import json
 import os
 import sys
@@ -34,7 +35,7 @@ _ROOT = os.path.dirname(
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 _RULES_DIR = "grammar/verilog"
 _PLUGINS_GLOB = os.path.join(_RULES_DIR, "plugins", "**", "*.py")

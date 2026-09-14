@@ -19,14 +19,14 @@ def renderer():
 def test_verbatim_replaces_subtree(renderer) -> None:
     """带标记的节点：子节点不渲染，只出标记文本。"""
     node = Node("Identifier", content="should_not_appear")
-    node._verbatim_text = "`MACRO"
+    node.add_attr("_verbatim_text", "`MACRO")
     assert renderer.render(node).strip() == "`MACRO"
 
 
 def test_verbatim_inside_parent_layout(renderer) -> None:
     """父布局照常渲染：标记节点的原文成为它所在位置的原子文本。"""
     inner = Node("Number", value="8")
-    inner._verbatim_text = "`W"
+    inner.add_attr("_verbatim_text", "`W")
     node = Node("ParenthesizedExpr", expr=inner)
     out = renderer.render(node)
     assert "`W" in out
@@ -36,7 +36,7 @@ def test_verbatim_inside_parent_layout(renderer) -> None:
 def test_verbatim_multiline_kept_as_is(renderer) -> None:
     """多行原文原样保留（不做重排）——"宁可原样，不可静默重排"。"""
     node = Node("Identifier", content="x")
-    node._verbatim_text = "`BODY a = 1;\n  b = 2;"
+    node.add_attr("_verbatim_text", "`BODY a = 1;\n  b = 2;")
     out = renderer.render(node)
     assert "a = 1;" in out and "b = 2;" in out
     assert "\n" in out

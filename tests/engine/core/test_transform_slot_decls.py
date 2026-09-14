@@ -8,6 +8,7 @@
 
 import re
 import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ _DECLARED = {d["name"]: d for d in _TOML_RAW["transform"]["slots"]}
 
 
 @pytest.fixture
-def probe_slot() -> str:
+def probe_slot() -> Iterator[str]:
     """注册一个探针槽位（测后还原注册面）。
 
     真实槽位需组件加载才注册，而测试基建的全局状态还原会移除
@@ -41,6 +42,7 @@ def probe_slot() -> str:
     from core import plugin_loader
 
     def _fn(node, ctx):  # noqa: ANN001, ANN201
+        del ctx  # 槽位 handler 协议签名参数
         return node
 
     slots = plugin_loader._transform_slots
@@ -49,6 +51,7 @@ def probe_slot() -> str:
     register_transform_slot(PROBE)(_fn)
     yield PROBE
     if had:
+        assert prev is not None  # had ⇒ 槽位已存在 ⇒ 前值非空
         slots[PROBE] = prev
     else:
         slots.pop(PROBE, None)

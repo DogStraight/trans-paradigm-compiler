@@ -221,6 +221,7 @@ class TestAstBreak:
 
     @pytest.fixture(scope="class")
     def parser(self, config_loaded):
+        del config_loaded  # fixture 依赖声明（配置加载）
         from parser import Parser, setup_grammar
         from core.define import GrammarRulesRegister, DEFAULT_EXT_DIRS
         from parser.rule_selector import RuleSelector

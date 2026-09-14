@@ -18,13 +18,14 @@
 3. 行尾注释锚定在含对应代码 token 的行（不漂移到其它语句行）。
 """
 
+import importlib
 import os
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
-from tests import _bootstrap  # noqa: E402  # pyright: ignore[reportUnusedImport]
+importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
 from tests.e2e.run_pipeline import run_pipeline_on_source  # noqa: E402
 
@@ -53,11 +54,6 @@ def _run_both(src: str):
 
 def _flat(text: str) -> str:
     return "".join(text.split())
-
-
-def _line_comments(text: str) -> list[str]:
-    """源中所有 `//` 注释文本（含 `/* */` 单行块注释不做此处收集）。"""
-    return [ln.split("//", 1)[1].strip() for ln in text.splitlines() if "//" in ln]
 
 
 def _for_each_out(src, fn):

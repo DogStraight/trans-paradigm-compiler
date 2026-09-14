@@ -8,14 +8,14 @@ snapshot → restore 后全部还原到基线。配合 conftest 的 autouse fixt
 
 import sys
 
-from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR
+from core.define import GrammarRulesRegister
 from core.config_registry import ConfigRegistry, _CONFIG_DECLARATIONS
 from core.global_state import snapshot, restore
 
 
 def _first_module_var() -> tuple[object, str]:
     """取一个已推送配置的模块变量（任意即可，验证还原）。"""
-    for _key, entries in _CONFIG_DECLARATIONS.items():
+    for _, entries in _CONFIG_DECLARATIONS.items():
         for mod_name, var_name in entries:
             mod = sys.modules.get(mod_name)
             if mod is not None and hasattr(mod, var_name):

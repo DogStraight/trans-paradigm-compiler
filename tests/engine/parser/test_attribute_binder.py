@@ -28,9 +28,11 @@ class _Sink:
         self.logs = []
 
     def _warn(self, message, context=None):
+        del context  # Parser 协议签名参数
         self.warns.append(message)
 
     def _log_state(self, action, mode="a", level=0, context=None):
+        del mode, context  # Parser 协议签名参数
         self.logs.append((level, action))
 
 

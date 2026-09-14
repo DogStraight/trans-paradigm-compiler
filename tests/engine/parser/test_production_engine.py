@@ -23,11 +23,16 @@ def _token(type_: str, content: str = "", line: int = 1, column: int = 0) -> Tok
     return Token(type=type_, content=content or type_, line=line, column=column)
 
 
+def _noop_log(*args, **kwargs) -> None:
+    """吞掉日志调用（fake parser 的最小钩子）。"""
+    del args, kwargs
+
+
 def _fake_self(extra: dict | None = None) -> object:
     """创建最小 fake parser 对象，包含 _parse_* 函数所需的属性。"""
     base = {
-        "_log_state": lambda *a, **kw: None,
-        "_debug_token_info": lambda ctx: "",
+        "_log_state": _noop_log,
+        "_debug_token_info": lambda _: "",
         "_process_production_node": process_production_node,
         "_parse_token": parse_token,
         "_collect_following_comments": collect_following_comments,

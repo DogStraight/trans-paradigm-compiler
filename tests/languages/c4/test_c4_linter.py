@@ -24,6 +24,7 @@ def c4_scanner(config_loaded):
     用独立 GrammarRulesRegister 实例，避免污染全局单例（get_default() 的
     rules 缓存被 c4 规则污染后，后续 verilog 测试规则树会混合）。
     """
+    del config_loaded  # fixture 依赖声明（配置加载）
     scanner = LinterScanner(
         rules_dir="grammar/c4",
         register=GrammarRulesRegister(),

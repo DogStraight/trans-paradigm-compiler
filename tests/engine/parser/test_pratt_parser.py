@@ -350,7 +350,7 @@ class TestOperatorGapCommentMount:
 
     def test_multiple_gaps_each_mounted(self, pratt):
         """`a + /* c1 */ b * /* c2 */ c`：每层 operator 各自挂载。"""
-        ast, c, seen = parse_with_comments(
+        ast, _, _ = parse_with_comments(
             pratt,
             [T("id", "a"), op("+"), C("/* c1 */"), T("id", "b"),
              op("*"), C("/* c2 */"), T("id", "c")],
@@ -364,7 +364,7 @@ class TestOperatorGapCommentMount:
 
     def test_prefix_unary_gap_mounted(self, pratt):
         """`! /* c */ a`：注释挂 UnaryOp（锚 `!`；`!` 是合成前缀一元）。"""
-        ast, c, seen = parse_with_comments(
+        ast, c, _ = parse_with_comments(
             pratt, [op("!"), C("/* c */"), T("id", "a")]
         )
         assert ast.node_name == "UnaryOp" and c == 3
@@ -373,7 +373,7 @@ class TestOperatorGapCommentMount:
 
     def test_ternary_both_gaps_mounted(self, pratt):
         """`c ? /* 真 */ a : /* 假 */ b`：op1/op2 间隙各自挂载。"""
-        ast, c, seen = parse_with_comments(
+        ast, _, _ = parse_with_comments(
             pratt,
             [T("id", "c"), op("?"), C("/* 真 */"), T("id", "a"),
              T(":", ":"), C("/* 假 */"), T("id", "b")],
@@ -402,7 +402,7 @@ class TestOperatorGapCommentMount:
         cmt = C_eol("// 行尾", 0)
         nl = Token(type="newline", content="\n", line=1, column=0)
         b = Token(type="id", content="b", line=2, column=0)
-        ast, c, seen = parse_with_comments(
+        ast, _, seen = parse_with_comments(
             pratt, [a, plus, cmt, nl, b]
         )
         assert ast.node_name == "BinaryOp"
@@ -417,7 +417,7 @@ class TestOperatorGapCommentMount:
 
     def test_no_sink_when_none_given(self, pratt):
         """comment_sink=None（linter 场景）：行中注释仍挂节点，行尾跳过不崩。"""
-        ast, c, seen = parse_with_comments(
+        ast, _, _ = parse_with_comments(
             pratt,
             [T("id", "a"), op("+"), C("/* c */"), T("id", "b")],
             comment_sink=None,

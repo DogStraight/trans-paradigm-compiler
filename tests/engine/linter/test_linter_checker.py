@@ -22,6 +22,7 @@ class _GoodChecker:
         self._message = message
 
     def validate(self, tokens):
+        del tokens  # Checker.validate 协议签名参数（返回固定诊断）
         return [
             LintDiagnostic(
                 range=(Position(0, 0), Position(0, 0)),
@@ -39,6 +40,7 @@ class _BrokenChecker:
     end = 1
 
     def validate(self, tokens):
+        del tokens  # Checker.validate 协议签名参数（直接抛异常模拟崩溃）
         raise RuntimeError("boom")
 
 

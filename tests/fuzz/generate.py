@@ -28,7 +28,6 @@ ROOT_CANDIDATES = ["Root", "SourceText", "ModuleDecl"]
 MAX_DEPTH = 8
 _ID_POOL = ["a", "b", "c", "clk", "data", "sig", "m", "x", "y", "state", "tmp",
             "DATA_W", "W", "N", "foo", "bar", "m0", "u1", "out_bus"]
-_IDS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def build_token_map(rules_dir: str) -> dict[str, str]:
