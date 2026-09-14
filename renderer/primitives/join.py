@@ -52,7 +52,7 @@ def eval_join(
     no_sep = not expr["join"]
 
     items = renderer._resolve_items(node, expr.get("items"))
-    rendered: list[tuple[Doc, list[LineSuffix]]] = []
+    rendered: list[tuple[Doc, list[LineSuffix], bool]] = []
 
     for item in items:
         if isinstance(item, Node):
@@ -176,7 +176,7 @@ def eval_join(
                     # 分隔符后行中注释（`clk, /* c */ output`）——注释随
                     # 分隔符输出（折行前）；sep 文本已 rstrip（", "→","），
                     # 注释前补空格
-                    _t, _ln = sep_ia.pop(0)
+                    _t, _ = sep_ia.pop(0)
                     result.append(Text(" " + _t))
                     result.append(Text(" "))
             if inline_sep:

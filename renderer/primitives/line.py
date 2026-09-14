@@ -54,7 +54,7 @@ def eval_line(expr: dict, node: Node, parent_layout: dict | None,
                 if isinstance(e, str) and ia_slots:
                     for anchor, entries in list(ia_slots.items()):
                         if anchor in e:
-                            for text, _line in entries:
+                            for text, _ in entries:
                                 parts.append(Text(text))
                                 parts.append(Text(" "))
                             del ia_slots[anchor]
@@ -71,7 +71,7 @@ def eval_line(expr: dict, node: Node, parent_layout: dict | None,
                         if isinstance(val, str):
                             for anchor, entries in list(ia_slots.items()):
                                 if anchor in val:
-                                    for text, _line in entries:
+                                    for text, _ in entries:
                                         parts.append(Text(" " + text + " "))
                                     del ia_slots[anchor]
                                     absorb_space = True

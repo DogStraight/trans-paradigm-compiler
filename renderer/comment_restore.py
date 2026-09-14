@@ -44,7 +44,7 @@ def restore_all_comments(
         / 块结束符 trailing / block body Comment 节点），41 文件实测
         restore 开/关差仅 1 条且为锚点错插缺陷，删除净改善。
     """
-    log = log_fn or (lambda m: None)
+    log = log_fn or (lambda _: None)
     restore_stack = bool(restoration_stack)
 
     # Inline comment restoration：仅展开路径——宏 marker（`/*<tpc:macro:N>*/`）

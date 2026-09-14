@@ -6,7 +6,7 @@ node_renderer.py — AST 节点级渲染逻辑
 Doc: renderer/renderer_architecture.md（世界 A 节点级渲染）
 """
 
-from typing import Any,Optional
+from typing import Any, Optional, Sequence
 from core.define import Node
 from .doc import (
     Doc,
@@ -23,7 +23,7 @@ from .doc import (
 from .primitives import eval_expr
 
 
-def _insert_before_trailing_break(doc: Doc, extra: list[Doc]) -> Doc:
+def _insert_before_trailing_break(doc: Doc, extra: Sequence[Doc]) -> Doc:
     """把 extra（行尾注释 LineSuffix）插到 doc **末尾换行点之前**。
 
     分段布局常以 `{ break = true }` / `tail_break` 收尾（如
