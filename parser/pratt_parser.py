@@ -171,8 +171,6 @@ def parse_number_literal(token: Token) -> Node:
 def _skip_gap_comments(
     tokens: list[Token],
     idx: int,
-    anchor: str,
-    comment_sink=None,
 ) -> tuple[int, list[tuple[str, int]], list[tuple[str, int]]]:
     """跳过 operator 消费后、操作数解析前的 trivia，收集行中注释（ADR-0013 决策 5）。
 
@@ -187,7 +185,6 @@ def _skip_gap_comments(
       - 行尾（注释后即换行，`//` 行注释典型形态）→ 返回 eol，调用方挂
         后续 RHS 子节点 leading（ADR-0014 方向 B：`//` 注释在重排表达式内
         必须位于输出行尾，只能随操作数独立断行——挂 RHS leading 机械安全）。
-        不再走 comment_sink（锚 = operator，渲染重排后无法锚匹配 → 丢）。
 
     Returns: (新 idx, midline 注释 [(text, line)], eol 注释 [(text, line)])
     """
@@ -272,7 +269,7 @@ def _mount_leading_comments(
         slots = {}
         node.add_attr("_comment_slots", slots)
     lead = slots.setdefault("leading", [])
-    for text, _line in eol_comments:
+    for text, _ in eol_comments:
         if text not in lead:
             lead.append(text)
 
@@ -373,9 +370,7 @@ def parse_expression(
                 # 前缀一元 operator 间隙注释（`- /* c */ a`）：跳过并收集，
                 # 行中挂 UnaryOp inline_after（ADR-0013 决策 5）；行尾挂
                 # operand leading（ADR-0014 方向 B）
-                idx, gap_comments, eol_comments = _skip_gap_comments(
-                    tokens, idx, op, comment_sink
-                )
+                idx, gap_comments, eol_comments = _skip_gap_comments(tokens, idx)
                 right, idx = parse_expression(
                     tokens,
                     idx,
@@ -462,9 +457,7 @@ def parse_expression(
             # operator 间隙注释（`a + /* c */ b`）：跳过并收集，行中挂
             # BinaryOp inline_after（ADR-0013 决策 5）；行尾挂 RHS leading
             # （ADR-0014 方向 B——`a || // c\n b` 的 `// c` 标注当行片段）
-            idx, gap_comments, eol_comments = _skip_gap_comments(
-                tokens, idx, op, comment_sink
-            )
+            idx, gap_comments, eol_comments = _skip_gap_comments(tokens, idx)
             right_node, idx = parse_expression(
                 tokens,
                 idx,
@@ -489,9 +482,7 @@ def parse_expression(
             idx += 1
             # 三目 op1（`?`）间隙注释（`cond ? /* 真 */ a : b`）：跳过并收集，
             # 行中挂 TernaryOp inline_after；行尾挂 true_val leading（方向 B）
-            idx, gap_comments1, eol_comments1 = _skip_gap_comments(
-                tokens, idx, op, comment_sink
-            )
+            idx, gap_comments1, eol_comments1 = _skip_gap_comments(tokens, idx)
             middle, idx = parse_expression(
                 tokens,
                 idx,
@@ -511,9 +502,7 @@ def parse_expression(
             idx += 1
             # 三目 op2（`:`）间隙注释（`cond ? a : /* 假 */ b`）：跳过并收集，
             # 行中挂 TernaryOp inline_after；行尾挂 false_val leading（方向 B）
-            idx, gap_comments2, eol_comments2 = _skip_gap_comments(
-                tokens, idx, second_sym, comment_sink
-            )
+            idx, gap_comments2, eol_comments2 = _skip_gap_comments(tokens, idx)
             right, idx = parse_expression(
                 tokens,
                 idx,

@@ -286,7 +286,7 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     return rule_node
 
 
-def _starts_line(self, context: ParseContext, tok_idx: int) -> bool:
+def _starts_line(context: ParseContext, tok_idx: int) -> bool:
     """tokens[tok_idx] 是否行首 token（前一非空白/非注释 token 是换行）。
 
     向前跳过 space.* 与注释（被 production skip 吞掉的注释 token 仍留在
@@ -312,7 +312,7 @@ def _starts_line(self, context: ParseContext, tok_idx: int) -> bool:
 
 
 def _claim_head_comments(
-    self, context: ParseContext, node: Node, end_line: int
+    self, node: Node, end_line: int
 ) -> None:
     """行首规则成功：领规则内容之前的独占行注释挂节点 Comment 子节点。
 
@@ -470,24 +470,24 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         # 仅非 repeat 迭代上下文（repeat 迭代项间注释由 _lift_gap_comments
         # 上浮为 Comment 迭代项，claim 不抢）。inline 弃 rule_node，挂返回
         # 的 inner（Comment 子节点随 inner 进 AST，join 拆段渲染）。
-        if _starts_line(self, context, _start_idx) and not getattr(
+        if _starts_line(context, _start_idx) and not getattr(
             self, "_repeat_iter_depth", 0
         ):
             _ptr = context.token_pointer
             _end = context.tokens[_ptr - 1].line if _ptr > 0 else 0
-            _claim_head_comments(self, context, inline_result, _end)
+            _claim_head_comments(self, inline_result, _end)
         return inline_result
 
     self._restore_current_node(old_node, context)
     # token 范围（半开 [start, end)）：匹配起始指针 + 结束指针，供增量定位
     rule_node._tok_span = (_start_idx, context.token_pointer)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
-    if _starts_line(self, context, _start_idx) and not getattr(
+    if _starts_line(context, _start_idx) and not getattr(
         self, "_repeat_iter_depth", 0
     ):
         _ptr = context.token_pointer
         _end = context.tokens[_ptr - 1].line if _ptr > 0 else 0
-        _claim_head_comments(self, context, rule_node, _end)
+        _claim_head_comments(self, rule_node, _end)
     return rule_node
 
 
@@ -516,7 +516,7 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 # ── 生产式准备 & 结束符检查 ──
 
 
-def _is_line_only_comment(context: ParseContext, t: Token) -> bool:
+def _is_line_only_comment(context: ParseContext) -> bool:
     """独占行注释判定：注释 token 之前（跳过空白/缩进 token）是换行或文件首。
 
     用于区分：
@@ -565,7 +565,7 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                 # 上浮为 Comment 迭代项（行号窗口，见 _repeat_loop）；
                 # tpc marker（`// <tpc:*>`）排除——宏/条件块还原依赖
                 # only_tpc 通道，不进树。
-                line_only = _is_line_only_comment(context, t)
+                line_only = _is_line_only_comment(context)
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
                 nxt = context.peek_token()
