@@ -211,7 +211,7 @@ def extract_macro_body(
     if not tpl or not pick:
         return None
 
-    _parser, ast = parse_ast(tpl.replace("{b}", body))
+    _, ast = parse_ast(tpl.replace("{b}", body))
     if ast is None:
         return None
     node = ast
