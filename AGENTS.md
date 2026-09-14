@@ -129,4 +129,9 @@
     `eval_benchmark.py`，需外部 oracle）
   - 门禁有效性抽查 `tools/check_gate_efficacy.py`（真实事故变异，期望门禁变红）
   - 进程级隔离对照 `tools/check_test_isolation.py`（每文件一进程 vs 单进程共享档，
-    差异即"换跑法就变脸"：判据见 `tests/README.md`）
+    差异即"换跑法就变脸"；`--hashseed-scan N` 再换一维：PYTHONHASHSEED。
+    判据见 `tests/README.md`）
+  - 现场转储 `tools/dump_pipeline_state.py`（管线语言状态：共享条目/组件/当前语言，
+    诊断跨语言串味；`--pre grammar/c4` 复现"同进程先跑过别的语言"）
+  - 宏位置覆盖 `tools/analyze_macro_positions.py`（宏位置透明性量化，非门禁；
+    边界依据见 ADR-0017）

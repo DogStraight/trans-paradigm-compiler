@@ -31,8 +31,15 @@ Doc: tests/README.md（隔离与顺序巡检节）
     python tools/check_test_isolation.py                        # 全量，每文件一进程
     python tools/check_test_isolation.py -m smoke               # 只 smoke 层
     python tools/check_test_isolation.py --compare -m smoke     # 与共享进程档对照
+    python tools/check_test_isolation.py --hashseed-scan 8 -m smoke   # 哈希种子扫描
     python tools/check_test_isolation.py --granularity test tests/e2e/test_real_fidelity.py
     python tools/check_test_isolation.py --jobs 8 --list        # 只列分组清单
+
+三个档回答同一问题的不同侧面（"同一份代码换跑法会不会变脸"）：
+- 隔离档：换**进程**（每块全新解释器）——进程内状态泄漏的探针；
+- 共享档（`--compare`）：单进程跑完全集——与隔离档差异即"换跑法就变脸"；
+- 哈希种子档（`--hashseed-scan N`）：换**PYTHONHASHSEED**（xdist 各 worker 天然
+  不同）——输出依赖 set/dict 迭代顺序时，同一输入在不同进程会给出不同结果。
 """
 
 from __future__ import annotations
@@ -54,6 +61,8 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 短摘要行变成 `FAILED ::test_needs - ...`（实测），此时按用例名辨认。
 _NODEID_RE = re.compile(r"^(?P<path>\S+\.py)::(?P<rest>.+)$")
 _FAIL_LINE_RE = re.compile(r"^(?:FAILED|ERROR)\s+(?P<nodeid>\S*::\S.*)$")
+# pytest 摘要的尾缀（"7 passed in 3.25s" / "1 failed in 2s (0:00:02)"）
+_TIME_SUFFIX_RE = re.compile(r"\s+in\s+[\d.]+s(?:\s*\([\d:. ]+\))?\s*$")
 
 
 @dataclass(frozen=True)
@@ -72,15 +81,29 @@ class ChunkResult:
 
 # ── 子进程调用 ──────────────────────────────────────────────────────────────
 
-def _pytest_env(random_hashseed: bool) -> dict[str, str]:
-    """子进程环境：强制 UTF-8 管道（含中文的 nodeid 不能按本机代码页解码）。"""
+def _pytest_env(random_hashseed: bool, hashseed: int | None = None) -> dict[str, str]:
+    """子进程环境：强制 UTF-8 管道（含中文的 nodeid 不能按本机代码页解码）。
+
+    `hashseed` 指定时写死该值；`random_hashseed` 则显式不设（每进程随机）。
+    """
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
-    if random_hashseed:
+    if hashseed is not None:
+        env["PYTHONHASHSEED"] = str(hashseed)
+    elif random_hashseed:
         env.pop("PYTHONHASHSEED", None)
     else:
         env["PYTHONHASHSEED"] = "0"
     return env
+
+
+def _stable_summary(summary: str) -> str:
+    """摘要去计时：`7 passed in 3.25s` → `7 passed`。
+
+    哈希种子扫描要判"结果是否漂移"，耗时不同不是漂移（实测：不去计时会把每个
+    种子都报成 drift）。
+    """
+    return _TIME_SUFFIX_RE.sub("", summary).strip()
 
 
 def _run_pytest(args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -261,6 +284,29 @@ def run_shared(selection: list[str], env: dict[str, str]) -> ChunkResult:
     return ChunkResult("(共享进程)", res.returncode, res.failed, res.summary)
 
 
+def hashseed_scan(
+    selection: list[str], seeds: int,
+) -> tuple[list[tuple[int, ChunkResult]], list[int]]:
+    """同一选择集在 seeds 个 PYTHONHASHSEED 下各跑一遍（单进程档）。
+
+    返回 (每个种子的结果, 与首个种子结果不同的种子)。差异即"输出/结果依赖
+    set|dict 迭代顺序"——xdist 每个 worker 的 seed 不同，这类问题在并行下就是
+    换跑法变脸。
+    """
+    runs: list[tuple[int, ChunkResult]] = []
+    drift: list[int] = []
+    baseline: tuple[int, tuple[str, ...], str] | None = None
+    for seed in range(seeds):
+        res = run_shared(selection, _pytest_env(False, hashseed=seed))
+        runs.append((seed, res))
+        key = (res.returncode, res.failed, _stable_summary(res.summary))
+        if baseline is None:
+            baseline = key
+        elif key != baseline:
+            drift.append(seed)
+    return runs, drift
+
+
 def diff_failures(
     isolated: list[ChunkResult], shared: ChunkResult,
 ) -> tuple[list[str], list[str]]:
@@ -299,6 +345,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--jobs", type=int, default=0, help="并行子进程数（默认 = CPU 核数）")
     ap.add_argument("--compare", action="store_true", help="再跑一次共享进程档并列出差异")
+    ap.add_argument(
+        "--hashseed-scan", type=int, default=0, metavar="N",
+        help="单进程档在 N 个 PYTHONHASHSEED 下各跑一遍，报结果漂移"
+    )
     ap.add_argument("--random-hashseed", action="store_true", help="不固定 PYTHONHASHSEED（巡检挡）")
     ap.add_argument("--verbose", action="store_true", help="每个块都打印结果")
     ap.add_argument("--list", action="store_true", help="只列分组清单")
@@ -361,7 +411,22 @@ def main(argv: list[str] | None = None) -> int:
             status = 1
         elif not bad:
             print("[OK] 两档一致且全绿——该集合没有进程内状态耦合")
-
+    if args.hashseed_scan:
+        print(f"[info] 哈希种子扫描：{args.hashseed_scan} 个 PYTHONHASHSEED × 单进程档")
+        t2 = time.perf_counter()
+        runs, drift = hashseed_scan(selection, args.hashseed_scan)
+        for seed, res in runs:
+            flag = "  <-- 与 seed 0 不一致" if seed in drift else ""
+            print(f"  seed={seed:<3} {res.summary}{flag}")
+        print(f"[哈希种子档] 用时 {time.perf_counter() - t2:.0f}s；漂移种子：{drift or '无'}")
+        if drift:
+            for seed in drift:
+                nid = next((r for s, r in runs if s == seed), None)
+                for failed in (nid.failed if nid else ()):
+                    print(f"       - seed={seed}: {failed}")
+            status = 1
+        elif not bad:
+            print("[OK] 结果不随哈希种子漂移")
     if status:
         print("[FAIL] 隔离档有失败或两档存在差异（见上）")
         return status

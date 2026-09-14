@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **草稿区能力提升为正式工具（`_drafts/` → `tools/`）**：把清理后仍被引用/仍可用的
+  诊断能力从暂存区搬进正式位（草稿区随之为空，纪律仍见 `AGENTS.md` 文档放置速查）：
+  ① `tools/dump_pipeline_state.py`（来自 `_drafts/probe_pipeline_state.py`）——打印
+  管线语言状态（`_PIPELINE_SHARED` 条目里的 rules/mapping_cfg/schedules、
+  `ConfigRegistry` 当前语言、已装载组件），`--pre grammar/c4` 复现"同进程先跑过别的
+  语言"，是跨语言串味定案时的现场转储器。
+  ② `tools/analyze_macro_positions.py`（来自 `_drafts/probe_macro_anywhere.py`，
+  ADR-0017 正文引用的那份测量）——宏位置透明性覆盖量化，**非门禁**（未通过的位置是
+  已记录边界）；CLI 化 `--source/--max-positions/--out`，退出码只看"跑不跑得起来"。
+  ③ `tools/check_test_isolation.py` 增 `--hashseed-scan N`（吸收
+  `_drafts/hashseed_probe.py`）：换 PYTHONHASHSEED 维度做"换跑法就变脸"检测；比对用
+  **去计时**摘要，否则每个种子都因耗时不同被判漂移（实测踩过）。
+  ④ `_drafts/probe_efficacy.py` 删除：与 `check_gate_efficacy` 第 5 条变异重复（A2）。
+  守护：`tests/policy/test_tools_diagnostics.py`（3 例，跑通 + 关键结论行）+
+  `tests/policy/test_check_test_isolation.py` 扩到 16 例（含"必须能报出种子漂移"的
+  正反例与去计时判据）；`docs/decisions/0017` 的引用路径同步为新工具。
+  全量 1906 passed / 8 skipped；smoke 362；policy 109；两项门禁脚本全绿。
+
 ### Fixed
 
 - **语言作用域跨语言串味（"幽灵 flake"的机制）**：同进程「先跑 c4 管线 → 再跑

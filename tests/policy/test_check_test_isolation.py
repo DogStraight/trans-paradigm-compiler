@@ -134,6 +134,42 @@ def test_failing_ids_strips_message_tail() -> None:
     assert cti._failing_ids(output) == ("tests/a.py::test_x",)
 
 
+def test_stable_summary_strips_timing() -> None:
+    """比对用摘要要去计时——否则每个种子都因耗时不同被判成漂移（实测踩过）。"""
+    assert cti._stable_summary("7 passed in 3.25s") == "7 passed"
+    assert cti._stable_summary("1 failed, 2 passed in 0.51s (0:00:00)") == "1 failed, 2 passed"
+    assert cti._stable_summary("2 passed") == "2 passed"
+
+
+def _run_tool(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(_TOOL), *args],
+        cwd=_ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+
+
+def test_hashseed_scan_reports_no_drift_for_stable_target() -> None:
+    """种子无关的目标：不得报漂移（假阳性会让这一档失去可信度）。"""
+    proc = _run_tool(["--hashseed-scan", "2", "tests/e2e/test_fidelity_cache_key.py"])
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out[-2000:]
+    assert "漂移种子：无" in out, out[-2000:]
+
+
+def test_hashseed_scan_detects_seed_dependent_target(tmp_path: Path) -> None:
+    """真依赖种子的目标：必须报出漂移（工具不是空转）。"""
+    (tmp_path / "test_seed_dependent.py").write_text(
+        "import os\n\n\ndef test_needs_seed_zero():\n"
+        "    assert os.environ.get('PYTHONHASHSEED') == '0'\n",
+        encoding="utf-8",
+    )
+    proc = _run_tool(["--hashseed-scan", "3", str(tmp_path)])
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 1, out[-2000:]
+    assert "漂移种子：[1, 2]" in out, out[-2000:]
+
+
 # ── 端到端负例：工具真的能报出两档差异 ──────────────────────────────────────
 
 def test_compare_reports_isolated_only_failure(tmp_path: Path) -> None:

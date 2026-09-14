@@ -91,6 +91,13 @@ python tools/check_test_isolation.py --granularity test tests/e2e/test_real_fide
 共享档单进程要跑全集（近十分钟）——故工具不进日常门禁，自保用例见
 `tests/policy/test_check_test_isolation.py`（含“真能报出差异”的负例）。
 
+第三个档回答同一问题的另一维：`--hashseed-scan N`（换 PYTHONHASHSEED，xdist 各
+worker 天然不同）——同一选择集在 N 个种子下各跑一遍，摘要/失败集漂移即“输出依赖
+set|dict 迭代顺序”。
+
+诊断跨语言串味用 `python tools/dump_pipeline_state.py [--pre grammar/c4]`：打印
+共享条目里缓存的 rules/组件/当前语言（`--pre` 复现“同进程先跑过别的语言”）。
+
 ## 并发注意
 
 - 全局 `timeout=120`（pyproject）：并行 CPU 争抢使真实语料全管线慢 ~2.5x
