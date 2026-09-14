@@ -4,9 +4,6 @@
     - 门级/开关原语实例化（gates 插件，A.3：26 原语 + strength/delay）
     - 模块实例位置端口连接（A.4.1.1 ordered port connection——UDP 实例依赖）
     - UDP 声明（udp 插件，A.5：comb/seq 表 + initial + edge 括号对）
-
-已知限制（TODO P1.8 注记）：多 UDP 块同文件时第二个块嵌套进第一个
-（块头内嵌 body 结构模式的块体衔接缺陷），单块形态完整可用。
 """
 
 import pytest
@@ -168,6 +165,18 @@ def test_udp_sequential_roundtrip():
     assert "(01) 0 : ? : 0;" in out
     assert "? ? : ? : -;" in out
     assert "endprimitive" in out
+    assert r["idempotent"]
+
+
+def test_udp_two_blocks_flat_roundtrip():
+    """同文件两个 UDP 块：AST 平级（Root 下两个 UdpDecl），非嵌套。"""
+    r = _run(UDP_COMB_SRC + "\n" + UDP_SEQ_SRC)
+    assert r["success"], r.get("error", "")
+    out = r["output"]
+    assert "primitive mux2(out, sel, a, b);" in out
+    assert "primitive dff(q, clk, d);" in out
+    names = [getattr(c, "node_name", None) for c in (r["ast"].sub_node or [])]
+    assert names == ["UdpDecl", "UdpDecl"], names
     assert r["idempotent"]
 
 
