@@ -28,6 +28,7 @@ def run_hier_check(analyzer, context) -> None:
     结果挂 analyzer（_hier_inst_maps / _hier_node_modules），供本文件内
     的层次引用解析 O(1) 查模块归属与实例。无报告——纯服务。
     """
+    del context  # postpass 协议签名参数（服务型：只建表，不报诊断）
     root = getattr(analyzer, "_ast", None)
     if root is None:
         return

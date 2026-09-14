@@ -331,7 +331,7 @@ def _loop_executes(node: Node, params: dict) -> bool | None:
     return ev != 0
 
 
-def _cond_text(cond: Node) -> str:
+def _cond_text(cond: Node | None) -> str:
     """条件表达式 → 文本（BinaryOp 渲染 left op right；叶节点取文本）。"""
     if not isinstance(cond, Node):
         return ""

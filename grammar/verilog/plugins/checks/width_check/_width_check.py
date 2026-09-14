@@ -11,6 +11,8 @@
 「主流 lint 机制调研」核心集合第 3 类）。
 """
 
+from typing import Any
+
 from core.define import Node
 
 # 参与宽度分析的符号 kind（语言知识：Verilog 内部信号/端口）
@@ -30,8 +32,8 @@ def run_width_check(analyzer, context) -> None:
     params_all = _module_params(context)
     params = _file_params(analyzer, params_all)
     analyzer._param_table = params
-    # _params 是内部元数据键（参数表），非符号宽度——类型注解豁免
-    table["_params"] = params  # type: ignore[assignment]
+    # _params 是内部元数据键（参数表），非符号宽度——表值类型为 Any
+    table["_params"] = params
     analyzer._width_table = table
     # _hier 解析器：跨模块成员宽度（a.b 中 a 是实例）——hier_check 插件
     # 服务（2026-08-29，references.md「层次引用解析机制调研」）；同语言
@@ -41,10 +43,10 @@ def run_width_check(analyzer, context) -> None:
 
         table["_hier"] = lambda n: hier.resolve_member_width(n, analyzer, context)
     except ImportError:
-        table["_hier"] = None  # type: ignore[assignment]
+        table["_hier"] = None
     _check_assignment_widths(analyzer, context, table)
     _check_port_connections(analyzer, context, table, params_all)
-    _check_inst_internal_widths(analyzer, context, table, params_all)
+    _check_inst_internal_widths(context, table, params_all)
     _check_select_ranges(analyzer, context, table)
 
 
@@ -507,7 +509,7 @@ def _override_params(site, module_defaults: dict, caller_params: dict) -> dict:
 # 固定宽度模块覆盖参数不影响内部赋值，跳过省遍历（单元库空壳模块）。
 
 
-def _check_inst_internal_widths(analyzer, context, table: dict, params_all: dict) -> None:
+def _check_inst_internal_widths(context, table: dict, params_all: dict) -> None:
     """B4：实例化点覆盖参数 → 目标模块内部赋值截断重算（W201）。"""
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
@@ -549,13 +551,13 @@ def _module_width_table(info) -> dict:
     声明符级按名对齐——与 A1 extract_width 同判据）；数组符号集随表。
     返回表只含符号宽度文本 + "_arrays"，_params 由调用方按覆盖表设置。
     """
-    table: dict[str, str] = {}
+    table: dict[str, Any] = {}
     arrays: set[str] = set()
     for pname, port in (getattr(info, "ports", None) or {}).items():
         table[pname] = getattr(port, "width_expr", None) or ""
     node = getattr(info, "node", None)
     if node is None:
-        table["_arrays"] = arrays  # type: ignore[assignment]
+        table["_arrays"] = arrays
         return table
     for n in _iter_nodes(node):
         if n.node_name == "IntegerDecl":
@@ -578,7 +580,7 @@ def _module_width_table(info) -> dict:
             table[nm] = w2 or type_w or ""
             if _declarator_is_array(it):
                 arrays.add(nm)
-    table["_arrays"] = arrays  # type: ignore[assignment]
+    table["_arrays"] = arrays
     return table
 
 
@@ -608,16 +610,15 @@ def _recheck_module_assigns(info, site, ov_params: dict, context) -> None:
     # 无参数化宽度（全部固定宽度）→ 覆盖参数不影响内部赋值，跳过
     if not any(_is_parameterized_text(t) for t in sub_table.values()):
         return
-    sub_table["_params"] = ov_params  # type: ignore[assignment]
-    inst_name = node_text(getattr(site, "inst_name", None))
+    sub_table["_params"] = ov_params
     for n in _iter_nodes(node):
         if n.node_name not in _ASSIGN_RULES:
             continue
-        _recheck_one(n, info, site, inst_name, sub_table, context)
+        _recheck_one(n, info, site, sub_table, context)
         if n.node_name == "AssignStmt":
             for ex in getattr(n, "extras", None) or []:
                 if isinstance(ex, Node):
-                    _recheck_one(ex, info, site, inst_name, sub_table, context)
+                    _recheck_one(ex, info, site, sub_table, context)
 
 
 def _is_parameterized_text(text: str) -> bool:
@@ -625,7 +626,7 @@ def _is_parameterized_text(text: str) -> bool:
     return any(ch.isalpha() for ch in text)
 
 
-def _recheck_one(node, info, site, inst_name: str, sub_table: dict, context) -> None:
+def _recheck_one(node, info, site, sub_table: dict, context) -> None:
     """单条内部赋值重算：RHS > LHS → 报 W201（主 node = 实例化点）。"""
     lw = infer_expr_width(getattr(node, "target", None), sub_table, info.name)
     rw = infer_expr_width(getattr(node, "value", None), sub_table, info.name)
@@ -656,7 +657,7 @@ def _unwrap(node):
     return node
 
 
-def symbol_width_table(analyzer) -> dict[str, str]:
+def symbol_width_table(analyzer) -> dict[str, Any]:
     """A1：符号宽度表 {符号名 → 宽度表达式文本}。
 
     原始文本原样保留：""（无范围标量）/ "7:0" / "WIDTH-1:0" / "32"。
@@ -671,7 +672,7 @@ def symbol_width_table(analyzer) -> dict[str, str]:
     (scope.name, sym_name)；查表走 _lookup_width 优先限定键，平面键
     仅作无模块上下文（测试直接构造表）的回退。
     """
-    table: dict[str, str] = {}
+    table: dict[str, Any] = {}
     arrays: set[str] = set()
     arrays_by_module: dict[str, set] = {}
     for sym in getattr(analyzer, "all_symbols", None) or []:
@@ -687,8 +688,8 @@ def symbol_width_table(analyzer) -> dict[str, str]:
         table[(mod, sym.name)] = extract_width(sym)  # type: ignore[index]
         if _is_array_symbol(sym):
             arrays_by_module.setdefault(mod, set()).add(sym.name)
-    table["_arrays"] = arrays  # type: ignore[assignment]
-    table["_arrays_by_module"] = arrays_by_module  # type: ignore[assignment]
+    table["_arrays"] = arrays
+    table["_arrays_by_module"] = arrays_by_module
     return table
 
 
@@ -1216,10 +1217,10 @@ def _select_width(node, width_table: dict, module: str = "") -> int | None:
                 width_table.get("_params"),
             )
         return 1
-    return _suffix_width(last, width_table, module)
+    return _suffix_width(last)
 
 
-def _suffix_width(suffix, width_table: dict, module: str = "") -> int | None:
+def _suffix_width(suffix) -> int | None:
     """SelectSuffix → 宽度：纯索引 1；range_suffix 按运算符分派。"""
     info = _range_info(getattr(suffix, "range_suffix", None))
     if info is None:

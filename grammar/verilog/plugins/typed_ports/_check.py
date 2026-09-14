@@ -93,7 +93,7 @@ def _check_type_wellformed(context, tname: str, tsc) -> None:
             role_scopes[child.name] = child
 
     for rname, rsym in role_syms.items():
-        ports = _role_flat_ports(tsc, rsym)
+        ports = _role_flat_ports(rsym)
         names = [p.get("name", "") for p in ports if p.get("name")]
         dup = _dupes(names)
         for d in dup:
@@ -226,7 +226,7 @@ def _check_impl_binding(context, node: Node, type_scopes: dict,
     # (.clk(clk), .rst_n(rstn), ...) => spi_io`）。真 typo = 既不在 role 集也
     # 不在 impl 定义端口集（否则 typo 会被当新端口展开）。
     defined = {
-        p.get("name", "") for p in _role_flat_ports(tsc, _role_sym(tsc, rname))
+        p.get("name", "") for p in _role_flat_ports(_role_sym(tsc, rname))
     }
     defined |= impl_ports.get(tname, {}).get(rname, set())
     for conn in _collect_connects(getattr(node, "ports", None)):
@@ -341,7 +341,7 @@ def _collect_type_impl_ports(node, out=None, cur_type: str = "") -> dict:
             tname = _text(getattr(node, "type_name", None))
             for child in node.iter_children():
                 _collect_type_impl_ports(child, out, tname)
-            return
+            return out
         if nn == "TypeImplDecl" and cur_type:
             rname = _text(getattr(node, "role_name", None))
             names = _impl_decl_port_names(getattr(node, "ports", None))
@@ -466,7 +466,7 @@ def _role_sym(tsc, rname: str):
     return None
 
 
-def _role_flat_ports(tsc, rsym) -> list[dict]:
+def _role_flat_ports(rsym) -> list[dict]:
     """role 符号 → 扁平端口列表 [{direction, name, packed_range?}]。
 
     读序与 _transform._resolved_ports 对齐（组件内共享语义，不重复造）：
@@ -557,13 +557,3 @@ def _text(node) -> str:
         if t:
             return t
     return ""
-
-
-def _iter_nodes(root):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)

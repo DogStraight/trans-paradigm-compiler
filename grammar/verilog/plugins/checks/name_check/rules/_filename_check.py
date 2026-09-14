@@ -22,6 +22,7 @@ import os
 
 def check_module_filename(symbol, rule, context) -> str | None:
     """模块名与文件名一致性判定。"""
+    del rule  # handler 协议签名参数（判定只用 symbol + context）
     node = getattr(symbol, "decl_node", None)
     fpath = getattr(node, "_file", None)
     if not fpath:

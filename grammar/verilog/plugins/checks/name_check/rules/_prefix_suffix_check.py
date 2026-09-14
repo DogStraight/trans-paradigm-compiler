@@ -30,6 +30,7 @@ L2 脚本 handler（name_check 插件）：前后缀语义约定（防错，2026
 
 def check_direction_suffix(symbol, rule, context) -> str | None:
     """端口方向后缀一致性（防接错方向）。"""
+    del context  # handler 协议签名参数（判定只用 symbol + rule）
     name = getattr(symbol, "name", "") or ""
     if not name or name.startswith("_"):
         return None
@@ -54,6 +55,7 @@ def check_direction_suffix(symbol, rule, context) -> str | None:
 
 def check_kind_suffix(symbol, rule, context) -> str | None:
     """类型后缀一致性（防类型混淆；require 模式补本类型后缀要求）。"""
+    del context  # handler 协议签名参数（判定只用 symbol + rule）
     name = getattr(symbol, "name", "") or ""
     if not name or name.startswith("_"):
         return None

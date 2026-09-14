@@ -75,7 +75,7 @@ class FormatterEngine:
             if not p.enabled:
                 continue
             # 量化拒绝准则：不满足 → 跳过该遍（布局决策显式化）
-            if p.criterion and not _criterion_met(p.criterion, result, ctxs):
+            if p.criterion and not _criterion_met(p.criterion, result):
                 continue
             # handler 优先（indent/ifdef/inst_port/wrap/comment 等内建遍
             # 均以 handler 实现）；category 是品类对齐遍（column_align）
@@ -90,7 +90,7 @@ class FormatterEngine:
         return result
 
 
-def _criterion_met(criterion: dict, lines: list[str], contexts: list[LineContext]) -> bool:
+def _criterion_met(criterion: dict, lines: list[str]) -> bool:
     """量化拒绝准则检查：全部满足才运行该遍。
 
     支持的准则键（cmake-format 借鉴方向——布局决策显式拒绝）：

@@ -22,8 +22,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from core._protocol import ROW_ORIGIN
 from core.define import Node
 
@@ -170,6 +168,8 @@ def _opposite_expand(type_scopes: dict, type_name: str, role_name: str,
             if getattr(sym, "kind", "") != "role" or rname == role_name:
                 continue
             rs = _role_raw_ports(type_scopes, type_name, rname)
+            if rs is None:
+                continue
             if (len(rs) == 1 and rs[0].get("node_name") == "TypeInvertPort"
                     and rs[0].get("target_role", "") == role_name):
                 return _expand_role(type_scopes, type_name, rname, _stack,
