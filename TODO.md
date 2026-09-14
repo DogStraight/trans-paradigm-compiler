@@ -16,17 +16,6 @@
 - [ ] 阶段 6 收尾 — 中间产物可视化：剩 transform 侧更多插件自述（出口已具备，
       按需补）
 
-## 测试隔离（2026-09-14 立项，幽灵 flake 根治：先可复现，再隔绝）
-
-> 背景：`test_macro_roundtrip_fidelity[ref_pp_func_macro_stmt.v]` 在全量并行下偶现
-> 保真 0.787（串行/重跑均过）——典型顺序敏感幽灵。已排除 hash seed 依赖（24 seed
-> 输出一致）与两条顺序注入。三层根治，逐层独立验证。
-> L1（全局态清单 + 覆盖门禁 + 两层还原）与 L2（外部资源隔离）已完成；手法记在
-> `_drafts/hashseed_probe.py`（已有物，不进 git）。
-
-- [ ] **L3 顺序可控（把偶发变必现）**：CI 增“随机顺序 × 固定种子”档；xdist 显式
-      `--dist loadfile`；`PYTHONHASHSEED` 日常固定 + 另设随机 seed 巡检档
-
 ## P1 — Verilog 实例完善
 
 ### P1.5 已知缺陷收尾

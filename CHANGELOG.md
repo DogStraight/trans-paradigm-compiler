@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **测试隔离 L3：顺序可控（把偶发变必现）**：①`pytest addopts` 显式
+  `--dist loadfile`（一个文件固定在同一 worker，模块级 fixture 与"安装态按模块
+  还原"语义绑定在同一进程）。②`tests/conftest.py` 新增零依赖的顺序随机化 hook
+  ——`TPC_SHUFFLE_SEED=<int>` 做**文件级**乱序（种子固定 → 失败可复现；单用例级
+  乱序不在范围：模块/session 级 fixture 在其作用域内合法拥有安装态）。③CI：日常档
+  固定 `PYTHONHASHSEED=0`（PR 加乱序 smoke 档），nightly 加全量乱序档 + 哈希
+  种子每进程随机的巡检档。守护：`tests/policy/test_order_shuffle.py`（同种子同序 /
+  不拆散文件 / 未设环境变量不动序）。
+- **顺序巡检当场拓出一条真实边界（登记表新增 `ACCUMULATED`）**：`--dist loadfile`
+  下的默认序曾 5 例 c4 失败——语言注册面（插件/原语注册表）**不能**按模块还原：
+  写入者是模块导入副作用，而 `plugin_loader` 缓存组件模块（sys.modules 命中即不重
+  exec）→ 还原后缓存命中不重注册 → 已装载语言拿不到自己的插件（`AsmGenPlugin`
+  不生效，transform 退化为 `Program`）。现登记为“只增不还原”表并写明理由；同时
+  删掉随之失效的 `keywise`/`prefix` 还原策略（无使用即删）。全量默认序 1880
+  passed / 8 skipped；乱序档 seed 1/2/3 均绿；串行+乱序（languages+engine）
+  1665 passed。
 - **测试隔离 L2：外部资源隔离**：①中间产物落盘改为**只认显式 `out_dir`**
   ——删掉 `pipeline` 里"input_path 含 samples 就写回样本目录"的嗅探：测试并行时
   多 worker 对同一样本并发写同名 gen/ast/symbols（撕裂读 → 偶发保真抖动），且把

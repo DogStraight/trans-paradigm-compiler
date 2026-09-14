@@ -85,7 +85,10 @@ python_files = ["test_*.py"]
 # 默认并发（pytest-xdist，进程级并行；global_state 进程内隔离天然兼容）：
 # 全量 315s → ~88s（~3.6x）。coverage 场景须显式 -n 0 关并发
 # （xdist 每 worker 独立计数会失真，实测 61% < fail_under 80）。
-addopts = "-n auto"
+# --dist loadfile：一个文件的所有测试固定在同一 worker——模块级 fixture 与
+# “安装态按模块还原”语义绑定在同一进程，且避免同 worker 内模块交错（A/B/A）
+# 把先跑模块的语言装载态擦掉。
+addopts = "-n auto --dist loadfile"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

@@ -38,6 +38,14 @@ jobs:
         run: |
           python tests/edge/run_edge.py
 
-      - name: 全量回归
+      - name: 全量回归（默认序；哈希种子每进程随机 = 巡检档）
+        run: |
+          python -m pytest tests -q
+
+      - name: 全量回归（文件级乱序，固定种子 → 可复现）
+        # 顺序敏感档：跨文件顺序依赖的隔离缺口在这里变必现（本地复现：
+        # TPC_SHUFFLE_SEED=1 pytest tests）；失败时换种子逐个排除。
+        env:
+          TPC_SHUFFLE_SEED: "1"
         run: |
           python -m pytest tests -q

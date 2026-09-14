@@ -29,8 +29,22 @@ jobs:
       - name: Run full test suite with coverage gate
         # -n auto：pytest-xdist 进程级并行（test extra 已含；global_state
         # 进程内隔离天然兼容）。实测 ~3x 加速（300s → 110s，16 逻辑核）。
+        # PYTHONHASHSEED=0：日常档固定哈希种子（失败可复现）；随机种子巡检
+        # 档在 nightly（Python 默认每进程随机）——集合/字典序敏感的问题只在
+        # 随机种子下暴露，两档互补。
+        env:
+          PYTHONHASHSEED: "0"
         run: |
           python -m pytest tests -q -n auto --cov
+
+      - name: Shuffled-order smoke (跨文件顺序敏感早发现)
+        # 文件级乱序（固定种子 → 可复现）：文件间顺序依赖的隔离缺口当场变红，
+        # 而不是回流成"偶发 flake"。全量乱序档在 nightly。
+        env:
+          TPC_SHUFFLE_SEED: "1"
+          PYTHONHASHSEED: "0"
+        run: |
+          python -m pytest -m smoke -q
 
       - name: Policy checks (约定即门禁)
         # --strict-doc：R3（Doc: 头）升 gate——引擎新文件必须带 Doc: 反向引用

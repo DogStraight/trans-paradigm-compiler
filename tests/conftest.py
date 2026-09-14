@@ -1,5 +1,6 @@
 """pytest 共享 fixtures — Lexer + ConfigRegistry。"""
 
+import random
 import sys
 import os
 from collections.abc import Iterator
@@ -76,6 +77,34 @@ def _restore_install_state(_global_state_baseline: dict) -> Iterator[None]:
     from core.global_state import restore
 
     restore(_global_state_baseline, scope="install")
+
+
+# ═══════════════════════════════════════════════════════
+# 顺序随机化（零依赖）：把"仅在某些文件顺序下出现"的隔离缺口变可复现失败
+# ═══════════════════════════════════════════════════════
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:
+    """`TPC_SHUFFLE_SEED=<int>` 时随机化**文件顺序**（未设 = 默认收集序）。
+
+    粒度是文件而不是单个用例：模块级/session 级 fixture 在其作用域内合法拥有
+    语言安装态（见 `core/global_state.py` 的 INSTALL_STATE），单用例级乱序会让
+    同一模块的作用域被反复拆开重建——那是 fixture 作用域语义问题，不是隔离缺口。
+    真正可变的维度是**跨文件顺序**（xdist worker 拿到哪些文件、按什么序跑，
+    正是幽灵 flake 的来源），本 hook 抖的就是它。种子固定 → 失败可复现。
+    """
+    seed = os.environ.get("TPC_SHUFFLE_SEED")
+    if not seed:
+        return
+    by_file: dict[str, list] = {}
+    for item in items:
+        by_file.setdefault(item.nodeid.split("::", 1)[0], []).append(item)
+    order = list(by_file)
+    random.Random(int(seed)).shuffle(order)
+    items[:] = [item for path in order for item in by_file[path]]
+    print(
+        f"\n[shuffle] 文件顺序已随机化 seed={seed}"
+        f"（复现：TPC_SHUFFLE_SEED={seed}；首文件 {order[0]}）"
+    )
 
 
 @pytest.fixture(scope="session")

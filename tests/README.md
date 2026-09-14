@@ -1,14 +1,15 @@
 # tests/ — 测试分层
 
 配置驱动的语言流水线（引擎）测试树。零运行时依赖；pytest 默认并行
-（`-n auto`，见 pyproject addopts），串行/收集用 `-n 0`。
+（`-n auto --dist loadfile`，见 pyproject addopts），串行/收集用 `-n 0`。
+各层规模不写死在本文（不造复述点）：以 `pytest --collect-only -q` 实测为准。
 
 ## 分层
 
-| 层 | 命令 | 规模 | 定位 |
-|----|------|------|------|
-| smoke（快速层） | `python -m pytest -m smoke` | 296 用例 / ~40s | 各功能域代表测试，日常/改动后快速回归 |
-| 全量 | `python -m pytest tests/` | 1711 用例 / 并行 ~6min、串行 ~32min | 发布/大改后完整回归 |
+| 层 | 命令 | 定位 |
+|----|------|------|
+| smoke（快速层） | `python -m pytest -m smoke` | 各功能域代表测试，日常/改动后快速回归 |
+| 全量 | `python -m pytest tests/` | 发布/大改后完整回归 |
 
 smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆盖由全量兜底。
 改动节奏建议：小改动跑 smoke（+ 涉及子系统专项）；结构性/跨子系统改动跑全量。
@@ -48,6 +49,25 @@ smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆�
   smoke 只抽轻量 `ref_uart_rx`——module 级结果缓存保证只跑它 1 次全管线，
   3 个非 sv-parser 断言共享；sv-parser 差分断言不进 smoke（外部二进制 + 慢）。
 - marker 注册见 pyproject `[tool.pytest.ini_options].markers`。
+
+## 隔离与顺序巡检
+
+测试隔离机制见 `core/global_state.py`（登记表 + 两层还原）与
+`tests/policy/test_global_state_coverage.py`（新增全局态不登记即红）。
+顺序敏感（“幽灵 flake”）靠下列两档把偶发变必现：
+
+| 维度 | 日常档 | 巡检档 |
+|------|--------|--------|
+| 执行顺序 | 默认收集序（`--dist loadfile` 保证一个文件在同一 worker） | `TPC_SHUFFLE_SEED=<int>` 文件级乱序（种子固定 → 失败可复现） |
+| 哈希种子 | `PYTHONHASHSEED=0`（CI 已设；失败可复现） | 不设 = 每进程随机（nightly）——集合/字典序敏感问题仅此档暴露 |
+
+```bash
+`$env:TPC_SHUFFLE_SEED="1"; python -m pytest tests -q`   # 全量乱序（复现同一失败用同一 seed）
+```
+
+乱序粒度是**文件**：模块级/session 级 fixture 在其作用域内合法拥有语言安装态，
+单用例级乱序会把作用域反复拆开重建（那是 fixture 语义问题，不是隔离缺口）。
+跨文件顺序才是 xdist 分发可变面。
 
 ## 并发注意
 

@@ -21,25 +21,32 @@ source/_sources + 推送进各模块的 _xxx_cfg 模块变量）、plugin_loader
   结果恒定，不受污染影响）。
 
 全局态登记表（清单即文档，2026-09-14 增）：
-引擎的模块级/类级可变容器必须落在五张表之一——`TRACKED`（测试级状态，
+引擎的模块级/类级可变容器必须落在六张表之一——`TRACKED`（测试级状态，
 每测试还原）、`INSTALL_STATE`（语言安装态，**模块结束**还原）、
-`CONTENT_ADDRESSED`（键 = 输入，同参结果恒定，可跨测试保留）、
-`CONSTANT`（字面量常量，永不改写）、`COVERED_ELSEWHERE`（由上方定制逻辑
-覆盖）。`tests/policy/test_global_state_coverage.py` 用自动发现扫出引擎包里
-未登记的容器并报红——把"记得登记"变成门禁。
+`ACCUMULATED`（只增的语言注册面，登记但刻意不还原：还原会与组件模块的
+sys.modules 缓存造出"缓存命中 + 注册缺失"不一致态）、`CONTENT_ADDRESSED`
+（键 = 输入，同参结果恒定，可跨测试保留）、`CONSTANT`（字面量常量，永不
+改写）、`COVERED_ELSEWHERE`（由上方定制逻辑覆盖）。
+`tests/policy/test_global_state_coverage.py` 用自动发现扫出引擎包里未登记的
+容器并报红——把"记得登记"变成门禁。
 
 两层还原（`restore(scope=...)`）：
 - `"test"`（每测试，`tests/conftest.py` 函数级 fixture）：清派生缓存 /
   去掉注册表新增项 / 复位共享上下文与深度计数器。
-- `"install"`（每模块，模块级 fixture）：复位语言装载写入的 pratt 安装态与
-  插件/原语注册表。**不能**逐测试复位——模块级 fixture 构造 Parser 装载语言
-  后就合法拥有这些状态，逐测试擦除会让同模块后续测试误解析（实测：pratt
-  合成分类器与 c4 插件注册表被 wipe）。
+- `"install"`（每模块，模块级 fixture）：复位语言装载写入的 pratt 安装态
+  （parser_core 每次构造 Parser 都会重装，故可还原）。**不能**逐测试复位
+  ——模块级 fixture 构造 Parser 装载语言后就合法拥有这些状态，逐测试擦除
+  会让同模块后续测试误解析（实测：pratt 合成分类器被 wipe）。
 - `"all"`：两者都做（CLI/嵌入场景多语言切换后清理用）。
 
+顺序巡检（把偶发变必现）：`TPC_SHUFFLE_SEED=<int>` 文件级乱序（`tests/conftest.py`
+的 `pytest_collection_modifyitems` hook，固定种子 = 可复现）+ `--dist loadfile`
+（一个文件固定在同一 worker）。默认收集序只是"某一序"——实测：同一份代码在
+不同文件序下曾 5 例失败（本模块 ACCUMULATED 那条边界即由此暴露）。
+
 泄漏检测：`fingerprint()` + `assert_clean()`——每测试**还原后**立即比对基线
-指纹（还原机制自身漏项当场红；实测抓到两处：keywise 还原不补被删基线键、
-快照内容依赖导入顺序）。跨测试的真实污染面由发现门禁 + 模块级还原共同封住。
+指纹（还原机制自身漏项当场红；实测抓到三处：keywise 还原不补被删基线键、
+快照内容依赖导入顺序、注册面还原与组件缓存不一致）。
 
 Doc: docs/references.md（测试隔离机制：顺序无关从机制上修复，2026-08-28）
 """
@@ -49,10 +56,9 @@ from __future__ import annotations
 import copy
 import sys
 
-# ── 登记表 1/4：TRACKED——测试级状态（每个测试结束还原）──
+# ── 登记表 1/6：TRACKED——测试级状态（每个测试结束还原）──
 # 策略：deepcopy 小数据深拷贝 / ref 不可拷贝引用按引用还原 /
-#       clear 纯缓存清空 / keywise 键控注册表（只去新增 + 补回被删基线项）/
-#       prefix 列表注册表（截到基线长度 + 补回被截基线项）
+#       clear 纯缓存清空
 TRACKED: dict[str, tuple[str, str]] = {
     # 派生缓存（纯函数键控，清空即安全）
     "parser._production._prod_feat_cache": ("clear", "生产式特征缓存（键 = 规则名::production）"),
@@ -66,31 +72,40 @@ TRACKED: dict[str, tuple[str, str]] = {
     "analyzer.checker.ProjectChecker._SHARED": ("clear", "checker 共享组件（按 rules_dir 键控）"),
 }
 
-# ── 登记表 1b/4：INSTALL_STATE——语言安装态（模块结束还原）──
-# 由语言装载/Parser 构造/插件导入（parser_core、plugin_loader、primitives）按
-# 语言写入。**不在**测试级表内：模块级 fixture（构造 Parser/装载语言）在自己的
-# 模块内合法拥有它们，测试级还原会把它擦掉（实测：pratt 合成分类器 + c4 插件
-# 注册表被 wipe → 同模块后续测试误解析/找不到原语）。
-# 模块结束还原 = 跨模块不串味，模块内由 fixture 自管。
+# ── 登记表 2/6：INSTALL_STATE——语言安装态（模块结束还原）──
+# 由语言装载/Parser 构造（parser_core）按语言写入。**不在**测试级表内：模块级
+# fixture（构造 Parser 装载语言）在自己模块内合法拥有它们，测试级还原会把它擦掉
+# （实测：pratt 合成分类器被 wipe → 同模块后续测试误解析）。
+# 可还原的前提：**下一次解析入口会幂等重装**（parser_core 每次构造 Parser 都调
+# install_*）——所以模块结束还原 = 跨模块不串味，模块内由 fixture 自管。
 INSTALL_STATE: dict[str, tuple[str, str]] = {
-    # pratt 语言安装态（install_* 按语言写入）
     "parser.pratt_parser._token_checks": ("deepcopy", "token 类别判定表（install_token_classifier）"),
     "parser.pratt_parser._bit_width_literal_parser": ("ref", "位宽字面量解析器（按语言安装）"),
     "parser.pratt_parser._bool_true_type": ("ref", "bool 真值类型（按语言安装）"),
     "parser.pratt_parser._atom_name_map": ("deepcopy", "原子 token→规则名映射（按语言安装）"),
-    # 插件/原语注册表（导入期累计 + 语言装载追加；只去新增，基线项保留）
-    "transform.engine._plugin_registry": ("prefix", "插件注册表"),
-    "transform.engine._plugin_index": ("keywise", "限定名→插件类索引"),
-    "transform.engine._plugin_contracts": ("keywise", "插件契约表"),
-    "transform.engine._plugin_shapes": ("keywise", "插件产物形状声明"),
-    "renderer.primitives.registry._PRIMITIVE_REGISTRY": ("prefix", "渲染原语注册表"),
-    "analyzer.primitives.registry._primitives": ("keywise", "分析原语注册表"),
-    "analyzer.primitives._symbol._capture_hooks": ("keywise", "符号捕获钩子表"),
-    "preprocessor.primitives.registry._registry": ("keywise", "指令处理原语注册表"),
-    "transform.primitives.registry._registry": ("keywise", "变换原语注册表"),
 }
 
-# ── 登记表 2/4：CONTENT_ADDRESSED——键 = 输入，同参结果恒定，可保留 ──
+# ── 登记表 3/6：ACCUMULATED——只增的语言注册面（登记但**刻意不还原**）──
+# 写入者是**模块导入副作用**（插件文件/原语模块 import 期注册），而
+# plugin_loader 缓存组件模块（sys.modules 命中即不重 exec）——还原注册面会造出
+# 不一致态：缓存命中 → 不重注册 → 注册面空。2026-09-14 实测：c4 模块结束还原
+# 后，同 worker 下一个 c4 文件装载组件命中缓存 → AsmGenPlugin 不再注册 →
+# transform 退化为 Program（默认序 + `--dist loadfile` 下 5 例失败）。
+# 累积是安全的：注册名按组件限定（如 `asm_gen.codegen`），查表按本语言的
+# 声明/规则名，跨语言多出来的条目不被引用（同名时文档化的“首胜”语义）。
+ACCUMULATED: dict[str, str] = {
+    "transform.engine._plugin_registry": "插件注册表（注册名按组件限定，查表按声明名）",
+    "transform.engine._plugin_index": "限定名→插件类索引（同上）",
+    "transform.engine._plugin_contracts": "插件契约表（同上）",
+    "transform.engine._plugin_shapes": "插件产物形状声明（同上）",
+    "renderer.primitives.registry._PRIMITIVE_REGISTRY": "渲染原语注册表（原语模块 import 期注册）",
+    "analyzer.primitives.registry._primitives": "分析原语注册表（原语模块 import 期注册）",
+    "analyzer.primitives._symbol._capture_hooks": "符号捕获钩子表（同上）",
+    "preprocessor.primitives.registry._registry": "指令处理原语注册表（同上）",
+    "transform.primitives.registry._registry": "变换原语注册表（同上）",
+}
+
+# ── 登记表 4/6：CONTENT_ADDRESSED——键 = 输入，同参结果恒定，可保留 ──
 CONTENT_ADDRESSED: dict[str, str] = {
     "core.config_registry.ConfigRegistry._resolve_cache": "键 = 语言参数元组（纯函数缓存）",
     "preprocessor.macro_shape._probe_cache": "键 = rules_dir",
@@ -100,7 +115,7 @@ CONTENT_ADDRESSED: dict[str, str] = {
     "lexer.pre_scan._CACHE": "键 = rules_dir",
 }
 
-# ── 登记表 3/4：COVERED_ELSEWHERE——由 snapshot/restore 定制逻辑覆盖 ──
+# ── 登记表 5/6：COVERED_ELSEWHERE——由 snapshot/restore 定制逻辑覆盖 ──
 COVERED_ELSEWHERE: dict[str, str] = {
     "core.define.GrammarRulesRegister._default_instance": "snapshot 深拷贝注册表实例",
     "core.config_registry.ConfigRegistry._entries": "snapshot 深拷贝",
@@ -114,7 +129,7 @@ COVERED_ELSEWHERE: dict[str, str] = {
     "core.config_registry._CONFIG_DECLARATIONS": "declare_cfg 声明表（snapshot 遍历它覆盖 module_vars；只增）",
 }
 
-# ── 登记表 4/4：CONSTANT——字面量常量，永不改写（若改写即缺陷）──
+# ── 登记表 6/6：CONSTANT——字面量常量，永不改写（若改写即缺陷）──
 CONSTANT: dict[str, str] = {
     "core.check_registry._SEVERITIES": "严重度字面量集合",
     "core.config_registry._DECL_FIELDS": "声明字段名字面量",
@@ -146,7 +161,9 @@ _ENGINE_PACKAGES = (
     "core", "lexer", "parser", "linter", "preprocessor",
     "analyzer", "transform", "renderer", "pipeline",
 )
-_REGISTRY_TABLES = (TRACKED, INSTALL_STATE, CONTENT_ADDRESSED, COVERED_ELSEWHERE, CONSTANT)
+_REGISTRY_TABLES = (
+    TRACKED, INSTALL_STATE, ACCUMULATED, CONTENT_ADDRESSED, COVERED_ELSEWHERE, CONSTANT
+)
 
 
 def _split_target(name: str) -> tuple[object, str]:
@@ -415,10 +432,6 @@ def _snapshot_tracked(table: dict[str, tuple[str, str]]) -> dict[str, object]:
             saved[name] = copy.deepcopy(value)
         elif strategy == "ref":
             saved[name] = value
-        elif strategy == "keywise":
-            saved[name] = dict(value)
-        elif strategy == "prefix":
-            saved[name] = list(value)
         else:  # clear：不存值（还原即清空）
             saved[name] = None
     return saved
@@ -442,19 +455,6 @@ def _restore_tracked(snap: dict, table: dict[str, tuple[str, str]], slot: str) -
                 del current[:]
             elif isinstance(current, set):
                 current.clear()
-        elif strategy == "keywise":
-            # 只去新增键 + 补回被删的基线键（语言加载可能 clear 后重注册）
-            for k in list(current):
-                if k not in saved:
-                    del current[k]
-            for k, v in saved.items():
-                if k not in current:
-                    current[k] = v
-        elif strategy == "prefix":
-            # 截到基线长度 + 补回被截的基线项（同理，不假定列表只增不减）
-            del current[len(saved):]
-            if len(current) < len(saved):
-                current.extend(saved[len(current):])
 
 
 def restore(snap: dict, scope: str = "all") -> None:
