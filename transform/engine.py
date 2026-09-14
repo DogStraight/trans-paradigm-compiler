@@ -10,6 +10,7 @@ engine.py — AstTransformer + TransformPlugin 基类 + 自动注册
 Doc: docs/language_walkthrough.md（变换引擎）
 """
 
+import sys
 from abc import ABC, abstractmethod
 from typing import Any, Callable, ClassVar, TypeVar, overload
 from core.define import Node
@@ -18,6 +19,12 @@ from analyzer.scope import Scope
 # ── 全局注册表 ──
 
 _plugin_registry: list[type["TransformPlugin"]] = []
+# 与 _plugin_registry 平行：每个插件类的**来源组件名**（`grammar/<lang>/plugins/
+# <component>/x.py` → `<component>`），引擎插件为 None。用于把插件应用限定在
+# 当前语言作用域内——注册表是进程级累积的（组件模块 import 期副作用），不过滤
+# 就会让**别的语言的插件参与本语言管线**（实测：同进程先跑 c4 再跑 verilog，
+# c4 的 AsmGenPlugin 会作用在 verilog AST 上）。
+_plugin_origins: list[str | None] = []
 # 限定名 → 类（插件身份面，ADR-0015 §1：插件实例化对象是一等单元，
 # 需可寻址 → 管线配置按名引用）与注册序（缺省执行序）。
 _plugin_index: dict[str, type["TransformPlugin"]] = {}
@@ -120,6 +127,7 @@ def register_plugin(
         # 索引：首胜（按名引用取注册序首个）；registry：照旧全注册
         _plugin_index.setdefault(qname, klass)
         _plugin_registry.append(klass)
+        _plugin_origins.append(_origin_component(klass))
         contract = {
             "produces": list(produces or []),
             "requires": list(requires or []),
@@ -135,6 +143,43 @@ def register_plugin(
     if cls is not None:
         return _register(cls)
     return _register
+
+
+def _origin_component(klass: type) -> str | None:
+    """插件类的来源组件名（非语言插件 → None）。
+
+    按模块文件路径判定：`.../grammar/<lang>/plugins/<component>/x.py` →
+    `<component>`；引擎插件（`transform/*.py`）→ None。路径判定不依赖模块名
+    （组件模块名是 `_comp_<组件>_<文件>` 的合成名，且同一文件可能被直接 import）。
+    """
+    mod = sys.modules.get(klass.__module__)
+    path = str(getattr(mod, "__file__", "") or "").replace("\\", "/")
+    parts = path.split("/")
+    if "grammar" not in parts or "plugins" not in parts:
+        return None
+    idx = len(parts) - 1 - parts[::-1].index("plugins")  # 最后一个 plugins
+    if idx + 1 < len(parts) - 1:  # 至少还有 <component>/<file>
+        return parts[idx + 1]
+    return None
+
+
+def active_plugin_classes() -> list[type["TransformPlugin"]]:
+    """当前语言作用域内的插件类：引擎插件 + 当前已装载组件声明的插件。
+
+    注册表是进程级累积的（见 `core/global_state.py` 的 ACCUMULATED 表），累积
+    本身不安全——`AstTransformer` 会**实例化并执行**登记的全部插件；安全来自
+    应用侧按语言作用域过滤（插件是否有根节点守卫属各插件自行约定，不能当机制
+    保障）。未建立语言作用域时（纯单测直接 import 插件模块）不过滤。
+    """
+    from core.plugin_loader import _active_components, _components_initialized
+
+    if not _components_initialized:
+        return list(_plugin_registry)
+    return [
+        cls
+        for cls, origin in zip(_plugin_registry, _plugin_origins)
+        if origin is None or origin in _active_components
+    ]
 
 
 def get_plugin_contracts() -> dict[str, dict[str, list[str]]]:
@@ -201,8 +246,9 @@ class AstTransformer:
         if plugins is not None:
             self._plugins = list(plugins)
         else:
-            # 从全局注册表自动实例化所有插件
-            self._plugins = [cls() for cls in _plugin_registry]
+            # 从全局注册表自动实例化**当前语言作用域内**的插件（引擎插件 +
+            # 当前已装载组件声明的插件；见 active_plugin_classes）
+            self._plugins = [cls() for cls in active_plugin_classes()]
         # 物化登记（契约校验，阶段 7 切片 2）：产物名 → 对象（可为 None）
         self._produced: dict[str, Any] = {}
 

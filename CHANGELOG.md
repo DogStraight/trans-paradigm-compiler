@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **语言作用域跨语言串味（"幽灵 flake"的机制）**：同进程「先跑 c4 管线 → 再跑
+  verilog」时 verilog 输出变**空**且 `success=True`（保真度 0.9925 → 0.0000），
+  实测于 HEAD，不是历史遗留。三处语言作用域状态跨语言累积，任一处都能让别的
+  语言的结果变样：
+  ① `GrammarRulesRegister.get_default()` 只增不清 → 后一语言的 rules 字典混入
+  前一语言规则**且顺序靠前**，而 `RuleSelector.get_block_rule()` 取"第一个匿名块
+  规则" → **根规则被前一语言夺走**（verilog 源码按 c4 的 `Program` 解析）；
+  ② `transform.engine._plugin_registry` 累积且 `AstTransformer` 会实例化并执行
+  **全部**登记插件 → 别的语言的 transform 插件参与本语言管线（`AsmGenPlugin` 的
+  根守卫恰好被 ① 造成的 `Program` 根通过 → AST 被换成 `AsmProgram`）；
+  ③ `_PIPELINE_SHARED` 缓存组件后，切回**已缓存**语言时 `ConfigRegistry`（进程级
+  "当前语言"）仍停在别的语言上 → 该语言的 token 类别/原子映射是别人家的
+  （c4 → verilog → c4 时第二次 c4 解析截断）。
+  修法（原则：语言切换 = 重建语言作用域）：`GrammarRulesRegister.begin_language()`
+  切语言即重置规则表并按路径规范化去抖；`plugin_loader._active_components` 在装载
+  时固化语言作用域 + `transform.engine.active_plugin_classes()` 按它过滤插件
+  （引擎插件恒在）；`pipeline._ensure_language_config()` 每次确认配置停在当前语言。
+  守护：`tests/engine/core/test_language_switch.py`（7 例：双向 + 来回切换的端到端
+  保真度、规则表无残留、根规则归属、插件作用域、配置声明随语言）；门禁有效性进
+  `tools/check_gate_efficacy.py` 清单（关掉重置即变红，实测 ratio 0.9925 → 0.0000）。
+  订正：`core/global_state.py` 的 `ACCUMULATED` 表原写"跨语言多出来的条目不被引用"
+  ——**已被证伪**（插件是全部实例化并执行），安全来自应用侧作用域过滤而非注册名限定。
+  全量 1900 passed / 8 skipped；单进程串行全量 1900 passed / 8 skipped（443s，
+  正是该 bug 赖以发作的"多语言同进程"场景）；`check_gate_efficacy --only 5`
+  如期变红（关掉 `begin_language` 即红）。
+
 ### Changed
 
 - **测试隔离 L4：进程级隔离对照**：新增 `tools/check_test_isolation.py`——把选中集

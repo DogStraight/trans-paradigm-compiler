@@ -83,6 +83,9 @@ INSTALL_STATE: dict[str, tuple[str, str]] = {
     "parser.pratt_parser._bit_width_literal_parser": ("ref", "位宽字面量解析器（按语言安装）"),
     "parser.pratt_parser._bool_true_type": ("ref", "bool 真值类型（按语言安装）"),
     "parser.pratt_parser._atom_name_map": ("deepcopy", "原子 token→规则名映射（按语言安装）"),
+    # 语言作用域（当前语言装载了哪些组件）：插件应用按它过滤，
+    # **模块级**还原——逐测试清掉会让同模块后续用例的 transform 空转（实测）。
+    "core.plugin_loader._active_components": ("deepcopy", "当前语言的组件作用域（插件过滤用）"),
 }
 
 # ── 登记表 3/6：ACCUMULATED——只增的语言注册面（登记但**刻意不还原**）──
@@ -91,13 +94,17 @@ INSTALL_STATE: dict[str, tuple[str, str]] = {
 # 不一致态：缓存命中 → 不重注册 → 注册面空。2026-09-14 实测：c4 模块结束还原
 # 后，同 worker 下一个 c4 文件装载组件命中缓存 → AsmGenPlugin 不再注册 →
 # transform 退化为 Program（默认序 + `--dist loadfile` 下 5 例失败）。
-# 累积是安全的：注册名按组件限定（如 `asm_gen.codegen`），查表按本语言的
-# 声明/规则名，跨语言多出来的条目不被引用（同名时文档化的“首胜”语义）。
+# 累积**本身不安全**（已实测证伪早先的"跨语言多出来的条目不被引用"）：
+# `AstTransformer` 会实例化并执行登记的全部插件，别的语言的插件会参与本语言
+# 管线。安全来自**应用侧按语言作用域过滤**（`transform.engine.
+# active_plugin_classes()`：引擎插件 + `core.plugin_loader._active_components`），
+# 而不是靠注册名限定——新增插件接入点时必须同样接这个过滤。
 ACCUMULATED: dict[str, str] = {
-    "transform.engine._plugin_registry": "插件注册表（注册名按组件限定，查表按声明名）",
-    "transform.engine._plugin_index": "限定名→插件类索引（同上）",
-    "transform.engine._plugin_contracts": "插件契约表（同上）",
-    "transform.engine._plugin_shapes": "插件产物形状声明（同上）",
+    "transform.engine._plugin_registry": "插件注册表（应用侧按语言作用域过滤，见 active_plugin_classes）",
+    "transform.engine._plugin_origins": "插件来源组件表（与注册表平行，同上）",
+    "transform.engine._plugin_index": "限定名→插件类索引（按名解析，不参与执行）",
+    "transform.engine._plugin_contracts": "插件契约表（同上，校验用）",
+    "transform.engine._plugin_shapes": "插件产物形状声明（同上，校验用）",
     "renderer.primitives.registry._PRIMITIVE_REGISTRY": "渲染原语注册表（原语模块 import 期注册）",
     "analyzer.primitives.registry._primitives": "分析原语注册表（原语模块 import 期注册）",
     "analyzer.primitives._symbol._capture_hooks": "符号捕获钩子表（同上）",

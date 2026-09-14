@@ -302,11 +302,31 @@ def _shared_key(ctx: _PipelineContext) -> tuple:
     return (ctx.rules_dir, tuple(ctx.ext_dirs or ()))
 
 
+def _ensure_language_config(ctx: _PipelineContext) -> None:
+    """确保进程级配置停在**当前语言**上（语言切换 = 重新初始化配置）。
+
+    `_PIPELINE_SHARED` 缓存的是组件（贵，按语言键控可复用），但 `ConfigRegistry`
+    是进程级"当前语言"单例——切回**已缓存**的语言时它可能还停在别的语言上，
+    于是该语言的 token 类别/原子映射等安装态用的是别人家的（实测：c4 → verilog
+    → c4 时第二次 c4 解析截断）。
+    """
+    want = os.path.normcase(os.path.abspath(ctx.rules_dir))
+    current = ConfigRegistry._entries_source or ""
+    if os.path.normcase(os.path.abspath(current)) == want:
+        return
+    ConfigRegistry.load_all(
+        ctx.rules_dir,
+        ext_dirs=ctx.ext_dirs,
+        plugins_dir=os.path.join(ctx.rules_dir, "plugins"),
+    )
+
+
 def _ensure_shared(ctx: _PipelineContext) -> None:
     """初始化/复用按 (rules_dir, ext_dirs) 缓存的共享组件。"""
     # 配置加载与组件构建统一按键控：原 _config_loaded 是全局标记（第一个
     # 语言决定配置，后续语言跳过加载——多语言进程的机制缺陷，2026-08-28
     # 与测试隔离机制一并修复）。
+    _ensure_language_config(ctx)
     key = _shared_key(ctx)
     if key not in _PIPELINE_SHARED:
         ConfigRegistry.load_all(

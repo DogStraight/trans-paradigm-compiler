@@ -661,6 +661,27 @@ class GrammarRulesRegister:
     def __init__(self) -> None:
         self.rules: dict[str, GrammarRule] = {}
         self._loaded_dirs: set[str] = set()
+        # 语言包归属（相对路径已规范化）：语言切换 = 重建（见 begin_language）
+        self._source_dir: str | None = None
+
+    def reset(self) -> None:
+        """清空规则表与目录缓存（语言切换 = 重建，见 begin_language）。"""
+        self.rules.clear()
+        self._loaded_dirs.clear()
+
+    def begin_language(self, rules_dir: str) -> None:
+        """声明"接下来的注册属于哪个语言包"：与上次不同则先重置。
+
+        默认单例跨语言只增不减会让后一语言的规则表混入前一语言规则，**且顺序
+        靠前**——`RuleSelector.get_block_rule()` 取"第一个匿名块规则"，于是根
+        规则被前一语言夺走（实测：同进程先跑 c4 再跑 verilog，verilog 源码被按
+        c4 的 `Program` 解析 → 渲染输出为空）。语言切换 = 重建，才能落实
+        "单语言选择模型"（切换语言 = 重新初始化管线）。
+        """
+        key = os.path.normcase(os.path.abspath(rules_dir)) if rules_dir else ""
+        if self._source_dir != key:
+            self.reset()
+            self._source_dir = key
 
     @staticmethod
     def _resolve_peek(rules_dict: dict) -> dict:

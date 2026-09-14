@@ -54,6 +54,11 @@ def setup_grammar(
 
     if register is None:
         register = GrammarRulesRegister.get_default()
+    # 语言作用域：同一注册器不跨语言累积（切换语言 = 重建规则表）。
+    # 不这样做时后一语言的规则表会混入前一语言规则，且顺序靠前——
+    # RuleSelector.get_block_rule 取"第一个匿名块规则"，根规则会被夺走
+    # （实测：c4 → verilog 后 verilog 源码按 c4 的 Program 解析，输出为空）。
+    register.begin_language(rules_dir)
     core_rules = register.rules_registration(rules_dir)
 
     ext_rules = {}

@@ -39,6 +39,14 @@ def _get_component_dir(plugins_dir: str = "") -> str:
 _loaded_components: dict[str, dict[str, Any]] = {}
 _transform_slots: dict[str, Callable] = {}
 _PRIMITIVE_ORDER: list[str] = []
+# 语言作用域是否已建立（`load_all_components` 跑过）：区分"当前语言无组件"与
+# "从未装载过任何语言"——插件按作用域过滤时，前者应过滤到空，后者不过滤
+# （纯单测直接 import 插件模块的场景）。
+_components_initialized: bool = False
+# 当前语言作用域的组件集（**装载时固化**，不读实时 `_loaded_components`）：
+# 后者会被测试隔离的测试级还原改（按基线删新增键），拿它当作用域会把本语言的
+# 插件也滤掉（实测：c4 模块内第二个用例开始 transform 空转）。
+_active_components: set[str] = set()
 
 
 def discover_components(plugins_dir: str = "") -> list[dict[str, Any]]:
@@ -200,13 +208,21 @@ def load_all_components(plugins_dir: str = "") -> list[dict[str, Any]]:
     """Discover, dependency-sort, and load all components.
 
     plugins_dir 非空时从指定语言包加载组件（单语言选择）；空时用默认包。
+    调用即建立**语言作用域**（`_components_initialized`）——即使该语言没有
+    组件（如 yaml），也要知道"当前作用域=空"，否则插件按作用域过滤会退化成
+    "不过滤"（见 `transform.engine.active_plugin_classes`）。
     """
+    global _components_initialized
+    _components_initialized = True
     metas = discover_components(plugins_dir)
     ordered = _resolve_dependencies(metas)
     result = []
     for meta in ordered:
         info = load_component(meta)
         result.append(info)
+    # 语言作用域固化：本次装载的组件集就是当前语言的全部组件
+    _active_components.clear()
+    _active_components.update(info["name"] for info in result)
     return result
 
 

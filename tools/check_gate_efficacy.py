@@ -74,6 +74,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": '    "W105": 0,',
         "test": "tests/policy/test_diag_baseline.py",
     },
+    {
+        "why": "语言作用域重置（2026-09-14 实测事故：同进程先跑 c4 再跑 verilog，"
+               "规则表跨语言累积 → 根规则被 c4 的 Program 夺走 → 输出为空；"
+               "该现象曾被当作'幽灵 flake'）",
+        "file": "parser/__init__.py",
+        "old": "    register.begin_language(rules_dir)\n",
+        "new": "    pass  # 变异：关掉语言作用域重置\n",
+        "test": "tests/engine/core/test_language_switch.py",
+    },
 ]
 
 
