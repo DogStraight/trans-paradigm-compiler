@@ -224,7 +224,7 @@ def discover_mutable_globals() -> list[str]:
         names.append(pkg)
     names.append("main")
 
-    found: dict[str, str] = {}  # 容器 id → 条目名（首见归属名）
+    found: dict[int, str] = {}  # 容器 id → 条目名（首见归属名）
     for name in names:
         if name == "core.global_state":
             continue
@@ -387,7 +387,7 @@ def snapshot() -> dict:
     # 只还原 load_all 推过且当前存在的变量；新增注册（declare_cfg）无害，
     # restore 只按快照里的 (module, var) 还原值。
     module_vars: dict[tuple[str, str], object] = {}
-    for _key, entries in _CONFIG_DECLARATIONS.items():
+    for _, entries in _CONFIG_DECLARATIONS.items():
         for mod_name, var_name in entries:
             mod = sys.modules.get(mod_name)
             if mod is not None and hasattr(mod, var_name):
@@ -432,7 +432,7 @@ def _snapshot_tracked(table: dict[str, tuple[str, str]]) -> dict[str, object]:
     """按策略快照表中各条目。"""
     _warm_imports()
     saved: dict[str, object] = {}
-    for name, (strategy, _reason) in table.items():
+    for name, (strategy, _) in table.items():
         owner, attr = _split_target(name)
         value = getattr(owner, attr)
         if strategy == "deepcopy":
@@ -447,7 +447,7 @@ def _snapshot_tracked(table: dict[str, tuple[str, str]]) -> dict[str, object]:
 def _restore_tracked(snap: dict, table: dict[str, tuple[str, str]], slot: str) -> None:
     """按策略还原表中各条目（`slot` = 快照内键："tracked" / "install"）。"""
     _warm_imports()
-    for name, (strategy, _reason) in table.items():
+    for name, (strategy, _) in table.items():
         owner, attr = _split_target(name)
         saved = snap[slot][name]
         current = getattr(owner, attr)
