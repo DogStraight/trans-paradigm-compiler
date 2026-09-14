@@ -670,7 +670,7 @@ def _make_macro_body_provider(ctx: _PipelineContext) -> Any:
         node = None
         body = (ctx.macro_table or {}).get(macro_name)
         if body:
-            kind, _basis = classify_macro_body(body, probe)
+            kind, _ = classify_macro_body(body, probe)
             shape_key = key_of_kind.get(kind)
             if shape_key:
                 node = extract_macro_body(body, shape_key, parse_ast)
