@@ -1,4 +1,4 @@
-"""Macro reversal — 统一位置桥（锚 + 残片）回插。
+"""Macro reversal — 统一位置桥（锚 + 原文）回插。
 
 对外统一入口，内部委托给 _bridge.restore_anchors。
 兼容旧调用格式：
@@ -34,7 +34,7 @@ def protect_and_reverse(
     *,
     anchors: list[dict] | None = None,
 ) -> str:
-    """按统一锚列表回插还原（锚 + 残片消耗式）。
+    """按统一锚列表回插还原（锚 + 原文消耗式）。
 
     参数 prefix 和 sync 容差来自配置 preprocessor.reverse（_macro.toml → [reverse]）。
     restoration_stack 为旧参数名（兼容），anchors 为统一锚列表。
@@ -55,12 +55,12 @@ def restore_condition_blocks(
     占位注释（`// <tpc:cond:N>`）在扫描时替代 inactive 分支 + 块边界指令，
     渲染后原位替换回原文，实现条件编译多义性的保真恢复。
 
-    嵌套条件块由 restore_anchors 的多轮扫描处理：外层残片可能含内层 marker。
+    嵌套条件块由 restore_anchors 的多轮扫描处理：外层原文可能含内层 marker。
     """
     if not placeholders:
         return rendered
     anchors = [
-        {"marker": ph_id, "fragment": original, "mode": "line", "kind": "cond"}
+        {"marker": ph_id, "source_text": original, "mode": "line", "kind": "cond"}
         for ph_id, original in placeholders.items()
     ]
     return restore_anchors(rendered, anchors, "`")

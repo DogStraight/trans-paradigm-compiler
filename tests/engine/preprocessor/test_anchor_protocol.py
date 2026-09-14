@@ -81,7 +81,7 @@ class TestTokenRestoreGuard:
         return [
             {
                 "marker": marker,
-                "fragment": "`NAME",
+                "source_text": "`NAME",
                 "mode": "token",
                 "kind": "macro",
             }
@@ -104,7 +104,7 @@ class TestTokenRestoreGuard:
         assert out == rendered
 
     def test_restore_skips_when_absent(self) -> None:
-        """锚文本 0 次（渲染路径已用残片直出）→ 不动作，不误改文本。"""
+        """锚文本 0 次（渲染路径已用原文直出）→ 不动作，不误改文本。"""
         marker = self._marker()
         rendered = "a = `NAME;\n"
         assert restore_anchors(rendered, self._entry(marker)) == rendered

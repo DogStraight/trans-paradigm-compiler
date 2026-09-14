@@ -26,7 +26,7 @@ _shape_cfg: dict = declare_cfg("preprocessor.macro_shape", {}, __name__, "_shape
 KIND_STMT = "完整语句"
 KIND_DECL = "完整声明"
 KIND_EXPR = "完整表达式"
-KIND_FRAGMENT = "残缺片段"
+KIND_PARTIAL = "残缺片段"
 
 # 探测顺序：外层包裹优先（语句 > 声明 > 表达式）——更"外层"的语法上下文先判定
 _PROBE_ORDER: tuple[tuple[str, str], ...] = (
@@ -68,7 +68,7 @@ def classify_macro_body(
     for lead in leads:
         if stripped.startswith(lead):
             head = stripped.split()[0][:12] if stripped.split() else stripped[:12]
-            return KIND_FRAGMENT, f"首 token 续接（{head}）"
+            return KIND_PARTIAL, f"首 token 续接（{head}）"
 
     for key, kind in _PROBE_ORDER:
         tpl = _wrapper_tpl(wrappers.get(key))
@@ -78,7 +78,7 @@ def classify_macro_body(
         # str.format 会把花括号当占位符抛错。
         if probe(tpl.replace("{b}", body)):
             return kind, f"{key} 包裹解析成功"
-    return KIND_FRAGMENT, "全部包裹失败"
+    return KIND_PARTIAL, "全部包裹失败"
 
 
 # ── 片段解析探测（懒构造 + 按 rules_dir 缓存） ──

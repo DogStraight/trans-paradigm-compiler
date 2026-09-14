@@ -46,7 +46,7 @@ def test_extract_multi_decl_body() -> None:
     assert [k.node_name for k in wrap.iter_children()] == ["WireDecl", "WireDecl"]
 
 
-def test_extract_fragment_returns_none() -> None:
+def test_extract_partial_returns_none() -> None:
     """残缺片段无法成完整单元 → 提取返回 None（调用方回退文本级处理）。
 
     注：`begin`/`end` 单看会在 stmt 包裹下被当作合法嵌套块（形态分类同样判完整），

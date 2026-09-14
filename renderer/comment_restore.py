@@ -71,7 +71,7 @@ def restore_all_comments(
     # Reverse macro protection — 必须放在 line-comment restore 之后：
     # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进
     # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
-    # 才能定位 marker 并替换为整行原文残片。
+    # 才能定位 marker 并替换为整行原文。
     if restore_stack:
         content = protect_and_reverse(
             content, restoration_stack=restoration_stack

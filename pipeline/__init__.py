@@ -545,23 +545,23 @@ def _stage_parse(
 # ── 宏边界节点化（P3.6） ──
 
 
-def _extract_macro_name(fragment: str) -> str:
+def _extract_macro_name(source_text: str) -> str:
     """从宏调用原文提取宏名（`` `NAME `` / `` `NAME(...) ``）→ NAME。"""
     import re
 
-    m = re.match(r"[^\w]*(\w+)", fragment.lstrip())
+    m = re.match(r"[^\w]*(\w+)", source_text.lstrip())
     return m.group(1) if m else ""
 
 
 def _attach_macro_meta(node: Any, entry: dict, body_provider: Any) -> Any:
-    """给宏边界节点挂锚表元数据（宏名 / 锚文本 / 原文残片 / 源区间 / 宏体子树）。
+    """给宏边界节点挂锚表元数据（宏名 / 锚文本 / 原文 / 源区间 / 宏体子树）。
 
-    渲染按 `_macro_fragment`（raw 源区间切片）直出宏调用原文，故元数据必须挂全；
+    渲染按 `_macro_source_text`（raw 源区间切片）直出宏调用原文，故元数据必须挂全；
     缺摘要时节点渲染为空（内容丢失），不是可接受的降级。
     """
-    node._macro_name = _extract_macro_name(entry.get("fragment", ""))
+    node._macro_name = _extract_macro_name(entry.get("source_text", ""))
     node._macro_marker = entry.get("marker", "")
-    node._macro_fragment = entry.get("fragment", "") or ""
+    node._macro_source_text = entry.get("source_text", "") or ""
     if entry.get("line") is not None:
         node._src_span = (
             entry["line"],
@@ -579,8 +579,8 @@ def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) ->
     """递归把锚标识符节点改写为 MacroCall（含 attrs 内嵌节点）。
 
     锚是普通标识符（`__tpc_marker_<salt>_<n>`，语言包不认识宏），parser 把它
-    建成 Identifier 节点；本阶段按锚表改写为 MacroCall 并挂元数据（宏名/原文
-    残片/源区间/宏体子树），宏边界于是在树中结构化可见。
+    建成 Identifier 节点；本阶段按锚表改写为 MacroCall 并挂元数据（宏名/原文/
+    源区间/宏体子树），宏边界于是在树中结构化可见。
     """
     from core.define import CHILDREN_FIELD, Node
 
@@ -750,7 +750,7 @@ def _verbatim_from_span(
     ):
         text = (
             text[: r["offset"] - start]
-            + r["fragment"]
+            + r["source_text"]
             + text[r["end_offset"] - start:]
         )
     return text

@@ -1,8 +1,8 @@
-"""e2e Macro 测试组——统一位置桥（token/line 锚 + 残片消耗式）还原回归守卫。
+"""e2e Macro 测试组——统一位置桥（token/line 锚 + 原文消耗式）还原回归守卫。
 
 背景：宏还原从"同步词启发式 find(body)"升级为统一位置桥——展开时把宏调用
 替换为唯一 token（tpc_marker_N，随 AST 确定渲染）或整行占位（line 锚，
-行首空体 decl 修饰如 `FORMAL_KEEP），还原时按操作栈 + 原文残片精确回插。
+行首空体 decl 修饰如 `FORMAL_KEEP），还原时按操作栈 + 原文精确回插。
 本测试把 macro 样本组的还原效果固化为断言，防止还原机制回退。
 
 覆盖：
@@ -128,7 +128,7 @@ def test_object_macro_def_reversed():
 
 
 def test_macro_complex_nested_reversed():
-    """嵌套宏 + 位宽字面量组合（`W'd`RST）：整体还原为单链 fragment，不粘连。"""
+    """嵌套宏 + 位宽字面量组合（`W'd`RST）：整体还原为单段原文，不粘连。"""
     _, _, out, _ = _run("ref_macro_complex.v")
     assert "head <= `W'd`RST;" in out
     assert "tail <= `W'd`RST;" in out

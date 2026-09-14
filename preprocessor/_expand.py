@@ -493,7 +493,7 @@ def _extend_macro_chain(line: str, end: int, macro_re: re.Pattern) -> int:
     """吞噬宏调用链：宏调用 + 位宽字面量后缀 + 后续相邻宏调用（`W'd`RST）。
 
     复合/嵌套宏调用（如 `W'd`RST = `W + 'd + `RST）token 替换成单个 token，
-    fragment 为整段原文——避免拆成相邻 token 后粘连（tpc_marker_A tpc_marker_B
+    source_text 为整段原文——避免拆成相邻 token 后粘连（tpc_marker_A tpc_marker_B
     无词边界，全词匹配还原失败）。
     """
     cur = end
@@ -531,7 +531,7 @@ def expand_tokens(
     锚形态（统一位置桥，见 _bridge）：
       line   整行占位：独占整行的宏调用（`debug(...)`）、行首空体宏
              （`FORMAL_KEEP reg ...）→ 整行替换为 `// <tpc:macro:N>` 占位，
-             fragment = 整行原文（含宏调用），渲染后整行回插。
+             source_text = 整行原文（含宏调用），渲染后整行回插。
       sync   行内非空体宏（如 `assign z = `MIN(x, y);`）→ 保留 body 替换，
              记录同步词字段，由同步词窗口启发式回插（兼容现状）。
 
@@ -539,11 +539,11 @@ def expand_tokens(
         line_map — **展开后行号（1-based）→ 源（clean）行号**：诊断回源用。
             逐行就地替换 → 输出行数只可能因宏体含换行而增加，一行源行对应
             一串连续输出行，故 list[int] 足够（无需完整区间表）。
-        restoration_stack — 统一锚列表（渲染路径还原用），每项含 marker/fragment/mode。
+        restoration_stack — 统一锚列表（渲染路径还原用），每项含 marker/source_text/mode。
         macro_regions — **宏区间表**（仅 semantic=True 有意义）：每条"宏体被铺进
             文本"的调用一项，含它在**源文本**里的区间（`src_line`/`src_col`/
             `src_end_col`）与它在**展开结果**里的字符区间（`offset`/`end_offset`），
-            以及 `name`/`fragment`（宏调用原文）/`body`（实际铺进的内容；宏体末行
+            以及 `name`/`source_text`（宏调用原文）/`body`（实际铺进的内容；宏体末行
             含行注释时末尾补了一个换行，见下）。
             它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
@@ -610,7 +610,7 @@ def expand_tokens(
             restoration_stack.append(
                 {
                     "marker": marker,
-                    "fragment": line,
+                    "source_text": line,
                     "mode": "line",
                     "kind": "macro",
                 }
@@ -628,7 +628,7 @@ def expand_tokens(
         parts = list(line)
         forward_entries: list[dict] = []
         for col, end, body, name, is_func, args_text in reversed(macro_matches):
-            fragment = line[col:end]  # 宏调用原文（含反引号与实参）
+            source_text = line[col:end]  # 宏调用原文（含反引号与实参）
             if not body:
                 # 空 body 宏：行内注释锚（marker 唯一，还原精确）
                 marker = make_marker("macro", _next_macro_seq())
@@ -636,7 +636,7 @@ def expand_tokens(
                 forward_entries.append(
                     {
                         "marker": marker,
-                        "fragment": fragment,
+                        "source_text": source_text,
                         "mode": "inline",
                         "kind": "macro",
                         "is_func": is_func,
@@ -651,13 +651,13 @@ def expand_tokens(
                 # 改用 inline+body 区间还原：
                 # marker 注释 + body 原文保留在源码（parser 跳过注释看到
                 # `input NAME = 1'b1`，Declarator @Init? 兜住端口默认值），
-                # 还原时按 [marker..body] 区间替换回宏调用原文残片。
+                # 还原时按 [marker..body] 区间替换回宏调用原文（source_text）。
                 marker = make_marker("macro", _next_macro_seq())
                 parts[col:end] = f"/*<{marker}>*/{body}"
                 forward_entries.append(
                     {
                         "marker": marker,
-                        "fragment": fragment,
+                        "source_text": source_text,
                         "mode": "inline",
                         "kind": "macro",
                         "body": body,
@@ -706,7 +706,7 @@ def expand_tokens(
             forward_entries.append(
                 {
                     "marker": token,
-                    "fragment": fragment,
+                    "source_text": source_text,
                     "mode": "token",
                     "kind": "macro",
                     "is_func": is_func,
@@ -728,7 +728,7 @@ def expand_tokens(
                 pending.append(
                     {
                         "name": name,
-                        "fragment": line[s_col:s_end],
+                        "source_text": line[s_col:s_end],
                         "is_func": is_func,
                         "body": body,
                         "src_line": line_no,

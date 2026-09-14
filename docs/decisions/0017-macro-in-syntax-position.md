@@ -59,7 +59,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
      语法声明后 **50/135 = 37%**——即整套槽位机制只买到 4 个位置，代价/收益
      不成立。
    - **会静默错渲染**：某些槽位的 layout 自带字面量（如 range 子槽的 `[` `]`），
-     宏残片可能已含这些字符 → 多套一对；判据不显然（取决于该槽位 layout 形态），
+     宏调用原文可能已含这些字符 → 多套一对；判据不显然（取决于该槽位 layout 形态），
      越补越像掩盖边界。
    故 `Identifier` 的 `macro.call` 备选、`MacroCall.parser`、
    `TypeSpec`/`TypeSpecNoReg` 的 `@MacroCall` 均**已撤销**。
@@ -71,7 +71,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
    现有产生式直接成立——所以"类型位槽位声明"是伪需求。宏边界节点（宏名 + raw
    源区间）由管线就树产生/改写（`pipeline/__init__.py::_rewrite_marker_nodes`），
    语言包对它的唯一认知是渲染方式（`[MacroCall.renderer.layout]` 输出
-   `_macro_fragment`）。
+   `_macro_source_text`）。
 
 4. **渲染侧：遇宏节点走 raw 分支拼接**——输出宏调用原文，不把展开内容重新
    格式化。带宏文本的对齐/格式化参照前人做法（Verible / clang-format：宏调用
@@ -104,7 +104,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 **付出**：
 - 展开在解析前发生（铺宏体文本）→ 渲染侧必须有 **raw 拼接** 才能把宏调用原文还回去
   （宏区间 ↔ 输出文本的对应），这是本决策真正的成本所在；
-- 宏区间与"可渲染单元"不重合的形态（宏残片含槽位字面量）需定下原样输出的边界
+- 宏区间与"可渲染单元"不重合的形态（宏调用原文含槽位字面量）需定下原样输出的边界
   规则（决策 4 末条）；
 - 迁移期间锚（`__tpc_marker_*`）与展开并存，需分切片迁移并保行为不回退
   （锚仍在用：`restore_anchors` 是当前输出的还原通道）。

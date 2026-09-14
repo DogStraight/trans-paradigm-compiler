@@ -16,12 +16,6 @@
 - [ ] 阶段 6 收尾 — 中间产物可视化：剩 transform 侧更多插件自述（出口已具备，
       按需补）
 
-## 文档工程（2026-09-04 立项，使用复盘 6 类文档框架）
-
-- [ ] **术语表（glossary）**：Doc IR / pass / slot / postpass / capability /
-      world A·B / inject / fragment 等术语集中定义（文档工程对标遗留，中低成本；
-      落点待定：docs 教程层或独立文件）
-
 ## P1 — Verilog 实例完善
 
 ### P1.5 已知缺陷收尾

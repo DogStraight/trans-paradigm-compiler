@@ -11,7 +11,7 @@ NO_ICE40_DEFAULT_ASSIGNMENTS）可解析。此前 `input NAME `M`（M body=
       （`/*<tpc:macro:N>*/` + body 原文保留在源码）——parser 跳过注释
       看到 `input NAME = 1'b1`，Declarator @Init? 兜住端口默认值
     - 还原：marker 后找 body（展开原文顺序）或 marker 前同行找 body
-      （渲染行尾锚定形态），[body..marker] 区间替换回宏调用原文残片
+      （渲染行尾锚定形态），[body..marker] 区间替换回宏调用原文
 
 连带验证：带参形态 `ICE40_DEFAULT_ASSIGNMENT_V(v)`（body=`= v`）与
 对象宏 `ICE40_DEFAULT_ASSIGNMENT_0/1` 同路径；ice40 全文件默认配置

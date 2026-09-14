@@ -37,4 +37,4 @@ def test_macro_node_appears_in_ast() -> None:
             walk(child)
 
     walk(res["ast"])
-    assert [getattr(n, "_macro_fragment", "") for n in found] == ["`SOMETHING"]
+    assert [getattr(n, "_macro_source_text", "") for n in found] == ["`SOMETHING"]

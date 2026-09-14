@@ -6,7 +6,7 @@
     - invert 引用（slave : invert master）展开后方向反转且位宽保留
     - 嵌套类型引用（spi.master inner）展开后位宽随前缀透传
     - wrapper 模块（impl [role] (...)）的 role 派生端口保留位宽
-    - 无位宽端口不产生空 [] 残片；保留路径（expand_enhanced=False）不受影响
+    - 无位宽端口不产生空 [] 残留；保留路径（expand_enhanced=False）不受影响
 """
 
 import pytest
@@ -40,7 +40,7 @@ def test_ranged_role_port_expands_with_width():
     out = r["output"]
     assert "[7:0] spi_io_mosi" in out
     assert "spi_io_clk" in out
-    # 无位宽端口不带空 [] 残片
+    # 无位宽端口不带空 [] 残留
     assert "[]" not in out
     assert "type spi" not in out
 
@@ -173,7 +173,7 @@ type spi {
 
 
 def test_no_range_ports_have_no_empty_brackets():
-    """无位宽端口：不产生空 [] 残片，端口正常展开。"""
+    """无位宽端口：不产生空 [] 残留，端口正常展开。"""
     r = _run(src=NO_RANGE_SRC)
     assert r["success"], r.get("error", "")
     out = r["output"]

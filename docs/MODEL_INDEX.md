@@ -97,7 +97,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 宏展开（strip 指令 + `` `NAME `` 引用展开） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py` | `tests/engine/preprocessor/test_primitives.py` + `tests/languages/verilog/test_macro*.py` |
-| 宏反向（统一位置桥：锚 + 残片回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
+| 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
 
 ### core + pipeline — 引擎骨架 / 配置 / 编排
 

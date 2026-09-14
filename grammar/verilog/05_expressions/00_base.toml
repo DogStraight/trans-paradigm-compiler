@@ -97,12 +97,12 @@ line = [
 
 # ── MacroCall — 宏调用边界节点（引擎层，语言包不声明 parser 规则） ──
 # 宏边界节点由**外层**（管线）就树产生，语言包里
-# 只声明它怎么渲染：直接输出宏调用原文（`_macro_fragment` = raw 源区间切片）。
+# 只声明它怎么渲染：直接输出宏调用原文（`_macro_source_text` = raw 源区间切片）。
 # 语言包不得为宏保留语法槽位——宏位置本质上是**文本任意**的，逐槽位声明
 # 既补不齐（结构词/运算符/分隔符位无槽可声明），又会在某些槽位静默错渲染
 # （槽位 layout 自带字面量时多套一对括号），见 ADR-0017 决策 3。
 [MacroCall.renderer.layout]
-line = [{ ref = "_macro_fragment" }]
+line = [{ ref = "_macro_source_text" }]
 
 [MacroCall.analyzer]
 identifier_ref = true

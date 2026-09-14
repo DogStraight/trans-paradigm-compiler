@@ -10,7 +10,7 @@ from core.define import DEFAULT_RULES_DIR
 from preprocessor.macro_shape import (
     KIND_DECL,
     KIND_EXPR,
-    KIND_FRAGMENT,
+    KIND_PARTIAL,
     KIND_STMT,
     build_parse_probe,
     classify_macro_body,
@@ -24,15 +24,15 @@ _PROBE = build_parse_probe(DEFAULT_RULES_DIR)
 # (宏体, 期望判定, 说明)
 CASES: list[tuple[str, str, str]] = [
     # ── 残缺片段：首 token 续接预过滤（依赖前置上下文） ──
-    ("= 1'b1", KIND_FRAGMENT, "ice40 端口默认值宏（续接 =）"),
-    ("[3:0]", KIND_FRAGMENT, "范围片段（续接 [）"),
-    ("+ 4", KIND_FRAGMENT, "运算符续段（续接 +）"),
-    (", .q(q)", KIND_FRAGMENT, "端口连接续段（续接 ,）"),
+    ("= 1'b1", KIND_PARTIAL, "ice40 端口默认值宏（续接 =）"),
+    ("[3:0]", KIND_PARTIAL, "范围片段（续接 [）"),
+    ("+ 4", KIND_PARTIAL, "运算符续段（续接 +）"),
+    (", .q(q)", KIND_PARTIAL, "端口连接续段（续接 ,）"),
     # ── 残缺片段：全部包裹失败 ──
-    ("begin", KIND_FRAGMENT, "块开头缺 end"),
-    ("end", KIND_FRAGMENT, "块结尾缺 begin"),
-    ("else y = 2;", KIND_FRAGMENT, "else 分支缺 if 头"),
-    ("3:0]", KIND_FRAGMENT, "半个范围（缺 [）"),
+    ("begin", KIND_PARTIAL, "块开头缺 end"),
+    ("end", KIND_PARTIAL, "块结尾缺 begin"),
+    ("else y = 2;", KIND_PARTIAL, "else 分支缺 if 头"),
+    ("3:0]", KIND_PARTIAL, "半个范围（缺 [）"),
     # ── 完整单元 ──
     ("initial Q = 0;", KIND_STMT, "SB_DFF_INIT 语句体宏"),
     ("y = 1'b1;", KIND_STMT, "完整过程赋值"),
@@ -63,7 +63,7 @@ def test_config_loaded_from_language_pack() -> None:
 def test_classification_is_config_driven() -> None:
     """判定完全由注入配置驱动：空配置 → 无模板 → 全残缺。"""
     kind, _ = classify_macro_body("y = 1'b1;", _PROBE, cfg={})
-    assert kind == KIND_FRAGMENT
+    assert kind == KIND_PARTIAL
 
     custom = {
         "continue_leads": [],
@@ -73,7 +73,7 @@ def test_classification_is_config_driven() -> None:
     assert kind2 == KIND_DECL, basis2
 
 
-def test_fragment_kind_unused_constant_guard() -> None:
+def test_partial_kind_unused_constant_guard() -> None:
     """四值常量互异（防拼写漂移）。"""
-    kinds = {KIND_STMT, KIND_DECL, KIND_EXPR, KIND_FRAGMENT}
+    kinds = {KIND_STMT, KIND_DECL, KIND_EXPR, KIND_PARTIAL}
     assert len(kinds) == 4

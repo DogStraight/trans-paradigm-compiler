@@ -74,7 +74,7 @@ def test_multi_line_body_spans_lines() -> None:
 
 
 def test_function_like_macro_records_call_and_substituted_body() -> None:
-    """带参宏：fragment 是调用原文（含实参），body 是代入后的展开体。"""
+    """带参宏：source_text 是调用原文（含实参），body 是代入后的展开体。"""
     src = (
         "`define MIN(a, b) ((a) < (b) ? (a) : (b))\n"
         "module m;\n"
@@ -85,7 +85,7 @@ def test_function_like_macro_records_call_and_substituted_body() -> None:
     assert len(regions) == 1
     r = regions[0]
     assert r["is_func"] is True
-    assert r["fragment"] == "`MIN(x, y)"
+    assert r["source_text"] == "`MIN(x, y)"
     assert _slice(expanded, r) == "((x) < (y) ? (x) : (y))"
 
 
@@ -117,7 +117,7 @@ def test_body_trailing_comment_gets_newline() -> None:
     assert len(regions) == 1
     r = regions[0]
     assert r["body"].endswith("\n"), r["body"]
-    assert r["fragment"] == "`V"
+    assert r["source_text"] == "`V"
     # 宏调用同行的 `;` 不在注释里（没被吞）
     assert ";" in expanded.split("// note")[1].split("\n")[1]
 

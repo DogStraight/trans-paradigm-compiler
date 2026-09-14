@@ -76,7 +76,7 @@ def restore_comments(
             # marker 已内联渲染（AST 路径）：如 ice40 端口列表内的
             # /*<tpc:macro:N>*/ 既是列表结构被锚点收集、又作为块注释节点
             # 随 AST 渲染——内联位置是权威位置，锚点回插会双份（宏还原后
-            # 同一 fragment 出现两次）。marker 编号唯一，全局判存在即可。
+            # 同一段原文出现两次）。marker 编号唯一，全局判存在即可。
             continue
         if c.get("midline"):
             # tpc 占位标记（行注释）：独立行插入（见函数 docstring），

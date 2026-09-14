@@ -225,7 +225,7 @@ def _atom_parser_impl(self, _tokens, idx, context):
             node = Node("MacroCall", content=tok.content)
             # 元数据走 add_attr（Node 的动态属性惯例；直接 setattr 会被静态
             # 检查判为未知属性赋值）
-            node.add_attr("_macro_fragment", tok.content)
+            node.add_attr("_macro_source_text", tok.content)
             node.add_attr("_macro_name", str(tok.content).lstrip("`").split("(")[0])
             node.add_attr("_tok_span", (j, j + 1))
             # consumed 从 idx 起算（含跳过的 trivia），与 pratt 的

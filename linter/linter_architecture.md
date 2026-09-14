@@ -82,7 +82,7 @@ flowchart LR
 行尾注释时（darkriscv `` `define LUI 7'b01101_11 // lui rd,imm ``），宏调用**同行的
 后续 token**（`;`）被吞进注释，语句丢分号 → 发现器级联失守（实测同一文件：文本展开
 81 条 phase-unrecognized → token 拼接 0 条）。窗口只带展开体的**语法 token**（体自带
-注释是 trivia，对语法判定无贡献，渲染路径按 `_macro_fragment` 原文还原、无信息丢失）。
+注释是 trivia，对语法判定无贡献，渲染路径按 `_macro_source_text` 原文还原、无信息丢失）。
 其中 26 条与"体注释"同进同出但**最小复现未触发（机制未定）**，见
 `docs/gaps/gap-parser-linter-approximation.md`。
 
