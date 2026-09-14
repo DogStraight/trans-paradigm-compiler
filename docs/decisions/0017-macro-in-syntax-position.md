@@ -55,7 +55,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
      根本没有"槽位"可声明——它们就是 parser 用来决定怎么解析的 token。
      位置覆盖量化（不变量：把任一 token 换成等价宏
      `` `define M <原 token 原文> ``，格式化输出必须不变；
-     `tools/analyze_macro_positions.py`）：逐槽位声明 **54/135 = 40%** → 撤销
+     `tools/check_macro_coverage.py`）：逐槽位声明 **54/135 = 40%** → 撤销
      语法声明后 **50/135 = 37%**——即整套槽位机制只买到 4 个位置，代价/收益
      不成立。
    - **会静默错渲染**：某些槽位的 layout 自带字面量（如 range 子槽的 `[` `]`），

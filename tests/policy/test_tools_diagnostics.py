@@ -1,4 +1,4 @@
-"""tools/ 诊断类工具自测：dump_pipeline_state / analyze_macro_positions。
+"""tools/ 诊断类工具自测：dump_pipeline_state / check_macro_coverage。
 
 两者都不是门禁——一个打印现场状态（诊断跨语言串味），一个量化已知边界（宏位置
 透明性）。但"跑得通 + 关键结论行在"是它们的最低保证：工具坏掉时没人会注意到
@@ -16,7 +16,7 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 _DUMP = _ROOT / "tools" / "dump_pipeline_state.py"
-_ANALYZE = _ROOT / "tools" / "analyze_macro_positions.py"
+_COVER = _ROOT / "tools" / "check_macro_coverage.py"
 
 pytestmark = pytest.mark.smoke
 
@@ -46,12 +46,12 @@ def test_dump_pipeline_state_with_foreign_language_pre() -> None:
     assert "ast=Root" in out, out[-2000:]
 
 
-def test_analyze_macro_positions_runs_and_reports(tmp_path: Path) -> None:
-    """小样本 + 抽样：跑得通、报告含通过数与失败分布（非门禁，退出码 0）。"""
+def test_check_macro_coverage_runs_and_reports(tmp_path: Path) -> None:
+    """小样本：跑得通、报告含覆盖数与失败面分布（非门禁，退出码 0）。"""
     src = tmp_path / "mini.v"
     src.write_text("module m;\n  wire a;\nendmodule\n", encoding="utf-8")
-    proc = _run(_ANALYZE, ["--source", str(src), "--max-positions", "2"])
+    proc = _run(_COVER, ["--file", str(src)])
     out = proc.stdout + proc.stderr
     assert proc.returncode == 0, out[-2000:]
-    assert "可测位置: 2" in out, out[-2000:]
-    assert "通过: " in out and "失败按 token 类型分布" in out, out[-2000:]
+    assert "宏位置覆盖：" in out, out[-2000:]
+    assert "失败面（按 token 类型" in out, out[-2000:]

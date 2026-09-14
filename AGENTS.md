@@ -135,5 +135,5 @@
     判据见 `tests/README.md`）
   - 现场转储 `tools/dump_pipeline_state.py`（管线语言状态：共享条目/组件/当前语言，
     诊断跨语言串味；`--pre grammar/c4` 复现"同进程先跑过别的语言"）
-  - 宏位置覆盖 `tools/analyze_macro_positions.py`（宏位置透明性量化，非门禁；
-    边界依据见 ADR-0017）
+  - 宏位置覆盖 `tools/check_macro_coverage.py`（宏位置透明性量化 + 失败面按 token
+    类型分布，非门禁；边界依据见 ADR-0017）
