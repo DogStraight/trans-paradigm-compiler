@@ -74,7 +74,7 @@ def test_restore_clears_shared_caches():
     from analyzer.checker import ProjectChecker
 
     baseline = snapshot()
-    _PIPELINE_SHARED["grammar/verilog"] = {"x": 1}
+    _PIPELINE_SHARED[("grammar/verilog", ())] = {"x": 1}
     ProjectChecker._SHARED["grammar/verilog"] = {"y": 2}
 
     restore(baseline)

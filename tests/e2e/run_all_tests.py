@@ -20,6 +20,7 @@ import os
 import json
 import time
 import io
+import hashlib
 import difflib
 import shutil
 from typing import Any
@@ -101,6 +102,11 @@ def _strip_all(text: str) -> str:
     return "".join("".join(lines).split())
 
 
+def _source_digest(text: str) -> str:
+    """源文本内容摘要——缓存条目按内容键控。"""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
 def _fidelity_cache_path(base_dir: str, group: str) -> str:
     """Get per-group fidelity cache path."""
     return os.path.join(base_dir, "samples", group, ".fidelity_cache.json")
@@ -113,6 +119,18 @@ def _load_fidelity_cache(base_dir: str, group: str) -> dict:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
+
+
+def _cached_prev(entry: Any, src_digest: str) -> float | None:
+    """取出可用的历史保真度（无条目 / 摘要不符 / 旧格式 → None）。
+
+    内容键控：样本源改过（摘要变）就当作没有基线——否则旧保真度会被拿来
+    与改了内容的样本比，报出无意义的 drop（反向则漏检真正下降）。
+    """
+    if isinstance(entry, dict) and entry.get("sha") == src_digest:
+        value = entry.get("fidelity")
+        return float(value) if isinstance(value, (int, float)) else None
+    return None
 
 
 def _save_fidelity_cache(base_dir: str, group: str, cache: dict) -> None:
@@ -301,18 +319,23 @@ def run_all(
                     fidelity = difflib.SequenceMatcher(None, ref_flat, gen_flat).ratio()
                     fidelity = round(fidelity, 4)
 
-                # 按组 + 展开模式加载缓存，检测保真度下降
+                # 按组 + 展开模式加载缓存，检测保真度下降（条目内容键控：
+                # 样本源改过 → 不算基线，避免与改了内容的样本比出幻影 drop）
                 mode = "expand" if effective_expand else "plain"
                 cache_key = f"{name}@{mode}"
+                src_digest = _source_digest(source)
                 group_cache = _load_fidelity_cache(base_dir, group)
-                prev = group_cache.get(cache_key)
+                prev = _cached_prev(group_cache.get(cache_key), src_digest)
                 if prev is not None and fidelity < prev:
                     fidelity_dropped = True
                     fidelity_changed.append((name, prev, fidelity))
 
                 # 更新缓存：保存最高保真度（下降后不会覆盖缓存）
                 prev_display = prev if prev is not None else fidelity
-                group_cache[cache_key] = max(prev or 0, fidelity)
+                group_cache[cache_key] = {
+                    "sha": src_digest,
+                    "fidelity": max(prev or 0.0, fidelity),
+                }
                 _save_fidelity_cache(base_dir, group, group_cache)
 
         # 判定测试结果

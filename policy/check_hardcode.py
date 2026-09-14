@@ -8,6 +8,8 @@
   规则 2 [gate]  不得硬编码 grammar/<lang> 相对路径字面量（P2.4 路径问题防复发）
   规则 3 [info]  文件头 Doc: 反向引用缺失（--strict-doc 升为 gate）
   规则 4 [info]  引擎代码不得直接 import grammar.<lang> 插件（--strict-import 升为 gate）
+  规则 5 [gate]  测试文件不得直接 os.chdir（进程级 CWD 泄漏 → 并行 worker
+                相互踩相对路径；需要时用 monkeypatch.chdir）
 
 扫描范围：引擎目录（core/lexer/parser/linter/preprocessor/analyzer/transform/
 renderer/pipeline）+ main.py；grammar/ 下的语言插件代码（plugins/*.py）是
@@ -95,6 +97,9 @@ _DOC_RE = re.compile(r"^Doc:\s*\S+", re.MULTILINE)
 # 规则 4：引擎代码直接导入 grammar.<lang> 包
 _GRAMMAR_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+grammar\.[A-Za-z0-9_]+")
 
+# 规则 5：测试文件（test_*.py / conftest.py）范围与禁止的 CWD 切换
+_TEST_FILE_RE = re.compile(r"^tests/(?:.+/)?(?:test_[^/]*\.py|conftest\.py)$")
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -159,6 +164,21 @@ def iter_engine_files(root: Path) -> Iterator[Path]:
         path = root / name
         if path.is_file():
             yield Path(name)
+
+
+def iter_test_files(root: Path) -> Iterator[Path]:
+    """产出测试文件（tests/**/test_*.py 与 conftest.py，相对 root）。
+
+    不含 tests/e2e/eval_*.py 等手动脚本：它们以 `main()` 内 `os.chdir(_ROOT)`
+    定位相对路径，是单进程一次性运行的工具，不参与并行测试进程共享 CWD。
+    """
+    tests_dir = root / "tests"
+    if not tests_dir.is_dir():
+        return
+    for path in sorted(tests_dir.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if _TEST_FILE_RE.match(rel):
+            yield Path(rel)
 
 
 def _iter_code_literals(text: str) -> Iterator[tuple[int, str]]:
@@ -254,6 +274,39 @@ def rule4_grammar_imports(root: Path) -> list[Finding]:
     return findings
 
 
+def rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
+    """规则 5：测试文件直接 `os.chdir`（进程级 CWD 泄漏）。
+
+    xdist worker 共享进程 CWD：一个测试切了不还原，同 worker 后续测试的
+    相对路径（`grammar/verilog`、`tests/e2e/samples/...`）全部落在错位置
+    ——与全局态泄漏同类，但现象更隐蔽（文件找不到/读到别的文件）。用
+    `monkeypatch.chdir`（自动还原）或绝对路径。
+    """
+    findings: list[Finding] = []
+    for rel in iter_test_files(root):
+        try:
+            tree = ast.parse((root / rel).read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            func = node.func if isinstance(node, ast.Call) else None
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "chdir"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "os"
+            ):
+                findings.append(
+                    Finding(
+                        "R5",
+                        str(rel),
+                        node.lineno,
+                        "测试内直接 os.chdir（改用 monkeypatch.chdir）",
+                    )
+                )
+    return findings
+
+
 # ── 汇总与 CLI ──────────────────────────────────────────────────────────────
 
 def collect_findings(root: Path) -> CheckReport:
@@ -268,6 +321,7 @@ def collect_findings(root: Path) -> CheckReport:
             "R2": RuleResult(r2_viol, r2_skip),
             "R3": RuleResult(rule3_doc_headers(root), []),
             "R4": RuleResult(rule4_grammar_imports(root), []),
+            "R5": RuleResult(rule5_no_chdir_in_tests(root), []),
         },
     )
 
@@ -298,7 +352,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = collect_findings(root)
     results = report.results
 
-    gate: set[str] = {"R1", "R2"}
+    gate: set[str] = {"R1", "R2", "R5"}
     if args.strict_doc:
         gate.add("R3")
     if args.strict_import:
@@ -309,7 +363,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"[tpc 约定门禁] 词表 {len(report.vocab)} 个关键字"
             "（grammar/ 提取，剔除 Python 关键字）"
         )
-    for rule_id in ("R1", "R2", "R3", "R4"):
+    for rule_id in ("R1", "R2", "R3", "R4", "R5"):
         res = results[rule_id]
         viol: list[Finding] = res.violations
         skip: list[Finding] = res.skipped

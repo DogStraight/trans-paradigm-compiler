@@ -117,7 +117,8 @@ class _PipelineContext:
     # 与 line_map 复合得到 展开行→原始源行，供 lint 日志回源）。
     clean_line_map: list = field(default_factory=list)
 
-    # 输出目录（由 _resolve_output_paths 填充）
+    # 输出目录（由 _resolve_output_paths 填充；基础目录由调用方显式给出）
+    out_dir: str | None = None
     gen_dir: str | None = None
     ast_dir: str | None = None
     sym_dir: str | None = None
@@ -259,22 +260,20 @@ def _resolve_render_handler(rules_dir: str):
 # ── 阶段函数 ──────────────────────────────────────────────
 
 def _resolve_paths(ctx: _PipelineContext) -> None:
-    """解析输出目录与中间文件路径。"""
-    if ctx.input_path and "samples" in ctx.input_path:
-        parts = ctx.input_path.replace("\\", "/").split("/")
-        group = (
-            "normal"
-            if "normal" in parts
-            else ("errors" if "errors" in parts else "normal")
-        )
-        # 从 input_path 推断 samples 目录（.../samples/<group>/ref/file.v）
-        # 不依赖 __file__ 定位 tests/（pipeline 是正式包，不在 tests 下）。
-        samples_dir = os.path.dirname(os.path.dirname(os.path.dirname(ctx.input_path)))
-        ctx.gen_dir = os.path.join(samples_dir, group, "gen")
-        ctx.ast_dir = os.path.join(samples_dir, group, "ast")
-        ctx.sym_dir = os.path.join(samples_dir, group, "symbols")
-        ctx.lex_dir = os.path.join(samples_dir, group, "lex")
-        ctx.cb_dir = os.path.join(samples_dir, group, "trans_callback")
+    """解析输出目录与中间文件路径。
+
+    输出位置**只由显式 `out_dir` 决定**（None = 不落盘）。此前从
+    `input_path` 嗅探 "samples" 自动写回样本目录：①测试并行时多个 worker 对
+    同一样本并发写同名文件（gen/ast/symbols 撕裂读 → 偶发保真抖动）；②把
+    "测试语料布局"约定藏进了正式包——需要落盘时由调用方给目录（测试 CLI 的
+    samples 约定在 `tests/e2e/run_pipeline.py`）。
+    """
+    if ctx.out_dir:
+        ctx.gen_dir = os.path.join(ctx.out_dir, "gen")
+        ctx.ast_dir = os.path.join(ctx.out_dir, "ast")
+        ctx.sym_dir = os.path.join(ctx.out_dir, "symbols")
+        ctx.lex_dir = os.path.join(ctx.out_dir, "lex")
+        ctx.cb_dir = os.path.join(ctx.out_dir, "trans_callback")
     else:
         ctx.gen_dir = ctx.ast_dir = ctx.sym_dir = ctx.lex_dir = ctx.cb_dir = None
 
@@ -294,12 +293,22 @@ def _resolve_paths(ctx: _PipelineContext) -> None:
     ctx.cb_json = os.path.join(ctx.cb_dir, f"{ctx.base_name}.json") if ctx.cb_dir else None
 
 
+def _shared_key(ctx: _PipelineContext) -> tuple:
+    """管线共享组件缓存键 = (rules_dir, ext_dirs)。
+
+    ext_dirs 进键是必需的：Lexer/LinterScanner/规则注入都吃它，只键 rules_dir
+    时不同 ext_dirs 会静默复用（拿到上一组扩展目录的组件/规则）。
+    """
+    return (ctx.rules_dir, tuple(ctx.ext_dirs or ()))
+
+
 def _ensure_shared(ctx: _PipelineContext) -> None:
-    """初始化/复用按 rules_dir 缓存的共享组件。"""
-    # 配置加载与组件构建统一按 rules_dir 键控：原 _config_loaded 是全局
-    # 标记（第一个语言决定配置，后续语言跳过加载——多语言进程的机制缺陷，
-    # 2026-08-28 与测试隔离机制一并修复）。
-    if ctx.rules_dir not in _PIPELINE_SHARED:
+    """初始化/复用按 (rules_dir, ext_dirs) 缓存的共享组件。"""
+    # 配置加载与组件构建统一按键控：原 _config_loaded 是全局标记（第一个
+    # 语言决定配置，后续语言跳过加载——多语言进程的机制缺陷，2026-08-28
+    # 与测试隔离机制一并修复）。
+    key = _shared_key(ctx)
+    if key not in _PIPELINE_SHARED:
         ConfigRegistry.load_all(
             ctx.rules_dir,
             ext_dirs=ctx.ext_dirs,
@@ -335,7 +344,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         # 渲染阶段由插件 handler 接管（覆盖式；与 analyze/transform 的叠加式
         # 不同）。未声明 → None（主管线源端渲染）。
         render_handler = _resolve_render_handler(ctx.rules_dir)
-        _PIPELINE_SHARED[ctx.rules_dir] = {
+        _PIPELINE_SHARED[key] = {
             "rules": rules,
             "rule_selector": rule_selector,
             "lexer": lexer,
@@ -345,7 +354,7 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
             "schedules": schedules,
             "render_handler": render_handler,
         }
-    shared = _PIPELINE_SHARED[ctx.rules_dir]
+    shared = _PIPELINE_SHARED[key]
     ctx.rules = shared["rules"]
     ctx.rule_selector = shared["rule_selector"]
     ctx.lexer = shared["lexer"]
@@ -1065,6 +1074,7 @@ def run_pipeline_on_source(
     ctx = _PipelineContext(
         source=source,
         input_path=input_path,
+        out_dir=out_dir,
         rules_dir=rules_dir,
         ext_dirs=ext_dirs,
         quiet=quiet,
@@ -1143,9 +1153,9 @@ def run_pipeline_on_source(
         if schedule is not None
         else _cfg.get("schedule", DEFAULT_SCHEDULE_NAME)
     )
-    # schedules / mapping_cfg 由管线按 rules_dir 缓存后注入编排器
+    # schedules / mapping_cfg 由管线按 (rules_dir, ext_dirs) 缓存后注入编排器
     # （schedule.py 不触碰 _PIPELINE_SHARED，保持可独立复用）。
-    _shared = _PIPELINE_SHARED[ctx.rules_dir]
+    _shared = _PIPELINE_SHARED[_shared_key(ctx)]
     ast, _ = _run_schedule(
         ctx, ast, None, schedule_name,
         _shared["schedules"], _shared["mapping_cfg"],

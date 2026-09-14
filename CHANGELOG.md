@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **测试隔离 L2：外部资源隔离**：①中间产物落盘改为**只认显式 `out_dir`**
+  ——删掉 `pipeline` 里"input_path 含 samples 就写回样本目录"的嗅探：测试并行时
+  多 worker 对同一样本并发写同名 gen/ast/symbols（撕裂读 → 偶发保真抖动），且把
+  测试语料布局约定藏进了正式包；now 测试调用零仓内写入（实测 e2e 全跑后
+  `tests/e2e/samples/**` 无新文件），samples 约定归 `tests/e2e/run_pipeline.py`
+  测试 CLI。②`_PIPELINE_SHARED` 缓存键补 `ext_dirs`（原只键 rules_dir，同语言
+  不同 ext_dirs 会静默复用组件与规则）。③保真度缓存条目改**内容键控**
+  （`{sha, fidelity}`；样本源改过即不算基线），消除陈旧基线造成的幻影 drop。
+  ④`check_hardcode` 新增规则 5 [gate]：测试文件禁 `os.chdir`（进程级 CWD 泄漏
+  → 并行 worker 互踩相对路径；用 `monkeypatch.chdir`）。全量 1872 passed / 8 skipped。
 - **测试隔离：全局态登记表 + 覆盖门禁 + 两层还原（L1）**：`core/global_state.py`
   的覆盖从手工表 → 五张登记表（`TRACKED` 测试级 / `INSTALL_STATE` 语言安装态 /
   `CONTENT_ADDRESSED` / `CONSTANT` / `COVERED_ELSEWHERE`）+ 自动发现模块级/类级

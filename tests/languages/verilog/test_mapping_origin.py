@@ -128,10 +128,12 @@ def test_trace_json_dumps_artifacts(tmp_path):
     src_file = ref / "ref_origin.v"
     src_file.write_text(INVERT_SRC, encoding="utf-8")
 
-    r = _run(INVERT_SRC, input_path=str(src_file))
+    # 落盘位置由显式 out_dir 决定（不依赖 input_path 的语料布局嗅探）
+    out_dir = tmp_path / "samples" / "normal"
+    r = _run(INVERT_SRC, input_path=str(src_file), out_dir=str(out_dir))
     assert r["success"], r.get("error", "")
 
-    trace_file = tmp_path / "samples" / "normal" / "symbols" / "trace.json"
+    trace_file = out_dir / "symbols" / "trace.json"
     assert trace_file.exists(), "trace.json 未落盘"
     data = json.loads(trace_file.read_text(encoding="utf-8"))
     by_kind = {e["kind"]: e for e in data["trace"]}

@@ -1,8 +1,8 @@
-"""check_hardcode.py 自测：引擎约定门禁（规则 1-4）的单元 + 真实仓库回归。
+"""check_hardcode.py 自测：引擎约定门禁（规则 1-5）的单元 + 真实仓库回归。
 
 单元用例在 tmp_path 上构造最小语法包（grammar/*/token.toml 的 [id.keyword]）
 与引擎文件（core/*.py），验证规则触发/豁免边界；回归用例直接跑真实仓库根，
-断言门禁规则（R1/R2）零违规——即"约定即门禁"本身进测试套件。
+断言门禁规则（R1/R2/R5）零违规——即"约定即门禁"本身进测试套件。
 
 Doc: tests/policy/test_check_hardcode.py
 """
@@ -138,6 +138,42 @@ def test_rule4_variable_attr_not_flagged(tmp_path: Path) -> None:
     assert checker.collect_findings(root).results["R4"].violations == []
 
 
+# ── 规则 5：测试文件禁 os.chdir（gate） ────────────────────────────
+
+def _add_test_file(root: Path, rel: str, code: str) -> Path:
+    """在扫描树里放一个测试文件（rel 为 tests/ 下相对路径）。"""
+    path = root / "tests" / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(code, encoding="utf-8")
+    return path
+
+
+def _r5(tmp_path: Path) -> list:
+    return checker.collect_findings(tmp_path).results["R5"].violations
+
+
+def test_rule5_flags_os_chdir_in_test(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path, "x = 1\n")
+    _add_test_file(root, "unit/test_a.py", "import os\nos.chdir('/tmp')\n")
+    assert [f.line for f in _r5(root)] == [2]
+
+
+def test_rule5_monkeypatch_chdir_ok(tmp_path: Path) -> None:
+    """monkeypatch.chdir 自动还原，是推荐做法，不报。"""
+    root = _make_tree(tmp_path, "x = 1\n")
+    _add_test_file(
+        root, "unit/test_a.py", "def test_x(tmp_path, monkeypatch):\n    monkeypatch.chdir(tmp_path)\n"
+    )
+    assert _r5(root) == []
+
+
+def test_rule5_engine_and_scripts_out_of_scope(tmp_path: Path) -> None:
+    """引擎代码与手动脚本（eval_*.py）不属规则 5 范围。"""
+    root = _make_tree(tmp_path, "import os\nos.chdir('.')\n")
+    _add_test_file(root, "e2e/eval_benchmark.py", "import os\nos.chdir('.')\n")
+    assert _r5(root) == []
+
+
 # ── CLI 退出码 ──────────────────────────────────────────────────────────────
 
 def test_main_exit_code_clean(tmp_path: Path) -> None:
@@ -155,14 +191,21 @@ def test_main_strict_doc_escalates(tmp_path: Path) -> None:
     assert checker.main(["--root", str(root), "--quiet", "--strict-doc"]) == 1
 
 
-# ── 真实仓库回归：门禁规则零违规 ────────────────────────────────────────────
+def test_main_r5_is_gate(tmp_path: Path) -> None:
+    root = _make_tree(tmp_path, "x = 1\n")
+    _add_test_file(root, "unit/test_a.py", "import os\nos.chdir('.')\n")
+    assert checker.main(["--root", str(root), "--quiet"]) == 1
+
+
+# ── 真实仓库回归：门禁规则零违规 ──────────────────────────────────
 
 def test_repo_gate_clean() -> None:
-    """真实仓库根：R1/R2 必须零违规（约定即门禁进测试套件）。"""
+    """真实仓库根：R1/R2/R5 必须零违规（约定即门禁进测试套件）。"""
     root = Path(__file__).resolve().parent.parent.parent
     report = checker.collect_findings(root)
     assert report.results["R1"].violations == []
     assert report.results["R2"].violations == []
+    assert report.results["R5"].violations == []
     # 词表来自真实 grammar/（防提取逻辑回归）
     assert "module" in report.vocab
     assert "if" not in report.vocab  # Python 关键字已剔除

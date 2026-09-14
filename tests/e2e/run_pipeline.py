@@ -37,6 +37,21 @@ def find_test_file(test_name: str, hint: str = "") -> tuple[str, str, str]:
 
 
 # ── Command-line entry ──
+def _default_out_dir(src_file: str) -> str | None:
+    """测试语料约定：`.../samples/<group>/ref/x.v` → 落盘到 `.../samples/<group>`。
+
+    该约定属**测试侧**：正式包只认显式 `out_dir`（见 `pipeline/_resolve_output_paths`），
+    否则并行 worker 会对仓内样本并发写同名产物。推断不出则不落盘。
+    """
+    parts = os.path.normpath(src_file).replace("\\", "/").split("/")
+    if "samples" not in parts:
+        return None
+    i = parts.index("samples")
+    if i + 2 >= len(parts):  # 至少 samples/<group>/<file>
+        return None
+    return os.path.join("/".join(parts[: i + 1]), parts[i + 1])
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="TransParadigm Compiler Pipeline – stage control and flexible execution",
@@ -56,7 +71,7 @@ def parse_args() -> argparse.Namespace:
         "--out-dir",
         type=str,
         default=None,
-        help="Output directory (auto-detected if not given)",
+        help="Output directory (tests/e2e/samples/<group> convention if omitted)",
     )
 
     parser.add_argument(
@@ -169,7 +184,7 @@ def main() -> None:
     result = run_pipeline_on_source(
         source=source,
         input_path=src_file,
-        out_dir=args.out_dir,
+        out_dir=args.out_dir or _default_out_dir(src_file),
         expand_macros=args.expand_macros,
         quiet=args.quiet,
         analyzer_enabled=args.analyzer and not args.no_semantic,

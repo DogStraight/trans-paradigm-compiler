@@ -62,7 +62,7 @@ TRACKED: dict[str, tuple[str, str]] = {
     # 递归深度计数器：异常路径漏减会残留 → 后续测试误判"超深"（典型幽灵来源）
     "linter.checkers.expression.ExpressionChecker._DEPTH": ("deepcopy", "表达式检查递归深度计数"),
     # 共享组件缓存
-    "pipeline._PIPELINE_SHARED": ("clear", "管线共享组件（按 rules_dir 键控）"),
+    "pipeline._PIPELINE_SHARED": ("clear", "管线共享组件（键 = (rules_dir, ext_dirs)）"),
     "analyzer.checker.ProjectChecker._SHARED": ("clear", "checker 共享组件（按 rules_dir 键控）"),
 }
 
