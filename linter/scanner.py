@@ -14,17 +14,15 @@ scanner.py — 两阶段 Linter 编排器。
 每层可独立开关。LinterScanner(...) 构造时通过 enable_phase0/1/2 控制。
 
 Doc: linter/linter_architecture.md
-Doc: linter/linter_architecture.md
 """
 
 import os
 
-from core.define import GrammarRule, Token
+from core.define import GrammarRule
 from core.config_registry import ConfigRegistry, declare_cfg
 from core.token_protocol import (
     BRACKET_L_PREFIX,
     BRACKET_R_PREFIX,
-    COMMENT_TOKEN_TYPE,
     bracket_left,
     bracket_right,
 )
@@ -304,7 +302,7 @@ class LinterScanner:
             registry.add(MacroTokenChecker(0, len(tokens)))
             # 宏/指令卫生（MH 族）：扫**原始源码**（指令行已从 token 流剥离）
             if _macro_hygiene_cfg.get("enabled", True):
-                prefix, _directives = _load_config()
+                prefix, _ = _load_config()
                 registry.add(
                     MacroHygieneChecker(source, prefix, _macro_hygiene_cfg)
                 )
