@@ -10,7 +10,8 @@ extra_keys, artifacts?}`），
 **通用值树渲染**（dict/list/标量 → 表格），不认识任何具体键名（不引入
 插件/语言知识，见 AGENTS.md 硬约束）。
 
-呈现：顶部**执行管道条**（单元节点链，箭头上标上游产物流）+ 单列**左轴卡片**
+呈现：顶部**执行管道条**（单元节点链，箭头上标上游产物流；单元自带内部链时
+挂为其**子时点**，如 analyze 的 postpass 链）+ 单列**左轴卡片**
 （轴节点按 kind 着色，时点顺序显式化）+ 卡片内**依赖行**（requires 机械回指
 上游产出该名的单元锚——纯名字匹配，不认识语义）。
 
@@ -43,15 +44,25 @@ td.key { font-family: ui-monospace, monospace; white-space: nowrap; color: #555;
 .row > .key { margin-right: .4rem; }
 .origin { font-family: ui-monospace, monospace; white-space: pre-wrap; }
 /* 执行管道条（顶部单元链；箭头上标上游产物流） */
-.pipe { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .45rem;
+.pipe { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .3rem .45rem;
         margin: .6rem 0 1.3rem; }
+.pipe-cell { display: inline-flex; flex-direction: column; gap: .2rem; }
 .pipe-node { display: inline-block; padding: .18rem .55rem; border-radius: .4rem;
              font-size: .82rem; font-family: ui-monospace, monospace;
-             text-decoration: none; white-space: nowrap; }
+             text-decoration: none; white-space: nowrap; align-self: flex-start; }
 .pipe-node:hover { filter: brightness(.93); }
-.pipe-arrow { color: #9aa1b5; font-size: .85rem; white-space: nowrap; }
+.pipe-arrow { color: #9aa1b5; font-size: .85rem; white-space: nowrap;
+              align-self: flex-start; padding-top: .2rem; }
 .pipe-arrow small { color: #15803d; font-family: ui-monospace, monospace;
                     margin-left: .2rem; font-size: .78rem; }
+/* 子时点（阶段内部链，如 analyze 的 postpass 链）：挂在单元节点下方 */
+.pipe-sub { display: flex; flex-direction: column; gap: .05rem;
+            margin-left: .35rem; padding-left: .45rem;
+            border-left: 2px solid #e3e6f0; }
+.pipe-sub-label { font-size: .68rem; color: #9aa1b5; letter-spacing: .02em; }
+.pipe-sub-node { font-size: .72rem; color: #555;
+                 font-family: ui-monospace, monospace; white-space: nowrap; }
+.pipe-sub-node .diag { color: #b45309; margin-left: .3rem; }
 /* 单列左轴（时点顺序显式化；节点按 kind 着色） */
 .trace { position: relative; padding-left: 2rem; }
 .trace::before { content: ""; position: absolute; left: .6rem; top: .4rem;
@@ -127,8 +138,35 @@ def _artifacts_html(artifacts: dict) -> str:
     return "".join(parts)
 
 
+def _sub_timepoints_html(entry: dict) -> str:
+    """阶段内部链 → 子时点列表（当前唯一来源：analyze 的 `postpasses` 自述）。
+
+    链是单元**内部**的时点序列（见 `analyzer/traversal.py::_run_postpasses`）——
+    编号写作 `<index>.<n>`（父单元时点 + 链内序），与卡片里的表同一顺序；
+    诊断数只在本环节报过时标出（`+N`）。不认识具体环节名（通用渲染）。
+    """
+    records = (entry.get("artifacts") or {}).get("postpasses")
+    if not isinstance(records, list) or not records:
+        return ""
+    idx = entry.get("index", "?")
+    rows = ['<span class="pipe-sub-label">postpass 链（子时点）</span>']
+    for n, rec in enumerate(records, start=1):
+        if isinstance(rec, dict):
+            name, diag = rec.get("name", "?"), rec.get("diagnostics")
+        else:
+            name, diag = rec, None
+        diag_html = f'<span class="diag">+{_esc(diag)}</span>' if diag else ""
+        rows.append(
+            f'<span class="pipe-sub-node">#{_esc(idx)}.{n} {_esc(name)}{diag_html}</span>'
+        )
+    return f'<span class="pipe-sub">{"".join(rows)}</span>'
+
+
 def _pipe_html(trace: list[dict]) -> str:
-    """执行管道条：单元节点链 + 箭头上标上游产物流（produced，纯机械标签）。"""
+    """执行管道条：单元节点链 + 箭头上标上游产物流（produced，纯机械标签）。
+
+    单元自带内部链（如 analyze 的 postpass 链）→ 挂在节点下方作**子时点**。
+    """
     if not trace:
         return ""
     parts = []
@@ -143,9 +181,13 @@ def _pipe_html(trace: list[dict]) -> str:
             parts.append(f'<span class="pipe-arrow">&#8594;{label}</span>')
         idx = entry.get("index", "?")
         css = _KIND_CSS.get(str(entry.get("kind", "?")), "sev-info")
-        parts.append(
+        node = (
             f'<a class="pipe-node {css}" href="#unit-{_esc(idx)}">'
             f"#{_esc(idx)} {_esc(entry.get('name', '?'))}</a>"
+        )
+        subs = _sub_timepoints_html(entry)
+        parts.append(
+            f'<span class="pipe-cell">{node}{subs}</span>' if subs else node
         )
     return f'<div class="pipe">{"".join(parts)}</div>'
 

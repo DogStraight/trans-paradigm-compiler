@@ -84,7 +84,9 @@ shapes=...)`，见 `transform/README.md`）；内置执行器取
 ，默认打印文本摘要；`--html` 落单文件 HTML（内联 CSS、零依赖），
 与 `tpc check --html` 同一视觉语言（共享 `analyzer/report_html.REPORT_CSS`）。
 
-页面内容 = 顶部**执行管道条**（单元节点链，箭头上标上游产物流）+ 单列**左轴**
+页面内容 = 顶部**执行管道条**（单元节点链，箭头上标上游产物流；单元自带内部链
+时挂为其**子时点**——如 analyze 的 postpass 链以 `#0.1 … #0.n` 列在节点下方，
+报过诊断的环节标 `+N`） + 单列**左轴**
 卡片区（轴节点按 kind 着色，时点顺序显式化）+ 每单元一张卡片（时点 `#index` /
 `name` / `kind` 徽标 / `impl` / `slot` / **依赖**（`requires` 回指上游产出该名的
 单元锚——纯名字匹配）/ 产物 `produced` / 黑板新增键） + **artifacts**（插件
