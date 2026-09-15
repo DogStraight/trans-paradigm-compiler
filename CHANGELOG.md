@@ -34,6 +34,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   （等价迁移）；③ `pipeline/README.md` 声明形态纠正为 loader 真实方言，并补
   "产物即数据路径"说明。验证：全量 1906 passed / 8 skipped（同基线）；
   `tpc trace` 可见 4 个显式时点（含产物/依赖回指）。
+- **管线单元（阶段 2：c4 等价迁移 + 作用域校验）**：c4 语言包显式声明它**真跑**的
+  单元（`analyze` → `asm`）——c4 无槽位声明、无 mapping 条目、规则无 `[X.transform]`
+  配置，三个引擎插件单元在本语言下都是空跑（`slot_runner` 承接 0 槽位即不产出），
+  故不声明；输出与迁移前**逐字节一致**（汇编 + `AsmProgram`）。另：插件单元加
+  **语言作用域校验**（引用了不在当前语言作用域内的插件 → fail-fast；插件注册表
+  进程级累积，按名字解析本身不区分语言）。守护：`test_language_units.py` 增至
+  7 例（c4 声明 + 作用域违规）。
 
 ### Fixed
 

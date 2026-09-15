@@ -83,6 +83,44 @@ def test_pack_unsupported_pipeline_key_fails_fast(tmp_path) -> None:
         _resolve_language_units(pack)
 
 
+def test_c4_pack_units_declared() -> None:
+    """c4 语言包只声明它真跑的单元（无槽位/无映射条目/无规则变换配置）。"""
+    from core.config_registry import ConfigRegistry
+    from core.plugin_loader import load_all_components
+    from pipeline import _resolve_language_units
+    from pipeline.schedule import build_unit_schedule
+
+    ConfigRegistry.load_all("grammar/c4", plugins_dir="grammar/c4/plugins")
+    load_all_components("grammar/c4/plugins")
+    try:
+        seq = build_unit_schedule(_resolve_language_units("grammar/c4"))
+    finally:  # 恢复 verilog（本文件后续用例走 verilog 管线）
+        ConfigRegistry.load_all(
+            "grammar/verilog", plugins_dir="grammar/verilog/plugins"
+        )
+        load_all_components("grammar/verilog/plugins")
+
+    assert seq is not None
+    assert [(d.name, d.kind, d.impl) for d in seq] == [
+        ("analyze", "analyze", "builtin.analyze"),
+        ("asm", "transform", "asm_gen.codegen"),
+    ]
+
+
+def test_plugin_unit_outside_language_scope_fails_fast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """插件单元引用了不在当前语言作用域的插件 → fail-fast（防跨语言声明）。"""
+    import transform.engine
+    from pipeline.schedule import build_unit_schedule
+
+    monkeypatch.setattr(transform.engine, "active_plugin_classes", lambda: [])
+    with pytest.raises(ValueError, match="不在当前语言作用域"):
+        build_unit_schedule(
+            {"t": {"type": "transform", "impl": "ConfigDrivenTransform"}}
+        )
+
+
 def test_requires_violation_fails_fast() -> None:
     """消费方在无产物时执行 → fail-fast（声明了 requires 就必须被满足）。"""
     from pipeline.schedule import PassDecl, _check_contract

@@ -306,7 +306,7 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
     """
     if not unit_decls:
         return None
-    from transform.engine import get_plugin_index
+    from transform.engine import active_plugin_classes, get_plugin_index
     from core.plugin_loader import get_transform_slot_decls
 
     from .units import (
@@ -363,6 +363,13 @@ def build_unit_schedule(unit_decls: dict[str, dict]) -> list["PassDecl"] | None:
                 raise ValueError(
                     f"[pipeline] unit '{u.name}' 引用了未注册的变换插件: "
                     f"{u.impl!r}（可用: {', '.join(sorted(plugin_index)) or '(空)'}）"
+                )
+            # 语言作用域：单元声明按语言包，不得引用**别的语言**的插件
+            # （插件注册表进程级累积，名字解析本身不区分语言）。
+            if plugin_index[u.impl] not in active_plugin_classes():
+                raise ValueError(
+                    f"[pipeline] unit '{u.name}' 的插件 {u.impl!r} 不在当前语言"
+                    f"作用域（单元声明按语言包，不得引用别的语言的插件）"
                 )
             if u.params:
                 _validate_plugin_params(

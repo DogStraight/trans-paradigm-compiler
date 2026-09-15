@@ -24,3 +24,21 @@ rules = { file = ["0*.toml"], required = true }
 # asm_gen 组件接管（[render] handler），不走主管线源端渲染。
 [plugins]
 render = "asm_gen"
+
+# ── 管线编排（语言级：加工单元 → 时点 + 契约校验 + 轨迹） ──
+# 声明后**替代**默认 pass 序列（analyze → transform），故 analyze 显式声明。
+# c4 的变换链只有一个有实作的阶段：asm_gen.codegen（Program → AsmProgram）。
+# 不声明 slots / map / codegen 三个引擎插件单元——c4 不声明槽位
+# （`[[transform.slots]]`）、无 mapping 条目、规则无 `[X.transform]` 配置，
+# 三者在本语言下都是空跑（slot_runner 承接 0 槽位即不产出）。显式声明的
+# 语义就是"声明什么跑什么"：c4 将来真需要哪一步，再加对应单元。
+[[pipeline.units]]
+name = "analyze"
+type = "analyze"
+impl = "builtin.analyze"
+
+[[pipeline.units]]
+name = "asm"
+type = "transform"
+impl = "asm_gen.codegen"
+after = "analyze"
