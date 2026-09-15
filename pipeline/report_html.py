@@ -55,11 +55,18 @@ td.key { font-family: ui-monospace, monospace; white-space: nowrap; color: #555;
               align-self: flex-start; padding-top: .2rem; }
 .pipe-arrow small { color: #15803d; font-family: ui-monospace, monospace;
                     margin-left: .2rem; font-size: .78rem; }
-/* 子时点（阶段内部链，如 analyze 的 postpass 链）：挂在单元节点下方 */
-.pipe-sub { display: flex; flex-direction: column; gap: .05rem;
-            margin-left: .35rem; padding-left: .45rem;
+/* 子时点（阶段内部链，如 analyze 的 postpass 链）：挂在单元节点下方，可折叠
+   注：本块是**普通字符串**（非 raw）——CSS 里别写反斜杠转义（`\25B8` 会被
+   Python 当八进制转义吃掉），标记字符直接写字面值。 */
+.pipe-sub { margin-left: .35rem; padding-left: .45rem;
             border-left: 2px solid #e3e6f0; }
+.pipe-sub > summary { cursor: pointer; list-style: none; }
+.pipe-sub > summary::marker { content: ""; }
+.pipe-sub > summary::before { content: "▸ "; color: #9aa1b5; }
+.pipe-sub[open] > summary::before { content: "▾ "; }
 .pipe-sub-label { font-size: .68rem; color: #9aa1b5; letter-spacing: .02em; }
+.pipe-sub-list { display: flex; flex-direction: column; gap: .05rem;
+                 padding-top: .15rem; }
 .pipe-sub-node { font-size: .72rem; color: #555;
                  font-family: ui-monospace, monospace; white-space: nowrap; }
 .pipe-sub-node .diag { color: #b45309; margin-left: .3rem; }
@@ -139,17 +146,25 @@ def _artifacts_html(artifacts: dict) -> str:
 
 
 def _sub_timepoints_html(entry: dict) -> str:
-    """阶段内部链 → 子时点列表（当前唯一来源：analyze 的 `postpasses` 自述）。
+    """阶段内部链 → 可折叠的**子时点**列表（现唯一来源：analyze 的 `postpasses` 自述）。
 
     链是单元**内部**的时点序列（见 `analyzer/traversal.py::_run_postpasses`）——
     编号写作 `<index>.<n>`（父单元时点 + 链内序），与卡片里的表同一顺序；
-    诊断数只在本环节报过时标出（`+N`）。不认识具体环节名（通用渲染）。
+    诊断数只在本环节报过时标出（`+N`）。摘要行给环数与诊断总数，默认**收起**
+    （顶层管道条保持紧凑；细看时展开）。不认识具体环节名（通用渲染）。
     """
     records = (entry.get("artifacts") or {}).get("postpasses")
     if not isinstance(records, list) or not records:
         return ""
     idx = entry.get("index", "?")
-    rows = ['<span class="pipe-sub-label">postpass 链（子时点）</span>']
+    total = sum(
+        (rec.get("diagnostics") or 0) if isinstance(rec, dict) else 0
+        for rec in records
+    )
+    label = f"postpass 链（子时点）· {len(records)} 环"
+    if total:
+        label += f" · +{total} 诊断"
+    rows = []
     for n, rec in enumerate(records, start=1):
         if isinstance(rec, dict):
             name, diag = rec.get("name", "?"), rec.get("diagnostics")
@@ -159,7 +174,11 @@ def _sub_timepoints_html(entry: dict) -> str:
         rows.append(
             f'<span class="pipe-sub-node">#{_esc(idx)}.{n} {_esc(name)}{diag_html}</span>'
         )
-    return f'<span class="pipe-sub">{"".join(rows)}</span>'
+    return (
+        f'<details class="pipe-sub">'
+        f'<summary class="pipe-sub-label">{_esc(label)}</summary>'
+        f'<span class="pipe-sub-list">{"".join(rows)}</span></details>'
+    )
 
 
 def _pipe_html(trace: list[dict]) -> str:

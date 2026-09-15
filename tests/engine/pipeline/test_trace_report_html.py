@@ -132,7 +132,7 @@ def test_pipe_chain_and_produced_labels() -> None:
 
 
 def test_pipe_sub_timepoints_from_artifacts() -> None:
-    """阶段内部链进管道条：analyze 的 postpass 链作**子时点**挂在节点下方。"""
+    """阶段内部链进管道条：analyze 的 postpass 链作**可折叠子时点**挂节点下方。"""
     out = render_trace_html(
         [
             _entry(
@@ -150,17 +150,34 @@ def test_pipe_sub_timepoints_from_artifacts() -> None:
             _entry(index=1, name="codegen", kind="transform"),
         ]
     )
-    assert 'class="pipe-sub"' in out
-    assert "postpass 链（子时点）" in out
+    assert '<details class="pipe-sub">' in out  # 默认收起（无 open）
+    assert "postpass 链（子时点）· 2 环 · +7 诊断" in out  # 摘要：环数 + 诊断总数
     assert "#0.1 a.py:run" in out
     assert "#0.2 b.py:run" in out
     assert "+7" in out  # 诊断数只在本环节报过时标出
+
+
+def test_pipe_sub_timepoints_omit_zero_total_diagnostics() -> None:
+    """全链零诊断时摘要不带诊断片段（不写 +0）。"""
+    out = render_trace_html(
+        [
+            _entry(
+                index=0,
+                name="analyze",
+                kind="analyze",
+                artifacts={"postpasses": [{"name": "a.py:run", "diagnostics": 0}]},
+            )
+        ]
+    )
+    assert "· 1 环" in out
+    assert "+0" not in out
 
 
 def test_pipe_no_sub_timepoints_without_chain() -> None:
     """无内部链的单元不产生子时点块（通用渲染，不假设谁有链）。"""
     out = render_trace_html([_entry(index=0, name="map", kind="transform")])
     assert 'class="pipe-sub"' not in out
+    assert "<details" not in out
 
 
 def test_requires_linked_to_upstream_producer() -> None:
