@@ -24,9 +24,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/policy/test_check_test_isolation.py` 扩到 16 例（含"必须能报出种子漂移"的
   正反例与去计时判据）；`docs/decisions/0017` 的引用路径同步为新工具。
   全量 1906 passed / 8 skipped；smoke 362；policy 109；两项门禁脚本全绿。
+- **管线单元：语言包级声明 + verilog 显式时点编排（迁移第一步）**：单元机制
+  （0.1.2 阶段 5-7）此前只有测试用过——声明只能放组件目录（编排寄生在插件上，
+  组件被 `[plugins] enabled` 关掉就无声改变），且文档写的 `[[pipeline.units.x]]`
+  形态与 loader 实际要求的 `[[pipeline.units]]` + `name` 不一致（照文档写即报错）。
+  现：① 语言包根 `tpc.toml [pipeline] units` 与组件声明**两源合并**（同名 fail-fast；
+  根 `[pipeline]` 段多余键不静默忽略）；② `grammar/verilog/tpc.toml` 声明 4 个单元
+  （`analyze` → `slots` → `map` → `codegen`），与 transform 插件注册序**逐一对齐**
+  （等价迁移）；③ `pipeline/README.md` 声明形态纠正为 loader 真实方言，并补
+  "产物即数据路径"说明。验证：全量 1906 passed / 8 skipped（同基线）；
+  `tpc trace` 可见 4 个显式时点（含产物/依赖回指）。
 
 ### Fixed
 
+- **契约只是装饰：`produces`/`requires` 未真正成为数据路径**：`ConfigDrivenTransform`
+  声明的 `requires=["mapping_tables"]` 由引擎校验，但它实际靠**扫同 transformer 的
+  兄弟插件**拿映射表——按契约把 map/codegen 拆成两个时点（各自 transformer 实例）
+  后映射表拿不到 → typed_ports 展开全丢（16 个测试红）。现：`note_produced` 登记的
+  产物同时发布到调度累积的**产物通道**（`PassState.productions`），消费方按契约名
+  取用（跨单元成立）——删掉兄弟插件扫描，单一数据路径。另：被开关跳过的单元不再
+  参与契约校验/物化核验（跳过 = 无产物是预期，非配置错）。
+  守护：`tests/engine/pipeline/test_language_units.py`（5 例）；
+  `tests/languages/verilog/test_mapping_origin.py` 的 trace 断言改为按插件名聚合
+  （不再假设只有一条 transform 条目）。
 - **语言作用域跨语言串味（"幽灵 flake"的机制）**：同进程「先跑 c4 管线 → 再跑
   verilog」时 verilog 输出变**空**且 `success=True`（保真度 0.9925 → 0.0000），
   实测于 HEAD，不是历史遗留。三处语言作用域状态跨语言累积，任一处都能让别的

@@ -90,6 +90,10 @@ class PassState:
     analyzer: Any | None = None  # 最近一轮 analyze 的 AnalysisTraversal
     transformer: Any | None = None  # 最近一轮 transform 的 AstTransformer
     extra: dict = field(default_factory=dict)  # pass 间自定义通道
+    # 单元产物通道（契约名 → 对象，ADR-0015 §3）：从已跑单元的物化登记累积；
+    # 经 `AstTransformer.set_shared("productions", ...)` 供后续单元消费
+    # （故消费方不必与生产方同实例——插件级单元的数据路径与契约声明一致）。
+    productions: dict = field(default_factory=dict)
     # 单元执行轨迹（阶段 6 可视化：时点 = 可视化断点）——每单元一条
     # {index, name, kind, impl?, slot?, params?, produced?, extra_added,
     #  extra_keys, artifacts?}
@@ -567,6 +571,8 @@ def _run_pass_transform(
         return
     AstTransformer.set_shared("rules", ctx.rules)
     AstTransformer.set_shared("mapping_cfg", mapping_cfg or {})
+    # 产物通道：已跑单元的物化登记（按契约名消费，跨 transformer 实例可见）
+    AstTransformer.set_shared("productions", state.productions)
     if slot is not None:
         from transform.slot_runner import SlotRunnerPlugin
 
@@ -653,7 +659,13 @@ def _run_schedule(
             ctx.log(f"[pipeline] pass '{decl.name}' skipped (transform disabled)")
             continue
         ctx.log(f"[pipeline] pass: {decl.name}")
-        _check_contract(decl, available)
+        # 契约校验/物化核验只在单元**实际会执行**时进行：上游被开关关掉 /
+        # analyze 未产出 scope 时，transform 单元无输入 → 由执行层按既有语义
+        # 跳过（log），不报"requires 未满足/产物未物化"——那是配置错误
+        # （顺序/引用），与开关无关。
+        runnable = not (decl.kind == "transform" and state.scope is None)
+        if runnable:
+            _check_contract(decl, available)
         _extra_before = set(state.extra)
         try:
             if decl.kind == "analyze":
@@ -668,10 +680,13 @@ def _run_schedule(
             state.trace.append(_trace_entry(index, decl, state, _extra_before))
             break
         # 执行后：物化核验（真产出 + 形状，阶段 7 切片 2）→ 产物并入可用集
-        produced = _collect_produced(decl, state)
-        _verify_produced(decl, _contract_of(decl), produced)
-        if produced:
-            available.update(produced)
+        produced: dict = {}
+        if runnable:
+            produced = _collect_produced(decl, state)
+            _verify_produced(decl, _contract_of(decl), produced)
+            if produced:
+                available.update(produced)
+                state.productions.update(produced)
         state.trace.append(
             _trace_entry(index, decl, state, _extra_before, produced)
         )

@@ -257,6 +257,44 @@ def _resolve_render_handler(rules_dir: str):
     return handler
 
 
+def _resolve_language_units(rules_dir: str) -> dict[str, dict]:
+    """语言包级加工单元声明：根 `tpc.toml [pipeline] units` + 组件声明合并。
+
+    编排是**语言级配置**（与 `[commands]` / `[plugins].render` 同层）：语言包根
+    可声明单元；组件目录亦可（插件自带单元）——两个声明源合并，同名 fail-fast
+    （时点编排按名引用，重名会指向不明的执行者）。声明形态与组件一致
+    （`[[pipeline.units]]` + `name`），解析复用 `plugin_loader._load_pipeline_decls`
+    ——两个源同一方言，避免双解析实现漂移。
+    """
+    import tomllib
+
+    from core.plugin_loader import _load_pipeline_decls
+
+    merged: dict[str, dict] = {}
+    tpc_path = os.path.join(rules_dir, "tpc.toml")
+    if os.path.isfile(tpc_path):
+        with open(tpc_path, "rb") as f:
+            meta = tomllib.load(f)
+        pack_pipeline = meta.get("pipeline", {})
+        unsupported = sorted(set(pack_pipeline) - {"units"})
+        if unsupported:
+            raise ValueError(
+                f"[pipeline] 语言包 {rules_dir} 的 [pipeline] 目前只支持 units，"
+                f"多出: {', '.join(unsupported)}"
+            )
+        merged.update(
+            _load_pipeline_decls(rules_dir, pack_pipeline).get("units", {})
+        )
+    for name, decl in get_pipeline_units().items():
+        if name in merged:
+            raise ValueError(
+                f"[pipeline] 单元名 {name!r} 重复：语言包根 tpc.toml 与组件声明同名"
+                f"（单元名须唯一，时点编排按名引用）"
+            )
+        merged[name] = decl
+    return merged
+
+
 # ── 阶段函数 ──────────────────────────────────────────────
 
 def _resolve_paths(ctx: _PipelineContext) -> None:
@@ -355,8 +393,9 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         # 编排调度按 rules_dir 缓存（同一原因：声明来自 _loaded_components）。
         schedules = build_schedules()
         # 加工单元声明（ADR-0015 §1，5b-2）：存在时以**单元序列**替代默认
-        # schedule 的 pass 序列（统一调度：analyze/transform/check 同列）。
-        unit_seq = build_unit_schedule(get_pipeline_units())
+        # schedule 的 pass 序列（统一调度：analyze/transform/check 同列）；
+        # 声明源 = 语言包根 tpc.toml + 组件目录（见 _resolve_language_units）。
+        unit_seq = build_unit_schedule(_resolve_language_units(ctx.rules_dir))
         if unit_seq is not None:
             schedules[DEFAULT_SCHEDULE_NAME] = unit_seq
         # 渲染插件覆盖式（[plugins].render = 组件名）：渲染插件产出中间表示

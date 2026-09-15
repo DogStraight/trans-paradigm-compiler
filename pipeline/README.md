@@ -8,14 +8,18 @@
 |------|--------|
 | `__init__.py` | 管线编排（`run_pipeline_on_source`，阶段序列化执行） |
 | `schedule.py` | 编排调度：pass 声明 + 时点序列器 + 调度构建 |
-| `units.py` | 加工单元实例 + 统一时点生成（`[pipeline.units.*]` 声明 → 单元序列） |
+| `units.py` | 加工单元实例 + 统一时点生成（`[[pipeline.units]]` 声明 → 单元序列） |
 | `report_html.py` | 时点轨迹 HTML 报告（`tpc trace --html`，与 check 报告同一视觉语言） |
 
 ## 加工单元（units）
 
-`[pipeline.units.<name>]` 显式声明加工单元实例（`type` / `impl` / `after`|`order` /
-`params`），时点由调度器统一生成（与 pass 级同构：钉号 → 声明序填空 → `after`
-迭代至不动点；冲突 / 环 / 未知引用 → fail-fast）。有声明时**替代**默认 pass 序列。
+`[[pipeline.units]]` 显式声明加工单元实例（每项 `name` + `type` / `impl` /
+`after`|`order` / `params`），时点由调度器统一生成（与 pass 级同构：钉号 →
+声明序填空 → `after` 迭代至不动点；冲突 / 环 / 未知引用 → fail-fast）。
+有声明时**替代**默认 pass 序列（故 `analyze` 也须显式声明）。
+
+**声明位置**：语言包根 `tpc.toml`（语言级编排，与 `[commands]` 同层）或组件目录
+`tpc.toml`（插件自带单元）；两个声明源**合并**，同名 fail-fast。
 
 `impl` 三形态（`units.py::classify_impl`）：
 
@@ -29,11 +33,13 @@
 （引擎 `slot_runner` 单槽位执行）——槽位各自独立时点：
 
 ```toml
-[[pipeline.units.analyze]]
+[[pipeline.units]]
+name = "analyze"
 type = "analyze"
 impl = "builtin.analyze"
 
-[[pipeline.units.wrapper]]
+[[pipeline.units]]
+name = "wrapper"
 type = "transform"
 slot = "build_wrapper"          # [[transform.slots]] 里声明的槽位名
 after = "analyze"
@@ -63,6 +69,12 @@ after = "analyze"
 shapes=...)`，见 `transform/README.md`）；内置执行器取
 `_BUILTIN_UNIT_CONTRACTS`。
 **无声明 = 不校验**（可选能力）；插件不管时点，时点只在本节配置里编排。
+
+**产物即数据路径**（不只校验）：`note_produced` 登记的产物同时发布到调度累积的
+**产物通道**（`PassState.productions` ← `AstTransformer.set_shared("productions")`），
+后续单元按 `requires` 名取用——生产/消费可**跨单元**（插件级单元各自 transformer
+实例），消费方无需与生产方同实例。上游被开关关掉/无 scope 时单元不执行，
+也就**不参与契约校验与物化核验**（跳过的单元没有产物是预期，不是配置错）。
 
 ### 时点轨迹报告（可视化产物）
 

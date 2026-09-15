@@ -76,12 +76,13 @@ class ConfigDrivenTransform(TransformPlugin):
 
     def process(self, ast: Node, root_scope: Scope) -> Node:
         """遍历 AST 并执行所有匹配的变换"""
-        # 自动拉取 SemanticMappingPlugin 的映射表
-        if self._transformer:
-            for plugin in self._transformer.plugins:
-                if type(plugin).__name__ == "SemanticMappingPlugin":
-                    self._tables = plugin.tables  # type: ignore[attr-defined]
-                    break
+        # 映射表按契约名（`requires=["mapping_tables"]`）从共享产物通道取用：
+        # 生产方（SemanticMappingPlugin）经 note_produced 发布，调度按单元时点
+        # 累积——故本插件不依赖"与生产方同实例"，插件级单元下同样成立。
+        produced = AstTransformer._shared_ctx.get("productions") or {}
+        tables = produced.get("mapping_tables")
+        if tables is not None:
+            self._tables = tables
 
         self._stats = {
             "expand": 0,

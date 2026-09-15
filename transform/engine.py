@@ -273,8 +273,13 @@ class AstTransformer:
         """登记物化产物（插件经 `TransformPlugin.note_produced` 调用；契约校验用）。
 
         引擎只记录名与对象（形状核验用），不懂语义（ADR-0015 §3 姿态）。
+        同时发布到共享产物通道（`_shared_ctx["productions"]`，由调度按单元时点
+        累积）——消费方按契约名取用，**不必与生产方在同一 transformer 实例**。
         """
         self._produced[name] = obj
+        published = self._shared_ctx.get("productions")
+        if isinstance(published, dict):
+            published[name] = obj
 
     def produced(self) -> dict[str, Any]:
         """本 transformer 生命周期内登记的物化产物（名 → 对象，对象可为 None）。"""

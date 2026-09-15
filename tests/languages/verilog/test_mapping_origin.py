@@ -67,13 +67,21 @@ def _run(src: str, **kw):
     return run_pipeline_on_source(source=src, quiet=True, no_lint=True, **kw)
 
 
+def _mapping_artifacts(trace: list[dict]) -> dict:
+    """trace 中所有 transform 单元的插件自述合并。
+
+    单元可拆为多个时点（插件级单元），故按**插件名**聚合而不取单条。
+    """
+    merged: dict = {}
+    for entry in trace:
+        if entry.get("kind") == "transform":
+            merged.update(entry.get("artifacts", {}))
+    return merged
+
+
 def _table_sources(res: dict, table: str = "type_ports_flat") -> dict:
     """取 trace 中 transform 单元的映射表来源（无则失败）。"""
-    entry = next(
-        (t for t in res.get("trace", []) if t.get("kind") == "transform"), None
-    )
-    assert entry is not None, "trace 缺 transform 单元"
-    art = entry.get("artifacts", {})
+    art = _mapping_artifacts(res.get("trace", []))
     assert "SemanticMappingPlugin" in art, f"无插件自述: {art}"
     table_info = art["SemanticMappingPlugin"].get(table)
     assert table_info is not None, f"无 {table} 表自述: {art}"
@@ -136,7 +144,6 @@ def test_trace_json_dumps_artifacts(tmp_path):
     trace_file = out_dir / "symbols" / "trace.json"
     assert trace_file.exists(), "trace.json 未落盘"
     data = json.loads(trace_file.read_text(encoding="utf-8"))
-    by_kind = {e["kind"]: e for e in data["trace"]}
-    art = by_kind["transform"].get("artifacts", {})
+    art = _mapping_artifacts(data["trace"])
     sources = art.get("SemanticMappingPlugin", {}).get("type_ports_flat", {})
     assert sources.get("sources", {}).get("spi.slave"), f"artifacts 未落盘: {art}"

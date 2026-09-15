@@ -39,6 +39,35 @@ style_check = { file = "base/_style_check.toml", section = "style_check", requir
 [plugins]
 enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs", "gates", "udp", "specify", "custom_rules_example"]
 
+# ── 管线编排（语言级：加工单元 → 时点 + 契约校验 + 轨迹） ──
+# 声明后**替代**默认 pass 序列（analyze → transform），故 analyze 显式声明。
+# 声明序与 transform 插件注册序对齐（transform/__init__.py：slot_runner →
+# 语义映射 → 配置驱动 codegen）；契约来自各插件 register_plugin 的
+# produces/requires（slot_runner: scope → slot_transforms；映射: → mapping_tables；
+# codegen: mapping_tables →）。
+[[pipeline.units]]
+name = "analyze"
+type = "analyze"
+impl = "builtin.analyze"
+
+[[pipeline.units]]
+name = "slots"
+type = "transform"
+impl = "slot_runner"
+after = "analyze"
+
+[[pipeline.units]]
+name = "map"
+type = "transform"
+impl = "SemanticMappingPlugin"
+after = "slots"
+
+[[pipeline.units]]
+name = "codegen"
+type = "transform"
+impl = "ConfigDrivenTransform"
+after = "map"
+
 # ── 指令定义（main.py 指令 → run_pipeline 参数开关） ──
 # 默认值 = 完整管线（preprocess/lint/parse/analyze/transform/render 全 true，
 # plugins.formatter=false）——指令只声明**差异项**。
