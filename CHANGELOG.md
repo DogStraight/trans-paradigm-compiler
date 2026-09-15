@@ -59,6 +59,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`setup_grammar` 静默吞掉组件装载失败**：`parser/__init__.py` 的组件装载段包在
+  `except ImportError: pass` 里——装载期任何 ImportError（插件模块循环导入/部分
+  初始化等）被静默吞掉，语言作用域停在上一语言、组件规则整段缺失。实测：全量
+  并行跑时 `test_plugin_scope_excludes_other_language` 失败过一次（切到 verilog 后
+  c4 的 `AsmGenPlugin` 仍在 `active_plugin_classes()` 内），复跑不复现——症状与该
+  静默路径一致（未能证明因果，但该失败模式已被消除）。现改为 **fail-fast**
+  （不吞异常），与「配置加载 fail-fast、不静默降级」硬约束一致。
+  守护：`tests/engine/core/test_language_switch.py::
+  test_component_load_failure_is_not_swallowed`（桩掉装载 → 异常须逃出）。
 - **契约只是装饰：`produces`/`requires` 未真正成为数据路径**：`ConfigDrivenTransform`
   声明的 `requires=["mapping_tables"]` 由引擎校验，但它实际靠**扫同 transformer 的
   兄弟插件**拿映射表——按契约把 map/codegen 拆成两个时点（各自 transformer 实例）

@@ -143,3 +143,26 @@ def test_config_entries_follow_language() -> None:
         "grammar/verilog", plugins_dir="grammar/verilog/plugins"
     )
     assert "plugins.render" not in ConfigRegistry._entries, "配置声明跨语言残留"
+
+
+def test_component_load_failure_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """装载期异常不被吞（fail-fast）：此前 `except ImportError: pass` 会把装载
+    失败静默掉，语言作用域停在上一语言（实测症状：切到 verilog 后 c4 的
+    `AsmGenPlugin` 仍在 `active_plugin_classes()` 内、组件规则缺失）。
+    与"配置加载 fail-fast，不静默降级"硬约束一致。
+    """
+    import core.plugin_loader as pl
+
+    def _boom(*args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        del args, kwargs  # 桩签名参数
+        raise ImportError("boom")
+
+    monkeypatch.setattr(pl, "load_all_components", _boom)
+    with pytest.raises(ImportError, match="boom"):
+        setup_grammar("grammar/verilog", GrammarRulesRegister.get_default())
+    # 恢复：setup_grammar 已清空 _loaded_components 后失败 → 撤桩重新装载，
+    # 避免影响同文件后续用例
+    monkeypatch.undo()
+    setup_grammar("grammar/verilog", GrammarRulesRegister.get_default())
