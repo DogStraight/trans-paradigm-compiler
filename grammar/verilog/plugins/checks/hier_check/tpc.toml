@@ -20,4 +20,6 @@
 # 语义）、interface/class 成员、全量 elaboration 不做（调研结论）。
 
 [analyzer]
-postpasses = ["_hier_check.py:run_hier_check"]
+[[analyzer.postpasses]]
+run = "_hier_check.py:run_hier_check"
+produces = ["hier_member_table"]

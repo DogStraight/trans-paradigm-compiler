@@ -24,4 +24,5 @@
 # always_comb/always_ff 语义，误报高（调研结论，见 references.md）。
 
 [analyzer]
-postpasses = ["_always_check.py:run_always_check"]
+[[analyzer.postpasses]]
+run = "_always_check.py:run_always_check"

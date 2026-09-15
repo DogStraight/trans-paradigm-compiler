@@ -13,4 +13,5 @@
 #           可能成为死值）
 
 [analyzer]
-postpasses = ["_inst_check.py:run_inst_check"]
+[[analyzer.postpasses]]
+run = "_inst_check.py:run_inst_check"

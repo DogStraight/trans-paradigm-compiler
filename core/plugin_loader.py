@@ -568,31 +568,71 @@ def get_pipeline_units() -> dict[str, dict]:
     return merged
 
 
-def get_analyzer_postpasses() -> list[Callable]:
-    """Return merged analyzer postpass functions from all loaded components.
+def get_analyzer_postpass_decls() -> list[dict[str, Any]]:
+    """合并所有已加载组件的 postpass 声明（保持**声明序**）。
 
-    postpass 是遍历结束后的链式走查钩子（ADR-0004）：签名
-    fn(analyzer, context) -> None，可访问 analyzer.all_symbols /
-    context.extra（跨文件模块表等框架注入状态），向 context.report 报诊断。
+    每条：`{"name", "fn", "produces", "requires"}`——`name` = `file.py:fn`
+    （链内轨迹/诊断标识），`fn` = 已解析函数（签名 `fn(analyzer, context)`）。
+    顺序 = 组件装载序（`discover_components` 按组件名排序）；链内依赖靠
+    `produces`/`requires` 声明并被 `AnalysisTraversal` 校验，不靠名字顺序碰巧成立。
     """
-    fns: list[Callable] = []
+    decls: list[dict[str, Any]] = []
     for info in _loaded_components.values():
-        fns.extend(info.get("postpasses", []))
-    return fns
+        decls.extend(info.get("postpasses", []))
+    return decls
 
 
-def _load_postpasses(cdir: str, postpass_specs: list) -> list[Callable]:
-    """Load postpass functions from '[analyzer] postpasses = ["file.py:fn"]'.
+def _name_list(value: Any, field: str, run: str, cdir: str) -> list[str]:
+    """postpass 契约名列表字段核验（缺省 = 空；非字符串列表 → fail-fast）。"""
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(
+        not isinstance(v, str) or not v for v in value
+    ):
+        raise ValueError(
+            f"[plugin] postpass '{run}' {field} 须为非空字符串列表: "
+            f"{value!r} ({cdir})"
+        )
+    return list(value)
 
-    fail-fast（ADR-0003）：声明了但模块/函数缺失直接报错，不静默降级。
+
+def _load_postpasses(cdir: str, postpass_specs: list) -> list[dict[str, Any]]:
+    """加载 `[[analyzer.postpasses]]` 声明（表形态，保持声明序）。
+
+    形态：
+
+        [[analyzer.postpasses]]
+        run = "_expand_ports.py:run_expand_ports"
+        produces = ["resolved_ports"]   # 可选：本环节产出名
+        requires = ["resolved_ports"]   # 可选：本环节依赖名
+
+    契约语义 = **链内时点可达性**：`requires` 须由链上更早环节的 `produces`、
+    `scope` 或链开始时 `context.extra` 已有的键提供，否则 fail-fast。
+    不核验物化（postpass 产物写在符号表/context 上，引擎不懂其语义）——
+    与 transform 单元契约的区别见 `analyzer/semantic_checks.md`。
+    fail-fast（ADR-0003）：非表 / 未知键 / `run` 格式 / 模块 / 函数任一不合法即报错。
     """
-    fns: list[Callable] = []
+    decls: list[dict[str, Any]] = []
     for spec in postpass_specs or []:
-        if not isinstance(spec, str) or ":" not in spec:
+        if not isinstance(spec, dict):
             raise ValueError(
-                f"[plugin] postpass 声明格式应为 'file.py:fn'，收到: {spec!r}"
+                f"[plugin] postpass 声明须为表（[[analyzer.postpasses]] + run），"
+                f"收到: {spec!r} ({cdir})"
             )
-        fname, fn_name = spec.split(":", 1)
+        unknown = set(spec) - {"run", "produces", "requires"}
+        if unknown:
+            raise ValueError(
+                f"[plugin] postpass 声明含未知键: {', '.join(sorted(unknown))}"
+                f"（支持 run/produces/requires）({cdir})"
+            )
+        run = spec.get("run")
+        if not isinstance(run, str) or ":" not in run:
+            raise ValueError(
+                f"[plugin] postpass.run 格式应为 'file.py:fn'，收到: {run!r} ({cdir})"
+            )
+        produces = _name_list(spec.get("produces"), "produces", run, cdir)
+        requires = _name_list(spec.get("requires"), "requires", run, cdir)
+        fname, fn_name = run.split(":", 1)
         modules = _load_python_handlers(cdir, [fname])
         if not modules:
             raise ValueError(f"[plugin] postpass 模块不存在: {fname} ({cdir})")
@@ -601,8 +641,10 @@ def _load_postpasses(cdir: str, postpass_specs: list) -> list[Callable]:
             raise ValueError(
                 f"[plugin] postpass 函数 {fn_name} 不存在于 {fname} ({cdir})"
             )
-        fns.append(fn)
-    return fns
+        decls.append(
+            {"name": run, "fn": fn, "produces": produces, "requires": requires}
+        )
+    return decls
 
 
 def _load_render_handler(cdir: str, render_meta: dict) -> Callable | None:

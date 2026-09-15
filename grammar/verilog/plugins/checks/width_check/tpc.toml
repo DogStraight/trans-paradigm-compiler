@@ -17,4 +17,8 @@
 # 对标：Verilator WIDTH/WIDTHEXPAND/WIDTHTRUNC/SELRANGE 家族。
 
 [analyzer]
-postpasses = ["_width_check.py:run_width_check"]
+# 链内契约：跨模块成员宽度（a.b）靠 hier_check 服务——需其 postpass 先跑
+# 并建好 per-module 实例表（_width_check 的 _hier 回调 → resolve_member_width）。
+[[analyzer.postpasses]]
+run = "_width_check.py:run_width_check"
+requires = ["hier_member_table"]

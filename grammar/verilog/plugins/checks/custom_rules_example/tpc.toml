@@ -17,4 +17,5 @@
 # 评测 focus）时生效，默认诊断面零影响。
 
 [analyzer]
-postpasses = ["_ansi_header.py:run_ansi_header_check"]
+[[analyzer.postpasses]]
+run = "_ansi_header.py:run_ansi_header_check"

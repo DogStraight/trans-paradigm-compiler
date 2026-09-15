@@ -113,7 +113,10 @@ pattern 缺省或判定不足时调用脚本（返回 str = 诊断消息，None 
 # 插件 tpc.toml
 [analyzer]
 primitives = ["collect_width_src"]     # 遍历期收集（节点锚定，L2 原语）
-postpasses = ["_chain_walk.py:run"]    # 遍历后走查（已实现）
+
+[[analyzer.postpasses]]                # 遍历后走查（已实现）
+run = "_chain_walk.py:run"
+produces = ["width_src"]               # 可选：本环节产出名（供后续环节 requires）
 ```
 
 ```python
@@ -126,8 +129,15 @@ def run(analyzer, context) -> None:
 
 - 实现位置：`analyzer/traversal.py::AnalysisTraversal._run_postpasses`——
   `analyze()` 的 `_walk()` 之后、`_resolve_pending()` 之后执行。
-- 声明解析：`core/plugin_loader.py::_load_postpasses`（`file.py:fn` 格式，
-  fail-fast：模块/函数缺失直接报错）+ `get_analyzer_postpasses()` 合并。
+- 声明解析：`core/plugin_loader.py::_load_postpasses`（表形态 `run =
+  "file.py:fn"` + 可选 `produces`/`requires`，fail-fast：非表/未知键/模块或函数
+  缺失直接报错）+ `get_analyzer_postpass_decls()` 合并（保持声明序）。
+- **链内契约**：`requires` 须由链上更早环节的 `produces`、`scope` 或链开始时
+  `context.extra` 已有的键提供，否则 fail-fast——顺序不再靠组件名排序碰巧成立。
+  与 transform 单元契约的区别：postpass 产物写在符号表/context 上，引擎不懂其
+  语义，故只校验**时点可达性**（不核验物化）。
+- 执行记录：每环（含链尾 L1 规则执行器）进管线**单元轨迹**的 `artifacts
+  .postpasses`（名字 + 本轮诊断数）——链也是时点，见 `tpc trace`。
 - 组件判定：`_parse_component_toml` 将 `[analyzer] postpasses` 计入
   组件标志（纯 postpass 插件如 inst_check 不因无 handlers 被丢弃）。
 - 收集阶段沿用现有原语副作用模式（`context.extra` 传递临时状态）。
@@ -150,8 +160,13 @@ scope 再决策"逻辑的**权威时机**。判断标准一句：
 修复为 postpass 递归展开）。postpass 用途两类：**检查**（§5 主体，报诊断）与
 **语义数据产出**（写 `sym.attrs` 供下游消费，见 5.3）。
 
-`tpc.toml [analyzer] postpasses` 列表**有序**——依赖上游产出的 postpass 须排在
-其后（typed_ports 的 `_expand_ports` 先于 `_check`，check 读 expander 数据）。
+`[[analyzer.postpasses]]` 列表**有序**（组件名排序 + 组件内声明序）；**依赖上游产出的
+postpass 用 `requires`/`produces` 声明**（链内契约，顺序不满足即 fail-fast），
+不靠列表位置碰巧成立。已声明的真实依赖：
+- typed_ports：`_expand_ports`（`produces = ["resolved_ports"]`）→ `_check`
+  （`requires = ["resolved_ports"]`）
+- `hier_check`（`produces = ["hier_member_table"]`）→ `width_check`
+  （`requires = ["hier_member_table"]`；跨模块成员宽度的服务型 postpass）
 
 ### 5.2 原语触发与配置层级
 

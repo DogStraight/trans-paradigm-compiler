@@ -80,6 +80,7 @@ TOKEN_ALLOWLIST: dict[str, str] = {
     "table": "transform 映射表键名（mapping table 的 'table' 字段，与 udp 插件关键字同名）",
     "include": "preprocessor 指令配置键名（_directives_cfg['include']，宏/包含指令配置协议，与 configs 插件 library 的 include 语句同名）",
     "impl": "加工单元配置字段（[pipeline.units.<name>].impl，ADR-0015 §1 显式配置品类）",
+    "fn": "postpass 声明解析出的函数引用键（[[analyzer.postpasses]].run → decl['fn']，引擎内部键名）",
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认

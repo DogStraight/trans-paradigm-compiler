@@ -59,6 +59,9 @@ class AnalysisTraversal:
         # 显式规则启用集（默认关闭的规则——如 NC 族——由测试/评测注入，
         # checks.py 经 getattr 读取）：None = 全部规则默认开关生效
         self._checks_enabled: list[str] | None = None
+        # postpass 链执行记录（{name, diagnostics}，含链尾 L1 规则执行器）：
+        # 供管线记进单元轨迹（链也是时点）
+        self.postpass_trace: list[dict] = []
 
     @staticmethod
     def _load_primitive_order() -> list[str]:
@@ -90,34 +93,68 @@ class AnalysisTraversal:
             self._context.extra.update(self._external_extra)
         self._scope_name_node_ids.clear()
         self._pending_name_refs: list[tuple] = []
+        self.postpass_trace.clear()
         self._walk(ast)
         self._resolve_pending()
         self._run_postpasses()
         return ast
 
     def _run_postpasses(self) -> None:
-        """遍历后统一执行插件的 post-pass 钩子（ADR-0004）。
+        """遍历后统一执行插件的 post-pass 链（ADR-0004）+ 链内契约校验。
 
         节点锚定原语在遍历期收集，postpass 在遍历结束后走查跨节点/跨文件
         状态（赋值链、模块实例化联动等），向 context.report 报诊断。
         跨文件信息（模块索引等）由调用方（ProjectChecker）注入
         context.extra。
 
+        **链内契约**（收编自"注释里的顺序约束"）：每条 postpass 可声明
+        `requires`/`produces`（`[[analyzer.postpasses]]`）；`requires` 须由链上
+        更早环节的 `produces`、`scope` 或链开始时 `context.extra` 已有的键提供，
+        否则 fail-fast——顺序不再靠组件名排序碰巧成立。
+
         声明式规则（L1 [[checks]]，规则=数据）紧随插件 postpass 执行：
         对遍历收集的符号表按 kind 分发 pattern/handler 判定——与插件
         postpass 同形态，但规则行为全在语言包 TOML（core/check_registry），
         引擎只做通用执行（analyzer/checks.py）。
+
+        执行记录（`postpass_trace`）供管线进单元轨迹：链也是**时点**，
+        哪一环跑了、报了几条诊断应可见（同 ADR-0015 §2 姿态）。
         """
         try:
-            from core.plugin_loader import get_analyzer_postpasses
+            from core.plugin_loader import get_analyzer_postpass_decls
         except ImportError:
             return
-        for fn in get_analyzer_postpasses():
-            fn(self, self._context)
+        decls = get_analyzer_postpass_decls()
+        available = set(self._context.extra) | {"scope"}
+        for decl in decls:
+            missing = [r for r in decl["requires"] if r not in available]
+            if missing:
+                raise ValueError(
+                    f"[analyzer] postpass '{decl['name']}' requires 未满足: "
+                    f"{', '.join(missing)}（须由链上更早环节 produces / scope / "
+                    f"框架注入 extra 提供；当前可用: "
+                    f"{', '.join(sorted(available)) or '(空)'}）"
+                )
+            before = len(self._context.diagnostics)
+            decl["fn"](self, self._context)
+            available.update(decl["produces"])
+            self.postpass_trace.append(
+                {
+                    "name": decl["name"],
+                    "diagnostics": len(self._context.diagnostics) - before,
+                }
+            )
         # 声明式规则执行器（无规则表时零开销返回）
         from analyzer.checks import check_rules_pass
 
+        before = len(self._context.diagnostics)
         check_rules_pass(self, self._context)
+        self.postpass_trace.append(
+            {
+                "name": "check_rules",
+                "diagnostics": len(self._context.diagnostics) - before,
+            }
+        )
 
     def _resolve_pending(self) -> None:
         """遍历后统一核对暂存的名称引用。

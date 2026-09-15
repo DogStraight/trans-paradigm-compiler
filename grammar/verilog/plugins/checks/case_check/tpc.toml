@@ -10,4 +10,5 @@
 #           故不处理 unique 豁免；casex/casez 也检查（default 仍应显式）。
 
 [analyzer]
-postpasses = ["_case_check.py:run_case_check"]
+[[analyzer.postpasses]]
+run = "_case_check.py:run_case_check"

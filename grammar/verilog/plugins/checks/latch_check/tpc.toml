@@ -14,4 +14,5 @@
 # 控制流路径分析（完整 LATCH 推断需数据流，属 analyzer 深度扩展）。
 
 [analyzer]
-postpasses = ["_latch_check.py:run_latch_check"]
+[[analyzer.postpasses]]
+run = "_latch_check.py:run_latch_check"

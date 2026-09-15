@@ -25,8 +25,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   正反例与去计时判据）；`docs/decisions/0017` 的引用路径同步为新工具。
   全量 1906 passed / 8 skipped；smoke 362；policy 109；两项门禁脚本全绿。
 - **管线单元：语言包级声明 + verilog 显式时点编排（迁移第一步）**：单元机制
-  （0.1.2 阶段 5-7）此前只有测试用过——声明只能放组件目录（编排寄生在插件上，
-  组件被 `[plugins] enabled` 关掉就无声改变），且文档写的 `[[pipeline.units.x]]`
+  （0.1.2 阶段 5-7）此前只有测试用过——声明只能放组件目录（**编排的归属错位**：
+  组件是语言包的实现单元，不是编排单元，声明随组件目录存废而变），且文档写的
+  `[[pipeline.units.x]]`
   形态与 loader 实际要求的 `[[pipeline.units]]` + `name` 不一致（照文档写即报错）。
   现：① 语言包根 `tpc.toml [pipeline] units` 与组件声明**两源合并**（同名 fail-fast；
   根 `[pipeline]` 段多余键不静默忽略）；② `grammar/verilog/tpc.toml` 声明 4 个单元
@@ -41,6 +42,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   **语言作用域校验**（引用了不在当前语言作用域内的插件 → fail-fast；插件注册表
   进程级累积，按名字解析本身不区分语言）。守护：`test_language_units.py` 增至
   7 例（c4 声明 + 作用域违规）。
+- **postpass 链收编进单元/契约体系（迁移阶段 3）**：analyzer 的 post-pass 链
+  （typed_ports 展开、inst_check/width_check 等检查）此前是**第二套隐式顺序**
+  ——顺序只由组件名排序碰巧成立，两条真实依赖仅写在注释里（`_expand_ports` →
+  `_check`、`hier_check` → `width_check`）。现：
+  ① 声明面改表形态 `[[analyzer.postpasses]] + run`，加可选 `produces`/`requires`
+  （字符串列表形态撤销，9 个组件同步迁移，无双方言）；
+  ② **链内契约**：`requires` 须由更早环节 `produces` / `scope` / 链启动时
+  `context.extra` 提供，否则 fail-fast——两条真实依赖已声明（`resolved_ports`、
+  `hier_member_table`），不再靠组件名排序碰巧对；
+  ③ 每环执行进管线**单元轨迹**（`artifacts.postpasses`：名字 + 本轮诊断数，含链尾
+  L1 规则执行器）——链也是时点，`tpc trace` 可见。
+  与 transform 单元契约的区别：postpass 产物写在符号表/context 上，引擎不懂语义，
+  故只校验**时点可达性**（不核实物化）。守护：`tests/engine/analyzer/test_postpass_chain.py`
+  （8 例：真实契约与顺序、表形态与 fail-fast、契约违规/满足、轨迹记录）。
 
 ### Fixed
 

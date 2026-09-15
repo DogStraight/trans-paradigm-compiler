@@ -57,7 +57,7 @@
 
 ```
 grammar/<lang>/plugins/checks/<name>/
-├── tpc.toml              # 插件声明（postpasses = ["_x.py:run"] 可选）
+├── tpc.toml              # 插件声明（[[analyzer.postpasses]] + run 可选）
 ├── rules/                # 规则表（[[checks]] 数组，规则=数据）
 │   ├── <name>.toml       # L1 声明（或 L2 handler 的 kind 分发）
 │   └── _*.py             # L2 脚本（handler / 内部函数）
@@ -118,8 +118,9 @@ def check_module_filename(symbol, rule, context) -> str | None:
 
 ```toml
 # 插件 tpc.toml
-[analyzer]
-postpasses = ["_chain_walk.py:run"]    # file.py:fn 格式
+[[analyzer.postpasses]]              # 表形态；run = "file.py:fn"
+run = "_chain_walk.py:run"
+requires = ["hier_member_table"]      # 可选：链内契约（依赖更早环节的 produces）
 ```
 
 ```python

@@ -741,4 +741,10 @@ def _trace_entry(
         described = state.transformer.describe_plugins()
         if described:
             entry["artifacts"] = described
+    if decl.kind == "analyze" and state.analyzer is not None:
+        # postpass 链也是时点：哪一环跑了、报了几条诊断（链内契约见
+        # analyzer/traversal.py::_run_postpasses）
+        postpasses = getattr(state.analyzer, "postpass_trace", None)
+        if postpasses:
+            entry["artifacts"] = {"postpasses": list(postpasses)}
     return entry

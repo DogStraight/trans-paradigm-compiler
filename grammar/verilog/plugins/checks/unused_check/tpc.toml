@@ -16,4 +16,5 @@
 # 的 `_` 约定）。
 
 [analyzer]
-postpasses = ["_unused_check.py:run_unused_check"]
+[[analyzer.postpasses]]
+run = "_unused_check.py:run_unused_check"
