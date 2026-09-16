@@ -1959,3 +1959,18 @@ as pure data during execution and REPLAYED into the caller's JIR after the borro
 
 **采集**：agent-reach（GitHub 仓库元数据）+ GitHub 源码检索（crate 结构/关键模块）+
 jamlang.org reference（语言能力面）；未拉本地镜像。
+
+**时机判断（2026-09-17 复核，作者定调）**：两边**不同线**，不是同一条曲线上的先后——
+jam 在**语言语义深度**（MVS/comptime/ABI/typed IR 内部构造）上走得比 tpc 远，tpc 在
+**工程化与工具面**（发布流程/门禁/格式保真/前置 lint/文档治理）上走得比 jam 远。
+故借鉴按**条目类型**切，不按"成熟度先后"切：
+
+- **现在可用**（结构/契约层，与语言成熟度无关）：typed IR + 机械 lowering 分工（P4.1 参照）、
+  冻结式 `--emit-*` 转储做 oracle（我们已有中间产物落盘，缺"格式冻结"声明）、IR verifier
+  形态、记录-重放模式。→ 需要时再从本档取。
+- **留待复看**（依赖语言语义定型或 tpc 真做后端）：MVS 三规则在语义分析期的落地、
+  comptime 求值器与 `cfn` 记录-重放细节、C ABI 分类。
+  **触发条件**：tpc 启动 P4（多后端/LLVM 桥）时复看本节；或 jam 发布 v0.1（语义定型）后
+  复看其内部构造。
+- **只作观察**：flat/tag-dispatched AST + interning（性能导向；tpc 瓶颈在 parser 常数而非
+  数据布局，且 AST 形态由引擎定——规则是数据）。
