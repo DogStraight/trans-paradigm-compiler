@@ -153,3 +153,53 @@ def test_interior_block_survives_verbatim_rhs() -> None:
         flat = _norm(out)
         assert flat.index("wire a =") < flat.index("`ifdef X"), f"[fmt={fmt}] 顺序错:\n{out}"
 
+
+# 注释落在 `inline = true` 规则（Init）上的两种形态：行中 / 行尾
+_INLINE_RULE_MIDLINE_SRC = "module m;\n    wire a = /* c */ b;\nendmodule\n"
+_INLINE_RULE_EOL_SRC = "module m;\n    wire a = // why\n        b;\nendmodule\n"
+_STMT_TAIL_SRC = "module m;\n    wire a = b; // tail\nendmodule\n"
+
+
+def test_midline_comment_inside_inline_rule_kept() -> None:
+    """行中块注释落在 `inline = true` 规则上不得丢——挂 `inline` 槽随展开迁移。
+
+    旧缺陷：槽挂 `inline_after`（锚 `=`）而规则节点被内联展开丢弃 → 注释消失
+    （`assign` 走非 inline 路径所以既有断言没拦住）。
+    """
+    for fmt in (False, True):
+        out = _run(_INLINE_RULE_MIDLINE_SRC, fmt)
+        assert out.count("/* c */") == 1, f"[fmt={fmt}] 注释丢失/重复:\n{out}"
+        assert "/* c */ b" in _norm(out), f"[fmt={fmt}] 注释不在原位:\n{out}"
+
+
+def test_eol_comment_after_equal_kept_without_swallowing_semicolon() -> None:
+    """`=` 后行尾注释（续行）保留，且不得吞掉语句终结符。
+
+    旧缺陷：槽随内联展开迁到替身节点后，LineSuffix 落在替身节点 doc 末尾 →
+    排在父布局的 `;` 之前，输出 `wire a = b // why;`（`;` 被注释吞掉，
+    语法损坏）。现迁移时行终止型转 `leading`（注释后换行）。
+    """
+    for fmt in (False, True):
+        out = _run(_INLINE_RULE_EOL_SRC, fmt)
+        assert out.count("// why") == 1, f"[fmt={fmt}] 注释丢失/重复:\n{out}"
+        assert "b;" in _norm(out), f"[fmt={fmt}] 终结符被注释吞掉:\n{out}"
+        # 回读健康检查：产物再解析必须成立
+        r2 = run_pipeline_on_source(
+            source=out, rules_dir="grammar/verilog", quiet=True,
+            no_lint=True, format_output=False, expand_macros=False,
+        )
+        assert r2["success"], f"[fmt={fmt}] 产物不可回读:\n{out}"
+
+
+def test_statement_tail_comment_stays_on_statement_line() -> None:
+    """语句尾注（`wire a = b; // tail`）仍在语句行尾（不被推成前置独立行）。
+
+    回归护栏：行尾型槽的换槽只发生在内联展开迁移点——若在生产侧改判
+    （读 `current_rule`，而它是内层规则退出后残留的旧值），尾注会被误挂
+    `leading` 推到语句上方。
+    """
+    for fmt in (False, True):
+        out = _run(_STMT_TAIL_SRC, fmt)
+        line = next(l for l in out.splitlines() if "wire a = b;" in l)
+        assert "// tail" in line, f"[fmt={fmt}] 尾注被推离语句行:\n{out}"
+

@@ -198,8 +198,12 @@ def try_inline_rule(
 ) -> Node | None:
     """若规则标记为内联且只有一个属性映射，则返回被映射的子节点，否则返回 None。
 
-    内联前：如果当前规则节点（即将被丢弃）有 Comment 子节点，
-    将它们转发到 old_node（父节点），避免行间注释丢失。
+    内联展开会**丢弃规则节点**（本规则节点不在 AST 里，父节点直接持有 inner）
+    ——挂在它 `_comment_slots` 上的注释（行中 `inline` / 行尾 `trailing` /
+    前置 `leading`）会随之消失（实测：`wire a = /* c */ b;` 与
+    `wire a = // why\n b;` 两处注释整条丢失，但 `assign` 语句走非 inline
+    路径所以不丢）。故展开前把注释槽**迁移到替身节点**（inner）——注释随
+    进 AST 的节点一起被渲染器消费。
     """
     if not getattr(rule, "inline", False) or len(getattr(rule, "node", {})) != 1:
         return None
@@ -214,6 +218,7 @@ def try_inline_rule(
         if not (0 <= pos < len(all_matched_nodes)):
             continue
         inner = all_matched_nodes[pos]
+        _transfer_comment_slots(context.current_node, inner)
         self._restore_current_node(old_node, context)
         self._log_state(
             f"规则 {rule.name} 内联展开成功 -> "
@@ -221,3 +226,49 @@ def try_inline_rule(
         )
         return inner
     return None
+
+
+def _transfer_comment_slots(source: Node | None, target: Node | None) -> None:
+    """把即将被丢弃节点的注释槽迁移到替身节点（内联展开用）。
+
+    槽位名与形状原样搬运（`{槽名: [文本]}` / `{槽名: {锚: [(文本, 行)]}}`），
+    逐条去重（同一注释可能在回溯中重复挂到多处）。目标已有槽位时合并（源序
+    保持：已在场的在前）。
+
+    例外：`trailing`（LineSuffix）在替身节点上会在**该节点 doc 的末尾**落地
+    ——排在父布局后续 token（`;`）之前 → 行注释会吞掉终结符（实测
+    `wire a = // why\n b;` 输出 `wire a = b // why;`，语法损坏）。故迁移时把
+    `trailing` 转为 `leading`（注释 + 换行后接替身节点）：`wire a = // why`
+    换行 `b;`，位置与源一致。块注释（行内、不停行）不受此影响——但迁移场景
+    下的注释都是行终止型（注释后同行无代码），统一转 `leading`。
+    """
+    if not isinstance(source, Node) or not isinstance(target, Node):
+        return
+    src_slots = getattr(source, "_comment_slots", None)
+    if not src_slots:
+        return
+    dst_slots = getattr(target, "_comment_slots", None)
+    if dst_slots is None:
+        dst_slots = {}
+        target.add_attr("_comment_slots", dst_slots)
+    for key, value in src_slots.items():
+        if key == "trailing" and isinstance(value, list):
+            bucket = dst_slots.setdefault("leading", [])
+            for item in value:
+                if item not in bucket:
+                    bucket.append(item)
+            continue
+        if isinstance(value, dict):
+            dst_map = dst_slots.setdefault(key, {})
+            for anchor, entries in value.items():
+                bucket = dst_map.setdefault(anchor, [])
+                for entry in entries:
+                    if entry not in bucket:
+                        bucket.append(entry)
+        elif isinstance(value, list):
+            bucket = dst_slots.setdefault(key, [])
+            for item in value:
+                if item not in bucket:
+                    bucket.append(item)
+        else:
+            dst_slots.setdefault(key, value)

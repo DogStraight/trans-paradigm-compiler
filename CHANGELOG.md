@@ -37,7 +37,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **内联展开节点/直出文本节点上的注释丢失（三处）**：
+- **注释落在内联展开规则上被丢（两处既存缺陷，零丢失闭环）**：`Init` 声明
+  `inline = true`，其规则节点会被内联展开丢弃（`_try_inline_rule`）——挂在它
+  `_comment_slots` 上的注释随节点消失：
+  1. `wire a = /* c */ b;`（行中块注释，挂 `inline_after`，锚不在替身节点布局里）；
+  2. `wire a = // why\n b;`（行尾注释，挂 `trailing`）。
+  同形的 `assign` 语句（非 inline 规则）一直正常，故既有断言未拦住。
+  修：① `try_inline_rule` 展开前把注释槽**迁移到替身节点**（`_transfer_comment_slots`，
+  逐条去重、与目标已有槽合并）；② 行中槽在 inline 规则下改用 `inline`（节点文本前
+  同行前置）语义——替身节点布局里没有锚 token；③ 迁移时把 `trailing` 转 `leading`：
+  LineSuffix 在替身节点 doc 末尾落地会排在父布局 `;` 之前（输出 `wire a = b // why;`，
+  `;` 被注释吞掉、语法损坏）。
+  另修一处同类：`try_inline_rule` 文档串声称已把 Comment 子节点转发给父节点，代码
+  从未实现（文档漂移）——改为描述实际的槽迁移行为。
+
+- **注释通道路由判据收敛（含让位闸门）**：`_comment_trivia.py` 现同时是位置判定与
+  路由判据的单点实现（新增 `comment_leave_to_expression` 纯函数），模块 docstring 列
+  **注释通道分工与优先级**表（行中 / 规则内部 / 列表项间 / 首元素前 / 其余独占行）。
+  `_production` 里的 `_comment_leave_to_expression` / `_is_line_only_comment` 两个本地
+  包装删除（直接调共享实现）。
+
+### Fixed
   1. **宏调用作右操作数时条件块整块消失**（本轮闸门引入的回归，已回门禁）：
      marker 挂到 `_verbatim_text` 直出节点后，直出路径只输出 `head_trailing`/`trailing`
      槽 → 前置槽不进渲染文本 → preprocessor 侧的条件块原文永远没有回插时机。
@@ -52,9 +72,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   3. 让位闸门从“仅独占行”放宽到“**非行中**”（`_comment_leave_to_expression`）：
      行尾型注释同样交表达式入口 → 右操作数 `leading`（原就地吐掉后只有锚点通道，
      普通注释不会回插）。
-  验证：全量 1972 passed / 7 skipped；darkriscv 输出不变（差异仍 37 行、两通道待回插
-  0、纯空白行与基线持平、注释文本零丢失零重复）；新增
-  `tests/engine/parser/test_comment_trivia.py`（8）、宏作 RHS 的条件块保全断言、
+  验证：全量 1982 passed / 7 skipped（本条目后为 1990+）；darkriscv 输出不变（差异
+  37 行、两通道待回插 0、纯空白行与基线持平、注释文本零丢失零重复）；新增
+  `tests/engine/parser/test_comment_trivia.py`（13：含路由判据与快照往返）、
+  `tests/e2e/test_comment_accounting.py`（3：真实语料零丢失 / 规则内部恰好一次 /
+  兜底通道登记）、宏 RHS 条件块保全 / 内联规则注释保全 / 尾注不被推离语句行断言、
   直出节点前置槽断言。
 
 ### Fixed

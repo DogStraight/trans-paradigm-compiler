@@ -19,13 +19,14 @@
 
 > 入口：`Parser.parse`；改注释机制相关挂载（行中/trailing/leading/独占行）先进
 > `_production.py::collect_following_comments` / `pratt_parser.py`。
-> **规则内部注释**另有一道**让位闸门**：`prepare_production` 的
-> `_comment_leave_to_expression`（判据 = 元素是 pratt 规则调用 + 注释**非行中** +
-> `context.production_pointer > 0` + 注释前 token 下标 ≥ `context.production_start_ptr`）
-> ——不吞注释、留给表达式入口按独占行/行尾归位（`leading_own_line` / `leading`）；
-> 两字段由 `match_productions` 维护并入回溯快照。列表项间注释
-> （`production_pointer == 0`）不受影响，仍由容器上浮为 Comment 迭代项。
-> 位置判定（前一显著 token / 独占行 / 行中）统一在 `_comment_trivia.py`，
-> 生产侧与表达式侧共用（收敛前同一判定三处实现、语义不一致）。
+> **规则内部注释**另有一道**让位闸门**：`prepare_production` 调
+> `_comment_trivia.comment_leave_to_expression`（判据 = 元素是 pratt 规则调用 +
+> 注释**非行中** + `context.production_pointer > 0` + 注释前 token 下标 ≥
+> `context.production_start_ptr`）——不吞注释、留给表达式入口按独占行/行尾归位
+> （`leading_own_line` / `leading`）；两字段由 `match_productions` 维护并入回溯快照。
+> 位置判定与**通道分工优先级**统一在 `_comment_trivia.py`（模块 docstring 有表：
+> 行中 → 节点槽 / 规则内部 → 让位闸门 / 列表项间 → 容器上浮 / 首元素前 →
+> `_claim_head_comments` / 其余独占行 → line 通道锚条目）。收敛前同一判定三处实现、
+> 语义不一致。
 > 表达式系统约定（`[[operator]]` 数组顺序=优先级 / is_atom / 一元-二元/三目 /
 > 结合性）见 `parser/expression_conventions.md`。

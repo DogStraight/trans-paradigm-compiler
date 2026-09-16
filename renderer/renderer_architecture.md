@@ -120,10 +120,14 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
   前独占注释上浮（`_claim_head_comments`）→ join 拆独立行段渲染。
 - **行内/行尾 = 节点 `_comment_slots`**：`trailing`（node_renderer →
   LineSuffix 行尾）/ `inline_after`（line.py 遇锚元素插后删槽，join 消费
-  锚=分隔符条目）/ `leading`（node_renderer 前置，行尾型：注释紧跟上一片段
-  同行）/ `leading_own_line`（node_renderer 前置，独占行型：块首尾各一硬
-  换行、注释间单换行——源中注释自成一行时用它，否则行注释会吃掉同行后续
-  内容；行终止型由声明驱动 `Renderer.comment_ends_line` 判定）。
+  锚=分隔符条目）/ `inline`（节点文本前同行前置，行中注释落在 `inline = true`
+  规则上时用它——槽位随内联展开迁到替身节点）/ `leading`（node_renderer 前置，
+  行尾型：注释紧跟上一片段同行）/ `leading_own_line`（node_renderer 前置，独占
+  行型：块首尾各一硬换行、注释间单换行——源中注释自成一行时用它，否则行注释会
+  吃掉同行后续内容；行终止型由声明驱动 `Renderer.comment_ends_line` 判定）。
+  前置三槽（`leading`/`leading_own_line`/`inline`）统一由 `_leading_slot_docs`
+  按源序补出，布局路径与 verbatim 直出路径同源（后者若漏，附着注释连同 marker
+  承载的原文一起丢）。
 - **pratt 表达式内注释（三分类）**：operator 间隙/表达式入口按“注释前同行
   有无代码 + 注释后同行有无代码”归位——行中 → `_mount_op_comments` 挂
   BinaryOp/TernaryOp/UnaryOp `inline_after[op]`；行尾 → 后续操作数

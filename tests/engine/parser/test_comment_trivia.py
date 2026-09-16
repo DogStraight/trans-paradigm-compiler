@@ -15,6 +15,7 @@ importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-
 
 from core.define import Token  # noqa: E402
 from parser._comment_trivia import (  # noqa: E402
+    comment_leave_to_expression,
     is_line_only,
     is_midline,
     prev_significant_index,
@@ -88,3 +89,69 @@ def test_is_midline_false_when_next_code_is_next_line():
 def test_is_midline_false_at_tail():
     toks = _tokens(("comment", "// c", 1), ("newline", "\n", 1))
     assert is_midline(toks, 0) is False
+
+
+# ── 路由判据：让位闸门 `comment_leave_to_expression` ──
+
+
+def _wire_like_tokens():
+    """`wire a =\n// c\n(expr)` 形状：`=` 已匹配、注释后换行接右操作数。"""
+    return _tokens(
+        ("id", "a", 1),
+        ("space", " ", 1),
+        ("symbol.base.equal", "=", 1),
+        ("newline", "\n", 1),
+        ("space.fold", "    ", 2),
+        ("comment", "// c", 2),
+        ("newline", "\n", 2),
+        ("bracket.l_parentheses", "(", 3),
+    )
+
+
+def test_leave_to_expression_accepts_rule_interior_comment():
+    """规则内部（本产生式已匹配 `=`、锚在规则起点之后）→ 让位。"""
+    toks = _wire_like_tokens()
+    assert comment_leave_to_expression(toks, 5, production_pointer=1, production_start_ptr=2) is True
+
+
+def test_leave_to_expression_rejects_first_element():
+    """`production_pointer == 0`（项首元素前 = 列表项间）→ 不让位（容器上浮）。"""
+    toks = _wire_like_tokens()
+    assert comment_leave_to_expression(toks, 5, production_pointer=0, production_start_ptr=2) is False
+
+
+def test_leave_to_expression_rejects_anchor_before_rule_start():
+    """锚属上一项（下标 < 规则起点）→ 不让位。"""
+    toks = _wire_like_tokens()
+    assert comment_leave_to_expression(toks, 5, production_pointer=1, production_start_ptr=9) is False
+
+
+def test_leave_to_expression_rejects_midline_comment():
+    """行中注释（同行前后均有代码）→ 不让位（走 inline_after 行内原位）。"""
+    toks = _tokens(
+        ("id", "a", 1), ("space", " ", 1), ("comment", "/* c */", 1),
+        ("space", " ", 1), ("id", "b", 1),
+    )
+    assert comment_leave_to_expression(toks, 2, production_pointer=1, production_start_ptr=0) is False
+
+
+class TestParseContextSnapshot:
+    """缺口 b：产生式位置状态（元素序号 / 规则匹配起点）必须在回溯快照里。
+
+    两者供注释让位闸门判据使用；回溯不还原会让闸门读到旧规则的位置状态
+    （已经踩过一次同类坑：`current_rule` 退出不还原 → 闸门读到内层 inline
+    规则的旧值）。
+    """
+
+    def test_snapshot_round_trip_restores_production_fields(self):
+        from parser.parser_core import ParseContext
+
+        ctx = ParseContext(tokens=[])
+        ctx.production_pointer = 3
+        ctx.production_start_ptr = 7
+        snapshot = ctx.create_snapshot()
+        ctx.production_pointer = 0
+        ctx.production_start_ptr = 0
+        ctx.restore_snapshot(snapshot)
+        assert ctx.production_pointer == 3
+        assert ctx.production_start_ptr == 7

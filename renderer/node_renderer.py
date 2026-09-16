@@ -62,7 +62,7 @@ def _body_indent(body_cfg: dict, renderer: Any) -> int:
 
 
 def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
-    """前置注释槽 → Doc 列表（`leading` 行尾型 + `leading_own_line` 独占行型）。
+    """节点**文本前**的注释槽 → Doc 列表（顺序 = 源序，最后一个最贴近节点文本）。
 
     - `leading`：`Text(comment) + Break()`——注释后换行、注释前不主动 break
       （父级 body 的 Break 提供换行+缩进）。行尾型注释（`a || // c`）由此落地：
@@ -71,7 +71,9 @@ def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
       一个硬换行（逐条各加首尾硬换行会在多条注释间叠空行）。行终止型必须硬换行
       （① 同行后续内容会被行注释吃掉；② 独占成行才能还原源的断行位置）。是否
       行终止由声明驱动 `renderer.comment_ends_line`；块注释逐条 `Text+Break`。
-    - 顺序按源序：`leading`（同行行尾）在前，`leading_own_line` 在后。
+    - `inline`：`Text(comment) + Text(" ")`——同行紧跟节点文本前（`= /* c */ b`）。
+      行中注释落在 `inline = true` 规则上时用它（替身节点里没有锚 token，
+      `inline_after` 定位不了）。
 
     抽成函数的原因：布局路径与 **verbatim 直出路径**都要输出前置槽（后者若漏，
     附着在直出节点上的注释连同 marker 承载的原文一起丢）。
@@ -94,6 +96,9 @@ def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
             if not renderer.comment_ends_line(c):
                 docs.append(Text(c))
                 docs.append(Break())
+    for c in slots.get("inline") or ():
+        docs.append(Text(c))
+        docs.append(Text(" "))
     return docs
 
 
@@ -189,26 +194,18 @@ def render_node(
 
     # --- 注释槽位（ADR-0006 注释遍泛化——注释节点模型步骤 1，P1.5）---
     # 节点属性 _comment_slots: {槽位名: [注释文本]}，槽位：
-    #   leading  — 节点文本前独立行（`// 前置注释` 在语句上方）
-    #   inline   — 节点文本前同行（行中注释：`/* c */ rst_n`，表达式内 token
-    #              间隙定位——注释挂"注释后第一 token 所属节点"）
+    #   leading / leading_own_line / inline — 节点文本前的注释（行尾型 / 独占行型
+    #              / 同行前置），统一由 _leading_slot_docs 按源序补出（布局路径与
+    #              verbatim 直出路径同源）
     #   trailing — 节点后行尾锚定（LineSuffix 渲染行尾注释）——已在上面 tail
     #              段按"换行前落地"输出，此处不重复
     slots = getattr(node, "_comment_slots", None)
     if slots:
-        lead = slots.get("leading")
-        own_line = slots.get("leading_own_line")
-        if lead or own_line:
-            parts = _leading_slot_docs(slots, renderer) + parts
         inline = slots.get("inline")
-        if inline:
-            # inline 注释同行前置：`Text(comment) + Text(" ")` 插到节点文本
-            # 前（head 前）——表达式内 token 间隙（`assign b = /* c */ rst_n`）。
-            inline_docs: list[Doc] = []
-            for c in inline:
-                inline_docs.append(Text(c))
-                inline_docs.append(Text(" "))
-            parts = inline_docs + parts
+        own_line = slots.get("leading_own_line")
+        lead = slots.get("leading")
+        if inline or own_line or lead:
+            parts = _leading_slot_docs(slots, renderer) + parts
 
     if parts:
         return Concat(parts)

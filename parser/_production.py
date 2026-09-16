@@ -13,11 +13,7 @@ from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
 from .follow import token_in_follow
-from ._comment_trivia import (
-    is_line_only,
-    is_midline,
-    prev_significant_index,
-)
+from ._comment_trivia import comment_leave_to_expression, is_line_only
 
 import contextlib
 
@@ -513,47 +509,6 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 # ── 生产式准备 & 结束符检查 ──
 
 
-def _comment_leave_to_expression(context: ParseContext) -> bool:
-    """注释是否交给表达式入口归位（而非在 `prepare_production` 吐掉）？
-
-    三条同时成立（与语言无关：只看 token 下标与产生式元素序号）：
-      - 注释**非行中**——行中注释（同行前后均有代码）位置在同行，已由
-        `collect_following_comments` 走 `inline_after`；交给表达式入口会被
-        当作"前置"而断行（行内嵌入必须保留）。
-      - 本产生式已匹配过元素（`production_pointer > 0`）——注释前有本规则
-        已消费的内容、注释后本规则还要继续（`wire A =` 后的注释）。
-      - 注释前一个显著 token 属本规则匹配范围（下标 >= 
-        `production_start_ptr`）——列表项间/语句间的注释其锚属上一项
-        （`;`/`,`），下标落在起点之前。
-
-    交付后由表达式入口三分类归位：独占行 → `leading_own_line`（硬换行独占
-    成行）；行尾 → 右操作数 `leading`（随操作数断行）。就地吐掉则只剩锚点
-    插值，而语句内部注释的锚可隔着折叠区几十行，落点必偏（darkriscv 实测）。
-    指针/元素信息缺失时保守拒绝（退回原有通道）。
-    """
-    tokens = context.tokens
-    idx = context.token_pointer
-    if is_midline(tokens, idx):
-        return False
-    if getattr(context, "production_pointer", 0) <= 0:
-        return False
-    return prev_significant_index(tokens, idx) >= getattr(
-        context, "production_start_ptr", 0
-    )
-
-
-def _is_line_only_comment(context: ParseContext) -> bool:
-    """注释是否独占一行（实现收敛到 `_comment_trivia.is_line_only`）。
-
-    用于区分：
-      - 独占行注释（`\n // State\n`）→ 进树为 Comment 节点（ADR-0013 B1）
-      - 行尾注释漏网（`port, // c\n`——collect_following_comments 因中间
-        trivia token 未收走而残留到 production skip）→ 留 line 通道
-        条目（宏/条件块 marker 还原通道）
-    """
-    return is_line_only(context.tokens, context.token_pointer)
-
-
 def prepare_production(self, context: ParseContext, features: dict) -> bool:
     """为匹配产生式做准备：跳过空白/注释。"""
     ftype = features["type"] if "type" in features else None
@@ -585,7 +540,12 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         while context.has_more_tokens():
             t = context.peek_token()
             if t and t.type == COMMENT_TOKEN_TYPE:
-                if keep_comments and _comment_leave_to_expression(context):
+                if keep_comments and comment_leave_to_expression(
+                    context.tokens,
+                    context.token_pointer,
+                    getattr(context, "production_pointer", 0),
+                    getattr(context, "production_start_ptr", 0),
+                ):
                     # 规则内部注释：留给被调表达式规则（入口三分类：独占行 →
                     # leading_own_line，行尾 → 右操作数 leading）
                     break
@@ -595,7 +555,7 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                 # 上浮为 Comment 迭代项（行号窗口，见 _repeat_loop）；
                 # tpc marker（`// <tpc:*>`）排除——宏/条件块还原依赖
                 # only_tpc 通道，不进树。
-                line_only = _is_line_only_comment(context)
+                line_only = is_line_only(context.tokens, context.token_pointer)
                 context.advance_token()
                 self._skip_tokens(context, tuple(self.skip_types))
                 nxt = context.peek_token()
@@ -775,21 +735,30 @@ def collect_following_comments(
                     slots.setdefault("trailing", []).append(nxt.content)
             else:
                 # 行中归属（注释节点模型 2b-2，token 标注定位）：注释在
-                # `= /* c */ rst_n` 的 `=` 与 `rst_n` 之间——挂**当前规则
-                # 节点**（匹配注释前 token 的 production 节点，确定成功）
-                # 的 inline_after 槽位（{锚 token: [(注释, 源行号)]}），
-                # 渲染端在布局 line 元素序列里按锚 token 文本定位插入
-                # （`=` 后）。
+                # `= /* c */ rst_n` 的 `=` 与 `rst_n` 之间。挂槽分两种：
+                #   - 当前规则**非** inline：挂 `inline_after`（{锚 token:
+                #     [(注释, 源行)]}），渲染端在布局 line 元素序列里按锚
+                #     token 文本定位插入（`=` 后）——本规则节点留在 AST。
+                #   - 当前规则 `inline = true`：规则节点会被内联展开**丢弃**
+                #     （见 attribute_binder.try_inline_rule），而替身节点布局
+                #     里没有锚 token（`=` 属父规则字面量）→ 挂 `inline`
+                #     （节点文本前同行前置），槽位随展开迁到替身节点后即可渲染
+                #     为 `= /* c */ b`。
                 cur_node = getattr(context, "current_node", None)
+                cur_rule = getattr(context, "current_rule", None)
+                inline_rule = bool(getattr(cur_rule, "inline", False))
                 if isinstance(cur_node, Node):
                     slots = getattr(cur_node, "_comment_slots", None)
                     if slots is None:
                         slots = {}
                         cur_node.add_attr("_comment_slots", slots)
-                    ia = slots.setdefault("inline_after", {})
-                    ia.setdefault(current_token.content, []).append(
-                        (nxt.content, nxt.line)
-                    )
+                    if inline_rule:
+                        slots.setdefault("inline", []).append(nxt.content)
+                    else:
+                        ia = slots.setdefault("inline_after", {})
+                        ia.setdefault(current_token.content, []).append(
+                            (nxt.content, nxt.line)
+                        )
         else:
             self._record_anchor(
                 {
@@ -807,6 +776,10 @@ def collect_following_comments(
             # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
             # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
             # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
+            # 注：当前规则节点可能被内联展开丢弃（Init 等）——槽位迁移与
+            # 行终止型换槽在 attribute_binder._transfer_comment_slots 处理
+            # （那里才知道替身节点是谁；此处不读 current_rule，它可能是内层
+            # 规则退出后残留的旧值）。
             cur_node = getattr(context, "current_node", None)
             if isinstance(cur_node, Node):
                 seen = getattr(self, "_trailing_seen", None)
