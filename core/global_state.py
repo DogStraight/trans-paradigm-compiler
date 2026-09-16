@@ -118,6 +118,7 @@ CONTENT_ADDRESSED: dict[str, str] = {
     "preprocessor.macro_shape._probe_cache": "键 = rules_dir",
     "preprocessor.macro_shape._ast_cache": "键 = rules_dir",
     "preprocessor.macro_shape._env_cache": "键 = rules_dir",
+    "preprocessor._expand._comment_marker_cache": "键 = rules_dir（注释定界符/行注释标记）",
     "analyzer.checks._HANDLER_CACHE": "键 = 插件目录（handler 模块跨次复用）",
     "lexer.pre_scan._CACHE": "键 = rules_dir",
 }

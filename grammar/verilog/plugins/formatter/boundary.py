@@ -461,6 +461,9 @@ class LineContext:
     is_directive: bool = False
     """本行是预处理指令（`ifdef/`define 等，从 token 配置推导）。wrap 区分
     指令不折 vs 宏调用语句（`LUI: $display(...)`，含 `(`）可折。"""
+    is_comment_cont: bool = False
+    """本行是**跨行块注释**内部的段（非首行）——注释自带版式（` * ` 与 `/*`
+    对齐），缩进 pass 不按 scope_depth 重算，而是随注释首行整体平移。"""
 
 
 # ── 边界扫描器 ──
@@ -516,6 +519,8 @@ class BoundaryScanner:
         pending_stmt_header = False
         pending_is_else = False
         pending_line_comment = False
+        # 多行块注释末段（含闭合标记）落行时继承 is_comment_cont（见多行注释拆分处）
+        pending_comment_cont = False
         in_port_list = False
         multi_active = False
         multi_header_line = 0
@@ -540,7 +545,7 @@ class BoundaryScanner:
                         segs = t.content.split("\n")
                         line_buf.append(segs[0])
                         pending_line_comment = True
-                        for seg in segs[1:]:
+                        for seg_idx, seg in enumerate(segs[1:]):
                             self._emit_line(
                                 contexts,
                                 line_buf,
@@ -555,9 +560,16 @@ class BoundaryScanner:
                                 False,
                                 False,
                                 0,
+                                False,
+                                False,
+                                False,
+                                seg_idx > 0,  # 首迭代产的是注释首行（不算内部段）
                             )
                             line_buf = [seg]
                             line_num += 1
+                        # 末段（含块注释闭合标记）留在 line_buf，由换行处产行：
+                        # 继承 is_comment_cont（缩进随注释首行平移，保留 ` */` 对齐）
+                        pending_comment_cont = True
                     else:
                         line_has_comment = True
                         if not line_buf:  # 行首是注释 → 纯注释行
@@ -714,6 +726,7 @@ class BoundaryScanner:
                         port_list_end,
                         bool(hdr_extra),
                         is_directive,
+                        pending_comment_cont,
                     )
                     line_buf = []
                     line_num += 1
@@ -724,6 +737,7 @@ class BoundaryScanner:
                     pending_stmt_header = False
                     pending_is_else = False
                     pending_line_comment = False
+                    pending_comment_cont = False
                     line_first_token = None
                     last_line_nontrivia = None
                 # skip space.* tokens
@@ -788,9 +802,8 @@ class BoundaryScanner:
             # 不是语句。否则 case 分支内的 `if (A &&` 被误标 case_item，
             # indent 按 case_item_hang（depth+1）缩进，二次 format 漂移。
             if case_depth >= 0 and self._current_depth(scope_path) == case_depth + 1:
-                if (
-                    t.type not in self.stmt_headers
-                    and (t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default")
+                if t.type not in self.stmt_headers and (
+                    t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default"
                 ):
                     pending_case_item = True
 
@@ -881,6 +894,7 @@ class BoundaryScanner:
         port_list_end=False,
         multi_extra=False,
         is_directive=False,
+        is_comment_cont=False,
     ):
         if not buf:
             contexts.append(LineContext(line_number=line_num, text=""))
@@ -906,5 +920,6 @@ class BoundaryScanner:
             port_list_end=port_list_end,
             multi_extra=multi_extra,
             is_directive=is_directive,
+            is_comment_cont=is_comment_cont,
         )
         contexts.append(ctx)

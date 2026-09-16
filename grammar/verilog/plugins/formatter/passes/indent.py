@@ -20,6 +20,14 @@ def run_indent_pass(
     indent_width: int = 4,
 ) -> list[str]:
     result = list(lines)
+    # 跨行块注释的**整体平移量**：注释内部段（`is_comment_cont`）保留源相对
+    # 对齐（` * ` 与 `/*` 对齐是注释自身版式），只随注释首行平移——按
+    # scope_depth 重算会把 ` *` 前的对齐空格吃掉（实测版权头变成 `* ...`）。
+    # 平移量读首行的最终缩进，因此 contexts 必须**按源行序**遍历：多行块注释
+    # 的内部段 ctx 在 boundary 里先于首行 ctx 产出（拆分时先吐内部行）。
+    comment_indent: int | None = None
+    comment_shift: int | None = None
+    contexts = sorted(contexts, key=lambda c: c.line_number)
     # 条件编译指令行（`ifdef/`ifndef/`else/`elsif/`endif）：PicoRV32 风格顶格，
     # 不随代码块缩进（gen 原始即顶格，indent 按 depth 重算会破坏）
     # ifdef/else/endif 是条件块边界 → 顶格；`define 行保留原缩进（preprocessor
@@ -34,6 +42,30 @@ def run_indent_pass(
         stripped = result[ln].lstrip()
         if not stripped:
             continue  # 空行 / 纯空白保持
+        if getattr(ctx, "is_comment_cont", False):
+            # 跨行块注释内部段：**按注释自身惯例规范化**——
+            #   - 内部行以 `*` 开头（`/* * */` 风格）：对齐到**块首行**缩进 + 1
+            #     （星号对齐首行 `/*` 的星号）。与源内相对偏移无关：渲染端对注释
+            #     是逐字输出（首行随布局缩进、内部行仍是源缩进），偏移信息已不
+            #     可靠，只能按惯例规范。
+            #   - 其余（自由文本，如 ASCII 图）：按首行平移量整体平移，保自身版式。
+            if comment_indent is None:
+                comment_indent = _indent_chars(result[ln - 1]) if ln > 0 else 0
+            if stripped.startswith("*"):
+                result[ln] = " " * (comment_indent + 1) + stripped
+                continue
+            if comment_shift is None:
+                prev_ln = ln - 1
+                if prev_ln >= 0:
+                    comment_shift = _indent_chars(result[prev_ln]) - _indent_chars(
+                        lines[prev_ln]
+                    )
+                else:
+                    comment_shift = 0
+            result[ln] = " " * max(0, _indent_chars(lines[ln]) + comment_shift) + stripped
+            continue
+        comment_shift = None
+        comment_indent = None
         if stripped.startswith(_IFDEF_DIRECTIVE):
             result[ln] = stripped
             continue
@@ -109,6 +141,19 @@ def run_indent_pass(
             target = ctx.scope_depth
         result[ln] = " " * (target * indent_width) + stripped
     return result
+
+
+def _indent_chars(line: str) -> int:
+    """行首空白字符数（tab 按 4 折；与 _indent_level 同口径的字符量化）。"""
+    n = 0
+    for c in line:
+        if c == "\t":
+            n += 4
+        elif c == " ":
+            n += 1
+        else:
+            break
+    return n
 
 
 def _indent_level(line: str, width: int) -> int:

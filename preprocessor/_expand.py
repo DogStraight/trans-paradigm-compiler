@@ -9,7 +9,7 @@ Doc: preprocessor/README.md
 
 import re
 from core.config_registry import declare_cfg
-from core.token_protocol import anchor_name, anchor_salt
+from core.token_protocol import COMMENT_TOKEN_TYPE, anchor_name, anchor_salt
 from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
@@ -95,6 +95,94 @@ def _get_expand_config() -> dict[str, int]:
 
 def _get_include_config() -> dict:
     return dict(_directives_cfg.get("include", {}))
+
+
+_comment_marker_cache: dict[
+    str, tuple[tuple[tuple[str, str], ...], tuple[str, ...]]
+] = {}
+
+
+def _load_comment_markers(
+    rules_dir: str,
+) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
+    """注释标记：`(跨行块注释定界符对, 行注释起始标记)`。
+
+    与 Lexer 同源：`ConfigRegistry.resolve(rules_dir)` → `merge_token_define` →
+    `capture_runner.build_rules` 归一化后按 kind 分流（引擎不知道注释标点，
+    `//` / `/* */` 全部来自语言包）：
+      - `marker`（如 `/* … */`）→ 成对定界符，跨行；
+      - `line`（如 `// … 换行`）→ 行内即终止，**不产生跨行状态**，但扫描时
+        必须跳过其文本——否则 `//* group x` 里的 `/*` 会被当成块注释开启
+        （实测：ref_simcells.v 第 31 行之后 3783 行全被当成注释内部）。
+    按 rules_dir 缓存。
+
+    用途：块注释**内部的行不是指令行**——注释里写 `` `ifdef X `` 这类文本若
+    按指令处理，会丢行甚至把注释截断成未闭合注释（实测输出
+    `/* note\\nendmodule`，语法破坏）。
+    """
+    cached = _comment_marker_cache.get(rules_dir)
+    if cached is not None:
+        return cached
+    import os
+
+    from core.config_registry import ConfigRegistry
+    from lexer.capture_runner import CaptureRunner
+    from lexer.lexer_utils import merge_token_define
+
+    resolved = ConfigRegistry.resolve(
+        rules_dir, plugins_dir=os.path.join(rules_dir, "plugins")
+    )
+    token_define = merge_token_define(resolved)
+    rules = [
+        rule
+        for rule in CaptureRunner.build_rules(token_define)
+        if rule.token_type == COMMENT_TOKEN_TYPE
+    ]
+    pairs = tuple((r.start, r.end) for r in rules if r.kind == "marker" and r.end)
+    line_markers = tuple(r.start for r in rules if r.kind == "line" and r.start)
+    cached = (pairs, line_markers)
+    _comment_marker_cache[rules_dir] = cached
+    return cached
+
+
+def _advance_block_comment(
+    line: str,
+    state: str | None,
+    pairs: tuple[tuple[str, str], ...],
+    line_markers: tuple[str, ...],
+) -> str | None:
+    """按行推进块注释状态；返回下一行行首时的状态（结束标记或 None）。
+
+    同行内的开/闭按出现顺序配对（开闭同行 → 状态不变）；行注释起始标记之后
+    的行内文本属于行注释（不跨行），不再扫描定界符。
+    已知近似：字符串内的定界符形态（如 `$display("/*")`）会被当成注释开启——
+    与捕获器不同源（捕获器兼顾字符串）；此处保守但极罕见，后续如需精确可
+    改用捕获器算跨度。
+    """
+    i = 0
+    while i < len(line):
+        if state is not None:
+            k = line.find(state, i)
+            if k < 0:
+                return state
+            i = k + len(state)
+            state = None
+            continue
+        best: tuple[int, str, str] | None = None
+        for start, end in pairs:
+            k = line.find(start, i)
+            if k >= 0 and (best is None or k < best[0]):
+                best = (k, start, end)
+        # 行注释起始标记在块注释起始之前 → 本行剩余部分是行注释文本
+        for marker in line_markers:
+            k = line.find(marker, i)
+            if k >= 0 and (best is None or k < best[0]):
+                return None
+        if best is None:
+            return None
+        i = best[0] + len(best[1])
+        state = best[2]
+    return state
 
 
 def _load_config() -> tuple[str, set[str]]:
@@ -225,14 +313,21 @@ def scan_directives(
     # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
     source, join_map = _join_continuation_lines(source)
     lines = source.split("\n")
+    # 块注释跨行状态（定界符/行注释标记来自语言包声明）：注释内部的行**不是指令行**
+    _block_pairs, _line_markers = _load_comment_markers(rules_dir)
+    _block_state: str | None = None
 
     for jno, line in enumerate(lines, 1):
         ctx["_cur_line_no"] = jno  # 控制指令 handler 记账用（边界行归属）
         stripped = line.strip()
         stack: list = ctx.get("_ifdef_stack", [])
+        _inside_block = _block_state is not None
+        _block_state = _advance_block_comment(line, _block_state, _block_pairs, _line_markers)
 
-        if not stripped.startswith(prefix):
-            # 非指令行：归入栈顶块当前分支（flush 时决定管线/占位）；无块时直接进管线
+        if _inside_block or not stripped.startswith(prefix):
+            # 非指令行（含块注释内部行）：归入栈顶块当前分支（flush 时决定管线/占位）；
+            # 无块时直接进管线。注释内的 `ifdef/`endif 不是指令——按指令处理
+            # 会丢行、甚至把注释截断成未闭合注释（实测）。
             if stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:

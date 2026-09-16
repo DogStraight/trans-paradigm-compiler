@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **注释文本里的"伪指令"与注释定界符识别（两起真实语料事故）**：
+  1. **块注释内的指令文本**：`scan_directives` 按行首前缀判定指令 → 注释里写
+     `` `ifdef `` / `` `endif `` / `` `define `` 这类文本时被当真指令，行被丢掉、
+     注释被截断成未闭合（实测 picorv32 风格片段输出 `/* note\nendmodule`、lint 报
+     125 错）。现扫描前按**语言包声明的注释标记**推到行内/跨行状态：`kind = marker`
+     （`/* … */`）产生跨行状态，其内部行不作指令识别；`kind = line`（`// … 换行`）
+     行内终止，但其文本须跳过——否则 `//* group x`（ref_simcells.v 第 31 行）里的
+     `/*` 会被当成块注释开启，之后 3783 行全被当成注释内部、指令集体失效。标记全部
+     来自 `[comment] pairs` / `[capture]`（`_load_comment_markers`，按 rules_dir 缓存
+     并登记入 `core/global_state.py`）。已知近似：字符串里的定界符形态会被当作注释
+     标记；注释后**同行**指令不识别（非回归，锁在测试里）。
+  2. **跨行块注释内部行的缩进**：渲染端对注释逐字输出（首行随布局缩进、内部行仍是
+     源缩进，相对偏移随环境变化），缩进 pass 又按 `scope_depth` 重算内部行 ⇒ ` *`
+     前的对齐空格被吃掉（版权头退化为 `* ...`）。现内部段（`is_comment_cont`）按
+     注释自身惯例规范化：`*` 开头行对齐到**块首行缩进 + 1**（`*/` 同理），其余自由
+     文本行按块首行平移量整体平移；规范化幂等。
+  验证：全量 2025 passed / 7 skipped；新增 `tests/engine/preprocessor/
+  test_directive_in_comment.py`（9 例）、`tests/languages/verilog/
+  test_block_comment_indent.py`（11 例）；`eval_diag_baseline` 5548 → 5548、
+  `check_macro_coverage` 86/135 = 63.7%、`eval_lint_accuracy` recall 33/33 / 误报 0
+  均与改动前一致。
+
 ### Added
 
 - **注释改动集的验证侧收口（覆盖率/对拍/隔离）**：
