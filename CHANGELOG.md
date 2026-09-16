@@ -7,25 +7,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **表达式内独占行注释按结构落位（pratt 三分类 + `leading_own_line` 槽）**：表达式
-  入口/操作符间隙的注释原只分"行中/行尾"两类（`inline_after` / `leading`），独占行
-  的那种被当成行尾 → 落到操作符同行。现三分类：行中 → `inline_after`；行尾 →
-  后续操作数 `leading`；**独占行** → 新增槽 `leading_own_line`（`node_renderer` 前置：
-  块首尾各一硬换行、注释间单换行；行终止型由语言包声明驱动
-  `Renderer.comment_ends_line`，引擎不硬编码注释语法）。效果（darkriscv 实测）：
-  表达式内部的 standalone 注释与条件块起始行**独立成行且保持源序**
-  （`//FCT3==5 ?`、`` `ifdef MODEL_TECH ``、`` `ifdef __DBNZ__ ``、
-  `` `ifdef __COPROCESSOR__ `` 不再被塞进操作符同行）；输出与基线差异 12 行、全为
-  该形态，纯空白行数与基线持平（15）。
+- **语句内部独占行注释按结构落位（表达式注释让位闸门 + pratt 三分类）**：表达式
+  内部注释原只分“行中/行尾”两类（`inline_after` / `leading`），独占行的那种被当成
+  行尾 → 落到操作符同行；而语句**内部**（`=` 与右操作数之间）的注释根本到不了
+  表达式入口（被 `prepare_production` 当规则 trivia 吞掉）→ 只剩锚点插值，而锚是
+  清洁流里的下一个显著 token，可隔着折叠区几十行 ⇒ 落点必偏。
+  现两道：
+  1. `prepare_production` 新增**让位闸门**（`_comment_inside_current_rule`）：元素是
+     pratt 规则调用、且注释是独占行、且**本产生式已匹配过元素**
+     （`context.production_pointer > 0`，复活原死字段）且**注释前 token 属本规则
+     匹配范围**（新字段 `context.production_start_ptr`，两者均入回溯快照）→ 不吞掉，
+     留给表达式入口。列表项间/语句间的注释其锚属上一项（`context.production_pointer
+     == 0`）→ 不受影响，仍由容器上浮为 Comment 迭代项。
+  2. pratt 注释三分类：行中 → `inline_after`；行尾 → 右操作数 `leading`；**独占行**
+     → 新增槽 `leading_own_line`（`node_renderer` 前置：块首尾各一硬换行、注释间
+     单换行；行终止型由语言包声明驱动 `Renderer.comment_ends_line`，引擎不硬编码
+     注释语法）。
+  效果（darkriscv 实测）：需回插的 marker **2 → 0**（含 `wire HLT =`、`RMDATA =`
+  两处，以及同因的重形态——`RMDATA` 的 `__MEXT__` 块原先被抬到**相邻语句**
+  `wire BMUX =` 之后，现归位本语句）；输出与基线差异 37 行，全为“条件块/独占行
+  注释独立成行且保源序”，纯空白行数与基线持平（15）。
   渲染端配套：`layout` 的 Concat 分支带**行状态**——当前行只余缩进且由非硬断行结束
-  时，挤掉子项开头的 HardBreak（`_strip_leading_hardbreak`，防"父断行 + 注释首断行"
+  时，挤掉子项开头的 HardBreak（`_strip_leading_hardbreak`，防“父断行 + 注释首断行”
   叠出空行）；显式空行惯例（连续 `Break`）不受影响（既有断言
   `test_consecutive_breaks_kept_for_blank_lines` 保持通过）。
   验证：全量 1971 passed / 7 skipped；新增 `tests/languages/verilog/
-  test_expr_own_line_comments.py`（条件块位置 + 行尾注释不误升独占行）、
-  `tests/engine/renderer/test_comment_slots.py::TestLeadingOwnLineSlot`（3 例）。
-  遗留：`` `=` `` 与右操作数之间的 3 处（`wire HLT =`、`RMDATA =` 及被抬到
-  `wire BMUX` 的 `__MEXT__` 块）需先定通道优先级，见 `TODO.md` P1.5。
+  test_expr_own_line_comments.py`（语句内条件块位置 / 不漂到相邻语句 / 行尾注释不误升
+  独占行）、`tests/engine/renderer/test_comment_slots.py::TestLeadingOwnLineSlot`。
 
 ### Fixed
 

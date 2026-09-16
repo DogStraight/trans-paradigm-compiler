@@ -35,6 +35,11 @@ def _run(src: str, fmt: bool) -> str:
     return r.get("output", "")
 
 
+def _norm(out: str) -> str:
+    """空白归一化副本——formatter 会做列对齐（`wire   a =`），顺序断言用。"""
+    return " ".join(out.split())
+
+
 # 语句内部的独占行条件块：`=` 后换行 → 条件块 → 右操作数（源序）
 _WIRE_IFDEF_SRC = (
     "module m;\n"
@@ -56,10 +61,11 @@ def test_condition_block_inside_statement_keeps_position() -> None:
     for fmt in (False, True):
         out = _run(_WIRE_IFDEF_SRC, fmt)
         assert out.count("<tpc:") == 0, out
-        i_eq = out.index("wire a =")
-        i_if = out.index("`ifdef X")
-        i_else_body = out.index("b | c;")
-        i_rhs = out.index("d;")
+        flat = _norm(out)
+        i_eq = flat.index("wire a =")
+        i_if = flat.index("`ifdef X")
+        i_else_body = flat.index("b | c;")
+        i_rhs = flat.index("d;")
         assert i_eq < i_if < i_else_body < i_rhs, f"[fmt={fmt}] 条件块位置错:\n{out}"
         # 块首独立成行：`ifdef` 所在行的上一行以 `=` 收尾
         lines = out.splitlines()
@@ -90,3 +96,33 @@ def test_trailing_comment_stays_with_operator_line() -> None:
         out = _run(_TRAILING_COMMENT_SRC, fmt)
         line_with_op = next(l for l in out.splitlines() if "||" in l)
         assert "// why" in line_with_op, f"[fmt={fmt}] 行尾注释被移出行:\n{out}"
+
+
+# 同因缺陷的最重形态：块漂到**相邻的**下一条语句（darkriscv `wire BMUX =`）
+_NEIGHBOUR_STMT_SRC = (
+    "module m;\n"
+    "    wire a = \n"
+    "`ifdef X\n"
+    "        b;\n"
+    "`endif\n"
+    "        c;\n"
+    "    wire z = y && w;\n"
+    "endmodule\n"
+)
+
+
+def test_statement_interior_block_does_not_drift_to_next_stmt() -> None:
+    """语句内部条件块不得漂到相邻语句（旧缺陷：锚点插值落到了下一条语句）。
+
+    darkriscv 实测：`RMDATA` 的 `__MEXT__` 块被插值抬到 `wire BMUX =` 之后。
+    现由结构定位（挂在右操作数节点的 leading_own_line），块只会在本语句内。
+    """
+    for fmt in (False, True):
+        out = _run(_NEIGHBOUR_STMT_SRC, fmt)
+        assert out.count("`ifdef X") == 1, f"[fmt={fmt}] 条件块丢失/重复:\n{out}"
+        flat = _norm(out)
+        i_a = flat.index("wire a =")
+        i_if = flat.index("`ifdef X")
+        i_z = flat.index("wire z =")
+        assert i_a < i_if < i_z, f"[fmt={fmt}] 条件块漂到相邻语句:\n{out}"
+

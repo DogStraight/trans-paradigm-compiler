@@ -54,6 +54,9 @@ class ParseContext:
         self.current_node: Node | None = None
         self.current_rule: GrammarRule | None = None
         self.production_pointer = 0
+        # 当前规则匹配的起始 token 下标（match_productions 入口登记）——
+        # 供「注释前 token 是否属本规则匹配范围」判据用（表达式注释让位闸门）
+        self.production_start_ptr = 0
         self.exc_type = None
         self.exc_tb = None
 
@@ -88,6 +91,7 @@ class ParseContext:
             self.current_node,
             self.current_rule,
             self.production_pointer,
+            self.production_start_ptr,
         )
 
     def restore_snapshot(self, snapshot):
@@ -95,7 +99,8 @@ class ParseContext:
          self.match_length,
          self.current_node,
          self.current_rule,
-         self.production_pointer) = snapshot
+         self.production_pointer,
+         self.production_start_ptr) = snapshot
 
     def update_current_node(self, node: Node | None) -> None:
         # current_node 允许 None（畸形输入恢复 old_node 可为 None——

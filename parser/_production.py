@@ -103,8 +103,12 @@ def match_productions(
     """
     prods = rule.prods if prods is None else prods
     all_matched_nodes: list[Node | None] = []
+    # 规则内元素序号 + 本规则匹配起点 token 下标（供注释归属判据，见
+    # prepare_production 的表达式注释让位闸门）；两者都在回溯快照里。
+    context.production_start_ptr = context.token_pointer
 
-    for _, prod in enumerate(prods):
+    for idx, prod in enumerate(prods):
+        context.production_pointer = idx
         self._log_state(lambda: f"产生式: {prod} | {self._debug_token_info(context)}")
 
         result_node = _try_production(self, context, rule, prod)
@@ -516,6 +520,34 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 # ── 生产式准备 & 结束符检查 ──
 
 
+def _comment_inside_current_rule(context: ParseContext) -> bool:
+    """独占行注释是否落在**当前规则内部**（而非列表项间/语句间）。
+
+    两条同时成立（与语言无关：只看 token 下标与产生式元素序号）：
+      - 当前产生式已匹配过至少一个元素（`production_pointer > 0`）——注释前
+        有本规则已消费的内容、注释后本规则还要继续（`wire A =` 后的注释）；
+      - 注释前一个显著 token 属本规则匹配范围（下标 >= 规则匹配起点）——
+        列表项间/语句间的注释其锚属上一项（`;`/`,`），下标落在起点之前。
+
+    判错方向的影响：误判“规则内部”→ 注释被表达式入口领走（少了 Comment
+    迭代项，位置仍正确但契约变）；误判“项间”→ 退回锚点插值（默认行为）。
+    节点/指针信息缺失时保守拒绝。
+    """
+    if getattr(context, "production_pointer", 0) <= 0:
+        return False
+    if not _is_line_only_comment(context):
+        return False
+    i = context.token_pointer - 1
+    tokens = context.tokens
+    while i >= 0:
+        t = tokens[i]
+        if t.type in ("space", "space.fold", NEWLINE_TOKEN_TYPE, COMMENT_TOKEN_TYPE):
+            i -= 1
+            continue
+        break
+    return i >= getattr(context, "production_start_ptr", 0)
+
+
 def _is_line_only_comment(context: ParseContext) -> bool:
     """独占行注释判定：注释 token 之前（跳过空白/缩进 token）是换行或文件首。
 
@@ -542,6 +574,14 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
     """为匹配产生式做准备：跳过空白/注释。"""
     ftype = features["type"] if "type" in features else None
     should_skip = True
+    # 表达式规则（pratt）调用前的**独占行注释让位**：当注释落在规则内部
+    # （本产生式已匹配过元素 + 注释前 token 属本规则匹配范围）时不在此吞掉，
+    # 留给表达式入口按“独占行”归位（leading_own_line，结构定位）——就地吞掉
+    # 只剩锚点插值，而语句内部注释的锚可隔着折叠区几十行，插值必偏。
+    # 列表项间/语句间的注释不在此列（锚属上一项）——仍由容器上浮为
+    # Comment 迭代项（ADR-0013 B1 模型不变）。语言无关：只看规则声明字段
+    # pratt 与 token 下标，不涉任何 token 类型知识。
+    keep_comments = False
 
     if ftype == "token":
         if features.get("token_type") == COMMENT_TOKEN_TYPE:
@@ -550,6 +590,8 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         ref_rule = self.grammar_rules.get(features["name"])
         if ref_rule and getattr(ref_rule, "is_block", False):
             should_skip = False
+        elif ref_rule is not None and getattr(ref_rule, "pratt", False):
+            keep_comments = True
     elif ftype == "optional":
         should_skip = False
     elif ftype == "repeat" and features.get("min", 0) == 0:
@@ -559,6 +601,10 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         while context.has_more_tokens():
             t = context.peek_token()
             if t and t.type == COMMENT_TOKEN_TYPE:
+                if keep_comments and _comment_inside_current_rule(context):
+                    # 规则内部的独占行注释：留给被调表达式规则（入口挂
+                    # leading_own_line，位置由结构定）
+                    break
                 # 独占行标记（B1 上浮判据）：advance 前判定——向前扫描
                 # 注释前一个非空白 token（newline/文件首 = 独占行）。
                 # 独占行且非 tpc marker 的注释由所在列表容器的 repeat
