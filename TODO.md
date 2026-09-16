@@ -3,27 +3,22 @@
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
 
-## 0.1.2 目标（2026-09-11 立项，单轨：宏体入树 → 管线时点化）
-
-> 设计：宏体入树（机制见 `preprocessor/README.md`）+ 时点化/可视化/契约校验
-> （机制见 `pipeline/README.md`）。
-> 每阶段独立验证、门禁通过才进下一阶段；阶段完成即删本行。不含：C 语言包（松散活动，
-> 不立项）、P3.2/P3.4 增量、P3.5 Rust 下沉、P4 多后端。
-> **版本节奏（作者定 2026-09-14）**：0.1.1 = 9 月内发布（发布材料已备：
-> CHANGELOG 归拢 09-09 + tag `v0.1.1`；剩余发布动作按需执行）；**0.1.2 = 10 月
-> 版本**——本批次工作已全部完成于主分支（阶段 0-9），等 10 月发布窗口，勿催。
-
-- [ ] 阶段 6 收尾 — 中间产物可视化：剩 transform 侧更多插件自述（出口已具备，
-      按需补）
-
 ## P1 — Verilog 实例完善
 
 ### P1.5 已知缺陷收尾
 
-- [ ] **darkriscv 条件编译嵌套位置精度（宏展开路径还原残余）**：ifdef 已
-      101/101 全还原、无占位残留、lint 零诊断；残余 = 表达式链内相邻条件块
-      （IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）还原位置依赖插值定位（渲染行距
-      非线性 + 锚点稀疏），嵌套位置仍有偏差 → sv-parser 预处理仍拒（interop
-      豁免保留，见 `tests/e2e/test_real_corpus.py::_SVPARSER_INTEROP_SKIP`）。
-      根治需 active 内容 marker 化（_flush_block 改造）或 token span 映射
-      （P3.1 已落地，前置就绪）。
+- [ ] **darkriscv interop 失败（探查 2026-09-17：原「条件块嵌套位置精度」归因证伪）**：
+      sv-parser 接受原始源（exit 0）、拒 tpc 输出；真因两条，均与条件块无关 ——
+      ① **formatter 二次格式化还原后文本**（restore 之后 `format_generated`）：
+      `` `__THREADS__ `` 等指令被当普通 token，声明被打散成
+      `reg IFPC // 注释 [0:...]-1] stage`（`;` 落进注释）→ 报 630；
+      ② **renderer 端口表收尾 `);` 与末项同行**，被末项行尾行注释吃掉
+      （源 685 `);` 独占行 → renderer 输出 `... :));`）→ 报 560；默认
+      `format_output=true` 时②被 formatter 掉手掩盖。
+      条件块位置残差实测很轻：157 占位 = 118 独占行精确命中 + 36 嵌套（多轮扫描
+      还原）+ 3 行内 + **0 丢失**；渲染文本原生 marker 116，仅 5 个被 production
+      skip 吞掉需回插（4 插值 + 1 相邻跟随）；关 formatter 后还原文本 == 最终输出
+      （相似度 1.0000），IFPC 三目链 token 序列与源侧一致；真实位置偏差仅 1 处
+      （端口表内 `ifdef __INTERRUPT__` 组被挪到 IDREQ 之后）。
+      → 修 ①② 后重跑 interop，再评估 active 内容 marker 化 / token span 映射
+      是否仍需做（原与路线选择挂钩的前提已不成立）。
