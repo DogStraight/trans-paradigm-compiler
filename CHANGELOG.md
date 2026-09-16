@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **换行三态化（soft / 条件断 / 强制断 + 向上传播）**：`{ soft }`→`Line`（可折叠）、
+  `{ break }`→`LineBreak`（组断开时在此断）、`{ hard_break }`→`HardBreak`（新增：
+  恒断**且强制所在组断开**）。机制：`group()` 见 `HardBreak` 不生成 Union（直接
+  返回 broken 形态）且节点保留 → 嵌套外层同样被强制（Prettier `propagateBreaks`
+  的构造期实现）；layout 入口 `_drop_break_after_hardbreak` 挤掉 HardBreak 之后
+  紧邻的条件断（避免空行，不动 `tail_break` 的显式连续 `Break`）；
+  `_resolve_line_suffix` / `_insert_before_trailing_break` 接上 HardBreak。
+  配置同步用 `tools/config_sites.py` 机械完成：17 处 `break = true` →
+  `hard_break = true`（零 churn），并清 2 处死配置（module head 的 `ref` 遮蔽
+  `group` → 端口表断行从未求值）。
+  效果：项间/末项行注释吞码解决（声明驱动，引擎无语言知识）；端口表断开时收尾
+  `);` 独占行（渲染器原生，不再依赖 formatter 补拆）。
+  验证：全量 1965 passed / 7 skipped；`config_sites check` 0 漂移键 / 0 多键同层；
+  改动 py 文件 Pylance 清零。
+
 ### Fixed
 
 - **darkriscv 互操作回门禁（两条与条件块无关的真缺陷）**：sv-parser 接受原始
