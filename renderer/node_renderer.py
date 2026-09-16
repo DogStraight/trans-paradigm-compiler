@@ -13,6 +13,7 @@ from .doc import (
     Empty,
     Text,
     Break,
+    HardBreak,
     Line,
     LineBreak,
     Concat,
@@ -26,17 +27,19 @@ from .primitives import eval_expr
 def _insert_before_trailing_break(doc: Doc, extra: Sequence[Doc]) -> Doc:
     """把 extra（行尾注释 LineSuffix）插到 doc **末尾换行点之前**。
 
-    分段布局常以 `{ break = true }` / `tail_break` 收尾（如
-    `ModuleDecl.renderer.head`、`tail_break = 2`）——LineSuffix 只在下一个
-    换行点前落地，追加在 break 之后会掉到下一行。`head` 又常被 group 包成
-    `Union`（flat/broken 两支同构、都以 break 收尾），故两支都插。
+    分段布局常以 `{ break = true }` / `{ hard_break = true }` / `tail_break`
+    收尾（如 `ModuleDecl.renderer.head`、`tail_break = 2`）——LineSuffix 只在
+    下一个换行点前落地，追加在 break 之后会掉到下一行。`head` 又常被 group
+    包成 `Union`（flat/broken 两支同构、都以 break 收尾），故两支都插。
+    注意：含 `HardBreak` 的 head 不再生成 Union（`group()` 直接返回 broken
+    形态，见 doc.py）——本函数同时识别 HardBreak 才能在那种形态下插对位置。
     （2026-09-13 修复：块结束符 / 块头行尾注释漂移。）
     """
     if not extra:
         return doc
     if isinstance(doc, Concat) and doc.docs:
         last = doc.docs[-1]
-        if isinstance(last, (Line, Break, LineBreak)):
+        if isinstance(last, (Line, Break, HardBreak, LineBreak)):
             return Concat([*doc.docs[:-1], *extra, last])
     if isinstance(doc, Union):
         flat = _insert_before_trailing_break(doc.flat, extra)

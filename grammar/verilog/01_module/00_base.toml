@@ -62,13 +62,11 @@ line = [
     "(",
     { opt = { group = [
     { opt = { ref = "ports" } },
-    { opt = { group = [
     { break = true },
-], ref = "ports" } },
-], ref = "ports" } },
+] } },
     ")",
     ";",
-    { break = true },
+    { hard_break = true },
 ]
 
 [ModuleDecl.renderer.body]
@@ -125,13 +123,11 @@ line = [
     "(",
     { opt = { group = [
     { opt = { ref = "ports" } },
-    { opt = { group = [
     { break = true },
-], ref = "ports" } },
-], ref = "ports" } },
+] } },
     ")",
     ";",
-    { break = true },
+    { hard_break = true },
 ]
 
 [MacroModuleDecl.renderer.body]

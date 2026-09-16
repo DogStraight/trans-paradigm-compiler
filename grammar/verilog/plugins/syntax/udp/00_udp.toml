@@ -62,17 +62,17 @@ line = [
     "(",
     { join = ", ", items = "ports" },
     ");",
-    { break = true },
+    { hard_break = true },
     { join = "\n", items = "port_decls" },
     { opt = { group = [
-        { break = true },
+        { hard_break = true },
         { ref = "initial" },
     ] } },
-    { break = true },
+    { hard_break = true },
     "table",
-    { break = true },
+    { hard_break = true },
     { join = "\n", items = "entries" },
-    { break = true },
+    { hard_break = true },
     "endtable",
 ]
 

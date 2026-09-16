@@ -5,7 +5,7 @@ Doc: renderer/renderer_architecture.md（join 列表拼接原语）
 
 from typing import Any
 from core.define import Node
-from ..doc import Doc, Empty, Text, Line as SoftLine, Break, Concat, Nest, LineSuffix, group
+from ..doc import Doc, Empty, Text, Line as SoftLine, Break, HardBreak, Concat, Nest, LineSuffix, group
 from .registry import register
 
 
@@ -180,10 +180,15 @@ def eval_join(
                     result.append(Text(" " + _t))
                     result.append(Text(" "))
             if inline_sep:
+                # 行终止型注释（行注释）后必须换行且**强制组断开**——否则扁平化
+                # 会把分隔符折成空格，注释吞掉后续项（`input a, // c output b`）。
+                # 哪种注释属该型由语言包声明（renderer.comment_ends_line）。
+                ends_line = any(
+                    renderer.comment_ends_line(s.text) for s in pending_suffix
+                )
                 result.extend(pending_suffix)
                 pending_suffix = []
-            if inline_sep:
-                result.append(SoftLine())
+                result.append(HardBreak() if ends_line else SoftLine())
         result.append(body)
         if inline_sep:
             pending_suffix = suffixes
@@ -191,14 +196,14 @@ def eval_join(
             result.extend(suffixes)
     if pending_suffix:
         result.extend(pending_suffix)
-        # 末项行尾注释属"到行边界终止"型（行注释）时，行必须在此结束：列表
-        # 后面若还有同行布局元素（模块端口关闭 `)` `;`），注释会把它们吃进
-        # 注释文本（`output [3:0] DEBUG // ... :));` → 端口表未闭合，语法非法，
-        # 2026-09-17 darkriscv）。补硬换行，后续元素另起一行。
+        # 末项行尾注释属"到行边界终止"型（行注释）时，行必须在此结束且**所在
+        # 组必须断开**（HardBreak 向上传播）：列表后面若还有同行布局元素
+        # （模块端口关闭 `)` `;`），注释会把它们吃进注释文本
+        # （`output [3:0] DEBUG // ... :));` → 端口表未闭合，2026-09-17）。
         # 哪种注释属该型由语言包声明（renderer.comment_ends_line），引擎不
-        # 硬编码标点；块注释不需断行，保持同行（`input clk, /* c */ output`）。
+        # 硬编码标点；块注释保持同行（`input clk, /* c */ output`）。
         if any(renderer.comment_ends_line(s.text) for s in pending_suffix):
-            result.append(Break())
+            result.append(HardBreak())
 
     # 分隔符行中注释槽清理：消费空键即删（B1.4 已删 leftover 回插通道）
     if _node_slots is not None and sep_anchor:

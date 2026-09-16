@@ -43,8 +43,9 @@ AST (parse/normalize 后)
 |------|------|
 | `Text` / `Empty` | 字面量 / 空 |
 | `Line`（软换行） | flat → 空格；broken → 换行+缩进 |
-| `Break`（硬换行） | 恒换行+缩进 |
-| `LineBreak` | 条件换行（尾部专用，flat 消失） |
+| `LineBreak`（条件换行） | flat → 消失；broken → 换行+缩进 |
+| `Break`（硬换行） | 恒换行+缩进（不强制所在组） |
+| `HardBreak`（强制断行） | 恒换行+缩进，**且强制所在组断开**（向上传播） |
 | `Concat` | 顺序拼接 |
 | `Nest` | 相对缩进偏移（后续行 +N 格） |
 | `Align` | 绝对列对齐：后续行缩进列 = `max(当前缩进, N)`（首行不受影响） |
@@ -57,11 +58,20 @@ AST (parse/normalize 后)
 首行超宽则回退 broken（fits 只测第一行，贪心）。`LineSuffix` 在 layout 入口
 经 `_resolve_line_suffix` 重写为换行点前的 `Text`（纯函数预处理，内核不动）。
 
+**换行三态与强制传播**（2026-09-17）：配置侧三态 = `{ soft }`→`Line` /
+`{ break }`→`LineBreak`（组断开时在此断）/ `{ hard_break }`→`HardBreak`
+（恒断且强制所在组断开）。两条配套规则：
+- `group()` 见 `HardBreak` 时**不生成 Union**（直接返回 broken 形态），且节点保留
+  在 doc 里 → 嵌套外层同样被强制（Prettier `propagateBreaks` 的构造期实现）；
+- layout 入口 `_drop_break_after_hardbreak`：`HardBreak` 之后紧邻的**条件断**
+  （`LineBreak`）不再产生新行（已断过，叠加会多出空行）；软断与硬断不动
+  （`tail_break` 用连续 `Break` 表达空行）。
+
 ### 布局原语（renderer/primitives/，TOML 可声明）
 
-14 个注册原语：`text/ref/join/group/line/indent/opt/soft/break/align/fill/
-line_suffix/intent/suffix_when`。注册机制：`@register(key)` 装饰器 → 全局调度表 →
-`eval_expr` 按 key 分派。
+15 个注册原语：`text/ref/join/group/line/indent/opt/soft/break/hard_break/align/
+fill/line_suffix/intent/suffix_when`。注册机制：`@register(key)` 装饰器 → 全局调度表 →
+`eval_expr` 按 key 分派（`line` 数组元素由 `eval_line` 内联消费，不走分派）。
 
 **suffix_when 值条件后缀**（2026-08-28）：节点属性值满足条件（startswith）时
 追加后缀文本，条件不命中返回 None（line 原语跳过）。典型用途：转义标识符

@@ -49,6 +49,7 @@ _VOCAB_DISPATCH = (
     "indent",
     "opt",
     "soft_break",
+    "hard_break",
     "align",
     "fill",
     "line_suffix",
@@ -57,7 +58,8 @@ _VOCAB_DISPATCH = (
 )
 _VOCAB_ELEMENT = (
     "soft",
-    "break",  # line 元素键：{soft = true} / {break = true}
+    "break",  # line 元素键：{soft = true}/{break = true}/{hard_break = true}
+    "hard_break",
     "nest",
     "items",
     "sep",
@@ -100,7 +102,6 @@ _VOCAB_SECTION = (
 _STRUCTURAL_KEY_SECTIONS = (".override",)
 
 _SECTION_RE = re.compile(r"^\s*(\[\[?)([^\]]+?)\]\]?\s*(?:#.*)?$")
-_KEY_RE = re.compile(r"""(?<![\w.\-"'#])([A-Za-z_][\w\-]*)\s*=""")
 _RENDERER_SUFFIX = ".renderer"
 
 
@@ -235,6 +236,11 @@ def _scan_file(path: str, rel: str) -> list[Site]:
                         last_key = key
                         # 就地登记：所属表 = 当时最内层开着的 `{`（跨行安全）
                         top = stack[-1] if stack else None
+                        parent_id = ""
+                        if top is not None:
+                            par = table_parent.get(top, None)
+                            if par is not None:
+                                parent_id = f"{par[0]}:{par[1]}"
                         sites.append(
                             Site(
                                 file=rel,
@@ -246,14 +252,8 @@ def _scan_file(path: str, rel: str) -> list[Site]:
                                 end=j,
                                 raw=raw,
                                 table=f"{top[0]}:{top[1]}" if top else "",
-                                owner=(
-                                    table_owner.get(top, "") if top else ""
-                                ),
-                                parent=(
-                                    f"{table_parent[top][0]}:{table_parent[top][1]}"
-                                    if top and table_parent.get(top)
-                                    else ""
-                                ),
+                                owner=(table_owner.get(top, "") if top else ""),
+                                parent=parent_id,
                             )
                         )
                     i = j - 1
@@ -326,7 +326,9 @@ def _is_structural(site: Site) -> bool:
     return site["value"] == "{"
 
 
-def _multi_dispatch_tables(sites: list[Site]) -> list[tuple[str, int, list[str], int]]:
+def _multi_dispatch_tables(
+    sites: list[Site],
+) -> list[tuple[str, int, list[str], list[str]]]:
     """同一行内表里多个**原语 dispatch 键** → 只有注册顺序最前的生效。
 
     表达式求值按注册顺序取首个命中的键（见 renderer/primitives/__init__.py
@@ -352,16 +354,6 @@ def _multi_dispatch_tables(sites: list[Site]) -> list[tuple[str, int, list[str],
         if len(keys) > 1:
             shadowed.append((f, tid, keys))
     dead_ids = {f"{f}:{tid}" for f, tid, _ in shadowed}
-
-    def _in_dead(file: str, table: str) -> bool:
-        seen: set[str] = set()
-        cur = table
-        while cur and cur not in seen:
-            seen.add(cur)
-            if f"{file}:{cur}" in dead_ids:
-                return True
-            cur = tparent.get((file, cur), "")
-        return False
 
     out: list[tuple[str, int, list[str], list[str]]] = []
     for f, tid, keys in shadowed:
@@ -415,10 +407,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     shadowed = _multi_dispatch_tables(sites)
     print(f"多原语键同层（后者静默失效）{len(shadowed)} 处")
     for f, line, keys, dead_keys in shadowed:
-        print(
-            f"  {f}:L{line}  生效={keys[0]}  失效={', '.join(keys[1:])}"
-            f"  失效子树键={', '.join(dead_keys) or '（无）'}"
-        )
+        winner = keys[0]
+        losers = ", ".join(keys[1:])
+        dead = ", ".join(dead_keys) or "（无）"
+        print(f"  {f}:L{line}  生效={winner}  失效={losers}  失效子树键={dead}")
     if unknown:
         print("\n[FAIL] 渲染段存在引擎词汇表以外的键（拼写/过时/残留）")
         return 1

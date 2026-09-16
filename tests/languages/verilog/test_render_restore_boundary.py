@@ -97,3 +97,41 @@ def test_block_comment_may_stay_inline() -> None:
         out = _run(src, fmt)
         assert "/* block */" in out, out
         assert ");" in out, out
+
+
+def test_interior_line_comment_does_not_swallow_next_port() -> None:
+    """项间行注释：其后的项不得被折进注释（旧缺陷：列表扁平化时注释吞后续项）。"""
+    src = (
+        "module m #(parameter P = 0)(\n"
+        "    input a, // first\n"
+        "    output [3:0] B\n"
+        ");\n"
+        "endmodule\n"
+    )
+    for fmt in (False, True):
+        out = _run(src, fmt)
+        assert "// first" in out and "output [3:0] B" in out, out
+        bad = _code_after_line_comment(out)
+        assert not bad, f"[fmt={fmt}] 行注释吞掉后续项: {bad}"
+
+
+def test_port_close_on_own_line_when_list_breaks() -> None:
+    """端口表断开时收尾 `);` 独占一行（渲染器原生，不再依赖 formatter 补拆）。"""
+    src = (
+        "module m #(parameter P = 0)(\n"
+        "    input verylongportname_one,\n"
+        "    output [31:0] verylongportname_two\n"
+        ");\n"
+        "endmodule\n"
+    )
+    for fmt in (False, True):
+        out = _run(src, fmt)
+        close_lines = [ln for ln in out.split("\n") if ln.strip() == ");"]
+        assert close_lines, f"[fmt={fmt}] 收尾符未独占行:\n{out}"
+        assert "verylongportname_two);" not in out, out
+
+
+def test_short_port_list_stays_inline() -> None:
+    """短端口表仍是单行（三态不把普通组拖成多行）。"""
+    out = _run("module m #(parameter P = 0)(a, b);\nendmodule\n", False)
+    assert out.split("\n")[0] == "module m #( parameter P = 0 )( a, b);", out

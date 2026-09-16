@@ -46,9 +46,9 @@ line = [
     "config ",
     { ref = "config_name" },
     ";",
-    { break = true },
+    { hard_break = true },
     { ref = "design" },
-    { break = true },
+    { hard_break = true },
     { join = "\n", items = "rules" },
 ]
 

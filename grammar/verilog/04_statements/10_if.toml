@@ -70,10 +70,10 @@ line = [
     "if (",
     { ref = "condition" },
     ")",
-    { break = true, indent = 1 },
+    { hard_break = true, indent = 1 },
     { ref = "then_stmt" },
     { opt = { line = [
-    { break = true },
+    { hard_break = true },
     { ref = "else_chain" },
 ] } },
 ]
@@ -151,10 +151,10 @@ line = [
     "else if (",
     { ref = "condition" },
     ")",
-    { break = true, indent = 1 },
+    { hard_break = true, indent = 1 },
     { ref = "then_stmt" },
     { opt = { line = [
-    { break = true },
+    { hard_break = true },
     { ref = "else_chain" },
 ] } },
 ]
@@ -194,7 +194,7 @@ body = "$2"
 [ElseBranch.renderer.layout]
 line = [
     "else",
-    { break = true, indent = 1 },
+    { hard_break = true, indent = 1 },
     { ref = "body" },
 ]
 

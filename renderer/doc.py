@@ -58,6 +58,20 @@ class Break(Doc):
 
 
 @dataclass
+class HardBreak(Doc):
+    """
+    强制断行（三态换行的第三态）。
+    与 `Break` 同为"永远换行"，但**额外强制所在组断开**：含它的 `group()`
+    不再生成 Union（直接返回 broken 形态），且该节点保留在 doc 里，使
+    嵌套外层同样被强制（Prettier propagateBreaks 语义的构造期实现，
+    2026-09-17）。用途：语义上"这一行必须在此结束"的构造（如行尾注释后
+    不得再接同行元素——否则回读时被并入注释文本）。
+    """
+
+    indent: int = 0
+
+
+@dataclass
 class LineBreak(Doc):
     """
     条件换行（尾部专用）。
@@ -207,8 +221,32 @@ class IfFlatPad(Doc):
 
 
 def group(doc: Doc) -> Doc:
-    """创建 group：Union(flatten(doc), doc)"""
+    """创建 group：Union(flatten(doc), doc)
+
+    含 `HardBreak`（永远换行且强制所在组断开）时**不生成 Union**：直接返回
+    broken 形态。硬换行沿嵌套向上传播——外层 `group()` 看到的是子结构返回的
+    doc，子结构里保留的 HardBreak 同样让外层强制断开（Prettier
+    propagateBreaks 的构造期实现）。
+    """
+    if _forces_break(doc):
+        return doc
     return Union(flat=flatten(doc), broken=doc)
+
+
+def _forces_break(doc: Doc) -> bool:
+    """doc 直接子树内是否含 HardBreak（**不进嵌套 Union**——嵌套组有自己的
+    权威；但它被强制断开时会把 HardBreak 保留在自己返回的 doc 里，见
+    `group()`，故传播仍然成立）。
+    """
+    match doc:
+        case HardBreak():
+            return True
+        case Concat(docs) | Fill(docs):
+            return any(_forces_break(d) for d in docs)
+        case Nest(_, d) | Align(_, d) | Prefix(_, d):
+            return _forces_break(d)
+        case _:
+            return False
 
 
 def flatten(doc: Doc) -> Doc:
@@ -224,7 +262,7 @@ def flatten(doc: Doc) -> Doc:
             return doc
         case Line():
             return Text(" ")
-        case Break():
+        case Break() | HardBreak():
             return doc
         case LineBreak():
             return Empty()  # flat 模式：消失
@@ -275,7 +313,7 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
 
     规则（Prettier lineSuffix 语义的 Doc 层实现）：
       - 遍历 Concat 序列，收集挂起的 suffix 文本；
-      - 遇到 Line/Break/LineBreak（换行点）→ 先把挂起 suffix 作为
+      - 遇到 Line/Break/HardBreak/LineBreak（换行点）→ 先把挂起 suffix 作为
         Text 插入到换行前；
       - 序列结束仍有挂起 → 追加到序列尾（doc 末尾即行尾）；
       - Nest/Align/Prefix/Union 递归处理；Fill 内不跨项推迟
@@ -292,7 +330,7 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
                     pending.append(d.text)
                     continue
                 resolved = _resolve_line_suffix(d)
-                if isinstance(resolved, (Line, Break, LineBreak)):
+                if isinstance(resolved, (Line, Break, HardBreak, LineBreak)):
                     if pending:
                         out.append(Text("".join(pending)))
                         pending = []
@@ -334,7 +372,9 @@ def layout(doc: Doc, max_width: int = 80) -> str:
     # 布局辅助查询（_flat_w/_has_hardline/_has_break）单次 layout 内记忆化：
     # doc 树每次渲染重建（id 可复用），入口清缓存防止跨代误命中。
     _clear_layout_cache()
-    return _best(max_width, 0, _resolve_line_suffix(doc))
+    # 先落行尾注释，再挤掉 HardBreak 之后紧邻的条件断（避免叠加出空行）
+    resolved = _drop_break_after_hardbreak(_resolve_line_suffix(doc))
+    return _best(max_width, 0, resolved)
 
 
 def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
@@ -356,6 +396,9 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
             return "\n" + " " * (k + i)
 
         case Break(indent=i):
+            return "\n" + " " * (k + i)
+
+        case HardBreak(indent=i):
             return "\n" + " " * (k + i)
 
         case LineBreak(indent=i):
@@ -432,6 +475,61 @@ def _clear_layout_cache() -> None:
     _LAYOUT_CACHE.clear()
 
 
+def _ends_with_hardbreak(doc: Doc) -> bool:
+    """doc 末尾最后叶子是否 HardBreak（沿 Concat/Nest/Align/Prefix 下钻）。
+
+    Union（含嵌套组）返回 False——嵌套组自行决定断开与否，不参与挤除。
+    """
+    match doc:
+        case HardBreak():
+            return True
+        case Concat(docs):
+            return bool(docs) and _ends_with_hardbreak(docs[-1])
+        case Nest(_, d) | Align(_, d) | Prefix(_, d):
+            return _ends_with_hardbreak(d)
+        case _:
+            return False
+
+
+def _drop_break_after_hardbreak(doc: Doc) -> Doc:
+    """`HardBreak` 之后紧邻的**条件断**（LineBreak）不再产生新行。
+
+    条件断的语义是"本组断开时在此断"；前一项已强制断行（HardBreak）时
+    "此处断行"与那处断行是同一处——叠加会多出一个空行（典型：列表末项行尾
+    注释的 HardBreak + 模块头 `)` 前的 `{ break = true }`）。
+    只挤掉条件断：软断（Line）与硬断（Break）不动——`tail_break` 用连续
+    `Break` 表达空行，不能被挤。
+    """
+    match doc:
+        case Concat(docs):
+            out: list[Doc] = []
+            for d in docs:
+                resolved = _drop_break_after_hardbreak(d)
+                if (
+                    isinstance(resolved, LineBreak)
+                    and out
+                    and _ends_with_hardbreak(out[-1])
+                ):
+                    continue
+                out.append(resolved)
+            return Concat(out)
+        case Nest(i, d):
+            return Nest(i, _drop_break_after_hardbreak(d))
+        case Align(a, d):
+            return Align(a, _drop_break_after_hardbreak(d))
+        case Prefix(i, d):
+            return Prefix(i, _drop_break_after_hardbreak(d))
+        case Union(flat, broken):
+            return Union(
+                _drop_break_after_hardbreak(flat),
+                _drop_break_after_hardbreak(broken),
+            )
+        case Fill(docs):
+            return Fill([_drop_break_after_hardbreak(d) for d in docs])
+        case _:
+            return doc
+
+
 def _has_hardline(doc: Doc) -> bool:
     """doc（flat 化后）是否含硬换行（Break/LineBreak）。
 
@@ -441,7 +539,7 @@ def _has_hardline(doc: Doc) -> bool:
     if key in _LAYOUT_CACHE:
         return cast(bool, _LAYOUT_CACHE[key])
     match doc:
-        case Break() | LineBreak():
+        case Break() | HardBreak() | LineBreak():
             result = True
         case Concat(docs):
             result = any(_has_hardline(d) for d in docs)
@@ -466,7 +564,7 @@ def _has_break(doc: Doc) -> bool:
     if key in _LAYOUT_CACHE:
         return cast(bool, _LAYOUT_CACHE[key])
     match doc:
-        case Line() | Break() | LineBreak():
+        case Line() | Break() | HardBreak() | LineBreak():
             result = True
         case Concat(docs):
             result = any(_has_break(d) for d in docs)
@@ -578,7 +676,7 @@ def _fits(w: int, doc: Doc) -> bool:
             return len(s) <= w
         case Line():
             return True  # 换行 = 当前行已结束
-        case Break():
+        case Break() | HardBreak():
             return True
         case Concat(docs):
             col = 0
@@ -588,7 +686,7 @@ def _fits(w: int, doc: Doc) -> bool:
                 match d:
                     case Line():
                         return True
-                    case Break():
+                    case Break() | HardBreak():
                         return True
                     case Text(s):
                         col += len(s)
@@ -620,7 +718,7 @@ def _fits(w: int, doc: Doc) -> bool:
                             if col > w:
                                 return False
                             match inner_d:
-                                case Line() | Break():
+                                case Line() | Break() | HardBreak():
                                     return True
                                 case Text(s):
                                     col += len(s)

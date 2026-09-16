@@ -4,7 +4,17 @@ Doc: renderer/renderer_architecture.md（Line/Break 换行原语）
 """
 from typing import Any
 from core.define import Node
-from ..doc import Doc, Empty, Text, Line as SoftLine, Break, Concat, Nest, group
+from ..doc import (
+    Doc,
+    Empty,
+    Text,
+    Line as SoftLine,
+    HardBreak,
+    LineBreak,
+    Concat,
+    Nest,
+    group,
+)
 from .registry import register
 
 
@@ -31,11 +41,17 @@ def eval_line(expr: dict, node: Node, parent_layout: dict | None,
         if absorb_space and isinstance(e, str) and not e.strip():
             absorb_space = False
             continue
-        if isinstance(e, dict) and (e.get("soft") or e.get("break")):
+        if isinstance(e, dict) and (
+            e.get("soft") or e.get("break") or e.get("hard_break")
+        ):
             indent_level = e.get("indent", 0)
             extra_indent = renderer._indent(indent_level)
-            if e.get("break"):
-                parts.append(Break(extra_indent))
+            # 三态（见 doc.py）：soft 可折叠 / break 组断开时断 /
+            # hard_break 永远断且强制所在组断开
+            if e.get("hard_break"):
+                parts.append(HardBreak(extra_indent))
+            elif e.get("break"):
+                parts.append(LineBreak(extra_indent))
             else:
                 parts.append(SoftLine(extra_indent))
             has_soft = True

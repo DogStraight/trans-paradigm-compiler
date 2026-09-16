@@ -39,7 +39,7 @@ production = [
 ]
 
 [SpecifyDecl.renderer.head]
-line = ["specify", { break = true }]
+line = ["specify", { hard_break = true }]
 
 [SpecifyDecl.renderer.body]
 indent = true
