@@ -95,6 +95,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [lyra](https://github.com/hankhsu1996/lyra) | 深度参考 | SystemVerilog 仿真工具链（C++/Bazel，复用 slang AST），同期活跃的同龄人；多级 IR + 927 case 测试组织可借鉴（详见深调研） |
 | [LLVM](https://llvm.org/) | 深度参考 | 中段治理范本：New PassManager 管线字符串声明 + AnalysisManager 按需缓存/失效传播 + IR verifier 结构自检（详见深调研） |
 | [GCC](https://gcc.gnu.org/) | 深度参考 | 中段治理另一范式：passes.def 静态声明序 + opt_pass 前置属性契约 + verify 固定收尾 + -fdump-* 可视化（详见深调研） |
+| [jam](https://github.com/raphamorim/jam) | 深度参考 | 新系统语言全栈编译器（Rust）：flat AST → typed JIR（+ verifier）→ LLVM；`--emit-*` 冻结转储做重写期逐字节 oracle；typed IR + 机械 lowering 的分工（详见深调研） |
 
 ### 语言工作台与 DSL
 
@@ -1865,3 +1866,66 @@ tpc `[[checks]]` schema / `tests/_check_test.py` / `config` per_file——见
   判定）→ 展开策略（TOML 声明），预处理器从硬编码启发式变配置驱动
   策略执行器——与 grammar 侧"语言知识不进代码"同构。P3.6 形态分类
   是策略选择前提，分类能力一落地现有分支退化为策略表声明。
+
+### jam（Rust）— 全栈系统语言编译器：flat AST → typed JIR → LLVM（2026-09-17 调研，agent-reach + GitHub 源码）
+
+**定位**：Raphael Amorim 的个人语言项目（[jamlang.org](https://jamlang.org)，2025-11 起，
+221★/7 fork，Apache-2.0 with LLVM Exceptions）。一门**新的静态类型系统语言**（mutable
+value semantics、泛型、tagged union、comptime），自带编译器 + std 库 + LLVM 后端；
+**Rust 重写自其 C++ 前身**（最后一个 C++ commit `4e66bc6`）。当前 v0.1 未发布、
+issue/PR 关闭、README 声明 No AI Policy（贡献政策）。
+
+**三端实现（源码级）**
+
+| 端 | crate | 方案 |
+|---|---|---|
+| 前端 | `jam-syntax` | 手写 byte-level lexer（关键字直接 match 字节串）+ 数字字面量解析器 + **flat/tag-dispatched AST**（`ast_flat.rs`：打包节点数组 + `extra` 池存变长负载，按 `AstTag` 分派；`TypePool`/`StringPool` 驻留）+ 手写递归下降 parser（优先级爬升；语句/表达式入口细分，直接写共享池并报诊断） |
+| 中端 | `jam-sema` | `astgen.rs`：AST → **JIR（typed flat IR）**，边降边做 definite-init/drop/exclusivity 检查与 comptime 求值；`analyzer.rs` + `abi.rs`：声明/类型/布局与 **C ABI 分类**（`classify_param`/`classify_return`，rustc 式 by-value-by-pointer 阈值）；`init_analysis.rs`：MVS 三规则（definite init / exclusivity / linear drop）；`drop_registry.rs`、`generics.rs`（按实例化克隆，每实例一个 LLVM 符号）、`module_resolver.rs`/`mangling.rs`；`jir_verify.rs`：**IR verifier**（结构 + def-before-use + 负载边界） |
+| 后端 | `jam-sema::jir_codegen` + `jam-llvm` | `jir_codegen.rs` 自述“purely mechanical: no inference here”（`JirInst` → 几条 LLVM 指令）；`jam-llvm` = LLVM C API raw 绑定 + **C++ shim（`shim/jam_shim.cpp`）** 补新 PM 优化管线（作者记录：不接 shim 时 `--release` 只跑 codegen pass、IR 级 pass 全空，与 `-O0` 无区别）；target/opt/LTO/strip 走 `-C key=value`（对齐 rustc 的 CLI 形态） |
+| 驱动 | `jam`（CLI） | `cli/run.rs`（单遍参数循环 + `-C` 解析）、`cli/emit.rs`（`--emit-tokens/ast/jir/ir` 文本转储） |
+
+**管线**：`Source → Tokens → AST → AstGen → JIR → Codegen → LLVM IR`（`jir.rs` 头注）。
+
+**与 tpc 的对照**
+
+| 维度 | jam | tpc |
+|---|---|---|
+| 定位 | 一门语言的**全栈**实现（语言设计 + 编译器 + std + FFI） | **语言无关的配置驱动前端管线**（语言是数据；不绑语言、不含后端/运行时） |
+| 加语法 | 改 Rust 代码（lexer/parser/ast_flat/astgen/codegen 多点） | 改 TOML（`grammar/<lang>/`），引擎零语言知识（门禁守） |
+| 中端 | typed IR（JIR）+ verifier + MVS 检查 + comptime 求值器 | 作用域/符号/浅语义 + 声明式检查（L1）+ postpass 链（时点契约化）；**无类型推导系统、无 IR**（接受项） |
+| 后端 | LLVM IR（ABI 分类、opt/LTO/strip） | 无后端：renderer 出格式化文本；c4 演示 asm/渲染插件 |
+| 验证 | **差分 oracle**：`--emit-*` 格式与 C++ 前身**逐字节一致**（`cpp-final` tag）+ Rust 单测 + `.jam` 语料 | 对拍（sv-parser/Verible/slang/svlint）+ 门禁体系（覆盖率/smoke/误报基线只许减/隔离巡检/门禁有效性）+ fuzz |
+| 工具面 | 无 formatter/linter/LSP/增量（检索无命中，重心在编译正确性） | 差异化正在这里：格式化保真（双世界）+ 前置 token 级 lint（recall 31/31、0 误报）+ 可配置规范执行 |
+| 治理 | 官网 reference 详尽 + 仓库根 `*_PLAN.md`（带 Zig/rustc 源码**文件与行号**对照的调研） | ADR / MODEL_INDEX / gaps / policy 分层 + 门禁脚本 |
+
+**亮点（标注）**
+
+- 🔥 **中间产物文本转储作为冻结 oracle**（`--emit-tokens/ast/jir/ir`，格式冻结到逐字节，
+  重写期间对齐前身实现）：与 tpc 的“对拍验证”同构，但它把**转储格式本身**做成了有
+  契约的对外接口。tpc 已有中间产物落盘（gen/ast/symbols/lex）+ trace JSON，缺的是
+  “格式冻结 + 逐字节可比”的声明；做 P4 前端桥时这是最省事的回归手段。
+- 🔥 **typed IR + 机械 lowering 的分工**：类型/ABI 决策全在前端完成，后端只做
+  `JirInst → 指令`（明说 no inference）。对 tpc 的 P4.1（多后端）是可直接搬的结构：
+  插件声明目标 → 前端产出类型化中间表示 → 后端机械翻译。
+- 💡 **IR verifier 作为独立可测组件**（`jir_verify.rs`：结构 / def-before-use / 负载
+  边界，返回诊断列表）：与 tpc 刚收编的“单元契约 / 时点可达性校验”同类——校验
+  中间态合法性而非事后调错。tpc 可考虑给 AST/Doc IR 定一组结构不变量做 debug 校验。
+- 💡 **comptime 求值器自带迭代上限**（`DEFAULT_ITER_CAP = 10_000`，超限报“可能死循环”）：
+  tpc 若引入编译期求值（宏/参数折叠），这是必备护栏形态。
+- 📌 **MVS / 参数模式 / 线性 drop**（Hylo/Swift 谱系，论文引用在 README）：属“语言语义
+  上限”参照——tpc 明确不做类型系统（接受项），此条只作“最深的语言知识长什么样”的观察，
+  不进路线。
+- 📌 **调研即仓库内文档**：`CALLC_PLAN.md`/`CFN_VARIADIC_PLAN.md`/`MSGSEND.md` 里带
+  Zig/rustc 源码文件 + 行号对照（如 `ffi/llvm.zig::airCall` 4692-4966），与 tpc 的
+  “见贤思齐 + 落档”同构（我们落 references.md，他落 `*_PLAN.md`）——差异是取舍，非优劣。
+
+**可实现性（对 tpc）**
+
+- 冻结式 `--emit-*` oracle：已有中间产物落盘的稳定化（P4.1 前置，小；接口契约先落档）。
+- typed IR + 机械 lowering 分工：P4.1（多后端/LMM IR）设计参照，零新依赖。
+- IR 不变量校验：可作 `tools/` 自查项（非门禁）或 debug 开关（先定义不变量清单）。
+- MVS / comptime / std：**不实现**——超出“配置驱动前端”边界（README Known limitations
+  已含“深语义在插件代码”）；作为语言包能力的观察样本保留。
+
+**采集**：agent-reach（GitHub 仓库元数据）+ GitHub 源码检索（crate 结构/关键模块）+
+jamlang.org reference（语言能力面）；未拉本地镜像。
