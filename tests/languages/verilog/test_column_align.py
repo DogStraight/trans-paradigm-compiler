@@ -308,3 +308,54 @@ def test_is_multidecl():
     assert _is_multidecl(["a", ",", "b", ";"])
     assert not _is_multidecl(["LATCHED_IRQ", "=", "32'h", "ffff_ffff", ","])
     assert not _is_multidecl(["mem_addr", ","])
+
+
+# ── 注释 token 化（2026-09-17）：注释词不是声明单元 ──
+
+def test_line_comment_is_single_token():
+    """行注释整段成一个 token（旧实现按空白切成 `'//', '32-bit', ...`）。"""
+    toks = _tokenize_bracket_aware("    reg [31:0] IFPC;   // 32-bit program counter IF state")
+    assert toks[-1] == "// 32-bit program counter IF state", toks
+
+
+def test_block_comment_is_single_token():
+    toks = _tokenize_bracket_aware("    reg [7:0] A; /* block comment */")
+    assert toks[-1] == "/* block comment */", toks
+
+
+def test_string_literal_not_split():
+    """字符串内的 `//` 不是注释起点，整串成一个 token（本插件无 lexer 对齐）。"""
+    toks = _tokenize_bracket_aware('    initial $display("a // b, c");')
+    assert '"a // b, c"' in toks, toks
+
+
+def test_trailing_line_comment_decl_skipped():
+    """尾注声明行跳过（保留原文）——旧实现把注释里最后一个标识符当 name，
+    重组出 `reg  IFPC // ... [31:0] state`（`;` 落进注释、声明未闭合）。"""
+    assert _extract("reg [31:0] IFPC;   // 32-bit program counter IF state") is None
+    assert _extract_multi("reg [31:0] IFPC;   // 32-bit program counter IF state") is None
+
+
+def test_trailing_block_comment_decl_skipped():
+    assert _extract("reg [7:0] A; /* block */") is None
+
+
+def test_align_keeps_trailing_comment_lines_intact():
+    """端到端：同组声明行带尾注时，格式化输出保留 `;` 与注释原文（语法不被破坏）。
+
+    回归锚点：曾输出 `reg  IFPC // 32-bit program counter IF [31:0] state`
+    ——`;` 被注释吃掉 → sv-parser 判语法错（darkriscv interop）。
+    """
+    src = (
+        "module m;\n"
+        "    reg [31:0] IFPC;   // 32-bit program counter IF state\n"
+        "    reg [31:0] PC;     // program counter EX stage\n"
+        "endmodule\n"
+    )
+    out = _fmt(src)
+    for line in out.split("\n"):
+        if "//" in line and line.strip().startswith("reg"):
+            head = line.split("//")[0]
+            assert ";" in head, f"尾注声明丢 `;`: {line!r}"
+    assert "program counter IF state" in out
+    assert "program counter EX stage" in out

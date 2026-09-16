@@ -72,11 +72,46 @@ def _tokenize_bracket_aware(line: str) -> list[str]:
     tokens: list[str] = []
     buf: list[str] = []
     in_bracket = 0
+    in_string = False
     i = 0
     n = len(stripped)
     while i < n:
         ch = stripped[i]
-        if ch == "[":
+        if in_string:
+            buf.append(ch)
+            if ch == "\\" and i + 1 < n:
+                buf.append(stripped[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            buf.append(ch)
+        elif ch == "/" and i + 1 < n and stripped[i + 1] == "/":
+            # 行注释整段成单个 token（2026-09-17）：旧实现按空白把注释词切开，
+            # `_parse_decl_parts` 会拿注释里最后一个标识符当 name，重组出
+            # `reg  IFPC // 32-bit program counter IF [31:0] state`（`;` 丢在
+            # 注释里）——声明行语法被破坏。
+            if buf:
+                tokens.append("".join(buf))
+                buf = []
+            tokens.append(stripped[i:])
+            i = n
+            continue
+        elif ch == "/" and i + 1 < n and stripped[i + 1] == "*":
+            # 块注释整段成单个 token（到本行内 `*/` 为止）；未闭合则到行尾
+            if buf:
+                tokens.append("".join(buf))
+                buf = []
+            j = stripped.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            tokens.append(stripped[i:j])
+            i = j
+            continue
+        elif ch == "[":
             in_bracket += 1
             buf.append(ch)
         elif ch == "]":
@@ -122,6 +157,11 @@ def _is_ident(tok: str) -> bool:
     if not tok:
         return False
     return tok[0].isalpha() or tok[0] == "_"
+
+
+def _is_comment_token(tok: str) -> bool:
+    """注释 token（`//` 行注释 / `/*` 块注释整段，见 _tokenize_bracket_aware）。"""
+    return tok.startswith("//") or tok.startswith("/*")
 
 
 def _is_multidecl(rest: list[str]) -> bool:
@@ -223,8 +263,10 @@ def _extract_semantic(tokens: list[str]) -> list[str] | None:
     first = tokens[1]
     rest = list(tokens[2:])
 
-    # 注释行跳过（防 `// comment` 被当声明）
-    if first.startswith("//"):
+    # 注释行跳过（防 `// comment` 被当声明）；含注释 token 的行同样跳过——
+    # 尾注（`reg x;  // c`）不是声明单元，参与列解析会把注释词当标识符/丢 `;`
+    # （与 _extract_semantic_multi 的尾注保护同约定：保留原文不重排，2026-09-17）。
+    if first.startswith("//") or any(_is_comment_token(t) for t in rest):
         return None
 
     # 结尾终结符（,;）独立保存，_join_semantic 重组时加回（防丢）

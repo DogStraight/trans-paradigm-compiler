@@ -986,6 +986,20 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         content = keep_blank_lines(ctx.source, content)
         ctx.log("[renderer] fidelity=keep_blank: blank lines restored")
 
+    # 格式化生成文本（缩进/品类对齐/实例端口对齐）——必须在 restore **之前**：
+    # 此刻文本是 AST 渲染结果（clean_source 的指令已换成
+    # `// <tpc:directive:N>` 注释 marker），**不含预处理指令**。restore 之后
+    # 文本会带回宏调用点/条件块原文与 `ifdef` 指令行，而 formatter 是无预处理器
+    # 的 Verilog formatter——实测被误解析（`reg [31:0] IFPC [0:(2**`__THREADS__)-1];`
+    # 被打散成 `reg IFPC // 注释 [0:...]`，`;` 落进注释 → 输出语法非法，
+    # 2026-09-17 darkriscv interop）。还原原文不是本次生成的代码，按源侧原样输出。
+    if ctx.format_output and content.strip():
+        content = format_generated(
+            content, ctx.rules, ctx.lexer,
+            rule_selector=ctx.rule_selector, rules_dir=ctx.rules_dir,
+        )
+        ctx.log("[formatter] formatted output")
+
     # Restore directive lines（副作用指令 define/undef/include）
     if ctx.directive_lines:
         content = "\n".join(ctx.directive_lines) + "\n" + content
@@ -1000,15 +1014,6 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         tpc_src_map=ctx.tpc_src_map,
         log_fn=ctx.log,
     )
-
-    # 格式化生成文本（缩进/品类对齐/实例端口对齐）— 所有 restore 之后，
-    # 让 formatter 处理还原后的最终文本（含宏/条件块原文），便于与 ref 对比。
-    if ctx.format_output and content.strip():
-        content = format_generated(
-            content, ctx.rules, ctx.lexer,
-            rule_selector=ctx.rule_selector, rules_dir=ctx.rules_dir,
-        )
-        ctx.log("[formatter] formatted output")
 
     # Write output (no header — gen file is raw content for clean diffing)
     if ctx.gen_file:
