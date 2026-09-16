@@ -158,14 +158,37 @@ def render_node(
     slots = getattr(node, "_comment_slots", None)
     if slots:
         lead = slots.get("leading")
-        if lead:
+        own_line = slots.get("leading_own_line")
+        if lead or own_line:
             # leading 注释独立行：`Text(comment) + Break()`——注释后换行，
             # 注释前不主动 break（父级 body 的 Break(body_indent) 提供换行+缩进，
-            # 避免双换行）；缩进继承外层 Nest。
+            # 避免双换行）；缩进继承外层 Nest。行尾型注释（`a || // c`）由此
+            # 落地：注释紧跟前一个片段同行，换行后接本节点（ADR-0014 方向 B）。
+            #
+            # leading_own_line（独占行型）：硬换行独占成行——① 同行后续内容
+            # 会被行注释吃掉；② 独占成行才能还原源的断行位置（`wire HLT =`
+            # 后换行接条件块）。行终止型由 renderer.comment_ends_line 判定。
+            # 两槽拼接按源序：leading（同行行尾）在前，own_line 在后。
             lead_docs: list[Doc] = []
-            for c in lead:
+            for c in lead or ():
                 lead_docs.append(Text(c))
                 lead_docs.append(Break())
+            if own_line:
+                # 整块独占成行：块首一个硬换行 + 注释之间单换行 + 块尾一个硬换行
+                # （逐条各加首尾硬换行会在多条注释之间叠出空行）。
+                # 块注释（非行终止型）逐条 Text+Break（不断行吞内容）。
+                line_cs = [c for c in own_line if renderer.comment_ends_line(c)]
+                if line_cs:
+                    lead_docs.append(HardBreak())
+                    for k, c in enumerate(line_cs):
+                        if k:
+                            lead_docs.append(HardBreak())
+                        lead_docs.append(Text(c.rstrip()))
+                    lead_docs.append(HardBreak())
+                for c in own_line:
+                    if not renderer.comment_ends_line(c):
+                        lead_docs.append(Text(c))
+                        lead_docs.append(Break())
             parts = lead_docs + parts
         inline = slots.get("inline")
         if inline:

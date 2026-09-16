@@ -406,6 +406,12 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
 
         case Concat(docs):
             result: list[str] = []
+            # 行状态（当前行是否只余缩进）+ 结束本行的断行类型：当前行已空且由
+            # **非硬**断行结束时，子项开头的硬换行是冗余（父布局已在此断行）
+            # ——不去会叠出纯空白行（三元 `? :` 断行 + 注释前硬换行 = 空行）。
+            # 连续 HardBreak 是显式空行惯例（tail_break 等），不由本路径挤除。
+            line_empty = False
+            ended_by_hard = False
             for i, d in enumerate(docs):
                 # 本项同行的前后兄弟宽度（到首个换行点为止）——
                 # Union 判定预算 = w - k - 前面已占 - 后续将占
@@ -419,8 +425,15 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
                     if _has_break(sibling):
                         break  # 换行点后的兄弟在新行（不在本行）
                     rest_w += _flat_w(sibling)
+                if line_empty and not ended_by_hard:
+                    d = _strip_leading_hardbreak(d)
                 s = _best(w, k, d, before_w + rest_w)
                 result.append(s)
+                if "\n" in s:
+                    line_empty = s.rsplit("\n", 1)[1].strip() == ""
+                    ended_by_hard = _ends_with_hardbreak(d)
+                elif s.strip():
+                    line_empty = False
             return "".join(result)
 
         case Nest(i, d):
@@ -489,6 +502,31 @@ def _ends_with_hardbreak(doc: Doc) -> bool:
             return _ends_with_hardbreak(d)
         case _:
             return False
+
+
+def _strip_leading_hardbreak(doc: Doc) -> Doc:
+    """去掉 doc 开头的硬换行（当前行已空 → 该断行冗余，防叠出空行）。
+
+    沿 Concat/Nest/Align/Prefix 下钻到首个叶子：首叶为 HardBreak 则去掉。
+    空行惯例（连续 `Break`）不经此路径，不受影响。
+    """
+    if isinstance(doc, HardBreak):
+        return Empty()
+    if isinstance(doc, Concat):
+        if doc.docs and isinstance(doc.docs[0], HardBreak):
+            rest = doc.docs[1:]
+            return Concat(rest) if rest else Empty()
+        return doc
+    if isinstance(doc, Nest):
+        inner = _strip_leading_hardbreak(doc.doc)
+        return Empty() if isinstance(inner, Empty) else Nest(doc.indent, inner)
+    if isinstance(doc, Align):
+        inner = _strip_leading_hardbreak(doc.doc)
+        return Empty() if isinstance(inner, Empty) else Align(doc.align, inner)
+    if isinstance(doc, Prefix):
+        inner = _strip_leading_hardbreak(doc.doc)
+        return Empty() if isinstance(inner, Empty) else Prefix(doc.indent, inner)
+    return doc
 
 
 def _drop_break_after_hardbreak(doc: Doc) -> Doc:

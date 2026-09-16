@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **表达式内独占行注释按结构落位（pratt 三分类 + `leading_own_line` 槽）**：表达式
+  入口/操作符间隙的注释原只分"行中/行尾"两类（`inline_after` / `leading`），独占行
+  的那种被当成行尾 → 落到操作符同行。现三分类：行中 → `inline_after`；行尾 →
+  后续操作数 `leading`；**独占行** → 新增槽 `leading_own_line`（`node_renderer` 前置：
+  块首尾各一硬换行、注释间单换行；行终止型由语言包声明驱动
+  `Renderer.comment_ends_line`，引擎不硬编码注释语法）。效果（darkriscv 实测）：
+  表达式内部的 standalone 注释与条件块起始行**独立成行且保持源序**
+  （`//FCT3==5 ?`、`` `ifdef MODEL_TECH ``、`` `ifdef __DBNZ__ ``、
+  `` `ifdef __COPROCESSOR__ `` 不再被塞进操作符同行）；输出与基线差异 12 行、全为
+  该形态，纯空白行数与基线持平（15）。
+  渲染端配套：`layout` 的 Concat 分支带**行状态**——当前行只余缩进且由非硬断行结束
+  时，挤掉子项开头的 HardBreak（`_strip_leading_hardbreak`，防"父断行 + 注释首断行"
+  叠出空行）；显式空行惯例（连续 `Break`）不受影响（既有断言
+  `test_consecutive_breaks_kept_for_blank_lines` 保持通过）。
+  验证：全量 1971 passed / 7 skipped；新增 `tests/languages/verilog/
+  test_expr_own_line_comments.py`（条件块位置 + 行尾注释不误升独占行）、
+  `tests/engine/renderer/test_comment_slots.py::TestLeadingOwnLineSlot`（3 例）。
+  遗留：`` `=` `` 与右操作数之间的 3 处（`wire HLT =`、`RMDATA =` 及被抬到
+  `wire BMUX` 的 `__MEXT__` 块）需先定通道优先级，见 `TODO.md` P1.5。
+
 ### Fixed
 
 - **列表项间条件块占位位置（端口表内 `ifdef` 组漂移）**：`_lift_gap_comments`

@@ -21,6 +21,10 @@ def _make_fake_renderer():
         def _indent(self, level):
             return level * len(self._INDENT_STR)
 
+        def comment_ends_line(self, text):
+            """行终止型注释判定（真 renderer 由语言包 `[comment] pairs` 声明驱动）。"""
+            return text.startswith("//")
+
         def _get_merged_layout(self, parent_layout, child_name):
             del parent_layout, child_name  # renderer 协议签名参数
             return {"layout": {"ref": "value"}}

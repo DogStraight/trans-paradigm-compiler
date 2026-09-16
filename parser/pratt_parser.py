@@ -171,24 +171,26 @@ def parse_number_literal(token: Token) -> Node:
 def _skip_gap_comments(
     tokens: list[Token],
     idx: int,
-) -> tuple[int, list[tuple[str, int]], list[tuple[str, int]]]:
-    """跳过 operator 消费后、操作数解析前的 trivia，收集行中注释（ADR-0013 决策 5）。
+) -> tuple[int, list[tuple[str, int]], list[tuple[str, int]], list[tuple[str, int]]]:
+    """跳过 operator 消费后、操作数解析前的 trivia，收集注释（ADR-0013 决策 5）。
 
     语义：`a + /* c */ b` 的 `/* c */` 位于 operator（`+`）与右操作数之间
     ——由消费 operator 的调用点在递归操作数前先行跳过并收集，注释随即将构造
-    的 BinaryOp/TernaryOp/UnaryOp 节点上挂（inline_after，锚 = operator）。
-    与 parse_expression 入口的前缀 while 互补：入口 while 处理"表达式开头"
-    的注释（无 operator 上下文）；本函数处理"operator 间隙"的注释。
+    的 BinaryOp/TernaryOp/UnaryOp 节点上挂。与 parse_expression 入口的前缀
+    while 互补：入口 while 处理"表达式开头"的注释。
 
-    行中/行尾判定（与 parser collect_following_comments 同语义）：
-      - 行中（注释后同行有代码）→ 返回 midline，调用方挂节点 inline_after；
-      - 行尾（注释后即换行，`//` 行注释典型形态）→ 返回 eol，调用方挂
-        后续 RHS 子节点 leading（ADR-0014 方向 B：`//` 注释在重排表达式内
-        必须位于输出行尾，只能随操作数独立断行——挂 RHS leading 机械安全）。
+    三分类（按源中注释与相邻 token 的同/异行关系，与 parser 侧同语义）：
+      - 行中（注释后同行有代码）→ midline，调用方挂 inline_after（锚 = op）；
+      - 独占行（注释前无同行代码、后同行无代码）→ own_line，挂后续 RHS 的
+        leading_own_line（硬换行独占成行：源的断行位置在此，插值回插在
+        折叠区里必偏）；
+      - 行尾（注释前同行有代码、注释后换行）→ eol，挂后续 RHS 的 leading
+        （ADR-0014 方向 B：行注释必须位于输出行尾，随操作数独立断行）。
 
-    Returns: (新 idx, midline 注释 [(text, line)], eol 注释 [(text, line)])
+    Returns: (新 idx, midline, own_line, eol) 注释 [(text, line)]
     """
     midline: list[tuple[str, int]] = []
+    own_line: list[tuple[str, int]] = []
     eol: list[tuple[str, int]] = []
     while idx < len(tokens):
         t = tokens[idx]
@@ -210,6 +212,8 @@ def _skip_gap_comments(
                 break
             if nxt is not None and getattr(nxt, "line", -1) == t.line:
                 midline.append((t.content, t.line))
+            elif _is_own_line(tokens, idx):
+                own_line.append((t.content, t.line))
             else:
                 eol.append((t.content, t.line))
             idx += 1
@@ -218,7 +222,21 @@ def _skip_gap_comments(
             idx += 1
             continue
         break
-    return idx, midline, eol
+    return idx, midline, own_line, eol
+
+
+def _is_own_line(tokens: list[Token], idx: int) -> bool:
+    """注释是否独占一行（向前扫：前一个显著 token 在更早的行 = 独占行）。"""
+    j = idx - 1
+    while j >= 0:
+        prev = tokens[j]
+        if not isinstance(prev, Token):
+            return True
+        if prev.type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE) or prev.type.startswith("space"):
+            j -= 1
+            continue
+        return getattr(prev, "line", -1) != getattr(tokens[idx], "line", -2)
+    return True
 
 
 def _mount_op_comments(
@@ -250,13 +268,15 @@ def _mount_op_comments(
 def _mount_leading_comments(
     node: Node,
     eol_comments: list[tuple[str, int]],
+    own_line: bool = False,
 ) -> None:
-    """将 operator 行尾注释挂到后续 RHS 子节点 leading（ADR-0014 方向 B）。
+    """将注释挂到后续 RHS 子节点的前置槽（ADR-0014 方向 B 及其独占行变体）。
 
-    `_comment_slots["leading"] = [text, ...]`——与 renderer node_renderer
-    leading 槽协议一致（节点文本前独立行，Text(comment)+Break 前置，
-    group 内恒断行）。空列表不挂（无属性噪音）。语言无关：`_comment_slots`
-    是引擎协议（下划线属性，normalizer 保留、dump 过滤）。
+    `_comment_slots["leading"] = [text, ...]`（行尾型，Text(comment)+Break 前置）
+    或 `_comment_slots["leading_own_line"]`（独占行型，硬换行独占成行）——
+    与 renderer node_renderer 槽协议一致。空列表不挂（无属性噪音）。
+    语言无关：`_comment_slots` 是引擎协议（下划线属性，normalizer 保留、
+    dump 过滤）。
 
     Node 守卫：操作数可能来自外部 atom_parser——linter 的原子解析器
     （ExpressionChecker）返回 object() 占位（AST 丢弃，仅判合法性），非
@@ -268,7 +288,8 @@ def _mount_leading_comments(
     if slots is None:
         slots = {}
         node.add_attr("_comment_slots", slots)
-    lead = slots.setdefault("leading", [])
+    key = "leading_own_line" if own_line else "leading"
+    lead = slots.setdefault(key, [])
     for text, _ in eol_comments:
         if text not in lead:
             lead.append(text)
@@ -309,30 +330,30 @@ def parse_expression(
     # 续行、行尾运算符（wrap 折行 `&&` 留行尾）后接操作数等，newline 是续行
     # 分隔符。表达式"结束"仍由中缀循环控制（遇 newline 非运算符自然 break），
     # 前缀跳过不吞掉结束信号——`expr1\n expr2` 在 expr1 的中缀循环即退出。
-    # 注释不纳入 AST 但不得静默丢失（P1.5）：跳过时经 comment_sink 记录，
-    # 锚 = 注释前最后一个 token（与 parse_token 行中注释语义一致，连续注释
-    # 共用同一锚，restore 去重兜底）。无 sink 或锚不可得（前无 token /
-    # 预解析 Node）时保持原行为跳过（Node 前的注释由外层规则收集）。
+    # 注释不纳入 AST 但不得静默丢失（P1.5）：**能挂树就挂树**——前缀操作数
+    # 节点（表达式起始处）的 leading 槽位（ADR-0014 方向 B 同族：行尾/独占行
+    # 注释随节点独立断行）；挂不上（无节点可挂/预解析 Node 之前/linter 原子
+    # 占位）才退 comment_sink 锚点通道（restore 兜底）。挂树后 restore 按
+    # 文本在场跳过——不双份。
+    #
+    # 为何挂前缀节点而不是行尾：`wire HLT =\n// <tpc:cond:51>\n(DDREQ ? …)`
+    # 这类位置（语句内部、右操作数之前）在清洁流里锚不可用——渲染端按锚插值
+    # 会把占位落到折叠区外（"清洁流相邻 ≠ 源相邻"）。挂 leading 后位置来自
+    # 树结构：注释独占一行、后续操作数另起一行。
+    entry_comments: list[tuple[str, int]] = []
+    entry_own_line: list[tuple[str, int]] = []
     _anchor_tok = tokens[idx - 1] if idx > 0 else None
     while (
         idx < len(tokens)
         and isinstance(tokens[idx], Token)
         and tokens[idx].type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
     ):
-        if (
-            tokens[idx].type == COMMENT_TOKEN_TYPE
-            and comment_sink is not None
-            and isinstance(_anchor_tok, Token)
-            and _anchor_tok.content
-        ):
-            comment_sink(
-                {
-                    "anchor": _anchor_tok.content,
-                    "text": tokens[idx].content,
-                    "line": tokens[idx].line,
-                    "midline": True,
-                }
-            )
+        if tokens[idx].type == COMMENT_TOKEN_TYPE:
+            entry = (tokens[idx].content, tokens[idx].line)
+            if _is_own_line(tokens, idx):
+                entry_own_line.append(entry)
+            else:
+                entry_comments.append(entry)
         idx += 1
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
@@ -370,7 +391,9 @@ def parse_expression(
                 # 前缀一元 operator 间隙注释（`- /* c */ a`）：跳过并收集，
                 # 行中挂 UnaryOp inline_after（ADR-0013 决策 5）；行尾挂
                 # operand leading（ADR-0014 方向 B）
-                idx, gap_comments, eol_comments = _skip_gap_comments(tokens, idx)
+                idx, gap_comments, own_line_comments, eol_comments = _skip_gap_comments(
+                    tokens, idx
+                )
                 right, idx = parse_expression(
                     tokens,
                     idx,
@@ -388,6 +411,7 @@ def parse_expression(
                 node = Node("UnaryOp", op=op, operand=right, position="prefix")
                 _mount_op_comments(node, op, gap_comments)
                 _mount_leading_comments(right, eol_comments)
+                _mount_leading_comments(right, own_line_comments, own_line=True)
             else:
                 raise ValueError(f"不支持的前缀运算符: {token.content}")
         elif is_none(token):
@@ -395,6 +419,29 @@ def parse_expression(
             idx += 1
         else:
             raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
+
+    # 入口注释落位（P1.5）：能挂树就挂树——前缀操作数节点 leading 槽
+    # （行尾/独占行注释随节点断行）；挂不上（原子占位非 Node、linter 丢 AST）
+    # 才退 comment_sink 锚点通道（restore 兜底）。挂树后 restore 按文本在场
+    # 跳过——不双份。
+    if entry_comments or entry_own_line:
+        if isinstance(node, Node):
+            _mount_leading_comments(node, entry_comments)
+            _mount_leading_comments(node, entry_own_line, own_line=True)
+        elif (
+            comment_sink is not None
+            and isinstance(_anchor_tok, Token)
+            and _anchor_tok.content
+        ):
+            for c_text, c_line in [*entry_comments, *entry_own_line]:
+                comment_sink(
+                    {
+                        "anchor": _anchor_tok.content,
+                        "text": c_text,
+                        "line": c_line,
+                        "midline": True,
+                    }
+                )
 
     # ── 中缀（led）──
     while idx < len(tokens):
@@ -455,9 +502,12 @@ def parse_expression(
             assoc = props.get("assoc", "left")
             right_rbp = lbp - 1 if assoc == "right" else lbp
             # operator 间隙注释（`a + /* c */ b`）：跳过并收集，行中挂
-            # BinaryOp inline_after（ADR-0013 决策 5）；行尾挂 RHS leading
+            # BinaryOp inline_after（ADR-0013 决策 5）；行尾挂 RHS leading，
+            # 独占行挂 RHS leading_own_line
             # （ADR-0014 方向 B——`a || // c\n b` 的 `// c` 标注当行片段）
-            idx, gap_comments, eol_comments = _skip_gap_comments(tokens, idx)
+            idx, gap_comments, own_line_comments, eol_comments = _skip_gap_comments(
+                tokens, idx
+            )
             right_node, idx = parse_expression(
                 tokens,
                 idx,
@@ -475,6 +525,7 @@ def parse_expression(
             node = Node("BinaryOp", op=op, left=node, right=right_node)
             _mount_op_comments(node, op, gap_comments)
             _mount_leading_comments(right_node, eol_comments)
+            _mount_leading_comments(right_node, own_line_comments, own_line=True)
         elif arity == 3:
             second_sym = props.get("second")
             if not second_sym:
@@ -482,7 +533,9 @@ def parse_expression(
             idx += 1
             # 三目 op1（`?`）间隙注释（`cond ? /* 真 */ a : b`）：跳过并收集，
             # 行中挂 TernaryOp inline_after；行尾挂 true_val leading（方向 B）
-            idx, gap_comments1, eol_comments1 = _skip_gap_comments(tokens, idx)
+            idx, gap_comments1, own_line1, eol_comments1 = _skip_gap_comments(
+                tokens, idx
+            )
             middle, idx = parse_expression(
                 tokens,
                 idx,
@@ -502,7 +555,9 @@ def parse_expression(
             idx += 1
             # 三目 op2（`:`）间隙注释（`cond ? a : /* 假 */ b`）：跳过并收集，
             # 行中挂 TernaryOp inline_after；行尾挂 false_val leading（方向 B）
-            idx, gap_comments2, eol_comments2 = _skip_gap_comments(tokens, idx)
+            idx, gap_comments2, own_line2, eol_comments2 = _skip_gap_comments(
+                tokens, idx
+            )
             right, idx = parse_expression(
                 tokens,
                 idx,
@@ -527,8 +582,10 @@ def parse_expression(
             )
             _mount_op_comments(node, op, gap_comments1)
             _mount_leading_comments(middle, eol_comments1)
+            _mount_leading_comments(middle, own_line1, own_line=True)
             _mount_op_comments(node, second_sym, gap_comments2)
             _mount_leading_comments(right, eol_comments2)
+            _mount_leading_comments(right, own_line2, own_line=True)
         else:
             raise ValueError(f"不支持的运算符元数: {arity}")
 

@@ -41,6 +41,35 @@ class TestLeadingSlot:
         assert out == "// 注释一\n/* 注释二 */\nx"
 
 
+class TestLeadingOwnLineSlot:
+    def test_own_line_comment_takes_its_own_line(self):
+        """leading_own_line：行终止型注释硬换行独占成行（前后各一硬换行）。"""
+        node = _stmt("x")
+        node.add_attr(
+            "_comment_slots", {"leading_own_line": ["// 独占行"]}
+        )
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "\n// 独占行\nx", repr(out)
+
+    def test_multiple_own_line_comments_no_blank_line(self):
+        """多条独占行注释之间不叠空行（块首尾各一硬换行，行间单换行）。"""
+        node = _stmt("x")
+        node.add_attr(
+            "_comment_slots", {"leading_own_line": ["// 一", "// 二"]}
+        )
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "\n// 一\n// 二\nx", repr(out)
+
+    def test_block_comment_in_own_line_slot_keeps_flow(self):
+        """块注释（非行终止型）不走硬换行（不断源片段）。"""
+        node = _stmt("x")
+        node.add_attr(
+            "_comment_slots", {"leading_own_line": ["/* 块 */"]}
+        )
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert out == "/* 块 */\nx", repr(out)
+
+
 class TestTrailingSlot:
     def test_trailing_comment_line_end(self):
         """trailing 槽位：行尾注释锚定语句行尾。"""

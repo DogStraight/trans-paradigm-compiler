@@ -120,9 +120,15 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
   前独占注释上浮（`_claim_head_comments`）→ join 拆独立行段渲染。
 - **行内/行尾 = 节点 `_comment_slots`**：`trailing`（node_renderer →
   LineSuffix 行尾）/ `inline_after`（line.py 遇锚元素插后删槽，join 消费
-  锚=分隔符条目）/ `leading`（node_renderer 前置）。
-- **pratt 表达式内注释**：operator 间隙行中 → `_mount_op_comments` 挂
-  BinaryOp/TernaryOp/UnaryOp `inline_after[op]`（此前唯一的旁路丢注释位）。
+  锚=分隔符条目）/ `leading`（node_renderer 前置，行尾型：注释紧跟上一片段
+  同行）/ `leading_own_line`（node_renderer 前置，独占行型：块首尾各一硬
+  换行、注释间单换行——源中注释自成一行时用它，否则行注释会吃掉同行后续
+  内容；行终止型由声明驱动 `Renderer.comment_ends_line` 判定）。
+- **pratt 表达式内注释（三分类）**：operator 间隙/表达式入口按“注释前同行
+  有无代码 + 注释后同行有无代码”归位——行中 → `_mount_op_comments` 挂
+  BinaryOp/TernaryOp/UnaryOp `inline_after[op]`；行尾 → 后续操作数
+  `leading`；独占行 → 后续操作数 `leading_own_line`（块首独立成行，源断行
+  位置在此；靠锚点插值会在折叠区里定位漂移）。
 - 机制细节与测试门禁见 `docs/MODEL_INDEX.md`「注释单机制设计」知识单元。
 
 ### 保真度分级（阶段 5）
