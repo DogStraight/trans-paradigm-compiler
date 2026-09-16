@@ -385,7 +385,12 @@ def _ensure_shared(ctx: _PipelineContext) -> None:
         rule_selector = RuleSelector(rules, stmt_names)
         lexer = Lexer(rules_dir=ctx.rules_dir, ext_dirs=ctx.ext_dirs)
         linter = LinterScanner(rules_dir=ctx.rules_dir, ext_dirs=ctx.ext_dirs)
-        renderer = Renderer(rules_dir=ctx.rules_dir)
+        # 行终止型注释起点由词法声明（[comment] pairs 的 kind）传入渲染器：
+        # 渲染阶段据此补硬换行，防止行注释吃掉同行后续元素。
+        renderer = Renderer(
+            rules_dir=ctx.rules_dir,
+            line_comment_starts=lexer.line_terminating_comment_starts(),
+        )
         # 组件映射配置按 rules_dir 缓存：get_component_mapping_config 读全局
         # _loaded_components，而其他语言包的 setup_grammar 会 clear+重载它——
         # 复用本缓存时若再读全局会拿到别的语言包组件（typed_ports mapping 丢失）。

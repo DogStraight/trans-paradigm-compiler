@@ -191,6 +191,14 @@ def eval_join(
             result.extend(suffixes)
     if pending_suffix:
         result.extend(pending_suffix)
+        # 末项行尾注释属"到行边界终止"型（行注释）时，行必须在此结束：列表
+        # 后面若还有同行布局元素（模块端口关闭 `)` `;`），注释会把它们吃进
+        # 注释文本（`output [3:0] DEBUG // ... :));` → 端口表未闭合，语法非法，
+        # 2026-09-17 darkriscv）。补硬换行，后续元素另起一行。
+        # 哪种注释属该型由语言包声明（renderer.comment_ends_line），引擎不
+        # 硬编码标点；块注释不需断行，保持同行（`input clk, /* c */ output`）。
+        if any(renderer.comment_ends_line(s.text) for s in pending_suffix):
+            result.append(Break())
 
     # 分隔符行中注释槽清理：消费空键即删（B1.4 已删 leftover 回插通道）
     if _node_slots is not None and sep_anchor:

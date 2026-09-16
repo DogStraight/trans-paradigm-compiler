@@ -25,13 +25,25 @@ class Renderer:
     _INDENT_STR = "    "
     _MAX_INLINE = 40
 
-    def __init__(self, rules_dir: str):
+    def __init__(self, rules_dir: str, line_comment_starts: tuple[str, ...] = ()):
         self._layouts: dict[str, dict] = {}
         self._children_field = CHILDREN_FIELD
+        # 行终止型注释起点（声明驱动：语言包 `[comment] pairs` 的 kind，
+        # 由调用方从 lexer 取——见 Lexer.line_terminating_comment_starts）
+        self._line_comment_starts = line_comment_starts
         load_layouts(rules_dir, self._layouts)
         self._apply_style(rules_dir)
         # 布局合并缓存 {(parent_type, child_type): merged_layout}
         self._merged_layout_cache: dict[tuple[str, str], dict] = {}
+
+    def comment_ends_line(self, text: str) -> bool:
+        """注释文本是否属"到行边界终止"型（声明驱动，非硬编码标点）。
+
+        是 → 其后不得再接同行元素：回读时这些元素会被并入注释文本
+        （`output x // c);` → 端口表未闭合）。列表末项/项间据此补硬换行。
+        """
+        stripped = text.lstrip()
+        return any(stripped.startswith(s) for s in self._line_comment_starts)
 
     def _get_merged_layout(self, parent_layout: dict, child_node_name: str) -> dict:
         """获取子节点的合并后布局（base_layout + override），带缓存"""

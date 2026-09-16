@@ -521,3 +521,17 @@ class TestLexerIntegration:
         tokens = lexer.tokenize("/* a\nb */\nx = 1\n")
         x = next(t for t in tokens if t.content == "x")
         assert x.line == 3
+
+    def test_line_terminating_comment_starts_from_declaration(self, config_loaded):
+        """行终止型注释起点只由声明给出（kind = line；block → marker 不算）。
+
+        渲染阶段据此判断"行尾注释后必须换行"——引擎不得硬编码注释标点。
+        """
+        del config_loaded  # fixture 依赖声明（配置加载）
+        td = _make_td(comment_pairs=[["#", "\n", "line"], ["/*", "*/", "block"]])
+        assert _lexer_with(td).line_terminating_comment_starts() == ("#",)
+
+    def test_no_comment_declaration_means_empty_starts(self, config_loaded):
+        """无注释声明 → 空词表（引擎零语言知识）。"""
+        del config_loaded  # fixture 依赖声明（配置加载）
+        assert _lexer_with(_make_td()).line_terminating_comment_starts() == ()

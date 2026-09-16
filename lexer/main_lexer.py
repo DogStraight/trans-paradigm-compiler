@@ -13,6 +13,7 @@ import os
 from core.define import Token
 from core.config_registry import declare_cfg
 from core.token_protocol import (
+    COMMENT_TOKEN_TYPE,
     bracket_left,
     bracket_right,
     keyword_type,
@@ -762,6 +763,20 @@ class Lexer:
     def _starts_comment(self, text: str, idx: int) -> bool:
         """idx 处（行首空白后）是否以注释标记开头（auto 锁定跳过注释行）。"""
         return any(text.startswith(s, idx) for s in self._comment_starts)
+
+    def line_terminating_comment_starts(self) -> tuple[str, ...]:
+        """声明为"到行边界终止"（kind ∈ line/line_match）的注释起点。
+
+        词表来自语言包声明（`[comment] pairs` / `[capture]`），与捕获实现
+        同源（见 capture_runner：kind == "line" 的捕获到换行终止）；引擎只按
+        kind 词表判类，不知晓具体注释标点。渲染阶段据此判断"行尾注释后必须
+        换行"（同行后续元素回读时会被并入注释文本——注释吃码）。
+        """
+        return tuple(
+            r.start
+            for r in self._capture_rules
+            if r.token_type == COMMENT_TOKEN_TYPE and r.kind in ("line", "line_match")
+        )
 
     # 仅供 tokenize 内部调用
     def _extend_symbol_at(self, text: str, idx: int) -> bool:

@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **darkriscv 互操作回门禁（两条与条件块无关的真缺陷）**：sv-parser 接受原始
+  源、拒 tpc 输出；探查（2026-09-17）证伪原归因「条件块嵌套位置精度」——实测
+  157 个条件块占位中 118 个独占行精确命中 / 36 嵌套（多轮还原）/ 3 行内 /
+  **0 丢失**，渲染文本原生 marker 116，仅 5 个被 production skip 吞掉需回插；
+  关 formatter 后「还原文本 == 最终输出」（相似度 1.0000）。真因两条：
+  ① **formatter 二次格式化还原原文**：`format_generated` 原在 restore **之后**
+  跑，还原文本带回 `ifdef` 指令行与未展开宏引用，无预处理器的 Verilog
+  formatter 把声明打散（`reg [31:0] IFPC [0:(2**`__THREADS__)-1];  // 注释` →
+  `reg IFPC // 注释 [0:...]`，`;` 落进注释）。改为 restore **之前**格式化
+  （此刻文本已把指令换成注释 marker，不含指令），还原原文按源侧原样输出。
+  ② **收尾符被行尾注释吃掉**：renderer 把端口表收尾 `);` 与末项同行，末项
+  行尾是行注释时 `);` 落入注释（`output [3:0] DEBUG // … :));` → 端口表未闭合）。
+  join 原语改为：末项行尾注释属声明为「到行边界终止」型（语言包
+  `[comment] pairs` 的 kind，经 `Lexer.line_terminating_comment_starts()`
+  传入）时补硬换行——引擎不硬编码注释标点（`Renderer.comment_ends_line`）。
+  ③ 同一批修的是 **column_align 尾注声明破坏**：插件内 ad-hoc 分词器把行注释
+  按空白切词，`_parse_decl_parts` 取注释里最后一个标识符当 name → 重组出
+  `reg  IFPC // … [31:0] state` 且丢 `;`（同组 ≥2 行触发对齐）。分词器改为
+  注释（`//` 整行 / `/*…*/`）整段成单 token 并识别字符串字面量；单声明提取
+  加尾注保护（保留原文，与多声明路径同约定）。
+  验证：darkriscv tpc 输出被 sv-parser 接受（rc 1 → 0，format 开/关两种）；
+  `_SVPARSER_INTEROP_SKIP` 取消 darkriscv 豁免；全量 1942 passed / 7 skipped；
+  smoke 363；新增断言：`tests/languages/verilog/test_render_restore_boundary.py`
+  （还原原文逐字/收尾符不被吞，两模式）、`tests/engine/renderer/
+  test_comment_ends_line.py`（声明驱动判类）、`test_capture_runner.py` 两例
+  （词表只来自声明）、`test_column_align.py` 六例（注释 token 化/尾注行跳过）。
+
 ### Changed
 
 - **删除 `sync` 锚兼容路线（宏还原）**：锚 `mode` 现为三态（`line` / `inline` /
