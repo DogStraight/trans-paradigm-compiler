@@ -126,6 +126,9 @@
 - 快速回归：`pytest -m smoke`（~12s，功能域代表层，日常改动先跑；分层见 `tests/README.md`）
 - 全量测试：`pytest tests/`（零运行时依赖，无第三方包）
 - 开发自查工具（都不进日常门禁，人工/按需跑）：
+  - 配置同步点位 `tools/config_sites.py`（引擎语义/键名变更时机械枚举语言包配置
+    点位：`list` 清单 / `check` 漂移哨兵 / `rename` 逐项替换；规程见
+    `policy/engine_config_sync.md`）
   - 增量覆盖率 `tools/check_coverage_delta.py`（只看改动文件，几十秒）
   - 真实语料误报基线 `tests/e2e/eval_diag_baseline.py`（增长即失败；查证误报用
     `eval_benchmark.py`，需外部 oracle）

@@ -10,6 +10,7 @@
 |------|------|----------|
 | `coding-style.md` | 代码风格（注释语言/分区标题/命名） | `check_hardcode.py`（规则 1-4） |
 | `doc-alignment.md` | 文档↔代码对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）+ 引用纪律（锚机制不锚 ADR）+ 删除判据（先证后删） | `check_doc_refs.py` / `doc_sync.py` |
+| `engine_config_sync.md` | 引擎语义/键名变更的配置同步规程（四步“翻译”式：定位语言包 → 取配置字典 → 整键匹配 → 逐项替换；子串误伤防范） | `tools/config_sites.py`（`list` / `check` / `rename`，开发自查，见规程） |
 | `release-checklist.md` | 发布 SOP（回归门禁 → 版本 → build → 包验证 → wheel 冒烟 → tag） | （人走流程，发布收尾） |
 
 ## 门禁工具
