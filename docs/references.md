@@ -1886,6 +1886,36 @@ issue/PR 关闭、README 声明 No AI Policy（贡献政策）。
 
 **管线**：`Source → Tokens → AST → AstGen → JIR → Codegen → LLVM IR`（`jir.rs` 头注）。
 
+#### 对照：宏体入树（tpc 0.1.2 的核心问题）
+
+jam **没有文本宏系统**（全仓检索 preprocessor/macro/#define 无命中；官网 reference 章节表
+亦无预处理章节）——它的编译期能力是**语言内一等构造**，因此"宏体是文本、要再解析、
+渲染要还原原文"这一整类问题在它那儿不存在：
+
+| | jam | tpc（ADR-0017 路线） |
+|---|---|---|
+| 编译期机制 | `comp`（const/var/if/参数特化）+ `cfn`（编译期执行、把代码**发进调用者**）+ `@` 内建 | 文本宏（`` `define `` / 宏调用）由**外层预处理器**处理，引擎不承认宏语法 |
+| "宏体"是什么 | **类型化 JIR 指令**（编译器自己造的节点，不是待解析文本） | 源文本片段（需重新走 lex/parse；或按 ADR-0017 由 linter 在展开后文本上检查） |
+| 产出物定位 | jam 的产物是 IR/机器码 → 每个 JirInst 只带 `src_line` 供诊断用；**无需还原调用点原文** | tpc 的产物是**格式化后的源码文本** → 宏调用必须按原文输出（`MacroCall` 节点 + raw 源区间还原） |
+| 死分支/常量 | `comp if` 死臂**从不 lower**、`comp const` 在使用点内联为常量值——没有"文本残留"要清理 | 展开后要保证渲染能逐字还原、位置可映射（条件编译还原是 P1.5 的难点） |
+
+**实现细节（可借鉴的工程手法）**：`cfn` 体在 AstGen 期执行，执行时共享池被不可变借用
+（`exec_block` 持借用）→ 调用者的 JIR **不能在执行中被改**，于是它们把编译期要产出的代码
+**记录为纯数据**（`CfnEmitCmd`，如 `WriteBytes { fd, fmt, .. }` / `PrintLocal`），
+**执行结束后再 replay 进调用者的 JIR**（`astgen.rs::RecordingCfnEmitter` + 实现
+`comptime::CompEmitter` trait 的 `handle_at_call`；docstring 原文："intrinsics are RECORDED
+as pure data during execution and REPLAYED into the caller's JIR after the borrows release"）。
+产出指令经统一 `emit()` 入块，`src_line` 取当前节点行号 → 诊断仍指向宏生成处附近。
+
+- 💡 **对本项目的启示（不照搬）**：两边的取舍由**产物形态**决定——产物是源码文本（tpc），
+  就必须保留调用点原文与位置映射；产物是 IR（jam），"编译期生成"天然就是造节点。
+  tpc 若要减少文本展开面，可考虑的不是"把 preprocessor 变成 typed IR"（那会要求语言有类型
+  系统），而是**收窄需要原文还原的宏形态**（ADR-0017 已走一半：完整单元宏可入树、残缺片段
+  维持展开）——判据仍是"渲染能否逐字还原"。
+- 💡 **记录-重放（record-then-replay）** 是可复用模式：当"执行期不能改目标结构"（借用/锁/
+  事务边界）时，把副作用记成纯数据、边界之外统一物化。tpc 的 postpass 链/单元产物通道
+  （`note_produced` → `PassState.productions`）本质是同构的"执行期登记、边界后消费"。
+
 **与 tpc 的对照**
 
 | 维度 | jam | tpc |
