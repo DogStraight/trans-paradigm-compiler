@@ -875,8 +875,16 @@ def _lift_gap_comments(
     （Declarator 不匹配 output，失败回滚）——注释行在 a 行与 b 行之间，
     由 PortList 的 b 迭代窗口（a 行, b 行] 收走，挂 b 前（源序正确）；
     b 行尾逗号后的 `// Data` 行 > b 行，留给 c 迭代。排除非独占行
-    （line_only=False，行尾漏网保持 line 通道）与 tpc marker（only_tpc
-    通道，宏/条件块还原依赖）。
+    （line_only=False，行尾漏网保持 line 通道）。
+
+    tpc marker（`// <tpc:*>`）同样上浮（2026-09-17）：它虽是 only_tpc 通道的
+    占位，但**独占行 marker 处在列表项间**时是结构位置——上浮为 Comment
+    迭代项后由渲染器原样输出在正确项间，restore 的 existing_lines 检查跳过
+    重复回插，条件块/宏原文就地替换（位置精确）。此前排除 → 只能走时域回插
+    的插值/锚窗口，而项间 marker 的锚是“清洁流下一个显著 token”（可能隔着
+    几十行）→ 落点必然偏（darkriscv 端口表内 `ifdef __INTERRUPT__` 组漂到
+    `output IDREQ` 之后）。optional 单值槽（`@PortList?`）仍不上浮
+    （lift_gap_comments=False）——那里的 Comment 会挤占唯一的 optional 内容槽。
     """
     if not getattr(self, "_line_comment_anchors", None):
         return
@@ -889,7 +897,6 @@ def _lift_gap_comments(
         e
         for e in anchors
         if e.get("line_only")
-        and "tpc:" not in e.get("text", "")
         and e.get("line", -1) > lo
         and e.get("line", -1) <= end_line
     ]

@@ -135,3 +135,36 @@ def test_short_port_list_stays_inline() -> None:
     """短端口表仍是单行（三态不把普通组拖成多行）。"""
     out = _run("module m #(parameter P = 0)(a, b);\nendmodule\n", False)
     assert out.split("\n")[0] == "module m #( parameter P = 0 )( a, b);", out
+
+
+# ── ③ 列表项间条件块的位置（marker 上浮为 Comment 迭代项） ──
+
+_PORT_IFDEF_SRC = (
+    "module m #(parameter P = 0)(\n"
+    "    input a, // first\n"
+    "`ifdef X\n"
+    "    input b,\n"
+    "`endif\n"
+    "    // mid\n"
+    "    output c\n"
+    ");\n"
+    "endmodule\n"
+)
+
+
+def test_port_list_condition_block_keeps_source_order() -> None:
+    """端口表项间的条件块必须还原在同序位置，不被插值抛到别的端口后。
+
+    旧缺陷（2026-09-17 darkriscv）：项间 marker 走"时域回插"的插值/锚窗口，
+    而它的锚是清洁流的下一个显著 token（可隔着几十行）→ 条件块漂到后面的
+    端口之后。现由 `_lift_gap_comments` 上浮为 Comment 迭代项，位置由结构定。
+    """
+    for fmt in (False, True):
+        out = _run(_PORT_IFDEF_SRC, fmt)
+        assert "`ifdef X" in out and "`endif" in out, out
+        i_a = out.index("input a")
+        i_if = out.index("`ifdef X")
+        i_mid = out.index("// mid")
+        i_c = out.index("output c")
+        assert i_a < i_if < i_mid < i_c, f"[fmt={fmt}] 条件块顺序错位:\n{out}"
+        assert out.count("<tpc:") == 0, out

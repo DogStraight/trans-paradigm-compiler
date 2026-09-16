@@ -7,9 +7,10 @@
 
 ### P1.5 已知缺陷收尾
 
-- [ ] **条件块还原：端口表内 `ifdef` 组位置漂移（1 处，2026-09-17 探查留存）**：
-      darkriscv 端口表内 `ifdef __INTERRUPT__` 组（源在 `RES` 之后）被还原到
-      `IDREQ` 之后——属被 production skip 吞掉、需插值定位的 5 个占位之一。
-      token 完全、sv-parser 接受（interop 已回门禁），属位置保真残余而非
-      语法缺陷。根治 = active 内容 marker 化（`_flush_block` 改造）或 token
-      span 映射（P3.1 已落地，前置就绪）。
+- [ ] **表达式内部条件块占位的位置（2 处，2026-09-17 探查留存）**：darkriscv 里两处
+      条件块占位落在**表达式内部**（`wire HLT = <block> (DDREQ…)`、
+      `RMDATA = <block> FCT3…`）——无列表容器可上浮，仍走时域回插的插值定位，
+      其中一处被抬到语句之前（语句边界漂移，因块本身不活跃故不影响语义）。
+      端口表内的那处已由 `_lift_gap_comments` 上浮修复（顺序与源一致）。
+      根治 = 表达式级 trivia 槽位（占位在表达式节点上有位置）或 token span 映射
+      （P3.1 已落地，前置就绪）。

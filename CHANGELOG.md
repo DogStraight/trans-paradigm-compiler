@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **列表项间条件块占位位置（端口表内 `ifdef` 组漂移）**：`_lift_gap_comments`
+  原显式排除 tpc marker（判据 `"tpc:" not in text`），使列表项间的 marker 只能走
+  "时域回插"的插值/锚窗口——而它的锚是清洁流的**下一个显著 token**（可隔几十行）
+  → 落点必偏（darkriscv 端口表内 `ifdef __INTERRUPT__` 组漂到 `output IDREQ`
+  之后）。现 marker 同样上浮为 Comment 迭代项：位置由结构决定，渲染器原样输出在
+  正确项间，restore 就地替换不再依赖插值。optional 单值槽（`@PortList?`）仍不上浮
+  （上浮的 Comment 会挤占唯一内容槽 → 端口丢失）。实测：需回插的 marker 5 → 2，
+  端口表顺序与源侧一致；全量 1965 passed / 7 skipped（零回退），新增断言
+  `tests/languages/verilog/test_render_restore_boundary.py::test_port_list_condition_block_keeps_source_order`。
+
 ### Changed
 
 - **换行三态化（soft / 条件断 / 强制断 + 向上传播）**：`{ soft }`→`Line`（可折叠）、
