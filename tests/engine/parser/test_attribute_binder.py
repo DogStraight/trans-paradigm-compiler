@@ -12,6 +12,7 @@ import pytest
 
 from core.define import Node, GrammarRule
 from parser.attribute_binder import (
+    _transfer_comment_slots,
     bind_attributes,
     extract_from_spec,
     get_attr_by_path,
@@ -34,6 +35,56 @@ class _Sink:
     def _log_state(self, action, mode="a", level=0, context=None):
         del mode, context  # Parser 协议签名参数
         self.logs.append((level, action))
+
+
+class TestTransferCommentSlots:
+    """内联展开时的注释槽迁移（`try_inline_rule` 调 `_transfer_comment_slots`）。
+
+    背景：`inline = true` 的规则节点会被展开丢弃——挂它槽上的注释随节点消失
+    （实测 `wire a = /* c */ b;` / `wire a = // why\n b;` 两处整条丢失）。
+    """
+
+    def test_list_slot_moved_and_deduped(self):
+        """列表槽（leading/inline）整体迁移，逐条去重。"""
+        src = Node("Init")
+        src.add_attr("_comment_slots", {"inline": ["/* c */"], "leading": ["// l"]})
+        dst = Node("Identifier", value="b")
+        _transfer_comment_slots(src, dst)
+        assert dst._comment_slots == {"inline": ["/* c */"], "leading": ["// l"]}
+
+    def test_trailing_converted_to_leading(self):
+        """trailing 转 leading（LineSuffix 停在替身节点末尾会排在父布局 `;` 前）。"""
+        src = Node("Init")
+        src.add_attr("_comment_slots", {"trailing": ["// why"]})
+        dst = Node("Identifier", value="b")
+        _transfer_comment_slots(src, dst)
+        assert dst._comment_slots == {"leading": ["// why"]}
+
+    def test_dict_slot_merged_with_dedup(self):
+        """字典槽（inline_after = {锚: [(注释, 行)]}）逐锚合并，重复条目不双份。"""
+        src = Node("Init")
+        src.add_attr(
+            "_comment_slots", {"inline_after": {"=": [("/* c */", 3), ("/* d */", 4)]}}
+        )
+        dst = Node("Identifier", value="b")
+        dst.add_attr("_comment_slots", {"inline_after": {"=": [("/* c */", 3)]}})
+        _transfer_comment_slots(src, dst)
+        assert dst._comment_slots["inline_after"] == {"=": [("/* c */", 3), ("/* d */", 4)]}
+
+    def test_scalar_slot_moved(self):
+        """非列表/字典的槽值原样迁移（防御式分支）。"""
+        src = Node("Init")
+        src.add_attr("_comment_slots", {"note": "x"})
+        dst = Node("Identifier", value="b")
+        _transfer_comment_slots(src, dst)
+        assert dst._comment_slots == {"note": "x"}
+
+    def test_noop_without_source_slots_or_node(self):
+        """无源槽 / 非 Node 目标（linter 原子占位）时不报错、不挂槽。"""
+        dst = Node("Identifier", value="b")
+        _transfer_comment_slots(None, dst)
+        _transfer_comment_slots(Node("Init"), None)
+        assert getattr(dst, "_comment_slots", None) is None
 
 
 class TestExtractFromSpec:

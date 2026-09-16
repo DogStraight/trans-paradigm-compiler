@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **注释改动集的验证侧收口（覆盖率/对拍/隔离）**：
+  1. 删死代码：`pratt_parser._is_own_line`（判定已收敛到 `_comment_trivia`，该函数
+     无调用者——覆盖率逐行比对发现）。
+  2. 补齐新增行未覆盖分支：`_transfer_comment_slots`（字典槽合并/去重/非容器槽/
+     空源与空目标）、`_strip_leading_hardbreak`（Nest/Align/Prefix 下钻与全空折叠）、
+     pratt 入口注释三支（行尾型→`leading`、独占行→`leading_own_line`、非 Node 原子
+     →仅 sink 兜底）。
+  3. 验证结果（仓库自查工具，非日常门禁）：增量覆盖率逐行比对 **新增行未覆盖 = 0**
+     （7 个改动文件）；`eval_diag_baseline` 真实语料诊断 **5548 → 5548 无增长**；
+     `check_macro_coverage` **86/135 = 63.7%**，与改动前（`c3041fe~1`）对拍**完全一致**；
+     `check_test_isolation` **155 块 OK / 0 FAIL**；`eval_lint_accuracy` **recall 100%
+     （33/33）/ 误报 0**（pratt 与 linter 共用，需回门）。
+
 ### Changed
 
 - **语句内部独占行注释按结构落位（表达式注释让位闸门 + pratt 三分类）**：表达式

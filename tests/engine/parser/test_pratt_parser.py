@@ -424,3 +424,64 @@ class TestOperatorGapCommentMount:
         )
         slots = getattr(ast, "_comment_slots", None)
         assert slots == {"inline_after": {"+": [("/* c */", 0)]}}
+
+
+class TestEntryCommentMount:
+    """表达式**入口**注释落位（P1.5）：挂前缀操作数节点 + 锚点通道兜底。
+
+    与 operator 间隙注释的区别：入口注释在操作数之前（无 operator 上下文），
+    按“独占行 / 其余”分槽：独占行 → `leading_own_line`（硬换行独占成行），
+    其余（行尾型）→ `leading`（注释 + 断行后接节点）。**同时**登记 comment_sink
+    （挂树失败/节点未被渲染时 marker 仍可回插——marker 文本承载条件块原文，
+    只挂树不兜底会静默丢块）。
+    """
+
+    def test_eol_comment_at_entry_mounted_and_sunk(self, pratt):
+        """入口行尾型注释（同行前已有代码）→ 前缀节点 `leading` + sink 兜底。"""
+        pp, _ = pratt
+        a = Token(type="id", content="a", line=0, column=0)
+        cmt = Token(type="comment", content="/* c */", line=0, column=2)
+        b = Token(type="id", content="b", line=0, column=8)
+        seen: list = []
+        ast, consumed = pp.parse_expression(
+            [a, cmt, b], 1, 0, {}, {}, {}, {}, 0, 0, _atom, None,
+            lambda e: seen.append(e),
+        )
+        assert ast.node_name == "Ident" and consumed == 3
+        assert getattr(ast, "_comment_slots", None) == {"leading": ["/* c */"]}
+        assert seen and seen[0]["text"] == "/* c */", "入口注释必须同时登记 sink 兜底"
+
+    def test_own_line_comment_at_entry_mounted_own_line(self, pratt):
+        """入口独占行注释 → 前缀节点 `leading_own_line` + sink 兜底。"""
+        pp, _ = pratt
+        a = Token(type="id", content="a", line=0, column=0)
+        nl1 = Token(type="newline", content="\n", line=0, column=1)
+        cmt = Token(type="comment", content="// c", line=1, column=0)
+        nl2 = Token(type="newline", content="\n", line=1, column=4)
+        b = Token(type="id", content="b", line=2, column=0)
+        seen: list = []
+        ast, _ = pp.parse_expression(
+            [a, nl1, cmt, nl2, b], 2, 0, {}, {}, {}, {}, 0, 0, _atom, None,
+            lambda e: seen.append(e),
+        )
+        assert ast.node_name == "Ident"
+        assert getattr(ast, "_comment_slots", None) == {
+            "leading_own_line": ["// c"]
+        }
+        assert seen and seen[0]["text"] == "// c"
+        assert seen[0]["midline"] is False
+
+    def test_non_node_atom_only_sinks(self, pratt):
+        """原子解析器返回非 Node（linter 占位）→ 挂不上树，仅 sink 兜底。"""
+        pp, _ = pratt
+        a = Token(type="id", content="a", line=0, column=0)
+        cmt = Token(type="comment", content="/* c */", line=0, column=2)
+        nl = Token(type="newline", content="\n", line=0, column=5)
+        b = Token(type="id", content="b", line=1, column=0)
+        seen: list = []
+        ast, _ = pp.parse_expression(
+            [a, cmt, nl, b], 1, 0, {}, {}, {}, {}, 0, 0,
+            lambda t, i: (object(), 1), None, lambda e: seen.append(e),
+        )
+        assert not hasattr(ast, "_comment_slots")
+        assert seen and seen[0]["text"] == "/* c */"

@@ -14,15 +14,19 @@
 """
 
 from renderer.doc import (
+    Align,
     Concat,
+    Empty,
     HardBreak,
     Line,
     LineBreak,
+    Nest,
+    Prefix,
     Text,
     group,
     layout,
 )
-from renderer.doc import _drop_break_after_hardbreak
+from renderer.doc import _drop_break_after_hardbreak, _strip_leading_hardbreak
 
 _WIDE = 1000
 _NARROW = 1
@@ -102,3 +106,41 @@ def test_consecutive_breaks_kept_for_blank_lines() -> None:
     """连续 Break 是显式空行（`tail_break = 2`）——不得被挤除。"""
     doc = Concat([Text("endmodule"), HardBreak(), HardBreak(), Text("next")])
     assert _render(_drop_break_after_hardbreak(doc)) == "endmodule\n\nnext"
+
+
+# ── 行状态去冗余：_strip_leading_hardbreak ──
+#
+# layout 的 Concat 分支在“当前行只余缩进且由非硬断行结束”时会调它，去掉子项
+# 开头的 HardBreak（否则“父断行 + 注释首断行”叠出纯空白行）。这里固化它沿
+# Concat/Nest/Align/Prefix 下钻的行为与全空折叠。
+
+
+def test_strip_leading_hardbreak_plain_and_concat() -> None:
+    assert isinstance(_strip_leading_hardbreak(HardBreak()), Empty)
+    stripped = _strip_leading_hardbreak(Concat([HardBreak(), Text("x")]))
+    assert isinstance(stripped, Concat) and _render(stripped) == "x"
+    only = _strip_leading_hardbreak(Concat([HardBreak()]))
+    assert isinstance(only, Empty)
+
+
+def test_strip_leading_hardbreak_descends_wrappers() -> None:
+    """Nest/Align/Prefix 包装下的首叶硬换行同样被去掉（包装保留）。"""
+    nested = _strip_leading_hardbreak(Nest(4, Concat([HardBreak(), Text("x")])))
+    assert isinstance(nested, Nest) and _render(nested) == "x"
+    aligned = _strip_leading_hardbreak(Align(8, Concat([HardBreak(), Text("x")])))
+    assert isinstance(aligned, Align) and _render(aligned) == "x"
+    prefixed = _strip_leading_hardbreak(Prefix(2, Concat([HardBreak(), Text("x")])))
+    assert isinstance(prefixed, Prefix) and _render(prefixed) == "  x"
+
+
+def test_strip_leading_hardbreak_collapses_empty_wrapper() -> None:
+    """包装内只剩硬换行 → 整体折叠为 Empty（不留空包装）。"""
+    assert isinstance(_strip_leading_hardbreak(Nest(4, HardBreak())), Empty)
+    assert isinstance(_strip_leading_hardbreak(Align(8, HardBreak())), Empty)
+    assert isinstance(_strip_leading_hardbreak(Prefix(2, HardBreak())), Empty)
+
+
+def test_strip_leading_hardbreak_keeps_non_leading_break() -> None:
+    """非首叶的硬换行不动（如 `x` 之后的硬换行）。"""
+    doc = Concat([Text("x"), HardBreak(), Text("y")])
+    assert _render(_strip_leading_hardbreak(doc)) == "x\ny"

@@ -213,20 +213,6 @@ def _skip_gap_comments(
     return idx, midline, own_line, eol
 
 
-def _is_own_line(tokens: list[Token], idx: int) -> bool:
-    """注释是否独占一行（向前扫：前一个显著 token 在更早的行 = 独占行）。"""
-    j = idx - 1
-    while j >= 0:
-        prev = tokens[j]
-        if not isinstance(prev, Token):
-            return True
-        if prev.type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE) or prev.type.startswith("space"):
-            j -= 1
-            continue
-        return getattr(prev, "line", -1) != getattr(tokens[idx], "line", -2)
-    return True
-
-
 def _mount_op_comments(
     node: Node,
     op: str,
