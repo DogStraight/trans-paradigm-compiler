@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **删除 `sync` 锚兼容路线（宏还原）**：锚 `mode` 现为三态（`line` / `inline` /
+  `token`）。旧"同步词窗口消歧"（`mode="sync"`）只服务**无 `mode` 字段**的旧格式
+  记录，而产出端（`_expand` 的三种锚 + `restore_condition_blocks` 的 cond 锚）
+  **全部显式带 mode**——无产生者即删（判据 A3 过时 / A1 无引用）。连带删除：
+  `_reverse._normalize_anchors` 旧格式包装、`_bridge._restore_sync_entry` 与
+  `preprocessor.reverse` 配置声明、`grammar/verilog/base/_macro.toml [reverse]` 段、
+  `grammar/verilog/tpc.toml` 的 `reverse = {...}` 声明、锚条目里已无消费者的
+  `is_func` 字段（region 侧保留）。未知 `mode` 现在 **fail-fast**（静默跳过会让
+  占位残留到输出——占位与原文的对应关系一旦错，输出就是错的）。
+  背景：ADR-0017 决策 4 落地后，非空体宏已改走"宏区间 + 渲染 raw 拼接"，还原锚
+  只剩空体宏/行级占位与条件块两支；本次清掉的是第三支的历史兼容壳。
+  验证：全量 1925 passed / 8 skipped（含真实语料保真与宏还原门禁）；smoke 363。
+
 - **草稿区能力提升为正式工具（`_drafts/` → `tools/`）**：把清理后仍被引用/仍可用的
   诊断能力从暂存区搬进正式位（草稿区随之为空，纪律仍见 `AGENTS.md` 文档放置速查）：
   ① `tools/dump_pipeline_state.py`（来自 `_drafts/probe_pipeline_state.py`）——打印

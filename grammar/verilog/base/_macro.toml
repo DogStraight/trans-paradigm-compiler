@@ -102,12 +102,6 @@ search_dirs = []
 # silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
 silent = false
 
-# ── [reverse] 宏还原参数 ──
-[reverse]
-sync_window_base = 15
-sync_window_pad = 5
-offset_tolerance = 2
-
 # ── [macro_shape] 宏体形态分类（包装解析） ──
 # 宏体放入 wrappers 模板包裹，能完整解析 → 完整语法单元（将来可保留为 AST 节点）；
 # 全部失败 → 残缺片段（只能原位文本级展开）。模板是**语言语法知识**，引擎只做

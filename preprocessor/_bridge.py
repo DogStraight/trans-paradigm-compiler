@@ -11,28 +11,16 @@
     marker:      唯一标识（"tpc:<kind>:<seq>"），以注释形态定位
     source_text: 原文（还原内容，可能是多行原文段）
     mode:        "line"（整行注释 marker，整行替换）
-                 "inline"（行内注释 marker，原位替换）
-                 "sync"（同步词启发式，表达式中间非空体宏，兼容现状）
+                 "inline"（行内注释 marker + body 区间，原位替换）
+                 "token"（唯一 token 锚，随 AST 确定渲染，整串精确匹配）
     kind:        来源类别（"cond" / "macro"），仅作调试/归组
-    # sync 模式额外字段（兼容现状 _restore_lines）：
-    body / macro / sync / sync_nth / offset / is_func / args
+    body:        inline 模式：展开时铺进源码的宏体（与 marker 一起换回原文）
+# 注：旧 "sync" 模式（同步词窗口消歧）已删——它只服务"无 mode 字段"的旧格式记录，
+# 而 `_expand`/`restore_condition_blocks` 产出的锚全部显式带 mode（2026-09-17）。
 Doc: preprocessor/README.md
 """
 
 import re
-
-from core.config_registry import declare_cfg
-
-# ── 配置需求（来自 tpc.toml）──────────────────────────────
-# preprocessor.reverse
-#   #sym:config = [reverse]
-#   格式: dict
-#     { sync_window_base: int, sync_window_pad: int, offset_tolerance: int }
-_reverse_cfg: dict = declare_cfg(
-    "preprocessor.reverse",
-    {"sync_window_base": 15, "sync_window_pad": 5, "offset_tolerance": 2},
-    __name__, "_reverse_cfg",
-)
 
 
 def make_marker(kind: str, seq: int) -> str:
@@ -47,68 +35,14 @@ def _line_marker_re(marker: str) -> re.Pattern:
     )
 
 
-def _restore_sync_entry(result: str, entry: dict, prefix: str) -> str:
-    """回插一条 sync 锚（现状同步词启发式逻辑，纳入统一引擎）。
-
-    非空 body 的行内宏（如表达式中间 `NAME(args)）。空 body 不在此路径
-    （由 line/inline 锚处理）。
-    """
-    body = entry.get("body", "")
-    macro = entry.get("macro", "")
-    if not body:
-        return result
-
-    sync_window_base = _reverse_cfg.get("sync_window_base", 15)
-    sync_window_pad = _reverse_cfg.get("sync_window_pad", 5)
-    offset_tolerance = _reverse_cfg.get("offset_tolerance", 2)
-
-    sync = entry.get("sync", "")
-    sync_nth = entry.get("sync_nth", 1)
-    offset = entry.get("offset", 0)
-
-    pos = 0
-    while True:
-        pos = result.find(body, pos)
-        if pos < 0:
-            break
-        if sync:
-            window = max(sync_window_base, len(sync) + offset + sync_window_pad)
-            before = result[max(0, pos - window):pos]
-            count = 0
-            matched = False
-            sync_idx = -1
-            while True:
-                sync_idx = before.find(sync, sync_idx + 1)
-                if sync_idx < 0:
-                    break
-                count += 1
-                if count == sync_nth:
-                    real_sync_end = max(0, pos - window) + sync_idx + len(sync)
-                    actual_offset = pos - real_sync_end
-                    if abs(actual_offset - offset) <= offset_tolerance:
-                        matched = True
-                        break
-            if not matched:
-                pos += 1
-                continue
-        if entry.get("is_func"):
-            replacement = f"{prefix}{macro}({entry.get('args', '')})"
-        else:
-            replacement = f"{prefix}{macro}"
-        result = result[:pos] + replacement + result[pos + len(body):]
-        break
-    return result
-
-
 def restore_anchors(
     rendered: str,
     anchors: list[dict] | None,
-    prefix: str = "`",
 ) -> str:
     """统一回插引擎：按锚定位 marker，替换为原文（source_text），消耗式。
 
-    line/inline 锚：marker 唯一 → 精确替换一次（原文不被全局复用）。
-    sync 锚：同步词窗口消歧（现状启发式）。
+    line/inline/token 锚：marker 唯一 → 精确替换一次（原文不被全局复用）。
+    未知 mode → fail-fast（静默跳过会让占位残留到输出，不在本层降级）。
     多轮扫描直到不再变化：原文可能含内层 marker（嵌套条件块/嵌套宏调用）。
     """
     if not anchors:
@@ -180,9 +114,9 @@ def restore_anchors(
                 if count == 1:
                     result = new_result
                     changed = True
-            else:  # sync
-                new_result = _restore_sync_entry(result, entry, prefix)
-                if new_result != result:
-                    result = new_result
-                    changed = True
+            else:
+                raise ValueError(
+                    f"[preprocessor] 未知锚 mode: {mode!r}"
+                    f"（支持 line/inline/token，见 preprocessor/README.md）"
+                )
     return result

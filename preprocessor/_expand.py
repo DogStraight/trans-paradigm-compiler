@@ -639,7 +639,6 @@ def expand_tokens(
                         "source_text": source_text,
                         "mode": "inline",
                         "kind": "macro",
-                        "is_func": is_func,
                     }
                 )
                 continue
@@ -661,7 +660,6 @@ def expand_tokens(
                         "mode": "inline",
                         "kind": "macro",
                         "body": body,
-                        "is_func": is_func,
                     }
                 )
                 continue
@@ -709,7 +707,6 @@ def expand_tokens(
                     "source_text": source_text,
                     "mode": "token",
                     "kind": "macro",
-                    "is_func": is_func,
                     # 源文本位置（展开前行/起列/止列）：宏调用在 raw 源上的区间，
                     # 供宏边界节点（MacroCall）双向映射用。
                     "line": line_no,

@@ -73,9 +73,7 @@ def restore_all_comments(
     # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
     # 才能定位 marker 并替换为整行原文。
     if restore_stack:
-        content = protect_and_reverse(
-            content, restoration_stack=restoration_stack
-        )
+        content = protect_and_reverse(content, anchors=restoration_stack)
         log("[preprocessor] macros reversed")
 
     # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
