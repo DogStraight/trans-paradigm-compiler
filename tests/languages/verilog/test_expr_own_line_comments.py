@@ -126,3 +126,30 @@ def test_statement_interior_block_does_not_drift_to_next_stmt() -> None:
         i_z = flat.index("wire z =")
         assert i_a < i_if < i_z, f"[fmt={fmt}] 条件块漂到相邻语句:\n{out}"
 
+
+# 右操作数是宏调用（渲染端"直出文本"节点）：附着注释不得随节点静默丢失
+_MACRO_RHS_SRC = (
+    "`define M(x) ((x)+1)\n"
+    "module m;\n"
+    "    wire a =\n"
+    "`ifdef X\n"
+    "        b;\n"
+    "`endif\n"
+    "        `M(c);\n"
+    "endmodule\n"
+)
+
+
+def test_interior_block_survives_verbatim_rhs() -> None:
+    """宏调用作右操作数时，语句内部条件块必须保留（不得整块消失）。
+
+    直出文本节点（`_verbatim_text`）不走布局：若前置槽不输出，marker 不会
+    进入渲染文本 → preprocessor 侧的条件块原文就永远没有回插时机（实测丢块）。
+    """
+    for fmt in (False, True):
+        out = _run(_MACRO_RHS_SRC, fmt)
+        assert out.count("`ifdef X") == 1, f"[fmt={fmt}] 条件块丢失/重复:\n{out}"
+        assert "`M(c)" in out or "M (c)" in out, f"[fmt={fmt}] 宏调用丢失:\n{out}"
+        flat = _norm(out)
+        assert flat.index("wire a =") < flat.index("`ifdef X"), f"[fmt={fmt}] 顺序错:\n{out}"
+

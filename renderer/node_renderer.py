@@ -61,6 +61,42 @@ def _body_indent(body_cfg: dict, renderer: Any) -> int:
     return renderer._indent(level)
 
 
+def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
+    """前置注释槽 → Doc 列表（`leading` 行尾型 + `leading_own_line` 独占行型）。
+
+    - `leading`：`Text(comment) + Break()`——注释后换行、注释前不主动 break
+      （父级 body 的 Break 提供换行+缩进）。行尾型注释（`a || // c`）由此落地：
+      注释紧跟前一片段同行，换行后接本节点（ADR-0014 方向 B）。
+    - `leading_own_line`：整块独占成行——块首一个硬换行 + 注释之间单换行 + 块尾
+      一个硬换行（逐条各加首尾硬换行会在多条注释间叠空行）。行终止型必须硬换行
+      （① 同行后续内容会被行注释吃掉；② 独占成行才能还原源的断行位置）。是否
+      行终止由声明驱动 `renderer.comment_ends_line`；块注释逐条 `Text+Break`。
+    - 顺序按源序：`leading`（同行行尾）在前，`leading_own_line` 在后。
+
+    抽成函数的原因：布局路径与 **verbatim 直出路径**都要输出前置槽（后者若漏，
+    附着在直出节点上的注释连同 marker 承载的原文一起丢）。
+    """
+    docs: list[Doc] = []
+    for c in slots.get("leading") or ():
+        docs.append(Text(c))
+        docs.append(Break())
+    own_line = slots.get("leading_own_line") or ()
+    if own_line:
+        line_cs = [c for c in own_line if renderer.comment_ends_line(c)]
+        if line_cs:
+            docs.append(HardBreak())
+            for k, c in enumerate(line_cs):
+                if k:
+                    docs.append(HardBreak())
+                docs.append(Text(c.rstrip()))
+            docs.append(HardBreak())
+        for c in own_line:
+            if not renderer.comment_ends_line(c):
+                docs.append(Text(c))
+                docs.append(Break())
+    return docs
+
+
 def render_node(
     node: Node,
     layout: dict,
@@ -98,13 +134,16 @@ def render_node(
 
     # 引擎级 raw 拼接（ADR-0017 决策 4）：带 `_verbatim_text` 的节点整体直出该
     # 文本——不走布局、不遍历子节点（宏调用视为不可拆原子文本；语言包对宏零知识，
-    # 本规则是引擎协议）。注释槽仍要输出（附着注释在节点 span 之外，不丢内容）。
+    # 本规则是引擎协议）。注释槽仍要输出（附着注释在节点 span 之外，不丢内容）
+    # ——**含前置槽**：sp走布局路径时前置槽在下面补出，直出路径必须同样补，
+    # 否则附着在直出节点上的注释（含 tpc marker，其文本承载条件块原文）会
+    # 静默丢失（2026-09-17 实测：宏调用作 RHS 时条件块整块消失）。
     # 文本可能含换行（多行构造原样输出）：后续行保留其原有缩进（不做重排）。
     verbatim = getattr(node, "_verbatim_text", None)
     if verbatim is not None:
-        return _insert_before_trailing_break(
-            Text(verbatim), [*head_trail_docs, *trail_docs]
-        )
+        pre = _leading_slot_docs(slots, renderer)
+        body: Doc = Concat([*pre, Text(verbatim)]) if pre else Text(verbatim)
+        return _insert_before_trailing_break(body, [*head_trail_docs, *trail_docs])
 
     # --- head ---
     if head_expr:
@@ -160,36 +199,7 @@ def render_node(
         lead = slots.get("leading")
         own_line = slots.get("leading_own_line")
         if lead or own_line:
-            # leading 注释独立行：`Text(comment) + Break()`——注释后换行，
-            # 注释前不主动 break（父级 body 的 Break(body_indent) 提供换行+缩进，
-            # 避免双换行）；缩进继承外层 Nest。行尾型注释（`a || // c`）由此
-            # 落地：注释紧跟前一个片段同行，换行后接本节点（ADR-0014 方向 B）。
-            #
-            # leading_own_line（独占行型）：硬换行独占成行——① 同行后续内容
-            # 会被行注释吃掉；② 独占成行才能还原源的断行位置（`wire HLT =`
-            # 后换行接条件块）。行终止型由 renderer.comment_ends_line 判定。
-            # 两槽拼接按源序：leading（同行行尾）在前，own_line 在后。
-            lead_docs: list[Doc] = []
-            for c in lead or ():
-                lead_docs.append(Text(c))
-                lead_docs.append(Break())
-            if own_line:
-                # 整块独占成行：块首一个硬换行 + 注释之间单换行 + 块尾一个硬换行
-                # （逐条各加首尾硬换行会在多条注释之间叠出空行）。
-                # 块注释（非行终止型）逐条 Text+Break（不断行吞内容）。
-                line_cs = [c for c in own_line if renderer.comment_ends_line(c)]
-                if line_cs:
-                    lead_docs.append(HardBreak())
-                    for k, c in enumerate(line_cs):
-                        if k:
-                            lead_docs.append(HardBreak())
-                        lead_docs.append(Text(c.rstrip()))
-                    lead_docs.append(HardBreak())
-                for c in own_line:
-                    if not renderer.comment_ends_line(c):
-                        lead_docs.append(Text(c))
-                        lead_docs.append(Break())
-            parts = lead_docs + parts
+            parts = _leading_slot_docs(slots, renderer) + parts
         inline = slots.get("inline")
         if inline:
             # inline 注释同行前置：`Text(comment) + Text(" ")` 插到节点文本

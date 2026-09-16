@@ -8,6 +8,7 @@ Doc: docs/language_walkthrough.md（Pratt 表达式解析）
 from typing import Any
 from core.define import Node, Token
 from ._constants import COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
+from ._comment_trivia import is_line_only, is_midline
 
 
 
@@ -197,22 +198,9 @@ def _skip_gap_comments(
         if not isinstance(t, Token):
             break
         if t.type == COMMENT_TOKEN_TYPE:
-            # 注释后跳过注释/换行，找第一个代码 token 判同行（midline）
-            off = 1
-            nxt = None
-            while idx + off < len(tokens):
-                cand = tokens[idx + off]
-                if isinstance(cand, Token) and cand.type in (
-                    COMMENT_TOKEN_TYPE,
-                    NEWLINE_TOKEN_TYPE,
-                ):
-                    off += 1
-                    continue
-                nxt = cand
-                break
-            if nxt is not None and getattr(nxt, "line", -1) == t.line:
+            if is_midline(tokens, idx):
                 midline.append((t.content, t.line))
-            elif _is_own_line(tokens, idx):
+            elif is_line_only(tokens, idx):
                 own_line.append((t.content, t.line))
             else:
                 eol.append((t.content, t.line))
@@ -350,7 +338,7 @@ def parse_expression(
     ):
         if tokens[idx].type == COMMENT_TOKEN_TYPE:
             entry = (tokens[idx].content, tokens[idx].line)
-            if _is_own_line(tokens, idx):
+            if is_line_only(tokens, idx):
                 entry_own_line.append(entry)
             else:
                 entry_comments.append(entry)
@@ -428,18 +416,31 @@ def parse_expression(
         if isinstance(node, Node):
             _mount_leading_comments(node, entry_comments)
             _mount_leading_comments(node, entry_own_line, own_line=True)
-        elif (
+        # 锚点通道**兜底**（挂树之外仍登记）：挂树成功时 restore 对已在场的
+        # 注释跳过（不双份，restore 自带在场检查）；挂树失败/未被渲染时
+        # （非 Node 原子占位、宏调用等直出文本节点）marker 仍能被回插——
+        # 否则条件块原文会随 marker 一起静默丢失（2026-09-17 实测）。
+        if (
             comment_sink is not None
             and isinstance(_anchor_tok, Token)
             and _anchor_tok.content
         ):
-            for c_text, c_line in [*entry_comments, *entry_own_line]:
+            for c_text, c_line in entry_comments:
                 comment_sink(
                     {
                         "anchor": _anchor_tok.content,
                         "text": c_text,
                         "line": c_line,
                         "midline": True,
+                    }
+                )
+            for c_text, c_line in entry_own_line:
+                comment_sink(
+                    {
+                        "anchor": _anchor_tok.content,
+                        "text": c_text,
+                        "line": c_line,
+                        "midline": False,
                     }
                 )
 

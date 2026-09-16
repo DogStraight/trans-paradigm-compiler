@@ -13,6 +13,11 @@ from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
 from .follow import token_in_follow
+from ._comment_trivia import (
+    is_line_only,
+    is_midline,
+    prev_significant_index,
+)
 
 import contextlib
 
@@ -293,26 +298,14 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
 def _starts_line(context: ParseContext, tok_idx: int) -> bool:
     """tokens[tok_idx] 是否行首 token（前一非空白/非注释 token 是换行）。
 
-    向前跳过 space.* 与注释（被 production skip 吞掉的注释 token 仍留在
-    tokens 流中——`( // head\n input` 的 input 前是已吞注释，行首判定
-    需越过它再看 newline）。tok_idx = 规则入口时 peek 的 token 索引
-    （匹配完成后 pointer 已移动，不能取当前 token_pointer）。
+    实现收敛到 `_comment_trivia.is_line_only`（跳过 space.* 与注释后再看
+    换行/行号——`( // head\n input` 的 input 前是已吞注释，行首判定需
+    越过它）。tok_idx = 规则入口时 peek 的 token 索引（匹配完成后
+    pointer 已移动，不能取当前 token_pointer）。
     """
     if tok_idx < 0:
         return False
-    i = tok_idx - 1
-    while i >= 0:
-        prev = context.tokens[i]
-        if prev.type == NEWLINE_TOKEN_TYPE:
-            return True
-        if prev.type in ("space.fold", "space") or prev.type.startswith("space"):
-            i -= 1
-            continue
-        if prev.type == COMMENT_TOKEN_TYPE:
-            i -= 1
-            continue
-        return False
-    return True
+    return is_line_only(context.tokens, tok_idx)
 
 
 def _claim_head_comments(
@@ -520,36 +513,37 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 # ── 生产式准备 & 结束符检查 ──
 
 
-def _comment_inside_current_rule(context: ParseContext) -> bool:
-    """独占行注释是否落在**当前规则内部**（而非列表项间/语句间）。
+def _comment_leave_to_expression(context: ParseContext) -> bool:
+    """注释是否交给表达式入口归位（而非在 `prepare_production` 吐掉）？
 
-    两条同时成立（与语言无关：只看 token 下标与产生式元素序号）：
-      - 当前产生式已匹配过至少一个元素（`production_pointer > 0`）——注释前
-        有本规则已消费的内容、注释后本规则还要继续（`wire A =` 后的注释）；
-      - 注释前一个显著 token 属本规则匹配范围（下标 >= 规则匹配起点）——
-        列表项间/语句间的注释其锚属上一项（`;`/`,`），下标落在起点之前。
+    三条同时成立（与语言无关：只看 token 下标与产生式元素序号）：
+      - 注释**非行中**——行中注释（同行前后均有代码）位置在同行，已由
+        `collect_following_comments` 走 `inline_after`；交给表达式入口会被
+        当作"前置"而断行（行内嵌入必须保留）。
+      - 本产生式已匹配过元素（`production_pointer > 0`）——注释前有本规则
+        已消费的内容、注释后本规则还要继续（`wire A =` 后的注释）。
+      - 注释前一个显著 token 属本规则匹配范围（下标 >= 
+        `production_start_ptr`）——列表项间/语句间的注释其锚属上一项
+        （`;`/`,`），下标落在起点之前。
 
-    判错方向的影响：误判“规则内部”→ 注释被表达式入口领走（少了 Comment
-    迭代项，位置仍正确但契约变）；误判“项间”→ 退回锚点插值（默认行为）。
-    节点/指针信息缺失时保守拒绝。
+    交付后由表达式入口三分类归位：独占行 → `leading_own_line`（硬换行独占
+    成行）；行尾 → 右操作数 `leading`（随操作数断行）。就地吐掉则只剩锚点
+    插值，而语句内部注释的锚可隔着折叠区几十行，落点必偏（darkriscv 实测）。
+    指针/元素信息缺失时保守拒绝（退回原有通道）。
     """
+    tokens = context.tokens
+    idx = context.token_pointer
+    if is_midline(tokens, idx):
+        return False
     if getattr(context, "production_pointer", 0) <= 0:
         return False
-    if not _is_line_only_comment(context):
-        return False
-    i = context.token_pointer - 1
-    tokens = context.tokens
-    while i >= 0:
-        t = tokens[i]
-        if t.type in ("space", "space.fold", NEWLINE_TOKEN_TYPE, COMMENT_TOKEN_TYPE):
-            i -= 1
-            continue
-        break
-    return i >= getattr(context, "production_start_ptr", 0)
+    return prev_significant_index(tokens, idx) >= getattr(
+        context, "production_start_ptr", 0
+    )
 
 
 def _is_line_only_comment(context: ParseContext) -> bool:
-    """独占行注释判定：注释 token 之前（跳过空白/缩进 token）是换行或文件首。
+    """注释是否独占一行（实现收敛到 `_comment_trivia.is_line_only`）。
 
     用于区分：
       - 独占行注释（`\n // State\n`）→ 进树为 Comment 节点（ADR-0013 B1）
@@ -557,17 +551,7 @@ def _is_line_only_comment(context: ParseContext) -> bool:
         trivia token 未收走而残留到 production skip）→ 留 line 通道
         条目（宏/条件块 marker 还原通道）
     """
-    idx = context.token_pointer
-    i = idx - 1
-    while i >= 0:
-        prev = context.tokens[i]
-        if prev.type == NEWLINE_TOKEN_TYPE:
-            return True
-        if prev.type in ("space.fold", "space") or prev.type.startswith("space"):
-            i -= 1
-            continue
-        return False
-    return True
+    return is_line_only(context.tokens, context.token_pointer)
 
 
 def prepare_production(self, context: ParseContext, features: dict) -> bool:
@@ -601,9 +585,9 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
         while context.has_more_tokens():
             t = context.peek_token()
             if t and t.type == COMMENT_TOKEN_TYPE:
-                if keep_comments and _comment_inside_current_rule(context):
-                    # 规则内部的独占行注释：留给被调表达式规则（入口挂
-                    # leading_own_line，位置由结构定）
+                if keep_comments and _comment_leave_to_expression(context):
+                    # 规则内部注释：留给被调表达式规则（入口三分类：独占行 →
+                    # leading_own_line，行尾 → 右操作数 leading）
                     break
                 # 独占行标记（B1 上浮判据）：advance 前判定——向前扫描
                 # 注释前一个非空白 token（newline/文件首 = 独占行）。

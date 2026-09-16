@@ -93,7 +93,7 @@
 | 布局原语（registry + 各原语实现） | `renderer/renderer_architecture.md` | `renderer/primitives/` | `tests/engine/renderer/test_renderer_primitives.py`<br>`tests/engine/renderer/test_primitives_*.py` |
 | renderer body 缩进（`body_cfg["indent"]`） | `language_walkthrough.md`（renderer：布局） | `renderer/node_renderer.py::_body_indent`<br>`renderer/node_renderer.py::render_node`（body 渲染段） | `tests/languages/yaml/test_yaml.py`<br>`tests/languages/c4/test_c4_asm.py`<br>`tests/e2e/test_real_fidelity.py` |
 | 保真度分级（ADR-0006 阶段 5） | `renderer/renderer_architecture.md` | `renderer/fidelity.py` | `tests/engine/renderer/test_fidelity.py` |
-| 注释槽位消费（leading/trailing/inline/LineSuffix） | `renderer/renderer_architecture.md`（注释处理节） | `renderer/node_renderer.py` | `tests/engine/renderer/test_comment_slots.py` |
+| 注释槽位消费（leading/leading_own_line/trailing/inline/inline_after/LineSuffix） | `renderer/renderer_architecture.md`（注释处理节） | `renderer/node_renderer.py`（`_leading_slot_docs` 含直出文本节点路径） | `tests/engine/renderer/test_comment_slots.py` |
 
 ### preprocessor — 宏展开 / 反向映射
 

@@ -37,6 +37,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **内联展开节点/直出文本节点上的注释丢失（三处）**：
+  1. **宏调用作右操作数时条件块整块消失**（本轮闸门引入的回归，已回门禁）：
+     marker 挂到 `_verbatim_text` 直出节点后，直出路径只输出 `head_trailing`/`trailing`
+     槽 → 前置槽不进渲染文本 → preprocessor 侧的条件块原文永远没有回插时机。
+     修：直出路径同样输出前置槽（`_leading_slot_docs` 抽出共享，布局/直出两路径同源）；
+     并**恢复锚点通道兜底**（挂树成功也登记，restore 对已在场文本跳过——不双份）——
+     挂树失败/未被渲染时 marker 仍可回插。
+  2. 注释位置判定**收敛为单点实现**（`parser/_comment_trivia.py`）：原 `_starts_line` /
+     `_is_line_only_comment` / `pratt_parser._is_own_line` 三处实现语义不一致
+     （`space` 子类型匹配范围不同、是否跳过注释不同）——同一输入可因路径不同得到
+     不同分类。现生产侧与表达式侧共用 `prev_significant_index` / `is_line_only` /
+     `is_midline`。
+  3. 让位闸门从“仅独占行”放宽到“**非行中**”（`_comment_leave_to_expression`）：
+     行尾型注释同样交表达式入口 → 右操作数 `leading`（原就地吐掉后只有锚点通道，
+     普通注释不会回插）。
+  验证：全量 1972 passed / 7 skipped；darkriscv 输出不变（差异仍 37 行、两通道待回插
+  0、纯空白行与基线持平、注释文本零丢失零重复）；新增
+  `tests/engine/parser/test_comment_trivia.py`（8）、宏作 RHS 的条件块保全断言、
+  直出节点前置槽断言。
+
+### Fixed
+
 - **列表项间条件块占位位置（端口表内 `ifdef` 组漂移）**：`_lift_gap_comments`
   原显式排除 tpc marker（判据 `"tpc:" not in text`），使列表项间的 marker 只能走
   "时域回插"的插值/锚窗口——而它的锚是清洁流的**下一个显著 token**（可隔几十行）

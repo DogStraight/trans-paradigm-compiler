@@ -70,6 +70,20 @@ class TestLeadingOwnLineSlot:
         assert out == "/* 块 */\nx", repr(out)
 
 
+class TestVerbatimNodeSlots:
+    def test_verbatim_node_still_emits_leading_slot(self):
+        """直出文本节点（`_verbatim_text`，宏调用类）也要输出前置槽。
+
+        直出路径不走布局，但附着注释在节点 span 之外——漏输出会让注释
+        （含 tpc marker，其文本承载条件块原文）静默丢失。
+        """
+        node = _stmt("x")
+        node.add_attr("_verbatim_text", "`M(c)")
+        node.add_attr("_comment_slots", {"leading_own_line": ["// <tpc:cond:1>"]})
+        out = _render(node, {"layout": {"ref": "value"}})
+        assert "`M(c)" in out and "// <tpc:cond:1>" in out, repr(out)
+
+
 class TestTrailingSlot:
     def test_trailing_comment_line_end(self):
         """trailing 槽位：行尾注释锚定语句行尾。"""

@@ -48,7 +48,7 @@ mapping_cfg 由管线按 rules_dir 缓存后注入。开关映射：
 |------|----------------|------|
 | 下划线属性 | parser → analyzer/transform/renderer | `_` 前缀属性穿过 normalizer（`attr_name.startswith("_")` continue）；`Node.dump` 过滤下划线 |
 | 注释锚点 | parser `_comment_anchors`/`_line_comment_anchors` → render（tpc marker 还原通道） | 普通注释全部进树（Comment 节点/`_comment_slots`）结构序渲染；锚点条目仅宏/条件块 marker 渲染后回插（还原依赖） |
-| 注释槽位 | parser `_comment_slots`（trailing/leading/inline_after）→ renderer | 行尾/行中/前置注释挂节点，结构序渲染（LineSuffix / line.py 锚 token / join 分隔符锚） |
+| 注释槽位 | parser `_comment_slots`（trailing/leading/leading_own_line/inline_after）→ renderer | 行尾/行中/前置（行尾型）/**前置独占行型**注释挂节点，结构序渲染（LineSuffix / line.py 锚 token / join 分隔符锚 / node_renderer 前置槽——含直出文本节点路径） |
 | 语义映射表 | analyze `resolved_ports`/raw → SemanticMappingPlugin | `type_ports_flat` 等映射表（typed_ports 组件 postpass 递归展开供源），ConfigDrivenTransform 消费 |
 | root_scope | analyzer → transform | 语义作用域根（transform 需 scope 非 None 才运行） |
 | 宏 marker | preprocessor → render | `// <tpc:macro:N>` 标记残留于 clean_source，render 时还原 |
