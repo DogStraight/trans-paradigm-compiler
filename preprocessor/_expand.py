@@ -15,6 +15,7 @@ from .primitives.registry import get_primitive, get_primitive_kind, list_primiti
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
+from .macro_shape import get_suffix_leads
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config
@@ -610,6 +611,9 @@ def expand_tokens(
     _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
     func_macros = func_macros or {}
     _syntax = load_comment_syntax(rules_dir)
+    # 赋值后缀宏体的前导符号集（语言包 `[macro_shape] suffix_leads` 声明）——
+    # 引擎不硬编码 `=`（`+`/`[` 等前导符号的处置不同，见两个 lead 声明的注释）
+    _suffix_leads = get_suffix_leads()
     restoration_stack: list[dict] = []
     lines = source.split("\n")
     # 锚名盐：随源文本走（同一文件内所有锚共用一个盐，序号区分彼此）。
@@ -701,8 +705,8 @@ def expand_tokens(
                     }
                 )
                 continue
-            if body.lstrip().startswith("="):
-                # 赋值后缀宏（body 以 `=` 开头，如 ice40 `ICE40_DEFAULT_ASSIGNMENT_1`
+            if _suffix_leads and body.lstrip().startswith(_suffix_leads):
+                # 赋值后缀宏（body 以前导符号开头，如 ice40 `ICE40_DEFAULT_ASSIGNMENT_1`
                 # body=`= 1'b1`，端口默认值位 `input NAME `M`）：token 替换会把
                 # `= 1'b1` 顶成 `tpc_marker_N` 标识符——`input NAME tpc_marker_N`
                 # 两个相邻 id，linter/parser 双拒（ice40 默认配置 34 错，M1）。

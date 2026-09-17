@@ -7,6 +7,7 @@
 import pytest
 
 from core.define import DEFAULT_RULES_DIR
+from preprocessor._expand import expand_tokens, scan_directives
 from preprocessor.macro_shape import (
     KIND_DECL,
     KIND_EXPR,
@@ -15,6 +16,7 @@ from preprocessor.macro_shape import (
     build_parse_probe,
     classify_macro_body,
     get_shape_config,
+    get_suffix_leads,
 )
 
 pytestmark = pytest.mark.smoke
@@ -77,3 +79,39 @@ def test_partial_kind_unused_constant_guard() -> None:
     """四值常量互异（防拼写漂移）。"""
     kinds = {KIND_STMT, KIND_DECL, KIND_EXPR, KIND_PARTIAL}
     assert len(kinds) == 4
+
+
+# ── 赋值后缀前导符号集（suffix_leads）：语言知识在声明，引擎不硬编码 `=` ──
+
+def test_suffix_leads_declared_from_language_pack() -> None:
+    """verilog 声明 `=`（ice40 端口默认值宏形态）。"""
+    assert get_suffix_leads() == ("=",)
+
+
+def test_suffix_leads_empty_when_undeclared() -> None:
+    """未声明 → 该处置不启用（该语言无赋值后缀宏形态）。"""
+    assert get_suffix_leads({}) == ()
+    assert get_suffix_leads({"suffix_leads": []}) == ()
+
+
+def test_suffix_lead_drives_anchor_mode(config_loaded) -> None:
+    """锚形态跟着声明走：`=` 开头 → 行内锚 + body；`+` 开头（在
+    continue_leads 但**不在** suffix_leads）→ token 锚。
+
+    两条事实各自声明、互不牽连：前者是赋值后缀处置，后者是残缺续段预过滤。
+    """
+    del config_loaded  # fixture 依赖声明（语言包配置加载）
+    src = "module m;\n  input a `D;\n  input b `P;\nendmodule\n"
+    _table, funcs, _conds, _ph, _dl, clean, _map = scan_directives(
+        src, DEFAULT_RULES_DIR
+    )
+    _expanded, anchors, _regions, _line_map = expand_tokens(
+        clean,
+        {"D": "= 1'b1", "P": "+ 1'b1"},
+        rules_dir=DEFAULT_RULES_DIR,
+        func_macros=funcs,
+    )
+    by_src = {a["source_text"]: a for a in anchors}
+    assert by_src["`D"]["mode"] == "inline"
+    assert by_src["`D"]["body"] == "= 1'b1"
+    assert by_src["`P"]["mode"] == "token", "`+` 不在 suffix_leads → 不走走行内锚处置"

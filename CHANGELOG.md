@@ -27,10 +27,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
      也把 `/* … */` 与 `//` 写死，现按声明编译三种模式（未声明块注释的语言包 →
      区间形态不存在；未声明行注释 → 单行形态不存在；`tpc-check` 关键字是引擎侧
      工具名，不属于语言知识）。
+  5. 宏体形态的最后一处硬编码：`_expand` 的赋值后缀宏判定写死 `=`（ice40 端口
+     默认值宏），现由语言包 `[macro_shape] suffix_leads` 声明（与 `continue_leads`
+     是两条独立事实：前者=赋值后缀处置，后者=残缺续段预过滤）。`preprocessor/README.md`
+     新增「形态清单」：哪些形态是声明列表、哪些是引擎机制。
   验证：全量 2046 passed / 7 skipped；新增 `tests/engine/lexer/test_comment_syntax.py`
   （5 例，三语言包声明面 + 缓存）、`tests/engine/preprocessor/test_markers.py`
   （12 例，含 yaml `#` 形态的还原与缺形态 fail-fast）、`test_check_suppress.py`
-  补 4 例（yaml 形态声明驱动）；真实语料三工具与改动前
+  补 4 例（yaml 形态声明驱动）、`test_macro_shape.py` 补 3 例（suffix_leads 声明
+  面 + 锚形态随声明走）；真实语料三工具与改动前
   一致（diag 5548 → 5548、宏覆盖 86/135 = 63.7%、lint recall 33/33 / 误报 0）。
 
 - **注释文本里的"伪指令"与注释定界符识别（两起真实语料事故）**：

@@ -21,6 +21,22 @@
 引擎不认识 `//` / `/* */`（yaml 是 `#`，c4 只有行注释且有两种）——语言包未声明
 所需形态而该形态又被需要 → fail-fast（不静默降级）。
 
+## 形态清单（哪些是声明列表、哪些是引擎机制）
+
+**语言知识 → 语言包声明（列表形态）**：
+
+| 形态 | 声明位置 | 消费点 |
+|------|----------|--------|
+| 注释标点（行注释起始 / 成对定界符） | `[comment] pairs` / `[[capture]]` | `lexer/comment_syntax.py` → `_markers.py`、`analyzer/suppress.py` |
+| 宏 token 识别（前缀/后缀策略） | `[macro_recognition]` | `lexer` 宏 token 扫描 |
+| 宏体形态（包裹模板列表 / 续接前导集 / 赋值后缀前导集） | `[macro_shape]`（`wrappers` / `continue_leads` / `suffix_leads`） | `macro_shape.py`（分类）、`_expand.py`（锚形态选择） |
+| 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
+| 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
+
+**引擎机制 → 不进语言包**（形态确定之后的"怎么替换/怎么还原"）：锚三形态
+（`line` / `inline` / `token`）与语义展开路径的选择；注释形态的可用性由声明
+**推导**（有行注释 → 整行形态可用；有块注释 → 行内形态可用）。
+
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |

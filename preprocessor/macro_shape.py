@@ -44,6 +44,18 @@ def get_shape_config(cfg: dict | None = None) -> tuple[dict, list[str]]:
     return wrappers, leads
 
 
+def get_suffix_leads(cfg: dict | None = None) -> tuple[str, ...]:
+    """读取"赋值后缀宏体"的前导符号集（语言包 `[macro_shape] suffix_leads`）。
+
+    宏体以此类符号开头（如 verilog 端口默认值宏 `= 1'b1`）→ 展开侧改走
+    "行内锚 + body 区间"还原（token 替换会造出相邻原子不可解析）。判定依据是
+    **语言语法知识**（哪些前导符号属于赋值后缀形态）→ 声明在语言包；未声明
+    或空 → 该处置不启用（该语言无此宏形态，与 continue_leads 同款宽容）。
+    """
+    cfg = _shape_cfg if cfg is None else cfg
+    return tuple(str(lead) for lead in (cfg.get("suffix_leads") or []))
+
+
 def _wrapper_tpl(spec: object) -> str:
     """取包裹模板（兼容旧字符串形态与 {tpl, pick, ...} 表形态）。"""
     if isinstance(spec, dict):
