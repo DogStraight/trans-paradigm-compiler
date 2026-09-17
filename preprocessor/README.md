@@ -29,7 +29,7 @@
 |------|----------|--------|
 | 注释标点（行注释起始 / 成对定界符） | `[comment] pairs` / `[[capture]]` | `lexer/comment_syntax.py` → `_markers.py`、`analyzer/suppress.py` |
 | 宏 token 识别（前缀/后缀策略） | `[macro_recognition]` | `lexer` 宏 token 扫描 |
-| 宏体形态（包裹模板列表 / 续接前导集 / 赋值后缀前导集） | `[macro_shape]`（`wrappers` / `continue_leads` / `suffix_leads`） | `macro_shape.py`（分类）、`_expand.py`（锚形态选择） |
+| 宏体形态（赋值后缀前导集） | `[macro_shape]`（`suffix_leads`） | `macro_shape.py`（声明读取）、`_expand.py`（锚形态选择） |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
@@ -40,7 +40,7 @@
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
-| `macro_shape.py` | 宏体形态分类（包装解析：完整单元 vs 残缺片段） |
+| `macro_shape.py` | 宏体形态声明的读取点（`[macro_shape] suffix_leads`：赋值后缀宏体的锚形态依据） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |
 | `_markers.py` | tpc marker 书写/识别（注释形态声明驱动） |

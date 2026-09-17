@@ -102,63 +102,13 @@ search_dirs = []
 # silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
 silent = false
 
-# ── [macro_shape] 宏体形态分类（包装解析） ──
-# 宏体放入 wrappers 模板包裹，能完整解析 → 完整语法单元（将来可保留为 AST 节点）；
-# 全部失败 → 残缺片段（只能原位文本级展开）。模板是**语言语法知识**，引擎只做
-# 通用包裹解析（语言知识不进代码）。
-# continue_leads：以此开头的宏体是“残缺续段”（依赖前置上下文）——首 token
-# 预过滤，防包裹模板的宽松接受（如 `+ 4` 被当一元正号、`= 1'b1` 被当端口默认值）。
-[macro_shape]
-continue_leads = [
-    "=",
-    "[",
-    "(",
-    ",",
-    ".",
-    "+",
-    "-",
-    "*",
-    "/",
-    "&",
-    "|",
-    "^",
-    "~",
-    "!",
-    "?",
-    ":",
-    "&&",
-    "||",
-    "==",
-    "!=",
-    "<",
-    ">",
-]
-
+# ── [macro_shape] 宏体形态声明 ──
+# 宏体形态是**语言语法知识**（哪些前导符号属于哪类形态），声明在此；
+# 引擎只按声明选展开/还原路径（语言知识不进代码）。
+#
 # suffix_leads：以此开头的宏体是**赋值后缀形态**（如 ice40 端口默认值宏
 # `` `ICE40_DEFAULT_ASSIGNMENT_1 `` body=`= 1'b1`）——展开时不能 token 替换
 # （`input NAME <锚名>` 两个相邻 id，parser/linter 双拒），要走"行内锚 + body
-# 原文保留"的还原路径。与 continue_leads 是**两条独立事实**（前者=残缺续段
-# 预过滤，本项=赋值后缀处置），只是巧合同含 `=`。
+# 原文保留"的还原路径。消费点：`_expand.py` 的锚形态选择。
+[macro_shape]
 suffix_leads = ["="]
-
-[macro_shape.wrappers.stmt]
-tpl = "module m;\ninitial begin\n{b}\nend\nendmodule"
-pick = "ModuleDecl.InitialStmt.BeginEnd"
-
-[macro_shape.wrappers.decl]
-tpl = "module m;\n{b}\nendmodule"
-pick = "ModuleDecl"
-# 去掉尾部固定部分（module 名 Identifier）
-skip_tail = 1
-
-[macro_shape.wrappers.expr]
-tpl = "module m;\nreg x;\ninitial begin\nx = {b};\nend\nendmodule"
-pick = "ModuleDecl.InitialStmt.BeginEnd.BlockingAssign"
-# 去掉头部固定部分（LHS）
-skip_head = 1
-
-[macro_shape.wrappers.port]
-tpl = "module m;\ninput x {b};\nendmodule"
-pick = "ModuleDecl.BodyInputDecl.DeclaratorList.Declarator"
-# 去掉头部固定部分（端口名 + 默认值重复占位）
-skip_head = 2

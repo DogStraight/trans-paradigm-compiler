@@ -292,15 +292,18 @@
 
 ### P3.6 预处理器宏策略配置化（backlog）
 
-> 原「宏体形态分类 + 宏节点进 AST」已闭环：形态分类器已实现
-> （`preprocessor/macro_shape.py`）；宏边界数据由外层管线就树产生
-> （见 `docs/decisions/0017-macro-in-syntax-position.md`）。剩余 backlog：
+> 原「宏体形态分类 + 宏节点进 AST」路线**已废弃并删除**：形态分类器
+> （`preprocessor/macro_shape.py`）与其 `[macro_shape]` 的 `wrappers`/
+> `continue_leads` 声明、`MacroCall._macro_body` 子树全删（实测调用 0 次、
+> 产物无读取者——pipeline 恒以语义展开，该链永不触发）；宏边界数据由外层管线
+> 就树产生（见 `docs/decisions/0017-macro-in-syntax-position.md`）。剩余 backlog：
 > 展开策略从现 5 种代码分支（整行占位 / inline 锚 / 区间还原 / 补分号 /
 > token 锚）收敛为 TOML 声明、预处理器变配置驱动策略执行器——见
 > references.md「不卫生宏体检测可行性·延伸」。
 
-- [ ] **预处理器宏策略配置化**：宏体形态（TOML 包裹模板判定）→ 展开策略
-      （TOML 声明），引擎按声明执行（语言知识不进代码）
+- [ ] **预处理器宏策略配置化**：宏体形态与展开策略均 TOML 声明
+      （现仅 `[macro_shape] suffix_leads` 一项），引擎按声明执行
+      （语言知识不进代码）
 
 ## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 

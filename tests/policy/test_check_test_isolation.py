@@ -30,15 +30,15 @@ pytestmark = pytest.mark.smoke
 def test_parse_nodeids_keeps_ids_with_spaces_and_brackets() -> None:
     """参数化 id 里可以有空格/方括号——按 "路径.py::" 切，不按空白切。"""
     output = (
-        "tests/engine/preprocessor/test_macro_shape.py::test_classify[= 1'b1-残缺片段-x]\n"
-        "tests/e2e/test_macro_reverse.py::test_basic\n"
+        "tests/engine/preprocessor/test_macro_regions.py::test_body_slice_equals_region_content[reg [7:0]]\n"
+        "tests/engine/lexer/test_lexer.py::TestNegative::test_timeout_safety_net[module m; endmodule]\n"
         "\n"
         "2 tests collected in 0.03s\n"
         "warning: something\n"
     )
     assert cti._parse_nodeids(output) == [
-        "tests/engine/preprocessor/test_macro_shape.py::test_classify[= 1'b1-残缺片段-x]",
-        "tests/e2e/test_macro_reverse.py::test_basic",
+        "tests/engine/preprocessor/test_macro_regions.py::test_body_slice_equals_region_content[reg [7:0]]",
+        "tests/engine/lexer/test_lexer.py::TestNegative::test_timeout_safety_net[module m; endmodule]",
     ]
 
 

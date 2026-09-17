@@ -163,7 +163,6 @@ class Node:
     # 不占 children（sub_node）——渲染与语义遍历均不进入，故行为面零变化；
     # 供增量/双向映射与后续阶段（4c）消费。
     _macro_body: object | None = None
-    # 宏调用原文（含前缀与实参，如 `` `MIN(x,y) ``）：渲染时由 MacroCall 节点直接
     # 输出（走 raw 源区间，ADR-0016）——替代“marker 占位 + 事后文本替换”。
     _macro_source_text: str | None = None
 
@@ -234,11 +233,6 @@ class Node:
             seen.update(id(c) for c in getattr(self, CHILDREN_FIELD))
             yield from getattr(self, CHILDREN_FIELD)
         for attr_name in vars(self):
-            # `_macro_body` = 宏展开体附属子树（MacroCall 专用）：结构可见
-            # （直接属性访问），但不参与遍历——渲染/语义遍历均不进入，
-            # 实现"宏调用位 vs 展开体位"分离且行为面零变化（ADR-0016）。
-            if attr_name == "_macro_body":
-                continue
             val = getattr(self, attr_name)
             if isinstance(val, Node):
                 if id(val) not in seen:

@@ -630,8 +630,8 @@ def _extract_macro_name(source_text: str) -> str:
     return m.group(1) if m else ""
 
 
-def _attach_macro_meta(node: Any, entry: dict, body_provider: Any) -> Any:
-    """给宏边界节点挂锚表元数据（宏名 / 锚文本 / 原文 / 源区间 / 宏体子树）。
+def _attach_macro_meta(node: Any, entry: dict) -> Any:
+    """给宏边界节点挂锚表元数据（宏名 / 锚文本 / 原文 / 源区间）。
 
     渲染按 `_macro_source_text`（raw 源区间切片）直出宏调用原文，故元数据必须挂全；
     缺摘要时节点渲染为空（内容丢失），不是可接受的降级。
@@ -645,19 +645,15 @@ def _attach_macro_meta(node: Any, entry: dict, body_provider: Any) -> Any:
             entry.get("col", 0),
             entry.get("end_col", 0),
         )
-    if body_provider is not None:
-        body_node = body_provider(node._macro_name)
-        if body_node is not None:
-            node._macro_body = body_node
     return node
 
 
-def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) -> Any:
+def _rewrite_marker_nodes(value: Any, table: dict) -> Any:
     """递归把锚标识符节点改写为 MacroCall（含 attrs 内嵌节点）。
 
     锚是普通标识符（`__tpc_marker_<salt>_<n>`，语言包不认识宏），parser 把它
     建成 Identifier 节点；本阶段按锚表改写为 MacroCall 并挂元数据（宏名/原文/
-    源区间/宏体子树），宏边界于是在树中结构化可见。
+    源区间），宏边界于是在树中结构化可见。
     """
     from core.define import CHILDREN_FIELD, Node
 
@@ -668,7 +664,7 @@ def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) ->
             and value.content in table
         ):
             new = Node("MacroCall", content=value.content)
-            _attach_macro_meta(new, table[value.content], body_provider)
+            _attach_macro_meta(new, table[value.content])
             for meta in ("_pos_line", "_pos_col", "_tok_span", "_file"):
                 meta_val = getattr(value, meta, None)
                 if meta_val is not None:
@@ -677,57 +673,17 @@ def _rewrite_marker_nodes(value: Any, table: dict, body_provider: Any = None) ->
         children = getattr(value, CHILDREN_FIELD, None)
         if isinstance(children, list):
             for i, child in enumerate(children):
-                children[i] = _rewrite_marker_nodes(child, table, body_provider)
+                children[i] = _rewrite_marker_nodes(child, table)
         for attr, val in list(vars(value).items()):
             if attr.startswith("_") or attr in ("node_name", CHILDREN_FIELD):
                 continue
-            value.__dict__[attr] = _rewrite_marker_nodes(val, table, body_provider)
+            value.__dict__[attr] = _rewrite_marker_nodes(val, table)
         return value
     if isinstance(value, list):
-        return [_rewrite_marker_nodes(v, table, body_provider) for v in value]
+        return [_rewrite_marker_nodes(v, table) for v in value]
     if isinstance(value, dict):
-        return {k: _rewrite_marker_nodes(v, table, body_provider) for k, v in value.items()}
+        return {k: _rewrite_marker_nodes(v, table) for k, v in value.items()}
     return value
-
-
-def _make_macro_body_provider(ctx: _PipelineContext) -> Any:
-    """构造 `macro_name → MacroBody 子树` 提供者（懒解析 + 按宏名缓存）。
-
-    完整单元宏（形态分类器判定）→ 提取展开体子树；残缺片段 → None（保持文本级
-    处理）。子树只挂 `MacroCall._macro_body`（**不进 children**）→ 渲染与语义
-    遍历不进入，行为面零变化。
-    """
-    from preprocessor.macro_shape import (
-        KIND_DECL,
-        KIND_EXPR,
-        KIND_STMT,
-        build_parse_ast,
-        build_parse_probe,
-        classify_macro_body,
-        extract_macro_body,
-    )
-
-    key_of_kind = {KIND_STMT: "stmt", KIND_DECL: "decl", KIND_EXPR: "expr"}
-    probe = build_parse_probe(ctx.rules_dir)
-    parse_ast = build_parse_ast(ctx.rules_dir)
-    cache: dict[str, Any] = {}
-
-    def provider(macro_name: str) -> Any:
-        if macro_name in cache:
-            return cache[macro_name]
-        node = None
-        body = (ctx.macro_table or {}).get(macro_name)
-        if body:
-            kind, _ = classify_macro_body(body, probe)
-            shape_key = key_of_kind.get(kind)
-            if shape_key:
-                node = extract_macro_body(body, shape_key, parse_ast)
-                if node is not None:
-                    node._from_expansion = True
-        cache[macro_name] = node
-        return node
-
-    return provider
 
 
 # ── 宏区间 raw 拼接（ADR-0017 决策 3/4） ──
@@ -907,7 +863,7 @@ def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
     }
     if not table:
         return ast
-    return _rewrite_marker_nodes(ast, table, _make_macro_body_provider(ctx))
+    return _rewrite_marker_nodes(ast, table)
 
 
 def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:

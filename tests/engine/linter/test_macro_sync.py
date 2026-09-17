@@ -9,7 +9,7 @@ linter（`linter/scanner.py`）与管线（`pipeline/__init__.py`）都调用
 import pytest
 
 from core.define import DEFAULT_RULES_DIR
-from preprocessor.macro_shape import get_shape_config
+from preprocessor.macro_shape import get_suffix_leads
 
 pytestmark = pytest.mark.smoke
 
@@ -35,16 +35,14 @@ def test_both_paths_share_same_expander() -> None:
 
 
 def test_shape_config_single_source() -> None:
-    """形态配置单一来源 = 语言包 TOML（分类器读取，无 Python 硬编码副本）。"""
+    """形态声明单一来源 = 语言包 TOML（引擎不硬编码副本）。"""
     from core.config_registry import ConfigRegistry
 
-    wrappers, leads = get_shape_config()
-    assert wrappers, "语言包未提供 wrappers"
-    assert leads, "语言包未提供 continue_leads"
+    leads = get_suffix_leads()
+    assert leads, "语言包未提供 suffix_leads"
 
     raw = ConfigRegistry._loaded.get("preprocessor.macro_shape") or {}
-    assert raw.get("wrappers") == wrappers
-    assert list(raw.get("continue_leads") or []) == leads
+    assert list(raw.get("suffix_leads") or []) == list(leads)
 
 
 def test_linter_accepts_defined_macro_source() -> None:

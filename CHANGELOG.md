@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **无消费者的宏体形态分类链（判据 A1 无引用）**：`[macro_shape]` 的 `wrappers`
+  （stmt/decl/expr/port 包裹模板 + `pick`/`skip_head`/`skip_tail`）与
+  `continue_leads` 首 token 预过滤、`preprocessor/macro_shape.py` 的
+  `classify_macro_body`/`build_parse_probe`/`build_parse_ast`/`extract_macro_body`、
+  `pipeline._make_macro_body_provider`、`Node._macro_body` 字段与其 `iter_children`
+  排除分支，全批删除（`wrappers.port` 更连引擎调用点都没有：`_PROBE_ORDER` /
+  `key_of_kind` 只含 stmt/decl/expr，仅测试直调）。
+  **实测根因**：pipeline 恒以 `semantic=True` 展开（非空体宏不建 token 锚）→
+  `_stage_macro_nodes` 锚表恒空 → 该链永不触发；在真实管线上挂探针跑一遍：
+  `classify_macro_body` 调用 **0 次**、`extract_macro_body` 请求过的 shape key
+  为空、`_macro_body` 挂载 **0 个**——产物本就无任何读取者（全仓只有写入点 +
+  遍历排除）。同批删除 `tests/engine/preprocessor/test_macro_body_extract.py`
+  与 `test_macro_shape.py` 的分类用例。
+  `[macro_shape]` 只留仍有消费者的 `suffix_leads`（`_expand.py` 锚形态选择，
+  ice40 端口默认值宏；`test_suffix_lead_drives_anchor_mode` 继续锁定
+  "声明 → 行为"链）：`grammar/verilog/base/_macro.toml` 的该段从 61 行缩到 8 行。
+  后续若重做"形态判定 → 展开策略"，按 ROADMAP P3.6 以"声明 + 真实消费点"成型
+  （见 `docs/decisions/0017-macro-in-syntax-position.md`）。
+
 ### Fixed
 
 - **引擎内硬编码注释标点（语言知识泄露）**：占位 marker（`tpc:<kind>:<seq>`）以
