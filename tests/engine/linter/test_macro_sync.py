@@ -1,15 +1,13 @@
 """linter 与管线宏处理同源（0.1.2 阶段 3）：单一来源门禁。
 
-阶段 3 目标 = "形态判定同一份配置，避免双实现漂移"。侦察结论：已成立——
+阶段 3 目标 = "宏处理同一份实现，避免双实现漂移"。侦察结论：已成立——
 linter（`linter/scanner.py`）与管线（`pipeline/__init__.py`）都调用
-`preprocessor._expand.expand_tokens`（同一函数对象），形态配置由
-`preprocessor/macro_shape.py` 单一读取语言包 `[macro_shape]`。本文件用断言
-**锁定**这两点，防未来任一路径私自复制一份实现/配置。
+`preprocessor._expand.expand_tokens`（同一函数对象）。本文件用断言**锁定**
+这一点，防未来任一路径私自复制一份实现。
 """
 import pytest
 
 from core.define import DEFAULT_RULES_DIR
-from preprocessor.macro_shape import get_suffix_leads
 
 pytestmark = pytest.mark.smoke
 
@@ -32,17 +30,6 @@ def test_both_paths_share_same_expander() -> None:
 
     assert linter_scanner.expand_tokens is canonical
     assert pipeline_expand is canonical
-
-
-def test_shape_config_single_source() -> None:
-    """形态声明单一来源 = 语言包 TOML（引擎不硬编码副本）。"""
-    from core.config_registry import ConfigRegistry
-
-    leads = get_suffix_leads()
-    assert leads, "语言包未提供 suffix_leads"
-
-    raw = ConfigRegistry._loaded.get("preprocessor.macro_shape") or {}
-    assert list(raw.get("suffix_leads") or []) == list(leads)
 
 
 def test_linter_accepts_defined_macro_source() -> None:

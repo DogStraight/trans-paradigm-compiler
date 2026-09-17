@@ -26,6 +26,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   后续若重做"形态判定 → 展开策略"，按 ROADMAP P3.6 以"声明 + 真实消费点"成型
   （见 `docs/decisions/0017-macro-in-syntax-position.md`）。
 
+- **`[macro_shape]` 声明整体删除（含 `suffix_leads`）——前置：linter 改走语义展开**：
+  上一项删完后只剩 `suffix_leads`（赋值后缀宏体前导集），它唯一的真消费者是
+  **linter 的锚形态特判**（`linter/scanner.py` 的 `expand_tokens` 未传 `semantic`
+  → 锚形态：`=` 开头 body 改走 inline 锚 + body 区间，否则 `input NAME `M`` 退化为
+  `input NAME tpc_marker_N` 两个相邻 id）。现把 linter 也切到**语义展开**
+  （宏体文本铺进流，与 pipeline 的 lint 输入、analyzer 的 `_expand_source`
+  同一条路）——形态特判与其声明于是不再需要，整段删掉：
+  `preprocessor/macro_shape.py`（模块删除）、`grammar/verilog/base/_macro.toml` 的
+  `[macro_shape]` 段、`grammar/verilog/tpc.toml` 的加载项、`_expand.py` 的
+  `_suffix_leads` 分支与 `get_suffix_leads` 导入、对应测试。
+  **实测依据**：关掉 `suffix_leads`（其余不动）→ ice40 语料 linter **+34 条
+  `phase-statement` 误报**（即当初 M1 的 34 错）；而把 linter 切成语义展开 →
+  9 个真实语料的诊断**逐条 (行,列,码) 完全一致**（3359 条 ice40 含在内，数量与
+  位置均不变）→ 语义展开既去掉特判又不改判定面。
+
 ### Fixed
 
 - **引擎内硬编码注释标点（语言知识泄露）**：占位 marker（`tpc:<kind>:<seq>`）以

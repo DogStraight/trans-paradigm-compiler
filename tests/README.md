@@ -25,7 +25,7 @@ smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆�
 | analyzer（Scope/Symbol） | `engine/analyzer/test_analyzer.py` | 模块级（纯单元） |
 | transform（注释迁移） | `engine/transform/test_comment_migrate.py::TestMigrateComments` | 类级 |
 | renderer（渲染原语） | `engine/renderer/test_renderer_primitives.py` | 模块级（fake renderer 纯内存） |
-| preprocessor（宏指令） | `engine/preprocessor/test_primitives.py` + `test_macro_shape.py` | 模块级 |
+| preprocessor（宏指令） | `engine/preprocessor/test_primitives.py` + `test_macro_regions.py` | 模块级 |
 | pipeline（时点序列） | `engine/pipeline/test_schedule.py::TestSequenceEntries` + `TestBuildSchedules` | 类级 |
 | languages/verilog | `languages/verilog/test_real_syntax.py` + `test_tok_span.py` | 模块级 |
 | languages/c4（第二语言） | `languages/c4/test_c4_asm.py::TestC4Assembly` | 类级 |

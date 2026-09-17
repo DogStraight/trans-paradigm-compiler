@@ -101,14 +101,3 @@ enabled = true
 search_dirs = []
 # silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
 silent = false
-
-# ── [macro_shape] 宏体形态声明 ──
-# 宏体形态是**语言语法知识**（哪些前导符号属于哪类形态），声明在此；
-# 引擎只按声明选展开/还原路径（语言知识不进代码）。
-#
-# suffix_leads：以此开头的宏体是**赋值后缀形态**（如 ice40 端口默认值宏
-# `` `ICE40_DEFAULT_ASSIGNMENT_1 `` body=`= 1'b1`）——展开时不能 token 替换
-# （`input NAME <锚名>` 两个相邻 id，parser/linter 双拒），要走"行内锚 + body
-# 原文保留"的还原路径。消费点：`_expand.py` 的锚形态选择。
-[macro_shape]
-suffix_leads = ["="]

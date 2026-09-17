@@ -292,18 +292,21 @@
 
 ### P3.6 预处理器宏策略配置化（backlog）
 
-> 原「宏体形态分类 + 宏节点进 AST」路线**已废弃并删除**：形态分类器
-> （`preprocessor/macro_shape.py`）与其 `[macro_shape]` 的 `wrappers`/
-> `continue_leads` 声明、`MacroCall._macro_body` 子树全删（实测调用 0 次、
-> 产物无读取者——pipeline 恒以语义展开，该链永不触发）；宏边界数据由外层管线
-> 就树产生（见 `docs/decisions/0017-macro-in-syntax-position.md`）。剩余 backlog：
-> 展开策略从现 5 种代码分支（整行占位 / inline 锚 / 区间还原 / 补分号 /
+> 原「宏体形态分类 + 宏节点进 AST」路线**已废弃并删除**：形态分类器与其
+> `[macro_shape]` 声明（`wrappers` / `continue_leads` / `suffix_leads`）、
+> `MacroCall._macro_body` 子树全删——形态分类的产物无读取者（实测调用 0 次）；
+> `suffix_leads` 唯一的真消费者是 linter 的**锚形态**特判（`=` 开头 body 改走
+> inline 锚），已由“linter 也走语义展开”替代（实测 9 个真实语料诊断逐条位置
+> 一致；ice40 的 34 条 `phase-statement` 误报本来靠该特判绕开，语义展开下自然
+> 不存在）。宏边界数据由外层管线就树产生
+> （见 `docs/decisions/0017-macro-in-syntax-position.md`）。剩余 backlog：
+> 展开策略从现 4 种代码分支（整行占位 / inline 锚 / 补分号 / 语义宏体替换 +
 > token 锚）收敛为 TOML 声明、预处理器变配置驱动策略执行器——见
 > references.md「不卫生宏体检测可行性·延伸」。
 
-- [ ] **预处理器宏策略配置化**：宏体形态与展开策略均 TOML 声明
-      （现仅 `[macro_shape] suffix_leads` 一项），引擎按声明执行
-      （语言知识不进代码）
+- [ ] **预处理器宏策略配置化**：展开策略 TOML 声明（现分散在 `_expand.py`
+      的 4 个分支里），引擎按声明执行（语言知识不进代码）；顺带核算非语义
+      路径（token 锚）当前是否还有引擎调用方
 
 ## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 

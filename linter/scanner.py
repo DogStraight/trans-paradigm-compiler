@@ -251,12 +251,19 @@ class LinterScanner:
             source, self._rules_dir, predefined=predefined, undefine=undefine
         )
         if macro_defs:
+            # 语义展开（与 pipeline 的 lint 输入、analyzer 的 `_expand_source` 同一条
+            # 路）：宏体文本铺进流，语法是否成立由语法自己判。锚形态的 token 替身会
+            # 让值体宏退化成“相邻原子”——如 `input NAME `M`（body `= 1'b1`）变
+            # `input NAME tpc_marker_N` 两个相邻 id → ice40 语料实测 34 条
+            # `phase-statement` 误报（曾经靠 `[macro_shape] suffix_leads` 形态特判
+            # 绕开，形态特判与声明均已删）。
             lex_source, _, _, _ = expand_tokens(
                 clean_source,
                 macro_defs,
                 rules_dir=self._rules_dir,
                 prefix=self._macro_prefix,
                 func_macros=func_macros,
+                semantic=True,
             )
         elif clean_source != source:
             lex_source = clean_source
