@@ -9,10 +9,12 @@ Doc: preprocessor/README.md
 
 import re
 from core.config_registry import declare_cfg
-from core.token_protocol import COMMENT_TOKEN_TYPE, anchor_name, anchor_salt
+from core.token_protocol import anchor_name, anchor_salt
+from lexer.comment_syntax import CommentSyntax, load_comment_syntax
 from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
+from ._markers import inline_marker, line_marker
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config
@@ -97,54 +99,6 @@ def _get_include_config() -> dict:
     return dict(_directives_cfg.get("include", {}))
 
 
-_comment_marker_cache: dict[
-    str, tuple[tuple[tuple[str, str], ...], tuple[str, ...]]
-] = {}
-
-
-def _load_comment_markers(
-    rules_dir: str,
-) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
-    """注释标记：`(跨行块注释定界符对, 行注释起始标记)`。
-
-    与 Lexer 同源：`ConfigRegistry.resolve(rules_dir)` → `merge_token_define` →
-    `capture_runner.build_rules` 归一化后按 kind 分流（引擎不知道注释标点，
-    `//` / `/* */` 全部来自语言包）：
-      - `marker`（如 `/* … */`）→ 成对定界符，跨行；
-      - `line`（如 `// … 换行`）→ 行内即终止，**不产生跨行状态**，但扫描时
-        必须跳过其文本——否则 `//* group x` 里的 `/*` 会被当成块注释开启
-        （实测：ref_simcells.v 第 31 行之后 3783 行全被当成注释内部）。
-    按 rules_dir 缓存。
-
-    用途：块注释**内部的行不是指令行**——注释里写 `` `ifdef X `` 这类文本若
-    按指令处理，会丢行甚至把注释截断成未闭合注释（实测输出
-    `/* note\\nendmodule`，语法破坏）。
-    """
-    cached = _comment_marker_cache.get(rules_dir)
-    if cached is not None:
-        return cached
-    import os
-
-    from core.config_registry import ConfigRegistry
-    from lexer.capture_runner import CaptureRunner
-    from lexer.lexer_utils import merge_token_define
-
-    resolved = ConfigRegistry.resolve(
-        rules_dir, plugins_dir=os.path.join(rules_dir, "plugins")
-    )
-    token_define = merge_token_define(resolved)
-    rules = [
-        rule
-        for rule in CaptureRunner.build_rules(token_define)
-        if rule.token_type == COMMENT_TOKEN_TYPE
-    ]
-    pairs = tuple((r.start, r.end) for r in rules if r.kind == "marker" and r.end)
-    line_markers = tuple(r.start for r in rules if r.kind == "line" and r.start)
-    cached = (pairs, line_markers)
-    _comment_marker_cache[rules_dir] = cached
-    return cached
-
-
 def _advance_block_comment(
     line: str,
     state: str | None,
@@ -218,12 +172,15 @@ def _build_macro_re(prefix: str) -> re.Pattern:
 # ── 纯文本展开（新方案）──
 
 
-def _inject_directive_marker(ctx: dict, stack: list, jno: int, line: str) -> None:
+def _inject_directive_marker(
+    ctx: dict, stack: list, jno: int, line: str, syntax: CommentSyntax
+) -> None:
     """active 指令行（define/undef/include）原位占位。
 
     指令行从 token 流剥离（不进入 clean_source），但在原位置插入
-    `// <tpc:directive:N>` 整行注释 marker，原文记入 placeholders；渲染后由
-    restore_anchors 原位回插，实现指令行位置保真（不再堆到文件头）。
+    整行占位注释（注释形态由语言包声明，见 `_markers.line_marker`），
+    原文记入 placeholders；渲染后由 restore_anchors 原位回插，实现指令行
+    位置保真（不再堆到文件头）。
     原文存**完整行（含前导缩进）**——还原要恢复原文形态，剥缩进会让
     嵌套 ifdef 内的 define 还原后顶格（ref 里 define 有 2/4 空格缩进）。
     占位行按 (原始行号, 文本) 入账本——1:1 替换不改变行数，行映射照常。
@@ -231,13 +188,14 @@ def _inject_directive_marker(ctx: dict, stack: list, jno: int, line: str) -> Non
     seq = ctx["_directive_seq"]
     ctx["_directive_seq"] = seq + 1
     marker = f"tpc:directive:{seq}"
+    placeholder = line_marker(syntax, marker)
     ctx.setdefault("_directive_placeholders", {})[marker] = line
     if stack:
         branch = stack[-1].get("cur_branch")
         if branch is not None:
-            branch["lines"].append((jno, f"// <{marker}>"))
+            branch["lines"].append((jno, placeholder))
     else:
-        ctx["_inject_lines"].append((jno, f"// <{marker}>"))
+        ctx["_inject_lines"].append((jno, placeholder))
 
 
 def scan_directives(
@@ -313,8 +271,9 @@ def scan_directives(
     # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
     source, join_map = _join_continuation_lines(source)
     lines = source.split("\n")
-    # 块注释跨行状态（定界符/行注释标记来自语言包声明）：注释内部的行**不是指令行**
-    _block_pairs, _line_markers = _load_comment_markers(rules_dir)
+    # 注释跨度扫描（定界符/行注释标记来自语言包声明）：注释内部的行**不是指令行**
+    _syntax = load_comment_syntax(rules_dir)
+    _block_pairs, _line_markers = _syntax.block_pairs, _syntax.line_starts
     _block_state: str | None = None
 
     for jno, line in enumerate(lines, 1):
@@ -355,7 +314,7 @@ def scan_directives(
         if not handler_cfg.get("enabled", True):
             # 配置禁用：不执行 handler，但原文原位占位保留
             if _is_ifdef_active(ctx):
-                _inject_directive_marker(ctx, stack, jno, line)
+                _inject_directive_marker(ctx, stack, jno, line, _syntax)
             elif stack:
                 branch = stack[-1].get("cur_branch")
                 if branch is not None:
@@ -379,7 +338,7 @@ def scan_directives(
             handler = get_primitive(op)
             if handler:
                 handler(stripped, prefix, directive_name, ctx)
-            _inject_directive_marker(ctx, stack, jno, line)
+            _inject_directive_marker(ctx, stack, jno, line, _syntax)
         elif stack:
             # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
             branch = stack[-1].get("cur_branch")
@@ -608,6 +567,7 @@ def expand_tokens(
     source: str,
     macro_defs: dict[str, str],
     *,
+    rules_dir: str,
     prefix: str = "`",
     func_macros: dict[str, list[str]] | None = None,
     semantic: bool = False,
@@ -618,6 +578,9 @@ def expand_tokens(
     带参宏（func_macros 中登记的名字）识别 `NAME( ... ) 调用并做形参替换。
     不再依赖 Token 流或 Lexer。
 
+    rules_dir：语言包目录——锚以注释形态穿过管线，标点从声明取
+    （`lexer/comment_syntax.py`，引擎不认识 `//` / `/* */`）。
+
     semantic=True（check 语义分析用，2026-08-29）：语句体宏（token 锚
     形态）改为**宏体展开**——锚只服务渲染还原，check 不需要还原、需要宏体
     语义（否则宏体内语句不可分析 + 锚被当未解析引用报 W002）。渲染路径
@@ -625,7 +588,7 @@ def expand_tokens(
 
     锚形态（统一位置桥，见 _bridge）：
       line   整行占位：独占整行的宏调用（`debug(...)`）、行首空体宏
-             （`FORMAL_KEEP reg ...）→ 整行替换为 `// <tpc:macro:N>` 占位，
+             （`FORMAL_KEEP reg ...）→ 整行替换为行注释占位，
              source_text = 整行原文（含宏调用），渲染后整行回插。
       sync   行内非空体宏（如 `assign z = `MIN(x, y);`）→ 保留 body 替换，
              记录同步词字段，由同步词窗口启发式回插（兼容现状）。
@@ -646,6 +609,7 @@ def expand_tokens(
     """
     _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
     func_macros = func_macros or {}
+    _syntax = load_comment_syntax(rules_dir)
     restoration_stack: list[dict] = []
     lines = source.split("\n")
     # 锚名盐：随源文本走（同一文件内所有锚共用一个盐，序号区分彼此）。
@@ -701,7 +665,7 @@ def expand_tokens(
         )
         if single_head_empty:
             marker = make_marker("macro", _next_macro_seq())
-            lines[line_no - 1] = f"// <{marker}>"
+            lines[line_no - 1] = line_marker(_syntax, marker)
             restoration_stack.append(
                 {
                     "marker": marker,
@@ -727,7 +691,7 @@ def expand_tokens(
             if not body:
                 # 空 body 宏：行内注释锚（marker 唯一，还原精确）
                 marker = make_marker("macro", _next_macro_seq())
-                parts[col:end] = f"/*<{marker}>*/"
+                parts[col:end] = inline_marker(_syntax, marker)
                 forward_entries.append(
                     {
                         "marker": marker,
@@ -747,7 +711,7 @@ def expand_tokens(
                 # `input NAME = 1'b1`，Declarator @Init? 兜住端口默认值），
                 # 还原时按 [marker..body] 区间替换回宏调用原文（source_text）。
                 marker = make_marker("macro", _next_macro_seq())
-                parts[col:end] = f"/*<{marker}>*/{body}"
+                parts[col:end] = inline_marker(_syntax, marker) + body
                 forward_entries.append(
                     {
                         "marker": marker,

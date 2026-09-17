@@ -174,7 +174,9 @@ ADR-0006 边界分析提出的五条理论边界，世界 A 相关四条落地�
 
 2. **tpc marker 通道锚点回插**：`inline_comment.py` 现只处理 tpc marker
    内部标记（宏/指令占位还原）——普通注释已全进树（单机制）；marker 通道
-   仍锚点窗口回插（内部标记非用户注释，漂移风险低）。**接受**：real
+   仍锚点窗口回插（内部标记非用户注释，漂移风险低）。marker 以**注释形态**
+   穿过管线，标点来自语言包声明（`lexer/comment_syntax.py` +
+   `preprocessor/_markers.py`），渲染端不硬编码 `//` / `/* */`。**接受**：real
    保真度门禁（8 module + 关键构造）锁定现状，攻击面在可测范围内。
 
 3. **fidelity 只有空行维度**：`indent_only`（仅缩进）是配置缺口——但世界 B

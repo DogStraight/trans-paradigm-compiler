@@ -46,6 +46,7 @@
 | token 定义驱动扫描（主扫描器） | `language_walkthrough.md`（词法层：token 定义驱动） | `lexer/main_lexer.py::Lexer.tokenize` | `tests/engine/lexer/test_lexer.py` |
 | 数字字面量 DFA（`[[number.based]]` 配置驱动） | `language_walkthrough.md`（数字字面量 DFA） | `lexer/number_gen.py`<br>`lexer/number_runner.py` | `tests/engine/lexer/test_number_gen.py`<br>`tests/engine/lexer/test_number_baseline.py` |
 | 原始文本捕获（注释/字符串/块标量） | `language_walkthrough.md`（注释/字符串 token 扫描） | `lexer/capture_runner.py` | `tests/engine/lexer/test_capture_runner.py` |
+| 注释形态读取（行注释起始 + 成对定界符，声明驱动） | `preprocessor/README.md`（marker 书写形态） | `lexer/comment_syntax.py::load_comment_syntax` | `tests/engine/lexer/test_comment_syntax.py` |
 | 顶层声明预扫描 | `language_walkthrough.md`（预扫描：顶层声明收集） | `lexer/pre_scan.py` | `tests/engine/lexer/test_lexer.py` |
 | 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all`<br>`lexer/lexer_utils.py::merge_token_define` | `tests/engine/core/test_config_loading.py` |
 
@@ -101,6 +102,7 @@
 |----------|----------|------------------|------------------|
 | 宏展开（strip 指令 + `` `NAME `` 引用展开） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py` | `tests/engine/preprocessor/test_primitives.py` + `tests/languages/verilog/test_macro*.py` |
 | 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
+| tpc marker 通道（占位注释形态声明驱动 + 锚定位） | `preprocessor/README.md`（marker 书写形态） | `preprocessor/_markers.py`（书写/识别）<br>`preprocessor/_bridge.py::restore_anchors`（按锚回插） | `tests/engine/preprocessor/test_markers.py`<br>`tests/engine/preprocessor/test_anchor_protocol.py` |
 
 ### core + pipeline — 引擎骨架 / 配置 / 编排
 

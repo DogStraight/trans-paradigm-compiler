@@ -7,6 +7,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **引擎内硬编码注释标点（语言知识泄露）**：占位 marker（`tpc:<kind>:<seq>`）以
+  注释形态穿过管线（parser 当 trivia、渲染端保留注释），但书写/识别处把 verilog
+  的 `//` 与 `/* */` 写死在引擎里（`_expand` 的指令占位与宏锚、`ifdef` 的条件块
+  占位、`_bridge` 的还原、`pipeline` 的 marker 行扫描、`renderer/inline_comment`
+  的整行占位扫描——yaml/c4 这类语言包里这些标点不成立）。现全部改为**语言包声明
+  驱动**：
+  1. `lexer/comment_syntax.py`（新）：`CommentSyntax`（行注释起始 + 成对定界符）
+     ——注释标点的唯一读取点，从 `[comment] pairs` / `[[capture]]` 归一化并按
+     `rules_dir` 缓存；预处理器扫描用的标记面（跨行定界符对 + 行注释起始列表）
+     同源。
+  2. `preprocessor/_markers.py`（新）：marker 的两种书写形态（整行行注释占位 /
+     行内块注释占位）与识别（整行形态正则、`tpc:` 编号提取），标点取自声明；
+     语言包未声明所需形态而该形态又被需要 → fail-fast（不静默降级）。
+  3. 还原侧按声明的标点定位（`_bridge.restore_anchors` / `_reverse` /
+     `renderer/comment_restore` / `renderer/inline_comment`），`expand_tokens`
+     新增 `rules_dir` 形参（锚的书写形态来源）。
+  验证：全量 2042 passed / 7 skipped；新增 `tests/engine/lexer/test_comment_syntax.py`
+  （5 例，三语言包声明面 + 缓存）、`tests/engine/preprocessor/test_markers.py`
+  （12 例，含 yaml `#` 形态的还原与缺形态 fail-fast）；真实语料三工具与改动前
+  一致（diag 5548 → 5548、宏覆盖 86/135 = 63.7%、lint recall 33/33 / 误报 0）。
+
 - **注释文本里的"伪指令"与注释定界符识别（两起真实语料事故）**：
   1. **块注释内的指令文本**：`scan_directives` 按行首前缀判定指令 → 注释里写
      `` `ifdef `` / `` `endif `` / `` `define `` 这类文本时被当真指令，行被丢掉、

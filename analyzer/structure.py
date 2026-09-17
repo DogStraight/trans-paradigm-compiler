@@ -275,7 +275,11 @@ class _StructureBase:
                 # semantic=True：语句体宏展开宏体（check 需语义，不要保真锚
                 # marker——否则宏体不可分析 + marker 被 W002 误报）
                 clean, _, regions, exp_to_clean = expand_tokens(
-                    clean, macro_table, func_macros=func_macros, semantic=True
+                    clean,
+                    macro_table,
+                    rules_dir=self._rules_dir,
+                    func_macros=func_macros,
+                    semantic=True,
                 )
                 exp_to_raw = [
                     clean_to_raw[c - 1] if 1 <= c <= len(clean_to_raw) else None

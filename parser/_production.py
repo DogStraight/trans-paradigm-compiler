@@ -553,7 +553,7 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
                 # 注释前一个非空白 token（newline/文件首 = 独占行）。
                 # 独占行且非 tpc marker 的注释由所在列表容器的 repeat
                 # 上浮为 Comment 迭代项（行号窗口，见 _repeat_loop）；
-                # tpc marker（`// <tpc:*>`）排除——宏/条件块还原依赖
+                # tpc marker（整行行注释形态的占位）排除——宏/条件块还原依赖
                 # only_tpc 通道，不进树。
                 line_only = is_line_only(context.tokens, context.token_pointer)
                 context.advance_token()
@@ -880,7 +880,7 @@ def _lift_gap_comments(
     b 行尾逗号后的 `// Data` 行 > b 行，留给 c 迭代。排除非独占行
     （line_only=False，行尾漏网保持 line 通道）。
 
-    tpc marker（`// <tpc:*>`）同样上浮（2026-09-17）：它虽是 only_tpc 通道的
+    tpc marker（整行行注释形态的占位）同样上浮（2026-09-17）：它虽是 only_tpc 通道的
     占位，但**独占行 marker 处在列表项间**时是结构位置——上浮为 Comment
     迭代项后由渲染器原样输出在正确项间，restore 的 existing_lines 检查跳过
     重复回插，条件块/宏原文就地替换（位置精确）。此前排除 → 只能走时域回插

@@ -70,6 +70,8 @@ from preprocessor import (
     scan_directives,
     expand_tokens,
 )
+from preprocessor._markers import line_form_re
+from lexer.comment_syntax import load_comment_syntax
 
 # 模块级共享状态：rules/lexer/renderer/transformer 按 rules_dir 缓存，避免重复初始化
 _PIPELINE_SHARED: dict = {}
@@ -448,14 +450,14 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
         undefine=ctx.undefine,
     )
     ctx.log(f"[preprocessor] macros defined: {len(ctx.macro_table)}")
-    # 扫描 clean_source 中 tpc marker 的源行号（restore_line_comments 对被吞
-    # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）
+    # 扫描 clean_source 中整行占位 marker 的源行号（restore_line_comments 对被吞
+    # marker 用已渲染 marker 分段线性插值定位，需要源行号锚点）——占位形态
+    # （行注释标点）从语言包声明取，引擎不硬编码。
+    _ph_re = line_form_re(load_comment_syntax(ctx.rules_dir))
     for _i, _l in enumerate(ctx.source.split("\n"), 1):
-        if "// <tpc:" in _l:
-            _start = _l.find("tpc:")
-            _end = _l.find(">", _start)
-            if _end > _start:
-                ctx.tpc_src_map[_l[_start:_end]] = _i
+        _m = _ph_re.match(_l)
+        if _m:
+            ctx.tpc_src_map[_m.group(1)] = _i
 
 
 def _stage_expand(ctx: _PipelineContext) -> None:
@@ -482,6 +484,7 @@ def _stage_expand(ctx: _PipelineContext) -> None:
             ) = expand_tokens(
                 ctx.source,
                 ctx.macro_table,
+                rules_dir=ctx.rules_dir,
                 func_macros=ctx.func_macros,
                 semantic=True,
             )
@@ -493,6 +496,7 @@ def _stage_expand(ctx: _PipelineContext) -> None:
         ctx.source, ctx.restore_stack, ctx.macro_regions, _ = expand_tokens(
             ctx.source,
             ctx.macro_table,
+            rules_dir=ctx.rules_dir,
             func_macros=ctx.func_macros,
             semantic=True,
         )
@@ -993,7 +997,7 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
 
     # 格式化生成文本（缩进/品类对齐/实例端口对齐）——必须在 restore **之前**：
     # 此刻文本是 AST 渲染结果（clean_source 的指令已换成
-    # `// <tpc:directive:N>` 注释 marker），**不含预处理指令**。restore 之后
+    # 整行占位注释 marker（行注释形态，标点来自语言包声明），**不含预处理指令**。restore 之后
     # 文本会带回宏调用点/条件块原文与 `ifdef` 指令行，而 formatter 是无预处理器
     # 的 Verilog formatter——实测被误解析（`reg [31:0] IFPC [0:(2**`__THREADS__)-1];`
     # 被打散成 `reg IFPC // 注释 [0:...]`，`;` 落进注释 → 输出语法非法，
@@ -1017,6 +1021,7 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         restoration_stack=ctx.restore_stack,
         placeholders=ctx.placeholders,
         tpc_src_map=ctx.tpc_src_map,
+        syntax=load_comment_syntax(ctx.rules_dir),
         log_fn=ctx.log,
     )
 

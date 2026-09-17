@@ -15,6 +15,7 @@ from core.token_protocol import (
     anchor_name,
     anchor_salt,
 )
+from lexer.comment_syntax import load_comment_syntax
 from preprocessor._bridge import restore_anchors
 
 
@@ -90,31 +91,37 @@ class TestTokenRestoreGuard:
     def _marker(self, seq: int = 1) -> str:
         return anchor_name(seq, "deadbeef")
 
+    def _restore(self, rendered: str, anchors: list[dict]) -> str:
+        # 注释形态（marker 书写标点）来自语言包声明，引擎不认识
+        return restore_anchors(
+            rendered, anchors, syntax=load_comment_syntax("grammar/verilog")
+        )
+
     def test_restore_single_hit(self) -> None:
         marker = self._marker()
         rendered = f"wire [7:0] a;\n  assign a = {marker};\n"
-        out = restore_anchors(rendered, self._entry(marker))
+        out = self._restore(rendered, self._entry(marker))
         assert out == "wire [7:0] a;\n  assign a = `NAME;\n"
 
     def test_restore_skips_when_ambiguous(self) -> None:
         """锚文本出现两次（用户文本恰含锚名）→ 保留占位，不做静默错还原。"""
         marker = self._marker()
         rendered = f"a = {marker};\nb = {marker};\n"
-        out = restore_anchors(rendered, self._entry(marker))
+        out = self._restore(rendered, self._entry(marker))
         assert out == rendered
 
     def test_restore_skips_when_absent(self) -> None:
         """锚文本 0 次（渲染路径已用原文直出）→ 不动作，不误改文本。"""
         marker = self._marker()
         rendered = "a = `NAME;\n"
-        assert restore_anchors(rendered, self._entry(marker)) == rendered
+        assert self._restore(rendered, self._entry(marker)) == rendered
 
     def test_prefix_marker_not_matched(self) -> None:
         """锚名是更长锚名的前缀 → 不误匹配（序号 1 不吃序号 10）。"""
         short = self._marker(1)
         long = self._marker(10)
         rendered = f"a = {long};\n"
-        assert restore_anchors(rendered, self._entry(short)) == rendered
+        assert self._restore(rendered, self._entry(short)) == rendered
 
 
 @pytest.mark.parametrize("seq", [1, 99, 12345])

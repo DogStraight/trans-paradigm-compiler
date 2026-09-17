@@ -10,6 +10,7 @@ Doc: renderer/renderer_architecture.md（注释单机制：restore 纯 tpc）
 
 from typing import Any, Callable
 
+from lexer.comment_syntax import CommentSyntax
 from preprocessor._reverse import protect_and_reverse, restore_condition_blocks
 from .inline_comment import restore_comments, restore_line_comments
 
@@ -22,6 +23,7 @@ def restore_all_comments(
     restoration_stack: Any | None,
     placeholders: dict | None,
     tpc_src_map: dict | None,
+    syntax: CommentSyntax,
     log_fn: Callable[[str], None] | None = None,
 ) -> str:
     """tpc 还原编排（marker 回插 + 宏还原 + 条件块）。
@@ -31,6 +33,7 @@ def restore_all_comments(
     - restoration_stack: 宏展开还原栈（非空 = 展开路径）
     - placeholders: 条件块占位映射
     - tpc_src_map: 源行号 → 渲染行号插值锚点
+    - syntax: 语言包注释形态（marker 以注释形态穿过管线，标点从声明取）
     - log_fn: 日志回调（默认静默）
 
     注：普通注释回插通道已全部删除（ADR-0013 单机制——注释进树结构序
@@ -47,14 +50,15 @@ def restore_all_comments(
     log = log_fn or (lambda _: None)
     restore_stack = bool(restoration_stack)
 
-    # Inline comment restoration：仅展开路径——宏 marker（`/*<tpc:macro:N>*/`）
+    # Inline comment restoration：仅展开路径——宏 marker（行内块注释形态，
+    # verilog 下是 `/*<tpc:macro:N>*/`）
     # 是块注释，被 parse_token 收集进 _comment_anchors，不回注则
     # protect_and_reverse 找不到 marker 宏调用丢失（tv80 `TV80DELAY`）；
     # 普通注释锚点漂移（渲染行号与源行号错位）会错插到端口/参数行——普通
     # 注释进树结构序渲染，不在此回插（restore_comments 恒 tpc 语义）。
     if comment_anchors and restore_stack:
         content, n = restore_comments(
-            content, comment_anchors, tpc_src_map=tpc_src_map
+            content, comment_anchors, tpc_src_map=tpc_src_map, syntax=syntax
         )
         log(f"[comments] tpc inline marker restoration: {n} items")
 
@@ -64,23 +68,23 @@ def restore_all_comments(
     # 找不到 marker，宏还原失效。有宏/条件块时回插，无则整个跳过。
     if line_anchors and (restore_stack or placeholders):
         content, n = restore_line_comments(
-            content, line_anchors, tpc_src_map=tpc_src_map
+            content, line_anchors, tpc_src_map=tpc_src_map, syntax=syntax
         )
         log(f"[comments] tpc marker restoration: {n} items")
 
     # Reverse macro protection — 必须放在 line-comment restore 之后：
-    # 宏 line 锚（`// <tpc:macro:N>`）是注释行，被 parser 收集进
+    # 宏 line 锚（整行行注释形态，verilog 下是 `// <tpc:macro:N>`）是注释行，被 parser 收集进
     # line_comment_anchors，由 restore_line_comments 回插后 protect_and_reverse
     # 才能定位 marker 并替换为整行原文。
     if restore_stack:
-        content = protect_and_reverse(content, anchors=restoration_stack)
+        content = protect_and_reverse(content, anchors=restoration_stack, syntax=syntax)
         log("[preprocessor] macros reversed")
 
     # Restore conditional blocks（占位注释 → 原文，inactive 分支 + 块边界）
-    # 必须放在 line-comment restore 之后：占位符 `// <tpc:cond:N>` 本身是注释行，
+    # 必须放在 line-comment restore 之后：占位符（整行行注释形态）本身是注释行，
     # 可能被 production skip 吞掉并记入 line_comment_anchors，若先 restore 条件块、
     # 后回插行注释，占位符会被再次插回而残留。
     if placeholders:
-        content = restore_condition_blocks(content, placeholders)
+        content = restore_condition_blocks(content, placeholders, syntax=syntax)
         log(f"[preprocessor] condition blocks restored: {len(placeholders)}")
     return content

@@ -20,7 +20,11 @@ def _expand(src: str) -> tuple[str, list[dict]]:
     """展开（语义模式）→ (展开文本, 区间表)。"""
     table, func_macros, _, _, _, clean, _ = scan_directives(src, _RULES)
     expanded, _, regions, _ = expand_tokens(
-        clean, table, func_macros=func_macros, semantic=True
+        clean,
+        table,
+        rules_dir=_RULES,
+        func_macros=func_macros,
+        semantic=True,
     )
     return expanded, regions
 
@@ -61,7 +65,7 @@ def test_multi_line_body_spans_lines() -> None:
     src = "module m;\n  wire a;\n  assign a = `M;\nendmodule\n"
     body = "1'b1 +\n  1'b0"
     expanded, _, regions, line_map = expand_tokens(
-        src, {"M": body}, semantic=True
+        src, {"M": body}, rules_dir=_RULES, semantic=True
     )
     assert len(regions) == 1
     # 多行宏体：输出行数 > 源行数，映射里 3 行（源行 3）占 3 个输出行位
@@ -128,7 +132,7 @@ def test_regions_only_in_semantic_mode() -> None:
         "`define V 1'b1\nmodule m;\n  assign a = `V;\nendmodule\n", _RULES
     )
     expanded, anchors, regions, _ = expand_tokens(
-        clean, table, func_macros=func_macros
+        clean, table, rules_dir=_RULES, func_macros=func_macros
     )
     assert regions == []
     assert anchors, "渲染路径应产锚"

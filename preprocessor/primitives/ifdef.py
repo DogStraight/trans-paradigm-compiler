@@ -16,6 +16,9 @@ ctx["_cur_line_no"]（scan_directives 主循环维护，测试直调 handler 时
 Doc: preprocessor/README.md
 """
 
+from lexer.comment_syntax import load_comment_syntax
+
+from .._markers import line_marker
 from .registry import register
 
 
@@ -38,13 +41,21 @@ def _make_placeholder(ctx, lines):
 
     lines 为 (原始行号, 文本) 账本对；占位行本身是注释（无 token），归属
     取段内首个已知行号，全未知（直接调用 handler 的测试路径）为 None。
+    占位**注释形态**由语言包声明（引擎不认识 `//` / `/* */`）——ctx 必须
+    带 rules_dir（scan_directives 设置；直调 handler 的测试须自备）。
     """
+    rules_dir = ctx.get("rules_dir")
+    if not rules_dir:
+        raise ValueError(
+            "[preprocessor] ifdef 占位需要 ctx['rules_dir']——"
+            "占位注释形态从语言包声明取（引擎不认识注释标点）"
+        )
     seq = ctx.get("_cond_seq", 0)
     ctx["_cond_seq"] = seq + 1
     ph_id = f"tpc:cond:{seq}"
     ctx.setdefault("_cond_placeholders", {})[ph_id] = "\n".join(t for _, t in lines)
     anchor = next((n for n, _ in lines if n is not None), None)
-    return anchor, f"// <{ph_id}>"
+    return anchor, line_marker(load_comment_syntax(rules_dir), ph_id)
 
 
 def _flush_block(ctx, block):

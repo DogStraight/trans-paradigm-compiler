@@ -3,21 +3,28 @@ inline_comment.py — tpc marker 回插（渲染后字符串级后处理）
 
 普通注释已全部进树（注释单机制：Comment 节点 / 节点 `_comment_slots`，
 渲染端结构序精确输出）——本模块只剩 **tpc marker 内部通道**：宏 marker
-（`/*<tpc:macro:N>*/`）与条件块占位（`// <tpc:cond:N>`）被 production
+（行内块注释形态）与条件块占位（整行行注释形态）被 production
 吞掉时经锚点收集，渲染后回插/插值定位，供 `protect_and_reverse` /
 `restore_condition_blocks` 找到标记（宏/条件块还原依赖）。标记是内部编号、
-非用户注释，锚点漂移风险低。
+非用户注释，锚点漂移风险低。**注释标点来自语言包声明**
+（`lexer/comment_syntax.py`，经 `preprocessor/_markers.py`）——本模块不硬编码
+`//` / `/* */`。
 
 Doc: renderer/renderer_architecture.md（注释单机制：tpc marker 通道）
 """
 
 import re
 
+from lexer.comment_syntax import CommentSyntax
+from preprocessor._markers import line_form_re, marker_core_re
+
 
 def restore_comments(
     rendered: str,
     comment_anchors: list[dict],
     tpc_src_map: dict | None = None,
+    *,
+    syntax: CommentSyntax,
 ) -> tuple[str, int]:
     """
     通过锚点匹配将 inline comment 回注到渲染文本中。
@@ -36,11 +43,11 @@ def restore_comments(
     5. 匹配失败则退化到窗口最后一行行尾追加
 
     ADR-0013 目标④（2026-09-05）：普通注释回插通道已删除（注释进树结构
-    序渲染）——本函数**只处理 tpc marker**（`/*<tpc:*>` 宏 marker /
-    `// <tpc:cond:N>` 条件块占位，宏/条件块还原依赖）。普通注释条目
+    序渲染）——本函数**只处理 tpc marker**（行内块注释形态的宏 marker /
+    整行行注释形态的条件块占位，宏/条件块还原依赖）。普通注释条目
     直接跳过。原 only_tpc / only_midline 参数删除（调用方恒 tpc 语义）。
 
-    tpc 占位标记（midline 行注释，如表达式中间的条件块占位 `// <tpc:cond:N>`，
+    tpc 占位标记（midline 行注释，如表达式中间的条件块占位，
     2026-08-28 darkriscv 还原修复）：独立行插入 + 插值定位，不参与普通注释
     的锚点窗口/单行单插竞争——相邻多占位（锚相同）或渲染行号漂移时，普通
     退化会把第二个占位甩到文件尾或静默丢失（darkriscv 12 个 ifdef 缺失的
@@ -74,7 +81,7 @@ def restore_comments(
             continue  # 普通注释进树结构序渲染，不再回插（ADR-0013 目标④）
         if comment in rendered:
             # marker 已内联渲染（AST 路径）：如 ice40 端口列表内的
-            # /*<tpc:macro:N>*/ 既是列表结构被锚点收集、又作为块注释节点
+            # 行内块注释形态的宏 marker 既是列表结构被锚点收集、又作为块注释节点
             # 随 AST 渲染——内联位置是权威位置，锚点回插会双份（宏还原后
             # 同一段原文出现两次）。marker 编号唯一，全局判存在即可。
             continue
@@ -120,7 +127,7 @@ def restore_comments(
     if tpc_pending:
         # 插值锚点（C4 收敛自 _scan_rendered_tpc；顺带修复 for 循环误缩进
         # 在 `if tpc_src_map:` 内——锚点映射为空时占位循环不执行的缺陷）
-        rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map)
+        rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map, syntax)
         # 相邻 tpc 标记顺序插入（同 restore_line_comments）：表达式链内
         # 连续条件块（如 darkriscv IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）
         # 独立插值会分散错位，相邻标记跟随上次插入位置保持结构
@@ -154,18 +161,20 @@ def restore_comments(
 
 
 def _scan_rendered_tpc(
-    lines: list[str], tpc_src_map: dict | None
+    lines: list[str], tpc_src_map: dict | None, syntax: CommentSyntax
 ) -> tuple[dict[str, int], dict[str, int]]:
     """扫描已渲染 tpc marker → 插值锚点（C4 位置桥收敛，2026-08-28）。
 
     返回 (rendered_tpc, rendered_tpc_src)：
-      rendered_tpc:     marker → 渲染行号（1-based），扫描 `// <tpc:...>`
+      rendered_tpc:     marker → 渲染行号（1-based），扫**整行占位**
+                        （形态由语言包声明）
       rendered_tpc_src: marker → 源行号（tpc_src_map，插值用 (源行, 渲染行) 对）
     restore_comments / restore_line_comments 两处共用，消除重复实现。
     """
+    line_re = line_form_re(syntax)
     rendered_tpc: dict[str, int] = {}
     for i, l in enumerate(lines, 1):
-        m = re.search(r"// <(tpc:[^>]+)>", l)
+        m = line_re.match(l)
         if m:
             rendered_tpc[m.group(1)] = i
     rendered_tpc_src: dict[str, int] = {}
@@ -203,6 +212,8 @@ def restore_line_comments(
     rendered: str,
     anchors: list[dict],
     tpc_src_map: dict | None = None,
+    *,
+    syntax: CommentSyntax,
 ) -> tuple[str, int]:
     """基于锚点的行注释回插。
 
@@ -221,7 +232,7 @@ def restore_line_comments(
     4. (text, line) 去重，处理回溯导致的重复收集
 
     ADR-0013 目标④（2026-09-05）：普通注释回插通道已删除（注释进树结构
-    序渲染）——本函数**只处理 tpc marker**（`// <tpc:*>`，宏/条件块还原
+    序渲染）——本函数**只处理 tpc marker**（整行行注释形态的占位，宏/条件块还原
     依赖），普通注释条目直接跳过。宏 marker 是唯一性插值定位、不依赖锚点
     窗口，仍必须回插——否则 protect_and_reverse 找不到 marker，宏还原失效。
     原 only_tpc 参数删除（调用方恒 tpc 语义）。
@@ -254,14 +265,14 @@ def restore_line_comments(
 
     # 已随 AST 渲染的 tpc: marker（位置精确）——作为被吞 marker 的插值锚点
     # （C4 收敛自 _scan_rendered_tpc）
-    rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map)
+    rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map, syntax)
 
     def _note_tpc_inserted(pos: int, src_line: int, text: str) -> None:
         """tpc 标记插入后更新插值锚点（2026-08-28 darkriscv 块尾占位修复）：
         先插入的 marker 成为后续 marker 的插值锚点——块头占位插入后，块尾
         占位（源行距超过相邻阈值）的插值不再依赖旧锚点，位置更准（否则
         `endif` 占位错位导致条件块嵌套深度错乱）。"""
-        m = re.search(r"<((?:tpc):[^>]+)>", text)
+        m = marker_core_re().search(text)
         if m:
             rendered_tpc[m.group(1)] = pos + 1  # 1-based 渲染行
             rendered_tpc_src[m.group(1)] = src_line

@@ -252,7 +252,10 @@ class LinterScanner:
         )
         if macro_defs:
             lex_source, _, _, _ = expand_tokens(
-                clean_source, macro_defs, prefix=self._macro_prefix,
+                clean_source,
+                macro_defs,
+                rules_dir=self._rules_dir,
+                prefix=self._macro_prefix,
                 func_macros=func_macros,
             )
         elif clean_source != source:
