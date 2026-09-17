@@ -296,18 +296,18 @@
 > ① 宏形态声明已生产式化 + 候选列表（`[macro_recognition]`：`shape` / `directive`
 >   / `call`，见 `preprocessor/README.md`）；
 > ② **展开策略已迁出引擎**→ 语言包能力 `[capabilities] macro_policy`：引擎只执行
->   四种处置（`splice` / `line` / `inline` / `token`），判定是语言知识，verilog
+>   三种处置（`splice` / `line` / `inline`），判定是语言知识，verilog
 >   策略在 `grammar/verilog/plugins/macro_policy/`（判定表 + 语料依据见其 README）；
 > ③ 宏边界数据由外层管线就树产生
->   （见 `docs/decisions/0017-macro-in-syntax-position.md`）。
+>   （见 `docs/decisions/0017-macro-in-syntax-position.md`）；
+> ④ 非语义路径（token 锚 + 宏边界节点化）已核算为死链并删除
+>   （锚表恒空 / 最终 AST 无 MacroCall，见 `docs/decisions/0018-preprocessor-plugin-policy.md`）。
 > 剩余项如下。
 
 - [ ] **函数宏实参形态迁出**：`_match_paren_args` / `_split_args` 的定界符 `()`、
       嵌套 `[]`、分隔符 `,` 仍是引擎硬编码（可入同一能力或改声明驱动）
 - [ ] **宏调用后随字面量后缀迁出**：`_LITERAL_SUFFIX_RE` 与 `[[number.based]]`
       是同一知识的两处表达（先补声明面再改，否则丢还原区间）
-- [ ] **token 锚路径核算**：`semantic=False` 当前无引擎调用方（pipeline /
-      analyzer / linter 都走语义展开）→ 该路径与 `_bridge` 的锚分支去留决策
 
 ## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 

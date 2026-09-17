@@ -272,14 +272,13 @@ class _StructureBase:
                 undefine=None,
             )
             if macro_table:
-                # semantic=True：语句体宏展开宏体（check 需语义，不要保真锚
-                # marker——否则宏体不可分析 + marker 被 W002 误报）
+                # 语句体宏展开宏体（check 需宏体语义，不要保真注释锚——否则宏体
+                # 不可分析 + 注释锚被 W002 误报）
                 clean, _, regions, exp_to_clean = expand_tokens(
                     clean,
                     macro_table,
                     rules_dir=self._rules_dir,
                     func_macros=func_macros,
-                    semantic=True,
                 )
                 exp_to_raw = [
                     clean_to_raw[c - 1] if 1 <= c <= len(clean_to_raw) else None
@@ -295,7 +294,7 @@ class _StructureBase:
     def _macro_line_spans(text: str, regions: list, clean_to_raw: list) -> list:
         """宏区间（字符偏移）→ 展开行区间（诊断宏归因用）。
 
-        regions 来自 expand_tokens(semantic=True)：offset/end_offset 为展开
+        regions 来自 expand_tokens（铺宏体）：offset/end_offset 为展开
         文本的绝对字符偏移。行号由行首偏移表二分求得；call_line = 宏调用
         原文行（clean 坐标经行表回源；不可映射为 None）。
         """

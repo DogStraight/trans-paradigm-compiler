@@ -8,12 +8,11 @@
 
 - **call_site**（全是通用文本/位置事实，无语言知识）：`name` / `body` / `is_func` /
   `args_text` / `line` / `col` / `end` / `line_text` / `before` / `after` /
-  `at_line_start` / `at_line_end` / `only_call_in_line` / `semantic`。
+  `at_line_start` / `at_line_end` / `only_call_in_line`。
 - **plan**（引擎定义的处置枚举 = 机制面；与铺条目 `mode` 同词，不弄两套名）：
     `splice`  宏体铺进流（+ 宏区间，渲染侧 raw 拼接还原）
     `line`    整行占位（整行换成行注释锚，source_text = 整行原文）
     `inline`  行内注释锚（原位回插宏调用原文）
-    `token`   唯一 token 锚（可带 `append` 追加文本，如语句尾分号）
 - 未声明能力 → 默认 `splice`（纯文本替换）；方案非法 → fail-fast（不静默降级）。
 
 能力按 **rules_dir** 作用域查找（该语言包目录下的组件才有资格应答）→
@@ -30,8 +29,7 @@ from core.errors import ConfigError
 MODE_SPLICE = "splice"
 MODE_LINE = "line"
 MODE_INLINE = "inline"
-MODE_TOKEN = "token"
-MODES: frozenset[str] = frozenset({MODE_SPLICE, MODE_LINE, MODE_INLINE, MODE_TOKEN})
+MODES: frozenset[str] = frozenset({MODE_SPLICE, MODE_LINE, MODE_INLINE})
 
 # 能力名（语言包 `[capabilities]` 段声明）
 CAPABILITY_NAME = "macro_policy"
@@ -76,10 +74,4 @@ def plan_macro(
             f"[macro_policy] plan.mode 须是 {sorted(MODES)} 之一，得到 {mode!r}"
             f"（宏 {call_site.get('name')!r}）"
         )
-    append = plan.get("append", "")
-    if not isinstance(append, str):
-        raise ConfigError(
-            f"[macro_policy] plan.append 须是字符串，得到 {append!r}"
-            f"（宏 {call_site.get('name')!r}）"
-        )
-    return {"mode": mode, "append": append}
+    return {"mode": mode}

@@ -28,11 +28,11 @@
 1. **引擎只保留文本操作与通用机制**：splice（宏体铺进流）、条件编译、include、
    锚/区间记账、还原、行映射、指令处理器分发。判定"此处该怎么处置"的知识不进引擎。
 2. **引擎定义处置枚举**（机制面，可审计、可对拍；与铺条目 `mode` 同词）：
-   `splice` / `line` / `inline` / `token`（可带 `append`）。
+   `splice` / `line` / `inline`。
 3. **语言包用既有 `[capabilities]` 能力机制声明策略入口**
    （`macro_policy = "file.py:fn"`，与 formatter 同款，见 `core/component_protocol.md`）。
    引擎给**通用文本事实**（调用点上下文：名字 / 宏体 / 行列 / 行内前后文 /
-   是否独占一行 / 是否语义模式），策略返回处置枚举。
+   是否独占一行），策略返回处置枚举。
 4. **能力按 rules_dir 作用域查找**（语言包目录下的组件才有资格应答）——
    不依赖"当前装载语言"的全局状态，跨语言不串用（新增
    `core/plugin_loader.get_capability_in`）。
@@ -52,10 +52,15 @@
 
 ## 验证
 
-- worktree A/B 对拍：107 个样本输出逐文件一致（成功标志 / 长度 / sha256 全同）；
+- worktree A/B 对拍：106 个样本输出逐文件一致（成功标志 / 长度 / sha256 全同）；
 - 全量测试 + 真实语料三工具持平（lint 33/33 / 误报 0、diag 5548、宏覆盖 86/135）；
 - 新增 `tests/engine/preprocessor/test_macro_policy.py`：未声明能力 → 默认 splice、
   各 mode 的执行效果、非法方案 fail-fast、语言作用域（c4 不拿 verilog 的策略）。
+
+> 后续收敛（同 ADR 方向）：非语义展开路径（token 锚 + 随 AST 定位渲染）无引擎
+> 调用方（pipeline / analyzer / linter 都走铺宏体），已删——枚举因此收到三模式，
+> `append`（语句尾补分号）知识随之消失；锚名协议（`core/token_protocol.py`）
+> 与宏边界节点化死链（`pipeline._stage_macro_nodes`，锚表恒空实测）同批删除。
 
 > Impl: `preprocessor/macro_policy.py`、`grammar/verilog/plugins/macro_policy/_policy.py`
 > Test: `tests/engine/preprocessor/test_macro_policy.py`

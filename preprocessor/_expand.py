@@ -11,7 +11,7 @@ import os
 import re
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
-from core.token_protocol import IDENT_RE, anchor_name, anchor_salt
+from core.token_protocol import IDENT_RE
 from lexer.comment_syntax import CommentSyntax, load_comment_syntax
 from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
 from .primitives.include import resolve_source_dir
@@ -21,7 +21,6 @@ from .macro_policy import (
     MODE_INLINE,
     MODE_LINE,
     MODE_SPLICE,
-    MODE_TOKEN,
     load_macro_policy,
     plan_macro,
 )
@@ -595,7 +594,6 @@ def _call_site(
     is_func: bool,
     args_text: str,
     only_call_in_line: bool,
-    semantic: bool,
 ) -> dict:
     """宏调用点的**通用文本事实**（引擎给处置策略的输入，无语言知识）。"""
     before, after = line[:col], line[end:]
@@ -613,7 +611,6 @@ def _call_site(
         "at_line_start": before.strip() == "",
         "at_line_end": after.strip() == "",
         "only_call_in_line": only_call_in_line,
-        "semantic": semantic,
     }
 
 
@@ -639,7 +636,6 @@ def expand_tokens(
     rules_dir: str,
     prefix: str = "`",
     func_macros: dict[str, list[str]] | None = None,
-    semantic: bool = False,
 ) -> tuple[str, list[dict], list[dict], list[int]]:
     """在源码文本中展开宏调用（纯文本层），并注册统一锚 / 宏区间表。
 
@@ -650,30 +646,25 @@ def expand_tokens(
     rules_dir：语言包目录——锚以注释形态穿过管线，标点从声明取
     （`lexer/comment_syntax.py`，引擎不认识 `//` / `/* */`）。
 
-    semantic=True：语义展开路径（check / lint 用；pipeline 全程走它）——宏体文本
-    铺进流，还原靠宏区间 raw 拼接。semantic 是**调用点事实**，交给处置策略
-    一并判定（`macro_policy.py`）。
-
     处置由**语言包策略**决定（`[capabilities] macro_policy`；未声明 → 默认 `splice`）。
     引擎执行的处置（机制面，见 macro_policy.py；与铺条目 mode 同词）：
       splice   宏体铺进流（+ 宏区间；末行含行注释时补换行，见 _splice_body）
       line     整行占位（行注释锚），source_text = 整行原文
       inline   行内注释锚（原位回插宏调用原文）
-      token    唯一 token 锚（可带 append 追加文本，如语句尾分号）
 
     Returns: (expanded_source, restoration_stack, macro_regions, line_map)
         line_map — **展开后行号（1-based）→ 源（clean）行号**：诊断回源用。
             逐行就地替换 → 输出行数只可能因宏体含换行而增加，一行源行对应
             一串连续输出行，故 list[int] 足够（无需完整区间表）。
-        restoration_stack — 统一锚列表（渲染路径还原用），每项含 marker/source_text/mode。
-        macro_regions — **宏区间表**（仅 semantic=True 有意义）：每条"宏体被铺进
-            文本"的调用一项，含它在**源文本**里的区间（`src_line`/`src_col`/
-            `src_end_col`）与它在**展开结果**里的字符区间（`offset`/`end_offset`），
-            以及 `name`/`source_text`（宏调用原文）/`body`（实际铺进的内容；宏体末行
-            含行注释时末尾补了一个换行，见下）。
+        restoration_stack — 统一锚列表（`line`/`inline` 置位用），每项含
+            marker/source_text/mode。
+        macro_regions — **宏区间表**：每条"宏体被铺进文本"的调用一项，含它在
+            **源文本**里的区间（`src_line`/`src_col`/`src_end_col`）与它在**展开
+            结果**里的字符区间（`offset`/`end_offset`），以及 `name`/`source_text`
+            （宏调用原文）/`body`（实际铺进的内容；宏体末行含行注释时末尾补了
+            一个换行，见下）。
             它是外层处理宏的单一事实源（ADR-0017 决策 3）：定位"哪些内容来自
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
-            semantic=False 时为空表（那条路径用锚还原）。
     """
     _MACRO_RE = _build_macro_re(prefix)
     func_macros = func_macros or {}
@@ -683,8 +674,6 @@ def expand_tokens(
     policy = load_macro_policy(rules_dir)
     restoration_stack: list[dict] = []
     lines = source.split("\n")
-    # 锚名盐：随源文本走（同一文件内所有锚共用一个盐，序号区分彼此）。
-    salt = anchor_salt(source)
 
     _macro_seq = 0
     # 宏区间表：按行收集 → 行处理完算行内列 → 全部行完算绝对字符偏移
@@ -740,7 +729,6 @@ def expand_tokens(
                     is_func,
                     args_text,
                     len(macro_matches) == 1,
-                    semantic,
                 ),
             )
             for col, end, body, name, is_func, args_text in macro_matches
@@ -787,34 +775,11 @@ def expand_tokens(
                     }
                 )
                 continue
-            token = anchor_name(_next_macro_seq(), salt)
-            if plan["mode"] == MODE_SPLICE:
-                # 语义展开：宏体文本铺进流，不建还原锚，只记宏区间
-                # （源区间 + 展开后区间，供外层定位 / 渲染 raw 拼接）
-                spliced = _splice_body(body, _syntax)
-                parts[col:end] = spliced
-                line_regions.append((col, end, name, is_func, spliced))
-                continue
-            # 锚形态 = 普通标识符（`__tpc_marker_<salt>_<n>`，保留命名空间）：
-            # 语言包不认识宏，锚与标识符同形 → 表达式/标识符槽位照常解析。
-            # 宏的**位置**由外层（扩展 / raw 拼接）处理，不给语言包留语法槽位
-            # （宏位置本质上是文本任意的，逐槽位声明补不齐且可能错渲染，
-            # 见 ADR-0017 决策 3）。策略可在替换文本上追加文本（如语句尾分号）——
-            # 锚的 marker 保持无分号原文（还原按锚名整串匹配 + (?!\w) 边界）。
-            parts[col:end] = token + plan.get("append", "")
-            forward_entries.append(
-                {
-                    "marker": token,
-                    "source_text": source_text,
-                    "mode": MODE_TOKEN,
-                    "kind": "macro",
-                    # 源文本位置（展开前行/起列/止列）：宏调用在 raw 源上的区间，
-                    # 供宏边界节点（MacroCall）双向映射用。
-                    "line": line_no,
-                    "col": col,
-                    "end_col": end,
-                }
-            )
+            # MODE_SPLICE：宏体文本铺进流，不建还原锚，只记宏区间
+            # （源区间 + 展开后区间，供外层定位 / 渲染 raw 拼接）
+            spliced = _splice_body(body, _syntax)
+            parts[col:end] = spliced
+            line_regions.append((col, end, name, is_func, spliced))
         restoration_stack.extend(reversed(forward_entries))
         lines[line_no - 1] = "".join(parts)
 

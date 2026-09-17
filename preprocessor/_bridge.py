@@ -13,7 +13,6 @@
     source_text: 原文（还原内容，可能是多行原文段）
     mode:        "line"（整行注释 marker，整行替换）
                  "inline"（行内注释 marker + body 区间，原位替换）
-                 "token"（唯一 token 锚，随 AST 确定渲染，整串精确匹配）
     kind:        来源类别（"cond" / "macro"），仅作调试/归组
     body:        inline 模式：展开时铺进源码的宏体（与 marker 一起换回原文）
 # 注：旧 "sync" 模式（同步词窗口消歧）已删——它只服务"无 mode 字段"的旧格式记录，
@@ -41,7 +40,7 @@ def restore_anchors(
 ) -> str:
     """统一回插引擎：按锚定位 marker，替换为原文（source_text），消耗式。
 
-    line/inline/token 锚：marker 唯一 → 精确替换一次（原文不被全局复用）。
+    line/inline 锚：marker 唯一 → 精确替换一次（原文不被全局复用）。
     未知 mode → fail-fast（静默跳过会让占位残留到输出，不在本层降级）。
     多轮扫描直到不再变化：原文可能含内层 marker（嵌套条件块/嵌套宏调用）。
 
@@ -106,23 +105,9 @@ def restore_anchors(
                 # 无 body 或 body 渲染后不可定位：仅替换 marker（保守，body 残留）
                 result = result.replace(marker_text, source_text)
                 changed = True
-            elif mode == "token":
-                # 唯一 token 锚（`<锚名>，见 core/token_protocol）：随 AST 确定
-                # 渲染，整串匹配精确还原。锚名以宏前缀开头（非词字符），
-                # `\b` 在其前不成立（需前一字符是词字符）——改用负向环视
-                # (?!\w) 排除"锚名是更长锚名前缀"（..._1 不误匹配 ..._10）。
-                # 唯一性守卫：锚文本在结果中必须恰好出现一次才回插——0 次
-                # 说明渲染路径已用原文直出（MacroCall._macro_source_text），
-                # 不动作；多次说明锚名不唯一（用户文本里恰含锚名），保留
-                # 占位可见，不做静默错还原。
-                pat = re.compile(rf"{re.escape(marker)}(?!\w)")
-                new_result, count = pat.subn(source_text, result)
-                if count == 1:
-                    result = new_result
-                    changed = True
             else:
                 raise ValueError(
                     f"[preprocessor] 未知锚 mode: {mode!r}"
-                    f"（支持 line/inline/token，见 preprocessor/README.md）"
+                    f"（支持 line/inline，见 preprocessor/README.md）"
                 )
     return result

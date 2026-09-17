@@ -2,10 +2,9 @@
 
 > TOML 驱动的宏展开（`` `NAME ``、指令）与反向（渲染后把展开还原回宏调用），
 > 语言无关。位置桥 = 锚 + 原文（source_text）消耗式回插。
-> 锚形态三态（`mode`）：`line`（行首空体宏，整行占位）/ `inline`（行内空体宏，
-> marker 占位）/ `token`（非空体宏，唯一 token 锚）；未知 mode →
-> fail-fast。非空体宏在**语义展开**路径下不建还原锚，改走宏区间 + 渲染 raw 拼接
-> （`_macro_source_text`）。
+> 锚形态两态（`mode`）：`line`（行首空体宏，整行占位）/ `inline`（行内空体宏，
+> marker 占位）；未知 mode → fail-fast。非空体宏不建还原锚，宏体文本铺进流，
+> 还原走宏区间 + 渲染 raw 拼接（`_macro_source_text`）。
 
 ## marker 的书写形态（声明驱动）
 
@@ -32,8 +31,8 @@
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
-**引擎机制 → 不进语言包**（形态确定之后的"怎么替换/怎么还原"）：四种处置机制
-（`splice` / `line` / `inline` / `token`）与其执行；**选哪一种由语言包策略决定**
+**引擎机制 → 不进语言包**（形态确定之后的"怎么替换/怎么还原"）：三种处置机制
+（`splice` / `line` / `inline`）与其执行；**选哪一种由语言包策略决定**
 （见下节「宏处置策略」）；注释形态的可用性由声明**推导**（有行注释 → 整行形态
 可用；有块注释 → 行内形态可用）。
 
@@ -45,12 +44,11 @@
 
 - 引擎给**通用文本事实**（调用点上下文，`preprocessor/_expand.py::_call_site`）：
   名字 / 宏体 / 是否带参 / 行号与行内起止列 / 行内前后文 / 是否行首行尾 /
-  是否独占该行 / 语义模式；
+  是否独占该行；
 - 策略返回**处置枚举**（引擎机制面，与铺条目 `mode` 同词）：
-  `splice`（宏体铺进流 + 宏区间）/ `line`（整行占位）/ `inline`（行内注释锚）/
-  `token`（唯一 token 锚，可带 `append` 追加文本，如语句尾分号）；
-- 未声明能力 → 默认 `splice`；方案非法（mode 未知 / `append` 非串 /
-  `line` 用于同行多调用）→ fail-fast（不静默降级）；
+  `splice`（宏体铺进流 + 宏区间）/ `line`（整行占位）/ `inline`（行内注释锚）；
+- 未声明能力 → 默认 `splice`；方案非法（mode 未知 / `line` 用于同行多调用）
+  → fail-fast（不静默降级）；
 - 查找按 **rules_dir** 作用域（`core/plugin_loader.py::get_capability_in`）：
   只有该语言包 `plugins/` 下的组件才有资格应答，同进程切语言不串用。
 

@@ -1,8 +1,8 @@
-"""e2e Macro 测试组——统一位置桥（token/line 锚 + 原文消耗式）还原回归守卫。
+"""e2e Macro 测试组——统一位置桥（line/inline 锚 + 原文消耗式）还原回归守卫。
 
 背景：宏还原从"同步词启发式 find(body)"升级为统一位置桥——展开时把宏调用
-替换为唯一 token（tpc_marker_N，随 AST 确定渲染）或整行占位（line 锚，
-行首空体 decl 修饰如 `FORMAL_KEEP），还原时按操作栈 + 原文精确回插。
+按语言包策略处理（空体宏 / 整行宏 → 注释形态锚；非空体宏 → 宏体铺进流 +
+宏区间 raw 拼接），还原时按操作栈 + 原文精确回插。
 本测试把 macro 样本组的还原效果固化为断言，防止还原机制回退。
 
 覆盖：
@@ -146,9 +146,9 @@ def test_ifdef_roundtrip_reversed():
 def test_empty_body_macro_inline_reversed():
     """空 body 宏行内占位（`TV80DELAY 1'b1）→ inline 注释锚，展开可解析 + 还原原样。
 
-    空 body 宏 token 替换会留下 `tpc_marker_N 1'b1` 相邻原子（id + 位宽字面量）
-    不可解析；inline 锚（`/*<marker>*/`）是 trivia，parser 跳过，还原原位回插
-    宏调用。tv80 的 `define TV80DELAY（无替换体）在 `<=` 后行内使用即此形态。
+    空 body 宏替换为空会丢调用原文；inline 锚（`/*<marker>*/`）是 trivia，
+    parser 跳过，还原原位回插宏调用。tv80 的 `define TV80DELAY（无替换体）
+    在 `<=` 后行内使用即此形态。
     """
     src = (
         "`define TV80DELAY\n"

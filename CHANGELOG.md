@@ -7,6 +7,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **删非语义展开路径（token 锚 + 宏边界节点化死链），处置枚举收到三模式**：
+  自查发现 `expand_tokens(semantic=False)` **无引擎调用方**（pipeline / analyzer /
+  linter 三条路全走"宏体铺进流"），而该路径独占 token 锚产出——实测 138 样例：
+  铺宏体路径产 `line` 32 + `inline` 259（token **0**），非语义路径才多出 `token` 124。
+  其下游 `pipeline._stage_macro_nodes`（锚标识符 → MacroCall）锚表**恒空**
+  （180 次调用全 0），最终 AST 里 MacroCall / `_macro_source_text` / `_src_span`
+  全为 0——整条链是死代码（判据 A1：无消费者）。删除：
+
+  1. `expand_tokens` 的 `semantic` 参数与 token 锚分支、`_call_site` 的 `semantic` 字段；
+     `_bridge.restore_anchors` 的 `token` 分支（`line` / `inline` 两态保留）；
+  2. 锚名协议 `core/token_protocol.py::RESERVED_PREFIX` / `ANCHOR_MARK` /
+     `anchor_salt` / `anchor_name`（仅 token 锚使用）+ 其测试文件；
+  3. 宏边界节点化整链：`pipeline._extract_macro_name` / `_attach_macro_meta` /
+     `_rewrite_marker_nodes` / `_stage_macro_nodes` + 调用点，
+     `Node._src_span` / `Node._macro_marker` 字段（`_macro_source_text` /
+     `_macro_name` 保留——`parser_core` 在 `parse_raw` 路径挂载，仍在使用）；
+     一并清掉 aefe313 遗漏的 `Node._macro_body` 字段声明（同属无写入者字段）；
+  4. 处置枚举 `token` 与 `append`（语句尾补分号）知识整体消失：
+     `macro_policy.py` 枚举收为 `splice` / `line` / `inline`，
+     verilog 策略插件判定表同缩（`README.md` 重写判定依据与已知边界）。
+
+  引擎侧语言知识因此再少一项（补分号不再需要——宏体铺进流后是真实文本，
+  语法自己判），`preprocessor/README.md` 锚形态描述由三态改两态。
+  依据与实测数据见 `docs/decisions/0018-preprocessor-plugin-policy.md`（后续收敛节）。
+
+  **验证**：worktree A/B 对拍 106 个共同样本输出逐文件一致（成功标志 / 长度 /
+  sha256 全同）；全量测试 2032 passed / 7 skipped；真实语料三工具持平
+  （lint 33/33 / 误报 0、diag 5548、宏位置覆盖 86/135）。
+
 - **预处理器展开策略迁出引擎 → 语言包能力 `macro_policy`（引擎只做文本操作）**：
   `preprocessor/_expand.expand_tokens` 原先内含 4 个硬编码策略分支（整行占位 /
   空体 inline 锚 / 独占一行补分号 / 语义替换）——判定条件是从 verilog 语料长出来的

@@ -104,7 +104,7 @@ class _PipelineContext:
     """保真度分级（ADR-0006 阶段 5）：full 完全重排 / keep_blank 保留空行。"""
     macro_regions: list[dict] = field(default_factory=list)
     """宏区间表（ADR-0017 决策 3）：值体宏在展开文本里的字符区间 + 源区间。"""
-    # lint 专用展开文本（semantic=True，铺宏体）：linter 是反向解析器，
+    # lint 专用展开文本（铺宏体）：linter 是反向解析器，
     # 它要看的是**真语法结构**——宏体铺进去有没有破坏语法只有展开态能判
     # （锚形态在结构位是普通标识符：`input <锚> d` 无产生式可匹配）。
     # 解析侧仍吃锚形态（宏不出口法层），两个消费者输入由此分开。
@@ -463,16 +463,15 @@ def _stage_macro_scan(ctx: _PipelineContext) -> None:
 def _stage_expand(ctx: _PipelineContext) -> None:
     """宏展开（纯文本，在 lex 之前）。
 
-    **语义展开**（`semantic=True`）：值体宏（非空体、非 `=` 前缀）把宏体文本
-    铺进流，解析器看的是真实文本——宏落在任意语法位置都退化为"展开后在该位置
-    是否语法合法"，由现有语法自己判定，语言包不需要任何宏声明（ADR-0017
-    决策 3）。宏区间表存到 `ctx.macro_regions`，供 `_stage_macro_splice` 做
-    渲染侧 raw 拼接（决策 4）。
-    整行宏 / 空体宏 / 赋值后缀宏 / 指令行仍走 line/inline/sync 锚，
-    由 `restore_anchors` 原位还原，不受本切换影响。
+    **宏体文本铺进流**：值体宏把宏体文本铺进流，解析器看的是真实文本——宏落在
+    任意语法位置都退化为"展开后在该位置是否语法合法"，由现有语法自己判定，
+    语言包不需要任何宏声明（ADR-0017 决策 3）。宏区间表存到 `ctx.macro_regions`，
+    供 `_stage_macro_splice` 做渲染侧 raw 拼接（决策 4）。
+    整行宏 / 空体宏 / 指令行走 line/inline 锚（语言包策略定，见
+    grammar/verilog/plugins/macro_policy），由 `restore_anchors` 原位还原。
     """
     if ctx.expand_macros and ctx.macro_table:
-        # lint 输入 = **真展开态**（semantic=True）：linter 是反向解析器，要验的是
+        # lint 输入 = **展开态**：linter 是反向解析器，要验的是
         # "宏体铺进去之后语法是否成立"；锚形态只有表达式位可匹配，结构位（类型/关键
         # 字位）无产生式可对（实测 `input `NT d` 在锚形态下 1 条误报、展开态通过）。
         if not ctx.lint_source:
@@ -486,7 +485,6 @@ def _stage_expand(ctx: _PipelineContext) -> None:
                 ctx.macro_table,
                 rules_dir=ctx.rules_dir,
                 func_macros=ctx.func_macros,
-                semantic=True,
             )
         if ctx.parse_raw:
             # raw 解析模式：不做替身替换——ctx.source 保持扫指令后的
@@ -498,7 +496,6 @@ def _stage_expand(ctx: _PipelineContext) -> None:
             ctx.macro_table,
             rules_dir=ctx.rules_dir,
             func_macros=ctx.func_macros,
-            semantic=True,
         )
         ctx.log("[preprocessor] macros expanded")
 
@@ -617,73 +614,6 @@ def _stage_parse(
         return None
     ctx.result["parser"] = parser
     return ast
-
-
-# ── 宏边界节点化（P3.6） ──
-
-
-def _extract_macro_name(source_text: str) -> str:
-    """从宏调用原文提取宏名（`` `NAME `` / `` `NAME(...) ``）→ NAME。"""
-    import re
-
-    m = re.match(r"[^\w]*(\w+)", source_text.lstrip())
-    return m.group(1) if m else ""
-
-
-def _attach_macro_meta(node: Any, entry: dict) -> Any:
-    """给宏边界节点挂锚表元数据（宏名 / 锚文本 / 原文 / 源区间）。
-
-    渲染按 `_macro_source_text`（raw 源区间切片）直出宏调用原文，故元数据必须挂全；
-    缺摘要时节点渲染为空（内容丢失），不是可接受的降级。
-    """
-    node._macro_name = _extract_macro_name(entry.get("source_text", ""))
-    node._macro_marker = entry.get("marker", "")
-    node._macro_source_text = entry.get("source_text", "") or ""
-    if entry.get("line") is not None:
-        node._src_span = (
-            entry["line"],
-            entry.get("col", 0),
-            entry.get("end_col", 0),
-        )
-    return node
-
-
-def _rewrite_marker_nodes(value: Any, table: dict) -> Any:
-    """递归把锚标识符节点改写为 MacroCall（含 attrs 内嵌节点）。
-
-    锚是普通标识符（`__tpc_marker_<salt>_<n>`，语言包不认识宏），parser 把它
-    建成 Identifier 节点；本阶段按锚表改写为 MacroCall 并挂元数据（宏名/原文/
-    源区间），宏边界于是在树中结构化可见。
-    """
-    from core.define import CHILDREN_FIELD, Node
-
-    if isinstance(value, Node):
-        if (
-            value.node_name == "Identifier"
-            and isinstance(getattr(value, "content", None), str)
-            and value.content in table
-        ):
-            new = Node("MacroCall", content=value.content)
-            _attach_macro_meta(new, table[value.content])
-            for meta in ("_pos_line", "_pos_col", "_tok_span", "_file"):
-                meta_val = getattr(value, meta, None)
-                if meta_val is not None:
-                    setattr(new, meta, meta_val)
-            return new
-        children = getattr(value, CHILDREN_FIELD, None)
-        if isinstance(children, list):
-            for i, child in enumerate(children):
-                children[i] = _rewrite_marker_nodes(child, table)
-        for attr, val in list(vars(value).items()):
-            if attr.startswith("_") or attr in ("node_name", CHILDREN_FIELD):
-                continue
-            value.__dict__[attr] = _rewrite_marker_nodes(val, table)
-        return value
-    if isinstance(value, list):
-        return [_rewrite_marker_nodes(v, table) for v in value]
-    if isinstance(value, dict):
-        return {k: _rewrite_marker_nodes(v, table) for k, v in value.items()}
-    return value
 
 
 # ── 宏区间 raw 拼接（ADR-0017 决策 3/4） ──
@@ -845,25 +775,6 @@ def _stage_macro_splice(ctx: _PipelineContext, ast: Any, tokens: list) -> Any:
             f"{getattr(target, 'node_name', '?')}"
         )
     return ast
-
-
-def _stage_macro_nodes(ctx: _PipelineContext, ast: Any) -> Any:
-    """宏边界节点化：marker 标识符 → MacroCall 节点（P3.6）。
-
-    展开阶段把宏调用替换为锚标识符（format 路径），parser 建成
-    Identifier 节点。本阶段按锚表（restore_stack 的 token 锚）把这类节点改写为
-    MacroCall（带 `_macro_name`/`_macro_marker` 元数据），使宏边界在 AST 中结构化
-    可见——P3.2 增量 diff / P3.3 双向映射的前提。渲染与分析声明在语言包对齐
-    Identifier，本阶段行为不变（语义化后续阶段）。
-    """
-    table = {
-        e["marker"]: e
-        for e in (ctx.restore_stack or [])
-        if e.get("mode") == "token" and e.get("marker")
-    }
-    if not table:
-        return ast
-    return _rewrite_marker_nodes(ast, table)
 
 
 def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
@@ -1164,8 +1075,6 @@ def run_pipeline_on_source(
         return ctx.result
     # 宏边界 raw 拼接（ADR-0017 决策 3/4）：区间 → 分层选替换单元 → 引擎标记
     ast = _stage_macro_splice(ctx, ast, tokens)
-    # 宏边界节点化（P3.6）：marker 标识符 → MacroCall 节点
-    ast = _stage_macro_nodes(ctx, ast)
     if stage == "parse":
         ctx.result["success"] = True
         ctx.result["ast"] = ast

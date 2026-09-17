@@ -4,8 +4,8 @@
 `[capabilities] macro_policy` 声明（契约见 `preprocessor/README.md`）。本文件锁定：
 
 - 未声明能力 → 默认 `splice`（纯文本替换 + 宏区间）；
-- verilog 策略插件的判定表（空体行首 / 空体行内 / 语义 / 独占一行补分号）；
-- 方案非法 → fail-fast（mode 非法 / append 非串 / 非表 / anchor_line 多调用同行）；
+- verilog 策略插件的判定表（空体行首 → line / 空体行内 → inline / 非空体 → splice）；
+- 方案非法 → fail-fast（mode 非法 / 非表 / line 多调用同行）；
 - 语言作用域：c4 拿不到 verilog 的策略。
 """
 import os
@@ -19,7 +19,6 @@ from preprocessor._expand import expand_tokens, scan_directives
 from preprocessor.macro_policy import (
     DEFAULT_PLAN,
     MODE_LINE,
-    MODE_TOKEN,
     load_macro_policy,
     plan_macro,
 )
@@ -39,11 +38,9 @@ def _components_loaded():
     load_all_components(os.path.join(_RULES, "plugins"))
 
 
-def _expand(src: str, semantic: bool = True):
+def _expand(src: str):
     table, funcs, _c, _h, _d, clean, _m = scan_directives(src, _RULES)
-    return expand_tokens(
-        clean, table, rules_dir=_RULES, func_macros=funcs, semantic=semantic
-    )
+    return expand_tokens(clean, table, rules_dir=_RULES, func_macros=funcs)
 
 
 # ── 契约：能力查找与默认方案 ────────────────────────────────────────
@@ -64,21 +61,16 @@ def test_undeclared_capability_defaults_to_splice() -> None:
 @pytest.mark.parametrize(
     "plan",
     [
-        "splice",                       # 非表
-        {"mode": "nope"},               # mode 非法
-        {},                             # 缺 mode
-        {"mode": "token", "append": 3},  # append 非串
+        "splice",        # 非表
+        {"mode": "nope"},  # mode 非法
+        {},              # 缺 mode
+        {"mode": "token"},  # 已删的旧模式
     ],
 )
 def test_illegal_plan_fails_fast(plan: object) -> None:
     """策略返回非法方案 → ConfigError（不静默降级）。"""
     with pytest.raises(ConfigError):
         plan_macro(lambda _site: plan, {"name": "X", "body": ""})  # type: ignore[arg-type]
-
-
-def test_illegal_append_fails_fast() -> None:
-    with pytest.raises(ConfigError, match="append"):
-        plan_macro(lambda _s: {"mode": "token", "append": 1}, {"name": "X"})
 
 
 def test_anchor_line_requires_single_call_in_line(config_loaded, monkeypatch) -> None:
@@ -107,44 +99,19 @@ def test_empty_body_macro_at_line_head_uses_line_anchor(config_loaded) -> None:
 
 
 def test_empty_body_macro_inline_uses_inline_anchor(config_loaded) -> None:
-    """行内空体宏 → 行内注释锚（token 替换会留相邻原子）。"""
+    """行内空体宏 → 行内注释锚（替换为空会丢调用原文）。"""
     del config_loaded
     src = "`define DELAY\nmodule m;\n  initial q <= `DELAY 1'b1;\nendmodule\n"
     _text, anchors, _regions, _lm = _expand(src)
     assert [a["mode"] for a in anchors] == ["inline"]
 
 
-def test_semantic_mode_splices_body_and_records_region(config_loaded) -> None:
-    """语义模式：非空体宏铺进流 + 记宏区间（不建还原锚）。"""
+def test_nonempty_body_splices_and_records_region(config_loaded) -> None:
+    """非空体宏：宏体铺进流 + 记宏区间（不建还原锚）。"""
     del config_loaded
     src = "`define STMT initial q = 0;\nmodule m;\n  `STMT\nendmodule\n"
-    text, anchors, regions, _lm = _expand(src, semantic=True)
+    text, anchors, regions, _lm = _expand(src)
     assert anchors == []
     assert [r["name"] for r in regions] == ["STMT"]
     assert "initial q = 0;" in text, "宏体铺进流"
-    assert "`STMT" not in text, "语义展开不留调用原文（还原走区间 raw 拼接）"
-
-
-def test_non_semantic_whole_line_macro_appends_semicolon(config_loaded) -> None:
-    """非语义 + 独占一行 → token 锚 + 补分号（锚名保持无分号原文）。"""
-    del config_loaded
-    src = "`define STMT initial q = 0;\nmodule m;\n  `STMT\nendmodule\n"
-    text, anchors, _regions, _lm = _expand(src, semantic=False)
-    token = [a for a in anchors if a["mode"] == MODE_TOKEN]
-    assert len(token) == 1
-    assert token[0]["source_text"] == "`STMT"
-    assert token[0]["marker"] + ";" in text, "替换文本含追加分号"
-
-
-def test_non_semantic_inline_macro_not_appended(config_loaded) -> None:
-    """非语义 + 行内（调用后还有内容）→ token 锚不补分号。
-
-    行内形态源文本自己带分号（`wire a = `M;`）——补了就会变成 `;;`：
-    按"该行分号数不变"判定。
-    """
-    del config_loaded
-    src = "`define M 1'b1\nmodule m;\n  wire a = `M;\nendmodule\n"
-    text, anchors, _regions, _lm = _expand(src, semantic=False)
-    token = [a for a in anchors if a["mode"] == MODE_TOKEN][0]
-    line = next(ln for ln in text.split("\n") if token["marker"] in ln)
-    assert line.count(";") == 1, f"行内宏不应追加分号：{line!r}"
+    assert "`STMT" not in text, "展开不留调用原文（还原走区间 raw 拼接）"

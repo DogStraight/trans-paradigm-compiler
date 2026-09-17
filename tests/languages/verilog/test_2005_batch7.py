@@ -9,9 +9,8 @@
       现以独立 AssignExtra 子规则落地）
     - 模块头属性（A.1.1 module_declaration 前缀 attribute_instance）：
       `(* keep *) module m (...)`（ice40 13 个模块）
-    - 语句体宏行尾补分号（preprocessor/_expand.py）：非空 body 宏独占一行
-      无分号时展开为 `tpc_marker_N;`（按 A.6.9 task_enable 裸任务调用可解析），
-      此前裸 `id` 不是合法语句，lint/parser 双拒（ice40 `SB_DFF_INIT 等）
+    - 语句体宏独占一行（preprocessor/_expand.py）：非空 body 宏的宏体文本铺进
+      流后可解析（ice40 `` `SB_DFF_INIT ``），还原走宏区间 raw 拼接
 """
 
 import pytest
@@ -190,14 +189,14 @@ def test_module_attribute_no_attr_still_works():
     assert "module m();" in r["output"]
 
 
-# ── 语句体宏行尾补分号（preprocessor/_expand.py）────────────────────────
+# ── 语句体宏独占一行（preprocessor/_expand.py）────────────────────────
 
 
 def test_statement_body_macro_line_final():
-    """非空 body 宏独占一行无分号 → 展开 `tpc_marker_N;` 可解析并还原。
+    """非空 body 宏独占一行无分号 → 宏体铺进流后可解析且还原回宏调用。
 
     ice40 实证：`define SB_DFF_INIT initial Q = 0;` 在模块体独占一行使用。
-    此前展开为裸 `tpc_marker_N`（裸 id 非合法语句），lint/parser 双拒。
+    宏体铺进流后是真实语句，还原按宏区间 raw 拼接（ADR-0017 决策 3/4）。
     """
     src = """module m;
 `define BODY initial q = 1;

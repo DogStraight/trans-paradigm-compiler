@@ -1,4 +1,4 @@
-"""宏区间表（`expand_tokens(..., semantic=True)` 第三返回值）——外层处理宏的事实源。
+"""宏区间表（`expand_tokens` 第三返回值）——外层处理宏的事实源。
 
 每条区间同时给两个坐标：
 - **源文本**坐标（`src_line`/`src_col`/`src_end_col`）：宏调用在源里的位置；
@@ -17,14 +17,13 @@ _RULES = "grammar/verilog"
 
 
 def _expand(src: str) -> tuple[str, list[dict]]:
-    """展开（语义模式）→ (展开文本, 区间表)。"""
+    """展开 → (展开文本, 区间表)。"""
     table, func_macros, _, _, _, clean, _ = scan_directives(src, _RULES)
     expanded, _, regions, _ = expand_tokens(
         clean,
         table,
         rules_dir=_RULES,
         func_macros=func_macros,
-        semantic=True,
     )
     return expanded, regions
 
@@ -65,7 +64,7 @@ def test_multi_line_body_spans_lines() -> None:
     src = "module m;\n  wire a;\n  assign a = `M;\nendmodule\n"
     body = "1'b1 +\n  1'b0"
     expanded, _, regions, line_map = expand_tokens(
-        src, {"M": body}, rules_dir=_RULES, semantic=True
+        src, {"M": body}, rules_dir=_RULES
     )
     assert len(regions) == 1
     # 多行宏体：输出行数 > 源行数，映射里 3 行（源行 3）占 3 个输出行位
@@ -124,19 +123,6 @@ def test_body_trailing_comment_gets_newline() -> None:
     assert r["source_text"] == "`V"
     # 宏调用同行的 `;` 不在注释里（没被吞）
     assert ";" in expanded.split("// note")[1].split("\n")[1]
-
-
-def test_regions_only_in_semantic_mode() -> None:
-    """默认（渲染路径）不产区间表——那条路径用锚还原，两者不混。"""
-    table, func_macros, _, _, _, clean, _ = scan_directives(
-        "`define V 1'b1\nmodule m;\n  assign a = `V;\nendmodule\n", _RULES
-    )
-    expanded, anchors, regions, _ = expand_tokens(
-        clean, table, rules_dir=_RULES, func_macros=func_macros
-    )
-    assert regions == []
-    assert anchors, "渲染路径应产锚"
-    assert "__tpc_marker_" in expanded
 
 
 def test_inactive_branch_macro_not_recorded() -> None:

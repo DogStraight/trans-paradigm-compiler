@@ -1,7 +1,7 @@
 """Macro reversal — 统一位置桥（锚 + 原文）回插。
 
 对外统一入口，内部委托给 _bridge.restore_anchors。调用方传入的锚必须是统一格式
-（每项带 `mode`：line/inline/token，见 `_bridge.py` 头部字段说明）——旧的
+（每项带 `mode`：line/inline，见 `_bridge.py` 头部字段说明）——旧的
 “无 mode”兼容包装已删（2026-09-17：产出端早已全部显式带 mode）。
 Doc: preprocessor/README.md
 """

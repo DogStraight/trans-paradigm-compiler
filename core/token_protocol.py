@@ -19,7 +19,6 @@ lexer 产出的 token 类型遵循统一命名协议，所有消费方必须引�
 Doc: core/component_protocol.md（token 类型协议）
 """
 
-import hashlib
 import re
 
 # ── 标识符形态（引擎级，单一份实现） ──
@@ -66,31 +65,6 @@ def literal_type(name: str) -> str:
 
 def macro_type(name: str) -> str:
     return f"{MACRO_PREFIX}{name}"
-
-
-# ── 宏展开锚名协议（引擎级，语言无关） ──
-# 展开阶段把宏调用替换为"锚名"占位。锚名以文本形态出现时带宏前缀
-# （`` `<锚名> ``），lexer 依既有宏识别规则归为 macro.call——不为锚新造
-# 词法形态（lex 阶段本就能识别宏，做锚时直接改 token 类别即可）。
-# 命名空间 __tpc_ 为引擎保留（用户代码不得使用）。锚名 = 保留前缀 +
-# 标记词 + 盐 + 序号：
-#   - 盐 = 源文本摘要（8 位十六进制）→ 不同文件锚名不同，用户宏体/脚本文本
-#     偶然撞名的概率可忽略（锚点必须"别人撞不出来"）；
-#   - 序号 = 本次展开内递增 → 同一文件内锚名互不相同；
-#   - 用 sha256 而非内置 hash()：PYTHONHASHSEED 随机化会破坏跨进程可复现
-#     （同一输入两次运行须得同一锚名，否则还原/对拍不可复现）。
-RESERVED_PREFIX = "__tpc_"
-ANCHOR_MARK = "marker"
-
-
-def anchor_salt(source: str) -> str:
-    """源文本摘要盐（8 位十六进制）：同源文本 → 同锚名，跨进程可复现。"""
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()[:8]
-
-
-def anchor_name(seq: int, salt: str) -> str:
-    """锚名：保留前缀 + 标记词 + 盐 + 序号（唯一、可复现、用户写不出）。"""
-    return f"{RESERVED_PREFIX}{ANCHOR_MARK}_{salt}_{seq}"
 
 
 # ── 引擎基础 token 类型（lexer 产出、无前缀） ──

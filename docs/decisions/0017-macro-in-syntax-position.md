@@ -65,7 +65,7 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
    `TypeSpec`/`TypeSpecNoReg` 的 `@MacroCall` 均**已撤销**。
 
 3. **宏由外层（预处理器/管线）处理；MacroCall 是引擎级节点，语言包只声明它怎么
-   渲染**。展开在解析之前发生（`expand_tokens(semantic=True)` 铺宏体文本）——
+   渲染**。展开在解析之前发生（`expand_tokens` 铺宏体文本）——
    **宏在任意位置都退化为"展开后的文本在该位置是否语法合法"**，由既有语法自己
    判定，不需要任何声明：`` input `NT d ``（NT=wire）展开就是 `input wire d`，
    现有产生式直接成立——所以"类型位槽位声明"是伪需求。宏边界节点（宏名 + raw
@@ -137,13 +137,11 @@ panic mode 的同步 token ∪ 行尾 newline 的 skip 推进，linter 本就是
 > Impl: 宏区间表（`preprocessor/_expand.py::expand_tokens` 第三返回值：
 > 源区间 + 展开结果字符区间；测试 `tests/engine/preprocessor/test_macro_regions.py`）
 > → 渲染侧 raw 拼接（`pipeline/__init__.py` 宏区间拼接 + 引擎标记 `_verbatim_text`）
-> → 解析侧已切语义展开；锚保留为空体宏/行级占位（`restore_anchors`，撤锚随
-> 空体宏形态收敛）。锚名协议（前缀/盐/序号/还原唯一性守卫，
-> `core/token_protocol.py` + `preprocessor/_bridge.py`）服务当前输出还原；
+> → 解析侧已切语义展开；锚保留为空体宏/行级占位（注释形态锚 + `restore_anchors`，
+> 见 `preprocessor/README.md`）；
 > 语法侧已**撤销全部宏声明**（`Identifier` 备选 / `MacroCall.parser` /
 > `TypeSpec` 的 `@MacroCall`）。
-> Test: `tests/engine/preprocessor/test_anchor_protocol.py`（锚名/还原守卫）·
-> `tests/languages/verilog/test_macro_type_slot.py`（6 个 xfail = 目标需求）·
+> Test: `tests/languages/verilog/test_macro_type_slot.py`（6 个 xfail = 目标需求）·
 > `tests/languages/verilog/test_macro_call_node.py`（宏边界节点）·
 > `tests/languages/verilog/test_macro_body_comment.py`（宏调用后同行内容不被吞——
 > 文本展开路线的守卫）

@@ -2,16 +2,12 @@
 
 2026-08-28 目标 1 收尾批次：ice40 cells_sim **默认配置**（不预定义
 NO_ICE40_DEFAULT_ASSIGNMENTS）可解析。此前 `input NAME `M`（M body=
-`= 1'b1`，端口默认值位）走 token 锚 → `tpc_marker_N` 顶掉默认值 →
-`input NAME tpc_marker_N` 两个相邻标识符，linter/parser 双拒（34 错），
-只能靠 NO_ICE40 空宏（注释锚）规避。
+`= 1'b1`，端口默认值位）替换成标识符占位 → `input NAME tpc_marker_N`
+两个相邻标识符，linter/parser 双拒（34 错），只能靠 NO_ICE40 空宏（注释锚）规避。
 
-修复（preprocessor/_expand.py + _bridge.py）：
-    - 展开：body 以 `=` 开头的非空宏（赋值后缀形态）→ inline+body 锚
-      （`/*<tpc:macro:N>*/` + body 原文保留在源码）——parser 跳过注释
-      看到 `input NAME = 1'b1`，Declarator @Init? 兜住端口默认值
-    - 还原：marker 后找 body（展开原文顺序）或 marker 前同行找 body
-      （渲染行尾锚定形态），[body..marker] 区间替换回宏调用原文
+修复（现机制）：赋值后缀宏与其他非空体宏同路——**宏体文本铺进流**，parser
+看到的就是 `input NAME = 1'b1`（Declarator @Init? 兜住端口默认值），
+还原走宏区间 raw 拼接（宏体不再占语法位）。
 
 连带验证：带参形态 `ICE40_DEFAULT_ASSIGNMENT_V(v)`（body=`= v`）与
 对象宏 `ICE40_DEFAULT_ASSIGNMENT_0/1` 同路径；ice40 全文件默认配置
@@ -144,7 +140,7 @@ def test_assign_init_macro_keeps_token_path():
 
 
 def test_non_assignment_macro_unchanged():
-    """非赋值后缀宏（body 不以 `=` 开头）仍走 token 锚，行为不变。"""
+    """普通对象宏（body 不以 `=` 开头）同路，行为不变。"""
     src = (
         "`define TV80DELAY 1\n"
         "module m;\n"

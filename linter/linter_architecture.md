@@ -70,21 +70,15 @@ flowchart LR
 - **P2 语句发现 + 扁平检查**：Discovery 产出多层级节点树 → 深度优先遍历，把每个节点
   （含 children）注册为独立 `StatementChecker` → 扁平验证。
 
-`scan()` 之前的 **token 级锚窗口拼接**（`_splice_anchor_windows`，2026-09-13）：展开
-后文本里宏调用是**锚**（`` `<锚名> ``，macro token；锚名协议见 `core/token_protocol`），
-检查器不得看到锚（P0 会报未定义宏），但锚代表的**展开体必须被检查**（宏落语法位时
-"展开后是否符合语法"正是展开路径要判的事，ADR-0017 决策 4）——故按锚表把锚 token
-原位换成展开体 token 序列（窗口），位置映射到锚位置。管线侧传锚表
-（`_stage_lint` 传 `ctx.restore_stack`），`tpc lint` 直扫 raw 源侧用 linter 自身展开
-产出的锚表——两条路径同一机制。
+`scan()` 之前：linter 在**展开态**上跑（宏体文本铺进流，与管线 lint 输入、
+`analyzer._expand_source` 同一条路）——检查器看的是"宏体铺进去之后语法是否成立"。
 
-为什么 token 级而非文本级（`semantic=True` 铺宏体）：文本替换跨注释边界——宏体自带
-行尾注释时（darkriscv `` `define LUI 7'b01101_11 // lui rd,imm ``），宏调用**同行的
-后续 token**（`;`）被吞进注释，语句丢分号 → 发现器级联失守（实测同一文件：文本展开
-81 条 phase-unrecognized → token 拼接 0 条）。窗口只带展开体的**语法 token**（体自带
-注释是 trivia，对语法判定无贡献，渲染路径按 `_macro_source_text` 原文还原、无信息丢失）。
-其中 26 条与"体注释"同进同出但**最小复现未触发（机制未定）**，见
-`docs/gaps/gap-parser-linter-approximation.md`。
+为什么必须是展开态：锚形态只在表达式位有产生式可匹配，结构位（类型/关键字位）没有
+（`input `NT d` 实测 1 条误报），且宏体本身也要被检查（宏体内语句不可分析就失去
+意义，ADR-0017 决策 4）。文本展开曾被"宏体自带行尾注释吞掉调用同行后续 token"绊住
+（darkriscv `` `define LUI ... // lui rd,imm ``，语句丢分号 → 级联 phase-unrecognized）；
+现由 `_expand._splice_body` 在宏体末行含行注释时补一个换行解决（行注释起始标记来自
+语言包声明，引擎不认识 `//`），同一文件 81 条 → 0 条。
 
 ---
 
