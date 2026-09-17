@@ -23,9 +23,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   3. 还原侧按声明的标点定位（`_bridge.restore_anchors` / `_reverse` /
      `renderer/comment_restore` / `renderer/inline_comment`），`expand_tokens`
      新增 `rules_dir` 形参（锚的书写形态来源）。
-  验证：全量 2042 passed / 7 skipped；新增 `tests/engine/lexer/test_comment_syntax.py`
+  4. 同一泄漏的另一处：`analyzer/suppress.py` 的诊断豁免注释（区间对 / disable-line）
+     也把 `/* … */` 与 `//` 写死，现按声明编译三种模式（未声明块注释的语言包 →
+     区间形态不存在；未声明行注释 → 单行形态不存在；`tpc-check` 关键字是引擎侧
+     工具名，不属于语言知识）。
+  验证：全量 2046 passed / 7 skipped；新增 `tests/engine/lexer/test_comment_syntax.py`
   （5 例，三语言包声明面 + 缓存）、`tests/engine/preprocessor/test_markers.py`
-  （12 例，含 yaml `#` 形态的还原与缺形态 fail-fast）；真实语料三工具与改动前
+  （12 例，含 yaml `#` 形态的还原与缺形态 fail-fast）、`test_check_suppress.py`
+  补 4 例（yaml 形态声明驱动）；真实语料三工具与改动前
   一致（diag 5548 → 5548、宏覆盖 86/135 = 63.7%、lint recall 33/33 / 误报 0）。
 
 - **注释文本里的"伪指令"与注释定界符识别（两起真实语料事故）**：

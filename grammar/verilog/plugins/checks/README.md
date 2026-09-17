@@ -3,7 +3,9 @@
 > 引擎机制：检查 = analyzer postpass 钩子 / analyzer 原语 / L1 声明式 `[[checks]]`
 > 规则表（**双路径实操见本文「编写检查规则」节**）。诊断
 > code/severity/range 协议与 `--json` 输出见 `main.py::_cmd_check` + `analyzer/
-> checker.py`（LSP 兼容序列化）；豁免注释语法见 `analyzer/suppress.py` docstring。
+> checker.py`（LSP 兼容序列化）；豁免注释语法见 `analyzer/suppress.py` docstring
+> （指令关键字固定，**注释标点随语言包声明**：verilog 是 `/* … */` 与 `// …`，
+> yaml 则写作 `# …`）。
 > 本表 = 每个 check 插件负责什么 + 各自诊断 code 的就近权威（code 全集按插件索引）。
 
 ## 插件清单（每 check 负责的部分）
