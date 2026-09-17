@@ -24,7 +24,12 @@ from .macro_policy import (
     load_macro_policy,
     plan_macro,
 )
-from .macro_shape import load_macro_shapes, macro_keywords
+from .macro_shape import (
+    MacroCallArgs,
+    load_macro_call_args,
+    load_macro_shapes,
+    macro_keywords,
+)
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config 由 preprocessor/macro_shape.py 读取（形态声明；
@@ -254,6 +259,9 @@ def scan_directives(
     """
     prefix, directives_set = _load_config(rules_dir)
     _MACRO_RE = _build_macro_re(prefix)
+    # 带参宏的实参形态（语言包 `[macro_recognition]` 的 call_args / arg_separator）：
+    # 定义侧形参表与展开侧实参表共用它（引擎不硬编码 `(` / `,`）。
+    call_args = load_macro_call_args(rules_dir=rules_dir)
 
     if _include_stack is None:
         _include_stack = set()
@@ -285,6 +293,7 @@ def scan_directives(
         "inc_dirs": all_dirs,
         "rules_dir": rules_dir,
         "_include_config": inc_config,
+        "_call_args": call_args,
     }
 
     # ── 预合并延续行（反斜杠折行）──
@@ -498,52 +507,16 @@ def enumerate_conditions(
     return configs
 
 
-def _match_paren_args(line: str, open_idx: int) -> tuple[str, int]:
-    """从 open_idx（`(` 位置）匹配括号，返回 (内部文本, 闭括号后位置)。
-
-    未闭合时返回 (空串, len(line))，由调用方按容错处理。
-    """
-    depth = 0
-    i = open_idx
-    while i < len(line):
-        c = line[i]
-        if c == "(":
-            depth += 1
-        elif c == ")":
-            depth -= 1
-            if depth == 0:
-                return line[open_idx + 1 : i], i + 1
-        i += 1
-    return "", len(line)
-
-
-def _split_args(text: str) -> list[str]:
-    """按顶层逗号分割实参（忽略括号/方括号内的逗号）。"""
-    parts: list[str] = []
-    depth = 0
-    cur: list[str] = []
-    for c in text:
-        if c in "([":
-            depth += 1
-            cur.append(c)
-        elif c in ")]":
-            depth -= 1
-            cur.append(c)
-        elif c == "," and depth == 0:
-            parts.append("".join(cur).strip())
-            cur = []
-        else:
-            cur.append(c)
-    parts.append("".join(cur).strip())
-    return parts
-
-
 def _expand_func_call(
-    name: str, args_text: str, func_macros: dict, macro_defs: dict
+    name: str,
+    args_text: str,
+    func_macros: dict,
+    macro_defs: dict,
+    call_args: MacroCallArgs,
 ) -> str:
     """展开带参宏调用：body[形参 → 实参]。实参不足补空串，按形参顺序绑定。"""
     params = func_macros.get(name, [])
-    arg_list = _split_args(args_text)
+    arg_list = call_args.split(args_text)
     body = macro_defs.get(name, "")
     for idx, p in enumerate(params):
         arg = arg_list[idx] if idx < len(arg_list) else ""
@@ -668,6 +641,16 @@ def expand_tokens(
     """
     _MACRO_RE = _build_macro_re(prefix)
     func_macros = func_macros or {}
+    # 实参形态（括号对 / 分隔符）由语言包声明；有待参宏却没声明 → fail-fast
+    # （引擎不硬编码 `(` / `,`，也不静默降级成“带参也不识别”）。
+    call_args = load_macro_call_args(rules_dir=rules_dir)
+    if func_macros and call_args is None:
+        raise ConfigError(
+            "[macro_recognition] 有待参宏（func_macros 非空）却未声明实参形态："
+            "call_args（如 \"bracket.l_parentheses,args,bracket.r_parentheses\"）"
+            "+ arg_separator（如 \"symbol.base.comma\"）——声明形式见 "
+            "preprocessor/README.md"
+        )
     _syntax = load_comment_syntax(rules_dir)
     # 宏处置策略（语言包 `[capabilities] macro_policy`；未声明 → 引擎默认 splice，
     # 见 macro_policy.py）：引擎只执行处置，不判定"该怎么处置"。
@@ -693,11 +676,16 @@ def expand_tokens(
             if m.start() < consumed_until:
                 continue  # 已被前一个宏调用链吞噬（`W'd`RST 嵌套）
             name = m.group(1)
-            if name in func_macros and line[m.end() :].startswith("("):
-                args_text, close_idx = _match_paren_args(line, m.end())
-                if close_idx > m.end():
+            if (
+                call_args is not None
+                and name in func_macros
+                and line[m.end() :].startswith(call_args.open)
+            ):
+                matched = call_args.match_args(line, m.end())
+                if matched is not None:
+                    args_text, close_idx = matched
                     body = _expand_func_call(
-                        name, args_text, func_macros, macro_defs
+                        name, args_text, func_macros, macro_defs, call_args
                     )
                     end = _extend_macro_chain(line, close_idx, _MACRO_RE)
                     consumed_until = max(consumed_until, end)

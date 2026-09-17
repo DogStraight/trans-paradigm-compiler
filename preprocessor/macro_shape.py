@@ -4,13 +4,19 @@
 语言知识不进代码）：
 
     [macro_recognition]
-    shape     = "symbol.base.backtick,name"     # 前缀 token 名 + 名字位占位符
-    directive = ["macro.define", "macro.undef", ...]   # 名字位候选（列表枚举）
-    call      = []                                     # 空列表 = 任意标识符
+    shape         = "symbol.base.backtick,name"     # 前缀 token 名 + 名字位占位符
+    directive     = ["macro.define", "macro.undef", ...]   # 名字位候选（列表枚举）
+    call          = []                                     # 空列表 = 任意标识符
+    call_args     = "bracket.l_parentheses,args,bracket.r_parentheses"
+    arg_separator = "symbol.base.comma"
 
 - `shape` 是与 grammar rules 同一套规则的生产式（`,` 顺序 / token 名），
   `name` 是**名字位占位符**（引擎在这里扫一个名字）；前缀位写 token 名
   （`symbol.<cat>.<name>`）→ 符号文本取自 token 定义，不在引擎里硬编码语言字符。
+- `call_args` / `arg_separator` 是**带参宏的实参形态**：调用括号对（写 bracket
+  token 名，文本取自 `[bracket].pairs`）+ 实参槽占位符 `args` + 顶层实参分隔符
+  （写 symbol token 名）——定义侧（`` `define NAME(a, b) ``）与调用侧（`` `NAME(x, y) ``）
+  同形，共用一份声明。配平计深的括号对 = 语言包声明的**全部**括号对。
 - 形态段（directive / call）声明名字位候选：**命中哪个候选就产出哪个 token
   类型**；候选为空列表 = 名字位是任意标识符（产出 `macro.call`，引擎协议常量，
   见 `core/token_protocol.py`）；整段不声明 = 该形态不识别（如 C 的宏调用就是
@@ -44,6 +50,11 @@ SHAPE_KINDS: tuple[str, ...] = (KIND_DIRECTIVE, KIND_CALL)
 # shape 里的名字位占位符（引擎在此扫一个名字）
 NAME_SLOT = "name"
 _SHAPE_FORM = '"symbol.<cat>.<name>,name"（前缀 token 名 + 名字位占位符）'
+# 带参实参形态的声明键 + 实参槽占位符（引擎在槽位扫实参列表，按分隔符切分）
+CALL_ARGS_KEY = "call_args"
+ARG_SEPARATOR_KEY = "arg_separator"
+ARGUMENT_SLOT = "args"
+_CALL_ARGS_FORM = f'"bracket.l_<名>,{ARGUMENT_SLOT},bracket.r_<名>"'
 
 
 @dataclass(frozen=True)
@@ -66,6 +77,87 @@ class MacroShape:
         return declared if declared in self.names else None
 
 
+@dataclass(frozen=True)
+class MacroCallArgs:
+    """带参宏的括号/分隔符形态（`[macro_recognition]` 声明解析结果）。
+
+    定义侧（`` `define NAME(a, b) body ``）与调用侧（`` `NAME(x, y) ``）同形，
+    共用一份声明；`nesting` 是配平计深用的括号对（语言包声明的全部括号对）。
+    括号文本按声明**整串**匹配 → 多字符括号对同样适用。
+    """
+
+    open: str
+    close: str
+    separator: str
+    nesting: tuple[tuple[str, str], ...]
+
+    def match_args(self, text: str, open_idx: int) -> tuple[str, int] | None:
+        """从 open_idx（开括号处）配平到对应闭括号 → (内部文本, 闭括号后位置)。
+
+        未配平（未闭合 / 调用跨行）→ None：调用方自行容错（定义侧退化为对象宏、
+        展开侧按非带参调用处理）。
+        """
+        if not text.startswith(self.open, open_idx):
+            return None
+        pairs = tuple(self.nesting)
+        closers = _sorted_closers(self.nesting)
+        inner_start = open_idx + len(self.open)
+        expect: list[str] = [self.close]
+        i = inner_start
+        while i < len(text):
+            opener = next((p for p in pairs if text.startswith(p[0], i)), None)
+            if opener is not None:
+                expect.append(opener[1])
+                i += len(opener[0])
+                continue
+            closer = next((c for c in closers if text.startswith(c, i)), None)
+            if closer is None:
+                i += 1
+                continue
+            if expect and expect[-1] == closer:
+                expect.pop()
+                if not expect:
+                    return text[inner_start:i], i + len(closer)
+            i += len(closer)
+        return None
+
+    def split(self, text: str) -> list[str]:
+        """按顶层分隔符切分实参（括号对内的分隔符不算），各段去首尾空白。"""
+        pairs = tuple(self.nesting)
+        closers = _sorted_closers(self.nesting)
+        parts: list[str] = []
+        cur: list[str] = []
+        depth = 0
+        i = 0
+        while i < len(text):
+            opener = next((p for p in pairs if text.startswith(p[0], i)), None)
+            if opener is not None:
+                depth += 1
+                cur.append(opener[0])
+                i += len(opener[0])
+                continue
+            closer = next((c for c in closers if text.startswith(c, i)), None)
+            if closer is not None:
+                depth -= 1
+                cur.append(closer)
+                i += len(closer)
+                continue
+            if depth == 0 and text.startswith(self.separator, i):
+                parts.append("".join(cur).strip())
+                cur = []
+                i += len(self.separator)
+                continue
+            cur.append(text[i])
+            i += 1
+        parts.append("".join(cur).strip())
+        return parts
+
+
+def _sorted_closers(nesting: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
+    """全部闭括号（长串优先——`>>` 不被 `>` 抢先匹配）。"""
+    return tuple(sorted({c for _, c in nesting}, key=len, reverse=True))
+
+
 def load_macro_shapes(
     cfg: dict | None = None,
     token_define: dict | None = None,
@@ -85,15 +177,9 @@ def load_macro_shapes(
     if cfg is None:
         cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
     if token_define is None and rules_dir:
-        from lexer.lexer_utils import get_token_define_merged
-
-        token_define = get_token_define_merged(rules_dir)
+        token_define = _token_define_of(rules_dir)
     token_define = token_define or {}
-    recognition = cfg.get("macro_recognition") or {}
-    if not isinstance(recognition, dict):
-        raise ConfigError(
-            f"[macro_recognition] 须是表（得到 {type(recognition).__name__}）"
-        )
+    recognition = _recognition(cfg)
 
     shape_production = recognition.get("shape")
     if shape_production is None:
@@ -133,6 +219,153 @@ def macro_keywords(shape: MacroShape) -> tuple[str, ...]:
     return tuple(name[len(MACRO_PREFIX):] for name in shape.names)
 
 
+def load_macro_call_args(
+    cfg: dict | None = None,
+    token_define: dict | None = None,
+    rules_dir: str | None = None,
+    *,
+    skip_undeclared_prefix: bool = False,
+) -> MacroCallArgs | None:
+    """读取 `[macro_recognition]` 的带参实参形态（未声明 → None）。
+
+        call_args     = "bracket.l_parentheses,args,bracket.r_parentheses"
+        arg_separator = "symbol.base.comma"
+
+    括号对文本按 token 名从 `[bracket].pairs` 取、分隔符文本从 `[symbol.*]` 取
+    （引擎不硬编码 `(` / `,`）；配平计深的括号对 = 语言包声明的全部括号对。
+    声明非法（形态不是括号对 / 槽名不是 args / 名字未声明 / 缺分隔符）→
+    fail-fast（不静默降级）。
+
+    cfg / token_define / rules_dir / skip_undeclared_prefix 语义同
+    `load_macro_shapes`。
+    """
+    if cfg is None:
+        cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
+    if token_define is None and rules_dir:
+        token_define = _token_define_of(rules_dir)
+    token_define = token_define or {}
+    recognition = _recognition(cfg)
+
+    production = recognition.get(CALL_ARGS_KEY)
+    if production is None:
+        return None
+    if not isinstance(production, str) or not production.strip():
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 须是非空生产式（{_CALL_ARGS_FORM}），"
+            f"得到 {production!r}"
+        )
+    separator_token = recognition.get(ARG_SEPARATOR_KEY)
+    if not isinstance(separator_token, str) or not separator_token:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 须与 {ARG_SEPARATOR_KEY}"
+            f"（实参分隔符 token 名，如 \"symbol.base.comma\"）同时声明，"
+            f"得到 {separator_token!r}"
+        )
+
+    open_token, close_token = _parse_call_args(production)
+    open_text = _token_text(
+        open_token, token_define, skip_undeclared_prefix, f"{CALL_ARGS_KEY} 开括号"
+    )
+    close_text = _token_text(
+        close_token, token_define, skip_undeclared_prefix, f"{CALL_ARGS_KEY} 闭括号"
+    )
+    separator = _token_text(
+        separator_token, token_define, skip_undeclared_prefix, ARG_SEPARATOR_KEY
+    )
+    if open_text is None or close_text is None or separator is None:
+        return None
+    nesting = _bracket_pairs(token_define)
+    if (open_text, close_text) not in nesting:
+        nesting = nesting + ((open_text, close_text),)
+    return MacroCallArgs(
+        open=open_text, close=close_text, separator=separator, nesting=nesting
+    )
+
+
+def _recognition(cfg: dict) -> dict:
+    """宏配置 → `[macro_recognition]` 表（缺省空表；非表 → fail-fast）。"""
+    recognition = cfg.get("macro_recognition") or {}
+    if not isinstance(recognition, dict):
+        raise ConfigError(
+            f"[macro_recognition] 须是表（得到 {type(recognition).__name__}）"
+        )
+    return recognition
+
+
+def _token_define_of(rules_dir: str) -> dict:
+    """该语言包的 token 定义（与 Lexer(rules_dir=...) 同源）。"""
+    from lexer.lexer_utils import get_token_define_merged
+
+    return get_token_define_merged(rules_dir)
+
+
+def _parse_call_args(production: str) -> tuple[str, str]:
+    """call_args 生产式 → (开括号 token 名, 闭括号 token 名)。非法 → ConfigError。"""
+    from parser.rule_selector import analyze_production_features
+
+    try:
+        feat = analyze_production_features(production)
+    except Exception as exc:  # noqa: BLE001 — 生产式语法错误即配置错（fail-fast）
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 无法解析: {production!r}（{exc}）"
+        ) from exc
+
+    if not isinstance(feat, dict):
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 无法解析为特征树: {production!r}"
+        )
+    items = feat.get("items")
+    if feat.get("type") != "seq" or not items or len(items) != 3:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 须是三位顺序 {_CALL_ARGS_FORM}"
+            f"（括号对夹一个实参槽），得到: {production!r}"
+        )
+    open_token, middle, close_token = (
+        _as_token(items[0]),
+        _as_token(items[1]),
+        _as_token(items[2]),
+    )
+    if middle != ARGUMENT_SLOT:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 中间位须写 {ARGUMENT_SLOT!r}"
+            f"（实参槽占位符），得到: {production!r}"
+        )
+    if not open_token or not close_token:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 两侧须写 bracket token 名"
+            f"（{_CALL_ARGS_FORM}），得到: {production!r}"
+        )
+    open_name = _bracket_side_name(open_token, "l_")
+    close_name = _bracket_side_name(close_token, "r_")
+    if open_name != close_name:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 括号对名称须一致（开 {open_token!r} "
+            f"/ 闭 {close_token!r}）——同名即同一对（[bracket].pairs）"
+        )
+    return open_token, close_token
+
+
+def _bracket_side_name(token_type: str, side: str) -> str:
+    """`bracket.l_<名>` / `bracket.r_<名>` → `<名>`；形态非法 → ConfigError。"""
+    prefix = f"bracket.{side}"
+    if not token_type.startswith(prefix) or len(token_type) == len(prefix):
+        raise ConfigError(
+            f"[macro_recognition] {CALL_ARGS_KEY} 括号位须是 token 名 "
+            f"'bracket.{side}<名>'，得到 {token_type!r}"
+        )
+    return token_type[len(prefix):]
+
+
+def _bracket_pairs(token_define: dict) -> tuple[tuple[str, str], ...]:
+    """语言包声明的括号对（`[bracket].pairs`：开 / 闭 / 名）。"""
+    pairs = (token_define.get("bracket") or {}).get("pairs") or []
+    out: list[tuple[str, str]] = []
+    for item in pairs:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append((str(item[0]), str(item[1])))
+    return tuple(out)
+
+
 def _resolve_macro_cfg(rules_dir: str) -> dict:
     """按语言包解析宏配置（与 token 定义同源，不复用全局已加载配置）。"""
     from core.config_registry import ConfigRegistry
@@ -157,7 +390,11 @@ def _parse_shape(production: str) -> str:
             f"[macro_recognition] shape 无法解析: {production!r}（{exc}）"
         ) from exc
 
-    items = feat.get("items") if isinstance(feat, dict) else None
+    if not isinstance(feat, dict):
+        raise ConfigError(
+            f"[macro_recognition] shape 无法解析为特征树: {production!r}"
+        )
+    items = feat.get("items")
     if feat.get("type") != "seq" or not items or len(items) != 2:
         raise ConfigError(
             f"[macro_recognition] shape 须是两位顺序 {_SHAPE_FORM}，得到: {production!r}"
@@ -215,6 +452,48 @@ def _check_candidate(token_type: str, kind: str) -> str:
     return token_type
 
 
+def _token_text(
+    token_type: str, token_define: dict, skip_undeclared: bool, where: str
+) -> str | None:
+    """token 名 → 文本（`symbol.<类>.<名>` 或 `bracket.[lr]_<名>`）。
+
+    未声明：token 表由调用方自建（skip_undeclared=True）→ None（跳过该形态）；
+    否则 fail-fast（语言包内的名字写错即配置错）。
+    """
+    parts = token_type.split(".")
+    hint = ""
+    if len(parts) == 3 and parts[0] == "symbol":
+        value = ((token_define.get("symbol") or {}).get(parts[1]) or {}).get(parts[2])
+        hint = f"（[symbol.{parts[1]}] 缺 {parts[2]}）"
+    elif len(parts) == 2 and parts[0] == "bracket" and parts[1][:2] in ("l_", "r_"):
+        side = 0 if parts[1].startswith("l_") else 1
+        name = parts[1][2:]
+        value = next(
+            (
+                pair[side]
+                for pair in (token_define.get("bracket") or {}).get("pairs") or []
+                if isinstance(pair, (list, tuple))
+                and len(pair) >= 3
+                and pair[2] == name
+            ),
+            None,
+        )
+        hint = f"（[bracket].pairs 缺 {name}）"
+    else:
+        raise ConfigError(
+            f"[macro_recognition] {where} 须是 token 名（symbol.<类>.<名> 或 "
+            f"bracket.[lr]_<名>），得到 {token_type!r}"
+        )
+    if not isinstance(value, str) or not value:
+        if skip_undeclared:
+            return None
+        raise ConfigError(
+            f"[macro_recognition] {where} token 名 {token_type!r} 未在 token 定义中"
+            f"声明{hint}"
+        )
+    return value
+
+
 def _prefix_text(
     token_type: str, token_define: dict, skip_undeclared: bool
 ) -> str | None:
@@ -223,13 +502,4 @@ def _prefix_text(
     未声明：调用方自建 token 表（skip_undeclared=True）→ None（跳过该形态）；
     否则 fail-fast（语言包内的名字写错即配置错）。
     """
-    _, category, name = token_type.split(".")
-    value = ((token_define.get("symbol") or {}).get(category) or {}).get(name)
-    if not isinstance(value, str) or not value:
-        if skip_undeclared:
-            return None
-        raise ConfigError(
-            f"[macro_recognition] shape 前缀 token 名 {token_type!r} 未在 token "
-            f"定义中声明（[symbol.{category}] 缺 {name}）"
-        )
-    return value
+    return _token_text(token_type, token_define, skip_undeclared, "shape 前缀")

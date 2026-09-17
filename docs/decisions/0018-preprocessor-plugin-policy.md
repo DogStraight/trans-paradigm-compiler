@@ -62,5 +62,9 @@
 > `append`（语句尾补分号）知识随之消失；锚名协议（`core/token_protocol.py`）
 > 与宏边界节点化死链（`pipeline._stage_macro_nodes`，锚表恒空实测）同批删除。
 
+> 背景表里的另两处引擎侧知识也已迁出：函数宏实参形态改 `[macro_recognition]`
+> 的 `call_args` / `arg_separator` 声明驱动（`_match_paren_args` / `_split_args`
+> 删，配平/切分入 `macro_shape.MacroCallArgs`）；仅剩 `_LITERAL_SUFFIX_RE`
+> （ROADMAP P3.6 末项）。
 > Impl: `preprocessor/macro_policy.py`、`grammar/verilog/plugins/macro_policy/_policy.py`
 > Test: `tests/engine/preprocessor/test_macro_policy.py`

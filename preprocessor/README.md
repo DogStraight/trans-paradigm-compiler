@@ -28,6 +28,7 @@
 |------|----------|--------|
 | 注释标点（行注释起始 / 成对定界符） | `[comment] pairs` / `[[capture]]` | `lexer/comment_syntax.py` → `_markers.py`、`analyzer/suppress.py` |
 | 宏形态（`shape` 生产式：前缀 token 名 + 名字位；段候选列表枚举） | `[macro_recognition]`（`shape` / `directive` / `call`） | `macro_shape.py`（声明解析）→ `lexer` 宏 token 扫描、`_expand.py`（文本层展开） |
+| 带参宏实参形态（调用括号对 + 实参槽 + 分隔符；定义侧与调用侧同形） | `[macro_recognition]`（`call_args` / `arg_separator`） | `macro_shape.py`（声明解析 + 配平/切分）→ `_expand.py`（调用侧）、`primitives/define.py`（形参表） |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
@@ -53,14 +54,13 @@
   只有该语言包 `plugins/` 下的组件才有资格应答，同进程切语言不串用。
 
 verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
-**尚未迁出的引擎侧语言知识**（ROADMAP P3.6 剩余项）：函数宏实参形态
-（`_match_paren_args` / `_split_args`）、宏调用后随字面量后缀
-（`_LITERAL_SUFFIX_RE`）。
+**尚未迁出的引擎侧语言知识**（ROADMAP P3.6 剩余项）：宏调用后随位宽字面量后缀
+（`_expand.py::_LITERAL_SUFFIX_RE` 与 `[[number.based]]` 是同一知识的两处表达）。
 
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
-| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析；前缀 token 文本 + 名字候选） |
+| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析：前缀 token 文本 + 名字候选 + 实参形态） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |
 | `_markers.py` | tpc marker 书写/识别（注释形态声明驱动） |

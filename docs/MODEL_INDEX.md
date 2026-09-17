@@ -101,7 +101,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 宏展开（strip 指令 + `` `NAME `` 引用展开） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py` | `tests/engine/preprocessor/test_primitives.py` + `tests/languages/verilog/test_macro*.py` |
-| 宏形态声明（`shape` 生产式 + 名字位候选列表；命中候选即产出该 token 类型） | `preprocessor/README.md`（形态清单） | `preprocessor/macro_shape.py`（声明解析）<br>`lexer/main_lexer.py::_match_macro_at`（词法落地） | `tests/engine/preprocessor/test_macro_shape.py` |
+| 宏形态声明（`shape` 生产式 + 名字位候选列表；带参实参形态 `call_args` / `arg_separator`） | `preprocessor/README.md`（形态清单） | `preprocessor/macro_shape.py`（声明解析 + 配平/切分）<br>`lexer/main_lexer.py::_match_macro_at`（词法落地） | `tests/engine/preprocessor/test_macro_shape.py`<br>`tests/engine/preprocessor/test_macro_call_args.py` |
 | 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
 | 宏处置策略（引擎定义 mode 枚举；语言包以 `[capabilities] macro_policy` 声明策略） | `docs/decisions/0018-preprocessor-plugin-policy.md` + `preprocessor/README.md`（策略契约节） | `preprocessor/macro_policy.py`（取入口/校验）<br>`grammar/verilog/plugins/macro_policy/`（判定表） | `tests/engine/preprocessor/test_macro_policy.py` |
 | tpc marker 通道（占位注释形态声明驱动 + 锚定位） | `preprocessor/README.md`（marker 书写形态） | `preprocessor/_markers.py`（书写/识别）<br>`preprocessor/_bridge.py::restore_anchors`（按锚回插） | `tests/engine/preprocessor/test_markers.py` |

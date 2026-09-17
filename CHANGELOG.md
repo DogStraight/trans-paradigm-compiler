@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **函数宏实参形态改声明驱动（删引擎硬编码 `(` / `)` / `,` / 嵌套 `[]`）**：
+  带参宏的括号对、实参分隔符、配平用的嵌套括号对原先是 `_expand._match_paren_args`
+  （认 `(`/`)`）、`_split_args`（认 `([`/`)]`/`,`）、`primitives/define.handle_define`
+  （认 `(`/`)`/`,`）三处引擎硬编码。现统一由语言包 `[macro_recognition]` 声明：
+
+  ```toml
+  call_args     = "bracket.l_parentheses,args,bracket.r_parentheses"
+  arg_separator = "symbol.base.comma"
+  ```
+
+  1. `call_args` 是与 `shape` 同款的**生产式**（token 名 + 实参槽占位符 `args`）；
+     括号对文本取自 `[bracket].pairs`、分隔符文本取自 `[symbol.*]`（`macro_shape.
+     _token_text`）——引擎不认识具体字符。定义侧（`` `define NAME(a, b) ``）与
+     调用侧（`` `NAME(x, y) ``）同形，共用这一份声明。
+  2. 配平与切分入 `macro_shape.MacroCallArgs`（`match_args` / `split`）：按声明
+     括号对**整串**匹配（多字符括号对同样适用），配平括号对取语言包声明的**全部**
+     括号对（旧实现只认 `(`/`)`、`([`/`)]`）。
+  3. `_match_paren_args` / `_split_args` 删除；`handle_define` 从 ctx 取声明
+     （由 `scan_directives` 放入）。
+  4. 声明的名字写错 / 形状不对 / `call_args` 缺 `arg_separator` → fail-fast；
+     **有待参宏却没声明实参形态** → `expand_tokens` fail-fast（不静默降级成
+     "带参也不识别"）。
+  5. 新增 `tests/engine/preprocessor/test_macro_call_args.py`（21 例：声明解析 /
+     8 种非法声明 fail-fast / 配平（嵌套、多字符、未闭合）/ 顶层切分 / 定义侧与
+     调用侧同源 / 缺声明 fail-fast）。
+
+  ROADMAP P3.6「函数宏实参形态迁出」闭环；该阶段仅剩 `_LITERAL_SUFFIX_RE` 一项。
+
+  **验证**：worktree A/B 对拍 106 个共同样本输出逐文件一致；全量测试 2053 passed /
+  7 skipped；真实语料三工具持平（lint 33/33 / 误报 0、diag 5548、宏位置覆盖 86/135）；
+  config_sites / doc_refs / hardcode 三门禁 PASS。
+
 - **删非语义展开路径（token 锚 + 宏边界节点化死链），处置枚举收到三模式**：
   自查发现 `expand_tokens(semantic=False)` **无引擎调用方**（pipeline / analyzer /
   linter 三条路全走"宏体铺进流"），而该路径独占 token 锚产出——实测 138 样例：

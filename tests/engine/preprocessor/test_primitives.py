@@ -12,6 +12,7 @@ import os
 import pytest
 
 from core.define import FileManager
+from preprocessor.macro_shape import load_macro_call_args
 from preprocessor.primitives.registry import (
     get_primitive,
     get_primitive_kind,
@@ -24,7 +25,8 @@ pytestmark = pytest.mark.smoke  # smoke：preprocessor 组代表（宏指令 han
 
 
 def _ctx(**kw) -> dict:
-    """构造 handler 共享上下文。"""
+    """构造 handler 共享上下文（含带参宏的实参形态声明——定义侧形参表靠它）。"""
+    rules_dir = FileManager.get_full_path("grammar/verilog")
     ctx = {
         "macro_defs": {},
         "_func_params": {},
@@ -38,7 +40,8 @@ def _ctx(**kw) -> dict:
         "inc_dirs": [],
         "_include_config": {},
         "_include_stack": set(),
-        "rules_dir": FileManager.get_full_path("grammar/verilog"),
+        "rules_dir": rules_dir,
+        "_call_args": load_macro_call_args(rules_dir=rules_dir),
         "directive_lines": [],
     }
     ctx.update(kw)

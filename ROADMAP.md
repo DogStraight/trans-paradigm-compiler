@@ -301,11 +301,11 @@
 > ③ 宏边界数据由外层管线就树产生
 >   （见 `docs/decisions/0017-macro-in-syntax-position.md`）；
 > ④ 非语义路径（token 锚 + 宏边界节点化）已核算为死链并删除
->   （锚表恒空 / 最终 AST 无 MacroCall，见 `docs/decisions/0018-preprocessor-plugin-policy.md`）。
+>   （锚表恒空 / 最终 AST 无 MacroCall，见 `docs/decisions/0018-preprocessor-plugin-policy.md`）；
+> ⑤ 带参宏实参形态（括号对 / 分隔符 / 配平）已声明驱动
+>   （`[macro_recognition]` 的 `call_args` / `arg_separator`）。
 > 剩余项如下。
 
-- [ ] **函数宏实参形态迁出**：`_match_paren_args` / `_split_args` 的定界符 `()`、
-      嵌套 `[]`、分隔符 `,` 仍是引擎硬编码（可入同一能力或改声明驱动）
 - [ ] **宏调用后随字面量后缀迁出**：`_LITERAL_SUFFIX_RE` 与 `[[number.based]]`
       是同一知识的两处表达（先补声明面再改，否则丢还原区间）
 
