@@ -20,6 +20,14 @@ Doc: core/component_protocol.md（token 类型协议）
 """
 
 import hashlib
+import re
+
+# ── 标识符形态（引擎级，单一份实现） ──
+# lexer 的 id 扫描与宏名扫描（宏形态声明的名字位写 `id`）共用本形态；
+# 文本层展开器构造宏调用正则时也用它——“宏名”与“标识符”在引擎里是同一个
+# 形态，不在各处各写一份（语言包里的 `[id.id]` 声明是既有的描述性条目，
+# 引擎当前不消费）。
+IDENT_RE = re.compile(r"[^\W\d]\w*")
 
 # ── 前缀常量 ──
 KEYWORD_PREFIX = "keyword."

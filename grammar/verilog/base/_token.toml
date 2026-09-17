@@ -33,6 +33,10 @@ at = "@"
 pound = "#"
 single_quote = "'"
 dollar = "$"
+# 宏前缀 `` ` ``：也是符号 token（tpc 宏形态声明用 token 名引用它，
+# 见 base/_macro.toml 的 [macro_recognition]）。lexer 在“前缀 + 名字”形态
+# 成立时按宏识别，裸 `` ` `` 才落本符号。
+backtick = "`"
 
 [symbol.extend]
 r_shift = ">>"

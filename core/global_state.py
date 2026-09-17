@@ -115,6 +115,7 @@ ACCUMULATED: dict[str, str] = {
 # ── 登记表 4/6：CONTENT_ADDRESSED——键 = 输入，同参结果恒定，可保留 ──
 CONTENT_ADDRESSED: dict[str, str] = {
     "core.config_registry.ConfigRegistry._resolve_cache": "键 = 语言参数元组（纯函数缓存）",
+    "preprocessor.macro_shape._PARSE_CACHE": "键 = 宏形态生产式字符串（纯函数缓存）",
     "lexer.comment_syntax._CACHE": "键 = rules_dir（注释形态：行注释起始/成对定界符）",
     "analyzer.checks._HANDLER_CACHE": "键 = 插件目录（handler 模块跨次复用）",
     "lexer.pre_scan._CACHE": "键 = rules_dir",

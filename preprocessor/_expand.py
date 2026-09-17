@@ -7,22 +7,20 @@ Both operate on pure text, no token dependency.
 Doc: preprocessor/README.md
 """
 
+import os
 import re
 from core.config_registry import declare_cfg
-from core.token_protocol import anchor_name, anchor_salt
+from core.token_protocol import IDENT_RE, anchor_name, anchor_salt
 from lexer.comment_syntax import CommentSyntax, load_comment_syntax
 from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
+from .macro_shape import load_macro_shapes, macro_keywords
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
-# preprocessor.macro_config
-#   #sym:config = (root)  ← 无 section，取整个文件
-#   格式: dict
-#     { macro_recognition: { directive: { strategy, prefix }, call: { strategy, prefix } },
-#       directives: { keyword: token_type, ... } }
-_macro_cfg: dict = declare_cfg("preprocessor.macro_config", {}, __name__, "_macro_cfg")
+# preprocessor.macro_config 由 preprocessor/macro_shape.py 读取（形态声明；
+# 本文件按 rules_dir 解析后交给它，不再自带一份声明）。
 
 # preprocessor.expand
 #   #sym:config = [expand]
@@ -139,12 +137,20 @@ def _advance_block_comment(
     return state
 
 
-def _load_config() -> tuple[str, set[str]]:
-    """Load macro config from ConfigRegistry → (prefix, directives_set)."""
-    cfg = dict(_macro_cfg)
-    recognition = cfg.get("macro_recognition", {})
-    prefix = recognition.get("prefix", "`")
-    configured = set(cfg.get("directives", {}).values())
+def _load_config(rules_dir: str) -> tuple[str, set[str]]:
+    """宏形态声明 → (前缀文本, 指令名集合)。
+
+    两者都从语言包 `[macro_recognition]` 的**形态生产式**推导（前缀 token 名 →
+    符号文本；指令候选名 → 去 `macro.` 前缀的关键字）——前缀不在引擎里硬编码
+    （解析见 preprocessor/macro_shape.py）。
+
+    按 rules_dir 解析该语言包的声明（与 `Lexer(rules_dir=...)` 同源），不复用
+    全局已加载配置：同进程切语言时不串味（c4 无宏形态 → 空前缀 + 空指令集）。
+    """
+    shapes = load_macro_shapes(rules_dir=rules_dir)
+    directive = shapes.get("directive")
+    prefix = directive.prefix if directive is not None else ""
+    configured = set(macro_keywords(directive)) if directive is not None else set()
     # 已注册的指令处理器名也算指令：未加载配置时也能区分"指令行 vs 行首宏调用"
     directives = configured | set(list_primitives())
     return prefix, directives
@@ -166,7 +172,14 @@ _LITERAL_SUFFIX_RE = re.compile(r"^'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*")
 
 
 def _build_macro_re(prefix: str) -> re.Pattern:
-    return re.compile(rf"\{prefix}(\w+)")
+    """宏调用正则（前缀 + 名字）；未声明前缀 → 永不匹配（该语言无宏形态）。
+
+    名字用引擎级标识符形态（`core/token_protocol.IDENT_RE`）——与 lexer 的
+    宏形态识别同源，不在文本层另写一份名字正则。
+    """
+    if not prefix:
+        return re.compile(r"(?!)")
+    return re.compile(re.escape(prefix) + f"({IDENT_RE.pattern})")
 
 
 # ── 纯文本展开（新方案）──
@@ -231,7 +244,7 @@ def scan_directives(
                           本源文件 → None（不可映射，消费方保守回退）。诊断
                           回源时与 `expand_tokens` 的展开级映射复合使用。
     """
-    prefix, directives_set = _load_config()
+    prefix, directives_set = _load_config(rules_dir)
     _MACRO_RE = _build_macro_re(prefix)
 
     if _include_stack is None:
@@ -607,7 +620,7 @@ def expand_tokens(
             哪条宏"→ 渲染侧 raw 拼接、诊断宏归因都靠它。
             semantic=False 时为空表（那条路径用锚还原）。
     """
-    _MACRO_RE = re.compile(rf"\{prefix}(\w+)")
+    _MACRO_RE = _build_macro_re(prefix)
     func_macros = func_macros or {}
     _syntax = load_comment_syntax(rules_dir)
     restoration_stack: list[dict] = []

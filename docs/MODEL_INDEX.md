@@ -101,6 +101,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 宏展开（strip 指令 + `` `NAME `` 引用展开） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py` | `tests/engine/preprocessor/test_primitives.py` + `tests/languages/verilog/test_macro*.py` |
+| 宏形态声明（生产式：前缀 token + 名字候选；指令集并入名字位） | `preprocessor/README.md`（形态清单） | `preprocessor/macro_shape.py`（生产式解析）<br>`lexer/main_lexer.py::_match_macro_at`（词法落地） | `tests/engine/preprocessor/test_macro_shape.py` |
 | 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
 | tpc marker 通道（占位注释形态声明驱动 + 锚定位） | `preprocessor/README.md`（marker 书写形态） | `preprocessor/_markers.py`（书写/识别）<br>`preprocessor/_bridge.py::restore_anchors`（按锚回插） | `tests/engine/preprocessor/test_markers.py`<br>`tests/engine/preprocessor/test_anchor_protocol.py` |
 

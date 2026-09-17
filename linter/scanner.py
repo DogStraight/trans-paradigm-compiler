@@ -143,7 +143,7 @@ class LinterScanner:
         self._tree = build_slice_tree(rules)
         self.lexer = Lexer(rules_dir=rules_dir, ext_dirs=ext_list)
 
-        self._macro_prefix, _ = _load_config()
+        self._macro_prefix, _ = _load_config(rules_dir)
 
         # ── 动态收集 block 起止符 ─────────────────
         _openers, _closers, self._block_pairs, _ = self._build_block_delimiters(rules)
@@ -312,7 +312,7 @@ class LinterScanner:
             registry.add(MacroTokenChecker(0, len(tokens)))
             # 宏/指令卫生（MH 族）：扫**原始源码**（指令行已从 token 流剥离）
             if _macro_hygiene_cfg.get("enabled", True):
-                prefix, _ = _load_config()
+                prefix, _ = _load_config(self._rules_dir)
                 registry.add(
                     MacroHygieneChecker(source, prefix, _macro_hygiene_cfg)
                 )

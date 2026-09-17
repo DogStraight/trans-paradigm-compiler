@@ -12,7 +12,7 @@
 
 - **宏调用参数定界符**：`_match_paren_args` / `_split_args` 写死 `(` `)` `,` 与
   嵌套 `[` `]`（语言包已声明 `[bracket] pairs` / `[symbol.base].comma`，可声明
-  为"调用括号对 + 实参分隔符 + 嵌套括号表"）。当前只有 verilog 声明宏调用
+  为"调用括号对 + 实参分隔符 + 嵌套括号表"）。当前只有 verilog 声明宏形态
   （c4/yaml 无 `[macro_recognition]`）→ 影响面窄。
 - **宏调用后随位宽字面量后缀**：`_LITERAL_SUFFIX_RE`（`'s`/进制/digit 集）与
   `[[number.based]]` 是同一知识的两处表达。**不能直接改为 FSM 探测**：该正则

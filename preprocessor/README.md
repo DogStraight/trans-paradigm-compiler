@@ -28,7 +28,7 @@
 | 形态 | 声明位置 | 消费点 |
 |------|----------|--------|
 | 注释标点（行注释起始 / 成对定界符） | `[comment] pairs` / `[[capture]]` | `lexer/comment_syntax.py` → `_markers.py`、`analyzer/suppress.py` |
-| 宏 token 识别（前缀/后缀策略） | `[macro_recognition]` | `lexer` 宏 token 扫描 |
+| 宏形态（**生产式**：前缀 token + 名字候选） | `[macro_recognition]`（`directive` / `call`） | `macro_shape.py`（生产式解析）→ `lexer` 宏 token 扫描、`_expand.py`（文本层展开） |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
@@ -39,6 +39,7 @@
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |
+| `macro_shape.py` | 宏形态声明读取（`[macro_recognition]` 生产式解析；前缀 token 文本 + 名字候选） |
 | `_reverse.py` | 宏反向（统一位置桥：锚 + 原文回插） |
 | `_bridge.py` | 统一位置桥（Anchor Bridge）——锚 + 原文消耗式回插引擎 |
 | `_markers.py` | tpc marker 书写/识别（注释形态声明驱动） |

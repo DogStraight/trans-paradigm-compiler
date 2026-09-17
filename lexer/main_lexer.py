@@ -14,11 +14,12 @@ from core.define import Token
 from core.config_registry import declare_cfg
 from core.token_protocol import (
     COMMENT_TOKEN_TYPE,
+    IDENT_RE,
+    MACRO_CALL_TOKEN_TYPE,
     bracket_left,
     bracket_right,
     keyword_type,
     literal_type,
-    macro_type,
     symbol_type,
 )
 
@@ -28,8 +29,8 @@ from .capture_runner import CaptureRunner, CaptureRule
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config（与 preprocessor/_expand.py 共享同一 key，宏配置
 # 权威归属 preprocessor 段）：
-#   { macro_recognition: { directive: { strategy, prefix }, call: { strategy, prefix } },
-#     directives: { keyword: token_type, ... } }
+#   { macro_recognition: { directive: "<生产式>", call: "<生产式>" }, ... }
+# 宏形态（前缀 token + 名字）由 preprocessor/macro_shape.py 解析。
 _macro_cfg: dict = declare_cfg("preprocessor.macro_config", {}, __name__, "_macro_cfg")
 
 
@@ -110,8 +111,13 @@ class Lexer:
                 ext_dirs=ext_dirs,
                 plugins_dir=os.path.join(rules_dir, "plugins"),
             )
+            # token 表来自语言包（非调用方注入）→ 宏前缀 token 名未声明即配置错；
+            # 调用方显式注入 token 表 → 表里没有的前缀 token 该形态不适用（不报错）
             if token_define_dict is None:
                 token_define_dict = merge_token_define(resolved)
+                token_table_injected = False
+            else:
+                token_table_injected = True
             raw_macro = resolved.get("preprocessor.macro_config", {}) or {}
             if number_configs is None:
                 number_configs = extract_number_configs(
@@ -128,12 +134,20 @@ class Lexer:
                     "统一走 ConfigRegistry。"
                 )
             raw_macro = _macro_cfg
+            # 调用方自建 token 表：表里没有的前缀 token → 该形态不适用（不报错）
+            token_table_injected = True
         self.token_define = token_define_dict
 
-        # 宏识别策略与配置
-        self._macro_dir_cfg: dict = raw_macro.get("macro_recognition", {}).get("directive", {})
-        self._macro_call_cfg: dict = raw_macro.get("macro_recognition", {}).get("call", {})
-        self.macro_config = {d: macro_type(d) for d in raw_macro.get("directives", {})}
+        # 宏形态（生产式声明：前缀 token + 名字位）——识别顺序 directive 优先
+        # （导入放这里：lexer 包与 preprocessor 包在模块级互相引用，避免环）
+        from preprocessor.macro_shape import SHAPE_KINDS, load_macro_shapes
+
+        self._macro_shapes = load_macro_shapes(
+            cfg=raw_macro,
+            token_define=token_define_dict,
+            skip_undeclared_prefix=token_table_injected,
+        )
+        self._macro_shape_kinds = SHAPE_KINDS
 
         self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
         raw_level = token_define_dict.get("indent", {}).get("level", 4)
@@ -508,7 +522,13 @@ class Lexer:
                 continue
 
             # ── symbol 分支 ──
-            elif lex_text[text_idx] in self.token_define["symbol"]["base"].values():
+            # 宏形态（前缀 + 名字）优先：前缀本身也是符号 token（如 `` ` ``）时，
+            # “前缀 + 名字”成立就按宏识别（下面的宏分支），裸符号才落本分支——
+            # 与语言包 [macro_recognition] 的形态声明一致。
+            elif (
+                lex_text[text_idx] in self.token_define["symbol"]["base"].values()
+                and self._match_macro_at(lex_text, text_idx) is None
+            ):
                 # handle possible dedent before actual token
                 self._emit_pending_dedent(tokens)
 
@@ -601,17 +621,11 @@ class Lexer:
             elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
                 self._emit_pending_dedent(tokens)
 
-                id_content: str = lex_text[text_idx]
-                text_idx += 1
-                offset += 1  # 首字符也要计入列偏移（否则后续 token 列号累积偏左）
-                while text_idx < lex_text_len and (
-                    lex_text[text_idx].isalpha()
-                    or lex_text[text_idx] == "_"
-                    or lex_text[text_idx].isdigit()
-                ):
-                    id_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
+                # 标识符扫描与宏名共用同一实现（宏形态声明里的名字位 = id）
+                id_len = self._scan_ident_len(lex_text, text_idx)
+                id_content: str = lex_text[text_idx : text_idx + id_len]
+                text_idx += id_len
+                offset += id_len
 
                 current_token.set_type("id")
                 current_token.set_content(id_content)
@@ -621,53 +635,23 @@ class Lexer:
                 tokens.append(current_token)
                 continue
 
-            # ── 宏 token 识别（prefix 策略）──
+            # ── 宏 token 识别（形态声明驱动：前缀 token + 名字）──
             #
-            # 按 directive → call 顺序检查，相同前缀时 directive 优先。
-            # 命中 directives 表 → macro.<key>；未命中且 call 策略相同 → macro.call。
+            # 形态来自语言包 [macro_recognition]（生产式，preprocessor/macro_shape.py
+            # 解析）：指令段优先；名字命中指令候选 → 产出该 token 类型（macro.define
+            # 等），其余名字 → macro.call（引擎协议常量）。“前缀 + 名字”不成立
+            # （如裸 `` ` ``）→ 不在此消费，由上面的 symbol 分支接管。
             #
-            dir_prefix = (
-                self._macro_dir_cfg.get("prefix", "")
-                if self._macro_dir_cfg.get("strategy") == "prefix"
-                else ""
-            )
-            call_prefix = (
-                self._macro_call_cfg.get("prefix", "")
-                if self._macro_call_cfg.get("strategy") == "prefix"
-                else ""
-            )
-            ch = lex_text[text_idx]
-            matched_prefix = ""
-            check_dir = False
-            if dir_prefix and ch == dir_prefix:
-                matched_prefix = dir_prefix
-                check_dir = True
-            elif call_prefix and ch == call_prefix:
-                matched_prefix = call_prefix
-
-            if matched_prefix:
+            macro_hit = self._match_macro_at(lex_text, text_idx)
+            if macro_hit is not None:
+                macro_content, macro_type = macro_hit
                 self._emit_pending_dedent(tokens)
-                macro_content = ch
-                text_idx += 1
-                while text_idx < lex_text_len and (
-                    lex_text[text_idx].isalpha()
-                    or lex_text[text_idx] == "_"
-                    or lex_text[text_idx].isdigit()
-                ):
-                    macro_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
-
-                macro_name = macro_content[1:]  # 去掉前缀
-                macro_type = (
-                    self.macro_config.get(macro_name, "macro.call")
-                    if check_dir
-                    else "macro.call"
-                )
+                offset = len(macro_content)
+                text_idx += offset
                 current_token.set_type(macro_type)
                 current_token.set_content(macro_content)
 
-                start_point += len(macro_content)
+                start_point += offset
                 current_token = self.refine_type(current_token)
                 tokens.append(current_token)
                 continue
@@ -784,6 +768,40 @@ class Lexer:
         return any(
             text.startswith(v, idx) for v in self._extend_values
         )
+
+    # ── 宏形态识别（语言包 [macro_recognition] 声明驱动） ──
+
+    @staticmethod
+    def _scan_ident_len(text: str, idx: int) -> int:
+        """标识符形态长度（0 = 此处不是标识符起始）。
+
+        id 分支与宏名扫描**共用**同一实现（形态常量 IDENT_RE）：宏形态声明里的
+        名字位写 `id`，“宏名”于是就是语言包的标识符形态，不在引擎里各写一份。
+        """
+        m = IDENT_RE.match(text, idx)
+        return m.end() - m.start() if m else 0
+
+    def _match_macro_at(self, text: str, idx: int) -> tuple[str, str] | None:
+        """idx 处的宏 token → (内容, token 类型)；非宏形态 → None。
+
+        形态 = 声明的前缀文本 + 一个标识符（无名字不算宏形态——裸前缀落符号
+        分支）。识别顺序 directive → call（同前缀时指令优先）；名字命中指令
+        候选 → 该候选名即 token 类型，其余 → macro.call。
+        """
+        for kind in self._macro_shape_kinds:
+            shape = self._macro_shapes.get(kind)
+            if shape is None or not shape.prefix:
+                continue
+            if not text.startswith(shape.prefix, idx):
+                continue
+            start = idx + len(shape.prefix)
+            name_len = self._scan_ident_len(text, start)
+            if not name_len:
+                continue
+            name = text[start : start + name_len]
+            token_type = shape.token_type_of(name) or MACRO_CALL_TOKEN_TYPE
+            return text[idx : start + name_len], token_type
+        return None
 
     # 仅供 tokenize 内部调用
     def _scan_plain_scalar(self, text: str, idx: int) -> tuple[str, int]:
