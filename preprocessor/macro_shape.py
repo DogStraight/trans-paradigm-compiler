@@ -4,11 +4,12 @@
 语言知识不进代码）：
 
     [macro_recognition]
-    shape         = "symbol.base.backtick,name"     # 前缀 token 名 + 名字位占位符
-    directive     = ["macro.define", "macro.undef", ...]   # 名字位候选（列表枚举）
-    call          = []                                     # 空列表 = 任意标识符
-    call_args     = "bracket.l_parentheses,args,bracket.r_parentheses"
-    arg_separator = "symbol.base.comma"
+shape          = "symbol.base.backtick,name"     # 前缀 token 名 + 名字位占位符
+        directive      = ["macro.define", "macro.undef", ...]   # 名字位候选（列表枚举）
+        call           = []                                     # 空列表 = 任意标识符
+        call_args      = "bracket.l_parentheses,args,bracket.r_parentheses"
+        arg_separator  = "symbol.base.comma"
+        suffix_after_call = "'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*"
 
 - `shape` 是与 grammar rules 同一套规则的生产式（`,` 顺序 / token 名），
   `name` 是**名字位占位符**（引擎在这里扫一个名字）；前缀位写 token 名
@@ -17,6 +18,9 @@
   token 名，文本取自 `[bracket].pairs`）+ 实参槽占位符 `args` + 顶层实参分隔符
   （写 symbol token 名）——定义侧（`` `define NAME(a, b) ``）与调用侧（`` `NAME(x, y) ``）
   同形，共用一份声明。配平计深的括号对 = 语言包声明的**全部**括号对。
+- `suffix_after_call` 是**宏调用后随字面量后缀**的形态模式（`` `W'd0 `` → `'d0`）
+  ——展开时把后缀纳入调用区间使替换与 token 边界对齐（比 `[[number.based]]`
+  宽一档，见 `load_macro_call_suffix`）。
 - 形态段（directive / call）声明名字位候选：**命中哪个候选就产出哪个 token
   类型**；候选为空列表 = 名字位是任意标识符（产出 `macro.call`，引擎协议常量，
   见 `core/token_protocol.py`）；整段不声明 = 该形态不识别（如 C 的宏调用就是
@@ -30,6 +34,7 @@ Doc: preprocessor/README.md
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 from core.config_registry import declare_cfg
@@ -55,6 +60,8 @@ CALL_ARGS_KEY = "call_args"
 ARG_SEPARATOR_KEY = "arg_separator"
 ARGUMENT_SLOT = "args"
 _CALL_ARGS_FORM = f'"bracket.l_<名>,{ARGUMENT_SLOT},bracket.r_<名>"'
+# 宏调用后随字面量后缀的形态模式键（如 verilog 的 `` `W'd0 `` → "'d0"）
+CALL_SUFFIX_KEY = "suffix_after_call"
 
 
 @dataclass(frozen=True)
@@ -280,6 +287,46 @@ def load_macro_call_args(
     return MacroCallArgs(
         open=open_text, close=close_text, separator=separator, nesting=nesting
     )
+
+
+def load_macro_call_suffix(
+    cfg: dict | None = None,
+    rules_dir: str | None = None,
+) -> re.Pattern[str] | None:
+    """读取宏调用后随字面量后缀的**形态模式**（未声明 → None）。
+
+        suffix_after_call = "'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*"
+
+    模式从位置处匹配（引擎按 `^` 锚定，只关心“开头是不是这个后缀”）；
+    与 `[literal] number` / `[id.id] id` 同款——形态模式写在语言包，引擎只编译
+    不解释。声明的模式比 `[[number.based]]` **宽一档**：还要覆盖无进制字母的
+    SV 填充字面量 `` `W'0 `` / `` `W'1 ``，故单独声明（不复用数字形态）。
+    声明非法（非串 / 不能编译 / 可匹配空串）→ fail-fast。
+    """
+    if cfg is None:
+        cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
+    recognition = _recognition(cfg)
+    pattern = recognition.get(CALL_SUFFIX_KEY)
+    if pattern is None:
+        return None
+    if not isinstance(pattern, str) or not pattern.strip():
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SUFFIX_KEY} 须是非空形态模式字符串"
+            "（如 \"'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*\"），"
+            f"得到 {pattern!r}"
+        )
+    try:
+        compiled = re.compile(f"^(?:{pattern})")
+    except re.error as exc:
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SUFFIX_KEY} 不是合法正则: {pattern!r}（{exc}）"
+        ) from exc
+    if compiled.match(""):
+        raise ConfigError(
+            f"[macro_recognition] {CALL_SUFFIX_KEY} 须至少匹配一个字符"
+            f"（匹配空串会让扩展区间退化），得到 {pattern!r}"
+        )
+    return compiled
 
 
 def _recognition(cfg: dict) -> dict:

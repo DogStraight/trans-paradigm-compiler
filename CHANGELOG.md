@@ -7,6 +7,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **宏调用后随字面量后缀改声明驱动（删引擎硬编码正则）**：`` `W'd0 `` 的 `'d0`、
+  `` `W'h1F `` 的 `'h1F` 原由 `_expand._LITERAL_SUFFIX_RE` 硬编码正则识别（展开时把
+  后缀纳入**调用区间**，使替换结果与 token 边界对齐 → 还原按 token 区间回插；
+  ADR-0017 决策 3/4）。现改为语言包声明形态模式：
+
+  ```toml
+  suffix_after_call = "'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*"
+  ```
+
+  1. 新增 `macro_shape.load_macro_call_suffix`：读取模式 + 编译（fail-fast：非串 /
+     空串 / 非法正则 / 可匹配空串）；与 `[literal] number` / `[id.id] id` 同款
+     （形态模式写在语言包，引擎只编译不解释）。
+  2. 未声明 → 不扩展（不猜语言字符）；`_extend_literal_suffix` /
+     `_extend_macro_chain` 改收编译后的模式，段内不再引用任何字面字符集。
+  3. 声明注释里写明它比 `[[number.based]]`（`base/_number.toml`）**宽一档**的理由：
+     还要覆盖无进制字母的 SV 填充字面量 `` `W'0 `` / `` `W'1 ``，故不复用数字形态
+     （否则丢还原区间——原先保守不改的正是这一条）。
+  4. 新增 `tests/engine/preprocessor/test_macro_suffix.py`（9 例：声明解析 / 4 种
+     非法声明 fail-fast / 区间扩展与不扩展 / 链合并）。
+
+  ROADMAP P3.6「预处理器宏策略配置化」至此全项闭环（段已删）——预处理器引擎侧不再
+  留任何宏相关的语言知识（前缀 / 名字位候选 / 实参形态 / 后随字面量后缀全声明驱动）。
+
+  **验证**：worktree A/B 对拍 106 个共同样本输出逐文件一致；真实语料三工具持平
+  （lint 33/33 / 误报 0、diag 5548、宏位置覆盖 86/135）；`test_macro_suffix.py` 9 例
+   + 全量测试（多轮复跑见下）。
+
 - **函数宏实参形态改声明驱动（删引擎硬编码 `(` / `)` / `,` / 嵌套 `[]`）**：
   带参宏的括号对、实参分隔符、配平用的嵌套括号对原先是 `_expand._match_paren_args`
   （认 `(`/`)`）、`_split_args`（认 `([`/`)]`/`,`）、`primitives/define.handle_define`

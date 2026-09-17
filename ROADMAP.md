@@ -290,25 +290,6 @@
 - [ ] 条件编译（`ifdef/ifndef`）下编辑，会改变展开结果 → 整段缓存失效，需处理
 - [ ] 宏定义本身的编辑（`define` 行改）→ 所有用到该宏的 token 全部失效，不是局部问题
 
-### P3.6 预处理器宏策略配置化（backlog）
-
-> 现状（分期）：
-> ① 宏形态声明已生产式化 + 候选列表（`[macro_recognition]`：`shape` / `directive`
->   / `call`，见 `preprocessor/README.md`）；
-> ② **展开策略已迁出引擎**→ 语言包能力 `[capabilities] macro_policy`：引擎只执行
->   三种处置（`splice` / `line` / `inline`），判定是语言知识，verilog
->   策略在 `grammar/verilog/plugins/macro_policy/`（判定表 + 语料依据见其 README）；
-> ③ 宏边界数据由外层管线就树产生
->   （见 `docs/decisions/0017-macro-in-syntax-position.md`）；
-> ④ 非语义路径（token 锚 + 宏边界节点化）已核算为死链并删除
->   （锚表恒空 / 最终 AST 无 MacroCall，见 `docs/decisions/0018-preprocessor-plugin-policy.md`）；
-> ⑤ 带参宏实参形态（括号对 / 分隔符 / 配平）已声明驱动
->   （`[macro_recognition]` 的 `call_args` / `arg_separator`）。
-> 剩余项如下。
-
-- [ ] **宏调用后随字面量后缀迁出**：`_LITERAL_SUFFIX_RE` 与 `[[number.based]]`
-      是同一知识的两处表达（先补声明面再改，否则丢还原区间）
-
 ## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 
 ### P4.1 多后端输出机制 + LLVM IR 目标插件

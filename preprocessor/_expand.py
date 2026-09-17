@@ -27,6 +27,7 @@ from .macro_policy import (
 from .macro_shape import (
     MacroCallArgs,
     load_macro_call_args,
+    load_macro_call_suffix,
     load_macro_shapes,
     macro_keywords,
 )
@@ -178,10 +179,6 @@ def _is_ifdef_active(ctx: dict) -> bool:
     if not stack:
         return True
     return all(f.get("active", True) for f in stack)
-
-
-# 宏调用后紧跟的位宽字面量后缀：`W'd0、`W'h1F、`W'sb101、`W'0 等
-_LITERAL_SUFFIX_RE = re.compile(r"^'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*")
 
 
 def _build_macro_re(prefix: str) -> re.Pattern:
@@ -524,29 +521,34 @@ def _expand_func_call(
     return body
 
 
-def _extend_literal_suffix(line: str, end: int) -> int:
-    """扩展宏调用区间到其后的位宽字面量后缀（`W'd0 → `W'd0 整体纳入）。
+def _extend_literal_suffix(
+    line: str, end: int, suffix_re: re.Pattern | None
+) -> int:
+    """扩展宏调用区间到其后的字面量后缀（`` `W'd0 `` → 整个调用区间）。
 
-    宏调用后紧跟 `'` 时（如 `W'd0、`W'h1F），token 替换若只换宏名会留下
-    `tpc_marker_N'd0`（标识符 + 位宽字面量，非合法数字字面量，解析丢行）；
-    把 `'<base><digits>` 一并纳入调用区间，token 替换整体，还原时整体回插原文。
+    后缀形态由语言包声明（`[macro_recognition].suffix_after_call`）；未声明 →
+    不扩展。纳入后缀是为了让替换结果与 **token 边界对齐**：`` `W'd0 `` 整个换成
+    一个 token（宏体），还原按 token 区间回插宏调用原文（ADR-0017 决策 3/4）。
     """
-    m = _LITERAL_SUFFIX_RE.match(line[end:])
+    if suffix_re is None:
+        return end
+    m = suffix_re.match(line[end:])
     if m and m.end() > 0:
         return end + m.end()
     return end
 
 
-def _extend_macro_chain(line: str, end: int, macro_re: re.Pattern) -> int:
-    """吞噬宏调用链：宏调用 + 位宽字面量后缀 + 后续相邻宏调用（`W'd`RST）。
+def _extend_macro_chain(
+    line: str, end: int, macro_re: re.Pattern, suffix_re: re.Pattern | None
+) -> int:
+    """吞噬宏调用链：宏调用 + 后随字面量后缀 + 后续相邻宏调用（`` `W'd`RST ``）。
 
-    复合/嵌套宏调用（如 `W'd`RST = `W + 'd + `RST）token 替换成单个 token，
-    source_text 为整段原文——避免拆成相邻 token 后粘连（tpc_marker_A tpc_marker_B
-    无词边界，全词匹配还原失败）。
+    相邻宏调用合并成单个调用区间：否则拆成相邻 token 后无词边界，还原按 token
+    区间回插会错位（宏名可能成为更长锚名前缀）。
     """
     cur = end
     while True:
-        nxt = _extend_literal_suffix(line, cur)
+        nxt = _extend_literal_suffix(line, cur, suffix_re)
         if nxt > cur:
             cur = nxt
         m = macro_re.match(line[cur:])
@@ -641,9 +643,9 @@ def expand_tokens(
     """
     _MACRO_RE = _build_macro_re(prefix)
     func_macros = func_macros or {}
-    # 实参形态（括号对 / 分隔符）由语言包声明；有待参宏却没声明 → fail-fast
-    # （引擎不硬编码 `(` / `,`，也不静默降级成“带参也不识别”）。
+    # 实参形态与后随字面量后缀都由语言包声明（引擎不硬编码 `(` / `,` / `'d`）
     call_args = load_macro_call_args(rules_dir=rules_dir)
+    suffix_re = load_macro_call_suffix(rules_dir=rules_dir)
     if func_macros and call_args is None:
         raise ConfigError(
             "[macro_recognition] 有待参宏（func_macros 非空）却未声明实参形态："
@@ -687,7 +689,7 @@ def expand_tokens(
                     body = _expand_func_call(
                         name, args_text, func_macros, macro_defs, call_args
                     )
-                    end = _extend_macro_chain(line, close_idx, _MACRO_RE)
+                    end = _extend_macro_chain(line, close_idx, _MACRO_RE, suffix_re)
                     consumed_until = max(consumed_until, end)
                     macro_matches.append(
                         (m.start(), end, body, name, True, args_text)
@@ -696,7 +698,7 @@ def expand_tokens(
             body = macro_defs.get(name)
             if body is None:
                 continue
-            end = _extend_macro_chain(line, m.end(), _MACRO_RE)
+            end = _extend_macro_chain(line, m.end(), _MACRO_RE, suffix_re)
             consumed_until = max(consumed_until, end)
             macro_matches.append((m.start(), end, body, name, False, ""))
 

@@ -64,7 +64,8 @@
 
 > 背景表里的另两处引擎侧知识也已迁出：函数宏实参形态改 `[macro_recognition]`
 > 的 `call_args` / `arg_separator` 声明驱动（`_match_paren_args` / `_split_args`
-> 删，配平/切分入 `macro_shape.MacroCallArgs`）；仅剩 `_LITERAL_SUFFIX_RE`
-> （ROADMAP P3.6 末项）。
+> 删，配平/切分入 `macro_shape.MacroCallArgs`）；后随字面量后缀改同表的
+> `suffix_after_call` 形态模式声明（`_LITERAL_SUFFIX_RE` 删）——背景表所列语言知识
+> 至此全部迁出，预处理器引擎侧不再含宏相关语言知识。
 > Impl: `preprocessor/macro_policy.py`、`grammar/verilog/plugins/macro_policy/_policy.py`
 > Test: `tests/engine/preprocessor/test_macro_policy.py`

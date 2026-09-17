@@ -52,6 +52,13 @@ call = []
 call_args = "bracket.l_parentheses,args,bracket.r_parentheses"
 arg_separator = "symbol.base.comma"
 
+# `suffix_after_call` = 宏调用**后随字面量后缀**的形态模式（正则，从位置处匹配）。
+# 展开时把后缀一并纳入调用区间，使替换结果与 token 边界对齐（还原按 token 区间
+# 回插宏调用原文，ADR-0017 决策 3/4）：`` `W'd0 `` 整体换成一个 token。
+# 比 [[number.based]]（`_number.toml`）**宽一档**：还要覆盖无进制字母的 SV 填充
+# 字面量 `` `W'0 `` / `` `W'1 ``，故单独声明（形态模式写在语言包，引擎只编译不解释）。
+suffix_after_call = "'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*"
+
 # ── [directives] 已并入上面的候选列表 ──
 # 原表（指令关键字 → token 类型）与形态声明是两份手写副本，已删：指令集现由
 # `directive` 的候选列表表达，命中哪个候选就产出哪个 token 类型（`macro.define`
