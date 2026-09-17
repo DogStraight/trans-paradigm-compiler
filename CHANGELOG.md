@@ -7,32 +7,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **宏形态改为**生产式**声明（`[macro_recognition]`），`[directives]` 表删除**：
+- **宏形态改由 `[macro_recognition]` 声明（`shape` 生产式 + 候选列表），`[directives]` 表删除**：
   原先每段宏形态用自造字段 `strategy` + `prefix` 描述（且只有 `strategy = "prefix"`
   被实现；文档宣称的 `suffix`/`none` 从未落地），另有一张手写的 `[directives]`
-  表（关键字 → token 类型）与它并存——形态与指令集是两份手写副本。现改为按
-  grammar rules 的**同一套生产式规则**书写，引擎只做通用解析：
+  表（关键字 → token 类型）与它并存——形态与指令集是两份手写副本。现改为用
+  grammar rules 的**同一套生产式规则**写形状、候选集用 TOML 列表枚举，引擎只做
+  通用解析：
 
   ```toml
   [macro_recognition]
-  directive = "symbol.base.backtick,(macro.else|macro.undef|macro.define|...)"
-  call      = "symbol.base.backtick,id"
+  shape     = "symbol.base.backtick,name"        # 前缀 token 名 + 名字位占位符
+  directive = ["macro.else", "macro.undef", "macro.define", ...]   # 名字位候选
+  call      = []                                 # 空列表 = 任意标识符
   ```
 
-  1. **用 token 名而不是字符**：前缀位写 token 名（`symbol.base.backtick`），
-     符号文本取自 token 定义——`` ` `` 因此在 `[symbol.base]` 里有了名字（新增
-     `backtick = "`"`）；名字位写 `id`，**宏名与标识符共用同一扫描实现**
-     （`core/token_protocol.IDENT_RE`：lexer 的 id 分支与宏名扫描不再各写一份，
-     文本层展开器也不再另写 `\w+`）。
-  2. **指令集并入名字位**（`|` 并起来）：命中哪个候选就产出哪个 token 类型
-     （`macro.define` 等），`_expand.py` 的指令名集合也从同一处推导——`[directives]`
-     表与其两份副本一并删除。
-  3. **形态落地**（`preprocessor/macro_shape.py`，生产式解析 + fail-fast）：
-     前缀位须是 `symbol.<cat>.<name>`、名字位须是 `id` 或 `macro.<关键字>`；
-     未实现形态（后缀序 / 正则前缀 / 多于两位）直接报错，不静默降级。
-     `[macro_recognition]` 按 **rules_dir** 解析（与 `Lexer(rules_dir=…)` 同源），
-     修掉旧实现读顶层 `prefix`（TOML 里根本没有该键）→ 回退硬编码 `` "`" `` 的
-     语言字符泄漏。
+  1. **用 token 名而不是字符**：`shape` 的前缀位写 token 名
+     （`symbol.base.backtick`），符号文本取自 token 定义——`` ` `` 因此在
+     `[symbol.base]` 里有了名字（新增 `backtick = "`"`）；`name` 是名字位占位符，
+     **宏名与标识符共用同一扫描实现**（`core/token_protocol.IDENT_RE`：lexer 的
+     id 分支与宏名扫描不再各写一份，文本层展开器也不再另写 `\w+`）。
+  2. **指令集用候选列表枚举**（一串 `macro.<关键字>`）：命中哪个候选就产出哪个
+     token 类型，`_expand.py` 的指令名集合也从同一处推导——`[directives]` 表与其
+     三份手写副本（lexer / `_expand` 各读一遍）一并删除；空列表 = 名字位任意
+     标识符，整段不声明 = 该形态不识别。
+  3. **形态落地**（`preprocessor/macro_shape.py`，声明解析 + fail-fast）：
+     `shape` 须是两位顺序 `symbol.<cat>.<name>,name`、候选须是 `macro.<关键字>`
+     列表；未实现形态（后缀序 / 正则前缀 / 多于两位）与非列表候选直接报错，
+     不静默降级。`[macro_recognition]` 按 **rules_dir** 解析
+     （与 `Lexer(rules_dir=…)` 同源），修掉旧实现读顶层 `prefix`（TOML 里根本
+     没有该键）→ 回退硬编码 `` "`" `` 的语言字符泄漏。
   4. **词法优先序**：`` ` `` 同时是 `symbol.base.backtick` 与宏前缀，symbol 分支
      让位——"前缀 + 名字"成立按宏识别，**裸 `` ` `` 落符号分支**（旧行为是吃成
      无名 `macro.call`）；实测全仓 238 个样例里裸反引号仅 4 处且都在注释文本里。
@@ -42,7 +45,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   **验证**：全量 2034 passed / 7 skipped；**worktree A/B 对拍** 107 个样本输出
   逐文件一致（成功标志/长度/sha256 全同）；真实语料三工具持平（lint recall
   33/33 / 误报 0、diag 5548、宏位置覆盖 86/135 = 63.7%）；新增
-  `tests/engine/preprocessor/test_macro_shape.py`（15 例：生产式解析 / fail-fast /
+  `tests/engine/preprocessor/test_macro_shape.py`（20 例：形状/候选解析 / fail-fast /
   前缀文本随 token 定义 / 语言切换不串味 / 词法落地）。
 
 ### Removed

@@ -4,25 +4,50 @@
 # 识别宏 token（生产式：前缀 token + 名字），供后续 preprocessing 阶段消费。
 # ============================================================================
 
-# ── [macro_recognition] 宏形态（生产式声明）──
+# ── [macro_recognition] 宏形态（生产式形状 + 候选列表）──
 #
-# 形态用**生产式**书写（与 grammar rules 同一套规则：`,` 顺序 / `|` 选择 /
-# `?`/`*`/`+` 后缀 / token 名），引擎只做通用解析（语言知识不进代码）：
+# `shape` = 形态形状，用**生产式**书写（与 grammar rules 同一套规则：`,` 顺序 /
+# token 名）。`name` 是**名字位占位符**（引擎在这里扫一个名字），前缀位写
+# token 名 → 符号文本取自 [symbol.*] 声明（引擎不硬编码语言字符）：
 #
-#   顺序位 0 = 前缀 token 名（符号文本取自 [symbol.*] 声明）
-#   顺序位 1 = 名字位：`id` = 语言包标识符；写成 token 名候选（macro.define …）
-#              时**命中哪个就产出哪个 token 类型**；其余名字 → macro.call
+#   "symbol.base.backtick,name" → 前缀 token + 名字（如 `` `define ``）
 #
-# 未声明某一段 = 该形态不识别（如 C 的宏调用就是普通标识符）。未实现形态
-# （后缀序 / 非符号前缀 / 多于两位）fail-fast，不静默降级。
+# 每个形态段（directive / call）声明**名字位候选列表**：
+#   命中哪个候选 → 产出哪个 token 类型（macro.define 等）；
+#   候选为空列表 → 名字位是任意标识符（产出 macro.call）；
+#   整段不声明   → 该形态不识别（如 C 的宏调用就是普通标识符）。
+#
+# 未实现形态（后缀序 / 非符号前缀 / 多于两位）fail-fast，不静默降级。
 [macro_recognition]
-directive = "symbol.base.backtick,(macro.else|macro.line|macro.undef|macro.ifdef|macro.elsif|macro.endif|macro.define|macro.ifndef|macro.pragma|macro.include|macro.resetall|macro.timescale|macro.celldefine|macro.undefineall|macro.end_keywords|macro.endcelldefine|macro.begin_keywords|macro.default_nettype|macro.unconnected_drive|macro.nounconnected_drive)"
-call = "symbol.base.backtick,id"
+shape = "symbol.base.backtick,name"
+directive = [
+    "macro.else",
+    "macro.line",
+    "macro.undef",
+    "macro.ifdef",
+    "macro.elsif",
+    "macro.endif",
+    "macro.define",
+    "macro.ifndef",
+    "macro.pragma",
+    "macro.include",
+    "macro.resetall",
+    "macro.timescale",
+    "macro.celldefine",
+    "macro.undefineall",
+    "macro.end_keywords",
+    "macro.endcelldefine",
+    "macro.begin_keywords",
+    "macro.default_nettype",
+    "macro.unconnected_drive",
+    "macro.nounconnected_drive",
+]
+call = []
 
-# ── [directives] 已并入上面的形态声明 ──
+# ── [directives] 已并入上面的候选列表 ──
 # 原表（指令关键字 → token 类型）与形态声明是两份手写副本，已删：指令集现由
-# `directive` 生产式的名字位候选表达，命中哪个候选就产出哪个 token 类型
-# （`macro.define` 等）；`_expand.py` 的指令名集合也从同一处推导。
+# `directive` 的候选列表表达，命中哪个候选就产出哪个 token 类型（`macro.define`
+# 等）；`_expand.py` 的指令名集合也从同一处推导。
 
 # ── [macro_hygiene] 宏/指令卫生检查参数（MH 族，linter 层）──
 #

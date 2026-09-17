@@ -28,7 +28,7 @@
 | 形态 | 声明位置 | 消费点 |
 |------|----------|--------|
 | 注释标点（行注释起始 / 成对定界符） | `[comment] pairs` / `[[capture]]` | `lexer/comment_syntax.py` → `_markers.py`、`analyzer/suppress.py` |
-| 宏形态（**生产式**：前缀 token + 名字候选） | `[macro_recognition]`（`directive` / `call`） | `macro_shape.py`（生产式解析）→ `lexer` 宏 token 扫描、`_expand.py`（文本层展开） |
+| 宏形态（`shape` 生产式：前缀 token 名 + 名字位；段候选列表枚举） | `[macro_recognition]`（`shape` / `directive` / `call`） | `macro_shape.py`（声明解析）→ `lexer` 宏 token 扫描、`_expand.py`（文本层展开） |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 

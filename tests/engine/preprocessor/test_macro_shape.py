@@ -1,13 +1,15 @@
-"""宏形态声明（语言包 `[macro_recognition]` 生产式）：解析 / fail-fast / 词法落地。
+"""宏形态声明（语言包 `[macro_recognition]`）：生产式形状 + 候选列表枚举。
 
-形态用**生产式**书写（与 grammar rules 同一套规则：`,` 顺序 / `|` 选择 / token 名），
-引擎只做通用解析（见 `preprocessor/macro_shape.py`）：
+```
+[macro_recognition]
+shape     = "symbol.base.backtick,name"        # 前缀 token 名 + 名字位占位符
+directive = ["macro.define", "macro.undef", ...]   # 名字位候选（列表枚举）
+call      = []                                     # 空列表 = 任意标识符
+```
 
-    directive = "symbol.base.backtick,(macro.define|macro.undef|...)"
-    call      = "symbol.base.backtick,id"
-
-- 前缀位 = token 名 → 符号文本取自 token 定义（引擎不硬编码语言字符）；
-- 名字位 = `id`（任意标识符）或 `macro.<关键字>` 候选（命中即产出该 token 类型）。
+- 前缀位写 token 名 → 符号文本取自 token 定义（引擎不硬编码语言字符）；
+- 名字位候选命中哪个就产出哪个 token 类型；空列表 = 任意标识符（→ macro.call）；
+- 整段不声明 = 该形态不识别。
 
 `` ` `` 同时是 `symbol.base.backtick` 与宏前缀：“前缀 + 名字”成立按宏识别，
 裸 `` ` `` 落符号分支。
@@ -34,17 +36,23 @@ def _lex(src: str) -> list[tuple[str, str]]:
     return [(t.type, t.content) for t in Lexer(rules_dir=DEFAULT_RULES_DIR).tokenize(src)]
 
 
-# ── 声明面（生产式解析） ─────────────────────────────────────────────
+def _shapes(recognition: dict, td: dict | None = None) -> dict:
+    return load_macro_shapes(
+        cfg={"macro_recognition": recognition}, token_define=td or _TD
+    )
 
 
-def test_language_pack_declares_production_shapes(config_loaded) -> None:
-    """verilog：指令段 = 前缀 token + 指令候选集；调用段 = 前缀 token + id。"""
+# ── 声明面（形状解析 + 候选列表） ────────────────────────────────────
+
+
+def test_language_pack_declares_shape_and_candidates(config_loaded) -> None:
+    """verilog：形状 = 前缀 token + 名字位；指令候选列表 20 项；call 空 = 任意名。"""
     del config_loaded  # fixture 依赖（语言包配置加载）
     shapes = load_macro_shapes(rules_dir=DEFAULT_RULES_DIR)
     assert set(shapes) == {KIND_DIRECTIVE, KIND_CALL}
     assert shapes[KIND_DIRECTIVE].prefix == "`"
     assert shapes[KIND_CALL].prefix == "`"
-    assert shapes[KIND_CALL].names == (), "名字位写 id → 任意标识符（候选集为空）"
+    assert shapes[KIND_CALL].names == (), "空候选列表 → 名字位任意标识符"
     assert len(shapes[KIND_DIRECTIVE].names) == 20
     assert "define" in macro_keywords(shapes[KIND_DIRECTIVE])
     assert "default_nettype" in macro_keywords(shapes[KIND_DIRECTIVE])
@@ -53,9 +61,9 @@ def test_language_pack_declares_production_shapes(config_loaded) -> None:
 def test_prefix_text_read_from_token_definition(config_loaded) -> None:
     """前缀文本按 token 名从 token 定义取（换表 → 前缀跟着变，引擎不写死）。"""
     del config_loaded
-    shapes = load_macro_shapes(
-        cfg={"macro_recognition": {"directive": "symbol.base.dollar,(macro.define)"}},
-        token_define={"symbol": {"base": {"dollar": "$"}}},
+    shapes = _shapes(
+        {"shape": "symbol.base.dollar,name", "directive": ["macro.define"]},
+        td={"symbol": {"base": {"dollar": "$"}}},
     )
     assert shapes[KIND_DIRECTIVE].prefix == "$"
     assert macro_keywords(shapes[KIND_DIRECTIVE]) == ("define",)
@@ -65,21 +73,25 @@ def test_undeclared_prefix_token_fails_fast(config_loaded) -> None:
     """语言包内前缀 token 名未声明 → fail-fast（名字写错即配置错）。"""
     del config_loaded
     with pytest.raises(ConfigError, match="未在 token 定义中声明"):
-        load_macro_shapes(
-            cfg={"macro_recognition": {"call": "symbol.base.nope,id"}},
-            token_define=_TD,
-        )
+        _shapes({"shape": "symbol.base.nope,name", "call": []})
 
 
 def test_injected_token_table_skips_unresolvable_shape(config_loaded) -> None:
     """调用方自建 token 表（测试/嵌入方）：表里没有的前缀 token → 该形态不适用。"""
     del config_loaded
     shapes = load_macro_shapes(
-        cfg={"macro_recognition": {"call": "symbol.base.backtick,id"}},
+        cfg={"macro_recognition": {"shape": "symbol.base.backtick,name", "call": []}},
         token_define={"symbol": {"base": {}}},
         skip_undeclared_prefix=True,
     )
     assert shapes == {}
+
+
+def test_segment_without_shape_fails_fast(config_loaded) -> None:
+    """声明了形态段却没有 shape → fail-fast（形状缺失不静默忽略）。"""
+    del config_loaded
+    with pytest.raises(ConfigError, match="缺 shape"):
+        _shapes({"directive": ["macro.define"]})
 
 
 def test_language_without_shape_declaration(config_loaded) -> None:
@@ -92,23 +104,37 @@ def test_language_without_shape_declaration(config_loaded) -> None:
 
 
 @pytest.mark.parametrize(
-    "production",
+    "shape",
     [
-        "symbol.base.backtick,id,id",                 # 三位（未实现形态）
-        "symbol.base.backtick,literal.number",        # 名字位非 id / macro.*
-        "symbol.base.backtick,(id|macro.define)",     # 候选中混入 id
-        "literal.number,id",                          # 前缀位不是 symbol token
-        "@Foo,id",                                    # 前缀位不是 token
-        "symbol.base.backtick",                       # 只有一位
+        "symbol.base.backtick,id",        # 名字位不是 name 占位符
+        "name,symbol.base.backtick",      # 后缀序未实现
+        "symbol.base.backtick,name,name",  # 三位
+        "literal.number,name",            # 前缀位不是 symbol token
+        "@Foo,name",                      # 前缀位不是 token
+        "symbol.base.backtick",           # 只有一位
     ],
 )
-def test_illegal_shape_fails_fast(config_loaded, production: str) -> None:
-    """未实现/非法形态 → ConfigError（不静默降级）。"""
+def test_illegal_shape_fails_fast(config_loaded, shape: str) -> None:
+    """未实现/非法形状 → ConfigError（不静默降级）。"""
     del config_loaded
     with pytest.raises(ConfigError):
-        load_macro_shapes(
-            cfg={"macro_recognition": {"directive": production}}, token_define=_TD
-        )
+        _shapes({"shape": shape, "directive": ["macro.define"]})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "macro.define",            # 字符串而非列表
+        ["define"],                # 候选缺 macro. 协议前缀
+        [123],                     # 候选不是字符串
+        {"define": True},          # 表而非列表
+    ],
+)
+def test_illegal_candidates_fail_fast(config_loaded, value: object) -> None:
+    """候选列表非法 → ConfigError。"""
+    del config_loaded
+    with pytest.raises(ConfigError):
+        _shapes({"shape": "symbol.base.backtick,name", "directive": value})
 
 
 # ── 词法落地（声明 → token 类型） ────────────────────────────────────
@@ -126,7 +152,7 @@ def test_directive_names_come_from_declaration(config_loaded) -> None:
 
 
 def test_unknown_name_is_macro_call(config_loaded) -> None:
-    """名字不在候选内 → macro.call（引擎协议常量）。"""
+    """名字不在候选内 → macro.call（call 段空列表接管任意标识符）。"""
     del config_loaded
     assert _lex("`NOT_A_DIRECTIVE\n")[0] == ("macro.call", "`NOT_A_DIRECTIVE")
 
