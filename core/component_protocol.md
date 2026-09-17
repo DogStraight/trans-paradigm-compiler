@@ -61,11 +61,15 @@ passes = [
 
 # 能力声明（P2.5 插件回调能力化）：引擎按能力名查找，不直接 import
 # grammar.<lang> 插件。入口 = file.py:fn（fn 返回插件定义的能力 API 面，
-# 如 dict 聚合多个函数）。未声明时引擎 get_capability 返回 None（降级）。
+# 如 dict 聚合多个函数）。未声明时引擎 get_capability 返回 None（降级）；
+# 按语言包限定时用 get_capability_in(name, rules_dir)（只有该语言包
+# plugins/ 下的组件才有资格应答——预处理器/渲染这类按 rules_dir 工作的
+# 消费点用它避开跨语言串用）。
 # 纯能力组件（无 grammar/analyzer/transform 声明，如 formatter）也据此被加载。
 # （typed_ports 原 transform_callbacks 能力已随旧 analyze 原语链删除，P1.5 step 2）
 [capabilities]
 formatter = "_capability.py:build_formatter"
+# macro_policy = "_policy.py:build_macro_policy"      # 宏处置策略（预处理器问询）
 
 # 渲染插件声明（覆盖式输出）：语言包 tpc.toml [plugins].render = "组件名"
 # 启用后，管线渲染阶段直接调用 handler 产出最终文本（如 c4 汇编），跳过

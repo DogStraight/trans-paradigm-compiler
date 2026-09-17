@@ -10,12 +10,21 @@ Doc: preprocessor/README.md
 import os
 import re
 from core.config_registry import declare_cfg
+from core.errors import ConfigError
 from core.token_protocol import IDENT_RE, anchor_name, anchor_salt
 from lexer.comment_syntax import CommentSyntax, load_comment_syntax
 from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
+from .macro_policy import (
+    MODE_INLINE,
+    MODE_LINE,
+    MODE_SPLICE,
+    MODE_TOKEN,
+    load_macro_policy,
+    plan_macro,
+)
 from .macro_shape import load_macro_shapes, macro_keywords
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
@@ -576,6 +585,53 @@ def _extend_macro_chain(line: str, end: int, macro_re: re.Pattern) -> int:
     return cur
 
 
+def _call_site(
+    line: str,
+    line_no: int,
+    col: int,
+    end: int,
+    body: str,
+    name: str,
+    is_func: bool,
+    args_text: str,
+    only_call_in_line: bool,
+    semantic: bool,
+) -> dict:
+    """宏调用点的**通用文本事实**（引擎给处置策略的输入，无语言知识）。"""
+    before, after = line[:col], line[end:]
+    return {
+        "name": name,
+        "body": body,
+        "is_func": is_func,
+        "args_text": args_text,
+        "line": line_no,
+        "col": col,
+        "end": end,
+        "line_text": line,
+        "before": before,
+        "after": after,
+        "at_line_start": before.strip() == "",
+        "at_line_end": after.strip() == "",
+        "only_call_in_line": only_call_in_line,
+        "semantic": semantic,
+    }
+
+
+def _splice_body(body: str, syntax: CommentSyntax) -> str:
+    """语义展开铺进流的宏体文本（`splice` 方案的文本面）。
+
+    宏体末行含**行注释**（起始标记由语言包声明，引擎不认识 `//`）时补一个换行：
+    否则宏调用**同行的后续内容**（如 `... ==`LUI;` 的 `;`）会落进注释里被吞 →
+    语句丢分号 → 发现器级联失守（darkriscv 实测 81 条）。补换行让被吞的部分回到
+    下一行，解析照常（语言语义上换行不是语句边界）；输出侧不受影响（渲染走宏调用
+    原文）。
+    """
+    tail = body.rsplit("\n", 1)[-1]
+    if any(mark in tail for mark in syntax.line_starts):
+        return body + "\n"
+    return body
+
+
 def expand_tokens(
     source: str,
     macro_defs: dict[str, str],
@@ -594,17 +650,16 @@ def expand_tokens(
     rules_dir：语言包目录——锚以注释形态穿过管线，标点从声明取
     （`lexer/comment_syntax.py`，引擎不认识 `//` / `/* */`）。
 
-    semantic=True（check 语义分析用，2026-08-29）：语句体宏（token 锚
-    形态）改为**宏体展开**——锚只服务渲染还原，check 不需要还原、需要宏体
-    语义（否则宏体内语句不可分析 + 锚被当未解析引用报 W002）。渲染路径
-    （format/expand 命令）保持默认 semantic=False（锚 + 还原原文，保真不变）。
+    semantic=True：语义展开路径（check / lint 用；pipeline 全程走它）——宏体文本
+    铺进流，还原靠宏区间 raw 拼接。semantic 是**调用点事实**，交给处置策略
+    一并判定（`macro_policy.py`）。
 
-    锚形态（统一位置桥，见 _bridge）：
-      line   整行占位：独占整行的宏调用（`debug(...)`）、行首空体宏
-             （`FORMAL_KEEP reg ...）→ 整行替换为行注释占位，
-             source_text = 整行原文（含宏调用），渲染后整行回插。
-      sync   行内非空体宏（如 `assign z = `MIN(x, y);`）→ 保留 body 替换，
-             记录同步词字段，由同步词窗口启发式回插（兼容现状）。
+    处置由**语言包策略**决定（`[capabilities] macro_policy`；未声明 → 默认 `splice`）。
+    引擎执行的处置（机制面，见 macro_policy.py；与铺条目 mode 同词）：
+      splice   宏体铺进流（+ 宏区间；末行含行注释时补换行，见 _splice_body）
+      line     整行占位（行注释锚），source_text = 整行原文
+      inline   行内注释锚（原位回插宏调用原文）
+      token    唯一 token 锚（可带 append 追加文本，如语句尾分号）
 
     Returns: (expanded_source, restoration_stack, macro_regions, line_map)
         line_map — **展开后行号（1-based）→ 源（clean）行号**：诊断回源用。
@@ -623,6 +678,9 @@ def expand_tokens(
     _MACRO_RE = _build_macro_re(prefix)
     func_macros = func_macros or {}
     _syntax = load_comment_syntax(rules_dir)
+    # 宏处置策略（语言包 `[capabilities] macro_policy`；未声明 → 引擎默认 splice，
+    # 见 macro_policy.py）：引擎只执行处置，不判定"该怎么处置"。
+    policy = load_macro_policy(rules_dir)
     restoration_stack: list[dict] = []
     lines = source.split("\n")
     # 锚名盐：随源文本走（同一文件内所有锚共用一个盐，序号区分彼此）。
@@ -668,95 +726,87 @@ def expand_tokens(
         if not macro_matches:
             continue
 
-        # ── 行首空体宏（`FORMAL_KEEP reg ...`）→ 整行占位 ──
-        # 行首空体宏是 decl 修饰符（如 `FORMAL_KEEP reg [3:0] q;`），唯一 token
-        # 替换会破坏 decl 解析（标识符 + decl 相邻）；整行占位回插整行原文。
-        single_head_empty = (
-            len(macro_matches) == 1
-            and not macro_matches[0][2]
-            and line[: macro_matches[0][0]].strip() == ""
-        )
-        if single_head_empty:
+        # ── 处置方案（引擎给事实、语言包策略给枚举；见 macro_policy.py）──
+        plans = [
+            plan_macro(
+                policy,
+                _call_site(
+                    line,
+                    line_no,
+                    col,
+                    end,
+                    body,
+                    name,
+                    is_func,
+                    args_text,
+                    len(macro_matches) == 1,
+                    semantic,
+                ),
+            )
+            for col, end, body, name, is_func, args_text in macro_matches
+        ]
+
+        # 整行占位（`line`）：整行换成行注释锚，source_text = 整行原文
+        # （该方案只在“本行仅此一个宏调用”时成立——否则会吞掉同行的其他调用）
+        if any(p["mode"] == MODE_LINE for p in plans):
+            if len(macro_matches) != 1:
+                raise ConfigError(
+                    "[macro_policy] line 方案要求该行只有这一个宏调用"
+                    f"（第 {line_no} 行有 {len(macro_matches)} 个）"
+                )
             marker = make_marker("macro", _next_macro_seq())
             lines[line_no - 1] = line_marker(_syntax, marker)
             restoration_stack.append(
                 {
                     "marker": marker,
                     "source_text": line,
-                    "mode": "line",
+                    "mode": MODE_LINE,
                     "kind": "macro",
                 }
             )
             continue
 
-        # ── 其他宏 → 锚替换 ──
-        # 非空 body 宏（assert/MIN 等）→ 唯一 token（tpc_marker_N），随 AST 确定
-        # 渲染，还原时 find 精确；不依赖注释通道（restore_comments 启发式对多锚
-        # 不可靠）或同步词容差。
-        # 空 body 宏（`TV80DELAY 1'b1` 行内占位）→ 行内块注释锚（inline）：
-        #   空宏 token 替换会留下 `tpc_marker_N 1'b1` 相邻原子（id + 位宽字面量）
-        #   不可解析；行内注释 marker 是 trivia，parser 跳过，还原时原位回插
-        #   原文宏调用（块注释位置 = 宏调用位置）。
+        # ── 逐调用执行处置（文本操作在引擎：锚书写 / 文本替换 / 区间记账）──
         parts = list(line)
         forward_entries: list[dict] = []
-        for col, end, body, name, is_func, args_text in reversed(macro_matches):
+        for (col, end, body, name, is_func, args_text), plan in reversed(
+            list(zip(macro_matches, plans))
+        ):
             source_text = line[col:end]  # 宏调用原文（含反引号与实参）
-            if not body:
-                # 空 body 宏：行内注释锚（marker 唯一，还原精确）
+            if plan["mode"] == MODE_INLINE:
+                # 行内注释锚（marker 唯一，还原精确）：块注释是 trivia，
+                # parser 跳过，还原时原位回插原文宏调用
                 marker = make_marker("macro", _next_macro_seq())
                 parts[col:end] = inline_marker(_syntax, marker)
                 forward_entries.append(
                     {
                         "marker": marker,
                         "source_text": source_text,
-                        "mode": "inline",
+                        "mode": MODE_INLINE,
                         "kind": "macro",
                     }
                 )
                 continue
             token = anchor_name(_next_macro_seq(), salt)
-            if semantic:
-                # check 语义展开：宏体替换（body 原文含分号），不建还原锚，
-                # 只记宏区间（源区间 + 展开后区间，供外层定位/raw 拼接）
-                #
-                # 宏体**末行含行注释**（如 `define LUI 7'b01 // lui rd,imm）时
-                # 补一个换行：否则宏调用**同行的后续内容**（`... ==`LUI;` 的 `;`）
-                # 落进注释里被吞掉 → 语句丢分号 → 发现器级联失守（darkriscv
-                # 实测 81 条）。补换行让被注释吞掉的部分回到下一行，解析照常
-                # （Verilog 不看行）；输出侧不受影响（渲染走宏调用原文）。
-                tail = body.rsplit("\n", 1)[-1]
-                spliced = body + "\n" if "//" in tail else body
+            if plan["mode"] == MODE_SPLICE:
+                # 语义展开：宏体文本铺进流，不建还原锚，只记宏区间
+                # （源区间 + 展开后区间，供外层定位 / 渲染 raw 拼接）
+                spliced = _splice_body(body, _syntax)
                 parts[col:end] = spliced
                 line_regions.append((col, end, name, is_func, spliced))
                 continue
             # 锚形态 = 普通标识符（`__tpc_marker_<salt>_<n>`，保留命名空间）：
             # 语言包不认识宏，锚与标识符同形 → 表达式/标识符槽位照常解析。
-            # 宏的**位置**由外层（扩展/raw 拼接）处理，不给语言包留语法槽位
+            # 宏的**位置**由外层（扩展 / raw 拼接）处理，不给语言包留语法槽位
             # （宏位置本质上是文本任意的，逐槽位声明补不齐且可能错渲染，
-            # 见 ADR-0017 决策 3）。
-            # 独占一行的宏调用（行首 ∧ 行尾）补分号：锚名 + `;` 按裸任务
-            # 调用语句可解析（1364-2005 A.6.9 task_enable），裸标识符不是合法
-            # 语句——lint/parser 都会拒（ice40 cells_sim 的 `SB_DFF_INIT 等
-            # 语句体宏独占一行无分号，真实语料实证）。只对"行首 ∧ 行尾"补：
-            # 行尾但非行首（如 `parameter P_D = `D` 后换行 `)`）是构造续行，
-            # 补分号会炸（ref_macro_complex 回归）；表达式位宏（调用后还有
-            # 内容）不补，保持既有行为。已知边界：宏调用独占一行夹在跨行
-            # 表达式中间（`a +` / `` `M`` / `+ b;`）会被误补，语料/真实代码
-            # 均无此形态（属坏风格），可接受。
-            # 注意：anchor 的 marker 保持无分号原文（还原按锚名整串匹配 +
-            # (?!\w) 边界），`;` 只进替换文本。
-            replacement = token
-            if (
-                "".join(parts[:col]).strip() == ""
-                and "".join(parts[end:]).strip() == ""
-            ):
-                replacement += ";"
-            parts[col:end] = replacement
+            # 见 ADR-0017 决策 3）。策略可在替换文本上追加文本（如语句尾分号）——
+            # 锚的 marker 保持无分号原文（还原按锚名整串匹配 + (?!\w) 边界）。
+            parts[col:end] = token + plan.get("append", "")
             forward_entries.append(
                 {
                     "marker": token,
                     "source_text": source_text,
-                    "mode": "token",
+                    "mode": MODE_TOKEN,
                     "kind": "macro",
                     # 源文本位置（展开前行/起列/止列）：宏调用在 raw 源上的区间，
                     # 供宏边界节点（MacroCall）双向映射用。

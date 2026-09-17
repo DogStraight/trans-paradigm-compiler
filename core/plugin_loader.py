@@ -544,6 +544,24 @@ def get_capability(name: str) -> Callable | None:
     return None
 
 
+def get_capability_in(name: str, root_dir: str) -> Callable | None:
+    """在指定语言包目录下查找能力入口（未声明 → None）。
+
+    与 `get_capability` 的区别：**按组件来源目录限定**，不依赖"当前装载语言"的
+    全局状态——按 rules_dir 工作的消费点（预处理器等）用它避开跨语言串用：
+    只有该语言包 `plugins/` 下的组件才有资格应答。
+    """
+    root = os.path.normcase(os.path.abspath(root_dir)) + os.sep
+    for info in _loaded_components.values():
+        cdir = str((info.get("meta") or {}).get("_dir") or "")
+        if not cdir or not os.path.normcase(os.path.abspath(cdir)).startswith(root):
+            continue
+        cap = (info.get("capabilities") or {}).get(name)
+        if cap is not None:
+            return cap
+    return None
+
+
 def get_pipeline_pass_decls() -> dict[str, dict]:
     """合并所有已加载组件的 pipeline.pass 声明（ADR-0007）。"""
     merged: dict[str, dict] = {}

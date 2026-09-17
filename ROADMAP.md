@@ -292,21 +292,22 @@
 
 ### P3.6 预处理器宏策略配置化（backlog）
 
-> 原「宏体形态分类 + 宏节点进 AST」路线**已废弃并删除**：形态分类器与其
-> `[macro_shape]` 声明（`wrappers` / `continue_leads` / `suffix_leads`）、
-> `MacroCall._macro_body` 子树全删——形态分类的产物无读取者（实测调用 0 次）；
-> `suffix_leads` 唯一的真消费者是 linter 的**锚形态**特判（`=` 开头 body 改走
-> inline 锚），已由“linter 也走语义展开”替代（实测 9 个真实语料诊断逐条位置
-> 一致；ice40 的 34 条 `phase-statement` 误报本来靠该特判绕开，语义展开下自然
-> 不存在）。宏边界数据由外层管线就树产生
-> （见 `docs/decisions/0017-macro-in-syntax-position.md`）。剩余 backlog：
-> 展开策略从现 4 种代码分支（整行占位 / inline 锚 / 补分号 / 语义宏体替换 +
-> token 锚）收敛为 TOML 声明、预处理器变配置驱动策略执行器——见
-> references.md「不卫生宏体检测可行性·延伸」。
+> 现状（分期）：
+> ① 宏形态声明已生产式化 + 候选列表（`[macro_recognition]`：`shape` / `directive`
+>   / `call`，见 `preprocessor/README.md`）；
+> ② **展开策略已迁出引擎**→ 语言包能力 `[capabilities] macro_policy`：引擎只执行
+>   四种处置（`splice` / `line` / `inline` / `token`），判定是语言知识，verilog
+>   策略在 `grammar/verilog/plugins/macro_policy/`（判定表 + 语料依据见其 README）；
+> ③ 宏边界数据由外层管线就树产生
+>   （见 `docs/decisions/0017-macro-in-syntax-position.md`）。
+> 剩余项如下。
 
-- [ ] **预处理器宏策略配置化**：展开策略 TOML 声明（现分散在 `_expand.py`
-      的 4 个分支里），引擎按声明执行（语言知识不进代码）；顺带核算非语义
-      路径（token 锚）当前是否还有引擎调用方
+- [ ] **函数宏实参形态迁出**：`_match_paren_args` / `_split_args` 的定界符 `()`、
+      嵌套 `[]`、分隔符 `,` 仍是引擎硬编码（可入同一能力或改声明驱动）
+- [ ] **宏调用后随字面量后缀迁出**：`_LITERAL_SUFFIX_RE` 与 `[[number.based]]`
+      是同一知识的两处表达（先补声明面再改，否则丢还原区间）
+- [ ] **token 锚路径核算**：`semantic=False` 当前无引擎调用方（pipeline /
+      analyzer / linter 都走语义展开）→ 该路径与 `_bridge` 的锚分支去留决策
 
 ## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
 

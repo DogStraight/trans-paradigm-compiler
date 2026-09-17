@@ -138,6 +138,7 @@ COVERED_ELSEWHERE: dict[str, str] = {
 # ── 登记表 6/6：CONSTANT——字面量常量，永不改写（若改写即缺陷）──
 CONSTANT: dict[str, str] = {
     "core.check_registry._SEVERITIES": "严重度字面量集合",
+    "preprocessor.macro_policy.DEFAULT_PLAN": "引擎默认宏处置方案（未声明策略能力时用）",
     "core.config_registry._DECL_FIELDS": "声明字段名字面量",
     "core.config_registry._DECLARATIONS": "import 期加载的声明规格表（只读）",
     "core._user_config._CONFIG_CANDIDATES": "配置文件候选路径",

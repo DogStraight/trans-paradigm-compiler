@@ -32,9 +32,32 @@
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 
-**引擎机制 → 不进语言包**（形态确定之后的"怎么替换/怎么还原"）：锚三形态
-（`line` / `inline` / `token`）与语义展开路径的选择；注释形态的可用性由声明
-**推导**（有行注释 → 整行形态可用；有块注释 → 行内形态可用）。
+**引擎机制 → 不进语言包**（形态确定之后的"怎么替换/怎么还原"）：四种处置机制
+（`splice` / `line` / `inline` / `token`）与其执行；**选哪一种由语言包策略决定**
+（见下节「宏处置策略」）；注释形态的可用性由声明**推导**（有行注释 → 整行形态
+可用；有块注释 → 行内形态可用）。
+
+## 宏处置策略（插件能力）
+
+引擎只做**文本操作**（替换 / 锚书写 / 还原 / 区间与行映射）；"这个宏调用该怎么
+处置"是**语言知识** → 语言包通过 `[capabilities] macro_policy = "file.py:fn"`
+声明策略（与 formatter 同款，见 `core/component_protocol.md`）：
+
+- 引擎给**通用文本事实**（调用点上下文，`preprocessor/_expand.py::_call_site`）：
+  名字 / 宏体 / 是否带参 / 行号与行内起止列 / 行内前后文 / 是否行首行尾 /
+  是否独占该行 / 语义模式；
+- 策略返回**处置枚举**（引擎机制面，与铺条目 `mode` 同词）：
+  `splice`（宏体铺进流 + 宏区间）/ `line`（整行占位）/ `inline`（行内注释锚）/
+  `token`（唯一 token 锚，可带 `append` 追加文本，如语句尾分号）；
+- 未声明能力 → 默认 `splice`；方案非法（mode 未知 / `append` 非串 /
+  `line` 用于同行多调用）→ fail-fast（不静默降级）；
+- 查找按 **rules_dir** 作用域（`core/plugin_loader.py::get_capability_in`）：
+  只有该语言包 `plugins/` 下的组件才有资格应答，同进程切语言不串用。
+
+verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
+**尚未迁出的引擎侧语言知识**（ROADMAP P3.6 剩余项）：函数宏实参形态
+（`_match_paren_args` / `_split_args`）、宏调用后随字面量后缀
+（`_LITERAL_SUFFIX_RE`）。
 
 | 文件 | 一句话 |
 |------|--------|

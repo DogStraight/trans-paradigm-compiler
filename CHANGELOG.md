@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **预处理器展开策略迁出引擎 → 语言包能力 `macro_policy`（引擎只做文本操作）**：
+  `preprocessor/_expand.expand_tokens` 原先内含 4 个硬编码策略分支（整行占位 /
+  空体 inline 锚 / 独占一行补分号 / 语义替换）——判定条件是从 verilog 语料长出来的
+  启发式。现改为引擎定义**处置枚举**（与锚条目 `mode` 同词）：
+  `splice`（宏体铺进流 + 宏区间）/ `line`（整行占位）/ `inline`（行内注释锚）/
+  `token`（唯一 token 锚，可带 `append` 追加文本）；"选哪一种"由语言包通过
+  `[capabilities] macro_policy = "file.py:fn"` 声明（与 formatter 同款），引擎给
+  通用文本事实（调用点上下文）、策略返回方案：
+
+  ```toml
+  # grammar/verilog/plugins/macro_policy/tpc.toml
+  [capabilities]
+  macro_policy = "_policy.py:build_macro_policy"
+  ```
+
+  1. 新增 `preprocessor/macro_policy.py`（契约 + 校验 + 默认方案）与
+     `grammar/verilog/plugins/macro_policy/`（判定表 + 语料依据）；判定表与迁移前
+     逐条等价（含优先序：空体宏形态先于 semantic 判定）。
+  2. 新增 `core/plugin_loader.py::get_capability_in(name, rules_dir)`：能力按
+     **语言包目录**限定查找（不依赖"当前装载语言"全局态）——预处理器按 rules_dir
+     工作，同进程切语言不串用（c4 拿不到 verilog 的策略）。
+  3. 未声明能力 → 默认 `splice`；方案非法（mode 未知 / `append` 非串 / `line`
+     用于同行多调用）→ fail-fast。
+  4. 顺带修掉 `expand_tokens` 里 `if "//" in tail` 的注释标点硬编码（改从
+     `lexer/comment_syntax.py` 声明取——同族"注释标点声明驱动"的漏网项）。
+  决策与边界见 `docs/decisions/0018-preprocessor-plugin-policy.md`。
+
+  **验证**：worktree A/B 对拍 107 个样本输出逐文件一致；全量测试通过；真实语料
+  三工具持平（lint 33/33 / 误报 0、diag 5548、宏位置覆盖 86/135）；新增
+  `tests/engine/preprocessor/test_macro_policy.py`（13 例：默认方案 / 判定表落地 /
+  非法方案 fail-fast / `line` 同行守卫 / 语言作用域）。
+
 - **宏形态改由 `[macro_recognition]` 声明（`shape` 生产式 + 候选列表），`[directives]` 表删除**：
   原先每段宏形态用自造字段 `strategy` + `prefix` 描述（且只有 `strategy = "prefix"`
   被实现；文档宣称的 `suffix`/`none` 从未落地），另有一张手写的 `[directives]`

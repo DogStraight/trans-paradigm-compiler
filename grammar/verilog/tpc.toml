@@ -35,7 +35,7 @@ macro_hygiene = { file = "base/_macro.toml", section = "macro_hygiene", required
 style_check = { file = "base/_style_check.toml", section = "style_check", required = false }
 
 [plugins]
-enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs", "gates", "udp", "specify", "custom_rules_example"]
+enabled = ["typed_ports", "formatter", "attributes", "semantic_check", "sim", "inst_check", "nettypes", "configs", "gates", "udp", "specify", "custom_rules_example", "macro_policy"]
 
 # ── 管线编排（语言级：加工单元 → 时点 + 契约校验 + 轨迹） ──
 # 声明后**替代**默认 pass 序列（analyze → transform），故 analyze 显式声明。

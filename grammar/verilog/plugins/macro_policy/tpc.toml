@@ -1,0 +1,7 @@
+# macro_policy 组件声明 — 宏处置策略（能力组件，无语法/分析/变换声明）
+
+[capabilities]
+macro_policy = "_policy.py:build_macro_policy"
+
+# 能力入口返回 API 面 {plan: fn}：引擎（preprocessor/_expand）逐宏调用问询。
+# 契约与判定表见本目录 README.md / preprocessor/README.md。
