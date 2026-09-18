@@ -238,11 +238,14 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
         grammar_dir: 语言包目录（相对项目根，如 "grammar/c4"）。空时用
             默认包（config/tpc_config.json 指向的 grammar）——保持既有单语言
             行为；第二语言（c4 等）通过 ConfigRegistry.load_language 传入。
+
+    两块来源：语言包自身 tpc.toml（`_core_declarations`）+ `[plugins] enabled`
+    列出的插件 tpc.toml（`_plugin_declarations`）；两块的声明元组形状由
+    `_file_decl` / `_bare_decl` 统一（core 与插件的 base/required 缺省不同）。
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    declarations = []
 
-    # 1. Core grammar package — 所有 [xxx] 段落（除了 grammar）都是配置声明
+    # 1. Language package tpc.toml（含 [engine] 兼容校验）
     if grammar_dir:
         core_path = os.path.join(root, grammar_dir, "tpc.toml")
         if not os.path.isfile(core_path):
@@ -256,100 +259,131 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
     # 引擎 API 兼容校验（[engine] 段，fail-fast）——该段是包与引擎的契约声明，
     # 不是配置声明，下面注册时跳过（否则会被当 bare data 注册进配置中心）
     check_engine_compat(meta, grammar_dir or core_path)
+    declarations = _core_declarations(meta)
+
+    # 2. Plugin packages — 从 [plugins] enabled 读取插件 tpc.toml
+    _plugin_declarations(os.path.dirname(core_path), meta, declarations)
+    return declarations
+
+
+def _core_declarations(meta: dict) -> list[tuple]:
+    """语言包 tpc.toml → 声明元组列表（跳过 `grammar` / `engine` 两段）。"""
+    declarations: list[tuple] = []
     for ns, table in meta.items():
         if ns in ("grammar", "engine"):
             continue
         for config_key, spec in _flatten_config({ns: table}):
             _validate_decl_spec(config_key, spec)
-            if isinstance(spec, dict) and isinstance(spec.get("file"), (str, list)):
+            if _is_file_spec(spec):
                 # 文件式配置：file 为字符串路径或列表模式
                 declarations.append(
-                    (
-                        config_key,
-                        spec.get("file", ""),
-                        spec.get("section"),
-                        spec.get("base", "rules"),
-                        spec.get("required", True),
-                        spec.get("description", ""),
-                        None,
-                    )
+                    _file_decl(config_key, spec.get("file", ""), spec, "rules", True)
                 )
             else:
                 # 非文件式配置，以 bare data 形式注册
-                declarations.append((config_key, "", None, "", False, "", spec))
-
-    # 2. Plugin packages — 从 [plugins] enabled 读取插件 tpc.toml
-    plugins_cfg = meta.get("plugins", {})
-    if isinstance(plugins_cfg, dict):
-        enabled = plugins_cfg.get("enabled", [])
-        if isinstance(enabled, list):
-            package_dir = os.path.dirname(core_path)
-            for name in enabled:
-                plugin_tpc, rel_dir = _find_plugin_tpc(package_dir, name)
-                if not plugin_tpc:
-                    continue
-                with open(plugin_tpc, encoding="utf-8") as f:
-                    plugin_meta = tomllib.loads(f.read())
-                for ns, table in plugin_meta.items():
-                    if ns == "grammar":
-                        continue
-                    for config_key, spec in _flatten_config({ns: table}):
-                        _validate_decl_spec(config_key, spec)
-                        if isinstance(spec, dict) and isinstance(
-                            spec.get("file"), (str, list)
-                        ):
-                            file_spec = spec["file"]
-                            prefixed = file_spec
-                            if isinstance(file_spec, str):
-                                prefixed = f"{rel_dir}/{file_spec}"
-                            elif isinstance(file_spec, list):
-                                prefixed = [f"{rel_dir}/{f}" for f in file_spec]
-                            # 同名配置 key 合并（多插件 token_ext 等共存）：若已有同
-                            # config_key 的插件声明，file 并入列表——否则扁平同名 key
-                            # 后加载覆盖先加载，只保留一个插件来源（resolve 语义）。
-                            merged_idx = None
-                            for i, d in enumerate(declarations):
-                                if d[0] == config_key and d[3] == "plugins":
-                                    merged_idx = i
-                                    break
-                            if merged_idx is not None:
-                                old = declarations[merged_idx]
-                                old_files = old[1]
-                                if isinstance(old_files, str):
-                                    old_files = [old_files]
-                                new_files = old_files + (
-                                    [prefixed] if isinstance(prefixed, str) else prefixed
-                                )
-                                declarations[merged_idx] = (
-                                    config_key,
-                                    new_files,
-                                    old[2],
-                                    "plugins",
-                                    old[4],
-                                    old[5],
-                                    None,
-                                )
-                            else:
-                                declarations.append(
-                                    (
-                                        config_key,
-                                        prefixed,
-                                        spec.get("section"),
-                                        "plugins",
-                                        spec.get("required", False),
-                                        spec.get("description", ""),
-                                        None,
-                                    )
-                                )
-                        else:
-                            # 非文件式配置（bare data）——插件 tpc.toml 里也可能有
-                            # 裸配置（[namespace].foo 点路径键，如插件自身的开关项）。
-                            # 缺此分支会导致插件裸配置从未注册（历史 bug）。
-                            declarations.append(
-                                (config_key, "", None, "", False, "", spec)
-                            )
+                declarations.append(_bare_decl(config_key, spec))
     return declarations
 
+
+def _plugin_declarations(package_dir: str, meta: dict, declarations: list) -> None:
+    """`[plugins] enabled` 列出的插件 tpc.toml → 声明追加进 `declarations`。
+
+    插件声明与语言包同形，但两处不同：base 固定 `plugins`（file 路径带插件
+    相对目录前缀）、required 缺省 **False**（插件可选）；同名 config_key 的
+    多插件来源**合并 file 列表**（见 `_append_plugin_file_decl`）。
+    """
+    plugins_cfg = meta.get("plugins", {})
+    if not isinstance(plugins_cfg, dict):
+        return
+    enabled = plugins_cfg.get("enabled", [])
+    if not isinstance(enabled, list):
+        return
+    for name in enabled:
+        plugin_tpc, rel_dir = _find_plugin_tpc(package_dir, name)
+        if not plugin_tpc:
+            continue
+        with open(plugin_tpc, encoding="utf-8") as f:
+            plugin_meta = tomllib.loads(f.read())
+        for ns, table in plugin_meta.items():
+            if ns == "grammar":
+                continue
+            for config_key, spec in _flatten_config({ns: table}):
+                _validate_decl_spec(config_key, spec)
+                if _is_file_spec(spec):
+                    _append_plugin_file_decl(
+                        config_key, spec, rel_dir, declarations
+                    )
+                else:
+                    # 非文件式配置（bare data）——插件 tpc.toml 里也可能有
+                    # 裸配置（[namespace].foo 点路径键，如插件自身的开关项）。
+                    # 缺此分支会导致插件裸配置从未注册（历史 bug）。
+                    declarations.append(_bare_decl(config_key, spec))
+
+
+def _append_plugin_file_decl(
+    config_key: str, spec: dict, rel_dir: str, declarations: list
+) -> None:
+    """插件文件式声明：file 路径加插件相对目录前缀，同名 key 合并 file 列表。
+
+    合并理由：多插件声明同一扁平 key（token_ext 等）时，不合并则后加载覆盖
+    先加载，只保留一个插件来源（违反 resolve 的深合并语义）。
+    """
+    file_spec = spec["file"]
+    prefixed = file_spec
+    if isinstance(file_spec, str):
+        prefixed = f"{rel_dir}/{file_spec}"
+    elif isinstance(file_spec, list):
+        prefixed = [f"{rel_dir}/{f}" for f in file_spec]
+    for i, d in enumerate(declarations):
+        if d[0] != config_key or d[3] != "plugins":
+            continue
+        old = declarations[i]
+        old_files = old[1]
+        if isinstance(old_files, str):
+            old_files = [old_files]
+        new_files = old_files + (
+            [prefixed] if isinstance(prefixed, str) else prefixed
+        )
+        # 保留先到者的 section/required/description（首个声明者为准）
+        declarations[i] = (
+            config_key,
+            new_files,
+            old[2],
+            "plugins",
+            old[4],
+            old[5],
+            None,
+        )
+        return
+    declarations.append(_file_decl(config_key, prefixed, spec, "plugins", False))
+
+
+def _is_file_spec(spec: Any) -> bool:
+    """声明是否为文件式（spec 是 dict 且 file 为字符串或列表）。"""
+    return isinstance(spec, dict) and isinstance(spec.get("file"), (str, list))
+
+
+def _file_decl(
+    config_key: str, file_spec: Any, spec: dict, base_key: str, required_default: bool
+) -> tuple:
+    """文件式声明元组（7 元，供 `_resolve_decls` 消费）。
+
+    语言包：base=`rules`、required 缺省 True；插件：base=`plugins`、缺省 False。
+    """
+    return (
+        config_key,
+        file_spec,
+        spec.get("section"),
+        base_key,
+        spec.get("required", required_default),
+        spec.get("description", ""),
+        None,
+    )
+
+
+def _bare_decl(config_key: str, spec: Any) -> tuple:
+    """非文件式（bare data）声明元组：值随声明直接给（file/section 留空）。"""
+    return (config_key, "", None, "", False, "", spec)
 
 _DECLARATIONS = _load_meta_declarations()
 
