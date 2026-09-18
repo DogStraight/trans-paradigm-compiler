@@ -214,20 +214,29 @@ def _load_pipeline_defaults() -> dict[str, Any]:
     """从 tpc_config.json 读 pipeline 段，作为 run_pipeline_on_source 参数默认值。
 
     项目级默认参数（tpc_config.json 提供） + 调用方/CLI 显式传入覆盖
-    （None 表示未传，取配置默认）。找不到配置/解析失败时回退空 dict。
+    （None 表示未传，取配置默认）。无用户配置 → 空 dict；配置存在但损坏 →
+    ConfigError（fail-fast）——与 core/define.py 同一策略：静默丢默认值等于
+    用户的配置**悄悄失效**，属"假绿"（见 core/config_lifecycle.md「fail-fast」）。
     """
     import json
-    from core.config_registry import _find_user_config
 
-    path = _find_user_config()
-    if path:
-        try:
-            with open(path, encoding="utf-8") as f:
-                cfg = json.load(f)
-            return cfg.get("pipeline", {})
-        except Exception:
-            pass
-    return {}
+    from core._user_config import find_user_config
+    from core.errors import ConfigError
+
+    path = find_user_config()
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ConfigError(f"[pipeline] {path} 读取/解析失败: {exc}") from exc
+    if not isinstance(cfg, dict):
+        raise ConfigError(f"[pipeline] {path} 顶层应为对象")
+    pipeline_cfg = cfg.get("pipeline", {})
+    if not isinstance(pipeline_cfg, dict):
+        raise ConfigError(f"[pipeline] {path} 的 pipeline 段应为对象")
+    return pipeline_cfg
 
 
 def _resolve_render_handler(rules_dir: str):

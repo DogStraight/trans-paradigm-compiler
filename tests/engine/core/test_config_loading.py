@@ -175,3 +175,57 @@ def test_decl_valid_bare_and_file_accepted(tmp_path):
     names = [d[0] for d in decls]
     assert "analyzer.primitives" in names
     assert "lexer.ok" in names
+
+
+# ── 用户 tpc_config.json 的损坏处置（$TPC_CONFIG 注入临时配置） ──
+
+
+def _write_user_config(tmp_path, content: str, monkeypatch):
+    cfg = tmp_path / "tpc_config.json"
+    cfg.write_text(content, encoding="utf-8")
+    monkeypatch.setenv("TPC_CONFIG", str(cfg))
+    return cfg
+
+
+def test_user_config_valid_pipeline_section_read(tmp_path, monkeypatch):
+    """合法用户配置：pipeline 段被读成默认参数。"""
+    from pipeline import _load_pipeline_defaults
+
+    _write_user_config(tmp_path, '{"pipeline": {"lang": "verilog"}}', monkeypatch)
+    assert _load_pipeline_defaults() == {"lang": "verilog"}
+
+
+def test_user_config_malformed_pipeline_fails_fast(tmp_path, monkeypatch):
+    """用户配置损坏 → ConfigError（不静默丢默认值；"假绿"防护）。"""
+    from pipeline import _load_pipeline_defaults
+
+    _write_user_config(tmp_path, "{ not json", monkeypatch)
+    with pytest.raises(ConfigError, match="读取/解析失败"):
+        _load_pipeline_defaults()
+
+
+def test_user_config_pipeline_section_wrong_type_fails_fast(tmp_path, monkeypatch):
+    """pipeline 段非对象 → ConfigError（不给静默回退）。"""
+    from pipeline import _load_pipeline_defaults
+
+    _write_user_config(tmp_path, '{"pipeline": [1, 2]}', monkeypatch)
+    with pytest.raises(ConfigError, match="pipeline 段应为对象"):
+        _load_pipeline_defaults()
+
+
+def test_user_config_malformed_grammar_lookup_fails_fast(tmp_path, monkeypatch):
+    """grammar 包里解析用户配置同样 fail-fast（不静默回退默认语言包）。"""
+    from core.config_registry import _find_grammar_tpc_toml
+
+    _write_user_config(tmp_path, "{ not json", monkeypatch)
+    with pytest.raises(ConfigError, match="读取/解析失败"):
+        _find_grammar_tpc_toml()
+
+
+def test_user_config_grammar_wrong_type_fails_fast(tmp_path, monkeypatch):
+    """grammar 段类型非法（非字符串/对象）→ ConfigError。"""
+    from core.config_registry import _find_grammar_tpc_toml
+
+    _write_user_config(tmp_path, '{"grammar": [1]}', monkeypatch)
+    with pytest.raises(ConfigError, match="grammar 段应为字符串或对象"):
+        _find_grammar_tpc_toml()

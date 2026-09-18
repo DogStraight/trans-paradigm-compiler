@@ -56,8 +56,10 @@ def _glob_match(patterns: list[str], base_dir: str) -> list[str]:
                         if regex.match(entry.name):
                             results.append(entry.path)
                             break
-        except PermissionError:
-            pass
+        except PermissionError as exc:
+            # 静默跳过不可读目录 = 规则文件静默缺失（token.toml 事故形态）
+            # → fail-fast（见 core/config_lifecycle.md「fail-fast」）
+            raise ConfigError(f"[config] 目录不可读，无法匹配规则文件: {base_dir}（{exc}）") from exc
         return sorted(results)
 
     try:
@@ -71,8 +73,9 @@ def _glob_match(patterns: list[str], base_dir: str) -> list[str]:
                     if regex.match(rel_path):
                         results.append(os.path.join(root, name))
                         break
-    except PermissionError:
-        pass
+    except PermissionError as exc:
+        # 同上：不可读目录不静默跳过
+        raise ConfigError(f"[config] 目录不可读，无法匹配规则文件: {base_dir}（{exc}）") from exc
 
     return sorted(results)
 
@@ -91,10 +94,17 @@ def _find_grammar_tpc_toml() -> str:
         try:
             with open(user_config, encoding="utf-8") as f:
                 cfg = json.load(f)
-            g = cfg.get("grammar", "")
-            grammar_dir = g if isinstance(g, str) else g.get("rules_dir", "")
-        except (json.JSONDecodeError, KeyError):
-            pass
+        except (json.JSONDecodeError, OSError) as exc:
+            # 用户配置损坏 → fail-fast（与 core/define.py 同策略）：静默回退到
+            # 默认语言包会让用户的 grammar 设置"看起来生效"却没有
+            raise ConfigError(f"[config] {user_config} 读取/解析失败: {exc}") from exc
+        g = cfg.get("grammar", "")
+        if isinstance(g, str):
+            grammar_dir = g
+        elif isinstance(g, dict):
+            grammar_dir = g.get("rules_dir", "")
+        else:
+            raise ConfigError(f"[config] {user_config} 的 grammar 段应为字符串或对象")
     # 用户配置缺失（wheel 安装后无项目 config/tpc_config.json）时回退默认语言包。
     # root 在 editable（项目根）与 wheel（site-packages）两种模式下都指向
     # grammar 包所在目录的父级，故 root/grammar/verilog 两种模式均可定位。
@@ -828,4 +838,6 @@ def _push_loaded_config() -> None:
                 val = config.get(key)
                 setattr(mod, var_name, val)
             except (KeyError, RuntimeError):
+                # 声明制契约：语言包未声明该键（KeyError）→ 保留模块默认值；
+                # 未 load_all（RuntimeError）同理。两者都是"无配置"的正常情形。
                 pass

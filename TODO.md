@@ -39,3 +39,12 @@
 > 审计外观察（不在本清单）：`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog 形态
 > 进了引擎，与"本模块零语言知识"的声明相左——归 `docs/gaps/gap-semantic-elaboration-boundaries.md`
 > 边界 2（引擎约定 vs 语言包声明）那条线，待语言包声明条件求值面时一起处理。
+
+## 测试基础设施
+
+- **全量并行跑偶发失败（预存在，成因未定）**：`tests/engine/core/test_language_switch.py::
+  test_plugin_scope_excludes_other_language`——切到 verilog 后 `active_plugin_classes()`
+  仍含 c4 的 `AsmGenPlugin`。实测：带/不带 2026-09-18 那批改动都会出现（3 跑 2 败 / 2 跑 1 败）
+  → 非该批引入；单跑与 `-n0` 不复现；`PYTHONHASHSEED` 0..7 全过；
+  `tools/check_test_isolation.py` 160 OK / 0 FAIL。待定位：并行 worker 下
+  `_components_initialized` / `_active_components` / `_plugin_origins` 三者何时不同步。

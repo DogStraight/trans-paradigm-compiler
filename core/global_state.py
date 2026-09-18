@@ -253,6 +253,10 @@ def _warm_imports() -> None:
     模块导入有注册副作用（如分析原语的 import 期注册）——不预热则快照内容
     取决于 `_split_target` 触发导入的顺序，快照与还原读到不同集合（实测：
     `_primitives` 快照 4 项、还原时现场 5 项 → 还原反把基线项删掉）。
+
+    条目解析失败在此**容忍跳过**（登记表可能含已搬移条目）；"所有登记条目
+    都能解析"由门禁测试 `tests/policy/test_global_state_coverage.py` 断言
+    （`test_registered_entries_resolvable`）——容忍 + 测试兜底，不是静默放行。
     """
     for table in _REGISTRY_TABLES:
         for name in table:
