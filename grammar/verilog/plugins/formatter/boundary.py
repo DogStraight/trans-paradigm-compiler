@@ -139,38 +139,30 @@ def _tail_keyword_tokens(info: dict) -> set[str]:
     return result
 
 
-def build_block_tokens(rules: dict) -> BlockTokenMap:
-    """从语法规则构建边界 token 集合。
+def _collect_call_names(feat, out: set[str]) -> None:
+    """递归收集 feature 树里的 @call 引用名（choice/seq/repeat 内部也要）。"""
+    if isinstance(feat, dict):
+        if feat.get("type") == "call":
+            out.add(feat.get("name", ""))
+        for key in ("alternatives", "items"):
+            v = feat.get(key)
+            if isinstance(v, list):
+                for x in v:
+                    _collect_call_names(x, out)
+        for key in ("elem",):
+            v = feat.get(key)
+            if isinstance(v, (dict, list)):
+                _collect_call_names(v, out)
+    elif isinstance(feat, str) and feat.startswith("@"):
+        out.add(feat[1:])
 
-    自动推导：
-      - is_block = True 的规则 → 开/闭 token 直接收集（block_start/block_end）
-      - production 末尾有 keyword.* 字面 token 的规则（如 case/endcase）→
-        作为隐式 scope 的终结符（从结构推导，end_case 已移除）
-      - call 链递归解析（如 @CaseKeyword → keyword.case|casex|casez）
-      - 每个 opener token 自动关联 ScopeKind
 
-    Returns:
-        BlockTokenMap 包含 openers / closers / ifdef_set / scope_kind_map
-    """
-    # 有配对结束符的块类别（结构类别语义，非具体关键字）
-    _BLOCK_KINDS = frozenset(
-        {
-            ScopeKind.MODULE,
-            ScopeKind.BLOCK,
-            ScopeKind.CASE,
-            ScopeKind.GENERATE,
-            ScopeKind.FUNCTION,
-            ScopeKind.TASK,
-        }
-    )
-    from linter.grammar_slicer import build_slice_tree, get_start_tokens
+def _collect_block_rule_bounds(
+    tree: dict, openers: set[str], closers: set[str]
+) -> None:
+    """第一轮：`is_block = True` 的规则 → openers/closers（含匿名块父规则）。"""
+    from linter.grammar_slicer import get_start_tokens
 
-    tree = build_slice_tree(rules)
-    openers: set[str] = set()
-    closers: set[str] = set()
-    scope_kind_map: dict[str, ScopeKind] = {}
-
-    # ── 第一轮：is_block = True 的规则 ──
     anon_blocks: set[str] = set()
     for name, info in tree.items():
         if not info.get("is_block"):
@@ -182,8 +174,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         if not prods:
             anon_blocks.add(name)
         else:
-            tokens = get_start_tokens(prods)
-            openers |= tokens
+            openers |= get_start_tokens(prods)
 
     # 匿名块的父规则 → 找 opener/closer
     seen_parents: set[str] = set()
@@ -195,8 +186,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             if feat.get("type") != "call":
                 continue
             if feat.get("name") in anon_blocks:
-                tokens = get_start_tokens(prods)
-                openers |= tokens
+                openers |= get_start_tokens(prods)
                 for f in reversed(prods):
                     if f.get("type") == "token":
                         closers.add(f["token_type"])
@@ -204,10 +194,16 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
                 seen_parents.add(name)
                 break
 
-    # ── 第二轮：production 末尾关键字终结符的隐式块（case/function/task 等）──
-    # 终结符从规则 production 推导（非 is_block 规则末尾 keyword.* 字面 token），
-    # 不硬编码 endcase/endfunction 等具体名（end_case 已移除）。
-    _END_KEYWORD_MARKERS = frozenset(
+
+def _collect_end_keyword_bounds(
+    tree: dict, openers: set[str], closers: set[str]
+) -> None:
+    """第二轮：production 末尾关键字终结符的隐式块（case/function/task 等）。
+
+    终结符从规则 production 推导（非 is_block 规则末尾 keyword.* 字面 token），
+    不硬编码 endcase/endfunction 等具体名（end_case 已移除）。
+    """
+    end_markers = frozenset(
         tok
         for info in tree.values()
         if isinstance(info, dict) and not info.get("is_block")
@@ -218,19 +214,28 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             continue  # 第一轮已处理
         ec_tail = _tail_keyword_tokens(info)
         # 只关注有明确关键字终结符的规则
-        if not ec_tail or not ec_tail & _END_KEYWORD_MARKERS:
+        if not ec_tail or not ec_tail & end_markers:
             continue
         prods = info.get("prods", [])
         if not prods:
             continue
-        # 递归解析起始 token
         tokens = _resolve_first_tokens(tree, prods[0])
         if tokens:
             openers |= tokens
-            closers |= ec_tail & _END_KEYWORD_MARKERS  # 只取关键字终结符
+            closers |= ec_tail & end_markers  # 只取关键字终结符
 
-    # ── 构建 scope_kind_map：从规则 analyzer.scope.kind 推导（结构类别是规则
-    #    自身的语义声明，非 formatter 单独映射表）──
+
+def _build_scope_kind_map(
+    rules: dict, tree: dict, openers: set[str], closers: set[str]
+) -> dict[str, ScopeKind]:
+    """token → ScopeKind（从规则 analyzer.scope.kind 推导），并把入口/终结 token 归入 opener/closer。
+
+    结构类别是规则自身的语义声明，非 formatter 单独映射表。副作用：向
+    `openers` / `closers` 补入带配对结束符的块入口与终结符（与推导同源）。
+    """
+    from linter.grammar_slicer import get_start_tokens
+
+    scope_kind_map: dict[str, ScopeKind] = {}
     for name, rule in rules.items():
         if not isinstance(rule, GrammarRule):
             continue
@@ -257,7 +262,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         bs = getattr(rule, "block_start", "") or ""
         be = getattr(rule, "block_end", "") or ""
         ec_kw = _tail_keyword_tokens(info)
-        has_pair = bool(be) or bool(ec_kw) or kind in _BLOCK_KINDS
+        has_pair = bool(be) or bool(ec_kw) or kind in _PAIRED_BLOCK_KINDS
         if has_pair and not be:
             # 无 block_end 的块（如 CaseStmt：endcase 在 production 尾）——
             # 取 production 尾字面 token 作配对 closer
@@ -292,36 +297,20 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             if isinstance(e, str) and e.startswith(KEYWORD_PREFIX):
                 scope_kind_map.setdefault(e, kind)
                 closers.add(e)
+    return scope_kind_map
 
-    ifdef_set = {
-        macro_type("ifdef"),
-        macro_type("ifndef"),
-        macro_type("else"),
-        macro_type("elsif"),
-        macro_type("endif"),
-    }
 
-    # ── 语句头 token 集：控制流规则（body 是 @Stmt/@BeginEnd/@ElseChain 引用）
-    #    的 first token，排除已作块 openers 的。用于识别"无 begin 的单语句体"
-    #    悬挂缩进（如 `if (X)` 后接单语句）。不要求 is_statement：else 系列规则
-    #    （ElseBranch/ElseIfStmt）未标 is_statement，但语义上是语句头（体可为单
-    #    语句）。具体关键字一律由规则推导，不在此硬编码。
-    def _collect_call_names(feat, out: set[str]) -> None:
-        """递归收集 feature 树里的 @call 引用名（choice/seq/repeat 内部也要）。"""
-        if isinstance(feat, dict):
-            if feat.get("type") == "call":
-                out.add(feat.get("name", ""))
-            for key in ("alternatives", "items"):
-                v = feat.get(key)
-                if isinstance(v, list):
-                    for x in v:
-                        _collect_call_names(x, out)
-            for key in ("elem",):
-                v = feat.get(key)
-                if isinstance(v, (dict, list)):
-                    _collect_call_names(v, out)
-        elif isinstance(feat, str) and feat.startswith("@"):
-            out.add(feat[1:])
+def _collect_stmt_headers(
+    tree: dict, openers: set[str], closers: set[str]
+) -> set[str]:
+    """控制流语句头 token 集（体可为单语句 → 悬挂缩进）。
+
+    规则条件：体内引用语句/块（@Stmt/@Statement/@BeginEnd/@ElseChain）。不要求
+    is_statement：else 系列规则（ElseBranch/ElseIfStmt）未标 is_statement，但
+    语义上是语句头。具体关键字一律由规则推导，不在此硬编码。已作块 openers/
+    closers 的不重复。
+    """
+    from linter.grammar_slicer import get_start_tokens
 
     stmt_headers: set[str] = set()
     for name, info in tree.items():
@@ -337,18 +326,22 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         # 体可为单语句（if/for/else/while/always 等），需要悬挂缩进
         if not (refs & {"Stmt", "Statement", "BeginEnd", "ElseChain"}):
             continue
-        toks = get_start_tokens(prods)
-        stmt_headers |= toks
+        stmt_headers |= get_start_tokens(prods)
     # 只保留关键字类（控制流语句头都是关键字：if/for/else/always 等），
     # 排除符号类 first token（如 `@` 事件控制、`;` 空语句——它们不是语句头）
     stmt_headers = {t for t in stmt_headers if t.startswith(KEYWORD_PREFIX)}
     # 已作块 openers/closers 的（case/generate/function/task/module 等）不重复
     stmt_headers -= openers
     stmt_headers -= closers
+    return stmt_headers
 
-    # ── 语句结束 token（分号类）：从规则 production 里的 *.semicolon 推导。
-    #    用于识别 if/for 单行体（body 同行，如 `if (X) stmt;`）——行尾分号
-    #    表示语句头在本行已结束，非单语句头（语言知识外部化，不硬编码分号）
+
+def _collect_stmt_end_tokens(tree: dict) -> set[str]:
+    """语句结束 token（分号类）：从规则 production 里的 *.semicolon 推导。
+
+    用于识别 if/for 单行体（body 同行，如 `if (X) stmt;`）——行尾分号表示
+    语句头在本行已结束（语言知识外部化，不硬编码分号）。
+    """
     stmt_end_tokens: set[str] = set()
     for info in tree.values():
         if not isinstance(info, dict):
@@ -357,10 +350,17 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
             tt = f.get("token_type") if isinstance(f, dict) else f
             if isinstance(tt, str) and tt.endswith(".semicolon"):
                 stmt_end_tokens.add(tt)
+    return stmt_end_tokens
 
-    # ── 声明头 token：有 analyzer.symbol.kind（port/wire/reg/parameter 等）的
-    #    声明规则的 first token（input/output/reg/wire/localparam...）。声明行
-    #    不是语句（module 体内 ifdef 的端口声明等），不参与多行续行
+
+def _collect_decl_headers(rules: dict, tree: dict) -> set[str]:
+    """声明头 token：有 analyzer.symbol.kind 的声明规则的 first token。
+
+    （input/output/reg/wire/localparam...）声明行不是语句（module 体内 ifdef 的
+    端口声明等），不参与多行续行。
+    """
+    from linter.grammar_slicer import get_start_tokens
+
     decl_headers: set[str] = set()
     for name, rule in rules.items():
         if not isinstance(rule, GrammarRule):
@@ -375,9 +375,54 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
         prods = info.get("prods") or []
         if not prods:
             continue
-        toks = get_start_tokens(prods)
-        decl_headers |= toks
-    decl_headers = {t for t in decl_headers if t.startswith(KEYWORD_PREFIX)}
+        decl_headers |= get_start_tokens(prods)
+    return {t for t in decl_headers if t.startswith(KEYWORD_PREFIX)}
+
+
+def build_block_tokens(rules: dict) -> BlockTokenMap:
+    """从语法规则构建边界 token 集合。
+
+    自动推导：
+      - is_block = True 的规则 → 开/闭 token 直接收集（block_start/block_end）
+      - production 末尾有 keyword.* 字面 token 的规则（如 case/endcase）→
+        作为隐式 scope 的终结符（从结构推导，end_case 已移除）
+      - call 链递归解析（如 @CaseKeyword → keyword.case|casex|casez）
+      - 每个 opener token 自动关联 ScopeKind
+
+    Returns:
+        BlockTokenMap 包含 openers / closers / ifdef_set / scope_kind_map
+    """
+    # 有配对结束符的块类别见模块级 `_PAIRED_BLOCK_KINDS`（判定 has_pair 用）
+    from linter.grammar_slicer import build_slice_tree
+
+    tree = build_slice_tree(rules)
+    openers: set[str] = set()
+    closers: set[str] = set()
+
+    # ── 1. is_block 规则（含匿名块父规则）──
+    _collect_block_rule_bounds(tree, openers, closers)
+    # ── 2. production 尾关键字终结符的隐式块（case/function/task 等）──
+    _collect_end_keyword_bounds(tree, openers, closers)
+
+    # ── 3. token → ScopeKind（同时把块入口/终结符归入 openers/closers）──
+    scope_kind_map = _build_scope_kind_map(rules, tree, openers, closers)
+
+    ifdef_set = {
+        macro_type("ifdef"),
+        macro_type("ifndef"),
+        macro_type("else"),
+        macro_type("elsif"),
+        macro_type("endif"),
+    }
+
+    # ── 4. 语句头 token（无 begin 的单语句体悬挂缩进）──
+    stmt_headers = _collect_stmt_headers(tree, openers, closers)
+
+    # ── 5. 语句结束 token（分号类）──
+    stmt_end_tokens = _collect_stmt_end_tokens(tree)
+
+    # ── 6. 声明头 token ──
+    decl_headers = _collect_decl_headers(rules, tree)
 
     return BlockTokenMap(
         openers=openers,
@@ -405,6 +450,20 @@ class ScopeKind(Enum):
     INITIAL = auto()
     FOR_LOOP = auto()
     IFDEF_BRANCH = auto()
+
+
+# 有配对结束符的块类别（结构类别语义，非具体关键字）——`_build_scope_kind_map`
+# 判定 has_pair 用。定义在 ScopeKind 之后：模块级名字在调用时才解析。
+_PAIRED_BLOCK_KINDS = frozenset(
+    {
+        ScopeKind.MODULE,
+        ScopeKind.BLOCK,
+        ScopeKind.CASE,
+        ScopeKind.GENERATE,
+        ScopeKind.FUNCTION,
+        ScopeKind.TASK,
+    }
+)
 
 
 @dataclass
