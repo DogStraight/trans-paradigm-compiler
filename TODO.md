@@ -33,7 +33,13 @@
     （12 个 `_scan_*`），`tokenize` 397 → 56 行。
   - ✅ `parser/pratt_parser.parse_expression`（310 行）：已引 `_PrattCtx` 收拢上下文
     （对外签名不变），主体拆为前缀/中缀两块各步，310 → 45 行。
-  - ⏳ `analyzer/structure.py`（1082 行 / CC 73 上帝对象，B-B 收尾项）。
+  - ✅ `analyzer/structure.py::_build_signal_graph`（257 行 / CC≈109）：已引
+    `_SignalGraphCtx` + 端口穿透两方法 + per-file 三分派，257 → 装配（`35ccbff`）。
+  - ✅ 同文件 `_precompute_generate_active`（81 行 / CC 21）+ 成对填充去重
+    + `_eval_const_expr`（112 行 / CC 28）→ `_ConstExprParser`：B-B4b。
+  - ⏳ 同文件 `_StructureBase` 上帝对象（类体 1110 行 / 53 成员 / 43 方法）：
+    层 3 精化基类，被 `ProjectChecker` 继承、postpass 经 `context.extra` 消费；
+    拆类需先立 ADR（B-B4c，暂缓）。
 - **B-C 结构重复**（非 tests 107 组）：跨插件重复抽公共助手
   （`case_check._const_value` ↔ `latch_check._const_value`、
   `always_check._target_sig` ↔ `latch_check._target_sig` 等）。

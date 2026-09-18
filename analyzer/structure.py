@@ -142,69 +142,72 @@ def _tokenize_const(text: str) -> list[tuple[str, str]] | None:
     return toks
 
 
-def _eval_const_expr(text: str) -> bool | None:
-    """纯常量表达式求值 → 布尔｜None（不可判，保守）。
+class _ConstExprParser:
+    """常量表达式递归下降求值器（游标即状态，故用类而非闭包）。
 
-    显式递归下降，**不用 `eval`**：源码文本进 `eval` 是 RCE 面（与语言包侧
-    `_eval_const` 同理由）；且 Python 词法与目标语言不一致——`!`/`&&`/`||`
-    在 Python 里是语法错，只会静默落回不可判，写进白名单反而看不出真实可达面。
-
-    语法：表达式 := 比较；比较 := 加减 (比较符 加减)*；加减 := 乘除
-    (('+'|'-') 乘除)*；乘除 := 一元 (('*'|'/'|'%') 一元)*；一元 := ('+'|'-')*
-    基本项；基本项 := 数字 | '(' 表达式 ')'。
+    语法见 `_eval_const_expr`；任一步不可判 → None 向上冒泡（保守）。
     """
-    toks = _tokenize_const(text.strip())
-    if toks is None:
-        return None
-    pos = 0
 
-    def peek() -> tuple[str, str] | None:
-        return toks[pos] if pos < len(toks) else None
+    def __init__(self, toks: list[tuple[str, str]]) -> None:
+        self.toks = toks
+        self.pos = 0
 
-    def eat() -> tuple[str, str]:
-        nonlocal pos
-        tok = toks[pos]
-        pos += 1
+    def parse(self) -> bool | None:
+        """整串求值：必须消费完所有 token，否则不可判。"""
+        val = self._cmp()
+        if val is None or self.pos != len(self.toks):
+            return None
+        return bool(val)
+
+    def _peek(self) -> tuple[str, str] | None:
+        return self.toks[self.pos] if self.pos < len(self.toks) else None
+
+    def _eat(self) -> tuple[str, str]:
+        tok = self.toks[self.pos]
+        self.pos += 1
         return tok
 
-    def parse_primary() -> float | None:
-        cur = peek()
+    def _primary(self) -> float | None:
+        """基本项：数字 | '(' 表达式 ')'。"""
+        cur = self._peek()
         if cur is None:
             return None
         kind, tok = cur
         if tok == "(":
-            eat()
-            val = parse_cmp()
-            nxt = peek()
+            self._eat()
+            val = self._cmp()
+            nxt = self._peek()
             if val is None or nxt is None or nxt[1] != ")":
                 return None
-            eat()
+            self._eat()
             return val
         if kind == "num":
-            eat()
+            self._eat()
             return float(tok)
         return None
 
-    def parse_unary() -> float | None:
-        cur = peek()
+    def _unary(self) -> float | None:
+        """一元：('+'|'-')* 基本项（符号链逐层取负）。"""
+        cur = self._peek()
         if cur is not None and cur[1] in ("+", "-"):
-            sign = eat()[1]
-            val = parse_unary()
+            sign = self._eat()[1]
+            val = self._unary()
             if val is None:
                 return None
             return -val if sign == "-" else val
-        return parse_primary()
+        return self._primary()
 
-    def parse_term() -> float | None:
-        left = parse_unary()
+    def _term(self) -> float | None:
+        """乘除模：左结合；除/模零 → 不可判。"""
+        left = self._unary()
         if left is None:
             return None
         while True:
-            cur = peek()
+            cur = self._peek()
             if cur is None or cur[1] not in ("*", "/", "%"):
                 return left
-            op = eat()[1]
-            right = parse_unary()
+            op = self._eat()[1]
+            right = self._unary()
             if right is None or (op in ("/", "%") and right == 0):
                 return None
             if op == "*":
@@ -214,30 +217,32 @@ def _eval_const_expr(text: str) -> bool | None:
             else:
                 left %= right
 
-    def parse_sum() -> float | None:
-        left = parse_term()
+    def _sum(self) -> float | None:
+        """加减：左结合。"""
+        left = self._term()
         if left is None:
             return None
         while True:
-            cur = peek()
+            cur = self._peek()
             if cur is None or cur[1] not in ("+", "-"):
                 return left
-            op = eat()[1]
-            right = parse_term()
+            op = self._eat()[1]
+            right = self._term()
             if right is None:
                 return None
             left = left + right if op == "+" else left - right
 
-    def parse_cmp() -> float | None:
-        left = parse_sum()
+    def _cmp(self) -> float | None:
+        """比较：结果折算 1.0/0.0（布尔参与后续比较：真=1 / 假=0）。"""
+        left = self._sum()
         if left is None:
             return None
         while True:
-            cur = peek()
+            cur = self._peek()
             if cur is None or cur[1] not in _CMP_OPS:
                 return left
-            op = eat()[1]
-            right = parse_sum()
+            op = self._eat()[1]
+            right = self._sum()
             if right is None:
                 return None
             ok = {
@@ -248,12 +253,25 @@ def _eval_const_expr(text: str) -> bool | None:
                 "==": left == right,
                 "!=": left != right,
             }[op]
-            left = 1.0 if ok else 0.0  # 布尔参与后续比较：真=1 / 假=0
+            left = 1.0 if ok else 0.0
 
-    val = parse_cmp()
-    if val is None or pos != len(toks):
+
+def _eval_const_expr(text: str) -> bool | None:
+    """纯常量表达式求值 → 布尔｜None（不可判，保守）。
+
+    显式递归下降（`_ConstExprParser`），**不用 `eval`**：源码文本进 `eval` 是
+    RCE 面（与语言包侧 `_eval_const` 同理由）；且 Python 词法与目标语言不一致
+    ——`!`/`&&`/`||` 在 Python 里是语法错，只会静默落回不可判，写进白名单反而
+    看不出真实可达面。
+
+    语法：表达式 := 比较；比较 := 加减 (比较符 加减)*；加减 := 乘除
+    (('+'|'-') 乘除)*；乘除 := 一元 (('*'|'/'|'%') 一元)*；一元 := ('+'|'-')*
+    基本项；基本项 := 数字 | '(' 表达式 ')'。
+    """
+    toks = _tokenize_const(text.strip())
+    if toks is None:
         return None
-    return bool(val)
+    return _ConstExprParser(toks).parse()
 
 
 # ── 引擎 ─────────────────────────────────────────────────
@@ -559,6 +577,50 @@ class _StructureBase:
         return modules
 
 
+    def _decl_name_nodes(
+        self, decl_node: Node, items_field: str, name_field: str
+    ) -> list[tuple[Node, Node]]:
+        """声明节点 → [(名字声明节点, 名字节点)]（端口/参数三类填充共用）。
+
+        端口与参数的声明同形：外层声明节点的 `items` 再套一层声明列表
+        （内层元素挂 `name`）。列表缺失 / 元素非节点 / 名字为空 → 不计。
+        """
+        dlist = getattr(decl_node, items_field, None) if items_field else None
+        d_items = getattr(dlist, items_field, None) if isinstance(dlist, Node) else None
+        out: list[tuple[Node, Node]] = []
+        for d in d_items or []:
+            if not isinstance(d, Node):
+                continue
+            dn = getattr(d, name_field, None) if name_field else None
+            if isinstance(dn, Node) and dn.content:
+                out.append((d, dn))
+        return out
+
+    def _register_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
+                       direction: str, width: str, net_type: str = "") -> None:
+        """登记端口（同名覆盖：ANSI 头部声明优先于 body 回填）。"""
+        decl_node._file = info.file
+        info.ports[name_node.content] = ModulePort(
+            name=name_node.content,
+            direction=direction,
+            width_expr=width,
+            net_type=net_type,
+            decl_node=decl_node,
+        )
+
+    def _backfill_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
+                       direction: str, width: str) -> None:
+        """按名回填端口方向/宽度；未登记则补登记（body 声明不带 net_type）。"""
+        p = info.ports.get(name_node.content)
+        if p is None:
+            self._register_port(info, name_node, decl_node, direction, width)
+            return
+        p.direction = p.direction or direction
+        p.width_expr = p.width_expr or width
+        if p.decl_node is None:
+            p.decl_node = decl_node
+
+
     def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
         """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格 + body 声明）。"""
         ports_field = self._field("ports")
@@ -595,21 +657,8 @@ class _StructureBase:
             width = self._render_subtree(pr) if isinstance(pr, Node) else ""
             pt = getattr(item, port_type_field, None) if port_type_field else None
             net_type = self._render_subtree(pt) if isinstance(pt, Node) else ""
-            dlist = getattr(item, items_field, None) if items_field else None
-            d_items = getattr(dlist, items_field, None) if dlist else None
-            for d in d_items or []:
-                if not isinstance(d, Node):
-                    continue
-                dn = getattr(d, name_field, None) if name_field else None
-                if isinstance(dn, Node) and dn.content:
-                    d._file = info.file
-                    info.ports[dn.content] = ModulePort(
-                        name=dn.content,
-                        direction=direction,
-                        width_expr=width,
-                        net_type=net_type,
-                        decl_node=d,
-                    )
+            for d, dn in self._decl_name_nodes(item, items_field, name_field):
+                self._register_port(info, dn, d, direction, width, net_type)
         # body 端口声明（旧式 `input [7:0] x;` 在模块体）→ 按名补方向/宽度
         # （2026-08-29 修复：tv80 旧式端口方向/宽度缺失——影响 W104 方向
         # 判定与 B3 端口连接宽度）。
@@ -645,28 +694,8 @@ class _StructureBase:
                 direction = getattr(node, direction_field, "") or ""
                 pr = getattr(node, width_field, None)
                 width = self._render_subtree(pr) if isinstance(pr, Node) else ""
-                dlist = getattr(node, items_field, None)
-                d_items = getattr(dlist, items_field, None) if dlist else None
-                for d in d_items or []:
-                    if not isinstance(d, Node):
-                        continue
-                    dn = getattr(d, name_field, None)
-                    if not (isinstance(dn, Node) and dn.content):
-                        continue
-                    p = info.ports.get(dn.content)
-                    if p is None:
-                        d._file = info.file
-                        info.ports[dn.content] = ModulePort(
-                            name=dn.content,
-                            direction=direction,
-                            width_expr=width,
-                            decl_node=d,
-                        )
-                    else:
-                        p.direction = p.direction or direction
-                        p.width_expr = p.width_expr or width
-                        if p.decl_node is None:
-                            p.decl_node = d
+                for d, dn in self._decl_name_nodes(node, items_field, name_field):
+                    self._backfill_port(info, dn, d, direction, width)
             # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
             for child in node.iter_children():
                 stack.append(child)
@@ -709,13 +738,8 @@ class _StructureBase:
         for node in self._iter_nodes(module_node):
             if node.node_name != "ParamDeclStmt":
                 continue
-            items = getattr(node, "items", None)
-            dl = getattr(items, "items", None) if isinstance(items, Node) else None
-            for d in dl or []:
-                if not isinstance(d, Node) or d.node_name != "Declarator":
-                    continue
-                name_node = getattr(d, "name", None)
-                if not isinstance(name_node, Node) or not name_node.content:
+            for d, name_node in self._decl_name_nodes(node, "items", "name"):
+                if d.node_name != "Declarator":
                     continue
                 if name_node.content in info.params:
                     continue  # 头部已填（body 同名重复声明，取先）
@@ -1070,84 +1094,86 @@ class _StructureBase:
         """per-file 预计算 {id(node): bool}——节点是否在选中的 generate 分支。
 
         单栈迭代（无递归）：栈元素 = (node, stack, params)。普通节点标记
-        活性后子节点入栈；GenerateBlock 内 IfBlock/ElseIfBlock 求值条件，
-        then/else 分支以「追加/弹出活性」展开入栈（else-if 链循环）。
-        节点活性 = 所在分支全部选中。O(树)，查询 O(1)。纯迭代实现避免
-        深 AST/嵌套 generate 递归爆栈（picorv32 等大文件，2026-08-29）。
+        活性后子节点按种类入栈（`_gen_push_children`）；GenerateBlock 内的
+        IfBlock/ElseIfBlock 求值条件后按 then/else 展开互斥分支
+        （`_expand_generate_if`）。节点活性 = 所在分支全部选中。O(树)，
+        查询 O(1)。纯迭代实现避免深 AST/嵌套 generate 递归爆栈
+        （picorv32 等大文件，2026-08-29）。
         """
         active: dict[int, bool] = {}
-        decl_rule = self._rule("module_decl_rule")
         root = fr.ast
         if root is None:
             return active
-
-        def expand_if(ifb, stack: list, params: dict, todo: list) -> None:
-            """IfBlock/ElseIfBlock：条件求值，then/else 分支展开入栈。
-
-            else-if 链：外层条件为假时进入链，链内条件独立求值但活性
-            叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
-            → 整块按当前活性展开（保守）。纯迭代无递归。
-            """
-            # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
-            base = list(stack)
-            cur = ifb
-            while isinstance(cur, Node) and cur.node_name in (
-                "IfBlock", "ElseIfBlock"
-            ):
-                cond_val = self._eval_gen_cond(cur, params)
-                then_node = getattr(cur, "then_stmt", None)
-                chain = getattr(cur, "else_chain", None)
-                if cond_val is None:
-                    todo.append((cur, base, params))
-                    return
-                # then 分支：base（外层全假）+ 本条件真
-                todo.append((then_node, base + [cond_val], params))
-                if isinstance(chain, Node) and chain.node_name in (
-                    "IfBlock", "ElseIfBlock"
-                ):
-                    # 进入链：外层再加"本条件假"
-                    base = base + [not cond_val]
-                    cur = chain
-                    continue
-                # 最终 else：base（外层全假）+ 本条件假
-                todo.append((chain, base + [not cond_val], params))
-                return
-
-        todo = []
-        for child in root.iter_children():
-            todo.append((child, [], {}))
+        decl_rule = self._rule("module_decl_rule")
+        todo = [(child, [], {}) for child in root.iter_children()]
         while todo:
             node, stack, params = todo.pop()
             if node is None:
                 continue
             active[id(node)] = all(stack)
-            if node.node_name == "GenerateBlock":
-                for sub in getattr(node, "sub_node", None) or []:
-                    if not isinstance(sub, Node):
-                        continue
-                    if sub.node_name in ("IfBlock", "ElseIfBlock"):
-                        # GenerateBlock 内的条件分支：求值展开（互斥）
-                        expand_if(sub, stack, params, todo)
-                    else:
-                        todo.append((sub, stack, params))
-                continue
-            # 普通 IfBlock/ElseIfBlock（always 内 if 等）：非 generate
-            # 条件——按普通子节点遍历（不展开互斥，活性继承当前栈）
-            if node.node_name == decl_rule:
-                info = self._module_index.get(
-                    getattr(getattr(node, "module_name", None), "content", "")
-                    or ""
-                )
-                params2: dict[str, str] = {}
-                if info is not None:
-                    params2 = {p.name: p.value_expr for p in info.params.values()}
-                for child in node.iter_children():
-                    todo.append((child, [], params2))
-                continue
-            for child in node.iter_children():
-                todo.append((child, stack, params))
+            self._gen_push_children(node, stack, params, todo, decl_rule)
         return active
 
+    def _gen_push_children(self, node, stack: list, params: dict, todo: list,
+                           decl_rule: str) -> None:
+        """按节点种类把子节点入栈（generate 遍历的分派点）。
+
+        - GenerateBlock：子块含 IfBlock/ElseIfBlock → 条件求值展开互斥；
+          其余子块沿用当前活性
+        - 模块声明（decl_rule）：子节点以本模块**参数表**入栈（条件求值用）
+        - 其他（含 always 内普通 if）：普通遍历，活性继承当前栈——非
+          generate 条件不展开互斥
+        """
+        if node.node_name == "GenerateBlock":
+            for sub in getattr(node, "sub_node", None) or []:
+                if not isinstance(sub, Node):
+                    continue
+                if sub.node_name in ("IfBlock", "ElseIfBlock"):
+                    # GenerateBlock 内的条件分支：求值展开（互斥）
+                    self._expand_generate_if(sub, stack, params, todo)
+                else:
+                    todo.append((sub, stack, params))
+            return
+        if node.node_name == decl_rule:
+            info = self._module_index.get(
+                getattr(getattr(node, "module_name", None), "content", "") or ""
+            )
+            params2: dict[str, str] = {}
+            if info is not None:
+                params2 = {p.name: p.value_expr for p in info.params.values()}
+            for child in node.iter_children():
+                todo.append((child, [], params2))
+            return
+        for child in node.iter_children():
+            todo.append((child, stack, params))
+
+    def _expand_generate_if(self, ifb, stack: list, params: dict, todo: list) -> None:
+        """IfBlock/ElseIfBlock：条件求值，then/else 分支展开入栈。
+
+        else-if 链：外层条件为假时进入链，链内条件独立求值但活性
+        叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
+        → 整块按当前活性展开（保守）。纯迭代无递归。
+        """
+        # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
+        base = list(stack)
+        cur = ifb
+        while isinstance(cur, Node) and cur.node_name in ("IfBlock", "ElseIfBlock"):
+            cond_val = self._eval_gen_cond(cur, params)
+            then_node = getattr(cur, "then_stmt", None)
+            chain = getattr(cur, "else_chain", None)
+            if cond_val is None:
+                todo.append((cur, base, params))
+                return
+            # then 分支：base（外层全假）+ 本条件真
+            todo.append((then_node, base + [cond_val], params))
+            if isinstance(chain, Node) and chain.node_name in ("IfBlock", "ElseIfBlock"):
+                # 进入链：外层再加"本条件假"
+                base = base + [not cond_val]
+                cur = chain
+                continue
+            # 最终 else：base（外层全假）+ 本条件假
+            todo.append((chain, base + [not cond_val], params))
+            return
 
     def _branch_active(self, mod_node: Node, target: Node, params: dict) -> bool:
         """模块内 target 是否处于选中的 generate 分支（递归沿祖先）。
