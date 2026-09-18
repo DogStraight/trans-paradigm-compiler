@@ -124,6 +124,14 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [cairn](https://github.com/eurisko-info-lab/cairn) | 深度参考 | 语言 = Fragment 片段组合 + 内容寻址；双向文法（一个 GrammarSpec 同时生成 parse+print）（详见深调研） |
 | [lvca](https://github.com/joelburget/lvca) | 深度参考 | OCaml provenance：`Provenance.t`（每个节点带 range）是一等公民（详见深调研） |
 
+### 开发期工具链（审查/流程；非 tpc 设计来源，供"本体开发怎么做"参照）
+
+| 项目 | 关系 | 一句话价值总结 |
+|------|------|----------------|
+| [Bifrost](https://github.com/BrokkAi/bifrost) | 设计参考 | Brokk 的多语言静态分析工具箱（Rust，Apache-2.0）：统一 IR + RQL 结构查询 + **显式证明层级**（proven/unproven）+ CLI/MCP/LSP/Python 四面；本仓用作外部审查与"换裁判"（规程 `policy/bifrost_audit.md`，自带 slopcop 诊断族） |
+| [SlopCop](https://slopcop.brokk.ai) | 概念参考 | Brokk 的托管审计服务（specialist agent + 静态分析 → 案件报告 + 可复制为 prompt 的建议）；其实现在 Bifrost 的 `slopcop` 工具集里本地可跑，故不引入托管面（详见调研节） |
+| [Spec Kit](https://github.com/github/spec-kit) | 设计参考 | GitHub 的 SDD 流程工具包（★137k，MIT，agent skills 形态）：本仓**只选择性借范式**（先成因后动手 / 收尾结论分级 / constitution 只用已成立原则），不引入 `.specify/` 目录与模板资产（详见调研节） |
+
 ### 工程组织与后端抽象
 
 | 项目 | 关系 | 一句话价值总结 |
@@ -1973,3 +1981,58 @@ jam 在**语言语义深度**（MVS/comptime/ABI/typed IR 内部构造）上走�
   复看其内部构造。
 - **只作观察**：flat/tag-dispatched AST + interning（性能导向；tpc 瓶颈在 parser 常数而非
   数据布局，且 AST 形态由引擎定——规则是数据）。
+
+### 开发期工具链（Bifrost / SlopCop / Spec Kit，2026-09-18 调研 + 本机实测）
+
+**定位**：三者服务的是"怎么做 tpc 这个工程"，不是 tpc 的设计来源（tpc 自身是分析器）。
+放在本档是为了溯源：借了什么、为什么不整套引入。
+
+**Bifrost（Brokk，Rust，Apache-2.0，本机 0.11.4）**
+
+- 形态：多语言静态分析工具箱；接口四面——CLI / MCP server / LSP / Python client；
+  能力面——统一 IR + RQL·JSON CodeQuery 结构查询 + 索引引用/调用/导入/层级 +
+  有界 receiver/数据流/taint/typestate。
+- 🔥 **证明层级与结果契约**：每个结果带 `proven`/`unproven`（不静默升级），诊断与截断
+  进结果契约，文档明说"零结果只在声明的能力范围内成立"——与我们"缺验证不算完成"
+  同调，值得作为分析器输出的参照。
+- 🔥 **`slopcop` 工具集内置**：复杂度（cyclomatic/cognitive）、异常吞吃、长方法与上帝
+  对象、结构重复、死代码与一次性抽象、测试断言薄弱、注释密度、git 热点、密钥样码——
+  即托管 SlopCop 的服务端工具层，本地 CLI/MCP 直接可用。
+- 语言面：C/C++/C#/Go/Java/JS/Kotlin/PHP/Python/Ruby/Rust/Scala/TS，**不含
+  Verilog/SystemVerilog** → 只覆盖本仓 Python 侧；`grammar/**` 仍归仓内自查面。
+- 实测（本机）：单次工具 2.4s（slopcop 报告族）/ 4.2s（`blast_radius`）；`scan` 小目录
+  1.8s、13 文件 15.7s；`--policy --root . --sources <子集>` 35.7s。⚠ 缩 root（子目录当
+  PATH）会让 Python 声明面策略 `inconclusive`——要完备结论必须保留仓库为 root。
+- 信号面：探针 `tools/bifrost_probe/` 5/5 命中（1 warning + 4 note，无多余）；刚清理过的
+  `preprocessor/` 0 命中。
+- 可实现性：**已接入**为按需外部审查（规程 `policy/bifrost_audit.md`、AGENTS 自查工具
+  一行、skill 入口）。不做的：不把它的策略当日常门禁（语言面窄 + 需外部二进制 +
+  全量扫描分钟级）。
+
+**SlopCop（Brokk，托管审计服务）**
+
+- 形态：specialist agent（复杂度/规模/重复/错误处理/死代码/测试信号/注释意图）+ 静态
+  分析 → 案件报告（评分 + 证据 + 可复制为 prompt 的建议），另有公开"Most Wanted"榜。
+- 实测结论：其能力面就是 Bifrost 的 `slopcop` 工具集 → **不引入托管面**（收益与本地
+  一致，代价是源码外传 + 结果不可本地复现 + 公开榜对"稳定展示态"的风险）。
+- 💡 可借的是报告形态："每条结论带可回溯证据 + 下一步动作"，与仓内"收尾给结论分级"
+  互补。
+
+**Spec Kit（GitHub，★137k，MIT，agent skills 形态）**
+
+- 形态：流程工具包三入口——SDD（`constitution → specify → plan → tasks → implement →
+  converge`，循环到 Converged）、bug fixing（`bug-assess → bug-fix → bug-test`，扩展）、
+  idea assessment（`intake → research → define → shape → decide`，扩展）。
+- 实测产物：`specify init`（Copilot skills 模式）写 ~30 文件——`.github/skills/speckit-*`
+  ×10 + `.specify/`（constitution / templates×5 / scripts(ps1)×6 / workflows / manifests）；
+  已有仓库用 `specify init --here --force`，官方明说不重写应用、不为既有行为反向造规格。
+- 🔥 **借走两条**（已落 `AGENTS.md` 实施节奏）：bug 三分离的**先成因后动手**；
+  **收尾结论分级** `verified`/`partial`/`failed` 且"缺验证不算完成"。
+- 🔥 **constitution 纪律**（已落 AGENTS 指令文件纪律）：只用已成立/已明确同意的原则，
+  不为填模板发明标准。
+- 💡 其余质量门（clarify/analyze/checklist）本仓门禁已覆盖；📌 spec 保鲜三模型
+  （不可变历史/活契约/发现回流）与本仓"完成即删 + git log 存史"是不同选择，作对照。
+- 可实现性：**只借范式，不引资产**——`.specify/` + 模板 + skills 会形成第二套记录体系
+  （与"单一真相源、不留双路径"冲突），且 SDD 模板对单点缺陷修复/重构过重；若将来要
+  对外交付"规格→任务→验证"链路，先评估只对**新语言包/新命令**这类有界新增启用。
+
