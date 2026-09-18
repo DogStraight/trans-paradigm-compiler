@@ -556,14 +556,29 @@ class GrammarRule:
         # 规则字段 schema 校验（fail-fast）
         self._validate_fields(name, kwargs)
 
-        # 设置默认值
+        self._set_field_defaults()
+        self._apply_stage_overrides(kwargs)
+
+        # 剩余未识别的属性
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+        self._derive_block_bounds()
+
+    def _set_field_defaults(self) -> None:
+        """未显式声明的字段取缺省：列表字段 []，其余 False。"""
         for fld in self._KNOWN_FIELDS:
             if fld in self._LIST_FIELDS:
                 setattr(self, fld, [])
             else:
                 setattr(self, fld, False)
 
-        # 从嵌套的阶段结构中提取属性到顶层，同时保留原始嵌套
+    def _apply_stage_overrides(self, kwargs: dict) -> None:
+        """嵌套阶段结构（parser / analyzer / renderer）的属性提到顶层。
+
+        同时**保留**原始嵌套（`self.parser = {...}` 等）——阶段块整体与拆出的
+        顶层字段并存，消费方按需取用。
+        """
         for stage in ("parser", "analyzer", "renderer"):
             stage_data = kwargs.pop(stage, {})
             if stage_data:
@@ -575,60 +590,64 @@ class GrammarRule:
                             continue
                         setattr(self, k, v)
 
-        # 剩余未识别的属性
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+    @staticmethod
+    def _is_literal_token(p) -> bool:
+        """是否纯字面 token（非 `@` 引用、不含组语法字符）。
 
-        # is_block 块规则：block_start/block_end 从 production 首尾字面 token
-        # 推导。方案 B：production 保留完整（生产式即真相，作者可读全形），
-        # 不再剥离——block_prods 存"内容部分"（去首尾）供块路径/linter/FOLLOW
-        # 匹配块头使用，node 绑定基于完整 production 编号（$1 = block_start）。
-        #   production = ["keyword.module", "@Identifier", ..., "keyword.endmodule"]
-        #   → block_start="keyword.module", block_end="keyword.endmodule",
-        #     block_prods=["@Identifier", ...]（内容部分）
+        组/可选/重复字符串（如 `"(symbol.base.colon,@Identifier)?"`）不是块边界。
+        """
+        return (
+            isinstance(p, str)
+            and not p.startswith("@")
+            and not any(ch in p for ch in "()|,*+?")
+        )
+
+    def _derive_block_bounds(self) -> None:
+        """is_block 块规则：从 production 首尾**字面 token** 推导
+        block_start / block_end 与 block_prods（内容部分）。
+
+        方案 B：production 保留完整（生产式即真相，作者可读全形），不再剥离——
+        block_prods 存"内容部分"（去首尾）供块路径/linter/FOLLOW 匹配块头使用，
+        node 绑定基于完整 production 编号（$1 = block_start）。
+          production = ["keyword.module", "@Identifier", ..., "keyword.endmodule"]
+          → block_start="keyword.module", block_end="keyword.endmodule",
+            block_prods=["@Identifier", ...]（内容部分）
+
+        块起止符判定语言无关：任何非 `@` 字面 token 都可作块边界（原实现硬编码
+        `keyword.` 前缀是 Verilog 渗透——module/begin/end 都是 keyword；c4 的
+        `{`/`}`（bracket）无法推导导致匿名块无限递归）。
+        """
         self.block_start = ""
         self.block_end = ""
         self.block_prods: list = []
-        if getattr(self, "is_block", False) and self.prods:
-            prods = list(self.prods)
-            # 块起止符推导：production 首尾**字面 token**（非 @call 引用）即视为
-            # 块边界。原实现硬编码 `keyword.` 前缀（Verilog 渗透——module/begin/end
-            # 都是 keyword），c4 的 `{`/`}`（bracket）无法推导导致匿名块无限递归。
-            # 语言无关化：任何非 @ 字面 token 都可作块起止符。
-            # 纯字面 token 判定：非 @ 开头且不含组语法字符（组/可选/重复
-            # 字符串如 "(symbol.base.colon,@Identifier)?" 不是块边界）。
-            def _is_lit_tok(p) -> bool:
-                return (
-                    isinstance(p, str)
-                    and not p.startswith("@")
-                    and not any(ch in p for ch in "()|,*+?")
-                )
-
-            if prods and _is_lit_tok(prods[0]):
-                self.block_start = prods[0]
-            if prods and _is_lit_tok(prods[-1]):
-                self.block_end = prods[-1]
-            elif prods:
-                # 尾元素是组/可选组（如 UDP 的 endprimitive 后接可选的
-                # ": name" 结尾标签——尾元素 "(colon,id)?"）→ 向前取最后一
-                # 个纯字面 token 作 block_end（标准块尾前可有可选标签）。
-                for p in reversed(prods[:-1]):
-                    if _is_lit_tok(p):
-                        self.block_end = p
-                        break
-            # 内容部分（去首尾字面 token）
-            self.block_prods = list(prods)
-            if self.block_start:
-                self.block_prods = self.block_prods[1:]
-            if self.block_end:
-                # block_end 可能不在尾元素（如 UDP 的 endprimitive 后接可选
-                # ": name" 标签——block_end 回退推导到倒数第二）→ 剥到
-                # block_end 元素之前（而非固定 -1，否则 block_end 残留进
-                # 块头被 match_productions 消费，块体循环吞掉后续兄弟块）。
-                idx = len(self.block_prods) - 1
-                while idx >= 0 and self.block_prods[idx] != self.block_end:
-                    idx -= 1
-                self.block_prods = self.block_prods[:idx]
+        if not (getattr(self, "is_block", False) and self.prods):
+            return
+        prods = list(self.prods)
+        if prods and self._is_literal_token(prods[0]):
+            self.block_start = prods[0]
+        if prods and self._is_literal_token(prods[-1]):
+            self.block_end = prods[-1]
+        elif prods:
+            # 尾元素是组/可选组（如 UDP 的 endprimitive 后接可选的
+            # ": name" 结尾标签——尾元素 "(colon,id)?"）→ 向前取最后一
+            # 个纯字面 token 作 block_end（标准块尾前可有可选标签）。
+            for p in reversed(prods[:-1]):
+                if self._is_literal_token(p):
+                    self.block_end = p
+                    break
+        # 内容部分（去首尾字面 token）
+        self.block_prods = list(prods)
+        if self.block_start:
+            self.block_prods = self.block_prods[1:]
+        if self.block_end:
+            # block_end 可能不在尾元素（如 UDP 的 endprimitive 后接可选
+            # ": name" 标签——block_end 回退推导到倒数第二）→ 剥到
+            # block_end 元素之前（而非固定 -1，否则 block_end 残留进
+            # 块头被 match_productions 消费，块体循环吞掉后续兄弟块）。
+            idx = len(self.block_prods) - 1
+            while idx >= 0 and self.block_prods[idx] != self.block_end:
+                idx -= 1
+            self.block_prods = self.block_prods[:idx]
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。
