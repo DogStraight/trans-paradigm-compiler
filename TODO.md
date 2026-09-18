@@ -41,9 +41,23 @@
   - ⏳ 同文件 `_StructureBase` 上帝对象（类体 1110 行 / 53 成员 / 43 方法）：
     层 3 精化基类，被 `ProjectChecker` 继承、postpass 经 `context.extra` 消费；
     拆类需先立 ADR（B-B4c，暂缓）。
-- **B-C 结构重复**（非 tests 107 组）：跨插件重复抽公共助手
-  （`case_check._const_value` ↔ `latch_check._const_value`、
-  `always_check._target_sig` ↔ `latch_check._target_sig` 等）。
+- **B-C 结构重复**（非 tests 111 组，按"同文件/同部件 → 跨部件"递进）：
+  - ✅ 引擎侧同形重复：`_deep_merge` ×2、`get_config_refs` ×4、`plugin_loader`
+    合并型 getter ×5、`_serialize_member`/`_serialize_group`、`soft_break` 三态
+    原语（`d2a6cbe`）。
+  - ✅ 检查插件族 AST 助手：`_iter_nodes` ×6 / `_unwrap` ×3 / `_target_sig` ×2 /
+    `_const_value` ×2 → `core/define`（引擎）+ `checks/_shared.py`（语言侧）
+    （`83b350b`）。
+  - ✅ `typed_ports` 组件内 `_text` ×3 / `_collect_type_scopes` ×2 →
+    `typed_ports/_node_utils.py`（`616ce1b`）。
+  - ✅ 常量表达式求值两份 78 行逐字同体 → `checks/_shared.const_eval`（`6262314`）。
+  - ⏳ 剩余：`formatter/passes._indent_level` ×2、检查族跨插件小助手
+    （`_is_timing_always` ×2、`_is_parameterized` 系）、`ifdef` 的
+    `handle_ifdef`/`handle_ifndef`、`config_registry.resolve`/
+    `resolve_with_sources`、`renderer/doc._has_break`/`_has_hardline`。
+  - 保留附理由（不再动）：policy/ 两个门禁脚本的重复（刻意各自独立）、
+    ≤25 token 的单行 setter/格式化器、跨层同形注册表——判据见
+    `_drafts/bifrost/dispositions.md`「B-C 分组处置」。
 
 > 审计外观察（不在本清单）：`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog 形态
 > 进了引擎，与"本模块零语言知识"的声明相左——归 `docs/gaps/gap-semantic-elaboration-boundaries.md`
