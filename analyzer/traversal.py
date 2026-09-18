@@ -65,13 +65,17 @@ class AnalysisTraversal:
 
     @staticmethod
     def _load_primitive_order() -> list[str]:
-        try:
-            from core.plugin_loader import get_primitive_order
-            order = get_primitive_order()
-            if order:
-                return order
-        except ImportError:
-            pass
+        """原语执行顺序：语言包 `[[analyzer.primitives]]` 声明优先。
+
+        未声明 → 引擎默认四原语顺序（analyzer/primitives/ 内置）。
+        引擎自导入不做 ImportError 兜底：`core.plugin_loader` 恒在，
+        静默回退只会把"装包坏了"伪装成"语言包没声明"。
+        """
+        from core.plugin_loader import get_primitive_order
+
+        order = get_primitive_order()
+        if order:
+            return order
         return [
             "symbol_declare",
             "scope_enter",
@@ -120,10 +124,8 @@ class AnalysisTraversal:
         执行记录（`postpass_trace`）供管线进单元轨迹：链也是**时点**，
         哪一环跑了、报了几条诊断应可见（同 ADR-0015 §2 姿态）。
         """
-        try:
-            from core.plugin_loader import get_analyzer_postpass_decls
-        except ImportError:
-            return
+        from core.plugin_loader import get_analyzer_postpass_decls
+
         decls = get_analyzer_postpass_decls()
         available = set(self._context.extra) | {"scope"}
         for decl in decls:

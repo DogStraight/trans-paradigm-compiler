@@ -36,10 +36,9 @@ def _compute_start_tokens(
         if not prods:
             return set()
         # 只取第一个 production 元素的 First set（后续元素可能不可达）
-        try:
-            pf = analyze_production_features(prods[0])
-        except Exception:
-            return set()
+        # 不吞 GrammarError：产生式非法 >> 起始 token 静默缺项（规则会变成
+        # 不可达，后续只能看到"无规刚可继续"的难查症状）
+        pf = analyze_production_features(prods[0])
         if pf:
             return _compute_start_tokens(pf, grammar_rules, visited.copy())
         return set()
@@ -86,10 +85,8 @@ def build_start_token_map_names(
         if not prods:
             continue
         first_prod_str = prods[0]
-        try:
-            feat = analyze_production_features(first_prod_str)
-        except Exception:
-            continue
+        # 同 `_compute_start_tokens`：产生式非法不静默跳过（fail-fast）
+        feat = analyze_production_features(first_prod_str)
         if feat is None:
             continue
         starts = _compute_start_tokens(feat, grammar_rules, set())

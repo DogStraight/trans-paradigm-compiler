@@ -159,6 +159,7 @@ def parse_number_literal(token: Token) -> Node:
         try:
             return Node("Number", value=float(content))
         except ValueError:
+            # 不是合法浮点（如 `1.2.3`）→ 落到整数/字符串分支；此处不报错是设计
             pass
     # 普通整数
     try:

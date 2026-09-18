@@ -460,6 +460,8 @@ class Discovery:
             try:
                 k = matcher.match(tokens, j, feat, trial, end, strict=True)
             except Exception:
+                # 错误恢复近似（同 `_container_end` / `_skip_to_statement_end`）：
+                # 匹配抛错时停止逐元素推进，让检查阶段报错，discovery 仍能推进。
                 break
             j = k if k > j else j + 1
         return None
@@ -575,6 +577,8 @@ class Discovery:
                 try:
                     j = matcher.match_rule(tokens, i + 1, prods, trial, end_idx)
                 except Exception:
+                    # 错误恢复近似：匹配无法完成 → 块体起点保持 i+1（不抛给调用方，
+                    # 语法错由检查阶段报；同 `_container_end` 的取舍）。
                     j = i + 1
                 if j > i + 1:
                     start = j

@@ -19,6 +19,7 @@ from core.define import (
     ParseError,
 )
 from core.config_registry import declare_cfg
+from core.errors import ConfigError
 from ._constants import ROOT_RULE_NAME
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
@@ -447,8 +448,14 @@ class Parser:
                 self.grammar_rules = (
                     GrammarRulesRegister.get_default().rules_registration()
                 )
-            except FileNotFoundError:
-                pass
+            except FileNotFoundError as exc:
+                # 无注入规则且默认语言包不可得 → 空规则表的 Parser 什么都解析
+                # 不了（后续只会报"无规则可继续"），属配置/状态错，fail-fast
+                # 报出原因（与 core/config_lifecycle.md「fail-fast」一致）。
+                raise ConfigError(
+                    "[parser] 既无注入语法规则（rules=）也无可用默认语言包："
+                    f"请先加载语言包（ConfigRegistry.load_all）或显式传入 rules（{exc}）"
+                ) from exc
         # 日志文件：构造参数优先，回退到 FileManager 全局配置
         if log_file is None:
             if FileManager.debug_log_file is not None:

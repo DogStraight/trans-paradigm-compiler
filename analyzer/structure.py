@@ -1258,6 +1258,8 @@ class _StructureBase:
         try:
             return self._ensure_shared()["renderer"].render(node).strip()
         except Exception:
+            # 渲染失败 → 空串：调用方（条件/宽度提取）按"拿不到文本 = 不可判"
+            # 保守处理，不影响正确性；此处不报错是设计（非静默错乱）。
             return ""
 
 
