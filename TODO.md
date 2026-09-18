@@ -49,9 +49,11 @@
     - ✅ `core/check_registry.load_user_check_config`（91 行）→ 三段校验各自成
       函数（`2f8c6c7`）；`core/define.GrammarRule.__init__`（79 行）→ 四步
       （`cffa79f`）。
-    - ⏳ 剩余：`analyzer/checker.ProjectChecker.check`（65 行）、
-      `analyzer/suppress.build_suppress_map`（60 行）、
-      `analyzer/traversal._walk_node`（47 行）、
+    - ✅ `analyzer/checker.ProjectChecker.check`（65 行）→ 四阶段
+      （`479f206`）；`analyzer/suppress.build_suppress_map`（60 行）→ 抽
+      `_merge_suppress`（原同函数内重复两遍的合并规则）+ `_split_code_comment`
+      （`4f6c030`）。
+    - ⏳ 剩余：`analyzer/traversal._walk_node`（47 行）、
       `core/config_registry._glob_match`（43 行 / CC 13）、
       `core/define.GrammarRule._validate_node_specs`（43 行 / CC 14）、
       `core/define.FileManager.load_all_toml`（70 行）。
