@@ -24,7 +24,7 @@ Yosys proc_dlatch（综合视角）/ SpyGlass W442aL。升级自有限版（只�
 """
 
 from core.define import Node, iter_nodes
-from grammar.verilog.plugins.checks._shared import const_value, target_sig
+from grammar.verilog.plugins.checks._shared import const_eval, const_value, target_sig
 
 _ALWAYS_RULE = "AlwaysStmt"
 _EDGE_KEYWORDS = ("posedge", "negedge")
@@ -261,22 +261,22 @@ def _loop_executes(node: Node, params: dict) -> bool | None:
         return None  # while/repeat/forever：边界不可判
     target = getattr(init, "target", None)
     name = getattr(target, "content", "") if isinstance(target, Node) else ""
-    iv = _eval_const(_node_text(getattr(init, "value", None)), params)
+    iv = const_eval(_node_text(getattr(init, "value", None)), params)
     if not name or iv is None:
         return None
     env = {**params, name: str(iv)}  # 循环变量代换为 init 值
     if cond.node_name == "BinaryOp":
         op = getattr(cond, "op", "") or ""
         if op in ("<", "<=", ">", ">=", "==", "!="):
-            l = _eval_const(_node_text(getattr(cond, "left", None)), env)
-            r = _eval_const(_node_text(getattr(cond, "right", None)), env)
+            l = const_eval(_node_text(getattr(cond, "left", None)), env)
+            r = const_eval(_node_text(getattr(cond, "right", None)), env)
             if l is not None and r is not None:
                 return {
                     "<": l < r, "<=": l <= r, ">": l > r,
                     ">=": l >= r, "==": l == r, "!=": l != r,
                 }[op]
     # 非比较条件（while (1) 等）→ 整体常量求值
-    ev = _eval_const(_cond_text(cond), env)
+    ev = const_eval(_cond_text(cond), env)
     if ev is None:
         return None
     return ev != 0
@@ -294,128 +294,6 @@ def _cond_text(cond: Node | None) -> str:
     if cond.node_name == "ParenthesizedExpr":
         return _cond_text(getattr(cond, "expr", None))
     return _node_text(cond)
-
-
-def _eval_const(text: str, params: dict) -> int | None:
-    """常量表达式求值（数字 + 参数名 + 括号 + 一元 +/- + 四则）。
-
-    递归下降（不用 eval——源码文本求值有 RCE 风险）；含未知标识符/未知
-    形态 → None（保守）。
-    """
-    toks = _const_tokenize(text, params)
-    if toks is None:
-        return None
-    pos = 0
-
-    def peek() -> tuple:
-        return toks[pos] if pos < len(toks) else ("eof", "")
-
-    def advance() -> tuple:
-        nonlocal pos
-        t = toks[pos]
-        pos += 1
-        return t
-
-    def parse_expr():
-        left = parse_term()
-        if left is None:
-            return None
-        while peek()[0] in ("+", "-"):
-            op = advance()[0]
-            right = parse_term()
-            if right is None:
-                return None
-            left = left + right if op == "+" else left - right
-        return left
-
-    def parse_term():
-        left = parse_factor()
-        if left is None:
-            return None
-        while peek()[0] in ("*", "/", "%"):
-            op = advance()[0]
-            right = parse_factor()
-            if right is None:
-                return None
-            if op == "*":
-                left = left * right
-            elif op == "/":
-                if right == 0:
-                    return None
-                left = left // right
-            else:
-                if right == 0:
-                    return None
-                left = left % right
-        return left
-
-    def parse_factor():
-        t = peek()
-        if t[0] == "-":
-            advance()
-            v = parse_factor()
-            return -v if v is not None else None
-        if t[0] == "+":
-            advance()
-            return parse_factor()
-        if t[0] == "(":
-            advance()
-            v = parse_expr()
-            if v is None or peek()[0] != ")":
-                return None
-            advance()
-            return v
-        if t[0] in ("num", "param"):
-            advance()
-            return t[1]
-        return None
-
-    v = parse_expr()
-    if v is None or peek()[0] != "eof":
-        return None
-    return v
-
-
-def _const_tokenize(text: str, params: dict) -> list | None:
-    """数字/参数名表达式 tokenize；未知字符 → None。参数名就地解析。"""
-    toks: list = []
-    i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch.isspace():
-            i += 1
-            continue
-        if ch.isdigit():
-            j = i
-            while j < n and text[j].isdigit():
-                j += 1
-            toks.append(("num", int(text[i:j])))
-            i = j
-            continue
-        if ch.isalpha() or ch == "_":
-            j = i
-            while j < n and (text[j].isalnum() or text[j] == "_"):
-                j += 1
-            ident = text[i:j]
-            v = params.get(ident)
-            if v is None:
-                return None
-            if isinstance(v, str):
-                if not v.strip().isdigit():
-                    return None  # 参数默认值非纯数字 → 不可判
-                toks.append(("param", int(v.strip())))
-            else:
-                toks.append(("param", v))
-            i = j
-            continue
-        if ch in "+-*/%()":
-            toks.append((ch, ch))
-            i += 1
-            continue
-        return None
-    toks.append(("eof", ""))
-    return toks
 
 
 def _node_text(node) -> str:

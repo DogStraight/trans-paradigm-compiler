@@ -124,7 +124,7 @@ class TestSymbolWidthTableA1:
 
 
 class TestWidthEvalA2:
-    """A2 常量宽度求值器（纯函数）。"""
+    """A2 常量宽度求值器（纯函数；常量求值实现在 `checks/_shared.py`）。"""
 
     def test_range_width(self):
         from grammar.verilog.plugins.checks.width_check._width_check import (
@@ -138,27 +138,27 @@ class TestWidthEvalA2:
         assert eval_width_text("") == 1  # 标量
 
     def test_const_arith(self):
+        from grammar.verilog.plugins.checks._shared import const_eval
         from grammar.verilog.plugins.checks.width_check._width_check import (
-            eval_const_expr,
             eval_width_text,
         )
 
-        assert eval_const_expr("2*4-1") == 7
-        assert eval_const_expr("(8-2)*3") == 18
-        assert eval_const_expr("-5+10") == 5
-        assert eval_const_expr("10/3") == 3
-        assert eval_const_expr("7%3") == 1
+        assert const_eval("2*4-1") == 7
+        assert const_eval("(8-2)*3") == 18
+        assert const_eval("-5+10") == 5
+        assert const_eval("10/3") == 3
+        assert const_eval("7%3") == 1
         assert eval_width_text("7-1:0") == 7  # 常量折叠后 6:0 → 7 位
 
     def test_parameterized_returns_none(self):
+        from grammar.verilog.plugins.checks._shared import const_eval
         from grammar.verilog.plugins.checks.width_check._width_check import (
-            eval_const_expr,
             eval_width_text,
         )
 
         assert eval_width_text("WIDTH-1:0") is None  # 参数化（B 阶段）
-        assert eval_const_expr("WIDTH") is None
-        assert eval_const_expr("DATA_W/2") is None
+        assert const_eval("WIDTH") is None
+        assert const_eval("DATA_W/2") is None
         assert eval_width_text("2*W-1:0") is None
 
     def test_literal_width(self):

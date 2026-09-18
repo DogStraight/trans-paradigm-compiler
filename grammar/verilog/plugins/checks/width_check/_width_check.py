@@ -14,6 +14,7 @@
 from typing import Any
 
 from core.define import Node, iter_nodes, unwrap_optional
+from grammar.verilog.plugins.checks._shared import const_eval
 
 # 参与宽度分析的符号 kind（语言知识：Verilog 内部信号/端口）
 _WIDTH_KINDS = {"wire", "reg", "integer", "port"}
@@ -78,7 +79,7 @@ def _check_select_ranges(analyzer, context, table: dict) -> None:
 
 
 def _check_suffix_bounds(sf, bw: int, base_name: str, context) -> None:
-    idx = eval_const_expr(node_text(getattr(sf, "index", None)))
+    idx = const_eval(node_text(getattr(sf, "index", None)))
     info = _range_info(getattr(sf, "range_suffix", None))
     if info is None:
         # 纯索引 [idx]：idx ∈ [0, bw-1]
@@ -92,7 +93,7 @@ def _check_suffix_bounds(sf, bw: int, base_name: str, context) -> None:
         return
     op, val_node = info
     op = node_text(op)
-    val = eval_const_expr(node_text(val_node))
+    val = const_eval(node_text(val_node))
     if idx is None or val is None:
         return  # 变量索引/宽度保守
     if op == ":":
@@ -146,8 +147,9 @@ def _module_params(context) -> dict[str, dict[str, str]]:
 
 # ── B2 参数化宽度求值（符号化常量求值） ───────────────────
 # eval_expr_params：常量表达式 + 参数表 → 数值（标识符查参数表，值可含
-# 嵌套参数链）。与 A2 eval_const_expr 的关系：纯数字域走 A2；含标识符
-# 走本函数（递归下降，ident 查表递归求值）。
+# 嵌套参数链）。与共用 `_shared.const_eval` 的关系：纯数字域（含单层参数
+# 名）走 const_eval；参数值本身还可再含表达式的**链式**场景走本函数
+# （递归下降，ident 查表递归求值 + 环护栏）。
 
 
 def eval_expr_params(
@@ -892,121 +894,15 @@ def eval_width_text(text: str) -> int | None:
         return 1
     if ":" in text:
         msb_s, lsb_s = text.split(":", 1)
-        msb = eval_const_expr(msb_s)
-        lsb = eval_const_expr(lsb_s)
+        msb = const_eval(msb_s)
+        lsb = const_eval(lsb_s)
         if msb is None or lsb is None:
             return None
         return abs(msb - lsb) + 1
-    v = eval_const_expr(text)
+    v = const_eval(text)
     if v is None:
         return None
     return v + 1  # 单表达式 [n] = n+1 位（惯例 [n:0]）
-
-
-def eval_const_expr(text: str) -> int | None:
-    """A2：常量表达式求值（数字 + 括号 + 一元 +/- + 四则 * / %）。
-
-    纯数字域 → 数值；含标识符/未知字符 → None（参数化留 B 阶段）。
-    递归下降：expr → term(+-) → factor(* / %) → 一元/括号/数字。
-    """
-    toks = _const_tokenize(text)
-    if toks is None:
-        return None
-    pos = 0
-
-    def peek() -> tuple:
-        return toks[pos] if pos < len(toks) else ("eof", "")
-
-    def advance() -> tuple:
-        nonlocal pos
-        t = toks[pos]
-        pos += 1
-        return t
-
-    def parse_expr():
-        left = parse_term()
-        if left is None:
-            return None
-        while peek()[0] in ("+", "-"):
-            op = advance()[0]
-            right = parse_term()
-            if right is None:
-                return None
-            left = left + right if op == "+" else left - right
-        return left
-
-    def parse_term():
-        left = parse_factor()
-        if left is None:
-            return None
-        while peek()[0] in ("*", "/", "%"):
-            op = advance()[0]
-            right = parse_factor()
-            if right is None:
-                return None
-            if op == "*":
-                left = left * right
-            elif op == "/":
-                if right == 0:
-                    return None
-                left = left // right
-            else:
-                if right == 0:
-                    return None
-                left = left % right
-        return left
-
-    def parse_factor():
-        t = peek()
-        if t[0] == "-":
-            advance()
-            v = parse_factor()
-            return -v if v is not None else None
-        if t[0] == "+":
-            advance()
-            return parse_factor()
-        if t[0] == "(":
-            advance()
-            v = parse_expr()
-            if v is None or peek()[0] != ")":
-                return None
-            advance()
-            return v
-        if t[0] == "num":
-            advance()
-            return t[1]
-        return None
-
-    v = parse_expr()
-    if v is None or peek()[0] != "eof":
-        return None
-    return v
-
-
-def _const_tokenize(text: str) -> list | None:
-    """数字表达式 tokenize：数字/括号/四则/一元；标识符或未知 → None。"""
-    toks: list = []
-    i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch.isspace():
-            i += 1
-            continue
-        if ch.isdigit():
-            j = i
-            while j < n and text[j].isdigit():
-                j += 1
-            toks.append(("num", int(text[i:j])))
-            i = j
-            continue
-        if ch in "+-*/%()":
-            toks.append((ch, ch))
-            i += 1
-            continue
-        return None  # 标识符/未知字符 → 常量域外（参数化）
-    toks.append(("eof", ""))
-    return toks
 
 
 def literal_width(text: str) -> int | None:
@@ -1117,7 +1013,7 @@ def infer_expr_width(node, width_table: dict, module: str = "") -> int | None:
     if name == "ConcatExpr":
         return _sum_width(getattr(node, "sub_node", None) or [], width_table, module)
     if name == "ReplicateExpr":
-        count = eval_const_expr(node_text(getattr(node, "count", None)))
+        count = const_eval(node_text(getattr(node, "count", None)))
         vw = infer_expr_width(getattr(node, "value", None), width_table, module)
         if count is None or vw is None:
             return None
@@ -1201,9 +1097,9 @@ def _suffix_width(suffix) -> int | None:
         return 1  # 纯索引 → 1 bit
     op, val_node = info
     op = node_text(op)  # ":" / "+:" / "-:"
-    val = eval_const_expr(node_text(val_node))
+    val = const_eval(node_text(val_node))
     if op == ":":
-        idx = eval_const_expr(node_text(getattr(suffix, "index", None)))
+        idx = const_eval(node_text(getattr(suffix, "index", None)))
         if idx is None or val is None:
             return None
         return abs(idx - val) + 1
