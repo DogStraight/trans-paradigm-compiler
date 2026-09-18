@@ -56,7 +56,11 @@
     `checks/_shared`（`4f0ad2c`）。
   - ✅ 三处同文件同体：`handle_ifdef`/`handle_ifndef`、
     `config_registry.resolve`/`resolve_with_sources`、
-    `renderer/doc._has_break`/`_has_hardline`（`cfc5944`）。
+    `renderer/doc._has_break`/`_has_hardline`（`cfc5944`）；另修掉 B-B2 拆分后
+    新显影的 `Lexer._scan_number`/`_scan_unsized_number` 同体。
+  - 复查（外部裁判，同口径分块）：非 tests 重复对 **111 → 71**，
+    其余为薄入口残留（token 量已大幅下降：159→35、234→52、156→20 等）与
+    已列明保留项。
   - ⏳ 保留项（附理由，见 dispositions）：policy/ 两个门禁脚本间的小重复
     （拟保持：两道门禁刻意各自独立可单跑，待作者确认）、≤25 token 的单行
     setter/格式化器（38 组）、跨层同形注册表、3–5 行样板体三对

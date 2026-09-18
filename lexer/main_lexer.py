@@ -524,19 +524,33 @@ class Lexer:
         tok = self.refine_type(tok)
         st.tokens.append(tok)
 
+    def _scan_number(self, st: "_LexState", tok: Token) -> None:
+        """数字字面量（_number_runner）。"""
+        self._scan_via_number_runner(st, tok, fallback_type="id")
+
     def _scan_unsized_number(self, st: "_LexState", tok: Token) -> None:
         """无尺寸字面量（'b1/'d0/'hFF 等，触发集合配置驱动）。"""
+        self._scan_via_number_runner(st, tok, fallback_type="symbol.base")
+
+    def _scan_via_number_runner(
+        self, st: "_LexState", tok: Token, *, fallback_type: str
+    ) -> None:
+        """走 number_runner 扫描一个字面量（两个入口分支共用）。
+
+        runner 返回空 / 零消费（如 `'d` 无 value、形态不匹配）→ 不消费整段，
+        退化为**单字符** token（类型 `fallback_type`）——防死循环：游标必须
+        前进，否则该位置永远匹配同一空结果。
+        """
         self._emit_pending_dedent(st.tokens)
 
         number_content, new_idx = self._number_runner.run(st.text, st.idx)
         st.offset = new_idx - st.idx
 
-        # runner 空结果（如 `'d` 无 value）：防死循环，退化为符号
         if not number_content or st.offset <= 0:
             st.idx += 1
             st.col += 1
             tok.set_content(st.text[st.idx - 1])
-            tok.set_type("symbol.base")
+            tok.set_type(fallback_type)
             tok = self.refine_type(tok)
             st.tokens.append(tok)
             return
@@ -646,32 +660,6 @@ class Lexer:
         tok.set_type(macro_type)
         tok.set_content(macro_content)
 
-        st.col += st.offset
-        tok = self.refine_type(tok)
-        st.tokens.append(tok)
-
-    def _scan_number(self, st: "_LexState", tok: Token) -> None:
-        """数字字面量（_number_runner）。"""
-        self._emit_pending_dedent(st.tokens)
-
-        number_content, new_idx = self._number_runner.run(st.text, st.idx)
-        st.offset = new_idx - st.idx
-
-        # runner 返回空（形态不匹配）：不消费字符，交给后续分支
-        # （防死循环：text_idx 必须前进）
-        if not number_content or st.offset <= 0:
-            st.idx += 1
-            st.col += 1
-            tok.set_content(st.text[st.idx - 1])
-            tok.set_type("id")
-            tok = self.refine_type(tok)
-            st.tokens.append(tok)
-            return
-
-        tok.set_type("literal.number")
-        tok.set_content(number_content)
-
-        st.idx = new_idx
         st.col += st.offset
         tok = self.refine_type(tok)
         st.tokens.append(tok)
