@@ -202,6 +202,10 @@ def load_user_check_config(plugins_dir: str = "") -> dict:
             "per_file": dict,              # {glob: {"disabled": [id, ...]}}
         }
         无用户配置文件或无 checks 段 → 全空（全部规则启用，P3 行为）。
+
+    三段各自一个校验函数（`_validate_enabled` / `_validate_overrides` /
+    `_validate_per_file`）：都 fail-fast，且都要求规则 id 引用存在
+    （`_validate_rule_refs`）。
     """
     from core._user_config import find_user_config
 
@@ -211,38 +215,62 @@ def load_user_check_config(plugins_dir: str = "") -> dict:
     if path in _USER_CONFIG_CACHE:
         return _USER_CONFIG_CACHE[path] or {}
 
+    checks = _load_user_checks(path)
+    if checks is None:
+        _USER_CONFIG_CACHE[path] = None
+        return {}
+
+    plugins_dir = _resolve_plugins_dir(plugins_dir)
+    # 校验前确保规则表已加载（用户配置引用校验需要可用规则 id 全集）
+    rule_ids = _user_rule_ids(plugins_dir)
+
+    enabled = _validate_enabled(checks.get("enabled"), rule_ids, path)
+    overrides = _validate_overrides(checks.get("overrides", {}), rule_ids, path)
+    per_file = _validate_per_file(checks.get("per_file", {}), rule_ids, path)
+
+    result = {"enabled": enabled, "overrides": overrides, "per_file": per_file}
+    _USER_CONFIG_CACHE[path] = result
+    return result
+
+
+def _load_user_checks(path: str) -> dict | None:
+    """读用户配置文件 → checks 段 dict；文件缺失/解析失败/无 checks 段 → None。"""
     import json
 
     try:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except (OSError, json.JSONDecodeError):
-        _USER_CONFIG_CACHE[path] = None
-        return {}
+        return None
 
     checks = raw.get("checks") if isinstance(raw, dict) else None
     if not isinstance(checks, dict):
-        _USER_CONFIG_CACHE[path] = None
-        return {}
+        return None
+    return checks
 
-    plugins_dir = _resolve_plugins_dir(plugins_dir)
-    # 校验前确保规则表已加载（用户配置引用校验需要可用规则 id 全集）
+
+def _user_rule_ids(plugins_dir: str) -> set[str]:
+    """规则 id 全集（用户配置引用校验用）；调用前确保规则表已加载。"""
     rules = get_check_rules(plugins_dir)
-    rule_ids: set[str] = {
-        rid for rid in (r.get("id") for r in rules) if isinstance(rid, str)
-    }
+    return {rid for rid in (r.get("id") for r in rules) if isinstance(rid, str)}
 
-    enabled = checks.get("enabled")
-    if enabled is not None:
-        if not isinstance(enabled, list) or not all(
-            isinstance(x, str) for x in enabled
-        ):
-            raise ConfigError(
-                f"[checks] 用户配置 enabled 应为规则 id 列表（{path}）"
-            )
-        _validate_rule_refs(enabled, rule_ids, "enabled", path)
 
-    overrides = checks.get("overrides", {})
+def _validate_enabled(enabled, rule_ids: set[str], path: str) -> list[str] | None:
+    """enabled：规则 id 列表（None = 未配置 → 全部启用）。"""
+    if enabled is None:
+        return None
+    if not isinstance(enabled, list) or not all(
+        isinstance(x, str) for x in enabled
+    ):
+        raise ConfigError(
+            f"[checks] 用户配置 enabled 应为规则 id 列表（{path}）"
+        )
+    _validate_rule_refs(enabled, rule_ids, "enabled", path)
+    return enabled
+
+
+def _validate_overrides(overrides, rule_ids: set[str], path: str) -> dict:
+    """overrides：{规则 id: {"severity": ...}}——id 须存在、severity 须合法。"""
     if not isinstance(overrides, dict):
         raise ConfigError(f"[checks] 用户配置 overrides 应为 dict（{path}）")
     for rid, ov in overrides.items():
@@ -257,8 +285,11 @@ def load_user_check_config(plugins_dir: str = "") -> dict:
                 f"[checks] 用户配置 overrides[{rid}] severity '{sev}' 非法"
                 f"（应为 {'/'.join(sorted(_SEVERITIES))}，{path}）"
             )
+    return overrides
 
-    per_file = checks.get("per_file", {})
+
+def _validate_per_file(per_file, rule_ids: set[str], path: str) -> dict:
+    """per_file：{文件 glob: {"disabled": [规则 id, ...]}}——键与值形态都校验。"""
     if not isinstance(per_file, dict):
         raise ConfigError(f"[checks] 用户配置 per_file 应为 dict（{path}）")
     for glob_pat, spec in per_file.items():
@@ -279,11 +310,7 @@ def load_user_check_config(plugins_dir: str = "") -> dict:
                 f" id 列表（{path}）"
             )
         _validate_rule_refs(disabled, rule_ids, f"per_file[{glob_pat}]", path)
-
-    result = {"enabled": enabled, "overrides": overrides, "per_file": per_file}
-    _USER_CONFIG_CACHE[path] = result
-    return result
-
+    return per_file
 
 def _validate_rule_refs(ids: list[str], rule_ids: set[str], where: str, path: str) -> None:
     """校验规则 id 引用存在（fail-fast：引用不存在的规则 = 配置错误）。"""
