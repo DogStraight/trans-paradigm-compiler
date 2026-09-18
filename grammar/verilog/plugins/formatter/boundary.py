@@ -528,6 +528,44 @@ class LineContext:
 # ── 边界扫描器 ──
 
 
+# ── 扫描状态（`_scan_tokens` 的行累加量收拢为单一对象）──
+
+
+@dataclass
+class _ScanState:
+    """`BoundaryScanner` 单次扫描的行累加状态。
+
+    原先是 `_scan_tokens` 里的 16 个局部量，被注释/换行/内容三块共享读写——
+    收拢成对象后才能把三块拆成独立方法（拆后各方法只改 `state`，不靠参数表）。
+    字段语义见各字段行尾注释与原实现（本轮纯搬移，未改语义）。
+    """
+
+    contexts: list[LineContext]
+    scope_path: list[ScopeNode]
+    ifdef_branches: list[ScopeBranch]
+    line_buf: list[str] = field(default_factory=list)
+    line_num: int = 1
+    line_has_comment: bool = False
+    pending_block_header: ScopeKind | None = None
+    pending_block_footer: ScopeKind | None = None
+    pending_case_item: bool = False
+    pending_stmt_header: bool = False
+    pending_is_else: bool = False
+    pending_line_comment: bool = False
+    # 多行块注释末段（含闭合标记）落行时继承 is_comment_cont
+    pending_comment_cont: bool = False
+    in_port_list: bool = False
+    multi_active: bool = False
+    multi_header_line: int = 0
+    multi_depth_extra: int = 0
+    line_first_token: str | None = None
+    last_line_nontrivia: str | None = None
+    # 最近的 case 深度（识别 case 分支项）
+    case_depth: int = -1
+    # 表达式花括号（concat/replicate）未闭合计数：表达式 `{` 不入块栈
+    brace_expr_depth: int = 0
+
+
 class BoundaryScanner:
     """单次 token 流遍历 → 为每行产出 LineContext。
 
@@ -566,324 +604,419 @@ class BoundaryScanner:
         return self._scan_tokens(tokens)
 
     def _scan_tokens(self, tokens: list) -> list[LineContext]:
-        contexts: list[LineContext] = []
-        scope_path: list[ScopeNode] = [ScopeNode(ScopeKind.ROOT)]
-        ifdef_branches: list[ScopeBranch] = []
-        line_buf: list[str] = []
-        line_num = 1
-        line_has_comment = False
-        pending_block_header: ScopeKind | None = None
-        pending_block_footer: ScopeKind | None = None
-        pending_case_item = False
-        pending_stmt_header = False
-        pending_is_else = False
-        pending_line_comment = False
-        # 多行块注释末段（含闭合标记）落行时继承 is_comment_cont（见多行注释拆分处）
-        pending_comment_cont = False
-        in_port_list = False
-        multi_active = False
-        multi_header_line = 0
-        multi_depth_extra = 0
-        line_first_token: str | None = None
-        last_line_nontrivia: str | None = None
-        # 追踪最近的 case 深度，用于识别 case 分支项
-        case_depth = -1
-        # 表达式花括号（concat/replicate `{a, b}`）未闭合计数：表达式 `{` 不是块，
-        # 不入栈；其 `}` 优先闭合表达式（计数 -1），不 pop 块栈
-        brace_expr_depth = 0
-
+        """单次 token 遍历 → 每行 LineContext（状态见 `_ScanState`，分派见三个 handler）。"""
+        state = _ScanState(
+            contexts=[],
+            scope_path=[ScopeNode(ScopeKind.ROOT)],
+            ifdef_branches=[],
+        )
         tokens = list(tokens)
         for _ti in range(len(tokens)):
             t = tokens[_ti]
             if t.type in self._TRIVIA:
                 if t.type == "comment":
-                    if "\n" in t.content:
-                        # 多行块注释（`/* ... */` 跨多行）：按物理行拆分逐行产出
-                        # context，保持与源行对齐（否则 ctxs 数 < 源行数，后续所有
-                        # 行 line_number/缩进错位）
-                        segs = t.content.split("\n")
-                        line_buf.append(segs[0])
-                        pending_line_comment = True
-                        for seg_idx, seg in enumerate(segs[1:]):
-                            self._emit_line(
-                                contexts,
-                                line_buf,
-                                line_num,
-                                scope_path,
-                                ifdef_branches,
-                                pending_block_header,
-                                pending_block_footer,
-                                True,
-                                pending_case_item,
-                                False,
-                                False,
-                                False,
-                                0,
-                                False,
-                                False,
-                                False,
-                                seg_idx > 0,  # 首迭代产的是注释首行（不算内部段）
-                            )
-                            line_buf = [seg]
-                            line_num += 1
-                        # 末段（含块注释闭合标记）留在 line_buf，由换行处产行：
-                        # 继承 is_comment_cont（缩进随注释首行平移，保留 ` */` 对齐）
-                        pending_comment_cont = True
-                    else:
-                        line_has_comment = True
-                        if not line_buf:  # 行首是注释 → 纯注释行
-                            pending_line_comment = True
-                        line_buf.append(t.content)
+                    self._handle_comment(t, state)
                 elif t.type == "newline":
-                    # 模块端口列表结束行（`);`）→ 对齐模块头（0 级）；
-                    # 先判断再重置 in_port_list
-                    port_list_end = (
-                        in_port_list and last_line_nontrivia in self.stmt_end_tokens
-                    )
-                    # if/for 单行体（body 同行，如 `if (X) stmt;`）：行尾分号
-                    # 表示语句头已在同行结束 → 非单语句头；同时结束端口列表
-                    if last_line_nontrivia in self.stmt_end_tokens:
-                        pending_stmt_header = False
-                        in_port_list = False
-                    # 多行语句续行：本行是否续行（上一行是多行语句头/续行）
-                    is_cont = multi_active
-                    op_cont = False
-                    # 行首是运算符（`&&`/`||`/`*`/`+`/`?`/`:` 等，不含 `.`）→
-                    # 表达式续行（折行 pass 拆出的续行行尾有分号，但仍属上一语句的
-                    # 表达式部分；二次 format 时靠行首运算符识别续行，缩进相对
-                    # 语句头 +1）。`.` 是实例端口连接行，不属运算符续行。
-                    # `$`（symbol.base.dollar）是系统任务前缀（`$display` 等），
-                    # 不是运算符——否则 if 单语句体的多行 $display 被误判续行。
-                    if (
-                        not is_cont
-                        and line_first_token is not None
-                        and line_first_token.startswith(SYMBOL_PREFIX)
-                        and not line_first_token.endswith(".dot")
-                        and not line_first_token.endswith(".dollar")
-                    ):
-                        is_cont = True
-                        op_cont = True
-                    # 行尾是运算符（`&&`/`+`/`:` 等留在行尾，续行从操作数开始）
-                    # ——wrap 断点取运算符之后（操作数行首，parser 可解析），
-                    # 二次 format 靠行尾运算符识别续行。只设 op_cont 供下一行
-                    # 判断；**不**作为 hdr 指向 line_num-1——行尾运算符的行若是
-                    # 续行（多折续行，如 `cond) && ENABLE_COUNTERS &&` 行尾 &&
-                    # 的下一行），其深度已含续行偏移，再相对 +1 会多一级
-                    # （once 20 vs twice 16 漂移）。续行一律对齐语句头
-                    # multi_header_line。
-                    # comma 是分隔符不是运算符（多行声明/端口列表的续行应对齐
-                    # 语句头 multi_header_line，不是 op_cont 的 line_num-1——
-                    # 否则 reg a,\n b,\n c; 续行 hdr 逐行指向上一行，缩进递增）。
-                    if (
-                        last_line_nontrivia is not None
-                        and last_line_nontrivia.startswith(SYMBOL_PREFIX)
-                        and not last_line_nontrivia.endswith(".dot")
-                        and not last_line_nontrivia.endswith(".comma")
-                        and last_line_nontrivia not in self.stmt_end_tokens
-                    ):
-                        op_cont = True
-                    hdr_line = multi_header_line if is_cont else 0
-                    hdr_extra = multi_depth_extra if is_cont else 0
-                    line_ends_stmt = last_line_nontrivia in self.stmt_end_tokens
-                    is_block_line = (
-                        pending_block_header is not None
-                        or pending_block_footer is not None
-                        or (line_first_token in self.openers)
-                        or (line_first_token in self.closers)
-                    )
-                    # 指令行：`\`` 开头且行内无 `(`——纯指令（`ifdef/`define/
-                    # `include 等）无括号；宏调用语句（`LUI: $display(...)` 或
-                    # `debug(...)）含 `(`，是语句形态非指令，wrap 可折其参数
-                    is_directive = (
-                        bool(line_buf)
-                        and line_buf[0].lstrip().startswith("`")
-                        and "(" not in "".join(line_buf)
-                    )
-                    is_pure_comment = (
-                        pending_line_comment
-                        or bool(line_buf)
-                        and (
-                            line_buf[0].lstrip().startswith("//")
-                            or line_buf[0].lstrip().startswith("/*")
-                            or line_buf[0].lstrip().startswith("*/")
-                        )
-                    )
-                    # 更新下一行的续行状态：语句结束 / 块头尾 / 单语句头 / 指令
-                    # / 注释 / 端口列表 / case 分支项 / 声明行 / 实例连接行
-                    # （`.name(...)`，inst_port 对齐）→ 非续行；普通语句行且行尾
-                    # 无分号 → 下一行是续行（语句头行号记下）
-                    is_decl = (
-                        line_first_token is not None
-                        and line_first_token in self.decl_headers
-                    )
-                    # 声明行行尾是运算符（`wire a = x &&` 的 `&&`，wrap 折行断点）
-                    # → 声明带初始化表达式且被折行，仍属续行（is_decl 不阻断）
-                    decl_op_cont = (
-                        is_decl
-                        and last_line_nontrivia is not None
-                        and last_line_nontrivia.startswith(SYMBOL_PREFIX)
-                        and not last_line_nontrivia.endswith(".dot")
-                        and last_line_nontrivia not in self.stmt_end_tokens
-                    )
-                    # 注释行不打断续行：纯注释（`// State` 等）是行内说明，实例化
-                    # 端口列表/多行表达式还在继续——注释行自身保持上一行 multi_active
-                    # （不设 False），后续端口行仍识别为续行。否则 `serv_csr ... (
-                    # .i_cnt7, // RS1 read port` 的注释后端口行顶格，缩进丢失。
-                    if is_pure_comment:
-                        pass  # 保持 multi_active（不打断续行链）
-                    elif (
-                        # 行尾运算符（`if (A &&` 的 `&&`，wrap 块头折行断点）→
-                        # 表达式未结束，强制下行续行——否则 pending_stmt_header
-                        # （if 是控制流头）把 multi_active 设 False，块头折行的
-                        # 续行（`B) begin`）缩进按 scope_depth 算，二次 format
-                        # 漂移（wrap 折行给 hdr+4，boundary 未识别给 scope_depth）
-                        not op_cont
-                        and (
-                            line_ends_stmt
-                            or is_block_line
-                            or pending_stmt_header
-                            or is_directive
-                            or in_port_list
-                            or pending_case_item
-                            or (is_decl and not decl_op_cont)
-                            or not line_buf
-                            # 行尾闭合括号（`)`/`]`/`}`）：括号组本行闭合，续行链
-                            # 到此为止——否则 `.b(b)` 后的 `);` 会被当成续行（+1 级），
-                            # 实例端口列表结束行缩进错位
-                            or last_line_nontrivia in self.close_bracket_types
-                        )
-                    ):
-                        multi_active = False
-                        # 续行链结束：重置语句头行号——否则后续被误判为续行的行
-                        # （如 if 单语句体的多行 $display）会继承旧语句头（hdr 错位，
-                        # 二次 format 漂移）。新语句头在 else 分支重新设置。
-                        multi_header_line = 0
-                        multi_depth_extra = 0
-                    else:
-                        multi_active = True
-                        # 只有新语句头才记下 header 行号；续行保持语句头（同级）。
-                        # 语句头行尾是 `=`（连续赋值，三目链 `? :` 续行 ref 用 +2）
-                        if not is_cont:
-                            multi_header_line = line_num
-                            multi_depth_extra = (
-                                1 if last_line_nontrivia == "symbol.base.equal" else 0
-                            )
-                    self._emit_line(
-                        contexts,
-                        line_buf,
-                        line_num,
-                        scope_path,
-                        ifdef_branches,
-                        pending_block_header,
-                        pending_block_footer,
-                        line_has_comment,
-                        pending_case_item,
-                        pending_stmt_header,
-                        pending_is_else,
-                        is_cont,
-                        hdr_line,
-                        port_list_end,
-                        bool(hdr_extra),
-                        is_directive,
-                        pending_comment_cont,
-                    )
-                    line_buf = []
-                    line_num += 1
-                    line_has_comment = False
-                    pending_block_header = None
-                    pending_block_footer = None
-                    pending_case_item = False
-                    pending_stmt_header = False
-                    pending_is_else = False
-                    pending_line_comment = False
-                    pending_comment_cont = False
-                    line_first_token = None
-                    last_line_nontrivia = None
+                    self._handle_newline(state)
                 # skip space.* tokens
                 continue
-
-            line_buf.append(t.content)
-            last_line_nontrivia = t.type
-            if line_first_token is None:
-                line_first_token = t.type
-
-            # 行首 token 是 else → else 链行（自身不悬挂，与 if/end 对齐；
-            # 其单语句体仍由 sst 触发下一行悬挂）
-            if t.type == "keyword.else" and not line_buf[:-1]:
-                pending_is_else = True
-
-            if t.type in self.ifdef_set:
-                self._handle_ifdef_token(t, scope_path, ifdef_branches)
-            elif t.type == "bracket.l_curly_bracket":
-                # `{` 天然是块边界（TypeBody/TypeImplDecl 等结构块）；
-                # 表达式花括号（concat/replicate，`{` 同行后还有内容）是特例，
-                # 计数排除、不入块栈——括号深度通用处理，不硬编码结构名
-                if _same_line_next(tokens, _ti, self._TRIVIA):
-                    brace_expr_depth += 1
-                else:
-                    pending_block_header = ScopeKind.BLOCK
-                    self._handle_opener(t, ScopeKind.BLOCK, scope_path, ifdef_branches)
-            elif t.type == "bracket.r_curly_bracket":
-                if brace_expr_depth > 0:
-                    brace_expr_depth -= 1  # 闭合表达式 `}`，不动块栈
-                else:
-                    pending_block_footer = ScopeKind.BLOCK
-                    self._handle_closer(t, scope_path, ifdef_branches)
-            elif t.type in self.openers:
-                kind = self._scope_kind_for(t.type)
-                if kind == ScopeKind.MODULE:
-                    in_port_list = True
-                if kind == ScopeKind.CASE:
-                    case_depth = self._current_depth(scope_path) + 1
-                # generate/endgenerate 不贡献缩进层级：匹配单行 `generate if ... begin`
-                # 风格（generate 块内容与 module 内容同级），其指令行按普通行缩进
-                if kind != ScopeKind.GENERATE:
-                    pending_block_header = kind
-                # 行内有 begin 块（如 `if (X) begin`）→ 非单语句体，取消悬挂
-                if kind == ScopeKind.BLOCK:
-                    pending_stmt_header = False
-                self._handle_opener(t, kind, scope_path, ifdef_branches)
-            elif t.type in self.closers:
-                kind = self._scope_kind_for_closer(t.type)
-                if kind != ScopeKind.GENERATE:
-                    pending_block_footer = kind
-                self._handle_closer(t, scope_path, ifdef_branches)
-                if kind == ScopeKind.CASE:
-                    case_depth = -1
-
-            # 控制流语句头（if/for/else 等，从规则推导）→ 本行是单语句头候选
-            if t.type in self.stmt_headers:
-                pending_stmt_header = True
-
-            # 识别 case 分支项：在 case 深度上遇到标识符或 default。
-            # 排除控制流语句头（if/for/while 等，stmt_headers）——它们也是
-            # KEYWORD_PREFIX，但 case 分支项是 `3'b100:`/`default:` 值+冒号形态，
-            # 不是语句。否则 case 分支内的 `if (A &&` 被误标 case_item，
-            # indent 按 case_item_hang（depth+1）缩进，二次 format 漂移。
-            if case_depth >= 0 and self._current_depth(scope_path) == case_depth + 1:
-                if t.type not in self.stmt_headers and (
-                    t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default"
-                ):
-                    pending_case_item = True
-
-        if line_buf:
+            self._handle_content_token(t, _ti, tokens, state)
+        if state.line_buf:
             self._emit_line(
-                contexts,
-                line_buf,
-                line_num,
-                scope_path,
-                ifdef_branches,
-                pending_block_header,
-                pending_block_footer,
-                line_has_comment,
-                pending_case_item,
-                pending_stmt_header,
-                pending_is_else,
-                multi_active,
-                multi_header_line if multi_active else 0,
+                state.contexts,
+                state.line_buf,
+                state.line_num,
+                state.scope_path,
+                state.ifdef_branches,
+                state.pending_block_header,
+                state.pending_block_footer,
+                state.line_has_comment,
+                state.pending_case_item,
+                state.pending_stmt_header,
+                state.pending_is_else,
+                state.multi_active,
+                state.multi_header_line if state.multi_active else 0,
+            )
+        return state.contexts
+
+    def _handle_comment(self, t, state: "_ScanState") -> None:
+        """注释 token：多行块注释按物理行拆分逐行产 context；单行只记标记。"""
+        if "\n" in t.content:
+            # 多行块注释（`/* ... */` 跨多行）：按物理行拆分逐行产出
+            # context，保持与源行对齐（否则 ctxs 数 < 源行数，后续所有
+            # 行 line_number/缩进错位）
+            segs = t.content.split("\n")
+            state.line_buf.append(segs[0])
+            state.pending_line_comment = True
+            for seg_idx, seg in enumerate(segs[1:]):
+                self._emit_line(
+                    state.contexts,
+                    state.line_buf,
+                    state.line_num,
+                    state.scope_path,
+                    state.ifdef_branches,
+                    state.pending_block_header,
+                    state.pending_block_footer,
+                    True,
+                    state.pending_case_item,
+                    False,
+                    False,
+                    False,
+                    0,
+                    False,
+                    False,
+                    False,
+                    seg_idx > 0,  # 首迭代产的是注释首行（不算内部段）
+                )
+                state.line_buf = [seg]
+                state.line_num += 1
+            # 末段（含块注释闭合标记）留在 line_buf，由换行处产行：
+            # 继承 is_comment_cont（缩进随注释首行平移，保留 ` */` 对齐）
+            state.pending_comment_cont = True
+        else:
+            state.line_has_comment = True
+            if not state.line_buf:  # 行首是注释 → 纯注释行
+                state.pending_line_comment = True
+            state.line_buf.append(t.content)
+
+    def _handle_newline(self, state: "_ScanState") -> None:
+        """换行 token：算本行标志 → 产出 context → 更新下行续行状态 → 重置行状态。"""
+        # 模块端口列表结束行（`);`）→ 对齐模块头（0 级）；
+        # 先判断再重置 in_port_list
+        port_list_end = (
+            state.in_port_list and state.last_line_nontrivia in self.stmt_end_tokens
+        )
+        # if/for 单行体（body 同行，如 `if (X) stmt;`）：行尾分号
+        # 表示语句头已在同行结束 → 非单语句头；同时结束端口列表
+        if state.last_line_nontrivia in self.stmt_end_tokens:
+            state.pending_stmt_header = False
+            state.in_port_list = False
+        # 多行语句续行：本行是否续行（行首运算符判定见 `_line_start_op_cont`，
+        # 行尾运算符判定见 `_line_end_op_cont`）
+        start_op = self._line_start_op_cont(state, state.multi_active)
+        is_cont = state.multi_active or start_op
+        op_cont = start_op or self._line_end_op_cont(state)
+        hdr_line = state.multi_header_line if is_cont else 0
+        hdr_extra = state.multi_depth_extra if is_cont else 0
+        line_ends_stmt = state.last_line_nontrivia in self.stmt_end_tokens
+        is_block_line = (
+            state.pending_block_header is not None
+            or state.pending_block_footer is not None
+            or (state.line_first_token in self.openers)
+            or (state.line_first_token in self.closers)
+        )
+        is_directive = self._is_directive_line(state.line_buf)
+        is_pure_comment = self._is_pure_comment_line(
+            state.pending_line_comment, state.line_buf
+        )
+        is_decl = self._is_decl_line(state)
+        decl_op_cont = self._decl_op_cont(state, is_decl)
+
+        # 更新下一行续行状态（续行链判定与注释行例外见 `_update_next_line_state`）
+        self._update_next_line_state(
+            state,
+            is_cont=is_cont,
+            op_cont=op_cont,
+            line_ends_stmt=line_ends_stmt,
+            is_block_line=is_block_line,
+            is_directive=is_directive,
+            is_decl=is_decl,
+            decl_op_cont=decl_op_cont,
+            is_pure_comment=is_pure_comment,
+        )
+        self._emit_line(
+            state.contexts,
+            state.line_buf,
+            state.line_num,
+            state.scope_path,
+            state.ifdef_branches,
+            state.pending_block_header,
+            state.pending_block_footer,
+            state.line_has_comment,
+            state.pending_case_item,
+            state.pending_stmt_header,
+            state.pending_is_else,
+            is_cont,
+            hdr_line,
+            port_list_end,
+            bool(hdr_extra),
+            is_directive,
+            state.pending_comment_cont,
+        )
+        self._reset_line_state(state)
+
+    # ── 行标志判定（`_handle_newline` 的分步）──
+
+    def _line_start_op_cont(self, state: "_ScanState", is_cont: bool) -> bool:
+        """行首是运算符 → 表达式续行（`&&`/`||`/`*`/`+`/`?`/`:` 等，不含 `.`）。
+
+        折行 pass 拆出的续行行尾有分号，但仍属上一语句的表达式部分；二次 format
+        时靠行首运算符识别续行，缩进相对语句头 +1。`.` 是实例端口连接行，不属
+        运算符续行；`$`（symbol.base.dollar）是系统任务前缀（`$display` 等），
+        不是运算符——否则 if 单语句体的多行 $display 被误判续行。
+        """
+        first = state.line_first_token
+        return (
+            not is_cont
+            and first is not None
+            and first.startswith(SYMBOL_PREFIX)
+            and not first.endswith(".dot")
+            and not first.endswith(".dollar")
+        )
+
+    def _line_end_op_cont(self, state: "_ScanState") -> bool:
+        """行尾是运算符（`&&`/`+`/`:` 等留在行尾，续行从操作数开始）→ 置 op_cont。
+
+        只供下一行判断，**不**作为 hdr 指向 line_num-1：行尾运算符的行若是续行
+        （多折续行，如 `cond) && ENABLE_COUNTERS &&` 行尾 && 的下一行），其深度
+        已含续行偏移，再相对 +1 会多一级（once 20 vs twice 16 漂移）。续行一律
+        对齐语句头 multi_header_line。comma 是分隔符不是运算符（多行声明/端口
+        列表的续行应对齐语句头 multi_header_line，否则 `reg a,\n b,\n c;` 续行
+        hdr 逐行指向上一行，缩进递增）。
+        """
+        last = state.last_line_nontrivia
+        return (
+            last is not None
+            and last.startswith(SYMBOL_PREFIX)
+            and not last.endswith(".dot")
+            and not last.endswith(".comma")
+            and last not in self.stmt_end_tokens
+        )
+
+    def _is_directive_line(self, line_buf: list[str]) -> bool:
+        """指令行：反引号开头且行内无 `(`。
+
+        纯指令（`define/`include/`ifdef 等）无括号；宏调用语句（`LUI: $display(...)`
+        或 `debug(...)`）含 `(`，是语句形态非指令，wrap 可折其参数。
+        """
+        return (
+            bool(line_buf)
+            and line_buf[0].lstrip().startswith("`")
+            and "(" not in "".join(line_buf)
+        )
+
+    def _is_pure_comment_line(self, pending_line_comment: bool, line_buf: list[str]) -> bool:
+        """纯注释行（已标记行注释，或行首是 `//`/`/*`/`*/`）。"""
+        return pending_line_comment or (
+            bool(line_buf)
+            and (
+                line_buf[0].lstrip().startswith("//")
+                or line_buf[0].lstrip().startswith("/*")
+                or line_buf[0].lstrip().startswith("*/")
+            )
+        )
+
+    def _is_decl_line(self, state: "_ScanState") -> bool:
+        """声明行（行首 token 在 decl_headers）。"""
+        return (
+            state.line_first_token is not None
+            and state.line_first_token in self.decl_headers
+        )
+
+    def _decl_op_cont(self, state: "_ScanState", is_decl: bool) -> bool:
+        """声明行行尾是运算符（`wire a = x &&` 的 `&&`，wrap 折行断点）。
+
+        → 声明带初始化表达式且被折行，仍属续行（is_decl 不阻断）。
+        """
+        last = state.last_line_nontrivia
+        return (
+            is_decl
+            and last is not None
+            and last.startswith(SYMBOL_PREFIX)
+            and not last.endswith(".dot")
+            and last not in self.stmt_end_tokens
+        )
+
+    def _ends_continuation_chain(
+        self,
+        state: "_ScanState",
+        *,
+        op_cont: bool,
+        line_ends_stmt: bool,
+        is_block_line: bool,
+        is_directive: bool,
+        is_decl: bool,
+        decl_op_cont: bool,
+    ) -> bool:
+        """本行是否结束续行链：语句结束 / 块头尾 / 单语句头 / 指令 / 端口列表 /
+        case 分支项 / 声明行 / 空行 / 行尾闭合括号 → 非续行。
+
+        - 行尾运算符（`if (A &&` 的 `&&`，wrap 块头折行断点）→ 表达式未结束，
+          强制下行续行——否则 pending_stmt_header（if 是控制流头）把
+          multi_active 置 False，块头折行的续行（`B) begin`）缩进按 scope_depth
+          算，二次 format 漂移（wrap 折行给 hdr+4，boundary 未识别给 scope_depth）。
+        - 行尾闭合括号（`)`/`]`/`}`）：括号组本行闭合，续行链到此为止——否则
+          `.b(b)` 后的 `);` 会被当成续行（+1 级），实例端口列表结束行缩进错位。
+        """
+        return not op_cont and (
+            line_ends_stmt
+            or is_block_line
+            or state.pending_stmt_header
+            or is_directive
+            or state.in_port_list
+            or state.pending_case_item
+            or (is_decl and not decl_op_cont)
+            or not state.line_buf
+            or state.last_line_nontrivia in self.close_bracket_types
+        )
+
+    def _update_next_line_state(
+        self,
+        state: "_ScanState",
+        *,
+        is_cont: bool,
+        op_cont: bool,
+        line_ends_stmt: bool,
+        is_block_line: bool,
+        is_directive: bool,
+        is_decl: bool,
+        decl_op_cont: bool,
+        is_pure_comment: bool,
+    ) -> None:
+        """更新下一行的续行状态（multi_active / multi_header_line / multi_depth_extra）。
+
+        注释行不打断续行：纯注释（`// State` 等）是行内说明，实例化端口列表/多行
+        表达式还在继续——注释行自身保持上一行 multi_active（不置 False），后续
+        端口行仍识别为续行。否则 `serv_csr ... (\n .i_cnt7, // RS1 read port` 的
+        注释后端口行顶格，缩进丢失。
+
+        续行链结束时重置语句头行号——否则后续被误判为续行的行（如 if 单语句体的
+        多行 $display）会继承旧语句头（hdr 错位，二次 format 漂移）。
+        """
+        if is_pure_comment:
+            return  # 保持 multi_active（不打断续行链）
+        if self._ends_continuation_chain(
+            state,
+            op_cont=op_cont,
+            line_ends_stmt=line_ends_stmt,
+            is_block_line=is_block_line,
+            is_directive=is_directive,
+            is_decl=is_decl,
+            decl_op_cont=decl_op_cont,
+        ):
+            state.multi_active = False
+            state.multi_header_line = 0
+            state.multi_depth_extra = 0
+            return
+        state.multi_active = True
+        # 只有新语句头才记下 header 行号；续行保持语句头（同级）。语句头行尾
+        # 是 `=`（连续赋值，三目链 `? :` 续行 ref 用 +2）。
+        if not is_cont:
+            state.multi_header_line = state.line_num
+            state.multi_depth_extra = (
+                1 if state.last_line_nontrivia == "symbol.base.equal" else 0
             )
 
-        return contexts
+    def _reset_line_state(self, state: "_ScanState") -> None:
+        """行产出后重置累加量（供下一行使用）。"""
+        state.line_buf = []
+        state.line_num += 1
+        state.line_has_comment = False
+        state.pending_block_header = None
+        state.pending_block_footer = None
+        state.pending_case_item = False
+        state.pending_stmt_header = False
+        state.pending_is_else = False
+        state.pending_line_comment = False
+        state.pending_comment_cont = False
+        state.line_first_token = None
+        state.last_line_nontrivia = None
+
+    def _handle_content_token(self, t, _ti: int, tokens: list, state: "_ScanState") -> None:
+        """非 trivia token：先入行缓冲，再按 token 类型分派（ifdef/花括号/块开闭/语句头/case 项）。"""
+        state.line_buf.append(t.content)
+        state.last_line_nontrivia = t.type
+        if state.line_first_token is None:
+            state.line_first_token = t.type
+
+        # 行首 token 是 else → else 链行（自身不悬挂，与 if/end 对齐；
+        # 其单语句体仍由 sst 触发下一行悬挂）
+        if t.type == "keyword.else" and not state.line_buf[:-1]:
+            state.pending_is_else = True
+
+        if t.type in self.ifdef_set:
+            self._handle_ifdef_token(t, state.scope_path, state.ifdef_branches)
+        elif t.type == "bracket.l_curly_bracket":
+            self._handle_curly_open(t, _ti, tokens, state)
+        elif t.type == "bracket.r_curly_bracket":
+            self._handle_curly_close(t, state)
+        elif t.type in self.openers:
+            self._handle_opener_token(t, state)
+        elif t.type in self.closers:
+            self._handle_closer_token(t, state)
+
+        self._track_stmt_header_and_case_item(t, state)
+
+    def _handle_curly_open(self, t, _ti: int, tokens: list, state: "_ScanState") -> None:
+        """`{`：天然块边界；表达式花括号（concat/replicate）计数排除、不入块栈。
+
+        `{` 同行后还有内容（`_same_line_next`）→ 表达式花括号；否则是块
+        （TypeBody/TypeImplDecl 等结构块）。括号深度通用处理，不硬编码结构名。
+        """
+        if _same_line_next(tokens, _ti, self._TRIVIA):
+            state.brace_expr_depth += 1
+        else:
+            state.pending_block_header = ScopeKind.BLOCK
+            self._handle_opener(
+                t, ScopeKind.BLOCK, state.scope_path, state.ifdef_branches
+            )
+
+    def _handle_curly_close(self, t, state: "_ScanState") -> None:
+        """`}`：优先闭合表达式花括号（计数 -1），否则 pop 块栈。"""
+        if state.brace_expr_depth > 0:
+            state.brace_expr_depth -= 1  # 闭合表达式 `}`，不动块栈
+        else:
+            state.pending_block_footer = ScopeKind.BLOCK
+            self._handle_closer(t, state.scope_path, state.ifdef_branches)
+
+    def _handle_opener_token(self, t, state: "_ScanState") -> None:
+        """块入口 token：记 kind、端口列表/case 深度/generate 特殊处理，再入块栈。"""
+        kind = self._scope_kind_for(t.type)
+        if kind == ScopeKind.MODULE:
+            state.in_port_list = True
+        if kind == ScopeKind.CASE:
+            state.case_depth = self._current_depth(state.scope_path) + 1
+        # generate/endgenerate 不贡献缩进层级：匹配单行 `generate if ... begin`
+        # 风格（generate 块内容与 module 内容同级），其指令行按普通行缩进
+        if kind != ScopeKind.GENERATE:
+            state.pending_block_header = kind
+        # 行内有 begin 块（如 `if (X) begin`）→ 非单语句体，取消悬挂
+        if kind == ScopeKind.BLOCK:
+            state.pending_stmt_header = False
+        self._handle_opener(t, kind, state.scope_path, state.ifdef_branches)
+
+    def _handle_closer_token(self, t, state: "_ScanState") -> None:
+        """块终结 token：记 kind、case 深度复位，再出栈。"""
+        kind = self._scope_kind_for_closer(t.type)
+        if kind != ScopeKind.GENERATE:
+            state.pending_block_footer = kind
+        self._handle_closer(t, state.scope_path, state.ifdef_branches)
+        if kind == ScopeKind.CASE:
+            state.case_depth = -1
+
+    def _track_stmt_header_and_case_item(self, t, state: "_ScanState") -> None:
+        """语句头候选与 case 分支项标记（每 token 一次，与 token 类型分支无关）。"""
+        # 控制流语句头（if/for/else 等，从规则推导）→ 本行是单语句头候选
+        if t.type in self.stmt_headers:
+            state.pending_stmt_header = True
+        if self._is_case_item_token(t, state):
+            state.pending_case_item = True
+
+    def _is_case_item_token(self, t, state: "_ScanState") -> bool:
+        """case 分支项 token：在 case 层深上遇到关键字（含 default）。
+
+        排除控制流语句头（if/for/while 等，stmt_headers）——它们也是
+        KEYWORD_PREFIX，但 case 分支项是 `3'b100:`/`default:` 值+冒号形态，
+        不是语句。否则 case 分支内的 `if (A &&` 被误标 case_item，
+        indent 按 case_item_hang（depth+1）缩进，二次 format 漂移。
+        """
+        if state.case_depth < 0:
+            return False
+        if self._current_depth(state.scope_path) != state.case_depth + 1:
+            return False
+        if t.type in self.stmt_headers:
+            return False
+        return t.type.startswith(KEYWORD_PREFIX) or t.type == "keyword.default"
 
     def _scope_kind_for(self, token_type: str) -> ScopeKind:
         return self.scope_kind_map.get(token_type, ScopeKind.BLOCK)

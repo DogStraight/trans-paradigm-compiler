@@ -24,11 +24,13 @@
 > （工作草稿，不进 git）。范围按作者定调：只修非 tests；每批跑 smoke +
 > `check_doc_refs` + `check_hardcode`，批末跑全量测试。完成即删对应条目。
 
-- **B-B 复杂度/长方法重构**（大改，分部件分批）：`analyzer/structure.py`
-  （1082 行 / CC 73）、`lexer/main_lexer.Lexer.tokenize`（397 行）、
-  `grammar/verilog/plugins/formatter/boundary.py` 的 `build_block_tokens` /
-  `BoundaryScanner._scan_tokens`（249 / 319 行）、
-  `parser/pratt_parser.parse_expression`（310 行）。
+- **B-B 复杂度/长方法重构**（大改，分部件分批；按局部→全体逐个单元做）：
+  - ✅ `grammar/verilog/plugins/formatter/boundary.py::build_block_tokens`（249 行 / CC 79）
+    已按字段拆为六个模块级助手（`308651b`）。
+  - ✅ 同文件 `BoundaryScanner._scan_tokens`（319 行 / CC 67）：已引 `_ScanState` 收拢
+    16 个状态量，拆为三块 handler + 换行判定链/分派分支的小函数（`_scan_tokens` 319 → 35 行）。
+  - ⏳ `lexer/main_lexer.Lexer.tokenize`（397 行）；`parser/pratt_parser.parse_expression`（310 行）；
+    `analyzer/structure.py`（1082 行 / CC 73 上帝对象，放最后）。
 - **B-C 结构重复**（非 tests 107 组）：跨插件重复抽公共助手
   （`case_check._const_value` ↔ `latch_check._const_value`、
   `always_check._target_sig` ↔ `latch_check._target_sig` 等）。
