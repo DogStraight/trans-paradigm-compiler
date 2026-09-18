@@ -140,3 +140,6 @@
     诊断跨语言串味；`--pre grammar/c4` 复现"同进程先跑过别的语言"）
   - 宏位置覆盖 `tools/check_macro_coverage.py`（宏位置透明性量化 + 失败面按 token
     类型分布，非门禁；边界依据见 ADR-0017）
+  - 外部审计 Bifrost（Python 侧结构面信号：改动影响面/到达测试、复杂度、异常吞吃、
+    结构重复、死代码、弱断言、结构查询；先小后大——单次工具秒级、完备结论需仓库为
+    root。规程见 `policy/bifrost_audit.md`，有效性抽查探针 `tools/bifrost_probe/`）
