@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from core._protocol import ROW_ORIGIN
 from core.define import Node
+from grammar.verilog.plugins.typed_ports._node_utils import collect_type_scopes, node_text
 
 # 方向反转映射（_invert_map.py 旧原语已删，本常量集中定义普通端口逐项取反）
 _DIR_INV = {"input": "output", "output": "input", "inout": "inout"}
@@ -43,7 +44,7 @@ def run_expand_ports(analyzer, context) -> None:
     root = getattr(analyzer, "root_scope", None)
     if root is None:
         return
-    type_scopes = _collect_type_scopes(root)
+    type_scopes = collect_type_scopes(root)
     for tname, tsc in type_scopes.items():
         for sym in tsc.symbols.values():
             if getattr(sym, "kind", "") != "role":
@@ -192,7 +193,7 @@ def _append_ansi(out: list[dict], p: dict, invert: bool = False,
         d = _DIR_INV.get(d, d)
     items = (p.get("items") or {}).get("items", [])
     for it in items or []:
-        nm = (it.get("name") or "") if isinstance(it, dict) else _text(it)
+        nm = (it.get("name") or "") if isinstance(it, dict) else node_text(it)
         if not nm:
             continue
         entry: dict = {"direction": d, "name": nm}
@@ -217,29 +218,3 @@ def _role_raw_ports(type_scopes: dict, type_name: str,
     return ports if isinstance(ports, list) else [ports] if ports else []
 
 
-def _collect_type_scopes(root) -> dict:
-    """DFS scope 树，收集 kind=type 的作用域 {类型名: Scope}。"""
-    out: dict = {}
-
-    def _walk(sc):
-        for child in getattr(sc, "children", []) or []:
-            if getattr(child, "kind", "") == "type":
-                out[child.name] = child
-            _walk(child)
-
-    _walk(root)
-    return out
-
-
-def _text(node) -> str:
-    """Node → 文本（防御非 Node；穿透取首个 content）。"""
-    if not isinstance(node, Node):
-        return str(node) if node else ""
-    content = getattr(node, "content", "") or ""
-    if content:
-        return content
-    for child in node.iter_children():
-        t = _text(child)
-        if t:
-            return t
-    return ""

@@ -35,6 +35,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.define import Node
+from grammar.verilog.plugins.typed_ports._node_utils import collect_type_scopes, node_text
 
 
 # ── 入口 ──────────────────────────────────────────────
@@ -52,7 +53,7 @@ def run_tp_check(analyzer, context) -> None:
         return
 
     # 收集类型作用域（kind=type）→ 类型名 → Scope
-    type_scopes: dict[str, Any] = _collect_type_scopes(root)
+    type_scopes: dict[str, Any] = collect_type_scopes(root)
     # 收集模块 typed_port 实例表：{模块 scope 名: {实例名: (type_name, role_name, sym)}}
     # impl 绑定（interface_ref）按"impl 所在模块"查本模块声明的接口实例（一组线）。
     module_insts: dict[str, dict[str, tuple]] = _collect_module_typed_ports(root)
@@ -137,7 +138,7 @@ def _walk_ast(node, context, type_scopes, module_insts, impl_ports, current_mod)
     if isinstance(node, Node):
         nn = node.node_name
         if nn == "ModuleDecl":
-            mname = _text(getattr(node, "module_name", None)) or current_mod
+            mname = node_text(getattr(node, "module_name", None)) or current_mod
             _walk_ast_children(node, context, type_scopes, module_insts, impl_ports, mname)
             return
         if nn == "ImplBindingWithInterface":
@@ -166,8 +167,8 @@ def _check_typed_port_decl(context, node: Node, type_scopes: dict) -> None:
     ts = getattr(node, "type_spec", None)
     if ts is None:
         return
-    tname = _text(getattr(ts, "type_name", None))
-    rname = _text(getattr(ts, "role_name", None))
+    tname = node_text(getattr(ts, "type_name", None))
+    rname = node_text(getattr(ts, "role_name", None))
     if not tname or not rname:
         return
     _check_type_role_ref(context, node, tname, rname, type_scopes)
@@ -194,8 +195,8 @@ def _check_impl_binding(context, node: Node, type_scopes: dict,
     ts = getattr(node, "type_spec", None)
     if ts is None:
         return  # 无类型引用（普通模块 impl）→ inst_check 域
-    tname = _text(getattr(ts, "type_name", None))
-    rname = _text(getattr(ts, "role_name", None))
+    tname = node_text(getattr(ts, "type_name", None))
+    rname = node_text(getattr(ts, "role_name", None))
     if not tname or not rname:
         return
     tsc = _check_type_role_ref(context, node, tname, rname, type_scopes)
@@ -204,7 +205,7 @@ def _check_impl_binding(context, node: Node, type_scopes: dict,
 
     # B1 interface_ref 解析：=> iface 必须命中 impl 所属模块的端口实例
     insts = module_insts.get(current_mod or "", {}) or {}
-    iface = _text(getattr(node, "interface_ref", None))
+    iface = node_text(getattr(node, "interface_ref", None))
     if iface:
         entry = insts.get(iface)
         if entry is None:
@@ -230,7 +231,7 @@ def _check_impl_binding(context, node: Node, type_scopes: dict,
     }
     defined |= impl_ports.get(tname, {}).get(rname, set())
     for conn in _collect_connects(getattr(node, "ports", None)):
-        pn = _text(getattr(conn, "port_name", None))
+        pn = node_text(getattr(conn, "port_name", None))
         if pn and pn not in defined:
             context.report(
                 f"impl '{tname}.{rname}' 连接了不属于该 role 定义端口集的端口 "
@@ -307,12 +308,12 @@ def _collect_impl_bindings(node, bindings: dict, module_insts: dict,
     if isinstance(node, Node):
         nn = node.node_name
         if nn == "ModuleDecl":
-            mname = _text(getattr(node, "module_name", None)) or current_mod
+            mname = node_text(getattr(node, "module_name", None)) or current_mod
             for child in node.iter_children():
                 _collect_impl_bindings(child, bindings, module_insts, mname)
             return
         if nn == "ImplBindingWithInterface":
-            iface = _text(getattr(node, "interface_ref", None))
+            iface = node_text(getattr(node, "interface_ref", None))
             mod = current_mod or ""
             insts = module_insts.get(mod, {}) or {}
             if iface and iface in insts:
@@ -338,12 +339,12 @@ def _collect_type_impl_ports(node, out=None, cur_type: str = "") -> dict:
     if isinstance(node, Node):
         nn = node.node_name
         if nn == "TypeDecl":
-            tname = _text(getattr(node, "type_name", None))
+            tname = node_text(getattr(node, "type_name", None))
             for child in node.iter_children():
                 _collect_type_impl_ports(child, out, tname)
             return out
         if nn == "TypeImplDecl" and cur_type:
-            rname = _text(getattr(node, "role_name", None))
+            rname = node_text(getattr(node, "role_name", None))
             names = _impl_decl_port_names(getattr(node, "ports", None))
             if rname:
                 out.setdefault(cur_type, {}).setdefault(rname, set()).update(names)
@@ -376,7 +377,7 @@ def _impl_decl_port_names(ports_node) -> set:
         if not isinstance(dl_items, list):
             continue
         for dcl in dl_items:
-            nm = _text(getattr(dcl, "name", None))
+            nm = node_text(getattr(dcl, "name", None))
             if nm:
                 names.add(nm)
     return names
@@ -404,20 +405,6 @@ def _check_type_role_ref(context, node: Node, tname: str, rname: str,
         )
         return None
     return tsc
-
-
-def _collect_type_scopes(root) -> dict:
-    """DFS scope 树，收集 kind=type 的作用域 {类型名: Scope}。"""
-    out: dict = {}
-
-    def _walk(sc):
-        for child in getattr(sc, "children", []) or []:
-            if getattr(child, "kind", "") == "type":
-                out[child.name] = child
-            _walk(child)
-
-    _walk(root)
-    return out
 
 
 def _collect_module_typed_ports(root) -> dict:
@@ -455,7 +442,7 @@ def _role_from_decl(decl_node) -> str:
     ts = getattr(decl_node, "type_spec", None)
     if ts is None:
         return ""
-    return _text(getattr(ts, "role_name", None))
+    return node_text(getattr(ts, "role_name", None))
 
 
 def _role_sym(tsc, rname: str):
@@ -491,7 +478,7 @@ def _role_flat_ports(rsym) -> list[dict]:
             else getattr(items_node, "items", [])
         )
         for item in item_list:
-            name = item.get("name", "") if isinstance(item, dict) else _text(item)
+            name = item.get("name", "") if isinstance(item, dict) else node_text(item)
             if not name:
                 continue
             entry: dict = {"direction": d, "name": name}
@@ -509,7 +496,7 @@ def _invert_targets(rsym) -> list[str]:
         if nn != "TypeInvertPort":
             continue
         t = pg.get("target_role") if isinstance(pg, dict) else getattr(pg, "target_role", None)
-        tg = _text(t)
+        tg = node_text(t)
         if tg:
             targets.append(tg)
     return targets
@@ -545,15 +532,3 @@ def _dupes(items: list[str]) -> list[str]:
     return out
 
 
-def _text(node) -> str:
-    """Node → 文本（防御非 Node；穿透取首个 content）。"""
-    if not isinstance(node, Node):
-        return str(node) if node else ""
-    content = getattr(node, "content", "") or ""
-    if content:
-        return content
-    for child in node.iter_children():
-        t = _text(child)
-        if t:
-            return t
-    return ""

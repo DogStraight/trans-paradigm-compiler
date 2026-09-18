@@ -7,6 +7,7 @@ from core.plugin_loader import register_transform_slot
 from core.define import Node
 from analyzer.scope import Scope
 from transform.engine import mark_extra
+from grammar.verilog.plugins.typed_ports._node_utils import node_text
 
 
 @register_transform_slot("delete_type_decl")
@@ -24,7 +25,7 @@ def build_wrapper(node: Node, ctx) -> Node | None:
     root_scope: Scope | None = ctx.get("root_scope")
     if not td or not impl_block or not root_scope:
         return None
-    type_name = _text(getattr(td, "type_name", None))
+    type_name = node_text(getattr(td, "type_name", None))
     if not type_name:
         return None
     role_name = _first_role_name(root_scope, type_name) or "impl"
@@ -90,11 +91,11 @@ def auto_connect_ports(node: Node, ctx) -> Node:
     iface = getattr(impl, "interface_ref", None)
     if iface is None:
         return node
-    iface_name = _text(iface)
+    iface_name = node_text(iface)
     type_name = type_map.get(iface_name, "")
     # 类型 + role 来自 type_spec（如 spi.master → spi / master）
     ts = getattr(impl, "type_spec", None)
-    role_name = _text(getattr(ts, "role_name", None)) if ts is not None else ""
+    role_name = node_text(getattr(ts, "role_name", None)) if ts is not None else ""
     all_ports: list[Node] = []
     explicit_names: set[str] = set()
     explicit = getattr(impl, "ports", None)
@@ -104,7 +105,7 @@ def auto_connect_ports(node: Node, ctx) -> Node:
     conns: list[Node] = []
     _collect_connects(explicit, conns)
     for ep in conns:
-        pn = _text(getattr(ep, "port_name", None))
+        pn = node_text(getattr(ep, "port_name", None))
         if pn:
             explicit_names.add(pn)
         all_ports.append(ep)
@@ -134,20 +135,20 @@ def replace_impl_binding(node: Node, ctx) -> Node:
     del ctx  # 槽位协议签名参数，本槽位不消费
     ts = getattr(node, "type_spec", None)
     if ts is not None:
-        tn = _text(getattr(ts, "type_name", None)) or ""
-        rn = _text(getattr(ts, "role_name", None)) or ""
+        tn = node_text(getattr(ts, "type_name", None)) or ""
+        rn = node_text(getattr(ts, "role_name", None)) or ""
         module_name = f"{tn}_{rn}" if tn and rn else "impl_module"
     else:
-        module_name = _text(getattr(node, "module_name", None)) or "impl_module"
-    inst_name = _text(getattr(node, "inst_name", None))
+        module_name = node_text(getattr(node, "module_name", None)) or "impl_module"
+    inst_name = node_text(getattr(node, "inst_name", None))
     if not inst_name:
         iface = getattr(node, "interface_ref", None)
         salt = module_name
         if iface is not None:
-            salt += "_" + _text(iface)
+            salt += "_" + node_text(iface)
         if ts is not None:
-            salt += "_" + _text(getattr(ts, "type_name", None) or "")
-            salt += "_" + _text(getattr(ts, "role_name", None) or "")
+            salt += "_" + node_text(getattr(ts, "type_name", None) or "")
+            salt += "_" + node_text(getattr(ts, "role_name", None) or "")
         inst_name = f"u_{module_name}_" + hashlib.md5(salt.encode()).hexdigest()[:6]
     mi = Node("ModuleInst")
     mi.add_attr("module_name", module_name)
@@ -156,19 +157,6 @@ def replace_impl_binding(node: Node, ctx) -> Node:
     if ports is not None:
         mi.add_attr("ports", ports)
     return mi
-
-
-def _text(n) -> str:
-    if isinstance(n, str):
-        return n
-    if hasattr(n, "content"):
-        return n.content
-    if hasattr(n, "iter_children"):
-        for c in n.iter_children():
-            r = _text(c)
-            if r:
-                return r
-    return ""
 
 
 def _collect_connects(node, out: list[Node]) -> None:
@@ -231,7 +219,7 @@ def _port_name(pn) -> str:
     for dcl in getattr(items, "items", []):
         name = getattr(dcl, "name", None)
         if name:
-            return _text(name)
+            return node_text(name)
     return ""
 
 
@@ -304,7 +292,7 @@ def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
                 continue
             item_list = items_node.get("items", []) if isinstance(items_node, dict) else getattr(items_node, "items", [])
             for item in item_list:
-                name = item.get("name", "") if isinstance(item, dict) else _text(item)
+                name = item.get("name", "") if isinstance(item, dict) else node_text(item)
                 if name:
                     entry: dict = {"direction": d, "name": name}
                     if pr:
