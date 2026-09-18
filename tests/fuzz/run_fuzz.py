@@ -62,6 +62,9 @@ def _token_seq(text: str, lexer: Lexer):
     try:
         toks = lexer.tokenize(text)
     except Exception:
+        # 不能 token 化 → 返回 None 由调用方判定（不在这里报错：调用方分
+        # "输入本来就不可 token 化"（语料本就可能坏）与"输出不可 token 化"
+        # （真缺陷）两种情形，不能一律当通过）
         return None
     return [(t.type, t.content) for t in toks if t.type not in TRIVIA_TOKEN_TYPES]
 
@@ -98,7 +101,12 @@ def check_one(src: str, lexer: Lexer, findings: list, label: str,
     ):
         seq_in = _token_seq(src, lexer)
         seq_out = _token_seq(out, lexer)
-        if seq_in is not None and seq_out is not None and seq_in != seq_out:
+        if seq_in is not None and seq_out is None:
+            # 输入可 token 化、输出却不可 → 格式化把输出弄成不可 token 化（真缺陷），
+            # 不能因"有一侧为 None"就把整条不变量静默跳过。
+            _save(findings_dir, f"{index:05d}_tokenizefail_{label}.v", src)
+            findings.append(f"[TOKENIZE-FAIL] {label}: 格式化输出无法 token 化")
+        elif seq_in is not None and seq_out is not None and seq_in != seq_out:
             _save(findings_dir, f"{index:05d}_tokencorrupt_{label}.v", src)
             findings.append(
                 f"[TOKEN-CORRUPT] {label}: 格式化改变了 token 序列 "
