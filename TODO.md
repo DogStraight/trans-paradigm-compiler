@@ -51,13 +51,16 @@
   - ✅ `typed_ports` 组件内 `_text` ×3 / `_collect_type_scopes` ×2 →
     `typed_ports/_node_utils.py`（`616ce1b`）。
   - ✅ 常量表达式求值两份 78 行逐字同体 → `checks/_shared.const_eval`（`6262314`）。
-  - ⏳ 剩余：`formatter/passes._indent_level` ×2、检查族跨插件小助手
-    （`_is_timing_always` ×2、`_is_parameterized` 系）、`ifdef` 的
-    `handle_ifdef`/`handle_ifndef`、`config_registry.resolve`/
-    `resolve_with_sources`、`renderer/doc._has_break`/`_has_hardline`。
-  - 保留附理由（不再动）：policy/ 两个门禁脚本的重复（刻意各自独立）、
-    ≤25 token 的单行 setter/格式化器、跨层同形注册表——判据见
-    `_drafts/bifrost/dispositions.md`「B-C 分组处置」。
+  - ✅ `formatter/passes` 行首缩进量化三份同体 → `formatter/style.line_indent_width`；
+    检查族跨插件小助手（`_is_timing_always`、`_is_parameterized` 系）→
+    `checks/_shared`（`4f0ad2c`）。
+  - ✅ 三处同文件同体：`handle_ifdef`/`handle_ifndef`、
+    `config_registry.resolve`/`resolve_with_sources`、
+    `renderer/doc._has_break`/`_has_hardline`（`cfc5944`）。
+  - ⏳ 保留项（附理由，见 dispositions）：policy/ 两个门禁脚本间的小重复
+    （拟保持：两道门禁刻意各自独立可单跑，待作者确认）、≤25 token 的单行
+    setter/格式化器（38 组）、跨层同形注册表、3–5 行样板体三对
+    （linter `_skip`、parser `_get_block_end`、packaging ↔ tests 的 JSON 读取）。
 
 > 审计外观察（不在本清单）：`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog 形态
 > 进了引擎，与"本模块零语言知识"的声明相左——归 `docs/gaps/gap-semantic-elaboration-boundaries.md`
