@@ -483,6 +483,10 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
 # 清缓存防跨代误命中。缓存是纯优化，命中错误只影响性能不影响正确性。
 _LAYOUT_CACHE: dict[tuple[int, int], object] = {}
 
+# 记忆化标签（缓存键第二项）：同一 doc 的不同查询各占独立槽位
+_BREAK_QUERY_HARDLINE = 1  # `_has_hardline`：只认 Break/HardBreak/LineBreak
+_BREAK_QUERY_LINE = 2      # `_has_break`：连软换行 Line 也算
+
 
 def _clear_layout_cache() -> None:
     _LAYOUT_CACHE.clear()
@@ -569,49 +573,37 @@ def _drop_break_after_hardbreak(doc: Doc) -> Doc:
 
 
 def _has_hardline(doc: Doc) -> bool:
-    """doc（flat 化后）是否含硬换行（Break/LineBreak）。
-
-    纯 doc 依赖的递归查询，per-layout 记忆化（见 _LAYOUT_CACHE）。
-    """
-    key = (id(doc), 1)
-    if key in _LAYOUT_CACHE:
-        return cast(bool, _LAYOUT_CACHE[key])
-    match doc:
-        case Break() | HardBreak() | LineBreak():
-            result = True
-        case Concat(docs):
-            result = any(_has_hardline(d) for d in docs)
-        case Nest(_, d) | Align(_, d) | Prefix(_, d):
-            result = _has_hardline(d)
-        case Union(flat, _):
-            result = _has_hardline(flat)
-        case Fill(docs):
-            result = any(_has_hardline(d) for d in docs)
-        case _:
-            result = False
-    _LAYOUT_CACHE[key] = result
-    return result
+    """doc（flat 化后）是否含硬换行（Break/LineBreak，不含软换行 Line）。"""
+    return _doc_has_break(doc, _BREAK_QUERY_HARDLINE)
 
 
 def _has_break(doc: Doc) -> bool:
-    """doc 是否含换行点（Line/Break/LineBreak）——Union 首行判定截断用。
+    """doc 是否含换行点（Line/Break/LineBreak）——Union 首行判定截断用。"""
+    return _doc_has_break(doc, _BREAK_QUERY_LINE)
 
-    纯 doc 依赖的递归查询，per-layout 记忆化（见 _LAYOUT_CACHE）。
+
+def _doc_has_break(doc: Doc, query: int) -> bool:
+    """doc 是否含换行点（递归下降；query 决定 `Line()` 算不算命中）。
+
+    纯 doc 依赖的递归查询，按 (doc, query) 记忆化（见 `_LAYOUT_CACHE`）——
+    同一 doc 两种查询结果不同（硬换行 / 含软换行点），**不可共用缓存槽位**。
     """
-    key = (id(doc), 2)
+    key = (id(doc), query)
     if key in _LAYOUT_CACHE:
         return cast(bool, _LAYOUT_CACHE[key])
     match doc:
-        case Line() | Break() | HardBreak() | LineBreak():
+        case Line() if query == _BREAK_QUERY_LINE:
+            result = True
+        case Break() | HardBreak() | LineBreak():
             result = True
         case Concat(docs):
-            result = any(_has_break(d) for d in docs)
+            result = any(_doc_has_break(d, query) for d in docs)
         case Nest(_, d) | Align(_, d) | Prefix(_, d):
-            result = _has_break(d)
+            result = _doc_has_break(d, query)
         case Union(flat, _):
-            result = _has_break(flat)
+            result = _doc_has_break(flat, query)
         case Fill(docs):
-            result = any(_has_break(d) for d in docs)
+            result = any(_doc_has_break(d, query) for d in docs)
         case _:
             result = False
     _LAYOUT_CACHE[key] = result

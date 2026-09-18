@@ -88,46 +88,33 @@ def _flush_block(ctx, block):
 def handle_ifdef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `ifdef COND。"""
     del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
-    _keyword, arg = split_directive(stripped, prefix)
-    cond = arg.strip()
-    defined = _is_macro_defined(ctx, cond)
-    stack: list = ctx.setdefault("_ifdef_stack", [])
-    branch = _new_branch(cond, False, defined)
-    parent_branch = stack[-1].get("cur_branch") if stack else None
-    block = {
-        "ifdef_line": stripped,
-        "cond": cond,
-        "negated": False,
-        "depth": len(stack),
-        "parent_branch": parent_branch,
-        "boundary_lines": [(ctx.get("_cur_line_no"), stripped)],
-        "branches": [branch],
-        "cur_branch": branch,
-    }
-    ctx.setdefault("_cond_blocks", []).append(block)
-    stack.append({
-        "active": defined,
-        "found_active": defined,
-        "cond": cond,
-        "block": block,
-        "cur_branch": branch,
-    })
+    _open_cond_block(stripped, prefix, ctx, negated=False)
 
 
 @register("ifndef", kind="control")
 def handle_ifndef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `ifndef COND。"""
     del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
+    _open_cond_block(stripped, prefix, ctx, negated=True)
+
+
+def _open_cond_block(stripped: str, prefix: str, ctx: dict, *, negated: bool) -> None:
+    """开一个条件块并压栈（`ifdef / `ifndef 共用）。
+
+    `negated` = 条件取反（ifndef）：分支活性、栈内 active/found_active 与块
+    标记 `negated` 三处同时取反；其余（条件解析、边界行、父分支）两指令一致。
+    """
     _keyword, arg = split_directive(stripped, prefix)
     cond = arg.strip()
     defined = _is_macro_defined(ctx, cond)
+    active = not defined if negated else defined
     stack: list = ctx.setdefault("_ifdef_stack", [])
-    branch = _new_branch(cond, False, not defined)
+    branch = _new_branch(cond, False, active)
     parent_branch = stack[-1].get("cur_branch") if stack else None
     block = {
         "ifdef_line": stripped,
         "cond": cond,
-        "negated": True,
+        "negated": negated,
         "depth": len(stack),
         "parent_branch": parent_branch,
         "boundary_lines": [(ctx.get("_cur_line_no"), stripped)],
@@ -136,8 +123,8 @@ def handle_ifndef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     }
     ctx.setdefault("_cond_blocks", []).append(block)
     stack.append({
-        "active": not defined,
-        "found_active": not defined,
+        "active": active,
+        "found_active": active,
         "cond": cond,
         "block": block,
         "cur_branch": branch,

@@ -537,40 +537,7 @@ class ConfigRegistry:
         Args:
             rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
         """
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        candidate = rules_dir
-        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
-            candidate = os.path.join("grammar", rules_dir)
-        if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
-            # 非语言包目录（临时目录等低层契约）：用当前全局声明
-            decls = [
-                (
-                    name,
-                    spec.get("file", ""),
-                    spec.get("section"),
-                    spec.get("base", "rules"),
-                    spec.get("required", True),
-                    spec.get("description", ""),
-                    spec.get("bare_value"),
-                )
-                for name, spec in cls._entries.items()
-            ]
-            candidate = rules_dir
-        else:
-            decls = _load_meta_declarations(grammar_dir=candidate)
-        cache_key = (
-            candidate,
-            tuple(ext_dirs) if ext_dirs else (),
-            plugins_dir,
-            frozenset(base_dirs.items()),
-        )
-        if cache_key in cls._resolve_cache:
-            return cls._resolve_cache[cache_key][0]
-        result, sources = cls._resolve_decls(
-            decls, candidate, ext_dirs, plugins_dir, base_dirs
-        )
-        cls._resolve_cache[cache_key] = (result, sources)
-        return result
+        return cls._resolve_cached(rules_dir, ext_dirs, plugins_dir, base_dirs)[0]
 
     @classmethod
     def resolve_with_sources(
@@ -585,11 +552,27 @@ class ConfigRegistry:
         与 resolve 相同，但额外返回每个 key 的来源（name → {file, section}
         或 {bare: True}），供调试/可观测（tpc config dump）。
         """
+        return cls._resolve_cached(rules_dir, ext_dirs, plugins_dir, base_dirs)
+
+    @classmethod
+    def _resolve_cached(
+        cls,
+        rules_dir: str,
+        ext_dirs: list[str] | None,
+        plugins_dir: str,
+        base_dirs: dict,
+    ) -> tuple[dict, dict]:
+        """解析语言包配置 → (配置, 来源)，按 (目录, ext, plugins, base) 缓存。
+
+        无全局副作用（不写 `_loaded`、不改 `_entries`、不推模块变量）——
+        `resolve` / `resolve_with_sources` 共用本函数，只有返回值取用不同。
+        """
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidate = rules_dir
         if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
             candidate = os.path.join("grammar", rules_dir)
         if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            # 非语言包目录（临时目录等低层契约）：用当前全局声明
             decls = [
                 (
                     name,
