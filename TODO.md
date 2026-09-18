@@ -36,7 +36,8 @@
   - ✅ `analyzer/structure.py::_build_signal_graph`（257 行 / CC≈109）：已引
     `_SignalGraphCtx` + 端口穿透两方法 + per-file 三分派，257 → 装配（`35ccbff`）。
   - ✅ 同文件 `_precompute_generate_active`（81 行 / CC 21）+ 成对填充去重
-    + `_eval_const_expr`（112 行 / CC 28）→ `_ConstExprParser`：B-B4b。
+    + `_eval_const_expr`（112 行 / CC 28）→ `_ConstExprParser`：B-B4b；
+    信号图三层方法的 CC 二次收口（三类裸源 / 过程块两趟 / 连接两类）：B-B4b2。
   - ⏳ 同文件 `_StructureBase` 上帝对象（类体 1110 行 / 53 成员 / 43 方法）：
     层 3 精化基类，被 `ProjectChecker` 继承、postpass 经 `context.extra` 消费；
     拆类需先立 ADR（B-B4c，暂缓）。
