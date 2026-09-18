@@ -145,6 +145,8 @@ def mutate_source(src: str, rng: random.Random, token_map: dict[str, str],
     try:
         toks = lexer.tokenize(src)
     except Exception:
+        # 语料自身无法 token 化 → 本次变异不适用，直接返回原文（生成器不判定
+        # 正确性，不会造成"静默通过"：这条用例会被当成未变异的原例跑）。
         return src
     idx = [i for i, t in enumerate(toks) if t.type not in TRIVIA_TOKEN_TYPES]
     if not idx:

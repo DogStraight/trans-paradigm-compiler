@@ -24,9 +24,6 @@
 > （工作草稿，不进 git）。范围按作者定调：只修非 tests；每批跑 smoke +
 > `check_doc_refs` + `check_hardcode`，批末跑全量测试。完成即删对应条目。
 
-- **B-A 异常吞吃 triage**（44 条）：score 10 的空体 `except Exception: pass`
-  逐条定成因 → 修 / 写明兜底理由 / 记为已知边界；最重一条是
-  `pipeline._load_pipeline_defaults`（与"配置加载 fail-fast"张力最大）。
 - **B-B 复杂度/长方法重构**（大改，分部件分批）：`analyzer/structure.py`
   （1082 行 / CC 73）、`lexer/main_lexer.Lexer.tokenize`（397 行）、
   `grammar/verilog/plugins/formatter/boundary.py` 的 `build_block_tokens` /
