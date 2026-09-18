@@ -51,20 +51,20 @@ def _load_wrap_config() -> tuple[dict, int]:
     """
     penalties = dict(_DEFAULT_PENALTIES)
     over = _DEFAULT_OVER_COLUMN
+    from core.config_registry import ConfigRegistry
     try:
-        from core.config_registry import ConfigRegistry
-
         cfg = ConfigRegistry.get("formatter.wrap")
-        if isinstance(cfg, dict):
-            bp = cfg.get("break_penalties")
-            if isinstance(bp, dict):
-                for k, v in bp.items():
-                    if k in penalties:
-                        penalties[k] = int(v)
-            if "over_column_penalty" in cfg:
-                over = int(cfg["over_column_penalty"])
-    except Exception:
-        pass
+    except (KeyError, RuntimeError):
+        # 未声明 / 未加载 → 用代码内默认（只认这两种，其它异常照抛）
+        return penalties, over
+    if isinstance(cfg, dict):
+        bp = cfg.get("break_penalties")
+        if isinstance(bp, dict):
+            for k, v in bp.items():
+                if k in penalties:
+                    penalties[k] = int(v)
+        if "over_column_penalty" in cfg:
+            over = int(cfg["over_column_penalty"])
     return penalties, over
 
 
@@ -225,7 +225,8 @@ def _parse_line(parser: Any, src: str):
         if ast is None or getattr(parser, "_parse_truncated", False):
             return None
         return ast
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — 解析失败是预期结果（行片段可能不是合法表达式）
+        # → 返回 None，调用方回退文本括号启发式；宽捕获理由同 inst_port。
         return None
 
 

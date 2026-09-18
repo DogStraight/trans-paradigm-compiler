@@ -19,11 +19,12 @@ def load_style() -> dict:
     try:
         from core.config_registry import ConfigRegistry
         cfg = ConfigRegistry.get("formatter.style")
-        if isinstance(cfg, dict):
-            if "indent_width" in cfg:
-                result["indent_width"] = int(cfg["indent_width"])
-            if "max_line_width" in cfg:
-                result["max_line_width"] = int(cfg["max_line_width"])
-    except Exception:
-        pass
+    except (KeyError, RuntimeError):
+        # 未声明 / 未加载 → 用上面代码内默认（只认这两种，其它异常照抛）
+        return result
+    if isinstance(cfg, dict):
+        if "indent_width" in cfg:
+            result["indent_width"] = int(cfg["indent_width"])
+        if "max_line_width" in cfg:
+            result["max_line_width"] = int(cfg["max_line_width"])
     return result

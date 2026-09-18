@@ -73,14 +73,14 @@ def _load_categories_from_config() -> list[dict] | None:
 
     未加载 / 无配置时返回 None（调用方 fallback 到代码内默认值）。
     """
+    from core.config_registry import ConfigRegistry
     try:
-        from core.config_registry import ConfigRegistry
         cfg = ConfigRegistry.get("formatter.categories")
-        if isinstance(cfg, list) and cfg:
-            return cfg
-    except Exception:
-        pass
-    return None
+    except (KeyError, RuntimeError):
+        # 只认两种"没有配置"：语言包未声明该键（KeyError）/ 配置未加载
+        # （RuntimeError）——其它异常照抛，不静默降级。
+        return None
+    return cfg if isinstance(cfg, list) and cfg else None
 
 
 def build_engine(
@@ -123,10 +123,11 @@ def build_engine(
     # 条件编译指令注释标注 pass（`` `else/`endif `` 补配对宏名，VeriGood 借鉴）
     # 纯文本栈，独立于缩进；幂等（已有注释不重复）。默认关闭（加注释是主动
     # 增强，与保真度对比 ref 冲突），由 [formatter.ifdef_annotate].enabled 控制
+    from core.config_registry import ConfigRegistry
     try:
-        from core.config_registry import ConfigRegistry
         _ia_enabled = bool(ConfigRegistry.get("formatter.ifdef_annotate.enabled"))
-    except Exception:  # noqa: BLE001 — 无配置默认关闭
+    except (KeyError, RuntimeError):
+        # 可选开关：未声明 / 未加载 → 默认关闭（只认这两种，其它异常照抛）
         _ia_enabled = False
     if _ia_enabled:
         engine.register(FormatterPass(
@@ -175,10 +176,11 @@ def build_engine(
     # 到 max_width，续行保留 `// ` 前缀；破坏性最小原则，由
     # [formatter.wrap_comments].enabled 控制。升格为 COMMENT 内建遍
     # （ADR-0006 阶段 4b），带 max_width 量化拒绝准则。
+    from core.config_registry import ConfigRegistry
     try:
-        from core.config_registry import ConfigRegistry
         _wc_enabled = bool(ConfigRegistry.get("formatter.wrap_comments.enabled"))
-    except Exception:  # noqa: BLE001 — 无配置默认关闭
+    except (KeyError, RuntimeError):
+        # 可选开关：未声明 / 未加载 → 默认关闭（同 ifdef_annotate）
         _wc_enabled = False
     if _wc_enabled:
         engine.register(FormatterPass(

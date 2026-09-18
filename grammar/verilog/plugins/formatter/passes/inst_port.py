@@ -308,11 +308,11 @@ def _find_instance_block(lines: list[str], g_start: int, g_end: int):
 def _max_pos_line(node: Any) -> int:
     """node 子树内最大 _pos_line（0 = 无定位信息）。"""
     best = getattr(node, "_pos_line", 0) or 0
-    try:
-        for child in node.iter_children():
-            best = max(best, _max_pos_line(child))
-    except Exception:  # noqa: BLE001 — 非 Node 对象/无 iter_children
-        pass
+    iter_children = getattr(node, "iter_children", None)
+    if iter_children is None:
+        return best  # 非 Node 对象（无 iter_children）→ 自身行号即结果
+    for child in iter_children():
+        best = max(best, _max_pos_line(child))
     return best
 
 
@@ -343,7 +343,9 @@ def _parse_instance_ports(
             ast = parser.parse(tokens)
         if ast is None or getattr(parser, "_parse_truncated", False):
             return None
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — 解析失败是预期结果（实例块可能不是合法独立模块）
+        # → 返回 None，调用方回退文本括号启发式；此处不承诺具体异常类型
+        # （lexer/parser 各自抛什么属实现细节），故保留宽捕获。
         return None
 
     # 找 ModuleInst（包装后 head_line 在 L2）
@@ -360,12 +362,12 @@ def _parse_instance_ports(
                         e = _max_pos_line(getattr(p, "value", None))
                         spans.append((s, e))
             return True
-        try:
-            for child in n.iter_children():
-                if visit(child):
-                    return True
-        except Exception:  # noqa: BLE001
-            pass
+        iter_children = getattr(n, "iter_children", None)
+        if iter_children is None:
+            return False
+        for child in iter_children():
+            if visit(child):
+                return True
         return False
 
     visit(ast)
