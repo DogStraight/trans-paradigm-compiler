@@ -9,6 +9,7 @@ from typing import Any
 from core.define import Node, Token
 from ._constants import COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 from ._comment_trivia import is_line_only, is_midline
+from dataclasses import dataclass
 
 
 
@@ -270,6 +271,26 @@ def _mount_leading_comments(
             lead.append(text)
 
 
+@dataclass(frozen=True)
+class _PrattCtx:
+    """Pratt 解析上下文：优先级表、运算符属性、回调与停止符。
+
+    原先把这 9 项逐个穿进每一层递归（11 个实参 × 12 个递归点）；收进上下文后
+    递归只需 `_parse(ctx, tokens, idx, rbp)`。对外入口 `parse_expression` 的
+    签名保持不变（调用方无需感知）。
+    """
+
+    prefix_priority: dict[str, int]
+    prefix_attrs: dict[str, Any]
+    infix_priority: dict[str, int]
+    infix_attrs: dict[str, Any]
+    max_infix_prio: int
+    unary_prefix_rbp: int
+    atom_parser: Any = None
+    stop_tokens: set | None = None
+    comment_sink: Any = None
+
+
 def parse_expression(
     tokens: list[Token],
     idx: int,
@@ -294,30 +315,70 @@ def parse_expression(
         循环跳过时经此通道记录（ADR-0013 决策 5 后 operator 间隙注释已挂
         节点 inline_after；此通道承接无 operator 上下文的残余）。语言
         无关：引擎不收集，由调用方决定去向。
+
+    本函数是**对外入口**（签名与历史一致，调用方无需感知重构）：把 11 个
+    解析上下文参数收进 `_PrattCtx` 后交给 `_parse`；递归调用一律走 `_parse`
+    （否则每个递归点都要重复这一长串实参）。
+    """
+    return _parse(
+        _PrattCtx(
+            prefix_priority=prefix_priority,
+            prefix_attrs=prefix_attrs,
+            infix_priority=infix_priority,
+            infix_attrs=infix_attrs,
+            max_infix_prio=max_infix_prio,
+            unary_prefix_rbp=unary_prefix_rbp,
+            atom_parser=atom_parser,
+            stop_tokens=stop_tokens,
+            comment_sink=comment_sink,
+        ),
+        tokens,
+        idx,
+        rbp,
+    )
+
+
+def _parse(ctx: "_PrattCtx", tokens: list[Token], idx: int, rbp: int) -> tuple[Node, int]:
+    """Pratt 主体：前缀段（原子/内置前缀）→ 入口注释落位 → 中缀段（led）。
+
+    注释契约（P1.5/ADR-0013/ADR-0014）：表达式内注释**能挂树就挂树**——前缀
+    操作数节点 leading 槽（行尾/独占行随节点断行）、operator 间隙挂节点
+    inline_after；挂不上才退 comment_sink 锚点通道（restore 兜底）。
     """
     if idx >= len(tokens):
         raise ValueError("表达式不完整")
 
-    # ── 前缀处理（先原子解析器，后内置前缀）──
-    node = None
-    # 跳过行内注释与换行（不纳入表达式 AST）。
-    # 换行跳过只发生在前缀位置（表达式/操作数开头）：三目 `cond ? a :` 后接
-    # 续行、行尾运算符（wrap 折行 `&&` 留行尾）后接操作数等，newline 是续行
-    # 分隔符。表达式"结束"仍由中缀循环控制（遇 newline 非运算符自然 break），
+    # 锚点取"进入前的上一个 token"（跳过 trivia 之前），供 comment_sink 通道
+    anchor_tok = tokens[idx - 1] if idx > 0 else None
+
+    # 前缀位置的行内注释与换行跳过（换行只在前缀位置跳过：表达式/操作数开头
+    # 的续行）；表达式"结束"仍由中缀循环控制（遇 newline 非运算符自然 break），
     # 前缀跳过不吞掉结束信号——`expr1\n expr2` 在 expr1 的中缀循环即退出。
-    # 注释不纳入 AST 但不得静默丢失（P1.5）：**能挂树就挂树**——前缀操作数
-    # 节点（表达式起始处）的 leading 槽位（ADR-0014 方向 B 同族：行尾/独占行
-    # 注释随节点独立断行）；挂不上（无节点可挂/预解析 Node 之前/linter 原子
-    # 占位）才退 comment_sink 锚点通道（restore 兜底）。挂树后 restore 按
-    # 文本在场跳过——不双份。
-    #
-    # 为何挂前缀节点而不是行尾：`wire HLT =\n// <tpc:cond:51>\n(DDREQ ? …)`
-    # 这类位置（语句内部、右操作数之前）在清洁流里锚不可用——渲染端按锚插值
-    # 会把占位落到折叠区外（"清洁流相邻 ≠ 源相邻"）。挂 leading 后位置来自
-    # 树结构：注释独占一行、后续操作数另起一行。
+    idx, entry_comments, entry_own_line = _skip_entry_trivia(tokens, idx)
+    if idx >= len(tokens):
+        raise ValueError("表达式不完整")
+
+    node, idx = _parse_prefix(ctx, tokens, idx)
+    _place_entry_comments(
+        node, anchor_tok, entry_comments, entry_own_line, ctx.comment_sink
+    )
+    node, idx = _led_loop(ctx, tokens, idx, rbp, node)
+
+    if node is None:
+        raise ValueError("解析失败，未生成 AST 节点")
+    return node, idx
+
+
+def _skip_entry_trivia(
+    tokens: list[Token], idx: int
+) -> tuple[int, list[tuple[str, int]], list[tuple[str, int]]]:
+    """跳过前缀位置的行内注释与换行（不纳入表达式 AST）。
+
+    注释按"独占行"与"行内"分类返回：两类分别挂 `leading_own_line` /
+    `leading` 槽（ADR-0014 方向 B：注释随节点独立断行）。
+    """
     entry_comments: list[tuple[str, int]] = []
     entry_own_line: list[tuple[str, int]] = []
-    _anchor_tok = tokens[idx - 1] if idx > 0 else None
     while (
         idx < len(tokens)
         and isinstance(tokens[idx], Token)
@@ -330,257 +391,257 @@ def parse_expression(
             else:
                 entry_comments.append(entry)
         idx += 1
-    if idx >= len(tokens):
-        raise ValueError("表达式不完整")
+    return idx, entry_comments, entry_own_line
 
+
+def _parse_prefix(ctx: "_PrattCtx", tokens: list[Token], idx: int) -> tuple[Node, int]:
+    """前缀位置：先原子解析器（语言包注入），未命中再内置前缀。
+
+    内置前缀由 token 分类谓词（is_number/is_string/...，语言包配置驱动）
+    分发；一元前缀运算符递归走 `_parse_prefix_unary`。
+    """
+    node = None
     # 1. 原子解析器
-    if atom_parser is not None:
-        node, consumed = atom_parser(tokens, idx)
+    if ctx.atom_parser is not None:
+        node, consumed = ctx.atom_parser(tokens, idx)
         if node is not None:
             idx += consumed
+    if node is not None:
+        return node, idx
 
     # 2. 内置前缀（原子未命中时启用）
-    if node is None:
-        token = tokens[idx]
-        if isinstance(token, Node):
-            node, idx = token, idx + 1
-        elif is_number(token):
-            node = parse_number_literal(token)
-            idx += 1
-        elif is_string(token):
-            s = token.content[1:-1] if len(token.content) >= 2 else token.content
-            node = Node("String", value=s)
-            idx += 1
-        elif is_bool(token):
-            node = Node("Bool", value=(token.type == _bool_true_type))
-            idx += 1
-        elif is_identifier(token):
-            name = token.content
-            node = Node("Identifier", content=name)
-            idx += 1
-        elif is_operator(token) and token.content in prefix_attrs:
-            props = prefix_attrs[token.content]
-            if props.get("arity") == 1 and props.get("position") == "prefix":
-                op = token.content
-                idx += 1
-                # 前缀一元 operator 间隙注释（`- /* c */ a`）：跳过并收集，
-                # 行中挂 UnaryOp inline_after（ADR-0013 决策 5）；行尾挂
-                # operand leading（ADR-0014 方向 B）
-                idx, gap_comments, own_line_comments, eol_comments = _skip_gap_comments(
-                    tokens, idx
-                )
-                right, idx = parse_expression(
-                    tokens,
-                    idx,
-                    unary_prefix_rbp,
-                    prefix_priority,
-                    prefix_attrs,
-                    infix_priority,
-                    infix_attrs,
-                    max_infix_prio,
-                    unary_prefix_rbp,
-                    atom_parser,
-                    stop_tokens,
-                    comment_sink,
-                )
-                node = Node("UnaryOp", op=op, operand=right, position="prefix")
-                _mount_op_comments(node, op, gap_comments)
-                _mount_leading_comments(right, eol_comments)
-                _mount_leading_comments(right, own_line_comments, own_line=True)
-            else:
-                raise ValueError(f"不支持的前缀运算符: {token.content}")
-        elif is_none(token):
-            node = Node("NoneLiteral")
-            idx += 1
-        else:
-            raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
+    token = tokens[idx]
+    if isinstance(token, Node):
+        return token, idx + 1
+    if is_number(token):
+        return parse_number_literal(token), idx + 1
+    if is_string(token):
+        s = token.content[1:-1] if len(token.content) >= 2 else token.content
+        return Node("String", value=s), idx + 1
+    if is_bool(token):
+        return Node("Bool", value=(token.type == _bool_true_type)), idx + 1
+    if is_identifier(token):
+        return Node("Identifier", content=token.content), idx + 1
+    if is_operator(token) and token.content in ctx.prefix_attrs:
+        props = ctx.prefix_attrs[token.content]
+        if props.get("arity") == 1 and props.get("position") == "prefix":
+            return _parse_prefix_unary(ctx, tokens, idx, token.content)
+        raise ValueError(f"不支持的前缀运算符: {token.content}")
+    if is_none(token):
+        return Node("NoneLiteral"), idx + 1
+    raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 
-    # 入口注释落位（P1.5）：能挂树就挂树——前缀操作数节点 leading 槽
-    # （行尾/独占行注释随节点断行）；挂不上（原子占位非 Node、linter 丢 AST）
-    # 才退 comment_sink 锚点通道（restore 兜底）。挂树后 restore 按文本在场
-    # 跳过——不双份。
-    if entry_comments or entry_own_line:
-        if isinstance(node, Node):
-            _mount_leading_comments(node, entry_comments)
-            _mount_leading_comments(node, entry_own_line, own_line=True)
-        # 锚点通道**兜底**（挂树之外仍登记）：挂树成功时 restore 对已在场的
-        # 注释跳过（不双份，restore 自带在场检查）；挂树失败/未被渲染时
-        # （非 Node 原子占位、宏调用等直出文本节点）marker 仍能被回插——
-        # 否则条件块原文会随 marker 一起静默丢失（2026-09-17 实测）。
-        if (
-            comment_sink is not None
-            and isinstance(_anchor_tok, Token)
-            and _anchor_tok.content
-        ):
-            for c_text, c_line in entry_comments:
-                comment_sink(
-                    {
-                        "anchor": _anchor_tok.content,
-                        "text": c_text,
-                        "line": c_line,
-                        "midline": True,
-                    }
-                )
-            for c_text, c_line in entry_own_line:
-                comment_sink(
-                    {
-                        "anchor": _anchor_tok.content,
-                        "text": c_text,
-                        "line": c_line,
-                        "midline": False,
-                    }
-                )
 
-    # ── 中缀（led）──
+def _parse_prefix_unary(
+    ctx: "_PrattCtx", tokens: list[Token], idx: int, op: str
+) -> tuple[Node, int]:
+    """前缀一元运算符：跳过运算符后间隙注释，递归操作数并挂注释。
+
+    间隙注释（`- /* c */ a`）：行中挂 UnaryOp `inline_after`（ADR-0013
+    决策 5）；行尾挂 operand `leading`（ADR-0014 方向 B）。
+    """
+    idx += 1
+    idx, gap_comments, own_line_comments, eol_comments = _skip_gap_comments(tokens, idx)
+    right, idx = _parse(ctx, tokens, idx, ctx.unary_prefix_rbp)
+    node = Node("UnaryOp", op=op, operand=right, position="prefix")
+    _mount_op_comments(node, op, gap_comments)
+    _mount_leading_comments(right, eol_comments)
+    _mount_leading_comments(right, own_line_comments, own_line=True)
+    return node, idx
+
+
+def _place_entry_comments(
+    node: Node,
+    anchor_tok: Token | None,
+    entry_comments: list[tuple[str, int]],
+    entry_own_line: list[tuple[str, int]],
+    comment_sink,
+) -> None:
+    """入口注释落位（P1.5）：能挂树就挂树，挂不上才退锚点通道。
+
+    为何挂前缀节点而不是行尾：`wire HLT =\n// <tpc:cond:51>\n(DDREQ ? …)`
+    这类位置（语句内部、右操作数之前）在清洁流里锚不可用——渲染端按锚插值
+    会把占位落到折叠区外（"清洁流相邻 ≠ 源相邻"）。挂 leading 后位置来自
+    树结构：注释独占一行、后续操作数另起一行。
+
+    锚点通道**兜底**（挂树之外仍登记）：挂树成功时 restore 对已在场的注释
+    跳过（不双份）；挂树失败/未被渲染时（非 Node 原子占位、宏调用等直出
+    文本节点）marker 仍能被回插——否则条件块原文会随 marker 一起静默丢失
+    （2026-09-17 实测）。
+    """
+    if not (entry_comments or entry_own_line):
+        return
+    if isinstance(node, Node):
+        _mount_leading_comments(node, entry_comments)
+        _mount_leading_comments(node, entry_own_line, own_line=True)
+    if comment_sink is not None and isinstance(anchor_tok, Token) and anchor_tok.content:
+        for c_text, c_line in entry_comments:
+            comment_sink(
+                {
+                    "anchor": anchor_tok.content,
+                    "text": c_text,
+                    "line": c_line,
+                    "midline": True,
+                }
+            )
+        for c_text, c_line in entry_own_line:
+            comment_sink(
+                {
+                    "anchor": anchor_tok.content,
+                    "text": c_text,
+                    "line": c_line,
+                    "midline": False,
+                }
+            )
+
+
+def _led_loop(
+    ctx: "_PrattCtx", tokens: list[Token], idx: int, rbp: int, node: Node
+) -> tuple[Node, int]:
+    """中缀（led）循环：postfix / binary / ternary 按优先级与结合性归约。"""
     while idx < len(tokens):
-        token = tokens[idx]
-        # 停止符集合：遇到则终止表达式解析（如右括号、逗号等）
-        if (
-            stop_tokens is not None
-            and isinstance(token, Token)
-            and token.type in stop_tokens
-        ):
-            break
-        if not is_operator(token):
-            # 续行（**行首运算符**）：`ALL0\n + ALL1` 的 `+` 在行首——上面
-            # "遇 newline 非运算符自然 break" 会把表达式截在 `ALL0`，语句
-            # 匹配器随后要求 `;` 却遇到 `+` → 整句判不出（多行语句误报根因，
-            # linter 与 parser 共用本函数，两侧同病）。
-            # 判据：跳过 trivia（换行/注释）后若下一个显著 token 是**中缀**
-            # 运算符 → 表达式续行（行首中缀运算符不可能是语句起点，语句级
-            # 换行终止语义不变量保留）；否则维持 break（`expr1\n expr2`）。
-            if isinstance(token, Token) and token.type in (
-                COMMENT_TOKEN_TYPE,
-                NEWLINE_TOKEN_TYPE,
-            ):
-                k = idx
-                while (
-                    k < len(tokens)
-                    and isinstance(tokens[k], Token)
-                    and tokens[k].type
-                    in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
-                ):
-                    k += 1
-                if (
-                    k < len(tokens)
-                    and is_operator(tokens[k])
-                    and tokens[k].content in infix_attrs
-                ):
-                    idx = k
-                    token = tokens[idx]
-                else:
-                    break
-            else:
-                break
-        op = token.content
-        if op not in infix_attrs:
-            break
-        props = infix_attrs[op]
+        op_idx = _infix_op_index(ctx, tokens, idx, rbp)
+        if op_idx is None:
+            break  # 停止符 / 非运算符 / 优先级不高于 rbp → 表达式到此结束
+        idx = op_idx
+        op = tokens[idx].content
+        props = ctx.infix_attrs[op]
         arity = props.get("arity", 2)
-        lbp = infix_priority.get(op, 0)
-        if lbp <= rbp:
-            break
+        lbp = ctx.infix_priority.get(op, 0)
 
         if arity == 1 and props.get("position") == "postfix":
             idx += 1
             node = Node("UnaryOp", op=op, operand=node, position="postfix")
             continue
-        elif arity == 2:
-            idx += 1
-            assoc = props.get("assoc", "left")
-            right_rbp = lbp - 1 if assoc == "right" else lbp
-            # operator 间隙注释（`a + /* c */ b`）：跳过并收集，行中挂
-            # BinaryOp inline_after（ADR-0013 决策 5）；行尾挂 RHS leading，
-            # 独占行挂 RHS leading_own_line
-            # （ADR-0014 方向 B——`a || // c\n b` 的 `// c` 标注当行片段）
-            idx, gap_comments, own_line_comments, eol_comments = _skip_gap_comments(
-                tokens, idx
-            )
-            right_node, idx = parse_expression(
-                tokens,
-                idx,
-                right_rbp,
-                prefix_priority,
-                prefix_attrs,
-                infix_priority,
-                infix_attrs,
-                max_infix_prio,
-                unary_prefix_rbp,
-                atom_parser,
-                stop_tokens,
-                comment_sink,
-            )
-            node = Node("BinaryOp", op=op, left=node, right=right_node)
-            _mount_op_comments(node, op, gap_comments)
-            _mount_leading_comments(right_node, eol_comments)
-            _mount_leading_comments(right_node, own_line_comments, own_line=True)
+        if arity == 2:
+            node, idx = _led_binary(ctx, tokens, idx, node, op, lbp, props)
         elif arity == 3:
-            second_sym = props.get("second")
-            if not second_sym:
-                raise ValueError(f"三元运算符缺少第二个符号: {op}")
-            idx += 1
-            # 三目 op1（`?`）间隙注释（`cond ? /* 真 */ a : b`）：跳过并收集，
-            # 行中挂 TernaryOp inline_after；行尾挂 true_val leading（方向 B）
-            idx, gap_comments1, own_line1, eol_comments1 = _skip_gap_comments(
-                tokens, idx
-            )
-            middle, idx = parse_expression(
-                tokens,
-                idx,
-                0,
-                prefix_priority,
-                prefix_attrs,
-                infix_priority,
-                infix_attrs,
-                max_infix_prio,
-                unary_prefix_rbp,
-                atom_parser,
-                stop_tokens,
-                comment_sink,
-            )
-            if idx >= len(tokens) or tokens[idx].content != second_sym:
-                raise ValueError(f"缺少三元运算符的第二个符号: {second_sym}")
-            idx += 1
-            # 三目 op2（`:`）间隙注释（`cond ? a : /* 假 */ b`）：跳过并收集，
-            # 行中挂 TernaryOp inline_after；行尾挂 false_val leading（方向 B）
-            idx, gap_comments2, own_line2, eol_comments2 = _skip_gap_comments(
-                tokens, idx
-            )
-            right, idx = parse_expression(
-                tokens,
-                idx,
-                rbp,
-                prefix_priority,
-                prefix_attrs,
-                infix_priority,
-                infix_attrs,
-                max_infix_prio,
-                unary_prefix_rbp,
-                atom_parser,
-                stop_tokens,
-                comment_sink,
-            )
-            node = Node(
-                "TernaryOp",
-                op1=op,
-                op2=second_sym,
-                cond=node,
-                true_val=middle,
-                false_val=right,
-            )
-            _mount_op_comments(node, op, gap_comments1)
-            _mount_leading_comments(middle, eol_comments1)
-            _mount_leading_comments(middle, own_line1, own_line=True)
-            _mount_op_comments(node, second_sym, gap_comments2)
-            _mount_leading_comments(right, eol_comments2)
-            _mount_leading_comments(right, own_line2, own_line=True)
+            node, idx = _led_ternary(ctx, tokens, idx, node, op, rbp, props)
         else:
             raise ValueError(f"不支持的运算符元数: {arity}")
-
-    if node is None:
-        raise ValueError("解析失败，未生成 AST 节点")
     return node, idx
 
+
+def _infix_op_index(
+    ctx: "_PrattCtx", tokens: list[Token], idx: int, rbp: int
+) -> int | None:
+    """中缀循环取下一个运算符的下标；None = 主循环应 break。
+
+    - stop_tokens 命中 → None（如右括号、逗号）
+    - 非运算符：跳过 trivia（换行/注释）后若下一个显著 token 是**中缀**
+      运算符 → 续行（`ALL0\\n + ALL1` 的 `+` 在行首）——上面"遇 newline 非
+      运算符自然 break"会把表达式截在 `ALL0`，语句匹配器随后要求 `;` 却遇到
+      `+` → 整句判不出（多行语句误报根因，linter 与 parser 共用本函数，两侧
+      同病）。判据：行首中缀运算符不可能是语句起点，语句级换行终止语义不变量
+      保留；否则维持 break（`expr1\\n expr2`）。
+    - 运算符不在 infix_attrs / 优先级不高于 rbp → None（由调用方决定结合性）
+    """
+    if idx >= len(tokens):
+        return None
+    token = tokens[idx]
+    if (
+        ctx.stop_tokens is not None
+        and isinstance(token, Token)
+        and token.type in ctx.stop_tokens
+    ):
+        return None
+    if not is_operator(token):
+        if not (isinstance(token, Token) and token.type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)):
+            return None
+        k = idx
+        while (
+            k < len(tokens)
+            and isinstance(tokens[k], Token)
+            and tokens[k].type in (COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE)
+        ):
+            k += 1
+        if (
+            k < len(tokens)
+            and is_operator(tokens[k])
+            and tokens[k].content in ctx.infix_attrs
+        ):
+            idx = k
+        else:
+            return None
+    op = tokens[idx].content
+    if op not in ctx.infix_attrs:
+        return None
+    if ctx.infix_priority.get(op, 0) <= rbp:
+        return None
+    return idx
+
+
+def _led_binary(
+    ctx: "_PrattCtx",
+    tokens: list[Token],
+    idx: int,
+    node: Node,
+    op: str,
+    lbp: int,
+    props: dict,
+) -> tuple[Node, int]:
+    """二元中缀：按结合性取 RHS 的 rbp，间隙注释挂 BinaryOp/RHS。
+
+    operator 间隙注释（`a + /* c */ b`）：行中挂 BinaryOp `inline_after`
+    （ADR-0013 决策 5）；行尾挂 RHS `leading`，独占行挂 RHS
+    `leading_own_line`（ADR-0014 方向 B——`a || // c\\n b` 的 `// c` 标注当行片段）。
+    """
+    idx += 1
+    assoc = props.get("assoc", "left")
+    right_rbp = lbp - 1 if assoc == "right" else lbp
+    idx, gap_comments, own_line_comments, eol_comments = _skip_gap_comments(tokens, idx)
+    right_node, idx = _parse(ctx, tokens, idx, right_rbp)
+    node = Node("BinaryOp", op=op, left=node, right=right_node)
+    _mount_op_comments(node, op, gap_comments)
+    _mount_leading_comments(right_node, eol_comments)
+    _mount_leading_comments(right_node, own_line_comments, own_line=True)
+    return node, idx
+
+
+def _led_ternary(
+    ctx: "_PrattCtx",
+    tokens: list[Token],
+    idx: int,
+    node: Node,
+    op: str,
+    rbp: int,
+    props: dict,
+) -> tuple[Node, int]:
+    """三元中缀：`cond ? true : false`（两处分隔符，注释各自挂载）。
+
+    真值段以 rbp=0 递归（三目内可含任意低优先级运算）；假值段以**当前 rbp**
+    递归（右结合语义，与二元右结合同一 rbp 规则）。
+    """
+    second_sym = props.get("second")
+    if not second_sym:
+        raise ValueError(f"三元运算符缺少第二个符号: {op}")
+    idx += 1
+    # 三目 op1（`?`）间隙注释（`cond ? /* 真 */ a : b`）：行中挂 TernaryOp
+    # inline_after；行尾挂 true_val leading（方向 B）
+    idx, gap_comments1, own_line1, eol_comments1 = _skip_gap_comments(tokens, idx)
+    middle, idx = _parse(ctx, tokens, idx, 0)
+    if idx >= len(tokens) or tokens[idx].content != second_sym:
+        raise ValueError(f"缺少三元运算符的第二个符号: {second_sym}")
+    idx += 1
+    # 三目 op2（`:`）间隙注释（`cond ? a : /* 假 */ b`）：行中挂 TernaryOp
+    # inline_after；行尾挂 false_val leading（方向 B）
+    idx, gap_comments2, own_line2, eol_comments2 = _skip_gap_comments(tokens, idx)
+    right, idx = _parse(ctx, tokens, idx, rbp)
+    node = Node(
+        "TernaryOp",
+        op1=op,
+        op2=second_sym,
+        cond=node,
+        true_val=middle,
+        false_val=right,
+    )
+    _mount_op_comments(node, op, gap_comments1)
+    _mount_leading_comments(middle, eol_comments1)
+    _mount_leading_comments(middle, own_line1, own_line=True)
+    _mount_op_comments(node, second_sym, gap_comments2)
+    _mount_leading_comments(right, eol_comments2)
+    _mount_leading_comments(right, own_line2, own_line=True)
+    return node, idx
 
 def parse_with_count(
     tokens: list,
