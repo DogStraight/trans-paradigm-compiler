@@ -10,7 +10,7 @@ Doc: preprocessor/README.md
 
 import re
 
-from .registry import register
+from .registry import register, split_directive
 
 _NAME_RE = re.compile(r"([A-Za-z_]\w*)")
 
@@ -23,9 +23,10 @@ def handle_define(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
       object-like:  `define NAME body          （名字后为空白或结束）
       function-like:`define NAME(a, b) body    （名字后紧跟开括号，形参按声明分隔）
     function-like 的形参表写入 ctx["_func_params"]，body 存入 macro_defs。
+    关键字/前缀不写死：参数区由 `split_directive` 切出（前缀 + 关键字 + 空白）。
     """
     del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析名字
-    arg = stripped[len(prefix) + len("define ") :]
+    _keyword, arg = split_directive(stripped, prefix)
     m = _NAME_RE.match(arg)
     if not m:
         return

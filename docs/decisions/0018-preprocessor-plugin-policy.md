@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-09-17
 - 关联：`docs/decisions/0017-macro-in-syntax-position.md`（宏位处理现行机制）、
-  `preprocessor/README.md`（契约落地）、`ROADMAP.md` P3.6（分期剩余项）
+  `preprocessor/README.md`（契约落地）
 
 ## 背景
 

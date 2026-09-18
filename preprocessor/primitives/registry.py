@@ -14,6 +14,23 @@ DirectiveContext = dict[str, Any]
 DirectiveHandler = Callable[[str, str, str, DirectiveContext], None]
 
 
+def split_directive(stripped: str, prefix: str) -> tuple[str, str]:
+    """指令行 → (关键字, 关键字之后的文本)。
+
+    切分规则 = **前缀 + 关键字 + 空白 + 参数**：关键字 = 前缀后第一段非空白，
+    其后文本（已去前导空白）就是 handler 的参数。关键字**拼写**来自语言包的
+    候选名声明（`[macro_recognition] directive`）——本函数不写死任何关键字，
+    分隔空白也不假定为单个空格（TAB 等同样成立）。
+
+    调用方：`scan_directives` 取关键字做分派，各 handler 取参数。
+    """
+    rest = stripped[len(prefix) :].lstrip()
+    i = 0
+    while i < len(rest) and not rest[i].isspace():
+        i += 1
+    return rest[:i], rest[i:].lstrip()
+
+
 # ── 注册表 ────────────────────────────────────────
 
 _registry: dict[str, tuple[DirectiveHandler, str]] = {}

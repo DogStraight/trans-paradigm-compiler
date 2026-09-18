@@ -13,7 +13,12 @@ from core.config_registry import declare_cfg
 from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
 from lexer.comment_syntax import CommentSyntax, load_comment_syntax
-from .primitives.registry import get_primitive, get_primitive_kind, list_primitives
+from .primitives.registry import (
+    get_primitive,
+    get_primitive_kind,
+    list_primitives,
+    split_directive,
+)
 from .primitives.include import resolve_source_dir
 from ._bridge import make_marker
 from ._markers import inline_marker, line_marker
@@ -322,10 +327,10 @@ def scan_directives(
                 ctx["_inject_lines"].append((jno, line))
             continue
 
-        # 从行首提取 directive 关键字（`define foo → "define"）
-        after_prefix = stripped[len(prefix) :]
-        space_pos = after_prefix.find(" ")
-        directive_name = after_prefix[:space_pos] if space_pos > 0 else after_prefix
+        # 从行首提取 directive 关键字（`define foo → "define"）：切分 = 前缀 +
+        # 关键字 + 空白（`primitives/registry.split_directive`，与 handler 取参数同源；
+        # 关键字拼写来自语言包候选，引擎不写死、也不假定分隔符是单个空格）
+        directive_name = split_directive(stripped, prefix)[0]
 
         # 行首宏调用（名字不在 directives 指令表，如 `debug(x);、`FORMAL_KEEP）
         if directive_name not in directives_set:

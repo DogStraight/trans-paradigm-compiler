@@ -19,7 +19,7 @@ Doc: preprocessor/README.md
 from lexer.comment_syntax import load_comment_syntax
 
 from .._markers import line_marker
-from .registry import register
+from .registry import register, split_directive
 
 
 def _is_macro_defined(ctx, cond):
@@ -88,7 +88,8 @@ def _flush_block(ctx, block):
 def handle_ifdef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `ifdef COND。"""
     del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
-    cond = stripped[len(prefix) + len("ifdef ") :].strip()
+    _keyword, arg = split_directive(stripped, prefix)
+    cond = arg.strip()
     defined = _is_macro_defined(ctx, cond)
     stack: list = ctx.setdefault("_ifdef_stack", [])
     branch = _new_branch(cond, False, defined)
@@ -117,7 +118,8 @@ def handle_ifdef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
 def handle_ifndef(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `ifndef COND。"""
     del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
-    cond = stripped[len(prefix) + len("ifndef ") :].strip()
+    _keyword, arg = split_directive(stripped, prefix)
+    cond = arg.strip()
     defined = _is_macro_defined(ctx, cond)
     stack: list = ctx.setdefault("_ifdef_stack", [])
     branch = _new_branch(cond, False, not defined)
@@ -178,7 +180,8 @@ def handle_else(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
 def handle_elsif(stripped: str, prefix: str, _name: str, ctx: dict) -> None:
     """处理 `elsif COND。语义同 else + ifdef。"""
     del _name  # DirectiveHandler 协议签名参数，本 handler 从 stripped 解析条件
-    cond = stripped[len(prefix) + len("elsif ") :].strip()
+    _keyword, arg = split_directive(stripped, prefix)
+    cond = arg.strip()
     _switch_branch(ctx, stripped, cond, False)
 
 

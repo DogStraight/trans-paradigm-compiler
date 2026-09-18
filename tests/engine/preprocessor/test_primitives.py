@@ -5,6 +5,7 @@
   - undef：移除宏
   - ifdef 族：条件栈、active 判定（predefined/undefine 优先级）、占位压缩
   - include：路径解析（""/<>）、递归、循环检测
+  - 指令行切分（前缀 + 关键字 + 空白 + 参数）：关键字不写死、TAB 同样成立
 """
 
 import os
@@ -12,11 +13,13 @@ import os
 import pytest
 
 from core.define import FileManager
+from preprocessor._expand import scan_directives
 from preprocessor.macro_shape import load_macro_call_args
 from preprocessor.primitives.registry import (
     get_primitive,
     get_primitive_kind,
     list_primitives,
+    split_directive,
 )
 
 pytestmark = pytest.mark.smoke  # smoke：preprocessor 组代表（宏指令 handler）
@@ -68,6 +71,57 @@ class TestRegistry:
     def test_control_kind(self):
         assert get_primitive_kind("ifdef") == "control"
         assert get_primitive_kind("define") == "normal"
+
+
+class TestDirectiveSplit:
+    """指令行切分（`split_directive`）：前缀 + 关键字 + 空白 + 参数。
+
+    关键字拼写来自语言包候选（引擎不写死）、分隔空白不假定为单个空格
+    （TAB 等同样成立）；handler 取参数与 scan 取关键字同源。
+    """
+
+    @pytest.mark.parametrize(
+        "line, expected",
+        [
+            ("`define W 8", ("define", "W 8")),
+            ("`define\tW 8", ("define", "W 8")),          # TAB 分隔
+            ("`define   W 8", ("define", "W 8")),          # 多空格
+            ("`ifdef  FEATURE", ("ifdef", "FEATURE")),
+            ("`else", ("else", "")),                      # 无参数
+            ("`endif  ", ("endif", "")),
+        ],
+    )
+    def test_split_forms(self, line: str, expected: tuple[str, str]):
+        assert split_directive(line, "`") == expected
+
+    def test_define_with_tab_separator(self):
+        """`define\tW 8：handler 参数区不依赖单个空格分隔符。"""
+        ctx = _ctx()
+        _call("define", "`define\tW 8", ctx)
+        assert ctx["macro_defs"]["W"] == "8"
+
+    def test_undef_with_tab_separator(self):
+        ctx = _ctx(macro_defs={"W": "8"})
+        _call("undef", "`undef\tW", ctx)
+        assert "W" not in ctx["macro_defs"]
+
+    def test_ifdef_with_tab_separator(self):
+        ctx = _ctx(_predefined={"FEATURE": "1"})
+        _call("ifdef", "`ifdef\tFEATURE", ctx)
+        assert ctx["_ifdef_stack"][-1]["active"] is True
+
+
+class TestScanDirectiveSeparator:
+    """scan 分派路径上的分隔符（关键字提取与 handler 同源）。"""
+
+    def test_tab_separated_define_reaches_table(self, config_loaded) -> None:
+        """`define\tW 8 按指令行处理（旧实现按单个空格切 → 整行当宏调用行，定义丢失）。"""
+        del config_loaded
+        table, _funcs, _c, _h, _d, _clean, _m = scan_directives(
+            "`define\tW 8\nmodule m;\nendmodule\n",
+            FileManager.get_full_path("grammar/verilog"),
+        )
+        assert table.get("W") == "8"
 
 
 class TestDefine:

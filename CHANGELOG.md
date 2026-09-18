@@ -7,6 +7,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **指令行切分收为单一实现（去 5 处关键字字面量 + 单空格假设）**：`define` /
+  `undef` / `ifdef` / `ifndef` / `elsif` 五个处理器各自写 `stripped[len(prefix) +
+  len("define ") :]`——关键字拼写重复了一遍（值与注册名由分派保证相同），
+  且分隔符假定是**单个空格**：`` `define\tW 8 `` 会被扫成"宏调用行"（关键字比较
+  不中 → 定义静默丢失）。现收为 `primitives/registry.py::split_directive`
+  （前缀 + 关键字 + 空白 + 参数）：`scan_directives` 取关键字与 handler 取参数
+  同源一份实现，关键字拼写只由声明候选提供、分隔空白按空白字符集切。
+  语料实测：138 个样本里 TAB 分隔指令 **0 处**（本次属防御性修复 + 去重复表达）。
+  测试：`tests/engine/preprocessor/test_primitives.py` 新增 `TestDirectiveSplit`
+  （6 种切分形态 + TAB 分隔的 define/undef/ifdef）与
+  `TestScanDirectiveSeparator`（TAB 分隔的 `` `define `` 能进宏表 = 分派级验证）。
+
+  **验证**：worktree A/B 对拍 106 个共同样本输出逐文件一致（TAB 语料为 0 → 预期
+  零差异）；预处理器目录 132 passed；单进程全量 **2072 passed / 7 skipped**；
+  真实语料三工具持平（lint 33/33 / 误报 0、diag 5548、宏覆盖 86/135）；
+  config_sites / doc_refs / hardcode 三门禁 PASS。
+
 - **宏调用后随字面量后缀改声明驱动（删引擎硬编码正则）**：`` `W'd0 `` 的 `'d0`、
   `` `W'h1F `` 的 `'h1F` 原由 `_expand._LITERAL_SUFFIX_RE` 硬编码正则识别（展开时把
   后缀纳入**调用区间**，使替换结果与 token 边界对齐 → 还原按 token 区间回插；
