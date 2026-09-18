@@ -64,6 +64,31 @@
 > **一次性计划文档**（评估/清理/改进计划）执行完后删除，成果记入 CHANGELOG——
 > 避免 docs/ 堆积"已完成"的计划文档。
 
+## 放置速查（写/归档文档先判类；防污染与负重）
+
+> 从 `AGENTS.md` 迁出（2026-09-18）；`AGENTS.md` 与 `policy/collaboration.md`
+> 以本表为准，不再各存一份。
+
+- **决策（为什么）** → `decisions/`（ADR），**≤10 决策点**：只在决策成立时建档、
+  完成即删（未立项设计输入不进 ADR）；删除前机制先落部件文档（历史 git log）。
+- **机制/架构（怎么拼）** → 就近引擎子包（`<pkg>/README.md` + 架构详述，如
+  `linter/linter_architecture.md`、`renderer/renderer_architecture.md`、
+  `analyzer/semantic_checks.md`）。
+- **描述性（是什么/怎么用/清单）** → **不就地 docs/**：就近 docstring / 子包
+  README / 插件 README（layout/expression/grammar 字段已就地）；docs 只留协作方
+  知识（为什么/怎么拼/制度/索引/gaps/教程）。
+- **制度（该怎么做/流程/约定）** → `policy/`（coding-style / release-checklist /
+  doc-alignment / collaboration，与门禁工具同层；清单见 `policy/README.md`）。
+- **外部调研/设计来源** → `references.md`——**只调研记录**（格式：定位 →
+  管线对比 → 亮点 → 可实现性）；tpc 自身执行/落地/评测**不落**此。
+- **能力缺口/已知边界** → `gaps/gap-*.md`（+ `gaps/README.md` 登记表）。
+- **执行记录/修复结果** → 代码 + 测试断言 + CHANGELOG（"为什么/推翻了什么"的
+  结论层可留 ADR）。规则行为预期 → 测试断言，文档不重复。
+- **已删/过时内容** → git log 追，不留兼容垫片；删除先证后删（判据全表见
+  `policy/doc-alignment.md`「删除判据」）。
+- **讨论草稿/未成型中间产物** → 根目录 `_drafts/`（暂存区：**不进 git**、门禁
+  排除；整理按上述分流落正式位后删原稿，不重复留档）。
+
 > 注释对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）2026-09-05
 > 就近 `policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
 > 只保留导航与分层说明。

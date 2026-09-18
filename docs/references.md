@@ -1683,7 +1683,10 @@ tpc `[[checks]]` schema / `tests/_check_test.py` / `config` per_file——见
 - 💡 可做（低成本）：给现有范式块补"何时可删"一行（删除谓词，与不留向后兼容
   同构）
 - 💡 可做（中成本）：行为范式迁 docs/ 的 conventions 文件、AGENTS.md 只留索引
-  （指针化）——个人项目暂不必要（文件仍在 ~100 行预算内），观察增长再动
+  （指针化）——当时判为“个人项目暂不必要（文件仍在 ~100 行预算内），观察增长再动”；
+  **2026-09-18 已执行**：AGENTS.md 138 → 57 行（协作范式迁 `policy/collaboration.md`、
+  文档放置速查迁 `docs/README.md`、开发自查工具清单迁 `tools/README.md`、子系统表
+  改为指向 `docs/engine_overview.md`）
 - 📌 不做：逐条三字段元数据（Source/Applicability/Expiry 标注）——对 ~6 条范式
   过重，"何时可删"单行已够
 - ❌ 不借鉴：自动生成指令文件（Tembo 明确反对：生成物缺最重要的架构决策）；
@@ -2026,9 +2029,9 @@ jam 在**语言语义深度**（MVS/comptime/ABI/typed IR 内部构造）上走�
 - 实测产物：`specify init`（Copilot skills 模式）写 ~30 文件——`.github/skills/speckit-*`
   ×10 + `.specify/`（constitution / templates×5 / scripts(ps1)×6 / workflows / manifests）；
   已有仓库用 `specify init --here --force`，官方明说不重写应用、不为既有行为反向造规格。
-- 🔥 **借走两条**（已落 `AGENTS.md` 实施节奏）：bug 三分离的**先成因后动手**；
+- 🔥 **借走两条**（已落 `policy/collaboration.md`「实施节奏」，AGENTS.md 只留摘要）：bug 三分离的**先成因后动手**；
   **收尾结论分级** `verified`/`partial`/`failed` 且"缺验证不算完成"。
-- 🔥 **constitution 纪律**（已落 AGENTS 指令文件纪律）：只用已成立/已明确同意的原则，
+- 🔥 **constitution 纪律**（已落 `policy/collaboration.md`「指令文件自身纪律」）：只用已成立/已明确同意的原则，
   不为填模板发明标准。
 - 💡 其余质量门（clarify/analyze/checklist）本仓门禁已覆盖；📌 spec 保鲜三模型
   （不可变历史/活契约/发现回流）与本仓"完成即删 + git log 存史"是不同选择，作对照。

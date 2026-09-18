@@ -5,17 +5,15 @@
 
 ## 改任何子系统前
 
-1. 先读 `docs/engine_overview.md`（引擎一条线，建立全景）再查 `docs/MODEL_INDEX.md`
-   跳转表：知识单元 → 文档位置 → 实现（Impl）→ 验证（Test）
-2. 查 `docs/gaps/README.md` 对应部件档案：边界/接受项在这——先确认"这算不算
-   要改"，避免把刻意接受的设计当 bug 修、或重复调研已否掉的方向
-3. 读对应 `docs/decisions/`（为什么，ADR）与架构文档（怎么拼）
-4. 改代码时维护文件头 `Doc:` 反向引用（约定见 `policy/doc-alignment.md`）
-5. 跑对应测试（`tests/`）；改 linter 用 `tests/e2e/eval_lint_accuracy.py` 验证 recall/误报
-6. 写代码守规约（非门禁软规约）：注释语言/分区标题/命名 →
-   `policy/coding-style.md`；表达式书写约定 → `parser/expression_conventions.md`；
-   **改过哪个 py 文件就清哪个文件的静态诊断** → `policy/pylance-cleanup.md`
-   （agent 侧 Pylance MCP 逐文件查，清零判据见该文）
+1. `docs/engine_overview.md`（全景）→ `docs/MODEL_INDEX.md`（跳转表：知识单元 →
+   文档 → 实现 → 验证）
+2. `docs/gaps/README.md` 对应部件档案：先确认"这算不算要改"，别把刻意接受的设计
+   当 bug 修、或重复调研已否掉的方向
+3. `docs/decisions/`（为什么）+ 就近架构文档（怎么拼）
+4. 维护文件头 `Doc:` 反向引用（`policy/doc-alignment.md`）
+5. 跑对应测试（`tests/`；改 linter 加跑 `tests/e2e/eval_lint_accuracy.py` 看 recall/误报）；
+   守规约：`policy/coding-style.md`（注释/分区/命名）与 `parser/expression_conventions.md`；
+   **改过哪个 py 就清哪个的静态诊断**（`policy/pylance-cleanup.md`）
 
 ## 硬约束
 
@@ -25,129 +23,35 @@
 - **不留向后兼容**：行为/配置/接口过时即删，不保留兼容垫片、deprecated 路径或
   "旧版分支"——历史在 git log 可追溯，删除优于兼容，避免死代码与双路径漂移。
   与 TODO"完成即删"同纪律：过时的直接删，而不是标记弃用后挂着。
-- **删除先证后删**（判据全表见 `policy/doc-alignment.md`「删除判据」）：
-  删除动作须命中
-  判据——A 代码（A1 无引用 / A2 双实现 / A3 决策过时 / A4 归属错→移动 /
-  A5 结构不一致）、B 注释（B1 零信息 / B2 与权威源重复 / B3 引已删目标 /
-  B4 编辑残留 / B5 过时注记）、C 文档（C1 一次性完成 / C2 漂移 / C3 重复 /
-  C4 版权）；说不出判据不删。反判据：调研/决策记录（references.md / ADR）、
-  个人思考沉淀、CHANGELOG 历史——这些不是删除对象。
-- 文档分层只对协作方文档生效（decisions + 机制文档进 MODEL_INDEX）；
-  个人思考沉淀（`references.md` 等）不对齐，别给它套对齐约定。
+- **删除先证后删**：删除须命中判据（说不出判据不删），反判据不是删除对象——
+  判据全表与反判据见 `policy/doc-alignment.md`「删除判据」。
+- 文档分层只对协作方文档生效（`references.md` 等个人思考沉淀不对齐），见 `docs/README.md`。
 
-## 协作行为范式（后来 session 必须继承）
+## 协作行为（完整版见 `policy/collaboration.md`）
 
-**克制推送：**
-- 默认**只本地提交，不推送**。远程仓库是稳定的作品展示态，保持干净。
-- 推送只在作者明确说"推"时执行；平时所有改动本地 `git commit` 攒着。
-- 文档措辞保持中性工程化，不带"变现/领先/借鉴"这类指向性表述（公共历史里
-  不留指向外部项目的显眼措辞）。
+- **默认只本地提交，不推送**（作者说"推"才推）；文档措辞中性工程化。
+- **先看成熟解法、不闭门造车**，不拉踩开源作者；借鉴点标 🔥/💡/📌，"不实现"写明原因；
+  成熟工具输出可当 oracle（对拍验证）。
+- **先落档后动手**；文档归位先判类（速查见 `docs/README.md`「放置速查」）。
+- **分步分期**（每阶段独立验证、完成即提交汇报）；**缺陷先成因后动手**；**收尾给
+  结论分级** `verified`/`partial`/`failed`，缺验证不算完成（只能报 partial）。
+- **TODO/ROADMAP 只留未完成、完成即删**；每次收尾主动同步（无需提示）。
 
-**见贤思齐：**
-- **先看成熟解法，用已验证的模式**：遇到问题先调研成熟产品（Verilator/slang/
-  Verible/SpyGlass/svlint 等）如何解决同一个问题，尽量采用已经验证的模式
-  （机制、语义、边界处置），不闭门造车重新发明——这是见贤思齐的前置动作，
-  先看再定要不要抄、怎么抄。
-- 调研外部项目时，**不拉踩开源作者**：先讲对方做得好、值得学的地方；差异用
-  "各有取舍，非优劣"表述，不用评分式/压人式语气。
-- **文档放置速查（写/归档文档先判类；防污染与负重）**：
-  - 决策（为什么）→ `docs/decisions/`（ADR），**≤10 决策点**：只在决策成立时
-    建档、完成即删（未立项设计输入不进 ADR）；删除前机制先落部件文档（历史 git log）。
-  - 机制/架构（怎么拼）→ 就近引擎子包（`<pkg>/README.md` + 架构详述，如
-    linter/linter_architecture.md、renderer/renderer_architecture.md、
-    analyzer/semantic_checks.md）。
-  - 描述性（是什么/怎么用/清单）→ **不就地 docs/**：就近 docstring / 子包
-    README / 插件 README（layout/expression/grammar 字段已就地）；docs 只留
-    协作方知识（为什么/怎么拼/制度/索引/gaps/教程）。
-  - 制度（该怎么做/流程/约定）→ `policy/`（coding-style / release-checklist /
-    doc-alignment，与门禁工具同层）。
-  - 外部调研/设计来源 → `docs/references.md`——**只调研记录**（格式：定位 →
-    管线对比 → 亮点 → 可实现性）；tpc 自身执行/落地/评测**不落**此。
-  - 能力缺口/已知边界 → `docs/gaps/gap-*.md`（+ gaps/README 登记表）。
-  - 执行记录/修复结果 → 代码 + 测试断言 + CHANGELOG（"为什么/推翻了什么"的
-    结论层可留 ADR）。规则行为预期 → 测试断言，文档不重复。
-  - 已删/过时内容 → git log 追，不留兼容垫片；删除先证后删（判据全表见
-    `policy/doc-alignment.md`「删除判据」）。
-  - 讨论草稿/未成型中间产物 → `_drafts/`（根目录暂存区：**不进 git**、门禁
-    排除；整理按上述分流落正式位后删原稿，不重复留档）。
-- **先落档后动手**：调研/设计结论先按上述分流落档再立项实现，落档是动手的
-  前置——不边做边定。
-- 借鉴点标注层级：🔥 直接借鉴 / 💡 启发 / 📌 路线观察；"不实现"也要写明原因。
-- **对拍验证**：成熟工具的输出可作 oracle（sv-parser 差分、format 对拍等），
-  用已验证实现校验自己的行为——与"先看成熟解法"互补：一个抄机制，一个当裁判。
+**指令文件自身纪律（AGENTS.md 修剪，细节见 `policy/collaboration.md`）：**
+- 已能正确做就删；**不复制门禁**；**只用已成立或已明确同意的原则**；细节迁出
+  （范式进 `policy/collaboration.md`，命令与清单进就近 README）——本文件是目录，
+  不是百科，保持 ~100 行量级。
 
-**实施节奏（分步分期）：**
-- 大任务**分步分期**，每阶段可独立验证（测试/门禁通过才进下一阶段），
-  不攒大改一次性提交；阶段完成即提交并汇报。
-- **测试门禁 + 测后决策**：规则/改动过门禁（含真实语料实测量化误报）后
-  按处置三选落地——修 / 降级 / 记录为已知边界；**回退只是处置之一，非
-  必要**（过不了门禁才回退，结论照常落档）。
-- **先成因后动手**（借 Spec Kit 的 bug 流程三分离）：缺陷/异常行为先给**成因
-  判定**（证据在哪、为什么是这个原因），再改，再验证；成因未定的修复不提交。
-- **收尾给结论分级**（同上）：每次"修好了/做完了"必须带等级与依据——
-  `verified`（有覆盖该行为的验证：测试/对拍/门禁实证）/ `partial`（只部分验证：
-  仅手动探针、仅单层、未跑门禁等，**写明缺哪一环**）/ `failed`。缺验证不算
-  完成，只能报 `partial` 并列出待验证项。
-- **默认开/关是数据决策**：规则默认开关由实测误报面定——误报可接受就
-  默认开（W 族先例），误报面大才默认关（NC/AW 先例），非固定策略。
+## 子系统
 
-**指令文件自身纪律（AGENTS.md 修剪）：**
-- 与代码同纪律：某条范式 agent 无指令也稳定执行 → 删（"已能正确做就删"，
-  调研来源见 references.md「知名 AGENTS.md 指令文件范式调研」），不靠堆
-  指令改行为——删除谓词 = 该范式不再需要被提示（与不留向后兼容同构）。
-- **不复制门禁**：测试门禁/工具已强制的项（lint 风格、hardcode gate、测试
-  命令等）不写进 AGENTS.md——一行"由门禁强制，修它报的"胜过重复条目，
-  省上下文预算（文件保持 ~100 行量级）。
-- **只用已成立或已明确同意的原则**（借 Spec Kit 的 constitution 纪律）：
-  写/改本文件与 `policy/` 时不为填格式发明标准——不成立的标准是噪声。
-
-**TODO/ROADMAP 维护纪律（两个文件都只留未完成）：**
-- `TODO.md` 只列未完成待办，**完成项一律删除**（不保留 [x] 条目）——完成
-  历史在 git log，决策记录在 references.md/ADR，TODO 不重复存。
-- **短期待办在 `TODO.md`，中长期目标（backlog/非发布阻塞/v0.2 候选）在
-  `ROADMAP.md`**；立项启动的项从 ROADMAP 移回 TODO，两文件同样完成即删。
-  P 编号沿用原始编号（对应 git 历史与交叉引用），不重新编号。
-- 每次"更新 TODO"动作必须**连带删除本次已闭环的条目**，不允许只加不减。
-- **闭环即主动更新，无需作者提示**：每次任务收尾前主动同步 TODO/ROADMAP
-  （删除本次闭环条目、立项项从 ROADMAP 移回 TODO），作为收尾固定环节，
-  与代码改动一起本地提交。
-- **调研/设计结论按"落档分流"落档**（见上），不进 TODO/ROADMAP——两文件里
-  的注记只允许"指明待办方向的上下文"，不允许沉淀调研结论。
-
-## 子系统一句话
-
-| 目录 | 职责 |
-|------|------|
-| `grammar/` | 语言规则（数据）：verilog/ 与 c4/ 的 TOML |
-| `lexer/` | 词法：token 定义驱动的扫描 |
-| `parser/` | 语法：递归下降 + Pratt + 规则选择 |
-| `linter/` | 解析前的 token 级 lint（反解析器，复用同一 TOML 语法） |
-| `preprocessor/` | 宏展开 / 反向映射 |
-| `analyzer/` | 语义分析：作用域、符号、类型（primitives 扩展） |
-| `transform/` | 语义映射 + 配置驱动变换 |
-| `renderer/` | Doc IR → 格式化输出 |
-| `core/` | 引擎骨架：配置注册、错误、插件加载 |
+各目录职责与边界见 `docs/engine_overview.md`（管线一条线 + 子系统表）；逐文件一句话
+见各子包 `README.md`。
 
 ## 运行
 
 - 入口：`main.py`（CLI）
 - 快速回归：`pytest -m smoke`（~12s，功能域代表层，日常改动先跑；分层见 `tests/README.md`）
 - 全量测试：`pytest tests/`（零运行时依赖，无第三方包）
-- 开发自查工具（都不进日常门禁，人工/按需跑）：
-  - 配置同步点位 `tools/config_sites.py`（引擎语义/键名变更时机械枚举语言包配置
-    点位：`list` 清单 / `check` 漂移哨兵 / `rename` 逐项替换；规程见
-    `policy/engine_config_sync.md`）
-  - 增量覆盖率 `tools/check_coverage_delta.py`（只看改动文件，几十秒）
-  - 真实语料误报基线 `tests/e2e/eval_diag_baseline.py`（增长即失败；查证误报用
-    `eval_benchmark.py`，需外部 oracle）
-  - 门禁有效性抽查 `tools/check_gate_efficacy.py`（真实事故变异，期望门禁变红）
-  - 进程级隔离对照 `tools/check_test_isolation.py`（每文件一进程 vs 单进程共享档，
-    差异即"换跑法就变脸"；`--hashseed-scan N` 再换一维：PYTHONHASHSEED。
-    判据见 `tests/README.md`）
-  - 现场转储 `tools/dump_pipeline_state.py`（管线语言状态：共享条目/组件/当前语言，
-    诊断跨语言串味；`--pre grammar/c4` 复现"同进程先跑过别的语言"）
-  - 宏位置覆盖 `tools/check_macro_coverage.py`（宏位置透明性量化 + 失败面按 token
-    类型分布，非门禁；边界依据见 ADR-0017）
-  - 外部审计 Bifrost（Python 侧结构面信号：改动影响面/到达测试、复杂度、异常吞吃、
-    结构重复、死代码、弱断言、结构查询；先小后大——单次工具秒级、完备结论需仓库为
-    root。规程见 `policy/bifrost_audit.md`，有效性抽查探针 `tools/bifrost_probe/`）
+- 开发自查工具（都不进日常门禁，人工/按需跑）：**清单见 `tools/README.md`**
+  （配置同步点位 / 增量覆盖率 / 门禁有效性抽查 / 隔离对照 / 现场转储 / 宏位置覆盖 /
+  外部审计 Bifrost；真实语料误报基线在 `tests/e2e/eval_diag_baseline.py`）
