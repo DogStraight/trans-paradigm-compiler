@@ -29,6 +29,10 @@ def _load_commands() -> dict:
 
     指令在语言包声明（如 format = { stages = [...], expand_macros = ... }），
     main.py 按声明驱动 run_pipeline_on_source（stages 参数跳过未声明阶段）。
+
+    文件缺失 → 容忍（无声明 = 全部走 `_CMD_DEFAULTS`）；TOML 损坏 → fatal
+    （静默退化成"无指令声明"会让指令行为悄悄变样，同 core/config_lifecycle
+    的 fail-fast；fatal 风格与 `_resolve_grammar_dirs` 一致）。
     """
     import tomllib
     from core.define import DEFAULT_RULES_DIR
@@ -37,9 +41,12 @@ def _load_commands() -> dict:
     try:
         with open(meta_path, "rb") as f:
             meta = tomllib.load(f)
-        return meta.get("commands", {})
-    except Exception:
+    except FileNotFoundError:
         return {}
+    except tomllib.TOMLDecodeError as exc:
+        print(f"[fatal] Invalid TOML: {meta_path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    return meta.get("commands", {})
 
 
 # 指令默认值 = 完整管线（preprocess/lint/parse/analyze/transform/render 全 true，

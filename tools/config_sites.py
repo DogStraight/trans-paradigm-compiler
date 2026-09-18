@@ -116,13 +116,17 @@ def _engine_vocab() -> set[str]:
 
 
 def _dispatch_order() -> tuple[str, ...]:
-    """原语 dispatch 键及注册顺序（表达式求值按序取首个命中）。"""
+    """原语 dispatch 键及注册顺序（表达式求值按序取首个命中）。
+
+    取不到注册表（最小环境跑工具）→ 用本文件声明的 `_VOCAB_DISPATCH`：那是
+    工具自己的期望词表，`check` 模式本就是拿它当基准比对漂移，不构成静默错乱。
+    """
     try:
         from renderer.primitives import get_registry
 
         keys = tuple(k for k, _ in get_registry())
         return keys or _VOCAB_DISPATCH
-    except Exception:  # noqa: BLE001 — 工具可在最小环境跑（退化为声明顺序）
+    except Exception:  # noqa: BLE001 — 最小环境跑工具：回退到声明词表（见 docstring）
         return _VOCAB_DISPATCH
 
 
