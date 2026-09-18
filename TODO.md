@@ -41,6 +41,19 @@
   - ⏳ 同文件 `_StructureBase` 上帝对象（类体 1110 行 / 53 成员 / 43 方法）：
     层 3 精化基类，被 `ProjectChecker` 继承、postpass 经 `context.extra` 消费；
     拆类需先立 ADR（B-B4c，暂缓）。
+  - ✅ `lexer/main_lexer.Lexer.__init__`（175 行）：已拆为装配 + 七个分步方法
+    （`de22813`）——类级最大函数 175 → 56 行。
+  - ⏳ **下一梯队长方法**（>80 行，外部裁判复查后列队）：
+    `core/config_registry.ConfigRegistry._resolve_decls`（~140 行）、
+    `core/config_registry._load_meta_declarations`（~118 行）、
+    `core/check_registry.load_user_check_config`（~91 行）、
+    `core/define.GrammarRule.__init__`（79 行）、
+    `analyzer/checker.ProjectChecker.check`（65 行）、
+    `analyzer/suppress.build_suppress_map`（60 行）、
+    `analyzer/traversal._walk_node`（47 行）、`core/config_registry._glob_match`（43 行）。
+  - ⏳ **类级上帝对象**（需设计决策，非机械拆分）：`_StructureBase`、
+    `ConfigRegistry`、`GrammarRule`、`ProjectChecker`、`AnalysisTraversal`、
+    `Lexer`、formatter `BoundaryScanner`——建议逐个人工定边界后再动。
 - **B-C 结构重复**（非 tests 111 组，按"同文件/同部件 → 跨部件"递进）：
   - ✅ 引擎侧同形重复：`_deep_merge` ×2、`get_config_refs` ×4、`plugin_loader`
     合并型 getter ×5、`_serialize_member`/`_serialize_group`、`soft_break` 三态
