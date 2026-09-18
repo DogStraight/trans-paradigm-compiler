@@ -120,6 +120,142 @@ class FileResult:
     macro_regions: list = field(default_factory=list)
 
 
+# ── 常量表达式求值 ────────────────────────────────────────
+
+# 只认中性形态（数字/括号/四则/比较——多数语言同形）；位运算、逻辑运算、
+# 标识符、三目一律不可判：那是语言层的事（语言包侧另有求值器，如 verilog 的
+# latch_check/_latch_check._eval_const）。
+_CONST_TOK_RE = re.compile(r"[ ]*(?:(\d+)|(<=|>=|==|!=|\+|-|\*|/|%|\(|\)|<|>))")
+_CMP_OPS = ("<", "<=", ">", ">=", "==", "!=")
+
+
+def _tokenize_const(text: str) -> list[tuple[str, str]] | None:
+    """常量表达式 → token 列表；出现未声明的字符 → None（不可判）。"""
+    toks: list[tuple[str, str]] = []
+    pos = 0
+    while pos < len(text):
+        m = _CONST_TOK_RE.match(text, pos)
+        if m is None:
+            return None
+        pos = m.end()
+        toks.append(("num", m.group(1)) if m.group(1) is not None else ("op", m.group(2)))
+    return toks
+
+
+def _eval_const_expr(text: str) -> bool | None:
+    """纯常量表达式求值 → 布尔｜None（不可判，保守）。
+
+    显式递归下降，**不用 `eval`**：源码文本进 `eval` 是 RCE 面（与语言包侧
+    `_eval_const` 同理由）；且 Python 词法与目标语言不一致——`!`/`&&`/`||`
+    在 Python 里是语法错，只会静默落回不可判，写进白名单反而看不出真实可达面。
+
+    语法：表达式 := 比较；比较 := 加减 (比较符 加减)*；加减 := 乘除
+    (('+'|'-') 乘除)*；乘除 := 一元 (('*'|'/'|'%') 一元)*；一元 := ('+'|'-')*
+    基本项；基本项 := 数字 | '(' 表达式 ')'。
+    """
+    toks = _tokenize_const(text.strip())
+    if toks is None:
+        return None
+    pos = 0
+
+    def peek() -> tuple[str, str] | None:
+        return toks[pos] if pos < len(toks) else None
+
+    def eat() -> tuple[str, str]:
+        nonlocal pos
+        tok = toks[pos]
+        pos += 1
+        return tok
+
+    def parse_primary() -> float | None:
+        cur = peek()
+        if cur is None:
+            return None
+        kind, tok = cur
+        if tok == "(":
+            eat()
+            val = parse_cmp()
+            nxt = peek()
+            if val is None or nxt is None or nxt[1] != ")":
+                return None
+            eat()
+            return val
+        if kind == "num":
+            eat()
+            return float(tok)
+        return None
+
+    def parse_unary() -> float | None:
+        cur = peek()
+        if cur is not None and cur[1] in ("+", "-"):
+            sign = eat()[1]
+            val = parse_unary()
+            if val is None:
+                return None
+            return -val if sign == "-" else val
+        return parse_primary()
+
+    def parse_term() -> float | None:
+        left = parse_unary()
+        if left is None:
+            return None
+        while True:
+            cur = peek()
+            if cur is None or cur[1] not in ("*", "/", "%"):
+                return left
+            op = eat()[1]
+            right = parse_unary()
+            if right is None or (op in ("/", "%") and right == 0):
+                return None
+            if op == "*":
+                left *= right
+            elif op == "/":
+                left /= right
+            else:
+                left %= right
+
+    def parse_sum() -> float | None:
+        left = parse_term()
+        if left is None:
+            return None
+        while True:
+            cur = peek()
+            if cur is None or cur[1] not in ("+", "-"):
+                return left
+            op = eat()[1]
+            right = parse_term()
+            if right is None:
+                return None
+            left = left + right if op == "+" else left - right
+
+    def parse_cmp() -> float | None:
+        left = parse_sum()
+        if left is None:
+            return None
+        while True:
+            cur = peek()
+            if cur is None or cur[1] not in _CMP_OPS:
+                return left
+            op = eat()[1]
+            right = parse_sum()
+            if right is None:
+                return None
+            ok = {
+                "<": left < right,
+                "<=": left <= right,
+                ">": left > right,
+                ">=": left >= right,
+                "==": left == right,
+                "!=": left != right,
+            }[op]
+            left = 1.0 if ok else 0.0  # 布尔参与后续比较：真=1 / 假=0
+
+    val = parse_cmp()
+    if val is None or pos != len(toks):
+        return None
+    return bool(val)
+
+
 # ── 引擎 ─────────────────────────────────────────────────
 
 
@@ -1036,14 +1172,9 @@ class _StructureBase:
             if v.isdigit():
                 return int(v) == 0
             return None
-        # 含运算的简单常量表达式（1+0 / 0 && 1 等）——求值器在 width_check
-        # 插件层（语言知识），引擎层只处理纯标识符/数字；复杂表达式保守
-        try:
-            if re.fullmatch(r"[0-9+\-*/()<>=!&| ]+", text):
-                return bool(eval(text, {"__builtins__": {}}, {}))
-        except Exception:
-            return None
-        return None
+        # 含运算的纯常量表达式（`1+0` / `2*3<7` 等）→ 显式求值（不用 eval，
+        # 见 _eval_const_expr）；标识符/位运算/逻辑运算等一律不可判 → None
+        return _eval_const_expr(text)
 
 
     def _module_of(self, fr, node) -> str:

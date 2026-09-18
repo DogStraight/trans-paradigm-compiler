@@ -17,3 +17,25 @@
 - 待定声明面（拟放**既有** `[directive_handlers.include]`，该表已有
   `enabled` / `search_dirs` / `silent`）：路径形态列表（开 / 闭 / 是否相对路径优先），
   关键字取用改走 `primitives/registry.py::split_directive`。
+
+## 外部审计修复（Bifrost 全仓诊断，2026-09-18 起）
+
+> 清单与处置记录：`_drafts/bifrost/findings.md`、`_drafts/bifrost/dispositions.md`
+> （工作草稿，不进 git）。范围按作者定调：只修非 tests；每批跑 smoke +
+> `check_doc_refs` + `check_hardcode`，批末跑全量测试。完成即删对应条目。
+
+- **B-A 异常吞吃 triage**（44 条）：score 10 的空体 `except Exception: pass`
+  逐条定成因 → 修 / 写明兜底理由 / 记为已知边界；最重一条是
+  `pipeline._load_pipeline_defaults`（与"配置加载 fail-fast"张力最大）。
+- **B-B 复杂度/长方法重构**（大改，分部件分批）：`analyzer/structure.py`
+  （1082 行 / CC 73）、`lexer/main_lexer.Lexer.tokenize`（397 行）、
+  `grammar/verilog/plugins/formatter/boundary.py` 的 `build_block_tokens` /
+  `BoundaryScanner._scan_tokens`（249 / 319 行）、
+  `parser/pratt_parser.parse_expression`（310 行）。
+- **B-C 结构重复**（非 tests 107 组）：跨插件重复抽公共助手
+  （`case_check._const_value` ↔ `latch_check._const_value`、
+  `always_check._target_sig` ↔ `latch_check._target_sig` 等）。
+
+> 审计外观察（不在本清单）：`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog 形态
+> 进了引擎，与"本模块零语言知识"的声明相左——归 `docs/gaps/gap-semantic-elaboration-boundaries.md`
+> 边界 2（引擎约定 vs 语言包声明）那条线，待语言包声明条件求值面时一起处理。

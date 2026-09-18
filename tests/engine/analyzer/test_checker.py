@@ -687,6 +687,38 @@ class TestMultiDriverCheck:
         codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
         assert "W105" not in codes
 
+    def test_generate_const_arith_condition_no_w105(self, checker, tmp_path):
+        """generate 条件为常量算式（`2*3 < 7`）：引擎求值后只留选中分支。
+
+        覆盖 analyzer/structure.py 的 `_eval_const_expr` 可达面（数字/括号/
+        四则/比较由引擎显式求值）；语言专有算子不在引擎词表内 → 不可判 →
+        保守保留双分支（求值器注释里写明这条边界）。
+        """
+        (tmp_path / "drv.sv").write_text(
+            "module drv (input clk, output reg q);\n"
+            "  always @(posedge clk) q <= 1'b1;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        top = tmp_path / "top.sv"
+        top.write_text(
+            "module top (input clk, output wire sig);\n"
+            "  wire s;\n"
+            "  generate\n"
+            "    if (2*3 < 7) begin : g_inst\n"
+            "      drv u (.clk(clk), .q(s));\n"
+            "    end else begin : g_assign\n"
+            "      assign s = 1'b0;\n"
+            "    end\n"
+            "  endgenerate\n"
+            "  assign sig = s;\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        report = checker.check(str(top))
+        codes = {d.get("code") for f in report["files"] for d in f["semantic"]}
+        assert "W105" not in codes
+
     def test_generate_elseif_chain_no_w105(self, checker, tmp_path):
         """generate if/else if/else 三链：中间分支不选中时不报。
 
