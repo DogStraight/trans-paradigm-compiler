@@ -141,6 +141,36 @@ class ProjectChecker(_StructureBase):
                 "modules": {name: file},
                 "exit_code": 0 | 1,
             }
+
+        四阶段各走一个方法：`_prepare_run`（归一化 + 重置本次运行状态）→
+        `_discover_all`（递归发现 + parse）→ 层 3 信号图 → `_analyze_all`
+        （postpass）→ `_collect_files`（两阶段诊断汇总）。
+        """
+        entries = self._prepare_run(entry_path)
+
+        # 1) 递归发现 + parse（模块索引逐步建立；多入口共享 seen，
+        #    重复入口不会重复 parse）
+        self._discover_all(entries)
+
+        # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
+        self._signal_graph = self._build_signal_graph()
+
+        # 2) 每个文件跑语义分析（postpass 拿到完整 module_index）
+        self._analyze_all()
+
+        # 3) 汇总两阶段诊断
+        files, any_error = self._collect_files()
+        return {
+            "files": files,
+            "modules": {n: i.file for n, i in self._module_index.items()},
+            "exit_code": 1 if any_error else 0,
+        }
+
+    def _prepare_run(self, entry_path: str | list[str]) -> list[str]:
+        """入口归一化为绝对路径，并重置本次运行的索引与缓存。
+
+        多入口共享同一次运行的状态（memo / module_index / 层 3 穿透缓存），
+        否则跨入口的单元定义互不可见。
         """
         raw = [entry_path] if isinstance(entry_path, str) else list(entry_path)
         entries = [os.path.abspath(p) for p in raw]
@@ -149,21 +179,25 @@ class ProjectChecker(_StructureBase):
         self._fr_by_module_cache = None  # P2.7 层 3：穿透查模块文件缓存随 check 重建
         self._ensure_shared()
         self._refresh_structure()
+        return entries
 
-        # 1) 递归发现 + parse（模块索引逐步建立；多入口共享 seen，
-        #    重复入口不会重复 parse）
+    def _discover_all(self, entries: list[str]) -> None:
+        """递归发现 + parse 全部入口（多入口共享 seen，重复入口不重复 parse）。"""
         seen: set[str] = set()
         for entry in entries:
             self._discover(entry, seen)
 
-        # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
-        self._signal_graph = self._build_signal_graph()
-
-        # 2) 每个文件跑语义分析（postpass 拿到完整 module_index）
+    def _analyze_all(self) -> None:
+        """对已发现文件跑语义分析（postpass 需要完整 module_index）。"""
         for fr in self._memo.values():
             self._analyze(fr)
 
-        # 3) 汇总两阶段诊断
+    def _collect_files(self) -> tuple[list, bool]:
+        """汇总两阶段诊断 → (files 列表, 是否存在阻断级诊断)。
+
+        阻断判定：语法侧 `blocking` 诊断、语义侧 `error` 级诊断任一出现即
+        退出码 1（与 check 返回的 exit_code 对应）。
+        """
         files = []
         any_error = False
         for path, fr in self._memo.items():
@@ -184,11 +218,7 @@ class ProjectChecker(_StructureBase):
                     "semantic": semantic,
                 }
             )
-        return {
-            "files": files,
-            "modules": {n: i.file for n, i in self._module_index.items()},
-            "exit_code": 1 if any_error else 0,
-        }
+        return files, any_error
 
     def _analyze(self, fr: FileResult) -> None:
         if fr.ast is None:
