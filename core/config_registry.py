@@ -617,25 +617,11 @@ class ConfigRegistry:
         Returns: (loaded, sources)
             loaded:  name → 配置值
             sources: name → {"file": 实际文件路径, "section": section} 或 {"bare": True}
+
+        分三步：基准目录表（`_build_bases`）→ 逐声明取值（`_load_decl_value`，
+        异常按三类分流，fail-fast 语义见各 except 注释）→ 汇总一次性报错。
         """
-        from core.define import FileManager
-
-        # 基准目录表
-        bases: dict[str, str] = {"rules": rules_dir}
-        ext_list = list(ext_dirs) if ext_dirs else []
-        for i, d in enumerate(ext_list):
-            bases[f"ext_{i}"] = d
-        if ext_list:
-            bases["ext"] = ext_list[0]  # 兼容 base="ext"
-        else:
-            bases["ext"] = ""  # ext 为空，required=False 的声明静默失败
-        if plugins_dir:
-            bases["plugins"] = plugins_dir
-        for bk, bv in base_dirs.items():
-            # 去掉 _dir 后缀便于匹配
-            key = bk.removesuffix("_dir")
-            bases[key] = bv
-
+        bases = cls._build_bases(rules_dir, ext_dirs, plugins_dir, base_dirs)
         loaded: dict[str, Any] = {}
         sources: dict[str, dict] = {}
         errors: list[str] = []
@@ -653,69 +639,24 @@ class ConfigRegistry:
                 continue
 
             try:
-                # file 可以是字符串（单文件）或列表（glob 模式）
-                if isinstance(file_spec, str):
-                    paths = [file_spec]
-                elif isinstance(file_spec, list):
-                    paths = file_spec
-                else:
-                    raise TypeError(f"file 必须是字符串或列表: {file_spec}")
-
-                merged: Any = None
-                src_files: list[str] = []
-                for fp in paths:
-                    # glob 模式：匹配 0 或多个文件
-                    matched = _glob_match([fp], base_dir)
-                    if not matched:
-                        if "*" not in fp and "?" not in fp:
-                            # 字面路径：glob 不匹配也直接尝试（文件缺失交给 FileNotFoundError）
-                            matched = [os.path.join(base_dir, fp).replace("\\", "/")]
-                        elif required:
-                            # 通配符无匹配且必选 → 显式报错。避免 fallback 到含 * 的
-                            # 字面路径触发 Errno 22，以及静默降级为空表。
-                            raise FileNotFoundError(f"glob 未找到匹配文件: {fp}")
-                        # required=False 的通配无匹配 → 合法空（跳过）
-                    for m in sorted(matched):
-                        content = FileManager.read_file(m.replace("\\", "/"))
-                        data = tomllib.loads(content)
-                        if section:
-                            # 文件存在但缺声明的段 → 配置声明错误，fail-fast
-                            # （不能再静默 `data.get(section, {})` 退化成空表）。
-                            if section not in data:
-                                raise KeyError(f"文件存在但缺少声明段 [{section}]")
-                            data = data[section]
-                        if merged is None:
-                            merged = data
-                        elif isinstance(merged, dict) and isinstance(data, dict):
-                            # 深合并：多插件同名配置（token_ext 等嵌套结构）合并，
-                            # 浅 update 会让后加载的顶层 key（如 [id]）覆盖前一个。
-                            merged = deep_merge(merged, data)
-                        else:
-                            merged = data
-                        src_files.append(m.replace("\\", "/"))
-
-                if merged is None:
-                    raise FileNotFoundError(f"未找到匹配文件: {file_spec}")
+                merged, src_files = cls._load_decl_value(
+                    file_spec, section, base_dir, required
+                )
                 loaded[name] = merged
                 sources[name] = {
                     "file": src_files[0] if len(src_files) == 1 else src_files,
                     "section": section,
                 }
-
             except tomllib.TOMLDecodeError as e:
                 # TOML 语法损坏（重复 key / 格式错误）必须 fail-fast：即使
                 # required=False 也不能静默退化成空表——否则下游以空配置继续
                 # 运行（如关键字表丢失 → 全部 token 退化为 id），静默错乱。
-                loc = f"{base_key}:{file_spec}"
-                if section:
-                    loc += f" → [{section}]"
+                loc = cls._decl_loc(base_key, file_spec, section)
                 errors.append(f"  [{name}] {loc}: TOML 语法错误: {e}")
             except FileNotFoundError as e:
                 # 文件缺失：required=True 是错误；required=False 是合法的可选缺失。
                 if required:
-                    loc = f"{base_key}:{file_spec}"
-                    if section:
-                        loc += f" → [{section}]"
+                    loc = cls._decl_loc(base_key, file_spec, section)
                     errors.append(f"  [{name}] {loc}: {e}")
                 else:
                     loaded[name] = {}
@@ -723,9 +664,7 @@ class ConfigRegistry:
             except Exception as e:
                 # 其他异常（缺段/结构不符等）：文件存在但配置结构有问题，属于
                 # 配置声明错误——required=False 也不应静默，统一 fail-fast。
-                loc = f"{base_key}:{file_spec}"
-                if section:
-                    loc += f" → [{section}]"
+                loc = cls._decl_loc(base_key, file_spec, section)
                 errors.append(f"  [{name}] {loc}: {e}")
             finally:
                 if name not in loaded:
@@ -740,6 +679,97 @@ class ConfigRegistry:
                 + "\n\n请检查规则目录结构和 TOML 文件内容。"
             )
         return loaded, sources
+
+    @staticmethod
+    def _build_bases(
+        rules_dir: str,
+        ext_dirs: list[str] | None,
+        plugins_dir: str,
+        base_dirs: dict,
+    ) -> dict[str, str]:
+        """基准目录表：rules / ext_N（+ `ext` 别名）/ plugins / 调用方 `base_dirs`。
+
+        调用方键名去掉 `_dir` 后缀便于匹配（`base_dirs` 是 `**kwargs`）。
+        """
+        bases: dict[str, str] = {"rules": rules_dir}
+        ext_list = list(ext_dirs) if ext_dirs else []
+        for i, d in enumerate(ext_list):
+            bases[f"ext_{i}"] = d
+        if ext_list:
+            bases["ext"] = ext_list[0]  # 兼容 base="ext"
+        else:
+            bases["ext"] = ""  # ext 为空，required=False 的声明静默失败
+        if plugins_dir:
+            bases["plugins"] = plugins_dir
+        for bk, bv in base_dirs.items():
+            # 去掉 _dir 后缀便于匹配
+            key = bk.removesuffix("_dir")
+            bases[key] = bv
+        return bases
+
+    @staticmethod
+    def _decl_loc(base_key: str, file_spec: Any, section: str) -> str:
+        """错误定位串：`base:file`（有段声明时再补 ` → [section]`）。"""
+        loc = f"{base_key}:{file_spec}"
+        if section:
+            loc += f" → [{section}]"
+        return loc
+
+    @staticmethod
+    def _load_decl_value(
+        file_spec: Any, section: str, base_dir: str, required: bool
+    ) -> tuple[Any, list[str]]:
+        """单条声明取值：glob 展开 → 读文件 → 取声明段 → 多文件深合并。
+
+        Returns: (merged, src_files)；无匹配文件 → FileNotFoundError。
+        异常分类交给调用方（TOML 语法错 / 文件缺失 / 其它结构错三态）。
+        """
+        from core.define import FileManager
+
+        # file 可以是字符串（单文件）或列表（glob 模式）
+        if isinstance(file_spec, str):
+            paths = [file_spec]
+        elif isinstance(file_spec, list):
+            paths = file_spec
+        else:
+            raise TypeError(f"file 必须是字符串或列表: {file_spec}")
+
+        merged: Any = None
+        src_files: list[str] = []
+        for fp in paths:
+            # glob 模式：匹配 0 或多个文件
+            matched = _glob_match([fp], base_dir)
+            if not matched:
+                if "*" not in fp and "?" not in fp:
+                    # 字面路径：glob 不匹配也直接尝试（文件缺失交给 FileNotFoundError）
+                    matched = [os.path.join(base_dir, fp).replace("\\", "/")]
+                elif required:
+                    # 通配符无匹配且必选 → 显式报错。避免 fallback 到含 * 的
+                    # 字面路径触发 Errno 22，以及静默降级为空表。
+                    raise FileNotFoundError(f"glob 未找到匹配文件: {fp}")
+                # required=False 的通配无匹配 → 合法空（跳过）
+            for m in sorted(matched):
+                content = FileManager.read_file(m.replace("\\", "/"))
+                data = tomllib.loads(content)
+                if section:
+                    # 文件存在但缺声明的段 → 配置声明错误，fail-fast
+                    # （不能再静默 `data.get(section, {})` 退化成空表）。
+                    if section not in data:
+                        raise KeyError(f"文件存在但缺少声明段 [{section}]")
+                    data = data[section]
+                if merged is None:
+                    merged = data
+                elif isinstance(merged, dict) and isinstance(data, dict):
+                    # 深合并：多插件同名配置（token_ext 等嵌套结构）合并，
+                    # 浅 update 会让后加载的顶层 key（如 [id]）覆盖前一个。
+                    merged = deep_merge(merged, data)
+                else:
+                    merged = data
+                src_files.append(m.replace("\\", "/"))
+
+        if merged is None:
+            raise FileNotFoundError(f"未找到匹配文件: {file_spec}")
+        return merged, src_files
 
     @classmethod
     def get(cls, name: str) -> Any:
