@@ -29,8 +29,9 @@
     已按字段拆为六个模块级助手（`308651b`）。
   - ✅ 同文件 `BoundaryScanner._scan_tokens`（319 行 / CC 67）：已引 `_ScanState` 收拢
     16 个状态量，拆为三块 handler + 换行判定链/分派分支的小函数（`_scan_tokens` 319 → 35 行）。
-  - ⏳ `lexer/main_lexer.Lexer.tokenize`（397 行）；`parser/pratt_parser.parse_expression`（310 行）；
-    `analyzer/structure.py`（1082 行 / CC 73 上帝对象，放最后）。
+  - ✅ `lexer/main_lexer.Lexer.tokenize`（397 行）：已引 `_LexState` + 逐分支提方法
+    （12 个 `_scan_*`），`tokenize` 397 → 56 行。
+  - ⏳ `parser/pratt_parser.parse_expression`（310 行）；`analyzer/structure.py`（1082 行 / CC 73 上帝对象，放最后）。
 - **B-C 结构重复**（非 tests 107 组）：跨插件重复抽公共助手
   （`case_check._const_value` ↔ `latch_check._const_value`、
   `always_check._target_sig` ↔ `latch_check._target_sig` 等）。

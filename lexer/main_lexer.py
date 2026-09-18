@@ -25,6 +25,7 @@ from core.token_protocol import (
 
 from .number_runner import build_number_runner
 from .capture_runner import CaptureRunner, CaptureRule
+from dataclasses import dataclass, field
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # preprocessor.macro_config（与 preprocessor/_expand.py 共享同一 key，宏配置
@@ -87,6 +88,22 @@ def _parse_char_class(segments: list) -> frozenset[str]:
         else:
             chars.update(seg)
     return frozenset(chars)
+
+
+# ── 词法扫描状态（`tokenize` 的逐字符游标与产出缓冲）──
+
+
+@dataclass
+class _LexState:
+    """`Lexer.tokenize` 的扫描状态：逐分支方法共享读写，替代原函数的多个局部游标。"""
+
+    text: str
+    text_len: int
+    idx: int = 0
+    line: int = 1
+    col: int = 0
+    offset: int = 0
+    tokens: list[Token] = field(default_factory=list)
 
 
 class Lexer:
@@ -299,8 +316,8 @@ class Lexer:
                 self.alpha_tokens.append((lit_value, literal_type(lit_name)))
 
     def tokenize(self, lex_text: str) -> list[Token]:
-        lex_text_len: int = len(lex_text)
-        lex_text = lex_text + "\n"  # add a newline at the end
+        text_len: int = len(lex_text)
+        text = lex_text + "\n"  # add a newline at the end
 
         # 缩进深度每次 tokenize 重置：每个源文件是独立缩进上下文，
         # 跨调用残留会导致新文件开头误发 space.dedent（YAML 缩进语言包暴露）。
@@ -309,392 +326,367 @@ class Lexer:
         self._line_indent = 0
         self._line_sig = None
 
-        # token pos relative
-        text_idx: int = 0
-        line_number: int = 1
-        start_point: int = 0
+        st = _LexState(text=text, text_len=text_len)
+        while st.idx < st.text_len:
+            tok = Token(line=st.line, column=st.col)
+            st.offset = 0
 
-        # tokens
-        tokens = []
-
-        while text_idx < lex_text_len:
-            # token container
-            current_token: Token = Token(line=line_number, column=start_point)
-
-            # reset offset
-            offset = 0
-
-            # ── newline 分支 ──
-            if lex_text[text_idx] in self.newline:
-                start_point += 1
-
-                current_token.set_type("newline")
-                current_token.set_content(lex_text[text_idx])
-
-                line_number += 1
-                text_idx += 1
-                start_point = 0
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                self.new_line_start = True
-                # 行状态随换行重置
-                self._line_indent = 0
-                self._line_sig = None
-                continue
-
-            # ── space 分支 ──
-            elif lex_text[text_idx] in self.token_define["space"].values():
-                space_content: str = ""
-                while (
-                    text_idx < lex_text_len
-                    and lex_text[text_idx] in self.token_define["space"].values()
-                ):
-                    space_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
-
-                # handle indentation only when this line just started
-                if self.new_line_start:
-                    # 记录本行物理缩进列（capture indent_leq 的终止基准）
-                    self._line_indent = len(space_content)
-                if self.new_line_start and self.indent_enable:
-                    # empty line (only spaces followed by newline) -> ignore
-                    if text_idx < lex_text_len and lex_text[text_idx] in self.newline:
-                        self.new_line_start = True
-                    else:
-                        # 行首空格：先判 bracket 深度，再判网格对齐（auto 模式
-                        # 首次结构缩进行锁定单位，Python 同款启发式）
-                        width = len(space_content)
-                        if self.bracket_depth > 0:
-                            # 括号内：抑制一切结构缩进（仅用于对齐，非结构变化）
-                            current_depth = self.indent_deep
-                        elif (
-                            self.indent_auto
-                            and self._indent_unit is None
-                            and not self._starts_comment(lex_text, text_idx)
-                        ):
-                            # 首次结构缩进：锁定单位（注释行不参与锁定——
-                            # 注释缩进不代表文件结构约定）
-                            self._indent_unit = width
-                            current_depth = 1
-                        elif not self._indent_aligned(width):
-                            # 不对齐 → 续行折行，保持当前深度
-                            current_depth = self.indent_deep
-                        else:
-                            # 对齐到缩进网格 → 结构深度变化
-                            unit = (
-                                self._indent_unit if self.indent_auto
-                                else self.indent_level
-                            )
-                            # auto 模式已对齐 ⟹ _indent_unit 非 None（对齐判定前置）
-                            assert unit is not None
-                            current_depth = width // unit
-
-                        if current_depth > self.indent_deep:
-                            # 结构缩进
-                            while self.indent_deep < current_depth:
-                                indent_token = Token(
-                                    line=line_number, column=start_point
-                                )
-                                indent_token.set_type("space.indent")
-                                indent_token.set_content(space_content)
-                                tokens.append(indent_token)
-                                self.indent_deep += 1
-                        elif current_depth < self.indent_deep:
-                            # 结构反缩进
-                            while self.indent_deep > current_depth:
-                                dedent_token = Token(
-                                    line=line_number, column=start_point
-                                )
-                                dedent_token.set_type("space.dedent")
-                                dedent_token.set_content("")
-                                tokens.append(dedent_token)
-                                self.indent_deep -= 1
-                        else:  # current_depth == self.indent_deep
-                            # 同深度：不对齐且括号外才是折行
-                            if (
-                                self.bracket_depth == 0
-                                and not self._indent_aligned(width)
-                            ):
-                                fold_token = Token(line=line_number, column=start_point)
-                                fold_token.set_type("space.fold")
-                                fold_token.set_content("")
-                                tokens.append(fold_token)
-
-                        self.new_line_start = False
-                # else: ignore
-
-                # update start_point
-                start_point += len(space_content)
-                continue
-
-            # capture — 原始文本捕获（CommentRunner 泛化：注释/heredoc/
-            # 围栏/块标量等"进入后原样吞字符"构造统一走 CaptureRunner，
-            # 完全配置驱动；after/next_chars 触发条件由 _match_capture 判定）
-            elif self._match_capture(lex_text, text_idx) is not None:
-                result = CaptureRunner.run(
-                    lex_text, text_idx, self.token_define,
-                    base_col=self._line_indent,
-                )
-                if result is not None:
-                    capture_content, new_idx, token_type = result
-                    self._emit_pending_dedent(tokens)
-                    current_token.set_type(token_type)
-                    current_token.set_content(capture_content)
-                    current_token = self.refine_type(current_token)
-                    tokens.append(current_token)
-                    offset = new_idx - text_idx
-                    text_idx = new_idx
-                    # 多行捕获跨行：行号/列按消费的原文跨度记账（此前只平移
-                    # 列、行号不增，捕获后的 token 行号系统性偏少）。
-                    newlines = lex_text.count("\n", text_idx - offset, new_idx)
-                    if newlines:
-                        line_number += newlines
-                        start_point = new_idx - (
-                            lex_text.rfind("\n", 0, new_idx) + 1
-                        )
-                    else:
-                        start_point += offset
-                    # 捕获终止于行边界（最后一个消费字符是换行）→ 下一个
-                    # token 在行首，置行首标记使缩进机制正确工作。
-                    if new_idx > 0 and lex_text[new_idx - 1] in self.newline:
-                        self.new_line_start = True
-                    # captures at beginning of line should not affect indentation
-                    elif self.new_line_start:
-                        self.new_line_start = False
-                    continue
-
-            # plain scalar — 裸标量（[plain] 配置驱动，YAML plain scalar 近似）：
-            # 单 token 扫描到行尾（含词内空格的多词值），终止规则
-            # （stop_space_after 映射分隔 / no_space_after_tokens 单词边界）
-            # 与字符集全部来自配置。extend 符号优先（'...' 文档结束符先于
-            # plain 的 '.' 触发）。未声明 [plain] 的语言包分支不触发。
+            if st.text[st.idx] in self.newline:
+                self._scan_newline(st, tok)
+            elif st.text[st.idx] in self.token_define["space"].values():
+                self._scan_space(st, tok)
+            elif self._match_capture(st.text, st.idx) is not None:
+                self._scan_capture(st, tok)
             elif (
                 self._plain_first
-                and lex_text[text_idx] in self._plain_first
-                and not self._extend_symbol_at(lex_text, text_idx)
+                and st.text[st.idx] in self._plain_first
+                and not self._extend_symbol_at(st.text, st.idx)
             ):
-                self._emit_pending_dedent(tokens)
-
-                scalar_content, new_idx = self._scan_plain_scalar(
-                    lex_text, text_idx
-                )
-                offset = new_idx - text_idx
-                text_idx = new_idx
-                current_token.set_content(scalar_content)
-                # 关键字精化（true/false/null 等经 flat map 升级为 keyword）
-                full = self.full_token_map.get(scalar_content)
-                current_token.set_type(full if full is not None else "literal.plain")
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── 无尺寸字面量分支（'b1/'d0/'hFF/'o7，配置驱动触发）──
-            # 触发集合从 lexer.number 形态推导（无 size + 单字符 base_prefix），
-            # 不再硬编码 'd/'h/'b/'o/'s 字符表——yaml/c4 无 ' 数字形态时
-            # ' 自然落到后续 capture（delim 规则）/symbol 分支。
+                self._scan_plain(st, tok)
+            elif st.text[st.idx:st.idx + 2] in self._unsized_prefixes:
+                self._scan_unsized_number(st, tok)
             elif (
-                lex_text[text_idx:text_idx + 2] in self._unsized_prefixes
+                st.text[st.idx] in self.token_define["symbol"]["base"].values()
+                and self._match_macro_at(st.text, st.idx) is None
             ):
-                self._emit_pending_dedent(tokens)
-
-                number_content, new_idx = self._number_runner.run(lex_text, text_idx)
-                offset = new_idx - text_idx
-
-                # runner 空结果（如 `'d` 无 value）：防死循环，退化为符号
-                if not number_content or offset <= 0:
-                    text_idx += 1
-                    start_point += 1
-                    current_token.set_content(lex_text[text_idx - 1])
-                    current_token.set_type("symbol.base")
-                    current_token = self.refine_type(current_token)
-                    tokens.append(current_token)
-                    continue
-
-                current_token.set_type("literal.number")
-                current_token.set_content(number_content)
-
-                text_idx = new_idx
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── symbol 分支 ──
-            # 宏形态（前缀 + 名字）优先：前缀本身也是符号 token（如 `` ` ``）时，
-            # “前缀 + 名字”成立就按宏识别（下面的宏分支），裸符号才落本分支——
-            # 与语言包 [macro_recognition] 的形态声明一致。
+                self._scan_symbol(st, tok)
             elif (
-                lex_text[text_idx] in self.token_define["symbol"]["base"].values()
-                and self._match_macro_at(lex_text, text_idx) is None
+                st.text[st.idx] in self.open_brackets
+                or st.text[st.idx] in self.close_brackets
             ):
-                # handle possible dedent before actual token
-                self._emit_pending_dedent(tokens)
-
-                # 最长匹配：从 base 字符起贪心扩展，extend 表里有什么就支持
-                # 多长（如 >>>/<<< 三字符，配置驱动，不硬编码符号长度）。
-                extend_values = self.token_define["symbol"]["extend"].values()
-                current_token.set_content(lex_text[text_idx])
-                current_token.set_type("symbol.base")
-                text_idx += 1
-                offset += 1
-                candidate = current_token.content
-                while text_idx < lex_text_len:
-                    probe = candidate + lex_text[text_idx]
-                    if probe in extend_values:
-                        candidate = probe
-                        text_idx += 1
-                        offset += 1
-                    else:
-                        break
-                if len(candidate) > 1:
-                    current_token.set_content(candidate)
-                    current_token.set_type("symbol.extend")
-
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── bracket 分支 ──
-            elif (
-                lex_text[text_idx] in self.open_brackets
-                or lex_text[text_idx] in self.close_brackets
-            ):
-                self._emit_pending_dedent(tokens)
-
-                # 跟踪括号深度
-                if lex_text[text_idx] in self.open_brackets:
-                    self.bracket_depth += 1
-                else:
-                    self.bracket_depth -= 1
-
-                current_token.set_type("bracket")
-                current_token.set_content(lex_text[text_idx])
-
-                text_idx += 1
-                start_point += 1
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # (comment/capture handled by CaptureRunner in earlier branch)
-
-            # ── 转义标识符分支（配置驱动，如 Verilog A.9.3 escaped_identifier）──
-            # `[id.escaped]` 声明才启用：prefix + 非终止符字符序列（到终止符/行尾
-            # 止），如 `\a.b`、`\my$mod`。token 类型置配置声明的类型（默认 id），
-            # refine_type 的 keyword 精化不适用——转义标识符显式不受关键字限制
-            # （`\always` 是合法名）。
-            # 与 sv-parser 差异（各有取舍）：sv-parser 严格"到空白止"
-            # （`wire \a.b;` 须写 `\a.b ;`），tpc 宽进——终止符集合含语法分隔符
-            # 使业界常见写法 `wire \a.b;` 直接可解析且幂等；名字内含终止符的
-            # 极端形态（`\a;b`）不支持，记录为已知限制。
+                self._scan_bracket(st, tok)
             elif (
                 self._escaped_cfg
-                and lex_text[text_idx] == self._escaped_cfg.get("prefix", "")
+                and st.text[st.idx] == self._escaped_cfg.get("prefix", "")
             ):
-                self._emit_pending_dedent(tokens)
-
-                terminators = self._escaped_cfg.get("terminators", " \t\r\n")
-                token_type = self._escaped_cfg.get("token_type", "id")
-                id_content = self._escaped_cfg.get("prefix", "")
-                text_idx += 1
-                offset += 1
-                while (
-                    text_idx < lex_text_len
-                    and lex_text[text_idx] not in terminators
-                ):
-                    id_content += lex_text[text_idx]
-                    text_idx += 1
-                    offset += 1
-
-                current_token.set_type(token_type)
-                current_token.set_content(id_content)
-
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── id 分支 ──
-            elif lex_text[text_idx].isalpha() or lex_text[text_idx] == "_":
-                self._emit_pending_dedent(tokens)
-
-                # 标识符扫描与宏名共用同一实现（宏形态声明里的名字位 = id）
-                id_len = self._scan_ident_len(lex_text, text_idx)
-                id_content: str = lex_text[text_idx : text_idx + id_len]
-                text_idx += id_len
-                offset += id_len
-
-                current_token.set_type("id")
-                current_token.set_content(id_content)
-
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── 宏 token 识别（形态声明驱动：前缀 token + 名字）──
-            #
-            # 形态来自语言包 [macro_recognition]（生产式，preprocessor/macro_shape.py
-            # 解析）：指令段优先；名字命中指令候选 → 产出该 token 类型（macro.define
-            # 等），其余名字 → macro.call（引擎协议常量）。“前缀 + 名字”不成立
-            # （如裸 `` ` ``）→ 不在此消费，由上面的 symbol 分支接管。
-            #
-            macro_hit = self._match_macro_at(lex_text, text_idx)
-            if macro_hit is not None:
-                macro_content, macro_type = macro_hit
-                self._emit_pending_dedent(tokens)
-                offset = len(macro_content)
-                text_idx += offset
-                current_token.set_type(macro_type)
-                current_token.set_content(macro_content)
-
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── number 分支 ──
-            elif lex_text[text_idx].isdigit():
-                self._emit_pending_dedent(tokens)
-
-                number_content, new_idx = self._number_runner.run(lex_text, text_idx)
-                offset = new_idx - text_idx
-
-                # runner 返回空（形态不匹配）：不消费字符，交给后续分支
-                # （防死循环：text_idx 必须前进）
-                if not number_content or offset <= 0:
-                    text_idx += 1
-                    start_point += 1
-                    current_token.set_content(lex_text[text_idx - 1])
-                    current_token.set_type("id")
-                    current_token = self.refine_type(current_token)
-                    tokens.append(current_token)
-                    continue
-
-                current_token.set_type("literal.number")
-                current_token.set_content(number_content)
-
-                text_idx = new_idx
-                start_point += offset
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-                continue
-
-            # ── 未识别分支 ──
+                self._scan_escaped_id(st, tok)
+            elif st.text[st.idx].isalpha() or st.text[st.idx] == "_":
+                self._scan_id(st, tok)
             else:
-                self._emit_pending_dedent(tokens)
+                macro_hit = self._match_macro_at(st.text, st.idx)
+                if macro_hit is not None:
+                    self._scan_macro(st, tok, macro_hit)
+                elif st.text[st.idx].isdigit():
+                    self._scan_number(st, tok)
+                else:
+                    self._scan_unrecognized(st, tok)
+        return st.tokens
 
-                current_token.set_type("unrecognized")
-                current_token.set_content(lex_text[text_idx])
+    def _scan_newline(self, st: "_LexState", tok: Token) -> None:
+        """换行 token：产出 newline 并重置行状态。"""
+        st.col += 1
 
-                text_idx += 1
-                start_point += 1
-                current_token = self.refine_type(current_token)
-                tokens.append(current_token)
-        return tokens
+        tok.set_type("newline")
+        tok.set_content(st.text[st.idx])
+
+        st.line += 1
+        st.idx += 1
+        st.col = 0
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+        self.new_line_start = True
+        # 行状态随换行重置
+        self._line_indent = 0
+        self._line_sig = None
+
+    def _scan_space(self, st: "_LexState", tok: Token) -> None:
+        """行首/行内空白：行首时按缩进网格产出 indent/dedent/fold 结构 token。"""
+        space_content: str = ""
+        while (
+            st.idx < st.text_len
+            and st.text[st.idx] in self.token_define["space"].values()
+        ):
+            space_content += st.text[st.idx]
+            st.idx += 1
+            st.offset += 1
+
+        # handle indentation only when this line just started
+        if self.new_line_start:
+            # 记录本行物理缩进列（capture indent_leq 的终止基准）
+            self._line_indent = len(space_content)
+        if self.new_line_start and self.indent_enable:
+            # empty line (only spaces followed by newline) -> ignore
+            if st.idx < st.text_len and st.text[st.idx] in self.newline:
+                self.new_line_start = True
+            else:
+                self._apply_line_indent(st, space_content)
+                self.new_line_start = False
+        # else: ignore
+
+        # update start_point
+        st.col += len(space_content)
+
+    def _apply_line_indent(self, st: "_LexState", space_content: str) -> None:
+        """结构缩进行：算目标深度 → 按深度差产出 indent/dedent/fold。"""
+        current_depth = self._indent_depth_for(st, len(space_content))
+        self._emit_indent_change(st, space_content, current_depth)
+
+    def _indent_depth_for(self, st: "_LexState", width: int) -> int:
+        """本行缩进对应的结构深度（括号内抑制 / auto 首次锁定单位 / 对齐判定）。"""
+        if self.bracket_depth > 0:
+            # 括号内：抑制一切结构缩进（仅用于对齐，非结构变化）
+            return self.indent_deep
+        if (
+            self.indent_auto
+            and self._indent_unit is None
+            and not self._starts_comment(st.text, st.idx)
+        ):
+            # 首次结构缩进：锁定单位（注释行不参与锁定——
+            # 注释缩进不代表文件结构约定）
+            self._indent_unit = width
+            return 1
+        if not self._indent_aligned(width):
+            # 不对齐 → 续行折行，保持当前深度
+            return self.indent_deep
+        # 对齐到缩进网格 → 结构深度变化
+        unit = self._indent_unit if self.indent_auto else self.indent_level
+        # auto 模式已对齐 ⟹ _indent_unit 非 None（对齐判定前置）
+        assert unit is not None
+        return width // unit
+
+    def _emit_indent_change(
+        self, st: "_LexState", space_content: str, current_depth: int
+    ) -> None:
+        """按深度差产出结构 token：缩进 / 反缩进 / 同深度折行。"""
+        if current_depth > self.indent_deep:
+            # 结构缩进
+            while self.indent_deep < current_depth:
+                indent_token = Token(line=st.line, column=st.col)
+                indent_token.set_type("space.indent")
+                indent_token.set_content(space_content)
+                st.tokens.append(indent_token)
+                self.indent_deep += 1
+        elif current_depth < self.indent_deep:
+            # 结构反缩进
+            while self.indent_deep > current_depth:
+                dedent_token = Token(line=st.line, column=st.col)
+                dedent_token.set_type("space.dedent")
+                dedent_token.set_content("")
+                st.tokens.append(dedent_token)
+                self.indent_deep -= 1
+        else:  # current_depth == self.indent_deep
+            # 同深度：不对齐且括号外才是折行
+            if self.bracket_depth == 0 and not self._indent_aligned(
+                len(space_content)
+            ):
+                fold_token = Token(line=st.line, column=st.col)
+                fold_token.set_type("space.fold")
+                fold_token.set_content("")
+                st.tokens.append(fold_token)
+
+    def _scan_capture(self, st: "_LexState", tok: Token) -> None:
+        """capture 构造（注释/heredoc/围栏/块标量）：原样吞字符，走 CaptureRunner。"""
+        result = CaptureRunner.run(
+            st.text, st.idx, self.token_define,
+            base_col=self._line_indent,
+        )
+        if result is not None:
+            capture_content, new_idx, token_type = result
+            self._emit_pending_dedent(st.tokens)
+            tok.set_type(token_type)
+            tok.set_content(capture_content)
+            tok = self.refine_type(tok)
+            st.tokens.append(tok)
+            st.offset = new_idx - st.idx
+            st.idx = new_idx
+            # 多行捕获跨行：行号/列按消费的原文跨度记账（此前只平移
+            # 列、行号不增，捕获后的 token 行号系统性偏少）。
+            newlines = st.text.count("\n", st.idx - st.offset, new_idx)
+            if newlines:
+                st.line += newlines
+                st.col = new_idx - (
+                    st.text.rfind("\n", 0, new_idx) + 1
+                )
+            else:
+                st.col += st.offset
+            # 捕获终止于行边界（最后一个消费字符是换行）→ 下一个
+            # token 在行首，置行首标记使缩进机制正确工作。
+            if new_idx > 0 and st.text[new_idx - 1] in self.newline:
+                self.new_line_start = True
+            # captures at beginning of line should not affect indentation
+            elif self.new_line_start:
+                self.new_line_start = False
+
+    def _scan_plain(self, st: "_LexState", tok: Token) -> None:
+        """plain scalar：单 token 扫到行尾（[plain] 配置驱动）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        scalar_content, new_idx = self._scan_plain_scalar(
+            st.text, st.idx
+        )
+        st.offset = new_idx - st.idx
+        st.idx = new_idx
+        tok.set_content(scalar_content)
+        # 关键字精化（true/false/null 等经 flat map 升级为 keyword）
+        full = self.full_token_map.get(scalar_content)
+        tok.set_type(full if full is not None else "literal.plain")
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_unsized_number(self, st: "_LexState", tok: Token) -> None:
+        """无尺寸字面量（'b1/'d0/'hFF 等，触发集合配置驱动）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        number_content, new_idx = self._number_runner.run(st.text, st.idx)
+        st.offset = new_idx - st.idx
+
+        # runner 空结果（如 `'d` 无 value）：防死循环，退化为符号
+        if not number_content or st.offset <= 0:
+            st.idx += 1
+            st.col += 1
+            tok.set_content(st.text[st.idx - 1])
+            tok.set_type("symbol.base")
+            tok = self.refine_type(tok)
+            st.tokens.append(tok)
+            return
+
+        tok.set_type("literal.number")
+        tok.set_content(number_content)
+
+        st.idx = new_idx
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_symbol(self, st: "_LexState", tok: Token) -> None:
+        """符号：base 字符起贪心扩展 extend 表（最长匹配）。"""
+        # handle possible dedent before actual token
+        self._emit_pending_dedent(st.tokens)
+
+        # 最长匹配：从 base 字符起贪心扩展，extend 表里有什么就支持
+        # 多长（如 >>>/<<< 三字符，配置驱动，不硬编码符号长度）。
+        extend_values = self.token_define["symbol"]["extend"].values()
+        tok.set_content(st.text[st.idx])
+        tok.set_type("symbol.base")
+        st.idx += 1
+        st.offset += 1
+        candidate = tok.content
+        while st.idx < st.text_len:
+            probe = candidate + st.text[st.idx]
+            if probe in extend_values:
+                candidate = probe
+                st.idx += 1
+                st.offset += 1
+            else:
+                break
+        if len(candidate) > 1:
+            tok.set_content(candidate)
+            tok.set_type("symbol.extend")
+
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_bracket(self, st: "_LexState", tok: Token) -> None:
+        """括号：跟踪括号深度（抑制括号内结构缩进）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        # 跟踪括号深度
+        if st.text[st.idx] in self.open_brackets:
+            self.bracket_depth += 1
+        else:
+            self.bracket_depth -= 1
+
+        tok.set_type("bracket")
+        tok.set_content(st.text[st.idx])
+
+        st.idx += 1
+        st.col += 1
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_escaped_id(self, st: "_LexState", tok: Token) -> None:
+        """转义标识符（[id.escaped] 声明后启用）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        terminators = self._escaped_cfg.get("terminators", " \t\r\n")
+        token_type = self._escaped_cfg.get("token_type", "id")
+        id_content = self._escaped_cfg.get("prefix", "")
+        st.idx += 1
+        st.offset += 1
+        while (
+            st.idx < st.text_len
+            and st.text[st.idx] not in terminators
+        ):
+            id_content += st.text[st.idx]
+            st.idx += 1
+            st.offset += 1
+
+        tok.set_type(token_type)
+        tok.set_content(id_content)
+
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_id(self, st: "_LexState", tok: Token) -> None:
+        """标识符（与宏名共用 _scan_ident_len）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        # 标识符扫描与宏名共用同一实现（宏形态声明里的名字位 = id）
+        id_len = self._scan_ident_len(st.text, st.idx)
+        id_content: str = st.text[st.idx : st.idx + id_len]
+        st.idx += id_len
+        st.offset += id_len
+
+        tok.set_type("id")
+        tok.set_content(id_content)
+
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_macro(self, st: "_LexState", tok: Token, macro_hit: tuple[str, str]) -> None:
+        """宏 token（形态声明驱动：前缀 + 名字）。"""
+        macro_content, macro_type = macro_hit
+        self._emit_pending_dedent(st.tokens)
+        st.offset = len(macro_content)
+        st.idx += st.offset
+        tok.set_type(macro_type)
+        tok.set_content(macro_content)
+
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_number(self, st: "_LexState", tok: Token) -> None:
+        """数字字面量（_number_runner）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        number_content, new_idx = self._number_runner.run(st.text, st.idx)
+        st.offset = new_idx - st.idx
+
+        # runner 返回空（形态不匹配）：不消费字符，交给后续分支
+        # （防死循环：text_idx 必须前进）
+        if not number_content or st.offset <= 0:
+            st.idx += 1
+            st.col += 1
+            tok.set_content(st.text[st.idx - 1])
+            tok.set_type("id")
+            tok = self.refine_type(tok)
+            st.tokens.append(tok)
+            return
+
+        tok.set_type("literal.number")
+        tok.set_content(number_content)
+
+        st.idx = new_idx
+        st.col += st.offset
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
+
+    def _scan_unrecognized(self, st: "_LexState", tok: Token) -> None:
+        """未识别字符：产出 unrecognized token（防死循环，必定前进）。"""
+        self._emit_pending_dedent(st.tokens)
+
+        tok.set_type("unrecognized")
+        tok.set_content(st.text[st.idx])
+
+        st.idx += 1
+        st.col += 1
+        tok = self.refine_type(tok)
+        st.tokens.append(tok)
 
     def _emit_pending_dedent(self, tokens: list[Token]) -> None:
         """当新行没有前导空格时，输出所有待处理的 dedent 令牌"""
