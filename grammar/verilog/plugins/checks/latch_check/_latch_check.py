@@ -23,7 +23,8 @@ Yosys proc_dlatch（综合视角）/ SpyGlass W442aL。升级自有限版（只�
 "if 无 else"，2026-08-29 调研后落地全路径判定）。
 """
 
-from core.define import Node
+from core.define import Node, iter_nodes
+from grammar.verilog.plugins.checks._shared import const_value, target_sig
 
 _ALWAYS_RULE = "AlwaysStmt"
 _EDGE_KEYWORDS = ("posedge", "negedge")
@@ -43,11 +44,11 @@ def run_latch_check(analyzer, context) -> None:
     if root is None:
         return
     # 按模块分组：循环边界参数求值需要当前模块参数表
-    for module in _iter_nodes(root):
+    for module in iter_nodes(root):
         if module.node_name not in ("ModuleDecl", "MacroModuleDecl"):
             continue
         params = _module_params(context, module)
-        for node in _iter_nodes(module):
+        for node in iter_nodes(module):
             if node.node_name != _ALWAYS_RULE:
                 continue
             if _is_timing_always(node):
@@ -64,7 +65,7 @@ def _module_params(context, module: Node) -> dict:
         if info is not None:
             out.update({p: mp.value_expr for p, mp in (info.params or {}).items()})
     # 模块体 parameter 声明（`parameter STEPS_AT_ONCE = 1;` 等，实例可覆盖）
-    for n in _iter_nodes(module):
+    for n in iter_nodes(module):
         if n.node_name != "ParamDeclStmt":
             continue
         for d in _declarators(n):
@@ -108,31 +109,13 @@ def _check_combinational(always_node: Node, context, params: dict) -> None:
 def _collect_assigned(body: Node) -> dict:
     """块内全部过程赋值目标 → {信号名: 首次赋值节点}（嵌套不穿透）。"""
     out: dict = {}
-    for node in _iter_nodes(body):
+    for node in iter_nodes(body):
         if node.node_name not in _ASSIGN_RULES:
             continue
-        sig = _target_sig(getattr(node, "target", None))
+        sig = target_sig(getattr(node, "target", None))
         if sig:
             out.setdefault(sig, node)
     return out
-
-
-def _target_sig(target) -> str | None:
-    """赋值目标 → 根信号名（Identifier 本体 / SelectExpr 取 base /
-    HierExpr 取首段；拼接目标 → None 保守跳过）。"""
-    if not isinstance(target, Node):
-        return None
-    name = target.node_name
-    if name == "Identifier":
-        return getattr(target, "content", "") or None
-    if name == "SelectExpr":
-        return _target_sig(getattr(target, "base", None))
-    if name == "HierExpr":
-        parts = getattr(target, "parts", None) or []
-        if parts and isinstance(parts[0], Node):
-            return getattr(parts[0], "content", "") or None
-        return None
-    return None
 
 
 def _must_assign(node, params: dict, full_case: bool = False) -> set:
@@ -146,7 +129,7 @@ def _must_assign(node, params: dict, full_case: bool = False) -> set:
         return set()
     name = node.node_name
     if name in _ASSIGN_RULES:
-        sig = _target_sig(getattr(node, "target", None))
+        sig = target_sig(getattr(node, "target", None))
         return {sig} if sig else set()
     if name == "BeginEnd":
         acc: set = set()
@@ -175,7 +158,7 @@ def _must_assign(node, params: dict, full_case: bool = False) -> set:
             return _must_assign(init, params, full_case)
         return set()
     if name == "ForInit":
-        sig = _target_sig(getattr(node, "target", None))
+        sig = target_sig(getattr(node, "target", None))
         return {sig} if sig else set()
     if name == "StmtOrNull":
         return _must_assign(getattr(node, "stmt", None), params, full_case)
@@ -255,7 +238,7 @@ def _case_covered(items: list) -> bool:
         for v in vals:
             if not isinstance(v, Node):
                 return False
-            cv = _const_value(_node_text(v))
+            cv = const_value(_node_text(v))
             if cv is None:
                 return False
             value, w = cv
@@ -264,38 +247,6 @@ def _case_covered(items: list) -> bool:
     if width == 0:
         return False
     return values == set(range(1 << width))
-
-
-def _const_value(text: str):
-    """case 臂常量文本 → (值, 位宽)；变量/通配符/x/z → None。"""
-    t = (text or "").strip()
-    if "'" not in t:
-        if not t.isdigit():
-            return None
-        v = int(t)
-        return (v, v.bit_length() if v else 1)
-    body = t.split("'", 1)[1]
-    if not body:
-        return None
-    if body[0] in "sS":
-        body = body[1:]
-    if not body:
-        return None
-    if len(body) == 1 and body in "01xXzZ?":
-        return None  # 填充/通配符常量不算覆盖
-    base_ch = body[0].lower()
-    if base_ch not in "bohd":
-        return None
-    digits = body[1:].replace("_", "")
-    if not digits or any(c in "xXzZ?" for c in digits):
-        return None
-    try:
-        v = int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
-    except ValueError:
-        return None
-    w = int(t.split("'", 1)[0]) if t.split("'", 1)[0].strip().isdigit() \
-        else (v.bit_length() if v else 1)
-    return (v, w)
 
 
 def _loop_executes(node: Node, params: dict) -> bool | None:
@@ -497,7 +448,7 @@ def _is_timing_always(always_node: Node) -> bool:
     ec = getattr(always_node, "event_control", None)
     if ec is None:
         return False  # 裸 always（无事件控制）按组合处理
-    for n in _iter_nodes(ec):
+    for n in iter_nodes(ec):
         edge = getattr(n, "edge", None)
         if isinstance(edge, Node):
             e = getattr(edge, "content", "") or edge.node_name or ""
@@ -506,11 +457,3 @@ def _is_timing_always(always_node: Node) -> bool:
     return False
 
 
-def _iter_nodes(root: Node):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)

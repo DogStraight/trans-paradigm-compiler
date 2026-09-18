@@ -27,7 +27,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from core.define import Node
+from core.define import Node, collect_nodes, iter_nodes, unwrap_optional
 from core.config_registry import declare_cfg
 
 if TYPE_CHECKING:
@@ -417,7 +417,7 @@ class _StructureBase:
 
         fr.ast = ast
         fr.modules = self._extract_modules(ast, path)
-        fr.inst_sites = self._collect_nodes(ast, self._rule("module_inst_rule"))
+        fr.inst_sites = collect_nodes(ast, self._rule("module_inst_rule"))
         fr.connections = self._elaborate_connections(path, fr.inst_sites)
         # 层 1 补充：模块内实例挂回 ModuleInfo（实例树展开的入口）
         for conn in fr.connections:
@@ -535,7 +535,7 @@ class _StructureBase:
                 inst_node=site,
                 file=path,
             )
-            ports_node = self._unwrap(getattr(site, ports_field, None))
+            ports_node = unwrap_optional(getattr(site, ports_field, None))
             items = getattr(ports_node, items_field, None) if ports_node else None
             for item in items or []:
                 if not isinstance(item, Node):
@@ -563,7 +563,7 @@ class _StructureBase:
             return modules  # 语言包未声明结构协议 → 无模块提取
         decl_rule = self._rule("module_decl_rule")
         name_field = self._field("module_name")
-        for node in self._iter_nodes(ast):
+        for node in iter_nodes(ast):
             if node.node_name != decl_rule:
                 continue
             name_node = getattr(node, name_field, None)
@@ -631,7 +631,7 @@ class _StructureBase:
         width_field = self._field("width")
         port_type_field = self._field("port_type")
         name_field = self._field("name")
-        ports_node = self._unwrap(getattr(module_node, ports_field, None))
+        ports_node = unwrap_optional(getattr(module_node, ports_field, None))
         items = getattr(ports_node, items_field, None) if ports_node else None
         if not items:
             # 无端口列表（纯 body 端口声明）也补 body（旧式风格）
@@ -705,13 +705,13 @@ class _StructureBase:
         params_field = self._field("params")
         param_name_field = self._field("param_name")
         value_field = self._field("value")
-        params_node = self._unwrap(getattr(module_node, params_field, None))
+        params_node = unwrap_optional(getattr(module_node, params_field, None))
         params = getattr(params_node, params_field, None) if params_node else None
         if params:
             for p in params:
                 if not isinstance(p, Node):
                     continue
-                p = self._unwrap(p)  # 参数声明可能被 optional 包装
+                p = unwrap_optional(p)  # 参数声明可能被 optional 包装
                 if not isinstance(p, Node):
                     continue
                 pn = getattr(p, param_name_field, None) if param_name_field else None
@@ -735,7 +735,7 @@ class _StructureBase:
         ParamDeclStmt → items(DeclaratorList) → Declarator(name, init)。
         头部参数已填过（同名保留头部——body 同名参数属重复声明，取先）。
         """
-        for node in self._iter_nodes(module_node):
+        for node in iter_nodes(module_node):
             if node.node_name != "ParamDeclStmt":
                 continue
             for d, name_node in self._decl_name_nodes(node, "items", "name"):
@@ -841,7 +841,7 @@ class _StructureBase:
         if not ctx.assign_rule:
             return out
         idx = 0
-        for node in self._iter_nodes(mnode):
+        for node in iter_nodes(mnode):
             if node.node_name != ctx.assign_rule:
                 continue
             idx += 1
@@ -882,7 +882,7 @@ class _StructureBase:
         out: list[str] = []
         if not (ctx.proc_rules and ctx.proc_blocks):
             return out
-        for node in self._iter_nodes(mnode):
+        for node in iter_nodes(mnode):
             if node.node_name not in ctx.proc_rules:
                 continue
             if not self._in_active_generate(fr, node):
@@ -934,7 +934,7 @@ class _StructureBase:
         if not (ctx.assign_rule and fr.ast is not None):
             return
         assign_idx = 0
-        for node in self._iter_nodes(fr.ast):
+        for node in iter_nodes(fr.ast):
             if node.node_name != ctx.assign_rule:
                 continue
             assign_idx += 1
@@ -1000,7 +1000,7 @@ class _StructureBase:
         未选中 generate 分支内的赋值不计（2026-08-29）。
         """
         block_sigs: dict[int, tuple[Node, set]] = {}
-        for node in self._iter_nodes(fr.ast):
+        for node in iter_nodes(fr.ast):
             if node.node_name not in ctx.proc_rules:
                 continue
             blk = assign_block.get(id(node))
@@ -1232,7 +1232,7 @@ class _StructureBase:
         （不因无法判定而漏报真多驱动，对齐 Verilator V3Param 语义的
         保守侧）。
         """
-        for gnode in self._iter_nodes(mod_node):
+        for gnode in iter_nodes(mod_node):
             if gnode.node_name != "GenerateBlock":
                 continue
             for sub in getattr(gnode, "sub_node", None) or []:
@@ -1427,34 +1427,6 @@ class _StructureBase:
                 except OSError:
                     continue
         return None
-
-
-    # ── 通用 AST 工具 ──
-
-    @staticmethod
-    def _unwrap(node):
-        """穿透 parser 的 optional 包装节点（$N 捕获可选组时是 optional 节点，
-        内容在 sub_node[0]；inline 规则展平后可能仍保留 optional 壳）。"""
-        while isinstance(node, Node) and node.node_name == "optional":
-            sub = getattr(node, "sub_node", None) or []
-            node = sub[0] if sub else None
-        return node
-
-
-    @staticmethod
-    def _iter_nodes(root: Node):
-        """DFS 迭代整棵 AST（含属性挂载的子节点）。"""
-        stack = [root]
-        while stack:
-            node = stack.pop()
-            yield node
-            for child in node.iter_children():
-                stack.append(child)
-
-
-    @staticmethod
-    def _collect_nodes(root: Node, node_name: str) -> list:
-        return [n for n in _StructureBase._iter_nodes(root) if n.node_name == node_name]
 
 
     def _inst_module_name(self, site: Node) -> str:

@@ -13,7 +13,7 @@
 import os
 import re
 
-from core.define import Node
+from core.define import Node, iter_nodes, unwrap_optional
 
 _LITERAL_RE = re.compile(r"^\d+'\s*[hdb]?[0-9a-fA-F_]*$")
 
@@ -57,7 +57,7 @@ def run_inst_check(analyzer, context) -> None:
 
 def _check_ports(context, site, info, related_def) -> None:
     """命名端口连接 × 模块端口表。"""
-    nl = _unwrap(getattr(site, "ports", None))   # NamedPortList
+    nl = unwrap_optional(getattr(site, "ports", None))   # NamedPortList
     conns = getattr(nl, "items", None) if nl else None
     for conn in conns or []:
         if not isinstance(conn, Node):
@@ -194,7 +194,7 @@ def _collect_assign_targets(analyzer) -> dict:
     out: dict[str, Node] = {}
     if root is None:
         return out
-    for node in _iter_nodes(root):
+    for node in iter_nodes(root):
         if node.node_name != "AssignStmt":
             continue
         tgt = getattr(node, "target", None)
@@ -250,7 +250,7 @@ def _check_inout_tri(analyzer, context) -> None:
     if root is None:
         return
     inout_rules = {"AnsiInoutDecl", "BodyInoutDecl"}
-    for node in _iter_nodes(root):
+    for node in iter_nodes(root):
         if node.node_name not in inout_rules:
             continue
         pt = getattr(node, "port_type", None)
@@ -270,16 +270,6 @@ def _check_inout_tri(analyzer, context) -> None:
                 level="warning",
                 node=node,
             )
-
-
-def _iter_nodes(root):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)
 
 
 def _check_params(context, site, info, related_def) -> None:
@@ -322,14 +312,6 @@ def _text(node) -> str:
             return _text(value)   # 嵌套合成节点（Number → literal.number 等）
         return str(value)
     return ""
-
-
-def _unwrap(node):
-    """穿透 optional 包装节点（与 analyzer/checker.py 的 _unwrap 同逻辑）。"""
-    while isinstance(node, Node) and node.node_name == "optional":
-        sub = getattr(node, "sub_node", None) or []
-        node = sub[0] if sub else None
-    return node
 
 
 def _is_parameterized(width_expr: str) -> bool:

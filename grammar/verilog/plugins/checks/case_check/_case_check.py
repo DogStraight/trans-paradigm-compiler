@@ -10,7 +10,8 @@ Verilator CASEINCOMPLETE / slang case-* / Spyglass W527。
 Verilog-2005 无 unique/priority 限定（SV 才有），不处理 unique 豁免。
 """
 
-from core.define import Node
+from core.define import Node, iter_nodes
+from grammar.verilog.plugins.checks._shared import const_value
 
 _CASE_RULE = "CaseStmt"
 _DEFAULT_RULE = "DefaultItem"
@@ -27,7 +28,7 @@ def run_case_check(analyzer, context) -> None:
     root = getattr(analyzer, "_ast", None)
     if root is None:
         return
-    for node in _iter_nodes(root):
+    for node in iter_nodes(root):
         if node.node_name != _CASE_RULE:
             continue
         items = getattr(node, "items", None)
@@ -63,7 +64,7 @@ def _case_covered(items) -> bool:
         for v in vals:
             if not isinstance(v, Node):
                 return False
-            cv = _const_value(_node_text(v))
+            cv = const_value(_node_text(v))
             if cv is None:
                 return False
             value, w = cv
@@ -80,38 +81,6 @@ def _case_items(items: Node) -> list:
         return [n for n in (getattr(items, "items", None) or [])
                 if isinstance(n, Node)]
     return [items]
-
-
-def _const_value(text: str):
-    """case 臂常量文本 → (值, 位宽)；变量/通配符/x/z → None。"""
-    t = (text or "").strip()
-    if "'" not in t:
-        if not t.isdigit():
-            return None
-        v = int(t)
-        return (v, v.bit_length() if v else 1)
-    body = t.split("'", 1)[1]
-    if not body:
-        return None
-    if body[0] in "sS":
-        body = body[1:]
-    if not body:
-        return None
-    if len(body) == 1 and body in "01xXzZ?":
-        return None  # 填充/通配符常量不算覆盖
-    base_ch = body[0].lower()
-    if base_ch not in "bohd":
-        return None
-    digits = body[1:].replace("_", "")
-    if not digits or any(c in "xXzZ?" for c in digits):
-        return None
-    try:
-        v = int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
-    except ValueError:
-        return None
-    w = int(t.split("'", 1)[0]) if t.split("'", 1)[0].strip().isdigit() \
-        else (v.bit_length() if v else 1)
-    return (v, w)
 
 
 def _node_text(node) -> str:
@@ -147,11 +116,3 @@ def _has_default(case_node: Node) -> bool:
     return False
 
 
-def _iter_nodes(root: Node):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)

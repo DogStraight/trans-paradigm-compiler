@@ -13,7 +13,7 @@
 
 from typing import Any
 
-from core.define import Node
+from core.define import Node, iter_nodes, unwrap_optional
 
 # 参与宽度分析的符号 kind（语言知识：Verilog 内部信号/端口）
 _WIDTH_KINDS = {"wire", "reg", "integer", "port"}
@@ -119,7 +119,7 @@ def _file_params(analyzer, module_params: dict) -> dict[str, str]:
     root = getattr(analyzer, "_ast", None)
     if root is None:
         return out
-    for node in _iter_nodes(root):
+    for node in iter_nodes(root):
         if node.node_name != "ModuleDecl":
             continue
         mn = getattr(getattr(node, "module_name", None), "content", "")
@@ -368,16 +368,6 @@ def _self_select_assign(node) -> bool:
     return False
 
 
-def _iter_nodes(root: Node):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)
-
-
 _MODULE_DECL_RULES = ("ModuleDecl", "MacroModuleDecl")
 
 
@@ -426,7 +416,7 @@ def _check_port_connections(analyzer, context, table: dict, params_all: dict) ->
             continue
         caller_mod = site_module.get(id(site), "")
         ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
-        nl = _unwrap(getattr(site, "ports", None))
+        nl = unwrap_optional(getattr(site, "ports", None))
         if nl is None:
             continue
         if nl.node_name == "OrderedPortList":
@@ -559,7 +549,7 @@ def _module_width_table(info) -> dict:
     if node is None:
         table["_arrays"] = arrays
         return table
-    for n in _iter_nodes(node):
+    for n in iter_nodes(node):
         if n.node_name == "IntegerDecl":
             for it in _declarator_names(n):
                 table[it] = _INTEGER_WIDTH
@@ -611,7 +601,7 @@ def _recheck_module_assigns(info, site, ov_params: dict, context) -> None:
     if not any(_is_parameterized_text(t) for t in sub_table.values()):
         return
     sub_table["_params"] = ov_params
-    for n in _iter_nodes(node):
+    for n in iter_nodes(node):
         if n.node_name not in _ASSIGN_RULES:
             continue
         _recheck_one(n, info, site, sub_table, context)
@@ -647,14 +637,6 @@ def _recheck_one(node, info, site, sub_table: dict, context) -> None:
         node=site,
         related=[("模块内赋值处", node)],
     )
-
-
-def _unwrap(node):
-    """穿透 parser 的 optional 包装节点（与 analyzer/checker.py 同款）。"""
-    while isinstance(node, Node) and node.node_name == "optional":
-        sub = getattr(node, "sub_node", None) or []
-        node = sub[0] if sub else None
-    return node
 
 
 def symbol_width_table(analyzer) -> dict[str, Any]:
@@ -789,7 +771,7 @@ def range_text(range_node) -> str:
     穿透 optional 包装：`@Range?` 绑定的 packed_range 是 optional 壳，
     Range 在 sub_node[0]（与 analyzer/checker.py 的 _unwrap 同款）。
     """
-    range_node = _unwrap_optional(range_node)
+    range_node = unwrap_optional(range_node)
     if not isinstance(range_node, Node):
         return ""
     msb = getattr(range_node, "msb", None)
@@ -799,14 +781,6 @@ def range_text(range_node) -> str:
     lsb = getattr(range_node, "lsb", None)
     lsb_t = node_text(lsb) if isinstance(lsb, Node) else ""
     return f"{msb_t}:{lsb_t}" if lsb_t else msb_t
-
-
-def _unwrap_optional(node):
-    """穿透 parser 的 optional 包装节点（内容在 sub_node[0]）。"""
-    while isinstance(node, Node) and node.node_name == "optional":
-        sub = getattr(node, "sub_node", None) or []
-        node = sub[0] if sub else None
-    return node
 
 
 def node_text(node) -> str:

@@ -250,6 +250,35 @@ class Node:
         return f'"{self.node_name}"'
 
 
+# ── Node 树通用工具（引擎与语言包插件共用） ──
+
+def iter_nodes(root: Node):
+    """DFS 迭代整棵 AST（先根后子；含属性挂载的子节点）。"""
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in node.iter_children():
+            stack.append(child)
+
+
+def unwrap_optional(node: Node | None) -> Node | None:
+    """穿透 parser 的 optional 包装节点（内容在 sub_node[0]，可嵌套）。
+
+    单元素可选项（`$N` 捕获可选组、inline 规则展平）在 AST 里可能留壳，
+    消费端取值前统一穿透；非 optional 原样返回，穿透落空 → None。
+    """
+    while isinstance(node, Node) and node.node_name == "optional":
+        sub = getattr(node, "sub_node", None) or []
+        node = sub[0] if sub else None
+    return node
+
+
+def collect_nodes(root: Node, node_name: str) -> list[Node]:
+    """某 `node_name` 的全部节点（先根序）。"""
+    return [n for n in iter_nodes(root) if n.node_name == node_name]
+
+
 class FileManager:
     """纯静态工具类 — 文件路径管理与 TOML 加载。全局单例（无实例状态）。"""
 

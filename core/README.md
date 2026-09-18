@@ -5,7 +5,7 @@
 
 | 文件 | 一句话 |
 |------|--------|
-| `define.py` | 核心类型：Token / GrammarRule / Node / FileManager |
+| `define.py` | 核心类型：Token / GrammarRule / Node / FileManager；Node 树通用工具（`iter_nodes` / `unwrap_optional` / `collect_nodes`，引擎与语言包插件共用一份） |
 | `config_registry.py` | 声明式配置注册中心（fail-fast 加载 + resolve） |
 | `plugin_loader.py` | 插件加载与管理（capabilities / pass 声明 / postpass 收集） |
 | `check_registry.py` | `[[checks]]` 声明式检查规则表（加载/校验/用户配置） |

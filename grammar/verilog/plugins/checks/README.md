@@ -31,6 +31,11 @@
 > code 登记进本表（诊断 code 就近权威）。分类容器（本目录下的子目录）不要求
 > 每插件独立成目录——纯规则组件（`rules/`）随位置任意深度。
 
+> **插件族共用助手**：`_shared.py`（不带 `tpc.toml`，不是插件）——赋值目标根信号名
+> `target_sig`、case 臂常量字面量 `const_value`。同族插件按
+> `from grammar.verilog.plugins.checks._shared import ...` 引用；需要同类工具时
+> 先看该文件，不要在各插件里再存一份（重复实现会在改判定规则时漂移）。
+
 ---
 
 ## 编写检查规则（双路径实操）

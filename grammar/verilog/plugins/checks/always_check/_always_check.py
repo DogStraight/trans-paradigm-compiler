@@ -16,9 +16,10 @@ always_ff 语义，误报高——调研结论）。语言知识（时序判定 
 收集 / 信号名提取）集中在此插件层，引擎零硬编码。
 """
 
-from core.define import Node
+from core.define import Node, iter_nodes
 
 from analyzer.checks import active_rule_ids
+from grammar.verilog.plugins.checks._shared import target_sig
 
 _ALWAYS_RULE = "AlwaysStmt"
 _EDGE_KEYWORDS = ("posedge", "negedge")
@@ -35,7 +36,7 @@ def run_always_check(analyzer, context) -> None:
     root = getattr(analyzer, "_ast", None)
     if root is None:
         return
-    for node in _iter_nodes(root):
+    for node in iter_nodes(root):
         if node.node_name != _ALWAYS_RULE:
             continue
         timing = _is_timing_always(node)
@@ -50,7 +51,7 @@ def _check_blocking_in_timing(always_node: Node, context) -> None:
     body = getattr(always_node, "body", None)
     if body is None:
         return
-    for n in _iter_nodes(body):
+    for n in iter_nodes(body):
         if n.node_name != "BlockingAssign":
             continue
         lhs = _target_text(getattr(n, "target", None))
@@ -70,11 +71,11 @@ def _check_mixed_assign(always_node: Node, context) -> None:
     if body is None:
         return
     seen: dict[str, set] = {}
-    for n in _iter_nodes(body):
+    for n in iter_nodes(body):
         op = _ASSIGN_RULES.get(n.node_name)
         if op is None:
             continue
-        sig = _target_sig(getattr(n, "target", None))
+        sig = target_sig(getattr(n, "target", None))
         if not sig:
             continue
         ops = seen.setdefault(sig, set())
@@ -88,23 +89,6 @@ def _check_mixed_assign(always_node: Node, context) -> None:
                     level="warning",
                     node=n,
                 )
-
-
-def _target_sig(target) -> str | None:
-    """赋值目标 → 根信号名（与 latch_check 同规则，结构知识插件层）。"""
-    if not isinstance(target, Node):
-        return None
-    name = target.node_name
-    if name == "Identifier":
-        return getattr(target, "content", "") or None
-    if name == "SelectExpr":
-        return _target_sig(getattr(target, "base", None))
-    if name == "HierExpr":
-        parts = getattr(target, "parts", None) or []
-        if parts and isinstance(parts[0], Node):
-            return getattr(parts[0], "content", "") or None
-        return None
-    return None
 
 
 def _target_text(target) -> str:
@@ -124,7 +108,7 @@ def _is_timing_always(always_node: Node) -> bool:
     ec = getattr(always_node, "event_control", None)
     if ec is None:
         return False
-    for n in _iter_nodes(ec):
+    for n in iter_nodes(ec):
         edge = getattr(n, "edge", None)
         if isinstance(edge, Node):
             e = getattr(edge, "content", "") or edge.node_name or ""
@@ -133,11 +117,3 @@ def _is_timing_always(always_node: Node) -> bool:
     return False
 
 
-def _iter_nodes(root: Node):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)

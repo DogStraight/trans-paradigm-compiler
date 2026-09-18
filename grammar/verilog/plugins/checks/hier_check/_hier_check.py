@@ -13,7 +13,7 @@ member；Verilator VSymGraph 全量 elaboration 对 lint 过重，不做）。
 resolve_member_width；direction 供未来跨模块悬空/驱动判定增量。
 """
 
-from core.define import Node
+from core.define import Node, iter_nodes
 
 # 实例化节点（本文件/目标模块内的 ModuleInst 均此形态）
 _INST_RULE = "ModuleInst"
@@ -39,16 +39,16 @@ def _build_maps(root):
     """{模块名: {实例名: (模块名, site)}} + {id(节点): 模块名}。"""
     inst_maps: dict = {}
     node_modules: dict = {}
-    for mod in _iter_nodes(root):
+    for mod in iter_nodes(root):
         if mod.node_name not in _MODULE_RULES:
             continue
         mn = _node_text(getattr(mod, "module_name", None))
         if not mn:
             continue
-        for n in _iter_nodes(mod):
+        for n in iter_nodes(mod):
             node_modules[id(n)] = mn
         insts: dict = {}
-        for n in _iter_nodes(mod):
+        for n in iter_nodes(mod):
             if n.node_name != _INST_RULE:
                 continue
             iname = _node_text(getattr(n, "inst_name", None))
@@ -159,7 +159,7 @@ def _member_width(info, name: str, site, caller_params: dict) -> int | None:
     from grammar.verilog.plugins.checks.width_check import _width_check as wc
 
     params = _merged_params(info, site, caller_params)
-    for n in _iter_nodes(node):
+    for n in iter_nodes(node):
         if n.node_name == "IntegerDecl" and _declares(n, name):
             return 32  # integer = 32 位（IEEE 1364-2005 A.2.1.3）
         if n.node_name not in _DECL_RULES or not _declares(n, name):
@@ -199,7 +199,7 @@ def _instance_in_module(info, name: str):
     node = getattr(info, "node", None)
     if node is None:
         return None
-    for n in _iter_nodes(node):
+    for n in iter_nodes(node):
         if n.node_name != _INST_RULE:
             continue
         if _node_text(getattr(n, "inst_name", None)) != name:
@@ -233,11 +233,3 @@ def _node_text(node) -> str:
     return "".join(parts)
 
 
-def _iter_nodes(root: Node):
-    """DFS 迭代整棵 AST。"""
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        yield node
-        for child in node.iter_children():
-            stack.append(child)
