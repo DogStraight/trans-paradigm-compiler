@@ -8,13 +8,11 @@ Doc: renderer/renderer_architecture.md（渲染器工作机制与现状：双世
 from .renderer import Renderer
 from transform.normalizer import normalize_ast
 
+from core.config_registry import config_refs_for
+
 __all__ = ["Renderer", "normalize_ast", "get_config_refs"]
-
-
-from core.config_registry import _CONFIG_DECLARATIONS
 
 
 def get_config_refs() -> dict[str, str]:
     """返回本部件所有配置需求: { "namespace.key": "_xxx_cfg", ... }"""
-    prefix = __name__ + "."
-    return {k: var for k, entries in _CONFIG_DECLARATIONS.items() for mod, var in entries if mod.startswith(prefix)}
+    return config_refs_for(__name__)

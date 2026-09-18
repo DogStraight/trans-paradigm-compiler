@@ -9,7 +9,7 @@
 Doc: docs/language_walkthrough.md（词法层：token 定义驱动）
 """
 
-from core.config_registry import _CONFIG_DECLARATIONS
+from core.config_registry import config_refs_for
 from . import pre_scan
 from .main_lexer import Lexer
 from .pre_scan import pre_scan, load_pre_scan_config
@@ -19,10 +19,4 @@ __all__ = ["Lexer", "pre_scan", "load_pre_scan_config", "get_config_refs"]
 
 def get_config_refs() -> dict[str, str]:
     """返回本部件所有配置需求: { "namespace.key": "_xxx_cfg", ... }"""
-    prefix = __name__ + "."
-    return {
-        k: var
-        for k, entries in _CONFIG_DECLARATIONS.items()
-        for mod, var in entries
-        if mod.startswith(prefix)
-    }
+    return config_refs_for(__name__)

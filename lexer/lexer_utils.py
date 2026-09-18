@@ -7,6 +7,8 @@ Doc: core/config_lifecycle.md
 
 import os
 
+from core.config_registry import deep_merge
+
 
 def merge_token_define(resolved: dict) -> dict:
     """从已解析配置 dict 合并 token 定义（基础 + 语言覆盖 + 增强层覆盖）。
@@ -14,11 +16,11 @@ def merge_token_define(resolved: dict) -> dict:
     resolved: ConfigRegistry.resolve() 的返回（含 "lexer.token_base" 等 key）。
     """
     base = dict(resolved.get("lexer.token_base", {}))
-    base = _deep_merge(base, dict(resolved.get("lexer.lexer_base", {})))
+    base = deep_merge(base, dict(resolved.get("lexer.lexer_base", {})))
     if resolved.get("lexer.token_lang"):
-        base = _deep_merge(base, dict(resolved["lexer.token_lang"]))
+        base = deep_merge(base, dict(resolved["lexer.token_lang"]))
     if resolved.get("lexer.token_ext"):
-        base = _deep_merge(base, dict(resolved["lexer.token_ext"]))
+        base = deep_merge(base, dict(resolved["lexer.token_ext"]))
     _validate_token_define(base)
     return base
 
@@ -51,17 +53,6 @@ def get_number_config(rules_dir: str | None = None) -> list[dict]:
         except (RuntimeError, KeyError):
             raw = {}
     return extract_number_configs(raw)
-
-
-def _deep_merge(base: dict, override: dict) -> dict:
-    """递归合并 override 到 base，override 的值优先"""
-    result = base.copy()
-    for key, val in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(result[key], val)
-        else:
-            result[key] = val
-    return result
 
 
 def get_token_define_merged(rules_dir: str, ext_dirs: list[str] | None = None) -> dict:

@@ -141,16 +141,18 @@ def _flatten_config(table: dict, prefix: str = "") -> list:
     return result
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
+def deep_merge(base: dict, override: dict) -> dict:
     """递归合并 override 到 base（dict 嵌套合并，非 dict 值后者优先）。
 
     用于同名配置 key 的多来源合并（多插件 token_ext 等）：浅 update 会让
     后加载的顶层 key（如 [id]）整体覆盖前一个，深合并保留嵌套结构。
+    单一实现：配置加载（本模块）与 `lexer/lexer_utils.merge_token_define`
+    共用；需要深合并的新调用方直接 import 本函数，不要再拷一份。
     """
     result = base.copy()
     for key, val in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(result[key], val)
+            result[key] = deep_merge(result[key], val)
         else:
             result[key] = val
     return result
@@ -704,7 +706,7 @@ class ConfigRegistry:
                         elif isinstance(merged, dict) and isinstance(data, dict):
                             # 深合并：多插件同名配置（token_ext 等嵌套结构）合并，
                             # 浅 update 会让后加载的顶层 key（如 [id]）覆盖前一个。
-                            merged = _deep_merge(merged, data)
+                            merged = deep_merge(merged, data)
                         else:
                             merged = data
                         src_files.append(m.replace("\\", "/"))
@@ -823,6 +825,22 @@ def declare_cfg(key: str, default: T, module: str = "", var: str = "") -> T:
     if ConfigRegistry._resolved:
         return ConfigRegistry._loaded.get(key, default)
     return default
+
+
+def config_refs_for(prefix: str) -> dict[str, str]:
+    """按模块名前缀取配置需求表：{ "namespace.key": "_xxx_cfg", ... }。
+
+    各部件 `__init__.py` 的 `get_config_refs()` 是对本函数的薄包装
+    （前缀 = 包名，如 `lexer` / `parser`）——扫描逻辑只有一份，
+    新增部件不再拷表达式。
+    """
+    scope = prefix + "."
+    return {
+        key: var
+        for key, entries in _CONFIG_DECLARATIONS.items()
+        for mod, var in entries
+        if mod.startswith(scope)
+    }
 
 
 def _push_loaded_config() -> None:

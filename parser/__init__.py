@@ -100,10 +100,9 @@ def setup_grammar(
 __all__ = ["Parser", "setup_grammar", "get_config_refs"]
 
 
-from core.config_registry import _CONFIG_DECLARATIONS
+from core.config_registry import config_refs_for
 
 
 def get_config_refs() -> dict[str, str]:
     """返回本部件所有配置需求: { "namespace.key": "_xxx_cfg", ... }"""
-    prefix = __name__ + "."
-    return {k: var for k, entries in _CONFIG_DECLARATIONS.items() for mod, var in entries if mod.startswith(prefix)}
+    return config_refs_for(__name__)

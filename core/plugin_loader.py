@@ -339,10 +339,7 @@ def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dic
 
 def get_transform_slot_decls() -> dict[str, dict]:
     """合并已加载组件的槽位契约声明（槽位名 → 契约，5b-3c 声明面）。"""
-    merged: dict[str, dict] = {}
-    for info in _loaded_components.values():
-        merged.update(info.get("slot_decls", {}))
-    return merged
+    return _merge_decl_maps(lambda info: info.get("slot_decls", {}))
 
 
 def _reload_component_handlers(cdir: str, handler_files: list[str]) -> None:
@@ -395,10 +392,7 @@ def _load_transform_ctx_channels(cdir: str, transform_meta: dict) -> dict[str, d
 
 def get_transform_ctx_channels() -> dict[str, dict]:
     """合并已加载组件的 ctx 通道声明（通道名 → {symbol_kind, attr}）。"""
-    merged: dict[str, dict] = {}
-    for info in _loaded_components.values():
-        merged.update(info.get("ctx_channels", {}))
-    return merged
+    return _merge_decl_maps(lambda info: info.get("ctx_channels", {}))
 
 
 def get_component_mapping_config() -> dict:
@@ -562,28 +556,32 @@ def get_capability_in(name: str, root_dir: str) -> Callable | None:
     return None
 
 
-def get_pipeline_pass_decls() -> dict[str, dict]:
-    """合并所有已加载组件的 pipeline.pass 声明（ADR-0007）。"""
+def _merge_decl_maps(pick: Callable[[dict], dict]) -> dict[str, dict]:
+    """合并所有已加载组件在 `pick(info)` 上的声明表（浅合并，后载覆盖）。
+
+    统一 `slot_decls` / `ctx_channels` / `pipeline.{passes,schedules,units}`
+    五处同形遍历；`pick` 直接给出取值路径，保持原有取值语义（缺键 → {}，
+    值为 None → 原样交给 `update` 报错，不在此处放宽）。
+    """
     merged: dict[str, dict] = {}
     for info in _loaded_components.values():
-        merged.update(info.get("pipeline", {}).get("passes", {}))
+        merged.update(pick(info))
     return merged
+
+
+def get_pipeline_pass_decls() -> dict[str, dict]:
+    """合并所有已加载组件的 pipeline.pass 声明（ADR-0007）。"""
+    return _merge_decl_maps(lambda info: info.get("pipeline", {}).get("passes", {}))
 
 
 def get_pipeline_schedules() -> dict[str, dict]:
     """合并所有已加载组件的 pipeline.schedule 声明（ADR-0007）。"""
-    merged: dict[str, dict] = {}
-    for info in _loaded_components.values():
-        merged.update(info.get("pipeline", {}).get("schedules", {}))
-    return merged
+    return _merge_decl_maps(lambda info: info.get("pipeline", {}).get("schedules", {}))
 
 
 def get_pipeline_units() -> dict[str, dict]:
     """合并所有已加载组件的 pipeline.units 声明（ADR-0015 §1 加工单元实例）。"""
-    merged: dict[str, dict] = {}
-    for info in _loaded_components.values():
-        merged.update(info.get("pipeline", {}).get("units", {}))
-    return merged
+    return _merge_decl_maps(lambda info: info.get("pipeline", {}).get("units", {}))
 
 
 def get_analyzer_postpass_decls() -> list[dict[str, Any]]:

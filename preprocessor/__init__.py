@@ -5,7 +5,7 @@ Architecture:
 Doc: preprocessor/README.md
 """
 
-from core.config_registry import _CONFIG_DECLARATIONS
+from core.config_registry import config_refs_for
 from . import _expand, _reverse
 from ._expand import scan_directives, expand_tokens, enumerate_conditions
 from ._reverse import protect_and_reverse, restore_condition_blocks
@@ -24,10 +24,4 @@ __all__ = [
 
 def get_config_refs() -> dict[str, str]:
     """返回本部件所有配置需求: { "namespace.key": "_xxx_cfg", ... }"""
-    prefix = __name__ + "."
-    return {
-        k: var
-        for k, entries in _CONFIG_DECLARATIONS.items()
-        for mod, var in entries
-        if mod.startswith(prefix)
-    }
+    return config_refs_for(__name__)

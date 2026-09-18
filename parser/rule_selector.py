@@ -345,27 +345,25 @@ def serialize_production_tree(feat: dict | None) -> str:
     if typ == "call":
         return f"@{feat['name']}"
     if typ == "choice":
-        return "|".join(_serialize_member(a) for a in feat["alternatives"])
+        return "|".join(_serialize_operand(a) for a in feat["alternatives"])
     if typ == "seq":
-        return ",".join(_serialize_member(i) for i in feat["items"])
+        return ",".join(_serialize_operand(i) for i in feat["items"])
     if typ == "repeat":
-        return f"{_serialize_group(feat['elem'])}*"
+        return f"{_serialize_operand(feat['elem'])}*"
     if typ == "optional":
-        return f"{_serialize_group(feat['elem'])}?"
+        return f"{_serialize_operand(feat['elem'])}?"
     if typ == "plus":
-        return f"{_serialize_group(feat['elem'])}+"
+        return f"{_serialize_operand(feat['elem'])}+"
     return ""
 
 
-def _serialize_member(feat: dict | None) -> str:
-    """choice/seq 的成员：复合（choice/seq）加括号，防止被外层分隔符吞并。"""
-    if feat is not None and feat.get("type") in ("choice", "seq"):
-        return f"({serialize_production_tree(feat)})"
-    return serialize_production_tree(feat)
+def _serialize_operand(feat: dict | None) -> str:
+    """嵌套位置的操作数：复合（choice/seq）加括号后回序列化。
 
-
-def _serialize_group(feat: dict | None) -> str:
-    """repeat/optional/plus 的 elem：复合（choice/seq）加括号，后缀作用于整体。"""
+    两种场合都要先框住：choice/seq 的**成员**不加括号会被外层分隔符
+    （`|` / `,`）吞并；repeat/optional/plus 的**elem** 不加括号则后缀
+    `*`/`?`/`+` 会落到末个成员而非整体。
+    """
     if feat is not None and feat.get("type") in ("choice", "seq"):
         return f"({serialize_production_tree(feat)})"
     return serialize_production_tree(feat)

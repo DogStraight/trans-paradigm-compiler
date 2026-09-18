@@ -13,15 +13,23 @@ from ..doc import Doc, Line as SoftLine, LineBreak, HardBreak
 from .registry import register
 
 
+def _break_doc(doc_cls: type[Doc], expr: dict, renderer: Any) -> Doc:
+    """按 `indent` 配置构造换行 Doc：有缩进 → 带缩进串，否则无参构造。
+
+    三态（soft / break / hard_break）只差 Doc 类型，构造规则同一条。
+    """
+    indent_level = expr.get("indent", 0)
+    if indent_level > 0:
+        return doc_cls(renderer._indent(indent_level))
+    return doc_cls()
+
+
 @register("soft")
 def eval_soft(expr: dict, node: Node, parent_layout: dict | None,
               renderer: Any) -> Doc:
     """求值 soft 原语（软换行）"""
     del node, parent_layout  # 原语注册协议签名参数，本原语不消费
-    indent_level = expr.get("indent", 0)
-    if indent_level > 0:
-        return SoftLine(renderer._indent(indent_level))
-    return SoftLine()
+    return _break_doc(SoftLine, expr, renderer)
 
 
 @register("break")
@@ -33,10 +41,7 @@ def eval_break(expr: dict, node: Node, parent_layout: dict | None,
     处理，不走本 dispatch）。强制断行用 `hard_break`。
     """
     del node, parent_layout  # 原语注册协议签名参数，本原语不消费
-    indent_level = expr.get("indent", 0)
-    if indent_level > 0:
-        return LineBreak(renderer._indent(indent_level))
-    return LineBreak()
+    return _break_doc(LineBreak, expr, renderer)
 
 
 @register("hard_break")
@@ -44,7 +49,4 @@ def eval_hard_break(expr: dict, node: Node, parent_layout: dict | None,
                     renderer: Any) -> Doc:
     """求值 hard_break 原语（强制断行 + 强制所在组断开）。"""
     del node, parent_layout  # 原语注册协议签名参数，本原语不消费
-    indent_level = expr.get("indent", 0)
-    if indent_level > 0:
-        return HardBreak(renderer._indent(indent_level))
-    return HardBreak()
+    return _break_doc(HardBreak, expr, renderer)
