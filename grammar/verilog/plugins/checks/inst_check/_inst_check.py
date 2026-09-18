@@ -14,6 +14,7 @@ import os
 import re
 
 from core.define import Node, iter_nodes, unwrap_optional
+from grammar.verilog.plugins.checks._shared import is_parameterized
 
 _LITERAL_RE = re.compile(r"^\d+'\s*[hdb]?[0-9a-fA-F_]*$")
 
@@ -76,7 +77,7 @@ def _check_ports(context, site, info, related_def) -> None:
             )
             continue
         # WC001：参数化宽度端口 + 字面量连接（配置敏感死值）
-        if port.width_expr and _is_parameterized(port.width_expr):
+        if port.width_expr and is_parameterized(port.width_expr):
             value = getattr(conn, "value", None)
             if _is_literal(value):
                 related = list(related_def)
@@ -312,11 +313,6 @@ def _text(node) -> str:
             return _text(value)   # 嵌套合成节点（Number → literal.number 等）
         return str(value)
     return ""
-
-
-def _is_parameterized(width_expr: str) -> bool:
-    """宽度表达式含非数字字符（如 DATA_W-1:0）→ 参数化。纯数字（7:0）不算。"""
-    return any(ch.isalpha() for ch in width_expr)
 
 
 def _is_literal(node) -> bool:

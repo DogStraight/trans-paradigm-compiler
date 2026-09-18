@@ -19,10 +19,11 @@ always_ff 语义，误报高——调研结论）。语言知识（时序判定 
 from core.define import Node, iter_nodes
 
 from analyzer.checks import active_rule_ids
-from grammar.verilog.plugins.checks._shared import target_sig
+from grammar.verilog.plugins.checks._shared import is_timing_always, target_sig
 
 _ALWAYS_RULE = "AlwaysStmt"
-_EDGE_KEYWORDS = ("posedge", "negedge")
+
+
 _ASSIGN_RULES = {"BlockingAssign": "=", "NonBlockingAssign": "<="}
 
 
@@ -39,7 +40,7 @@ def run_always_check(analyzer, context) -> None:
     for node in iter_nodes(root):
         if node.node_name != _ALWAYS_RULE:
             continue
-        timing = _is_timing_always(node)
+        timing = is_timing_always(node)
         if need_aw001 and timing:
             _check_blocking_in_timing(node, context)
         if need_aw002:
@@ -101,19 +102,5 @@ def _target_text(target) -> str:
     if parts and isinstance(parts[0], Node):
         return getattr(parts[0], "content", "") or ""
     return target.node_name
-
-
-def _is_timing_always(always_node: Node) -> bool:
-    """always 是否为时序敏感（含 posedge/negedge）。"""
-    ec = getattr(always_node, "event_control", None)
-    if ec is None:
-        return False
-    for n in iter_nodes(ec):
-        edge = getattr(n, "edge", None)
-        if isinstance(edge, Node):
-            e = getattr(edge, "content", "") or edge.node_name or ""
-            if e in _EDGE_KEYWORDS or e.split(".")[-1] in _EDGE_KEYWORDS:
-                return True
-    return False
 
 

@@ -1,13 +1,16 @@
 """checks 插件族共用助手 — 赋值目标信号名 / 常量字面量与表达式求值。
 
-这里的函数原先在 `always_check` / `case_check` / `latch_check` / `width_check`
-各存一份同体或近同体实现（本轮外部审计"结构重复"命中），收敛到本模块一份。
-结构知识（`Identifier` / `SelectExpr` / `HierExpr` 形态、Verilog 字面量写法、
-参数名求值域）留在**插件层**，引擎不参与。
+这里的函数原先在 `always_check` / `case_check` / `inst_check` / `latch_check`
+/ `width_check` 各存一份同体或近同体实现（本轮外部审计"结构重复"命中），
+收敛到本模块一份。结构知识（`Identifier` / `SelectExpr` / `HierExpr` 形态、
+Verilog 字面量写法、参数名求值域、边沿关键字）留在**插件层**，引擎不参与。
 
 Doc: grammar/verilog/plugins/checks/README.md（插件族共用助手）
 """
-from core.define import Node
+from core.define import Node, iter_nodes
+
+# 边沿敏感关键字（always 事件控制里的时序标志）
+EDGE_KEYWORDS = ("posedge", "negedge")
 
 
 def target_sig(target: Node | None) -> str | None:
@@ -204,3 +207,27 @@ def const_eval(text: str, params: dict | None = None) -> int | None:
     if toks is None:
         return None
     return _ConstExprParser(toks).parse()
+
+
+def is_timing_always(always_node: Node) -> bool:
+    """always 是否为时序敏感（事件控制里含 posedge/negedge 边沿）。
+
+    event_control → EventCtrlParen → SensitivityList → EdgeSense（edge =
+    posedge/negedge）。`@*` 或电平敏感列表 = 组合；含边沿 = 时序；裸 always
+    （无事件控制）按组合处理。
+    """
+    ec = getattr(always_node, "event_control", None)
+    if ec is None:
+        return False  # 裸 always（无事件控制）按组合处理
+    for n in iter_nodes(ec):
+        edge = getattr(n, "edge", None)
+        if isinstance(edge, Node):
+            e = getattr(edge, "content", "") or edge.node_name or ""
+            if e in EDGE_KEYWORDS or e.split(".")[-1] in EDGE_KEYWORDS:
+                return True
+    return False
+
+
+def is_parameterized(text: str) -> bool:
+    """宽度文本含字母 → 参数化（如 `DATA_W-1:0`；纯数字 `7:0` 不算）。"""
+    return any(ch.isalpha() for ch in text)

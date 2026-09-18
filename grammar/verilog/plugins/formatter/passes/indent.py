@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from ..boundary import LineContext
+from ..style import line_indent_width
 
 
 def run_indent_pass(
@@ -50,19 +51,22 @@ def run_indent_pass(
             #     可靠，只能按惯例规范。
             #   - 其余（自由文本，如 ASCII 图）：按首行平移量整体平移，保自身版式。
             if comment_indent is None:
-                comment_indent = _indent_chars(result[ln - 1]) if ln > 0 else 0
+                comment_indent = line_indent_width(result[ln - 1]) if ln > 0 else 0
             if stripped.startswith("*"):
                 result[ln] = " " * (comment_indent + 1) + stripped
                 continue
             if comment_shift is None:
                 prev_ln = ln - 1
                 if prev_ln >= 0:
-                    comment_shift = _indent_chars(result[prev_ln]) - _indent_chars(
-                        lines[prev_ln]
+                    comment_shift = (
+                        line_indent_width(result[prev_ln])
+                        - line_indent_width(lines[prev_ln])
                     )
                 else:
                     comment_shift = 0
-            result[ln] = " " * max(0, _indent_chars(lines[ln]) + comment_shift) + stripped
+            result[ln] = (
+                " " * max(0, line_indent_width(lines[ln]) + comment_shift) + stripped
+            )
             continue
         comment_shift = None
         comment_indent = None
@@ -121,16 +125,16 @@ def run_indent_pass(
             assert prev is not None  # hanging 分支已保证 prev 非 None
             if prev.multi_line_cont and prev.multi_header_line:
                 hdr_ln = prev.multi_header_line - 1
-                prev_level = _indent_level(result[hdr_ln], indent_width)
+                prev_level = line_indent_width(result[hdr_ln]) // indent_width
             else:
                 prev_ln = prev.line_number - 1
-                prev_level = _indent_level(result[prev_ln], indent_width)
+                prev_level = line_indent_width(result[prev_ln]) // indent_width
             target = prev_level + 1
         elif ctx.multi_line_cont:
             # 多行语句续行：相对语句头实际缩进 +1（同语句内续行同级，不累积）；
             # 语句头行尾 `=` 的三目链续行（multi_extra）额外 +1（ref 用 +2）
             hdr_ln = ctx.multi_header_line - 1
-            hdr_level = _indent_level(result[hdr_ln], indent_width)
+            hdr_level = line_indent_width(result[hdr_ln]) // indent_width
             target = hdr_level + 1 + (1 if ctx.multi_extra else 0)
         elif case_item_hang:
             target = ctx.scope_depth + 1
@@ -141,29 +145,3 @@ def run_indent_pass(
             target = ctx.scope_depth
         result[ln] = " " * (target * indent_width) + stripped
     return result
-
-
-def _indent_chars(line: str) -> int:
-    """行首空白字符数（tab 按 4 折；与 _indent_level 同口径的字符量化）。"""
-    n = 0
-    for c in line:
-        if c == "\t":
-            n += 4
-        elif c == " ":
-            n += 1
-        else:
-            break
-    return n
-
-
-def _indent_level(line: str, width: int) -> int:
-    """行首缩进换算为级数（tab=4 空格）。"""
-    n = 0
-    for c in line:
-        if c == "\t":
-            n += 4
-        elif c == " ":
-            n += 1
-        else:
-            break
-    return n // width

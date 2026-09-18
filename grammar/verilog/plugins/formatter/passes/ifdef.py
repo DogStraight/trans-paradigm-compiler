@@ -10,21 +10,9 @@
 from __future__ import annotations
 
 from ..boundary import LineContext
+from ..style import line_indent_width
 
 _IFDEF_DIRECTIVE = ("`ifdef", "`ifndef", "`elsif", "`else", "`endif")
-
-
-def _indent_level(line: str, width: int) -> int:
-    """行首缩进换算为级数（tab=4 空格）。"""
-    n = 0
-    for c in line:
-        if c == "\t":
-            n += 4
-        elif c == " ":
-            n += 1
-        else:
-            break
-    return n // width
 
 
 def run_ifdef_pass(
@@ -69,7 +57,7 @@ def run_ifdef_pass(
                 if 0 <= ln < len(result):
                     stripped = result[ln].lstrip()
                     if stripped:
-                        level = _indent_level(result[ln], indent_width) + 1
+                        level = line_indent_width(result[ln]) // indent_width + 1
                         result[ln] = " " * (level * indent_width) + stripped
             _k += 1
     return result

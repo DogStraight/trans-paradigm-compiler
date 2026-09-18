@@ -14,7 +14,7 @@
 from typing import Any
 
 from core.define import Node, iter_nodes, unwrap_optional
-from grammar.verilog.plugins.checks._shared import const_eval
+from grammar.verilog.plugins.checks._shared import const_eval, is_parameterized
 
 # 参与宽度分析的符号 kind（语言知识：Verilog 内部信号/端口）
 _WIDTH_KINDS = {"wire", "reg", "integer", "port"}
@@ -600,7 +600,7 @@ def _recheck_module_assigns(info, site, ov_params: dict, context) -> None:
         return
     sub_table = _module_width_table(info)
     # 无参数化宽度（全部固定宽度）→ 覆盖参数不影响内部赋值，跳过
-    if not any(_is_parameterized_text(t) for t in sub_table.values()):
+    if not any(is_parameterized(t) for t in sub_table.values()):
         return
     sub_table["_params"] = ov_params
     for n in iter_nodes(node):
@@ -611,11 +611,6 @@ def _recheck_module_assigns(info, site, ov_params: dict, context) -> None:
             for ex in getattr(n, "extras", None) or []:
                 if isinstance(ex, Node):
                     _recheck_one(ex, info, site, sub_table, context)
-
-
-def _is_parameterized_text(text: str) -> bool:
-    """宽度文本含字母 → 参数化（非纯数字/范围形态）。"""
-    return any(ch.isalpha() for ch in text)
 
 
 def _recheck_one(node, info, site, sub_table: dict, context) -> None:

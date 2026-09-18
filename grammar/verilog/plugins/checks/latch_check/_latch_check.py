@@ -24,10 +24,11 @@ Yosys proc_dlatch（综合视角）/ SpyGlass W442aL。升级自有限版（只�
 """
 
 from core.define import Node, iter_nodes
-from grammar.verilog.plugins.checks._shared import const_eval, const_value, target_sig
+from grammar.verilog.plugins.checks._shared import const_eval, const_value, is_timing_always, target_sig
 
 _ALWAYS_RULE = "AlwaysStmt"
-_EDGE_KEYWORDS = ("posedge", "negedge")
+
+
 # 过程赋值规则（锁存判定只看过程体内赋值）
 _ASSIGN_RULES = {"BlockingAssign", "NonBlockingAssign"}
 # if 家族（IfBlock/IfStmt 与 else if 变体同构：condition/then_stmt/else_chain）
@@ -51,7 +52,7 @@ def run_latch_check(analyzer, context) -> None:
         for node in iter_nodes(module):
             if node.node_name != _ALWAYS_RULE:
                 continue
-            if _is_timing_always(node):
+            if is_timing_always(node):
                 continue  # 时序 always：if 无 else 是合法复位写法
             _check_combinational(node, context, params)
 
@@ -315,23 +316,5 @@ def _node_text(node) -> str:
         if t:
             return t
     return ""
-
-
-def _is_timing_always(always_node: Node) -> bool:
-    """always 是否为时序敏感（含 posedge/negedge）。
-
-    event_control → EventCtrlParen → SensitivityList → EdgeSense（edge=
-    posedge/negedge）。@* 或电平敏感列表 = 组合；含边沿 = 时序。
-    """
-    ec = getattr(always_node, "event_control", None)
-    if ec is None:
-        return False  # 裸 always（无事件控制）按组合处理
-    for n in iter_nodes(ec):
-        edge = getattr(n, "edge", None)
-        if isinstance(edge, Node):
-            e = getattr(edge, "content", "") or edge.node_name or ""
-            if e in _EDGE_KEYWORDS or e.split(".")[-1] in _EDGE_KEYWORDS:
-                return True
-    return False
 
 
