@@ -116,6 +116,41 @@ class Lexer:
         rules_dir: str | None = None,
         ext_dirs: list[str] | None = None,
     ) -> None:
+        """装配词法配置：来源解析 → 宏/缩进/token 表 → capture 与字符集 →
+        plain 段 → 括号与行状态 → 数字 runner。
+
+        每步一个方法（原先 175 行的单构造体）：各步只按顺序往 `self` 上挂
+        配置表，顺序有依赖（token 表先于 capture/plain 派生态）。增删配置面
+        时只看对应那一步；fail-fast 都留在所属步内。
+        """
+        token_define_dict, raw_macro, number_configs, injected = self._resolve_sources(
+            token_define_dict, number_configs, rules_dir, ext_dirs
+        )
+        self.token_define = token_define_dict
+        self._setup_macro_shapes(raw_macro, injected)
+        self._setup_indent()
+        self._setup_token_tables()
+        self._setup_capture_and_charsets(number_configs)
+        self._setup_plain_scalar()
+        self._setup_brackets_and_line_state()
+        self._setup_number_runner(number_configs)
+
+    def _resolve_sources(
+        self,
+        token_define_dict: dict | None,
+        number_configs: list[dict] | None,
+        rules_dir: str | None,
+        ext_dirs: list[str] | None,
+    ) -> tuple[dict, dict, list[dict] | None, bool]:
+        """配置来源 → (token 表, 宏配置, 数字形态, 是否调用方注入 token 表)。
+
+        有 rules_dir：按语言包自包含解析（一次 resolve），token 定义 / 宏配置 /
+        数字形态都跟随本实例的 rules_dir，不依赖最后一次 load_all 的全局状态
+        ——同一进程跨语言（测试/多语言服务）时不会串用上一语言的配置。
+        无 rules_dir：token/number 配置由调用方直传（测试自建定义）；宏配置回退
+        全局声明式 `_macro_cfg`。旧版 get_token_define/get_number_config 文件
+        读取兜底已移除（无调用方，统一 ConfigRegistry）。
+        """
         if rules_dir:
             # 按语言包自包含解析（一次 resolve）：token 定义 / 宏配置 / 数字形态
             # 都跟随本实例的 rules_dir，不依赖最后一次 load_all 的全局状态——
@@ -153,21 +188,26 @@ class Lexer:
             raw_macro = _macro_cfg
             # 调用方自建 token 表：表里没有的前缀 token → 该形态不适用（不报错）
             token_table_injected = True
-        self.token_define = token_define_dict
+        return token_define_dict, raw_macro, number_configs, token_table_injected
 
-        # 宏形态（生产式声明：前缀 token + 名字位）——识别顺序 directive 优先
-        # （导入放这里：lexer 包与 preprocessor 包在模块级互相引用，避免环）
+    def _setup_macro_shapes(self, raw_macro: dict, injected: bool) -> None:
+        """宏形态（生产式声明：前缀 token + 名字位）——识别顺序 directive 优先。
+
+        （导入放函数内：lexer 包与 preprocessor 包在模块级互相引用，避免环）
+        """
         from preprocessor.macro_shape import SHAPE_KINDS, load_macro_shapes
 
         self._macro_shapes = load_macro_shapes(
             cfg=raw_macro,
-            token_define=token_define_dict,
-            skip_undeclared_prefix=token_table_injected,
+            token_define=self.token_define,
+            skip_undeclared_prefix=injected,
         )
         self._macro_shape_kinds = SHAPE_KINDS
 
-        self.indent_enable = token_define_dict.get("indent", {}).get("enable", False)
-        raw_level = token_define_dict.get("indent", {}).get("level", 4)
+    def _setup_indent(self) -> None:
+        """缩进配置（level = int 固定网格 / "auto" 从文件启发式推导）。"""
+        self.indent_enable = self.token_define.get("indent", {}).get("enable", False)
+        raw_level = self.token_define.get("indent", {}).get("level", 4)
         # level = "auto"：缩进单位从文件启发式推导（首次结构缩进行锁定，
         # Python 同款）——YAML 文件缩进宽度不固定（2/4/6），固定网格无法
         # 解析 2 空格文件。固定 int 的语言包（verilog/c4 未启用 indent）不变。
@@ -176,18 +216,25 @@ class Lexer:
         # _indent_unit：auto 模式下的锁定单位（None = 未锁定，每次 tokenize 重置）
         self._indent_unit: int | None = None
         self.indent_deep = 0
-        self.blank: list = list(token_define_dict.get("space", {}).values()) + list(
-            token_define_dict.get("newline", {}).values()
+
+    def _setup_token_tables(self) -> None:
+        """token 表派生态：空白/换行集合、转义标识符形态、字母 token 与完整名映射。"""
+        self.blank: list = list(self.token_define.get("space", {}).values()) + list(
+            self.token_define.get("newline", {}).values()
         )
-        self.newline: list = list(token_define_dict.get("newline", {}).values())
+        self.newline: list = list(self.token_define.get("newline", {}).values())
         # 转义标识符形态（配置驱动，如 Verilog A.9.3 escaped_identifier）：
         #   [id.escaped] prefix = "\\"  terminators = " \t\r\n,;()[]{}"  token_type = "id"
         # 声明才启用该分支（c4 等无此形态的语言不声明即不触发）；prefix/
         # terminators/token_type 全部来自配置，引擎不硬编码语言知识。
-        self._escaped_cfg: dict | None = token_define_dict.get("id", {}).get("escaped")
+        self._escaped_cfg: dict | None = self.token_define.get("id", {}).get("escaped")
         self.alpha_tokens = []
         self._build_alpha_tokens()
         self.full_token_map: dict[str, str] = self._build_full_token_map()
+
+    def _setup_capture_and_charsets(self, number_configs: list[dict] | None) -> None:
+        """capture mode 表（注释/字符串/heredoc/块标量等）+ 空白字符集 +
+        无尺寸数字触发前缀。"""
         # capture mode 表（注释/字符串/heredoc/块标量等，配置驱动）：
         # 构建一次缓存，避免 tokenize 主循环每轮重建规则表。
         self._capture_rules: list[CaptureRule] = CaptureRunner.build_rules(
@@ -203,7 +250,7 @@ class Lexer:
         ]
         # 空白/换行字符集（plain 扫描终止判定用）
         self._space_set: frozenset[str] = frozenset(
-            token_define_dict.get("space", {}).values()
+            self.token_define.get("space", {}).values()
         )
         self._newline_set: frozenset[str] = frozenset(self.newline)
         # 无尺寸数字触发前缀（'d/'h/'b/'o 等，从 lexer.number 形态推导）：
@@ -211,13 +258,18 @@ class Lexer:
         # prefix+base 组合（大小写），signed 形态另加 prefix+s/S。
         self._unsized_prefixes: set[str] = _build_unsized_prefixes(number_configs)
 
+    def _setup_plain_scalar(self) -> None:
+        """plain scalar 段（[plain]，YAML 类语言的裸标量扫描）+ 多字符 extend 符号表。
+
+        fail-fast：触发字符必须是续字符子集（否则扫描空转死循环）。
+        """
         # plain scalar 配置（[plain] 段，YAML 类语言的裸标量扫描）：
         # first = 触发字符集；continuation = 续字符集（含空格，多词值）；
         # stop_space_after = 这些字符后随空白/行尾即终止（YAML 的 ':' 映射分隔）；
         # no_space_after_tokens = 前一个显著 token 在此集合时遇空格终止
         #   （锚点名/别名名是单词，不吞空格——'&anchor value' 拆两 token）。
         # 未声明 [plain] 的语言包（verilog/c4）→ 分支永不触发，零影响。
-        plain_cfg = token_define_dict.get("plain", {}) or {}
+        plain_cfg = self.token_define.get("plain", {}) or {}
         self._plain_first: frozenset[str] = _parse_char_class(
             plain_cfg.get("first", []) or []
         )
@@ -251,7 +303,8 @@ class Lexer:
             if isinstance(v, str) and len(v) > 1
         ]
 
-        # 括号配对表 → 开闭集合 + 类型映射
+    def _setup_brackets_and_line_state(self) -> None:
+        """括号配对表 → 开闭集合 + 类型映射；行状态初值。"""
         bracket_pairs: list = self.token_define.get("bracket", {}).get("pairs", [])
         self.open_brackets: set[str] = set()
         self.close_brackets: set[str] = set()
@@ -273,10 +326,13 @@ class Lexer:
         self._line_indent = 0
         self._line_sig: str | None = None
 
-        # 数字解析器：配置驱动（语言包声明形态）→ 生成 FSM（唯一路径）。
-        # 旧 NumberFSM 回退已移除（P2.1 配置化后所有语言包都声明数字形态，
-        # 回退路径不可达且带旧 FSM 的过度匹配 bug：0x1F 被误认整体等）。
-        # 形态缺失 = 配置错误，fail-fast（decisions/0003）。
+    def _setup_number_runner(self, number_configs: list[dict] | None) -> None:
+        """数字解析器：配置驱动（语言包声明形态）→ 生成 FSM（唯一路径）。
+
+        旧 NumberFSM 回退已移除（P2.1 配置化后所有语言包都声明数字形态，
+        回退路径不可达且带旧 FSM 的过度匹配 bug：0x1F 被误认整体等）。
+        形态缺失 = 配置错误，fail-fast。
+        """
         runner = build_number_runner(number_configs)
         if runner is None:
             raise RuntimeError(
