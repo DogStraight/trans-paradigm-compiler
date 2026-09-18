@@ -71,6 +71,9 @@ def build_suppress_map(
     区间豁免 [off 行, on 行) 内的每一行都豁免；未闭合的 off 豁免到文件尾。
     单行豁免只豁免注释所在行。同行的豁免合并（None 优先=全部豁免）。
     syntax：语言包注释形态（豁免指令以注释形态书写）。
+
+    指令优先级按行内顺序判定：先看 `on`（闭合区间）→ 再看 `off`（开启区间）
+    → 最后看单行指令（只认注释区，见 `_split_code_comment`）。
     """
     off_re, on_re, line_re = _build_patterns(syntax)
     lines = text.splitlines()
@@ -79,27 +82,13 @@ def build_suppress_map(
 
     def _fill_interval(start: int, end: int, rules: set[str] | None) -> None:
         for ln in range(start, end):
-            prev = suppress.get(ln)
-            if rules is None or prev is None:
-                # None 优先：任一侧"全部豁免"则整行全部豁免
-                suppress[ln] = rules if prev is None else None
-            else:
-                suppress[ln] = prev | rules
+            suppress[ln] = _merge_suppress(suppress.get(ln), rules)
 
     for idx, line in enumerate(lines):
-        # 区分代码区/注释区：行注释起始之后的 `off` 指令是被注释掉的文本，
-        # 不构成指令（指令格式是约定，普通注释里不应写完整指令）
-        code_part = line
-        comment_part = ""
-        if syntax.line_start:
-            pos = line.find(syntax.line_start)
-            if pos >= 0:
-                code_part = line[:pos]
-                comment_part = line[pos:]
+        code_part, comment_part = _split_code_comment(line, syntax)
 
         if on_re is not None and pending is not None:
-            m = on_re.search(code_part)
-            if m:
+            if on_re.search(code_part):
                 off_line, rules = pending
                 _fill_interval(off_line, idx, rules)
                 pending = None
@@ -112,18 +101,42 @@ def build_suppress_map(
         if line_re is not None:
             m = line_re.search(comment_part)
             if m:
-                rules = _parse_rules(m.group(1))
-                prev = suppress.get(idx)
-                if rules is None or prev is None:
-                    suppress[idx] = rules if prev is None else None
-                else:
-                    suppress[idx] = prev | rules
+                suppress[idx] = _merge_suppress(
+                    suppress.get(idx), _parse_rules(m.group(1))
+                )
 
     if pending is not None:
         off_line, rules = pending
         _fill_interval(off_line, len(lines), rules)
     return suppress
 
+
+def _split_code_comment(line: str, syntax: CommentSyntax) -> tuple[str, str]:
+    """行 → (代码区, 注释区)。
+
+    行注释起始之后的 `off` 指令是**被注释掉的文本**，不构成指令（指令格式是
+    约定，普通注释里不应写完整指令）：区间指令只认代码区，单行指令只认注释区。
+    语言包未声明行注释起始符（`line_start` 空）→ 整行视作代码区。
+    """
+    if not syntax.line_start:
+        return line, ""
+    pos = line.find(syntax.line_start)
+    if pos < 0:
+        return line, ""
+    return line[:pos], line[pos:]
+
+
+def _merge_suppress(
+    prev: set[str] | None, rules: set[str] | None
+) -> set[str] | None:
+    """同行豁免合并：任一侧 None（全部豁免）优先，否则取并集。
+
+    `prev` 是 `dict.get` 的结果——**缺键与值为 None 同为 None**，故
+    `prev is None` 一律按"该行先前无豁免"处理（沿用原实现语义，未改动）。
+    """
+    if rules is None or prev is None:
+        return rules if prev is None else None
+    return prev | rules
 
 def apply_suppressions(
     diagnostics: list[dict], suppress_map: Mapping[int, set[str] | None]
