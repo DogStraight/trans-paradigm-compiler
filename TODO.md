@@ -43,14 +43,18 @@
     拆类需先立 ADR（B-B4c，暂缓）。
   - ✅ `lexer/main_lexer.Lexer.__init__`（175 行）：已拆为装配 + 七个分步方法
     （`de22813`）——类级最大函数 175 → 56 行。
-  - ⏳ **下一梯队长方法**（>80 行，外部裁判复查后列队）：
-    `core/config_registry.ConfigRegistry._resolve_decls`（~140 行）、
-    `core/config_registry._load_meta_declarations`（~118 行）、
-    `core/check_registry.load_user_check_config`（~91 行）、
-    `core/define.GrammarRule.__init__`（79 行）、
-    `analyzer/checker.ProjectChecker.check`（65 行）、
-    `analyzer/suppress.build_suppress_map`（60 行）、
-    `analyzer/traversal._walk_node`（47 行）、`core/config_registry._glob_match`（43 行）。
+  - ⏳ **第二梯队长方法**（逐单元推进，已做 4 项，均附验证与提交）：
+    - ✅ `core/config_registry.ConfigRegistry._resolve_decls`（142 行）→ 三步
+      （`3f9cea9`）；`_load_meta_declarations`（118 行）→ 按来源拆（`6b0b25c`）。
+    - ✅ `core/check_registry.load_user_check_config`（91 行）→ 三段校验各自成
+      函数（`2f8c6c7`）；`core/define.GrammarRule.__init__`（79 行）→ 四步
+      （`cffa79f`）。
+    - ⏳ 剩余：`analyzer/checker.ProjectChecker.check`（65 行）、
+      `analyzer/suppress.build_suppress_map`（60 行）、
+      `analyzer/traversal._walk_node`（47 行）、
+      `core/config_registry._glob_match`（43 行 / CC 13）、
+      `core/define.GrammarRule._validate_node_specs`（43 行 / CC 14）、
+      `core/define.FileManager.load_all_toml`（70 行）。
   - ⏳ **类级上帝对象**（需设计决策，非机械拆分）：`_StructureBase`、
     `ConfigRegistry`、`GrammarRule`、`ProjectChecker`、`AnalysisTraversal`、
     `Lexer`、formatter `BoundaryScanner`——建议逐个人工定边界后再动。
