@@ -68,6 +68,10 @@ def char_category(ch: str) -> str | None:
     return _CHAR_CATEGORY.get(ch)
 
 
+# 多字符前缀的合法首字符：只有十进制数字才有 `digit{first}` 入边
+_DECIMAL_CHARS = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+
+
 class NumberPattern:
     """单个数字形态模式：由声明编译出的状态链。
 
@@ -195,6 +199,39 @@ class _PatternBuilder:
         self.accepting.add(size_state)
         return size_state
 
+    def _prefix_entry_state(self, from_state: int, first: str) -> int:
+        """前缀首字符的入口态（取已有的 `digit{first}` 转移目标，缺则新建）。"""
+        node = self.transitions.get((from_state, f"digit{first}"))
+        if node is None:
+            node = self.new_state()
+            self.add(from_state, f"digit{first}", node)
+        return node
+
+    def _link_prefix(self, node: int, prefix: str) -> int | None:
+        """按前缀剩余字符建链 → 末态（字符类别未声明 → None，该前缀丢弃）。"""
+        cur = node
+        for ch in prefix[1:]:
+            cat = _CHAR_CATEGORY.get(ch)
+            if cat is None:
+                return None
+            nxt = self.new_state()
+            self.add(cur, cat, nxt)
+            cur = nxt
+        return cur
+
+    def _close_prefix_value(self, cur: int, prefix: str, value_digits: dict) -> None:
+        """前缀末态自环收 value 字符（进制 = `value_digits[前缀末字符]`）+ 收为接受态。
+
+        多字符前缀形态暂不支持 x/z value。
+        """
+        radix = value_digits.get(prefix[-1].lower(), "dec")
+        for cat in _digit_cats_for(radix):
+            if cat == "xz":
+                continue
+            self.add(cur, cat, cur)
+        self.add(cur, "underscore", cur)
+        self.accepting.add(cur)
+
     def build_multi_prefix(
         self,
         start: int,
@@ -212,35 +249,16 @@ class _PatternBuilder:
         by_first: dict[str, list[str]] = {}
         for p in prefixes:
             by_first.setdefault(p[0], []).append(p)
+        from_state = start if size_is_none else current
         for first, plist in by_first.items():
-            if first not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"):
+            if first not in _DECIMAL_CHARS:
                 continue
-            from_state = start if size_is_none else current
-            node = self.transitions.get((from_state, f"digit{first}"))
-            if node is None:
-                node = self.new_state()
-                self.add(from_state, f"digit{first}", node)
+            node = self._prefix_entry_state(from_state, first)
             for p in plist:
                 # 每条前缀独立建链（0x → xz；0b → base_b；…）
-                cur = node
-                ok = True
-                for ch in p[1:]:
-                    cat = _CHAR_CATEGORY.get(ch)
-                    if cat is None:
-                        ok = False
-                        break
-                    nxt = self.new_state()
-                    self.add(cur, cat, nxt)
-                    cur = nxt
-                if not ok:
-                    continue
-                radix = value_digits.get(p[-1].lower(), "dec")
-                for cat in _digit_cats_for(radix):
-                    if cat == "xz":
-                        continue
-                    self.add(cur, cat, cur)
-                self.add(cur, "underscore", cur)
-                self.accepting.add(cur)
+                end = self._link_prefix(node, p)
+                if end is not None:
+                    self._close_prefix_value(end, p, value_digits)
 
     def build_single_prefix(
         self, current: int, base_prefix: str, signed_opt: bool
