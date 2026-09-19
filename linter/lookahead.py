@@ -79,11 +79,14 @@ _MAX_PREFIX_LEN = 8
 
 
 def _feat_token_paths(feat: dict | None, tree: dict) -> set[tuple[str, ...]] | None:
-    """单个 production 元素的判别 token 序列集。
+    """单个 production 元素的判别 token 序列集（按 feature 类型分派）。
 
     返回 set[tuple[str, ...]]：该元素可能的前缀 token 序列（含空元组 = epsilon）。
     返回 None：该元素是**终止元素**（表达式黑盒/语句/块边界）——路径在此结束，
     不继续展开其后的 token。前缀在此截断，后续由变长前瞻在边界块内区分。
+
+    各类型语义见 `_paths_choice` / `_paths_seq` / `_paths_optional` /
+    `_paths_repeat` / `_paths_call`。
     """
     if feat is None:
         return {()}
@@ -91,62 +94,96 @@ def _feat_token_paths(feat: dict | None, tree: dict) -> set[tuple[str, ...]] | N
     if typ == "token":
         return {(feat["token_type"],)}
     if typ == "choice":
-        result: set[tuple[str, ...]] = set()
-        for alt in feat.get("alternatives", []):
-            sub = _feat_token_paths(alt, tree)
-            if sub is None:
-                return None  # 任一分支含终止元素 → 整体终止
-            result |= sub
-        return result
+        return _paths_choice(feat, tree)
     if typ == "seq":
-        result = {()}
-        for item in feat.get("items", []):
-            sub = _feat_token_paths(item, tree)
-            if sub is None:
-                return result  # seq 遇终止元素 → 保留到该元素为止的前缀
-            result = {p + s for p in result for s in sub}
-        return result
+        return _paths_seq(feat, tree)
     if typ == "optional":
-        elem = feat.get("elem")
-        sub = _feat_token_paths(elem, tree)
-        if sub is None and elem is not None and elem.get("type") == "call":
-            # 可选复杂 call：仅当 first 含 `[`（可被 Level 1 括号配对跳过，如
-            # @Range? 的 [7:0]）时保留 epsilon + first 集——否则 function [7:0]
-            # 的 [ 不在判别路径（A 类多候选消歧被淘汰）而漏检。其他复杂 call
-            # （如 @ParamOverride? 的 #(...)，Level 1 无法跳过其内部）维持截断
-            # → paths 空走 Level 2 试解析，避免 # 后的 ( 逐 token 误淘汰。
-            info = tree.get(elem.get("name", "")) or {}
-            prods = info.get("prods") or []
-            if prods:
-                firsts = {t for t in _collect_first_start_tokens(prods[0], tree)}
-                if _square_bracket_lr()[0] in firsts:
-                    return {()} | {(t,) for t in firsts}
+        return _paths_optional(feat, tree)
+    if typ in ("repeat", "plus"):
+        return _paths_repeat(feat, tree)
+    if typ == "call":
+        return _paths_call(feat, tree)
+    return {()}
+
+
+def _paths_choice(feat: dict, tree: dict) -> set[tuple[str, ...]] | None:
+    """`choice`：各分支路径并集；**任一分支终止 → 整体终止**（None）。"""
+    result: set[tuple[str, ...]] = set()
+    for alt in feat.get("alternatives", []):
+        sub = _feat_token_paths(alt, tree)
+        if sub is None:
+            return None
+        result |= sub
+    return result
+
+
+def _paths_seq(feat: dict, tree: dict) -> set[tuple[str, ...]] | None:
+    """`seq`：逐元素做笛卡尔拼接；遇终止元素 → 保留到该元素为止的前缀。"""
+    result: set[tuple[str, ...]] = {()}
+    for item in feat.get("items", []):
+        sub = _feat_token_paths(item, tree)
+        if sub is None:
+            return result
+        result = {p + s for p in result for s in sub}
+    return result
+
+
+def _paths_repeat(feat: dict, tree: dict) -> set[tuple[str, ...]] | None:
+    """`repeat` / `plus`：0 次 或 1 次（再长不增加判别深度，到边界块为止）。"""
+    sub = _feat_token_paths(feat.get("elem"), tree)
+    if sub is None:
+        return None
+    return {()} | sub
+
+
+def _paths_optional(feat: dict, tree: dict) -> set[tuple[str, ...]] | None:
+    """`optional`：epsilon + 子路径；子路径终止时查复杂 call 的括号特例。"""
+    elem = feat.get("elem")
+    sub = _feat_token_paths(elem, tree)
+    if sub is None:
+        sub = _optional_bracket_paths(elem, tree)
         if sub is None:
             return None  # 可选复杂 call → 截断（内容不可静态判别）
-        return {()} | sub
-    if typ in ("repeat", "plus"):
-        # 变长重复：0 次 或 1 次（再长不增加判别深度，到边界块为止）
-        elem = feat.get("elem")
-        sub = _feat_token_paths(elem, tree)
-        if sub is None:
-            return None
-        return {()} | sub
-    if typ == "call":
-        name = feat.get("name", "")
-        info = tree.get(name)
-        if info is None:
-            return None
-        if info.get("pratt"):
-            return None  # pratt 表达式黑盒（由 pratt 解析器处理）→ 终止元素
-        if info.get("is_statement") or info.get("is_block"):
-            return None  # 语句/块边界 → 终止元素（不穿透句子级）
-        if not info.get("is_atom"):
-            return None  # 非原子复杂 call（参数列表/端口连接等）→ 截断，走 Level 2
-        prods = info.get("prods", [])
-        if not prods:
-            return None
-        return {(t,) for t in _collect_first_start_tokens(prods[0], tree)}
-    return {()}
+    return {()} | sub
+
+
+def _optional_bracket_paths(elem: dict | None, tree: dict) -> set[tuple[str, ...]] | None:
+    """可选**复杂 call** 的括号特例：仅当 first 含 `[` 时保留 epsilon + first 集。
+
+    `[` 可被 Level 1 括号配对跳过（如 `@Range?` 的 `[7:0]`）——否则
+    `function [7:0]` 的 `[` 不在判别路径（A 类多候选消歧被淘汰）而漏检。
+    其他复杂 call（如 `@ParamOverride?` 的 `#(...)`，Level 1 无法跳过其内部）
+    维持截断 → paths 空走 Level 2 试解析，避免 `#` 后的 `(` 逐 token 误淘汰。
+    """
+    if elem is None or elem.get("type") != "call":
+        return None
+    info = tree.get(elem.get("name", "")) or {}
+    prods = info.get("prods") or []
+    if not prods:
+        return None
+    firsts = {t for t in _collect_first_start_tokens(prods[0], tree)}
+    if _square_bracket_lr()[0] not in firsts:
+        return None
+    return {()} | {(t,) for t in firsts}
+
+
+def _paths_call(feat: dict, tree: dict) -> set[tuple[str, ...]] | None:
+    """`call`：pratt 表达式黑盒 / 语句块边界 / 非原子复杂调用 → 终止（None）。
+
+    只对**原子**规则（`is_atom`）展开其 production 首元素集：参数列表、端口连接
+    这类非原子结构内容不可静态判别，截断后由 Level 2 试解析兜底。
+    """
+    info = tree.get(feat.get("name", ""))
+    if info is None:
+        return None
+    if info.get("pratt") or info.get("is_statement") or info.get("is_block"):
+        return None
+    if not info.get("is_atom"):
+        return None
+    prods = info.get("prods", [])
+    if not prods:
+        return None
+    return {(t,) for t in _collect_first_start_tokens(prods[0], tree)}
 
 
 def _build_prefix_paths(prods: list[dict], tree: dict) -> set[tuple[str, ...]]:
@@ -166,6 +203,49 @@ def _build_prefix_paths(prods: list[dict], tree: dict) -> set[tuple[str, ...]]:
     return result
 
 
+def _has_info_flag(info: object, flag: str) -> bool:
+    """规则表条目是否带某标志（条目可能不是 dict）。"""
+    return isinstance(info, dict) and bool(info.get(flag))
+
+
+def _collect_block_ends(tree: dict) -> frozenset[str]:
+    """块结束符集合（从块规则 `block_end` 收集，Level 1 前瞻边界）。"""
+    return frozenset(
+        info["block_end"] for info in tree.values() if _has_info_flag(info, "block_end")
+    )
+
+
+def _collect_stmt_ends(tree: dict) -> frozenset[str]:
+    """句子结束符：语句规则 production 末尾字面 token ∪ 所有块规则的 block_end。
+
+    不假设分号——分号只是其中普通成员，随语言配置变化。并入 block_end 是因为
+    块结束符天然是容器语句边界：discovery 的 `_skip_to_end` 依赖它正确定位
+    if/for 等嵌套容器的终止点——缺失时 if 块边界会延伸到后续语句（吞掉后续
+    always 等），语句边界错乱。
+    """
+    ends = {
+        tok
+        for info in tree.values()
+        if _has_info_flag(info, "is_statement")
+        for tok in LookaheadTable._rule_end_tokens(info)
+    }
+    return frozenset(ends) | _collect_block_ends(tree)
+
+
+def _is_inline_dispatcher(info: dict, prods: list[dict]) -> bool:
+    """inline 语句分派器（production 单 choice of calls，如 SimCtrlStmt）→ 不注册。
+
+    2026-08-28 坏输入收敛：分派器的 first = 各分支 first 并集，注册产生消歧噪音
+    ——`assign` 触发 SimCtrlStmt（分支 ProcAssign 的 first），choice 内 strict=False
+    使 @PrimaryExpr 失败不推进、后续元素继续假成功（errs=0），`assign = b;` 被误
+    分类为 SimCtrlStmt 漏检。分派器只服务 parser 的注入点（@CtrlStmt），分支各自
+    是 is_statement 已注册（ProcAssign/DeassignStmt 等），linter 直接命中分支即可。
+    """
+    return bool(
+        info.get("inline") and len(prods) == 1 and prods[0].get("type") == "choice"
+    )
+
+
 class LookaheadTable:
     """从规则树预计算的前瞻消歧表。"""
 
@@ -179,30 +259,9 @@ class LookaheadTable:
         self._matcher = matcher
         # 消歧 trace（默认环境变量 TPC_LINT_TRACE；显式传值覆盖）
         self._trace = _TRACE_ENV if trace is None else trace
-        # 块结束符集合（从块规则 block_end 收集，Level 1 前瞻边界）
-        self._block_ends = frozenset(
-            info["block_end"]
-            for info in tree.values()
-            if isinstance(info, dict) and info.get("block_end")
-        )
-        # 句子结束符（从语句规则 production 末尾字面 token + 配置 end_case 推导，
-        # 不假设分号——分号只是其中普通成员，随语言配置变化）。并入所有块规则
-        # 的 block_end（keyword.end 等）：块结束符天然是容器语句边界，discovery
-        # 的 _skip_to_end 依赖它正确定位 if/for 等嵌套容器的终止点——缺失时
-        # if 块边界延伸到后续语句（吞掉后续 always 等），语句边界错乱。
-        self._stmt_ends = (
-            frozenset(
-                tok
-                for info in tree.values()
-                if isinstance(info, dict) and info.get("is_statement")
-                for tok in LookaheadTable._rule_end_tokens(info)
-            )
-            | frozenset(
-                info["block_end"]
-                for info in tree.values()
-                if isinstance(info, dict) and info.get("block_end")
-            )
-        )
+        # 块结束符 / 句子结束符（推导规则见 _collect_block_ends/_collect_stmt_ends）
+        self._block_ends = _collect_block_ends(tree)
+        self._stmt_ends = _collect_stmt_ends(tree)
         # 方括号开/闭类型（配置推导）：Level 1 括号配对跳过 @PrimaryExpr 内部/
         # 块头范围的 [..] 区间，不参与判别 token 匹配。
         self._l_square, self._r_square = _square_bracket_lr()
@@ -237,69 +296,72 @@ class LookaheadTable:
         return result
 
     def _build(self) -> None:
-        for name, info in self._tree.items():
-            # 块起始 token（block.start）优先注册为起始 token：
-            # ModuleDecl 等块语句的 production 首元素是 @Identifier（模块名），
-            # 真实起始 token 是 block.start（keyword.module），不注册则无法发现。
-            # 块规则不要求 is_statement（generate 等非语句块同样需被发现）。
-            bs = info.get("block_start") or ""
-            if bs:
-                # 还原 block_start 到 production 首元素：块规则（task/function）
-                # 的 prods 已剥离 keyword.task 等，还原后与普通 A 类规则视图统一
-                # （prods[0] 都是触发 token），paths 统一从 prods[1:] 开始。
-                bprods = info.get("prods") or []
-                full = [{"type": "token", "token_type": bs}] + bprods
-                bpaths = self._a_prefix_paths(full)
-                self.keyword_map.setdefault(bs, []).append(
-                    {"name": name, "paths": bpaths}
-                )
-                continue
+        """遍历规则表，按触发形态把候选注册进 `keyword_map` / `ident_candidates`。
 
+        三个注册路径各自的判据与理由见 `_register_block_rule` /
+        `_register_ident_rule` / `_register_keyword_rule`。
+        """
+        for name, info in self._tree.items():
+            if self._register_block_rule(name, info):
+                continue
             if not info.get("is_statement"):
                 continue
             prods = info.get("prods")
             if not prods:
                 continue  # 空 production 的 block 块（GenerateBlock 等）由边界检查处理
-            # inline 语句分派器（production 单 choice of calls，如 SimCtrlStmt
-            # = @ForkBlock|@EventWaitStmt|...）不注册为消歧候选（2026-08-28
-            # 坏输入收敛）：分派器的 first = 各分支 first 并集，注册产生消歧
-            # 噪音——`assign` 触发 SimCtrlStmt（分支 ProcAssign 的 first），
-            # choice 内 strict=False 使 @PrimaryExpr 失败不推进、后续元素继续
-            # 假成功（errs=0），`assign = b;` 被误分类为 SimCtrlStmt 漏检。
-            # 分派器只服务 parser 的注入点（@CtrlStmt），分支各自是
-            # is_statement 已注册（ProcAssign/DeassignStmt 等），linter 直接
-            # 命中分支即可。
-            if (
-                info.get("inline")
-                and len(prods) == 1
-                and prods[0].get("type") == "choice"
-            ):
+            if _is_inline_dispatcher(info, prods):
                 continue
             firsts = _rule_first(name, self._tree)
             if not firsts:
                 continue
             if "id" in firsts:
-                # B 类：标识符触发 → 前缀路径 + 注册到全局候选（不按上下文分组）
-                paths = _build_prefix_paths(prods[1:], self._tree)
-                # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
-                paths = {p for p in paths if p}
-                entry = {"name": name, "paths": paths}
-                self.ident_candidates.append(entry)
-                # 同一规则还可能以非 id 字面 token 起始（如拼接赋值 lvalue 的
-                # `{`，来自 @PrimaryExpr 的 Concatenation 分支）→ 这些起始 token
-                # 一并注册到 keyword_map，否则 `{a,b} = expr;` 从 `{` 触发不了
-                # BlockingAssign，bracket 分支会整体跳过导致 RHS 误判为新语句。
-                non_id = firsts - {"id"}
-                if non_id:
-                    aentry = {"name": name, "paths": paths}
-                    for tt in non_id:
-                        self.keyword_map.setdefault(tt, []).append(aentry)
+                self._register_ident_rule(name, prods, firsts)
             else:
-                # A 类：关键字/具体符号触发 → 也计算前缀路径（与 B 类统一两级消歧）
-                apaths = self._a_prefix_paths(prods)
-                entry = {"name": name, "paths": apaths}
-                for tt in firsts:
-                    self.keyword_map.setdefault(tt, []).append(entry)
+                self._register_keyword_rule(name, prods, firsts)
+
+    def _register_block_rule(self, name: str, info: dict) -> bool:
+        """块规则：`block.start` 优先注册为起始 token（返回是否已处理）。
+
+        ModuleDecl 等块语句的 production 首元素是 @Identifier（模块名），真实起始
+        token 是 block.start（keyword.module）——不注册则无法发现。块规则不要求
+        is_statement（generate 等非语句块同样需被发现）。
+
+        注册前把 block_start 还原到 production 首元素：块规则（task/function）
+        的 prods 已剥离 keyword.task 等，还原后与普通 A 类规则视图统一
+        （prods[0] 都是触发 token），paths 统一从 prods[1:] 开始。
+        """
+        bs = info.get("block_start") or ""
+        if not bs:
+            return False
+        full = [{"type": "token", "token_type": bs}] + (info.get("prods") or [])
+        self.keyword_map.setdefault(bs, []).append(
+            {"name": name, "paths": self._a_prefix_paths(full)}
+        )
+        return True
+
+    def _register_ident_rule(
+        self, name: str, prods: list[dict], firsts: set[str]
+    ) -> None:
+        """B 类：标识符触发 → 前缀路径 + 注册到全局候选（不按上下文分组）。"""
+        # 去空路径：仅 epsilon（无判别前缀）→ 视同无静态前缀，走 Level 2
+        paths = {p for p in _build_prefix_paths(prods[1:], self._tree) if p}
+        self.ident_candidates.append({"name": name, "paths": paths})
+        # 同一规则还可能以非 id 字面 token 起始（如拼接赋值 lvalue 的 `{`，
+        # 来自 @PrimaryExpr 的 Concatenation 分支）→ 这些起始 token 一并注册到
+        # keyword_map，否则 `{a,b} = expr;` 从 `{` 触发不了 BlockingAssign，
+        # bracket 分支会整体跳过导致 RHS 误判为新语句。
+        for tt in firsts - {"id"}:
+            self.keyword_map.setdefault(tt, []).append(
+                {"name": name, "paths": paths}
+            )
+
+    def _register_keyword_rule(
+        self, name: str, prods: list[dict], firsts: set[str]
+    ) -> None:
+        """A 类：关键字/具体符号触发 → 前缀路径（与 B 类统一两级消歧）。"""
+        entry = {"name": name, "paths": self._a_prefix_paths(prods)}
+        for tt in firsts:
+            self.keyword_map.setdefault(tt, []).append(entry)
 
     def _a_prefix_paths(self, prods: list[dict]) -> set[tuple[str, ...]]:
         """A 类/块规则的前缀路径（production 视图统一：prods[0] 是触发 token）。
