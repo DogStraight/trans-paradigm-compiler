@@ -142,28 +142,44 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
     return result
 
 
+def _regex_next_word(keyword: str, skip_keywords: list[str], term_class: str) -> str:
+    """关键字后下一个词（可跨过修饰词）；声明了终结符集则要求其后紧跟终结符。"""
+    skip = "".join(rf"(?:{kw}\s+)?" for kw in skip_keywords)
+    base = rf"\b{keyword}\s+{skip}(\w+)"
+    return rf"{base}\s*(?:{term_class})" if term_class else base
+
+
+def _regex_after_range(keyword: str, skip_keywords: list[str]) -> str:
+    """跨过可选位宽范围后的首个词（后随 `(`）——如函数/任务名。"""
+    skip = "".join(rf"(?:{kw}\s+)?" for kw in skip_keywords)
+    return rf"\b{keyword}\s+{skip}(?:\[[^\]]*\]\s+)?(\w+)\s*\("
+
+
+def _regex_last_word_before_semicolon(keyword: str) -> str:
+    """分号前最后一个词——如 `typedef ... name;`。"""
+    return rf"\b{keyword}\s+.*?(\w+)\s*;"
+
+
 def _build_regex(
     keyword: str,
     capture: str,
     skip_keywords: list[str],
     terminators: list[str],
 ) -> str:
-    """为一种声明类别构建匹配正则，首个分组为声明名。"""
+    """为一种声明类别构建匹配正则，首个分组为声明名。
+
+    capture 形态 → 构造器：`next_word`（词后面可跟终结符集）/ `after_range`
+    （跨过可选 `[...]` 位宽）/ `last_word_before_semicolon`；未声明形态 → 空串。
+    """
     term_escaped = [re.escape(t) for t in terminators]
     term_class = f"[{''.join(term_escaped)}]" if term_escaped else ""
 
     if capture == "next_word":
-        skip = "".join(rf"(?:{kw}\s+)?" for kw in skip_keywords)
-        base = rf"\b{keyword}\s+{skip}(\w+)"
-        return rf"{base}\s*(?:{term_class})" if term_class else base
-
-    elif capture == "after_range":
-        skip = "".join(rf"(?:{kw}\s+)?" for kw in skip_keywords)
-        return rf"\b{keyword}\s+{skip}(?:\[[^\]]*\]\s+)?(\w+)\s*\("
-
-    elif capture == "last_word_before_semicolon":
-        return rf"\b{keyword}\s+.*?(\w+)\s*;"
-
+        return _regex_next_word(keyword, skip_keywords, term_class)
+    if capture == "after_range":
+        return _regex_after_range(keyword, skip_keywords)
+    if capture == "last_word_before_semicolon":
+        return _regex_last_word_before_semicolon(keyword)
     return ""
 
 
@@ -180,6 +196,27 @@ def _clean_text(text: str, clean_patterns: list) -> str:
 
 def _is_decl_name(name: str, context_kws: frozenset) -> bool:
     return not (name in context_kws or name.startswith("$"))
+
+
+def _collect_kind_patterns(
+    sym: dict[str, str], cleaned: str, patterns: list, context_kws: frozenset
+) -> None:
+    """逐类别模式收集：组 1 = 声明名，类别 = 模式自带的 kind（首见归属）。"""
+    for kind, pattern in patterns:
+        for m in pattern.finditer(cleaned):
+            name = m.group(1)
+            if _is_decl_name(name, context_kws) and name not in sym:
+                sym[name] = kind
+
+
+def _collect_fallback(
+    sym: dict[str, str], cleaned: str, fallback, context_kws: frozenset
+) -> None:
+    """兜底模式收集：组 1 = 类别、组 2 = 声明名（首见归属）。"""
+    for m in fallback.finditer(cleaned):
+        kind, name = m.group(1), m.group(2)
+        if _is_decl_name(name, context_kws) and name not in sym:
+            sym[name] = kind
 
 
 def pre_scan(
@@ -199,28 +236,13 @@ def pre_scan(
     if config is None:
         config = load_pre_scan_config()
 
-    patterns = config.get("patterns", [])
-    fallback = config.get("fallback")
     context_kws = config.get("context_keywords", frozenset())
-    clean_patterns = config.get("clean_patterns", [])
-
-    cleaned = _clean_text(text, clean_patterns)
+    cleaned = _clean_text(text, config.get("clean_patterns", []))
     sym: dict[str, str] = {}
 
-    for kind, pattern in patterns:
-        for m in pattern.finditer(cleaned):
-            name = m.group(1)
-            if not _is_decl_name(name, context_kws):
-                continue
-            if name not in sym:
-                sym[name] = kind
-
+    _collect_kind_patterns(sym, cleaned, config.get("patterns", []), context_kws)
+    fallback = config.get("fallback")
     if fallback:
-        for m in fallback.finditer(cleaned):
-            kind, name = m.group(1), m.group(2)
-            if not _is_decl_name(name, context_kws):
-                continue
-            if name not in sym:
-                sym[name] = kind
+        _collect_fallback(sym, cleaned, fallback, context_kws)
 
     return sym
