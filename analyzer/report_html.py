@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import os
+from dataclasses import dataclass
 
 # severity → 徽标文案/CSS 类（与 LSP DiagnosticSeverity 对齐）
 _SEVERITY_META: dict[int, tuple[str, str]] = {
@@ -87,68 +88,96 @@ def _diag_row(d: dict, path: str) -> str:
     )
 
 
-def render_html_report(report: dict) -> str:
-    """ProjectChecker.check() report → 完整 HTML 文档字符串。"""
-    files = report.get("files", [])
-    n_error = n_warn = n_info = 0
-    rows_total = 0
-    file_cards = []
-    for f in files:
-        syntax = f.get("syntax") or []
-        semantic = f.get("semantic") or []
-        diags = syntax + semantic
-        if not diags and f.get("parse_ok", True):
-            continue  # 全干净文件不占卡片（与文本输出一致）
-        if not diags and not f.get("parse_ok", True):
-            n_error += 1  # 纯解析失败文件（无诊断）计一个 error
-        rows = []
-        for d in diags:
-            rows.append(_diag_row(d, f["path"]))
-            sev = d.get("severity", 2)
-            if sev == 1:
-                n_error += 1
-            elif sev == 2:
-                n_warn += 1
-            else:
-                n_info += 1
-            rows_total += 1
-        rel = os.path.relpath(f["path"])
-        status = (
-            f'<span class="badge ok">parse ok</span>'
-            if f.get("parse_ok", True)
-            else f'<span class="badge sev-error">parse error</span>'
-        )
-        parse_err = f.get("parse_error")
-        meta = (
-            f'<div class="meta">{html.escape(str(parse_err))}</div>'
-            if parse_err
-            else ""
-        )
-        body = "".join(rows)
-        file_cards.append(
-            f'<div class="file"><h2>{html.escape(rel)} {status}</h2>{meta}'
-            f"<table><tbody>{body}</tbody></table></div>"
-        )
-    if rows_total == 0 and not file_cards:
-        body_html = '<p class="badge ok">No issues found.</p>'
-    else:
-        body_html = "".join(file_cards)
+@dataclass
+class _Tally:
+    """诊断计数：severity 1/2/其他 → error/warning/info，另记总行数。"""
 
-    summary = "".join(
+    error: int = 0
+    warning: int = 0
+    info: int = 0
+    rows: int = 0
+
+    def add(self, sev: int) -> None:
+        """按 severity 归档一条诊断。"""
+        if sev == 1:
+            self.error += 1
+        elif sev == 2:
+            self.warning += 1
+        else:
+            self.info += 1
+        self.rows += 1
+
+
+def _parse_status_html(f: dict) -> str:
+    """解析状态徽章（parse ok / parse error）。"""
+    if f.get("parse_ok", True):
+        return '<span class="badge ok">parse ok</span>'
+    return '<span class="badge sev-error">parse error</span>'
+
+
+def _card_html(f: dict, rows: list[str]) -> str:
+    """文件卡片：标题（相对路径 + 解析状态）+ 解析错误元信息 + 诊断表。"""
+    rel = os.path.relpath(f["path"])
+    parse_err = f.get("parse_error")
+    meta = (
+        f'<div class="meta">{html.escape(str(parse_err))}</div>' if parse_err else ""
+    )
+    return (
+        f'<div class="file"><h2>{html.escape(rel)} {_parse_status_html(f)}</h2>{meta}'
+        f"<table><tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _file_card(f: dict, tally: "_Tally") -> str | None:
+    """单文件 → 卡片 HTML；全干净（无诊断且解析成功）→ None（不占卡片）。"""
+    diags = (f.get("syntax") or []) + (f.get("semantic") or [])
+    if not diags:
+        if f.get("parse_ok", True):
+            return None  # 全干净文件不占卡片（与文本输出一致）
+        tally.error += 1  # 纯解析失败文件（无诊断）计一个 error
+        return _card_html(f, [])
+    for d in diags:
+        tally.add(d.get("severity", 2))
+    return _card_html(f, [_diag_row(d, f["path"]) for d in diags])
+
+
+def _summary_html(tally: "_Tally") -> str:
+    """摘要条：error/warning/info 计数（单复数拼 s）。"""
+    return "".join(
         [
-            f'<span class="badge sev-error">{n_error} error'
-            f"{'s' if n_error != 1 else ''}</span> ",
-            f'<span class="badge sev-warning">{n_warn} warning'
-            f"{'s' if n_warn != 1 else ''}</span> ",
-            f'<span class="badge sev-info">{n_info} info</span>',
+            f'<span class="badge sev-error">{tally.error} error'
+            f"{'s' if tally.error != 1 else ''}</span> ",
+            f'<span class="badge sev-warning">{tally.warning} warning'
+            f"{'s' if tally.warning != 1 else ''}</span> ",
+            f'<span class="badge sev-info">{tally.info} info</span>',
         ]
     )
+
+
+def _document_html(summary: str, body_html: str) -> str:
+    """整页外壳（单文件、内联 CSS、零依赖）。"""
     title = "tpc check report"
     return (
-        "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+        '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
         f"<title>{title}</title><style>{REPORT_CSS}</style></head><body>"
         f"<h1>{title}</h1>"
         f'<div class="summary">{summary}</div>'
         f"{body_html}"
         "</body></html>"
     )
+
+
+def render_html_report(report: dict) -> str:
+    """ProjectChecker.check() report → 完整 HTML 文档字符串。"""
+    tally = _Tally()
+    file_cards = [
+        card
+        for card in (_file_card(f, tally) for f in report.get("files", []))
+        if card is not None
+    ]
+    body_html = (
+        '<p class="badge ok">No issues found.</p>'
+        if tally.rows == 0 and not file_cards
+        else "".join(file_cards)
+    )
+    return _document_html(_summary_html(tally), body_html)
