@@ -37,6 +37,22 @@ ConfigDrivenTransform（`config_driven.py`）再消费表做 expand/replace/dele
 跳过 `_process_items` 字段模板提取（那是给 raw 声明结构的）。引擎只做通用判断，
 语言语义在组件 postpass。
 
+### 回退路径：raw 声明结构的字段模板提取（`_process_items`）
+
+符号**无** `resolved_ports` 时走 `_process_items`：按 `source.fields` 逐字段展开
+"记录集"，**模板字符串决定形态**（语言无关，模板来自组件 mapping_entries）：
+
+| 模板 | 语义 |
+|------|------|
+| `{$.key}` | 取条目同键的值；源缺该键 → **该字段整体跳过**（不塞字面模板串） |
+| 含 `[*]` | 路径取值；路上遇列表按段名展开 → 一行变多行（笛卡尔）；列表为空 → 该行消失 |
+| 其它 | 字面量（每行都写该字符串） |
+
+`source.filter` = 包含过滤（匹配全部 key=value 才留）；`source.exclude_keys` =
+含其中任一键即丢（过滤 ref 条目）；`source.value` = 单字段表的取值简写。
+三形态与"缺键/空展开"边界有直接用例：
+`tests/engine/transform/test_semantic_mapping_items.py`。
+
 ### resolve_entries / apply_refs —— 已删除（P1.5 step 2 B）
 
 引擎曾提供 `resolve_entries`（`kind=apply_refs`）后处理（消费 `_ref_callbacks`
