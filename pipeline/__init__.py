@@ -568,28 +568,41 @@ def _stage_lint(ctx: _PipelineContext) -> bool:
     blocking = [e for e in lint_errors if e.blocking]
     notes = [e for e in lint_errors if not e.blocking]
     for err in blocking:
-        # 诊断行号回源（展开态行 → clean 行 → 原始源行）：lint 输入是真
-        # 展开文本，宏体多行/条件压缩时行号会漂；映射不可用（未展开/
-        # 无宏）时逐级退化为原行号。
-        ln = err.range[0].line + 1
-        src_ln = ln
-        if ctx.line_map and 1 <= ln <= len(ctx.line_map):
-            src_ln = ctx.line_map[ln - 1]
-            if 1 <= src_ln <= len(ctx.clean_line_map):
-                src_ln = ctx.clean_line_map[src_ln - 1] or src_ln
-        ctx.log(f"[linter] {err.message} at L{src_ln}:{err.range[0].character}")
+        ctx.log(f"[linter] {err.message} at {_lint_src_pos(ctx, err)}")
     if notes:
-        # 卫生类按码汇总（真实语料可达数千条，逐条会淹没过程日志；
-        # 逐条定位是 `tpc lint` / `tpc check` 的输出职责）。
-        by_code: dict[str, int] = {}
-        for e in notes:
-            by_code[e.code] = by_code.get(e.code, 0) + 1
-        pairs = ", ".join(f"{c}×{n}" for c, n in sorted(by_code.items()))
-        ctx.log(f"[linter] style notes: {len(notes)} 处（{pairs}）——不阻断管线")
+        ctx.log(_style_notes_summary(notes))
     if blocking:
         ctx.result["error"] = f"lint failed: {len(blocking)} error(s)"
         return False
     return True
+
+
+def _lint_src_pos(ctx: _PipelineContext, err: Any) -> str:
+    """诊断位置回源：展开态行 → clean 行 → 原始源行（不可映射时逐级退化）。
+
+    lint 输入是真展开文本，宏体多行/条件压缩时行号会漂；未展开/无宏时没有映射
+    表，退化为原行号。
+    """
+    ln = err.range[0].line + 1
+    src_ln = ln
+    if ctx.line_map and 1 <= ln <= len(ctx.line_map):
+        src_ln = ctx.line_map[ln - 1]
+        if 1 <= src_ln <= len(ctx.clean_line_map):
+            src_ln = ctx.clean_line_map[src_ln - 1] or src_ln
+    return f"L{src_ln}:{err.range[0].character}"
+
+
+def _style_notes_summary(notes: list) -> str:
+    """卫生类提示按码汇总一行。
+
+    真实语料可达数千条，逐条会淹没过程日志；逐条定位是 `tpc lint` / `tpc check`
+    的输出职责。
+    """
+    by_code: dict[str, int] = {}
+    for e in notes:
+        by_code[e.code] = by_code.get(e.code, 0) + 1
+    pairs = ", ".join(f"{c}×{n}" for c, n in sorted(by_code.items()))
+    return f"[linter] style notes: {len(notes)} 处（{pairs}）——不阻断管线"
 
 
 def _stage_parse(
@@ -751,39 +764,61 @@ def _stage_macro_splice(ctx: _PipelineContext, ast: Any, tokens: list) -> Any:
     spans = _node_spans(ast)
 
     for r in regions:
-        idxs = [
-            i for i, off in enumerate(offsets) if r["offset"] <= off < r["end_offset"]
-        ]
-        if not idxs:
-            continue
-        lo, hi = idxs[0], idxs[-1] + 1
-
-        enclosing = sorted(
-            ((n, a, b) for n, a, b in spans if a <= lo and hi <= b),
-            key=lambda x: x[2] - x[1],
-        )
-        target: Any = None
-        text: str | None = None
-        for node, a, b in enclosing:
-            if not _renders_as_itself(
-                node, ctx, expanded, offsets, tokens, a, b
-            ):
-                continue
-            target = node
-            text = _verbatim_from_span(
-                expanded, offsets, tokens, a, b, regions
-            )
-            break
-        if target is None or text is None:
-            continue
-        if getattr(target, "_verbatim_text", None) is not None:
-            continue
-        target._verbatim_text = text
-        ctx.log(
-            f"[macro] raw splice: {r['name']} → "
-            f"{getattr(target, 'node_name', '?')}"
-        )
+        _splice_one_region(ctx, r, expanded, tokens, offsets, spans, regions)
     return ast
+
+
+def _splice_one_region(
+    ctx: _PipelineContext,
+    region: dict,
+    expanded: str,
+    tokens: list,
+    offsets: list[int],
+    spans: list[tuple[Any, int, int]],
+    regions: list[dict],
+) -> None:
+    """单条宏区间 → 最小自述包含节点挂 `_verbatim_text`（已挂则不动）。"""
+    idxs = [
+        i for i, off in enumerate(offsets)
+        if region["offset"] <= off < region["end_offset"]
+    ]
+    if not idxs:
+        return
+    hit = _narrowest_verbatim_node(
+        ctx, expanded, tokens, offsets, spans, idxs[0], idxs[-1] + 1, regions
+    )
+    if hit is None:
+        return
+    target, text = hit
+    if getattr(target, "_verbatim_text", None) is not None:
+        return
+    target._verbatim_text = text
+    ctx.log(
+        f"[macro] raw splice: {region['name']} → "
+        f"{getattr(target, 'node_name', '?')}"
+    )
+
+
+def _narrowest_verbatim_node(
+    ctx: _PipelineContext,
+    expanded: str,
+    tokens: list,
+    offsets: list[int],
+    spans: list[tuple[Any, int, int]],
+    lo: int,
+    hi: int,
+    regions: list[dict],
+) -> tuple[Any, str] | None:
+    """包含 [lo, hi) 的节点里，按自述判据从最小往上找第一个 → `(节点, 切片)`。"""
+    enclosing = sorted(
+        ((n, a, b) for n, a, b in spans if a <= lo and hi <= b),
+        key=lambda x: x[2] - x[1],
+    )
+    for node, a, b in enclosing:
+        if not _renders_as_itself(node, ctx, expanded, offsets, tokens, a, b):
+            continue
+        return node, _verbatim_from_span(expanded, offsets, tokens, a, b, regions)
+    return None
 
 
 def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
@@ -849,35 +884,60 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
     if ctx.render_handler is not None:
         content = ctx.render_handler(ast, ctx)
         ctx.log("[renderer] render plugin: output via handler")
-        # Write output (no header — raw content for clean diffing)
-        if ctx.gen_file:
-            with open(ctx.gen_file, "w", encoding="utf-8") as f:
-                f.write(content)
-            ctx.log(f"[output] {ctx.gen_file}")
+        _write_gen_file(ctx, content)
         ctx.result["output"] = content
         ctx.result["ast"] = ast
         ctx.result["success"] = True
         ctx.result["idempotent"] = True  # 中间表示输出无源端幂等语义
         return
 
-    content = ctx.renderer.render(ast)
+    content = _prepare_render_output(ctx, ctx.renderer.render(ast), parser)
+    _write_gen_file(ctx, content)
 
-    # 保真度分级（ADR-0006 阶段 5）：keep_blank 按源结构位置回插空行。
-    # 在注释回插/格式化之前做——回插的空行是源空行，后续 restore 与
-    # formatter 基于它继续（formatter 保留空行，不重排空行分布）。
+    # Render extra ASTs as separate files
+    extra_asts: list[tuple[str, Node]] = collect_extra_asts()
+    if extra_asts:
+        ctx.log(f"[remapper] extracted {len(extra_asts)} extra AST(s)")
+
+    ctx.result["output"] = content
+    ctx.result["ast"] = ast
+    ctx.result["extra_asts"] = extra_asts
+    ctx.result["extra_outputs"] = _render_extra_asts(ctx, extra_asts)
+    ctx.result["success"] = True
+    ctx.result["idempotent"] = _check_idempotent(ctx, content)
+
+
+def _write_gen_file(ctx: _PipelineContext, content: str) -> None:
+    """写主输出文件（无 header——gen 文件是裸内容，便于 diff）。"""
+    if not ctx.gen_file:
+        return
+    with open(ctx.gen_file, "w", encoding="utf-8") as f:
+        f.write(content)
+    ctx.log(f"[output] {ctx.gen_file}")
+
+
+def _prepare_render_output(
+    ctx: _PipelineContext, content: str, parser: Any
+) -> str:
+    """渲染后源端还原：保真度空行 → 格式化 → 指令行回插 → 注释还原。
+
+    ⚠ 顺序：**格式化必须在 restore 之前**——此刻文本是 AST 渲染结果（clean_source
+    的指令已换成整行占位注释 marker，标点来自语言包声明），不含预处理指令；
+    restore 之后文本会带回宏调用点/条件块原文与 `ifdef` 指令行，而 formatter 是
+    无预处理器的 Verilog formatter——实测被误解析（`reg [31:0] IFPC
+    [0:(2**`__THREADS__)-1];` 被打散成 `reg IFPC // 注释 [0:...]`，`;` 落进注释
+    → 输出语法非法，2026-09-17 darkriscv interop）。还原原文不是本次生成的代码，
+    按源侧原样输出。
+
+    保真度分级（ADR-0006 阶段 5）：keep_blank 按源结构位置回插空行——在注释回插/
+    格式化之前做，回插的空行是源空行，后续 restore 与 formatter 基于它继续。
+    """
     if ctx.fidelity == "keep_blank":
         from renderer.fidelity import keep_blank_lines
 
         content = keep_blank_lines(ctx.source, content)
         ctx.log("[renderer] fidelity=keep_blank: blank lines restored")
 
-    # 格式化生成文本（缩进/品类对齐/实例端口对齐）——必须在 restore **之前**：
-    # 此刻文本是 AST 渲染结果（clean_source 的指令已换成
-    # 整行占位注释 marker（行注释形态，标点来自语言包声明），**不含预处理指令**。restore 之后
-    # 文本会带回宏调用点/条件块原文与 `ifdef` 指令行，而 formatter 是无预处理器
-    # 的 Verilog formatter——实测被误解析（`reg [31:0] IFPC [0:(2**`__THREADS__)-1];`
-    # 被打散成 `reg IFPC // 注释 [0:...]`，`;` 落进注释 → 输出语法非法，
-    # 2026-09-17 darkriscv interop）。还原原文不是本次生成的代码，按源侧原样输出。
     if ctx.format_output and content.strip():
         content = format_generated(
             content, ctx.rules, ctx.lexer,
@@ -890,7 +950,7 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         content = "\n".join(ctx.directive_lines) + "\n" + content
         ctx.log(f"[preprocessor] directives restored: {len(ctx.directive_lines)}")
 
-    content = restore_all_comments(
+    return restore_all_comments(
         content,
         comment_anchors=getattr(parser, "_comment_anchors", None),
         line_anchors=getattr(parser, "_line_comment_anchors", None),
@@ -901,21 +961,18 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
         log_fn=ctx.log,
     )
 
-    # Write output (no header — gen file is raw content for clean diffing)
-    if ctx.gen_file:
-        with open(ctx.gen_file, "w", encoding="utf-8") as f:
-            f.write(content)
-        ctx.log(f"[output] {ctx.gen_file}")
 
-    # Render extra ASTs as separate files
-    extra_asts: list[tuple[str, Node]] = collect_extra_asts()
-    if extra_asts:
-        ctx.log(f"[remapper] extracted {len(extra_asts)} extra AST(s)")
+def _render_extra_asts(
+    ctx: _PipelineContext, extra_asts: list[tuple[str, Node]]
+) -> list[tuple[str, str]]:
+    """extra AST 逐个渲染并按需落盘。
+
+    extra 输出与主输出一致：format 开启时也过 formatter（否则品类对齐/缩进/
+    换行不统一，trans/ 的包装模块文件格式与主文件不一致）。
+    """
     extra_outputs: list[tuple[str, str]] = []
     for out_name, extra_root in extra_asts:
         extra_content = ctx.renderer.render(extra_root)
-        # extra 输出与主输出一致：format 开启时也过 formatter（否则品类对齐/
-        # 缩进/换行不统一，trans/ 的包装模块文件格式与主文件不一致）
         if ctx.format_output and extra_content.strip():
             extra_content = format_generated(
                 extra_content, ctx.rules, ctx.lexer,
@@ -927,13 +984,7 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
             with open(extra_file, "w", encoding="utf-8") as f:
                 f.write(extra_content)
             ctx.log(f"[remapper] extra output: {extra_file}")
-
-    ctx.result["output"] = content
-    ctx.result["ast"] = ast
-    ctx.result["extra_asts"] = extra_asts
-    ctx.result["extra_outputs"] = extra_outputs
-    ctx.result["success"] = True
-    ctx.result["idempotent"] = _check_idempotent(ctx, content)
+    return extra_outputs
 
 
 # ── 入口 ──────────────────────────────────────────────────
