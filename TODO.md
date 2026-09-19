@@ -49,23 +49,31 @@
     `ProjectChecker.check`(65) / `build_suppress_map`(60) /
     `AnalysisTraversal._walk_node`(47) / `_glob_match`(43) /
     `_validate_node_specs`(43) / `load_all_toml`(70)。
-  - ⏳ **第三梯队：方法级 >80 行还剩 7 项**（已完成 3 项）：
-    - ✅ `renderer/primitives/join.py::eval_join`（193 行）→ `_JoinCfg` +
+  - ✅ **第三梯队全部完成**（方法级 >80 行，B-B16..B-B25 逐单元验证 + 提交）：
+    - `renderer/primitives/join.py::eval_join`（193）→ `_JoinCfg` +
       渲染/组装/槽清理/包裹分步（`6452ce6`）。
-    - ✅ `linter/discovery.py::Discovery._discover_range`（177 行）→ 四路分派
+    - `linter/discovery.py::Discovery._discover_range`（177）→ 四路分派
       + `_rule_of`/`_make_stmt_node`（`feb1bb5`）。
-    - ✅ `lexer/number_gen.py::compile_number_pattern`（174 行）→
+    - `lexer/number_gen.py::compile_number_pattern`（174）→
       `_PatternBuilder` 装配器 + 四阶段（`eb865cc`）。
-    - ✅ `renderer/inline_comment.py::restore_line_comments`（169 行）→ 四条落位
-      路径各自成对（`_needs_reinsert`/`_commit_insert`/`_commit_split`）169 → 73 行
-      （`b58a3b5`）。
-    - ✅ 同文件 `restore_comments`（139 行）→ 锚点窗口/插入/退化/占位独立行四块，
-      与 `restore_line_comments` 共用记账助手（`_dedupe_anchors`/`_free_slot`/
-      `_splice_line`/`_indent_at`）139 → 65 行（`57cf50c`）。
-    - ⏳ 剩余：`lexer/capture_runner.py::CaptureRunner.run`（125 行）、
-      `renderer/node_renderer.py::render_node`（108 行）、
-      `renderer/doc.py::_best`（96 行）、`_fits`（87 行）、
-      `renderer/primitives/line.py::eval_line`（84 行）。
+    - `renderer/inline_comment.py::restore_line_comments`（169 → 73）→ 四条落位
+      路径各自成对（`b58a3b5`）；同文件 `restore_comments`（139 → 65）→
+      锚点窗口/插入/退化/占位四块，与前者共用记账助手（`57cf50c`）。
+    - `lexer/capture_runner.py::CaptureRunner.run`（132 → 31）→ kind → handler
+      分发表，`_VALID_KINDS` 改由该表派生（`c4e9ddb`）。
+    - `renderer/node_renderer.py::render_node`（108 → 46）→ head/body/tail 三段
+      + verbatim 直出 + LineSuffix 取出（`710db10`）。
+    - `renderer/doc.py::_best`（96 → 63）与 `_fits`（87 → 41）→ 各抽多行分支
+      （`_best_concat`/`_best_union`/`_row_width`/`_fits_concat`）（`12bca10`）。
+    - `renderer/primitives/line.py::eval_line`（83 → 33）→ `_LineState` +
+      断行/元素/锚插入分派（`8da55be`）。
+    - `renderer/primitives/join.py::_assemble_join`（102 → 33，B-B16 拆分时
+      转移出来的长方法，本次收口）（`8ff6ad6`）。
+    - **外部裁判同口径复查：函数级 >80 行命中 0**；剩余命中均为类体
+      （`_StructureBase` 1129 / `_PatternBuilder` 179 等），归入下面的类级清单。
+    60-80 行区间现有 9 项（`renderer/doc._best` 63、`node_renderer.render_body` 77、
+    `capture_runner.build_rules` 79、`lookahead._level1_scan` 77 等）——均低于阈值，
+    其中分派型函数（`_best` 15 个变体分支）刻意不再拆。
   - ⏳ **类级上帝对象 11 处**（需设计决策，非机械拆分）：`_StructureBase`(414)、
     `Lexer`(336)、`RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、
     `ConfigRegistry`(87)、`GrammarRule`(70)、`ProjectChecker`(56)、
