@@ -161,6 +161,37 @@ def _capture_line_match(
     return (content, pos, rule.token_type)
 
 
+def _consume_indicator_line(ctx: _CaptureCtx, pos: int, content: str) -> tuple[str, int]:
+    """指示符行（start → 行尾含换行）原样入 content → (content, 新 pos)。
+
+    缩进指示/切块指示（|-/|+/|2）原样保留（与指示符行一体捕获，不做语义展开）。
+    """
+    text = ctx.text
+    while pos < len(text) and text[pos] not in ctx.newline_set:
+        content += text[pos]
+        pos += 1
+    if pos < len(text):  # 指示符行换行
+        content += text[pos]
+        pos += 1
+    return content, pos
+
+
+def _scalar_line_bounds(ctx: _CaptureCtx, pos: int) -> tuple[int, int, int]:
+    """内容行 → (行首, 行尾（不含换行）, 物理列)。
+
+    行首空白 → 物理列（tab 计 1 列，宽容）。
+    """
+    text = ctx.text
+    line_start = pos
+    p = pos
+    while p < len(text) and text[p] in ctx.space_set:
+        p += 1
+    eol = p
+    while eol < len(text) and text[eol] not in ctx.newline_set:
+        eol += 1
+    return line_start, eol, p - line_start
+
+
 def _capture_indent_leq(
     ctx: _CaptureCtx, rule: CaptureRule, pos: int
 ) -> tuple[str, int, str]:
@@ -169,29 +200,14 @@ def _capture_indent_leq(
     指示符行（start → 行尾含换行）原样入 content，然后逐行捕获
     "列 > base_col"的内容行（含空行——空行是内容），遇"非空且列 ≤ base_col"
     的行终止（该行不消费）。终止基准 = 触发行的物理缩进列（base_col，由
-    lexer 传入行首空白宽度）。缩进指示/切块指示（|-/|+/|2）原样保留
-    （与指示符行一体捕获，不做语义展开）。
+    lexer 传入行首空白宽度）。
     """
     text = ctx.text
     content = text[ctx.start:pos]
-    while pos < len(text) and text[pos] not in ctx.newline_set:
-        content += text[pos]
-        pos += 1
-    if pos < len(text):  # 指示符行换行
-        content += text[pos]
-        pos += 1
+    content, pos = _consume_indicator_line(ctx, pos, content)
     while pos < len(text):
-        line_start = pos
-        # 行首空白 → 物理列（tab 计 1 列，宽容）
-        p = pos
-        while p < len(text) and text[p] in ctx.space_set:
-            p += 1
-        col = p - line_start
-        # 行尾（不含换行）
-        eol = p
-        while eol < len(text) and text[eol] not in ctx.newline_set:
-            eol += 1
-        if eol > p and col <= ctx.base_col:
+        line_start, eol, col = _scalar_line_bounds(ctx, pos)
+        if eol > line_start + col and col <= ctx.base_col:
             break  # 终止行（非空、列 ≤ 基准）：不消费
         # 内容行（含空行）：整行含换行入 content
         if eol < len(text):
@@ -216,6 +232,97 @@ _CAPTURE_HANDLERS = {
 
 _VALID_KINDS = tuple(_CAPTURE_HANDLERS)
 
+
+def _legacy_comment_rule(item) -> CaptureRule | None:
+    """legacy `[comment] pairs` 单项 → 规则（条目过短 → None）。
+
+    kind "block" 归一化为 "marker"；未知 kind fail-fast（decisions/0003）。
+    """
+    if len(item) >= 3:
+        start, end, legacy_kind = item[0], item[1], item[2]
+    elif len(item) == 2:
+        start, end = item[0], item[1]
+        legacy_kind = "line"
+    else:
+        return None
+    kind = "marker" if legacy_kind == "block" else legacy_kind
+    if kind not in _VALID_KINDS:
+        raise ValueError(
+            "[lexer] [comment] pairs 含未知 kind: "
+            f"{legacy_kind!r}（合法: line / block）"
+        )
+    return CaptureRule(start, end, kind, "comment")
+
+
+def _legacy_comment_rules(token_define: dict) -> list[CaptureRule]:
+    """legacy `[comment] pairs` → token_type = "comment"。"""
+    rules: list[CaptureRule] = []
+    for item in token_define.get("comment", {}).get("pairs", []):
+        rule = _legacy_comment_rule(item)
+        if rule is not None:
+            rules.append(rule)
+    return rules
+
+
+def _string_delim_rules(token_define: dict) -> list[CaptureRule]:
+    """`[string] delimiters` → kind "delim" / token_type "literal.string"。
+
+    引擎不再硬编码引号定界符（verilog 只声明 "，yaml/c4 声明 " 与 '）。
+    """
+    rules: list[CaptureRule] = []
+    for delim in token_define.get("string", {}).get("delimiters", []) or []:
+        if not isinstance(delim, str) or not delim:
+            raise ValueError(
+                "[lexer] [string] delimiters 含非法条目: "
+                f"{delim!r}（须为非空字符串）"
+            )
+        rules.append(CaptureRule(delim, delim, "delim", "literal.string"))
+    return rules
+
+
+def _capture_rule_from_mode(mode: dict) -> CaptureRule:
+    """单个 `[[capture]]` 条目 → 规则（配置不完整 → fail-fast）。"""
+    kind = mode.get("kind")
+    token_type = mode.get("token_type")
+    if kind not in _VALID_KINDS or not token_type:
+        raise ValueError(
+            "[lexer] [capture] 段配置不完整："
+            f"mode={mode!r}（需要 kind ∈ {_VALID_KINDS} + token_type）"
+        )
+    # indent_leq 的终止条件是列比较（base_col 运行时传入），无需 end
+    if kind not in ("line", "indent_leq") and not mode.get("end"):
+        raise ValueError(
+            "[lexer] [capture] 段配置不完整："
+            f"kind={kind!r} 需要非空 end 终止标记，mode={mode!r}"
+        )
+    after = mode.get("after", [])
+    if not isinstance(after, list):
+        raise ValueError(
+            "[lexer] [capture] 段配置不完整："
+            f"after 须为 token 类型列表，mode={mode!r}"
+        )
+    return CaptureRule(
+        start=str(mode["start"]),
+        end=str(mode.get("end", "")),
+        kind=kind,
+        token_type=str(token_type),
+        after=tuple(str(t) for t in after),
+        next_chars=str(mode.get("next_chars", "")),
+    )
+
+
+def _capture_section_rules(token_define: dict) -> list[CaptureRule]:
+    """新 `[[capture]]` 段（TOML 数组表 → dict 列表）→ 规则。"""
+    modes = token_define.get("capture")
+    if not isinstance(modes, list):
+        return []
+    rules: list[CaptureRule] = []
+    for mode in modes:
+        if isinstance(mode, dict):
+            rules.append(_capture_rule_from_mode(mode))
+    return rules
+
+
 class CaptureRunner:
     """从 token_define 构建 capture mode 表并扫描文本。
 
@@ -230,76 +337,14 @@ class CaptureRunner:
 
         fail-fast（decisions/0003）：非法 kind 直接报错，不静默降级
         （legacy CommentRunner 对未知 kind 静默 return None——本类修正）。
+        各段细则见 `_legacy_comment_rules` / `_string_delim_rules` /
+        `_capture_section_rules`。
         """
-        rules: list[CaptureRule] = []
-
-        # 1. legacy [comment] pairs → token_type = "comment"
-        pairs = token_define.get("comment", {}).get("pairs", [])
-        for item in pairs:
-            if len(item) >= 3:
-                start, end, legacy_kind = item[0], item[1], item[2]
-            elif len(item) == 2:
-                start, end = item[0], item[1]
-                legacy_kind = "line"
-            else:
-                continue
-            kind = "marker" if legacy_kind == "block" else legacy_kind
-            if kind not in _VALID_KINDS:
-                raise ValueError(
-                    "[lexer] [comment] pairs 含未知 kind: "
-                    f"{legacy_kind!r}（合法: line / block）"
-                )
-            rules.append(CaptureRule(start, end, kind, "comment"))
-
-        # 2. [string] delimiters → kind = "delim"，token_type = "literal.string"
-        #    （引擎不再硬编码引号定界符；verilog 只声明 "，yaml/c4 声明 " 与 '）
-        for delim in token_define.get("string", {}).get("delimiters", []) or []:
-            if not isinstance(delim, str) or not delim:
-                raise ValueError(
-                    "[lexer] [string] delimiters 含非法条目: "
-                    f"{delim!r}（须为非空字符串）"
-                )
-            rules.append(
-                CaptureRule(delim, delim, "delim", "literal.string")
-            )
-
-        # 3. 新 [capture] 段（TOML 数组表 [[capture]] → dict 列表）
-        modes = token_define.get("capture")
-        if isinstance(modes, list):
-            for mode in modes:
-                if not isinstance(mode, dict):
-                    continue
-                kind = mode.get("kind")
-                token_type = mode.get("token_type")
-                if kind not in _VALID_KINDS or not token_type:
-                    raise ValueError(
-                        "[lexer] [capture] 段配置不完整："
-                        f"mode={mode!r}（需要 kind ∈ {_VALID_KINDS} + token_type）"
-                    )
-                # indent_leq 的终止条件是列比较（base_col 运行时传入），无需 end
-                if kind not in ("line", "indent_leq") and not mode.get("end"):
-                    raise ValueError(
-                        "[lexer] [capture] 段配置不完整："
-                        f"kind={kind!r} 需要非空 end 终止标记，mode={mode!r}"
-                    )
-                after = mode.get("after", [])
-                if not isinstance(after, list):
-                    raise ValueError(
-                        "[lexer] [capture] 段配置不完整："
-                        f"after 须为 token 类型列表，mode={mode!r}"
-                    )
-                next_chars = mode.get("next_chars", "")
-                rules.append(
-                    CaptureRule(
-                        start=str(mode["start"]),
-                        end=str(mode.get("end", "")),
-                        kind=kind,
-                        token_type=str(token_type),
-                        after=tuple(str(t) for t in after),
-                        next_chars=str(next_chars),
-                    )
-                )
-
+        rules = (
+            _legacy_comment_rules(token_define)
+            + _string_delim_rules(token_define)
+            + _capture_section_rules(token_define)
+        )
         # 按起始标记长度降序：长标记优先（/* 在 / 前、<<EOF 在 << 前）
         rules.sort(key=lambda r: -r.start_len)
         return rules
