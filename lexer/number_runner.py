@@ -22,6 +22,9 @@ from .number_gen import (
     NumberPattern,
 )
 
+# value 态后允许跨过的空白字符（形态声明允许时）
+_SPACE_CHARS = (" ", "\t")
+
 
 class ConfigNumberRunner:
     """配置驱动的数字解析器：多 pattern 最长匹配。"""
@@ -42,6 +45,35 @@ class ConfigNumberRunner:
                 best = (tok, end)
         return best
 
+    @staticmethod
+    def _value_states(pat: NumberPattern) -> set[int]:
+        """空格跳过的目标态：仅 value 态（base 字母后的进制值态），不含 size
+        态（十进制整数）——整数后空格是分隔符不是续值。"""
+        return set(pat.base_states.values()) or pat.accepting
+
+    @staticmethod
+    def _should_break(ch: str, prev_underscore: bool, after_space: bool) -> bool:
+        """当前字符是否直接终止扫描：连续下划线 / 跨空格的三元 `?` 基值。"""
+        if ch == "_" and prev_underscore:
+            return True
+        return after_space and ch == "?"
+
+    @staticmethod
+    def _next_state(pat: NumberPattern, state: int, ch: str) -> int | None:
+        """单字符转移目标（无该字符类别或该转移 → None = 终止）。"""
+        cat = char_category(ch)
+        return pat.transitions.get((state, cat)) if cat else None
+
+    @staticmethod
+    def _token_before(text: str, start_pos: int, last_accept: int) -> tuple[str, int]:
+        """截取到最近接受位并去掉尾随下划线；无接受位/修剪后为空 → ("", start_pos)。"""
+        if last_accept <= start_pos:
+            return "", start_pos
+        trimmed = text[start_pos:last_accept].rstrip("_")
+        if trimmed:
+            return trimmed, start_pos + len(trimmed)
+        return "", start_pos
+
     def _run_pattern(
         self, pat: NumberPattern, text: str, start_pos: int
     ) -> tuple[str, int]:
@@ -56,28 +88,19 @@ class ConfigNumberRunner:
 
         # 允许空格跳过（'h/'d/'b/'o 后 32'h ffff_ffff）：仅引号类形态
         allow_space = pat.allow_space_after_quote
-        # 空格跳过的目标态：仅 value 态（base 字母后的进制值态），
-        # 不含 size 态（十进制整数）——整数后空格是分隔符不是续值
-        value_states = set(pat.base_states.values())
-        if not value_states:
-            value_states = pat.accepting
+        value_states = self._value_states(pat)
 
         while i < len(text):
             ch = text[i]
-            # 禁止连续下划线
-            if ch == "_" and prev_underscore:
+            if self._should_break(ch, prev_underscore, after_space):
                 break
             # value 态后允许空格（32'h ffff_ffff）——仅形态声明允许时
-            if allow_space and state in value_states and (ch == " " or ch == "\t"):
+            if allow_space and state in value_states and ch in _SPACE_CHARS:
                 i += 1
                 after_space = True
                 continue
-            # 跨空格不允许 '?' 基值（三元运算符）
-            if after_space and ch == "?":
-                break
             after_space = False
-            cat = char_category(ch)
-            nxt = pat.transitions.get((state, cat)) if cat else None
+            nxt = self._next_state(pat, state, ch)
             if nxt is None:
                 break
             state = nxt
@@ -85,12 +108,7 @@ class ConfigNumberRunner:
             i += 1
             if state in pat.accepting:
                 last_accept = i
-        if last_accept > start_pos:
-            token = text[start_pos:last_accept]
-            trimmed = token.rstrip("_")
-            if trimmed:
-                return trimmed, start_pos + len(trimmed)
-        return "", start_pos
+        return self._token_before(text, start_pos, last_accept)
 
 
 def build_number_runner(
