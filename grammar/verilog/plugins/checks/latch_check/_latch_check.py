@@ -23,6 +23,8 @@ Yosys proc_dlatch（综合视角）/ SpyGlass W442aL。升级自有限版（只�
 "if 无 else"，2026-08-29 调研后落地全路径判定）。
 """
 
+from typing import Callable
+
 from core.define import Node, iter_nodes
 from grammar.verilog.plugins.checks._shared import const_eval, const_value, is_timing_always, target_sig
 
@@ -119,53 +121,97 @@ def _collect_assigned(body: Node) -> dict:
     return out
 
 
+def _ma_target(node, params, full_case) -> set:
+    """赋值语句 / ForInit：目标信号必赋值。"""
+    del params, full_case  # 协议签名参数（分派表统一签名）
+    sig = target_sig(getattr(node, "target", None))
+    return {sig} if sig else set()
+
+
+def _ma_block(node, params, full_case) -> set:
+    """BeginEnd：顺序复合 → 各子句并集（每句都执行）。"""
+    acc: set = set()
+    for ch in node.iter_children():
+        if isinstance(ch, Node):
+            acc |= _must_assign(ch, params, full_case)
+    return acc
+
+
+def _ma_if(node, params, full_case) -> set:
+    """if/else → 两分支交集（无 else → `_else_branch` 得 None → ∅）。"""
+    then = _must_assign(getattr(node, "then_stmt", None), params, full_case)
+    return then & _must_assign(_else_branch(node), params, full_case)
+
+
+def _ma_body(node, params, full_case) -> set:
+    """else 平铺分支：体节点的必赋值。"""
+    return _must_assign(getattr(node, "body", None), params, full_case)
+
+
+def _ma_stmt(node, params, full_case) -> set:
+    """StmtOrNull：内部语句的必赋值。"""
+    return _must_assign(getattr(node, "stmt", None), params, full_case)
+
+
+def _ma_case(node, params, full_case) -> set:
+    """case：各臂交集（完备性判据（default / 全覆盖 / full_case）见 `_case_must`）。"""
+    return _case_must(node, params, full_case)
+
+
+def _ma_attr(node, params, full_case) -> set:
+    """(* full_case *) case … → 视为完备（合成语义：未列值 don't-care）。"""
+    return _must_assign(
+        getattr(node, "stmt", None), params,
+        full_case or "full_case" in _attr_names(node),
+    )
+
+
+def _ma_loop(node, params, full_case) -> set:
+    """循环：可判"至少执行一次" → 体内必赋值，否则 init 算必赋值（可能 0 次）。"""
+    if _loop_executes(node, params):
+        return _must_assign(getattr(node, "body", None), params, full_case)
+    init = getattr(node, "init", None)
+    if isinstance(init, Node):
+        return _must_assign(init, params, full_case)
+    return set()
+
+
+def _ma_none(node, params, full_case) -> set:
+    """AssignStmt：连续赋值不出现在过程体内（防御）。"""
+    del node, params, full_case  # 协议签名参数（分派表统一签名）
+    return set()
+
+
+# 节点类型 → must-assign 处理器（语言知识表；表外类型 → ∅）
+# 表项全部是紧邻上方定义的 `_ma_*`——模块导入期求值，引用更靠后的助手会 NameError。
+_MUST_ASSIGN_HANDLERS: dict[str, Callable[[Node, dict, bool], set]] = {
+    **dict.fromkeys(_ASSIGN_RULES, _ma_target),
+    "ForInit": _ma_target,
+    "BeginEnd": _ma_block,
+    **dict.fromkeys(_IF_RULES, _ma_if),
+    **dict.fromkeys(_ELSE_RULES, _ma_body),
+    "CaseStmt": _ma_case,
+    "AttrStmt": _ma_attr,
+    **dict.fromkeys(_LOOP_RULES, _ma_loop),
+    "StmtOrNull": _ma_stmt,
+    "AssignStmt": _ma_none,
+}
+
+
 def _must_assign(node, params: dict, full_case: bool = False) -> set:
     """前向 must-assign：语句 → 全路径必赋值信号集合（纯函数）。
 
     顺序复合 = 并集；if/else = 交集（无 else → ∅）；case = 各臂交集
     （无 default 且未全覆盖且无 full_case → ∅）；循环 = init 值代入条件
     可判"至少执行一次"则体内必赋值，否则 ∅（init 除外）。
+    逐类型规则见 `_MUST_ASSIGN_HANDLERS`（语言知识表）。
     """
     if node is None or not isinstance(node, Node):
         return set()
-    name = node.node_name
-    if name in _ASSIGN_RULES:
-        sig = target_sig(getattr(node, "target", None))
-        return {sig} if sig else set()
-    if name == "BeginEnd":
-        acc: set = set()
-        for ch in node.iter_children():
-            if isinstance(ch, Node):
-                acc |= _must_assign(ch, params, full_case)
-        return acc
-    if name in _IF_RULES:
-        then = _must_assign(getattr(node, "then_stmt", None), params, full_case)
-        return then & _must_assign(_else_branch(node), params, full_case)
-    if name in _ELSE_RULES:
-        return _must_assign(getattr(node, "body", None), params, full_case)
-    if name == "CaseStmt":
-        return _case_must(node, params, full_case)
-    if name == "AttrStmt":
-        # (* full_case *) case … → 视为完备（合成语义：未列值 don't-care）
-        return _must_assign(
-            getattr(node, "stmt", None), params,
-            full_case or "full_case" in _attr_names(node),
-        )
-    if name in _LOOP_RULES:
-        if _loop_executes(node, params):
-            return _must_assign(getattr(node, "body", None), params, full_case)
-        init = getattr(node, "init", None)
-        if isinstance(init, Node):
-            return _must_assign(init, params, full_case)
+    handler = _MUST_ASSIGN_HANDLERS.get(node.node_name)
+    if handler is None:
         return set()
-    if name == "ForInit":
-        sig = target_sig(getattr(node, "target", None))
-        return {sig} if sig else set()
-    if name == "StmtOrNull":
-        return _must_assign(getattr(node, "stmt", None), params, full_case)
-    if name == "AssignStmt":
-        return set()  # 连续赋值不出现在过程体内（防御）
-    return set()
+    return handler(node, params, full_case)
 
 
 def _else_branch(node) -> Node | None:
@@ -250,32 +296,55 @@ def _case_covered(items: list) -> bool:
     return values == set(range(1 << width))
 
 
+# 循环条件里的比较运算符（两侧常量可判时直接得结果）
+_CMP_OPS = ("<", "<=", ">", ">=", "==", "!=")
+
+
+def _eval_compare(cond: Node, env: dict) -> bool | None:
+    """比较条件按两侧常量求值；非比较 / 不可判 → None。"""
+    if cond.node_name != "BinaryOp":
+        return None
+    op = getattr(cond, "op", "") or ""
+    if op not in _CMP_OPS:
+        return None
+    l = const_eval(_node_text(getattr(cond, "left", None)), env)
+    r = const_eval(_node_text(getattr(cond, "right", None)), env)
+    if l is None or r is None:
+        return None
+    return {
+        "<": l < r, "<=": l <= r, ">": l > r,
+        ">=": l >= r, "==": l == r, "!=": l != r,
+    }[op]
+
+
+def _loop_init_env(node: Node, params: dict) -> dict | None:
+    """循环 init → 条件求值环境（循环变量代换为 init 值）；不可判 → None。"""
+    init = getattr(node, "init", None)
+    if not isinstance(init, Node):
+        return None
+    target = getattr(init, "target", None)
+    name = getattr(target, "content", "") if isinstance(target, Node) else ""
+    iv = const_eval(_node_text(getattr(init, "value", None)), params)
+    if not name or iv is None:
+        return None
+    return {**params, name: str(iv)}
+
+
 def _loop_executes(node: Node, params: dict) -> bool | None:
     """循环是否**至少执行一次**：init 值代入条件求值（含参数）。
 
     `for (i=0; i<STEPS_AT_ONCE; …)` 且 STEPS_AT_ONCE=1 → 0<1 真 → 执行；
     `for (i=0; i<0; …)` → 假 → 可能 0 次；while/边界不可判 → None（保守）。
     """
-    init = getattr(node, "init", None)
     cond = getattr(node, "condition", None)
-    if not isinstance(init, Node) or not isinstance(cond, Node):
+    if not isinstance(cond, Node):
         return None  # while/repeat/forever：边界不可判
-    target = getattr(init, "target", None)
-    name = getattr(target, "content", "") if isinstance(target, Node) else ""
-    iv = const_eval(_node_text(getattr(init, "value", None)), params)
-    if not name or iv is None:
+    env = _loop_init_env(node, params)
+    if env is None:
         return None
-    env = {**params, name: str(iv)}  # 循环变量代换为 init 值
-    if cond.node_name == "BinaryOp":
-        op = getattr(cond, "op", "") or ""
-        if op in ("<", "<=", ">", ">=", "==", "!="):
-            l = const_eval(_node_text(getattr(cond, "left", None)), env)
-            r = const_eval(_node_text(getattr(cond, "right", None)), env)
-            if l is not None and r is not None:
-                return {
-                    "<": l < r, "<=": l <= r, ">": l > r,
-                    ">=": l >= r, "==": l == r, "!=": l != r,
-                }[op]
+    res = _eval_compare(cond, env)
+    if res is not None:
+        return res
     # 非比较条件（while (1) 等）→ 整体常量求值
     ev = const_eval(_cond_text(cond), env)
     if ev is None:
