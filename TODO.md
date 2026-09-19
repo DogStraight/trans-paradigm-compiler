@@ -171,20 +171,20 @@
     `cmd_rename`、`_smoke_test`（format/lint/check 三面必跑）、
     `bifrost_probe/smelly.py`（**刻意坏味探针**，修好即门禁失效）。判据与逐条理由见
     dispositions。
-- **B-F 圈复杂度 / 认知复杂度**（批次一“最高分区”6 文件 + 批次二 config_driven/pipeline
-  + 批次三 indent/width_check/wrap/column_align/node_renderer/grammar_inject
-  + 批次四 matcher/attribute_binder/_production/schedule，2026-09-19）：
-  外部裁判同口径量化（批次三起把本机 `.agents/` 技能脚本排除出扫描集，历史数字同口径
-  扣除 1 条/名目）——批次一 CC 150 → 132 / 认知 157 → 140；批次二 132 → 124 / 140 → 135；
-  批次三 124 → 107 / 135 → 117；批次四 **107 → 87 / 117 → 96**；
-  **四批合计 CC 150 → 87（-63）、认知 157 → 96（-61）**。
+- **B-F 圈复杂度 / 认知复杂度**（五个批次，2026-09-19）：外部裁判同口径量化（批次三起
+  把本机 `.agents/` 技能脚本排除出扫描集，历史数字同口径扣除 1 条/名目）——
+  批次一 150 → 132 / 157 → 140；二 132 → 124 / 140 → 135；三 124 → 107 / 135 → 117；
+  四 107 → 87 / 117 → 96；五 **87 → 78 / 96 → 90**；
+  **五批合计 CC 150 → 78（-72）、认知 157 → 90（-67）**。
   - ✅ 已清（**整文件**）：`linter/lookahead.py`、`preprocessor/_expand.py`、`parser/follow.py`、
     `transform/config_driven.py`、`pipeline/__init__.py`、`formatter/indent.py`、
     `width_check/_width_check.py`、`formatter/wrap.py`、`formatter/passes/column_align.py`、
     `renderer/node_renderer.py`、`parser/grammar_inject.py`、`linter/checkers/matcher.py`、
-    `parser/attribute_binder.py`、`parser/_production.py`、`pipeline/schedule.py`；局部：
-    `transform/_semantic_mapping`（认知 99 + CC 27）、`normalizer._normalize`（34/89）、
-    `renderer/doc` 三处（24/62、11/17、16/27）。提交见 dispositions 的逐条记录。
+    `parser/attribute_binder.py`、`parser/_production.py`、`pipeline/schedule.py`、
+    `typed_ports/_transform.py`、`checks/_shared.py`、`latch_check/_latch_check.py`、
+    `core/plugin_loader.py`；局部：`transform/_semantic_mapping`（认知 99 + CC 27）、
+    `normalizer._normalize`（34/89）、`renderer/doc` 三处（24/62、11/17、16/27）。
+    提交见 dispositions 的逐条记录。
   - 判据 = **分派型保持 / 有内部逻辑拆**（判据与逐条清点在
     `_drafts/bifrost/dispositions.md`「CC / 认知复杂度三分类」）：`renderer/doc.flatten`
     20/18、`_best` 17/16、`_doc_has_break`/`_flat_w`/`_fits`/`_drop_break_after_hardbreak`
@@ -193,19 +193,19 @@
     （一次去掉多处 `if trace:`；循环内 `sorted()` 打印留 guard）；
     ②状态收 `_XxxCtx` dataclass 后助手提到模块级——**嵌套函数的分支计入外层 CC**，
     所以"提模块级"是硬要求不是偏好。
-  - ⏳ 剩项（按当前值，现以**语言侧与工具脚本**为主）：`tools/check_test_isolation.main`
-    28/54、`latch_check._must_assign` 21、`typed_ports/_transform.build_wrapper` 21
-    （+ `_resolved_ports` 18/认知 45）、`pipeline/units.assign_points` 20、
-    `policy/doc_sync.collect_refs` 20/43、`plugin_loader._load_pipeline_decls` 19/40、
-    `rule_selector.analyze_production_features` 19、`tools/config_sites._scan_file` 认知 79、
-    `policy/check_doc_refs.rule_d3_impl_test_files` 认知 48、
-    `linter/grammar_slicer.build_slice_tree` 认知 43（全表见 dispositions）。
+  - ⏳ 剩项（按当前值，现以**工具脚本与引擎尾项**为主）：`tools/check_test_isolation.main`
+    28/54、`pipeline/units.assign_points` 20、`policy/doc_sync.collect_refs` 20/43、
+    `rule_selector.analyze_production_features` 19、`tools/config_sites._scan_file` 19/79、
+    `policy/check_doc_refs.rule_d3_impl_test_files` 16/48、
+    `linter/grammar_slicer.build_slice_tree` 认知 43、
+    `transform/engine._collect_subtree_comments` 认知 40、`main._print_check_text` 认知 39
+    （全表见 dispositions）。
   - ⛔ **已判保持，不得重开**：`boundary._build_scope_kind_map` 21/52 与 `_resolve_first_tokens` /
     `_collect_stmt_headers` / `_collect_block_rule_bounds` / `_is_case_item_token`（“逐规则/
     逐元素判定的单一职责循环，再拆只会把映射逻辑碎片化”）；`renderer/doc.flatten` 20、
     `_best` 17、`_doc_has_break` / `_flat_w` / `_fits` / `_drop_break_after_hardbreak`
     （一变体一臂的分派型）。逐条理由见 dispositions。
-  - 批次验证（批次四 7 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
+  - 批次验证（批次五 4 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
     诊断基线 5548 持平；`eval_lint_accuracy` 33/33 + 0 误报；三门禁 PASS；字节对拍
     73 文件 0 差异。
 
