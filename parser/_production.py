@@ -684,6 +684,115 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
     return parsed_node
 
 
+def _slots_of(node: Any) -> dict | None:
+    """节点注释槽（不存在就地创建）；非 Node → None。"""
+    if not isinstance(node, Node):
+        return None
+    slots = getattr(node, "_comment_slots", None)
+    if slots is None:
+        slots = {}
+        node.add_attr("_comment_slots", slots)
+    return slots
+
+
+def _peek_after_comment(
+    context: ParseContext, nxt: Token
+) -> tuple[bool, Token | None]:
+    """注释后第一个非注释非换行 token → (是否与本注释同行, 该 token)。
+
+    行中注释判定（注释节点模型 2b-2）：注释之后还有同行的非注释 token
+    （如 `assign b = /* 嵌入 */ rst_n;` 的注释在 `=` 与 `rst_n` 之间）。
+    newline 是独立 token 且与注释同行（行尾注释的正常形态），跳过。
+    """
+    off = 1
+    while True:
+        after = context.peek_token(offset=off)
+        if after is None:
+            return False, None
+        if after.type in (COMMENT_TOKEN_TYPE, "newline"):
+            off += 1
+            continue
+        return after.line == nxt.line, after
+
+
+def _attach_midline_trailing(context: ParseContext, nxt: Token) -> None:
+    """尾注归属：注释后第一个 token 是终结符（`;`/`)`/`,` 等）→ 挂 trailing。
+
+    无后续规则节点可挂（如 `assign b = c /* c2 */;` 的注释在 `c` 与 `;`
+    之间）→ 挂当前节点 trailing 槽位。
+    """
+    slots = _slots_of(getattr(context, "current_node", None))
+    if slots is not None:
+        slots.setdefault("trailing", []).append(nxt.content)
+
+
+def _attach_midline_inline(
+    context: ParseContext, nxt: Token, anchor_tok: Token
+) -> None:
+    """行中归属（token 标注定位）：`= /* c */ rst_n` 的注释在 `=` 与 `rst_n` 之间。
+
+    挂槽分两种：
+      - 当前规则**非** inline：挂 `inline_after`（{锚 token: [(注释, 源行)]}），
+        渲染端在布局 line 元素序列里按锚 token 文本定位插入（`=` 后）——本规则
+        节点留在 AST。
+      - 当前规则 `inline = true`：规则节点会被内联展开**丢弃**（见
+        attribute_binder.try_inline_rule），而替身节点布局里没有锚 token
+        （`=` 属父规则字面量）→ 挂 `inline`（节点文本前同行前置），槽位随展开
+        迁到替身节点后即可渲染为 `= /* c */ b`。
+    """
+    slots = _slots_of(getattr(context, "current_node", None))
+    if slots is None:
+        return
+    if getattr(getattr(context, "current_rule", None), "inline", False):
+        slots.setdefault("inline", []).append(nxt.content)
+        return
+    ia = slots.setdefault("inline_after", {})
+    ia.setdefault(anchor_tok.content, []).append((nxt.content, nxt.line))
+
+
+def _attach_line_end(parser, context: ParseContext, nxt: Token,
+                     current_token: Token, token_type: str) -> None:
+    """行尾注释（注释后 newline）：锚点 + trailing 槽，按 (text, line) 全局去重。
+
+    行尾注释（ADR-0013 目标④后普通注释进树结构序渲染）：挂当前节点
+    `_comment_slots["trailing"]`，render_node 用 LineSuffix 渲染为 Doc 一等公民
+    （与块结束符行尾/终结符尾注同槽）。下划线属性穿过 normalizer
+    （transform/normalizer.py 保留）、Node.dump 过滤。
+
+    全局去重：parser 回溯会对同一注释重复进入本分支（`_comment_anchors`
+    双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点（如列表项 +
+    列表容器）→ 渲染双份。按 (text, line) 只挂第一处（重复时连槽都不建，
+    与原行为一致）。
+
+    注：当前规则节点可能被内联展开丢弃（Init 等）——槽位迁移与行终止型换槽在
+    attribute_binder._transfer_comment_slots 处理（那里才知道替身节点是谁；
+    此处不读 current_rule，它可能是内层规则退出后残留的旧值）。
+    """
+    parser._record_anchor(
+        {
+            "anchor": current_token.content,
+            "text": nxt.content,
+            "line": nxt.line,
+            "type": token_type,
+        },
+        "inline",
+    )
+    cur_node = getattr(context, "current_node", None)
+    if not isinstance(cur_node, Node):
+        return
+    seen = getattr(parser, "_trailing_seen", None)
+    if seen is None:
+        seen = set()
+        parser._trailing_seen = seen
+    key = (nxt.content, nxt.line)
+    if key in seen:
+        return
+    seen.add(key)
+    slots = _slots_of(cur_node)
+    if slots is not None:
+        slots.setdefault("trailing", []).append(nxt.content)
+
+
 def collect_following_comments(
     self, context: ParseContext, current_token: Token, token_type: str
 ) -> None:
@@ -691,109 +800,23 @@ def collect_following_comments(
 
     三通道归属（与 renderer 注释模型对应）：
       - 行中注释（注释后同行有非注释 token）：后跟终结符（`;`/`)`/`,`）→
-        挂当前节点 trailing 槽位（无后续规则节点可挂）；后跟代码 → 挂
-        inline_after 槽位（{锚 token: [(注释, 源行号)]}，token 标注定位，
-        渲染端按锚文本插入）
-      - 行尾注释（注释后 newline）→ 挂当前节点 _comment_slots["trailing"]
-        （renderer LineSuffix 结构序渲染）+ _comment_anchors（tpc marker
-        还原通道），按 (text, line) 全局去重（parser 回溯双收集 +
-        current_node 回溯变化防渲染双份）
+        挂当前节点 trailing 槽位（见 `_attach_midline_trailing`）；后跟代码 →
+        挂 inline_after / inline 槽位（见 `_attach_midline_inline`）
+      - 行尾注释（注释后 newline）→ 挂当前节点 trailing 槽 + 锚点
+        （见 `_attach_line_end`）
     不挂子规则节点：子规则匹配可能回溯重建，注释会随丢弃节点丢失。
     """
     while True:
         nxt = context.peek_token(offset=0)
         if not (nxt and nxt.type == COMMENT_TOKEN_TYPE):
             break
-        # 行中注释判定（注释节点模型 2b-2）：注释之后还有同行的非注释
-        # token（如 `assign b = /* 嵌入 */ rst_n;` 的注释在 `=` 与 `rst_n`
-        # 之间）→ 行中注释，进 pending 队列——由下一个规则节点（parse_call
-        # 成功）挂 inline 槽位、或下一终结符挂 trailing（结构序渲染，
-        # 替代锚点回插）；不进 _comment_anchors（防 restore 双份）。
-        # newline 是独立 token 且与注释同行（行尾注释的正常形态），跳过。
-        is_midline = False
-        off = 1
-        while True:
-            after = context.peek_token(offset=off)
-            if after is None:
-                break
-            if after.type in (COMMENT_TOKEN_TYPE, "newline"):
-                off += 1
-                continue
-            is_midline = after.line == nxt.line
-            break
-        if is_midline:
-            if after is not None and after.type.startswith("symbol"):
-                # 尾注归属：注释后第一个 token 是终结符（`;`/`)`/`,` 等），
-                # 无后续规则节点可挂（如 `assign b = c /* c2 */;` 的注释在
-                # `c` 与 `;` 之间）→ 挂当前节点 trailing 槽位。
-                cur_node = getattr(context, "current_node", None)
-                if isinstance(cur_node, Node):
-                    slots = getattr(cur_node, "_comment_slots", None)
-                    if slots is None:
-                        slots = {}
-                        cur_node.add_attr("_comment_slots", slots)
-                    slots.setdefault("trailing", []).append(nxt.content)
-            else:
-                # 行中归属（注释节点模型 2b-2，token 标注定位）：注释在
-                # `= /* c */ rst_n` 的 `=` 与 `rst_n` 之间。挂槽分两种：
-                #   - 当前规则**非** inline：挂 `inline_after`（{锚 token:
-                #     [(注释, 源行)]}），渲染端在布局 line 元素序列里按锚
-                #     token 文本定位插入（`=` 后）——本规则节点留在 AST。
-                #   - 当前规则 `inline = true`：规则节点会被内联展开**丢弃**
-                #     （见 attribute_binder.try_inline_rule），而替身节点布局
-                #     里没有锚 token（`=` 属父规则字面量）→ 挂 `inline`
-                #     （节点文本前同行前置），槽位随展开迁到替身节点后即可渲染
-                #     为 `= /* c */ b`。
-                cur_node = getattr(context, "current_node", None)
-                cur_rule = getattr(context, "current_rule", None)
-                inline_rule = bool(getattr(cur_rule, "inline", False))
-                if isinstance(cur_node, Node):
-                    slots = getattr(cur_node, "_comment_slots", None)
-                    if slots is None:
-                        slots = {}
-                        cur_node.add_attr("_comment_slots", slots)
-                    if inline_rule:
-                        slots.setdefault("inline", []).append(nxt.content)
-                    else:
-                        ia = slots.setdefault("inline_after", {})
-                        ia.setdefault(current_token.content, []).append(
-                            (nxt.content, nxt.line)
-                        )
+        is_midline, after = _peek_after_comment(context, nxt)
+        if not is_midline:
+            _attach_line_end(self, context, nxt, current_token, token_type)
+        elif after is not None and after.type.startswith("symbol"):
+            _attach_midline_trailing(context, nxt)
         else:
-            self._record_anchor(
-                {
-                    "anchor": current_token.content,
-                    "text": nxt.content,
-                    "line": nxt.line,
-                    "type": token_type,
-                },
-                "inline",
-            )
-            # 行尾注释（ADR-0013 目标④后普通注释进树结构序渲染）：挂当前
-            # 节点 _comment_slots["trailing"]，render_node 用 LineSuffix 渲染
-            # 为 Doc 一等公民（与块结束符行尾/终结符尾注同槽）。下划线属性
-            # 穿过 normalizer（transform/normalizer.py 保留）、Node.dump 过滤。
-            # 全局去重：parser 回溯会对同一注释重复进入本分支（_comment_anchors
-            # 双收集同源），且 current_node 回溯变化会把同一注释挂到多个节点
-            # （如列表项 + 列表容器）→ 渲染双份。按 (text, line) 只挂第一处。
-            # 注：当前规则节点可能被内联展开丢弃（Init 等）——槽位迁移与
-            # 行终止型换槽在 attribute_binder._transfer_comment_slots 处理
-            # （那里才知道替身节点是谁；此处不读 current_rule，它可能是内层
-            # 规则退出后残留的旧值）。
-            cur_node = getattr(context, "current_node", None)
-            if isinstance(cur_node, Node):
-                seen = getattr(self, "_trailing_seen", None)
-                if seen is None:
-                    seen = set()
-                    self._trailing_seen = seen
-                key = (nxt.content, nxt.line)
-                if key not in seen:
-                    seen.add(key)
-                    slots = getattr(cur_node, "_comment_slots", None)
-                    if slots is None:
-                        slots = {}
-                        cur_node.add_attr("_comment_slots", slots)
-                    slots.setdefault("trailing", []).append(nxt.content)
+            _attach_midline_inline(context, nxt, current_token)
         context.advance_token()
 
 
