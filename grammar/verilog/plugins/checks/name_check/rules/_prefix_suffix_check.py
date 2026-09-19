@@ -27,6 +27,9 @@ L2 脚本 handler（name_check 插件）：前后缀语义约定（防错，2026
 签名：fn(symbol, rule, context) -> str | None（None = 通过）。
 """
 
+# 方向关键字 token 的 value 穿透层数上限（防异常结构成环）
+_KEYWORD_UNWRAP_DEPTH = 4
+
 
 def check_direction_suffix(symbol, rule, context) -> str | None:
     """端口方向后缀一致性（防接错方向）。"""
@@ -78,22 +81,27 @@ def check_kind_suffix(symbol, rule, context) -> str | None:
 def _direction_of(symbol) -> str | None:
     """端口声明方向（decl_node.direction：字符串或关键字 token 节点）。"""
     node = getattr(symbol, "decl_node", None)
-    d = getattr(node, "direction", None) if node is not None else None
+    if node is None:
+        return None
+    d = getattr(node, "direction", None)
+    if d is None:
+        return None
     if isinstance(d, str):
         return d or None
-    if d is not None:
-        # 关键字 token 节点（input/output/inout）：value 递归取文本
-        for _ in range(4):
-            if d is None:
-                return None
-            c = getattr(d, "content", "") or ""
-            if c:
-                return c
-            v = getattr(d, "value", None)
-            if isinstance(v, str):
-                return v or None
-            if hasattr(v, "node_name"):
-                d = v
-                continue
-            return None
+    # 关键字 token 节点（input/output/inout）：content/value 逐层穿透取文本
+    return _keyword_text(d, _KEYWORD_UNWRAP_DEPTH)
+
+
+def _keyword_text(d, depth: int) -> str | None:
+    """关键字 token 节点 → 文本（content 优先，value 为节点时穿透，最多 depth 层）。"""
+    if d is None or depth <= 0:
+        return None
+    c = getattr(d, "content", "") or ""
+    if c:
+        return c
+    v = getattr(d, "value", None)
+    if isinstance(v, str):
+        return v or None
+    if hasattr(v, "node_name"):
+        return _keyword_text(v, depth - 1)
     return None
