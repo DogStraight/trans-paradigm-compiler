@@ -508,47 +508,62 @@ class GrammarRule:
 
     @classmethod
     def _validate_node_specs(cls, name: str, kwargs: dict) -> None:
-        """node 绑定中 $N 位置捕获的静态越界校验（fail-fast，对齐 ADR-0003）。
+        """node 绑定中 $N 位置捕获的静态越界校验（fail-fast）。
 
         拦截：$N 越界（N > production 顶层 slot 数）→ GrammarError。
         块规则的 production 已剥离首尾字面 token（parser 块路径单独消费
         起止符，绑定基于剥离后的内容部分编号，见 __init__），校验使用
-        同一剥离逻辑。
+        同一剥离逻辑（`_stripped_prods`）。
         不拦截：$N.path 子路径的属性存在性——choice 分支形态差异（同一
         slot 不同分支挂载不同属性）是设计语义，运行时由 Node.__getattr__
         给出友好报错 + attribute_binder 诊断。
         """
         parser_data = kwargs.get("parser")
-        node_map = parser_data.get("node") if isinstance(parser_data, dict) else None
+        if not isinstance(parser_data, dict):
+            return
+        node_map = parser_data.get("node")
         if not isinstance(node_map, dict) or not node_map:
             return
-        raw_prods = parser_data.get("production") if isinstance(parser_data, dict) else None
+        raw_prods = parser_data.get("production")
         if not isinstance(raw_prods, list):
             return
-        prods = list(raw_prods)
-        is_block = kwargs.get("is_block") is True or bool(
-            isinstance(parser_data, dict) and parser_data.get("is_block") is True
+        is_block = (
+            kwargs.get("is_block") is True or parser_data.get("is_block") is True
         )
-        if is_block:
-            if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
-                prods.pop(0)
-            if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
-                prods.pop()
-        max_slot = len(prods)
+        max_slot = len(cls._stripped_prods(list(raw_prods), is_block))
         for attr, spec in node_map.items():
             for item in spec if isinstance(spec, list) else [spec]:
-                if not isinstance(item, str):
-                    continue
-                m = cls._RE_POS_REF.match(item)
-                if m is None:
-                    continue
-                idx = int(m.group(1))
-                if not (1 <= idx <= max_slot):
-                    raise GrammarError(
-                        f"[grammar] 规则 {name} 的 node 绑定 {attr} = {item!r} 越界："
-                        f"production 共 {max_slot} 个 slot"
-                        f"（块规则已剥离起止符），不存在 ${idx}。"
-                    )
+                cls._check_pos_ref(name, attr, item, max_slot)
+
+    @staticmethod
+    def _stripped_prods(prods: list, is_block: bool) -> list:
+        """块规则 production 剥离首尾字面 token（非块规则原样返回）。
+
+        parser 块路径单独消费起止符，绑定与 $N 校验都基于**内容部分**编号。
+        """
+        if not is_block:
+            return prods
+        if prods and isinstance(prods[0], str) and not prods[0].startswith("@"):
+            prods.pop(0)
+        if prods and isinstance(prods[-1], str) and not prods[-1].startswith("@"):
+            prods.pop()
+        return prods
+
+    @classmethod
+    def _check_pos_ref(cls, name: str, attr: str, item, max_slot: int) -> None:
+        """单个 node 绑定值：`$N` 越界 → GrammarError（非字符串 / 非 `$N` 跳过）。"""
+        if not isinstance(item, str):
+            return
+        m = cls._RE_POS_REF.match(item)
+        if m is None:
+            return
+        idx = int(m.group(1))
+        if not (1 <= idx <= max_slot):
+            raise GrammarError(
+                f"[grammar] 规则 {name} 的 node 绑定 {attr} = {item!r} 越界："
+                f"production 共 {max_slot} 个 slot"
+                f"（块规则已剥离起止符），不存在 ${idx}。"
+            )
 
     def __init__(self, name: str, **kwargs):
         self.name = name
