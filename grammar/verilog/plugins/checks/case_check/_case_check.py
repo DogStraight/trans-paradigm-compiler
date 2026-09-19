@@ -29,13 +29,8 @@ def run_case_check(analyzer, context) -> None:
     if root is None:
         return
     for node in iter_nodes(root):
-        if node.node_name != _CASE_RULE:
+        if not _missing_default(node):
             continue
-        items = getattr(node, "items", None)
-        if _has_default(node):
-            continue
-        if _case_covered(items):
-            continue  # 无 default 但常量全覆盖（对齐 Verilator CASEINCOMPLETE）
         context.report(
             "case 语句无 default 分支（组合逻辑未覆盖全分支，"
             "有锁存/仿真综合不一致风险）",
@@ -43,6 +38,19 @@ def run_case_check(analyzer, context) -> None:
             level="warning",
             node=node,
         )
+
+
+def _missing_default(node: Node) -> bool:
+    """该节点是否"无 default 且非常量全覆盖"的 case（→ 需报 CC001）。
+
+    三类节点不算：非 CaseStmt；含 DefaultItem；无 default 但常量全覆盖
+    （对齐 Verilator CASEINCOMPLETE）。
+    """
+    if node.node_name != _CASE_RULE:
+        return False
+    if _has_default(node):
+        return False
+    return not _case_covered(getattr(node, "items", None))
 
 
 def _case_covered(items) -> bool:
