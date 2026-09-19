@@ -78,6 +78,53 @@ def run_tp_check(analyzer, context) -> None:
 # ── A 族：type 定义良构 ────────────────────────────────
 
 
+def _role_scope_map(tsc) -> dict[str, Any]:
+    """role 子作用域表（role 名 → Scope）——查逆引用目标存在性用。"""
+    return {
+        child.name: child
+        for child in getattr(tsc, "children", []) or []
+        if getattr(child, "kind", "") == "role"
+    }
+
+
+def _report_port_dupes(context, tname: str, rname: str, rsym) -> None:
+    """role 内端口重名（TP004）。"""
+    names = [p.get("name", "") for p in _role_flat_ports(rsym) if p.get("name")]
+    for d in _dupes(names):
+        context.report(
+            f"type '{tname}' role '{rname}' 端口名重复: '{d}'"
+            "（同一 role 内端口名须唯一）",
+            code="TP004", level="error",
+            node=getattr(rsym, "decl_node", None),
+        )
+
+
+def _check_invert_refs(
+    context, tname: str, rname: str, rsym, role_syms: dict, role_scopes: dict
+) -> None:
+    """invert 引用目标存在（TP002）+ 非自反（TP006）逐条报。
+
+    双向 invert 的退化环**不在此报**（A 族只判存在/自反；深环在展开期由
+    push_cycle 兜底）——末分支保留为显式"不报"说明。
+    """
+    node = getattr(rsym, "decl_node", None)
+    for inv_target in _invert_targets(rsym):
+        if inv_target == rname:
+            context.report(
+                f"type '{tname}' role '{rname}' invert 自反引用自身 "
+                f"'{inv_target}'（反转须指向另一 role）",
+                code="TP006", level="error", node=node,
+            )
+        elif inv_target not in role_syms:
+            context.report(
+                f"type '{tname}' role '{rname}' invert 引用不存在的 role "
+                f"'{inv_target}'",
+                code="TP002", level="error", node=node,
+            )
+        elif inv_target in role_scopes and _invert_targets(role_syms[inv_target]):
+            pass
+
+
 def _check_type_wellformed(context, tname: str, tsc) -> None:
     """type 定义内部一致性：role 内端口名不重复、invert 无环/目标存在。
 
@@ -87,43 +134,11 @@ def _check_type_wellformed(context, tname: str, tsc) -> None:
     role_syms = {
         s.name: s for s in tsc.symbols.values() if getattr(s, "kind", "") == "role"
     }
-    # role 作用域树（role 子 scope 内含端口符号）——查逆引用目标存在性
-    role_scopes: dict[str, Any] = {}
-    for child in getattr(tsc, "children", []) or []:
-        if getattr(child, "kind", "") == "role":
-            role_scopes[child.name] = child
+    role_scopes = _role_scope_map(tsc)
 
     for rname, rsym in role_syms.items():
-        ports = _role_flat_ports(rsym)
-        names = [p.get("name", "") for p in ports if p.get("name")]
-        dup = _dupes(names)
-        for d in dup:
-            context.report(
-                f"type '{tname}' role '{rname}' 端口名重复: '{d}'"
-                "（同一 role 内端口名须唯一）",
-                code="TP004", level="error",
-                node=getattr(rsym, "decl_node", None),
-            )
-        # invert 引用目标存在 + 非自反（对 raw ports 里的 TypeInvertPort）
-        for inv_target in _invert_targets(rsym):
-            if inv_target == rname:
-                context.report(
-                    f"type '{tname}' role '{rname}' invert 自反引用自身 "
-                    f"'{inv_target}'（反转须指向另一 role）",
-                    code="TP006", level="error",
-                    node=getattr(rsym, "decl_node", None),
-                )
-            elif inv_target not in role_syms:
-                context.report(
-                    f"type '{tname}' role '{rname}' invert 引用不存在的 role "
-                    f"'{inv_target}'",
-                    code="TP002", level="error",
-                    node=getattr(rsym, "decl_node", None),
-                )
-            elif inv_target in role_scopes and _invert_targets(role_syms[inv_target]):
-                # 双向 invert = 无环检查的退化环（A 只判存在/自反；深环在
-                # 展开期由 push_cycle 兜底。此处报双向互反为可疑良构问题）
-                pass
+        _report_port_dupes(context, tname, rname, rsym)
+        _check_invert_refs(context, tname, rname, rsym, role_syms, role_scopes)
 
 
 # ── A/B/C 族：AST 走查（带模块上下文）─────────────────
@@ -298,31 +313,50 @@ def _check_multi_impl_binding(context, ast, module_insts) -> None:
             )
 
 
-def _collect_impl_bindings(node, bindings: dict, module_insts: dict,
-                           current_mod) -> None:
-    """DFS 收集 ImplBindingWithInterface 的 (模块名, interface_ref) → impl 节点。
+def _register_impl_binding(
+    node, bindings: dict, module_insts: dict, current_mod
+) -> None:
+    """登记一条 impl 绑定：(模块名, interface_ref) → impl 节点。
 
     只登记 interface_ref 命中本模块端口实例的绑定（悬空 ref 已在 B 族 TP010
     报；未命中实例的 impl 不参与多驱动统计——它绑不到线）。
     """
+    iface = node_text(getattr(node, "interface_ref", None))
+    mod = current_mod or ""
+    insts = module_insts.get(mod, {}) or {}
+    if iface and iface in insts:
+        bindings.setdefault(mod, {}).setdefault(iface, []).append(node)
+
+
+def _collect_impl_bindings(node, bindings: dict, module_insts: dict,
+                           current_mod) -> None:
+    """DFS 收集 ImplBindingWithInterface 的 (模块名, interface_ref) → impl 节点。
+
+    ModuleDecl 进入时更新模块上下文（后续子节点用新模块名）；登记细则见
+    `_register_impl_binding`。
+    """
     if isinstance(node, Node):
-        nn = node.node_name
-        if nn == "ModuleDecl":
+        if node.node_name == "ModuleDecl":
             mname = node_text(getattr(node, "module_name", None)) or current_mod
             for child in node.iter_children():
                 _collect_impl_bindings(child, bindings, module_insts, mname)
             return
-        if nn == "ImplBindingWithInterface":
-            iface = node_text(getattr(node, "interface_ref", None))
-            mod = current_mod or ""
-            insts = module_insts.get(mod, {}) or {}
-            if iface and iface in insts:
-                bindings.setdefault(mod, {}).setdefault(iface, []).append(node)
+        if node.node_name == "ImplBindingWithInterface":
+            _register_impl_binding(node, bindings, module_insts, current_mod)
         for child in node.iter_children():
             _collect_impl_bindings(child, bindings, module_insts, current_mod)
     elif isinstance(node, list):
         for item in node:
             _collect_impl_bindings(item, bindings, module_insts, current_mod)
+
+
+def _register_impl_decl(node, out: dict, cur_type: str) -> None:
+    """登记 TypeImplDecl[role] 的端口名集（{type: {role: set(names)}}）。"""
+    rname = node_text(getattr(node, "role_name", None))
+    if not rname:
+        return
+    names = _impl_decl_port_names(getattr(node, "ports", None))
+    out.setdefault(cur_type, {}).setdefault(rname, set()).update(names)
 
 
 def _collect_type_impl_ports(node, out=None, cur_type: str = "") -> dict:
@@ -337,17 +371,13 @@ def _collect_type_impl_ports(node, out=None, cur_type: str = "") -> dict:
     if out is None:
         out = {}
     if isinstance(node, Node):
-        nn = node.node_name
-        if nn == "TypeDecl":
+        if node.node_name == "TypeDecl":
             tname = node_text(getattr(node, "type_name", None))
             for child in node.iter_children():
                 _collect_type_impl_ports(child, out, tname)
             return out
-        if nn == "TypeImplDecl" and cur_type:
-            rname = node_text(getattr(node, "role_name", None))
-            names = _impl_decl_port_names(getattr(node, "ports", None))
-            if rname:
-                out.setdefault(cur_type, {}).setdefault(rname, set()).update(names)
+        if node.node_name == "TypeImplDecl" and cur_type:
+            _register_impl_decl(node, out, cur_type)
         for child in node.iter_children():
             _collect_type_impl_ports(child, out, cur_type)
     elif isinstance(node, list):
@@ -453,6 +483,50 @@ def _role_sym(tsc, rname: str):
     return None
 
 
+def _pg_field(pg, key: str, default):
+    """端口组字段读取：dict 用 get、节点用 getattr（两形态统一入口）。"""
+    if isinstance(pg, dict):
+        return pg.get(key, default)
+    return getattr(pg, key, default)
+
+
+def _items_list(container) -> list:
+    """声明容器 → items 列表（dict 形 `{items: [...]}` / 节点形 `.items`）。"""
+    if isinstance(container, dict):
+        return container.get("items", []) or []
+    return getattr(container, "items", None) or []
+
+
+def _port_item_name(item) -> str:
+    """端口项 → 名字（dict 取 name；节点走 node_text）。"""
+    if isinstance(item, dict):
+        return item.get("name", "") or ""
+    return node_text(item)
+
+
+def _flat_port_group(pg) -> list[dict]:
+    """单个端口组 → 若干 `{direction, name[, packed_range]}` 条目。
+
+    `packed_range` 只认 dict 形态端口组（节点形态无该字段——与
+    `_transform._resolved_ports` 的读取口径一致，不额外兜底）。
+    """
+    items_node = _pg_field(pg, "items", {})
+    if not items_node:
+        return []
+    direction = _pg_field(pg, "direction", "")
+    packed = pg.get("packed_range") if isinstance(pg, dict) else None
+    out: list[dict] = []
+    for item in _items_list(items_node):
+        name = _port_item_name(item)
+        if not name:
+            continue
+        entry: dict = {"direction": direction, "name": name}
+        if packed:
+            entry["packed_range"] = packed
+        out.append(entry)
+    return out
+
+
 def _role_flat_ports(rsym) -> list[dict]:
     """role 符号 → 扁平端口列表 [{direction, name, packed_range?}]。
 
@@ -464,27 +538,9 @@ def _role_flat_ports(rsym) -> list[dict]:
     rp = getattr(rsym, "attrs", {}).get("resolved_ports")
     if rp:
         return rp
-    raw = getattr(rsym, "attrs", {}).get("ports", []) or []
-    flat = []
-    for pg in raw:
-        d = pg.get("direction", "") if isinstance(pg, dict) else getattr(pg, "direction", "")
-        pr = pg.get("packed_range") if isinstance(pg, dict) else None
-        items_node = pg.get("items", {}) if isinstance(pg, dict) else getattr(pg, "items", None)
-        if not items_node:
-            continue
-        item_list = (
-            items_node.get("items", [])
-            if isinstance(items_node, dict)
-            else getattr(items_node, "items", [])
-        )
-        for item in item_list:
-            name = item.get("name", "") if isinstance(item, dict) else node_text(item)
-            if not name:
-                continue
-            entry: dict = {"direction": d, "name": name}
-            if pr:
-                entry["packed_range"] = pr
-            flat.append(entry)
+    flat: list[dict] = []
+    for pg in getattr(rsym, "attrs", {}).get("ports", []) or []:
+        flat.extend(_flat_port_group(pg))
     return flat
 
 
