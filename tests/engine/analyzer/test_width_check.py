@@ -31,7 +31,7 @@ def _width_table(checker, src_text: str) -> dict:
         path = f.name
     try:
         checker.check(path)
-        fr = checker._memo[os.path.abspath(path)]
+        fr = checker._ctx.memo[os.path.abspath(path)]
         table = getattr(fr.analyzer, "_width_table", None)
         assert table is not None, "width_check 插件未产出宽度表（postpass 未执行？）"
         return table
@@ -207,7 +207,7 @@ def _rhs_widths(checker, src_text: str) -> dict:
         path = f.name
     try:
         checker.check(path)
-        fr = checker._memo[os.path.abspath(path)]
+        fr = checker._ctx.memo[os.path.abspath(path)]
         from grammar.verilog.plugins.checks.width_check import _width_check as wc
 
         table = fr.analyzer._width_table

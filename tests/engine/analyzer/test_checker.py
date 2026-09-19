@@ -282,7 +282,7 @@ class TestElaborationConnections:
             encoding="utf-8",
         )
         checker.check(str(top))
-        # 连接展开挂在 FileResult.connections（checker._memo 内部状态）
+        # 连接展开挂在 FileResult.connections（checker._ctx.memo 内部状态）
         conns = _collect_connections(checker)
         assert len(conns) == 1
         c = conns[0]
@@ -341,9 +341,9 @@ class TestElaborationConnections:
 
 
 def _collect_connections(checker):
-    """从 checker._memo（FileResult.connections）收集连接展开（测试内联访问）。"""
+    """从 checker._ctx.memo（FileResult.connections）收集连接展开（测试内联访问）。"""
     out = []
-    for fr in checker._memo.values():
+    for fr in checker._ctx.memo.values():
         for c in fr.connections:
             out.append(
                 {
@@ -472,7 +472,7 @@ class TestElaborationSignalGraph:
         )
         checker.check(str(top))
         # 注入发生在 analyze 的 _external_extra（analyze() 重建 context 合并）
-        for fr in checker._memo.values():
+        for fr in checker._ctx.memo.values():
             if fr.analyzer is not None:
                 assert "signal_graph" in fr.analyzer._external_extra
                 assert "connections" in fr.analyzer._external_extra

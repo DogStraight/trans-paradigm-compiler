@@ -305,66 +305,110 @@ def _graph_entry(graph: dict, key: tuple) -> dict:
     return graph[key]
 
 
-class _StructureBase:
-    """结构提取底座（elaboration）。字段初始化见 ProjectChecker.__init__。"""
+@dataclass
+class StructureCtx:
+    """结构提取会话上下文：环境开关 + 会话状态 + 结构协议读取。
 
-    # 门面（ProjectChecker）持有的共享状态与共享组件入口——底座各方法直接
-    # 访问，初始化在门面 __init__ / _ensure_shared（两者共用同一对象）。
-    _memo: dict[str, FileResult]
-    _module_index: dict[str, ModuleInfo]
-    _rules_dir: str
-    _include_dirs: list[str]
-    _expand_macros: bool
-    _ensure_shared: Callable[[], dict]
+    组合根（`ProjectChecker.__init__`）构造一次并注入各协作者——把原先靠
+    "大家是同一个 self" 隐式共享的状态收成显式对象：
 
-    def _refresh_structure(self) -> None:
+    - 环境开关（`rules_dir` / `ext_dirs` / `include_dirs` / `expand_macros` /
+      `ensure_shared`）：构造后不变。
+    - 会话状态（`memo` / `module_index` / `fr_by_module_cache`）：每次 check
+      起始由 `invalidate()` 清空（三者**成对失效**——后两者的键都由 memo 派生）。
+    - 结构协议（`struct` / `fields`）：`refresh()` 在 `load_all` 之后推入
+      （语言知识仅来自 grammar/<lang> TOML；未声明 = 不支持结构提取）。
+
+    协议读取与两个共享读取助手（`render_subtree` / `inst_module_name`）放在
+    这里而非某个功能簇：它们被多个簇共用，且只依赖本对象的环境/协议。
+    """
+
+    rules_dir: str
+    ext_dirs: list[str]
+    include_dirs: list[str]
+    expand_macros: bool
+    ensure_shared: Callable[[], dict]
+    memo: dict[str, FileResult] = field(default_factory=dict)
+    module_index: dict[str, ModuleInfo] = field(default_factory=dict)
+    struct: dict = field(default_factory=dict)
+    fields: dict = field(default_factory=dict)
+    fr_by_module_cache: dict | None = None
+
+    # ── 会话状态失效（每次 check 起始调用）──
+
+    def invalidate(self) -> None:
+        """清本次运行的索引与派生缓存（memo 与 fr_by_module 缓存成对失效）。"""
+        self.memo.clear()
+        self.module_index.clear()
+        self.fr_by_module_cache = None
+
+    def refresh(self) -> None:
         """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。"""
-        self._struct = _structure_cfg or {}
-        self._fields = (self._struct.get("fields") or {}) if self._struct else {}
-
+        self.struct = _structure_cfg or {}
+        self.fields = (self.struct.get("fields") or {}) if self.struct else {}
 
     # ── 结构协议读取（语言知识仅来自 grammar/<lang> TOML）──
 
-    def _rule(self, key: str) -> str:
+    def rule(self, key: str) -> str:
         """规则名/关键字等标量协议项（如 module_decl_rule）。"""
-        return str(self._struct.get(key) or "")
+        return str(self.struct.get(key) or "")
 
-
-    def _field(self, key: str) -> str:
+    def field(self, key: str) -> str:
         """节点字段名协议项（如 module_name / ports）。"""
-        return str(self._fields.get(key) or "")
+        return str(self.fields.get(key) or "")
 
-
-    def _exts(self) -> list[str]:
-        exts = self._struct.get("file_exts") or []
+    def exts(self) -> list[str]:
+        exts = self.struct.get("file_exts") or []
         return [str(e) for e in exts] if isinstance(exts, list) else []
 
-
-    def _dirs(self, key: str) -> set[str]:
+    def dirs(self, key: str) -> set[str]:
         """端口方向值集合（层 3 信号图判定；语言包声明，引擎零语言知识）。"""
-        vals = (self._struct.get(key) or []) if self._struct else []
+        vals = (self.struct.get(key) or []) if self.struct else []
         return {str(v) for v in vals} if isinstance(vals, list) else set()
 
-
-    def _has_structure(self) -> bool:
+    def has_structure(self) -> bool:
         """语言包是否声明了跨文件结构协议（模块/实例化形态）。"""
-        return bool(self._struct and self._rule("module_decl_rule"))
+        return bool(self.struct and self.rule("module_decl_rule"))
+
+    def render_subtree(self, node: Node) -> str:
+        """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""
+        try:
+            return self.ensure_shared()["renderer"].render(node).strip()
+        except Exception:
+            # 渲染失败 → 空串：调用方（条件/宽度提取）按"拿不到文本 = 不可判"
+            # 保守处理，不影响正确性；此处不报错是设计（非静默错乱）。
+            return ""
+
+    def inst_module_name(self, site: Node) -> str:
+        mn = getattr(site, self.field("module_name"), None)
+        if isinstance(mn, Node) and mn.content:
+            return mn.content
+        return ""
+
+class _StructureBase:
+    """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
+
+    会话状态与协议读取全在 `StructureCtx`（`self._ctx`）——本类不持有字段，
+    各阶段方法从 `_ctx` 取环境/状态，跨阶段的调用由组合根（门面）装配。
+    """
+
+    _ctx: StructureCtx
 
 
     # ── 递归发现 ──
 
     def _discover(self, path: str, seen: set[str]) -> None:
-        if path in self._memo or path in seen:
+        if path in self._ctx.memo or path in seen:
             return
         seen.add(path)
         fr = self._parse_file(path)
-        self._memo[path] = fr
+        self._ctx.memo[path] = fr
         for name, info in fr.modules.items():
-            if name not in self._module_index:
-                self._module_index[name] = info
+            if name not in self._ctx.module_index:
+                self._ctx.module_index[name] = info
         for site in fr.inst_sites:
-            mod_name = self._inst_module_name(site)
-            if not mod_name or mod_name in self._module_index:
+            mod_name = self._ctx.inst_module_name(site)
+            if not mod_name or mod_name in self._ctx.module_index:
                 continue
             def_path = self._find_module_file(mod_name, path)
             if def_path:
@@ -375,13 +419,13 @@ class _StructureBase:
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
         fr = FileResult(path=path, source=source)
-        shared = self._ensure_shared()
+        shared = self._ctx.ensure_shared()
 
         # 宏展开（真实工程含 `ifdef/`define；对齐 run_pipeline 语义——
         # scan_directives 提取宏表 + expand_tokens 纯文本展开，lex/lint/
         # parse 全在展开后文本上）。无宏文件空表零影响。同时接收行映射
         # （展开行→原始源行）与宏区间表（展开行区间，诊断归因用）。
-        if self._expand_macros:
+        if self._ctx.expand_macros:
             source, fr.line_map, fr.macro_regions = self._expand_source(source, path)
 
         # 阶段 1：语法检查（token 级）。有**阻断类**诊断 → 语义阶段跳过
@@ -396,10 +440,10 @@ class _StructureBase:
         from parser import Parser
         from parser.parser_core import ParseError
 
-        pre_scan_config = load_pre_scan_config(self._rules_dir)
+        pre_scan_config = load_pre_scan_config(self._ctx.rules_dir)
         pre_symbols = pre_scan(source, pre_scan_config)
         parser = Parser(
-            rules_dir=self._rules_dir,
+            rules_dir=self._ctx.rules_dir,
             pre_symbols=pre_symbols,
             rules=shared["rules"],
             rule_selector=shared["rule_selector"],
@@ -417,7 +461,7 @@ class _StructureBase:
 
         fr.ast = ast
         fr.modules = self._extract_modules(ast, path)
-        fr.inst_sites = collect_nodes(ast, self._rule("module_inst_rule"))
+        fr.inst_sites = collect_nodes(ast, self._ctx.rule("module_inst_rule"))
         fr.connections = self._elaborate_connections(path, fr.inst_sites)
         # 层 1 补充：模块内实例挂回 ModuleInfo（实例树展开的入口）
         for conn in fr.connections:
@@ -447,9 +491,9 @@ class _StructureBase:
 
             macro_table, func_macros, _, _, _, clean, clean_to_raw = scan_directives(
                 source,
-                self._rules_dir,
+                self._ctx.rules_dir,
                 source_path=path,
-                search_dirs=self._include_dirs,
+                search_dirs=self._ctx.include_dirs,
                 predefined=None,
                 undefine=None,
             )
@@ -459,7 +503,7 @@ class _StructureBase:
                 clean, _, regions, exp_to_clean = expand_tokens(
                     clean,
                     macro_table,
-                    rules_dir=self._rules_dir,
+                    rules_dir=self._ctx.rules_dir,
                     func_macros=func_macros,
                 )
                 exp_to_raw = [
@@ -514,16 +558,16 @@ class _StructureBase:
         上层规则 handler，此处只展开结构）。语言无关：端口连接节点形态
         由结构协议声明（connects_field/value_field/ordered_rule）。
         """
-        if not self._has_structure():
+        if not self._ctx.has_structure():
             return []
         out: list[PortConnection] = []
-        ports_field = self._field("connects") or "ports"
-        value_field = self._field("value")
-        conn_name_field = self._field("port_name")
-        items_field = self._field("items")
+        ports_field = self._ctx.field("connects") or "ports"
+        value_field = self._ctx.field("value")
+        conn_name_field = self._ctx.field("port_name")
+        items_field = self._ctx.field("items")
         for site in inst_sites:
-            mod_name = self._inst_module_name(site)
-            inst_name_node = getattr(site, self._field("inst_name"), None)
+            mod_name = self._ctx.inst_module_name(site)
+            inst_name_node = getattr(site, self._ctx.field("inst_name"), None)
             inst_name = (
                 inst_name_node.content
                 if isinstance(inst_name_node, Node) and inst_name_node.content
@@ -545,12 +589,12 @@ class _StructureBase:
                 pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
                 if pn_text:
                     val = getattr(item, value_field, None) if value_field else None
-                    conn.connects[pn_text] = self._render_subtree(val) if isinstance(
+                    conn.connects[pn_text] = self._ctx.render_subtree(val) if isinstance(
                         val, Node
                     ) else ""
                     continue
                 # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
-                conn.ordered.append(self._render_subtree(item))
+                conn.ordered.append(self._ctx.render_subtree(item))
             out.append(conn)
         return out
 
@@ -559,10 +603,10 @@ class _StructureBase:
 
     def _extract_modules(self, ast: Node, path: str) -> dict[str, ModuleInfo]:
         modules: dict[str, ModuleInfo] = {}
-        if not self._has_structure():
+        if not self._ctx.has_structure():
             return modules  # 语言包未声明结构协议 → 无模块提取
-        decl_rule = self._rule("module_decl_rule")
-        name_field = self._field("module_name")
+        decl_rule = self._ctx.rule("module_decl_rule")
+        name_field = self._ctx.field("module_name")
         for node in iter_nodes(ast):
             if node.node_name != decl_rule:
                 continue
@@ -623,14 +667,14 @@ class _StructureBase:
 
     def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
         """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格 + body 声明）。"""
-        ports_field = self._field("ports")
-        items_field = self._field("items")
-        bare_rule = self._field("bare_rule")
-        decl_field = self._field("decl")
-        direction_field = self._field("direction")
-        width_field = self._field("width")
-        port_type_field = self._field("port_type")
-        name_field = self._field("name")
+        ports_field = self._ctx.field("ports")
+        items_field = self._ctx.field("items")
+        bare_rule = self._ctx.field("bare_rule")
+        decl_field = self._ctx.field("decl")
+        direction_field = self._ctx.field("direction")
+        width_field = self._ctx.field("width")
+        port_type_field = self._ctx.field("port_type")
+        name_field = self._ctx.field("name")
         ports_node = unwrap_optional(getattr(module_node, ports_field, None))
         items = getattr(ports_node, items_field, None) if ports_node else None
         if not items:
@@ -654,9 +698,9 @@ class _StructureBase:
             if direction_field:
                 direction = getattr(item, direction_field, "") or ""
             pr = getattr(item, width_field, None) if width_field else None
-            width = self._render_subtree(pr) if isinstance(pr, Node) else ""
+            width = self._ctx.render_subtree(pr) if isinstance(pr, Node) else ""
             pt = getattr(item, port_type_field, None) if port_type_field else None
-            net_type = self._render_subtree(pt) if isinstance(pt, Node) else ""
+            net_type = self._ctx.render_subtree(pt) if isinstance(pt, Node) else ""
             for d, dn in self._decl_name_nodes(item, items_field, name_field):
                 self._register_port(info, dn, d, direction, width, net_type)
         # body 端口声明（旧式 `input [7:0] x;` 在模块体）→ 按名补方向/宽度
@@ -674,13 +718,13 @@ class _StructureBase:
         的 AddSub4 函数参数 A/B/Sub/Carry_In 被误登记为模块端口，8 条
         W104 假阳性；Verilator 0 报 PINMISSING）。
         """
-        rules = self._struct.get("body_port_rules") or []
+        rules = self._ctx.struct.get("body_port_rules") or []
         if not rules:
             return
-        direction_field = self._field("body_direction") or "direction"
-        width_field = self._field("width")
-        items_field = self._field("items")
-        name_field = self._field("name")
+        direction_field = self._ctx.field("body_direction") or "direction"
+        width_field = self._ctx.field("width")
+        items_field = self._ctx.field("items")
+        name_field = self._ctx.field("name")
         _FUNC_OR_TASK = ("FuncDecl", "FuncDeclOld", "TaskDecl", "FunctionDecl",
                          "TaskDeclStmt")
         stack = list(module_node.iter_children())
@@ -693,7 +737,7 @@ class _StructureBase:
             if node.node_name in rules:
                 direction = getattr(node, direction_field, "") or ""
                 pr = getattr(node, width_field, None)
-                width = self._render_subtree(pr) if isinstance(pr, Node) else ""
+                width = self._ctx.render_subtree(pr) if isinstance(pr, Node) else ""
                 for d, dn in self._decl_name_nodes(node, items_field, name_field):
                     self._backfill_port(info, dn, d, direction, width)
             # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
@@ -702,9 +746,9 @@ class _StructureBase:
 
 
     def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
-        params_field = self._field("params")
-        param_name_field = self._field("param_name")
-        value_field = self._field("value")
+        params_field = self._ctx.field("params")
+        param_name_field = self._ctx.field("param_name")
+        value_field = self._ctx.field("value")
         params_node = unwrap_optional(getattr(module_node, params_field, None))
         params = getattr(params_node, params_field, None) if params_node else None
         if params:
@@ -720,7 +764,7 @@ class _StructureBase:
                 val = getattr(p, value_field, None) if value_field else None
                 info.params[pn.content] = ModuleParam(
                     name=pn.content,
-                    value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
+                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
                 )
         # 模块体内参数声明（`parameter P = v;` 语句形态，非头部 #(..) 列表）：
         # ice40 单元库 SB_RAM40_4K 等大量使用 body 参数——只收头部参数会让
@@ -746,7 +790,7 @@ class _StructureBase:
                 val = getattr(d, "init", None)
                 info.params[name_node.content] = ModuleParam(
                     name=name_node.content,
-                    value_expr=self._render_subtree(val) if isinstance(val, Node) else "",
+                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
                 )
 
 
@@ -775,21 +819,21 @@ class _StructureBase:
         """
         graph: dict[tuple, dict] = {}
         ctx = _SignalGraphCtx(
-            assign_rule=self._rule("assign_rule"),
-            target_field=self._field("assign_target"),
-            extras_field=self._field("assign_extras"),
-            extra_target_field=self._field("assign_extra_target"),
-            out_dirs=self._dirs("output_dirs"),
-            inout_dirs=self._dirs("inout_dirs"),
+            assign_rule=self._ctx.rule("assign_rule"),
+            target_field=self._ctx.field("assign_target"),
+            extras_field=self._ctx.field("assign_extras"),
+            extra_target_field=self._ctx.field("assign_extra_target"),
+            out_dirs=self._ctx.dirs("output_dirs"),
+            inout_dirs=self._ctx.dirs("inout_dirs"),
             # P2.7 层 3：实例树层次展开底座（per-module 实例表 + 驱动穿透）
             module_insts=self._build_module_insts(),
-            proc_rules=self._struct.get("proc_assign_rules") or [],
-            proc_blocks=self._struct.get("proc_block_rules") or [],
+            proc_rules=self._ctx.struct.get("proc_assign_rules") or [],
+            proc_blocks=self._ctx.struct.get("proc_block_rules") or [],
             # (模块, 端口) → 裸驱动源列表（无路径前缀：assign#N / proc /
             # inst:{实例名}:{子端口}）——路径由调用方拼，跨实例化点可复用缓存
             src_cache={},
         )
-        for fr in self._memo.values():
+        for fr in self._ctx.memo.values():
             self._sg_assign_drivers(fr, graph, ctx)
             self._sg_proc_drivers(fr, graph, ctx)
             self._sg_connections(fr, graph, ctx)
@@ -814,7 +858,7 @@ class _StructureBase:
         if module in seen:
             return [], True
         seen = seen | {module}
-        info = self._module_index.get(module)
+        info = self._ctx.module_index.get(module)
         if info is None or info.node is None:
             return None, False
         fr = self._fr_by_module.get(module)
@@ -850,7 +894,7 @@ class _StructureBase:
             for tgt in self._iter_assign_targets(
                 node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
             ):
-                if self._render_subtree(tgt) == port:
+                if self._ctx.render_subtree(tgt) == port:
                     out.append(f"assign#{idx}")
         return out
 
@@ -869,7 +913,7 @@ class _StructureBase:
                 if sig != port:
                     continue
                 dirn = ""
-                im = self._module_index.get(inst_mod)
+                im = self._ctx.module_index.get(inst_mod)
                 if im is not None and pname in im.ports:
                     dirn = im.ports[pname].direction
                 if dirn in ctx.out_dirs or dirn in ctx.inout_dirs:
@@ -888,7 +932,7 @@ class _StructureBase:
             if not self._in_active_generate(fr, node):
                 continue
             tgt = getattr(node, ctx.target_field, None)
-            sig = self._render_subtree(tgt) if isinstance(tgt, Node) else ""
+            sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
             if sig == port:
                 out.append("proc")
         return out
@@ -945,7 +989,7 @@ class _StructureBase:
             for tgt in self._iter_assign_targets(
                 node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
             ):
-                sig = self._render_subtree(tgt)
+                sig = self._ctx.render_subtree(tgt)
                 if not sig or not _is_signal_expr(sig):
                     continue
                 entry = _graph_entry(graph, (mod_name, sig))
@@ -1007,7 +1051,7 @@ class _StructureBase:
             if blk is None or not self._in_active_generate(fr, node):
                 continue
             tgt = getattr(node, ctx.target_field, None)
-            sig = self._render_subtree(tgt) if isinstance(tgt, Node) else ""
+            sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
             if not sig or not _is_signal_expr(sig):
                 continue
             if id(blk) not in block_sigs:
@@ -1028,7 +1072,7 @@ class _StructureBase:
             if not self._in_active_generate(fr, conn.inst_node):
                 continue  # 实例化点所在 generate 分支未选中
             inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
-            mod = self._module_index.get(conn.module_name)
+            mod = self._ctx.module_index.get(conn.module_name)
             self._sg_named_connection(graph, conn, mod_name, inst_ref, mod, ctx)
             self._sg_positional_connection(graph, conn, mod_name, inst_ref)
 
@@ -1090,7 +1134,7 @@ class _StructureBase:
         保持连接展开顺序（assign#N 对齐用不上，此处仅穿透）。
         """
         out: dict[str, list] = {}
-        for fr in self._memo.values():
+        for fr in self._ctx.memo.values():
             for conn in fr.connections:
                 mod_name = self._module_of(fr, conn.inst_node)
                 if not mod_name:
@@ -1107,10 +1151,10 @@ class _StructureBase:
         cache = getattr(self, "_fr_by_module_cache", None)
         if cache is None:
             cache = {}
-            for fr in self._memo.values():
+            for fr in self._ctx.memo.values():
                 for mname in (fr.modules or {}):
                     cache.setdefault(mname, fr)
-            self._fr_by_module_cache = cache
+            self._ctx.fr_by_module_cache = cache
         return cache
 
 
@@ -1152,7 +1196,7 @@ class _StructureBase:
         root = fr.ast
         if root is None:
             return active
-        decl_rule = self._rule("module_decl_rule")
+        decl_rule = self._ctx.rule("module_decl_rule")
         todo = [(child, [], {}) for child in root.iter_children()]
         while todo:
             node, stack, params = todo.pop()
@@ -1183,7 +1227,7 @@ class _StructureBase:
                     todo.append((sub, stack, params))
             return
         if node.node_name == decl_rule:
-            info = self._module_index.get(
+            info = self._ctx.module_index.get(
                 getattr(getattr(node, "module_name", None), "content", "") or ""
             )
             params2: dict[str, str] = {}
@@ -1231,7 +1275,7 @@ class _StructureBase:
         转布尔。不可判（无参数值/非纯常量/引用未定义）→ None 保守。
         """
         cond = getattr(ifb, "condition", None)
-        text = self._render_subtree(cond) if isinstance(cond, Node) else ""
+        text = self._ctx.render_subtree(cond) if isinstance(cond, Node) else ""
         text = (text or "").strip()
         if not text:
             return None
@@ -1284,8 +1328,8 @@ class _StructureBase:
         与 _iter_nodes_with_module 同语义。
         """
         mapping: dict[int, str] = {}
-        decl_rule = self._rule("module_decl_rule")
-        name_field = self._field("module_name")
+        decl_rule = self._ctx.rule("module_decl_rule")
+        name_field = self._ctx.field("module_name")
         root = fr.ast
         if root is None:
             return mapping
@@ -1316,14 +1360,6 @@ class _StructureBase:
                 yield et
 
 
-    def _render_subtree(self, node: Node) -> str:
-        """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""
-        try:
-            return self._ensure_shared()["renderer"].render(node).strip()
-        except Exception:
-            # 渲染失败 → 空串：调用方（条件/宽度提取）按"拿不到文本 = 不可判"
-            # 保守处理，不影响正确性；此处不报错是设计（非静默错乱）。
-            return ""
 
 
     # ── 模块定义文件查找 ──
@@ -1333,9 +1369,9 @@ class _StructureBase:
 
         扩展名与模块关键字来自语言包结构协议（file_exts / module_keyword）。
         """
-        exts = self._exts()
-        keyword = self._rule("module_keyword")
-        dirs = [os.path.dirname(from_file)] + self._include_dirs
+        exts = self._ctx.exts()
+        keyword = self._ctx.rule("module_keyword")
+        dirs = [os.path.dirname(from_file)] + self._ctx.include_dirs
         for d in dirs:
             if not os.path.isdir(d):
                 continue
@@ -1368,8 +1404,3 @@ class _StructureBase:
         return None
 
 
-    def _inst_module_name(self, site: Node) -> str:
-        mn = getattr(site, self._field("module_name"), None)
-        if isinstance(mn, Node) and mn.content:
-            return mn.content
-        return ""

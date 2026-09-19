@@ -18,7 +18,7 @@ from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIR
 
 from analyzer.structure import (
     FileResult,
-    ModuleInfo,
+    StructureCtx,
     _StructureBase,
 )
 
@@ -44,32 +44,32 @@ class ProjectChecker(_StructureBase):
         expand_macros: bool = True,
         enabled_rules: list[str] | None = None,
     ):
-        self._rules_dir = rules_dir
-        self._ext_dirs = ext_dirs or []
-        self._include_dirs = [os.path.abspath(d) for d in (include_dirs or [])]
-        # 宏展开（真实工程含 `ifdef/`define；无宏文件 scan_directives 空表
-        # 零影响）。默认开——check 语义对齐 run_pipeline（展开后分析）。
-        self._expand_macros = expand_macros
+        # 会话上下文（环境开关 + 索引 + 结构协议）：状态与协议读取的单一
+        # 归属点，各阶段协作者共享同一实例（原先靠"同一个 self"隐式共享）。
+        self._ctx = StructureCtx(
+            rules_dir=rules_dir,
+            ext_dirs=list(ext_dirs or []),
+            include_dirs=[os.path.abspath(d) for d in (include_dirs or [])],
+            # 宏展开（真实工程含 `ifdef/`define；无宏文件 scan_directives 空表
+            # 零影响）。默认开——check 语义对齐 run_pipeline（展开后分析）。
+            expand_macros=expand_macros,
+            ensure_shared=self._ensure_shared,
+        )
         # 显式规则启用集（None = 语言包 default + 用户配置；评测/测试用
         # 注入——如 check_accuracy 的 focus 规则，含默认关闭的 NC 族）。
         self._enabled_rules = enabled_rules
         # 独立规则实例：测试跨语言（c4 等）时传入，避免污染全局单例
         # （模式同 tests/languages/c4/test_c4_linter.py 的 fixture 注释）。
         self._register = register
-        self._memo: dict[str, FileResult] = {}
-        self._module_index: dict[str, ModuleInfo] = {}
         # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
         self._signal_graph: dict = {}
-        # 语言包结构协议（全部语言知识来自配置；缺失 = 无跨文件检查）。
-        # 注意：配置在 _ensure_shared（load_all）之后才推入 _structure_cfg，
-        # 因此 __init__ 只置空，check() 里 _ensure_shared 后刷新。
-        self._struct: dict = {}
-        self._fields: dict = {}
+        # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
+        # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 
     # ── 共享组件 ──
 
     def _ensure_shared(self) -> dict:
-        key = self._rules_dir
+        key = self._ctx.rules_dir
         if key in ProjectChecker._SHARED:
             return ProjectChecker._SHARED[key]
         from core.config_registry import ConfigRegistry
@@ -81,15 +81,15 @@ class ProjectChecker(_StructureBase):
 
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         rules_dir = (
-            self._rules_dir
-            if os.path.isabs(self._rules_dir)
-            else os.path.join(root, self._rules_dir)
+            self._ctx.rules_dir
+            if os.path.isabs(self._ctx.rules_dir)
+            else os.path.join(root, self._ctx.rules_dir)
         )
         plugins_dir = os.path.join(rules_dir, "plugins")
         # 配置加载 + 插件组件发现（postpass/原语注册依赖此步骤；
         # 与 pipeline 一致——pipeline 在模块导入时顶层调用）
         ConfigRegistry.load_all(
-            rules_dir, ext_dirs=self._ext_dirs, plugins_dir=plugins_dir
+            rules_dir, ext_dirs=self._ctx.ext_dirs, plugins_dir=plugins_dir
         )
         from core.plugin_loader import load_all_components
 
@@ -98,7 +98,7 @@ class ProjectChecker(_StructureBase):
         rules = setup_grammar(
             rules_dir,
             self._register or GrammarRulesRegister.get_default(),
-            ext_dirs=self._ext_dirs,
+            ext_dirs=self._ctx.ext_dirs,
         )
         stmt_names = [
             n
@@ -108,10 +108,10 @@ class ProjectChecker(_StructureBase):
         shared = {
             "rules": rules,
             "rule_selector": RuleSelector(rules, stmt_names),
-            "lexer": Lexer(rules_dir=rules_dir, ext_dirs=self._ext_dirs),
+            "lexer": Lexer(rules_dir=rules_dir, ext_dirs=self._ctx.ext_dirs),
             "linter": LinterScanner(
                 rules_dir=rules_dir,
-                ext_dirs=self._ext_dirs,
+                ext_dirs=self._ctx.ext_dirs,
                 # 独立 register 必须透传：LinterScanner 内部 setup_grammar
                 # 默认用全局单例 get_default()，跨语言（c4）检查会把 c4 规则
                 # 灌进单例且无法靠 ConfigRegistry 恢复（test_c4_linter 同款坑）。
@@ -162,7 +162,7 @@ class ProjectChecker(_StructureBase):
         files, any_error = self._collect_files()
         return {
             "files": files,
-            "modules": {n: i.file for n, i in self._module_index.items()},
+            "modules": {n: i.file for n, i in self._ctx.module_index.items()},
             "exit_code": 1 if any_error else 0,
         }
 
@@ -174,11 +174,10 @@ class ProjectChecker(_StructureBase):
         """
         raw = [entry_path] if isinstance(entry_path, str) else list(entry_path)
         entries = [os.path.abspath(p) for p in raw]
-        self._memo.clear()
-        self._module_index.clear()
-        self._fr_by_module_cache = None  # P2.7 层 3：穿透查模块文件缓存随 check 重建
+        # memo / module_index / 派生缓存成对失效（缓存键由 memo 派生）
+        self._ctx.invalidate()
         self._ensure_shared()
-        self._refresh_structure()
+        self._ctx.refresh()
         return entries
 
     def _discover_all(self, entries: list[str]) -> None:
@@ -189,7 +188,7 @@ class ProjectChecker(_StructureBase):
 
     def _analyze_all(self) -> None:
         """对已发现文件跑语义分析（postpass 需要完整 module_index）。"""
-        for fr in self._memo.values():
+        for fr in self._ctx.memo.values():
             self._analyze(fr)
 
     def _collect_files(self) -> tuple[list, bool]:
@@ -200,7 +199,7 @@ class ProjectChecker(_StructureBase):
         """
         files = []
         any_error = False
-        for path, fr in self._memo.items():
+        for path, fr in self._ctx.memo.items():
             if any(d.blocking for d in fr.lint_diags):
                 any_error = True  # 语法错误（stage=syntax，阻断类）→ exit 1
             semantic = []
@@ -226,21 +225,21 @@ class ProjectChecker(_StructureBase):
         from analyzer import AnalysisTraversal
 
         shared = self._ensure_shared()
-        analyzer = AnalysisTraversal(shared["rules"], rules_dir=self._rules_dir)
+        analyzer = AnalysisTraversal(shared["rules"], rules_dir=self._ctx.rules_dir)
         # 显式规则启用集（默认关闭的规则——如 NC 族——测试/评测注入）
         if self._enabled_rules is not None:
             analyzer._checks_enabled = list(self._enabled_rules)
         # 跨文件上下文注入（analyze() 重建 context 后合并进 extra）
-        analyzer._external_extra["module_index"] = self._module_index
+        analyzer._external_extra["module_index"] = self._ctx.module_index
         analyzer._external_extra["inst_sites"] = fr.inst_sites
         # elaboration 层 2（ADR-0008）：本文件实例化点端口连接展开
         analyzer._external_extra["connections"] = fr.connections
         # elaboration 层 3（ADR-0008）：全工程信号驱动/负载图
         analyzer._external_extra["signal_graph"] = self._signal_graph
         # 端口方向值集（插件规则消费：未连接端口/驱动负载判定；语言包声明）
-        analyzer._external_extra["output_dirs"] = sorted(self._dirs("output_dirs"))
-        analyzer._external_extra["input_dirs"] = sorted(self._dirs("input_dirs"))
-        analyzer._external_extra["inout_dirs"] = sorted(self._dirs("inout_dirs"))
+        analyzer._external_extra["output_dirs"] = sorted(self._ctx.dirs("output_dirs"))
+        analyzer._external_extra["input_dirs"] = sorted(self._ctx.dirs("input_dirs"))
+        analyzer._external_extra["inout_dirs"] = sorted(self._ctx.dirs("inout_dirs"))
         analyzer.analyze(fr.ast)
         fr.analyzer = analyzer
 

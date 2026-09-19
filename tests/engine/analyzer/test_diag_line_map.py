@@ -127,6 +127,6 @@ def test_line_map_table_contract(checker, tmp_path):
         encoding="utf-8",
     )
     checker.check(str(src))
-    fr = checker._memo[str(src)]
+    fr = checker._ctx.memo[str(src)]
     assert fr.line_map[5] == 9  # wire z_unused：展开行 5 → 原始行 9
     assert fr.line_map[1] == 2  # 块前段照常 1:1（module 行）
