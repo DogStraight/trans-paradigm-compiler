@@ -189,6 +189,32 @@ def _resolve_nav_target(candidate: str, root: Path) -> str | None:
     return None
 
 
+def _d2_finding(nav_rel: str, line_no: int, line: str, target: str) -> Finding:
+    """D2 诊断（索引引用不存在的文档）。"""
+    return Finding(
+        "D2", nav_rel, line_no, f"索引引用不存在的文档 '{target}'", line.strip()[:120]
+    )
+
+
+def _check_nav_line(
+    line: str, nav_rel: str, line_no: int, root: Path, findings: list[Finding]
+) -> None:
+    """一行内的两类引用形态：完整路径链接 + 反引号裸文件名/子路径。"""
+    for m in _DOC_LINK_RE.finditer(line):
+        target = _resolve_nav_target(m.group(0), root)
+        if target and not (root / target).is_file():
+            findings.append(_d2_finding(nav_rel, line_no, line, target))
+    # 反引号裸文件名 / docs 子路径形态（避免重复计数：跳过已被完整路径正则
+    # 覆盖的片段）
+    for m in _BARE_REF_RE.finditer(line):
+        cand = m.group(1)
+        if "docs/" in line[max(0, m.start() - 8): m.end()]:
+            continue
+        target = _resolve_nav_target(cand, root)
+        if target and not (root / target).is_file():
+            findings.append(_d2_finding(nav_rel, line_no, line, target))
+
+
 def rule_d2_nav_indexes(root: Path) -> list[Finding]:
     """规则 D2（gate）：导航索引引用的 docs 文件必须存在。"""
     findings: list[Finding] = []
@@ -198,36 +224,7 @@ def rule_d2_nav_indexes(root: Path) -> list[Finding]:
             continue
         text = nav_path.read_text(encoding="utf-8", errors="replace")
         for line_no, line in _iter_md_lines(text):
-            # 完整路径链接形态
-            for m in _DOC_LINK_RE.finditer(line):
-                target = _resolve_nav_target(m.group(0), root)
-                if target and not (root / target).is_file():
-                    findings.append(
-                        Finding(
-                            "D2",
-                            nav_rel,
-                            line_no,
-                            f"索引引用不存在的文档 '{target}'",
-                            line.strip()[:120],
-                        )
-                    )
-            # 反引号裸文件名 / docs 子路径形态（避免重复计数：跳过已被
-            # 完整路径正则覆盖的片段）
-            for m in _BARE_REF_RE.finditer(line):
-                cand = m.group(1)
-                if "docs/" in line[max(0, m.start() - 8): m.end()]:
-                    continue  # 同一引用已按完整路径形态处理
-                target = _resolve_nav_target(cand, root)
-                if target and not (root / target).is_file():
-                    findings.append(
-                        Finding(
-                            "D2",
-                            nav_rel,
-                            line_no,
-                            f"索引引用不存在的文档 '{target}'",
-                            line.strip()[:120],
-                        )
-                    )
+            _check_nav_line(line, nav_rel, line_no, root, findings)
     return findings
 
 
@@ -244,6 +241,57 @@ def _iter_md_lines(text: str) -> Iterator[tuple[int, str]]:
             yield line_no, line
 
 
+def _d3_finding(doc_rel, line_no: int, message: str) -> Finding:
+    """D3 诊断（info 级：Impl/Test 引用缺失）。"""
+    return Finding("D3", str(doc_rel), line_no, message)
+
+
+def _check_d3_candidate(
+    root: Path, doc_rel, line_no: int, kind: str, cand: str, dir_candidates: list[str]
+) -> Finding | None:
+    """单个候选 → 缺失则出诊断（返回 None = 通过/不归 D3 管）。
+
+    - `docs/` 前缀：指向 docs 自身的引用交给 D2 → 跳过
+    - 裸文件名（无目录前缀）：继承本行最后一个带目录候选的目录
+      （`a/b.py / c.py` → c.py 解析为 a/c.py）
+    - 含 `*` 的 glob 形态：非空即过
+    """
+    if cand.startswith("docs/"):
+        return None
+    if "/" not in cand:
+        base_dir = Path(dir_candidates[-1]).parent if dir_candidates else None
+        resolved = (Path(base_dir) / cand) if base_dir else Path(cand)
+        if (root / resolved).is_file():
+            return None
+        return _d3_finding(doc_rel, line_no, f"{kind}: 引用的文件不存在 '{cand}'")
+    if "*" in cand:
+        if list(root.glob(cand)):
+            return None
+        return _d3_finding(doc_rel, line_no, f"{kind}: glob 无匹配 '{cand}'")
+    if (root / cand).is_file():
+        return None
+    return _d3_finding(doc_rel, line_no, f"{kind}: 引用的文件不存在 '{cand}'")
+
+
+def _check_d3_line(
+    root: Path, doc_rel, line_no: int, line: str, findings: list[Finding]
+) -> None:
+    """一行 `Impl:` / `Test:` 逐候选检查。"""
+    m = _IMPL_TEST_RE.match(line.strip())
+    if not m:
+        return
+    kind = "Impl" if "Impl" in m.group(0) else "Test"
+    body = m.group(1)
+    # 本行已解析出的候选（带目录的），供裸文件名继承目录
+    dir_candidates = [c for c in _PATH_CANDIDATE_RE.findall(body) if "/" in c]
+    for cand in _PATH_CANDIDATE_RE.findall(body):
+        finding = _check_d3_candidate(
+            root, doc_rel, line_no, kind, cand, dir_candidates
+        )
+        if finding is not None:
+            findings.append(finding)
+
+
 def rule_d3_impl_test_files(root: Path) -> list[Finding]:
     """规则 D3（info）：docs 内 Impl:/Test: 引用的文件级存在（glob 非空即过）。
 
@@ -254,38 +302,7 @@ def rule_d3_impl_test_files(root: Path) -> list[Finding]:
     for doc_rel in iter_doc_files(root):
         text = (root / doc_rel).read_text(encoding="utf-8", errors="replace")
         for line_no, line in _iter_md_lines(text):
-            m = _IMPL_TEST_RE.match(line.strip())
-            if not m:
-                continue
-            kind = "Impl" if "Impl" in m.group(0) else "Test"
-            body = m.group(1)
-            # 本行已解析出的候选（带目录的），供裸文件名继承目录
-            dir_candidates = [c for c in _PATH_CANDIDATE_RE.findall(body) if "/" in c]
-            for cand in _PATH_CANDIDATE_RE.findall(body):
-                if cand.startswith("docs/"):
-                    continue  # 指向 docs 自身的引用交给 D2
-                if "/" not in cand:
-                    # 裸文件名：继承本行最后一个带目录候选的目录
-                    base_dir = Path(dir_candidates[-1]).parent if dir_candidates else None
-                    resolved = (Path(base_dir) / cand) if base_dir else Path(cand)
-                    if not (root / resolved).is_file():
-                        findings.append(
-                            Finding("D3", str(doc_rel), line_no,
-                                    f"{kind}: 引用的文件不存在 '{cand}'")
-                        )
-                    continue
-                if "*" in cand:  # glob 形态：非空即过
-                    if not list(root.glob(cand)):
-                        findings.append(
-                            Finding("D3", str(doc_rel), line_no,
-                                    f"{kind}: glob 无匹配 '{cand}'")
-                        )
-                    continue
-                if not (root / cand).is_file():
-                    findings.append(
-                        Finding("D3", str(doc_rel), line_no,
-                                f"{kind}: 引用的文件不存在 '{cand}'")
-                    )
+            _check_d3_line(root, doc_rel, line_no, line, findings)
     return findings
 
 
@@ -345,25 +362,35 @@ def _collect_d1_targets(root: Path) -> set[str]:
     return targets
 
 
+def _nav_line_targets(line: str, root: Path) -> Iterator[str]:
+    """一行内的引用形态 → 解析出的 docs 目标（非 docs 引用不产出）。"""
+    for m in _DOC_LINK_RE.finditer(line):
+        t = _resolve_nav_target(m.group(0), root)
+        if t:
+            yield t
+    for m in _BARE_REF_RE.finditer(line):
+        cand = m.group(1)
+        if "docs/" in line[max(0, m.start() - 8): m.end()]:
+            continue  # 同一引用已按完整路径形态处理
+        t = _resolve_nav_target(cand, root)
+        if t:
+            yield t
+
+
 def _collect_d2_targets(root: Path) -> set[str]:
-    """D2 扫描中出现的全部 docs 目标（供 D4 判孤儿）。"""
+    """D2 扫描中出现的全部 docs 目标（供 D4 判孤儿）。
+
+    口径与 D2 规则不同：这里按**整份文本**逐行收集（含 ``` 代码块内的示例
+    引用），D2 规则则跳过代码块——沿用原实现的这种不对称（孤儿集是超集）。
+    """
     targets: set[str] = set()
     for nav_rel in NAV_FILES:
         nav_path = root / nav_rel
         if not nav_path.is_file():
             continue
         text = nav_path.read_text(encoding="utf-8", errors="replace")
-        for m in _DOC_LINK_RE.finditer(text):
-            t = _resolve_nav_target(m.group(0), root)
-            if t:
-                targets.add(t)
-        for m in _BARE_REF_RE.finditer(text):
-            cand = m.group(1)
-            if "docs/" in text[max(0, m.start() - 8): m.end()]:
-                continue
-            t = _resolve_nav_target(cand, root)
-            if t:
-                targets.add(t)
+        for line in text.splitlines():
+            targets.update(_nav_line_targets(line, root))
     return targets
 
 
