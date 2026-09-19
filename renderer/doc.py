@@ -547,15 +547,22 @@ def _strip_leading_hardbreak(doc: Doc) -> Doc:
             return Concat(rest) if rest else Empty()
         return doc
     if isinstance(doc, Nest):
-        inner = _strip_leading_hardbreak(doc.doc)
-        return Empty() if isinstance(inner, Empty) else Nest(doc.indent, inner)
+        return _rebuild(doc, doc.indent, _strip_leading_hardbreak(doc.doc))
     if isinstance(doc, Align):
-        inner = _strip_leading_hardbreak(doc.doc)
-        return Empty() if isinstance(inner, Empty) else Align(doc.align, inner)
+        return _rebuild(doc, doc.align, _strip_leading_hardbreak(doc.doc))
     if isinstance(doc, Prefix):
-        inner = _strip_leading_hardbreak(doc.doc)
-        return Empty() if isinstance(inner, Empty) else Prefix(doc.indent, inner)
+        return _rebuild(doc, doc.indent, _strip_leading_hardbreak(doc.doc))
     return doc
+
+
+def _rebuild(orig: Doc, head: int, inner: Doc) -> Doc:
+    """重建同类型的单子包装（首字段为界宽/缩进）；inner 为 Empty → 整体 Empty。
+
+    Nest / Align / Prefix 三者签名同为 `(int, Doc)`，故可按原类型直接重建。
+    """
+    if isinstance(inner, Empty):
+        return Empty()
+    return type(orig)(head, inner)
 
 
 def _drop_break_after_hardbreak(doc: Doc) -> Doc:
@@ -572,11 +579,7 @@ def _drop_break_after_hardbreak(doc: Doc) -> Doc:
             out: list[Doc] = []
             for d in docs:
                 resolved = _drop_break_after_hardbreak(d)
-                if (
-                    isinstance(resolved, LineBreak)
-                    and out
-                    and _ends_with_hardbreak(out[-1])
-                ):
+                if _swallowed_by_hardbreak(resolved, out):
                     continue
                 out.append(resolved)
             return Concat(out)
@@ -595,6 +598,19 @@ def _drop_break_after_hardbreak(doc: Doc) -> Doc:
             return Fill([_drop_break_after_hardbreak(d) for d in docs])
         case _:
             return doc
+
+
+def _swallowed_by_hardbreak(resolved: Doc, out: list[Doc]) -> bool:
+    """紧跟前项硬换行的**条件断**应被挤掉（与那处断行是同一处，叠加多一空行）。
+
+    只看前一已留项是否以硬换行结尾；软断/硬断不受影响（`tail_break` 用连续
+    `Break` 表达空行，不可挤）。
+    """
+    return (
+        isinstance(resolved, LineBreak)
+        and bool(out)
+        and _ends_with_hardbreak(out[-1])
+    )
 
 
 def _has_hardline(doc: Doc) -> bool:
