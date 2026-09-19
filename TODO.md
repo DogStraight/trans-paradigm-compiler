@@ -197,7 +197,13 @@
     `tools/check_coverage_delta.py`、`parser/parser_core.py`、`lexer/capture_runner.py`、
     `lexer/main_lexer.py`、`parser/pratt_parser.py`、`preprocessor/macro_shape.py`、
     `core/define.py`、`core/config_registry.py`、`renderer/fidelity.py`、
-    `tools/check_gate_efficacy.py`；
+    `tools/check_gate_efficacy.py`（批次十追加）`renderer/loader.py`、
+    `renderer/primitives/join.py`、`renderer/primitives/opt.py` + `ref.py`、
+    `inst_check/_inst_check.py`、`name_check/rules/_prefix_suffix_check.py`、
+    `analyzer/suppress.py`、`analyzer/checks.py`、`parser/block_parser.py`、
+    `parser/__init__.py`、`grammar/c4/plugins/asm_gen/_asm.py`、
+    `formatter/__init__.py`、`formatter/boundary.py`、`linter/checkers/style.py`、
+    `linter/checkers/boundary.py`、`case_check/_case_check.py`、`policy/check_hardcode.py`；
     局部：`transform/_semantic_mapping`（认知 99 + CC 27）、
     `normalizer._normalize`（34/89）、`renderer/doc` 三处（24/62、11/17、16/27）。
     提交见 dispositions 的逐条记录。
@@ -209,16 +215,11 @@
     （一次去掉多处 `if trace:`；循环内 `sorted()` 打印留 guard）；
     ②状态收 `_XxxCtx` dataclass 后助手提到模块级——**嵌套函数的分支计入外层 CC**，
     所以"提模块级"是硬要求不是偏好。
-  - ⏳ 剩项（按当前值；已全部不属“产品热路径”，或属新露头的小项）：
-    `renderer/loader.load_layouts` 认知 22 + `renderer/primitives/join._render_join_items` 认知 21、
-    `inst_check._collect_assign_targets` 认知 21 + `_check_ports` 认知 19、
-    `name_check._prefix_suffix_check._direction_of` 认知 20、
-    `analyzer/suppress.build_suppress_map` 认知 19、`parser/block_parser.parse_block_body` 认知 19、
-    `grammar/c4/plugins/asm_gen._asm._C4Compiler.stmt` 认知 18、
-    `linter/checkers/style.StyleChecker.validate` 认知 18、`analyzer/checks.check_rules_pass` 认知 16、
-    `case_check._case_check.run_case_check` CC 11、`policy/check_hardcode.main` CC 11、
-    `boundary._collect_call_names` 认知 19（待判是否并入判保持）
-    （全表见 dispositions）。
+  - ⏳ 剩项：**无**。批次十把批次九队列的 12 项一次做完，并顺带清掉全库复检新露出的
+    6 项（`renderer/primitives/opt.eval_opt`、`ref.eval_ref`、`formatter.split_port_close_lines`、
+    `linter/checkers/boundary.BoundaryChecker.validate`、`parser._apply_ext_injections`、
+    `formatter/boundary._collect_call_names`——最后一项原记“待判是否并入判保持”，
+    实证可拆，故**不**并入）。复检剩余命中**全部**在下方“已判保持”清单内。
   - ⛔ **已判保持，不得重开**：`boundary._build_scope_kind_map` 21/52 与 `_resolve_first_tokens` /
     `_collect_stmt_headers` / `_collect_block_rule_bounds` / `_is_case_item_token`（“逐规则/
     逐元素判定的单一职责循环，再拆只会把映射逻辑碎片化”）；`renderer/doc.flatten` 20、
@@ -228,6 +229,15 @@
   - 批次验证（批次九 8 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
     诊断基线 5548 持平；`eval_lint_accuracy` 33/33 + 0 误报；三门禁 PASS；字节对拍
     73 文件 0 差异。
+  - 批次十（13 提交）：**CC 17 → 12、认知 21 → 5**；十批累计 **CC 150 → 12（-138）、
+    认知 157 → 5（-152）**。验证同口径全绿：全量 `pytest tests/ -n 4` **2111 passed /
+    7 skipped**；诊断基线 5548 持平；`eval_lint_accuracy` 33/33 + 0 误报；三门禁 PASS；
+    字节对拍 73 文件 0 差异；13 个改动文件 Pylance 0 诊断。**本主线收口**。
+  - 拆法新增三则（写进 dispositions）：③平臂 if/elif 链在 Bifrost 口径下便宜、
+    臂内嵌套贵 → 优先“臂体挪进助手”而非改分派表（探针实证）；④多来源 doc 收集用
+    累加器 `parts`，别让助手各返回 `Concat` 再拼（改变 Doc 嵌套结构）；⑤状态收
+    dataclass 三形态：扫描游标（`_IntervalScan` / `_BoundaryScan`）、跨调用作用域
+    （`_RuleScope`）、行/项事实束（`_LineFacts` / `_PortFields`）。
 
 > 审计外观察（不在本清单）：无。此前记的 "`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog
 > 形态进了引擎"已修（generate 条件面的规则/字段/运算符拼写全部移入 `[structure]`
