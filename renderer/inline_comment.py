@@ -42,31 +42,17 @@ def restore_comments(
     4. 一行仅插入一条注释
     5. 匹配失败则退化到窗口最后一行行尾追加
 
-    ADR-0013 目标④（2026-09-05）：普通注释回插通道已删除（注释进树结构
-    序渲染）——本函数**只处理 tpc marker**（行内块注释形态的宏 marker /
-    整行行注释形态的条件块占位，宏/条件块还原依赖）。普通注释条目
-    直接跳过。原 only_tpc / only_midline 参数删除（调用方恒 tpc 语义）。
-
-    tpc 占位标记（midline 行注释，如表达式中间的条件块占位，
-    2026-08-28 darkriscv 还原修复）：独立行插入 + 插值定位，不参与普通注释
-    的锚点窗口/单行单插竞争——相邻多占位（锚相同）或渲染行号漂移时，普通
-    退化会把第二个占位甩到文件尾或静默丢失（darkriscv 12 个 ifdef 缺失的
-    根因）。tpc 标记按 marker 唯一性由 restore_anchors 还原，只需独立行进
-    rendered（整行替换还原 ifdef 指令行）。
+    只处理 tpc marker（ADR-0013 目标④后普通注释回插通道已删）：行内块注释
+    形态的宏 marker 走锚点窗口（`_find_comment_anchor` / `_attach_comment`），
+    midline 行注释形态的条件块占位收集后统一独立行插入
+    （`_insert_tpc_placeholders`）——后者不参与锚点窗口/单行单插竞争（相邻多
+    占位或渲染行号漂移时会把第二个占位甩到文件尾，darkriscv 12 个 ifdef 缺失
+    的根因），按 marker 唯一性由 restore_anchors 还原即可。
     """
     if not comment_anchors:
         return rendered, 0
 
-    # 去重：parser 回溯可能导致同一条 comment 被多次收集
-    # 按 (text, line) 去重，保留最先记录的锚点（最接近注释的紧前 token）
-    seen: set[tuple[str, int]] = set()
-    unique: list[dict] = []
-    for c in comment_anchors:
-        key = (c["text"], c["line"])
-        if key not in seen:
-            seen.add(key)
-            unique.append(c)
-
+    unique = _dedupe_anchors(comment_anchors)
     lines = rendered.split("\n")
     occupied: set[int] = set()
     # tpc 占位标记（midline 行注释）单独收集：最后统一独立行插入
@@ -86,79 +72,99 @@ def restore_comments(
             # 同一段原文出现两次）。marker 编号唯一，全局判存在即可。
             continue
         if c.get("midline"):
-            # tpc 占位标记（行注释）：独立行插入（见函数 docstring），
-            # 不参与普通注释锚点窗口/单行单插竞争——收集到最后统一处理
             tpc_pending.append((src_line, comment))
             continue
 
-        start = max(0, src_line - 1 - 3)
-        end = min(len(lines), src_line + 3)
-
-        best_idx = -1
-        best_pos = -1
-
-        for i in range(start, end):
-            if i in occupied:
-                continue
-            # 从右向左搜：优先匹配行尾附近的锚点（更可能是注释位置）
-            pos = lines[i].rfind(anchor)
-            if pos < 0:
-                continue
-            # 取最后一个匹配（同一行可能有多个相同 token）
-            if i > best_idx or (i == best_idx and pos > best_pos):
-                best_idx = i
-                best_pos = pos
-
+        best_idx, best_pos = _find_comment_anchor(lines, anchor, src_line, occupied)
         if best_idx >= 0:
-            # 在锚点后插入注释
-            pos = best_pos + len(anchor)
-            line = lines[best_idx]
-            indent = " " if pos > 0 and not line[pos - 1].isspace() else ""
-            lines[best_idx] = line[:pos] + indent + "  " + comment + line[pos:]
-            occupied.add(best_idx)
+            _attach_comment(lines, occupied, best_idx, best_pos, anchor, comment)
         else:
-            # 退化到行号窗口最后一行行尾
-            target = min(end - 1, len(lines) - 1)
-            if target not in occupied:
-                lines[target] = lines[target].rstrip() + "  " + comment
-                occupied.add(target)
+            _append_comment_to_line(lines, occupied, src_line, comment)
 
-    # tpc 占位标记：独立行插入（插值定位尽力，退化 src_line 窗口），绝不丢失
     if tpc_pending:
-        # 插值锚点（C4 收敛自 _scan_rendered_tpc；顺带修复 for 循环误缩进
-        # 在 `if tpc_src_map:` 内——锚点映射为空时占位循环不执行的缺陷）
-        rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map, syntax)
-        # 相邻 tpc 标记顺序插入（同 restore_line_comments）：表达式链内
-        # 连续条件块（如 darkriscv IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）
-        # 独立插值会分散错位，相邻标记跟随上次插入位置保持结构
-        last_tpc_pos: int | None = None
-        last_tpc_src: int = -100
-        for src_line, comment in tpc_pending:
-            if last_tpc_pos is not None and src_line - last_tpc_src <= 8:
-                ins = min(last_tpc_pos + 1, len(lines))
-            else:
-                center = _interp_tpc_line(
-                    src_line, rendered_tpc_src, rendered_tpc
-                )
-                ins = min(center, len(lines))
-            # 在插值中心附近找插入行（前插独立注释行，跳过已占用行）
-            guard = 0
-            while ins < len(lines) and ins in occupied and guard < len(lines):
-                ins += 1
-                guard += 1
-            indent = ""
-            if lines:
-                ref = lines[min(ins, len(lines) - 1)]
-                indent = " " * (len(ref) - len(ref.lstrip()))
-            lines.insert(ins, indent + comment)
-            # insert 后：已占用行号 >= ins 的 +1
-            occupied = {o + 1 if o >= ins else o for o in occupied}
-            occupied.add(ins)
-            last_tpc_pos = ins
-            last_tpc_src = src_line
-
+        _insert_tpc_placeholders(lines, occupied, tpc_pending, tpc_src_map, syntax)
     return "\n".join(lines), len(unique)
 
+
+def _find_comment_anchor(
+    lines: list[str], anchor: str, src_line: int, occupied: set[int]
+) -> tuple[int, int]:
+    """[src_line-4, src_line+3) 窗口内找锚点 → (行号, 锚点起始列)；未命中 (-1, -1)。
+
+    从右向左搜：优先匹配行尾附近的锚点（更可能是注释位置）；同一行多个相同
+    token 取最后一个；已插过注释的行跳过（一行仅一条）。
+    """
+    start = max(0, src_line - 1 - 3)
+    end = min(len(lines), src_line + 3)
+    best_idx = -1
+    best_pos = -1
+    for i in range(start, end):
+        if i in occupied:
+            continue
+        pos = lines[i].rfind(anchor)
+        if pos < 0:
+            continue
+        if i > best_idx or (i == best_idx and pos > best_pos):
+            best_idx = i
+            best_pos = pos
+    return best_idx, best_pos
+
+
+def _attach_comment(
+    lines: list[str],
+    occupied: set[int],
+    best_idx: int,
+    best_pos: int,
+    anchor: str,
+    comment: str,
+) -> None:
+    """锚点后插入注释（锚点与后续文本之间补缩进与两空格分隔）。"""
+    pos = best_pos + len(anchor)
+    line = lines[best_idx]
+    indent = " " if pos > 0 and not line[pos - 1].isspace() else ""
+    lines[best_idx] = line[:pos] + indent + "  " + comment + line[pos:]
+    occupied.add(best_idx)
+
+
+def _append_comment_to_line(
+    lines: list[str], occupied: set[int], src_line: int, comment: str
+) -> None:
+    """锚点窗口内没找到锚点 → 退化到窗口最后一行行尾追加。"""
+    target = min(min(len(lines), src_line + 3) - 1, len(lines) - 1)
+    if target not in occupied:
+        lines[target] = lines[target].rstrip() + "  " + comment
+        occupied.add(target)
+
+
+def _insert_tpc_placeholders(
+    lines: list[str],
+    occupied: set[int],
+    tpc_pending: list[tuple[int, str]],
+    tpc_src_map: dict | None,
+    syntax: CommentSyntax,
+) -> None:
+    """tpc 占位标记（midline 行注释）独立行插入：插值定位尽力，绝不丢失。
+
+    相邻 tpc 标记顺序插入（同 `restore_line_comments`）：表达式链内连续条件块
+    （如 darkriscv IFPC 三目链的 EBREAK/INTERRUPT/DBNZ）独立插值会分散错位，
+    相邻标记（源行距 ≤ 8）跟随上次插入位置保持结构；其余按已渲染 marker
+    插值定位（`_interp_tpc_line`），落位用 `_free_slot` 跳过已占用行。
+    """
+    # 插值锚点（C4 收敛自 _scan_rendered_tpc；顺带修复 for 循环误缩进
+    # 在 `if tpc_src_map:` 内——锚点映射为空时占位循环不执行的缺陷）
+    rendered_tpc, rendered_tpc_src = _scan_rendered_tpc(lines, tpc_src_map, syntax)
+    last_tpc_pos: int | None = None
+    last_tpc_src: int = -100
+    for src_line, comment in tpc_pending:
+        if last_tpc_pos is not None and src_line - last_tpc_src <= 8:
+            ins = min(last_tpc_pos + 1, len(lines))
+        else:
+            center = _interp_tpc_line(src_line, rendered_tpc_src, rendered_tpc)
+            ins = min(center, len(lines))
+        ins = _free_slot(lines, occupied, ins)
+        _splice_line(lines, occupied, ins, _indent_at(lines, ins) + comment)
+        last_tpc_pos = ins
+        last_tpc_src = src_line
 
 def _scan_rendered_tpc(
     lines: list[str], tpc_src_map: dict | None, syntax: CommentSyntax
