@@ -193,6 +193,9 @@ class Discovery:
         层级最多到句子级：递归进入块 body 发现句子节点，不深入句子内部
         （表达式/字面量等黑盒）。句子结束边界由 production 推导（见
         _statement_end），不依赖 end_case 手写值。
+
+        主循环只做分派（按 token 类型四路），每路一个 `_discover_*` 方法：
+        括号开启符 / 块开启符 / 闭合与延续关键字 / 语句。
         """
         # 递归深度上限（纵深防御，2026-08-28 坏输入收敛）：容器递归与自身
         # 区间重叠等病态输入曾触发 ~978 层递归（受 Python 递归上限约束，
@@ -218,145 +221,165 @@ class Discovery:
             # 触发），命中即按语句发现；否则整体跳过括号区间（端口/参数列表等）。
             # 仅对无 block_end 的纯语句规则走语句分支（块规则仍由块分支处理）。
             if t.type in self._bracket_openers:
-                # 属性对 (* ... *)：整体跳过，不注册语句节点。属性是元数据，
-                # 其 body（case/赋值）由后续扫描独立发现——注册 AttrStmt 会因
-                # checker 需匹配跨行 body、边界难定而误报。
-                if (
-                    self._attr_openers
-                    and t.type == self._attr_openers[0]
-                    and self._next_type(tokens, i + 1, end) == self._attr_openers[1]
-                ):
-                    i = self._skip_balanced(tokens, i, end)
-                    continue
-                candidates = self._lookahead.classify(tokens, i)
-                if candidates and not (
-                    isinstance(candidates[0], str)
-                    and (self._tree.get(candidates[0], {}) or {}).get("block_end")
-                ):
-                    rule = candidates[0] if len(candidates) == 1 else candidates
-                    e = self._statement_end(tokens, i, candidates[0], end)
-                    if e > i:
-                        nodes.append(
-                            DiscoveredNode(
-                                type="statement",
-                                rule=rule,
-                                start=i,
-                                end=e,
-                                context=context,
-                            )
-                        )
-                        i = e
-                        continue
-                i = self._skip_balanced(tokens, i, end)
+                i = self._discover_bracket(tokens, i, end, context, nodes)
                 continue
 
             # 块边界 → 注册块节点 + 递归 body 产出 children
             if t.type in self._block_openers:
-                candidates = self._lookahead.classify(tokens, i)
-                end_idx = i + 1
-                if candidates is None:
-                    i = end_idx
-                    continue
-                if not candidates:
-                    # 块关键字存在但块头 production 不匹配 → 未识别块
-                    self._record_unrecognized(tokens, i)
-                    i = end_idx
-                    continue
-                if candidates:
-                    rule = candidates[0] if len(candidates) == 1 else candidates
-                    be = (
-                        self._tree.get(candidates[0], {}) or {}
-                    ).get("block_end") or ""
-                    end_idx = self._skip_to_end(tokens, i, {be}, end) if be else i + 1
-                    if end_idx > i:
-                        node = DiscoveredNode(
-                            type="statement",
-                            rule=rule,
-                            start=i,
-                            end=end_idx,
-                            context=context,
-                        )
-                        body_start, body_end = self._block_body(
-                            tokens, i, end_idx, candidates[0], end
-                        )
-                        if body_start < body_end:
-                            node.children = self._discover_range(
-                                tokens,
-                                body_start,
-                                body_end,
-                                context,
-                                depth + 1,
-                            )
-                        nodes.append(node)
-                i = end_idx
+                i = self._discover_block(tokens, i, end, context, depth, nodes)
                 continue
 
-            if t.type in self._block_closers:
+            # 块闭合符（end/`}` 等）与容器结构延续关键字（else/default 等，
+            # 配置驱动推导）：不单独成语句，跳过——其 body（块/语句）由后续
+            # 扫描自然发现。不跳过会把 else 当"有语句特征但无匹配"的未识别
+            # 语句误报。
+            if t.type in self._block_closers or t.type in self._continuation_openers:
                 i += 1
                 continue
 
-            # 容器结构延续关键字（else/default 等，配置驱动推导）：不单独
-            # 成语句，跳过——其 body（块/语句）由后续扫描自然发现。不跳过会
-            # 把 else 当"有语句特征但无匹配"的未识别语句误报。
-            if t.type in self._continuation_openers:
-                i += 1
-                continue
-
-            # 语句发现：动态两级消歧
-            candidates = self._lookahead.classify(tokens, i)
-            if candidates is None:
-                i += 1
-                continue
-            if not candidates:
-                # 有语句起点特征但无任何已知语句规则匹配（拼错关键字/残缺结构头）
-                # → 记录未识别诊断，不静默吞错。
-                self._record_unrecognized(tokens, i)
-                i += 1
-                continue
-            if candidates:
-                rule = candidates[0] if len(candidates) == 1 else candidates
-                if isinstance(candidates[0], str) and self._is_nested_container(
-                    candidates[0]
-                ):
-                    e = self._container_end(tokens, i, candidates[0], end)
-                else:
-                    e = self._statement_end(tokens, i, candidates[0], end)
-                if e > i:
-                    node = DiscoveredNode(
-                        type="statement",
-                        rule=rule,
-                        start=i,
-                        end=e,
-                        context=context,
-                    )
-                    # 引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归
-                    if isinstance(candidates[0], str) and self._is_nested_container(
-                        candidates[0]
-                    ):
-                        body = self._locate_stmt_body(tokens, i, candidates[0], e)
-                        if body is not None:
-                            bs, _, _ = body
-                            # 实验：body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
-                            bctx = context
-                            # body 起点必须**严格在规则起点之后**（2026-08-28
-                            # 坏输入收敛根因防御）：容器的 body 结构上位于
-                            # 头部 token 之后（if/for 的 body 在 `if (x)` 后），
-                            # body 起点 == 规则起点意味着"body"即规则自身——
-                            # inline 语句分派器（如 SimCtrlStmt = choice of
-                            # 语句规则）的 _locate_stmt_body 返回 choice 起点
-                            # == 规则起点，递归区间与自身完全重叠 → 每层注册
-                            # 同一节点直至递归上限（`assign a = ;` 977 条
-                            # 重复诊断）。语义上语句分派器的嵌套语句由后续
-                            # 扫描独立发现（扁平化策略），不递归。
-                            if i < bs < e:
-                                node.children = self._discover_range(
-                                    tokens, bs, e, bctx, depth + 1
-                                )
-                    nodes.append(node)
-                    i = e
-                    continue
-            i += 1
+            i = self._discover_statement(tokens, i, end, context, depth, nodes)
         return nodes
+
+    def _discover_bracket(
+        self,
+        tokens: list[Token],
+        i: int,
+        end: int,
+        context: str,
+        nodes: list[DiscoveredNode],
+    ) -> int:
+        """括号开启符：属性对整体跳过；否则先试语句分类，退化时跳过括号区间。
+
+        Returns: 下一个扫描位置（必定 > i，防死循环）。
+        """
+        t = tokens[i]
+        # 属性对 (* ... *)：整体跳过，不注册语句节点。属性是元数据，
+        # 其 body（case/赋值）由后续扫描独立发现——注册 AttrStmt 会因
+        # checker 需匹配跨行 body、边界难定而误报。
+        if (
+            self._attr_openers
+            and t.type == self._attr_openers[0]
+            and self._next_type(tokens, i + 1, end) == self._attr_openers[1]
+        ):
+            return self._skip_balanced(tokens, i, end)
+        candidates = self._lookahead.classify(tokens, i)
+        if candidates and not (
+            isinstance(candidates[0], str)
+            and (self._tree.get(candidates[0], {}) or {}).get("block_end")
+        ):
+            e = self._statement_end(tokens, i, candidates[0], end)
+            if e > i:
+                nodes.append(
+                    self._make_stmt_node(self._rule_of(candidates), i, e, context)
+                )
+                return e
+        return self._skip_balanced(tokens, i, end)
+
+    def _discover_block(
+        self,
+        tokens: list[Token],
+        i: int,
+        end: int,
+        context: str,
+        depth: int,
+        nodes: list[DiscoveredNode],
+    ) -> int:
+        """块开启符：注册块节点 + 递归 body 产出 children。
+
+        块头 production 不匹配 → 未识别块诊断；块结束符缺失 → 只跳过关键字。
+        Returns: 下一个扫描位置（必定 > i）。
+        """
+        candidates = self._lookahead.classify(tokens, i)
+        end_idx = i + 1
+        if candidates is None:
+            return end_idx
+        if not candidates:
+            # 块关键字存在但块头 production 不匹配 → 未识别块
+            self._record_unrecognized(tokens, i)
+            return end_idx
+        rule = self._rule_of(candidates)
+        be = (self._tree.get(candidates[0], {}) or {}).get("block_end") or ""
+        end_idx = self._skip_to_end(tokens, i, {be}, end) if be else i + 1
+        if end_idx > i:
+            node = self._make_stmt_node(rule, i, end_idx, context)
+            body_start, body_end = self._block_body(
+                tokens, i, end_idx, candidates[0], end
+            )
+            if body_start < body_end:
+                node.children = self._discover_range(
+                    tokens, body_start, body_end, context, depth + 1
+                )
+            nodes.append(node)
+        return end_idx
+
+    def _discover_statement(
+        self,
+        tokens: list[Token],
+        i: int,
+        end: int,
+        context: str,
+        depth: int,
+        nodes: list[DiscoveredNode],
+    ) -> int:
+        """语句发现：动态两级消歧（引用式容器 / 普通语句），必要时递归 body。
+
+        容器式语句（production 含 @Stmt/@BeginEnd）定位 body 后递归；普通语句
+        只注册区间不深入（表达式黑盒）。Returns: 下一个扫描位置（必定 > i）。
+        """
+        candidates = self._lookahead.classify(tokens, i)
+        if candidates is None:
+            return i + 1
+        if not candidates:
+            # 有语句起点特征但无任何已知语句规则匹配（拼错关键字/残缺结构头）
+            # → 记录未识别诊断，不静默吞错。
+            self._record_unrecognized(tokens, i)
+            return i + 1
+        rule = self._rule_of(candidates)
+        nested = isinstance(candidates[0], str) and self._is_nested_container(
+            candidates[0]
+        )
+        if nested:
+            e = self._container_end(tokens, i, candidates[0], end)
+        else:
+            e = self._statement_end(tokens, i, candidates[0], end)
+        if e <= i:
+            return i + 1
+        node = self._make_stmt_node(rule, i, e, context)
+        # 引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归
+        if nested:
+            body = self._locate_stmt_body(tokens, i, candidates[0], e)
+            if body is not None:
+                bs, _, _ = body
+                # 实验：body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
+                bctx = context
+                # body 起点必须**严格在规则起点之后**（2026-08-28 坏输入收敛
+                # 根因防御）：容器的 body 结构上位于头部 token 之后（if/for 的
+                # body 在 `if (x)` 后），body 起点 == 规则起点意味着"body"即
+                # 规则自身——inline 语句分派器（如 SimCtrlStmt = choice of
+                # 语句规则）的 _locate_stmt_body 返回 choice 起点 == 规则起点，
+                # 递归区间与自身完全重叠 → 每层注册同一节点直至递归上限
+                # （`assign a = ;` 977 条重复诊断）。语义上语句分派器的嵌套
+                # 语句由后续扫描独立发现（扁平化策略），不递归。
+                if i < bs < e:
+                    node.children = self._discover_range(
+                        tokens, bs, e, bctx, depth + 1
+                    )
+        nodes.append(node)
+        return e
+
+    @staticmethod
+    def _rule_of(candidates: list) -> "str | list":
+        """候选规则 → 节点 rule 值（唯一命中取字符串，多命中取列表）。"""
+        return candidates[0] if len(candidates) == 1 else candidates
+
+    @staticmethod
+    def _make_stmt_node(
+        rule: "str | list", start: int, end: int, context: str
+    ) -> DiscoveredNode:
+        """构造语句/块区间节点（四处调用点共用字段组合）。"""
+        return DiscoveredNode(
+            type="statement", rule=rule, start=start, end=end, context=context
+        )
 
     # ── 辅助 ────────────────────────────────────
 
