@@ -31,6 +31,15 @@ from .lookahead import LookaheadTable
 _MAX_DISCOVER_DEPTH = 64
 
 
+def _split_end_set(
+    end_set: frozenset[str] | set[str],
+) -> tuple[set[str], set[str]]:
+    """结束符声明集 → (排除集, 正向集)：`!` 前缀项为排除项。"""
+    exclude = {s[1:] for s in end_set if s.startswith("!")}
+    positive = {s for s in end_set if not s.startswith("!")}
+    return exclude, positive
+
+
 def _derive_attr_openers(tree: dict) -> tuple[str, str] | None:
     """从语法树推导属性对开括号（如 (* ... *)）。
 
@@ -84,37 +93,43 @@ class Discovery:
         # 据此整体跳过属性对，使带属性的语句（如 (* parallel_case *) case ...）
         # 边界不被属性内的括号/newline 截断。
         self._attr_openers = _derive_attr_openers(tree)
-        # 容器结构延续关键字（配置驱动推导，不硬编码）：production 以纯
-        # keyword token 开头、但不启动任何语句/块的规则——如 else（if 链
-        # 延续）、default（case 项延续）。children 递归遇到时跳过：延续
-        # 关键字不单独成语句，其 body（块/语句）由后续扫描自然发现；不跳过
-        # 会把 else 当"有语句特征但无匹配"的未识别语句误报。
-        _stmt_block_firsts: set[str] = set()
-        _continuation: set[str] = set()
-        for _info in tree.values():
-            if not isinstance(_info, dict):
-                continue
-            _prods = _info.get("prods") or []
-            if not _prods or _prods[0].get("type") != "token":
-                continue
-            _tok = _prods[0].get("token_type", "")
-            if _info.get("is_statement") or _info.get("is_block"):
-                _stmt_block_firsts.add(_tok)
-                continue
-            if not _tok.startswith(KEYWORD_PREFIX):
-                continue
-            # 精确化：延续关键字 = production **引用语句/块**的容器延续
-            # （else → @Stmt、default → @StmtOrNull、impl → 块成员）。仅凭
-            # "keyword 起始 + 非语句/块"会把 input/output/parameter/invert 等
-            # 声明规则误当延续——它们在块头内侥幸不触发，但在 body 语境出现
-            # 会被跳过漏检。引用判定复用 _feat_calls_stmt（穿透包装选择器）。
-            if any(self._feat_calls_stmt(f) for f in _prods):
-                _continuation.add(_tok)
-        self._continuation_openers = frozenset(
-            _continuation - _stmt_block_firsts
-        )
+        # 容器结构延续关键字（配置驱动推导，不硬编码；理由见
+        # `_derive_continuation_openers`）
+        self._continuation_openers = self._derive_continuation_openers(tree)
         # 未识别语句诊断（本次 discover 累积，scan 后由 scanner 合并）。
         self._unrecognized: list[LintDiagnostic] = []
+
+    def _derive_continuation_openers(self, tree: dict) -> frozenset[str]:
+        """容器结构延续关键字（配置驱动推导，不硬编码）。
+
+        production 以纯 keyword token 开头、但不启动任何语句/块的规则——如
+        else（if 链延续）、default（case 项延续）。children 递归遇到时跳过：
+        延续关键字不单独成语句，其 body（块/语句）由后续扫描自然发现；不跳过
+        会把 else 当"有语句特征但无匹配"的未识别语句误报。
+
+        精确化：延续关键字 = production **引用语句/块**的容器延续（else →
+        @Stmt、default → @StmtOrNull、impl → 块成员）。仅凭"keyword 起始 +
+        非语句/块"会把 input/output/parameter/invert 等声明规则误当延续——
+        它们在块头内侥幸不触发，但在 body 语境出现会被跳过漏检。引用判定复用
+        `_feat_calls_stmt`（穿透包装选择器）。
+        """
+        stmt_block_firsts: set[str] = set()
+        continuation: set[str] = set()
+        for info in tree.values():
+            if not isinstance(info, dict):
+                continue
+            prods = info.get("prods") or []
+            if not prods or prods[0].get("type") != "token":
+                continue
+            tok = prods[0].get("token_type", "")
+            if info.get("is_statement") or info.get("is_block"):
+                stmt_block_firsts.add(tok)
+                continue
+            if not tok.startswith(KEYWORD_PREFIX):
+                continue
+            if any(self._feat_calls_stmt(f) for f in prods):
+                continuation.add(tok)
+        return frozenset(continuation - stmt_block_firsts)
 
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
         """扫描 token 流，递归发现嵌套节点，返回树（children 填充）。"""
@@ -331,38 +346,46 @@ class Discovery:
             # → 记录未识别诊断，不静默吞错。
             self._record_unrecognized(tokens, i)
             return i + 1
-        rule = self._rule_of(candidates)
-        nested = isinstance(candidates[0], str) and self._is_nested_container(
-            candidates[0]
-        )
+        rule_name = candidates[0]
+        nested = isinstance(rule_name, str) and self._is_nested_container(rule_name)
         if nested:
-            e = self._container_end(tokens, i, candidates[0], end)
+            e = self._container_end(tokens, i, rule_name, end)
         else:
-            e = self._statement_end(tokens, i, candidates[0], end)
+            e = self._statement_end(tokens, i, rule_name, end)
         if e <= i:
             return i + 1
-        node = self._make_stmt_node(rule, i, e, context)
-        # 引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归
+        node = self._make_stmt_node(self._rule_of(candidates), i, e, context)
         if nested:
-            body = self._locate_stmt_body(tokens, i, candidates[0], e)
-            if body is not None:
-                bs, _, _ = body
-                # 实验：body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
-                bctx = context
-                # body 起点必须**严格在规则起点之后**（2026-08-28 坏输入收敛
-                # 根因防御）：容器的 body 结构上位于头部 token 之后（if/for 的
-                # body 在 `if (x)` 后），body 起点 == 规则起点意味着"body"即
-                # 规则自身——inline 语句分派器（如 SimCtrlStmt = choice of
-                # 语句规则）的 _locate_stmt_body 返回 choice 起点 == 规则起点，
-                # 递归区间与自身完全重叠 → 每层注册同一节点直至递归上限
-                # （`assign a = ;` 977 条重复诊断）。语义上语句分派器的嵌套
-                # 语句由后续扫描独立发现（扁平化策略），不递归。
-                if i < bs < e:
-                    node.children = self._discover_range(
-                        tokens, bs, e, bctx, depth + 1
-                    )
+            self._attach_container_body(node, tokens, i, rule_name, e, context, depth)
         nodes.append(node)
         return e
+
+    def _attach_container_body(
+        self,
+        node: DiscoveredNode,
+        tokens: list[Token],
+        i: int,
+        rule_name: str,
+        e: int,
+        context: str,
+        depth: int,
+    ) -> None:
+        """引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归填 children。"""
+        body = self._locate_stmt_body(tokens, i, rule_name, e)
+        if body is None:
+            return
+        bs = body[0]
+        # body 上下文继承当前上下文（不假设 stmt_rule → proc_body）。
+        bctx = context
+        # body 起点必须**严格在规则起点之后**（2026-08-28 坏输入收敛根因防御）：
+        # 容器的 body 结构上位于头部 token 之后（if/for 的 body 在 `if (x)` 后），
+        # body 起点 == 规则起点意味着"body"即规则自身——inline 语句分派器
+        # （如 SimCtrlStmt = choice of 语句规则）的 _locate_stmt_body 返回 choice
+        # 起点 == 规则起点，递归区间与自身完全重叠 → 每层注册同一节点直至递归
+        # 上限（`assign a = ;` 977 条重复诊断）。语义上语句分派器的嵌套语句由
+        # 后续扫描独立发现（扁平化策略），不递归。
+        if i < bs < e:
+            node.children = self._discover_range(tokens, bs, e, bctx, depth + 1)
 
     @staticmethod
     def _rule_of(candidates: list) -> "str | list":
@@ -417,31 +440,64 @@ class Discovery:
             return self._find_stmt_in_feat(prods[0])
         return None
 
+    def _call_entry(self, name: str) -> str | None:
+        """call 元素 → 语句/块入口名（本体即语句/块 → 自身；否则穿透包装）。"""
+        tinfo = self._tree.get(name, {})
+        if tinfo.get("is_statement") or tinfo.get("is_block"):
+            return name
+        return self._inner_stmt_entry(name)
+
+    def _first_entry(self, feats) -> str | None:
+        """元素序列内首个语句/块入口名（无 → None）。"""
+        for feat in feats:
+            r = self._find_stmt_in_feat(feat)
+            if r:
+                return r
+        return None
+
     def _find_stmt_in_feat(self, feat):
         """在 feature 内递归找首个语句/块入口名（穿透包装）。"""
         if not isinstance(feat, dict):
             return None
         typ = feat.get("type")
         if typ == "call":
-            tinfo = self._tree.get(feat.get("name", ""), {})
-            if tinfo.get("is_statement") or tinfo.get("is_block"):
-                return feat["name"]
-            return self._inner_stmt_entry(feat.get("name", ""))
+            return self._call_entry(feat.get("name", ""))
         if typ == "choice":
-            for alt in feat.get("alternatives", []):
-                r = self._find_stmt_in_feat(alt)
-                if r:
-                    return r
-            return None
+            return self._first_entry(feat.get("alternatives", []))
         if typ == "seq":
-            for item in feat.get("items", []):
-                r = self._find_stmt_in_feat(item)
-                if r:
-                    return r
-            return None
+            return self._first_entry(feat.get("items", []))
         if typ in ("optional", "repeat", "plus"):
             return self._find_stmt_in_feat(feat.get("elem"))
         return None
+
+    def _stmt_entry_at(self, feat: dict) -> str | None:
+        """当前元素若是语句/块引用 → 入口规则名；否则 None。
+
+        call：本体即语句/块 → 自身名；包装规则 → 内部语句名。
+        choice 内直接引用语句/块（如传播产生的 (@AttrStmt|@Stmt)）：entry 仅用于
+        标记，递归由 `_discover_range` 独立扫描 [bs, e)，不依赖具体入口名。
+        """
+        typ = feat.get("type")
+        if typ == "call":
+            return self._call_entry(feat.get("name", ""))
+        if typ == "choice":
+            return self._find_stmt_in_feat(feat)
+        return None
+
+    def _advance_match(self, tokens: list[Token], j: int, feat, end: int) -> int | None:
+        """用共享 matcher 推进一个元素 → 新位置；匹配抛错 → None（停止推进）。
+
+        错误恢复近似（同 `_container_end` / `_skip_to_statement_end`）：匹配抛错时
+        停止逐元素推进，让检查阶段报错，discovery 仍能推进。
+        """
+        trial: list = []
+        try:
+            k = self._lookahead._matcher.match(
+                tokens, j, feat, trial, end, strict=True
+            )
+        except Exception:
+            return None
+        return k if k > j else j + 1
 
     def _locate_stmt_body(
         self, tokens: list[Token], i: int, rule: str, end: int
@@ -451,39 +507,20 @@ class Discovery:
         用共享 matcher 逐元素匹配 production，遇到 is_statement/is_block 的
         call（@Stmt/@BeginEnd 等）即记录其起始位置。返回 (body_start, body_end, 入口规则名)。
         """
-        matcher = self._lookahead._matcher
-        if matcher is None:
+        if self._lookahead._matcher is None:
             return None
         info = self._tree.get(rule, {})
         j = i
         for feat in info.get("prods", []):
             if j >= end or not isinstance(feat, dict):
                 break
-            typ = feat.get("type")
-            name = feat.get("name") if typ == "call" else ""
-            if name:
-                tinfo = self._tree.get(name, {})
-                if tinfo.get("is_statement") or tinfo.get("is_block"):
-                    return j, end, name
-                # 包装规则穿透：body 起始 = 该 call 匹配起始，入口 = 内部语句名
-                inner = self._inner_stmt_entry(name)
-                if inner:
-                    return j, end, inner
-            elif typ == "choice":
-                # choice 内直接引用语句/块（如传播产生的 (@AttrStmt|@Stmt)）：
-                # body 起始 = choice 起始。entry 仅用于标记，递归由 _discover_range
-                # 独立扫描 [bs, e)，不依赖具体入口名。
-                inner = self._find_stmt_in_feat(feat)
-                if inner:
-                    return j, end, inner
-            trial: list = []
-            try:
-                k = matcher.match(tokens, j, feat, trial, end, strict=True)
-            except Exception:
-                # 错误恢复近似（同 `_container_end` / `_skip_to_statement_end`）：
-                # 匹配抛错时停止逐元素推进，让检查阶段报错，discovery 仍能推进。
+            entry = self._stmt_entry_at(feat)
+            if entry:
+                return j, end, entry
+            j_next = self._advance_match(tokens, j, feat, end)
+            if j_next is None:
                 break
-            j = k if k > j else j + 1
+            j = j_next
         return None
 
     def _container_end(
@@ -526,6 +563,26 @@ class Discovery:
         # 无可推导结束符（容器语句等）→ 跳到语句终结符集合/行尾
         return self._skip_to_statement_end(tokens, i, n)
 
+    def _terminator_from_call(self, last: dict) -> set[str]:
+        """末尾是 call：递归查其 production 是否以语句终结符收尾。
+
+        语句终结符集合 = 所有语句规则末尾字面 token（`_stmt_ends`）减去块结束符
+        ——call 内部以"语句终结符"收尾即语句边界。Verilog 为分号
+        （symbol.base.semicolon），语言无关：其他语言的分号类终结符同样被推导，
+        替代硬编码。
+        """
+        inner = self._tree.get(last.get("name", ""), {})
+        iprods = inner.get("prods", [])
+        if not iprods:
+            return set()
+        ilast = iprods[-1]
+        if not isinstance(ilast, dict) or ilast.get("type") != "token":
+            return set()
+        terminators = self._lookahead._stmt_ends - self._lookahead._block_ends
+        if ilast.get("token_type") not in terminators:
+            return set()
+        return {ilast["token_type"]}
+
     def _derived_end_case(self, rule: str) -> set[str]:
         """从 production 推导结束符：结尾纯字面 token（非 @、无 ?*+ 后缀）。
 
@@ -535,41 +592,28 @@ class Discovery:
         推导结束符。
 
         额外：production 末尾是 call（如 ModuleInst 的 @PortConnection 展开
-        为 `(...);`）——递归查 call 的 production 是否以分号收尾，是则推导
-        分号。这使跨行语句（模块名/参数/实例名分多行）以分号为可靠终止
-        （depth 跟踪保证括号内分号不误判）。
+        为 `(...);`）→ 交 `_terminator_from_call` 递归推导，使跨行语句（模块名/
+        参数/实例名分多行）以分号为可靠终止（depth 跟踪保证括号内分号不误判）。
         """
         if self._is_nested_container(rule):
             return set()
-        info = self._tree.get(rule, {})
-        prods = info.get("prods", [])
+        prods = (self._tree.get(rule, {}) or {}).get("prods", [])
         if not prods:
             return set()
+        return self._end_case_of_last(prods)
+
+    def _end_case_of_last(self, prods: list) -> set[str]:
+        """production 末尾元素 → 结束符集（token 字面 / call 递归 / 其余空集）。"""
         last = prods[-1]
-        if isinstance(last, dict) and last.get("type") == "token":
-            tt = last["token_type"]
+        if not isinstance(last, dict):
+            return set()
+        if last.get("type") == "token":
             # 含 "|" 的多候选 token（如 keyword.case|casex）拆分为精确成员，
             # 否则 _skip_to_end 的精确匹配扫不到（原 _is_single_token_rule 用
             # "|" 排除整个规则，导致这类语句边界退化为通用跳过）。
-            return set(tt.split("|"))
-        # 末尾是 call：递归查其 production 是否以语句终结符收尾。语句终结符
-        # 集合 = 所有语句规则末尾字面 token（_stmt_ends）减去块结束符——call
-        # 内部以"语句终结符"收尾即语句边界。Verilog 为分号（symbol.base.
-        # semicolon），语言无关：其他语言的分号类终结符同样被推导，替代硬编码。
-        if isinstance(last, dict) and last.get("type") == "call":
-            inner = self._tree.get(last.get("name", ""), {})
-            iprods = inner.get("prods", [])
-            if iprods:
-                ilast = iprods[-1]
-                stmt_terminators = (
-                    self._lookahead._stmt_ends - self._lookahead._block_ends
-                )
-                if (
-                    isinstance(ilast, dict)
-                    and ilast.get("type") == "token"
-                    and ilast.get("token_type") in stmt_terminators
-                ):
-                    return {ilast["token_type"]}
+            return set(last["token_type"].split("|"))
+        if last.get("type") == "call":
+            return self._terminator_from_call(last)
         return set()
 
     def _block_body(
@@ -636,12 +680,47 @@ class Discovery:
             i += 1
         return n
 
+    def _is_attr_prefix(self, tokens: list[Token], i: int, n: int) -> bool:
+        """位置 i 是否属性对开括号（`(*`）——属性对整体跳过（不改变块 depth）。
+
+        属性后的行尾换行也属于属性前缀（body 从下一行开始），调用方一并跳过
+        ——否则换行会被 end_case 当语句边界截断（(* x *) 后换行 case 的边界
+        只到属性行）。
+        """
+        if not self._attr_openers:
+            return False
+        return (
+            tokens[i].type == self._attr_openers[0]
+            and self._next_type(tokens, i + 1, n) == self._attr_openers[1]
+        )
+
+    def _advance_block_depth(
+        self, t: Token, depth: int, positive: frozenset[str] | set[str]
+    ) -> tuple[int, bool]:
+        """块开/闭符推进深度 → (新深度, 是否命中目标闭合符)。
+
+        命中 = positive 闭合符（如 keyword.end）且当前深度 ≤1：该 token 就是
+        目标块结束符。此前缺失该分支：depth 1→0 的 end 被跳过（positive 检查
+        在 depth 更新前），容器边界越过正确 end 延伸到 EOF，把后续语句吞进块体。
+        """
+        if t.type in self._block_openers:
+            return depth + 1, False
+        if t.type in self._block_closers:
+            if t.type in positive and depth <= 1:
+                return depth, True
+            return max(0, depth - 1), False
+        return depth, False
+
     def _skip_to_end(
         self, tokens: list[Token], i: int, end_set: frozenset[str] | set[str], n: int
     ) -> int:
+        """按 end_set 跳过 token 到最后位置（`!` 前缀 = 排除项）。
+
+        `positive` 为空时退化为"跳过一个 trivia 后的位置"；循环内逐 token
+        判定排除/命中/空自/属性对/块深度（块深度推进见 `_advance_block_depth`）。
+        """
         depth = 0
-        exclude = {s[1:] for s in end_set if s.startswith("!")}
-        positive = {s for s in end_set if not s.startswith("!")}
+        exclude, positive = _split_end_set(end_set)
         if not positive:
             j = skip_trivia(tokens, i + 1, n)
             return j if j <= n else n
@@ -655,27 +734,12 @@ class Discovery:
             if t.type in TRIVIA_TOKEN_TYPES:
                 i += 1
                 continue
-            # 属性对 (* ... *)：整体跳过（不改变块 depth）。属性后的行尾换行
-            # 也属于属性前缀（body 从下一行开始），一并跳过——否则换行会被
-            # end_case 当语句边界截断（(* x *) 后换行 case 的边界只到属性行）。
-            if (
-                self._attr_openers
-                and t.type == self._attr_openers[0]
-                and self._next_type(tokens, i + 1, n) == self._attr_openers[1]
-            ):
-                i = self._skip_balanced(tokens, i, n)
-                i = skip_trivia(tokens, i, n)
+            if self._is_attr_prefix(tokens, i, n):
+                i = skip_trivia(tokens, self._skip_balanced(tokens, i, n), n)
                 continue
-            if t.type in self._block_openers:
-                depth += 1
-            elif t.type in self._block_closers:
-                # positive 闭合符（如 keyword.end）使深度归零 → 该 token 就是
-                # 目标块结束符，返回其之后位置。此前缺失此分支：depth 1→0 的
-                # end 被跳过（positive 检查在 depth 更新前），容器边界越过正确
-                # end 延伸到 EOF，把后续语句吞进块体。
-                if t.type in positive and depth <= 1:
-                    return i + 1
-                depth = max(0, depth - 1)
+            depth, hit = self._advance_block_depth(t, depth, positive)
+            if hit:
+                return i + 1
             i += 1
         return n
 
