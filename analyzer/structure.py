@@ -680,6 +680,208 @@ class ConnectionElaborator:
                 yield et
 
 
+class ModuleExtractor:
+    """层 1 单元提取：AST → ModuleInfo（端口/参数声明形态 + 名字/方向/宽度）。
+
+    语言知识全部走 ctx 协议（`module_decl_rule` / 节点字段名 / `has_structure`），
+    故换语言包即换形态。产出挂 `FileResult.modules`（层 2/3 与 postpass 消费）。
+
+    只依赖 ctx（协议读取 + 渲染助手），不持有会话状态。
+    """
+
+    def __init__(self, ctx: StructureCtx) -> None:
+        self._ctx = ctx
+
+    # ── AST 提取（模块定义表 / 实例化点）──
+
+    def extract_modules(self, ast: Node, path: str) -> dict[str, ModuleInfo]:
+        modules: dict[str, ModuleInfo] = {}
+        if not self._ctx.has_structure():
+            return modules  # 语言包未声明结构协议 → 无模块提取
+        decl_rule = self._ctx.rule("module_decl_rule")
+        name_field = self._ctx.field("module_name")
+        for node in iter_nodes(ast):
+            if node.node_name != decl_rule:
+                continue
+            name_node = getattr(node, name_field, None)
+            if not isinstance(name_node, Node) or not name_node.content:
+                continue
+            info = ModuleInfo(name=name_node.content, file=path, node=node)
+            node._file = path  # related 链跨文件定位
+            self._fill_ports(info, node)
+            self._fill_params(info, node)
+            modules[info.name] = info
+        return modules
+
+    def _decl_name_nodes(
+        self, decl_node: Node, items_field: str, name_field: str
+    ) -> list[tuple[Node, Node]]:
+        """声明节点 → [(名字声明节点, 名字节点)]（端口/参数三类填充共用）。
+
+        端口与参数的声明同形：外层声明节点的 `items` 再套一层声明列表
+        （内层元素挂 `name`）。列表缺失 / 元素非节点 / 名字为空 → 不计。
+        """
+        dlist = getattr(decl_node, items_field, None) if items_field else None
+        d_items = getattr(dlist, items_field, None) if isinstance(dlist, Node) else None
+        out: list[tuple[Node, Node]] = []
+        for d in d_items or []:
+            if not isinstance(d, Node):
+                continue
+            dn = getattr(d, name_field, None) if name_field else None
+            if isinstance(dn, Node) and dn.content:
+                out.append((d, dn))
+        return out
+
+    def _register_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
+                       direction: str, width: str, net_type: str = "") -> None:
+        """登记端口（同名覆盖：ANSI 头部声明优先于 body 回填）。"""
+        decl_node._file = info.file
+        info.ports[name_node.content] = ModulePort(
+            name=name_node.content,
+            direction=direction,
+            width_expr=width,
+            net_type=net_type,
+            decl_node=decl_node,
+        )
+
+    def _backfill_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
+                       direction: str, width: str) -> None:
+        """按名回填端口方向/宽度；未登记则补登记（body 声明不带 net_type）。"""
+        p = info.ports.get(name_node.content)
+        if p is None:
+            self._register_port(info, name_node, decl_node, direction, width)
+            return
+        p.direction = p.direction or direction
+        p.width_expr = p.width_expr or width
+        if p.decl_node is None:
+            p.decl_node = decl_node
+
+    def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
+        """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格 + body 声明）。"""
+        ports_field = self._ctx.field("ports")
+        items_field = self._ctx.field("items")
+        bare_rule = self._ctx.field("bare_rule")
+        decl_field = self._ctx.field("decl")
+        direction_field = self._ctx.field("direction")
+        width_field = self._ctx.field("width")
+        port_type_field = self._ctx.field("port_type")
+        name_field = self._ctx.field("name")
+        ports_node = unwrap_optional(getattr(module_node, ports_field, None))
+        items = getattr(ports_node, items_field, None) if ports_node else None
+        if not items:
+            # 无端口列表（纯 body 端口声明）也补 body（旧式风格）
+            self._fill_body_ports(info, module_node)
+            return
+        for item in items:
+            if not isinstance(item, Node):
+                continue
+            if bare_rule and item.node_name == bare_rule:
+                # 裸名端口（方向/类型在 body 声明，此处仅登记名字）
+                if item.content:
+                    info.ports[item.content] = ModulePort(name=item.content)
+                continue
+            # ANSI 风格：端口声明规则 inline 展平，item 即具体声明；
+            # 防御：也可能是未展平的包装节点（取其 decl 字段）
+            decl = getattr(item, decl_field, None) if decl_field else None
+            if isinstance(decl, Node):
+                item = decl
+            direction = ""
+            if direction_field:
+                direction = getattr(item, direction_field, "") or ""
+            pr = getattr(item, width_field, None) if width_field else None
+            width = self._ctx.render_subtree(pr) if isinstance(pr, Node) else ""
+            pt = getattr(item, port_type_field, None) if port_type_field else None
+            net_type = self._ctx.render_subtree(pt) if isinstance(pt, Node) else ""
+            for d, dn in self._decl_name_nodes(item, items_field, name_field):
+                self._register_port(info, dn, d, direction, width, net_type)
+        # body 端口声明（旧式 `input [7:0] x;` 在模块体）→ 按名补方向/宽度
+        # （2026-08-29 修复：tv80 旧式端口方向/宽度缺失——影响 W104 方向
+        # 判定与 B3 端口连接宽度）。
+        self._fill_body_ports(info, module_node)
+
+    def _fill_body_ports(self, info: ModuleInfo, module_node: Node) -> None:
+        """body 端口声明补全：方向/宽度按名回填裸名端口或补登记。
+
+        只扫模块体顶层声明，**跳过函数/任务子树**——函数参数（input
+        [3:0] A）与模块体端口同节点名（BodyInputDecl），全子树遍历会把
+        函数局部 input 误当模块端口（2026-08-29 对标测试暴露：tv80_alu
+        的 AddSub4 函数参数 A/B/Sub/Carry_In 被误登记为模块端口，8 条
+        W104 假阳性；Verilator 0 报 PINMISSING）。
+        """
+        rules = self._ctx.struct.get("body_port_rules") or []
+        if not rules:
+            return
+        direction_field = self._ctx.field("body_direction") or "direction"
+        width_field = self._ctx.field("width")
+        items_field = self._ctx.field("items")
+        name_field = self._ctx.field("name")
+        _FUNC_OR_TASK = ("FuncDecl", "FuncDeclOld", "TaskDecl", "FunctionDecl",
+                         "TaskDeclStmt")
+        stack = list(module_node.iter_children())
+        while stack:
+            node = stack.pop()
+            if not isinstance(node, Node):
+                continue
+            if node.node_name in _FUNC_OR_TASK:
+                continue  # 函数/任务子树整体跳过（参数非模块端口）
+            if node.node_name in rules:
+                direction = getattr(node, direction_field, "") or ""
+                pr = getattr(node, width_field, None)
+                width = self._ctx.render_subtree(pr) if isinstance(pr, Node) else ""
+                for d, dn in self._decl_name_nodes(node, items_field, name_field):
+                    self._backfill_port(info, dn, d, direction, width)
+            # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
+            for child in node.iter_children():
+                stack.append(child)
+
+    def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
+        params_field = self._ctx.field("params")
+        param_name_field = self._ctx.field("param_name")
+        value_field = self._ctx.field("value")
+        params_node = unwrap_optional(getattr(module_node, params_field, None))
+        params = getattr(params_node, params_field, None) if params_node else None
+        if params:
+            for p in params:
+                if not isinstance(p, Node):
+                    continue
+                p = unwrap_optional(p)  # 参数声明可能被 optional 包装
+                if not isinstance(p, Node):
+                    continue
+                pn = getattr(p, param_name_field, None) if param_name_field else None
+                if not isinstance(pn, Node) or not pn.content:
+                    continue
+                val = getattr(p, value_field, None) if value_field else None
+                info.params[pn.content] = ModuleParam(
+                    name=pn.content,
+                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
+                )
+        # 模块体内参数声明（`parameter P = v;` 语句形态，非头部 #(..) 列表）：
+        # ice40 单元库 SB_RAM40_4K 等大量使用 body 参数——只收头部参数会让
+        # W103（覆盖不存在参数）误报（2026-08-29 对标测试暴露，79 条 FP）。
+        # 扫描 module_node 子树内全部 ParamDeclStmt（含 generate/ifdef 内）。
+        self._fill_body_params(info, module_node)
+
+    def _fill_body_params(self, info: ModuleInfo, module_node: Node) -> None:
+        """扫描模块体 ParamDeclStmt，补 body 参数进 module_index。
+
+        ParamDeclStmt → items(DeclaratorList) → Declarator(name, init)。
+        头部参数已填过（同名保留头部——body 同名参数属重复声明，取先）。
+        """
+        for node in iter_nodes(module_node):
+            if node.node_name != "ParamDeclStmt":
+                continue
+            for d, name_node in self._decl_name_nodes(node, "items", "name"):
+                if d.node_name != "Declarator":
+                    continue
+                if name_node.content in info.params:
+                    continue  # 头部已填（body 同名重复声明，取先）
+                val = getattr(d, "init", None)
+                info.params[name_node.content] = ModuleParam(
+                    name=name_node.content,
+                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
+                )
+
+
 class _StructureBase:
     """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
 
@@ -688,6 +890,7 @@ class _StructureBase:
     """
 
     _ctx: StructureCtx
+    _extract: ModuleExtractor
     _conn: ConnectionElaborator
     _gen: GenerateEvaluator
 
@@ -757,7 +960,7 @@ class _StructureBase:
             return fr
 
         fr.ast = ast
-        fr.modules = self._extract_modules(ast, path)
+        fr.modules = self._extract.extract_modules(ast, path)
         fr.inst_sites = collect_nodes(ast, self._ctx.rule("module_inst_rule"))
         fr.connections = self._conn.elaborate_connections(path, fr.inst_sites)
         # 层 1 补充：模块内实例挂回 ModuleInfo（实例树展开的入口）
@@ -847,199 +1050,18 @@ class _StructureBase:
 
 
 
-    # ── AST 提取（模块定义表 / 实例化点）──
-
-    def _extract_modules(self, ast: Node, path: str) -> dict[str, ModuleInfo]:
-        modules: dict[str, ModuleInfo] = {}
-        if not self._ctx.has_structure():
-            return modules  # 语言包未声明结构协议 → 无模块提取
-        decl_rule = self._ctx.rule("module_decl_rule")
-        name_field = self._ctx.field("module_name")
-        for node in iter_nodes(ast):
-            if node.node_name != decl_rule:
-                continue
-            name_node = getattr(node, name_field, None)
-            if not isinstance(name_node, Node) or not name_node.content:
-                continue
-            info = ModuleInfo(name=name_node.content, file=path, node=node)
-            node._file = path  # related 链跨文件定位
-            self._fill_ports(info, node)
-            self._fill_params(info, node)
-            modules[info.name] = info
-        return modules
 
 
-    def _decl_name_nodes(
-        self, decl_node: Node, items_field: str, name_field: str
-    ) -> list[tuple[Node, Node]]:
-        """声明节点 → [(名字声明节点, 名字节点)]（端口/参数三类填充共用）。
-
-        端口与参数的声明同形：外层声明节点的 `items` 再套一层声明列表
-        （内层元素挂 `name`）。列表缺失 / 元素非节点 / 名字为空 → 不计。
-        """
-        dlist = getattr(decl_node, items_field, None) if items_field else None
-        d_items = getattr(dlist, items_field, None) if isinstance(dlist, Node) else None
-        out: list[tuple[Node, Node]] = []
-        for d in d_items or []:
-            if not isinstance(d, Node):
-                continue
-            dn = getattr(d, name_field, None) if name_field else None
-            if isinstance(dn, Node) and dn.content:
-                out.append((d, dn))
-        return out
-
-    def _register_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
-                       direction: str, width: str, net_type: str = "") -> None:
-        """登记端口（同名覆盖：ANSI 头部声明优先于 body 回填）。"""
-        decl_node._file = info.file
-        info.ports[name_node.content] = ModulePort(
-            name=name_node.content,
-            direction=direction,
-            width_expr=width,
-            net_type=net_type,
-            decl_node=decl_node,
-        )
-
-    def _backfill_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
-                       direction: str, width: str) -> None:
-        """按名回填端口方向/宽度；未登记则补登记（body 声明不带 net_type）。"""
-        p = info.ports.get(name_node.content)
-        if p is None:
-            self._register_port(info, name_node, decl_node, direction, width)
-            return
-        p.direction = p.direction or direction
-        p.width_expr = p.width_expr or width
-        if p.decl_node is None:
-            p.decl_node = decl_node
 
 
-    def _fill_ports(self, info: ModuleInfo, module_node: Node) -> None:
-        """按结构协议提取端口声明形态（ANSI 风格 + 裸名风格 + body 声明）。"""
-        ports_field = self._ctx.field("ports")
-        items_field = self._ctx.field("items")
-        bare_rule = self._ctx.field("bare_rule")
-        decl_field = self._ctx.field("decl")
-        direction_field = self._ctx.field("direction")
-        width_field = self._ctx.field("width")
-        port_type_field = self._ctx.field("port_type")
-        name_field = self._ctx.field("name")
-        ports_node = unwrap_optional(getattr(module_node, ports_field, None))
-        items = getattr(ports_node, items_field, None) if ports_node else None
-        if not items:
-            # 无端口列表（纯 body 端口声明）也补 body（旧式风格）
-            self._fill_body_ports(info, module_node)
-            return
-        for item in items:
-            if not isinstance(item, Node):
-                continue
-            if bare_rule and item.node_name == bare_rule:
-                # 裸名端口（方向/类型在 body 声明，此处仅登记名字）
-                if item.content:
-                    info.ports[item.content] = ModulePort(name=item.content)
-                continue
-            # ANSI 风格：端口声明规则 inline 展平，item 即具体声明；
-            # 防御：也可能是未展平的包装节点（取其 decl 字段）
-            decl = getattr(item, decl_field, None) if decl_field else None
-            if isinstance(decl, Node):
-                item = decl
-            direction = ""
-            if direction_field:
-                direction = getattr(item, direction_field, "") or ""
-            pr = getattr(item, width_field, None) if width_field else None
-            width = self._ctx.render_subtree(pr) if isinstance(pr, Node) else ""
-            pt = getattr(item, port_type_field, None) if port_type_field else None
-            net_type = self._ctx.render_subtree(pt) if isinstance(pt, Node) else ""
-            for d, dn in self._decl_name_nodes(item, items_field, name_field):
-                self._register_port(info, dn, d, direction, width, net_type)
-        # body 端口声明（旧式 `input [7:0] x;` 在模块体）→ 按名补方向/宽度
-        # （2026-08-29 修复：tv80 旧式端口方向/宽度缺失——影响 W104 方向
-        # 判定与 B3 端口连接宽度）。
-        self._fill_body_ports(info, module_node)
 
 
-    def _fill_body_ports(self, info: ModuleInfo, module_node: Node) -> None:
-        """body 端口声明补全：方向/宽度按名回填裸名端口或补登记。
-
-        只扫模块体顶层声明，**跳过函数/任务子树**——函数参数（input
-        [3:0] A）与模块体端口同节点名（BodyInputDecl），全子树遍历会把
-        函数局部 input 误当模块端口（2026-08-29 对标测试暴露：tv80_alu
-        的 AddSub4 函数参数 A/B/Sub/Carry_In 被误登记为模块端口，8 条
-        W104 假阳性；Verilator 0 报 PINMISSING）。
-        """
-        rules = self._ctx.struct.get("body_port_rules") or []
-        if not rules:
-            return
-        direction_field = self._ctx.field("body_direction") or "direction"
-        width_field = self._ctx.field("width")
-        items_field = self._ctx.field("items")
-        name_field = self._ctx.field("name")
-        _FUNC_OR_TASK = ("FuncDecl", "FuncDeclOld", "TaskDecl", "FunctionDecl",
-                         "TaskDeclStmt")
-        stack = list(module_node.iter_children())
-        while stack:
-            node = stack.pop()
-            if not isinstance(node, Node):
-                continue
-            if node.node_name in _FUNC_OR_TASK:
-                continue  # 函数/任务子树整体跳过（参数非模块端口）
-            if node.node_name in rules:
-                direction = getattr(node, direction_field, "") or ""
-                pr = getattr(node, width_field, None)
-                width = self._ctx.render_subtree(pr) if isinstance(pr, Node) else ""
-                for d, dn in self._decl_name_nodes(node, items_field, name_field):
-                    self._backfill_port(info, dn, d, direction, width)
-            # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
-            for child in node.iter_children():
-                stack.append(child)
 
 
-    def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
-        params_field = self._ctx.field("params")
-        param_name_field = self._ctx.field("param_name")
-        value_field = self._ctx.field("value")
-        params_node = unwrap_optional(getattr(module_node, params_field, None))
-        params = getattr(params_node, params_field, None) if params_node else None
-        if params:
-            for p in params:
-                if not isinstance(p, Node):
-                    continue
-                p = unwrap_optional(p)  # 参数声明可能被 optional 包装
-                if not isinstance(p, Node):
-                    continue
-                pn = getattr(p, param_name_field, None) if param_name_field else None
-                if not isinstance(pn, Node) or not pn.content:
-                    continue
-                val = getattr(p, value_field, None) if value_field else None
-                info.params[pn.content] = ModuleParam(
-                    name=pn.content,
-                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
-                )
-        # 模块体内参数声明（`parameter P = v;` 语句形态，非头部 #(..) 列表）：
-        # ice40 单元库 SB_RAM40_4K 等大量使用 body 参数——只收头部参数会让
-        # W103（覆盖不存在参数）误报（2026-08-29 对标测试暴露，79 条 FP）。
-        # 扫描 module_node 子树内全部 ParamDeclStmt（含 generate/ifdef 内）。
-        self._fill_body_params(info, module_node)
 
 
-    def _fill_body_params(self, info: ModuleInfo, module_node: Node) -> None:
-        """扫描模块体 ParamDeclStmt，补 body 参数进 module_index。
 
-        ParamDeclStmt → items(DeclaratorList) → Declarator(name, init)。
-        头部参数已填过（同名保留头部——body 同名参数属重复声明，取先）。
-        """
-        for node in iter_nodes(module_node):
-            if node.node_name != "ParamDeclStmt":
-                continue
-            for d, name_node in self._decl_name_nodes(node, "items", "name"):
-                if d.node_name != "Declarator":
-                    continue
-                if name_node.content in info.params:
-                    continue  # 头部已填（body 同名重复声明，取先）
-                val = getattr(d, "init", None)
-                info.params[name_node.content] = ModuleParam(
-                    name=name_node.content,
-                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
-                )
+
 
 
     def _build_signal_graph(self) -> dict:
