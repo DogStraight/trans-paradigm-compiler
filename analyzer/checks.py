@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from core.check_registry import (
@@ -75,46 +76,74 @@ def active_rule_ids(analyzer) -> set:
     return active
 
 
+@dataclass(frozen=True)
+class _RuleScope:
+    """一次 postpass 的规则生效范围（跨符号复用）。"""
+
+    plugins_dir: str              # 语言包插件目录（规则表加载根）
+    active: set                   # 启用规则 id 集
+    overrides: dict               # 用户 severity 覆盖 {rid: {severity: ...}}
+    per_file: dict                # 文件 glob 豁免 {rid: [glob, ...]}
+    file_ctx: str | None          # 符号文件代表路径（per_file 匹配用）
+
+
 def check_rules_pass(analyzer, context) -> None:
     """postpass 入口：遍历后对所有符号按 kind 分发声明式规则。
 
     从 analyzer.all_symbols（遍历期 symbol_declare 原语收集）取符号，
     按 sym.kind 查规则表，pattern 判定 / handler 兜底，报诊断。
     无规则表（语言包未声明 rules/）时零开销返回。
-    规则表定位：analyzer._rules_dir（grammar/<lang>/）下的 plugins/；
-    未指定（None）用默认包。
-
-    P4 用户配置（config/tpc_config.json checks 段）在此应用：
-        enabled   未列出 = 关闭（"不选即关"）；缺省 = 全部启用
-        overrides severity 覆盖（如 NC001 → error）
-        per_file  文件 glob 豁免（disabled 列表）
+    规则生效范围（规则表定位 + P4 用户配置 + 文件上下文）见 `_rule_scope`。
     """
     symbols = getattr(analyzer, "all_symbols", None) or []
     if not symbols:
         return
-    plugins_dir = plugins_dir_of(analyzer)
-    user_cfg = load_user_check_config(plugins_dir=plugins_dir)
-    overrides = user_cfg.get("overrides", {})
-    per_file = user_cfg.get("per_file", {})
-    file_ctx = _file_context(symbols)
-    active = active_rule_ids(analyzer)
+    scope = _rule_scope(analyzer, symbols)
 
     # 规则表按插件目录加载（语言包 rules/）；缓存由 check_registry 管理
     for sym in symbols:
-        rules = get_rules_for_kind(sym.kind, plugins_dir=plugins_dir)
-        if not rules:
-            continue
-        name = getattr(sym, "name", "") or ""
-        if not name:
-            continue
-        for rule in rules:
-            rid = rule.get("id", "")
-            if rid not in active:
-                continue  # 未启用（默认关 / 不选即关）
-            if _disabled_for_file(rid, file_ctx, per_file):
-                continue  # per_file 豁免
-            rule = _with_override(rule, overrides.get(rid))
-            _apply_rule(sym, rule, name, context)
+        _check_symbol(sym, scope, context)
+
+
+def _rule_scope(analyzer, symbols) -> _RuleScope:
+    """装配本次 postpass 的规则生效范围。
+
+    规则表定位：analyzer._rules_dir（grammar/<lang>/）下的 plugins/；
+    未指定（None）用默认包。
+    P4 用户配置（config/tpc_config.json checks 段）：enabled 未列出 =
+    关闭（"不选即关"，见 `active_rule_ids`）；overrides severity 覆盖；
+    per_file 文件 glob 豁免（disabled 列表）。
+    """
+    plugins_dir = plugins_dir_of(analyzer)
+    user_cfg = load_user_check_config(plugins_dir=plugins_dir)
+    return _RuleScope(
+        plugins_dir=plugins_dir,
+        active=active_rule_ids(analyzer),
+        overrides=user_cfg.get("overrides", {}),
+        per_file=user_cfg.get("per_file", {}),
+        file_ctx=_file_context(symbols),
+    )
+
+
+def _check_symbol(sym, scope: _RuleScope, context) -> None:
+    """单个符号：按 kind 取规则表，逐条过滤生效性后应用。
+
+    三层过滤：规则表无该 kind → 跳过；规则未启用（默认关）→ 跳过；
+    规则被 per_file glob 豁免 → 跳过。通过者应用 severity 覆盖后执行。
+    """
+    rules = get_rules_for_kind(sym.kind, plugins_dir=scope.plugins_dir)
+    if not rules:
+        return
+    name = getattr(sym, "name", "") or ""
+    if not name:
+        return
+    for rule in rules:
+        rid = rule.get("id", "")
+        if rid not in scope.active:
+            continue  # 未启用（默认关 / 不选即关）
+        if _disabled_for_file(rid, scope.file_ctx, scope.per_file):
+            continue  # per_file 豁免
+        _apply_rule(sym, _with_override(rule, scope.overrides.get(rid)), name, context)
 
 
 def _file_context(symbols) -> str | None:
