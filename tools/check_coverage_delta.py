@@ -152,24 +152,23 @@ def _run_cov(files: list[str]) -> tuple[dict, str]:
     return normalized, label
 
 
-def _report(files: list[str], cov: dict, fail_under: float | None) -> int:
-    """打印每文件覆盖率；返回退出码。"""
-    rows: list[tuple[str, float, int, list[int]]] = []
-    for f in files:
-        info = _lookup(cov, f)
-        if info is None:
-            print(f"  [?]    {f}  — 未出现在报告中（本次测试范围未导入该模块？）")
-            continue
-        summary = info.get("summary", {})
-        pct = float(summary.get("percent_covered", 0.0))
-        stmts = int(summary.get("num_statements", 0))
-        missing = info.get("missing_lines", []) or []
-        rows.append((f, pct, stmts, missing))
+def _coverage_row(f: str, cov: dict) -> tuple[str, float, int, list[int]] | None:
+    """单文件覆盖率行 `(文件, 百分比, 语句数, 缺失行)`；报告里没有 → None。"""
+    info = _lookup(cov, f)
+    if info is None:
+        print(f"  [?]    {f}  — 未出现在报告中（本次测试范围未导入该模块？）")
+        return None
+    summary = info.get("summary", {})
+    return (
+        f,
+        float(summary.get("percent_covered", 0.0)),
+        int(summary.get("num_statements", 0)),
+        info.get("missing_lines", []) or [],
+    )
 
-    if not rows:
-        print("[warn] 无可用覆盖率数据")
-        return 0 if fail_under is None else 1
 
+def _print_rows(rows: list[tuple[str, float, int, list[int]]]) -> None:
+    """逐文件覆盖率表（缺失行最多预览 12 个）。"""
     width = max(len(r[0]) for r in rows)
     print()
     print(f"{'文件':<{width}}  覆盖率  语句  缺失行")
@@ -179,15 +178,33 @@ def _report(files: list[str], cov: dict, fail_under: float | None) -> int:
             miss_preview += f" …(+{len(missing) - 12})"
         print(f"{f:<{width}}  {pct:6.1f}%  {stmts:4d}  {miss_preview}")
 
+
+def _check_threshold(
+    rows: list[tuple[str, float, int, list[int]]], fail_under: float
+) -> int:
+    """阈值判定 → 退出码（低于阈值逐条列出）。"""
+    below = [(f, p) for f, p, _, _ in rows if p < fail_under]
+    if below:
+        detail = "；".join(f"{f} {p:.1f}%" for f, p in below)
+        print(f"[FAIL] 低于阈值 {fail_under:g}%：{detail}")
+        return 1
+    print(f"[OK] 均不低于阈值 {fail_under:g}%")
+    return 0
+
+
+def _report(files: list[str], cov: dict, fail_under: float | None) -> int:
+    """打印每文件覆盖率；返回退出码。"""
+    rows = [row for row in (_coverage_row(f, cov) for f in files) if row is not None]
+
+    if not rows:
+        print("[warn] 无可用覆盖率数据")
+        return 0 if fail_under is None else 1
+
+    _print_rows(rows)
     total = sum(r[1] * r[2] for r in rows) / max(sum(r[2] for r in rows), 1)
     print(f"\n[summary] 改动文件合计覆盖率 {total:.1f}%（语句加权）")
-    if fail_under is not None:  # NaN 比较在下方显式处理
-        below = [(f, p) for f, p, _, _ in rows if p < fail_under]
-        if below:
-            detail = "；".join(f"{f} {p:.1f}%" for f, p in below)
-            print(f"[FAIL] 低于阈值 {fail_under:g}%：{detail}")
-            return 1
-        print(f"[OK] 均不低于阈值 {fail_under:g}%")
+    if fail_under is not None:  # NaN 比较在阈值判定内显式处理
+        return _check_threshold(rows, fail_under)
     return 0
 
 
