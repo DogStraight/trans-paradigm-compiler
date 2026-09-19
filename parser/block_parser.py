@@ -148,6 +148,39 @@ def collect_line_comments(self, context: ParseContext, block_node: Node) -> None
     self._skip_tokens(context, tuple(self.skip_types))
 
 
+def _drain_comments(self, context: ParseContext, block_node: Node) -> None:
+    """反复"跳空白 + 收集行尾注释"，直到一轮下来 token 指针没有前进。
+
+    内层终止判据 = 指针未前进（`collect_line_comments` 每收一条注释都会
+    消费 comment + newline），故收完一轮后循环再跳一次空白继续尝试。
+    """
+    while True:
+        self._skip_tokens(context, tuple(self.skip_types))
+        if not context.has_more_tokens():
+            return
+        before = context.token_pointer
+        self._collect_line_comments(context, block_node)
+        if context.token_pointer == before:
+            return
+
+
+def _stop_on_sentence_failure(self, context: ParseContext, end_token) -> None:
+    """句子解析失败收口：记录失败现场 + 判定是否"提前停止"。
+
+    仅当仍有未消费 token（非 EOF/非块结束符）时标记 `_parse_truncated`：
+    这是语法错误的典型现场——解析无法继续但输入未耗尽。
+    """
+    self._record_fail_site(
+        context,
+        rule="sentence",
+        reason="sentence parse returned None (block body stop)",
+        preserve=True,
+    )
+    cur = context.peek_token()
+    if cur is not None and cur.type != end_token:
+        self._parse_truncated = True
+
+
 def parse_block_body(
     self,
     context: ParseContext,
@@ -162,15 +195,7 @@ def parse_block_body(
     end_token = block_end_of(rule)
 
     while context.has_more_tokens():
-        # 反复跳过空白 + 收集注释，直到没有更多注释为止
-        while True:
-            self._skip_tokens(context, tuple(self.skip_types))
-            if not context.has_more_tokens():
-                break
-            before = context.token_pointer
-            self._collect_line_comments(context, block_node)
-            if context.token_pointer == before:
-                break  # 没有收集到注释，退出内层循环
+        _drain_comments(self, context, block_node)
 
         if not context.has_more_tokens():
             break
@@ -182,17 +207,7 @@ def parse_block_body(
 
         stmt_node = parse_sentence(self, context)
         if stmt_node is None:
-            self._record_fail_site(
-                context,
-                rule="sentence",
-                reason="sentence parse returned None (block body stop)",
-                preserve=True,
-            )
-            # 仅当仍有未消费 token（非 EOF/非块结束符）时标记"提前停止"：
-            # 这是语法错误的典型现场——解析无法继续但输入未耗尽。
-            cur = context.peek_token()
-            if cur is not None and cur.type != end_token:
-                self._parse_truncated = True
+            _stop_on_sentence_failure(self, context, end_token)
             break
         block_node.add_sub_node(stmt_node)
     return True
