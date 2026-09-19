@@ -340,7 +340,8 @@ def _print_findings(title: str, findings: Sequence[Finding]) -> None:
         print(f"      {loc}: {f.message}{suffix}")
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """CLI 参数面（prog / 描述 / 四个开关）。"""
     parser = argparse.ArgumentParser(
         prog="check_hardcode",
         description="引擎约定门禁：语言知识不进代码（AGENTS.md 硬约束机器化）",
@@ -349,40 +350,52 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--strict-doc", action="store_true", help="规则 3 升为 gate")
     parser.add_argument("--strict-import", action="store_true", help="规则 4 升为 gate")
     parser.add_argument("--quiet", action="store_true", help="只输出违规与结论")
-    args = parser.parse_args(argv)
+    return parser
 
-    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
-    report = collect_findings(root)
-    results = report.results
 
+def _gate_rule_ids(args: argparse.Namespace) -> set[str]:
+    """gate 规则集：R1/R2/R5 常驻，R3/R4 由 --strict-* 升格。"""
     gate: set[str] = {"R1", "R2", "R5"}
     if args.strict_doc:
         gate.add("R3")
     if args.strict_import:
         gate.add("R4")
+    return gate
 
-    if not args.quiet:
+
+def _rule_label(rule_id: str, gate: set[str]) -> str:
+    """规则分级标签（gate / gate（--strict 升格）/ info）。"""
+    if rule_id not in gate:
+        return "info"
+    return "gate（--strict 升格）" if rule_id in ("R3", "R4") else "gate"
+
+
+def _print_rule_reports(report: CheckReport, gate: set[str], quiet: bool) -> None:
+    """逐规则打印：分级标签 + 违规 + allowlist 跳过（quiet 省表头与跳过项）。"""
+    if not quiet:
         print(
             f"[tpc 约定门禁] 词表 {len(report.vocab)} 个关键字"
             "（grammar/ 提取，剔除 Python 关键字）"
         )
     for rule_id in ("R1", "R2", "R3", "R4", "R5"):
-        res = results[rule_id]
-        viol: list[Finding] = res.violations
-        skip: list[Finding] = res.skipped
-        if rule_id in gate and rule_id in ("R3", "R4"):
-            label = "gate（--strict 升格）"
-        elif rule_id in gate:
-            label = "gate"
-        else:
-            label = "info"
-        if not args.quiet:
-            print(f"── 规则 {rule_id} [{label}]")
-        _print_findings(f"{rule_id} 发现", viol)
-        if skip and not args.quiet:
-            _print_findings(f"{rule_id} allowlist 跳过", skip)
+        res = report.results[rule_id]
+        if not quiet:
+            print(f"── 规则 {rule_id} [{_rule_label(rule_id, gate)}]")
+        _print_findings(f"{rule_id} 发现", res.violations)
+        if res.skipped and not quiet:
+            _print_findings(f"{rule_id} allowlist 跳过", res.skipped)
 
-    gate_findings = sum(len(results[r].violations) for r in gate)
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _build_arg_parser().parse_args(argv)
+
+    root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
+    report = collect_findings(root)
+    gate = _gate_rule_ids(args)
+
+    _print_rule_reports(report, gate, args.quiet)
+
+    gate_findings = sum(len(report.results[r].violations) for r in gate)
     if gate_findings:
         print(f"[FAIL] 门禁违规 {gate_findings} 处（{', '.join(sorted(gate))}）")
         return 1
