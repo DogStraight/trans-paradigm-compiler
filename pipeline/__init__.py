@@ -974,85 +974,37 @@ def run_pipeline_on_source(
 
     # 默认参数来源：tpc_config.json 的 pipeline 段（项目级默认值），
     # 调用方显式传入时覆盖（None 表示"未传，取配置默认"）。
-    _cfg = _load_pipeline_defaults()
-
-    # rules_dir 相对路径 → 基于项目根解析为绝对路径。wheel 安装后从任意
-    # 目录运行，相对路径（如 "grammar/verilog"）会解析到 CWD 下失败。
-    # 项目根 = 本包目录的父级（editable=项目根 / wheel=site-packages，
-    # grammar 作为包在 site-packages/grammar/，两种模式均可定位）。
-    if rules_dir and not os.path.isabs(rules_dir):
-        _pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        rules_dir = os.path.join(_pkg_root, rules_dir)
-    if ext_dirs:
-        ext_dirs = [
-            d if os.path.isabs(d) else os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d
-            )
-            for d in ext_dirs
-        ]
-
-    # 参数默认值解析（None → 配置默认）
-    if out_dir is None:
-        out_dir = _cfg.get("out_dir")
-    if expand_macros is None:
-        expand_macros = _cfg.get("expand_macros", False)
-    if quiet is None:
-        quiet = _cfg.get("quiet", False)
-    if analyzer_enabled is None:
-        analyzer_enabled = _cfg.get("analyzer", True)
-    if transform_enabled is None:
-        transform_enabled = _cfg.get("transform", True)
-    if renderer_enabled is None:
-        renderer_enabled = _cfg.get("renderer", True)
-    if stage is None:
-        stage = _cfg.get("stage")
-    if no_lint is None:
-        no_lint = not _cfg.get("lint", True)
-    if include_dirs is None:
-        include_dirs = _cfg.get("include_dirs")
-    if predefined is None:
-        predefined = _cfg.get("define")
-    if undefine is None:
-        undefine = _cfg.get("undefine")
-    if check_idempotent is None:
-        check_idempotent = _cfg.get("check_idempotent", True)
-    if parse_enabled is None:
-        parse_enabled = _cfg.get("parse", True)
-    if format_output is None:
-        format_output = _cfg.get("format_output", True)
-
-    ctx = _PipelineContext(
+    cfg = _load_pipeline_defaults()
+    rules_dir, ext_dirs = _abs_rules_dirs(rules_dir, ext_dirs)
+    ctx = _build_pipeline_ctx(
+        _resolve_defaults(
+            cfg,
+            {
+                "rules_dir": rules_dir,
+                "ext_dirs": ext_dirs,
+                "out_dir": out_dir,
+                "expand_macros": expand_macros,
+                "quiet": quiet,
+                "analyzer_enabled": analyzer_enabled,
+                "transform_enabled": transform_enabled,
+                "renderer_enabled": renderer_enabled,
+                "stage": stage,
+                "no_lint": no_lint,
+                "include_dirs": include_dirs,
+                "predefined": predefined,
+                "undefine": undefine,
+                "check_idempotent": check_idempotent,
+                "parse_enabled": parse_enabled,
+                "format_output": format_output,
+                "parse_raw": parse_raw,
+            },
+        ),
         source=source,
         input_path=input_path,
-        out_dir=out_dir,
-        rules_dir=rules_dir,
-        ext_dirs=ext_dirs,
-        quiet=quiet,
-        stage=stage,
-        expand_macros=expand_macros,
-        analyzer_enabled=analyzer_enabled,
-        transform_enabled=transform_enabled,
-        renderer_enabled=renderer_enabled,
-        no_lint=no_lint,
-        parse_enabled=parse_enabled,
-        format_output=format_output,
         expand_enhanced=expand_enhanced,
-        include_dirs=include_dirs,
-        predefined=predefined,
-        undefine=undefine,
-        check_idempotent=check_idempotent,
         fidelity=fidelity,
-        parse_raw=bool(parse_raw),
     )
-    ctx.result = {
-        "success": False,
-        "output": "",
-        "ast": None,
-        "extra_asts": [],
-        "error": "",
-        "parser": None,
-        "idempotent": True,
-    }
+    ctx.result = _init_result_dict()
 
     # 输出路径 + 共享组件
     _resolve_paths(ctx)
@@ -1066,17 +1018,15 @@ def run_pipeline_on_source(
     tokens = _stage_lex(ctx)
     # 空体宏 → 占位/跳过（锚路径下无 macro.call，空转）
     tokens = _stage_macro_placeholders(tokens, ctx.macro_table)
-    if stage == "lex":
-        ctx.result["success"] = True
-        return ctx.result
+    if ctx.stage == "lex":
+        return _succeed(ctx)
 
     # Pre-scan + lint
     pre_scan_config, pre_symbols = _stage_prescan(ctx)
     if not _stage_lint(ctx):
         return ctx.result
-    if not parse_enabled:
-        ctx.result["success"] = True
-        return ctx.result
+    if not ctx.parse_enabled:
+        return _succeed(ctx)
 
     # 解析
     ast = _stage_parse(ctx, pre_scan_config, pre_symbols, tokens)
@@ -1084,14 +1034,125 @@ def run_pipeline_on_source(
         return ctx.result
     # 宏边界 raw 拼接（ADR-0017 决策 3/4）：区间 → 分层选替换单元 → 引擎标记
     ast = _stage_macro_splice(ctx, ast, tokens)
-    if stage == "parse":
-        ctx.result["success"] = True
-        ctx.result["ast"] = ast
-        return ctx.result
+    if ctx.stage == "parse":
+        return _succeed(ctx, ast)
 
+    return _run_post_parse(ctx, ast, schedule, cfg)
+
+
+def _succeed(ctx: _PipelineContext, ast: Any = None) -> dict[str, Any]:
+    """提前收尾：标记成功（可选带 ast）并返回结果。"""
+    ctx.result["success"] = True
+    if ast is not None:
+        ctx.result["ast"] = ast
+    return ctx.result
+
+
+def _init_result_dict() -> dict[str, Any]:
+    """管线结果骨架（字段契约见 `run_pipeline_on_source` docstring）。"""
+    return {
+        "success": False,
+        "output": "",
+        "ast": None,
+        "extra_asts": [],
+        "error": "",
+        "parser": None,
+        "idempotent": True,
+    }
+
+
+# 参数 → 配置键 → 兜底值（None = "未传，取配置默认"）
+_DEFAULT_SPECS: tuple[tuple[str, str, Any], ...] = (
+    ("out_dir", "out_dir", None),
+    ("expand_macros", "expand_macros", False),
+    ("quiet", "quiet", False),
+    ("analyzer_enabled", "analyzer", True),
+    ("transform_enabled", "transform", True),
+    ("renderer_enabled", "renderer", True),
+    ("stage", "stage", None),
+    ("include_dirs", "include_dirs", None),
+    ("predefined", "define", None),
+    ("undefine", "undefine", None),
+    ("check_idempotent", "check_idempotent", True),
+    ("parse_enabled", "parse", True),
+    ("format_output", "format_output", True),
+)
+
+
+def _resolve_defaults(cfg: dict, values: dict[str, Any]) -> dict[str, Any]:
+    """`values` 里为 None 的项 → 取 `cfg` 默认（其余项原样透传）。
+
+    两个不直取同名键的特例：`no_lint` 与配置键**反向**（配置用 `lint=true`，
+    接口用 `no_lint`）；`parse_raw` 只做布尔归一（无配置默认）。
+    """
+    resolved = dict(values)
+    for key, cfg_key, fallback in _DEFAULT_SPECS:
+        if resolved.get(key) is None:
+            resolved[key] = cfg.get(cfg_key, fallback)
+    if resolved.get("no_lint") is None:
+        resolved["no_lint"] = not cfg.get("lint", True)
+    resolved["parse_raw"] = bool(resolved.get("parse_raw"))
+    return resolved
+
+
+def _abs_rules_dirs(
+    rules_dir: str, ext_dirs: list[str] | None
+) -> tuple[str, list[str] | None]:
+    """相对路径 → 基于项目根解析为绝对路径。
+
+    wheel 安装后从任意目录运行，相对路径（如 "grammar/verilog"）会解析到 CWD
+    下失败。项目根 = 本包目录的父级（editable=项目根 / wheel=site-packages，
+    grammar 作为包在 site-packages/grammar/，两种模式均可定位）。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if rules_dir and not os.path.isabs(rules_dir):
+        rules_dir = os.path.join(root, rules_dir)
+    if ext_dirs:
+        ext_dirs = [d if os.path.isabs(d) else os.path.join(root, d) for d in ext_dirs]
+    return rules_dir, ext_dirs
+
+
+def _build_pipeline_ctx(
+    resolved: dict[str, Any],
+    *,
+    source: str,
+    input_path: str | None,
+    expand_enhanced: bool,
+    fidelity: str,
+) -> _PipelineContext:
+    """按解析后的参数构造管线上下文。"""
+    return _PipelineContext(
+        source=source,
+        input_path=input_path,
+        out_dir=resolved["out_dir"],
+        rules_dir=resolved["rules_dir"],
+        ext_dirs=resolved["ext_dirs"],
+        quiet=resolved["quiet"],
+        stage=resolved["stage"],
+        expand_macros=resolved["expand_macros"],
+        analyzer_enabled=resolved["analyzer_enabled"],
+        transform_enabled=resolved["transform_enabled"],
+        renderer_enabled=resolved["renderer_enabled"],
+        no_lint=resolved["no_lint"],
+        parse_enabled=resolved["parse_enabled"],
+        format_output=resolved["format_output"],
+        expand_enhanced=expand_enhanced,
+        include_dirs=resolved["include_dirs"],
+        predefined=resolved["predefined"],
+        undefine=resolved["undefine"],
+        check_idempotent=resolved["check_idempotent"],
+        fidelity=fidelity,
+        parse_raw=resolved["parse_raw"],
+    )
+
+
+def _run_post_parse(
+    ctx: _PipelineContext, ast: Any, schedule: str | None, cfg: dict
+) -> dict[str, Any]:
+    """解析之后的收尾：归一化 → 编排调度 → trace 落盘 → 渲染。"""
     # 归一化
     ast = normalize_ast(ast)
-    if not quiet and ctx.ast_json:
+    if not ctx.quiet and ctx.ast_json:
         save_json(ast.dump(), ctx.ast_json, "ast", log_fn=ctx.log)
 
     # 编排调度（ADR-0007）：schedule 内 pass 序列（analyze/transform/check），
@@ -1099,7 +1160,7 @@ def run_pipeline_on_source(
     schedule_name: str = (
         schedule
         if schedule is not None
-        else _cfg.get("schedule", DEFAULT_SCHEDULE_NAME)
+        else cfg.get("schedule", DEFAULT_SCHEDULE_NAME)
     )
     # schedules / mapping_cfg 由管线按 (rules_dir, ext_dirs) 缓存后注入编排器
     # （schedule.py 不触碰 _PIPELINE_SHARED，保持可独立复用）。
@@ -1119,12 +1180,9 @@ def run_pipeline_on_source(
         )
     if ctx.result.get("error"):
         return ctx.result
-    if stage in _LEGACY_PASS_STAGES:
-        ctx.result["success"] = True
-        ctx.result["ast"] = ast
-        return ctx.result
+    if ctx.stage in _LEGACY_PASS_STAGES:
+        return _succeed(ctx, ast)
 
     # 渲染
     _stage_render(ctx, ast, ctx.result.get("parser"))
-
     return ctx.result
