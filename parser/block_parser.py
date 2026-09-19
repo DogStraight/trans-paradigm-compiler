@@ -6,7 +6,7 @@ _parse_block_body, parse_block。
 Doc: docs/language_walkthrough.md（块规则解析）
 """
 
-from core.define import Node, GrammarRule
+from core.define import Node, GrammarRule, block_end_of
 from .parser_core import ParseContext
 from ._constants import (
     COMMENT_NODE_NAME,
@@ -59,13 +59,6 @@ def parse_sentence(self, context: ParseContext) -> Node | None:
     return None
 
 
-def _get_block_end(rule: GrammarRule) -> str:
-    """从规则提取块结束符（block_end 由 production 首尾字面 token 推导）。"""
-    if hasattr(rule, "block_end") and rule.block_end:
-        return rule.block_end
-    return ""
-
-
 def resolve_block_rule(
     self, start_token: str | None
 ) -> tuple[GrammarRule, str, str | None] | None:
@@ -79,7 +72,7 @@ def resolve_block_rule(
         self._log_state(f"未找到匹配的块规则: {start_token}")
         return None
     block_name = matched_rule.name
-    end_token = _get_block_end(matched_rule)
+    end_token = block_end_of(matched_rule)
     return matched_rule, block_name, end_token
 
 
@@ -166,7 +159,7 @@ def parse_block_body(
     `parse_sentence` 返回 None 时直接 break，块体解析停止。
     语句匹配失败时直接 break，停止块体解析。
     """
-    end_token = _get_block_end(rule)
+    end_token = block_end_of(rule)
 
     while context.has_more_tokens():
         # 反复跳过空白 + 收集注释，直到没有更多注释为止

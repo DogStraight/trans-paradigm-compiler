@@ -279,6 +279,15 @@ def collect_nodes(root: Node, node_name: str) -> list[Node]:
     return [n for n in iter_nodes(root) if n.node_name == node_name]
 
 
+def block_end_of(rule) -> str:
+    """规则的块结束符 token 类型（`block_end` 由 production 首尾字面 token 推导）。
+
+    无声明 / 空串 → `""`。parser 两处（production 展开与块解析）此前各写一份
+    同名同体的取值函数，统一到规则模型旁（GrammarRule 定义在本模块）。
+    """
+    return getattr(rule, "block_end", "") or ""
+
+
 class FileManager:
     """纯静态工具类 — 文件路径管理与 TOML 加载。全局单例（无实例状态）。"""
 

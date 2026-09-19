@@ -8,7 +8,7 @@ _production.py — 生产式解析全流程（合并 rule_matcher + node_parsers
 Doc: docs/language_walkthrough.md（production 求值引擎）
 """
 
-from core.define import Node, Token, GrammarRule, CHILDREN_FIELD
+from core.define import Node, Token, GrammarRule, CHILDREN_FIELD, block_end_of
 from .parser_core import ParseContext
 from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
@@ -233,7 +233,7 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         rule_node.add_sub_node(child)
 
     # 4) 消费结束符
-    be = getattr(rule, "block_end", None) or _get_block_end_for(rule)
+    be = block_end_of(rule)
     if be:
         self._skip_tokens(context, tuple(self.skip_types))
         tok = context.peek_token()
@@ -1017,13 +1017,6 @@ def parse_plus(self, node: dict, context: ParseContext) -> Node | None:
     for child in nodes:
         plus_node.add_sub_node(child) if child is not None else None
     return plus_node
-
-
-def _get_block_end_for(rule) -> str:
-    """从规则提取块结束符（block_end 由 production 首尾字面 token 推导）。"""
-    if hasattr(rule, "block_end") and rule.block_end:
-        return rule.block_end
-    return ""
 
 
 # 公开别名（保持与 parser_core 中 _repeat_loop = repeat_loop 的兼容）
