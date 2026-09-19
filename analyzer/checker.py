@@ -73,16 +73,19 @@ class ProjectChecker:
         self._register = register
         # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
         self._signal_graph: dict = {}
-        # 各阶段协作者（均只持 ctx 引用，不存会话状态）
-        self._gen = GenerateEvaluator(self._ctx)
-        self._conn = ConnectionElaborator(self._ctx)
-        self._extract = ModuleExtractor(self._ctx)
+        # 各阶段协作者按依赖链接线：门面**只持有会话上下文 + 两个阶段入口**
+        # （发现 / 信号图），中间协作者（连接展开 / 提取 / 单文件流水线 /
+        # 条件求值）作为构造链局部量注入下游——DAG 只在构造处显式，之后不必
+        # 经门面中转（原先"一个 self 上的 49 个方法"正因缺这层表达）。
+        gen = GenerateEvaluator(self._ctx)
+        conn = ConnectionElaborator(self._ctx)
+        extract = ModuleExtractor(self._ctx)
         # 单文件流水线组合提取器 + 连接展开器（阶段顺序在它内部）
-        self._pipeline = FilePipeline(self._ctx, self._extract, self._conn)
+        pipeline = FilePipeline(self._ctx, extract, conn)
         # 递归发现组合单文件流水线
-        self._indexer = ModuleIndexer(self._ctx, self._pipeline)
+        self._indexer = ModuleIndexer(self._ctx, pipeline)
         # 层 3 信号图组合连接展开器 + generate 求值器
-        self._graph = SignalGraphBuilder(self._ctx, self._conn, self._gen)
+        self._graph = SignalGraphBuilder(self._ctx, conn, gen)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 
