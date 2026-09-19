@@ -171,18 +171,21 @@
     `cmd_rename`、`_smoke_test`（format/lint/check 三面必跑）、
     `bifrost_probe/smelly.py`（**刻意坏味探针**，修好即门禁失效）。判据与逐条理由见
     dispositions。
-- **B-F 圈复杂度 / 认知复杂度**（五个批次，2026-09-19）：外部裁判同口径量化（批次三起
-  把本机 `.agents/` 技能脚本排除出扫描集，历史数字同口径扣除 1 条/名目）——
+- **B-F 圈复杂度 / 认知复杂度**（六个批次，2026-09-19）：外部裁判同口径量化（批次三起
+  把本机 `.agents/` 技能脚本排除出扫描集，历史数字同口径扣除）——
   批次一 150 → 132 / 157 → 140；二 132 → 124 / 140 → 135；三 124 → 107 / 135 → 117；
-  四 107 → 87 / 117 → 96；五 **87 → 78 / 96 → 90**；
-  **五批合计 CC 150 → 78（-72）、认知 157 → 90（-67）**。
+  四 107 → 87 / 117 → 96；五 87 → 78 / 96 → 90；六 **78 → 58 / 90 → 72**；
+  **六批合计 CC 150 → 58（-92）、认知 157 → 72（-85）**。
   - ✅ 已清（**整文件**）：`linter/lookahead.py`、`preprocessor/_expand.py`、`parser/follow.py`、
     `transform/config_driven.py`、`pipeline/__init__.py`、`formatter/indent.py`、
     `width_check/_width_check.py`、`formatter/wrap.py`、`formatter/passes/column_align.py`、
     `renderer/node_renderer.py`、`parser/grammar_inject.py`、`linter/checkers/matcher.py`、
     `parser/attribute_binder.py`、`parser/_production.py`、`pipeline/schedule.py`、
     `typed_ports/_transform.py`、`checks/_shared.py`、`latch_check/_latch_check.py`、
-    `core/plugin_loader.py`；局部：`transform/_semantic_mapping`（认知 99 + CC 27）、
+    `core/plugin_loader.py`、`pipeline/units.py`、`parser/rule_selector.py`、
+    `transform/engine.py`、`linter/grammar_slicer.py`、`core/global_state.py`、
+    `preprocessor/_bridge.py`、`analyzer/primitives/_symbol.py`、`pipeline/report_html.py`、
+    `linter/scanner.py`、`main.py`；局部：`transform/_semantic_mapping`（认知 99 + CC 27）、
     `normalizer._normalize`（34/89）、`renderer/doc` 三处（24/62、11/17、16/27）。
     提交见 dispositions 的逐条记录。
   - 判据 = **分派型保持 / 有内部逻辑拆**（判据与逐条清点在
@@ -193,19 +196,25 @@
     （一次去掉多处 `if trace:`；循环内 `sorted()` 打印留 guard）；
     ②状态收 `_XxxCtx` dataclass 后助手提到模块级——**嵌套函数的分支计入外层 CC**，
     所以"提模块级"是硬要求不是偏好。
-  - ⏳ 剩项（按当前值，现以**工具脚本与引擎尾项**为主）：`tools/check_test_isolation.main`
-    28/54、`pipeline/units.assign_points` 20、`policy/doc_sync.collect_refs` 20/43、
-    `rule_selector.analyze_production_features` 19、`tools/config_sites._scan_file` 19/79、
-    `policy/check_doc_refs.rule_d3_impl_test_files` 16/48、
-    `linter/grammar_slicer.build_slice_tree` 认知 43、
-    `transform/engine._collect_subtree_comments` 认知 40、`main._print_check_text` 认知 39
+  - ⏳ 剩项（按当前值，现以**工具脚本、引擎尾项与语言包尾项**为主）：
+    `analyzer/structure.py` 一族（`elaborate_connections` 认知 32、`ModuleExtractor._fill_ports`
+    15/28 + `_fill_params` 认知 23 + `_fill_body_ports` 19、`SignalGraphBuilder` 四处 16~19、
+    `GenerateEvaluator._gen_push_children` 12/19）、`transform/primitives/node.emit` 认知 30 +
+    `replace` 26、`tools/check_test_isolation.main` 28/54、`tools/config_sites._scan_file` 19/79 +
+    `_multi_dispatch_tables` 19、`policy/check_doc_refs.rule_d3_impl_test_files` 16/48、
+    `policy/doc_sync.collect_refs` 20/43、`lexer/number_gen._PatternBuilder.build_multi_prefix` 27、
+    `hier_check.resolve_member_width` 16/31 + `_member_width` 28、
+    `ifdef.run_ifdef_pass` 认知 31 + `ifdef_annotate.run_ifdef_annotate` 认知 30、
+    `grouping.group_by_scope` 15、`tools/check_coverage_delta._report` 17；
+    `parser/parser_core.Parser.__init__` 16 属**作者门禁**（“拆它属额外动刀，待作者定”）
     （全表见 dispositions）。
   - ⛔ **已判保持，不得重开**：`boundary._build_scope_kind_map` 21/52 与 `_resolve_first_tokens` /
     `_collect_stmt_headers` / `_collect_block_rule_bounds` / `_is_case_item_token`（“逐规则/
     逐元素判定的单一职责循环，再拆只会把映射逻辑碎片化”）；`renderer/doc.flatten` 20、
-    `_best` 17、`_doc_has_break` / `_flat_w` / `_fits` / `_drop_break_after_hardbreak`
-    （一变体一臂的分派型）。逐条理由见 dispositions。
-  - 批次验证（批次五 4 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
+    `_best` 17、`_doc_has_break` / `_flat_w` / `_fits` / `_drop_break_after_hardbreak`、
+    `parser/rule_selector.serialize_production_tree` 12（一变体一臂的分派型，臂内一行）。
+    逐条理由见 dispositions。
+  - 批次验证（批次六 10 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
     诊断基线 5548 持平；`eval_lint_accuracy` 33/33 + 0 误报；三门禁 PASS；字节对拍
     73 文件 0 差异。
 
