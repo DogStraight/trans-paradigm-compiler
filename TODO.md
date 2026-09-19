@@ -171,14 +171,17 @@
     `cmd_rename`、`_smoke_test`（format/lint/check 三面必跑）、
     `bifrost_probe/smelly.py`（**刻意坏味探针**，修好即门禁失效）。判据与逐条理由见
     dispositions。
-- **B-F 圈复杂度 / 认知复杂度**（批次一“最高分区”6 文件 + 批次二 config_driven/pipeline，
-  2026-09-19）：外部裁判同口径量化——批次一 CC 151 → 133 / 认知 158 → 141；
-  批次二 CC 133 → 125 / 认知 141 → 136；**两批合计 CC 151 → 125（-26）、
-  认知 158 → 136（-22）**。
-  - ✅ 已清（整文件）：`linter/lookahead.py`、`preprocessor/_expand.py`、`parser/follow.py`、
-    `transform/config_driven.py`、`pipeline/__init__.py`；局部：`transform/_semantic_mapping`
-    （认知 99 + CC 27）、`normalizer._normalize`（34/89）、`renderer/doc` 三处（24/62、
-    11/17、16/27）。提交见 dispositions 的逐条记录。
+- **B-F 圈复杂度 / 认知复杂度**（批次一“最高分区”6 文件 + 批次二 config_driven/pipeline
+  + 批次三 indent/width_check/wrap/column_align/node_renderer/grammar_inject，2026-09-19）：
+  外部裁判同口径量化（批次三起把本机 `.agents/` 技能脚本排除出扫描集，历史数字同口径
+  扣除 1 条/名目）——批次一 CC 150 → 132 / 认知 157 → 140；批次二 132 → 124 / 140 → 135；
+  批次三 **124 → 107 / 135 → 117**；**三批合计 CC 150 → 107（-43）、认知 157 → 117（-40）**。
+  - ✅ 已清（**整文件**）：`linter/lookahead.py`、`preprocessor/_expand.py`、`parser/follow.py`、
+    `transform/config_driven.py`、`pipeline/__init__.py`、`formatter/indent.py`、
+    `width_check/_width_check.py`、`formatter/wrap.py`、`formatter/passes/column_align.py`、
+    `renderer/node_renderer.py`、`parser/grammar_inject.py`；局部：
+    `transform/_semantic_mapping`（认知 99 + CC 27）、`normalizer._normalize`（34/89）、
+    `renderer/doc` 三处（24/62、11/17、16/27）。提交见 dispositions 的逐条记录。
   - 判据 = **分派型保持 / 有内部逻辑拆**（判据与逐条清点在
     `_drafts/bifrost/dispositions.md`「CC / 认知复杂度三分类」）：`renderer/doc.flatten`
     20/18、`_best` 17/16、`_doc_has_break`/`_flat_w`/`_fits`/`_drop_break_after_hardbreak`
@@ -187,18 +190,23 @@
     （一次去掉多处 `if trace:`；循环内 `sorted()` 打印留 guard）；
     ②状态收 `_XxxCtx` dataclass 后助手提到模块级——**嵌套函数的分支计入外层 CC**，
     所以"提模块级"是硬要求不是偏好。
-  - ⏳ 剩项（按当前值，现以**语言侧插件**为主）：`formatter/indent.run_indent_pass` 35/62、
-    `width_check.node_text` 31、`formatter/wrap._wrap_line` 29、`tools/check_test_isolation.main`
-    28/54、`width_check.eval_expr_params` 23、`pipeline/schedule._sequence_entries` 22、
-    `boundary._build_scope_kind_map` 21/52、`latch_check._must_assign` 21、
-    `typed_ports/_transform.build_wrapper` 21、`renderer/node_renderer.render_body` 21、
-    `width_check.infer_expr_width` 20、`RuleMatcher._first_tokens` 20、`pipeline/units.assign_points`
-    20、`policy/doc_sync.collect_refs` 20、`parser/grammar_inject.inject_productions` 认知 60、
-    `parser/_production.collect_following_comments` 认知 57、`tools/config_sites._scan_file`
-    认知 79（全表见 dispositions）。
-  - 批次验证：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；诊断基线 5548 持平；
-    `check_doc_refs` D1–D4=0、`check_hardcode --strict`、`config_sites check` 三门禁 PASS；
-    格式化字节对拍 73 文件 0 差异（本批每次涉渲染/预处理/语法的单元都跑过）。
+  - ⏳ 剩项（按当前值，现以**引擎/工具侧**为主）：`pipeline/schedule._sequence_entries` 22/40、
+    `tools/check_test_isolation.main` 28/54、`latch_check._must_assign` 21、
+    `typed_ports/_transform.build_wrapper` 21（+ `_resolved_ports` 认知 45）、
+    `RuleMatcher._first_tokens` 20/50、`pipeline/units.assign_points` 20、
+    `policy/doc_sync.collect_refs` 20/43、`plugin_loader._load_pipeline_decls` 19/40、
+    `attribute_binder.get_attr_by_path` 19/50、`rule_selector.analyze_production_features` 19、
+    `tools/config_sites._scan_file` 认知 79、`parser/_production.collect_following_comments`
+    认知 57、`policy/check_doc_refs.rule_d3_impl_test_files` 认知 48（全表见 dispositions）。
+  - ⛔ **已判保持，不得重开**：`boundary._build_scope_kind_map` 21/52 与 `_resolve_first_tokens` /
+    `_collect_stmt_headers` / `_collect_block_rule_bounds` / `_is_case_item_token`（“逐规则/
+    逐元素判定的单一职责循环，再拆只会把映射逻辑碎片化”）；`renderer/doc.flatten` 20、
+    `_best` 17、`_doc_has_break` / `_flat_w` / `_fits` / `_drop_break_after_hardbreak`
+    （一变体一臂的分派型）。逐条理由见 dispositions。
+  - 批次验证（批次三 10 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
+    诊断基线 5548 持平；`eval_lint_accuracy` 33/33 命中 + 0 误报；`check_doc_refs`
+    D1–D4=0、`check_hardcode --strict`、`config_sites check` 三门禁 PASS；格式化字节对拍
+    73 文件 0 差异（本批每次涉渲染/预处理/语法的单元都跑过）。
 
 > 审计外观察（不在本清单）：无。此前记的 "`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog
 > 形态进了引擎"已修（generate 条件面的规则/字段/运算符拼写全部移入 `[structure]`
