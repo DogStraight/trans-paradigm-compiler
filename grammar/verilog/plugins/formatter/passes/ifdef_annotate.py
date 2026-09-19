@@ -40,6 +40,32 @@ def _extract_name(line: str) -> str | None:
     return None
 
 
+def _annotate_endif(line: str, s: str, leading: str, stack: list[str]) -> str:
+    """`` `endif ``：pop 栈顶并补配对宏名（已有注释/空栈 → 原样）。"""
+    name = stack.pop() if stack else None
+    if name and "//" not in s:
+        return f"{leading}`endif // {name}"
+    return line
+
+
+def _annotate_elsif(line: str, s: str, leading: str) -> str:
+    """`` `elsif ``：补自身条件名（`` `elsif FEATURE_B `` → 尾补 `` // FEATURE_B ``）。"""
+    if "//" in s:
+        return line
+    name = _extract_elsif_name(s)
+    if not name:
+        return line
+    return f"{leading}`elsif {name} // {name}"
+
+
+def _annotate_else(line: str, s: str, leading: str, stack: list[str]) -> str:
+    """`` `else ``：沿用栈顶宏名（条件分支仍是同一个 ifdef 块）。"""
+    name = stack[-1] if stack else None
+    if name and "//" not in s:
+        return f"{leading}`else // {name}"
+    return line
+
+
 def run_ifdef_annotate(lines: Sequence[str]) -> list[str]:
     """给 `` `else `` / `` `endif `` 补配对宏名注释（幂等：已有注释不重复）。"""
     stack: list[str] = []
@@ -53,27 +79,11 @@ def run_ifdef_annotate(lines: Sequence[str]) -> list[str]:
                 stack.append(name)
             result.append(line)
         elif s.startswith(_IFDEF_END):
-            name = stack.pop() if stack else None
-            if name and "//" not in s:
-                # 已有注释不覆盖；无注释则补 `` `endif // NAME ``
-                result.append(f"{leading}`endif // {name}")
-            else:
-                result.append(line)
-        elif s.startswith(("`elsif",)):
-            # elsif 保留自身条件名（`` `elsif FEATURE_B `` → 补 `` // FEATURE_B ``）
-            if "//" not in s:
-                name = _extract_elsif_name(s)
-                if name:
-                    result.append(f"{leading}`elsif {name} // {name}")
-                    continue
-            result.append(line)
+            result.append(_annotate_endif(line, s, leading, stack))
+        elif s.startswith("`elsif"):
+            result.append(_annotate_elsif(line, s, leading))
         elif s.startswith(_IFDEF_ELSE):
-            # else 沿用栈顶宏名（条件分支仍是同一个 ifdef 块）
-            name = stack[-1] if stack else None
-            if name and "//" not in s:
-                result.append(f"{leading}`else // {name}")
-            else:
-                result.append(line)
+            result.append(_annotate_else(line, s, leading, stack))
         else:
             result.append(line)
     return result
