@@ -185,20 +185,31 @@ class Node:
         )
 
     @staticmethod
+    def _dump_dict(item: dict):
+        """dict 项 → 过滤空值后的字典（全空 → None）。"""
+        filtered = {
+            k: Node._dump_item(v)
+            for k, v in item.items()
+            if v is not None and not (isinstance(v, list) and not v)
+        }
+        return filtered if filtered else None
+
+    @staticmethod
+    def _dump_list(item: list):
+        """列表项 → 过滤 None 后的列表（全空 → None）。"""
+        filtered = [Node._dump_item(x) for x in item if x is not None]
+        filtered = [x for x in filtered if x is not None]
+        return filtered if filtered else None
+
+    @staticmethod
     def _dump_item(item):
+        """序列化辅助：Node → dump；dict/list 递归并滤空；其余原样。"""
         if isinstance(item, Node):
             return item.dump()
         if isinstance(item, dict):
-            filtered = {
-                k: Node._dump_item(v)
-                for k, v in item.items()
-                if v is not None and not (isinstance(v, list) and not v)
-            }
-            return filtered if filtered else None
+            return Node._dump_dict(item)
         if isinstance(item, list):
-            filtered = [Node._dump_item(x) for x in item if x is not None]
-            filtered = [x for x in filtered if x is not None]
-            return filtered if filtered else None
+            return Node._dump_list(item)
         return item
 
     def dump(self):
@@ -624,18 +635,22 @@ class GrammarRule:
         """嵌套阶段结构（parser / analyzer / renderer）的属性提到顶层。
 
         同时**保留**原始嵌套（`self.parser = {...}` 等）——阶段块整体与拆出的
-        顶层字段并存，消费方按需取用。
+        顶层字段并存，消费方按需取用。字段提法见 `_apply_stage_fields`。
         """
         for stage in ("parser", "analyzer", "renderer"):
             stage_data = kwargs.pop(stage, {})
             if stage_data:
                 setattr(self, stage, stage_data)
-                for k, v in stage_data.items():
-                    if k in self._KNOWN_FIELDS:
-                        # node 只接受 dict 类型
-                        if k == "node" and not isinstance(v, dict):
-                            continue
-                        setattr(self, k, v)
+                self._apply_stage_fields(stage_data)
+
+    def _apply_stage_fields(self, stage_data: dict) -> None:
+        """阶段块内的已知字段提到顶层（node 只接受 dict 类型）。"""
+        for k, v in stage_data.items():
+            if k not in self._KNOWN_FIELDS:
+                continue
+            if k == "node" and not isinstance(v, dict):
+                continue
+            setattr(self, k, v)
 
     @staticmethod
     def _is_literal_token(p) -> bool:
@@ -648,6 +663,45 @@ class GrammarRule:
             and not p.startswith("@")
             and not any(ch in p for ch in "()|,*+?")
         )
+
+    def _literal_bound_start(self, prods: list) -> str:
+        """块起始符 = 首个纯字面 token（否则空串）。"""
+        if prods and self._is_literal_token(prods[0]):
+            return prods[0]
+        return ""
+
+    def _literal_bound_end(self, prods: list) -> str:
+        """块结束符 = 末个纯字面 token；尾元素是组/可选组时向前找。
+
+        如 UDP 的 endprimitive 后接可选 ": name" 标签（尾元素 "(colon,id)?"）
+        → 向前取最后一个纯字面 token 作 block_end（标准块尾前可有可选标签）。
+        """
+        if not prods:
+            return ""
+        if self._is_literal_token(prods[-1]):
+            return prods[-1]
+        for p in reversed(prods[:-1]):
+            if self._is_literal_token(p):
+                return p
+        return ""
+
+    def _block_content_prods(self, prods: list) -> list:
+        """块内容部分：去首 block_start、去 block_end 及其后。
+
+        block_end 可能不在尾元素（如 UDP 的 endprimitive 后接可选 ": name"
+        标签——block_end 回退推导到倒数第二）→ 剥到 block_end 元素之前（而非
+        固定 -1，否则 block_end 残留进块头被 match_productions 消费，块体循环
+        吞掉后续兄弟块）。
+        """
+        content = list(prods)
+        if self.block_start:
+            content = content[1:]
+        if not self.block_end:
+            return content
+        idx = len(content) - 1
+        while idx >= 0 and content[idx] != self.block_end:
+            idx -= 1
+        return content[:idx]
 
     def _derive_block_bounds(self) -> None:
         """is_block 块规则：从 production 首尾**字面 token** 推导
@@ -670,31 +724,9 @@ class GrammarRule:
         if not (getattr(self, "is_block", False) and self.prods):
             return
         prods = list(self.prods)
-        if prods and self._is_literal_token(prods[0]):
-            self.block_start = prods[0]
-        if prods and self._is_literal_token(prods[-1]):
-            self.block_end = prods[-1]
-        elif prods:
-            # 尾元素是组/可选组（如 UDP 的 endprimitive 后接可选的
-            # ": name" 结尾标签——尾元素 "(colon,id)?"）→ 向前取最后一
-            # 个纯字面 token 作 block_end（标准块尾前可有可选标签）。
-            for p in reversed(prods[:-1]):
-                if self._is_literal_token(p):
-                    self.block_end = p
-                    break
-        # 内容部分（去首尾字面 token）
-        self.block_prods = list(prods)
-        if self.block_start:
-            self.block_prods = self.block_prods[1:]
-        if self.block_end:
-            # block_end 可能不在尾元素（如 UDP 的 endprimitive 后接可选
-            # ": name" 标签——block_end 回退推导到倒数第二）→ 剥到
-            # block_end 元素之前（而非固定 -1，否则 block_end 残留进
-            # 块头被 match_productions 消费，块体循环吞掉后续兄弟块）。
-            idx = len(self.block_prods) - 1
-            while idx >= 0 and self.block_prods[idx] != self.block_end:
-                idx -= 1
-            self.block_prods = self.block_prods[:idx]
+        self.block_start = self._literal_bound_start(prods)
+        self.block_end = self._literal_bound_end(prods)
+        self.block_prods = self._block_content_prods(prods)
 
     def has_pass_end_case(self) -> bool:
         """该规则是否为语句级规则（用于 parse_sentence 候选列表）。
