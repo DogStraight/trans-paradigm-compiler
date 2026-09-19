@@ -432,54 +432,101 @@ def _iter_nodes_with_module(root: Node):
 # 连接同码）。
 
 
-def _check_port_connections(analyzer, context, table: dict, params_all: dict) -> None:
-    module_index = context.extra.get("module_index", {}) or {}
-    inst_sites = context.extra.get("inst_sites", []) or []
-    caller_params = table.get("_params", {}) or {}
-    # 实例化点 → 所属模块（连接表达式是本模块信号，查表要带模块上下文
-    # 防跨模块同名污染；2026-08-29 对标测试暴露）
+def _site_module_map(analyzer) -> dict[int, str]:
+    """实例化点 node id → 所属模块名。
+
+    连接表达式是本模块信号，查表要带模块上下文防跨模块同名污染
+    （2026-08-29 对标测试暴露）。
+    """
     site_module: dict[int, str] = {}
     root = getattr(analyzer, "_ast", None)
     if root is not None:
         for node, module in _iter_nodes_with_module(root):
             site_module[id(node)] = module
+    return site_module
+
+
+def _check_port_connections(analyzer, context, table: dict, params_all: dict) -> None:
+    """B3：逐实例化点检查端口连接宽度（W201）。"""
+    module_index = context.extra.get("module_index", {}) or {}
+    inst_sites = context.extra.get("inst_sites", []) or []
+    caller_params = table.get("_params", {}) or {}
+    site_module = _site_module_map(analyzer)
     for site in inst_sites:
-        mod_name = node_text(getattr(site, "module_name", None))
-        if not mod_name:
+        _check_site_connections(
+            context, site, module_index, params_all, caller_params, table, site_module
+        )
+
+
+def _check_site_connections(
+    context,
+    site,
+    module_index: dict,
+    params_all: dict,
+    caller_params: dict,
+    table: dict,
+    site_module: dict[int, str],
+) -> None:
+    """单个实例化点：前置判据 → 覆盖参数表 → 按端口列表形态检查连接。"""
+    mod_name = node_text(getattr(site, "module_name", None))
+    if not mod_name:
+        return
+    info = module_index.get(mod_name)
+    if info is None:
+        return
+    nl = unwrap_optional(getattr(site, "ports", None))
+    if nl is None:
+        return
+    caller_mod = site_module.get(id(site), "")
+    ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
+    if nl.node_name == "OrderedPortList":
+        _check_ordered_conns(
+            context, mod_name, info, nl, table, ov_params, caller_mod
+        )
+        return
+    _check_named_conns(context, mod_name, info, nl, table, ov_params, caller_mod)
+
+
+def _check_ordered_conns(
+    context, mod_name: str, info, nl, table: dict, ov_params: dict, caller_mod: str
+) -> None:
+    """位置连接：第 i 个连接表达式 ↔ 模块第 i 个端口（声明序）。
+
+    覆盖参数走 B3 三层合并（2026-08-29 补齐——tv80/旧风格实例）。
+    """
+    ordered_ports = list(info.ports.values())
+    for i, val in enumerate(getattr(nl, "items", None) or []):
+        if i >= len(ordered_ports):
+            break
+        if not isinstance(val, Node):
             continue
-        info = module_index.get(mod_name)
-        if info is None:
+        _check_conn_width(
+            context, mod_name, ordered_ports[i], val, table, ov_params, caller_mod
+        )
+
+
+def _check_named_conns(
+    context, mod_name: str, info, nl, table: dict, ov_params: dict, caller_mod: str
+) -> None:
+    """具名连接（`.port(expr)`）：按端口名取模块端口后逐条对比。"""
+    for conn in getattr(nl, "items", None) or []:
+        if not isinstance(conn, Node) or conn.node_name != "NamedPortConnect":
             continue
-        caller_mod = site_module.get(id(site), "")
-        ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
-        nl = unwrap_optional(getattr(site, "ports", None))
-        if nl is None:
+        pn = node_text(getattr(conn, "port_name", None))
+        if not pn:
             continue
-        if nl.node_name == "OrderedPortList":
-            # 位置连接：第 i 个连接表达式 ↔ 模块第 i 个端口（声明序），
-            # 覆盖参数走 B3 三层合并（2026-08-29 补齐——tv80/旧风格实例）
-            ordered_ports = list(info.ports.values())
-            for i, val in enumerate(getattr(nl, "items", None) or []):
-                if i >= len(ordered_ports):
-                    break
-                if not isinstance(val, Node):
-                    continue
-                _check_conn_width(context, mod_name, ordered_ports[i], val,
-                                  table, ov_params, caller_mod)
+        port = info.ports.get(pn)
+        if port is None:
             continue
-        conns = getattr(nl, "items", None) if nl else None
-        for conn in conns or []:
-            if not isinstance(conn, Node) or conn.node_name != "NamedPortConnect":
-                continue
-            pn = node_text(getattr(conn, "port_name", None))
-            if not pn:
-                continue
-            port = info.ports.get(pn)
-            if port is None:
-                continue
-            _check_conn_width(context, mod_name, port,
-                              getattr(conn, "value", None), table, ov_params,
-                              caller_mod)
+        _check_conn_width(
+            context,
+            mod_name,
+            port,
+            getattr(conn, "value", None),
+            table,
+            ov_params,
+            caller_mod,
+        )
 
 
 def _check_conn_width(context, mod_name: str, port, val, table: dict,
@@ -573,18 +620,23 @@ def _module_width_table(info) -> dict:
     """目标模块符号宽度表（从 ModuleInfo.node 走查，B4 用）。
 
     端口宽度取 checker 已提取的 width_expr（ANSI + body 端口已合并）；
-    内部声明走查 WireDecl/RegDecl/IntegerDecl（类型级 packed_range 优先、
-    声明符级按名对齐——与 A1 extract_width 同判据）；数组符号集随表。
-    返回表只含符号宽度文本 + "_arrays"，_params 由调用方按覆盖表设置。
+    内部声明走查见 `_collect_module_decl_widths`。返回表只含符号宽度文本 +
+    "_arrays"，_params 由调用方按覆盖表设置。
     """
     table: dict[str, Any] = {}
     arrays: set[str] = set()
     for pname, port in (getattr(info, "ports", None) or {}).items():
         table[pname] = getattr(port, "width_expr", None) or ""
     node = getattr(info, "node", None)
-    if node is None:
-        table["_arrays"] = arrays
-        return table
+    if node is not None:
+        _collect_module_decl_widths(node, table, arrays)
+    table["_arrays"] = arrays
+    return table
+
+
+def _collect_module_decl_widths(node, table: dict, arrays: set) -> None:
+    """模块内声明宽度入表：IntegerDecl → 32 位固定；其余走\n    声明语句处理器（WireDecl/RegDecl）。
+    """
     for n in iter_nodes(node):
         if n.node_name == "IntegerDecl":
             for it in _declarator_names(n):
@@ -592,22 +644,24 @@ def _module_width_table(info) -> dict:
             continue
         if n.node_name not in _DECL_NODE_RULES:
             continue
-        type_w = range_text(getattr(n, "packed_range", None))
-        items = getattr(n, "items", None)
-        if not isinstance(items, Node):
+        _collect_decl_statement_widths(n, table, arrays)
+
+
+def _collect_decl_statement_widths(decl: Node, table: dict, arrays: set) -> None:
+    """单条 Wire/RegDecl 的声明符宽度入表（声明符级优先类型级，A1 同判据）。"""
+    type_w = range_text(getattr(decl, "packed_range", None))
+    items = getattr(decl, "items", None)
+    if not isinstance(items, Node):
+        return
+    for it in getattr(items, "items", None) or []:
+        if not isinstance(it, Node):
             continue
-        for it in getattr(items, "items", None) or []:
-            if not isinstance(it, Node):
-                continue
-            nm = getattr(getattr(it, "name", None), "content", "")
-            if not nm:
-                continue
-            w2 = range_text(getattr(it, "packed_range", None))
-            table[nm] = w2 or type_w or ""
-            if _declarator_is_array(it):
-                arrays.add(nm)
-    table["_arrays"] = arrays
-    return table
+        nm = getattr(getattr(it, "name", None), "content", "")
+        if not nm:
+            continue
+        table[nm] = range_text(getattr(it, "packed_range", None)) or type_w or ""
+        if _declarator_is_array(it):
+            arrays.add(nm)
 
 
 def _declarator_names(decl_node: Node) -> list[str]:
@@ -766,34 +820,42 @@ def table_width_to_num_params(text: str | None, params: dict | None) -> int | No
     return eval_width_text_params(text, params or {})
 
 
+def _declarator_width_by_name(node, sym_name: str) -> str:
+    """声明符级 packed_range（`wire a [7:0]`）→ 宽度文本；查不到 → ""。
+
+    多声明符（wire a, b;）共享同一 decl_node——按符号名在 DeclaratorList
+    中定位对应声明符的 packed_range。
+    """
+    items = getattr(node, "items", None)
+    if not isinstance(items, Node):
+        return ""
+    for it in getattr(items, "items", None) or []:
+        if not isinstance(it, Node):
+            continue
+        name = getattr(getattr(it, "name", None), "content", "")
+        if name != sym_name:
+            continue
+        w = range_text(getattr(it, "packed_range", None))
+        if w:
+            return w
+    return ""
+
+
 def extract_width(sym) -> str:
     """从符号声明节点提取宽度文本。
 
-    多声明符（wire a, b;）共享同一 decl_node——按符号名在 DeclaratorList
-    中定位对应声明符的 packed_range（声明符级形态 `wire a [7:0]`）。
+    类型级 packed_range（wire [7:0] a / input wire [7:0] a）优先，无则按
+    符号名对齐取声明符级（见 `_declarator_width_by_name`）。
     """
     if sym.kind == "integer":
         return _INTEGER_WIDTH
     node = sym.decl_node
     if node is None:
         return ""
-    # 类型级 packed_range（wire [7:0] a / input wire [7:0] a）
-    pr = getattr(node, "packed_range", None)
-    w = range_text(pr)
+    w = range_text(getattr(node, "packed_range", None))
     if w:
         return w
-    # 声明符级 packed_range（wire a [7:0]；多声明符按名对齐）
-    items = getattr(node, "items", None)
-    if isinstance(items, Node):
-        for it in getattr(items, "items", None) or []:
-            if not isinstance(it, Node):
-                continue
-            name = getattr(getattr(it, "name", None), "content", "")
-            if name == sym.name:
-                w2 = range_text(getattr(it, "packed_range", None))
-                if w2:
-                    return w2
-    return ""
+    return _declarator_width_by_name(node, sym.name)
 
 
 def range_text(range_node) -> str:
