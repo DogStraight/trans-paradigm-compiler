@@ -184,6 +184,24 @@ def _align_contiguous_ports(lines: list[str]) -> None:
             i += 1
 
 
+def _emit_line_with_ctx(
+    result: list[str],
+    new_ctxs: list[LineContext],
+    line: str,
+    ctx: LineContext | None,
+    segs: list[str] | None,
+) -> None:
+    """一行（或拆出的多段）与 contexts 同步追加：拆段复制同一源行 ctx。"""
+    if segs is None:
+        result.append(line)
+        if ctx is not None:
+            new_ctxs.append(ctx)
+        return
+    result.extend(segs)
+    if ctx is not None:
+        new_ctxs.extend([ctx] * len(segs))
+
+
 def run_inst_port_align(lines: list[str], contexts: list[LineContext], parser: Any = None) -> list[str]:
     """拆单行多端口 + 连续端口行对齐。
 
@@ -202,21 +220,8 @@ def run_inst_port_align(lines: list[str], contexts: list[LineContext], parser: A
         # impl 绑定语句（`impl type.role (ports)`）：`type.role` 会被当端口段拆开
         # （如 `impl spi.master (.clk(clk),` 拆成 `.master(.clk(clk),)` + `.clk(clk),`），
         # 整行跳过拆分——其后续 `.port(expr)` 行仍走连续端口对齐。
-        if line.lstrip().startswith("impl "):
-            result.append(line)
-            if ctx is not None:
-                new_ctxs.append(ctx)
-            continue
-        segs = _split_line_ports(line)
-        if segs is not None:
-            result.extend(segs)
-            for _ in segs:
-                if ctx is not None:
-                    new_ctxs.append(ctx)  # 派生复制：同一结构上下文的拆分段
-        else:
-            result.append(line)
-            if ctx is not None:
-                new_ctxs.append(ctx)
+        segs = None if line.lstrip().startswith("impl ") else _split_line_ports(line)
+        _emit_line_with_ctx(result, new_ctxs, line, ctx, segs)
     # 就地同步 contexts（调用方持有同一列表；wrap 后续按 index 取）
     if new_ctxs:
         contexts[:] = new_ctxs
@@ -265,29 +270,28 @@ def _iter_port_groups_ast(lines: list[str]):
             i += 1
 
 
-def _find_instance_block(lines: list[str], g_start: int, g_end: int):
-    """从端口组向上找实例头行（行尾 `(` 且非 `.name(` 形态），向下按括号
-    深度找 `);` 尾行（跨行端口表达式内的 `)` 不误判为实例尾）。
+def _find_instance_head(lines: list[str], g_start: int) -> int | None:
+    """向上找实例头行：组前最近的非空非注释行，行尾 `(` 且非 `.name(` 形态。
 
-    Returns: (head_idx, tail_idx) 或 None（找不到完整块）。
+    中途碰到普通行（非注释/非空）→ 组前不是实例头，返回 None。
     """
-    del g_end  # 尾行由括号深度扫描定位，g_end 仅作签名兼容（组区间上界）
-    # 头：组前最近的非空非注释行，行尾 `(` 且非端口形态
-    head = None
     i = g_start - 1
     while i >= 0:
         s = lines[i].rstrip()
         if s.endswith("(") and not _PORT_NAME_RE.search(s):
-            head = i
-            break
+            return i
         if s.strip() and not _is_comment_line(s):
-            return None  # 组前是普通行（非实例头）→ 无法定位块
+            return None
         i -= 1
-    if head is None:
-        return None
-    # 尾：从 head 起累计 `(`/`)` 深度（端口表达式的嵌套括号已含在内），
-    # 深度归零且行尾 `);` → 实例尾行。跨行 concat 端口的 `)` 只使深度
-    # 下降不归零，不会误判为尾。
+    return None
+
+
+def _find_instance_tail(lines: list[str], head: int) -> int | None:
+    """从实例头行起累计 `(`/`)` 深度 → 深度归零且行尾 `);` 的尾行索引。
+
+    端口表达式的嵌套括号已含在内；跨行 concat 端口的 `)` 只使深度下降不
+    归零，不会误判为尾。括号提前失衡（深度 <0）→ None（块不完整）。
+    """
     depth = 0
     j = head
     while j < len(lines):
@@ -298,11 +302,27 @@ def _find_instance_block(lines: list[str], g_start: int, g_end: int):
             elif ch == ")":
                 depth -= 1
         if depth == 0 and s.rstrip().endswith(");"):
-            return head, j
+            return j
         if depth < 0:
             return None  # 括号提前失衡 → 块不完整
         j += 1
     return None
+
+
+def _find_instance_block(lines: list[str], g_start: int, g_end: int):
+    """从端口组向上找实例头行（行尾 `(` 且非 `.name(` 形态），向下按括号
+    深度找 `);` 尾行（跨行端口表达式内的 `)` 不误判为实例尾）。
+
+    Returns: (head_idx, tail_idx) 或 None（找不到完整块）。
+    """
+    del g_end  # 尾行由括号深度扫描定位，g_end 仅作签名兼容（组区间上界）
+    head = _find_instance_head(lines, g_start)
+    if head is None:
+        return None
+    tail = _find_instance_tail(lines, head)
+    if tail is None:
+        return None
+    return head, tail
 
 
 def _max_pos_line(node: Any) -> int:
@@ -316,6 +336,48 @@ def _max_pos_line(node: Any) -> int:
     return best
 
 
+def _collect_named_port_spans(n: Any, spans: list) -> bool:
+    """DFS 找 ModuleInst 并收集其 NamedPortConnect 的 (起始行, 结束行)。
+
+    Returns: 是否已命中 ModuleInst（命中即停止下钻）。
+    """
+    if getattr(n, "node_name", None) == "ModuleInst":
+        ports = getattr(n, "ports", None)
+        items = getattr(ports, "items", None) if ports is not None else None
+        if isinstance(items, list):
+            for p in items:
+                if getattr(p, "node_name", None) == "NamedPortConnect":
+                    s = getattr(p, "_pos_line", 0) or 0
+                    e = _max_pos_line(getattr(p, "value", None))
+                    spans.append((s, e))
+        return True
+    iter_children = getattr(n, "iter_children", None)
+    if iter_children is None:
+        return False
+    return any(_collect_named_port_spans(child, spans) for child in iter_children())
+
+
+def _parse_block_ast(parser: Any, wrapped: str):
+    """包装源码 → AST；解析失败/截断/无 lexer → None（调用方回退文本启发式）。"""
+    import contextlib
+    import io as _io
+
+    lexer = getattr(parser, "lexer", None)
+    if lexer is None:
+        return None
+    try:
+        tokens = lexer.tokenize(wrapped)
+        with contextlib.redirect_stderr(_io.StringIO()):
+            ast = parser.parse(tokens)
+    except Exception:  # noqa: BLE001 — 解析失败是预期结果（实例块可能不是合法独立模块）
+        # → 返回 None，调用方回退文本括号启发式；此处不承诺具体异常类型
+        # （lexer/parser 各自抛什么属实现细节），故保留宽捕获。
+        return None
+    if ast is None or getattr(parser, "_parse_truncated", False):
+        return None
+    return ast
+
+
 def _parse_instance_ports(
     parser: Any, block_lines: list[str]
 ):
@@ -326,53 +388,19 @@ def _parse_instance_ports(
     Returns: list[(start_off, end_off)]（相对 block_lines 的行偏移，
     head 为偏移 0），解析失败返回 None。
     """
-    import contextlib
-    import io as _io
-
     wrapped = (
         "module _tpc_p;\n"
         + "\n".join(block_lines)
         + "\nendmodule\n"
     )
-    try:
-        lexer = getattr(parser, "lexer", None)
-        if lexer is None:
-            return None
-        tokens = lexer.tokenize(wrapped)
-        with contextlib.redirect_stderr(_io.StringIO()):
-            ast = parser.parse(tokens)
-        if ast is None or getattr(parser, "_parse_truncated", False):
-            return None
-    except Exception:  # noqa: BLE001 — 解析失败是预期结果（实例块可能不是合法独立模块）
-        # → 返回 None，调用方回退文本括号启发式；此处不承诺具体异常类型
-        # （lexer/parser 各自抛什么属实现细节），故保留宽捕获。
+    ast = _parse_block_ast(parser, wrapped)
+    if ast is None:
         return None
-
-    # 找 ModuleInst（包装后 head_line 在 L2）
+    # 找 ModuleInst（包装后 head_line 在 L2），行号映射：wrapped 的
+    # L1 = `module _tpc_p;`，L2 = head_line，L(2+k) = block_lines[k]
+    # → span 行号 → block 偏移 = line - 2
     spans: list[tuple[int, int]] = []
-
-    def visit(n: Any) -> bool:
-        if getattr(n, "node_name", None) == "ModuleInst":
-            ports = getattr(n, "ports", None)
-            items = getattr(ports, "items", None) if ports is not None else None
-            if isinstance(items, list):
-                for p in items:
-                    if getattr(p, "node_name", None) == "NamedPortConnect":
-                        s = getattr(p, "_pos_line", 0) or 0
-                        e = _max_pos_line(getattr(p, "value", None))
-                        spans.append((s, e))
-            return True
-        iter_children = getattr(n, "iter_children", None)
-        if iter_children is None:
-            return False
-        for child in iter_children():
-            if visit(child):
-                return True
-        return False
-
-    visit(ast)
-    # 行号映射：wrapped 的 L1 = `module _tpc_p;`，L2 = head_line，
-    # L(2+k) = block_lines[k]。span 行号 → block 偏移 = line - 2
+    _collect_named_port_spans(ast, spans)
     return [(max(0, s - 2), max(0, e - 2)) for s, e in spans]
 
 
