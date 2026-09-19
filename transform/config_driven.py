@@ -149,45 +149,48 @@ class ConfigDrivenTransform(TransformPlugin):
         return result
 
     def _transform_children(self, node: Node, root_scope: Scope) -> None:
-        """变换节点的所有子节点"""
+        """变换节点的所有子节点（单节点属性 / 列表属性两路）。"""
         for attr_name in list(vars(node)):
             val = getattr(node, attr_name)
             if isinstance(val, Node):
-                result = self._walk(val, root_scope, parent=node, parent_attr=attr_name)
-                if result is SKIP:
-                    pass
-                elif result is None:
-                    setattr(node, attr_name, None)
-                elif isinstance(result, list):
-                    migrated = [
-                        migrate_comments(val, t) if i == 0 else t
-                        for i, t in enumerate(result)
-                    ]
-                    setattr(node, attr_name, migrated[0] if migrated else None)
-                else:
-                    setattr(node, attr_name, migrate_comments(val, result))
+                self._replace_child_attr(node, attr_name, val, root_scope)
             elif isinstance(val, list):
-                new_list: list = []
-                for item in val:
-                    if isinstance(item, Node):
-                        r = self._walk(
-                            item, root_scope, parent=node, parent_attr=attr_name
-                        )
-                        if r is SKIP:
-                            new_list.append(item)
-                        elif r is None:
-                            continue
-                        elif isinstance(r, list):
-                            migrated = [
-                                migrate_comments(item, t) if i == 0 else t
-                                for i, t in enumerate(r)
-                            ]
-                            new_list.extend(migrated)
-                        else:
-                            new_list.append(migrate_comments(item, r))
-                    else:
-                        new_list.append(item)
-                setattr(node, attr_name, new_list)
+                setattr(
+                    node,
+                    attr_name,
+                    self._transform_child_list(val, node, attr_name, root_scope),
+                )
+
+    def _replace_child_attr(
+        self, node: Node, attr_name: str, val: Node, root_scope: Scope
+    ) -> None:
+        """单节点属性：SKIP → 原样；None → 置 None；列表结果 → 取首项（注释并入首项）。"""
+        result = self._walk(val, root_scope, parent=node, parent_attr=attr_name)
+        if result is SKIP:
+            return
+        if result is None:
+            setattr(node, attr_name, None)
+            return
+        merged = _migrated_results(val, result)
+        setattr(node, attr_name, merged[0] if merged else None)
+
+    def _transform_child_list(
+        self, val: list, node: Node, attr_name: str, root_scope: Scope
+    ) -> list:
+        """列表属性：逐项走 walk——SKIP 保留原项、None 丢弃、列表结果展开。"""
+        new_list: list = []
+        for item in val:
+            if not isinstance(item, Node):
+                new_list.append(item)
+                continue
+            r = self._walk(item, root_scope, parent=node, parent_attr=attr_name)
+            if r is SKIP:
+                new_list.append(item)
+            elif r is None:
+                continue
+            else:
+                new_list.extend(_migrated_results(item, r))
+        return new_list
 
     # ── 变换调度核心 ──
 
@@ -244,73 +247,99 @@ class ConfigDrivenTransform(TransformPlugin):
 
         快捷方式：若一个 Node 有 name/content/value 主要值属性，
         该属性的值会直接以 Node 名称为键注册（覆盖 Node 本身）。
+        展开规则见 `_flatten_context` / `_flatten_node` / `_flatten_dict`。
         """
         ctx: dict[str, Any] = {}
-
-        def _flatten(obj: Any, prefix: str = ""):
-            if isinstance(obj, Node):
-                # 主要值快捷方式：有 name/content/value 的 Node，
-                # 直接用标量值以该 Node 的 key 注册
-                has_primary = False
-                for primary in ("name", "content", "value"):
-                    if hasattr(obj, primary):
-                        pv = getattr(obj, primary)
-                        if isinstance(pv, str):
-                            base_key = prefix.rstrip(".") if prefix else ""
-                            if base_key:
-                                ctx[base_key] = pv
-                                has_primary = True
-                            elif not prefix:
-                                # 根节点：直接用属性名注册
-                                ctx[primary] = pv
-                                has_primary = True
-                            break
-
-                # 无论是否有快捷方式，都展开子属性（sub_node 等）
-                # 已注册为快捷方式的 name/content/value 跳过重复展开
-                for attr_name in vars(obj):
-                    if attr_name.startswith("_"):
-                        continue
-                    if attr_name in ("name", "content", "value") and has_primary:
-                        continue
-                    val = getattr(obj, attr_name)
-                    key = f"{prefix}{attr_name}" if prefix else attr_name
-                    if isinstance(val, (Node, dict)):
-                        ctx[key] = val
-                        _flatten(val, key + ".")
-                    elif isinstance(val, list):
-                        ctx[key] = val
-                        for i, item in enumerate(val):
-                            if isinstance(item, (Node, dict)):
-                                ctx[f"{key}[{i}]"] = item
-                                _flatten(item, f"{key}[{i}].")
-                            else:
-                                ctx[f"{key}[{i}]"] = item
-                    else:
-                        ctx[key] = val
-
-                # 如果没有快捷方式，把 Node 自身也注册（用于路径访问）
-                if not has_primary:
-                    base_key = prefix.rstrip(".") if prefix else ""
-                    if base_key and base_key not in ctx:
-                        ctx[base_key] = obj
-            elif isinstance(obj, dict):
-                for k, v in obj.items():
-                    key = f"{prefix}{k}" if prefix else k
-                    ctx[key] = v
-                    if isinstance(v, (Node, dict)):
-                        _flatten(v, key + ".")
-                    elif isinstance(v, list):
-                        for i, item in enumerate(v):
-                            if isinstance(item, (Node, dict)):
-                                ctx[f"{key}[{i}]"] = item
-                                _flatten(item, f"{key}[{i}].")
-
-        _flatten(node)
-
+        _flatten_context(node, ctx)
         # 额外注入
         ctx["_node"] = node
         return ctx
+
+
+# 主要值属性（Node 有其一且为字符串时，以该 Node 的 key 注册标量而非 Node 本身）
+_PRIMARY_ATTRS = ("name", "content", "value")
+
+
+def _migrated_results(orig: Node, result: Any) -> list:
+    """walk 结果（非 SKIP）→ 节点列表：列表结果逐项（注释并入首项），单节点包一层。"""
+    if isinstance(result, list):
+        return [
+            migrate_comments(orig, t) if i == 0 else t
+            for i, t in enumerate(result)
+        ]
+    return [migrate_comments(orig, result)]
+
+
+def _flatten_context(obj: Any, ctx: dict, prefix: str = "") -> None:
+    """把 obj（Node / dict）的属性展开进 ctx（点号前缀 + `key[i]` 列表下标）。"""
+    if isinstance(obj, Node):
+        _flatten_node(obj, ctx, prefix)
+    elif isinstance(obj, dict):
+        _flatten_dict(obj, ctx, prefix)
+
+
+def _flatten_node(obj: Node, ctx: dict, prefix: str) -> None:
+    """Node → ctx：主值快捷方式 + 子属性展开 + 无快捷方式时注册 Node 自身。"""
+    has_primary = _register_primary(obj, ctx, prefix)
+    for attr_name in vars(obj):
+        if attr_name.startswith("_"):
+            continue
+        if attr_name in _PRIMARY_ATTRS and has_primary:
+            continue
+        key = f"{prefix}{attr_name}" if prefix else attr_name
+        _flatten_value(key, getattr(obj, attr_name), ctx)
+    if has_primary:
+        return
+    # 无快捷方式：把 Node 自身也注册（用于路径访问）
+    base_key = prefix.rstrip(".") if prefix else ""
+    if base_key and base_key not in ctx:
+        ctx[base_key] = obj
+
+
+def _register_primary(obj: Node, ctx: dict, prefix: str) -> bool:
+    """主值快捷方式：以该 Node 的 key（根节点则用属性名）注册字符串主值。
+
+    返回是否注册了快捷方式——它决定子属性展开是否跳过 `name/content/value`、
+    以及是否还需把 Node 自身注册进 ctx。
+    """
+    for primary in _PRIMARY_ATTRS:
+        if not hasattr(obj, primary):
+            continue
+        pv = getattr(obj, primary)
+        if not isinstance(pv, str):
+            continue
+        base_key = prefix.rstrip(".") if prefix else ""
+        if base_key or not prefix:
+            ctx[base_key or primary] = pv
+            return True
+        return False  # 前缀只余点号（不可达）：不注册，也不认快捷方式
+    return False
+
+
+def _flatten_value(key: str, val: Any, ctx: dict) -> None:
+    """Node 的单个属性值展开：Node/dict → 注册 + 递归；list → 注册 + 逐下标。"""
+    ctx[key] = val
+    if isinstance(val, (Node, dict)):
+        _flatten_context(val, ctx, key + ".")
+    elif isinstance(val, list):
+        for i, item in enumerate(val):
+            ctx[f"{key}[{i}]"] = item
+            if isinstance(item, (Node, dict)):
+                _flatten_context(item, ctx, f"{key}[{i}].")
+
+
+def _flatten_dict(obj: dict, ctx: dict, prefix: str) -> None:
+    """dict → ctx：逐键注册（Node/dict 递归；list 只对复合元素记下标）。"""
+    for k, v in obj.items():
+        key = f"{prefix}{k}" if prefix else k
+        ctx[key] = v
+        if isinstance(v, (Node, dict)):
+            _flatten_context(v, ctx, key + ".")
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, (Node, dict)):
+                    ctx[f"{key}[{i}]"] = item
+                    _flatten_context(item, ctx, f"{key}[{i}].")
 
 
 # ── 内置原语注册（模块级，import 时自动注册）──
@@ -560,27 +589,32 @@ def _switch_primitive(engine, node, config, root_scope):
     if value == on_expr:
         return SKIP
 
-    cases = config.get("cases", {})
-    sub_config = cases.get(value) or config.get("default")
+    sub_config = config.get("cases", {}).get(value) or config.get("default")
     if sub_config is None:
         return SKIP
+    return _run_switch_case(engine, node, sub_config, root_scope)
 
+
+def _run_switch_case(engine, node, sub_config: dict, root_scope):
+    """switch 分支规格：带 `kind` → 原语调度；无 `kind` → 规格本身即 emit。"""
     kind = sub_config.get("kind", "")
-    if kind:
-        prim = get_primitive(kind)
-        if prim:
-            result = prim(engine, node, sub_config, root_scope)
-            if result is not SKIP:
-                engine._stats["switch"] = engine._stats.get("switch", 0) + 1
-            return result
-    else:
-        # 无 kind → 直接作为 emit 规格
-        ctx = engine._build_context(node)
-        result = _emit(sub_config, ctx)
+    if not kind:
+        result = _emit(sub_config, engine._build_context(node))
         if result is not None:
-            engine._stats["switch"] = engine._stats.get("switch", 0) + 1
-            return result
-    return SKIP
+            _bump_switch_stat(engine)
+        return result
+    prim = get_primitive(kind)
+    if prim is None:
+        return SKIP
+    result = prim(engine, node, sub_config, root_scope)
+    if result is not SKIP:
+        _bump_switch_stat(engine)
+    return result
+
+
+def _bump_switch_stat(engine) -> None:
+    """switch 产出计数（本原语命中一条分支即记一次）。"""
+    engine._stats["switch"] = engine._stats.get("switch", 0) + 1
 
 
 register_primitive("switch", _switch_primitive)
