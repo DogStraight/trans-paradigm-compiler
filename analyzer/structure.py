@@ -534,6 +534,30 @@ class GenerateEvaluator:
             self._gen_push_children(node, stack, params, todo, decl_rule, face)
         return active
 
+    def _push_generate_children(
+        self, node, stack: list, params: dict, todo: list, face: "_GenFace"
+    ) -> None:
+        """generate 块子块入栈：条件分支求值展开互斥，其余沿用当前活性。"""
+        for sub in getattr(node, CHILDREN_FIELD, None) or []:
+            if not isinstance(sub, Node):
+                continue
+            if face.is_branch(sub.node_name):
+                # generate 块内的条件分支：求值展开（互斥）
+                self._expand_generate_if(sub, stack, params, todo, face)
+            else:
+                todo.append((sub, stack, params))
+
+    def _push_module_children(self, node, todo: list, face: "_GenFace") -> None:
+        """模块声明子节点入栈：以本模块**参数表**入栈（条件求值用）。"""
+        name_field = face.module_name_field
+        name_node = getattr(node, name_field, None) if name_field else None
+        info = self._ctx.module_index.get(getattr(name_node, "content", "") or "")
+        params2: dict[str, str] = {}
+        if info is not None:
+            params2 = {p.name: p.value_expr for p in info.params.values()}
+        for child in node.iter_children():
+            todo.append((child, [], params2))
+
     def _gen_push_children(
         self,
         node,
@@ -552,24 +576,10 @@ class GenerateEvaluator:
           generate 条件不展开互斥
         """
         if node.node_name == face.block_rule:
-            for sub in getattr(node, CHILDREN_FIELD, None) or []:
-                if not isinstance(sub, Node):
-                    continue
-                if face.is_branch(sub.node_name):
-                    # generate 块内的条件分支：求值展开（互斥）
-                    self._expand_generate_if(sub, stack, params, todo, face)
-                else:
-                    todo.append((sub, stack, params))
+            self._push_generate_children(node, stack, params, todo, face)
             return
         if node.node_name == decl_rule:
-            name_field = face.module_name_field
-            name_node = getattr(node, name_field, None) if name_field else None
-            info = self._ctx.module_index.get(getattr(name_node, "content", "") or "")
-            params2: dict[str, str] = {}
-            if info is not None:
-                params2 = {p.name: p.value_expr for p in info.params.values()}
-            for child in node.iter_children():
-                todo.append((child, [], params2))
+            self._push_module_children(node, todo, face)
             return
         for child in node.iter_children():
             todo.append((child, stack, params))
@@ -1485,6 +1495,25 @@ class SignalGraphBuilder:
                     out.append(f"assign#{idx}")
         return out
 
+    def _add_driver(self, graph: dict, mod_name: str, sig: str, inst_ref: str) -> None:
+        """登记驱动源（(模块, 信号) 键控，源标识去重）。"""
+        entry = _graph_entry(graph, (mod_name, sig))
+        if inst_ref not in entry["drivers"]:
+            entry["drivers"].append(inst_ref)
+
+    def _add_load(self, graph: dict, mod_name: str, sig: str, inst_ref: str) -> None:
+        """登记负载源（(模块, 信号) 键控，源标识去重）。"""
+        entry = _graph_entry(graph, (mod_name, sig))
+        if inst_ref not in entry["loads"]:
+            entry["loads"].append(inst_ref)
+
+    @staticmethod
+    def _port_direction(mod, port_name: str) -> str:
+        """端口方向（模块表缺失 / 无该端口 → ""）。"""
+        if mod is not None and port_name in mod.ports:
+            return mod.ports[port_name].direction
+        return ""
+
     def _port_src_from_insts(
         self, module: str, port: str, ctx: "_SignalGraphCtx"
     ) -> list[str]:
@@ -1500,10 +1529,9 @@ class SignalGraphBuilder:
             for pname, sig in conn.connects.items():
                 if sig != port:
                     continue
-                dirn = ""
-                im = self._ctx.module_index.get(inst_mod)
-                if im is not None and pname in im.ports:
-                    dirn = im.ports[pname].direction
+                dirn = self._port_direction(
+                    self._ctx.module_index.get(inst_mod), pname
+                )
                 if dirn in ctx.out_dirs or dirn in ctx.inout_dirs:
                     out.append(f"inst:{inst_name}:{pname}")
         return out
@@ -1526,14 +1554,40 @@ class SignalGraphBuilder:
                 out.append("proc")
         return out
 
+    def _inst_module_name_of(self, module: str, iname: str, ctx: "_SignalGraphCtx") -> str:
+        """实例名 → 被实例化模块名（per-module 实例表查找；未知 → ""）。"""
+        for i_name, i_mod, _ in ctx.module_insts.get(module, []):
+            if i_name == iname:
+                return i_mod
+        return ""
+
+    def _resolve_inst_source(
+        self, module: str, src: str, path: str, seen: set, ctx: "_SignalGraphCtx"
+    ) -> list[str]:
+        """`inst:` 子引用 → 完整路径标识（递归穿透）。
+
+        子模块黑盒（未定义）→ 保守记实例路径；悬空（模块定义但无驱动）→
+        不记（对齐 Verilator elaboration 后视角）。
+        """
+        _, iname, iport = src.split(":", 2)
+        inst_mod = self._inst_module_name_of(module, iname, ctx)
+        if not inst_mod:
+            return []
+        sub, sub_defined = self._resolve_port_drivers(
+            inst_mod, iport, f"{path}/{iname}", seen, ctx
+        )
+        if sub:
+            return sub
+        if not sub_defined:
+            return [f"{path}/{iname}"]  # 黑盒保守
+        return []
+
     def _resolve_port_drivers(
         self, module: str, port: str, path: str, seen: set, ctx: "_SignalGraphCtx"
     ) -> tuple[list, bool]:
         """端口驱动源 → (完整路径标识列表, 模块是否定义)（层 3 穿透）。
 
-        裸源拼实例链路径；inst 子引用递归——子模块黑盒（未定义）→
-        保守记实例源；子模块悬空（无驱动）→ 不记（悬空 output 不
-        驱动，对齐 Verilator elaboration 后视角）。
+        裸源拼实例链路径；inst 子引用递归（见 `_resolve_inst_source`）。
         """
         sources, defined = self._port_driver_sources(module, port, seen, ctx)
         if sources is None:
@@ -1541,21 +1595,7 @@ class SignalGraphBuilder:
         out: list[str] = []
         for src in sources:
             if src.startswith("inst:"):
-                _, iname, iport = src.split(":", 2)
-                inst_mod = ""
-                for i_name, i_mod, _ in ctx.module_insts.get(module, []):
-                    if i_name == iname:
-                        inst_mod = i_mod
-                        break
-                if inst_mod:
-                    sub, sub_defined = self._resolve_port_drivers(
-                        inst_mod, iport, f"{path}/{iname}", seen, ctx
-                    )
-                    if sub:
-                        out.extend(sub)
-                    elif not sub_defined:
-                        out.append(f"{path}/{iname}")  # 黑盒保守
-                    # 悬空（sub 空且 defined）→ 不记
+                out.extend(self._resolve_inst_source(module, src, path, seen, ctx))
             else:
                 out.append(f"{path}:{src}")
         return out, defined
@@ -1581,9 +1621,7 @@ class SignalGraphBuilder:
                 sig = self._ctx.render_subtree(tgt)
                 if not sig or not _is_signal_expr(sig):
                     continue
-                entry = _graph_entry(graph, (mod_name, sig))
-                if inst_ref not in entry["drivers"]:
-                    entry["drivers"].append(inst_ref)
+                self._add_driver(graph, mod_name, sig, inst_ref)
 
     def _sg_proc_drivers(
         self, fr: "FileResult", graph: dict, ctx: "_SignalGraphCtx"
@@ -1606,9 +1644,7 @@ class SignalGraphBuilder:
             mod_name = self._conn.module_of(fr, blk_node)
             inst_ref = f"{os.path.basename(fr.path)}:always#{block_idx}"
             for sig in sigs:
-                entry = _graph_entry(graph, (mod_name, sig))
-                if inst_ref not in entry["drivers"]:
-                    entry["drivers"].append(inst_ref)
+                self._add_driver(graph, mod_name, sig, inst_ref)
 
     def _proc_assign_blocks(self, fr, ctx: "_SignalGraphCtx") -> dict[int, Node | None]:
         """赋值节点 → 所属过程块节点（blk 可为 None：不在任何过程块内）。"""
@@ -1666,6 +1702,13 @@ class SignalGraphBuilder:
             self._sg_named_connection(graph, conn, mod_name, inst_ref, mod, ctx)
             self._sg_positional_connection(graph, conn, mod_name, inst_ref)
 
+    def _sg_inout_connection(
+        self, graph: dict, mod_name: str, sig: str, inst_ref: str
+    ) -> None:
+        """inout 端口：既作驱动又作负载。"""
+        self._add_driver(graph, mod_name, sig, inst_ref)
+        self._add_load(graph, mod_name, sig, inst_ref)
+
     def _sg_named_connection(
         self,
         graph: dict,
@@ -1679,24 +1722,23 @@ class SignalGraphBuilder:
         for port_name, sig in conn.connects.items():
             if not sig or not _is_signal_expr(sig):
                 continue
-            entry = _graph_entry(graph, (mod_name, sig))
-            direction = ""
-            if mod is not None and port_name in mod.ports:
-                direction = mod.ports[port_name].direction
+            direction = self._port_direction(mod, port_name)
             if direction in ctx.out_dirs:
                 # P2.7 层 3：驱动源穿透到模块内部真实源（带实例路径）。
                 # 穿透成功 → 用穿透源；悬空 output（模块定义但无驱动）→
                 # 不记（对齐 Verilator elaboration）；黑盒（模块未定义）→
                 # 原子源兜底（保守）。
-                self._sg_emit_penetrated(entry, conn, port_name, inst_ref, ctx)
+                self._sg_emit_penetrated(
+                    _graph_entry(graph, (mod_name, sig)),
+                    conn,
+                    port_name,
+                    inst_ref,
+                    ctx,
+                )
             elif direction in ctx.inout_dirs:
-                if inst_ref not in entry["drivers"]:
-                    entry["drivers"].append(inst_ref)
-                if inst_ref not in entry["loads"]:
-                    entry["loads"].append(inst_ref)
+                self._sg_inout_connection(graph, mod_name, sig, inst_ref)
             else:  # input / 未知 → 负载
-                if inst_ref not in entry["loads"]:
-                    entry["loads"].append(inst_ref)
+                self._add_load(graph, mod_name, sig, inst_ref)
 
     def _sg_emit_penetrated(
         self, entry: dict, conn, port_name: str, inst_ref: str, ctx: "_SignalGraphCtx"
@@ -1720,9 +1762,7 @@ class SignalGraphBuilder:
         for sig in conn.ordered:
             if not sig or not _is_signal_expr(sig):
                 continue
-            entry = _graph_entry(graph, (mod_name, sig))
-            if inst_ref not in entry["loads"]:
-                entry["loads"].append(inst_ref)
+            self._add_load(graph, mod_name, sig, inst_ref)
 
     @property
     def _fr_by_module(self) -> dict:
