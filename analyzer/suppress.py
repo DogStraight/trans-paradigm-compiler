@@ -164,7 +164,7 @@ def iter_suppress_lines(
     text: str, syntax: CommentSyntax
 ) -> Iterator[tuple[int, set[str] | None]]:
     """供调试/文档：逐条输出豁免指令（行号, 规则集）。"""
-    off_re, _on_re, line_re = _build_patterns(syntax)
+    off_re, _, line_re = _build_patterns(syntax)
     for idx, line in enumerate(text.splitlines()):
         code_part = line
         comment_part = ""

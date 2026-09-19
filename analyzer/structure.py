@@ -305,8 +305,8 @@ class _SignalGraphCtx:
     target_field: str
     extras_field: str
     extra_target_field: str
-    out_dirs: list
-    inout_dirs: list
+    out_dirs: set[str]
+    inout_dirs: set[str]
     module_insts: dict
     proc_rules: list
     proc_blocks: list
