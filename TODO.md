@@ -171,12 +171,13 @@
     `cmd_rename`、`_smoke_test`（format/lint/check 三面必跑）、
     `bifrost_probe/smelly.py`（**刻意坏味探针**，修好即门禁失效）。判据与逐条理由见
     dispositions。
-- **B-F 圈复杂度 / 认知复杂度**（八个批次，2026-09-20）：外部裁判同口径量化（批次三起
+- **B-F 圈复杂度 / 认知复杂度**（九个批次，2026-09-20）：外部裁判同口径量化（批次三起
   把本机 `.agents/` 技能脚本排除出扫描集，历史数字同口径扣除）——
   批次一 150 → 132 / 157 → 140；二 132 → 124 / 140 → 135；三 124 → 107 / 135 → 117；
   四 107 → 87 / 117 → 96；五 87 → 78 / 96 → 90；六 78 → 58 / 90 → 72；
-  七 58 → 42 / 72 → 49；八 **42 → 28 / 49 → 33**；
-  **八批合计 CC 150 → 28（-122）、认知 157 → 33（-124）**。
+  七 58 → 42 / 72 → 49；八 42 → 28 / 49 → 33；九 **28 → 17 / 33 → 21**；
+  **九批合计 CC 150 → 17（-133）、认知 157 → 21（-136）**；剩下的命中已全部落在
+  “已判保持”清单内，只余少量新露出的小项（见下）。
   - ✅ 已清（**整文件**）：`linter/lookahead.py`、`preprocessor/_expand.py`、`parser/follow.py`、
     `transform/config_driven.py`、`pipeline/__init__.py`、`formatter/indent.py`、
     `width_check/_width_check.py`、`formatter/wrap.py`、`formatter/passes/column_align.py`、
@@ -193,7 +194,10 @@
     `lexer/number_runner.py`、`linter/checkers/macro_hygiene.py`、
     `typed_ports/_check.py`、`formatter/passes/inst_port.py`、`tools/config_sites.py`、
     `policy/check_doc_refs.py`、`policy/doc_sync.py`、`tools/check_test_isolation.py`、
-    `tools/check_coverage_delta.py`；
+    `tools/check_coverage_delta.py`、`parser/parser_core.py`、`lexer/capture_runner.py`、
+    `lexer/main_lexer.py`、`parser/pratt_parser.py`、`preprocessor/macro_shape.py`、
+    `core/define.py`、`core/config_registry.py`、`renderer/fidelity.py`、
+    `tools/check_gate_efficacy.py`；
     局部：`transform/_semantic_mapping`（认知 99 + CC 27）、
     `normalizer._normalize`（34/89）、`renderer/doc` 三处（24/62、11/17、16/27）。
     提交见 dispositions 的逐条记录。
@@ -205,28 +209,25 @@
     （一次去掉多处 `if trace:`；循环内 `sorted()` 打印留 guard）；
     ②状态收 `_XxxCtx` dataclass 后助手提到模块级——**嵌套函数的分支计入外层 CC**，
     所以"提模块级"是硬要求不是偏好。
-  - ⏳ 剩项（按当前值，仅剩**引擎/语言包局部**与作者门禁项）：
-    `lexer/capture_runner.CaptureRunner.build_rules` 14、`parser/pratt_parser._parse_prefix` 13、
-    `preprocessor/macro_shape.load_macro_shapes` 13 + `load_macro_call_suffix` 13、
-    `core/define.Node._dump_item` 12、`renderer/loader.load_layouts` 认知 22、
-    `renderer/primitives/join._render_join_items` 认知 21、
+  - ⏳ 剩项（按当前值；已全部不属“产品热路径”，或属新露头的小项）：
+    `renderer/loader.load_layouts` 认知 22 + `renderer/primitives/join._render_join_items` 认知 21、
     `inst_check._collect_assign_targets` 认知 21 + `_check_ports` 认知 19、
     `name_check._prefix_suffix_check._direction_of` 认知 20、
-    `lexer/main_lexer._build_alpha_tokens` 认知 20 + `_scan_plain_scalar` 认知 20、
     `analyzer/suppress.build_suppress_map` 认知 19、`parser/block_parser.parse_block_body` 认知 19、
-    `boundary._collect_call_names` 认知 19；
-    `parser/parser_core.Parser.__init__` 16/25 属**作者门禁**（“拆它属额外动刀，待作者定”）
-    （全表见 dispositions；工具/策略脚本已清完）。
+    `grammar/c4/plugins/asm_gen._asm._C4Compiler.stmt` 认知 18、
+    `linter/checkers/style.StyleChecker.validate` 认知 18、`analyzer/checks.check_rules_pass` 认知 16、
+    `case_check._case_check.run_case_check` CC 11、`policy/check_hardcode.main` CC 11、
+    `boundary._collect_call_names` 认知 19（待判是否并入判保持）
+    （全表见 dispositions）。
   - ⛔ **已判保持，不得重开**：`boundary._build_scope_kind_map` 21/52 与 `_resolve_first_tokens` /
     `_collect_stmt_headers` / `_collect_block_rule_bounds` / `_is_case_item_token`（“逐规则/
     逐元素判定的单一职责循环，再拆只会把映射逻辑碎片化”）；`renderer/doc.flatten` 20、
     `_best` 17、`_doc_has_break` / `_flat_w` / `_fits` / `_drop_break_after_hardbreak`、
     `parser/rule_selector.serialize_production_tree` 12（一变体一臂的分派型，臂内一行）。
     逐条理由见 dispositions。
-  - 批次验证（批次八 10 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
-    诊断基线 5548 持平；`eval_lint_accuracy` 33/33 + 0 误报；三门禁 PASS（含工具自身
-    实跑：`config_sites check` / `check_doc_refs` / `doc_sync refs` /
-    `check_test_isolation --compare`）；字节对拍 73 文件 0 差异。
+  - 批次验证（批次九 8 提交）：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；
+    诊断基线 5548 持平；`eval_lint_accuracy` 33/33 + 0 误报；三门禁 PASS；字节对拍
+    73 文件 0 差异。
 
 > 审计外观察（不在本清单）：无。此前记的 "`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog
 > 形态进了引擎"已修（generate 条件面的规则/字段/运算符拼写全部移入 `[structure]`
