@@ -1124,9 +1124,10 @@ class _StructureBase:
         分支都驱动 pcpi_mul_ready → 8 条 W105 假阳性，Verilator 0 报）。
 
         实现：per-file 预计算 {id(node): bool}（一次 DFS 维护 generate
-        条件栈，O(树)）；查询 O(1)。此前每节点全树扫描定位 generate +
-        _subtree_contains 判定分支是 O(节点×树) 平方级——picorv32 过程
-        赋值驱动收集（2026-08-29）后单次 check 103s，预计算后恢复秒级。
+        条件栈，O(树)）；查询 O(1)。此前的每节点全树扫描（旧
+        `_branch_active` / `_subtree_contains` 路线，已删）是 O(节点×树)
+        平方级——picorv32 过程赋值驱动收集（2026-08-29）后单次 check 103s，
+        预计算后恢复秒级。
         """
         if fr.ast is None or node is None:
             return True
@@ -1222,53 +1223,6 @@ class _StructureBase:
             todo.append((chain, base + [not cond_val], params))
             return
 
-    def _branch_active(self, mod_node: Node, target: Node, params: dict) -> bool:
-        """模块内 target 是否处于选中的 generate 分支（递归沿祖先）。
-
-        遍历模块子树找 GenerateBlock→IfBlock/ElseIfBlock；若 target 在某
-        个条件分支块内，求值 condition（参数表），判定该分支是否选中；
-        未选中 → False。else-if 链递归（ElseIfBlock 与 IfBlock 同构）。
-        多个嵌套 generate 全部选中才 True。条件不可判 → True 保守保留
-        （不因无法判定而漏报真多驱动，对齐 Verilator V3Param 语义的
-        保守侧）。
-        """
-        for gnode in iter_nodes(mod_node):
-            if gnode.node_name != "GenerateBlock":
-                continue
-            for sub in getattr(gnode, "sub_node", None) or []:
-                if not isinstance(sub, Node):
-                    continue
-                if sub.node_name == "IfBlock" and self._subtree_contains(sub, target):
-                    return self._if_branch_active(sub, target, params)
-                # ElseIfBlock 也可能直接挂在 GenerateBlock 下（罕见）
-                if sub.node_name == "ElseIfBlock" and self._subtree_contains(sub, target):
-                    return self._if_branch_active(sub, target, params)
-        return True
-
-
-    def _if_branch_active(self, ifb: Node, target: Node, params: dict) -> bool:
-        """IfBlock/ElseIfBlock：target 所在分支是否选中（else-if 链递归）。
-
-        - target 在 then 分支 → 条件为真才选中
-        - target 在 else 分支（else_chain 内）→ 条件为假**且**后续链判定
-        - else_chain 是 ElseIfBlock → 递归（其 then/else 判定）
-        - else_chain 是 ElseBlockBranch（最终 else）→ 前面全假才选中
-        """
-        in_then = self._subtree_contains(getattr(ifb, "then_stmt", None), target)
-        cond_val = self._eval_gen_cond(ifb, params)
-        if in_then:
-            return cond_val is True if cond_val is not None else True
-        # else 分支：条件为假 + 链内判定
-        if cond_val is not None and cond_val:
-            return False  # 条件为真，else 分支未选中
-        chain = getattr(ifb, "else_chain", None)
-        if not isinstance(chain, Node):
-            return True  # 无 else → 条件为假时无分支；保守保留
-        if chain.node_name == "ElseIfBlock":
-            return self._if_branch_active(chain, target, params)
-        # ElseBlockBranch（最终 else）：前面条件全假 → 选中
-        return self._subtree_contains(chain, target)
-
 
     def _eval_gen_cond(self, ifb: Node, params: dict):
         """IfBlock.condition → 布尔｜None（不可判）。
@@ -1305,8 +1259,8 @@ class _StructureBase:
         """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
 
         per-file 预计算映射（2026-08-31 性能修复）：一次 DFS 建立
-        {id(节点): 模块名}，查询 O(1)。此前逐节点全树扫描
-        `_subtree_contains` 是 O(N×树) 平方级——elaboration 层 3
+        {id(节点): 模块名}，查询 O(1)。此前逐节点全树扫描（旧
+        `_subtree_contains`，已删）是 O(N×树) 平方级——elaboration 层 3
         `_build_signal_graph` 对每个 assign/过程块/实例节点调用，picorv32
         实测 76 次调用 7.5s（占单次 check 21.6s 的 35%，profile 定位）。
         与 `_in_active_generate` 预计算同款手法（2026-08-29 先例：
@@ -1345,21 +1299,6 @@ class _StructureBase:
             for child in node.iter_children():
                 stack.append((child, mod))
         return mapping
-
-
-    @staticmethod
-    def _subtree_contains(root: Node | None, target: Node) -> bool:
-        """target 是否在 root 子树内（含自身）。root 为 None 时 False。"""
-        if root is None:
-            return False
-        stack = [root]
-        while stack:
-            node = stack.pop()
-            if node is target:
-                return True
-            for child in node.iter_children():
-                stack.append(child)
-        return False
 
 
     def _iter_assign_targets(
