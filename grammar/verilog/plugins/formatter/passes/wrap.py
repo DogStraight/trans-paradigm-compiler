@@ -45,6 +45,11 @@ _DEFAULT_OVER_COLUMN = 10
 
 # 块头关键字（控制流语句头；与 boundary 的 stmt_headers 同源）
 _HEAD_KEYWORDS = frozenset({"if", "else", "for", "while", "case", "casex", "casez"})
+# 不折的行首（端口列表 / 声明：声明仅在带初始化表达式时才折）
+_NO_WRAP_HEADS = ("input", "output", "inout")
+_DECL_HEADS = ("reg", "wire", "parameter", "localparam")
+# 折行轮数上限（正常输入每轮 head 严格变短；此上限只兜底病态输入防空转）
+_MAX_WRAP_ROUNDS = 8
 
 
 def _load_wrap_config() -> tuple[dict, int]:
@@ -428,6 +433,140 @@ def run_wrap_pass(
     return out
 
 
+def _wrap_blocked(line: str, max_width: int, is_directive: bool) -> bool:
+    """粗判据：不超宽 / 空行 / 注释与指令行 / 端口列表 → 不折。"""
+    if len(line) <= max_width:
+        return True
+    stripped = line.lstrip()
+    if not stripped:
+        return True
+    if _is_comment_or_directive(line, is_directive=is_directive):
+        return True
+    return stripped.split()[0] in _NO_WRAP_HEADS  # 端口列表不折
+
+
+def _decl_without_init(first: str, code_part: str) -> bool:
+    """声明行（reg/wire/parameter/localparam）无 `=` → 不折。
+
+    `reg [31:0] x;` 无初始化表达式不折（折了也无收益）；带 `=` 的声明
+    （`wire [W-1:0] x = a && b;`）才折。
+    """
+    if first not in _DECL_HEADS:
+        return False
+    return "=" not in code_part
+
+
+def _has_wrappable_tail(line: str, code_part: str) -> bool:
+    """行"尾部形态"是否允许折：块头 / 三目链中间行 / 以分号收尾的完整语句。
+
+    已有续行（无分号结尾）不折——已由前面的 wrap 处理；块头行例外：
+    if/for/while/case 无分号，条件在 `()` 内可折（断点含括号内）；三目链
+    中间行例外：行尾 `:`（如 `wire x = A ? {B, C} :` 续接下一分支）——折在
+    行内嵌套三目 `? :` 或 concat 逗号处，续行仍以 `:`/`,` 结尾链不破
+    （pratt 跳 newline 已支持，实测解析 OK）；不折则整行超宽永久保留。
+    """
+    if _is_block_header(line):
+        return True
+    if _is_ternary_cont_line(line):
+        return True
+    return code_part.rstrip().endswith(";")
+
+
+def _split_for_wrap(line: str, max_width: int, is_directive: bool) -> tuple[str, str] | None:
+    """判"是否要折"；要折返回 (去注释代码部分, 行尾注释)，不折返回 None。
+
+    行尾注释先分离：分号判据、声明 `=` 判据都在代码部分做（注释内容不干扰），
+    折出的行注释跟尾行（注释不折，但随语句语义位置走）。
+    """
+    if _wrap_blocked(line, max_width, is_directive):
+        return None
+    stripped = line.lstrip()
+    first = stripped.split()[0] if stripped.split() else ""
+    code_part, trailing = _split_trailing_comment(line)
+    if _decl_without_init(first, code_part):
+        return None
+    if not _has_wrappable_tail(line, code_part):
+        return None
+    return code_part, trailing
+
+
+def _seg_width(seg: str, index: int, trailing: str, cont_indent: str) -> int:
+    """段宽（含行尾注释；后续段加续行缩进）。"""
+    return len(seg) + len(trailing) + (len(cont_indent) if index > 0 else 0)
+
+
+def _widest_segment(segments: list[str], trailing: str, cont_indent: str) -> int:
+    """最宽段的序号（含缩进与行尾注释）。"""
+    best = 0
+    for i in range(1, len(segments)):
+        if _seg_width(segments[i], i, trailing, cont_indent) > _seg_width(
+            segments[best], best, trailing, cont_indent
+        ):
+            best = i
+    return best
+
+
+def _split_once(cur: str, pt: int) -> tuple[str, str] | None:
+    """在断点 pt 处把 cur 拆成 (head, tail)；拆不出 → None。
+
+    分号只属于最后一段（中间段无分号）。concat 内元素对齐空格清理：品类对齐
+    对 concat 元素（`{ 16'bx ,`）误加列对齐空格（concat 元素非对齐组）——统一
+    去逗号前多余空格（`{ 16'bx ,` → `{ 16'bx,`），否则折点二次 format 漂移。
+    只在含 concat `{` 的 head 做，避免误伤普通表达式。
+    """
+    has_semi = cur.rstrip().endswith(";")
+    content = cur.rstrip()[:-1] if has_semi else cur.rstrip()
+    if pt > len(content):
+        return None
+    head = content[:pt].rstrip()
+    tail = content[pt:].strip()
+    if not tail or not head:
+        return None
+    if has_semi:
+        tail += ";"
+    if "{" in head and " ," in head:
+        head = head.replace(" ,", ",")
+    return head, tail
+
+
+def _split_segments(
+    code_part: str,
+    max_width: int,
+    indent_width: int,
+    penalties: dict,
+    over_column: int,
+    cont_indent: str,
+    trailing: str,
+    parser: Any,
+) -> list[str]:
+    """分段折行：每轮折"最宽段"（含首段），直到所有段 ≤ max_width 或无断点。
+
+    后续段将带 cont_indent（折出的行带续行缩进）——段宽判断含缩进，否则
+    100 字符尾行 +4 缩进 = 104 仍超宽（darkriscv 三目链尾行）。
+    首段 cur 已含原缩进（code_part = 原行去注释，含缩进），不加；
+    折出的新段无缩进，判断 +len(cont_indent)。
+
+    轮数上限 `_MAX_WRAP_ROUNDS`：正常输入每轮都缩短（head 严格变短），上限
+    只为病态输入兜底（防"折点选不出进展"时空转）。
+    """
+    segments: list[str] = [code_part]
+    for _ in range(_MAX_WRAP_ROUNDS):
+        widest = _widest_segment(segments, trailing, cont_indent)
+        if _seg_width(segments[widest], widest, trailing, cont_indent) <= max_width:
+            break
+        cur = segments[widest]
+        pt = _find_break_point(
+            cur, max_width, penalties, over_column, indent_width, parser=parser
+        )
+        if pt is None:
+            break
+        split = _split_once(cur, pt)
+        if split is None:
+            break
+        segments[widest : widest + 1] = list(split)
+    return segments
+
+
 def _wrap_line(
     line: str,
     max_width: int,
@@ -449,85 +588,27 @@ def _wrap_line(
     """
     if penalties is None or over_column is None:
         penalties, over_column = _load_wrap_config()
-    # 不折的行：空/注释/指令/端口/声明（assign 除外）
-    if len(line) <= max_width:
+    split = _split_for_wrap(line, max_width, is_directive)
+    if split is None:
         return [line]
-    stripped = line.lstrip()
-    if not stripped:
-        return [line]
-    if _is_comment_or_directive(line, is_directive=is_directive):
-        return [line]
-    first = stripped.split()[0] if stripped.split() else ""
-    if first in ("input", "output", "inout"):
-        return [line]  # 端口列表不折
-    # 分离行尾注释：分号判据、声明 `=` 判据都在代码部分做（注释内容不干扰），
-    # 折出的行注释跟尾行（注释不折，但随语句语义位置走）
-    code_part, trailing = _split_trailing_comment(line)
-    is_header = _is_block_header(line)
-    if first in ("reg", "wire", "parameter", "localparam"):
-        # 声明：含 `=`（带初始化表达式）才折——`reg [31:0] x;` 无 = 不折
-        if "=" not in code_part:
-            return [line]
-    # 已有续行（无分号结尾）不折——已由前面的 wrap 处理；
-    # 块头行例外：if/for/while/case 无分号，条件在 `()` 内可折（断点含括号内）
-    # 三目链中间行例外：行尾 `:`（如 `wire x = A ? {B, C} :` 续接下一分支）——
-    # 折在行内嵌套三目 `? :` 或 concat 逗号处，续行仍以 `:`/`,` 结尾链不破
-    # （pratt 跳 newline 已支持，实测解析 OK）；不折则整行超宽永久保留
-    is_ternary_cont = _is_ternary_cont_line(line)
-    if (
-        not is_header
-        and not is_ternary_cont
-        and not code_part.rstrip().endswith(";")
-    ):
-        return [line]
-
+    code_part, trailing = split
     indent = _indent_of(line)
     # 续行 +1 级；本行已是续行 → 同级（对齐语句头 +4 的效果）
     cont_indent = indent if already_cont else indent + " " * indent_width
-
-    # 分段折行：每轮折"最宽段"（含首段），直到所有段 ≤ max_width 或无断点。
-    # 后续段将带 cont_indent（折出的行带续行缩进）——段宽判断含缩进，否则
-    # 100 字符尾行 +4 缩进 = 104 仍超宽（darkriscv 三目链尾行）。
-    # 首段 cur 已含原缩进（code_part = 原行去注释，含缩进），不加；
-    # 折出的新段无缩进，判断 +len(cont_indent)。
-    segments: list[str] = [code_part]
-    guard = 0
-    while guard < 8:
-        guard += 1
-        # 找最宽段（后续段带 cont_indent）
-        def _seg_len(s: str, idx: int) -> int:
-            return len(s) + len(trailing) + (len(cont_indent) if idx > 0 else 0)
-
-        widest = max(range(len(segments)), key=lambda i: _seg_len(segments[i], i))
-        if _seg_len(segments[widest], widest) <= max_width:
-            break
-        cur = segments[widest]
-        pt = _find_break_point(cur, max_width, penalties, over_column, indent_width, parser=parser)
-        if pt is None:
-            break
-        # 拆：分号移尾行（分号只属于最后一段；中间段无分号）
-        has_semi = cur.rstrip().endswith(";")
-        content = cur.rstrip()[:-1] if has_semi else cur.rstrip()
-        if pt > len(content):
-            break
-        head = content[:pt].rstrip()
-        tail = content[pt:].strip()
-        if not tail or not head:
-            break
-        if has_semi:
-            tail += ";"
-        # concat 内元素对齐空格清理：品类对齐对 concat 元素（`{ 16'bx ,`）
-        # 误加列对齐空格（concat 元素非对齐组）——统一去逗号前多余空格
-        # （`{ 16'bx ,` → `{ 16'bx,`），否则折点二次 format 漂移。
-        # 只在含 concat `{` 的 head 做，避免误伤普通表达式
-        if "{" in head and " ," in head:
-            head = head.replace(" ,", ",")
-        segments[widest : widest + 1] = [head, tail]
-    result = segments
+    segments = _split_segments(
+        code_part,
+        max_width,
+        indent_width,
+        penalties,
+        over_column,
+        cont_indent,
+        trailing,
+        parser,
+    )
     # 行尾注释附回最后一行（代码语义位置 = 语句尾）
     if trailing:
-        result[-1] = result[-1] + " " + trailing.lstrip()
+        segments[-1] = segments[-1] + " " + trailing.lstrip()
     # 第一行保留原缩进，后续行用 cont_indent
-    if len(result) > 1:
-        result = [result[0]] + [cont_indent + r.lstrip() for r in result[1:]]
-    return result
+    if len(segments) > 1:
+        return [segments[0]] + [cont_indent + s.lstrip() for s in segments[1:]]
+    return segments
