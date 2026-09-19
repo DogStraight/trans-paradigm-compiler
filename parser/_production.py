@@ -669,14 +669,48 @@ def prepare_production(self, context: ParseContext, features: dict) -> bool:
     return context.has_more_tokens()
 
 
+def _next_non_trivia(parser, context: ParseContext) -> Token | None:
+    """peek 跳过 trivia（不消费 token，检查后指针不动）→ 首个实质 token。
+
+    FOLLOW 是 token 级后继集，trivia（newline/space.fold/comment）不是语法后继。
+    """
+    offset = 0
+    while True:
+        tok = context.peek_token(offset)
+        if tok is None:
+            return None
+        if tok.type in parser.skip_types or tok.type == COMMENT_TOKEN_TYPE:
+            offset += 1
+            continue
+        return tok
+
+
+def _prod_refs_block(parser, rule: GrammarRule) -> bool:
+    """规则 production 是否引用块规则（body 由 parse_block 管理）→ FOLLOW 不适用。
+
+    复用 `_get_prod_features` 缓存（key = rule.name::prod）——原直接
+    analyze_production_features 每次运行期重新解析 production 字符串
+    （picorv32 单管线 11.7 万次 build_tree，最大热点）。
+    """
+    for prod in rule.prods:
+        feats = _get_prod_features(rule, prod)
+        tree = feats["tree"] if feats else None
+        if tree and tree.get("type") == "call":
+            inner = parser.grammar_rules.get(tree["name"])
+            if inner and getattr(inner, "is_block", False):
+                return True
+    return False
+
+
 def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
     """检查规则匹配后当前 token 是否为合法后继（派生 FOLLOW 硬性检查）。
 
     判定顺序：
       1. 跳过 trivia（newline/space.fold/comment）后取检查 token——FOLLOW
-         是 token 级后继集，trivia 不是语法后继
+         是 token 级后继集，trivia 不是语法后继（见 `_next_non_trivia`）
       2. 块 body 辅助验证（production 引用块规则、body 由 parse_block 管理
-         的规则）→ 接受——块边界由结构决定，FOLLOW 检查不适用
+         的规则）→ 接受——块边界由结构决定，FOLLOW 检查不适用（见
+         `_prod_refs_block`）
       3. 派生 FOLLOW 硬性检查（token ∉ FOLLOW → 拒绝）——parser/follow.py
          从 production 结构机械推导，语法是唯一真相源
       4. 无派生 FOLLOW（不可达规则，到不了此检查）→ 接受
@@ -684,47 +718,28 @@ def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
     if not context.has_more_tokens():
         return True
 
-    # 1. peek 跳过 trivia（不消费 token，检查后指针不动）
-    token = None
-    offset = 0
-    while True:
-        tok = context.peek_token(offset)
-        if tok is None:
-            return True
-        if tok.type in self.skip_types or tok.type == COMMENT_TOKEN_TYPE:
-            offset += 1
-            continue
-        token = tok
-        break
+    token = _next_non_trivia(self, context)
+    if token is None:
+        return True
 
     # 2. 若 body 由 parse_block 管理，边界由结构决定，FOLLOW 检查不适用。
-    #    复用 _get_prod_features 缓存（key = rule.name::prod）——原直接
-    #    analyze_production_features 每次运行期重新解析 production 字符串
-    #    （picorv32 单管线 11.7 万次 build_tree，最大热点）。
-    for prod in rule.prods:
-        feats = _get_prod_features(rule, prod)
-        tree = feats["tree"] if feats else None
-        if tree and tree.get("type") == "call":
-            inner = self.grammar_rules.get(tree["name"])
-            if inner and getattr(inner, "is_block", False):
-                return True
+    if _prod_refs_block(self, rule):
+        return True
 
     # 3. 派生 FOLLOW 硬性检查
     follows = getattr(self, "_follows", None)
     follow = follows.get(rule.name) if follows is not None else None
-    if follow:
-        if token_in_follow(token.type, follow):
-            return True
-        self._log_state(
-            f"✗ 后继检查(FOLLOW): 规则 {rule.name} "
-            f"后继 '{token.content}' (type={token.type}) "
-            f"Ln {token.line} 不在派生 FOLLOW 中",
-            context=context,
-        )
-        return False
-
-    # 4. 无派生 FOLLOW（不可达规则）→ 接受
-    return True
+    if not follow:
+        return True  # 4. 无派生 FOLLOW（不可达规则）→ 接受
+    if token_in_follow(token.type, follow):
+        return True
+    self._log_state(
+        f"✗ 后继检查(FOLLOW): 规则 {rule.name} "
+        f"后继 '{token.content}' (type={token.type}) "
+        f"Ln {token.line} 不在派生 FOLLOW 中",
+        context=context,
+    )
+    return False
 
 
 # ── 原子解析器：_parse_token / _parse_call / _parse_seq / etc. ──
@@ -1025,6 +1040,41 @@ def _lift_gap_comments(
             mark(e["text"], e.get("line", 0))
 
 
+@contextlib.contextmanager
+def _repeat_iter_scope(parser, enabled: bool):
+    """迭代深度标记（B1.3 协调）——仅 lift 场景。
+
+    迭代项规则（行首）在迭代内匹配，try_plain_rule 的 claim 跳过（迭代项间
+    注释由 `_lift_gap_comments` 上浮为 Comment 迭代项，ADR 模型优先）；容器
+    首元素（非 repeat）不在迭代内 → claim 处理首元素前注释。仅 lift 场景标记
+    深度（optional 的单值槽不算迭代项上下文——PortParens `@PortList?` 的首元素
+    claim 需放行）。
+    """
+    if not enabled:
+        yield
+        return
+    parser._repeat_iter_depth = getattr(parser, "_repeat_iter_depth", 0) + 1
+    try:
+        yield
+    finally:
+        parser._repeat_iter_depth = getattr(parser, "_repeat_iter_depth", 1) - 1
+
+
+def _lift_iter_gap(
+    parser, context: ParseContext, nodes: list, last_end_line: int | None
+) -> int:
+    """本次迭代后的项间注释上浮；返回新的窗口下界（本次迭代匹配末行）。
+
+    匹配末行 = 本次迭代消费的最后一个 token 的源行（失败迭代回滚不更新窗口
+    下界，其吞的注释由后续成功迭代按行号窗口收走）。
+    """
+    tokens = context.tokens
+    ptr = context.token_pointer
+    end_line = tokens[ptr - 1].line if ptr > 0 else 0
+    _lift_gap_comments(parser, nodes, last_end_line, end_line)
+    return end_line
+
+
 def _repeat_loop(
     self,
     elem: dict,
@@ -1049,32 +1099,15 @@ def _repeat_loop(
     last_end_line: int | None = start_tok.line if start_tok else 0
     while True:
         snapshot = context.create_snapshot()
-        # repeat 迭代深度（B1.3 协调）：迭代项规则（行首）在迭代内匹配，
-        # try_plain_rule 的 claim 跳过（迭代项间注释由 _lift_gap_comments
-        # 上浮为 Comment 迭代项，ADR 模型优先）；容器首元素（非 repeat）
-        # 不在迭代内 → claim 处理首元素前注释。仅 lift 场景标记深度
-        # （optional 的单值槽不算迭代项上下文——PortParens `@PortList?`
-        # 的首元素 claim 需放行）。
-        if lift_gap_comments:
-            self._repeat_iter_depth = getattr(self, "_repeat_iter_depth", 0) + 1
-        try:
+        with _repeat_iter_scope(self, lift_gap_comments):
             result = self._process_production_node(elem, context)
-        finally:
-            if lift_gap_comments:
-                self._repeat_iter_depth = getattr(self, "_repeat_iter_depth", 1) - 1
         if result is None:
             context.restore_snapshot(snapshot)
             break
-        # B1：迭代成功——行号窗口内独占行注释上浮为 Comment 迭代项
-        # （插本次迭代结果之前）。匹配末行 = 本次迭代消费的最后一个
-        # token 的源行（失败迭代回滚不更新窗口下界，其吞的注释由后续
-        # 成功迭代按行号窗口收走）。
+        # B1：迭代成功——行号窗口内独占行注释上浮为 Comment 迭代项（插本次
+        # 迭代结果之前）
         if lift_gap_comments:
-            tokens = context.tokens
-            ptr = context.token_pointer
-            end_line = tokens[ptr - 1].line if ptr > 0 else 0
-            _lift_gap_comments(self, nodes, last_end_line, end_line)
-            last_end_line = end_line
+            last_end_line = _lift_iter_gap(self, context, nodes, last_end_line)
         nodes.append(result)
         if max_count is not None and len(nodes) >= max_count:
             break
