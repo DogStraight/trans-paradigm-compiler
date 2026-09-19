@@ -89,6 +89,43 @@ def _esc(v: object) -> str:
     return html.escape(str(v if v is not None else ""))
 
 
+def _dict_rows_html(value: dict, depth: int) -> str:
+    """紧凑键值行（深层 dict 用：depth ≥ 2 时避免"表格套表格"的视觉深度）。"""
+    parts = []
+    for k, v in value.items():
+        parts.append(
+            f'<div class="row"><span class="key">{_esc(k)}</span>'
+            f"{_value_html(v, depth + 1)}</div>"
+        )
+    return "".join(parts)
+
+
+def _dict_table_html(value: dict, depth: int) -> str:
+    """dict → 键值表。"""
+    rows = []
+    for k, v in value.items():
+        rows.append(
+            f'<tr><td class="key">{_esc(k)}</td><td>{_value_html(v, depth + 1)}</td></tr>'
+        )
+    return f"<table><tbody>{''.join(rows)}</tbody></table>"
+
+
+def _dict_list_table_html(value: list, depth: int) -> str:
+    """同构 dict 列表 → 表头取各元素键的并集。"""
+    keys = sorted({k for item in value for k in item})
+    rows = []
+    for item in value:
+        cells = "".join(
+            f"<td>{_value_html(item.get(k), depth + 1)}</td>" for k in keys
+        )
+        rows.append(f"<tr>{cells}</tr>")
+    head = "".join(f"<th>{_esc(k)}</th>" for k in keys)
+    return (
+        f"<table><thead><tr>{head}</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
 def _value_html(value: object, depth: int = 0) -> str:
     """通用值树 → HTML（dict[键:值] → 表格 / list → 表格或串接 / 标量 → code）。
 
@@ -97,33 +134,11 @@ def _value_html(value: object, depth: int = 0) -> str:
     """
     if isinstance(value, dict):
         if depth >= 2:
-            parts = []
-            for k, v in value.items():
-                parts.append(
-                    f'<div class="row"><span class="key">{_esc(k)}</span>'
-                    f"{_value_html(v, depth + 1)}</div>"
-                )
-            return "".join(parts)
-        rows = []
-        for k, v in value.items():
-            rows.append(
-                f'<tr><td class="key">{_esc(k)}</td><td>{_value_html(v, depth + 1)}</td></tr>'
-            )
-        return f"<table><tbody>{''.join(rows)}</tbody></table>"
+            return _dict_rows_html(value, depth)
+        return _dict_table_html(value, depth)
     if isinstance(value, list):
         if value and all(isinstance(x, dict) for x in value):
-            rows = []
-            keys = sorted({k for item in value for k in item})
-            for item in value:
-                cells = "".join(
-                    f"<td>{_value_html(item.get(k), depth + 1)}</td>" for k in keys
-                )
-                rows.append(f"<tr>{cells}</tr>")
-            head = "".join(f"<th>{_esc(k)}</th>" for k in keys)
-            return (
-                f"<table><thead><tr>{head}</tr></thead>"
-                f"<tbody>{''.join(rows)}</tbody></table>"
-            )
+            return _dict_list_table_html(value, depth)
         if not value:
             return '<span class="meta">(空)</span>'
         return "<br>".join(_value_html(v, depth + 1) for v in value)
@@ -211,6 +226,53 @@ def _pipe_html(trace: list[dict]) -> str:
     return f'<div class="pipe">{"".join(parts)}</div>'
 
 
+def _deps_row(deps: list[tuple[str, object]]) -> str:
+    """依赖行：requires 名 + 上游产出该名的单元链接（None = 未找到）。"""
+    items = []
+    for rname, producer in deps:
+        origin = (
+            f'<a href="#unit-{_esc(producer)}">#{_esc(producer)}</a> '
+            if producer is not None
+            else ""
+        )
+        items.append(f"{origin}<code>{_esc(rname)}</code>")
+    return '<tr><td class="key">依赖</td><td>' + ", ".join(items) + "</td></tr>"
+
+
+def _code_list(values, empty: str = '<span class="meta">—</span>') -> str:
+    """`code` 串接列表（空时占位）。"""
+    return ", ".join(f"<code>{_esc(k)}</code>" for k in values) or empty
+
+
+def _card_meta_rows(entry: dict, deps: list[tuple[str, object]] | None) -> list[str]:
+    """卡片元信息行：impl / slot / 依赖 / 产物 / 黑板新增 / 黑板键。"""
+    rows = []
+    if entry.get("impl"):
+        rows.append(
+            f'<tr><td class="key">impl</td><td><code>{_esc(entry["impl"])}</code></td></tr>'
+        )
+    if entry.get("slot"):
+        rows.append(f'<tr><td class="key">slot</td><td>{_esc(entry["slot"])}</td></tr>')
+    if deps:
+        rows.append(_deps_row(deps))
+    produced = entry.get("produced") or []
+    if produced:
+        rows.append(
+            '<tr><td class="key">产物</td><td>' + _code_list(produced) + "</td></tr>"
+        )
+    rows.append(
+        '<tr><td class="key">黑板新增</td><td>'
+        + _code_list(entry.get("extra_added") or [])
+        + "</td></tr>"
+    )
+    rows.append(
+        '<tr><td class="key">黑板键</td><td>'
+        + _code_list(entry.get("extra_keys") or [])
+        + "</td></tr>"
+    )
+    return rows
+
+
 def _unit_card(entry: dict, deps: list[tuple[str, object]] | None = None) -> str:
     """单个加工单元 → 卡片（轴节点 + h2 + 元信息 + 依赖 + 黑板 + artifacts）。
 
@@ -221,44 +283,7 @@ def _unit_card(entry: dict, deps: list[tuple[str, object]] | None = None) -> str
     name = _esc(entry.get("name", "?"))
     kind = str(entry.get("kind", ""))
     css = _KIND_CSS.get(kind, "sev-info")
-    rows = []
-    if entry.get("impl"):
-        rows.append(
-            f'<tr><td class="key">impl</td><td><code>{_esc(entry["impl"])}</code></td></tr>'
-        )
-    if entry.get("slot"):
-        rows.append(f'<tr><td class="key">slot</td><td>{_esc(entry["slot"])}</td></tr>')
-    if deps:
-        items = []
-        for rname, producer in deps:
-            origin = (
-                f'<a href="#unit-{_esc(producer)}">#{_esc(producer)}</a> '
-                if producer is not None
-                else ""
-            )
-            items.append(f"{origin}<code>{_esc(rname)}</code>")
-        rows.append(
-            '<tr><td class="key">依赖</td><td>' + ", ".join(items) + "</td></tr>"
-        )
-    produced = entry.get("produced") or []
-    if produced:
-        rows.append(
-            '<tr><td class="key">产物</td><td>'
-            + ", ".join(f"<code>{_esc(k)}</code>" for k in produced)
-            + "</td></tr>"
-        )
-    added = entry.get("extra_added") or []
-    keys = entry.get("extra_keys") or []
-    rows.append(
-        '<tr><td class="key">黑板新增</td><td>'
-        + (", ".join(f"<code>{_esc(k)}</code>" for k in added) or '<span class="meta">—</span>')
-        + "</td></tr>"
-    )
-    rows.append(
-        '<tr><td class="key">黑板键</td><td>'
-        + (", ".join(f"<code>{_esc(k)}</code>" for k in keys) or '<span class="meta">—</span>')
-        + "</td></tr>"
-    )
+    rows = _card_meta_rows(entry, deps)
     return (
         f'<div class="file" id="unit-{_esc(idx)}">'
         f'<div class="tnode {css}"></div>'
@@ -269,6 +294,47 @@ def _unit_card(entry: dict, deps: list[tuple[str, object]] | None = None) -> str
     )
 
 
+def _kind_counts(trace: list[dict]) -> dict[str, int]:
+    """单元按 kind 计数。"""
+    counts: dict[str, int] = {}
+    for e in trace:
+        k = str(e.get("kind", "?"))
+        counts[k] = counts.get(k, 0) + 1
+    return counts
+
+
+# 摘要条先列的已知环节（其余 kind 按名字排序补在后）
+_SUMMARY_KINDS = ("analyze", "transform", "check")
+
+
+def _summary_html(trace: list[dict]) -> str:
+    """摘要条：单元总数 + 已知环节计数 + 其余 kind 计数。"""
+    n_by_kind = _kind_counts(trace)
+    summary = [f'<span class="badge ok">{len(trace)} units</span>']
+    for k in _SUMMARY_KINDS:
+        if n_by_kind.get(k):
+            css = _KIND_CSS.get(k, "sev-info")
+            summary.append(f'<span class="badge {css}">{k} ×{n_by_kind[k]}</span>')
+    for k, n in sorted(n_by_kind.items()):
+        if k not in _SUMMARY_KINDS:
+            summary.append(f'<span class="badge sev-info">{_esc(k)} ×{n}</span>')
+    return "".join(summary)
+
+
+def _trace_body_html(trace: list[dict]) -> tuple[str, str]:
+    """(管道条, 卡片区)。空轨迹 → 空管道 + 提示。"""
+    if not trace:
+        return "", '<p class="badge sev-warning">trace 为空（管线未执行任何单元）</p>'
+    last: dict[str, object] = {}  # 产物名 → 上游产出单元的 index（名字等值匹配）
+    cards = []
+    for e in trace:
+        deps = [(rname, last.get(rname)) for rname in (e.get("requires") or [])]
+        cards.append(_unit_card(e, deps))
+        for pname in e.get("produced") or []:
+            last[pname] = e.get("index")
+    return _pipe_html(trace), f'<div class="trace">{"".join(cards)}</div>'
+
+
 def render_trace_html(
     trace: list[dict],
     *,
@@ -276,46 +342,16 @@ def render_trace_html(
     source_path: str | None = None,
 ) -> str:
     """执行轨迹 → 完整 HTML 文档字符串（单文件、内联 CSS、零依赖）。"""
-    n_by_kind: dict[str, int] = {}
-    for e in trace:
-        k = str(e.get("kind", "?"))
-        n_by_kind[k] = n_by_kind.get(k, 0) + 1
-
-    summary = [f'<span class="badge ok">{len(trace)} units</span>']
-    for k in ("analyze", "transform", "check"):
-        if n_by_kind.get(k):
-            css = _KIND_CSS.get(k, "sev-info")
-            summary.append(
-                f'<span class="badge {css}">{k} ×{n_by_kind[k]}</span>'
-            )
-    for k, n in sorted(n_by_kind.items()):
-        if k not in ("analyze", "transform", "check"):
-            summary.append(f'<span class="badge sev-info">{_esc(k)} ×{n}</span>')
-
+    pipe, body = _trace_body_html(trace)
     meta = (
         f'<div class="meta">source: {_esc(source_path)}</div>' if source_path else ""
     )
-    if trace:
-        last: dict[str, object] = {}  # 产物名 → 上游产出单元的 index（名字等值匹配）
-        cards = []
-        for e in trace:
-            deps = [
-                (rname, last.get(rname)) for rname in (e.get("requires") or [])
-            ]
-            cards.append(_unit_card(e, deps))
-            for pname in e.get("produced") or []:
-                last[pname] = e.get("index")
-        pipe = _pipe_html(trace)
-        body = f'<div class="trace">{"".join(cards)}</div>'
-    else:
-        pipe = ""
-        body = '<p class="badge sev-warning">trace 为空（管线未执行任何单元）</p>'
     return (
         '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
         f"<title>{_esc(title)}</title>"
         f"<style>{REPORT_CSS}{_EXTRA_CSS}</style></head><body>"
         f"<h1>{_esc(title)}</h1>"
-        f'<div class="summary">{"".join(summary)}</div>'
+        f'<div class="summary">{_summary_html(trace)}</div>'
         f"{meta}{pipe}{body}"
         "</body></html>"
     )
