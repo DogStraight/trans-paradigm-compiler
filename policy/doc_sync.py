@@ -102,72 +102,111 @@ def _md_codeblock_ranges(text: str) -> list[tuple[int, int]]:
     return ranges
 
 
+class _RefCollector:
+    """单文件的引用点收集器：区间重叠去重（保留先收集的最长/最早区间）。"""
+
+    def __init__(self, rel: Path, text: str):
+        self.rel = rel
+        self.text = text
+        self.collected: list[tuple[int, int, Ref]] = []
+
+    def _overlaps(self, start: int, end: int) -> bool:
+        return any(s < end and start < e for s, e, _ in self.collected)
+
+    def add(self, start: int, end: int, text_val: str, tgt: str | None) -> None:
+        """登记一个引用点（与已收区间重叠 → 丢弃）。"""
+        if self._overlaps(start, end):
+            return
+        self.collected.append(
+            (
+                start,
+                end,
+                Ref(
+                    self.rel.as_posix(),
+                    _line_of(self.text, start),
+                    start,
+                    end,
+                    text_val,
+                    tgt or "",
+                ),
+            )
+        )
+
+    def refs(self) -> list[Ref]:
+        """本文件收集到的引用点（按登记顺序）。"""
+        return [r for _, _, r in self.collected]
+
+
+def _collect_doc_header(collector: "_RefCollector", text: str, target: str) -> None:
+    """形态 1：代码 Doc: 头（替换区间 = group(1) 路径部分）。
+
+    .py 对 docs 的引用只有 Doc: 头这一种形态（仓库 114 处实证）——代码字符串/
+    注释里的 docs/ 路径是数据或叙述，不是引用，不收集（避免 rename 误伤测试
+    夹具）。
+    """
+    for m in gate._DOC_HEADER_RE.finditer(text):
+        tgt = m.group(1)
+        if tgt == target:
+            collector.add(m.start(1), m.end(1), m.group(0).strip(), tgt)
+
+
+def _collect_doc_links(
+    collector: "_RefCollector", root: Path, text: str, target: str, code_blocks: list
+) -> None:
+    """形态 2：docs/ 链接形态（README ./docs/...、正文 docs/...）。"""
+    for m in gate._DOC_LINK_RE.finditer(text):
+        if any(s <= m.start() < e for s, e in code_blocks):
+            continue
+        tgt = gate._resolve_nav_target(m.group(0), root)
+        if tgt == target:
+            collector.add(m.start(), m.end(), m.group(0), tgt)
+
+
+def _collect_bare_refs(
+    collector: "_RefCollector", root: Path, text: str, target: str, code_blocks: list
+) -> None:
+    """形态 3：反引号裸名 / 子目录前缀（替换区间 = group(1) 内部，保留反引号）。"""
+    for m in gate._BARE_REF_RE.finditer(text):
+        if any(s <= m.start() < e for s, e in code_blocks):
+            continue
+        cand = m.group(1)
+        if "docs/" in text[max(0, m.start() - 8): m.end()]:
+            continue  # 同一引用已按完整路径形态处理
+        tgt = gate._resolve_nav_target(cand, root)
+        if tgt == target:
+            collector.add(m.start(1), m.end(1), cand, tgt)
+
+
+def _refs_in_file(root: Path, rel: Path, target: str) -> Iterator[Ref]:
+    """单文件内的引用点（读失败 → 无产出）。"""
+    try:
+        text = (root / rel).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    code_blocks = _md_codeblock_ranges(text) if rel.suffix == ".md" else []
+    collector = _RefCollector(rel, text)
+    if rel.suffix == ".py":
+        _collect_doc_header(collector, text, target)
+    else:
+        # 形态 2/3 仅对 .md/.toml（导航索引/文档正文/TOML 注释）
+        _collect_doc_links(collector, root, text, target, code_blocks)
+        _collect_bare_refs(collector, root, text, target, code_blocks)
+    yield from collector.refs()
+
+
 def collect_refs(root: Path, target: str) -> list[Ref]:
     """收集引用 target（docs 相对路径）的全部引用点。
 
     同一组正则与 check_doc_refs 完全一致：_DOC_HEADER_RE（代码 Doc: 头）、
     _DOC_LINK_RE（docs/ 链接形态）、_BARE_REF_RE（反引号裸名/子目录前缀）。
-    区间重叠去重：`./docs/x.md` 内嵌的 `docs/x.md`、Doc: 头行内的路径
-    片段不重复计数（保留先收集的最长/最早区间）。
+    区间重叠去重见 `_RefCollector`，各形态细则见 `_collect_*`。
     """
-    refs: list[Ref] = []
     target = target.replace("\\", "/").lstrip("./")
     if not target.startswith("docs/"):
         target = f"docs/{target}"
-
+    refs: list[Ref] = []
     for rel in _iter_scan_files(root):
-        path = root / rel
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        code_blocks = _md_codeblock_ranges(text) if rel.suffix == ".md" else []
-        is_code = rel.suffix == ".py"
-        collected: list[tuple[int, int, Ref]] = []  # (start, end, ref) 供重叠判断
-
-        def overlaps(start: int, end: int) -> bool:
-            return any(s < end and start < e for s, e, _ in collected)
-
-        def add(start: int, end: int, text_val: str, tgt: str | None) -> None:
-            if overlaps(start, end):
-                return
-            collected.append((start, end, Ref(rel.as_posix(), _line_of(text, start),
-                                              start, end, text_val, tgt or "")))
-
-        # 形态 1：代码 Doc: 头（整行匹配，替换区间 = group(1) 路径部分）。
-        # .py 对 docs 的引用只有 Doc: 头这一种形态（仓库 114 处实证）——
-        # 代码字符串/注释里的 docs/ 路径是数据或叙述，不是引用，不收集
-        # （避免 rename 误伤测试夹具）。
-        if is_code:
-            for m in gate._DOC_HEADER_RE.finditer(text):
-                tgt = m.group(1)
-                if tgt != target:
-                    continue
-                add(m.start(1), m.end(1), m.group(0).strip(), tgt)
-
-        # 形态 2/3 仅对 .md/.toml（导航索引/文档正文/TOML 注释）
-        if not is_code:
-            # 形态 2：docs/ 链接形态（README ./docs/...、正文 docs/...）
-            for m in gate._DOC_LINK_RE.finditer(text):
-                if any(s <= m.start() < e for s, e in code_blocks):
-                    continue
-                tgt = gate._resolve_nav_target(m.group(0), root)
-                if tgt != target:
-                    continue
-                add(m.start(), m.end(), m.group(0), tgt)
-
-            # 形态 3：反引号裸名 / 子目录前缀（替换区间 = group(1) 内部，保留反引号）
-            for m in gate._BARE_REF_RE.finditer(text):
-                if any(s <= m.start() < e for s, e in code_blocks):
-                    continue
-                cand = m.group(1)
-                if "docs/" in text[max(0, m.start() - 8): m.end()]:
-                    continue  # 同一引用已按完整路径形态处理
-                tgt = gate._resolve_nav_target(cand, root)
-                if tgt != target:
-                    continue
-                add(m.start(1), m.end(1), cand, tgt)
-        refs.extend(r for _, _, r in collected)
+        refs.extend(_refs_in_file(root, rel, target))
     return refs
 
 
@@ -303,7 +342,66 @@ def cmd_rename(root: Path, old: str, new: str, apply: bool) -> int:
     return 0
 
 
+def _refs_by_file(refs: Sequence[Ref]) -> dict[str, list[Ref]]:
+    """引用点按文件归组。"""
+    out: dict[str, list[Ref]] = {}
+    for ref in refs:
+        out.setdefault(ref.path, []).append(ref)
+    return out
+
+
+def _removable_lines(
+    root: Path, rel: str, file_refs: list[Ref], target_doc: str
+) -> tuple[list[int], list[Ref]]:
+    """单文件判定 → (可机械清理的行号（0-based）, 需人工的引用）。
+
+    机械可清：代码 Doc: 头行（整行删）/ 非 .py 的独占行（行内除本引用外无
+    其它 .md 引用 → 整行删）；行内并列引用 → 人工。
+    """
+    lines = (root / rel).read_text(encoding="utf-8").splitlines(keepends=True)
+    is_py = rel.endswith(".py")
+    removable: list[int] = []
+    manual: list[Ref] = []
+    for ref in sorted(file_refs, key=lambda r: r.start, reverse=True):
+        line_idx = ref.line - 1
+        if line_idx >= len(lines):
+            continue
+        line = lines[line_idx]
+        if is_py and gate._DOC_HEADER_RE.search(line):
+            removable.append(line_idx)
+        elif not is_py and not _other_md_refs(root, line, target_doc):
+            removable.append(line_idx)
+        else:
+            manual.append(ref)
+    return removable, manual
+
+
+def _judge_removable(
+    root: Path, by_file: dict[str, list[Ref]], target_doc: str
+) -> tuple[dict[str, list[int]], list[Ref]]:
+    """阶段 1：只读判定（不落盘）→ (可清理行号表, 人工清单)。"""
+    removable: dict[str, list[int]] = {}
+    manual: list[Ref] = []
+    for rel, file_refs in by_file.items():
+        line_idxs, need_manual = _removable_lines(root, rel, file_refs, target_doc)
+        if line_idxs:
+            removable[rel] = line_idxs
+        manual.extend(need_manual)
+    return removable, manual
+
+
+def _drop_lines(root: Path, removable: dict[str, list[int]]) -> None:
+    """阶段 2：按行号倒序删行（防区间漂移）后落盘。"""
+    for rel, line_idxs in removable.items():
+        path = root / rel
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        for line_idx in sorted(set(line_idxs), reverse=True):
+            del lines[line_idx]
+        path.write_text("".join(lines), encoding="utf-8")
+
+
 def cmd_delete(root: Path, target: str, apply: bool) -> int:
+    """删除文档并清理引用点（原子：任一引用非机械可清则完全不动）。"""
     target_doc = target.replace("\\", "/").lstrip("./")
     if not target_doc.startswith("docs/"):
         target_doc = f"docs/{target_doc}"
@@ -321,47 +419,14 @@ def cmd_delete(root: Path, target: str, apply: bool) -> int:
 
     # 原子性：先全量判定，任一引用非机械可清 → 完全不动（不产生部分
     # 提交状态），列人工清单返回 1。全部可清才落盘。
-    # 机械可清判定：
-    # - 代码 Doc: 头行（整行删）
-    # - 独占表格/列表行（行内除本引用外无其它 .md 引用 → 整行删）
-    # 行内并列引用 → 人工。
-    manual: list[Ref] = []
-    by_file: dict[str, list[Ref]] = {}
-    for ref in refs:
-        by_file.setdefault(ref.path, []).append(ref)
-
-    # 阶段 1：判定（只读，不落盘）
-    removable: dict[str, list[int]] = {}  # rel -> [line_idx 集合（0-based）]
-    for rel, file_refs in by_file.items():
-        path = root / rel
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        is_py = rel.endswith(".py")
-        for ref in sorted(file_refs, key=lambda r: r.start, reverse=True):
-            line_idx = ref.line - 1
-            if line_idx >= len(lines):
-                continue
-            line = lines[line_idx]
-            if is_py and gate._DOC_HEADER_RE.search(line):
-                removable.setdefault(rel, []).append(line_idx)
-                continue
-            if not is_py and not _other_md_refs(root, line, target_doc):
-                removable.setdefault(rel, []).append(line_idx)
-                continue
-            manual.append(ref)
+    removable, manual = _judge_removable(root, _refs_by_file(refs), target_doc)
     if manual:
         print(f"[delete] 以下 {len(manual)} 处引用非机械可清，请人工处理后再删：")
         _print_refs(manual)
         print("[delete] 未做任何改动（原子拒绝，避免部分提交状态）")
         return 1
 
-    # 阶段 2：落盘（按行号倒序删行，防区间漂移）
-    for rel, line_idxs in removable.items():
-        path = root / rel
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        for line_idx in sorted(set(line_idxs), reverse=True):
-            del lines[line_idx]
-        path.write_text("".join(lines), encoding="utf-8")
-
+    _drop_lines(root, removable)
     os.remove(target_path)
     print(f"[delete] 已删除 {target_doc}（同步清理 {len(removable)} 个引用文件）")
     print("[delete] 请 git add -A && python policy/check_doc_refs.py 验证")
