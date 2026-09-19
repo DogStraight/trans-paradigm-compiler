@@ -6,6 +6,9 @@
 时各自的索引互不可见，对方的单元会报成未知单元。
 """
 
+import builtins
+import os
+
 import pytest
 
 from analyzer.checker import ProjectChecker
@@ -76,6 +79,36 @@ def test_multi_entry_sees_each_other(checker, project):
     # 两个文件都被纳入本次检查
     assert len(report["files"]) == 2
     assert "b" in report["modules"]
+
+
+def test_dir_index_built_once(checker, tmp_path, monkeypatch):
+    """目录内单元名索引按目录建一次：多个未定义单元不重读整个目录。
+
+    背景（外部审计 performance.file-read-in-loop）：原实现对每个未解析的单元名
+    都重读目录内全部文件，N 个未定义单元 = 整目录读 N 遍。诱饵文件不含任何单元
+    定义，因此它只可能被"建索引"读到——重复查找一旦回潮，计数就会 > 1。
+    """
+    (tmp_path / "top.sv").write_text(
+        "module top;\n  x1 u1 ();\n  x2 u2 ();\n  x3 u3 ();\nendmodule\n",
+        encoding="utf-8",
+    )
+    decoy = tmp_path / "decoy.sv"
+    decoy.write_text("// 无单元定义\n", encoding="utf-8")
+    target = os.path.abspath(decoy)
+
+    reads = 0
+    real_open = builtins.open
+
+    def counting_open(file, *args, **kwargs):
+        nonlocal reads
+        if isinstance(file, (str, os.PathLike)) and os.path.abspath(file) == target:
+            reads += 1
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", counting_open)
+    report = checker.check(str(tmp_path / "top.sv"))
+    assert "W101" in _codes(report)
+    assert reads == 1
 
 
 def test_multi_entry_accepts_str_and_list_equivalently(checker, project):

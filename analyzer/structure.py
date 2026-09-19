@@ -353,8 +353,9 @@ class StructureCtx:
 
     - 环境开关（`rules_dir` / `ext_dirs` / `include_dirs` / `expand_macros` /
       `ensure_shared`）：构造后不变。
-    - 会话状态（`memo` / `module_index` / `fr_by_module_cache`）：每次 check
-      起始由 `invalidate()` 清空（三者**成对失效**——后两者的键都由 memo 派生）。
+    - 会话状态（`memo` / `module_index` / `fr_by_module_cache` / `dir_module_files`）：
+      每次 check 起始由 `invalidate()` 清空（前三者**成对失效**——键都由 memo 派生；
+      `dir_module_files` 缓存磁盘目录内容，同一次运行内文件不变，一并清）。
     - 结构协议（`struct` / `fields`）：`refresh()` 在 `load_all` 之后推入
       （语言知识仅来自 grammar/<lang> TOML；未声明 = 不支持结构提取）。
 
@@ -372,6 +373,7 @@ class StructureCtx:
     struct: dict = field(default_factory=dict)
     fields: dict = field(default_factory=dict)
     fr_by_module_cache: dict | None = None
+    dir_module_files: dict[str, dict[str, str]] = field(default_factory=dict)
 
     # ── 会话状态失效（每次 check 起始调用）──
 
@@ -380,6 +382,7 @@ class StructureCtx:
         self.memo.clear()
         self.module_index.clear()
         self.fr_by_module_cache = None
+        self.dir_module_files.clear()
 
     def refresh(self) -> None:
         """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。
@@ -1196,12 +1199,11 @@ class ModuleIndexer:
     # ── 模块定义文件查找 ──
 
     def _find_module_file(self, module_name: str, from_file: str) -> str | None:
-        """按名字找模块定义文件：同名文件优先，再扫描目录文本匹配。
+        """按名字找模块定义文件：同名文件优先，再查目录内单元名索引。
 
         扩展名与模块关键字来自语言包结构协议（file_exts / module_keyword）。
         """
         exts = self._ctx.exts()
-        keyword = self._ctx.rule("module_keyword")
         dirs = [os.path.dirname(from_file)] + self._ctx.include_dirs
         for d in dirs:
             if not os.path.isdir(d):
@@ -1210,29 +1212,55 @@ class ModuleIndexer:
                 cand = os.path.join(d, module_name + ext)
                 if os.path.isfile(cand):
                     return cand
-        if not keyword:
+        if not self._ctx.rule("module_keyword"):
             return None
-        pattern = re.compile(
-            r"\b" + re.escape(keyword) + r"\s+" + re.escape(module_name) + r"\b"
-        )
         for d in dirs:
             if not os.path.isdir(d):
                 continue
+            hit = self._dir_module_index(d).get(module_name)
+            if hit:
+                return hit
+        return None
+
+    def _dir_module_index(self, d: str) -> dict[str, str]:
+        """目录内「单元名 → 定义文件」文本索引（按目录建一次，随会话失效）。
+
+        关键字与扩展名来自语言包结构协议。此前是逐次查找重读整个目录（未命中时
+        整目录被反复读），审计 `performance.file-read-in-loop`；建表后同一目录每
+        文件至多读一次。名字位形态用引擎级 `IDENT_RE`（与 lexer 的 id 扫描同源，
+        不另写字符类）；查询名来自 AST，必满配该形态，故键查得全。
+
+        未命中的目录缓存空表——同一次运行内文件不变，不重复扫。
+        """
+        cache = self._ctx.dir_module_files
+        cached = cache.get(d)
+        if cached is not None:
+            return cached
+        table: dict[str, str] = {}
+        keyword = self._ctx.rule("module_keyword")
+        exts = self._ctx.exts()
+        pattern = re.compile(
+            r"\b" + re.escape(keyword) + r"\s+(" + IDENT_RE.pattern + r")"
+        )
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            cache[d] = table
+            return table
+        for fname in names:
+            if not any(fname.endswith(ext) for ext in exts):
+                continue
+            fp = os.path.join(d, fname)
             try:
-                names = sorted(os.listdir(d))
+                with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                    text = f.read()
             except OSError:
                 continue
-            for fname in names:
-                if not any(fname.endswith(ext) for ext in exts):
-                    continue
-                fp = os.path.join(d, fname)
-                try:
-                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
-                        if pattern.search(f.read()):
-                            return fp
-                except OSError:
-                    continue
-        return None
+            for name in pattern.findall(text):
+                # 先发现者优先（与 discover 的单元索引语义一致）
+                table.setdefault(name, fp)
+        cache[d] = table
+        return table
 
 
 class SignalGraphBuilder:
