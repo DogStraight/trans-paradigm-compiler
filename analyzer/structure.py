@@ -1035,23 +1035,22 @@ class FilePipeline:
         return out
 
 
-class _StructureBase:
-    """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
+class ModuleIndexer:
+    """递归发现：入口 → 实例化链（+ 目录内关键字文本扫描兜底）→ 单元索引。
 
-    会话状态与协议读取全在 `StructureCtx`（`self._ctx`）——本类不持有字段，
-    各阶段方法从 `_ctx` 取环境/状态，跨阶段的调用由组合根（门面）装配。
+    每个新文件交给 `FilePipeline` 解析（构造注入），产物收进
+    `ctx.memo`（按路径）与 `ctx.module_index`（首个定义者优先：同名单元在多个
+    文件重复定义时先发现的赢，与既有语义一致）。`seen` 由调用方跨入口共享，
+    重复入口不重复解析。
     """
 
-    _ctx: StructureCtx
-    _pipeline: FilePipeline
-    _extract: ModuleExtractor
-    _conn: ConnectionElaborator
-    _gen: GenerateEvaluator
-
+    def __init__(self, ctx: StructureCtx, pipeline: FilePipeline) -> None:
+        self._ctx = ctx
+        self._pipeline = pipeline
 
     # ── 递归发现 ──
 
-    def _discover(self, path: str, seen: set[str]) -> None:
+    def discover(self, path: str, seen: set[str]) -> None:
         if path in self._ctx.memo or path in seen:
             return
         seen.add(path)
@@ -1066,7 +1065,65 @@ class _StructureBase:
                 continue
             def_path = self._find_module_file(mod_name, path)
             if def_path:
-                self._discover(def_path, seen)
+                self.discover(def_path, seen)
+
+    # ── 模块定义文件查找 ──
+
+    def _find_module_file(self, module_name: str, from_file: str) -> str | None:
+        """按名字找模块定义文件：同名文件优先，再扫描目录文本匹配。
+
+        扩展名与模块关键字来自语言包结构协议（file_exts / module_keyword）。
+        """
+        exts = self._ctx.exts()
+        keyword = self._ctx.rule("module_keyword")
+        dirs = [os.path.dirname(from_file)] + self._ctx.include_dirs
+        for d in dirs:
+            if not os.path.isdir(d):
+                continue
+            for ext in exts:
+                cand = os.path.join(d, module_name + ext)
+                if os.path.isfile(cand):
+                    return cand
+        if not keyword:
+            return None
+        pattern = re.compile(
+            r"\b" + re.escape(keyword) + r"\s+" + re.escape(module_name) + r"\b"
+        )
+        for d in dirs:
+            if not os.path.isdir(d):
+                continue
+            try:
+                names = sorted(os.listdir(d))
+            except OSError:
+                continue
+            for fname in names:
+                if not any(fname.endswith(ext) for ext in exts):
+                    continue
+                fp = os.path.join(d, fname)
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        if pattern.search(f.read()):
+                            return fp
+                except OSError:
+                    continue
+        return None
+
+
+class _StructureBase:
+    """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
+
+    会话状态与协议读取全在 `StructureCtx`（`self._ctx`）——本类不持有字段，
+    各阶段方法从 `_ctx` 取环境/状态，跨阶段的调用由组合根（门面）装配。
+    """
+
+    _ctx: StructureCtx
+    _indexer: ModuleIndexer
+    _pipeline: FilePipeline
+    _extract: ModuleExtractor
+    _conn: ConnectionElaborator
+    _gen: GenerateEvaluator
+
+
 
 
 
@@ -1452,45 +1509,5 @@ class _StructureBase:
 
 
 
-    # ── 模块定义文件查找 ──
-
-    def _find_module_file(self, module_name: str, from_file: str) -> str | None:
-        """按名字找模块定义文件：同名文件优先，再扫描目录文本匹配。
-
-        扩展名与模块关键字来自语言包结构协议（file_exts / module_keyword）。
-        """
-        exts = self._ctx.exts()
-        keyword = self._ctx.rule("module_keyword")
-        dirs = [os.path.dirname(from_file)] + self._ctx.include_dirs
-        for d in dirs:
-            if not os.path.isdir(d):
-                continue
-            for ext in exts:
-                cand = os.path.join(d, module_name + ext)
-                if os.path.isfile(cand):
-                    return cand
-        if not keyword:
-            return None
-        pattern = re.compile(
-            r"\b" + re.escape(keyword) + r"\s+" + re.escape(module_name) + r"\b"
-        )
-        for d in dirs:
-            if not os.path.isdir(d):
-                continue
-            try:
-                names = sorted(os.listdir(d))
-            except OSError:
-                continue
-            for fname in names:
-                if not any(fname.endswith(ext) for ext in exts):
-                    continue
-                fp = os.path.join(d, fname)
-                try:
-                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
-                        if pattern.search(f.read()):
-                            return fp
-                except OSError:
-                    continue
-        return None
 
 

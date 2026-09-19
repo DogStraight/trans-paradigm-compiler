@@ -22,6 +22,7 @@ from analyzer.structure import (
     FileResult,
     GenerateEvaluator,
     ModuleExtractor,
+    ModuleIndexer,
     StructureCtx,
     _StructureBase,
 )
@@ -73,6 +74,8 @@ class ProjectChecker(_StructureBase):
         self._extract = ModuleExtractor(self._ctx)
         # 单文件流水线组合提取器 + 连接展开器（阶段顺序在它内部）
         self._pipeline = FilePipeline(self._ctx, self._extract, self._conn)
+        # 递归发现组合单文件流水线
+        self._indexer = ModuleIndexer(self._ctx, self._pipeline)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 
@@ -194,7 +197,7 @@ class ProjectChecker(_StructureBase):
         """递归发现 + parse 全部入口（多入口共享 seen，重复入口不重复 parse）。"""
         seen: set[str] = set()
         for entry in entries:
-            self._discover(entry, seen)
+            self._indexer.discover(entry, seen)
 
     def _analyze_all(self) -> None:
         """对已发现文件跑语义分析（postpass 需要完整 module_index）。"""
