@@ -151,6 +151,7 @@ CONSTANT: dict[str, str] = {
     "core.define.GrammarRule._KNOWN_FIELDS": "规则字段 schema 字面量",
     "analyzer.report_html._SEVERITY_META": "严重度展示元数据字面量",
     "lexer.main_lexer.Lexer.token_define": "类级默认模板（实例构造即重绑 self.token_define）",
+    "lexer.capture_runner._CAPTURE_HANDLERS": "capture kind → 终止条件 handler 分发表（只读，`_VALID_KINDS` 由它派生）",
     "lexer.number_gen._CHAR_CATEGORY": "字符类别字面量表",
     "linter.checkers.expression.ExpressionChecker._MAX_DEPTH": "最大递归深度常量",
     "main._CMD_DEFAULTS": "CLI 子命令默认值",

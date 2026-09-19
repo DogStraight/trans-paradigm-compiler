@@ -38,6 +38,8 @@ Doc: docs/language_walkthrough.md（注释/字符串 token 扫描）
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 
 class CaptureRule:
     """一种原始捕获模式的匹配规则。"""
@@ -66,8 +68,153 @@ class CaptureRule:
         self.next_set = frozenset(next_chars)
 
 
-_VALID_KINDS = ("line", "marker", "delim", "line_match", "indent_leq")
+@dataclass(frozen=True)
+class _CaptureCtx:
+    """一次捕获扫描的输入上下文（同一文本上跨 rule 复用）。"""
 
+    text: str  # 输入文本
+    start: int  # 触发位置（start 标记起始下标）
+    newline_set: frozenset[str]  # [newline] 段声明的换行字符
+    space_set: frozenset[str]  # [space] 段声明的空白字符
+    base_col: int  # 触发行的物理缩进列（indent_leq 终止基准）
+
+
+def _capture_line(
+    ctx: _CaptureCtx, rule: CaptureRule, pos: int
+) -> tuple[str, int, str]:
+    """到换行字符（[newline] 段配置，不硬编码 \\n）或 EOF；换行不消费。"""
+    text = ctx.text
+    content = text[ctx.start:pos]
+    while pos < len(text) and text[pos] not in ctx.newline_set:
+        content += text[pos]
+        pos += 1
+    return (content, pos, rule.token_type)
+
+
+def _capture_marker(
+    ctx: _CaptureCtx, rule: CaptureRule, pos: int
+) -> tuple[str, int, str]:
+    """到 end 标记（消费）或 EOF（未闭合自然终止）。"""
+    text = ctx.text
+    content = text[ctx.start:pos]
+    while pos < len(text):
+        if text[pos : pos + rule.end_len] == rule.end:
+            content += text[pos : pos + rule.end_len]
+            pos += rule.end_len
+            return (content, pos, rule.token_type)
+        content += text[pos]
+        pos += 1
+    # 未闭合（EOF 自然终止）：tokenize 会在输入末尾追加换行
+    # （main_lexer 确保尾 token 处理），该追加换行会被 marker
+    # 吞进 content——`/*` → `/*\n`，下一轮 `/*\n` + 追加 `\n`
+    # → `/*\n\n` 无限增长（format 幂等破坏）。剥掉尾部换行：
+    # 未闭合注释的 token 内容不含追加的终止换行，渲染时按
+    # 注释原样输出。
+    if content.endswith(tuple(ctx.newline_set)):
+        content = content[:-1]
+    return (content, pos, rule.token_type)
+
+
+def _capture_delim(
+    ctx: _CaptureCtx, rule: CaptureRule, pos: int
+) -> tuple[str, int, str]:
+    """到 end 定界符（消费，含定界符本身）或换行（不消费，不跨行）或 EOF。
+
+    end 按**长度**比较（与 marker/line_match 同构）：此前用 `ch == rule.end`
+    单字符比较，多字符定界符（如三引号）永不匹配 → 静默吞到行尾/EOF（把后续
+    token 一起吃掉）。
+    """
+    text = ctx.text
+    content = text[ctx.start:pos]
+    end_len = rule.end_len
+    while pos < len(text):
+        if text[pos : pos + end_len] == rule.end:
+            content += rule.end
+            pos += end_len
+            return (content, pos, rule.token_type)
+        if text[pos] in ctx.newline_set:
+            return (content, pos, rule.token_type)
+        content += text[pos]
+        pos += 1
+    return (content, pos, rule.token_type)
+
+
+def _capture_line_match(
+    ctx: _CaptureCtx, rule: CaptureRule, pos: int
+) -> tuple[str, int, str]:
+    """到"一行恰好等于 end"处（heredoc/围栏）；end 后的换行不消费。"""
+    text = ctx.text
+    content = text[ctx.start:pos]
+    while pos < len(text):
+        if text[pos : pos + rule.end_len] == rule.end:
+            # 前置必须是行首（pos 处是行起点）或换行后紧邻
+            at_line_start = (
+                pos == ctx.start + rule.start_len or text[pos - 1] in ctx.newline_set
+            )
+            after = pos + rule.end_len
+            if at_line_start and (
+                after >= len(text) or text[after] in ctx.newline_set
+            ):
+                return (content, pos, rule.token_type)
+        content += text[pos]
+        pos += 1
+    return (content, pos, rule.token_type)
+
+
+def _capture_indent_leq(
+    ctx: _CaptureCtx, rule: CaptureRule, pos: int
+) -> tuple[str, int, str]:
+    """YAML 块标量：逐行捕获"列 > base_col"的内容行。
+
+    指示符行（start → 行尾含换行）原样入 content，然后逐行捕获
+    "列 > base_col"的内容行（含空行——空行是内容），遇"非空且列 ≤ base_col"
+    的行终止（该行不消费）。终止基准 = 触发行的物理缩进列（base_col，由
+    lexer 传入行首空白宽度）。缩进指示/切块指示（|-/|+/|2）原样保留
+    （与指示符行一体捕获，不做语义展开）。
+    """
+    text = ctx.text
+    content = text[ctx.start:pos]
+    while pos < len(text) and text[pos] not in ctx.newline_set:
+        content += text[pos]
+        pos += 1
+    if pos < len(text):  # 指示符行换行
+        content += text[pos]
+        pos += 1
+    while pos < len(text):
+        line_start = pos
+        # 行首空白 → 物理列（tab 计 1 列，宽容）
+        p = pos
+        while p < len(text) and text[p] in ctx.space_set:
+            p += 1
+        col = p - line_start
+        # 行尾（不含换行）
+        eol = p
+        while eol < len(text) and text[eol] not in ctx.newline_set:
+            eol += 1
+        if eol > p and col <= ctx.base_col:
+            break  # 终止行（非空、列 ≤ 基准）：不消费
+        # 内容行（含空行）：整行含换行入 content
+        if eol < len(text):
+            eol += 1  # 含换行
+        content += text[line_start:eol]
+        pos = eol
+    # 剥一个尾部换行：渲染时节点间 join "\n" 恰好补回，避免
+    # 输出空行（字面块 clip 语义 = 恰好一个尾换行）
+    if content.endswith(tuple(ctx.newline_set)):
+        content = content[:-1]
+    return (content, pos, rule.token_type)
+
+
+# kind → 终止条件 handler（`_VALID_KINDS` 由本表派生，保证两者不脱节）
+_CAPTURE_HANDLERS = {
+    "line": _capture_line,
+    "marker": _capture_marker,
+    "delim": _capture_delim,
+    "line_match": _capture_line_match,
+    "indent_leq": _capture_indent_leq,
+}
+
+_VALID_KINDS = tuple(_CAPTURE_HANDLERS)
 
 class CaptureRunner:
     """从 token_define 构建 capture mode 表并扫描文本。
@@ -175,115 +322,23 @@ class CaptureRunner:
             (content, end_pos, token_type) — 捕获内容、结束位置（消费到的
             下标，不含换行终止符）、产出 token 类型
             None — 当前位置不匹配任何 mode
+
+        扫描本体按 kind 分派到 `_CAPTURE_HANDLERS`（每个 handler 一种终止
+        条件，见各 handler docstring）；本方法只做触发判定与上下文装配。
         """
         rules = CaptureRunner.build_rules(token_define)
-        newline_set = set(token_define.get("newline", {}).values())
-        space_set = set(token_define.get("space", {}).values())
+        ctx = _CaptureCtx(
+            text=text,
+            start=start,
+            newline_set=frozenset(token_define.get("newline", {}).values()),
+            space_set=frozenset(token_define.get("space", {}).values()),
+            base_col=base_col,
+        )
         for rule in rules:
             # 检查是否以起始标记开头
             if text[start : start + rule.start_len] != rule.start:
                 continue
-
             pos = start + rule.start_len
-            content = text[start:pos]
-
-            if rule.kind == "line":
-                # 到换行字符或 EOF，不消费换行
-                while pos < len(text) and text[pos] not in newline_set:
-                    content += text[pos]
-                    pos += 1
-                return (content, pos, rule.token_type)
-
-            elif rule.kind == "marker":
-                # 到 end 标记（消费）或 EOF（未闭合自然终止）
-                while pos < len(text):
-                    if text[pos : pos + rule.end_len] == rule.end:
-                        content += text[pos : pos + rule.end_len]
-                        pos += rule.end_len
-                        return (content, pos, rule.token_type)
-                    content += text[pos]
-                    pos += 1
-                # 未闭合（EOF 自然终止）：tokenize 会在输入末尾追加换行
-                # （main_lexer 确保尾 token 处理），该追加换行会被 marker
-                # 吞进 content——`/*` → `/*\n`，下一轮 `/*\n` + 追加 `\n`
-                # → `/*\n\n` 无限增长（format 幂等破坏）。剥掉尾部换行：
-                # 未闭合注释的 token 内容不含追加的终止换行，渲染时按
-                # 注释原样输出。
-                if content.endswith(tuple(newline_set)):
-                    content = content[:-1]
-                return (content, pos, rule.token_type)
-
-            elif rule.kind == "delim":
-                # 到 end 定界符（消费，含定界符本身）或换行（不消费，
-                # 字符串不跨行）或 EOF（未闭合自然终止）。
-                # end 按**长度**比较（与 marker/line_match 同构）：此前用
-                # `ch == rule.end` 单字符比较，多字符定界符（`"""`）永不
-                # 匹配 → 静默吞到行尾/EOF（把后续 token 一起吃掉）。
-                end_len = rule.end_len
-                while pos < len(text):
-                    if text[pos : pos + end_len] == rule.end:
-                        content += rule.end
-                        pos += end_len
-                        return (content, pos, rule.token_type)
-                    if text[pos] in newline_set:
-                        return (content, pos, rule.token_type)
-                    content += text[pos]
-                    pos += 1
-                return (content, pos, rule.token_type)
-
-            elif rule.kind == "line_match":
-                # 到"一行恰好等于 end"处；end 后的换行不消费
-                while pos < len(text):
-                    if text[pos : pos + rule.end_len] == rule.end:
-                        # 前置必须是行首（pos 处是行起点）或换行后紧邻
-                        at_line_start = (
-                            pos == start + rule.start_len
-                            or text[pos - 1] in newline_set
-                        )
-                        after = pos + rule.end_len
-                        if at_line_start and (
-                            after >= len(text) or text[after] in newline_set
-                        ):
-                            return (content, pos, rule.token_type)
-                    content += text[pos]
-                    pos += 1
-                return (content, pos, rule.token_type)
-
-            elif rule.kind == "indent_leq":
-                # YAML 块标量：指示符行（start → 行尾含换行）原样入 content，
-                # 然后逐行捕获"列 > base_col"的内容行（含空行——空行是
-                # 内容），遇"非空且列 ≤ base_col"的行终止（该行不消费）。
-                # 终止基准 = 触发行的物理缩进列（base_col，由 lexer 传入
-                # 行首空白宽度）。缩进指示/切块指示（|-/|+/|2）原样保留
-                # （与指示符行一体捕获，不做语义展开）。
-                while pos < len(text) and text[pos] not in newline_set:
-                    content += text[pos]
-                    pos += 1
-                if pos < len(text):  # 指示符行换行
-                    content += text[pos]
-                    pos += 1
-                while pos < len(text):
-                    line_start = pos
-                    # 行首空白 → 物理列（tab 计 1 列，宽容）
-                    p = pos
-                    while p < len(text) and text[p] in space_set:
-                        p += 1
-                    col = p - line_start
-                    # 行尾（不含换行）
-                    eol = p
-                    while eol < len(text) and text[eol] not in newline_set:
-                        eol += 1
-                    if eol > p and col <= base_col:
-                        break  # 终止行（非空、列 ≤ 基准）：不消费
-                    # 内容行（含空行）：整行含换行入 content
-                    if eol < len(text):
-                        eol += 1  # 含换行
-                    content += text[line_start:eol]
-                    pos = eol
-                # 剥一个尾部换行：渲染时节点间 join "\n" 恰好补回，避免
-                # 输出空行（字面块 clip 语义 = 恰好一个尾换行）
-                if content.endswith(tuple(newline_set)):
-                    content = content[:-1]
-                return (content, pos, rule.token_type)
-
+            return _CAPTURE_HANDLERS[rule.kind](ctx, rule, pos)
         return None
+
