@@ -215,9 +215,14 @@
 
 ## 测试基础设施
 
+- **并行度默认值**：`pyproject.toml` 的 `addopts = "-n auto"` **保持现状**（作者
+  2026-09-19 定调“先这样”）。本机跑全量时自行显式传 `-n 4` 规避顶满核（做法与分档
+  见 `tests/README.md`「改动节奏分档」）；不改仓库默认。
 - **全量并行跑偶发失败（预存在，成因未定）**：`tests/engine/core/test_language_switch.py::
   test_plugin_scope_excludes_other_language`——切到 verilog 后 `active_plugin_classes()`
-  仍含 c4 的 `AsmGenPlugin`。实测：带/不带 2026-09-18 那批改动都会出现（3 跑 2 败 / 2 跑 1 败）
+  仍含 c4 的 `AsmGenPlugin`。实测：带/不带 2026-09-18 那批改动都会出现（3 跑 2  败 / 2 跑 1 败）
   → 非该批引入；单跑与 `-n0` 不复现；`PYTHONHASHSEED` 0..7 全过；
   `tools/check_test_isolation.py` 160 OK / 0 FAIL。待定位：并行 worker 下
-  `_components_initialized` / `_active_components` / `_plugin_origins` 三者何时不同步。
+  `_components_initialized` / `_active_components` / `_plugin_origins` 三者何时 不同步。
+  **排期（作者 2026-09-19）**：等 bifrost 审查主线走完再单独开单元查；在此之前全量
+  门禁如因此抖动，按 partial 报（不得当“随机噪声”扫掉）。
