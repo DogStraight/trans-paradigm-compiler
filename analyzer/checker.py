@@ -18,6 +18,7 @@ from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIR
 
 from analyzer.structure import (
     ConnectionElaborator,
+    FilePipeline,
     FileResult,
     GenerateEvaluator,
     ModuleExtractor,
@@ -70,6 +71,8 @@ class ProjectChecker(_StructureBase):
         self._gen = GenerateEvaluator(self._ctx)
         self._conn = ConnectionElaborator(self._ctx)
         self._extract = ModuleExtractor(self._ctx)
+        # 单文件流水线组合提取器 + 连接展开器（阶段顺序在它内部）
+        self._pipeline = FilePipeline(self._ctx, self._extract, self._conn)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 

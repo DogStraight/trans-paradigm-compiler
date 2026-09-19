@@ -882,40 +882,28 @@ class ModuleExtractor:
                 )
 
 
-class _StructureBase:
-    """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
+class FilePipeline:
+    """单文件装配流水线：读源 → 宏展开 → 解析 → 单元提取 → 连接展开。
 
-    会话状态与协议读取全在 `StructureCtx`（`self._ctx`）——本类不持有字段，
-    各阶段方法从 `_ctx` 取环境/状态，跨阶段的调用由组合根（门面）装配。
+    阶段顺序在这里（而不是散在调用方）：解析产 AST 后才能提单元，提完单元才能
+    按模块端口展开实例化连接。故本类组合 `ModuleExtractor` 与
+    `ConnectionElaborator`（构造注入），其余依赖走 ctx。
+
+    产出 `FileResult`（ast / modules / inst_sites / connections / line_map /
+    macro_regions），由调用方（发现阶段）收进 ctx.memo 与 ctx.module_index。
     """
 
-    _ctx: StructureCtx
-    _extract: ModuleExtractor
-    _conn: ConnectionElaborator
-    _gen: GenerateEvaluator
+    def __init__(
+        self,
+        ctx: StructureCtx,
+        extractor: ModuleExtractor,
+        conn: ConnectionElaborator,
+    ) -> None:
+        self._ctx = ctx
+        self._extract = extractor
+        self._conn = conn
 
-
-    # ── 递归发现 ──
-
-    def _discover(self, path: str, seen: set[str]) -> None:
-        if path in self._ctx.memo or path in seen:
-            return
-        seen.add(path)
-        fr = self._parse_file(path)
-        self._ctx.memo[path] = fr
-        for name, info in fr.modules.items():
-            if name not in self._ctx.module_index:
-                self._ctx.module_index[name] = info
-        for site in fr.inst_sites:
-            mod_name = self._ctx.inst_module_name(site)
-            if not mod_name or mod_name in self._ctx.module_index:
-                continue
-            def_path = self._find_module_file(mod_name, path)
-            if def_path:
-                self._discover(def_path, seen)
-
-
-    def _parse_file(self, path: str) -> FileResult:
+    def parse_file(self, path: str) -> FileResult:
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
         fr = FileResult(path=path, source=source)
@@ -972,7 +960,6 @@ class _StructureBase:
             mod.insts.append(conn)
         fr.parse_ok = True
         return fr
-
 
     def _expand_source(self, source: str, path: str) -> tuple[str, list, list]:
         """宏展开（scan_directives 提取宏表 + expand_tokens 纯文本展开）。
@@ -1046,6 +1033,45 @@ class _StructureBase:
                 }
             )
         return out
+
+
+class _StructureBase:
+    """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
+
+    会话状态与协议读取全在 `StructureCtx`（`self._ctx`）——本类不持有字段，
+    各阶段方法从 `_ctx` 取环境/状态，跨阶段的调用由组合根（门面）装配。
+    """
+
+    _ctx: StructureCtx
+    _pipeline: FilePipeline
+    _extract: ModuleExtractor
+    _conn: ConnectionElaborator
+    _gen: GenerateEvaluator
+
+
+    # ── 递归发现 ──
+
+    def _discover(self, path: str, seen: set[str]) -> None:
+        if path in self._ctx.memo or path in seen:
+            return
+        seen.add(path)
+        fr = self._pipeline.parse_file(path)
+        self._ctx.memo[path] = fr
+        for name, info in fr.modules.items():
+            if name not in self._ctx.module_index:
+                self._ctx.module_index[name] = info
+        for site in fr.inst_sites:
+            mod_name = self._ctx.inst_module_name(site)
+            if not mod_name or mod_name in self._ctx.module_index:
+                continue
+            def_path = self._find_module_file(mod_name, path)
+            if def_path:
+                self._discover(def_path, seen)
+
+
+
+
+
 
 
 
