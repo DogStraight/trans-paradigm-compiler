@@ -58,40 +58,54 @@ def run_inst_check(analyzer, context) -> None:
 
 def _check_ports(context, site, info, related_def) -> None:
     """命名端口连接 × 模块端口表。"""
+    for conn in _named_port_conns(site):
+        _check_port_conn(context, conn, info, related_def)
+
+
+def _named_port_conns(site) -> list:
+    """实例化点的命名端口连接项（无 NamedPortList 时为空）。"""
     nl = unwrap_optional(getattr(site, "ports", None))   # NamedPortList
     conns = getattr(nl, "items", None) if nl else None
-    for conn in conns or []:
-        if not isinstance(conn, Node):
-            continue
-        pn = _text(getattr(conn, "port_name", None))
-        if not pn:
-            continue
-        port = info.ports.get(pn)
-        if port is None:
-            context.report(
-                f"实例化 '{info.name}' 连接了不存在的端口 '{pn}'",
-                code="W102",
-                level="error",
-                node=conn,
-                related=related_def,
-            )
-            continue
-        # WC001：参数化宽度端口 + 字面量连接（配置敏感死值）
-        if port.width_expr and is_parameterized(port.width_expr):
-            value = getattr(conn, "value", None)
-            if _is_literal(value):
-                related = list(related_def)
-                if port.decl_node is not None:
-                    related.append(("端口 '%s' 声明处" % pn, port.decl_node))
-                context.report(
-                    f"字面量 {_text(value)} 连接参数化宽度端口 '{pn}'"
-                    f"（[{port.width_expr}]）——端口宽度由配置决定，"
-                    "配置变更时该字面量可能成为死值",
-                    code="WC001",
-                    level="warning",
-                    node=conn,
-                    related=related,
-                )
+    return [c for c in conns or [] if isinstance(c, Node)]
+
+
+def _check_port_conn(context, conn, info, related_def) -> None:
+    """单个命名端口连接：端口存在性（W102）+ 死值字面量（WC001）。"""
+    pn = _text(getattr(conn, "port_name", None))
+    if not pn:
+        return
+    port = info.ports.get(pn)
+    if port is None:
+        context.report(
+            f"实例化 '{info.name}' 连接了不存在的端口 '{pn}'",
+            code="W102",
+            level="error",
+            node=conn,
+            related=related_def,
+        )
+        return
+    _check_dead_literal(context, conn, port, pn, related_def)
+
+
+def _check_dead_literal(context, conn, port, pn, related_def) -> None:
+    """WC001：参数化宽度端口 + 字面量连接（配置敏感死值）。"""
+    if not port.width_expr or not is_parameterized(port.width_expr):
+        return
+    value = getattr(conn, "value", None)
+    if not _is_literal(value):
+        return
+    related = list(related_def)
+    if port.decl_node is not None:
+        related.append(("端口 '%s' 声明处" % pn, port.decl_node))
+    context.report(
+        f"字面量 {_text(value)} 连接参数化宽度端口 '{pn}'"
+        f"（[{port.width_expr}]）——端口宽度由配置决定，"
+        "配置变更时该字面量可能成为死值",
+        code="WC001",
+        level="warning",
+        node=conn,
+        related=related,
+    )
 
 
 def _check_missing_ports(
@@ -198,16 +212,21 @@ def _collect_assign_targets(analyzer) -> dict:
     for node in iter_nodes(root):
         if node.node_name != "AssignStmt":
             continue
-        tgt = getattr(node, "target", None)
-        sig = _sig_text(tgt)
-        if sig and sig not in out:
-            out[sig] = tgt if isinstance(tgt, Node) else node
+        _add_assign_target(out, getattr(node, "target", None), node)
         for ex in getattr(node, "extras", None) or []:
-            et = getattr(ex, "target", None)
-            esig = _sig_text(et)
-            if esig and esig not in out:
-                out[esig] = et if isinstance(et, Node) else ex
+            _add_assign_target(out, getattr(ex, "target", None), ex)
     return out
+
+
+def _add_assign_target(out: dict[str, Node], tgt, fallback) -> None:
+    """登记一个赋值目标（简单信号名 → 定位节点；同名已登记则不覆盖）。
+
+    目标不是节点（缺失/标量）时以所属语句节点兜底定位。
+    """
+    sig = _sig_text(tgt)
+    if not sig or sig in out:
+        return
+    out[sig] = tgt if isinstance(tgt, Node) else fallback
 
 
 _SIG_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
