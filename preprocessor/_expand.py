@@ -260,25 +260,45 @@ def scan_directives(
                           回源时与 `expand_tokens` 的展开级映射复合使用。
     """
     prefix, directives_set = _load_config(rules_dir)
-    _MACRO_RE = _build_macro_re(prefix)
-    # 带参宏的实参形态（语言包 `[macro_recognition]` 的 call_args / arg_separator）：
-    # 定义侧形参表与展开侧实参表共用它（引擎不硬编码 `(` / `,`）。
-    call_args = load_macro_call_args(rules_dir=rules_dir)
+    macro_re = _build_macro_re(prefix)
+    ctx = _build_scan_ctx(
+        rules_dir, source_path, search_dirs, predefined, undefine, _include_stack
+    )
 
-    if _include_stack is None:
-        _include_stack = set()
+    # ── 预合并延续行（反斜杠折行）──
+    # 账本：每条输出行携带其**原始行号**（行与行号成对入列表）——clean 行数
+    # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
+    source, join_map = _join_continuation_lines(source)
+    _scan_lines(source.split("\n"), ctx, prefix, directives_set, rules_dir)
 
-    # include 配置（从 ConfigRegistry 读）
+    result = _collect_scan_result(ctx, join_map)
+    if result[0]:  # 有宏定义才预展开（供 reverser）
+        _expand_macro_bodies(result[0], result[1], macro_re)
+    return result
+
+
+def _build_scan_ctx(
+    rules_dir: str,
+    source_path: str | None,
+    search_dirs: list[str] | None,
+    predefined: dict[str, str] | None,
+    undefine: set[str] | None,
+    include_stack: set[str] | None,
+) -> dict:
+    """扫描会话上下文：宏表 + 条件栈/占位序号 + 路径与配置（handler 共享）。
+
+    搜索路径：CLI 传入的 search_dirs 优先，合并配置中的 search_dirs。
+    带参宏的实参形态（语言包 `[macro_recognition]` 的 call_args / arg_separator）：
+    定义侧形参表与展开侧实参表共用它（引擎不硬编码 `(` / `,`）。
+    """
     inc_config = _get_include_config()
-
-    # 搜索路径：CLI 传入的 search_dirs 优先，合并配置中的 search_dirs
-    cli_dirs = search_dirs or []
-    cfg_dirs = inc_config.get("search_dirs", [])
     src_dir = resolve_source_dir(source_path, rules_dir)
-    all_dirs = cli_dirs + cfg_dirs + [src_dir, rules_dir]
-
-    # Handler 共享上下文
-    ctx = {
+    all_dirs = (
+        (search_dirs or [])
+        + inc_config.get("search_dirs", [])
+        + [src_dir, rules_dir]
+    )
+    return {
         "macro_defs": {},
         "_func_params": {},
         "_cond_blocks": [],
@@ -290,93 +310,17 @@ def scan_directives(
         "_undefine": set(undefine) if undefine else set(),
         "directive_lines": [],
         "_inject_lines": [],
-        "_include_stack": _include_stack,
+        "_include_stack": include_stack if include_stack is not None else set(),
         "source_dir": src_dir,
         "inc_dirs": all_dirs,
         "rules_dir": rules_dir,
         "_include_config": inc_config,
-        "_call_args": call_args,
+        "_call_args": load_macro_call_args(rules_dir=rules_dir),
     }
 
-    # ── 预合并延续行（反斜杠折行）──
-    # 账本：每条输出行携带其**原始行号**（行与行号成对入列表）——clean 行数
-    # 与原始行数不同（条件压缩/续行合并），行映射只能逐行记账，不能事后对齐。
-    source, join_map = _join_continuation_lines(source)
-    lines = source.split("\n")
-    # 注释跨度扫描（定界符/行注释标记来自语言包声明）：注释内部的行**不是指令行**
-    _syntax = load_comment_syntax(rules_dir)
-    _block_pairs, _line_markers = _syntax.block_pairs, _syntax.line_starts
-    _block_state: str | None = None
 
-    for jno, line in enumerate(lines, 1):
-        ctx["_cur_line_no"] = jno  # 控制指令 handler 记账用（边界行归属）
-        stripped = line.strip()
-        stack: list = ctx.get("_ifdef_stack", [])
-        _inside_block = _block_state is not None
-        _block_state = _advance_block_comment(line, _block_state, _block_pairs, _line_markers)
-
-        if _inside_block or not stripped.startswith(prefix):
-            # 非指令行（含块注释内部行）：归入栈顶块当前分支（flush 时决定管线/占位）；
-            # 无块时直接进管线。注释内的 `ifdef/`endif 不是指令——按指令处理
-            # 会丢行、甚至把注释截断成未闭合注释（实测）。
-            if stack:
-                branch = stack[-1].get("cur_branch")
-                if branch is not None:
-                    branch["lines"].append((jno, line))
-            elif _is_ifdef_active(ctx):
-                ctx["_inject_lines"].append((jno, line))
-            continue
-
-        # 从行首提取 directive 关键字（`define foo → "define"）：切分 = 前缀 +
-        # 关键字 + 空白（`primitives/registry.split_directive`，与 handler 取参数同源；
-        # 关键字拼写来自语言包候选，引擎不写死、也不假定分隔符是单个空格）
-        directive_name = split_directive(stripped, prefix)[0]
-
-        # 行首宏调用（名字不在 directives 指令表，如 `debug(x);、`FORMAL_KEEP）
-        if directive_name not in directives_set:
-            if stack:
-                branch = stack[-1].get("cur_branch")
-                if branch is not None:
-                    branch["lines"].append((jno, line))
-            elif _is_ifdef_active(ctx):
-                ctx["_inject_lines"].append((jno, line))
-            continue
-
-        handler_cfg = _directives_cfg.get(directive_name, {})
-        if not handler_cfg.get("enabled", True):
-            # 配置禁用：不执行 handler，但原文原位占位保留
-            if _is_ifdef_active(ctx):
-                _inject_directive_marker(ctx, stack, jno, line, _syntax)
-            elif stack:
-                branch = stack[-1].get("cur_branch")
-                if branch is not None:
-                    branch["lines"].append((jno, line))
-            continue
-
-        # 指令关键字 → op（预定义操作）绑定，kind 以 op 对应处理器为准
-        op = handler_cfg.get("op", directive_name)
-        kind = get_primitive_kind(op)
-        if kind == "control":
-            # 控制指令行（ifdef/else/endif）：负责条件栈，始终执行。
-            # 不记录 directive_lines（由占位恢复），不归入分支内容（是块边界）。
-            handler = get_primitive(op)
-            if handler:
-                handler(stripped, prefix, directive_name, ctx)
-            continue
-
-        # 副作用指令行（define/undef/include）
-        if _is_ifdef_active(ctx):
-            # 活跃分支内：执行 handler，原文原位占位（渲染后回插到原位置）
-            handler = get_primitive(op)
-            if handler:
-                handler(stripped, prefix, directive_name, ctx)
-            _inject_directive_marker(ctx, stack, jno, line, _syntax)
-        elif stack:
-            # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
-            branch = stack[-1].get("cur_branch")
-            if branch is not None:
-                branch["lines"].append((jno, line))
-
+def _collect_scan_result(ctx: dict, join_map: list) -> tuple:
+    """把 ctx 里的累积状态整理成返回契约（含 clean 行 → 原始行映射）。"""
     macro_defs = ctx["macro_defs"]
     func_macros = ctx["_func_params"]
     condition_blocks = ctx.get("_cond_blocks", [])
@@ -391,49 +335,6 @@ def scan_directives(
         join_map[jno - 1] if jno and 1 <= jno <= len(join_map) else None
         for jno, _ in inject_lines
     ]
-
-    if not macro_defs:
-        return (
-            {},
-            func_macros,
-            condition_blocks,
-            placeholders,
-            directive_lines,
-            clean_source,
-            clean_to_raw,
-        )
-
-    # ---- Fully expand macro bodies (for reverser) ----
-    # 带参宏 body 含形参占位，形参未绑定时不能预展开，跳过。
-    expand_cfg = _get_expand_config()
-    max_iter = expand_cfg.get("max_iterations", 128)
-    # 体长上限：防递归宏指数膨胀（fuzz 2026-08-22 发现 MemoryError——
-    # `` `define debug ( `debug ... ) `` 每次迭代体长翻倍，128 轮即
-    # 2^128 长度）。超限宏停止展开（引用保留为未展开 token），软失败不崩溃。
-    max_body_len = expand_cfg.get("max_body_len", 1 << 16)
-    stalled: set[str] = set()
-    for _ in range(max_iter):
-        changed = False
-        for name, body in list(macro_defs.items()):
-            if name in func_macros or name in stalled:
-                continue
-            # 直接自引用（`X 出现在 X 自己的体里）：GCC 语义——递归宏引用
-            # 不展开。预判跳过，避免进入翻倍循环。
-            if name in _MACRO_RE.findall(body):
-                stalled.add(name)
-                continue
-            new_body = _MACRO_RE.sub(
-                lambda m: macro_defs.get(m.group(1), m.group(0)), body
-            )
-            if new_body != body:
-                if len(new_body) > max_body_len:
-                    stalled.add(name)  # 传递递归兜底：体积超限即停止
-                    continue
-                changed = True
-                macro_defs[name] = new_body
-        if not changed:
-            break
-
     return (
         macro_defs,
         func_macros,
@@ -443,6 +344,156 @@ def scan_directives(
         clean_source,
         clean_to_raw,
     )
+
+
+def _scan_lines(
+    lines: list[str], ctx: dict, prefix: str, directives_set: set[str], rules_dir: str
+) -> None:
+    """逐行扫描：指令行分派到处理器，非指令行按条件栈归属。
+
+    注释跨度扫描（定界符/行注释标记来自语言包声明）：**块注释内部的行不是指令
+    行**——按指令处理会丢行、甚至把注释截断成未闭合注释（实测）。
+    """
+    _syntax = load_comment_syntax(rules_dir)
+    _block_pairs, _line_markers = _syntax.block_pairs, _syntax.line_starts
+    block_state: str | None = None
+
+    for jno, line in enumerate(lines, 1):
+        ctx["_cur_line_no"] = jno  # 控制指令 handler 记账用（边界行归属）
+        stack: list = ctx.get("_ifdef_stack", [])
+        inside_block = block_state is not None
+        block_state = _advance_block_comment(
+            line, block_state, _block_pairs, _line_markers
+        )
+        if inside_block or not line.strip().startswith(prefix):
+            _route_line(ctx, stack, jno, line)
+            continue
+        _handle_directive(ctx, stack, jno, line, prefix, directives_set, _syntax)
+
+
+def _route_line(ctx: dict, stack: list, jno: int, line: str) -> None:
+    """非指令行（含块注释内部行、行首宏调用）：按条件栈归属。
+
+    有块 → 归栈顶块当前分支（flush 时决定管线/占位）；无块且当前条件活跃 →
+    直接进管线（`_inject_lines`）。
+    """
+    if stack:
+        _append_to_branch(stack, jno, line)
+    elif _is_ifdef_active(ctx):
+        ctx["_inject_lines"].append((jno, line))
+
+
+def _append_to_branch(stack: list, jno: int, line: str) -> None:
+    """把行归入栈顶块的当前分支（无当前分支时丢弃——块边界行）。"""
+    branch = stack[-1].get("cur_branch")
+    if branch is not None:
+        branch["lines"].append((jno, line))
+
+
+def _handle_directive(
+    ctx: dict,
+    stack: list,
+    jno: int,
+    line: str,
+    prefix: str,
+    directives_set: set[str],
+    syntax,
+) -> None:
+    """指令行分派：控制指令（条件栈）/ 副作用指令（define/undef/include）。
+
+    行首宏调用（名字不在指令表，如 `debug(x);）不是指令 → 按普通行归属。
+    配置禁用的指令不执行 handler，但原文原位占位保留。
+    """
+    stripped = line.strip()
+    # 从行首提取 directive 关键字（`define foo → "define"）：切分 = 前缀 +
+    # 关键字 + 空白（`primitives/registry.split_directive`，与 handler 取参同源；
+    # 关键字拼写来自语言包候选，引擎不写死、也不假定分隔符是单个空格）
+    directive_name = split_directive(stripped, prefix)[0]
+    if directive_name not in directives_set:
+        _route_line(ctx, stack, jno, line)
+        return
+
+    handler_cfg = _directives_cfg.get(directive_name, {})
+    op = handler_cfg.get("op", directive_name)
+    if not handler_cfg.get("enabled", True):
+        if _is_ifdef_active(ctx):
+            _inject_directive_marker(ctx, stack, jno, line, syntax)
+        elif stack:
+            _append_to_branch(stack, jno, line)
+        return
+
+    # 指令关键字 → op（预定义操作）绑定，kind 以 op 对应处理器为准
+    if get_primitive_kind(op) == "control":
+        # 控制指令行（ifdef/else/endif）：负责条件栈，始终执行。
+        # 不记录 directive_lines（由占位恢复），不归入分支内容（是块边界）。
+        _invoke_directive(op, stripped, prefix, directive_name, ctx)
+        return
+
+    # 副作用指令行（define/undef/include）
+    if _is_ifdef_active(ctx):
+        # 活跃分支内：执行 handler，原文原位占位（渲染后回插到原位置）
+        _invoke_directive(op, stripped, prefix, directive_name, ctx)
+        _inject_directive_marker(ctx, stack, jno, line, syntax)
+    elif stack:
+        # inactive 分支内：不执行、不进 directive_lines，原文归入分支（占位保留）
+        _append_to_branch(stack, jno, line)
+
+
+def _invoke_directive(
+    op: str, stripped: str, prefix: str, name: str, ctx: dict
+) -> None:
+    """执行指令处理器（op 绑定到 primitive；未注册 → 不执行）。"""
+    handler = get_primitive(op)
+    if handler:
+        handler(stripped, prefix, name, ctx)
+
+
+def _expand_macro_bodies(macro_defs: dict, func_macros: dict, macro_re) -> None:
+    """原地全展开宏体（供 reverser），迭代到不动点。
+
+    体长上限：防递归宏指数膨胀（fuzz 2026-08-22 发现 MemoryError——
+    `` `define debug ( `debug ... ) `` 每次迭代体长翻倍，128 轮即 2^128 长度）。
+    超限宏停止展开（引用保留为未展开 token），软失败不崩溃。
+    """
+    expand_cfg = _get_expand_config()
+    max_iter = expand_cfg.get("max_iterations", 128)
+    max_body_len = expand_cfg.get("max_body_len", 1 << 16)
+    stalled: set[str] = set()
+    for _ in range(max_iter):
+        if not _expand_round(macro_defs, func_macros, stalled, macro_re, max_body_len):
+            break
+
+
+def _expand_round(
+    macro_defs: dict,
+    func_macros: dict,
+    stalled: set[str],
+    macro_re,
+    max_body_len: int,
+) -> bool:
+    """全体宏体各展一轮 → 是否有变化（供迭代到不动点）。
+
+    带参宏 body 含形参占位，形参未绑定时不能预展开，跳过。直接自引用（`X 出现
+    在 X 自己的体里）按 GCC 语义不展开——预判跳过，避免进入翻倍循环。
+    """
+    changed = False
+    for name, body in list(macro_defs.items()):
+        if name in func_macros or name in stalled:
+            continue
+        if name in macro_re.findall(body):
+            stalled.add(name)
+            continue
+        new_body = macro_re.sub(
+            lambda m: macro_defs.get(m.group(1), m.group(0)), body
+        )
+        if new_body == body:
+            continue
+        if len(new_body) > max_body_len:
+            stalled.add(name)  # 传递递归兜底：体积超限即停止
+            continue
+        macro_defs[name] = new_body
+        changed = True
+    return changed
 
 
 # ── 多路径诊断：条件块叶路径枚举 ──
