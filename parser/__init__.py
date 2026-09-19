@@ -18,19 +18,31 @@ def _apply_ext_injections(
 
     for r_name, r_rule in ext_rules.items():
         inj = getattr(r_rule, "inject", None)
-        if inj and isinstance(inj, dict):
-            targets = inj.get("targets", [])
-            if targets:
-                for t in targets:
-                    inject_config.setdefault(r_name, []).append(t)
-            repl = inj.get("replace", {})
-            if repl:
-                replace_config.update(repl)
+        if not inj or not isinstance(inj, dict):
+            continue
+        _collect_inject_targets(inject_config, r_name, inj.get("targets", []))
+        _merge_replace_config(replace_config, inj.get("replace", {}))
 
     if inject_config:
         inject_productions(rules, inject_config)
     if replace_config:
         inject_replace_rule(rules, replace_config)
+
+
+def _collect_inject_targets(
+    config: dict[str, list[str]], rule_name: str, targets
+) -> None:
+    """登记该扩展规则要注入的目标规则名（未声明 targets 时不登记）。"""
+    if not targets:
+        return
+    for t in targets:
+        config.setdefault(rule_name, []).append(t)
+
+
+def _merge_replace_config(config: dict[str, dict[str, str]], repl) -> None:
+    """合并该扩展规则的替换配置（未声明 replace 时不合并）。"""
+    if repl:
+        config.update(repl)
 
 
 def setup_grammar(

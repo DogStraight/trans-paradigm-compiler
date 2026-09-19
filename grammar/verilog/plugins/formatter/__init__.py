@@ -245,30 +245,42 @@ def split_port_close_lines(
     """
     if categories is None:
         categories = _load_categories_from_config() or DEFAULT_CATEGORIES
-    port_tokens: set[str] = set()
-    for cat in categories:
-        # 只认端口方向品类（port_dir），防误拆 assignment/declaration 等
-        # （如 `assign z = `MIN(x, y);` 行尾也含 `);`，但 first_token 是 assign）
-        if cat.get("family") != "port_dir":
-            continue
-        first = cat.get("matcher", {}).get("first_token")
-        if isinstance(first, str):
-            port_tokens.add(first)
-        elif isinstance(first, list):
-            port_tokens.update(first)
+    port_tokens = _port_dir_first_tokens(categories)
     if not port_tokens:
         return list(lines)
     out: list[str] = []
     for line in lines:
-        s = line.rstrip()
-        if s.endswith(");") and s.strip():
-            first = s.lstrip().split(None, 1)[0]
-            if first in port_tokens:
-                out.append(s[:-2].rstrip())
-                out.append(");")
-                continue
-        out.append(line)
+        out.extend(_split_port_close_line(line, port_tokens))
     return out
+
+
+def _port_dir_first_tokens(categories: list[dict]) -> set[str]:
+    """端口方向品类（family == port_dir）的 first_token 集。
+
+    只认端口方向品类，防误拆 assignment/declaration 等（如
+    `assign z = `MIN(x, y);` 行尾也含 `);`，但 first_token 是 assign）。
+    """
+    tokens: set[str] = set()
+    for cat in categories:
+        if cat.get("family") != "port_dir":
+            continue
+        first = cat.get("matcher", {}).get("first_token")
+        if isinstance(first, str):
+            tokens.add(first)
+        elif isinstance(first, list):
+            tokens.update(first)
+    return tokens
+
+
+def _split_port_close_line(line: str, port_tokens: set[str]) -> list[str]:
+    """单行拆分：端口尾行 `output name );` → [`output name`, `);`]；其余原样。"""
+    s = line.rstrip()
+    if not (s.endswith(");") and s.strip()):
+        return [line]
+    first = s.lstrip().split(None, 1)[0]
+    if first not in port_tokens:
+        return [line]
+    return [s[:-2].rstrip(), ");"]
 
 
 def format_source(source: str, rules_dir: str, categories: list[dict] | None = None) -> str:

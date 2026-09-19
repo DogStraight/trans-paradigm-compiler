@@ -142,19 +142,33 @@ def _tail_keyword_tokens(info: dict) -> set[str]:
 def _collect_call_names(feat, out: set[str]) -> None:
     """递归收集 feature 树里的 @call 引用名（choice/seq/repeat 内部也要）。"""
     if isinstance(feat, dict):
-        if feat.get("type") == "call":
-            out.add(feat.get("name", ""))
-        for key in ("alternatives", "items"):
-            v = feat.get(key)
-            if isinstance(v, list):
-                for x in v:
-                    _collect_call_names(x, out)
-        for key in ("elem",):
-            v = feat.get(key)
-            if isinstance(v, (dict, list)):
-                _collect_call_names(v, out)
+        _collect_dict_calls(feat, out)
     elif isinstance(feat, str) and feat.startswith("@"):
         out.add(feat[1:])
+
+
+def _collect_dict_calls(feat: dict, out: set[str]) -> None:
+    """字典 feature：自身的 @call 名 + 递归各子 feature。"""
+    if feat.get("type") == "call":
+        out.add(feat.get("name", ""))
+    for child in _call_children(feat):
+        _collect_call_names(child, out)
+
+
+def _call_children(feat: dict) -> list:
+    """字典 feature 的子位：alternatives/items 列表各项 + elem 单值。
+
+    elem 为列表时原样返回（调用方对非 dict 非 str 的输入不做处理）。
+    """
+    children: list = []
+    for key in ("alternatives", "items"):
+        v = feat.get(key)
+        if isinstance(v, list):
+            children.extend(v)
+    elem = feat.get("elem")
+    if isinstance(elem, (dict, list)):
+        children.append(elem)
+    return children
 
 
 def _collect_block_rule_bounds(
