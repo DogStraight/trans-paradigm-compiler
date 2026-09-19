@@ -329,6 +329,44 @@ def collect_extra_asts() -> list[tuple[str, Node]]:
     return ctx.pop(_EXTRA_ASTS_KEY, [])
 
 
+def _merge_entry_list(cur: list, entries) -> None:
+    """按条目去重追加（同一注释可能在回溯中重复挂到多处）。"""
+    for e in entries:
+        if e not in cur:
+            cur.append(e)
+
+
+def _merge_slot_dict(merged: dict, v: dict) -> None:
+    """`inline_after` 形态：锚 keys 合并 + entries 去重追加。"""
+    for anchor, entries in v.items():
+        _merge_entry_list(merged.setdefault(anchor, []), entries)
+
+
+def _merge_slots(acc_slots: dict, slots: dict) -> None:
+    """单节点注释槽 → 累加表。
+
+    槽位值两形态（ADR-0013 阶段 A 后均存在）：
+      - list（leading/inline/trailing）：直接扩展
+      - dict（inline_after = {锚 token: [(注释, 源行号)]}）：按键合并
+        （锚 keys 合并去重，entries 按 (text, line) 去重）
+    """
+    for k, v in slots.items():
+        if isinstance(v, dict):
+            _merge_slot_dict(acc_slots.setdefault(k, {}), v)
+        elif isinstance(v, list):
+            acc_slots.setdefault(k, []).extend(v)
+        else:
+            acc_slots.setdefault(k, []).append(v)
+
+
+def _collect_public_children(node: Node, acc_slots: dict) -> None:
+    """递归收集节点公开属性里的注释（`_` 前缀的元数据/槽位字段不参与遍历）。"""
+    for k, v in list(vars(node).items()):
+        if k.startswith("_"):
+            continue
+        _collect_subtree_comments(v, acc_slots)
+
+
 def _collect_subtree_comments(node: Any, acc_slots: dict) -> None:
     """递归收集节点子树的注释（_comment_slots 槽位）。
 
@@ -336,36 +374,31 @@ def _collect_subtree_comments(node: Any, acc_slots: dict) -> None:
     spi_io // 注释` 的行尾注释挂在 instance_name 的 Identifier 子节点）
     全部迁移到替换产物，防注释随丢弃子树丢失。
 
-    槽位值两形态（ADR-0013 阶段 A 后均存在）：
-      - list（leading/inline/trailing）：直接扩展
-      - dict（inline_after = {锚 token: [(注释, 源行号)]}）：按键合并
-        （锚 keys 合并去重，entries 按 (text, line) 去重）
+    槽位合并形态见 `_merge_slots`；Node/list/dict 三种容器都下钻
+    （属性值可能是列表或字典）。
     """
     if isinstance(node, Node):
         slots = getattr(node, "_comment_slots", None)
         if slots:
-            for k, v in slots.items():
-                if isinstance(v, dict):
-                    merged = acc_slots.setdefault(k, {})
-                    for anchor, entries in v.items():
-                        cur = merged.setdefault(anchor, [])
-                        for e in entries:
-                            if e not in cur:
-                                cur.append(e)
-                elif isinstance(v, list):
-                    acc_slots.setdefault(k, []).extend(v)
-                else:
-                    acc_slots.setdefault(k, []).append(v)
-        for k, v in list(vars(node).items()):
-            if k.startswith("_"):
-                continue
-            _collect_subtree_comments(v, acc_slots)
+            _merge_slots(acc_slots, slots)
+        _collect_public_children(node, acc_slots)
     elif isinstance(node, list):
         for item in node:
             _collect_subtree_comments(item, acc_slots)
     elif isinstance(node, dict):
         for item in node.values():
             _collect_subtree_comments(item, acc_slots)
+
+
+def _merge_into_existing(new_slots: dict, acc_slots: dict) -> None:
+    """把累加表并入已有槽位表：缺键直接搬，字典键合并，列表键拼接。"""
+    for k, v in acc_slots.items():
+        if k not in new_slots:
+            new_slots[k] = v
+        elif isinstance(v, dict):
+            _merge_slot_dict(new_slots[k], v)
+        else:
+            new_slots[k] = new_slots[k] + v
 
 
 def migrate_comments(old_node: Any, new_node: Any) -> Any:
@@ -389,21 +422,8 @@ def migrate_comments(old_node: Any, new_node: Any) -> Any:
     if not acc_slots:
         return new_node
     new_slots = getattr(new_node, "_comment_slots", None)
-    if acc_slots:
-        if new_slots is None:
-            new_node.add_attr("_comment_slots", dict(acc_slots))
-        else:
-            for k, v in acc_slots.items():
-                if k not in new_slots:
-                    new_slots[k] = v
-                elif isinstance(v, dict):
-                    # inline_after 字典合并（锚 keys + entries 去重）
-                    merged = new_slots[k]
-                    for anchor, entries in v.items():
-                        cur = merged.setdefault(anchor, [])
-                        for e in entries:
-                            if e not in cur:
-                                cur.append(e)
-                else:
-                    new_slots[k] = new_slots[k] + v
+    if new_slots is None:
+        new_node.add_attr("_comment_slots", dict(acc_slots))
+    else:
+        _merge_into_existing(new_slots, acc_slots)
     return new_node
