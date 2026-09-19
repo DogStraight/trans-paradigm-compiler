@@ -171,13 +171,14 @@
     `cmd_rename`、`_smoke_test`（format/lint/check 三面必跑）、
     `bifrost_probe/smelly.py`（**刻意坏味探针**，修好即门禁失效）。判据与逐条理由见
     dispositions。
-- **B-F 圈复杂度 / 认知复杂度**（批次一：先"最高分区"6 个文件，2026-09-19）：
-  外部裁判同口径量化 **CC 命中 151 → 133、认知 158 → 141**。
-  - ✅ 已清：`transform/_semantic_mapping`（认知 99 + CC 27）、`normalizer._normalize`
-    （34/89）、`renderer/doc` 三处（`_fits_concat` 24/62、`_strip_leading_hardbreak`、
-    `_resolve_line_suffix` 16/27）、`linter/lookahead.py`（整文件）、
-    `preprocessor/_expand.py`（整文件：`scan_directives` 31/72、`expand_tokens` 20/41 等）、
-    `parser/follow.py`（整文件：`compute_follows` 33 等）。提交见 dispositions 的逐条记录。
+- **B-F 圈复杂度 / 认知复杂度**（批次一“最高分区”6 文件 + 批次二 config_driven/pipeline，
+  2026-09-19）：外部裁判同口径量化——批次一 CC 151 → 133 / 认知 158 → 141；
+  批次二 CC 133 → 125 / 认知 141 → 136；**两批合计 CC 151 → 125（-26）、
+  认知 158 → 136（-22）**。
+  - ✅ 已清（整文件）：`linter/lookahead.py`、`preprocessor/_expand.py`、`parser/follow.py`、
+    `transform/config_driven.py`、`pipeline/__init__.py`；局部：`transform/_semantic_mapping`
+    （认知 99 + CC 27）、`normalizer._normalize`（34/89）、`renderer/doc` 三处（24/62、
+    11/17、16/27）。提交见 dispositions 的逐条记录。
   - 判据 = **分派型保持 / 有内部逻辑拆**（判据与逐条清点在
     `_drafts/bifrost/dispositions.md`「CC / 认知复杂度三分类」）：`renderer/doc.flatten`
     20/18、`_best` 17/16、`_doc_has_break`/`_flat_w`/`_fits`/`_drop_break_after_hardbreak`
@@ -186,12 +187,15 @@
     （一次去掉多处 `if trace:`；循环内 `sorted()` 打印留 guard）；
     ②状态收 `_XxxCtx` dataclass 后助手提到模块级——**嵌套函数的分支计入外层 CC**，
     所以"提模块级"是硬要求不是偏好。
-  - ⏳ 剩项（按当前值）：`transform/config_driven._expand_primitive` 36/66、
-    `pipeline.run_pipeline_on_source` 32、`tools/check_test_isolation.main` 28/54、
-    语言侧 `formatter/indent.run_indent_pass` 35/62、`width_check.node_text` 31、
-    `formatter/wrap._wrap_line` 29、`pipeline/schedule._sequence_entries` 22、
-    `renderer/node_renderer.render_body` 21、`parser/grammar_inject.inject_productions`
-    认知 60、`parser/_production.collect_following_comments` 认知 57 等（全表见 dispositions）。
+  - ⏳ 剩项（按当前值，现以**语言侧插件**为主）：`formatter/indent.run_indent_pass` 35/62、
+    `width_check.node_text` 31、`formatter/wrap._wrap_line` 29、`tools/check_test_isolation.main`
+    28/54、`width_check.eval_expr_params` 23、`pipeline/schedule._sequence_entries` 22、
+    `boundary._build_scope_kind_map` 21/52、`latch_check._must_assign` 21、
+    `typed_ports/_transform.build_wrapper` 21、`renderer/node_renderer.render_body` 21、
+    `width_check.infer_expr_width` 20、`RuleMatcher._first_tokens` 20、`pipeline/units.assign_points`
+    20、`policy/doc_sync.collect_refs` 20、`parser/grammar_inject.inject_productions` 认知 60、
+    `parser/_production.collect_following_comments` 认知 57、`tools/config_sites._scan_file`
+    认知 79（全表见 dispositions）。
   - 批次验证：全量 `pytest tests/ -n 4` **2111 passed / 7 skipped**；诊断基线 5548 持平；
     `check_doc_refs` D1–D4=0、`check_hardcode --strict`、`config_sites check` 三门禁 PASS；
     格式化字节对拍 73 文件 0 差异（本批每次涉渲染/预处理/语法的单元都跑过）。
