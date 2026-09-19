@@ -321,6 +321,9 @@ class FileManager:
         file_rules 列表特殊处理：所有文件中的 file_rules 会合并为一个列表。
         以下划线 _ 开头的文件/目录被跳过。
         如果目录不存在或为空，返回空 dict。
+
+        单文件合并与子目录合并各一个模块级助手（`_merge_toml_file` /
+        `_merge_child_rules`），二者都返回本源的 file_rules 列表供调用方汇总。
         """
         dir_path = cls.get_full_path(dir_relative_path)
         merged: dict = {}
@@ -328,17 +331,7 @@ class FileManager:
         if not os.path.isdir(dir_path):
             return merged
         for fname in sorted(os.listdir(dir_path)):
-            # 跳过：下划线前缀（辅助文件）、token.toml（语言词法覆盖，
-            # 由 [lexer] 声明加载）、tpc.toml（语言包配置入口，[lexer]/
-            # [parser] 等段是配置声明非语法规则）、plugins（语言插件目录，
-            # 插件 tpc.toml 不是语法规则——如 asm_gen 的 [transform] 表会
-            # 污染规则集）
-            if (
-                fname.startswith("_")
-                or fname == "token.toml"
-                or fname == "tpc.toml"
-                or fname == "plugins"
-            ):
+            if _is_skipped_load_name(fname):
                 continue
             fpath = os.path.join(dir_path, fname)
             # 子目录递归
@@ -354,34 +347,64 @@ class FileManager:
                 sub = cls.load_all_toml(
                     os.path.join(dir_relative_path, fname).replace("\\", "/")
                 )
-                for k, v in sub.items():
-                    if k == "file_rules":
-                        all_file_rules.extend(v)
-                    else:
-                        merged[k] = v
+                all_file_rules.extend(_merge_child_rules(sub, merged))
                 continue
             if not fname.endswith(".toml"):
                 continue
-            with open(fpath, "r", encoding="utf-8") as f:
-                data = tomllib.loads(f.read())
-            # file_rules 特殊处理：跨文件合并
-            fr = data.pop("file_rules", None)
-            if fr:
-                all_file_rules.extend(fr)
-            # 检测跨文件重名覆盖
-            overlaps = merged.keys() & data.keys()
-            if overlaps:
-                import sys as _sys
-
-                print(
-                    f"[loader] {fname} overwrites previous rules: "
-                    f"{', '.join(sorted(overlaps))}",
-                    file=_sys.stderr,
-                )
-            merged.update(data)
+            all_file_rules.extend(_merge_toml_file(fpath, fname, merged))
         if all_file_rules:
             merged["file_rules"] = all_file_rules
         return merged
+
+
+def _is_skipped_load_name(fname: str) -> bool:
+    """目录扫描时跳过的条目名（文件与目录同名判定）。
+
+    跳过：下划线前缀（辅助文件）、token.toml（语言词法覆盖，由 `[lexer]`
+    声明加载）、tpc.toml（语言包配置入口，`[lexer]`/`[parser]` 等段是配置
+    声明非语法规则）、plugins（语言插件目录，插件 tpc.toml 不是语法规则
+    ——如 asm_gen 的 `[transform]` 表会污染规则集）。
+    """
+    return (
+        fname.startswith("_")
+        or fname in ("token.toml", "tpc.toml", "plugins")
+    )
+
+
+def _merge_child_rules(sub: dict, merged: dict) -> list:
+    """子目录加载结果并入顶层：`file_rules` 单独收集返回，其余键按名覆盖。"""
+    rules: list = []
+    for k, v in sub.items():
+        if k == "file_rules":
+            rules.extend(v)
+        else:
+            merged[k] = v
+    return rules
+
+
+def _merge_toml_file(fpath: str, fname: str, merged: dict) -> list:
+    """读单个 .toml 并入 `merged`，返回该文件的 `file_rules`（跨文件合并在调用方）。
+
+    `file_rules` 不并入顶层 dict（它是**跨文件累加**的列表，交给调用方汇总）；
+    其余键按名覆盖，覆盖时向 stderr 打一行提示（跨文件重名是常见手误）。
+    """
+    with open(fpath, "r", encoding="utf-8") as f:
+        data = tomllib.loads(f.read())
+    # file_rules 特殊处理：跨文件合并
+    fr = data.pop("file_rules", None)
+    # 检测跨文件重名覆盖
+    overlaps = merged.keys() & data.keys()
+    if overlaps:
+        import sys as _sys
+
+        print(
+            f"[loader] {fname} overwrites previous rules: "
+            f"{', '.join(sorted(overlaps))}",
+            file=_sys.stderr,
+        )
+    merged.update(data)
+    return list(fr) if fr else []
+
 
 
 class GrammarRule:
