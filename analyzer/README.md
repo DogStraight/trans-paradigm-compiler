@@ -9,8 +9,8 @@
 | `context.py` | AnalysisContext（分析上下文/诊断上报） |
 | `traversal.py` | AnalysisTraversal（遍历 + post-pass 钩子调度） |
 | `diagnostic.py` | 结构化诊断 + related 链 |
-| `checker.py` | ProjectChecker（工程检查**门面**：跨文件索引编排 + 分阶段诊断汇总）。结构提取细节委托给 `structure.py` |
-| `structure.py` | `_StructureBase`（结构提取**底座**：elaboration 三层——单元注册表 / 端口连接展开 / 信号驱动图）。**通用设施**，非检查专用：消费方含各 postpass/插件（读它注入的 `module_index`/`inst_sites`/信号图）；协议声明点（语言包 `[structure] protocol`）在此 |
+| `checker.py` | ProjectChecker（工程检查**门面 + 组合根**：装配六个结构提取协作者 + 分阶段诊断汇总）。结构提取细节全在 `structure.py` |
+| `structure.py` | 结构提取（elaboration 三层）——**组合式**：`StructureCtx`（会话上下文：环境开关 + 索引 + 语言包 `[structure] protocol` 协议读取）+ 六个阶段协作者（`ModuleIndexer` 发现 / `FilePipeline` 单文件装配 / `ModuleExtractor` 单元提取 / `ConnectionElaborator` 连接展开层 2 / `SignalGraphBuilder` 信号图层 3 / `GenerateEvaluator` 条件求值）。**通用设施**，非检查专用：消费方含各 postpass/插件（读它注入的 `module_index`/`inst_sites`/信号图） |
 | `report_html.py` | check 报告 → HTML（诊断的呈现视图，CLI `--html`） |
 | `checks.py` | L1 声明式检查规则执行器（规则 = 数据） |
 | `suppress.py` | 诊断豁免注释（Verilator lint_off 借鉴） |

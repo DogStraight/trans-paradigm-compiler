@@ -1,4 +1,4 @@
-"""structure.py — 结构提取底座（elaboration）：单元/实例/端口/驱动的跨文件索引。
+"""structure.py — 结构提取（elaboration）：单元/实例/端口/驱动的跨文件索引。
 
 定位：**通用设施**，不是检查专用——消费方包括各 postpass/插件（它们读底座
 注入的 `context.extra`：`module_index` / `inst_sites` / 信号图）。
@@ -6,17 +6,22 @@
 语言无关边界：本模块**零语言知识**。单元/实例化的规则名、节点字段、文件
 扩展名、关键字全部来自语言包声明的 `[structure] protocol`
 （grammar/<lang>/base/_structure.toml）；未声明该段 = 该语言不支持结构提取，
-调用方退化为单文件 lint + analyze（`_has_structure` 判定）。
+调用方退化为单文件 lint + analyze（`ctx.has_structure()` 判定）。
 
-三层（ADR-0008）：
-  层 1  单元注册表——递归发现（实例化链 + 目录内关键字文本扫描兜底）+
-        端口/参数/宽度声明形态提取
-  层 2  端口连接展开——实例化点连接 vs 端口声明（W104 类检查的基础）
-  层 3  信号驱动/负载图——连续/过程赋值驱动源 + 层次驱动穿透（W105 类检查的基础）
+三层（ADR-0008）+ 组合结构（本模块是**一组协作者**，不是一个大类）：
 
-本类由 `analyzer/checker.py` 的 ProjectChecker 继承（门面只做检查编排与诊断
-汇总，不碰结构提取细节）。实例字段（`_memo` / `_module_index` / `_signal_graph`
-/ `_struct` / `_fields`）由门面 `__init__` 统一初始化——与检查共享同一对象。
+    StructureCtx        会话上下文：环境开关 + 索引 + 协议读取（唯一状态归属点）
+    ModuleIndexer       发现：入口 → 实例化链（+ 目录关键字文本扫描兜底）→ 索引
+    FilePipeline        单文件装配：读源 → 宏展开 → 解析 → 提单元 → 展开连接
+    ModuleExtractor     层 1  单元注册表（端口/参数形态）
+    ConnectionElaborator 层 2 端口连接展开（W104 类检查的基础）
+    SignalGraphBuilder  层 3  信号驱动/负载图（W105 类检查的基础）
+    GenerateEvaluator   generate 条件求值（层 3 的互斥分支活性）
+
+组合方向（无环）：`FilePipeline` 含 `ModuleExtractor` + `ConnectionElaborator`；
+`ModuleIndexer` 含 `FilePipeline`；`SignalGraphBuilder` 含 `ConnectionElaborator`
++ `GenerateEvaluator`；全部共享同一个 `StructureCtx`。组合根是门面
+`analyzer/checker.py::ProjectChecker`（原先的门面继承底座已改为组合）。
 
 Doc: analyzer/semantic_checks.md（跨文件语义检查）
 """
@@ -1109,45 +1114,26 @@ class ModuleIndexer:
         return None
 
 
-class _StructureBase:
-    """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
+class SignalGraphBuilder:
+    """层 3 信号驱动/负载图：assign/过程赋值/实例化连接 → {drivers, loads}。
 
-    会话状态与协议读取全在 `StructureCtx`（`self._ctx`）——本类不持有字段，
-    各阶段方法从 `_ctx` 取环境/状态，跨阶段的调用由组合根（门面）装配。
+    W105 类检查的基础（elaboration 层 3，ADR-0008）。组合 `GenerateEvaluator`
+    （互斥分支活性：未选中分支的驱动不计）与 `ConnectionElaborator`（模块归属 /
+    赋值目标 / 实例化点表）；跨文件数据从 `ctx.memo` + `ctx.module_index` 取，
+    穿透查模块文件走 `_fr_by_module`（惰性缓存，与 ctx.invalidate() 成对失效）。
     """
 
-    _ctx: StructureCtx
-    _indexer: ModuleIndexer
-    _pipeline: FilePipeline
-    _extract: ModuleExtractor
-    _conn: ConnectionElaborator
-    _gen: GenerateEvaluator
+    def __init__(
+        self,
+        ctx: StructureCtx,
+        conn: ConnectionElaborator,
+        gen: GenerateEvaluator,
+    ) -> None:
+        self._ctx = ctx
+        self._conn = conn
+        self._gen = gen
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def _build_signal_graph(self) -> dict:
+    def build(self) -> dict:
         """层 3：全工程信号驱动/负载图（ADR-0008，含实例树层次展开）。
 
         汇总所有文件的端口连接展开 + 连续赋值目标，按 **(模块, 信号名)**
@@ -1478,8 +1464,6 @@ class _StructureBase:
             if inst_ref not in entry["loads"]:
                 entry["loads"].append(inst_ref)
 
-
-
     @property
     def _fr_by_module(self) -> dict:
         """{模块名: FileResult}——驱动穿透查模块定义文件（惰性构建）。"""
@@ -1491,6 +1475,47 @@ class _StructureBase:
                     cache.setdefault(mname, fr)
             self._ctx.fr_by_module_cache = cache
         return cache
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1,14 +1,15 @@
-"""checker.py — 工程检查门面（ProjectChecker）。
+"""checker.py — 工程检查门面（ProjectChecker，组合根）。
 
-定位：`tpc check` 的执行入口。继承**结构提取底座**（`analyzer/structure.py`，
-协议见语言包 `[structure] protocol`）建立跨文件索引，再对每个文件跑语义分析
-（插件 postpass 做联动检查），汇总**分阶段**错误：
+定位：`tpc check` 的执行入口。**组合**结构提取的各阶段协作者
+（`analyzer/structure.py`，协议见语言包 `[structure] protocol`）建立跨文件索引，
+再对每个文件跑语义分析（插件 postpass 做联动检查），汇总**分阶段**错误：
 
     stage=syntax   — linter 产出（token 级语法错误，阶段 1）
     stage=semantic — analyzer 插件产出（parse 成功后符号级 + 跨文件联动检查）
 
-本文件只做**检查编排**：结构提取在 `analyzer/structure.py`（`_StructureBase`），
-那里也是语言包 `[structure]` 协议的声明点——门面不再声明结构协议。
+本文件只做**检查编排与诊断汇总**：结构提取的六个协作者（见 structure.py）、
+会话上下文 `StructureCtx`、语言包 `[structure]` 协议声明点全在那里；门面把它们
+装配起来并驱动阶段顺序（prepare → discover → 信号图 → analyze → collect）。
 Doc: analyzer/semantic_checks.md（跨文件语义检查）
 """
 
@@ -23,12 +24,16 @@ from analyzer.structure import (
     GenerateEvaluator,
     ModuleExtractor,
     ModuleIndexer,
+    SignalGraphBuilder,
     StructureCtx,
-    _StructureBase,
 )
 
-class ProjectChecker(_StructureBase):
+
+class ProjectChecker:
     """跨文件语义检查引擎。
+
+    组合根：构造 `StructureCtx`（会话上下文）与六个阶段协作者，`check()` 只做
+    阶段编排与诊断汇总（结构提取细节全在 `analyzer/structure.py` 的协作者里）。
 
     Usage:
         checker = ProjectChecker()
@@ -76,6 +81,8 @@ class ProjectChecker(_StructureBase):
         self._pipeline = FilePipeline(self._ctx, self._extract, self._conn)
         # 递归发现组合单文件流水线
         self._indexer = ModuleIndexer(self._ctx, self._pipeline)
+        # 层 3 信号图组合连接展开器 + generate 求值器
+        self._graph = SignalGraphBuilder(self._ctx, self._conn, self._gen)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 
@@ -166,7 +173,7 @@ class ProjectChecker(_StructureBase):
         self._discover_all(entries)
 
         # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
-        self._signal_graph = self._build_signal_graph()
+        self._signal_graph = self._graph.build()
 
         # 2) 每个文件跑语义分析（postpass 拿到完整 module_index）
         self._analyze_all()
