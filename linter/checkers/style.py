@@ -26,6 +26,8 @@ Doc: linter/linter_architecture.md（P0 行级检查）
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from core.define import Token
 
 from .. import LintDiagnostic, Position
@@ -33,6 +35,22 @@ from ..checker import Checker
 
 # 行尾空白集合（尾随区判定；与 ST002 的豁免区共用）
 _TRAILING_CHARS = " \t"
+
+
+@dataclass(frozen=True)
+class _LineFacts:
+    """一行源码的排版事实（ST 三查共用）。"""
+
+    line: str      # 去 CRLF 的 \r 后的行内容
+    content: str   # 去行尾空白后的内容
+
+    @classmethod
+    def of(cls, raw: str) -> "_LineFacts | None":
+        """从原始行构造；空行返回 None（空行不参与三查）。"""
+        line = raw.rstrip("\r")  # CRLF：\r 不算行内容
+        if not line:
+            return None
+        return cls(line=line, content=line.rstrip(_TRAILING_CHARS))
 
 
 class StyleChecker(Checker):
@@ -51,51 +69,73 @@ class StyleChecker(Checker):
         del tokens  # 文件级检查：数据来自源码行，非 token 区间
         errors: list[LintDiagnostic] = []
         for line_idx, raw in enumerate(self._source.split("\n")):
-            line = raw.rstrip("\r")  # CRLF：\r 不算行内容
-            if not line:
+            facts = _LineFacts.of(raw)
+            if facts is None:
                 continue
-            content = line.rstrip(_TRAILING_CHARS)
-
-            # ── ST001 尾随空白 ──────────────────────────
-            if self._trailing and len(content) != len(line):
-                errors.append(
-                    self._diag(
-                        "ST001",
-                        f"行尾存在空白（{len(line) - len(content)} 个字符）",
-                        line_idx,
-                        len(content),
-                        len(line),
-                    )
-                )
-
-            # ── ST002 制表符（非尾随区；尾随区已由 ST001 覆盖）──
-            if self._tab:
-                tab_at = content.find("\t")
-                if tab_at >= 0:
-                    count = content.count("\t")
-                    suffix = f"（本行 {count} 处）" if count > 1 else ""
-                    errors.append(
-                        self._diag(
-                            "ST002",
-                            f"行内使用制表符，缩进请用空格{suffix}",
-                            line_idx,
-                            tab_at,
-                            tab_at + 1,
-                        )
-                    )
-
-            # ── ST003 行长超限 ──────────────────────────
-            if self._max_width and len(line) > self._max_width:
-                errors.append(
-                    self._diag(
-                        "ST003",
-                        f"行宽 {len(line)} 字符，超过上限 {self._max_width}",
-                        line_idx,
-                        self._max_width,
-                        len(line),
-                    )
-                )
+            errors.extend(self._check_line(line_idx, facts))
         return errors
+
+    def _check_line(self, line_idx: int, facts: _LineFacts) -> list[LintDiagnostic]:
+        """单行三查：ST001 尾随空白 → ST002 行内制表符 → ST003 行长超限。"""
+        return (
+            self._check_trailing_ws(line_idx, facts)
+            + self._check_tab_char(line_idx, facts)
+            + self._check_line_width(line_idx, facts)
+        )
+
+    def _check_trailing_ws(
+        self, line_idx: int, facts: _LineFacts
+    ) -> list[LintDiagnostic]:
+        """ST001 尾随空白：行尾（换行前）存在空格或制表符。"""
+        n_trail = len(facts.line) - len(facts.content)
+        if not self._trailing or n_trail == 0:
+            return []
+        return [
+            self._diag(
+                "ST001",
+                f"行尾存在空白（{n_trail} 个字符）",
+                line_idx,
+                len(facts.content),
+                len(facts.line),
+            )
+        ]
+
+    def _check_tab_char(
+        self, line_idx: int, facts: _LineFacts
+    ) -> list[LintDiagnostic]:
+        """ST002 制表符：非尾随区（尾随区已由 ST001 覆盖，不双报）。"""
+        if not self._tab:
+            return []
+        tab_at = facts.content.find("\t")
+        if tab_at < 0:
+            return []
+        count = facts.content.count("\t")
+        suffix = f"（本行 {count} 处）" if count > 1 else ""
+        return [
+            self._diag(
+                "ST002",
+                f"行内使用制表符，缩进请用空格{suffix}",
+                line_idx,
+                tab_at,
+                tab_at + 1,
+            )
+        ]
+
+    def _check_line_width(
+        self, line_idx: int, facts: _LineFacts
+    ) -> list[LintDiagnostic]:
+        """ST003 行长超限：上限为 0 时不检。"""
+        if not self._max_width or len(facts.line) <= self._max_width:
+            return []
+        return [
+            self._diag(
+                "ST003",
+                f"行宽 {len(facts.line)} 字符，超过上限 {self._max_width}",
+                line_idx,
+                self._max_width,
+                len(facts.line),
+            )
+        ]
 
     # ── 诊断构造 ──────────────────────────────────
 
