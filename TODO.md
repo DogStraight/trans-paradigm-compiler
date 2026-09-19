@@ -49,18 +49,18 @@
     `ProjectChecker.check`(65) / `build_suppress_map`(60) /
     `AnalysisTraversal._walk_node`(47) / `_glob_match`(43) /
     `_validate_node_specs`(43) / `load_all_toml`(70)。
-  - ⏳ **第三梯队：方法级 >80 行还剩 10 项**（⚠ 更正：早先队列取自被截断的
-    清单，漏了 linter/lexer/renderer 三包；下面是复查全量后的实际情况）：
-    - `renderer/primitives/join.py::eval_join`（193 行，score 298）
-    - `linter/discovery.py::Discovery._discover_range`（177 行，237）
-    - `lexer/number_gen.py::compile_number_pattern`（174 行，249）
-    - `renderer/inline_comment.py::restore_line_comments`（169 行，214）
-    - `renderer/inline_comment.py::restore_comments`（139 行，154）
-    - `lexer/capture_runner.py::CaptureRunner.run`（125 行，130）
-    - `renderer/node_renderer.py::render_node`（108 行，93）
-    - `renderer/doc.py::_best`（96 行，126）
-    - `renderer/doc.py::_fits`（87 行，177）
-    - `renderer/primitives/line.py::eval_line`（84 行，84）
+  - ⏳ **第三梯队：方法级 >80 行还剩 7 项**（已完成 3 项）：
+    - ✅ `renderer/primitives/join.py::eval_join`（193 行）→ `_JoinCfg` +
+      渲染/组装/槽清理/包裹分步（`6452ce6`）。
+    - ✅ `linter/discovery.py::Discovery._discover_range`（177 行）→ 四路分派
+      + `_rule_of`/`_make_stmt_node`（`feb1bb5`）。
+    - ✅ `lexer/number_gen.py::compile_number_pattern`（174 行）→
+      `_PatternBuilder` 装配器 + 四阶段（`eb865cc`）。
+    - ⏳ 剩余：`renderer/inline_comment.py::restore_line_comments`（169 行）、
+      `restore_comments`（139 行）、`lexer/capture_runner.py::CaptureRunner.run`
+      （125 行）、`renderer/node_renderer.py::render_node`（108 行）、
+      `renderer/doc.py::_best`（96 行）、`_fits`（87 行）、
+      `renderer/primitives/line.py::eval_line`（84 行）。
   - ⏳ **类级上帝对象 11 处**（需设计决策，非机械拆分）：`_StructureBase`(414)、
     `Lexer`(336)、`RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、
     `ConfigRegistry`(87)、`GrammarRule`(70)、`ProjectChecker`(56)、
