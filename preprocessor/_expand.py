@@ -9,6 +9,7 @@ Doc: preprocessor/README.md
 
 import os
 import re
+from dataclasses import dataclass, field
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
@@ -139,21 +140,38 @@ def _advance_block_comment(
             i = k + len(state)
             state = None
             continue
-        best: tuple[int, str, str] | None = None
-        for start, end in pairs:
-            k = line.find(start, i)
-            if k >= 0 and (best is None or k < best[0]):
-                best = (k, start, end)
+        best = _next_open_delimiter(line, i, pairs)
+        marker_at = _next_line_marker(line, i, line_markers)
         # 行注释起始标记在块注释起始之前 → 本行剩余部分是行注释文本
-        for marker in line_markers:
-            k = line.find(marker, i)
-            if k >= 0 and (best is None or k < best[0]):
-                return None
+        if marker_at >= 0 and (best is None or marker_at < best[0]):
+            return None
         if best is None:
             return None
         i = best[0] + len(best[1])
         state = best[2]
     return state
+
+
+def _next_open_delimiter(
+    line: str, i: int, pairs: tuple[tuple[str, str], ...]
+) -> tuple[int, str, str] | None:
+    """i 之后最早的块注释起始 → `(位置, 起始标记, 结束标记)`；无 → None。"""
+    best: tuple[int, str, str] | None = None
+    for start, end in pairs:
+        k = line.find(start, i)
+        if k >= 0 and (best is None or k < best[0]):
+            best = (k, start, end)
+    return best
+
+
+def _next_line_marker(line: str, i: int, markers: tuple[str, ...]) -> int:
+    """i 之后最早的行注释起始标记位置；无 → -1。"""
+    best = -1
+    for marker in markers:
+        k = line.find(marker, i)
+        if k >= 0 and (best < 0 or k < best):
+            best = k
+    return best
 
 
 def _load_config(rules_dir: str) -> tuple[str, set[str]]:
@@ -514,33 +532,51 @@ def _enumerate_rec(
         out.append({"define": set(define), "undefine": set(undefine)})
         return
     block = blocks[idx]
-    d = block.get("depth", 0)
-    # 当前块的子块范围：其后连续 depth 更大的块
-    sub_end = idx + 1
-    while sub_end < len(blocks) and blocks[sub_end].get("depth", 0) > d:
-        sub_end += 1
     branches = block["branches"]
+    sub_end = _subtree_end(blocks, idx, block.get("depth", 0))
     for i, branch in enumerate(branches):
-        new_def = set(define)
-        new_undef = set(undefine)
-        # 选中分支 i 需前面所有分支条件为假
-        for j in range(i):
-            c = branches[j].get("cond")
-            if c:
-                new_undef.add(c)
-        if not branch.get("is_else"):
-            c = branch.get("cond")
-            if c:
-                if i == 0 and block.get("negated"):
-                    new_undef.add(c)  # ifndef 分支：条件未定义
-                else:
-                    new_def.add(c)  # ifdef / elsif 分支：条件已定义
-        if idx + 1 < sub_end and blocks[idx + 1].get("parent_branch") is branch:
-            # 有属于该分支的子块：先枚举子块（含其后所有块）
-            _enumerate_rec(blocks, idx + 1, new_def, new_undef, out, max_configs)
+        new_def, new_undef = _branch_env(branches, i, define, undefine, block)
+        # 有属于该分支的子块 → 先枚举子块；否则直接继续后续块
+        child_idx = idx + 1
+        if child_idx < sub_end and blocks[child_idx].get("parent_branch") is branch:
+            _enumerate_rec(blocks, child_idx, new_def, new_undef, out, max_configs)
         else:
-            # 该分支下无子块：直接继续后续块
             _enumerate_rec(blocks, sub_end, new_def, new_undef, out, max_configs)
+
+
+def _subtree_end(blocks: list[dict], idx: int, depth: int) -> int:
+    """当前块的子块范围末尾下标（其后连续 depth 更大的块）。"""
+    sub_end = idx + 1
+    while sub_end < len(blocks) and blocks[sub_end].get("depth", 0) > depth:
+        sub_end += 1
+    return sub_end
+
+
+def _branch_env(
+    branches: list[dict], i: int, define: set[str], undefine: set[str], block: dict
+) -> tuple[set[str], set[str]]:
+    """选中分支 i 时的 `(define, undefine)` 假设集。
+
+    选中 i 需前面所有分支条件为假（前面分支的 cond 进 undefine）；本分支 cond
+    按方向计入：ifndef（首分支且块 negated）→ undefine，其它 → define；
+    `is_else` / 无 cond 不加任何假设。
+    """
+    new_def = set(define)
+    new_undef = set(undefine)
+    for j in range(i):
+        c = branches[j].get("cond")
+        if c:
+            new_undef.add(c)
+    if branches[i].get("is_else"):
+        return new_def, new_undef
+    c = branches[i].get("cond")
+    if not c:
+        return new_def, new_undef
+    if i == 0 and block.get("negated"):
+        new_undef.add(c)  # ifndef 分支：条件未定义
+    else:
+        new_def.add(c)  # ifdef / elsif 分支：条件已定义
+    return new_def, new_undef
 
 
 def enumerate_conditions(
@@ -660,6 +696,35 @@ def _splice_body(body: str, syntax: CommentSyntax) -> str:
     return body
 
 
+@dataclass
+class _MacroExpandCtx:
+    """展开会话状态（原为 `expand_tokens` 的闭包变量，显式化以便助手提到模块级）。
+
+    属性分两类：
+    - **构造后不变**：`macro_re` / `macro_defs` / `func_macros` / `call_args` /
+      `suffix_re` / `policy` / `syntax`（语言包声明与宏表）。
+    - **逐行累积**：`lines`（就地替换）/ `restoration_stack`（还原锚）/
+      `regions_by_line`（宏区间，行处理完算行内列）/ `seq`（锚序号，走 `next_seq()`）。
+    """
+
+    macro_re: re.Pattern
+    macro_defs: dict[str, str]
+    func_macros: dict[str, list[str]]
+    call_args: Any
+    suffix_re: Any
+    policy: Any
+    syntax: CommentSyntax
+    lines: list[str]
+    restoration_stack: list[dict] = field(default_factory=list)
+    regions_by_line: dict[int, list[dict]] = field(default_factory=dict)
+    seq: int = 0
+
+    def next_seq(self) -> int:
+        """锚序号（自增；`make_marker` 的唯一性来源）。"""
+        self.seq += 1
+        return self.seq
+
+
 def expand_tokens(
     source: str,
     macro_defs: dict[str, str],
@@ -709,62 +774,29 @@ def expand_tokens(
             "+ arg_separator（如 \"symbol.base.comma\"）——声明形式见 "
             "preprocessor/README.md"
         )
-    _syntax = load_comment_syntax(rules_dir)
-    # 宏处置策略（语言包 `[capabilities] macro_policy`；未声明 → 引擎默认 splice，
-    # 见 macro_policy.py）：引擎只执行处置，不判定"该怎么处置"。
-    policy = load_macro_policy(rules_dir)
-    restoration_stack: list[dict] = []
-    lines = source.split("\n")
-
-    _macro_seq = 0
-    # 宏区间表：按行收集 → 行处理完算行内列 → 全部行完算绝对字符偏移
-    regions_by_line: dict[int, list[dict]] = {}
-
-    def _next_macro_seq() -> int:
-        nonlocal _macro_seq
-        _macro_seq += 1
-        return _macro_seq
+    ctx = _MacroExpandCtx(
+        macro_re=_MACRO_RE,
+        macro_defs=macro_defs,
+        func_macros=func_macros,
+        call_args=call_args,
+        suffix_re=suffix_re,
+        # 宏处置策略（语言包 `[capabilities] macro_policy`；未声明 → 引擎默认
+        # splice，见 macro_policy.py）：引擎只执行处置，不判定"该怎么处置"。
+        policy=load_macro_policy(rules_dir),
+        syntax=load_comment_syntax(rules_dir),
+        lines=source.split("\n"),
+    )
+    lines = ctx.lines
 
     for line_no, line in enumerate(lines, 1):
-        macro_matches: list[tuple[int, int, str, str, bool, str]] = []
-        # 本行被“铺宏体”的调用（原起列, 原止列, 名字, 是否带参, 宏体）
-        line_regions: list[tuple[int, int, str, bool, str]] = []
-        consumed_until = -1
-        for m in _MACRO_RE.finditer(line):
-            if m.start() < consumed_until:
-                continue  # 已被前一个宏调用链吞噬（`W'd`RST 嵌套）
-            name = m.group(1)
-            if (
-                call_args is not None
-                and name in func_macros
-                and line[m.end() :].startswith(call_args.open)
-            ):
-                matched = call_args.match_args(line, m.end())
-                if matched is not None:
-                    args_text, close_idx = matched
-                    body = _expand_func_call(
-                        name, args_text, func_macros, macro_defs, call_args
-                    )
-                    end = _extend_macro_chain(line, close_idx, _MACRO_RE, suffix_re)
-                    consumed_until = max(consumed_until, end)
-                    macro_matches.append(
-                        (m.start(), end, body, name, True, args_text)
-                    )
-                    continue
-            body = macro_defs.get(name)
-            if body is None:
-                continue
-            end = _extend_macro_chain(line, m.end(), _MACRO_RE, suffix_re)
-            consumed_until = max(consumed_until, end)
-            macro_matches.append((m.start(), end, body, name, False, ""))
-
+        macro_matches = _collect_macro_matches(ctx, line)
         if not macro_matches:
             continue
 
         # ── 处置方案（引擎给事实、语言包策略给枚举；见 macro_policy.py）──
         plans = [
             plan_macro(
-                policy,
+                ctx.policy,
                 _call_site(
                     line,
                     line_no,
@@ -780,77 +812,170 @@ def expand_tokens(
             for col, end, body, name, is_func, args_text in macro_matches
         ]
 
-        # 整行占位（`line`）：整行换成行注释锚，source_text = 整行原文
-        # （该方案只在“本行仅此一个宏调用”时成立——否则会吞掉同行的其他调用）
-        if any(p["mode"] == MODE_LINE for p in plans):
-            if len(macro_matches) != 1:
-                raise ConfigError(
-                    "[macro_policy] line 方案要求该行只有这一个宏调用"
-                    f"（第 {line_no} 行有 {len(macro_matches)} 个）"
-                )
-            marker = make_marker("macro", _next_macro_seq())
-            lines[line_no - 1] = line_marker(_syntax, marker)
-            restoration_stack.append(
+        if _try_line_mode(ctx, line_no, line, plans, len(macro_matches)):
+            continue
+
+        # ── 逐调用执行处置（文本操作在引擎：锚书写 / 文本替换 / 区间记账）──
+        new_line, forward_entries, line_regions = _run_plans(
+            ctx, line, macro_matches, plans
+        )
+        ctx.restoration_stack.extend(reversed(forward_entries))
+        lines[line_no - 1] = new_line
+
+        if line_regions:
+            ctx.regions_by_line[line_no] = _line_region_entries(
+                line, line_no, line_regions
+            )
+
+    # 行内列 → 展开结果的绝对字符区间（消费方按 offset 定位 token/节点）
+    macro_regions = _absolute_regions(lines, ctx.regions_by_line)
+
+    # 行映射（诊断回源）：**展开后行号（1-based）→ 源（clean）行号**。
+    # 依据：本函数逐行就地替换，输出行数只可能因宏体含换行而增加
+    # （`lines[i] = ...` 内嵌 \n）→ 一行源行对应一串连续输出行。
+    out_to_src = _out_to_src_map(lines)
+
+    return(
+        "\n".join(lines), ctx.restoration_stack, macro_regions, out_to_src
+    )
+
+
+def _match_one(
+    ctx: "_MacroExpandCtx", line: str, m
+) -> tuple[int, str, str, bool, str] | None:
+    """单个正则命中 → `(end, body, name, is_func, args_text)`；不可展开 → None。
+
+    带参调用：名字在 func_macros 且后随调用开始符，且实参可配对 → 形参替换；
+    否则（含带参形态但实参未闭合）回退当同名的无参宏。
+    """
+    name = m.group(1)
+    if (
+        ctx.call_args is not None
+        and name in ctx.func_macros
+        and line[m.end() :].startswith(ctx.call_args.open)
+    ):
+        matched = ctx.call_args.match_args(line, m.end())
+        if matched is not None:
+            args_text, close_idx = matched
+            body = _expand_func_call(
+                name, args_text, ctx.func_macros, ctx.macro_defs, ctx.call_args
+            )
+            end = _extend_macro_chain(line, close_idx, ctx.macro_re, ctx.suffix_re)
+            return end, body, name, True, args_text
+    body = ctx.macro_defs.get(name)
+    if body is None:
+        return None
+    end = _extend_macro_chain(line, m.end(), ctx.macro_re, ctx.suffix_re)
+    return end, body, name, False, ""
+
+
+def _collect_macro_matches(ctx: "_MacroExpandCtx", line: str) -> list[tuple]:
+    """本行的宏调用（原起列, 原止列, 宏体, 名字, 是否带参, 实参文本）。"""
+    matches: list[tuple] = []
+    consumed_until = -1
+    for m in ctx.macro_re.finditer(line):
+        if m.start() < consumed_until:
+            continue  # 已被前一个宏调用链吞噬（`W'd`RST 嵌套）
+        hit = _match_one(ctx, line, m)
+        if hit is None:
+            continue
+        end, body, name, is_func, args_text = hit
+        consumed_until = max(consumed_until, end)
+        matches.append((m.start(), end, body, name, is_func, args_text))
+    return matches
+
+
+def _try_line_mode(
+    ctx: "_MacroExpandCtx", line_no: int, line: str, plans: list[dict], count: int
+) -> bool:
+    """整行占位（`line`）：整行换成行注释锚，source_text = 整行原文。
+
+    该方案只在"本行仅此一个宏调用"时成立——否则会吞掉同行的其他调用。
+    """
+    if not any(p["mode"] == MODE_LINE for p in plans):
+        return False
+    if count != 1:
+        raise ConfigError(
+            "[macro_policy] line 方案要求该行只有这一个宏调用"
+            f"（第 {line_no} 行有 {count} 个）"
+        )
+    marker = make_marker("macro", ctx.next_seq())
+    ctx.lines[line_no - 1] = line_marker(ctx.syntax, marker)
+    ctx.restoration_stack.append(
+        {
+            "marker": marker,
+            "source_text": line,
+            "mode": MODE_LINE,
+            "kind": "macro",
+        }
+    )
+    return True
+
+
+def _run_plans(
+    ctx: "_MacroExpandCtx",
+    line: str,
+    macro_matches: list[tuple],
+    plans: list[dict],
+) -> tuple[str, list[dict], list[tuple]]:
+    """逐调用执行处置（**倒序**，避免列偏移互相影响）：→ (新行, 还原锚, 区间)。
+
+    文本操作在引擎：锚书写 / 文本替换 / 区间记账。
+    - `inline`：行内注释锚（marker 唯一，还原精确）；块注释是 trivia，parser
+      跳过，还原时原位回插原文宏调用。
+    - `splice`：宏体文本铺进流，不建还原锚，只记宏区间（源区间 + 展开后区间）。
+    """
+    parts = list(line)
+    forward_entries: list[dict] = []
+    line_regions: list[tuple] = []
+    for (col, end, body, name, is_func, _args), plan in reversed(
+        list(zip(macro_matches, plans))
+    ):
+        source_text = line[col:end]  # 宏调用原文（含反引号与实参）
+        if plan["mode"] == MODE_INLINE:
+            marker = make_marker("macro", ctx.next_seq())
+            parts[col:end] = inline_marker(ctx.syntax, marker)
+            forward_entries.append(
                 {
                     "marker": marker,
-                    "source_text": line,
-                    "mode": MODE_LINE,
+                    "source_text": source_text,
+                    "mode": MODE_INLINE,
                     "kind": "macro",
                 }
             )
             continue
+        spliced = _splice_body(body, ctx.syntax)
+        parts[col:end] = spliced
+        line_regions.append((col, end, name, is_func, spliced))
+    return "".join(parts), forward_entries, line_regions
 
-        # ── 逐调用执行处置（文本操作在引擎：锚书写 / 文本替换 / 区间记账）──
-        parts = list(line)
-        forward_entries: list[dict] = []
-        for (col, end, body, name, is_func, args_text), plan in reversed(
-            list(zip(macro_matches, plans))
-        ):
-            source_text = line[col:end]  # 宏调用原文（含反引号与实参）
-            if plan["mode"] == MODE_INLINE:
-                # 行内注释锚（marker 唯一，还原精确）：块注释是 trivia，
-                # parser 跳过，还原时原位回插原文宏调用
-                marker = make_marker("macro", _next_macro_seq())
-                parts[col:end] = inline_marker(_syntax, marker)
-                forward_entries.append(
-                    {
-                        "marker": marker,
-                        "source_text": source_text,
-                        "mode": MODE_INLINE,
-                        "kind": "macro",
-                    }
-                )
-                continue
-            # MODE_SPLICE：宏体文本铺进流，不建还原锚，只记宏区间
-            # （源区间 + 展开后区间，供外层定位 / 渲染 raw 拼接）
-            spliced = _splice_body(body, _syntax)
-            parts[col:end] = spliced
-            line_regions.append((col, end, name, is_func, spliced))
-        restoration_stack.extend(reversed(forward_entries))
-        lines[line_no - 1] = "".join(parts)
 
-        if line_regions:
-            # 展开后行内列 = 原列 + 左侧各宏替换的长度增量（按原列升序累加）
-            delta = 0
-            pending: list[dict] = []
-            for s_col, s_end, name, is_func, body in sorted(line_regions):
-                pending.append(
-                    {
-                        "name": name,
-                        "source_text": line[s_col:s_end],
-                        "is_func": is_func,
-                        "body": body,
-                        "src_line": line_no,
-                        "src_col": s_col,
-                        "src_end_col": s_end,
-                        "in_line_col": s_col + delta,
-                        "in_line_len": len(body),
-                    }
-                )
-                delta += len(body) - (s_end - s_col)
-            regions_by_line[line_no] = pending
+def _line_region_entries(
+    line: str, line_no: int, line_regions: list[tuple]
+) -> list[dict]:
+    """行内区间 → 待定条目（展开后列 = 原列 + 左侧各宏替换的长度增量）。"""
+    delta = 0
+    pending: list[dict] = []
+    for s_col, s_end, name, is_func, body in sorted(line_regions):
+        pending.append(
+            {
+                "name": name,
+                "source_text": line[s_col:s_end],
+                "is_func": is_func,
+                "body": body,
+                "src_line": line_no,
+                "src_col": s_col,
+                "src_end_col": s_end,
+                "in_line_col": s_col + delta,
+                "in_line_len": len(body),
+            }
+        )
+        delta += len(body) - (s_end - s_col)
+    return pending
 
-    # 行内列 → 展开结果的绝对字符区间（消费方按 offset 定位 token/节点）
+
+def _absolute_regions(lines: list[str], regions_by_line: dict[int, list[dict]]) -> list[dict]:
+    """行内区间（列）→ 展开结果的绝对字符区间（行号 1-based）。"""
     macro_regions: list[dict] = []
     base = 0
     for idx, line_text in enumerate(lines, 1):
@@ -859,12 +984,12 @@ def expand_tokens(
             entry["end_offset"] = entry["offset"] + entry.pop("in_line_len")
             macro_regions.append(entry)
         base += len(line_text) + 1
+    return macro_regions
 
-    # 行映射（诊断回源）：**展开后行号（1-based）→ 源（clean）行号**。
-    # 依据：本函数逐行就地替换，输出行数只可能因宏体含换行而增加
-    # （`lines[i] = "".join(parts)` 内嵌 \n）→ 一行源行对应一串连续输出行。
+
+def _out_to_src_map(lines: list[str]) -> list[int]:
+    """展开后行号（1-based）→ 源行号：逐行按它含的 \n 数展开成下标表。"""
     out_to_src: list[int] = []
-    for _src_no, _text in enumerate(lines, 1):
-        out_to_src.extend([_src_no] * (_text.count("\n") + 1))
-
-    return "\n".join(lines), restoration_stack, macro_regions, out_to_src
+    for src_no, text in enumerate(lines, 1):
+        out_to_src.extend([src_no] * (text.count("\n") + 1))
+    return out_to_src
