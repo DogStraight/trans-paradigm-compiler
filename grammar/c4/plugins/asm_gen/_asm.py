@@ -87,6 +87,7 @@ class _C4Compiler:
 
     # ── 表达式（值 → a 寄存器）──
     def expr(self, n: Node | None, loc: int) -> None:
+        """表达式 → 指令（按节点名分派；未知节点取首个子节点）。"""
         if n is None:
             return  # 无操作数（getattr 缺省），静默跳过
         name = n.node_name
@@ -98,10 +99,7 @@ class _C4Compiler:
         elif name == "Identifier":
             self._expr_identifier(n, loc)
         elif name == "BinaryOp":
-            self.expr(n.left, loc)
-            self.emitter.emit("PSH")
-            self.expr(n.right, loc)
-            self.emitter.emit(self._binop(n.op))
+            self._expr_binop(n, loc)
         elif name == "UnaryOp":
             self._expr_unary(n, loc)
         elif name == "TernaryOp":
@@ -111,19 +109,41 @@ class _C4Compiler:
         elif name == "IndexExpr":
             self._expr_index(n, loc)
         elif name == "ParenthesizedExpr":
-            self.expr(n.expr, loc)
+            self._expr_paren(n, loc)
         elif name == "TypeCastExpr":
-            self.expr(n.value, loc)
+            self._expr_cast(n, loc)
         elif name == "SizeofExpr":
-            size = 4 if self._is_char_type(n.type_name) else 4
-            self.emitter.emit("IMM", size)
+            self._expr_sizeof(n)
         else:
-            # 未知节点：尝试第一个子节点
-            ch = list(n.iter_children())
-            if ch:
-                self.expr(ch[0], loc)
-            else:
-                self.emitter.emit("IMM", 0)
+            self._expr_fallback(n, loc)
+
+    def _expr_binop(self, n: Node, loc: int) -> None:
+        """二元运算：左值 → PSH → 右值 → 指令（c4 栈式求值序）。"""
+        self.expr(n.left, loc)
+        self.emitter.emit("PSH")
+        self.expr(n.right, loc)
+        self.emitter.emit(self._binop(n.op))
+
+    def _expr_paren(self, n: Node, loc: int) -> None:
+        """括号表达式：透传内层。"""
+        self.expr(n.expr, loc)
+
+    def _expr_cast(self, n: Node, loc: int) -> None:
+        """类型转换：c4 转型不改值，透传操作数。"""
+        self.expr(n.value, loc)
+
+    def _expr_sizeof(self, n: Node) -> None:
+        """sizeof → 立即数宽度。"""
+        size = 4 if self._is_char_type(n.type_name) else 4
+        self.emitter.emit("IMM", size)
+
+    def _expr_fallback(self, n: Node, loc: int) -> None:
+        """未知节点：尝试第一个子节点，无子节点则给 0（容错，不报错）。"""
+        ch = list(n.iter_children())
+        if ch:
+            self.expr(ch[0], loc)
+        else:
+            self.emitter.emit("IMM", 0)
 
     def _int_value(self, n: Node) -> int:
         v = getattr(n, "value", None)
@@ -342,38 +362,19 @@ class _C4Compiler:
         return None
 
     def stmt(self, n: Node, loc: int) -> None:
+        """语句 → 指令（按节点名分派；未知语句递归子节点容错）。"""
         name = n.node_name
         if name == "IfStmt":
-            l1, l2 = self._new_label(), self._new_label()
-            self.expr(n.cond, loc)
-            self.emitter.emit_jump("BZ", l1)
-            self.stmt(n.then_body, loc)
-            self.emitter.emit_jump("JMP", l2)
-            self.emitter.label(l1)
-            eb = self._unwrap_stmt(getattr(n, "else_body", None))
-            if eb is not None:
-                self.stmt(eb, loc)
-            self.emitter.label(l2)
+            self._stmt_if(n, loc)
         elif name == "WhileStmt":
-            l1, l2 = self._new_label(), self._new_label()
-            self.emitter.label(l1)
-            self.expr(n.cond, loc)
-            self.emitter.emit_jump("BZ", l2)
-            self.stmt(n.body, loc)
-            self.emitter.emit_jump("JMP", l1)
-            self.emitter.label(l2)
+            self._stmt_while(n, loc)
         elif name == "ReturnStmt":
-            v = getattr(n, "value", None)
-            if v is not None:
-                self.expr(v, loc)
-            self.emitter.emit("LEV")
+            self._stmt_return(n, loc)
         elif name == "BlockStmt":
             for c in getattr(n, "sub_node", []) or []:
                 self.stmt(c, loc)
         elif name == "ExprStmt":
-            e = getattr(n, "expr", None)
-            if e is not None:
-                self._expr_stmt_assign(e, loc)
+            self._stmt_expr(n, loc)
         elif name == "VarDecl":
             pass  # 局部声明：地址在函数入口统一分配
         elif name == "EmptyStmt":
@@ -382,6 +383,42 @@ class _C4Compiler:
             # 未知语句：递归处理子节点（容错）
             for c in n.iter_children():
                 self.stmt(c, loc)
+
+    def _stmt_if(self, n: Node, loc: int) -> None:
+        """if/else → 条件 BZ 跳过 then、JMP 跳过 else，两段标签收口。"""
+        l1, l2 = self._new_label(), self._new_label()
+        self.expr(n.cond, loc)
+        self.emitter.emit_jump("BZ", l1)
+        self.stmt(n.then_body, loc)
+        self.emitter.emit_jump("JMP", l2)
+        self.emitter.label(l1)
+        eb = self._unwrap_stmt(getattr(n, "else_body", None))
+        if eb is not None:
+            self.stmt(eb, loc)
+        self.emitter.label(l2)
+
+    def _stmt_while(self, n: Node, loc: int) -> None:
+        """while → 条件标签 + BZ 出口 + 体后回跳。"""
+        l1, l2 = self._new_label(), self._new_label()
+        self.emitter.label(l1)
+        self.expr(n.cond, loc)
+        self.emitter.emit_jump("BZ", l2)
+        self.stmt(n.body, loc)
+        self.emitter.emit_jump("JMP", l1)
+        self.emitter.label(l2)
+
+    def _stmt_return(self, n: Node, loc: int) -> None:
+        """return [expr] → 值入 a 寄存器 + LEV（无值 return 只发 LEV）。"""
+        v = getattr(n, "value", None)
+        if v is not None:
+            self.expr(v, loc)
+        self.emitter.emit("LEV")
+
+    def _stmt_expr(self, n: Node, loc: int) -> None:
+        """表达式语句：赋值形态走左值寻址，其余按普通表达式求值。"""
+        e = getattr(n, "expr", None)
+        if e is not None:
+            self._expr_stmt_assign(e, loc)
 
     def _expr_stmt_assign(self, e: Node, loc: int) -> None:
         """表达式语句（含赋值）：处理 BinaryOp '=' 的左值。"""
