@@ -18,6 +18,7 @@ from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIR
 
 from analyzer.structure import (
     FileResult,
+    GenerateEvaluator,
     StructureCtx,
     _StructureBase,
 )
@@ -63,6 +64,8 @@ class ProjectChecker(_StructureBase):
         self._register = register
         # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
         self._signal_graph: dict = {}
+        # 各阶段协作者（均只持 ctx 引用，不存会话状态）
+        self._gen = GenerateEvaluator(self._ctx)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 

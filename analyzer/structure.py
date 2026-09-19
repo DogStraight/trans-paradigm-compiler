@@ -385,6 +385,159 @@ class StructureCtx:
             return mn.content
         return ""
 
+class GenerateEvaluator:
+    """generate 条件求值：节点是否落在**选中**的 generate 互斥分支内。
+
+    对齐 Verilator V3Param::visit(AstGenIf)：求值条件、删去未选中分支，使后续
+    多驱动检测只看到选中分支的驱动源（tpc 不展开 generate，故按预计算活性过滤
+    而非物理删树）。per-file 预计算 `{id(node): bool}`（一次 DFS 维护条件栈，
+    O(树)），查询 O(1)——每节点全树扫描的旧路线已删（`_branch_active` 系）。
+
+    只依赖 ctx（协议读取 + 渲染助手），不持有会话状态。
+    """
+
+    def __init__(self, ctx: StructureCtx) -> None:
+        self._ctx = ctx
+
+    def in_active_generate(self, fr, node) -> bool:
+        """节点是否在**选中**的 generate 互斥分支内（对齐 Verilator）。
+
+        Verilator 在 V3Param::visit(AstGenIf) 求值 generate 条件，未选中
+        分支的 AST 物理删除（deleteTree）——后续多驱动检测只看到选中分支
+        的驱动源。tpc 不展开 generate，信号图平铺收集会同时计入互斥分支
+        （如 picorv32 `generate if (ENABLE_MUL) 实例 else assign`：两个
+        分支都驱动 pcpi_mul_ready → 8 条 W105 假阳性，Verilator 0 报）。
+
+        实现：per-file 预计算 {id(node): bool}（一次 DFS 维护 generate
+        条件栈，O(树)）；查询 O(1)。此前的每节点全树扫描（旧
+        `_branch_active` / `_subtree_contains` 路线，已删）是 O(节点×树)
+        平方级——picorv32 过程赋值驱动收集（2026-08-29）后单次 check 103s，
+        预计算后恢复秒级。
+        """
+        if fr.ast is None or node is None:
+            return True
+        memo = getattr(fr, "_gen_active_map", None)
+        if memo is None:
+            memo = self._precompute_generate_active(fr)
+            fr._gen_active_map = memo
+        return memo.get(id(node), True)
+
+    def _precompute_generate_active(self, fr) -> dict:
+        """per-file 预计算 {id(node): bool}——节点是否在选中的 generate 分支。
+
+        单栈迭代（无递归）：栈元素 = (node, stack, params)。普通节点标记
+        活性后子节点按种类入栈（`_gen_push_children`）；GenerateBlock 内的
+        IfBlock/ElseIfBlock 求值条件后按 then/else 展开互斥分支
+        （`_expand_generate_if`）。节点活性 = 所在分支全部选中。O(树)，
+        查询 O(1)。纯迭代实现避免深 AST/嵌套 generate 递归爆栈
+        （picorv32 等大文件，2026-08-29）。
+        """
+        active: dict[int, bool] = {}
+        root = fr.ast
+        if root is None:
+            return active
+        decl_rule = self._ctx.rule("module_decl_rule")
+        todo = [(child, [], {}) for child in root.iter_children()]
+        while todo:
+            node, stack, params = todo.pop()
+            if node is None:
+                continue
+            active[id(node)] = all(stack)
+            self._gen_push_children(node, stack, params, todo, decl_rule)
+        return active
+
+    def _gen_push_children(self, node, stack: list, params: dict, todo: list,
+                           decl_rule: str) -> None:
+        """按节点种类把子节点入栈（generate 遍历的分派点）。
+
+        - GenerateBlock：子块含 IfBlock/ElseIfBlock → 条件求值展开互斥；
+          其余子块沿用当前活性
+        - 模块声明（decl_rule）：子节点以本模块**参数表**入栈（条件求值用）
+        - 其他（含 always 内普通 if）：普通遍历，活性继承当前栈——非
+          generate 条件不展开互斥
+        """
+        if node.node_name == "GenerateBlock":
+            for sub in getattr(node, "sub_node", None) or []:
+                if not isinstance(sub, Node):
+                    continue
+                if sub.node_name in ("IfBlock", "ElseIfBlock"):
+                    # GenerateBlock 内的条件分支：求值展开（互斥）
+                    self._expand_generate_if(sub, stack, params, todo)
+                else:
+                    todo.append((sub, stack, params))
+            return
+        if node.node_name == decl_rule:
+            info = self._ctx.module_index.get(
+                getattr(getattr(node, "module_name", None), "content", "") or ""
+            )
+            params2: dict[str, str] = {}
+            if info is not None:
+                params2 = {p.name: p.value_expr for p in info.params.values()}
+            for child in node.iter_children():
+                todo.append((child, [], params2))
+            return
+        for child in node.iter_children():
+            todo.append((child, stack, params))
+
+    def _expand_generate_if(self, ifb, stack: list, params: dict, todo: list) -> None:
+        """IfBlock/ElseIfBlock：条件求值，then/else 分支展开入栈。
+
+        else-if 链：外层条件为假时进入链，链内条件独立求值但活性
+        叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
+        → 整块按当前活性展开（保守）。纯迭代无递归。
+        """
+        # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
+        base = list(stack)
+        cur = ifb
+        while isinstance(cur, Node) and cur.node_name in ("IfBlock", "ElseIfBlock"):
+            cond_val = self._eval_gen_cond(cur, params)
+            then_node = getattr(cur, "then_stmt", None)
+            chain = getattr(cur, "else_chain", None)
+            if cond_val is None:
+                todo.append((cur, base, params))
+                return
+            # then 分支：base（外层全假）+ 本条件真
+            todo.append((then_node, base + [cond_val], params))
+            if isinstance(chain, Node) and chain.node_name in ("IfBlock", "ElseIfBlock"):
+                # 进入链：外层再加"本条件假"
+                base = base + [not cond_val]
+                cur = chain
+                continue
+            # 最终 else：base（外层全假）+ 本条件假
+            todo.append((chain, base + [not cond_val], params))
+            return
+
+    def _eval_gen_cond(self, ifb: Node, params: dict):
+        """IfBlock.condition → 布尔｜None（不可判）。
+
+        条件文本（HierExpr/Identifier/常量表达式）→ 查参数表 → 数值求值
+        转布尔。不可判（无参数值/非纯常量/引用未定义）→ None 保守。
+        """
+        cond = getattr(ifb, "condition", None)
+        text = self._ctx.render_subtree(cond) if isinstance(cond, Node) else ""
+        text = (text or "").strip()
+        if not text:
+            return None
+        if text.isdigit():
+            return int(text) != 0
+        if text in params:
+            v = params[text].strip()
+            if v.isdigit():
+                return int(v) != 0
+            return None  # 参数值本身非纯数字 → 不可判
+        # 一元 ! 参数（`!OUTPUT_FIFO_ENABLE` 等，2026-08-31 补：axis_fifo
+        # generate else 分支此前不可判 → 双分支全 active → 9 条 W105 误报）
+        m = re.fullmatch(r"!\s*([A-Za-z_][A-Za-z0-9_]*)", text)
+        if m and m.group(1) in params:
+            v = params[m.group(1)].strip()
+            if v.isdigit():
+                return int(v) == 0
+            return None
+        # 含运算的纯常量表达式（`1+0` / `2*3<7` 等）→ 显式求值（不用 eval，
+        # 见 _eval_const_expr）；标识符/位运算/逻辑运算等一律不可判 → None
+        return _eval_const_expr(text)
+
+
 class _StructureBase:
     """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
 
@@ -393,6 +546,7 @@ class _StructureBase:
     """
 
     _ctx: StructureCtx
+    _gen: GenerateEvaluator
 
 
     # ── 递归发现 ──
@@ -889,7 +1043,7 @@ class _StructureBase:
             if node.node_name != ctx.assign_rule:
                 continue
             idx += 1
-            if not self._in_active_generate(fr, node):
+            if not self._gen.in_active_generate(fr, node):
                 continue
             for tgt in self._iter_assign_targets(
                 node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
@@ -929,7 +1083,7 @@ class _StructureBase:
         for node in iter_nodes(mnode):
             if node.node_name not in ctx.proc_rules:
                 continue
-            if not self._in_active_generate(fr, node):
+            if not self._gen.in_active_generate(fr, node):
                 continue
             tgt = getattr(node, ctx.target_field, None)
             sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
@@ -983,7 +1137,7 @@ class _StructureBase:
                 continue
             assign_idx += 1
             mod_name = self._module_of(fr, node)
-            if not self._in_active_generate(fr, node):
+            if not self._gen.in_active_generate(fr, node):
                 continue  # 所在 generate 互斥分支未选中（2026-08-29）
             inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
             for tgt in self._iter_assign_targets(
@@ -1048,7 +1202,7 @@ class _StructureBase:
             if node.node_name not in ctx.proc_rules:
                 continue
             blk = assign_block.get(id(node))
-            if blk is None or not self._in_active_generate(fr, node):
+            if blk is None or not self._gen.in_active_generate(fr, node):
                 continue
             tgt = getattr(node, ctx.target_field, None)
             sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
@@ -1069,7 +1223,7 @@ class _StructureBase:
         """
         for conn in fr.connections:
             mod_name = self._module_of(fr, conn.inst_node)
-            if not self._in_active_generate(fr, conn.inst_node):
+            if not self._gen.in_active_generate(fr, conn.inst_node):
                 continue  # 实例化点所在 generate 分支未选中
             inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
             mod = self._ctx.module_index.get(conn.module_name)
@@ -1158,145 +1312,12 @@ class _StructureBase:
         return cache
 
 
-    def _in_active_generate(self, fr, node) -> bool:
-        """节点是否在**选中**的 generate 互斥分支内（对齐 Verilator）。
-
-        Verilator 在 V3Param::visit(AstGenIf) 求值 generate 条件，未选中
-        分支的 AST 物理删除（deleteTree）——后续多驱动检测只看到选中分支
-        的驱动源。tpc 不展开 generate，信号图平铺收集会同时计入互斥分支
-        （如 picorv32 `generate if (ENABLE_MUL) 实例 else assign`：两个
-        分支都驱动 pcpi_mul_ready → 8 条 W105 假阳性，Verilator 0 报）。
-
-        实现：per-file 预计算 {id(node): bool}（一次 DFS 维护 generate
-        条件栈，O(树)）；查询 O(1)。此前的每节点全树扫描（旧
-        `_branch_active` / `_subtree_contains` 路线，已删）是 O(节点×树)
-        平方级——picorv32 过程赋值驱动收集（2026-08-29）后单次 check 103s，
-        预计算后恢复秒级。
-        """
-        if fr.ast is None or node is None:
-            return True
-        memo = getattr(fr, "_gen_active_map", None)
-        if memo is None:
-            memo = self._precompute_generate_active(fr)
-            fr._gen_active_map = memo
-        return memo.get(id(node), True)
 
 
-    def _precompute_generate_active(self, fr) -> dict:
-        """per-file 预计算 {id(node): bool}——节点是否在选中的 generate 分支。
-
-        单栈迭代（无递归）：栈元素 = (node, stack, params)。普通节点标记
-        活性后子节点按种类入栈（`_gen_push_children`）；GenerateBlock 内的
-        IfBlock/ElseIfBlock 求值条件后按 then/else 展开互斥分支
-        （`_expand_generate_if`）。节点活性 = 所在分支全部选中。O(树)，
-        查询 O(1)。纯迭代实现避免深 AST/嵌套 generate 递归爆栈
-        （picorv32 等大文件，2026-08-29）。
-        """
-        active: dict[int, bool] = {}
-        root = fr.ast
-        if root is None:
-            return active
-        decl_rule = self._ctx.rule("module_decl_rule")
-        todo = [(child, [], {}) for child in root.iter_children()]
-        while todo:
-            node, stack, params = todo.pop()
-            if node is None:
-                continue
-            active[id(node)] = all(stack)
-            self._gen_push_children(node, stack, params, todo, decl_rule)
-        return active
-
-    def _gen_push_children(self, node, stack: list, params: dict, todo: list,
-                           decl_rule: str) -> None:
-        """按节点种类把子节点入栈（generate 遍历的分派点）。
-
-        - GenerateBlock：子块含 IfBlock/ElseIfBlock → 条件求值展开互斥；
-          其余子块沿用当前活性
-        - 模块声明（decl_rule）：子节点以本模块**参数表**入栈（条件求值用）
-        - 其他（含 always 内普通 if）：普通遍历，活性继承当前栈——非
-          generate 条件不展开互斥
-        """
-        if node.node_name == "GenerateBlock":
-            for sub in getattr(node, "sub_node", None) or []:
-                if not isinstance(sub, Node):
-                    continue
-                if sub.node_name in ("IfBlock", "ElseIfBlock"):
-                    # GenerateBlock 内的条件分支：求值展开（互斥）
-                    self._expand_generate_if(sub, stack, params, todo)
-                else:
-                    todo.append((sub, stack, params))
-            return
-        if node.node_name == decl_rule:
-            info = self._ctx.module_index.get(
-                getattr(getattr(node, "module_name", None), "content", "") or ""
-            )
-            params2: dict[str, str] = {}
-            if info is not None:
-                params2 = {p.name: p.value_expr for p in info.params.values()}
-            for child in node.iter_children():
-                todo.append((child, [], params2))
-            return
-        for child in node.iter_children():
-            todo.append((child, stack, params))
-
-    def _expand_generate_if(self, ifb, stack: list, params: dict, todo: list) -> None:
-        """IfBlock/ElseIfBlock：条件求值，then/else 分支展开入栈。
-
-        else-if 链：外层条件为假时进入链，链内条件独立求值但活性
-        叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
-        → 整块按当前活性展开（保守）。纯迭代无递归。
-        """
-        # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
-        base = list(stack)
-        cur = ifb
-        while isinstance(cur, Node) and cur.node_name in ("IfBlock", "ElseIfBlock"):
-            cond_val = self._eval_gen_cond(cur, params)
-            then_node = getattr(cur, "then_stmt", None)
-            chain = getattr(cur, "else_chain", None)
-            if cond_val is None:
-                todo.append((cur, base, params))
-                return
-            # then 分支：base（外层全假）+ 本条件真
-            todo.append((then_node, base + [cond_val], params))
-            if isinstance(chain, Node) and chain.node_name in ("IfBlock", "ElseIfBlock"):
-                # 进入链：外层再加"本条件假"
-                base = base + [not cond_val]
-                cur = chain
-                continue
-            # 最终 else：base（外层全假）+ 本条件假
-            todo.append((chain, base + [not cond_val], params))
-            return
 
 
-    def _eval_gen_cond(self, ifb: Node, params: dict):
-        """IfBlock.condition → 布尔｜None（不可判）。
 
-        条件文本（HierExpr/Identifier/常量表达式）→ 查参数表 → 数值求值
-        转布尔。不可判（无参数值/非纯常量/引用未定义）→ None 保守。
-        """
-        cond = getattr(ifb, "condition", None)
-        text = self._ctx.render_subtree(cond) if isinstance(cond, Node) else ""
-        text = (text or "").strip()
-        if not text:
-            return None
-        if text.isdigit():
-            return int(text) != 0
-        if text in params:
-            v = params[text].strip()
-            if v.isdigit():
-                return int(v) != 0
-            return None  # 参数值本身非纯数字 → 不可判
-        # 一元 ! 参数（`!OUTPUT_FIFO_ENABLE` 等，2026-08-31 补：axis_fifo
-        # generate else 分支此前不可判 → 双分支全 active → 9 条 W105 误报）
-        m = re.fullmatch(r"!\s*([A-Za-z_][A-Za-z0-9_]*)", text)
-        if m and m.group(1) in params:
-            v = params[m.group(1)].strip()
-            if v.isdigit():
-                return int(v) == 0
-            return None
-        # 含运算的纯常量表达式（`1+0` / `2*3<7` 等）→ 显式求值（不用 eval，
-        # 见 _eval_const_expr）；标识符/位运算/逻辑运算等一律不可判 → None
-        return _eval_const_expr(text)
+
 
 
     def _module_of(self, fr, node) -> str:
