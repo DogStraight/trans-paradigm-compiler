@@ -394,39 +394,62 @@ def _skip_entry_trivia(
     return idx, entry_comments, entry_own_line
 
 
+def _parse_atom(
+    ctx: "_PrattCtx", tokens: list[Token], idx: int
+) -> tuple[Node, int] | None:
+    """原子解析器（语言包注入）：命中 → (node, 新 idx)；未命中 → None。"""
+    if ctx.atom_parser is None:
+        return None
+    node, consumed = ctx.atom_parser(tokens, idx)
+    if node is None:
+        return None
+    return node, idx + consumed
+
+
+def _literal_prefix_node(token) -> Node | None:
+    """字面量类内置前缀 → 节点（数字/字符串/布尔/标识符；未命中 → None）。"""
+    if is_number(token):
+        return parse_number_literal(token)
+    if is_string(token):
+        s = token.content[1:-1] if len(token.content) >= 2 else token.content
+        return Node("String", value=s)
+    if is_bool(token):
+        return Node("Bool", value=(token.type == _bool_true_type))
+    if is_identifier(token):
+        return Node("Identifier", content=token.content)
+    return None
+
+
+def _parse_prefix_operator(
+    ctx: "_PrattCtx", tokens: list[Token], idx: int, token
+) -> tuple[Node, int]:
+    """前缀运算符：arity/position 校验后交 `_parse_prefix_unary`。"""
+    props = ctx.prefix_attrs[token.content]
+    if props.get("arity") == 1 and props.get("position") == "prefix":
+        return _parse_prefix_unary(ctx, tokens, idx, token.content)
+    raise ValueError(f"不支持的前缀运算符: {token.content}")
+
+
 def _parse_prefix(ctx: "_PrattCtx", tokens: list[Token], idx: int) -> tuple[Node, int]:
     """前缀位置：先原子解析器（语言包注入），未命中再内置前缀。
 
     内置前缀由 token 分类谓词（is_number/is_string/...，语言包配置驱动）
-    分发；一元前缀运算符递归走 `_parse_prefix_unary`。
+    分发；一元前缀运算符递归走 `_parse_prefix_unary`。判定优先级：
+    节点 token → 字面量类 → 运算符 → None（末项为兜底报错）。
     """
-    node = None
-    # 1. 原子解析器
-    if ctx.atom_parser is not None:
-        node, consumed = ctx.atom_parser(tokens, idx)
-        if node is not None:
-            idx += consumed
-    if node is not None:
-        return node, idx
+    atom = _parse_atom(ctx, tokens, idx)
+    if atom is not None:
+        return atom
 
     # 2. 内置前缀（原子未命中时启用）
     token = tokens[idx]
     if isinstance(token, Node):
         return token, idx + 1
-    if is_number(token):
-        return parse_number_literal(token), idx + 1
-    if is_string(token):
-        s = token.content[1:-1] if len(token.content) >= 2 else token.content
-        return Node("String", value=s), idx + 1
-    if is_bool(token):
-        return Node("Bool", value=(token.type == _bool_true_type)), idx + 1
-    if is_identifier(token):
-        return Node("Identifier", content=token.content), idx + 1
+    node = _literal_prefix_node(token)
+    if node is not None:
+        return node, idx + 1
     if is_operator(token) and token.content in ctx.prefix_attrs:
-        props = ctx.prefix_attrs[token.content]
-        if props.get("arity") == 1 and props.get("position") == "prefix":
-            return _parse_prefix_unary(ctx, tokens, idx, token.content)
-        raise ValueError(f"不支持的前缀运算符: {token.content}")
+        return _parse_prefix_operator(ctx, tokens, idx, token)
     if is_none(token):
         return Node("NoneLiteral"), idx + 1
     raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
