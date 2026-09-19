@@ -717,65 +717,87 @@ def _fill(w: int, k: int, docs: list[Doc]) -> str:
     return "".join(out)
 
 
+def _fits_fixed_len(d: Doc) -> int | None:
+    """定宽子项的列宽：Text 字数 / Pad·IfFlatPad 宽度 / IfBreakPad 的 0；非定宽 → None。"""
+    if isinstance(d, Text):
+        return len(d.s)
+    if isinstance(d, (Pad, IfFlatPad)):
+        return d.width
+    if isinstance(d, IfBreakPad):
+        return 0  # flat 布局 0 宽
+    return None
+
+
 def _fits_concat(w: int, docs: Sequence[Doc]) -> bool:
     """Concat 首行 fit 检查：逐个累加列宽，遇断行即"当前行已结束"→ True。
 
     与原实现逐字同源，两处保守语义**刻意保留**（改动即行为变化）：
     - `Nest`/`Prefix`/`Union` 子项递归判定后**立即返回**，不再累加其后的兄弟
       宽度（col 递归后不可知）；
-    - `Concat` 子项走内层循环，内层未出结论时回到外层继续（列宽沿用）。
+    - `Concat` 子项走内层扫描 `_fits_concat_inner`，内层未出结论时回到外层继续
+      （列宽沿用）。
+
+    定宽子项（Text/Pad/IfBreakPad/IfFlatPad）在此直接累加，其余分派给 `_fits_step`。
     """
     col = 0
     for d in docs:
         if col > w:
             return False
+        length = _fits_fixed_len(d)
+        if length is not None:
+            col += length
+            if col > w:
+                return False
+            continue
+        verdict, col = _fits_step(w, col, d)
+        if verdict is not None:
+            return verdict
+    return col <= w
+
+
+def _fits_step(w: int, col: int, d: Doc) -> tuple[bool | None, int]:
+    """非定宽子项的 fit 推进：返回 (结论, 列宽)；结论 None = 继续下一个子项。"""
+    match d:
+        case Line() | Break() | HardBreak():
+            return True, col
+        case Nest(_, inner):
+            # Nest 不影响 fits（缩进只影响后续行）；递归后 col 不可知 → 保守收口
+            return _fits(w - col, inner), col
+        case Union(flat, _):
+            return _fits(w - col, flat), col
+        case Prefix(i, inner):
+            col += i
+            if col > w:
+                return False, col
+            return _fits(w - col, inner), col
+        case Concat(inner_docs):
+            return _fits_concat_inner(w, col, inner_docs)
+        case _:
+            return True, col
+
+
+def _fits_concat_inner(
+    w: int, col: int, docs: Sequence[Doc]
+) -> tuple[bool | None, int]:
+    """Concat 子项的内层扫描（**与 `_fits_concat` 刻意不同**，别合并成一份）。
+
+    返回 (结论, 列宽)；结论 None = 内层未出结论 → 回外层继续（列宽沿用）。
+    差异在"未知子项"：内层对其做一次 `_fits` 判定，外层按保守取 True——这是
+    与原实现同源的行为，不是笔误。
+    """
+    for d in docs:
+        if col > w:
+            return False, col
         match d:
-            case Line():
-                return True
-            case Break() | HardBreak():
-                return True
+            case Line() | Break() | HardBreak():
+                return True, col
             case Text(s):
                 col += len(s)
-                if col > w:
-                    return False
-            case Pad(width) | IfFlatPad(width):
-                col += width
-                if col > w:
-                    return False
-            case IfBreakPad(_):
-                pass  # flat 布局 0 宽
-            case Nest(_, inner):
-                # Nest 不影响 fits（缩进只影响后续行）
-                if not _fits(w - col, inner):
-                    return False
-                # 递归后不确定 col，用保守估算
-                return True
-            case Prefix(i, inner):
-                col += i
-                if col > w:
-                    return False
-                return _fits(w - col, inner)
-            case Union(flat, _):
-                if not _fits(w - col, flat):
-                    return False
-                return True
-            case Concat(inner_docs):
-                # 内层循环：结论出来即返回；走完未出结论 → 回到外层继续
-                for inner_d in inner_docs:
-                    if col > w:
-                        return False
-                    match inner_d:
-                        case Line() | Break() | HardBreak():
-                            return True
-                        case Text(s):
-                            col += len(s)
-                        case _:
-                            if not _fits(w - col, inner_d):
-                                return False
-                            return True
             case _:
-                return True
-    return col <= w
+                if not _fits(w - col, d):
+                    return False, col
+                return True, col
+    return None, col
 
 
 def _fits(w: int, doc: Doc) -> bool:
