@@ -43,6 +43,9 @@ _BREAK_KIND = {
 _DEFAULT_PENALTIES = {"comma": 1, "logic": 10, "arith": 20, "ternary": 30}
 _DEFAULT_OVER_COLUMN = 10
 
+# 块头关键字（控制流语句头；与 boundary 的 stmt_headers 同源）
+_HEAD_KEYWORDS = frozenset({"if", "else", "for", "while", "case", "casex", "casez"})
+
 
 def _load_wrap_config() -> tuple[dict, int]:
     """从 ConfigRegistry 读 [formatter.wrap]（语言包 tpc.toml）。
@@ -101,6 +104,16 @@ def _is_comment_or_directive(line: str, is_directive: bool = False) -> bool:
     return False
 
 
+def _is_else_if(s: str) -> bool:
+    """`else if` 三种形态：`else if (..)` / `else\\tif (..)` / `end else if (..)`。
+
+    `end else if` 是 Verilog 同行 else 链：end 收块 + else if 续条件。
+    """
+    if s.startswith(("else ", "else\t")):
+        return "if" in s.split()[:3]
+    return s.startswith("end") and "else if" in s
+
+
 def _is_block_header(line: str) -> bool:
     """块头行：if/else if/for/while/case 等控制流条件行。
 
@@ -110,15 +123,10 @@ def _is_block_header(line: str) -> bool:
     集合即控制流语句头，与 boundary 的 stmt_headers 同源）。
     """
     s = line.lstrip()
-    if s.startswith(("else ", "else\t")) and "if" in s.split()[:3]:
+    if _is_else_if(s):
         return True
-    # `end else if (...)`（Verilog 同行 else 链）：end 收块 + else if 续条件
-    if s.startswith("end") and "else if" in s:
-        return True
-    first = s.split()[0] if s else ""
-    return (
-        first in ("if", "else", "for", "while", "case", "casex", "casez") and "(" in s
-    )
+    first = s.split()[0] if s.split() else ""
+    return first in _HEAD_KEYWORDS and "(" in s
 
 
 def _split_trailing_comment(line: str) -> tuple[str, str]:
@@ -136,6 +144,70 @@ def _split_trailing_comment(line: str) -> tuple[str, str]:
         elif ch == "/" and not in_str and i + 1 < len(line) and line[i + 1] == "/":
             return line[:i].rstrip(), line[i:]
     return line.rstrip(), ""
+
+
+class _DepthScan:
+    """逐字符括号/字符串深度跟踪（`()` / `[]` / `{}` 各自独立计数）。
+
+    单独成类的原因：原实现把"深度更新"与"断点判定"写在一个 if/elif 链里，
+    再加字符串态的两个 continue，认知复杂度全记在扫描函数头上。
+    """
+
+    __slots__ = ("paren", "bracket", "brace", "in_str")
+
+    def __init__(self) -> None:
+        self.paren = 0
+        self.bracket = 0
+        self.brace = 0
+        self.in_str = False
+
+    def accepts_split_after(self, ch: str, allow_in_parens: bool) -> bool:
+        """吃掉 ch，并回答"该字符处可放断点吗"。
+
+        字符串态（含定界符本身）一律不可——否则字符串内的运算符会被误当
+        断点；`[]` 内一律不可；`()` 内仅 allow_in_parens（块头行）放行。
+        """
+        if self.in_str:
+            if ch == '"':
+                self.in_str = False
+            return False
+        if ch == '"':
+            self.in_str = True
+            return False
+        self._count_bracket(ch)
+        return self.bracket == 0 and (self.paren == 0 or allow_in_parens)
+
+    def _count_bracket(self, ch: str) -> None:
+        """括号深度计数。"""
+        if ch == "(":
+            self.paren += 1
+        elif ch == ")":
+            self.paren -= 1
+        elif ch == "[":
+            self.bracket += 1
+        elif ch == "]":
+            self.bracket -= 1
+        elif ch == "{":
+            self.brace += 1
+        elif ch == "}":
+            self.brace -= 1
+
+
+def _hint_at(
+    text: str, i: int, hints: list[str], brace_depth: int, allow_concat: bool
+) -> str | None:
+    """位置 i 处命中的断点提示符；concat `{}` 内的 `,` 默认排除。
+
+    concat `{}` 内逗号是**元素分隔符**（不是运算符），断裂破坏元素边界；
+    allow_concat（AST 确认语句完整）时放行——元素是子表达式，可断。
+    """
+    for h in hints:
+        if not text.startswith(h, i):
+            continue
+        if brace_depth > 0 and h == "," and not allow_concat:
+            continue
+        return h
+    return None
 
 
 def _top_level_split_points(
@@ -162,45 +234,15 @@ def _top_level_split_points(
     """
     stripped = line.lstrip()
     base = len(line) - len(stripped)
+    scan = _DepthScan()
     points: list[int] = []
-    depth = 0  # () 深度
-    bracket_depth = 0  # [] 深度
-    brace_depth = 0  # {} 深度
-    in_str = False
     i = 0
     while i < len(stripped):
-        ch = stripped[i]
-        if in_str:
-            if ch == '"':
-                in_str = False
-            i += 1
-            continue
-        if ch == '"':
-            in_str = True
-            i += 1
-            continue
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-        elif ch == "[":
-            bracket_depth += 1
-        elif ch == "]":
-            bracket_depth -= 1
-        elif ch == "{":
-            brace_depth += 1
-        elif ch == "}":
-            brace_depth -= 1
-        elif bracket_depth == 0 and (depth == 0 or allow_in_parens):
-            for h in hints:
-                if stripped.startswith(h, i):
-                    # concat `{}` 内逗号是元素分隔符：默认排除（断裂破坏
-                    # 元素边界）；allow_concat（AST 确认语句完整）放行
-                    if brace_depth > 0 and h == "," and not allow_concat:
-                        continue
-                    points.append(base + i)
-                    i += len(h) - 1
-                    break
+        if scan.accepts_split_after(stripped[i], allow_in_parens):
+            h = _hint_at(stripped, i, hints, scan.brace, allow_concat)
+            if h is not None:
+                points.append(base + i)
+                i += len(h) - 1
         i += 1
     return points
 
