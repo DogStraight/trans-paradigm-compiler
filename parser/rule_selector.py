@@ -9,6 +9,38 @@ from core.errors import GrammarError
 from ._constants import IDENTIFIER_TOKEN_TYPE
 
 
+def _token_firsts(feat: dict) -> set[str]:
+    """token 类型声明 → 首 token 集合（`A|B` 多候选拆开）。"""
+    tt = feat.get("token_type", "")
+    if "|" in tt:
+        return set(tt.split("|"))
+    return {tt}
+
+
+def _call_firsts(
+    feat: dict, grammar_rules: dict[str, GrammarRule], visited: set[str]
+) -> set[str]:
+    """call：被调规则首元素的 First set；块规则 / 空 production / 防环 → ∅。"""
+    name = feat.get("name", "")
+    if name in visited or name not in grammar_rules:
+        return set()
+    visited.add(name)
+    rule = grammar_rules[name]
+    # 块规则的起始 token 由 block 外部负责，不在 First set 计算中
+    if getattr(rule, "is_block", False):
+        return set()
+    prods = rule.prods
+    if not prods:
+        return set()
+    # 只取第一个 production 元素的 First set（后续元素可能不可达）
+    # 不吞 GrammarError：产生式非法 >> 起始 token 静默缺项（规则会变成
+    # 不可达，后续只能看到"无规刚可继续"的难查症状）
+    pf = analyze_production_features(prods[0])
+    if not pf:
+        return set()
+    return _compute_start_tokens(pf, grammar_rules, visited.copy())
+
+
 def _compute_start_tokens(
     feat: dict,
     grammar_rules: dict[str, GrammarRule],
@@ -18,35 +50,14 @@ def _compute_start_tokens(
     typ = feat.get("type")
 
     if typ == "token":
-        tt = feat.get("token_type", "")
-        if "|" in tt:
-            return set(tt.split("|"))
-        return {tt}
+        return _token_firsts(feat)
 
     if typ == "call":
-        name = feat.get("name", "")
-        if name in visited or name not in grammar_rules:
-            return set()
-        visited.add(name)
-        rule = grammar_rules[name]
-        # 块规则的起始 token 由 block 外部负责，不在 First set 计算中
-        if getattr(rule, "is_block", False):
-            return set()
-        prods = rule.prods
-        if not prods:
-            return set()
-        # 只取第一个 production 元素的 First set（后续元素可能不可达）
-        # 不吞 GrammarError：产生式非法 >> 起始 token 静默缺项（规则会变成
-        # 不可达，后续只能看到"无规刚可继续"的难查症状）
-        pf = analyze_production_features(prods[0])
-        if pf:
-            return _compute_start_tokens(pf, grammar_rules, visited.copy())
-        return set()
+        return _call_firsts(feat, grammar_rules, visited)
 
     if typ == "choice":
-        alts = feat.get("alternatives", [])
         result: set[str] = set()
-        for alt in alts:
+        for alt in feat.get("alternatives", []):
             result.update(_compute_start_tokens(alt, grammar_rules, visited.copy()))
         return result
 
@@ -64,6 +75,37 @@ def _compute_start_tokens(
     return set()
 
 
+def _register_rule_starts(
+    rule: GrammarRule,
+    name: str,
+    name_map: dict[str, list[str]],
+    grammar_rules: dict[str, GrammarRule],
+) -> None:
+    """单条规则的首 token 注册（block_start 优先；production First set 去重追加）。"""
+    # 补充：block.start 也作为起始 token 注册（优先于 production 处理，
+    # 确保空 production 的块规则如 GenerateBlock 仍能注册起始符）
+    bs = getattr(rule, "block_start", None)
+    if bs:
+        name_map.setdefault(bs, []).append(name)
+
+    prods = rule.prods
+    if not prods:
+        return
+    first_prod_str = prods[0]
+    # 同 `_compute_start_tokens`：产生式非法不静默跳过（fail-fast）
+    feat = analyze_production_features(first_prod_str)
+    if feat is None:
+        return
+    for tok in _compute_start_tokens(feat, grammar_rules, set()):
+        # 去重：块规则的 production 首字面 token 与 block_start 相同
+        # （如 ConfigDecl 的 keyword.config）→ 上面已注册，不再重复。
+        # 重复候选使同一规则被连续试两次（第一次的失败状态影响第二次
+        # 的匹配判定），产生"尝试过 X, X"的误报失败现场。
+        if tok == bs:
+            continue
+        name_map.setdefault(tok, []).append(name)
+
+
 def build_start_token_map_names(
     grammar_rules: dict[str, GrammarRule],
     statement_rule_names: list[str],
@@ -73,33 +115,7 @@ def build_start_token_map_names(
     for name in statement_rule_names:
         if name not in grammar_rules:
             continue
-        rule = grammar_rules[name]
-
-        # 补充：block.start 也作为起始 token 注册（优先于 production 处理，
-        # 确保空 production 的块规则如 GenerateBlock 仍能注册起始符）
-        bs = getattr(rule, "block_start", None)
-        if bs:
-            name_map.setdefault(bs, []).append(name)
-
-        prods = rule.prods
-        if not prods:
-            continue
-        first_prod_str = prods[0]
-        # 同 `_compute_start_tokens`：产生式非法不静默跳过（fail-fast）
-        feat = analyze_production_features(first_prod_str)
-        if feat is None:
-            continue
-        starts = _compute_start_tokens(feat, grammar_rules, set())
-        for tok in starts:
-            # 去重：块规则的 production 首字面 token 与 block_start 相同
-            # （如 ConfigDecl 的 keyword.config）→ 上面已注册，不再重复。
-            # 重复候选使同一规则被连续试两次（第一次的失败状态影响第二次
-            # 的匹配判定），产生"尝试过 X, X"的误报失败现场。
-            if tok == bs:
-                continue
-            if tok not in name_map:
-                name_map[tok] = []
-            name_map[tok].append(name)
+        _register_rule_starts(grammar_rules[name], name, name_map, grammar_rules)
     return name_map
 
 
@@ -250,73 +266,97 @@ def flatten_production_features(
     return _flatten_production_features(features)
 
 
+def _find_outermost_paren(s: str) -> tuple[int, int] | None:
+    """最外层括号对的下标区间（栈配平；无 → None）。"""
+    stack: list[int] = []
+    for i, ch in enumerate(s):
+        if ch == "(":
+            stack.append(i)
+        elif ch == ")" and stack:
+            start = stack.pop()
+            if not stack:
+                return (start, i)
+    return None
+
+
+def _apply_paren_placeholder(
+    s: str, paren: tuple[int, int], placeholder_map: dict
+) -> dict[str, Any] | None:
+    """把最外层括号换成占位符后继续解析（占位符 → 内层树，解析到即回填）。"""
+    start, end = paren
+    before = s[:start]
+    inner = s[start + 1 : end]
+    after = s[end + 1 :]
+    placeholder = f"__paren_{len(placeholder_map)}__"
+    placeholder_map[placeholder] = _build_feature_tree(inner, placeholder_map)
+    return _build_feature_tree(before + placeholder + after, placeholder_map)
+
+
+def _is_rule_call(s: str) -> bool:
+    """`@Rule` 语法调用形态。"""
+    return s.startswith("@") and len(s) > 1 and bool(_RE_CALL.match(s[1:]))
+
+
+def _split_suffix(s: str, placeholder_map: dict) -> dict[str, Any] | None:
+    """后缀运算符（优先级最高）：`*` 零或多次 / `+` 一次或多次 / `?` 零或一次。"""
+    for suffix, typ in SUFFIX_MAP.items():
+        if s.endswith(suffix):
+            base = s[:-1].strip()
+            return {"type": typ, "elem": _build_feature_tree(base, placeholder_map)}
+    return None
+
+
+def _split_by_separator(s: str, placeholder_map: dict) -> dict[str, Any] | None:
+    """按分隔符表拆一层（`|` 选择 / `,` 顺序）；无命中 → None。"""
+    for sep, typ, field in SEPARATOR_HANDLERS:
+        if sep not in s:
+            continue
+        parts = [p.strip() for p in s.split(sep) if p.strip()]
+        items = [
+            t for t in (_build_feature_tree(p, placeholder_map) for p in parts) if t
+        ]
+        return {"type": typ, field: items}
+    return None
+
+
+def _build_feature_tree(s: str, placeholder_map: dict) -> dict[str, Any] | None:
+    """产生式片段 → feature 树（递归）。
+
+    步骤即优先级：括号占位（`_apply_paren_placeholder`）→ 占位回填 →
+    分隔符层（`_split_by_separator`）→ 后缀层（`_split_suffix`）→
+    `@调用` → 普通 token；都识别不了 → GrammarError。
+    """
+    s = s.strip().replace(" ", "")
+    if not s:
+        return None
+    paren = _find_outermost_paren(s)
+    if paren:
+        return _apply_paren_placeholder(s, paren, placeholder_map)
+    if s in placeholder_map:
+        return placeholder_map[s]
+    sep_tree = _split_by_separator(s, placeholder_map)
+    if sep_tree is not None:
+        return sep_tree
+    suffix_tree = _split_suffix(s, placeholder_map)
+    if suffix_tree is not None:
+        return suffix_tree
+    if _is_rule_call(s):
+        return {"type": "call", "name": s[1:]}
+    if _RE_TOKEN.match(s):
+        return {"type": "token", "token_type": s}
+    raise GrammarError(f"无效的产生式片段: {s}")
+
+
 def analyze_production_features(production: str) -> dict[str, Any] | None:
     """分析产生式字符串，返回纯字典结构的中间 AST。
     支持后缀操作符：
         *  零次或多次 -> {"type": "repeat", "elem": ...}
         +  一次或多次 -> {"type": "plus", "elem": ...}
         ?  零次或一次 -> {"type": "optional", "elem": ...}
+    逐步解析见 `_build_feature_tree`（括号先占位再回填）。
     """
-    placeholder_map: dict[str, dict[str, Any] | None] = {}
-
-    def find_outermost_paren(s: str) -> tuple[int, int] | None:
-        stack = []
-        for i, ch in enumerate(s):
-            if ch == "(":
-                stack.append(i)
-            elif ch == ")" and stack:
-                start = stack.pop()
-                if not stack:
-                    return (start, i)
-        return None
-
-    def build_tree(s: str) -> dict[str, Any] | None:
-        s = s.strip().replace(" ", "")
-        if not s:
-            return None
-
-        # 1. 括号占位
-        paren = find_outermost_paren(s)
-        if paren:
-            start, end = paren
-            before = s[:start]
-            inner = s[start + 1 : end]
-            after = s[end + 1 :]
-            inner_ast = build_tree(inner)
-            placeholder = f"__paren_{len(placeholder_map)}__"
-            placeholder_map[placeholder] = inner_ast
-            new_s = before + placeholder + after
-            return build_tree(new_s)
-
-        if s in placeholder_map:
-            return placeholder_map[s]
-
-        for sep, typ, field in SEPARATOR_HANDLERS:
-            if sep in s:
-                parts = [p.strip() for p in s.split(sep) if p.strip()]
-                return {
-                    "type": typ,
-                    field: [build_tree(p) for p in parts if build_tree(p) is not None],
-                }
-
-        # 3. 后缀运算符（优先级最高）：'+', '*', '?'
-        for suffix, typ in SUFFIX_MAP.items():
-            if s.endswith(suffix):
-                base = s[:-1].strip()
-                return {"type": typ, "elem": build_tree(base)}
-
-        # 4. 语法调用 '@Rule'
-        if s.startswith("@") and len(s) > 1 and _RE_CALL.match(s[1:]):
-            return {"type": "call", "name": s[1:]}
-
-        # 5. 普通 token
-        if _RE_TOKEN.match(s):
-            return {"type": "token", "token_type": s}
-
-        raise GrammarError(f"无效的产生式片段: {s}")
-
     try:
-        return build_tree(production)
+        return _build_feature_tree(production, {})
     except Exception as e:
         raise GrammarError(f"分析产生式失败 {production}: {str(e)}") from e
 
