@@ -140,30 +140,29 @@ def _run_mutation(m: dict[str, str]) -> tuple[bool, str]:
     )
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="门禁有效性抽查（变异）")
-    ap.add_argument("--list", action="store_true", help="只列清单")
-    ap.add_argument("--only", type=int, default=None, help="只跑第 N 条（从 1 起）")
-    args = ap.parse_args()
+def _print_mutation_list() -> None:
+    """`--list`：逐条打印变异清单（文件 / 变异 / 期望变红的测试 / 来源事故）。"""
+    for i, m in enumerate(_MUTATIONS, 1):
+        print(f"{i}. {m['file']}")
+        print(f"   变异：{m['old'].splitlines()[0][:70]}… → {m['new'].splitlines()[0][:50]}…")
+        print(f"   期望变红：{m['test']}")
+        print(f"   来源事故：{m['why']}")
 
-    if args.list:
-        for i, m in enumerate(_MUTATIONS, 1):
-            print(f"{i}. {m['file']}")
-            print(f"   变异：{m['old'].splitlines()[0][:70]}… → {m['new'].splitlines()[0][:50]}…")
-            print(f"   期望变红：{m['test']}")
-            print(f"   来源事故：{m['why']}")
-        return 0
 
-    if not _ensure_clean_tree():
-        return 2
-
+def _select_mutations(only: int | None) -> list[tuple[int, dict]] | None:
+    """选中要跑的变异（`--only` 指定单条）；编号不存在 → None（调用方退 2）。"""
     selected = list(enumerate(_MUTATIONS, 1))
-    if args.only is not None:
-        selected = [(i, m) for i, m in selected if i == args.only]
-        if not selected:
-            print(f"[error] 无第 {args.only} 条")
-            return 2
+    if only is None:
+        return selected
+    picked = [(i, m) for i, m in selected if i == only]
+    if not picked:
+        print(f"[error] 无第 {only} 条")
+        return None
+    return picked
 
+
+def _run_mutations(selected: list[tuple[int, dict]]) -> list[str]:
+    """逐条跑变异 → 未如期变红者清单（调用方据此定退出码）。"""
     failures: list[str] = []
     print(f"[info] 抽查 {len(selected)} 条变异（每条跑一次相关测试，约一分钟）\n")
     for i, m in selected:
@@ -172,8 +171,29 @@ def main() -> int:
         print(f"        {note}")
         if not ok:
             failures.append(f"{m['file']}（期望 {m['test']} 变红）：{note}")
-
     print()
+    return failures
+
+
+def main() -> int:
+    """门禁有效性抽查（变异法）CLI 入口。"""
+    ap = argparse.ArgumentParser(description="门禁有效性抽查（变异）")
+    ap.add_argument("--list", action="store_true", help="只列清单")
+    ap.add_argument("--only", type=int, default=None, help="只跑第 N 条（从 1 起）")
+    args = ap.parse_args()
+
+    if args.list:
+        _print_mutation_list()
+        return 0
+
+    if not _ensure_clean_tree():
+        return 2
+
+    selected = _select_mutations(args.only)
+    if selected is None:
+        return 2
+
+    failures = _run_mutations(selected)
     if failures:
         print("[FAIL] 以下变异未如期触发门禁：")
         for f in failures:

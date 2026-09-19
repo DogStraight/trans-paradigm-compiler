@@ -20,6 +20,31 @@ from __future__ import annotations
 import difflib
 
 
+def _lcs_line_map(src_seq: list[str], out_seq: list[str]) -> dict[int, int]:
+    """LCS 匹配块内一一对应的 src 非空行序 → out 非空行序映射。"""
+    src_to_out: dict[int, int] = {}
+    sm = difflib.SequenceMatcher(None, src_seq, out_seq)
+    for i, j, size in sm.get_matching_blocks():
+        for k in range(size):
+            src_to_out[i + k] = j + k
+    return src_to_out
+
+
+def _raw_out_lines(out_lines: list[str], out_seq: list[str]) -> list[str]:
+    """按 out 非空行序列取回原始 out 行（含缩进；找不到时退回去空白文本）。"""
+    out_raw: list[str] = []
+    cursor = 0
+    for line in out_seq:
+        while cursor < len(out_lines) and out_lines[cursor].strip() != line:
+            cursor += 1
+        if cursor < len(out_lines):
+            out_raw.append(out_lines[cursor])
+            cursor += 1
+        else:
+            out_raw.append(line)
+    return out_raw
+
+
 def keep_blank_lines(source: str, rendered: str) -> str:
     """把源文本的空行分布回插到渲染输出（结构对应位置）。"""
     src_lines = source.split("\n")
@@ -32,26 +57,8 @@ def keep_blank_lines(source: str, rendered: str) -> str:
     if not src_seq or not out_seq:
         return rendered
 
-    # src → out 匹配映射（LCS 匹配块内一一对应）
-    src_to_out: dict[int, int] = {}
-    sm = difflib.SequenceMatcher(None, src_seq, out_seq)
-    for i, j, size in sm.get_matching_blocks():
-        for k in range(size):
-            src_to_out[i + k] = j + k
-
-    out_to_src = {j: i for i, j in src_to_out.items()}
-
-    # 还原原始 out 行（含缩进）：按 out 非空行序列找原行
-    out_raw: list[str] = []
-    cursor = 0
-    for line in out_seq:
-        while cursor < len(out_lines) and out_lines[cursor].strip() != line:
-            cursor += 1
-        if cursor < len(out_lines):
-            out_raw.append(out_lines[cursor])
-            cursor += 1
-        else:
-            out_raw.append(line)
+    out_to_src = {j: i for i, j in _lcs_line_map(src_seq, out_seq).items()}
+    out_raw = _raw_out_lines(out_lines, out_seq)
 
     result: list[str] = []
     for j, raw in enumerate(out_raw):

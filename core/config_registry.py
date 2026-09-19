@@ -168,6 +168,40 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _validate_file_spec_fields(config_key: str, spec: dict) -> None:
+    """文件式声明字段校验：file / section / required / base（类型错 → fail-fast）。"""
+    f = spec["file"]
+    if not (isinstance(f, str) or (isinstance(f, list) and all(isinstance(x, str) for x in f))):
+        raise ConfigError(
+            f"[config] {config_key}: file 必须是字符串或字符串列表，got {type(f).__name__}"
+        )
+    sec = spec.get("section")
+    if sec is not None and not isinstance(sec, str):
+        raise ConfigError(
+            f"[config] {config_key}: section 必须是字符串或 None，got {type(sec).__name__}"
+        )
+    req = spec.get("required", True)
+    if not isinstance(req, bool):
+        raise ConfigError(
+            f"[config] {config_key}: required 必须是布尔值，got {type(req).__name__}"
+        )
+    base = spec.get("base", "rules")
+    if not isinstance(base, str):
+        raise ConfigError(
+            f"[config] {config_key}: base 必须是字符串，got {type(base).__name__}"
+        )
+
+
+def _validate_bare_spec(config_key: str, spec: dict) -> None:
+    """无 file 的 dict：含声明字段 = 疑似"忘了 file" → 拦截；否则合法裸配置。"""
+    decl_like = set(spec) & {"section", "required", "base", "description"}
+    if decl_like:
+        raise ConfigError(
+            f"[config] {config_key}: 疑似文件式声明但缺 file 字段"
+            f"（含 {sorted(decl_like)}）。文件式声明需 file = \"...\"。"
+        )
+
+
 def _validate_decl_spec(config_key: str, spec: Any) -> None:
     """校验 tpc.toml 配置声明结构（fail-fast，schema 化第一步）。
 
@@ -187,39 +221,9 @@ def _validate_decl_spec(config_key: str, spec: Any) -> None:
             f"合法字段: {sorted(_DECL_FIELDS)}"
         )
     if "file" in spec:
-        f = spec["file"]
-        if isinstance(f, str):
-            pass
-        elif isinstance(f, list) and all(isinstance(x, str) for x in f):
-            pass
-        else:
-            raise ConfigError(
-                f"[config] {config_key}: file 必须是字符串或字符串列表，got {type(f).__name__}"
-            )
-        sec = spec.get("section")
-        if sec is not None and not isinstance(sec, str):
-            raise ConfigError(
-                f"[config] {config_key}: section 必须是字符串或 None，got {type(sec).__name__}"
-            )
-        req = spec.get("required", True)
-        if not isinstance(req, bool):
-            raise ConfigError(
-                f"[config] {config_key}: required 必须是布尔值，got {type(req).__name__}"
-            )
-        base = spec.get("base", "rules")
-        if not isinstance(base, str):
-            raise ConfigError(
-                f"[config] {config_key}: base 必须是字符串，got {type(base).__name__}"
-            )
-    else:
-        # dict 但无 file：若含声明字段（section/required/base/description）则
-        # 疑似"忘了 file 的文件式声明"——拦截；纯数据 dict 是合法 bare data。
-        decl_like = set(spec) & {"section", "required", "base", "description"}
-        if decl_like:
-            raise ConfigError(
-                f"[config] {config_key}: 疑似文件式声明但缺 file 字段"
-                f"（含 {sorted(decl_like)}）。文件式声明需 file = \"...\"。"
-            )
+        _validate_file_spec_fields(config_key, spec)
+        return
+    _validate_bare_spec(config_key, spec)
 
 
 def _find_plugin_tpc(package_dir: str, name: str) -> tuple[str, str]:
@@ -295,6 +299,28 @@ def _core_declarations(meta: dict) -> list[tuple]:
     return declarations
 
 
+def _plugin_specs(plugin_meta: dict):
+    """插件 tpc.toml → (config_key, spec) 逐条（跳过 `grammar` 段）。"""
+    for ns, table in plugin_meta.items():
+        if ns == "grammar":
+            continue
+        yield from _flatten_config({ns: table})
+
+
+def _append_plugin_spec(
+    config_key: str, spec: dict, rel_dir: str, declarations: list
+) -> None:
+    """单条插件声明：文件式合并 file 列表；非文件式以 bare data 注册。"""
+    _validate_decl_spec(config_key, spec)
+    if _is_file_spec(spec):
+        _append_plugin_file_decl(config_key, spec, rel_dir, declarations)
+        return
+    # 非文件式配置（bare data）——插件 tpc.toml 里也可能有裸配置
+    # （[namespace].foo 点路径键，如插件自身的开关项）。缺此分支会导致插件
+    # 裸配置从未注册（历史 bug）。
+    declarations.append(_bare_decl(config_key, spec))
+
+
 def _plugin_declarations(package_dir: str, meta: dict, declarations: list) -> None:
     """`[plugins] enabled` 列出的插件 tpc.toml → 声明追加进 `declarations`。
 
@@ -314,20 +340,8 @@ def _plugin_declarations(package_dir: str, meta: dict, declarations: list) -> No
             continue
         with open(plugin_tpc, encoding="utf-8") as f:
             plugin_meta = tomllib.loads(f.read())
-        for ns, table in plugin_meta.items():
-            if ns == "grammar":
-                continue
-            for config_key, spec in _flatten_config({ns: table}):
-                _validate_decl_spec(config_key, spec)
-                if _is_file_spec(spec):
-                    _append_plugin_file_decl(
-                        config_key, spec, rel_dir, declarations
-                    )
-                else:
-                    # 非文件式配置（bare data）——插件 tpc.toml 里也可能有
-                    # 裸配置（[namespace].foo 点路径键，如插件自身的开关项）。
-                    # 缺此分支会导致插件裸配置从未注册（历史 bug）。
-                    declarations.append(_bare_decl(config_key, spec))
+        for config_key, spec in _plugin_specs(plugin_meta):
+            _append_plugin_spec(config_key, spec, rel_dir, declarations)
 
 
 def _append_plugin_file_decl(
@@ -760,6 +774,49 @@ class ConfigRegistry:
         return loc
 
     @staticmethod
+    def _decl_paths(file_spec: Any) -> list[str]:
+        """声明 file 字段 → 待展开路径列表（单串或列表；其它类型 → TypeError）。"""
+        if isinstance(file_spec, str):
+            return [file_spec]
+        if isinstance(file_spec, list):
+            return file_spec
+        raise TypeError(f"file 必须是字符串或列表: {file_spec}")
+
+    @staticmethod
+    def _matched_files(fp: str, base_dir: str, required: bool) -> list[str]:
+        """单个模式 → 匹配文件列表。
+
+        字面路径即使 glob 不匹配也直接尝试（文件缺失交给 FileNotFoundError）；
+        通配符无匹配且必选 → 显式报错（避免 fallback 到含 `*` 的字面路径触发
+        Errno 22，以及静默降级为空表）；required=False 的通配无匹配 → 合法空。
+        """
+        matched = _glob_match([fp], base_dir)
+        if matched:
+            return matched
+        if "*" not in fp and "?" not in fp:
+            return [os.path.join(base_dir, fp).replace("\\", "/")]
+        if required:
+            raise FileNotFoundError(f"glob 未找到匹配文件: {fp}")
+        return []
+
+    @staticmethod
+    def _read_decl_file(path: str, section: str) -> Any:
+        """读单个声明文件 → 数据（有 section 则只取该段）。
+
+        文件存在但缺声明的段 → 配置声明错误，fail-fast（不能再静默
+        `data.get(section, {})` 退化成空表）。
+        """
+        from core.define import FileManager
+
+        content = FileManager.read_file(path.replace("\\", "/"))
+        data = tomllib.loads(content)
+        if not section:
+            return data
+        if section not in data:
+            raise KeyError(f"文件存在但缺少声明段 [{section}]")
+        return data[section]
+
+    @staticmethod
     def _load_decl_value(
         file_spec: Any, section: str, base_dir: str, required: bool
     ) -> tuple[Any, list[str]]:
@@ -768,39 +825,11 @@ class ConfigRegistry:
         Returns: (merged, src_files)；无匹配文件 → FileNotFoundError。
         异常分类交给调用方（TOML 语法错 / 文件缺失 / 其它结构错三态）。
         """
-        from core.define import FileManager
-
-        # file 可以是字符串（单文件）或列表（glob 模式）
-        if isinstance(file_spec, str):
-            paths = [file_spec]
-        elif isinstance(file_spec, list):
-            paths = file_spec
-        else:
-            raise TypeError(f"file 必须是字符串或列表: {file_spec}")
-
         merged: Any = None
         src_files: list[str] = []
-        for fp in paths:
-            # glob 模式：匹配 0 或多个文件
-            matched = _glob_match([fp], base_dir)
-            if not matched:
-                if "*" not in fp and "?" not in fp:
-                    # 字面路径：glob 不匹配也直接尝试（文件缺失交给 FileNotFoundError）
-                    matched = [os.path.join(base_dir, fp).replace("\\", "/")]
-                elif required:
-                    # 通配符无匹配且必选 → 显式报错。避免 fallback 到含 * 的
-                    # 字面路径触发 Errno 22，以及静默降级为空表。
-                    raise FileNotFoundError(f"glob 未找到匹配文件: {fp}")
-                # required=False 的通配无匹配 → 合法空（跳过）
-            for m in sorted(matched):
-                content = FileManager.read_file(m.replace("\\", "/"))
-                data = tomllib.loads(content)
-                if section:
-                    # 文件存在但缺声明的段 → 配置声明错误，fail-fast
-                    # （不能再静默 `data.get(section, {})` 退化成空表）。
-                    if section not in data:
-                        raise KeyError(f"文件存在但缺少声明段 [{section}]")
-                    data = data[section]
+        for fp in ConfigRegistry._decl_paths(file_spec):
+            for m in sorted(ConfigRegistry._matched_files(fp, base_dir, required)):
+                data = ConfigRegistry._read_decl_file(m, section)
                 if merged is None:
                     merged = data
                 elif isinstance(merged, dict) and isinstance(data, dict):
