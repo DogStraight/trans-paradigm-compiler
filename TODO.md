@@ -18,6 +18,47 @@
   `enabled` / `search_dirs` / `silent`）：路径形态列表（开 / 闭 / 是否相对路径优先），
   关键字取用改走 `primitives/registry.py::split_directive`。
 
+## 架构：精化（elaboration）部件化 + 插件化（未开工）
+
+> 作者定调（2026-09-19）：精化器逻辑应由**插件**实现，引擎侧只留"加载精化器的位"。
+> 本仓已有同款机制可复用，不造第二套：`core/component_protocol.md` §1 的
+> `[capabilities]` 能力位 + `get_capability_in(name, rules_dir)`（按语言包作用域，
+> 切语言不串用）；先例 `macro_policy`（引擎薄适配器 `preprocessor/macro_policy.py`
+> + 插件 `plugins/macro_policy/`）与 `formatter`。
+
+- **现状错配（实测，`analyzer/structure.py`）**：
+  - 文本模式求值/判断（应 AST-first）：`_is_signal_expr` 正则、`render_subtree` 渲染
+    后再字符串比较（`== port`）、`_eval_gen_cond` 的 `text.isdigit()` /
+    `text.startswith(not_op)` / `IDENT_RE.fullmatch`、`_tokenize_const` +
+    `_CONST_TOK_RE` + `_eval_const_expr` 文本递归下降、`_param_truth` 值文本判数字。
+  - 语言知识硬编码（应进插件）：`_fill_body_ports` 的 `_FUNC_OR_TASK` 元组、
+    `_fill_body_params` 的 `"ParamDeclStmt"` / `"Declarator"` / `"init"`、
+    `elaborate_connections` 的 `field("connects") or "ports"`、
+    `_fill_body_ports` 的 `or "direction"`，以及"名字在 `Node.content`"这一未声明形态假设。
+  - AST 证据（`_drafts/probe_ast_shape.py`）：取反在 AST 里是
+    `UnaryOp(op='!', operand=HierExpr([Identifier('W')]))`——**不是文本前缀**；
+    `Number.value` 今天有 str / Node 两种形态（形态知识进插件后由插件自认，无需对齐语法绑定）。
+- **契约划分**：引擎基座 = ①加载位（能力名 + 未声明降级为单文件 lint+analyze）
+  ②产物模型与 `context.extra` 键名（**形状属引擎协议**——消费方是下游 postpass，
+  不能由插件定义）③语言无关服务句柄（读源 / 宏展开 / AST 解析 / 行映射 `line_map`、
+  宏区间 `macro_regions`）。插件 = 全部语言语义（实例化点→目标模块名、按名找定义文件、
+  单文件精化、**AST-first 求值规则**、驱动源三类形态、层次穿透、端口方向语义）。
+- **分期**：E1 立零件（`analyzer/elaboration/`：契约 + 能力名 + 加载位 + 产物模型 +
+  句柄，只新增不接线）→ E2 verilog 精化器整体搬进
+  `grammar/verilog/plugins/elaboration/`，门面改经契约调用并**同批删引擎侧旧实现与
+  `[structure]` 声明**（不留双路径）→ E3 插件内 AST-first 重写（删文本解析链）→
+  E4 文档收口（`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
+  `MODEL_INDEX`/`analyzer/README`）。
+- 按建议定的两条：编排骨架（发现循环 / 汇总 / `extra` 注入）**留引擎**（无语言语义）；
+  产物**运行期核验**（照 transform 插件 `produces` + `_verify_produced` 同款，
+  少填产物键 → fail，不让下游静默空转）。
+- 外部对照（为什么这不是过度泛化）：elaboration 是 HDL/EDA 的必备阶段（Verilator
+  `V3Param` 删未选中 AST 子树、slang `Elaborator`、VHDL/Ada LRM 专章），通用语言侧
+  同构概念（Racket phase、Scala macro elaboration、Zig comptime、C++ 模板实例化）；
+  成熟实现一律在 AST/IR 上精化，文本只作输出与诊断呈现。注意中文"精化"与
+  refinement（B/Event-B 规格精化）撞词，部件/配置名用 `elaboration`。
+
+
 ## 外部审计修复（Bifrost 全仓诊断，2026-09-18 起）
 
 > 清单与处置记录：`_drafts/bifrost/findings.md`、`_drafts/bifrost/dispositions.md`
@@ -115,10 +156,25 @@
     （共性已抽，残留仅入口样板）、policy 门禁 3 对（待作者确认）、语言侧变体 1 对、
     类内 1 对（随 B-B4c）、测试/工具侧 6 对（各自独立可单跑）。
     可继续压的只剩这 1 对类内（B-B4c）+ policy 3 对（待作者定）。
+- **B-E 内置策略（性能类 in-loop 族）**：AST 自查当前非 tests 树共 12 处"循环内 I/O"
+  （原始报数行号已随重构漂移，按形态重定位）。
+  - ✅ `analyzer/structure.py::ModuleIndexer` 目录兜底查找：原实现对每个未解析单元名
+    重读整个目录（全语料实测 15 次查找 / 13 次未命中 = 整目录读 13 遍、134 次读 / 95 ms）
+    → 改按目录建一次「单元名 → 文件」文本索引（`ctx.dir_module_files`，随会话失效）
+    → **18 次读**；加回归测试锁"按目录建一次"（诱饵计数：1 vs 关缓存 3）。
+    外部裁判同口径复查：命中数不变——策略报的是**形态**（"循环里有读文件"仍在，
+    即建表循环），病理（同一文件反复读）已由读数证明消失。
+  - ✅ 其余 11 处判**保持**（逐文件各读一次，非病理）：`parse_file`、`load_check_rules`、
+    `_plugin_declarations`/`_load_decl_value`、`_apply_check_suppressions`、
+    `_stage_render`（写 extra）、`collect_grammar_keywords`、`load_layouts`、
+    `cmd_rename`、`_smoke_test`（format/lint/check 三面必跑）、
+    `bifrost_probe/smelly.py`（**刻意坏味探针**，修好即门禁失效）。判据与逐条理由见
+    dispositions。
 
-> 审计外观察（不在本清单）：`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog 形态
-> 进了引擎，与"本模块零语言知识"的声明相左——归 `docs/gaps/gap-semantic-elaboration-boundaries.md`
-> 边界 2（引擎约定 vs 语言包声明）那条线，待语言包声明条件求值面时一起处理。
+> 审计外观察（不在本清单）：无。此前记的 "`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog
+> 形态进了引擎"已修（generate 条件面的规则/字段/运算符拼写全部移入 `[structure]`
+> 声明，引擎零 Verilog 形态）——口径收窄后的**求值能力**边界记在
+> `docs/gaps/gap-semantic-elaboration-boundaries.md` 边界 1/2。
 
 ## 测试基础设施
 
