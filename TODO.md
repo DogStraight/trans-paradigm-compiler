@@ -56,18 +56,21 @@
       + `_rule_of`/`_make_stmt_node`（`feb1bb5`）。
     - ✅ `lexer/number_gen.py::compile_number_pattern`（174 行）→
       `_PatternBuilder` 装配器 + 四阶段（`eb865cc`）。
-    - ⏳ 剩余：`renderer/inline_comment.py::restore_line_comments`（169 行）、
-      `restore_comments`（139 行）、`lexer/capture_runner.py::CaptureRunner.run`
-      （125 行）、`renderer/node_renderer.py::render_node`（108 行）、
+    - ✅ `renderer/inline_comment.py::restore_line_comments`（169 行）→ 四条落位
+      路径各自成对（`_needs_reinsert`/`_commit_insert`/`_commit_split`）169 → 73 行
+      （`b58a3b5`）。
+    - ✅ 同文件 `restore_comments`（139 行）→ 锚点窗口/插入/退化/占位独立行四块，
+      与 `restore_line_comments` 共用记账助手（`_dedupe_anchors`/`_free_slot`/
+      `_splice_line`/`_indent_at`）139 → 65 行（`57cf50c`）。
+    - ⏳ 剩余：`lexer/capture_runner.py::CaptureRunner.run`（125 行）、
+      `renderer/node_renderer.py::render_node`（108 行）、
       `renderer/doc.py::_best`（96 行）、`_fits`（87 行）、
       `renderer/primitives/line.py::eval_line`（84 行）。
   - ⏳ **类级上帝对象 11 处**（需设计决策，非机械拆分）：`_StructureBase`(414)、
     `Lexer`(336)、`RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、
     `ConfigRegistry`(87)、`GrammarRule`(70)、`ProjectChecker`(56)、
-    `CaptureRunner`(36)、`AnalysisTraversal`(33)、`Node`(6)。
-  - ⏳ **类级上帝对象**（需设计决策，非机械拆分）：`_StructureBase`、
-    `ConfigRegistry`、`GrammarRule`、`ProjectChecker`、`AnalysisTraversal`、
-    `Lexer`、formatter `BoundaryScanner`——建议逐个人工定边界后再动。
+    `CaptureRunner`(36)、`AnalysisTraversal`(33)、`Node`(6)——
+    建议先就 `_StructureBase` 立 ADR 定边界，其余逐个人工定边界后再动。
 - **B-C 结构重复**（非 tests 111 组，按"同文件/同部件 → 跨部件"递进）：
   - ✅ 引擎侧同形重复：`_deep_merge` ×2、`get_config_refs` ×4、`plugin_loader`
     合并型 getter ×5、`_serialize_member`/`_serialize_group`、`soft_break` 三态
