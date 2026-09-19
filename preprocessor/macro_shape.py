@@ -98,6 +98,18 @@ class MacroCallArgs:
     separator: str
     nesting: tuple[tuple[str, str], ...]
 
+    def _opener_at(self, text: str, i: int) -> tuple[str, str] | None:
+        """位置 i 处的嵌套开括号对 `(open, close)`；无 → None。"""
+        return next(
+            (p for p in tuple(self.nesting) if text.startswith(p[0], i)), None
+        )
+
+    def _closer_at(self, text: str, i: int) -> str | None:
+        """位置 i 处的闭括号文本（长串优先）；无 → None。"""
+        return next(
+            (c for c in _sorted_closers(self.nesting) if text.startswith(c, i)), None
+        )
+
     def match_args(self, text: str, open_idx: int) -> tuple[str, int] | None:
         """从 open_idx（开括号处）配平到对应闭括号 → (内部文本, 闭括号后位置)。
 
@@ -106,18 +118,16 @@ class MacroCallArgs:
         """
         if not text.startswith(self.open, open_idx):
             return None
-        pairs = tuple(self.nesting)
-        closers = _sorted_closers(self.nesting)
         inner_start = open_idx + len(self.open)
         expect: list[str] = [self.close]
         i = inner_start
         while i < len(text):
-            opener = next((p for p in pairs if text.startswith(p[0], i)), None)
+            opener = self._opener_at(text, i)
             if opener is not None:
                 expect.append(opener[1])
                 i += len(opener[0])
                 continue
-            closer = next((c for c in closers if text.startswith(c, i)), None)
+            closer = self._closer_at(text, i)
             if closer is None:
                 i += 1
                 continue
@@ -130,20 +140,18 @@ class MacroCallArgs:
 
     def split(self, text: str) -> list[str]:
         """按顶层分隔符切分实参（括号对内的分隔符不算），各段去首尾空白。"""
-        pairs = tuple(self.nesting)
-        closers = _sorted_closers(self.nesting)
         parts: list[str] = []
         cur: list[str] = []
         depth = 0
         i = 0
         while i < len(text):
-            opener = next((p for p in pairs if text.startswith(p[0], i)), None)
+            opener = self._opener_at(text, i)
             if opener is not None:
                 depth += 1
                 cur.append(opener[0])
                 i += len(opener[0])
                 continue
-            closer = next((c for c in closers if text.startswith(c, i)), None)
+            closer = self._closer_at(text, i)
             if closer is not None:
                 depth -= 1
                 cur.append(closer)
@@ -163,6 +171,47 @@ class MacroCallArgs:
 def _sorted_closers(nesting: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
     """全部闭括号（长串优先——`>>` 不被 `>` 抢先匹配）。"""
     return tuple(sorted({c for _, c in nesting}, key=len, reverse=True))
+
+
+def _require_shape_production(recognition: dict) -> str | None:
+    """取 `shape` 生产式：未声明（且无形态段）→ None；缺失/非法 → fail-fast。"""
+    shape_production = recognition.get("shape")
+    if shape_production is None:
+        declared = [k for k in SHAPE_KINDS if recognition.get(k) is not None]
+        if declared:
+            raise ConfigError(
+                f"[macro_recognition] 声明了形态段 {declared} 但缺 shape"
+                f"（形态形状写在 shape，如 {_SHAPE_FORM}）"
+            )
+        return None
+    if not isinstance(shape_production, str) or not shape_production.strip():
+        raise ConfigError(
+            f"[macro_recognition] shape 须是非空生产式字符串（得到 {shape_production!r}）"
+        )
+    return shape_production
+
+
+def _shape_prefix(
+    shape_production: str, token_define: dict, skip_undeclared: bool
+) -> str | None:
+    """形态生产式 → 前缀文本（`_PARSE_CACHE` 记忆化；未声明前缀 → None）。"""
+    prefix_token = _PARSE_CACHE.get(shape_production)
+    if prefix_token is None:
+        prefix_token = _parse_shape(shape_production)
+        _PARSE_CACHE[shape_production] = prefix_token
+    return _prefix_text(prefix_token, token_define, skip_undeclared)
+
+
+def _declared_shapes(recognition: dict, prefix: str) -> dict[str, MacroShape]:
+    """逐形态段构造 MacroShape（未声明的段不出现）。"""
+    shapes: dict[str, MacroShape] = {}
+    for kind in SHAPE_KINDS:
+        value = recognition.get(kind)
+        if value is not None:
+            shapes[kind] = MacroShape(
+                kind=kind, prefix=prefix, names=_candidates(value, kind)
+            )
+    return shapes
 
 
 def load_macro_shapes(
@@ -188,37 +237,13 @@ def load_macro_shapes(
     token_define = token_define or {}
     recognition = _recognition(cfg)
 
-    shape_production = recognition.get("shape")
+    shape_production = _require_shape_production(recognition)
     if shape_production is None:
-        declared = [k for k in SHAPE_KINDS if recognition.get(k) is not None]
-        if declared:
-            raise ConfigError(
-                f"[macro_recognition] 声明了形态段 {declared} 但缺 shape"
-                f"（形态形状写在 shape，如 {_SHAPE_FORM}）"
-            )
         return {}
-    if not isinstance(shape_production, str) or not shape_production.strip():
-        raise ConfigError(
-            f"[macro_recognition] shape 须是非空生产式字符串（得到 {shape_production!r}）"
-        )
-
-    prefix_token = _PARSE_CACHE.get(shape_production)
-    if prefix_token is None:
-        prefix_token = _parse_shape(shape_production)
-        _PARSE_CACHE[shape_production] = prefix_token
-    prefix = _prefix_text(prefix_token, token_define, skip_undeclared_prefix)
+    prefix = _shape_prefix(shape_production, token_define, skip_undeclared_prefix)
     if prefix is None:
         return {}
-
-    shapes: dict[str, MacroShape] = {}
-    for kind in SHAPE_KINDS:
-        value = recognition.get(kind)
-        if value is None:
-            continue
-        shapes[kind] = MacroShape(
-            kind=kind, prefix=prefix, names=_candidates(value, kind)
-        )
-    return shapes
+    return _declared_shapes(recognition, prefix)
 
 
 def macro_keywords(shape: MacroShape) -> tuple[str, ...]:
@@ -289,23 +314,8 @@ def load_macro_call_args(
     )
 
 
-def load_macro_call_suffix(
-    cfg: dict | None = None,
-    rules_dir: str | None = None,
-) -> re.Pattern[str] | None:
-    """读取宏调用后随字面量后缀的**形态模式**（未声明 → None）。
-
-        suffix_after_call = "'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*"
-
-    模式从位置处匹配（引擎按 `^` 锚定，只关心“开头是不是这个后缀”）；
-    与 `[literal] number` / `[id.id] id` 同款——形态模式写在语言包，引擎只编译
-    不解释。声明的模式比 `[[number.based]]` **宽一档**：还要覆盖无进制字母的
-    SV 填充字面量 `` `W'0 `` / `` `W'1 ``，故单独声明（不复用数字形态）。
-    声明非法（非串 / 不能编译 / 可匹配空串）→ fail-fast。
-    """
-    if cfg is None:
-        cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
-    recognition = _recognition(cfg)
+def _require_suffix_pattern(recognition: dict) -> str | None:
+    """取 `suffix_after_call` 形态模式：未声明 → None；非法（非串/空）→ fail-fast。"""
     pattern = recognition.get(CALL_SUFFIX_KEY)
     if pattern is None:
         return None
@@ -315,6 +325,11 @@ def load_macro_call_suffix(
             "（如 \"'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*\"），"
             f"得到 {pattern!r}"
         )
+    return pattern
+
+
+def _compile_suffix_pattern(pattern: str) -> re.Pattern[str]:
+    """编译后缀模式（非合法正则 / 可匹配空串 → fail-fast）。"""
     try:
         compiled = re.compile(f"^(?:{pattern})")
     except re.error as exc:
@@ -327,6 +342,30 @@ def load_macro_call_suffix(
             f"（匹配空串会让扩展区间退化），得到 {pattern!r}"
         )
     return compiled
+
+
+def load_macro_call_suffix(
+    cfg: dict | None = None,
+    rules_dir: str | None = None,
+) -> re.Pattern[str] | None:
+    """读取宏调用后随字面量后缀的**形态模式**（未声明 → None）。
+
+        suffix_after_call = "'[sS]?[bBoOdDhH]?[0-9a-fA-FxXzZ_?]*"
+
+    模式从位置处匹配（引擎按 `^` 锚定，只关心“开头是不是这个后缀”）；
+    与 `[literal] number` / `[id.id] id` 同款——形态模式写在语言包，引擎只编译
+    不解释。声明的模式比 `[[number.based]]` **宽一档**：还要覆盖无进制字母的
+    SV 填充字面量 `` `W'0 `` / `` `W'1 ``，故单独声明（不复用数字形态）。
+    声明非法（非串 / 不能编译 / 可匹配空串）→ fail-fast（见 `_require_suffix_pattern`
+    与 `_compile_suffix_pattern`）。
+    """
+    if cfg is None:
+        cfg = _resolve_macro_cfg(rules_dir) if rules_dir else _macro_cfg
+    recognition = _recognition(cfg)
+    pattern = _require_suffix_pattern(recognition)
+    if pattern is None:
+        return None
+    return _compile_suffix_pattern(pattern)
 
 
 def _recognition(cfg: dict) -> dict:
