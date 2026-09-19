@@ -408,7 +408,7 @@ class Parser:
         rule_selector: "RuleSelector | None" = None,
         silent: bool = False,
     ) -> None:
-        """初始化解析器。
+        """初始化解析器（分阶段装配，各段见 `_init_*` 方法）。
 
         Args:
             rules_dir: 语法规则目录（相对路径）。传入时由调用方接管 RuleSelector。
@@ -419,7 +419,30 @@ class Parser:
             rules: 预加载的语法规则表。传入时跳过内部 GrammarRulesRegister 加载。
             rule_selector: 预构建的 RuleSelector。传入时跳过内部创建。
         """
-        self.grammar_rules: dict[str, GrammarRule] = {}
+        self._init_flags(verbose, silent, pre_symbols)
+        self._load_brackets()
+        self._init_rules(rules)
+        self._init_logging(log_file)
+        self.statement_rule_names = [
+            name
+            for name, rule in self.grammar_rules.items()
+            if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
+        ]
+        self._init_pratt_language()
+        self._init_rule_selector(rules_dir, rule_selector)
+        self._init_skip_types()
+        # 停点/trace 过滤器（set_trace 设置，按规则名或 token 位置）
+        self._trace_rule: str | None = None
+        self._trace_token_pos: int | None = None
+
+        self._init_atoms()
+        self._init_follows()
+        self._init_anchors()
+
+    def _init_flags(
+        self, verbose: bool, silent: bool, pre_symbols: dict[str, str] | None
+    ) -> None:
+        """开关与容器字段。"""
         self.verbose = verbose
         # silent：探测性解析（宏体形态分类/提取等）全静默——不输出 WARN/失败报告，
         # 避免污染宿主解析流程的日志与门禁断言（真实语料无 WARN 断言）。
@@ -436,27 +459,33 @@ class Parser:
         # 解析时作用域栈（可选，配合 peek scope 使用）
         self.scope_stack = ScopeStack()
 
-        # 加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）
+    def _load_brackets(self) -> None:
+        """加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）。"""
         from core.utils import get_bracket_map
+
         self._bracket_map, self._inverse_bracket_map = get_bracket_map()
 
-        # 规则加载：外部注入优先，回退内部自动加载
+    def _init_rules(self, rules: dict[str, GrammarRule] | None) -> None:
+        """规则加载：外部注入优先，回退内部自动加载（不可得 → fail-fast）。"""
+        self.grammar_rules: dict[str, GrammarRule] = {}
         if rules is not None:
             self.grammar_rules = rules
-        else:
-            try:
-                self.grammar_rules = (
-                    GrammarRulesRegister.get_default().rules_registration()
-                )
-            except FileNotFoundError as exc:
-                # 无注入规则且默认语言包不可得 → 空规则表的 Parser 什么都解析
-                # 不了（后续只会报"无规则可继续"），属配置/状态错，fail-fast
-                # 报出原因（与 core/config_lifecycle.md「fail-fast」一致）。
-                raise ConfigError(
-                    "[parser] 既无注入语法规则（rules=）也无可用默认语言包："
-                    f"请先加载语言包（ConfigRegistry.load_all）或显式传入 rules（{exc}）"
-                ) from exc
-        # 日志文件：构造参数优先，回退到 FileManager 全局配置
+            return
+        try:
+            self.grammar_rules = (
+                GrammarRulesRegister.get_default().rules_registration()
+            )
+        except FileNotFoundError as exc:
+            # 无注入规则且默认语言包不可得 → 空规则表的 Parser 什么都解析
+            # 不了（后续只会报"无规则可继续"），属配置/状态错，fail-fast
+            # 报出原因（与 core/config_lifecycle.md「fail-fast」一致）。
+            raise ConfigError(
+                "[parser] 既无注入语法规则（rules=）也无可用默认语言包："
+                f"请先加载语言包（ConfigRegistry.load_all）或显式传入 rules（{exc}）"
+            ) from exc
+
+    def _init_logging(self, log_file: str | None) -> None:
+        """日志文件（构造参数优先，回退 FileManager 全局配置）与级别阈值。"""
         if log_file is None:
             if FileManager.debug_log_file is not None:
                 self.debug_log_file = FileManager.get_full_path(
@@ -465,37 +494,6 @@ class Parser:
         elif log_file:
             self.debug_log_file = FileManager.get_full_path(log_file)
         # log_file="" 或 "/dev/null" → 不写日志（不设置 self.debug_log_file）
-        self.statement_rule_names = [
-            name
-            for name, rule in self.grammar_rules.items()
-            if hasattr(rule, "has_pass_end_case") and rule.has_pass_end_case()
-        ]
-        # 运算符定义
-        self.operator_defs = pratt_parser.process_operator_data(_operator_defs_cfg)
-        # Token 分类器
-        if _token_categories_cfg:
-            pratt_parser.install_token_classifier(_token_categories_cfg)
-        # 注入语言层位宽字面量解析器（保持 pratt_parser 语言无关）
-        pratt_parser.install_bit_width_literal_parser(_parse_bit_width_literal)
-        # RuleSelector：外部注入优先，回退内部创建
-        if rule_selector is not None:
-            self.rule_selector = rule_selector
-        elif rules_dir:
-            pass
-        else:
-            self.rule_selector = RuleSelector(
-                self.grammar_rules,
-                self.statement_rule_names,
-            )
-        self.skip_types = list(_skip_types_cfg)
-        # 引擎协议 trivia 恒定跳过：宏占位 token（空体宏展开为空的"跳过/占位"
-        # 形态）不是语言知识——它由引擎协议产生（占位阶段），
-        # 因此不放进语言配置 skip_types，而在引擎侧统一追加。
-        from core.token_protocol import PLACEHOLDER_TOKEN_TYPE
-
-        if PLACEHOLDER_TOKEN_TYPE not in self.skip_types:
-            self.skip_types.append(PLACEHOLDER_TOKEN_TYPE)
-
         # 日志级别阈值：无文件且非 verbose → 只留 WARN+（stderr 可见），
         # 修复旧实现把 _log_state 整体替换为空 lambda 导致 WARN 也被吞的问题。
         # verbose → 全级别（TRACE 起）；有日志文件 → INFO 起写文件。
@@ -508,10 +506,47 @@ class Parser:
         else:
             self._log_level = self.LOG_INFO
 
-        # 停点/trace 过滤器（set_trace 设置，按规则名或 token 位置）
-        self._trace_rule: str | None = None
-        self._trace_token_pos: int | None = None
+    def _init_pratt_language(self) -> None:
+        """pratt 侧语言注入：运算符表 / token 分类器 / 位宽字面量解析器。"""
+        self.operator_defs = pratt_parser.process_operator_data(_operator_defs_cfg)
+        if _token_categories_cfg:
+            pratt_parser.install_token_classifier(_token_categories_cfg)
+        # 注入语言层位宽字面量解析器（保持 pratt_parser 语言无关）
+        pratt_parser.install_bit_width_literal_parser(_parse_bit_width_literal)
 
+    def _init_rule_selector(
+        self, rules_dir: str | None, rule_selector: "RuleSelector | None"
+    ) -> None:
+        """RuleSelector：外部注入优先；传 rules_dir 时由调用方接管（不建）。"""
+        if rule_selector is not None:
+            self.rule_selector = rule_selector
+        elif rules_dir:
+            pass
+        else:
+            self.rule_selector = RuleSelector(
+                self.grammar_rules,
+                self.statement_rule_names,
+            )
+
+    def _init_skip_types(self) -> None:
+        """跳过 token 类型 = 语言配置 + 引擎协议占位 token。"""
+        self.skip_types = list(_skip_types_cfg)
+        # 引擎协议 trivia 恒定跳过：宏占位 token（空体宏展开为空的"跳过/占位"
+        # 形态）不是语言知识——它由引擎协议产生（占位阶段），
+        # 因此不放进语言配置 skip_types，而在引擎侧统一追加。
+        from core.token_protocol import PLACEHOLDER_TOKEN_TYPE
+
+        if PLACEHOLDER_TOKEN_TYPE not in self.skip_types:
+            self.skip_types.append(PLACEHOLDER_TOKEN_TYPE)
+
+    def _init_atoms(self) -> None:
+        """原子规则表 + 内置前缀兜底节点名注入 pratt。
+
+        A2：内置前缀兜底节点名与语言包规则名对齐——从"单字面 token production"
+        的 is_atom 规则推导 {token_type: 规则名} 注入 pratt（如 literal.string →
+        StringLiteral / StringLit，id → Identifier）。语言定义原子规则即自动对齐，
+        无对应规则时 pratt 回退内置名（纯兜底）。
+        """
         self.atomic_rules: list[GrammarRule] = sorted(
             (
                 rule
@@ -521,10 +556,6 @@ class Parser:
             key=lambda r: len(r.prods),
             reverse=True,
         )
-        # A2：内置前缀兜底节点名与语言包规则名对齐——从"单字面 token production"
-        # 的 is_atom 规则推导 {token_type: 规则名} 注入 pratt（如 literal.string →
-        # StringLiteral / StringLit，id → Identifier）。语言定义原子规则即自动对齐，
-        # 无对应规则时 pratt 回退内置名（纯兜底）。
         _atom_names: dict[str, str] = {}
         for _rule in self.atomic_rules:
             _prods = _rule.prods or []
@@ -535,27 +566,38 @@ class Parser:
             ):
                 _atom_names.setdefault(_prods[0], _rule.name)
         pratt_parser.install_atom_name_map(_atom_names)
-        # FOLLOW 集派生缓存（parser/follow.py）：check_end_case 的硬性依据。
-        # pratt 运算符成员从 token_category 的 operator 分类读取（语言数据，
-        # 前缀成员如 "symbol.base."），注入 is_atom 规则的 FOLLOW。
-        _op_cfg = _token_categories_cfg.get("operator", {}) if isinstance(
-            _token_categories_cfg, dict
-        ) else {}
-        _op_members = list(_op_cfg.get("types", []) or []) if isinstance(
-            _op_cfg, dict
-        ) else []
+
+    def _init_follows(self) -> None:
+        """FOLLOW 集派生缓存（parser/follow.py）：check_end_case 的硬性依据。
+
+        pratt 运算符成员从 token_category 的 operator 分类读取（语言数据，
+        前缀成员如 "symbol.base."），注入 is_atom 规则的 FOLLOW。
+        """
+        _op_cfg = (
+            _token_categories_cfg.get("operator", {})
+            if isinstance(_token_categories_cfg, dict)
+            else {}
+        )
+        _op_members = (
+            list(_op_cfg.get("types", []) or []) if isinstance(_op_cfg, dict) else []
+        )
         from .follow import compute_follows
+
         self._follows = compute_follows(self.grammar_rules, _op_members)
-        # inline comment 锚点记录（restore 仅 tpc marker——普通注释进树，
-        # 不再回插）
+
+    def _init_anchors(self) -> None:
+        """注释锚点容器与去重集（inline / line 两通道各自独立）。
+
+        inline comment 锚点记录（restore 仅 tpc marker——普通注释进树，
+        不再回插）；line comment 锚点（列表结构内被 production skip 吞掉的
+        注释，restore 仅 tpc marker 通道）。
+        去重（按通道分 key 空间）：parser 回溯会对同一注释重复进入收集点
+        （候选规则逐一尝试、production 多次 skip），restore 端本就按
+        (text, line) 去重保留首条——收集端同语义去重，消除冗余条目。
+        两个锚点列表 restore 时各自独立去重，跨列表不去重（语义保等）。
+        """
         self._comment_anchors: list[dict] = []
-        # line comment 锚点（列表结构内被 production skip 吞掉的注释；
-        # restore 仅 tpc marker 通道）
         self._line_comment_anchors: list[dict] = []
-        # 锚点收集去重（按通道分 key 空间）：parser 回溯会对同一注释重复进入
-        # 收集点（候选规则逐一尝试、production 多次 skip），restore 端本就按
-        # (text, line) 去重保留首条——收集端同语义去重，消除冗余条目。
-        # 两个锚点列表 restore 时各自独立去重，跨列表不去重（语义保等）。
         self._anchor_seen_inline: set[tuple[str, int]] = set()
         self._anchor_seen_line: set[tuple[str, int]] = set()
 
