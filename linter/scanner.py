@@ -62,6 +62,44 @@ _style_check_cfg: dict = declare_cfg(
 )
 
 
+def _seq_end_tokens(feat: dict, excludes: dict[str, set[str]]) -> set:
+    """seq 的末尾 token 集（= 末元素的末尾集）。
+
+    顺带做排除推导：逐位比较"上一元素的末尾集 × 当前元素的起始集"，命中
+    (symbol.base.colon, keyword.X) 相邻对即登记 X 的前驱排除 colon。
+    """
+    ends = {None}
+    for item in feat.get("items", []):
+        starts = _feature_end_tokens(item, excludes)
+        for e in ends:
+            for st in starts:
+                if st and e == "symbol.base.colon" and st.startswith("keyword."):
+                    excludes.setdefault(st, set()).add(e)
+        ends = starts
+    return ends
+
+
+def _feature_end_tokens(feat, excludes: dict[str, set[str]]) -> set:
+    """返回 feature 可能的末尾 token 集合（call 截断）。"""
+    if feat is None:
+        return {None}
+    typ = feat.get("type")
+    if typ == "token":
+        return {feat.get("token_type", "")}
+    if typ == "call":
+        return {None}
+    if typ == "seq":
+        return _seq_end_tokens(feat, excludes)
+    if typ in ("repeat", "optional", "plus"):
+        return _feature_end_tokens(feat.get("elem"), excludes) | {None}
+    if typ == "choice":
+        acc = set()
+        for alt in feat.get("alternatives", []):
+            acc |= _feature_end_tokens(alt, excludes)
+        return acc
+    return {None}
+
+
 def _derive_opener_prev_excludes(tree: dict) -> dict[str, frozenset[str]]:
     """语法推导块 opener 的非起始前驱 token 集（供 BoundaryChecker）。
 
@@ -72,40 +110,11 @@ def _derive_opener_prev_excludes(tree: dict) -> dict[str, frozenset[str]]:
     unclosed 误报。推导是通用结构（不硬编码关键字名），语言知识留 TOML。
     """
     excludes: dict[str, set[str]] = {}
-
-    def walk(feat):
-        """返回 feature 可能的末尾 token 集合（call 截断）。"""
-        if feat is None:
-            return {None}
-        typ = feat.get("type")
-        if typ == "token":
-            return {feat.get("token_type", "")}
-        if typ == "call":
-            return {None}
-        if typ == "seq":
-            ends = {None}
-            for item in feat.get("items", []):
-                starts = walk(item)
-                for e in ends:
-                    for st in starts:
-                        if st and e == "symbol.base.colon" and st.startswith("keyword."):
-                            excludes.setdefault(st, set()).add(e)
-                ends = starts
-            return ends
-        if typ in ("repeat", "optional", "plus"):
-            return walk(feat.get("elem")) | {None}
-        if typ == "choice":
-            acc = set()
-            for alt in feat.get("alternatives", []):
-                acc |= walk(alt)
-            return acc
-        return {None}
-
     for info in tree.values():
         if not isinstance(info, dict):
             continue
         for prod in info.get("prods", []):
-            walk(prod)
+            _feature_end_tokens(prod, excludes)
     return {k: frozenset(v) for k, v in excludes.items()}
 
 
