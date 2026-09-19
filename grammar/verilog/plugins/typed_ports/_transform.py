@@ -16,6 +16,57 @@ def delete_type_decl(node: Node, ctx) -> None:
     return None
 
 
+# 实现块里以类型声明形式给出的端口（合并时按名去重）
+_TYPED_PORT_DECLS = (
+    "AnsiInputDecl",
+    "AnsiOutputDecl",
+    "AnsiInoutDecl",
+    "TypedPortDecl",
+)
+
+
+def _wrapper_ports(ports: list[dict], impl_block) -> list[Node]:
+    """包装模块端口：类型声明的解析端口 + 实现块内端口声明（按名去重）。"""
+    port_items: list[Node] = []
+    for p in ports:
+        d = _port_decl(p["direction"], p["name"], p.get("packed_range"))
+        if d:
+            port_items.append(d)
+    impl_ports = getattr(impl_block, "ports", None)
+    if impl_ports:
+        for ip in getattr(impl_ports, "items", []) or []:
+            if ip.node_name not in _TYPED_PORT_DECLS:
+                continue
+            pname = _port_name(ip)
+            if pname and not any(_port_name(pi) == pname for pi in port_items):
+                port_items.append(ip)
+    return port_items
+
+
+def _wrapper_body(impl_block) -> Node:
+    """包装模块体：实现块 body 的子节点。
+
+    normalize 把单元素 repeat 展平为单节点（如 body=[WireDecl] → WireDecl），
+    此时取 sub_node/items 可能得到 DeclaratorList 等非列表 → 需包成列表。
+    """
+    body = Node("ModuleBlock")
+    body.add_attr("sub_node", [])
+    impl_body = getattr(impl_block, "body", None)
+    if not impl_body:
+        return body
+    if isinstance(impl_body, list):
+        body.sub_node = [n for n in impl_body if isinstance(n, Node)]
+        return body
+    if isinstance(impl_body, Node):
+        subs = getattr(impl_body, "sub_node", []) or getattr(impl_body, "items", [])
+        if isinstance(subs, Node):
+            subs = [subs]
+        elif not isinstance(subs, list):
+            subs = [impl_body]
+        body.sub_node = [n for n in subs if isinstance(n, Node)]
+    return body
+
+
 @register_transform_slot("build_wrapper")
 def build_wrapper(node: Node, ctx) -> Node | None:
     """从 TypeDecl + TypeImplDecl 构建包装模块。"""
@@ -30,7 +81,6 @@ def build_wrapper(node: Node, ctx) -> Node | None:
         return None
     role_name = _first_role_name(root_scope, type_name) or "impl"
     wrapper_name = f"{type_name}_{role_name}"
-    ports = _resolved_ports(root_scope, type_name)
     mod = Node("ModuleDecl")
     name_node = Node("Identifier")
     name_node.add_attr("content", wrapper_name)
@@ -42,48 +92,58 @@ def build_wrapper(node: Node, ctx) -> Node | None:
         if plp:
             mod.add_attr("params", plp)
     # 合并端口
-    port_items = []
-    if ports:
-        for p in ports:
-            d = _port_decl(p["direction"], p["name"], p.get("packed_range"))
-            if d:
-                port_items.append(d)
-    impl_ports = getattr(impl_block, "ports", None)
-    if impl_ports:
-        ipl = getattr(impl_ports, "items", [])
-        for ip in ipl:
-            if ip.node_name not in ("AnsiInputDecl", "AnsiOutputDecl", "AnsiInoutDecl", "TypedPortDecl"):
-                continue
-            pname = _port_name(ip)
-            if pname and not any(_port_name(pi) == pname for pi in port_items):
-                port_items.append(ip)
+    port_items = _wrapper_ports(
+        _resolved_ports(root_scope, type_name), impl_block
+    )
     if port_items:
         pl = Node("PortList")
         pl.add_attr("items", port_items)
         mod.add_attr("ports", pl)
-    # Body
-    body = Node("ModuleBlock")
-    body.add_attr("sub_node", [])
-    impl_body = getattr(impl_block, "body", None)
-    if impl_body:
-        if isinstance(impl_body, list):
-            body.sub_node = [n for n in impl_body if isinstance(n, Node)]
-        elif isinstance(impl_body, Node):
-            # normalize 把单元素 repeat 展平为单节点（如 body=[WireDecl] → WireDecl），
-            # 此时取 sub_node/items 可能得到 DeclaratorList 等非列表 → 需包成列表
-            subs = getattr(impl_body, "sub_node", []) or getattr(impl_body, "items", [])
-            if isinstance(subs, Node):
-                subs = [subs]
-            elif not isinstance(subs, list):
-                subs = [impl_body]
-            body.sub_node = [n for n in subs if isinstance(n, Node)]
-    mod.add_attr("body", body)
+    mod.add_attr("body", _wrapper_body(impl_block))
     mark_extra(wrapper_name, mod)
     return mod
 
 
+def _explicit_connects(impl) -> tuple[list[Node], set[str]]:
+    """impl.ports → (连接节点列表, 已显式连接的端口名集)。
+
+    impl.ports 结构：可能直接是 NamedPortList，也可能包一层
+    （ports.sub_node[0] == NamedPortList，inline ImplPortsParens 未展平）。
+    统一收敛到 NamedPortConnect 列表。
+    """
+    conns: list[Node] = []
+    _collect_connects(getattr(impl, "ports", None), conns)
+    names: set[str] = set()
+    for ep in conns:
+        pn = node_text(getattr(ep, "port_name", None))
+        if pn:
+            names.add(pn)
+    return conns, names
+
+
+def _auto_connects(
+    resolved: list[dict], explicit_names: set[str], iface_name: str
+) -> list[Node]:
+    """为未显式连接的端口生成隐式连接（信号名 `{接口名}_{端口名}`）。"""
+    out: list[Node] = []
+    for p in resolved:
+        pname = p.get("name", "")
+        if not pname or pname in explicit_names:
+            continue
+        conn = Node("NamedPortConnect")
+        conn.add_attr("port_name", pname)
+        sig = Node("Identifier")
+        sig.add_attr("content", f"{iface_name}_{pname}")
+        conn.add_attr("value", sig)
+        out.append(conn)
+    return out
+
+
 @register_transform_slot("auto_connect_ports")
 def auto_connect_ports(node: Node, ctx) -> Node:
+    """按接口类型自动补齐未显式连接的端口（
+    显式连接优先，仅补接口侧缺的）。
+    """
     impl = ctx.get("impl_node")
     type_map: dict = ctx.get("type_map", {})
     if not impl or not type_map:
@@ -96,33 +156,11 @@ def auto_connect_ports(node: Node, ctx) -> Node:
     # 类型 + role 来自 type_spec（如 spi.master → spi / master）
     ts = getattr(impl, "type_spec", None)
     role_name = node_text(getattr(ts, "role_name", None)) if ts is not None else ""
-    all_ports: list[Node] = []
-    explicit_names: set[str] = set()
-    explicit = getattr(impl, "ports", None)
-    # impl.ports 结构：可能直接是 NamedPortList，也可能包一层
-    # （ports.sub_node[0] == NamedPortList，inline ImplPortsParens 未展平）。
-    # 统一收敛到 NamedPortConnect 列表。
-    conns: list[Node] = []
-    _collect_connects(explicit, conns)
-    for ep in conns:
-        pn = node_text(getattr(ep, "port_name", None))
-        if pn:
-            explicit_names.add(pn)
-        all_ports.append(ep)
-    if type_name:
-        root = ctx.get("root_scope")
-        if root:
-            resolved = _resolved_ports(root, type_name, role_name=role_name)
-            for p in resolved:
-                pname = p.get("name", "")
-                if not pname or pname in explicit_names:
-                    continue
-                conn = Node("NamedPortConnect")
-                conn.add_attr("port_name", pname)
-                sig = Node("Identifier")
-                sig.add_attr("content", f"{iface_name}_{pname}")
-                conn.add_attr("value", sig)
-                all_ports.append(conn)
+    all_ports, explicit_names = _explicit_connects(impl)
+    root = ctx.get("root_scope")
+    if type_name and root:
+        resolved = _resolved_ports(root, type_name, role_name=role_name)
+        all_ports.extend(_auto_connects(resolved, explicit_names, iface_name))
     if all_ports:
         npl = Node("NamedPortList")
         npl.add_attr("items", all_ports)
@@ -263,6 +301,44 @@ def _to_range_node(packed_range):
     return None
 
 
+def _dual_get(obj, key: str, default):
+    """dict 与对象两形态字段读取（postpass 序列化结果是 dict，声明节点是对象）。"""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _item_name(item) -> str:
+    """端口条目名：dict 形态取 name 字段，对象形态取节点文本。"""
+    if isinstance(item, dict):
+        return item.get("name", "")
+    return node_text(item)
+
+
+def _flat_group_ports(raw: list) -> list[dict]:
+    """raw 端口组声明 → 扁平端口条目（direction + name[+ packed_range]）。
+
+    ⚠ `packed_range` 刻意只认 dict 形态（对象形态取 None）——与既有回退语义
+    一致，勿顺手改成 dual getattr（会让对象形态多带位宽，改变下游宽度判定）。
+    """
+    flat: list[dict] = []
+    for pg in raw:
+        d = _dual_get(pg, "direction", "")
+        pr = pg.get("packed_range") if isinstance(pg, dict) else None
+        items_node = _dual_get(pg, "items", {})
+        if not items_node:
+            continue
+        for item in _dual_get(items_node, "items", []):
+            name = _item_name(item)
+            if not name:
+                continue
+            entry: dict = {"direction": d, "name": name}
+            if pr:
+                entry["packed_range"] = pr
+            flat.append(entry)
+    return flat
+
+
 def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
     """解析类型下指定 role 的扁平端口列表（direction + name）。
 
@@ -282,22 +358,7 @@ def _resolved_ports(root, type_name: str, role_name: str = "") -> list[dict]:
         rp = sym.attrs.get("resolved_ports", [])
         if rp:
             return rp
-        raw = sym.attrs.get("ports", [])
-        flat = []
-        for pg in raw:
-            d = pg.get("direction", "") if isinstance(pg, dict) else getattr(pg, "direction", "")
-            pr = pg.get("packed_range") if isinstance(pg, dict) else None
-            items_node = pg.get("items", {}) if isinstance(pg, dict) else getattr(pg, "items", None)
-            if not items_node:
-                continue
-            item_list = items_node.get("items", []) if isinstance(items_node, dict) else getattr(items_node, "items", [])
-            for item in item_list:
-                name = item.get("name", "") if isinstance(item, dict) else node_text(item)
-                if name:
-                    entry: dict = {"direction": d, "name": name}
-                    if pr:
-                        entry["packed_range"] = pr
-                    flat.append(entry)
+        flat = _flat_group_ports(sym.attrs.get("ports", []))
         if flat:
             return flat
     return []
