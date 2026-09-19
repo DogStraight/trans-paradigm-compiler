@@ -110,20 +110,40 @@
       断行/元素/锚插入分派（`8da55be`）。
     - `renderer/primitives/join.py::_assemble_join`（102 → 33，B-B16 拆分时
       转移出来的长方法，本次收口）（`8ff6ad6`）。
-    - **外部裁判同口径复查：函数级 >80 行命中 0**；剩余命中均为类体
-      （`_PatternBuilder` 179 等），归入下面的类级清单。
+    - ⚠ **复查口径修正（2026-09-20）**：`report_long_method_and_god_object_smells`
+      **每调用最多分析 25 个文件**（报表头 `Files analyzed cap: 25`，**不报截断**）——
+      历轮复查脚本用 `CHUNK=60` → 约 58% 文件静默漏检。脚本已改 `CHUNK=20`。
+      - **函数级 >80 行 = 5 处**（旧结论"命中 0"**作废**；AST 独立复核一致）：
+        `preprocessor/_expand.expand_tokens` 113（CC 7）、
+        `formatter/__init__.build_engine` 107（CC 6）、
+        `linter/scanner.LinterScanner.scan` 106（CC 10）、
+        `pipeline/__init__.run_pipeline_on_source` 101（CC 9）、
+        `linter/scanner.LinterScanner.__init__` 93（CC 8）——均刚过线，CC 不超阈。
+      - **类/容器级 17 处**（旧结论"9 处"**作废**），见下条。
+      - 参照：`compute_cyclomatic_complexity` / `compute_cognitive_complexity` **无上限**
+        （CHUNK 60 与 20 结果一致）→ B-F 的 "CC 12 / 认知 5" **仍有效**；
+        `report_structural_clone_smells` 无上限提示，但分块会影响"最佳克隆对"选取
+        （36 文件一次 46 条 vs 18+18 两次 52 条）→ 重复对数须**固定分块**比较。
     60-80 行区间现有 9 项（`renderer/doc._best` 63、`node_renderer.render_body` 77、
     `capture_runner.build_rules` 79、`lookahead._level1_scan` 77 等）——均低于阈值，
     其中分派型函数（`_best` 15 个变体分支）刻意不再拆。
-  - ⏳ **类级上帝对象 9 处命中**（2026-09-20 同口径重测；需设计决策，非机械拆分）：
-    `Lexer`(886 行/92 成员/57 函数, score 424)、`RuleMatcher`(914/49/36, 354)、
-    `Discovery`(700/43/34, 234)、`ConfigRegistry`(445/22/16, 127)、
-    `GrammarRule`(327/41/17, 102)、`SignalGraphBuilder`(404/25/21, 98)、
-    `AnalysisTraversal`(239/29/12, 33)、`StructureCtx`(121/21/10, 17)、
-    `ModuleExtractor`(272/16/15, 15)——后三类行数达标，触发项是**成员数/函数数**
-    （`godObjectDirectChildren=20` / `godObjectFunctions=15`），且是 B-B4c 拆分的
-    产物（拆方法会让类级分值先升后降，已实测）。`LookaheadTable` 已不再命中。
-    逐个人工定边界后再动；信号明细见 dispositions 的类级表。
+  - ⏳ **类级上帝对象 17 处命中**（2026-09-20 修正版；需设计决策，非机械拆分）：
+    **(A) 类体 >300 行 —— 10 个（正是全仓 class body >300 行的全部）**：
+    `RuleMatcher` 914 行/36 方法（354）、`Lexer` 886/57（424）、`Discovery` 700/34（234）、
+    `BoundaryScanner` 549/30（241）、`Parser` 494/25（246）、`_C4Compiler` 480/39（195）、
+    `LookaheadTable` 454/20（154）、`ConfigRegistry` 445/16（127）、
+    `SignalGraphBuilder` 404/22（98）、`GrammarRule` 327/18（102）。
+    **(B) 仅成员/函数数触发（行数 <300）—— 7 个，多为上下文/状态容器**：
+    `_PipelineContext` 77 行/49 成员（73）、`AnalysisTraversal` 239/29（33）、
+    `ParseContext` 74/22（19）、`StructureCtx` 121/21（17）、`_ScanState` 33/21（17）、
+    `LinterScanner` 235/20（15）、`ModuleExtractor` 272/15 函数（15）。
+    判别（全仓 139 个类：类体中位数 21 行、P90 224、P95 454）：(A) 组确属 P95–P99
+    尾巴，但**类内无坏味道**（最长方法 30–79 行、最大 CC 6–13，CC 族对这些类零命中），
+    且多为"**模块即类**"（`RuleMatcher` 类体占文件 92%、`Lexer` 88%、`Discovery` 91%）
+    →读作"这个模块很大"更准确；(B) 组是**判据假阳性**（上下文/状态容器天生成员多，
+    `_ScanState` 33 行 21 字段即为此存在）。其中 `SignalGraphBuilder` / `StructureCtx` /
+    `ModuleExtractor` 是 B-B4c 拆 1129 行 `_StructureBase` 的**产物**（1 个巨型命中 →
+    3 个中等命中，方法级因此变干净）。信号明细见 dispositions 的类级表。
   - ✅ **`_StructureBase` 上帝对象已解（B-B4c-0..7，2026-09-19）**：先删 3 个门面
     不可达方法（-49 行），再把 49 个方法按职责组合化——`StructureCtx`（会话状态 +
     协议读取 + 2 个共享读取助手）+ 6 个协作者（`GenerateEvaluator` 151 /
