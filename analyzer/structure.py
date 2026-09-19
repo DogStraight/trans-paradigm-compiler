@@ -538,6 +538,148 @@ class GenerateEvaluator:
         return _eval_const_expr(text)
 
 
+class ConnectionElaborator:
+    """层 2 端口连接展开：实例化点连接 × 目标模块端口声明 → FileResult.connections。
+
+    W104 类检查的基础：把"实例化了谁、哪个端口连了什么"摊平成 per-file 连接表
+    （命名连接 + 位置连接），供 postpass 经 `context.extra["connections"]` 消费。
+    `module_of`（节点所属模块）/ `iter_assign_targets`（赋值目标）/ `build_module_insts`
+    （实例化点表）同时被层 3 信号图复用。
+
+    只依赖 ctx（协议读取 + 渲染助手），不持有会话状态。
+    """
+
+    def __init__(self, ctx: StructureCtx) -> None:
+        self._ctx = ctx
+
+    def elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:
+        """层 2：实例化点端口连接展开（ADR-0008）。
+
+        从 ModuleInst 节点提取端口连接 → (端口名, 连接信号名) 映射：
+        - NamedPortList（命名连接 .p(sig)）→ 按 port_name 收集
+        - OrderedPortList（位置连接 a,b,c）→ 按序收集
+        连接信号名 = 端口连接表达式的文本（信号/拼接/常量；解析交给
+        上层规则 handler，此处只展开结构）。语言无关：端口连接节点形态
+        由结构协议声明（connects_field/value_field/ordered_rule）。
+        """
+        if not self._ctx.has_structure():
+            return []
+        out: list[PortConnection] = []
+        ports_field = self._ctx.field("connects") or "ports"
+        value_field = self._ctx.field("value")
+        conn_name_field = self._ctx.field("port_name")
+        items_field = self._ctx.field("items")
+        for site in inst_sites:
+            mod_name = self._ctx.inst_module_name(site)
+            inst_name_node = getattr(site, self._ctx.field("inst_name"), None)
+            inst_name = (
+                inst_name_node.content
+                if isinstance(inst_name_node, Node) and inst_name_node.content
+                else ""
+            )
+            conn = PortConnection(
+                inst_name=inst_name,
+                module_name=mod_name,
+                inst_node=site,
+                file=path,
+            )
+            ports_node = unwrap_optional(getattr(site, ports_field, None))
+            items = getattr(ports_node, items_field, None) if ports_node else None
+            for item in items or []:
+                if not isinstance(item, Node):
+                    continue
+                # 命名连接：.port_name(value) 形态（NamedPortConnect 有 port_name）
+                pn = getattr(item, conn_name_field, None) if conn_name_field else None
+                pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
+                if pn_text:
+                    val = getattr(item, value_field, None) if value_field else None
+                    conn.connects[pn_text] = self._ctx.render_subtree(val) if isinstance(
+                        val, Node
+                    ) else ""
+                    continue
+                # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
+                conn.ordered.append(self._ctx.render_subtree(item))
+            out.append(conn)
+        return out
+
+    def build_module_insts(self) -> dict:
+        """{模块名: [(实例名, 被实例化模块名, PortConnection)]}——per-module
+        实例表（层 3 驱动穿透用）。
+
+        从全工程 connections（层 2 展开）按实例化点所属模块归组——实例
+        化点 = 连接表达式所在模块（_module_of 语义）。模块内实例顺序
+        保持连接展开顺序（assign#N 对齐用不上，此处仅穿透）。
+        """
+        out: dict[str, list] = {}
+        for fr in self._ctx.memo.values():
+            for conn in fr.connections:
+                mod_name = self.module_of(fr, conn.inst_node)
+                if not mod_name:
+                    continue
+                out.setdefault(mod_name, []).append(
+                    (conn.inst_name, conn.module_name, conn)
+                )
+        return out
+
+    def module_of(self, fr, node) -> str:
+        """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
+
+        per-file 预计算映射（2026-08-31 性能修复）：一次 DFS 建立
+        {id(节点): 模块名}，查询 O(1)。此前逐节点全树扫描（旧
+        `_subtree_contains`，已删）是 O(N×树) 平方级——elaboration 层 3
+        `_build_signal_graph` 对每个 assign/过程块/实例节点调用，picorv32
+        实测 76 次调用 7.5s（占单次 check 21.6s 的 35%，profile 定位）。
+        与 `_in_active_generate` 预计算同款手法（2026-08-29 先例：
+        103s → 秒级）。映射挂在 fr 上，check() 每文件重建（AST 不变，
+        一次构建全文件复用）。
+        """
+        if fr.ast is None or node is None:
+            return ""
+        memo = getattr(fr, "_module_map", None)
+        if memo is None:
+            memo = self._precompute_module_map(fr)
+            fr._module_map = memo
+        return memo.get(id(node), "")
+
+    def _precompute_module_map(self, fr) -> dict:
+        """per-file 预计算 {id(node): 模块名}（一次 DFS，O(树)）。
+
+        栈元素 = (node, 当前模块名)；ModuleDecl 进入时更新模块名，
+        子树内节点继承。嵌套模块罕见（SV 特性），内层覆盖外层名——
+        与 _iter_nodes_with_module 同语义。
+        """
+        mapping: dict[int, str] = {}
+        decl_rule = self._ctx.rule("module_decl_rule")
+        name_field = self._ctx.field("module_name")
+        root = fr.ast
+        if root is None:
+            return mapping
+        stack = [(root, "")]
+        while stack:
+            node, mod = stack.pop()
+            if node.node_name == decl_rule:
+                nm = getattr(node, name_field, None)
+                mod = nm.content if isinstance(nm, Node) else ""
+            mapping[id(node)] = mod
+            for child in node.iter_children():
+                stack.append((child, mod))
+        return mapping
+
+    def iter_assign_targets(
+        self, node: Node, target_field: str, extras_field: str, extra_target_field: str
+    ):
+        """按协议提取赋值语句的驱动目标节点（主目标 + 多目标后缀）。"""
+        tgt = getattr(node, target_field, None)
+        if isinstance(tgt, Node):
+            yield tgt
+        for ex in getattr(node, extras_field, None) or []:
+            if not isinstance(ex, Node):
+                continue
+            et = getattr(ex, extra_target_field, None)
+            if isinstance(et, Node):
+                yield et
+
+
 class _StructureBase:
     """结构提取底座（elaboration）：各阶段协作者 + 会话上下文 `_ctx`。
 
@@ -546,6 +688,7 @@ class _StructureBase:
     """
 
     _ctx: StructureCtx
+    _conn: ConnectionElaborator
     _gen: GenerateEvaluator
 
 
@@ -616,7 +759,7 @@ class _StructureBase:
         fr.ast = ast
         fr.modules = self._extract_modules(ast, path)
         fr.inst_sites = collect_nodes(ast, self._ctx.rule("module_inst_rule"))
-        fr.connections = self._elaborate_connections(path, fr.inst_sites)
+        fr.connections = self._conn.elaborate_connections(path, fr.inst_sites)
         # 层 1 补充：模块内实例挂回 ModuleInfo（实例树展开的入口）
         for conn in fr.connections:
             mod = fr.modules.get(conn.module_name)
@@ -702,55 +845,6 @@ class _StructureBase:
         return out
 
 
-    def _elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:
-        """层 2：实例化点端口连接展开（ADR-0008）。
-
-        从 ModuleInst 节点提取端口连接 → (端口名, 连接信号名) 映射：
-        - NamedPortList（命名连接 .p(sig)）→ 按 port_name 收集
-        - OrderedPortList（位置连接 a,b,c）→ 按序收集
-        连接信号名 = 端口连接表达式的文本（信号/拼接/常量；解析交给
-        上层规则 handler，此处只展开结构）。语言无关：端口连接节点形态
-        由结构协议声明（connects_field/value_field/ordered_rule）。
-        """
-        if not self._ctx.has_structure():
-            return []
-        out: list[PortConnection] = []
-        ports_field = self._ctx.field("connects") or "ports"
-        value_field = self._ctx.field("value")
-        conn_name_field = self._ctx.field("port_name")
-        items_field = self._ctx.field("items")
-        for site in inst_sites:
-            mod_name = self._ctx.inst_module_name(site)
-            inst_name_node = getattr(site, self._ctx.field("inst_name"), None)
-            inst_name = (
-                inst_name_node.content
-                if isinstance(inst_name_node, Node) and inst_name_node.content
-                else ""
-            )
-            conn = PortConnection(
-                inst_name=inst_name,
-                module_name=mod_name,
-                inst_node=site,
-                file=path,
-            )
-            ports_node = unwrap_optional(getattr(site, ports_field, None))
-            items = getattr(ports_node, items_field, None) if ports_node else None
-            for item in items or []:
-                if not isinstance(item, Node):
-                    continue
-                # 命名连接：.port_name(value) 形态（NamedPortConnect 有 port_name）
-                pn = getattr(item, conn_name_field, None) if conn_name_field else None
-                pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
-                if pn_text:
-                    val = getattr(item, value_field, None) if value_field else None
-                    conn.connects[pn_text] = self._ctx.render_subtree(val) if isinstance(
-                        val, Node
-                    ) else ""
-                    continue
-                # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
-                conn.ordered.append(self._ctx.render_subtree(item))
-            out.append(conn)
-        return out
 
 
     # ── AST 提取（模块定义表 / 实例化点）──
@@ -980,7 +1074,7 @@ class _StructureBase:
             out_dirs=self._ctx.dirs("output_dirs"),
             inout_dirs=self._ctx.dirs("inout_dirs"),
             # P2.7 层 3：实例树层次展开底座（per-module 实例表 + 驱动穿透）
-            module_insts=self._build_module_insts(),
+            module_insts=self._conn.build_module_insts(),
             proc_rules=self._ctx.struct.get("proc_assign_rules") or [],
             proc_blocks=self._ctx.struct.get("proc_block_rules") or [],
             # (模块, 端口) → 裸驱动源列表（无路径前缀：assign#N / proc /
@@ -1045,7 +1139,7 @@ class _StructureBase:
             idx += 1
             if not self._gen.in_active_generate(fr, node):
                 continue
-            for tgt in self._iter_assign_targets(
+            for tgt in self._conn.iter_assign_targets(
                 node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
             ):
                 if self._ctx.render_subtree(tgt) == port:
@@ -1136,11 +1230,11 @@ class _StructureBase:
             if node.node_name != ctx.assign_rule:
                 continue
             assign_idx += 1
-            mod_name = self._module_of(fr, node)
+            mod_name = self._conn.module_of(fr, node)
             if not self._gen.in_active_generate(fr, node):
                 continue  # 所在 generate 互斥分支未选中（2026-08-29）
             inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
-            for tgt in self._iter_assign_targets(
+            for tgt in self._conn.iter_assign_targets(
                 node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
             ):
                 sig = self._ctx.render_subtree(tgt)
@@ -1168,7 +1262,7 @@ class _StructureBase:
         block_idx = 0
         for blk_node, sigs in block_sigs.values():
             block_idx += 1
-            mod_name = self._module_of(fr, blk_node)
+            mod_name = self._conn.module_of(fr, blk_node)
             inst_ref = f"{os.path.basename(fr.path)}:always#{block_idx}"
             for sig in sigs:
                 entry = _graph_entry(graph, (mod_name, sig))
@@ -1222,7 +1316,7 @@ class _StructureBase:
         黑盒（模块未定义）→ 原子源兜底；悬空 output → 不记。
         """
         for conn in fr.connections:
-            mod_name = self._module_of(fr, conn.inst_node)
+            mod_name = self._conn.module_of(fr, conn.inst_node)
             if not self._gen.in_active_generate(fr, conn.inst_node):
                 continue  # 实例化点所在 generate 分支未选中
             inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
@@ -1279,24 +1373,6 @@ class _StructureBase:
             if inst_ref not in entry["loads"]:
                 entry["loads"].append(inst_ref)
 
-    def _build_module_insts(self) -> dict:
-        """{模块名: [(实例名, 被实例化模块名, PortConnection)]}——per-module
-        实例表（层 3 驱动穿透用）。
-
-        从全工程 connections（层 2 展开）按实例化点所属模块归组——实例
-        化点 = 连接表达式所在模块（_module_of 语义）。模块内实例顺序
-        保持连接展开顺序（assign#N 对齐用不上，此处仅穿透）。
-        """
-        out: dict[str, list] = {}
-        for fr in self._ctx.memo.values():
-            for conn in fr.connections:
-                mod_name = self._module_of(fr, conn.inst_node)
-                if not mod_name:
-                    continue
-                out.setdefault(mod_name, []).append(
-                    (conn.inst_name, conn.module_name, conn)
-                )
-        return out
 
 
     @property
@@ -1320,65 +1396,10 @@ class _StructureBase:
 
 
 
-    def _module_of(self, fr, node) -> str:
-        """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
-
-        per-file 预计算映射（2026-08-31 性能修复）：一次 DFS 建立
-        {id(节点): 模块名}，查询 O(1)。此前逐节点全树扫描（旧
-        `_subtree_contains`，已删）是 O(N×树) 平方级——elaboration 层 3
-        `_build_signal_graph` 对每个 assign/过程块/实例节点调用，picorv32
-        实测 76 次调用 7.5s（占单次 check 21.6s 的 35%，profile 定位）。
-        与 `_in_active_generate` 预计算同款手法（2026-08-29 先例：
-        103s → 秒级）。映射挂在 fr 上，check() 每文件重建（AST 不变，
-        一次构建全文件复用）。
-        """
-        if fr.ast is None or node is None:
-            return ""
-        memo = getattr(fr, "_module_map", None)
-        if memo is None:
-            memo = self._precompute_module_map(fr)
-            fr._module_map = memo
-        return memo.get(id(node), "")
 
 
-    def _precompute_module_map(self, fr) -> dict:
-        """per-file 预计算 {id(node): 模块名}（一次 DFS，O(树)）。
-
-        栈元素 = (node, 当前模块名)；ModuleDecl 进入时更新模块名，
-        子树内节点继承。嵌套模块罕见（SV 特性），内层覆盖外层名——
-        与 _iter_nodes_with_module 同语义。
-        """
-        mapping: dict[int, str] = {}
-        decl_rule = self._ctx.rule("module_decl_rule")
-        name_field = self._ctx.field("module_name")
-        root = fr.ast
-        if root is None:
-            return mapping
-        stack = [(root, "")]
-        while stack:
-            node, mod = stack.pop()
-            if node.node_name == decl_rule:
-                nm = getattr(node, name_field, None)
-                mod = nm.content if isinstance(nm, Node) else ""
-            mapping[id(node)] = mod
-            for child in node.iter_children():
-                stack.append((child, mod))
-        return mapping
 
 
-    def _iter_assign_targets(
-        self, node: Node, target_field: str, extras_field: str, extra_target_field: str
-    ):
-        """按协议提取赋值语句的驱动目标节点（主目标 + 多目标后缀）。"""
-        tgt = getattr(node, target_field, None)
-        if isinstance(tgt, Node):
-            yield tgt
-        for ex in getattr(node, extras_field, None) or []:
-            if not isinstance(ex, Node):
-                continue
-            et = getattr(ex, extra_target_field, None)
-            if isinstance(et, Node):
-                yield et
 
 
 
