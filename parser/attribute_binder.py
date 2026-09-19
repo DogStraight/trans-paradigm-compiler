@@ -21,6 +21,49 @@ _RE_INDEX_PATH = re.compile(r"^(\w*)\[(\d+|\*)\]$")
 _BIND_DIAG = 0
 
 
+def _collect_map(
+    items: list, path: str, keep_comments: bool, retain_comments: bool
+) -> list | None:
+    """逐个 item 递归提取并展平；空结果 → None。
+
+    retain_comments（list-spec 的 `items[*]` 提取）：路径解不出但 item 自身是
+    `_comment` 引擎标记时保留该项——repeat 项间上浮的独占注释无 sub_node 等
+    结构路径可解，保留自身才能进容器 items（renderer join 作独立行段渲染，
+    ADR-0013 B1）。`keep_comments` 只是原样下传（影响更深层的同判据）。
+    """
+    results: list = []
+    for item in items:
+        val = get_attr_by_path(item, path, keep_comments)
+        if val is None:
+            if retain_comments and keep_comments and getattr(item, "_comment", False):
+                results.append(item)
+            continue
+        if isinstance(val, list):
+            results.extend(val)
+        else:
+            results.append(val)
+    return results if results else None
+
+
+def _by_index_spec(
+    obj: Any, attr_name: str, index_spec: str, rest: str, keep_comments: bool
+) -> Any:
+    """`name[N]` / `name[*]` 形态：先取属性，再按索引或逐项 map。"""
+    sub = obj
+    if attr_name:
+        sub = getattr(sub, attr_name, None)
+        if sub is None:
+            return None
+    if index_spec == "*":
+        if not isinstance(sub, list):
+            return None
+        return _collect_map(sub, rest, keep_comments, retain_comments=True)
+    idx = int(index_spec)
+    if isinstance(sub, list) and 0 <= idx < len(sub):
+        return get_attr_by_path(sub[idx], rest, keep_comments)
+    return None
+
+
 def get_attr_by_path(obj: Any, path: str, keep_comments: bool = False) -> Any:
     """递归路径提取，支持：
     - value.content      → 嵌套属性
@@ -39,47 +82,13 @@ def get_attr_by_path(obj: Any, path: str, keep_comments: bool = False) -> Any:
 
     m = _RE_INDEX_PATH.match(first)
     if m:
-        attr_name = m.group(1)
-        index_spec = m.group(2)
-        sub = obj
-        if attr_name:
-            sub = getattr(sub, attr_name, None)
-            if sub is None:
-                return None
-        if index_spec == "*":
-            if not isinstance(sub, list):
-                return None
-            results = []
-            for item in sub:
-                val = get_attr_by_path(item, rest, keep_comments)
-                if val is None:
-                    if keep_comments and getattr(item, "_comment", False):
-                        results.append(item)
-                    continue
-                if isinstance(val, list):
-                    results.extend(val)
-                else:
-                    results.append(val)
-            return results if results else None
-        else:
-            idx = int(index_spec)
-            if isinstance(sub, list) and 0 <= idx < len(sub):
-                return get_attr_by_path(sub[idx], rest, keep_comments)
-            return None
+        return _by_index_spec(obj, m.group(1), m.group(2), rest, keep_comments)
 
     sub = getattr(obj, first, None)
     if sub is not None:
         return get_attr_by_path(sub, rest, keep_comments)
     if isinstance(obj, list):
-        results = []
-        for item in obj:
-            val = get_attr_by_path(item, path, keep_comments)
-            if val is not None:
-                if isinstance(val, list):
-                    results.extend(val)
-                else:
-                    results.append(val)
-        return results if results else None
+        return _collect_map(obj, path, keep_comments, retain_comments=False)
     return None
 
 
@@ -115,78 +124,123 @@ def extract_from_spec(
     return None
 
 
-def bind_attributes(
-    self,
-    rule_node: Node,
-    rule: GrammarRule,
-    all_matched_nodes: list[Node],
-) -> None:
-    """将规则中的属性映射绑定到规则节点上。
+class _AttrBinder:
+    """把一条规则的 node 映射绑定到规则节点上（含失败诊断）。
 
     诊断（不改变提取语义，只负责定位绑定失败）：
       - slot 越界（匹配节点列表短于 production）→ WARN。正常匹配流程中
         match_productions 全成功时列表与 production 等长，越界仅出现在
         匹配器缺陷场景，值得暴露而非静默。静态越界（$N > production
         声明 slot 数）已在 GrammarRule 加载时 fail-fast。
-      - 路径提取失败（slot 存在但子路径无此属性）→ 按 _BIND_DIAG 输出
+      - 路径提取失败（slot 存在但子路径无此属性）→ 按 `_BIND_DIAG` 输出
         DEBUG 级诊断（含 slot 节点现有属性，帮助区分"choice 分支形态
         差异"与"绑定名拼写错误"）。默认静默。
     """
+
+    __slots__ = (
+        "parser",
+        "nodes",
+        "warn",
+        "log_state",
+        "debug_level",
+        "rule_name",
+    )
+
+    def __init__(self, parser: Any, rule: GrammarRule, all_matched_nodes: list[Node]):
+        self.parser = parser
+        self.nodes = all_matched_nodes
+        self.warn = getattr(parser, "_warn", None)
+        self.log_state = getattr(parser, "_log_state", None)
+        self.debug_level = getattr(parser, "LOG_DEBUG", 0)
+        self.rule_name = getattr(rule, "name", "?")
+
+    def bind_all(self, rule_node: Node, node_map: dict) -> None:
+        """逐属性绑定：list-spec 走合并路径，其余走单值路径。"""
+        for attr_name, spec in node_map.items():
+            if isinstance(spec, list):
+                self._bind_list(rule_node, attr_name, spec)
+            else:
+                self._bind_one(rule_node, attr_name, spec)
+
+    def _bind_list(self, rule_node: Node, attr_name: str, specs: list) -> None:
+        """list-spec（列表容器 items 绑定）：逐个提取并合并。
+
+        保留 Comment 迭代项（ADR-0013 B1：repeat 项间独占注释进 items）。
+        """
+        merged: list = []
+        for item_spec in specs:
+            extracted = extract_from_spec(
+                self.parser, item_spec, self.nodes, keep_comments=True
+            )
+            if extracted is None:
+                continue
+            if isinstance(extracted, list):
+                merged.extend(extracted)
+            else:
+                merged.append(extracted)
+        if merged:
+            rule_node.add_attr(attr_name, merged)
+
+    def _bind_one(self, rule_node: Node, attr_name: str, spec: Any) -> None:
+        """单值 spec：提取 → optional 解壳 → 挂载；失败走诊断。"""
+        extracted = extract_from_spec(self.parser, spec, self.nodes)
+        if extracted is None:
+            self._diagnose(attr_name, spec)
+            return
+        if isinstance(extracted, Node) and extracted.node_name == "optional":
+            children = getattr(extracted, CHILDREN_FIELD, None)
+            if not children:
+                return
+            extracted = children[0]
+        rule_node.add_attr(attr_name, extracted)
+
+    def _diagnose(self, attr_name: str, spec: Any) -> None:
+        """提取失败定位：slot 越界 → WARN；路径提取失败 → DEBUG（默认静默）。"""
+        parsed = _parse_pos_spec(spec) if isinstance(spec, str) else None
+        if parsed is None:
+            return
+        pos, path = parsed
+        slot = self.nodes[pos] if 0 <= pos < len(self.nodes) else None
+        if slot is None:
+            self._warn_slot_missing(attr_name, spec, pos)
+        else:
+            self._log_path_failed(attr_name, spec, pos, slot, path)
+
+    def _warn_slot_missing(self, attr_name: str, spec: Any, pos: int) -> None:
+        """production slot 无匹配节点 → WARN（值得暴露而非静默）。"""
+        if self.warn is None:
+            return
+        self.warn(
+            f"属性绑定 {self.rule_name}.{attr_name} = {spec!r} 失败："
+            f"第 {pos + 1} 个 production slot 无匹配节点，属性未挂载"
+        )
+
+    def _log_path_failed(
+        self, attr_name: str, spec: Any, pos: int, slot: Node, path: str | None
+    ) -> None:
+        """子路径无此属性 → DEBUG 级诊断（含 slot 现有属性）。"""
+        if not _BIND_DIAG or self.log_state is None:
+            return
+        existing = ", ".join(sorted(vars(slot))) or "(none)"
+        self.log_state(
+            f"节点属性绑定 {self.rule_name}.{attr_name} = {spec!r} "
+            f"提取为 None（slot {pos + 1} 节点属性: {existing}；"
+            f"路径: {path or '(直接引用)'}）",
+            level=self.debug_level,
+        )
+
+
+def bind_attributes(
+    self,
+    rule_node: Node,
+    rule: GrammarRule,
+    all_matched_nodes: list[Node],
+) -> None:
+    """将规则中的属性映射绑定到规则节点上（判据与诊断见 `_AttrBinder`）。"""
     node_map = getattr(rule, "node", None)
     if not isinstance(node_map, dict):
         return
-    warn = getattr(self, "_warn", None)
-    log_state = getattr(self, "_log_state", None)
-    debug_level = getattr(self, "LOG_DEBUG", 0)
-    rule_name = getattr(rule, "name", "?")
-    for attr_name, spec in node_map.items():
-        if isinstance(spec, list):
-            merged = []
-            for item_spec in spec:
-                # list-spec（列表容器 items 绑定）保留 Comment 迭代项
-                # （ADR-0013 B1：repeat 项间独占注释进 items）
-                extracted = extract_from_spec(
-                    self, item_spec, all_matched_nodes, keep_comments=True
-                )
-                if extracted is not None:
-                    if isinstance(extracted, list):
-                        merged.extend(extracted)
-                    else:
-                        merged.append(extracted)
-            if merged:
-                rule_node.add_attr(attr_name, merged)
-            continue
-        extracted = extract_from_spec(self, spec, all_matched_nodes)
-        if extracted is None:
-            parsed = _parse_pos_spec(spec) if isinstance(spec, str) else None
-            if parsed is not None:
-                pos, path = parsed
-                slot = (
-                    all_matched_nodes[pos]
-                    if 0 <= pos < len(all_matched_nodes)
-                    else None
-                )
-                if slot is None and warn is not None:
-                    warn(
-                        f"属性绑定 {rule_name}.{attr_name} = {spec!r} 失败："
-                        f"第 {pos + 1} 个 production slot 无匹配节点，属性未挂载"
-                    )
-                elif slot is not None and _BIND_DIAG and log_state is not None:
-                    existing = ", ".join(sorted(vars(slot))) or "(none)"
-                    log_state(
-                        f"节点属性绑定 {rule_name}.{attr_name} = {spec!r} "
-                        f"提取为 None（slot {pos + 1} 节点属性: {existing}；"
-                        f"路径: {path or '(直接引用)'}）",
-                        level=debug_level,
-                    )
-            continue
-        if isinstance(extracted, Node) and extracted.node_name == "optional":
-            if not hasattr(extracted, CHILDREN_FIELD) or not getattr(
-                extracted, CHILDREN_FIELD
-            ):
-                continue
-            extracted = getattr(extracted, CHILDREN_FIELD)[0]
-        rule_node.add_attr(attr_name, extracted)
+    _AttrBinder(self, rule, all_matched_nodes).bind_all(rule_node, node_map)
 
 
 def try_inline_rule(
@@ -228,6 +282,39 @@ def try_inline_rule(
     return None
 
 
+def _merge_into(bucket: list, items) -> None:
+    """逐条去重追加（同一注释可能在回溯中重复挂到多处）。"""
+    for item in items:
+        if item not in bucket:
+            bucket.append(item)
+
+
+def _ensure_slot_dict(target: Node) -> dict:
+    """目标节点的注释槽字典（无则挂空字典）。"""
+    dst_slots = getattr(target, "_comment_slots", None)
+    if dst_slots is None:
+        dst_slots = {}
+        target.add_attr("_comment_slots", dst_slots)
+    return dst_slots
+
+
+def _merge_slot(dst_slots: dict, key: str, value) -> None:
+    """单个槽的迁移：`trailing` 转 `leading`（理由见 `_transfer_comment_slots`），
+    dict 形状（锚 → 条目）逐锚合并，list 形状逐条去重，其余原样补缺。"""
+    if key == "trailing" and isinstance(value, list):
+        _merge_into(dst_slots.setdefault("leading", []), value)
+        return
+    if isinstance(value, dict):
+        dst_map = dst_slots.setdefault(key, {})
+        for anchor, entries in value.items():
+            _merge_into(dst_map.setdefault(anchor, []), entries)
+        return
+    if isinstance(value, list):
+        _merge_into(dst_slots.setdefault(key, []), value)
+        return
+    dst_slots.setdefault(key, value)
+
+
 def _transfer_comment_slots(source: Node | None, target: Node | None) -> None:
     """把即将被丢弃节点的注释槽迁移到替身节点（内联展开用）。
 
@@ -247,28 +334,6 @@ def _transfer_comment_slots(source: Node | None, target: Node | None) -> None:
     src_slots = getattr(source, "_comment_slots", None)
     if not src_slots:
         return
-    dst_slots = getattr(target, "_comment_slots", None)
-    if dst_slots is None:
-        dst_slots = {}
-        target.add_attr("_comment_slots", dst_slots)
+    dst_slots = _ensure_slot_dict(target)
     for key, value in src_slots.items():
-        if key == "trailing" and isinstance(value, list):
-            bucket = dst_slots.setdefault("leading", [])
-            for item in value:
-                if item not in bucket:
-                    bucket.append(item)
-            continue
-        if isinstance(value, dict):
-            dst_map = dst_slots.setdefault(key, {})
-            for anchor, entries in value.items():
-                bucket = dst_map.setdefault(anchor, [])
-                for entry in entries:
-                    if entry not in bucket:
-                        bucket.append(entry)
-        elif isinstance(value, list):
-            bucket = dst_slots.setdefault(key, [])
-            for item in value:
-                if item not in bucket:
-                    bucket.append(item)
-        else:
-            dst_slots.setdefault(key, value)
+        _merge_slot(dst_slots, key, value)
