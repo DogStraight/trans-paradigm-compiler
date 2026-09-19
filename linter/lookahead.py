@@ -203,6 +203,55 @@ def _build_prefix_paths(prods: list[dict], tree: dict) -> set[tuple[str, ...]]:
     return result
 
 
+def _paths_prefix_match(seen: list[str], entry: dict) -> bool:
+    """实际序列 seen 与判别路径的公共前缀一致 → 候选存活。
+
+    双向匹配：seen 可能比路径短（块规则头 automatic 只是完整路径的前缀），也可能
+    比路径长（判别点后的内容不影响归属）。
+    """
+    return any(
+        tuple(seen)[: min(len(seen), len(p))] == p[: min(len(seen), len(p))]
+        for p in entry.get("paths", ())
+    )
+
+
+def _filter_by_prefix(
+    path_entries: list[dict], seen: list[str]
+) -> tuple[list[dict], list[str]]:
+    """按公共前缀过滤候选：返回 (存活, 被淘汰名字列表)。"""
+    kept = [e for e in path_entries if _paths_prefix_match(seen, e)]
+    dropped = [e["name"] for e in path_entries if e not in kept]
+    return kept, dropped
+
+
+def _is_unique_path_hit(
+    path_entries: list[dict], seen: list[str], l2_only: list[dict]
+) -> bool:
+    """唯一 path 候选且 seen 恰好等于其某条**完整**判别路径 → 命中。"""
+    if l2_only or len(path_entries) != 1:
+        return False
+    return any(
+        len(p) == len(seen) and p == tuple(seen)
+        for p in path_entries[0].get("paths", ())
+    )
+
+
+def _prefer_trial(
+    best: tuple[int, int, str] | None, errs: int, consumed: int
+) -> bool:
+    """Level 2 的 best 选择：errs 最少优先；**仅 errs==0（完整匹配）时**用 consumed 加分。
+
+    2026-08-28 坏输入收敛：errs>0 的错误恢复推进（skip 跳过坏 token）是假推进——
+    SimCtrlStmt（inline 分派器，choice 失败 strict 报错+跳过 1 token）凭 consumed=1
+    胜过 AssignStmt（表达式失败不推进 consumed=0），`assign a = ;` 被误分类为
+    SimCtrlStmt、phase-expr 期望不命中。errs>0 时保持注册顺序（keyword_map[assign]
+    首位 AssignStmt 胜，checker 报精确诊断）。
+    """
+    if best is None or errs < best[0]:
+        return True
+    return errs == best[0] and errs == 0 and consumed > best[1]
+
+
 def _has_info_flag(info: object, flag: str) -> bool:
     """规则表条目是否带某标志（条目可能不是 dict）。"""
     return isinstance(info, dict) and bool(info.get(flag))
@@ -464,27 +513,12 @@ class LookaheadTable:
             if tokens[pos].type in _TRIVIA:
                 pos += 1
                 continue
-            # 操作数/范围延续：`[` 是 @PrimaryExpr 内部（a[i]）或块头范围（[7:0]）
-            # 的括号区间，用括号配对跳过、不参与判别 token 匹配——否则
-            # data[i] = i 的 [i]、function [7:0] 的 [7:0] 让判别路径不匹配而漏检。
-            # 括号未闭合（残缺）→ 跳过失败，保守加入 seen 走淘汰（不吞错）。
-            if tokens[pos].type == self._l_square:
-                end = self._skip_square(tokens, pos, n)
-                if end > pos:
-                    pos = end
-                    continue
+            skip = self._square_skip_end(tokens, pos, n)
+            if skip > pos:
+                pos = skip
+                continue
             seen.append(tokens[pos].type)
-            kept: list[dict] = []
-            for entry in path_entries:
-                # 匹配：实际序列 seen 与判别路径公共前缀一致（双向——seen 可能比
-                # 路径短，如块规则头 automatic 只是完整路径的前缀；也可能比路径长，
-                # 判别点后的内容不影响归属）
-                if any(
-                    tuple(seen)[: min(len(seen), len(p))] == p[: min(len(seen), len(p))]
-                    for p in entry.get("paths", ())
-                ):
-                    kept.append(entry)
-            dropped = [e["name"] for e in path_entries if e not in kept]
+            kept, dropped = _filter_by_prefix(path_entries, seen)
             path_entries[:] = kept
             self._trace_out(
                 f"  L1 pos={pos} tok={tokens[pos].type} seen={seen} "
@@ -492,33 +526,41 @@ class LookaheadTable:
                 + (f" dropped={dropped}" if dropped else "")
             )
             if not path_entries and not l2_only:
-                # Level 1 判别路径被操作数内部内容挡住（如拼接 lvalue
-                # `{a,b} = expr;` 的起点非 id）→ 回退 Level 2 对原始
-                # 候选完整 production 试解析（判别不了不等于未识别；残缺
-                # 语句试解析仍零匹配返回 []，不吞错）。allow_partial=False：
-                # 静态可判别的多候选（如 if 缺括号的 IfBlock/IfStmt）保持
-                # [] 未识别诊断（e09/e17 门禁基线）。
-                t_limit = min(limit + 1, n)
-                self._trace_out("  L1 -> all path candidates dropped, fallback L2")
-                return self._try_parse(tokens, i, entries, t_limit)
-            # 命中：唯一 path 候选且 seen 恰好等于某条完整判别路径
-            if (
-                len(path_entries) == 1
-                and not l2_only
-                and any(
-                    len(p) == len(seen) and p == tuple(seen)
-                    for p in path_entries[0].get("paths", ())
-                )
-            ):
-                self._trace_out(
-                    f"  L1 -> unique path hit {path_entries[0]['name']}"
-                )
+                return self._fallback_l2(tokens, i, entries, limit, n)
+            if _is_unique_path_hit(path_entries, seen, l2_only):
+                self._trace_out(f"  L1 -> unique path hit {path_entries[0]['name']}")
                 return [path_entries[0]["name"]]
             if not path_entries:
                 self._trace_out("  L1 -> path exhausted (l2_only remains), break")
                 break  # 只剩需试解析的候选 → 走 Level 2
             pos += 1
         return None
+
+    def _square_skip_end(self, tokens: list[Token], pos: int, n: int) -> int:
+        """`[` 处的括号配对跳过终点；不是 `[` 或未闭合 → 返回 pos（不跳过）。
+
+        操作数/范围延续：`[` 是 @PrimaryExpr 内部（a[i]）或块头范围（[7:0]）的
+        括号区间，用括号配对跳过、不参与判别 token 匹配——否则 data[i] = i 的
+        [i]、function [7:0] 的 [7:0] 让判别路径不匹配而漏检。括号未闭合（残缺）
+        → 不跳过，保守加入 seen 走淘汰（不吞错）。
+        """
+        if tokens[pos].type != self._l_square:
+            return pos
+        end = self._skip_square(tokens, pos, n)
+        return end if end > pos else pos
+
+    def _fallback_l2(
+        self, tokens: list[Token], i: int, entries: list[dict], limit: int, n: int
+    ) -> list[str] | None:
+        """Level 1 判别路径被挡 → Level 2 对原始候选完整 production 试解析。
+
+        判别不了不等于未识别（如拼接 lvalue `{a,b} = expr;` 的起点非 id）；残缺
+        语句试解析仍零匹配返回 []，不吞错。`allow_partial=False`：静态可判别的
+        多候选（如 if 缺括号的 IfBlock/IfStmt）保持 [] 未识别诊断（e09/e17
+        门禁基线）。
+        """
+        self._trace_out("  L1 -> all path candidates dropped, fallback L2")
+        return self._try_parse(tokens, i, entries, min(limit + 1, n))
 
     def _level1_decide(
         self,
@@ -603,67 +645,75 @@ class LookaheadTable:
         allow_partial: bool = False,
     ) -> list[str] | None:
         """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。"""
-        if self._matcher is None:
+        matcher = self._matcher
+        if matcher is None:
             return None
         best: tuple[int, int, str] | None = None
         for entry in entries:
-            name = entry["name"]
-            info = self._tree.get(name, {})
-            prods = info.get("prods", [])
-            if not prods:
+            trial = self._trial_parse(matcher, entry, tokens, i, limit)
+            if trial is None:
                 continue
-            trial: list = []
-            j = i
-            # 块规则（task/function 等）：block_start 已从 production 剥离，
-            # 试解析前先消费 block_start token（同 StatementChecker 的做法）。
-            bs = info.get("block_start") or ""
-            if bs and j < limit and tokens[j].type == bs:
-                j += 1
-            # probe 模式：本试探的 limit 是人为截断的（句子边界+1），语句区间
-            # 在 EOF 处耗尽是正常截断而非残缺——EOF 报错会把截断试探误判为匹配
-            # 失败（合法 for 被报未识别）。上下文管理器（C1 重构）：退出必恢复
-            # 实例状态（即使匹配内部抛异常），消除裸 try/finally 的污染风险。
-            matcher = self._matcher
-            try:
-                with matcher.probe_mode():
-                    j = matcher.match_rule(tokens, j, prods, trial, limit)
-            except Exception:
-                self._trace_out(f"  L2 {name} EXC (skipped)")
-                continue
-            errs = len(trial)
-            consumed = j - i
-            self._trace_out(
-                f"  L2 {name}: errs={errs} consumed={consumed}"
-                + (f" first_err={trial[0].message[:60]!r}" if trial else "")
-            )
-            # best 选择：errs 最少优先；**仅 errs==0（完整匹配）时**用
-            # consumed 加分（2026-08-28 坏输入收敛）：errs>0 的错误恢复
-            # 推进（skip 跳过坏 token）是假推进——SimCtrlStmt（inline 分派
-            # 器，choice 失败 strict 报错+跳过 1 token）凭 consumed=1 胜过
-            # AssignStmt（表达式失败不推进 consumed=0），`assign a = ;`
-            # 被误分类为 SimCtrlStmt、phase-expr 期望不命中。errs>0 时保持
-            # 注册顺序（keyword_map[assign] 首位 AssignStmt 胜，checker 报
-            # 精确诊断）。
-            if best is None or errs < best[0] or (
-                errs == best[0] and errs == 0 and consumed > best[1]
-            ):
-                best = (errs, consumed, name)
+            errs, consumed = trial
+            if _prefer_trial(best, errs, consumed):
+                best = (errs, consumed, entry["name"])
+        return self._decide_best(best, allow_partial)
+
+    def _trial_parse(
+        self, matcher, entry: dict, tokens: list[Token], i: int, limit: int
+    ) -> tuple[int, int] | None:
+        """单个候选的试解析 → `(errs, consumed)`；不可试（无 production / 抛异常）→ None。
+
+        块规则（task/function 等）：block_start 已从 production 剥离，试解析前先
+        消费 block_start token（同 StatementChecker 的做法）。
+
+        probe 模式：本试探的 limit 是人为截断的（句子边界+1），语句区间在 EOF 处
+        耗尽是正常截断而非残缺——EOF 报错会把截断试探误判为匹配失败（合法 for
+        被报未识别）。上下文管理器（C1 重构）：退出必恢复实例状态（即使匹配内部
+        抛异常），消除裸 try/finally 的污染风险。
+        """
+        name = entry["name"]
+        info = self._tree.get(name, {})
+        prods = info.get("prods", [])
+        if not prods:
+            return None
+        trial: list = []
+        j = i
+        bs = info.get("block_start") or ""
+        if bs and j < limit and tokens[j].type == bs:
+            j += 1
+        try:
+            with matcher.probe_mode():
+                j = matcher.match_rule(tokens, j, prods, trial, limit)
+        except Exception:
+            self._trace_out(f"  L2 {name} EXC (skipped)")
+            return None
+        errs = len(trial)
+        consumed = j - i
+        self._trace_out(
+            f"  L2 {name}: errs={errs} consumed={consumed}"
+            + (f" first_err={trial[0].message[:60]!r}" if trial else "")
+        )
+        return errs, consumed
+
+    def _decide_best(
+        self, best: tuple[int, int, str] | None, allow_partial: bool
+    ) -> list[str] | None:
+        """试解析收口：全失败时 A 类（keyword 触发）返回错误最少者供精确诊断。
+
+        B 类保持 []（未识别诊断，拼错关键字场景）；A 类返回错误最少的候选，
+        让 checker 报精确诊断（如 `wire ;` 报 expected id 而非 unrecognized）。
+        """
         if best is None:
             self._trace_out("  L2 -> no candidate matched")
             return []
-        if best[0] != 0:
-            # 全失败：B 类保持 []（未识别诊断，拼错关键字场景）；A 类
-            # （keyword 触发）返回错误最少的候选，让 checker 报精确诊断
-            # （如 \`wire ;\` 报 expected id 而非 unrecognized）。
-            if allow_partial:
-                self._trace_out(
-                    f"  L2 -> best {best[2]} errs={best[0]} (allow_partial)"
-                )
-                return [best[2]]
-            self._trace_out(f"  L2 -> all fail errs={best[0]} -> unrecognized []")
-            return []
-        self._trace_out(f"  L2 -> {best[2]} (errs=0 consumed={best[1]})")
-        return [best[2]]
+        if best[0] == 0:
+            self._trace_out(f"  L2 -> {best[2]} (errs=0 consumed={best[1]})")
+            return [best[2]]
+        if allow_partial:
+            self._trace_out(f"  L2 -> best {best[2]} errs={best[0]} (allow_partial)")
+            return [best[2]]
+        self._trace_out(f"  L2 -> all fail errs={best[0]} -> unrecognized []")
+        return []
 
     def _find_boundary(self, tokens: list[Token], i: int, n: int) -> int:
         """返回从 i 起第一个句子终止符（分号/块结束）的位置（边界块上界）。"""
