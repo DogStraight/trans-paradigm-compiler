@@ -350,37 +350,48 @@ class Lexer:
             )
         self._number_runner = runner
 
-    def _build_alpha_tokens(self) -> None:
-        """构建字母形式 token 映射列表 (value, type)"""
-        self.alpha_tokens.clear()
-
-        # 1. symbol.base 和 symbol.extend
+    def _alpha_symbol_tokens(self) -> list[tuple[str, str]]:
+        """symbol.base / symbol.extend 里的字母形符号。"""
+        out: list[tuple[str, str]] = []
         for cat in ("base", "extend"):
             for sym_name, sym_value in (
                 self.token_define.get("symbol", {}).get(cat, {}).items()
             ):
                 if isinstance(sym_value, str) and sym_value.isalpha():
-                    self.alpha_tokens.append(
-                        (sym_value, symbol_type(cat, sym_name))
-                    )
+                    out.append((sym_value, symbol_type(cat, sym_name)))
+        return out
 
-        # 2. bracket（来自 pairs 结构）
+    def _alpha_bracket_tokens(self) -> list[tuple[str, str]]:
+        """bracket pairs 里的字母形括号字符（左右各判一次）。"""
+        out: list[tuple[str, str]] = []
         for open_c, close_c, name in self.token_define.get("bracket", {}).get(
             "pairs", []
         ):
             if isinstance(open_c, str) and open_c.isalpha():
-                self.alpha_tokens.append((open_c, bracket_left(name)))
+                out.append((open_c, bracket_left(name)))
             if isinstance(close_c, str) and close_c.isalpha():
-                self.alpha_tokens.append((close_c, bracket_right(name)))
+                out.append((close_c, bracket_right(name)))
+        return out
 
-        # 3. literal 精确字面量（排除 string, number）
+    def _alpha_literal_tokens(self) -> list[tuple[str, str]]:
+        """literal 段里的字母形字面量（string/number 除外）。"""
+        out: list[tuple[str, str]] = []
         for lit_name, lit_value in self.token_define.get("literal", {}).items():
             if lit_name in ("string", "number"):
                 continue
             if isinstance(lit_value, str) and lit_value.isalpha():
-                self.alpha_tokens.append((lit_value, literal_type(lit_name)))
+                out.append((lit_value, literal_type(lit_name)))
+        return out
+
+    def _build_alpha_tokens(self) -> None:
+        """构建字母形式 token 映射列表 (value, type)：符号 + 括号 + 字面量。"""
+        self.alpha_tokens.clear()
+        self.alpha_tokens.extend(self._alpha_symbol_tokens())
+        self.alpha_tokens.extend(self._alpha_bracket_tokens())
+        self.alpha_tokens.extend(self._alpha_literal_tokens())
 
     def tokenize(self, lex_text: str) -> list[Token]:
+        """token 化入口：重置行/缩进状态后逐位置分派到 `_scan_one`。"""
         text_len: int = len(lex_text)
         text = lex_text + "\n"  # add a newline at the end
 
@@ -393,49 +404,86 @@ class Lexer:
 
         st = _LexState(text=text, text_len=text_len)
         while st.idx < st.text_len:
-            tok = Token(line=st.line, column=st.col)
-            st.offset = 0
-
-            if st.text[st.idx] in self.newline:
-                self._scan_newline(st, tok)
-            elif st.text[st.idx] in self.token_define["space"].values():
-                self._scan_space(st, tok)
-            elif self._match_capture(st.text, st.idx) is not None:
-                self._scan_capture(st, tok)
-            elif (
-                self._plain_first
-                and st.text[st.idx] in self._plain_first
-                and not self._extend_symbol_at(st.text, st.idx)
-            ):
-                self._scan_plain(st, tok)
-            elif st.text[st.idx:st.idx + 2] in self._unsized_prefixes:
-                self._scan_unsized_number(st, tok)
-            elif (
-                st.text[st.idx] in self.token_define["symbol"]["base"].values()
-                and self._match_macro_at(st.text, st.idx) is None
-            ):
-                self._scan_symbol(st, tok)
-            elif (
-                st.text[st.idx] in self.open_brackets
-                or st.text[st.idx] in self.close_brackets
-            ):
-                self._scan_bracket(st, tok)
-            elif (
-                self._escaped_cfg
-                and st.text[st.idx] == self._escaped_cfg.get("prefix", "")
-            ):
-                self._scan_escaped_id(st, tok)
-            elif st.text[st.idx].isalpha() or st.text[st.idx] == "_":
-                self._scan_id(st, tok)
-            else:
-                macro_hit = self._match_macro_at(st.text, st.idx)
-                if macro_hit is not None:
-                    self._scan_macro(st, tok, macro_hit)
-                elif st.text[st.idx].isdigit():
-                    self._scan_number(st, tok)
-                else:
-                    self._scan_unrecognized(st, tok)
+            self._scan_one(st)
         return st.tokens
+
+    def _at_capture(self, st: "_LexState") -> bool:
+        """当前位置是否命中某 capture 起始标记。"""
+        return self._match_capture(st.text, st.idx) is not None
+
+    def _at_plain(self, st: "_LexState") -> bool:
+        """plain scalar 起始字符（且不属于扩展符号）。"""
+        if not self._plain_first or st.text[st.idx] not in self._plain_first:
+            return False
+        return not self._extend_symbol_at(st.text, st.idx)
+
+    def _at_unsized_prefix(self, st: "_LexState") -> bool:
+        """2 字符无尺寸数字前缀（如 'd / 'h）。"""
+        return st.text[st.idx:st.idx + 2] in self._unsized_prefixes
+
+    def _at_symbol(self, st: "_LexState") -> bool:
+        """基础符号字符（宏调用优先：宏匹配命中时交给 fallback）。"""
+        if st.text[st.idx] not in self.token_define["symbol"]["base"].values():
+            return False
+        return self._match_macro_at(st.text, st.idx) is None
+
+    def _at_bracket(self, st: "_LexState") -> bool:
+        """开/闭括号字符。"""
+        ch = st.text[st.idx]
+        return ch in self.open_brackets or ch in self.close_brackets
+
+    def _at_escaped(self, st: "_LexState") -> bool:
+        """转义标识符前缀（语言包声明了才认）。"""
+        if not self._escaped_cfg:
+            return False
+        return st.text[st.idx] == self._escaped_cfg.get("prefix", "")
+
+    def _at_ident(self, st: "_LexState") -> bool:
+        """标识符/关键字起始（字母或下划线）。"""
+        ch = st.text[st.idx]
+        return ch.isalpha() or ch == "_"
+
+    def _scan_fallback(self, st: "_LexState", tok: Token) -> None:
+        """以上皆非：宏调用 → 数字 → 未识别。"""
+        macro_hit = self._match_macro_at(st.text, st.idx)
+        if macro_hit is not None:
+            self._scan_macro(st, tok, macro_hit)
+        elif st.text[st.idx].isdigit():
+            self._scan_number(st, tok)
+        else:
+            self._scan_unrecognized(st, tok)
+
+    def _scan_one(self, st: "_LexState") -> None:
+        """产出一个 token：按固定优先级分派到对应扫描器。
+
+        优先级（自上而下，首个命中者处理）：换行 → 空白缩进 → capture →
+        plain scalar → 无尺寸数字 → 基础符号 → 括号 → 转义标识符 →
+        标识符 → 兜底（宏/数字/未识别）。
+        """
+        tok = Token(line=st.line, column=st.col)
+        st.offset = 0
+        ch = st.text[st.idx]
+
+        if ch in self.newline:
+            self._scan_newline(st, tok)
+        elif ch in self.token_define["space"].values():
+            self._scan_space(st, tok)
+        elif self._at_capture(st):
+            self._scan_capture(st, tok)
+        elif self._at_plain(st):
+            self._scan_plain(st, tok)
+        elif self._at_unsized_prefix(st):
+            self._scan_unsized_number(st, tok)
+        elif self._at_symbol(st):
+            self._scan_symbol(st, tok)
+        elif self._at_bracket(st):
+            self._scan_bracket(st, tok)
+        elif self._at_escaped(st):
+            self._scan_escaped_id(st, tok)
+        elif self._at_ident(st):
+            self._scan_id(st, tok)
+        else:
+            self._scan_fallback(st, tok)
 
     def _scan_newline(self, st: "_LexState", tok: Token) -> None:
         """换行 token：产出 newline 并重置行状态。"""
@@ -752,33 +800,52 @@ class Lexer:
                 self.indent_deep -= 1
             self.new_line_start = False
 
-    def _build_full_token_map(self) -> dict[str, str]:
-        """构建 {原始字符串: 完整类型名} 的扁平映射表"""
+    def _full_map_brackets(self) -> dict[str, str]:
+        """bracket pairs → {括号字符: 完整类型名}（左右两向）。"""
         m: dict[str, str] = {}
-        # bracket（来自 pairs）
         for open_c, close_c, name in self.token_define.get("bracket", {}).get(
             "pairs", []
         ):
             m[open_c] = bracket_left(name)
             m[close_c] = bracket_right(name)
-        # symbol.base
-        for name, val in self.token_define.get("symbol", {}).get("base", {}).items():
-            if isinstance(val, str):
-                m[val] = symbol_type("base", name)
-        # symbol.extend
-        for name, val in self.token_define.get("symbol", {}).get("extend", {}).items():
-            if isinstance(val, str):
-                m[val] = symbol_type("extend", name)
-        # literal 精确匹配（排除 string/number 等由 lexer 正则处理的）
+        return m
+
+    def _full_map_symbols(self) -> dict[str, str]:
+        """symbol.base / symbol.extend → {符号文本: 完整类型名}。"""
+        m: dict[str, str] = {}
+        for cat in ("base", "extend"):
+            for name, val in (
+                self.token_define.get("symbol", {}).get(cat, {}).items()
+            ):
+                if isinstance(val, str):
+                    m[val] = symbol_type(cat, name)
+        return m
+
+    def _full_map_literals(self) -> dict[str, str]:
+        """literal 段 → {字面量文本: 完整类型名}（string/number 由正则处理，排除）。"""
+        m: dict[str, str] = {}
         for name, val in self.token_define.get("literal", {}).items():
             if name in ("string", "number"):
                 continue
             if isinstance(val, str):
                 m[val] = literal_type(name)
-        # keyword（从 token_define["id"]["keyword"] 加载）
+        return m
+
+    def _full_map_keywords(self) -> dict[str, str]:
+        """keyword 段 → {关键字文本: 完整类型名}。"""
+        m: dict[str, str] = {}
         for _, orig in self.token_define.get("id", {}).get("keyword", {}).items():
             if isinstance(orig, str):
                 m[orig] = keyword_type(orig)
+        return m
+
+    def _build_full_token_map(self) -> dict[str, str]:
+        """构建 {原始字符串: 完整类型名} 的扁平映射表（括号/符号/字面量/关键字）。"""
+        m: dict[str, str] = {}
+        m.update(self._full_map_brackets())
+        m.update(self._full_map_symbols())
+        m.update(self._full_map_literals())
+        m.update(self._full_map_keywords())
         return m
 
     # 仅供 tokenize 内部调用
@@ -847,48 +914,45 @@ class Lexer:
         return None
 
     # 仅供 tokenize 内部调用
+    def _plain_space_stops(self, text: str, idx: int) -> bool:
+        """空格位置的终止判定：后随注释标记 / 前一个 token 不吞空格。"""
+        if any(text.startswith(cs, idx + 1) for cs in self._comment_starts):
+            return True
+        return self._line_sig in self._plain_no_space_tokens
+
+    def _plain_nxt_breaks(self, nxt: str) -> bool:
+        """stop_space_after 字符的后随字符是否终止（空白/行尾/EOF）。"""
+        return not nxt or nxt in self._space_set or nxt in self._newline_set
+
+    def _plain_stops_here(self, text: str, idx: int) -> bool:
+        """当前位置是否终止 plain scalar（终止规则见 `_scan_plain_scalar`）。"""
+        ch = text[idx]
+        if ch in self._newline_set:
+            return True
+        nxt = text[idx + 1] if idx + 1 < len(text) else ""
+        if ch in self._space_set and self._plain_space_stops(text, idx):
+            return True
+        if ch in self._plain_stop_space_after and self._plain_nxt_breaks(nxt):
+            return True
+        if ch in self._plain_flow_stops and self.bracket_depth > 0:
+            return True
+        return ch not in self._plain_cont
+
     def _scan_plain_scalar(self, text: str, idx: int) -> tuple[str, int]:
         """从 idx 扫描 plain scalar（[plain] 配置驱动，YAML plain scalar 近似）。
 
-        终止规则（配置声明，引擎无 YAML 具体知识）：
+        终止规则（配置声明，引擎无 YAML 具体知识，逐条见 `_plain_stops_here`）：
         - 换行 / EOF：终止（不消费）
         - stop_space_after 字符（如 ':'）后随空白/行尾：终止（映射分隔）
-        - 空格后随 stop_before_comment… 注：注释终止靠"空格 + 注释分支"自然
-          实现——空格不在续字符集时即终止；此处空格在续字符集（多词值），
-          由 stop_before_comment 字符（'#'）判定：空格后随 '#' → 终止
-          （'#' 留给注释分支，`abc#def` 的 '#' 前无空格 → 词内续字符）
+        - 空格后随注释标记（'#'）：终止——'#' 留给注释分支，`abc#def`
+          的 '#' 前无空格 → 词内续字符
         - no_space_after_tokens：前一个显著 token（锚点/别名名）后遇空格终止
+        - flow 语境终止符：括号内（流式集合）遇 { } 终止
         返回 (content, new_idx)；content 尾部空白已剥。
         """
         content = ""
-        stop_comment_chars = self._comment_starts
-        while idx < len(text):
-            ch = text[idx]
-            if ch in self._newline_set:
-                break
-            nxt = text[idx + 1] if idx + 1 < len(text) else ""
-            # 空格后随注释标记 → 终止（注释留给注释分支）
-            if ch in self._space_set and any(
-                text.startswith(cs, idx + 1) for cs in stop_comment_chars
-            ):
-                break
-            # 前一个显著 token 是锚点/别名 → 空格是单词边界（不吞）
-            if (
-                ch in self._space_set
-                and self._line_sig in self._plain_no_space_tokens
-            ):
-                break
-            # stop_space_after 字符后随空白/行尾 → 终止
-            if ch in self._plain_stop_space_after and (
-                not nxt or nxt in self._space_set or nxt in self._newline_set
-            ):
-                break
-            # flow 语境终止符：括号内（流式集合）遇 { } 终止
-            if ch in self._plain_flow_stops and self.bracket_depth > 0:
-                break
-            if ch not in self._plain_cont:
-                break
-            content += ch
+        while idx < len(text) and not self._plain_stops_here(text, idx):
+            content += text[idx]
             idx += 1
         # 剥尾部空白（多词值行尾的空格不保留）
         return content.rstrip(" "), idx
