@@ -121,6 +121,27 @@ stdio + 显式 root（JSON 宿主配置）：
   用户可见变化→CHANGELOG），不写进本文件。
 - **不进日常门禁**：需要外部二进制，且全量扫描是 30s–分钟级。
 
+## 能力族清单与本仓实测状态（2026-09-20）
+
+按"信号类型"分类；"本仓状态"以实测为准（用时 = 本机一次调用实测）。
+
+| 族 | 工具 / 策略 | 本仓状态 | 值得注意的点 |
+|---|---|---|---|
+| **① 规模与复杂度** | `compute_cyclomatic_complexity`（10）、`compute_cognitive_complexity`（15）、`report_long_method_and_god_object_smells` | 已用并收口（CC 12 / 认知 5 命中，全判保持）；类级 17 处/函数级 5 处未动，见 TODO | ⚠ 长方法/上帝对象工具**每调用最多分析 25 个文件**（`Files analyzed cap: 25`，**不报截断**）→ 分块 ≤20；CC/认知两工具**无上限** |
+| **② 结构重复** | `report_structural_clone_smells`（minTokens=12 / shingleSize=2 / minShared=3 / astThreshold=70） | 已用（判据已定 A–G，快照待重跑：同参数现报 108 对） | 无上限提示，但分块大小会改变"最佳克隆对"选取（36 文件一次 46 条 vs 18+18 两次 52 条）→ 对数须固定分块比较 |
+| **③ 异常与断言** | `report_exception_handling_smells`（权重打分）、`report_test_assertion_smells` | 已用并收口（吞吃 44/44、断言 22/22 判定） | 断言族在本仓全是"断言在调用链内"的形态假阳性；断言工具整仓单次会截断（337 文件只报 8 条）→ 分块 |
+| **④ 变更差分** | `score_diff`、`missing_tests`、`blast_radius` | **未用**（本轮实测可用：`score_diff` 18.9s、`missing_tests` 4.8s） | **最值得纳入流程的一族**：`score_diff` 给结构面净变化（认知 Δ / 增删行 / 引入符号 / 签名变更 / `untested_fraction` / 未解析使用点），`missing_tests` 给"改动未达测试"的函数计数——本仓现有三道证据（pytest、字节对拍、诊断基线）全是**行为面**，缺的正是结构面量化 |
+| **⑤ 热点交叉** | `analyze_git_hotspots` | **未用**（本轮实测 3.3s，278 commits） | 给 churn × complexity 表：本仓 top 为 `analyzer/structure.py`(29/10)、`pipeline/__init__.py`(26/10)、`preprocessor/_expand.py`(21/7)——**正是超长函数所在文件**，可作"先动哪个"的经验依据 |
+| **⑥ 注释密度** | `report_comment_density_for_files` / `_for_code_unit` | **未取**（本轮实测 1.0s 可用） | 输出 Hdr/Inl/Span 计数；本仓注释密度偏高，纯比例意义有限，只宜当"异常低"的筛子 |
+| **⑦ 死代码** | `report_dead_code_and_unused_abstraction_smells` | **不可用** | 只支持 Rust → Python 侧无此信号；本仓等价面 = Pylance 诊断 + `policy/pylance-cleanup.md` |
+| **⑧ 安全/密钥** | `report_secret_like_code`、`security.java.*` 策略 | **不可用** | `secret_like_code` 在本仓**直接 panic**（Rust 非 ASCII char boundary，遇中文即崩，2026-09-20 实测）；Java taint 策略不适用（仓内无 Java）。开源前检查改用其它手段 |
+| **⑨ 内置策略（19 条）** | code-smells 17 + security 2 | 已分类（Python 有效面 12 条） | Python 相关：`dynamic-evaluation`（已修）、`unsafe-deserialization`（0 命中）、`python-absent-member`（**结论缺失**，需整仓跑 1h+，缩范围必 `inconclusive`）、in-loop 族（已判"形态 vs 病理"）。Go 3 / Rust 2 / Java 2 空跑 |
+| **⑩ 结构查询** | `--query-file`（RQL）/ `--repl` / `--list-row-schemas` | **未用** | 能答**跨维度**问题（如"CC>10 且被 ≥3 处调用"、"哪些引擎模块导入了 `grammar/`"——后者正是本仓"语言知识不进代码"硬约束的可机器化面）。写查询前先读 `--list-row-schemas` 的行域/字段目录 |
+| **⑪ 集成面** | `--mcp symbol\|extended`（含 `query_code`）、`--lsp`、`run_policy`（MCP Tasks） | **未用** | 把"外部裁判"从人工 CLI 变成 agent 可调用能力；给 agent 的推荐面是 `symbol\|extended` |
+
+**优先级建议**（按"对本仓缺口的边际价值"）：④ > ⑤ > ⑩ > ⑪ > ⑥ > ⑨（absent-member）。
+④ 直接补"结构面证据"；⑤ 决定 17 个类与 5 个长函数的动手顺序；⑩ 能机器化本仓的硬约束自查。
+
 ## 已知边界（实测）
 
 - 子目录当 root → 声明面不全（`inconclusive`），别据此下"干净"结论。
