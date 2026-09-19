@@ -657,6 +657,57 @@ class ConnectionElaborator:
     def __init__(self, ctx: StructureCtx) -> None:
         self._ctx = ctx
 
+    def _inst_name_of(self, site: Node) -> str:
+        """实例名（实例化点节点的 inst_name 字段文本；缺省 ""）。"""
+        node = getattr(site, self._ctx.field("inst_name"), None)
+        if isinstance(node, Node) and node.content:
+            return node.content
+        return ""
+
+    def _connection_items(self, site: Node, ports_field: str, items_field: str) -> list:
+        """实例化点的连接项列表（端口连接字段 → 容器节点 → items 字段）。"""
+        ports_node = unwrap_optional(getattr(site, ports_field, None))
+        items = getattr(ports_node, items_field, None) if ports_node else None
+        return items or []
+
+    def _named_connect(
+        self,
+        item: Node,
+        conn: PortConnection,
+        conn_name_field: str,
+        value_field: str,
+    ) -> bool:
+        """命名连接 `.p(sig)` → `conn.connects`；返回是否命中了命名形态。
+
+        命名连接判定 = 项上有 port_name 字段且非空（NamedPortConnect 形态）；
+        其余项按位置连接处理（调用方续接）。
+        """
+        pn = getattr(item, conn_name_field, None) if conn_name_field else None
+        pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
+        if not pn_text:
+            return False
+        val = getattr(item, value_field, None) if value_field else None
+        conn.connects[pn_text] = (
+            self._ctx.render_subtree(val) if isinstance(val, Node) else ""
+        )
+        return True
+
+    def _fill_connection(
+        self,
+        conn: PortConnection,
+        items: list,
+        conn_name_field: str,
+        value_field: str,
+    ) -> None:
+        """逐项展开连接：命名连接进 connects，其余按位置序进 ordered。"""
+        for item in items:
+            if not isinstance(item, Node):
+                continue
+            if self._named_connect(item, conn, conn_name_field, value_field):
+                continue
+            # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
+            conn.ordered.append(self._ctx.render_subtree(item))
+
     def elaborate_connections(
         self, path: str, inst_sites: list
     ) -> list[PortConnection]:
@@ -671,41 +722,24 @@ class ConnectionElaborator:
         """
         if not self._ctx.has_structure():
             return []
-        out: list[PortConnection] = []
         ports_field = self._ctx.field("connects") or "ports"
         value_field = self._ctx.field("value")
         conn_name_field = self._ctx.field("port_name")
         items_field = self._ctx.field("items")
+        out: list[PortConnection] = []
         for site in inst_sites:
-            mod_name = self._ctx.inst_module_name(site)
-            inst_name_node = getattr(site, self._ctx.field("inst_name"), None)
-            inst_name = (
-                inst_name_node.content
-                if isinstance(inst_name_node, Node) and inst_name_node.content
-                else ""
-            )
             conn = PortConnection(
-                inst_name=inst_name,
-                module_name=mod_name,
+                inst_name=self._inst_name_of(site),
+                module_name=self._ctx.inst_module_name(site),
                 inst_node=site,
                 file=path,
             )
-            ports_node = unwrap_optional(getattr(site, ports_field, None))
-            items = getattr(ports_node, items_field, None) if ports_node else None
-            for item in items or []:
-                if not isinstance(item, Node):
-                    continue
-                # 命名连接：.port_name(value) 形态（NamedPortConnect 有 port_name）
-                pn = getattr(item, conn_name_field, None) if conn_name_field else None
-                pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
-                if pn_text:
-                    val = getattr(item, value_field, None) if value_field else None
-                    conn.connects[pn_text] = (
-                        self._ctx.render_subtree(val) if isinstance(val, Node) else ""
-                    )
-                    continue
-                # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
-                conn.ordered.append(self._ctx.render_subtree(item))
+            self._fill_connection(
+                conn,
+                self._connection_items(site, ports_field, items_field),
+                conn_name_field,
+                value_field,
+            )
             out.append(conn)
         return out
 
