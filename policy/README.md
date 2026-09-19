@@ -14,6 +14,7 @@
 | `engine_config_sync.md` | 引擎语义/键名变更的配置同步规程（四步“翻译”式：定位语言包 → 取配置字典 → 整键匹配 → 逐项替换；子串误伤防范） | `tools/config_sites.py`（`list` / `check` / `rename`，开发自查，见规程） |
 | `pylance-cleanup.md` | 改过哪个 py 就清哪个的静态诊断（含静/动态双面清理） | （人按需跑，无门禁） |
 | `bifrost_audit.md` | 外部审计规程（Bifrost 结构面信号：影响面/复杂度/异常吞吃/死代码/弱断言；先小后大） | （外部工具，开发自查） |
+| `structural_budget.md` | 结构欠账的度量与停止判据（超额量口径 R1–R5 / 结构欠账分 S / ROI 决策 / 三条停止规则） | `tools/structural_score.py`（开发自查，需外部二进制） |
 | `release-checklist.md` | 发布 SOP（回归门禁 → 版本 → build → 包验证 → wheel 冒烟 → tag） | （人走流程，发布收尾） |
 
 ## 门禁工具
