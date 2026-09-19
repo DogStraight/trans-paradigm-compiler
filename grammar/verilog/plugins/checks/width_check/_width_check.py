@@ -982,6 +982,50 @@ def eval_width_text(text: str) -> int | None:
     return v + 1  # 单表达式 [n] = n+1 位（惯例 [n:0]）
 
 
+def _unsized_dec_width(text: str) -> int | None:
+    """无基数前缀的十进制整数 → 最小位宽（"255" → 8、"0" → 0）。"""
+    digits = text.replace("_", "")
+    if digits.startswith("-"):
+        digits = digits[1:]
+    if not digits.isdigit():
+        return None
+    return _min_bits(int(digits, 10))
+
+
+def _strip_sign_prefix(body: str) -> str:
+    """去掉 signed 前缀（'shFF → hFF）——最小位宽同无符号。"""
+    return body[1:] if body[:1] in ("s", "S") else body
+
+
+def _based_digits_value(digits: str, base_ch: str) -> int | None:
+    """基数 + 数位文本 → 数值；含 x/z 位或无法解析 → 不可判（保守）。"""
+    digits = digits.replace("_", "")
+    if not digits:
+        return None
+    if any(c in "xXzZ" for c in digits):
+        return None  # 含未知位 → 宽度无法精确
+    try:
+        return int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
+    except ValueError:
+        return None
+
+
+def _based_literal_width(body: str) -> int | None:
+    """带基数常量体（'hFF / 'b101 / 'd5 / '0 / 'shFF…）→ 位宽。"""
+    body = _strip_sign_prefix(body)
+    if not body:
+        return None
+    if len(body) == 1 and body in "01xXzZ":
+        return 0  # 填充常量：'0/'1/'x/'z 自适应上下文（永不截断）
+    base_ch = body[0].lower()
+    if base_ch not in "bohd":
+        return None  # 未知形态
+    v = _based_digits_value(body[1:], base_ch)
+    if v is None:
+        return None
+    return _min_bits(v)
+
+
 def literal_width(text: str) -> int | None:
     """A2：字面量文本 → 位宽（"8'd5" → 8、"4'b1010" → 4）。
 
@@ -996,40 +1040,11 @@ def literal_width(text: str) -> int | None:
     if not t:
         return None
     if "'" not in t:
-        # unsized 十进制整数：最小位宽 = 容纳值所需位数（0 → 0 自适应）
-        digits = t.replace("_", "")
-        if digits.startswith("-"):
-            digits = digits[1:]
-        if not digits.isdigit():
-            return None
-        v = int(digits, 10)
-        return _min_bits(v)
-    w = t.split("'", 1)[0].strip()
-    if w.isdigit():
-        return int(w)  # sized："8'd5" → 8
-    # unsized 带基数常量（'hFF / 'b101 / 'd5 / '0 / 'shFF…）
-    body = t.split("'", 1)[1]
-    if not body:
-        return None
-    if body[0] in "sS":
-        body = body[1:]  # signed 前缀（'shFF）——最小位宽同无符号
-    if not body:
-        return None
-    if len(body) == 1 and body in "01xXzZ":
-        return 0  # 填充常量：'0/'1/'x/'z 自适应上下文
-    base_ch = body[0].lower()
-    if base_ch not in "bohd":
-        return None  # 未知形态
-    digits = body[1:].replace("_", "")
-    if not digits:
-        return None
-    if any(c in "xXzZ" for c in digits):
-        return None  # 含未知位 → 保守（宽度无法精确）
-    try:
-        v = int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
-    except ValueError:
-        return None
-    return _min_bits(v)
+        return _unsized_dec_width(t)
+    head, _, body = t.partition("'")
+    if head.strip().isdigit():
+        return int(head.strip())  # sized："8'd5" → 8
+    return _based_literal_width(body)
 
 
 def _min_bits(v: int) -> int:
@@ -1058,70 +1073,25 @@ _REDUCTION_OPS = {"&", "|", "^", "~&", "~|", "~^", "^~"}
 def infer_expr_width(node, width_table: dict, module: str = "") -> int | None:
     """A3：表达式节点 → 宽度（纯函数；未知 → None 保守）。
 
-    原子：Identifier（查宽度表）/ Number|BitWidthLiteral（字面量位宽）
-    / StringLiteral（保守 None）
+    逐类型的宽度规则在 `_EXPR_WIDTH_RULES`（语言知识表）——
+    原子：Identifier（查宽度表）/ Number|BitWidthLiteral（字面量位宽）；
     结构：ParenthesizedExpr（内层）/ SelectExpr（位选：索引 1、范围
     abs+1、+:/-: 切片宽度——最内层 suffix 决定）/ ConcatExpr（和）/
-    ReplicateExpr（count×宽）/ HierExpr（末段下标 1，纯成员链查末段名）
+    ReplicateExpr（count×宽）/ HierExpr（末段下标 1，纯成员链查末段名）；
     运算：UnaryOp（归约 → 1，! ~ → 同宽）/ BinaryOp（算术 max、比较 1、
-    移位 LHS、位运算 max、逻辑 1）/ TernaryOp（max 分支）
-    调用：$signed/$unsigned（同参数宽）；其他/用户函数 → None
+    移位 LHS、位运算 max、逻辑 1）/ TernaryOp（max 分支）；
+    调用：$signed/$unsigned（同参数宽）。
+    表外（StringLiteral / CallExpr）与非节点输入 → None。
 
     module：当前模块名（多模块文件内符号查表用限定键，防跨模块同名
     污染——2026-08-29 对标测试暴露 SB_MAC16 D 污染 SB_DFF D）。
     """
     if not isinstance(node, Node):
         return None
-    name = node.node_name
-
-    if name == "Identifier":
-        return table_width_to_num_params(
-            _lookup_width(width_table, module, getattr(node, "content", "") or ""),
-            width_table.get("_params"),
-        )
-    if name in ("Number", "BitWidthLiteral"):
-        return literal_width(node_text(node))
-    if name == "StringLiteral":
-        return None  # 字符串宽度语义罕见，保守
-    if name == "ParenthesizedExpr":
-        return infer_expr_width(getattr(node, "expr", None), width_table, module)
-    if name == "SelectExpr":
-        return _select_width(node, width_table, module)
-    if name == "ConcatExpr":
-        return _sum_width(getattr(node, "sub_node", None) or [], width_table, module)
-    if name == "ReplicateExpr":
-        count = const_eval(node_text(getattr(node, "count", None)))
-        vw = infer_expr_width(getattr(node, "value", None), width_table, module)
-        if count is None or vw is None:
-            return None
-        return count * vw
-    if name == "HierExpr":
-        return _hier_width(node, width_table, module)
-    if name == "UnaryOp":
-        op = getattr(node, "op", "")
-        if op in _REDUCTION_OPS:
-            return 1  # 一元归约 → 1 bit
-        if op == "!":
-            return 1  # 逻辑非 → 1 bit（IEEE 1364-2005 5.5.2 逻辑运算；
-            # 2026-08-29 对拍 Verilator：!x 结果 1 位，此前按操作数宽误报）
-        return infer_expr_width(getattr(node, "operand", None), width_table, module)
-    if name == "BinaryOp":
-        return _binary_width(node, width_table, module)
-    if name == "TernaryOp":
-        tw = infer_expr_width(getattr(node, "true_val", None), width_table, module)
-        fw = infer_expr_width(getattr(node, "false_val", None), width_table, module)
-        if tw is None or fw is None:
-            return None
-        return max(tw, fw)
-    if name == "SysFuncCall":
-        callee = node_text(getattr(node, "callee", None))
-        if callee in ("signed", "unsigned"):
-            # 单参数系统函数：宽度不变（仅改符号性）
-            return _first_arg_width(node, width_table, module)
+    rule = _EXPR_WIDTH_RULES.get(node.node_name)
+    if rule is None:
         return None
-    if name == "CallExpr":
-        return None  # 用户函数返回宽度需函数表（C 阶段）
-    return None
+    return rule(node, width_table, module)
 
 
 def _binary_width(node, width_table: dict, module: str = "") -> int | None:
@@ -1259,3 +1229,93 @@ def _first_arg_width(node, width_table: dict, module: str = "") -> int | None:
         if isinstance(it, Node):
             return infer_expr_width(it, width_table, module)
     return None
+
+
+# ── A3 逐类型宽度规则（表项） ────────────────────────────
+# 规则签名统一为 (node, width_table, module) → 宽度；`infer_expr_width` 按
+# 节点类型查 `_EXPR_WIDTH_RULES` 分派。表放段末：表项引用的更深助手
+# （_binary_width / _select_width / _sum_width / _hier_width / _first_arg_width）
+# 定义在前，模块导入期才能解析。
+
+
+def _ident_width(node, width_table: dict, module: str) -> int | None:
+    """Identifier → 查符号宽度表（参数化文本按参数表求值；缺省 None）。"""
+    return table_width_to_num_params(
+        _lookup_width(width_table, module, getattr(node, "content", "") or ""),
+        width_table.get("_params"),
+    )
+
+
+def _literal_node_width(node, width_table: dict, module: str) -> int | None:
+    """Number / BitWidthLiteral → 按字面量文本取位宽（A2）。"""
+    del width_table, module  # 字面量宽度与符号表无关（协议签名参数）
+    return literal_width(node_text(node))
+
+
+def _paren_width(node, width_table: dict, module: str) -> int | None:
+    """ParenthesizedExpr → 内层表达式宽度。"""
+    return infer_expr_width(getattr(node, "expr", None), width_table, module)
+
+
+def _concat_width(node, width_table: dict, module: str) -> int | None:
+    """ConcatExpr → 各元素宽度和（任一不可判 → None）。"""
+    return _sum_width(getattr(node, "sub_node", None) or [], width_table, module)
+
+
+def _replicate_width(node, width_table: dict, module: str) -> int | None:
+    """ReplicateExpr → 复制次数 × 值宽度。"""
+    count = const_eval(node_text(getattr(node, "count", None)))
+    vw = infer_expr_width(getattr(node, "value", None), width_table, module)
+    if count is None or vw is None:
+        return None
+    return count * vw
+
+
+def _unary_width(node, width_table: dict, module: str) -> int | None:
+    """UnaryOp → 归约 / 逻辑非为 1 bit，其余同操作数宽。"""
+    op = getattr(node, "op", "")
+    if op in _REDUCTION_OPS:
+        return 1  # 一元归约 → 1 bit
+    if op == "!":
+        return 1  # 逻辑非 → 1 bit（IEEE 1364-2005 5.5.2 逻辑运算；
+        # 2026-08-29 对拍 Verilator：!x 结果 1 位，此前按操作数宽误报）
+    return infer_expr_width(getattr(node, "operand", None), width_table, module)
+
+
+def _ternary_width(node, width_table: dict, module: str) -> int | None:
+    """TernaryOp → 两分支宽的 max（任一不可判 → None）。"""
+    tw = infer_expr_width(getattr(node, "true_val", None), width_table, module)
+    fw = infer_expr_width(getattr(node, "false_val", None), width_table, module)
+    if tw is None or fw is None:
+        return None
+    return max(tw, fw)
+
+
+def _sysfunc_width(node, width_table: dict, module: str) -> int | None:
+    """SysFuncCall → $signed/$unsigned 宽度不变（仅改符号性）；其余不可判。
+
+    用户函数（CallExpr）返回宽度需函数表 → 同不在表内（C 阶段）。
+    """
+    callee = node_text(getattr(node, "callee", None))
+    if callee in ("signed", "unsigned"):
+        return _first_arg_width(node, width_table, module)
+    return None
+
+
+# 节点类型 → 宽度规则（语言知识；不在表内 = 不可判 None）
+# 不在表内的还有：StringLiteral（字符串宽度语义罕见，保守）、
+# CallExpr（用户函数返回宽度需函数表，C 阶段）。
+_EXPR_WIDTH_RULES: dict[str, Callable[[Node, dict, str], int | None]] = {
+    "Identifier": _ident_width,
+    "Number": _literal_node_width,
+    "BitWidthLiteral": _literal_node_width,
+    "ParenthesizedExpr": _paren_width,
+    "SelectExpr": _select_width,
+    "ConcatExpr": _concat_width,
+    "ReplicateExpr": _replicate_width,
+    "HierExpr": _hier_width,
+    "UnaryOp": _unary_width,
+    "BinaryOp": _binary_width,
+    "TernaryOp": _ternary_width,
+    "SysFuncCall": _sysfunc_width,
+}
