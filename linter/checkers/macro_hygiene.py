@@ -86,34 +86,59 @@ class MacroHygieneChecker(Checker):
 
     # ── MH002：宏重定义未 undef ──────────────────────────
 
+    def _redef_diag(
+        self, name: str, prev: str, value: str, line_idx: int, indent: int, width: int
+    ) -> LintDiagnostic:
+        """MH002 诊断：同名宏以不同值重定义。"""
+        return self._diag(
+            "MH002",
+            f"宏 '{name}' 以不同值重定义（'{prev}' → '{value}'）"
+            f"——重定义前应先用 {self._prefix}{self._undef} {name} 表明意图",
+            line_idx,
+            indent,
+            width,
+        )
+
+    @staticmethod
+    def _define_value(rest: str, cont: str) -> tuple[str, str | None]:
+        """`define` 指令体 → (宏名, 值)；多行宏体（续行）值不确定 → None。
+
+        宏名缺失 → ("", None)（调用方跳过该行）。
+        """
+        name, body = _split_name_body(rest)
+        if not name:
+            return "", None
+        return name, None if (cont and body.endswith(cont)) else body
+
+    def _handle_define(
+        self,
+        rest: str,
+        cont: str,
+        seen: dict[str, str | None],
+        errors: list[LintDiagnostic],
+        line_idx: int,
+        indent: int,
+        width: int,
+    ) -> None:
+        """`define` 行：值变化（两侧都确定时）报 MH002，并更新已知值。"""
+        name, value = self._define_value(rest, cont)
+        if not name:
+            return
+        prev = seen.get(name)
+        if name in seen and prev is not None and value is not None and prev != value:
+            errors.append(self._redef_diag(name, prev, value, line_idx, indent, width))
+        seen[name] = value
+
     def _check_macro_redef(self) -> list[LintDiagnostic]:
         if not (self._define and self._undef):
             return []  # 语言包未声明宏指令关键字 → 本子检查不启用
         errors: list[LintDiagnostic] = []
         seen: dict[str, str | None] = {}
+        cont = self._cont
 
         for line_idx, kw, rest, indent, width in self._iter_directives():
             if kw == self._define:
-                name, body = _split_name_body(rest)
-                if not name:
-                    continue
-                # 多行宏体（续行）跨行，单行比较不安全 → 值不确定
-                value = None if (self._cont and body.endswith(self._cont)) else body
-                if name in seen:
-                    prev = seen[name]
-                    if prev is not None and value is not None and prev != value:
-                        errors.append(
-                            self._diag(
-                                "MH002",
-                                f"宏 '{name}' 以不同值重定义（'{prev}' → '{value}'）"
-                                f"——重定义前应先用 {self._prefix}{self._undef} "
-                                f"{name} 表明意图",
-                                line_idx,
-                                indent,
-                                width,
-                            )
-                        )
-                seen[name] = value
+                self._handle_define(rest, cont, seen, errors, line_idx, indent, width)
             elif kw == self._undef:
                 name, _ = _split_name_body(rest)
                 if name:
