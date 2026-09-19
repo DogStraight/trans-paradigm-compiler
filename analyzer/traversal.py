@@ -200,26 +200,61 @@ class AnalysisTraversal:
                 self._walk(item)
 
     def _walk_node(self, node: Node) -> None:
+        """节点级遍历：标准原语 → 自定义原语 → 递归子节点 → scope_exit。
+
+        原语执行序 = 声明序（`_primitive_order`）；`scope_exit` 必须最后跑
+        （子节点走完才退出作用域），故从标准循环里排除、单独收尾。
+        自定义原语来自两条声明路径，合并去重见 `_custom_primitive_names`。
+        """
         rule = self._rules.get(node.node_name)
         config = getattr(rule, "analyzer", {}) if rule else {}
         self._context.node = node
         self._context.config = config
 
-        # 标准原语
-        po = self._primitive_order
-        for prim_name in po:
+        self._run_standard_primitives(node, config)
+        self._run_custom_primitives(node, config)
+
+        # 递归子节点
+        for child in node.iter_children():
+            self._walk(child)
+
+        # scope_exit（子节点遍历完之后）
+        self._run_scope_exit(node, config)
+
+    def _run_standard_primitives(self, node: Node, config: dict) -> None:
+        """标准原语：按声明执行序逐个跑（`scope_exit` 不在此列，收尾单独跑）。"""
+        for prim_name in self._primitive_order:
             if prim_name == "scope_exit":
                 continue
-            prim = get_primitive(prim_name)
-            if prim is None:
-                continue
             if _is_primitive_triggered(prim_name, config):
-                prim(self, node, config)
+                self._invoke_primitive(prim_name, node, config)
 
-        # 自定义原语：primitives 列表 + 配置键同名触发（如 check_name_call = {...}
-        # ——键名即原语名，一个键同时触发并携带配置，避免 primitives 列表 + 单独
-        # 配置段两处配合的费解写法）。两者合并去重；跳过标准原语与元键 primitives。
-        po_set = set(po)
+    def _run_custom_primitives(self, node: Node, config: dict) -> None:
+        """自定义原语：两条声明路径合并去重后逐个跑（不再过 trigger 判定）。"""
+        names = self._custom_primitive_names(config, set(self._primitive_order))
+        for prim_name in names:
+            self._invoke_primitive(prim_name, node, config)
+
+    def _run_scope_exit(self, node: Node, config: dict) -> None:
+        """scope_exit 收尾：作用域节点的子节点走完后退出。"""
+        if _is_primitive_triggered("scope_exit", config):
+            self._invoke_primitive("scope_exit", node, config)
+
+    def _invoke_primitive(self, prim_name: str, node: Node, config: dict) -> None:
+        """按名取原语并调用（未注册的名字 → 跳过）。"""
+        prim = get_primitive(prim_name)
+        if prim is not None:
+            prim(self, node, config)
+
+    def _custom_primitive_names(self, config: dict, po_set: set[str]) -> list[str]:
+        """自定义原语名列表（去重、剔除标准原语与元键 `primitives`）。
+
+        两条声明路径合并：
+        - `primitives` 列表：显式列出要跑的原语名；
+        - **配置键同名触发**：如 `check_name_call = { ... }`——键名即原语名，
+          一个键同时触发并携带配置，避免"primitives 列表 + 单独配置段"
+          两处配合的费解写法。
+        """
         custom_names: list[str] = []
         seen: set[str] = set()
         for prim_name in config.get("primitives", []):
@@ -232,20 +267,7 @@ class AnalysisTraversal:
             if get_primitive(prim_name) is not None:
                 custom_names.append(prim_name)
                 seen.add(prim_name)
-        for prim_name in custom_names:
-            prim = get_primitive(prim_name)
-            if prim is not None:
-                prim(self, node, config)
-
-        # 递归子节点
-        for child in node.iter_children():
-            self._walk(child)
-
-        # scope_exit
-        scope_exit_prim = get_primitive("scope_exit")
-        if scope_exit_prim is not None:
-            if _is_primitive_triggered("scope_exit", config):
-                scope_exit_prim(self, node, config)
+        return custom_names
 
 
 # ── 辅助函数 ──
