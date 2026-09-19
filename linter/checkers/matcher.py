@@ -52,6 +52,26 @@ def _is_atom_selector(info: dict, tree: dict) -> bool:
     return True
 
 
+def _token_firsts(feat: dict) -> set[str]:
+    """token 类型声明 → 首 token 集合（`A|B` 多候选拆开）。"""
+    tt = feat.get("token_type", "")
+    if "|" in tt:
+        return set(tt.split("|"))
+    return {tt}
+
+
+def _no_progress_ok(feat: dict, sub_errs: list, before: int) -> bool:
+    """元素匹配成功但不推进时，是否算合法（跳过继续而非回滚）。
+
+    optional 可不存在；全可选 call（如 TypeSpecNoReg）与 0 次 repeat（如
+    RangeBracket*）匹配成功但不消费也属合法。token/choice/plus 等失败仍回滚，
+    防止前一元素失败后后续 @Expression 在未推进位置假匹配。
+    """
+    if feat.get("type") == "optional":
+        return True
+    return feat.get("type") in ("call", "repeat") and len(sub_errs) == before
+
+
 class RuleMatcher:
     """从 production 树内联匹配规则的共享匹配器。"""
 
@@ -177,28 +197,11 @@ class RuleMatcher:
                 # 不完整（残缺：缺分号/缺语句体，缺失 token 处恰为文件末尾无换行
                 # 时即 EOF）。仅 optional 元素可合法缺失。报一次错即终止，不静默。
                 # probe 语境（_try_parse 截断试探）不报——那是正常截断非残缺。
-                if (
-                    not self._probe_eof
-                    and any(f.get("type") != "optional" for f in prods[pos:])
-                ):
+                if not self._probe_eof and self._has_required_tail(prods, pos):
                     self._report_eof(tokens, limit, errors)
                 break
             before = len(errors)
-            if feat.get("type") == "optional":
-                # first 与后续元素重叠（如门级实例 (strength)? 与无名实例
-                # 的 "("）→ overlap 变体：失败且首 token 命中时静默交还
-                # 后续元素，不报 incomplete 不跳过。
-                nxt: frozenset[str] = frozenset()
-                for later in prods[pos + 1 :]:
-                    nxt |= self._first_tokens(later, set())
-                if nxt:
-                    j = self._match_optional_overlap(
-                        tokens, i, feat, errors, limit, nxt
-                    )
-                else:
-                    j = self.match(tokens, i, feat, errors, limit, strict=True)
-            else:
-                j = self.match(tokens, i, feat, errors, limit, strict=True)
+            j = self._match_element(tokens, i, feat, prods, pos, errors, limit)
             if j <= i:
                 # optional 可不存在；全可选 call（如 TypeSpecNoReg）匹配成功但
                 # 不消费也属合法——两者都跳过继续，仅真正失败（有错误）才回滚
@@ -207,6 +210,41 @@ class RuleMatcher:
                 return start
             i = j
         return i
+
+    @staticmethod
+    def _has_required_tail(prods: list[dict], pos: int) -> bool:
+        """pos 及其后是否还有必选（非 optional）元素。"""
+        return any(f.get("type") != "optional" for f in prods[pos:])
+
+    def _match_element(
+        self,
+        tokens: list[Token],
+        i: int,
+        feat: dict,
+        prods: list[dict],
+        pos: int,
+        errors: list,
+        limit: int,
+    ) -> int:
+        """单元素匹配；optional 在"后续元素 first 与之重叠"时走 overlap 变体。
+
+        first 与后续元素重叠（如门级实例 (strength)? 与无名实例的 "("）→
+        overlap 变体：失败且首 token 命中时静默交还后续元素，不报 incomplete
+        不跳过（见 `_match_optional_overlap`）。
+        """
+        if feat.get("type") != "optional":
+            return self.match(tokens, i, feat, errors, limit, strict=True)
+        nxt = self._optional_overlap_firsts(prods, pos)
+        if not nxt:
+            return self.match(tokens, i, feat, errors, limit, strict=True)
+        return self._match_optional_overlap(tokens, i, feat, errors, limit, nxt)
+
+    def _optional_overlap_firsts(self, prods: list[dict], pos: int) -> frozenset[str]:
+        """pos 之后各元素的 first 并集（overlap 判据集）。"""
+        nxt: frozenset[str] = frozenset()
+        for later in prods[pos + 1 :]:
+            nxt |= self._first_tokens(later, set())
+        return nxt
 
     # ── 分发器 ──────────────────────────────────
 
@@ -570,28 +608,28 @@ class RuleMatcher:
             before = len(sub_errs)
             k = self.match(tokens, j, feat, sub_errs, limit, strict)
             if k <= j:
-                # optional 可不存在；全可选 call（如 TypeSpecNoReg）与 0 次
-                # repeat（如 RangeBracket*）匹配成功但不消费也属合法——都跳过
-                # 继续。token/choice/plus 等失败仍回滚，防止前一元素失败后
-                # 后续 @Expression 在未推进位置假匹配
-                if feat.get("type") == "optional":
-                    continue
-                if feat.get("type") in ("call", "repeat") and len(sub_errs) == before:
-                    continue
-                return start
+                if not _no_progress_ok(feat, sub_errs, before):
+                    return start
+                continue
             j = k
         if not silent:
             errors += sub_errs
-        # 内联匹配后检查 exclude 负向前瞻（如 Declarator 的 symbol.base.dot）：
-        # 命中排除 token 视为失败回滚（防止声明器吞掉后续端口/点语法）。
-        # 注意：exclude 是消歧必需的负向前瞻，与派生 FOLLOW 正交（非后继集）。
-        if j > start:
-            exclude: set = info.get("exclude") or set()
-            if exclude:
-                k = skip_trivia(tokens, j, limit)
-                if k < limit and tokens[k].type in exclude:
-                    return start
+        if j > start and self._hits_exclude(tokens, j, info, limit):
+            return start
         return j
+
+    @staticmethod
+    def _hits_exclude(tokens: list[Token], j: int, info: dict, limit: int) -> bool:
+        """内联匹配后检查 exclude 负向前瞻（如 Declarator 的 symbol.base.dot）。
+
+        命中排除 token 视为失败回滚（防止声明器吞掉后续端口/点语法）。注意：
+        exclude 是消歧必需的负向前瞻，与派生 FOLLOW 正交（非后继集）。
+        """
+        exclude: set = info.get("exclude") or set()
+        if not exclude:
+            return False
+        k = skip_trivia(tokens, j, limit)
+        return k < limit and tokens[k].type in exclude
 
     def _match_choice(
         self,
@@ -716,61 +754,70 @@ class RuleMatcher:
         return self._match_optional(tokens, i, node, errors, limit)
 
     def _first_tokens(self, feat: dict, visited: set) -> set[str]:
-        """递归计算 feature 的必然首 token 类型集合（防环）。"""
+        """递归计算 feature 的必然首 token 类型集合（防环）。
+
+        逐类型实现分在 `_first_of_*`：call 带块起始/可空传播（最重）、
+        seq/choice 为并集、optional·repeat·plus 取其 elem。
+        """
         typ = feat.get("type", "")
-        if typ == "token":
-            tt = feat.get("token_type", "")
-            if "|" in tt:
-                return set(tt.split("|"))
-            return {tt}
         if typ == "call":
-            name = feat.get("name", "")
-            if name in visited:
-                return set()
-            info = self._tree.get(name)
-            if info:
-                # 块规则：block_start 已从 production 剥离（如 BeginEnd 的
-                # keyword.begin），需并入 firsts，否则 @BeginEnd 等块候选的
-                # 首 token 收集缺失（Stmt/CtrlStmt firsts 漏 begin）。
-                result: set[str] = set()
-                bs = info.get("block_start") or ""
-                if bs:
-                    result.add(bs)
-                prods = info.get("prods", [])
-                if prods and isinstance(prods[0], dict):
-                    result |= self._first_tokens(prods[0], visited | {name})
-                # nullable 传播：首元素是可空形态（optional/repeat）时，
-                # first 含"空后下一元素"的 first（如 GateInstance 的
-                # @Identifier? 空 → first 含 "("；否则 overlap 判据漏判）。
-                if prods and isinstance(prods[0], dict):
-                    if prods[0].get("type") in ("optional", "repeat"):
-                        for later in prods[1:]:
-                            result |= self._first_tokens(
-                                later, visited | {name}
-                            )
-                            if later.get("type") not in ("optional", "repeat"):
-                                break
-                return result
-            return set()
+            return self._first_of_call(feat, visited)
         if typ == "seq":
-            items = feat.get("items", [])
-            if items:
-                result = set()
-                for it in items:
-                    result |= self._first_tokens(it, visited)
-                    # seq 内可空元素后继续收集（同上 nullable 传播）
-                    if it.get("type") not in ("optional", "repeat"):
-                        break
-                return result
-            return set()
+            return self._nullable_after(feat.get("items", []), visited)
         if typ == "choice":
-            result: set[str] = set()
-            for a in feat.get("alternatives", []):
-                result |= self._first_tokens(a, visited)
-            return result
+            return self._first_of_choice(feat, visited)
         if typ in ("optional", "repeat", "plus"):
             return self._first_tokens(feat.get("elem", {}) or {}, visited)
+        if typ == "token":
+            return _token_firsts(feat)
         return set()
+
+    def _first_of_call(self, feat: dict, visited: set) -> set[str]:
+        """call：目标规则首元素 firsts + block_start + **可空前缀传播**。
+
+        块规则：block_start 已从 production 剥离（如 BeginEnd 的
+        keyword.begin），需并入 firsts，否则 @BeginEnd 等块候选的
+        首 token 收集缺失（Stmt/CtrlStmt firsts 漏 begin）。
+        """
+        name = feat.get("name", "")
+        if name in visited:
+            return set()
+        info = self._tree.get(name)
+        if not info:
+            return set()
+        result: set[str] = set()
+        bs = info.get("block_start") or ""
+        if bs:
+            result.add(bs)
+        prods = info.get("prods", [])
+        first = prods[0] if prods and isinstance(prods[0], dict) else None
+        if first is None:
+            return result
+        result |= self._first_tokens(first, visited | {name})
+        if first.get("type") in ("optional", "repeat"):
+            result |= self._nullable_after(prods[1:], visited | {name})
+        return result
+
+    def _nullable_after(self, items: list, visited: set) -> set[str]:
+        """可空前缀传播：从 items 首元素起逐个并入 firsts，遇非可空元素停。
+
+        首元素是可空形态（optional/repeat）时，first 还要含"空之后那一元素"
+        的 first（如 GateInstance 的 @Identifier? 空 → first 应含 "("；
+        否则 overlap 判据漏判）。call / seq 两处共用。
+        """
+        result: set[str] = set()
+        for it in items:
+            result |= self._first_tokens(it, visited)
+            if it.get("type") not in ("optional", "repeat"):
+                break
+        return result
+
+    def _first_of_choice(self, feat: dict, visited: set) -> set[str]:
+        """choice：各分支 firsts 并集。"""
+        result: set[str] = set()
+        for a in feat.get("alternatives", []):
+            result |= self._first_tokens(a, visited)
+        return result
 
     def _first_tokens_of_rule(self, name: str, visited: set) -> set[str]:
         """规则 production 首元素的必然首 token 集合。"""
@@ -889,12 +936,25 @@ class RuleMatcher:
     def _skip_to_end(
         self, tokens: list[Token], i: int, end_set: set[str], limit: int
     ) -> int:
-        depth = 0
+        """跳过到结束符之后（end_set 可含 `!` 前缀排除项）。"""
         exclude = {s[1:] for s in end_set if s.startswith("!")}
         positive = {s for s in end_set if not s.startswith("!")}
         if not positive:
-            j = skip_trivia(tokens, i + 1, limit)
-            return j if j <= limit else limit
+            return self._skip_to_limit(tokens, i + 1, limit)
+        return self._scan_to_end(tokens, i, positive, exclude, limit)
+
+    @staticmethod
+    def _skip_to_limit(tokens: list[Token], i: int, limit: int) -> int:
+        """无正选集：只跳 trivia，越界即夹到 limit。"""
+        j = skip_trivia(tokens, i, limit)
+        return j if j <= limit else limit
+
+    def _scan_to_end(
+        self, tokens: list[Token], i: int, positive: set[str], exclude: set[str],
+        limit: int,
+    ) -> int:
+        """逐 token 扫描：排除集过、正选集在深度 0 命中即收、块内继续。"""
+        depth = 0
         while i < limit:
             t = tokens[i]
             if t.type in exclude:
@@ -905,15 +965,24 @@ class RuleMatcher:
             if t.type in _TRIVIA:
                 i = skip_trivia(tokens, i, limit)
                 continue
-            if t.type in self._block_openers:
-                depth += 1
-            elif t.type in self._block_closers:
-                # positive 闭合符（如 keyword.end）使深度归零 → 该 token 就是
-                # 目标块结束符，返回其之后位置。对齐 discovery._skip_to_end：
-                # 缺失此分支时 depth 1→0 的 end 被跳过，块分支用 block_end 跳过
-                # 会越过正确 end 延伸（`end else` 同行吞掉 else 链）。
-                if t.type in positive and depth <= 1:
-                    return i + 1
-                depth = max(0, depth - 1)
+            if self._closes_target_block(t, positive, depth):
+                return i + 1
+            depth = self._block_depth_step(t, depth)
             i += 1
         return limit
+
+    def _closes_target_block(self, t: Token, positive: set[str], depth: int) -> bool:
+        """闭合符是否即目标块结束符（正选闭合符且深度 ≤ 1）。
+
+        对齐 discovery._skip_to_end：缺失此判据时 depth 1→0 的 end 被跳过，
+        块分支用 block_end 跳过会越过正确 end 延伸（`end else` 同行吞掉 else 链）。
+        """
+        return t.type in self._block_closers and t.type in positive and depth <= 1
+
+    def _block_depth_step(self, t: Token, depth: int) -> int:
+        """块开/闭符号 → 新嵌套深度（闭合符不低于 0）。"""
+        if t.type in self._block_openers:
+            return depth + 1
+        if t.type in self._block_closers:
+            return max(0, depth - 1)
+        return depth
