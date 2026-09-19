@@ -165,6 +165,90 @@ def rule_frame(self, context: ParseContext, rule: GrammarRule):
             self.scope_stack.pop()
 
 
+def _consume_block_start(
+    parser, context: ParseContext, rule: GrammarRule, bs: str
+) -> tuple[Token | None, int]:
+    """跳过 trivia 后消费块起始符；返回 (起始 token, `_tok_span` 左端指针)。
+
+    起始 token 为 None（或类型不匹配）即块规则失败——失败点已记录，调用方
+    直接返回 None。
+    """
+    parser._skip_tokens(context, tuple(parser.skip_types))
+    start_idx = context.token_pointer
+    tok = context.peek_token()
+    if not tok or tok.type != bs:
+        parser._record_fail_site(
+            context, rule=rule.name, reason=f"block start mismatch: expected {bs}"
+        )
+        return None, start_idx
+    context.advance_token()
+    return tok, start_idx
+
+
+def _move_trailing_to_head(rule_node: Node) -> None:
+    """块头行尾注释迁槽（`module m; // c`，2026-09-13）。
+
+    块体解析**之前**挂到本节点的 trailing 属于"块头那一行"，不是块尾：渲染时
+    trailing 随 tail（`endmodule`/`end`）输出，注释会漂到块末。迁到
+    head_trailing，renderer 紧跟 head 输出（同行行尾）。
+    """
+    slots = getattr(rule_node, "_comment_slots", None)
+    if slots and slots.get("trailing"):
+        slots["head_trailing"] = slots.pop("trailing")
+
+
+def _attach_block_body(parser, context: ParseContext, rule: GrammarRule, rule_node: Node) -> None:
+    """解析块体（parse_block_body）并把子节点挂到规则节点。"""
+    block_body = Node(BLOCK_NODE_NAME)
+    from .block_parser import parse_block_body
+
+    parse_block_body(parser, context, block_body, rule)
+    for child in getattr(block_body, CHILDREN_FIELD, []):
+        rule_node.add_sub_node(child)
+
+
+def _attach_end_comment(parser, rule_node: Node, tok: Token, nxt: Token, be: str) -> None:
+    """块结束符后注释的归属：同行 → 本节点 trailing；新行 → anchor 条目。"""
+    if nxt.line == tok.line:
+        # 行尾形态（`end // comment` 同行）→ 挂块规则节点 trailing 槽（结构序
+        # 渲染 LineSuffix，ADR-0013 注释节点元信息）。仅记 anchor 的话 restore
+        # 不回普通注释（仅 tpc marker）→ 丢失（tv80 `end // case: ...` 203 条实测）。
+        slots = getattr(rule_node, "_comment_slots", None)
+        if slots is None:
+            slots = {}
+            rule_node.add_attr("_comment_slots", slots)
+        slots.setdefault("trailing", []).append(nxt.content)
+        return
+    # 独占形态（结束符后新行注释）→ 记 anchor 条目（restore 仅 tpc marker），
+    # 注释不属于本块结束行。
+    parser._record_anchor(
+        {"anchor": tok.content, "text": nxt.content, "line": nxt.line, "type": be},
+        "inline",
+    )
+
+
+def _consume_block_end(parser, context: ParseContext, rule: GrammarRule, rule_node: Node) -> None:
+    """消费块结束符，并一并消费其后的行内注释（`end // comment`）。
+
+    块规则结束符不走 parse_token，注释若残留会停在 token 流，使外层规则的后继
+    检查（FOLLOW）失败回滚。
+    """
+    be = block_end_of(rule)
+    if not be:
+        return
+    parser._skip_tokens(context, tuple(parser.skip_types))
+    tok = context.peek_token()
+    if not tok or tok.type != be:
+        return
+    context.advance_token()
+    while context.has_more_tokens():
+        nxt = context.peek_token()
+        if not nxt or nxt.type != COMMENT_TOKEN_TYPE:
+            break
+        _attach_end_comment(parser, rule_node, tok, nxt, be)
+        context.advance_token()
+
+
 def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """块规则匹配：起止符消费 + 块头内容 + 块体 + FOLLOW 检查。
 
@@ -180,97 +264,40 @@ def try_block_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         return self.parse_block(context, start_token="", rule=rule)
 
     # 1) 消费起始符
-    self._skip_tokens(context, tuple(self.skip_types))
-    _start_idx = context.token_pointer
-    tok = context.peek_token()
-    if not tok or tok.type != bs:
-        self._record_fail_site(
-            context,
-            rule=rule.name,
-            reason=f"block start mismatch: expected {bs}",
-        )
+    tok, _start_idx = _consume_block_start(self, context, rule, bs)
+    if tok is None:
         return None
-    context.advance_token()
 
     # 2) 匹配块头内容 production（block_prods，不含 block_start/block_end）
     rule_node = Node(rule.name)
-    if tok is not None:
-        # 源位置元数据（语义诊断定位用）：块规则锚定起始符
-        rule_node._pos_line = tok.line
-        rule_node._pos_col = tok.column
+    # 源位置元数据（语义诊断定位用）：块规则锚定起始符
+    rule_node._pos_line = tok.line
+    rule_node._pos_col = tok.column
     old_node = context.current_node
     context.update_current_node(rule_node)
     all_matched = match_productions(self, context, rule, rule.block_prods)
     if all_matched is None:
+        # 恢复 previous current_node（允许 None——fuzz 发现：畸形 ANSI 端口
+        # （如 `input [7:0]` 缺端口名）在句子解析上下文里 current_node 可为
+        # None，原 assert 直接崩溃。恢复 None 是合法状态，不得用断言兜错误
+        # 路径——用户输入必须软失败（截断/解析错误），不能崩。）
         self._record_fail_site(
             context,
             rule=rule.name,
             reason="block header production failed",
         )
-        # 恢复 previous current_node（允许 None——fuzz 发现：畸形 ANSI 端口
-        # （如 `input [7:0]` 缺端口名）在句子解析上下文里 current_node 可为
-        # None，原 assert 直接崩溃。恢复 None 是合法状态，不得用断言兜错误
-        # 路径——用户输入必须软失败（截断/解析错误），不能崩。）
         context.update_current_node(old_node)
         return None
     self._bind_attributes(rule_node, rule, all_matched)
 
-    # 2b) 块头行尾注释迁槽（`module m; // c`，2026-09-13）
-    # 块体解析**之前**挂到本节点的 trailing 属于"块头那一行"，不是块尾：
-    # 渲染时 trailing 随 tail（`endmodule`/`end`）输出，注释会漂到块末。
-    # 迁到 head_trailing，renderer 紧跟 head 输出（同行行尾）。
-    _head_slots = getattr(rule_node, "_comment_slots", None)
-    if _head_slots and _head_slots.get("trailing"):
-        _head_slots["head_trailing"] = _head_slots.pop("trailing")
+    # 2b) 块头行尾注释迁槽
+    _move_trailing_to_head(rule_node)
 
     # 3) 解析块体
-    block_body = Node(BLOCK_NODE_NAME)
-    from .block_parser import parse_block_body
+    _attach_block_body(self, context, rule, rule_node)
 
-    parse_block_body(self, context, block_body, rule)
-    body_children = getattr(block_body, CHILDREN_FIELD, [])
-    for child in body_children:
-        rule_node.add_sub_node(child)
-
-    # 4) 消费结束符
-    be = block_end_of(rule)
-    if be:
-        self._skip_tokens(context, tuple(self.skip_types))
-        tok = context.peek_token()
-        if tok and tok.type == be:
-            context.advance_token()
-            # 结束符后行内注释（`end // comment`）一并消费：
-            # 块规则结束符不走 parse_token，注释若残留会停在 token 流，
-            # 使外层规则的后继检查（FOLLOW）失败回滚。
-            while context.has_more_tokens():
-                nxt = context.peek_token()
-                if nxt and nxt.type == COMMENT_TOKEN_TYPE:
-                    if nxt.line == tok.line:
-                        # 行尾形态（`end // comment` 同行）→ 挂块规则节点
-                        # trailing 槽（结构序渲染 LineSuffix，ADR-0013 注释
-                        # 节点元信息）。仅记 anchor 的话 restore 不回普通
-                        # 注释（仅 tpc marker）→ 丢失（tv80 `end // case:
-                        # ...` 203 条实测）。
-                        slots = getattr(rule_node, "_comment_slots", None)
-                        if slots is None:
-                            slots = {}
-                            rule_node.add_attr("_comment_slots", slots)
-                        slots.setdefault("trailing", []).append(nxt.content)
-                    else:
-                        # 独占形态（结束符后新行注释）→ 记 anchor 条目
-                        # （restore 仅 tpc marker），注释不属于本块结束行。
-                        self._record_anchor(
-                            {
-                                "anchor": tok.content,
-                                "text": nxt.content,
-                                "line": nxt.line,
-                                "type": be,
-                            },
-                            "inline",
-                        )
-                    context.advance_token()
-                else:
-                    break
+    # 4) 消费结束符（含结束符后行内注释）
+    _consume_block_end(self, context, rule, rule_node)
 
     # 5) FOLLOW 检查（方案 B+）：块规则消费完 block_end 后，下一个 token
     #    也必须是派生 FOLLOW 中的合法后继——与普通规则统一（不再跳过）。
@@ -304,6 +331,73 @@ def _starts_line(context: ParseContext, tok_idx: int) -> bool:
     return is_line_only(context.tokens, tok_idx)
 
 
+def _insert_gap_comments(parser, subs: list, cmt_list: list[dict]) -> None:
+    """把领到的注释条目按源行序插到 sub_node 首位（逐个前插 → 最终源序）。"""
+    from .block_parser import _derive_comment_node_name, _make_comment_node
+
+    cmt_name = getattr(parser, "_gap_comment_node_name", None)
+    if cmt_name is None:
+        cmt_name = _derive_comment_node_name(parser, COMMENT_TOKEN_TYPE)
+        parser._gap_comment_node_name = cmt_name
+    for e in sorted(cmt_list, key=lambda x: x.get("line", 0)):
+        subs.insert(0, _make_comment_node(cmt_name, e["text"]))
+
+
+def _claim_line_anchors(parser, subs: list, end_line: int) -> None:
+    """来源 1（line 通道，B1.3 既有）：**独占行**注释。
+
+    领窗口 = 注释行 < 本规则匹配末行（理由与嵌套安全见 `_claim_head_comments`）。
+    """
+    anchors = getattr(parser, "_line_comment_anchors", None)
+    if not anchors:
+        return
+    lift = [
+        e
+        for e in anchors
+        if e.get("line_only")
+        and "tpc:" not in e.get("text", "")
+        and e.get("line", -1) < end_line
+    ]
+    if not lift:
+        return
+    _insert_gap_comments(parser, subs, lift)
+    mark = getattr(parser, "_mark_comment_collected", None)
+    if mark is not None:
+        for e in lift:
+            mark(e["text"], e.get("line", 0))
+
+
+def _claim_inline_anchors(parser, subs: list, end_line: int) -> None:
+    """来源 2（inline 通道，ADR-0014 ①）：容器**开括号同行**的行尾注释。
+
+    按"紧前 token type 以 bracket.l_ 开头"识别容器开括号锚（BRACKET_L_PREFIX，
+    语言无关），与 B1.3 同判据（首元素前形态）、同窗口（line < 本规则匹配末行）。
+    """
+    from core.token_protocol import BRACKET_L_PREFIX
+
+    anchors = getattr(parser, "_comment_anchors", None)
+    if not anchors:
+        return
+    lift = [
+        e
+        for e in anchors
+        if "tpc:" not in e.get("text", "")
+        and e.get("type", "").startswith(BRACKET_L_PREFIX)
+        and e.get("line", -1) < end_line
+    ]
+    if not lift:
+        return
+    _insert_gap_comments(parser, subs, lift)
+    # 从 inline 通道消除：restore 对普通注释本就跳过（ADR-0013 目标④）——
+    # 消除是防 pipeline 其它消费路径 + 与 _anchor_seen_inline 一致防回溯
+    # 重录/外层规则双份（与 line 通道 mark 同语义）
+    seen = {(e["text"], e.get("line", 0)) for e in lift}
+    parser._anchor_seen_inline.update(seen)
+    parser._comment_anchors[:] = [
+        e for e in anchors if (e["text"], e.get("line", 0)) not in seen
+    ]
+
+
 def _claim_head_comments(
     self, node: Node, end_line: int
 ) -> None:
@@ -319,9 +413,7 @@ def _claim_head_comments(
     ADR-0014（①）第二来源：容器**开括号同行**的行内 line comment
     （`sub u (//RF interface\n .port...`）——与 `(` 同行非独占行，B1/B1.3
     窗口不收；行尾注释进 inline 通道（_comment_anchors）、渲染 restore 只
-    处理 tpc marker → 不进树即丢。按"紧前 token type 以 bracket.l_ 开头"
-    识别容器开括号锚（BRACKET_L_PREFIX，语言无关），与 B1.3 同判据（首
-    元素前形态）、同窗口（line < 本规则匹配末行）领取挂 Comment 子节点。
+    处理 tpc marker → 不进树即丢。见 `_claim_inline_anchors`。
 
     嵌套安全：
     - 行中开始的规则（如 AnsiInputDecl 内 DeclaratorList 的 declarator）
@@ -338,59 +430,8 @@ def _claim_head_comments(
     if subs is None:
         subs = []
         setattr(node, "sub_node", subs)
-
-    def _insert(cmt_list: list[dict]) -> None:
-        from .block_parser import _derive_comment_node_name, _make_comment_node
-
-        cmt_name = getattr(self, "_gap_comment_node_name", None)
-        if cmt_name is None:
-            cmt_name = _derive_comment_node_name(self, COMMENT_TOKEN_TYPE)
-            self._gap_comment_node_name = cmt_name
-        for e in sorted(cmt_list, key=lambda x: x.get("line", 0)):
-            cmt = _make_comment_node(cmt_name, e["text"])
-            subs.insert(0, cmt)
-
-    # 来源 1（line 通道，B1.3 既有）：独占行注释
-    if getattr(self, "_line_comment_anchors", None):
-        anchors = self._line_comment_anchors
-        lift = [
-            e
-            for e in anchors
-            if e.get("line_only")
-            and "tpc:" not in e.get("text", "")
-            and e.get("line", -1) < end_line
-        ]
-        if lift:
-            _insert(lift)
-            mark = getattr(self, "_mark_comment_collected", None)
-            if mark is not None:
-                for e in lift:
-                    mark(e["text"], e.get("line", 0))
-
-    # 来源 2（inline 通道，ADR-0014 ①）：容器开括号起始的行尾注释
-    from core.token_protocol import BRACKET_L_PREFIX
-
-    if getattr(self, "_comment_anchors", None):
-        anchors2 = self._comment_anchors
-        lift2 = [
-            e
-            for e in anchors2
-            if "tpc:" not in e.get("text", "")
-            and e.get("type", "").startswith(BRACKET_L_PREFIX)
-            and e.get("line", -1) < end_line
-        ]
-        if lift2:
-            _insert(lift2)
-            # 从 inline 通道消除：restore 对普通注释本就跳过（ADR-0013
-            # 目标④）——消除是防 pipeline 其它消费路径 + 与 _anchor_seen_
-            # inline 一致防回溯重录/外层规则双份（与 line 通道 mark 同语义）
-            seen = set((e["text"], e.get("line", 0)) for e in lift2)
-            self._anchor_seen_inline.update(seen)
-            self._comment_anchors[:] = [
-                e
-                for e in self._comment_anchors
-                if (e["text"], e.get("line", 0)) not in seen
-            ]
+    _claim_line_anchors(self, subs, end_line)
+    _claim_inline_anchors(self, subs, end_line)
 
 
 def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
