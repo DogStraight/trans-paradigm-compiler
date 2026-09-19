@@ -4,6 +4,7 @@ Doc: renderer/renderer_architecture.md（join 列表拼接原语）
 """
 
 from typing import Any
+from dataclasses import dataclass
 from core.define import Node
 from ..doc import Doc, Empty, Text, Line as SoftLine, Break, HardBreak, Concat, Nest, LineSuffix, group
 from .registry import register
@@ -30,28 +31,56 @@ def _split_trailing_suffix(doc: Doc) -> tuple[Doc, list[LineSuffix]]:
     return doc, []
 
 
-@register("join")
-def eval_join(
-    expr: dict, node: Node, parent_layout: dict | None, renderer: Any
-) -> Doc | None:
-    sep_text = expr["join"].rstrip()
-    nest_level = expr.get("nest", 0)
-    first_soft = expr.get("first_soft", False)
-    prefix = expr.get("prefix", "")
-    suffix = expr.get("suffix", "")
-    # no_soft: 硬拼接，不插 SoftLine、不 group（用于"必须一行"的列表，
-    # 如增强语法 role 端口列表 `master : input clk, input miso, ...;`）。
-    # 硬拼接时保留原始分隔符（含尾随空格，如 ", "），避免 rstrip 丢空格。
-    no_soft = expr.get("no_soft", False)
-    if no_soft:
-        sep_text = expr["join"]
+@dataclass(frozen=True)
+class _JoinCfg:
+    """join 原语的配置面（读一次，渲染/组装/包裹三阶段共用）。"""
 
-    # 分隔符为 \n → 使用硬换行，不 group
-    # 分隔符为空 → 直接拼接，不 group
-    is_newline_sep = expr["join"] == "\n"
-    no_sep = not expr["join"]
+    sep_text: str        # 项间分隔文本（no_soft 时不 rstrip，保留尾随空格）
+    sep_anchor: str      # 行中注释锚（= sep_text.rstrip()）
+    nest_level: int
+    first_soft: bool
+    prefix: str
+    suffix: str
+    no_soft: bool
+    is_newline_sep: bool
+    no_sep: bool
+    inline_sep: bool     # 行内分隔（有 sep + SoftLine 可折）
 
-    items = renderer._resolve_items(node, expr.get("items"))
+    @classmethod
+    def from_expr(cls, expr: dict) -> "_JoinCfg":
+        """从原语配置读各项；`inline_sep` 与 `sep_anchor` 是派生态，一并算好。"""
+        sep_text = expr["join"].rstrip()
+        # no_soft: 硬拼接，不插 SoftLine、不 group（用于"必须一行"的列表，
+        # 如增强语法 role 端口列表 `master : input clk, input miso, ...;`）。
+        # 硬拼接时保留原始分隔符（含尾随空格，如 ", "），避免 rstrip 丢空格。
+        no_soft = expr.get("no_soft", False)
+        if no_soft:
+            sep_text = expr["join"]
+        # 分隔符为 \n → 使用硬换行，不 group；为空 → 直接拼接，不 group
+        is_newline_sep = expr["join"] == "\n"
+        no_sep = not expr["join"]
+        return cls(
+            sep_text=sep_text,
+            sep_anchor=sep_text.rstrip() if sep_text else "",
+            nest_level=expr.get("nest", 0),
+            first_soft=expr.get("first_soft", False),
+            prefix=expr.get("prefix", ""),
+            suffix=expr.get("suffix", ""),
+            no_soft=no_soft,
+            is_newline_sep=is_newline_sep,
+            no_sep=no_sep,
+            inline_sep=not is_newline_sep and not no_sep and not no_soft,
+        )
+
+
+def _render_join_items(
+    items: list, parent_layout: dict | None, renderer: Any
+) -> list[tuple[Doc, list[LineSuffix], bool]]:
+    """渲染每个列表项 → [(项正文, 尾部 LineSuffix 链, 是否独占行注释)]。
+
+    三类项：独占行注释（`_comment` 标记，段分隔用）、节点项（可能带首部
+    Comment 子节点，拆为注释段 + 主体）、非节点项（直接文本化）。
+    """
     rendered: list[tuple[Doc, list[LineSuffix], bool]] = []
 
     for item in items:
@@ -92,39 +121,63 @@ def eval_join(
         if not isinstance(d, Empty):
             body, suffixes = _split_trailing_suffix(d)
             rendered.append((body, suffixes, False))
+    return rendered
 
-    if not rendered:
-        return None
 
-    # 行内分隔（有 sep + SoftLine 可折）：item 尾部 LineSuffix（行尾注释）输出在
-    # 分隔符之后、折行点之前（`input clk, // 注释`——注释在逗号后行尾，flat 与
-    # broken 均正确）；换行分隔（语句块 join="\n"）保持 item 内（`stmt; // 注释`）。
-    inline_sep = not is_newline_sep and not no_sep and not no_soft
+def _take_sep_inline_after(node: Node, sep_anchor: str) -> list:
+    """取容器节点 inline_after 里锚=分隔符的行中注释槽（**返回原槽列表**）。
 
-    # 容器节点 inline_after 中锚=分隔符的行中注释（ADR-0013 ③补全：
-    # `input clk, /* c */ output`——`,` 是 join 分隔符非布局 line 文本元素，
-    # line.py 锚消费不到 → join 组装时插到分隔符后）。按收集序（= 分隔符
-    # 序）逐 sep 分配，pop 直接作用于节点槽（消费即删——B1.4 已删 leftover
-    # 回插通道，残余不再兜底）。
-    sep_anchor = ""
-    if sep_text:
-        sep_anchor = sep_text.rstrip()
-    sep_ia: list = []
-    _node_slots = getattr(node, "_comment_slots", None)
-    if _node_slots and sep_anchor:
-        _ia = _node_slots.get("inline_after") or {}
-        if sep_anchor in _ia:
-            sep_ia = _ia[sep_anchor]
+    容器节点 inline_after 中锚=分隔符的行中注释（ADR-0013 ③补全：
+    `input clk, /* c */ output`——`,` 是 join 分隔符非布局 line 文本元素，
+    line.py 锚消费不到 → join 组装时插到分隔符后）。按收集序（= 分隔符序）
+    逐 sep 分配，`pop` 直接作用于节点槽（消费即删——B1.4 已删 leftover 回插
+    通道，残余不再兜底）。
+    """
+    if not sep_anchor:
+        return []
+    slots = getattr(node, "_comment_slots", None)
+    if not slots:
+        return []
+    inline_after = slots.get("inline_after") or {}
+    return inline_after.get(sep_anchor) or []
 
+
+def _cleanup_sep_slot(node: Node, sep_anchor: str) -> None:
+    """分隔符行中注释槽清理：消费空键即删（B1.4 已删 leftover 回插通道）。"""
+    if not sep_anchor:
+        return
+    slots = getattr(node, "_comment_slots", None)
+    if slots is None:
+        return
+    inline_after = slots.get("inline_after")
+    if inline_after and sep_anchor in inline_after and not inline_after[sep_anchor]:
+        del inline_after[sep_anchor]
+        if not inline_after:
+            del slots["inline_after"]
+
+
+def _assemble_join(
+    rendered: list[tuple[Doc, list[LineSuffix], bool]],
+    cfg: _JoinCfg,
+    sep_ia: list,
+    renderer: Any,
+) -> list[Doc]:
+    """按 join 语义组装 Doc 序列（含独占行注释分段、分隔符与行尾注释时序）。
+
+    - 项尾部 LineSuffix（行尾注释）在**行内分隔**下输出在分隔符之后、折行点
+      之前（`input clk, // 注释`——flat 与 broken 均正确）；换行分隔
+      （`join="\\n"`）保持项内（`stmt; // 注释`）。
+    - 独占行注释项把列表切成多段：注释前 Break、注释后 Break，段首无分隔符。
+    - 末项行尾注释若属"到行边界终止"型（语言包声明的
+      `renderer.comment_ends_line`）→ 追加 HardBreak（**组必须断开**：列表后面
+      若还有同行布局元素（`)` `;`），注释会把它们吃进注释文本）。
+    """
+    sep_text = cfg.sep_text
     pending_suffix: list[LineSuffix] = []
     result: list[Doc] = []
-    if prefix:
-        result.append(Text(prefix))
+    if cfg.prefix:
+        result.append(Text(cfg.prefix))
 
-    # 独占行注释（ADR-0013 阶段 B）作"段分隔"：注释项把列表切成多段。
-    # 普通项沿用原 join 语义（分隔符在项间输出、行尾注释 LineSuffix 处理）；
-    # 注释项打断处：若前项分隔符已输出则 Break 到注释行，注释后下一项为
-    # 新段首（无分隔符）。
     after_comment = False
     n_rendered = len(rendered)
     for i, (body, suffixes, is_comment) in enumerate(rendered):
@@ -137,7 +190,7 @@ def eval_join(
                 if i > 0:
                     # 注释前有普通项：该项行尾补分隔符（端口 `,`——列表未
                     # 结束，分隔符归属前项行尾），随后 Break 到注释行
-                    if inline_sep and not no_sep and not no_soft and not is_newline_sep:
+                    if cfg.inline_sep:
                         result.append(Text(sep_text))
                     result.append(Break())
                 else:
@@ -145,7 +198,7 @@ def eval_join(
                     # 独占行语义——注释前强制 Break（first_soft 的空格会把
                     # 注释贴到父上下文行尾，如 `module m( // head`），
                     # 换行分隔/硬拼场景无 SoftLine 概念则跳过（父已有换行）。
-                    if not is_newline_sep and not no_sep and not no_soft:
+                    if not cfg.is_newline_sep and not cfg.no_sep and not cfg.no_soft:
                         result.append(Break())
             result.append(body)
             if i < n_rendered - 1:
@@ -155,20 +208,20 @@ def eval_join(
         if after_comment:
             # 注释后新段首项：无前置分隔符，直接接正文
             result.append(body)
-            if inline_sep:
+            if cfg.inline_sep:
                 pending_suffix = suffixes
             else:
                 result.extend(suffixes)
             after_comment = False
             continue
-        if i == 0 and first_soft and inline_sep:
+        if i == 0 and cfg.first_soft and cfg.inline_sep:
             result.append(SoftLine())
         if i > 0:
-            if is_newline_sep:
+            if cfg.is_newline_sep:
                 result.append(Break())
-            elif no_sep:
+            elif cfg.no_sep:
                 pass
-            elif no_soft:
+            elif cfg.no_soft:
                 result.append(Text(sep_text))
             else:
                 result.append(Text(sep_text))
@@ -179,7 +232,7 @@ def eval_join(
                     _t, _ = sep_ia.pop(0)
                     result.append(Text(" " + _t))
                     result.append(Text(" "))
-            if inline_sep:
+            if cfg.inline_sep:
                 # 行终止型注释（行注释）后必须换行且**强制组断开**——否则扁平化
                 # 会把分隔符折成空格，注释吞掉后续项（`input a, // c output b`）。
                 # 哪种注释属该型由语言包声明（renderer.comment_ends_line）。
@@ -190,7 +243,7 @@ def eval_join(
                 pending_suffix = []
                 result.append(HardBreak() if ends_line else SoftLine())
         result.append(body)
-        if inline_sep:
+        if cfg.inline_sep:
             pending_suffix = suffixes
         else:
             result.extend(suffixes)
@@ -204,22 +257,39 @@ def eval_join(
         # 硬编码标点；块注释保持同行（`input clk, /* c */ output`）。
         if any(renderer.comment_ends_line(s.text) for s in pending_suffix):
             result.append(HardBreak())
+    return result
 
-    # 分隔符行中注释槽清理：消费空键即删（B1.4 已删 leftover 回插通道）
-    if _node_slots is not None and sep_anchor:
-        _ia = _node_slots.get("inline_after")
-        if _ia and sep_anchor in _ia and not _ia[sep_anchor]:
-            del _ia[sep_anchor]
-            if not _ia:
-                del _node_slots["inline_after"]
 
-    if suffix:
-        result.append(Text(suffix))
+@register("join")
+def eval_join(
+    expr: dict, node: Node, parent_layout: dict | None, renderer: Any
+) -> Doc | None:
+    """join 原语：列表连接（分隔符 / 折行 / 行尾注释 / 段分隔注释）。
 
-    if is_newline_sep or no_sep or no_soft:
+    四阶段：读配置（`_JoinCfg.from_expr`）→ 渲染各项
+    （`_render_join_items`）→ 组装（`_assemble_join`，含分隔符注释槽）→
+    包裹（group 与否 + nest）。
+      - 分隔符为 `\\n` / 空 / `no_soft`：不 group（硬拼或项内已带换行）；
+      - 分隔符行中注释槽消费空后即删（`_cleanup_sep_slot`）。
+    """
+    cfg = _JoinCfg.from_expr(expr)
+    items = renderer._resolve_items(node, expr.get("items"))
+    rendered = _render_join_items(items, parent_layout, renderer)
+    if not rendered:
+        return None
+
+    sep_ia = _take_sep_inline_after(node, cfg.sep_anchor)
+    result = _assemble_join(rendered, cfg, sep_ia, renderer)
+    _cleanup_sep_slot(node, cfg.sep_anchor)
+
+    if cfg.suffix:
+        result.append(Text(cfg.suffix))
+
+    if cfg.is_newline_sep or cfg.no_sep or cfg.no_soft:
         doc = Concat(result)
     else:
         doc = group(Concat(result))
-    if nest_level:
-        doc = Nest(renderer._indent(nest_level), doc)
+    if cfg.nest_level:
+        doc = Nest(renderer._indent(cfg.nest_level), doc)
     return doc
+
