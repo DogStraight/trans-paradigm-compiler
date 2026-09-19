@@ -154,6 +154,7 @@ CONSTANT: dict[str, str] = {
     "lexer.capture_runner._CAPTURE_HANDLERS": "capture kind → 终止条件 handler 分发表（只读，`_VALID_KINDS` 由它派生）",
     "lexer.number_gen._CHAR_CATEGORY": "字符类别字面量表",
     "linter.checkers.expression.ExpressionChecker._MAX_DEPTH": "最大递归深度常量",
+    "linter.grammar_slicer._FIRST_HANDLERS": "元素类型→First 集 handler 分发表（只读字面量）",
     "main._CMD_DEFAULTS": "CLI 子命令默认值",
     "parser._production._DISPATCH": "节点分发表字面量",
     "parser.rule_selector.SEPARATOR_HANDLERS": "production 分隔符处理器表（模块级字面量）",
@@ -196,17 +197,11 @@ def _split_target(name: str) -> tuple[object, str]:
     raise LookupError(f"无法解析全局态条目：{name}")
 
 
-def discover_mutable_globals() -> list[str]:
-    """扫描引擎包的模块级/类级可变容器（dict/list/set/bytearray）→ 条目名。
+def _engine_module_names() -> list[str]:
+    """引擎包 + 全部子模块名（末附 `main`）。
 
-    范围 = `_ENGINE_PACKAGES` + main（语言包插件目录的内容数据常量较多，
-    且插件表已由 plugin_loader 登记表覆盖）。`core.global_state` 自身
-    排除（登记表本体）。
-
-    别名去重：同一对象被多个模块 `import` 绑定时（如 `_CONFIG_DECLARATIONS`
-    在 core/lexer/parser 各处可见），按 `_ENGINE_PACKAGES` 顺序取首个出现的
-    **归属名**；类级容器统一用 `类.__module__ + 类.__qualname__` 命名
-    （不受 `config = ConfigRegistry` 这类别名影响）。
+    子模块先于包模块：别名的"归属名"落到定义处（如
+    `_CONFIG_DECLARATIONS` → core.config_registry，而非 lexer）。
     """
     import importlib
     import pkgutil
@@ -219,32 +214,63 @@ def discover_mutable_globals() -> list[str]:
             continue
         path = getattr(mod, "__path__", None)
         if path is not None:
-            # 子模块先于包模块：别名的"归属名"落到定义处（如
-            # `_CONFIG_DECLARATIONS` → core.config_registry，而非 lexer）
             names.extend(info.name for info in pkgutil.walk_packages(path, pkg + "."))
         names.append(pkg)
     names.append("main")
+    return names
+
+
+# 视作"全局可变容器"的类型（bytearray 含在内：就地改写不可见）
+_MUTABLE_CONTAINERS = (dict, list, set, bytearray)
+
+
+def _collect_class_containers(klass: type, found: dict[int, str]) -> None:
+    """类的直接属性中的可变容器。
+
+    类级容器统一用 `类.__module__ + 类.__qualname__` 命名（不受
+    `config = ConfigRegistry` 这类别名影响）。
+    """
+    owner = f"{klass.__module__}.{klass.__qualname__}"
+    for c_attr, c_val in vars(klass).items():
+        if c_attr.startswith("__"):
+            continue
+        if isinstance(c_val, _MUTABLE_CONTAINERS):
+            found.setdefault(id(c_val), f"{owner}.{c_attr}")
+
+
+def _collect_module_containers(mod, name: str, found: dict[int, str]) -> None:
+    """单模块的模块级/类级容器 → `found`（`setdefault` 保首见归属名）。"""
+    for attr, value in vars(mod).items():
+        if attr.startswith("__"):
+            continue
+        if isinstance(value, _MUTABLE_CONTAINERS):
+            found.setdefault(id(value), f"{name}.{attr}")
+        elif isinstance(value, type) and value.__module__ == name:
+            _collect_class_containers(value, found)
+
+
+def discover_mutable_globals() -> list[str]:
+    """扫描引擎包的模块级/类级可变容器（dict/list/set/bytearray）→ 条目名。
+
+    范围 = `_ENGINE_PACKAGES` + main（语言包插件目录的内容数据常量较多，
+    且插件表已由 plugin_loader 登记表覆盖）。`core.global_state` 自身
+    排除（登记表本体）。
+
+    别名去重：同一对象被多个模块 `import` 绑定时（如 `_CONFIG_DECLARATIONS`
+    在 core/lexer/parser 各处可见），按 `_ENGINE_PACKAGES` 顺序取首个出现的
+    **归属名**。
+    """
+    import importlib
 
     found: dict[int, str] = {}  # 容器 id → 条目名（首见归属名）
-    for name in names:
+    for name in _engine_module_names():
         if name == "core.global_state":
             continue
         try:
             mod = importlib.import_module(name)
         except Exception:  # noqa: BLE001 — 可选依赖缺失时跳过该模块
             continue
-        for attr, value in vars(mod).items():
-            if attr.startswith("__"):
-                continue
-            if isinstance(value, (dict, list, set, bytearray)):
-                found.setdefault(id(value), f"{name}.{attr}")
-            elif isinstance(value, type) and value.__module__ == name:
-                owner = f"{value.__module__}.{value.__qualname__}"
-                for c_attr, c_val in vars(value).items():
-                    if c_attr.startswith("__"):
-                        continue
-                    if isinstance(c_val, (dict, list, set, bytearray)):
-                        found.setdefault(id(c_val), f"{owner}.{c_attr}")
+        _collect_module_containers(mod, name, found)
     return sorted(found.values())
 
 
@@ -469,16 +495,16 @@ def _restore_tracked(snap: dict, table: dict[str, tuple[str, str]], slot: str) -
                 current.clear()
 
 
-def restore(snap: dict, scope: str = "all") -> None:
-    """把全局状态还原到快照（引用替换；共享缓存清空按需重建）。
+def _restore_registries(snap: dict) -> None:
+    """规则注册表与配置注册表按快照深拷贝还原。
 
-    scope："all" 全部 / "test" 仅测试级 TRACKED / "install" 仅安装态。
-    测试级 restored 每测试调用；安装态由**模块级** fixture 在模块结束时调用
-    （模块内的语言装载由该模块自己的 fixture 拥有，不能被逐测试擦除）。
+    注意：快照值不可直接赋给全局（测试会原地 clear/改写全局 → 污染快照
+    对象本身，后续 restore 还原的是被污染的快照——2026-08-28 实测
+    isolated_registry 的 ConfigRegistry.reset() 清空共享引用即复现）。
+    每测试 deepcopy 一次 ~5ms，换取快照不可变语义。
     """
     from core.define import GrammarRulesRegister
     from core.config_registry import ConfigRegistry
-    from core import plugin_loader
 
     GrammarRulesRegister._default_instance = copy.deepcopy(snap["register"])
     ConfigRegistry._entries = copy.deepcopy(snap["cfg_entries"])
@@ -486,36 +512,59 @@ def restore(snap: dict, scope: str = "all") -> None:
     ConfigRegistry._entries_source = snap["cfg_entries_source"]
     ConfigRegistry._sources = copy.deepcopy(snap["cfg_sources"])
     ConfigRegistry._resolved = snap["cfg_resolved"]
-    # 注意：快照值不可直接赋给全局（测试会原地 clear/改写全局 → 污染快照
-    # 对象本身，后续 restore 还原的是被污染的快照——2026-08-28 实测
-    # isolated_registry 的 ConfigRegistry.reset() 清空共享引用即复现）。
-    # 每测试 deepcopy 一次 ~5ms，换取快照不可变语义。
 
+
+def _restore_module_vars(snap: dict) -> None:
+    """配置推送目标模块变量（`load_all` → `_push_loaded_config` 写入的 `_xxx_cfg`）复位。"""
     for (mod_name, var_name), value in snap["module_vars"].items():
         mod = sys.modules.get(mod_name)
         if mod is not None:
             setattr(mod, var_name, copy.deepcopy(value))
 
-    # 组件表/变换槽：移除基线后新增的键（基线键内容保留——组件按
-    # setup_grammar clear+重载语义，测试不改其内部）
-    for k in list(plugin_loader._loaded_components):
-        if k not in snap["component_keys"]:
-            del plugin_loader._loaded_components[k]
-    for k in list(plugin_loader._transform_slots):
-        if k not in snap["transform_slot_keys"]:
-            del plugin_loader._transform_slots[k]
+
+def _drop_new_keys(mapping: dict, baseline: set) -> None:
+    """移除基线后新增的键（基线键内容保留）。"""
+    for k in list(mapping):
+        if k not in baseline:
+            del mapping[k]
+
+
+def _restore_component_state(snap: dict) -> None:
+    """组件表/变换槽/原语序还原。
+
+    组件表/变换槽含 Python handler（module/函数引用），deepcopy 不可行
+    （TypeError: cannot pickle 'module'）；且组件按 setup_grammar
+    clear+重载语义——移除基线后新增的键即可（基线键内容保留，测试不改其内部）。
+    """
+    from core import plugin_loader
+
+    _drop_new_keys(plugin_loader._loaded_components, snap["component_keys"])
+    _drop_new_keys(plugin_loader._transform_slots, snap["transform_slot_keys"])
     plugin_loader._PRIMITIVE_ORDER[:] = snap["primitive_order"]
 
-    # 声明式检查规则表：移除基线后新增的键（规则表是静态数据，基线键
-    # 内容保留——测试不改其内部，只防跨语言残留）
+
+def _restore_check_registry(snap: dict) -> None:
+    """声明式检查规则表 + 用户检查配置缓存：移除基线后新增的键。
+
+    规则表是静态数据，基线键内容保留（测试不改其内部，只防跨语言残留）；
+    用户配置缓存按键清理，防 `$TPC_CONFIG` 注入残留。
+    """
     _check_reg = __import__("core.check_registry", fromlist=["_CHECK_RULES"])
-    for k in list(_check_reg._CHECK_RULES):
-        if k not in snap["check_rule_keys"]:
-            del _check_reg._CHECK_RULES[k]
-    # 用户检查配置缓存：清空基线后新增的键（防 $TPC_CONFIG 注入残留）
-    for k in list(_check_reg._USER_CONFIG_CACHE):
-        if k not in snap["check_user_cfg_keys"]:
-            del _check_reg._USER_CONFIG_CACHE[k]
+    _drop_new_keys(_check_reg._CHECK_RULES, snap["check_rule_keys"])
+    _drop_new_keys(_check_reg._USER_CONFIG_CACHE, snap["check_user_cfg_keys"])
+
+
+def restore(snap: dict, scope: str = "all") -> None:
+    """把全局状态还原到快照（引用替换；共享缓存清空按需重建）。
+
+    scope："all" 全部 / "test" 仅测试级 TRACKED / "install" 仅安装态。
+    测试级 restored 每测试调用；安装态由**模块级** fixture 在模块结束时调用
+    （模块内的语言装载由该模块自己的 fixture 拥有，不能被逐测试擦除）。
+    """
+    _restore_registries(snap)
+    _restore_module_vars(snap)
+    _restore_component_state(snap)
+    _restore_check_registry(snap)
 
     # 登记表 TRACKED：按策略通用还原（测试级状态；语言安装态 INSTALL_STATE
     # 不在此列——模块级 fixture 拥有，由 restore(scope="install") 收尾）
