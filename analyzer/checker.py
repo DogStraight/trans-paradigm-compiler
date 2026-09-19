@@ -10,6 +10,7 @@
 本文件只做**检查编排与诊断汇总**：结构提取的六个协作者（见 structure.py）、
 会话上下文 `StructureCtx`、语言包 `[structure]` 协议声明点全在那里；门面把它们
 装配起来并驱动阶段顺序（prepare → discover → 信号图 → analyze → collect）。
+共享组件装载在 `shared_components.py`，诊断形状序列化在 `diag_serialize.py`。
 Doc: analyzer/semantic_checks.md（跨文件语义检查）
 """
 
@@ -27,23 +28,21 @@ from analyzer.structure import (
     SignalGraphBuilder,
     StructureCtx,
 )
+from analyzer.shared_components import SharedComponents
+from analyzer.diag_serialize import semantic_diag, syntax_diag
 
 
 class ProjectChecker:
     """跨文件语义检查引擎。
 
     组合根：构造 `StructureCtx`（会话上下文）与六个阶段协作者，`check()` 只做
-    阶段编排与诊断汇总（结构提取细节全在 `analyzer/structure.py` 的协作者里）。
+    阶段编排与诊断汇总（结构提取细节全在 `analyzer/structure.py` 的协作者里，
+    共享组件装载在 `analyzer/shared_components.py`）。
 
     Usage:
         checker = ProjectChecker()
         report = checker.check("rtl/top.sv")
     """
-
-    # 按 rules_dir 缓存的共享组件（与 pipeline 的 _PIPELINE_SHARED 分离，
-    # check 是独立入口，不耦合 pipeline 内部状态）
-    _SHARED: dict = {}
-
 
     def __init__(
         self,
@@ -92,58 +91,10 @@ class ProjectChecker:
     # ── 共享组件 ──
 
     def _ensure_shared(self) -> dict:
-        key = self._ctx.rules_dir
-        if key in ProjectChecker._SHARED:
-            return ProjectChecker._SHARED[key]
-        from core.config_registry import ConfigRegistry
-        from parser import setup_grammar
-        from parser.rule_selector import RuleSelector
-        from lexer import Lexer
-        from linter.scanner import LinterScanner
-        from renderer import Renderer
-
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        rules_dir = (
-            self._ctx.rules_dir
-            if os.path.isabs(self._ctx.rules_dir)
-            else os.path.join(root, self._ctx.rules_dir)
+        """按 rules_dir 缓存的共享组件（装载细节见 analyzer/shared_components.py）。"""
+        return SharedComponents.get(
+            self._ctx.rules_dir, self._ctx.ext_dirs, self._register
         )
-        plugins_dir = os.path.join(rules_dir, "plugins")
-        # 配置加载 + 插件组件发现（postpass/原语注册依赖此步骤；
-        # 与 pipeline 一致——pipeline 在模块导入时顶层调用）
-        ConfigRegistry.load_all(
-            rules_dir, ext_dirs=self._ctx.ext_dirs, plugins_dir=plugins_dir
-        )
-        from core.plugin_loader import load_all_components
-
-        load_all_components()
-
-        rules = setup_grammar(
-            rules_dir,
-            self._register or GrammarRulesRegister.get_default(),
-            ext_dirs=self._ctx.ext_dirs,
-        )
-        stmt_names = [
-            n
-            for n, r in rules.items()
-            if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
-        ]
-        shared = {
-            "rules": rules,
-            "rule_selector": RuleSelector(rules, stmt_names),
-            "lexer": Lexer(rules_dir=rules_dir, ext_dirs=self._ctx.ext_dirs),
-            "linter": LinterScanner(
-                rules_dir=rules_dir,
-                ext_dirs=self._ctx.ext_dirs,
-                # 独立 register 必须透传：LinterScanner 内部 setup_grammar
-                # 默认用全局单例 get_default()，跨语言（c4）检查会把 c4 规则
-                # 灌进单例且无法靠 ConfigRegistry 恢复（test_c4_linter 同款坑）。
-                register=self._register or GrammarRulesRegister.get_default(),
-            ),
-            "renderer": Renderer(rules_dir=rules_dir),
-        }
-        ProjectChecker._SHARED[key] = shared
-        return shared
 
     # ── 入口 ──
 
@@ -228,7 +179,7 @@ class ProjectChecker:
             semantic = []
             if fr.analyzer is not None:
                 for d in fr.analyzer.diagnostics:
-                    semantic.append(self._semantic_diag(fr, d))
+                    semantic.append(semantic_diag(fr, d))
                     if d.level == "error":
                         any_error = True
             files.append(
@@ -236,7 +187,7 @@ class ProjectChecker:
                     "path": path,
                     "parse_ok": fr.parse_ok,
                     "parse_error": fr.parse_error,
-                    "syntax": [self._syntax_diag(fr, d) for d in fr.lint_diags],
+                    "syntax": [syntax_diag(fr, d) for d in fr.lint_diags],
                     "semantic": semantic,
                 }
             )
@@ -266,113 +217,4 @@ class ProjectChecker:
         analyzer.analyze(fr.ast)
         fr.analyzer = analyzer
 
-    # ── 诊断序列化（LSP 兼容 + stage 字段）──
 
-    @staticmethod
-    def _map_diag_line(fr: FileResult, line0: int | None) -> int | None:
-        """展开坐标（0-based）→ 原始源坐标（0-based）；无表/不可映射时原样保留。
-
-        行表来自 ``_expand_source`` 的两级复合（展开→clean→原始）；None/越界
-        一律回退展开行号——映射可能不准时宁保留诚实偏移，不给错误的源行号。
-        """
-        lm = fr.line_map
-        if not lm or line0 is None or not (0 <= line0 < len(lm)):
-            return line0
-        src = lm[line0]
-        return src - 1 if src is not None else line0
-
-    @staticmethod
-    def _macro_of_line(fr: FileResult, line0: int | None) -> str:
-        """诊断行（展开坐标 0-based）落在某宏展开区间 → 宏名；否则空串。
-
-        区间表由 `_expand_source` 在语义展开时换算（展开行区间 + 宏调用
-        原始行）；未展开/顿路径无表 → 恒空。归因是**行级**的（宏体多行
-        则其内诊断均归该宏）。
-        """
-        if line0 is None or not fr.macro_regions:
-            return ""
-        line1 = line0 + 1
-        for r in fr.macro_regions:
-            if r["line_start"] <= line1 <= r["line_end"]:
-                return str(r["name"])
-        return ""
-
-    @staticmethod
-    def _syntax_diag(fr: FileResult, d) -> dict:
-        span = getattr(d, "range", None)
-        if span:
-            rng = {
-                "start": {
-                    "line": ProjectChecker._map_diag_line(fr, span[0].line),
-                    "character": span[0].character,
-                },
-                "end": {
-                    "line": ProjectChecker._map_diag_line(fr, span[1].line),
-                    "character": span[1].character,
-                },
-            }
-        else:
-            rng = None
-        out = {
-            "stage": "syntax",
-            "file": fr.path,
-            "severity": getattr(d, "severity", 1),
-            "code": getattr(d, "code", "parse-error"),
-            "message": d.message,
-            "range": rng,
-        }
-        macro = ProjectChecker._macro_of_line(fr, span[0].line) if span else ""
-        if macro:
-            out["macro"] = macro
-        return out
-
-    @staticmethod
-    def _semantic_diag(fr: FileResult, d) -> dict:
-        node = d.node
-        line = getattr(node, "_pos_line", None)
-        col = getattr(node, "_pos_col", None)
-        sev = {"error": 1, "warning": 2, "info": 3}.get(d.level, 2)
-        # 行号回源：仅对本文件节点用行表（跨文件节点行号属另一文件坐标系）
-        same_file = getattr(node, "_file", None) in (None, fr.path)
-        if line is not None:
-            line0 = (line - 1) if line else 0
-            if same_file:
-                line0 = ProjectChecker._map_diag_line(fr, line0)
-            rng = {
-                "start": {"line": line0, "character": col or 0},
-                "end": {"line": line0, "character": (col or 0) + 1},
-            }
-        else:
-            rng = None
-        out = {
-            "stage": "semantic",
-            "file": fr.path,
-            "severity": sev,
-            "code": d.code or "semantic",
-            "message": d.message,
-            "level": d.level,
-            "range": rng,
-        }
-        if line is not None and same_file:
-            macro = ProjectChecker._macro_of_line(fr, (line - 1) if line else 0)
-            if macro:
-                out["macro"] = macro
-        related = []
-        for msg, rnode in d.related:
-            rl = getattr(rnode, "_pos_line", None)
-            rc = getattr(rnode, "_pos_col", None)
-            if rl is not None and getattr(rnode, "_file", None) in (None, fr.path):
-                mapped = ProjectChecker._map_diag_line(fr, rl - 1)
-                if mapped is not None:
-                    rl = mapped + 1
-            related.append(
-                {
-                    "message": msg,
-                    "file": getattr(rnode, "_file", None) or fr.path,
-                    "line": rl,
-                    "column": rc,
-                }
-            )
-        if related:
-            out["related"] = related
-        return out

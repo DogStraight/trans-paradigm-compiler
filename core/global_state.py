@@ -4,7 +4,7 @@
 注册表（只增不重置）、ConfigRegistry 配置（_entries/_loaded/_entries_
 source/_sources + 推送进各模块的 _xxx_cfg 模块变量）、plugin_loader 组件
 表（_loaded_components/_transform_slots/_PRIMITIVE_ORDER）、pipeline 共享
-组件缓存（_PIPELINE_SHARED）、ProjectChecker 共享缓存（_SHARED）。
+组件缓存（_PIPELINE_SHARED）、checker 共享组件缓存（SharedComponents._CACHE）。
 
 同一进程内跑多语言/多配置测试时，测试顺序会导致状态残留污染（此前靠各
 测试"独立 GrammarRulesRegister() 实例"逐处 workaround 兜底，仍偶发顺序
@@ -15,7 +15,7 @@ source/_sources + 推送进各模块的 _xxx_cfg 模块变量）、plugin_loader
 设计取舍：
 - snapshot 深拷贝轻量状态（注册表 ~2.5ms、配置 ~2ms、模块变量若干），
   每测试还原开销 ~5ms，远优于"每测试重载配置"（~60ms）。
-- 按需重建的共享缓存（_PIPELINE_SHARED / ProjectChecker._SHARED）只
+- 按需重建的共享缓存（_PIPELINE_SHARED / SharedComponents._CACHE）只
   clear 不深拷贝（组件对象重、可能含不可拷贝引用；键控缓存重建成本低）。
 - ConfigRegistry._resolve_cache 保留（纯函数缓存：键 = 语言参数，同参数
   结果恒定，不受污染影响）。
@@ -69,7 +69,7 @@ TRACKED: dict[str, tuple[str, str]] = {
     "linter.checkers.expression.ExpressionChecker._DEPTH": ("deepcopy", "表达式检查递归深度计数"),
     # 共享组件缓存
     "pipeline._PIPELINE_SHARED": ("clear", "管线共享组件（键 = (rules_dir, ext_dirs)）"),
-    "analyzer.checker.ProjectChecker._SHARED": ("clear", "checker 共享组件（按 rules_dir 键控）"),
+    "analyzer.shared_components.SharedComponents._CACHE": ("clear", "checker 共享组件（按 rules_dir 键控）"),
 }
 
 # ── 登记表 2/6：INSTALL_STATE——语言安装态（模块结束还原）──

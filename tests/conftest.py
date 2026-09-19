@@ -30,7 +30,7 @@ from lexer import Lexer
 # ═══════════════════════════════════════════════════════
 # 全局状态隔离（顺序无关）：session 拍基线快照，每个测试后还原。
 # 引擎存在多处全局可变单例（GrammarRulesRegister / ConfigRegistry /
-# plugin_loader / pipeline._PIPELINE_SHARED / ProjectChecker._SHARED +
+# plugin_loader / pipeline._PIPELINE_SHARED / SharedComponents._CACHE +
 # 各模块 _xxx_cfg 配置变量），测试顺序会导致状态残留污染（此前靠各测试
 # "独立实例"逐处 workaround，仍偶发顺序敏感）。机制见 core/global_state.py。
 # ═══════════════════════════════════════════════════════

@@ -6,7 +6,7 @@
 展开区间（FileResult.macro_regions）→ 诊断加 "macro": "<NAME>"。
 
 Doc: analyzer/structure.py::_expand_source
-Doc: analyzer/checker.py::_map_diag_line
+Doc: analyzer/diag_serialize.py::map_diag_line
 """
 
 import os

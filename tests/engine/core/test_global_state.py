@@ -71,15 +71,15 @@ def test_restore_restores_module_vars():
 def test_restore_clears_shared_caches():
     """共享组件缓存（pipeline/checker）清空还原（按需重建）。"""
     from pipeline import _PIPELINE_SHARED
-    from analyzer.checker import ProjectChecker
+    from analyzer.shared_components import SharedComponents
 
     baseline = snapshot()
     _PIPELINE_SHARED[("grammar/verilog", ())] = {"x": 1}
-    ProjectChecker._SHARED["grammar/verilog"] = {"y": 2}
+    SharedComponents._CACHE["grammar/verilog"] = {"y": 2}
 
     restore(baseline)
     assert _PIPELINE_SHARED == {}
-    assert ProjectChecker._SHARED == {}
+    assert SharedComponents._CACHE == {}
 
 
 def test_restore_recovers_components():
