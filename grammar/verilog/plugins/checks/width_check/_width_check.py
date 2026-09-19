@@ -149,51 +149,60 @@ def _module_params(context) -> dict[str, dict[str, str]]:
 # eval_expr_params：常量表达式 + 参数表 → 数值（标识符查参数表，值可含
 # 嵌套参数链）。与共用 `_shared.const_eval` 的关系：纯数字域（含单层参数
 # 名）走 const_eval；参数值本身还可再含表达式的**链式**场景走本函数
-# （递归下降，ident 查表递归求值 + 环护栏）。
+# （递归下降，ident 查表递归求值 + 环护栏）——两份**能力不同**，就近保留
+# （结构重复处置 B-C4）。
 
 
-def eval_expr_params(
-    text: str, params: dict[str, str], _seen: frozenset | None = None
-) -> int | None:
-    """常量表达式 + 参数表 → 数值。
+class _ChainedConstParser:
+    """链式参数常量表达式求值器（求值游标即状态，故用类而非闭包）。
 
-    "8" → 8；"WIDTH-1"（WIDTH=8）→ 7；"DATA_W/2"（DATA_W=16）→ 8；
-    "A+B"（A=2,B=3）→ 5；"W"（W="DATA_W/2", DATA_W=16）→ 8（链式）；
-    含未知标识符/循环引用（WIDTH=WIDTH）→ None。
+    token 流里的 `("ident", 名)` 延迟到求值点解析：查参数表后值本身再走
+    `eval_expr_params` 递归（`W = "DATA_W/2"` 这类嵌套链），`seen` 做环
+    护栏（`WIDTH = WIDTH` → 不可判）。
     """
-    toks = _expr_tokenize(text)
-    if toks is None:
-        return None
-    pos = 0
 
-    def peek() -> tuple:
-        return toks[pos] if pos < len(toks) else ("eof", "")
+    def __init__(self, toks: list, params: dict[str, str], seen: frozenset) -> None:
+        self.toks = toks
+        self.params = params
+        self.seen = seen
+        self.pos = 0
 
-    def advance() -> tuple:
-        nonlocal pos
-        t = toks[pos]
-        pos += 1
-        return t
+    def parse(self) -> int | None:
+        """整串求值：必须吃到 eof，否则不可判。"""
+        val = self._expr()
+        if val is None or self._peek()[0] != "eof":
+            return None
+        return val
 
-    def parse_expr():
-        left = parse_term()
+    def _peek(self) -> tuple:
+        return self.toks[self.pos] if self.pos < len(self.toks) else ("eof", "")
+
+    def _advance(self) -> tuple:
+        tok = self.toks[self.pos]
+        self.pos += 1
+        return tok
+
+    def _expr(self) -> int | None:
+        """加减（左结合）。"""
+        left = self._term()
         if left is None:
             return None
-        while peek()[0] in ("+", "-"):
-            op = advance()[0]
-            right = parse_term()
+        while self._peek()[0] in ("+", "-"):
+            op = self._advance()[0]
+            right = self._term()
             if right is None:
                 return None
             left = left + right if op == "+" else left - right
         return left
 
-    def parse_term():
-        left = parse_factor()
+    def _term(self) -> int | None:
+        """乘除模（左结合）；除/模零 → 不可判。"""
+        left = self._factor()
         if left is None:
             return None
-        while peek()[0] in ("*", "/", "%"):
-            op = advance()[0]
-            right = parse_factor()
+        while self._peek()[0] in ("*", "/", "%"):
+            op = self._advance()[0]
+            right = self._factor()
             if right is None:
                 return None
             if op == "*":
@@ -208,41 +217,54 @@ def eval_expr_params(
                 left = left % right
         return left
 
-    def parse_factor():
-        t = peek()
+    def _factor(self) -> int | None:
+        """一元 +/- 链、括号、数字、参数（参数值递归求值 + 环护栏）。"""
+        t = self._peek()
         if t[0] == "-":
-            advance()
-            v = parse_factor()
+            self._advance()
+            v = self._factor()
             return -v if v is not None else None
         if t[0] == "+":
-            advance()
-            return parse_factor()
+            self._advance()
+            return self._factor()
         if t[0] == "(":
-            advance()
-            v = parse_expr()
-            if v is None or peek()[0] != ")":
+            self._advance()
+            v = self._expr()
+            if v is None or self._peek()[0] != ")":
                 return None
-            advance()
+            self._advance()
             return v
         if t[0] == "num":
-            advance()
+            self._advance()
             return t[1]
         if t[0] == "ident":
-            advance()
-            v = params.get(t[1])
-            if v is None:
-                return None  # 未知标识符（非本模块参数/信号）
-            if _seen is not None and t[1] in _seen:
-                return None  # 循环引用（WIDTH=WIDTH）防递归死循环
-            return eval_expr_params(
-                v, params, frozenset(_seen or ()) | {t[1]}
-            )  # 参数值递归求值（链式；环防护）
+            self._advance()
+            return self._resolve_param(t[1])
         return None
 
-    v = parse_expr()
-    if v is None or peek()[0] != "eof":
+    def _resolve_param(self, name: str) -> int | None:
+        """参数名 → 数值：值表达式递归求值（链式）；未知/环 → 不可判。"""
+        val = self.params.get(name)
+        if val is None:
+            return None  # 未知标识符（非本模块参数/信号）
+        if name in self.seen:
+            return None  # 循环引用（WIDTH=WIDTH）防递归死循环
+        return eval_expr_params(val, self.params, self.seen | {name})
+
+
+def eval_expr_params(
+    text: str, params: dict[str, str], _seen: frozenset | None = None
+) -> int | None:
+    """常量表达式 + 参数表 → 数值。
+
+    "8" → 8；"WIDTH-1"（WIDTH=8）→ 7；"DATA_W/2"（DATA_W=16）→ 8；
+    "A+B"（A=2,B=3）→ 5；"W"（W="DATA_W/2", DATA_W=16）→ 8（链式）；
+    含未知标识符/循环引用（WIDTH=WIDTH）→ None。
+    """
+    toks = _expr_tokenize(text)
+    if toks is None:
         return None
-    return v
+    return _ChainedConstParser(toks, params, _seen or frozenset()).parse()
 
 
 def eval_width_text_params(text: str, params: dict[str, str]) -> int | None:
@@ -267,8 +289,24 @@ def eval_width_text_params(text: str, params: dict[str, str]) -> int | None:
     return v2 + 1  # 单表达式 [n] = n+1 位
 
 
+def _scan_run(text: str, i: int, accept) -> int:
+    """从 i 起连续满足 accept 的字符区间 → 终点下标（不含）。"""
+    n = len(text)
+    while i < n and accept(text[i]):
+        i += 1
+    return i
+
+
+def _is_ident_char(ch: str) -> bool:
+    """标识符续字符（字母/数字/下划线）。"""
+    return ch.isalnum() or ch == "_"
+
+
 def _expr_tokenize(text: str) -> list | None:
-    """常量表达式 tokenize（数字/标识符/括号/四则/一元；未知字符 None）。"""
+    """常量表达式 tokenize（数字/标识符/括号/四则/一元；未知字符 None）。
+
+    标识符**不在这里查表**——留给求值器在求值点解析（链式参数 + 环护栏）。
+    """
     toks: list = []
     i = 0
     n = len(text)
@@ -278,16 +316,12 @@ def _expr_tokenize(text: str) -> list | None:
             i += 1
             continue
         if ch.isdigit():
-            j = i
-            while j < n and text[j].isdigit():
-                j += 1
+            j = _scan_run(text, i, str.isdigit)
             toks.append(("num", int(text[i:j])))
             i = j
             continue
         if ch.isalpha() or ch == "_":
-            j = i
-            while j < n and (text[j].isalnum() or text[j] == "_"):
-                j += 1
+            j = _scan_run(text, i, _is_ident_char)
             toks.append(("ident", text[i:j]))
             i = j
             continue
