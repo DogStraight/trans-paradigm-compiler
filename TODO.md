@@ -70,15 +70,23 @@
     - `renderer/primitives/join.py::_assemble_join`（102 → 33，B-B16 拆分时
       转移出来的长方法，本次收口）（`8ff6ad6`）。
     - **外部裁判同口径复查：函数级 >80 行命中 0**；剩余命中均为类体
-      （`_StructureBase` 1129 / `_PatternBuilder` 179 等），归入下面的类级清单。
+      （`_PatternBuilder` 179 等），归入下面的类级清单。
     60-80 行区间现有 9 项（`renderer/doc._best` 63、`node_renderer.render_body` 77、
     `capture_runner.build_rules` 79、`lookahead._level1_scan` 77 等）——均低于阈值，
     其中分派型函数（`_best` 15 个变体分支）刻意不再拆。
-  - ⏳ **类级上帝对象 11 处**（需设计决策，非机械拆分）：`_StructureBase`(414)、
-    `Lexer`(336)、`RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、
-    `ConfigRegistry`(87)、`GrammarRule`(70)、`ProjectChecker`(56)、
-    `CaptureRunner`(36)、`AnalysisTraversal`(33)、`Node`(6)——
-    建议先就 `_StructureBase` 立 ADR 定边界，其余逐个人工定边界后再动。
+  - ✅ **`_StructureBase` 上帝对象已解（B-B4c-0..7，2026-09-19）**：先删 3 个门面
+    不可达方法（-49 行），再把 49 个方法按职责组合化——`StructureCtx`（会话状态 +
+    协议读取 + 2 个共享读取助手）+ 6 个协作者（`GenerateEvaluator` 151 /
+    `ConnectionElaborator` 140 / `ModuleExtractor` 200 / `FilePipeline` 151 /
+    `ModuleIndexer` 72 / `SignalGraphBuilder` 361），门面 `ProjectChecker` 不再继承、
+    改为**组合根**接线。**最大类 1129 → 361 行**（外部裁判类级命中相应消失）；
+    依据与理由写在 `analyzer/structure.py` 模块头（一个子类零覆盖 / 9 字段收 ctx /
+    簇间无反向边）。
+  - ⏳ **类级上帝对象 10 处**（需设计决策，非机械拆分）：`Lexer`(336)、
+    `RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、`ConfigRegistry`(87)、
+    `GrammarRule`(70)、`ProjectChecker`(344，组合化后成为门面最大类：编排 + 诊断
+    序列化 + `_ensure_shared` 组件装载——可再抽「共享组件装载」协作者)、
+    `CaptureRunner`(36)、`AnalysisTraversal`(33)、`Node`(6)——逐个人工定边界后再动。
 - **B-C 结构重复**（非 tests 111 组，按"同文件/同部件 → 跨部件"递进）：
   - ✅ 引擎侧同形重复：`_deep_merge` ×2、`get_config_refs` ×4、`plugin_loader`
     合并型 getter ×5、`_serialize_member`/`_serialize_group`、`soft_break` 三态
