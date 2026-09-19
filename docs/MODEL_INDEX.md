@@ -37,7 +37,7 @@
 | 规则选择（候选过滤 / 语句发现） | `language_walkthrough.md`（规则选择/语句发现） | `parser/rule_selector.py` | `tests/engine/parser/`（`test_production_engine.py` 等） |
 | 规则形态分类 / FOLLOW 集派生 | `language_walkthrough.md`（规则形态分类） | `parser/follow.py` | `tests/engine/parser/test_follow.py` |
 | node 绑定捕获（$N 绑定 + 路径提取） | `language_walkthrough.md`（node 绑定捕获） | `parser/attribute_binder.py` | `tests/engine/parser/test_attribute_binder.py` |
-| EXT 注入（grammar inject：树层合并 + 传播 + 序列化） | `language_walkthrough.md`（EXT 注入） | `parser/grammar_inject.py`<br>`parser/rule_selector.py::serialize_production_tree` | `tests/engine/parser/test_grammar_inject.py`<br>`tests/engine/parser/test_production_serialize.py` |
+| EXT 注入（grammar inject：树层合并 + 传播 + 序列化） | `language_walkthrough.md`（EXT 注入）<br>`grammar/README.md`（注入归组：多条规则注入同一 target 须先归组容器） | `parser/grammar_inject.py`<br>`parser/rule_selector.py::serialize_production_tree` | `tests/engine/parser/test_grammar_inject.py`<br>`tests/engine/parser/test_production_serialize.py` |
 
 ### lexer — 词法（token 定义驱动扫描）
 

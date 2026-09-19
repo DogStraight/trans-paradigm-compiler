@@ -25,3 +25,16 @@
 > 加语法结构见 `core/component_protocol.md`（inject 挂载 + 组件协议）；加检查规则见
 > `grammar/verilog/plugins/checks/`（L1 声明式 [[checks]] 规则表 + L2 handler 脚本，
 > name_check 为最小示例）。
+
+## 扩展已有语法（inject 归组）
+
+扩展语法用 `[ExtRule.inject] targets = ["@TargetRule"]`（或 `TargetRule.production[N]`）
+挂到已有规则上；引擎做法是**两层注入**——直接注入 + 传播注入（引用 @Target 的规则
+替换为 `(@ExtRule|@Target)`），实现见 `parser/grammar_inject.py`。
+
+⚠ **多条规则注入同一 target 时，先归组到容器规则、再注入一次**：传播注入会把引用
+`@Target` 的规则逐条替换为 `choice[@Ext, @Target]`，各自 inject 会让嵌套按规则数线性
+加深；且单例规则表被 `_write_prods` 污染后每次 `setup_grammar` 叠加 → 全量测试深到
+serialize `RecursionError`。先例：`grammar/verilog/plugins/syntax/sim/90_sim_ctrl.toml`
+（各仿真语句先挂 `SimCtrlStmt`，容器再注入 `@CtrlStmt` 一次）；机制边界见
+`docs/gaps/gap-semantic-elaboration-boundaries.md`。

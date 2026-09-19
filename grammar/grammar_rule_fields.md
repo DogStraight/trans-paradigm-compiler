@@ -48,6 +48,29 @@ production = [
 - **消费方**: parser（规则匹配）、linter（语句检查器）
 - **元素类型**: 字面 token（可含 `|` 候选）、子规则引用（`@Expression`）、后缀 `?`/`*`/`+`
 
+production 串是**微语法**（EBNF 变体），拼写规则如下：
+
+| 语义 | 写法 | 例 |
+|------|------|-----|
+| 序列 | **逗号 `,`** | `"keyword.assign,@Identifier,symbol.base.equal"` |
+| 选择 | `\|` | `"@Stmt\|symbol.base.semicolon"` |
+| 可选 | 后缀 `?` | `"@BlockLabel?"` |
+| 重复 | 后缀 `*`（0+）/ `+`（1+） | `"(...)*"` |
+| 分组 | `(...)`（内部用 `\|` 或 `,`） | `"(keyword.assign\|keyword.force)"` |
+| 规则调用 | `@Rule` | `@Expression` |
+| 字面 token | `keyword.xxx` / `symbol.base.xxx` | `keyword.fork` |
+
+⚠ **序列必须用逗号，不能用空格**：`build_tree` 第一步就是 `replace(" ", "")`
+（`parser/rule_selector.py`），空格会被删掉、相邻元素粘成一个。实测两种后果：
+
+| 写法 | 结果 |
+|------|------|
+| `"keyword.assign keyword.force"` | 静默变成**单个 token** `keyword.assignkeyword.force`（不存在 → 该候选永不匹配，最难查） |
+| `"@Decl @Decl"` | `GrammarError: 无效的产生式片段: @Decl@Decl`（粘连后不成 token 形态） |
+
+正确：`"keyword.assign,keyword.force"` / `"(keyword.assign,keyword.force)?"`。逗号后的空格
+无害（会被删掉）；只有**用空格代替逗号**才是错。
+
 ### `is_atom` — 原子操作数解析策略（顶层 `[Rule]`）
 
 标记"此规则可作为表达式操作数的原子"，供 pratt 解析器**原子优先结合**。
