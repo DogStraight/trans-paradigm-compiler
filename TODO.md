@@ -43,20 +43,28 @@
     拆类需先立 ADR（B-B4c，暂缓）。
   - ✅ `lexer/main_lexer.Lexer.__init__`（175 行）：已拆为装配 + 七个分步方法
     （`de22813`）——类级最大函数 175 → 56 行。
-  - ⏳ **第二梯队长方法**（逐单元推进，已做 4 项，均附验证与提交）：
-    - ✅ `core/config_registry.ConfigRegistry._resolve_decls`（142 行）→ 三步
-      （`3f9cea9`）；`_load_meta_declarations`（118 行）→ 按来源拆（`6b0b25c`）。
-    - ✅ `core/check_registry.load_user_check_config`（91 行）→ 三段校验各自成
-      函数（`2f8c6c7`）；`core/define.GrammarRule.__init__`（79 行）→ 四步
-      （`cffa79f`）。
-    - ✅ `analyzer/checker.ProjectChecker.check`（65 行）→ 四阶段
-      （`479f206`）；`analyzer/suppress.build_suppress_map`（60 行）→ 抽
-      `_merge_suppress`（原同函数内重复两遍的合并规则）+ `_split_code_comment`
-      （`4f6c030`）。
-    - ⏳ 剩余：`analyzer/traversal._walk_node`（47 行）、
-      `core/config_registry._glob_match`（43 行 / CC 13）、
-      `core/define.GrammarRule._validate_node_specs`（43 行 / CC 14）、
-      `core/define.FileManager.load_all_toml`（70 行）。
+  - ✅ **第二梯队全部完成**（B-B6..B-B15，逐单元验证 + 提交）：
+    `ConfigRegistry._resolve_decls`(142) / `_load_meta_declarations`(118) /
+    `load_user_check_config`(91) / `GrammarRule.__init__`(79) /
+    `ProjectChecker.check`(65) / `build_suppress_map`(60) /
+    `AnalysisTraversal._walk_node`(47) / `_glob_match`(43) /
+    `_validate_node_specs`(43) / `load_all_toml`(70)。
+  - ⏳ **第三梯队：方法级 >80 行还剩 10 项**（⚠ 更正：早先队列取自被截断的
+    清单，漏了 linter/lexer/renderer 三包；下面是复查全量后的实际情况）：
+    - `renderer/primitives/join.py::eval_join`（193 行，score 298）
+    - `linter/discovery.py::Discovery._discover_range`（177 行，237）
+    - `lexer/number_gen.py::compile_number_pattern`（174 行，249）
+    - `renderer/inline_comment.py::restore_line_comments`（169 行，214）
+    - `renderer/inline_comment.py::restore_comments`（139 行，154）
+    - `lexer/capture_runner.py::CaptureRunner.run`（125 行，130）
+    - `renderer/node_renderer.py::render_node`（108 行，93）
+    - `renderer/doc.py::_best`（96 行，126）
+    - `renderer/doc.py::_fits`（87 行，177）
+    - `renderer/primitives/line.py::eval_line`（84 行，84）
+  - ⏳ **类级上帝对象 11 处**（需设计决策，非机械拆分）：`_StructureBase`(414)、
+    `Lexer`(336)、`RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、
+    `ConfigRegistry`(87)、`GrammarRule`(70)、`ProjectChecker`(56)、
+    `CaptureRunner`(36)、`AnalysisTraversal`(33)、`Node`(6)。
   - ⏳ **类级上帝对象**（需设计决策，非机械拆分）：`_StructureBase`、
     `ConfigRegistry`、`GrammarRule`、`ProjectChecker`、`AnalysisTraversal`、
     `Lexer`、formatter `BoundaryScanner`——建议逐个人工定边界后再动。
