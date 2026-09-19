@@ -9,6 +9,9 @@ from core.define import Node
 from ..doc import Doc, Empty, Text, Line as SoftLine, Break, HardBreak, Concat, Nest, LineSuffix, group
 from .registry import register
 
+# 分段节点（有 head/body/tail 段）的布局键——其在列表项中的首部注释归 body 段
+_SEGMENT_KEYS = ("head", "body", "tail")
+
 
 def _split_trailing_suffix(doc: Doc) -> tuple[Doc, list[LineSuffix]]:
     """递归拆出 doc 尾部（后序遍历最后叶子）的 LineSuffix 链。
@@ -73,54 +76,68 @@ class _JoinCfg:
         )
 
 
+def _split_head_comments(
+    item: Node, renderer: Any
+) -> list[tuple[Doc, list[LineSuffix], bool]]:
+    """节点 sub_node 首部 Comment 子节点 → 独立行注释条目（并从 sub_node 摘除）。
+
+    ADR-0013 B1.3：容器首元素前独占注释挂首元素 Comment 子节点——join 布局内
+    拆为注释段 + 节点主体（注释独立行渲染）。item 主体渲染不引 sub_node
+    （layout 引绑定属性），Comment 不会被 render_node 重复渲染。
+
+    ⚠ 只对**非分段节点**（无 head/body/tail 的列表项，如 Declarator/端口项）拆：
+    **分段节点**（ModuleDecl 等有 head/body/tail）的 sub_node 就是它的 body，
+    首部 Comment 属 body 首注释，归 render_node 的 body 段渲染——若在此拆出，
+    注释会渲染到节点 head 之前（`// 注释` 漂到 `module` 声明前；回归
+    `tests/languages/verilog/test_comment_body_head.py`）。
+    """
+    item_layout = renderer._layouts.get(item.node_name, {})
+    if any(k in item_layout for k in _SEGMENT_KEYS):
+        return []
+    head_cmts: list[Node] = []
+    subs = getattr(item, "sub_node", None)
+    while subs and getattr(subs[0], "_comment", False):
+        head_cmts.append(subs.pop(0))
+    return [(Text(getattr(c, "value", "")), [], True) for c in head_cmts]
+
+
+def _render_join_item(
+    item: Any, parent_layout: dict | None, renderer: Any
+) -> list[tuple[Doc, list[LineSuffix], bool]]:
+    """单项渲染 → 0..n 条 (项正文, 尾部 LineSuffix 链, 是否独占行注释)。
+
+    三类项：独占行注释项（`_comment` 标记，段分隔用）→ 1 条注释条目；
+    节点项（可能带首部 Comment 子节点 → 注释条目 + 主体）；非节点项（直接
+    文本化）。渲染为 Empty 的节点不产出条目。
+    """
+    if not isinstance(item, Node):
+        return [(Text(str(item)), [], False)]
+
+    # 独占行注释（ADR-0013 阶段 B）：_comment 引擎标记（parser
+    # collect_line_comments 挂）——列表容器（端口/声明组）内独立行
+    # 注释是"项间分隔注释"，不参与 join 分隔符。作为独立行插入
+    # （前后 Break），见 `_asm_comment_item`。
+    if getattr(item, "_comment", False):
+        merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
+        d = renderer._render_inline(item, merged)
+        return [(d, [], True)]
+
+    entries = _split_head_comments(item, renderer)
+    merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
+    d = renderer._render_inline(item, merged)
+    if not isinstance(d, Empty):
+        body, suffixes = _split_trailing_suffix(d)
+        entries.append((body, suffixes, False))
+    return entries
+
+
 def _render_join_items(
     items: list, parent_layout: dict | None, renderer: Any
 ) -> list[tuple[Doc, list[LineSuffix], bool]]:
-    """渲染每个列表项 → [(项正文, 尾部 LineSuffix 链, 是否独占行注释)]。
-
-    三类项：独占行注释（`_comment` 标记，段分隔用）、节点项（可能带首部
-    Comment 子节点，拆为注释段 + 主体）、非节点项（直接文本化）。
-    """
+    """渲染每个列表项 → [(项正文, 尾部 LineSuffix 链, 是否独占行注释)]。"""
     rendered: list[tuple[Doc, list[LineSuffix], bool]] = []
-
     for item in items:
-        if isinstance(item, Node):
-            # 独占行注释（ADR-0013 阶段 B）：_comment 引擎标记（parser
-            # collect_line_comments 挂）——列表容器（端口/声明组）内独立行
-            # 注释是"项间分隔注释"，不参与 join 分隔符。先收集，组装时
-            # 作为独立行插入（前后 Break），见下方注释项处理。
-            if getattr(item, "_comment", False):
-                merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
-                d = renderer._render_inline(item, merged)
-                rendered.append((d, [], True))
-                continue
-            # 节点 sub_node 首部 Comment（ADR-0013 B1.3：容器首元素前独占
-            # 注释挂首元素 Comment 子节点）——join 布局内拆为注释段 +
-            # 节点主体（注释独立行渲染）。item 主体渲染不引 sub_node
-            # （layout 引绑定属性），Comment 不会被 render_node 重复渲染。
-            #
-            # ⚠ 只对**非分段节点**（无 head/body/tail 的列表项，如
-            # Declarator/端口项）拆：**分段节点**（ModuleDecl 等有
-            # head/body/tail）的 sub_node 就是它的 body，首部 Comment 属
-            # body 首注释，归 render_node 的 body 段渲染——若在此拆出，
-            # 注释会渲染到节点 head 之前（`// 注释` 漂到 `module` 声明前；
-            # 回归 `tests/languages/verilog/test_comment_body_head.py`）。
-            item_layout = renderer._layouts.get(item.node_name, {})
-            segmented = any(k in item_layout for k in ("head", "body", "tail"))
-            head_cmts: list[Node] = []
-            subs = getattr(item, "sub_node", None)
-            if not segmented:
-                while subs and getattr(subs[0], "_comment", False):
-                    head_cmts.append(subs.pop(0))
-            for c in head_cmts:
-                rendered.append((Text(getattr(c, "value", "")), [], True))
-            merged = renderer._get_merged_layout(parent_layout or {}, item.node_name)
-            d = renderer._render_inline(item, merged)
-        else:
-            d = Text(str(item))
-        if not isinstance(d, Empty):
-            body, suffixes = _split_trailing_suffix(d)
-            rendered.append((body, suffixes, False))
+        rendered.extend(_render_join_item(item, parent_layout, renderer))
     return rendered
 
 
