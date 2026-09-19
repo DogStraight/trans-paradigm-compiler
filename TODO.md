@@ -246,6 +246,14 @@
     dataclass 三形态：扫描游标（`_IntervalScan` / `_BoundaryScan`）、跨调用作用域
     （`_RuleScope`）、行/项事实束（`_LineFacts` / `_PortFields`）。
 
+- **B-G 测试断言族**（`report_test_assertion_smells`，起点 22 项，2026-09-20 逐项判完）：
+  ✅ **22/22 判保持**——本族在本仓无语义问题，信号来自"断言不在被测函数体内"的词法
+  判据：19 项断言/校验在调用链内（`_assert_ok` / `_module_body` /
+  `_assert_comment_kept_standalone` / `_run` / `check_engine_compat` 的
+  `raise ConfigError` / `validate_sequence` 的 `raise ValueError` / `assert_clean`）、
+  2 项是"不抛即通过"的健壮性与安全网测试、1 项 `self-comparison` 是两次独立求值
+  （同种子可复现判据）。逐项证据见 dispositions；无改动。
+
 > 审计外观察（不在本清单）：无。此前记的 "`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog
 > 形态进了引擎"已修（generate 条件面的规则/字段/运算符拼写全部移入 `[structure]`
 > 声明，引擎零 Verilog 形态）——口径收窄后的**求值能力**边界记在
