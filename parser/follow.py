@@ -118,47 +118,89 @@ def _compute_first_nullable(
     块路径单独消费），其作为 @call 引用/语句候选时的首 token 是 block_start
     （如 BeginEnd 剥离后 prods=[] 但 FIRST 应为 {keyword.begin}）。
     """
-    first_map: dict[str, set[str]] = {n: set() for n in names}
-    nullable_map: dict[str, bool] = {n: False for n in names}
-    # 块规则 FIRST 种子（不参与迭代——block_start 是确定性事实）
-    for n in names:
-        rule = rules.get(n)
-        if rule is not None and getattr(rule, "is_block", False):
-            bs = getattr(rule, "block_start", "") or ""
-            if bs:
-                first_map[n] = {bs}
-    # pratt 规则 FIRST 种子：内置前缀运算符（| ~ ! + - ^ & 等）不在任何
-    # production 里（由 pratt 解析器处理），但它们是合法的表达式起始——
-    # 如 case item 以 `|{...}:` 开头的 reduction OR。注入整个运算符家族
-    # （家族级无法按 content 区分前缀/中缀，过度包含是 fail-open 方向）。
-    if operator_members:
-        for n in names:
-            rule = rules.get(n)
-            if rule is not None and getattr(rule, "pratt", False):
-                first_map[n] |= set(operator_members)
+    first_map, nullable_map = _seed_first(names, rules, operator_members)
     changed = True
     while changed:
         changed = False
         for name in names:
-            if rules.get(name) is not None and getattr(
-                rules[name], "is_block", False
-            ) and getattr(rules[name], "block_start", ""):
-                # 有 block_start 的块规则：FIRST 已种子化，跳过迭代覆盖
-                continue
-            f = set(first_map[name])  # 保留种子（block_start / pratt 运算符注入）
-            nullable = True
-            for elem in trees[name]:
-                f |= _elem_first(elem, first_map, nullable_map)
-                if not _elem_nullable(elem, nullable_map):
-                    nullable = False
-                    break
-            if f != first_map[name]:
-                first_map[name] = f
-                changed = True
-            if nullable != nullable_map[name]:
-                nullable_map[name] = nullable
+            if _has_block_start(rules, name):
+                continue  # 有 block_start 的块规则：FIRST 已种子化，跳过迭代覆盖
+            f, nullable = _seq_first_nullable(trees[name], first_map, nullable_map)
+            f |= first_map[name]  # 保留种子（block_start / pratt 运算符注入）
+            if _update_first_nullable(first_map, nullable_map, name, f, nullable):
                 changed = True
     return first_map, nullable_map
+
+
+def _seed_first(
+    names: set[str],
+    rules: dict[str, GrammarRule],
+    operator_members: list[str] | None,
+) -> tuple[dict[str, set[str]], dict[str, bool]]:
+    """FIRST / nullable 初始表：块规则 block_start 种子 + pratt 运算符种子。
+
+    - block_start 种子（确定性事实，不参与迭代）：块规则剥离后 prods 是内容
+      部分，但它作为 @call/语句候选时的首 token 是 block_start。
+    - pratt 规则种子：内置前缀运算符（`|` `~` `!` `+` `-` `^` `&` 等）不在
+      任何 production 里（由 pratt 解析器处理），但它们是合法的表达式起始——
+      如 case item 以 `|{...}:` 开头的 reduction OR。注入**整个运算符家族**
+      （家族级无法按 content 区分前缀/中缀，过度包含是 fail-open 方向）。
+    """
+    first_map: dict[str, set[str]] = {n: set() for n in names}
+    nullable_map: dict[str, bool] = {n: False for n in names}
+    for n in names:
+        rule = rules.get(n)
+        if rule is None:
+            continue
+        bs = getattr(rule, "block_start", "") or ""
+        if getattr(rule, "is_block", False) and bs:
+            first_map[n] = {bs}
+        if operator_members and getattr(rule, "pratt", False):
+            first_map[n] |= set(operator_members)
+    return first_map, nullable_map
+
+
+def _has_block_start(rules: dict[str, GrammarRule], name: str) -> bool:
+    """该规则是否带 block_start（FIRST 已种子化）。"""
+    rule = rules.get(name)
+    if rule is None or not getattr(rule, "is_block", False):
+        return False
+    return bool(getattr(rule, "block_start", ""))
+
+
+def _seq_first_nullable(
+    elems: list[dict], first_map: dict[str, set[str]], nullable_map: dict[str, bool]
+) -> tuple[set[str], bool]:
+    """序列的 `(FIRST 并集, 是否整体可空)`。
+
+    遇第一个不可空元素即停——其后元素既不在 FIRST 里，也不影响可空性。
+    """
+    first: set[str] = set()
+    nullable = True
+    for elem in elems:
+        first |= _elem_first(elem, first_map, nullable_map)
+        if not _elem_nullable(elem, nullable_map):
+            nullable = False
+            break
+    return first, nullable
+
+
+def _update_first_nullable(
+    first_map: dict[str, set[str]],
+    nullable_map: dict[str, bool],
+    name: str,
+    f: set[str],
+    nullable: bool,
+) -> bool:
+    """写回 FIRST/nullable；返回是否有变化（不动点终止条件）。"""
+    changed = False
+    if f != first_map[name]:
+        first_map[name] = f
+        changed = True
+    if nullable != nullable_map[name]:
+        nullable_map[name] = nullable
+        changed = True
+    return changed
 
 
 def _propagate_seq(
@@ -178,13 +220,9 @@ def _propagate_seq(
     changed = False
     for i, elem in enumerate(elems):
         for member in _elem_calls(elem):
-            beta_first: set[str] = set()
-            beta_nullable = True
-            for later in elems[i + 1 :]:
-                beta_first |= _elem_first(later, first_map, nullable_map)
-                if not _elem_nullable(later, nullable_map):
-                    beta_nullable = False
-                    break
+            beta_first, beta_nullable = _seq_first_nullable(
+                elems[i + 1 :], first_map, nullable_map
+            )
             # repeat/plus 的内部循环后继：下一次迭代的 FIRST。
             # 注意 beta_nullable 仍由后续元素（beta 侧）决定——repeat 自身
             # 可空（0 次迭代），owner FOLLOW 传播条件与循环无关。
@@ -192,15 +230,29 @@ def _propagate_seq(
                 beta_first |= _elem_first(elem, first_map, nullable_map)
             if body_first is not None:
                 beta_first |= body_first
-            if member not in follows:
-                continue
-            before = len(follows[member])
-            follows[member] |= beta_first
-            if beta_nullable:
-                follows[member] |= follows[owner]
-            if len(follows[member]) != before:
+            if _merge_follow(follows, member, owner, beta_first, beta_nullable):
                 changed = True
     return changed
+
+
+def _merge_follow(
+    follows: dict[str, set[str]],
+    member: str,
+    owner: str,
+    beta_first: set[str],
+    beta_nullable: bool,
+) -> bool:
+    """把 beta 侧 FIRST（+ 可空时 owner 的 FOLLOW）并入 member 的 FOLLOW。
+
+    member 不在表内（未注册规则名）→ 不写、无变化。
+    """
+    if member not in follows:
+        return False
+    before = len(follows[member])
+    follows[member] |= beta_first
+    if beta_nullable:
+        follows[member] |= follows[owner]
+    return len(follows[member]) != before
 
 
 def compute_follows(
@@ -223,106 +275,177 @@ def compute_follows(
         {规则名: frozenset[token 成员]}。FOLLOW 为空的规则（不可达且无
         语句/原子角色）由调用方回退旧行为。
     """
-    if trace:
-        import sys as _sys
-
-        def _t(msg: str) -> None:
-            print(f"[follow-trace] {msg}", file=_sys.stderr)
-    else:
-
-        def _t(msg: str) -> None:  # pyright: ignore[reportUnusedFunction] — trace 关闭时的兜底定义
-            del msg  # trace 关闭：调用点在 if trace 内不执行，兜底空操作
-
+    _t = _trace_printer(trace)
     names = set(rules)
-    # 块规则用内容部分（block_prods）建模——block_start/block_end 由块路径
-    # 单独消费，不是内容生产式的一部分（body 循环由 body_first 单独注入），
-    # 与剥离形态保持一致，避免块头内部元素 FOLLOW 混入 block_end。
-    trees = {}
-    for n in names:
-        r = rules[n]
-        if getattr(r, "is_block", False):
-            trees[n] = _prods_trees(
-                getattr(r, "block_prods", None)
-                or getattr(r, "prods", []) or []
-            )
-        else:
-            trees[n] = _rule_trees(r)
+    trees = _rule_trees_map(names, rules)
     first_map, nullable_map = _compute_first_nullable(
         names, trees, rules, operator_members
     )
 
     follows: dict[str, set[str]] = {n: set() for n in names}
 
-    statements = {n for n in names if getattr(rules[n], "is_statement", False)}
-    atoms = {n for n in names if getattr(rules[n], "is_atom", False)}
-    inline_rules = {n for n in names if getattr(rules[n], "inline", False)}
-    block_rules = {n for n in names if getattr(rules[n], "is_block", False)}
+    statements, atoms, inline_rules, block_rules = _role_sets(names, rules)
 
-    if trace:
-        _t(
-            f"rules={len(names)} statements={len(statements)} "
-            f"atoms={len(atoms)} inline={len(inline_rules)} block={len(block_rules)}"
-        )
+    _t(
+        f"rules={len(names)} statements={len(statements)} "
+        f"atoms={len(atoms)} inline={len(inline_rules)} block={len(block_rules)}"
+    )
 
     # 块结束符集合（语句循环的后继之一）
-    block_ends: set[str] = set()
-    for n in block_rules:
-        be = getattr(rules[n], "block_end", "") or ""
-        if be:
-            block_ends.add(be)
-
+    block_ends = _block_end_tokens(block_rules, rules)
     # 语句候选 FIRST 全集（语句循环：任一语句可跟随任一语句）
-    stmt_first: set[str] = set()
-    for s in statements:
-        stmt_first |= first_map.get(s, set())
+    stmt_first = _stmt_first_union(statements, first_map)
+    _t(f"stmt_first={sorted(stmt_first)} block_ends={sorted(block_ends)}")
 
-    if trace:
-        _t(f"stmt_first={sorted(stmt_first)} block_ends={sorted(block_ends)}")
-
-    # 语句循环注入
-    for s in statements:
-        follows[s] |= stmt_first | block_ends
-
-    # pratt 运算符注入：atom 后可跟任意运算符 token
+    body_first = stmt_first | block_ends
+    _inject_statement_loop(follows, statements, body_first)
     if operator_members:
-        for a in atoms:
-            follows[a] |= set(operator_members)
-        if trace:
-            _t(f"operator injection: {len(atoms)} atoms <- {sorted(operator_members)}")
-
-    # 主体方程不动点
-    changed = True
-    while changed:
-        changed = False
-        for name in names:
-            if name in block_rules:
-                # 块规则：内容 production 后附 body 循环（nullable 虚拟元素）
-                changed |= _propagate_seq(
-                    follows,
-                    trees[name],
-                    name,
-                    first_map,
-                    nullable_map,
-                    body_first=stmt_first | block_ends,
-                )
-            else:
-                changed |= _propagate_seq(
-                    follows, trees[name], name, first_map, nullable_map
-                )
-
-    # inline 传播：inline 展开后成员直接面对 inline 规则的后继
-    for i in inline_rules:
-        fi = follows.get(i, set())
-        for elem in trees[i]:
-            for member in _elem_calls(elem):
-                if member in follows:
-                    follows[member] |= fi
+        _inject_operator_members(follows, atoms, operator_members, _t)
+    _propagate_fixpoint(
+        follows, names, trees, block_rules, first_map, nullable_map, body_first
+    )
+    _propagate_inline(follows, inline_rules, trees)
 
     if trace:
         for n in sorted(follows):
             _t(f"FOLLOW({n}) = {sorted(follows[n])}")
 
     return {n: frozenset(s) for n, s in follows.items()}
+
+
+def _trace_printer(trace: bool):
+    """trace 打印器；关闭时返回空操作（各调用点无需自行判 trace）。"""
+    if not trace:
+        return lambda _msg: None
+
+    import sys as _sys
+
+    def _t(msg: str) -> None:
+        print(f"[follow-trace] {msg}", file=_sys.stderr)
+
+    return _t
+
+
+def _rule_trees_map(names: set[str], rules: dict[str, GrammarRule]) -> dict[str, list[dict]]:
+    """每规则的生产式树；块规则用**内容部分**（`block_prods`）。
+
+    块规则用内容部分建模——block_start/block_end 由块路径单独消费，不是内容
+    生产式的一部分（body 循环由 `body_first` 单独注入），与剥离形态保持一致，
+    避免块头内部元素 FOLLOW 混入 block_end。
+    """
+    trees: dict[str, list[dict]] = {}
+    for n in names:
+        r = rules[n]
+        if getattr(r, "is_block", False):
+            trees[n] = _prods_trees(
+                getattr(r, "block_prods", None) or getattr(r, "prods", []) or []
+            )
+        else:
+            trees[n] = _rule_trees(r)
+    return trees
+
+
+def _role_sets(
+    names: set[str], rules: dict[str, GrammarRule]
+) -> tuple[set[str], set[str], set[str], set[str]]:
+    """角色集合：`(语句, 原子, inline, 块)`。"""
+    statements: set[str] = set()
+    atoms: set[str] = set()
+    inline_rules: set[str] = set()
+    block_rules: set[str] = set()
+    for n in names:
+        r = rules[n]
+        if getattr(r, "is_statement", False):
+            statements.add(n)
+        if getattr(r, "is_atom", False):
+            atoms.add(n)
+        if getattr(r, "inline", False):
+            inline_rules.add(n)
+        if getattr(r, "is_block", False):
+            block_rules.add(n)
+    return statements, atoms, inline_rules, block_rules
+
+
+def _block_end_tokens(block_rules: set[str], rules: dict[str, GrammarRule]) -> set[str]:
+    """块结束符集合（语句循环的后继之一）。"""
+    ends: set[str] = set()
+    for n in block_rules:
+        be = getattr(rules[n], "block_end", "") or ""
+        if be:
+            ends.add(be)
+    return ends
+
+
+def _stmt_first_union(statements: set[str], first_map: dict) -> set[str]:
+    """语句候选 FIRST 全集（语句循环：任一语句可跟随任一语句）。"""
+    stmt_first: set[str] = set()
+    for s in statements:
+        stmt_first |= first_map.get(s, set())
+    return stmt_first
+
+
+def _inject_statement_loop(
+    follows: dict[str, set[str]], statements: set[str], body_first: set[str]
+) -> None:
+    """语句循环注入：每个语句可跟任一语句 FIRST 或块结束符。"""
+    for s in statements:
+        follows[s] |= body_first
+
+
+def _inject_operator_members(
+    follows: dict[str, set[str]],
+    atoms: set[str],
+    operator_members: list[str],
+    t,
+) -> None:
+    """pratt 运算符注入：atom 后可跟任意运算符 token。"""
+    for a in atoms:
+        follows[a] |= set(operator_members)
+    t(f"operator injection: {len(atoms)} atoms <- {sorted(operator_members)}")
+
+
+def _propagate_fixpoint(
+    follows: dict[str, set[str]],
+    names: set[str],
+    trees: dict[str, list[dict]],
+    block_rules: set[str],
+    first_map: dict,
+    nullable_map: dict,
+    body_first: set[str],
+) -> None:
+    """主体方程不动点：逐规则 `_propagate_seq` 直到不再变化。
+
+    块规则：内容 production 之后附 body 循环（nullable 虚拟元素）。
+    """
+    changed = True
+    while changed:
+        changed = False
+        for name in names:
+            if name in block_rules:
+                changed |= _propagate_seq(
+                    follows,
+                    trees[name],
+                    name,
+                    first_map,
+                    nullable_map,
+                    body_first=body_first,
+                )
+            else:
+                changed |= _propagate_seq(
+                    follows, trees[name], name, first_map, nullable_map
+                )
+
+
+def _propagate_inline(
+    follows: dict[str, set[str]], inline_rules: set[str], trees: dict[str, list[dict]]
+) -> None:
+    """inline 传播：inline 展开后成员直接面对 inline 规则的后继。"""
+    for i in inline_rules:
+        fi = follows.get(i, set())
+        for elem in trees[i]:
+            for member in _elem_calls(elem):
+                if member in follows:
+                    follows[member] |= fi
 
 
 def token_in_follow(tok_type: str, follow: frozenset[str]) -> bool:
