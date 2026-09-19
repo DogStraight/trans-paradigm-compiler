@@ -32,6 +32,75 @@ def make_marker(kind: str, seq: int) -> str:
     return f"tpc:{kind}:{seq}"
 
 
+def _restore_line_anchor(
+    result: str, marker: str, source_text: str, syntax: CommentSyntax
+) -> tuple[str, bool]:
+    """整行 marker 回插：优先整行替换为 source_text（可为多行原文段）。
+
+    渲染后 marker 若被并进其他行（非独占行），退化为文本替换。
+    """
+    text = line_marker(syntax, marker)
+    m = re.search(rf"^[ \t]*{re.escape(text)}[ \t]*$", result, re.MULTILINE)
+    if m:
+        return result[:m.start()] + source_text + result[m.end():], True
+    if text in result:
+        # 宽松退化：占位文本出现处原位替换
+        return result.replace(text, source_text), True
+    return result, False
+
+
+def _restore_inline_anchor(
+    result: str, entry: dict, source_text: str, syntax: CommentSyntax
+) -> tuple[str, bool]:
+    """行内 marker + body 区间回插：按操作栈机械撤销展开。
+
+    找到 marker（行内块注释形态）后，body 有两条定位路径：
+      1. marker 后（展开原文顺序：`<marker>= 1'b1` 保留在 clean_source，
+         parser 跳过注释看到端口默认值；渲染端行尾锚定把 marker 挪到行尾后
+         body 仍在 marker 前同行）
+      2. marker 前同行（渲染行尾锚定形态：`= 1'b1 <marker>,`）
+    两种都替换 [body..marker] 整体为宏调用原文（source_text，body 不残留）。
+    无 body 或 body 渲染后不可定位：仅替换 marker（保守，body 残留）。
+    """
+    marker_text = inline_marker(syntax, entry["marker"])
+    m_pos = result.find(marker_text)
+    if m_pos < 0:
+        return result, False
+    body = entry.get("body", "")
+    if body:
+        b_pos = result.find(body, m_pos + len(marker_text))
+        if b_pos >= 0:
+            return result[:m_pos] + source_text + result[b_pos + len(body):], True
+        # marker 前同行（行尾锚定形态）：body 被渲染挪到 marker 前
+        line_start = result.rfind("\n", 0, m_pos) + 1
+        b_pos = result.rfind(body, line_start, m_pos)
+        if b_pos >= 0:
+            return (
+                result[:b_pos] + source_text + result[m_pos + len(marker_text):],
+                True,
+            )
+    return result.replace(marker_text, source_text), True
+
+
+def _restore_one_anchor(
+    result: str, entry: dict, syntax: CommentSyntax
+) -> tuple[str, bool]:
+    """按锚 mode 回插一次 → (新文本, 是否发生变化)。
+
+    未知 mode → fail-fast（静默跳过会让占位残留到输出，不在本层降级）。
+    """
+    mode = entry.get("mode", "line")
+    source_text = entry.get("source_text", "")
+    if mode == "line":
+        return _restore_line_anchor(result, entry["marker"], source_text, syntax)
+    if mode == "inline":
+        return _restore_inline_anchor(result, entry, source_text, syntax)
+    raise ValueError(
+        f"[preprocessor] 未知锚 mode: {mode!r}"
+        f"（支持 line/inline，见 preprocessor/README.md）"
+    )
+
+
 def restore_anchors(
     rendered: str,
     anchors: list[dict] | None,
@@ -41,7 +110,6 @@ def restore_anchors(
     """统一回插引擎：按锚定位 marker，替换为原文（source_text），消耗式。
 
     line/inline 锚：marker 唯一 → 精确替换一次（原文不被全局复用）。
-    未知 mode → fail-fast（静默跳过会让占位残留到输出，不在本层降级）。
     多轮扫描直到不再变化：原文可能含内层 marker（嵌套条件块/嵌套宏调用）。
 
     syntax：语言包注释形态（占位以注释形态穿过管线，标点从声明取——
@@ -55,59 +123,9 @@ def restore_anchors(
     while changed:
         changed = False
         for entry in anchors:
-            mode = entry.get("mode", "line")
-            marker = entry.get("marker", "")
-            source_text = entry.get("source_text", "")
-            if not marker:
+            if not entry.get("marker", ""):
                 continue
-
-            if mode == "line":
-                # 整行 marker：优先整行替换为 source_text（可为多行原文段）；
-                # 渲染后 marker 若被并进其他行（非独占行），退化为文本替换。
-                text = line_marker(syntax, marker)
-                m = re.search(
-                    rf"^[ \t]*{re.escape(text)}[ \t]*$", result, re.MULTILINE
-                )
-                if m:
-                    result = result[:m.start()] + source_text + result[m.end():]
-                    changed = True
-                elif text in result:
-                    # 宽松退化：占位文本出现处原位替换
-                    result = result.replace(text, source_text)
-                    changed = True
-            elif mode == "inline":
-                # 行内 marker + body 区间替换：按操作栈机械撤销展开——
-                # 找到 marker（行内块注释形态）后，body 有两条定位路径：
-                #   1. marker 后（展开原文顺序：`<marker>= 1'b1` 保留在
-                #      clean_source，parser 跳过注释看到端口默认值；渲染端
-                #      行尾锚定把 marker 挪到行尾后 body 仍在 marker 前同行）
-                #   2. marker 前同行（渲染行尾锚定形态：`= 1'b1 <marker>,`）
-                # 两种都替换 [body..marker] 整体为宏调用原文（source_text，body 不残留）。
-                marker_text = inline_marker(syntax, marker)
-                m_pos = result.find(marker_text)
-                if m_pos < 0:
-                    continue
-                body = entry.get("body", "")
-                if body:
-                    b_pos = result.find(body, m_pos + len(marker_text))
-                    if b_pos >= 0:
-                        b_end = b_pos + len(body)
-                        result = result[:m_pos] + source_text + result[b_end:]
-                        changed = True
-                        continue
-                    # marker 前同行（行尾锚定形态）：body 被渲染挪到 marker 前
-                    line_start = result.rfind("\n", 0, m_pos) + 1
-                    b_pos = result.rfind(body, line_start, m_pos)
-                    if b_pos >= 0:
-                        result = result[:b_pos] + source_text + result[m_pos + len(marker_text):]
-                        changed = True
-                        continue
-                # 无 body 或 body 渲染后不可定位：仅替换 marker（保守，body 残留）
-                result = result.replace(marker_text, source_text)
+            result, did_change = _restore_one_anchor(result, entry, syntax)
+            if did_change:
                 changed = True
-            else:
-                raise ValueError(
-                    f"[preprocessor] 未知锚 mode: {mode!r}"
-                    f"（支持 line/inline，见 preprocessor/README.md）"
-                )
     return result
