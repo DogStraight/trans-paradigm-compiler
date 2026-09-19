@@ -280,13 +280,13 @@ def flatten(doc: Doc) -> Doc:
             return Text(text)
         case Pad(width):
             # 恒输出：flat 保留 padding（对齐参与 fits）
-            return Text(" " * width) if width else Empty()
+            return _spaces(width)
         case IfBreakPad(_):
             # 仅 broken 输出：flat 模式消失
             return Empty()
         case IfFlatPad(width):
             # 仅 flat 输出：flat 保留 padding（计入 fits，超宽可强制断行）
-            return Text(" " * width) if width else Empty()
+            return _spaces(width)
         case Prefix(i, d):
             flat_inner = flatten(d)
             if isinstance(flat_inner, Empty):
@@ -296,6 +296,11 @@ def flatten(doc: Doc) -> Doc:
             return flatten(flat)
         case _:
             return doc
+
+
+def _spaces(n: int) -> Doc:
+    """n 个空格的 Text（n 为 0 → Empty：不留空 Text 节点）。"""
+    return Text(" " * n) if n else Empty()
 
 
 def nest(indent: int, doc: Doc) -> Doc:
@@ -323,27 +328,7 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
         case LineSuffix(text):
             return Text(text)  # 顶层孤立 suffix：直接显示
         case Concat(docs):
-            out: list[Doc] = []
-            pending: list[str] = []
-            for d in docs:
-                if isinstance(d, LineSuffix):
-                    pending.append(d.text)
-                    continue
-                resolved = _resolve_line_suffix(d)
-                if isinstance(resolved, (Line, Break, HardBreak, LineBreak)):
-                    if pending:
-                        out.append(Text("".join(pending)))
-                        pending = []
-                    out.append(resolved)
-                elif isinstance(resolved, Empty):
-                    if pending:
-                        # 子结构为空但 suffix 挂起：保留，等下一个换行点
-                        continue
-                else:
-                    out.append(resolved)
-            if pending:
-                out.append(Text("".join(pending)))
-            return Concat(out)
+            return _resolve_suffix_concat(docs)
         case Nest(i, d):
             return Nest(i, _resolve_line_suffix(d))
         case Align(a, d):
@@ -359,6 +344,38 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
             return Fill([_resolve_line_suffix(d) for d in docs])
         case _:
             return doc
+
+
+def _resolve_suffix_concat(docs: Sequence[Doc]) -> Concat:
+    """Concat 的行尾锚定：收集挂起 suffix，遇换行点先插入挂起文本。
+
+    序列结束仍挂起 → 追加到尾（doc 末尾即行尾）；子项递归后为空但 suffix
+    挂起时**不下发**（`continue`）——等到下一个换行点或序列尾。
+    """
+    out: list[Doc] = []
+    pending: list[str] = []
+    for d in docs:
+        if isinstance(d, LineSuffix):
+            pending.append(d.text)
+            continue
+        resolved = _resolve_line_suffix(d)
+        if _is_line_point(resolved):
+            if pending:
+                out.append(Text("".join(pending)))
+                pending = []
+            out.append(resolved)
+        elif isinstance(resolved, Empty):
+            continue
+        else:
+            out.append(resolved)
+    if pending:
+        out.append(Text("".join(pending)))
+    return Concat(out)
+
+
+def _is_line_point(doc: Doc) -> bool:
+    """是否换行点（Line/Break/HardBreak/LineBreak）——挂起 suffix 的落点。"""
+    return isinstance(doc, (Line, Break, HardBreak, LineBreak))
 
 
 def layout(doc: Doc, max_width: int = 80) -> str:
