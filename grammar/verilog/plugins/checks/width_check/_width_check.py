@@ -11,7 +11,7 @@
 「主流 lint 机制调研」核心集合第 3 类）。
 """
 
-from typing import Any
+from typing import Any, Callable
 
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import const_eval, is_parameterized
@@ -814,61 +814,75 @@ def range_text(range_node) -> str:
     return f"{msb_t}:{lsb_t}" if lsb_t else msb_t
 
 
-def node_text(node) -> str:
-    """Node → 源码文本（通用文本化：content 优先；token 节点文本在 value；
-    合成/结构节点按类型补结构字符——拼接 {}、复制 {{n{}}、位选 []、
-    一元 op 前缀、三目 ?:、调用 $f(args)、二元 op 紧凑插入）。
+def _text_concat(node) -> str:
+    """ConcatExpr → `{a,b}`（空元素丢弃）。"""
+    parts = [node_text(ch) for ch in getattr(node, "sub_node", None) or []]
+    return "{" + ",".join(p for p in parts if p) + "}"
 
-    iter_children 的 vars 遍历按 parser.node 绑定顺序（Python dict
-    保序）——未显式处理的节点按子节点绑定序拼接。A4 诊断消息复用。
+
+def _text_replicate(node) -> str:
+    """ReplicateExpr → `{n{val}}`。"""
+    cnt = node_text(getattr(node, "count", None))
+    val = node_text(getattr(node, "value", None))
+    return f"{{{cnt}{{{val}}}}}" if cnt and val else ""
+
+
+def _text_unary(node) -> str:
+    """UnaryOp → 一元运算符前缀 + 操作数。"""
+    op = getattr(node, "op", "") or ""
+    return f"{op}{node_text(getattr(node, 'operand', None))}"
+
+
+def _text_binary(node) -> str:
+    """BinaryOp → 运算符紧凑插入（`a+b`）。"""
+    op = getattr(node, "op", "") or ""
+    lt = node_text(getattr(node, "left", None))
+    rt = node_text(getattr(node, "right", None))
+    return f"{lt}{op}{rt}" if lt and rt else ""
+
+
+def _text_ternary(node) -> str:
+    """TernaryOp → `c?t:f`。"""
+    cd = node_text(getattr(node, "cond", None))
+    tv = node_text(getattr(node, "true_val", None))
+    fv = node_text(getattr(node, "false_val", None))
+    return f"{cd}?{tv}:{fv}" if cd and tv and fv else ""
+
+
+def _text_select(node) -> str:
+    """SelectExpr → `base[首个后缀]其余后缀`。"""
+    base = node_text(getattr(node, "base", None))
+    suf = _suffix_text(getattr(node, "first_suffix", None))
+    extra = "".join(
+        _suffix_text(s) for s in getattr(node, "extra_suffixes", None) or []
+    )
+    return f"{base}[{suf}]{extra}" if base and suf else ""
+
+
+def _text_hier(node) -> str:
+    """HierExpr → 各段文本直接拼接（`a.b`）。"""
+    parts = [node_text(p) for p in getattr(node, "parts", None) or []]
+    return "".join(p for p in parts if p)
+
+
+def _text_sysfunc(node) -> str:
+    """SysFuncCall → `$callee(args)`。"""
+    callee = node_text(getattr(node, "callee", None))
+    return f"${callee}({_args_text(node)})"
+
+
+def _text_call(node) -> str:
+    """CallExpr → `callee(args)`。"""
+    callee = node_text(getattr(node, "callee", None))
+    return f"{callee}({_args_text(node)})"
+
+
+def _text_by_token_or_children(node) -> str:
+    """未列入分派表的节点：取 token 文本，否则按子节点绑定序拼接。
+
+    token 节点（literal.number / symbol.* 等）的文本在 value 属性——放在
+    显式分派**之后**，否则业务属性 value（如 ReplicateExpr.value）会被误当。
     """
-    if not isinstance(node, Node):
-        return str(node) if node else ""
-    c = getattr(node, "content", None)
-    if isinstance(c, str) and c:
-        return c
-    name = node.node_name
-    if name == "ConcatExpr":
-        parts = [node_text(ch) for ch in getattr(node, "sub_node", None) or []]
-        return "{" + ",".join(p for p in parts if p) + "}"
-    if name == "ReplicateExpr":
-        cnt = node_text(getattr(node, "count", None))
-        val = node_text(getattr(node, "value", None))
-        return f"{{{cnt}{{{val}}}}}" if cnt and val else ""
-    if name == "UnaryOp":
-        op = getattr(node, "op", "") or ""
-        return f"{op}{node_text(getattr(node, 'operand', None))}"
-    if name == "BinaryOp":
-        op = getattr(node, "op", "") or ""
-        lt = node_text(getattr(node, "left", None))
-        rt = node_text(getattr(node, "right", None))
-        return f"{lt}{op}{rt}" if lt and rt else ""
-    if name == "TernaryOp":
-        cd = node_text(getattr(node, "cond", None))
-        tv = node_text(getattr(node, "true_val", None))
-        fv = node_text(getattr(node, "false_val", None))
-        return f"{cd}?{tv}:{fv}" if cd and tv and fv else ""
-    if name == "SelectExpr":
-        base = node_text(getattr(node, "base", None))
-        suf = _suffix_text(getattr(node, "first_suffix", None))
-        extra = "".join(
-            _suffix_text(s)
-            for s in getattr(node, "extra_suffixes", None) or []
-        )
-        return f"{base}[{suf}]{extra}" if base and suf else ""
-    if name == "HierExpr":
-        parts = [node_text(p) for p in getattr(node, "parts", None) or []]
-        return "".join(p for p in parts if p)
-    if name == "SysFuncCall":
-        callee = node_text(getattr(node, "callee", None))
-        args = _args_text(node)
-        return f"${callee}({args})"
-    if name == "CallExpr":
-        callee = node_text(getattr(node, "callee", None))
-        args = _args_text(node)
-        return f"{callee}({args})"
-    # token 节点（literal.number / symbol.* 等）：文本在 value 属性
-    # （放在显式分派之后——业务属性 value（如 ReplicateExpr.value）不能被误当）
     v = getattr(node, "value", None)
     if isinstance(v, str) and v:
         return v
@@ -882,6 +896,40 @@ def node_text(node) -> str:
         if t:
             parts.append(t)
     return "".join(parts)
+
+
+# 节点类型 → 文本构造（合成/结构节点的语言知识；未列入者走 token/子节点）
+_NODE_TEXT_BUILDERS: dict[str, Callable[[Node], str]] = {
+    "ConcatExpr": _text_concat,
+    "ReplicateExpr": _text_replicate,
+    "UnaryOp": _text_unary,
+    "BinaryOp": _text_binary,
+    "TernaryOp": _text_ternary,
+    "SelectExpr": _text_select,
+    "HierExpr": _text_hier,
+    "SysFuncCall": _text_sysfunc,
+    "CallExpr": _text_call,
+}
+
+
+def node_text(node) -> str:
+    """Node → 源码文本（通用文本化：content 优先；token 节点文本在 value；
+    合成/结构节点按类型补结构字符——拼接 {}、复制 {{n{}}、位选 []、
+    一元 op 前缀、三目 ?:、调用 $f(args)、二元 op 紧凑插入）。
+
+    逐类型的构造在 `_NODE_TEXT_BUILDERS`（语言知识表）；iter_children 的
+    vars 遍历按 parser.node 绑定顺序（Python dict 保序）——未显式处理的
+    节点按子节点绑定序拼接。A4 诊断消息复用。
+    """
+    if not isinstance(node, Node):
+        return str(node) if node else ""
+    c = getattr(node, "content", None)
+    if isinstance(c, str) and c:
+        return c
+    builder = _NODE_TEXT_BUILDERS.get(node.node_name)
+    if builder is not None:
+        return builder(node)
+    return _text_by_token_or_children(node)
 
 
 def _suffix_text(suffix) -> str:
