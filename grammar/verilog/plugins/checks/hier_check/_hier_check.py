@@ -13,6 +13,8 @@ member；Verilator VSymGraph 全量 elaboration 对 lint 过重，不做）。
 resolve_member_width；direction 供未来跨模块悬空/驱动判定增量。
 """
 
+from dataclasses import dataclass
+
 from core.define import Node, iter_nodes
 
 # 实例化节点（本文件/目标模块内的 ModuleInst 均此形态）
@@ -35,6 +37,19 @@ def run_hier_check(analyzer, context) -> None:
     analyzer._hier_inst_maps, analyzer._hier_node_modules = _build_maps(root)
 
 
+def _module_insts(mod) -> dict:
+    """模块内实例表 `{实例名: (模块名, site)}`（同名重复实例取首见）。"""
+    insts: dict = {}
+    for n in iter_nodes(mod):
+        if n.node_name != _INST_RULE:
+            continue
+        iname = _node_text(getattr(n, "inst_name", None))
+        mname = _node_text(getattr(n, "module_name", None))
+        if iname and mname:
+            insts.setdefault(iname, (mname, n))
+    return insts
+
+
 def _build_maps(root):
     """{模块名: {实例名: (模块名, site)}} + {id(节点): 模块名}。"""
     inst_maps: dict = {}
@@ -47,28 +62,35 @@ def _build_maps(root):
             continue
         for n in iter_nodes(mod):
             node_modules[id(n)] = mn
-        insts: dict = {}
-        for n in iter_nodes(mod):
-            if n.node_name != _INST_RULE:
-                continue
-            iname = _node_text(getattr(n, "inst_name", None))
-            mname = _node_text(getattr(n, "module_name", None))
-            if iname and mname:
-                insts.setdefault(iname, (mname, n))
-        inst_maps[mn] = insts
+        inst_maps[mn] = _module_insts(mod)
     return inst_maps, node_modules
 
 
-def resolve_member_width(node, analyzer, context) -> int | None:
-    """HierExpr 纯成员链 → 跨模块成员宽度（None = 保守不推断）。
+@dataclass
+class _Step:
+    """链段推进结果（三种归宿之一定）。
 
-    逐段下钻：头段 a 查当前模块实例表 → 目标模块端口表（宽度表达式 +
-    实例覆盖参数三层合并）→ 非端口走查目标模块内部声明 → 若本段是目标
-    模块内实例再下钻下一段。含下标段（HierSuffix）→ None。
+    width      —— 命中成员宽度（终点），`width` 携带值
+    descend    —— 本段是目标模块内实例，下一段在下钻后的模块里找
+    unresolved —— 保守不推断（调用方返回 None）
+    """
+
+    kind: str
+    width: int | None = None
+    module: str = ""
+    site: object = None
+
+
+def _start_chain(node, analyzer):
+    """纯成员链起点 → (parts, mod_name, site, cur_mod)；非链/表缺失 → None。
+
+    准入条件：链长 ≥2（单段是普通信号引用）、头段是节点且有名字、
+    per-module 实例表与节点→模块映射已建（postpass 未跑 → 保守）、
+    头段确实是本模块实例（本地信号/未识别 → 保守）。
     """
     parts = getattr(node, "parts", None) or []
     if len(parts) < 2:
-        return None  # 单段 = 普通信号引用，非层次链
+        return None
     head = parts[0]
     if not isinstance(head, Node):
         return None
@@ -84,39 +106,70 @@ def resolve_member_width(node, analyzer, context) -> int | None:
         return None
     entry = (inst_maps.get(cur_mod) or {}).get(head_name)
     if entry is None:
-        return None  # 头段不是本模块实例（本地信号/未识别 → 保守）
+        return None
     mod_name, site = entry
+    return parts, mod_name, site, cur_mod
+
+
+def _port_width(port, info, site, caller_params: dict) -> int | None:
+    """端口宽度：无范围 → 标量 1 bit；否则按三层合并参数求值。"""
+    from grammar.verilog.plugins.checks.width_check import _width_check as wc
+
+    we = getattr(port, "width_expr", None) or ""
+    if not we:
+        return 1
+    return wc.eval_width_text_params(we, _merged_params(info, site, caller_params))
+
+
+def _step_segment(
+    part, mod_name: str, site, caller_params: dict, context
+) -> "_Step":
+    """推进一步链段：端口宽度 / 内部成员宽度 / 实例下钻 / 保守。"""
+    if not isinstance(part, Node):
+        return _Step("unresolved")
+    if part.node_name == "HierSuffix":
+        return _Step("unresolved")  # 下标段（a.b[i]）→ 保守
+    pname = _node_text(getattr(part, "name", None))
+    if not pname:
+        return _Step("unresolved")
+    info = (context.extra.get("module_index", {}) or {}).get(mod_name)
+    if info is None:
+        return _Step("unresolved")
+    # 端口表命中 → 宽度（端口是成员访问终点）
+    port = (getattr(info, "ports", None) or {}).get(pname)
+    if port is not None:
+        return _Step("width", width=_port_width(port, info, site, caller_params))
+    # 内部成员声明命中 → 宽度
+    mw = _member_width(info, pname, site, caller_params)
+    if mw is not None:
+        return _Step("width", width=mw)
+    # 本段是目标模块内实例 → 下钻
+    sub = _instance_in_module(info, pname)
+    if sub is None:
+        return _Step("unresolved")
+    return _Step("descend", module=sub[0], site=sub[1])
+
+
+def resolve_member_width(node, analyzer, context) -> int | None:
+    """HierExpr 纯成员链 → 跨模块成员宽度（None = 保守不推断）。
+
+    逐段下钻：头段 a 查当前模块实例表 → 目标模块端口表（宽度表达式 +
+    实例覆盖参数三层合并）→ 非端口走查目标模块内部声明 → 若本段是目标
+    模块内实例再下钻下一段。含下标段（HierSuffix）→ None。
+    段内细则见 `_step_segment`。
+    """
+    start = _start_chain(node, analyzer)
+    if start is None:
+        return None
+    parts, mod_name, site, cur_mod = start
     caller_params = _module_defaults(context, cur_mod)
     for part in parts[1:]:
-        if not isinstance(part, Node):
+        step = _step_segment(part, mod_name, site, caller_params, context)
+        if step.kind == "width":
+            return step.width
+        if step.kind != "descend":
             return None
-        if part.node_name == "HierSuffix":
-            return None  # 下标段（a.b[i]）→ 保守
-        pname = _node_text(getattr(part, "name", None))
-        if not pname:
-            return None
-        info = (context.extra.get("module_index", {}) or {}).get(mod_name)
-        if info is None:
-            return None
-        # 端口表命中 → 宽度（端口是成员访问终点）
-        port = (getattr(info, "ports", None) or {}).get(pname)
-        if port is not None:
-            from grammar.verilog.plugins.checks.width_check import _width_check as wc
-
-            params = _merged_params(info, site, caller_params)
-            we = getattr(port, "width_expr", None) or ""
-            if not we:
-                return 1  # 无范围端口 = 标量 1 bit
-            return wc.eval_width_text_params(we, params)
-        # 内部成员声明命中 → 宽度
-        mw = _member_width(info, pname, site, caller_params)
-        if mw is not None:
-            return mw
-        # 本段是目标模块内实例 → 下钻
-        sub = _instance_in_module(info, pname)
-        if sub is None:
-            return None
-        mod_name, site = sub
+        mod_name, site = step.module, step.site
         caller_params = _module_defaults(context, mod_name)
     return None
 
@@ -148,6 +201,19 @@ def _merged_params(info, site, caller_params: dict) -> dict:
     return out
 
 
+def _declarator_of(decl_node: Node, name: str):
+    """声明节点内名为 name 的声明符节点（无 → None）。"""
+    items = getattr(decl_node, "items", None)
+    if not isinstance(items, Node):
+        return None
+    for it in getattr(items, "items", None) or []:
+        if not isinstance(it, Node):
+            continue
+        if getattr(getattr(it, "name", None), "content", "") == name:
+            return it
+    return None
+
+
 def _member_width(info, name: str, site, caller_params: dict) -> int | None:
     """目标模块内部成员宽度（走查 ModuleInfo.node 声明子树）。
 
@@ -162,19 +228,15 @@ def _member_width(info, name: str, site, caller_params: dict) -> int | None:
     for n in iter_nodes(node):
         if n.node_name == "IntegerDecl" and _declares(n, name):
             return 32  # integer = 32 位（IEEE 1364-2005 A.2.1.3）
-        if n.node_name not in _DECL_RULES or not _declares(n, name):
+        if n.node_name not in _DECL_RULES:
+            continue
+        decl = _declarator_of(n, name)
+        if decl is None:
             continue
         # 声明符级 packed_range 优先（wire a [7:0]；多声明符按名对齐）
-        items = getattr(n, "items", None)
-        if isinstance(items, Node):
-            for it in getattr(items, "items", None) or []:
-                if not isinstance(it, Node):
-                    continue
-                if getattr(getattr(it, "name", None), "content", "") != name:
-                    continue
-                w = wc.range_text(getattr(it, "packed_range", None))
-                if w:
-                    return wc.eval_width_text_params(w, params)
+        w = wc.range_text(getattr(decl, "packed_range", None))
+        if w:
+            return wc.eval_width_text_params(w, params)
         # 类型级 packed_range（wire [7:0] a）
         w = wc.range_text(getattr(n, "packed_range", None))
         if w:
@@ -185,13 +247,7 @@ def _member_width(info, name: str, site, caller_params: dict) -> int | None:
 
 def _declares(decl_node: Node, name: str) -> bool:
     """声明节点是否含名为 name 的声明符。"""
-    items = getattr(decl_node, "items", None)
-    if not isinstance(items, Node):
-        return False
-    for it in getattr(items, "items", None) or []:
-        if isinstance(it, Node) and getattr(getattr(it, "name", None), "content", "") == name:
-            return True
-    return False
+    return _declarator_of(decl_node, name) is not None
 
 
 def _instance_in_module(info, name: str):
