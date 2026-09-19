@@ -31,6 +31,8 @@ Doc: docs/language_walkthrough.md（数字字面量 DFA）
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 # ── 数字形态状态基类 ──
 # 状态模型：每种形态编译出 (size→base→value) 的链式状态；
 # 多个形态共享同一套通用字符类别（dec/bin/oct/hex 等）。
@@ -113,107 +115,111 @@ def _expand_prefix(prefix: str) -> list[str]:
     return [p for p in prefix.split("|") if p]
 
 
-def compile_number_pattern(cfg: dict) -> NumberPattern:
-    """编译单个 [[number.based]] 声明为 NumberPattern。"""
-    name = cfg.get("name", "based")
-    transitions: dict[tuple[int, str], int] = {}
-    accepting: set[int] = set()
-    sid = [0]
-    base_states: dict[str, int] = {}
+@dataclass
+class _PatternBuilder:
+    """数字形态状态机装配器：持有转移表 / 接受集 / 状态号计数器。
 
-    def new_state() -> int:
-        s = sid[0]
-        sid[0] += 1
+    三个阶段共用一份（size 子图 / base_prefix 子图 / value 子图）——每个
+    阶段只往这几张表里写，最后 `to_pattern` 一次性交给 `NumberPattern`。
+    """
+
+    transitions: dict[tuple[int, str], int] = field(default_factory=dict)
+    accepting: set[int] = field(default_factory=set)
+    base_states: dict[str, int] = field(default_factory=dict)
+    sid: int = 0
+
+    def new_state(self) -> int:
+        """取新状态号（单调递增，pattern 内独立编号）。"""
+        s = self.sid
+        self.sid += 1
         return s
 
-    size_cfg = cfg.get("size", "none")
-    base_prefix = cfg.get("base_prefix", "'")
-    bases = cfg.get("bases", [])
-    value_digits = cfg.get("value_digits", {})
-    value_allow = cfg.get("value_allow", [])
-    allow_space = cfg.get("value_allow_space", False)
-    # 无前缀形态（base_prefix = "none"）：size 态即最终接受态（十进制整数/浮点），
-    # 不建 quote/base 链
-    no_prefix = base_prefix == "none"
+    def add(self, src: int, cat: str, dst: int) -> None:
+        """加一条转移 src --cat--> dst。"""
+        self.transitions[(src, cat)] = dst
 
-    # ── size 部分 ──
-    size_is_none = size_cfg == "none" or (
-        isinstance(size_cfg, dict) and size_cfg.get("digits") == "none"
-    )
-    # 无前缀十进制形态是否允许 0 开头（0 / 017 / 0.5，verilog unsigned_number）：
-    # 由 size.digits = "any" 显式声明；默认 nonzero 严格 digit1-9 开头
-    # （C 风格：0 开头交给 c_octal 这类前缀形态，避免 08 被吞成十进制）
-    size_allow_zero = (
-        isinstance(size_cfg, dict) and size_cfg.get("digits") == "any"
-    )
-    start = new_state()
+    def digits(self, src: int, dst: int, lo: int = 0, hi: int = 10) -> None:
+        """批量加 `digit{lo}`..`digit{hi-1}` 转移（同 src→dst）。"""
+        for i in range(lo, hi):
+            self.add(src, f"digit{i}", dst)
 
-    if size_is_none:
-        # 无 size：直接进 base_prefix
-        current = start
-    else:
-        # 有 size：size 语义 = non_zero_unsigned_number（IEEE A.8.7，
-        # non_zero_decimal_digit 开头）——带前缀形态只 digit1-9 开头（0'b1 非法）；
-        # 无前缀形态按 size_allow_zero 决定 0 开头（verilog_dec = any；c_dec = nonzero）
-        size_state = new_state()
-        if no_prefix and size_allow_zero:
-            for i in range(0, 10):
-                transitions[(start, f"digit{i}")] = size_state
-        else:
-            for i in range(1, 10):
-                transitions[(start, f"digit{i}")] = size_state
-        for i in range(0, 10):
-            transitions[(size_state, f"digit{i}")] = size_state
-        transitions[(size_state, "underscore")] = size_state
-        # 浮点/科学计数：dec [. dec] [e[+-] dec]（旧 FSM DEC_INT 行为）
-        frac_state = new_state()          # 小数点后（3.14）
-        exp_state = new_state()           # e 之后（1e10）
-        exp_sign_state = new_state()      # e+ / e- 符号后
-        exp_digit_state = new_state()     # 指数数字
-        transitions[(size_state, "dot")] = frac_state
-        transitions[(size_state, "eE")] = exp_state
-        for i in range(0, 10):
-            transitions[(frac_state, f"digit{i}")] = frac_state
-        transitions[(frac_state, "underscore")] = frac_state
-        transitions[(frac_state, "eE")] = exp_state
-        accepting.add(frac_state)
-        transitions[(exp_state, "sign")] = exp_sign_state
-        for i in range(0, 10):
-            transitions[(exp_state, f"digit{i}")] = exp_digit_state
-        for i in range(0, 10):
-            transitions[(exp_sign_state, f"digit{i}")] = exp_digit_state
-        for i in range(0, 10):
-            transitions[(exp_digit_state, f"digit{i}")] = exp_digit_state
-        transitions[(exp_digit_state, "underscore")] = exp_digit_state
-        accepting.add(exp_digit_state)
-        # size 态本身是接受态：十进制整数（7 / 123 / 0 等）
-        accepting.add(size_state)
-        current = size_state
-
-    # ── base_prefix 部分 ──
-    # 无前缀形态（base_prefix="none"）：size 态即接受态，直接返回
-    if no_prefix:
+    def to_pattern(self, name: str, start: int, allow_space: bool) -> NumberPattern:
+        """装配结果 → NumberPattern。"""
         return NumberPattern(
-            name, transitions, accepting, start, base_states, allow_space
+            name, self.transitions, self.accepting, start, self.base_states,
+            allow_space,
         )
 
-    # 前缀可能是多字符（0x/0b/0o）或单字符（' / 0）
-    prefixes = _expand_prefix(base_prefix)
-    # 多字符前缀：每条前缀独立建链，值随前缀（value_digits 键 = 前缀末字符）
-    if prefixes and any(len(p) > 1 for p in prefixes):
-        # 按首字符分组的链（0x/0b/0o 首字符都是 0）
+    def build_size(
+        self,
+        start: int,
+        size_cfg,
+        size_is_none: bool,
+        no_prefix: bool,
+        size_allow_zero: bool,
+    ) -> int:
+        """size 子图 → 返回 `current`（下一阶段的起点）。
+
+        size 语义 = non_zero_unsigned_number（IEEE A.8.7，
+        non_zero_decimal_digit 开头）——带前缀形态只 digit1-9 开头（0'b1 非法）；
+        无前缀形态按 size_allow_zero 决定 0 开头（verilog_dec = any；c_dec = nonzero）。
+        浮点/科学计数：`dec [. dec] [e[+-] dec]`（旧 FSM DEC_INT 行为）。
+        """
+        if size_is_none:
+            # 无 size：直接进 base_prefix
+            return start
+        size_state = self.new_state()
+        if no_prefix and size_allow_zero:
+            self.digits(start, size_state, 0, 10)
+        else:
+            self.digits(start, size_state, 1, 10)
+        self.digits(size_state, size_state, 0, 10)
+        self.add(size_state, "underscore", size_state)
+        frac_state = self.new_state()          # 小数点后（3.14）
+        exp_state = self.new_state()           # e 之后（1e10）
+        exp_sign_state = self.new_state()      # e+ / e- 符号后
+        exp_digit_state = self.new_state()     # 指数数字
+        self.add(size_state, "dot", frac_state)
+        self.add(size_state, "eE", exp_state)
+        self.digits(frac_state, frac_state, 0, 10)
+        self.add(frac_state, "underscore", frac_state)
+        self.add(frac_state, "eE", exp_state)
+        self.accepting.add(frac_state)
+        self.add(exp_state, "sign", exp_sign_state)
+        self.digits(exp_state, exp_digit_state, 0, 10)
+        self.digits(exp_sign_state, exp_digit_state, 0, 10)
+        self.digits(exp_digit_state, exp_digit_state, 0, 10)
+        self.add(exp_digit_state, "underscore", exp_digit_state)
+        self.accepting.add(exp_digit_state)
+        # size 态本身是接受态：十进制整数（7 / 123 / 0 等）
+        self.accepting.add(size_state)
+        return size_state
+
+    def build_multi_prefix(
+        self,
+        start: int,
+        current: int,
+        size_is_none: bool,
+        prefixes: list[str],
+        value_digits: dict,
+    ) -> None:
+        """多字符前缀（0x/0b/0o…）子图：按首字符分组，每条前缀独立建链。
+
+        前缀以数字开头（0x）→ 从 size/start 的 `digit{first}` 转移出发；
+        前缀末字符决定 value 进制（`value_digits` 键 = 前缀末字符）。
+        多字符前缀形态暂不支持 x/z value。
+        """
         by_first: dict[str, list[str]] = {}
         for p in prefixes:
             by_first.setdefault(p[0], []).append(p)
         for first, plist in by_first.items():
             if first not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"):
                 continue
-            # 前缀以数字开头（0x）：从 size/start 的 digit{first} 转移
             from_state = start if size_is_none else current
-            node = transitions.get((from_state, f"digit{first}"))
+            node = self.transitions.get((from_state, f"digit{first}"))
             if node is None:
-                node = new_state()
-                transitions[(from_state, f"digit{first}")] = node
+                node = self.new_state()
+                self.add(from_state, f"digit{first}", node)
             for p in plist:
                 # 每条前缀独立建链（0x → xz；0b → base_b；…）
                 cur = node
@@ -223,74 +229,136 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
                     if cat is None:
                         ok = False
                         break
-                    nxt = new_state()
-                    transitions[(cur, cat)] = nxt
+                    nxt = self.new_state()
+                    self.add(cur, cat, nxt)
                     cur = nxt
                 if not ok:
                     continue
-                # 前缀末字符决定 value 进制（value_digits: {x:"hex", b:"bin", …}）
                 radix = value_digits.get(p[-1].lower(), "dec")
                 for cat in _digit_cats_for(radix):
                     if cat == "xz":
-                        continue  # 多字符前缀形态暂不支持 x/z value
-                    transitions[(cur, cat)] = cur
-                transitions[(cur, "underscore")] = cur
-                accepting.add(cur)
-        return NumberPattern(
-            name, transitions, accepting, start, base_states, allow_space
-        )
+                        continue
+                    self.add(cur, cat, cur)
+                self.add(cur, "underscore", cur)
+                self.accepting.add(cur)
 
-    # ── 单字符前缀（' / 0 / 's）──
-    # 前缀首字符类别按声明（' → quote，0 → digit0），不再硬编码 quote——
-    # 支持 c4 前导 0 八进制（base_prefix = "0"）
-    quote_state = new_state()
-    signed_opt = cfg.get("signed", False)
-    prefix_first = base_prefix[0] if base_prefix and base_prefix != "none" else "'"
-    prefix_cat = _CHAR_CATEGORY.get(prefix_first, "quote")
-    if signed_opt:
-        # 先前缀（quote/digit0）到 quote_state，再 s（sign_s）到 sign_after_state
-        transitions[(current, prefix_cat)] = quote_state
-        sign_after_state = new_state()
-        transitions[(quote_state, "sign_s")] = sign_after_state
-    else:
-        transitions[(current, prefix_cat)] = quote_state
-        sign_after_state = quote_state
+    def build_single_prefix(
+        self, current: int, base_prefix: str, signed_opt: bool
+    ) -> tuple[int, int]:
+        """单字符前缀（`'` / `0` / `'s`）子图 → (quote_state, sign_after_state)。
 
-    # ── base 字母 → value 态（或前缀后直接 value）──
-    if bases:
-        for base_char in bases:
-            base_lower = base_char.lower()
-            radix = value_digits.get(base_lower, "dec")
-            value_state = new_state()
-            base_states[base_lower] = value_state
-            cat = _CHAR_CATEGORY.get(base_char)
-            if cat:
-                transitions[(sign_after_state, cat)] = value_state
-            # value 态：进制 digit 集 + 允许的特殊字符
-            for cat in _digit_cats_for(radix):
-                if cat == "xz" and "x" not in value_allow and "z" not in value_allow and "?" not in value_allow:
-                    continue  # x/z/? 只在声明允许时进 value
-                transitions[(value_state, cat)] = value_state
-            transitions[(value_state, "underscore")] = value_state
-            accepting.add(value_state)
-    else:
-        # 无 base 字母：前缀后直接进 value（值随前缀，value_digits 键 = 前缀末字符）
-        # 如 c4 前导 0 八进制：base_prefix = "0"，value_digits = { "0" = "oct" }
+        前缀首字符类别按声明（`'` → quote，0 → digit0），不硬编码 quote——
+        支持 c4 前导 0 八进制（base_prefix = "0"）。
+        """
+        quote_state = self.new_state()
+        prefix_first = base_prefix[0] if base_prefix and base_prefix != "none" else "'"
+        prefix_cat = _CHAR_CATEGORY.get(prefix_first, "quote")
+        self.add(current, prefix_cat, quote_state)
+        if not signed_opt:
+            return quote_state, quote_state
+        # 有 signed：先前缀（quote/digit0）到 quote_state，再 s（sign_s）到其后的态
+        sign_after_state = self.new_state()
+        self.add(quote_state, "sign_s", sign_after_state)
+        return quote_state, sign_after_state
+
+    def build_value_states(
+        self,
+        sign_after_state: int,
+        base_prefix: str,
+        bases: list,
+        value_digits: dict,
+        value_allow: list,
+    ) -> None:
+        """base 字母 → value 态（或前缀后直接 value 态）。
+
+        有 `bases`：每个进制字母一个 value 态（记入 `base_states`，供运行期按
+        字母选态）；无 `bases`：前缀后直接进 value（值随前缀，`value_digits`
+        键 = 前缀末字符），如 c4 前导 0 八进制。
+        """
+        if bases:
+            for base_char in bases:
+                base_lower = base_char.lower()
+                radix = value_digits.get(base_lower, "dec")
+                value_state = self.new_state()
+                self.base_states[base_lower] = value_state
+                cat = _CHAR_CATEGORY.get(base_char)
+                if cat:
+                    self.add(sign_after_state, cat, value_state)
+                for vcat in _value_cats(radix, value_allow):
+                    self.add(value_state, vcat, value_state)
+                self.add(value_state, "underscore", value_state)
+                self.accepting.add(value_state)
+            return
         radix = value_digits.get(base_prefix[-1].lower(), "dec")
-        for cat in _digit_cats_for(radix):
-            if cat == "xz" and "x" not in value_allow and "z" not in value_allow and "?" not in value_allow:
-                continue
-            transitions[(sign_after_state, cat)] = sign_after_state
-        transitions[(sign_after_state, "underscore")] = sign_after_state
-        accepting.add(sign_after_state)
+        for vcat in _value_cats(radix, value_allow):
+            self.add(sign_after_state, vcat, sign_after_state)
+        self.add(sign_after_state, "underscore", sign_after_state)
+        self.accepting.add(sign_after_state)
 
-    return NumberPattern(
-        name, transitions, accepting, start, base_states, allow_space
+
+def _value_cats(radix: str, value_allow: list) -> list[str]:
+    """value 态接受的字符类别：进制 digit 集 + 声明的特殊字符。
+
+    `xz`（x/z/?）只在 `value_allow` 显式声明时进 value，否则值域越界。
+    """
+    cats: list[str] = []
+    for cat in _digit_cats_for(radix):
+        if cat == "xz" and not (
+            "x" in value_allow or "z" in value_allow or "?" in value_allow
+        ):
+            continue
+        cats.append(cat)
+    return cats
+
+
+def compile_number_pattern(cfg: dict) -> NumberPattern:
+    """编译单个 [[number.based]] 声明为 NumberPattern。
+
+    四步：读声明 → size 子图 → base_prefix 子图（无前缀 / 多字符 / 单字符
+    三分支）→ value 子图；每步只往同一个 `_PatternBuilder` 写，最后统一
+    装配成 `NumberPattern`（状态号在 pattern 内独立编号）。
+    """
+    name = cfg.get("name", "based")
+    allow_space = cfg.get("value_allow_space", False)
+    size_cfg = cfg.get("size", "none")
+    base_prefix = cfg.get("base_prefix", "'")
+    bases = cfg.get("bases", [])
+    value_digits = cfg.get("value_digits", {})
+    value_allow = cfg.get("value_allow", [])
+    # 无前缀形态（base_prefix = "none"）：size 态即最终接受态（十进制整数/浮点），
+    # 不建 quote/base 链
+    no_prefix = base_prefix == "none"
+    size_is_none = size_cfg == "none" or (
+        isinstance(size_cfg, dict) and size_cfg.get("digits") == "none"
+    )
+    # 无前缀十进制形态是否允许 0 开头（0 / 017 / 0.5，verilog unsigned_number）：
+    # 由 size.digits = "any" 显式声明；默认 nonzero 严格 digit1-9 开头
+    # （C 风格：0 开头交给 c_octal 这类前缀形态，避免 08 被吞成十进制）
+    size_allow_zero = (
+        isinstance(size_cfg, dict) and size_cfg.get("digits") == "any"
     )
 
+    b = _PatternBuilder()
+    start = b.new_state()
+    current = b.build_size(start, size_cfg, size_is_none, no_prefix, size_allow_zero)
 
-# ── 编译声明列表 ──
+    # 无前缀形态：size 态即接受态，直接返回
+    if no_prefix:
+        return b.to_pattern(name, start, allow_space)
 
+    # 前缀可能是多字符（0x/0b/0o）或单字符（' / 0）
+    prefixes = _expand_prefix(base_prefix)
+    if prefixes and any(len(p) > 1 for p in prefixes):
+        b.build_multi_prefix(start, current, size_is_none, prefixes, value_digits)
+        return b.to_pattern(name, start, allow_space)
+
+    _, sign_after_state = b.build_single_prefix(
+        current, base_prefix, cfg.get("signed", False)
+    )
+    b.build_value_states(
+        sign_after_state, base_prefix, bases, value_digits, value_allow
+    )
+    return b.to_pattern(name, start, allow_space)
 
 def compile_patterns(cfg_list: list[dict]) -> list[NumberPattern]:
     """编译 [[number.based]] 声明列表。"""
