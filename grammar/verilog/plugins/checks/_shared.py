@@ -32,6 +32,62 @@ def target_sig(target: Node | None) -> str | None:
     return None
 
 
+def scan_char_run(text: str, i: int, accept) -> int:
+    """从 i 起连续满足 accept 的字符区间 → 终点下标（不含）。"""
+    n = len(text)
+    while i < n and accept(text[i]):
+        i += 1
+    return i
+
+
+def is_ident_char(ch: str) -> bool:
+    """标识符续字符（字母/数字/下划线）。"""
+    return ch.isalnum() or ch == "_"
+
+
+def _min_width(v: int) -> int:
+    """值 → 最小位宽（0 → 1 位）。"""
+    return v.bit_length() if v else 1
+
+
+def _literal_body(body: str) -> str | None:
+    """常量体去掉 signed 前缀（'shFF → hFF）；空 → None。"""
+    if body[:1] in ("s", "S"):
+        body = body[1:]
+    return body or None
+
+
+def _explicit_width(head: str) -> int | None:
+    """`'` 前的尺寸（`8'hFF` → 8）；未给尺寸 → None。"""
+    head = head.strip()
+    return int(head) if head.isdigit() else None
+
+
+def _based_value(digits: str, base_ch: str) -> int | None:
+    """基数 + 数位文本 → 值；含 x/z/? 位或无法解析 → None。"""
+    digits = digits.replace("_", "")
+    if not digits or any(c in "xXzZ?" for c in digits):
+        return None
+    try:
+        return int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
+    except ValueError:
+        return None
+
+
+def _based_constant(body: str, head: str) -> tuple[int, int] | None:
+    """带基数常量体（已去 signed 前缀）→ (值, 位宽)；形态非法 → None。"""
+    if len(body) == 1 and body in "01xXzZ?":
+        return None  # 填充/通配符常量不算覆盖
+    base_ch = body[0].lower()
+    if base_ch not in "bohd":
+        return None
+    v = _based_value(body[1:], base_ch)
+    if v is None:
+        return None
+    w = _explicit_width(head)
+    return (v, w if w is not None else _min_width(v))
+
+
 def const_value(text: str) -> tuple[int, int] | None:
     """case 臂常量文本 → (值, 位宽)；变量/通配符/x/z → None。
 
@@ -43,36 +99,31 @@ def const_value(text: str) -> tuple[int, int] | None:
         if not t.isdigit():
             return None
         v = int(t)
-        return (v, v.bit_length() if v else 1)
-    body = t.split("'", 1)[1]
-    if not body:
+        return (v, _min_width(v))
+    head, _, raw_body = t.partition("'")
+    body = _literal_body(raw_body)
+    if body is None:
         return None
-    if body[0] in "sS":
-        body = body[1:]
-    if not body:
+    return _based_constant(body, head)
+
+
+def _param_token(word: str, params: dict) -> tuple | None:
+    """标识符 → `("param", 值)`；未声明 / 值非 int 且非纯数字串 → None。"""
+    v = params.get(word)
+    if v is None:
         return None
-    if len(body) == 1 and body in "01xXzZ?":
-        return None  # 填充/通配符常量不算覆盖
-    base_ch = body[0].lower()
-    if base_ch not in "bohd":
-        return None
-    digits = body[1:].replace("_", "")
-    if not digits or any(c in "xXzZ?" for c in digits):
-        return None
-    try:
-        v = int(digits, {"b": 2, "o": 8, "h": 16, "d": 10}[base_ch])
-    except ValueError:
-        return None
-    w = int(t.split("'", 1)[0]) if t.split("'", 1)[0].strip().isdigit() \
-        else (v.bit_length() if v else 1)
-    return (v, w)
+    if isinstance(v, str):
+        if not v.strip().isdigit():
+            return None  # 参数默认值非纯数字 → 不可判
+        return ("param", int(v.strip()))
+    return ("param", v)
 
 
 def const_tokenize(text: str, params: dict | None = None) -> list | None:
     """常量表达式 tokenize：数字 / 运算符 / 括号 /（有参数表时）参数名。
 
-    参数名就地解析：值须为 int 或**纯数字字符串**，否则该标识符不可判。
-    `params` 为空 → 标识符一律不可判（纯数字域用法）。
+    参数名就地解析（`_param_token`：值须为 int 或**纯数字字符串**，否则该
+    标识符不可判）。`params` 为空 → 标识符一律不可判（纯数字域用法）。
     未知字符或不可判标识符 → None（保守）。
     """
     params = params or {}
@@ -85,25 +136,16 @@ def const_tokenize(text: str, params: dict | None = None) -> list | None:
             i += 1
             continue
         if ch.isdigit():
-            j = i
-            while j < n and text[j].isdigit():
-                j += 1
+            j = scan_char_run(text, i, str.isdigit)
             toks.append(("num", int(text[i:j])))
             i = j
             continue
         if ch.isalpha() or ch == "_":
-            j = i
-            while j < n and (text[j].isalnum() or text[j] == "_"):
-                j += 1
-            v = params.get(text[i:j])
-            if v is None:
+            j = scan_char_run(text, i, is_ident_char)
+            tok = _param_token(text[i:j], params)
+            if tok is None:
                 return None
-            if isinstance(v, str):
-                if not v.strip().isdigit():
-                    return None  # 参数默认值非纯数字 → 不可判
-                toks.append(("param", int(v.strip())))
-            else:
-                toks.append(("param", v))
+            toks.append(tok)
             i = j
             continue
         if ch in "+-*/%()":

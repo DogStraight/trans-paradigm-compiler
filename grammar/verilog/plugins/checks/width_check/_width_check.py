@@ -14,7 +14,12 @@
 from typing import Any, Callable
 
 from core.define import Node, iter_nodes, unwrap_optional
-from grammar.verilog.plugins.checks._shared import const_eval, is_parameterized
+from grammar.verilog.plugins.checks._shared import (
+    const_eval,
+    is_ident_char,
+    is_parameterized,
+    scan_char_run,
+)
 
 # 参与宽度分析的符号 kind（语言知识：Verilog 内部信号/端口）
 _WIDTH_KINDS = {"wire", "reg", "integer", "port"}
@@ -289,23 +294,11 @@ def eval_width_text_params(text: str, params: dict[str, str]) -> int | None:
     return v2 + 1  # 单表达式 [n] = n+1 位
 
 
-def _scan_run(text: str, i: int, accept) -> int:
-    """从 i 起连续满足 accept 的字符区间 → 终点下标（不含）。"""
-    n = len(text)
-    while i < n and accept(text[i]):
-        i += 1
-    return i
-
-
-def _is_ident_char(ch: str) -> bool:
-    """标识符续字符（字母/数字/下划线）。"""
-    return ch.isalnum() or ch == "_"
-
-
 def _expr_tokenize(text: str) -> list | None:
     """常量表达式 tokenize（数字/标识符/括号/四则/一元；未知字符 None）。
 
     标识符**不在这里查表**——留给求值器在求值点解析（链式参数 + 环护栏）。
+    字符区间扫描与标识符字符集复用 `_shared`（checks 族单一份实现）。
     """
     toks: list = []
     i = 0
@@ -316,12 +309,12 @@ def _expr_tokenize(text: str) -> list | None:
             i += 1
             continue
         if ch.isdigit():
-            j = _scan_run(text, i, str.isdigit)
+            j = scan_char_run(text, i, str.isdigit)
             toks.append(("num", int(text[i:j])))
             i = j
             continue
         if ch.isalpha() or ch == "_":
-            j = _scan_run(text, i, _is_ident_char)
+            j = scan_char_run(text, i, is_ident_char)
             toks.append(("ident", text[i:j]))
             i = j
             continue
