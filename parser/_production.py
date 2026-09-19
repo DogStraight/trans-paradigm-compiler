@@ -434,6 +434,41 @@ def _claim_head_comments(
     _claim_inline_anchors(self, subs, end_line)
 
 
+def _exclude_hit(parser, context: ParseContext, rule: GrammarRule) -> str | None:
+    """exclude 负向前瞻（消歧，与 linter matcher 同语义）：命中则返回 token 类型。
+
+    规则匹配成功后，若下一个非 trivia token 命中 exclude 集（如 Declarator 的
+    symbol.base.dot，防声明器吞掉 `spi.slave` 点语法/后续端口），整体失败回滚。
+    与派生 FOLLOW 正交：FOLLOW 是"后继集合"（宽松），exclude 是"明确拒绝"
+    （严格）——FOLLOW 含运算符家族前缀（symbol.base.）时家族成员会误放行
+    exclude token，故 exclude 检查必须先于 FOLLOW。
+    """
+    excludes = getattr(rule, "exclude", None) or []
+    if not excludes:
+        return None
+    parser._skip_tokens(context, tuple(parser.skip_types))
+    nxt = context.peek_token()
+    if nxt is not None and nxt.type in excludes:
+        return nxt.type
+    return None
+
+
+def _claim_if_line_start(
+    parser, context: ParseContext, node: Node, start_idx: int
+) -> None:
+    """行首规则领前置独占注释（B1.3 兜底，容器首元素前形态）。
+
+    仅非 repeat 迭代上下文（repeat 迭代项间注释由 `_lift_gap_comments` 上浮为
+    Comment 迭代项，claim 不抢）。inline 弃 rule_node 时挂返回的 inner
+    （Comment 子节点随 inner 进 AST，join 拆段渲染）。
+    """
+    if not _starts_line(context, start_idx) or getattr(parser, "_repeat_iter_depth", 0):
+        return
+    ptr = context.token_pointer
+    end_line = context.tokens[ptr - 1].line if ptr > 0 else 0
+    _claim_head_comments(parser, node, end_line)
+
+
 def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | None:
     """普通规则匹配链：production 匹配 → 属性绑定 → FOLLOW 检查 → inline。
 
@@ -465,24 +500,16 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
         )
         return None
 
-    # exclude 负向前瞻（消歧，与 linter matcher 同语义）：规则匹配成功后，
-    # 若下一个非 trivia token 命中 exclude 集（如 Declarator 的
-    # symbol.base.dot，防声明器吞掉 `spi.slave` 点语法/后续端口），整体
-    # 失败回滚。与派生 FOLLOW 正交：FOLLOW 是"后继集合"（宽松），exclude
-    # 是"明确拒绝"（严格）——FOLLOW 含运算符家族前缀（symbol.base.）时
-    # 家族成员会误放行 exclude token，故 exclude 检查必须先于 FOLLOW。
-    _excludes = getattr(rule, "exclude", None) or []
-    if _excludes:
-        self._skip_tokens(context, tuple(self.skip_types))
-        _nxt = context.peek_token()
-        if _nxt is not None and _nxt.type in _excludes:
-            self._record_fail_site(
-                context,
-                rule=rule.name,
-                reason=f"exclude negative lookahead hit {_nxt.type}",
-            )
-            self._restore_current_node(old_node, context)
-            return None
+    # exclude 负向前瞻（必须先于 FOLLOW，判据见 `_exclude_hit`）
+    hit = _exclude_hit(self, context, rule)
+    if hit is not None:
+        self._record_fail_site(
+            context,
+            rule=rule.name,
+            reason=f"exclude negative lookahead hit {hit}",
+        )
+        self._restore_current_node(old_node, context)
+        return None
 
     # 属性绑定
     self._bind_attributes(rule_node, rule, all_matched_nodes)
@@ -500,28 +527,14 @@ def try_plain_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     # Inline 扁平化
     inline_result = self._try_inline_rule(rule, all_matched_nodes, old_node, context)
     if inline_result is not None:
-        # 行首规则领前置独占注释（B1.3 兜底，容器首元素前形态）——
-        # 仅非 repeat 迭代上下文（repeat 迭代项间注释由 _lift_gap_comments
-        # 上浮为 Comment 迭代项，claim 不抢）。inline 弃 rule_node，挂返回
-        # 的 inner（Comment 子节点随 inner 进 AST，join 拆段渲染）。
-        if _starts_line(context, _start_idx) and not getattr(
-            self, "_repeat_iter_depth", 0
-        ):
-            _ptr = context.token_pointer
-            _end = context.tokens[_ptr - 1].line if _ptr > 0 else 0
-            _claim_head_comments(self, inline_result, _end)
+        _claim_if_line_start(self, context, inline_result, _start_idx)
         return inline_result
 
     self._restore_current_node(old_node, context)
     # token 范围（半开 [start, end)）：匹配起始指针 + 结束指针，供增量定位
     rule_node._tok_span = (_start_idx, context.token_pointer)
     self._log_state(f"✓ 规则 {rule.name} 匹配成功", context=context)
-    if _starts_line(context, _start_idx) and not getattr(
-        self, "_repeat_iter_depth", 0
-    ):
-        _ptr = context.token_pointer
-        _end = context.tokens[_ptr - 1].line if _ptr > 0 else 0
-        _claim_head_comments(self, rule_node, _end)
+    _claim_if_line_start(self, context, rule_node, _start_idx)
     return rule_node
 
 
@@ -550,86 +563,110 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
 # ── 生产式准备 & 结束符检查 ──
 
 
-def prepare_production(self, context: ParseContext, features: dict) -> bool:
-    """为匹配产生式做准备：跳过空白/注释。"""
-    ftype = features["type"] if "type" in features else None
-    should_skip = True
-    # 表达式规则（pratt）调用前的**独占行注释让位**：当注释落在规则内部
-    # （本产生式已匹配过元素 + 注释前 token 属本规则匹配范围）时不在此吞掉，
-    # 留给表达式入口按“独占行”归位（leading_own_line，结构定位）——就地吞掉
-    # 只剩锚点插值，而语句内部注释的锚可隔着折叠区几十行，插值必偏。
-    # 列表项间/语句间的注释不在此列（锚属上一项）——仍由容器上浮为
-    # Comment 迭代项（ADR-0013 B1 模型不变）。语言无关：只看规则声明字段
-    # pratt 与 token 下标，不涉任何 token 类型知识。
-    keep_comments = False
+def _call_skip_decision(ref_rule) -> tuple[bool, bool]:
+    """call 形态：引用块规则不跳（块边界由结构定）；引用 pratt 规则时注释让位。"""
+    if ref_rule and getattr(ref_rule, "is_block", False):
+        return False, False
+    if ref_rule is not None and getattr(ref_rule, "pratt", False):
+        return True, True
+    return True, False
 
+
+def _skip_decision(parser, features: dict) -> tuple[bool, bool]:
+    """本产生式是否需要跳过 trivia + 注释是否让位给表达式规则。
+
+    让位判据（keep_comments）：表达式规则（pratt）调用前的**独占行注释让位**
+    ——当注释落在规则内部（本产生式已匹配过元素 + 注释前 token 属本规则匹配
+    范围）时不在此吞掉，留给表达式入口按“独占行”归位（leading_own_line，
+    结构定位）——就地吞掉只剩锚点插值，而语句内部注释的锚可隔着折叠区几十行，
+    插值必偏。列表项间/语句间的注释不在此列（锚属上一项）——仍由容器上浮为
+    Comment 迭代项（ADR-0013 B1 模型不变）。语言无关：只看规则声明字段
+    pratt 与 token 下标，不涉任何 token 类型知识。
+
+    不跳过的形态：注释 token 本身 / 引用块规则（块边界由结构定）/ optional /
+    0 次 repeat。
+    """
+    ftype = features["type"] if "type" in features else None
     if ftype == "token":
-        if features.get("token_type") == COMMENT_TOKEN_TYPE:
-            should_skip = False
-    elif ftype == "call":
-        ref_rule = self.grammar_rules.get(features["name"])
-        if ref_rule and getattr(ref_rule, "is_block", False):
-            should_skip = False
-        elif ref_rule is not None and getattr(ref_rule, "pratt", False):
-            keep_comments = True
-    elif ftype == "optional":
-        should_skip = False
-    elif ftype == "repeat" and features.get("min", 0) == 0:
-        should_skip = False
-    if should_skip:
-        self._skip_tokens(context, tuple(self.skip_types))
-        while context.has_more_tokens():
-            t = context.peek_token()
-            if t and t.type == COMMENT_TOKEN_TYPE:
-                if keep_comments and comment_leave_to_expression(
-                    context.tokens,
-                    context.token_pointer,
-                    getattr(context, "production_pointer", 0),
-                    getattr(context, "production_start_ptr", 0),
-                ):
-                    # 规则内部注释：留给被调表达式规则（入口三分类：独占行 →
-                    # leading_own_line，行尾 → 右操作数 leading）
-                    break
-                # 独占行标记（B1 上浮判据）：advance 前判定——向前扫描
-                # 注释前一个非空白 token（newline/文件首 = 独占行）。
-                # 独占行且非 tpc marker 的注释由所在列表容器的 repeat
-                # 上浮为 Comment 迭代项（行号窗口，见 _repeat_loop）；
-                # tpc marker（整行行注释形态的占位）排除——宏/条件块还原依赖
-                # only_tpc 通道，不进树。
-                line_only = is_line_only(context.tokens, context.token_pointer)
-                context.advance_token()
-                self._skip_tokens(context, tuple(self.skip_types))
-                nxt = context.peek_token()
-                anchor = nxt.content if nxt else None
-                # 锚点精确化（注释节点模型补丁）：端口组间行尾注释（`//Control`）
-                # 后常跟 `.o_port` 形态——首 token 是符号 `.`（独立 token），
-                # restore 窗口内 `anchor='.'` 命中所有端口行（插错位 + 多注释
-                # 竞争 → 非幂等振荡 + 注释丢失）。`.` 后跟标识符（端口名形态）
-                # 时拼接成 `.o_x` 唯一锚；restore 匹配失败时回退行首 `.` 匹配
-                # （src 未格式化场景行号偏移大，精确锚可能落空）。
-                nxt2 = context.peek_token(offset=1)
-                if (
-                    anchor == "."
-                    and nxt2 is not None
-                    and nxt2.type not in (COMMENT_TOKEN_TYPE, "newline")
-                    and nxt2.content
-                    and nxt2.content[0].isalpha()
-                ):
-                    anchor = anchor + nxt2.content
-                self._record_anchor(
-                    {
-                        "text": t.content,
-                        "line": t.line,
-                        "anchor": anchor,
-                        "line_only": line_only,
-                    },
-                    "line",
-                )
-            else:
-                break
-        if not context.has_more_tokens():
-            return False
+        return features.get("token_type") != COMMENT_TOKEN_TYPE, False
+    if ftype == "call":
+        return _call_skip_decision(parser.grammar_rules.get(features["name"]))
+    if ftype == "optional":
+        return False, False
+    if ftype == "repeat":
+        return features.get("min", 0) != 0, False
+    return True, False
+
+
+def _comment_anchor(context: ParseContext) -> str | None:
+    """注释后首 token → 锚文本（`.` 后跟标识符时拼接唯一锚 `.o_x`）。
+
+    锚点精确化（注释节点模型补丁）：端口组间行尾注释（`//Control`）后常跟
+    `.o_port` 形态——首 token 是符号 `.`（独立 token），restore 窗口内
+    `anchor='.'` 命中所有端口行（插错位 + 多注释竞争 → 非幂等振荡 + 注释
+    丢失）。`.` 后跟标识符（端口名形态）时拼接成 `.o_x` 唯一锚；restore
+    匹配失败时回退行首 `.` 匹配（src 未格式化场景行号偏移大，精确锚可能落空）。
+    """
+    nxt = context.peek_token()
+    anchor = nxt.content if nxt else None
+    nxt2 = context.peek_token(offset=1)
+    if (
+        anchor == "."
+        and nxt2 is not None
+        and nxt2.type not in (COMMENT_TOKEN_TYPE, "newline")
+        and nxt2.content
+        and nxt2.content[0].isalpha()
+    ):
+        return anchor + nxt2.content
+    return anchor
+
+
+def _handle_comment_anchor(
+    parser, context: ParseContext, t: Token, keep_comments: bool
+) -> bool:
+    """跳过一条注释并记锚；返回 False = 停在本注释前（留给表达式规则）。
+
+    独占行标记（B1 上浮判据）：advance 前判定——向前扫描注释前一个非空白
+    token（newline/文件首 = 独占行）。独占行且非 tpc marker 的注释由所在列表
+    容器的 repeat 上浮为 Comment 迭代项（行号窗口，见 `_repeat_loop`）；
+    tpc marker（整行行注释形态的占位）排除——宏/条件块还原依赖 only_tpc 通道，
+    不进树。
+    """
+    if keep_comments and comment_leave_to_expression(
+        context.tokens,
+        context.token_pointer,
+        getattr(context, "production_pointer", 0),
+        getattr(context, "production_start_ptr", 0),
+    ):
+        return False
+    line_only = is_line_only(context.tokens, context.token_pointer)
+    context.advance_token()
+    parser._skip_tokens(context, tuple(parser.skip_types))
+    parser._record_anchor(
+        {
+            "text": t.content,
+            "line": t.line,
+            "anchor": _comment_anchor(context),
+            "line_only": line_only,
+        },
+        "line",
+    )
     return True
+
+
+def prepare_production(self, context: ParseContext, features: dict) -> bool:
+    """为匹配产生式做准备：跳过空白/注释（跳/不跳判据见 `_skip_decision`）。"""
+    should_skip, keep_comments = _skip_decision(self, features)
+    if not should_skip:
+        return True
+    self._skip_tokens(context, tuple(self.skip_types))
+    while context.has_more_tokens():
+        t = context.peek_token()
+        if not t or t.type != COMMENT_TOKEN_TYPE:
+            break
+        if not _handle_comment_anchor(self, context, t, keep_comments):
+            break
+    return context.has_more_tokens()
 
 
 def check_end_case(self, context: ParseContext, rule: GrammarRule) -> bool:
