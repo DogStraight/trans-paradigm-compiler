@@ -10,7 +10,7 @@ Doc: renderer/renderer_architecture.md（Doc IR 原语与 layout 算法）
 """
 
 from dataclasses import dataclass
-from typing import cast
+from typing import Sequence, cast
 
 # ── Doc 类型 ──
 
@@ -377,6 +377,65 @@ def layout(doc: Doc, max_width: int = 80) -> str:
     return _best(max_width, 0, resolved)
 
 
+def _break_str(k: int, indent: int) -> str:
+    """断行原语统一形态：换行 + 绝对缩进列（k = 当前缩进列，indent = 附加级）。"""
+    return "\n" + " " * (k + indent)
+
+
+def _row_width(docs: Sequence[Doc], index: int) -> int:
+    """第 index 项**同行**前后兄弟的 flat 宽度合计 → Union 判定预算。
+
+    只有换行点之前的兄弟还在本行，故两侧累加都遇含断行的兄弟即停
+    （`_has_break` 软硬断行都算）。本项自身不计入（预算只描述"将占的宽度"）。
+    """
+    before = 0
+    for sibling in reversed(docs[:index]):
+        if _has_break(sibling):
+            break  # 更早的兄弟在换行点之前（不在本行）
+        before += _flat_w(sibling)
+    rest = 0
+    for sibling in docs[index + 1 :]:
+        if _has_break(sibling):
+            break  # 换行点后的兄弟在新行（不在本行）
+        rest += _flat_w(sibling)
+    return before + rest
+
+
+def _best_concat(w: int, k: int, docs: Sequence[Doc]) -> str:
+    """Concat：逐项渲染，顺带维护行状态（当前行是否只余缩进 / 结束本行的断行类型）。
+
+    行状态用途：当前行已空且由**非硬**断行结束时，子项开头的硬换行是冗余
+    （父布局已在此断行）——不去会叠出纯空白行（三元 `? :` 断行 + 注释前硬换行
+    = 空行）。连续 HardBreak 是显式空行惯例（tail_break 等），不由本路径挤除。
+    每项的 budget = 同行前后兄弟宽度（`_row_width`）。
+    """
+    result: list[str] = []
+    line_empty = False
+    ended_by_hard = False
+    for i, d in enumerate(docs):
+        if line_empty and not ended_by_hard:
+            d = _strip_leading_hardbreak(d)
+        s = _best(w, k, d, _row_width(docs, i))
+        result.append(s)
+        if "\n" in s:
+            line_empty = s.rsplit("\n", 1)[1].strip() == ""
+            ended_by_hard = _ends_with_hardbreak(d)
+        elif s.strip():
+            line_empty = False
+    return "".join(result)
+
+
+def _best_union(w: int, k: int, flat: Doc, broken: Doc, budget: int) -> str:
+    """Union：flat 版首行宽度 ≤ 剩余预算（w - k - budget，budget 含本项之后兄弟
+    宽度——continuation 感知）则取 flat，否则回退 broken。
+    """
+    flat_s = _best(w, k, flat, budget)
+    first_line = flat_s.split("\n")[0] if flat_s else ""
+    if len(first_line) <= w - k - budget:
+        return flat_s
+    return _best(w, k, broken, budget)
+
+
 def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
     """核心布局函数：返回渲染后的字符串
 
@@ -384,6 +443,9 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
     仅 Union 的 flat 判定使用（预算 = w - k - budget）——防止
     "group 单独 fits、组合 continuation 溢出"（Veryl fits_flat
     语义）。渲染路径本身不累计列状态（文本宽度事后可量）。
+
+    按 Doc 变体分派；多行的两处（Concat 的行状态机、Union 的 flat 判定）
+    见 `_best_concat` / `_best_union`。
     """
     match doc:
         case Empty():
@@ -393,48 +455,19 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
             return s
 
         case Line(indent=i):
-            return "\n" + " " * (k + i)
+            return _break_str(k, i)
 
         case Break(indent=i):
-            return "\n" + " " * (k + i)
+            return _break_str(k, i)
 
         case HardBreak(indent=i):
-            return "\n" + " " * (k + i)
+            return _break_str(k, i)
 
         case LineBreak(indent=i):
-            return "\n" + " " * (k + i)  # broken 模式：换行
+            return _break_str(k, i)  # broken 模式：换行
 
         case Concat(docs):
-            result: list[str] = []
-            # 行状态（当前行是否只余缩进）+ 结束本行的断行类型：当前行已空且由
-            # **非硬**断行结束时，子项开头的硬换行是冗余（父布局已在此断行）
-            # ——不去会叠出纯空白行（三元 `? :` 断行 + 注释前硬换行 = 空行）。
-            # 连续 HardBreak 是显式空行惯例（tail_break 等），不由本路径挤除。
-            line_empty = False
-            ended_by_hard = False
-            for i, d in enumerate(docs):
-                # 本项同行的前后兄弟宽度（到首个换行点为止）——
-                # Union 判定预算 = w - k - 前面已占 - 后续将占
-                before_w = 0
-                for sibling in reversed(docs[:i]):
-                    if _has_break(sibling):
-                        break  # 更早的兄弟在换行点之前（不在本行）
-                    before_w += _flat_w(sibling)
-                rest_w = 0
-                for sibling in docs[i + 1 :]:
-                    if _has_break(sibling):
-                        break  # 换行点后的兄弟在新行（不在本行）
-                    rest_w += _flat_w(sibling)
-                if line_empty and not ended_by_hard:
-                    d = _strip_leading_hardbreak(d)
-                s = _best(w, k, d, before_w + rest_w)
-                result.append(s)
-                if "\n" in s:
-                    line_empty = s.rsplit("\n", 1)[1].strip() == ""
-                    ended_by_hard = _ends_with_hardbreak(d)
-                elif s.strip():
-                    line_empty = False
-            return "".join(result)
+            return _best_concat(w, k, docs)
 
         case Nest(i, d):
             return _best(w, k + i, d, budget)
@@ -450,14 +483,7 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
             return " " * i + _best(w, k + i, d, budget)
 
         case Union(flat, broken):
-            # flat 判定：flat 版首行宽度 ≤ 剩余预算（w - k - budget，
-            # budget 含本项之后兄弟宽度——continuation 感知）。
-            flat_s = _best(w, k, flat, budget)
-            first_line = flat_s.split("\n")[0] if flat_s else ""
-            if len(first_line) <= w - k - budget:
-                return flat_s
-            # flat 超宽（含后续 continuation），回退到 broken
-            return _best(w, k, broken, budget)
+            return _best_union(w, k, flat, broken, budget)
 
         case Pad(width):
             # 恒输出（flat/broken 均输出，对齐参与布局）
@@ -473,7 +499,6 @@ def _best(w: int, k: int, doc: Doc, budget: int = 0) -> str:
 
         case _:
             return ""
-
 
 # ── 布局辅助查询的 per-layout 记忆化 ──────────────────────────────
 # _flat_w/_has_hardline/_has_break 是纯 doc 依赖的递归查询，_best 的
@@ -692,10 +717,74 @@ def _fill(w: int, k: int, docs: list[Doc]) -> str:
     return "".join(out)
 
 
+def _fits_concat(w: int, docs: Sequence[Doc]) -> bool:
+    """Concat 首行 fit 检查：逐个累加列宽，遇断行即"当前行已结束"→ True。
+
+    与原实现逐字同源，两处保守语义**刻意保留**（改动即行为变化）：
+    - `Nest`/`Prefix`/`Union` 子项递归判定后**立即返回**，不再累加其后的兄弟
+      宽度（col 递归后不可知）；
+    - `Concat` 子项走内层循环，内层未出结论时回到外层继续（列宽沿用）。
+    """
+    col = 0
+    for d in docs:
+        if col > w:
+            return False
+        match d:
+            case Line():
+                return True
+            case Break() | HardBreak():
+                return True
+            case Text(s):
+                col += len(s)
+                if col > w:
+                    return False
+            case Pad(width) | IfFlatPad(width):
+                col += width
+                if col > w:
+                    return False
+            case IfBreakPad(_):
+                pass  # flat 布局 0 宽
+            case Nest(_, inner):
+                # Nest 不影响 fits（缩进只影响后续行）
+                if not _fits(w - col, inner):
+                    return False
+                # 递归后不确定 col，用保守估算
+                return True
+            case Prefix(i, inner):
+                col += i
+                if col > w:
+                    return False
+                return _fits(w - col, inner)
+            case Union(flat, _):
+                if not _fits(w - col, flat):
+                    return False
+                return True
+            case Concat(inner_docs):
+                # 内层循环：结论出来即返回；走完未出结论 → 回到外层继续
+                for inner_d in inner_docs:
+                    if col > w:
+                        return False
+                    match inner_d:
+                        case Line() | Break() | HardBreak():
+                            return True
+                        case Text(s):
+                            col += len(s)
+                        case _:
+                            if not _fits(w - col, inner_d):
+                                return False
+                            return True
+            case _:
+                return True
+    return col <= w
+
+
 def _fits(w: int, doc: Doc) -> bool:
     """
     检查 doc 的 flat 版本是否能放入 w 列宽。
     只检查第一行。
+
+    按 Doc 变体分派（首行宽度语义见 `_fits_concat`；Nest/Align 只影响后续行
+    缩进，不影响首行判定）。
     """
     if w < 0:
         return False
@@ -709,56 +798,7 @@ def _fits(w: int, doc: Doc) -> bool:
         case Break() | HardBreak():
             return True
         case Concat(docs):
-            col = 0
-            for d in docs:
-                if col > w:
-                    return False
-                match d:
-                    case Line():
-                        return True
-                    case Break() | HardBreak():
-                        return True
-                    case Text(s):
-                        col += len(s)
-                        if col > w:
-                            return False
-                    case Pad(width) | IfFlatPad(width):
-                        col += width
-                        if col > w:
-                            return False
-                    case IfBreakPad(_):
-                        pass  # flat 布局 0 宽
-                    case Nest(_, inner):
-                        # Nest 不影响 fits（缩进只影响后续行）
-                        if not _fits(w - col, inner):
-                            return False
-                        # 递归后不确定 col，用保守估算
-                        return True
-                    case Prefix(i, inner):
-                        col += i
-                        if col > w:
-                            return False
-                        return _fits(w - col, inner)
-                    case Union(flat, _):
-                        if not _fits(w - col, flat):
-                            return False
-                        return True
-                    case Concat(inner_docs):
-                        for inner_d in inner_docs:
-                            if col > w:
-                                return False
-                            match inner_d:
-                                case Line() | Break() | HardBreak():
-                                    return True
-                                case Text(s):
-                                    col += len(s)
-                                case _:
-                                    if not _fits(w - col, inner_d):
-                                        return False
-                                    return True
-                    case _:
-                        return True
-            return col <= w
+            return _fits_concat(w, docs)
         case Nest(_, d):
             return _fits(w, d)
         case Align(_, d):
@@ -779,3 +819,4 @@ def _fits(w: int, doc: Doc) -> bool:
             return True
         case _:
             return True
+
