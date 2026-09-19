@@ -115,6 +115,15 @@
     60-80 行区间现有 9 项（`renderer/doc._best` 63、`node_renderer.render_body` 77、
     `capture_runner.build_rules` 79、`lookahead._level1_scan` 77 等）——均低于阈值，
     其中分派型函数（`_best` 15 个变体分支）刻意不再拆。
+  - ⏳ **类级上帝对象 9 处命中**（2026-09-20 同口径重测；需设计决策，非机械拆分）：
+    `Lexer`(886 行/92 成员/57 函数, score 424)、`RuleMatcher`(914/49/36, 354)、
+    `Discovery`(700/43/34, 234)、`ConfigRegistry`(445/22/16, 127)、
+    `GrammarRule`(327/41/17, 102)、`SignalGraphBuilder`(404/25/21, 98)、
+    `AnalysisTraversal`(239/29/12, 33)、`StructureCtx`(121/21/10, 17)、
+    `ModuleExtractor`(272/16/15, 15)——后三类行数达标，触发项是**成员数/函数数**
+    （`godObjectDirectChildren=20` / `godObjectFunctions=15`），且是 B-B4c 拆分的
+    产物（拆方法会让类级分值先升后降，已实测）。`LookaheadTable` 已不再命中。
+    逐个人工定边界后再动；信号明细见 dispositions 的类级表。
   - ✅ **`_StructureBase` 上帝对象已解（B-B4c-0..7，2026-09-19）**：先删 3 个门面
     不可达方法（-49 行），再把 49 个方法按职责组合化——`StructureCtx`（会话状态 +
     协议读取 + 2 个共享读取助手）+ 6 个协作者（`GenerateEvaluator` 151 /
@@ -123,11 +132,6 @@
     改为**组合根**接线。**最大类 1129 → 361 行**（外部裁判类级命中相应消失）；
     依据与理由写在 `analyzer/structure.py` 模块头（一个子类零覆盖 / 9 字段收 ctx /
     簇间无反向边）。
-  - ⏳ **类级上帝对象 10 处**（需设计决策，非机械拆分）：`Lexer`(336)、
-    `RuleMatcher`(318)、`Discovery`(293)、`LookaheadTable`(134)、`ConfigRegistry`(87)、
-    `GrammarRule`(70)、`ProjectChecker`(344，组合化后成为门面最大类：编排 + 诊断
-    序列化 + `_ensure_shared` 组件装载——可再抽「共享组件装载」协作者)、
-    `CaptureRunner`(36)、`AnalysisTraversal`(33)、`Node`(6)——逐个人工定边界后再动。
 - **B-C 结构重复**（非 tests 111 组，按"同文件/同部件 → 跨部件"递进）：
   - ✅ 引擎侧同形重复：`_deep_merge` ×2、`get_config_refs` ×4、`plugin_loader`
     合并型 getter ×5、`_serialize_member`/`_serialize_group`、`soft_break` 三态
@@ -149,14 +153,17 @@
     → `core/token_protocol.skip_trivia`（TRIVIA 判定与跳过同源）；parser
     `_get_block_end_for`/`_get_block_end` 逐字同体 → `core.define.block_end_of`
     （`2ac9f2f`、`d80f330`）。
-  - 复查（外部裁判，同口径分块）：非 tests 重复对 **111 → 69**，
-    其余为薄入口残留（token 量已大幅下降：159→35、234→52、156→20 等）与
-    已列明保留项——**逐对分类见 dispositions**：token 类型构造函数族 10 对 +
-    类型判定谓词族 16 对（API 面，一类型一函数）、具名入口→共享实现 32 对
-    （共性已抽，残留仅入口样板）、policy 门禁 3 对（**作者定调：保持**）、语言侧变体 1 对、
-    类内 1 对（随 B-B4c）、测试/工具侧 6 对（各自独立可单跑）。
-    可继续压的只剩这 1 对类内（B-B4c）。policy 3 对已定：保持（两道门禁各自独立、
-    可单跑，抽公共会把门禁耦合，且脚本是制度执行者非产品代码）。
+  - ⚠ 复查（外部裁判，同口径分块）：非 tests 重复对 **111 → 108**（2026-09-20 同参数
+    `min_score=90` 重测；84 对 ≤40 token = 薄入口/桩型）。**此前记的 "69 对" 是 B-D
+    分类期的中间快照**——复杂度批次（B-F 六~十）拆出大量薄助手后回升，属 C 类
+    "具名入口 → 共享实现"形态（共性已抽、残留入口样板），但**结案前需按 A–G 重新归位
+    一次（逐对确认无新形态）**：这一步未做，故 B-C 现状是"判据已定、快照待重跑"。
+    分类明细见 dispositions（含 token 量下降：159→35、234→52、156→20 等）。
+  - ✅ 类内 1 对 `StructureCtx.field` ↔ `rule`（30 tok）：**已判保持**（B-B4c 完成后
+    可直接判——两者读**不同来源**：`rule` 取 `[structure]` 顶层键、`field` 取 `fields`
+    段键；共性只剩 `str(x or "")` 骨架，合并要把来源字典当参数传，与"一来源一入口"
+    判据相反）。policy 3 对已定：保持（两道门禁各自独立、可单跑，抽公共会把门禁耦合，
+    且脚本是制度执行者非产品代码）。
 - **B-E 内置策略（性能类 in-loop 族）**：AST 自查当前非 tests 树共 12 处"循环内 I/O"
   （原始报数行号已随重构漂移，按形态重定位）。
   - ✅ `analyzer/structure.py::ModuleIndexer` 目录兜底查找：原实现对每个未解析单元名
