@@ -28,15 +28,23 @@ Doc: docs/references.md（Verilog 静态检查工具群：suppress 借鉴 Verila
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import Iterator, Mapping
 
 from lexer.comment_syntax import CommentSyntax
 
 
-def _build_patterns(
-    syntax: CommentSyntax,
-) -> tuple[re.Pattern | None, re.Pattern | None, re.Pattern | None]:
-    """按语言的注释形态编译三种豁免指令模式：`(off, on, disable-line)`。
+@dataclass(frozen=True)
+class _Directives:
+    """三种豁免指令的编译模式；语言包未声明对应注释形态时该字段为 None。"""
+
+    off: re.Pattern | None       # 区间开启：`tpc-check off [规则...]`
+    on: re.Pattern | None        # 区间闭合：`tpc-check on`
+    line: re.Pattern | None      # 单行豁免：`tpc-check: disable-line [规则...]`
+
+
+def _compile_directives(syntax: CommentSyntax) -> _Directives:
+    """按语言的注释形态编译三种豁免指令模式。
 
     指令**关键字**（`tpc-check`）是引擎侧工具名，不是语言知识；只有注释标点
     来自声明。未声明对应形态 → 该模式为 None（该形态不可用）。
@@ -54,13 +62,21 @@ def _build_patterns(
     if syntax.line_start:
         ls = re.escape(syntax.line_start)
         line_re = re.compile(rf"{ls}\s*tpc-check:\s*disable-line\b([^\n]*)")
-    return off_re, on_re, line_re
+    return _Directives(off=off_re, on=on_re, line=line_re)
 
 
 def _parse_rules(spec: str) -> set[str] | None:
     """解析豁免注释里的规则列表；空（未写）→ None（全部豁免）。"""
     rules = {t for t in spec.split() if t}
     return rules or None
+
+
+@dataclass
+class _IntervalScan:
+    """区间豁免扫描状态（跨行游标）。"""
+
+    suppress: dict[int, set[str] | None] = field(default_factory=dict)
+    pending: tuple[int, set[str] | None] | None = None  # (off 行, 规则集)
 
 
 def build_suppress_map(
@@ -75,40 +91,84 @@ def build_suppress_map(
     指令优先级按行内顺序判定：先看 `on`（闭合区间）→ 再看 `off`（开启区间）
     → 最后看单行指令（只认注释区，见 `_split_code_comment`）。
     """
-    off_re, on_re, line_re = _build_patterns(syntax)
+    dirs = _compile_directives(syntax)
     lines = text.splitlines()
-    suppress: dict[int, set[str] | None] = {}
-    pending: tuple[int, set[str] | None] | None = None  # (off 行, 规则集)
-
-    def _fill_interval(start: int, end: int, rules: set[str] | None) -> None:
-        for ln in range(start, end):
-            suppress[ln] = _merge_suppress(suppress.get(ln), rules)
+    scan = _IntervalScan()
 
     for idx, line in enumerate(lines):
-        code_part, comment_part = _split_code_comment(line, syntax)
+        _scan_directive_line(idx, line, syntax, dirs, scan)
 
-        if on_re is not None and pending is not None:
-            if on_re.search(code_part):
-                off_line, rules = pending
-                _fill_interval(off_line, idx, rules)
-                pending = None
-                continue
-        if off_re is not None and pending is None:
-            m = off_re.search(code_part)
-            if m:
-                pending = (idx, _parse_rules(m.group(1)))
-                continue
-        if line_re is not None:
-            m = line_re.search(comment_part)
-            if m:
-                suppress[idx] = _merge_suppress(
-                    suppress.get(idx), _parse_rules(m.group(1))
-                )
+    if scan.pending is not None:
+        off_line, rules = scan.pending
+        _fill_interval(scan.suppress, off_line, len(lines), rules)
+    return scan.suppress
 
-    if pending is not None:
-        off_line, rules = pending
-        _fill_interval(off_line, len(lines), rules)
-    return suppress
+
+def _scan_directive_line(
+    idx: int, line: str, syntax: CommentSyntax, dirs: _Directives, scan: _IntervalScan
+) -> None:
+    """单行指令扫描：`on` → `off` → 单行豁免，按此优先级。
+
+    区间指令触发即返回（该行不再作单行豁免判定——同原 `continue` 语义）。
+    """
+    code_part, comment_part = _split_code_comment(line, syntax)
+    if _try_close_interval(idx, code_part, dirs, scan):
+        return
+    if _try_open_interval(idx, code_part, dirs, scan):
+        return
+    _mark_disable_line(idx, comment_part, dirs, scan)
+
+
+def _try_close_interval(
+    idx: int, code_part: str, dirs: _Directives, scan: _IntervalScan
+) -> bool:
+    """`on` 指令：闭合未决区间 [off 行, 本行)，本行自身不豁免。"""
+    if dirs.on is None or scan.pending is None:
+        return False
+    if not dirs.on.search(code_part):
+        return False
+    off_line, rules = scan.pending
+    _fill_interval(scan.suppress, off_line, idx, rules)
+    scan.pending = None
+    return True
+
+
+def _try_open_interval(
+    idx: int, code_part: str, dirs: _Directives, scan: _IntervalScan
+) -> bool:
+    """`off` 指令：开启区间（已在区间内时忽略，交由 `on` 闭合）。"""
+    if dirs.off is None or scan.pending is not None:
+        return False
+    m = dirs.off.search(code_part)
+    if not m:
+        return False
+    scan.pending = (idx, _parse_rules(m.group(1)))
+    return True
+
+
+def _mark_disable_line(
+    idx: int, comment_part: str, dirs: _Directives, scan: _IntervalScan
+) -> None:
+    """单行豁免：只认注释区（代码区出现指令文本 = 被注释掉，不构成指令）。"""
+    if dirs.line is None:
+        return
+    m = dirs.line.search(comment_part)
+    if not m:
+        return
+    scan.suppress[idx] = _merge_suppress(
+        scan.suppress.get(idx), _parse_rules(m.group(1))
+    )
+
+
+def _fill_interval(
+    suppress: dict[int, set[str] | None],
+    start: int,
+    end: int,
+    rules: set[str] | None,
+) -> None:
+    """区间豁免 [start, end) 的每一行并入 rules（同行既有豁免合并）。"""
+    for ln in range(start, end):
+        suppress[ln] = _merge_suppress(suppress.get(ln), rules)
 
 
 def _split_code_comment(line: str, syntax: CommentSyntax) -> tuple[str, str]:
@@ -163,21 +223,19 @@ def apply_suppressions(
 def iter_suppress_lines(
     text: str, syntax: CommentSyntax
 ) -> Iterator[tuple[int, set[str] | None]]:
-    """供调试/文档：逐条输出豁免指令（行号, 规则集）。"""
-    off_re, _, line_re = _build_patterns(syntax)
+    """供调试/文档：逐条输出豁免指令（行号, 规则集）。
+
+    只枚举指令本身（不合并区间、不判优先级，`off` 在区间内也照样列出），
+    与 `build_suppress_map` 的判定语义不同——勿用它替代后者。
+    """
+    dirs = _compile_directives(syntax)
     for idx, line in enumerate(text.splitlines()):
-        code_part = line
-        comment_part = ""
-        if syntax.line_start:
-            pos = line.find(syntax.line_start)
-            if pos >= 0:
-                code_part = line[:pos]
-                comment_part = line[pos:]
-        if off_re is not None:
-            m = off_re.search(code_part)
+        code_part, comment_part = _split_code_comment(line, syntax)
+        if dirs.off is not None:
+            m = dirs.off.search(code_part)
             if m:
                 yield idx, _parse_rules(m.group(1))
-        if line_re is not None:
-            m = line_re.search(comment_part)
+        if dirs.line is not None:
+            m = dirs.line.search(comment_part)
             if m:
                 yield idx, _parse_rules(m.group(1))
