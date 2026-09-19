@@ -331,7 +331,8 @@ def diff_failures(
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
-def main(argv: list[str] | None = None) -> int:
+def _cli_parser() -> argparse.ArgumentParser:
+    """命令行参数定义。"""
     ap = argparse.ArgumentParser(
         prog="check_test_isolation",
         description="测试隔离对照：共享进程 vs 每块一个干净进程（进程级隔离，跨平台）",
@@ -352,7 +353,87 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--random-hashseed", action="store_true", help="不固定 PYTHONHASHSEED（巡检挡）")
     ap.add_argument("--verbose", action="store_true", help="每个块都打印结果")
     ap.add_argument("--list", action="store_true", help="只列分组清单")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def _phase_isolated(
+    args: argparse.Namespace,
+    env: dict[str, str],
+    jobs: int,
+    roots: list[str],
+    chunks: dict[str, list[str]],
+    nodeids: list[str],
+) -> tuple[list[ChunkResult], int]:
+    """隔离档：逐块新解释器跑 + 报表明细 → (结果, status)。"""
+    print(
+        f"[info] 用例 {len(nodeids)} 个 → {len(chunks)} 块"
+        f"（粒度 {args.granularity}，jobs={jobs}，"
+        f"PYTHONHASHSEED={'随机' if args.random_hashseed else '0'}）"
+    )
+    t0 = time.perf_counter()
+    isolated = run_isolated(chunks, env, jobs, args.granularity, roots, args.verbose)
+    elapsed = time.perf_counter() - t0
+    bad = [r for r in isolated if not r.ok]
+    print(f"[隔离档] {len(isolated) - len(bad)} OK / {len(bad)} FAIL（用时 {elapsed:.0f}s）")
+    for res in bad:
+        print(f"  FAIL {res.name} — {res.summary}")
+        for nid in res.failed:
+            # 省略形态（文件部分为空）在报表里补上块名，否则看不出是哪个文件
+            shown = f"{res.name}{nid}" if nid.startswith("::") else nid
+            print(f"       - {shown}")
+    return isolated, (1 if bad else 0)
+
+
+def _phase_compare(
+    selection: list[str],
+    env: dict[str, str],
+    isolated: list[ChunkResult],
+    any_fail: bool,
+) -> bool:
+    """共享进程档对照（`--compare`）→ 是否存在两档差异。"""
+    print("[info] 共享进程档：单进程（-n 0）跑完选中集——一个进程才叫\"共享\"")
+    t1 = time.perf_counter()
+    shared = run_shared(selection, env)
+    print(f"[共享档] {shared.summary}（用时 {time.perf_counter() - t1:.0f}s）")
+    shared_only, isolated_only = diff_failures(isolated, shared)
+    if shared_only:
+        print(f"[差异] 只在共享档失败（进程内状态泄漏/顺序污染）：{len(shared_only)}")
+        for nid in shared_only:
+            print(f"       - {nid}")
+    if isolated_only:
+        print(f"[差异] 只在隔离档失败（隐式依赖同进程其它文件的状态）：{len(isolated_only)}")
+        for nid in isolated_only:
+            print(f"       - {nid}")
+    if shared_only or isolated_only:
+        return True
+    if not any_fail:
+        print("[OK] 两档一致且全绿——该集合没有进程内状态耦合")
+    return False
+
+
+def _phase_hashseed(selection: list[str], seeds: int, any_fail: bool) -> bool:
+    """哈希种子扫描（`--hashseed-scan`）→ 是否存在结果漂移。"""
+    print(f"[info] 哈希种子扫描：{seeds} 个 PYTHONHASHSEED × 单进程档")
+    t2 = time.perf_counter()
+    runs, drift = hashseed_scan(selection, seeds)
+    for seed, res in runs:
+        flag = "  <-- 与 seed 0 不一致" if seed in drift else ""
+        print(f"  seed={seed:<3} {res.summary}{flag}")
+    print(f"[哈希种子档] 用时 {time.perf_counter() - t2:.0f}s；漂移种子：{drift or '无'}")
+    if not drift:
+        if not any_fail:
+            print("[OK] 结果不随哈希种子漂移")
+        return False
+    for seed in drift:
+        res = next((r for s, r in runs if s == seed), None)
+        for failed in (res.failed if res else ()):
+            print(f"       - seed={seed}: {failed}")
+    return True
+
+
+def main(argv: list[str] | None = None) -> int:
+    """隔离对照 CLI 入口：收集 → 切块 → 隔离档（+ 可选对照/哈希扫描）。"""
+    args = _cli_parser().parse_args(argv)
 
     targets = args.targets or ["tests"]
     env = _pytest_env(args.random_hashseed)
@@ -375,58 +456,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {name} — {len(items)}")
         return 0
 
-    print(
-        f"[info] 用例 {len(nodeids)} 个 → {len(chunks)} 块"
-        f"（粒度 {args.granularity}，jobs={jobs}，"
-        f"PYTHONHASHSEED={'随机' if args.random_hashseed else '0'}）"
-    )
-    t0 = time.perf_counter()
-    isolated = run_isolated(chunks, env, jobs, args.granularity, roots, args.verbose)
-    elapsed = time.perf_counter() - t0
-    bad = [r for r in isolated if not r.ok]
-    print(f"[隔离档] {len(isolated) - len(bad)} OK / {len(bad)} FAIL（用时 {elapsed:.0f}s）")
-    for res in bad:
-        print(f"  FAIL {res.name} — {res.summary}")
-        for nid in res.failed:
-            # 省略形态（文件部分为空）在报表里补上块名，否则看不出是哪个文件
-            shown = f"{res.name}{nid}" if nid.startswith("::") else nid
-            print(f"       - {shown}")
-
-    status = 1 if bad else 0
+    isolated, status = _phase_isolated(args, env, jobs, roots, chunks, nodeids)
+    any_fail = any(not r.ok for r in isolated)
+    drift = False
     if args.compare:
-        print("[info] 共享进程档：单进程（-n 0）跑完选中集——一个进程才叫\"共享\"")
-        t1 = time.perf_counter()
-        shared = run_shared(selection, env)
-        print(f"[共享档] {shared.summary}（用时 {time.perf_counter() - t1:.0f}s）")
-        shared_only, isolated_only = diff_failures(isolated, shared)
-        if shared_only:
-            print(f"[差异] 只在共享档失败（进程内状态泄漏/顺序污染）：{len(shared_only)}")
-            for nid in shared_only:
-                print(f"       - {nid}")
-        if isolated_only:
-            print(f"[差异] 只在隔离档失败（隐式依赖同进程其它文件的状态）：{len(isolated_only)}")
-            for nid in isolated_only:
-                print(f"       - {nid}")
-        if shared_only or isolated_only:
-            status = 1
-        elif not bad:
-            print("[OK] 两档一致且全绿——该集合没有进程内状态耦合")
+        drift = _phase_compare(selection, env, isolated, any_fail)
     if args.hashseed_scan:
-        print(f"[info] 哈希种子扫描：{args.hashseed_scan} 个 PYTHONHASHSEED × 单进程档")
-        t2 = time.perf_counter()
-        runs, drift = hashseed_scan(selection, args.hashseed_scan)
-        for seed, res in runs:
-            flag = "  <-- 与 seed 0 不一致" if seed in drift else ""
-            print(f"  seed={seed:<3} {res.summary}{flag}")
-        print(f"[哈希种子档] 用时 {time.perf_counter() - t2:.0f}s；漂移种子：{drift or '无'}")
-        if drift:
-            for seed in drift:
-                nid = next((r for s, r in runs if s == seed), None)
-                for failed in (nid.failed if nid else ()):
-                    print(f"       - seed={seed}: {failed}")
-            status = 1
-        elif not bad:
-            print("[OK] 结果不随哈希种子漂移")
+        drift = _phase_hashseed(selection, args.hashseed_scan, any_fail) or drift
+    if drift:
+        status = 1
     if status:
         print("[FAIL] 隔离档有失败或两档存在差异（见上）")
         return status
