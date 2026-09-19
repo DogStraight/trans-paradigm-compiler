@@ -4,7 +4,7 @@ Doc: renderer/renderer_architecture.md（join 列表拼接原语）
 """
 
 from typing import Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from core.define import Node
 from ..doc import Doc, Empty, Text, Line as SoftLine, Break, HardBreak, Concat, Nest, LineSuffix, group
 from .registry import register
@@ -156,6 +156,115 @@ def _cleanup_sep_slot(node: Node, sep_anchor: str) -> None:
             del slots["inline_after"]
 
 
+@dataclass
+class _AssembleState:
+    """join 组装状态（跨项复用）。
+
+    `sep_ia` 是分隔符行中注释槽的**原列表引用**（`pop` 直接作用于节点槽，
+    消费即删——见 `_take_sep_inline_after`）。
+    """
+
+    result: list[Doc] = field(default_factory=list)
+    pending_suffix: list[LineSuffix] = field(default_factory=list)
+    sep_ia: list = field(default_factory=list)
+    after_comment: bool = False  # 上一项是独占行注释 → 本项是段首（无前置分隔符）
+
+
+def _asm_comment_item(
+    state: _AssembleState, body: Doc, i: int, n_rendered: int, cfg: _JoinCfg
+) -> None:
+    """独占行注释项（ADR-0013 阶段 B）：把列表切成多段——注释前 Break、注释后
+    Break（注释在尾则无），段首无分隔符。
+
+    注释前分两情形：
+    - 前面有普通项（i > 0）：该项行尾补分隔符（端口 `,`——列表未结束，分隔符
+      归属前项行尾），随后 Break 到注释行；
+    - 列表首项即注释段（容器首元素前独占注释 / B2 头注释）：独占行语义——注释前
+      强制 Break（first_soft 的空格会把注释贴到父上下文行尾，如
+      `module m( // head`），换行分隔/硬拼场景无 SoftLine 概念则跳过（父已有换行）。
+    """
+    # flush 前项挂起 suffix（前项行尾注释，属前项行尾）
+    if state.pending_suffix:
+        state.result.extend(state.pending_suffix)
+        state.pending_suffix = []
+    if not state.after_comment:
+        if i > 0:
+            if cfg.inline_sep:
+                state.result.append(Text(cfg.sep_text))
+            state.result.append(Break())
+        elif not cfg.is_newline_sep and not cfg.no_sep and not cfg.no_soft:
+            state.result.append(Break())
+    state.result.append(body)
+    if i < n_rendered - 1:
+        state.result.append(Break())  # 注释后还有项 → Break；注释在尾则无
+    state.after_comment = True
+
+
+def _asm_separator(
+    state: _AssembleState, i: int, cfg: _JoinCfg, renderer: Any
+) -> None:
+    """分隔符段：段首 SoftLine（first_soft）+ 项间分隔符 + 行尾注释时序。
+
+    - 分隔符形态：换行分隔 → Break；`no_sep` → 无分隔；`no_soft` → 硬拼文本；
+      否则 sep 文本 + 分隔符后行中注释（注释随分隔符输出、在折行前）。
+    - 行内分隔下挂起的行尾注释在此落地：到行边界终止型（语言包声明的
+      `renderer.comment_ends_line`）须换行且**强制组断开**——否则扁平化会把
+      分隔符折成空格、注释吞掉后续项（`input a, // c output b`）。
+    """
+    if i == 0 and cfg.first_soft and cfg.inline_sep:
+        state.result.append(SoftLine())
+    if i == 0:
+        return
+    if cfg.is_newline_sep:
+        state.result.append(Break())
+    elif cfg.no_sep:
+        pass
+    elif cfg.no_soft:
+        state.result.append(Text(cfg.sep_text))
+    else:
+        state.result.append(Text(cfg.sep_text))
+        if state.sep_ia:
+            # 分隔符后行中注释（`clk, /* c */ output`）——注释随分隔符输出
+            # （折行前）；sep 文本已 rstrip（", "→","），注释前补空格
+            _t, _ = state.sep_ia.pop(0)
+            state.result.append(Text(" " + _t))
+            state.result.append(Text(" "))
+    if cfg.inline_sep:
+        ends_line = any(
+            renderer.comment_ends_line(s.text) for s in state.pending_suffix
+        )
+        state.result.extend(state.pending_suffix)
+        state.pending_suffix = []
+        state.result.append(HardBreak() if ends_line else SoftLine())
+
+
+def _asm_append_item(
+    state: _AssembleState, body: Doc, suffixes: list[LineSuffix], cfg: _JoinCfg
+) -> None:
+    """项正文落地 + 行尾注释时序：行内分隔下挂起到分隔符之后，否则直接输出在项内。"""
+    state.result.append(body)
+    if cfg.inline_sep:
+        state.pending_suffix = suffixes
+    else:
+        state.result.extend(suffixes)
+
+
+def _asm_flush_tail(state: _AssembleState, renderer: Any) -> None:
+    """末项挂起行尾注释落地。
+
+    属"到行边界终止"型（行注释）时，行必须在此结束且**所在组必须断开**
+    （HardBreak 向上传播）：列表后面若还有同行布局元素（模块端口关闭 `)` `;`），
+    注释会把它们吃进注释文本（`output [3:0] DEBUG // ... :));` → 端口表未闭合，
+    2026-09-17）。哪种注释属该型由语言包声明（renderer.comment_ends_line），
+    引擎不硬编码标点；块注释保持同行（`input clk, /* c */ output`）。
+    """
+    if not state.pending_suffix:
+        return
+    state.result.extend(state.pending_suffix)
+    if any(renderer.comment_ends_line(s.text) for s in state.pending_suffix):
+        state.result.append(HardBreak())
+
+
 def _assemble_join(
     rendered: list[tuple[Doc, list[LineSuffix], bool]],
     cfg: _JoinCfg,
@@ -167,98 +276,28 @@ def _assemble_join(
     - 项尾部 LineSuffix（行尾注释）在**行内分隔**下输出在分隔符之后、折行点
       之前（`input clk, // 注释`——flat 与 broken 均正确）；换行分隔
       （`join="\\n"`）保持项内（`stmt; // 注释`）。
-    - 独占行注释项把列表切成多段：注释前 Break、注释后 Break，段首无分隔符。
-    - 末项行尾注释若属"到行边界终止"型（语言包声明的
-      `renderer.comment_ends_line`）→ 追加 HardBreak（**组必须断开**：列表后面
-      若还有同行布局元素（`)` `;`），注释会把它们吃进注释文本）。
+    - 独占行注释项把列表切成多段（`_asm_comment_item`）。
+    - 末项行尾注释的硬断行收口见 `_asm_flush_tail`。
     """
-    sep_text = cfg.sep_text
-    pending_suffix: list[LineSuffix] = []
-    result: list[Doc] = []
+    state = _AssembleState(sep_ia=sep_ia)
     if cfg.prefix:
-        result.append(Text(cfg.prefix))
+        state.result.append(Text(cfg.prefix))
 
-    after_comment = False
     n_rendered = len(rendered)
     for i, (body, suffixes, is_comment) in enumerate(rendered):
         if is_comment:
-            # flush 前项挂起 suffix（前项行尾注释，属前项行尾）
-            if pending_suffix:
-                result.extend(pending_suffix)
-                pending_suffix = []
-            if not after_comment:
-                if i > 0:
-                    # 注释前有普通项：该项行尾补分隔符（端口 `,`——列表未
-                    # 结束，分隔符归属前项行尾），随后 Break 到注释行
-                    if cfg.inline_sep:
-                        result.append(Text(sep_text))
-                    result.append(Break())
-                else:
-                    # 列表首项即注释段（容器首元素前独占注释 / B2 头注释）：
-                    # 独占行语义——注释前强制 Break（first_soft 的空格会把
-                    # 注释贴到父上下文行尾，如 `module m( // head`），
-                    # 换行分隔/硬拼场景无 SoftLine 概念则跳过（父已有换行）。
-                    if not cfg.is_newline_sep and not cfg.no_sep and not cfg.no_soft:
-                        result.append(Break())
-            result.append(body)
-            if i < n_rendered - 1:
-                result.append(Break())  # 注释后还有项 → Break；注释在尾则无
-            after_comment = True
+            _asm_comment_item(state, body, i, n_rendered, cfg)
             continue
-        if after_comment:
+        if state.after_comment:
             # 注释后新段首项：无前置分隔符，直接接正文
-            result.append(body)
-            if cfg.inline_sep:
-                pending_suffix = suffixes
-            else:
-                result.extend(suffixes)
-            after_comment = False
+            state.after_comment = False
+            _asm_append_item(state, body, suffixes, cfg)
             continue
-        if i == 0 and cfg.first_soft and cfg.inline_sep:
-            result.append(SoftLine())
-        if i > 0:
-            if cfg.is_newline_sep:
-                result.append(Break())
-            elif cfg.no_sep:
-                pass
-            elif cfg.no_soft:
-                result.append(Text(sep_text))
-            else:
-                result.append(Text(sep_text))
-                if sep_ia:
-                    # 分隔符后行中注释（`clk, /* c */ output`）——注释随
-                    # 分隔符输出（折行前）；sep 文本已 rstrip（", "→","），
-                    # 注释前补空格
-                    _t, _ = sep_ia.pop(0)
-                    result.append(Text(" " + _t))
-                    result.append(Text(" "))
-            if cfg.inline_sep:
-                # 行终止型注释（行注释）后必须换行且**强制组断开**——否则扁平化
-                # 会把分隔符折成空格，注释吞掉后续项（`input a, // c output b`）。
-                # 哪种注释属该型由语言包声明（renderer.comment_ends_line）。
-                ends_line = any(
-                    renderer.comment_ends_line(s.text) for s in pending_suffix
-                )
-                result.extend(pending_suffix)
-                pending_suffix = []
-                result.append(HardBreak() if ends_line else SoftLine())
-        result.append(body)
-        if cfg.inline_sep:
-            pending_suffix = suffixes
-        else:
-            result.extend(suffixes)
-    if pending_suffix:
-        result.extend(pending_suffix)
-        # 末项行尾注释属"到行边界终止"型（行注释）时，行必须在此结束且**所在
-        # 组必须断开**（HardBreak 向上传播）：列表后面若还有同行布局元素
-        # （模块端口关闭 `)` `;`），注释会把它们吃进注释文本
-        # （`output [3:0] DEBUG // ... :));` → 端口表未闭合，2026-09-17）。
-        # 哪种注释属该型由语言包声明（renderer.comment_ends_line），引擎不
-        # 硬编码标点；块注释保持同行（`input clk, /* c */ output`）。
-        if any(renderer.comment_ends_line(s.text) for s in pending_suffix):
-            result.append(HardBreak())
-    return result
+        _asm_separator(state, i, cfg, renderer)
+        _asm_append_item(state, body, suffixes, cfg)
 
+    _asm_flush_tail(state, renderer)
+    return state.result
 
 @register("join")
 def eval_join(
