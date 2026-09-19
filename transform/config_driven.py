@@ -7,6 +7,8 @@ config_driven.py — ConfigDrivenTransform 插件
 Doc: docs/language_walkthrough.md（配置驱动变换）
 """
 
+from contextlib import contextmanager
+from functools import partial
 from typing import Any
 from core.define import Node
 from analyzer.scope import Scope
@@ -333,119 +335,162 @@ def _expand_primitive(engine, node, config, root_scope):
         AST 节点追加到模块端口列表
     """
     context = engine._build_context(node)
-
-    source_cfg = config.get("source", {})
-    lookup_source = source_cfg.get("lookup", "")
-    lookup_key = source_cfg.get("key", "")
-
-    data = None
-    if lookup_source == "scope":
-        # 支持 scope_kind 参数：按 kind 查找子作用域再解析符号
-        scope_kind = source_cfg.get("scope_kind")
-        if scope_kind:
-            data = (
-                _lookup_child_scope(root_scope, lookup_key, scope_kind, context)
-                if lookup_key
-                else None
-            )
-        else:
-            data = (
-                _lookup_scope(root_scope, lookup_key, context) if lookup_key else None
-            )
-    elif lookup_source:
-        table = engine._tables.get(lookup_source, {})
-        data = _lookup(table, lookup_key, context) if lookup_key else None
-
-    foreach_field = config.get("foreach", "")
-    as_name = config.get("as", foreach_field)
-    items: list = []
-    if data and foreach_field:
-        if isinstance(data, dict) and foreach_field in data:
-            raw_items = data[foreach_field]
-            items = raw_items if isinstance(raw_items, list) else [raw_items]
-        elif isinstance(data, list):
-            items = data
-            as_name = foreach_field or "item"
-    elif data and not foreach_field:
-        if isinstance(data, dict):
-            context.update(data)
-
-    # items_path 嵌套拍平：遍历 items 中每个元素，沿点号路径取出子列表展开
-    # 例如 items_path = "items.items" → 对每个 port 取出 port["items"]["items"] 列表
-    flatten_path = config.get("items_path", "")
-    if flatten_path and items:
-        flat: list = []
-        for item in items:
-            cur = item
-            for part in flatten_path.split("."):
-                if isinstance(cur, dict):
-                    cur = cur.get(part)
-                else:
-                    cur = None
-                    break
-            if isinstance(cur, list):
-                # 将子列表元素展开到主列表，同时保留外层 context 属性
-                for sub in cur:
-                    if isinstance(sub, dict):
-                        merged = dict(item if isinstance(item, dict) else {})
-                        merged.update(sub)
-                        flat.append(merged)
-                    else:
-                        flat.append(sub)
-            elif cur is not None:
-                flat.append(cur)
-        items = flat
+    data = _resolve_expand_source(
+        engine, config.get("source", {}), root_scope, context
+    )
+    items, as_name = _extract_expand_items(config, data, context)
+    items = _flatten_items_path(items, config.get("items_path", ""))
 
     emit_spec = config.get("emit")
     if emit_spec is None:
         return SKIP
+    if not items:
+        return _run_emit_once(engine, node, emit_spec, root_scope, context)
 
-    if items:
+    results = _foreach(
+        items,
+        as_name,
+        partial(_expand_item, engine, node, emit_spec, root_scope),
+        context,
+    )
+    # 兜底防御：SKIP（switch 无匹配分支等"无产出"哨兵）不应并入结果列表
+    # 泄漏进 AST（会渲染成字面 "SKIP"）；此处过滤与 _walk 的 SKIP 语义
+    # （保留原节点）不同——foreach 的原节点已被消费，SKIP = 该行无产出。
+    results = [r for r in results if r is not SKIP]
+    return results if results else SKIP
 
-        def _do_transform(item: Any, ctx: dict):
-            """对 foreach 元素执行变换：emit 或原语调度"""
-            del item  # foreach 回调协议签名参数，本实现从 ctx 取元素
-            if isinstance(emit_spec, dict) and "kind" in emit_spec:
-                prim = get_primitive(emit_spec["kind"])
-                if prim:
-                    # 将 foreach 上下文注到节点上供原语消费
-                    saved = {}
-                    try:
-                        for k, v in ctx.items():
-                            # foreach 的 item 存在 $ 下，展开到节点顶层
-                            if k == "$" and isinstance(v, dict):
-                                for ik, iv in v.items():
-                                    if not hasattr(node, ik):
-                                        setattr(node, ik, iv)
-                                        saved[ik] = None
-                            elif not hasattr(node, k):
-                                setattr(node, k, v)
-                                saved[k] = None
-                            elif getattr(node, k) != v:
-                                saved[k] = getattr(node, k)
-                                setattr(node, k, v)
-                        return prim(engine, node, emit_spec, root_scope)
-                    finally:
-                        for k, v_orig in saved.items():
-                            if v_orig is None:
-                                delattr(node, k)
-                            else:
-                                setattr(node, k, v_orig)
-            return _emit(emit_spec, ctx)
 
-        results = _foreach(items, as_name, _do_transform, context)
-        # 兜底防御：SKIP（switch 无匹配分支等"无产出"哨兵）不应并入结果列表
-        # 泄漏进 AST（会渲染成字面 "SKIP"）；此处过滤与 _walk 的 SKIP 语义
-        # （保留原节点）不同——foreach 的原节点已被消费，SKIP = 该行无产出。
-        results = [r for r in results if r is not SKIP]
-        return results if results else SKIP
-    else:
-        if isinstance(emit_spec, dict) and "kind" in emit_spec:
-            prim = get_primitive(emit_spec["kind"])
-            if prim:
+def _resolve_expand_source(engine, source_cfg: dict, root_scope, context) -> Any:
+    """按 `source` 声明取源数据：scope（可带 `scope_kind`）/ 映射表；无声明 → None。"""
+    lookup_source = source_cfg.get("lookup", "")
+    lookup_key = source_cfg.get("key", "")
+    if not lookup_source:
+        return None
+    if not lookup_key:
+        return None
+    if lookup_source == "scope":
+        # scope_kind：按 kind 查找子作用域再解析符号
+        scope_kind = source_cfg.get("scope_kind")
+        if scope_kind:
+            return _lookup_child_scope(root_scope, lookup_key, scope_kind, context)
+        return _lookup_scope(root_scope, lookup_key, context)
+    return _lookup(engine._tables.get(lookup_source, {}), lookup_key, context)
+
+
+def _extract_expand_items(config: dict, data: Any, context: dict) -> tuple[list, str]:
+    """`foreach` 声明 → `(待展开元素列表, 元素绑定名)`。
+
+    - 数据是 dict 且含 foreach 字段 → 取该字段（非列表则单元素包一层）；
+    - 数据本身就是列表 → 整表即元素列表，绑定名回退 `item`；
+    - 无 foreach 字段而数据是 dict → 直接并入 context（不展开元素）。
+    """
+    foreach_field = config.get("foreach", "")
+    as_name = config.get("as", foreach_field)
+    if not data or not foreach_field:
+        if data and isinstance(data, dict):
+            context.update(data)
+        return [], as_name
+    if isinstance(data, dict) and foreach_field in data:
+        raw_items = data[foreach_field]
+        return (raw_items if isinstance(raw_items, list) else [raw_items]), as_name
+    if isinstance(data, list):
+        return data, foreach_field or "item"
+    return [], as_name
+
+
+def _flatten_items_path(items: list, flatten_path: str) -> list:
+    """`items_path` 嵌套拍平：沿点号路径取子列表并展开，保留外层属性。
+
+    例：`items_path = "items.items"` → 对每个 port 取 `port["items"]["items"]`
+    列表，子元素与外层属性合并后展开到主列表。
+    """
+    if not flatten_path or not items:
+        return items
+    flat: list = []
+    for item in items:
+        flat.extend(_expand_path_entry(item, _path_get(item, flatten_path)))
+    return flat
+
+
+def _expand_path_entry(item: Any, cur: Any) -> list:
+    """`items_path` 取到值后的展开。
+
+    列表 → 逐元素（dict 与外层属性合并）；其它非 None → 该值单元素；None → 空。
+    """
+    if isinstance(cur, list):
+        return [_merge_parent(item, sub) for sub in cur]
+    return [] if cur is None else [cur]
+
+
+def _merge_parent(item: Any, sub: Any) -> Any:
+    """子元素与外层属性合并；子元素非 dict → 原样保留（不造新 dict）。"""
+    if not isinstance(sub, dict):
+        return sub
+    merged = dict(item) if isinstance(item, dict) else {}
+    merged.update(sub)
+    return merged
+
+
+def _path_get(item: Any, path: str) -> Any:
+    """沿点号路径取值；中途非 dict → None。"""
+    cur = item
+    for part in path.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+@contextmanager
+def _injected_foreach_context(node: Node, ctx: dict):
+    """临时把 foreach 上下文注到节点上供原语消费，退出还原。
+
+    `ctx["$"]` 是本次 foreach 元素（作为 dict 展开到节点顶层）；其余键直接注入。
+    原本不在节点上的属性记录为 None → 退出删除；已存在的同名属性记原值 → 退出还原
+    （值不同才覆盖，相同不动）。
+    """
+    saved: dict[str, Any] = {}
+    try:
+        for k, v in ctx.items():
+            if k == "$" and isinstance(v, dict):
+                for ik, iv in v.items():
+                    if not hasattr(node, ik):
+                        setattr(node, ik, iv)
+                        saved[ik] = None
+            elif not hasattr(node, k):
+                setattr(node, k, v)
+                saved[k] = None
+            elif getattr(node, k) != v:
+                saved[k] = getattr(node, k)
+                setattr(node, k, v)
+        yield
+    finally:
+        for k, v_orig in saved.items():
+            if v_orig is None:
+                delattr(node, k)
+            else:
+                setattr(node, k, v_orig)
+
+
+def _run_emit_once(engine, node, emit_spec, root_scope, context) -> Any:
+    """无 foreach 元素时的单次产出：emit 声明带 `kind` → 原语；否则 `_emit`。"""
+    if isinstance(emit_spec, dict) and "kind" in emit_spec:
+        prim = get_primitive(emit_spec["kind"])
+        if prim:
+            return prim(engine, node, emit_spec, root_scope)
+    return _emit(emit_spec, context)
+
+
+def _expand_item(engine, node, emit_spec, root_scope, item, ctx):
+    """foreach 回调：对元素执行 emit 或原语调度（签名由 `_foreach` 协议约定）。"""
+    del item  # foreach 回调协议签名参数，本实现从 ctx 取元素
+    if isinstance(emit_spec, dict) and "kind" in emit_spec:
+        prim = get_primitive(emit_spec["kind"])
+        if prim:
+            # 将 foreach 上下文注到节点上供原语消费
+            with _injected_foreach_context(node, ctx):
                 return prim(engine, node, emit_spec, root_scope)
-        result = _emit(emit_spec, context)
-        return result
+    return _emit(emit_spec, ctx)
 
 
 def _replace_primitive(engine, node, config, root_scope):
