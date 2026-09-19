@@ -42,43 +42,53 @@ def _glob_match(patterns: list[str], base_dir: str) -> list[str]:
         "*.toml"       → base_dir 下所有 .toml 文件
         "0*.toml"      → base_dir 下以 0 开头的 .toml 文件
         "0*/*.toml"    → base_dir 下以 0 开头的子目录中的 .toml 文件
+
+    两条路径：pattern 不含目录分隔符 → 平铺匹配文件名（`_match_flat`）；
+    含分隔符 → 递归匹配相对路径（`_match_recursive`）。
     """
     compiled = [_glob_to_regex(p) for p in patterns]
     # 统一分隔符后再用 os.sep 判断，跨平台兼容
     has_dir = any(os.sep in p.replace("/", os.sep) for p in patterns)
-    results: list[str] = []
-
-    if not has_dir:
-        try:
-            for entry in os.scandir(base_dir):
-                if entry.is_file():
-                    for regex in compiled:
-                        if regex.match(entry.name):
-                            results.append(entry.path)
-                            break
-        except PermissionError as exc:
-            # 静默跳过不可读目录 = 规则文件静默缺失（token.toml 事故形态）
-            # → fail-fast（见 core/config_lifecycle.md「fail-fast」）
-            raise ConfigError(f"[config] 目录不可读，无法匹配规则文件: {base_dir}（{exc}）") from exc
-        return sorted(results)
-
     try:
-        for root, dirs, files in os.walk(base_dir):
-            rel_root = os.path.relpath(root, base_dir)
-            if rel_root == ".":
-                rel_root = ""
-            for name in files + dirs:
-                rel_path = os.path.join(rel_root, name)
-                for regex in compiled:
-                    if regex.match(rel_path):
-                        results.append(os.path.join(root, name))
-                        break
+        if has_dir:
+            results = _match_recursive(compiled, base_dir)
+        else:
+            results = _match_flat(compiled, base_dir)
     except PermissionError as exc:
-        # 同上：不可读目录不静默跳过
-        raise ConfigError(f"[config] 目录不可读，无法匹配规则文件: {base_dir}（{exc}）") from exc
-
+        # 静默跳过不可读目录 = 规则文件静默缺失（token.toml 事故形态）
+        # → fail-fast（见 core/config_lifecycle.md「fail-fast」）
+        raise ConfigError(
+            f"[config] 目录不可读，无法匹配规则文件: {base_dir}（{exc}）"
+        ) from exc
     return sorted(results)
 
+
+def _match_flat(compiled: list, base_dir: str) -> list[str]:
+    """平铺匹配：只比 base_dir 下的**文件名**（pattern 不含目录分隔符）。"""
+    results: list[str] = []
+    for entry in os.scandir(base_dir):
+        if entry.is_file() and _any_match(compiled, entry.name):
+            results.append(entry.path)
+    return results
+
+
+def _match_recursive(compiled: list, base_dir: str) -> list[str]:
+    """含目录分隔符的 pattern：逐层比**相对路径**（文件与子目录都参与）。"""
+    results: list[str] = []
+    for root, dirs, files in os.walk(base_dir):
+        rel_root = os.path.relpath(root, base_dir)
+        if rel_root == ".":
+            rel_root = ""
+        for name in files + dirs:
+            rel_path = os.path.join(rel_root, name)
+            if _any_match(compiled, rel_path):
+                results.append(os.path.join(root, name))
+    return results
+
+
+def _any_match(compiled: list, candidate: str) -> bool:
+    """候选名是否命中任一 pattern（原"命中即 break"语义——只关心是否命中）。"""
+    return any(regex.match(candidate) for regex in compiled)
 
 # ──────────────────────────────────────────────
 # 配置声明加载（从 grammar 包 tpc.toml 读取 [config.*]）
