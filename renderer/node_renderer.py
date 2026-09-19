@@ -61,16 +61,38 @@ def _body_indent(body_cfg: dict, renderer: Any) -> int:
     return renderer._indent(level)
 
 
+def _own_line_docs(own_line, renderer: Any) -> list[Doc]:
+    """`leading_own_line` 槽 → Doc：整块独占成行。
+
+    块首一个硬换行 + 行终止型注释之间单换行 + 块尾一个硬换行（逐条各加首尾
+    硬换行会在多条注释间叠空行）。是否行终止由声明驱动
+    `renderer.comment_ends_line`；块注释（非行终止）逐条 `Text + Break`，
+    与行终止型分开两遗——硬换行只有当块里真有行终止型注释时才补。
+    """
+    line_cs = [c for c in own_line if renderer.comment_ends_line(c)]
+    docs: list[Doc] = []
+    if line_cs:
+        docs.append(HardBreak())
+        for k, c in enumerate(line_cs):
+            if k:
+                docs.append(HardBreak())
+            docs.append(Text(c.rstrip()))
+        docs.append(HardBreak())
+    for c in own_line:
+        if not renderer.comment_ends_line(c):
+            docs.append(Text(c))
+            docs.append(Break())
+    return docs
+
+
 def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
     """节点**文本前**的注释槽 → Doc 列表（顺序 = 源序，最后一个最贴近节点文本）。
 
     - `leading`：`Text(comment) + Break()`——注释后换行、注释前不主动 break
       （父级 body 的 Break 提供换行+缩进）。行尾型注释（`a || // c`）由此落地：
       注释紧跟前一片段同行，换行后接本节点（ADR-0014 方向 B）。
-    - `leading_own_line`：整块独占成行——块首一个硬换行 + 注释之间单换行 + 块尾
-      一个硬换行（逐条各加首尾硬换行会在多条注释间叠空行）。行终止型必须硬换行
-      （① 同行后续内容会被行注释吃掉；② 独占成行才能还原源的断行位置）。是否
-      行终止由声明驱动 `renderer.comment_ends_line`；块注释逐条 `Text+Break`。
+    - `leading_own_line`：整块独占成行（见 `_own_line_docs`）。行终止型必须硬
+      换行（① 同行后续内容会被行注释吃掉；② 独占成行才能还原源的断行位置）。
     - `inline`：`Text(comment) + Text(" ")`——同行紧跟节点文本前（`= /* c */ b`）。
       行中注释落在 `inline = true` 规则上时用它（替身节点里没有锚 token，
       `inline_after` 定位不了）。
@@ -84,18 +106,7 @@ def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
         docs.append(Break())
     own_line = slots.get("leading_own_line") or ()
     if own_line:
-        line_cs = [c for c in own_line if renderer.comment_ends_line(c)]
-        if line_cs:
-            docs.append(HardBreak())
-            for k, c in enumerate(line_cs):
-                if k:
-                    docs.append(HardBreak())
-                docs.append(Text(c.rstrip()))
-            docs.append(HardBreak())
-        for c in own_line:
-            if not renderer.comment_ends_line(c):
-                docs.append(Text(c))
-                docs.append(Break())
+        docs.extend(_own_line_docs(own_line, renderer))
     for c in slots.get("inline") or ():
         docs.append(Text(c))
         docs.append(Text(" "))
@@ -265,6 +276,96 @@ def render_inline(
     return render_node(node, layout, renderer)
 
 
+def _children_from_items(node: Node, items_list: list) -> list[Node]:
+    """具名属性列表：按顺序从 node 提取子节点（单节点或节点列表）。"""
+    children: list[Node] = []
+    for attr_name in items_list:
+        val = getattr(node, attr_name, None)
+        if val is None:
+            continue
+        if isinstance(val, Node):
+            children.append(val)
+        elif isinstance(val, list):
+            children.extend(v for v in val if isinstance(v, Node))
+    return children
+
+
+def _container_children(container: Node, source: str, children_field: str) -> list[Node]:
+    """容器节点的子节点；无子节点时把节点自身作为唯一 child。
+
+    单节点：若为容器（同名 source 属性或 children_field 非空）取其子节点；
+    否则把节点本身作为唯一 child——normalize 会把单元素 repeat 展平为单节点
+    （如 TypeImplDecl.body: repeat[WireDecl] → WireDecl），此时 source 指向的
+    就是内容本身。
+    """
+    if "." in source:
+        sub = getattr(container, children_field, None)
+    else:
+        sub = getattr(container, source, None)
+        if sub is None:
+            sub = getattr(container, children_field, None)
+    if not sub:
+        return [container]
+    return sub if isinstance(sub, list) else [sub]
+
+
+def _children_from_source(node: Node, source: str, children_field: str) -> list[Node]:
+    """source 路径 → 子节点列表。
+
+    点路径穿透（如 "body.members" → node.body.members）：让 body 源可指向
+    嵌套子节点（TypeDecl.body 穿透到 TypeBody.members）；点路径下已到达
+    目标节点，直接按容器展开（见 `_container_children`）。
+    """
+    container = node
+    for part in source.split("."):
+        container = getattr(container, part, None)
+        if container is None:
+            break
+    if isinstance(container, Node):
+        return _container_children(container, source, children_field)
+    if isinstance(container, list):
+        return container
+    return []
+
+
+def _resolve_children(
+    node: Node, body_cfg: Optional[dict], children_field: str
+) -> list[Node]:
+    """body 子节点来源三分支：具名属性列表 / source 路径 / 默认 children_field。"""
+    if body_cfg and isinstance(body_cfg, dict):
+        source = body_cfg.get("source")
+        items_list = body_cfg.get("items")
+    else:
+        source = None
+        items_list = None
+    if items_list:
+        return _children_from_items(node, items_list)
+    if source:
+        return _children_from_source(node, source, children_field)
+    return list(getattr(node, children_field, []))
+
+
+def _body_docs(
+    children: list,
+    body_cfg: Optional[dict],
+    parent_layout: Optional[dict],
+    renderer: Any,
+) -> list[Doc]:
+    """逐子节点渲染成 Doc；`body_cfg["sep"]` 只在非末项之后追加。"""
+    docs: list[Doc] = []
+    children_list = [c for c in children if isinstance(c, Node)]
+    sep = body_cfg.get("sep") if isinstance(body_cfg, dict) else None
+    for i, child in enumerate(children_list):
+        merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
+        d = render_node(child, merged, renderer)
+        if isinstance(d, Empty):
+            continue
+        if sep and i < len(children_list) - 1:
+            d = Concat([d, Text(sep)])
+        docs.append(d)
+    return docs
+
+
 def render_body(
     node: Node,
     body_cfg: Optional[dict],
@@ -275,73 +376,12 @@ def render_body(
 
     body_cfg 可指定 source 字段名（如 source = "items"），
     或 items 列表（如 items = ["then_stmt", "else_chain"]），
-    从 node 的对应属性获取子节点。
+    从 node 的对应属性获取子节点（取法见 `_resolve_children`）。
     body_cfg["indent"] 控制缩进级别（true=1 级 / false=不缩进 / int=N 级，
     默认 1 级），实际缩进由 render_node/render_inline 的 body 渲染段执行。
     """
-    if body_cfg and isinstance(body_cfg, dict):
-        source = body_cfg.get("source")
-        items_list = body_cfg.get("items")
-    else:
-        source = None
-        items_list = None
-
-    children_field = renderer._children_field
-
-    if items_list:
-        # 具名属性列表：按顺序从 node 提取子节点
-        children: list[Node] = []
-        for attr_name in items_list:
-            val = getattr(node, attr_name, None)
-            if val is None:
-                continue
-            if isinstance(val, Node):
-                children.append(val)
-            elif isinstance(val, list):
-                children.extend(v for v in val if isinstance(v, Node))
-    elif source:
-        container = node
-        # 点路径穿透（如 "body.members" → node.body.members）：
-        # 让 body 源可指向嵌套子节点（TypeDecl.body 穿透到 TypeBody.members）
-        for part in source.split("."):
-            container = getattr(container, part, None)
-            if container is None:
-                break
-        if isinstance(container, Node):
-            # 单节点：若为容器（同名 source 属性或 sub_node 非空）取其子节点；
-            # 否则把节点本身作为唯一 child——normalize 会把单元素 repeat 展平
-            # 为单节点（如 TypeImplDecl.body: repeat[WireDecl] → WireDecl），
-            # 此时 source 指向的就是内容本身。
-            # 点路径下（source 含 "."）已到达目标节点，直接按容器展开。
-            if "." in source:
-                sub = getattr(container, children_field, None)
-            else:
-                sub = getattr(container, source, None)
-                if sub is None:
-                    sub = getattr(container, children_field, None)
-            if sub:
-                children = sub if isinstance(sub, list) else [sub]
-            else:
-                children = [container]
-        elif isinstance(container, list):
-            children = container
-        else:
-            children = []
-    else:
-        children = getattr(node, children_field, [])
-
-    docs: list[Doc] = []
-    children_list = [c for c in children if isinstance(c, Node)]
-    for i, child in enumerate(children_list):
-        merged = renderer._get_merged_layout(parent_layout or {}, child.node_name)
-        d = render_node(child, merged, renderer)
-        if not isinstance(d, Empty):
-            if body_cfg and isinstance(body_cfg, dict):
-                sep = body_cfg.get("sep")
-                if sep and i < len(children_list) - 1:
-                    d = Concat([d, Text(sep)])
-            docs.append(d)
-    return docs
+    children = _resolve_children(node, body_cfg, renderer._children_field)
+    return _body_docs(children, body_cfg, parent_layout, renderer)
 
 
 def resolve_items(
