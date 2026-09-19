@@ -96,13 +96,17 @@
     `config_registry.resolve`/`resolve_with_sources`、
     `renderer/doc._has_break`/`_has_hardline`（`cfc5944`）；另修掉 B-B2 拆分后
     新显影的 `Lexer._scan_number`/`_scan_unsized_number` 同体。
-  - 复查（外部裁判，同口径分块）：非 tests 重复对 **111 → 71**，
+  - ✅ 3–5 行样板体两对：linter `_skip`（matcher 4 处内联/封套 + discovery 2 处）
+    → `core/token_protocol.skip_trivia`（TRIVIA 判定与跳过同源）；parser
+    `_get_block_end_for`/`_get_block_end` 逐字同体 → `core.define.block_end_of`
+    （`2ac9f2f`、`d80f330`）。
+  - 复查（外部裁判，同口径分块）：非 tests 重复对 **111 → 69**，
     其余为薄入口残留（token 量已大幅下降：159→35、234→52、156→20 等）与
-    已列明保留项。
-  - ⏳ 保留项（附理由，见 dispositions）：policy/ 两个门禁脚本间的小重复
-    （拟保持：两道门禁刻意各自独立可单跑，待作者确认）、≤25 token 的单行
-    setter/格式化器（38 组）、跨层同形注册表、3–5 行样板体三对
-    （linter `_skip`、parser `_get_block_end`、packaging ↔ tests 的 JSON 读取）。
+    已列明保留项——**逐对分类见 dispositions**：token 类型构造函数族 10 对 +
+    类型判定谓词族 16 对（API 面，一类型一函数）、具名入口→共享实现 32 对
+    （共性已抽，残留仅入口样板）、policy 门禁 3 对（待作者确认）、语言侧变体 1 对、
+    类内 1 对（随 B-B4c）、测试/工具侧 6 对（各自独立可单跑）。
+    可继续压的只剩这 1 对类内（B-B4c）+ policy 3 对（待作者定）。
 
 > 审计外观察（不在本清单）：`_eval_gen_cond` 的 `!PARAM` 特判是 Verilog 形态
 > 进了引擎，与"本模块零语言知识"的声明相左——归 `docs/gaps/gap-semantic-elaboration-boundaries.md`
