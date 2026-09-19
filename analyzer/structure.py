@@ -4,9 +4,10 @@
 注入的 `context.extra`：`module_index` / `inst_sites` / 信号图）。
 
 语言无关边界：本模块**零语言知识**。单元/实例化的规则名、节点字段、文件
-扩展名、关键字全部来自语言包声明的 `[structure] protocol`
-（grammar/<lang>/base/_structure.toml）；未声明该段 = 该语言不支持结构提取，
-调用方退化为单文件 lint + analyze（`ctx.has_structure()` 判定）。
+扩展名、关键字、generate 条件面的规则/字段/运算符拼写全部来自语言包声明的
+`[structure] protocol`（grammar/<lang>/base/_structure.toml）；未声明该段
+= 该语言不支持结构提取，调用方退化为单文件 lint + analyze
+（`ctx.has_structure()` 判定）。
 
 三层（ADR-0008）+ 组合结构（本模块是**一组协作者**，不是一个大类）：
 
@@ -38,7 +39,8 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from core.define import Node, collect_nodes, iter_nodes, unwrap_optional
+from core.define import CHILDREN_FIELD, Node, collect_nodes, iter_nodes, unwrap_optional
+from core.token_protocol import IDENT_RE
 from core.config_registry import declare_cfg
 
 if TYPE_CHECKING:
@@ -149,7 +151,9 @@ def _tokenize_const(text: str) -> list[tuple[str, str]] | None:
         if m is None:
             return None
         pos = m.end()
-        toks.append(("num", m.group(1)) if m.group(1) is not None else ("op", m.group(2)))
+        toks.append(
+            ("num", m.group(1)) if m.group(1) is not None else ("op", m.group(2))
+        )
     return toks
 
 
@@ -316,6 +320,30 @@ def _graph_entry(graph: dict, key: tuple) -> dict:
     return graph[key]
 
 
+@dataclass(frozen=True)
+class _GenFace:
+    """generate 条件求值面（`[structure]` / `[structure.fields]` 声明）。
+
+    条件求值要认的东西**全是语言形态**：哪个规则是 generate 块容器、哪些规则是
+    条件分支、分支上哪个字段是条件/then/else、逻辑非运算符怎么拼。引擎一律按
+    声明取（`StructureCtx.gen_face`），不再内置 Verilog 形态。
+
+    未声明的部分为空：`block_rule` 空 = 该语言不做 generate 活性过滤（不认
+    generate 块）；`not_ops` 空 = 不认前缀取反（条件不可判 → None 保守）。
+    """
+
+    block_rule: str  # generate 块容器规则名
+    branch_rules: tuple[str, ...]  # 条件分支规则名（宿主：条件/then/else 字段）
+    condition_field: str  # 分支上的条件字段
+    then_field: str  # then 分支字段
+    else_field: str  # else 链字段（else / else-if）
+    not_ops: tuple[str, ...]  # 逻辑非运算符前缀（文本识别；引擎不认识拼写）
+    module_name_field: str = ""  # 模块名字段（取参数表用；与 [structure.fields] 同源）
+
+    def is_branch(self, node_name: str) -> bool:
+        return node_name in self.branch_rules
+
+
 @dataclass
 class StructureCtx:
     """结构提取会话上下文：环境开关 + 会话状态 + 结构协议读取。
@@ -354,9 +382,14 @@ class StructureCtx:
         self.fr_by_module_cache = None
 
     def refresh(self) -> None:
-        """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。"""
+        """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。
+
+        顺带校验条件求值面（`gen_face`）：形态非法在**配置加载点**就报错，
+        不等真用到才炸（fail-fast，见 core/config_lifecycle.md）。
+        """
         self.struct = _structure_cfg or {}
         self.fields = (self.struct.get("fields") or {}) if self.struct else {}
+        self.gen_face()
 
     # ── 结构协议读取（语言知识仅来自 grammar/<lang> TOML）──
 
@@ -381,6 +414,40 @@ class StructureCtx:
         """语言包是否声明了跨文件结构协议（模块/实例化形态）。"""
         return bool(self.struct and self.rule("module_decl_rule"))
 
+    def gen_face(self) -> "_GenFace":
+        """generate 条件求值面（`[structure]` / `[structure.fields]` 声明）。
+
+        未声明 / 只声明一半 → 对应项为空（不认 generate 块 / 不认取反），
+        行为退为保守侧（不过滤 = 不漏报驱动）；**类型非法才报错**（fail-fast）。
+        """
+        not_ops = self.struct.get("gen_not_ops")
+        if not_ops is None:
+            not_ops = []
+        if not isinstance(not_ops, list) or not all(
+            isinstance(o, str) and o for o in not_ops
+        ):
+            raise ValueError(
+                "[structure] gen_not_ops 须为非空字符串列表"
+                f"（逻辑非运算符前缀），得到 {not_ops!r}"
+            )
+        branches = self.struct.get("gen_branch_rules") or []
+        if not isinstance(branches, list) or not all(
+            isinstance(b, str) and b for b in branches
+        ):
+            raise ValueError(
+                "[structure] gen_branch_rules 须为非空字符串列表"
+                f"（generate 条件分支规则名），得到 {branches!r}"
+            )
+        return _GenFace(
+            block_rule=self.rule("gen_block_rule"),
+            branch_rules=tuple(branches),
+            condition_field=self.field("gen_condition"),
+            then_field=self.field("gen_then"),
+            else_field=self.field("gen_else_chain"),
+            not_ops=tuple(not_ops),
+            module_name_field=self.field("module_name"),
+        )
+
     def render_subtree(self, node: Node) -> str:
         """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""
         try:
@@ -396,6 +463,7 @@ class StructureCtx:
             return mn.content
         return ""
 
+
 class GenerateEvaluator:
     """generate 条件求值：节点是否落在**选中**的 generate 互斥分支内。
 
@@ -404,7 +472,8 @@ class GenerateEvaluator:
     而非物理删树）。per-file 预计算 `{id(node): bool}`（一次 DFS 维护条件栈，
     O(树)），查询 O(1)——每节点全树扫描的旧路线已删（`_branch_active` 系）。
 
-    只依赖 ctx（协议读取 + 渲染助手），不持有会话状态。
+    **语言形态全部走声明**（`StructureCtx.gen_face`：块/分支规则名、条件/then/
+    else 字段名、逻辑非运算符前缀）——本类零语言知识，未声明则退为不过滤（保守）。
     """
 
     def __init__(self, ctx: StructureCtx) -> None:
@@ -437,15 +506,20 @@ class GenerateEvaluator:
         """per-file 预计算 {id(node): bool}——节点是否在选中的 generate 分支。
 
         单栈迭代（无递归）：栈元素 = (node, stack, params)。普通节点标记
-        活性后子节点按种类入栈（`_gen_push_children`）；GenerateBlock 内的
-        IfBlock/ElseIfBlock 求值条件后按 then/else 展开互斥分支
-        （`_expand_generate_if`）。节点活性 = 所在分支全部选中。O(树)，
-        查询 O(1)。纯迭代实现避免深 AST/嵌套 generate 递归爆栈
-        （picorv32 等大文件，2026-08-29）。
+        活性后子节点按种类入栈（`_gen_push_children`）；generate 块内的条件
+        分支求值后按 then/else 展开互斥（`_expand_generate_if`）。节点活性
+        = 所在分支全部选中。O(树)，查询 O(1)。纯迭代实现避免深 AST/嵌套
+        generate 递归爆栈（picorv32 等大文件，2026-08-29）。
+
+        语言包未声明 generate 块规则 → 返回空表（不认 generate = 全部节点
+        按活跃处理，保守方向：不过滤不会漏报驱动）。
         """
         active: dict[int, bool] = {}
         root = fr.ast
         if root is None:
+            return active
+        face = self._ctx.gen_face()
+        if not face.block_rule:
             return active
         decl_rule = self._ctx.rule("module_decl_rule")
         todo = [(child, [], {}) for child in root.iter_children()]
@@ -454,33 +528,40 @@ class GenerateEvaluator:
             if node is None:
                 continue
             active[id(node)] = all(stack)
-            self._gen_push_children(node, stack, params, todo, decl_rule)
+            self._gen_push_children(node, stack, params, todo, decl_rule, face)
         return active
 
-    def _gen_push_children(self, node, stack: list, params: dict, todo: list,
-                           decl_rule: str) -> None:
+    def _gen_push_children(
+        self,
+        node,
+        stack: list,
+        params: dict,
+        todo: list,
+        decl_rule: str,
+        face: "_GenFace",
+    ) -> None:
         """按节点种类把子节点入栈（generate 遍历的分派点）。
 
-        - GenerateBlock：子块含 IfBlock/ElseIfBlock → 条件求值展开互斥；
-          其余子块沿用当前活性
-        - 模块声明（decl_rule）：子节点以本模块**参数表**入栈（条件求值用）
+        - generate 块（`face.block_rule`）：条件分支子块交 `_expand_generate_if`
+          展开互斥；其余子块沿用当前活性
+        - 模块声明（`decl_rule`）：子节点以本模块**参数表**入栈（条件求值用）
         - 其他（含 always 内普通 if）：普通遍历，活性继承当前栈——非
           generate 条件不展开互斥
         """
-        if node.node_name == "GenerateBlock":
-            for sub in getattr(node, "sub_node", None) or []:
+        if node.node_name == face.block_rule:
+            for sub in getattr(node, CHILDREN_FIELD, None) or []:
                 if not isinstance(sub, Node):
                     continue
-                if sub.node_name in ("IfBlock", "ElseIfBlock"):
-                    # GenerateBlock 内的条件分支：求值展开（互斥）
-                    self._expand_generate_if(sub, stack, params, todo)
+                if face.is_branch(sub.node_name):
+                    # generate 块内的条件分支：求值展开（互斥）
+                    self._expand_generate_if(sub, stack, params, todo, face)
                 else:
                     todo.append((sub, stack, params))
             return
         if node.node_name == decl_rule:
-            info = self._ctx.module_index.get(
-                getattr(getattr(node, "module_name", None), "content", "") or ""
-            )
+            name_field = face.module_name_field
+            name_node = getattr(node, name_field, None) if name_field else None
+            info = self._ctx.module_index.get(getattr(name_node, "content", "") or "")
             params2: dict[str, str] = {}
             if info is not None:
                 params2 = {p.name: p.value_expr for p in info.params.values()}
@@ -490,8 +571,10 @@ class GenerateEvaluator:
         for child in node.iter_children():
             todo.append((child, stack, params))
 
-    def _expand_generate_if(self, ifb, stack: list, params: dict, todo: list) -> None:
-        """IfBlock/ElseIfBlock：条件求值，then/else 分支展开入栈。
+    def _expand_generate_if(
+        self, ifb, stack: list, params: dict, todo: list, face: "_GenFace"
+    ) -> None:
+        """条件分支（`face.branch_rules`）：条件求值，then/else 分支展开入栈。
 
         else-if 链：外层条件为假时进入链，链内条件独立求值但活性
         叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
@@ -500,16 +583,16 @@ class GenerateEvaluator:
         # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
         base = list(stack)
         cur = ifb
-        while isinstance(cur, Node) and cur.node_name in ("IfBlock", "ElseIfBlock"):
-            cond_val = self._eval_gen_cond(cur, params)
-            then_node = getattr(cur, "then_stmt", None)
-            chain = getattr(cur, "else_chain", None)
+        while isinstance(cur, Node) and face.is_branch(cur.node_name):
+            cond_val = self._eval_gen_cond(cur, params, face)
+            then_node = getattr(cur, face.then_field, None) if face.then_field else None
+            chain = getattr(cur, face.else_field, None) if face.else_field else None
             if cond_val is None:
                 todo.append((cur, base, params))
                 return
             # then 分支：base（外层全假）+ 本条件真
             todo.append((then_node, base + [cond_val], params))
-            if isinstance(chain, Node) and chain.node_name in ("IfBlock", "ElseIfBlock"):
+            if isinstance(chain, Node) and face.is_branch(chain.node_name):
                 # 进入链：外层再加"本条件假"
                 base = base + [not cond_val]
                 cur = chain
@@ -518,13 +601,18 @@ class GenerateEvaluator:
             todo.append((chain, base + [not cond_val], params))
             return
 
-    def _eval_gen_cond(self, ifb: Node, params: dict):
-        """IfBlock.condition → 布尔｜None（不可判）。
+    def _eval_gen_cond(self, ifb: Node, params: dict, face: "_GenFace"):
+        """条件分支的条件字段 → 布尔｜None（不可判）。
 
         条件文本（HierExpr/Identifier/常量表达式）→ 查参数表 → 数值求值
         转布尔。不可判（无参数值/非纯常量/引用未定义）→ None 保守。
+
+        语言形态全来自声明：逻辑非运算符前缀（`face.not_ops`）按声明识别，
+        标识符形态用引擎级 `IDENT_RE`（与 lexer 的 id 扫描同源，不另写字符类）。
         """
-        cond = getattr(ifb, "condition", None)
+        cond = (
+            getattr(ifb, face.condition_field, None) if face.condition_field else None
+        )
         text = self._ctx.render_subtree(cond) if isinstance(cond, Node) else ""
         text = (text or "").strip()
         if not text:
@@ -532,21 +620,24 @@ class GenerateEvaluator:
         if text.isdigit():
             return int(text) != 0
         if text in params:
-            v = params[text].strip()
-            if v.isdigit():
-                return int(v) != 0
-            return None  # 参数值本身非纯数字 → 不可判
-        # 一元 ! 参数（`!OUTPUT_FIFO_ENABLE` 等，2026-08-31 补：axis_fifo
-        # generate else 分支此前不可判 → 双分支全 active → 9 条 W105 误报）
-        m = re.fullmatch(r"!\s*([A-Za-z_][A-Za-z0-9_]*)", text)
-        if m and m.group(1) in params:
-            v = params[m.group(1)].strip()
-            if v.isdigit():
-                return int(v) == 0
-            return None
+            return self._param_truth(params[text])
+        # 逻辑非前缀 + 参数名（前缀表由语言包声明；未声明 = 不认取反）
+        for op in face.not_ops:
+            if not text.startswith(op):
+                continue
+            name = text[len(op) :].strip()
+            if IDENT_RE.fullmatch(name) and name in params:
+                val = self._param_truth(params[name])
+                return None if val is None else not val
         # 含运算的纯常量表达式（`1+0` / `2*3<7` 等）→ 显式求值（不用 eval，
         # 见 _eval_const_expr）；标识符/位运算/逻辑运算等一律不可判 → None
         return _eval_const_expr(text)
+
+    @staticmethod
+    def _param_truth(raw: str) -> bool | None:
+        """参数值文本 → 真值（纯数字非零为真）；非纯数字 → None（不可判）。"""
+        v = (raw or "").strip()
+        return int(v) != 0 if v.isdigit() else None
 
 
 class ConnectionElaborator:
@@ -563,7 +654,9 @@ class ConnectionElaborator:
     def __init__(self, ctx: StructureCtx) -> None:
         self._ctx = ctx
 
-    def elaborate_connections(self, path: str, inst_sites: list) -> list[PortConnection]:
+    def elaborate_connections(
+        self, path: str, inst_sites: list
+    ) -> list[PortConnection]:
         """层 2：实例化点端口连接展开（ADR-0008）。
 
         从 ModuleInst 节点提取端口连接 → (端口名, 连接信号名) 映射：
@@ -604,9 +697,9 @@ class ConnectionElaborator:
                 pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
                 if pn_text:
                     val = getattr(item, value_field, None) if value_field else None
-                    conn.connects[pn_text] = self._ctx.render_subtree(val) if isinstance(
-                        val, Node
-                    ) else ""
+                    conn.connects[pn_text] = (
+                        self._ctx.render_subtree(val) if isinstance(val, Node) else ""
+                    )
                     continue
                 # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
                 conn.ordered.append(self._ctx.render_subtree(item))
@@ -743,8 +836,15 @@ class ModuleExtractor:
                 out.append((d, dn))
         return out
 
-    def _register_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
-                       direction: str, width: str, net_type: str = "") -> None:
+    def _register_port(
+        self,
+        info: ModuleInfo,
+        name_node: Node,
+        decl_node: Node,
+        direction: str,
+        width: str,
+        net_type: str = "",
+    ) -> None:
         """登记端口（同名覆盖：ANSI 头部声明优先于 body 回填）。"""
         decl_node._file = info.file
         info.ports[name_node.content] = ModulePort(
@@ -755,8 +855,14 @@ class ModuleExtractor:
             decl_node=decl_node,
         )
 
-    def _backfill_port(self, info: ModuleInfo, name_node: Node, decl_node: Node,
-                       direction: str, width: str) -> None:
+    def _backfill_port(
+        self,
+        info: ModuleInfo,
+        name_node: Node,
+        decl_node: Node,
+        direction: str,
+        width: str,
+    ) -> None:
         """按名回填端口方向/宽度；未登记则补登记（body 声明不带 net_type）。"""
         p = info.ports.get(name_node.content)
         if p is None:
@@ -826,8 +932,13 @@ class ModuleExtractor:
         width_field = self._ctx.field("width")
         items_field = self._ctx.field("items")
         name_field = self._ctx.field("name")
-        _FUNC_OR_TASK = ("FuncDecl", "FuncDeclOld", "TaskDecl", "FunctionDecl",
-                         "TaskDeclStmt")
+        _FUNC_OR_TASK = (
+            "FuncDecl",
+            "FuncDeclOld",
+            "TaskDecl",
+            "FunctionDecl",
+            "TaskDeclStmt",
+        )
         stack = list(module_node.iter_children())
         while stack:
             node = stack.pop()
@@ -864,7 +975,9 @@ class ModuleExtractor:
                 val = getattr(p, value_field, None) if value_field else None
                 info.params[pn.content] = ModuleParam(
                     name=pn.content,
-                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
+                    value_expr=(
+                        self._ctx.render_subtree(val) if isinstance(val, Node) else ""
+                    ),
                 )
         # 模块体内参数声明（`parameter P = v;` 语句形态，非头部 #(..) 列表）：
         # ice40 单元库 SB_RAM40_4K 等大量使用 body 参数——只收头部参数会让
@@ -889,7 +1002,9 @@ class ModuleExtractor:
                 val = getattr(d, "init", None)
                 info.params[name_node.content] = ModuleParam(
                     name=name_node.content,
-                    value_expr=self._ctx.render_subtree(val) if isinstance(val, Node) else "",
+                    value_expr=(
+                        self._ctx.render_subtree(val) if isinstance(val, Node) else ""
+                    ),
                 )
 
 
@@ -1219,8 +1334,9 @@ class SignalGraphBuilder:
         ctx.src_cache[cache_key] = result
         return result
 
-    def _port_src_from_assigns(self, fr, mnode, port: str,
-                               ctx: "_SignalGraphCtx") -> list[str]:
+    def _port_src_from_assigns(
+        self, fr, mnode, port: str, ctx: "_SignalGraphCtx"
+    ) -> list[str]:
         """端口裸源①：模块内连续赋值目标 == 端口（限定模块子树）。
 
         子树而非文件全树——同文件多模块同名 assign 不能污染
@@ -1243,8 +1359,9 @@ class SignalGraphBuilder:
                     out.append(f"assign#{idx}")
         return out
 
-    def _port_src_from_insts(self, module: str, port: str,
-                             ctx: "_SignalGraphCtx") -> list[str]:
+    def _port_src_from_insts(
+        self, module: str, port: str, ctx: "_SignalGraphCtx"
+    ) -> list[str]:
         """端口裸源②：模块内更深实例 output/inout 连接 == 端口 → 子引用。
 
         子引用交 `_resolve_port_drivers` 递归穿透；方向取自被实例化模块
@@ -1265,8 +1382,9 @@ class SignalGraphBuilder:
                     out.append(f"inst:{inst_name}:{pname}")
         return out
 
-    def _port_src_from_procs(self, fr, mnode, port: str,
-                             ctx: "_SignalGraphCtx") -> list[str]:
+    def _port_src_from_procs(
+        self, fr, mnode, port: str, ctx: "_SignalGraphCtx"
+    ) -> list[str]:
         """端口裸源③：模块内过程赋值目标 == 端口（always 驱动 output 端口）。"""
         out: list[str] = []
         if not (ctx.proc_rules and ctx.proc_blocks):
@@ -1382,8 +1500,9 @@ class SignalGraphBuilder:
                 todo.append((child, blk))
         return assign_block
 
-    def _proc_block_signals(self, fr, assign_block: dict,
-                            ctx: "_SignalGraphCtx") -> dict[int, tuple[Node, set]]:
+    def _proc_block_signals(
+        self, fr, assign_block: dict, ctx: "_SignalGraphCtx"
+    ) -> dict[int, tuple[Node, set]]:
         """过程块 → 该块内被赋值的信号集合（块内多赋值去重为同一驱动源）。
 
         未选中 generate 分支内的赋值不计（2026-08-29）。
@@ -1421,8 +1540,15 @@ class SignalGraphBuilder:
             self._sg_named_connection(graph, conn, mod_name, inst_ref, mod, ctx)
             self._sg_positional_connection(graph, conn, mod_name, inst_ref)
 
-    def _sg_named_connection(self, graph: dict, conn, mod_name: str, inst_ref: str,
-                             mod, ctx: "_SignalGraphCtx") -> None:
+    def _sg_named_connection(
+        self,
+        graph: dict,
+        conn,
+        mod_name: str,
+        inst_ref: str,
+        mod,
+        ctx: "_SignalGraphCtx",
+    ) -> None:
         """命名连接：按端口方向记驱动/负载；output 走层 3 穿透。"""
         for port_name, sig in conn.connects.items():
             if not sig or not _is_signal_expr(sig):
@@ -1446,8 +1572,9 @@ class SignalGraphBuilder:
                 if inst_ref not in entry["loads"]:
                     entry["loads"].append(inst_ref)
 
-    def _sg_emit_penetrated(self, entry: dict, conn, port_name: str, inst_ref: str,
-                            ctx: "_SignalGraphCtx") -> None:
+    def _sg_emit_penetrated(
+        self, entry: dict, conn, port_name: str, inst_ref: str, ctx: "_SignalGraphCtx"
+    ) -> None:
         """output 端口驱动源：穿透结果 / 黑盒原子源兜底 / 悬空不记。"""
         pen, pen_defined = self._resolve_port_drivers(
             conn.module_name, port_name, inst_ref, set(), ctx
@@ -1460,8 +1587,9 @@ class SignalGraphBuilder:
             if inst_ref not in entry["drivers"]:
                 entry["drivers"].append(inst_ref)
 
-    def _sg_positional_connection(self, graph: dict, conn, mod_name: str,
-                                  inst_ref: str) -> None:
+    def _sg_positional_connection(
+        self, graph: dict, conn, mod_name: str, inst_ref: str
+    ) -> None:
         """位置连接：方向靠模块端口表按序匹配；未知方向保守记负载。"""
         for sig in conn.ordered:
             if not sig or not _is_signal_expr(sig):
@@ -1477,68 +1605,7 @@ class SignalGraphBuilder:
         if cache is None:
             cache = {}
             for fr in self._ctx.memo.values():
-                for mname in (fr.modules or {}):
+                for mname in fr.modules or {}:
                     cache.setdefault(mname, fr)
             self._ctx.fr_by_module_cache = cache
         return cache
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

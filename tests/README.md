@@ -22,7 +22,7 @@ smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆�
 | lexer（基础 token 化） | `engine/lexer/test_lexer.py::TestTokenizeBasic` | 类级 |
 | parser（Pratt 框架） | `engine/parser/test_pratt_parser.py` | 模块级（纯合成零依赖） |
 | linter（P1 边界） | `engine/linter/test_linter_boundary.py::TestNormalBoundary` | 类级 |
-| analyzer（Scope/Symbol） | `engine/analyzer/test_analyzer.py` | 模块级（纯单元） |
+| analyzer（Scope/Symbol） | `engine/analyzer/test_analyzer.py` + `test_gen_face.py::test_verilog_pack_declares_gen_face`（结构协议声明面） | 模块级（纯单元）+ 函数级 |
 | transform（注释迁移） | `engine/transform/test_comment_migrate.py::TestMigrateComments` | 类级 |
 | renderer（渲染原语） | `engine/renderer/test_renderer_primitives.py` | 模块级（fake renderer 纯内存） |
 | preprocessor（宏指令） | `engine/preprocessor/test_primitives.py` + `test_macro_regions.py` | 模块级 |

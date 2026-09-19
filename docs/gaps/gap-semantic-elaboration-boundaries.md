@@ -17,10 +17,19 @@
      求值器）、无全设计数值宽度传播（Verilator 式）——宽度语义按需由
      `checks/width_check` 覆盖（W201 赋值/端口截断、W202 位选越界；参数化
      折叠 + 层次成员宽度）；无 CDC 分析
+     - 2026-09-19 收紧口径：generate 条件面的**形态**已全部声明化
+       （`[structure]` 的 `gen_block_rule` / `gen_branch_rules` / `gen_not_ops`
+       + `[structure.fields]` 的条件/then/else 字段名；引擎零 Verilog 形态）；
+       仍属边界的是**求值能力**：只认 数字 / 参数名（含逻辑非前缀）/中性常量
+       表达式（四则与比较），多运算符/位运算/层次引用一律不可判 → 按当前活性
+       保守展开（宁可不过滤也不误删分支）。
 2. **深语义在插件代码非 TOML**（接受）：配置驱动语法/渲染/浅语义（作用域/
-   符号/名字解析）；真正新语义能力 = 引擎原语/插件脚本；表达式树形态
+   符号/名字解析）（含 elaboration 的形态面：单元/实例规则名、节点字段、
+   generate 条件面）；真正新语义能力 = 引擎原语/插件脚本；表达式树形态
    （`UnaryOp`/`BinaryOp`）+ 内建前缀运算符是引擎约定，语言包须对齐非全自由
-   数据。
+   数据（2026-09-19 修正：generate 条件求值原在引擎里硬编码 Verilog 形态
+   ——`GenerateBlock`/`IfBlock`/`condition` 与 `!PARAM` 特判——已全部移入
+   `[structure]` 声明；pratt 的表达式树形态仍是引擎约定）。
 3. **全局可变单例（注册表/配置/组件表）**（工程摩擦，机制已备）：三张表进程级、
    跨语言会累积——正确性靠**作用域过滤 + 缓存键一致性**，不靠"别的语言不引用"：
    - 语言切换重建：`core/define.py::GrammarRulesRegister.begin_language`
@@ -57,5 +66,8 @@
 ## 关联条目
 
 - `grammar/verilog/plugins/typed_ports/` + `analyzer/checker.py::ProjectChecker`
+- generate 条件面声明：`analyzer/structure.py::StructureCtx.gen_face`（引擎侧接口）
+  + `grammar/verilog/base/_structure.toml`（语言包侧声明）；守门测试
+  `tests/engine/analyzer/test_gen_face.py`
 - 边界 3 机制：`tests/engine/core/test_language_switch.py`（语言切换作用域门禁）、
   `tools/check_test_isolation.py`（进程级隔离对照）
