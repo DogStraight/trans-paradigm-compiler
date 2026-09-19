@@ -108,37 +108,53 @@ class SlotRunnerPlugin(TransformPlugin):
             self._walk_recursive(child, decl, fn, base_ctx)
         return node
 
+    def _slot_ctx(self, item: Node, decl: dict, base_ctx: dict) -> dict:
+        """单节点调用上下文：base_ctx + 声明通道（`SLOT_CTX_SELF` → 节点自身）。"""
+        ctx = dict(base_ctx)
+        for key, src in decl["ctx"].items():
+            ctx[key] = item if src == SLOT_CTX_SELF else _find_node(item, src)
+        return ctx
+
+    def _count_slot_call(self, decl: dict) -> None:
+        """调用计数（全局计数 + per-slot 计数）。"""
+        self._stats["slots_called"] += 1
+        name = decl["name"]
+        self._per_slot[name] = self._per_slot.get(name, 0) + 1
+
+    def _splice_result(self, item: Node, out: Any, result: str, new: list) -> None:
+        """按声明的 result 形态把 handler 产物接回父列表。
+
+        - extra：额外产物由 handler 自己出（`mark_extra`）——返回值**不接回**
+          AST（typed_ports build_wrapper 先例：wrapper 是独立文件）
+        - replace 且返回了新节点：1:1 替换，注释随迁
+        - none 且返回节点：原地变换，接回 handler 返回值
+        - 其余（含 replace 但未换节点）：保留原节点
+        """
+        if result == "extra":
+            new.append(item)
+        elif result == "replace" and isinstance(out, Node) and out is not item:
+            new.append(migrate_comments(item, out))
+        elif result == "none" and isinstance(out, Node):
+            new.append(out)
+        else:
+            new.append(item)
+
     def _process_list(
         self, items: list, decl: dict, fn, base_ctx: dict
     ) -> list:
+        """逐项跑 slot handler：命中 `on` 规则 → 调用并接回；否则按声明的
+        walk 模式下探（`recursive`）。`remove` 形态直接不接回（从父列表移除）。"""
         on = set(decl["on"])
         result = decl["result"]
         recursive = decl["walk"] == "recursive"
         new: list = []
         for item in items:
             if isinstance(item, Node) and item.node_name in on:
-                ctx = dict(base_ctx)
-                for key, src in decl["ctx"].items():
-                    ctx[key] = (
-                        item if src == SLOT_CTX_SELF else _find_node(item, src)
-                    )
-                out = fn(item, ctx)
-                self._stats["slots_called"] += 1
-                self._per_slot[decl["name"]] = (
-                    self._per_slot.get(decl["name"], 0) + 1
-                )
+                out = fn(item, self._slot_ctx(item, decl, base_ctx))
+                self._count_slot_call(decl)
                 if result == "remove":
                     continue  # 不接回（从父列表移除）
-                if result == "extra":
-                    # 额外产物由 handler 自己出（`mark_extra`）——返回值**不接回**
-                    # AST（typed_ports build_wrapper 先例：wrapper 是独立文件）。
-                    new.append(item)
-                elif result == "replace" and isinstance(out, Node) and out is not item:
-                    new.append(migrate_comments(item, out))  # 1:1 替换：注释随迁
-                elif result == "none" and isinstance(out, Node):
-                    new.append(out)  # 原地变换：接回 handler 返回值
-                else:
-                    new.append(item)
+                self._splice_result(item, out, result, new)
                 continue
             if recursive:
                 self._walk_recursive(item, decl, fn, base_ctx)
