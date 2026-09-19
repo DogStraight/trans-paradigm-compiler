@@ -90,6 +90,15 @@ def _parse_char_class(segments: list) -> frozenset[str]:
     return frozenset(chars)
 
 
+def _any_prefix_at(text: str, idx: int, values: "list[str] | tuple[str, ...]") -> bool:
+    """idx 处是否命中 values 中任一前缀（多字符触发判定：注释起始 / extend 符号）。
+
+    语言包声明的候选串集合（注释起始、多字符符号）都要"逐候选试前缀"，
+    判定形态同一条——`_starts_comment` / `_extend_symbol_at` 共用。
+    """
+    return any(text.startswith(v, idx) for v in values)
+
+
 # ── 词法扫描状态（`tokenize` 的逐字符游标与产出缓冲）──
 
 
@@ -782,7 +791,7 @@ class Lexer:
     # 仅供 tokenize 内部调用
     def _starts_comment(self, text: str, idx: int) -> bool:
         """idx 处（行首空白后）是否以注释标记开头（auto 锁定跳过注释行）。"""
-        return any(text.startswith(s, idx) for s in self._comment_starts)
+        return _any_prefix_at(text, idx, self._comment_starts)
 
     def line_terminating_comment_starts(self) -> tuple[str, ...]:
         """声明为"到行边界终止"（kind ∈ line/line_match）的注释起点。
@@ -801,9 +810,7 @@ class Lexer:
     # 仅供 tokenize 内部调用
     def _extend_symbol_at(self, text: str, idx: int) -> bool:
         """idx 处是否命中多字符 extend 符号（'...' 优先于 plain 的 '.' 触发）。"""
-        return any(
-            text.startswith(v, idx) for v in self._extend_values
-        )
+        return _any_prefix_at(text, idx, self._extend_values)
 
     # ── 宏形态识别（语言包 [macro_recognition] 声明驱动） ──
 

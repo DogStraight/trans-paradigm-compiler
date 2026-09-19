@@ -20,7 +20,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from core.define import Token
-from core.token_protocol import TRIVIA_TOKEN_TYPES
+from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia
 
 from .. import LintDiagnostic, token_span
 
@@ -50,12 +50,6 @@ def _is_atom_selector(info: dict, tree: dict) -> bool:
         if sub is None or not sub.get("is_atom"):
             return False
     return True
-
-
-def _skip(tokens: list[Token], i: int, limit: int) -> int:
-    while i < limit and tokens[i].type in _TRIVIA:
-        i += 1
-    return i
 
 
 class RuleMatcher:
@@ -269,7 +263,7 @@ class RuleMatcher:
             consumed = memo[i]
             return (object(), consumed) if consumed > 0 else (None, 0)
         n = len(tokens)
-        j = _skip(tokens, i, n)
+        j = skip_trivia(tokens, i, n)
         if j >= n:
             memo[i] = 0
             return None, 0
@@ -303,7 +297,7 @@ class RuleMatcher:
     ) -> int:
         tok = node.get("token_type", "")
         # token_type 可能含 "|"（如 keyword.case|casex|casez）
-        j = _skip(tokens, i, limit)
+        j = skip_trivia(tokens, i, limit)
         if j >= limit:
             # 区间内 token 耗尽（无更多非 trivia token）→ 必选 token 缺失
             # （如缺分号且语句区间在 EOF 结尾）。可选语境静默，必选报错。
@@ -452,9 +446,7 @@ class RuleMatcher:
             # @PrimaryExpr（is_atom 规则集合选择器，可推导）只匹配原子操作数
             # （赋值目标/操作数），不消费运算符——避免 `a <= b` 被当比较表达式
             # 吞掉（NonBlockingAssign 的 <= 赋值歧义）。@Expression 才完整 pratt。
-            j = i
-            while j < limit and tokens[j].type in _TRIVIA:
-                j += 1
+            j = skip_trivia(tokens, i, limit)
             if j >= limit:
                 return i
             _, consumed = self.match_atom(tokens, j)
@@ -475,9 +467,7 @@ class RuleMatcher:
         # @Expression / pratt 链：先跳过 trivia——从行首 newline 等 trivia
         # 位置 consume 时，pratt 的 consumed 不含已跳过的 trivia，会与后续
         # 元素错位（多行表达式 RHS 误报）。
-        j = i
-        while j < limit and tokens[j].type in _TRIVIA:
-            j += 1
+        j = skip_trivia(tokens, i, limit)
         sub_errors, consumed = self._expr.consume(
             tokens, j
         )
@@ -501,7 +491,7 @@ class RuleMatcher:
         # 静默吞掉——@Stmt 位置非块起点时应视为失败，让上层报错。
         bs = info.get("block_start") or ""
         if bs:
-            k = _skip(tokens, i, limit)
+            k = skip_trivia(tokens, i, limit)
             if k >= limit or tokens[k].type != bs:
                 return i
         # 优先用 block_end（精确配对结束符，如 BeginEnd 的 keyword.end）：
@@ -532,7 +522,7 @@ class RuleMatcher:
         del info, strict  # 内部方法参数，本分支不消费
         # 先验证起始 token，防止非嵌套语句上下文误跳过
         firsts = self._first_tokens_of_rule(name, set())
-        k = _skip(tokens, i, limit)
+        k = skip_trivia(tokens, i, limit)
         if k >= limit:
             return i
         if firsts and tokens[k].type not in firsts:
@@ -598,7 +588,7 @@ class RuleMatcher:
         if j > start:
             exclude: set = info.get("exclude") or set()
             if exclude:
-                k = _skip(tokens, j, limit)
+                k = skip_trivia(tokens, j, limit)
                 if k < limit and tokens[k].type in exclude:
                     return start
         return j
@@ -623,7 +613,7 @@ class RuleMatcher:
         # 先跳过 trivia：choice 从第一个非 trivia token 开始尝试分支，避免
         # 内部分支（如 @Expression 的 pratt consume）在 trivia 位置消费错位
         # （consumed 不含已跳过的 trivia，导致 case item 等从行首 newline 失败）。
-        i = _skip(tokens, i, limit)
+        i = skip_trivia(tokens, i, limit)
         if i >= limit:
             if strict:
                 # 区间在 token 流末尾耗尽：锚定最后一个非 trivia token（残缺
@@ -653,7 +643,7 @@ class RuleMatcher:
         # 所有分支都无进展：仅在必选位置（strict）报 unexpected 并吞 token 恢复；
         # 可选语境（optional/repeat 内）失败不推进，防止吞 token 造成误匹配。
         if strict:
-            j = _skip(tokens, i, limit)
+            j = skip_trivia(tokens, i, limit)
             if j < limit:
                 t = tokens[j]
                 errors.append(
@@ -684,7 +674,7 @@ class RuleMatcher:
         # （如 `@PortParens?` 遇到 `(` 但端口列表坏），报错并跳过恢复
         ft = self._first_tokens(inner, set())
         if ft:
-            k = _skip(tokens, i, limit)
+            k = skip_trivia(tokens, i, limit)
             if k < limit and tokens[k].type in ft:
                 t = tokens[k]
                 errors.append(
@@ -845,7 +835,7 @@ class RuleMatcher:
             j = self.match(tokens, i, elem, trial, limit, strict=False)
             if j <= i:
                 if require_one and count == 0:
-                    j = _skip(tokens, i, limit)
+                    j = skip_trivia(tokens, i, limit)
                     if j < limit:
                         t = tokens[j]
                         errors.append(
@@ -903,7 +893,7 @@ class RuleMatcher:
         exclude = {s[1:] for s in end_set if s.startswith("!")}
         positive = {s for s in end_set if not s.startswith("!")}
         if not positive:
-            j = _skip(tokens, i + 1, limit)
+            j = skip_trivia(tokens, i + 1, limit)
             return j if j <= limit else limit
         while i < limit:
             t = tokens[i]
@@ -913,7 +903,7 @@ class RuleMatcher:
             if t.type in positive and depth == 0:
                 return i + 1
             if t.type in _TRIVIA:
-                i += 1
+                i = skip_trivia(tokens, i, limit)
                 continue
             if t.type in self._block_openers:
                 depth += 1

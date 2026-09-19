@@ -18,7 +18,7 @@ Doc: linter/linter_architecture.md
 from __future__ import annotations
 
 from core.define import Token
-from core.token_protocol import KEYWORD_PREFIX, TRIVIA_TOKEN_TYPES
+from core.token_protocol import KEYWORD_PREFIX, TRIVIA_TOKEN_TYPES, skip_trivia
 
 from . import LintDiagnostic, token_span
 from .checker import (
@@ -26,9 +26,6 @@ from .checker import (
     DiscoveredNode,
 )
 from .lookahead import LookaheadTable
-
-# 通用词法常量（引擎 token 协议，单一事实源 core/token_protocol.py）
-_TRIVIA = TRIVIA_TOKEN_TYPES
 
 # discovery 递归深度上限（坏输入收敛防御，见 _discover_range 注释）
 _MAX_DISCOVER_DEPTH = 64
@@ -207,7 +204,7 @@ class Discovery:
         nodes: list[DiscoveredNode] = []
         i = start
         while i < end:
-            i = self._skip(tokens, i, end)
+            i = skip_trivia(tokens, i, end)
             if i >= end:
                 break
             t = tokens[i]
@@ -646,7 +643,7 @@ class Discovery:
         exclude = {s[1:] for s in end_set if s.startswith("!")}
         positive = {s for s in end_set if not s.startswith("!")}
         if not positive:
-            j = self._skip(tokens, i + 1, n)
+            j = skip_trivia(tokens, i + 1, n)
             return j if j <= n else n
         while i < n:
             t = tokens[i]
@@ -655,7 +652,7 @@ class Discovery:
                 continue
             if t.type in positive and depth == 0:
                 return i + 1
-            if t.type in _TRIVIA:
+            if t.type in TRIVIA_TOKEN_TYPES:
                 i += 1
                 continue
             # 属性对 (* ... *)：整体跳过（不改变块 depth）。属性后的行尾换行
@@ -667,7 +664,7 @@ class Discovery:
                 and self._next_type(tokens, i + 1, n) == self._attr_openers[1]
             ):
                 i = self._skip_balanced(tokens, i, n)
-                i = self._skip(tokens, i, n)
+                i = skip_trivia(tokens, i, n)
                 continue
             if t.type in self._block_openers:
                 depth += 1
@@ -702,12 +699,5 @@ class Discovery:
 
     @staticmethod
     def _next_type(tokens: list[Token], i: int, n: int) -> str:
-        while i < n and tokens[i].type in _TRIVIA:
-            i += 1
+        i = skip_trivia(tokens, i, n)
         return tokens[i].type if i < n else ""
-
-    @staticmethod
-    def _skip(tokens: list[Token], i: int, n: int) -> int:
-        while i < n and tokens[i].type in _TRIVIA:
-            i += 1
-        return i

@@ -92,3 +92,16 @@ TRIVIA_TOKEN_TYPES = frozenset(
         PLACEHOLDER_TOKEN_TYPE,
     }
 )
+
+
+def skip_trivia(tokens: list, i: int, limit: int) -> int:
+    """从 i 起跳过 trivia token，返回首个非 trivia 下标（≤ limit）。
+
+    TRIVIA 的**判定与跳过同源**（与 `TRIVIA_TOKEN_TYPES` 成对）：同一条
+    "跳过连续 trivia" 循环历史散在 linter 多个文件（matcher 4 处 + discovery
+    2 处 + 各自的方法封套），逻辑相同、边界条件各异（有的写 `n`、有的写
+    `limit`）——统一在此，调用方只需传区间上界，不再各写一份。
+    """
+    while i < limit and tokens[i].type in TRIVIA_TOKEN_TYPES:
+        i += 1
+    return i
