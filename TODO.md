@@ -315,11 +315,35 @@
   把**抽取能力**（从树上取语言结构）与**动态求解**（常量/宽度/端口方向等语义求值）
   移到插件侧。现状是基座把**很多 Verilog 独有的操作在引擎内侧实现了**——作者判定为
   "明显的语义渗透"。
-- **已知命中点（本仓实测事实，非推测）**：
-  - `analyzer/structure.py`：引擎侧实现了 generate 条件求值（`_eval_const_expr`/`_ConstExprParser`）、
-    端口/参数抽取（`_PortFields`/`ModuleExtractor`）、信号图（`SignalGraphBuilder`）
-  - 数字形态：`NumberFSM` 全局硬编码单例同时承载 C 与 Verilog 形态（roadmap P2.1 已记）
-  - 对照：`typed_ports` 已是"抽取走插件"的正面样板（插件 + TOML 声明，引擎零硬编码）
+- **设计原则细化（作者 2026-09-20，防止走成"普适化 → 配置面膨胀"）**：
+  **自带配置的增量设计**——引擎侧留**占位 + 简单实现**（能跑通最普适形态），
+  语言特有的完整实现**集中到语言适配层**；这样配置复杂度与语言知识都落在插件侧，
+  插件又靠引擎的原语组合而不必重复造骨架。
+  - **三选一别走错**：引擎硬编码（禁） / **引擎配置字段（慎）** / **插件实现（首选）**。
+    "为让引擎普适而设计一套 schema"会把复杂度从代码搬到配置，并为新形态预留表达力
+    缺口——这是本仓已经踩过的形态（见下面的数字实证）。
+  - **两条判据**：① *普适性*：去掉所有语言包声明后，引擎的简单实现能否对任意输入
+    给出**可解释**结果？能 → 引擎；不能 → 插件。② *配置 vs 代码*：**能被表单穷举、
+    且不涉及算法/状态机/语义求值**的少量变体 → 留配置；需要算法/状态机/求解的 →
+    移插件代码。③ *增量*：插件只写"与默认的差"（override / 扩展点），不复制骨架。
+  - **普适原语必须共享**（否则各插件重写"跳空白"之类会漂移）：既有 `core/token_protocol`、
+    `lexer/lexer_utils`、`core.define.iter_nodes` 已是这类原语，重设计时明确清单。
+- **命中点与实证（本仓事实）**：
+  - `analyzer/structure.py`：引擎侧实现了 generate 条件求值（`_eval_const_expr`/
+    `_ConstExprParser`）、端口/参数抽取（`_PortFields`/`ModuleExtractor`）、
+    信号图（`SignalGraphBuilder`）→ 属"抽取 + 动态求解"，是 L2 的首要搬迁面。
+  - **数字形态（配置面膨胀的实证）**：旧 `NumberFSM` 硬编码单例**已不存在**
+    （P2.1 配置化时移除，`lexer/main_lexer.py` 有记录）。现状是另一种形态——
+    为让引擎普适，`grammar/verilog/base/_number.toml` 用 **7 个字段 × 4 个形态块**
+    （`size.digits`/`base_prefix`/`signed`/`bases`/`value_digits`/`value_allow`/
+    `value_allow_space`）声明形态，引擎侧 `number_gen._PatternBuilder`（通用 DFA
+    构造）+ `number_runner` 把它编译成状态表。**加形态可能撞 schema 表达力边界**，
+    这正是"普适化推高配置面"的样本。按新原则应改为：引擎留"十进制/浮点最简扫描"
+    占位 + 数字扫描原语（字符类判定 / 最长匹配 / radix 取值），verilog 插件侧
+    集中实现位宽·进制·x-z 形态。
+  - 正面样板：`typed_ports`（抽取走插件 + TOML 声明，引擎零硬编码）。
+- **诚实代价（写进 ADR 权衡）**：声明式 → 命令式后，**加语言不再是零代码**
+  （c4/yaml 需写一小段插件或继承默认）；换来的是引擎 schema 与代码不随语言数增长。
 - **已有约束须一并遵守**：语言知识零进代码（AGENTS 硬约束）、不留兼容垫片、
   删除先证后删（`policy/doc-alignment.md`）；配置加载 fail-fast。
 - **预期待定**：属架构决策，动手前先立 ADR（`docs/decisions/`）；现仅记方向与命中点。
