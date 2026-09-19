@@ -254,6 +254,81 @@ _SLOT_WALKS = ("top", "recursive")
 _SLOT_RESULTS = ("extra", "none", "replace", "remove")
 
 
+def _slot_name(decl: dict, cdir: str, slots: dict) -> str:
+    """槽位名：须为非空字符串且不重复。"""
+    name = decl.get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"[plugin] transform.slots 缺 name: {decl!r} ({cdir})")
+    if name in slots:
+        raise ValueError(f"[plugin] transform.slots 槽位名重复: {name!r} ({cdir})")
+    return name
+
+
+def _ensure_slot_registered(cdir: str, name: str, transform_meta: dict) -> None:
+    """槽位须已由组件 handlers `@register_transform_slot` 注册（缺则补注册一次）。
+
+    注册副作用是一次性的（模块体已 exec 过），但注册表可能被外部清理
+    （测试隔离还原 _transform_slots / 热重载）→ 两者失同步。补注册一次
+    （重新 exec 本组件 handlers；注册为幂等——register_transform_slot
+    覆盖式、register_primitive 同名同函数幂等）。
+    """
+    if name not in _transform_slots:
+        _reload_component_handlers(cdir, transform_meta.get("handlers", []))
+    if name not in _transform_slots:
+        raise ValueError(
+            f"[plugin] transform.slots 槽位 {name!r} 未注册（须由 "
+            f"[transform].handlers 的模块 @register_transform_slot）({cdir})"
+        )
+
+
+def _slot_on_list(decl: dict, name: str, cdir: str) -> list[str]:
+    """`on` 触发节点名（字符串或字符串列表）→ 非空字符串列表。"""
+    on = decl.get("on")
+    on_list = [on] if isinstance(on, str) else list(on or [])
+    if not on_list or not all(isinstance(o, str) and o for o in on_list):
+        raise ValueError(
+            f"[plugin] transform.slots '{name}' on 须为非空节点名或其列表 "
+            f"({cdir})"
+        )
+    return on_list
+
+
+def _slot_walk_result(decl: dict, name: str, cdir: str) -> tuple[str, str]:
+    """`walk` / `result` 字段 → 合法取值（非法 fail-fast）。"""
+    walk = decl.get("walk", "top")
+    if walk not in _SLOT_WALKS:
+        raise ValueError(
+            f"[plugin] transform.slots '{name}' walk 非法: {walk!r}"
+            f"（合法: {_SLOT_WALKS}）({cdir})"
+        )
+    result = decl.get("result", "none")
+    if result not in _SLOT_RESULTS:
+        raise ValueError(
+            f"[plugin] transform.slots '{name}' result 非法: {result!r}"
+            f"（合法: {_SLOT_RESULTS}）({cdir})"
+        )
+    return walk, result
+
+
+def _slot_ctx(decl: dict, name: str, cdir: str) -> dict[str, str]:
+    """`ctx` 取值声明 → {键: 来源}；`$` 开头的特殊来源只允许 `$node`。"""
+    ctx = decl.get("ctx", {}) or {}
+    if not isinstance(ctx, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in ctx.items()
+    ):
+        raise ValueError(
+            f"[plugin] transform.slots '{name}' ctx 须为 {{键 = 来源}} 字符串表 "
+            f"({cdir})"
+        )
+    for src in ctx.values():
+        if src.startswith("$") and src != SLOT_CTX_SELF:
+            raise ValueError(
+                f"[plugin] transform.slots '{name}' ctx 特殊来源非法: {src!r}"
+                f"（合法: {SLOT_CTX_SELF} 或节点名）({cdir})"
+            )
+    return dict(ctx)
+
+
 def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dict]:
     """解析组件 `[[transform.slots]]` 槽位契约声明 → {槽位名: 契约}。
 
@@ -276,62 +351,14 @@ def _load_transform_slot_decls(cdir: str, transform_meta: dict) -> dict[str, dic
                 f"[plugin] transform.slots 项须为表（[[transform.slots]]）: "
                 f"{decl!r} ({cdir})"
             )
-        name = decl.get("name")
-        if not isinstance(name, str) or not name:
-            raise ValueError(f"[plugin] transform.slots 缺 name: {decl!r} ({cdir})")
-        if name in slots:
-            raise ValueError(
-                f"[plugin] transform.slots 槽位名重复: {name!r} ({cdir})"
-            )
-        if name not in _transform_slots:
-            # 注册副作用是一次性的（模块体已 exec 过），但注册表可能被外部
-            # 清理（测试隔离还原 _transform_slots / 热重载）→ 两者失同步。
-            # 补注册一次（重新 exec 本组件 handlers；注册为幂等——
-            # register_transform_slot 覆盖式、register_primitive 同名同函数幂等）。
-            _reload_component_handlers(cdir, transform_meta.get("handlers", []))
-        if name not in _transform_slots:
-            raise ValueError(
-                f"[plugin] transform.slots 槽位 {name!r} 未注册（须由 "
-                f"[transform].handlers 的模块 @register_transform_slot）({cdir})"
-            )
-        on = decl.get("on")
-        on_list = [on] if isinstance(on, str) else list(on or [])
-        if not on_list or not all(isinstance(o, str) and o for o in on_list):
-            raise ValueError(
-                f"[plugin] transform.slots '{name}' on 须为非空节点名或其列表 "
-                f"({cdir})"
-            )
-        walk = decl.get("walk", "top")
-        if walk not in _SLOT_WALKS:
-            raise ValueError(
-                f"[plugin] transform.slots '{name}' walk 非法: {walk!r}"
-                f"（合法: {_SLOT_WALKS}）({cdir})"
-            )
-        result = decl.get("result", "none")
-        if result not in _SLOT_RESULTS:
-            raise ValueError(
-                f"[plugin] transform.slots '{name}' result 非法: {result!r}"
-                f"（合法: {_SLOT_RESULTS}）({cdir})"
-            )
-        ctx = decl.get("ctx", {}) or {}
-        if not isinstance(ctx, dict) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in ctx.items()
-        ):
-            raise ValueError(
-                f"[plugin] transform.slots '{name}' ctx 须为 {{键 = 来源}} 字符串表 "
-                f"({cdir})"
-            )
-        for src in ctx.values():
-            if src.startswith("$") and src != SLOT_CTX_SELF:
-                raise ValueError(
-                    f"[plugin] transform.slots '{name}' ctx 特殊来源非法: {src!r}"
-                    f"（合法: {SLOT_CTX_SELF} 或节点名）({cdir})"
-                )
+        name = _slot_name(decl, cdir, slots)
+        _ensure_slot_registered(cdir, name, transform_meta)
+        walk, result = _slot_walk_result(decl, name, cdir)
         slots[name] = {
             "name": name,
-            "on": on_list,
+            "on": _slot_on_list(decl, name, cdir),
             "walk": walk,
-            "ctx": dict(ctx),
+            "ctx": _slot_ctx(decl, name, cdir),
             "result": result,
         }
     return slots
@@ -424,72 +451,78 @@ def get_primitive_order() -> list[str]:
     return list(_PRIMITIVE_ORDER)
 
 
+def _resolve_handler(cdir: str, spec: str, what: str) -> Callable:
+    """`file.py:fn` 规格 → 可调用（fail-fast：模块/函数缺失直接报错，ADR-0003）。
+
+    `what` 只用于诊断文案（如 `pipeline.pass handler` / `pipeline.units impl`）。
+    """
+    fname, fn_name = spec.split(":", 1)
+    modules = _load_python_handlers(cdir, [fname])
+    if not modules:
+        raise ValueError(f"[plugin] {what} 模块不存在: {fname} ({cdir})")
+    fn = getattr(modules[0], fn_name, None)
+    if fn is None or not callable(fn):
+        raise ValueError(
+            f"[plugin] {what} 函数 {fn_name} 不存在于 {fname} ({cdir})"
+        )
+    return fn
+
+
+def _pass_decl(cdir: str, p: dict) -> tuple[str, dict]:
+    """单条 `[[pipeline.pass]]` → (pass 名, 声明副本含 `_handler`)。"""
+    name = p.get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"[plugin] pipeline.pass 缺 name: {p!r} ({cdir})")
+    decl = dict(p)
+    handler_spec = decl.get("handler")
+    if handler_spec:
+        if not isinstance(handler_spec, str) or ":" not in handler_spec:
+            raise ValueError(
+                f"[plugin] pipeline.pass handler 格式应为 'file.py:fn'，"
+                f"收到: {handler_spec!r} ({cdir})"
+            )
+        decl["_handler"] = _resolve_handler(cdir, handler_spec, "pipeline.pass handler")
+    return name, decl
+
+
+def _schedule_decl(cdir: str, s: dict) -> tuple[str, dict]:
+    """单条 `[[pipeline.schedule]]` → (schedule 名, 声明)。"""
+    sname = s.get("name")
+    if not isinstance(sname, str) or not sname:
+        raise ValueError(f"[plugin] pipeline.schedule 缺 name: {s!r} ({cdir})")
+    return sname, s
+
+
+def _unit_decl(cdir: str, u: dict) -> tuple[str, dict]:
+    """单条 `[[pipeline.units]]` → (单元名, 声明副本)。
+
+    非内置 impl（含 ':'）→ 解析为 handler（与 pass handler 同格式，fail-fast）。
+    """
+    if not isinstance(u, dict):
+        raise ValueError(f"[plugin] pipeline.units 项须为表: {u!r} ({cdir})")
+    uname = u.get("name")
+    if not isinstance(uname, str) or not uname:
+        raise ValueError(f"[plugin] pipeline.units 缺 name: {u!r} ({cdir})")
+    udecl = {k: v for k, v in u.items() if k != "name"}
+    impl = udecl.get("impl", "")
+    if isinstance(impl, str) and ":" in impl and not impl.startswith("builtin."):
+        udecl["_handler"] = _resolve_handler(cdir, impl, "pipeline.units impl")
+    return uname, udecl
+
+
 def _load_pipeline_decls(cdir: str, pipeline_meta: dict) -> dict[str, Any]:
-    """加载组件 [pipeline] 声明：pass 定义（handler 解析为可调用）+
-    schedule 原始声明。
+    """加载组件 `[pipeline]` 声明：pass 定义（handler 解析为可调用）+
+    schedule 原始声明 + 加工单元实例（ADR-0015 §1）。
 
     pass handler 格式 `file.py:fn`（与 postpass 一致），fail-fast：
     声明了但模块/函数缺失直接报错（ADR-0003）。
+    单元项形态：{ name, type, impl, after|order?, params? }（name 提到 dict 键）。
     """
-    passes: dict[str, dict] = {}
-    for p in pipeline_meta.get("pass", []) or []:
-        name = p.get("name")
-        if not isinstance(name, str) or not name:
-            raise ValueError(f"[plugin] pipeline.pass 缺 name: {p!r} ({cdir})")
-        decl = dict(p)
-        handler_spec = decl.get("handler")
-        if handler_spec:
-            if not isinstance(handler_spec, str) or ":" not in handler_spec:
-                raise ValueError(
-                    f"[plugin] pipeline.pass handler 格式应为 'file.py:fn'，"
-                    f"收到: {handler_spec!r} ({cdir})"
-                )
-            fname, fn_name = handler_spec.split(":", 1)
-            modules = _load_python_handlers(cdir, [fname])
-            if not modules:
-                raise ValueError(
-                    f"[plugin] pipeline.pass handler 模块不存在: {fname} ({cdir})"
-                )
-            fn = getattr(modules[0], fn_name, None)
-            if fn is None or not callable(fn):
-                raise ValueError(
-                    f"[plugin] pipeline.pass handler 函数 {fn_name} 不存在于 "
-                    f"{fname} ({cdir})"
-                )
-            decl["_handler"] = fn
-        passes[name] = decl
-    schedules: dict[str, dict] = {}
-    for s in pipeline_meta.get("schedule", []) or []:
-        sname = s.get("name")
-        if not isinstance(sname, str) or not sname:
-            raise ValueError(f"[plugin] pipeline.schedule 缺 name: {s!r} ({cdir})")
-        schedules[sname] = s
-    # 加工单元实例（ADR-0015 §1）：显式 + 带参数的配置品类。
-    # 项形态：{ name, type, impl, after|order?, params? }（name 提到 dict 键）。
-    units: dict[str, dict] = {}
-    for u in pipeline_meta.get("units", []) or []:
-        if not isinstance(u, dict):
-            raise ValueError(f"[plugin] pipeline.units 项须为表: {u!r} ({cdir})")
-        uname = u.get("name")
-        if not isinstance(uname, str) or not uname:
-            raise ValueError(f"[plugin] pipeline.units 缺 name: {u!r} ({cdir})")
-        udecl = {k: v for k, v in u.items() if k != "name"}
-        # 非内置 impl（含 ':'）→ 解析为 handler（与 pass handler 同格式，fail-fast）。
-        impl = udecl.get("impl", "")
-        if isinstance(impl, str) and ":" in impl and not impl.startswith("builtin."):
-            fname, fn_name = impl.split(":", 1)
-            modules = _load_python_handlers(cdir, [fname])
-            if not modules:
-                raise ValueError(
-                    f"[plugin] pipeline.units impl 模块不存在: {fname} ({cdir})"
-                )
-            fn = getattr(modules[0], fn_name, None)
-            if fn is None or not callable(fn):
-                raise ValueError(
-                    f"[plugin] pipeline.units impl 函数 {fn_name} 不存在于 {fname} ({cdir})"
-                )
-            udecl["_handler"] = fn
-        units[uname] = udecl
+    passes = dict(_pass_decl(cdir, p) for p in pipeline_meta.get("pass", []) or [])
+    schedules = dict(
+        _schedule_decl(cdir, s) for s in pipeline_meta.get("schedule", []) or []
+    )
+    units = dict(_unit_decl(cdir, u) for u in pipeline_meta.get("units", []) or [])
     return {"passes": passes, "schedules": schedules, "units": units}
 
 
