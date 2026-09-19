@@ -102,74 +102,86 @@ def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
     return docs
 
 
-def render_node(
+def _line_suffix_docs(slots: dict) -> tuple[list[Doc], list[Doc]]:
+    """注释槽 → (head 行尾 LineSuffix 列表, 节点行尾 LineSuffix 列表)。
+
+    LineSuffix 只在"下一个换行点"前落地：head 布局常以 break 收尾、tail 常有
+    尾随空行 break，两处都得插到 break 之前（见 `_insert_before_trailing_break`
+    及 `_append_head` / `_append_tail`）——追加在 break 之后会掉到下一行，这是
+    块结束符 / 块头行尾注释漂移的根因（`end // c`、`endmodule // c`、
+    `module m; // c`，2026-09-13 实测）。
+    """
+    head_trail = [LineSuffix(" " + c) for c in (slots.get("head_trailing") or [])]
+    trail = [LineSuffix(" " + c) for c in (slots.get("trailing") or [])]
+    return head_trail, trail
+
+
+def _render_verbatim(
+    verbatim: str,
+    slots: dict,
+    renderer: Any,
+    head_trail_docs: list[Doc],
+    trail_docs: list[Doc],
+) -> Doc:
+    """引擎级 raw 拼接（ADR-0017 决策 4）：整体直出该文本，不走布局、不遍历子节点。
+
+    宏调用视为不可拆原子文本；语言包对宏零知识，本规则是引擎协议。注释槽仍要
+    输出（附着注释在节点 span 之外，不丢内容）——**含前置槽**：走布局路径时
+    前置槽在后面补出，直出路径必须同样补，否则附着在直出节点上的注释（含 tpc
+    marker，其文本承载条件块原文）会静默丢失（2026-09-17 实测：宏调用作 RHS 时
+    条件块整块消失）。文本可能含换行（多行构造原样输出）：后续行保留其原有缩进
+    （不做重排）。
+    """
+    pre = _leading_slot_docs(slots, renderer)
+    body: Doc = Concat([*pre, Text(verbatim)]) if pre else Text(verbatim)
+    return _insert_before_trailing_break(body, [*head_trail_docs, *trail_docs])
+
+
+def _append_head(
+    parts: list[Doc],
+    head_expr: Any,
     node: Node,
     layout: dict,
     renderer: Any,
-) -> Doc:
-    """渲染节点为独立块
+    head_trail_docs: list[Doc],
+) -> None:
+    """head 段：表达式求值结果插行尾注释后追加（head 常以 break 收尾 → 插 break 前）。"""
+    if not head_expr:
+        return
+    head_doc = eval_expr(head_expr, node, layout, renderer)
+    if head_doc is not None:
+        parts.append(_insert_before_trailing_break(head_doc, head_trail_docs))
 
-    不再通过 Prefix 添加第一行缩进；body 的缩进由 body_cfg["indent"]
-    控制（true=1 级、false=不缩进、int=N 级，默认 1 级），渲染为
-    Break(body_indent) + Nest(body_indent, child_doc)。
 
-    Args:
-        node: 当前 AST 节点
-        layout: 该节点的布局配置
-        renderer: Renderer 实例
+def _append_body(
+    parts: list[Doc],
+    node: Node,
+    body_cfg: Any,
+    layout: dict,
+    renderer: Any,
+) -> None:
+    """body 段：每个子节点文档前补 `Break(body_indent)` 并整体 `Nest`。"""
+    if not body_cfg:
+        return
+    body_docs = render_body(node, body_cfg, layout, renderer)
+    body_indent = _body_indent(body_cfg, renderer)
+    for bd in body_docs:
+        parts.append(Break(body_indent))
+        parts.append(Nest(body_indent, bd))
 
-    Returns:
-        Doc IR
+
+def _append_tail(
+    parts: list[Doc],
+    layout: dict,
+    tail_cfg: Any,
+    node: Node,
+    renderer: Any,
+    trail_docs: list[Doc],
+) -> None:
+    """tail 段：解析 tail 声明（str / dict{text,break} / 表达式）→ Break + 文本
+    + 行尾注释 + 尾随空行（tb 个空行含首 Break，故补 tb-1 个）；无 tail 文本时
+    仅落行尾注释。
     """
-    head_expr = layout.get("layout") or layout.get("head")
-    body_cfg = layout.get("body")
-    tail_cfg = layout.get("tail")
-
-    parts: list[Doc] = []
-
-    # 注释槽位提前取出：head_trailing 须紧跟 head 输出，trailing 须在 tail 的
-    # 尾随空行 break **之前**输出。LineSuffix 只在"下一个换行点"前落地，
-    # 追加在 break 之后会掉到下一行——这是块结束符/块头行尾注释漂移的根因
-    # （`end // c`、`endmodule // c`、`module m; // c`，2026-09-13 实测）。
-    slots = getattr(node, "_comment_slots", None) or {}
-    head_trail_docs = [
-        LineSuffix(" " + c) for c in (slots.get("head_trailing") or [])
-    ]
-    trail_docs = [LineSuffix(" " + c) for c in (slots.get("trailing") or [])]
-
-    # 引擎级 raw 拼接（ADR-0017 决策 4）：带 `_verbatim_text` 的节点整体直出该
-    # 文本——不走布局、不遍历子节点（宏调用视为不可拆原子文本；语言包对宏零知识，
-    # 本规则是引擎协议）。注释槽仍要输出（附着注释在节点 span 之外，不丢内容）
-    # ——**含前置槽**：sp走布局路径时前置槽在下面补出，直出路径必须同样补，
-    # 否则附着在直出节点上的注释（含 tpc marker，其文本承载条件块原文）会
-    # 静默丢失（2026-09-17 实测：宏调用作 RHS 时条件块整块消失）。
-    # 文本可能含换行（多行构造原样输出）：后续行保留其原有缩进（不做重排）。
-    verbatim = getattr(node, "_verbatim_text", None)
-    if verbatim is not None:
-        pre = _leading_slot_docs(slots, renderer)
-        body: Doc = Concat([*pre, Text(verbatim)]) if pre else Text(verbatim)
-        return _insert_before_trailing_break(body, [*head_trail_docs, *trail_docs])
-
-    # --- head ---
-    if head_expr:
-        head_doc = eval_expr(head_expr, node, layout, renderer)
-        if head_doc is not None:
-            # head 布局常以 break 收尾（`ModuleDecl.renderer.head`）→ 行尾注释
-            # 须插到该 break 之前，否则落到下一行
-            parts.append(
-                _insert_before_trailing_break(head_doc, head_trail_docs)
-            )
-
-    # --- body ---
-    if body_cfg:
-        body_docs = render_body(node, body_cfg, layout, renderer)
-        body_indent = _body_indent(body_cfg, renderer)
-        for bd in body_docs:
-            parts.append(Break(body_indent))
-            parts.append(Nest(body_indent, bd))
-
-    # --- tail ---
-    # （trail_docs 已在函数开头取出：须在 tail 的尾随空行 break 之前输出）
     tail_doc = None
     tb = 0
     if isinstance(tail_cfg, str):
@@ -192,25 +204,53 @@ def render_node(
     elif trail_docs:
         parts.extend(trail_docs)
 
-    # --- 注释槽位（ADR-0006 注释遍泛化——注释节点模型步骤 1，P1.5）---
-    # 节点属性 _comment_slots: {槽位名: [注释文本]}，槽位：
-    #   leading / leading_own_line / inline — 节点文本前的注释（行尾型 / 独占行型
-    #              / 同行前置），统一由 _leading_slot_docs 按源序补出（布局路径与
-    #              verbatim 直出路径同源）
-    #   trailing — 节点后行尾锚定（LineSuffix 渲染行尾注释）——已在上面 tail
-    #              段按"换行前落地"输出，此处不重复
-    slots = getattr(node, "_comment_slots", None)
-    if slots:
-        inline = slots.get("inline")
-        own_line = slots.get("leading_own_line")
-        lead = slots.get("leading")
-        if inline or own_line or lead:
-            parts = _leading_slot_docs(slots, renderer) + parts
+
+def render_node(
+    node: Node,
+    layout: dict,
+    renderer: Any,
+) -> Doc:
+    """渲染节点为独立块
+
+    不再通过 Prefix 添加第一行缩进；body 的缩进由 body_cfg["indent"]
+    控制（true=1 级、false=不缩进、int=N 级，默认 1 级），渲染为
+    Break(body_indent) + Nest(body_indent, child_doc)。
+
+    四段顺序：verbatim 直出（命中即返回）→ head → body → tail，最后补节点文本
+    前的注释槽（`_leading_slot_docs`，`trailing` 槽已在 tail 段落地故不重复）。
+
+    Args:
+        node: 当前 AST 节点
+        layout: 该节点的布局配置
+        renderer: Renderer 实例
+
+    Returns:
+        Doc IR
+    """
+    head_expr = layout.get("layout") or layout.get("head")
+    body_cfg = layout.get("body")
+    tail_cfg = layout.get("tail")
+
+    # 注释槽位提前取出：head_trailing 须紧跟 head 输出，trailing 须在 tail 的
+    # 尾随空行 break **之前**输出（`_line_suffix_docs` 的 docstring 记了根因）。
+    slots = getattr(node, "_comment_slots", None) or {}
+    head_trail_docs, trail_docs = _line_suffix_docs(slots)
+
+    verbatim = getattr(node, "_verbatim_text", None)
+    if verbatim is not None:
+        return _render_verbatim(
+            verbatim, slots, renderer, head_trail_docs, trail_docs
+        )
+
+    parts: list[Doc] = []
+    _append_head(parts, head_expr, node, layout, renderer, head_trail_docs)
+    _append_body(parts, node, body_cfg, layout, renderer)
+    _append_tail(parts, layout, tail_cfg, node, renderer, trail_docs)
+    parts = _leading_slot_docs(slots, renderer) + parts
 
     if parts:
         return Concat(parts)
     return Empty()
-
 
 def render_inline(
     node: Node,
