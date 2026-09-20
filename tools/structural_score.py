@@ -17,8 +17,13 @@
 C 与 D 需要外部二进制 `bifrost`（Python 侧审计，见 `policy/bifrost_audit.md`）；
 L 与"模块即类"判定是纯 AST，无外部依赖。本工具**不进日常门禁**。
 
+已判保持的项（`tools/structural_kept.json`，**每条必须有理由与出处**）在计分前剔除
+（R6，对全部族生效）：S 度量的是**未经处置的欠账**，不是"总复杂度"——逐项下过结论的
+项就该从 S 里出去，否则审计无法闭合。
+
 用法：
     python tools/structural_score.py              # 打印各分量与总分
+    python tools/structural_score.py --component C  # 只算某个分量（C / L / D）
     python tools/structural_score.py --save       # 写基线（tools/structural_baseline.json）
     python tools/structural_score.py --compare    # 与基线比较，列出新增项（回归）
 """
@@ -51,6 +56,9 @@ EXEMPT_PREFIXES = ("policy.",)   # 制度执行者（各自独立、可单跑，
 
 _CC_RE = re.compile(r"^- (.+): (\d+) \(in .+\)$")
 _COG_RE = re.compile(r"^- (.+): (\d+)$")
+
+# 族 → Score 计分字段（口径常量之外的机械映射）
+_FIELDS = {"CC": "cc", "COG": "cog", "FUNC": "func", "CLASS": "cls", "CLONE": "clone"}
 
 
 @dataclass
@@ -294,35 +302,34 @@ def _class_item(rel: str, node: ast.ClassDef, module_lines: int) -> Item | None:
 
 # ── 组装与输出 ──────────────────────────────────────────────────────────────
 
-def compute(root: pathlib.Path, components: set[str]) -> tuple[Score, int]:
-    """按需计算分量（components ⊆ {C, L, D}）→ (分数, 扫描文件数)。
+def _accumulate(score: Score, items: list[Item], kept: dict[str, str]) -> None:
+    """把一批命中的超额量计入得分，**计入前剔除判保持项**（R6，对全部族生效）。
 
-    已判保持的项（`tools/structural_kept.json`）在计入前剔除——保持是结论，
-    不是待办；没有登记理由的项不剔除，否则指标可被“默默豁免”掉。
+    剔除键与基线/登记表同形（`<族>|<项键>`）；已判保持 = 有结论的项，不再重复计分，
+    否则审计无法闭合（存量项每轮重复论证）。
     """
+    for item in items:
+        if f"{item.family}|{item.key}" in kept:
+            continue
+        score.items.append(item)
+        name = _FIELDS[item.family]
+        setattr(score, name, getattr(score, name) + item.excess)
+
+
+def compute(root: pathlib.Path, components: set[str]) -> tuple[Score, int]:
+    """按需计算分量（components ⊆ {C, L, D}）→ (分数, 扫描文件数)。"""
     files = _py_files(root)
     kept = _load_kept(root)
     score = Score()
+    collectors: dict[str, list[Item]] = {}
     if "C" in components:
-        for item in _complexity_items(root, files):
-            score.items.append(item)
-            if item.family == "CC":
-                score.cc += item.excess
-            else:
-                score.cog += item.excess
+        collectors["C"] = _complexity_items(root, files)
     if "L" in components:
-        for item in _scale_items(root, files):
-            score.items.append(item)
-            if item.family == "FUNC":
-                score.func += item.excess
-            else:
-                score.cls += item.excess
+        collectors["L"] = _scale_items(root, files)
     if "D" in components:
-        for item in _clone_items(root, files):
-            if f"CLONE|{item.key}" in kept:
-                continue
-            score.items.append(item)
-            score.clone += item.excess
+        collectors["D"] = _clone_items(root, files)
+    for items in collectors.values():
+        _accumulate(score, items, kept)
     return score, len(files)
 
 
@@ -382,20 +389,31 @@ def _save_baseline(root: pathlib.Path, score: Score) -> None:
     print(f"已写基线：{_baseline_path(root)}（S = {score.total}）")
 
 
-def _compare(root: pathlib.Path, score: Score) -> int:
-    """与基线比较：存量项按批次消化，**新增项才算回归**（退出码 1）。"""
-    base = _load_baseline(root)
-    old = base["items"]
-    new = {f"{i.family}|{i.key}": i.excess for i in score.items}
+def _diff(old: dict[str, int], new: dict[str, int]) -> tuple[list, list, list]:
+    """基线 vs 当前 → (新增, 变大, 消除) 三组（存量项按批次消化，不算回归）。"""
     added = [(k, v) for k, v in new.items() if k not in old]
     grew = [(k, v, old[k]) for k, v in new.items() if k in old and v > old[k]]
     gone = [k for k in old if k not in new]
-    print(f"基线 S = {base['total']} → 当前 S = {score.total}（Δ {score.total - base['total']:+d}）")
-    print(f"  消除 {len(gone)} 项 / 新增 {len(added)} 项 / 变大 {len(grew)} 项")
+    return added, grew, gone
+
+
+def _print_diff(added: list, grew: list) -> None:
+    """只列需要动作的两组（新增 / 变大），按超额量降序。"""
     for key, value in sorted(added, key=lambda kv: -kv[1]):
         print(f"    [新增] +{value:<5} {key}")
     for key, value, before in sorted(grew, key=lambda kv: -(kv[1] - kv[2])):
         print(f"    [变大] {before} → {value}  {key}")
+
+
+def _compare(root: pathlib.Path, score: Score) -> int:
+    """与基线比较：**新增项才算回归**（退出码 1）。"""
+    base = _load_baseline(root)
+    old = {k: int(v) for k, v in base["items"].items()}
+    new = {f"{i.family}|{i.key}": i.excess for i in score.items}
+    added, grew, gone = _diff(old, new)
+    print(f"基线 S = {base['total']} → 当前 S = {score.total}（Δ {score.total - base['total']:+d}）")
+    print(f"  消除 {len(gone)} 项 / 新增 {len(added)} 项 / 变大 {len(grew)} 项")
+    _print_diff(added, grew)
     return 1 if (added or grew) else 0
 
 
