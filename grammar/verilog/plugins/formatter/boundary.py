@@ -22,11 +22,11 @@ from lexer import Lexer
 from core.define import GrammarRule
 from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, macro_type, split_token_types
 
-# ── BlockTokenMap ──
+# ── _BlockTokenMap ──
 
 
 @dataclass
-class BlockTokenMap:
+class _BlockTokenMap:
     """由语法规则构建的块边界映射。"""
 
     openers: set[str] = field(default_factory=set)
@@ -391,7 +391,7 @@ def _collect_decl_headers(rules: dict, tree: dict) -> set[str]:
     return {t for t in decl_headers if t.startswith(KEYWORD_PREFIX)}
 
 
-def build_block_tokens(rules: dict) -> BlockTokenMap:
+def build_block_tokens(rules: dict) -> _BlockTokenMap:
     """从语法规则构建边界 token 集合。
 
     自动推导：
@@ -402,7 +402,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
       - 每个 opener token 自动关联 ScopeKind
 
     Returns:
-        BlockTokenMap 包含 openers / closers / ifdef_set / scope_kind_map
+        _BlockTokenMap 包含 openers / closers / ifdef_set / scope_kind_map
     """
     # 有配对结束符的块类别见模块级 `_PAIRED_BLOCK_KINDS`（判定 has_pair 用）
     from linter.grammar_slicer import build_slice_tree
@@ -436,7 +436,7 @@ def build_block_tokens(rules: dict) -> BlockTokenMap:
     # ── 6. 声明头 token ──
     decl_headers = _collect_decl_headers(rules, tree)
 
-    return BlockTokenMap(
+    return _BlockTokenMap(
         openers=openers,
         closers=closers,
         ifdef_set=ifdef_set,
@@ -479,19 +479,19 @@ _PAIRED_BLOCK_KINDS = frozenset(
 
 
 @dataclass
-class ScopeNode:
+class _ScopeNode:
     kind: ScopeKind
     name: str = ""
     token_line: int = 0
 
 
 @dataclass
-class ScopeBranch:
+class _ScopeBranch:
     """ifdef 的单个分支，维护独立的 scope 栈快照。"""
 
     condition: str = ""
-    openers: list[ScopeNode] = field(default_factory=list)
-    extra_openers: list[ScopeNode] = field(default_factory=list)
+    openers: list[_ScopeNode] = field(default_factory=list)
+    extra_openers: list[_ScopeNode] = field(default_factory=list)
 
 
 # ── 行上下文 ──
@@ -553,8 +553,8 @@ class _ScanState:
     """
 
     contexts: list[LineContext]
-    scope_path: list[ScopeNode]
-    ifdef_branches: list[ScopeBranch]
+    scope_path: list[_ScopeNode]
+    ifdef_branches: list[_ScopeBranch]
     line_buf: list[str] = field(default_factory=list)
     line_num: int = 1
     line_has_comment: bool = False
@@ -619,7 +619,7 @@ class BoundaryScanner:
         """单次 token 遍历 → 每行 LineContext（状态见 `_ScanState`，分派见三个 handler）。"""
         state = _ScanState(
             contexts=[],
-            scope_path=[ScopeNode(ScopeKind.ROOT)],
+            scope_path=[_ScopeNode(ScopeKind.ROOT)],
             ifdef_branches=[],
         )
         tokens = list(tokens)
@@ -1039,17 +1039,17 @@ class BoundaryScanner:
     def _current_depth(self, scope_path: list) -> int:
         return len(scope_path) - 1
 
-    def _snapshot_scope(self, scope_path: list[ScopeNode]) -> list[ScopeNode]:
+    def _snapshot_scope(self, scope_path: list[_ScopeNode]) -> list[_ScopeNode]:
         return list(scope_path[1:])
 
     def _restore_scope(
-        self, scope_path: list[ScopeNode], snapshot: list[ScopeNode]
+        self, scope_path: list[_ScopeNode], snapshot: list[_ScopeNode]
     ) -> None:
         scope_path[:] = [scope_path[0]] + list(snapshot)
 
     def _handle_ifdef_token(self, t, scope_path, ifdef_branches):
         if t.type in ("macro.ifdef", "macro.ifndef"):
-            branch = ScopeBranch(
+            branch = _ScopeBranch(
                 condition=t.content, openers=self._snapshot_scope(scope_path)
             )
             ifdef_branches.append(branch)
@@ -1057,7 +1057,7 @@ class BoundaryScanner:
             if ifdef_branches:
                 branch = ifdef_branches[-1]
                 self._restore_scope(scope_path, branch.openers)
-                ifdef_branches[-1] = ScopeBranch(
+                ifdef_branches[-1] = _ScopeBranch(
                     condition=t.content, openers=branch.openers
                 )
         elif t.type == "macro.endif":
@@ -1068,7 +1068,7 @@ class BoundaryScanner:
     def _handle_opener(self, t, kind, scope_path, ifdef_branches):
         if kind == ScopeKind.GENERATE:
             return  # generate 不贡献缩进层级（不入栈）
-        node = ScopeNode(kind=kind, name=t.content, token_line=t.line)
+        node = _ScopeNode(kind=kind, name=t.content, token_line=t.line)
         scope_path.append(node)
         if ifdef_branches:
             ifdef_branches[-1].extra_openers.append(node)

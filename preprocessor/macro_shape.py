@@ -65,7 +65,7 @@ CALL_SUFFIX_KEY = "suffix_after_call"
 
 
 @dataclass(frozen=True)
-class MacroShape:
+class _MacroShape:
     """一段宏形态：前缀文本 + 名字位候选。
 
     names 为空 = 名字位是任意标识符（产出 macro.call）。
@@ -202,13 +202,13 @@ def _shape_prefix(
     return _prefix_text(prefix_token, token_define, skip_undeclared)
 
 
-def _declared_shapes(recognition: dict, prefix: str) -> dict[str, MacroShape]:
-    """逐形态段构造 MacroShape（未声明的段不出现）。"""
-    shapes: dict[str, MacroShape] = {}
+def _declared_shapes(recognition: dict, prefix: str) -> dict[str, _MacroShape]:
+    """逐形态段构造 _MacroShape（未声明的段不出现）。"""
+    shapes: dict[str, _MacroShape] = {}
     for kind in SHAPE_KINDS:
         value = recognition.get(kind)
         if value is not None:
-            shapes[kind] = MacroShape(
+            shapes[kind] = _MacroShape(
                 kind=kind, prefix=prefix, names=_candidates(value, kind)
             )
     return shapes
@@ -220,8 +220,8 @@ def load_macro_shapes(
     rules_dir: str | None = None,
     *,
     skip_undeclared_prefix: bool = False,
-) -> dict[str, MacroShape]:
-    """读取 `[macro_recognition]` → `{kind: MacroShape}`（未声明的段不出现）。
+) -> dict[str, _MacroShape]:
+    """读取 `[macro_recognition]` → `{kind: _MacroShape}`（未声明的段不出现）。
 
     cfg           — 宏配置（缺省：给了 rules_dir 则按该语言包解析，否则取全局声明）
     token_define  — token 定义（前缀 token 名的文本来源）
@@ -246,7 +246,7 @@ def load_macro_shapes(
     return _declared_shapes(recognition, prefix)
 
 
-def macro_keywords(shape: MacroShape) -> tuple[str, ...]:
+def macro_keywords(shape: _MacroShape) -> tuple[str, ...]:
     """名字位候选 → 指令关键字（`macro.define` → `define`）。"""
     return tuple(name[len(MACRO_PREFIX):] for name in shape.names)
 

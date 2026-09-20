@@ -120,7 +120,7 @@ class ParseContext:
         return self.tokens[pos] if pos < len(self.tokens) else None
 
 
-class ScopeEntry:
+class _ScopeEntry:
     """作用域条目"""
 
     def __init__(self, name: str, kind: str):
@@ -130,10 +130,10 @@ class ScopeEntry:
         self.symbols: dict[str, str] = {}
 
 
-class ScopeStack:
+class _ScopeStack:
     """轻量级作用域栈，供 Parser 在解析过程中实时查询符号。
 
-    与 Analyzer 的后阶段全量分析不同，ScopeStack 只服务于 Parser 规则选择，
+    与 Analyzer 的后阶段全量分析不同，_ScopeStack 只服务于 Parser 规则选择，
     回溯时需配合 snapshot/restore 回滚。
 
     scope 声明来源：规则 TOML 中的 [RuleName.analyzer] scope = { ... }。
@@ -141,7 +141,7 @@ class ScopeStack:
 
     def __init__(self) -> None:
         # 根作用域（全局）
-        self._stack: list[ScopeEntry] = [ScopeEntry("__global__", "global")]
+        self._stack: list[_ScopeEntry] = [_ScopeEntry("__global__", "global")]
 
     # ── 快照/恢复（配合 parser 回溯） ──
 
@@ -157,7 +157,7 @@ class ScopeStack:
     # ── 作用域管理 ──
 
     def push(self, name: str, kind: str) -> None:
-        self._stack.append(ScopeEntry(name, kind))
+        self._stack.append(_ScopeEntry(name, kind))
 
     def pop(self) -> None:
         if len(self._stack) > 1:
@@ -182,7 +182,7 @@ class ScopeStack:
         return len(self._stack)
 
     @property
-    def current(self) -> ScopeEntry:
+    def current(self) -> _ScopeEntry:
         return self._stack[-1]
 
     def dump(self) -> list[dict]:
@@ -457,7 +457,7 @@ class Parser:
         self.pre_symbols = pre_symbols or {}
         self.pre_hints: dict[str, list[str]] = {}
         # 解析时作用域栈（可选，配合 peek scope 使用）
-        self.scope_stack = ScopeStack()
+        self.scope_stack = _ScopeStack()
 
     def _load_brackets(self) -> None:
         """加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）。"""

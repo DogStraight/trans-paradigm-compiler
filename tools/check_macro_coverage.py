@@ -97,7 +97,7 @@ def _norm(text: str) -> str:
     return " ".join(text.split())
 
 
-def measure(source: str) -> dict:
+def _measure(source: str) -> dict:
     base = _run(source)
     if not base["success"]:
         raise SystemExit(f"基线不可解析，无法测量：{base.get('error')}")
@@ -156,7 +156,7 @@ def main() -> int:
     args = ap.parse_args()
 
     source = open(args.file, encoding="utf-8").read() if args.file else SAMPLE
-    result = measure(source)
+    result = _measure(source)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -119,7 +119,7 @@ def _param_token(word: str, params: dict) -> tuple | None:
     return ("param", v)
 
 
-def const_tokenize(text: str, params: dict | None = None) -> list | None:
+def _const_tokenize(text: str, params: dict | None = None) -> list | None:
     """常量表达式 tokenize：数字 / 运算符 / 括号 /（有参数表时）参数名。
 
     参数名就地解析（`_param_token`：值须为 int 或**纯数字字符串**，否则该
@@ -262,7 +262,7 @@ def const_eval(text: str, params: dict | None = None) -> int | None:
     → None）。`params` 给出参数名 → 值时可参与求值（如 `WIDTH-1`），
     否则标识符即不可判。
     """
-    toks = const_tokenize(text, params)
+    toks = _const_tokenize(text, params)
     if toks is None:
         return None
     return _ConstExprParser(toks).parse()

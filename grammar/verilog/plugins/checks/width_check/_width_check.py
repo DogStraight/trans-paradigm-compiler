@@ -32,7 +32,7 @@ _DECL_NODE_RULES = {"WireDecl", "RegDecl"}
 
 def run_width_check(analyzer, context) -> None:
     """postpass 入口：A1 宽度表 + B1 参数表 + A4 赋值 + B3 端口连接宽度。"""
-    table = symbol_width_table(analyzer)
+    table = _symbol_width_table(analyzer)
     # B1 模块参数表：全工程两层结构 → 当前文件模块单层（本文件模块的
     # 宽度求值只用自己模块的参数；跨模块传播 B3）。内嵌 "_params" 键
     # 供 infer 查表（符号名不会与 "_params" 冲突——参数不在宽度表）。
@@ -72,7 +72,7 @@ def _check_select_ranges(analyzer, context, table: dict) -> None:
             continue
         base = getattr(node, "base", None)
         base_name = getattr(base, "content", "") if isinstance(base, Node) else ""
-        bw = table_width_to_num_params(
+        bw = _table_width_to_num_params(
             _lookup_width(table, module, base_name), table.get("_params")
         )
         if bw is None:
@@ -653,7 +653,7 @@ def _recheck_one(node, info, site, sub_table: dict, context) -> None:
     )
 
 
-def symbol_width_table(analyzer) -> dict[str, Any]:
+def _symbol_width_table(analyzer) -> dict[str, Any]:
     """A1：符号宽度表 {符号名 → 宽度表达式文本}。
 
     原始文本原样保留：""（无范围标量）/ "7:0" / "WIDTH-1:0" / "32"。
@@ -674,14 +674,14 @@ def symbol_width_table(analyzer) -> dict[str, Any]:
     for sym in getattr(analyzer, "all_symbols", None) or []:
         if sym.kind not in _WIDTH_KINDS:
             continue
-        table[sym.name] = extract_width(sym)
+        table[sym.name] = _extract_width(sym)
         if _is_array_symbol(sym):
             arrays.add(sym.name)
         # 模块限定键：符号所属模块作用域（端口/声明都在模块 scope 下）
         mod = ""
         if sym.scope is not None and sym.scope.kind == "module":
             mod = sym.scope.name or ""
-        table[(mod, sym.name)] = extract_width(sym)  # type: ignore[index]
+        table[(mod, sym.name)] = _extract_width(sym)  # type: ignore[index]
         if _is_array_symbol(sym):
             arrays_by_module.setdefault(mod, set()).add(sym.name)
     table["_arrays"] = arrays
@@ -740,7 +740,7 @@ def table_width_to_num(text: str | None) -> int | None:
     return eval_width_text(text)
 
 
-def table_width_to_num_params(text: str | None, params: dict | None) -> int | None:
+def _table_width_to_num_params(text: str | None, params: dict | None) -> int | None:
     """B2：宽度表文本 + 参数表 → 数值（参数化宽度求值版）。"""
     if text is None:
         return None
@@ -770,7 +770,7 @@ def _declarator_width_by_name(node, sym_name: str) -> str:
     return ""
 
 
-def extract_width(sym) -> str:
+def _extract_width(sym) -> str:
     """从符号声明节点提取宽度文本。
 
     类型级 packed_range（wire [7:0] a / input wire [7:0] a）优先，无则按
@@ -1120,7 +1120,7 @@ def _select_width(node, width_table: dict, module: str = "") -> int | None:
         bn = getattr(base, "content", "") if isinstance(base, Node) else ""
         arrays = _lookup_arrays(width_table, module)
         if bn in arrays:
-            return table_width_to_num_params(
+            return _table_width_to_num_params(
                 _lookup_width(width_table, module, bn),
                 width_table.get("_params"),
             )
@@ -1186,14 +1186,14 @@ def _hier_width(node, width_table: dict, module: str = "") -> int | None:
         return None
     if last.node_name == "Identifier":
         # 单段（a）或末段是标识符：查宽度表
-        return table_width_to_num_params(
+        return _table_width_to_num_params(
             _lookup_width(width_table, module, getattr(last, "content", "") or ""),
             width_table.get("_params"),
         )
     if last.node_name == "HierSuffix":
         return 1  # 末段下标选择 → 1 bit
     if last.node_name == "HierMember":
-        w = table_width_to_num_params(
+        w = _table_width_to_num_params(
             _lookup_width(
                 width_table, module,
                 getattr(getattr(last, "name", None), "content", "") or "",
@@ -1231,7 +1231,7 @@ def _first_arg_width(node, width_table: dict, module: str = "") -> int | None:
 
 def _ident_width(node, width_table: dict, module: str) -> int | None:
     """Identifier → 查符号宽度表（参数化文本按参数表求值；缺省 None）。"""
-    return table_width_to_num_params(
+    return _table_width_to_num_params(
         _lookup_width(width_table, module, getattr(node, "content", "") or ""),
         width_table.get("_params"),
     )

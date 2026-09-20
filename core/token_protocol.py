@@ -47,10 +47,6 @@ def symbol_type(category: str, name: str) -> str:
     return f"{SYMBOL_PREFIX}{category}.{name}"
 
 
-def bracket_types(name: str) -> tuple[str, str]:
-    return f"{BRACKET_L_PREFIX}{name}", f"{BRACKET_R_PREFIX}{name}"
-
-
 def bracket_left(name: str) -> str:
     return f"{BRACKET_L_PREFIX}{name}"
 

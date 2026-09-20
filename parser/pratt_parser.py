@@ -30,7 +30,7 @@ def process_operator_data(data: list) -> list[tuple[int, dict]]:
     return operator_defs
 
 
-def build_priority_maps(operator_defs):
+def _build_priority_maps(operator_defs):
     prefix_priority = {}
     prefix_attrs = {}
     infix_priority = {}
@@ -53,7 +53,7 @@ def build_priority_maps(operator_defs):
 
 
 # ── Token 分类 ──
-def build_token_classifier(categories: dict) -> dict:
+def _build_token_classifier(categories: dict) -> dict:
     """从分类配置构建 {name: check_fn(token) -> bool} 映射"""
     checks = {}
     for name, cfg in categories.items():
@@ -116,7 +116,7 @@ def is_operator(token) -> bool:
     return _check("operator", token)
 
 
-def is_none(token) -> bool:
+def _is_none(token) -> bool:
     return _check("none", token)
 
 
@@ -137,7 +137,7 @@ def install_token_classifier(categories: dict) -> None:
             "[pratt] token categories is empty — check base/_lexer.toml [token_category]"
         )
     global _token_checks, _bool_true_type
-    _token_checks = build_token_classifier(categories)
+    _token_checks = _build_token_classifier(categories)
     # 从 bool 分类配置推导真值 token 类型（约定：types 列表第一个为真值）
     bool_cfg = categories.get("bool")
     if isinstance(bool_cfg, dict):
@@ -450,7 +450,7 @@ def _parse_prefix(ctx: "_PrattCtx", tokens: list[Token], idx: int) -> tuple[Node
         return node, idx + 1
     if is_operator(token) and token.content in ctx.prefix_attrs:
         return _parse_prefix_operator(ctx, tokens, idx, token)
-    if is_none(token):
+    if _is_none(token):
         return Node("NoneLiteral"), idx + 1
     raise ValueError(f"意外的 token: {token.content} (type: {token.type})")
 
@@ -679,7 +679,7 @@ def parse_with_count(
     tokens 可包含 Token 或预解析的 Node（如 CallExpr），
     Node 作为原子表达式直接返回。
     """
-    prefix_priority, prefix_attrs, infix_priority, infix_attrs = build_priority_maps(
+    prefix_priority, prefix_attrs, infix_priority, infix_attrs = _build_priority_maps(
         operator_defs
     )
     max_infix_prio = max(infix_priority.values()) if infix_priority else 0

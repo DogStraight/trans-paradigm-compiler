@@ -66,7 +66,7 @@ def _is_signal_expr(text: str) -> bool:
 
 
 @dataclass
-class ModulePort:
+class _ModulePort:
     """模块端口声明（声明形态，供实例化联动比对）。"""
 
     name: str
@@ -91,7 +91,7 @@ class ModuleInfo:
     name: str
     file: str
     node: Node  # ModuleDecl 节点（定位）
-    ports: dict[str, ModulePort] = field(default_factory=dict)
+    ports: dict[str, _ModulePort] = field(default_factory=dict)
     params: dict[str, ModuleParam] = field(default_factory=dict)
     # elaboration 层 2/3（ADR-0008）：模块的端口连接展开 + 实例树
     insts: list = field(default_factory=list)  # 模块内实例化点（已展开连接）
@@ -917,7 +917,7 @@ class ModuleExtractor:
     ) -> None:
         """登记端口（同名覆盖：ANSI 头部声明优先于 body 回填）。"""
         decl_node._file = info.file
-        info.ports[name_node.content] = ModulePort(
+        info.ports[name_node.content] = _ModulePort(
             name=name_node.content,
             direction=direction,
             width_expr=width,
@@ -964,7 +964,7 @@ class ModuleExtractor:
         if not bare_rule or item.node_name != bare_rule:
             return False
         if item.content:
-            info.ports[item.content] = ModulePort(name=item.content)
+            info.ports[item.content] = _ModulePort(name=item.content)
         return True
 
     def _register_ansi_item(

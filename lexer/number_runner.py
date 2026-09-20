@@ -26,7 +26,7 @@ from .number_gen import (
 _SPACE_CHARS = (" ", "\t")
 
 
-class ConfigNumberRunner:
+class _ConfigNumberRunner:
     """配置驱动的数字解析器：多 pattern 最长匹配。"""
 
     def __init__(self, configs: list[dict]):
@@ -113,7 +113,7 @@ class ConfigNumberRunner:
 
 def build_number_runner(
     configs: list[dict] | None = None,
-) -> ConfigNumberRunner | None:
+) -> _ConfigNumberRunner | None:
     """构建数字解析器（配置驱动唯一路径）。
 
     Args:
@@ -121,8 +121,8 @@ def build_number_runner(
             由 Lexer 构造处 fail-fast 报错（形态缺失 = 配置错误）。
 
     Returns:
-        ConfigNumberRunner 或 None（形态未声明，调用方负责 fail-fast）。
+        _ConfigNumberRunner 或 None（形态未声明，调用方负责 fail-fast）。
     """
     if configs:
-        return ConfigNumberRunner(configs)
+        return _ConfigNumberRunner(configs)
     return None

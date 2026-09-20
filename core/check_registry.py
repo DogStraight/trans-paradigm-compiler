@@ -170,14 +170,6 @@ def get_rules_for_kind(kind: str, plugins_dir: str = "") -> list[dict[str, Any]]
     return [r for r in get_check_rules(plugins_dir) if r.get("kind") == kind]
 
 
-def get_rule(rule_id: str, plugins_dir: str = "") -> dict[str, Any] | None:
-    """按 id 取规则（用户配置 enabled/overrides 引用）。"""
-    for r in get_check_rules(plugins_dir):
-        if r.get("id") == rule_id:
-            return r
-    return None
-
-
 # ── P4 用户配置层（config/tpc_config.json 的 checks 段）──────────────
 #
 # 语义（analyzer/semantic_checks.md §4，Ruff/Semgrep 共识）：

@@ -36,16 +36,16 @@ Doc: parser/README.md（注释通道分工）
 from ._constants import COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
 
 
-def is_space_token(tok) -> bool:
+def _is_space_token(tok) -> bool:
     """`space` 命名空间下的全部子类型（space / space.fold / space.indent …）。"""
     return tok.type.startswith("space")
 
 
-def is_newline_token(tok) -> bool:
+def _is_newline_token(tok) -> bool:
     return tok.type == NEWLINE_TOKEN_TYPE
 
 
-def is_comment_token(tok) -> bool:
+def _is_comment_token(tok) -> bool:
     return tok.type == COMMENT_TOKEN_TYPE
 
 
@@ -57,7 +57,7 @@ def prev_significant_index(tokens: list, idx: int) -> int:
     i = idx - 1
     while i >= 0:
         tok = tokens[i]
-        if is_space_token(tok) or is_newline_token(tok) or is_comment_token(tok):
+        if _is_space_token(tok) or _is_newline_token(tok) or _is_comment_token(tok):
             i -= 1
             continue
         return i
@@ -73,9 +73,9 @@ def is_line_only(tokens: list, idx: int) -> bool:
     i = idx - 1
     while i >= 0:
         tok = tokens[i]
-        if is_newline_token(tok):
+        if _is_newline_token(tok):
             return True
-        if is_space_token(tok) or is_comment_token(tok):
+        if _is_space_token(tok) or _is_comment_token(tok):
             i -= 1
             continue
         return getattr(tok, "line", -1) != getattr(tokens[idx], "line", -2)
@@ -88,7 +88,7 @@ def is_midline(tokens: list, idx: int) -> bool:
     j = idx + 1
     while j < len(tokens):
         tok = tokens[j]
-        if is_space_token(tok) or is_newline_token(tok) or is_comment_token(tok):
+        if _is_space_token(tok) or _is_newline_token(tok) or _is_comment_token(tok):
             j += 1
             continue
         return getattr(tok, "line", -1) == line

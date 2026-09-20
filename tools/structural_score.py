@@ -57,12 +57,12 @@ EXEMPT_PREFIXES = ("policy.",)   # 制度执行者（各自独立、可单跑，
 _CC_RE = re.compile(r"^- (.+): (\d+) \(in .+\)$")
 _COG_RE = re.compile(r"^- (.+): (\d+)$")
 
-# 族 → Score 计分字段（口径常量之外的机械映射）
+# 族 → _Score 计分字段（口径常量之外的机械映射）
 _FIELDS = {"CC": "cc", "COG": "cog", "FUNC": "func", "CLASS": "cls", "CLONE": "clone"}
 
 
 @dataclass
-class Item:
+class _Item:
     """一条超额项（用于 --compare 的"新命中"判定）。"""
 
     family: str      # CC / COG / FUNC / CLASS / CLONE
@@ -72,7 +72,7 @@ class Item:
 
 
 @dataclass
-class Score:
+class _Score:
     """四个分量与明细。"""
 
     cc: int = 0
@@ -80,7 +80,7 @@ class Score:
     func: int = 0
     cls: int = 0
     clone: int = 0
-    items: list[Item] = field(default_factory=list)
+    items: list[_Item] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -136,9 +136,9 @@ def _max_by_fqn(report: str, pattern: re.Pattern) -> dict[str, int]:
     return out
 
 
-def _complexity_items(root: pathlib.Path, files: list[str]) -> list[Item]:
+def _complexity_items(root: pathlib.Path, files: list[str]) -> list[_Item]:
     """C 分量：CC 与认知复杂度的超额量。"""
-    items: list[Item] = []
+    items: list[_Item] = []
     for tool, pattern, base, family in (
         ("compute_cyclomatic_complexity", _CC_RE, CC_BASE, "CC"),
         ("compute_cognitive_complexity", _COG_RE, COG_BASE, "COG"),
@@ -149,7 +149,7 @@ def _complexity_items(root: pathlib.Path, files: list[str]) -> list[Item]:
             for fqn, val in _max_by_fqn(_bifrost(root, tool, args), pattern).items():
                 values[fqn] = max(values.get(fqn, 0), val)
         items.extend(
-            Item(family, fqn, val - base, f"{family} {val}")
+            _Item(family, fqn, val - base, f"{family} {val}")
             for fqn, val in sorted(values.items())
             if val > base
         )
@@ -244,7 +244,7 @@ def _is_entity_dup(root: pathlib.Path, sym: str, peer: str, tokens: int) -> bool
     return not _is_entry_stub(root, sym, peer)
 
 
-def _clone_items(root: pathlib.Path, files: list[str]) -> list[Item]:
+def _clone_items(root: pathlib.Path, files: list[str]) -> list[_Item]:
     """D 分量：实体级重复对的 token 超额量（按对去重，计入门槛见 `_is_entity_dup`）。"""
     pairs: dict[tuple[str, str], int] = {}
     for chunk in _chunks(files, CLONE_CHUNK):
@@ -255,16 +255,16 @@ def _clone_items(root: pathlib.Path, files: list[str]) -> list[Item]:
             if _is_entity_dup(root, sym, peer, tokens):
                 pairs[(sym, peer)] = max(pairs.get((sym, peer), 0), tokens)
     return [
-        Item("CLONE", f"{_cell_fqn(a)} <-> {_cell_fqn(b)}", tok - CLONE_MIN_TOKENS, f"{tok} tok")
+        _Item("CLONE", f"{_cell_fqn(a)} <-> {_cell_fqn(b)}", tok - CLONE_MIN_TOKENS, f"{tok} tok")
         for (a, b), tok in sorted(pairs.items())
     ]
 
 
 # ── L 分量（纯 AST，无外部依赖）─────────────────────────────────────────────
 
-def _scale_items(root: pathlib.Path, files: list[str]) -> list[Item]:
+def _scale_items(root: pathlib.Path, files: list[str]) -> list[_Item]:
     """L 分量：函数行与类规模的超额量（含"模块即类"豁免）。"""
-    items: list[Item] = []
+    items: list[_Item] = []
     for rel in files:
         src = (root / rel).read_text(encoding="utf-8")
         module_lines = src.count("\n") + 1
@@ -275,34 +275,34 @@ def _scale_items(root: pathlib.Path, files: list[str]) -> list[Item]:
     return items
 
 
-def _scale_item(rel: str, node: ast.AST, module_lines: int) -> Item | None:
+def _scale_item(rel: str, node: ast.AST, module_lines: int) -> _Item | None:
     """单个 AST 节点的规模超额项（函数行 / 类规模；不超标返回 None）。"""
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         lines = (node.end_lineno or node.lineno) - node.lineno + 1
         if lines > FUNC_LIMIT:
-            return Item("FUNC", f"{rel}:{node.name}", lines - FUNC_LIMIT, f"{lines} 行")
+            return _Item("FUNC", f"{rel}:{node.name}", lines - FUNC_LIMIT, f"{lines} 行")
         return None
     if not isinstance(node, ast.ClassDef):
         return None
     return _class_item(rel, node, module_lines)
 
 
-def _class_item(rel: str, node: ast.ClassDef, module_lines: int) -> Item | None:
+def _class_item(rel: str, node: ast.ClassDef, module_lines: int) -> _Item | None:
     """类规模超额项：模块即类时按文件行度量（拆类不缩小模读面），否则按类体行。"""
     body = (node.end_lineno or node.lineno) - node.lineno + 1
     if body / module_lines >= MODULE_SCOPE_RATIO:
         if module_lines > MODULE_LIMIT:
-            return Item("CLASS", f"{rel}:{node.name}", module_lines - MODULE_LIMIT,
+            return _Item("CLASS", f"{rel}:{node.name}", module_lines - MODULE_LIMIT,
                         f"模块即类 {module_lines} 行（类体 {body}）")
         return None
     if body > CLASS_LIMIT:
-        return Item("CLASS", f"{rel}:{node.name}", body - CLASS_LIMIT, f"类体 {body} 行")
+        return _Item("CLASS", f"{rel}:{node.name}", body - CLASS_LIMIT, f"类体 {body} 行")
     return None
 
 
 # ── 组装与输出 ──────────────────────────────────────────────────────────────
 
-def _accumulate(score: Score, items: list[Item], kept: dict[str, str]) -> None:
+def _accumulate(score: _Score, items: list[_Item], kept: dict[str, str]) -> None:
     """把一批命中的超额量计入得分，**计入前剔除判保持项**（R6，对全部族生效）。
 
     剔除键与基线/登记表同形（`<族>|<项键>`）；已判保持 = 有结论的项，不再重复计分，
@@ -316,12 +316,12 @@ def _accumulate(score: Score, items: list[Item], kept: dict[str, str]) -> None:
         setattr(score, name, getattr(score, name) + item.excess)
 
 
-def compute(root: pathlib.Path, components: set[str]) -> tuple[Score, int]:
+def compute(root: pathlib.Path, components: set[str]) -> tuple[_Score, int]:
     """按需计算分量（components ⊆ {C, L, D}）→ (分数, 扫描文件数)。"""
     files = _py_files(root)
     kept = _load_kept(root)
-    score = Score()
-    collectors: dict[str, list[Item]] = {}
+    score = _Score()
+    collectors: dict[str, list[_Item]] = {}
     if "C" in components:
         collectors["C"] = _complexity_items(root, files)
     if "L" in components:
@@ -333,7 +333,7 @@ def compute(root: pathlib.Path, components: set[str]) -> tuple[Score, int]:
     return score, len(files)
 
 
-def _print_score(score: Score, components: set[str], n_files: int) -> None:
+def _print_score(score: _Score, components: set[str], n_files: int) -> None:
     print(f"扫描面：{n_files} 个非 tests Python 文件（排除 {', '.join(SKIP_DIRS)}）")
     rows = [("C", "复杂度超额", score.cc + score.cog, "CC / 认知"),
             ("L", "规模超额", score.func + score.cls, "函数行 / 类规模"),
@@ -342,7 +342,7 @@ def _print_score(score: Score, components: set[str], n_files: int) -> None:
         if key in components:
             print(f"  {label:<8} {value:>6}   （{note}）")
     print(f"  {'结构欠账分 S':<8} {score.total:>6}")
-    by_family: dict[str, list[Item]] = {}
+    by_family: dict[str, list[_Item]] = {}
     for item in score.items:
         by_family.setdefault(item.family, []).append(item)
     for family in ("CC", "COG", "FUNC", "CLASS", "CLONE"):
@@ -377,7 +377,7 @@ def _load_baseline(root: pathlib.Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _save_baseline(root: pathlib.Path, score: Score) -> None:
+def _save_baseline(root: pathlib.Path, score: _Score) -> None:
     payload = {
         "total": score.total,
         "components": {"C": score.cc + score.cog, "L": score.func + score.cls, "D": score.clone},
@@ -405,7 +405,7 @@ def _print_diff(added: list, grew: list) -> None:
         print(f"    [变大] {before} → {value}  {key}")
 
 
-def _compare(root: pathlib.Path, score: Score) -> int:
+def _compare(root: pathlib.Path, score: _Score) -> int:
     """与基线比较：**新增项才算回归**（退出码 1）。"""
     base = _load_baseline(root)
     old = {k: int(v) for k, v in base["items"].items()}

@@ -118,7 +118,7 @@ class CheckReport:
 
 # ── 文件收集 ────────────────────────────────────────────────────────────────
 
-def iter_py_files(root: Path) -> Iterator[Path]:
+def _iter_py_files(root: Path) -> Iterator[Path]:
     """产出仓库内全部 .py 文件（相对 root），排除构建/虚拟环境目录。"""
     for path in sorted(root.rglob("*.py")):
         rel = path.relative_to(root)
@@ -127,7 +127,7 @@ def iter_py_files(root: Path) -> Iterator[Path]:
         yield rel
 
 
-def iter_doc_files(root: Path) -> Iterator[Path]:
+def _iter_doc_files(root: Path) -> Iterator[Path]:
     """产出 docs/ 下全部 .md 文件（相对 root）。"""
     docs_dir = root / "docs"
     if docs_dir.is_dir():
@@ -137,10 +137,10 @@ def iter_doc_files(root: Path) -> Iterator[Path]:
 
 # ── D1：代码 Doc: 头目标存在性 ─────────────────────────────────────────────
 
-def rule_d1_doc_headers(root: Path) -> list[Finding]:
+def _rule_d1_doc_headers(root: Path) -> list[Finding]:
     """规则 D1（gate）：代码 Doc: 头引用的 docs 文件必须存在。"""
     findings: list[Finding] = []
-    for rel in iter_py_files(root):
+    for rel in _iter_py_files(root):
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
         for m in _DOC_HEADER_RE.finditer(text):
             target = m.group(1)
@@ -215,7 +215,7 @@ def _check_nav_line(
             findings.append(_d2_finding(nav_rel, line_no, line, target))
 
 
-def rule_d2_nav_indexes(root: Path) -> list[Finding]:
+def _rule_d2_nav_indexes(root: Path) -> list[Finding]:
     """规则 D2（gate）：导航索引引用的 docs 文件必须存在。"""
     findings: list[Finding] = []
     for nav_rel in NAV_FILES:
@@ -292,14 +292,14 @@ def _check_d3_line(
             findings.append(finding)
 
 
-def rule_d3_impl_test_files(root: Path) -> list[Finding]:
+def _rule_d3_impl_test_files(root: Path) -> list[Finding]:
     """规则 D3（info）：docs 内 Impl:/Test: 引用的文件级存在（glob 非空即过）。
 
     支持同一行 `/` 分隔的多候选；裸文件名（无目录前缀）继承本行前一个有
     目录候选的目录（`a/b.py / c.py` → c.py 解析为 a/c.py）。
     """
     findings: list[Finding] = []
-    for doc_rel in iter_doc_files(root):
+    for doc_rel in _iter_doc_files(root):
         text = (root / doc_rel).read_text(encoding="utf-8", errors="replace")
         for line_no, line in _iter_md_lines(text):
             _check_d3_line(root, doc_rel, line_no, line, findings)
@@ -308,11 +308,11 @@ def rule_d3_impl_test_files(root: Path) -> list[Finding]:
 
 # ── D4：孤儿文档提醒（info） ────────────────────────────────────────────────
 
-def rule_d4_orphan_docs(root: Path, d1_targets: set[str], d2_targets: set[str]) -> list[Finding]:
+def _rule_d4_orphan_docs(root: Path, d1_targets: set[str], d2_targets: set[str]) -> list[Finding]:
     """规则 D4（info）：docs 文件未被代码 Doc: 或导航索引引用（孤儿提醒）。"""
     referenced = d1_targets | d2_targets
     findings: list[Finding] = []
-    for doc_rel in iter_doc_files(root):
+    for doc_rel in _iter_doc_files(root):
         doc = doc_rel.as_posix()
         # 导航文件自身（docs 导航 / 跳转表）不算孤儿；decisions/README 由
         # docs-README 决策行引用（不豁免，靠真实引用）
@@ -335,27 +335,27 @@ def rule_d4_orphan_docs(root: Path, d1_targets: set[str], d2_targets: set[str]) 
 
 def collect_findings(root: Path) -> CheckReport:
     """跑全部规则，返回 CheckReport（测试与 CLI 共用入口）。"""
-    d1 = rule_d1_doc_headers(root)
-    d2 = rule_d2_nav_indexes(root)
+    d1 = _rule_d1_doc_headers(root)
+    d2 = _rule_d2_nav_indexes(root)
     # 供 D4 使用：已引用的 docs 目标集合
     d1_targets = _collect_d1_targets(root)
     d2_targets = _collect_d2_targets(root)
-    d4 = rule_d4_orphan_docs(root, d1_targets, d2_targets)
+    d4 = _rule_d4_orphan_docs(root, d1_targets, d2_targets)
     return CheckReport(
         results={
             "D1": RuleResult(d1, []),
             "D2": RuleResult(d2, []),
-            "D3": RuleResult(rule_d3_impl_test_files(root), []),
+            "D3": RuleResult(_rule_d3_impl_test_files(root), []),
             "D4": RuleResult(d4, []),
         },
-        doc_files=list(iter_doc_files(root)),
+        doc_files=list(_iter_doc_files(root)),
     )
 
 
 def _collect_d1_targets(root: Path) -> set[str]:
     """D1 扫描中出现的全部 docs 目标（供 D4 判孤儿）。"""
     targets: set[str] = set()
-    for rel in iter_py_files(root):
+    for rel in _iter_py_files(root):
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
         for m in _DOC_HEADER_RE.finditer(text):
             targets.add(m.group(1))

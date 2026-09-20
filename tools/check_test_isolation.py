@@ -250,7 +250,7 @@ def _run_chunk(
     return ChunkResult(name, res.returncode, res.failed, res.summary)
 
 
-def run_isolated(
+def _run_isolated(
     chunks: dict[str, list[str]], env: dict[str, str], jobs: int, granularity: str,
     roots: list[str], verbose: bool,
 ) -> list[ChunkResult]:
@@ -270,7 +270,7 @@ def run_isolated(
     return sorted(results, key=lambda r: r.name)
 
 
-def run_shared(selection: list[str], env: dict[str, str]) -> ChunkResult:
+def _run_shared(selection: list[str], env: dict[str, str]) -> ChunkResult:
     """共享进程档：**一个**进程跑完选中集（`-n 0`）。
 
     刻意关并：xdist 会把文件分到不同 worker——那样"共享"名不副实（实测
@@ -284,7 +284,7 @@ def run_shared(selection: list[str], env: dict[str, str]) -> ChunkResult:
     return ChunkResult("(共享进程)", res.returncode, res.failed, res.summary)
 
 
-def hashseed_scan(
+def _hashseed_scan(
     selection: list[str], seeds: int,
 ) -> tuple[list[tuple[int, ChunkResult]], list[int]]:
     """同一选择集在 seeds 个 PYTHONHASHSEED 下各跑一遍（单进程档）。
@@ -297,7 +297,7 @@ def hashseed_scan(
     drift: list[int] = []
     baseline: tuple[int, tuple[str, ...], str] | None = None
     for seed in range(seeds):
-        res = run_shared(selection, _pytest_env(False, hashseed=seed))
+        res = _run_shared(selection, _pytest_env(False, hashseed=seed))
         runs.append((seed, res))
         key = (res.returncode, res.failed, _stable_summary(res.summary))
         if baseline is None:
@@ -371,7 +371,7 @@ def _phase_isolated(
         f"PYTHONHASHSEED={'随机' if args.random_hashseed else '0'}）"
     )
     t0 = time.perf_counter()
-    isolated = run_isolated(chunks, env, jobs, args.granularity, roots, args.verbose)
+    isolated = _run_isolated(chunks, env, jobs, args.granularity, roots, args.verbose)
     elapsed = time.perf_counter() - t0
     bad = [r for r in isolated if not r.ok]
     print(f"[隔离档] {len(isolated) - len(bad)} OK / {len(bad)} FAIL（用时 {elapsed:.0f}s）")
@@ -393,7 +393,7 @@ def _phase_compare(
     """共享进程档对照（`--compare`）→ 是否存在两档差异。"""
     print("[info] 共享进程档：单进程（-n 0）跑完选中集——一个进程才叫\"共享\"")
     t1 = time.perf_counter()
-    shared = run_shared(selection, env)
+    shared = _run_shared(selection, env)
     print(f"[共享档] {shared.summary}（用时 {time.perf_counter() - t1:.0f}s）")
     shared_only, isolated_only = diff_failures(isolated, shared)
     if shared_only:
@@ -415,7 +415,7 @@ def _phase_hashseed(selection: list[str], seeds: int, any_fail: bool) -> bool:
     """哈希种子扫描（`--hashseed-scan`）→ 是否存在结果漂移。"""
     print(f"[info] 哈希种子扫描：{seeds} 个 PYTHONHASHSEED × 单进程档")
     t2 = time.perf_counter()
-    runs, drift = hashseed_scan(selection, seeds)
+    runs, drift = _hashseed_scan(selection, seeds)
     for seed, res in runs:
         flag = "  <-- 与 seed 0 不一致" if seed in drift else ""
         print(f"  seed={seed:<3} {res.summary}{flag}")

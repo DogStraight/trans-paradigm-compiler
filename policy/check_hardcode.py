@@ -154,7 +154,7 @@ def collect_grammar_keywords(root: Path) -> set[str]:
     return vocab - PY_KEYWORDS
 
 
-def iter_engine_files(root: Path) -> Iterator[Path]:
+def _iter_engine_files(root: Path) -> Iterator[Path]:
     """产出引擎目录 + main.py 下的全部 .py 文件（相对 root）。"""
     for name in ENGINE_DIRS:
         base = root / name
@@ -167,7 +167,7 @@ def iter_engine_files(root: Path) -> Iterator[Path]:
             yield Path(name)
 
 
-def iter_test_files(root: Path) -> Iterator[Path]:
+def _iter_test_files(root: Path) -> Iterator[Path]:
     """产出测试文件（tests/**/test_*.py 与 conftest.py，相对 root）。
 
     不含 tests/e2e/eval_*.py 等手动脚本：它们以 `main()` 内 `os.chdir(_ROOT)`
@@ -211,11 +211,11 @@ def _iter_code_literals(text: str) -> Iterator[tuple[int, str]]:
 
 # ── 规则实现 ────────────────────────────────────────────────────────────────
 
-def rule1_token_literals(root: Path, vocab: set[str]) -> tuple[list[Finding], list[Finding]]:
+def _rule1_token_literals(root: Path, vocab: set[str]) -> tuple[list[Finding], list[Finding]]:
     """规则 1：语言 token 字符串字面量。返回 (违规, allowlist 跳过)。"""
     violations: list[Finding] = []
     skipped: list[Finding] = []
-    for rel in iter_engine_files(root):
+    for rel in _iter_engine_files(root):
         text = (root / rel).read_text(encoding="utf-8")
         for line_no, lit in _iter_code_literals(text):
             if lit not in vocab:
@@ -231,11 +231,11 @@ def rule1_token_literals(root: Path, vocab: set[str]) -> tuple[list[Finding], li
     return violations, skipped
 
 
-def rule2_grammar_paths(root: Path) -> tuple[list[Finding], list[Finding]]:
+def _rule2_grammar_paths(root: Path) -> tuple[list[Finding], list[Finding]]:
     """规则 2：grammar/<lang> 相对路径字面量。返回 (违规, allowlist 跳过)。"""
     violations: list[Finding] = []
     skipped: list[Finding] = []
-    for rel in iter_engine_files(root):
+    for rel in _iter_engine_files(root):
         text = (root / rel).read_text(encoding="utf-8")
         for line_no, lit in _iter_code_literals(text):
             if not _PATH_LITERAL_RE.match(lit):
@@ -251,20 +251,20 @@ def rule2_grammar_paths(root: Path) -> tuple[list[Finding], list[Finding]]:
     return violations, skipped
 
 
-def rule3_doc_headers(root: Path) -> list[Finding]:
+def _rule3_doc_headers(root: Path) -> list[Finding]:
     """规则 3（info）：文件头 Doc: 反向引用缺失。"""
     findings: list[Finding] = []
-    for rel in iter_engine_files(root):
+    for rel in _iter_engine_files(root):
         head = (root / rel).read_text(encoding="utf-8")[:2000]
         if not _DOC_RE.search(head):
             findings.append(Finding("R3", str(rel), 1, "文件头缺 Doc: 反向引用"))
     return findings
 
 
-def rule4_grammar_imports(root: Path) -> list[Finding]:
+def _rule4_grammar_imports(root: Path) -> list[Finding]:
     """规则 4（info）：引擎代码直接 import grammar.<lang> 插件。"""
     findings: list[Finding] = []
-    for rel in iter_engine_files(root):
+    for rel in _iter_engine_files(root):
         for line_no, line in enumerate(
             (root / rel).read_text(encoding="utf-8").splitlines(), 1
         ):
@@ -275,7 +275,7 @@ def rule4_grammar_imports(root: Path) -> list[Finding]:
     return findings
 
 
-def rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
+def _rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
     """规则 5：测试文件直接 `os.chdir`（进程级 CWD 泄漏）。
 
     xdist worker 共享进程 CWD：一个测试切了不还原，同 worker 后续测试的
@@ -284,7 +284,7 @@ def rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
     `monkeypatch.chdir`（自动还原）或绝对路径。
     """
     findings: list[Finding] = []
-    for rel in iter_test_files(root):
+    for rel in _iter_test_files(root):
         try:
             tree = ast.parse((root / rel).read_text(encoding="utf-8"))
         except SyntaxError:
@@ -315,16 +315,16 @@ def rule5_no_chdir_in_tests(root: Path) -> list[Finding]:
 def collect_findings(root: Path) -> CheckReport:
     """跑全部规则，返回 CheckReport（测试与 CLI 共用入口）。"""
     vocab = collect_grammar_keywords(root)
-    r1_viol, r1_skip = rule1_token_literals(root, vocab)
-    r2_viol, r2_skip = rule2_grammar_paths(root)
+    r1_viol, r1_skip = _rule1_token_literals(root, vocab)
+    r2_viol, r2_skip = _rule2_grammar_paths(root)
     return CheckReport(
         vocab=vocab,
         results={
             "R1": RuleResult(r1_viol, r1_skip),
             "R2": RuleResult(r2_viol, r2_skip),
-            "R3": RuleResult(rule3_doc_headers(root), []),
-            "R4": RuleResult(rule4_grammar_imports(root), []),
-            "R5": RuleResult(rule5_no_chdir_in_tests(root), []),
+            "R3": RuleResult(_rule3_doc_headers(root), []),
+            "R4": RuleResult(_rule4_grammar_imports(root), []),
+            "R5": RuleResult(_rule5_no_chdir_in_tests(root), []),
         },
     )
 

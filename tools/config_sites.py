@@ -171,7 +171,7 @@ def _value_head(after: str) -> str:
     return after.split()[0].rstrip(",")
 
 
-class Site(dict):
+class _Site(dict):
     """一个配置键点位：file/line/section/key/value/col（键 token 起止列）。"""
 
 
@@ -185,7 +185,7 @@ class _FileScan:
     """
 
     rel: str
-    sites: list[Site] = field(default_factory=list)
+    sites: list[_Site] = field(default_factory=list)
     section: str = ""
     stack: list[tuple[int, int]] = field(default_factory=list)
     arrays: list[tuple[str, int]] = field(default_factory=list)
@@ -198,7 +198,7 @@ class _FileScan:
     quote: str = ""
     line: int = 0
 
-    def scan(self, path: str) -> list[Site]:
+    def scan(self, path: str) -> list[_Site]:
         """逐行扫描 TOML → 点位列表。"""
         with open(path, encoding="utf-8") as f:
             for lineno, raw in enumerate(f.read().split("\n"), 1):
@@ -283,11 +283,11 @@ class _FileScan:
             self.sites.append(self._make_site(code[i:j], after, i, j, raw))
         return j - 1
 
-    def _make_site(self, key: str, after: str, col: int, end: int, raw: str) -> Site:
+    def _make_site(self, key: str, after: str, col: int, end: int, raw: str) -> _Site:
         """点位构造（所属表 = 当时最内层开着的 `{`，跨行安全）。"""
         top = self.stack[-1] if self.stack else None
         par = self.table_parent.get(top, None) if top is not None else None
-        return Site(
+        return _Site(
             file=self.rel,
             line=self.line,
             section=self.section,
@@ -302,7 +302,7 @@ class _FileScan:
         )
 
 
-def _scan_file(path: str, rel: str) -> list[Site]:
+def _scan_file(path: str, rel: str) -> list[_Site]:
     """扫描一个 TOML：记录每个键的 file:line/段路径/原值/所属行内表/消费方。
 
     `owner` = 该键所在行内表的**消费方键**：`=\u00a0{...}` 是其值（如 `opt`），
@@ -336,8 +336,8 @@ def _packs(root: str, roots: list[str]) -> list[str]:
     ]
 
 
-def _collect(root: str, roots: list[str], renderer_only: bool) -> list[Site]:
-    sites: list[Site] = []
+def _collect(root: str, roots: list[str], renderer_only: bool) -> list[_Site]:
+    sites: list[_Site] = []
     for pack in _packs(root, roots):
         for full, rel in _iter_toml(root, pack):
             for s in _scan_file(full, rel):
@@ -350,7 +350,7 @@ def _collect(root: str, roots: list[str], renderer_only: bool) -> list[Site]:
 # ── 模式实现 ────────────────────────────────────────────────────────
 
 
-def _filter_sites(sites: list[Site], args: argparse.Namespace) -> list[Site]:
+def _filter_sites(sites: list[_Site], args: argparse.Namespace) -> list[_Site]:
     """按 `--key` / `--value` 过滤点位。"""
     if args.key:
         sites = [s for s in sites if s["key"] == args.key]
@@ -359,7 +359,7 @@ def _filter_sites(sites: list[Site], args: argparse.Namespace) -> list[Site]:
     return sites
 
 
-def _print_key_group(key: str, hits: list[Site], vocab: set[str]) -> None:
+def _print_key_group(key: str, hits: list[_Site], vocab: set[str]) -> None:
     """单个键的分组输出（非引擎词汇标注 + 逐点位 file:line）。"""
     flag = "" if key in vocab else "  ← 非引擎词汇"
     print(f"\n[{key}] {len(hits)} 处{flag}")
@@ -367,9 +367,9 @@ def _print_key_group(key: str, hits: list[Site], vocab: set[str]) -> None:
         print(f"  {s['file']}:{s['line']}  {{{s['section']}}}  = {s['value']}")
 
 
-def cmd_list(args: argparse.Namespace) -> int:
+def _cmd_list(args: argparse.Namespace) -> int:
     sites = _filter_sites(_collect(args.root, args.pack, args.renderer_only), args)
-    by_key: dict[str, list[Site]] = {}
+    by_key: dict[str, list[_Site]] = {}
     for s in sites:
         by_key.setdefault(s["key"], []).append(s)
     print(f"点位合计: {len(sites)}（语言包 {len(_packs(args.root, args.pack))} 个）")
@@ -379,7 +379,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _is_structural(site: Site) -> bool:
+def _is_structural(site: _Site) -> bool:
     """结构键（非引擎词汇）：`override` 下的规则名、容器键（值为 `{`）。"""
     if any(mark in site["section"] for mark in _STRUCTURAL_KEY_SECTIONS):
         return True
@@ -387,13 +387,13 @@ def _is_structural(site: Site) -> bool:
 
 
 def _dispatch_tables(
-    sites: list[Site], order: dict[str, int]
-) -> tuple[dict[tuple[str, str], list[Site]], dict[tuple[str, str], str]]:
+    sites: list[_Site], order: dict[str, int]
+) -> tuple[dict[tuple[str, str], list[_Site]], dict[tuple[str, str], str]]:
     """按 (文件, 表 id) 归组**走 dispatch** 的键 → (表 → 键, 表 → 父表 id)。
 
     `line` 数组元素由 `eval_line` 内联处理（不走 dispatch）→ 不参与本检查。
     """
-    tables: dict[tuple[str, str], list[Site]] = {}
+    tables: dict[tuple[str, str], list[_Site]] = {}
     tparent: dict[tuple[str, str], str] = {}
     for s in sites:
         if s["table"]:
@@ -437,7 +437,7 @@ def _dead_keys_under(
     f: str,
     tid: str,
     keys: list[str],
-    sites: list[Site],
+    sites: list[_Site],
     tparent: dict[tuple[str, str], str],
 ) -> list[str]:
     """被遮蔽表子树内失效的键（`键@行`，含自身表里非首个的键）。"""
@@ -452,7 +452,7 @@ def _dead_keys_under(
 
 
 def _multi_dispatch_tables(
-    sites: list[Site],
+    sites: list[_Site],
 ) -> list[tuple[str, int, list[str], list[str]]]:
     """同一行内表里多个**原语 dispatch 键** → 只有注册顺序最前的生效。
 
@@ -478,7 +478,7 @@ def _multi_dispatch_tables(
     return out
 
 
-def cmd_check(args: argparse.Namespace) -> int:
+def _cmd_check(args: argparse.Namespace) -> int:
     vocab = _engine_vocab()
     sites = _collect(args.root, args.pack, renderer_only=True)
     unknown = [
@@ -515,7 +515,7 @@ def cmd_rename(args: argparse.Namespace) -> int:
     if not hits:
         print("无匹配点位（整键相等比对，子串不命中）")
         return 0
-    by_file: dict[str, list[Site]] = {}
+    by_file: dict[str, list[_Site]] = {}
     for s in hits:
         by_file.setdefault(s["file"], []).append(s)
     changed = 0
@@ -552,11 +552,11 @@ def main(argv: list[str] | None = None) -> int:
     add_common(lp)
     lp.add_argument("--key", help="按整键过滤（子串不命中）")
     lp.add_argument("--value", help="按值头部过滤（如 true / { / [）")
-    lp.set_defaults(func=cmd_list)
+    lp.set_defaults(func=_cmd_list)
 
     cp = sub.add_parser("check", help="渲染段非引擎词汇键（门禁式）")
     add_common(cp)
-    cp.set_defaults(func=cmd_check)
+    cp.set_defaults(func=_cmd_check)
 
     rp = sub.add_parser("rename", help="机械重命名键（默认 dry-run）")
     add_common(rp)

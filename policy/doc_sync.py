@@ -56,7 +56,7 @@ _SYNC_EXCLUDE_FILES: tuple[str, ...] = ("CHANGELOG.md",)
 
 
 @dataclass(frozen=True)
-class Ref:
+class _Ref:
     """一条引用点（字符区间定位，供精确替换）。"""
 
     path: str  # 相对 root
@@ -108,7 +108,7 @@ class _RefCollector:
     def __init__(self, rel: Path, text: str):
         self.rel = rel
         self.text = text
-        self.collected: list[tuple[int, int, Ref]] = []
+        self.collected: list[tuple[int, int, _Ref]] = []
 
     def _overlaps(self, start: int, end: int) -> bool:
         return any(s < end and start < e for s, e, _ in self.collected)
@@ -121,7 +121,7 @@ class _RefCollector:
             (
                 start,
                 end,
-                Ref(
+                _Ref(
                     self.rel.as_posix(),
                     _line_of(self.text, start),
                     start,
@@ -132,7 +132,7 @@ class _RefCollector:
             )
         )
 
-    def refs(self) -> list[Ref]:
+    def refs(self) -> list[_Ref]:
         """本文件收集到的引用点（按登记顺序）。"""
         return [r for _, _, r in self.collected]
 
@@ -177,7 +177,7 @@ def _collect_bare_refs(
             collector.add(m.start(1), m.end(1), cand, tgt)
 
 
-def _refs_in_file(root: Path, rel: Path, target: str) -> Iterator[Ref]:
+def _refs_in_file(root: Path, rel: Path, target: str) -> Iterator[_Ref]:
     """单文件内的引用点（读失败 → 无产出）。"""
     try:
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
@@ -194,7 +194,7 @@ def _refs_in_file(root: Path, rel: Path, target: str) -> Iterator[Ref]:
     yield from collector.refs()
 
 
-def collect_refs(root: Path, target: str) -> list[Ref]:
+def collect_refs(root: Path, target: str) -> list[_Ref]:
     """收集引用 target（docs 相对路径）的全部引用点。
 
     同一组正则与 check_doc_refs 完全一致：_DOC_HEADER_RE（代码 Doc: 头）、
@@ -204,7 +204,7 @@ def collect_refs(root: Path, target: str) -> list[Ref]:
     target = target.replace("\\", "/").lstrip("./")
     if not target.startswith("docs/"):
         target = f"docs/{target}"
-    refs: list[Ref] = []
+    refs: list[_Ref] = []
     for rel in _iter_scan_files(root):
         refs.extend(_refs_in_file(root, rel, target))
     return refs
@@ -230,7 +230,7 @@ def _other_md_refs(root: Path, line: str, target: str) -> bool:
     return False
 
 
-def _replacement_for(ref: Ref, new_doc: str) -> str | None:
+def _replacement_for(ref: _Ref, new_doc: str) -> str | None:
     """计算 ref 的替换文本；非机械可改返回 None（留人工）。
 
     new_doc 为 docs 相对路径（docs/bar.md）。替换区间是引用中的路径部分
@@ -264,13 +264,13 @@ def _replacement_for(ref: Ref, new_doc: str) -> str | None:
     return None  # 未知形态 → 人工
 
 
-def _apply_replacements(root: Path, refs: Sequence[Ref], new_doc: str) -> list[Ref]:
+def _apply_replacements(root: Path, refs: Sequence[_Ref], new_doc: str) -> list[_Ref]:
     """按引用点做文本替换；返回无法机械处理的引用（人工清单）。
 
     按文件聚合、从后往前替换（避免区间漂移）；仅 --apply 调用。
     """
-    manual: list[Ref] = []
-    by_file: dict[str, list[Ref]] = {}
+    manual: list[_Ref] = []
+    by_file: dict[str, list[_Ref]] = {}
     for ref in refs:
         by_file.setdefault(ref.path, []).append(ref)
     for rel, file_refs in by_file.items():
@@ -292,7 +292,7 @@ def _apply_replacements(root: Path, refs: Sequence[Ref], new_doc: str) -> list[R
 
 # ── 输出 ────────────────────────────────────────────────────────────────────
 
-def _print_refs(refs: Sequence[Ref]) -> None:
+def _print_refs(refs: Sequence[_Ref]) -> None:
     if not refs:
         print("  无引用点（可直接改名/删除）")
         return
@@ -303,7 +303,7 @@ def _print_refs(refs: Sequence[Ref]) -> None:
 
 # ── 子命令 ──────────────────────────────────────────────────────────────────
 
-def cmd_refs(root: Path, target: str) -> int:
+def _cmd_refs(root: Path, target: str) -> int:
     print(f"[refs] {target} 的引用点：")
     _print_refs(collect_refs(root, target))
     return 0
@@ -342,17 +342,17 @@ def cmd_rename(root: Path, old: str, new: str, apply: bool) -> int:
     return 0
 
 
-def _refs_by_file(refs: Sequence[Ref]) -> dict[str, list[Ref]]:
+def _refs_by_file(refs: Sequence[_Ref]) -> dict[str, list[_Ref]]:
     """引用点按文件归组。"""
-    out: dict[str, list[Ref]] = {}
+    out: dict[str, list[_Ref]] = {}
     for ref in refs:
         out.setdefault(ref.path, []).append(ref)
     return out
 
 
 def _removable_lines(
-    root: Path, rel: str, file_refs: list[Ref], target_doc: str
-) -> tuple[list[int], list[Ref]]:
+    root: Path, rel: str, file_refs: list[_Ref], target_doc: str
+) -> tuple[list[int], list[_Ref]]:
     """单文件判定 → (可机械清理的行号（0-based）, 需人工的引用）。
 
     机械可清：代码 Doc: 头行（整行删）/ 非 .py 的独占行（行内除本引用外无
@@ -361,7 +361,7 @@ def _removable_lines(
     lines = (root / rel).read_text(encoding="utf-8").splitlines(keepends=True)
     is_py = rel.endswith(".py")
     removable: list[int] = []
-    manual: list[Ref] = []
+    manual: list[_Ref] = []
     for ref in sorted(file_refs, key=lambda r: r.start, reverse=True):
         line_idx = ref.line - 1
         if line_idx >= len(lines):
@@ -377,11 +377,11 @@ def _removable_lines(
 
 
 def _judge_removable(
-    root: Path, by_file: dict[str, list[Ref]], target_doc: str
-) -> tuple[dict[str, list[int]], list[Ref]]:
+    root: Path, by_file: dict[str, list[_Ref]], target_doc: str
+) -> tuple[dict[str, list[int]], list[_Ref]]:
     """阶段 1：只读判定（不落盘）→ (可清理行号表, 人工清单)。"""
     removable: dict[str, list[int]] = {}
-    manual: list[Ref] = []
+    manual: list[_Ref] = []
     for rel, file_refs in by_file.items():
         line_idxs, need_manual = _removable_lines(root, rel, file_refs, target_doc)
         if line_idxs:
@@ -459,7 +459,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
 
     if args.cmd == "refs":
-        return cmd_refs(root, args.target)
+        return _cmd_refs(root, args.target)
     if args.cmd == "rename":
         return cmd_rename(root, args.old, args.new, args.apply)
     if args.cmd == "delete":

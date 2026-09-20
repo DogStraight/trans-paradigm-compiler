@@ -101,31 +101,6 @@ def group_by_scope(
     return result
 
 
-def extract_rows(
-    lines: list[str],
-    indices: list[int],
-    extract_fn: Callable[[str], list[str] | None],
-) -> tuple[list[list[str]], list[int]]:
-    """从行列表中提取语义行。
-
-    Args:
-        lines: 原始行列表
-        indices: 候选行索引
-        extract_fn: 提取函数，接收一行文本返回语义列列表，None 表示跳过
-
-    Returns:
-        (rows, valid_indices): 成功提取的行列表和对应的索引
-    """
-    rows: list[list[str]] = []
-    valid_indices: list[int] = []
-    for idx in indices:
-        cols = extract_fn(lines[idx])
-        if cols:
-            rows.append(cols)
-            valid_indices.append(idx)
-    return rows, valid_indices
-
-
 def compute_column_widths(rows: list[list[str]], columns: int) -> list[int]:
     """计算每列的最大宽度。"""
     widths = [0] * columns

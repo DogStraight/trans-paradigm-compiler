@@ -1,14 +1,9 @@
 {
- "total": 528,
+ "total": 0,
  "components": {
   "C": 0,
-  "L": 528,
+  "L": 0,
   "D": 0
  },
- "items": {
-  "CLASS|grammar/verilog/plugins/formatter/boundary.py:BoundaryScanner": 99,
-  "CLASS|lexer/main_lexer.py:Lexer": 204,
-  "CLASS|linter/checkers/matcher.py:RuleMatcher": 181,
-  "CLASS|parser/parser_core.py:Parser": 44
- }
+ "items": {}
 }

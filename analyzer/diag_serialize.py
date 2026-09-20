@@ -34,7 +34,7 @@ def map_diag_line(fr: FileResult, line0: int | None) -> int | None:
     return src - 1 if src is not None else line0
 
 
-def macro_of_line(fr: FileResult, line0: int | None) -> str:
+def _macro_of_line(fr: FileResult, line0: int | None) -> str:
     """诊断行（展开坐标 0-based）落在某宏展开区间 → 宏名；否则空串。
 
     区间表由 `_expand_source` 在语义展开时换算（展开行区间 + 宏调用
@@ -77,13 +77,13 @@ def syntax_diag(fr: FileResult, d) -> dict:
         "message": d.message,
         "range": rng,
     }
-    macro = macro_of_line(fr, span[0].line) if span else ""
+    macro = _macro_of_line(fr, span[0].line) if span else ""
     if macro:
         out["macro"] = macro
     return out
 
 
-def related_diags(fr: FileResult, d) -> list:
+def _related_diags(fr: FileResult, d) -> list:
     """诊断 related 链 → LSP 形状列表。
 
     行号回源只对本文件节点做（跨文件节点的行号属另一文件坐标系）；
@@ -140,10 +140,10 @@ def semantic_diag(fr: FileResult, d) -> dict:
         "range": rng,
     }
     if line is not None and same_file:
-        macro = macro_of_line(fr, (line - 1) if line else 0)
+        macro = _macro_of_line(fr, (line - 1) if line else 0)
         if macro:
             out["macro"] = macro
-    related = related_diags(fr, d)
+    related = _related_diags(fr, d)
     if related:
         out["related"] = related
     return out

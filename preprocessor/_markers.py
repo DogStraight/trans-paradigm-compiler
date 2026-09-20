@@ -60,16 +60,16 @@ def line_form_re(syntax: CommentSyntax) -> re.Pattern:
         # 未声明行注释 → 永不匹配的形态（扫描侧容忍，书写侧才 fail-fast）
         return re.compile(r"(?!x)x")
     return re.compile(
-        rf"^[ \t]*{re.escape(start)}[ \t]*<({marker_core_pattern()})>[ \t]*$",
+        rf"^[ \t]*{re.escape(start)}[ \t]*<({_marker_core_pattern()})>[ \t]*$",
         re.MULTILINE,
     )
 
 
-def marker_core_pattern() -> str:
+def _marker_core_pattern() -> str:
     """marker 编号的捕获模式（`tpc:<kind>:<seq>`）。"""
     return r"tpc:[^>]+"
 
 
 def marker_core_re() -> re.Pattern:
     """从任意文本取 marker 编号（`<tpc:…>` 内的部分）。"""
-    return re.compile(rf"<({marker_core_pattern()})>")
+    return re.compile(rf"<({_marker_core_pattern()})>")

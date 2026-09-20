@@ -44,7 +44,7 @@ sys.modules 缓存造出"缓存命中 + 注册缺失"不一致态）、`CONTENT_
 （一个文件固定在同一 worker）。默认收集序只是"某一序"——实测：同一份代码在
 不同文件序下曾 5 例失败（本模块 ACCUMULATED 那条边界即由此暴露）。
 
-泄漏检测：`fingerprint()` + `assert_clean()`——每测试**还原后**立即比对基线
+泄漏检测：`_fingerprint()` + `assert_clean()`——每测试**还原后**立即比对基线
 指纹（还原机制自身漏项当场红；实测抓到三处：keywise 还原不补被删基线键、
 快照内容依赖导入顺序、注册面还原与组件缓存不一致）。
 
@@ -381,7 +381,7 @@ def _signature(value: object) -> tuple:
     return ("ref", type(value).__name__)
 
 
-def fingerprint() -> dict[str, tuple]:
+def _fingerprint() -> dict[str, tuple]:
     """TRACKED 各条目的指纹（用于测试开始前的基线比对）。"""
     _warm_imports()
     out: dict[str, tuple] = {}
@@ -394,7 +394,7 @@ def fingerprint() -> dict[str, tuple]:
 def assert_clean(baseline: dict) -> None:
     """断言当前全局态指纹 == 基线（每个测试开始前调：泄漏当场变红）。"""
     want = baseline.get("tracked_fingerprint") or {}
-    now = fingerprint()
+    now = _fingerprint()
     changed = [
         n for n in sorted(set(want) | set(now)) if want.get(n) != now.get(n)
     ]
@@ -455,7 +455,7 @@ def snapshot() -> dict:
         # + 测试级基线指纹（每测试还原后比对用）。
         "tracked": _snapshot_tracked(TRACKED),
         "install": _snapshot_tracked(INSTALL_STATE),
-        "tracked_fingerprint": fingerprint(),
+        "tracked_fingerprint": _fingerprint(),
     }
 
 

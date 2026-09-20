@@ -6,6 +6,10 @@
     "工具在 compute 阶段跳过这些项，--compare 不再把它们报为回归。"
   ],
   "items": {
+    "CLASS|lexer/main_lexer.py:Lexer": "模块即类（R2）判保持——作者 2026-09-20 定调「允许拆文件，但认知复杂度低时可以接受内聚」。实测：类内 38 个方法**最大认知 12 / 最大 CC 6**（阈 15 / 10 以下），合计认知 144 / CC 125；规模来自**方法数（覆盖面广）**而非单个方法深度——拆 mixin 只切共享 `self._*` 状态，是形式拆分。",
+    "CLASS|linter/checkers/matcher.py:RuleMatcher": "模块即类（R2）判保持——同 Lexer 同判据。实测：32 个方法最大认知 14 / 最大 CC 9（均在阈下），合计认知 172 / CC 158；规模来自规则匹配的分支族（每支一个短方法），不是单点难读。",
+    "CLASS|grammar/verilog/plugins/formatter/boundary.py:BoundaryScanner": "类体 549 行判保持——同判据。实测：15 个方法最大认知 10 / 最大 CC 13（`_is_case_item_token`，已单独判保持），合计认知 66 / CC 100；类外还有同一族的模块级助手（`_build_scope_kind_map` 族，已判保持），同属「逐规则/逐变体分支」。",
+    "CLASS|parser/parser_core.py:Parser": "类体 494 行判保持——同判据。实测：13 个方法最大认知 12 / 最大 CC 8（均在阈下），合计认知 66 / CC 59；规模来自解析器职责面（词法/规则选择/作用域/日志）而非单方法深度。",
     "CC|grammar.verilog.plugins.formatter.boundary._build_scope_kind_map": "C-C1（分派型保持）：逐规则判定的单一职责循环（一规则一臂，臂内一行映射）；再拆只会把映射逻辑碎片化。出处：_drafts/bifrost/dispositions.md B-B1b 节「已判保持（不得重开）」。2026-09-20 复核仍成立。",
     "COG|grammar.verilog.plugins.formatter.boundary._build_scope_kind_map": "同 C-C1（认知分随同一循环的规则分支数）；见 B-B1b 节。",
     "CC|grammar.verilog.plugins.formatter.boundary._collect_stmt_headers": "C-C2（分派型保持）：逐规则收集语句头，一规则一臂且臂内一行的单一职责循环；见 B-B1b 节。",

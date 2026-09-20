@@ -39,7 +39,7 @@ from core.check_registry import (
 _HANDLER_CACHE: dict[str, dict[str, tuple[Any, Callable]]] = {}
 
 
-def plugins_dir_of(analyzer) -> str:
+def _plugins_dir_of(analyzer) -> str:
     """analyzer 的语言包插件目录（无 rules_dir 时为空串）。"""
     rules_dir = getattr(analyzer, "_rules_dir", None)
     if not rules_dir:
@@ -57,7 +57,7 @@ def active_rule_ids(analyzer) -> set:
     injected = getattr(analyzer, "_checks_enabled", None)
     if injected is not None:
         return set(injected)
-    pdir = plugins_dir_of(analyzer)
+    pdir = _plugins_dir_of(analyzer)
     user_cfg = load_user_check_config(plugins_dir=pdir)
     enabled = user_cfg.get("enabled")
     if enabled is not None:
@@ -114,7 +114,7 @@ def _rule_scope(analyzer, symbols) -> _RuleScope:
     关闭（"不选即关"，见 `active_rule_ids`）；overrides severity 覆盖；
     per_file 文件 glob 豁免（disabled 列表）。
     """
-    plugins_dir = plugins_dir_of(analyzer)
+    plugins_dir = _plugins_dir_of(analyzer)
     user_cfg = load_user_check_config(plugins_dir=plugins_dir)
     return _RuleScope(
         plugins_dir=plugins_dir,
@@ -326,8 +326,3 @@ def _get_handler_fn(rule_dir: str, fname: str, fn_name: str) -> Callable:
         )
     cache[cache_key] = (mod, fn)
     return fn
-
-
-def run_declarative_checks(analyzer, context) -> None:
-    """别名：与 check_rules_pass 相同（供插件 postpasses 显式声明）。"""
-    check_rules_pass(analyzer, context)

@@ -218,24 +218,3 @@ def apply_suppressions(
             continue  # 被豁免（None = 全部豁免）
         kept.append(d)
     return kept
-
-
-def iter_suppress_lines(
-    text: str, syntax: CommentSyntax
-) -> Iterator[tuple[int, set[str] | None]]:
-    """供调试/文档：逐条输出豁免指令（行号, 规则集）。
-
-    只枚举指令本身（不合并区间、不判优先级，`off` 在区间内也照样列出），
-    与 `build_suppress_map` 的判定语义不同——勿用它替代后者。
-    """
-    dirs = _compile_directives(syntax)
-    for idx, line in enumerate(text.splitlines()):
-        code_part, comment_part = _split_code_comment(line, syntax)
-        if dirs.off is not None:
-            m = dirs.off.search(code_part)
-            if m:
-                yield idx, _parse_rules(m.group(1))
-        if dirs.line is not None:
-            m = dirs.line.search(comment_part)
-            if m:
-                yield idx, _parse_rules(m.group(1))

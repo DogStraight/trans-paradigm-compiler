@@ -127,7 +127,7 @@ stdio + 显式 root（JSON 宿主配置）：
 
 | 族 | 工具 / 策略 | 本仓状态 | 值得注意的点 |
 |---|---|---|---|
-| **① 规模与复杂度** | `compute_cyclomatic_complexity`（10）、`compute_cognitive_complexity`（15）、`report_long_method_and_god_object_smells` | **复杂度面已闭合**：CC / 认知命中逐项下结论（分派型 = 表述能力所需 17 项登记判保持、工具自身 1 项已拆），C 超额 **119 → 0**；函数级 >80 行 = 0；**类/模块规模面未闭合**（4 项，见 `structural_budget.md` 六节） | ⚠ 长方法/上帝对象工具**每调用最多分析 25 个文件**（`Files analyzed cap: 25`，**不报截断**）→ 分块 ≤20；CC/认知两工具**无上限** |
+| **① 规模与复杂度** | `compute_cyclomatic_complexity`（10）、`compute_cognitive_complexity`（15）、`report_long_method_and_god_object_smells` | **已逐项收口**：CC/认知 19 项 + 类/模块规模 4 项均下结论（前 17 项 = 分派型/单一职责循环，后 4 项 = **最大单方法认知 10–14、规模来自方法数**的低认知大容器）；函数级 >80 行 = 0。判据与证据表见 `structural_budget.md` 六节 | ⚠ 长方法/上帝对象工具**每调用最多分析 25 个文件**（`Files analyzed cap: 25`，**不报截断**）→ 分块 ≤20；CC/认知两工具**无上限** |
 | **② 结构重复** | `report_structural_clone_smells`（minTokens=12 / shingleSize=2 / minShared=3 / astThreshold=70） | 已用，**该族已闭合**：真重复 2 处合并（常量表达式解析器 → `_IntExprParser`；两形态字段读取 → `_node_utils.dual_get`）、3 对逐行对照后判保持，D 超额 **940 → 0**。快照按 R3/R6 口径重测（同参数现报 108 对原始命中，过滤后 0） | 无上限提示，但分块大小会改变"最佳克隆对"选取（36 文件一次 46 条 vs 18+18 两次 52 条）→ 对数须固定分块比较 |
 | **③ 异常与断言** | `report_exception_handling_smells`（权重打分）、`report_test_assertion_smells` | 已用并收口（吞吃 44/44、断言 22/22 判定） | 断言族在本仓全是"断言在调用链内"的形态假阳性；断言工具整仓单次会截断（337 文件只报 8 条）→ 分块 |
 | **④ 变更差分** | `score_diff`、`missing_tests`、`blast_radius` | **未用**（本轮实测可用：`score_diff` 18.9s、`missing_tests` 4.8s） | **最值得纳入流程的一族**：`score_diff` 给结构面净变化（认知 Δ / 增删行 / 引入符号 / 签名变更 / `untested_fraction` / 未解析使用点），`missing_tests` 给"改动未达测试"的函数计数——本仓现有三道证据（pytest、字节对拍、诊断基线）全是**行为面**，缺的正是结构面量化 |

@@ -99,7 +99,7 @@ def _register_rule_starts(
         name_map.setdefault(tok, []).append(name)
 
 
-def build_start_token_map_names(
+def _build_start_token_map_names(
     grammar_rules: dict[str, GrammarRule],
     statement_rule_names: list[str],
 ) -> dict[str, list[str]]:
@@ -134,7 +134,7 @@ class RuleSelector:
         self.start_token_map: dict[str, list[str]] = {}
         self._names_to_rules: dict[str, GrammarRule] | None = None
 
-        self.start_token_map = build_start_token_map_names(
+        self.start_token_map = _build_start_token_map_names(
             grammar_rules, statement_rule_names
         )
 
