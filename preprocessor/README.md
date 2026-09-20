@@ -30,6 +30,7 @@
 | 宏形态（`shape` 生产式：前缀 token 名 + 名字位；段候选列表枚举） | `[macro_recognition]`（`shape` / `directive` / `call`） | `macro_shape.py`（声明解析）→ `lexer` 宏 token 扫描、`_expand.py`（文本层展开） |
 | 带参宏实参形态（调用括号对 + 实参槽 + 分隔符；定义侧与调用侧同形） | `[macro_recognition]`（`call_args` / `arg_separator`） | `macro_shape.py`（声明解析 + 配平/切分）→ `_expand.py`（调用侧）、`primitives/define.py`（形参表） |
 | 宏调用后随字面量后缀（`` `W'd0 `` 的 `'d0`；比 `[[number.based]]` 宽一档） | `[macro_recognition]`（`suffix_after_call`） | `macro_shape.py::load_macro_call_suffix`（编译形态模式）→ `_expand.py`（区间扩展） |
+| include 路径形态（开 / 闭定界符 + 解析策略：相对优先 or 仅 search_dirs） | `[directive_handlers.include]`（`path_forms`；未声明→引擎默认两形态） | `primitives/include.py`（形态匹配 + 路径解析） |
 | 数字形态（位宽字面量等） | `[[number.based]]` | `lexer/number_gen.py` |
 | 括号对 / 逗号等标点 | `[bracket] pairs` / `[symbol.*]` | lexer / parser / linter |
 

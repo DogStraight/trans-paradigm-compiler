@@ -108,3 +108,10 @@ enabled = true
 search_dirs = []
 # silent: true 时文件不存在不报错（类似 GPP 的 #sinclude）
 silent = false
+# 路径形态（开 / 闭定界符 + 解析策略）：声明序即优先序。
+# relative_first = true → 先按当前文件目录解析、未命中再按 search_dirs；
+#                     false → 仅按 search_dirs（系统路径风格）。
+path_forms = [
+    { open = '"', close = '"', relative_first = true },
+    { open = "<", close = ">", relative_first = false },
+]

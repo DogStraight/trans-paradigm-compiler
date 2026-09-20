@@ -4,7 +4,7 @@
   - define：object-like / function-like 形参表
   - undef：移除宏
   - ifdef 族：条件栈、active 判定（predefined/undefine 优先级）、占位压缩
-  - include：路径解析（""/<>）、递归、循环检测
+  - include：路径解析（""/<>）、递归、循环检测、指令拼写与路径形态声明驱动
   - 指令行切分（前缀 + 关键字 + 空白 + 参数）：关键字不写死、TAB 同样成立
 """
 
@@ -13,6 +13,7 @@ import os
 import pytest
 
 from core.define import FileManager
+from core.errors import ConfigError
 from preprocessor._expand import scan_directives
 from preprocessor.macro_shape import load_macro_call_args
 from preprocessor.primitives.registry import (
@@ -247,3 +248,45 @@ class TestInclude:
         ctx = _ctx(source_dir=str(tmp_path), inc_dirs=[], _include_config={"silent": True})
         _call("include", '`include "nope.v"', ctx)  # 不抛异常
         assert ctx["macro_defs"] == {}
+
+    def test_include_c_style_spelling(self, tmp_path):
+        """指令拼写不写死：C 系 `#include` 走同一个处理器（前缀由调用方传入）。"""
+        (tmp_path / "std.v").write_text("`define FROM_INC 1", encoding="utf-8")
+        ctx = _ctx(source_dir=str(tmp_path), inc_dirs=[str(tmp_path)])
+        _call("include", '#include "std.v"', ctx, prefix="#")
+        assert "FROM_INC" in ctx["macro_defs"]
+
+    def test_include_angle_spelling(self, tmp_path):
+        """C 系尖括号形态（系统路径风格）同样成立。"""
+        (tmp_path / "sys.h").write_text("`define ANGLE_INC 1", encoding="utf-8")
+        ctx = _ctx(source_dir="", inc_dirs=[str(tmp_path)])
+        _call("include", "#include <sys.h>", ctx, prefix="#")
+        assert "ANGLE_INC" in ctx["macro_defs"]
+
+    def test_include_path_forms_declared(self, tmp_path):
+        """路径形态由声明给出：声明只留 `'...'` 时，双引号形态不再识别。"""
+        (tmp_path / "inc.v").write_text("`define FROM_INC 1", encoding="utf-8")
+        forms = [{"open": "'", "close": "'", "relative_first": True}]
+        ctx = _ctx(
+            source_dir=str(tmp_path), inc_dirs=[str(tmp_path)],
+            _include_config={"path_forms": forms},
+        )
+        _call("include", "`include 'inc.v'", ctx)
+        assert "FROM_INC" in ctx["macro_defs"]
+
+        other = _ctx(
+            source_dir=str(tmp_path), inc_dirs=[str(tmp_path)],
+            _include_config={"path_forms": forms},
+        )
+        _call("include", '`include "inc.v"', other)  # 未声明的形态 → 不识别
+        assert other["macro_defs"] == {}
+
+    def test_include_path_forms_invalid_fail_fast(self, tmp_path):
+        """形态非法（非列表 / 元素缺 open·close）→ ConfigError。"""
+        for bad in ("x", [], [{"open": '"'}], ["\""]):
+            ctx = _ctx(
+                source_dir=str(tmp_path), inc_dirs=[],
+                _include_config={"path_forms": bad},
+            )
+            with pytest.raises(ConfigError):
+                _call("include", '`include "inc.v"', ctx)
