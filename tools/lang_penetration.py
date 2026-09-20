@@ -107,31 +107,52 @@ def _ident_sites(tree: ast.AST) -> list[tuple[int, str]]:
     return out
 
 
-def main() -> int:
-    argv = sys.argv[1:]
-    dirs = tuple(argv[argv.index("--dirs") + 1:]) if "--dirs" in argv else DEFAULT_DIRS
-    top = int(argv[argv.index("--top") + 1]) if "--top" in argv else 12
+def _scan_structural(rel: str, tree: ast.AST, rule_names: set[str]) -> list[str]:
+    """① 结构名字面量：引擎字符串常量命中语言包规则/节点名（硬信号）。"""
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        value = getattr(node, "value", None)
+        if isinstance(value, str) and value in rule_names:
+            hits.append(f'{rel}:{node.lineno}: "{value}"')
+    return hits
 
-    rule_names = _pack_declared_names()
+
+def _scan_idents(rel: str, tree: ast.AST) -> tuple[list[str], int]:
+    """② 标识符词面：→ (Tier A 命中行, Tier B 命中数)。"""
+    tier_a: list[str] = []
+    tier_b = 0
+    for lineno, name in _ident_sites(tree):
+        words = _ident_words(name)
+        if words & TIER_A:
+            tier_a.append(f"{lineno}:{name}")
+        if words & TIER_B:
+            tier_b += 1
+    return tier_a, tier_b
+
+
+def _scan(dirs: tuple[str, ...], rule_names: set[str]) -> tuple[
+    list[str], dict[str, list[str]], collections.Counter[str]
+]:
+    """扫引擎目录 → (结构名字面量命中, Tier A 按文件命中, Tier B 按子目录计数)。"""
     structural: list[str] = []
     tier_a: dict[str, list[str]] = collections.defaultdict(list)
     tier_b: collections.Counter[str] = collections.Counter()
-
     for path in _engine_files(dirs):
         rel = path.relative_to(ROOT).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                if node.value in rule_names:
-                    structural.append(f'{rel}:{node.lineno}: "{node.value}"')
-        for lineno, name in _ident_sites(tree):
-            words = _ident_words(name)
-            if words & TIER_A:
-                tier_a[rel].append(f"{lineno}:{name}")
-            if words & TIER_B:
-                tier_b[rel.split("/", 1)[0]] += 1
+        structural.extend(_scan_structural(rel, tree, rule_names))
+        a_hits, b_hits = _scan_idents(rel, tree)
+        if a_hits:
+            tier_a[rel].extend(a_hits)
+        if b_hits:
+            tier_b[rel.split("/", 1)[0]] += b_hits
+    return structural, tier_a, tier_b
 
-    print(f"语言包声明面：规则/节点名 {len(rule_names)} 个")
+
+def _report(structural: list[str], tier_a: dict[str, list[str]],
+            tier_b: collections.Counter[str], rule_names: int, top: int) -> None:
+    """打印三档结果（结构名字面量 / Tier A 明细 / Tier B 计数）。"""
+    print(f"语言包声明面：规则/节点名 {rule_names} 个")
     print(f"\n== ① 结构名字面量（硬信号）：{len(structural)} 处")
     for row in structural:
         print("   " + row)
@@ -147,6 +168,16 @@ def main() -> int:
         print(f"   … 其余 {len(tier_a) - top} 个文件")
     print("\n== ② Tier B 通用/动作词（仅计数参考）："
           + ", ".join(f"{d} {n}" for d, n in tier_b.most_common()))
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    dirs = tuple(argv[argv.index("--dirs") + 1:]) if "--dirs" in argv else DEFAULT_DIRS
+    top = int(argv[argv.index("--top") + 1]) if "--top" in argv else 12
+
+    rule_names = _pack_declared_names()
+    structural, tier_a, tier_b = _scan(dirs, rule_names)
+    _report(structural, tier_a, tier_b, len(rule_names), top)
     return 0
 
 
