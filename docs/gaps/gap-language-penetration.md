@@ -90,12 +90,23 @@
 - 已删：`pratt_parser` 的"数字字面量扩展钩子"（框位 + `install_*` + 引擎实现）——
   实测三语言包下**不可达**（见上"可达性"教训），带宽度基数的语言事实由 lexer 声明 +
   语法规则承担。
-- **待定（需要作者拍板）**：语言包的 `BitWidthLiteral` 规则（production =
+- **待定（删除受阻，2026-09-20 实测）**：语言包的 `BitWidthLiteral` 规则（production =
   `[literal.number, symbol.base.single_quote, @Identifier]`）在当前 `[[number.based]]`
-  声明下**也不可达**（实测 `8'hFF` / `8 'hFF` / `8'h FF` / `'hFF` / `8'shFF` / `4'b10_10`
-  六种形态均不产生该节点）→ 连带 `[[BitWidthLiteral.renderer.layout]]` 与
-  `inst_check` / `width_check` 里按该节点名分支的代码同属死面。删它要动多处 production
-  候选列表与文档，属"删除先证后删"里证据较齐但影响面较大的一项。
+  声明下**不可达**（实测 `8'hFF` / `8 'hFF` / `8'h FF` / `'hFF` / `8'shFF` / `4'b10_10`
+  六种形态均不产生该节点；`8 'hFF` 甚至直接解析失败）→ 连带
+  `[[BitWidthLiteral.renderer.layout]]`、`attributes`/`udp`/`PrimaryExpr` 里的候选、
+  `inst_check`（合成节点文本拼回分支）与 `width_check`（宽度分派表项）同属死面。
+  **作者确认它是死规则（完整数字字面量在 lexer 阶段就拿到了）**，但**实际删除被行为耦合挡住**：
+  - 删除后 `tests/languages/verilog/test_macro_body_comment.py`（宏体行尾注释 + 还原守卫）
+    与 `tests/e2e/test_real_corpus.py::test_svparser_interop[ref_darkriscv.v]` 变红；
+  - 逐项 bisect（规则定义 / 候选列表两维）结论：**只要规则定义还在，测试就绿**——
+    把候选从 `PrimaryExpr` 拿掉不影响，把**规则定义**删掉就红。即：**一个"不可达"的
+    is_atom 规则，其存在与否仍会改变行为**（症状：宏调用的还原失效 → 输出里宏体文本
+    留在流里、调用同行后续 token 被行尾注释吞掉）。
+  - 判据检查：删除判据里"**删除不改变行为**"**不成立** → 回退保留该规则。
+  - **待查**：耦合机制（怀疑在 is_atom 规则集合/原子匹配顺序，或反向还原路径对
+    渲染文本形态的隐式依赖）。这条本身就是个信号：**规则的"可达性"与"影响力"不等价**——
+    不可达仍可能有影响，删任何规则前都要跑行为面。
 
 **linter / preprocessor**：本轮**未发现**词法/结构面渗透。linter 由 grammar 切片驱动
 （语句/块边界从规则推导），preprocessor 已全形态外置（`[macro_recognition]` +
