@@ -320,6 +320,15 @@ def _graph_entry(graph: dict, key: tuple) -> dict:
     return graph[key]
 
 
+def _append_ref(entry: dict, kind: str, ref: str) -> None:
+    """把源标识记入条目的 `kind` 列表（已存在则不重复）。
+
+    驱动/负载两个登记入口共用本逻辑（原各自写一份"查重后追加"）。
+    """
+    if ref not in entry[kind]:
+        entry[kind].append(ref)
+
+
 @dataclass(frozen=True)
 class _GenFace:
     """generate 条件求值面（`[structure]` / `[structure.fields]` 声明）。
@@ -1497,15 +1506,11 @@ class SignalGraphBuilder:
 
     def _add_driver(self, graph: dict, mod_name: str, sig: str, inst_ref: str) -> None:
         """登记驱动源（(模块, 信号) 键控，源标识去重）。"""
-        entry = _graph_entry(graph, (mod_name, sig))
-        if inst_ref not in entry["drivers"]:
-            entry["drivers"].append(inst_ref)
+        _append_ref(_graph_entry(graph, (mod_name, sig)), "drivers", inst_ref)
 
     def _add_load(self, graph: dict, mod_name: str, sig: str, inst_ref: str) -> None:
         """登记负载源（(模块, 信号) 键控，源标识去重）。"""
-        entry = _graph_entry(graph, (mod_name, sig))
-        if inst_ref not in entry["loads"]:
-            entry["loads"].append(inst_ref)
+        _append_ref(_graph_entry(graph, (mod_name, sig)), "loads", inst_ref)
 
     @staticmethod
     def _port_direction(mod, port_name: str) -> str:

@@ -1,16 +1,16 @@
 {
- "total": 1595,
+ "total": 1052,
  "components": {
   "C": 119,
-  "L": 536,
-  "D": 940
+  "L": 528,
+  "D": 405
  },
  "items": {
   "CC|grammar.verilog.plugins.formatter.boundary.BoundaryScanner._is_case_item_token": 3,
   "CC|grammar.verilog.plugins.formatter.boundary._build_scope_kind_map": 11,
   "CC|grammar.verilog.plugins.formatter.boundary._collect_block_rule_bounds": 2,
   "CC|grammar.verilog.plugins.formatter.boundary._collect_stmt_headers": 4,
-  "CC|grammar.verilog.plugins.formatter.boundary._resolve_first_tokens": 5,
+  "CC|grammar.verilog.plugins.formatter.boundary._resolve_first_tokens": 4,
   "CC|parser.rule_selector.serialize_production_tree": 2,
   "CC|renderer.doc._best": 7,
   "CC|renderer.doc._doc_has_break": 2,
@@ -21,32 +21,20 @@
   "CC|tools.structural_score._compare": 1,
   "COG|grammar.verilog.plugins.formatter.boundary._build_scope_kind_map": 37,
   "COG|grammar.verilog.plugins.formatter.boundary._collect_block_rule_bounds": 14,
-  "COG|grammar.verilog.plugins.formatter.boundary._resolve_first_tokens": 6,
+  "COG|grammar.verilog.plugins.formatter.boundary._resolve_first_tokens": 4,
   "COG|renderer.doc._best": 1,
   "COG|renderer.doc.flatten": 3,
+  "COG|tools.structural_score.compute": 3,
   "CLASS|grammar/verilog/plugins/formatter/boundary.py:BoundaryScanner": 99,
   "CLASS|lexer/main_lexer.py:Lexer": 204,
-  "CLASS|linter/checkers/matcher.py:RuleMatcher": 189,
+  "CLASS|linter/checkers/matcher.py:RuleMatcher": 181,
   "CLASS|parser/parser_core.py:Parser": 44,
-  "CLONE|analyzer.structure.SignalGraphBuilder._add_driver <-> analyzer.structure.SignalGraphBuilder._add_load": 50,
-  "CLONE|core.plugin_loader.get_pipeline_pass_decls <-> core.plugin_loader.get_pipeline_schedules": 34,
-  "CLONE|core.plugin_loader.get_pipeline_pass_decls <-> core.plugin_loader.get_pipeline_units": 34,
-  "CLONE|core.plugin_loader.get_pipeline_schedules <-> core.plugin_loader.get_pipeline_units": 34,
   "CLONE|grammar.verilog.plugins.checks._shared._ConstExprParser._expr <-> grammar.verilog.plugins.checks.width_check._width_check._ChainedConstParser._expr": 80,
   "CLONE|grammar.verilog.plugins.checks._shared._ConstExprParser._term <-> grammar.verilog.plugins.checks.width_check._width_check._ChainedConstParser._term": 114,
   "CLONE|grammar.verilog.plugins.checks._shared._ConstExprParser.parse <-> grammar.verilog.plugins.checks.width_check._width_check._ChainedConstParser.parse": 32,
-  "CLONE|grammar.verilog.plugins.checks.inst_check._inst_check._sig_text <-> grammar.verilog.plugins.typed_ports._node_utils.node_text": 63,
   "CLONE|grammar.verilog.plugins.checks.width_check._width_check._replicate_width <-> grammar.verilog.plugins.checks.width_check._width_check._ternary_width": 61,
-  "CLONE|grammar.verilog.plugins.checks.width_check._width_check._text_concat <-> grammar.verilog.plugins.checks.width_check._width_check._text_hier": 38,
   "CLONE|grammar.verilog.plugins.typed_ports._check._pg_field <-> grammar.verilog.plugins.typed_ports._transform._dual_get": 29,
   "CLONE|linter.checkers.matcher.RuleMatcher._first_of_choice <-> linter.grammar_slicer._choice_firsts": 47,
-  "CLONE|linter.checkers.matcher.RuleMatcher._optional_overlap_firsts <-> parser.follow._stmt_first_union": 42,
-  "CLONE|linter.checkers.matcher._token_firsts <-> parser.rule_selector._token_firsts": 40,
-  "CLONE|linter.grammar_slicer.build_slice_tree <-> pipeline.schedule._resolve_pass_decls": 31,
-  "CLONE|main._add_lint_parser <-> main._add_trace_parser": 66,
-  "CLONE|preprocessor.primitives.ifdef.handle_ifdef <-> preprocessor.primitives.ifdef.handle_ifndef": 40,
-  "CLONE|renderer.primitives.soft_break.eval_break <-> renderer.primitives.soft_break.eval_hard_break": 35,
-  "CLONE|renderer.primitives.soft_break.eval_break <-> renderer.primitives.soft_break.eval_soft": 35,
-  "CLONE|renderer.primitives.soft_break.eval_hard_break <-> renderer.primitives.soft_break.eval_soft": 35
+  "CLONE|linter.checkers.matcher.RuleMatcher._optional_overlap_firsts <-> parser.follow._stmt_first_union": 42
  }
 }

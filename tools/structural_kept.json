@@ -1,0 +1,11 @@
+{
+  "_note": [
+    "判保持登记表（结构欠账分口径的豁免源，见 policy/structural_budget.md）。",
+    "每条必须写理由与出处——'保持'是结论，不是'没看'；没有理由的项不许进这里。",
+    "键 = \"<族>|<项键>\"（与 tools/structural_baseline.json 的 items 键同形）。",
+    "工具在 compute 阶段跳过这些项，--compare 不再把它们报为回归。"
+  ],
+  "items": {
+    "CLONE|grammar.verilog.plugins.checks.inst_check._inst_check._sig_text <-> grammar.verilog.plugins.typed_ports._node_utils.node_text": "E 类变体（非重复）：_sig_text 带信号名正则过滤、非 Node 返回空串；node_text 是通用取文本。共性只剩递归骨架，合并需引入模式参数——得不偿失。出处：_drafts/bifrost/dispositions.md「结构重复残量分类」E 行；2026-09-20 复核仍成立。"
+  }
+}

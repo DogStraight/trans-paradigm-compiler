@@ -13,7 +13,7 @@
 | `dump_pipeline_state.py` | 管线语言状态转储（共享条目/组件/当前语言；`--pre grammar/c4` 复现"同进程先跑过别的语言"） | 诊断跨语言串味 | — |
 | `check_macro_coverage.py` | 宏位置透明性量化 + 失败面按 token 类型分布 | 动宏/预处理器相关路径 | ADR-0017（边界依据） |
 | `bifrost_probe/` | 外部审计 Bifrost 的有效性抽查探针（刻意含坏味，`bifrost scan tools/bifrost_probe` 应报 5 条） | 接外部审计或怀疑其失效时 | `policy/bifrost_audit.md` |
-| `structural_score.py` | 结构欠账分 S（复杂度/规模/重复三分量取**超额量**；`--save` 写基线、`--compare` 新增即回归） | 结构性改动前后算收益 / 判主线是否收口 | `policy/structural_budget.md`（口径与停止判据） |
+| `structural_score.py` | 结构欠账分 S（复杂度/规模/重复三分量取**超额量**；`--save` 写基线、`--compare` 新增即回归） | 结构性改动前后算收益 / 判主线是否收口 | `policy/structural_budget.md`（口径 R1–R6 与停止判据；判保持登记在 `structural_kept.json`） |
 
 另有非本目录的按需门禁：
 

@@ -44,6 +44,7 @@ MODULE_LIMIT = 800
 MODULE_SCOPE_RATIO = 0.60        # 类体占文件行比例 ≥ 此值 → 按模块度量
 CLONE_MIN_TOKENS = 12            # 重复工具的 minTokens
 CLONE_ENTITY_TOKENS = 40         # 实体级重复门槛（≤ 此值为入口/桩形态，不计入 D）
+CLONE_STUB_STMTS = 4             # 入口桩：两侧体无控制流且简单语句 ≤ 此值 → 不计入 D
 CLONE_CHUNK = 30                 # 重复工具分块（固定值：分块影响"最佳克隆对"选取）
 CC_CHUNK = 20                    # 复杂度/规模工具分块（工具每调用最多 25 文件）
 EXEMPT_PREFIXES = ("policy.",)   # 制度执行者（各自独立、可单跑，判保持）
@@ -152,6 +153,55 @@ def _cell_fqn(cell: str) -> str:
     return cell.strip().lstrip("`").split("`", 1)[0]
 
 
+def _cell_path(cell: str) -> str:
+    """报表单元 `` `fqn` (path) `` → 仓库相对路径（统一分隔符）。"""
+    m = re.search(r"\(([^)]+)\)\s*$", cell.strip())
+    return m.group(1).replace("\\", "/") if m else ""
+
+
+_COMPOUND = (ast.For, ast.While, ast.If, ast.Try, ast.With, ast.AsyncFor, ast.AsyncWith)
+
+
+def _is_thin_stub(root: pathlib.Path, path: str, name: str) -> bool:
+    """该定义体是否"薄"：无控制流（无复合语句）且去 docstring 后语句数 ≤ 阈值。
+
+    真·转调共享实现的体是直线：样板 `del`/赋值 + 一句调用或 return。带 `for`/`if`
+    的体即使语句少也含真实逻辑，不算薄（避免把"碰巧短"当成"共性已抽"）。
+    """
+    src_file = root / path
+    if not src_file.exists():
+        return False
+    try:
+        tree = ast.parse(src_file.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if node.name != name:
+            continue
+        body = list(node.body)
+        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            body = body[1:]          # 去掉 docstring
+        if any(isinstance(s, _COMPOUND) for s in body):
+            return False
+        return len(body) <= CLONE_STUB_STMTS
+    return False
+
+
+def _is_entry_stub(root: pathlib.Path, sym: str, peer: str) -> bool:
+    """是否"薄入口"对：两侧定义体都是无控制流的直线体（注册面要求的具名入口）。
+
+    注册面（`@register` 原语、handler 表、`get_*` 声明读取）要求一个名一个函数，
+    体里只剩"转调共享实现 + 协议样板"；这类对的相似度全在装饰器/签名/docstring/
+    样板实参上。判据是"**是否还有未共享的逻辑**"，故按体形态判，不按 token 数判。
+    """
+    return all(
+        _is_thin_stub(root, _cell_path(c), _cell_fqn(c).rsplit(".", 1)[-1])
+        for c in (sym, peer)
+    )
+
+
 def _clone_rows(report: str) -> dict[tuple[str, str], int]:
     """重复报表的表格行 → {两侧符号对: tokens}（同一对取较大 tokens）。
 
@@ -172,15 +222,18 @@ def _clone_rows(report: str) -> dict[tuple[str, str], int]:
     return pairs
 
 
-def _is_entity_dup(sym: str, peer: str, tokens: int) -> bool:
-    """是否计作实体级重复：超门槛，且非"两侧都是制度执行者"。
+def _is_entity_dup(root: pathlib.Path, sym: str, peer: str, tokens: int) -> bool:
+    """是否计作实体级重复：超门槛，且**不是**以下两类保持项。
 
-    ≤ 门槛的是具名入口/桩形态（共性已抽，残留只是入口样板）；`policy/` 的
-    门禁脚本刻意各自独立、可单跑，抽公共会把门禁耦合——两者都判保持。
+    - ≤ `CLONE_ENTITY_TOKENS` 的对：具名入口/桩形态（共性已抽，残留只是入口样板）
+    - 两侧定义体都 ≤ `CLONE_STUB_STMTS` 语句的"薄入口"对（注册面要求一个名一个函数）
+    - 两侧都在 `policy/`：制度执行者刻意各自独立、可单跑
     """
     if tokens <= CLONE_ENTITY_TOKENS:
         return False
-    return not all(_cell_fqn(c).startswith(EXEMPT_PREFIXES) for c in (sym, peer))
+    if all(_cell_fqn(c).startswith(EXEMPT_PREFIXES) for c in (sym, peer)):
+        return False
+    return not _is_entry_stub(root, sym, peer)
 
 
 def _clone_items(root: pathlib.Path, files: list[str]) -> list[Item]:
@@ -191,7 +244,7 @@ def _clone_items(root: pathlib.Path, files: list[str]) -> list[Item]:
         for (sym, peer), tokens in _clone_rows(
             _bifrost(root, "report_structural_clone_smells", args)
         ).items():
-            if _is_entity_dup(sym, peer, tokens):
+            if _is_entity_dup(root, sym, peer, tokens):
                 pairs[(sym, peer)] = max(pairs.get((sym, peer), 0), tokens)
     return [
         Item("CLONE", f"{_cell_fqn(a)} <-> {_cell_fqn(b)}", tok - CLONE_MIN_TOKENS, f"{tok} tok")
@@ -242,8 +295,13 @@ def _class_item(rel: str, node: ast.ClassDef, module_lines: int) -> Item | None:
 # ── 组装与输出 ──────────────────────────────────────────────────────────────
 
 def compute(root: pathlib.Path, components: set[str]) -> tuple[Score, int]:
-    """按需计算分量（components ⊆ {C, L, D}）→ (分数, 扫描文件数)。"""
+    """按需计算分量（components ⊆ {C, L, D}）→ (分数, 扫描文件数)。
+
+    已判保持的项（`tools/structural_kept.json`）在计入前剔除——保持是结论，
+    不是待办；没有登记理由的项不剔除，否则指标可被“默默豁免”掉。
+    """
     files = _py_files(root)
+    kept = _load_kept(root)
     score = Score()
     if "C" in components:
         for item in _complexity_items(root, files):
@@ -261,6 +319,8 @@ def compute(root: pathlib.Path, components: set[str]) -> tuple[Score, int]:
                 score.cls += item.excess
     if "D" in components:
         for item in _clone_items(root, files):
+            if f"CLONE|{item.key}" in kept:
+                continue
             score.items.append(item)
             score.clone += item.excess
     return score, len(files)
@@ -288,6 +348,19 @@ def _print_score(score: Score, components: set[str], n_files: int) -> None:
 
 def _baseline_path(root: pathlib.Path) -> pathlib.Path:
     return root / "tools" / "structural_baseline.json"
+
+
+def _kept_path(root: pathlib.Path) -> pathlib.Path:
+    return root / "tools" / "structural_kept.json"
+
+
+def _load_kept(root: pathlib.Path) -> dict[str, str]:
+    """判保持登记表 {族|项键: 理由}（缺文件则空表）。"""
+    path = _kept_path(root)
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return dict(data.get("items", {}))
 
 
 def _load_baseline(root: pathlib.Path) -> dict:
