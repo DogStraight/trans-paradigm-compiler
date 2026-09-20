@@ -98,7 +98,7 @@ production = ["@PrimaryExpr|@UnaryExpr", "(@BinaryOp,@PrimaryExpr|@UnaryExpr)*"]
 pratt = true
 ```
 
-**原子入口（PrimaryExpr）不显式标记，由结构推导**：production 是纯 `@` 分派（choice of calls）且**全部分支都是 `is_atom` 规则**的选择器，即表达式原子入口（`PrimaryExpr = @BitWidthLiteral|@Number|@SelectExpr|@Identifier|...` 全为 `is_atom`）。`_is_atom_selector` 推导之，matcher 对其走 ExpressionChecker 原子匹配器——只匹配操作数、不消费运算符（解决 `a <= b` 赋值 vs 比较歧义）。
+**原子入口（PrimaryExpr）不显式标记，由结构推导**：production 是纯 `@` 分派（choice of calls）且**全部分支都是 `is_atom` 规则**的选择器，即表达式原子入口（`PrimaryExpr = @Number|@SelectExpr|@Identifier|...` 全为 `is_atom`）。`_is_atom_selector` 推导之，matcher 对其走 ExpressionChecker 原子匹配器——只匹配操作数、不消费运算符（解决 `a <= b` 赋值 vs 比较歧义）。
 
 - **消费方**: parser `_production.py`（pratt 走 try_pratt_rule）；linter `lookahead.py`（pratt 黑盒截断前缀）、`checkers/matcher.py`（pratt→完整解析、`_is_atom_selector`→原子匹配）
 - **区分理由**: `PrimaryExpr` 不能标 `pratt = true`——parser 会把它交给 pratt 解析（改变解析行为）；也不能标 `is_atom = true`——`is_atom` 会让 lookahead 展开 first tokens（破坏黑盒截断）、matcher 把普通原子也拉到 EC（实测 6 测试 FAIL）。原子入口由 `_is_atom_selector` 从 `is_atom` 结构推导，与 `is_atom` 正交（同一维度，无需独立字段）。

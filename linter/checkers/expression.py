@@ -2,7 +2,7 @@
 
 设计：表达式处理完全复用解析器能力，不在代码中固化任何组合逻辑。
     - 运算符链 / 中缀 / 优先级：parse_with_count + parser.operator_defs（配置驱动）。
-    - 原子（BitWidthLiteral / SelectExpr / ConcatExpr / ReplicateExpr /
+    - 原子（Number / SelectExpr / ConcatExpr / ReplicateExpr /
       CallExpr / SysFuncCall / ParenthesizedExpr / 括号）：交给共享 RuleMatcher
       按 is_atom 规则的 production 内联匹配，参考 parser 的 atomic_rules 流程
       （收集 is_atom 规则、按 production 长度降序逐个尝试），不手写。

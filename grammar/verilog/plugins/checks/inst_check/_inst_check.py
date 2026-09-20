@@ -315,18 +315,13 @@ def _check_params(context, site, info, related_def) -> None:
 
 
 def _text(node) -> str:
-    """Node → 源码文本（防御非 Node；BitWidthLiteral 等合成节点无 content，
-    从 value/base/width 属性拼回）。"""
+    """Node → 源码文本（防御非 Node；合成节点无 content 时取 value）。"""
     if not isinstance(node, Node):
         return str(node) if node else ""
     content = getattr(node, "content", "") or ""
     if content:
         return content
     value = getattr(node, "value", None)
-    if value is not None and getattr(node, "base", None) is not None:
-        width = getattr(node, "width", None)
-        base = getattr(node, "base", "")
-        return f"{width}'{base}{value}" if width is not None else f"{base}{value}"
     if value is not None:
         if isinstance(value, Node):
             return _text(value)   # 嵌套合成节点（Number → literal.number 等）
@@ -335,10 +330,10 @@ def _text(node) -> str:
 
 
 def _is_literal(node) -> bool:
-    """节点是否为数字字面量（Number / BitWidthLiteral / 数字或进制字面量文本）。"""
+    """节点是否为数字字面量（Number / 数字或进制字面量文本）。"""
     if not isinstance(node, Node):
         return False
-    if node.node_name in ("Number", "BitWidthLiteral"):
+    if node.node_name == "Number":
         return True
     content = getattr(node, "content", "") or ""
     return bool(_LITERAL_RE.match(content.strip()))

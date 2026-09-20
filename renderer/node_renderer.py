@@ -113,18 +113,38 @@ def _leading_slot_docs(slots: dict, renderer: Any) -> list[Doc]:
     return docs
 
 
-def _line_suffix_docs(slots: dict) -> tuple[list[Doc], list[Doc]]:
-    """注释槽 → (head 行尾 LineSuffix 列表, 节点行尾 LineSuffix 列表)。
+def _line_suffix_docs(slots: dict, renderer: Any) -> tuple[list[Doc], list[Doc]]:
+    """注释槽 → (head 行尾 Doc 列表, 节点行尾 Doc 列表)。
 
+    `trailing`/`head_trailing` 槽里混着两类注释：行终止型（`//`）与块注释
+    （`/* */`），判类由语言包声明 `renderer.comment_ends_line`（引擎不硬编码
+    标点），差别体现在 `LineSuffix.line_ending`：
+      - 行终止型 → 跨嵌套层级推迟（见 `doc.py::_resolve_line_suffix`）；
+      - 块注释 → 就地落地（`a /* c */ + b`）——若也推迟会被搬到行尾
+        （`a + b; /* c */`，2026-09-20 实测回归）。
     LineSuffix 只在"下一个换行点"前落地：head 布局常以 break 收尾、tail 常有
     尾随空行 break，两处都得插到 break 之前（见 `_insert_before_trailing_break`
     及 `_append_head` / `_append_tail`）——追加在 break 之后会掉到下一行，这是
     块结束符 / 块头行尾注释漂移的根因（`end // c`、`endmodule // c`、
     `module m; // c`，2026-09-13 实测）。
     """
-    head_trail = [LineSuffix(" " + c) for c in (slots.get("head_trailing") or [])]
-    trail = [LineSuffix(" " + c) for c in (slots.get("trailing") or [])]
-    return head_trail, trail
+    return (
+        _trailing_slot_docs(slots.get("head_trailing"), renderer),
+        _trailing_slot_docs(slots.get("trailing"), renderer),
+    )
+
+
+def _trailing_slot_docs(comments: Any, renderer: Any) -> list[Doc]:
+    """行尾注释槽 → Doc 列表。
+
+    行终止型（`renderer.comment_ends_line`，如 `//`）→ `LineSuffix`（推迟到
+    下一个换行点前，跨层上提）；块注释 → 同样 `LineSuffix` 但 `line_ending=False`
+    （就地落地，`a /* c */ + b` 不被推迟到行尾）。两者都保持 LineSuffix 类型：
+    `join` 要据此把项尾注释搬到分隔符之后（`clk, /* c */ output`）。
+    """
+    return [
+        LineSuffix(" " + c, renderer.comment_ends_line(c)) for c in comments or ()
+    ]
 
 
 def _render_verbatim(
@@ -245,7 +265,7 @@ def render_node(
     # 注释槽位提前取出：head_trailing 须紧跟 head 输出，trailing 须在 tail 的
     # 尾随空行 break **之前**输出（`_line_suffix_docs` 的 docstring 记了根因）。
     slots = getattr(node, "_comment_slots", None) or {}
-    head_trail_docs, trail_docs = _line_suffix_docs(slots)
+    head_trail_docs, trail_docs = _line_suffix_docs(slots, renderer)
 
     verbatim = getattr(node, "_verbatim_text", None)
     if verbatim is not None:

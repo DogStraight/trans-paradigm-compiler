@@ -50,13 +50,22 @@ AST (parse/normalize 后)
 | `Nest` | 相对缩进偏移（后续行 +N 格） |
 | `Align` | 绝对列对齐：后续行缩进列 = `max(当前缩进, N)`（首行不受影响） |
 | `Fill` | 流式折行：内容/分隔符交替序列，逐元素贪心放置（中间态折行） |
-| `LineSuffix` | 行尾锚定：内容推迟到下一个换行点之前输出 |
+| `LineSuffix` | 行尾锚定：内容推迟到下一个换行点之前输出（`line_ending=False` 的块注释就地落地） |
 | `Union` + `group`/`flatten` | flat/broken 二象性选择 |
 | `Prefix` | 首行缩进 + 后续行 Nest 的统一原语 |
 
 **layout 算法**：`best(w, k, doc)` 宽度感知递归。`Union` 分支尝试 flat 版本、
 首行超宽则回退 broken（fits 只测第一行，贪心）。`LineSuffix` 在 layout 入口
 经 `_resolve_line_suffix` 重写为换行点前的 `Text`（纯函数预处理，内核不动）。
+
+**行尾锚定的推迟范围与两类注释**（2026-09-20 修）：挂起后缀**跨嵌套 Concat/
+Nest/Align/Prefix 上提**（Prettier lineSuffix 是全局缓冲，不是按层就地文本化）——
+内层原子节点（`Number`/`SelectExpr`）的 doc 常无尾换行点，就地落地会把父级
+同行后续内容（语句 `;`、`join` 的 `,`/`)`）印在注释之后 → **落进注释里被吃掉**
+（`assign a = v[0] // c` + 换行 + `;` → `assign a = v[0] // c;`：分号消失）。
+判类由语言包声明 `Renderer.comment_ends_line` 写入 `LineSuffix.line_ending`：
+行终止型（`//`）参与上提；块注释（`/* */`）就地落地（`a /* c */ + b` 不被搬到
+行尾）。上提后无换行点可落时（doc/序列结束）追加在末尾（末尾即行尾）。
 
 **换行三态与强制传播**（2026-09-17）：配置侧三态 = `{ soft }`→`Line` /
 `{ break }`→`LineBreak`（组断开时在此断）/ `{ hard_break }`→`HardBreak`
@@ -119,7 +128,8 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
 - **独立行注释 = Comment 节点**：`collect_line_comments` + 容器项间/首元素
   前独占注释上浮（`_claim_head_comments`）→ join 拆独立行段渲染。
 - **行内/行尾 = 节点 `_comment_slots`**：`trailing`（node_renderer →
-  LineSuffix 行尾）/ `inline_after`（line.py 遇锚元素插后删槽，join 消费
+  LineSuffix 行尾；行终止型推迟、块注释就地，见上文「行尾锚定的推迟范围
+  与两类注释」）/ `inline_after`（line.py 遇锚元素插后删槽，join 消费
   锚=分隔符条目）/ `inline`（节点文本前同行前置，行中注释落在 `inline = true`
   规则上时用它——槽位随内联展开迁到替身节点）/ `leading`（node_renderer 前置，
   行尾型：注释紧跟上一片段同行）/ `leading_own_line`（node_renderer 前置，独占

@@ -7,6 +7,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **行尾注释锚定改跨层推迟 + 按语言包声明分流两类注释（修分号被注释吃掉的既存缺陷）**：
+  `LineSuffix` 原先只在**同一层 Concat 内**推迟，内层原子节点（`Number` / `SelectExpr` /
+  `ParenthesizedExpr`）的 doc 常无尾换行点 → 后缀就地落地，父级同行后续内容（语句 `;`、
+  `join` 的分隔符/闭括号）被印在注释之后，**落进注释里被吃掉**：
+  `assign a = v[0] // note` + 换行 + `;` → 输出 `assign a = v[0] // note;`（分号消失，
+  输出非法）。现按 Prettier lineSuffix 的全局缓冲语义**跨嵌套 Concat/Nest/Align/Prefix
+  上提**（`Union` 两支后缀文本相同才上提，不同则各自就地落地；`Fill` 内不跨项）。
+  同时把 `trailing`/`head_trailing` 槽里混着的两类注释分流——判类由语言包声明
+  `Renderer.comment_ends_line` 驱动（引擎不硬编码标点），写入 `LineSuffix.line_ending`：
+  行终止型（`//`）参与上提，块注释（`/* */`）**就地落地**（`a /* c */ + b` 不被搬到行尾；
+  两类都保持 `LineSuffix` 类型，`join` 才能继续把项尾注释搬到分隔符之后，
+  `clk, /* c */ output` 形态不变）。
+
+  **验证**：全量 **2114 passed / 7 skipped**；真实语料 diag 5548 持平、lint 33/33 误报 0；
+  格式化字节对拍 73 文件 0 diff；三门禁 PASS；`structural_score --compare` 无新增/变大。
+
+- **删死规则 `BitWidthLiteral`（语言包 verilog，连带 6 处死面）**：完整数字字面量在
+  lexer 阶段即作为单个 `literal.number` token 产出（`[[number.based]]` 声明），该规则的
+  production（`literal.number` + `'` + `@Identifier`）实测六种形态（`8'hFF` / `8 'hFF` /
+  `8'h FF` / `'hFF` / `8'shFF` / `4'b10_10`）均不产生节点 = **不可达**。删除范围：
+  规则定义块（parser/node/renderer layout）、`PrimaryExpr` 候选、`AttrConstPrimary` 与
+  `UdpInitial` 的候选、`inst_check` 的合成节点拼回分支与 `_is_literal` 名单、
+  `width_check` 宽度分派表项，并同步四处文档举例。
+  **删除一度受阻**，真因不是"规则被用到"：`(text, line)` 全局去重下，该规则的**失败尝试**
+  残留 `current_node` → 行尾注释被挂到随后被丢弃的节点上（HEAD 行为），删规则后注释改挂
+  真节点 `Number` → 触发上面那条分号缺陷 → 宏原文回填的自描述比较失败。上一条修完后
+  删除直接通过（`test_macro_body_comment`、`test_real_corpus::svparser_interop[ref_darkriscv.v]`
+  全绿，计数见上）。教训记在 `docs/gaps/gap-language-penetration.md`：**规则的"可达性"
+  与"影响力"不等价**（不可达规则仍可经 `current_node` 残留 / 注释去重等间接通道改变行为）。
+
 - **指令行切分收为单一实现（去 5 处关键字字面量 + 单空格假设）**：`define` /
   `undef` / `ifdef` / `ifndef` / `elsif` 五个处理器各自写 `stripped[len(prefix) +
   len("define ") :]`——关键字拼写重复了一遍（值与注册名由分派保证相同），

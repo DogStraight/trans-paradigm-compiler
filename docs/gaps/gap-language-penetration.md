@@ -66,8 +66,9 @@
 
 **语言名与协议名的同名陷阱**：`Root` / `Comment` / `UnaryOp` / `BinaryOp` / `TernaryOp` /
 `Number` / `Identifier` / `MacroCall` 是**引擎表达式树协议**（pratt 建节点 + 语言包按此名
-声明 renderer），属"引擎定义的最小协议"；同一份名单里只有 `BitWidthLiteral` 是渗透
-（见下）。判"是协议还是渗透"的问法：**这个名字是引擎要求的契约，还是引擎对某种语言
+声明 renderer），属"引擎定义的最小协议"；同一份名单里的 `BitWidthLiteral` 曾按"渗透"
+记账，实测是**不可达的死规则**（不是渗透，删除判据 B 类），2026-09-20 已删。
+判"是协议还是渗透"的问法：**这个名字是引擎要求的契约，还是引擎对某种语言
 语法形态的假设**？
 
 ### 已确认的渗透点
@@ -90,23 +91,35 @@
 - 已删：`pratt_parser` 的"数字字面量扩展钩子"（框位 + `install_*` + 引擎实现）——
   实测三语言包下**不可达**（见上"可达性"教训），带宽度基数的语言事实由 lexer 声明 +
   语法规则承担。
-- **待定（删除受阻，2026-09-20 实测）**：语言包的 `BitWidthLiteral` 规则（production =
+- **已删（2026-09-20 结案）**：语言包的 `BitWidthLiteral` 规则（production =
   `[literal.number, symbol.base.single_quote, @Identifier]`）在当前 `[[number.based]]`
   声明下**不可达**（实测 `8'hFF` / `8 'hFF` / `8'h FF` / `'hFF` / `8'shFF` / `4'b10_10`
   六种形态均不产生该节点；`8 'hFF` 甚至直接解析失败）→ 连带
   `[[BitWidthLiteral.renderer.layout]]`、`attributes`/`udp`/`PrimaryExpr` 里的候选、
   `inst_check`（合成节点文本拼回分支）与 `width_check`（宽度分派表项）同属死面。
-  **作者确认它是死规则（完整数字字面量在 lexer 阶段就拿到了）**，但**实际删除被行为耦合挡住**：
-  - 删除后 `tests/languages/verilog/test_macro_body_comment.py`（宏体行尾注释 + 还原守卫）
-    与 `tests/e2e/test_real_corpus.py::test_svparser_interop[ref_darkriscv.v]` 变红；
-  - 逐项 bisect（规则定义 / 候选列表两维）结论：**只要规则定义还在，测试就绿**——
-    把候选从 `PrimaryExpr` 拿掉不影响，把**规则定义**删掉就红。即：**一个"不可达"的
-    is_atom 规则，其存在与否仍会改变行为**（症状：宏调用的还原失效 → 输出里宏体文本
-    留在流里、调用同行后续 token 被行尾注释吞掉）。
-  - 判据检查：删除判据里"**删除不改变行为**"**不成立** → 回退保留该规则。
-  - **待查**：耦合机制（怀疑在 is_atom 规则集合/原子匹配顺序，或反向还原路径对
-    渲染文本形态的隐式依赖）。这条本身就是个信号：**规则的"可达性"与"影响力"不等价**——
-    不可达仍可能有影响，删任何规则前都要跑行为面。
+  **作者确认它是死规则（完整数字字面量在 lexer 阶段就拿到了）**，全部已删。
+- **删除受阻的真因（本次实测，非"规则定义本身被需要"）**：删定义后两条测试变红
+  （`tests/languages/verilog/test_macro_body_comment.py`、
+  `tests/e2e/test_real_corpus.py::test_svparser_interop[ref_darkriscv.v]`）。逐项
+  bisect（规则定义 / 候选列表两维）得到"只要规则定义还在就绿"，
+  但**机制不是"规则被用到"**：
+  - 关键取证：`_attach_line_end` 的 `(text, line)` **全局去重**。HEAD 下同一行尾注释
+    先被 `BitWidthLiteral` 的**失败尝试**（`current_node` 残留该节点）吃掉并挂到
+    随后被丢弃的节点上 → 注释只留在锚点通道；删规则后注释**第一次**就挂到真节点
+    `Number` 上（V2 实测 `current_node=Number`）。
+  - 后果：`LineSuffix` 当时"按层就地落地"（内层原子节点 doc 无尾换行点）→ 语句
+    `;` 被印在注释之后 → **分号消失**（输出非法）→ 宏原文回填的自描述比较
+    （`_renders_as_itself`，注释剥离后比对）不再成立 → 回填静默跳过。
+  - **同一坑在 HEAD 上已可达**（与删规则无关）：`assign a = v[0] // note` + 换行 + `;`
+    → `assign a = v[0] // note;`（分号被吃）；`(v[0])` 形态同样。
+  - 已修：`LineSuffix` 跨嵌套层级上提 + `line_ending` 判类（行终止型推迟、块注释
+    就地），见 `renderer/renderer_architecture.md`「行尾锚定的推迟范围与两类注释」。
+    修完删规则直接通过：全量 **2114 passed / 7 skipped**、diag 5548 持平、
+    lint 33/33 误报 0、格式化字节对拍 73 文件 0 diff。
+- **教训（保留）**：规则的"可达性"与"影响力"不等价——不可达的 is_atom 规则仍可能
+  通过 `current_node` 残留 / 注释去重这类**间接通道**改变行为；删任何规则前都要跑
+  行为面（本次还额外证明：注释挂载对"原子规则集合与顺序"存在隐式依赖，属已修的
+  潜在脆弱点）。
 
 **linter / preprocessor**：本轮**未发现**词法/结构面渗透。linter 由 grammar 切片驱动
 （语句/块边界从规则推导），preprocessor 已全形态外置（`[macro_recognition]` +

@@ -2,7 +2,7 @@
 # Verilog 语法规则 — 表达式 [基础]
 # ============================================================================
 # 本文件定义 Verilog 表达式体系的全部节点：
-#   字面量:   BitWidthLiteral, Number
+#   字面量:   Number
 #   标识符:   Identifier
 #   选择/索引: SelectSuffix, SelectExpr
 #   拼接/复制: ConcatExpr, ReplicateExpr
@@ -13,33 +13,6 @@
 #
 # 依赖: base/_token.toml (运算符符号、括号、逗号等)
 # 被引用于: 几乎所有其他语法文件
-
-# ── BitWidthLiteral — 位宽字面量 ──
-# Verilog 的带宽度基数数字，如 `8'hFF`, `32'd100`, `4'b1010`。
-# 格式: <width>'<s?><base><value>
-#   width — 十进制宽度（literal.number）
-#   '     — 基数标记
-#   value — 完整数字串（由 @Identifier 捕获，包含基数字符和数值部分）
-#
-# ⚠ 已知限制: 当前未拆分 base（h/d/b/o）和 value 为独立字段，
-#   渲染时通过 ref="value" 直接输出 Identifier 内容（如 "hFF"）。
-#   若需精确控制（如 signed 标识 'sh' 的支持），需扩展生产式。
-
-[BitWidthLiteral.parser]
-is_atom = true
-production = ["literal.number", "symbol.base.single_quote", "@Identifier"]
-
-[BitWidthLiteral.parser.node]
-width = "$1"
-value = "$3"
-
-[[BitWidthLiteral.renderer.layout.line]]
-
-[BitWidthLiteral.renderer.layout.line.opt]
-group = [{ ref = "width" }, "'"]
-
-[[BitWidthLiteral.renderer.layout.line]]
-ref = "value"
 
 [Number.parser]
 is_atom = true
@@ -277,7 +250,7 @@ layout = { join = "", items = "parts", no_soft = true }
 
 [PrimaryExpr.parser]
 production = [
-    "@BitWidthLiteral|@Number|@StringLiteral|@SelectExpr|@HierExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
+    "@Number|@StringLiteral|@SelectExpr|@HierExpr|@Identifier|@ParenthesizedExpr|@ReplicateExpr|@ConcatExpr|@CallExpr|@SysFuncCall",
 ]
 inline = true
 

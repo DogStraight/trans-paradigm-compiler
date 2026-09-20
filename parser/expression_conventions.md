@@ -35,7 +35,7 @@ assoc = "left"
 ```
 [PrimaryExpr.parser]  # 或类似的 atom 规则
 production = [
-    "@BitWidthLiteral|@Number|@StringLiteral|@SelectExpr|@Identifier|...",
+    "@Number|@StringLiteral|@SelectExpr|@Identifier|...",
 ]
 ```
 

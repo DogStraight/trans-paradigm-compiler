@@ -193,7 +193,7 @@ layout = { ref = "value" }
 [AttrConstPrimary]
 inline = true
 [AttrConstPrimary.parser]
-production = ["@BitWidthLiteral|@Number|@Identifier|literal.string"]
+production = ["@Number|@Identifier|literal.string"]
 [AttrConstPrimary.parser.node]
 value = "$1"
 [AttrConstPrimary.renderer]

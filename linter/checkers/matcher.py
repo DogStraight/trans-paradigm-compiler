@@ -3,7 +3,7 @@
 从 production 树内联匹配规则，供两个检查器复用：
     - StatementChecker：在语句区间内按 production 精确匹配
     - ExpressionChecker：pratt 的 atom_parser 回调经 match_atom 识别 Verilog 原子
-      （BitWidthLiteral / ConcatExpr / ReplicateExpr / SelectExpr / CallExpr ...），
+      （Number / ConcatExpr / ReplicateExpr / SelectExpr / CallExpr ...），
       原子由 is_atom 规则 production 驱动（参考 parser atomic_rules），不手写。
 
 Doc: linter/linter_architecture.md
@@ -34,7 +34,7 @@ _TRIVIA = TRIVIA_TOKEN_TYPES
 
 def _is_atom_selector(info: dict, tree: dict) -> bool:
     """推导"表达式原子入口"：production 是纯 @ 分派（choice of calls）且全部
-    分支都是 is_atom 规则（如 PrimaryExpr = @BitWidthLiteral|@Number|...）。
+    分支都是 is_atom 规则（如 PrimaryExpr = @Number|@SelectExpr|...）。
     不显式标记——从 is_atom 结构正交推导，与 is_atom 共享同一维度。
     """
     prods = info.get("prods", [])

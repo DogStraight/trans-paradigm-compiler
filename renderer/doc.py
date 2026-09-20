@@ -142,6 +142,13 @@ class LineSuffix(Doc):
       Concat([a, LineSuffix("// note"), b, Line(), c]) →
       渲染为 "a b // note\nc"（suffix 跨过 b 锚定在行尾）。
 
+    `line_ending` 区分两类注释（由语言包声明驱动 `Renderer.comment_ends_line`，
+    引擎不硬编码标点）：
+      - True（行终止型 `//`）：跨嵌套层级上提（全局缓冲），保证后续同行内容
+        不被吞进注释（`assign a = v[0] // c` + `;` → 分号落下一行/注释后）；
+      - False（块注释 `/* */`）：**就地落地**——块注释不结束行，中线原位输出
+        （`a /* c */ + b`）。
+
     layout() 入口先经 _resolve_line_suffix 重写为
     Concat 内换行前的 Text，_best 内核无感知。
     与 inline_comment.py（现仅 tpc marker 内部通道）互补：前者是 Doc
@@ -149,6 +156,7 @@ class LineSuffix(Doc):
     """
 
     text: str
+    line_ending: bool = True
 
 
 @dataclass
@@ -275,7 +283,7 @@ def flatten(doc: Doc) -> Doc:
         case Fill(docs):
             # fill 扁平化：分隔符（Line）→ 空格，内容拼接
             return Concat([flatten(d) for d in docs])
-        case LineSuffix(text):
+        case LineSuffix(text, _):
             # flat 模式：suffix 直接显示（跟在当前行尾）
             return Text(text)
         case Pad(width):
@@ -320,45 +328,95 @@ def _resolve_line_suffix(doc: Doc) -> Doc:
       - 遍历 Concat 序列，收集挂起的 suffix 文本；
       - 遇到 Line/Break/HardBreak/LineBreak（换行点）→ 先把挂起 suffix 作为
         Text 插入到换行前；
-      - 序列结束仍有挂起 → 追加到序列尾（doc 末尾即行尾）；
-      - Nest/Align/Prefix/Union 递归处理；Fill 内不跨项推迟
-        （内容项内 LineSuffix 就地文本化）。
+      - 挂起 suffix **跨嵌套 Concat/Nest/Align/Prefix 上提**（Prettier 的
+        lineSuffix 是全局缓冲，不是"就地文本化"）：内层节点的 doc 常没有尾
+        换行点（原子节点），若在内层就地落地，父级同行后续内容（语句的 `;`
+        、`join` 的 `,`）会被印在该注释之后 → 落进注释里被吃掉；
+      - 序列结束/整棵 doc 结束仍有挂起 → 追加到末尾（末尾即行尾）；
+      - Union 两支后缀文本相同才上提（不同则各自就地落地）；
+        Fill 内不跨项推迟（分隔符即换行点，内容项内就地文本化）。
+    """
+    resolved, pending = _resolve_suffix(doc)
+    if pending:
+        return _append_suffix(resolved, "".join(pending))
+    return resolved
+
+
+def _append_suffix(doc: Doc, text: str) -> Doc:
+    """doc 末尾追加后缀文本（doc 末尾即行尾）。"""
+    if isinstance(doc, Empty):
+        return Text(text)
+    if isinstance(doc, Concat):
+        return Concat([*doc.docs, Text(text)])
+    return Concat([doc, Text(text)])
+
+
+def _resolve_suffix(doc: Doc) -> tuple[Doc, list[str]]:
+    """行尾锚定（内部）：返回 (去 suffix 的 doc, 尚未落地的挂起后缀文本)。
+
+    挂起后缀由调用方在**下一个换行点前**落地；本层序列已结束仍未落地 →
+    把挂起原样返回给父层（跨层上提）。
     """
     match doc:
-        case LineSuffix(text):
-            return Text(text)  # 顶层孤立 suffix：直接显示
+        case LineSuffix():
+            return _suffix_entry(doc)
         case Concat(docs):
             return _resolve_suffix_concat(docs)
         case Nest(i, d):
-            return Nest(i, _resolve_line_suffix(d))
+            resolved, pending = _resolve_suffix(d)
+            return Nest(i, resolved), pending
         case Align(a, d):
-            return Align(a, _resolve_line_suffix(d))
+            resolved, pending = _resolve_suffix(d)
+            return Align(a, resolved), pending
         case Prefix(i, d):
-            return Prefix(i, _resolve_line_suffix(d))
+            resolved, pending = _resolve_suffix(d)
+            return Prefix(i, resolved), pending
         case Union(flat, broken):
-            return Union(
-                _resolve_line_suffix(flat), _resolve_line_suffix(broken)
-            )
+            return _resolve_suffix_union(flat, broken)
         case Fill(docs):
             # Fill 内分隔符是换行点：suffix 若在内容项里，就地显示
-            return Fill([_resolve_line_suffix(d) for d in docs])
+            return Fill([_resolve_line_suffix(d) for d in docs]), []
         case _:
-            return doc
+            return doc, []
 
 
-def _resolve_suffix_concat(docs: Sequence[Doc]) -> Concat:
+def _suffix_entry(suffix: LineSuffix) -> tuple[Doc, list[str]]:
+    """单个 suffix → (就地落地内容, 挂起文本)：行终止型推迟，块注释就地。"""
+    if suffix.line_ending:
+        return Empty(), [suffix.text]
+    return Text(suffix.text), []
+
+
+def _resolve_suffix_union(flat: Doc, broken: Doc) -> tuple[Doc, list[str]]:
+    """Union 两支的行尾锚定：后缀文本相同才上提（不同则各自就地落地）。"""
+    flat_doc, flat_pending = _resolve_suffix(flat)
+    broken_doc, broken_pending = _resolve_suffix(broken)
+    if flat_pending == broken_pending:
+        return Union(flat_doc, broken_doc), flat_pending
+    return (
+        Union(
+            _append_suffix(flat_doc, "".join(flat_pending)),
+            _append_suffix(broken_doc, "".join(broken_pending)),
+        ),
+        [],
+    )
+
+
+def _resolve_suffix_concat(docs: Sequence[Doc]) -> tuple[Concat, list[str]]:
     """Concat 的行尾锚定：收集挂起 suffix，遇换行点先插入挂起文本。
 
-    序列结束仍挂起 → 追加到尾（doc 末尾即行尾）；子项递归后为空但 suffix
-    挂起时**不下发**（`continue`）——等到下一个换行点或序列尾。
+    子项递归后为空但 suffix 挂起时**不下发**（`continue`）——等到下一个换行点
+    或序列尾；子项上提的后缀与本层挂起合并，继续向后找换行点。序列结束仍挂起
+    → 返回给调用方（父层继续上提）。
     """
     out: list[Doc] = []
     pending: list[str] = []
     for d in docs:
-        if isinstance(d, LineSuffix):
+        if isinstance(d, LineSuffix) and d.line_ending:
             pending.append(d.text)
             continue
-        resolved = _resolve_line_suffix(d)
+        resolved, inner = _resolve_suffix(d)
+        pending.extend(inner)
         if _is_line_point(resolved):
             if pending:
                 out.append(Text("".join(pending)))
@@ -368,15 +426,12 @@ def _resolve_suffix_concat(docs: Sequence[Doc]) -> Concat:
             continue
         else:
             out.append(resolved)
-    if pending:
-        out.append(Text("".join(pending)))
-    return Concat(out)
+    return Concat(out), pending
 
 
 def _is_line_point(doc: Doc) -> bool:
     """是否换行点（Line/Break/HardBreak/LineBreak）——挂起 suffix 的落点。"""
     return isinstance(doc, (Line, Break, HardBreak, LineBreak))
-
 
 def layout(doc: Doc, max_width: int = 80) -> str:
     """

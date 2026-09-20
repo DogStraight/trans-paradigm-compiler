@@ -1065,7 +1065,7 @@ def infer_expr_width(node, width_table: dict, module: str = "") -> int | None:
     """A3：表达式节点 → 宽度（纯函数；未知 → None 保守）。
 
     逐类型的宽度规则在 `_EXPR_WIDTH_RULES`（语言知识表）——
-    原子：Identifier（查宽度表）/ Number|BitWidthLiteral（字面量位宽）；
+    原子：Identifier（查宽度表）/ Number（字面量位宽）；
     结构：ParenthesizedExpr（内层）/ SelectExpr（位选：索引 1、范围
     abs+1、+:/-: 切片宽度——最内层 suffix 决定）/ ConcatExpr（和）/
     ReplicateExpr（count×宽）/ HierExpr（末段下标 1，纯成员链查末段名）；
@@ -1238,7 +1238,7 @@ def _ident_width(node, width_table: dict, module: str) -> int | None:
 
 
 def _literal_node_width(node, width_table: dict, module: str) -> int | None:
-    """Number / BitWidthLiteral → 按字面量文本取位宽（A2）。"""
+    """Number → 按字面量文本取位宽（A2）。"""
     del width_table, module  # 字面量宽度与符号表无关（协议签名参数）
     return literal_width(node_text(node))
 
@@ -1299,7 +1299,6 @@ def _sysfunc_width(node, width_table: dict, module: str) -> int | None:
 _EXPR_WIDTH_RULES: dict[str, Callable[[Node, dict, str], int | None]] = {
     "Identifier": _ident_width,
     "Number": _literal_node_width,
-    "BitWidthLiteral": _literal_node_width,
     "ParenthesizedExpr": _paren_width,
     "SelectExpr": _select_width,
     "ConcatExpr": _concat_width,

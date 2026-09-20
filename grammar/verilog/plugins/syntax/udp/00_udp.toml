@@ -105,14 +105,14 @@ layout = { ref = "decl" }
 # ── UdpInitial — initial 输出端口 = init_val ; ──
 
 [UdpInitial]
-# init_val ::= 1'b0 | 1'b1 | 1'bx | 1 | 0——based number（1'b0）是
-# BitWidthLiteral，纯数字是 Number，两者都收。
+# init_val ::= 1'b0 | 1'b1 | 1'bx | 1 | 0——based number（1'b0）由 lexer 作为
+# 完整数字字面量产出（literal.number），统一走 Number。
 [UdpInitial.parser]
 production = [
     "keyword.initial",
     "@Identifier",
     "symbol.base.equal",
-    "@BitWidthLiteral|@Number",
+    "@Number",
     "symbol.base.semicolon",
 ]
 [UdpInitial.parser.node]
