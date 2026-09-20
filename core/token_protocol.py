@@ -105,3 +105,14 @@ def skip_trivia(tokens: list, i: int, limit: int) -> int:
     while i < limit and tokens[i].type in TRIVIA_TOKEN_TYPES:
         i += 1
     return i
+
+
+def split_token_types(decl: str) -> set[str]:
+    """`token_type` 声明 → 类型集合（多候选 `A|B` 拆开；无 `|` 即单元素集）。
+
+    多候选写在同一字段是**引擎侧声明约定**（如 `keyword.case|keyword.casex`），
+    因为 FIRST 集/精确匹配都需要逐个成员。历史在 matcher / rule_selector /
+    discovery / lookahead / 语言包 formatter 各写一份 `"|" in tt` 判断——统一在此，
+    调用方不再各自 `split("|")`。
+    """
+    return set(decl.split("|")) if "|" in decl else {decl}

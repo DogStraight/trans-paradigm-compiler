@@ -18,7 +18,7 @@ Doc: linter/linter_architecture.md
 from __future__ import annotations
 
 from core.define import Token
-from core.token_protocol import KEYWORD_PREFIX, TRIVIA_TOKEN_TYPES, skip_trivia
+from core.token_protocol import KEYWORD_PREFIX, TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
 
 from . import LintDiagnostic, token_span
 from .checker import (
@@ -611,7 +611,7 @@ class Discovery:
             # 含 "|" 的多候选 token（如 keyword.case|casex）拆分为精确成员，
             # 否则 _skip_to_end 的精确匹配扫不到（原 _is_single_token_rule 用
             # "|" 排除整个规则，导致这类语句边界退化为通用跳过）。
-            return set(last["token_type"].split("|"))
+            return split_token_types(last["token_type"])
         if last.get("type") == "call":
             return self._terminator_from_call(last)
         return set()

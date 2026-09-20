@@ -30,7 +30,7 @@ import sys
 from core.define import Token
 
 from core.utils import square_bracket_types
-from core.token_protocol import TRIVIA_TOKEN_TYPES
+from core.token_protocol import TRIVIA_TOKEN_TYPES, split_token_types
 
 # trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
 _TRIVIA = TRIVIA_TOKEN_TYPES
@@ -341,7 +341,7 @@ class LookaheadTable:
                     # 多候选 token（keyword.case|casex）拆为精确成员——含 "|"
                     # 的整串匹配不到实际 token，拆分供 discovery/_skip_to_end
                     # 与 _skip_to_statement_end 的精确匹配使用。
-                    result.update(tt.split("|"))
+                    result.update(split_token_types(tt))
         return result
 
     def _build(self) -> None:

@@ -20,7 +20,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from core.define import Token
-from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia
+from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
 
 from .. import LintDiagnostic, token_span
 
@@ -50,14 +50,6 @@ def _is_atom_selector(info: dict, tree: dict) -> bool:
         if sub is None or not sub.get("is_atom"):
             return False
     return True
-
-
-def _token_firsts(feat: dict) -> set[str]:
-    """token 类型声明 → 首 token 集合（`A|B` 多候选拆开）。"""
-    tt = feat.get("token_type", "")
-    if "|" in tt:
-        return set(tt.split("|"))
-    return {tt}
 
 
 def _no_progress_ok(feat: dict, sub_errs: list, before: int) -> bool:
@@ -344,7 +336,7 @@ class RuleMatcher:
                 self._report_eof(tokens, limit, errors)
             return i
         actual = tokens[j].type
-        if actual in tok.split("|"):
+        if actual in split_token_types(tok):
             return j + 1
         if strict:
             t = tokens[j]
@@ -769,7 +761,7 @@ class RuleMatcher:
         if typ in ("optional", "repeat", "plus"):
             return self._first_tokens(feat.get("elem", {}) or {}, visited)
         if typ == "token":
-            return _token_firsts(feat)
+            return split_token_types(feat.get("token_type", ""))
         return set()
 
     def _first_of_call(self, feat: dict, visited: set) -> set[str]:

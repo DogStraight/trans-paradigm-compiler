@@ -6,15 +6,8 @@ Doc: docs/language_walkthrough.md（规则选择/语句发现）
 from typing import Any
 from core.define import Token, GrammarRule
 from core.errors import GrammarError
+from core.token_protocol import split_token_types
 from ._constants import IDENTIFIER_TOKEN_TYPE
-
-
-def _token_firsts(feat: dict) -> set[str]:
-    """token 类型声明 → 首 token 集合（`A|B` 多候选拆开）。"""
-    tt = feat.get("token_type", "")
-    if "|" in tt:
-        return set(tt.split("|"))
-    return {tt}
 
 
 def _call_firsts(
@@ -50,7 +43,7 @@ def _compute_start_tokens(
     typ = feat.get("type")
 
     if typ == "token":
-        return _token_firsts(feat)
+        return split_token_types(feat.get("token_type", ""))
 
     if typ == "call":
         return _call_firsts(feat, grammar_rules, visited)

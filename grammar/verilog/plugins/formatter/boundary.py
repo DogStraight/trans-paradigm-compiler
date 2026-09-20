@@ -20,7 +20,7 @@ from enum import Enum, auto
 from lexer import Lexer
 
 from core.define import GrammarRule
-from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, macro_type
+from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, macro_type, split_token_types
 
 # ── BlockTokenMap ──
 
@@ -57,9 +57,7 @@ def _resolve_first_tokens(
     typ = feat.get("type")
     if typ == "token":
         tt = feat.get("token_type", "")
-        if "|" in tt:
-            return set(tt.split("|"))
-        return {tt}
+        return split_token_types(tt)
     if typ == "call":
         name = feat.get("name", "")
         if name in visited or name not in tree:
