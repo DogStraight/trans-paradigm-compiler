@@ -1,9 +1,9 @@
 {
- "total": 1052,
+ "total": 647,
  "components": {
   "C": 119,
   "L": 528,
-  "D": 405
+  "D": 0
  },
  "items": {
   "CC|grammar.verilog.plugins.formatter.boundary.BoundaryScanner._is_case_item_token": 3,
@@ -28,13 +28,6 @@
   "CLASS|grammar/verilog/plugins/formatter/boundary.py:BoundaryScanner": 99,
   "CLASS|lexer/main_lexer.py:Lexer": 204,
   "CLASS|linter/checkers/matcher.py:RuleMatcher": 181,
-  "CLASS|parser/parser_core.py:Parser": 44,
-  "CLONE|grammar.verilog.plugins.checks._shared._ConstExprParser._expr <-> grammar.verilog.plugins.checks.width_check._width_check._ChainedConstParser._expr": 80,
-  "CLONE|grammar.verilog.plugins.checks._shared._ConstExprParser._term <-> grammar.verilog.plugins.checks.width_check._width_check._ChainedConstParser._term": 114,
-  "CLONE|grammar.verilog.plugins.checks._shared._ConstExprParser.parse <-> grammar.verilog.plugins.checks.width_check._width_check._ChainedConstParser.parse": 32,
-  "CLONE|grammar.verilog.plugins.checks.width_check._width_check._replicate_width <-> grammar.verilog.plugins.checks.width_check._width_check._ternary_width": 61,
-  "CLONE|grammar.verilog.plugins.typed_ports._check._pg_field <-> grammar.verilog.plugins.typed_ports._transform._dual_get": 29,
-  "CLONE|linter.checkers.matcher.RuleMatcher._first_of_choice <-> linter.grammar_slicer._choice_firsts": 47,
-  "CLONE|linter.checkers.matcher.RuleMatcher._optional_overlap_firsts <-> parser.follow._stmt_first_union": 42
+  "CLASS|parser/parser_core.py:Parser": 44
  }
 }

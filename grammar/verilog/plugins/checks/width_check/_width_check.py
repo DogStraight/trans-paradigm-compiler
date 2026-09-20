@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import (
+    _IntExprParser,
     const_eval,
     is_ident_char,
     is_parameterized,
@@ -158,87 +159,22 @@ def _module_params(context) -> dict[str, dict[str, str]]:
 # （结构重复处置 B-C4）。
 
 
-class _ChainedConstParser:
-    """链式参数常量表达式求值器（求值游标即状态，故用类而非闭包）。
+class _ChainedConstParser(_IntExprParser):
+    """链式参数常量表达式求值器（语法/优先级共用 `_IntExprParser`）。
 
-    token 流里的 `("ident", 名)` 延迟到求值点解析：查参数表后值本身再走
+    与 `_shared._ConstExprParser` 的差别**只在叶子形态**：token 流里的
+    `("ident", 名)` 延迟到求值点解析——查参数表后值本身再走
     `eval_expr_params` 递归（`W = "DATA_W/2"` 这类嵌套链），`seen` 做环
-    护栏（`WIDTH = WIDTH` → 不可判）。
+    护栏（`WIDTH = WIDTH` → 不可判）。求值游标即状态，故用类而非闭包。
     """
 
     def __init__(self, toks: list, params: dict[str, str], seen: frozenset) -> None:
-        self.toks = toks
+        super().__init__(toks)
         self.params = params
         self.seen = seen
-        self.pos = 0
 
-    def parse(self) -> int | None:
-        """整串求值：必须吃到 eof，否则不可判。"""
-        val = self._expr()
-        if val is None or self._peek()[0] != "eof":
-            return None
-        return val
-
-    def _peek(self) -> tuple:
-        return self.toks[self.pos] if self.pos < len(self.toks) else ("eof", "")
-
-    def _advance(self) -> tuple:
-        tok = self.toks[self.pos]
-        self.pos += 1
-        return tok
-
-    def _expr(self) -> int | None:
-        """加减（左结合）。"""
-        left = self._term()
-        if left is None:
-            return None
-        while self._peek()[0] in ("+", "-"):
-            op = self._advance()[0]
-            right = self._term()
-            if right is None:
-                return None
-            left = left + right if op == "+" else left - right
-        return left
-
-    def _term(self) -> int | None:
-        """乘除模（左结合）；除/模零 → 不可判。"""
-        left = self._factor()
-        if left is None:
-            return None
-        while self._peek()[0] in ("*", "/", "%"):
-            op = self._advance()[0]
-            right = self._factor()
-            if right is None:
-                return None
-            if op == "*":
-                left = left * right
-            elif op == "/":
-                if right == 0:
-                    return None
-                left = left // right
-            else:
-                if right == 0:
-                    return None
-                left = left % right
-        return left
-
-    def _factor(self) -> int | None:
-        """一元 +/- 链、括号、数字、参数（参数值递归求值 + 环护栏）。"""
-        t = self._peek()
-        if t[0] == "-":
-            self._advance()
-            v = self._factor()
-            return -v if v is not None else None
-        if t[0] == "+":
-            self._advance()
-            return self._factor()
-        if t[0] == "(":
-            self._advance()
-            v = self._expr()
-            if v is None or self._peek()[0] != ")":
-                return None
-            self._advance()
-            return v
+    def _leaf(self, t: tuple) -> int | None:
+        """叶子：数字直接取值；ident 查参数表递归求值。"""
         if t[0] == "num":
             self._advance()
             return t[1]

@@ -12,6 +12,7 @@ Doc: linter/linter_architecture.md
 from typing import Any
 
 from core.define import GrammarRule
+from core.token_protocol import split_token_types
 from parser.rule_selector import analyze_production_features
 
 
@@ -97,8 +98,12 @@ def get_start_tokens(parsed: list[dict], tree: dict | None = None) -> set[str]:
 
 
 def _token_first(feat: dict, _tree: dict | None) -> set[str]:
-    """字面量 token 元素：首 token 即其类型。"""
-    return {feat["token_type"]}
+    """字面量 token 元素：首 token 即其类型（多候选 `A|B` 拆开）。
+
+    与 matcher / rule_selector 同口径（`split_token_types`）——否则含 `|`
+    的整串不会与实际 token 匹配，该规则的首 token 会静默缺失。
+    """
+    return split_token_types(feat["token_type"])
 
 
 def _call_firsts(feat: dict, tree: dict | None) -> set[str]:

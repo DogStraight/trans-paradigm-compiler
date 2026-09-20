@@ -157,8 +157,14 @@ def const_tokenize(text: str, params: dict | None = None) -> list | None:
     return toks
 
 
-class _ConstExprParser:
-    """整数常量表达式递归下降解析器（游标即状态，故用类而非闭包）。"""
+class _IntExprParser:
+    """整数常量表达式递归下降求值器（游标即状态，故用类而非闭包）。
+
+    语法与优先级固定：expr → term（+ -）→ factor（* / %）→ 一元/括号/叶子。
+    **叶子形态留给子类**（`_leaf`）：纯数字域与链式参数域的 token 形态不同
+    （`_ConstExprParser` 的 param 在 tokenize 阶段已解析；`_ChainedConstParser`
+    的 ident 延迟到求值点），其余解析逻辑完全共用。
+    """
 
     def __init__(self, toks: list) -> None:
         self.toks = toks
@@ -215,7 +221,7 @@ class _ConstExprParser:
         return left
 
     def _factor(self) -> int | None:
-        """一元 +/- 链、括号、数字、参数。"""
+        """一元 +/- 链、括号、叶子（叶子形态由子类定）。"""
         t = self._peek()
         if t[0] == "-":
             self._advance()
@@ -231,6 +237,17 @@ class _ConstExprParser:
                 return None
             self._advance()
             return v
+        return self._leaf(t)
+
+    def _leaf(self, t: tuple) -> int | None:
+        """叶子 token → 值（子类实现；不是叶子形态时返回 None）。"""
+        raise NotImplementedError
+
+
+class _ConstExprParser(_IntExprParser):
+    """纯数字域常量表达式（`param` 在 tokenize 阶段已解析为数值）。"""
+
+    def _leaf(self, t: tuple) -> int | None:
         if t[0] in ("num", "param"):
             self._advance()
             return t[1]

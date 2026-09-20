@@ -128,7 +128,7 @@ stdio + 显式 root（JSON 宿主配置）：
 | 族 | 工具 / 策略 | 本仓状态 | 值得注意的点 |
 |---|---|---|---|
 | **① 规模与复杂度** | `compute_cyclomatic_complexity`（10）、`compute_cognitive_complexity`（15）、`report_long_method_and_god_object_smells` | 已用并收口（CC 12 / 认知 5 命中，全判保持）；类级 17 处/函数级 5 处未动，见 TODO | ⚠ 长方法/上帝对象工具**每调用最多分析 25 个文件**（`Files analyzed cap: 25`，**不报截断**）→ 分块 ≤20；CC/认知两工具**无上限** |
-| **② 结构重复** | `report_structural_clone_smells`（minTokens=12 / shingleSize=2 / minShared=3 / astThreshold=70） | 已用（判据已定 A–G，快照待重跑：同参数现报 108 对） | 无上限提示，但分块大小会改变"最佳克隆对"选取（36 文件一次 46 条 vs 18+18 两次 52 条）→ 对数须固定分块比较 |
+| **② 结构重复** | `report_structural_clone_smells`（minTokens=12 / shingleSize=2 / minShared=3 / astThreshold=70） | 已用，**该族已闭合**：真重复 2 处合并（常量表达式解析器 → `_IntExprParser`；两形态字段读取 → `_node_utils.dual_get`）、3 对逐行对照后判保持，D 超额 **940 → 0**。快照按 R3/R6 口径重测（同参数现报 108 对原始命中，过滤后 0） | 无上限提示，但分块大小会改变"最佳克隆对"选取（36 文件一次 46 条 vs 18+18 两次 52 条）→ 对数须固定分块比较 |
 | **③ 异常与断言** | `report_exception_handling_smells`（权重打分）、`report_test_assertion_smells` | 已用并收口（吞吃 44/44、断言 22/22 判定） | 断言族在本仓全是"断言在调用链内"的形态假阳性；断言工具整仓单次会截断（337 文件只报 8 条）→ 分块 |
 | **④ 变更差分** | `score_diff`、`missing_tests`、`blast_radius` | **未用**（本轮实测可用：`score_diff` 18.9s、`missing_tests` 4.8s） | **最值得纳入流程的一族**：`score_diff` 给结构面净变化（认知 Δ / 增删行 / 引入符号 / 签名变更 / `untested_fraction` / 未解析使用点），`missing_tests` 给"改动未达测试"的函数计数——本仓现有三道证据（pytest、字节对拍、诊断基线）全是**行为面**，缺的正是结构面量化 |
 | **⑤ 热点交叉** | `analyze_git_hotspots` | **未用**（本轮实测 3.3s，278 commits） | 给 churn × complexity 表：本仓 top 为 `analyzer/structure.py`(29/10)、`pipeline/__init__.py`(26/10)、`preprocessor/_expand.py`(21/7)——**正是超长函数所在文件**，可作"先动哪个"的经验依据 |

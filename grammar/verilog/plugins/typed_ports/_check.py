@@ -35,7 +35,11 @@ from __future__ import annotations
 from typing import Any
 
 from core.define import Node
-from grammar.verilog.plugins.typed_ports._node_utils import collect_type_scopes, node_text
+from grammar.verilog.plugins.typed_ports._node_utils import (
+    collect_type_scopes,
+    dual_get,
+    node_text,
+)
 
 
 # ── 入口 ──────────────────────────────────────────────
@@ -483,13 +487,6 @@ def _role_sym(tsc, rname: str):
     return None
 
 
-def _pg_field(pg, key: str, default):
-    """端口组字段读取：dict 用 get、节点用 getattr（两形态统一入口）。"""
-    if isinstance(pg, dict):
-        return pg.get(key, default)
-    return getattr(pg, key, default)
-
-
 def _items_list(container) -> list:
     """声明容器 → items 列表（dict 形 `{items: [...]}` / 节点形 `.items`）。"""
     if isinstance(container, dict):
@@ -510,10 +507,10 @@ def _flat_port_group(pg) -> list[dict]:
     `packed_range` 只认 dict 形态端口组（节点形态无该字段——与
     `_transform._resolved_ports` 的读取口径一致，不额外兜底）。
     """
-    items_node = _pg_field(pg, "items", {})
+    items_node = dual_get(pg, "items", {})
     if not items_node:
         return []
-    direction = _pg_field(pg, "direction", "")
+    direction = dual_get(pg, "direction", "")
     packed = pg.get("packed_range") if isinstance(pg, dict) else None
     out: list[dict] = []
     for item in _items_list(items_node):

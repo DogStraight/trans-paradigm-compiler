@@ -7,7 +7,7 @@ from core.plugin_loader import register_transform_slot
 from core.define import Node
 from analyzer.scope import Scope
 from transform.engine import mark_extra
-from grammar.verilog.plugins.typed_ports._node_utils import node_text
+from grammar.verilog.plugins.typed_ports._node_utils import dual_get, node_text
 
 
 @register_transform_slot("delete_type_decl")
@@ -301,13 +301,6 @@ def _to_range_node(packed_range):
     return None
 
 
-def _dual_get(obj, key: str, default):
-    """dict 与对象两形态字段读取（postpass 序列化结果是 dict，声明节点是对象）。"""
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
-
-
 def _item_name(item) -> str:
     """端口条目名：dict 形态取 name 字段，对象形态取节点文本。"""
     if isinstance(item, dict):
@@ -323,12 +316,12 @@ def _flat_group_ports(raw: list) -> list[dict]:
     """
     flat: list[dict] = []
     for pg in raw:
-        d = _dual_get(pg, "direction", "")
+        d = dual_get(pg, "direction", "")
         pr = pg.get("packed_range") if isinstance(pg, dict) else None
-        items_node = _dual_get(pg, "items", {})
+        items_node = dual_get(pg, "items", {})
         if not items_node:
             continue
-        for item in _dual_get(items_node, "items", []):
+        for item in dual_get(items_node, "items", []):
             name = _item_name(item)
             if not name:
                 continue

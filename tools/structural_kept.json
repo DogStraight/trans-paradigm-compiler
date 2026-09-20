@@ -6,6 +6,9 @@
     "工具在 compute 阶段跳过这些项，--compare 不再把它们报为回归。"
   ],
   "items": {
-    "CLONE|grammar.verilog.plugins.checks.inst_check._inst_check._sig_text <-> grammar.verilog.plugins.typed_ports._node_utils.node_text": "E 类变体（非重复）：_sig_text 带信号名正则过滤、非 Node 返回空串；node_text 是通用取文本。共性只剩递归骨架，合并需引入模式参数——得不偿失。出处：_drafts/bifrost/dispositions.md「结构重复残量分类」E 行；2026-09-20 复核仍成立。"
+    "CLONE|grammar.verilog.plugins.checks.inst_check._inst_check._sig_text <-> grammar.verilog.plugins.typed_ports._node_utils.node_text": "E 类变体（非重复）：_sig_text 带信号名正则过滤、非 Node 返回空串；node_text 是通用取文本。共性只剩递归骨架，合并需引入模式参数——得不偿失。出处：_drafts/bifrost/dispositions.md「结构重复残量分类」E 行；2026-09-20 复核仍成立。",
+    "CLONE|linter.checkers.matcher.RuleMatcher._first_of_choice <-> linter.grammar_slicer._choice_firsts": "变体型（非重复）：两边只有 3 行并集循环同形，真正的差异在**策略层**——token 是否拆多候选、块规则是否并入 block_start、可空前缀是否传播、optional 是否取 elem、树是 dict 还是 GrammarRule 对象；matcher/_first_tokens 与 slicer/_collect_first_start_tokens 在这些上各不相同。合并需把 4–5 个策略差异参数化，新抽象比现状复杂（判据：新抽象自身要更简单才划算）。2026-09-20 逐项对照后判保持。",
+    "CLONE|linter.checkers.matcher.RuleMatcher._optional_overlap_firsts <-> parser.follow._stmt_first_union": "同形不同源（非重复）：前者是“production 后缀 × feature 树”的并集（依赖 _first_tokens）；后者是“语句名集 × first_map”的并集。`|=` 累加是通用形态，不是可抽的实体；合并只能共用“循环累加”这层空壳。2026-09-20 判保持。",
+    "CLONE|grammar.verilog.plugins.checks.width_check._width_check._replicate_width <-> grammar.verilog.plugins.checks.width_check._width_check._ternary_width": "同形不同源（非重复）：_replicate_width 是“**常量计数**（const_eval）× 值宽度”，_ternary_width 是“两**分支宽度**取 max”。相似的只是“两次取数 + 任一 None 则 None + combine”这三行骨架；可抽的只剩 None 传播，新抽象不比现状简单（判据：新抽象自身要更简单才划算）。2026-09-20 逐行对照后判保持。"
   }
 }
