@@ -55,5 +55,6 @@
 | `gap-parser-linter-approximation.md` | parser/linter 错误处理近似（无恢复 + 启发式） |
 | `gap-formatter-line-behavior.md` | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
 | `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |
+| `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面首轮清单 + 三条判据） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
