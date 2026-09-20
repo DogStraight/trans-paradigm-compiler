@@ -319,33 +319,6 @@ from .block_parser import (
 )
 
 
-def _parse_bit_width_literal(content: str) -> Node | None:
-    """Verilog 位宽字面量解析：8'hFF / 32'd100 / 'hFF / 4'b1010。
-
-    由 Parser 注入到 pratt_parser，使通用表达式解析器保持语言无关。
-    返回 None 表示该 token 不是位宽字面量（回退到通用数字解析）。
-    """
-    if "'" not in content:
-        return None
-    parts = content.split("'", 1)
-    width_part = parts[0].strip()
-    rest = parts[1] if len(parts) > 1 else ""
-    # 宽度部分可能为空（自动位宽）或数字
-    width = None
-    if width_part:
-        try:
-            width = int(width_part)
-        except ValueError:
-            # 非法宽度，按自动处理
-            width = None
-    if rest and rest[0] in ("b", "o", "d", "h"):
-        base = rest[0]
-        value = rest[1:] if len(rest) > 1 else ""
-        return Node("BitWidthLiteral", width=width, base=base, value=value)
-    # 格式错误：回退为普通数字（由调用方处理）
-    return None
-
-
 class Parser:
     """语法分析器 — 将 token 流解析为 AST"""
 
@@ -507,12 +480,10 @@ class Parser:
             self._log_level = self.LOG_INFO
 
     def _init_pratt_language(self) -> None:
-        """pratt 侧语言注入：运算符表 / token 分类器 / 位宽字面量解析器。"""
+        """pratt 侧语言装配：运算符表 / token 分类器。"""
         self.operator_defs = pratt_parser.process_operator_data(_operator_defs_cfg)
         if _token_categories_cfg:
             pratt_parser.install_token_classifier(_token_categories_cfg)
-        # 注入语言层位宽字面量解析器（保持 pratt_parser 语言无关）
-        pratt_parser.install_bit_width_literal_parser(_parse_bit_width_literal)
 
     def _init_rule_selector(
         self, rules_dir: str | None, rule_selector: "RuleSelector | None"

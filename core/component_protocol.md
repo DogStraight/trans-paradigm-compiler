@@ -79,6 +79,14 @@ formatter = "_capability.py:build_formatter"
 handler = "_asm.py:render_asm"
 ```
 
+能力 fn 返回的 dict 就是**引擎↔语言包的 API 面**：键名即契约，故键名必须**语言中性**
+——引擎不按名去调用"某个语言的具体步骤"。现存能力面的约定：
+
+| 能力 | 引擎消费的键 |
+|---|---|
+| `formatter` | `BoundaryScanner`（扫描器）、`build_engine`（pass 引擎）、`pre_scan_passes`（**扫描前的前置文本遍列表**，按声明序；语言包决定有几遍、叫什么——引擎不知道每遍的语义，缺省 = 不跑） |
+| `macro_policy` | `plan`（宏调用点事实 → 处置方案；见 `preprocessor/macro_policy.py`） |
+
 ## 2. 加载流程（setup_grammar）
 
 ```

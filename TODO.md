@@ -298,20 +298,29 @@
   - **analyzer = 重灾区**（与作者判断一致）：`structure.py` 硬编码 5 个**规则名**
     （`"FuncDecl"/"FuncDeclOld"/"TaskDecl"`、`"ParamDeclStmt"`、`"Declarator"`）
     + 语义名词标识符 **183 处**（端口/实例/信号驱动）；`checker.py` 的 `_signal_graph`/
-    `inst_sites`。
-  - **parser**：一处分量级渗透——`parser_core._parse_bit_width_literal` 实现了 Verilog
-    的 `[size]'[base]digits` 形态并无条件安装（槽位通用、**默认实现语言特定**）。
-  - **linter / preprocessor**：词法/结构面**未发现**渗透（linter 由 grammar 切片驱动；
-    preprocessor 已全形态外置）——linter 的 21 处名词命中全是误报（文本宽度 / 动词 reset）。
-    ⚠ "词法面清"≠"语义面清"，语义面要判据 ①/②。
+    `inst_sites`。**均归 L2（精化基座）**——不动，等 L1 其余面做完。
+  - **parser**：11 处结构名命中全是**引擎表达式树/节点协议名**；原先当渗透的
+    `_parse_bit_width_literal` 经**调用计数探针**实测在三语言包下**不可达**（lexer 按
+    `[[number.based]]` 捕成单 token，规则的 `Number` 先手接住）→ 实为**冗余第二路径**，
+    **已删**（钩子 + 槽位 + 登记条目）。
+  - **pipeline**：`__init__.py` 曾按名调语言包的排版步骤（`split_port_close_lines` /
+    `split_inst_tail_lines`）→ **已修**：能力面改声明 `pre_scan_passes`（前置文本遍列表）。
+  - **linter / preprocessor / lexer / renderer / core / transform**：词法/结构面未发现活渗透
+    （linter 的 21 处、renderer 的 18 处、lexer 的 7 处名词命中全是误报；
+    `core/_protocol.py` 的 `ATTR_RESOLVED_PORTS` 等是**产物契约键名**，按既定决策留引擎 → 归 L2 重审）。
   - **同名陷阱**：`Root`/`Comment`/`UnaryOp`/`BinaryOp`/`TernaryOp`/`Number`/`Identifier`/
-    `MacroCall` 是**引擎表达式树协议**（语言包按此名声明 renderer），不是渗透。
+    `MacroCall` 是**引擎表达式树/节点协议**（语言包按此名声明 renderer），不是渗透。
+  - ⚠⚠ **新判据（当场踩坑得出）**：弱信号命中要过四道——① 词法命中 → ② 看调用链定性
+    → ③ **数调用次数（可达性）** → ④ 才分“渗透 / 死代码 / 契约”。
+    只做到 ② 会把**不可达的冗余路径**当渗透，白花一道外置工序（本次实测）。
 - **现有的两条门禁只覆盖词法面**（关键字字面量 / 配置键声明），为何抓不到语义渗透：
   用配置键或通用算法表达的 Verilog 语义里**一个 Verilog 词都没有** → 形式完全合规；
   配置点位法反而**奖励**这类渗透。两条门禁答的是"有没有**语言的关键字**"，
   而精化基座的问题是"有没有实现**语言的语义**"——前者是字符串问题，后者是判据问题。
-- **下一步**：行为面基线（最小语言包探针）→ parser 位宽字面量外置 → analyzer 结构名
-  （5 处，规则名进声明面）→ analyzer 语义面（183 处，属 L2 基座重设计，先立 ADR）。
+- **下一步**：① 语言包 `BitWidthLiteral` 规则**待拍板是否删**（实测六种形态均不可达，
+  连带 renderer layout 与 `inst_check`/`width_check` 的该节点名分支同属死面）；
+  ② 行为面基线（最小语言包探针）——判语义面的唯一办法，单独一期；
+  ③ 之后就进 L2（精化基座重设计；analyzer 的 5 个规则名 + 183 处语义面 + 产物契约键名都在那一批）。
 - **另："多加语言包"作为暴露法的代价（已知事实）**：c4/yaml 覆盖浅，暴露力有限；
   且多语言同进程已有真实串味史（`_PIPELINE_SHARED` 按 rules_dir 缓存、
   `global_state` 语言注册面只增不还原、`test_language_switch` 曾偶发失败）→ 该法

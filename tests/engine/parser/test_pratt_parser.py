@@ -258,37 +258,22 @@ class TestEdgeCases:
 
 
 # ═══════════════════════════════════════════════════════
-# 语言无关性：位宽字面量注入 + bool 配置驱动
+# 语言无关性：数字字面量无语言语法 + bool 配置驱动
 # ═══════════════════════════════════════════════════════
 
 class TestLanguageNeutrality:
-    """pratt_parser 不内置语言语法：位宽字面量由注入回调处理，bool 由配置驱动。"""
+    """pratt_parser 不内置语言语法：数字只走通用整数/浮点，bool 由配置驱动。
 
-    def test_bit_width_injection(self):
-        """注入位宽解析器后，8'hff 被解析为 BitWidthLiteral。"""
+    Verilog 的带宽度基数形态（`8'hFF`）走**语法规则面**（lexer 按
+    `[[number.based]]` 捕为单 token → 语言包的 Number 规则接住），
+    引擎侧没有也不该有第二种扩展机制（曾经有过一个注入式钩子，经实测
+    在三个语言包下不可达——原子解析器先手接住数字——已删）。
+    """
+
+    def test_number_literal_is_generic_only(self):
+        """无语言语法时，位宽样式数字按通用 Number 保留原文（不报错、不猜语义）。"""
         import parser.pratt_parser as pp
 
-        def _verilog_bw(content):
-            if "'" in content:
-                parts = content.split("'", 1)
-                rest = parts[1] if len(parts) > 1 else ""
-                if rest and rest[0] in ("b", "o", "d", "h"):
-                    return Node("BitWidthLiteral", width=None, base=rest[0], value=rest[1:])
-            return None
-
-        pp.install_bit_width_literal_parser(_verilog_bw)
-        try:
-            n = pp.parse_number_literal(T("number", "8'hff"))
-            assert n.node_name == "BitWidthLiteral"
-            assert n.base == "h" and n.value == "ff"
-        finally:
-            pp.install_bit_width_literal_parser(None)
-
-    def test_no_injection_fallback_generic(self):
-        """无注入时位宽样式数字回退为通用 Number（语言无关）。"""
-        import parser.pratt_parser as pp
-
-        pp.install_bit_width_literal_parser(None)
         n = pp.parse_number_literal(T("number", "8'hff"))
         assert n.node_name == "Number"
         assert n.value == "8'hff"

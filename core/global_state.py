@@ -80,7 +80,6 @@ TRACKED: dict[str, tuple[str, str]] = {
 # install_*）——所以模块结束还原 = 跨模块不串味，模块内由 fixture 自管。
 INSTALL_STATE: dict[str, tuple[str, str]] = {
     "parser.pratt_parser._token_checks": ("deepcopy", "token 类别判定表（install_token_classifier）"),
-    "parser.pratt_parser._bit_width_literal_parser": ("ref", "位宽字面量解析器（按语言安装）"),
     "parser.pratt_parser._bool_true_type": ("ref", "bool 真值类型（按语言安装）"),
     "parser.pratt_parser._atom_name_map": ("deepcopy", "原子 token→规则名映射（按语言安装）"),
     # 语言作用域（当前语言装载了哪些组件）：插件应用按它过滤，

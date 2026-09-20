@@ -19,7 +19,7 @@ Verilog formatter：**文本行 pass 管线**，操作裸 `list[str]` + 行上�
 
 ```
 源文本
-  → split_port_close_lines / split_inst_tail_lines（拆粘连行）
+  → pre_scan_passes（能力面声明的前置文本遍：拆端口尾行 + 拆参数化实例化尾行）
   → BoundaryScanner.scan（token 流 → 每行 LineContext）
   → FormatterEngine.run（按配置依次执行 pass）
     → indent（缩进重排，最前）

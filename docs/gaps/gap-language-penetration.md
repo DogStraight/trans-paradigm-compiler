@@ -28,17 +28,41 @@
 
 ⚠ 判据 3 **不能当判据**：普适协议也可能叫这些名。实测误报两类——linter 的 `width`
 是 LSP 诊断列宽、`reset_atom_memo` 的 `reset` 是动词。必须逐条看调用链才能定性。
-⚠ 三条都只覆盖被测路径 → 结论只能是"**已知渗透面收敛**"，不是"无渗透"。
+
+⚠⚠ **第二条教训（2026-09-20 当场踩到）：弱信号命中还须先判"可达性"**。
+首轮把 `parser_core._parse_bit_width_literal`（引擎实现的 Verilog `[size]'[base]digits`）
+当成活渗透 → 先做成能力外置（新增 `number_literal` 能力 + 语言包组件）；随后用
+**调用计数探针**（monkeypatch `pratt_parser.parse_number_literal` 计数）实测：
+**三个语言包下调用次数全为 0**——lexer 按 `[[number.based]]` 把 `8'hFF` 捕成
+**单 token**，语言包的 `Number` 规则（`value = "$1"`）先手接住，pratt 的
+字面量前缀路径根本不执行。即那条引擎实现是**不可达的冗余第二路径**（同一个概念
+有两条扩展机制），不是渗透。
+处置：**撤掉外置物、删掉冗余钩子**（`install_*` + 槽位 + 登记表条目），
+保留通用整数/浮点解析；带宽度基数的语言事实留在**语法规则面**（lexer 声明 + 规则），
+那里本来就有它。
+**可复用判据**：弱信号 → ② 看调用链定性 → ③ **数调用次数（可达性）** →
+④ 才分"渗透 / 死代码 / 契约"。只做到 ② 会把死路径当渗透，多花一道外置工序。
 
 ## 首轮实测（2026-09-20，词法/结构面，作者指定重点：analyzer / preprocessor / linter）
 
 | 子系统 | ① 结构名字面量 | ② 语言对象词（定性） | 结论 |
 |---|---|---|---|
 | **analyzer** | **5**（全在 `structure.py`） | 183（`structure.py` 独占，真渗透） | **重灾区**（与作者判断一致） |
-| parser | 9（多为 pratt 表达式树协议名） | 10（位宽字面量族，真渗透） | 一处分量级渗透 |
+| parser | 11（全是 pratt/节点协议名） | 10（位宽字面量族 → **不可达**，见下） | **无活渗透** |
 | linter | 0 | 21（**全部误报**：文本宽度 / 动词 reset） | 词法面已清 |
 | preprocessor | 0 | 0 | 词法面已清（形态外置后） |
-| core / pipeline / renderer / transform / lexer | 待跑（作者判定面窄：renderer 吃原语、transform 插槽化） | — | — |
+| core / pipeline / renderer / transform / lexer | 0 | 45（**全部误报或契约**，见下表） | 已清（一处已修） |
+
+**非精化基座面的逐条定性（2026-09-20）**
+
+| 位置 | 命中 | 定性 |
+|---|---|---|
+| `pipeline/__init__.py:184-189` | `split_port_close_lines` / `split_inst_tail_lines` | **曾是真渗透**（引擎按名调用语言的排版步骤）→ **已修**：能力面改声明 `pre_scan_passes`（前置文本遍列表，引擎不知道每遍的语义） |
+| `renderer/doc.py` 18 处 | `width` / `max_width` / `_row_width` | 排版列宽（Prettier 式 Doc 模型）→ 误报 |
+| `lexer/main_lexer.py` 7 处 | `width` | `[indent]` 缩进宽度 → 误报 |
+| `core/define.py` / `global_state.py` | `_default_instance`、`reset` | Python 单例实例 / 动词 → 误报 |
+| `pipeline/schedule.py` | `instance` | `instance = cls(**params)` 对象实例 → 误报 |
+| `core/_protocol.py`、`transform/_semantic_mapping.py` | `ATTR_RESOLVED_PORTS` / `TABLE_TYPE_PORTS_FLAT` / `_uses_resolved_ports` | **契约面**（elaboration 产物键名按既定决策留引擎，消费方是下游 postpass）→ 归 L2 重审 |
 
 **语言名与协议名的同名陷阱**：`Root` / `Comment` / `UnaryOp` / `BinaryOp` / `TernaryOp` /
 `Number` / `Identifier` / `MacroCall` 是**引擎表达式树协议**（pratt 建节点 + 语言包按此名
@@ -59,13 +83,19 @@
 - `analyzer/checker.py:74,130,208,212`：`_signal_graph` / `inst_sites` ——全工程信号
   驱动/负载图（ADR-0008 elaboration 层 3）。
 
-**parser（一处）**
-- `parser/parser_core.py:322-344` `_parse_bit_width_literal`：引擎实现 Verilog 的
-  `[size]'[base]digits` 形态（硬编码进制字母 `b/o/d/h` 与节点名 `BitWidthLiteral`），
-  并在 `:515` **无条件**安装。
-- ⚠ 定性要点：**槽位是通用的**（`pratt_parser.install_bit_width_literal_parser`，
-  目的是"让 pratt 保持语言无关"），**渗透在默认实现**——引擎留的不是"占位 + 最简形态"，
-  而是完整的 Verilog 实现。
+**parser（无活渗透；一处冗余路径已删）**
+- 11 处 ① 命中全是**引擎表达式树/节点协议名**（`Root` / `Comment` / `UnaryOp` / `BinaryOp` /
+  `TernaryOp` / `Number` / `Identifier` / `MacroCall`）：语言包按这些名声明 renderer，
+  属契约。
+- 已删：`pratt_parser` 的"数字字面量扩展钩子"（框位 + `install_*` + 引擎实现）——
+  实测三语言包下**不可达**（见上"可达性"教训），带宽度基数的语言事实由 lexer 声明 +
+  语法规则承担。
+- **待定（需要作者拍板）**：语言包的 `BitWidthLiteral` 规则（production =
+  `[literal.number, symbol.base.single_quote, @Identifier]`）在当前 `[[number.based]]`
+  声明下**也不可达**（实测 `8'hFF` / `8 'hFF` / `8'h FF` / `'hFF` / `8'shFF` / `4'b10_10`
+  六种形态均不产生该节点）→ 连带 `[[BitWidthLiteral.renderer.layout]]` 与
+  `inst_check` / `width_check` 里按该节点名分支的代码同属死面。删它要动多处 production
+  候选列表与文档，属"删除先证后删"里证据较齐但影响面较大的一项。
 
 **linter / preprocessor**：本轮**未发现**词法/结构面渗透。linter 由 grammar 切片驱动
 （语句/块边界从规则推导），preprocessor 已全形态外置（`[macro_recognition]` +

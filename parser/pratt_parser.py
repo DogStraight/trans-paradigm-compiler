@@ -73,9 +73,6 @@ def _build_token_classifier(categories: dict) -> dict:
 # 模块级分类器（由 install_token_classifier 设置）
 _token_checks: dict = {}
 
-# 位宽字面量解析钩子：由语言层注入（None = 不识别位宽字面量）
-_bit_width_literal_parser = None
-
 # 布尔真值 token 类型（由 token_category.bool 配置推导）
 _bool_true_type = None
 
@@ -120,16 +117,6 @@ def _is_none(token) -> bool:
     return _check("none", token)
 
 
-def install_bit_width_literal_parser(fn) -> None:
-    """注入位宽字面量解析器 fn(content) -> Node | None。
-
-    None 返回值表示该 token 不是位宽字面量，回退到通用数字解析。
-    由语言层在初始化时调用，保持本模块语言无关。
-    """
-    global _bit_width_literal_parser
-    _bit_width_literal_parser = fn
-
-
 def install_token_classifier(categories: dict) -> None:
     """从 [token_category] 配置安装分类函数，替换模块级 is_* 的行为"""
     if not categories:
@@ -149,12 +136,13 @@ def install_token_classifier(categories: dict) -> None:
 
 # ── 字面量解析辅助 ──
 def parse_number_literal(token: Token) -> Node:
+    """数字 token → 节点（通用形态：浮点 / 整数 / 无法识别则保留原文）。
+
+    语言特有的数字形态（如 Verilog 带宽度基数的 `8'hFF`）走**语法规则面**：
+    lexer 按 `[[number.based]]` 声明捕获为单 token，语言包的 `Number` 规则
+    （`value = "$1"`）接住它——引擎侧不需要也不应该有第二种扩展机制。
+    """
     content = token.content
-    # 位宽字面量（如 8'hff）：由语言层注入的解析器处理
-    if _bit_width_literal_parser is not None:
-        node = _bit_width_literal_parser(content)
-        if node is not None:
-            return node
     # 浮点数
     if "." in content:
         try:

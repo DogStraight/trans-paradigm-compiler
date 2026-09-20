@@ -84,13 +84,12 @@ class TestVerilogCapabilities:
         f = get_capability("formatter")
         assert f is not None
         caps = f()
-        for key in (
-            "BoundaryScanner",
-            "build_engine",
-            "split_port_close_lines",
-            "split_inst_tail_lines",
-        ):
+        for key in ("BoundaryScanner", "build_engine"):
             assert callable(caps[key])
+        # 前置文本遍：一列可调用（引擎不知道每条在干什么，只按序跑；已声明 → 非空）
+        passes = caps.get("pre_scan_passes")
+        assert isinstance(passes, list) and passes
+        assert all(callable(p) for p in passes)
 
     def test_format_generated_via_capability(self):
         """format_generated 经能力查找格式化（format_output=True 管线 e2e 路径）。"""

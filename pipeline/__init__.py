@@ -181,12 +181,12 @@ def format_generated(
         caps = formatter_entry()
         BoundaryScanner = caps["BoundaryScanner"]
         build_engine = caps["build_engine"]
-        split_port_close_lines = caps["split_port_close_lines"]
-        split_inst_tail_lines = caps["split_inst_tail_lines"]
 
-        # 先拆粘连行（端口尾行 + 参数化实例化尾行），再扫描，避免 contexts 错位
-        lines = split_port_close_lines(content.split("\n"))
-        lines = split_inst_tail_lines(lines)
+        # 先跑语言包声明的**前置文本遍**（按声明序），再扫描，避免 contexts 错位；
+        # 引擎不知道这些遍在干什么（连名带序都由语言包给）——未声明 = 不跑
+        lines = content.split("\n")
+        for pre_pass in caps.get("pre_scan_passes", ()):
+            lines = pre_pass(lines)
         split_content = "\n".join(lines)
 
         scanner = BoundaryScanner(rules, lexer)
