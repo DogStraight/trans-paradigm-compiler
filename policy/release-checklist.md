@@ -16,7 +16,7 @@
 ```bash
 python -m pytest tests/ -q                      # 单测全绿（默认并发）
 python tests/e2e/run_all_tests.py               # e2e FAIL 0
-python tests/e2e/eval_lint_accuracy.py          # lint recall 31/31、零误报
+python tests/e2e/eval_lint_accuracy.py          # lint recall 100%、误报 FP 0
 python -m pytest tests/ -n 0 --cov --cov-report=term # 覆盖率 ≥ fail_under（80；-n 0 关并发防 xdist 计数失真）
 ```
 
@@ -30,17 +30,18 @@ python -m pytest tests/ -n 0 --cov --cov-report=term # 覆盖率 ≥ fail_under�
 ## 3. 构建 sdist / wheel
 
 ```bash
-python -m build            # 需 pip install build；产出 dist/trans_paradigm_compiler-0.1.0.tar.gz + .whl
+python -m build            # 需 pip install build；产出 dist/trans_paradigm_compiler-<version>.tar.gz + .whl
 ```
 
 ## 4. 验证包内容（不扁平化）
 
 ```bash
-python -m zipfile -l dist/*.whl | Select-String 'grammar/(verilog|c4)'
-# 必须保留：
-#   grammar/verilog/tpc.toml + 各规则 TOML + plugins/（typed_ports/formatter/sim/...）
+python -m zipfile -l dist/*.whl | Select-String 'grammar/'
+# 必须保留（顶层按语言包分目录；实测随包：verilog / c4 / yaml）：
+#   grammar/verilog/tpc.toml + 各规则 TOML + plugins/（typed_ports/formatter/checks/...）
 #   grammar/c4/tpc.toml + 规则 TOML + plugins/
-# 不要出现 data-files 扁平化（grammar/verilog 与 c4 混在一起 = 失败）
+#   grammar/yaml/
+# 不要出现 data-files 扁平化（各语言包混在一起 = 失败）
 tar -tf dist/*.tar.gz | Select-String 'grammar/'   # sdist 同样核对
 ```
 
@@ -50,9 +51,11 @@ tar -tf dist/*.tar.gz | Select-String 'grammar/'   # sdist 同样核对
 py -3.11 -m venv .venv-smoke
 .venv-smoke\Scripts\pip install dist\*.whl
 .venv-smoke\Scripts\tpc --version
-.venv-smoke\Scripts\tpc format samples\normal\ref\ref_alu.v   # 无报错
-.venv-smoke\Scripts\tpc lint samples\lint_err\ref\ref_e01_missing_endmodule.v  # exit 1
-.venv-smoke\Scripts\tpc lint samples\normal\ref\ref_alu.v     # exit 0
+.venv-smoke\Scripts\tpc format tests\e2e\samples\normal\ref\ref_alu.v   # 无报错
+.venv-smoke\Scripts\tpc lint tests\e2e\samples\lint_err\ref\ref_e01_missing_endmodule.v  # exit 1
+.venv-smoke\Scripts\tpc lint tests\e2e\samples\normal\ref\ref_alu.v     # exit 0
+.venv-smoke\Scripts\tpc check tests\e2e\samples\normal\ref\ref_alu.v    # exit 0 / No issues found
+# 再从任意目录（如 %TEMP%）跑一条，验 rules_dir 解析到 site-packages 内 grammar 包
 Remove-Item -Recurse .venv-smoke
 ```
 
