@@ -12,7 +12,7 @@
 
 | 插件 | 机制 | 负责 | 诊断 code |
 |------|------|------|-----------|
-| `name_check/` | L1 声明式 `[[checks]]`（naming.toml）+ L2 handler（`_filename_check.py`） | 命名约定：module/实例/wire/reg/端口/parameter/localparam/genvar/函数/任务 小写或大写蛇形；NC011 模块名-文件名一致 | NC001-NC011 |
+| `name_check/` | L1 声明式 `[[checks]]`（naming.toml）+ L2 handler（`_filename_check.py`） | 命名约定：module/实例/wire/reg/端口/parameter/localparam/genvar/函数/任务/integer/type 小写或大写蛇形；NC011 模块名-文件名一致；NC014-016 端口/wire/reg 前后缀 | NC001-NC016 |
 | `width_check/` | postpass | 位宽一致性：赋值/端口连接截断（W201）、位选越界（W202） | W201, W202 |
 | `inst_check/` | postpass（跨文件 ProjectChecker 联动） | 模块实例化：定义存在（W101）、端口连接名存在（W102）、参数覆盖名存在（W103）、悬空端口（W104）、多驱动（W105）、inout 非 tri（W106）、字面量连接参数化宽度端口（WC001） | W101-W106, WC001 |
 | `latch_check/` | postpass | 锁存风险（条件不全/case 分支推断锁存） | LC001 |
@@ -178,7 +178,7 @@ python policy/check_hardcode.py                             # 语言知识不进
 
 | 场景 | 路径 | 蓝本插件 |
 |---|---|---|
-| 命名/风格检查 | L1（pattern 正则） | name_check（NC001-010） |
+| 命名/风格检查 | L1（pattern 正则） | name_check（NC001-013） |
 | 文件名一致性 | L2 handler | name_check（NC011，_filename_check.py） |
 | 跨文件端口连接 | L2 postpass | inst_check（W101-103/WC001） |
 | 位宽/截断 | L2 postpass | width_check（W201/W202，最大最全） |
