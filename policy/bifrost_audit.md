@@ -121,6 +121,37 @@ stdio + 显式 root（JSON 宿主配置）：
   用户可见变化→CHANGELOG），不写进本文件。
 - **不进日常门禁**：需要外部二进制，且全量扫描是 30s–分钟级。
 
+## 重构期用法（能力族 ④ 变更差分，2026-09-22 接入）
+
+> 动机：结构性重构（移文件 / 拆类 / 改签名）**行为面证据对它无感**——pytest 全绿、
+> 字节对拍一致、诊断基线不变，都不能说明"搬对了、没搬脏"。④ 补的正是这一面。
+
+```powershell
+# 重构前后各跑一次（锚点 = 重构前提交）
+bifrost --root . --tool score_diff     --args '{"base":"<锚点>","target":"HEAD"}'
+bifrost --root . --tool blast_radius   --args '{"base":"<锚点>","target":"HEAD"}'
+bifrost --root . --tool missing_tests  --args '{"base":"<锚点>","target":"HEAD"}'
+python tools/structural_score.py --compare     # 结构欠账分（新增即回归，退出码 1）
+```
+
+- `score_diff` 字段口径：`geometry`（ins/del/introduced/deleted/moved/signature_changes/
+  directories_changed/mean_directory_distance）、`baseline`（`cognitive_before/after/delta`）、
+  `verification.untested_fraction` + `without_direct_test_reference`（改了却无直接测试
+  引用的生产符号，逐条带 `non_test_reference_sites`）、
+  `coordination.external_callers_by_signature_change`（签名变更的**外部**调用点——
+  **改接口前先看它**）。
+- ⚠ `excluded.unparseable_files` 把 `.md` / `.toml` 记为不可解析（本仓 21 个）——
+  属预期，不是错误。
+- ⚠ **两个基线口径不同，别混用**：`structural_score.py --save/--compare` 是**键级**
+  基线（符号全名的路径键）→ 移文件会让旧键"消除"、新键"新增"；故**跨搬家窗口看
+  `score_diff` 的聚合量**，`--compare` 用于**同布局内**的回归。
+
+**当前锚点（精化基座重构前，2026-09-22）**：提交 `c63c6bb`，S=0 已冻结于
+`tools/structural_baseline.json`。同窗口实测（`HEAD~10..HEAD`）：认知 Δ **−23**、
+ins 1143 / del 598、introduced 48 / deleted 17 / moved 69 / signature_changes 36、
+`untested_fraction` **0.9**（91/233 改动生产符号的 90% 无直接测试引用——本仓测试是
+行为面/语料驱动，非逐符号，属预期画像；**重构后该值若显著上升才是信号**）。
+
 ## 能力族清单与本仓实测状态（2026-09-20）
 
 按"信号类型"分类；"本仓状态"以实测为准（用时 = 本机一次调用实测）。
@@ -130,7 +161,7 @@ stdio + 显式 root（JSON 宿主配置）：
 | **① 规模与复杂度** | `compute_cyclomatic_complexity`（10）、`compute_cognitive_complexity`（15）、`report_long_method_and_god_object_smells` | **已逐项收口**：CC/认知 19 项 + 类/模块规模 4 项均下结论（前 17 项 = 分派型/单一职责循环，后 4 项 = **最大单方法认知 10–14、规模来自方法数**的低认知大容器）；函数级 >80 行 = 0。判据与证据表见 `structural_budget.md` 六节 | ⚠ 长方法/上帝对象工具**每调用最多分析 25 个文件**（`Files analyzed cap: 25`，**不报截断**）→ 分块 ≤20；CC/认知两工具**无上限** |
 | **② 结构重复** | `report_structural_clone_smells`（minTokens=12 / shingleSize=2 / minShared=3 / astThreshold=70） | 已用，**该族已闭合**：真重复 2 处合并（常量表达式解析器 → `_IntExprParser`；两形态字段读取 → `_node_utils.dual_get`）、3 对逐行对照后判保持，D 超额 **940 → 0**。快照按 R3/R6 口径重测（同参数现报 108 对原始命中，过滤后 0） | 无上限提示，但分块大小会改变"最佳克隆对"选取（36 文件一次 46 条 vs 18+18 两次 52 条）→ 对数须固定分块比较 |
 | **③ 异常与断言** | `report_exception_handling_smells`（权重打分）、`report_test_assertion_smells` | 已用并收口（吞吃 44/44、断言 22/22 判定） | 断言族在本仓全是"断言在调用链内"的形态假阳性；断言工具整仓单次会截断（337 文件只报 8 条）→ 分块 |
-| **④ 变更差分** | `score_diff`、`missing_tests`、`blast_radius` | **未用**（本轮实测可用：`score_diff` 18.9s、`missing_tests` 4.8s） | **最值得纳入流程的一族**：`score_diff` 给结构面净变化（认知 Δ / 增删行 / 引入符号 / 签名变更 / `untested_fraction` / 未解析使用点），`missing_tests` 给"改动未达测试"的函数计数——本仓现有三道证据（pytest、字节对拍、诊断基线）全是**行为面**，缺的正是结构面量化 |
+| **④ 变更差分** | `score_diff`、`missing_tests`、`blast_radius` | **已接入流程**（重构期必跑；2026-09-22 实测：`blast_radius` 2.4s、`missing_tests` 0.1s、`score_diff` 44.1s / 10 提交窗口） | **唯一补"结构面证据"的族**：`score_diff` 给结构面净变化（认知 Δ / 增删行 / 引入符号 / 签名变更 / `untested_fraction` / 未解析使用点），`missing_tests` 给"改动未达测试"的函数计数——本仓现有三道证据（pytest、字节对拍、诊断基线）全是**行为面**，对"移文件 / 拆类 / 改签名"无感。用法见下节 |
 | **⑤ 热点交叉** | `analyze_git_hotspots` | **未用**（本轮实测 3.3s，278 commits） | 给 churn × complexity 表：本仓 top 为 `analyzer/structure.py`(29/10)、`pipeline/__init__.py`(26/10)、`preprocessor/_expand.py`(21/7)——**正是超长函数所在文件**，可作"先动哪个"的经验依据 |
 | **⑥ 注释密度** | `report_comment_density_for_files` / `_for_code_unit` | **未取**（本轮实测 1.0s 可用） | 输出 Hdr/Inl/Span 计数；本仓注释密度偏高，纯比例意义有限，只宜当"异常低"的筛子 |
 | **⑦ 死代码** | `report_dead_code_and_unused_abstraction_smells` | **不可用** | 只支持 Rust → Python 侧无此信号；本仓等价面 = Pylance 诊断 + `policy/pylance-cleanup.md` |
@@ -141,6 +172,16 @@ stdio + 显式 root（JSON 宿主配置）：
 
 **优先级建议**（按"对本仓缺口的边际价值"）：④ > ⑤ > ⑩ > ⑪ > ⑥ > ⑨（absent-member）。
 ④ 直接补"结构面证据"；⑤ 决定 17 个类与 5 个长函数的动手顺序；⑩ 能机器化本仓的硬约束自查。
+
+**收尾归属判定（2026-09-22，审计线收口时定）**：
+
+| 族 | 归属 | 理由 |
+|---|---|---|
+| ④ 变更差分 | **纳入流程**（重构期必跑） | 唯一补"结构面证据"的族，见上「重构期用法」节 |
+| ⑤ `analyze_git_hotspots` | **按需** | 只在决定"先动哪个"时跑一次；本仓 churn × complexity 表已落 `structural_budget.md` 五节 |
+| ⑥ 注释密度 | **不纳入** | 本仓注释密度整体偏高，"比例"意义有限，只宜当"异常低"的筛子 |
+| ⑩ RQL（`--query-file`） | **按需** | 答**跨维度**问题的手段（如"哪些引擎模块导入了 `grammar/`"= 硬约束可机器化面），不是每轮要跑的门禁 |
+| ⑪ MCP / LSP | **按需** | agent 集成面（把外部裁判变成可调用能力），需求驱动再启 |
 
 > **命中 ≠ 待办**：本工具族按**阈值**报命中，阈值附近会无穷再生。哪些命中算
 > "必须处理"、一次改动值多少、何时收口，由 `structural_budget.md` 定（超额量口径

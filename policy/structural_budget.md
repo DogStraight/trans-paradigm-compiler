@@ -47,8 +47,16 @@ S = C + L + D                                                 越低越好
 | **ROI** | `ROI = ΔS / 改动规模` | **ROI < 0.05 不做**（起始标定值，两次实测后定稿）：即"改 100 行至少降 5 点欠账" |
 | **验证面** | `score_diff` 的 `verification.untested_fraction` + `without_direct_test_reference` | 单次改动的报告项（不进 S）：改了却无直接测试引用的生产符号占比 |
 
-**不做也必须留痕**：判"保持"的项写入 `_drafts/bifrost/dispositions.md`（理由 + 证据），
+**不做也必须留痕**：判"保持"的项写入 `tools/structural_kept.json`（理由 + 出处，
+**逐条自足**——不许写"见某草稿某节"，`_drafts/` 会随收尾销毁；完整性由
+`tests/policy/test_structural_kept.py` 守：理由有实质长度 + 键能解析到真实定义），
 不许出现"没人管"的项——"保持"是结论，"没看"不是。
+
+**重构前的结构面锚点（2026-09-22）**：提交 `c63c6bb`，S = 0 已冻结于
+`tools/structural_baseline.json`。⚠ 跨"移文件"窗口请用能力族 ④ 的 `score_diff`
+**聚合量**（见 `bifrost_audit.md`「重构期用法」节）——`--compare` 是**键级**基线
+（键含符号的路径），搬家会让旧键"消除"、新键"新增"，同时报大量两边条目，
+**那不等于回归**。
 
 ## 五、停止规则（满足任一 → 本主线收口）
 
