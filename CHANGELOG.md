@@ -5,6 +5,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Bifrost 外部审计收尾（主线收口）——能力族 ④ 变更差分接入 + 判保持登记表守卫**：
+
+  审计修复主线（复杂度族 / 重复族 / in-loop 族 / 断言族）此前已逐项下结论，本次收尾
+  补齐四件事，使"每个命中都有结论"**可被机器守、可被复读**：
+
+  1. **B-C 结构重复族快照按 A–G 归位（结案）**：按 `tools/structural_score.py` **同口径**
+     （`CLONE_CHUNK=30`、`min_score=90`、R3 + R6）重跑 = **102 对**（≤40 tok 83 对），
+     逐对归位：A 10 / B 15 / C 68 / D 4 / F 1 / G 1 / U 3——**U 的 3 对正是已登记的
+     「变体 / 同形不同源」→ 无新形态**；过 R3 的 4 对全部有 R6 结论，D = 0 与 S 自洽。
+     C 从 B-D 分类期的 32 增至 68，正是复杂度批次（B-F 六~十）拆出的薄助手/桩（共性
+     已抽、残留入口样板），不是新逻辑重复。⚠ 旧草稿脚本用 `CHUNK=60`，与 S 口径
+     **不可比**（本次改为复用度量工具的机器，不另写一套）。
+  2. **判保持登记表自足化 + 新增守卫**：`tools/structural_kept.json` 原有多条理由写成
+     "见 `_drafts/bifrost/dispositions.md` 某节"——草稿销毁后即成**悬空引用**（"保持"
+     退化成"没看"），全部内联为自足理由；补登记 1 项（`policy/check_doc_refs` 内 89 tok
+     同类对，此前只被 R4"两侧都在 `policy/`"机械豁免、**无逐项结论**，而 R4 的理由写的
+     是"两道门禁各自独立"，不覆盖同文件内情形）。新增
+     `tests/policy/test_structural_kept.py` 守两件事：理由有实质长度、键能解析到真实
+     定义——**结构性搬家后路径失效会当场变红**（精化基座重构的前哨）。
+  3. **能力族 ④ 变更差分接入流程**（`score_diff` / `blast_radius` / `missing_tests`）：
+     本仓现有三道证据（pytest、字节对拍、诊断基线）全是**行为面**，对"移文件 / 拆类 /
+     改签名"无感，而下一项工作正是这类改动。用法、字段口径、以及**两套基线口径不可
+     混用**的坑记入 `policy/bifrost_audit.md`「重构期用法」节；重构前锚点 = `c63c6bb`
+     （S = 0 冻结于 `tools/structural_baseline.json`）。未用族归属一并判定（⑤/⑩/⑪ 按需，
+     ⑥ 不纳入）。
+  4. **审计结论分流**：跨项复用的**判据**（复杂度过阈三分类 / in-loop"形态 vs 病理" /
+     测试断言的词法判据 / 重复对的体形态判据）固化进 `policy/bifrost_audit.md`「判据集」；
+     `TODO.md` 的「外部审计修复」块（231 行，已 100% 完成）按"完成即删"移除；
+     `_drafts/bifrost/`（findings + dispositions + raw 共 2.6 MB）在**无耐久引用复检后**
+     销毁——结论先落正式位（登记表 / `structural_budget.md` / `bifrost_audit.md`）再删稿。
+
+  **验证**：`tests/policy` 125 passed（含新守卫 5 例）；`structural_score --compare` 仍
+  S = 0（消除 0 / 新增 0 / 变大 0）；`check_doc_refs` / `check_hardcode` PASS。
+
 ### Changed
 
 - **行尾注释锚定改跨层推迟 + 按语言包声明分流两类注释（修分号被注释吃掉的既存缺陷）**：
