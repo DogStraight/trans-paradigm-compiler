@@ -37,6 +37,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
      `TODO.md` 的「外部审计修复」块（231 行，已 100% 完成）按"完成即删"移除；
      `_drafts/bifrost/`（findings + dispositions + raw 共 2.6 MB）在**无耐久引用复检后**
      销毁——结论先落正式位（登记表 / `structural_budget.md` / `bifrost_audit.md`）再删稿。
+  5. **`bifrost.correctness.python-absent-member` 下边界判决**（此前是"结论缺失"，不是
+     "跑了没发现"）：整仓单跑**两次独立实测均不收敛**（2026-09-18 3471s；2026-09-22
+     复测 3652s/61min，RSS 1.7 GB → 5.1 GB 线性增长 = 组合爆炸）；而
+     `--root . --sources <子集>` 可得 `complete`（`bifrost_probe` 0.6s / `analyzer` 146s），
+     但 absence 分析要求声明面穷尽，**分片并集不等于整仓结论**。判决：整仓判不了 →
+     登记为已知边界（含复现命令与耗时），替代面 = Pylance 诊断。要拿这个信号须先解决
+     "声明面穷尽性"，不靠加预算硬跑。
 
   **验证**：`tests/policy` 125 passed（含新守卫 5 例）；`structural_score --compare` 仍
   S = 0（消除 0 / 新增 0 / 变大 0）；`check_doc_refs` / `check_hardcode` PASS。

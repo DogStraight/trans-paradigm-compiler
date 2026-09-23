@@ -207,3 +207,17 @@ ins 1143 / del 598、introduced 48 / deleted 17 / moved 69 / signature_changes 3
   插件注册）会落 `unproven`，需按候选而非结论对待。
 - 动态求值策略对 `eval/exec` 报 warning 级——本仓 `preprocessor` 侧无命中，仓内
   `declare_cfg` 走的是模块属性注入，不触发。
+- **`bifrost.correctness.python-absent-member` 在本仓拿不到整仓结论**（2026-09-22 判决，
+  不是"跑了没发现"）：
+
+  | 跑法 | 结果 | 实测 |
+  |---|---|---|
+  | 整仓单跑（`--policy --policy-id …`，无 `--sources`） | **不收敛** | 2026-09-18 **3471s** 人工终止；2026-09-22 复测 **3652s（61 min）仍未收敛**，RSS 从 1.7 GB **线性涨到 5.1 GB**（组合爆炸特征） |
+  | `--root . --sources <子集>` | `complete` | `tools/bifrost_probe` **0.6s** / `analyzer` **146s**，均 clean |
+  | 子目录当 root | `inconclusive` | `capability_incomplete`：*"python absent-member analysis requires an active Python declaration surface"* |
+
+  含义：**整仓判不了**（两次独立实测，间隔 4 天、同一版本 0.11.4）；分片能得
+  `complete` 但**只对该子集有效**——absence 分析要求声明面穷尽，分片削减声明面，
+  分片并集**不等于**整仓结论，且成本随面陡增（~10 文件 146s）。**替代面** =
+   Pylance 诊断（本仓等价物，见 `policy/pylance-cleanup.md`）。若将来要拿这个信号，
+  需先解决"声明面穷尽性"，别靠加预算硬跑。
