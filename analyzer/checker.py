@@ -219,7 +219,7 @@ class ProjectChecker:
           （`ROLE_GEN_ACTIVITY` → generate 分支活性，层 3 的驱动过滤用）。
         """
         source = StructureAtomSource(self._ctx)
-        service = ElaborationService(self._ctx.render_subtree)
+        service = ElaborationService(self._ctx)
         result = self._elaborator.run(source, self._elab_extra, service)
         role_key = self._elaborator.role_key(ROLE_GEN_ACTIVITY)
         if role_key is not None:
