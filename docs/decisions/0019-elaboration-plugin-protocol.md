@@ -83,7 +83,7 @@
 | `scope` | 必需 | 执行原子：`file` / `unit` / `project`（**引擎定义枚举**，机制面，可审计；同 ADR-0018 决策 2） |
 | `provides` | 必需 | 产出键声明，**运行期核验**（照 transform 插件 `produces` + `_verify_produced` 同款：少填产物键 → fail，不让下游静默空转） |
 | `depends_on` | 可选 | 项间依赖；引擎按**拓扑序**执行（后声明项经 `ctx.products` 读先声明项产物） |
-| `role` | 可选 | **引擎角色位**（**引擎定义封闭枚举**；现役只有 `unit_constants`）。条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物；声明角色位的项，其唯一 `provides` 键即该角色的容器键 |
+| `role` | 可选 | **引擎角色位**（**引擎定义封闭枚举**，契约见下）。条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物；声明角色位的项，其唯一 `provides` 键即该角色的容器键 |
 
 设计取向：**定位声明式为主、求解为插件代码**——把"变化的结构"做成数据、把"特异
 的求解"做成代码（L2 已定的三分法）。`locator_fn` 与省略定位保证表达力不锁死。
@@ -98,6 +98,19 @@
 >    "单元常量绑定"这张表。容器条目名由插件定 ⇒ 引擎不能写死 `"param_default"`（那是把
 >    插件起的名字塞进引擎）。`role` 是引擎能认的封闭枚举，机制上等价于 `scope`。
 >    ⚠ **它是过渡面**：gen 族搬迁完成后应删除该角色（`contract.py::ROLES`）。
+
+> **角色位契约**（每个角色**同时**定义寻址键与产物形状——因为引擎要消费它，这与
+> 普通条目"形状归插件"不同）：
+>
+> | 角色 | 寻址键 | 产物形状 | 引擎消费方（都**随对应族退场**） |
+> |---|---|---|---|
+> | `unit_constants` | 单元名 | `{名字: 值文本}` | 过渡期 `GenerateEvaluator` → **P3-1 起退场** |
+> | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → **P3-2 起退场** |
+>
+> ⚠ **角色位一律是过渡面**：终态（决策 1）下引擎不消费任何插件产物，故 **P3 收口时
+> `ROLES` 应为空**——这是"重构完成"的一个可机械检查的判据。角色位的 `scope` **不限**
+> （`unit` / `file` 都已有实例），唯一硬约束是"恰好一个 `provides` 键"；原设计曾要求
+> role ⇒ `scope == unit`，P3-1 落地时放宽（那是把 `unit` 的实现细节错当成了通用约束）。
 
 **4. 细粒度：每一项 = 一个可导出事实。**
 不按现有 4 个类切，按"事实"切。首清单（本次勘察得出，**非穷举**，随落地调整）：
@@ -195,9 +208,31 @@
   5 个消费方迁移 + **同批删**引擎侧抽取与 `ModuleParam`/`ModuleInfo.params`/两个死声明键）。
   **已完成**。效果：消掉病灶②（跨文件参数值变更）在引擎边界的一半——引擎不再定义
   "参数有值文本"这个事实。`param_override` 改归 P3（理由见决策 4 的更正节）。
-- **P3 逐族搬迁**（每项：落地 → 验证 → 删旧实现，不留双路径）：ports 族 →
-  connections 族（含 `inst_sites` + `param_override` 上提）→ gen 族（届时删 `role`
-  角色位）→ signal graph 族。
+- **P3 搬迁（⚠ 顺序按 P3 开工实测更正）**：原计划按**事实**分族（ports → connections →
+  gen → signal graph）。开工时清点引擎内部消费关系（`grep` `in_active_generate` /
+  `module_index` / `\.ports` / `inst_sites`）发现**该切法不成立**：
+
+  | 事实 | 引擎内部消费者 |
+  |---|---|
+  | gen 活性 | **只在 `SignalGraphBuilder` 内**（`in_active_generate` 5 处调用点） |
+  | `ports` / `inst_sites` / `connections` | **同一个簇**：`ConnectionElaborator`（层 2）+ `SignalGraphBuilder`（层 3） |
+  | `module_index` | 发现（`ModuleIndexer`）+ 层 3 + `checker` 返回值 |
+
+  即：除 gen 外，**每个事实的消费者都是那个本身要一起消失的层 2/3 簇**。按事实切会在
+  每一步都撞上"引擎的层 2/3 还在读它"→ 被迫为**注定要消失的消费者**造临时 role
+  （role 会堆到 3 个，全是过渡脚手架）。**改为按消费簇切**：
+
+  1. **gen 族**：`GenerateEvaluator`（184 行）+ `_GenFace` + 文本常量求值链
+     （`_tokenize_const` / `_ConstExprParser` / `_eval_const_expr` / `_param_truth`）。
+     其消费簇**只有一个**（层 3）→ 用**一个** role（`gen_activity`）桥接成立。落地后
+     `ROLE_UNIT_CONSTANTS` **消失**：gen 求解器经 `depends_on = ["param_default"]` +
+     `ctx.products["param_default"]` 直接读单元常量——`depends_on` 通道至此才真正被用上
+     （P2 是纵向打穿，未用依赖）。顺带兑现 TODO「文本模式求值/判断（应 AST-first）」
+     那一整条清单。
+  2. **层 2 + 层 3 + ports 一次性搬迁**：`ConnectionElaborator`（176）+ `SignalGraphBuilder`
+     （400）+ `_ModulePort` / `ModuleInfo.ports` / `ModuleInfo.insts` / `PortConnection`
+     （形状归插件）+ `param_override` 上提。它们的消费者是**彼此**，切开只会造桥。
+     落地后**所有临时 role 归零**，引擎只剩文件层（这即决策 1 的终态验收）。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
   `MODEL_INDEX` / `analyzer/README` 同步。
 
