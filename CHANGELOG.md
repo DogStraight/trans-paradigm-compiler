@@ -7,6 +7,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **精化协议骨架 + 行为面基线（ADR-0019 P1）**：分两批落地**机制**，**均未接线**
+  （`ProjectChecker` / `pipeline` 尚不调用，对外行为零变化）。
+
+  1. **P1a 契约与驱动器**（`analyzer/elaboration/`）：
+     - `contract.py`：`Locator`（声明式定位 = 规则名）/ `ElaborationItem` /
+       `ElaboratorSpec` + `parse_spec` 全字段 fail-fast（未知键 / 项重名 / 容器键跨项
+       重复 / `depends_on` 自引用与成环 / `locator` 与 `locator_fn` 二选一 / 求解名
+       未解析 / scope 非引擎枚举）；Kahn 拓扑排序（同层保持声明序，结果确定）。
+     - `driver.py`：引擎侧**唯一执行体，语言无关**——按拓扑序驱动「原子枚举
+       （file/unit/project）→ 定位 → 求解 → 归位 → 强方向核验」；`SolveCtx` 是跨文件
+       传播通道（后声明项读先声明项产物）；含 `Atom` / `AtomSource`（原子供源协议，
+       真实实现留 P2）。
+     - `loader.py`：`load_elaborator_spec(rules_dir)`——与 `macro_policy` 同款能力位
+       查找（按语言包作用域，切语言不串用）；未声明 → `None` = 降级。
+     - `core/_protocol.py` 增 `CTX_ELABORATION`（产物容器键）。
+     - **与 `schedule._verify_produced` 的刻意差异**（记入模块头）：那里双向核验
+       （声明 = 物化，物化未声明也报错）；本处只做**强方向**（求解器返回未声明的键 →
+       fail），**不**因"声明了但某原子无产物"报错——本处按原子出产物，"该原子无此类值"
+       是常态（无参数的模块本就没有 `param_default`），双向核验会误报。另加"容器键
+       跨项唯一"补住静默覆盖。
+     - 新增 `tests/engine/analyzer/test_elaborator_protocol.py`（**37 例**：声明
+       fail-fast / 拓扑序 / 定位归位 / 核验 / 降级五组）。
+
+  2. **P1b 行为面基线**（gap 档判据 1「待做」项）：
+     - 新增 `tools/min_pack_probe.py` + 基线 `tools/min_pack_baseline.json`。机制 =
+       `$TPC_CONFIG`（官方支持的覆盖点）把**默认语言包**指向迷你包、**子进程**跑引擎
+       测试——必须**进程级**隔离：`DEFAULT_RULES_DIR` 在 import 期已被各模块复制值，
+       同进程 monkeypatch 无效。**零引擎改动**。
+     - 首轮实测：`tests/engine` 共 1402 例 → **仍绿 1126** / 变红 146 / 报错 130。
+       判读：改动前后各跑一次，**仍绿集合缩小 = 回归**（曾有测试走引擎通用面，现开始
+       依赖语言包声明）= P2–P3 逐族搬迁的回归护栏。
+     - ⚠ 两个已知折扣（写在工具 docstring 与 gap 档）：① 只有**仍绿集合**稳定——
+       `变红/报错` 边界会漂（两次 146/130 vs 141/135，总数不变），故基线只认仍绿集合；
+       ② 探针包固定为 `grammar/yaml`（仓库既有"迷你语言包"，无插件、4 个 token 文件），
+       它**仍是一门真语言**，故结论只在"相对该包"的意义上成立；换包须重记基线。
+     - `tools/README.md` 登记；`docs/gaps/gap-language-penetration.md` 判据 1 状态
+       改「已做」并记机制与实测。
+
+  **验证**：P1a = `test_elaborator_protocol.py` **37 passed**、`tests/engine/analyzer`
+  **296 passed**、`-m smoke` **433 passed**（与改动前一致 → 未接线，零行为变化）；
+  P1b = 探针两次跑仍绿集合逐项相同（1126 / 1126，无回归、无新变绿）。
+  ⚠ **静态检查未机器验证**：本会话 pylance MCP 工具不在可用工具集且 `pyright` CLI 未
+  安装 → 已按 `pylance-cleanup` 判据手工自查并预修两处严格模式问题（未参数化的
+  `Mapping` 注解；`item.locator_fn`（`str | None`）传入 `_solver(name: str)` 加断言
+  收窄），据实记为 partial。
+
 - **精化基座重构定案（设计先行，未实现）**：ADR-0019
   （`docs/decisions/0019-elaboration-plugin-protocol.md`）确立边界——引擎的最小可视
   单位 = **文件**（读源 / 宏展开 / 解析 / AST 缓存 / 行映射与宏区间 / 依赖发现编排）；
