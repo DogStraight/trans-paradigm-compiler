@@ -15,7 +15,7 @@
 | `bifrost_probe/` | 外部审计 Bifrost 的有效性抽查探针（刻意含坏味，`bifrost scan tools/bifrost_probe` 应报 5 条） | 接外部审计或怀疑其失效时 | `policy/bifrost_audit.md` |
 | `structural_score.py` | 结构欠账分 S（复杂度/规模/重复三分量取**超额量**；`--save` 写基线、`--compare` 新增即回归） | 结构性改动前后算收益 / 判主线是否收口 | `policy/structural_budget.md`（口径 R1–R6 与停止判据；判保持登记在 `structural_kept.json`） |
 | `lang_penetration.py` | 语言知识渗透探针（弱信号）：引擎里出现语言包规则/节点名（硬信号）+ 语言对象词作标识符（弱信号，需人工判） | L1 渗透复审 / 动 analyzer 语义面前后对照 | `docs/gaps/gap-language-penetration.md`（三条判据与实测清单） |
-| `min_pack_probe.py` | **最小语言包探针（行为面基线）**：把默认语言包换成迷你包跑引擎测试，记录"哪些引擎测试仍绿"（仍绿 = 引擎通用面）；`--record` 写基线，默认比对并「有回归即 exit 1」。机制 = `$TPC_CONFIG` 指向临时配置（**零引擎改动**） | 动精化基座 / analyzer 语义面前后对照（ADR-0019 P2–P3）；判"某测试是不是靠语言包声明才成立" | `docs/gaps/gap-language-penetration.md` 判据 1；基线 `tools/min_pack_baseline.json`（与探针包绑定，换包须重记） |
+| `min_pack_probe.py` | **最小语言包探针（行为面基线）**：把默认语言包换成迷你包跑引擎测试，记录"哪些引擎测试仍绿"（仍绿 = 引擎通用面）；`--record` 写基线，默认比对并「有回归即 exit 1」。机制 = `$TPC_CONFIG` 指向临时配置（**零引擎改动**）。⚠ **强制串行**（默认补 `-n 0`）——探针故意混跑双语，并行结果随 worker 分配漂移，不可作判据 | 动精化基座 / analyzer 语义面前后对照（ADR-0019 P2–P3）；判"某测试是不是靠语言包声明才成立" | `docs/gaps/gap-language-penetration.md` 判据 1；基线 `tools/min_pack_baseline.json`（与探针包绑定，换包须重记；**必须串行重记**） |
 
 另有非本目录的按需门禁：
 

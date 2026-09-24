@@ -25,6 +25,7 @@ Yosys proc_dlatch（综合视角）/ SpyGlass W442aL。升级自有限版（只�
 
 from typing import Callable
 
+from core._protocol import CTX_ELABORATION
 from core.define import Node, iter_nodes
 from grammar.verilog.plugins.checks._shared import const_eval, const_value, is_timing_always, target_sig
 
@@ -60,13 +61,12 @@ def run_latch_check(analyzer, context) -> None:
 
 
 def _module_params(context, module: Node) -> dict:
-    """当前模块参数默认值：头参数（module_index）+ 模块体参数声明。"""
+    """当前模块参数默认值：精化产物 `param_default`（头部 + 体内已由插件合并）。"""
     out: dict = {}
     mn = getattr(getattr(module, "module_name", None), "content", "") or ""
     if mn:
-        info = (context.extra.get("module_index", {}) or {}).get(mn)
-        if info is not None:
-            out.update({p: mp.value_expr for p, mp in (info.params or {}).items()})
+        container = context.extra.get(CTX_ELABORATION, {}) or {}
+        out.update((container.get("param_default", {}) or {}).get(mn, {}) or {})
     # 模块体 parameter 声明（`parameter STEPS_AT_ONCE = 1;` 等，实例可覆盖）
     for n in iter_nodes(module):
         if n.node_name != "ParamDeclStmt":

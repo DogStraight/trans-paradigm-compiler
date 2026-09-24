@@ -77,14 +77,6 @@ class _ModulePort:
 
 
 @dataclass
-class ModuleParam:
-    """模块参数声明。"""
-
-    name: str
-    value_expr: str = ""  # 默认值表达式文本（如 "8"、"DATA_W"）
-
-
-@dataclass
 class ModuleInfo:
     """一个模块定义（跨文件索引条目）。"""
 
@@ -92,7 +84,8 @@ class ModuleInfo:
     file: str
     node: Node  # ModuleDecl 节点（定位）
     ports: dict[str, _ModulePort] = field(default_factory=dict)
-    params: dict[str, ModuleParam] = field(default_factory=dict)
+    # 参数默认值**不在引擎侧**：它是语言知识 → 精化产物 `param_default`
+    # （ADR-0019，`grammar/verilog/plugins/elaboration/`；消费方读产物容器）。
     # elaboration 层 2/3（ADR-0008）：模块的端口连接展开 + 实例树
     insts: list = field(default_factory=list)  # 模块内实例化点（已展开连接）
 
@@ -383,6 +376,9 @@ class StructureCtx:
     fields: dict = field(default_factory=dict)
     fr_by_module_cache: dict | None = None
     dir_module_files: dict[str, dict[str, str]] = field(default_factory=dict)
+    # 精化产物：单元级常量绑定（ADR-0019 角色位 unit_constants；由 ProjectChecker
+    # 从插件容器按角色取入）。过渡期供 generate 条件求值；gen 族搬迁后随之退场。
+    unit_constants: dict[str, dict[str, str]] = field(default_factory=dict)
 
     # ── 会话状态失效（每次 check 起始调用）──
 
@@ -392,6 +388,7 @@ class StructureCtx:
         self.module_index.clear()
         self.fr_by_module_cache = None
         self.dir_module_files.clear()
+        self.unit_constants.clear()
 
     def refresh(self) -> None:
         """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。
@@ -560,10 +557,10 @@ class GenerateEvaluator:
         """模块声明子节点入栈：以本模块**参数表**入栈（条件求值用）。"""
         name_field = face.module_name_field
         name_node = getattr(node, name_field, None) if name_field else None
-        info = self._ctx.module_index.get(getattr(name_node, "content", "") or "")
-        params2: dict[str, str] = {}
-        if info is not None:
-            params2 = {p.name: p.value_expr for p in info.params.values()}
+        # 单元常量绑定来自**精化产物**（ADR-0019 角色位 unit_constants）——引擎不再
+        # 读自己的 Verilog 形状 dataclass；插件未声明该角色 → 空表（条件不可判，保守）
+        unit_name = getattr(name_node, "content", "") or ""
+        params2: dict[str, str] = self._ctx.unit_constants.get(unit_name, {})
         for child in node.iter_children():
             todo.append((child, [], params2))
 
@@ -883,14 +880,13 @@ class ModuleExtractor:
             info = ModuleInfo(name=name_node.content, file=path, node=node)
             node._file = path  # related 链跨文件定位
             self._fill_ports(info, node)
-            self._fill_params(info, node)
             modules[info.name] = info
         return modules
 
     def _decl_name_nodes(
         self, decl_node: Node, items_field: str, name_field: str
     ) -> list[tuple[Node, Node]]:
-        """声明节点 → [(名字声明节点, 名字节点)]（端口/参数三类填充共用）。
+        """声明节点 → [(名字声明节点, 名字节点)]（端口/body 端口回填共用）。
 
         端口与参数的声明同形：外层声明节点的 `items` 再套一层声明列表
         （内层元素挂 `name`）。列表缺失 / 元素非节点 / 名字为空 → 不计。
@@ -1055,77 +1051,6 @@ class ModuleExtractor:
             # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
             for child in node.iter_children():
                 stack.append(child)
-
-    def _register_header_param(
-        self, info: ModuleInfo, p: object, param_name_field: str, value_field: str
-    ) -> None:
-        """头部 `#(P = v)` 单个参数项 → `info.params`（非节点/无名字 → 跳过）。"""
-        if not isinstance(p, Node):
-            return
-        p = unwrap_optional(p)  # 参数声明可能被 optional 包装
-        if not isinstance(p, Node):
-            return
-        pn = getattr(p, param_name_field, None) if param_name_field else None
-        if not isinstance(pn, Node) or not pn.content:
-            return
-        val = getattr(p, value_field, None) if value_field else None
-        info.params[pn.content] = ModuleParam(
-            name=pn.content,
-            value_expr=(
-                self._ctx.render_subtree(val) if isinstance(val, Node) else ""
-            ),
-        )
-
-    def _fill_header_params(
-        self,
-        info: ModuleInfo,
-        module_node: Node,
-        params_field: str,
-        param_name_field: str,
-        value_field: str,
-    ) -> None:
-        """头部 `#(..)` 参数列表 → `info.params`。"""
-        params_node = unwrap_optional(getattr(module_node, params_field, None))
-        params = getattr(params_node, params_field, None) if params_node else None
-        for p in params or []:
-            self._register_header_param(info, p, param_name_field, value_field)
-
-    def _fill_params(self, info: ModuleInfo, module_node: Node) -> None:
-        """模块参数：头部 `#(..)` 列表 + 模块体内 `parameter` 声明。"""
-        self._fill_header_params(
-            info,
-            module_node,
-            self._ctx.field("params"),
-            self._ctx.field("param_name"),
-            self._ctx.field("value"),
-        )
-        # 模块体内参数声明（`parameter P = v;` 语句形态，非头部 #(..) 列表）：
-        # ice40 单元库 SB_RAM40_4K 等大量使用 body 参数——只收头部参数会让
-        # W103（覆盖不存在参数）误报（2026-08-29 对标测试暴露，79 条 FP）。
-        # 扫描 module_node 子树内全部 ParamDeclStmt（含 generate/ifdef 内）。
-        self._fill_body_params(info, module_node)
-
-    def _fill_body_params(self, info: ModuleInfo, module_node: Node) -> None:
-        """扫描模块体 ParamDeclStmt，补 body 参数进 module_index。
-
-        ParamDeclStmt → items(DeclaratorList) → Declarator(name, init)。
-        头部参数已填过（同名保留头部——body 同名参数属重复声明，取先）。
-        """
-        for node in iter_nodes(module_node):
-            if node.node_name != "ParamDeclStmt":
-                continue
-            for d, name_node in self._decl_name_nodes(node, "items", "name"):
-                if d.node_name != "Declarator":
-                    continue
-                if name_node.content in info.params:
-                    continue  # 头部已填（body 同名重复声明，取先）
-                val = getattr(d, "init", None)
-                info.params[name_node.content] = ModuleParam(
-                    name=name_node.content,
-                    value_expr=(
-                        self._ctx.render_subtree(val) if isinstance(val, Node) else ""
-                    ),
-                )
 
 
 class FilePipeline:

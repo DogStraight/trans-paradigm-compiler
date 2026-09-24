@@ -7,8 +7,65 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **精化协议骨架 + 行为面基线（ADR-0019 P1）**：分两批落地**机制**，**均未接线**
-  （`ProjectChecker` / `pipeline` 尚不调用，对外行为零变化）。
+- **P2 纵向打穿 `param_default`：引擎侧参数抽取整体迁出（ADR-0019）**：引擎不再定义
+  "参数有值文本"这个事实——它是语言知识，改为 verilog 语言包的精化项产物。
+
+  1. **verilog 插件**（`grammar/verilog/plugins/elaboration/`，纯能力组件，
+     `[capabilities] elaborator`）：`param_default` 项（`unit` 作用域）求解
+     `{单元名: {参数名: 值表达式文本}}`，头部 `#(P=v)` 优先 + 体内 `parameter P=v;`
+     补全——合并规则与搬迁前 `_fill_params` **逐字对齐**。
+  2. **引擎接线**（`analyzer/elaboration/{atoms,service}.py` + `checker.py`）：
+     `StructureAtomSource`（文件 / 单元 / 工程原子，单元判定走声明）；
+     `ElaborationService`（语言无关服务句柄，P2 只开 `render`，转交既有
+     `StructureCtx.render_subtree`，不新增异常处理点）；`check()` 在**信号图之前**
+     跑精化（层 3 的 generate 活性要用单元常量绑定），产物容器注入
+     `analyzer._external_extra` 供插件消费。
+  3. **5 个消费方迁移**（原各自读引擎 `ModuleInfo.params`）：`width_check` /
+     `hier_check` / `latch_check` / `inst_check`（W103 只要参数名集合）+ 引擎
+     `GenerateEvaluator`。
+  4. **同批删除**（不留双路径）：`ModuleParam`、`ModuleInfo.params`、
+     `_register_header_param` / `_fill_header_params` / `_fill_params` /
+     `_fill_body_params`，以及随之成死声明的 `[structure.fields]` 两键
+     （`params` / `param_name`）。
+
+  **搬迁前先做等价性对拍**：新实现落地后、删旧实现前，断言插件产物与引擎抽取
+  **逐项相同**（实测通过）；删旧实现后该断言改为**冻结 golden 值**
+  （`tests/engine/analyzer/test_elaboration_param_default.py`）。这是"先证后改"的落地形态。
+
+  **P2 实测更正两处协议**（已回写 ADR-0019 决策 3）：
+  - `locator` / `locator_fn` **都可省略**（省略 ⇒ 求解器收到 `hits = [原子根]`）。
+    原设计要求"恰好声明一个"，但 `param_default` 的值分散在两种节点形态（头部字段 +
+    体内 `ParamDeclStmt`），**单条规则名表达不了**——硬要表达就会长出字段投影小语言
+    （＝已拒的"配置面膨胀"）。
+  - 新增**引擎角色位 `role`**（封闭枚举，现役只有 `unit_constants`）：容器条目名由
+    插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物（过渡期 `GenerateEvaluator` 需要
+    单元常量绑定）。⚠ 它是**过渡面**，gen 族迁入 P3 后应删除该角色。
+
+  **分期更正**：`param_override` **不再与 P2 同批**。落地时读码发现它的三层合并逻辑
+  （`#(.P(v))`）**今天已全在插件侧**（`width_check._override_params` /
+  `hier_check._merged_params`）——**不是引擎侧渗透**，上提为协议项是**去重共享**而非
+  "搬出引擎"。故改随 `inst_sites` / `connections` 族在 P3 落地（它是那两族产物的直接
+  消费者，同批做才无中间态）。
+
+  **验证**：`tests/engine/analyzer` **303 passed**、`-m smoke` **434 passed**、
+  `tests/policy` **125 passed**（含诊断基线门禁持平）、最小语言包探针串行**无回归**
+  （仍绿 1163 / 1163 逐项相同）。
+
+- **最小语言包探针：修正为强制串行（P1b 的交付缺陷，实测暴露）**：原基线以并行建立，
+  并声称"仍绿集合稳定"——**该结论是错的**。探针**故意让一个进程里混跑两种语言**
+  （默认包 = 探针包，而大量引擎测试显式加载 verilog），而本仓已记载"多语言同进程有
+  真实串味史"（`tests/README.md`），结果随 xdist 的 worker 分配漂移。实测（**同一份
+  代码**）并行三次 **1126 / 1122 / 1120** 仍绿；**在基线提交 `141cf25` 上复跑也复现不出
+  基线**（1120 + 6 项假回归）。改串行后同一子集两次逐项相同（351），全量串行两次
+  **1163 / 1163 逐项相同**。
+  处置：工具**默认补 `-n 0`**（`_serialize`，显式给并行参数则尊重但降级为"大致规模"）、
+  比对前先出数（口径不符也看得到规模）、基线**串行重记**
+  （`tests/engine` 串行 = 1163 仍绿 / 246 变红 / **0 报错**；串行下报错为 0，而并行
+  130~155——又一佐证）。口径写入工具 docstring、`tools/README.md`、
+  `docs/gaps/gap-language-penetration.md`（判据 1 节）。
+
+- **精化协议骨架 + 行为面基线（ADR-0019 P1）**：分两批落地**机制**，P1 当时**未接线**
+  （`ProjectChecker` / `pipeline` 不调用，对外行为零变化）——**P2 已接线**，见上。
 
   1. **P1a 契约与驱动器**（`analyzer/elaboration/`）：
      - `contract.py`：`Locator`（声明式定位 = 规则名）/ `ElaborationItem` /
@@ -36,6 +93,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
        测试——必须**进程级**隔离：`DEFAULT_RULES_DIR` 在 import 期已被各模块复制值，
        同进程 monkeypatch 无效。**零引擎改动**。
      - 首轮实测：`tests/engine` 共 1402 例 → **仍绿 1126** / 变红 146 / 报错 130。
+       ⚠ **该并行口径与数字已被推翻**（下一批修正为强制串行：仍绿 1163 / 0 报错）——
+       保留原文以留下"错在哪"的痕迹，**判据以串行口径为准**。
        判读：改动前后各跑一次，**仍绿集合缩小 = 回归**（曾有测试走引擎通用面，现开始
        依赖语言包声明）= P2–P3 逐族搬迁的回归护栏。
      - ⚠ 两个已知折扣（写在工具 docstring 与 gap 档）：① 只有**仍绿集合**稳定——

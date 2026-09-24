@@ -8,7 +8,10 @@
 （避免与 refinement（B/Event-B 规格精化）撞词）。
 """
 
+from analyzer.elaboration.atoms import StructureAtomSource
 from analyzer.elaboration.contract import (
+    ROLE_UNIT_CONSTANTS,
+    ROLES,
     SCOPE_FILE,
     SCOPE_PROJECT,
     SCOPE_UNIT,
@@ -26,9 +29,12 @@ from analyzer.elaboration.driver import (
     SolveCtx,
 )
 from analyzer.elaboration.loader import CAPABILITY_NAME, load_elaborator_spec
+from analyzer.elaboration.service import ElaborationService, ServiceApi
 
 __all__ = [
     "CAPABILITY_NAME",
+    "ROLES",
+    "ROLE_UNIT_CONSTANTS",
     "SCOPE_FILE",
     "SCOPE_PROJECT",
     "SCOPE_UNIT",
@@ -37,10 +43,13 @@ __all__ = [
     "AtomSource",
     "ElaborationItem",
     "ElaborationResult",
+    "ElaborationService",
     "Elaborator",
     "ElaboratorSpec",
     "Locator",
+    "ServiceApi",
     "SolveCtx",
+    "StructureAtomSource",
     "load_elaborator_spec",
     "parse_spec",
 ]

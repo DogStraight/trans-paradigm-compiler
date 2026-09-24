@@ -1,0 +1,10 @@
+# elaboration 组件声明 — verilog 精化项与求解器（**能力组件**：无语法/分析/变换声明）
+#
+# 契约（引擎侧）：`analyzer/elaboration/`；定案：`docs/decisions/0019-elaboration-plugin-protocol.md`。
+# 同款先例：`macro_policy`（引擎只做文本操作）、`formatter`（纯能力组件）。
+
+[capabilities]
+elaborator = "_elaborator.py:build_elaborator"
+
+# 能力入口返回 API 面 {items: [...], solvers: {...}}：引擎按**项列表**驱动
+# 「定位 → 求解 → 归位 → 核验」，项与求解见本目录 README.md / _elaborator.py。

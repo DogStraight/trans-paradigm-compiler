@@ -50,21 +50,26 @@
 必须进程级隔离——各模块 `from core.define import DEFAULT_RULES_DIR` 在 import 期
 已复制值，同进程 monkeypatch 无效。
 
+⚠⚠ **必须串行跑（工具已默认补 `-n 0`）——这条是实测踩出来的，不是性能选择**：
+探针**故意让一个进程里混跑两种语言**（默认包 = 探针包，而大量引擎测试显式加载
+verilog），而本仓已记载"多语言同进程有真实串味史"（`tests/README.md`）→ xdist 的
+worker 分配一变，结果就变。实测（`tests/engine`，**同一份代码**）并行三次 =
+**1126 / 1122 / 1120** 仍绿；**在基线提交 `141cf25` 上复跑也复现不出基线**
+（1120 + 6 项假回归）。改串行后同一子集两次逐项相同（351）。故**基线以串行建立与
+比对**；并行结果只能当"大致规模"，**不可作回归判据**。
+
 探针包 = `grammar/yaml`（仓库既有"迷你语言包"：无插件、4 个 token 文件，且**固定**
 ——基线与该包绑定，换包须重记）。⚠ 它仍是一门真语言（声明了缩进与标量形态），故结论
 只在"相对该包"的意义上成立，这是本判据的已知折扣。
 
-首轮实测（`tests/engine`，共 1402 例）：
+首轮实测（串行，`tests/engine`）：基线见 `tools/min_pack_baseline.json`（含逐项仍绿
+清单与计数）。
 
-| 仍绿（= 引擎通用面） | 变红 | 报错 | 跳过 |
-|---|---|---|---|
-| **1126** | 146 | 130 | 0 |
+⚠ 只有**仍绿集合**可作判据；`变红/报错` 的边界会漂（同一用例随分配落"失败"或"报错"，
+总数不变），计数仅供人看。
 
-⚠ 只有**仍绿集合**稳定（重复跑逐项相同）；`变红/报错` 的边界会漂（两次 146/130 vs
-141/135，总数不变——同一用例在不同 worker 里落"失败"或"报错"）。故基线只认仍绿集合。
-
-判读方式：改动前后各跑一次，**仍绿集合缩小 = 回归**（曾有测试走引擎通用面，现在开始
-依赖语言包声明）。这是 P2–P3 逐族搬迁的回归护栏。
+判读方式：改动前后各跑一次（都串行），**仍绿集合缩小 = 回归**（曾有测试走引擎通用面，
+现在开始依赖语言包声明）。这是 P2–P3 逐族搬迁的回归护栏。
 
 ## 首轮实测（2026-09-20，词法/结构面，作者指定重点：analyzer / preprocessor / linter）
 
@@ -99,13 +104,23 @@
 **analyzer（重灾区）**
 - `analyzer/structure.py:1038-1040`：`"FuncDecl"` / `"FuncDeclOld"` / `"TaskDecl"` 集合
   ——按**规则名**认"函数/任务体"。
-- `analyzer/structure.py:1115,1118`：`"ParamDeclStmt"` / `"Declarator"` ——按规则名取
-  参数与声明符。
+- ~~`analyzer/structure.py:1115,1118`：`"ParamDeclStmt"` / `"Declarator"` ——按规则名取
+  参数与声明符。~~ **P2 已迁出**（ADR-0019）：随 `param_default` 精化项进入
+  `grammar/verilog/plugins/elaboration/`，引擎侧 `_fill_params` 族与
+  `ModuleParam`/`ModuleInfo.params` **同批删除**——本项清零。
 - `analyzer/structure.py` 语义名词标识符 **183 处**（`_register_port` / `_inst_name_of` /
   `_is_signal_expr` / `_SIGNAL_RE` / `_backfill_port` …）：端口方向、实例连接、信号驱动
   等**硬件语义在引擎里实现**（L2 的"抽取能力 + 动态求解该在插件侧"）。
+  ⚠ P2 后复测仍 **183**（未动：P2 搬的是参数，属"求解"面；端口/实例/信号仍在原位，
+  P3 逐族处理）。
 - `analyzer/checker.py:74,130,208,212`：`_signal_graph` / `inst_sites` ——全工程信号
   驱动/负载图（ADR-0008 elaboration 层 3）。
+  ⚠ P2 后复测：`checker.py` 仍 4 处（P3 目标，未动）。
+
+**P2 后渗透面复测（2026-09-24，`tools/lang_penetration.py`）**：① 硬信号
+`analyzer/structure.py` **5 → 3**（`ParamDeclStmt`/`Declarator` 两项清零）；② Tier A
+语言对象词 analyzer **187 = `structure.py` 183 + `checker.py` 4**——**新增的
+`analyzer/elaboration/` 命中 0**（探针自己认它语言中性）。故本批**未引入新渗透面**。
 
 **parser（无活渗透；一处冗余路径已删）**
 - 11 处 ① 命中全是**引擎表达式树/节点协议名**（`Root` / `Comment` / `UnaryOp` / `BinaryOp` /

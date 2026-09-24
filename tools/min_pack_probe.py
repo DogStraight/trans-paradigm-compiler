@@ -9,9 +9,15 @@
 ⚠ 只覆盖**被测路径**（与 gap 档三条判据同一局限）：结论只能表述为"已知渗透面收敛"，
 **不能**表述为"引擎已语言无关"。
 
-⚠ **只比对"通过的集合"**：实测 `failed` / `errored` 的边界会漂（同一次基线两次跑：
-146/130 vs 141/135，总数不变——同一用例随 xdist 分配在不同 worker 里可能落"失败"
-或"报错"），而 `passed` 集合逐项相同。故 `compare` 只认 `passed`；计数仅供人看。
+⚠ **一律串行跑**（工具默认补 `-n 0`，见 `_serialize`）：探针**故意让一个进程里混跑两种
+语言**——默认包 = 探针包，而大量引擎测试显式加载 verilog；本仓已记载"多语言同进程有真实
+串味史"（`tests/README.md`），结果因此随 xdist 的 worker 分配漂移。实测（`tests/engine`，
+**同一份代码**）并行三次 = **1126 / 1122 / 1120** 仍绿；**在基线提交上复跑也复现不出基线**
+（1120 + 6 项假回归）。改串行后同一子集两次逐项相同（351）。故基线必须**串行**建立与
+比对；并行结果只能当"大致规模"，**不可作回归判据**。
+
+⚠ **只比对"通过的集合"**：`failed` / `errored` 的边界同样会漂（同一用例随分配落"失败"
+或"报错"，总数不变）。故 `compare` 只认 `passed`；计数仅供人看。
 
 机制（**零引擎改动**）：`$TPC_CONFIG` 是官方支持的用户配置覆盖点
 （`core/_user_config.py` 优先级 1）→ 写一份临时配置把 `grammar` 指向探针包；子进程里
@@ -24,7 +30,7 @@
     python tools/min_pack_probe.py --record         # 跑并写基线（需说明原因）
     python tools/min_pack_probe.py --target tests/engine
     python tools/min_pack_probe.py --pack grammar/c4
-    python tools/min_pack_probe.py -n 0 -- -x       # 透传 pytest 参数（`--` 之后）
+    python tools/min_pack_probe.py -- -x            # 透传 pytest 参数（`--` 之后）
 
 按需跑，**不进日常门禁**（分钟级）——见 tools/README.md。判据与实测清单见
 `docs/gaps/gap-language-penetration.md`。
@@ -165,6 +171,24 @@ def _report(result: dict, diff: dict | None) -> None:
         print(f"  ↑ 新变绿 {len(diff['newly_passing'])} 项（可能是普适面扩大）")
 
 
+def _serialize(extra: list[str]) -> list[str]:
+    """补 `-n 0`（串行）——**必需项，不是性能选择**。
+
+    探针故意让一个进程里混跑两种语言（默认包 = 探针包，而大量引擎测试显式加载
+    verilog），而本仓多语言同进程有真实串味史 → 并行结果随 worker 分配漂移（同一份
+    代码实测 1126 / 1122 / 1120，在基线提交上复跑也复现不出基线）。串行（固定顺序）
+    才可复现，故基线与比对一律串行。用户显式给了并行参数则尊重其选择（那时只当
+    "大致规模"看，别当判据）。
+    """
+    explicit = any(
+        a in ("-n", "--numprocesses")
+        or a.startswith("--numprocesses=")
+        or a.startswith("-n")
+        for a in extra
+    )
+    return extra if explicit else ["-n", "0", *extra]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="最小语言包探针（行为面基线；gap 判据 1）",
@@ -182,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         extra = extra[1:]
 
     targets = args.target or list(_TARGET_DEFAULT)
-    result = run_probe(args.pack, targets, list(extra))
+    result = run_probe(args.pack, targets, _serialize(list(extra)))
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -199,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  [基线不存在] 先跑 --record 建立基线（{args.baseline}）")
         return 0
 
+    diff = compare(baseline, result)
+    _report(result, diff)  # 先出数：口径不符时也要看得到规模
     for key, what in (("pack", "探针包"), ("targets", "目标集")):
         if baseline.get(key) != result.get(key):
             print(
@@ -206,9 +232,6 @@ def main(argv: list[str] | None = None) -> int:
                 f"vs 当前 {result.get(key)!r}——基线与该口径绑定，请重新 --record"
             )
             return 1
-
-    diff = compare(baseline, result)
-    _report(result, diff)
     if diff["regressed"]:
         print("  ✗ 存在回归：曾有引擎测试在此包下仍绿，现在不绿了")
         return 1

@@ -71,20 +71,33 @@
 > `ElaborationItem` / 能力名 `elaborator` / 目录 `analyzer/elaboration/`）；
 > 中文行文仍可称"精化"。README.md 对外话术用 "elaboration"。
 
-**3. 每个精化项（`ElaborationItem`）的字段**——前 3 项为设计输入给定，其余为本次新增：
+**3. 每个精化项（`ElaborationItem`）的字段**——前 3 项为设计输入给定，其余为本次新增
+（⚠ **P2 实测更正 2 处**，见本决策末）：
 
 | 字段 | 必/选 | 含义 |
 |---|---|---|
 | `name` | 必需 | **项目名**。产物键，语言包作用域内唯一；引擎只当日志标签与容器键，**不解释语义** |
-| `locator` | 必需 | **如何从 AST 找到此类值**：声明式定位 `Locator(rule=..., fields={...})`——引擎在 scope 原子子树内按规则名匹配、按字段名取值 |
+| `locator` | 可选 | **如何从 AST 找到此类值**：声明式定位 `Locator(rule=...)`——引擎在 scope 原子子树内按规则名匹配 |
+| `locator_fn` | 可选 | 同上，但定位本身需要算法（函数名，与 `solvers` 同表解析）；与 `locator` 二选一 |
 | `solver` | 必需 | **求解的精化逻辑的函数名称**（字符串）。加载期从 `solvers` 解析，缺失 → fail-fast |
 | `scope` | 必需 | 执行原子：`file` / `unit` / `project`（**引擎定义枚举**，机制面，可审计；同 ADR-0018 决策 2） |
 | `provides` | 必需 | 产出键声明，**运行期核验**（照 transform 插件 `produces` + `_verify_produced` 同款：少填产物键 → fail，不让下游静默空转） |
-| `depends_on` | 可选 | 项间依赖；引擎按**拓扑序**执行（如 `param_override` 依赖 `param_default`） |
-| `locator_fn` | 可选 | **逃生门**：定位本身需要算法（非"规则名 + 字段名"可表达）时改用函数名，同 `solver` 解析。声明式够用时不用 |
+| `depends_on` | 可选 | 项间依赖；引擎按**拓扑序**执行（后声明项经 `ctx.products` 读先声明项产物） |
+| `role` | 可选 | **引擎角色位**（**引擎定义封闭枚举**；现役只有 `unit_constants`）。条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物；声明角色位的项，其唯一 `provides` 键即该角色的容器键 |
 
 设计取向：**定位声明式为主、求解为插件代码**——把"变化的结构"做成数据、把"特异
-的求解"做成代码（L2 已定的三分法）。`locator_fn` 保证表达力不锁死。
+的求解"做成代码（L2 已定的三分法）。`locator_fn` 与省略定位保证表达力不锁死。
+
+> **P2 实测更正（两处，均为落地时才发现）**：
+> ① **`locator` / `locator_fn` 都可省略**（省略 ⇒ 求解器收到 `hits = [原子根]`）。
+>    原设计要求"恰好声明一个"，但 `param_default` 的值分散在**两种节点形态**
+>    （头部 `#(..)` 字段 + 体内 `ParamDeclStmt`），**单条规则名表达不了**；而"怎么找"
+>    本身就是语言知识 → 归插件代码正是本协议的目的。原设计会逼出一个字段投影小语言
+>    （＝已拒的"配置面膨胀"）。
+> ② **新增 `role`**：`GenerateEvaluator`（生成条件求值）在 P3 才迁入协议，过渡期它仍需
+>    "单元常量绑定"这张表。容器条目名由插件定 ⇒ 引擎不能写死 `"param_default"`（那是把
+>    插件起的名字塞进引擎）。`role` 是引擎能认的封闭枚举，机制上等价于 `scope`。
+>    ⚠ **它是过渡面**：gen 族搬迁完成后应删除该角色（`contract.py::ROLES`）。
 
 **4. 细粒度：每一项 = 一个可导出事实。**
 不按现有 4 个类切，按"事实"切。首清单（本次勘察得出，**非穷举**，随落地调整）：
@@ -95,6 +108,16 @@
 `hier_paths`
 
 每项独立声明定位与求解、独立验证、独立删除引擎侧旧实现。
+
+> **P2 实测更正（`param_override` 的归期）**：原分期把 `param_override` 与
+> `param_default` **同批**落地。落地时读码发现：**实例化点参数覆盖的三层合并逻辑
+> （`#(.P(v))`）今天已经全在插件侧**（`width_check._override_params`、
+> `hier_check._merged_params`，各自直接读 AST）——**它不是引擎侧渗透**。把它上提为
+> 协议项是**去重与共享**（多个检查复用同一张合并表），不是"把语言知识搬出引擎"。
+> 故归期改为**随 `inst_sites` / `connections` 族在 P3 落地**：它是那两族产物的直接
+> 消费者，同批做才不产生中间态。P2 只落 `param_default`——**真正消掉引擎侧
+> `ModuleParam` / `ModuleInfo.params` 的那一项**（实测它同时服务 5 个消费方：
+> `width_check` / `hier_check` / `latch_check` / `inst_check` + 引擎 `GenerateEvaluator`）。
 
 **5. 产物契约：引擎定容器，插件定条目。**
 引擎产出 `context.extra[ELABORATION] = {item_name: {atom_key: product}}`——引擎只保证
@@ -145,29 +168,40 @@
 
 ## 验证
 
-- **P1 先固化行为基线**（回归护栏；gap 档判据 1「最小语言包探针」同为"待做"项，
-  同批补）——没有基线则"改了有没有用"无法判。
+- **P1 先固化行为基线**（回归护栏）：`tools/min_pack_probe.py` + `tools/min_pack_baseline.json`。
+  ⚠ 口径 = **串行**（见分期一节）；比对只认**仍绿集合**。
 - **每项搬迁的统一口径**：`tests/policy/test_diag_baseline.py` 卡住的真实语料诊断
-  基线持平（门禁"只许减"）+ `tests/engine/analyzer` 部件测试全绿 + 全量测试 +
+  基线持平（门禁"只许减"）+ `tests/engine/analyzer` 部件测试全绿 + smoke + 全量测试 +
   真实语料对拍（格式化字节对拍 / lint 准确率）。
-- **新增 `tests/engine/analyzer/test_elaborator_protocol.py`**：未声明能力 → 降级为
-  单文件；`solver` 名未解析 / `scope` 取值非法 / `provides` 未产出 → **fail-fast**；
-  `depends_on` 拓扑序生效；**语言作用域**（c4 拿不到 verilog 的项）；容器形状。
-- 当前基线（本 ADR 落档时实测）：HEAD `28bf9eb`，`pytest -m smoke` **433 passed**。
+- **协议机制测试**（`tests/engine/analyzer/test_elaborator_protocol.py`）：未声明能力 →
+  降级；协议**形状** fail-fast（未知键 / 项重名 / 容器键跨项重复 / 角色位重复与非法 /
+  `depends_on` 自引用与成环 / `locator` 与 `locator_fn` 同给 / 求解名未解析）；拓扑序；
+  强方向核验（求解器返回未声明的键 → fail）。
+  ⚠ **刻意不做**"声明了但某原子无产物 → fail"的双向核验（理由见 `contract.py` 模块头：
+  按原子出产物时空是常态），这是与 `_verify_produced` 的已知差异，不是遗漏。
+- **搬迁项的等价性对拍**（P2 的做法，后续各族照办）：新实现落地后、删旧实现前，先断言
+  **产物与旧实现逐项相同**（P2 的 `test_elaboration_param_default.py` 即此法的产物——
+  对拍通过后才删引擎侧，golden 值随之为冻结契约）。
+- 落档时基线：HEAD `28bf9eb`，`pytest -m smoke` **433 passed**。
 
 ## 分期
 
-- **P1 立骨架（只新增不接线）**：`analyzer/elaboration/`（`ElaborationItem` /
+- **P1 立骨架**（只新增不接线）：`analyzer/elaboration/`（`ElaborationItem` /
   `Locator` / `ElaboratorSpec` / 驱动器 / 加载位 / 产物容器 / 运行期核验）+ 行为基线。
-- **P2 纵向打穿两项**：`param_default` + `param_override`（后者依赖前者），
-  `width_check` 改读新容器，并**同批删**引擎侧对应实现——直接消掉病灶②（跨文件
-  参数值变更），且以最小面积验证协议本身（定位 / 求解 / 跨文件 / 下游消费 / 核验
-  五段全通）。
+  **已完成**（行为基线 = `tools/min_pack_probe.py`；⚠ 必须**串行**跑，探针故意混跑双语，
+  并行结果随 worker 分配漂移——实测同一份代码 1126/1122/1120，在基线提交上复跑也复现
+  不出基线）。
+- **P2 纵向打穿 `param_default`**（`param_default` 一项 + verilog 插件 + 引擎接线 +
+  5 个消费方迁移 + **同批删**引擎侧抽取与 `ModuleParam`/`ModuleInfo.params`/两个死声明键）。
+  **已完成**。效果：消掉病灶②（跨文件参数值变更）在引擎边界的一半——引擎不再定义
+  "参数有值文本"这个事实。`param_override` 改归 P3（理由见决策 4 的更正节）。
 - **P3 逐族搬迁**（每项：落地 → 验证 → 删旧实现，不留双路径）：ports 族 →
-  connections 族 → gen 族 → signal graph 族。
+  connections 族（含 `inst_sites` + `param_override` 上提）→ gen 族（届时删 `role`
+  角色位）→ signal graph 族。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
   `MODEL_INDEX` / `analyzer/README` 同步。
 
-> Impl: `analyzer/elaboration/`（契约/驱动器/加载位）、
+> Impl: `analyzer/elaboration/`（契约 / 驱动器 / 原子供源 / 服务句柄 / 加载位）、
 > `grammar/verilog/plugins/elaboration/`（verilog 精化项与求解器）
-> Test: `tests/engine/analyzer/test_elaborator_protocol.py`
+> Test: `tests/engine/analyzer/test_elaborator_protocol.py`（机制面）、
+> `tests/engine/analyzer/test_elaboration_param_default.py`（P2 搬迁项 + 角色位 + 降级）

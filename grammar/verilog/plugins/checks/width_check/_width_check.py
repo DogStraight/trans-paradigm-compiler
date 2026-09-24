@@ -13,6 +13,7 @@
 
 from typing import Any, Callable
 
+from core._protocol import CTX_ELABORATION
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import (
     _IntExprParser,
@@ -136,19 +137,22 @@ def _file_params(analyzer, module_params: dict) -> dict[str, str]:
 
 
 # ── B1 模块参数表 ────────────────────────────────────────
-# 参数化宽度（WIDTH-1:0）求值需要模块参数值。来源：模块定义 ParamDecl
-# 默认值（module_index 的 ModuleParam.value_expr）。实例化覆盖
+# 参数化宽度（WIDTH-1:0）求值需要模块参数值。来源 = **精化产物** `param_default`
+# （`plugins/elaboration/`，头部 + 体内参数已由插件合并；ADR-0019）。实例化覆盖
 # （#(.P(v))）对模块内宽度的传播属 B3（跨模块视角）。
 
 
 def _module_params(context) -> dict[str, dict[str, str]]:
-    """{模块名: {参数名: 值表达式文本}}——全工程模块定义参数默认值。"""
-    module_index = context.extra.get("module_index", {}) or {}
-    out: dict[str, dict[str, str]] = {}
-    for mname, info in module_index.items():
-        params = getattr(info, "params", None) or {}
-        out[mname] = {p.name: p.value_expr for p in params.values()}
-    return out
+    """{单元名: {参数名: 值表达式文本}}——**精化产物** `param_default`（ADR-0019）。
+
+    来源由"引擎 `ModuleInfo.params`"改为"本语言包精化项产物"：容器键与值形状由
+    `plugins/elaboration` 定义——引擎不认识"参数"这个概念（语言知识在插件）。
+    """
+    container = context.extra.get(CTX_ELABORATION, {}) or {}
+    return {
+        str(name): dict(values)
+        for name, values in (container.get("param_default", {}) or {}).items()
+    }
 
 
 # ── B2 参数化宽度求值（符号化常量求值） ───────────────────

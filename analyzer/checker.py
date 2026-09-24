@@ -30,6 +30,13 @@ from analyzer.structure import (
 )
 from analyzer.shared_components import SharedComponents
 from analyzer.diag_serialize import semantic_diag, syntax_diag
+from analyzer.elaboration import (
+    ROLE_UNIT_CONSTANTS,
+    Elaborator,
+    ElaborationService,
+    StructureAtomSource,
+    load_elaborator_spec,
+)
 
 
 class ProjectChecker:
@@ -72,6 +79,10 @@ class ProjectChecker:
         self._register = register
         # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
         self._signal_graph: dict = {}
+        # 精化（ADR-0019）：能力面在 _prepare_run 装载语言包后建（未声明 → 降级）；
+        # 产物容器随每次运行重置，注入 analyzer._external_extra 供插件消费。
+        self._elaborator = Elaborator(None)
+        self._elab_extra: dict = {}
         # 各阶段协作者按依赖链接线：门面**只持有会话上下文 + 两个阶段入口**
         # （发现 / 信号图），中间协作者（连接展开 / 提取 / 单文件流水线 /
         # 条件求值）作为构造链局部量注入下游——DAG 只在构造处显式，之后不必
@@ -126,6 +137,10 @@ class ProjectChecker:
         #    重复入口不会重复 parse）
         self._discover_all(entries)
 
+        # 1a) 精化（ADR-0019）：按语言包项列表建产物容器（文件 / 单元作用域）。
+        #     须在信号图之前——层 3 的 generate 活性判定要用单元常量绑定。
+        self._elaborate()
+
         # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
         self._signal_graph = self._graph.build()
 
@@ -152,6 +167,9 @@ class ProjectChecker:
         self._ctx.invalidate()
         self._ensure_shared()
         self._ctx.refresh()
+        # 精化能力面（ADR-0019）：须在语言包装载后解析（未声明 → 降级为 None）
+        self._elaborator = Elaborator(load_elaborator_spec(self._ctx.rules_dir))
+        self._elab_extra = {}
         return entries
 
     def _discover_all(self, entries: list[str]) -> None:
@@ -193,6 +211,21 @@ class ProjectChecker:
             )
         return files, any_error
 
+    def _elaborate(self) -> None:
+        """跑语言包精化项列表（ADR-0019）：建产物容器 + 取引擎角色位产物。
+
+        - **容器**：`self._elab_extra[CTX_ELABORATION]`（条目名与值形状由插件定）；
+          未声明能力的语言包 → 不产生该键（降级，与旧行为一致）。
+        - **角色位**：引擎自己要用的产物**不按插件条目名**寻址，按引擎角色位问
+          （`ROLE_UNIT_CONSTANTS` → 单元常量绑定，过渡期供 generate 条件求值）。
+        """
+        source = StructureAtomSource(self._ctx)
+        service = ElaborationService(self._ctx.render_subtree)
+        result = self._elaborator.run(source, self._elab_extra, service)
+        role_key = self._elaborator.role_key(ROLE_UNIT_CONSTANTS)
+        if role_key is not None:
+            self._ctx.unit_constants = dict(result.products.get(role_key, {}))
+
     def _analyze(self, fr: FileResult) -> None:
         if fr.ast is None:
             return
@@ -214,6 +247,9 @@ class ProjectChecker:
         analyzer._external_extra["output_dirs"] = sorted(self._ctx.dirs("output_dirs"))
         analyzer._external_extra["input_dirs"] = sorted(self._ctx.dirs("input_dirs"))
         analyzer._external_extra["inout_dirs"] = sorted(self._ctx.dirs("inout_dirs"))
+        # 精化产物容器（ADR-0019）：条目名与值形状由插件定，引擎只保证容器；
+        # 未声明精化能力 → 无此键（插件侧按 .get 缺省处理）。
+        analyzer._external_extra.update(self._elab_extra)
         analyzer.analyze(fr.ast)
         fr.analyzer = analyzer
 

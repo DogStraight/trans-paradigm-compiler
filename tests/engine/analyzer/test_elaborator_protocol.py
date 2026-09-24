@@ -111,9 +111,11 @@ def test_malformed_spec_shapes_fail_fast(bad):
         _item(provides=["a", "a"]),  # provides 项内重复
         _item(depends_on=["ghost"]),  # 依赖未声明的项
         _item(name="a", depends_on=["a"]),  # 自引用
-        _item(locator=None, locator_fn=None),  # 定位两缺
-        _item(locator={"rule": "R"}, locator_fn="solve"),  # 定位两给
+        _item(locator={"rule": "R"}, locator_fn="solve"),  # 定位两给（语义歧义）
         _item(locator={"rule": ""}),  # 规则名空
+        _item(role="not_a_role"),  # 引擎角色位非法
+        _item(role="unit_constants", scope="file"),  # 角色位要求 unit 作用域
+        _item(role="unit_constants", provides=["a", "b"]),  # 角色位要求唯一产物键
     ],
 )
 def test_malformed_item_fails_fast(bad_item):

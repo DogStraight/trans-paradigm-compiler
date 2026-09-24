@@ -9,9 +9,12 @@
 > = **文件**；精化协议 = 语言包 `[capabilities] elaborator` 返回的**可扩展项列表**
 > （字段 `name` / `locator` / `solver` / `scope` / `provides` / `depends_on` /
 > `locator_fn`）；产物**容器**由引擎定、**条目名与形状由插件定**。
-> **分期**：P1 骨架 + 行为基线（只新增不接线）→ P2 纵向打穿 `param_default` +
-> `param_override`（`width_check` 改读新容器）→ P3 逐族搬迁（每项落地即删旧实现）
-> → P4 文档收口。机制复用既有能力位（`formatter` / `macro_policy` 先例）。
+> **进度**：P1 **已完成**（骨架 `analyzer/elaboration/` + 行为面基线）→ P2 **已完成**
+> （纵向打穿 `param_default`：verilog 插件 + 引擎接线 + 5 个消费方迁移 + **同批删**
+> 引擎侧抽取）→ P3 逐族搬迁（每项落地即删旧实现）→ P4 文档收口。
+> ⚠ P2 实测更正两处协议（已回写 ADR-0019 决策 3）：新增**引擎角色位 `role`**、
+> `locator` 改为**可省略**；`param_override` 实测为"插件侧已有合并逻辑的上提"而非
+> 引擎侧渗透 → 随 `inst_sites`/`connections` 族在 P3 落地（理由见 ADR 决策 4 更正节）。
 
 - **现状错配（实测，`analyzer/structure.py`）**：
   - 文本模式求值/判断（应 AST-first）：`_is_signal_expr` 正则、`render_subtree` 渲染
@@ -19,9 +22,11 @@
     `text.startswith(not_op)` / `IDENT_RE.fullmatch`、`_tokenize_const` +
     `_CONST_TOK_RE` + `_eval_const_expr` 文本递归下降、`_param_truth` 值文本判数字。
   - 语言知识硬编码（应进插件）：`_fill_body_ports` 的 `_FUNC_OR_TASK` 元组、
-    `_fill_body_params` 的 `"ParamDeclStmt"` / `"Declarator"` / `"init"`、
     `elaborate_connections` 的 `field("connects") or "ports"`、
     `_fill_body_ports` 的 `or "direction"`，以及"名字在 `Node.content`"这一未声明形态假设。
+    （~~`_fill_body_params` 的 `"ParamDeclStmt"` / `"Declarator"` / `"init"`~~ ——
+    **P2 已迁出**：随 `param_default` 精化项进入 `plugins/elaboration/`，引擎侧抽取与
+    `ModuleParam`/`ModuleInfo.params`/`[structure.fields]` 相关两键**同批删除**。）
   - AST 证据（`_drafts/probe_ast_shape.py`）：取反在 AST 里是
     `UnaryOp(op='!', operand=HierExpr([Identifier('W')]))`——**不是文本前缀**；
     `Number.value` 今天有 str / Node 两种形态（形态知识进插件后由插件自认，无需对齐语法绑定）。

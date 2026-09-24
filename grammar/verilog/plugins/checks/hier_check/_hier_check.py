@@ -15,6 +15,7 @@ resolve_member_width；direction 供未来跨模块悬空/驱动判定增量。
 
 from dataclasses import dataclass
 
+from core._protocol import CTX_ELABORATION
 from core.define import Node, iter_nodes
 
 # 实例化节点（本文件/目标模块内的 ModuleInst 均此形态）
@@ -111,14 +112,18 @@ def _start_chain(node, analyzer):
     return parts, mod_name, site, cur_mod
 
 
-def _port_width(port, info, site, caller_params: dict) -> int | None:
+def _port_width(
+    port, info, site, caller_params: dict, context
+) -> int | None:
     """端口宽度：无范围 → 标量 1 bit；否则按三层合并参数求值。"""
     from grammar.verilog.plugins.checks.width_check import _width_check as wc
 
     we = getattr(port, "width_expr", None) or ""
     if not we:
         return 1
-    return wc.eval_width_text_params(we, _merged_params(info, site, caller_params))
+    return wc.eval_width_text_params(
+        we, _merged_params(context, info, site, caller_params)
+    )
 
 
 def _step_segment(
@@ -138,9 +143,9 @@ def _step_segment(
     # 端口表命中 → 宽度（端口是成员访问终点）
     port = (getattr(info, "ports", None) or {}).get(pname)
     if port is not None:
-        return _Step("width", width=_port_width(port, info, site, caller_params))
+        return _Step("width", width=_port_width(port, info, site, caller_params, context))
     # 内部成员声明命中 → 宽度
-    mw = _member_width(info, pname, site, caller_params)
+    mw = _member_width(info, pname, site, caller_params, context)
     if mw is not None:
         return _Step("width", width=mw)
     # 本段是目标模块内实例 → 下钻
@@ -175,19 +180,19 @@ def resolve_member_width(node, analyzer, context) -> int | None:
 
 
 def _module_defaults(context, mod_name: str) -> dict:
-    """模块参数默认值（module_index 参数表 → {名: 值表达式文本}）。"""
-    info = (context.extra.get("module_index", {}) or {}).get(mod_name)
-    if info is None:
-        return {}
-    return {p.name: p.value_expr for p in (getattr(info, "params", None) or {}).values()}
+    """模块参数默认值（**精化产物** `param_default` → {名: 值表达式文本}）。"""
+    container = context.extra.get(CTX_ELABORATION, {}) or {}
+    return dict((container.get("param_default", {}) or {}).get(mod_name, {}) or {})
 
 
-def _merged_params(info, site, caller_params: dict) -> dict:
+def _merged_params(context, info, site, caller_params: dict) -> dict:
     """B3 三层参数合并：模块默认 → 调用者参数 → 实例覆盖（最高优先）。"""
     out = dict(caller_params)
     # 目标模块默认值（覆盖后未提供时回落）
-    for p in (getattr(info, "params", None) or {}).values():
-        out.setdefault(p.name, p.value_expr)
+    for pname, pvalue in _module_defaults(
+        context, getattr(info, "name", "")
+    ).items():
+        out.setdefault(pname, pvalue)
     po = getattr(site, "params", None)
     pl = getattr(po, "params", None) if isinstance(po, Node) else None
     items = getattr(pl, "items", None) if isinstance(pl, Node) else None
@@ -214,7 +219,7 @@ def _declarator_of(decl_node: Node, name: str):
     return None
 
 
-def _member_width(info, name: str, site, caller_params: dict) -> int | None:
+def _member_width(info, name: str, site, caller_params: dict, context) -> int | None:
     """目标模块内部成员宽度（走查 ModuleInfo.node 声明子树）。
 
     类型级/声明符级 packed_range → 文本 → 参数求值；integer → 32。
@@ -224,7 +229,7 @@ def _member_width(info, name: str, site, caller_params: dict) -> int | None:
         return None
     from grammar.verilog.plugins.checks.width_check import _width_check as wc
 
-    params = _merged_params(info, site, caller_params)
+    params = _merged_params(context, info, site, caller_params)
     for n in iter_nodes(node):
         if n.node_name == "IntegerDecl" and _declares(n, name):
             return 32  # integer = 32 位（IEEE 1364-2005 A.2.1.3）

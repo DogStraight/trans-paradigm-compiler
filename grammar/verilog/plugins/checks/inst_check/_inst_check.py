@@ -13,6 +13,7 @@
 import os
 import re
 
+from core._protocol import CTX_ELABORATION
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import is_parameterized
 
@@ -292,6 +293,12 @@ def _check_inout_tri(analyzer, context) -> None:
             )
 
 
+def _module_param_names(context, module_name: str) -> set[str]:
+    """模块参数名集合（**精化产物** `param_default`；W103 只关心名字）。"""
+    container = context.extra.get(CTX_ELABORATION, {}) or {}
+    return set((container.get("param_default", {}) or {}).get(module_name, {}) or {})
+
+
 def _check_params(context, site, info, related_def) -> None:
     """命名参数覆盖 × 模块参数表。"""
     po = getattr(site, "params", None)         # ParamOverride
@@ -301,7 +308,7 @@ def _check_params(context, site, info, related_def) -> None:
         if not isinstance(item, Node) or item.node_name != "NamedParamOverride":
             continue
         pn = _text(getattr(item, "param_name", None))
-        if pn and pn not in info.params:
+        if pn and pn not in _module_param_names(context, info.name):
             context.report(
                 f"实例化 '{info.name}' 覆盖了不存在的参数 '{pn}'",
                 code="W103",
