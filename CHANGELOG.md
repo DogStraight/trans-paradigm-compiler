@@ -50,6 +50,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **测试耗时：`_find_plugin_tpc` 目录遍历去重（全量并行 159s → 96s，-40%）**：
+  `config_registry._find_plugin_tpc` 原按**组件名逐个** `os.walk` 全树搜索组件
+  `tpc.toml`，而 `_load_meta_declarations` 在一次 check 里被反复调用——实测一个只含
+  小样例的 `check()` 里该函数被调 **130 次**、`os.walk` **2740 次**（0.136s/次
+  check），暖态 check 因此 0.256s、其中 `config_registry.resolve` ×10 独占 0.184s。
+  改为**按 `plugins_dir` 建一次 名→(tpc 路径, 相对目录) 索引**后按名取（与 analyzer
+  侧已验收的 `ModuleIndexer.dir_module_files` 同型；`setdefault` 保持"遍历序首个"
+  语义）。索引登记在 `CONTENT_ADDRESSED`（键 = `plugins_dir`，纯字符串索引）。
+
+  **实测**：暖态 `check()` 0.256s → **0.121s**（`resolve` 0.184s → 0.048s，函数调用
+  -25%）；全量并行 `-n auto` 用例 2119 → 2120、**159.2s → 95.9s**；e2e
+  `run_all_tests` 59.5s → 42.1s（FAIL 0 不变）。
+
+  **验证**：全量 **2120 passed / 7 skipped / 0 failed**（shuffle seed 1/2 各再跑一次
+  同样全绿）；`tools/check_test_isolation.py` 隔离档 **163 OK / 0 FAIL**；
+  `eval_lint_accuracy` recall 100% / FP 0；`eval_diag_baseline` **5548 → 5548 无增长**
+  （配置解析语义未变）；`check_doc_refs` / `check_hardcode` PASS。
+
+  ⚠ **同批记一条被实测否掉的方案**（避免重走）：把 `_PIPELINE_SHARED` /
+  `SharedComponents._CACHE` 从"每测试 clear"改成按内容寻址保留，**使全量 28–44 项
+  失败**（语言切换三例、real_fidelity 六例、pipeline_idempotent、
+  `test_shared_cache_key`、analyzer 多驱动/大小写/inout、case_check …；随机文件序下
+  23–36 项）。根因：这两个缓存的**值是可变的引擎束**（lexer/parser/renderer/scanner
+  实例，运行期写自身状态），不是纯值——"键控"只保证取到同一对象，不保证该对象可跨
+  运行复用。真正的方向是把束里的**不可变装配**与**每次运行的可变态**分开（冷装载
+  实测构成：语法后处理 ~0.5–0.6s、目录遍历 ~0.2s、TOML 解析 ~0.19s），属设计改动，
+  结论记在 `core/global_state.py` 的设计取舍段。
+
 - **行尾注释锚定改跨层推迟 + 按语言包声明分流两类注释（修分号被注释吃掉的既存缺陷）**：
   `LineSuffix` 原先只在**同一层 Concat 内**推迟，内层原子节点（`Number` / `SelectExpr` /
   `ParenthesizedExpr`）的 doc 常无尾换行点 → 后缀就地落地，父级同行后续内容（语句 `;`、

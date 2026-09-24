@@ -14,9 +14,23 @@ source/_sources + 推送进各模块的 _xxx_cfg 模块变量）、plugin_loader
 
 设计取舍：
 - snapshot 深拷贝轻量状态（注册表 ~2.5ms、配置 ~2ms、模块变量若干），
-  每测试还原开销 ~5ms，远优于"每测试重载配置"（~60ms）。
-- 按需重建的共享缓存（_PIPELINE_SHARED / SharedComponents._CACHE）只
-  clear 不深拷贝（组件对象重、可能含不可拷贝引用；键控缓存重建成本低）。
+  每测试还原开销 ~11ms（实测 restore+assert_clean）。原来的对比基线
+  "每测试重载配置 ~60ms"**低估了真实成本**，见下条。
+- 按需重建的共享缓存（_PIPELINE_SHARED / SharedComponents._CACHE）**每测试 clear**。
+  ⚠ 2026-09-22 更正两件事：
+  ① 原注释写"键控缓存重建成本低"——**实测证伪**：冷装载 **0.54–1.3s/次**
+     （20× 于同段拿来对比的 ~60ms），于是每个碰 check/pipeline 的测试都重装一次
+     整台引擎，是测试耗时的主要成分；
+  ② 但"改成不 clear（按内容寻址保留）"**已被实测否掉**：保留后全量并行
+     **28–44 项失败**（语言切换 c4/verilog 三例、real_fidelity 六例、
+     pipeline_idempotent、`test_shared_cache_key`、analyzer 多驱动/大小写/inout、
+     case_check …，随机种子下 23–36 项）。原因：这两个缓存的值是**可变的引擎束**
+     （lexer/parser/renderer/scanner 实例，运行期会写自身状态），**不是纯值**——
+     "键控"只保证取到同一个对象，不保证该对象可跨运行复用。
+  → 正确的方向是**把束里的"不可变装配"与"每次运行的可变态"分开**（装配可缓存：
+    实测冷装载里语法后处理 `grammar_inject._propagate_into_prods` + 
+    `rule_selector._build_feature_tree` 约占 0.5–0.6s、目录遍历 ~0.2s、TOML 解析
+    ~0.19s），而不是简单地把 clear 去掉。这属设计改动，未做。
 - ConfigRegistry._resolve_cache 保留（纯函数缓存：键 = 语言参数，同参数
   结果恒定，不受污染影响）。
 
@@ -118,6 +132,7 @@ CONTENT_ADDRESSED: dict[str, str] = {
     "lexer.comment_syntax._CACHE": "键 = rules_dir（注释形态：行注释起始/成对定界符）",
     "analyzer.checks._HANDLER_CACHE": "键 = 插件目录（handler 模块跨次复用）",
     "lexer.pre_scan._CACHE": "键 = rules_dir",
+    "core.config_registry._PLUGIN_TPC_INDEX": "键 = plugins_dir（组件 tpc.toml 路径索引，纯字符串）",
 }
 
 # ── 登记表 5/6：COVERED_ELSEWHERE——由 snapshot/restore 定制逻辑覆盖 ──

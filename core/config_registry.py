@@ -226,6 +226,11 @@ def _validate_decl_spec(config_key: str, spec: Any) -> None:
     _validate_bare_spec(config_key, spec)
 
 
+# 组件 tpc.toml 索引：plugins 树 → {组件名: (tpc 绝对路径, 相对 plugins 的目录)}。
+# 按 `plugins_dir` 建一次（动机与键控口径见 `_plugin_tpc_index`）。
+_PLUGIN_TPC_INDEX: dict[str, dict[str, tuple[str, str]]] = {}
+
+
 def _find_plugin_tpc(package_dir: str, name: str) -> tuple[str, str]:
     """在 plugins/ 目录树递归查找组件 <name>/tpc.toml（聚类目录支持）。
 
@@ -236,13 +241,40 @@ def _find_plugin_tpc(package_dir: str, name: str) -> tuple[str, str]:
     plugins_dir = os.path.join(package_dir, "plugins")
     if not os.path.isdir(plugins_dir):
         return "", ""
+    return _plugin_tpc_index(plugins_dir).get(name, ("", ""))
+
+
+def _plugin_tpc_index(plugins_dir: str) -> dict[str, tuple[str, str]]:
+    """一次遍历建 `{组件名: (tpc 路径, 相对 plugins 的目录)}`（同名取遍历序首个）。
+
+    动机（2026-09-22 实测）：`_find_plugin_tpc` 原按**组件名逐个** `os.walk` 全树
+    搜索，而 `_load_meta_declarations` 在一次 check 里被反复调用 → 一个只含小样例的
+    `check()` 实测该函数被调 **130 次**、`os.walk` **2740 次**（0.136s/次 check）；
+    全量测试里这是可观的重复劳动。改为**按目录建一次**索引后按名取（与 analyzer 侧
+    已验收的 `ModuleIndexer.dir_module_files` 同型）。
+
+    键 = plugins_dir：纯字符串索引、无跨运行可变对象（与 `macro_shape._PARSE_CACHE`
+    同类的纯函数缓存，故登记在 `CONTENT_ADDRESSED`）。⚠ 若在同一路径上**改写**
+    plugins 树需清索引；现有测试都用独立 tmp 目录，键不同、不会命中陈旧项。
+    """
+    idx = _PLUGIN_TPC_INDEX.get(plugins_dir)
+    if idx is not None:
+        return idx
+    idx = {}
     for root, dirs, files in os.walk(plugins_dir):
         dirs[:] = [d for d in dirs if not d.startswith("_")]
-        if os.path.basename(root) != name or "tpc.toml" not in files:
+        if "tpc.toml" not in files:
             continue
-        rel = os.path.relpath(root, plugins_dir).replace("\\", "/")
-        return os.path.join(root, "tpc.toml"), rel
-    return "", ""
+        # setdefault：与原"逐名遍历、命中即返回"取同一个（遍历序首个）
+        idx.setdefault(
+            os.path.basename(root),
+            (
+                os.path.join(root, "tpc.toml"),
+                os.path.relpath(root, plugins_dir).replace("\\", "/"),
+            ),
+        )
+    _PLUGIN_TPC_INDEX[plugins_dir] = idx
+    return idx
 
 
 def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:

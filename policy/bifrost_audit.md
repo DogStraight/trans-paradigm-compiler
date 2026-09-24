@@ -166,7 +166,7 @@ ins 1143 / del 598、introduced 48 / deleted 17 / moved 69 / signature_changes 3
 | **⑥ 注释密度** | `report_comment_density_for_files` / `_for_code_unit` | **未取**（本轮实测 1.0s 可用） | 输出 Hdr/Inl/Span 计数；本仓注释密度偏高，纯比例意义有限，只宜当"异常低"的筛子 |
 | **⑦ 死代码** | `report_dead_code_and_unused_abstraction_smells` | **不可用** | 只支持 Rust → Python 侧无此信号；本仓等价面 = Pylance 诊断 + `policy/pylance-cleanup.md` |
 | **⑧ 安全/密钥** | `report_secret_like_code`、`security.java.*` 策略 | **不可用** | `secret_like_code` 在本仓**直接 panic**（Rust 非 ASCII char boundary，遇中文即崩，2026-09-20 实测）；Java taint 策略不适用（仓内无 Java）。开源前检查改用其它手段 |
-| **⑨ 内置策略（19 条）** | code-smells 17 + security 2 | 已分类（Python 有效面 12 条） | Python 相关：`dynamic-evaluation`（已修）、`unsafe-deserialization`（0 命中）、`python-absent-member`（**结论缺失**，需整仓跑 1h+，缩范围必 `inconclusive`）、in-loop 族（已判"形态 vs 病理"）。Go 3 / Rust 2 / Java 2 空跑 |
+| **⑨ 内置策略（19 条）** | code-smells 17 + security 2 | 已分类（Python 有效面 12 条） | Python 相关：`dynamic-evaluation`（已修）、`unsafe-deserialization`（0 命中）、`python-absent-member`（**已下边界判决**——整仓两次实测均不收敛，见本文「已知边界」）、in-loop 族（已判"形态 vs 病理"，2 处真问题已修）。Go 3 / Rust 2 / Java 2 空跑 |
 | **⑩ 结构查询** | `--query-file`（RQL）/ `--repl` / `--list-row-schemas` | **未用** | 能答**跨维度**问题（如"CC>10 且被 ≥3 处调用"、"哪些引擎模块导入了 `grammar/`"——后者正是本仓"语言知识不进代码"硬约束的可机器化面）。写查询前先读 `--list-row-schemas` 的行域/字段目录 |
 | **⑪ 集成面** | `--mcp symbol\|extended`（含 `query_code`）、`--lsp`、`run_policy`（MCP Tasks） | **未用** | 把"外部裁判"从人工 CLI 变成 agent 可调用能力；给 agent 的推荐面是 `symbol\|extended` |
 
@@ -195,7 +195,7 @@ ins 1143 / del 598、introduced 48 / deleted 17 / moved 69 / signature_changes 3
 | 族 | 判据 | 本仓结论 |
 |---|---|---|
 | **CC / 认知过阈** | ① *分派型*：一类型/一 Doc 变体一臂、臂内无逻辑（纯递归/纯取值/纯重建）→ **保持**——CC 高只因变体多，拆开把同一语义散成 N 个函数，可读性反向；② *有内部逻辑*：臂内含嵌套循环/多重条件/可提重复模式 → **拆**；③ `tools/*` 一次性命令行扫描 → 低优先（非产品路径） | 过阈项**全部**落在 ①（② 已拆完）→ 停止线在"每项有结论"，不在"数字归零" |
-| **性能类 in-loop**（`performance.*-in-loop`） | **同一文件是否被同一次运行反复读**：是 → 修；每文件各读一次 → 保持（命中的是**形态**不是病理） | 12 处：1 处真问题（`ModuleIndexer` 目录兜底对每个未解析单元名重读整目录 → 改"按目录建一次单元名→文件索引" + 诱饵计数回归测试），11 处保持；`tools/bifrost_probe/smelly.py` 是**刻意坏味探针**——修好即门禁失效，不得"修" |
+| **性能类 in-loop**（`performance.*-in-loop`） | **同一文件是否被同一次运行反复读**：是 → 修；每文件各读一次 → 保持（命中的是**形态**不是病理）。⚠ 判"保持"时要连**目录遍历**一起看，别只看 `open()` | 12 处：**2 处真问题**——① `ModuleIndexer` 目录兜底对每个未解析单元名重读整目录 → 改"按目录建一次单元名→文件索引" + 诱饵计数回归测试；② `config_registry._find_plugin_tpc` 按**组件名逐个** `os.walk` 全树（一次 check 实测调 130 次、`os.walk` 2740 次）→ 改"按 plugins_dir 建一次 名→tpc 路径 索引"（2026-09-22 补判：原表把它列在"保持"里，因为判据只看了 `open()` 没看遍历）。其余 10 处保持；`tools/bifrost_probe/smelly.py` 是**刻意坏味探针**——修好即门禁失效，不得"修" |
 | **测试断言族** | 信号来自"断言不在被测函数体内"的**词法**判据；本仓断言多在被调用的助手 / 自带 `_assert_*` / `raise` 校验内 | **22/22 判保持**（无语义问题）；按此判据，新命中**先查调用链再判**，别直接当"弱断言" |
 | **结构重复**（`report_structural_clone_smells`） | 见 `policy/structural_budget.md` R3（>40 tok **且**两侧非薄入口 **且**不都在 `policy/`）：入口样板的相似度全在装饰器/签名/docstring 上，判据是"**是否还有未共享的逻辑**"故按**体形态**判，不按 token 数判 | 快照归位结果见 `structural_budget.md` 六节「B-C 快照归位」 |
 
