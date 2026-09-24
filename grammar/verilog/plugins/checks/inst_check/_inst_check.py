@@ -13,7 +13,7 @@
 import os
 import re
 
-from core._protocol import CTX_ELABORATION
+from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION
 from core.define import Node, iter_nodes, unwrap_optional
 from grammar.verilog.plugins.checks._shared import is_parameterized
 
@@ -24,9 +24,13 @@ def run_inst_check(analyzer, context) -> None:
     """postpass 入口：本文件实例化点 × 全工程模块表 联动检查。"""
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
-    # elaboration 层 2（ADR-0008）：实例化点端口连接展开——未连接端口判定
-    connections = context.extra.get("connections", []) or []
-    conn_by_inst = {c.inst_name: c for c in connections}
+    # 层 2 连接展开来自**本语言包的精化产物**（ADR-0019）：本插件的 `connections` 项按
+    # **文件**给出 `{路径: [连接...]}`，而 postpass 是**逐文件**跑的 → 用引擎给的"当前
+    # 分析文件"取切片（引擎不再按文件注入 `connections`；层 2 实现已删）。
+    container = context.extra.get(CTX_ELABORATION, {}) or {}
+    path = context.extra.get(CTX_ANALYZED_FILE, "") or ""
+    connections = (container.get("connections", {}) or {}).get(path, []) or []
+    conn_by_inst = {c["inst_name"]: c for c in connections}
     for site in inst_sites:
         mod_name = _text(getattr(site, "module_name", None))
         if not mod_name:
@@ -125,8 +129,8 @@ def _check_missing_ports(
     conn = conn_by_inst.get(_text(getattr(site, "inst_name", None)))
     if conn is None:
         return
-    connected = set(conn.connects.keys())
-    ordered = conn.ordered or []
+    connected = set(conn["connects"].keys())
+    ordered = conn["ordered"] or []
     if ordered:
         # 位置连接：第 i 个连接信号 ↔ 模块第 i 个端口（声明序）
         ordered_ports = list(info.ports.keys())
@@ -162,20 +166,22 @@ def _check_multi_driver(analyzer, context, connections) -> None:
     归属：驱动源含本文件（assign 或实例连接）才报——避免跨文件重复；
     本文件 assign 目标优先定位，否则实例连接处。
     """
-    signal_graph = context.extra.get("signal_graph", {}) or {}
+    signal_graph = (
+        (context.extra.get(CTX_ELABORATION, {}) or {}).get("signal_graph", {}) or {}
+    ).get("", {}) or {}
     if not signal_graph:
         return
     this_file = ""
     for conn in connections:
-        this_file = os.path.basename(conn.file)
+        this_file = os.path.basename(conn["file"])
         break
     # 本文件 assign 驱动目标 → 信号名 → 节点（归属判定 + 定位）
     assign_nodes = _collect_assign_targets(analyzer)
     # 本文件出现的信号（连接展开里的连接信号名）
     local_sigs: set[str] = set()
     for conn in connections:
-        local_sigs.update(conn.connects.values())
-        local_sigs.update(conn.ordered)
+        local_sigs.update(conn["connects"].values())
+        local_sigs.update(conn["ordered"])
     for (_, sig), entry in signal_graph.items():
         drivers = entry.get("drivers", [])
         if len(drivers) < 2:
@@ -250,12 +256,12 @@ def _sig_text(node) -> str:
 def _find_signal_node(connections, sig):
     """找本文件连接该信号的实例节点（定位用）。"""
     for conn in connections:
-        for s in conn.connects.values():
+        for s in conn["connects"].values():
             if s == sig:
-                return conn.inst_node
-        for s in conn.ordered:
+                return conn["inst_node"]
+        for s in conn["ordered"]:
             if s == sig:
-                return conn.inst_node
+                return conn["inst_node"]
     return None
 
 

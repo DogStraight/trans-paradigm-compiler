@@ -20,12 +20,10 @@ from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIR
 from core._protocol import CTX_ANALYZED_FILE
 
 from analyzer.structure import (
-    ConnectionElaborator,
     FilePipeline,
     FileResult,
     ModuleExtractor,
     ModuleIndexer,
-    SignalGraphBuilder,
     StructureCtx,
 )
 from analyzer.shared_components import SharedComponents
@@ -77,25 +75,18 @@ class ProjectChecker:
         # 独立规则实例：测试跨语言（c4 等）时传入，避免污染全局单例
         # （模式同 tests/languages/c4/test_c4_linter.py 的 fixture 注释）。
         self._register = register
-        # elaboration 层 3（ADR-0008）：全工程信号图（check() 时构建）
-        self._signal_graph: dict = {}
         # 精化（ADR-0019）：能力面在 _prepare_run 装载语言包后建（未声明 → 降级）；
         # 产物容器随每次运行重置，注入 analyzer._external_extra 供插件消费。
         self._elaborator = Elaborator(None)
         self._elab_extra: dict = {}
-        # 各阶段协作者按依赖链接线：门面**只持有会话上下文 + 两个阶段入口**
-        # （发现 / 信号图），中间协作者（连接展开 / 提取 / 单文件流水线）作为构造链
-        # 局部量注入下游——DAG 只在构造处显式，之后不必经门面中转（原先"一个 self
-        # 上的 49 个方法"正因缺这层表达）。generate 求值器已随 gen 族迁入语言包插件
-        # （ADR-0019 P3-①），故不在构造链里。
-        conn = ConnectionElaborator(self._ctx)
+        # 各阶段协作者按依赖链接线：门面**只持有会话上下文 + 发现入口**，中间协作者
+        # （提取 / 单文件流水线）作为构造链局部量注入下游——DAG 只在构造处显式。
+        # 层 2/3（连接展开 / 信号图）与 generate 求值已随 ADR-0019 P3 迁入语言包插件，
+        # 故都不在构造链里（本类不再持有它们，也不再注入它们的产物）。
         extract = ModuleExtractor(self._ctx)
-        # 单文件流水线组合提取器 + 连接展开器（阶段顺序在它内部）
-        pipeline = FilePipeline(self._ctx, extract, conn)
+        pipeline = FilePipeline(self._ctx, extract)
         # 递归发现组合单文件流水线
         self._indexer = ModuleIndexer(self._ctx, pipeline)
-        # 层 3 信号图组合连接展开器（generate 活性来自精化产物，不经构造注入）
-        self._graph = SignalGraphBuilder(self._ctx, conn)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 
@@ -128,7 +119,7 @@ class ProjectChecker:
             }
 
         四阶段各走一个方法：`_prepare_run`（归一化 + 重置本次运行状态）→
-        `_discover_all`（递归发现 + parse）→ 层 3 信号图 → `_analyze_all`
+        `_discover_all`（递归发现 + parse）→ `_elaborate`（精化产物）→ `_analyze_all`
         （postpass）→ `_collect_files`（两阶段诊断汇总）。
         """
         entries = self._prepare_run(entry_path)
@@ -137,14 +128,11 @@ class ProjectChecker:
         #    重复入口不会重复 parse）
         self._discover_all(entries)
 
-        # 1a) 精化（ADR-0019）：按语言包项列表建产物容器（文件 / 单元作用域）。
-        #     须在信号图之前——层 3 的 generate 活性判定要用单元常量绑定。
+        # 1a) 精化（ADR-0019）：按语言包项列表建产物容器（文件 / 单元 / 项目作用域）。
+        #     容器经 _external_extra 交给 postpass——**引擎不解释其中语义**。
         self._elaborate()
 
-        # 1b) elaboration 层 3（ADR-0008）：全工程信号驱动/负载图 + 层次
-        self._signal_graph = self._graph.build()
-
-        # 2) 每个文件跑语义分析（postpass 拿到完整 module_index）
+        # 2) 每个文件跑语义分析（postpass 拿到完整 module_index 与精化产物容器）
         self._analyze_all()
 
         # 3) 汇总两阶段诊断
@@ -239,10 +227,6 @@ class ProjectChecker:
         # 跨文件上下文注入（analyze() 重建 context 后合并进 extra）
         analyzer._external_extra["module_index"] = self._ctx.module_index
         analyzer._external_extra["inst_sites"] = fr.inst_sites
-        # elaboration 层 2（ADR-0008）：本文件实例化点端口连接展开
-        analyzer._external_extra["connections"] = fr.connections
-        # elaboration 层 3（ADR-0008）：全工程信号驱动/负载图
-        analyzer._external_extra["signal_graph"] = self._signal_graph
         # 端口方向值集（插件规则消费：未连接端口/驱动负载判定；语言包声明）
         analyzer._external_extra["output_dirs"] = sorted(self._ctx.dirs("output_dirs"))
         analyzer._external_extra["input_dirs"] = sorted(self._ctx.dirs("input_dirs"))

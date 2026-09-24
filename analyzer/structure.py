@@ -1,29 +1,27 @@
-"""structure.py — 结构提取（elaboration）：单元/实例/端口/驱动的跨文件索引。
+"""structure.py — 结构提取的**文件层**：单元索引 + 依赖发现（引擎侧最小面）。
 
-定位：**通用设施**，不是检查专用——消费方包括各 postpass/插件（它们读底座
-注入的 `context.extra`：`module_index` / `inst_sites` / 信号图）。
+定位：**通用设施**，不是检查专用——消费方包括各 postpass/插件（它们读引擎注入的
+`context.extra`：`module_index` / `inst_sites`，以及 `CTX_ELABORATION` 里的精化产物）。
 
 语言无关边界：本模块**零语言知识**。单元/实例化的规则名、节点字段、文件
 扩展名、关键字全部来自语言包声明的 `[structure] protocol`
 （grammar/<lang>/base/_structure.toml）；未声明该段 = 该语言不支持结构提取，
 调用方退化为单文件 lint + analyze（`ctx.has_structure()` 判定）。
 
-⚠ **generate 条件求值已迁出**（ADR-0019 P3-①）：块/分支规则名、条件/then/else
-字段名、逻辑非运算符拼写不再由本模块声明与求值——那些是语言知识，现归语言包插件
-精化项 `gen_activity`（`grammar/verilog/plugins/elaboration/`）；引擎按**角色位**取
-其产物（`ctx.gen_activity`），见 `SignalGraphBuilder._in_active_generate`。
+⚠ **层 2/3 与 generate 求值均已迁出**（ADR-0019 P3）：端口连接展开、信号驱动/负载图、
+generate 条件求值都是**语言知识**，现归语言包插件精化项
+（`grammar/verilog/plugins/elaboration/`：`port_decls` / `connections` / `signal_graph` /
+`gen_activity`）；引擎按**角色位**取自己要用的产物（现仅 `gen_activity`），其余产物由
+插件**直接读容器**。
 
-三层（ADR-0008）+ 组合结构（本模块是**一组协作者**，不是一个大类）：
+本模块剩下的协作者（引擎唯一可视单位 = **文件**）：
 
     StructureCtx        会话上下文：环境开关 + 索引 + 协议读取（唯一状态归属点）
     ModuleIndexer       发现：入口 → 实例化链（+ 目录关键字文本扫描兜底）→ 索引
-    FilePipeline        单文件装配：读源 → 宏展开 → 解析 → 提单元 → 展开连接
-    ModuleExtractor     层 1  单元注册表（端口/参数形态）
-    ConnectionElaborator 层 2 端口连接展开（W104 类检查的基础）
-    SignalGraphBuilder  层 3  信号驱动/负载图（W105 类检查的基础）
+    FilePipeline        单文件装配：读源 → 宏展开 → 解析 → 提单元（名字/文件/节点）
+    ModuleExtractor     单元注册表（**只剩**名字 / 文件 / 声明节点——语言形状全在插件）
 
-组合方向（无环）：`FilePipeline` 含 `ModuleExtractor` + `ConnectionElaborator`；
-`ModuleIndexer` 含 `FilePipeline`；`SignalGraphBuilder` 含 `ConnectionElaborator`；
+组合方向（无环）：`FilePipeline` 含 `ModuleExtractor`；`ModuleIndexer` 含 `FilePipeline`；
 全部共享同一个 `StructureCtx`。组合根是门面
 `analyzer/checker.py::ProjectChecker`（原先的门面继承底座已改为组合）。
 
@@ -60,12 +58,7 @@ _structure_cfg: dict = declare_cfg("structure.protocol", {}, __name__, "_structu
 
 # 连接表达式是否为"简单信号名"（层 3 建图过滤：常量/拼接/带位选的复杂
 # 表达式不入驱动/负载图——信号解析交给上层规则，此处只记简单标识符）。
-_SIGNAL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-
-def _is_signal_expr(text: str) -> bool:
-    """简单信号名（标识符形态）→ True；常量/拼接/位选/层次引用 → False。"""
-    return bool(_SIGNAL_RE.match(text.strip()))
 
 
 @dataclass
@@ -93,16 +86,7 @@ class ModuleInfo:
     #    2026-09-25 连同唯一写入点（`FilePipeline.parse_file` 的挂回循环）删除。
 
 
-@dataclass
-class PortConnection:
-    """层 2：一个实例化点的端口连接（展开后）。"""
 
-    inst_name: str  # 实例名（如 u1）
-    module_name: str  # 被实例化模块名
-    inst_node: Node  # ModuleInst 节点（定位）
-    file: str
-    connects: dict[str, str] = field(default_factory=dict)  # 端口名 → 连接信号名
-    ordered: list[str] = field(default_factory=list)  # 位置连接信号（有序）
 
 
 @dataclass
@@ -118,7 +102,6 @@ class FileResult:
     analyzer: "AnalysisTraversal | None" = None  # stage=semantic 诊断源
     modules: dict[str, ModuleInfo] = field(default_factory=dict)
     inst_sites: list = field(default_factory=list)  # ModuleInst 节点
-    connections: list = field(default_factory=list)  # PortConnection（层 2）
     # 展开行（0-based，索引展开后文本）→ 原始源行（1-based）；None = 不可
     # 映射（include 拼接行）；空表 = 未展开（诊断行号原样）。两级复合：
     # scan_directives（原始→clean）+ expand_tokens（clean→展开后）。
@@ -137,46 +120,6 @@ class FileResult:
 # ── 引擎 ─────────────────────────────────────────────────
 
 
-@dataclass(frozen=True)
-class _SignalGraphCtx:
-    """信号图构建的配置与缓存（层 3 专用）。
-
-    原先是 `_build_signal_graph` 里的局部量与两个闭包共享——收拢后端口穿透
-    （`_port_driver_sources` / `_resolve_port_drivers`）与 per-file 三类贡献
-    （`_sg_*`）都在同一份配置下工作。
-    """
-
-    assign_rule: str
-    target_field: str
-    extras_field: str
-    extra_target_field: str
-    out_dirs: set[str]
-    inout_dirs: set[str]
-    module_insts: dict
-    proc_rules: list
-    proc_blocks: list
-    src_cache: dict = field(default_factory=dict)
-
-
-def _graph_entry(graph: dict, key: tuple) -> dict:
-    """取（或建）信号图条目 {"drivers": [], "loads": []}。"""
-    if key not in graph:
-        graph[key] = {"drivers": [], "loads": []}
-    return graph[key]
-
-
-def _append_ref(entry: dict, kind: str, ref: str) -> None:
-    """把源标识记入条目的 `kind` 列表（已存在则不重复）。
-
-    驱动/负载两个登记入口共用本逻辑（原各自写一份"查重后追加"）。
-    """
-    if ref not in entry[kind]:
-        entry[kind].append(ref)
-
-
-
-
-
 @dataclass
 class StructureCtx:
     """结构提取会话上下文：环境开关 + 会话状态 + 结构协议读取。
@@ -186,7 +129,7 @@ class StructureCtx:
 
     - 环境开关（`rules_dir` / `ext_dirs` / `include_dirs` / `expand_macros` /
       `ensure_shared`）：构造后不变。
-    - 会话状态（`memo` / `module_index` / `fr_by_module_cache` / `dir_module_files`）：
+    - 会话状态（`memo` / `module_index` / `dir_module_files`）：
       每次 check 起始由 `invalidate()` 清空（前三者**成对失效**——键都由 memo 派生；
       `dir_module_files` 缓存磁盘目录内容，同一次运行内文件不变，一并清）。
     - 结构协议（`struct` / `fields`）：`refresh()` 在 `load_all` 之后推入
@@ -205,7 +148,6 @@ class StructureCtx:
     module_index: dict[str, ModuleInfo] = field(default_factory=dict)
     struct: dict = field(default_factory=dict)
     fields: dict = field(default_factory=dict)
-    fr_by_module_cache: dict | None = None
     dir_module_files: dict[str, dict[str, str]] = field(default_factory=dict)
     # 精化产物：generate 分支活性（ADR-0019 角色位 gen_activity；由 ProjectChecker
     # 从插件容器按角色取入）。形状 = {文件路径: {id(节点): bool}}——引擎不再自己求值
@@ -215,10 +157,9 @@ class StructureCtx:
     # ── 会话状态失效（每次 check 起始调用）──
 
     def invalidate(self) -> None:
-        """清本次运行的索引与派生缓存（memo 与 fr_by_module 缓存成对失效）。"""
+        """清本次运行的索引与派生缓存。"""
         self.memo.clear()
         self.module_index.clear()
-        self.fr_by_module_cache = None
         self.dir_module_files.clear()
         self.gen_activity.clear()
 
@@ -290,182 +231,7 @@ class _PortFields:
     name: str
 
 
-class ConnectionElaborator:
-    """层 2 端口连接展开：实例化点连接 × 目标模块端口声明 → FileResult.connections。
 
-    W104 类检查的基础：把"实例化了谁、哪个端口连了什么"摊平成 per-file 连接表
-    （命名连接 + 位置连接），供 postpass 经 `context.extra["connections"]` 消费。
-    `module_of`（节点所属模块）/ `iter_assign_targets`（赋值目标）/ `build_module_insts`
-    （实例化点表）同时被层 3 信号图复用。
-
-    只依赖 ctx（协议读取 + 渲染助手），不持有会话状态。
-    """
-
-    def __init__(self, ctx: StructureCtx) -> None:
-        self._ctx = ctx
-
-    def _inst_name_of(self, site: Node) -> str:
-        """实例名（实例化点节点的 inst_name 字段文本；缺省 ""）。"""
-        node = getattr(site, self._ctx.field("inst_name"), None)
-        if isinstance(node, Node) and node.content:
-            return node.content
-        return ""
-
-    def _connection_items(self, site: Node, ports_field: str, items_field: str) -> list:
-        """实例化点的连接项列表（端口连接字段 → 容器节点 → items 字段）。"""
-        ports_node = unwrap_optional(getattr(site, ports_field, None))
-        items = getattr(ports_node, items_field, None) if ports_node else None
-        return items or []
-
-    def _named_connect(
-        self,
-        item: Node,
-        conn: PortConnection,
-        conn_name_field: str,
-        value_field: str,
-    ) -> bool:
-        """命名连接 `.p(sig)` → `conn.connects`；返回是否命中了命名形态。
-
-        命名连接判定 = 项上有 port_name 字段且非空（NamedPortConnect 形态）；
-        其余项按位置连接处理（调用方续接）。
-        """
-        pn = getattr(item, conn_name_field, None) if conn_name_field else None
-        pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
-        if not pn_text:
-            return False
-        val = getattr(item, value_field, None) if value_field else None
-        conn.connects[pn_text] = (
-            self._ctx.render_subtree(val) if isinstance(val, Node) else ""
-        )
-        return True
-
-    def _fill_connection(
-        self,
-        conn: PortConnection,
-        items: list,
-        conn_name_field: str,
-        value_field: str,
-    ) -> None:
-        """逐项展开连接：命名连接进 connects，其余按位置序进 ordered。"""
-        for item in items:
-            if not isinstance(item, Node):
-                continue
-            if self._named_connect(item, conn, conn_name_field, value_field):
-                continue
-            # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
-            conn.ordered.append(self._ctx.render_subtree(item))
-
-    def elaborate_connections(
-        self, path: str, inst_sites: list
-    ) -> list[PortConnection]:
-        """层 2：实例化点端口连接展开（ADR-0008）。
-
-        从 ModuleInst 节点提取端口连接 → (端口名, 连接信号名) 映射：
-        - NamedPortList（命名连接 .p(sig)）→ 按 port_name 收集
-        - OrderedPortList（位置连接 a,b,c）→ 按序收集
-        连接信号名 = 端口连接表达式的文本（信号/拼接/常量；解析交给
-        上层规则 handler，此处只展开结构）。语言无关：端口连接节点形态
-        由结构协议声明（connects_field/value_field/ordered_rule）。
-        """
-        if not self._ctx.has_structure():
-            return []
-        ports_field = self._ctx.field("connects") or "ports"
-        value_field = self._ctx.field("value")
-        conn_name_field = self._ctx.field("port_name")
-        items_field = self._ctx.field("items")
-        out: list[PortConnection] = []
-        for site in inst_sites:
-            conn = PortConnection(
-                inst_name=self._inst_name_of(site),
-                module_name=self._ctx.inst_module_name(site),
-                inst_node=site,
-                file=path,
-            )
-            self._fill_connection(
-                conn,
-                self._connection_items(site, ports_field, items_field),
-                conn_name_field,
-                value_field,
-            )
-            out.append(conn)
-        return out
-
-    def build_module_insts(self) -> dict:
-        """{模块名: [(实例名, 被实例化模块名, PortConnection)]}——per-module
-        实例表（层 3 驱动穿透用）。
-
-        从全工程 connections（层 2 展开）按实例化点所属模块归组——实例
-        化点 = 连接表达式所在模块（_module_of 语义）。模块内实例顺序
-        保持连接展开顺序（assign#N 对齐用不上，此处仅穿透）。
-        """
-        out: dict[str, list] = {}
-        for fr in self._ctx.memo.values():
-            for conn in fr.connections:
-                mod_name = self.module_of(fr, conn.inst_node)
-                if not mod_name:
-                    continue
-                out.setdefault(mod_name, []).append(
-                    (conn.inst_name, conn.module_name, conn)
-                )
-        return out
-
-    def module_of(self, fr, node) -> str:
-        """节点所属模块名（所在 ModuleDecl；文件级/未命中 → ""）。
-
-        per-file 预计算映射（2026-08-31 性能修复）：一次 DFS 建立
-        {id(节点): 模块名}，查询 O(1)。此前逐节点全树扫描（旧
-        `_subtree_contains`，已删）是 O(N×树) 平方级——elaboration 层 3
-        `_build_signal_graph` 对每个 assign/过程块/实例节点调用，picorv32
-        实测 76 次调用 7.5s（占单次 check 21.6s 的 35%，profile 定位）。
-        与 `_in_active_generate` 预计算同款手法（2026-08-29 先例：
-        103s → 秒级）。映射挂在 fr 上，check() 每文件重建（AST 不变，
-        一次构建全文件复用）。
-        """
-        if fr.ast is None or node is None:
-            return ""
-        memo = getattr(fr, "_module_map", None)
-        if memo is None:
-            memo = self._precompute_module_map(fr)
-            fr._module_map = memo
-        return memo.get(id(node), "")
-
-    def _precompute_module_map(self, fr) -> dict:
-        """per-file 预计算 {id(node): 模块名}（一次 DFS，O(树)）。
-
-        栈元素 = (node, 当前模块名)；ModuleDecl 进入时更新模块名，
-        子树内节点继承。嵌套模块罕见（SV 特性），内层覆盖外层名——
-        与 _iter_nodes_with_module 同语义。
-        """
-        mapping: dict[int, str] = {}
-        decl_rule = self._ctx.rule("module_decl_rule")
-        name_field = self._ctx.field("module_name")
-        root = fr.ast
-        if root is None:
-            return mapping
-        stack = [(root, "")]
-        while stack:
-            node, mod = stack.pop()
-            if node.node_name == decl_rule:
-                nm = getattr(node, name_field, None)
-                mod = nm.content if isinstance(nm, Node) else ""
-            mapping[id(node)] = mod
-            for child in node.iter_children():
-                stack.append((child, mod))
-        return mapping
-
-    def iter_assign_targets(
-        self, node: Node, target_field: str, extras_field: str, extra_target_field: str
-    ):
-        """按协议提取赋值语句的驱动目标节点（主目标 + 多目标后缀）。"""
-        tgt = getattr(node, target_field, None)
-        if isinstance(tgt, Node):
-            yield tgt
-        for ex in getattr(node, extras_field, None) or []:
-            if not isinstance(ex, Node):
-                continue
-            et = getattr(ex, extra_target_field, None)
-            if isinstance(et, Node):
-                yield et
 
 
 class ModuleExtractor:
@@ -671,25 +437,22 @@ class ModuleExtractor:
 
 
 class FilePipeline:
-    """单文件装配流水线：读源 → 宏展开 → 解析 → 单元提取 → 连接展开。
+    """单文件装配流水线：读源 → 宏展开 → 解析 → 单元注册。
 
-    阶段顺序在这里（而不是散在调用方）：解析产 AST 后才能提单元，提完单元才能
-    按模块端口展开实例化连接。故本类组合 `ModuleExtractor` 与
-    `ConnectionElaborator`（构造注入），其余依赖走 ctx。
+    阶段顺序在这里（而不是散在调用方）：解析产 AST 后才能提单元。层 2/3 已迁语言包
+    插件（ADR-0019 P3），故本类只组合 `ModuleExtractor`，其余依赖走 ctx。
 
-    产出 `FileResult`（ast / modules / inst_sites / connections / line_map /
-    macro_regions），由调用方（发现阶段）收进 ctx.memo 与 ctx.module_index。
+    产出 `FileResult`（ast / modules / inst_sites / line_map / macro_regions），
+    由调用方（发现阶段）收进 ctx.memo 与 ctx.module_index。
     """
 
     def __init__(
         self,
         ctx: StructureCtx,
         extractor: ModuleExtractor,
-        conn: ConnectionElaborator,
     ) -> None:
         self._ctx = ctx
         self._extract = extractor
-        self._conn = conn
 
     def parse_file(self, path: str) -> FileResult:
         with open(path, "r", encoding="utf-8") as f:
@@ -738,7 +501,6 @@ class FilePipeline:
         fr.ast = ast
         fr.modules = self._extract.extract_modules(ast, path)
         fr.inst_sites = collect_nodes(ast, self._ctx.rule("module_inst_rule"))
-        fr.connections = self._conn.elaborate_connections(path, fr.inst_sites)
         fr.parse_ok = True
         return fr
 
@@ -915,419 +677,4 @@ class ModuleIndexer:
         return table
 
 
-class SignalGraphBuilder:
-    """层 3 信号驱动/负载图：assign/过程赋值/实例化连接 → {drivers, loads}。
 
-    W105 类检查的基础（elaboration 层 3，ADR-0008）。组合 `ConnectionElaborator`
-    （模块归属 / 赋值目标 / 实例化点表）；**generate 互斥分支活性不在此求值**——它
-    来自精化产物（ADR-0019 角色位 `gen_activity`，见 `_in_active_generate`）。
-    跨文件数据从 `ctx.memo` + `ctx.module_index` 取，穿透查模块文件走
-    `_fr_by_module`（惰性缓存，与 ctx.invalidate() 成对失效）。
-    """
-
-    def __init__(
-        self,
-        ctx: StructureCtx,
-        conn: ConnectionElaborator,
-    ) -> None:
-        self._ctx = ctx
-        self._conn = conn
-
-    def _in_active_generate(self, fr, node) -> bool:
-        """节点是否在**选中**的 generate 互斥分支内（层 3 的驱动过滤）。
-
-        活性表来自**精化产物**（ADR-0019 角色位 `gen_activity`）——引擎不再求值
-        generate 条件（对齐 Verilator：未选中分支的驱动不计；tpc 不展开 generate，
-        故按活性过滤而非物理删树）。
-
-        产物缺失（语言包未声明该角色 / 该文件无活性表）→ 视作**全部活跃**：保守方向
-        = 不过滤 → 不漏报驱动。
-        """
-        if node is None:
-            return True
-        table = self._ctx.gen_activity.get(getattr(fr, "path", ""))
-        if not table:
-            return True
-        return table.get(id(node), True)
-
-    def build(self) -> dict:
-        """层 3：全工程信号驱动/负载图（ADR-0008，含实例树层次展开）。
-
-        汇总所有文件的端口连接展开 + 连续赋值目标，按 **(模块, 信号名)**
-        建立（2026-08-29 修复：跨模块同名信号隔离——真实语料 ice40 的
-        SB_LUT4/ICESTORM_LC/SB_MAC16 各有端口 O，按裸信号名合并会误报
-        多驱动）：
-            (module, signal) → {"drivers": [驱动源标识], "loads": [..]}
-        驱动源三类（语言知识全部来自配置协议）：
-        - 实例 output/inout 端口连接该信号 → **穿透**到被实例化模块
-          内部对该端口的真实驱动源（2026-08-31 P2.7 层 3 扩展）：
-          模块内 assign/过程赋值目标 == 端口名 → "路径:assign#N"；
-          更深实例 output 连接 == 端口名 → 递归穿透；无驱动（悬空
-          output）→ 不计驱动源。路径形如 "top/u_a/u_b"。
-        - 本文件连续赋值目标（assign_rule 协议 + 多目标 AssignExtra）→
-          assign 驱动（"file:assign#N"）
-        驱动/负载源标识含文件名，消费方按"驱动源所在文件"归属（避免
-        跨文件重复报）。输出注入 context.extra["signal_graph"]。
-
-        实现按步骤分派（本方法只做装配）：per-file 三类贡献各一个
-        `_sg_*` 方法；端口穿透用 `_port_driver_sources`（模块内裸源，
-        带缓存）+ `_resolve_port_drivers`（递归拼实例链路径）。
-        """
-        graph: dict[tuple, dict] = {}
-        ctx = _SignalGraphCtx(
-            assign_rule=self._ctx.rule("assign_rule"),
-            target_field=self._ctx.field("assign_target"),
-            extras_field=self._ctx.field("assign_extras"),
-            extra_target_field=self._ctx.field("assign_extra_target"),
-            out_dirs=self._ctx.dirs("output_dirs"),
-            inout_dirs=self._ctx.dirs("inout_dirs"),
-            # P2.7 层 3：实例树层次展开底座（per-module 实例表 + 驱动穿透）
-            module_insts=self._conn.build_module_insts(),
-            proc_rules=self._ctx.struct.get("proc_assign_rules") or [],
-            proc_blocks=self._ctx.struct.get("proc_block_rules") or [],
-            # (模块, 端口) → 裸驱动源列表（无路径前缀：assign#N / proc /
-            # inst:{实例名}:{子端口}）——路径由调用方拼，跨实例化点可复用缓存
-            src_cache={},
-        )
-        for fr in self._ctx.memo.values():
-            self._sg_assign_drivers(fr, graph, ctx)
-            self._sg_proc_drivers(fr, graph, ctx)
-            self._sg_connections(fr, graph, ctx)
-        return graph
-
-    def _port_driver_sources(
-        self, module: str, port: str, seen: set, ctx: "_SignalGraphCtx"
-    ) -> tuple[list | None, bool]:
-        """模块内端口驱动源（裸源，无路径）→ (sources, 模块是否定义)。
-
-        遍历**目标模块子树**（ModuleInfo.node）而非文件全树——同文件
-        多模块同名 assign 不能污染（2026-08-31 探针暴露）。返回
-        (None, False) = 模块未定义（黑盒，调用方兜底原子源）；
-        ([], True) = 模块定义但端口悬空（无驱动 → 不记）。
-
-        三类来源：模块内连续赋值目标 == 端口 / 更深实例 output(inout)
-        连接 == 端口（记子引用，交穿透递归）/ 过程赋值目标 == 端口。
-        """
-        cache_key = (module, port)
-        if cache_key in ctx.src_cache:
-            return ctx.src_cache[cache_key]
-        if module in seen:
-            return [], True
-        seen = seen | {module}
-        info = self._ctx.module_index.get(module)
-        if info is None or info.node is None:
-            return None, False
-        fr = self._fr_by_module.get(module)
-        if fr is None or fr.ast is None:
-            return None, False
-        mnode = info.node
-        sources = (
-            self._port_src_from_assigns(fr, mnode, port, ctx)
-            + self._port_src_from_insts(module, port, ctx)
-            + self._port_src_from_procs(fr, mnode, port, ctx)
-        )
-        result = (list(dict.fromkeys(sources)), True)
-        ctx.src_cache[cache_key] = result
-        return result
-
-    def _port_src_from_assigns(
-        self, fr, mnode, port: str, ctx: "_SignalGraphCtx"
-    ) -> list[str]:
-        """端口裸源①：模块内连续赋值目标 == 端口（限定模块子树）。
-
-        子树而非文件全树——同文件多模块同名 assign 不能污染
-        （2026-08-31 探针暴露）。
-        """
-        out: list[str] = []
-        if not ctx.assign_rule:
-            return out
-        idx = 0
-        for node in iter_nodes(mnode):
-            if node.node_name != ctx.assign_rule:
-                continue
-            idx += 1
-            if not self._in_active_generate(fr, node):
-                continue
-            for tgt in self._conn.iter_assign_targets(
-                node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
-            ):
-                if self._ctx.render_subtree(tgt) == port:
-                    out.append(f"assign#{idx}")
-        return out
-
-    def _add_driver(self, graph: dict, mod_name: str, sig: str, inst_ref: str) -> None:
-        """登记驱动源（(模块, 信号) 键控，源标识去重）。"""
-        _append_ref(_graph_entry(graph, (mod_name, sig)), "drivers", inst_ref)
-
-    def _add_load(self, graph: dict, mod_name: str, sig: str, inst_ref: str) -> None:
-        """登记负载源（(模块, 信号) 键控，源标识去重）。"""
-        _append_ref(_graph_entry(graph, (mod_name, sig)), "loads", inst_ref)
-
-    @staticmethod
-    def _port_direction(mod, port_name: str) -> str:
-        """端口方向（模块表缺失 / 无该端口 → ""）。"""
-        if mod is not None and port_name in mod.ports:
-            return mod.ports[port_name].direction
-        return ""
-
-    def _port_src_from_insts(
-        self, module: str, port: str, ctx: "_SignalGraphCtx"
-    ) -> list[str]:
-        """端口裸源②：模块内更深实例 output/inout 连接 == 端口 → 子引用。
-
-        子引用交 `_resolve_port_drivers` 递归穿透；方向取自被实例化模块
-        的端口表（表缺失 → 不算驱动）。
-        """
-        out: list[str] = []
-        for inst_name, inst_mod, conn in ctx.module_insts.get(module, []):
-            if conn is None:
-                continue
-            for pname, sig in conn.connects.items():
-                if sig != port:
-                    continue
-                dirn = self._port_direction(
-                    self._ctx.module_index.get(inst_mod), pname
-                )
-                if dirn in ctx.out_dirs or dirn in ctx.inout_dirs:
-                    out.append(f"inst:{inst_name}:{pname}")
-        return out
-
-    def _port_src_from_procs(
-        self, fr, mnode, port: str, ctx: "_SignalGraphCtx"
-    ) -> list[str]:
-        """端口裸源③：模块内过程赋值目标 == 端口（always 驱动 output 端口）。"""
-        out: list[str] = []
-        if not (ctx.proc_rules and ctx.proc_blocks):
-            return out
-        for node in iter_nodes(mnode):
-            if node.node_name not in ctx.proc_rules:
-                continue
-            if not self._in_active_generate(fr, node):
-                continue
-            tgt = getattr(node, ctx.target_field, None)
-            sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
-            if sig == port:
-                out.append("proc")
-        return out
-
-    def _inst_module_name_of(self, module: str, iname: str, ctx: "_SignalGraphCtx") -> str:
-        """实例名 → 被实例化模块名（per-module 实例表查找；未知 → ""）。"""
-        for i_name, i_mod, _ in ctx.module_insts.get(module, []):
-            if i_name == iname:
-                return i_mod
-        return ""
-
-    def _resolve_inst_source(
-        self, module: str, src: str, path: str, seen: set, ctx: "_SignalGraphCtx"
-    ) -> list[str]:
-        """`inst:` 子引用 → 完整路径标识（递归穿透）。
-
-        子模块黑盒（未定义）→ 保守记实例路径；悬空（模块定义但无驱动）→
-        不记（对齐 Verilator elaboration 后视角）。
-        """
-        _, iname, iport = src.split(":", 2)
-        inst_mod = self._inst_module_name_of(module, iname, ctx)
-        if not inst_mod:
-            return []
-        sub, sub_defined = self._resolve_port_drivers(
-            inst_mod, iport, f"{path}/{iname}", seen, ctx
-        )
-        if sub:
-            return sub
-        if not sub_defined:
-            return [f"{path}/{iname}"]  # 黑盒保守
-        return []
-
-    def _resolve_port_drivers(
-        self, module: str, port: str, path: str, seen: set, ctx: "_SignalGraphCtx"
-    ) -> tuple[list, bool]:
-        """端口驱动源 → (完整路径标识列表, 模块是否定义)（层 3 穿透）。
-
-        裸源拼实例链路径；inst 子引用递归（见 `_resolve_inst_source`）。
-        """
-        sources, defined = self._port_driver_sources(module, port, seen, ctx)
-        if sources is None:
-            return [], defined
-        out: list[str] = []
-        for src in sources:
-            if src.startswith("inst:"):
-                out.extend(self._resolve_inst_source(module, src, path, seen, ctx))
-            else:
-                out.append(f"{path}:{src}")
-        return out, defined
-
-    def _sg_assign_drivers(
-        self, fr: "FileResult", graph: dict, ctx: "_SignalGraphCtx"
-    ) -> None:
-        """连续赋值驱动（模块级 assign 并发驱动；多目标 AssignExtra 展开）。"""
-        if not (ctx.assign_rule and fr.ast is not None):
-            return
-        assign_idx = 0
-        for node in iter_nodes(fr.ast):
-            if node.node_name != ctx.assign_rule:
-                continue
-            assign_idx += 1
-            mod_name = self._conn.module_of(fr, node)
-            if not self._in_active_generate(fr, node):
-                continue  # 所在 generate 互斥分支未选中（2026-08-29）
-            inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
-            for tgt in self._conn.iter_assign_targets(
-                node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
-            ):
-                sig = self._ctx.render_subtree(tgt)
-                if not sig or not _is_signal_expr(sig):
-                    continue
-                self._add_driver(graph, mod_name, sig, inst_ref)
-
-    def _sg_proc_drivers(
-        self, fr: "FileResult", graph: dict, ctx: "_SignalGraphCtx"
-    ) -> None:
-        """过程赋值驱动（always/initial 内阻塞/非阻塞赋值目标）。
-
-        2026-08-29 注入器暴露：`always @* y = c;` + `assign y = d;` 双驱动
-        此前漏检（信号图只收连续赋值 + 实例 output）。对标 Verilator
-        MULTIDRIVEN（过程 + 连续驱动同判）。驱动源 = **过程块**（同一 always
-        内多赋值算一个驱动者——如 always @(posedge clk) 内分支赋值同一 reg
-        合法；不同块或 always+assign 才冲突）。
-        """
-        if not (ctx.proc_rules and ctx.proc_blocks and fr.ast is not None):
-            return
-        assign_block = self._proc_assign_blocks(fr, ctx)
-        block_sigs = self._proc_block_signals(fr, assign_block, ctx)
-        block_idx = 0
-        for blk_node, sigs in block_sigs.values():
-            block_idx += 1
-            mod_name = self._conn.module_of(fr, blk_node)
-            inst_ref = f"{os.path.basename(fr.path)}:always#{block_idx}"
-            for sig in sigs:
-                self._add_driver(graph, mod_name, sig, inst_ref)
-
-    def _proc_assign_blocks(self, fr, ctx: "_SignalGraphCtx") -> dict[int, Node | None]:
-        """赋值节点 → 所属过程块节点（blk 可为 None：不在任何过程块内）。"""
-        assign_block: dict[int, Node | None] = {}
-        todo: list[tuple[Node | None, Node | None]] = [(fr.ast, None)]
-        while todo:
-            node, blk = todo.pop()
-            if node is None:
-                continue
-            if node.node_name in ctx.proc_blocks:
-                blk = node
-            if node.node_name in ctx.proc_rules:
-                assign_block[id(node)] = blk
-            for child in node.iter_children():
-                todo.append((child, blk))
-        return assign_block
-
-    def _proc_block_signals(
-        self, fr, assign_block: dict, ctx: "_SignalGraphCtx"
-    ) -> dict[int, tuple[Node, set]]:
-        """过程块 → 该块内被赋值的信号集合（块内多赋值去重为同一驱动源）。
-
-        未选中 generate 分支内的赋值不计（2026-08-29）。
-        """
-        block_sigs: dict[int, tuple[Node, set]] = {}
-        for node in iter_nodes(fr.ast):
-            if node.node_name not in ctx.proc_rules:
-                continue
-            blk = assign_block.get(id(node))
-            if blk is None or not self._in_active_generate(fr, node):
-                continue
-            tgt = getattr(node, ctx.target_field, None)
-            sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
-            if not sig or not _is_signal_expr(sig):
-                continue
-            if id(blk) not in block_sigs:
-                block_sigs[id(blk)] = (blk, set())
-            block_sigs[id(blk)][1].add(sig)
-        return block_sigs
-
-    def _sg_connections(
-        self, fr: "FileResult", graph: dict, ctx: "_SignalGraphCtx"
-    ) -> None:
-        """实例化点连接：命名连接按端口方向记驱动/负载；位置连接保守记负载。
-
-        output 端口做层 3 穿透（驱动源 = 模块内部真实源 + 实例链路径）；
-        黑盒（模块未定义）→ 原子源兜底；悬空 output → 不记。
-        """
-        for conn in fr.connections:
-            mod_name = self._conn.module_of(fr, conn.inst_node)
-            if not self._in_active_generate(fr, conn.inst_node):
-                continue  # 实例化点所在 generate 分支未选中
-            inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
-            mod = self._ctx.module_index.get(conn.module_name)
-            self._sg_named_connection(graph, conn, mod_name, inst_ref, mod, ctx)
-            self._sg_positional_connection(graph, conn, mod_name, inst_ref)
-
-    def _sg_inout_connection(
-        self, graph: dict, mod_name: str, sig: str, inst_ref: str
-    ) -> None:
-        """inout 端口：既作驱动又作负载。"""
-        self._add_driver(graph, mod_name, sig, inst_ref)
-        self._add_load(graph, mod_name, sig, inst_ref)
-
-    def _sg_named_connection(
-        self,
-        graph: dict,
-        conn,
-        mod_name: str,
-        inst_ref: str,
-        mod,
-        ctx: "_SignalGraphCtx",
-    ) -> None:
-        """命名连接：按端口方向记驱动/负载；output 走层 3 穿透。"""
-        for port_name, sig in conn.connects.items():
-            if not sig or not _is_signal_expr(sig):
-                continue
-            direction = self._port_direction(mod, port_name)
-            if direction in ctx.out_dirs:
-                # P2.7 层 3：驱动源穿透到模块内部真实源（带实例路径）。
-                # 穿透成功 → 用穿透源；悬空 output（模块定义但无驱动）→
-                # 不记（对齐 Verilator elaboration）；黑盒（模块未定义）→
-                # 原子源兜底（保守）。
-                self._sg_emit_penetrated(
-                    _graph_entry(graph, (mod_name, sig)),
-                    conn,
-                    port_name,
-                    inst_ref,
-                    ctx,
-                )
-            elif direction in ctx.inout_dirs:
-                self._sg_inout_connection(graph, mod_name, sig, inst_ref)
-            else:  # input / 未知 → 负载
-                self._add_load(graph, mod_name, sig, inst_ref)
-
-    def _sg_emit_penetrated(
-        self, entry: dict, conn, port_name: str, inst_ref: str, ctx: "_SignalGraphCtx"
-    ) -> None:
-        """output 端口驱动源：穿透结果 / 黑盒原子源兜底 / 悬空不记。"""
-        pen, pen_defined = self._resolve_port_drivers(
-            conn.module_name, port_name, inst_ref, set(), ctx
-        )
-        if pen:
-            for s in pen:
-                if s not in entry["drivers"]:
-                    entry["drivers"].append(s)
-        elif not pen_defined:
-            if inst_ref not in entry["drivers"]:
-                entry["drivers"].append(inst_ref)
-
-    def _sg_positional_connection(
-        self, graph: dict, conn, mod_name: str, inst_ref: str
-    ) -> None:
-        """位置连接：方向靠模块端口表按序匹配；未知方向保守记负载。"""
-        for sig in conn.ordered:
-            if not sig or not _is_signal_expr(sig):
-                continue
-            self._add_load(graph, mod_name, sig, inst_ref)
-
-    @property
-    def _fr_by_module(self) -> dict:
-        """{模块名: FileResult}——驱动穿透查模块定义文件（惰性构建）。"""
-        cache = getattr(self, "_fr_by_module_cache", None)
-        if cache is None:
-            cache = {}
-            for fr in self._ctx.memo.values():
-                for mname in fr.modules or {}:
-                    cache.setdefault(mname, fr)
-            self._ctx.fr_by_module_cache = cache
-        return cache

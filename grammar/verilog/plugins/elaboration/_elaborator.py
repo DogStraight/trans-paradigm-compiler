@@ -86,8 +86,8 @@ def build_elaborator() -> dict:
             {
                 "name": "connections",
                 "scope": "file",
-                # 引擎角色位：层 3 与 postpass 消费的连接表（P3-②b 切换时启用）
-                "role": "unit_connections",
+                # **无**引擎角色位：层 2 的消费者只有本语言包的 postpass（`inst_check`），
+                # 它们直接读**产物容器**（ADR-0019 P3-②c-1：引擎侧层 2/3 已删）
                 "provides": [_PROVIDES_CONNECTIONS],
                 "solver": "solve_connections",
             },
@@ -105,8 +105,8 @@ def build_elaborator() -> dict:
             {
                 "name": "signal_graph",
                 "scope": "project",
-                # 引擎角色位：`ProjectChecker` 注入 postpass（`context.extra["signal_graph"]`）
-                "role": "unit_signal_graph",
+                # **无**引擎角色位：层 3 的消费者只有本语言包的 postpass（`inst_check`
+                # 的 W105），它直接读**产物容器**（P3-②c-1：引擎侧层 2/3 已删）
                 "provides": [_PROVIDES_SIGNAL_GRAPH],
                 # 三个**自身产物**（插件内流通，不经引擎中转）：实例连接 / 端口方向 /
                 # generate 活性。`depends_on` 保证它们先跑。

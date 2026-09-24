@@ -105,9 +105,11 @@
 > | 角色 | 寻址键 | 产物形状 | 引擎消费方（**随对应族退场**） |
 > |---|---|---|---|
 > | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → 层 3 迁入后 |
-> | `unit_ports` | 单元名 | `{端口名: {name, direction, width_expr, net_type, decl_node}}` | `ConnectionElaborator`（层 2）+ `SignalGraphBuilder`（层 3）→ 两者迁入后 |
-> | `unit_connections` | 文件路径 | `[{inst_name, module_name, inst_node, file, connects, ordered}]` | `SignalGraphBuilder`（层 3）+ `ProjectChecker` 注入 postpass → 层 2/3 迁入后 |
-> | `unit_signal_graph` | `""`（project 单原子） | `{(单元名, 信号名): {drivers: [...], loads: [...]}}` | `ProjectChecker` 注入 postpass（W105）→ 层 3 迁入后 |
+> | `unit_ports` | 单元名 | `{端口名: {name, direction, width_expr, net_type, decl_node}}` | 层 2/3（**已随 P3-②c-1 迁出 → 现无引擎消费者**，待 c-2 迁完 4 个插件消费方后退场） |
+>
+> 🗑 **已退场**：`unit_constants`（P3-①）、`unit_connections` 与 `unit_signal_graph`
+> （P3-②c-1：层 2/3 删除后引擎不再消费，postpass 改读产物容器）。
+> `ROLES` 从 4 项收到 **2 项**（`gen_activity` / `unit_ports`）。
 >
 > `unit_constants`（寻址键 = 单元名，形状 = `{名字: 值文本}`）曾在 P2–P3-① 间服役
 > （过渡期 `GenerateEvaluator` 要参数表）；**P3-① 已退场**——gen 求值迁入插件后，单元
@@ -269,14 +271,19 @@
      - **P3-②c 待做**（最后一步，做完即达终态）。⚠ **关键洞察（先删消费方，role 才退场）**：
        role 是"引擎消费插件产物"的寻址机制；**引擎一旦不再消费，role 就该退场**。故顺序
        是"先迁消费方 → 再删引擎实现 → role 自然归零"，而非逐项删引擎代码：
-       1. **c-1**：`inst_check` 是 `connections` 的**唯一**消费方（实测：`width_check` 只用
-          `inst_sites`，不碰 `connections`）→ 把它与 `signal_graph` 的读取一并改为读
-          **产物容器**；此后层 2/3 **无任何消费者** → 删 `ConnectionElaborator` /
-          `SignalGraphBuilder` / `_SignalGraphCtx` / `_graph_entry` / `_append_ref` /
-          `_is_signal_expr` / `_SIGNAL_RE` / `PortConnection` / `FileResult.connections`，
-          `ROLE_UNIT_CONNECTIONS` 与 `ROLE_UNIT_SIGNAL_GRAPH` **同时退场**。
-          ⚠ 同批处理 `tests/engine/analyzer/test_checker.py::TestElaborationConnections`
-          （直连 `fr.connections` 的层 2 测试——主体随实现消失）。
+       1. **c-1 —— 已完成**：`inst_check`（`connections` 的**唯一**消费方）对
+          `connections` / `signal_graph` 的读取改为**读产物容器**（用引擎给的
+          `CTX_ANALYZED_FILE` 取按文件切片）；随后层 2/3 **整块删除**——
+          `ConnectionElaborator` / `SignalGraphBuilder` / `_SignalGraphCtx` /
+          `_graph_entry` / `_append_ref` / `_is_signal_expr` / `_SIGNAL_RE` /
+          `PortConnection` / `FileResult.connections` / `StructureCtx.fr_by_module_cache`
+          （净减约 **600 行**）；`ROLE_UNIT_CONNECTIONS` 与 `ROLE_UNIT_SIGNAL_GRAPH`
+          **同时退场**。同批：`test_checker.py::TestElaborationConnections` 删除
+          （主体消失；覆盖由 `test_elaboration_connections.py` 承担）、层 3 直连测试改读
+          产物容器、两个对拍测试退化为"产物行为 + 退场守卫"。
+          ⚠ 实测踩坑：切 `_SignalGraphCtx` 时**留下了它的 `@dataclass(frozen=True)`
+          装饰器**，于是它转去装饰 `StructureCtx` → 会话上下文被冻住
+          （`FrozenInstanceError`）——测试立刻抓到（file-anatomy 陷阱 1 的实例）。
        2. **c-2**：4 个端口消费方改读 `port_decls` 产物 → 引擎侧再无 `unit_ports` 消费者
           → 删 `_ModulePort` / `ModuleInfo.ports` / `_PortFields` / `ModuleExtractor._fill_ports`
           族 + `[structure]` 端口字段声明 → **`ROLES` 归零**（终态判据达成）。

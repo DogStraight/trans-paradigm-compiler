@@ -32,6 +32,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `-m smoke` **423 passed**；`tests/policy` **125 passed**（含诊断基线门禁持平）；
   **全量 2190 passed / 7 skipped**；探针 **1189 仍绿（+26）/ ✓ 无回归**。
 
+### Changed
+
+- **P3-②c-1：层 2/3 整块迁出引擎，两个角色位同时退场（ADR-0019）**：引擎不再做端口连接
+  展开与信号驱动/负载图——它们都是语言知识。
+
+  - **先迁消费方**（这是本步的关键顺序）：`inst_check` 是 `connections` 的**唯一**消费方
+    （实测 `width_check` 只用 `inst_sites`，不碰 `connections`）→ 它对 `connections` /
+    `signal_graph` 的读取改为**读产物容器**，用引擎给的 `CTX_ANALYZED_FILE` 取按文件切片。
+  - **再删引擎实现**（净减约 **600 行**）：`ConnectionElaborator`（176）+
+    `SignalGraphBuilder`（416）+ `_SignalGraphCtx` / `_graph_entry` / `_append_ref` /
+    `_is_signal_expr` / `_SIGNAL_RE` / `PortConnection` / `FileResult.connections` /
+    `StructureCtx.fr_by_module_cache`（随之成死字段）；`FilePipeline` 不再组合层 2；
+    `ProjectChecker` 不再注入 `connections` / `signal_graph`（**不留双路径**）。
+  - **角色位退场**：`ROLE_UNIT_CONNECTIONS` 与 `ROLE_UNIT_SIGNAL_GRAPH` 删除——
+    引擎不再消费它们，postpass 直接读容器。`ROLES` 从 4 项收到 **2 项**
+    （`gen_activity` / `unit_ports`）。插件侧两项也摘掉 `role` 声明。
+  - **不变量**：`structure.py` 的模块头改为"**文件层**：单元索引 + 依赖发现"——
+    引擎唯一可视单位 = 文件（`ModuleExtractor` 只剩名字/文件/声明节点）。
+
+  ⚠ **实测踩坑（file-anatomy 陷阱 1 的实例）**：用锚点切 `_SignalGraphCtx` 时只切了
+  `class ...` 行、**留下了它的 `@dataclass(frozen=True)` 装饰器**——于是那个装饰器转去
+  装饰 `StructureCtx`，把会话上下文冻住（`FrozenInstanceError: cannot assign to field
+  'rules_dir'`）。跑一次部件测试立刻抓到并修回。**教训：按锚点删代码块必须把装饰器
+  一起锚进去。**
+
+  **测试同批调整**：`test_checker.py::TestElaborationConnections` 删除（主体随实现消失；
+  覆盖由 `test_elaboration_connections.py` 承担）；层 3 直连测试改读产物容器；两个对拍
+  测试退化为"**产物行为守卫 + 退场守卫**"（引擎侧类/属性不得复活——机器守"不留双路径"）。
+
+  **验证**：全量 **2187 passed / 7 skipped**，其中 `tests/policy` **125 passed**——含
+  **诊断基线门禁持平**，即 W104/W105 诊断与删除前**逐项一致**（这是 `inst_check` 换源
+  正确性的关键证据）；`tests/engine/analyzer` **326 passed**；`-m smoke` **423 passed**。
+  探针：5 项"回归"经 `--collect-only` 核实**正是被删/改名的 5 个测试 id**
+  （4 删 + 1 改名），非行为回归 → 基线按"差异已逐条解释"重记（1186 仍绿）。
+
 - **修复：精化产物原子键冲突**取先**——同名单元跨文件错配（ADR-0019 P3-②b 前置）**：
   产物按**原子键**（unit 作用域 = 单元名）归位，驱动器原为**后写覆盖**；而引擎
   `module_index` 是"**首个**定义者优先"。于是**同名单元在多个文件重复定义**时两边指向

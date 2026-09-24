@@ -73,35 +73,11 @@ ROLE_UNIT_PORTS = "unit_ports"
 """单元端口声明表：寻址键 = **单元名**；形状 = `{端口名: {name, direction, width_expr,
 net_type, decl_node}}`。
 
-引擎消费方 = `ConnectionElaborator`（层 2 按端口名/方向展开连接）+
-`SignalGraphBuilder`（层 3 按方向判驱动/负载）。层 2/3 迁入协议（ADR-0019 P3-②）后
-**本角色退场**——届时 ports 只在插件内部流通。
+引擎消费方 = 层 2/3 —— **但层 2/3 已迁入协议**（ADR-0019 P3-②c-1），故此刻**无引擎
+消费者**；待 c-2 把 4 个端口消费方（插件）也改读容器后，本角色随之退场。
 """
 
-ROLE_UNIT_CONNECTIONS = "unit_connections"
-"""实例化点连接展开表（层 2）：寻址键 = **文件路径**；形状 =
-`[{inst_name, module_name, inst_node, file, connects, ordered}]`。
-
-引擎消费方 = `SignalGraphBuilder`（层 3 按连接记驱动/负载）+ `ProjectChecker` 注入
-`context.extra["connections"]` 供 postpass（W104 等）。层 2/3 迁入协议后**本角色退场**。
-"""
-
-ROLE_UNIT_SIGNAL_GRAPH = "unit_signal_graph"
-"""全工程信号驱动/负载图（层 3）：寻址键 = **`""`**（`project` 作用域单原子）；
-形状 = `{(单元名, 信号名): {"drivers": [源标识], "loads": [源标识]}}`。
-
-引擎消费方 = `ProjectChecker` 注入 `context.extra["signal_graph"]` 供 postpass（W105）。
-层 3 迁入协议后**本角色退场**——届时引擎只剩文件层，`ROLES` 应为空。
-"""
-
-ROLES: frozenset[str] = frozenset(
-    {
-        ROLE_GEN_ACTIVITY,
-        ROLE_UNIT_PORTS,
-        ROLE_UNIT_CONNECTIONS,
-        ROLE_UNIT_SIGNAL_GRAPH,
-    }
-)
+ROLES: frozenset[str] = frozenset({ROLE_GEN_ACTIVITY, ROLE_UNIT_PORTS})
 
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──
 ITEM_KEYS: frozenset[str] = frozenset(

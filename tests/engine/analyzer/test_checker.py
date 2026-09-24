@@ -11,6 +11,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
+from core._protocol import CTX_ELABORATION
+
 from analyzer.checker import ProjectChecker
 
 ADDER = """\
@@ -262,98 +264,6 @@ class TestNoStructureProtocol:
         assert len(report["files"]) == 1
 
 
-# ── elaboration 层 2：端口连接展开（ADR-0008） ──────────────
-
-class TestElaborationConnections:
-    """层 2 端口连接展开：NamedPortList / OrderedPortList → PortConnection。
-
-    验证连接结构从 AST 展开（端口名 → 连接信号名），经 context.extra
-    注入插件可消费；位置连接按序收集。
-    """
-
-    def test_named_connections_expanded(self, checker, tmp_path):
-        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
-        top = tmp_path / "top.sv"
-        top.write_text(
-            "module top;\n"
-            "  wire [7:0] x, y, z;\n"
-            "  adder u1 (.a(x), .b(y), .y(z));\n"
-            "endmodule\n",
-            encoding="utf-8",
-        )
-        checker.check(str(top))
-        # 连接展开挂在 FileResult.connections（checker._ctx.memo 内部状态）
-        conns = _collect_connections(checker)
-        assert len(conns) == 1
-        c = conns[0]
-        assert c["inst_name"] == "u1"
-        assert c["module_name"] == "adder"
-        assert c["connects"] == {"a": "x", "b": "y", "y": "z"}
-
-    def test_ordered_connections_expanded(self, checker, tmp_path):
-        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
-        top = tmp_path / "top.sv"
-        top.write_text(
-            "module top;\n"
-            "  wire [7:0] x, y, z;\n"
-            "  adder u2 (x, y, z);\n"
-            "endmodule\n",
-            encoding="utf-8",
-        )
-        checker.check(str(top))
-        conns = _collect_connections(checker)
-        assert len(conns) == 1
-        assert conns[0]["ordered"] == ["x", "y", "z"]
-        assert conns[0]["connects"] == {}
-
-    def test_mixed_named_and_unconnected(self, checker, tmp_path):
-        (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
-        top = tmp_path / "top.sv"
-        top.write_text(
-            "module top;\n"
-            "  wire [7:0] x, z;\n"
-            "  adder u3 (.a(x), .y(z));\n"  # b 未连接（.b() 缺省）
-            "endmodule\n",
-            encoding="utf-8",
-        )
-        checker.check(str(top))
-        conns = _collect_connections(checker)
-        assert conns[0]["connects"] == {"a": "x", "y": "z"}
-
-    def test_connections_injected_for_each_file(self, checker, tmp_path):
-        """顶层文件与模块定义文件各自有连接注入（模块文件内实例化也展开）。"""
-        (tmp_path / "child.sv").write_text(
-            "module child;\n  wire c;\nendmodule\n", encoding="utf-8"
-        )
-        (tmp_path / "mid.sv").write_text(
-            "module mid;\n  child m1 ();\nendmodule\n", encoding="utf-8"
-        )
-        top = tmp_path / "top.sv"
-        top.write_text(
-            "module top;\n  mid t1 ();\nendmodule\n", encoding="utf-8"
-        )
-        checker.check(str(top))
-        conns = _collect_connections(checker)
-        by_inst = {c["inst_name"]: c for c in conns}
-        # top 文件实例化 mid；mid 文件实例化 child——两处都展开
-        assert by_inst["t1"]["module_name"] == "mid"
-        assert by_inst["m1"]["module_name"] == "child"
-
-
-def _collect_connections(checker):
-    """从 checker._ctx.memo（FileResult.connections）收集连接展开（测试内联访问）。"""
-    out = []
-    for fr in checker._ctx.memo.values():
-        for c in fr.connections:
-            out.append(
-                {
-                    "inst_name": c.inst_name,
-                    "module_name": c.module_name,
-                    "connects": dict(c.connects),
-                    "ordered": list(c.ordered),
-                }
-            )
-    return out
 
 
 # ── elaboration 层 3：驱动/负载图（ADR-0008） ──────────────
@@ -377,7 +287,7 @@ class TestElaborationSignalGraph:
             encoding="utf-8",
         )
         checker.check(str(top))
-        graph = checker._signal_graph
+        graph = _graph(checker)
         # x/y 连 input a/b → 负载（u1 读取）；z 连 output y → 驱动
         # （P2.7 层 3 穿透：驱动源 = adder 内部 assign 驱动 y，带实例路径）
         # 键 = (模块名, 信号名)——跨模块同名信号隔离（2026-08-29 修复）
@@ -406,7 +316,7 @@ class TestElaborationSignalGraph:
             encoding="utf-8",
         )
         report = checker.check(str(top))
-        graph = checker._signal_graph
+        graph = _graph(checker)
         assert graph[("top", "s")]["drivers"] == ["top.sv:assign#1"]
         w105 = _find(
             [d for f in report["files"] for d in f["semantic"]], "W105"
@@ -423,7 +333,7 @@ class TestElaborationSignalGraph:
             encoding="utf-8",
         )
         checker.check(str(top))
-        graph = checker._signal_graph
+        graph = _graph(checker)
         insts_d = [r.split(":")[-1] for r in graph[("top", "bus")]["drivers"]]
         insts_l = [r.split(":")[-1] for r in graph[("top", "bus")]["loads"]]
         assert "m1" in insts_d
@@ -440,7 +350,7 @@ class TestElaborationSignalGraph:
             encoding="utf-8",
         )
         checker.check(str(top))
-        graph = checker._signal_graph
+        graph = _graph(checker)
         assert ("top", "1'b0") not in graph
         assert ("top", "8'hFF") not in graph
         assert any("u1:assign" in r for r in graph[("top", "z")]["drivers"])
@@ -458,11 +368,11 @@ class TestElaborationSignalGraph:
             encoding="utf-8",
         )
         checker.check(str(top))
-        graph = checker._signal_graph
+        graph = _graph(checker)
         assert len(graph[("top", "s")]["drivers"]) == 2
 
-    def test_signal_graph_injected_in_context(self, checker, tmp_path):
-        """信号图经 context.extra 注入（postpass 可消费）。"""
+    def test_elaboration_container_is_injected_for_postpasses(self, checker, tmp_path):
+        """精化产物**容器**经 `context.extra` 交付 postpass（层 2/3 已迁插件）。"""
         (tmp_path / "adder.sv").write_text(ADDER, encoding="utf-8")
         top = tmp_path / "top.sv"
         top.write_text(
@@ -471,11 +381,20 @@ class TestElaborationSignalGraph:
             encoding="utf-8",
         )
         checker.check(str(top))
-        # 注入发生在 analyze 的 _external_extra（analyze() 重建 context 合并）
         for fr in checker._ctx.memo.values():
-            if fr.analyzer is not None:
-                assert "signal_graph" in fr.analyzer._external_extra
-                assert "connections" in fr.analyzer._external_extra
+            if fr.analyzer is None:
+                continue
+            extra = fr.analyzer._external_extra
+            container = extra[CTX_ELABORATION]
+            assert "signal_graph" in container and "connections" in container
+            # 引擎**不再**注入旧的按文件键（层 2/3 实现已删 → 不留双路径）
+            assert "signal_graph" not in extra
+            assert "connections" not in extra
+
+
+def _graph(checker):
+    """层 3 信号图：读**精化产物**（引擎侧 `_signal_graph` 已随 P3-②c-1 删除）。"""
+    return checker._elab_extra[CTX_ELABORATION]["signal_graph"][""]
 
 
 # ── 跨文件端口完整性：未连接端口 W104（elaboration 层 2 之上） ──

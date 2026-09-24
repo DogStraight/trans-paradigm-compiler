@@ -23,7 +23,7 @@ import pytest
 from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION
 
 from analyzer.checker import ProjectChecker
-from analyzer.elaboration import ROLE_UNIT_CONNECTIONS, load_elaborator_spec
+from analyzer.elaboration import load_elaborator_spec
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
@@ -52,21 +52,6 @@ def project(tmp_path):
     return path
 
 
-def _norm(conns) -> list[dict]:
-    """引擎侧 `PortConnection` 列表 → 与产物同形的 dict 列表。"""
-    return [
-        {
-            "inst_name": c.inst_name,
-            "module_name": c.module_name,
-            "inst_node": c.inst_node,
-            "file": c.file,
-            "connects": dict(c.connects),
-            "ordered": list(c.ordered),
-        }
-        for c in conns
-    ]
-
-
 def _plugin(checker: ProjectChecker) -> dict:
     return checker._elab_extra[CTX_ELABORATION]["connections"]
 
@@ -75,28 +60,18 @@ def _plugin(checker: ProjectChecker) -> dict:
 
 @pytest.mark.smoke
 def test_verilog_pack_declares_connections(checker):
-    """语言包必须声明 `connections` 项（含引擎角色位与作用域）。"""
+    """语言包必须声明 `connections` 项（作用域；引擎角色位已随层 2/3 迁出退场）。"""
     checker._prepare_run([])
     spec = load_elaborator_spec("grammar/verilog")
     assert spec is not None
     item = next(it for it in spec.items if it.name == "connections")
     assert item.scope == "file"
-    assert item.role == ROLE_UNIT_CONNECTIONS
+    assert item.role is None  # 引擎不再消费 → 无角色位
     assert item.provides == ("connections",)
-    assert spec.role_key(ROLE_UNIT_CONNECTIONS) == "connections"
+    assert spec.role_key("unit_connections") is None
 
 
 # ── 2. 等价性对拍（搬迁的前提） ──
-
-def test_plugin_matches_engine_per_file(checker, project):
-    checker.check(str(project))
-    plugin = _plugin(checker)
-
-    assert set(plugin) == set(checker._ctx.memo), "原子键应为文件路径且覆盖全部已发现文件"
-    assert plugin, "产物为空"
-    for path, fr in checker._ctx.memo.items():
-        assert plugin[path] == _norm(fr.connections), f"{path} 的连接表不一致"
-
 
 def test_named_and_positional_connections_are_not_vacuous(checker, project):
     """不空转：三种形态都真的抽到了（否则对拍可能只是"两边都空"）。"""
