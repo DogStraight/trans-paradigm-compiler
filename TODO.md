@@ -3,13 +3,15 @@
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
 
-## 架构：精化（elaboration）部件化 + 插件化（未开工）
+## 架构：精化（elaboration）部件化 + 插件化（ADR-0019 定案，未开工）
 
-> 作者定调（2026-09-19）：精化器逻辑应由**插件**实现，引擎侧只留"加载精化器的位"。
-> 本仓已有同款机制可复用，不造第二套：`core/component_protocol.md` §1 的
-> `[capabilities]` 能力位 + `get_capability_in(name, rules_dir)`（按语言包作用域，
-> 切语言不串用）；先例 `macro_policy`（引擎薄适配器 `preprocessor/macro_policy.py`
-> + 插件 `plugins/macro_policy/`）与 `formatter`。
+> **定案**：`docs/decisions/0019-elaboration-plugin-protocol.md`——引擎最小可视单位
+> = **文件**；精化协议 = 语言包 `[capabilities] elaborator` 返回的**可扩展项列表**
+> （字段 `name` / `locator` / `solver` / `scope` / `provides` / `depends_on` /
+> `locator_fn`）；产物**容器**由引擎定、**条目名与形状由插件定**。
+> **分期**：P1 骨架 + 行为基线（只新增不接线）→ P2 纵向打穿 `param_default` +
+> `param_override`（`width_check` 改读新容器）→ P3 逐族搬迁（每项落地即删旧实现）
+> → P4 文档收口。机制复用既有能力位（`formatter` / `macro_policy` 先例）。
 
 - **现状错配（实测，`analyzer/structure.py`）**：
   - 文本模式求值/判断（应 AST-first）：`_is_signal_expr` 正则、`render_subtree` 渲染
@@ -23,25 +25,15 @@
   - AST 证据（`_drafts/probe_ast_shape.py`）：取反在 AST 里是
     `UnaryOp(op='!', operand=HierExpr([Identifier('W')]))`——**不是文本前缀**；
     `Number.value` 今天有 str / Node 两种形态（形态知识进插件后由插件自认，无需对齐语法绑定）。
-- **契约划分**：引擎基座 = ①加载位（能力名 + 未声明降级为单文件 lint+analyze）
-  ②产物模型与 `context.extra` 键名（**形状属引擎协议**——消费方是下游 postpass，
-  不能由插件定义）③语言无关服务句柄（读源 / 宏展开 / AST 解析 / 行映射 `line_map`、
+- **契约划分**（按 ADR-0019 修订）：引擎基座 = ①加载位（能力名 + 未声明降级为单文件
+  lint+analyze）②**产物容器**（`context.extra` 的单一容器键 + 生命周期；**条目名与
+  形状归插件**）③语言无关服务句柄（读源 / 宏展开 / AST 解析 / 行映射 `line_map` /
   宏区间 `macro_regions`）。插件 = 全部语言语义（实例化点→目标模块名、按名找定义文件、
   单文件精化、**AST-first 求值规则**、驱动源三类形态、层次穿透、端口方向语义）。
-- **分期**：E1 立零件（`analyzer/elaboration/`：契约 + 能力名 + 加载位 + 产物模型 +
-  句柄，只新增不接线）→ E2 verilog 精化器整体搬进
-  `grammar/verilog/plugins/elaboration/`，门面改经契约调用并**同批删引擎侧旧实现与
-  `[structure]` 声明**（不留双路径）→ E3 插件内 AST-first 重写（删文本解析链）→
-  E4 文档收口（`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
-  `MODEL_INDEX`/`analyzer/README`）。
-- 按建议定的两条：编排骨架（发现循环 / 汇总 / `extra` 注入）**留引擎**（无语言语义）；
-  产物**运行期核验**（照 transform 插件 `produces` + `_verify_produced` 同款，
-  少填产物键 → fail，不让下游静默空转）。
-- 外部对照（为什么这不是过度泛化）：elaboration 是 HDL/EDA 的必备阶段（Verilator
-  `V3Param` 删未选中 AST 子树、slang `Elaborator`、VHDL/Ada LRM 专章），通用语言侧
-  同构概念（Racket phase、Scala macro elaboration、Zig comptime、C++ 模板实例化）；
-  成熟实现一律在 AST/IR 上精化，文本只作输出与诊断呈现。注意中文"精化"与
-  refinement（B/Event-B 规格精化）撞词，部件/配置名用 `elaboration`。
+  ⚠ 原记"产物模型与 `context.extra` 键名（形状属引擎协议，不能由插件定义）"**已推翻**
+  ——其前提是"条目固定"，条目可扩展后不再成立；依据与风险缓解见 ADR-0019 决策 5 + 权衡。
+- 编排骨架（发现循环 / 汇总 / 容器注入）留引擎、产物**运行期核验**、外部对照与命名
+  纪律（`elaboration` 非 refinement）——均已并入 ADR-0019，此处不重复（docs 治理 C3）。
 
 
 ## 语言知识渗透复审与精化基座重设计（2026-09-20 立，长期）
@@ -53,7 +45,7 @@
 > （判据集 + 已知边界 + 重构期用法）；当前基线 **S = 0**（每个命中都有结论；
 > 原始量仍在，删 `structural_kept.json` 对应条目即可回滚），登记表完整性由
 > `tests/policy/test_structural_kept.py` 守。
-> **下一项 = 精化基座重构**（本文件首节的 E1–E4 执行面 + 下方 L2 的能力边界
+> **下一项 = 精化基座重构**（本文件首节的 P1–P4 执行面 = ADR-0019；下方 L2 的能力边界
 > 设计原则，同一件事的两面）；L1 语言知识渗透复审仍是长期方向、不在近期排期。
 
 ### L1 语言知识渗透复审（长期）
@@ -145,11 +137,15 @@
     占位 + 数字扫描原语（字符类判定 / 最长匹配 / radix 取值），verilog 插件侧
     集中实现位宽·进制·x-z 形态。
   - 正面样板：`typed_ports`（抽取走插件 + TOML 声明，引擎零硬编码）。
-- **诚实代价（写进 ADR 权衡）**：声明式 → 命令式后，**加语言不再是零代码**
+- **诚实代价（已写进 ADR-0019 权衡）**：声明式 → 命令式后，**加语言不再是零代码**
   （c4/yaml 需写一小段插件或继承默认）；换来的是引擎 schema 与代码不随语言数增长。
 - **已有约束须一并遵守**：语言知识零进代码（AGENTS 硬约束）、不留兼容垫片、
   删除先证后删（`policy/doc-alignment.md`）；配置加载 fail-fast。
-- **预期待定**：属架构决策，动手前先立 ADR（`docs/decisions/`）；现仅记方向与命中点。
+- **定案与范围分界**：**精化基座**已由 ADR-0019 定案
+  （`docs/decisions/0019-elaboration-plugin-protocol.md`）；**本节保留为通用设计原则**
+  （三分法 / 两失效信号 / 普适原语清单 / 成熟解法参照），管辖 ADR-0019 范围外的待议面
+  （数字形态 `_number.toml`、analyze→transform 映射通道契约键名）——那些**仍未立项**，
+  动手前同样先立 ADR。
 - **成熟解法参照（避免自造）**：
   - **GCC 的路线**：语言差异由**手写前端**接住（每个语言一个 front end），共享点在下游
     （GENERIC/GIMPLE IR + 后端 + 目标描述 `.md`）。它的"占位"不在前端骨架，而在

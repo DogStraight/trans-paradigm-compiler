@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **精化基座重构定案（设计先行，未实现）**：ADR-0019
+  （`docs/decisions/0019-elaboration-plugin-protocol.md`）确立边界——引擎的最小可视
+  单位 = **文件**（读源 / 宏展开 / 解析 / AST 缓存 / 行映射与宏区间 / 依赖发现编排）；
+  精化协议 = 语言包 `[capabilities] elaborator` 返回的**可扩展项列表**（`name` /
+  `locator` / `solver` / `scope` / `provides` / `depends_on` / `locator_fn`），
+  **定位声明式为主、求解为插件函数**；产物**容器**由引擎定、**条目名与形状由插件定**。
+  分期：P1 骨架 + 行为基线（只新增不接线）→ P2 纵向打穿 `param_default` +
+  `param_override` → P3 逐族搬迁（每项落地即删旧实现）→ P4 文档收口。
+
+  **为什么是"搬类型"而不只是"搬逻辑"**（本次勘察结论）：`width_check` 插件 1311 行
+  逻辑早已在插件侧，却靠 `_ModulePort.width_expr` / `ModuleParam.value_expr`
+  （`analyzer/structure.py:68-98` 的**引擎 dataclass**）喂饭——**引擎替插件决定了
+  "世界由哪些事实构成"**（端口有宽度、参数有值文本、信号有驱动/负载），故"位宽比较"
+  「跨文件参数值变更」观感上仍像在基座里；只要类型词汇表留在引擎，插件再怎么写都只是
+  在填引擎的表格。同构先例 = ADR-0018（预处理器：引擎只做文本操作，策略走能力位）。
+  `TODO.md` 原「精化部件化 + 插件化」的 E1–E4 执行面改 P1–P4，"产物模型与 `context.extra`
+  键名（形状属引擎协议，不能由插件定义）"一条**推翻**（前提是"条目固定"，条目可扩展后
+  不成立）——已同步。
+
 - **Bifrost 外部审计收尾（主线收口）——能力族 ④ 变更差分接入 + 判保持登记表守卫**：
 
   审计修复主线（复杂度族 / 重复族 / in-loop 族 / 断言族）此前已逐项下结论，本次收尾
