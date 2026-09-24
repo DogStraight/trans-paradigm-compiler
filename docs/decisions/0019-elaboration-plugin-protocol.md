@@ -266,10 +266,26 @@
        一致（6 个专为信号图设计的 `W105_*`/`W104_*` 样例 + 真实语料），并断言不空转
        （多驱动与 output 穿透真的发生、负载非空）。
        **至此插件侧五项齐备且各自对拍通过**；引擎侧层 2/3 仍在原位（只新增阶段）。
-     - **P3-②c 待做**（最后一步，做完即达终态）：引擎切到各产物 + 删层 2/3
-       （`ConnectionElaborator` / `SignalGraphBuilder`）与 ports/connections/signal_graph
-       引擎侧 + 4 个插件消费方迁移（`inst_check` / `width_check` / `hier_check` /
-       `latch_check` 读 `module_index.ports`）+ `param_override` 上提 → **`ROLES` 归零**。
+     - **P3-②c 待做**（最后一步，做完即达终态）。⚠ **关键洞察（先删消费方，role 才退场）**：
+       role 是"引擎消费插件产物"的寻址机制；**引擎一旦不再消费，role 就该退场**。故顺序
+       是"先迁消费方 → 再删引擎实现 → role 自然归零"，而非逐项删引擎代码：
+       1. **c-1**：`inst_check` 是 `connections` 的**唯一**消费方（实测：`width_check` 只用
+          `inst_sites`，不碰 `connections`）→ 把它与 `signal_graph` 的读取一并改为读
+          **产物容器**；此后层 2/3 **无任何消费者** → 删 `ConnectionElaborator` /
+          `SignalGraphBuilder` / `_SignalGraphCtx` / `_graph_entry` / `_append_ref` /
+          `_is_signal_expr` / `_SIGNAL_RE` / `PortConnection` / `FileResult.connections`，
+          `ROLE_UNIT_CONNECTIONS` 与 `ROLE_UNIT_SIGNAL_GRAPH` **同时退场**。
+          ⚠ 同批处理 `tests/engine/analyzer/test_checker.py::TestElaborationConnections`
+          （直连 `fr.connections` 的层 2 测试——主体随实现消失）。
+       2. **c-2**：4 个端口消费方（`inst_check` / `width_check` / `hier_check` /
+          `latch_check` 读 `module_index.ports`）改读 `port_decls` 产物 → 引擎侧再无
+          `unit_ports` 消费者 → 删 `_ModulePort` / `ModuleInfo.ports` / `_PortFields` /
+          `ModuleExtractor._fill_ports` 族 + `[structure]` 端口字段声明 → **`ROLES` 归零**
+          （终态判据达成）。
+       3. **c-3**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；与 `inst_sites` /
+          `connections` 族同批）。
+       ✅ 顺带删掉一个**死字段**：`ModuleInfo.insts`（模块内实例化点）**只有写入、从无读取**
+       ——连同唯一写入点（`FilePipeline.parse_file` 的"挂回"循环）一起删（已完成）。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
   `MODEL_INDEX` / `analyzer/README` 同步。
 

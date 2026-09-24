@@ -89,8 +89,8 @@ class ModuleInfo:
     ports: dict[str, _ModulePort] = field(default_factory=dict)
     # 参数默认值**不在引擎侧**：它是语言知识 → 精化产物 `param_default`
     # （ADR-0019，`grammar/verilog/plugins/elaboration/`；消费方读产物容器）。
-    # elaboration 层 2/3（ADR-0008）：模块的端口连接展开 + 实例树
-    insts: list = field(default_factory=list)  # 模块内实例化点（已展开连接）
+    # ⚠ 曾有 `insts`（模块内实例化点）——**只有写入、从无读取**的死字段，
+    #    2026-09-25 连同唯一写入点（`FilePipeline.parse_file` 的挂回循环）删除。
 
 
 @dataclass
@@ -739,13 +739,6 @@ class FilePipeline:
         fr.modules = self._extract.extract_modules(ast, path)
         fr.inst_sites = collect_nodes(ast, self._ctx.rule("module_inst_rule"))
         fr.connections = self._conn.elaborate_connections(path, fr.inst_sites)
-        # 层 1 补充：模块内实例挂回 ModuleInfo（实例树展开的入口）
-        for conn in fr.connections:
-            mod = fr.modules.get(conn.module_name)
-            if mod is None:
-                # 被实例化模块可能定义在别的文件（本文件只有实例化点）
-                continue
-            mod.insts.append(conn)
         fr.parse_ok = True
         return fr
 
