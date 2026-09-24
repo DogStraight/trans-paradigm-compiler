@@ -19,12 +19,17 @@ from analyzer.scope import Scope
 # ── 全局注册表 ──
 
 _plugin_registry: list[type["TransformPlugin"]] = []
-# 与 _plugin_registry 平行：每个插件类的**来源组件名**（`grammar/<lang>/plugins/
-# <component>/x.py` → `<component>`），引擎插件为 None。用于把插件应用限定在
-# 当前语言作用域内——注册表是进程级累积的（组件模块 import 期副作用），不过滤
-# 就会让**别的语言的插件参与本语言管线**（实测：同进程先跑 c4 再跑 verilog，
-# c4 的 AsmGenPlugin 会作用在 verilog AST 上）。
-_plugin_origins: list[str | None] = []
+# 插件类的**来源组件名**（`grammar/<lang>/plugins/<component>/x.py` → `<component>`），
+# 引擎插件为 None。用于把插件应用限定在当前语言作用域内——注册表是进程级累积的
+# （组件模块 import 期副作用），不过滤就会让**别的语言的插件参与本语言管线**。
+#
+# ⚠ **按类键控，不按注册序下标**。原先是与 `_plugin_registry` 平行的 list，但注册表
+# 会被测试侧截断清理（`del _plugin_registry[order:]`，5 处），而平行表不会——两张表
+# 一旦错位，"注册 → 截断 → 再注册"后新注册项就被 `zip` 配到**别人的来源**上：语言
+# 插件配到 `None`（= 引擎插件语义）会在任何语言下生效（实测幽灵 flake：切到 verilog
+# 后 c4 的 `AsmGenPlugin` 仍在 `active_plugin_classes()` 内）；引擎插件配到组件名则
+# 会被**静默过滤掉**。键控后截断注册表不再可能造成错配。
+_plugin_origins: dict[type["TransformPlugin"], str | None] = {}
 # 限定名 → 类（插件身份面，ADR-0015 §1：插件实例化对象是一等单元，
 # 需可寻址 → 管线配置按名引用）与注册序（缺省执行序）。
 _plugin_index: dict[str, type["TransformPlugin"]] = {}
@@ -127,7 +132,7 @@ def register_plugin(
         # 索引：首胜（按名引用取注册序首个）；registry：照旧全注册
         _plugin_index.setdefault(qname, klass)
         _plugin_registry.append(klass)
-        _plugin_origins.append(_origin_component(klass))
+        _plugin_origins[klass] = _origin_component(klass)
         contract = {
             "produces": list(produces or []),
             "requires": list(requires or []),
@@ -170,6 +175,9 @@ def active_plugin_classes() -> list[type["TransformPlugin"]]:
     本身不安全——`AstTransformer` 会**实例化并执行**登记的全部插件；安全来自
     应用侧按语言作用域过滤（插件是否有根节点守卫属各插件自行约定，不能当机制
     保障）。未建立语言作用域时（纯单测直接 import 插件模块）不过滤。
+
+    来源按**类**取（`_plugin_origins[cls]`），不按注册序下标——下标配对被注册表
+    截断打乱过（幽灵 flake 根因，见 `_plugin_origins` 定义处注释）。
     """
     from core.plugin_loader import _active_components, _components_initialized
 
@@ -177,8 +185,8 @@ def active_plugin_classes() -> list[type["TransformPlugin"]]:
         return list(_plugin_registry)
     return [
         cls
-        for cls, origin in zip(_plugin_registry, _plugin_origins)
-        if origin is None or origin in _active_components
+        for cls in _plugin_registry
+        if _plugin_origins.get(cls) is None or _plugin_origins[cls] in _active_components
     ]
 
 

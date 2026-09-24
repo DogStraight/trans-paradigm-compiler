@@ -100,7 +100,7 @@ INSTALL_STATE: dict[str, tuple[str, str]] = {
 # 而不是靠注册名限定——新增插件接入点时必须同样接这个过滤。
 ACCUMULATED: dict[str, str] = {
     "transform.engine._plugin_registry": "插件注册表（应用侧按语言作用域过滤，见 active_plugin_classes）",
-    "transform.engine._plugin_origins": "插件来源组件表（与注册表平行，同上）",
+    "transform.engine._plugin_origins": "插件来源组件表（**按类键控**——刻意不做成与注册表平行的下标表，截断注册表会错配来源）",
     "transform.engine._plugin_index": "限定名→插件类索引（按名解析，不参与执行）",
     "transform.engine._plugin_contracts": "插件契约表（同上，校验用）",
     "transform.engine._plugin_shapes": "插件产物形状声明（同上，校验用）",

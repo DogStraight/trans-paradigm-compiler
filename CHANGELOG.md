@@ -1143,6 +1143,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   数字单源门禁（文档禁止硬编码样本统计）、真实语料误报基线（只许降不许升）、
   增量覆盖率工具、门禁有效性变异抽查（4/4 期望变红）。
 
+### Fixed
+
+- **插件来源表按下标配对被注册表截断打乱（幽灵 flake 根因）**：`transform.engine`
+  的插件来源表 `_plugin_origins` 原先是与 `_plugin_registry` **平行的 list**，靠
+  `zip(registry, origins)` 配对。但测试侧清理惯用 `del _plugin_registry[order:]`
+  （5 处）——**只截注册表**；两表一旦错位，"注册 → 截断 → 再注册"后新注册项就配到
+  **前一项**的来源上：
+
+  - 语言插件配到 `None`（= 引擎插件语义）→ **在任何语言下都生效**。这正是那条长期
+    未定性的幽灵：`test_language_switch.py::test_plugin_scope_excludes_other_language`
+    在并行全量下偶发失败（"切到 verilog 后 c4 的 `AsmGenPlugin` 仍在作用域内"）；
+  - 反向配错则会把**引擎插件静默过滤掉**——插件缺失、行为降级，无任何报错。
+
+  改为**按类键控**（`dict[type, str | None]`），截断注册表不再可能造成错配。
+
+  **复现与验证**：定位时建了 6 秒确定性复现（`test_plugin_index` +
+  `test_unit_params` + `test_unit_plugin_schedule` + `test_contract_check` +
+  `tests/languages/c4` + `test_language_switch`，`-n 1`）——修前该序列 2 failed /
+  修后 62 passed；诊断实测失配 3 条（`AsmGenPlugin` 配对 `None`、现算 `'asm_gen'`），
+  两表长度 6 vs 94。新增回归测试
+  `test_registry_truncation_does_not_misplace_plugin_origin` 构造"注册→截断→再注册"
+  窗口，**反向验证过**：把实现临时还原成平行 list，该测试立刻变红
+  （`'_LangProbe'` 与引擎插件并列）。
+
 ## [0.1.1] - 2026-09-09
 
 注释还原体系闭环（ADR-0013 阶段 B1~B1.5/A2 + ADR-0014）+ typed_ports 语义

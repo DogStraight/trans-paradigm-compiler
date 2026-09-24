@@ -166,3 +166,45 @@ def test_component_load_failure_is_not_swallowed(
     # 避免影响同文件后续用例
     monkeypatch.undo()
     setup_grammar("grammar/verilog", GrammarRulesRegister.get_default())
+
+
+def test_registry_truncation_does_not_misplace_plugin_origin() -> None:
+    """幽灵 flake 回归：注册表被截断后新注册插件的**来源不得错配**。
+
+    测试侧清理惯用 `del _plugin_registry[order:]`（5 处），但**只截注册表**。来源
+    表若做成与注册表平行的下标表，则"注册 → 截断 → 再注册"之后 `zip` 会把后注册项
+    的来源配到**前一项**上：语言插件配到 `None`（= 引擎插件语义）→ 在**任何**语言下
+    都生效，正是"切到 verilog 后 c4 的 `AsmGenPlugin` 仍在 `active_plugin_classes()`
+    内"这条长期未定性的幽灵；反向配错则会把引擎插件静默过滤掉。
+
+    本测试显式制造该窗口：先注册一个**引擎来源**（None）探针 → 截断注册表 →
+    再注册一个**语言来源**（asm_gen）探针 → 断言后者在当前语言下被过滤掉。
+    """
+    import transform.engine as e
+    from grammar.c4.plugins.asm_gen._asm import AsmGenPlugin
+
+    class _EngineProbe(e.TransformPlugin):
+        """引擎侧来源（模块路径不在 grammar/plugins 下 → 判定为 None）。"""
+
+        def process(self, ast, root_scope):  # noqa: ANN001, ANN201
+            del root_scope  # 探针不参与执行，只为占一个注册位
+            return ast
+
+    class _LangProbe(AsmGenPlugin):
+        """语言插件来源：借真实 c4 插件模块的 `__file__` 判定为 `asm_gen`。"""
+
+    _LangProbe.__module__ = AsmGenPlugin.__module__
+
+    order = len(e._plugin_registry)
+    try:
+        e.register_plugin(name="_probe_engine_origin")(_EngineProbe)
+        del e._plugin_registry[order:]  # 模拟其它测试的清理：只截注册表
+        e.register_plugin(name="_probe_lang_origin")(_LangProbe)  # 截断后再注册
+
+        setup_grammar("grammar/verilog", GrammarRulesRegister.get_default())
+        names = {cls.__name__ for cls in active_plugin_classes()}
+        assert "_LangProbe" not in names, (
+            "语言插件的来源被错配成引擎插件（None）→ 在任何语言下都生效"
+        )
+    finally:
+        del e._plugin_registry[order:]

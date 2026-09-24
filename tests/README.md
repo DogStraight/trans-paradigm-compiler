@@ -34,9 +34,14 @@ smoke 不代表全量——只覆盖每功能域核心路径，特性面全覆�
   而 `-n 0 --cov` 645.5s vs `-n auto --cov` 173.9s。
 - **降并发**：`-n auto` 会顶满所有核（并行下真实语料慢 ~2.5x，见 pyproject 注释），
   笔记本上连跑宜显式 `-n 4`——墙钟约 +30%，CPU 压力与发热明显下降。
-- 并行下**已知 1 例 flaky**：`engine/core/test_language_switch.py::test_plugin_scope_excludes_other_language`
-  （待定位，见 `TODO.md`「测试基础设施」）。并行全量出现"仅此 1 项失败"时按它归因，
-  **不要**为此再补一遍 `-n0` 全量。
+- **原「已知 1 例 flaky」已定位并修复**（2026-09-22）：`test_language_switch.py::
+  test_plugin_scope_excludes_other_language` 的偶发失败根因是**插件来源表按注册序
+  下标配对**——测试侧清理惯用 `del _plugin_registry[order:]`（5 处，**只截注册表**），
+  平行来源表不截 → 两表错位 → `zip` 把后注册项配到前一项的来源上：语言插件配到
+  `None`（= 引擎插件语义）→ 任何语言下都生效（就是那条幽灵）；反向则把引擎插件
+  静默过滤掉。已改为**按类键控**，并加回归测试
+  `test_registry_truncation_does_not_misplace_plugin_origin`（构造"注册→截断→再注册"
+  窗口；反向验证过——还原旧实现即变红）。
 
 ## smoke 组别与代表（`@pytest.mark.smoke`）
 
