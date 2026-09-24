@@ -7,6 +7,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P3 开工：搬迁顺序更正 + 协议前置零件（ADR-0019）**：P3 按原计划"**按事实**分族"
+  （ports → connections → gen → signal graph）开工时，清点引擎内部消费关系发现**该切法
+  不成立**——除 gen 外，每个事实（`ports` / `inst_sites` / `connections`）的消费者都是
+  **同一个簇**：`ConnectionElaborator`（层 2）+ `SignalGraphBuilder`（层 3）。而这个簇
+  本身也在搬迁名单上，按事实切就会在每一步为**注定要消失的消费者**造临时 role
+  （会堆到 3 个，全是脚手架）。
+
+  实测依据（`grep in_active_generate` / `module_index` / `\.ports` / `inst_sites`）：
+  `in_active_generate` 的调用点**全部在 `SignalGraphBuilder` 内**（5 处）→ 只有 **gen**
+  能用**一个** role 桥接成立。故改**按消费簇**切：
+  ① **gen 族**（消费簇只有层 3）② **层 2 + 层 3 + ports 一次性**（消费者是彼此）。
+  终态判据 = **`ROLES` 为空**（引擎不消费任何插件产物）——可机械检查。已回写
+  ADR-0019 P3 节与 `TODO.md`。
+
+  同批落 P3-①的**前置零件**（**只新增不接线**，为让下一轮只剩"搬逻辑"）：
+  - 登记 `ROLE_GEN_ACTIVITY`（寻址键 = **文件路径**，形状 = `{id(节点): bool}`）；
+  - **放宽 role 的 `scope` 约束**（原要求 `role ⇒ scope == unit`，是把 `unit` 的实现细节
+    错当通用约束；`gen_activity` 本就是 file 作用域）；
+  - ADR 补**角色位契约表**：每个角色**同时**定义寻址键与产物形状——引擎要消费它，故与
+    普通条目"形状归插件"不同；并写明**角色位一律是过渡面**、收口时应为空。
+
+  验证：全量 **2166 passed / 7 skipped**；`tests/engine/analyzer` **305 passed**；
+  `-m smoke` **434 passed**；`tests/policy` **125 passed**。
+
 - **P2 纵向打穿 `param_default`：引擎侧参数抽取整体迁出（ADR-0019）**：引擎不再定义
   "参数有值文本"这个事实——它是语言知识，改为 verilog 语言包的精化项产物。
 

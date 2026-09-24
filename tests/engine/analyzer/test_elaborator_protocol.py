@@ -114,7 +114,6 @@ def test_malformed_spec_shapes_fail_fast(bad):
         _item(locator={"rule": "R"}, locator_fn="solve"),  # 定位两给（语义歧义）
         _item(locator={"rule": ""}),  # 规则名空
         _item(role="not_a_role"),  # 引擎角色位非法
-        _item(role="unit_constants", scope="file"),  # 角色位要求 unit 作用域
         _item(role="unit_constants", provides=["a", "b"]),  # 角色位要求唯一产物键
     ],
 )
@@ -139,6 +138,33 @@ def test_container_key_unique_across_items():
         _item(name="i2", provides=["k"]),
     ]
     with pytest.raises(ConfigError, match="只能有一个产出方"):
+        parse_spec(_spec(items))
+
+
+def test_role_scope_is_governed_by_role_contract_not_globally():
+    """角色位**不再**限定 scope——寻址键由角色契约定义（见 ADR-0019 角色位契约表）。
+
+    `unit_constants` 寻址键 = 单元名；`gen_activity` 寻址键 = 文件路径。
+    """
+    spec_unit = parse_spec(_spec([_item(role="unit_constants", scope=SCOPE_UNIT)]))
+    assert spec_unit.role_key("unit_constants") == "x"
+    spec_file = parse_spec(_spec([_item(role="gen_activity", scope=SCOPE_FILE)]))
+    assert spec_file.role_key("gen_activity") == "x"
+
+
+def test_role_key_none_when_role_not_declared():
+    spec = parse_spec(_spec([_item()]))
+    assert spec.role_key("unit_constants") is None
+    assert spec.role_key("gen_activity") is None
+
+
+def test_duplicate_role_across_items_rejected():
+    """两个项应答同一角色 → 引擎按角色取值有歧义。"""
+    items = [
+        _item(name="i1", provides=["ka"], role="gen_activity"),
+        _item(name="i2", provides=["kb"], role="gen_activity"),
+    ]
+    with pytest.raises(ConfigError, match="引擎角色"):
         parse_spec(_spec(items))
 
 

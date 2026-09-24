@@ -54,13 +54,25 @@ SCOPE_PROJECT = "project"
 SCOPES: frozenset[str] = frozenset({SCOPE_FILE, SCOPE_UNIT, SCOPE_PROJECT})
 
 # ── 引擎角色位（引擎定义枚举 = 机制面；只给"引擎自己要消费的产物"用） ──
+# ⚠ 角色位**一律是过渡面**：终态（ADR-0019 决策 1）下引擎不消费任何插件产物，
+#    故精化基座重构收口时 `ROLES` 应为空——这是"重构完成"的可机械检查判据。
+#    每个角色**同时**定义寻址键与产物形状（引擎要消费它，与普通条目"形状归插件"不同）。
 ROLE_UNIT_CONSTANTS = "unit_constants"
-"""单元级常量绑定：`{单元名: {名字: 值文本}}`。
+"""单元级常量绑定：寻址键 = **单元名**；形状 = `{名字: 值文本}`。
 
-引擎侧消费方 = 过渡期的 generate 条件求值（`GenerateEvaluator` 需要单元参数表）。
-gen 族按 ADR-0019 P3 迁入协议后，**本角色应随之删除**（它只为过渡存在）。
+引擎消费方 = 过渡期 `GenerateEvaluator`（generate 条件求值需要单元参数表）。
+gen 族迁入协议（ADR-0019 P3-1）后**本角色退场**——届时 gen 求解器经
+`depends_on = ["param_default"]` + `ctx.products` 直接读单元常量，不经引擎中转。
 """
-ROLES: frozenset[str] = frozenset({ROLE_UNIT_CONSTANTS})
+
+ROLE_GEN_ACTIVITY = "gen_activity"
+"""generate 分支活性：寻址键 = **文件路径**；形状 = `{id(节点): bool}`。
+
+bool = 该节点是否落在**选中**的 generate 分支内（层 3 据此"未选中分支的驱动不计"）。
+引擎消费方 = `SignalGraphBuilder`；层 3 迁入协议（ADR-0019 P3-2）后**本角色退场**。
+"""
+
+ROLES: frozenset[str] = frozenset({ROLE_UNIT_CONSTANTS, ROLE_GEN_ACTIVITY})
 
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──
 ITEM_KEYS: frozenset[str] = frozenset(
@@ -265,11 +277,8 @@ def _parse_item(
                 f"[elaborator] 精化项 '{name}' 声明了 role={role!r}，其 provides "
                 f"须恰好一个键（引擎按角色取唯一产物），得到 {provides!r}"
             )
-        if scope != SCOPE_UNIT:
-            raise ConfigError(
-                f"[elaborator] 精化项 '{name}' 声明了 role={role!r} → scope 须为 "
-                f"'{SCOPE_UNIT}'（引擎按单元名寻址），得到 {scope!r}"
-            )
+        # scope 不限：寻址键由**角色契约**定义（`unit_constants` = 单元名、
+        # `gen_activity` = 文件路径），不是全局约束（原设 role ⇒ scope==unit 已放宽）。
 
     return ElaborationItem(
         name=name,

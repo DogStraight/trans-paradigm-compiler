@@ -10,6 +10,7 @@
 
 from analyzer.elaboration.atoms import StructureAtomSource
 from analyzer.elaboration.contract import (
+    ROLE_GEN_ACTIVITY,
     ROLE_UNIT_CONSTANTS,
     ROLES,
     SCOPE_FILE,
@@ -34,6 +35,7 @@ from analyzer.elaboration.service import ElaborationService, ServiceApi
 __all__ = [
     "CAPABILITY_NAME",
     "ROLES",
+    "ROLE_GEN_ACTIVITY",
     "ROLE_UNIT_CONSTANTS",
     "SCOPE_FILE",
     "SCOPE_PROJECT",
