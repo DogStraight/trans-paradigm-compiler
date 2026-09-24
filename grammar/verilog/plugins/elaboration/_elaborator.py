@@ -5,7 +5,7 @@
 
 ## 现役项
 
-**`param_default`**（`unit` 作用域，`role = unit_constants`）
+**`param_default`**（`unit` 作用域，**无引擎角色位**）
 单元参数默认值表 `{参数名: 值表达式文本}`，两处来源合并，**头部优先**：
 
 1. 头部 `#(P = v)` 参数列表（`ModuleDecl.params` → 列表项 `param_name` / `value`）；
@@ -15,6 +15,10 @@
 合并规则与搬迁前 `ModuleExtractor._fill_params` **逐字对齐**（头部同名优先、
 体内同名重复声明取先、迭代顺序同用 `core.define.iter_nodes`）——本项是引擎侧同名
 实现的原位替代，行为必须一致（回归护栏见 `tools/min_pack_probe.py`）。
+
+**`gen_activity`**（`file` 作用域，`role = gen_activity`）
+generate 分支活性 `{id(节点): bool}`；`depends_on = ["param_default"]`（条件求值要
+单元常量表，经 `ctx.products` 自取）。语义与搬迁来源见本文件后半段。
 
 ## 为什么本项不声明定位
 
@@ -60,8 +64,9 @@ def build_elaborator() -> dict:
             {
                 "name": "param_default",
                 "scope": "unit",
-                # 引擎角色位：过渡期生成条件求值需要"单元常量绑定"（gen 族搬迁后删）
-                "role": "unit_constants",
+                # **无**引擎角色位：generate 条件求值已随 gen 族迁入本插件，其求解器经
+                # `depends_on` + `ctx.products` 读本项产物 → 引擎不再需要单元常量表
+                # （`unit_constants` 角色随 P3-①b 退场）。
                 "provides": [_PROVIDES_PARAM_DEFAULT],
                 "solver": "solve_param_default",
             },

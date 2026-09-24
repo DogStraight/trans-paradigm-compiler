@@ -4,10 +4,14 @@
 注入的 `context.extra`：`module_index` / `inst_sites` / 信号图）。
 
 语言无关边界：本模块**零语言知识**。单元/实例化的规则名、节点字段、文件
-扩展名、关键字、generate 条件面的规则/字段/运算符拼写全部来自语言包声明的
-`[structure] protocol`（grammar/<lang>/base/_structure.toml）；未声明该段
-= 该语言不支持结构提取，调用方退化为单文件 lint + analyze
-（`ctx.has_structure()` 判定）。
+扩展名、关键字全部来自语言包声明的 `[structure] protocol`
+（grammar/<lang>/base/_structure.toml）；未声明该段 = 该语言不支持结构提取，
+调用方退化为单文件 lint + analyze（`ctx.has_structure()` 判定）。
+
+⚠ **generate 条件求值已迁出**（ADR-0019 P3-①）：块/分支规则名、条件/then/else
+字段名、逻辑非运算符拼写不再由本模块声明与求值——那些是语言知识，现归语言包插件
+精化项 `gen_activity`（`grammar/verilog/plugins/elaboration/`）；引擎按**角色位**取
+其产物（`ctx.gen_activity`），见 `SignalGraphBuilder._in_active_generate`。
 
 三层（ADR-0008）+ 组合结构（本模块是**一组协作者**，不是一个大类）：
 
@@ -17,11 +21,10 @@
     ModuleExtractor     层 1  单元注册表（端口/参数形态）
     ConnectionElaborator 层 2 端口连接展开（W104 类检查的基础）
     SignalGraphBuilder  层 3  信号驱动/负载图（W105 类检查的基础）
-    GenerateEvaluator   generate 条件求值（层 3 的互斥分支活性）
 
 组合方向（无环）：`FilePipeline` 含 `ModuleExtractor` + `ConnectionElaborator`；
-`ModuleIndexer` 含 `FilePipeline`；`SignalGraphBuilder` 含 `ConnectionElaborator`
-+ `GenerateEvaluator`；全部共享同一个 `StructureCtx`。组合根是门面
+`ModuleIndexer` 含 `FilePipeline`；`SignalGraphBuilder` 含 `ConnectionElaborator`；
+全部共享同一个 `StructureCtx`。组合根是门面
 `analyzer/checker.py::ProjectChecker`（原先的门面继承底座已改为组合）。
 
 为什么是组合而不是继承（2026-09-19 实测依据）：① 底座原先只有 1 个子类且**零方法
@@ -128,158 +131,7 @@ class FileResult:
 
 # ── 常量表达式求值 ────────────────────────────────────────
 
-# 只认中性形态（数字/括号/四则/比较——多数语言同形）；位运算、逻辑运算、
-# 标识符、三目一律不可判：那是语言层的事（语言包侧另有求值器，如 verilog 的
-# latch_check/_latch_check._eval_const）。
-_CONST_TOK_RE = re.compile(r"[ ]*(?:(\d+)|(<=|>=|==|!=|\+|-|\*|/|%|\(|\)|<|>))")
-_CMP_OPS = ("<", "<=", ">", ">=", "==", "!=")
 
-
-def _tokenize_const(text: str) -> list[tuple[str, str]] | None:
-    """常量表达式 → token 列表；出现未声明的字符 → None（不可判）。"""
-    toks: list[tuple[str, str]] = []
-    pos = 0
-    while pos < len(text):
-        m = _CONST_TOK_RE.match(text, pos)
-        if m is None:
-            return None
-        pos = m.end()
-        toks.append(
-            ("num", m.group(1)) if m.group(1) is not None else ("op", m.group(2))
-        )
-    return toks
-
-
-class _ConstExprParser:
-    """常量表达式递归下降求值器（游标即状态，故用类而非闭包）。
-
-    语法见 `_eval_const_expr`；任一步不可判 → None 向上冒泡（保守）。
-    """
-
-    def __init__(self, toks: list[tuple[str, str]]) -> None:
-        self.toks = toks
-        self.pos = 0
-
-    def parse(self) -> bool | None:
-        """整串求值：必须消费完所有 token，否则不可判。"""
-        val = self._cmp()
-        if val is None or self.pos != len(self.toks):
-            return None
-        return bool(val)
-
-    def _peek(self) -> tuple[str, str] | None:
-        return self.toks[self.pos] if self.pos < len(self.toks) else None
-
-    def _eat(self) -> tuple[str, str]:
-        tok = self.toks[self.pos]
-        self.pos += 1
-        return tok
-
-    def _primary(self) -> float | None:
-        """基本项：数字 | '(' 表达式 ')'。"""
-        cur = self._peek()
-        if cur is None:
-            return None
-        kind, tok = cur
-        if tok == "(":
-            self._eat()
-            val = self._cmp()
-            nxt = self._peek()
-            if val is None or nxt is None or nxt[1] != ")":
-                return None
-            self._eat()
-            return val
-        if kind == "num":
-            self._eat()
-            return float(tok)
-        return None
-
-    def _unary(self) -> float | None:
-        """一元：('+'|'-')* 基本项（符号链逐层取负）。"""
-        cur = self._peek()
-        if cur is not None and cur[1] in ("+", "-"):
-            sign = self._eat()[1]
-            val = self._unary()
-            if val is None:
-                return None
-            return -val if sign == "-" else val
-        return self._primary()
-
-    def _term(self) -> float | None:
-        """乘除模：左结合；除/模零 → 不可判。"""
-        left = self._unary()
-        if left is None:
-            return None
-        while True:
-            cur = self._peek()
-            if cur is None or cur[1] not in ("*", "/", "%"):
-                return left
-            op = self._eat()[1]
-            right = self._unary()
-            if right is None or (op in ("/", "%") and right == 0):
-                return None
-            if op == "*":
-                left *= right
-            elif op == "/":
-                left /= right
-            else:
-                left %= right
-
-    def _sum(self) -> float | None:
-        """加减：左结合。"""
-        left = self._term()
-        if left is None:
-            return None
-        while True:
-            cur = self._peek()
-            if cur is None or cur[1] not in ("+", "-"):
-                return left
-            op = self._eat()[1]
-            right = self._term()
-            if right is None:
-                return None
-            left = left + right if op == "+" else left - right
-
-    def _cmp(self) -> float | None:
-        """比较：结果折算 1.0/0.0（布尔参与后续比较：真=1 / 假=0）。"""
-        left = self._sum()
-        if left is None:
-            return None
-        while True:
-            cur = self._peek()
-            if cur is None or cur[1] not in _CMP_OPS:
-                return left
-            op = self._eat()[1]
-            right = self._sum()
-            if right is None:
-                return None
-            ok = {
-                "<": left < right,
-                "<=": left <= right,
-                ">": left > right,
-                ">=": left >= right,
-                "==": left == right,
-                "!=": left != right,
-            }[op]
-            left = 1.0 if ok else 0.0
-
-
-def _eval_const_expr(text: str) -> bool | None:
-    """纯常量表达式求值 → 布尔｜None（不可判，保守）。
-
-    显式递归下降（`_ConstExprParser`），**不用 `eval`**：源码文本进 `eval` 是
-    RCE 面（与语言包侧 `_eval_const` 同理由）；且 Python 词法与目标语言不一致
-    ——`!`/`&&`/`||` 在 Python 里是语法错，只会静默落回不可判，写进白名单反而
-    看不出真实可达面。
-
-    语法：表达式 := 比较；比较 := 加减 (比较符 加减)*；加减 := 乘除
-    (('+'|'-') 乘除)*；乘除 := 一元 (('*'|'/'|'%') 一元)*；一元 := ('+'|'-')*
-    基本项；基本项 := 数字 | '(' 表达式 ')'。
-    """
-    toks = _tokenize_const(text.strip())
-    if toks is None:
-        return None
-    return _ConstExprParser(toks).parse()
 
 
 # ── 引擎 ─────────────────────────────────────────────────
@@ -322,28 +174,7 @@ def _append_ref(entry: dict, kind: str, ref: str) -> None:
         entry[kind].append(ref)
 
 
-@dataclass(frozen=True)
-class _GenFace:
-    """generate 条件求值面（`[structure]` / `[structure.fields]` 声明）。
 
-    条件求值要认的东西**全是语言形态**：哪个规则是 generate 块容器、哪些规则是
-    条件分支、分支上哪个字段是条件/then/else、逻辑非运算符怎么拼。引擎一律按
-    声明取（`StructureCtx.gen_face`），不再内置 Verilog 形态。
-
-    未声明的部分为空：`block_rule` 空 = 该语言不做 generate 活性过滤（不认
-    generate 块）；`not_ops` 空 = 不认前缀取反（条件不可判 → None 保守）。
-    """
-
-    block_rule: str  # generate 块容器规则名
-    branch_rules: tuple[str, ...]  # 条件分支规则名（宿主：条件/then/else 字段）
-    condition_field: str  # 分支上的条件字段
-    then_field: str  # then 分支字段
-    else_field: str  # else 链字段（else / else-if）
-    not_ops: tuple[str, ...]  # 逻辑非运算符前缀（文本识别；引擎不认识拼写）
-    module_name_field: str = ""  # 模块名字段（取参数表用；与 [structure.fields] 同源）
-
-    def is_branch(self, node_name: str) -> bool:
-        return node_name in self.branch_rules
 
 
 @dataclass
@@ -376,9 +207,10 @@ class StructureCtx:
     fields: dict = field(default_factory=dict)
     fr_by_module_cache: dict | None = None
     dir_module_files: dict[str, dict[str, str]] = field(default_factory=dict)
-    # 精化产物：单元级常量绑定（ADR-0019 角色位 unit_constants；由 ProjectChecker
-    # 从插件容器按角色取入）。过渡期供 generate 条件求值；gen 族搬迁后随之退场。
-    unit_constants: dict[str, dict[str, str]] = field(default_factory=dict)
+    # 精化产物：generate 分支活性（ADR-0019 角色位 gen_activity；由 ProjectChecker
+    # 从插件容器按角色取入）。形状 = {文件路径: {id(节点): bool}}——引擎不再自己求值
+    # generate 条件（那是语言知识，已归语言包精化项）。层 3 迁入协议后随之退场。
+    gen_activity: dict[str, dict[int, bool]] = field(default_factory=dict)
 
     # ── 会话状态失效（每次 check 起始调用）──
 
@@ -388,17 +220,17 @@ class StructureCtx:
         self.module_index.clear()
         self.fr_by_module_cache = None
         self.dir_module_files.clear()
-        self.unit_constants.clear()
+        self.gen_activity.clear()
 
     def refresh(self) -> None:
         """load_all 后刷新结构协议（_structure_cfg 模块变量被推入真实值）。
 
-        顺带校验条件求值面（`gen_face`）：形态非法在**配置加载点**就报错，
-        不等真用到才炸（fail-fast，见 core/config_lifecycle.md）。
+        ⚠ 不再校验"条件求值面"：generate 的块/分支规则名、条件字段、逻辑非前缀已随
+        gen 族搬迁（ADR-0019 P3-①）删除——那些形态现在归**语言包插件**自己持有，引擎
+        不认（故也无需在此 fail-fast）。此处只留仍属引擎读取面的项。
         """
         self.struct = _structure_cfg or {}
         self.fields = (self.struct.get("fields") or {}) if self.struct else {}
-        self.gen_face()
 
     # ── 结构协议读取（语言知识仅来自 grammar/<lang> TOML）──
 
@@ -423,39 +255,7 @@ class StructureCtx:
         """语言包是否声明了跨文件结构协议（模块/实例化形态）。"""
         return bool(self.struct and self.rule("module_decl_rule"))
 
-    def gen_face(self) -> "_GenFace":
-        """generate 条件求值面（`[structure]` / `[structure.fields]` 声明）。
 
-        未声明 / 只声明一半 → 对应项为空（不认 generate 块 / 不认取反），
-        行为退为保守侧（不过滤 = 不漏报驱动）；**类型非法才报错**（fail-fast）。
-        """
-        not_ops = self.struct.get("gen_not_ops")
-        if not_ops is None:
-            not_ops = []
-        if not isinstance(not_ops, list) or not all(
-            isinstance(o, str) and o for o in not_ops
-        ):
-            raise ValueError(
-                "[structure] gen_not_ops 须为非空字符串列表"
-                f"（逻辑非运算符前缀），得到 {not_ops!r}"
-            )
-        branches = self.struct.get("gen_branch_rules") or []
-        if not isinstance(branches, list) or not all(
-            isinstance(b, str) and b for b in branches
-        ):
-            raise ValueError(
-                "[structure] gen_branch_rules 须为非空字符串列表"
-                f"（generate 条件分支规则名），得到 {branches!r}"
-            )
-        return _GenFace(
-            block_rule=self.rule("gen_block_rule"),
-            branch_rules=tuple(branches),
-            condition_field=self.field("gen_condition"),
-            then_field=self.field("gen_then"),
-            else_field=self.field("gen_else_chain"),
-            not_ops=tuple(not_ops),
-            module_name_field=self.field("module_name"),
-        )
 
     def render_subtree(self, node: Node) -> str:
         """把 AST 子树渲染回文本（宽度表达式/连接信号等）。"""
@@ -473,190 +273,7 @@ class StructureCtx:
         return ""
 
 
-class GenerateEvaluator:
-    """generate 条件求值：节点是否落在**选中**的 generate 互斥分支内。
 
-    对齐 Verilator V3Param::visit(AstGenIf)：求值条件、删去未选中分支，使后续
-    多驱动检测只看到选中分支的驱动源（tpc 不展开 generate，故按预计算活性过滤
-    而非物理删树）。per-file 预计算 `{id(node): bool}`（一次 DFS 维护条件栈，
-    O(树)），查询 O(1)——每节点全树扫描的旧路线已删（`_branch_active` 系）。
-
-    **语言形态全部走声明**（`StructureCtx.gen_face`：块/分支规则名、条件/then/
-    else 字段名、逻辑非运算符前缀）——本类零语言知识，未声明则退为不过滤（保守）。
-    """
-
-    def __init__(self, ctx: StructureCtx) -> None:
-        self._ctx = ctx
-
-    def in_active_generate(self, fr, node) -> bool:
-        """节点是否在**选中**的 generate 互斥分支内（对齐 Verilator）。
-
-        Verilator 在 V3Param::visit(AstGenIf) 求值 generate 条件，未选中
-        分支的 AST 物理删除（deleteTree）——后续多驱动检测只看到选中分支
-        的驱动源。tpc 不展开 generate，信号图平铺收集会同时计入互斥分支
-        （如 picorv32 `generate if (ENABLE_MUL) 实例 else assign`：两个
-        分支都驱动 pcpi_mul_ready → 8 条 W105 假阳性，Verilator 0 报）。
-
-        实现：per-file 预计算 {id(node): bool}（一次 DFS 维护 generate
-        条件栈，O(树)）；查询 O(1)。此前的每节点全树扫描（旧
-        `_branch_active` / `_subtree_contains` 路线，已删）是 O(节点×树)
-        平方级——picorv32 过程赋值驱动收集（2026-08-29）后单次 check 103s，
-        预计算后恢复秒级。
-        """
-        if fr.ast is None or node is None:
-            return True
-        memo = getattr(fr, "_gen_active_map", None)
-        if memo is None:
-            memo = self._precompute_generate_active(fr)
-            fr._gen_active_map = memo
-        return memo.get(id(node), True)
-
-    def _precompute_generate_active(self, fr) -> dict:
-        """per-file 预计算 {id(node): bool}——节点是否在选中的 generate 分支。
-
-        单栈迭代（无递归）：栈元素 = (node, stack, params)。普通节点标记
-        活性后子节点按种类入栈（`_gen_push_children`）；generate 块内的条件
-        分支求值后按 then/else 展开互斥（`_expand_generate_if`）。节点活性
-        = 所在分支全部选中。O(树)，查询 O(1)。纯迭代实现避免深 AST/嵌套
-        generate 递归爆栈（picorv32 等大文件，2026-08-29）。
-
-        语言包未声明 generate 块规则 → 返回空表（不认 generate = 全部节点
-        按活跃处理，保守方向：不过滤不会漏报驱动）。
-        """
-        active: dict[int, bool] = {}
-        root = fr.ast
-        if root is None:
-            return active
-        face = self._ctx.gen_face()
-        if not face.block_rule:
-            return active
-        decl_rule = self._ctx.rule("module_decl_rule")
-        todo = [(child, [], {}) for child in root.iter_children()]
-        while todo:
-            node, stack, params = todo.pop()
-            if node is None:
-                continue
-            active[id(node)] = all(stack)
-            self._gen_push_children(node, stack, params, todo, decl_rule, face)
-        return active
-
-    def _push_generate_children(
-        self, node, stack: list, params: dict, todo: list, face: "_GenFace"
-    ) -> None:
-        """generate 块子块入栈：条件分支求值展开互斥，其余沿用当前活性。"""
-        for sub in getattr(node, CHILDREN_FIELD, None) or []:
-            if not isinstance(sub, Node):
-                continue
-            if face.is_branch(sub.node_name):
-                # generate 块内的条件分支：求值展开（互斥）
-                self._expand_generate_if(sub, stack, params, todo, face)
-            else:
-                todo.append((sub, stack, params))
-
-    def _push_module_children(self, node, todo: list, face: "_GenFace") -> None:
-        """模块声明子节点入栈：以本模块**参数表**入栈（条件求值用）。"""
-        name_field = face.module_name_field
-        name_node = getattr(node, name_field, None) if name_field else None
-        # 单元常量绑定来自**精化产物**（ADR-0019 角色位 unit_constants）——引擎不再
-        # 读自己的 Verilog 形状 dataclass；插件未声明该角色 → 空表（条件不可判，保守）
-        unit_name = getattr(name_node, "content", "") or ""
-        params2: dict[str, str] = self._ctx.unit_constants.get(unit_name, {})
-        for child in node.iter_children():
-            todo.append((child, [], params2))
-
-    def _gen_push_children(
-        self,
-        node,
-        stack: list,
-        params: dict,
-        todo: list,
-        decl_rule: str,
-        face: "_GenFace",
-    ) -> None:
-        """按节点种类把子节点入栈（generate 遍历的分派点）。
-
-        - generate 块（`face.block_rule`）：条件分支子块交 `_expand_generate_if`
-          展开互斥；其余子块沿用当前活性
-        - 模块声明（`decl_rule`）：子节点以本模块**参数表**入栈（条件求值用）
-        - 其他（含 always 内普通 if）：普通遍历，活性继承当前栈——非
-          generate 条件不展开互斥
-        """
-        if node.node_name == face.block_rule:
-            self._push_generate_children(node, stack, params, todo, face)
-            return
-        if node.node_name == decl_rule:
-            self._push_module_children(node, todo, face)
-            return
-        for child in node.iter_children():
-            todo.append((child, stack, params))
-
-    def _expand_generate_if(
-        self, ifb, stack: list, params: dict, todo: list, face: "_GenFace"
-    ) -> None:
-        """条件分支（`face.branch_rules`）：条件求值，then/else 分支展开入栈。
-
-        else-if 链：外层条件为假时进入链，链内条件独立求值但活性
-        叠加外层"假"（FAST=0 且 MUL=1 → MUL 分支选中）。条件不可判
-        → 整块按当前活性展开（保守）。纯迭代无递归。
-        """
-        # 链入口：当前栈 + 之前所有 else-if 的条件取假（首块无前置）
-        base = list(stack)
-        cur = ifb
-        while isinstance(cur, Node) and face.is_branch(cur.node_name):
-            cond_val = self._eval_gen_cond(cur, params, face)
-            then_node = getattr(cur, face.then_field, None) if face.then_field else None
-            chain = getattr(cur, face.else_field, None) if face.else_field else None
-            if cond_val is None:
-                todo.append((cur, base, params))
-                return
-            # then 分支：base（外层全假）+ 本条件真
-            todo.append((then_node, base + [cond_val], params))
-            if isinstance(chain, Node) and face.is_branch(chain.node_name):
-                # 进入链：外层再加"本条件假"
-                base = base + [not cond_val]
-                cur = chain
-                continue
-            # 最终 else：base（外层全假）+ 本条件假
-            todo.append((chain, base + [not cond_val], params))
-            return
-
-    def _eval_gen_cond(self, ifb: Node, params: dict, face: "_GenFace"):
-        """条件分支的条件字段 → 布尔｜None（不可判）。
-
-        条件文本（HierExpr/Identifier/常量表达式）→ 查参数表 → 数值求值
-        转布尔。不可判（无参数值/非纯常量/引用未定义）→ None 保守。
-
-        语言形态全来自声明：逻辑非运算符前缀（`face.not_ops`）按声明识别，
-        标识符形态用引擎级 `IDENT_RE`（与 lexer 的 id 扫描同源，不另写字符类）。
-        """
-        cond = (
-            getattr(ifb, face.condition_field, None) if face.condition_field else None
-        )
-        text = self._ctx.render_subtree(cond) if isinstance(cond, Node) else ""
-        text = (text or "").strip()
-        if not text:
-            return None
-        if text.isdigit():
-            return int(text) != 0
-        if text in params:
-            return self._param_truth(params[text])
-        # 逻辑非前缀 + 参数名（前缀表由语言包声明；未声明 = 不认取反）
-        for op in face.not_ops:
-            if not text.startswith(op):
-                continue
-            name = text[len(op) :].strip()
-            if IDENT_RE.fullmatch(name) and name in params:
-                val = self._param_truth(params[name])
-                return None if val is None else not val
-        # 含运算的纯常量表达式（`1+0` / `2*3<7` 等）→ 显式求值（不用 eval，
-        # 见 _eval_const_expr）；标识符/位运算/逻辑运算等一律不可判 → None
-        return _eval_const_expr(text)
-
-    @staticmethod
-    def _param_truth(raw: str) -> bool | None:
-        """参数值文本 → 真值（纯数字非零为真）；非纯数字 → None（不可判）。"""
-        v = (raw or "").strip()
-        return int(v) != 0 if v.isdigit() else None
 
 
 @dataclass(frozen=True)
@@ -1308,21 +925,37 @@ class ModuleIndexer:
 class SignalGraphBuilder:
     """层 3 信号驱动/负载图：assign/过程赋值/实例化连接 → {drivers, loads}。
 
-    W105 类检查的基础（elaboration 层 3，ADR-0008）。组合 `GenerateEvaluator`
-    （互斥分支活性：未选中分支的驱动不计）与 `ConnectionElaborator`（模块归属 /
-    赋值目标 / 实例化点表）；跨文件数据从 `ctx.memo` + `ctx.module_index` 取，
-    穿透查模块文件走 `_fr_by_module`（惰性缓存，与 ctx.invalidate() 成对失效）。
+    W105 类检查的基础（elaboration 层 3，ADR-0008）。组合 `ConnectionElaborator`
+    （模块归属 / 赋值目标 / 实例化点表）；**generate 互斥分支活性不在此求值**——它
+    来自精化产物（ADR-0019 角色位 `gen_activity`，见 `_in_active_generate`）。
+    跨文件数据从 `ctx.memo` + `ctx.module_index` 取，穿透查模块文件走
+    `_fr_by_module`（惰性缓存，与 ctx.invalidate() 成对失效）。
     """
 
     def __init__(
         self,
         ctx: StructureCtx,
         conn: ConnectionElaborator,
-        gen: GenerateEvaluator,
     ) -> None:
         self._ctx = ctx
         self._conn = conn
-        self._gen = gen
+
+    def _in_active_generate(self, fr, node) -> bool:
+        """节点是否在**选中**的 generate 互斥分支内（层 3 的驱动过滤）。
+
+        活性表来自**精化产物**（ADR-0019 角色位 `gen_activity`）——引擎不再求值
+        generate 条件（对齐 Verilator：未选中分支的驱动不计；tpc 不展开 generate，
+        故按活性过滤而非物理删树）。
+
+        产物缺失（语言包未声明该角色 / 该文件无活性表）→ 视作**全部活跃**：保守方向
+        = 不过滤 → 不漏报驱动。
+        """
+        if node is None:
+            return True
+        table = self._ctx.gen_activity.get(getattr(fr, "path", ""))
+        if not table:
+            return True
+        return table.get(id(node), True)
 
     def build(self) -> dict:
         """层 3：全工程信号驱动/负载图（ADR-0008，含实例树层次展开）。
@@ -1420,7 +1053,7 @@ class SignalGraphBuilder:
             if node.node_name != ctx.assign_rule:
                 continue
             idx += 1
-            if not self._gen.in_active_generate(fr, node):
+            if not self._in_active_generate(fr, node):
                 continue
             for tgt in self._conn.iter_assign_targets(
                 node, ctx.target_field, ctx.extras_field, ctx.extra_target_field
@@ -1476,7 +1109,7 @@ class SignalGraphBuilder:
         for node in iter_nodes(mnode):
             if node.node_name not in ctx.proc_rules:
                 continue
-            if not self._gen.in_active_generate(fr, node):
+            if not self._in_active_generate(fr, node):
                 continue
             tgt = getattr(node, ctx.target_field, None)
             sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
@@ -1542,7 +1175,7 @@ class SignalGraphBuilder:
                 continue
             assign_idx += 1
             mod_name = self._conn.module_of(fr, node)
-            if not self._gen.in_active_generate(fr, node):
+            if not self._in_active_generate(fr, node):
                 continue  # 所在 generate 互斥分支未选中（2026-08-29）
             inst_ref = f"{os.path.basename(fr.path)}:assign#{assign_idx}"
             for tgt in self._conn.iter_assign_targets(
@@ -1604,7 +1237,7 @@ class SignalGraphBuilder:
             if node.node_name not in ctx.proc_rules:
                 continue
             blk = assign_block.get(id(node))
-            if blk is None or not self._gen.in_active_generate(fr, node):
+            if blk is None or not self._in_active_generate(fr, node):
                 continue
             tgt = getattr(node, ctx.target_field, None)
             sig = self._ctx.render_subtree(tgt) if isinstance(tgt, Node) else ""
@@ -1625,7 +1258,7 @@ class SignalGraphBuilder:
         """
         for conn in fr.connections:
             mod_name = self._conn.module_of(fr, conn.inst_node)
-            if not self._gen.in_active_generate(fr, conn.inst_node):
+            if not self._in_active_generate(fr, conn.inst_node):
                 continue  # 实例化点所在 generate 分支未选中
             inst_ref = f"{os.path.basename(conn.file)}:{conn.inst_name}"
             mod = self._ctx.module_index.get(conn.module_name)

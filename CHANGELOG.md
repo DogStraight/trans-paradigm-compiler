@@ -7,6 +7,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P3-① gen 族迁出引擎（ADR-0019）：generate 条件求值归语言包**：引擎不再求值
+  generate 条件，也不再声明它的形态。
+
+  1. **P3-①a 移植**（`d8944bd`，只新增不接线）：插件项 `gen_activity`
+     （`scope = file`，`role = gen_activity`，`depends_on = ["param_default"]`）+
+     求解器——**逐字搬迁** `GenerateEvaluator` + `_GenFace` + 文本常量求值链。
+     单元常量经 `ctx.products["param_default"]` 读，**不经引擎中转**（`depends_on`
+     通道至此才真正被用上）。**与引擎旧实现逐节点对拍通过**后才动删除。
+  2. **P3-①b 切换 + 删除**：`SignalGraphBuilder` 经**引擎角色位** `gen_activity` 取产物
+     （`_in_active_generate`；产物缺失 → 视作全活跃，保守不过滤）；引擎侧
+     `GenerateEvaluator` / `_GenFace` / `_tokenize_const` / `_ConstExprParser` /
+     `_eval_const_expr` / `_CONST_TOK_RE` / `_CMP_OPS` / `StructureCtx.gen_face()` /
+     `unit_constants` 字段与 `StructureCtx.refresh()` 的形态校验——**同批删除**；
+     `[structure]` 的 3 个 gen 标量 + 3 个 gen 字段声明一并删除；
+     `ROLE_UNIT_CONSTANTS` **退场**（现役角色只剩 `gen_activity`）。
+     净减引擎侧约 **390 行**语言知识。
+
+  **⚠ 搬迁未改技法**（据实记）：那条链仍是**文本模式**求值（先渲染条件子树再解析
+  文本）——AST-first 改写的动机因此从"消除渗透"变为"插件代码质量"，作为**独立改进项**
+  保留（需自己一套验证，故**不在搬迁里顺手改**）。TODO 相应改写。
+
+  **测试**（`tests/engine/analyzer/test_elaboration_gen_activity.py`）：
+  - 对拍用**两个夹具**——真实语料 `gen_generate.v`（generate-for + if/else）与可判合成
+    夹具（裸参数 `if (EN)`）。**为什么必须两类**：求值器只认裸参数名 / 纯数字 / 纯常量
+    表达式，**参数名与运算符混排**（`DATA_WIDTH > 8`）一律不可判 → 全 True；
+    只用真实语料时"参数表丢失"与"正常"**都是全 True**，判据退化成**假等价**
+    （第一版就这么写的，被"不空转"断言当场抓到）。
+  - 已知边界锁 + 退场守卫（`GenerateEvaluator` 等**不得复活**、`[structure]` gen 声明为
+    空、`unit_constants` 角色为 None）。
+  - `test_gen_face.py` **删除**（其主体 = 引擎声明面，已不存在）；其中与**求值语义**
+    有关的用例（literal / 参数真值 / `!` 前缀 / 常量算式中性子集）与
+    `test_analyzer.py::TestConstExprEval` **整体搬迁**到插件侧测试，**覆盖不减**。
+
+- **最小语言包探针：区分"真回归"与"测试重组"（用出来的缺陷）**：一次测试搬迁让探针报
+  **27 进 / 27 出**（总数不变）——逐条核对全是自己挪的测试（删 `test_gen_face.py`、
+  搬 `TestConstExprEval`），**引擎行为零变化**。处置：`_report` 增加**按模块聚合**
+  （先看"回归"是否整块落在少数模块、且同名测试出现在"新变绿"里）；工具文档写明
+  **基线与"测试 id 集合"绑定**——测试增删改名也会表现为成对差异，故测试重组后必须重记
+  基线，且**重记前要能逐条解释差异**（解释不了就别重记，否则等于把真回归洗掉）。
+  基线已按此重记并复跑验证（**1163 / 1163 逐项相同，✓ 无回归**）。
+
 - **P3 开工：搬迁顺序更正 + 协议前置零件（ADR-0019）**：P3 按原计划"**按事实**分族"
   （ports → connections → gen → signal graph）开工时，清点引擎内部消费关系发现**该切法
   不成立**——除 gen 外，每个事实（`ports` / `inst_sites` / `connections`）的消费者都是

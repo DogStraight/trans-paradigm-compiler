@@ -4,7 +4,6 @@ import pytest
 
 from analyzer.scope import Scope, Symbol
 from analyzer.diagnostic import Diagnostic
-from analyzer.structure import _eval_const_expr
 from core.define import Node
 
 pytestmark = pytest.mark.smoke  # smoke：analyzer 组代表（Scope/Symbol 核心，纯单元）
@@ -136,33 +135,3 @@ class TestDiagnostic:
         d = Diagnostic("test error", code="E003")
         assert "E003" in str(d)
         assert "test error" in str(d)
-
-
-class TestConstExprEval:
-    """常量算式求值器（analyzer/structure）——中性子集与拒收面。
-
-    求值器只认数字/括号/四则/比较；语言专有算子（`&&`/`||`/`!`/位运算）
-    一律不可判（None，保守）——那是语言包侧求值器的职责。
-    """
-
-    @pytest.mark.parametrize(
-        "text,expected",
-        [
-            ("1+0", True),
-            ("0", False),
-            ("2", True),
-            ("2*3<7", True),
-            ("(1+2)*3", True),
-            ("5%2", True),  # 取模：算术算子，本轮起可达（旧实现白名单里漏了 %）
-            ("1/0", None),  # 除零 → 不可判
-            ("1 && 0", None),  # 逻辑运算属语言层
-            ("1|0", None),  # 位运算属语言层
-            ("!0", None),  # 一元逻辑非属语言层
-            ("1 << 1", None),  # 移位属语言层
-            ("WIDTH", None),  # 标识符 → 不可判
-            ("1 + x", None),
-            ("", None),
-        ],
-    )
-    def test_neutral_subset(self, text, expected):
-        assert _eval_const_expr(text) is expected

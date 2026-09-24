@@ -24,12 +24,9 @@ proc_assign_rules = ["BlockingAssign", "NonBlockingAssign"]  # 过程赋值（al
 proc_block_rules = ["AlwaysStmt", "InitialStmt"]  # 过程块规则名（同一块内多赋值 = 一个驱动源；2026-08-29 防同块多赋值假阳性）
 body_port_rules  = ["BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl"]  # 模块体端口声明（旧式端口方向/宽度补全）
 
-# generate 条件求值面（层 3 互斥分支活性）：引擎不认任何 Verilog 形态，
-# 块/分支规则名、条件/then/else 字段名、逻辑非运算符前缀全在此声明。
-# 未声明 gen_block_rule = 该语言不做 generate 活性过滤（不过滤 = 不漏报驱动）。
-gen_block_rule   = "GenerateBlock"             # generate 块容器规则名
-gen_branch_rules = ["IfBlock", "ElseIfBlock"]  # 条件分支规则名（条件/then/else 字段的宿主）
-gen_not_ops      = ["!"]                       # 逻辑非运算符前缀（条件文本 "!参数名" 的取反）
+# ⚠ generate 条件求值面**已迁出**（ADR-0019 P3-①）：块/分支规则名、条件/then/else
+# 字段名、逻辑非运算符前缀不再由引擎声明——它们是语言知识，现归语言包插件
+# `grammar/verilog/plugins/elaboration/_elaborator.py`（精化项 `gen_activity`）。
 
 # 节点字段（语法 TOML node 绑定名）
 [structure.fields]
@@ -50,6 +47,5 @@ assign_target       = "target"  # 赋值目标字段（AssignStmt/AssignExtra �
 assign_extras       = "extras"  # 多目标后缀数组字段（AssignStmt 上，层 3）
 assign_extra_target = "target"  # AssignExtra 的目标字段（层 3）
 body_direction      = "direction"  # body 端口方向字段（Body*Decl 上）
-gen_condition       = "condition"  # generate 条件字段（IfBlock/ElseIfBlock 上）
-gen_then            = "then_stmt"  # generate then 分支字段
-gen_else_chain      = "else_chain"  # generate else / else-if 链字段
+# ⚠ generate 三个字段名（condition / then_stmt / else_chain）已随 gen 族迁出，
+#   现归插件 `plugins/elaboration/_elaborator.py`（见上）。

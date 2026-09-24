@@ -13,8 +13,8 @@
 > （纵向打穿 `param_default`：verilog 插件 + 引擎接线 + 5 个消费方迁移 + **同批删**
 > 引擎侧抽取）→ P3 **顺序已更正**（原按"事实"分族不成立：除 gen 外每个事实的消费者
 > 都是同一簇 = 引擎层 2/3，按事实切会为注定消失的消费者造一堆临时 role）→
-> **改按消费簇切**：①gen 族（消费簇只有层 3，用一个 role 桥接；落地后
-> `ROLE_UNIT_CONSTANTS` 退场）②层 2+3+ports 一次性（消费者是彼此）→ P4 文档收口。
+> **改按消费簇切**：①gen 族 **已完成**（P3-①a 移植 + 逐节点对拍；P3-①b 切引擎 + 删；
+> `ROLE_UNIT_CONSTANTS` 已退场）②层 2+3+ports 一次性（消费者是彼此）→ P4 文档收口。
 > 终态判据：**`ROLES` 为空**（引擎不消费任何插件产物）。理由与实测表见 ADR-0019 P3 节。
 > ⚠ P2 实测更正两处协议（已回写 ADR-0019 决策 3）：新增**引擎角色位 `role`**、
 > `locator` 改为**可省略**；`param_override` 实测为"插件侧已有合并逻辑的上提"而非
@@ -22,9 +22,13 @@
 
 - **现状错配（实测，`analyzer/structure.py`）**：
   - 文本模式求值/判断（应 AST-first）：`_is_signal_expr` 正则、`render_subtree` 渲染
-    后再字符串比较（`== port`）、`_eval_gen_cond` 的 `text.isdigit()` /
-    `text.startswith(not_op)` / `IDENT_RE.fullmatch`、`_tokenize_const` +
-    `_CONST_TOK_RE` + `_eval_const_expr` 文本递归下降、`_param_truth` 值文本判数字。
+    后再字符串比较（`== port`）。
+    （~~`_eval_gen_cond` 的 `text.isdigit()` / `text.startswith(not_op)` /
+    `IDENT_RE.fullmatch`、`_tokenize_const` + `_CONST_TOK_RE` + `_eval_const_expr` 文本
+    递归下降、`_param_truth` 值文本判数字~~ —— **P3-① 已随 gen 族迁出引擎**：整条链进
+    `grammar/verilog/plugins/elaboration/`，引擎侧与 `[structure]` gen 声明**同批删除**。
+    ⚠ **技法未变**（它仍是文本求值）——AST-first 改写作为**插件侧独立改进项**保留，
+    此时动机是"插件代码质量"而非"消除渗透"，须配自己一套验证。）
   - 语言知识硬编码（应进插件）：`_fill_body_ports` 的 `_FUNC_OR_TASK` 元组、
     `elaborate_connections` 的 `field("connects") or "ports"`、
     `_fill_body_ports` 的 `or "direction"`，以及"名字在 `Node.content`"这一未声明形态假设。

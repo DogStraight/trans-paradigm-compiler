@@ -114,7 +114,7 @@ def test_malformed_spec_shapes_fail_fast(bad):
         _item(locator={"rule": "R"}, locator_fn="solve"),  # 定位两给（语义歧义）
         _item(locator={"rule": ""}),  # 规则名空
         _item(role="not_a_role"),  # 引擎角色位非法
-        _item(role="unit_constants", provides=["a", "b"]),  # 角色位要求唯一产物键
+        _item(role="gen_activity", provides=["a", "b"]),  # 角色位要求唯一产物键
     ],
 )
 def test_malformed_item_fails_fast(bad_item):
@@ -142,14 +142,14 @@ def test_container_key_unique_across_items():
 
 
 def test_role_scope_is_governed_by_role_contract_not_globally():
-    """角色位**不再**限定 scope——寻址键由角色契约定义（见 ADR-0019 角色位契约表）。
+    """角色位**不**限定 scope——寻址键由角色契约定义（见 ADR-0019 角色位契约表）。
 
-    `unit_constants` 寻址键 = 单元名；`gen_activity` 寻址键 = 文件路径。
+    现役唯一角色 `gen_activity` 的寻址键 = **文件路径**（`scope == "file"`），
+    故"role ⇒ scope == unit"不是通用约束（原设如此，P3-1 已放宽）。
     """
-    spec_unit = parse_spec(_spec([_item(role="unit_constants", scope=SCOPE_UNIT)]))
-    assert spec_unit.role_key("unit_constants") == "x"
-    spec_file = parse_spec(_spec([_item(role="gen_activity", scope=SCOPE_FILE)]))
-    assert spec_file.role_key("gen_activity") == "x"
+    spec = parse_spec(_spec([_item(role="gen_activity", scope=SCOPE_FILE)]))
+    assert spec.items[0].scope == SCOPE_FILE
+    assert spec.role_key("gen_activity") == "x"
 
 
 def test_role_key_none_when_role_not_declared():

@@ -1,4 +1,4 @@
-"""精化项 `param_default`（verilog 插件）—— golden 值 + 角色位 + 降级。
+"""精化项 `param_default`（verilog 插件）—— golden 值 + 退场守卫 + 降级。
 
 组别归属：analyzer（精化协议面）。本文件守 ADR-0019 **P2** 落地的 `param_default`。
 
@@ -10,7 +10,8 @@
 覆盖四点：
 1. 语言包确实声明了 `elaborator` 能力与 `param_default` 项（声明缺失 = 静默降级）；
 2. golden 值：头部参数 / 体内参数（含多声明符）/ 无参数单元；
-3. 引擎角色位 `unit_constants` = 该容器键（过渡期 generate 条件求值的来源）；
+3. **引擎角色位已退场**（P3-①：gen 求值迁入插件后，单元常量只经插件间依赖通道消费，
+   引擎不再中转）——本项**无** `role`；
 4. 未声明能力的语言包 → 降级（无容器键、无角色产物）。
 
 ⚠ 夹具源码形态受**语法包当前覆盖**限制：头部多参数必须**逐个重复 `parameter`
@@ -26,10 +27,7 @@ import pytest
 from core._protocol import CTX_ELABORATION
 
 from analyzer.checker import ProjectChecker
-from analyzer.elaboration import (
-    ROLE_UNIT_CONSTANTS,
-    load_elaborator_spec,
-)
+from analyzer.elaboration import ROLE_GEN_ACTIVITY, load_elaborator_spec
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
@@ -87,7 +85,8 @@ def test_verilog_pack_declares_elaborator(checker):
     assert "param_default" in [it.name for it in spec.items]
     item = next(it for it in spec.items if it.name == "param_default")
     assert item.scope == "unit"
-    assert item.role == ROLE_UNIT_CONSTANTS
+    # 无引擎角色位：单元常量只经插件间依赖通道（`gen_activity` 的 depends_on）消费
+    assert item.role is None
     assert item.provides == ("param_default",)
 
 
@@ -112,12 +111,17 @@ def test_param_default_body_overrides_are_not_engine_responsibility(checker, pro
 
 # ── 3. 引擎角色位（过渡期 generate 条件求值的来源） ──
 
-def test_role_unit_constants_points_at_container_key(checker, project):
-    """引擎按角色位取产物，不认插件起的条目名。"""
+def test_role_unit_constants_is_retired(checker, project):
+    """P3-① 后：引擎侧 `unit_constants` **已退场**——单元常量只由产物承载。
+
+    generate 条件求值改由插件自己的 `gen_activity` 求解器经 `ctx.products` 读取
+    （不经引擎中转），故引擎不再需要该角色位（`ROLES` 里已无 `unit_constants`）。
+    本用例锁住"退场"，防它被无意中搬回引擎。
+    """
     checker.check(str(project))
-    assert checker._elaborator.role_key(ROLE_UNIT_CONSTANTS) == "param_default"
-    assert checker._ctx.unit_constants == _params_of(checker)
-    assert checker._ctx.unit_constants["lib"] == _GOLDEN_LIB
+    assert _params_of(checker)["lib"] == _GOLDEN_LIB
+    assert checker._elaborator.role_key("unit_constants") is None
+    assert not hasattr(checker._ctx, "unit_constants")
 
 
 # ── 4. 未声明能力 → 降级 ──
@@ -127,8 +131,8 @@ def test_pack_without_capability_degrades():
     checker = ProjectChecker(rules_dir="grammar/c4")
     checker._prepare_run([])
     assert checker._elaborator.declared is False
-    assert checker._elaborator.role_key(ROLE_UNIT_CONSTANTS) is None
+    assert checker._elaborator.role_key(ROLE_GEN_ACTIVITY) is None
 
     checker._elaborate()
     assert CTX_ELABORATION not in checker._elab_extra
-    assert checker._ctx.unit_constants == {}
+    assert checker._ctx.gen_activity == {}

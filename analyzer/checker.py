@@ -22,7 +22,6 @@ from analyzer.structure import (
     ConnectionElaborator,
     FilePipeline,
     FileResult,
-    GenerateEvaluator,
     ModuleExtractor,
     ModuleIndexer,
     SignalGraphBuilder,
@@ -31,7 +30,7 @@ from analyzer.structure import (
 from analyzer.shared_components import SharedComponents
 from analyzer.diag_serialize import semantic_diag, syntax_diag
 from analyzer.elaboration import (
-    ROLE_UNIT_CONSTANTS,
+    ROLE_GEN_ACTIVITY,
     Elaborator,
     ElaborationService,
     StructureAtomSource,
@@ -84,18 +83,18 @@ class ProjectChecker:
         self._elaborator = Elaborator(None)
         self._elab_extra: dict = {}
         # 各阶段协作者按依赖链接线：门面**只持有会话上下文 + 两个阶段入口**
-        # （发现 / 信号图），中间协作者（连接展开 / 提取 / 单文件流水线 /
-        # 条件求值）作为构造链局部量注入下游——DAG 只在构造处显式，之后不必
-        # 经门面中转（原先"一个 self 上的 49 个方法"正因缺这层表达）。
-        gen = GenerateEvaluator(self._ctx)
+        # （发现 / 信号图），中间协作者（连接展开 / 提取 / 单文件流水线）作为构造链
+        # 局部量注入下游——DAG 只在构造处显式，之后不必经门面中转（原先"一个 self
+        # 上的 49 个方法"正因缺这层表达）。generate 求值器已随 gen 族迁入语言包插件
+        # （ADR-0019 P3-①），故不在构造链里。
         conn = ConnectionElaborator(self._ctx)
         extract = ModuleExtractor(self._ctx)
         # 单文件流水线组合提取器 + 连接展开器（阶段顺序在它内部）
         pipeline = FilePipeline(self._ctx, extract, conn)
         # 递归发现组合单文件流水线
         self._indexer = ModuleIndexer(self._ctx, pipeline)
-        # 层 3 信号图组合连接展开器 + generate 求值器
-        self._graph = SignalGraphBuilder(self._ctx, conn, gen)
+        # 层 3 信号图组合连接展开器（generate 活性来自精化产物，不经构造注入）
+        self._graph = SignalGraphBuilder(self._ctx, conn)
         # 结构协议在 _ensure_shared（load_all）之后才就绪——__init__ 不推入，
         # check() 起始的 _ctx.refresh() 负责（缺失 = 无跨文件检查）。
 
@@ -217,14 +216,14 @@ class ProjectChecker:
         - **容器**：`self._elab_extra[CTX_ELABORATION]`（条目名与值形状由插件定）；
           未声明能力的语言包 → 不产生该键（降级，与旧行为一致）。
         - **角色位**：引擎自己要用的产物**不按插件条目名**寻址，按引擎角色位问
-          （`ROLE_UNIT_CONSTANTS` → 单元常量绑定，过渡期供 generate 条件求值）。
+          （`ROLE_GEN_ACTIVITY` → generate 分支活性，层 3 的驱动过滤用）。
         """
         source = StructureAtomSource(self._ctx)
         service = ElaborationService(self._ctx.render_subtree)
         result = self._elaborator.run(source, self._elab_extra, service)
-        role_key = self._elaborator.role_key(ROLE_UNIT_CONSTANTS)
+        role_key = self._elaborator.role_key(ROLE_GEN_ACTIVITY)
         if role_key is not None:
-            self._ctx.unit_constants = dict(result.products.get(role_key, {}))
+            self._ctx.gen_activity = dict(result.products.get(role_key, {}))
 
     def _analyze(self, fr: FileResult) -> None:
         if fr.ast is None:

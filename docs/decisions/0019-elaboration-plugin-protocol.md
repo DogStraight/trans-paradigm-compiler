@@ -102,10 +102,13 @@
 > **角色位契约**（每个角色**同时**定义寻址键与产物形状——因为引擎要消费它，这与
 > 普通条目"形状归插件"不同）：
 >
-> | 角色 | 寻址键 | 产物形状 | 引擎消费方（都**随对应族退场**） |
+> | 角色 | 寻址键 | 产物形状 | 引擎消费方（**随对应族退场**） |
 > |---|---|---|---|
-> | `unit_constants` | 单元名 | `{名字: 值文本}` | 过渡期 `GenerateEvaluator` → **P3-1 起退场** |
-> | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → **P3-2 起退场** |
+> | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → **P3-② 起退场** |
+>
+> `unit_constants`（寻址键 = 单元名，形状 = `{名字: 值文本}`）曾在 P2–P3-① 间服役
+> （过渡期 `GenerateEvaluator` 要参数表）；**P3-① 已退场**——gen 求值迁入插件后，单元
+> 常量改由插件经 `ctx.products["param_default"]` 自取，引擎不再中转。
 >
 > ⚠ **角色位一律是过渡面**：终态（决策 1）下引擎不消费任何插件产物，故 **P3 收口时
 > `ROLES` 应为空**——这是"重构完成"的一个可机械检查的判据。角色位的 `scope` **不限**
@@ -222,13 +225,17 @@
   每一步都撞上"引擎的层 2/3 还在读它"→ 被迫为**注定要消失的消费者**造临时 role
   （role 会堆到 3 个，全是过渡脚手架）。**改为按消费簇切**：
 
-  1. **gen 族**：`GenerateEvaluator`（184 行）+ `_GenFace` + 文本常量求值链
-     （`_tokenize_const` / `_ConstExprParser` / `_eval_const_expr` / `_param_truth`）。
-     其消费簇**只有一个**（层 3）→ 用**一个** role（`gen_activity`）桥接成立。落地后
-     `ROLE_UNIT_CONSTANTS` **消失**：gen 求解器经 `depends_on = ["param_default"]` +
-     `ctx.products["param_default"]` 直接读单元常量——`depends_on` 通道至此才真正被用上
-     （P2 是纵向打穿，未用依赖）。顺带兑现 TODO「文本模式求值/判断（应 AST-first）」
-     那一整条清单。
+  1. **gen 族 —— 已完成**（P3-①a 移植 + 逐节点对拍，P3-①b 切引擎 + 删）：
+     `GenerateEvaluator`（184 行）+ `_GenFace` + 文本常量求值链
+     （`_tokenize_const` / `_ConstExprParser` / `_eval_const_expr` / `_param_truth`）
+     整体迁入插件项 `gen_activity`（`scope = file`，`role = gen_activity`，
+     `depends_on = ["param_default"]`），引擎侧与 `[structure]` gen 声明面**同批删除**。
+     **引擎侧的文本求值链自此清零**——但注意：**搬迁未改技法**，它仍是文本模式求值
+     （先渲染条件子树再解析文本），只是搬进了插件。故 TODO「文本模式求值/判断（应
+     AST-first）」的**渗透维度**结项（引擎里不再有这套 Verilog 求值），而**AST-first
+     改写作为独立改进项保留**（动机从"消除渗透"变为"插件代码质量"，需自己一套验证）。
+     `ROLE_UNIT_CONSTANTS` **已退场**；`depends_on` 通道至此才真正被用上（P2 是纵向
+     打穿，未用依赖）。
   2. **层 2 + 层 3 + ports 一次性搬迁**：`ConnectionElaborator`（176）+ `SignalGraphBuilder`
      （400）+ `_ModulePort` / `ModuleInfo.ports` / `ModuleInfo.insts` / `PortConnection`
      （形状归插件）+ `param_override` 上提。它们的消费者是**彼此**，切开只会造桥。

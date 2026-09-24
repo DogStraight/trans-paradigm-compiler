@@ -19,6 +19,12 @@
 ⚠ **只比对"通过的集合"**：`failed` / `errored` 的边界同样会漂（同一用例随分配落"失败"
 或"报错"，总数不变）。故 `compare` 只认 `passed`；计数仅供人看。
 
+⚠ **基线与"测试 id 集合"绑定**：测试被**增删改名**（哪怕引擎行为没变）也会表现为
+"回归 + 新变绿"**成对**出现。实测踩到过——一次测试搬迁造成 **27 进 / 27 出**（总数
+不变），逐条核对全是自己挪的测试。故：① 报告按**模块聚合**（先看"回归"是否整块落在
+少数模块、且同名测试出现在"新变绿"里）；② 测试重组后**必须重记基线**，且重记前要能
+**逐条解释**差异——解释不了就别重记（否则等于把真回归洗掉）。
+
 机制（**零引擎改动**）：`$TPC_CONFIG` 是官方支持的用户配置覆盖点
 （`core/_user_config.py` 优先级 1）→ 写一份临时配置把 `grammar` 指向探针包；子进程里
 `core.define.DEFAULT_RULES_DIR` 即该包（import 期从配置派生，故必须**进程级**隔离，
@@ -149,6 +155,20 @@ def compare(baseline: dict, current: dict) -> dict:
 
 # ── CLI ──
 
+def _by_module(ids: list[str]) -> list[tuple[str, int]]:
+    """按模块聚合测试 id（`::` 前部分），计数降序。
+
+    用途：一眼分辨**真回归**与**测试重组**——若"回归"整块落在少数模块上、且那些模块
+    的同名测试出现在"新变绿"里，那就是改名/搬迁，不是行为变化（实测踩到过：一次搬迁
+    造成 27 进 27 出，逐条核对全是自己挪的测试）。
+    """
+    counts: dict[str, int] = {}
+    for tid in ids:
+        mod = tid.split("::")[0]
+        counts[mod] = counts.get(mod, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
 def _report(result: dict, diff: dict | None) -> None:
     print(
         f"[min-pack-probe] pack={result['pack']} "
@@ -161,14 +181,19 @@ def _report(result: dict, diff: dict | None) -> None:
     if diff is None:
         return
     print(f"  与基线相同 {diff['stable']}")
-    if diff["regressed"]:
-        print(f"  ⚠ 回归（曾绿今不绿）{len(diff['regressed'])} 项：")
-        for tid in diff["regressed"][:20]:
-            print(f"    - {tid}")
-        if len(diff["regressed"]) > 20:
-            print(f"    …（另 {len(diff['regressed']) - 20} 项）")
-    if diff["newly_passing"]:
-        print(f"  ↑ 新变绿 {len(diff['newly_passing'])} 项（可能是普适面扩大）")
+    for label, ids in (
+        ("⚠ 回归（曾绿今不绿）", diff["regressed"]),
+        ("↑ 新变绿", diff["newly_passing"]),
+    ):
+        if not ids:
+            continue
+        print(f"  {label} {len(ids)} 项，按模块：")
+        for mod, n in _by_module(ids):
+            print(f"    {n:4d}  {mod}")
+        for tid in ids[:10]:
+            print(f"         - {tid}")
+        if len(ids) > 10:
+            print(f"         …（另 {len(ids) - 10} 项）")
 
 
 def _serialize(extra: list[str]) -> list[str]:
