@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P3-②a ports 抽取移植进插件 + 逐端口对拍（ADR-0019）**：新增项 `port_decls`
+  （`scope = unit`，`role = unit_ports`）——三种声明形态合并（**ANSI 头部** /
+  **裸名头部** / **体内旧式声明回填**，同名**头部优先**），与引擎
+  `ModuleExtractor._fill_ports` **逐字对齐**（含"回填只补空字段"、"body 声明不带网络
+  类型"、"跳过函数/任务子树"——后者是 2026-08-29 修过的 tv80 假阳性根因）。
+
+  - **只新增、无人消费**：引擎侧 `ModuleInfo.ports` 仍在原位、仍是层 2/3 的输入。
+    本阶段的存在意义是与引擎产物做**逐端口等价性对拍**——两个夹具：
+    `gen_generate.v`（ANSI 头部，含参数化宽度与 `wire` 网络类型）与
+    `EX001_non_ansi_header/top.sv`（裸名头部 + 体内 `input a;` → 走**回填**路径）。
+  - 插件内 `_declarators_of` 并入 `_decl_name_nodes`（参数与端口共用"两层 `items` 取
+    声明符"逻辑，避免结构重复族新增）。
+  - 登记引擎角色位 `unit_ports`（形状 = `{端口名: {name, direction, width_expr,
+    net_type, decl_node}}`）——引擎**尚未切换**；声明面前置登记是 P3-②b 的前置零件。
+  - ✅ 顺带核实一条**终态判据**：**"收口时 `ROLES` 为空"可达**——引擎的**文件发现**
+    阶段（`ModuleIndexer`）只用**声明**（单元/实例规则名、名字字段、扩展名、关键字）+
+    通用 AST 操作（"取声明种类的节点"），**不需要任何插件产物**；故决策 1 的"引擎按
+    语言包给出的单元名去找文件"**不引入新角色**。
+  - ⚠ 记一个**待处理差异**（P3-②b 必须处理）：产物按**原子键（单元名）**归位，同名单元
+    在多个文件重复定义时"**最后一个**原子赢"；而引擎 `module_index` 是"**首个**定义者
+    优先"。当前夹具单元名唯一，故未暴露——但切换后层 2/3 按单元名取端口表会取错文件。
+
+  验证：新测试 **6 passed**；`tests/engine/analyzer` **309 passed**；`-m smoke`
+  **421 passed**；`tests/policy` **125 passed**（含诊断基线门禁持平）；
+  **全量 2170 passed / 7 skipped**；探针 **1169 仍绿（+6）/ ✓ 无回归**。
+
 - **P3-① gen 族迁出引擎（ADR-0019）：generate 条件求值归语言包**：引擎不再求值
   generate 条件，也不再声明它的形态。
 

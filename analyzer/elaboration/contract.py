@@ -66,7 +66,16 @@ bool = 该节点是否落在**选中**的 generate 分支内（层 3 据此"未�
 引擎消费方 = `SignalGraphBuilder`；层 3 迁入协议（ADR-0019 P3-②）后**本角色退场**。
 """
 
-ROLES: frozenset[str] = frozenset({ROLE_GEN_ACTIVITY})
+ROLE_UNIT_PORTS = "unit_ports"
+"""单元端口声明表：寻址键 = **单元名**；形状 = `{端口名: {name, direction, width_expr,
+net_type, decl_node}}`。
+
+引擎消费方 = `ConnectionElaborator`（层 2 按端口名/方向展开连接）+
+`SignalGraphBuilder`（层 3 按方向判驱动/负载）。层 2/3 迁入协议（ADR-0019 P3-②）后
+**本角色退场**——届时 ports 只在插件内部流通。
+"""
+
+ROLES: frozenset[str] = frozenset({ROLE_GEN_ACTIVITY, ROLE_UNIT_PORTS})
 
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──
 ITEM_KEYS: frozenset[str] = frozenset(

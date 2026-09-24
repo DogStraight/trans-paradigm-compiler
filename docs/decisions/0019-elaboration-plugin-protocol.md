@@ -104,11 +104,17 @@
 >
 > | 角色 | 寻址键 | 产物形状 | 引擎消费方（**随对应族退场**） |
 > |---|---|---|---|
-> | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → **P3-② 起退场** |
+> | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → 层 3 迁入后 |
+> | `unit_ports` | 单元名 | `{端口名: {name, direction, width_expr, net_type, decl_node}}` | `ConnectionElaborator`（层 2）+ `SignalGraphBuilder`（层 3）→ 两者迁入后 |
 >
 > `unit_constants`（寻址键 = 单元名，形状 = `{名字: 值文本}`）曾在 P2–P3-① 间服役
 > （过渡期 `GenerateEvaluator` 要参数表）；**P3-① 已退场**——gen 求值迁入插件后，单元
 > 常量改由插件经 `ctx.products["param_default"]` 自取，引擎不再中转。
+>
+> ✅ **"收口时 `ROLES` 为空"这个终态判据已核实可达**（P3-② 开工时查过）：引擎的**文件
+> 发现**阶段（`ModuleIndexer`）只用**声明**（单元规则名 / 实例规则名 / 名字字段 /
+> 扩展名 / 关键字）+ 通用 AST 操作（"取声明种类的节点"），**不需要任何插件产物**；故
+> "引擎按语言包给出的单元名去找文件"（决策 1）不引入新角色。
 >
 > ⚠ **角色位一律是过渡面**：终态（决策 1）下引擎不消费任何插件产物，故 **P3 收口时
 > `ROLES` 应为空**——这是"重构完成"的一个可机械检查的判据。角色位的 `scope` **不限**
@@ -236,10 +242,18 @@
      改写作为独立改进项保留**（动机从"消除渗透"变为"插件代码质量"，需自己一套验证）。
      `ROLE_UNIT_CONSTANTS` **已退场**；`depends_on` 通道至此才真正被用上（P2 是纵向
      打穿，未用依赖）。
-  2. **层 2 + 层 3 + ports 一次性搬迁**：`ConnectionElaborator`（176）+ `SignalGraphBuilder`
-     （400）+ `_ModulePort` / `ModuleInfo.ports` / `ModuleInfo.insts` / `PortConnection`
-     （形状归插件）+ `param_override` 上提。它们的消费者是**彼此**，切开只会造桥。
-     落地后**所有临时 role 归零**，引擎只剩文件层（这即决策 1 的终态验收）。
+  2. **层 2 + 层 3 + ports 一次性搬迁 —— 进行中**：`ConnectionElaborator`（176）+
+     `SignalGraphBuilder`（400）+ `_ModulePort` / `ModuleInfo.ports` / `ModuleInfo.insts`
+     / `PortConnection`（形状归插件）+ `param_override` 上提。它们的消费者是**彼此**，
+     切开只会造桥。落地后**所有临时 role 归零**，引擎只剩文件层（这即决策 1 的终态验收）。
+     - **P3-②a 已完成（只新增）**：`port_decls` 项移植 + 与引擎 `ModuleInfo.ports` 的
+       **逐端口对拍**（两个夹具：ANSI 头部 / 裸名头部 + 体内旧式声明）。`unit_ports`
+       角色位已登记但引擎**尚未切换**——本阶段产物无人消费，存在意义即对拍。
+       ⚠ 已记一个键口径差异待 P3-②b 处理：产物按**原子键（单元名）**归位，同名单元在
+       多文件重复定义时"最后一个原子赢"，而 `module_index` 是"**首个**定义者优先"。
+     - **P3-②b 待做**：引擎切到 `unit_ports` / 新产物 + 删层 2/3 与 ports 引擎侧 +
+       4 个插件消费方迁移（`inst_check` / `width_check` / `hier_check` / `latch_check`
+       读 `module_index.ports`）+ `param_override` 上提。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
   `MODEL_INDEX` / `analyzer/README` 同步。
 

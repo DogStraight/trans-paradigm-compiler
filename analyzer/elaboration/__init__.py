@@ -11,6 +11,7 @@
 from analyzer.elaboration.atoms import StructureAtomSource
 from analyzer.elaboration.contract import (
     ROLE_GEN_ACTIVITY,
+    ROLE_UNIT_PORTS,
     ROLES,
     SCOPE_FILE,
     SCOPE_PROJECT,
@@ -35,6 +36,7 @@ __all__ = [
     "CAPABILITY_NAME",
     "ROLES",
     "ROLE_GEN_ACTIVITY",
+    "ROLE_UNIT_PORTS",
     "SCOPE_FILE",
     "SCOPE_PROJECT",
     "SCOPE_UNIT",

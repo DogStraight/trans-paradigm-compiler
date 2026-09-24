@@ -55,6 +55,7 @@ _RULE_DECLARATOR = "Declarator"
 
 _PROVIDES_PARAM_DEFAULT = "param_default"
 _PROVIDES_GEN_ACTIVITY = "gen_activity"
+_PROVIDES_PORT_DECLS = "port_decls"
 
 
 def build_elaborator() -> dict:
@@ -71,6 +72,14 @@ def build_elaborator() -> dict:
                 "solver": "solve_param_default",
             },
             {
+                "name": "port_decls",
+                "scope": "unit",
+                # 引擎角色位：层 2/3 的端口形态（P3-② 切换时启用；本项先只新增）
+                "role": "unit_ports",
+                "provides": [_PROVIDES_PORT_DECLS],
+                "solver": "solve_port_decls",
+            },
+            {
                 "name": "gen_activity",
                 "scope": "file",
                 # 引擎角色位：层 3 判"未选中分支的驱动不计"（层 3 迁入协议后删）
@@ -84,6 +93,7 @@ def build_elaborator() -> dict:
         ],
         "solvers": {
             "solve_param_default": solve_param_default,
+            "solve_port_decls": solve_port_decls,
             "solve_gen_activity": solve_gen_activity,
         },
     }
@@ -132,11 +142,8 @@ def _collect_body_params(unit: Node, values: dict[str, str], ctx: SolveCtx) -> N
     for node in iter_nodes(unit):
         if node.node_name != _RULE_BODY_PARAM:
             continue
-        for decl in _declarators_of(node):
+        for decl, name_node in _decl_name_nodes(node):
             if decl.node_name != _RULE_DECLARATOR:
-                continue
-            name_node = getattr(decl, _DECL_NAME, None)
-            if not isinstance(name_node, Node) or not name_node.content:
                 continue
             if name_node.content in values:
                 continue  # 头部已填（同名重复声明取先）
@@ -144,11 +151,23 @@ def _collect_body_params(unit: Node, values: dict[str, str], ctx: SolveCtx) -> N
             values[name_node.content] = _render(ctx, init)
 
 
-def _declarators_of(decl_node: Node) -> list[Node]:
-    """声明语句 → 声明符列表（**两层** `items`，与引擎 `_decl_name_nodes` 同形）。"""
+def _decl_name_nodes(decl_node: Node) -> list[tuple[Node, Node]]:
+    """声明节点 → [(声明符节点, 名字节点)]（**两层** `items`，与引擎同形）。
+
+    外层声明节点的 `items` 再套一层声明列表（内层元素挂 `name`）；列表缺失 / 元素非
+    节点 / 名字为空 → 不计（与引擎 `ModuleExtractor._decl_name_nodes` 同语义）。
+    端口与参数的声明同形，故两处共用本助手。
+    """
     outer = getattr(decl_node, _ITEMS, None)
     inner = getattr(outer, _ITEMS, None) if isinstance(outer, Node) else None
-    return [d for d in (inner or []) if isinstance(d, Node)]
+    out: list[tuple[Node, Node]] = []
+    for d in inner or []:
+        if not isinstance(d, Node):
+            continue
+        dn = getattr(d, _DECL_NAME, None)
+        if isinstance(dn, Node) and dn.content:
+            out.append((d, dn))
+    return out
 
 
 def _render(ctx: SolveCtx, node: object) -> str:
@@ -488,3 +507,142 @@ def _eval_const_expr(text: str) -> bool | None:
     if toks is None:
         return None
     return _ConstExprParser(toks).parse()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 项 `port_decls`：单元端口声明表
+# ════════════════════════════════════════════════════════════════════════════
+# 三种声明形态合并（与引擎 `ModuleExtractor._fill_ports` **逐字对齐**）：
+#   ① ANSI 头部逐项（方向 / 宽度 / 网络类型）；
+#   ② 头部裸名项（`(a, b, y)` 形态，仅登记名字）；
+#   ③ 体内旧式声明（`input [7:0] a;`）→ 按名**回填**方向/宽度，未登记则补登记。
+# 同名时**头部优先**（回填只补空字段）；body 声明不带网络类型。
+#
+# ⚠ P3-②a 阶段本项是**只新增**（引擎侧 `ModuleInfo.ports` 仍在原位、仍是层 2/3 的
+#   输入），故此刻**无人消费它**——存在意义是与引擎产物做**等价性对拍**（见
+#   `tests/engine/analyzer/test_elaboration_port_decls.py`）。切换 + 删引擎侧在 P3-②b。
+
+# ── 本语言包的端口形态（原 `[structure]` / `[structure.fields]` 声明） ──
+_UNIT_PORTS = "ports"
+_BARE_PORT_RULE = "Identifier"
+_PORT_DECL = "decl"  # 包装字段（inline 规则防御穿透）
+_PORT_DIRECTION = "direction"
+_PORT_WIDTH = "packed_range"
+_PORT_TYPE = "port_type"
+_BODY_PORT_RULES = ("BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl")
+# 函数/任务子树整体跳过（其参数与模块体端口同节点名；见 `_collect_body_ports`）
+_FUNC_OR_TASK = ("FuncDecl", "FuncDeclOld", "TaskDecl", "FunctionDecl", "TaskDeclStmt")
+
+
+def solve_port_decls(hits: list[Node], atom: Atom, ctx: SolveCtx) -> dict | None:
+    """单元端口声明表 `{端口名: {name, direction, width_expr, net_type, decl_node}}`。
+
+    本项不声明定位（作用域 = `unit`）→ `hits = [单元节点]`。
+    `decl_node._file` 会写成本原子所属文件——related 链跨文件定位要用（引擎侧
+    `_register_port` 同款副作用），故此处不能丢。
+    """
+    unit = hits[0] if hits else None
+    if not isinstance(unit, Node):
+        return None
+    ports: dict[str, dict] = {}
+    _collect_ansi_ports(unit, ports, ctx, atom.path)
+    _collect_body_ports(unit, ports, ctx, atom.path)
+    return {_PROVIDES_PORT_DECLS: ports}
+
+
+def _new_port(
+    name: str,
+    path: str,
+    direction: str = "",
+    width_expr: str = "",
+    net_type: str = "",
+    decl_node: Node | None = None,
+) -> dict:
+    if decl_node is not None:
+        decl_node._file = path  # related 链跨文件定位
+    return {
+        "name": name,
+        "direction": direction,
+        "width_expr": width_expr,
+        "net_type": net_type,
+        "decl_node": decl_node,
+    }
+
+
+def _collect_ansi_ports(
+    unit: Node, ports: dict[str, dict], ctx: SolveCtx, path: str
+) -> None:
+    """头部端口列表：裸名项只登记名字，其余按 ANSI 项逐名登记。"""
+    holder = unwrap_optional(getattr(unit, _UNIT_PORTS, None))
+    items = getattr(holder, _ITEMS, None) if isinstance(holder, Node) else None
+    for item in items or []:
+        if not isinstance(item, Node):
+            continue
+        if item.node_name == _BARE_PORT_RULE:
+            if item.content:
+                ports[item.content] = _new_port(item.content, path)
+            continue
+        _register_ansi_item(item, ports, ctx, path)
+
+
+def _register_ansi_item(
+    item: Node, ports: dict[str, dict], ctx: SolveCtx, path: str
+) -> None:
+    """ANSI 端口项 → 逐名登记（方向 / 宽度 / 网络类型）。
+
+    ANSI 风格：端口声明规则 inline 展平，item 即具体声明；防御：也可能是**未展平**的
+    包装节点（取其 `decl` 字段）。
+    """
+    decl = getattr(item, _PORT_DECL, None)
+    if isinstance(decl, Node):
+        item = decl
+    direction = getattr(item, _PORT_DIRECTION, "") or ""
+    pr = getattr(item, _PORT_WIDTH, None)
+    width = _render(ctx, pr) if isinstance(pr, Node) else ""
+    pt = getattr(item, _PORT_TYPE, None)
+    net_type = _render(ctx, pt) if isinstance(pt, Node) else ""
+    for d, dn in _decl_name_nodes(item):
+        ports[dn.content] = _new_port(dn.content, path, direction, width, net_type, d)
+
+
+def _collect_body_ports(
+    unit: Node, ports: dict[str, dict], ctx: SolveCtx, path: str
+) -> None:
+    """体内旧式端口声明 → 按名回填方向/宽度（未登记则补登记）。
+
+    只扫模块体，**跳过函数/任务子树**——函数参数（`input [3:0] A`）与模块体端口同
+    节点名（`BodyInputDecl`），全子树遍历会把函数局部 input 误当模块端口
+    （2026-08-29 对标测试暴露：tv80_alu 的 AddSub4 函数参数 A/B/Sub/Carry_In 被误
+    登记为模块端口 → 8 条 W104 假阳性；Verilator 0 报 PINMISSING）。纯迭代无递归。
+    """
+    stack = list(unit.iter_children())
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, Node):
+            continue
+        if node.node_name in _FUNC_OR_TASK:
+            continue  # 函数/任务子树整体跳过（参数非模块端口）
+        if node.node_name in _BODY_PORT_RULES:
+            _backfill_body_port_node(node, ports, ctx, path)
+        # 继续下钻（Body*Decl 自身无端口子节点，正常下钻函数兄弟）
+        for child in node.iter_children():
+            stack.append(child)
+
+
+def _backfill_body_port_node(
+    node: Node, ports: dict[str, dict], ctx: SolveCtx, path: str
+) -> None:
+    """单个 body 端口声明节点 → 按名回填（body 声明**不带网络类型**）。"""
+    direction = getattr(node, _PORT_DIRECTION, "") or ""
+    pr = getattr(node, _PORT_WIDTH, None)
+    width = _render(ctx, pr) if isinstance(pr, Node) else ""
+    for d, dn in _decl_name_nodes(node):
+        existing = ports.get(dn.content)
+        if existing is None:
+            ports[dn.content] = _new_port(dn.content, path, direction, width, "", d)
+            continue
+        existing["direction"] = existing["direction"] or direction
+        existing["width_expr"] = existing["width_expr"] or width
+        if existing["decl_node"] is None:
+            d._file = path
+            existing["decl_node"] = d

@@ -14,10 +14,12 @@
 | 项 | 作用域 | 角色位 | 容器键 | 内容 |
 |---|---|---|---|---|
 | `param_default` | `unit` | — | `param_default` | `{单元名: {参数名: 值表达式文本}}`——头部 `#(P=v)` 优先，体内 `parameter P=v;` 补全 |
+| `port_decls` | `unit` | `unit_ports` | `port_decls` | `{单元名: {端口名: {name, direction, width_expr, net_type, decl_node}}}`——ANSI 头部 / 裸名头部 / 体内旧式声明三形态合并，**头部优先** |
 | `gen_activity` | `file` | `gen_activity` | `gen_activity` | `{文件路径: {id(节点): bool}}`——节点是否落在**选中**的 generate 互斥分支内；`depends_on = ["param_default"]` |
 
-两项都**不声明定位**（`param_default` 的值分散在头部字段与体内声明两种形态；
-`gen_activity` 直接以文件根为输入）→ 求解器收到 `hits = [原子根]`，自行走子树。
+三项都**不声明定位**（`param_default` 的值分散在头部字段与体内声明两种形态；
+`port_decls` 要合并三种声明形态；`gen_activity` 直接以文件根为输入）→ 求解器收到
+`hits = [原子根]`，自行走子树。
 
 ## 依赖通道（插件内部，不经引擎）
 
@@ -25,13 +27,16 @@
 求解器经 `ctx.products["param_default"]` **直接读**前一项产物。引擎只保证拓扑序，
 不中转数据（`unit_constants` 角色位随之退场）。
 
-## 引擎角色位 `gen_activity`（过渡，会退场）
+## 引擎角色位（过渡，会退场）
 
 容器条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物。`role` 是引擎能认的**封闭
-枚举**，现役只有 `gen_activity`（引擎侧消费方 = `SignalGraphBuilder` 的驱动过滤）。
+枚举**：`gen_activity`（引擎侧 `SignalGraphBuilder` 的驱动过滤）、`unit_ports`
+（层 2/3 的端口形态；**P3-②a 已登记但引擎尚未切换**）。
 
 ⚠ **角色位一律是过渡面**：终态（ADR-0019 决策 1）下引擎不消费任何插件产物，故 P3 收口
 时 `analyzer/elaboration/contract.py::ROLES` 应为空——这是"重构完成"的可机械检查判据。
+（已核实：文件发现阶段只用**声明**（实例规则名 + 名字字段 + 扩展名 + 关键字）与通用 AST
+操作，**不需要插件产物**，故该判据可达。）
 
 ## 消费方
 
@@ -44,6 +49,10 @@
 | `checks/latch_check` | `param_default` | 参数化条件判定 |
 | `checks/inst_check` | `param_default` | W103（覆盖不存在的参数）——只要**参数名集合** |
 | 引擎 `SignalGraphBuilder` | `gen_activity`（经**角色位**） | 层 3 驱动过滤：未选中 generate 分支的驱动不计 |
+| 引擎 `ConnectionElaborator` / `SignalGraphBuilder` | `port_decls`（经**角色位**，**P3-②b 起**） | 层 2/3 的端口名/方向/宽度 |
+
+`port_decls` 目前**只新增、无人消费**（引擎侧 `ModuleInfo.ports` 仍在原位）——P3-②a 的
+意义是与引擎产物做**等价性对拍**（两个夹具：ANSI 头部 + 裸名头部/体内旧式声明）。
 
 ## 搬迁纪律
 
