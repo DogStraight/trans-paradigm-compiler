@@ -43,6 +43,13 @@ CTX_MAPPING_CFG = "mapping_cfg"
 CTX_EXTRA_ASTS = "_remapper_extra_asts"
 """额外 AST 输出列表。"""
 
+# ── 精化产物容器（context.extra 中的 key；ADR-0019）──
+CTX_ELABORATION = "elaboration"
+"""精化产物容器：`{容器键: {原子键: 值}}`。
+
+引擎只定**容器与生命周期**；容器键（= 精化项的 `provides`）与值形状由语言包定义
+（`analyzer/elaboration/` 引擎不解释语义）。未声明精化能力 → 本键不出现（降级）。"""
+
 # ── 组件元数据 key（component.toml 字段名）──
 META_NAME = "name"
 META_LANG = "lang"
