@@ -277,13 +277,23 @@
           `ROLE_UNIT_CONNECTIONS` 与 `ROLE_UNIT_SIGNAL_GRAPH` **同时退场**。
           ⚠ 同批处理 `tests/engine/analyzer/test_checker.py::TestElaborationConnections`
           （直连 `fr.connections` 的层 2 测试——主体随实现消失）。
-       2. **c-2**：4 个端口消费方（`inst_check` / `width_check` / `hier_check` /
-          `latch_check` 读 `module_index.ports`）改读 `port_decls` 产物 → 引擎侧再无
-          `unit_ports` 消费者 → 删 `_ModulePort` / `ModuleInfo.ports` / `_PortFields` /
-          `ModuleExtractor._fill_ports` 族 + `[structure]` 端口字段声明 → **`ROLES` 归零**
-          （终态判据达成）。
+       2. **c-2**：4 个端口消费方改读 `port_decls` 产物 → 引擎侧再无 `unit_ports` 消费者
+          → 删 `_ModulePort` / `ModuleInfo.ports` / `_PortFields` / `ModuleExtractor._fill_ports`
+          族 + `[structure]` 端口字段声明 → **`ROLES` 归零**（终态判据达成）。
+          **消费方清单（已实测，c-2 直接照此改）**：
+          | 插件 | 读什么 |
+          |---|---|
+          | `width_check` | `info.ports.values()`（**顺序** → 位置连接匹配）、`info.ports.get(pn)`、`port.width_expr`（含 `_module_width_table` 的 `info.ports.items()`） |
+          | `inst_check` | `info.ports.get(pn)` / `.keys()` / `.items()`、`port.width_expr`、`port.decl_node`（related 链）、`port.direction`（另有 `output_dirs` / `input_dirs` 来自 extra） |
+          | `hier_check` | `port.width_expr`（`_port_width` / `_module_width_table`） |
+          | `latch_check` | **不碰 ports**（只读 `param_default` 与本文件 AST） |
+          ⚠ 别误改：`sym.decl_node` / `s.decl_node`（`unused_check` / `width_check`）是**符号**
+          的声明节点，与端口无关。
        3. **c-3**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；与 `inst_sites` /
           `connections` 族同批）。
+       ✅ 已备 c-1 的前置：引擎注入**当前分析文件**（`core/_protocol.py::CTX_ANALYZED_FILE`，
+       语言无关的文件层事实）——`connections` 是**文件作用域**产物而 postpass 逐文件跑，插件
+       需要它才能取对切片（否则只能反查 AST 猜自己在分析哪个文件）。
        ✅ 顺带删掉一个**死字段**：`ModuleInfo.insts`（模块内实例化点）**只有写入、从无读取**
        ——连同唯一写入点（`FilePipeline.parse_file` 的"挂回"循环）一起删（已完成）。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +

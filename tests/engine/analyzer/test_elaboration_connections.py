@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from core._protocol import CTX_ELABORATION
+from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION
 
 from analyzer.checker import ProjectChecker
 from analyzer.elaboration import ROLE_UNIT_CONNECTIONS, load_elaborator_spec
@@ -131,3 +131,20 @@ def test_file_without_instances_yields_empty_list(checker, project):
     checker.check(str(project))
     # sub 无实例化点，但 top 有；此处用产物覆盖性断言（每个文件都有键）
     assert all(isinstance(v, list) for v in _plugin(checker).values())
+
+
+def test_analyzed_file_is_injected_so_consumers_can_slice(checker, project):
+    """引擎注入**当前分析文件**（语言无关的文件层事实）——插件据此取按文件的产物切片。
+
+    这是 P3-②c-1 的前置：`connections` 是**文件作用域**产物（`{路径: [...]}`），而 postpass
+    是**逐文件**跑的——没有这个键，插件只能反查 AST 去猜自己在分析哪个文件。
+    """
+    checker.check(str(project))
+    for path, fr in checker._ctx.memo.items():
+        assert fr.analyzer is not None
+        extra = fr.analyzer._external_extra
+        assert extra[CTX_ANALYZED_FILE] == path
+        # 用该键取切片：容器按文件给出连接表
+        container = extra[CTX_ELABORATION]
+        assert isinstance(container["connections"].get(path), list)
+        assert isinstance(container["port_decls"], dict)

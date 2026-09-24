@@ -50,6 +50,13 @@ CTX_ELABORATION = "elaboration"
 引擎只定**容器与生命周期**；容器键（= 精化项的 `provides`）与值形状由语言包定义
 （`analyzer/elaboration/` 引擎不解释语义）。未声明精化能力 → 本键不出现（降级）。"""
 
+CTX_ANALYZED_FILE = "analyzed_file"
+"""**当前分析文件**的路径（`context.extra` 中的 key）。
+
+插件 postpass 需要知道"我正在分析哪个文件"，才能按文件取精化产物的**切片**
+（如 `容器["connections"][本文件]`）。这是**语言无关的文件层事实**（引擎给出的当前
+文件路径），不是语言知识——故由引擎注入，而不是让插件去猜/反查 AST。"""
+
 # ── 组件元数据 key（component.toml 字段名）──
 META_NAME = "name"
 META_LANG = "lang"

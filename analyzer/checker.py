@@ -17,6 +17,7 @@ Doc: analyzer/semantic_checks.md（跨文件语义检查）
 import os
 
 from core.define import GrammarRulesRegister, DEFAULT_RULES_DIR, DEFAULT_EXT_DIRS
+from core._protocol import CTX_ANALYZED_FILE
 
 from analyzer.structure import (
     ConnectionElaborator,
@@ -246,6 +247,8 @@ class ProjectChecker:
         analyzer._external_extra["output_dirs"] = sorted(self._ctx.dirs("output_dirs"))
         analyzer._external_extra["input_dirs"] = sorted(self._ctx.dirs("input_dirs"))
         analyzer._external_extra["inout_dirs"] = sorted(self._ctx.dirs("inout_dirs"))
+        # 当前分析文件（语言无关的文件层事实）：插件据此按文件取精化产物**切片**
+        analyzer._external_extra[CTX_ANALYZED_FILE] = fr.path
         # 精化产物容器（ADR-0019）：条目名与值形状由插件定，引擎只保证容器；
         # 未声明精化能力 → 无此键（插件侧按 .get 缺省处理）。
         analyzer._external_extra.update(self._elab_extra)
