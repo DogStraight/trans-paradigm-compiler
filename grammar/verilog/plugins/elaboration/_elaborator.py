@@ -42,6 +42,8 @@ from core.token_protocol import IDENT_RE
 
 from analyzer.elaboration.driver import Atom, SolveCtx
 
+from grammar.verilog.plugins.elaboration._graph import solve_signal_graph
+
 # ── 本语言包的语法绑定（同 base/_structure.toml [structure.fields]） ──
 _UNIT_PARAMS = "params"  # ModuleDecl.params（外层容器）
 _PARAM_NAME = "param_name"  # 头部参数项上的参数名
@@ -57,6 +59,7 @@ _PROVIDES_PARAM_DEFAULT = "param_default"
 _PROVIDES_GEN_ACTIVITY = "gen_activity"
 _PROVIDES_PORT_DECLS = "port_decls"
 _PROVIDES_CONNECTIONS = "connections"
+_PROVIDES_SIGNAL_GRAPH = "signal_graph"
 
 
 def build_elaborator() -> dict:
@@ -99,11 +102,23 @@ def build_elaborator() -> dict:
                 "depends_on": ["param_default"],
                 "solver": "solve_gen_activity",
             },
+            {
+                "name": "signal_graph",
+                "scope": "project",
+                # 引擎角色位：`ProjectChecker` 注入 postpass（`context.extra["signal_graph"]`）
+                "role": "unit_signal_graph",
+                "provides": [_PROVIDES_SIGNAL_GRAPH],
+                # 三个**自身产物**（插件内流通，不经引擎中转）：实例连接 / 端口方向 /
+                # generate 活性。`depends_on` 保证它们先跑。
+                "depends_on": ["connections", "port_decls", "gen_activity"],
+                "solver": "solve_signal_graph",
+            },
         ],
         "solvers": {
             "solve_param_default": solve_param_default,
             "solve_port_decls": solve_port_decls,
             "solve_connections": solve_connections,
+            "solve_signal_graph": solve_signal_graph,
             "solve_gen_activity": solve_gen_activity,
         },
     }

@@ -86,8 +86,21 @@ ROLE_UNIT_CONNECTIONS = "unit_connections"
 `context.extra["connections"]` 供 postpass（W104 等）。层 2/3 迁入协议后**本角色退场**。
 """
 
+ROLE_UNIT_SIGNAL_GRAPH = "unit_signal_graph"
+"""全工程信号驱动/负载图（层 3）：寻址键 = **`""`**（`project` 作用域单原子）；
+形状 = `{(单元名, 信号名): {"drivers": [源标识], "loads": [源标识]}}`。
+
+引擎消费方 = `ProjectChecker` 注入 `context.extra["signal_graph"]` 供 postpass（W105）。
+层 3 迁入协议后**本角色退场**——届时引擎只剩文件层，`ROLES` 应为空。
+"""
+
 ROLES: frozenset[str] = frozenset(
-    {ROLE_GEN_ACTIVITY, ROLE_UNIT_PORTS, ROLE_UNIT_CONNECTIONS}
+    {
+        ROLE_GEN_ACTIVITY,
+        ROLE_UNIT_PORTS,
+        ROLE_UNIT_CONNECTIONS,
+        ROLE_UNIT_SIGNAL_GRAPH,
+    }
 )
 
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──

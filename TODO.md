@@ -13,11 +13,12 @@
 > （纵向打穿 `param_default`：verilog 插件 + 引擎接线 + 5 个消费方迁移 + **同批删**
 > 引擎侧抽取）→ P3 **顺序已更正**（原按"事实"分族不成立：除 gen 外每个事实的消费者
 > 都是同一簇 = 引擎层 2/3，按事实切会为注定消失的消费者造一堆临时 role）→
-> **改按消费簇切**：①gen 族 **已完成**（P3-①a 移植 + 逐节点对拍；P3-①b 切引擎 + 删；
-> `ROLE_UNIT_CONSTANTS` 已退场）②层 2+3+ports **进行中**（P3-②a `port_decls` 移植 +
-> 逐端口对拍；P3-②b-prep `connections` 移植 + 逐文件对拍——**均只新增**；P3-②b 待做：
-> 切引擎 + 删层 2/3 与 ports/connections 引擎侧 + 4 个插件消费方迁移 + `param_override`
-> 上提 + 同名单元键口径差异）→ P4 文档收口。
+> **改按消费簇切**：①gen 族 **已完成** ②层 2+3+ports **插件侧已完成**（`port_decls` /
+> `connections` / `signal_graph` 三项移植且**各自对拍通过**，均只新增；服务面
+> `files`/`unit_node`/`unit_file` 已开；原子键冲突取先已修）→ **P3-②c 待做**：引擎切换 +
+> 删层 2/3 与 ports/connections 引擎侧 + 4 个插件消费方迁移（`inst_check` / `width_check` /
+> `hier_check` / `latch_check`）+ `param_override` 上提 → **终态判据 `ROLES` 为空** →
+> P4 文档收口。
 > 终态判据：**`ROLES` 为空**（引擎不消费任何插件产物）。理由与实测表见 ADR-0019 P3 节。
 > ⚠ P2 实测更正两处协议（已回写 ADR-0019 决策 3）：新增**引擎角色位 `role`**、
 > `locator` 改为**可省略**；`param_override` 实测为"插件侧已有合并逻辑的上提"而非

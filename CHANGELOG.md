@@ -7,6 +7,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P3-②b：层 3 信号图移植进插件 + 逐条目对拍（ADR-0019）**：新增项 `signal_graph`
+  （`scope = project`，`role = unit_signal_graph`）——`SignalGraphBuilder`（400 行 /
+  22 方法）**逐字搬迁**到新文件 `grammar/verilog/plugins/elaboration/_graph.py`，算法不动。
+
+  - **只换数据来源**：实例连接读自身产物 `connections`、端口方向读 `port_decls`、
+    generate 活性读 `gen_activity`（三者经 `depends_on`，**插件内流通、不经引擎中转**）；
+    文件/单元改经**服务面**（本次新开的 `files()` / `unit_node()` / `unit_file()`）；
+    声明值（`AssignStmt` / `BlockingAssign` / `NonBlockingAssign` / `AlwaysStmt` /
+    `InitialStmt` / 目标字段 / 方向集）由插件持有。**图形状保持不变**
+    （`{(单元, 信号): {drivers, loads}}`，消费方迁移才是机械的）。
+  - **对拍**：7 个夹具（6 个**专为信号图设计**的 `W105_*` / `W104_*` 样例 + 真实语料
+    `gen_generate.v`）**逐条目一致**；并断言**不空转**——多驱动与 output **穿透**真的发生
+    （驱动源里同时有 `file:assign#N` 与实例路径形态）、负载侧非空。
+  - ⚠ 缺 `depends_on` 任一项结果就会与引擎不同——故本对拍同时验证依赖通道把三个自身
+    产物按序备好了。
+  - 分文件（`_graph.py` vs `_elaborator.py`）是刻意的：不让单文件过大（结构预算），
+    且层 3 能单独对拍。
+  - **顺带**：精化服务面扩展 `files` / `unit_node` / `unit_file`（语言无关面；层 3 的
+    驱动穿透要按单元名取子树与定义文件）+ 3 例测试（含"`render` 确实**转交**引擎助手
+    而非自实现"）。
+
+  验证：新测试 **10 passed**（服务面另 3 例）；`tests/engine/analyzer` **329 passed**；
+  `-m smoke` **423 passed**；`tests/policy` **125 passed**（含诊断基线门禁持平）；
+  **全量 2190 passed / 7 skipped**；探针 **1189 仍绿（+26）/ ✓ 无回归**。
+
+- **修复：精化产物原子键冲突**取先**——同名单元跨文件错配（ADR-0019 P3-②b 前置）**：
+  产物按**原子键**（unit 作用域 = 单元名）归位，驱动器原为**后写覆盖**；而引擎
+  `module_index` 是"**首个**定义者优先"。于是**同名单元在多个文件重复定义**时两边指向
+  **不同文件**——引擎按单元名取参数表/端口表会拿到另一个定义的值，跨文件检查**静默错判**。
+  该口径差自 P2 起就存在（夹具单元名唯一，未暴露），但 P3-② 切换后会从"潜伏"变"必然"，
+  故先修：`_accept` 归位改 `setdefault`（**取先**，与 `module_index` 同口径；对 file /
+  project 作用域是 no-op），口径写入契约模块头。
+  守卫两层：**驱动器级**（同一原子键两份产物 → 取先）+ **跨文件集成级**（两文件都定义
+  `dup`，断言 `module_index["dup"].file` 与 `param_default` / `port_decls` 两个产物都指向
+  同一份定义）。验证：analyzer **316 passed**；全量 **2177 passed / 7 skipped**；
+  探针 **1176 仍绿 / 无回归**。
+
 - **P3-②b-prep：层 2 连接展开移植进插件 + 逐文件对拍（ADR-0019）**：新增项 `connections`
   （`scope = file`，`role = unit_connections`）——与引擎
   `ConnectionElaborator.elaborate_connections` **逐字对齐**：**命名连接** `.p(sig)` 进
