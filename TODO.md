@@ -168,6 +168,25 @@
     「不拉踩开源作者」+ 对外话术纪律）；可比的是**取舍位置与可审计性**，且要同时写明
     自己的短板（无优化深度、语言规模墙、语义分析浅、单语言选择模型）。
 
+## 语法覆盖：头部参数列表的"续项不带关键字"形态（实测缺口，待决策）
+
+> 来源：ADR-0019 P2 写夹具时实测（2026-09-24）。`grammar/verilog` 当前**只接受每个
+> 参数都重复 `parameter`** 的形式：
+
+| 写法 | 实测 |
+|---|---|
+| `#(parameter W = 8, parameter D = W/2)` | ✅ 解析通过 |
+| `#(parameter W = 8, D = 4)` | ❌ 被 linter 阻断（`incomplete structure, expected one of: symbol.base.pound` …） |
+| `#(W = 8, D = 4)`（ANSI 风格） | ❌ 同上 |
+
+- **为何值得看**：`#(parameter A = 1, B = 2)` 是真实语料里的常见写法（IEEE 1364-2005
+  的 `parameter_port_list` 第一式 `list_of_param_assignments { , parameter_port_declaration }`
+  允许多种解释，各工具普遍接受该形态）。0.1.1 目标是"Verilog2005 全量语法包"，
+  此形态是否属缺口**需按真实语料定**（本次只在合成夹具上实测，未统计语料命中率）。
+- **判据**：先扫真实语料（`tests/e2e/samples/real/`）统计该形态出现次数；有量则补
+  语法（`parameter` 关键字可省略的续项），无则记为该目标下的已知取舍。
+- 与精化搬迁无关（P2 只是撞上了它并被它挡住，故当时改用可解析形态写夹具）。
+
 ## 测试基础设施
 
 - **并行度默认值**：`pyproject.toml` 的 `addopts = "-n auto"` **保持现状**（作者
