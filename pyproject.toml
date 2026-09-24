@@ -83,8 +83,11 @@ minversion = "8.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 # 默认并发（pytest-xdist，进程级并行；global_state 进程内隔离天然兼容）：
-# 全量 315s → ~88s（~3.6x）。coverage 场景须显式 -n 0 关并发
-# （xdist 每 worker 独立计数会失真，实测 61% < fail_under 80）。
+# 全量 315s → ~88s（~3.6x）。**覆盖率同样走并行**（2026-09-22 实测：
+# `-n 0 --cov` 645.5s / `-n auto --cov` 173.9s，两者 TOTAL 逐位相同——89.73%，
+# 12425 语句 / 1276 未覆盖；同子集对照串行 70.93% vs 并行 70.94%）。
+# 旧注释"xdist 每 worker 独立计数会失真，实测 61%"**已作废**：pytest-cov 在
+# xdist 下走 coverage 的 parallel 模式并自动 combine，不必再显式 `-n 0`。
 # --dist loadfile：一个文件的所有测试固定在同一 worker——模块级 fixture 与
 # “安装态按模块还原”语义绑定在同一进程，且避免同 worker 内模块交错（A/B/A）
 # 把先跑模块的语言装载态擦掉。

@@ -17,7 +17,7 @@
 python -m pytest tests/ -q                      # 单测全绿（默认并发）
 python tests/e2e/run_all_tests.py               # e2e FAIL 0
 python tests/e2e/eval_lint_accuracy.py          # lint recall 100%、误报 FP 0
-python -m pytest tests/ -n 0 --cov --cov-report=term # 覆盖率 ≥ fail_under（80；-n 0 关并发防 xdist 计数失真）
+python -m pytest tests/ -q --cov --cov-report=term # 覆盖率 ≥ fail_under（80；并行即准，无需 -n 0）
 ```
 
 ## 2. 版本号核对

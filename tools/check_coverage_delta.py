@@ -126,7 +126,7 @@ def _run_cov(files: list[str]) -> tuple[dict, str]:
         "pytest",
         *scope,
         "-n",
-        "0",  # xdist 下每 worker 独立计数会失真（见 pyproject 注释）
+        "auto",  # 覆盖率并行即准（2026-09-22 实测与串行逐位相同；见 pyproject 注释）
         "-q",
         "--no-header",
         # 覆盖 pyproject 的全量阈值：增量场景的总覆盖率天然偏低（只看改动
