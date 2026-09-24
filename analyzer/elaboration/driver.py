@@ -176,4 +176,8 @@ class Elaborator:
                 f"{', '.join(undeclared)}（声明: {', '.join(item.provides)}）"
             )
         for key, value in out.items():
-            products[key][atom.key] = value
+            # **原子键冲突取先**（与引擎单元索引"首个定义者优先"同口径）：
+            # 同名单元在多个文件重复定义时，`module_index` 保留**先发现**的定义；
+            # 产物若"后写覆盖"，引擎按单元名取产物就会取到**另一个文件**的值
+            # （端口表/参数表错配 → 跨文件检查静默错判）。故此处 setdefault 而非赋值。
+            products[key].setdefault(atom.key, value)

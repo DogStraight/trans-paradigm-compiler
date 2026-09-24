@@ -244,6 +244,28 @@ def test_driver_dispatches_by_scope_and_keys_by_atom():
     assert source.calls == [SCOPE_UNIT]  # 只问声明的 scope
 
 
+def test_atom_key_conflict_first_wins():
+    """同一原子键出现两份产物 → **取先**（与引擎单元索引"首个定义者优先"同口径）。
+
+    同名单元在多个文件重复定义时，若产物"后写覆盖"，引擎按单元名取产物就会取到**另一个
+    文件**的值（端口表/参数表错配 → 跨文件检查静默错判）。
+    """
+
+    def solve(hits, atom, ctx):
+        return {"x": atom.path}  # 值 = 文件路径，便于分辨哪一份胜出
+
+    spec = parse_spec(_spec([_item(scope=SCOPE_UNIT)], solvers={"solve": solve}))
+    source = _Source(
+        unit=[
+            Atom(key="dup", path="a.v", node=Node("Root")),
+            Atom(key="dup", path="b.v", node=Node("Root")),
+        ]
+    )
+    extra: dict = {}
+    Elaborator(spec).run(source, extra)
+    assert extra[CTX_ELABORATION]["x"] == {"dup": "a.v"}, "原子键冲突应取先"
+
+
 def test_container_preseeded_even_when_atom_yields_nothing():
     """声明了但某原子无此类值 → 键仍在（空表），下游不必两套写法。"""
     spec = parse_spec(_spec([_item()], solvers={"solve": _noop}))

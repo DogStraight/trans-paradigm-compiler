@@ -126,6 +126,31 @@ def test_role_unit_constants_is_retired(checker, project):
 
 # ── 4. 未声明能力 → 降级 ──
 
+def test_duplicate_unit_name_keeps_the_first_definition(checker, tmp_path):
+    """同名单元跨文件重复定义：产物与 `module_index` 指向**同一个**定义（取先）。
+
+    这是**跨文件错配**的守卫：产物若"后写覆盖"，引擎按单元名取参数表/端口表就会取到
+    另一个文件的值——检查会静默错判。两个产物键（`param_default` / `port_decls`）都要守。
+    """
+    a = tmp_path / "a.v"
+    a.write_text(
+        "module dup (input from_a);\n  parameter P = 1;\nendmodule\n", encoding="utf-8"
+    )
+    b = tmp_path / "b.v"
+    b.write_text(
+        "module dup (input from_b);\n  parameter P = 2;\nendmodule\n", encoding="utf-8"
+    )
+    checker.check([str(a), str(b)])
+
+    container = checker._elab_extra[CTX_ELABORATION]
+    # 引擎侧口径 = "首个定义者优先"（`ModuleInfo.params` 已在 P2 删除，故用 file 作锚点）
+    assert checker._ctx.module_index["dup"].file == str(a)
+
+    # 产物必须同口径（先发现的 a.v 胜）
+    assert container["param_default"]["dup"] == {"P": "1"}
+    assert set(container["port_decls"]["dup"]) == {"from_a"}
+
+
 def test_pack_without_capability_degrades():
     """c4 未声明 `elaborator` → 无容器键、无角色产物（与旧行为一致）。"""
     checker = ProjectChecker(rules_dir="grammar/c4")
