@@ -258,10 +258,22 @@
        算的，精化 pass 却在**发现之后**统一跑；若它依赖 `module_index`（彼时只填了一部分）
        结果就会不同。实测读码：`elaborate_connections` **完全不读端口表**，只读声明字段并
        渲染连接表达式 → 无时序问题。
-     - **P3-②b 待做**：引擎切到 `unit_ports` / `unit_connections` 与层 3 产物 + 删层 2/3
-       与 ports/connections 引擎侧 + 4 个插件消费方迁移（`inst_check` / `width_check` /
-       `hier_check` / `latch_check` 读 `module_index.ports`）+ `param_override` 上提 +
-       **同名单元键口径差异**（见 P3-②a 条目）。
+     - **P3-②b 待做**：引擎切到各产物 + 删层 2/3 与 ports/connections 引擎侧 +
+       4 个插件消费方迁移（`inst_check` / `width_check` / `hier_check` / `latch_check`
+       读 `module_index.ports`）+ `param_override` 上提。
+       ✅ 同名单元键口径差异**已修**（P3-②b-prep2：驱动器原子键冲突**取先**，与
+       `module_index`"首个定义者优先"同口径——产物与引擎索引必须指向同一定义）。
+       **层 3 的移植面已勘定**（`SignalGraphBuilder`，400 行 / 22 方法；读码结论落此，
+       免得下一轮重读）：
+       - **消费自身产物**（经 `depends_on`，**不经引擎中转**）：`connections`（实例连接）、
+         `port_decls`（端口方向判定）、`gen_activity`（互斥分支活性）；
+       - **服务面**（P3-②b-prep3 已开）：`files()` 逐文件扫 + `unit_node()` /
+         `unit_file()` 驱动穿透；
+       - **声明值改由插件持有**：`AssignStmt`（连续赋值规则）、`BlockingAssign` /
+         `NonBlockingAssign`（过程赋值）、`AlwaysStmt` / `InitialStmt`（过程块）、
+         `target` / `extras` / `target`（赋值目标字段）、方向集 `output|input|inout`；
+       - **图形状保持不变**：`{(单元, 信号): {"drivers": [...], "loads": [...]}}`
+         ——保持形状，消费方迁移才是机械的（`inst_check` W105 读它）。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
   `MODEL_INDEX` / `analyzer/README` 同步。
 
