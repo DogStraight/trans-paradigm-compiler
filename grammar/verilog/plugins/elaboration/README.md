@@ -15,11 +15,11 @@
 |---|---|---|---|---|
 | `param_default` | `unit` | — | `param_default` | `{单元名: {参数名: 值表达式文本}}`——头部 `#(P=v)` 优先，体内 `parameter P=v;` 补全 |
 | `port_decls` | `unit` | `unit_ports` | `port_decls` | `{单元名: {端口名: {name, direction, width_expr, net_type, decl_node}}}`——ANSI 头部 / 裸名头部 / 体内旧式声明三形态合并，**头部优先** |
+| `connections` | `file` | `unit_connections` | `connections` | `{文件路径: [{inst_name, module_name, inst_node, file, connects, ordered}]}`——命名连接进 `connects`，其余按位置序进 `ordered` |
 | `gen_activity` | `file` | `gen_activity` | `gen_activity` | `{文件路径: {id(节点): bool}}`——节点是否落在**选中**的 generate 互斥分支内；`depends_on = ["param_default"]` |
 
-三项都**不声明定位**（`param_default` 的值分散在头部字段与体内声明两种形态；
-`port_decls` 要合并三种声明形态；`gen_activity` 直接以文件根为输入）→ 求解器收到
-`hits = [原子根]`，自行走子树。
+四项都**不声明定位**（值/形态分散在多种节点形态或整个原子，单条规则名表达不了）→
+求解器收到 `hits = [原子根]`，自行走子树。
 
 ## 依赖通道（插件内部，不经引擎）
 
@@ -31,7 +31,8 @@
 
 容器条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物。`role` 是引擎能认的**封闭
 枚举**：`gen_activity`（引擎侧 `SignalGraphBuilder` 的驱动过滤）、`unit_ports`
-（层 2/3 的端口形态；**P3-②a 已登记但引擎尚未切换**）。
+（层 2/3 的端口形态；**已登记、引擎尚未切换**）、`unit_connections`（层 2 连接表；
+**已登记、引擎尚未切换**）。
 
 ⚠ **角色位一律是过渡面**：终态（ADR-0019 决策 1）下引擎不消费任何插件产物，故 P3 收口
 时 `analyzer/elaboration/contract.py::ROLES` 应为空——这是"重构完成"的可机械检查判据。
@@ -50,9 +51,17 @@
 | `checks/inst_check` | `param_default` | W103（覆盖不存在的参数）——只要**参数名集合** |
 | 引擎 `SignalGraphBuilder` | `gen_activity`（经**角色位**） | 层 3 驱动过滤：未选中 generate 分支的驱动不计 |
 | 引擎 `ConnectionElaborator` / `SignalGraphBuilder` | `port_decls`（经**角色位**，**P3-②b 起**） | 层 2/3 的端口名/方向/宽度 |
+| 引擎 `SignalGraphBuilder` / `ProjectChecker` | `connections`（经**角色位**，**P3-②b 起**） | 层 3 按连接记驱动/负载；注入 `context.extra["connections"]` 供 postpass（W104 等） |
 
-`port_decls` 目前**只新增、无人消费**（引擎侧 `ModuleInfo.ports` 仍在原位）——P3-②a 的
-意义是与引擎产物做**等价性对拍**（两个夹具：ANSI 头部 + 裸名头部/体内旧式声明）。
+`port_decls` 与 `connections` 目前**只新增、无人消费**（引擎侧 `ModuleInfo.ports` 与
+`FileResult.connections` 仍在原位）——本阶段的意义是与引擎产物做**等价性对拍**：
+`port_decls` 用两个夹具（ANSI 头部 / 裸名头部 + 体内旧式声明），`connections` 覆盖命名 /
+位置 / 命名但值为空（`.a()`）三种连接形态。
+
+> ✅ 搬迁查过一个**时序风险，结论是不存在**：引擎的层 2 是在**发现过程中逐文件**算的，
+> 而精化 pass 在**发现之后**统一跑；若层 2 依赖 `module_index`（彼时只填了一部分），两者
+> 结果会不同。实测读码：`elaborate_connections` **完全不读端口表**，只读声明字段并把连接
+> 表达式渲染成文本 → 无时序风险（对拍即证据）。
 
 ## 搬迁纪律
 

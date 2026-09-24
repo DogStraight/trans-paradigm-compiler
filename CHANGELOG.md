@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P3-②b-prep：层 2 连接展开移植进插件 + 逐文件对拍（ADR-0019）**：新增项 `connections`
+  （`scope = file`，`role = unit_connections`）——与引擎
+  `ConnectionElaborator.elaborate_connections` **逐字对齐**：**命名连接** `.p(sig)` 进
+  `connects[端口名]`，其余项按出现序进 `ordered`（值 = 连接表达式渲染文本）。
+
+  - **只新增、无人消费**：引擎 `FileResult.connections` 仍在原位、仍是层 3 与 postpass 的
+    输入。本阶段意义是与引擎产物**逐文件对拍**——夹具覆盖命名 / 位置 / **命名但值为空
+    （`.a()`）** 三种连接形态，并断言"不空转"（三种形态都真的抽到）。
+  - ✅ **排除一个时序风险**（结论：不存在）：引擎的层 2 是在**发现过程中逐文件**算的
+    （`FilePipeline.parse_file` 内调），而精化 pass 在**发现之后**统一跑——若层 2 依赖
+    `module_index`（彼时只填了一部分），搬迁后结果就会不同。实测读码：
+    `elaborate_connections` **完全不读端口表**（不用 `module_index`/ports），只读**声明
+    字段**（实例名 / 连接字段 / 端口名 / 值）并把表达式渲染成文本 → **无时序问题**。
+    （这正是"先读码再动手"省下的一次返工——该风险若成立，P3-②b 的方案要重做。）
+  - 登记引擎角色位 `unit_connections`（引擎**尚未切换**；声明面前置登记是 P3-②b 的前置）。
+
+  验证：新测试 **5 passed**；`tests/engine/analyzer` **314 passed**；`-m smoke`
+  **422 passed**；`tests/policy` **125 passed**（含诊断基线门禁持平）；
+  **全量 2175 passed / 7 skipped**；探针 **1174 仍绿（+11）/ ✓ 无回归**。
+
 - **P3-②a ports 抽取移植进插件 + 逐端口对拍（ADR-0019）**：新增项 `port_decls`
   （`scope = unit`，`role = unit_ports`）——三种声明形态合并（**ANSI 头部** /
   **裸名头部** / **体内旧式声明回填**，同名**头部优先**），与引擎

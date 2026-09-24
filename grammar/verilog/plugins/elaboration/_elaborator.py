@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import re
 
-from core.define import CHILDREN_FIELD, Node, iter_nodes, unwrap_optional
+from core.define import CHILDREN_FIELD, Node, collect_nodes, iter_nodes, unwrap_optional
 from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
 
@@ -56,6 +56,7 @@ _RULE_DECLARATOR = "Declarator"
 _PROVIDES_PARAM_DEFAULT = "param_default"
 _PROVIDES_GEN_ACTIVITY = "gen_activity"
 _PROVIDES_PORT_DECLS = "port_decls"
+_PROVIDES_CONNECTIONS = "connections"
 
 
 def build_elaborator() -> dict:
@@ -80,6 +81,14 @@ def build_elaborator() -> dict:
                 "solver": "solve_port_decls",
             },
             {
+                "name": "connections",
+                "scope": "file",
+                # 引擎角色位：层 3 与 postpass 消费的连接表（P3-②b 切换时启用）
+                "role": "unit_connections",
+                "provides": [_PROVIDES_CONNECTIONS],
+                "solver": "solve_connections",
+            },
+            {
                 "name": "gen_activity",
                 "scope": "file",
                 # 引擎角色位：层 3 判"未选中分支的驱动不计"（层 3 迁入协议后删）
@@ -94,6 +103,7 @@ def build_elaborator() -> dict:
         "solvers": {
             "solve_param_default": solve_param_default,
             "solve_port_decls": solve_port_decls,
+            "solve_connections": solve_connections,
             "solve_gen_activity": solve_gen_activity,
         },
     }
@@ -646,3 +656,85 @@ def _backfill_body_port_node(
         if existing["decl_node"] is None:
             d._file = path
             existing["decl_node"] = d
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 项 `connections`：实例化点端口连接展开（层 2，per-file）
+# ════════════════════════════════════════════════════════════════════════════
+# 与引擎 `ConnectionElaborator.elaborate_connections` **逐字对齐**：
+#   - **命名连接** `.p(sig)`（项上有非空 `port_name`）→ `connects[端口名] = 值文本`；
+#   - 其余项 = **位置连接**，按出现序进 `ordered`（值 = 连接表达式文本）。
+#
+# ✅ 一个曾经担心的风险，实测**不存在**：层 2 **完全不读端口表**（不用 `module_index` /
+#   ports）——它只读**声明字段**（实例名 / 连接字段 / 端口名 / 值）并把表达式渲染成文本。
+#   故"发现过程中逐文件算"与"发现之后统一算"**结果相同**，搬迁无时序风险。
+#
+# ⚠ 本阶段本项**只新增**（引擎 `FileResult.connections` 仍在原位、仍是层 3 与 postpass
+#   的输入），存在意义是与引擎产物做**逐项对拍**。
+
+# ── 本语言包的实例化形态（原 `[structure]` / `[structure.fields]` 声明） ──
+_INST_RULE = "ModuleInst"
+_INST_NAME = "inst_name"
+_INST_CONNECTS = "ports"  # 连接列表字段（[structure.fields].connects 的值）
+_PORT_NAME = "port_name"
+_CONN_VALUE = "value"
+
+
+def solve_connections(hits: list[Node], atom: Atom, ctx: SolveCtx) -> dict | None:
+    """文件内实例化点的连接展开表（层 2）。
+
+    本项不声明定位（作用域 = `file`）→ `hits = [文件 AST 根]`；实例化点按**声明的实例
+    规则名**自行收集（`collect_nodes`，与引擎 `FileResult.inst_sites` 同源）。
+    """
+    root = hits[0] if hits else None
+    if not isinstance(root, Node):
+        return None
+    conns = [
+        _elaborate_connection(site, atom.path, ctx)
+        for site in collect_nodes(root, _INST_RULE)
+    ]
+    return {_PROVIDES_CONNECTIONS: conns}
+
+
+def _elaborate_connection(site: Node, path: str, ctx: SolveCtx) -> dict:
+    """单个实例化点 → 连接展开（命名连接进 connects，其余按位置序进 ordered）。"""
+    connects: dict[str, str] = {}
+    ordered: list[str] = []
+    for item in _connection_items(site):
+        if not isinstance(item, Node):
+            continue
+        pn = getattr(item, _PORT_NAME, None)
+        pn_text = pn.content if isinstance(pn, Node) and pn.content else ""
+        if pn_text:
+            val = getattr(item, _CONN_VALUE, None)
+            connects[pn_text] = _render(ctx, val) if isinstance(val, Node) else ""
+            continue
+        # 其余项 = 位置连接（Expression/HierExpr 等，渲染回文本）
+        ordered.append(_render(ctx, item))
+    return {
+        "inst_name": _inst_name_of(site),
+        "module_name": _inst_module_name(site),
+        "inst_node": site,
+        "file": path,
+        "connects": connects,
+        "ordered": ordered,
+    }
+
+
+def _connection_items(site: Node) -> list:
+    """实例化点的连接项列表（连接字段 → 容器节点 → `items` 字段）。"""
+    holder = unwrap_optional(getattr(site, _INST_CONNECTS, None))
+    items = getattr(holder, _ITEMS, None) if isinstance(holder, Node) else None
+    return list(items or [])
+
+
+def _inst_name_of(site: Node) -> str:
+    """实例名（实例化点 `inst_name` 字段文本；缺省 ""）。"""
+    node = getattr(site, _INST_NAME, None)
+    return node.content if isinstance(node, Node) and node.content else ""
+
+
+def _inst_module_name(site: Node) -> str:
+    """被实例化模块名（实例化点 `module_name` 字段文本；缺省 ""）。"""
+    node = getattr(site, _UNIT_NAME_FIELD, None)
+    return node.content if isinstance(node, Node) and node.content else ""

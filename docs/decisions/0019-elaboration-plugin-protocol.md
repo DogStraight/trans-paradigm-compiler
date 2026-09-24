@@ -106,6 +106,7 @@
 > |---|---|---|---|
 > | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → 层 3 迁入后 |
 > | `unit_ports` | 单元名 | `{端口名: {name, direction, width_expr, net_type, decl_node}}` | `ConnectionElaborator`（层 2）+ `SignalGraphBuilder`（层 3）→ 两者迁入后 |
+> | `unit_connections` | 文件路径 | `[{inst_name, module_name, inst_node, file, connects, ordered}]` | `SignalGraphBuilder`（层 3）+ `ProjectChecker` 注入 postpass → 层 2/3 迁入后 |
 >
 > `unit_constants`（寻址键 = 单元名，形状 = `{名字: 值文本}`）曾在 P2–P3-① 间服役
 > （过渡期 `GenerateEvaluator` 要参数表）；**P3-① 已退场**——gen 求值迁入插件后，单元
@@ -251,9 +252,16 @@
        角色位已登记但引擎**尚未切换**——本阶段产物无人消费，存在意义即对拍。
        ⚠ 已记一个键口径差异待 P3-②b 处理：产物按**原子键（单元名）**归位，同名单元在
        多文件重复定义时"最后一个原子赢"，而 `module_index` 是"**首个**定义者优先"。
-     - **P3-②b 待做**：引擎切到 `unit_ports` / 新产物 + 删层 2/3 与 ports 引擎侧 +
-       4 个插件消费方迁移（`inst_check` / `width_check` / `hier_check` / `latch_check`
-       读 `module_index.ports`）+ `param_override` 上提。
+     - **P3-②b-prep 已完成（只新增）**：`connections` 项（层 2）移植 + 与
+       `FileResult.connections` **逐文件对拍**（覆盖命名 / 位置 / 命名但值为空 `.a()`）。
+       ✅ 顺带排除一个**时序风险**（结论：不存在）——层 2 在引擎里是**发现过程中逐文件**
+       算的，精化 pass 却在**发现之后**统一跑；若它依赖 `module_index`（彼时只填了一部分）
+       结果就会不同。实测读码：`elaborate_connections` **完全不读端口表**，只读声明字段并
+       渲染连接表达式 → 无时序问题。
+     - **P3-②b 待做**：引擎切到 `unit_ports` / `unit_connections` 与层 3 产物 + 删层 2/3
+       与 ports/connections 引擎侧 + 4 个插件消费方迁移（`inst_check` / `width_check` /
+       `hier_check` / `latch_check` 读 `module_index.ports`）+ `param_override` 上提 +
+       **同名单元键口径差异**（见 P3-②a 条目）。
 - **P4 文档收口**：`core/component_protocol.md` 加"精化器能力位"节 + 插件 README +
   `MODEL_INDEX` / `analyzer/README` 同步。
 

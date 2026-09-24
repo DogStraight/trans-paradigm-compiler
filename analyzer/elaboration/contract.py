@@ -75,7 +75,17 @@ net_type, decl_node}}`。
 **本角色退场**——届时 ports 只在插件内部流通。
 """
 
-ROLES: frozenset[str] = frozenset({ROLE_GEN_ACTIVITY, ROLE_UNIT_PORTS})
+ROLE_UNIT_CONNECTIONS = "unit_connections"
+"""实例化点连接展开表（层 2）：寻址键 = **文件路径**；形状 =
+`[{inst_name, module_name, inst_node, file, connects, ordered}]`。
+
+引擎消费方 = `SignalGraphBuilder`（层 3 按连接记驱动/负载）+ `ProjectChecker` 注入
+`context.extra["connections"]` 供 postpass（W104 等）。层 2/3 迁入协议后**本角色退场**。
+"""
+
+ROLES: frozenset[str] = frozenset(
+    {ROLE_GEN_ACTIVITY, ROLE_UNIT_PORTS, ROLE_UNIT_CONNECTIONS}
+)
 
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──
 ITEM_KEYS: frozenset[str] = frozenset(
