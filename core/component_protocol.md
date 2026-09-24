@@ -87,6 +87,54 @@ handler = "_asm.py:render_asm"
 | `formatter` | `BoundaryScanner`（扫描器）、`build_engine`（pass 引擎）、`pre_scan_passes`（**扫描前的前置文本遍列表**，按声明序；语言包决定有几遍、叫什么——引擎不知道每遍的语义，缺省 = 不跑） |
 | `macro_policy` | `plan`（宏调用点事实 → 处置方案；见 `preprocessor/macro_policy.py`） |
 
+## 1b. 精化器能力位（`elaborator`）
+
+> 定案与权衡：`docs/decisions/0019-elaboration-plugin-protocol.md`。
+> 引擎侧实现：`analyzer/elaboration/`；插件示例：`grammar/verilog/plugins/elaboration/`。
+
+**引擎只做文件操作**（读源 / 宏展开 / 解析 / AST 缓存 / 行映射与宏区间 / 依赖发现编排）；
+"世界由哪些事实构成"（端口有宽度、参数有值文本、信号有驱动/负载、generate 怎么判）是
+**语言知识** → 由语言包经此能力位声明成一张**可扩展的项列表**，引擎按列表驱动
+「定位 → 求解 → 归位 → 核验」（与 §1 的 `formatter` / `macro_policy` 同款能力机制）。
+
+```toml
+[capabilities]
+elaborator = "_elaborator.py:build_elaborator"
+```
+
+入口返回 `{"items": [...], "solvers": {...}}`；项字段：
+
+| 字段 | 必/选 | 含义 |
+|---|---|---|
+| `name` | 必需 | 项目名（容器键前缀；语言包作用域内唯一） |
+| `scope` | 必需 | 执行原子：`file` / `unit` / `project`（**引擎定义枚举**，机制面） |
+| `solver` | 必需 | **求解函数名**（加载期从 `solvers` 解析；缺失 → fail-fast） |
+| `provides` | 必需 | 本项负责的**容器键**（非空、**跨项唯一**） |
+| `depends_on` | 可选 | 项间依赖（引擎按**拓扑序**跑；求解器经 `ctx.products` 读前项产物） |
+| `locator` | 可选 | **声明式定位**：在 scope 原子子树内按**规则名**收节点 |
+| `locator_fn` | 可选 | 定位本身需要算法时的函数名（与 `locator` 二选一） |
+| `role` | 可选 | **引擎角色位**（引擎定义封闭枚举，见下）——只给"引擎自己要消费的产物"用 |
+
+`locator` / `locator_fn` **都可省略**（省略 ⇒ 求解器收到 `hits = [原子根]`，自行走子树）
+——"怎么找"本身就是语言知识。
+
+- **求解签名** `fn(hits, atom, ctx) -> Mapping | None`：返回本原子为 `provides` 子集贡献的
+  「容器键 → 值」；`None` = 本原子无此类值（合法）。`ctx.products` 是容器**活视图**；
+  `ctx.service` 是**语言无关服务句柄**（`render` / `files` / `unit_node` / `unit_file`）。
+- **产物容器** `context.extra["elaboration"] = {容器键: {原子键: 值}}`——引擎只保证**容器与
+  生命周期**，**条目名与值形状由语言包定义**（引擎不解释语义）；原子键冲突**取先**
+  （与引擎单元索引"首个定义者优先"同口径）。
+- **降级**：未声明该能力 → 不提取、不递归、不注入容器（`tpc check` 退回单文件 lint + analyze）。
+- **fail-fast**（全部在**加载期**）：未知键 / 项重名 / 容器键跨项重复 / `role` 重复 /
+  `depends_on` 自引用与成环 / `locator` 与 `locator_fn` 同给 / 求解名未解析 / `scope` 非法。
+- **核验只做强方向**：求解器返回**未声明的容器键** → fail；**不**因"声明了但某原子无产物"
+  报错（按原子出产物时空是常态）——**与 `pipeline/schedule.py::_verify_produced` 的刻意差异**。
+- **角色位（`role`）**：条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物。`role` 是
+  引擎能认的封闭枚举（每个角色**同时**定义寻址键与产物形状，因为引擎要消费它）。
+  ⚠ **角色位一律是过渡面**：终态下引擎不消费任何插件产物，故收口判据是
+  `analyzer/elaboration/contract.py::ROLES` **为空**——当前仍有 `gen_activity` /
+  `unit_ports`（P3 尚未收口，见 ADR-0019 的分期节）。
+
 ## 2. 加载流程（setup_grammar）
 
 ```
