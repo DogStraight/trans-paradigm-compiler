@@ -5,12 +5,12 @@
  * 表达式优先级 / 调用 / 指针与成员访问）。
  *
  * ⚠ 写法受**当前阶段已支持的语法面**约束（不是风格偏好，是边界）：
- *   1. 无初始化器（`int i = 0;` 属阶段 2b）→ 声明与赋值分开写；
- *   2. 无链式后缀（`r->items[i]`、`a.b.c` 见 Layer B2 的"已知边界"）→
+ *   1. 无链式后缀（`r->items[i]`、`a.b.c` 见 Layer B2 的"已知边界"）→
  *      传数组指针 + 下标，或先取指针再 `->`；
- *   3. 无 `sizeof` / 强制转换 / 逗号运算符 / 预处理指令；
- *   4. `for` 不用声明式初值（`for (int i = …)` 属阶段 2b）。
- *   样本据此写成"受约束但仍是真实实现"的形态；阶段推进后本文件应逐步放宽。
+ *   2. 无 `sizeof` / 强制转换 / 逗号运算符 / 预处理指令 / 位域 / 指示符初始化。
+ *   ✅ **已放宽**（阶段 2b 到位，本文件随能力"长回"自然写法）：声明即初始化
+ *   （`unsigned int total = 0;`）、`for (int i = 0; …)` 声明式初值。
+ *   样本随阶段推进持续放宽；**不要**为了让样本"好看"而使用未支持的语法。
  */
 
 typedef unsigned long size_alias;
@@ -47,9 +47,8 @@ static int ring_count(struct ring *r) {
 }
 
 int ring_push(struct ring_item *items, unsigned int *head, unsigned int tail) {
-    unsigned int next;
+    unsigned int next = *head + 1;
     struct ring_item *slot;
-    next = *head + 1;
     if (next >= 16) {
         next = 0;
     }
@@ -75,12 +74,9 @@ int ring_pop(struct ring_item *items, unsigned int head, unsigned int *tail, str
 }
 
 unsigned int ring_sum(struct ring_item *items, int n) {
-    unsigned int total;
-    struct ring_item *p;
-    int i;
-    total = 0;
-    p = items;
-    for (i = 0; i < n; i++) {
+    unsigned int total = 0;
+    struct ring_item *p = items;
+    for (int i = 0; i < n; i++) {
         total += p->key;
         p++;
     }
@@ -88,12 +84,9 @@ unsigned int ring_sum(struct ring_item *items, int n) {
 }
 
 int ring_find(struct ring_item *items, int n, unsigned int want) {
-    int i;
-    int found;
-    struct ring_item *p;
-    found = 0;
-    i = 0;
-    p = items;
+    int i = 0;
+    int found = 0;
+    struct ring_item *p = items;
     while (i < n) {
         if (p->key == want) {
             found = 1;
@@ -113,12 +106,9 @@ unsigned int ring_total(struct ring_item *items, int n) {
 }
 
 int ring_scan(struct ring_item *items, int n, unsigned int want) {
-    int i;
-    int hits;
-    struct ring_item *p;
-    hits = 0;
-    i = 0;
-    p = items;
+    int i = 0;
+    int hits = 0;
+    struct ring_item *p = items;
     do {
         switch (p->key) {
             case 0:
