@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from core._protocol import CTX_ELABORATION
 from core.define import Node, iter_nodes
+from grammar.verilog.plugins.checks._shared import port_table
 
 # 实例化节点（本文件/目标模块内的 ModuleInst 均此形态）
 _INST_RULE = "ModuleInst"
@@ -118,7 +119,7 @@ def _port_width(
     """端口宽度：无范围 → 标量 1 bit；否则按三层合并参数求值。"""
     from grammar.verilog.plugins.checks.width_check import _width_check as wc
 
-    we = getattr(port, "width_expr", None) or ""
+    we = port.get("width_expr") or ""
     if not we:
         return 1
     return wc.eval_width_text_params(
@@ -140,8 +141,8 @@ def _step_segment(
     info = (context.extra.get("module_index", {}) or {}).get(mod_name)
     if info is None:
         return _Step("unresolved")
-    # 端口表命中 → 宽度（端口是成员访问终点）
-    port = (getattr(info, "ports", None) or {}).get(pname)
+    # 端口表命中 → 宽度（端口是成员访问终点）；端口表读**精化产物**（ADR-0019）
+    port = port_table(context, mod_name).get(pname)
     if port is not None:
         return _Step("width", width=_port_width(port, info, site, caller_params, context))
     # 内部成员声明命中 → 宽度

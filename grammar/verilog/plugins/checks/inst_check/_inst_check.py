@@ -15,7 +15,7 @@ import re
 
 from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION
 from core.define import Node, iter_nodes, unwrap_optional
-from grammar.verilog.plugins.checks._shared import is_parameterized
+from grammar.verilog.plugins.checks._shared import is_parameterized, port_table
 
 _LITERAL_RE = re.compile(r"^\d+'\s*[hdb]?[0-9a-fA-F_]*$")
 
@@ -62,9 +62,10 @@ def run_inst_check(analyzer, context) -> None:
 
 
 def _check_ports(context, site, info, related_def) -> None:
-    """命名端口连接 × 模块端口表。"""
+    """命名端口连接 × 模块端口表（端口表读**精化产物** `port_decls`，ADR-0019）。"""
+    ports = port_table(context, info.name)
     for conn in _named_port_conns(site):
-        _check_port_conn(context, conn, info, related_def)
+        _check_port_conn(context, conn, info, related_def, ports)
 
 
 def _named_port_conns(site) -> list:
@@ -74,12 +75,12 @@ def _named_port_conns(site) -> list:
     return [c for c in conns or [] if isinstance(c, Node)]
 
 
-def _check_port_conn(context, conn, info, related_def) -> None:
+def _check_port_conn(context, conn, info, related_def, ports) -> None:
     """单个命名端口连接：端口存在性（W102）+ 死值字面量（WC001）。"""
     pn = _text(getattr(conn, "port_name", None))
     if not pn:
         return
-    port = info.ports.get(pn)
+    port = ports.get(pn)
     if port is None:
         context.report(
             f"实例化 '{info.name}' 连接了不存在的端口 '{pn}'",
@@ -94,17 +95,19 @@ def _check_port_conn(context, conn, info, related_def) -> None:
 
 def _check_dead_literal(context, conn, port, pn, related_def) -> None:
     """WC001：参数化宽度端口 + 字面量连接（配置敏感死值）。"""
-    if not port.width_expr or not is_parameterized(port.width_expr):
+    width = port.get("width_expr") or ""
+    if not width or not is_parameterized(width):
         return
     value = getattr(conn, "value", None)
     if not _is_literal(value):
         return
+    decl_node = port.get("decl_node")
     related = list(related_def)
-    if port.decl_node is not None:
-        related.append(("端口 '%s' 声明处" % pn, port.decl_node))
+    if decl_node is not None:
+        related.append(("端口 '%s' 声明处" % pn, decl_node))
     context.report(
         f"字面量 {_text(value)} 连接参数化宽度端口 '{pn}'"
-        f"（[{port.width_expr}]）——端口宽度由配置决定，"
+        f"（[{width}]）——端口宽度由配置决定，"
         "配置变更时该字面量可能成为死值",
         code="WC001",
         level="warning",
@@ -129,11 +132,12 @@ def _check_missing_ports(
     conn = conn_by_inst.get(_text(getattr(site, "inst_name", None)))
     if conn is None:
         return
+    ports = port_table(context, info.name)  # 端口表读**精化产物**（ADR-0019）
     connected = set(conn["connects"].keys())
     ordered = conn["ordered"] or []
     if ordered:
-        # 位置连接：第 i 个连接信号 ↔ 模块第 i 个端口（声明序）
-        ordered_ports = list(info.ports.keys())
+        # 位置连接：第 i 个连接信号 ↔ 模块第 i 个端口（产品插入序 = **声明序**）
+        ordered_ports = list(ports.keys())
         for i in range(min(len(ordered), len(ordered_ports))):
             connected.add(ordered_ports[i])
     # 语言知识：端口方向值（input/output/inout）来自语言包 checker 结构
@@ -141,14 +145,15 @@ def _check_missing_ports(
     out_dirs = set(context.extra.get("output_dirs", []) or [])
     in_dirs = set(context.extra.get("input_dirs", []) or [])
     check_dirs = in_dirs | out_dirs
-    for pname, port in info.ports.items():
-        if not port.direction or port.direction not in check_dirs:
+    for pname, port in ports.items():
+        direction = port.get("direction") or ""
+        if not direction or direction not in check_dirs:
             continue
         if pname in connected:
             continue
         context.report(
             f"实例化 '{info.name}' 未连接端口 '{pname}'"
-            f"（{port.direction} 端口悬空）",
+            f"（{direction} 端口悬空）",
             code="W104",
             level="warning",
             node=site,

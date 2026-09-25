@@ -20,6 +20,7 @@ from grammar.verilog.plugins.checks._shared import (
     const_eval,
     is_ident_char,
     is_parameterized,
+    port_table,
     scan_char_run,
 )
 
@@ -427,7 +428,7 @@ def _check_ordered_conns(
 
     覆盖参数走 B3 三层合并（2026-08-29 补齐——tv80/旧风格实例）。
     """
-    ordered_ports = list(info.ports.values())
+    ordered_ports = list(port_table(context, info.name).values())
     for i, val in enumerate(getattr(nl, "items", None) or []):
         if i >= len(ordered_ports):
             break
@@ -442,13 +443,14 @@ def _check_named_conns(
     context, mod_name: str, info, nl, table: dict, ov_params: dict, caller_mod: str
 ) -> None:
     """具名连接（`.port(expr)`）：按端口名取模块端口后逐条对比。"""
+    ports = port_table(context, info.name)  # 端口表读**精化产物**（ADR-0019）
     for conn in getattr(nl, "items", None) or []:
         if not isinstance(conn, Node) or conn.node_name != "NamedPortConnect":
             continue
         pn = node_text(getattr(conn, "port_name", None))
         if not pn:
             continue
-        port = info.ports.get(pn)
+        port = ports.get(pn)
         if port is None:
             continue
         _check_conn_width(
@@ -465,17 +467,14 @@ def _check_named_conns(
 def _check_conn_width(context, mod_name: str, port, val, table: dict,
                       ov_params: dict, caller_mod: str = "") -> None:
     """单条端口连接宽度对比：连接 > 端口 → 截断报 W201。"""
-    pw = (
-        eval_width_text_params(port.width_expr, ov_params)
-        if getattr(port, "width_expr", None)
-        else 1
-    )
+    we = port.get("width_expr") or ""
+    pw = eval_width_text_params(we, ov_params) if we else 1
     cw = infer_expr_width(val, table, caller_mod)
     if pw is None or cw is None:
         return
     if cw > pw:
         context.report(
-            f"端口连接宽度截断：{mod_name}.{port.name} {pw} 位 ← 连接 {cw} 位"
+            f"端口连接宽度截断：{mod_name}.{port.get('name')} {pw} 位 ← 连接 {cw} 位"
             f"（{node_text(val)}）",
             code="W201",
             level="warning",
@@ -549,17 +548,17 @@ def _override_changes_params(site, defaults: dict) -> bool:
     return False
 
 
-def _module_width_table(info) -> dict:
-    """目标模块符号宽度表（从 ModuleInfo.node 走查，B4 用）。
+def _module_width_table(info, context) -> dict:
+    """目标模块符号宽度表（从单元声明节点走查，B4 用）。
 
-    端口宽度取 checker 已提取的 width_expr（ANSI + body 端口已合并）；
+    端口宽度取**精化产物** `port_decls`（ANSI + body 端口已由插件合并，ADR-0019）；
     内部声明走查见 `_collect_module_decl_widths`。返回表只含符号宽度文本 +
     "_arrays"，_params 由调用方按覆盖表设置。
     """
     table: dict[str, Any] = {}
     arrays: set[str] = set()
-    for pname, port in (getattr(info, "ports", None) or {}).items():
-        table[pname] = getattr(port, "width_expr", None) or ""
+    for pname, port in port_table(context, info.name).items():
+        table[pname] = port.get("width_expr") or ""
     node = getattr(info, "node", None)
     if node is not None:
         _collect_module_decl_widths(node, table, arrays)
@@ -619,7 +618,7 @@ def _recheck_module_assigns(info, site, ov_params: dict, context) -> None:
     node = getattr(info, "node", None)
     if node is None:
         return
-    sub_table = _module_width_table(info)
+    sub_table = _module_width_table(info, context)
     # 无参数化宽度（全部固定宽度）→ 覆盖参数不影响内部赋值，跳过
     if not any(is_parameterized(t) for t in sub_table.values()):
         return

@@ -7,10 +7,26 @@ Verilog 字面量写法、参数名求值域、边沿关键字）留在**插件�
 
 Doc: grammar/verilog/plugins/checks/README.md（插件族共用助手）
 """
+from core._protocol import CTX_ELABORATION
 from core.define import Node, iter_nodes
 
 # 边沿敏感关键字（always 事件控制里的时序标志）
 EDGE_KEYWORDS = ("posedge", "negedge")
+
+
+def port_table(context, unit_name: str) -> dict:
+    """单元端口表：读**本语言包精化产物** `port_decls`（ADR-0019）。
+
+    形状：`{端口名: {name, direction, width_expr, net_type, decl_node}}`；**插入序 =
+    声明序**（位置连接按序匹配端口时依赖它）。返回 `{}` = 该单元无端口表（未定义 /
+    未产出）——调用方按"无端口"处理。
+
+    ⚠ 引擎侧端口提取已随 P3-② 全部删除，故**不存在**"引擎注入的端口表"这条路；
+    端口是语言知识，只在语言包内流通。
+    """
+    container = context.extra.get(CTX_ELABORATION, {}) or {}
+    table = (container.get("port_decls", {}) or {}).get(unit_name)
+    return dict(table) if table else {}
 
 
 def target_sig(target: Node | None) -> str | None:
