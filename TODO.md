@@ -57,20 +57,27 @@
       反向守（缺口修复后该用例会失败并提醒复核文档）。
 - [ ] **阶段 2b/3**：位域、初始化器（含指示符）、数组长度常量表达式、函数体与语句、
       表达式族、整型后缀与浮点字面量、字符/字符串转义表
-- [ ] **阶段 3 表达式与语句（上一轮尝试已停放，需按 c4 扁平形态重做）**：
-      2026-09-25 曾委派 subagent 实现（运算符表 + 表达式 + 语句，约 700 行 TOML），
-      **未通过验收**：其 `00_expressions.toml` 在 `setup_grammar` 阶段即
-      `RecursionError: maximum recursion depth exceeded`（FIRST/nullable 推导按规则
-      第一元素递归，遇环溢出）。其产物已挪出仓库到 `_drafts/stage3_wip/`
-      （`03_statements.toml` / `_operator.toml` / `00_expressions.wip.toml`）供参考，
-      包已回到绿色（`tests/languages/c` 39 passed）。
-      **下一轮的做法（已核实的参照）**：照 c4 的**扁平**形态重建表达式——
-      `Expression = ["@PrimaryExpr"]`，`PrimaryExpr` 是**单条原子交替**
-      （`@Number|@StringLit|@Identifier|@ParenthesizedExpr|@CallExpr|…`），
-      `ParenthesizedExpr = ["(", "@Expression", ")"]`（c4 同样存在经括号的环却不溢出，
-      说明真凶是子代理文件里某个可空/自引用规则）。落地顺序：先原子+后缀，
-      再加一元/二元优先级链，每加一层跑一次 `tests/languages/c`；
-      出现 `RecursionError` 就用"注释掉一半规则"二分定位。
+- [x] **阶段 3 Layer A+B——已完成**（自做，分层落地各带测试）：
+      **Layer A** = 原子（Number/StringLiteral/Identifier/ParenthesizedExpr）+
+      PrimaryExpr 选择器 + Expression 入口 + 最小语句（CompoundStmt/ExprStmt/
+      EmptyStmt/ReturnStmt/Stmt 选择器）+ FuncDef（原型与定义靠 `{` vs `;` 区分）；
+      **Layer B** = 运算符表 `base/_operator.toml`（40 项，C99 §6.5 优先级/结合性/
+      一元位置；有意不含逗号运算符——它在实参表与枚举体里是分隔符）+ `operator_defs`
+      + UnaryExpr（前缀 first set）。测试 `test_c_statements.py` 14 例 +
+      `test_c_expressions.py` 22 例（断言**树形**：乘高于加、加减高于移位、相等高于
+      按位与、&& 高于 ||、赋值右结合、减法左结合、6 前缀 + 2 后缀一元、三目嵌赋值…）。
+      ✅ **关键形态约束（已记入 `grammar/c/00_expressions.toml` 头注）**：表达式环必须
+      同时满足 ① 原子 `is_atom = true`；② `Expression`/`UnaryExpr` 标 `pratt = true`；
+      ③ 选择器 `PrimaryExpr` 标 `inline = true` 且 production 为**单条交替**——缺任一项
+      即 `setup_grammar` 报 `RecursionError`（FIRST/nullable 推导遇环溢出）。
+      上一轮委派尝试（产物存 `_drafts/stage3_wip/`）正是缺这些标记而失败；
+      照 c4 验证过的形态重做后**一次通过**。
+- [ ] **阶段 3 Layer C（控制流）+ 后缀链**：`if/else`、`while`、`do/while`、`for`
+      （含 C99 声明式）、`switch/case/default`、`break/continue`、`goto/标号`；
+      以及后缀链（调用 `f(a)` / 下标 `a[i]` / 成员 `a.b`、`a->b`）——后者照 c4 的
+      **原子形态**（`CallExpr`/`IndexExpr` 为 `is_atom`，下标用 `(...)+` 链）。
+- [ ] **阶段 2b 词法与类型剩余**：位域 `int x : 3`、初始化器（含指示符 `.f=`/`[i]=`）、
+      数组长度常量表达式、整型后缀（U/L/LL）与浮点字面量、字符/字符串转义表。
 ：完整运算符优先级与结合性、`sizeof`/`_Alignof`、强制转换、
       复合字面量外的常用面；语句族（if/switch/for/while/do/goto/label/compound）
 - [ ] **阶段 3 结构类型与作用域语义**：struct/union/enum（含位域）、标签命名空间、
