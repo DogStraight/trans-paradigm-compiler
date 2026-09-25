@@ -33,4 +33,4 @@ rules = { file = ["0*.toml"], required = true }
 #   因为 verilog 的 `[plugins] enabled` 列出了 gates。
 #   故"启用组合等效某个标准"的运行入口就在这里——c11 已启用；c17/c23 待落地后追加。
 [plugins]
-enabled = ["c11", "c17"]
+enabled = ["c11", "c17", "c23"]

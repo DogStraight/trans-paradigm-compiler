@@ -1,0 +1,27 @@
+# c23 插件 — 词法扩展（C23 §6.4.1 关键字）
+#
+# 分为两类（同一策略：声明齐全，无规则者用起来即语法错误）：
+#   ① 本插件已有语法规则的：`static_assert`
+#   ② 待"注入机制补『改』路径"后才能加规则的：其余
+#
+# `bool` / `true` / `false` / `nullptr` / `typeof` 等在 C23 里是**关键字**（不再是
+# <stdbool.h>/<stddef.h> 的宏或标识符）。声明它们会让"把 `bool` 当 typedef 名"的
+# 旧代码报语法错误——这是**忠于标准**的代价，且是**响亮失败**；若某工程需要旧写法，
+# 就不启用 c23 档。
+
+[id.keyword]
+static_assert = "static_assert"
+alignas = "alignas"
+alignof = "alignof"
+bool = "bool"
+constexpr = "constexpr"
+false = "false"
+nullptr = "nullptr"
+thread_local = "thread_local"
+true = "true"
+typeof = "typeof"
+typeof_unqual = "typeof_unqual"
+_BitInt = "_BitInt"
+_Decimal32 = "_Decimal32"
+_Decimal64 = "_Decimal64"
+_Decimal128 = "_Decimal128"

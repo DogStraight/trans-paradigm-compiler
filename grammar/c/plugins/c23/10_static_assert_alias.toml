@@ -1,0 +1,27 @@
+# ============================================================================
+# c23 插件 — 小写 `static_assert ( 常量表达式 , 字面量 ) ;`（C23 §6.7.5）
+# ============================================================================
+# 与 c11 的 `_Static_assert` 同形；C23 同时保留 `_Static_assert`（向后兼容）。
+# 文件作用域可用（同 c11 那条的理由：标 `is_statement` 即被全局语句发现接手，
+# 不需要改核心 `Stmt` 选择器）。
+#
+# ⚠ 已知边界：块作用域不可用（需在核心 `Stmt` 选择器加分支 → 属"改"核心，
+#   与 C23 其余语法增量同批待办）。
+
+[StaticAssertC23Decl]
+is_statement = true
+
+[StaticAssertC23Decl.parser]
+production = [
+    "keyword.static_assert",
+    "bracket.l_parentheses",
+    "@Expression",
+    "symbol.base.comma",
+    "literal.string",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+
+[StaticAssertC23Decl.parser.node]
+cond = "$3"
+message = "$5"

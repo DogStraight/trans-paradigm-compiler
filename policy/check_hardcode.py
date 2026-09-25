@@ -87,6 +87,10 @@ TOKEN_ALLOWLIST: dict[str, str] = {
     "register": "全局态注册面字段名（GrammarRulesRegister 的 '_default_instance'/'register'），与 C 存储类关键字同名",
     "auto": "lexer 缩进配置值（indent level == 'auto'），与 C 存储类关键字同名",
     "switch": "transform 统计键名（engine._stats['switch']），与 C 语句关键字同名",
+    # C23 档（plugins/c23）引入的关键字与引擎词汇撞名——`bool` 是引擎的 token 类别谓词名
+    # （parser/pratt_parser.py::is_bool 里的 `_check("bool", token)`，指引擎 token 类别，
+    # 不是 C 的 `bool` 类型）。同上：引擎自身词汇，非语言知识。
+    "bool": "token 类别谓词名（pratt_parser 的 is_bool/_check('bool', …)），与 C23 关键字同名",
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认

@@ -71,11 +71,22 @@ class TestPluginManifests:
             meta = tomllib.load(f)
         assert "grammar" not in meta
 
-    def test_pack_enables_both_increments(self):
+    def test_pack_enables_all_three_increments(self):
         with open(os.path.join(_PACK, "tpc.toml"), "rb") as f:
             meta = tomllib.load(f)
         enabled = meta["plugins"]["enabled"]
-        assert "c11" in enabled and "c17" in enabled
+        assert {"c11", "c17", "c23"} <= set(enabled)
+
+    def test_c23_requires_c17(self):
+        with open(os.path.join(_PACK, "plugins", "c23", "tpc.toml"), "rb") as f:
+            meta = tomllib.load(f)
+        assert meta.get("requires") == ["c17"]
+
+    def test_c23_carries_grammar_files(self):
+        """c23 与 c17 不同：它有**真实语法增量**（小写 `static_assert` 关键字化）。"""
+        with open(os.path.join(_PACK, "plugins", "c23", "tpc.toml"), "rb") as f:
+            meta = tomllib.load(f)
+        assert meta.get("grammar", {}).get("files"), "c23 应有语法文件"
 
 
 class TestPackLoadsWithChain:
@@ -90,6 +101,63 @@ class TestPackLoadsWithChain:
             lexer = Lexer(rules_dir=_PACK)
             types = [t.type for t in lexer.tokenize("_Static_assert\n") if t.type != "newline"]
             assert types == ["keyword._Static_assert"]
+        finally:
+            ConfigRegistry.load_language(
+                "grammar/verilog", plugins_dir="grammar/verilog/plugins"
+            )
+
+
+class TestC23IncrementWorks:
+    def test_static_assert_parses_with_c23(self, config_loaded):
+        """小写 `static_assert(1, "x");` → `StaticAssertC23Decl`（C23 关键字化生效）。"""
+        del config_loaded
+        import os as _os
+
+        from core.config_registry import ConfigRegistry
+        from core.define import GrammarRulesRegister
+        from lexer import Lexer
+        from parser import setup_grammar
+        from parser.parser_core import Parser
+        from parser.rule_selector import RuleSelector
+
+        ConfigRegistry.load_language(_PACK, plugins_dir=_os.path.join(_PACK, "plugins"))
+        try:
+            register = GrammarRulesRegister()
+            rules = setup_grammar(_PACK, register)
+            stmt = [
+                n
+                for n, r in rules.items()
+                if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
+            ]
+            parser = Parser(
+                rules_dir=_PACK,
+                rules=rules,
+                rule_selector=RuleSelector(rules, stmt),
+                log_file="",
+            )
+            ast = parser.parse(
+                Lexer(rules_dir=_PACK).tokenize('static_assert(1, "x");\n')
+            )
+            assert [n.node_name for n in ast.sub_node] == ["StaticAssertC23Decl"]
+        finally:
+            ConfigRegistry.load_language(
+                "grammar/verilog", plugins_dir="grammar/verilog/plugins"
+            )
+
+    def test_c23_keywords_are_lexed(self, config_loaded):
+        """C23 关键字词法面生效（`typeof`/`constexpr` 等即使暂无规则也是关键字）。"""
+        del config_loaded
+        import os as _os
+
+        from core.config_registry import ConfigRegistry
+        from lexer import Lexer
+
+        ConfigRegistry.load_language(_PACK, plugins_dir=_os.path.join(_PACK, "plugins"))
+        try:
+            lexer = Lexer(rules_dir=_PACK)
+            for word in ("typeof", "constexpr", "nullptr", "bool", "true"):
+                types = [x.type for x in lexer.tokenize(word + "\n") if x.type != "newline"]
+                assert types == [f"keyword.{word}"], f"{word} -> {types}"
         finally:
             ConfigRegistry.load_language(
                 "grammar/verilog", plugins_dir="grammar/verilog/plugins"

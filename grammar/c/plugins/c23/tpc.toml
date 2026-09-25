@@ -1,0 +1,29 @@
+# c23 插件 — C23 增量（第三档：c23 ⊇ c17 ⊇ c11 ⊇ 核心基线）
+#
+# 与 c11/c17 的分工：`requires = ["c17"]` 让包含关系在**加载期可执行**（缺前置响亮失败）。
+#
+# **本插件落地了哪一项**：C23 把**小写 `static_assert` 正式关键字化**（N3096 §6.4.1），
+#   与 C11 的 `_Static_assert` 同形——这是可以**只靠插件自己**加上的那一类增量
+#   （文件作用域的语句规则，标 `is_statement` 即被全局语句发现接手，
+#   不需要改动核心基线的 `Stmt` 选择器）。
+#
+# ⚠ **需要"改"核心规则的那一类增量本插件未做**（记在此，正是 ROADMAP
+#   「注入机制补『改』路径」要解决的问题）：
+#     · `typeof` / `typeof_unqual` —— 类型说明符，要加进核心 `TypeSpecifier` 交替；
+#     · `constexpr` —— 声明说明符，要加进核心 `DeclSpecs` 链；
+#     · `[[属性]]` —— 声明/语句前缀，要加进 `Declaration`/`Stmt`；
+#     · `nullptr` / `true` / `false` —— 表达式原子，要加进 `PrimaryExpr`。
+#   这些都不是"新增一条独立规则"，而是**往既有规则的交替里塞分支**；现役
+#   `grammar_inject` 只能做规则 **production 的字符串子串补丁**（且软失败），
+#   不够可靠——具体待办与判据见 ROADMAP 该条与缺口档。
+#
+# 词法面：C23 新增关键字**全部声明**（词法完整）；没有规则的用起来就是语法错误
+#   （响亮失败，不会静默当标识符）——与 c11 插件同一策略。
+
+requires = ["c17"]
+
+[lexer]
+token_ext = { file = "_token_ext.toml", required = true }
+
+[grammar]
+files = ["10_static_assert_alias.toml"]
