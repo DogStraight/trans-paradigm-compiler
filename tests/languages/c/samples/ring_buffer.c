@@ -7,9 +7,9 @@
  * ⚠ 写法受**当前阶段已支持的语法面**约束（不是风格偏好，是边界）：
  *   1. 无链式后缀（`r->items[i]`、`a.b.c` 见 Layer B2 的"已知边界"）→
  *      传数组指针 + 下标，或先取指针再 `->`；
- *   2. 无 `sizeof` / 强制转换 / 逗号运算符 / 预处理指令 / 位域 / 指示符初始化。
- *   ✅ **已放宽**（阶段 2b 到位，本文件随能力"长回"自然写法）：声明即初始化
- *   （`unsigned int total = 0;`）、`for (int i = 0; …)` 声明式初值。
+ *   2. 无强制转换 / 逗号运算符 / 预处理指令 / 链式后缀（`a.b.c`、`f(x)[i]`）。
+ *   ✅ **已放宽**（阶段 2b 到位，本文件随能力"长回"自然写法）：声明即初始化、
+ *   `for (int i = 0; …)` 声明式初值、**指示符初始化 `.field=`/`[i]=`**、**`sizeof`**。
  *   样本随阶段推进持续放宽；**不要**为了让样本"好看"而使用未支持的语法。
  */
 
@@ -30,6 +30,13 @@ struct ring {
     unsigned int head;
     unsigned int tail;
 };
+
+/* 用上阶段 2b 的指示符初始化与 sizeof（真实代码里的常见写法） */
+int ring_marks[4] = {[0] = 1, [3] = 2};
+
+unsigned int ring_item_size = sizeof(struct ring_item);
+
+static const struct ring_item ring_default = {.key = 0, .values = {[1] = 7}};
 
 int ring_init(struct ring *r) {
     r->head = 0;

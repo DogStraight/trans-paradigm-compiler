@@ -22,10 +22,20 @@ from tests.languages.c.conftest import _lint, _node_names, _parse
 
 _SAMPLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samples", "ring_buffer.c")
 
-# 顶层 = 1 个文件头块注释 + 5 条类型声明（size_alias/enum/struct ring_item/
-# typedef ring_item/struct ring）+ 8 个函数定义（ring_init / ring_count / ring_push /
-# ring_pop / ring_sum / ring_total / ring_find / ring_scan）
-_TOP = ["Comment"] + ["Declaration"] * 5 + ["FuncDef"] * 8
+# 顶层构成（随样本扩容更新）：
+#   2 个块注释（文件头 + "用上阶段 2b" 那段的说明）
+#   + 5 条类型声明（size_alias / enum / struct ring_item / typedef ring_item / struct ring）
+#   + 3 条带初始化器的文件级声明（指示符初始化 ring_marks / sizeof ring_item_size /
+#     带指示符的 ring_default）
+#   + 8 个函数定义（ring_init / ring_count / ring_push / ring_pop / ring_sum /
+#     ring_total / ring_find / ring_scan）
+_TOP = (
+    ["Comment"]
+    + ["Declaration"] * 5
+    + ["Comment"]
+    + ["Declaration"] * 3
+    + ["FuncDef"] * 8
+)
 
 
 def _source() -> str:
@@ -97,4 +107,4 @@ class TestImplementationSample:
 
 
 # 实测记录（阶段 3 完成 + 本样本定稿时；数字与包状态绑定，变化须重记）
-_RECORDED_PHASE_GAP = 5
+_RECORDED_PHASE_GAP = 7
