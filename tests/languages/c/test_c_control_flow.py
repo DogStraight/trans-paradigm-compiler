@@ -139,7 +139,20 @@ class TestControlFlowRejection:
     def test_bad_control_flow_reports(self, c_linter, src):
         assert _lint(f"void f(void) {{ {src} }}\n", c_linter), f"应报错但通过了：{src!r}"
 
-    def test_for_decl_init_is_not_supported_yet(self, c_linter):
-        """`for (int i = 0; …)` 声明式初值需初始化器（阶段 2b）——本层**不支持**，
-        断言它报错而不是静默接受（防"看起来支持"）。"""
-        assert _lint("void f(void) { for (int i = 0; i < n; i++) x; }\n", c_linter)
+    def test_for_with_decl_init(self, c):
+        """`for (int i = 0; …)` —— 声明式初值（C99 §6.8.5.3），阶段 2b 起支持。
+
+        ⚠ 本用例原为**边界测试**（断言"报错"），阶段 2b 落地后**转正**为结构性断言：
+        边界测试必须随能力落地退场——否则它会靠 linter 的近似误报继续"绿"，
+        变成假绿（本轮实测：能力已支持，但旧断言仍通过，因为 linter 对该形态本就误报）。
+        """
+        stmt = _body("for (int i = 0; i < n; i++) x;", c)[0]
+        assert stmt.node_name == "ForStmt"
+        assert stmt.init.node_name == "ForInitDecl"
+        assert stmt.cond.node_name == "BinaryOp" and stmt.cond.op == "<"
+
+    def test_for_with_expression_init_still_works(self, c):
+        """表达式初值形态不受影响（`for (i = 0; …)`）。"""
+        stmt = _body("for (i = 0; i < n; i++) x;", c)[0]
+        assert stmt.node_name == "ForStmt"
+        assert stmt.init.node_name == "BinaryOp" and stmt.init.op == "="

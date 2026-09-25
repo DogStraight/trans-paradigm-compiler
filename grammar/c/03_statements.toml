@@ -8,7 +8,6 @@
 #   break / continue / goto / 标号。
 #
 # ⚠ 本层**未做**（记在此防"看起来支持"）：
-#   · `for (int i = 0; …)` 声明式初值——需要初始化器（阶段 2b）；
 #   · `case 1 ... 5:`（GNU 范围扩展，非 C99）；
 #   · switch 体内的声明（C99 允许，但需初始化器面）。
 #
@@ -185,11 +184,27 @@ cond = "$5"
 [ForStmt]
 is_statement = true
 
+# ⚠ 初值位既可用**表达式**也可用**声明**（C99 §6.8.5.3 的 `for (int i = 0; …)`）——
+#   声明式初值靠阶段 2b 的初始化器才可行。`@ForInitDecl` 是"说明符 + 初始化声明符"
+#   （不含结尾 `;`，因为 `;` 是 for 头自己的分隔符）。
+[ForInitDecl.parser]
+production = [
+    "@TypeQualifier|@TypeSpecifier",
+    "@SpecRest*",
+    "@InitDeclarator",
+]
+
+[ForInitDecl.parser.node]
+specs = "$1"
+rest = "$2"
+declarator = "$3"
+
+
 [ForStmt.parser]
 production = [
     "keyword.for",
     "bracket.l_parentheses",
-    "@Expression?",
+    "(@Expression|@ForInitDecl)?",
     "symbol.base.semicolon",
     "@Expression?",
     "symbol.base.semicolon",

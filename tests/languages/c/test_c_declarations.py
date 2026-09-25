@@ -77,6 +77,30 @@ class TestDeclarationParse:
         assert _node_names(ast) == ["Declaration"] * 5
 
 
+class TestArraySizeExpression:
+    """数组长度从"只收数字字面量"放宽为**常量表达式**（阶段 2b 续）。
+
+    语法层宽进——"是不是整型常量表达式"归语义层判；这里只断言**表达式进了 AST**。
+    """
+
+    def test_identifier_size(self, c):
+        """`int a[N];` —— 宏/常量作长度（真实语料最常见）。"""
+        ast = _parse("int a[N];\n", c)
+        suffix = ast.sub_node[0].declarators.first.declarator.direct.suffixes.items[0]
+        assert suffix.size.node_name == "Identifier"
+
+    def test_constant_expression_size(self, c):
+        """`int a[2 * 4];` —— 常量表达式作长度（优先级照样成立）。"""
+        ast = _parse("int a[2 * 4];\n", c)
+        suffix = ast.sub_node[0].declarators.first.declarator.direct.suffixes.items[0]
+        assert suffix.size.node_name == "BinaryOp" and suffix.size.op == "*"
+
+    def test_empty_size_still_ok(self, c):
+        """`int a[];` —— 长度可省（不完整类型，语法允许）。"""
+        ast = _parse("int a[];\n", c)
+        assert _node_names(ast) == ["Declaration"]
+
+
 class TestDeclarationRejection:
     """负样本：缺声明符 / 括号不闭合 / 悬空指针等必须被拒。"""
 

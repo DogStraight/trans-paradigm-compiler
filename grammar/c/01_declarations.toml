@@ -196,11 +196,14 @@ production = [
 inner = "$2"
 
 
-# 数组后缀 `[ size? ]`——阶段 1 只接受数字字面量（表达式在阶段 3）
+# 数组后缀 `[ size? ]`
+# ⚠ 长度改为**常量表达式**（原先只收数字字面量）：`int a[N]` / `int a[2 * 4]` 都是真实
+#   语料里的常见写法。语法层宽进——"是不是整型常量表达式"归语义层判（`int a[f()]`
+#   在语法上仍会通过）。环安全：`ArraySuffix` 不参与表达式环（没有回到自身的路径）。
 [ArraySuffix.parser]
 production = [
     "bracket.l_square_bracket",
-    "literal.number?",
+    "@Expression?",
     "bracket.r_square_bracket",
 ]
 
