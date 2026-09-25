@@ -1,8 +1,7 @@
 """eval_check_accuracy.py — analyzer 检查规则检出准确度评测（0.1.1 试水）。
 
 对 tests/e2e/samples/check_accuracy/cases/ 下的标注样本逐一跑 ProjectChecker
-（跨文件语义检查，含 P1.10 核心检查集：UN001/W104/W105/CC001/W106/LC001/
-NC012/NC013），与 expected.json 标注比对，统计：
+（跨文件语义检查），与 expected.json 标注比对，统计：
 
     recall   — 正样例（pos）中期望检出的规则码是否都被检出（漏检 = MISS）
     FP       — 负样例（neg）误报 + 正样例检出的期望外规则码

@@ -50,20 +50,21 @@ _MUTATIONS: list[dict[str, str]] = [
         "why": "slot_runner 的 result=extra 曾误把 handler 返回值接回 AST → typed_ports"
                " wrapper 被内联进主输出（保真度 1.0→0.43），由真实语料 e2e 抓到",
         "file": "transform/slot_runner.py",
-        "old": "                if result == \"extra\":\n"
-               "                    # 额外产物由 handler 自己出（`mark_extra`）——返回值**不接回**\n"
-               "                    # AST（typed_ports build_wrapper 先例：wrapper 是独立文件）。\n"
-               "                    new.append(item)\n",
-        "new": "                if result == \"extra\":\n"
-               "                    new.append(out if isinstance(out, Node) else item)\n",
+        # ⚠ 载荷随目标代码重排同步更新过（2026-09-25）：旧片段是 16 空格缩进 + 行内
+        # 注释的写法，注释迁进 docstring 后失配——**变异失效本身就是门禁失效**，
+        # 由 tests/policy/test_gate_efficacy_mutations.py 静态守住。
+        "old": "        if result == \"extra\":\n"
+               "            new.append(item)\n",
+        "new": "        if result == \"extra\":\n"
+               "            new.append(out if isinstance(out, Node) else item)\n",
         "test": "tests/engine/pipeline/test_unit_slot_schedule.py",
     },
     {
         "why": "MH002 的续行保守判定若被去掉，多行宏体会被误判为值不同 → 误报"
                "（实现时即按宁可漏报定调，故该行为必须有测试锁住）",
         "file": "linter/checkers/macro_hygiene.py",
-        "old": "                value = None if (self._cont and body.endswith(self._cont)) else body",
-        "new": "                value = body",
+        "old": "        return name, None if (cont and body.endswith(cont)) else body",
+        "new": "        return name, body",
         "test": "tests/engine/linter/test_linter_macro_hygiene.py",
     },
     {

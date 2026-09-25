@@ -165,15 +165,13 @@
       "插件内": 3,
       "文档": 2,
       "测试": 2,
-      "行为基线": 5
+      "行为基线": 4
      },
-     "scatter": [
-      "tests/e2e/eval_check_accuracy.py"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
-     "total": 12
+     "total": 11
     },
     "EX001": {
      "converged": [
@@ -227,15 +225,13 @@
       "插件内": 3,
       "文档": 2,
       "测试": 1,
-      "行为基线": 5
+      "行为基线": 4
      },
-     "scatter": [
-      "tests/e2e/eval_check_accuracy.py"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
-     "total": 11
+     "total": 10
     },
     "NC001": {
      "converged": [
@@ -244,11 +240,14 @@
      ],
      "converged_count": 2,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
-     "kept": null,
+     "kept": {
+      "reason": "该码在 tests/_check_test.py 里只作**指令格式示例**（`// ruleid: NC001` 的写法演示），不是登记点——它展示的是语法，不承诺某个具体码存在；同文件已是格式说明文档，逐 token 校验属散文类（有意接受边界，见 ADR-0020 D3）",
+      "source": "docs/decisions/0020-feature-scatter-governance.md（D3 校验/派生/接受三分）"
+     },
      "roles": {
       "引擎侧登记": 2,
       "插件内": 2,
-      "文档": 4,
+      "文档": 5,
       "测试": 3,
       "行为基线": 3
      },
@@ -260,7 +259,7 @@
      "scatter_count": 3,
      "stage_count": 0,
      "stage_files": [],
-     "total": 14
+     "total": 15
     },
     "NC002": {
      "converged": [
@@ -424,7 +423,7 @@
      "roles": {
       "引擎侧登记": 1,
       "插件内": 1,
-      "文档": 2,
+      "文档": 3,
       "测试": 2,
       "行为基线": 1
      },
@@ -434,7 +433,7 @@
      "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
-     "total": 7
+     "total": 8
     },
     "NC011": {
      "converged": [
@@ -464,15 +463,13 @@
      "kept": null,
      "roles": {
       "插件内": 2,
-      "行为基线": 2
+      "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/eval_check_accuracy.py"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
-     "total": 4
+     "total": 3
     },
     "NC013": {
      "converged": [
@@ -483,15 +480,13 @@
      "kept": null,
      "roles": {
       "插件内": 1,
-      "行为基线": 2
+      "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/eval_check_accuracy.py"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
-     "total": 3
+     "total": 2
     },
     "NC014": {
      "converged": [
@@ -571,15 +566,13 @@
       "插件内": 3,
       "文档": 2,
       "测试": 4,
-      "行为基线": 5
+      "行为基线": 4
      },
-     "scatter": [
-      "tests/e2e/eval_check_accuracy.py"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
-     "total": 14
+     "total": 13
     },
     "WC001": {
      "converged": [
@@ -606,12 +599,12 @@
     }
    },
    "summary": {
-    "budget": 16,
+    "budget": 8,
     "converged_total": 40,
     "instances": 24,
     "scatter_max": 3,
-    "scatter_median": 1,
-    "scatter_total": 16,
+    "scatter_median": 0,
+    "scatter_total": 11,
     "stage_max": 0,
     "stage_median": 0
    }

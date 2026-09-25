@@ -1,4 +1,9 @@
 {
  "_note": "功能散点『已判保持』登记表——每条必须有 reason（为什么接受这个散点/为什么不合并）与 source（出处：ADR/机制文档/测试）。判保持的实例其散点数不计入预算（口径同 policy/structural_budget.md R6）。键 = '<family>:<instance>'，family/instance 须存在于 tools/feature_sites_baseline.json。",
- "kept": {}
+ "kept": {
+  "check:NC001": {
+   "reason": "该码在 tests/_check_test.py 里只作**指令格式示例**（`// ruleid: NC001` 的写法演示），不是登记点——它展示的是语法，不承诺某个具体码存在；同文件已是格式说明文档，逐 token 校验属散文类（有意接受边界，见 ADR-0020 D3）",
+   "source": "docs/decisions/0020-feature-scatter-governance.md（D3 校验/派生/接受三分）"
+  }
+ }
 }
