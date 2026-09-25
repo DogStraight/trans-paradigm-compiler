@@ -96,13 +96,58 @@ production = [
 
 [DeclaratorList.parser]
 production = [
-    "@Declarator",
-    "(symbol.base.comma,@Declarator)*",
+    "@InitDeclarator",
+    "(symbol.base.comma,@InitDeclarator)*",
 ]
 
 [DeclaratorList.parser.node]
 first = "$1"
 rest = "$2"
+
+
+# ── 初始化器（阶段 2b）──
+# C99 §6.7.8：`= assignment-expression` 或 `= { initializer-list }`（可递归嵌套）。
+#
+# ⚠ 环的性质与表达式环不同：`InitList → Initializer → InitList` 这条环**由 `{` 守卫**
+#   （`InitList` 的首 token 是 `{`，不可空），故 FIRST 推导收敛、不会 RecursionError；
+#   而 `Initializer → @Expression` 那条不回到 `Initializer` 自身。落地时不必像表达式
+#   环那样加 pratt/inline 三件套，但**不要**把 `InitList` 改成可空形态（那才会引入
+#   真正的 FIRST 环）。
+#
+# 本阶段**未做**（记在此防"看起来支持"）：指示符初始化 `.field = v` / `[i] = v`（C99
+#   新增）、括号内的类型名（复合字面量 `(T){…}`）、`sizeof`、位域。
+
+[InitDeclarator.parser]
+production = [
+    "@Declarator",
+    "(symbol.base.equal,@Initializer)?",
+]
+
+[InitDeclarator.parser.node]
+declarator = "$1"
+init = "$2"
+
+
+[Initializer.parser]
+production = [
+    "@Expression|@InitList",
+]
+inline = true
+
+[Initializer.parser.node]
+value = "$1"
+
+
+[InitList.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "(@Initializer,(symbol.base.comma,@Initializer)*)?",
+    "symbol.base.comma?",
+    "bracket.r_curly_bracket",
+]
+
+[InitList.parser.node]
+items = "$2"
 
 
 [Declarator.parser]

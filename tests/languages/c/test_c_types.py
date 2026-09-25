@@ -80,7 +80,7 @@ class TestTypedefNameAsType:
         """
         ast = _parse("int x;\n", c)
         decl = ast.sub_node[0]
-        assert decl.declarators.first.direct.head.content == "x"
+        assert decl.declarators.first.declarator.direct.head.content == "x"
 
 
 class TestTypesRejection:

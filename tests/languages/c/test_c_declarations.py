@@ -29,19 +29,19 @@ class TestDeclarationParse:
         ast = _parse("int x;\n", c)
         assert _node_names(ast) == ["Declaration"]
         decl = ast.sub_node[0]
-        assert decl.declarators.first.direct.head.content == "x"
+        assert decl.declarators.first.declarator.direct.head.content == "x"
 
     def test_declaration_list(self, c):
         ast = _parse("int a, b, c;\n", c)
         decl = ast.sub_node[0]
-        assert decl.declarators.first.direct.head.content == "a"
+        assert decl.declarators.first.declarator.direct.head.content == "a"
         assert len(decl.declarators.rest.items) == 2  # b, c
 
     def test_pointer_declarator(self, c):
         ast = _parse("int *p;\nchar **pp;\n", c)
         first, second = ast.sub_node
-        assert first.declarators.first.pointers.node_name == "Pointer"
-        assert second.declarators.first.direct.head.content == "pp"
+        assert first.declarators.first.declarator.pointers.node_name == "Pointer"
+        assert second.declarators.first.declarator.direct.head.content == "pp"
 
     def test_specifier_order_is_free(self, c):
         """`const char *s;` 与 `char const *s;` 都应通过（顺序自由）。"""
@@ -121,10 +121,6 @@ class TestSyntaxWideIn:
 
 class TestStagingBoundaries:
     """阶段边界：明确本阶段**不**支持的面（防"看起来支持"）。"""
-
-    def test_initializer_is_not_supported_yet(self, c_linter):
-        """初始化器 `= expr` 属阶段 3（表达式）——本阶段应被拒，不得静默接受。"""
-        assert _lint("int x = 1;\n", c_linter)
 
     def test_function_body_is_not_supported_yet(self, c_linter):
         """函数体属阶段 3（语句）——本阶段应被拒。"""
