@@ -4,15 +4,17 @@
    "desc": "加一个引擎能力位（语言包声明 + 引擎契约）",
    "instances": {
     "elaborator": {
-     "converged": [],
-     "converged_count": 0,
+     "converged": [
+      "core/engine_capabilities.py"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/elaboration/tpc.toml",
      "kept": null,
      "roles": {
-      "引擎侧登记": 6,
-      "插件内": 4,
+      "引擎侧登记": 7,
+      "插件内": 5,
       "文档": 4,
-      "测试": 2
+      "测试": 3
      },
      "scatter": [
       "analyzer/elaboration/README.md",
@@ -25,15 +27,17 @@
      "scatter_count": 6,
      "stage_count": 0,
      "stage_files": [],
-     "total": 16
+     "total": 19
     },
     "formatter": {
-     "converged": [],
-     "converged_count": 0,
+     "converged": [
+      "core/engine_capabilities.py"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/formatter/tpc.toml",
      "kept": null,
      "roles": {
-      "引擎侧登记": 13,
+      "引擎侧登记": 14,
       "插件内": 14,
       "文档": 20,
       "测试": 28,
@@ -59,15 +63,17 @@
      "scatter_count": 15,
      "stage_count": 0,
      "stage_files": [],
-     "total": 77
+     "total": 78
     },
     "macro_policy": {
-     "converged": [],
-     "converged_count": 0,
+     "converged": [
+      "core/engine_capabilities.py"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/macro_policy/tpc.toml",
      "kept": null,
      "roles": {
-      "引擎侧登记": 9,
+      "引擎侧登记": 10,
       "插件内": 6,
       "文档": 5,
       "测试": 1
@@ -86,12 +92,12 @@
      "scatter_count": 9,
      "stage_count": 0,
      "stage_files": [],
-     "total": 21
+     "total": 22
     }
    },
    "summary": {
     "budget": 30,
-    "converged_total": 0,
+    "converged_total": 3,
     "instances": 3,
     "scatter_max": 15,
     "scatter_median": 9,
@@ -242,7 +248,7 @@
      "roles": {
       "引擎侧登记": 2,
       "插件内": 2,
-      "文档": 3,
+      "文档": 4,
       "测试": 3,
       "行为基线": 3
      },
@@ -254,7 +260,7 @@
      "scatter_count": 3,
      "stage_count": 0,
      "stage_files": [],
-     "total": 13
+     "total": 14
     },
     "NC002": {
      "converged": [
@@ -418,7 +424,7 @@
      "roles": {
       "引擎侧登记": 1,
       "插件内": 1,
-      "文档": 1,
+      "文档": 2,
       "测试": 2,
       "行为基线": 1
      },
@@ -428,7 +434,7 @@
      "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
-     "total": 6
+     "total": 7
     },
     "NC011": {
      "converged": [
@@ -840,12 +846,16 @@
      "total": 1
     },
     "structure.protocol": {
-     "converged": [],
-     "converged_count": 0,
+     "converged": [
+      "core/engine_capabilities.py"
+     ],
+     "converged_count": 1,
      "declared_in": "analyzer/structure.py",
      "kept": null,
      "roles": {
-      "引擎侧登记": 1
+      "引擎侧登记": 2,
+      "插件内": 1,
+      "测试": 1
      },
      "scatter": [
       "analyzer/structure.py"
@@ -853,12 +863,12 @@
      "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
-     "total": 1
+     "total": 4
     }
    },
    "summary": {
     "budget": 26,
-    "converged_total": 0,
+    "converged_total": 1,
     "instances": 14,
     "scatter_max": 3,
     "scatter_median": 2,

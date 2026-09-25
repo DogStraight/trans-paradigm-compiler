@@ -178,6 +178,8 @@ CONSTANT: dict[str, str] = {
     "pipeline.schedule.DEFAULT_SCHEDULE_ENTRIES": "默认调度序字面量",
     "pipeline.schedule._BUILTIN_UNIT_CONTRACTS": "内置单元契约字面量",
     "transform.normalizer.EXTRACT_PREFIXES": "抽取前缀字面量",
+    "core.engine_capabilities.CAPABILITIES": "引擎能力表（能力名 → 版本，只读字面量）",
+    "core.engine_capabilities.SECTION_CAPABILITY": "语言包清单段 → 能力映射（只读字面量）",
 }
 
 _ENGINE_PACKAGES = (

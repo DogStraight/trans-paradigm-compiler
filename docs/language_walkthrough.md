@@ -27,7 +27,8 @@ grammar/<lang>/
 
 ```toml
 [engine]
-api = "0.1"   # 本包构建所依据的引擎 API 线（major.minor）；不匹配即加载 fail-fast
+# 本包依赖的引擎契约面（逐项能力 + 版本）；任一不匹配即加载 fail-fast，报错点名缺哪一项
+uses = ["lexer.token_ext.v1", "parser.pratt.v1"]
 ```
 
 **单语言选择模型**：管线一次只用一种语言。初始化时选定：

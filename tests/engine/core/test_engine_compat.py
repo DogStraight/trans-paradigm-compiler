@@ -1,121 +1,144 @@
-"""引擎 API 兼容契约（core/engine_compat.py）——语言包 [engine] api 声明。
+"""引擎能力协商契约（core/engine_compat.py + core/engine_capabilities.py）。
 
 契约：语言包 `grammar/<lang>/tpc.toml` 声明
 
     [engine]
-    api = "0.1"      # 该包构建所依据的引擎 API 线（major.minor）
+    uses = ["lexer.token_ext.v1", "parser.pratt.v1"]
 
-引擎 major.minor 不匹配 → 加载 fail-fast（ConfigError）；未声明 = 不校验
-（纯增量，ad-hoc 包与测试夹具不受影响）。三条断言：声明齐全 / 不匹配拦截 /
-该段不进配置声明（否则会被当 bare data 注册）。
+逐项协商（能力表与版本语义见 `core/engine_capabilities.py`）；任一项不认识或版本
+不匹配 → 加载 fail-fast（ConfigError，**点名是哪一项**）；未声明 `[engine]` = 不校验
+（纯增量，ad-hoc 包与测试夹具不受影响）。
+
+本文件覆盖：形态合法性、协商语义（**未声明的能力变化不误伤**）、旧 `api` 线已删除
+（残留即报未知键）、`[engine]` 不进配置声明。
+
+Doc: core/config_lifecycle.md（包↔引擎契约节）
 """
+from __future__ import annotations
 
 import os
-import tomllib
 
 import pytest
-
-from core import __version__
-from core.errors import ConfigError
-from core.engine_compat import api_line, check_engine_compat, engine_api_line
-from core.config_registry import _load_meta_declarations
-
-pytestmark = pytest.mark.smoke  # smoke：core 组代表（包/引擎契约 fail-fast）
 
 _ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
+from core import engine_capabilities as caps  # noqa: E402
+from core.config_registry import _load_meta_declarations  # noqa: E402
+from core.engine_compat import check_engine_compat  # noqa: E402
+from core.errors import ConfigError  # noqa: E402
 
-# ── 版本串解析 ──────────────────────────────────────
+pytestmark = pytest.mark.smoke  # smoke：core 组代表（包/引擎契约 fail-fast）
 
-
-def test_api_line_takes_major_minor():
-    assert api_line("0.1.1") == "0.1"
-    assert api_line("2.3") == "2.3"
-
-
-def test_api_line_rejects_short_version():
-    with pytest.raises(ConfigError, match="major.minor"):
-        api_line("0")
+_ANY = sorted(caps.CAPABILITIES)[0]  # 任取一项真实能力
+_ANY_V = f"{_ANY}.v{caps.CAPABILITIES[_ANY]}"
 
 
-def test_engine_api_line_matches_package_version():
-    assert engine_api_line() == api_line(__version__)
+# ── parse_use 形态 ──────────────────────────────────────────
+
+def test_parse_use_splits_name_and_version():
+    assert caps.parse_use("lexer.token_ext.v1") == ("lexer.token_ext", "1")
+    assert caps.parse_use("capability.elaborator.v2") == ("capability.elaborator", "2")
 
 
-# ── check_engine_compat 各态 ────────────────────────
+@pytest.mark.parametrize("bad", ["lexer.token_ext", "lexer.token_ext.v", ".v1", "", 1])
+def test_parse_use_rejects_malformed(bad):
+    with pytest.raises(ConfigError, match="uses 项"):
+        caps.parse_use(bad)
 
 
-def test_absent_section_is_not_checked():
+# ── check_engine_compat 各态 ────────────────────────────────
+
+def test_absent_engine_section_is_not_checked():
     """未声明 [engine] → 不校验（纯增量，不破坏既有包/夹具）。"""
     check_engine_compat({}, "grammar/x")
 
 
-def test_matching_api_passes():
-    check_engine_compat({"engine": {"api": api_line(__version__)}}, "grammar/x")
+def test_valid_uses_passes():
+    check_engine_compat({"engine": {"uses": [_ANY_V]}}, "grammar/x")
 
 
-def test_mismatched_api_fails_fast():
-    with pytest.raises(ConfigError, match="不兼容"):
-        check_engine_compat({"engine": {"api": "9.9"}}, "grammar/x")
-
-
-def test_section_without_key_fails_fast():
-    with pytest.raises(ConfigError, match="缺"):
-        check_engine_compat({"engine": {}}, "grammar/x")
-
-
-def test_non_string_api_fails_fast():
-    with pytest.raises(ConfigError, match="非空字符串"):
-        check_engine_compat({"engine": {"api": 1}}, "grammar/x")
-
-
-def test_non_table_section_fails_fast():
-    with pytest.raises(ConfigError, match="须为表"):
-        check_engine_compat({"engine": "0.1"}, "grammar/x")
-
-
-# ── 集成：tpc.toml 加载路径 ─────────────────────────
-
-
-def _write_tpc(tmp_path, content):
-    (tmp_path / "tpc.toml").write_text(content, encoding="utf-8")
-
-
-def test_pack_with_mismatched_engine_fails_fast(tmp_path):
-    _write_tpc(
-        tmp_path, '[engine]\napi = "9.9"\n\n[lexer]\nk = { file = "x.toml" }\n'
+def test_all_current_capabilities_pass():
+    check_engine_compat(
+        {"engine": {"uses": [f"{k}.v{v}" for k, v in caps.CAPABILITIES.items()]}},
+        "grammar/x",
     )
-    with pytest.raises(ConfigError, match="不兼容"):
-        _load_meta_declarations(grammar_dir=str(tmp_path))
 
 
-def test_pack_without_engine_section_still_loads(tmp_path):
-    _write_tpc(tmp_path, '[lexer]\nk = { file = "x.toml" }\n')
-    decls = _load_meta_declarations(grammar_dir=str(tmp_path))
-    assert any(d[0] == "lexer.k" for d in decls)
+def test_unknown_capability_reports_its_name():
+    """引擎不认识的能力 → 报错**点名**是哪一项（旧契约说不出缺什么）。"""
+    with pytest.raises(ConfigError, match="不认识能力 'no.such.thing'"):
+        check_engine_compat({"engine": {"uses": ["no.such.thing.v1"]}}, "grammar/x")
 
 
-def test_engine_section_not_registered_as_config(tmp_path):
-    """[engine] 是包↔引擎契约，不是配置声明（不应进配置中心）。"""
-    _write_tpc(
-        tmp_path,
-        f'[engine]\napi = "{api_line(__version__)}"\n\n'
-        '[lexer]\nk = { file = "x.toml" }\n',
-    )
-    decls = _load_meta_declarations(grammar_dir=str(tmp_path))
-    assert not any(d[0].startswith("engine") for d in decls)
-    assert any(d[0] == "lexer.k" for d in decls)
+def test_version_mismatch_names_item_and_both_versions():
+    with pytest.raises(ConfigError, match=rf"能力 '{_ANY}'.*声明 v99.*v\d"):
+        check_engine_compat({"engine": {"uses": [f"{_ANY}.v99"]}}, "grammar/x")
 
 
-@pytest.mark.parametrize("pack", ["grammar/verilog", "grammar/c4", "grammar/yaml"])
-def test_builtin_packs_declare_current_engine_line(pack):
-    """内置三包都声明 [engine].api = 当前引擎线。
+def test_legacy_api_key_is_rejected():
+    """旧契约 `api` 已删除——残留必须**响亮失败**，不得静默忽略。"""
+    with pytest.raises(ConfigError, match="未知键: api"):
+        check_engine_compat({"engine": {"api": "0.1"}}, "grammar/x")
 
-    引擎 minor 变更时本测试会失败——这是**故意的**：契约要求同步复核三包，
-    确认它们确实与新引擎语义兼容后再改声明。
+
+@pytest.mark.parametrize(
+    "section", [{}, [], {"uses": []}, {"uses": "x"}, "0.1", {"uses": [1]}]
+)
+def test_malformed_engine_section_fails(section):
+    with pytest.raises(ConfigError):
+        check_engine_compat({"engine": section}, "grammar/x")
+
+
+# ── 协商语义：未声明的能力变化不误伤（P-C 的核心承诺） ──────
+
+def test_unrelated_capability_change_does_not_affect_pack(monkeypatch):
+    """包只声明 A；引擎把**另一项** B 升版 → 该包**照旧可加载**。
+
+    这正是能力协商相对"整条 API 线"的收益：受影响面 = 声明了该能力的包。
     """
-    with open(os.path.join(_ROOT, pack, "tpc.toml"), encoding="utf-8") as f:
-        meta = tomllib.loads(f.read())
-    assert meta.get("engine", {}).get("api") == engine_api_line()
+    names = sorted(caps.CAPABILITIES)
+    mine, other = names[0], names[1]
+    monkeypatch.setitem(caps.CAPABILITIES, other, "99")
+    check_engine_compat({"engine": {"uses": [f"{mine}.v1"]}}, "grammar/x")
+
+
+def test_declared_capability_change_is_caught(monkeypatch):
+    """引擎把包**声明过**的能力升版 → 该包被拦下（且点名）。"""
+    name = sorted(caps.CAPABILITIES)[0]
+    monkeypatch.setitem(caps.CAPABILITIES, name, "99")
+    with pytest.raises(ConfigError, match=rf"能力 '{name}'"):
+        check_engine_compat({"engine": {"uses": [f"{name}.v1"]}}, "grammar/x")
+
+
+# ── [engine] 不是配置声明（不进配置中心） ───────────────────
+
+def test_engine_section_is_not_a_config_declaration(tmp_path):
+    pack = tmp_path
+    (pack / "tpc.toml").write_text(
+        f'[engine]\nuses = ["{_ANY_V}"]\n\n[lexer]\nk = {{ file = "x.toml" }}\n',
+        encoding="utf-8",
+    )
+    decls = _load_meta_declarations(grammar_dir=str(pack))
+    assert not any(d[0].startswith("engine") for d in decls), (
+        "[engine] 是包↔引擎契约，不应进配置中心"
+    )
+    assert any(d[0] == "lexer.k" for d in decls)
+
+
+# ── 内置三包：能力清单由清单推导（权威判据在 policy 门禁） ──
+
+@pytest.mark.parametrize("pack", ["c4", "verilog", "yaml"])
+def test_builtin_packs_declare_uses_and_negotiate(pack):
+    """内置三包都声明能力清单且逐项协商通过。
+
+    ⚠ "推导集 ⊆ 声明集"（用到了就必须声明）是**仓库不变式**，断言在
+    `tests/policy/test_engine_capabilities.py`——同一断言两处写就成了新的散点。
+    """
+    import tomllib
+
+    with open(os.path.join(_ROOT, "grammar", pack, "tpc.toml"), "rb") as f:
+        meta = tomllib.load(f)
+    assert meta["engine"]["uses"], f"{pack} 未声明能力清单"
+    check_engine_compat(meta, f"grammar/{pack}")

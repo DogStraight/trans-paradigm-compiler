@@ -16,6 +16,10 @@
   "tests/e2e/samples/check_accuracy/expected.json": {
    "reason": "码由门禁校验：focus 与已定义码双向核对（已定义未入样本即失败）",
    "source": "tests/policy/test_rule_coverage.py::test_every_defined_rule_has_sample"
+  },
+  "core/engine_capabilities.py": {
+   "reason": "能力表是能力协商的**单一来源**（版本只在这里定义）；包侧覆盖由门禁保证（推导集 ⊆ 声明集、声明集 ⊆ 能力表），引擎侧不存在第二处手写版本",
+   "source": "tests/policy/test_engine_capabilities.py::test_pack_declares_every_capability_it_uses"
   }
  }
 }

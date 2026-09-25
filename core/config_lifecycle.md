@@ -13,27 +13,40 @@ token.toml 重复 key 事故——解析失败被 `except` 当"可选缺失"静�
 全退化为 id → linter 全面崩溃。**静默错乱是"假绿"温床**——配置损坏在入口暴露，
 不运行期难查。实现见 `config_registry.py::ConfigRegistry.load_all` 异常分类。
 
-## 包↔引擎契约：`[engine] api`（2026-09-13）
+## 包↔引擎契约：`[engine] uses` 能力清单（2026-09-25）
 
 `grammar/<lang>/tpc.toml` 可声明：
 
 ```toml
 [engine]
-api = "0.1"      # 该包构建所依据的引擎 API 线（major.minor）
+uses = ["lexer.token_ext.v1", "parser.pratt.v1"]
 ```
 
-语义：语言包依赖引擎语义（FOLLOW 推导 / inject / 节点绑定 / 组件协议），0.x 期
-minor 变动即可能破坏旧包——声明后引擎 major.minor 不匹配即**拒绝加载**
-（`ConfigError`，fail-fast），替掉"升级引擎后包静默坏掉"的隐式契约。
+语义：逐项列出该包**依赖的引擎契约面**（能力表与版本语义见
+`core/engine_capabilities.py`）。每项须是引擎已知能力且版本匹配，否则**拒绝加载**
+（`ConfigError`，fail-fast），报错**点名是哪一项能力**（包的版本 vs 引擎的版本）。
 **未声明 = 不校验**（纯增量：ad-hoc 包与测试夹具不受影响）。
+
+**为什么不是"整条 API 线"**（原 `api = "0.1"`，已于本版删除）：整条线的粒度让
+①引擎 minor 一动**所有**包都被拦（哪怕该包只用语法声明、没碰精化协议），
+②报错说不出**缺哪一项**。能力协商把受影响面收敛到"**声明了该能力**的包"，
+报错直接指出迁移对象；引擎内部重构/优化/文案调整**不**升版本（判据见能力表头注，
+否则受影响面会被自己放大成常态）。
+
+**单一来源纪律**：`uses` 不许凭记忆写——`required_capabilities()` 从包**自己的清单**
+（tpc.toml 段 + `[capabilities]` 键 + `rules/*.toml`）机械推导，门禁
+`tests/policy/test_engine_capabilities.py` 断言"推导集 ⊆ 声明集"（漏声明即红）
+与"声明集 ⊆ 能力表"（改名/删除的残留即红）。
+
+**不留向后兼容**：`[engine]` 只认 `uses` 一个键——残留的 `api = "0.1"` 会被"未知键"
+在加载期拦下（响亮失败，不静默忽略）。
 
 校验点两处（不同入口，都不可省）：`_load_meta_declarations`（`load_all` /
 `resolve` 路径）与 `core/define.py::_load_tpc_meta`（import 期默认包）。
 `[engine]` **不是配置声明**——注册时跳过（否则会被当 bare data 进配置中心）。
-契约实现见 `core/engine_compat.py`，回归 `tests/engine/core/test_engine_compat.py`。
-
-内置三包均声明当前线；引擎 minor 变更时 `test_builtin_packs_declare_current_engine_line`
-会失败——这是**故意的**，逼一次三包语义复核。
+契约实现见 `core/engine_compat.py` + `core/engine_capabilities.py`，回归
+`tests/engine/core/test_engine_compat.py`（协商语义）+ `tests/policy/test_engine_capabilities.py`
+（覆盖不变式）。
 
 ## 三阶段时序
 

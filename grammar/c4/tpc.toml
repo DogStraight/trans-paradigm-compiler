@@ -4,9 +4,17 @@
 # 配置结构遵循 grammar/<lang>/ 约定（参考 grammar/verilog/tpc.toml）。
 
 [engine]
-# 本包构建所依据的引擎 API 线（major.minor）——引擎不匹配即加载 fail-fast
-# （契约语义见 core/engine_compat.py，校验点见 core/config_lifecycle.md）。
-api = "0.1"
+# 本包依赖的引擎契约面（逐项能力 + 版本）——任一项引擎不认识或版本不匹配即
+# 加载 fail-fast，报错点名是哪一项（能力表与版本语义见 core/engine_capabilities.py，
+# 校验点见 core/config_lifecycle.md）。能力清单由包**实际用到的清单段**推导，
+# 门禁 tests/policy/test_engine_capabilities.py 查漏声明。
+uses = [
+    "lexer.token_ext.v1",
+    "parser.pratt.v1",
+    "pipeline.units.v1",
+    "render.plugins.v1",
+    "transform.slots.v1",
+]
 
 [lexer]
 token_base = { file = "base/_token.toml", required = true }

@@ -60,9 +60,12 @@
       **预算 56 → 16**（中位 2→1、最大 5→3）。剩余 16 点与接受边界见缺口档「步 2 结果」。
       ⚠ **未做完的**：`eval_check_accuracy.py` docstring 枚举（可改为不枚举 = 真删除）、
       `_check_test.py`、`check_gate_efficacy.py` 接同一门禁、机制文档码表（有意不接校验）
-- [ ] **步 3 契约协商（P-C）**：`[engine].api`（整条 API 线）→ 能力清单
-      `uses = ["…v1"]` + 引擎能力版本表 + **精确缺项报错**；切换后按"不留向后兼容"
-      删掉旧 `api` 线（若必须并存须写明删除期限与判据）
+- [x] **步 3 契约协商（P-C）——已完成**：`[engine].uses` 能力清单 +
+      `core/engine_capabilities.py` 能力表 + 精确缺项报错；旧 `api` 线**已删**
+      （残留由"未知键"拦下）。`uses` 由包清单机械推导，门禁
+      `tests/policy/test_engine_capabilities.py` 查漏声明/残留；协商语义（含"未声明的
+      能力变化不误伤"）在 `tests/engine/core/test_engine_compat.py`。
+      三包清单：c4 5 / verilog 14 / yaml 2。实测与取舍见缺口档「步 3 结果」
 - [ ] **步 4 定案建 ADR**：三步的结论合成 ADR（`docs/decisions/`），并把机制写进
       `core/component_protocol.md` / `core/config_lifecycle.md` 等机制文档
 
