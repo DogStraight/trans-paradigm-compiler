@@ -9,7 +9,7 @@
 
 本文件只做**检查编排与诊断汇总**：结构提取的六个协作者（见 structure.py）、
 会话上下文 `StructureCtx`、语言包 `[structure]` 协议声明点全在那里；门面把它们
-装配起来并驱动阶段顺序（prepare → discover → 信号图 → analyze → collect）。
+装配起来并驱动阶段顺序（prepare → discover → elaborate → analyze → collect）。
 共享组件装载在 `shared_components.py`，诊断形状序列化在 `diag_serialize.py`。
 Doc: analyzer/semantic_checks.md（跨文件语义检查）
 """
@@ -104,7 +104,7 @@ class ProjectChecker:
 
         Args:
             entry_path: 入口文件路径；或**多入口列表**（同一工程的多个顶层
-                文件）。多入口共享 module_index 与层 2/3 图——单元定义的
+                文件）。多入口共享 module_index 与精化产物容器——单元定义的
                 发现范围是「入口所在目录 + include 目录」（`_find_module_file`
                 先找同名文件、再在该目录内做关键字文本扫描兜底），所以
                 **跨目录**的工程或分布在多目录的顶层文件必须一次 check；
@@ -145,7 +145,7 @@ class ProjectChecker:
     def _prepare_run(self, entry_path: str | list[str]) -> list[str]:
         """入口归一化为绝对路径，并重置本次运行的索引与缓存。
 
-        多入口共享同一次运行的状态（memo / module_index / 层 3 穿透缓存），
+        多入口共享同一次运行的状态（memo / module_index / 精化产物容器），
         否则跨入口的单元定义互不可见。
         """
         raw = [entry_path] if isinstance(entry_path, str) else list(entry_path)

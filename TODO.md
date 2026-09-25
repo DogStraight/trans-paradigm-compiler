@@ -3,62 +3,22 @@
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
 
-## 架构：精化（elaboration）部件化 + 插件化（ADR-0019，**P1–P3 已完成**）
+## 架构：精化（elaboration）部件化 + 插件化（ADR-0019）——**已收口**
 
-> **定案**：`docs/decisions/0019-elaboration-plugin-protocol.md`——引擎最小可视单位
-> = **文件**；精化协议 = 语言包 `[capabilities] elaborator` 返回的**可扩展项列表**
-> （字段 `name` / `locator` / `solver` / `scope` / `provides` / `depends_on` /
-> `locator_fn` / `role`）；产物**容器**由引擎定、**条目名与形状由插件定**。
->
-> **已完成**：P1（骨架 + 行为面基线）→ P2（`param_default` 端到端 + 5 消费方迁移）→
-> P3-①（gen 族迁出）→ P3-②a/b（`port_decls` / `connections` / `signal_graph` 三项移植 +
-> **各自逐项对拍**）→ P3-②c-1（层 2/3 删除约 600 行）→ P3-②c-2a/b（3 个端口消费方改读
-> 产物 + 删引擎侧端口提取与 `[structure]` 死声明）。
-> ✅ **终态判据已达成**：**`ROLES` 为空**（引擎不消费任何插件产物；测试 `test_roles_are_empty_at_terminal_state`
-> 机器守）。引擎侧净减约 **1000 行**语言知识。
->
-> **待做**（只余 c-3 的下半段）：
-> - **c-3 消费方迁移**：`param_override` 插件项**已落地且与 `width_check` 自己的合并逐项
->   对拍通过**（字面量覆盖 + `changed` 判据 + 不空转）。待做的是**删掉消费方那份重复合并**
->   （`width_check._override_params` / `_override_changes_params`，`hier_check._merged_params`）
->   ——⚠ **前提是先处理一处技法差异**：`width_check` 用**自带 `node_text` 渲染器**取覆盖值
->   文本，插件项用**服务渲染器**；字面量一致，**表达式**覆盖可能只差空白（数值等价，但
->   `_override_changes_params` 的文本比较可能变脸）。差异已在测试里钉住。
-> - ~~P4 收尾~~ **已完成**：`component_protocol` §1b + `analyzer/README` + 插件 README +
->   `MODEL_INDEX` 跳转行（`7ee2340`）。
-> - 可选清理：`role` 机制在终态下已无合法值（`ROLES` 空）——是否连机制一起删，待定
->   （现按 ADR 保留，作为"将来确有引擎自用产物"的登记位）。
-> ⚠ P2 实测更正两处协议（已回写 ADR-0019 决策 3）：新增**引擎角色位 `role`**、
-> `locator` 改为**可省略**；`param_override` 实测为"插件侧已有合并逻辑的上提"而非
-> 引擎侧渗透 → 随 `inst_sites`/`connections` 族在 P3 落地（理由见 ADR 决策 4 更正节）。
+> P1–P4 全部完成，含 c-3 消费方去重（`width_check` 改读 `param_override` 产物）与
+> **"引擎角色位"机制整体删除**（终态下引擎**一个插件产物都不消费**，机制已无合法值 →
+> 按"不留向后兼容"连登记槽一起删）。引擎最小可视单位 = **文件**；引擎侧净减约
+> **1000 行**语言知识。定案 / 分期 / 角色位契约表 / 实测踩坑见
+> `docs/decisions/0019-elaboration-plugin-protocol.md`（本文件不再复述，完成历史看 git log）。
+> 收口时从执行面**析出两项仍未完成**的独立改进（原判据失效，各自需要新判据）：
 
-- **现状错配（实测，`analyzer/structure.py`）**：
-  - 文本模式求值/判断（应 AST-first）：`_is_signal_expr` 正则、`render_subtree` 渲染
-    后再字符串比较（`== port`）。
-    （~~`_eval_gen_cond` 的 `text.isdigit()` / `text.startswith(not_op)` /
-    `IDENT_RE.fullmatch`、`_tokenize_const` + `_CONST_TOK_RE` + `_eval_const_expr` 文本
-    递归下降、`_param_truth` 值文本判数字~~ —— **P3-① 已随 gen 族迁出引擎**：整条链进
-    `grammar/verilog/plugins/elaboration/`，引擎侧与 `[structure]` gen 声明**同批删除**。
-    ⚠ **技法未变**（它仍是文本求值）——AST-first 改写作为**插件侧独立改进项**保留，
-    此时动机是"插件代码质量"而非"消除渗透"，须配自己一套验证。）
-  - 语言知识硬编码（应进插件）：`_fill_body_ports` 的 `_FUNC_OR_TASK` 元组、
-    `elaborate_connections` 的 `field("connects") or "ports"`、
-    `_fill_body_ports` 的 `or "direction"`，以及"名字在 `Node.content`"这一未声明形态假设。
-    （~~`_fill_body_params` 的 `"ParamDeclStmt"` / `"Declarator"` / `"init"`~~ ——
-    **P2 已迁出**：随 `param_default` 精化项进入 `plugins/elaboration/`，引擎侧抽取与
-    `ModuleParam`/`ModuleInfo.params`/`[structure.fields]` 相关两键**同批删除**。）
-  - AST 证据（`_drafts/probe_ast_shape.py`）：取反在 AST 里是
-    `UnaryOp(op='!', operand=HierExpr([Identifier('W')]))`——**不是文本前缀**；
-    `Number.value` 今天有 str / Node 两种形态（形态知识进插件后由插件自认，无需对齐语法绑定）。
-- **契约划分**（按 ADR-0019 修订）：引擎基座 = ①加载位（能力名 + 未声明降级为单文件
-  lint+analyze）②**产物容器**（`context.extra` 的单一容器键 + 生命周期；**条目名与
-  形状归插件**）③语言无关服务句柄（读源 / 宏展开 / AST 解析 / 行映射 `line_map` /
-  宏区间 `macro_regions`）。插件 = 全部语言语义（实例化点→目标模块名、按名找定义文件、
-  单文件精化、**AST-first 求值规则**、驱动源三类形态、层次穿透、端口方向语义）。
-  ⚠ 原记"产物模型与 `context.extra` 键名（形状属引擎协议，不能由插件定义）"**已推翻**
-  ——其前提是"条目固定"，条目可扩展后不再成立；依据与风险缓解见 ADR-0019 决策 5 + 权衡。
-- 编排骨架（发现循环 / 汇总 / 容器注入）留引擎、产物**运行期核验**、外部对照与命名
-  纪律（`elaboration` 非 refinement）——均已并入 ADR-0019，此处不重复（docs 治理 C3）。
+- **插件侧 AST-first 改写**：搬迁是**逐字**的，技法未变——`grammar/verilog/plugins/
+  elaboration/_graph.py::_is_signal_expr`（正则判"简单信号名"）与 `render_subtree`
+  渲染后**字符串比较**仍是文本模式。动机已从"消除引擎侧渗透"改为**插件代码质量**，
+  故须**自带一套验证**（不再有渗透判据兜底）。
+- **引擎侧未声明的取值形态假设**：`[structure.fields]` 只声明**字段名**，引擎仍假设取值在
+  `Node.content`（`analyzer/structure.py` 单元名、`analyzer/elaboration/atoms.py`）——
+  "形态从哪里取"没进声明面，多形态语言包会撞。归 L1（渗透复审）。
 
 
 ## 语言知识渗透复审与精化基座重设计（2026-09-20 立，长期）
@@ -70,8 +30,9 @@
 > （判据集 + 已知边界 + 重构期用法）；当前基线 **S = 0**（每个命中都有结论；
 > 原始量仍在，删 `structural_kept.json` 对应条目即可回滚），登记表完整性由
 > `tests/policy/test_structural_kept.py` 守。
-> **下一项 = 精化基座重构**（本文件首节的 P1–P4 执行面 = ADR-0019；下方 L2 的能力边界
-> 设计原则，同一件事的两面）；L1 语言知识渗透复审仍是长期方向、不在近期排期。
+> ~~下一项 = 精化基座重构~~ ✅ **已完成**（ADR-0019，见本文件首节）；下方 L2 的**能力
+> 边界设计原则**保留（管辖 ADR-0019 范围外的待议面）；L1 渗透复审仍是长期方向、
+> 不在近期排期。
 
 ### L1 语言知识渗透复审（长期）
 
@@ -81,7 +42,8 @@
 - **判据三条（强弱递减；详见 `docs/gaps/gap-language-penetration.md`）**：
   ① **最小语言包探针**（主判据，行为面）——只加载最小骨架包跑全量测试，仍绿的引擎
      测试 = 普适面（**已做** 2026-09-24：`tools/min_pack_probe.py` + 基线；
-     `tests/engine` 仍绿 1126 例）；② **声明面缺失探针**（辅助，行为面）——临时删一段
+     `tests/engine` 仍绿 **1186** 例——数字随测试增删漂移，基线须**串行**重录，
+      工具头有纪律说明）；② **声明面缺失探针**（辅助，行为面）——临时删一段
      语言包声明跑测试，仍绿处 = 引擎替声明做事；③ **弱信号面** =
      `tools/lang_penetration.py`（引擎里出现语言包规则/节点名（硬信号）/
      语言对象词作标识符（弱信号，须人工判））。
@@ -90,7 +52,8 @@
   - **analyzer = 重灾区**（与作者判断一致）：`structure.py` 硬编码 5 个**规则名**
     （`"FuncDecl"/"FuncDeclOld"/"TaskDecl"`、`"ParamDeclStmt"`、`"Declarator"`）
     + 语义名词标识符 **183 处**（端口/实例/信号驱动）；`checker.py` 的 `_signal_graph`/
-    `inst_sites`。**均归 L2（精化基座）**——不动，等 L1 其余面做完。
+    `inst_sites`。**均归 L2（精化基座）**——✅ **已随 ADR-0019 P1–P4 迁移或删除**
+    （见上节；那 5 个规则名与语义面现全在语言包插件侧）。
   - **parser**：11 处结构名命中全是**引擎表达式树/节点协议名**；原先当渗透的
     `_parse_bit_width_literal` 经**调用计数探针**实测在三语言包下**不可达**（lexer 按
     `[[number.based]]` 捕成单 token，规则的 `Number` 先手接住）→ 实为**冗余第二路径**，
@@ -110,8 +73,9 @@
   配置点位法反而**奖励**这类渗透。两条门禁答的是"有没有**语言的关键字**"，
   而精化基座的问题是"有没有实现**语言的语义**"——前者是字符串问题，后者是判据问题。
 - **下一步**：① 行为面基线（最小语言包探针）——**已做**（2026-09-24，判据 1）；
-  ② 之后就进 L2（精化基座重设计；analyzer 的 5 个规则名 + 183 处语义面 + 产物契约键名
-  都在那一批）。
+  ② L2（精化基座重设计）——✅ **已由 ADR-0019 完成**（analyzer 的 5 个规则名 +
+  语义面 + 产物契约键名都在那一批里处理完）。**剩余面 = 精化基座之外的渗透复审**
+  （判据 ② 声明面缺失探针 / ③ 弱信号面，按需在改动时顺带做），未见排期。
 - **另："多加语言包"作为暴露法的代价（已知事实）**：c4/yaml 覆盖浅，暴露力有限；
   且多语言同进程已有真实串味史（`_PIPELINE_SHARED` 按 rules_dir 缓存、
   `global_state` 语言注册面只增不还原、`test_language_switch` 曾偶发失败）→ 该法
@@ -152,9 +116,11 @@
 - **普适原语必须共享**（否则各插件重写"跳空白"之类会漂移）：既有 `core/token_protocol`、
     `lexer/lexer_utils`、`core.define.iter_nodes` 已是这类原语，重设计时明确清单。
 - **命中点与实证（本仓事实）**：
-  - `analyzer/structure.py`：引擎侧实现了 generate 条件求值（`_eval_const_expr`/
+  - `analyzer/structure.py`：~~引擎侧实现了 generate 条件求值（`_eval_const_expr`/
     `_ConstExprParser`）、端口/参数抽取（`_PortFields`/`ModuleExtractor`）、
-    信号图（`SignalGraphBuilder`）→ 属"抽取 + 动态求解"，是 L2 的首要搬迁面。
+    信号图（`SignalGraphBuilder`）~~ → ✅ **已全部随 ADR-0019 P3 迁入语言包**
+    （`grammar/verilog/plugins/elaboration/`），`structure.py` 现只剩**文件层**
+    （索引 / 发现 / 单文件装配）。
   - **数字形态（配置面膨胀的实证）**：旧 `NumberFSM` 硬编码单例**已不存在**
     （P2.1 配置化时移除，`lexer/main_lexer.py` 有记录）。现状是另一种形态——
     为让引擎普适，`grammar/verilog/base/_number.toml` 用 **7 个字段 × 4 个形态块**

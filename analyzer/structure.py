@@ -11,7 +11,7 @@
 ⚠ **层 2/3 与 generate 求值均已迁出**（ADR-0019 P3）：端口连接展开、信号驱动/负载图、
 generate 条件求值都是**语言知识**，现归语言包插件精化项
 （`grammar/verilog/plugins/elaboration/`：`port_decls` / `connections` / `signal_graph` /
-`gen_activity`）；引擎按**角色位**取自己要用的产物（现仅 `gen_activity`），其余产物由
+`gen_activity`）；引擎**一个产物都不消费**（角色的机制已随终态整体退场），全部产物由
 插件**直接读容器**。
 
 本模块剩下的协作者（引擎唯一可视单位 = **文件**）：
@@ -55,10 +55,6 @@ _structure_cfg: dict = declare_cfg("structure.protocol", {}, __name__, "_structu
 
 
 # ── 数据模型 ──────────────────────────────────────────────
-
-# 连接表达式是否为"简单信号名"（层 3 建图过滤：常量/拼接/带位选的复杂
-# 表达式不入驱动/负载图——信号解析交给上层规则，此处只记简单标识符）。
-
 
 
 @dataclass
@@ -175,7 +171,7 @@ class StructureCtx:
         return [str(e) for e in exts] if isinstance(exts, list) else []
 
     def dirs(self, key: str) -> set[str]:
-        """端口方向值集合（层 3 信号图判定；语言包声明，引擎零语言知识）。"""
+        """端口方向值集合（**注入 `context.extra` 供语言包用**；引擎零语言知识）。"""
         vals = (self.struct.get(key) or []) if self.struct else []
         return {str(v) for v in vals} if isinstance(vals, list) else set()
 
@@ -208,7 +204,7 @@ class ModuleExtractor:
     """层 1 单元提取：AST → ModuleInfo（端口/参数声明形态 + 名字/方向/宽度）。
 
     语言知识全部走 ctx 协议（`module_decl_rule` / 节点字段名 / `has_structure`），
-    故换语言包即换形态。产出挂 `FileResult.modules`（层 2/3 与 postpass 消费）。
+    故换语言包即换形态。产出挂 `FileResult.modules`（索引与精化原子供源消费）。
 
     只依赖 ctx（协议读取 + 渲染助手），不持有会话状态。
     """
