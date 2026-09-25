@@ -21,9 +21,12 @@
   某原子无产物"报错（按原子出产物，空是常态）。理由见 `contract.py` 模块头。
 - **降级**：未声明能力 → 不提取、不递归、不注入容器。
 
-## 未接线状态（P1）
+## 接线（已完成）
 
-按 ADR-0019 分期，本包当前**只新增不接线**：`ProjectChecker` / `pipeline` 尚不调用
-`load_elaborator_spec`，`[structure]` 声明面与 `analyzer/structure.py` 的引擎侧实现
-仍在原位。接线自 P2（`param_default` + `param_override`）起，逐族替换并**同批删除**
-旧实现（不留双路径）。
+唯一调用点是 `analyzer/checker.py::ProjectChecker`：构造期 `Elaborator(load_elaborator_spec(...))`，
+`_elaborate()` 在发现之后运行项列表，把产物容器注入 `context.extra[CTX_ELABORATION]`，
+并注入 `CTX_ANALYZED_FILE`（**文件作用域产物的切片依据**——后处理逐文件跑，
+语言包靠它取对本文件的产物）。
+
+引擎**不消费任何产物**：角色的机制已整体退场，产物由语言包内的检查经容器读取；
+`pipeline` 不参与（精化是 analyzer 阶段的事）。

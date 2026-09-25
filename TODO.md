@@ -66,8 +66,19 @@
       `tests/policy/test_engine_capabilities.py` 查漏声明/残留；协商语义（含"未声明的
       能力变化不误伤"）在 `tests/engine/core/test_engine_compat.py`。
       三包清单：c4 5 / verilog 14 / yaml 2。实测与取舍见缺口档「步 3 结果」
-- [ ] **步 4 定案建 ADR**：三步的结论合成 ADR（`docs/decisions/`），并把机制写进
-      `core/component_protocol.md` / `core/config_lifecycle.md` 等机制文档
+- [x] **步 4 定案建 ADR——已完成**：`docs/decisions/0020-feature-scatter-governance.md`
+      （D1 度量先行 / D2 单一来源 / D3 校验·派生·接受三分 / D4 契约版本化到能力粒度 /
+      D5 不留兼容且收敛声明可审计 / D6 断言分工 + 被拒绝的 5 个备选 + 三步验证证据）。
+      机制文档同步：`core/config_lifecycle.md`（包↔引擎契约节改写为能力清单）、
+      `core/component_protocol.md`（§1b 精化器能力位，步 3 前已落）。
+- [ ] **ADR-0019 退场**（"完成即删"判据已满足：机制已落 `core/component_protocol.md`
+      §1b + `analyzer/elaboration/README.md`）。**前置**：先清引用——协作方文档 7 处
+      （`component_protocol.md` / `analyzer/README.md` / `analyzer/elaboration/README.md` /
+      `gap-language-penetration.md` / `gap-feature-scatter.md`）+ **代码注释 32 处**
+      （引用纪律：代码不反向引用 ADR；注释改为内联"为什么"或指向机制文档），
+      清完再删档（历史在 git log）。⚠ 同批发现并已修一处**陈述过期**：
+      `analyzer/elaboration/README.md` 原写"未接线状态（P1）/只新增不接线"，实际 P2–P4
+      早已接线——已改为「接线（已完成）」并写明唯一调用点与"引擎不消费任何产物"。
 
 > ⚠ 顺序纪律：**步 1 的度量先行**——不先用数字定位"哪一族的哪几个登记点最贵"，
 > 后面的收敛就是猜（本仓已有"配置面膨胀"的实证教训，见 `references.md` 数字形态节）。
