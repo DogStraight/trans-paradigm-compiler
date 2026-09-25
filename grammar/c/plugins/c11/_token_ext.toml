@@ -1,0 +1,16 @@
+# c11 插件 — 词法扩展（C11 §6.4.1 新增关键字）
+#
+# ⚠ 全部 6 个 C11 新关键字都在此声明（词法面完整）；语法规则只做 `_Static_assert`。
+#   其余关键字的语法面（`_Generic` 选择表达式、`_Alignas` 对齐说明符、
+#   `_Alignof`、`_Noreturn` 函数说明符、`_Thread_local` 存储类、`_Atomic` 类型限定符）
+#   待后续增量批次——**声明了关键字但没有规则**时，用它们就是语法错误（响亮失败），
+#   不会静默当作标识符。
+
+[id.keyword]
+_Static_assert = "_Static_assert"
+_Generic = "_Generic"
+_Alignas = "_Alignas"
+_Alignof = "_Alignof"
+_Noreturn = "_Noreturn"
+_Thread_local = "_Thread_local"
+_Atomic = "_Atomic"

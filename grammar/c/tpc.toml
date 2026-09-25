@@ -8,6 +8,7 @@
 # 本包依赖的引擎契约面（逐项能力 + 版本）——任一项引擎不认识或版本不匹配即
 # 加载 fail-fast，报错点名是哪一项（能力表见 core/engine_capabilities.py）。
 uses = [
+    "grammar.rules.v1",
     "lexer.token_ext.v1",
     "parser.pratt.v1",
 ]

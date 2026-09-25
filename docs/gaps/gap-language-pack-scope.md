@@ -203,3 +203,44 @@ grammar/c/
 三条缺口（整型后缀 / 前导点浮点 / 字符串内转义引号）都由
 `tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：修好后对应用例
 会失败并提醒同步本档。
+
+
+## 增量插件形态实测：**缺运行时启用开关**（2026-09-25）
+
+C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_assert` + C11 六个新
+关键字的词法扩展）。实测三点：
+
+1. **增量确实住在插件里、不碰基座**：`StaticAssertDecl` 只出现在插件目录，
+   核心基线文件（`00_*`/`01_*`/`02_*`/`03_*`）不含它——"加标准 = 加插件"成立，
+   已由 `tests/languages/c/test_c_increment_plugin.py` 按**扫描文件**的方式守住。
+2. `<pack>/plugins/` 是**随包自动发现**的：`setup_grammar(rules_dir, register, ext_dirs)`
+   没有 enabled 参数；`load_language(pack, plugins_dir=…)` 传与不传都加载到同一份。
+3. 语言包 `tpc.toml` 的 `[plugins] enabled` 是**打包/分发面**清单，不是运行时开关。
+
+**缺口**：ROADMAP 定调的"`enabled` 组合等效某个标准"目前**无法在一次运行里表达**
+（只能在打包面或 pack 副本上切换两档）。要做"语法接受域断言（对标各标准语法规范）"
+（ROADMAP C 包条目里的验收项），就需要一个**运行时可选的插件组合**入口。
+
+**候选**：给 `load_language` / `setup_grammar` 一个显式的 `enabled` 覆盖（或 `ext_dirs`
+收敛成"插件组合"声明），语义与打包面的 `[plugins] enabled` 统一到一处清单——
+顺带把"两处各有一份启用清单"这个潜在散点一并消除。判据：同一 pack、同一次进程内，
+两档组合各自可加载并解析出不同规则表；且 `requires` 链（c17→c11→核心）在缺前置时
+**响亮失败**（组件依赖排序已有该行为，`core/plugin_loader.py` 的 `META_REQUIRES`）。
+
+
+### 精化（同日实测）：规则加载与词法扩展走**两条不同**路径
+
+- **规则文件**（`[grammar] files`）：`setup_grammar(<pack>, register)` **自动扫描**
+  `<pack>/plugins/`，故规则会进来（`StaticAssertDecl` 在规则表里 ✓）。
+- **词法扩展**（`[lexer] token_ext`）：经 `ConfigRegistry.load_language(pack,
+  plugins_dir=…)` 与 `setup_grammar(..., ext_dirs=[…/plugins])` **都未生效**——
+  `_Static_assert` 仍是标识符，于是 `_Static_assert(1, "x");` 被解析成 `ExprStmt`
+  （函数调用），插件规则永远匹配不到。verilog 侧的可复现用法是把 `ext_dirs` 传给
+  **`LinterScanner(rules_dir=…, ext_dirs=["…/plugins"])`**（`tests/languages/verilog/
+  test_2005_batch2.py:115`）。
+
+**结论**：C 包首个增量插件目前是"**规则层已增量、词法层未接通**"的半成品。
+下一步（按"先成因后动手"）：读 `Lexer` / `LinterScanner` 对 `ext_dirs` 的消费路径
+（`core.define.DEFAULT_EXT_DIRS` 的派生链是入口），确认语言包插件目录该以什么身份
+进入词法扩展；接通后把 `test_construct_not_yet_parsed_as_plugin_node` 改为断言
+`["StaticAssertDecl"]`。**不要**改断言迁就现状。
