@@ -82,7 +82,7 @@ value = "$2"
 # PrimaryExpr — 原子选择器（inline + 单条交替 = 环保护第 ③ 项）
 [PrimaryExpr.parser]
 production = [
-    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr",
+    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@CallExpr|@IndexExpr|@MemberExpr",
 ]
 inline = true
 
@@ -96,3 +96,64 @@ production = ["@PrimaryExpr"]
 pratt = true
 
 [Expression.parser.node]
+
+
+# ── 后缀链（Layer B2）──
+# ⚠ 三个后缀形态一律标 `is_atom = true`：它们内部含 `@Expression`，与 `Expression`
+#   成环——环只有在**原子规则**里才被 pratt 层截断（同 `ParenthesizedExpr`）。
+#   写成普通规则会让 `setup_grammar` 直接 RecursionError（上一轮委派即栽在同类位置上）。
+#
+# 已知边界（本层不做，记在此防"看起来支持"）：
+#   · 链式后缀 `f(a)[i]` / `a.b.c` / `p->q->r` —— 需要"原子 + 后缀*"形态，
+#     与环保护冲突（后缀组不在原子位置）；留待与引擎侧确认后再做。
+#   · 通过函数指针调用 `(*fp)(x)`、复合字面量、`sizeof` 表达式。
+
+# CallExpr — 调用 f(arg, ...)（实参表可空：`f()`）
+[CallExpr.parser]
+is_atom = true
+production = [
+    "@Identifier",
+    "bracket.l_parentheses",
+    "@ArgumentList?",
+    "bracket.r_parentheses",
+]
+
+[CallExpr.parser.node]
+callee = "$1"
+args = "$3"
+
+
+# IndexExpr — 下标 a[i][j]（c4 同款：`(...)` 组 + 量词表达链式下标）
+[IndexExpr.parser]
+is_atom = true
+production = [
+    "@Identifier",
+    "(bracket.l_square_bracket,@Expression,bracket.r_square_bracket)+",
+]
+
+[IndexExpr.parser.node]
+base = "$1"
+indexes = "$2.items[*].sub_node[1]"
+
+
+# MemberExpr — 成员访问 a.b / p->q（单级；多级链见上方"已知边界"）
+[MemberExpr.parser]
+is_atom = true
+production = [
+    "@Identifier",
+    "(symbol.base.dot|symbol.extend.arrow)",
+    "@Identifier",
+]
+
+[MemberExpr.parser.node]
+base = "$1"
+access = "$2"
+member = "$3"
+
+
+# ArgumentList — 逗号分隔实参（**表达式列表**；这里的逗号是分隔符不是运算符）
+[ArgumentList.parser]
+production = ["@Expression", "(symbol.base.comma,@Expression)*"]
+
+[ArgumentList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]

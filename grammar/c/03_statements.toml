@@ -4,8 +4,13 @@
 # C99 §6.8 语句。Layer A 只落"能让函数体立起来"的最小集：
 #   CompoundStmt（复合语句，同时用作函数体）/ ExprStmt / EmptyStmt / ReturnStmt
 #   + Stmt 选择器 + FuncDef（函数定义）
-# Layer C 再补：if / while / do / for / switch / case / default / goto / 标号 /
-#   break / continue。
+# Layer C（本层已补）：if / else / while / do-while / for / switch + case/default /
+#   break / continue / goto / 标号。
+#
+# ⚠ 本层**未做**（记在此防"看起来支持"）：
+#   · `for (int i = 0; …)` 声明式初值——需要初始化器（阶段 2b）；
+#   · `case 1 ... 5:`（GNU 范围扩展，非 C99）；
+#   · switch 体内的声明（C99 允许，但需初始化器面）。
 #
 # ⚠ 语句规则一律标 `is_statement = true`：引擎的语句发现按"首 token 能否起始某条
 #   语句规则"挑候选；未标记的规则不会成为语句入口（linter 会整行静默跳过）。
@@ -33,7 +38,7 @@ body = "$2"
 
 [Stmt.parser]
 production = [
-    "@CompoundStmt|@ExprStmt|@EmptyStmt|@ReturnStmt",
+    "@CompoundStmt|@ExprStmt|@EmptyStmt|@ReturnStmt|@IfStmt|@WhileStmt|@DoWhileStmt|@ForStmt|@SwitchStmt|@BreakStmt|@ContinueStmt|@GotoStmt|@LabelStmt|@CaseLabel|@DefaultLabel",
 ]
 inline = true
 
@@ -101,3 +106,175 @@ specs = "$1"
 rest = "$2"
 declarator = "$3"
 body = "$4"
+
+
+# ── 控制流（Layer C）──
+# 容器语句（body 是语句）：`_derived_end_case` 对容器返回空集，语句边界走通用跳过——
+# 故这类规则的 production **不要以可分号终结的字面 token 收尾**（`IfStmt` 以 @Stmt
+# 收尾、`WhileStmt` 同），否则语句边界会被截断在内部。
+
+# IfStmt — if ( Expression ) Stmt [else Stmt]
+[IfStmt]
+is_statement = true
+
+[IfStmt.parser]
+production = [
+    "keyword.if",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+    "(keyword.else,@Stmt)?",
+]
+
+[IfStmt.parser.node]
+cond = "$3"
+then = "$5"
+else_branch = "$6"
+
+
+# WhileStmt — while ( Expression ) Stmt
+[WhileStmt]
+is_statement = true
+
+[WhileStmt.parser]
+production = [
+    "keyword.while",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+]
+
+[WhileStmt.parser.node]
+cond = "$3"
+body = "$5"
+
+
+# DoWhileStmt — do Stmt while ( Expression ) ;
+[DoWhileStmt]
+is_statement = true
+
+[DoWhileStmt.parser]
+production = [
+    "keyword.do",
+    "@Stmt",
+    "keyword.while",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "symbol.base.semicolon",
+]
+
+[DoWhileStmt.parser.node]
+body = "$2"
+cond = "$5"
+
+
+# ForStmt — for ( init? ; cond? ; step? ) Stmt
+# （声明式初值 `for (int i = 0; …)` 需初始化器 → 阶段 2b，见头注）
+[ForStmt]
+is_statement = true
+
+[ForStmt.parser]
+production = [
+    "keyword.for",
+    "bracket.l_parentheses",
+    "@Expression?",
+    "symbol.base.semicolon",
+    "@Expression?",
+    "symbol.base.semicolon",
+    "@Expression?",
+    "bracket.r_parentheses",
+    "@Stmt",
+]
+
+[ForStmt.parser.node]
+init = "$3"
+cond = "$5"
+step = "$7"
+body = "$9"
+
+
+# SwitchStmt — switch ( Expression ) Stmt（体内为 CompoundStmt，含 case/default 标号）
+[SwitchStmt]
+is_statement = true
+
+[SwitchStmt.parser]
+production = [
+    "keyword.switch",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+    "@Stmt",
+]
+
+[SwitchStmt.parser.node]
+cond = "$3"
+body = "$5"
+
+
+# CaseLabel / DefaultLabel —— 复合语句体内的标号（也算语句，否则体内解析看不到）
+[CaseLabel]
+is_statement = true
+
+[CaseLabel.parser]
+production = [
+    "keyword.case",
+    "@Expression",
+    "symbol.base.colon",
+]
+
+[CaseLabel.parser.node]
+value = "$2"
+
+
+[DefaultLabel]
+is_statement = true
+
+[DefaultLabel.parser]
+production = ["keyword.default", "symbol.base.colon"]
+
+[DefaultLabel.parser.node]
+
+
+# BreakStmt / ContinueStmt
+[BreakStmt]
+is_statement = true
+
+[BreakStmt.parser]
+production = ["keyword.break", "symbol.base.semicolon"]
+
+[BreakStmt.parser.node]
+
+
+[ContinueStmt]
+is_statement = true
+
+[ContinueStmt.parser]
+production = ["keyword.continue", "symbol.base.semicolon"]
+
+[ContinueStmt.parser.node]
+
+
+# GotoStmt — goto Identifier ;
+[GotoStmt]
+is_statement = true
+
+[GotoStmt.parser]
+production = ["keyword.goto", "@Identifier", "symbol.base.semicolon"]
+
+[GotoStmt.parser.node]
+label = "$2"
+
+
+# LabelStmt — Identifier : Stmt
+[LabelStmt]
+is_statement = true
+
+[LabelStmt.parser]
+production = ["@Identifier", "symbol.base.colon", "@Stmt"]
+
+[LabelStmt.parser.node]
+name = "$1"
+stmt = "$3"
