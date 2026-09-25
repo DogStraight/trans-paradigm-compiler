@@ -46,8 +46,12 @@
 - [ ] **C 包 linter 误报修正（引擎侧归因先行）**：合法头文件
       `tests/languages/c/samples/ring_buffer.h` 上 linter 报 **17 条**误报，四类构造函数
       （带体类型说明符 / 成员数组后缀 / 带括号声明符 / 枚举体 `=`）——解析侧正常，
-      故是 `linter/discovery.py` 的语句发现与"语句结束"判定跟不上 C 的声明形态。
-      先归因（"结束判定不认 `{`/`(`/`[`" vs "候选集合缺 C 语句入口"）再动手；
+      故是 linter 跟不上 C 的声明形态。**归因已完成（2026-09-25，两个不同机制）**：
+      ① 机制 A `linter/checkers/matcher.py::_match_token` 严格逐 token 匹配**不回溯**
+      ——规则内部的可选分支（`StructSpecifier` 的 `@StructBody?`）不被尝试，覆盖
+      `{`/`[`/`(` 三类 15 条；② 机制 B `lookahead.classify()` 对 `enum` 开头返回空候选
+      → `discovery.py::_record_unrecognized`，覆盖 2 条（`struct` 同源却有候选，推导
+      只覆盖一支）。修点/判据/包侧兜底见缺口档同节；
       现状与逐条构造记 `docs/gaps/gap-parser-linter-approximation.md`「C 语言包暴露的
       语句发现缺口」，回归由 `test_c_corpus.py::test_linter_gap_is_recorded_not_hidden`
       反向守（缺口修复后该用例会失败并提醒复核文档）。

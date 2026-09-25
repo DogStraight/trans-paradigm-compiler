@@ -65,6 +65,42 @@ newline 惯例；容器结束 = 匹配失败回退派生 `_stmt_ends`）是显�
 
 **为什么值得修**：C 的声明形态（体、声明符括号、成员后缀）与 verilog/c4 的差异大，
 现有近似（首 token 挑语句 + 启发式找语句结束）在 C 上**误报率 100%**（合法代码全报），
-这会让 C 包的检查链在最基础的头文件上不可用。修点在 `linter/discovery.py` 的语句
-发现/结束判定（引擎侧），需要先判定：是"语句结束判定不认 `{`/`(`/`[`"还是"候选集合
-缺 C 的语句入口"——按"缺陷先成因后动手"先做这一步归因。
+这会让 C 包的检查链在最基础的头文件上不可用。
+
+### 归因（2026-09-25，已定位到代码，两个**不同**机制）
+
+**机制 A —— 严格逐 token 匹配不回溯**（覆盖 `{` / `[` / `(` 三类，共 15 条）：
+
+- 报文出处：`linter/checkers/matcher.py::_match_token`（`expected '<tok>', got '<actual>'`）。
+- 证据链（`struct ring_item { … };`）：`Declaration` 产生式逐元素走 —
+  ① `@StorageClass|@TypeQualifier|@TypeSpecifier` 吃掉 `struct ring_item`（说明符交替可用）；
+  ② `@SpecRest*` 匹配 0 次；③ `@DeclaratorList?` 匹配 0 次（下一 token 是 `{`，起不了声明符）；
+  ④ 期望 `symbol.base.semicolon`，实得 `bracket.l_curly_bracket` → 报错。
+- 结论：**规则内部的可选分支（`StructSpecifier` 的 `@StructBody?`）没有被尝试**——
+  匹配器在"后续必需元素失败"时不会回头去取前面可选元素的分支（无回溯）。
+  `[`（`(@ArraySuffix|@FuncSuffix)*` 组量词）与 `(`（同一组的 `@FuncSuffix`）同因。
+
+**机制 B —— 首 token 候选缺路径**（覆盖 `enum` 类，2 条）：
+
+- 报文出处：`linter/discovery.py::_record_unrecognized`（`unrecognized statement:
+  no grammar rule matches here`），触发条件 = `lookahead.classify()` 返回**空候选**。
+- 现象：`enum` 开头的行完全没有候选，而 `struct` 开头的行有候选（`Declaration`）。
+- 结论：首 token 映射的推导在 `enum` 这条路径上断了（`keyword.enum` 经
+  `EnumSpecifier`/`AnonEnumSpecifier` → `TypeSpecifier` 的交替），需要查推导为何
+  只覆盖到 `struct` 那一支。
+
+### 修点与判据（按归因分两条，各自可独立验证）
+
+1. **机制 A**：`matcher` 对 `?` / `*` / 组的处理要能在"后续必需元素失败"时**回溯取
+   可选分支**（或至少对 `?` 做"先试可选、失败再跳过"的正确语义）。判据：C 语料样本上
+   `phase-statement` 类报文归零，且 verilog/c4/yaml 三包既有 lint 测试与真实语料
+   误报基线**不退化**（这是引擎侧改动，影响面必须用三包 + 基线锁住）。
+2. **机制 B**：`lookahead` 的首 token 推导对"规则内交替"要一致覆盖（`enum` 与 `struct`
+   同源却只覆盖一支）。判据：`enum` 开头的行有候选；`unrecognized` 类报文归零。
+3. **包侧兜底（不推荐先做）**：把 `StructSpecifier` 的 `@StructBody?` 拆成两条规则交替
+   （带体 / 不带体）可绕开机制 A——但那是在语言包里迁就匹配器的缺陷，且改变 AST 形状；
+   仅当引擎侧改动风险过高时作为临时方案，并须写明"待引擎修复后回退"。
+
+⚠ 回归守：`tests/languages/c/test_c_corpus.py::test_linter_gap_is_recorded_not_hidden`
+断言的是"诊断全落在两类已知码 + 数量 = 17"——**修好后该用例会失败**，届时按上面的
+判据换成"无诊断"并复核本档。
