@@ -77,7 +77,7 @@ def _effective_lines(text: str) -> int:
     return len([ln for ln in text.splitlines() if ln.strip()])
 
 
-_SAMPLE_NAMES = ["ring_buffer.h", "ring_buffer.c"]
+_SAMPLE_NAMES = ["ring_buffer.h", "ring_buffer.c", "edge_comments.c"]
 
 
 class TestRenderNonEmpty:
@@ -135,4 +135,49 @@ class TestCommentPreservation:
         anchor = " ".join(src[start + 2 : end].split())[:24]
         assert anchor and anchor in " ".join(out.split()), (
             f"{name}: 块注释正文 {anchor!r} 未出现在渲染输出里（注释被丢弃）"
+        )
+
+
+def _comments(text: str) -> list[str]:
+    """提取注释正文（去空白），用于"注释清单"比对。
+
+    只做**形态无关**的正文比对：`/* … */` 与 `// …` 都归一到"去掉定界符与空白后的正文"。
+    这样排版变化不影响判据，而"整条注释丢失/被吞进代码"会立刻暴露。
+    """
+    out, i, n = [], 0, len(text)
+    while i < n:
+        if text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j
+            out.append(" ".join(text[i + 2 : j].split()))
+            i = j + 2
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" ".join(text[i + 2 : j].split()))
+            i = j + 1
+        else:
+            i += 1
+    return [c for c in out if c]
+
+
+class TestCommentInventory:
+    """**注释清单判据**：源里的每一条注释都必须在渲染输出里出现（数量与正文都对齐）。
+
+    比"抽样锚点"强：抽样只看一条，清单判据能抓住"某一条被静默吞掉"。
+    容忍排版（正文去空白后比对），不容忍丢失或与代码混在一起（正文不再相等）。
+    """
+
+    @pytest.mark.parametrize("name", _SAMPLE_NAMES)
+    def test_every_source_comment_survives(self, c_render, name):
+        src = _read(name)
+        out = c_render(src)
+        want, got = _comments(src), _comments(out)
+        assert len(got) >= len(want), (
+            f"{name}: 源 {len(want)} 条注释，渲染只剩 {len(got)} 条（注释被丢弃）\n"
+            f"缺: {[c[:24] for c in want if c not in got][:5]}"
+        )
+        missing = [c for c in want if c not in got]
+        assert not missing, (
+            f"{name}: 以下注释未出现在渲染输出：{[c[:30] for c in missing]}"
         )
