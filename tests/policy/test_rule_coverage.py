@@ -20,8 +20,6 @@ KNOWN_GAPS：已定义但尚无样本的显式登记，**带上限**（照 linte
 靠豁免维持绿色）。补样本后须同步下调上限。
 """
 
-import ast
-import glob
 import importlib
 import json
 import os
@@ -37,8 +35,9 @@ if _ROOT not in sys.path:
 
 importlib.import_module("tests._bootstrap")  # 副作用导入（sys.path + UTF-8）
 
+from tests import _rule_codes as rule_codes  # noqa: E402 码提取的单一实现（两门禁共用）
+
 _RULES_DIR = "grammar/verilog"
-_PLUGINS_GLOB = os.path.join(_RULES_DIR, "plugins", "**", "*.py")
 _EXPECTED = os.path.join(
     "tests", "e2e", "samples", "check_accuracy", "expected.json"
 )
@@ -52,35 +51,12 @@ MAX_KNOWN_GAPS = 0
 
 def _declared_codes() -> set[str]:
     """声明式规则表的 id 集合（加载语言包后读取）。"""
-    from analyzer.checker import ProjectChecker
-    from core import check_registry
-
-    ProjectChecker(rules_dir=_RULES_DIR)  # 触发规则表加载
-    return {str(r["id"]) for r in check_registry.get_check_rules()}
+    return rule_codes.declared_codes(_RULES_DIR)
 
 
 def _source_codes() -> set[str]:
-    """插件 handler 源码里 `code=` 关键字实参的字面量集合（ast 提取）。
-
-    只取字符串字面量：动态拼接的码（若有）无法静态枚举，会在下文
-    "入样本但未找到定义"方向暴露，不会静默漏掉。
-    """
-    codes: set[str] = set()
-    for path in glob.glob(_PLUGINS_GLOB, recursive=True):
-        with open(path, encoding="utf-8") as f:
-            try:
-                tree = ast.parse(f.read(), filename=path)
-            except SyntaxError:  # 语法错误的插件文件由其他测试负责
-                continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            for kw in node.keywords:
-                if kw.arg != "code":
-                    continue
-                if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
-                    codes.add(kw.value.value)
-    return codes
+    """插件 handler 源码里 `code=` 关键字实参的字面量集合（ast 提取）。"""
+    return rule_codes.source_codes(_RULES_DIR)
 
 
 def _sampled_codes() -> set[str]:

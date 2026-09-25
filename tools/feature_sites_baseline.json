@@ -4,6 +4,8 @@
    "desc": "加一个引擎能力位（语言包声明 + 引擎契约）",
    "instances": {
     "elaborator": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/elaboration/tpc.toml",
      "kept": null,
      "roles": {
@@ -26,12 +28,14 @@
      "total": 16
     },
     "formatter": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/formatter/tpc.toml",
      "kept": null,
      "roles": {
       "引擎侧登记": 13,
       "插件内": 14,
-      "文档": 19,
+      "文档": 20,
       "测试": 28,
       "行为基线": 2
      },
@@ -55,15 +59,17 @@
      "scatter_count": 15,
      "stage_count": 0,
      "stage_files": [],
-     "total": 76
+     "total": 77
     },
     "macro_policy": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/macro_policy/tpc.toml",
      "kept": null,
      "roles": {
       "引擎侧登记": 9,
       "插件内": 6,
-      "文档": 4,
+      "文档": 5,
       "测试": 1
      },
      "scatter": [
@@ -80,11 +86,12 @@
      "scatter_count": 9,
      "stage_count": 0,
      "stage_files": [],
-     "total": 20
+     "total": 21
     }
    },
    "summary": {
     "budget": 30,
+    "converged_total": 0,
     "instances": 3,
     "scatter_max": 15,
     "scatter_median": 9,
@@ -97,6 +104,12 @@
    "desc": "加一条检查规则（诊断码是它的对外身份）",
    "instances": {
     "AW001": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 3,
      "declared_in": "grammar/verilog/plugins/checks/always_check/_always_check.py",
      "kept": null,
      "roles": {
@@ -105,17 +118,19 @@
       "测试": 2,
       "行为基线": 3
      },
-     "scatter": [
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/mutation/injectors.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 3,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 11
     },
     "AW002": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 3,
      "declared_in": "grammar/verilog/plugins/checks/always_check/_always_check.py",
      "kept": null,
      "roles": {
@@ -124,17 +139,20 @@
       "测试": 1,
       "行为基线": 3
      },
-     "scatter": [
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/mutation/injectors.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 3,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 10
     },
     "CC001": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tests/e2e/samples/real/diag_baseline.json"
+     ],
+     "converged_count": 4,
      "declared_in": "grammar/verilog/plugins/checks/case_check/_case_check.py",
      "kept": null,
      "roles": {
@@ -144,18 +162,18 @@
       "行为基线": 5
      },
      "scatter": [
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/eval_check_accuracy.py",
-      "tests/e2e/mutation/injectors.py",
-      "tests/e2e/samples/check_accuracy/expected.json",
-      "tests/e2e/samples/real/diag_baseline.json"
+      "tests/e2e/eval_check_accuracy.py"
      ],
-     "scatter_count": 5,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 12
     },
     "EX001": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/custom_rules_example/_ansi_header.py",
      "kept": null,
      "roles": {
@@ -164,15 +182,17 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 7
     },
     "EX002": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/custom_rules_example/rules/param_type.toml",
      "kept": null,
      "roles": {
@@ -181,15 +201,20 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 8
     },
     "LC001": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tests/e2e/samples/real/diag_baseline.json"
+     ],
+     "converged_count": 4,
      "declared_in": "grammar/verilog/plugins/checks/latch_check/_latch_check.py",
      "kept": null,
      "roles": {
@@ -199,40 +224,43 @@
       "行为基线": 5
      },
      "scatter": [
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/eval_check_accuracy.py",
-      "tests/e2e/mutation/injectors.py",
-      "tests/e2e/samples/check_accuracy/expected.json",
-      "tests/e2e/samples/real/diag_baseline.json"
+      "tests/e2e/eval_check_accuracy.py"
      ],
-     "scatter_count": 5,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 11
     },
     "NC001": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 2,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
       "引擎侧登记": 2,
       "插件内": 2,
       "文档": 3,
-      "测试": 2,
+      "测试": 3,
       "行为基线": 3
      },
      "scatter": [
       "analyzer/semantic_checks.md",
       "core/check_registry.py",
-      "tests/_check_test.py",
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "tests/_check_test.py"
      ],
-     "scatter_count": 5,
+     "scatter_count": 3,
      "stage_count": 0,
      "stage_files": [],
-     "total": 12
+     "total": 13
     },
     "NC002": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -240,15 +268,17 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 3
     },
     "NC003": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -256,15 +286,17 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 3
     },
     "NC004": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -272,15 +304,17 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 3
     },
     "NC005": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -292,15 +326,18 @@
      },
      "scatter": [
       "analyzer/semantic_checks.md",
-      "tests/_check_test.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "tests/_check_test.py"
      ],
-     "scatter_count": 3,
+     "scatter_count": 2,
      "stage_count": 0,
      "stage_files": [],
      "total": 7
     },
     "NC006": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -308,30 +345,34 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 4
     },
     "NC007": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
       "插件内": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 2
     },
     "NC008": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -342,15 +383,18 @@
       "行为基线": 1
      },
      "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json",
       "tools/check_gate_efficacy.py"
      ],
-     "scatter_count": 2,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 6
     },
     "NC009": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -358,34 +402,39 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 3
     },
     "NC010": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
       "引擎侧登记": 1,
       "插件内": 1,
       "文档": 1,
-      "测试": 1,
+      "测试": 2,
       "行为基线": 1
      },
      "scatter": [
-      "analyzer/semantic_checks.md",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "analyzer/semantic_checks.md"
      ],
-     "scatter_count": 2,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
-     "total": 5
+     "total": 6
     },
     "NC011": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -394,15 +443,17 @@
       "测试": 2,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 10
     },
     "NC012": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -410,15 +461,18 @@
       "行为基线": 2
      },
      "scatter": [
-      "tests/e2e/eval_check_accuracy.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "tests/e2e/eval_check_accuracy.py"
      ],
-     "scatter_count": 2,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 4
     },
     "NC013": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -426,15 +480,20 @@
       "行为基线": 2
      },
      "scatter": [
-      "tests/e2e/eval_check_accuracy.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "tests/e2e/eval_check_accuracy.py"
      ],
-     "scatter_count": 2,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 3
     },
     "NC014": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 3,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -445,17 +504,18 @@
       "行为基线": 3
      },
      "scatter": [
-      "analyzer/semantic_checks.md",
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/mutation/injectors.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "analyzer/semantic_checks.md"
      ],
-     "scatter_count": 4,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 10
     },
     "NC015": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -465,15 +525,18 @@
       "行为基线": 1
      },
      "scatter": [
-      "analyzer/semantic_checks.md",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "analyzer/semantic_checks.md"
      ],
-     "scatter_count": 2,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 5
     },
     "NC016": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
      "kept": null,
      "roles": {
@@ -482,15 +545,20 @@
       "测试": 1,
       "行为基线": 1
      },
-     "scatter": [
-      "tests/e2e/samples/check_accuracy/expected.json"
-     ],
-     "scatter_count": 1,
+     "scatter": [],
+     "scatter_count": 0,
      "stage_count": 0,
      "stage_files": [],
      "total": 6
     },
     "UN001": {
+     "converged": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tests/e2e/samples/real/diag_baseline.json"
+     ],
+     "converged_count": 4,
      "declared_in": "grammar/verilog/plugins/checks/unused_check/_unused_check.py",
      "kept": null,
      "roles": {
@@ -500,18 +568,18 @@
       "行为基线": 5
      },
      "scatter": [
-      "tests/e2e/eval_benchmark.py",
-      "tests/e2e/eval_check_accuracy.py",
-      "tests/e2e/mutation/injectors.py",
-      "tests/e2e/samples/check_accuracy/expected.json",
-      "tests/e2e/samples/real/diag_baseline.json"
+      "tests/e2e/eval_check_accuracy.py"
      ],
-     "scatter_count": 5,
+     "scatter_count": 1,
      "stage_count": 0,
      "stage_files": [],
      "total": 14
     },
     "WC001": {
+     "converged": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "converged_count": 1,
      "declared_in": "grammar/verilog/plugins/checks/inst_check/_inst_check.py",
      "kept": null,
      "roles": {
@@ -523,21 +591,21 @@
      },
      "scatter": [
       "analyzer/semantic_checks.md",
-      "analyzer/suppress.py",
-      "tests/e2e/samples/check_accuracy/expected.json"
+      "analyzer/suppress.py"
      ],
-     "scatter_count": 3,
+     "scatter_count": 2,
      "stage_count": 0,
      "stage_files": [],
      "total": 12
     }
    },
    "summary": {
-    "budget": 56,
+    "budget": 16,
+    "converged_total": 40,
     "instances": 24,
-    "scatter_max": 5,
-    "scatter_median": 2,
-    "scatter_total": 56,
+    "scatter_max": 3,
+    "scatter_median": 1,
+    "scatter_total": 16,
     "stage_max": 0,
     "stage_median": 0
    }
@@ -546,6 +614,8 @@
    "desc": "加一个配置段键（引擎 declare_cfg 登记面）",
    "instances": {
     "analyzer.root_scope": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "analyzer/traversal.py",
      "kept": null,
      "roles": {
@@ -562,6 +632,8 @@
      "total": 3
     },
     "lexer.bracket_map": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "core/utils.py",
      "kept": null,
      "roles": {
@@ -578,6 +650,8 @@
      "total": 3
     },
     "lexer.pre_scan": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "lexer/pre_scan.py",
      "kept": null,
      "roles": {
@@ -593,6 +667,8 @@
      "total": 2
     },
     "linter.macro_hygiene": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "linter/scanner.py",
      "kept": null,
      "roles": {
@@ -610,6 +686,8 @@
      "total": 4
     },
     "linter.style_check": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "linter/scanner.py",
      "kept": null,
      "roles": {
@@ -625,6 +703,8 @@
      "total": 2
     },
     "parser.operator_defs": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "parser/parser_core.py",
      "kept": null,
      "roles": {
@@ -642,6 +722,8 @@
      "total": 4
     },
     "parser.skip_types": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "parser/parser_core.py",
      "kept": null,
      "roles": {
@@ -657,6 +739,8 @@
      "total": 2
     },
     "parser.token_categories": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "parser/parser_core.py",
      "kept": null,
      "roles": {
@@ -674,6 +758,8 @@
      "total": 5
     },
     "preprocessor.continuation": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "preprocessor/_expand.py",
      "kept": null,
      "roles": {
@@ -688,6 +774,8 @@
      "total": 1
     },
     "preprocessor.directives": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "preprocessor/_expand.py",
      "kept": null,
      "roles": {
@@ -702,6 +790,8 @@
      "total": 1
     },
     "preprocessor.expand": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "preprocessor/_expand.py",
      "kept": null,
      "roles": {
@@ -716,6 +806,8 @@
      "total": 1
     },
     "preprocessor.macro_config": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "lexer/main_lexer.py",
      "kept": null,
      "roles": {
@@ -732,6 +824,8 @@
      "total": 3
     },
     "renderer.style": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "renderer/loader.py",
      "kept": null,
      "roles": {
@@ -746,6 +840,8 @@
      "total": 1
     },
     "structure.protocol": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "analyzer/structure.py",
      "kept": null,
      "roles": {
@@ -762,6 +858,7 @@
    },
    "summary": {
     "budget": 26,
+    "converged_total": 0,
     "instances": 14,
     "scatter_max": 3,
     "scatter_median": 2,
@@ -774,6 +871,8 @@
    "desc": "加一个语法构造族（一个插件目录）",
    "instances": {
     "attributes": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/attributes/tpc.toml",
      "kept": null,
      "roles": {
@@ -789,6 +888,8 @@
      "total": 2
     },
     "configs": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/configs/tpc.toml",
      "kept": null,
      "roles": {
@@ -806,6 +907,8 @@
      "total": 4
     },
     "gates": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/gates/tpc.toml",
      "kept": null,
      "roles": {
@@ -822,6 +925,8 @@
      "total": 3
     },
     "nettypes": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/nettypes/tpc.toml",
      "kept": null,
      "roles": {
@@ -841,6 +946,8 @@
      "total": 6
     },
     "sim": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/sim/tpc.toml",
      "kept": null,
      "roles": {
@@ -868,6 +975,8 @@
      "total": 17
     },
     "specify": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/specify/tpc.toml",
      "kept": null,
      "roles": {
@@ -885,6 +994,8 @@
      "total": 4
     },
     "udp": {
+     "converged": [],
+     "converged_count": 0,
      "declared_in": "grammar/verilog/plugins/syntax/udp/tpc.toml",
      "kept": null,
      "roles": {
@@ -903,6 +1014,7 @@
    },
    "summary": {
     "budget": 0,
+    "converged_total": 0,
     "instances": 7,
     "scatter_max": 0,
     "scatter_median": 0,

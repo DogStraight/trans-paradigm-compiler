@@ -23,6 +23,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / "tools" / "feature_sites_baseline.json"
 KEPT = ROOT / "tools" / "feature_sites_kept.json"
+CONVERGED = ROOT / "tools" / "feature_sites_converged.json"
 
 
 def _load(path: Path) -> dict:
@@ -68,3 +69,36 @@ def test_kept_entries_are_auditable(entry):
     assert inst in base[fam]["instances"], f"判保持条目 {key} 的实例不存在于基线"
     for field in ("reason", "source"):
         assert str(meta.get(field, "")).strip(), f"判保持条目 {key} 缺 {field}"
+
+
+def _converged() -> dict:
+    if not CONVERGED.exists():
+        return {}
+    return json.loads(CONVERGED.read_text(encoding="utf-8")).get("converged", {})
+
+
+@pytest.mark.parametrize("entry", sorted(_converged().items()))
+def test_converged_entries_are_auditable(entry):
+    """每个『已收敛』登记点必须：文件真实存在 + reason/source 非空 + source 指向的门禁存在。
+
+    这是**反向防滥用**：把欠账洗成"已收敛"只要写一行 JSON，故要求 source 落在
+    一个**真实存在的测试文件**上——收敛声明必须可点开验证（口径同
+    `policy/structural_budget.md` R6：判保持要登记理由与出处）。
+    """
+    path, meta = entry
+    assert (ROOT / path).exists(), f"已收敛条目 {path} 指向的文件不存在"
+    for field in ("reason", "source"):
+        assert str(meta.get(field, "")).strip(), f"已收敛条目 {path} 缺 {field}"
+    gate = str(meta["source"]).split("::", 1)[0]
+    assert (ROOT / gate).exists(), f"已收敛条目 {path} 的 source 门禁不存在：{gate}"
+
+
+def test_converged_paths_are_actually_counted_out():
+    """写进收敛表的路径必须真的出现在基线里（否则是空转登记）。"""
+    base = _load(BASELINE)["families"]
+    counted: set[str] = set()
+    for fam in base.values():
+        for inst in fam["instances"].values():
+            counted.update(inst.get("converged", []))
+    for path in _converged():
+        assert path in counted, f"已收敛条目 {path} 未在任何族的收敛点里出现（空转登记）"

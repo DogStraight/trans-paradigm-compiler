@@ -38,6 +38,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / "tools" / "feature_sites_baseline.json"
 KEPT = ROOT / "tools" / "feature_sites_kept.json"
+# 已收敛的登记点（判据：**不再靠人手记着同步**——或由单一来源派生，或由门禁校验；
+# 每条须 reason + source 指向具体门禁/机制）。收敛点不计入散点欠账。
+CONVERGED = ROOT / "tools" / "feature_sites_converged.json"
 
 # 扫面后缀（文本文件；二进制/构建产物不参与）
 SUFFIXES = (".py", ".md", ".toml", ".json", ".cfg", ".txt", ".yml", ".yaml")
@@ -52,6 +55,7 @@ EXCLUDE_DIRS = {
 EXCLUDE_FILES = {
     BASELINE.relative_to(ROOT).as_posix(),
     KEPT.relative_to(ROOT).as_posix(),
+    CONVERGED.relative_to(ROOT).as_posix(),
 }
 
 # 角色归类：前缀（相对路径，POSIX 分隔）→ 角色
@@ -220,6 +224,7 @@ def scan(families: list[str] | None = None) -> dict:
     files = _iter_files()
     corpus = {rel: (ROOT / rel).read_text(encoding="utf-8", errors="replace") for rel in files}
     kept = _load_kept()
+    converged_map = _load_converged()
     result: dict[str, dict] = {}
     for fam, spec in FAMILIES.items():
         if families and fam not in families:
@@ -247,12 +252,14 @@ def scan(families: list[str] | None = None) -> dict:
                 contacts = {
                     rel: _role(rel) for rel, text in corpus.items() if pat.search(text)
                 }
+            scatter_all = sorted(
+                rel for rel, role in contacts.items() if role in SCATTER_ROLES
+            )
+            converged = [rel for rel in scatter_all if rel in converged_map]
+            scatter = [rel for rel in scatter_all if rel not in converged_map]
             roles: dict[str, int] = {}
             for role in contacts.values():
                 roles[role] = roles.get(role, 0) + 1
-            scatter = sorted(
-                rel for rel, role in contacts.items() if role in SCATTER_ROLES
-            )
             stage = sorted(
                 rel for rel, role in contacts.items() if role.startswith("插件内（")
             )
@@ -262,6 +269,8 @@ def scan(families: list[str] | None = None) -> dict:
                 "roles": dict(sorted(roles.items())),
                 "scatter": scatter,
                 "scatter_count": len(scatter),
+                "converged": converged,
+                "converged_count": len(converged),
                 "stage_files": stage,
                 "stage_count": len(stage),
                 "kept": kept.get(f"{fam}:{inst}"),
@@ -276,6 +285,7 @@ def scan(families: list[str] | None = None) -> dict:
                 "scatter_total": sum(counts),
                 "scatter_median": counts[len(counts) // 2] if counts else 0,
                 "scatter_max": counts[-1] if counts else 0,
+                "converged_total": sum(e["converged_count"] for e in entries.values()),
                 "stage_median": stages[len(stages) // 2] if stages else 0,
                 "stage_max": stages[-1] if stages else 0,
                 "budget": sum(
@@ -294,6 +304,18 @@ def _load_kept() -> dict[str, dict]:
     return {k: v for k, v in data.get("kept", {}).items()}
 
 
+def _load_converged() -> dict[str, dict]:
+    """已收敛的登记点（路径 → {reason, source}）——不计入散点欠账。
+
+    判据：**不再靠人手记着同步**（由单一来源派生，或由门禁校验）。没有判据就
+    别往里加——否则等于把欠账洗掉（同 `policy/structural_budget.md` R6 的理由）。
+    """
+    if not CONVERGED.exists():
+        return {}
+    data = json.loads(CONVERGED.read_text(encoding="utf-8"))
+    return {k: v for k, v in data.get("converged", {}).items()}
+
+
 # ── 输出 ────────────────────────────────────────────────────
 
 def cmd_list(result: dict, verbose: bool) -> None:
@@ -302,6 +324,7 @@ def cmd_list(result: dict, verbose: bool) -> None:
         print(f"\n=== 族 {fam}：{data['desc']} ===")
         print(
             f"    实例 {s['instances']}｜散点合计 {s['scatter_total']}"
+            f"（已收敛 {s.get('converged_total', 0)}）"
             f"｜中位 {s['scatter_median']}｜最大 {s['scatter_max']}"
             f"｜**预算（未处置欠账）= {s['budget']}**"
         )

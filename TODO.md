@@ -52,10 +52,14 @@
       （`core/check_registry.py` + 3 个 e2e 脚本/基线 + `expected.json` + `diag_baseline.json`
       + `semantic_checks.md`）被每条规则反复登记 → 由 `check_registry` 单一来源派生或校验。
       实测与口径见 `docs/gaps/gap-feature-scatter.md`「步 1 实测结果」
-- [ ] **步 2 试点收敛**：选一族做"单一注册点"（建议**检查规则族**——已有
-      `rules/*.toml` 雏形且散落最重，一条诊断码实测跨 20 个文件）。目标判据：
-      加一条规则 = 清单 1 项 + 实现 1 文件 + 测试 1 文件，其余由工具**校验或派生**；
-      用一条真实新规则走通并对照步 1 基线报接触点下降数
+- [x] **步 2 试点收敛（机器可读登记点已收敛；散文类为有意接受的边界）**：
+      单一来源提取抽成 `tests/_rule_codes.py`（两门禁共用一份实现），新增
+      `tests/policy/test_code_registry_sync.py` 校验变异注入器 / 评测基准映射 /
+      真实语料基线的码引用；收敛账 `tools/feature_sites_converged.json`（须 reason+source
+      指向门禁）+ 反向防滥用门禁（路径真实存在、source 门禁存在、不得空转登记）。
+      **预算 56 → 16**（中位 2→1、最大 5→3）。剩余 16 点与接受边界见缺口档「步 2 结果」。
+      ⚠ **未做完的**：`eval_check_accuracy.py` docstring 枚举（可改为不枚举 = 真删除）、
+      `_check_test.py`、`check_gate_efficacy.py` 接同一门禁、机制文档码表（有意不接校验）
 - [ ] **步 3 契约协商（P-C）**：`[engine].api`（整条 API 线）→ 能力清单
       `uses = ["…v1"]` + 引擎能力版本表 + **精确缺项报错**；切换后按"不留向后兼容"
       删掉旧 `api` 线（若必须并存须写明删除期限与判据）

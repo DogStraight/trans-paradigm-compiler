@@ -1,0 +1,21 @@
+{
+ "_note": "功能散点的『已收敛』登记点——判据是**不再靠人手记着同步**：或由单一来源派生，或由门禁校验（引用漂移即红）。每条必须有 reason（怎么收敛的）+ source（哪个门禁/机制保证）。没有判据别往里加：往里加等于把欠账洗掉（口径同 policy/structural_budget.md R6）。键 = 仓库相对 POSIX 路径。",
+ "converged": {
+  "tests/e2e/mutation/injectors.py": {
+   "reason": "码由门禁校验：注入器 target/allowed_extra 引用未定义码即失败（否则该变异静默失效）",
+   "source": "tests/policy/test_code_registry_sync.py::test_mutation_injectors_reference_defined_codes"
+  },
+  "tests/e2e/eval_benchmark.py": {
+   "reason": "码由门禁校验：Verilator→tpc 码映射值必须是已定义码（否则评分少算一类）",
+   "source": "tests/policy/test_code_registry_sync.py::test_benchmark_mapping_references_defined_codes"
+  },
+  "tests/e2e/samples/real/diag_baseline.json": {
+   "reason": "码由门禁校验：计数键必须是已定义码（码已删则该键是历史残留，须按更新规程处理）",
+   "source": "tests/policy/test_code_registry_sync.py::test_real_corpus_baseline_only_counts_defined_codes"
+  },
+  "tests/e2e/samples/check_accuracy/expected.json": {
+   "reason": "码由门禁校验：focus 与已定义码双向核对（已定义未入样本即失败）",
+   "source": "tests/policy/test_rule_coverage.py::test_every_defined_rule_has_sample"
+  }
+ }
+}

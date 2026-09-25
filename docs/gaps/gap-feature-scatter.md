@@ -120,6 +120,42 @@ major.minor，不区分"该包到底用了哪些引擎能力"。后果：
 各处**（能派生就派生、不能派生就让门禁比对），目标"加一条规则 = 清单 1 项 + 实现 1 文件 +
 测试 1 文件"。`capability` 族（30 散点）是第二个候选目标。
 
+## 步 2 结果（2026-09-25）：机器可读登记点已收敛
+
+**做法**：码的单一来源 = 声明式规则表 ∪ 插件 handler `code=` 字面量，抽成**一份共用实现**
+`tests/_rule_codes.py`（`test_rule_coverage.py` 与新增门禁共用——两处各自实现提取逻辑
+本身就是新的散点）。新增 `tests/policy/test_code_registry_sync.py` 把机器可读登记点接上校验。
+
+**门禁有效性（实测，非声明）**：注入假码 `ZZ999` 到变异注入器 → 该门禁 **1 failed**、
+还原后 **0**；三处检查实际校验 **11 / 13 / 7** 条码（非空转）。
+⚠ 过程中复现了同一坑两次：码形态正则写成 `[A-Z]{2,4}` 会把**单字母前缀码**
+（`W101/W201/W202` 等 8 个）静默漏出校验面——两处都显式记进注释。
+
+**收敛账（`tools/feature_sites_converged.json`，须 reason + source 指向门禁）**：
+
+| 登记点 | 收敛方式 |
+|---|---|
+| `tests/e2e/mutation/injectors.py` | 门禁校验 target/allowed_extra 必须已定义（否则变异静默失效） |
+| `tests/e2e/eval_benchmark.py` | 门禁校验映射值必须已定义（否则评分少算一类） |
+| `tests/e2e/samples/real/diag_baseline.json` | 门禁校验计数键必须已定义（码删则残留键暴露） |
+| `tests/e2e/samples/check_accuracy/expected.json` | 既有门禁双向核对（已定义未入样本即失败） |
+
+**预算变化**：`check` 族 **56 → 16**（中位 2→1、最大 5→3），其余三族不变。
+
+**剩余 16 点（步 2b 候选，未见底就别报收敛）**：
+
+    6  analyzer/semantic_checks.md          机制文档的码表（散文/成范围出现，逐 token 校验会误报）
+    5  tests/e2e/eval_check_accuracy.py     仅 docstring 里枚举码（可改为不枚举 → 真删除）
+    2  tests/_check_test.py                 共用测试助手（若为迭代用，应改读单一来源）
+    1  core/check_registry.py               规则表模块头 docstring 的示例码（文档，非登记）
+    1  tools/check_gate_efficacy.py         变异目标（与注入器同理，可接同一门禁）
+    1  analyzer/suppress.py                 抑制逻辑引用码（合理引用）
+
+**接受的边界（有意不收敛）**：散文类（机制文档码表、docstring 枚举）**不**接逐 token
+校验——会成范围（`NC001-NC010`）与历史提及出现，逐 token 校验是误报机器；
+这类由 `test_doc_stats.py` + 人工复核承担。判断标准始终是"**是否必须靠人记着同步**"，
+不是"文件里有没有出现这个码"。
+
 ## 关联条目
 
 - `TODO.md`「0.1.3 立项」WS2（执行步骤与待决策点）
