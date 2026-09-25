@@ -88,13 +88,23 @@
       机制文档同步：`core/config_lifecycle.md`（包↔引擎契约节改写为能力清单）、
       `core/component_protocol.md`（§1b 精化器能力位，步 3 前已落）。
 - [ ] **ADR-0019 退场**（"完成即删"判据已满足：机制已落 `core/component_protocol.md`
-      §1b + `analyzer/elaboration/README.md`）。**前置**：先清引用——协作方文档 7 处
-      （`component_protocol.md` / `analyzer/README.md` / `analyzer/elaboration/README.md` /
-      `gap-language-penetration.md` / `gap-feature-scatter.md`）+ **代码注释 32 处**
-      （引用纪律：代码不反向引用 ADR；注释改为内联"为什么"或指向机制文档），
-      清完再删档（历史在 git log）。⚠ 同批发现并已修一处**陈述过期**：
-      `analyzer/elaboration/README.md` 原写"未接线状态（P1）/只新增不接线"，实际 P2–P4
-      早已接线——已改为「接线（已完成）」并写明唯一调用点与"引擎不消费任何产物"。
+      §1b + `analyzer/elaboration/README.md`）。**前置 = 清引用**，已精确盘点（2026-09-25）：
+      **54 处 / 28 文件**。构成：
+      · **括号内溯源标签**（绝大多数，如 `（ADR-0019 P3-②c-3）` / `（ADR-0019 决策 4
+        更正节）` / `（精化产物 `port_decls`，ADR-0019）`）——同一事实在正文里**已经
+        内联解释**，标签可整段删除；注意三种写法：全角括号内、逗号后置、以及
+        `# 1a) 精化（ADR-0019）：` 这类注释前缀。
+      · **裸引用**（少数，如"本文件守 ADR-0019 **P2** 落地的…"、"已按 ADR-0019 迁入"、
+        "ADR-0019 的代码落点"）——需改写成"精化协议"+ 机制文档指针，不能只删标签。
+      · 分布：`analyzer/` 13、`grammar/verilog/` 18、`tests/engine/analyzer/` 9、
+        `docs/`（含 ADR-0019 自身）4、`core/` 3、`tools/` 1。
+      ⚠ 顺序：**先清引用 → 再删档**（否则文档里留悬空引用）；删档后跑
+      `tests/policy`（文档引用门禁）与全量确认无悬空。
+      ⚠ 同批发现并已修一处**陈述过期**：`analyzer/elaboration/README.md` 原写
+      "未接线状态（P1）/只新增不接线"，实际 P2–P4 早已接线——已改为「接线（已完成）」。
+      ⚠ 本轮（round 7）评估后**刻意不动手**：机械批量改 54 处的句法风险（全角/半角
+      括号、逗号后置、注释前缀三种写法混用）高于收益，留给一次专门的、逐类替换 +
+      逐文件复核的改动。
 
 > ⚠ 顺序纪律：**步 1 的度量先行**——不先用数字定位"哪一族的哪几个登记点最贵"，
 > 后面的收敛就是猜（本仓已有"配置面膨胀"的实证教训，见 `references.md` 数字形态节）。
