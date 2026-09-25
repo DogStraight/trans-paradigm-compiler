@@ -45,3 +45,26 @@ newline 惯例；容器结束 = 匹配失败回退派生 `_stmt_ends`）是显�
 
 - `linter/linter_architecture.md`「已知边界问题」表（多行 RHS / `@*` 敏感列表等）
 - lint recall 门禁：`tests/e2e/eval_lint_accuracy.py`
+
+
+## C 语言包暴露的语句发现缺口（2026-09-25 实测）
+
+`grammar/c/` 的**解析侧完全正常**（整文件进 AST、结构与计数都可查），但同一份合法
+声明序列过 linter 会报 **17 条** `phase-statement` / `phase-unrecognized`。
+样本：`tests/languages/c/samples/ring_buffer.h`（真实风格头文件），逐条分布见
+`tests/languages/c/test_c_corpus.py::test_linter_gap_is_recorded_not_hidden`。
+
+**四类构造函数**（linter 的语句发现与"语句结束"判定跟不上）：
+
+| 构造 | 报文 | 例 |
+|---|---|---|
+| 带成员体的类型说明符 | `expected ';', got '{'` | `struct ring_item { … };` / `union ring_slot { … };` / `enum … { … };` |
+| 成员声明里的数组后缀 | `expected ';', got '['` | `struct ring_item items[16];` |
+| 带括号的声明符 | `unexpected '('` | `int ring_push(struct ring *r, …);` |
+| 枚举体内的 `=` | `unrecognized statement` | `enum { RING_FULL = 2 };` |
+
+**为什么值得修**：C 的声明形态（体、声明符括号、成员后缀）与 verilog/c4 的差异大，
+现有近似（首 token 挑语句 + 启发式找语句结束）在 C 上**误报率 100%**（合法代码全报），
+这会让 C 包的检查链在最基础的头文件上不可用。修点在 `linter/discovery.py` 的语句
+发现/结束判定（引擎侧），需要先判定：是"语句结束判定不认 `{`/`(`/`[`"还是"候选集合
+缺 C 的语句入口"——按"缺陷先成因后动手"先做这一步归因。
