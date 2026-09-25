@@ -98,14 +98,32 @@
       → B2 后缀链 → C 控制流）。C 包核心基线现已可解析：声明 / 类型说明符（含
       struct/union/enum 与 typedef 名）/ 函数原型与定义 / 完整表达式优先级 /
       后缀链 / 控制流。
-- [ ] **真实语料扩容（阶段 3 后必做）**：`tests/languages/c/samples/ring_buffer.h` 目前只有
-      声明面（阶段 1/2a 时写的）。阶段 3 已支持函数体/表达式/控制流，应补一份**含实现**
-      的 `.c` 样本（函数定义 + 控制流 + 表达式 + 调用）并把语料断言扩到那边——
-      否则"真实语料"这层验证停在旧阶段。
-- [ ] **阶段 2b 词法与类型剩余**：位域 `int x : 3`、初始化器（含指示符 `.f=`/`[i]=`）、
-      数组长度常量表达式、整型后缀（U/L/LL）与浮点字面量、字符/字符串转义表。
-：完整运算符优先级与结合性、`sizeof`/`_Alignof`、强制转换、
-      复合字面量外的常用面；语句族（if/switch/for/while/do/goto/label/compound）
+- [x] **真实语料扩容——已完成**：`samples/ring_buffer.h`（声明面，1 注释 + 11 声明）+
+      `samples/ring_buffer.c`（实现面，2 注释 + 8 声明 + 8 函数，含控制流/表达式/调用/
+      指示符初始化/`sizeof`），两个语料测试 + linter 缺口反向守（`_RECORDED_PHASE_GAP = 7`）。
+- [ ] **阶段 2b 词法与类型剩余**：
+      · **整型后缀（U/L/LL）**——`[[number.based]]` schema 无后缀字段，修法与判据见缺口档
+        「C 包词法面暴露的配置表达力缺口」（倾向扩 schema，不新增阶段）；
+      · 前导点浮点 `.5`、字符串内**转义引号**（delim 捕获不识别转义）——同上节记录；
+      · 强制转换 `(T)x`（与 `(expr)` 的区分需类型名知识，归语义层同批）、复合字面量、
+        链式后缀（`a.b.c` / `f(x)[i]`）、`_Alignof`、作用域与类型语义（语义层）。
+- [ ] **引擎级 `enabled` 覆盖参数**（把"档位对照需 pack 副本"变成一等参数）：
+      目标 = `load_language(pack, plugins_dir=…, enabled=["c11"])` 显式指定启用组合。
+      **逐处清单已核实（`core/config_registry.py`，一次可做完）**：
+        1 `_plugin_declarations(…, enabled=None)`——`None` 时仍读 `meta["plugins"]["enabled"]`；
+          显式给出时用它并校验为字符串列表（非法即 ConfigError）。
+        2 `_load_meta_declarations(grammar_dir="", enabled=None)`——透传。
+        3 `_ensure_entries_for(cls, rules_dir, enabled=None)`——透传；**缓存键
+          `cls._entries_source` 须由 `candidate` 改为 `(candidate, tuple(enabled)…)`**，
+          否则切档复用上一档声明（症状：改了 enabled 毫无变化 = 静默失效）。
+        4 `load_language(…, enabled=None)`——透传给 `_ensure_entries_for` 与 `load_all`。
+        5 `load_all(…, enabled=None, **base_dirs)`——体内 `_ensure_entries_for(rules_dir)`
+          要带 `enabled`；`_resolve` 的 `cache_key`（约 681 行）**也要加** `tuple(enabled)…`
+          ——同一类缓存陷阱，两处都得改。
+      ⚠ 签名锚点：`load_all` 是 `**base_dirs: str,\n    ) -> None:`（不是 `):`）。
+      改完必须用 `test_c_standard_tiers.py` 的**三档断言**验证（它按"解析成哪个节点"判据，
+      能直接抓出缓存串档）。⚠ 本轮评估后**刻意不动手**：改动不大，但两处缓存键是静默失效点，
+      当时剩余上下文不足以在出错后完成验证迭代——故先留这份"逐处已核实"清单。
 - [ ] **阶段 3 结构类型与作用域语义**：struct/union/enum（含位域）、标签命名空间、
       作用域与链接（static/extern）、函数原型与定义
 - [ ] **阶段 4 预处理器（独立评估，最大难点）**：`#if` 表达式求值、参数化宏、
