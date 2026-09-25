@@ -58,3 +58,4 @@
 | `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面首轮清单 + 三条判据） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
+| `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；0.1.3 WS2） |
