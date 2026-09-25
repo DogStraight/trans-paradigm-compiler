@@ -56,6 +56,7 @@ _RULE_BODY_PARAM = "ParamDeclStmt"
 _RULE_DECLARATOR = "Declarator"
 
 _PROVIDES_PARAM_DEFAULT = "param_default"
+_PROVIDES_PARAM_OVERRIDE = "param_override"
 _PROVIDES_GEN_ACTIVITY = "gen_activity"
 _PROVIDES_PORT_DECLS = "port_decls"
 _PROVIDES_CONNECTIONS = "connections"
@@ -92,6 +93,17 @@ def build_elaborator() -> dict:
                 "solver": "solve_connections",
             },
             {
+                "name": "param_override",
+                "scope": "file",
+                # **无**引擎角色位：只被本语言包的检查（`width_check` 等）读——它是把
+                # 各检查原先**各自一份**的"实例化点覆盖后参数表"合并逻辑**去重共享**
+                # （ADR-0019 决策 4 更正节：不是渗透修复，那段逻辑本来就在插件侧）
+                "provides": [_PROVIDES_PARAM_OVERRIDE],
+                # 要"目标单元默认"与"本文件连接表"
+                "depends_on": ["param_default", "connections"],
+                "solver": "solve_param_override",
+            },
+            {
                 "name": "gen_activity",
                 "scope": "file",
                 # **无**引擎角色位：活性只被本插件自己的 `signal_graph` 经
@@ -118,6 +130,7 @@ def build_elaborator() -> dict:
             "solve_param_default": solve_param_default,
             "solve_port_decls": solve_port_decls,
             "solve_connections": solve_connections,
+            "solve_param_override": solve_param_override,
             "solve_signal_graph": solve_signal_graph,
             "solve_gen_activity": solve_gen_activity,
         },
@@ -753,3 +766,96 @@ def _inst_module_name(site: Node) -> str:
     """被实例化模块名（实例化点 `module_name` 字段文本；缺省 ""）。"""
     node = getattr(site, _UNIT_NAME_FIELD, None)
     return node.content if isinstance(node, Node) and node.content else ""
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 项 `param_override`：实例化点**覆盖后**的参数表
+# ════════════════════════════════════════════════════════════════════════════
+# 三层合并（与 width_check 原先就地做的 `_override_params` **逐字对齐**）：
+#   调用者参数（**本文件**各单元参数合并）→ 目标单元默认（`param_default`）→
+#   site 覆盖（`#(.P(v))`，最高优先）。
+# `changed` = 存在"覆盖值 ≠ 目标默认值"的项（与 `_override_changes_params` 同语义；
+# width_check 用它决定是否重算"实例化覆盖 → 目标模块内赋值截断"）。
+#
+# ⚠ 本项是**去重共享**（把各检查原先各自一份的合并逻辑上提），**不是**"把语言知识
+#   搬出引擎"——那段合并今天本来就在插件侧（ADR-0019 决策 4 更正节）。
+#
+# ⚠ **已知技法差异（迁移消费方前必须处理）**：width_check 的 `_override_params` 用
+#   **自带的 `node_text` 渲染器**把覆盖值取成文本，本项用**服务渲染器**（`_render`）。
+#   字面量（`#(.W(16))`）两者一致；**表达式**覆盖（如 `#(.W(4*4))`）可能产生不同的
+#   空白形态（`4*4` vs `4 * 4`）。故本项当前**只新增**（消费方仍用各自那份），
+#   存在意义是与它们**对拍**；切换时须先处理该差异（见测试文件头的说明）。
+
+_PARAM_OVERRIDE_RULE = "NamedParamOverride"
+
+
+def solve_param_override(hits: list[Node], atom: Atom, ctx: SolveCtx) -> dict | None:
+    """本文件各实例化点的覆盖后参数表（`file` 作用域 → 键 = 文件路径）。"""
+    root = hits[0] if hits else None
+    if not isinstance(root, Node):
+        return None
+    defaults_all = ctx.products.get(_PROVIDES_PARAM_DEFAULT) or {}
+    conns = (ctx.products.get(_PROVIDES_CONNECTIONS) or {}).get(atom.path) or []
+    caller = _file_param_merge(root, defaults_all)
+    out: list[dict] = []
+    for conn in conns:
+        target = defaults_all.get(conn["module_name"]) or {}
+        overrides = _site_param_overrides(conn["inst_node"], ctx)
+        merged = dict(caller)
+        merged.update(target)
+        merged.update(overrides)
+        out.append(
+            {
+                "inst_name": conn["inst_name"],
+                "module_name": conn["module_name"],
+                "inst_node": conn["inst_node"],
+                "params": merged,
+                "changed": any(pv != target.get(pn) for pn, pv in overrides.items()),
+            }
+        )
+    return {_PROVIDES_PARAM_OVERRIDE: out}
+
+
+def _file_param_merge(root: Node, defaults_all: dict) -> dict[str, str]:
+    """本文件各单元参数合并（单层）——与 width_check `_file_params` 同语义。
+
+    ⚠ 同名参数在多个单元出现时**后处理的覆盖先处理的**（`dict.update` 的实际行为；
+    width_check 的 docstring 写"取先"但代码是 `update`——此处**照代码**对齐）。
+    """
+    out: dict[str, str] = {}
+    for node in iter_nodes(root):
+        if node.node_name != _UNIT_DECL_RULE:
+            continue
+        nm = getattr(node, _UNIT_NAME_FIELD, None)
+        name = nm.content if isinstance(nm, Node) else ""
+        if name and name in defaults_all:
+            out.update(defaults_all[name] or {})
+    return out
+
+
+def _site_param_overrides(site: Node, ctx: SolveCtx) -> dict[str, str]:
+    """实例化点上的 `#(.P(v))` 覆盖项 → `{参数名: 值文本}`。"""
+    out: dict[str, str] = {}
+    for item in _param_override_items(site):
+        name_node = getattr(item, _PARAM_NAME, None)
+        pn = (
+            name_node.content
+            if isinstance(name_node, Node) and name_node.content
+            else ""
+        )
+        pv = _render(ctx, getattr(item, _PARAM_VALUE, None))
+        if pn and pv:
+            out[pn] = pv
+    return out
+
+
+def _param_override_items(site: Node) -> list:
+    """参数覆盖项列表（`site.params` → `.params` → `.items`——两层容器，与头部参数同形）。"""
+    holder = getattr(site, _UNIT_PARAMS, None)
+    inner = getattr(holder, _UNIT_PARAMS, None) if isinstance(holder, Node) else None
+    items = getattr(inner, _ITEMS, None) if isinstance(inner, Node) else None
+    return [
+        it
+        for it in (items or [])
+        if isinstance(it, Node) and it.node_name == _PARAM_OVERRIDE_RULE
+    ]

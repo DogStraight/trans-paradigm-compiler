@@ -17,11 +17,15 @@
 > ✅ **终态判据已达成**：**`ROLES` 为空**（引擎不消费任何插件产物；测试 `test_roles_are_empty_at_terminal_state`
 > 机器守）。引擎侧净减约 **1000 行**语言知识。
 >
-> **待做**（P3 收尾 + P4）：
-> - **c-3**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；它是"插件侧已有合并逻辑
->   的去重共享"而非引擎侧渗透）。
-> - **P4 收尾**：`MODEL_INDEX` 同步 + 插件 README 与实现终对账（`component_protocol` §1b
->   与 `analyzer/README` 已落）。
+> **待做**（只余 c-3 的下半段）：
+> - **c-3 消费方迁移**：`param_override` 插件项**已落地且与 `width_check` 自己的合并逐项
+>   对拍通过**（字面量覆盖 + `changed` 判据 + 不空转）。待做的是**删掉消费方那份重复合并**
+>   （`width_check._override_params` / `_override_changes_params`，`hier_check._merged_params`）
+>   ——⚠ **前提是先处理一处技法差异**：`width_check` 用**自带 `node_text` 渲染器**取覆盖值
+>   文本，插件项用**服务渲染器**；字面量一致，**表达式**覆盖可能只差空白（数值等价，但
+>   `_override_changes_params` 的文本比较可能变脸）。差异已在测试里钉住。
+> - ~~P4 收尾~~ **已完成**：`component_protocol` §1b + `analyzer/README` + 插件 README +
+>   `MODEL_INDEX` 跳转行（`7ee2340`）。
 > - 可选清理：`role` 机制在终态下已无合法值（`ROLES` 空）——是否连机制一起删，待定
 >   （现按 ADR 保留，作为"将来确有引擎自用产物"的登记位）。
 > ⚠ P2 实测更正两处协议（已回写 ADR-0019 决策 3）：新增**引擎角色位 `role`**、

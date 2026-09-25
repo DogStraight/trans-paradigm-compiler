@@ -11,13 +11,14 @@
 | `_elaborator.py` | `build_elaborator()` 项列表 + 参数/端口/连接/generate 四项的求解函数 |
 | `_graph.py` | 层 3 信号图（`signal_graph` 项，400 行搬迁自引擎 `SignalGraphBuilder`）——分文件是为了不让单文件过大 |
 
-## 现役项（5 项，**均无引擎角色位**）
+## 现役项（6 项，**均无引擎角色位**）
 
 | 项 | 作用域 | 容器键 | 内容 |
 |---|---|---|---|
 | `param_default` | `unit` | `param_default` | `{单元名: {参数名: 值表达式文本}}`——头部 `#(P=v)` 优先，体内 `parameter P=v;` 补全 |
 | `port_decls` | `unit` | `port_decls` | `{单元名: {端口名: {name, direction, width_expr, net_type, decl_node}}}`——ANSI 头部 / 裸名头部 / 体内旧式声明三形态合并，**头部优先** |
 | `connections` | `file` | `connections` | `{文件路径: [{inst_name, module_name, inst_node, file, connects, ordered}]}`——命名连接进 `connects`，其余按位置序进 `ordered` |
+| `param_override` | `file` | `param_override` | `{文件路径: [{inst_name, module_name, inst_node, params, changed}]}`——实例化点**覆盖后**的参数表（调用者参数 → 目标默认 → site 覆盖）；`changed` = 覆盖 ≠ 默认 |
 | `gen_activity` | `file` | `gen_activity` | `{文件路径: {id(节点): bool}}`——节点是否落在**选中**的 generate 互斥分支内 |
 | `signal_graph` | `project` | `signal_graph` | `{(单元名, 信号名): {drivers: [...], loads: [...]}}`——层 3 全工程驱动/负载图（含 output 穿透与实例链路径） |
 
@@ -28,6 +29,8 @@
 
 ```
 param_default ──depends_on──▶ gen_activity ──┐
+param_default ──depends_on──▶ param_override │
+connections ────depends_on──▶ param_override │
                               port_decls ────┼──depends_on──▶ signal_graph
                               connections ───┘
 ```

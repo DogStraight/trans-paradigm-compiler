@@ -7,6 +7,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **P3-②c-3（上）：`param_override` 共享项落地 + 逐项对拍（ADR-0019）**：把各检查原先
+  **各自一份**的"实例化点覆盖后参数表"合并逻辑上提为共享产物。
+
+  - 新增项 `param_override`（`file` 作用域，`depends_on = ["param_default", "connections"]`）：
+    `{文件路径: [{inst_name, module_name, inst_node, params, changed}]}`——三层合并
+    **调用者参数（本文件各单元合并）→ 目标单元默认 → site 覆盖**；`changed` = 存在
+    "覆盖值 ≠ 目标默认值"的项。
+  - **与 `width_check` 自己的合并逐项对拍通过**：字面量覆盖下 `params` 与 `changed`
+    全等；不空转（真实夹具里 `W` 由默认 4 变 16、`changed=True`）。
+  - ⚠ **探明一处技法差异（迁移消费方前必须处理）**：`width_check._override_params` 用
+    **自带的 `node_text` 渲染器**取覆盖值文本，本项用**服务渲染器**——字面量逐字一致，
+    **表达式**覆盖（`#(.W(4*4))`）可能只差空白。数值等价，但 `_override_changes_params`
+    的**文本比较**可能随之变脸。测试显式钉住"**去空白后一致**"这条不变量（连去空白都
+    不一致即说明是语义差异而非技法差异，必须查清）。
+  - ⚠ 本项的性质是**去重共享**，不是"把语言知识搬出引擎"——那段合并今天本来就在插件侧
+    （`width_check` / `hier_check` 各一份），引擎里没有对应实现（ADR-0019 决策 4 更正节）。
+    故**不影响终态判据**（`ROLES` 早已归零）。
+  - **只新增**（消费方仍用各自那份）→ 行为零变化；删除消费方重复逻辑待做（先处理上面
+    那个差异）。
+
+  验证：新测试 **4 passed**；`tests/engine/analyzer` **328 passed**；`-m smoke`
+  **424 passed**；`tests/policy` **125 passed**（含诊断基线门禁持平）；
+  **全量 2189 passed / 7 skipped**；探针 **新变绿 4 项 / ✓ 无回归**（纯加性）。
+
 - **P3-②c-2：端口提取迁出引擎 → 终态达成（`ROLES` 归零，ADR-0019）**：引擎侧最后一块
   语言知识（端口形态）清空，**引擎不再消费任何插件产物**。
 

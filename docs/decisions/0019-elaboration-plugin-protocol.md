@@ -297,8 +297,16 @@
             → `AttributeError`，由 8 个测试当场抓到；② 按锚点删 `ModuleExtractor` 的方法族
             时，**多行签名的闭合行与 `def` 同缩进**，把"按缩进找块尾"骗到 → 留下半截签名
             （`SyntaxError`）→ 回滚 `structure.py` 后改用"先跳过签名再找块尾"的脚本。
-       3. **c-3 待做**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；与
-          `inst_sites` / `connections` 族同批）。
+       3. **c-3 —— 插件项已落地并对拍；消费方迁移待做**：新增项 `param_override`
+          （`file` 作用域，`depends_on = ["param_default", "connections"]`）——把各检查
+          原先**各自一份**的"实例化点覆盖后参数表"合并逻辑上提为共享产物；与
+          `width_check` 自己的合并**逐项对拍通过**（字面量覆盖 + `changed` 判据一致 +
+          不空转：`W` 4→16）。
+          ⚠ **已探明一处技法差异（迁移消费方前必须处理）**：`width_check._override_params`
+          用**自带的 `node_text` 渲染器**把覆盖值取成文本，本项用**服务渲染器**——字面量
+          逐字一致，**表达式**覆盖可能只差空白（数值等价；但 `_override_changes_params` 的
+          **文本比较**可能随之变脸）。测试显式钉住"去空白后一致"这条不变量。
+          → 故"删掉消费方那份合并"仍待做（先处理该差异）。
        ✅ 已备 c-1 的前置：引擎注入**当前分析文件**（`core/_protocol.py::CTX_ANALYZED_FILE`，
        语言无关的文件层事实）——`connections` 是**文件作用域**产物而 postpass 逐文件跑，插件
        需要它才能取对切片（否则只能反查 AST 猜自己在分析哪个文件）。
