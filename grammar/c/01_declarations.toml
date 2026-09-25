@@ -141,13 +141,77 @@ value = "$1"
 [InitList.parser]
 production = [
     "bracket.l_curly_bracket",
-    "(@Initializer,(symbol.base.comma,@Initializer)*)?",
+    "(@InitElement,(symbol.base.comma,@InitElement)*)?",
     "symbol.base.comma?",
     "bracket.r_curly_bracket",
 ]
 
 [InitList.parser.node]
 items = "$2"
+
+
+# InitElement — 初始化列表的一项：普通初始化器或**指示符初始化器**
+# 候选顺序：指示符在前（它以 `.` / `[` 开头，与表达式/列表不冲突，更具体先试）。
+[InitElement.parser]
+production = [
+    "@DesignatedInitializer|@Initializer",
+]
+inline = true
+
+[InitElement.parser.node]
+value = "$1"
+
+
+# ── 指示符初始化（阶段 2b，C99 §6.7.8）──
+# 形态：`desig-list = initializer`，desig-list = designator+（可链：`.a.b = v`、
+# `[0].x = v`）。环安全：`DesignatedInitializer → Initializer → InitList →
+# InitElement → DesignatedInitializer` 由 `.` / `[` / `{` 守卫（三者首 token 都不可空），
+# 与 InitList 自身那条环同性质。
+#
+# ⚠ 语法层宽进：`.a` 里的名字是否是该结构体的成员、`[i]` 是否越界，都归语义层。
+[DesignatedInitializer.parser]
+production = [
+    "@Designator+",
+    "symbol.base.equal",
+    "@Initializer",
+]
+
+[DesignatedInitializer.parser.node]
+designators = "$1"
+init = "$3"
+
+
+[Designator.parser]
+production = [
+    "@MemberDesignator|@IndexDesignator",
+]
+inline = true
+
+[Designator.parser.node]
+value = "$1"
+
+
+# MemberDesignator — `.field`
+[MemberDesignator.parser]
+production = [
+    "symbol.base.dot",
+    "@Identifier",
+]
+
+[MemberDesignator.parser.node]
+field = "$2"
+
+
+# IndexDesignator — `[ 常量表达式 ]`
+[IndexDesignator.parser]
+production = [
+    "bracket.l_square_bracket",
+    "@Expression",
+    "bracket.r_square_bracket",
+]
+
+[IndexDesignator.parser.node]
+index = "$2"
 
 
 [Declarator.parser]

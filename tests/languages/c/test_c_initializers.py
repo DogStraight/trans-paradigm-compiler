@@ -126,3 +126,50 @@ class TestInitializerRejection:
         ast = _parse(src, c)
         names = [n.node_name for n in (getattr(ast, "sub_node", []) or [])]
         assert names == [], f"应解析失败但产出了顶层节点 {names}"
+
+
+class TestDesignatedInitializers:
+    """C99 §6.7.8 指示符初始化：`.field = v` / `[i] = v`，可链。"""
+
+    def test_member_designator(self, c):
+        init = _init("struct s x = {.a = 1};\n", c)
+        assert init.node_name == "InitList"
+        assert _count(init, "DesignatedInitializer") == 1
+        assert _count(init, "MemberDesignator") == 1
+        assert _count(init, "Number") == 1
+
+    def test_index_designator(self, c):
+        init = _init("int a[5] = {[0] = 1, [4] = 2};\n", c)
+        assert _count(init, "DesignatedInitializer") == 2
+        assert _count(init, "IndexDesignator") == 2
+        assert _count(init, "Number") == 4  # 两个下标 + 两个值
+
+    def test_chained_designator(self, c):
+        """`.a.b = 1` —— 指示符可链（designator+）。"""
+        init = _init("struct s x = {.a.b = 1};\n", c)
+        assert _count(init, "MemberDesignator") == 2
+
+    def test_mixed_designated_and_plain(self, c):
+        """混用：`{1, .b = 2}` —— 真实代码里的常见写法。"""
+        init = _init("struct s x = {1, .b = 2};\n", c)
+        assert _count(init, "DesignatedInitializer") == 1
+        assert _count(init, "Number") == 2
+
+    def test_designator_index_is_expression(self, c):
+        """下标是常量表达式（语法层宽进）。"""
+        init = _init("int a[4] = {[1 + 1] = 9};\n", c)
+        assert _count(init, "IndexDesignator") == 1
+        assert _count(init, "BinaryOp") == 1
+
+    @pytest.mark.parametrize(
+        "src",
+        [
+            "struct s x = {.a 1};\n",     # 指示符缺 `=`
+            "int a[2] = {[0] 1};\n",       # 同上（下标形态）
+            "int a[2] = {[0 = 1};\n",      # 下标缺 `]`
+        ],
+    )
+    def test_bad_designator_fails_at_parse(self, c, src):
+        ast = _parse(src, c)
+        names = [n.node_name for n in (getattr(ast, "sub_node", []) or [])]
+        assert names == [], f"应解析失败但产出了顶层节点 {names}"
