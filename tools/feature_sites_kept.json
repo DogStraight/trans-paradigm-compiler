@@ -1,0 +1,4 @@
+{
+ "_note": "功能散点『已判保持』登记表——每条必须有 reason（为什么接受这个散点/为什么不合并）与 source（出处：ADR/机制文档/测试）。判保持的实例其散点数不计入预算（口径同 policy/structural_budget.md R6）。键 = '<family>:<instance>'，family/instance 须存在于 tools/feature_sites_baseline.json。",
+ "kept": {}
+}

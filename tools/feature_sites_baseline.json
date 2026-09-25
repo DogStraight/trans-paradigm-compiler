@@ -1,0 +1,916 @@
+{
+ "families": {
+  "capability": {
+   "desc": "加一个引擎能力位（语言包声明 + 引擎契约）",
+   "instances": {
+    "elaborator": {
+     "declared_in": "grammar/verilog/plugins/elaboration/tpc.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 6,
+      "插件内": 4,
+      "文档": 4,
+      "测试": 2
+     },
+     "scatter": [
+      "analyzer/elaboration/README.md",
+      "analyzer/elaboration/__init__.py",
+      "analyzer/elaboration/contract.py",
+      "analyzer/elaboration/driver.py",
+      "analyzer/elaboration/loader.py",
+      "core/component_protocol.md"
+     ],
+     "scatter_count": 6,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 16
+    },
+    "formatter": {
+     "declared_in": "grammar/verilog/plugins/formatter/tpc.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 13,
+      "插件内": 14,
+      "文档": 19,
+      "测试": 28,
+      "行为基线": 2
+     },
+     "scatter": [
+      "analyzer/elaboration/contract.py",
+      "core/component_protocol.md",
+      "core/plugin_loader.py",
+      "core/token_protocol.py",
+      "linter/checkers/style.py",
+      "linter/linter_architecture.md",
+      "pipeline/__init__.py",
+      "preprocessor/README.md",
+      "preprocessor/macro_policy.py",
+      "renderer/README.md",
+      "renderer/fidelity.py",
+      "renderer/renderer_architecture.md",
+      "tests/e2e/samples/real/CREDITS.md",
+      "tests/fuzz/run_fuzz.py",
+      "tools/structural_kept.json"
+     ],
+     "scatter_count": 15,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 76
+    },
+    "macro_policy": {
+     "declared_in": "grammar/verilog/plugins/macro_policy/tpc.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 9,
+      "插件内": 6,
+      "文档": 4,
+      "测试": 1
+     },
+     "scatter": [
+      "analyzer/elaboration/README.md",
+      "analyzer/elaboration/contract.py",
+      "analyzer/elaboration/loader.py",
+      "core/component_protocol.md",
+      "core/global_state.py",
+      "pipeline/__init__.py",
+      "preprocessor/README.md",
+      "preprocessor/_expand.py",
+      "preprocessor/macro_policy.py"
+     ],
+     "scatter_count": 9,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 20
+    }
+   },
+   "summary": {
+    "budget": 30,
+    "instances": 3,
+    "scatter_max": 15,
+    "scatter_median": 9,
+    "scatter_total": 30,
+    "stage_max": 0,
+    "stage_median": 0
+   }
+  },
+  "check": {
+   "desc": "加一条检查规则（诊断码是它的对外身份）",
+   "instances": {
+    "AW001": {
+     "declared_in": "grammar/verilog/plugins/checks/always_check/_always_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 4,
+      "文档": 2,
+      "测试": 2,
+      "行为基线": 3
+     },
+     "scatter": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 11
+    },
+    "AW002": {
+     "declared_in": "grammar/verilog/plugins/checks/always_check/_always_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 4,
+      "文档": 2,
+      "测试": 1,
+      "行为基线": 3
+     },
+     "scatter": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 10
+    },
+    "CC001": {
+     "declared_in": "grammar/verilog/plugins/checks/case_check/_case_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 2,
+      "测试": 2,
+      "行为基线": 5
+     },
+     "scatter": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/eval_check_accuracy.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tests/e2e/samples/real/diag_baseline.json"
+     ],
+     "scatter_count": 5,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 12
+    },
+    "EX001": {
+     "declared_in": "grammar/verilog/plugins/checks/custom_rules_example/_ansi_header.py",
+     "kept": null,
+     "roles": {
+      "插件内": 4,
+      "文档": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 7
+    },
+    "EX002": {
+     "declared_in": "grammar/verilog/plugins/checks/custom_rules_example/rules/param_type.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 5,
+      "文档": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 8
+    },
+    "LC001": {
+     "declared_in": "grammar/verilog/plugins/checks/latch_check/_latch_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 2,
+      "测试": 1,
+      "行为基线": 5
+     },
+     "scatter": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/eval_check_accuracy.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tests/e2e/samples/real/diag_baseline.json"
+     ],
+     "scatter_count": 5,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 11
+    },
+    "NC001": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "插件内": 2,
+      "文档": 3,
+      "测试": 2,
+      "行为基线": 3
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "core/check_registry.py",
+      "tests/_check_test.py",
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 5,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 12
+    },
+    "NC002": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "NC003": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "NC004": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "NC005": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 1,
+      "文档": 1,
+      "测试": 2,
+      "行为基线": 2
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "tests/_check_test.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 7
+    },
+    "NC006": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 4
+    },
+    "NC007": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 2
+    },
+    "NC008": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 1,
+      "文档": 1,
+      "测试": 2,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tools/check_gate_efficacy.py"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 6
+    },
+    "NC009": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "NC010": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 1,
+      "文档": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "NC011": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 4,
+      "文档": 3,
+      "测试": 2,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 10
+    },
+    "NC012": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 2,
+      "行为基线": 2
+     },
+     "scatter": [
+      "tests/e2e/eval_check_accuracy.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 4
+    },
+    "NC013": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "行为基线": 2
+     },
+     "scatter": [
+      "tests/e2e/eval_check_accuracy.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "NC014": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 3,
+      "文档": 2,
+      "测试": 1,
+      "行为基线": 3
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 4,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 10
+    },
+    "NC015": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "插件内": 2,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "NC016": {
+     "declared_in": "grammar/verilog/plugins/checks/name_check/rules/naming.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 1,
+      "测试": 1,
+      "行为基线": 1
+     },
+     "scatter": [
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 6
+    },
+    "UN001": {
+     "declared_in": "grammar/verilog/plugins/checks/unused_check/_unused_check.py",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "文档": 2,
+      "测试": 4,
+      "行为基线": 5
+     },
+     "scatter": [
+      "tests/e2e/eval_benchmark.py",
+      "tests/e2e/eval_check_accuracy.py",
+      "tests/e2e/mutation/injectors.py",
+      "tests/e2e/samples/check_accuracy/expected.json",
+      "tests/e2e/samples/real/diag_baseline.json"
+     ],
+     "scatter_count": 5,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 14
+    },
+    "WC001": {
+     "declared_in": "grammar/verilog/plugins/checks/inst_check/_inst_check.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "插件内": 4,
+      "文档": 2,
+      "测试": 3,
+      "行为基线": 1
+     },
+     "scatter": [
+      "analyzer/semantic_checks.md",
+      "analyzer/suppress.py",
+      "tests/e2e/samples/check_accuracy/expected.json"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 12
+    }
+   },
+   "summary": {
+    "budget": 56,
+    "instances": 24,
+    "scatter_max": 5,
+    "scatter_median": 2,
+    "scatter_total": 56,
+    "stage_max": 0,
+    "stage_median": 0
+   }
+  },
+  "config": {
+   "desc": "加一个配置段键（引擎 declare_cfg 登记面）",
+   "instances": {
+    "analyzer.root_scope": {
+     "declared_in": "analyzer/traversal.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "测试": 1
+     },
+     "scatter": [
+      "analyzer/traversal.py",
+      "pipeline/schedule.py"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "lexer.bracket_map": {
+     "declared_in": "core/utils.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 3
+     },
+     "scatter": [
+      "core/utils.py",
+      "linter/lookahead.py",
+      "linter/scanner.py"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "lexer.pre_scan": {
+     "declared_in": "lexer/pre_scan.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2
+     },
+     "scatter": [
+      "core/global_state.py",
+      "lexer/pre_scan.py"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 2
+    },
+    "linter.macro_hygiene": {
+     "declared_in": "linter/scanner.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2,
+      "文档": 1,
+      "测试": 1
+     },
+     "scatter": [
+      "linter/linter_architecture.md",
+      "linter/scanner.py"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 4
+    },
+    "linter.style_check": {
+     "declared_in": "linter/scanner.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1,
+      "测试": 1
+     },
+     "scatter": [
+      "linter/scanner.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 2
+    },
+    "parser.operator_defs": {
+     "declared_in": "parser/parser_core.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 3,
+      "测试": 1
+     },
+     "scatter": [
+      "linter/checkers/expression.py",
+      "linter/scanner.py",
+      "parser/parser_core.py"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 4
+    },
+    "parser.skip_types": {
+     "declared_in": "parser/parser_core.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 2
+     },
+     "scatter": [
+      "parser/_production.py",
+      "parser/parser_core.py"
+     ],
+     "scatter_count": 2,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 2
+    },
+    "parser.token_categories": {
+     "declared_in": "parser/parser_core.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 3,
+      "测试": 2
+     },
+     "scatter": [
+      "core/config_registry.py",
+      "linter/checkers/expression.py",
+      "parser/parser_core.py"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 5
+    },
+    "preprocessor.continuation": {
+     "declared_in": "preprocessor/_expand.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1
+     },
+     "scatter": [
+      "preprocessor/_expand.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 1
+    },
+    "preprocessor.directives": {
+     "declared_in": "preprocessor/_expand.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1
+     },
+     "scatter": [
+      "preprocessor/_expand.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 1
+    },
+    "preprocessor.expand": {
+     "declared_in": "preprocessor/_expand.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1
+     },
+     "scatter": [
+      "preprocessor/_expand.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 1
+    },
+    "preprocessor.macro_config": {
+     "declared_in": "lexer/main_lexer.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 3
+     },
+     "scatter": [
+      "lexer/main_lexer.py",
+      "preprocessor/_expand.py",
+      "preprocessor/macro_shape.py"
+     ],
+     "scatter_count": 3,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 3
+    },
+    "renderer.style": {
+     "declared_in": "renderer/loader.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1
+     },
+     "scatter": [
+      "renderer/loader.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 1
+    },
+    "structure.protocol": {
+     "declared_in": "analyzer/structure.py",
+     "kept": null,
+     "roles": {
+      "引擎侧登记": 1
+     },
+     "scatter": [
+      "analyzer/structure.py"
+     ],
+     "scatter_count": 1,
+     "stage_count": 0,
+     "stage_files": [],
+     "total": 1
+    }
+   },
+   "summary": {
+    "budget": 26,
+    "instances": 14,
+    "scatter_max": 3,
+    "scatter_median": 2,
+    "scatter_total": 26,
+    "stage_max": 0,
+    "stage_median": 0
+   }
+  },
+  "syntax": {
+   "desc": "加一个语法构造族（一个插件目录）",
+   "instances": {
+    "attributes": {
+     "declared_in": "grammar/verilog/plugins/syntax/attributes/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内（跨阶段）": 2
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 2,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/attributes/00_attribute.toml",
+      "grammar/verilog/plugins/syntax/attributes/tpc.toml"
+     ],
+     "total": 2
+    },
+    "configs": {
+     "declared_in": "grammar/verilog/plugins/syntax/configs/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内（跨阶段）": 4
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 4,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/configs/00_config.toml",
+      "grammar/verilog/plugins/syntax/configs/01_library.toml",
+      "grammar/verilog/plugins/syntax/configs/_token_ext.toml",
+      "grammar/verilog/plugins/syntax/configs/tpc.toml"
+     ],
+     "total": 4
+    },
+    "gates": {
+     "declared_in": "grammar/verilog/plugins/syntax/gates/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内（跨阶段）": 3
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 3,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/gates/00_gate.toml",
+      "grammar/verilog/plugins/syntax/gates/_token_ext.toml",
+      "grammar/verilog/plugins/syntax/gates/tpc.toml"
+     ],
+     "total": 3
+    },
+    "nettypes": {
+     "declared_in": "grammar/verilog/plugins/syntax/nettypes/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 1,
+      "插件内（跨阶段）": 4,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 4,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/nettypes/00_net_decl.toml",
+      "grammar/verilog/plugins/syntax/nettypes/01_var_decl.toml",
+      "grammar/verilog/plugins/syntax/nettypes/_token_ext.toml",
+      "grammar/verilog/plugins/syntax/nettypes/tpc.toml"
+     ],
+     "total": 6
+    },
+    "sim": {
+     "declared_in": "grammar/verilog/plugins/syntax/sim/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内": 3,
+      "插件内（跨阶段）": 11,
+      "文档": 2,
+      "测试": 1
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 11,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/sim/00_initial.toml",
+      "grammar/verilog/plugins/syntax/sim/10_event_wait.toml",
+      "grammar/verilog/plugins/syntax/sim/20_forever.toml",
+      "grammar/verilog/plugins/syntax/sim/30_sys_task.toml",
+      "grammar/verilog/plugins/syntax/sim/40_fork_block.toml",
+      "grammar/verilog/plugins/syntax/sim/50_timing.toml",
+      "grammar/verilog/plugins/syntax/sim/60_proc_assign.toml",
+      "grammar/verilog/plugins/syntax/sim/70_event_decl.toml",
+      "grammar/verilog/plugins/syntax/sim/90_sim_ctrl.toml",
+      "grammar/verilog/plugins/syntax/sim/_token_ext.toml",
+      "grammar/verilog/plugins/syntax/sim/tpc.toml"
+     ],
+     "total": 17
+    },
+    "specify": {
+     "declared_in": "grammar/verilog/plugins/syntax/specify/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内（跨阶段）": 4
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 4,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/specify/00_specify.toml",
+      "grammar/verilog/plugins/syntax/specify/01_defparam.toml",
+      "grammar/verilog/plugins/syntax/specify/_token_ext.toml",
+      "grammar/verilog/plugins/syntax/specify/tpc.toml"
+     ],
+     "total": 4
+    },
+    "udp": {
+     "declared_in": "grammar/verilog/plugins/syntax/udp/tpc.toml",
+     "kept": null,
+     "roles": {
+      "插件内（跨阶段）": 3
+     },
+     "scatter": [],
+     "scatter_count": 0,
+     "stage_count": 3,
+     "stage_files": [
+      "grammar/verilog/plugins/syntax/udp/00_udp.toml",
+      "grammar/verilog/plugins/syntax/udp/_token_ext.toml",
+      "grammar/verilog/plugins/syntax/udp/tpc.toml"
+     ],
+     "total": 3
+    }
+   },
+   "summary": {
+    "budget": 0,
+    "instances": 7,
+    "scatter_max": 0,
+    "scatter_median": 0,
+    "scatter_total": 0,
+    "stage_max": 11,
+    "stage_median": 4
+   }
+  }
+ },
+ "recorded": "2026-09-25"
+}

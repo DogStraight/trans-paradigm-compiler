@@ -98,6 +98,28 @@ major.minor，不区分"该包到底用了哪些引擎能力"。后果：
   （升级期若必须并存，须写明删除期限与判据）。验证：三个内置包各自声明 + 造一个
   "只声明子集"的包证明无关演进不误伤 + 缺项报错文案含具体能力名。
 
+## 步 1 实测结果（2026-09-25，`tools/feature_sites.py --save` 基线）
+
+| 功能族 | 实例 | 散点合计 | 中位 | 最大 | 结论 |
+|---|---|---|---|---|---|
+| `check` 加检查规则 | 24 | **56** | 2 | 5 | 散点**高度重复**：几乎每条规则都要在同样 5–6 个文件登记 |
+| `syntax` 加语法构造 | 7 | **0** | 0 | 0 | 无跨文件登记点（插件自动发现）→ 该族问题只在**跨阶段文件数**：一个构造 2–11 个文件（`sim` = 11） |
+| `capability` 加能力位 | 3 | **30** | 9 | 15 | 散点最贵的一族（`formatter` 15 / `macro_policy` 9 / `elaborator` 6） |
+| `config` 加配置段键 | 14 | **26** | 2 | 3 | 中等 |
+
+**步 2 的收敛目标（由数字定，不靠直觉）**：`check` 族的散点集合是**同一批文件反复出现**——
+
+    core/check_registry.py                  （规则注册表，唯一合理的单一来源候选）
+    tests/e2e/mutation/injectors.py          （变异注入器的码清单）
+    tests/e2e/samples/check_accuracy/expected.json
+    tests/e2e/samples/real/diag_baseline.json
+    tests/e2e/eval_check_accuracy.py / eval_benchmark.py（评分脚本的码枚举）
+    analyzer/semantic_checks.md              （文档侧码表）
+
+即"一条规则码要手写进 6 处"。步 2 判据：**由 `check_registry` 单一来源派生或校验其余
+各处**（能派生就派生、不能派生就让门禁比对），目标"加一条规则 = 清单 1 项 + 实现 1 文件 +
+测试 1 文件"。`capability` 族（30 散点）是第二个候选目标。
+
 ## 关联条目
 
 - `TODO.md`「0.1.3 立项」WS2（执行步骤与待决策点）
