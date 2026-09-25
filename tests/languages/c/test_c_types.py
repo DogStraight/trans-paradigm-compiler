@@ -12,6 +12,8 @@
 
 import pytest
 
+from core.define import iter_nodes
+
 from tests.languages.c.conftest import _lint, _node_names, _parse
 
 
@@ -94,12 +96,37 @@ class TestTypesRejection:
     def test_bad_type_source_reports(self, c_linter, src):
         assert _lint(src, c_linter), f"应报错但通过了：{src!r}"
 
-    def test_member_without_declarator_fails_at_parse(self, c):
-        """成员缺声明符（`struct p { int ; };`）在**解析层**被拒。
+    def test_member_without_declarator_is_syntactically_accepted(self, c):
+        """`struct p { int ; };` —— **语法层接受**，约束归语义层。
 
-        ⚠ 断言放在解析层而非 linter：`StructMember` 要求声明符列表非空，故语法上
-        不可能匹配；而 linter 对"成员体不平衡"的整行会走近似路径（不报），
-        那是已知的 linter 近似边界（见 `docs/gaps/gap-parser-linter-approximation.md`），
-        不能拿它当语法判据。
+        ⚠ 本用例原断言"解析层被拒"。阶段 2b 引入**位域**（`int x : 3;`）后，成员的
+        声明符表必须**可省**（匿名位域 `int : 0;` 没有声明符），"成员至少要有声明符或
+        位宽"这条约束因此落到**语义层**（C99 §6.7.2.1 的约束，非语法）。
+        这是"边界测试随能力落地转正"的第三个实例——**不要**为维持旧断言把声明符表改回
+        必选（那会打断匿名位域）。
         """
-        assert _node_names(_parse("struct point { int ; };\n", c)) == []
+        assert _node_names(_parse("struct point { int ; };\n", c)) == ["Declaration"]
+
+
+class TestBitField:
+    """位域（C99 §6.7.2.1）：`unsigned int flag : 3;` / 匿名 `int : 0;`。"""
+
+    def test_named_bitfield(self, c):
+        ast = _parse("struct s { unsigned int flag : 3; };\n", c)
+        assert _node_names(ast) == ["Declaration"]
+        member = ast.sub_node[0].specs.spec.body.members.items[0]
+        assert member.node_name == "StructMember"
+        # 宽度是表达式：按"成员子树里有几个 Number"断言，避开可选组的 seq 包装形状
+        assert sum(1 for n in iter_nodes(member) if n.node_name == "Number") == 1
+
+    def test_anonymous_bitfield(self, c):
+        """`int : 0;` —— 匿名位域（声明符可省，正是为此把声明符表改为可选）。"""
+        ast = _parse("struct s { int : 0; int x; };\n", c)
+        members = ast.sub_node[0].specs.spec.body.members.items
+        assert len(members) == 2
+
+    def test_bitfield_width_expression(self, c):
+        """宽度是常量表达式（语法层宽进），如 `a : W - 1`。"""
+        ast = _parse("struct s { unsigned int a : W - 1; };\n", c)
+        member = ast.sub_node[0].specs.spec.body.members.items[0]
+        assert any(n.node_name == "BinaryOp" for n in iter_nodes(member))

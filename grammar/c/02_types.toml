@@ -71,16 +71,24 @@ members = "$2"
 [StructMember]
 is_statement = true
 
+# 成员声明：说明符 + 声明符列表 + 可选**位域宽度** + `;`
+# 位域（C99 §6.7.2.1）：`unsigned int flag : 3;` / `int : 0;`（匿名占位）。
+# ⚠ 宽度是常量表达式（`@Expression`，语法层宽进——"是不是整型常量"归语义层）；
+#   匿名位域 `int : 0;` 的声明符表**可省**，故此处沿用 `@DeclaratorList`（非可选）会让
+#   匿名位域解析失败——需要 `;` 前允许省略声明符，见下面 `@DeclaratorList?`。
+#   环安全：宽度里的 `@Expression` 不回到 `StructMember`，与数组长度同性质。
 [StructMember.parser]
 production = [
     "@MemberSpec",
-    "@DeclaratorList",
+    "@DeclaratorList?",
+    "(symbol.base.colon,@Expression)?",
     "symbol.base.semicolon",
 ]
 
 [StructMember.parser.node]
 specs = "$1"
 declarators = "$2"
+bit_width = "$3"
 
 
 [MemberSpec.parser]
