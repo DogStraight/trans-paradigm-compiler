@@ -59,6 +59,7 @@ production = [
 ]
 
 [StorageClass.parser.node]
+base = "$1"
 
 
 [TypeQualifier.parser]
@@ -67,6 +68,7 @@ production = [
 ]
 
 [TypeQualifier.parser.node]
+base = "$1"
 
 
 [TypeSpecifier.parser]
@@ -90,6 +92,7 @@ production = [
 ]
 
 [SpecRest.parser.node]
+spec = "$1"
 
 
 # ── DeclaratorList / Declarator — 声明符（指针 + 直接声明符） ──
@@ -100,9 +103,11 @@ production = [
     "(symbol.base.comma,@InitDeclarator)*",
 ]
 
+# ⚠ **渲染前提：列表容器用合并 `items` 字段**（原 first/rest 形态只能按位引子节点，
+#   逗号分隔符拿不到正确形态——`items` 是 renderer `intent = "compact"` 的消费面）。
+#   `$2.items[*].sub_node[1]`：每个 `(comma,InitDeclarator)` 组的第二个子节点。
 [DeclaratorList.parser.node]
-first = "$1"
-rest = "$2"
+items = ["$1", "$2.items[*].sub_node[1]"]
 
 
 # ── 初始化器（阶段 2b）──
@@ -125,7 +130,10 @@ production = [
 
 [InitDeclarator.parser.node]
 declarator = "$1"
-init = "$2"
+# init — `=` 之后的初始化器本体。绑定直接落到组内的初始化器（而不是包住 `=`
+#   的可选组）：包住 `=` 的形态渲染时会多印一个 `=`，而"并联一个新属性"会让同一
+#   棵子树被 iter_nodes 走两遍（结构查询/计数类断言失真）。
+init = "$2.sub_node[0].sub_node[1]"
 
 
 [Initializer.parser]
@@ -146,8 +154,15 @@ production = [
     "bracket.r_curly_bracket",
 ]
 
+# ⚠ 合并 `items`（渲染前提，同 DeclaratorList）：`$2` 是可选组，其唯一子节点是
+#   `seq(首元素, (comma,元素)*)`——取 `[0]` 得首元素、取 `[1].items[*].sub_node[1]`
+#   得其余元素（每个 `(comma,元素)` 组的第二个子节点）。空 `{}` 时可选组无子节点，
+#   两条路径都落空 → items 不挂载。
 [InitList.parser.node]
-items = "$2"
+items = [
+    "$2.sub_node[0].sub_node[0]",
+    "$2.sub_node[0].sub_node[1].items[*].sub_node[1]",
+]
 
 
 # InitElement — 初始化列表的一项：普通初始化器或**指示符初始化器**
@@ -176,8 +191,11 @@ production = [
     "@Initializer",
 ]
 
+# ⚠ `@Designator+` 出来的是引擎内部的 `plus` 容器节点（normalize 不展平它、
+#   也没有对应布局）——直接 ref 它会静默渲染成空。故绑定直接落到它的 items 列表，
+#   渲染按普通列表拼接（`.a.b` → `.a` + `.b`）。
 [DesignatedInitializer.parser.node]
-designators = "$1"
+designators = ["$1.items[*]"]
 init = "$3"
 
 
@@ -324,3 +342,128 @@ production = [
 [ParamSpec.parser.node]
 first = "$1"
 rest = "$2"
+
+
+# ============================================================================
+# 渲染配置（世界 A 布局）— 翻译单元与声明/声明符
+# ============================================================================
+# 口径同 00_expressions.toml 头注（叶子 ref / 可选 opt+group / 列表 compact）。
+# 说明符序列（`unsigned long long`）是**空格分隔**的列表：`intent = "compact"`
+# 的 `sep` 传 `" "`（分隔文本 rstrip 后为空，间距由软换行给出）。
+
+# TranslationUnit — 根块：顶层声明逐个成行（首项无前导换行 → join 而非 body）
+[TranslationUnit.renderer.layout]
+join = "\n"
+
+[Declaration.renderer.layout]
+line = [
+    { ref = "specs" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+    { opt = { group = [
+    " ",
+    { ref = "declarators" },
+] } },
+    ";",
+]
+
+[StorageClass.renderer.layout]
+ref = "base"
+
+[TypeQualifier.renderer.layout]
+ref = "base"
+
+[TypeSpecifier.renderer.layout]
+ref = "spec"
+
+[SpecRest.renderer.layout]
+ref = "spec"
+
+[DeclaratorList.renderer.layout]
+intent = "compact"
+items = "items"
+first_soft = false
+
+[InitDeclarator.renderer.layout]
+line = [
+    { ref = "declarator" },
+    { opt = { group = [
+    " = ",
+    { ref = "init" },
+] } },
+]
+
+[Initializer.renderer.layout]
+ref = "value"
+
+[InitList.renderer.layout]
+line = [
+    "{",
+    { intent = "compact", items = "items", first_soft = false, nest = 0 },
+    "}",
+]
+
+[InitElement.renderer.layout]
+ref = "value"
+
+# designators 同样用 `join = ""`（理由同 DirectDeclarator.suffixes：可能含注释项）
+[DesignatedInitializer.renderer.layout]
+line = [{ join = "", items = "designators" }, " = ", { ref = "init" }]
+
+[Designator.renderer.layout]
+ref = "value"
+
+[MemberDesignator.renderer.layout]
+line = [".", { ref = "field" }]
+
+[IndexDesignator.renderer.layout]
+line = ["[", { ref = "index" }, "]"]
+
+[Declarator.renderer.layout]
+line = [{ opt = { ref = "pointers" } }, { ref = "direct" }]
+
+[Pointer.renderer.layout]
+line = [{ ref = "first" }, { opt = { ref = "more" } }]
+
+# DirectDeclarator — 头 + 后缀链（`f(int a)` / `a[4]`）：后缀直接拼接，无分隔符。
+# ⚠ 用 `join = ""`（items 列表）而不是 `{ ref = "suffixes" }`：后缀链里可能混进
+#   **独占行注释**（引擎把 `f(\n// c\nint a)` 的注释挂进 suffixes 迭代项，
+#   见 parser/_production.py `_claim_if_line_start`）——`join` 会把 `_comment` 项
+#   拆成独立行段，`ref` 则直接顺序拼接 → 注释会把后续后缀吃掉整行
+#   （实测 `int f// c(int a);`，输出已不是合法 C）。
+[DirectDeclarator.renderer.layout]
+line = [{ ref = "head" }, { opt = { join = "", items = "suffixes" } }]
+
+[ParenDeclarator.renderer.layout]
+line = ["(", { ref = "inner" }, ")"]
+
+[ArraySuffix.renderer.layout]
+line = ["[", { opt = { ref = "size" } }, "]"]
+
+[FuncSuffix.renderer.layout]
+line = ["(", { opt = { ref = "params" } }, ")"]
+
+[ParamList.renderer.layout]
+intent = "compact"
+items = "items"
+first_soft = false
+
+[ParamDecl.renderer.layout]
+line = [
+    { ref = "type_spec" },
+    { opt = { group = [
+    " ",
+    { ref = "declarator" },
+] } },
+]
+
+[ParamSpec.renderer.layout]
+line = [
+    { ref = "first" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+]

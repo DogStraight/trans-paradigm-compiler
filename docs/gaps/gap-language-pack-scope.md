@@ -266,36 +266,41 @@ C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_asse
 或按档位准备 pack 副本。这是**易用性**问题，不再是**能力缺失**。
 
 
-## C 包渲染/保真面现状与工作清单（2026-09-25 实测，原文打印起点）
+## C 包渲染/保真面现状（原文打印闭环已通，2026-09-25）
 
-**实测三件事**：
+**闭环已成立**（`tests/languages/c/test_c_render_fidelity.py`，10 例全绿）：源文本 →
+tokenize → parse → render → 与源比对（非空 / 行数 ≥ 源有效行 80% / `difflib` 比值 ≥ 0.80），
+外加**幂等**（渲染结果再过一遍管线，逐字相同）与**注释保留**（块注释正文必须出现）。
 
-1. **渲染输出是空串，且不报错**：`int x;` / `int f(void) { return 0; }` 经 C 包的
-   `Renderer` 都渲染成 `''`。原因**不是**缺包级 `[renderer]` 段（c4 / yaml 都没有该段，
-   却能渲染；verilog 的 `[renderer]` 只声明一个**可选** style 文件），而是
-   **逐规则 `[Rule.renderer.layout]` 缺失**——引擎对"没有渲染配置的规则"**静默输出空串**。
-   ⚠ 这是一处**无声的保真度损失**（本仓配置加载 fail-fast，但渲染覆盖不是）。
-2. **覆盖率对照**（新增工具 `tools/render_coverage.py` 量出）：
-   `grammar/verilog` 265 规则 / 有渲染配置 **243（92%）**；`grammar/c` 70 规则 /
-   **1（1%）**——唯一那处还是照 c4 抄的叶子 `Identifier`。
-3. **模板已确认**（verilog 成熟形态）：
-   · 单行规则 → `[Rule.renderer.layout] line = [ … { ref = "字段" } … ]`
-   · 可选段 → `{ opt = { group = [ … ] } }`
-   · **列表规则 → `[Rule.renderer] layout = { intent = "compact", items = "items",
-     first_soft = false }`，且该规则要有一个**合并列表字段** `items`**
-     （verilog `DeclaratorList` 写作 `items = ["$1", "$2.items[*].sub_node[1]"]`）
-   · 根块 → `[Rule.renderer.body]`（yaml `Document` / 待补的 `TranslationUnit`）
-
-**工作清单（按"从简单到复杂"，建议顺序）**：
-
-| 步 | 内容 | 备注 |
+| 项 | 布局补齐前 | 现在 |
 |---|---|---|
-| 1 | 列表规则改**合并 `items` 字段** + 列表布局：`DeclaratorList` / `ParamList` / `ArgumentList` / `InitList` | ⚠ **会改 AST 形状**（现有测试用 `first`/`rest`），需同批更新约 10 处断言 |
-| 2 | 叶子/说明符族布局：`SimpleType`（需补 `base = "$1"` 绑定）、`StructOrUnion`、`TypeSpecifier`、`Declaration`、`TranslationUnit.renderer.body` | 补最小链条即可让 `int x;` 真实渲染 |
-| 3 | 表达式/语句族布局（`BinaryOp` 等引擎节点 + 各语句规则） | 引擎节点的渲染走原语，语言包只需给规则布局 |
-| 4 | **注释恢复**（用户指出的难点）：按设计意图分 **line / block / inline** 三级——line/block 以**节点**挂载、inline 以**靠近语法的元信息**挂载 | 引擎侧已有 `_comment` 标记与 `collect_line_comments`（ADR-0013）；先对齐 verilog 的挂载形态，再谈 inline 元信息 |
-| 5 | **保真度测试管线**：照 `tests/e2e/run_pipeline.py::run_pipeline_on_source` + `test_real_fidelity.py` 的形态（difflib 比值阈值 + 结构断言 + **幂等**第二遍）建 C 版 | 先小样本（`int x;` / 带 line/block 注释），再扩到 `samples/ring_buffer.{h,c}` |
-| 6 | 外部 oracle（可选）：`clang-format` 或"解析→渲染→再解析"往返作为正确性判据 | 现阶段先把**往返幂等**做出来 |
+| `tools/render_coverage.py grammar/c` | 70 条规则 / 1 有渲染配置（1%） | **80 条 / 80（100%）** |
+| `samples/ring_buffer.h` ratio / 有效行 | 0.0000 / 0（渲染为空串） | **0.9842** / 35（源 33） |
+| `samples/ring_buffer.c` ratio / 有效行 | 0.0000 / 0 | **0.9780** / 126（源 117） |
 
-**纪律**：每步都要有"未覆盖 → 能被发现"的守卫（渲染覆盖率门禁或往返断言），
-否则缺布局会继续**静默吞掉内容**。
+**为什么"覆盖率 100%"不是凑数**：分母 70 → 80 是因为补了 `Comment`（真规则，新增
+`grammar/c/04_comments.toml`）、pratt 产物 `BinaryOp`/`UnaryOp`/`TernaryOp`、以及 6 个
+`bracket.*` token 节点——后两类**不补布局就静默丢内容**（实测 `a[i]` 渲染成 `ai`）。
+
+**已修的真实内容丢失（不是格式问题）**：
+- `StorageClass`/`TypeQualifier`/`SimpleType`/`StructOrUnion` 原先**一个字段都没有** →
+  关键字文本完全不在 AST 里；`SpecRest` 无子节点 → `typedef struct X{…} Y;` 的**整个 struct 体**
+  不在 AST 里。补最小 node 绑定后回填。
+
+**已知偏差（逐条，均不丢 token）**：
+
+| # | 现象 | 原因 / 现状 |
+|---|---|---|
+| 1 | `i++` 渲染成 `++i` | 引擎 pratt 用 `UnaryOp` 单名 + `position` 区分前后缀，布局原语无"按属性换序"能力（**引擎侧能力缺口**） |
+| 2 | `case` 体不额外缩进、标号缩进与源不同 | `CaseLabel`/`LabelStmt` 是独立语句规则（语法形状如此），纯格式 |
+| 3 | `for (;;)` → `for (; ; )` | 三段用字面 `"; "` 拼以保 `for (int i = 0; …)` 的空格；空段多出空格，合法 C |
+| 4 | 长参数表按 40 列折行 | C 包未声明 `[renderer.style]`，用引擎默认 `max_inline=40`（与 verilog 默认同口径）；要贴源可加 `max_inline=80` |
+| 5 | `enum e { /* c */ A }` 首项前的**独占行注释丢失** | **解析端**：首槽位 `@Enumerator` 不在 repeat 内，注释被 claim 到最深的 `Enumerator.name`，`_split_head_comments` 够不到 → 要动 parser 的 claim/attach（超出语言包） |
+| 6 | 注释落在声明符后缀链/下标里时位置不理想（且二次渲染可能不幂等） | 这些位置的列表渲染**必须用 `join`**；用 `ref` 会把整行代码吃进注释（实测输出非法 C）——已在样本内避开并在布局里用 `join` |
+| 7 | `#include` 在**词法层直接 ValueError**（`Unexpected token: #`） | `#` 未进符号表；预处理属阶段 4（先于本次改动存在） |
+
+**未做（下一步）**：
+1. **inline 注释**（`int x; /* why */`）：设计意图是"以靠近语法的**元信息**挂载"（line/block 走节点，
+   inline 走节点属性）；本轮只通了 line/block 的节点路径。
+2. 上面 1/5/6 三处**引擎侧/解析侧**改动（前后缀换序、注释 claim 深度、列表内注释落位）。
+3. 外部 oracle（`clang-format`）或"渲染→再解析"往返的**内容级**对拍（现在只做幂等，不比对外部格式）。

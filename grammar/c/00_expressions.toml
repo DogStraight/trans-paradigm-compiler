@@ -96,6 +96,7 @@ production = ["@PrimaryExpr"]
 pratt = true
 
 [Expression.parser.node]
+value = "$1"
 
 
 # ── 后缀链（Layer B2）──
@@ -133,7 +134,11 @@ production = [
 
 [IndexExpr.parser.node]
 base = "$1"
-indexes = "$2.items[*].sub_node[1]"
+# indexes —「`[ Expression ]` 组」列表（含方括号）。渲染必须拿到**组**：
+#   `$2.items[*].sub_node[1]` 那种"只抽 Expression"的形态会把方括号丢掉
+#   （`a[i]` 渲染成 `ai`）。组节点经 normalize 展平成 `["[", Expression, "]"]`，
+#   ref 顺序拼接即 `a[i][j]`。
+indexes = ["$2.items[*]"]
 
 
 # MemberExpr — 成员访问 a.b / p->q（单级；多级链见上方"已知边界"）
@@ -211,3 +216,110 @@ production = [
 first = "$1"
 rest = "$2"
 pointers = "$3"
+
+
+# ============================================================================
+# 渲染配置（世界 A 布局）— 表达式
+# ============================================================================
+# 口径（同 verilog/c4，见 renderer/renderer_architecture.md）：
+#   · 叶子/关键字：`{ ref = "字段" }`（字段绑到 token，normalize 后是字符串）；
+#   · 可选段：`{ opt = { group = [...] } }`——group 内任一 ref 求值为 None 时
+#     整组消失（renderer/primitives/group.py），故标点不会被留下；
+#   · 列表：规则带合并 `items` 字段 + `intent = "compact"`；
+#   · 分隔符是 `join` 文本 rstrip 后 + 软换行，故 `sep = " "` 的空格来自软换行。
+
+[Number.renderer.layout]
+ref = "value"
+
+[StringLiteral.renderer.layout]
+ref = "value"
+
+[ParenthesizedExpr.renderer.layout]
+line = ["(", { ref = "expr" }, ")"]
+
+# UnaryExpr 与 Expression 是 pratt 入口规则：规则节点被 pratt 产物
+# （UnaryOp/BinaryOp/TernaryOp）取代，通常不在 AST 里出现。布局按"若出现即正确"
+# 给出（与 PrimaryExpr 同形的分发布局），不是空壳。
+[UnaryExpr.renderer.layout]
+line = [{ ref = "op" }, { ref = "value" }]
+
+[PrimaryExpr.renderer.layout]
+ref = "value"
+
+[Expression.renderer.layout]
+ref = "value"
+
+[CallExpr.renderer.layout]
+line = [{ ref = "callee" }, "(", { opt = { ref = "args" } }, ")"]
+
+[IndexExpr.renderer.layout]
+line = [{ ref = "base" }, { join = "", items = "indexes" }]
+
+[MemberExpr.renderer.layout]
+line = [{ ref = "base" }, { ref = "access" }, { ref = "member" }]
+
+# ArgumentList — 实参表：紧凑列表，flat 无前导空格（`f(a, b)` 而非 `f( a, b)`）
+[ArgumentList.renderer.layout]
+intent = "compact"
+items = "items"
+first_soft = false
+nest = 0
+
+[SizeofTypeExpr.renderer.layout]
+line = ["sizeof(", { ref = "type_name" }, ")"]
+
+[SizeofExpr.renderer.layout]
+line = ["sizeof ", { ref = "operand" }]
+
+[TypeName.renderer.layout]
+line = [
+    { ref = "first" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+    { ref = "pointers" },
+]
+
+# ── pratt 产物节点的布局（引擎构造，语言包声明文本形态）──
+# ⚠ UnaryOp 的 prefix/postfix **共用同一节点名**（`position` 字段区分），而布局
+#   没有"按属性值换序"的原语，只能二选一：此处取 prefix 序（`*p` / `-x`）。
+#   代价：postfix（`i++` / `p--`）会渲染成 `++i` / `--p`（token 齐全、顺序反了）。
+[UnaryOp.renderer.layout]
+line = [{ ref = "op" }, { ref = "operand" }]
+
+[BinaryOp.renderer.layout]
+line = [{ ref = "left" }, " ", { ref = "op" }, " ", { ref = "right" }]
+
+[TernaryOp.renderer.layout]
+line = [
+    { ref = "cond" },
+    " ? ",
+    { ref = "true_val" },
+    " : ",
+    { ref = "false_val" },
+]
+
+# ── 括号 token 节点的布局 ──
+# ⚠ **必需**：normalize 的 token 叶子提取只覆盖 `keyword.`/`symbol.`/`literal.`
+#   前缀（transform/normalizer.py EXTRACT_PREFIXES）——`bracket.*` 节点不在其中，
+#   会**原样留在 AST 里**。凡布局把"整组"（而非抽出的子节点）渲染出来时
+#   （如 IndexExpr.index_groups），括号节点就会走到这里；不声明布局 = 括号静默
+#   消失（`a[i]` 渲染成 `ai`）。形态同 verilog（05_expressions/00_base.toml 末）。
+["bracket.l_parentheses".renderer.layout]
+ref = "value"
+
+["bracket.r_parentheses".renderer.layout]
+ref = "value"
+
+["bracket.l_square_bracket".renderer.layout]
+ref = "value"
+
+["bracket.r_square_bracket".renderer.layout]
+ref = "value"
+
+["bracket.l_curly_bracket".renderer.layout]
+ref = "value"
+
+["bracket.r_curly_bracket".renderer.layout]
+ref = "value"

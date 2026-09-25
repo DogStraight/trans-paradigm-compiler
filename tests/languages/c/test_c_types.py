@@ -58,8 +58,8 @@ class TestEnum:
     def test_enum_with_values(self, c):
         ast = _parse("enum color { RED, GREEN = 2, BLUE };\n", c)
         body = ast.sub_node[0].specs.spec.body
-        assert body.first.name.content == "RED"
-        assert len(body.rest.items) == 2
+        assert body.items[0].name.content == "RED"
+        assert len(body.items) == 3
 
     def test_enum_tagged_only(self, c):
         ast = _parse("enum color c;\n", c)
@@ -82,7 +82,7 @@ class TestTypedefNameAsType:
         """
         ast = _parse("int x;\n", c)
         decl = ast.sub_node[0]
-        assert decl.declarators.first.declarator.direct.head.content == "x"
+        assert decl.declarators.items[0].declarator.direct.head.content == "x"
 
 
 class TestTypesRejection:

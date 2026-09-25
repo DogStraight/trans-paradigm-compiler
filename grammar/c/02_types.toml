@@ -54,6 +54,7 @@ production = [
 ]
 
 [StructOrUnion.parser.node]
+base = "$1"
 
 
 [StructBody.parser]
@@ -88,7 +89,9 @@ production = [
 [StructMember.parser.node]
 specs = "$1"
 declarators = "$2"
-bit_width = "$3"
+# bit_width — 位宽表达式本体（绑定落到组内的表达式，理由同 InitDeclarator.init：
+#   包住 `:` 的形态会多印一个 `:`；并联新属性会让子树被 iter_nodes 走两遍）
+bit_width = "$3.sub_node[0].sub_node[1]"
 
 
 [MemberSpec.parser]
@@ -135,9 +138,10 @@ production = [
     "bracket.r_curly_bracket",
 ]
 
+# ⚠ 合并 `items`（渲染前提，同 DeclaratorList）：`$2` 是首个枚举项、
+#   `$3.items[*].sub_node[1]` 是其余项（每个 `(comma,Enumerator)` 组的第二个子节点）。
 [EnumBody.parser.node]
-first = "$2"
-rest = "$3"
+items = ["$2", "$3.items[*].sub_node[1]"]
 
 
 # 枚举项：`NAME` 或 `NAME = 数字字面量`（一般常量表达式在阶段 3）
@@ -149,7 +153,8 @@ production = [
 
 [Enumerator.parser.node]
 name = "$1"
-value = "$2"
+# value — 显式枚举值本体（绑定落到组内的表达式，理由同 InitDeclarator.init）
+value = "$2.sub_node[0].sub_node[1]"
 
 
 # ── 简单类型说明符（内建类型词）与 typedef 名 ──
@@ -161,6 +166,7 @@ production = [
 ]
 
 [SimpleType.parser.node]
+base = "$1"
 
 
 [TypedefName.parser]
@@ -170,3 +176,99 @@ production = [
 
 [TypedefName.parser.node]
 name = "$1"
+
+
+# ============================================================================
+# 渲染配置（世界 A 布局）— 类型说明符与类型定义
+# ============================================================================
+# 口径同 00_expressions.toml 头注。聚合体（struct/union/enum 体）是**块**：
+# head 打头（`{` / `enum tag {`）、body 逐成员缩进一行、tail 收尾（`}`），
+# 与 verilog 的 ModuleDecl 三段式同构（renderer/renderer_architecture.md）。
+
+[StructSpecifier.renderer.layout]
+line = [
+    { ref = "kind" },
+    " ",
+    { ref = "tag" },
+    { opt = { group = [
+    " ",
+    { ref = "body" },
+] } },
+]
+
+[AnonStructSpecifier.renderer.layout]
+line = [{ ref = "kind" }, " ", { ref = "body" }]
+
+[StructOrUnion.renderer.layout]
+ref = "base"
+
+[StructBody.renderer.head]
+line = ["{"]
+
+# body 子节点来源用 `items`（理由同 CompoundStmt：单成员 struct 会被 normalize
+# 塌成单节点，`source` 路径会再往下钻一层取错子节点）
+[StructBody.renderer.body]
+indent = true
+items = ["members"]
+
+[StructBody.renderer.tail]
+text = "}"
+
+# StructMember — 成员声明：说明符 [声明符] [: 位宽] ;
+[StructMember.renderer.layout]
+line = [
+    { ref = "specs" },
+    { opt = { group = [
+    " ",
+    { ref = "declarators" },
+] } },
+    { opt = { group = [
+    " : ",
+    { ref = "bit_width" },
+] } },
+    ";",
+]
+
+[MemberSpec.renderer.layout]
+line = [
+    { ref = "first" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+]
+
+[EnumSpecifier.renderer.layout]
+line = [
+    "enum ",
+    { ref = "tag" },
+    { opt = { group = [
+    " ",
+    { ref = "body" },
+] } },
+]
+
+[AnonEnumSpecifier.renderer.layout]
+line = ["enum ", { ref = "body" }]
+
+[EnumBody.renderer.layout]
+line = [
+    "{",
+    { intent = "compact", items = "items", first_soft = false, nest = 0 },
+    "}",
+]
+
+[Enumerator.renderer.layout]
+line = [
+    { ref = "name" },
+    { opt = { group = [
+    " = ",
+    { ref = "value" },
+] } },
+]
+
+[SimpleType.renderer.layout]
+ref = "base"
+
+[TypedefName.renderer.layout]
+ref = "name"

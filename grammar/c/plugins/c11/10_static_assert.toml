@@ -27,3 +27,14 @@ production = [
 [StaticAssertDecl.parser.node]
 cond = "$3"
 message = "$5"
+
+# 渲染（世界 A）：`_Static_assert(条件, 消息);`——message 绑的是 literal.string
+# token，normalize 后即含引号的字符串，ref 原样输出。
+[StaticAssertDecl.renderer.layout]
+line = [
+    "_Static_assert(",
+    { ref = "cond" },
+    ", ",
+    { ref = "message" },
+    ");",
+]

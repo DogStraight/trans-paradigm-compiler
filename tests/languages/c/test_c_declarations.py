@@ -29,19 +29,19 @@ class TestDeclarationParse:
         ast = _parse("int x;\n", c)
         assert _node_names(ast) == ["Declaration"]
         decl = ast.sub_node[0]
-        assert decl.declarators.first.declarator.direct.head.content == "x"
+        assert decl.declarators.items[0].declarator.direct.head.content == "x"
 
     def test_declaration_list(self, c):
         ast = _parse("int a, b, c;\n", c)
         decl = ast.sub_node[0]
-        assert decl.declarators.first.declarator.direct.head.content == "a"
-        assert len(decl.declarators.rest.items) == 2  # b, c
+        assert decl.declarators.items[0].declarator.direct.head.content == "a"
+        assert len(decl.declarators.items) == 3  # b, c
 
     def test_pointer_declarator(self, c):
         ast = _parse("int *p;\nchar **pp;\n", c)
         first, second = ast.sub_node
-        assert first.declarators.first.declarator.pointers.node_name == "Pointer"
-        assert second.declarators.first.declarator.direct.head.content == "pp"
+        assert first.declarators.items[0].declarator.pointers.node_name == "Pointer"
+        assert second.declarators.items[0].declarator.direct.head.content == "pp"
 
     def test_specifier_order_is_free(self, c):
         """`const char *s;` 与 `char const *s;` 都应通过（顺序自由）。"""
@@ -86,13 +86,13 @@ class TestArraySizeExpression:
     def test_identifier_size(self, c):
         """`int a[N];` —— 宏/常量作长度（真实语料最常见）。"""
         ast = _parse("int a[N];\n", c)
-        suffix = ast.sub_node[0].declarators.first.declarator.direct.suffixes.items[0]
+        suffix = ast.sub_node[0].declarators.items[0].declarator.direct.suffixes.items[0]
         assert suffix.size.node_name == "Identifier"
 
     def test_constant_expression_size(self, c):
         """`int a[2 * 4];` —— 常量表达式作长度（优先级照样成立）。"""
         ast = _parse("int a[2 * 4];\n", c)
-        suffix = ast.sub_node[0].declarators.first.declarator.direct.suffixes.items[0]
+        suffix = ast.sub_node[0].declarators.items[0].declarator.direct.suffixes.items[0]
         assert suffix.size.node_name == "BinaryOp" and suffix.size.op == "*"
 
     def test_empty_size_still_ok(self, c):

@@ -45,7 +45,7 @@ def _first_decl(src: str, c):
 
 def _init(src: str, c):
     """第一条声明的第一个声明符的初始化器（未挂载 → None），已剥 seq/inline 层。"""
-    raw = getattr(_first_decl(src, c).declarators.first, "init", None)
+    raw = getattr(_first_decl(src, c).declarators.items[0], "init", None)
     return None if raw is None else _unwrap(raw)
 
 
@@ -74,8 +74,8 @@ class TestScalarInitializer:
     def test_multiple_declarators_with_and_without_init(self, c):
         """`int i = 0, j;` —— 逐个声明符各自可选带初始化器（第二个为空）。"""
         decl = _first_decl("int i = 0, j;\n", c)
-        assert getattr(decl.declarators.first, "init", None) is not None
-        rest = decl.declarators.rest.items
+        assert getattr(decl.declarators.items[0], "init", None) is not None
+        rest = decl.declarators.items[1:]
         assert rest, "第二个声明符没进 AST"
         second = _unwrap(rest[0].sub_node[1]) if _is_rule(rest[0]) is False else rest[0]
         assert getattr(second, "init", None) is None

@@ -1,0 +1,25 @@
+# ============================================================================
+# C 语法规则 — 注释节点（line/block 注释的**节点路径**）
+# ============================================================================
+# 引擎按「production 恰好 == [<注释 token 类型>]」的规则**自推导**注释节点名
+# （parser/block_parser.py `_derive_comment_node_name`）。不声明本规则时注释节点
+# 没有渲染布局 → 渲染端静默输出空串（内容无声丢失，c4 现状）。
+# C 的注释 token 类型是 `comment`（base/_lexer.toml 的 `[comment] pairs`，
+# `/* */` 与 `//` 两种形态同类型；行终止判定由 `Renderer` 的 line_comment_starts
+# 声明驱动，不在本文件）。
+#
+# 范围（本轮）：**独占行**注释（comment 后跟 newline，见
+# `collect_line_comments`）——文件头块注释、行间说明注释都走这条路径。
+# ⚠ 行内/行尾注释（`int x; /* c */`）本轮不做：它不走注释节点路径，而是
+#   节点 `_comment_slots`（world A 的槽位机制）——不声明处理也不影响本规则的
+#   渲染（详见交付报告的边界说明）。
+# 渲染：注释原文逐字输出（`$1.value` 即 token 原文，含 `/*` `*/`），不重排。
+
+[Comment.parser]
+production = ["comment"]
+
+[Comment.parser.node]
+value = "$1.value"
+
+[Comment.renderer.layout]
+ref = "value"

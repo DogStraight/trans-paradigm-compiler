@@ -138,7 +138,9 @@ production = [
 [IfStmt.parser.node]
 cond = "$3"
 then = "$5"
-else_branch = "$6"
+# else_branch — else 分支的语句本体（绑定落到组内语句，理由同 InitDeclarator.init：
+#   包住 `else` 的形态会多印一个 `else`）
+else_branch = "$6.sub_node[0].sub_node[1]"
 
 
 # WhileStmt — while ( Expression ) Stmt
@@ -302,3 +304,129 @@ production = ["@Identifier", "symbol.base.colon", "@Stmt"]
 [LabelStmt.parser.node]
 name = "$1"
 stmt = "$3"
+
+
+# ============================================================================
+# 渲染配置（世界 A 布局）— 语句
+# ============================================================================
+# 口径同 00_expressions.toml 头注。容器语句（体是语句序列）用 head/body/tail
+# 三段式：`{` 打头、body 逐句缩进一行、`}` 收尾（同 verilog 的 BeginEnd）。
+# ⚠ 单语句体（`if (c) x = 1;`）与块体（`if (c) { … }`）共用同一布局：
+#   块体走 body 段自然折行，单语句体同行即可。
+
+[CompoundStmt.renderer.head]
+line = ["{"]
+
+# ⚠ body 子节点来源用 `items`（具名属性列表），**不要**用 `source = "body"`：
+#   `source` 走 `_container_children`——normalize 会把**单项** repeat 塌成单节点
+#   （`body` 由 list 变 Node），该函数随后把"单节点"当成容器再往下钻一层
+#   （`container.body`），于是 `{ while (a) { … } }` 渲染成 `{ { … } }`：
+#   while 头整条静默消失（实测，单语句/单成员容器都有此坑）。
+#   `items` 走 `_children_from_items`，单节点/列表都按原样取，无此启发式。
+[CompoundStmt.renderer.body]
+indent = true
+items = ["body"]
+
+[CompoundStmt.renderer.tail]
+text = "}"
+
+[Stmt.renderer.layout]
+ref = "value"
+
+[ExprStmt.renderer.layout]
+line = [{ ref = "expr" }, ";"]
+
+[EmptyStmt.renderer.layout]
+line = [";"]
+
+[ReturnStmt.renderer.layout]
+line = [
+    "return",
+    { opt = { group = [
+    " ",
+    { ref = "value" },
+] } },
+    ";",
+]
+
+# FuncDef — 说明符序列 声明符 复合语句（体自带 `{` `}`，故此处只留一个空格）
+[FuncDef.renderer.layout]
+line = [
+    { ref = "specs" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+    " ",
+    { ref = "declarator" },
+    " ",
+    { ref = "body" },
+]
+
+[IfStmt.renderer.layout]
+line = [
+    "if (",
+    { ref = "cond" },
+    ") ",
+    { ref = "then" },
+    { opt = { group = [
+    " else ",
+    { ref = "else_branch" },
+] } },
+]
+
+[WhileStmt.renderer.layout]
+line = ["while (", { ref = "cond" }, ") ", { ref = "body" }]
+
+[DoWhileStmt.renderer.layout]
+line = ["do ", { ref = "body" }, " while (", { ref = "cond" }, ");"]
+
+[ForInitDecl.renderer.layout]
+line = [
+    { ref = "specs" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+    " ",
+    { ref = "declarator" },
+]
+
+[ForStmt.renderer.layout]
+line = [
+    "for (",
+    { opt = { ref = "init" } },
+    "; ",
+    { opt = { ref = "cond" } },
+    "; ",
+    { opt = { ref = "step" } },
+    ") ",
+    { ref = "body" },
+]
+
+[SwitchStmt.renderer.layout]
+line = ["switch (", { ref = "cond" }, ") ", { ref = "body" }]
+
+[CaseLabel.renderer.layout]
+line = ["case ", { ref = "value" }, ":"]
+
+[DefaultLabel.renderer.layout]
+line = ["default:"]
+
+[BreakStmt.renderer.layout]
+line = ["break;"]
+
+[ContinueStmt.renderer.layout]
+line = ["continue;"]
+
+[GotoStmt.renderer.layout]
+line = ["goto ", { ref = "label" }, ";"]
+
+# LabelStmt — `name:` 后换行缩进一级（源里标号与被标语句不同行，硬换行还原）
+[LabelStmt.renderer.layout]
+line = [
+    { ref = "name" },
+    ":",
+    { hard_break = true, indent = 1 },
+    { ref = "stmt" },
+]

@@ -25,3 +25,13 @@ production = [
 [StaticAssertC23Decl.parser.node]
 cond = "$3"
 message = "$5"
+
+# 渲染（世界 A）：小写 `static_assert(条件, 消息);`（同 c11 那条的形态）
+[StaticAssertC23Decl.renderer.layout]
+line = [
+    "static_assert(",
+    { ref = "cond" },
+    ", ",
+    { ref = "message" },
+    ");",
+]
