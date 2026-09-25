@@ -62,22 +62,17 @@ SCOPES: frozenset[str] = frozenset({SCOPE_FILE, SCOPE_UNIT, SCOPE_PROJECT})
 # ⚠ 角色位**一律是过渡面**：终态（ADR-0019 决策 1）下引擎不消费任何插件产物，
 #    故精化基座重构收口时 `ROLES` 应为空——这是"重构完成"的可机械检查判据。
 #    每个角色**同时**定义寻址键与产物形状（引擎要消费它，与普通条目"形状归插件"不同）。
-ROLE_GEN_ACTIVITY = "gen_activity"
-"""generate 分支活性：寻址键 = **文件路径**；形状 = `{id(节点): bool}`。
+ROLES: frozenset[str] = frozenset()
+"""引擎角色位——**现役为空**（ADR-0019 P3 收口后的终态）。
 
-bool = 该节点是否落在**选中**的 generate 分支内（层 3 据此"未选中分支的驱动不计"）。
-引擎消费方 = `SignalGraphBuilder`；层 3 迁入协议（ADR-0019 P3-②）后**本角色退场**。
+角色位是"引擎消费插件产物"的寻址机制：引擎一旦不再消费某产物，那个角色就该退场。
+P3 收口后**引擎不消费任何插件产物**（层 2/3 与 generate 求值都在语言包侧，产出方与
+消费方同源），故此处为空——**这就是"重构完成"的可机械检查判据**。
+
+历史（均已退场，见 ADR-0019 的角色位契约表）：`unit_constants`（P3-①）、
+`unit_connections` / `unit_signal_graph`（P3-②c-1）、`unit_ports` / `gen_activity`
+（P3-②c-2b）。机制本身保留：将来若确有"引擎自己要用的产物"，按同一契约登记新角色即可。
 """
-
-ROLE_UNIT_PORTS = "unit_ports"
-"""单元端口声明表：寻址键 = **单元名**；形状 = `{端口名: {name, direction, width_expr,
-net_type, decl_node}}`。
-
-引擎消费方 = 层 2/3 —— **但层 2/3 已迁入协议**（ADR-0019 P3-②c-1），故此刻**无引擎
-消费者**；待 c-2 把 4 个端口消费方（插件）也改读容器后，本角色随之退场。
-"""
-
-ROLES: frozenset[str] = frozenset({ROLE_GEN_ACTIVITY, ROLE_UNIT_PORTS})
 
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──
 ITEM_KEYS: frozenset[str] = frozenset(

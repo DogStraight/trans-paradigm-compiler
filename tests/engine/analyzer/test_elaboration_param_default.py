@@ -27,7 +27,7 @@ import pytest
 from core._protocol import CTX_ELABORATION
 
 from analyzer.checker import ProjectChecker
-from analyzer.elaboration import ROLE_GEN_ACTIVITY, load_elaborator_spec
+from analyzer.elaboration import load_elaborator_spec
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
@@ -156,8 +156,7 @@ def test_pack_without_capability_degrades():
     checker = ProjectChecker(rules_dir="grammar/c4")
     checker._prepare_run([])
     assert checker._elaborator.declared is False
-    assert checker._elaborator.role_key(ROLE_GEN_ACTIVITY) is None
+    assert checker._elaborator.role_key("gen_activity") is None
 
     checker._elaborate()
     assert CTX_ELABORATION not in checker._elab_extra
-    assert checker._ctx.gen_activity == {}

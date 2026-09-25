@@ -148,8 +148,6 @@
     "tests.engine.analyzer.test_elaboration_port_decls::test_ansi_ports_carry_direction_and_width",
     "tests.engine.analyzer.test_elaboration_port_decls::test_body_port_backfill_is_not_vacuous",
     "tests.engine.analyzer.test_elaboration_port_decls::test_decl_node_is_exposed_for_related_chain",
-    "tests.engine.analyzer.test_elaboration_port_decls::test_plugin_matches_engine_per_port[ansi]",
-    "tests.engine.analyzer.test_elaboration_port_decls::test_plugin_matches_engine_per_port[legacy]",
     "tests.engine.analyzer.test_elaboration_port_decls::test_verilog_pack_declares_port_decls",
     "tests.engine.analyzer.test_elaboration_signal_graph::test_engine_side_layer_2_3_is_retired",
     "tests.engine.analyzer.test_elaboration_signal_graph::test_graph_is_produced_for_every_fixture[W104_fully_connected]",
@@ -200,7 +198,7 @@
     "tests.engine.analyzer.test_elaborator_protocol::test_order_follows_depends_on_and_keeps_declaration_order",
     "tests.engine.analyzer.test_elaborator_protocol::test_parse_minimal_spec",
     "tests.engine.analyzer.test_elaborator_protocol::test_role_key_none_when_role_not_declared",
-    "tests.engine.analyzer.test_elaborator_protocol::test_role_scope_is_governed_by_role_contract_not_globally",
+    "tests.engine.analyzer.test_elaborator_protocol::test_roles_are_empty_at_terminal_state",
     "tests.engine.analyzer.test_elaborator_protocol::test_solver_must_return_mapping_or_none",
     "tests.engine.analyzer.test_elaborator_protocol::test_solver_returning_undeclared_key_fails",
     "tests.engine.analyzer.test_elaborator_protocol::test_undeclared_capability_degrades_with_no_side_effect",
@@ -1190,7 +1188,7 @@
     "tests.engine.transform.test_semantic_mapping_items::test_wildcard_form_expands_list_into_rows",
     "tests.engine.transform.test_semantic_mapping_items::test_wildcard_form_missing_path_falls_back_to_template"
   ],
-  "passed_count": 1186,
+  "passed_count": 1184,
   "skipped_count": 0,
   "targets": [
     "tests/engine"

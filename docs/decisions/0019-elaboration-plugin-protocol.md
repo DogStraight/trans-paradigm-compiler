@@ -102,14 +102,14 @@
 > **角色位契约**（每个角色**同时**定义寻址键与产物形状——因为引擎要消费它，这与
 > 普通条目"形状归插件"不同）：
 >
-> | 角色 | 寻址键 | 产物形状 | 引擎消费方（**随对应族退场**） |
-> |---|---|---|---|
-> | `gen_activity` | 文件路径 | `{id(节点): bool}`（节点是否落在**选中**的 generate 分支内） | `SignalGraphBuilder` → 层 3 迁入后 |
-> | `unit_ports` | 单元名 | `{端口名: {name, direction, width_expr, net_type, decl_node}}` | 层 2/3（**已随 P3-②c-1 迁出 → 现无引擎消费者**，待 c-2 迁完 4 个插件消费方后退场） |
+> ✅ **终态已达成：`ROLES` 为空**（P3-②c-2b）。引擎不消费任何插件产物——所有产物都由
+> 语言包插件自己读容器（产出方与消费方同源），故**没有任何合法角色**，任何 `role` 声明
+> 在加载期即被拒（fail-fast）。
 >
-> 🗑 **已退场**：`unit_constants`（P3-①）、`unit_connections` 与 `unit_signal_graph`
-> （P3-②c-1：层 2/3 删除后引擎不再消费，postpass 改读产物容器）。
-> `ROLES` 从 4 项收到 **2 项**（`gen_activity` / `unit_ports`）。
+> 🗑 **已全部退场的角色**（历史）：`unit_constants`（P3-①）、`unit_connections` /
+> `unit_signal_graph`（P3-②c-1）、`unit_ports` / `gen_activity`（P3-②c-2b）。
+> 机制本身保留：将来若确有"引擎自己要用的产物"，按同一契约登记新角色即可
+> （每角色**同时**定义寻址键与产物形状）。
 >
 > `unit_constants`（寻址键 = 单元名，形状 = `{名字: 值文本}`）曾在 P2–P3-① 间服役
 > （过渡期 `GenerateEvaluator` 要参数表）；**P3-① 已退场**——gen 求值迁入插件后，单元
@@ -284,20 +284,21 @@
           ⚠ 实测踩坑：切 `_SignalGraphCtx` 时**留下了它的 `@dataclass(frozen=True)`
           装饰器**，于是它转去装饰 `StructureCtx` → 会话上下文被冻住
           （`FrozenInstanceError`）——测试立刻抓到（file-anatomy 陷阱 1 的实例）。
-       2. **c-2**：4 个端口消费方改读 `port_decls` 产物 → 引擎侧再无 `unit_ports` 消费者
-          → 删 `_ModulePort` / `ModuleInfo.ports` / `_PortFields` / `ModuleExtractor._fill_ports`
-          族 + `[structure]` 端口字段声明 → **`ROLES` 归零**（终态判据达成）。
-          **消费方清单（已实测，c-2 直接照此改）**：
-          | 插件 | 读什么 |
-          |---|---|
-          | `width_check` | `info.ports.values()`（**顺序** → 位置连接匹配）、`info.ports.get(pn)`、`port.width_expr`（含 `_module_width_table` 的 `info.ports.items()`） |
-          | `inst_check` | `info.ports.get(pn)` / `.keys()` / `.items()`、`port.width_expr`、`port.decl_node`（related 链）、`port.direction`（另有 `output_dirs` / `input_dirs` 来自 extra） |
-          | `hier_check` | `port.width_expr`（`_port_width` / `_module_width_table`） |
-          | `latch_check` | **不碰 ports**（只读 `param_default` 与本文件 AST） |
-          ⚠ 别误改：`sym.decl_node` / `s.decl_node`（`unused_check` / `width_check`）是**符号**
-          的声明节点，与端口无关。
-       3. **c-3**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；与 `inst_sites` /
-          `connections` 族同批）。
+       2. **c-2 —— 已完成**（达成终态）：
+          - **c-2a**：3 个端口消费方改读产物 `port_decls`（`width_check` 4 处 /
+            `inst_check` 8 处 / `hier_check` 2 处；`latch_check` **不碰端口**），共用
+            `_shared.port_table(context, unit_name)` 一份助手。
+          - **c-2b**：删引擎侧端口提取（`_ModulePort` / `ModuleInfo.ports` / `_PortFields`
+            / `ModuleExtractor` 的 ports 族 198 行）+ `[structure]` 全部端口/连接/赋值/
+            过程/body 声明（引擎只剩读 4 个标量 + 3 个方向集 + 1 个字段）；
+            `ROLE_UNIT_PORTS` 与 `ROLE_GEN_ACTIVITY` **退场**（后者因层 3 已删、
+            `ctx.gen_activity` 只剩写入无读取）→ **`ROLES` 归零**。
+          ⚠ 实测踩两坑：① `port.name`（f-string 里的诊断文案）不在"语义属性"grep 清单里
+            → `AttributeError`，由 8 个测试当场抓到；② 按锚点删 `ModuleExtractor` 的方法族
+            时，**多行签名的闭合行与 `def` 同缩进**，把"按缩进找块尾"骗到 → 留下半截签名
+            （`SyntaxError`）→ 回滚 `structure.py` 后改用"先跳过签名再找块尾"的脚本。
+       3. **c-3 待做**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；与
+          `inst_sites` / `connections` 族同批）。
        ✅ 已备 c-1 的前置：引擎注入**当前分析文件**（`core/_protocol.py::CTX_ANALYZED_FILE`，
        语言无关的文件层事实）——`connections` 是**文件作用域**产物而 postpass 逐文件跑，插件
        需要它才能取对切片（否则只能反查 AST 猜自己在分析哪个文件）。

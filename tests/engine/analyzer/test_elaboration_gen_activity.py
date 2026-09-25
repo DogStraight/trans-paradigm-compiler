@@ -36,7 +36,7 @@ from core._protocol import CTX_ELABORATION
 from core.define import Node
 
 from analyzer.checker import ProjectChecker
-from analyzer.elaboration import ROLE_GEN_ACTIVITY, SolveCtx, load_elaborator_spec
+from analyzer.elaboration import ROLES, SolveCtx, load_elaborator_spec
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
@@ -86,7 +86,7 @@ def test_verilog_pack_declares_gen_activity(checker):
     assert spec is not None
     item = next(it for it in spec.items if it.name == "gen_activity")
     assert item.scope == "file"
-    assert item.role == ROLE_GEN_ACTIVITY
+    assert item.role is None  # 引擎不再消费 → 无角色位（P3-②c-2b）
     assert item.provides == ("gen_activity",)
     assert item.depends_on == ("param_default",)
     order = [it.name for it in spec.order()]

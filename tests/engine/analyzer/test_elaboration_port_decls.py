@@ -27,7 +27,7 @@ import pytest
 from core._protocol import CTX_ELABORATION
 
 from analyzer.checker import ProjectChecker
-from analyzer.elaboration import ROLE_UNIT_PORTS, load_elaborator_spec
+from analyzer.elaboration import load_elaborator_spec
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
@@ -45,23 +45,6 @@ def checker() -> ProjectChecker:
     return ProjectChecker(rules_dir="grammar/verilog")
 
 
-def _engine_ports(checker: ProjectChecker) -> dict:
-    """引擎侧旧实现的端口表（对拍基准），拍平成与产物同形的 dict。"""
-    return {
-        name: {
-            pn: {
-                "name": p.name,
-                "direction": p.direction,
-                "width_expr": p.width_expr,
-                "net_type": p.net_type,
-                "decl_node": p.decl_node,
-            }
-            for pn, p in (info.ports or {}).items()
-        }
-        for name, info in checker._ctx.module_index.items()
-    }
-
-
 def _plugin_ports(checker: ProjectChecker) -> dict:
     return checker._elab_extra[CTX_ELABORATION]["port_decls"]
 
@@ -76,24 +59,12 @@ def test_verilog_pack_declares_port_decls(checker):
     assert spec is not None
     item = next(it for it in spec.items if it.name == "port_decls")
     assert item.scope == "unit"
-    assert item.role == ROLE_UNIT_PORTS
+    assert item.role is None  # 引擎不再消费 → 无角色位（P3-②c-2b）
     assert item.provides == ("port_decls",)
-    assert spec.role_key(ROLE_UNIT_PORTS) == "port_decls"
+    assert spec.role_key("unit_ports") is None
 
 
 # ── 2. 等价性对拍（搬迁的前提） ──
-
-@pytest.mark.parametrize("fixture", ["legacy", "ansi"])
-def test_plugin_matches_engine_per_port(checker, fixture):
-    checker.check(_FIXTURE_LEGACY if fixture == "legacy" else _FIXTURE_ANSI)
-    plugin = _plugin_ports(checker)
-    engine = _engine_ports(checker)
-
-    assert set(plugin) == set(engine), "单元集与引擎不一致"
-    assert engine, "夹具没被解析（空索引 → 对拍退化成空转）"
-    for unit, engine_ports in engine.items():
-        assert plugin[unit] == engine_ports, f"单元 {unit} 的端口表不一致"
-
 
 def test_body_port_backfill_is_not_vacuous(checker):
     """不空转：**裸名头部 + 体内声明**那条路径真的回填了方向（否则对拍无意义）。"""
@@ -104,8 +75,6 @@ def test_body_port_backfill_is_not_vacuous(checker):
     assert ports["a"]["direction"] == "input"
     assert ports["b"]["direction"] == "output"
     assert ports["a"]["width_expr"] == ""  # body 声明无宽度 → 空
-    # 与引擎逐项一致（同一断言在对拍里已覆盖，这里显式锁住"回填发生了"）
-    assert _plugin_ports(checker) == _engine_ports(checker)
 
 
 def test_ansi_ports_carry_direction_and_width(checker):

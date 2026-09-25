@@ -29,7 +29,6 @@ from analyzer.structure import (
 from analyzer.shared_components import SharedComponents
 from analyzer.diag_serialize import semantic_diag, syntax_diag
 from analyzer.elaboration import (
-    ROLE_GEN_ACTIVITY,
     Elaborator,
     ElaborationService,
     StructureAtomSource,
@@ -200,19 +199,17 @@ class ProjectChecker:
         return files, any_error
 
     def _elaborate(self) -> None:
-        """跑语言包精化项列表（ADR-0019）：建产物容器 + 取引擎角色位产物。
+        """跑语言包精化项列表（ADR-0019）：建产物容器。
 
-        - **容器**：`self._elab_extra[CTX_ELABORATION]`（条目名与值形状由插件定）；
-          未声明能力的语言包 → 不产生该键（降级，与旧行为一致）。
-        - **角色位**：引擎自己要用的产物**不按插件条目名**寻址，按引擎角色位问
-          （`ROLE_GEN_ACTIVITY` → generate 分支活性，层 3 的驱动过滤用）。
+        容器 `self._elab_extra[CTX_ELABORATION]`（条目名与值形状由插件定）经
+        `_external_extra` 交付 postpass；未声明能力的语言包 → 不产生该键（降级）。
+
+        ⚠ **引擎不消费任何产物**（P3 收口后）：所有产物都由语言包插件自己读容器
+        （产出方与消费方同源）。故此处**不按角色位取任何东西**——`ROLES` 为空即终态。
         """
         source = StructureAtomSource(self._ctx)
         service = ElaborationService(self._ctx)
-        result = self._elaborator.run(source, self._elab_extra, service)
-        role_key = self._elaborator.role_key(ROLE_GEN_ACTIVITY)
-        if role_key is not None:
-            self._ctx.gen_activity = dict(result.products.get(role_key, {}))
+        self._elaborator.run(source, self._elab_extra, service)
 
     def _analyze(self, fr: FileResult) -> None:
         if fr.ast is None:

@@ -22,6 +22,7 @@ from core.define import Node
 from core.errors import ConfigError
 
 from analyzer.elaboration import (
+    ROLES,
     SCOPE_FILE,
     SCOPE_UNIT,
     Atom,
@@ -114,7 +115,7 @@ def test_malformed_spec_shapes_fail_fast(bad):
         _item(locator={"rule": "R"}, locator_fn="solve"),  # 定位两给（语义歧义）
         _item(locator={"rule": ""}),  # 规则名空
         _item(role="not_a_role"),  # 引擎角色位非法
-        _item(role="gen_activity", provides=["a", "b"]),  # 角色位要求唯一产物键
+        _item(role="gen_activity", provides=["a", "b"]),  # 终态下任何 role 非法
     ],
 )
 def test_malformed_item_fails_fast(bad_item):
@@ -141,15 +142,15 @@ def test_container_key_unique_across_items():
         parse_spec(_spec(items))
 
 
-def test_role_scope_is_governed_by_role_contract_not_globally():
-    """角色位**不**限定 scope——寻址键由角色契约定义（见 ADR-0019 角色位契约表）。
+def test_roles_are_empty_at_terminal_state():
+    """**终态判据**：`ROLES` 为空 → 任何 role 声明都被拒。
 
-    现役唯一角色 `gen_activity` 的寻址键 = **文件路径**（`scope == "file"`），
-    故"role ⇒ scope == unit"不是通用约束（原设如此，P3-1 已放宽）。
+    角色位是"引擎消费插件产物"的寻址机制；P3 收口后引擎不消费任何产物，故没有合法
+    角色——这是"角色位一律是过渡面"的可机械检查后果（引擎不解释语义 ⇔ 无需按名寻址）。
     """
-    spec = parse_spec(_spec([_item(role="gen_activity", scope=SCOPE_FILE)]))
-    assert spec.items[0].scope == SCOPE_FILE
-    assert spec.role_key("gen_activity") == "x"
+    assert ROLES == frozenset(), f"ROLES 应为空（终态判据），实得 {sorted(ROLES)}"
+    with pytest.raises(ConfigError, match="引擎角色"):
+        parse_spec(_spec([_item(role="gen_activity", scope=SCOPE_FILE)]))
 
 
 def test_role_key_none_when_role_not_declared():

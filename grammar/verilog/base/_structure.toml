@@ -1,51 +1,41 @@
 # ============================================================================
-# 结构提取协议 — tpc check 跨文件检查的 AST 形态声明
+# 结构提取协议 — 引擎**文件层**的形态声明（依赖发现 + 单元索引）
 # ============================================================================
-# tpc 结构提取底座（analyzer/checker.py）零语言知识：单元/实例化的规则名、
-# 节点字段、文件扩展名、关键字全部由语言包在此声明，引擎只读配置。
+# ADR-0019 后引擎唯一可视单位 = **文件**：`analyzer/structure.py` 只做读源 / 解析 /
+# AST 缓存 / 行映射 / **依赖发现编排**（按单元名找文件、读文件）。故本段只剩
+# **发现与索引**所需的声明；语言语义（端口 / 参数 / 连接 / 信号驱动 / generate）
+# 全部归语言包插件精化项（`plugins/elaboration/`，引擎不认）。
 #
-# 未声明本段 = 该语言包不支持结构提取（tpc check 退化为通用 lint +
-# analyze，不提取单元、不递归、不注入 module_index）。
+# 未声明本段 = 该语言包不支持结构提取（tpc check 退化为通用 lint + analyze，
+# 不提取单元、不递归、不注入 module_index）。
 #
 # 字段名对应语法 TOML 的 [*.parser.node] 绑定（如 [ModuleDecl.parser.node]
-# 的 module_name/ports/params），改动语法绑定名时同步本文件。
+# 的 module_name），改动语法绑定名时同步本文件。
 # ============================================================================
 
 [structure]
-module_decl_rule = "ModuleDecl"    # 模块声明规则名（提取模块定义表）
-module_inst_rule = "ModuleInst"    # 模块实例化规则名（递归发现 + 联动检查）
-module_keyword   = "module"        # 模块声明关键字（定义文件文本扫描兜底）
+module_decl_rule = "ModuleDecl"    # 单元声明规则名（提取单元索引）
+module_inst_rule = "ModuleInst"    # 实例化规则名（递归发现的链）
+module_keyword   = "module"        # 单元声明关键字（定义文件文本扫描兜底）
 file_exts        = [".v", ".sv"]   # 源文件扩展名（定义文件查找）
-output_dirs      = ["output"]      # 端口方向 = 驱动（层 3 信号图判定）
-input_dirs       = ["input"]       # 端口方向 = 负载（层 3 信号图判定）
-inout_dirs       = ["inout"]       # 端口方向 = 双向（驱动 + 负载）
-assign_rule      = "AssignStmt"    # 连续赋值规则名（层 3 信号图 assign 驱动收集）
-proc_assign_rules = ["BlockingAssign", "NonBlockingAssign"]  # 过程赋值（always/initial 内）驱动收集（W105 多驱动；2026-08-29 注入器暴露 always+assign 双驱动漏检）
-proc_block_rules = ["AlwaysStmt", "InitialStmt"]  # 过程块规则名（同一块内多赋值 = 一个驱动源；2026-08-29 防同块多赋值假阳性）
-body_port_rules  = ["BodyInputDecl", "BodyOutputDecl", "BodyInoutDecl"]  # 模块体端口声明（旧式端口方向/宽度补全）
+# 端口方向值集：引擎**不解释**语义，只按声明把这些值集注入给插件
+# （插件的端口方向判定消费；形态与判定逻辑都在语言包）
+output_dirs      = ["output"]      # 方向值 = 驱动
+input_dirs       = ["input"]       # 方向值 = 负载
+inout_dirs       = ["inout"]       # 方向值 = 双向
 
-# ⚠ generate 条件求值面**已迁出**（ADR-0019 P3-①）：块/分支规则名、条件/then/else
-# 字段名、逻辑非运算符前缀不再由引擎声明——它们是语言知识，现归语言包插件
-# `grammar/verilog/plugins/elaboration/_elaborator.py`（精化项 `gen_activity`）。
-
-# 节点字段（语法 TOML node 绑定名）
+# 节点字段（语法 TOML node 绑定名）——只剩发现与索引要用的
 [structure.fields]
-module_name = "module_name"   # 模块名 / 被实例化模块名字段
-inst_name   = "inst_name"     # 实例名（ModuleInst 上）
-ports       = "ports"         # 端口列表字段（ModuleDecl/ModuleInst 上）
-items       = "items"         # 列表容器 items 字段（PortList/DeclaratorList 等）
-decl        = "decl"          # 端口声明包装字段（inline 规则防御穿透）
-direction   = "direction"     # 端口方向字段（input/output/inout）
-width       = "packed_range"  # 端口宽度表达式字段（TypeSpec 上）
-port_type   = "port_type"     # 端口数据类型/网络类型字段（wire/tri/reg，层 2）
-name        = "name"          # 声明器名字段（Declarator.name）
-value       = "value"         # 表达式值字段（端口连接值）
-bare_rule   = "Identifier"    # 裸名端口节点名（旧风格端口，无方向/宽度）
-connects    = "ports"         # 实例化点端口连接列表字段（ModuleInst 上，层 2）
-port_name   = "port_name"     # 命名端口连接 .p(..) 的端口名字段（NamedPortConnect）
-assign_target       = "target"  # 赋值目标字段（AssignStmt/AssignExtra 上，层 3）
-assign_extras       = "extras"  # 多目标后缀数组字段（AssignStmt 上，层 3）
-assign_extra_target = "target"  # AssignExtra 的目标字段（层 3）
-body_direction      = "direction"  # body 端口方向字段（Body*Decl 上）
-# ⚠ generate 三个字段名（condition / then_stmt / else_chain）已随 gen 族迁出，
-#   现归插件 `plugins/elaboration/_elaborator.py`（见上）。
+module_name = "module_name"   # 单元名 / 被实例化单元名字段
+#
+# ⚠ 下列声明已随 ADR-0019 迁出语言包插件（**不要**搬回引擎）：
+#   - 生成/求值面：`gen_block_rule` / `gen_branch_rules` / `gen_not_ops`
+#     + `gen_condition` / `gen_then` / `gen_else_chain` → 插件 `gen_activity`（P3-①）
+#   - 参数面：`params` / `param_name` → 插件 `param_default`（P2）
+#   - 端口面：`ports` / `items` / `decl` / `direction` / `width` / `port_type` /
+#     `name` / `bare_rule` / `body_port_rules` / `body_direction`
+#     → 插件 `port_decls`（P3-②c-2b）
+#   - 连接面：`connects` / `port_name` / `value` / `inst_name` → 插件 `connections`
+#   - 赋值/过程面：`assign_rule` / `assign_target` / `assign_extras` /
+#     `assign_extra_target` / `proc_assign_rules` / `proc_block_rules`
+#     → 插件 `signal_graph`（P3-②c-1）

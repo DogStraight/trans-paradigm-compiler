@@ -1,77 +1,77 @@
 # verilog/plugins/elaboration — verilog 精化项与求解器
 
-> **语言知识在这**：单元是什么、参数在哪、怎么求值、generate 怎么判——全在本组件。
-> 引擎侧 `analyzer/elaboration/` 只驱动「定位 → 求解 → 归位 → 核验」，**不认识 Verilog**。
+> **语言知识在这**：单元/实例是什么、参数在哪、怎么求值、端口什么形态、信号谁驱动谁、
+> generate 怎么判——全在本组件。引擎侧 `analyzer/elaboration/` 只驱动「定位 → 求解 →
+> 归位 → 核验」，**不认识 Verilog**。
 > 契约与定案：`docs/decisions/0019-elaboration-plugin-protocol.md`。
 
 | 文件 | 一句话 |
 |------|--------|
 | `tpc.toml` | 组件声明：`[capabilities] elaborator = "_elaborator.py:build_elaborator"`（**纯能力组件**：无语法/分析/变换声明，同 `macro_policy` / `formatter`） |
-| `_elaborator.py` | `build_elaborator()` 项列表 + 各求解函数 |
+| `_elaborator.py` | `build_elaborator()` 项列表 + 参数/端口/连接/generate 四项的求解函数 |
+| `_graph.py` | 层 3 信号图（`signal_graph` 项，400 行搬迁自引擎 `SignalGraphBuilder`）——分文件是为了不让单文件过大 |
 
-## 现役项
+## 现役项（5 项，**均无引擎角色位**）
 
-| 项 | 作用域 | 角色位 | 容器键 | 内容 |
-|---|---|---|---|---|
-| `param_default` | `unit` | — | `param_default` | `{单元名: {参数名: 值表达式文本}}`——头部 `#(P=v)` 优先，体内 `parameter P=v;` 补全 |
-| `port_decls` | `unit` | `unit_ports` | `port_decls` | `{单元名: {端口名: {name, direction, width_expr, net_type, decl_node}}}`——ANSI 头部 / 裸名头部 / 体内旧式声明三形态合并，**头部优先** |
-| `connections` | `file` | `unit_connections` | `connections` | `{文件路径: [{inst_name, module_name, inst_node, file, connects, ordered}]}`——命名连接进 `connects`，其余按位置序进 `ordered` |
-| `gen_activity` | `file` | `gen_activity` | `gen_activity` | `{文件路径: {id(节点): bool}}`——节点是否落在**选中**的 generate 互斥分支内；`depends_on = ["param_default"]` |
-| `signal_graph` | `project` | `unit_signal_graph` | `signal_graph` | `{(单元名, 信号名): {drivers: [...], loads: [...]}}`——层 3 全工程驱动/负载图（含 output 穿透与实例链路径）；`depends_on = ["connections", "port_decls", "gen_activity"]`（**三个自身产物**） |
+| 项 | 作用域 | 容器键 | 内容 |
+|---|---|---|---|
+| `param_default` | `unit` | `param_default` | `{单元名: {参数名: 值表达式文本}}`——头部 `#(P=v)` 优先，体内 `parameter P=v;` 补全 |
+| `port_decls` | `unit` | `port_decls` | `{单元名: {端口名: {name, direction, width_expr, net_type, decl_node}}}`——ANSI 头部 / 裸名头部 / 体内旧式声明三形态合并，**头部优先** |
+| `connections` | `file` | `connections` | `{文件路径: [{inst_name, module_name, inst_node, file, connects, ordered}]}`——命名连接进 `connects`，其余按位置序进 `ordered` |
+| `gen_activity` | `file` | `gen_activity` | `{文件路径: {id(节点): bool}}`——节点是否落在**选中**的 generate 互斥分支内 |
+| `signal_graph` | `project` | `signal_graph` | `{(单元名, 信号名): {drivers: [...], loads: [...]}}`——层 3 全工程驱动/负载图（含 output 穿透与实例链路径） |
 
 五项都**不声明定位**（值/形态分散在多种节点形态或整个原子，单条规则名表达不了）→
 求解器收到 `hits = [原子根]`（`project` 作用域则为空），自行走子树。
 
-实现分两个文件：`_elaborator.py`（前四项）与 `_graph.py`（`signal_graph`，层 3，
-400 行搬迁自引擎 `SignalGraphBuilder`——分文件是为了不让单文件过大，也便于层 3 单独对拍）。
-
 ## 依赖通道（插件内部，不经引擎）
 
-`gen_activity` 的条件求值需要单元常量表 → 声明 `depends_on = ["param_default"]`，
-求解器经 `ctx.products["param_default"]` **直接读**前一项产物。引擎只保证拓扑序，
-不中转数据（`unit_constants` 角色位随之退场）。
+```
+param_default ──depends_on──▶ gen_activity ──┐
+                              port_decls ────┼──depends_on──▶ signal_graph
+                              connections ───┘
+```
 
-## 引擎角色位（过渡，会退场）
+声明 `depends_on` 后引擎**只保证拓扑序**，数据由求解器经 `ctx.products[...]` **直接读**
+前项产物——引擎不中转、不解释。层 3 一次消费**三个**自身产物（`connections` /
+`port_decls` / `gen_activity`），这是依赖通道被用满的地方。
 
-容器条目名由插件定 ⇒ 引擎无法按名寻址**自己也要用**的产物。`role` 是引擎能认的**封闭
-枚举**：`gen_activity`（引擎侧 `SignalGraphBuilder` 的驱动过滤）、`unit_ports`
-（层 2/3 的端口形态；**已登记、引擎尚未切换**）、`unit_connections`（层 2 连接表；
-**已登记、引擎尚未切换**）、`unit_signal_graph`（层 3 产物；**已登记、引擎尚未切换**）。
+## 引擎角色位：**现役为空**（重构终态）
 
-⚠ **角色位一律是过渡面**：终态（ADR-0019 决策 1）下引擎不消费任何插件产物，故 P3 收口
-时 `analyzer/elaboration/contract.py::ROLES` 应为空——这是"重构完成"的可机械检查判据。
-（已核实：文件发现阶段只用**声明**（实例规则名 + 名字字段 + 扩展名 + 关键字）与通用 AST
-操作，**不需要插件产物**，故该判据可达。）
+`role` 曾是"引擎自己要用的产物"的寻址机制（引擎定义的封闭枚举）。**P3 收口后引擎不消费
+任何插件产物**（层 2/3 与 generate 求值都在本插件侧，产出方与消费方同源），故
+`analyzer/elaboration/contract.py::ROLES` **为空**，且**任何 role 声明都会被拒**（加载期
+fail-fast）——这正是"重构完成"的可机械检查判据。
 
-## 消费方
+历史（均已退场）：`unit_constants`（P3-①）、`unit_connections` / `unit_signal_graph`
+（P3-②c-1）、`unit_ports` / `gen_activity`（P3-②c-2b）。
 
-引擎把容器注入 `context.extra[CTX_ELABORATION]`。
+## 消费方（全部在语言包内，读产物容器）
+
+引擎把容器注入 `context.extra[CTX_ELABORATION]`；**按文件的产物**用引擎给的
+`context.extra[CTX_ANALYZED_FILE]`（当前分析文件）取切片。
 
 | 消费方 | 读什么 | 用途 |
 |---|---|---|
-| `checks/width_check` | `param_default` | 参数化宽度求值（`_params` 表） |
-| `checks/hier_check` | `param_default` | 层次成员宽度求值 |
-| `checks/latch_check` | `param_default` | 参数化条件判定 |
-| `checks/inst_check` | `param_default` | W103（覆盖不存在的参数）——只要**参数名集合** |
-| 引擎 `SignalGraphBuilder` | `gen_activity`（经**角色位**） | 层 3 驱动过滤：未选中 generate 分支的驱动不计 |
-| 引擎 `ConnectionElaborator` / `SignalGraphBuilder` | `port_decls`（经**角色位**，**P3-②b 起**） | 层 2/3 的端口名/方向/宽度 |
-| 引擎 `SignalGraphBuilder` / `ProjectChecker` | `connections`（经**角色位**，**P3-②b 起**） | 层 3 按连接记驱动/负载；注入 `context.extra["connections"]` 供 postpass（W104 等） |
-| 引擎 `ProjectChecker` | `signal_graph`（经**角色位**，**P3-②b 起**） | 注入 `context.extra["signal_graph"]` 供 postpass（W105 多驱动） |
+| `checks/width_check` | `param_default` + `port_decls` | 参数化宽度求值；端口连接宽度（位置连接按**声明序**匹配端口） |
+| `checks/hier_check` | `param_default` + `port_decls` | 层次成员/端口宽度 |
+| `checks/latch_check` | `param_default` | 参数化条件判定（**不碰端口**） |
+| `checks/inst_check` | 四者 | W101/W102/W103/W104/W105/WC001——命名/位置连接、参数名集合、驱动/负载图 |
+| 本组件 `_graph.py` | `connections` / `port_decls` / `gen_activity` | 层 3 信号图（插件内部依赖） |
 
-`port_decls` / `connections` / `signal_graph` 目前**只新增、无人消费**（引擎侧
-`ModuleInfo.ports` / `FileResult.connections` / `ProjectChecker._signal_graph` 仍在原位）
-——本阶段的意义是与引擎产物做**等价性对拍**：
-`port_decls`（ANSI / 裸名+体内两夹具）、`connections`（命名 / 位置 / `.a()` 三形态）、
-`signal_graph`（6 个专为信号图设计的 W105/W104 样例 + 真实语料）。
+## 搬迁纪律（为什么可以信这五项）
 
-> ✅ 搬迁查过一个**时序风险，结论是不存在**：引擎的层 2 是在**发现过程中逐文件**算的，
+每一项在**删掉引擎侧实现之前**都与它做过**等价性对拍**（含真实语料）：
+`param_default`↔`ModuleExtractor._fill_params`、`port_decls`↔`_fill_ports`、
+`connections`↔`ConnectionElaborator`、`gen_activity`↔`GenerateEvaluator`（逐节点）、
+`signal_graph`↔`SignalGraphBuilder`（逐条目，7 夹具）。删除后对拍退化为**golden 行为守卫
++ 退场守卫**（引擎侧类/属性不得复活）。
+
+> ✅ 搬迁查过一个**时序风险，结论是不存在**：引擎的层 2 原是在**发现过程中逐文件**算的，
 > 而精化 pass 在**发现之后**统一跑；若层 2 依赖 `module_index`（彼时只填了一部分），两者
-> 结果会不同。实测读码：`elaborate_connections` **完全不读端口表**，只读声明字段并把连接
-> 表达式渲染成文本 → 无时序风险（对拍即证据）。
+> 结果会不同。实测读码：`elaborate_connections` **完全不读端口表**，只读声明字段并渲染
+> 连接表达式 → 无时序风险（对拍即证据）。
 
-## 搬迁纪律
-
-`gen_activity` 是引擎侧 `GenerateEvaluator` + `_GenFace` + 文本常量求值链的**逐字搬迁**
-（搬迁期与旧实现做过**逐节点对拍**）。⚠ 它仍是**文本模式**求值（先经服务句柄渲染条件
-子树再解析文本）——AST-first 改写是**独立改进项**（TODO「文本模式求值/判断（应
-AST-first）」），需自己的一套验证，别在搬迁里顺手改。
+⚠ `gen_activity` 仍是**文本模式**求值（先经服务句柄渲染条件子树再解析文本）——AST-first
+改写是**独立改进项**（TODO「文本模式求值/判断（应 AST-first）」），动机是插件代码质量而非
+"消除渗透"，需自己一套验证，**别在搬迁里顺手改**。

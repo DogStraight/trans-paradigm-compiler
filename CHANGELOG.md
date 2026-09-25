@@ -5,6 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **P3-②c-2：端口提取迁出引擎 → 终态达成（`ROLES` 归零，ADR-0019）**：引擎侧最后一块
+  语言知识（端口形态）清空，**引擎不再消费任何插件产物**。
+
+  1. **c-2a 消费方迁移**（`b3a8521`）：3 个端口消费方改读精化产物 `port_decls`——
+     `width_check`（位置连接按**声明序**取端口值 / 具名连接 / 宽度文本 / 目标模块宽度表）、
+     `inst_check`（W102 端口存在性 / WC001 死值 / W104 未连接端口）、`hier_check`
+     （层次端口宽度）；`latch_check` **不碰端口**（实测）。共用
+     `_shared.port_table(context, unit_name)` 一份助手（含"插入序 = 声明序"的说明）。
+     ⚠ 踩坑：`port.name`（f-string 里的诊断文案）不在"语义属性"grep 清单里 →
+     `AttributeError`，由 8 个测试当场抓到——**迁形状时要搜所有属性访问，不只语义属性**。
+  2. **c-2b 删引擎侧**（本批）：`_ModulePort` / `ModuleInfo.ports` / `_PortFields` /
+     `ModuleExtractor` 的 ports 族（198 行）；`[structure]` 的端口/连接/赋值/过程/body
+     声明**全部删除**（引擎只剩读 4 个标量 + 3 个方向集 + 1 个字段，并在文件里列明
+     "已迁出、别搬回"）；`ROLE_UNIT_PORTS` 与 `ROLE_GEN_ACTIVITY` 退场（后者因层 3 已删、
+     `ctx.gen_activity` 只剩写入无读取）→ **`ROLES` 为空**。
+     `StructureCtx` 随之只剩 `memo` / `module_index` / `dir_module_files`；`ModuleInfo`
+     只剩 `name` / `file` / `node`（**语言无关三项**）。
+     ⚠ 踩坑：按锚点删 `ModuleExtractor` 方法族时，**多行签名的闭合行与 `def` 同缩进**，
+     把"按缩进找块尾"骗到 → 留下半截签名（`SyntaxError`）→ 回滚后改用"**先跳过签名**
+     再找块尾"的脚本（与"装饰器必须同块"并列为切块的两个陷阱）。
+
+  **验证**：`tests/engine/analyzer` **324 passed**；`-m smoke` **423 passed**；
+  `tests/policy` **125 passed**（含**诊断基线门禁持平**——端口换源后 W201/W102/W103/
+  W104/WC001 逐项一致）；**全量 2185 passed / 7 skipped**；`tools/config_sites.py check`
+  **PASS**（删声明后引擎读取面与语言包声明仍一致）。探针 3 项"回归"经 `--collect-only`
+  核实**正是被删/改名的 3 个测试 id**（2 删 + 1 改名）→ 基线按"差异已逐条解释"重记（1184）。
+  终态判据由测试机器守：`test_roles_are_empty_at_terminal_state`。
+
 ### Added
 
 - **P3-②b：层 3 信号图移植进插件 + 逐条目对拍（ADR-0019）**：新增项 `signal_graph`

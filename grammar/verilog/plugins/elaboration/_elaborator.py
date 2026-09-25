@@ -78,8 +78,8 @@ def build_elaborator() -> dict:
             {
                 "name": "port_decls",
                 "scope": "unit",
-                # 引擎角色位：层 2/3 的端口形态（P3-② 切换时启用；本项先只新增）
-                "role": "unit_ports",
+                # **无**引擎角色位：端口只在本语言包内流通（引擎侧端口提取已随
+                # P3-②c-2b 全删；`_shared.port_table` 供各检查插件读容器）
                 "provides": [_PROVIDES_PORT_DECLS],
                 "solver": "solve_port_decls",
             },
@@ -94,8 +94,8 @@ def build_elaborator() -> dict:
             {
                 "name": "gen_activity",
                 "scope": "file",
-                # 引擎角色位：层 3 判"未选中分支的驱动不计"（层 3 迁入协议后删）
-                "role": "gen_activity",
+                # **无**引擎角色位：活性只被本插件自己的 `signal_graph` 经
+                # `depends_on` + `ctx.products` 读（P3-②c-2b：引擎不再消费任何产物）
                 "provides": [_PROVIDES_GEN_ACTIVITY],
                 # 条件求值要**单元常量绑定** → 依赖通道（ADR-0019 决策 3）：引擎保证
                 # 先跑 param_default；本求解器经 ctx.products 读它，**不经引擎中转**

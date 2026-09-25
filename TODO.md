@@ -3,23 +3,27 @@
 > 完成项/完成历史看 git log + 测试套件，本文件只列未完成待办。
 > 中长期目标（backlog/非发布阻塞/v0.2 候选）见 `ROADMAP.md`，不在本文件。
 
-## 架构：精化（elaboration）部件化 + 插件化（ADR-0019 定案，未开工）
+## 架构：精化（elaboration）部件化 + 插件化（ADR-0019，**P1–P3 已完成**）
 
 > **定案**：`docs/decisions/0019-elaboration-plugin-protocol.md`——引擎最小可视单位
 > = **文件**；精化协议 = 语言包 `[capabilities] elaborator` 返回的**可扩展项列表**
 > （字段 `name` / `locator` / `solver` / `scope` / `provides` / `depends_on` /
-> `locator_fn`）；产物**容器**由引擎定、**条目名与形状由插件定**。
-> **进度**：P1 **已完成**（骨架 `analyzer/elaboration/` + 行为面基线）→ P2 **已完成**
-> （纵向打穿 `param_default`：verilog 插件 + 引擎接线 + 5 个消费方迁移 + **同批删**
-> 引擎侧抽取）→ P3 **顺序已更正**（原按"事实"分族不成立：除 gen 外每个事实的消费者
-> 都是同一簇 = 引擎层 2/3，按事实切会为注定消失的消费者造一堆临时 role）→
-> **改按消费簇切**：①gen 族 **已完成** ②层 2+3+ports **c-1 已完成**（`inst_check` 改读产物
-> 容器 → 层 2/3 整块删除、净减约 600 行；`ROLE_UNIT_CONNECTIONS` / `ROLE_UNIT_SIGNAL_GRAPH`
-> **退场**，`ROLES` 收到 2 项）→ **c-2 待做**：4 个端口消费方（`width_check` / `inst_check` /
-> `hier_check`；`latch_check` 不碰）改读 `port_decls` → 删 `_ModulePort` / `ModuleInfo.ports` /
-> `_PortFields` / `ModuleExtractor._fill_ports` 族 + `[structure]` 端口字段 → **`ROLES` 归零**
-> （终态判据）→ **c-3**：`param_override` 上提 → P4 文档收口。
-> 终态判据：**`ROLES` 为空**（引擎不消费任何插件产物）。理由与实测表见 ADR-0019 P3 节。
+> `locator_fn` / `role`）；产物**容器**由引擎定、**条目名与形状由插件定**。
+>
+> **已完成**：P1（骨架 + 行为面基线）→ P2（`param_default` 端到端 + 5 消费方迁移）→
+> P3-①（gen 族迁出）→ P3-②a/b（`port_decls` / `connections` / `signal_graph` 三项移植 +
+> **各自逐项对拍**）→ P3-②c-1（层 2/3 删除约 600 行）→ P3-②c-2a/b（3 个端口消费方改读
+> 产物 + 删引擎侧端口提取与 `[structure]` 死声明）。
+> ✅ **终态判据已达成**：**`ROLES` 为空**（引擎不消费任何插件产物；测试 `test_roles_are_empty_at_terminal_state`
+> 机器守）。引擎侧净减约 **1000 行**语言知识。
+>
+> **待做**（P3 收尾 + P4）：
+> - **c-3**：`param_override` 上提（ADR 决策 4 的更正经 P3 落地；它是"插件侧已有合并逻辑
+>   的去重共享"而非引擎侧渗透）。
+> - **P4 收尾**：`MODEL_INDEX` 同步 + 插件 README 与实现终对账（`component_protocol` §1b
+>   与 `analyzer/README` 已落）。
+> - 可选清理：`role` 机制在终态下已无合法值（`ROLES` 空）——是否连机制一起删，待定
+>   （现按 ADR 保留，作为"将来确有引擎自用产物"的登记位）。
 > ⚠ P2 实测更正两处协议（已回写 ADR-0019 决策 3）：新增**引擎角色位 `role`**、
 > `locator` 改为**可省略**；`param_override` 实测为"插件侧已有合并逻辑的上提"而非
 > 引擎侧渗透 → 随 `inst_sites`/`connections` 族在 P3 落地（理由见 ADR 决策 4 更正节）。
