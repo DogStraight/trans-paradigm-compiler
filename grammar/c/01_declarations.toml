@@ -71,7 +71,7 @@ production = [
 
 [TypeSpecifier.parser]
 production = [
-    "keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool",
+    "(keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool)",
 ]
 
 [TypeSpecifier.parser.node]

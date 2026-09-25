@@ -135,31 +135,31 @@ grammar/c/
    则"C89 等效"就不可表达——需在阶段 1 决定是否再切一层 `c89` 基线（**记为首个待决项**，
    不阻塞阶段 1 开工）。
 
-### 阶段 1 进度与**当前阻塞**（2026-09-25）
+### 阶段 1 现状（2026-09-25）
 
 **已落地**（`grammar/c/`）：`tpc.toml`（能力清单 + lexer/parser 入口）、`base/_token.toml`
 （C99 标点/多字符运算符/括号/字面量/标识符；`#` **不**作注释）、`base/_lexer.toml`
-（`/* */` 块注释 + `//` 行注释）、`base/_number.toml`（十进制/八进制/十六进制）、
-`token.toml`（C99 全部 37 个关键字）、`01_declarations.toml`（翻译单元 + 声明 +
-说明符三层 + 声明符/指针/数组/函数后缀/括号声明符/参数表）。
+（`/* */` + `//`）、`base/_number.toml`（十/八/十六进制）、`token.toml`（C99 全部 37
+关键字）、`00_expressions.toml`（叶子 `Identifier`）、`01_declarations.toml`（翻译单元 +
+声明 + 说明符序列 + 声明符：多级指针 / 数组 / 函数后缀 / 括号声明符 / 参数表）。
 
-**验收状态**：词法与**负样本**已通过（8 项：缺声明符 / 悬空指针 / 括号不闭合 /
-参数表尾随逗号 / 缺分号 / 初始化器与函数体与 struct **按阶段边界被正确拒绝**）；
-**正样本解析被阻塞**（10 项标 `xfail`）。
+**验收**：`tests/languages/c/test_c_declarations.py` **20 passed**（正样本 15：声明进 AST
+且声明符结构可查，含函数指针递归 `int (*fp)(int);`、逗号列表、多词说明符、
+`typedef`；负样本 5：缺声明符 / 悬空指针 / 括号不闭合 / 参数表尾逗号 / 缺分号）。
 
-**阻塞判据**：C 包顶层 `Declaration` 解析出空 AST（parser 报 `match_length 0`、
-`fail_sites 2–3`；linter 报 `unexpected 'x'` —— 说明说明符已消费、卡在声明符链）。
-**对照实验**（`_drafts/probe_parser_paths.py`）：`grammar/c4` 的 `int a;` → `VarDecl` ✓、
-`int main(){…}` → `FuncDef` ✓；`grammar/yaml` 的 `a: 1` → `MappingEntry` ✓；
-**唯 C 包为空** → 阻塞在解析层对声明规则形态的处理，不在词法/关键字/token 类别
-（三者已逐项核对：`keyword.int` 正常分词、`Declaration` 进了 `stmt_names`、
-`pass_end_case=True`）。
+**未落地（阶段 2/3）**：`struct/union/enum` 说明符、typedef 名作类型、初始化器、
+数组长度表达式、函数体与语句、表达式族（运算符表/一元二元后缀/cast/sizeof）、
+整型后缀与浮点字面量（阶段 1b）。
 
-**已证伪的五个假设**（每一步都实测）：①带括号 token 组 `(a|b)`（改裸交替 `a|b`
-仍失败）②说明符规则层级过深（压成一层仍失败）③后缀规则组 `(@A|@B)*`（整段删除仍失败）
-④首元素带量词组 `(x)*`（改 `@Rule?` 仍失败）⑤`@Identifier|@Rule` 交替（改纯
-`@Identifier` 仍失败）。
+**包作者须知（本轮实测教训，写包必看）**：
 
-**下一步（从已知可用侧二分）**：把 yaml `MappingEntry` 的最小可用形态逐项长成 C 的
-声明规则（单规则最小包 → 加说明符 → 加声明符），定位**具体哪一项形态**不被接受；
-若确认是引擎侧限制（而非本包写法），按"缺陷先成因后动手"落引擎侧修复 + 回归。
+1. **`Identifier` 这类叶子规则要语言包自己定义**——引擎不内置（c4 / yaml / verilog
+   各自定义一份）。漏定义时 `@Identifier` 引用**匹配为空**，症状是"parser 报
+   `match_length 0`、linter 报 `expected ';' got 'id'`"，**看起来像规则形态问题**；
+   本轮为此先后证伪了五个形态假设（带括号 token 组 / 说明符层级 / 后缀规则组 /
+   首元素带量词组 / `@Rule|@Rule` 交替），真因只是规则缺失。
+   → 加新包时先对齐一份"引擎不内置、必须自带"的规则清单。
+2. **linter 近似边界**：语句发现按"首 token 能起始某条语句规则"挑候选；不属于任何
+   语句入口 FIRST 集的顶层构造会被**整体跳过，既不解析也不诊断**（实测
+   `struct point p;` 在阶段 1 即如此，而 `int x` 缺分号会报错）。阶段 2 加入
+   struct/union/enum 后该行为自然改变——不要把它当期望行为钉住。

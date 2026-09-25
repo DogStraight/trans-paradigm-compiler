@@ -1,0 +1,23 @@
+# ============================================================================
+# C 语法规则 — 表达式叶子（阶段 1 只落 Identifier）
+# ============================================================================
+# ⚠ `Identifier` 是**语言包必须自己定义的规则**（引擎不内置）——c4 / yaml / verilog
+#   各自定义一份。漏定义时 `@Identifier` 引用匹配为空：声明符链整体失败，症状是
+#   "parser 报 match_length 0、linter 报 expected ';' got 'id'"，**看起来像规则形态
+#   问题**（本轮为此证伪了五个形态假设，真因是规则缺失）。故本包显式定义并记一笔。
+#
+# 阶段 1 只落叶子 Identifier（声明符名称用）；完整表达式族（运算符表、一元/二元/
+# 后缀、cast、sizeof…）在阶段 3 接上。
+
+[Identifier.parser]
+is_atom = true
+production = ["id"]
+
+[Identifier.parser.node]
+content = "$1.value"
+
+[Identifier.analyzer]
+identifier_ref = true
+
+[Identifier.renderer.layout]
+ref = "content"
