@@ -180,3 +180,26 @@ grammar/c/
    语句入口 FIRST 集的顶层构造会被**整体跳过，既不解析也不诊断**（实测
    `struct point p;` 在阶段 1 即如此，而 `int x` 缺分号会报错）。阶段 2 加入
    struct/union/enum 后该行为自然改变——不要把它当期望行为钉住。
+
+
+### 同节的第二处：前导点浮点 `.5`（2026-09-25）
+
+浮点本身已可用（`3.14` / `1e10` / `1.e5` / **`0.5`** 都是单个 `literal.number`——最后
+一个靠把 `c_dec` 的 `size.digits` 从 `nonzero` 放开为 `any`，让内置浮点链作用到
+0 开头的小数）。但 **`.5`**（C99 允许的"小数点开头"形态）表达不了：数字形态由
+`size`（前缀数字）/ `base_prefix` 描述，**没有"以点开头"的位置**，故 `.5` 被切成
+`.` + `5`。修法与整型后缀同族（扩 schema 或包侧后处理），判据同上。
+
+两处缺口都由 `tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：
+修好后对应用例会失败并提醒同步本档。
+
+
+### 同节的第三处：字符串内的转义引号（2026-09-25）
+
+`"a\"b"`（字符串里含转义引号）捕获**提前终止**：`[string] delimiters` 的 delim 模式按
+"下一个定界符"结束，**不识别反斜杠转义**（与 `docs/gaps/gap-lexer-capture-boundaries.md`
+记录的捕获边界同类）。真实代码里 `printf("say \"hi\"")` 很常见，故这条**有实际影响**。
+
+三条缺口（整型后缀 / 前导点浮点 / 字符串内转义引号）都由
+`tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：修好后对应用例
+会失败并提醒同步本档。

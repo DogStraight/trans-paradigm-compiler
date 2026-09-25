@@ -1,11 +1,17 @@
-# _number.toml — C 整数字面量形态（阶段 1；浮点与后缀见下）
+# _number.toml — C 数字字面量形态（阶段 2b 词法收官）
 #
-# C99 §6.4.4.1 整型常量：十进制（非零开头）、八进制（前导 0）、十六进制（0x/0X）。
+# C99 §6.4.4：整型常量（十进制 / 前导 0 八进制 / 0x 十六进制）+ 浮点常量
+# （小数与指数形态由 lexer 的**内置浮点链**处理，见 lexer/number_gen.py 的
+# dot / exp 状态——配置侧只负责"这是一种数字形态"）。
 #
-# ⚠ 阶段 1 **未接**：整型后缀（U/u、L/l、LL/ll 及其组合）与浮点常量
-#   （§6.4.4.2，含小数点/指数/后缀）——它们进阶段 1b（同一批词法面，需扩
-#   [[number.based]] 的 value_allow 表达力后一并做，避免半套后缀被静默接受）。
+# ⚠ **未接：整型后缀（U/u、L/l、LL/ll 及组合）**——`[[number.based]]` 的字段全集是
+#   name / size / base_prefix / signed / bases / value_digits / value_allow /
+#   value_allow_space（实测 = lexer/number_gen.py 里 cfg.get 的键），**没有后缀位**；
+#   `value_allow` 的语义是"数位中允许的特殊字符"（verilog 的 x/z/?），不是结尾可选标识符。
+#   症状：`42u` 被切成 `42` + `u`（与 `42 u` 无法区分）。修法候选与判据见缺口档
+#   docs/gaps/gap-language-pack-scope.md「C 包词法面暴露的配置表达力缺口」。
 
+# 十六进制：0x / 0X（大小写由字符类别覆盖）
 [[number.based]]
 name = "c_prefix"
 size = "none"
@@ -14,6 +20,7 @@ bases = []
 value_digits = { x = "hex" }
 value_allow = []
 
+# 八进制：前导 0（0[0-7]*，含 0 本身）
 [[number.based]]
 name = "c_octal"
 size = "none"
@@ -22,9 +29,14 @@ bases = []
 value_digits = { "0" = "oct" }
 value_allow = []
 
+# 十进制 / 浮点入口：`digits = "any"` 让 `0` / `017` / `0.5` 都走本形态——
+# 这样内置浮点链才会作用到 **0 开头的小数**（`0.5`）。
+# ⚠ 语法层只判"这是一个数字 token"：`017` 是八进制还是十进制、`0.5` 的取值属求值/语义层。
+#   写成 `nonzero` 时的症状：`0.5` 被拆成 `0` + `.` + `5`（实测）。
+#   `3.14` / `1e10` 在两种写法下都能过（非零开头），故 `0.5` 是这条形态的**判据样本**。
 [[number.based]]
 name = "c_dec"
-size = { digits = "nonzero" }
+size = { digits = "any" }
 base_prefix = "none"
 bases = []
 value_digits = { d = "dec" }
