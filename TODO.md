@@ -107,6 +107,14 @@
       · 前导点浮点 `.5`、字符串内**转义引号**（delim 捕获不识别转义）——同上节记录；
       · 强制转换 `(T)x`（与 `(expr)` 的区分需类型名知识，归语义层同批）、复合字面量、
         链式后缀（`a.b.c` / `f(x)[i]`）、`_Alignof`、作用域与类型语义（语义层）。
+      ⚠ **round 26 实测：按清单实施后档位未按预期切换**——同一进程内依次
+      `enabled=["c11"]` → `enabled=[]` 时，第二档仍解析出 `StaticAssertDecl`
+      （说明还有一处缓存或自动发现路径绕过了 `enabled`；`_ensure_entries_for` 的
+      `_entries_source` 缓存键已按清单改为含 `enabled` 仍不生效）。
+      已**回退引擎改动**（不留未经验证的改动），本项待重新归因：
+      先确认 `load_all` 之外还有谁在提供 `[lexer] token_ext`（候选：`Lexer` 侧按
+      `ext_dirs` 自行读插件、或 `_resolve_cached` 的 `_resolve_cache`）。
+      **当前可用方案仍是 pack 副本**（`test_c_standard_tiers.py`，已通过）。
 - [ ] **引擎级 `enabled` 覆盖参数**（把"档位对照需 pack 副本"变成一等参数）：
       目标 = `load_language(pack, plugins_dir=…, enabled=["c11"])` 显式指定启用组合。
       **逐处清单已核实（`core/config_registry.py`，一次可做完）**：
