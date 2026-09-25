@@ -140,7 +140,13 @@ def _resolve_dependencies(metas: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if name in path:
             raise ValueError(f"Component dependency cycle: {' -> '.join(path + [name])}")
         if name not in names:
-            raise ValueError(f"Component '{name}' requires '{name}' but it's not found")
+            # ⚠ 报文要点名**依赖方**（谁 requires 了缺失的组件），否则用户拿到
+            # "X requires X" 这种自指消息无从下手。依赖方 = 调用栈里的上一环
+            # （path[-1]；无则说明缺失项出现在顶层清单里）。
+            requirer = path[-1] if path else "(顶层清单)"
+            raise ValueError(
+                f"Component '{requirer}' requires '{name}' but it's not found"
+            )
         meta = next(m for m in metas if m[META_NAME] == name)
         for dep in meta.get(META_REQUIRES, []):
             _visit(dep, path + [name])
