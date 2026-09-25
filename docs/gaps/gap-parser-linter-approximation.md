@@ -56,12 +56,15 @@ newline 惯例；容器结束 = 匹配失败回退派生 `_stmt_ends`）是显�
 
 **四类构造函数**（linter 的语句发现与"语句结束"判定跟不上）：
 
-| 构造 | 报文 | 例 |
-|---|---|---|
-| 带成员体的类型说明符 | `expected ';', got '{'` | `struct ring_item { … };` / `union ring_slot { … };` / `enum … { … };` |
-| 成员声明里的数组后缀 | `expected ';', got '['` | `struct ring_item items[16];` |
-| 带括号的声明符 | `unexpected '('` | `int ring_push(struct ring *r, …);` |
-| 枚举体内的 `=` | `unrecognized statement` | `enum { RING_FULL = 2 };` |
+| 构造 | 条数 | 报文 | 例 |
+|---|---|---|---|
+| 带成员体的类型说明符 | 3 | `expected ';', got '{'` | `struct ring_item { … };` / `union ring_slot { … };` / `struct ring { … };` |
+| 带括号的声明符 | 10 | `incomplete structure, expected one of: bracket.l_parentheses…` + `expected ';', got 'keyword.struct'`（每条 2 报） | `int ring_push(struct ring *r, struct ring_item *item);` |
+
+⚠ **数字与包状态绑定**：上表 13 条 = 本包**阶段 1 + 2a** 的实测（2026-09-25，已提交状态）。
+阶段 3 的试验语法在树里时另测得 **17 条 / 四类**（多出 `enum` 体的 `unrecognized` 与
+成员声明里的 `[` 两类）——那两类随阶段 3 落地会重新出现，届时按同法重测并补进本表。
+记录纪律：**数量变化要重新记录并同步测试断言**，不要随手改断言迁就现状。
 
 **为什么值得修**：C 的声明形态（体、声明符括号、成员后缀）与 verilog/c4 的差异大，
 现有近似（首 token 挑语句 + 启发式找语句结束）在 C 上**误报率 100%**（合法代码全报），
@@ -80,7 +83,8 @@ newline 惯例；容器结束 = 匹配失败回退派生 `_stmt_ends`）是显�
   匹配器在"后续必需元素失败"时不会回头去取前面可选元素的分支（无回溯）。
   `[`（`(@ArraySuffix|@FuncSuffix)*` 组量词）与 `(`（同一组的 `@FuncSuffix`）同因。
 
-**机制 B —— 首 token 候选缺路径**（覆盖 `enum` 类，2 条）：
+**机制 B —— 首 token 候选缺路径**（阶段 3 试验语法下复现的 `enum` 类，2 条；
+本包当前状态**未复现**——记录在此备阶段 3 落地后对照）：
 
 - 报文出处：`linter/discovery.py::_record_unrecognized`（`unrecognized statement:
   no grammar rule matches here`），触发条件 = `lookahead.classify()` 返回**空候选**。

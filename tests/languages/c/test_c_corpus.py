@@ -77,12 +77,18 @@ class TestRingBufferHeader:
         那会把缺陷固化。它断言的是**缺口的可发现性**：诊断全部落在两类已知码上，
         且数量与缺口档记录一致；缺口一旦修复，本用例会失败并提醒复核文档。
 
-        四类构造函数（`docs/gaps/gap-parser-linter-approximation.md`）：
-        块状类型体 `struct/union/enum … { … }`、成员声明里的 `[`、
-        带括号的声明符 `f(…)`。修它属**引擎侧**（`linter/discovery.py` 的语句发现与
-        语句结束判定），不在语言包侧。
+        两类构造函数（`docs/gaps/gap-parser-linter-approximation.md`）：
+        ① 带成员体的类型说明符 `struct/union … { … };`（3 条）；
+        ② 带括号的声明符 `int f(struct ring *r);`（每条 2 报，共 10 条）。
+        归因 = `linter/checkers/matcher.py` 严格逐 token 匹配**不回溯**（规则内部的
+        可选分支不被尝试），属**引擎侧**修点，不在语言包侧。
+
+        ⚠ **数字与包状态绑定**：实测 13 条是在本包当前阶段（1 + 2a）测得的；阶段 3 的
+        试验语法在树里时曾测得 17 条 / 4 类（多出 `enum` 体的 unrecognized 与成员数组
+        `[` 两类）。故本用例断言的是"**缺口仍存在且规模未漂移**"，任何人推进语法面后
+        数量变化都应在缺口档里重新记录并同步此处，而不是随手改断言。
         """
         errs = _lint(_source(), c_linter)
         codes = {e.code for e in errs}
         assert codes <= {"phase-statement", "phase-unrecognized"}, codes
-        assert len(errs) == 17, f"缺口数量变了（{len(errs)} 条）——复核缺口档记录"
+        assert len(errs) == 13, f"缺口数量变了（{len(errs)} 条）——复核缺口档记录"

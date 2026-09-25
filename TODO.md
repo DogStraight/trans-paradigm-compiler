@@ -57,7 +57,21 @@
       反向守（缺口修复后该用例会失败并提醒复核文档）。
 - [ ] **阶段 2b/3**：位域、初始化器（含指示符）、数组长度常量表达式、函数体与语句、
       表达式族、整型后缀与浮点字面量、字符/字符串转义表
-- [ ] **阶段 3 表达式与语句**：完整运算符优先级与结合性、`sizeof`/`_Alignof`、强制转换、
+- [ ] **阶段 3 表达式与语句（上一轮尝试已停放，需按 c4 扁平形态重做）**：
+      2026-09-25 曾委派 subagent 实现（运算符表 + 表达式 + 语句，约 700 行 TOML），
+      **未通过验收**：其 `00_expressions.toml` 在 `setup_grammar` 阶段即
+      `RecursionError: maximum recursion depth exceeded`（FIRST/nullable 推导按规则
+      第一元素递归，遇环溢出）。其产物已挪出仓库到 `_drafts/stage3_wip/`
+      （`03_statements.toml` / `_operator.toml` / `00_expressions.wip.toml`）供参考，
+      包已回到绿色（`tests/languages/c` 39 passed）。
+      **下一轮的做法（已核实的参照）**：照 c4 的**扁平**形态重建表达式——
+      `Expression = ["@PrimaryExpr"]`，`PrimaryExpr` 是**单条原子交替**
+      （`@Number|@StringLit|@Identifier|@ParenthesizedExpr|@CallExpr|…`），
+      `ParenthesizedExpr = ["(", "@Expression", ")"]`（c4 同样存在经括号的环却不溢出，
+      说明真凶是子代理文件里某个可空/自引用规则）。落地顺序：先原子+后缀，
+      再加一元/二元优先级链，每加一层跑一次 `tests/languages/c`；
+      出现 `RecursionError` 就用"注释掉一半规则"二分定位。
+：完整运算符优先级与结合性、`sizeof`/`_Alignof`、强制转换、
       复合字面量外的常用面；语句族（if/switch/for/while/do/goto/label/compound）
 - [ ] **阶段 3 结构类型与作用域语义**：struct/union/enum（含位域）、标签命名空间、
       作用域与链接（static/extern）、函数原型与定义
