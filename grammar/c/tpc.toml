@@ -20,5 +20,7 @@ bracket_map = { file = "base/_token.toml", section = "bracket", required = false
 number = { file = "base/_number.toml", section = "number", required = false }
 
 [parser]
+# 运算符表（优先级 / 结合性 / 一元位置，C99 §6.5）——Layer B 起生效
+operator_defs = { file = "base/_operator.toml", section = "operator", required = true }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
 rules = { file = ["0*.toml"], required = true }

@@ -1,14 +1,43 @@
 # ============================================================================
-# C 语法规则 — 表达式叶子（阶段 1 只落 Identifier）
+# C 语法规则 — 表达式（阶段 3 分层落地；本文件当前 = Layer A：原子）
 # ============================================================================
-# ⚠ `Identifier` 是**语言包必须自己定义的规则**（引擎不内置）——c4 / yaml / verilog
-#   各自定义一份。漏定义时 `@Identifier` 引用匹配为空：声明符链整体失败，症状是
-#   "parser 报 match_length 0、linter 报 expected ';' got 'id'"，**看起来像规则形态
-#   问题**（本轮为此证伪了五个形态假设，真因是规则缺失）。故本包显式定义并记一笔。
+# ⚠ **形态约束（照 c4 验证过的实现，勿改）**：表达式环必须有这三项保护，缺任一项
+#   都会在 `setup_grammar` 阶段直接 `RecursionError`（FIRST/nullable 推导遇环溢出）：
+#     ① 原子规则标 `is_atom = true`（pratt 的 atom_parser 遍历它们）；
+#     ② `Expression` / `UnaryExpr` 标 `pratt = true`（真正的前缀/中缀解析交给
+#        `base/_operator.toml` 的 operator_defs）；
+#     ③ 原子选择器 `PrimaryExpr` 标 `inline = true`，且 production 是**单条交替**。
+#   `ParenthesizedExpr` 内含 `@Expression` 会与 `Expression` 成环——这不是问题：
+#   上述三项齐备时环被 pratt 层截断。（阶段 3 的一次委派尝试即因缺这些标记，
+#   在 setup_grammar 报 RecursionError；产物存 `_drafts/stage3_wip/` 备查。）
 #
-# 阶段 1 只落叶子 Identifier（声明符名称用）；完整表达式族（运算符表、一元/二元/
-# 后缀、cast、sizeof…）在阶段 3 接上。
+# Layer 划分（每层落地即跑 `tests/languages/c`）：
+#   Layer A（本层）：原子（数字 / 字符串 / 标识符 / 括号）+ 选择器 + 表达式入口
+#   Layer B：运算符表（一元前缀 / 后缀 / 二元优先级链 / 赋值 / 条件 / 逗号）
+#   Layer C：控制流语句（if / while / do / for / switch / goto / 标号）
 
+# ── 原子规则 ──
+
+# Number — 数字字面量（十/八/十六进制；lexer 按 literal.number 产出）
+[Number.parser]
+is_atom = true
+production = ["literal.number"]
+
+[Number.parser.node]
+value = "$1"
+
+
+# StringLiteral — 字符串 "..." 与字符常量 '...'（lexer 均产出 literal.string）
+[StringLiteral.parser]
+is_atom = true
+production = ["literal.string"]
+
+[StringLiteral.parser.node]
+value = "$1"
+
+
+# Identifier — 标识符（**语言包必须自带**：引擎不内置；漏定义会让引用它的规则
+# 静默匹配为空——本包阶段 1 为此踩过坑，详见缺口档「包作者须知」）
 [Identifier.parser]
 is_atom = true
 production = ["id"]
@@ -21,3 +50,49 @@ identifier_ref = true
 
 [Identifier.renderer.layout]
 ref = "content"
+
+
+# ParenthesizedExpr — ( Expression )（与 Expression 成环，靠 pratt + inline 截断）
+[ParenthesizedExpr.parser]
+is_atom = true
+production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+
+[ParenthesizedExpr.parser.node]
+expr = "$2"
+
+
+# UnaryExpr — 一元前缀（`+ - ! ~ * & ++ --`）
+# 环保护第 ② 项：`pratt = true` 让前缀由 operator_defs 的 position=prefix 接管；
+# 本规则自身的 production 主要供 **first set**（语句/表达式起点识别）——
+# 否则 `-x;` / `*p;` / `!b;` 这类语句没有候选起点，linter 会整行静默跳过。
+[UnaryExpr.parser]
+production = [
+    "(symbol.extend.add_one|symbol.extend.sub_one|symbol.base.add|symbol.base.sub|symbol.base.not|symbol.base.bit_not|symbol.base.multiple|symbol.base.and)",
+    "@PrimaryExpr",
+]
+pratt = true
+
+[UnaryExpr.parser.node]
+op = "$1"
+value = "$2"
+
+
+# ── 表达式结构 ──
+
+# PrimaryExpr — 原子选择器（inline + 单条交替 = 环保护第 ③ 项）
+[PrimaryExpr.parser]
+production = [
+    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr",
+]
+inline = true
+
+[PrimaryExpr.parser.node]
+value = "$1"
+
+
+# Expression — 表达式入口（pratt 接管运算符；Layer B 接 operator_defs）
+[Expression.parser]
+production = ["@PrimaryExpr"]
+pratt = true
+
+[Expression.parser.node]

@@ -1,0 +1,252 @@
+# _operator.toml — C 运算符表（优先级 + 结合性，C99 §6.5）
+#
+# 形态照 grammar/c4/base/_symbol_level.toml：**数组顺序即优先级**（越靠前越低），
+# 不写优先级数字（理由见 parser/expression_conventions.md §1）。
+#
+# 覆盖范围 = C99 §6.5 的全部**中缀/前缀/后缀运算符终结符**（expression 族）：
+#   §6.5.16 赋值 → §6.5.15 条件 → §6.5.14…§6.5.5 二元 → §6.5.3 一元前缀
+#   → §6.5.2 后缀（++/--）
+#
+# **不在本表**（语法形态而非优先级，由 00_expressions.toml 的产生式承担）：
+#   §6.5.17 逗号（理由见下方该节）、后缀链 `f(x)` `a[i]` `p->m` `s.m`（§6.5.2）
+#   ——后者不是 token 对 token 的中缀运算（RHS 是参数表/表达式/成员名，各不同），
+#   塞进符号表要按符号特判 RHS 形态，反而引入语言知识；故走 PostfixExpr 原子链。
+#   `sizeof`（§6.5.3.4）同理：操作数是"表达式或类型名"两种形态，走产生式。
+#
+# ⚠ symbol 字段是**运算符文本**，pratt 按 token.content 匹配（见
+#   parser/pratt_parser.py `_build_priority_maps` 用 props["symbol"] 作键、
+#   `_led_loop` 用 tokens[idx].content 查表）——不是 token 类型名。
+#   词法形态在 base/_token.toml，两者靠文本对应（expression_conventions.md §6）。
+# ⚠ 同一符号可两声明（一元前缀 + 二元中缀，如 `+ - * &`）：前缀项必须带
+#   `position = "prefix"`，否则会被当成中缀（§4 常见坑）。
+
+# ── §6.5.17 逗号 ──
+# ⚠ **刻意不进本表**（与 c4 / verilog 一致，两者都没有逗号运算符）：
+#   pratt 中缀项在**任何** pratt 规则里都以 rbp=0 起步（`try_pratt_rule` 用
+#   整张表解析，不读规则的 production），逗号一旦入表，`f(a, b)` 的实参分隔、
+#   `int a = 1, b` 的声明符分隔、`enum {A, B}` 的枚举项分隔、`int a[n], b` 的
+#   长度分隔**全都会被当成逗号运算符吞掉**（实测：枚举体从 3 项塌成 1 项）。
+#   故逗号表达式走**语法形态**——`CommaExpr`（00_expressions.toml，非 pratt：
+#   显式 `,` 分隔 + 逐项 pratt 子表达式），只在"整个表达式"位点使用；
+#   分隔符敏感的位点（实参/初始化器/数组长度/枚举值/case 值）引用逗号无关的
+#   `@Expression`。这是形态选择而非优先级选择，故不牺牲 §6.5.17 的接受域。
+
+# ── §6.5.16 赋值（右结合；C99 全部 11 个） ──
+[[operator]]
+symbol = "="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "*="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "/="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "%="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "+="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "-="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "<<="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = ">>="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "&="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "^="
+arity = 2
+assoc = "right"
+
+[[operator]]
+symbol = "|="
+arity = 2
+assoc = "right"
+
+# ── §6.5.15 条件（三目，右结合；`:` 是第二分隔符） ──
+[[operator]]
+symbol = "?"
+arity = 3
+second = ":"
+assoc = "right"
+
+# ── §6.5.14 逻辑或 ──
+[[operator]]
+symbol = "||"
+arity = 2
+assoc = "left"
+
+# ── §6.5.13 逻辑与 ──
+[[operator]]
+symbol = "&&"
+arity = 2
+assoc = "left"
+
+# ── §6.5.12 按位或 ──
+[[operator]]
+symbol = "|"
+arity = 2
+assoc = "left"
+
+# ── §6.5.11 按位异或 ──
+[[operator]]
+symbol = "^"
+arity = 2
+assoc = "left"
+
+# ── §6.5.10 按位与 ──
+[[operator]]
+symbol = "&"
+arity = 2
+assoc = "left"
+
+# ── §6.5.9 相等 ──
+[[operator]]
+symbol = "=="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "!="
+arity = 2
+assoc = "left"
+
+# ── §6.5.8 关系 ──
+[[operator]]
+symbol = "<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "<="
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">="
+arity = 2
+assoc = "left"
+
+# ── §6.5.7 移位 ──
+[[operator]]
+symbol = "<<"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = ">>"
+arity = 2
+assoc = "left"
+
+# ── §6.5.6 加减 ──
+[[operator]]
+symbol = "+"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "-"
+arity = 2
+assoc = "left"
+
+# ── §6.5.5 乘除模 ──
+[[operator]]
+symbol = "*"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "/"
+arity = 2
+assoc = "left"
+
+[[operator]]
+symbol = "%"
+arity = 2
+assoc = "left"
+
+# ── §6.5.3 一元前缀（高于所有二元；`*` 解引用 / `&` 取址复用二元符号） ──
+# 注意：这些项的优先级只在"与二元同符号"时有意义——pratt 的
+# `_parse_prefix_unary` 一律以 `unary_prefix_rbp = max_infix_prio + 1` 递归
+# 操作数（见 parser/pratt_parser.py），故一元永远高于所有二元。
+[[operator]]
+symbol = "+"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "-"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "!"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "~"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "*"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "&"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "++"
+arity = 1
+position = "prefix"
+
+[[operator]]
+symbol = "--"
+arity = 1
+position = "prefix"
+
+# ── §6.5.2 后缀 ++/--（最高） ──
+# ⚠ 实际由 PostfixExpr 的产生式消费（原子最长匹配先吃 `x++` 整体），本表项
+#   保证"独立出现时"pratt 中缀循环也能归约（形态与 c4 一致，不另设机制）。
+[[operator]]
+symbol = "++"
+arity = 1
+position = "postfix"
+
+[[operator]]
+symbol = "--"
+arity = 1
+position = "postfix"

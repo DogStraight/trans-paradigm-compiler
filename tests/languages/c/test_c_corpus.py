@@ -83,7 +83,8 @@ class TestRingBufferHeader:
         归因 = `linter/checkers/matcher.py` 严格逐 token 匹配**不回溯**（规则内部的
         可选分支不被尝试），属**引擎侧**修点，不在语言包侧。
 
-        ⚠ **数字与包状态绑定**：实测 13 条是在本包当前阶段（1 + 2a）测得的；阶段 3 的
+        ⚠ **数字与包状态绑定**：实测 14 条 = 阶段 1+2a+3A 测得（每落地一层语法面都会变：
+        13 → 14）；阶段 3 的
         试验语法在树里时曾测得 17 条 / 4 类（多出 `enum` 体的 unrecognized 与成员数组
         `[` 两类）。故本用例断言的是"**缺口仍存在且规模未漂移**"，任何人推进语法面后
         数量变化都应在缺口档里重新记录并同步此处，而不是随手改断言。
@@ -91,4 +92,4 @@ class TestRingBufferHeader:
         errs = _lint(_source(), c_linter)
         codes = {e.code for e in errs}
         assert codes <= {"phase-statement", "phase-unrecognized"}, codes
-        assert len(errs) == 13, f"缺口数量变了（{len(errs)} 条）——复核缺口档记录"
+        assert len(errs) == 14, f"缺口数量变了（{len(errs)} 条）——复核缺口档记录"

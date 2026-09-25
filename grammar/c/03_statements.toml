@@ -1,0 +1,103 @@
+# ============================================================================
+# C 语法规则 — 语句（阶段 3 分层；本文件当前 = Layer A：最小语句集）
+# ============================================================================
+# C99 §6.8 语句。Layer A 只落"能让函数体立起来"的最小集：
+#   CompoundStmt（复合语句，同时用作函数体）/ ExprStmt / EmptyStmt / ReturnStmt
+#   + Stmt 选择器 + FuncDef（函数定义）
+# Layer C 再补：if / while / do / for / switch / case / default / goto / 标号 /
+#   break / continue。
+#
+# ⚠ 语句规则一律标 `is_statement = true`：引擎的语句发现按"首 token 能否起始某条
+#   语句规则"挑候选；未标记的规则不会成为语句入口（linter 会整行静默跳过）。
+# ⚠ 容器语句（body 是语句序列）不要给 `_derived_end_case` 可推导的结尾字面 token，
+#   否则语句边界会被截断在内部语句处——故 `CompoundStmt` 的 `@Stmt*` 之后再无字面
+#   token（`}` 是括号、由括号配对处理）。
+
+# ── CompoundStmt — { Stmt* }（函数体与块语句共用） ──
+
+[CompoundStmt]
+is_statement = true
+
+[CompoundStmt.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "@Stmt*",
+    "bracket.r_curly_bracket",
+]
+
+[CompoundStmt.parser.node]
+body = "$2"
+
+
+# ── Stmt — 语句选择器（Layer A 的候选集；Layer C 逐项扩充） ──
+
+[Stmt.parser]
+production = [
+    "@CompoundStmt|@ExprStmt|@EmptyStmt|@ReturnStmt",
+]
+inline = true
+
+[Stmt.parser.node]
+value = "$1"
+
+
+# ── ExprStmt — Expression ; ──
+
+[ExprStmt]
+is_statement = true
+
+[ExprStmt.parser]
+production = [
+    "@Expression",
+    "symbol.base.semicolon",
+]
+
+[ExprStmt.parser.node]
+expr = "$1"
+
+
+# ── EmptyStmt — ; ──
+
+[EmptyStmt]
+is_statement = true
+
+[EmptyStmt.parser]
+production = ["symbol.base.semicolon"]
+
+[EmptyStmt.parser.node]
+
+
+# ── ReturnStmt — return Expression? ; ──
+
+[ReturnStmt]
+is_statement = true
+
+[ReturnStmt.parser]
+production = [
+    "keyword.return",
+    "@Expression?",
+    "symbol.base.semicolon",
+]
+
+[ReturnStmt.parser.node]
+value = "$2"
+
+
+# ── FuncDef — 类型 声明符 复合语句（与 Declaration 的区分靠结尾 `{` vs `;`） ──
+
+[FuncDef]
+is_statement = true
+
+[FuncDef.parser]
+production = [
+    "@StorageClass|@TypeQualifier|@TypeSpecifier",
+    "@SpecRest*",
+    "@Declarator",
+    "@CompoundStmt",
+]
+
+[FuncDef.parser.node]
+specs = "$1"
+rest = "$2"
+declarator = "$3"
+body = "$4"
