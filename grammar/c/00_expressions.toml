@@ -82,7 +82,7 @@ value = "$2"
 # PrimaryExpr — 原子选择器（inline + 单条交替 = 环保护第 ③ 项）
 [PrimaryExpr.parser]
 production = [
-    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@CallExpr|@IndexExpr|@MemberExpr",
+    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@CallExpr|@IndexExpr|@MemberExpr|@SizeofTypeExpr|@SizeofExpr",
 ]
 inline = true
 
@@ -157,3 +157,57 @@ production = ["@Expression", "(symbol.base.comma,@Expression)*"]
 
 [ArgumentList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
+
+
+# ── sizeof（阶段 2b）──
+# C99 §6.5.3.4：`sizeof unary-expression` 与 `sizeof ( type-name )` 两种形态。
+# ⚠ 两个规则都标 `is_atom = true`：它们内部含 `@Expression`（经 `@PrimaryExpr`），
+#   与 `Expression` 成环——环只在原子规则里被 pratt 截断（同 ParenthesizedExpr）。
+#   两条规则的首 token 都是 `keyword.sizeof`，靠**候选顺序**消歧：先试"括号类型名"
+#   （更具体），失败再退到"一元表达式"。
+#
+# ⚠ **未做：强制转换 `(T)x`**（C99 §6.5.4）。它与 `(expr)` 的区分需要**类型名知识**
+#   （C 的经典歧义，标准靠"T 是否为 typedef 名"判定），属语义层信息，不能靠语法层
+#   猜。留待与 typedef 名判定同批处理（`hier`/语义层就位后）。
+
+# SizeofTypeExpr — sizeof ( type-name )   例：sizeof(int) / sizeof(struct s) / sizeof(char *)
+[SizeofTypeExpr.parser]
+is_atom = true
+production = [
+    "keyword.sizeof",
+    "bracket.l_parentheses",
+    "@TypeName",
+    "bracket.r_parentheses",
+]
+
+[SizeofTypeExpr.parser.node]
+type_name = "$3"
+
+
+# SizeofExpr — sizeof unary-expression   例：sizeof x / sizeof a[0]
+[SizeofExpr.parser]
+is_atom = true
+# ⚠ 操作数用 `@UnaryExpr`（pratt 入口）而不是 `@PrimaryExpr`：后者在 `sizeof a[0]` /
+#   `sizeof f(y)` 上只匹配到标识符就停（后缀没跟上），整个语句随后失配。
+#   `@UnaryExpr` 走 pratt 层的"最长匹配"（遍历 is_atom 规则取消费最多者），后缀链才对得上。
+production = [
+    "keyword.sizeof",
+    "@UnaryExpr",
+]
+
+[SizeofExpr.parser.node]
+operand = "$2"
+
+
+# TypeName — 类型名（说明符序列 + 指针星号），仅供 sizeof/转换等"类型作操数"的位置用
+[TypeName.parser]
+production = [
+    "@TypeQualifier|@TypeSpecifier",
+    "@SpecRest*",
+    "(symbol.base.multiple)*",
+]
+
+[TypeName.parser.node]
+first = "$1"
+rest = "$2"
+pointers = "$3"

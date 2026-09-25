@@ -105,3 +105,52 @@ class TestExpressionRejection:
     )
     def test_bad_expression_reports(self, c_linter, src):
         assert _lint(src, c_linter), f"应报错但通过了：{src!r}"
+
+
+class TestSizeof:
+    """C99 §6.5.3.4：`sizeof ( type-name )` 与 `sizeof unary-expression` 两种形态。"""
+
+    @pytest.mark.parametrize(
+        "src",
+        ["sizeof(int)", "sizeof(unsigned int)", "sizeof(struct s)", "sizeof(char *)"],
+    )
+    def test_sizeof_type_name(self, c, src):
+        e = _expr(src, c)
+        assert e.node_name == "SizeofTypeExpr", f"{src!r} -> {e.node_name}"
+
+    def test_sizeof_type_name_multiwrd(self, c):
+        """多词类型名（`sizeof(unsigned long long)`）——`TypeName` 收说明符序列。"""
+        e = _expr("sizeof(unsigned long long)", c)
+        assert e.node_name == "SizeofTypeExpr"
+        spec = e.type_name
+        assert spec.rest is not None  # 说明符余项非空（多词证据）
+
+    @pytest.mark.parametrize("src", ["sizeof x", "sizeof a[0]", "sizeof f(y)"])
+    def test_sizeof_expression(self, c, src):
+        e = _expr(src, c)
+        assert e.node_name == "SizeofExpr", f"{src!r} -> {e.node_name}"
+
+    def test_sizeof_in_expression(self, c):
+        """`sizeof(int) * 2` —— sizeof 是原子，参与优先级链。"""
+        e = _expr("sizeof(int) * 2", c)
+        assert e.node_name == "BinaryOp" and e.op == "*"
+        assert e.left.node_name == "SizeofTypeExpr"
+
+    def test_sizeof_bad_form_fails_at_parse(self, c):
+        """`sizeof(` —— 残缺形态在解析层被拒（linter 对残缺形态会沉默，不作判据）。"""
+        ast = _parse("void f(void) { sizeof(; }\n", c)
+        assert [n.node_name for n in (getattr(ast, "sub_node", []) or [])] == []
+
+
+class TestCastIsNotSupportedYet:
+    """⚠ **强制转换 `(T)x` 尚未支持**（C99 §6.5.4）——钉住"报错"而非静默误解析。
+
+    它与 `(expr)` 的区分需要**类型名知识**（T 是否为 typedef 名），属语义层信息；
+    语法层猜会把 `(x)` 误判成转换。故本阶段**拒收**，留待与 typedef 名判定同批处理。
+    修好后本用例会失败 → 提醒同步 `00_expressions.toml` 的"未做"清单。
+    """
+
+    def test_cast_form_is_rejected(self, c):
+        ast = _parse("void f(void) { (int)x; }\n", c)
+        names = [n.node_name for n in (getattr(ast, "sub_node", []) or [])]
+        assert names == [], f"形态变了（现为 {names}）——若已支持强制转换，请改断言并同步 TOML 清单"
