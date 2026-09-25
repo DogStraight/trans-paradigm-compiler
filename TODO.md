@@ -43,6 +43,15 @@
       标签/枚举项"是**语义约束** §6.7p2，归语义层）。顺带修两个真 bug（token 键重复
       导致 `symbol.base.equal` 静默失配、字面量正则过度转义导致数字从不被识别），
       两条坑记入缺口档「阶段 2a 的两条实测坑」。
+- [ ] **跨语言检查规则泄漏（本轮真实语料工作发现，可复现）**：同一进程里**先跑过
+      verilog linter**，再 `load_language("grammar/c")` 扫 C 源，结果多出 **1 条
+      `ST003`**（verilog 检查规则残留；C 包自身无 `rules/`）。症状 = **检查结果依赖
+      测试顺序**，与 `tests/README.md` 记录的"多语言同进程串味"同类，属 `core/global_state`
+      / 语言作用域面。复现：先 `LinterScanner(rules_dir="grammar/verilog").scan("module m(); endmodule")`
+      再切 C 扫 `tests/languages/c/samples/ring_buffer.c`。判据：同一份 C 源在"先跑过
+      verilog"与"干净进程"下诊断集合相同。回归守：
+      `tests/languages/c/test_c_corpus_impl.py::test_linter_gap_is_recorded`（非 phase 码
+      白名单目前只允许 ST003，修复后应改为"无非 phase 码"）。
 - [ ] **C 包 linter 误报修正（引擎侧归因先行）**：合法头文件
       `tests/languages/c/samples/ring_buffer.h` 上 linter 报 **17 条**误报，四类构造函数
       （带体类型说明符 / 成员数组后缀 / 带括号声明符 / 枚举体 `=`）——解析侧正常，

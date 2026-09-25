@@ -187,12 +187,28 @@ production = [
 items = ["$1", "$2.items[*].sub_node[1]"]
 
 
+# ⚠ 参数类型必须是**说明符序列**，不能只收单个 `@TypeSpecifier`：`SimpleType` 是**一个
+#   类型词**，而 `unsigned int` / `const char` / `long long` 都是多词。只收单个时的症状
+#   很隐蔽——`int f(int a)` 正常、`int f(unsigned int n)` 整个函数定义解析失败
+#   （实测：真实语料样本的 `ring_push` 即栽在这里，报 match_length 截断）。
+#   与 `MemberSpec`（结构体成员）同形：限定符/类型说明符打头 + 说明符序列重复项。
 [ParamDecl.parser]
 production = [
-    "@TypeSpecifier",
+    "@ParamSpec",
     "@Declarator?",
 ]
 
 [ParamDecl.parser.node]
 type_spec = "$1"
 declarator = "$2"
+
+
+[ParamSpec.parser]
+production = [
+    "@TypeQualifier|@TypeSpecifier",
+    "@SpecRest*",
+]
+
+[ParamSpec.parser.node]
+first = "$1"
+rest = "$2"

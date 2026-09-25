@@ -34,11 +34,20 @@ production = [
 body = "$2"
 
 
-# ── Stmt — 语句选择器（Layer A 的候选集；Layer C 逐项扩充） ──
+# ── Stmt — 语句选择器（Layer A 候选集 + Layer C 控制流） ──
+# ⚠ **必须含 `@Declaration`**：C 里"块内声明"也是语句（`{ int n; … }`）。漏掉它的症状
+#   很隐蔽——顶层声明照样解析（翻译单元走全局语句发现），但**函数体内的局部声明会让
+#   整个函数定义解析失败**（实测：`int f(void) { int n; return n; }` → 空 AST，而
+#   `int f(void) { return 0; }` 正常）。verilog 的 `Stmt` 同样含 `DeclStmt`，同一道理。
+# ⚠ **`@Declaration` 必须排在 `@ExprStmt` 之后**（候选按序尝试）：C 的 typedef 名与
+#   变量名同处一个命名空间，`b;` 既可读作表达式语句，也可读作"以 typedef 名 `b` 为
+#   类型、无声明符的声明"（声明符表可选）。放前面会让所有"标识符开头"的语句都变成
+#   声明（实测把 `if (a) b;` 的 then 分支从 ExprStmt 变成 Declaration）。
+#   顺序消歧与"语法层宽进、语义层收"一致：真伪 typedef 由语义层按符号表判。
 
 [Stmt.parser]
 production = [
-    "@CompoundStmt|@ExprStmt|@EmptyStmt|@ReturnStmt|@IfStmt|@WhileStmt|@DoWhileStmt|@ForStmt|@SwitchStmt|@BreakStmt|@ContinueStmt|@GotoStmt|@LabelStmt|@CaseLabel|@DefaultLabel",
+    "@CompoundStmt|@ExprStmt|@EmptyStmt|@ReturnStmt|@IfStmt|@WhileStmt|@DoWhileStmt|@ForStmt|@SwitchStmt|@BreakStmt|@ContinueStmt|@GotoStmt|@LabelStmt|@CaseLabel|@DefaultLabel|@Declaration",
 ]
 inline = true
 
