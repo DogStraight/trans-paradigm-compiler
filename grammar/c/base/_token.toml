@@ -1,0 +1,81 @@
+# _token.toml — C 基础 Token 定义（标点/运算符/括号/字面量/标识符）
+#
+# 语言关键字在 ../token.toml。C99 标点集见 ISO/IEC 9899:1999 §6.4.6；
+# 多字符运算符走 symbol.extend（最长匹配）。
+# ⚠ `#` **不是注释**（与 c4 演示 DSL 不同，c4 把 # 当行注释）——C 的 # 是预处理
+#   指示符引导符，归阶段 4 的预处理器面；此处先作为符号，避免被静默吞掉。
+
+[space]
+blank_space = " "
+tab = "\t"
+# CRLF 行尾的 \r 部分（\n 由 [newline] 处理）：作为可忽略空白吞掉
+carriage_return = "\r"
+# UTF-8 BOM：作为可忽略字符吞掉
+bom = "\ufeff"
+
+[newline]
+newline = "\n"
+
+# 单字符符号（C99 §6.4.6 punctuator 的单字符部分）
+[symbol.base]
+add = "+"
+sub = "-"
+multiple = "*"
+div = "/"
+mod = "%"
+and = "&"
+or = "|"
+xor = "^"
+not = "!"
+bit_not = "~"
+lesser = "<"
+bigger = ">"
+equal = "="
+question_mark = "?"
+colon = ":"
+semicolon = ";"
+comma = ","
+dot = "."
+assign = "="
+
+# 多字符符号（最长匹配；C99 的复合赋值与箭头运算符）
+[symbol.extend]
+is_equal = "=="
+not_equal = "!="
+lesser_equal = "<="
+bigger_equal = ">="
+l_shift = "<<"
+r_shift = ">>"
+logic_double_and = "&&"
+logic_double_or = "||"
+add_one = "++"
+sub_one = "--"
+arrow = "->"
+add_assign = "+="
+sub_assign = "-="
+mul_assign = "*="
+div_assign = "/="
+mod_assign = "%="
+and_assign = "&="
+or_assign = "|="
+xor_assign = "^="
+l_shift_assign = "<<="
+r_shift_assign = ">>="
+ellipsis = "..."
+
+[bracket]
+pairs = [
+    ["(", ")", "parentheses"],
+    ["[", "]", "square_bracket"],
+    ["{", "}", "curly_bracket"],
+]
+
+[literal]
+number = "\\d+"
+
+# 字符串定界符（CaptureRunner delim mode）：C 的双引号字符串与单引号字符常量
+[string]
+delimiters = ['"', "'"]
+
+[id.id]
+id = "[a-z_A-Z][a-z_A-Z0-9]*"

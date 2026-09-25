@@ -1,0 +1,193 @@
+# ============================================================================
+# C 语法规则 — 翻译单元与声明/声明符（阶段 1）
+# ============================================================================
+# C99 §6.5.2 声明符（declarator）语法。**声明符递归是 C 语法最难点**，也是后续
+# 一切（函数定义/类型/表达式）的地基——AST 形状由它决定，故阶段 1 先打这一层。
+#
+# 阶段 1 支持：
+#   声明说明符（存储类 / 类型限定符 / 类型说明符，顺序自由）
+#   简单声明符：标识符 / 多级指针 / 数组后缀 / 函数后缀 / 括号声明符
+# 阶段 1 **不支持**（留阶段 2/3，见缺口档接受域清单）：
+#   struct/union/enum 说明符、typedef 名作类型、初始化器 `= expr`、
+#   数组长度表达式（本阶段只接受数字字面量）、函数体、函数指针的完整形态
+#
+# ⚠ 说明符的**组合合法性**（如 `long long int` 合法、`float int` 非法）不在语法层
+#   判定——语法层宽进，留给语义层（与本包其余部分同哲学）。
+
+# ── TranslationUnit — 根块（整个文件 = 外部声明序列） ──
+
+[TranslationUnit]
+is_block = true
+
+[TranslationUnit.parser]
+production = []
+
+[TranslationUnit.parser.node]
+
+
+# ── Declaration — 声明（语句发现靠 is_statement） ──
+
+[Declaration]
+is_statement = true
+
+[Declaration.parser]
+production = [
+    "@StorageClass|@TypeQualifier|@TypeSpecifier",
+    "@SpecRest*",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+
+[Declaration.parser.node]
+specs = "$1"
+rest = "$2"
+declarators = "$3"
+
+
+# ── 说明符三层规则（存储类 / 类型限定符 / 类型说明符） ──
+# ⚠ **形态约束（实测得出，勿随意改）**：本仓的语句发现/FIRST 集推导按
+#   `split_token_types` 口径解析**不带括号的 token 交替** `a|b|c`；写成带括号的组
+#   `"(a|b|c)"` 时整串会被当成**一个** token 类型（`_first_token_of_spec` 的
+#   退化分支），该规则的首 token 静默缺失 → 解析出空 AST。
+#   故此处三处关键字交替一律用**裸交替**（同 yaml 的 `"@Scalar|@MergeKey"` 形态）。
+#   分层（存储类 / 限定符 / 类型说明符）是**语法形态**而非语义判定——组合合法性
+#   仍归语义层。
+
+[StorageClass.parser]
+production = [
+    "keyword.typedef|keyword.extern|keyword.static|keyword.auto|keyword.register",
+]
+
+[StorageClass.parser.node]
+
+
+[TypeQualifier.parser]
+production = [
+    "keyword.const|keyword.volatile|keyword.restrict",
+]
+
+[TypeQualifier.parser.node]
+
+
+[TypeSpecifier.parser]
+production = [
+    "keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool",
+]
+
+[TypeSpecifier.parser.node]
+
+
+# SpecRest — 说明符序列的其余部分（`unsigned long long` 等组合靠重复表达）
+[SpecRest.parser]
+production = [
+    "@StorageClass|@TypeQualifier|@TypeSpecifier",
+]
+
+[SpecRest.parser.node]
+
+
+# ── DeclaratorList / Declarator — 声明符（指针 + 直接声明符） ──
+
+[DeclaratorList.parser]
+production = [
+    "@Declarator",
+    "(symbol.base.comma,@Declarator)*",
+]
+
+[DeclaratorList.parser.node]
+first = "$1"
+rest = "$2"
+
+
+[Declarator.parser]
+production = [
+    "@Pointer?",
+    "@DirectDeclarator",
+]
+
+[Declarator.parser.node]
+pointers = "$1"
+direct = "$2"
+
+
+# Pointer — 指针前缀 `*` 序列（自递归表达多级指针）
+# ⚠ 形态约束（实测）：产生式**首个元素不用带量词的括号组** `"(x)*"`——已证可用的
+#   首元素形态是 `"@Rule?"`（verilog `@Range?`）。本规则把重复收进自身递归。
+[Pointer.parser]
+production = [
+    "symbol.base.multiple",
+    "@Pointer?",
+]
+
+[Pointer.parser.node]
+first = "$1"
+more = "$2"
+
+
+[DirectDeclarator.parser]
+production = [
+    "@Identifier|@ParenDeclarator",
+    "(@ArraySuffix|@FuncSuffix)*",
+]
+
+[DirectDeclarator.parser.node]
+head = "$1"
+suffixes = "$2"
+
+
+[ParenDeclarator.parser]
+production = [
+    "bracket.l_parentheses",
+    "@Declarator",
+    "bracket.r_parentheses",
+]
+
+[ParenDeclarator.parser.node]
+inner = "$2"
+
+
+# 数组后缀 `[ size? ]`——阶段 1 只接受数字字面量（表达式在阶段 3）
+[ArraySuffix.parser]
+production = [
+    "bracket.l_square_bracket",
+    "literal.number?",
+    "bracket.r_square_bracket",
+]
+
+[ArraySuffix.parser.node]
+size = "$2"
+
+
+# 函数后缀 `( 参数表? )`
+[FuncSuffix.parser]
+production = [
+    "bracket.l_parentheses",
+    "@ParamList?",
+    "bracket.r_parentheses",
+]
+
+[FuncSuffix.parser.node]
+params = "$2"
+
+
+# ── 参数表 ──
+
+[ParamList.parser]
+production = [
+    "@ParamDecl",
+    "(symbol.base.comma,@ParamDecl)*",
+]
+
+[ParamList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+
+
+[ParamDecl.parser]
+production = [
+    "@TypeSpecifier",
+    "@Declarator?",
+]
+
+[ParamDecl.parser.node]
+type_spec = "$1"
+declarator = "$2"

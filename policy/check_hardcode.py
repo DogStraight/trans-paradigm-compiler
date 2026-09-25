@@ -81,6 +81,12 @@ TOKEN_ALLOWLIST: dict[str, str] = {
     "include": "preprocessor 指令配置键名（_directives_cfg['include']，宏/包含指令配置协议，与 configs 插件 library 的 include 语句同名）",
     "impl": "加工单元配置字段（[pipeline.units.<name>].impl，ADR-0015 §1 显式配置品类）",
     "fn": "postpass 声明解析出的函数引用键（[[analyzer.postpasses]].run → decl['fn']，引擎内部键名）",
+    # C 包（grammar/c）关键字与引擎协议词同名——均为引擎自身词汇，非语言知识。
+    # 加 C 包后本门禁第一次跑到这些冲突（verilog/c4 的关键字不撞这几个词）。
+    "inline": "规则形态字段（[Rule.parser] inline = true）+ renderer 槽名（slots['inline']），与 C 关键字同名",
+    "register": "全局态注册面字段名（GrammarRulesRegister 的 '_default_instance'/'register'），与 C 存储类关键字同名",
+    "auto": "lexer 缩进配置值（indent level == 'auto'），与 C 存储类关键字同名",
+    "switch": "transform 统计键名（engine._stats['switch']），与 C 语句关键字同名",
 }
 
 # 规则 2 allowlist：文档化的默认语言引导路径（产品决策：verilog 为默认

@@ -1,0 +1,51 @@
+# ============================================================================
+# C 语言关键字 Token 定义（ISO/IEC 9899:1999 §6.4.1）
+# ============================================================================
+# 基础标点/运算符/括号在 base/_token.toml。
+#
+# C99 关键字共 37 个（含 C99 新增的 inline / restrict / _Bool / _Complex /
+# _Imaginary）。**阶段 1 先声明全部关键字**（词法面完整），语法规则按其支持的
+# 子集引用——未引用的关键字会被 linter 视为"未期望 token"（负样本判据之一）。
+#
+# ⚠ 标准增量归属待决（阶段 0 记）：`inline` / `restrict` / `_Bool` 是 C99 相对
+#   C89 的新增；若将来要表达"C89 等效"，需再切一层 c89 基线（见缺口档待决项）。
+
+[id]
+[id.keyword]
+auto = "auto"
+break = "break"
+case = "case"
+char = "char"
+const = "const"
+continue = "continue"
+default = "default"
+do = "do"
+double = "double"
+else = "else"
+enum = "enum"
+extern = "extern"
+float = "float"
+for = "for"
+goto = "goto"
+if = "if"
+inline = "inline"
+int = "int"
+long = "long"
+register = "register"
+restrict = "restrict"
+return = "return"
+short = "short"
+signed = "signed"
+sizeof = "sizeof"
+static = "static"
+struct = "struct"
+switch = "switch"
+typedef = "typedef"
+union = "union"
+unsigned = "unsigned"
+void = "void"
+volatile = "volatile"
+while = "while"
+_Bool = "_Bool"
+_Complex = "_Complex"
+_Imaginary = "_Imaginary"

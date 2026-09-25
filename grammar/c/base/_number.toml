@@ -1,0 +1,31 @@
+# _number.toml — C 整数字面量形态（阶段 1；浮点与后缀见下）
+#
+# C99 §6.4.4.1 整型常量：十进制（非零开头）、八进制（前导 0）、十六进制（0x/0X）。
+#
+# ⚠ 阶段 1 **未接**：整型后缀（U/u、L/l、LL/ll 及其组合）与浮点常量
+#   （§6.4.4.2，含小数点/指数/后缀）——它们进阶段 1b（同一批词法面，需扩
+#   [[number.based]] 的 value_allow 表达力后一并做，避免半套后缀被静默接受）。
+
+[[number.based]]
+name = "c_prefix"
+size = "none"
+base_prefix = "0x"
+bases = []
+value_digits = { x = "hex" }
+value_allow = []
+
+[[number.based]]
+name = "c_octal"
+size = "none"
+base_prefix = "0"
+bases = []
+value_digits = { "0" = "oct" }
+value_allow = []
+
+[[number.based]]
+name = "c_dec"
+size = { digits = "nonzero" }
+base_prefix = "none"
+bases = []
+value_digits = { d = "dec" }
+value_allow = []

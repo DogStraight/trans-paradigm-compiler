@@ -1,0 +1,21 @@
+# _lexer.toml — C 词法配置（注释形态）
+#
+# C99 §6.4.9：两种注释——`/* … */`（块，可跨行）与 `// …`（行，C99 新增）。
+# ⚠ 与 c4 演示 DSL 不同：C 的 `#` 不是注释（见 base/_token.toml 头注）。
+
+[comment]
+pairs = [
+  ["/*", "*/", "block"],
+  ["//", "\n", "line"],
+]
+
+[indent]
+enable = false
+level = 4
+
+[token_category]
+# 字面量/操作符分类（Pratt 解析器 token 识别用）
+number = { match = "exact", types = ["literal.number"] }
+string = { match = "exact", types = ["literal.string"] }
+identifier = { match = "prefix", types = ["id", "id."] }
+operator = { match = "prefix", types = ["symbol.base.", "symbol.extend."] }

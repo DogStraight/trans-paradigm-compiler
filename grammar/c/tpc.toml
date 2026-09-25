@@ -1,0 +1,24 @@
+# tpc.toml — C 语言包入口（核心基线 ≈ C99 语法面；标准增量插件见 ROADMAP「C 语言包」）
+#
+# 阶段 1（0.1.3 WS1）：词法 + 类型说明符与声明符。**不含表达式与语句**——初始化器、
+# 函数体、数组长度表达式在阶段 2/3 接上（故本阶段翻译单元 = 外部声明序列）。
+# 分层与接受域清单见 docs/gaps/gap-language-pack-scope.md「C 语言包」节。
+
+[engine]
+# 本包依赖的引擎契约面（逐项能力 + 版本）——任一项引擎不认识或版本不匹配即
+# 加载 fail-fast，报错点名是哪一项（能力表见 core/engine_capabilities.py）。
+uses = [
+    "lexer.token_ext.v1",
+    "parser.pratt.v1",
+]
+
+[lexer]
+token_base = { file = "base/_token.toml", required = true }
+lexer_base = { file = "base/_lexer.toml", required = true }
+token_lang = { file = "token.toml", required = true }
+bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
+number = { file = "base/_number.toml", section = "number", required = false }
+
+[parser]
+token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
+rules = { file = ["0*.toml"], required = true }
