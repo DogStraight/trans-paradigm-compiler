@@ -205,7 +205,7 @@ class ProjectChecker:
         `_external_extra` 交付 postpass；未声明能力的语言包 → 不产生该键（降级）。
 
         ⚠ **引擎不消费任何产物**（P3 收口后）：所有产物都由语言包插件自己读容器
-        （产出方与消费方同源）。故此处**不按角色位取任何东西**——`ROLES` 为空即终态。
+        （产出方与消费方同源）。故此处**不按角色位取任何东西**——角色的**机制**已整体退场。
         """
         source = StructureAtomSource(self._ctx)
         service = ElaborationService(self._ctx)

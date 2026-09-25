@@ -66,7 +66,7 @@ def test_verilog_pack_declares_signal_graph(checker):
     assert spec is not None
     item = next(it for it in spec.items if it.name == "signal_graph")
     assert item.scope == "project"
-    assert item.role is None  # 引擎不再消费 → 无角色位
+    assert not hasattr(item, "role")  # 字段本身已删（P3 收口）
     assert item.provides == ("signal_graph",)
     assert item.depends_on == ("connections", "port_decls", "gen_activity")
     # 依赖序真的生效：三者都排在 signal_graph 之前

@@ -15,7 +15,6 @@
     `depends_on` 项间依赖（引擎按**拓扑序**执行）
     `locator`    **如何从 AST 找到此类值**——声明式：在原子子树内按规则名匹配
     `locator_fn` 同上，但定位本身需要算法（函数名）
-    `role`       引擎角色位（**引擎定义枚举**，见下）——只给"引擎自己要消费的产物"用
   `locator` / `locator_fn` **都可省略**：省略 = 求解器自行在原子子树内定位
   （P2 实测得出：`param_default` 的值分散在"头部 `#(..)` 字段"与"体内
   `ParamDeclStmt`"两种形态，单条规则名表达不了；而"怎么找"本身就是语言知识，
@@ -28,13 +27,11 @@
   **原子键冲突取先**（同一次运行内，同名原子的第一份产物胜出）——与引擎单元索引
   "首个定义者优先"同口径：同名单元在多个文件重复定义时，两边必须指向**同一个**定义，
   否则引擎按单元名取产物会取到另一个文件的值（跨文件检查静默错判）。
-- **角色位 `role`**：条目名由插件定 ⇒ 引擎无法按名寻址自己也要用的产物。`role` 是
-  **引擎定义的封闭枚举**（同 `scope` 的性质，机制面）——声明了角色位的项，其**唯一**
-  `provides` 键即该角色的容器键，引擎按角色取（见 `Elaborator.role_key`）。
-  现役角色只有 `gen_activity`（generate 分支活性：`{文件路径: {id(节点): bool}}`，
-  引擎侧消费方 = 层 3 的驱动过滤；层 3 迁入协议后此角色应随之退场）。
-  ⚠ **角色位一律是过渡面**——终态下引擎不消费任何插件产物，故重构收口时 `ROLES`
-  应为空（可机械检查）。
+- **角色位已退场**（ADR-0019 P3 收口）：`role` 曾是"引擎消费插件产物"的寻址机制
+  （条目名由插件定，引擎无法按名寻址自己也要用的产物）。终态下引擎**不消费任何插件
+  产物**，故该字段连同 `ROLES` / `role_key` 一并删除——项集合里不再有"引擎自己要用
+  的产物"这类成员。**不留垫片**：现声明 `role` 会被"未知键"在加载期拦下（响亮失败）。
+  将来若确有此需求，按同一契约重新登记（判据与历史见 ADR-0019 角色位契约表）。
 - 未声明能力 → 引擎**降级**（不提取、不注入容器）；声明非法 → fail-fast。
 
 ⚠ 与 `pipeline/schedule.py::_verify_produced`（声明 = 物化，双向一致）的**刻意差异**：
@@ -58,22 +55,6 @@ SCOPE_UNIT = "unit"
 SCOPE_PROJECT = "project"
 SCOPES: frozenset[str] = frozenset({SCOPE_FILE, SCOPE_UNIT, SCOPE_PROJECT})
 
-# ── 引擎角色位（引擎定义枚举 = 机制面；只给"引擎自己要消费的产物"用） ──
-# ⚠ 角色位**一律是过渡面**：终态（ADR-0019 决策 1）下引擎不消费任何插件产物，
-#    故精化基座重构收口时 `ROLES` 应为空——这是"重构完成"的可机械检查判据。
-#    每个角色**同时**定义寻址键与产物形状（引擎要消费它，与普通条目"形状归插件"不同）。
-ROLES: frozenset[str] = frozenset()
-"""引擎角色位——**现役为空**（ADR-0019 P3 收口后的终态）。
-
-角色位是"引擎消费插件产物"的寻址机制：引擎一旦不再消费某产物，那个角色就该退场。
-P3 收口后**引擎不消费任何插件产物**（层 2/3 与 generate 求值都在语言包侧，产出方与
-消费方同源），故此处为空——**这就是"重构完成"的可机械检查判据**。
-
-历史（均已退场，见 ADR-0019 的角色位契约表）：`unit_constants`（P3-①）、
-`unit_connections` / `unit_signal_graph`（P3-②c-1）、`unit_ports` / `gen_activity`
-（P3-②c-2b）。机制本身保留：将来若确有"引擎自己要用的产物"，按同一契约登记新角色即可。
-"""
-
 # ── 声明键（未知键 fail-fast：拼错立刻可见，不静默忽略） ──
 ITEM_KEYS: frozenset[str] = frozenset(
     {
@@ -84,7 +65,6 @@ ITEM_KEYS: frozenset[str] = frozenset(
         "solver",
         "provides",
         "depends_on",
-        "role",
     }
 )
 SPEC_KEYS: frozenset[str] = frozenset({"items", "solvers"})
@@ -113,14 +93,13 @@ class ElaborationItem:
     depends_on: tuple[str, ...] = ()
     locator: Locator | None = None
     locator_fn: str | None = None
-    role: str | None = None
 
 
 @dataclass(frozen=True)
 class ElaboratorSpec:
     """语言包声明的精化能力面（项列表 + 求解函数表）。
 
-    `solvers` 同时承担 `locator_fn` 的解析（角色由项声明决定，不另立一张表）。
+    `solvers` 同时承担 `locator_fn` 的解析（不另立一张表）。
     """
 
     items: tuple[ElaborationItem, ...]
@@ -129,14 +108,6 @@ class ElaboratorSpec:
     def order(self) -> tuple[ElaborationItem, ...]:
         """按 `depends_on` 拓扑序排列（同层保持声明序，结果确定；环 → fail-fast）。"""
         return _topo_order(self.items)
-
-    def role_key(self, role: str) -> str | None:
-        """该引擎角色位对应的容器键（无项声明该角色 → None）。"""
-        for item in self.items:
-            if item.role == role:
-                return item.provides[0]
-        return None
-
 
 # ── 声明解析（fail-fast：任一处不合法直接报错，不静默降级） ──
 
@@ -265,21 +236,6 @@ def _parse_item(
 
     locator, locator_fn = _parse_locator(item, name, solvers)
 
-    role = item.get("role")
-    if role is not None:
-        if role not in ROLES:
-            raise ConfigError(
-                f"[elaborator] 精化项 '{name}' role 须是引擎角色之一 "
-                f"{sorted(ROLES)}，得到 {role!r}"
-            )
-        if len(provides) != 1:
-            raise ConfigError(
-                f"[elaborator] 精化项 '{name}' 声明了 role={role!r}，其 provides "
-                f"须恰好一个键（引擎按角色取唯一产物），得到 {provides!r}"
-            )
-        # scope 不限：寻址键由**角色契约**定义（`gen_activity` = 文件路径），
-        # 不是全局约束（原设 role ⇒ scope==unit 已放宽）。
-
     return ElaborationItem(
         name=name,
         scope=scope,
@@ -288,7 +244,6 @@ def _parse_item(
         depends_on=depends_on,
         locator=locator,
         locator_fn=locator_fn,
-        role=role,
     )
 
 
@@ -304,21 +259,6 @@ def _reject_duplicate_provides(items: Sequence[ElaborationItem]) -> None:
                     f"'{it.name}'（同一键只能有一个产出方）"
                 )
             owner[key] = it.name
-
-
-def _reject_duplicate_roles(items: Sequence[ElaborationItem]) -> None:
-    """引擎角色位跨项唯一：两个项应答同一角色 → 引擎按角色取值就有歧义。"""
-    owner: dict[str, str] = {}
-    for it in items:
-        if it.role is None:
-            continue
-        prev = owner.get(it.role)
-        if prev is not None:
-            raise ConfigError(
-                f"[elaborator] 引擎角色 '{it.role}' 被多项声明: '{prev}' 与 "
-                f"'{it.name}'"
-            )
-        owner[it.role] = it.name
 
 
 def parse_spec(raw: Any) -> ElaboratorSpec:
@@ -358,7 +298,6 @@ def parse_spec(raw: Any) -> ElaboratorSpec:
             )
 
     _reject_duplicate_provides(items)
-    _reject_duplicate_roles(items)
     result = ElaboratorSpec(items=items, solvers=dict(solvers))
     result.order()  # 环探测（加载期 fail-fast）
     return result

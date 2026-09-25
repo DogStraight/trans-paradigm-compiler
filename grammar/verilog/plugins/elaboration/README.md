@@ -11,7 +11,7 @@
 | `_elaborator.py` | `build_elaborator()` 项列表 + 参数/端口/连接/generate 四项的求解函数 |
 | `_graph.py` | 层 3 信号图（`signal_graph` 项，400 行搬迁自引擎 `SignalGraphBuilder`）——分文件是为了不让单文件过大 |
 
-## 现役项（6 项，**均无引擎角色位**）
+## 现役项（6 项，**均无角色位**——机制已退场）
 
 | 项 | 作用域 | 容器键 | 内容 |
 |---|---|---|---|
@@ -39,14 +39,15 @@ connections ────depends_on──▶ param_override │
 前项产物——引擎不中转、不解释。层 3 一次消费**三个**自身产物（`connections` /
 `port_decls` / `gen_activity`），这是依赖通道被用满的地方。
 
-## 引擎角色位：**现役为空**（重构终态）
+## 引擎角色位：**机制已整体退场**（重构终态）
 
 `role` 曾是"引擎自己要用的产物"的寻址机制（引擎定义的封闭枚举）。**P3 收口后引擎不消费
-任何插件产物**（层 2/3 与 generate 求值都在本插件侧，产出方与消费方同源），故
-`analyzer/elaboration/contract.py::ROLES` **为空**，且**任何 role 声明都会被拒**（加载期
-fail-fast）——这正是"重构完成"的可机械检查判据。
+任何插件产物**（层 2/3 与 generate 求值都在本插件侧，产出方与消费方同源），故该机制
+**整体删除**（`role` 字段 / `ROLES` 枚举 / `role_key`）——**不留登记槽**：`ROLES` 为空时
+任何 role 声明都必然 fail-fast，字段已不可合法使用，留着只是"不可用的配置面"。
+现声明 `role` 会被"未知键"在加载期拦下（响亮失败，不静默忽略）。
 
-历史（均已退场）：`unit_constants`（P3-①）、`unit_connections` / `unit_signal_graph`
+历史角色（逐阶段退场）：`unit_constants`（P3-①）、`unit_connections` / `unit_signal_graph`
 （P3-②c-1）、`unit_ports` / `gen_activity`（P3-②c-2b）。
 
 ## 消费方（全部在语言包内，读产物容器）
@@ -56,7 +57,7 @@ fail-fast）——这正是"重构完成"的可机械检查判据。
 
 | 消费方 | 读什么 | 用途 |
 |---|---|---|
-| `checks/width_check` | `param_default` + `port_decls` | 参数化宽度求值；端口连接宽度（位置连接按**声明序**匹配端口） |
+| `checks/width_check` | `param_default` + `port_decls` + `param_override` | 参数化宽度求值；端口连接宽度（位置连接按**声明序**匹配端口）；实例化点覆盖后参数表（B3/B4，经 `_shared.override_of`） |
 | `checks/hier_check` | `param_default` + `port_decls` | 层次成员/端口宽度 |
 | `checks/latch_check` | `param_default` | 参数化条件判定（**不碰端口**） |
 | `checks/inst_check` | 四者 | W101/W102/W103/W104/W105/WC001——命名/位置连接、参数名集合、驱动/负载图 |

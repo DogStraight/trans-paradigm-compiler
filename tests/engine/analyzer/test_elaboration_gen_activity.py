@@ -36,7 +36,7 @@ from core._protocol import CTX_ELABORATION
 from core.define import Node
 
 from analyzer.checker import ProjectChecker
-from analyzer.elaboration import ROLES, SolveCtx, load_elaborator_spec
+from analyzer.elaboration import SolveCtx, load_elaborator_spec
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
@@ -86,7 +86,7 @@ def test_verilog_pack_declares_gen_activity(checker):
     assert spec is not None
     item = next(it for it in spec.items if it.name == "gen_activity")
     assert item.scope == "file"
-    assert item.role is None  # 引擎不再消费 → 无角色位（P3-②c-2b）
+    assert not hasattr(item, "role")  # 字段本身已删（P3 收口）
     assert item.provides == ("gen_activity",)
     assert item.depends_on == ("param_default",)
     order = [it.name for it in spec.order()]
@@ -235,5 +235,5 @@ def test_engine_side_gen_evaluation_is_retired(checker):
     assert checker._ctx.field("gen_condition") == ""
     assert checker._ctx.field("gen_then") == ""
     assert checker._ctx.field("gen_else_chain") == ""
-    # `unit_constants` 角色位已退场（generate 求值不再经引擎中转参数表）
-    assert checker._elaborator.role_key("unit_constants") is None
+    # generate 求值不再经引擎中转参数表（且角色的机制已整体退场）
+    assert not hasattr(checker._elaborator, "role_key")

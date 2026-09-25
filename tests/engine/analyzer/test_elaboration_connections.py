@@ -60,15 +60,14 @@ def _plugin(checker: ProjectChecker) -> dict:
 
 @pytest.mark.smoke
 def test_verilog_pack_declares_connections(checker):
-    """语言包必须声明 `connections` 项（作用域；引擎角色位已随层 2/3 迁出退场）。"""
+    """语言包必须声明 `connections` 项（作用域；角色的**机制**已随层 2/3 迁出退场）。"""
     checker._prepare_run([])
     spec = load_elaborator_spec("grammar/verilog")
     assert spec is not None
     item = next(it for it in spec.items if it.name == "connections")
     assert item.scope == "file"
-    assert item.role is None  # 引擎不再消费 → 无角色位
+    assert not hasattr(item, "role")  # 字段本身已删（不是"值为 None"）
     assert item.provides == ("connections",)
-    assert spec.role_key("unit_connections") is None
 
 
 # ── 2. 等价性对拍（搬迁的前提） ──

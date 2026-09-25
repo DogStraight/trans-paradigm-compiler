@@ -79,13 +79,6 @@ class Elaborator:
         """该语言包是否声明了精化能力。"""
         return self._spec is not None
 
-    def role_key(self, role: str) -> str | None:
-        """该引擎角色位对应的容器键（无声明 / 未声明能力 → None）。
-
-        引擎**不按插件起的条目名**寻址自己也要用的产物——只按角色位问。
-        """
-        return None if self._spec is None else self._spec.role_key(role)
-
     def container(self) -> dict[str, dict[str, Any]]:
         """空容器：为每个声明的容器键**预置空表**。
 

@@ -53,15 +53,14 @@ def _plugin_ports(checker: ProjectChecker) -> dict:
 
 @pytest.mark.smoke
 def test_verilog_pack_declares_port_decls(checker):
-    """语言包必须声明 `port_decls` 项（含引擎角色位与作用域）——缺声明即静默降级。"""
+    """语言包必须声明 `port_decls` 项（作用域）——缺声明即静默降级。"""
     checker._prepare_run([])
     spec = load_elaborator_spec("grammar/verilog")
     assert spec is not None
     item = next(it for it in spec.items if it.name == "port_decls")
     assert item.scope == "unit"
-    assert item.role is None  # 引擎不再消费 → 无角色位（P3-②c-2b）
+    assert not hasattr(item, "role")  # 字段本身已删（P3 收口）
     assert item.provides == ("port_decls",)
-    assert spec.role_key("unit_ports") is None
 
 
 # ── 2. 等价性对拍（搬迁的前提） ──

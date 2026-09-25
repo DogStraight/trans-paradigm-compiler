@@ -22,7 +22,6 @@ from core.define import Node
 from core.errors import ConfigError
 
 from analyzer.elaboration import (
-    ROLES,
     SCOPE_FILE,
     SCOPE_UNIT,
     Atom,
@@ -31,6 +30,7 @@ from analyzer.elaboration import (
     load_elaborator_spec,
     parse_spec,
 )
+from analyzer.elaboration import contract
 from analyzer.elaboration.contract import Locator
 
 
@@ -142,31 +142,21 @@ def test_container_key_unique_across_items():
         parse_spec(_spec(items))
 
 
-def test_roles_are_empty_at_terminal_state():
-    """**终态判据**：`ROLES` 为空 → 任何 role 声明都被拒。
+def test_role_mechanism_is_retired_at_terminal_state():
+    """**终态判据（强式）**：角色位机制**整体退场**——不只是"现役为空"。
 
-    角色位是"引擎消费插件产物"的寻址机制；P3 收口后引擎不消费任何产物，故没有合法
-    角色——这是"角色位一律是过渡面"的可机械检查后果（引擎不解释语义 ⇔ 无需按名寻址）。
+    角色位是"引擎消费插件产物"的寻址机制；P3 收口后引擎不消费任何产物，故该机制
+    连**登记槽**一起删（`ROLES` / `ElaboratorSpec.role_key` / `Elaborator.role_key` /
+    项的 `role` 字段）——留着就是"不可合法使用的配置面"（`ROLES` 空时任何 role 声明
+    必然 fail-fast），正是硬约束"不留向后兼容"的对象。
     """
-    assert ROLES == frozenset(), f"ROLES 应为空（终态判据），实得 {sorted(ROLES)}"
-    with pytest.raises(ConfigError, match="引擎角色"):
-        parse_spec(_spec([_item(role="gen_activity", scope=SCOPE_FILE)]))
-
-
-def test_role_key_none_when_role_not_declared():
-    spec = parse_spec(_spec([_item()]))
-    assert spec.role_key("unit_constants") is None
-    assert spec.role_key("gen_activity") is None
-
-
-def test_duplicate_role_across_items_rejected():
-    """两个项应答同一角色 → 引擎按角色取值有歧义。"""
-    items = [
-        _item(name="i1", provides=["ka"], role="gen_activity"),
-        _item(name="i2", provides=["kb"], role="gen_activity"),
-    ]
-    with pytest.raises(ConfigError, match="引擎角色"):
-        parse_spec(_spec(items))
+    assert not hasattr(contract, "ROLES"), "ROLES 登记槽应已随机制退场"
+    assert not hasattr(ElaboratorSpec, "role_key")
+    assert not hasattr(Elaborator, "role_key")
+    assert "role" not in contract.ITEM_KEYS
+    # 声明面：`role` 成了未知键 → 加载期**响亮失败**（不静默忽略、不留兼容垫片）
+    with pytest.raises(ConfigError, match="未知键"):
+        parse_spec(_spec([_item(role="gen_activity")]))
 
 
 def test_depends_on_cycle_fails_at_load_time():

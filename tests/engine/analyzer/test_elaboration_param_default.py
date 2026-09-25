@@ -11,7 +11,7 @@
 1. 语言包确实声明了 `elaborator` 能力与 `param_default` 项（声明缺失 = 静默降级）；
 2. golden 值：头部参数 / 体内参数（含多声明符）/ 无参数单元；
 3. **引擎角色位已退场**（P3-①：gen 求值迁入插件后，单元常量只经插件间依赖通道消费，
-   引擎不再中转）——本项**无** `role`；
+   引擎不再中转）——角色的**机制**已整体退场；
 4. 未声明能力的语言包 → 降级（无容器键、无角色产物）。
 
 ⚠ 夹具源码形态受**语法包当前覆盖**限制：头部多参数必须**逐个重复 `parameter`
@@ -86,7 +86,7 @@ def test_verilog_pack_declares_elaborator(checker):
     item = next(it for it in spec.items if it.name == "param_default")
     assert item.scope == "unit"
     # 无引擎角色位：单元常量只经插件间依赖通道（`gen_activity` 的 depends_on）消费
-    assert item.role is None
+    assert not hasattr(item, "role")  # 字段本身已删（P3 收口）
     assert item.provides == ("param_default",)
 
 
@@ -109,18 +109,17 @@ def test_param_default_body_overrides_are_not_engine_responsibility(checker, pro
     assert "X" in lib_params and "Y" in lib_params and "Z" in lib_params
 
 
-# ── 3. 引擎角色位（过渡期 generate 条件求值的来源） ──
+# ── 3. 引擎侧单元常量已退场（只由产物承载） ──
 
-def test_role_unit_constants_is_retired(checker, project):
+def test_engine_side_unit_constants_is_retired(checker, project):
     """P3-① 后：引擎侧 `unit_constants` **已退场**——单元常量只由产物承载。
 
     generate 条件求值改由插件自己的 `gen_activity` 求解器经 `ctx.products` 读取
-    （不经引擎中转），故引擎不再需要该角色位（`ROLES` 里已无 `unit_constants`）。
-    本用例锁住"退场"，防它被无意中搬回引擎。
+    （不经引擎中转），故引擎不再需要"引擎侧常量表"这条路；角色的**机制**随后整体
+    退场（P3 收口）。本用例锁住"退场"，防它被无意中搬回引擎。
     """
     checker.check(str(project))
     assert _params_of(checker)["lib"] == _GOLDEN_LIB
-    assert checker._elaborator.role_key("unit_constants") is None
     assert not hasattr(checker._ctx, "unit_constants")
 
 
@@ -152,11 +151,10 @@ def test_duplicate_unit_name_keeps_the_first_definition(checker, tmp_path):
 
 
 def test_pack_without_capability_degrades():
-    """c4 未声明 `elaborator` → 无容器键、无角色产物（与旧行为一致）。"""
+    """c4 未声明 `elaborator` → 无容器键、无任何产物（与旧行为一致）。"""
     checker = ProjectChecker(rules_dir="grammar/c4")
     checker._prepare_run([])
     assert checker._elaborator.declared is False
-    assert checker._elaborator.role_key("gen_activity") is None
 
     checker._elaborate()
     assert CTX_ELABORATION not in checker._elab_extra

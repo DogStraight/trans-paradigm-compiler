@@ -82,7 +82,7 @@ def test_verilog_pack_declares_param_override(checker):
     assert spec is not None
     item = next(it for it in spec.items if it.name == "param_override")
     assert item.scope == "file"
-    assert item.role is None  # 引擎不消费 → 无角色位（终态）
+    assert not hasattr(item, "role")  # 字段本身已删（终态）
     assert item.provides == ("param_override",)
     assert item.depends_on == ("param_default", "connections")
     order = [it.name for it in spec.order()]
