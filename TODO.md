@@ -72,10 +72,27 @@
       即 `setup_grammar` 报 `RecursionError`（FIRST/nullable 推导遇环溢出）。
       上一轮委派尝试（产物存 `_drafts/stage3_wip/`）正是缺这些标记而失败；
       照 c4 验证过的形态重做后**一次通过**。
-- [ ] **阶段 3 Layer C（控制流）+ 后缀链**：`if/else`、`while`、`do/while`、`for`
-      （含 C99 声明式）、`switch/case/default`、`break/continue`、`goto/标号`；
-      以及后缀链（调用 `f(a)` / 下标 `a[i]` / 成员 `a.b`、`a->b`）——后者照 c4 的
-      **原子形态**（`CallExpr`/`IndexExpr` 为 `is_atom`，下标用 `(...)+` 链）。
+- [x] **阶段 3 Layer B2+C——已完成**：
+      **B2 后缀链** = `CallExpr`（`f(a, b)` / `f()`）/ `IndexExpr`（`a[i][j]`）/
+      `MemberExpr`（`a.b` / `p->q`）/ `ArgumentList`——三个后缀形态均 `is_atom`
+      （内部含 `@Expression`，环只能在原子规则里被 pratt 截断）；
+      **C 控制流** = `IfStmt`（含 else）/ `WhileStmt` / `DoWhileStmt` / `ForStmt`
+      （三段全可省，`for (;;)` 合法）/ `SwitchStmt` / `CaseLabel` / `DefaultLabel` /
+      `BreakStmt` / `ContinueStmt` / `GotoStmt` / `LabelStmt`，`Stmt` 选择器扩到 15 分支。
+      测试：`test_c_postfix.py` 13 例、`test_c_control_flow.py` 19 例（断言结构与**顺序**，
+      不只"能解析"）。
+      ⚠ **两条"未支持即报错"的边界由测试守住**（防"看起来支持"）：`f(a)[i]` 链式后缀、
+      `for (int i = 0; …)` 声明式初值（后者需初始化器 → 阶段 2b）。
+      ⚠ 踩坑（已记入测试注释）：inline 交替选择器与可选位命中规则分支时会套一层 `seq`，
+      且 `seq` 子节点里既有 token 也有规则节点——解包要挑规则节点（`_unwrap` 助手）。
+- [x] **阶段 3 全部层级完成**（Layer A 原子/入口/最小语句/函数定义 → B 运算符表与优先级
+      → B2 后缀链 → C 控制流）。C 包核心基线现已可解析：声明 / 类型说明符（含
+      struct/union/enum 与 typedef 名）/ 函数原型与定义 / 完整表达式优先级 /
+      后缀链 / 控制流。
+- [ ] **真实语料扩容（阶段 3 后必做）**：`tests/languages/c/samples/ring_buffer.h` 目前只有
+      声明面（阶段 1/2a 时写的）。阶段 3 已支持函数体/表达式/控制流，应补一份**含实现**
+      的 `.c` 样本（函数定义 + 控制流 + 表达式 + 调用）并把语料断言扩到那边——
+      否则"真实语料"这层验证停在旧阶段。
 - [ ] **阶段 2b 词法与类型剩余**：位域 `int x : 3`、初始化器（含指示符 `.f=`/`[i]=`）、
       数组长度常量表达式、整型后缀（U/L/LL）与浮点字面量、字符/字符串转义表。
 ：完整运算符优先级与结合性、`sizeof`/`_Alignof`、强制转换、
