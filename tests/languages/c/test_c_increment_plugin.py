@@ -10,12 +10,11 @@
 4. **解析形态确实变了**：`_Static_assert(1, "x");` → `StaticAssertDecl`
    （条件与消息都挂上）。
 
-⚠ **实测发现（记入缺口档与 TODO）**：本仓当前**没有运行时的启用/停用开关**——
-`<pack>/plugins/` 是随包**自动发现**的（`setup_grammar(rules_dir, register, ext_dirs)`
-没有 enabled 参数；`load_language(pack, plugins_dir=…)` 指定与否都加载到同一份）。
-语言包 `tpc.toml` 里的 `[plugins] enabled` 属**打包/分发面**清单。故 ROADMAP 说的
-"启用组合等效某个标准"目前只能在**打包面**或**pack 副本**上表达，不能在一次运行里
-切换两档——这是"标准插件族"形态缺的那块，已登记。
+**启用入口（本轮实测更正）**：语言包 `tpc.toml` 的 `[plugins] enabled` 就是
+**运行时启用清单**——它决定哪些插件目录的声明被合并（含 `[lexer] token_ext`）。
+⚠ 上一轮我把这份清单当成"打包/分发面装饰"，**是错的**：加它之前 `_Static_assert`
+一直是标识符；加上后立刻成为关键字。故 ROADMAP 说的"启用组合等效某标准"**在运行时
+可表达**（改这份清单即可）；差异只在"同一次进程内切两档"需要重载或 pack 副本。
 """
 
 import os
@@ -61,7 +60,7 @@ def _load():
     parser = Parser(
         rules_dir=_PACK, rules=rules, rule_selector=RuleSelector(rules, stmt), log_file=""
     )
-    lexer = Lexer(rules_dir=_PACK)
+    lexer = Lexer(rules_dir=_PACK, ext_dirs=[_PLUGINS])
     return rules, (lambda src: parser.parse(lexer.tokenize(src)))
 
 
@@ -82,24 +81,27 @@ class TestPluginIsLoadedWithPack:
         rules, _ = _load()
         assert "StaticAssertDecl" in rules
 
-    def test_construct_not_yet_parsed_as_plugin_node(self, restore_language):
-        """⚠ **缺口（本轮钉住现状）**：规则已从插件加载，但**词法扩展未接通**——
-        `_Static_assert` 仍是标识符，故 `_Static_assert(1, "x");` 被解析成
-        `ExprStmt`（当作函数调用），而**不是**插件的 `StaticAssertDecl`。
+    def test_construct_parses_into_plugin_node(self, restore_language):
+        """`_Static_assert(1, "x");` → 插件的 `StaticAssertDecl`。
 
-        证据与下一步（已记缺口档）：`setup_grammar(..., ext_dirs=[plugins])` **不足以**
-        让 `[lexer] token_ext` 生效；verilog 侧的用法是把 `ext_dirs` 传给
-        **`LinterScanner(rules_dir=…, ext_dirs=["…/plugins"])`**（见
-        `tests/languages/verilog/test_2005_batch2.py`）。下一步先确认
-        `Lexer`/`LinterScanner` 是怎么消费 `ext_dirs` 的，再把本用例改为断言
-        `["StaticAssertDecl"]`。**不要**为了让它变绿而改断言迁就现状。
+        ⚠ **接通条件（本轮实测得出，勿再按"打包面"理解）**：插件必须在语言包
+        `tpc.toml` 的 `[plugins] enabled` 清单里 —— 那份清单是**运行时启用清单**，
+        `load_language(pack, plugins_dir=…)` 只在被列出的插件上合并声明（含
+        `[lexer] token_ext` 的词法扩展）。对照证据：verilog 的 `nand`（plugin 关键字）
+        在 verilog 下**无需任何 ext_dirs** 即为关键字，因为 verilog 的 `enabled`
+        列了 gates。
         """
         _, parse = _load()
-        names = _names(parse(_SRC_MIN))
-        assert names == ["ExprStmt"], (
-            f"形态变了（现为 {names}）——若词法扩展已接通，请把本用例改为断言 "
-            '["StaticAssertDecl"] 并同步缺口档'
-        )
+        ast = parse(_SRC_MIN)
+        assert _names(ast) == ["StaticAssertDecl"], _names(ast)
+
+    def test_condition_and_message_are_bound(self, restore_language):
+        _, parse = _load()
+        node = parse(_SRC_MIN).sub_node[0]
+        assert node.cond.node_name == "Number"
+        # `message` 绑定的是 **token**（production 里直接写 `literal.string`），
+        # 故其节点名即 token 类型——不是 `StringLiteral` 那条规则（规则只在表达式位置用）。
+        assert node.message.node_name == "literal.string"
 
 
 class TestIncrementLivesOutsideBaseline:

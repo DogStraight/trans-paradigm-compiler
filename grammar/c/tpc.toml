@@ -25,3 +25,12 @@ number = { file = "base/_number.toml", section = "number", required = false }
 operator_defs = { file = "base/_operator.toml", section = "operator", required = true }
 token_categories = { file = "base/_lexer.toml", section = "token_category", required = true }
 rules = { file = ["0*.toml"], required = true }
+
+# ── 插件清单（核心基线之外的增量） ──
+# ⚠ 这份清单**不是**打包面的装饰：实测 `load_language(pack, plugins_dir=…)` 只在该清单
+#   列出的插件上合并其声明（含 `[lexer] token_ext` 的词法扩展）。对照：verilog 的
+#   `nand`（plugins/syntax/gates 的关键字）在 verilog 下无需任何 ext_dirs 即为关键字，
+#   因为 verilog 的 `[plugins] enabled` 列出了 gates。
+#   故"启用组合等效某个标准"的运行入口就在这里——c11 已启用；c17/c23 待落地后追加。
+[plugins]
+enabled = ["c11"]

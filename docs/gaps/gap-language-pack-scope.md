@@ -205,7 +205,7 @@ grammar/c/
 会失败并提醒同步本档。
 
 
-## 增量插件形态实测：**缺运行时启用开关**（2026-09-25）
+## 增量插件形态实测：**启用入口 = `[plugins] enabled`**（2026-09-25，含一处自我更正）
 
 C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_assert` + C11 六个新
 关键字的词法扩展）。实测三点：
@@ -244,3 +244,23 @@ C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_asse
 （`core.define.DEFAULT_EXT_DIRS` 的派生链是入口），确认语言包插件目录该以什么身份
 进入词法扩展；接通后把 `test_construct_not_yet_parsed_as_plugin_node` 改为断言
 `["StaticAssertDecl"]`。**不要**改断言迁就现状。
+
+
+### ⚠ 自我更正（同轮）：启用入口**存在**，就在语言包 `[plugins] enabled`
+
+上一版本档写"本仓没有运行时的启用/停用开关、`[plugins] enabled` 只是打包面清单"——
+**该结论是错的**，实测反证：
+
+- C 包加 `[plugins] enabled = ["c11"]` **之前**：`_Static_assert` 被分词为 `id`，
+  `_Static_assert(1, "x");` 解析成 `ExprStmt`（函数调用），插件规则永不匹配；
+- 加**之后**：`_Static_assert` 即为 `keyword._Static_assert`，解析成
+  `StaticAssertDecl` ✓；
+- 对照证据：verilog 的 `nand`（`plugins/syntax/gates/_token_ext.toml` 声明）在 verilog
+  下**无需任何 `ext_dirs`** 就是关键字——因为 verilog 的 `enabled` 列了 `gates`；
+- `Lexer(..., ext_dirs=…)` / `setup_grammar(..., ext_dirs=…)` 传插件的**实测都无效**
+  （三种粒度试过），真正生效的是 `load_language` 时按 `enabled` 合并声明。
+
+**由此**：ROADMAP 的"`enabled` 组合等效某个标准"**在运行时即可表达**（改这份清单）。
+仅剩一处待办：**同一次进程内切两档**（基线档 / c11 档）需要重载配置或 pack 副本——
+若要做"各标准接受域断言"的对照测试，需要一个显式的组合覆盖入口（`enabled` 覆盖参数），
+或按档位准备 pack 副本。这是**易用性**问题，不再是**能力缺失**。

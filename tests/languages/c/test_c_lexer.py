@@ -8,6 +8,8 @@
 不要用会先被 Python 解释一层再被断言解释一层的写法（本轮为此踩过一次）。
 """
 
+import os
+
 import pytest
 
 from core.config_registry import ConfigRegistry
@@ -19,7 +21,7 @@ _RULES = "grammar/c"
 @pytest.fixture(scope="module")
 def c_lexer(config_loaded):
     del config_loaded
-    ConfigRegistry.load_language(_RULES)
+    ConfigRegistry.load_language(_RULES, plugins_dir=os.path.join(_RULES, "plugins"))
     yield Lexer(rules_dir=_RULES)
     ConfigRegistry.load_language(
         "grammar/verilog", plugins_dir="grammar/verilog/plugins"
