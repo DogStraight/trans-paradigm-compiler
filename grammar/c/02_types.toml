@@ -1,0 +1,164 @@
+# ============================================================================
+# C 语法规则 — 类型说明符与类型定义（阶段 2a）
+# ============================================================================
+# C99 §6.7.2（类型说明符）/ §6.7.2.1（struct/union）/ §6.7.2.2（enum）/
+# §6.7.3（类型定义 typedef 名）。
+#
+# 阶段 2a 支持：
+#   struct/union 说明符：带标签（可选成员体）/ 匿名（必须有成员体）
+#   enum 说明符：带标签（可选枚举体）/ 匿名
+#   成员声明（结构体成员 = 说明符 + 声明符列表 + `;`）
+#   枚举项（`NAME` 或 `NAME = 数字字面量`）
+#   **typedef 名作类型**（`myint x;`——语法层宽进，靠语义层区分类型名与变量名）
+#
+# 阶段 2a **不支持**（留阶段 2b/3）：位域 `int x : 3`、成员初始化器、
+#   枚举值用一般常量表达式（本阶段只接受数字字面量）、`_Alignas`、属性。
+#
+# ⚠ **typedef 名的歧义是刻意留给语义层的**：把 `@TypedefName` 放进说明符交替后，
+#   "以标识符开头的语句"既可能是声明（`myint x;`）也可能是表达式语句（`x = 1;`）。
+#   C 靠符号表消歧（typedef 名在普通标识符命名空间里是"类型"）；本包同样把这一步
+#   留给语义层——**阶段 3 接表达式语句时必须处理该歧义**（届时按符号表判定，
+#   而不是在语法层瞎猜）。
+
+# ── StructSpecifier / UnionSpecifier ──
+# 带标签：`struct tag` / `struct tag { … }`
+# 匿名：`struct { … }`（typedef 匿名结构体是 C 里最常见的用法之一）
+
+[StructSpecifier.parser]
+production = [
+    "@StructOrUnion",
+    "@Identifier",
+    "@StructBody?",
+]
+
+[StructSpecifier.parser.node]
+kind = "$1"
+tag = "$2"
+body = "$3"
+
+
+[AnonStructSpecifier.parser]
+production = [
+    "@StructOrUnion",
+    "@StructBody",
+]
+
+[AnonStructSpecifier.parser.node]
+kind = "$1"
+body = "$2"
+
+
+[StructOrUnion.parser]
+production = [
+    "keyword.struct|keyword.union",
+]
+
+[StructOrUnion.parser.node]
+
+
+[StructBody.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "@StructMember*",
+    "bracket.r_curly_bracket",
+]
+
+[StructBody.parser.node]
+members = "$2"
+
+
+# 成员声明：说明符 + 声明符列表 + `;`（位域在阶段 2b）
+[StructMember]
+is_statement = true
+
+[StructMember.parser]
+production = [
+    "@MemberSpec",
+    "@DeclaratorList",
+    "symbol.base.semicolon",
+]
+
+[StructMember.parser.node]
+specs = "$1"
+declarators = "$2"
+
+
+[MemberSpec.parser]
+production = [
+    "@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier|@TypedefName",
+    "@SpecRest*",
+]
+
+[MemberSpec.parser.node]
+first = "$1"
+rest = "$2"
+
+
+# ── EnumSpecifier ──
+
+[EnumSpecifier.parser]
+production = [
+    "keyword.enum",
+    "@Identifier",
+    "@EnumBody?",
+]
+
+[EnumSpecifier.parser.node]
+tag = "$2"
+body = "$3"
+
+
+[AnonEnumSpecifier.parser]
+production = [
+    "keyword.enum",
+    "@EnumBody",
+]
+
+[AnonEnumSpecifier.parser.node]
+body = "$2"
+
+
+[EnumBody.parser]
+production = [
+    "bracket.l_curly_bracket",
+    "@Enumerator",
+    "(symbol.base.comma,@Enumerator)*",
+    "symbol.base.comma?",
+    "bracket.r_curly_bracket",
+]
+
+[EnumBody.parser.node]
+first = "$2"
+rest = "$3"
+
+
+# 枚举项：`NAME` 或 `NAME = 数字字面量`（一般常量表达式在阶段 3）
+[Enumerator.parser]
+production = [
+    "@Identifier",
+    "(symbol.base.equal,literal.number)?",
+]
+
+[Enumerator.parser.node]
+name = "$1"
+value = "$2"
+
+
+# ── 简单类型说明符（内建类型词）与 typedef 名 ──
+# `@TypedefName` 只是"标识符作类型"的语法占位——是不是真的 typedef 名由语义层判定。
+
+[SimpleType.parser]
+production = [
+    "(keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool)",
+]
+
+[SimpleType.parser.node]
+
+
+[TypedefName.parser]
+production = [
+    "@Identifier",
+]
+
+[TypedefName.parser.node]
+name = "$1"

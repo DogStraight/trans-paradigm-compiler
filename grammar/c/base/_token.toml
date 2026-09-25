@@ -36,7 +36,6 @@ colon = ":"
 semicolon = ";"
 comma = ","
 dot = "."
-assign = "="
 
 # 多字符符号（最长匹配；C99 的复合赋值与箭头运算符）
 [symbol.extend]

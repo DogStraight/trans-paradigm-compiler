@@ -83,17 +83,40 @@ class TestDeclarationRejection:
     @pytest.mark.parametrize(
         "src",
         [
-            "int ;\n",              # 缺声明符
-            "int *;\n",             # 只有指针
             "int a[;\n",            # 数组括号不闭合
             "int f(int a,);\n",     # 参数表尾随逗号
             "int x\n",              # 缺分号
-            "int ;\nint y;\n",     # 首个声明即缺声明符
+            "struct p { int a; \n",  # 成员体不闭合（阶段 2a）
         ],
     )
     def test_bad_source_reports(self, c_linter, src):
         errs = _lint(src, c_linter)
         assert errs, f"应报错但通过了：{src!r}"
+
+
+class TestSyntaxWideIn:
+    """语法层**宽进**的样本：C99 语法允许、但语义上非法的形态。
+
+    ⚠ 这不是"漏检"而是**分层设计**：`declaration: declaration-specifiers
+    init-declarator-list? ;` 里声明符列表**本身可选**（§6.7 语法）；
+    "声明至少要声明一个声明符、一个标签或枚举成员"是**语义约束**（§6.7p2）。
+    语法层宽进、语义层收（同 `float int x;` 的处理）——语义层检查属后续阶段
+    （检查插件族），故此处**断言语法接受**，避免把语义判据塞进语法规则。
+    """
+
+    @pytest.mark.parametrize("src", ["int ;\n", "int ;\nint y;\n"])
+    def test_declaration_without_declarator_is_syntactically_ok(self, c, src):
+        ast = _parse(src, c)
+        assert _node_names(ast), f"语法层应接受（语义约束归语义层）：{src!r}"
+
+    def test_incomplete_declarator_fails_at_parse(self, c):
+        """`int *;` —— 声明符不完整（`*` 后必须跟标识符或括号声明符）→ 解析层拒。
+
+        ⚠ 断言在解析层：`Declarator` 要求 `@DirectDeclarator`，语法上不可能只有 `*`；
+        而 linter 对"没能起始任何语句规则"的行会保持沉默（已知近似边界，
+        见 `docs/gaps/gap-parser-linter-approximation.md`），不能拿它当语法判据。
+        """
+        assert _node_names(_parse("int *;\n", c)) == []
 
 
 class TestStagingBoundaries:
@@ -107,16 +130,10 @@ class TestStagingBoundaries:
         """函数体属阶段 3（语句）——本阶段应被拒。"""
         assert _lint("int main(void) { return 0; }\n", c_linter)
 
-    def test_struct_specifier_is_currently_skipped_silently(self, c_linter):
-        """`struct point p;` 本阶段**既不解析也不报错**（记录现状，非期望）。
-
-        ⚠ 这是 **linter 近似**的已知边界（不是本包的阶段设计）：语句发现按"首 token
-        能起始某条语句规则"挑选候选，`struct` 在本阶段不属于任何语句入口的 FIRST 集
-        → 该行被整体跳过，既不解析也不诊断（对比 `int x` 缺分号会报错，因为 `int`
-        是语句入口）。阶段 2 加入 struct/union/enum 说明符后，此行为自然改变——
-        届时本用例应改为断言"被拒"或"被接受"，不要保留"静默跳过"作为期望。
-        """
-        assert _lint("struct point p;\n", c_linter) == []
+    def test_struct_specifier_parses_after_stage_2a(self, c):
+        """阶段 2a 起 `struct point p;` 是正常声明（原"静默跳过"行为随之后退场）。"""
+        ast = _parse("struct point p;\n", c)
+        assert _node_names(ast) == ["Declaration"]
 
     def test_specifier_combination_is_semantic_not_syntactic(self, c):
         """`float int x;` 语法层**宽进**（组合合法性归语义层）——应解析通过。

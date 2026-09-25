@@ -34,7 +34,7 @@ is_statement = true
 production = [
     "@StorageClass|@TypeQualifier|@TypeSpecifier",
     "@SpecRest*",
-    "@DeclaratorList",
+    "@DeclaratorList?",
     "symbol.base.semicolon",
 ]
 
@@ -71,16 +71,22 @@ production = [
 
 [TypeSpecifier.parser]
 production = [
-    "(keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool)",
+    "@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier|@TypedefName",
 ]
 
 [TypeSpecifier.parser.node]
+spec = "$1"
 
 
 # SpecRest — 说明符序列的其余部分（`unsigned long long` 等组合靠重复表达）
+# ⚠ **刻意不含 `@TypedefName`**：它（标识符）若进了重复项，贪婪的 `@SpecRest*` 会把
+#   声明符名当类型名吃掉（实测：`int x;` 解析成 specs=int + rest=[x] + 无声明符，
+#   `declarators` 槽位为空）。typedef 名**只允许出现在首个说明符位置**——
+#   代价是 `unsigned myint x;`（类型词之后再跟 typedef 名）暂不支持，属罕见写法，
+#   记在缺口档阶段 2 未落地项里。
 [SpecRest.parser]
 production = [
-    "@StorageClass|@TypeQualifier|@TypeSpecifier",
+    "@StorageClass|@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier",
 ]
 
 [SpecRest.parser.node]
@@ -111,8 +117,7 @@ direct = "$2"
 
 
 # Pointer — 指针前缀 `*` 序列（自递归表达多级指针）
-# ⚠ 形态约束（实测）：产生式**首个元素不用带量词的括号组** `"(x)*"`——已证可用的
-#   首元素形态是 `"@Rule?"`（verilog `@Range?`）。本规则把重复收进自身递归。
+# 自递归写法：首元素 `*` 之后可选再跟一层 Pointer，覆盖 `*` / `**` / `***`。
 [Pointer.parser]
 production = [
     "symbol.base.multiple",
