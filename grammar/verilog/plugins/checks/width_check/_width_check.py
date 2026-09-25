@@ -20,6 +20,7 @@ from grammar.verilog.plugins.checks._shared import (
     const_eval,
     is_ident_char,
     is_parameterized,
+    override_of,
     port_table,
     scan_char_run,
 )
@@ -54,8 +55,8 @@ def run_width_check(analyzer, context) -> None:
     except ImportError:
         table["_hier"] = None
     _check_assignment_widths(analyzer, context, table)
-    _check_port_connections(analyzer, context, table, params_all)
-    _check_inst_internal_widths(context, table, params_all)
+    _check_port_connections(analyzer, context, table)
+    _check_inst_internal_widths(context, table)
     _check_select_ranges(analyzer, context, table)
 
 
@@ -123,7 +124,8 @@ def _check_suffix_bounds(sf, bw: int, base_name: str, context) -> None:
 
 
 def _file_params(analyzer, module_params: dict) -> dict[str, str]:
-    """当前文件各模块参数合并（单层；多模块同名参数取先——罕见，保守）。"""
+    """当前文件各模块参数合并（单层；多模块同名参数**取后**——`update` 的实际
+    行为，罕见场景，保守）。"""
     out: dict[str, str] = {}
     root = getattr(analyzer, "_ast", None)
     if root is None:
@@ -380,28 +382,23 @@ def _site_module_map(analyzer) -> dict[int, str]:
     return site_module
 
 
-def _check_port_connections(analyzer, context, table: dict, params_all: dict) -> None:
+def _check_port_connections(analyzer, context, table: dict) -> None:
     """B3：逐实例化点检查端口连接宽度（W201）。"""
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
-    caller_params = table.get("_params", {}) or {}
     site_module = _site_module_map(analyzer)
     for site in inst_sites:
-        _check_site_connections(
-            context, site, module_index, params_all, caller_params, table, site_module
-        )
+        _check_site_connections(context, site, module_index, table, site_module)
 
 
 def _check_site_connections(
     context,
     site,
     module_index: dict,
-    params_all: dict,
-    caller_params: dict,
     table: dict,
     site_module: dict[int, str],
 ) -> None:
-    """单个实例化点：前置判据 → 覆盖参数表 → 按端口列表形态检查连接。"""
+    """单个实例化点：前置判据 → 覆盖参数表（精化产物）→ 按端口列表形态检查连接。"""
     mod_name = node_text(getattr(site, "module_name", None))
     if not mod_name:
         return
@@ -412,7 +409,7 @@ def _check_site_connections(
     if nl is None:
         return
     caller_mod = site_module.get(id(site), "")
-    ov_params = _override_params(site, params_all.get(mod_name, {}), caller_params)
+    ov_params, _ = override_of(context, site)
     if nl.node_name == "OrderedPortList":
         _check_ordered_conns(
             context, mod_name, info, nl, table, ov_params, caller_mod
@@ -482,23 +479,6 @@ def _check_conn_width(context, mod_name: str, port, val, table: dict,
         )
 
 
-def _override_params(site, module_defaults: dict, caller_params: dict) -> dict:
-    """实例化点覆盖后参数表：调用者参数 → 模块默认 → site 覆盖（最高）。"""
-    out = dict(caller_params)
-    out.update(module_defaults or {})
-    po = getattr(site, "params", None)
-    pl = getattr(po, "params", None) if isinstance(po, Node) else None
-    items = getattr(pl, "items", None) if isinstance(pl, Node) else None
-    for item in items or []:
-        if not isinstance(item, Node) or item.node_name != "NamedParamOverride":
-            continue
-        pn = node_text(getattr(item, "param_name", None))
-        pv = node_text(getattr(item, "value", None))
-        if pn and pv:
-            out[pn] = pv
-    return out
-
-
 # ── B4 实例化覆盖 → 目标模块内部赋值重算（2026-08-31 补） ──────
 # B3 只查"端口连接宽度"（外层表达式 vs 端口宽度），**不回传被实例化
 # 模块内部**的赋值——用户场景：模块 A 内 `reg [3:0] y; wire [W-1:0] x;
@@ -514,11 +494,10 @@ def _override_params(site, module_defaults: dict, caller_params: dict) -> dict:
 # 固定宽度模块覆盖参数不影响内部赋值，跳过省遍历（单元库空壳模块）。
 
 
-def _check_inst_internal_widths(context, table: dict, params_all: dict) -> None:
+def _check_inst_internal_widths(context, table: dict) -> None:
     """B4：实例化点覆盖参数 → 目标模块内部赋值截断重算（W201）。"""
     module_index = context.extra.get("module_index", {}) or {}
     inst_sites = context.extra.get("inst_sites", []) or []
-    caller_params = table.get("_params", {}) or {}
     for site in inst_sites:
         mod_name = node_text(getattr(site, "module_name", None))
         if not mod_name:
@@ -526,26 +505,10 @@ def _check_inst_internal_widths(context, table: dict, params_all: dict) -> None:
         info = module_index.get(mod_name)
         if info is None or getattr(info, "node", None) is None:
             continue
-        defaults = params_all.get(mod_name, {})
-        if not _override_changes_params(site, defaults):
+        ov_params, changed = override_of(context, site)
+        if not changed:
             continue  # 无覆盖或覆盖值 == 默认 → 模块定义处检查已覆盖，跳过
-        ov_params = _override_params(site, defaults, caller_params)
         _recheck_module_assigns(info, site, ov_params, context)
-
-
-def _override_changes_params(site, defaults: dict) -> bool:
-    """site 是否有参数覆盖且覆盖值 ≠ 模块默认值（有效覆盖判据）。"""
-    po = getattr(site, "params", None)
-    pl = getattr(po, "params", None) if isinstance(po, Node) else None
-    items = getattr(pl, "items", None) if isinstance(pl, Node) else None
-    for item in items or []:
-        if not isinstance(item, Node) or item.node_name != "NamedParamOverride":
-            continue
-        pn = node_text(getattr(item, "param_name", None))
-        pv = node_text(getattr(item, "value", None))
-        if pn and pv and pv != defaults.get(pn):
-            return True
-    return False
 
 
 def _module_width_table(info, context) -> dict:

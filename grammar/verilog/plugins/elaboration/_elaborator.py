@@ -556,9 +556,8 @@ def _eval_const_expr(text: str) -> bool | None:
 #   ③ 体内旧式声明（`input [7:0] a;`）→ 按名**回填**方向/宽度，未登记则补登记。
 # 同名时**头部优先**（回填只补空字段）；body 声明不带网络类型。
 #
-# ⚠ P3-②a 阶段本项是**只新增**（引擎侧 `ModuleInfo.ports` 仍在原位、仍是层 2/3 的
-#   输入），故此刻**无人消费它**——存在意义是与引擎产物做**等价性对拍**（见
-#   `tests/engine/analyzer/test_elaboration_port_decls.py`）。切换 + 删引擎侧在 P3-②b。
+# ⚠ P3-② 已完成：引擎侧 `ModuleInfo.ports` **已删除**，本项是端口表的**唯一来源**
+#   （消费方经 `checks/_shared.port_table` 读容器切片）。端口是语言知识，只在语言包内流通。
 
 # ── 本语言包的端口形态（原 `[structure]` / `[structure.fields]` 声明） ──
 _UNIT_PORTS = "ports"
@@ -697,8 +696,8 @@ def _backfill_body_port_node(
 #   ports）——它只读**声明字段**（实例名 / 连接字段 / 端口名 / 值）并把表达式渲染成文本。
 #   故"发现过程中逐文件算"与"发现之后统一算"**结果相同**，搬迁无时序风险。
 #
-# ⚠ 本阶段本项**只新增**（引擎 `FileResult.connections` 仍在原位、仍是层 3 与 postpass
-#   的输入），存在意义是与引擎产物做**逐项对拍**。
+# ⚠ P3-② 已完成：引擎 `FileResult.connections` / `ConnectionElaborator` **已删除**，
+#   本项是连接表的**唯一来源**（消费方经容器 + `CTX_ANALYZED_FILE` 取本文件切片）。
 
 # ── 本语言包的实例化形态（原 `[structure]` / `[structure.fields]` 声明） ──
 _INST_RULE = "ModuleInst"
@@ -780,11 +779,12 @@ def _inst_module_name(site: Node) -> str:
 # ⚠ 本项是**去重共享**（把各检查原先各自一份的合并逻辑上提），**不是**"把语言知识
 #   搬出引擎"——那段合并今天本来就在插件侧（ADR-0019 决策 4 更正节）。
 #
-# ⚠ **已知技法差异（迁移消费方前必须处理）**：width_check 的 `_override_params` 用
-#   **自带的 `node_text` 渲染器**把覆盖值取成文本，本项用**服务渲染器**（`_render`）。
-#   字面量（`#(.W(16))`）两者一致；**表达式**覆盖（如 `#(.W(4*4))`）可能产生不同的
-#   空白形态（`4*4` vs `4 * 4`）。故本项当前**只新增**（消费方仍用各自那份），
-#   存在意义是与它们**对拍**；切换时须先处理该差异（见测试文件头的说明）。
+# ⚠ **技法差异（已论证安全，勿按"逐字一致"假设改回）**：width_check 原用**自带的
+#   `node_text` 渲染器**取覆盖值文本，本项用**服务渲染器**（`_render`）。字面量
+#   （`#(.W(16))`）一致；**表达式**覆盖（如 `#(.W(4*4))`）可能只差空白形态
+#   （`4*4` vs `4 * 4`）。该差异只可能让原先**多触发** B4 重算；"少触发"仅发生在
+#   覆盖文本与默认文本**完全相同**时（语义必然相等 → 重算也不产出新诊断）→ 不漏诊。
+#   消费方（`width_check`）已切到本项，一致性由 `const_eval` 断言**语义值**而非文本。
 
 _PARAM_OVERRIDE_RULE = "NamedParamOverride"
 

@@ -7,7 +7,7 @@ Verilog 字面量写法、参数名求值域、边沿关键字）留在**插件�
 
 Doc: grammar/verilog/plugins/checks/README.md（插件族共用助手）
 """
-from core._protocol import CTX_ELABORATION
+from core._protocol import CTX_ANALYZED_FILE, CTX_ELABORATION
 from core.define import Node, iter_nodes
 
 # 边沿敏感关键字（always 事件控制里的时序标志）
@@ -27,6 +27,26 @@ def port_table(context, unit_name: str) -> dict:
     container = context.extra.get(CTX_ELABORATION, {}) or {}
     table = (container.get("port_decls", {}) or {}).get(unit_name)
     return dict(table) if table else {}
+
+
+def override_of(context, site) -> tuple[dict, bool]:
+    """实例化点**覆盖后**参数表 + 是否"有效覆盖"：读本语言包精化产物。
+
+    产物 `param_override`（ADR-0019 P3-②c）逐实例化点产出，元素含
+    `inst_node` / `params` / `changed`——故此处**按实例化节点身份**匹配。
+    返回 `(参数表, changed)`；未命中 → `({}, False)`（该点无覆盖后参数表：
+    目标单元未定义或未产出），调用方按"无参数可判"保守处理。
+
+    ⚠ 引擎侧没有对应实现，故不存在"引擎注入的覆盖表"这条路：三层合并
+    （调用者参数 → 目标单元默认 → site 覆盖）是语言知识，只在语言包内流通。
+    """
+    container = context.extra.get(CTX_ELABORATION, {}) or {}
+    path = context.extra.get(CTX_ANALYZED_FILE)
+    entries = (container.get("param_override", {}) or {}).get(path) or []
+    for entry in entries:
+        if entry.get("inst_node") is site:
+            return dict(entry.get("params") or {}), bool(entry.get("changed"))
+    return {}, False
 
 
 def target_sig(target: Node | None) -> str | None:
