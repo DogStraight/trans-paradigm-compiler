@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **字面量尾随后缀：`[[number.based]] suffix` 键**（引擎 schema 扩一项；C 包消费）：
+
+  - 声明面：`suffix = { chars = "uUlL", max = 2 }`——**可选后缀字符集 + 长度上限**。
+    形态非法（非表 / 空字符集 / `max < 1` / `max` 类型错）**fail-fast**，不静默降级。
+  - 实现取向：后缀是 **DFA 之后的声明式尾段**，由 `number_runner` 在最新接受位之后
+    消费；**不做成 DFA 转移**——字符→类别映射是全局的，而 `f`/`F` 已是十六进制 digit
+    类别（`hex_value_abc`），按类别加后缀边会与 hex 值自环**撞键**（覆盖后十六进制
+    数字解析崩）。门禁用 `0x1FF` 把这条判据钉死。未声明 `suffix` 的形态（verilog）
+    行为逐字不变。
+  - C 包补上 C99 §6.4.4.1 的整型/浮点后缀：`42u` / `10L` / `1ULL` / `1LLU` /
+    `0xFFu` / `017UL` / `1.5f` / `1e3L`。此前被切成"数字 + 标识符"（`[[number.based]]`
+    没有后缀位），是 C 真实代码里遍地都是的形态。
+  - **组合合法性不在词法层判定**（`1UL` 合法、`1ff` 非法）——C 的 pp-number 本就宽进，
+    约束归语义层；与本包"语法层只判'这是一个数字 token'"的既有口径一致。
+  - 反向守用例按纪律**转正向**：`tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps`
+    里的"整型后缀仍被切开"4 例删除，改为 `TestNumberForms` 的 21 例正向断言。
+
+  验证：新增 `tests/engine/lexer/test_number_suffix.py` **26 例**（声明面 9 + 消费面 17，
+  含 `0x1FF` 撞键判据、`max` 封顶、未声明形态零变化）；C 词法改写为 21 例正向断言
+  （原 4 例"仍被切开"的反向守删除）；**缺陷态变异复验**（删掉 `_consume_suffix` 调用 →
+  32 例变红 → 还原）。**全量 2521 passed / 7 skipped**。
+
 - **C 包声明渲染风格：页宽 80 列**（`grammar/c/base/_style.toml` + `[renderer] style`）：
   此前用引擎默认 40 列（`renderer/loader.py` 的兜底值），把正常声明与调用折成多行
   ——`int ring_pop(struct ring_item *items, unsigned int head, …)` 被拆成 5 行。

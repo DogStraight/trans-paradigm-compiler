@@ -2,16 +2,19 @@
 #
 # C99 §6.4.4：整型常量（十进制 / 前导 0 八进制 / 0x 十六进制）+ 浮点常量
 # （小数与指数形态由 lexer 的**内置浮点链**处理，见 lexer/number_gen.py 的
-# dot / exp 状态——配置侧只负责"这是一种数字形态"）。
+# dot / exp 状态——配置侧只负责"这是一种数字形态"）+ **整型/浮点后缀**。
 #
-# ⚠ **未接：整型后缀（U/u、L/l、LL/ll 及组合）**——`[[number.based]]` 的字段全集是
-#   name / size / base_prefix / signed / bases / value_digits / value_allow /
-#   value_allow_space（实测 = lexer/number_gen.py 里 cfg.get 的键），**没有后缀位**；
-#   `value_allow` 的语义是"数位中允许的特殊字符"（verilog 的 x/z/?），不是结尾可选标识符。
-#   症状：`42u` 被切成 `42` + `u`（与 `42 u` 无法区分）。修法候选与判据见缺口档
-#   docs/gaps/gap-language-pack-scope.md「C 包词法面暴露的配置表达力缺口」。
+# 后缀（`suffix = { chars, max }`，2026-09-25 接上）：C99 §6.4.4.1 的
+# integer-suffix（u/U 与 l/L/ll/LL 的组合，最长 3 字符如 `LLU`）与
+# floating-suffix（f/F/l/L）。
+# ⚠ **组合合法性不在词法层判定**：C 的 pp-number 本就宽进（`1ff` 也是一个
+#   pp-number，到约束期才报错），`chars` 给的是**可选字符集**、`max` 是长度上限；
+#   "哪些组合是合法常量"归语义/约束层。这与本包"语法层只判'这是一个数字 token'"
+#   的既有口径一致。
+# 三个形态都声明后缀：`42u` / `10L` / `1ULL` / `0xFFu` / `1.5f` / `1e3L`。
 
 # 十六进制：0x / 0X（大小写由字符类别覆盖）
+# 后缀只列 u/U/l/L——`f`/`F` 是十六进制 digit，已在值域内（`0x1F` 的 F 由 DFA 吃掉）
 [[number.based]]
 name = "c_prefix"
 size = "none"
@@ -19,6 +22,7 @@ base_prefix = "0x"
 bases = []
 value_digits = { x = "hex" }
 value_allow = []
+suffix = { chars = "uUlL", max = 3 }
 
 # 八进制：前导 0（0[0-7]*，含 0 本身）
 [[number.based]]
@@ -28,12 +32,14 @@ base_prefix = "0"
 bases = []
 value_digits = { "0" = "oct" }
 value_allow = []
+suffix = { chars = "uUlL", max = 3 }
 
 # 十进制 / 浮点入口：`digits = "any"` 让 `0` / `017` / `0.5` 都走本形态——
 # 这样内置浮点链才会作用到 **0 开头的小数**（`0.5`）。
 # ⚠ 语法层只判"这是一个数字 token"：`017` 是八进制还是十进制、`0.5` 的取值属求值/语义层。
 #   写成 `nonzero` 时的症状：`0.5` 被拆成 `0` + `.` + `5`（实测）。
 #   `3.14` / `1e10` 在两种写法下都能过（非零开头），故 `0.5` 是这条形态的**判据样本**。
+# 后缀集含 `fF`（浮点后缀）与本形态一并承载的整型后缀 `uUlL`。
 [[number.based]]
 name = "c_dec"
 size = { digits = "any" }
@@ -41,3 +47,4 @@ base_prefix = "none"
 bases = []
 value_digits = { d = "dec" }
 value_allow = []
+suffix = { chars = "uUlLfF", max = 3 }

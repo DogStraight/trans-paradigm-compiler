@@ -86,7 +86,10 @@ while = "while"
 运算符、注释。
 
 > 数字形态由配置驱动（P2.1）：`base/_number.toml` 声明 `[[number.based]]` 形态，
-> 由 `lexer/number_gen.py` 编译为 FSM、`lexer/number_runner.py` 执行。
+> 由 `lexer/number_gen.py` 编译为 FSM、`lexer/number_runner.py` 执行。形态可再声明
+> `suffix = { chars, max }`（可选**尾随后缀字符集**与长度上限，C 的 `42u` / `1ULL` /
+> `1.5f`）——它是 **DFA 之后的声明式尾段**，由 runner 在接受位之后消费，不是 DFA
+> 转移（全局字符类别里 `f`/`F` 已是十六进制 digit，按类别加边会与 hex 值自环撞键）。
 
 > 注释扫描走 `lexer/capture_runner.py::CaptureRunner`——原始文本捕获模式的
 > 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture

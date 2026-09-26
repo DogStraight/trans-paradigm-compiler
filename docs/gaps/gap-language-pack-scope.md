@@ -115,7 +115,8 @@ grammar/c/
 | 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool/_Complex`）+ 符号/无符号 | 1 | `long long`/`_Bool`/`_Complex` 是 C99 新增 |
 | 声明 | 声明符递归：多级指针、数组（含 `[]` 不定长）、函数声明符、函数指针、返回函数指针 | 1–2 | **C 语法最难点**；用 c4 的声明符规则起步 |
 | 声明 | 存储类（`typedef/extern/static/auto/register`）、类型限定符（`const/volatile/restrict`）与**函数说明符**（`inline`，C99 §6.7.4） | 2 | `restrict` 仅指针、`inline` 仅函数——都是**约束**（语义层），语法层宽进 |
-| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：整数后缀（`1UL`）、前导点浮点（`.5`）、字符串内转义引号、强制转换 `(T)x`、链式后缀（`a.b.c`/`f(x)[i]`）、逗号运算符、复合字面量 |
+| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、字符串内转义引号、强制转换 `(T)x`、链式后缀（`a.b.c`/`f(x)[i]`）、逗号运算符、复合字面量 |
+| 词法 | **后缀实测补洞（2026-09-25）**：整型后缀（`42u`/`1ULL`/`0x1Fu`）与浮点后缀（`1.5f`/`1e3L`）此前被切成"数字 + 标识符" → 已补（`[[number.based]] suffix` 键，DFA 之后的声明式尾段），门禁 `tests/engine/lexer/test_number_suffix.py` | 1 | 组合合法性（`1UL` 合法 / `1ff` 非法）**不在词法层判定**——C 的 pp-number 本就宽进，约束归语义层 |
 | 声明 | 初始化器（标量/聚合/指示符 `.field=`、`[i]=`） | 2 | 指示符是 C99 新增 |
 | 类型 | `struct`/`union`（含**位域**）、`enum`、标签命名空间（tag vs ordinary） | 2 | 命名空间分离属**语义**层（先语法后语义） |
 | 语句 | compound / 表达式语句 / 空语句 / `if`(含 `else`) / `switch`(含 `case`/`default`) / `while` / `do` / `for`(含 C99 声明式 `for(int i…)`) / `goto` / 标号 / `break` / `continue` / `return` | 3 | `for` 声明式是 C99 新增（归核心基线需明确） |
@@ -163,9 +164,9 @@ grammar/c/
    数组长度与枚举值当时都写成可选，症状是"静默为空"而非报错。**可选位点会掩盖
    词法失效**——加可选捕获时要配一条"非空"断言。
 
-**仍留阶段 2b/3**：位域 `int x : 3`、成员/变量初始化器（含指示符 `.f=`/`[i]=`）、
+**仍留阶段 3/词法**：成员/变量初始化器（含指示符 `.f=`/`[i]=`）、
 数组长度用常量表达式（当前只接受数字字面量）、函数体与语句、表达式族
-（运算符表 / 一元二元后缀 / cast / sizeof）、整型后缀与浮点字面量、字符/字符串转义表。
+（运算符表 / 一元二元后缀 / cast / sizeof）、字符/字符串转义表。
 **已知写法取舍**：typedef 名**只允许出现在首个说明符位置**（`unsigned myint x;` 暂不支持）
 ——若允许它进说明符重复项，贪婪匹配会把声明符名当类型名吃掉（实测）。
 
@@ -183,25 +184,29 @@ grammar/c/
    struct/union/enum 后该行为自然改变——不要把它当期望行为钉住。
 
 
-### 同节的第二处：前导点浮点 `.5`（2026-09-25）
+### 前导点浮点 `.5`（2026-09-25）
 
 浮点本身已可用（`3.14` / `1e10` / `1.e5` / **`0.5`** 都是单个 `literal.number`——最后
 一个靠把 `c_dec` 的 `size.digits` 从 `nonzero` 放开为 `any`，让内置浮点链作用到
 0 开头的小数）。但 **`.5`**（C99 允许的"小数点开头"形态）表达不了：数字形态由
 `size`（前缀数字）/ `base_prefix` 描述，**没有"以点开头"的位置**，故 `.5` 被切成
-`.` + `5`。修法与整型后缀同族（扩 schema 或包侧后处理），判据同上。
+`.` + `5`。
 
-两处缺口都由 `tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：
-修好后对应用例会失败并提醒同步本档。
+⚠ 同族的**整型后缀**（`42u` / `1ULL` / `0x1Fu` / `1.5f`）已于同日修好：
+`[[number.based]]` 新增 `suffix = { chars, max }` 键（**DFA 之后的声明式尾段**，由
+`number_runner` 在接受位之后消费——不做成 DFA 转移的原因见 `lexer/number_gen.py`
+的键说明：全局字符类别里 `f`/`F` 已是十六进制 digit，按类别加边会与 hex 值自环撞键）。
+对应用例已转正向（`test_c_lexer.py::TestNumberForms`），引擎侧门禁见
+`tests/engine/lexer/test_number_suffix.py`（含 `0x1FF` 撞键判据）。
 
 
-### 同节的第三处：字符串内的转义引号（2026-09-25）
+### 字符串内的转义引号（2026-09-25）
 
 `"a\"b"`（字符串里含转义引号）捕获**提前终止**：`[string] delimiters` 的 delim 模式按
 "下一个定界符"结束，**不识别反斜杠转义**（与 `docs/gaps/gap-lexer-capture-boundaries.md`
 记录的捕获边界同类）。真实代码里 `printf("say \"hi\"")` 很常见，故这条**有实际影响**。
 
-三条缺口（整型后缀 / 前导点浮点 / 字符串内转义引号）都由
+上面两条缺口（前导点浮点 / 字符串内转义引号）都由
 `tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：修好后对应用例
 会失败并提醒同步本档。
 

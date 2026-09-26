@@ -108,7 +108,36 @@ class _ConfigNumberRunner:
             i += 1
             if state in pat.accepting:
                 last_accept = i
+        last_accept = self._consume_suffix(pat, text, last_accept, start_pos)
         return self._token_before(text, start_pos, last_accept)
+
+    @staticmethod
+    def _consume_suffix(
+        pat: NumberPattern, text: str, last_accept: int, start_pos: int
+    ) -> int:
+        """消费形态声明的**尾随后缀**（C 的 `1UL` / `1.5f` / `0x1Fu`）→ 新的接受位。
+
+        后缀是 DFA 之后的声明式尾段（`suffix = { chars, max }`），不是 DFA 转移：
+        理由见 `number_gen.compile_number_pattern`（全局字符类别里 `f`/`F` 已是
+        十六进制 digit，按类别加边会撞键）。未声明后缀的形态（verilog）走空集，
+        行为与本键不存在时逐字一致。
+
+        只在已有接受位之后消费（无匹配则原样返回）；超额字符留给下一个 token
+        （`1u2` → `1u` + `2`，与"数字后跟标识符"同形）。后缀**组合合法性**
+        （`1UL` 合法、`1ff` 非法）不在词法层判定——C 的 pp-number 本就宽进，
+        约束归语义层。
+        """
+        if not pat.suffix_chars or pat.suffix_max <= 0 or last_accept <= start_pos:
+            return last_accept
+        i, taken = last_accept, 0
+        while (
+            i < len(text)
+            and taken < pat.suffix_max
+            and text[i] in pat.suffix_chars
+        ):
+            i += 1
+            taken += 1
+        return i
 
 
 def build_number_runner(

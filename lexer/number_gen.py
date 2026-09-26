@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from core.errors import ConfigError
+
 # ── 数字形态状态基类 ──
 # 状态模型：每种形态编译出 (size→base→value) 的链式状态；
 # 多个形态共享同一套通用字符类别（dec/bin/oct/hex 等）。
@@ -87,6 +89,8 @@ class NumberPattern:
         start_state: int,
         base_states: dict[str, int] | None = None,
         allow_space_after_quote: bool = False,
+        suffix_chars: frozenset[str] | None = None,
+        suffix_max: int = 0,
     ):
         self.name = name
         self.transitions = transitions
@@ -94,6 +98,10 @@ class NumberPattern:
         self.start_state = start_state
         self.base_states = base_states or {}   # 进制字母 → value 态
         self.allow_space_after_quote = allow_space_after_quote
+        # 尾随后缀（C 的 `1UL` / `1.5f`）：DFA 接受之后可选的声明式尾段，
+        # 由 runner 消费（见 `compile_number_pattern` 的 suffix 键说明）。
+        self.suffix_chars = suffix_chars or frozenset()
+        self.suffix_max = suffix_max
 
 
 def _digit_cats_for(radix: str) -> set[str]:
@@ -131,6 +139,8 @@ class _PatternBuilder:
     accepting: set[int] = field(default_factory=set)
     base_states: dict[str, int] = field(default_factory=dict)
     sid: int = 0
+    suffix_chars: frozenset[str] = frozenset()
+    suffix_max: int = 0
 
     def new_state(self) -> int:
         """取新状态号（单调递增，pattern 内独立编号）。"""
@@ -151,7 +161,7 @@ class _PatternBuilder:
         """装配结果 → NumberPattern。"""
         return NumberPattern(
             name, self.transitions, self.accepting, start, self.base_states,
-            allow_space,
+            allow_space, self.suffix_chars, self.suffix_max,
         )
 
     def build_size(
@@ -335,6 +345,13 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     四步：读声明 → size 子图 → base_prefix 子图（无前缀 / 多字符 / 单字符
     三分支）→ value 子图；每步只往同一个 `_PatternBuilder` 写，最后统一
     装配成 `NumberPattern`（状态号在 pattern 内独立编号）。
+
+    **suffix 键**（可选，`suffix = { chars = "uUlLfF", max = 3 }`）：字面量尾随
+    后缀字符集与最大长度（C 的 `1UL` / `1.5f` / `0x1Fu`）。它是 **DFA 之后的
+    声明式尾段**，由 `number_runner` 在接受位之后消费——不做成 DFA 转移的原因：
+    字符→类别映射是**全局**的，而 `f`/`F` 已是十六进制 digit 类别
+    （`hex_value_abc`），按类别加后缀边会与 hex 值自环**撞键**（后者被覆盖 =
+    六进制数字解析崩）。未声明该键的形态（verilog）行为零变化。
     """
     name = cfg.get("name", "based")
     allow_space = cfg.get("value_allow_space", False)
@@ -343,6 +360,7 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     bases = cfg.get("bases", [])
     value_digits = cfg.get("value_digits", {})
     value_allow = cfg.get("value_allow", [])
+    suffix_chars, suffix_max = _parse_suffix(cfg)
     # 无前缀形态（base_prefix = "none"）：size 态即最终接受态（十进制整数/浮点），
     # 不建 quote/base 链
     no_prefix = base_prefix == "none"
@@ -357,6 +375,7 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     )
 
     b = _PatternBuilder()
+    b.suffix_chars, b.suffix_max = suffix_chars, suffix_max
     start = b.new_state()
     current = b.build_size(start, size_cfg, size_is_none, no_prefix, size_allow_zero)
 
@@ -381,3 +400,33 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
 def compile_patterns(cfg_list: list[dict]) -> list[NumberPattern]:
     """编译 [[number.based]] 声明列表。"""
     return [compile_number_pattern(c) for c in cfg_list]
+
+
+def _parse_suffix(cfg: dict) -> tuple[frozenset[str], int]:
+    """`suffix = { chars = "uUlL", max = 2 }` → (字符集, 最大长度)。
+
+    未声明 → 空集（该形态无后缀，行为与无此键时完全一致）。
+    形态非法**直接报错**（配置 fail-fast）：后缀声明漏写/写错会让字面量被切成
+    "数字 + 标识符"，是静默的形态错误，靠"看起来能跑"发现不了。
+    """
+    raw = cfg.get("suffix")
+    if raw is None:
+        return frozenset(), 0
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            "[[number.based]] 的 suffix 须为表，形如 "
+            f'suffix = {{ chars = "uUlL", max = 2 }}；实得 {raw!r}'
+        )
+    chars = raw.get("chars", "")
+    if isinstance(chars, list):
+        chars = "".join(str(c) for c in chars)
+    if not isinstance(chars, str) or not chars:
+        raise ConfigError(
+            f"[[number.based]] 的 suffix.chars 须为非空字符串（可选后缀字符集），实得 {chars!r}"
+        )
+    max_len = raw.get("max", len(chars))
+    if isinstance(max_len, bool) or not isinstance(max_len, int) or max_len < 1:
+        raise ConfigError(
+            f"[[number.based]] 的 suffix.max 须为 ≥1 的整数，实得 {max_len!r}"
+        )
+    return frozenset(chars), max_len

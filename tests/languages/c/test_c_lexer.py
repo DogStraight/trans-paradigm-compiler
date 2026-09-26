@@ -50,10 +50,30 @@ class TestNumberForms:
             "0.5",        # **0 开头的小数**（判据样本：digits=nonzero 时会被拆成 0 + .5）
             "1e10",       # 指数
             "1.e5",       # 小数位为空的指数形态
+            # ── 后缀（C99 §6.4.4.1，`[[number.based]] suffix 键，2026-09-25 接上）──
+            "42u", "42U",             # unsigned-suffix
+            "10L", "10l",             # long-suffix
+            "1LL", "1ll", "1ULL", "1LLU",   # long-long（含与 unsigned 的组合，3 字符）
+            "0xFFu", "0X1fUL", "017UL",     # 十六进制/八进制 + 后缀
+            "1.5f", "1.5F", "1.5L",   # floating-suffix
+            "1e3L", "2.3e-4f",        # 指数 + 后缀
         ],
     )
     def test_single_number_token(self, c_lexer, src):
         assert _types(src, c_lexer) == ["literal.number"], f"{src!r} 不是单个数字 token"
+
+    def test_suffix_kept_in_token_content(self, c_lexer):
+        """后缀进 token **正文**（不只类型对）——`42u` 不再是 `42` + `u`。"""
+        toks = [t for t in c_lexer.tokenize("1ULL\n") if t.type == "literal.number"]
+        assert [t.content for t in toks] == ["1ULL"]
+
+    def test_number_then_identifier_still_splits(self, c_lexer):
+        """对照：真正的"数字后跟标识符"仍切两 token（后缀是闭集，不许吞标识符）。"""
+        assert _types("456abc", c_lexer) == ["literal.number", "id"]
+
+    def test_suffix_stops_at_declared_max(self, c_lexer):
+        """`max` 封顶：`1u2` → `1u` + `2`（超额字符留给下一个 token）。"""
+        assert _types("1u2", c_lexer) == ["literal.number", "literal.number"]
 
     def test_numbers_in_expression_context(self, c_lexer):
         assert _types("x = 0.5 + 1e3;", c_lexer) == [
@@ -93,22 +113,14 @@ class TestComments:
 class TestRecordedLexicalGaps:
     """⚠ **已知词法缺口**（钉成用例：修好后会失败 → 提醒同步缺口档与 TODO）。
 
-    1. **整型后缀**（`42u` / `0xFFu` / `10L` / `1ULL`）：`[[number.based]]` schema 无
-       后缀字段（键全集见 `lexer/number_gen.py`），故被切成"数字 + 标识符"。
-    2. **前导点浮点**（`.5`）：数字形态由 `size` / `base_prefix` 描述，表达不了
+    1. **前导点浮点**（`.5`）：数字形态由 `size` / `base_prefix` 描述，表达不了
        "以点开头"的浮点，故被切成"点 + 数字"。
+    2. **转义引号**（`"a\\"b"`）：delim 捕获不识别反斜杠转义。
 
-    两条都记在 `docs/gaps/gap-language-pack-scope.md`
-    「C 包词法面暴露的配置表达力缺口」。
+    ⚠ **整型后缀**（`42u` / `0xFFu` / `10L` / `1ULL`）已于 2026-09-25 修好
+    （`[[number.based]]` 新增 `suffix` 键）——按本类的用法（"修好后用例会失败并提醒
+    同步"），对应用例已**转为正向断言**（见 `TestNumberForms`）。
     """
-
-    @pytest.mark.parametrize("src", ["42u", "0xFFu", "10L", "1ULL"])
-    def test_integer_suffix_still_splits(self, c_lexer, src):
-        types = _types(src, c_lexer)
-        assert types == ["literal.number", "id"], (
-            f"{src!r} 的 token 形态变了（现为 {types}）——"
-            "若后缀已支持，请把本用例改为「单个数字 token」并同步缺口档"
-        )
 
     def test_escaped_quote_inside_string_breaks_capture(self, c_lexer):
         """**转义引号**（`"a\\"b"`）让字符串捕获提前终止。
