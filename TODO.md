@@ -356,6 +356,26 @@
       `.gitignore` 把 gen/ 当产物的意图冲突）。
       **判据**：全新克隆（或 `git worktree add` 到空目录）上直接 `pytest tests -q` 全绿，
       无需先跑 e2e harness。
+- [ ] **行尾注释在渲染中重复（每遍加倍）⇒ `format(format(x)) != format(x)`**（fuzz 抓到，
+      **发布阻塞项**）：CI 的 fuzz 步（500 轮、不固定种子）因此**随机红**——本机连跑两次
+      findings 0 只是运气。**确定性复现**（不需要 fuzz）：
+        · 现场在 `tests/fuzz/findings/*_nonidem_mut_ref_darkriscv.v.v`（fuzz 落盘，取任一份）；
+        · `python main.py format in.v > out1.v` → `python main.py format out1.v > out2.v`
+          → 两遍差 4 行，且**第三遍继续变**（不收敛）。
+      症状：同一条行尾注释在**一遍渲染内**就变两份，随后每遍**加倍**：
+        · 一遍：`... ] }; // i-type  // i-type`
+        · 两遍：`... ] }; // i-type  // i-type // i-type  // i-type`
+      触发位置：`ref_darkriscv.v` 变异体里一条**跨行三目链**的行中/行尾注释（语句在 `function`
+      之类块内、表达式里含宏与拼接）。**已排除**：手工构造的 16 个最小变体（模块级 `assign`、
+      `always`/`function` 块内、带宏、三目链、`case`、续行注释、括号拼接…）**都不复现**
+      ——触发依赖现场那份文件的特定组合，需从现场反推。
+      排查起点（未验证，供下一步）：`renderer/doc.py::_resolve_line_suffix`（`layout()` 入口
+      会把 `Union` 重写成 `Concat` 内换行前的 `Text`）与 `Union` 的 flat/broken 两分支是否
+      **各自都带了同一条注释**；相关面还有 `renderer/primitives/line.py`（`inline_after`
+      锚 token 定位）与 `parser/_production.py` 的行尾注释挂点。
+      ⚠ 判据（先定成因再动手）：同一条注释在**一遍渲染**里只许出现一次；修好后
+      `fix(fuzz)` 用同一份 findings 复跑必须 findings 0，且既有注释四文件门禁全绿
+      （该面历史上"收紧一处、六处门禁变红"，别只修现场不看门禁）。
 - [ ] **隔离工具 nodeid 归一只在同盘成立（Linux/CI 会红，本机跨盘"假绿"）**：
       `tools/check_test_isolation.py::_normalize_id` 用 `os.path.relpath(path, _ROOT)`——
       仓库根与目标目录**同盘**时算出相对路径，**丢掉 `::用例名`**；**跨盘**时 `relpath`
