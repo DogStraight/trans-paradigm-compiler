@@ -428,7 +428,12 @@ def _cmd_config_dump(args: argparse.Namespace) -> None:
     from core.config_registry import ConfigRegistry
     from core.define import DEFAULT_RULES_DIR
 
-    rules_dir = args.rules_dir or DEFAULT_RULES_DIR
+    # 默认 rules_dir 锚定 _project_root（与 `_resolve_grammar_dirs` 同口径）：
+    # DEFAULT_RULES_DIR 是**相对**路径（`grammar/verilog`），不锚定则解析结果
+    # 依赖 CWD——实测 wheel 装好后从仓库外跑本指令会报
+    # `ConfigError: glob 未找到匹配文件: 0*/*.toml`（根因是相对路径落到 CWD 下）。
+    # `--rules-dir` 是用户显式给的路径，仍按常规相对 CWD 解析。
+    rules_dir = args.rules_dir or os.path.join(_project_root, DEFAULT_RULES_DIR)
     plugins_dir = os.path.join(rules_dir, "plugins")
     loaded, sources = ConfigRegistry.resolve_with_sources(
         rules_dir, plugins_dir=plugins_dir
