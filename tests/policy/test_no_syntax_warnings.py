@@ -11,7 +11,6 @@ Python 3.14 会报、CI 的 pytest 汇总只显示"N warnings"不点名，而 Py
 只编译不导入 ⇒ 无副作用、无语言装载态污染。含反向自检（造一段非法转义，机制必须报出来）。
 """
 
-import os
 import warnings
 from pathlib import Path
 
