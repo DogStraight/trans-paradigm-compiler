@@ -290,6 +290,38 @@
 
 ## 测试基础设施
 
+> ⚠ **0.1.3 首次推送的阻塞项 + 完整 CI 排练结果**（作者 2026-09-26 定档：0.1.3 不单独
+> 推送，计划 **11 月直接推送并打 `v0.1.3` 标**，**打标前必须 CI 全绿**）。`origin/dev`
+> 至今停在 v0.1.1 ⇒ 本批 449 个提交 **CI 从未跑过**，故在本地把 `ci.yml` 的每一步
+> 等价跑了一遍。**结论：4 类红**，全部来自这批"从未被门禁看过"的提交。
+>
+> | CI 步骤 | 本地等价做法 | 结果 |
+> |---|---|---|
+> | `pytest tests -q -n auto --cov` | 同命令 | ✅ 全绿（覆盖率 90.09%，≥80） |
+> | shuffled-order smoke | `TPC_SHUFFLE_SEED=1 pytest -m smoke` | ✅ 451 passed |
+> | policy `check_hardcode --strict-doc --strict-import` | 同命令 | ❌ **R3 2 处**（见下①） |
+> | policy `check_doc_refs.py` | 同命令 | ✅ exit 0（D4 1 处 info：ADR-0020 孤儿，非 gate） |
+> | **pyright strict** | `pyright --project pyrightconfig.strict.json` | ❌ **49 errors**（见下②） |
+> | edge corpus gate | `python tests/edge/run_edge.py` | ✅ clean 6 / reject 7 / failures 0 |
+> | fuzz smoke | `python tests/fuzz/run_fuzz.py --iters 500` | ✅ findings 0 |
+> | CLI check | 仓库外 `tpc format` | ✅ exit 0 |
+> | wheel-install job | build + 独立 venv 装 wheel + 仓库外 CLI | ✅（0.1.3 交付轮已验） |
+>
+> 待修**四类**：
+> **① `check_hardcode --strict-doc` 缺 `Doc:` 头 2 处**（机械修）：
+> `core/global_state.py:1`、`analyzer/elaboration/__init__.py:1`。
+> **② pyright strict 49 errors**（v0.1.1 时是 **0**——`1448afc` 专门清零过；本批静默漂移）。
+> 规则分布：`reportOptionalMemberAccess` 21 / `reportUnusedImport` 10 /
+> `reportArgumentType` 6 / `reportUndefinedVariable` 4 / `reportUnusedVariable` 2 /
+> `reportReturnType` 2 / `reportCallIssue` 2 / `reportAttributeAccessIssue` 2；
+> 文件分布集中在 `tests/languages/c`（17）与引擎 `preprocessor`（6）/`analyzer`（3）/
+> `lexer`（3）/`linter`（2）/`parser`（2）/`renderer`（2）/`pipeline`（1）。
+> 按 `policy/pylance-cleanup.md` 分部件清零。⚠ 其中 4 条 `"Any" is not defined`
+> （`parser/_production.py:788`、`preprocessor/_expand.py:713-715`）**当"真问题"看**：
+> 名字用在值位置，只是靠 `from __future__ import annotations` 才没在运行期炸。
+> **③ 单测依赖 gitignore 生成物**（下面第一条）。
+> **④ 隔离工具 nodeid 归一同盘退化**（下面第二条）。
+
 - **并行度默认值**：`pyproject.toml` 的 `addopts = "-n auto"` **保持现状**（作者
   2026-09-19 定调“先这样”）。本机跑全量时自行显式传 `-n 4` 规避顶满核（做法与分档
   见 `tests/README.md`「改动节奏分档」）；不改仓库默认。
