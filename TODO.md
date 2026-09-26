@@ -293,3 +293,35 @@
 - **并行度默认值**：`pyproject.toml` 的 `addopts = "-n auto"` **保持现状**（作者
   2026-09-19 定调“先这样”）。本机跑全量时自行显式传 `-n 4` 规避顶满核（做法与分档
   见 `tests/README.md`「改动节奏分档」）；不改仓库默认。
+
+- [ ] **单测依赖 gitignore 的生成物 ⇒ 全新检出/CI 必红**（打 `v0.1.2` tag 时实测发现）：
+      `tests/engine/analyzer/test_elaboration_{port_decls,signal_graph,gen_activity}.py`
+      硬编码读 `tests/e2e/samples/normal/gen/gen_generate.v`，而该目录是
+      `tests/e2e/run_all_tests.py` 的**产物**且在 `.gitignore`（`tests/e2e/samples/*/gen/`）。
+      **实测**（临时 worktree 检出 `8dca789` = 全新检出态）：
+        · 直接 `pytest tests` → **4 failed / 2172 passed / 18 skipped**（3 个是上述
+          `FileNotFoundError`）；
+        · 先跑 `run_all_tests.py` 生成产物 → **1 failed / 2175 passed / 18 skipped**
+          （精化三项转绿；余下 1 项见下条）。
+      影响：`ci.yml` 的 `pytest tests` 之前**没有生成步骤**，且 `origin/dev` 停在 v0.1.1
+      ——本批 395 提交**从未推送**，CI 从未跑过它们 ⇒ 首次推送会红。
+      修法候选：① 三项测试改用**已入库**的 ANSI 头部样本（`tests/e2e/samples/check_accuracy/
+      cases/**` 或新增 `tests/engine/analyzer/fixtures/ansi_header.sv`）；② 测试内按需用
+      `tmp_path` 自造样本（跑管线格式化 `ref/` 形态或直接写小样本再分析），**彻底去掉跨套件
+      依赖**；③ 对 `normal/gen/gen_generate.v` 单独 `!` 反忽略入库（最省事，但与
+      `.gitignore` 把 gen/ 当产物的意图冲突）。
+      **判据**：全新克隆（或 `git worktree add` 到空目录）上直接 `pytest tests -q` 全绿，
+      无需先跑 e2e harness。
+- [ ] **隔离工具 nodeid 归一只在同盘成立（Linux/CI 会红，本机跨盘"假绿"）**：
+      `tools/check_test_isolation.py::_normalize_id` 用 `os.path.relpath(path, _ROOT)`——
+      仓库根与目标目录**同盘**时算出相对路径，**丢掉 `::用例名`**；**跨盘**时 `relpath`
+      无法计算、退回原样（保留用例名）。**实测**（同一目标目录、同一脚本，只换仓位置）：
+        · 主仓（仓在 `E:`、临时目录在 `C:`）→ 报 `::test_needs`（1 条差异）；
+        · worktree（两者同在 `C:`）→ 报 `iso_probe/test_a_sets_state.py` 与
+          `iso_probe/test_b_needs_state.py`（2 条差异，用例名丢失）。
+      故自测 `tests/policy/test_check_test_isolation.py::test_compare_reports_isolated_only_failure`
+      （断言含 `test_b_needs_state.py::test_needs`）**只在跨盘通过**；Linux/macOS 上仓库与
+      `/tmp` 同属一个文件系统 ⇒ 与 worktree 同形 ⇒ **首次推送 CI 会红**。
+      修法：`_normalize_id` 显式处理 `ValueError`（跨盘/仓外），并保证**用例名始终保留**、
+      路径统一成 posix 相对形式；自测改为断言"文件名 + 用例名"两段，并补一条同盘/仓外路径
+      的直接判据（否则本机永远只能验到跨盘那一半）。
