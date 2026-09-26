@@ -103,7 +103,7 @@ is_statement = true
 
 [FuncDef.parser]
 production = [
-    "@StorageClass|@TypeQualifier|@TypeSpecifier",
+    "@StorageClass|@TypeQualifier|@TypeSpecifier|@FuncSpec",
     "@SpecRest*",
     "@Declarator",
     "@CompoundStmt",

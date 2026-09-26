@@ -112,9 +112,10 @@ grammar/c/
 | 词法 | 关键字（C99 全 37 个）、标点/运算符、注释（`/* */` 与 `//`） | 1 | `//` 是 C99 新增（C89 无）→ 归核心基线需明确 |
 | 词法 | 整数常量（十进制/八进制/十六进制 + `U`/`L`/`LL` 后缀）、浮点（含指数/后缀）、字符与字符串字面量（含转义表） | 1 | 字面量形态多，**逐形态正负样本** |
 | 词法 | 标识符与关键字冲突、行拼接（`\` 续行） | 1 | 续行属预处理面（阶段 4 复核） |
-| 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool`）+ 符号/无符号 | 1 | `long long`/`_Bool` 是 C99 新增 |
+| 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool/_Complex`）+ 符号/无符号 | 1 | `long long`/`_Bool`/`_Complex` 是 C99 新增 |
 | 声明 | 声明符递归：多级指针、数组（含 `[]` 不定长）、函数声明符、函数指针、返回函数指针 | 1–2 | **C 语法最难点**；用 c4 的声明符规则起步 |
-| 声明 | 存储类（`typedef/extern/static/auto/register`）与类型限定符（`const/volatile/restrict`） | 2 | `restrict` 仅指针（C99） |
+| 声明 | 存储类（`typedef/extern/static/auto/register`）、类型限定符（`const/volatile/restrict`）与**函数说明符**（`inline`，C99 §6.7.4） | 2 | `restrict` 仅指针、`inline` 仅函数——都是**约束**（语义层），语法层宽进 |
+| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：整数后缀（`1UL`）、前导点浮点（`.5`）、字符串内转义引号、强制转换 `(T)x`、链式后缀（`a.b.c`/`f(x)[i]`）、逗号运算符、复合字面量 |
 | 声明 | 初始化器（标量/聚合/指示符 `.field=`、`[i]=`） | 2 | 指示符是 C99 新增 |
 | 类型 | `struct`/`union`（含**位域**）、`enum`、标签命名空间（tag vs ordinary） | 2 | 命名空间分离属**语义**层（先语法后语义） |
 | 语句 | compound / 表达式语句 / 空语句 / `if`(含 `else`) / `switch`(含 `case`/`default`) / `while` / `do` / `for`(含 C99 声明式 `for(int i…)`) / `goto` / 标号 / `break` / `continue` / `return` | 3 | `for` 声明式是 C99 新增（归核心基线需明确） |

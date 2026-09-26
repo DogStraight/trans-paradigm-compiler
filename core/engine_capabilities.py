@@ -27,6 +27,13 @@ from core.errors import ConfigError
 # 版本 +1 的判据：**该能力的语义/形状对语言包可见地变了**（字段增删改、加载时序变化、
 # 声明面语义变化）。纯内部实现重构、性能优化、报错文案调整**不**升版本——否则
 # "受影响面"会被自己放大成常态，能力协商就退化成原来的粗线。
+#
+# ⚠ 判据边界（2026-09-25 明确，ADR-0020 D4 的执行口径）：**加性**扩展（新增可选键 /
+#   新增布局原语）**不**升版——其"包用了新键、旧引擎**静默**给出错结果"的危险路径
+#   已由引擎侧 fail-fast 堵住（认不出的布局键直接报 ConfigError，见
+#   `renderer/primitives/__init__.py::eval_expr`；词法/解析面同理由未知键加载期报错）。
+#   只有**既有声明面语义变化**（同名字段改义、必填性变化、加载时序变化）才 +1——
+#   那种情况旧包不会报错、只会默默跑出不同结果，正是版本号要拦的。
 CAPABILITIES: dict[str, str] = {
     "grammar.rules": "1",           # [grammar] files / inject（规则叠加与替换）
     "lexer.token_ext": "1",         # [lexer] token_ext / pre_scan / bracket_map

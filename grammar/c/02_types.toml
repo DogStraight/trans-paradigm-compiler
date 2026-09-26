@@ -162,7 +162,7 @@ value = "$2.sub_node[0].sub_node[1]"
 
 [SimpleType.parser]
 production = [
-    "(keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool)",
+    "(keyword.void|keyword.char|keyword.short|keyword.int|keyword.long|keyword.float|keyword.double|keyword.signed|keyword.unsigned|keyword._Bool|keyword._Complex)",
 ]
 
 [SimpleType.parser.node]

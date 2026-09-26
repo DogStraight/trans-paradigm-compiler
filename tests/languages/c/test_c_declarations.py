@@ -22,6 +22,36 @@ import pytest
 from tests.languages.c.conftest import _lint, _node_names, _parse
 
 
+class TestC99Specifiers:
+    """C99 §6.7.4 函数说明符与 C99 类型词（此前的接受面空洞，2026-09-25 实测补上）。
+
+    实测口径：`inline` 此前**整条解析失败**（说明符位没有函数说明符规则，
+    `inline int f(...)` 出空 AST）；`_Complex` 同理。两者都属 C99 核心语法面，
+    且 `static inline` 在真实 C 头文件里极常见。
+    """
+
+    def test_inline_function_specifier(self, c):
+        ast = _parse("inline int f(restrict int *p) { return 0; }\n", c)
+        assert _node_names(ast) == ["FuncDef"]
+        assert ast.sub_node[0].specs.node_name == "FuncSpec"
+
+    def test_static_inline_order_free(self, c):
+        """`static inline int g(void)`：存储类在首个说明符位、函数说明符进 rest。"""
+        ast = _parse("static inline int g(void) { return 1; }\n", c)
+        func = ast.sub_node[0]
+        assert func.specs.node_name == "StorageClass"
+        assert func.specs.base.value == "static"
+        assert func.rest.items[0].spec.node_name == "FuncSpec"
+
+    def test_complex_type_specifier(self, c):
+        """`float _Complex z;`：`_Complex` 走 rest（同 `long long` 的多词形态）。"""
+        ast = _parse("float _Complex z;\n", c)
+        decl = ast.sub_node[0]
+        assert decl.specs.spec.node_name == "SimpleType"
+        assert decl.rest.items[0].spec.node_name == "SimpleType"
+        assert decl.rest.items[0].spec.base.value == "_Complex"
+
+
 class TestDeclarationParse:
     """正样本：声明进 AST，且声明符结构可查。"""
 

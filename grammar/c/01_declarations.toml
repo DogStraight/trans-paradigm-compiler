@@ -32,7 +32,7 @@ is_statement = true
 
 [Declaration.parser]
 production = [
-    "@StorageClass|@TypeQualifier|@TypeSpecifier",
+    "@StorageClass|@TypeQualifier|@TypeSpecifier|@FuncSpec",
     "@SpecRest*",
     "@DeclaratorList?",
     "symbol.base.semicolon",
@@ -88,11 +88,24 @@ spec = "$1"
 #   记在缺口档阶段 2 未落地项里。
 [SpecRest.parser]
 production = [
-    "@StorageClass|@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier",
+    "@StorageClass|@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier|@FuncSpec",
 ]
 
 [SpecRest.parser.node]
 spec = "$1"
+
+
+# FuncSpec — C99 §6.7.4 函数说明符（`inline`；`_Noreturn` 是 C11，走插件）
+# 只挂在 Declaration / FuncDef 的说明符位上（成员/参数说明符位不放：`struct { inline int x; }`
+# 是语法错误，不是语义约束）。"inline 只能出现在函数声明"是 §6.7.4p2 的**约束**，
+# 归语义层——语法层与 `@TypedefName` 同口径宽进。
+[FuncSpec.parser]
+production = [
+    "keyword.inline",
+]
+
+[FuncSpec.parser.node]
+base = "$1"
 
 
 # ── DeclaratorList / Declarator — 声明符（指针 + 直接声明符） ──
@@ -370,6 +383,9 @@ line = [
 ]
 
 [StorageClass.renderer.layout]
+ref = "base"
+
+[FuncSpec.renderer.layout]
 ref = "base"
 
 [TypeQualifier.renderer.layout]
