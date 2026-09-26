@@ -466,6 +466,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.1.2] - 2026-10-25
 
+### Fixed
+
+- **直出切片与注释槽双吐同一条行尾注释（每遍加倍、不收敛）**——fuzz 报的非幂等，实为
+  渲染缺陷：语句含宏 ⇒ 挂 `_verbatim_text` = 该语句**展开切片原文**，而切片末尾**就含
+  行尾注释**；同一条注释又在 `_comment_slots['trailing']` 里（**裸 str**）。
+  `_render_verbatim` 按"附着注释在节点 span 之外"的假设把槽也输出 ⇒ 一条注释出两份；
+  下一遍切片里已含两份 ⇒ **每遍加倍**（实测 `// i-type` 4→6→10、注释总数 731→733→737）。
+  修法：**直出文本权威**——切片里已含的注释不再由槽输出，切片之外的槽照旧输出。
+  判据见 `tests/engine/renderer/test_verbatim_node.py`（含"切片外仍输出"的对照）。
+- **Python ≤3.13 上导入即 `NameError`**：`preprocessor/_expand.py` 与 `parser/_production.py`
+  的注解用了**未导入**的 `Any`——本机 Python 3.14 的惰性注解（PEP 649）掩盖了它，而
+  `requires-python = ">=3.11"` 与 CI 矩阵（3.11/3.12/3.13）会在 def/class 创建时立即求值。
+  补导入并新增门禁 `tests/policy/test_eager_annotations.py`（此类缺陷本地 3.14 结构性测不出）。
+- **`_fits_fixed_len` 读 `Text.s`（字段实为 `text`）⇒ `_fits` 遇含 `Text` 的 `Concat` 抛
+  `AttributeError`**：重构 `3b9b113` 把原 `case Text(s): col += len(s)`（**位置捕获模式**）
+  机械抽成谓词时把模式变量名当成了属性名。`layout` 主路径走 `_flat_w` 缓存、很少直接问
+  `_fits`，故夹具与真实语料都没抓到。补 `TestFitsFixedWidthPath` 回归判据。
+- **`check_hardcode --strict-doc`（R3）假红**：该规则只扫"文件前 2000 字符"，而
+  `core/global_state.py` 的 `Doc:` 在**字符偏移 2597**（约定位置是"docstring 末行"）⇒
+  合规文件永久红。改为按模块 docstring 判定（保留前 2000 字符作兼容退路）；另补
+  `analyzer/elaboration/__init__.py` 真缺的 `Doc:`。
+- **测试基础设施三处**（全新检出/同文件系统/CI 才现形）：① 3 个精化测试读 gitignore 的
+  e2e 生成物 `samples/normal/gen/*.v` ⇒ 改指受版本控制的 `ref/` 同名样本；
+  ② `check_test_isolation._normalize_id` 跨盘抛 `ValueError` 且仓外路径归一不到一起 ⇒
+  补跨盘守卫 + 仓外压 basename（始终保留 `::用例名`）；③ `_abs_target` 只按"仓库根 + 目标
+  目录"直拼，而同盘时 pytest 的 rootdir 是**共同祖先**（Linux 为 `/`）⇒ 支持逐级向上解析。
+
+### Added
+
+- **`tools/ci_rehearsal.py`：本地排练 `ci.yml` 全部门禁**（发布/打标前一条命令自查）——
+  9 步（主回归+覆盖率 / 乱序 smoke / 两条 policy / pyright strict / edge / fuzz / CLI /
+  wheel 安装冒烟），结论三态 **PASS / FAIL / INCOMPLETE**：**SKIP 与"一步都没跑"都不算绿**。
+  ⚠ `ci.yml` 的触发是 `push.branches` + `pull_request`，**推 tag 不触发 CI**；本批 449 个
+  提交从未推送 ⇒ 门禁从未运行 ⇒ 静默漂移到 4 类红（本轮逐项清零，见上）。
+
 ### Changed
 
 - **P3-②c-3（上）：`param_override` 共享项落地 + 逐项对拍（ADR-0019）**：把各检查原先
