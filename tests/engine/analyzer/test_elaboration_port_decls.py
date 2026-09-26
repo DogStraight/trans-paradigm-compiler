@@ -8,7 +8,7 @@
 | 夹具 | 覆盖 |
 |---|---|
 | `tests/e2e/samples/check_accuracy/cases/EX001_non_ansi_header/top.sv` | **裸名头部**（`module top(a, b)`）+ **体内旧式声明**（`input a;`）→ 回填路径 |
-| `tests/e2e/samples/normal/gen/gen_generate.v` | **ANSI 头部**（方向 + 宽度 + 网络类型） |
+| `tests/e2e/samples/normal/ref/ref_generate.v` | **ANSI 头部**（方向 + 宽度 + 网络类型） |
 
 ⚠ P3-②a 阶段本项**只新增、无人消费**（引擎侧 `ModuleInfo.ports` 仍在原位、仍是层 2/3 的
 输入）——本文件的存在意义就是**对拍**。切换 + 删引擎侧在 P3-②b。
@@ -36,7 +36,7 @@ _FIXTURE_LEGACY = os.path.join(
     "EX001_non_ansi_header", "top.sv",
 )
 _FIXTURE_ANSI = os.path.join(
-    "tests", "e2e", "samples", "normal", "gen", "gen_generate.v"
+    "tests", "e2e", "samples", "normal", "ref", "ref_generate.v"
 )
 
 

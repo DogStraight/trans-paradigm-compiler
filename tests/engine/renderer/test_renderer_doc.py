@@ -5,6 +5,7 @@ from renderer.doc import (
     Concat, Nest, Prefix, Union,
     group, flatten, layout,
 )
+from renderer.doc import _fits, _fits_fixed_len  # noqa: E402  判据直测私有谓词（见文末回归类）
 
 
 class TestDocConstruct:
@@ -130,3 +131,26 @@ class TestDocLayout:
         """LineBreak flat 时消失。"""
         doc = group(Concat([Text("a"), LineBreak(), Text("b")]))
         assert layout(doc) == "ab"
+
+
+class TestFitsFixedWidthPath:
+    """`_fits` 的**定宽累加**路径必须吃得下 `Text` 子项（回归 2026-09-26 实测缺陷）。
+
+    事故：`_fits_fixed_len` 写的是 `len(d.s)`，而 `Text` 的字段是 `text`——它是
+    重构 `3b9b113` 把原 `case Text(s): col += len(s)`（**位置捕获模式**，`s` 由模式
+    绑定）机械抽成谓词时，把模式变量名当成了属性名。症状：`_fits` 一旦遇到含 `Text`
+    的 `Concat` 就 `AttributeError`（`layout` 主路径走 `_flat_w` 缓存，很少直接问
+    `_fits`，所以夹具与真实语料都没抓到——这条判据是补上那个缺口）。
+    """
+
+    def test_fixed_len_reads_text_field(self):
+        """定宽取长：Text 按字段 `text` 计字，非定宽变体返回 None。"""
+        assert _fits_fixed_len(Text("abc")) == 3
+        assert _fits_fixed_len(Empty()) is None
+
+    def test_fits_concat_with_text_children(self):
+        """含 Text 的 Concat：能放下 / 放不下都要给结论，而不是抛异常。"""
+        assert _fits(80, Concat([Text("hello")])) is True
+        assert _fits(4, Concat([Text("hello")])) is False
+        assert _fits(3, Concat([Text("ab"), Text("c")])) is True
+        assert _fits(2, Concat([Text("ab"), Text("c")])) is False

@@ -758,9 +758,10 @@ class Lexer:
         """转义标识符（[id.escaped] 声明后启用）。"""
         self._emit_pending_dedent(st.tokens)
 
-        terminators = self._escaped_cfg.get("terminators", " \t\r\n")
-        token_type = self._escaped_cfg.get("token_type", "id")
-        id_content = self._escaped_cfg.get("prefix", "")
+        cfg = self._escaped_cfg or {}  # 只在声明 [id.escaped] 后走到这里；空表取默认
+        terminators = cfg.get("terminators", " \t\r\n")
+        token_type = cfg.get("token_type", "id")
+        id_content = cfg.get("prefix", "")
         st.idx += 1
         st.offset += 1
         while (

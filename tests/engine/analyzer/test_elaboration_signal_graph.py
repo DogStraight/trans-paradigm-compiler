@@ -40,7 +40,7 @@ _CASES = [
         "W105_single_inst_and_load",
         "W104_fully_connected",
     )
-] + [os.path.join("tests", "e2e", "samples", "normal", "gen", "gen_generate.v")]
+] + [os.path.join("tests", "e2e", "samples", "normal", "ref", "ref_generate.v")]
 
 
 @pytest.fixture

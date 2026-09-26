@@ -209,3 +209,17 @@ def test_repo_gate_clean() -> None:
     # 词表来自真实 grammar/（防提取逻辑回归）
     assert "module" in report.vocab
     assert "if" not in report.vocab  # Python 关键字已剔除
+
+
+def test_rule3_doc_header_beyond_2000_chars(tmp_path: Path) -> None:
+    """长 docstring 里合规的 `Doc:` 不得判红（回归：门禁曾只扫前 2000 字符）。
+
+    实测 `core/global_state.py` 的 `Doc:` 在**字符偏移 2597** —— 约定位置是
+    "docstring 末行行首"，与"前 2000 字符"无关；门禁须按 docstring 判定，
+    否则长 docstring 的文件永久假红。
+    """
+    filler = "".join(f"说明第 {i} 行，凑长度用。\n" for i in range(200))
+    code = f'"""模块说明。\n\n{filler}\nDoc: docs/somewhere.md\n"""\nx = 1\n'
+    assert len(code) > 2000, "夹具本身要长过 2000 字符，否则测不到该路径"
+    root = _make_tree(tmp_path, code)
+    assert checker.collect_findings(root).results["R3"].violations == []

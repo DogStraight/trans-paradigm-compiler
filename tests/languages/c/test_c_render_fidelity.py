@@ -60,6 +60,7 @@ def c_env(config_loaded):
 
     def render(src: str) -> str:
         ast = parser.parse(lexer.tokenize(src))
+        assert ast is not None  # 判据 1（非空）的入口：解析不出 AST 即失败
         return renderer.render(ast)
 
     yield {"render": render, "tokenize": lexer.tokenize}

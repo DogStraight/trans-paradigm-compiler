@@ -221,7 +221,7 @@ def _collect_end_keyword_bounds(
         if isinstance(info, dict) and not info.get("is_block")
         for tok in _tail_keyword_tokens(info)
     )
-    for name, info in tree.items():
+    for info in tree.values():
         if info.get("is_block"):
             continue  # 第一轮已处理
         ec_tail = _tail_keyword_tokens(info)
@@ -325,7 +325,7 @@ def _collect_stmt_headers(
     from linter.grammar_slicer import get_start_tokens
 
     stmt_headers: set[str] = set()
-    for name, info in tree.items():
+    for info in tree.values():
         if not isinstance(info, dict):
             continue
         prods = info.get("prods", [])

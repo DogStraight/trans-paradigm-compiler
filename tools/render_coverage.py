@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.config_registry import ConfigRegistry  # noqa: E402
-from core.define import GrammarRulesRegister  # noqa: E402
+from core.define import GrammarRule, GrammarRulesRegister  # noqa: E402
 from parser import setup_grammar  # noqa: E402
 
 
@@ -38,9 +38,8 @@ def _has_render(rule) -> bool:
     return bool(cfg.get("layout") or cfg.get("body") or cfg.get("ref"))
 
 
-def _node_fields(rule) -> set[str]:
+def _node_fields(rule: GrammarRule) -> set[str]:
     """规则 node 绑定里的字段名（`{ ref = … }` 能引用的东西）。"""
-    from core.define import GrammarRule  # noqa: F401  仅说明类型
 
     parser_cfg = getattr(rule, "parser", None) or {}
     node = parser_cfg.get("node") if isinstance(parser_cfg, dict) else None

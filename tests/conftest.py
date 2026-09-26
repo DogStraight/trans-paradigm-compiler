@@ -37,7 +37,7 @@ from lexer import Lexer
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _global_state_baseline() -> dict:
+def _global_state_baseline() -> dict:  # pyright: ignore[reportUnusedFunction] — autouse fixture（按名发现）
     """session 基线：加载 verilog 配置并拍全局状态快照（隔离锚点）。"""
     from core.config_registry import ConfigRegistry
     from core.define import GrammarRulesRegister
@@ -52,7 +52,9 @@ def _global_state_baseline() -> dict:
 
 
 @pytest.fixture(autouse=True)
-def _restore_global_state(_global_state_baseline: dict) -> Iterator[None]:
+def _restore_global_state(  # pyright: ignore[reportUnusedFunction] — autouse fixture（按名发现）
+    _global_state_baseline: dict,
+) -> Iterator[None]:
     """每个测试结束后把**测试级**全局状态还原到基线 → 测试顺序无关。
 
     - 测试级 = 派生缓存 / 注册表新增项 / 共享上下文 / 深度计数器（见
@@ -71,7 +73,9 @@ def _restore_global_state(_global_state_baseline: dict) -> Iterator[None]:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _restore_install_state(_global_state_baseline: dict) -> Iterator[None]:
+def _restore_install_state(  # pyright: ignore[reportUnusedFunction] — autouse fixture（按名发现）
+    _global_state_baseline: dict,
+) -> Iterator[None]:
     """模块结束时还原语言安装态 → 跨模块不串味（模块内由 fixture 自管）。"""
     yield
     from core.global_state import restore

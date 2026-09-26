@@ -11,7 +11,7 @@
 
 | 夹具 | 覆盖 |
 |---|---|
-| 真实语料 `tests/e2e/samples/normal/gen/gen_generate.v` | generate-for + generate if/else；条件是 `DATA_WIDTH > 8`（**不可判**）与 `g == 0`（含循环变量，**不可判**） |
+| 真实语料 `tests/e2e/samples/normal/ref/ref_generate.v` | generate-for + generate if/else；条件是 `DATA_WIDTH > 8`（**不可判**）与 `g == 0`（含循环变量，**不可判**） |
 | 合成 `_DECIDED`（体内 `parameter EN = 1` + `if (EN)`） | **可判**路径 |
 
 ⚠ **为什么必须两类都有**：求值器只认 **裸参数名**（含 `!` 前缀）/ 纯数字 / 纯常量
@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import os
+from typing import cast
 
 import pytest
 
@@ -37,11 +38,12 @@ from core.define import Node
 
 from analyzer.checker import ProjectChecker
 from analyzer.elaboration import SolveCtx, load_elaborator_spec
+from analyzer.elaboration.service import ServiceApi
 
 pytestmark = pytest.mark.usefixtures("config_loaded")
 
 _FIXTURE_REAL = os.path.join(
-    "tests", "e2e", "samples", "normal", "gen", "gen_generate.v"
+    "tests", "e2e", "samples", "normal", "ref", "ref_generate.v"
 )
 
 # 可判条件夹具：体内 `parameter EN = 1;` + `if (EN)`（裸参数名 → 求值器能判）
@@ -155,7 +157,8 @@ def _cond(text: str, params: dict):
 
     node = Node("IfBlock")
     node.add_attr("condition", Node("Identifier"))
-    ctx = SolveCtx(products={}, service=_FakeService(text))
+    # `_FakeService` 只实现被求值器调用到的那几个方法——代 ServiceApi 的测试替身
+    ctx = SolveCtx(products={}, service=cast(ServiceApi, _FakeService(text)))
     return elab._eval_gen_cond(node, params, ctx)
 
 

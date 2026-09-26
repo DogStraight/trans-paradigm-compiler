@@ -36,6 +36,7 @@ _TOOL = os.path.join(_ROOT, "tools", "check_gate_efficacy.py")
 
 def _mutations() -> list[dict]:
     spec = importlib.util.spec_from_file_location("check_gate_efficacy", _TOOL)
+    assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return list(mod._MUTATIONS)

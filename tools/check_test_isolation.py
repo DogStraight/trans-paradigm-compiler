@@ -153,14 +153,25 @@ def _normalize_id(nodeid: str) -> str:
     子进程拿到的目标可能是绝对路径（如 `--granularity test` 逐用例跑），pytest
     会把那个写法回显在 FAILED 行里——两档比对前必须归一，否则同一失败在
     "绝对 vs 相对" 两种写法下会被算成两个不同的失败。
+
+    两条实测边界（2026-09-26 发布排练发现）：
+    - **跨盘**（仓在 E:、pytest 的 tmp_path 在 C:）时 `os.path.relpath` 抛 `ValueError`——
+      原实现未接，工具直接崩；Windows 上目标在别的盘就触发；
+    - **仓外路径**（pytest tmp_path 是常态）原实现返回原样 ⇒ 绝对与相对两种写法归一不到
+      一起，正是本函数要消除的形态。故仓外一律压 **basename**，并**始终保留 `::用例名`**
+      （那是两档比对的唯一稳定标识）。
     """
     path, sep, rest = nodeid.partition("::")
     if not sep or not path:  # 无文件部分（rootdir 之外的省略形态）原样返回
         return nodeid
-    rel = os.path.relpath(path, _ROOT)
-    if rel.startswith(".."):
-        return nodeid
-    return f"{rel.replace(os.sep, '/')}::{rest}"
+    try:
+        rel = os.path.relpath(path, _ROOT)
+    except ValueError:  # 跨盘：算不出相对路径（Windows）
+        rel = path
+    rel = rel.replace(os.sep, "/")
+    if rel.startswith("..") or os.path.isabs(rel):
+        rel = os.path.basename(rel)  # 仓外：只留文件名，保留 ::用例名
+    return f"{rel}::{rest}"
 
 
 def _compare_key(nodeid: str) -> str:

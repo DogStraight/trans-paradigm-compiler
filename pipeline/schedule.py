@@ -26,7 +26,7 @@ Doc: docs/pipeline_stages.md
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from core.plugin_loader import (
     get_capability,
@@ -116,7 +116,8 @@ def _entry_fields(e, schedule_name: str) -> tuple[str, int | None, str | None]:
             f"[pipeline] schedule '{schedule_name}' 条目 {name!r} "
             f"order 与 after 互斥"
         )
-    return name, order, after
+    # order/after 的合法性由 `_check_order` 与调用方校验（此处只收类型，不改行为）
+    return cast(str, name), cast(int | None, order), cast(str | None, after)
 
 
 def _check_order(order, schedule_name: str) -> None:

@@ -492,9 +492,10 @@ class Discovery:
         """
         trial: list = []
         try:
-            k = self._lookahead._matcher.match(
-                tokens, j, feat, trial, end, strict=True
-            )
+            matcher = self._lookahead._matcher
+            if matcher is None:  # 未装载匹配器：与既有 except 同义地放弃该元素
+                return None
+            k = matcher.match(tokens, j, feat, trial, end, strict=True)
         except Exception:
             return None
         return k if k > j else j + 1

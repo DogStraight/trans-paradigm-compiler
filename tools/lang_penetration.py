@@ -113,7 +113,7 @@ def _scan_structural(rel: str, tree: ast.AST, rule_names: set[str]) -> list[str]
     for node in ast.walk(tree):
         value = getattr(node, "value", None)
         if isinstance(value, str) and value in rule_names:
-            hits.append(f'{rel}:{node.lineno}: "{value}"')
+            hits.append(f'{rel}:{getattr(node, "lineno", 0)}: "{value}"')
     return hits
 
 

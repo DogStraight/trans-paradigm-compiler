@@ -7,7 +7,8 @@
 
 Doc: renderer/renderer_architecture.md（soft 软换行原语）
 """
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 from core.define import Node
 from ..doc import Doc, Line as SoftLine, LineBreak, HardBreak
 from .registry import register
@@ -20,7 +21,8 @@ def _break_doc(doc_cls: type[Doc], expr: dict, renderer: Any) -> Doc:
     """
     indent_level = expr.get("indent", 0)
     if indent_level > 0:
-        return doc_cls(renderer._indent(indent_level))
+        # soft/break/hard_break 三个 Doc 的构造签名同为 (str)
+        return cast(Callable[[str], Doc], doc_cls)(renderer._indent(indent_level))
     return doc_cls()
 
 

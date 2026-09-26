@@ -23,6 +23,7 @@ Doc: preprocessor/README.md
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 from core.errors import ConfigError
 
@@ -54,7 +55,7 @@ def load_macro_policy(rules_dir: str) -> Callable[[dict], dict] | None:
         raise ConfigError(
             f"[macro_policy] 能力入口须返回含可调用 plan 的表（得到 {type(api).__name__}）"
         )
-    return plan
+    return cast(Callable[[dict], dict], plan)  # 已过 callable 检查；签名由能力契约约定
 
 
 def plan_macro(

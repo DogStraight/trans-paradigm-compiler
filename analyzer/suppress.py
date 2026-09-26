@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Iterator, Mapping
+from typing import Mapping
 
 from lexer.comment_syntax import CommentSyntax
 

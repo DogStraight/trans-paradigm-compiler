@@ -44,9 +44,15 @@ def _first_decl(src: str, c):
 
 
 def _init(src: str, c):
-    """第一条声明的第一个声明符的初始化器（未挂载 → None），已剥 seq/inline 层。"""
+    """第一条声明的第一个声明符的初始化器，已剥 seq/inline 层。
+
+    ⚠ 未挂载 = **判据失败**（"可选位点静默为空"是本包吃过的教训），故此处直接断言、
+    不返回 None——调用方一律按"必须挂上"用（原实现返回 Optional 时，12 处调用各自
+    裸访问可选值，语义与静态门禁都不清）。
+    """
     raw = getattr(_first_decl(src, c).declarators.items[0], "init", None)
-    return None if raw is None else _unwrap(raw)
+    assert raw is not None, "初始化器未挂载（可选位点静默为空）"
+    return _unwrap(raw)
 
 
 def _count(node, name: str) -> int:

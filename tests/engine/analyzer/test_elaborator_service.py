@@ -97,4 +97,6 @@ def test_service_reflects_real_session(checker, tmp_path):
     engine_info = checker._ctx.module_index["top"]
     assert svc.unit_node("top") is engine_info.node
     assert svc.unit_file("top") == engine_info.file
-    assert svc.unit_node("top").node_name == "ModuleDecl"
+    top_node = svc.unit_node("top")
+    assert top_node is not None
+    assert top_node.node_name == "ModuleDecl"

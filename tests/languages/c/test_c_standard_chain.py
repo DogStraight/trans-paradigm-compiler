@@ -15,7 +15,6 @@ import tomllib
 
 import pytest
 
-from core.errors import ConfigError
 from core.plugin_loader import _resolve_dependencies
 
 ROOT = os.path.dirname(
@@ -25,7 +24,7 @@ _PACK = os.path.join(ROOT, "grammar", "c")
 
 
 def _meta(name: str, requires: list[str] | None = None) -> dict:
-    m = {"name": name}
+    m: dict = {"name": name}
     if requires:
         m["requires"] = requires
     return m
@@ -138,6 +137,7 @@ class TestC23IncrementWorks:
             ast = parser.parse(
                 Lexer(rules_dir=_PACK).tokenize('static_assert(1, "x");\n')
             )
+            assert ast is not None
             assert [n.node_name for n in ast.sub_node] == ["StaticAssertC23Decl"]
         finally:
             ConfigRegistry.load_language(

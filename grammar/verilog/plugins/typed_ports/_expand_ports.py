@@ -23,7 +23,6 @@
 from __future__ import annotations
 
 from core._protocol import ROW_ORIGIN
-from core.define import Node
 from grammar.verilog.plugins.typed_ports._node_utils import collect_type_scopes, node_text
 
 # 方向反转映射（_invert_map.py 旧原语已删，本常量集中定义普通端口逐项取反）

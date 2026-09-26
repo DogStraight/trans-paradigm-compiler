@@ -208,3 +208,31 @@ def test_isolated_tier_green_on_real_file() -> None:
     out = proc.stdout + proc.stderr
     assert proc.returncode == 0, out[-3000:]
     assert "[隔离档] 1 OK / 0 FAIL" in out, out[-3000:]
+
+
+# ── nodeid 归一（2026-09-26 发布排练暴露的两条边界）────────────────────────
+
+def test_normalize_id_keeps_case_name_for_outside_repo_path() -> None:
+    """仓外路径压成 basename，但**必须保留 `::用例名`**（两档比对的唯一稳定标识）。"""
+    assert cti._normalize_id(os.path.join("..", "outside", "test_a.py") + "::test_b") == (
+        "test_a.py::test_b"
+    )
+
+
+def test_normalize_id_in_repo_absolute_path_becomes_relative_posix() -> None:
+    """仓内绝对路径 → 仓根相对 + 正斜杠（两档写法归一）。"""
+    abs_path = str(_ROOT / "tests" / "policy" / "test_x.py")
+    assert cti._normalize_id(abs_path + "::test_y") == "tests/policy/test_x.py::test_y"
+
+
+def test_normalize_id_survives_cross_drive(monkeypatch) -> None:
+    """跨盘时 `os.path.relpath` 抛 ValueError——工具不得崩，压 basename 并保留用例名。
+
+    Windows 实测：仓在 E:、pytest tmp_path 在 C: 时 relpath 抛
+    `ValueError: path is on mount 'C:', start on mount 'E:'`（原实现未接）。
+    """
+    def raiser(*_args, **_kwargs):
+        raise ValueError("path is on mount 'C:', start on mount 'E:'")
+
+    monkeypatch.setattr(cti.os.path, "relpath", raiser)
+    assert cti._normalize_id("C:/tmp/iso/test_a.py::test_b") == "test_a.py::test_b"

@@ -166,5 +166,6 @@ def _collect_first_start_tokens(feat: dict | None, tree: dict | None = None) -> 
     """递归收集单个元素的起始 token。"""
     if feat is None:
         return set()
-    handler = _FIRST_HANDLERS.get(feat.get("type"))
+    key = feat.get("type")
+    handler = _FIRST_HANDLERS.get(key) if isinstance(key, str) else None
     return handler(feat, tree) if handler else set()

@@ -3,6 +3,7 @@
 > 定案见 `docs/decisions/0019-elaboration-plugin-protocol.md`；文件职责见 `README.md`。
 > 本包**只提供机制**：项列表与全部语义求解都归语言包插件
 > （`grammar/<lang>/plugins/elaboration/`，`[capabilities] elaborator`）。
+Doc: core/component_protocol.md（§1b 精化器能力位）
 
 命名纪律：中文行文称"精化"，但部件/类名/能力名一律用 `elaboration`
 （避免与 refinement（B/Event-B 规格精化）撞词）。

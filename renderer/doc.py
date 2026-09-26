@@ -10,7 +10,7 @@ Doc: renderer/renderer_architecture.md（Doc IR 原语与 layout 算法）
 """
 
 from dataclasses import dataclass
-from typing import Sequence, cast
+from typing import Callable, Sequence, cast
 
 # ── Doc 类型 ──
 
@@ -634,7 +634,8 @@ def _rebuild(orig: Doc, head: int, inner: Doc) -> Doc:
     """
     if isinstance(inner, Empty):
         return Empty()
-    return type(orig)(head, inner)
+    ctor = cast(Callable[[int, Doc], Doc], type(orig))  # 三者签名同为 (int, Doc)
+    return ctor(head, inner)
 
 
 def _drop_break_after_hardbreak(doc: Doc) -> Doc:
@@ -808,7 +809,7 @@ def _fill(w: int, k: int, docs: list[Doc]) -> str:
 def _fits_fixed_len(d: Doc) -> int | None:
     """定宽子项的列宽：Text 字数 / Pad·IfFlatPad 宽度 / IfBreakPad 的 0；非定宽 → None。"""
     if isinstance(d, Text):
-        return len(d.s)
+        return len(d.text)
     if isinstance(d, (Pad, IfFlatPad)):
         return d.width
     if isinstance(d, IfBreakPad):

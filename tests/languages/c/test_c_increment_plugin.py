@@ -97,7 +97,9 @@ class TestPluginIsLoadedWithPack:
 
     def test_condition_and_message_are_bound(self, restore_language):
         _, parse = _load()
-        node = parse(_SRC_MIN).sub_node[0]
+        ast = parse(_SRC_MIN)
+        assert ast is not None
+        node = ast.sub_node[0]
         assert node.cond.node_name == "Number"
         # `message` 绑定的是 **token**（production 里直接写 `literal.string`），
         # 故其节点名即 token 类型——不是 `StringLiteral` 那条规则（规则只在表达式位置用）。

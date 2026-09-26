@@ -35,6 +35,8 @@ generate 分支活性 `{id(节点): bool}`；`depends_on = ["param_default"]`（
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from typing import Any
 
 from core.define import CHILDREN_FIELD, Node, collect_nodes, iter_nodes, unwrap_optional
 from core.errors import ConfigError
@@ -816,7 +818,7 @@ def solve_param_override(hits: list[Node], atom: Atom, ctx: SolveCtx) -> dict | 
     return {_PROVIDES_PARAM_OVERRIDE: out}
 
 
-def _file_param_merge(root: Node, defaults_all: dict) -> dict[str, str]:
+def _file_param_merge(root: Node, defaults_all: Mapping[str, Any]) -> dict[str, str]:
     """本文件各单元参数合并（单层）——与 width_check `_file_params` 同语义。
 
     ⚠ 同名参数在多个单元出现时**后处理的覆盖先处理的**（`dict.update` 的实际行为；

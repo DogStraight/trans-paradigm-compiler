@@ -29,7 +29,7 @@ _RULES = DEFAULT_RULES_DIR
 
 
 @pytest.fixture(autouse=True)
-def _components_loaded():
+def _components_loaded():  # pyright: ignore[reportUnusedFunction] — autouse fixture（按名发现）
     """每个用例前加载 verilog 组件。
 
     能力查找依赖已加载组件表，而测试级全局状态还原会在用例间清掉装载表

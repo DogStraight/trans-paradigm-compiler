@@ -40,7 +40,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from core.define import CHILDREN_FIELD, Node, collect_nodes, iter_nodes, unwrap_optional
+from core.define import Node, collect_nodes, iter_nodes
 from core.token_protocol import IDENT_RE
 from core.config_registry import declare_cfg
 

@@ -262,12 +262,25 @@ def _rule2_grammar_paths(root: Path) -> tuple[list[Finding], list[Finding]]:
 
 
 def _rule3_doc_headers(root: Path) -> list[Finding]:
-    """规则 3（info）：文件头 Doc: 反向引用缺失。"""
+    """规则 3（info）：文件头 Doc: 反向引用缺失。
+
+    判据按 `docs/README.md` 的约定——`Doc:` 写在**模块 docstring** 里（末行行首）。
+    ⚠ 早期实现只扫"文件前 2000 字符"，对长 docstring 的文件是**假红**：实测
+    `core/global_state.py` 的 `Doc:` 在**字符偏移 2597** ⇒ 永远够不到（该文件其实合规）。
+    故先解析 docstring 再匹配；仍保留前 2000 字符的退路（兼容注释式写法，属加性放宽，
+    不会新增红）。
+    """
     findings: list[Finding] = []
     for rel in _iter_engine_files(root):
-        head = (root / rel).read_text(encoding="utf-8")[:2000]
-        if not _DOC_RE.search(head):
-            findings.append(Finding("R3", str(rel), 1, "文件头缺 Doc: 反向引用"))
+        text = (root / rel).read_text(encoding="utf-8")
+        doc = ""
+        try:
+            doc = ast.get_docstring(ast.parse(text)) or ""
+        except SyntaxError:
+            doc = ""  # 语法错另有门禁负责；此处退回首 2000 字符判据
+        if _DOC_RE.search(doc) or _DOC_RE.search(text[:2000]):
+            continue
+        findings.append(Finding("R3", str(rel), 1, "文件头缺 Doc: 反向引用"))
     return findings
 
 
