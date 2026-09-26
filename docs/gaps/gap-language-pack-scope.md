@@ -109,8 +109,9 @@ grammar/c/
 
 **盘点工具**：`python tools/c_acceptance.py`（27 条构造逐条试解析，报"进 AST / 空 AST /
 词法抛错"）——**空洞是无声的**：不属任何语句入口 FIRST 集的构造会被整体跳过而不报错，
-只跑测试套件看不出还差哪一族。当前 **接受 18 / 空洞 9**（空洞：`.5`、字符串内转义引号、
-逗号运算符、强制转换、链式后缀两项、复合字面量、预处理两项）。
+只跑测试套件看不出还差哪一族。当前 **接受 20 / 空洞 7**（空洞：`.5`、字符串内转义引号、
+逗号运算符、强制转换、复合字面量、预处理两项；**链式后缀 `a.b.c` / `f(x)[i]` 已于
+2026-09-25 从空洞转为接受**）。
 
 | 族 | 条目 | 阶段 | 备注 |
 |---|---|---|---|
@@ -120,8 +121,9 @@ grammar/c/
 | 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool/_Complex`）+ 符号/无符号 | 1 | `long long`/`_Bool`/`_Complex` 是 C99 新增 |
 | 声明 | 声明符递归：多级指针、数组（含 `[]` 不定长）、函数声明符、函数指针、返回函数指针 | 1–2 | **C 语法最难点**；用 c4 的声明符规则起步 |
 | 声明 | 存储类（`typedef/extern/static/auto/register`）、类型限定符（`const/volatile/restrict`）与**函数说明符**（`inline`，C99 §6.7.4） | 2 | `restrict` 仅指针、`inline` 仅函数——都是**约束**（语义层），语法层宽进 |
-| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、字符串内转义引号、强制转换 `(T)x`、链式后缀（`a.b.c`/`f(x)[i]`）、逗号运算符、复合字面量 |
-| 词法 | **后缀实测补洞（2026-09-25）**：整型后缀（`42u`/`1ULL`/`0x1Fu`）与浮点后缀（`1.5f`/`1e3L`）此前被切成"数字 + 标识符" → 已补（`[[number.based]] suffix` 键，DFA 之后的声明式尾段），门禁 `tests/engine/lexer/test_number_suffix.py` | 1 | 组合合法性（`1UL` 合法 / `1ff` 非法）**不在词法层判定**——C 的 pp-number 本就宽进，约束归语义层 |
+| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、字符串内转义引号、强制转换 `(T)x`、逗号运算符、复合字面量 |
+| 表达式 | **链式后缀补洞（2026-09-25）**：`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)` 此前不支持（三个后缀规则都是单级）→ 改为 `PostfixExpr{base, suffixes}`（原子 + 后缀+，同 clang 手写路径的"leading part + 后缀循环"），见 `tests/languages/c/test_c_postfix.py` 28 例 | 3 | 参照见 `docs/references.md`「C 语言文法参照」（ISO C99 §6.5.2 + clang + tree-sitter-c） |
+| 词法 | **后缀实测补洞（2026-09-25）**：整型后缀（`42u`/`1ULL`/`0x1Fu`）与浮点后缀（`1.5f`/`1e3L`）此前被切成"数字 + 标识符" → 已补（`[[number.based]] suffix` 键，DFA 之后的声明式尾段），门禁 `tests/engine/lexer/test_number_suffix.py` | 1 | 组合合法性（`1UL` 合法 / `1ff` 非法）**不在词法层判定**——C 的 pp-number 本就宽进（tree-sitter-c 同样按字符类宽进），约束归语义层 |
 | 声明 | 初始化器（标量/聚合/指示符 `.field=`、`[i]=`） | 2 | 指示符是 C99 新增 |
 | 类型 | `struct`/`union`（含**位域**）、`enum`、标签命名空间（tag vs ordinary） | 2 | 命名空间分离属**语义**层（先语法后语义） |
 | 语句 | compound / 表达式语句 / 空语句 / `if`(含 `else`) / `switch`(含 `case`/`default`) / `while` / `do` / `for`(含 C99 声明式 `for(int i…)`) / `goto` / 标号 / `break` / `continue` / `return` | 3 | `for` 声明式是 C99 新增（归核心基线需明确） |
@@ -301,13 +303,15 @@ render → 与源比对，七条判据：
 |---|---|---|
 | `tools/render_coverage.py grammar/c` | 70 条规则 / 1 有渲染配置（1%） | **80 条 / 80（100%）** |
 | `samples/ring_buffer.h` ratio / 有效行 | 0.0000 / 0（渲染为空串） | **0.9926** / 33（源 33） |
-| `samples/ring_buffer.c` ratio / 有效行 | 0.0000 / 0 | **0.9907** / 120（源 117） |
+| `samples/ring_buffer.c` ratio / 有效行 | 0.0000 / 0 | **0.9925** / 117（源 117） |
 | `samples/edge_comments.c` ratio / 有效行 | — | **0.9822** / 29（源 31） |
 
-⚠ 两处**再记录**（说明原因，不是调阈值凑绿）：① `ring_buffer.c` 0.9780 → 0.9867 是
-`i++` 修好后的直接结果（6 处 `i++`/`p++` 不再被写成 `++i`/`++p`）；② 三样本再升到
-0.9822～0.9926 是本包补上 `[renderer] style`（**页宽 80 列**，C 惯例；此前用引擎默认
-40 列，把正常声明/调用折成多行）后的结果。
+⚠ 三处**再记录**（说明原因，不是调阈值凑绿）：① `ring_buffer.c` 0.9780 → 0.9867 是
+`i++` 修好后的直接结果（6 处 `i++`/`p++` 不再被写成 `++i`/`++p`）；② 升到 0.9822～0.9926
+是本包补上 `[renderer] style`（**页宽 80 列**，C 惯例；此前用引擎默认 40 列，把正常
+声明/调用折成多行）的结果；③ `ring_buffer.c` 再升到 **0.9925 且有效行 117 = 源 117**
+是**链式后缀支持后样本长回自然写法**的结果（`r->items[i].key` 这类三级链；
+见 `TODO.md` 阶段 3 条目与 `docs/references.md`「C 语言文法参照」）。
 
 ⚠ 本闭环测的是**默认 `full` 级**（与 verilog 参考 `tests/e2e/test_real_fidelity.py`
 同口径）；引擎另有 `keep_blank` 级（按源结构位置回插空行，`renderer/fidelity.py`），

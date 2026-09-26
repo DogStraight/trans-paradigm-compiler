@@ -69,7 +69,10 @@ class TestScalarInitializer:
         assert _init('char *s = "hi";\n', c).node_name == "StringLiteral"
 
     def test_call_initializer(self, c):
-        assert _init("int x = f(a);\n", c).node_name == "CallExpr"
+        """初始化器是调用表达式 → 后缀链（`PostfixExpr` + `CallSuffix`）。"""
+        init = _init("int x = f(a);\n", c)
+        assert init.node_name == "PostfixExpr"
+        assert [s.node_name for s in init.suffixes] == ["CallSuffix"]
 
     def test_multiple_declarators_with_and_without_init(self, c):
         """`int i = 0, j;` —— 逐个声明符各自可选带初始化器（第二个为空）。"""

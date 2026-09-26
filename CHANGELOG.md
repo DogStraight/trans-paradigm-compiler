@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包后缀链：`PostfixExpr{base, suffixes}`（链式后缀，ISO C99 §6.5.2）**：
+
+  - 形状：旧实现是三个**单级**规则（`CallExpr` 的 base 只能是 `@Identifier`、`IndexExpr`
+    用组量词勉强支持 `a[i][j]`、`MemberExpr` 单级），故 `a.b.c` / `f(x)[i]` / `p->a[i]` /
+    `(*fp)(x)` 都不支持（旧测试把它们钉成"应报错"）。现按标准的六形态改为
+    **原子 + 后缀+**：`PostfixExpr{base, suffixes}` + `IndexSuffix` / `CallSuffix` /
+    `MemberSuffix`——与 clang 手写路径同形（先解析 leading part，再循环吃后缀，
+    `ParsePostfixExpressionSuffix`）。三个旧规则与布局**已删**（不留并存）。
+  - 两处引擎侧机制在实现中暴露并写进包注释（都是**取错就静默丢内容/整块失败**的坑）：
+    ① **FOLLOW 由引用推出来**——`PostfixExpr` 若不被任何规则引用，其派生 FOLLOW 只剩
+    pratt 注入的运算符族，`switch (p->key)` / `if (a.b)` 这类**后随 `)`** 的形态被 FOLLOW
+    硬检查拦掉（实测 `ring_buffer.c` 的 `ring_scan` 整函数解析失败）；
+    ② `+` 量词产生的是 **`plus` 包装节点**，而 normalizer 只消 `optional/repeat/seq`
+    （`transform/normalizer.py::ELIMINATE_TYPES`）——直接绑 `$2` 会拿到无布局的包装节点、
+    后缀静默渲染成空（实测 `r->head = 0;` 渲成 `r = 0;`，**token 序列判据当场抓到**）。
+  - 另两处形状约束（记在包注释里防重踩）：链的 head 不能用含 pratt 入口的
+    `PrimaryExpr`（`PostfixExpr → PrimaryExpr → UnaryExpr →` pratt 原子路径 → 回到
+    `PostfixExpr` 会无限递归，实测每步撞 `maximum recursion depth exceeded`）；
+    后缀用 `+` 而非 `*`（裸原子不该被包成链——`atomic_rules` 按 production 数降序、
+    等长取先试者，`*` 会让 `x` 变成 `PostfixExpr(base=Identifier, [])`，全局 AST 变脸）。
+  - 参照：`docs/references.md` 新增「C 语言文法参照」（ISO C99 §6.5.2 / clang
+    `ParsePostfixExpressionSuffix` / tree-sitter-c 的 `prec` 与后缀规则），含借鉴点与
+    "不实现 GLR 消歧"的理由。
+  - 样本随能力**长回**自然写法：`samples/ring_buffer.c` 用 `r->items[i].key` 三级链并
+    与头文件签名对齐（9 个函数）；保真度 **0.9907 → 0.9925 且有效行 117 = 源 117**。
+
+  验证：`test_c_postfix.py` 重写为 **28 例**（链形/链长/嵌套/上下文/负样本；旧的
+  "链式后缀应报错"用例按纪律转正向）；`tools/c_acceptance.py` **接受 18 → 20 / 空洞 9 → 7**；
+  linter `phase-*` 缺口数**保持 7**（中途加过一层 `AtomExpr` 间接，实测在 `sizeof` 初值处
+  多误报 1 条 → 7→8，故撤掉该间接、把原子清单写在两处并注明）；**全量 2536 passed / 7 skipped**。
+
 - **字面量尾随后缀：`[[number.based]] suffix` 键**（引擎 schema 扩一项；C 包消费）：
 
   - 声明面：`suffix = { chars = "uUlL", max = 2 }`——**可选后缀字符集 + 长度上限**。

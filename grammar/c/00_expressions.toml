@@ -80,9 +80,20 @@ value = "$2"
 # ── 表达式结构 ──
 
 # PrimaryExpr — 原子选择器（inline + 单条交替 = 环保护第 ③ 项）
+# ⚠ 本规则是**语句/表达式起点**的种子（首 token 推导读它）：含 `@UnaryExpr`
+#   让前缀一元语句有候选起点；含 `@PostfixExpr` 有第二个作用——**派生 FOLLOW**。
+#   FOLLOW 由"谁引用本规则"推出来：`PostfixExpr` 若不在这里被引用，它的 FOLLOW
+#   只剩 pratt 注入的运算符族，于是 `switch (p->key)` / `if (p->key)` / `(p->key)`
+#   这类**后随 `)`** 的形态会被 FOLLOW 硬检查拦掉（实测：`ring_buffer.c` 的
+#   `ring_scan` 整函数解析失败）。
+# ⚠ 本规则的原子清单与 `PostfixExpr` 的 head 清单**同一份**（两处都写）：
+#   这是"无环"与"不扰动 linter"两个约束下的取舍——把原子清单抽成独立规则
+#   （曾试 `AtomExpr`）会多一层 inline 间接，而 linter 的 token 匹配器**不回溯**
+#   （见 `docs/gaps/gap-parser-linter-approximation.md` 机制 A），多一层就多在
+#   `sizeof` 初值处误报一条（实测 7 → 8）。加原子形态时两处都要改。
 [PrimaryExpr.parser]
 production = [
-    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@CallExpr|@IndexExpr|@MemberExpr|@SizeofTypeExpr|@SizeofExpr",
+    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@SizeofTypeExpr|@SizeofExpr|@PostfixExpr",
 ]
 inline = true
 
@@ -100,60 +111,91 @@ value = "$1"
 
 
 # ── 后缀链（Layer B2）──
-# ⚠ 三个后缀形态一律标 `is_atom = true`：它们内部含 `@Expression`，与 `Expression`
-#   成环——环只有在**原子规则**里才被 pratt 层截断（同 `ParenthesizedExpr`）。
-#   写成普通规则会让 `setup_grammar` 直接 RecursionError（上一轮委派即栽在同类位置上）。
+# 标准（ISO C99 §6.5.2）是**左递归**：
+#   postfix-expression: primary-expression
+#                     | postfix-expression [ expression ]
+#                     | postfix-expression ( argument-expression-list? )
+#                     | postfix-expression . identifier
+#                     | postfix-expression -> identifier
+#                     | postfix-expression ++ | postfix-expression --
+# 本仓是递归下降 + 原子最长匹配（`parser_core._atom_parser_impl` 遍历 is_atom 规则
+# 取消费最多者），左递归会无限递归，故按**同族形态**表达成"原子 + 后缀*"——
+# 与 clang 手写路径同形（先解析 leading part，再循环吃后缀，见
+# `ParsePostfixExpressionSuffix`）；本包声明符链（DirectDeclarator + ArraySuffix/
+# FuncSuffix）已是这个形态，此处照搬。
 #
-# 已知边界（本层不做，记在此防"看起来支持"）：
-#   · 链式后缀 `f(a)[i]` / `a.b.c` / `p->q->r` —— 需要"原子 + 后缀*"形态，
-#     与环保护冲突（后缀组不在原子位置）；留待与引擎侧确认后再做。
-#   · 通过函数指针调用 `(*fp)(x)`、复合字面量、`sizeof` 表达式。
+# ⚠ `PostfixExpr` 标 `is_atom = true`：它经后缀含 `@Expression`，与 `Expression`
+#   成环——环只在原子规则里被截断（同 ParenthesizedExpr 一族）。
+# ⚠ 后缀用 `+`（**至少一个**）而不是 `*`：裸原子不该落进本规则。原因在引擎的
+#   原子选择：`atomic_rules` 按 production 数**降序**排，等长匹配取先试者
+#   （`consumed > best` 严格比较）——本规则 2 条 production 会排在 `Identifier`
+#   （1 条）**之前**，于是裸 `x` 会被包成 `PostfixExpr(base=Identifier, [])`，
+#   全局 AST 形状变脸。要求 ≥1 后缀后，裸原子由原子规则自己胜出；有链时才由
+#   本规则以更长消费量胜出 ✓。
+#
+# 后缀 `++`/`--`（§6.5.2 后两项）**不走本链**：它们是 pratt 的后缀运算符
+# （`[[operator]] position = "postfix"`），由 `UnaryOp` + `when` 分发承载，
+# 与链自然复合（`a[i]++` → UnaryOp(postfix, PostfixExpr(a,[i]))）。
+#
+# 已知边界（本层不做，记在此防"看起来支持"）：强制转换 `(T)x` 与复合字面量
+#   `(T){…}`（需类型名知识，见 sizeof 段说明）。
 
-# CallExpr — 调用 f(arg, ...)（实参表可空：`f()`）
-[CallExpr.parser]
+# PostfixExpr — 原子 + 后缀+（`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)`）
+# ⚠ head 用**显式原子清单**（不复用 `@PrimaryExpr`）：`PrimaryExpr` 含 pratt 入口
+#   `@UnaryExpr`，head 若走它则 `PostfixExpr → PrimaryExpr → UnaryExpr →（pratt
+#   原子路径）→ PostfixExpr` 无限递归（实测每步撞 `maximum recursion depth
+#   exceeded` 告警：解析仍成功但慢且脆）。清单与 `PrimaryExpr` 同步维护。
+[PostfixExpr.parser]
 is_atom = true
 production = [
-    "@Identifier",
+    "(@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@SizeofTypeExpr|@SizeofExpr)",
+    "(@IndexSuffix|@CallSuffix|@MemberSuffix)+",
+]
+
+[PostfixExpr.parser.node]
+base = "$1"
+# suffixes — 后缀组是 `+` 量词 → **plus 包装节点**（normalizer 只消 optional/
+# repeat/seq，不消 plus：`transform/normalizer.py::ELIMINATE_TYPES`）。故走路径
+# `$2.items[*]` 取出**节点列表**给渲染端 join（同旧 IndexExpr 的 indexes 口径）；
+# 直接绑 `"$2"` 会拿到 plus 节点本身，而它没有布局 → 静默渲染成空
+# （实测 `r->head = 0;` 渲成 `r = 0;`，token 序列判据当场抓到）。
+suffixes = ["$2.items[*]"]
+
+
+# IndexSuffix — [ Expression ]
+[IndexSuffix.parser]
+production = [
+    "bracket.l_square_bracket",
+    "@Expression",
+    "bracket.r_square_bracket",
+]
+
+[IndexSuffix.parser.node]
+index = "$2"
+
+
+# CallSuffix — ( ArgumentList? )（实参表可空：`f()`）
+[CallSuffix.parser]
+production = [
     "bracket.l_parentheses",
     "@ArgumentList?",
     "bracket.r_parentheses",
 ]
 
-[CallExpr.parser.node]
-callee = "$1"
-args = "$3"
+[CallSuffix.parser.node]
+args = "$2"
 
 
-# IndexExpr — 下标 a[i][j]（c4 同款：`(...)` 组 + 量词表达链式下标）
-[IndexExpr.parser]
-is_atom = true
+# MemberSuffix — `.` identifier / `->` identifier
+[MemberSuffix.parser]
 production = [
-    "@Identifier",
-    "(bracket.l_square_bracket,@Expression,bracket.r_square_bracket)+",
-]
-
-[IndexExpr.parser.node]
-base = "$1"
-# indexes —「`[ Expression ]` 组」列表（含方括号）。渲染必须拿到**组**：
-#   `$2.items[*].sub_node[1]` 那种"只抽 Expression"的形态会把方括号丢掉
-#   （`a[i]` 渲染成 `ai`）。组节点经 normalize 展平成 `["[", Expression, "]"]`，
-#   ref 顺序拼接即 `a[i][j]`。
-indexes = ["$2.items[*]"]
-
-
-# MemberExpr — 成员访问 a.b / p->q（单级；多级链见上方"已知边界"）
-[MemberExpr.parser]
-is_atom = true
-production = [
-    "@Identifier",
     "(symbol.base.dot|symbol.extend.arrow)",
     "@Identifier",
 ]
 
-[MemberExpr.parser.node]
-base = "$1"
-access = "$2"
-member = "$3"
+[MemberSuffix.parser.node]
+access = "$1"
+member = "$2"
 
 
 # ArgumentList — 逗号分隔实参（**表达式列表**；这里的逗号是分隔符不是运算符）
@@ -249,14 +291,21 @@ ref = "value"
 [Expression.renderer.layout]
 ref = "value"
 
-[CallExpr.renderer.layout]
-line = [{ ref = "callee" }, "(", { opt = { ref = "args" } }, ")"]
+# PostfixExpr — 原子 + 后缀链（`a.b.c` / `f(x)[i]` / `p->a[i]`）。
+# ⚠ 后缀链用 `join = ""`（items）：用 `{ ref = "suffixes" }` 会把整链当一段文本，
+#   但**注释落在后缀里**时 `ref` 无换行能力（实测把整行代码吃进注释）。
+#   同 DirectDeclarator 的 suffix 链形态。
+[PostfixExpr.renderer.layout]
+line = [{ ref = "base" }, { opt = { join = "", items = "suffixes" } }]
 
-[IndexExpr.renderer.layout]
-line = [{ ref = "base" }, { join = "", items = "indexes" }]
+[IndexSuffix.renderer.layout]
+line = ["[", { ref = "index" }, "]"]
 
-[MemberExpr.renderer.layout]
-line = [{ ref = "base" }, { ref = "access" }, { ref = "member" }]
+[CallSuffix.renderer.layout]
+line = ["(", { opt = { ref = "args" } }, ")"]
+
+[MemberSuffix.renderer.layout]
+line = [{ ref = "access" }, { ref = "member" }]
 
 # ArgumentList — 实参表：紧凑列表，flat 无前导空格（`f(a, b)` 而非 `f( a, b)`）
 [ArgumentList.renderer.layout]

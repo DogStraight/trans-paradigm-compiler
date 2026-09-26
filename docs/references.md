@@ -48,6 +48,8 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [DHParser](https://gitlab.lrz.de/badw-it/DHParser) | 概念参考 | 完整 left-recursion 支持、测试驱动语法开发、声明式 AST 变换；错误恢复方案不同（反向解析器 vs post-mortem） |
 | [Veryl](https://github.com/veryl-lang/veryl) | 设计参考 | SystemVerilog 现代超集 HDL（Rust，1026★，2022 起活跃）：语法简化 + 可综合保证 + 类型化 clock/reset + 转译保真——HDL 语法设计的直接参照（详见深调研） |
 | [pyverilog](https://github.com/PyHDI/Pyverilog) | 概念参考 | Takamaeda-Yamazaki（日本学者）的 Python HDL 工具包：PLY（Lex/Yacc 风格）LALR 文法声明做 Verilog 解析——"语法即声明、Verilog 工具不必手写解析器"的早期代表（与 Veryl 同作者国别、同 HDL 工具窄域；设计来源追溯见深调研「路线亲缘」） |
+| [ISO C99 标准文法](https://port70.net/~nsz/c/c99/n1256.html)（n1256，WG14 草案） | 设计参考 | C 包的**权威依据**：左递归的 `postfix-expression` 六形态（§6.5.2）、`integer-suffix`/`floating-suffix`（§6.4.4.1）、说明符分层（§6.7.1–6.7.4）——凡"C 到底怎么规定"的问题先查标准再决定取舍（详见深调研「C 语言文法参照」） |
+| [tree-sitter-c](https://github.com/tree-sitter/tree-sitter-c)（grammar.js） | 设计参考 | 生产级 C 文法（GLR）：后缀**各自成规则 + 显式优先级**（SUBSCRIPT 17 / FIELD 16 / CALL 15 > UNARY 14）、`number_literal` 后缀按**字符类宽进**、`case_statement` **吸收**后续语句、前缀/后缀自增按位置区分——C 包三处取舍的直接参照（详见深调研「C 语言文法参照」） |
 
 | 宏处理机制对照（[Lean 4](https://github.com/leanprover/lean4) / [Clang](https://github.com/llvm/llvm-project) / Verible / GLR） | 深度参考 | 结构宏进树（Lean syntax + macro scope 卫生）/ 编辑/格式化不展开宏 + raw 进 CST（Verible）/ 全展开 + 双位置 + 旁路记录表（Clang）——宏体入树（ADR-0016）的机制输入（详见深调研） |
 
@@ -604,6 +606,65 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 - 🔥 碎片化 changelog：**高可实现，低成本**。tpc 可加 `docs/changelog-fragments/<PR>.md` + 发布时聚合脚本（Python 十几行）；或不引入，维持当前手动小节（发布不频繁时手动够用）
 - 💡 foundryup 工具链管理器：**中可实现**。tpc 若做多版本分发（当前 exe 单版本）才值得；零依赖下用脚本实现即可
 - 💡 benchmark 公开页：**高可实现**。tpc 已有 fuzz/edge 数据，发布一个静态 benchmark 页即可
+
+### C 语言文法参照（ISO C99 §6.5.2 + Clang + tree-sitter-c，2026-09-25 深调研）
+
+C 包从"声明面"走到"表达式面"时遇到的三个形状问题（后缀链、字面量后缀、case 缩进），
+都能在标准与成熟实现里找到依据或对照，故单列一节。
+
+- 定位：**标准**是权威依据（n1256 = C99+TC3 草案，WG14 官方站点镜像）；**Clang** 是
+  手写递归下降的工业级代表（与 tpc 同族实现路径）；**tree-sitter-c** 是 GLR 路线的
+  生成式文法代表（与 tpc 异构，正好当"另一种解法"的对照）
+
+**1. 后缀链（postfix-expression）**
+
+| 来源 | 形态 |
+|---|---|
+| ISO C99 §6.5.2 | **左递归**六形态：`postfix-expression` 可再由 `[expr]` / `(args)` / `.id` / `->id` / `++` / `--` 扩展 |
+| Clang `ParsePostfixExpressionSuffix`（[ParseExpr.cpp](https://chromium.googlesource.com/native_client/nacl-llvm-project-v10/+/244b96ba0a047185ae82f5dc8903ea0756b18b9f/clang/lib/Parse/ParseExpr.cpp)） | 手写路径：**先解析 leading part，再循环吃后缀**——不做左递归 |
+| tree-sitter-c | 各后缀**独立成规则**，base 为 `$.expression`，靠 `prec(SUBSCRIPT 17 / FIELD 16 / CALL 15)` + GLR 消歧 |
+| tpc（本包） | 同 Clang 的形态：`PostfixExpr{base, suffixes}` = 原子 + 后缀+；后缀链长度不受限 |
+
+- 🔥 **借鉴（已落地）**：Clang 的"leading part + 后缀循环"就是 tpc 能表达的形态
+  （递归下降表达不了左递归），实现见 `grammar/c/00_expressions.toml::PostfixExpr`；
+  旧实现是三个**单级**规则（`CallExpr` 的 base 只能 `@Identifier`），故 `a.b.c` /
+  `f(x)[i]` / `p->a[i]` / `(*fp)(x)` 都不支持——已按本节参照改掉并转正向用例。
+- 📌 **不实现**：GLR/优先级消歧（tree-sitter 路线）。tpc 走"最长匹配 + FOLLOW 硬检查"，
+  取舍是**声明面更简单**（不需要写优先级数字）但**要自己排形态**（见包内注释的
+  FOLLOW/环约束）。
+
+**2. 字面量后缀（`integer-suffix` / `floating-suffix`）**
+
+| 来源 | 形态 |
+|---|---|
+| ISO C99 §6.4.4.1 | 后缀是**有限组合**（`u`/`U` + `l`/`L`/`ll`/`LL`），合法组合有明确枚举 |
+| tree-sitter-c `number_literal` | 实现上按**字符类宽进**：`/[uUlLwWfFbBdD]*/`（还含 MS 扩展）——组合合法性不在这里判 |
+| tpc（本包） | 同 tree-sitter 的选择：`[[number.based]] suffix = { chars, max }` 给"可选字符集 + 长度上限"，**组合合法性归约束层** |
+
+- 🔥 **借鉴（已落地）**：tree-sitter 的做法印证了"词法层宽进、约束层收紧"对本问题是
+  成熟解（C 的 pp-number 本就宽进）；实现见 `lexer/number_runner.py::_consume_suffix`。
+- 💡 **实现差异（有意）**：tpc 把后缀做成 **DFA 之后的声明式尾段**而不是 DFA 边——
+  引擎的字符→类别映射是全局的，`f`/`F` 已是十六进制 digit 类别，按类别加边会与 hex
+  值自环撞键（判据 `0x1FF` 钉在 `tests/engine/lexer/test_number_suffix.py`）。
+
+**3. `case` 体缩进（未闭环，参照在此）**
+
+| 来源 | 形态 |
+|---|---|
+| ISO C99 §6.8.1 | `labeled-statement: case constant-expression : statement`——label 只拥有**一条**语句（`case 0: a; b;` 的 `b` 不属于 label） |
+| tree-sitter-c `case_statement` | **吸收**后续语句：`prec.right(seq(choice('case expr','default'), ':', repeat(choice($._non_case_statement, $.declaration, ...))))` |
+
+- 💡 **启发（未采纳，记档）**：tree-sitter 用"label 吸收后续语句"换来缩进自然
+  （body 嵌套即缩进），代价是 AST 语义偏离标准（语句被挂到 label 下）。tpc 当前选
+  **标准形状**（label 是独立语句节点），故渲染端缺一级缩进——已记在
+  `docs/gaps/gap-language-pack-scope.md` §C（要修需渲染端"标签后同级子节点多缩进一级"
+  的能力，或在包侧改用吸收形态）。两条路都记着，等有真实需求时再取舍。
+
+**4. 前后缀自增的节点形态（旁证）**
+
+- tree-sitter-c `update_expression` = `choice(seq(op, arg), seq(arg, op))`：**同一节点名、
+  按位置区分**前后缀——与 tpc 的 `UnaryOp{position}` + `when` 分发布局同构 ✓（tpc 侧
+  `when` 原语的动机即"同节点名两形态"，见 `renderer/renderer_architecture.md`）。
 
 ### vbcc（C）— 1989 年起的可移植 C 编译器（2026-08 深调研）
 

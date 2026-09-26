@@ -82,16 +82,17 @@
       上一轮委派尝试（产物存 `_drafts/stage3_wip/`）正是缺这些标记而失败；
       照 c4 验证过的形态重做后**一次通过**。
 - [x] **阶段 3 Layer B2+C——已完成**：
-      **B2 后缀链** = `CallExpr`（`f(a, b)` / `f()`）/ `IndexExpr`（`a[i][j]`）/
-      `MemberExpr`（`a.b` / `p->q`）/ `ArgumentList`——三个后缀形态均 `is_atom`
+      **B2 后缀链** = `PostfixExpr`（原子 + 后缀+）+ `IndexSuffix` / `CallSuffix` /
+      `MemberSuffix`（**链式**：`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)`；旧单级
+      三规则 `CallExpr`/`IndexExpr`/`MemberExpr` 已删）/ `ArgumentList`——链规则 `is_atom`
       （内部含 `@Expression`，环只能在原子规则里被 pratt 截断）；
       **C 控制流** = `IfStmt`（含 else）/ `WhileStmt` / `DoWhileStmt` / `ForStmt`
       （三段全可省，`for (;;)` 合法）/ `SwitchStmt` / `CaseLabel` / `DefaultLabel` /
       `BreakStmt` / `ContinueStmt` / `GotoStmt` / `LabelStmt`，`Stmt` 选择器扩到 15 分支。
-      测试：`test_c_postfix.py` 13 例、`test_c_control_flow.py` 19 例（断言结构与**顺序**，
-      不只"能解析"）。
-      ⚠ **两条"未支持即报错"的边界由测试守住**（防"看起来支持"）：`f(a)[i]` 链式后缀、
-      `for (int i = 0; …)` 声明式初值（后者需初始化器 → 阶段 2b）。
+      测试：`test_c_postfix.py` 28 例（含链式与 `(*fp)(x)`）、`test_c_control_flow.py` 19 例
+      （断言结构与**顺序**，不只"能解析"）。
+      ⚠ 旧的两条"未支持即报错"边界（`f(a)[i]` 链式后缀、`for (int i = 0; …)` 声明式初值）
+      **都已支持**，对应用例已按纪律转正向。
       ⚠ 踩坑（已记入测试注释）：inline 交替选择器与可选位命中规则分支时会套一层 `seq`，
       且 `seq` 子节点里既有 token 也有规则节点——解包要挑规则节点（`_unwrap` 助手）。
 - [x] **阶段 3 全部层级完成**（Layer A 原子/入口/最小语句/函数定义 → B 运算符表与优先级
@@ -99,7 +100,7 @@
       struct/union/enum 与 typedef 名）/ 函数原型与定义 / 完整表达式优先级 /
       后缀链 / 控制流。
 - [x] **真实语料扩容——已完成**：`samples/ring_buffer.h`（声明面，1 注释 + 11 声明）+
-      `samples/ring_buffer.c`（实现面，2 注释 + 8 声明 + 8 函数，含控制流/表达式/调用/
+      `samples/ring_buffer.c`（实现面，2 注释 + 8 声明 + 9 函数，含控制流/表达式/调用/
       指示符初始化/`sizeof`），两个语料测试 + linter 缺口反向守（`_RECORDED_PHASE_GAP = 7`）。
 - [ ] **阶段 2b 词法与类型剩余**：
       · 前导点浮点 `.5`、字符串内**转义引号**（delim 捕获不识别转义）——见缺口档
