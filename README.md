@@ -14,7 +14,35 @@ model-friendly configuration; forkable pipeline
 
 **A config-driven language pipeline: formatter, linter, checker, macro
 expander, and language extensions — all described in TOML files, none
-hardcoded in the engine.**
+hardcoded in the engine.** Language knowledge is *declared in full* where the
+problem is closed, and *attached as language-pack plugins* where it is open.
+
+## The core idea: three zones
+
+The pipeline is cut by one question — **how stable is the object being described?**
+
+| Zone | Nature of the object | How it is expressed |
+|------|----------------------|---------------------|
+| **Before the AST**<br>(lexing, parsing) | a **closed** system — grammar and parsing are stable, well-specified structure | **fully declarative**: tokens, number shapes, productions, operator tables — `grammar/` TOML |
+| **After the AST**<br>(analysis, transformation) | an **open** system — how a language is analysed and rewritten differs everywhere; beyond the shared core it is all special cases | **shared operations become engine primitives; language-specific ones become language-pack plugins**, wired into the pipeline at declared **time points** (pipeline slots) |
+| **Rendering** | **closed** again — text layout rarely needs language-specific logic | **declarative again**: layout TOML (`[Rule.renderer.layout/head/body/tail]`) over the engine's Doc IR primitives |
+
+So the closed zones are formalised end-to-end as configuration, the open zone is
+organised as plugins on a declared schedule, and the pipeline itself is the single
+seam where they meet. **The engine holds no language knowledge at all**; adding or
+reshaping a language never means forking it.
+
+Where does a new capability belong? Ask which zone it is in:
+
+- **lexer / grammar** → the language pack's TOML (touch the engine schema only when TOML
+  cannot express it, e.g. `[[number.based]] suffix`);
+- **shared analysis / transformation** → an engine primitive; **language-specific** → a
+  plugin plus a `[pipeline]` slot;
+- **output layout** → layout configuration (an engine primitive only when data cannot
+  express it, e.g. the `when` attribute-dispatch primitive).
+
+Read [docs/engine_overview.md](./docs/engine_overview.md) for the same split walked
+through the full pipeline.
 
 For a Verilog user that means: format messy code, lint files that do not even
 parse (the linter runs before the parser), and cross-check module ports across
@@ -64,6 +92,7 @@ endmodule
 
 ## Table of contents
 
+- [The core idea: three zones](#the-core-idea-three-zones)
 - [Why / when not to use](#why--when-not-to-use)
 - [Quick start](#quick-start)
 - [Example: a Verilog type extension](#example-a-verilog-type-extension)
@@ -83,8 +112,8 @@ TransParadigm is for building **forkable, model-friendly language toolchains**
 where the language itself stays as data:
 
 - **Rules are data, not code.** All language specifics live in TOML config
-  files. The engine is a generic skeleton; every stage has a configuration
-  surface.
+  files — and where a language needs behaviour rather than data, that behaviour
+  ships as a plugin of that language pack, never as a branch in the engine.
 - **Forkable, not rewrite.** Each stage can be replaced or reconfigured. Fork
   the repo to make private, incremental changes to *your* language pipeline —
   no engine rewrite required.
@@ -123,7 +152,7 @@ Requirements: Python 3.11+ (zero runtime dependencies).
 git clone https://github.com/DogStraight/trans-paradigm-compiler && cd trans-paradigm-compiler
 pip install -e ".[test]"     # editable install + test deps
 
-tpc --version                # 0.1.1
+tpc --version                # 0.1.2
 tpc format input.v           # format a Verilog file (stdout)
 tpc format input.v --fidelity keep_blank   # keep source blank lines
 tpc lint input.v             # pre-parse token lint (exit 1 on diagnostics)
@@ -332,6 +361,13 @@ Tests are order-independent — each test restores global state via
 `core/global_state` (see `tests/conftest.py`), so pytest-xdist workers behave
 identically to a serial run.
 
+Every CI step can also be rehearsed locally in one command —
+`python tools/ci_rehearsal.py` (main regression + coverage, shuffled-order
+smoke, both policy gates, pyright strict, edge corpus, fuzz smoke, CLI, and the
+wheel-install smoke). It reports **PASS / FAIL / INCOMPLETE** and deliberately
+refuses to call a gate green when it could not run it: a skipped gate is not a
+passing gate.
+
 CI ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) runs the full suite
 with a coverage gate, a wheel-install smoke test, plus policy gates
 (`check_hardcode` — language knowledge stays out of engine code; `check_doc_refs`
@@ -353,7 +389,7 @@ Python 3.11/3.12/3.13 × Windows/Ubuntu.
 
 ## Status
 
-**Experimental — Alpha, not yet published to PyPI.** Version 0.1.1.
+**Experimental — Alpha, not yet published to PyPI.** Version 0.1.2.
 
 Verilog support targets IEEE 1364-2005 (Verilog-2005), with the
 synthesizable core in the main pack and simulation/library syntax in plugins
@@ -414,7 +450,7 @@ revision, but if you find any statement that does not match the actual code,
 please open an issue with a correction — precise documentation is preferred
 over polished claims.
 
-> Last synced against the codebase: **2026-09-05** (structure table, CI gate list,
-> documentation index, version).
+> Last synced against the codebase: **2026-09-26** (core-idea section, structure
+> table, CI gate list, documentation index, version).
 
 [Design docs](./docs/) · [Known limitations](./docs/gaps/README.md)
