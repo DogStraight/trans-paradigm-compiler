@@ -321,6 +321,18 @@
 > 名字用在值位置，只是靠 `from __future__ import annotations` 才没在运行期炸。
 > **③ 单测依赖 gitignore 生成物**（下面第一条）。
 > **④ 隔离工具 nodeid 归一同盘退化**（下面第二条）。
+>
+> **对照：`v0.1.2` tag（`8dca789`）本身也过不了 CI**（同日同法排练，同一 worktree 手法）：
+> pytest **4 failed / 2172 passed / 18 skipped**、shuffled smoke **1 failed**、
+> `check_hardcode` **R3 同 2 处**、**pyright 27 errors**、fuzz smoke **FAIL**
+> （`[NON-IDEMPOTENT] mut:ref_darkriscv.v: format(format(x)) != format(x)`，两次复跑均现）。
+> 两个含义：① 0.1.2 批自己就带着这些红（因为从未推送过）；② 0.1.3 批**又新增 22 条
+> pyright**（27 → 49），但**顺手修掉了那条非幂等**（HEAD 上 fuzz findings 0）
+> ——即"渲染/解析注释落位四处缺陷"那轮的真实收益之一。
+>
+> 另注：`ci.yml` 的触发是 `push.branches` + `pull_request`，**推送 tag 不触发 CI**
+> （`nightly.yml` 是 schedule + workflow_dispatch）——门禁只在推**分支**时对**分支 HEAD**
+> 评估。故"tag 能否过 CI"是内容问题，不是流程问题。
 
 - **并行度默认值**：`pyproject.toml` 的 `addopts = "-n auto"` **保持现状**（作者
   2026-09-19 定调“先这样”）。本机跑全量时自行显式传 `-n 4` 规避顶满核（做法与分档
