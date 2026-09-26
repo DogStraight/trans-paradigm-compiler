@@ -42,8 +42,8 @@ _LINE_COVERAGE = 0.80
 
 
 @pytest.fixture(scope="module")
-def c_render(config_loaded):
-    """加载 C 包并返回 render(src) → 渲染文本。测试结束恢复 verilog。"""
+def c_env(config_loaded):
+    """加载 C 包 → {"render": render(src), "tokenize": tokenize(src)}（测试结束恢复 verilog）。"""
     del config_loaded
     ConfigRegistry.load_language(_RULES, plugins_dir=_PLUGINS)
     rules = setup_grammar(_RULES, GrammarRulesRegister(), ext_dirs=[_PLUGINS])
@@ -62,10 +62,16 @@ def c_render(config_loaded):
         ast = parser.parse(lexer.tokenize(src))
         return renderer.render(ast)
 
-    yield render
+    yield {"render": render, "tokenize": lexer.tokenize}
     ConfigRegistry.load_language(
         "grammar/verilog", plugins_dir="grammar/verilog/plugins"
     )
+
+
+@pytest.fixture(scope="module")
+def c_render(c_env):
+    """render(src) → 渲染文本（既有判据用；词法面见 `c_env`）。"""
+    return c_env["render"]
 
 
 def _read(name: str) -> str:
@@ -75,6 +81,19 @@ def _read(name: str) -> str:
 
 def _effective_lines(text: str) -> int:
     return len([ln for ln in text.splitlines() if ln.strip()])
+
+
+# trivia token 前缀（空白/换行/注释）：渲染**允许**重排，序列判据只比显著 token
+_TRIVIA_PREFIXES = ("space", "newline", "comment")
+
+
+def _significant(tokens) -> list[tuple[str, str]]:
+    """显著 token 序列 `[(type, content)]`（去 trivia 与注释）。"""
+    return [
+        (t.type, t.content)
+        for t in tokens
+        if not t.type.startswith(_TRIVIA_PREFIXES)
+    ]
 
 
 _SAMPLE_NAMES = ["ring_buffer.h", "ring_buffer.c", "edge_comments.c"]
@@ -181,6 +200,77 @@ class TestCommentInventory:
         assert not missing, (
             f"{name}: 以下注释未出现在渲染输出：{[c[:30] for c in missing]}"
         )
+
+
+class TestTokenSequence:
+    """**判据 7：显著 token 序列保真**——渲染前后逐项相同 `[(type, content)]`。
+
+    "原文打印"的强判据：重排只许动空白，**不许动 token 的序**。比 `difflib` 强
+    （`i++` → `++i` 只差 3 个字符、比值 0.99+，`difflib` 与行数判据都抓不到），
+    也比"清单比对"贴题（清单管有没有，序列管顺序对不对）。
+
+    语言无关：两侧都用包自己的 lexer；trivia（`space.*` / 注释）不参与比对
+    ——排版允许重排，注释另有清单判据。
+    """
+
+    @pytest.mark.parametrize("name", _SAMPLE_NAMES)
+    def test_significant_tokens_identical(self, c_env, name):
+        src = _read(name)
+        out = c_env["render"](src)
+        want = _significant(c_env["tokenize"](src))
+        got = _significant(c_env["tokenize"](out))
+        assert got == want, _token_diff(name, want, got)
+
+    @pytest.mark.parametrize("name", _SAMPLE_NAMES)
+    def test_significant_tokens_round_trip(self, c_env, name):
+        """再渲染一遍仍逐项相同（与判据 4 同源，按 token 面再确认一次）。"""
+        first = c_env["render"](_read(name))
+        second = c_env["render"](first)
+        assert _significant(c_env["tokenize"](second)) == _significant(
+            c_env["tokenize"](first)
+        ), _token_diff(name, _significant(c_env["tokenize"](first)),
+                       _significant(c_env["tokenize"](second)))
+
+
+def _token_diff(name: str, want: list, got: list) -> str:
+    """token 序列差异的可读报告（首个不同的窗口 + 长度差）。"""
+    for i, (w, g) in enumerate(zip(want, got)):
+        if w != g:
+            return (
+                f"{name}: 显著 token 序列在第 {i} 项起不同（渲染动了 token 的序）\n"
+                f"  源: {want[max(0, i - 3) : i + 4]}\n"
+                f"  出: {got[max(0, i - 3) : i + 4]}"
+            )
+    return (
+        f"{name}: token 数量不同（源 {len(want)} / 出 {len(got)}）——"
+        f"多出 {want[len(got):][:5]} / 缺失 {got[len(want):][:5]}"
+    )
+
+
+class TestPostfixOrder:
+    """后缀自增/自减的**顺序**判据（pratt `UnaryOp` 前缀/后缀同名，由 `when` 分发）。
+
+    缺陷（本包首例，2026-09-25）：布局原语无"按属性值换序"能力，只能二选一 →
+    `i++` 渲成 `++i`（token 齐全、**顺序反了**）。C 里 `i++` 与 `++i` 语义不同，
+    故这是**语义级**保真缺陷；而 `difflib` 只差 3 个字符（比值 0.99+）、行数判据
+    也看不出，两者都抓不到——单列顺序判据，并由判据 7（token 序列）在样本面上兜底。
+    """
+
+    _SRC = "int f(int n) {\n    int i = 0;\n    i++;\n    n--;\n    return i;\n}\n"
+
+    def test_postfix_stays_postfix(self, c_render):
+        out = c_render(self._SRC)
+        assert "i++;" in out and "n--;" in out, f"后缀自增/自减丢失：\n{out}"
+        assert "++i" not in out and "--n" not in out, f"后缀被渲成前缀（顺序反了）：\n{out}"
+
+    def test_prefix_stays_prefix(self, c_render):
+        """反向：前缀不得被渲成后缀（`when` 的 else 支）。"""
+        out = c_render("int f(int x) {\n    return -x;\n}\n")
+        assert "-x" in out and "x-" not in out, out
+
+    def test_round_trip(self, c_render):
+        out = c_render(self._SRC)
+        assert c_render(out) == out, f"渲染不幂等：\n{out}\n---\n{c_render(out)}"
 
 
 # 同一位置领到**多条**独占行注释：源序必须保住（枚举体首项前是最小复现面）。

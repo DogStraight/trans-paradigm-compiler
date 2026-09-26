@@ -78,14 +78,21 @@ Nest/Align/Prefix 上提**（Prettier lineSuffix 是全局缓冲，不是按层�
 
 ### 布局原语（renderer/primitives/，TOML 可声明）
 
-15 个注册原语：`text/ref/join/group/line/indent/opt/soft/break/hard_break/align/
-fill/line_suffix/intent/suffix_when`。注册机制：`@register(key)` 装饰器 → 全局调度表 →
+16 个注册原语：`text/ref/join/group/line/indent/opt/soft/break/hard_break/align/
+fill/line_suffix/intent/suffix_when/when`。注册机制：`@register(key)` 装饰器 → 全局调度表 →
 `eval_expr` 按 key 分派（`line` 数组元素由 `eval_line` 内联消费，不走分派）。
 
 **suffix_when 值条件后缀**（2026-08-28）：节点属性值满足条件（startswith）时
 追加后缀文本，条件不命中返回 None（line 原语跳过）。典型用途：转义标识符
 空白终止（IEEE A.9.3，`\\$_BUF_ (` 而非 `\\$_BUF_(`）。引擎零语言知识：
 条件与后缀都是布局 TOML 数据。
+
+**when 属性分发布局**（2026-09-25）：同一节点名承载多形态时按属性值选支布局
+（`when = { attr, eq|ne|in|startswith|exists }` + `then`/`else` 两支，分支可省）。
+典型用途：pratt `UnaryOp` 的 `position` 分前缀/后缀（`-x` 对 `i++`）——此前布局
+原语无"按属性值换序"能力、只能二选一，后缀被渲成 `++i`（**token 齐全但顺序反了**，
+C 里两者语义不同）。声明形态非法（`when` 非表 / 缺 `attr` / 条件键不是恰好一个）
+**直接报错**，不返回 None：认不出的键会让整块布局静默输出空串。
 
 **intent 意图层**（阶段 4a）：语言包声明"结构 → 布局意图"，引擎推导 Doc，
 消灭手拼。词表：`compact`（紧凑列表 = join+first_soft+nest 别名）/ `wrap`
@@ -206,10 +213,13 @@ ADR-0006 边界分析提出的五条理论边界，世界 A 相关四条落地�
 
 **不可接受/需后续关注：**
 
-5. **Layout TOML 无 schema 校验**：布局表达式错误（拼错原语键/类型）静默
-   降级为 None，不报错。与 ADR-0003 fail-fast 精神相悖——但布局是渲染
-   增强，非配置加载主路径。**后续**：可加布局 schema 校验（P3 声明式
-   schema 的落点之一）。
+5. **Layout TOML 无 schema 校验**：布局表达式错误（**类型**错、分支形态错）静默
+   降级为 None，不报错。**部分已收**（2026-09-25）：① 认不出的**键**（拼错/用了
+   引擎没有的原语）由 `eval_expr` **直接报 `ConfigError`**（点名牌出的键与已知原语）
+   ——此前静默返回 None、整块布局无声消失；② `when` 原语的声明形态非法（非表 /
+   缺 `attr` / 条件键不是恰好一个）同样 fail-fast；③ 仓库侧词汇漂移由
+   `tools/config_sites.py check` + 门禁 `tests/policy/test_config_sites.py` 守。
+   **仍缺**：逐原语的类型/取值 schema（`{line = "str"}` 这类）——P3 声明式 schema 落点。
 
 6. **c4/yaml intent 迁移**：c4 ArgumentList 已随 verilog 批量迁移落地
    （023d939，共 12 处）；yaml 布局经实证**无列表 join 形态**——MappingEntry/

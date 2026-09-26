@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`when` 布局原语 + 保真度判据 7（token 序列）**（承接同轮 C 包保真度闭环）：
+
+  - **`when` 属性分发布局**（`renderer/primitives/when.py`）：同一节点名承载多形态时
+    按属性值选支——`when = { attr, eq|ne|in|startswith|exists }` + `then`/`else`
+    两支（可省）。此前布局原语没有"按属性值换序"能力，只能二选一。
+  - **修 C 包语义级缺陷**：pratt `UnaryOp` 前缀/后缀同名（`position` 区分），
+    旧布局固定前缀序 → `i++`/`p--` 被渲成 `++i`/`--p`（token 齐全但**顺序反了**；
+    C 里 `i++` 与 `++i` 语义不同）。改用 `when` 后前缀/后缀各取一支。
+  - **判据 7：显著 token 序列逐项相同**（`(type, content)`，trivia 与注释除外）——
+    内容级对拍，比 `difflib` 强得多：`i++`→`++i` 只差 3 个字符（比值 0.99+），
+    difflib 与行数判据都抓不到，序列判据一眼看出。样本 `ring_buffer.c` 本就含 6 处
+    `i++`/`p++`——**旧判据一直是绿的**，正是本判据补的盲区。
+  - **认不出的布局键改为 fail-fast**（`renderer/primitives/__init__.py::eval_expr`）：
+    此前静默返回 None → 整块布局**无声消失**（"缺布局静默丢内容"的同一根因），
+    现直接报 `ConfigError` 并点名牌出的键与已知原语。全量测试证明现有四包无一处
+    依赖旧行为（零回归）。`when` 的声明形态非法同样 fail-fast。
+  - 配套：`tools/config_sites.py` 词汇表补 `when` 的键（`then/else/eq/ne/in/exists`），
+    门禁 `tests/policy/test_config_sites.py` 复绿。
+
+  验证：新增引擎门禁 **11 条**（`TestWhenPrimitive` 8 + `TestUnknownPrimitiveKeyFailsFast` 3）；
+  C 包闭环 **20 → 29 例**（判据 7 token 序列 6 例 + 后缀序 3 例）；`when` 的缺陷态变异
+  复验（把 C 包 `UnaryOp` 布局改回固定前缀序 → `TestTokenSequence` 与 `TestPostfixOrder`
+  变红 → 还原）。样本再记录：`ring_buffer.c` 0.9780 → **0.9867**（`i++` 修好的直接结果）。
+  **全量 2474 passed / 7 skipped**（判据 7 与 `when` 之前是 2457）。
+
 ### Fixed
 
 - **渲染/解析：注释落位四处缺陷**（在 C 包保真度闭环上暴露，**成因都在引擎**，非语言包）：

@@ -8,6 +8,7 @@ Doc: renderer/renderer_architecture.md（布局原语注册表）
 
 from typing import Any
 from core.define import Node
+from core.errors import ConfigError
 from ..doc import Doc, Text
 
 from .registry import get_registry
@@ -28,6 +29,7 @@ from . import fill as _fill
 from . import line_suffix as _line_suffix
 from . import intent as _intent
 from . import suffix_when as _suffix_when
+from . import when as _when
 
 _PRIMITIVE_MODULES = (
     _ref,
@@ -42,6 +44,7 @@ _PRIMITIVE_MODULES = (
     _line_suffix,
     _intent,
     _suffix_when,
+    _when,
 )
 
 __all__ = [
@@ -87,7 +90,14 @@ def eval_expr(
         if key in expr:
             return handler(expr, node, parent_layout, renderer)
 
-    return None
+    # 认不出的键：此前静默返回 None（整块布局**无声消失**——"缺布局静默丢内容"
+    # 的同一根因，实测表现是 `a[i]` 渲成 `ai`、规则漏布局渲成空串）。按
+    # AGENTS.md「配置加载 fail-fast」直接报错，并点名键与已知原语。
+    raise ConfigError(
+        f"布局表达式不含已知原语：键={sorted(expr)}；已知原语="
+        f"{sorted({k for k, _ in get_registry()})}。"
+        "（拼错原语键/用了引擎没有的原语时，此前会静默输出空串）"
+    )
 
 
 __all__ = ["eval_expr"]

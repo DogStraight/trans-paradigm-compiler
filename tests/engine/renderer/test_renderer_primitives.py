@@ -7,6 +7,7 @@
 import pytest
 
 from core.define import Node
+from core.errors import ConfigError
 from renderer.doc import layout
 from renderer.primitives import eval_expr
 from renderer.doc import Text
@@ -303,9 +304,91 @@ class TestJoinCommentPlacementRegressions:
 
 
 # ═══════════════════════════════════════════════════════
-# group 原语
+# when 原语（属性分发布局）
 # ═══════════════════════════════════════════════════════
 
+
+def _when_expr(cond, then=None, else_=None):
+    e = {"when": cond}
+    if then is not None:
+        e["then"] = then
+    if else_ is not None:
+        e["else"] = else_
+    return e
+
+
+class TestWhenPrimitive:
+    """`when`：按节点属性值选支布局（同节点名多形态的文本分发）。
+
+    首个消费方是 C 包的 pratt `UnaryOp`（`position` 分前缀/后缀，`-x` 对 `i++`）。
+    """
+
+    def test_eq_hit_takes_then(self):
+        node = _n("UnaryOp", op="++", position="postfix")
+        expr = _when_expr({"attr": "position", "eq": "postfix"}, {"ref": "op"}, {"ref": "miss"})
+        assert _render_expr(expr, node) == "++"
+
+    def test_eq_miss_takes_else(self):
+        node = _n("UnaryOp", op="-", position="prefix")
+        expr = _when_expr({"attr": "position", "eq": "postfix"}, {"ref": "miss"}, {"ref": "op"})
+        assert _render_expr(expr, node) == "-"
+
+    def test_branch_may_be_omitted(self):
+        """缺 `else` = 该分支不输出（不是错）。"""
+        node = _n("UnaryOp", op="-", position="prefix")
+        expr = _when_expr({"attr": "position", "eq": "postfix"}, {"ref": "op"})
+        assert _render_expr(expr, node) == ""
+
+    def test_in_and_exists_and_startswith(self):
+        node = _n("N", kind="c", content="\\x")
+        assert _render_expr(_when_expr({"attr": "kind", "in": ["a", "c"]}, {"ref": "kind"}), node) == "c"
+        assert _render_expr(_when_expr({"attr": "nope", "exists": False}, {"ref": "kind"}), node) == "c"
+        assert _render_expr(_when_expr({"attr": "content", "startswith": "\\"}, {"ref": "kind"}), node) == "c"
+        # 属性缺失：除 exists 外一律不命中
+        assert _render_expr(_when_expr({"attr": "nope", "eq": "x"}, {"ref": "kind"}), node) == ""
+
+    @pytest.mark.parametrize(
+        "cond",
+        [
+            "not-a-dict",
+            {"eq": "x"},                       # 缺 attr
+            {"attr": "position"},              # 无条件键
+            {"attr": "position", "eq": "a", "in": ["b"]},   # 两个条件键
+        ],
+    )
+    def test_malformed_condition_fails_fast(self, cond):
+        """声明形态非法即报错——**不许**静默输出空串（同"缺布局静默丢内容"根因）。"""
+        node = _n("UnaryOp", op="-", position="prefix")
+        with pytest.raises(ConfigError):
+            _render_expr(_when_expr(cond, {"ref": "op"}), node)
+
+
+class TestUnknownPrimitiveKeyFailsFast:
+    """认不出的布局键**报错**，不静默输出空串（"缺布局静默丢内容"的根因）。
+
+    实测症状来源：规则漏布局 / 键拼错时 `eval_expr` 返回 None，渲染端把整块
+    内容当"无内容"跳过（本包最早的症状是 70 条规则只有 1 条有布局、渲染为空串）。
+    """
+
+    def test_misspelled_key_raises(self):
+        node = _n("id", value="x")
+        with pytest.raises(ConfigError, match="已知原语"):
+            _render_expr({"lin": [{"ref": "value"}]}, node)  # `line` 拼错
+
+    def test_missing_primitive_raises(self):
+        with pytest.raises(ConfigError):
+            _render_expr({"items": ["a"]}, _n("List"))
+
+    def test_element_options_beside_dispatch_key_still_ok(self):
+        """元素键（items/nest/first_soft…）与分发键同层是正常形态，不是"认不出"。"""
+        node = _n("List", items=[_n("id", value="a")])
+        expr = {"join": ", ", "items": "items", "first_soft": False, "nest": 0}
+        assert _render_expr(expr, node) == "a"
+
+
+# ═══════════════════════════════════════════════════════
+# group 原语
+# ═══════════════════════════════════════════════════════
 class TestGroupPrimitive:
     def test_group_flat(self):
         node = _n("id", value="short")

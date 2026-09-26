@@ -72,6 +72,13 @@ _VOCAB_ELEMENT = (
     "no_soft",
     "prefix",
     "suffix",
+    # when 原语的键（renderer/primitives/when.py）：条件键 + 两支布局
+    "then",
+    "else",
+    "eq",
+    "ne",
+    "in",
+    "exists",
 )
 _VOCAB_SECTION = (
     "layout",  # <Rule>.renderer.{layout,head,body,tail}

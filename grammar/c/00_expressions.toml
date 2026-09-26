@@ -282,11 +282,14 @@ line = [
 ]
 
 # ── pratt 产物节点的布局（引擎构造，语言包声明文本形态）──
-# ⚠ UnaryOp 的 prefix/postfix **共用同一节点名**（`position` 字段区分），而布局
-#   没有"按属性值换序"的原语，只能二选一：此处取 prefix 序（`*p` / `-x`）。
-#   代价：postfix（`i++` / `p--`）会渲染成 `++i` / `--p`（token 齐全、顺序反了）。
+# ⚠ UnaryOp 的 prefix/postfix **共用同一节点名**（`position` 字段区分），故按属性
+#   分发布局（`when` 原语）：前缀 `-x` / 后缀 `i++` 各取一支。
+#   此前布局原语无"按属性值换序"能力、只能二选一，postfix 被渲成 `++i`
+#   （token 齐全但顺序反了——C 里 `i++` 与 `++i` 语义不同）。
 [UnaryOp.renderer.layout]
-line = [{ ref = "op" }, { ref = "operand" }]
+when = { attr = "position", eq = "postfix" }
+then = { line = [{ ref = "operand" }, { ref = "op" }] }
+else = { line = [{ ref = "op" }, { ref = "operand" }] }
 
 [BinaryOp.renderer.layout]
 line = [{ ref = "left" }, " ", { ref = "op" }, " ", { ref = "right" }]
