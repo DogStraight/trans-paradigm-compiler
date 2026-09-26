@@ -147,6 +147,45 @@ def _trailing_slot_docs(comments: Any, renderer: Any) -> list[Doc]:
     ]
 
 
+def _slot_text(item: Any) -> str:
+    """注释槽条目的文本。
+
+    ⚠ 槽条目**可能是裸 str**（实测 `_comment_slots['trailing'] = '// i-type '`），也可能
+    是 Comment 节点/token（取 `content`/`text`）——两种都要认，否则过滤拿到空串而静默失效。
+    """
+    if isinstance(item, str):
+        return item
+    for attr in ("content", "text"):
+        value = getattr(item, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _drop_slots_inside_verbatim(slots: dict, verbatim: str) -> dict:
+    """剔除**已包含在直出文本里**的注释槽（直出文本权威，避免同一条注释出两份）。
+
+    `_verbatim_text` 是节点的展开切片原文，**行尾注释也在其中**（实测切片尾部
+    `… } ; // i-type `）。而 `_render_verbatim` 的既定语义是"附着注释在节点 span
+    **之外**，故槽仍要输出"——切片内的那条不满足该前提：既随切片输出、又被槽输出，
+    于是**一遍渲染内变两份**，下一遍切片已含两份 ⇒ **每遍加倍**（fuzz `[NON-IDEMPOTENT]`）。
+
+    保守判据：只丢"文本非空且确实出现在切片里"的槽；空文本或不在切片中的槽原样保留
+    （切片之外的附着注释仍按 docstring 要求输出）。
+    """
+    out: dict = {}
+    for name, value in slots.items():
+        items = value if isinstance(value, list) else [value]
+        kept = [
+            it for it in items
+            if not (_slot_text(it).strip() and _slot_text(it).strip() in verbatim)
+        ]
+        if not kept:
+            continue
+        out[name] = kept if isinstance(value, list) else kept[0]
+    return out
+
+
 def _render_verbatim(
     verbatim: str,
     slots: dict,
@@ -269,6 +308,10 @@ def render_node(
 
     verbatim = getattr(node, "_verbatim_text", None)
     if verbatim is not None:
+        # 直出文本是**权威**：切片里已含的注释不再由槽输出（否则一条变两条；下一遍
+        # 切片已含两条 ⇒ 每遍加倍）。切片之外的槽照旧输出（见 _render_verbatim）。
+        slots = _drop_slots_inside_verbatim(slots, verbatim)
+        head_trail_docs, trail_docs = _line_suffix_docs(slots, renderer)
         return _render_verbatim(
             verbatim, slots, renderer, head_trail_docs, trail_docs
         )
