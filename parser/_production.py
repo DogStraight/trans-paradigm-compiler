@@ -8,9 +8,11 @@ _production.py — 生产式解析全流程（合并 rule_matcher + node_parsers
 Doc: docs/language_walkthrough.md（production 求值引擎）
 """
 
+from typing import Any
+
 from core.define import Node, Token, GrammarRule, CHILDREN_FIELD, block_end_of
 from .parser_core import ParseContext
-from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE, NEWLINE_TOKEN_TYPE
+from ._constants import BLOCK_NODE_NAME, COMMENT_TOKEN_TYPE
 from .rule_selector import analyze_production_features, flatten_production_features
 from .follow import token_in_follow
 from ._comment_trivia import comment_leave_to_expression, is_line_only

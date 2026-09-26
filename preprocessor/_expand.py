@@ -7,9 +7,9 @@ Both operate on pure text, no token dependency.
 Doc: preprocessor/README.md
 """
 
-import os
 import re
 from dataclasses import dataclass, field
+from typing import Any
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
 from core.token_protocol import IDENT_RE
@@ -26,7 +26,6 @@ from ._markers import inline_marker, line_marker
 from .macro_policy import (
     MODE_INLINE,
     MODE_LINE,
-    MODE_SPLICE,
     load_macro_policy,
     plan_macro,
 )
