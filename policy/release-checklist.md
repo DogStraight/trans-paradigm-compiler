@@ -20,6 +20,12 @@ python tests/e2e/eval_lint_accuracy.py          # lint recall 100%、误报 FP 0
 python -m pytest tests/ -q --cov --cov-report=term # 覆盖率 ≥ fail_under（80；并行即准，无需 -n 0）
 ```
 
+> 或**一条命令**跑完 CI 的全部步骤（含 pyright strict / edge / fuzz / wheel 安装冒烟）：
+> `python tools/ci_rehearsal.py`。结论三态 **PASS / FAIL / INCOMPLETE**——
+> **SKIP（本机缺 pyright 等）与「一步都没跑」都不算绿**，整体判 INCOMPLETE 并 exit 2。
+> ⚠ CI 的触发是 `push.branches` + `pull_request`，**推 tag 不触发 CI**；长期不推送期间
+> 门禁等于没跑（已实测累积 4 类红，见 `TODO.md`「测试基础设施」）——**打标前必须先跑本工具**。
+
 ## 2. 版本号核对
 
 - [ ] 版本单一来源 `core/__init__.__version__` 与 `pyproject.toml [project].version` 一致

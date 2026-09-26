@@ -7,6 +7,7 @@
 | 工具 | 用途 | 何时跑 | 规程/判据 |
 |------|------|--------|-----------|
 | `config_sites.py` | 机械枚举语言包配置点位：`list` 清单 / `check` 漂移哨兵 / `rename` 逐项替换 | 引擎语义/键名变更时 | `policy/engine_config_sync.md` |
+| `ci_rehearsal.py` | **本地排练 `ci.yml` 的全部门禁**（发布/打标前一条命令自查）：主回归+覆盖率 / 乱序 smoke / 两条 policy 脚本 / pyright strict / edge / fuzz / CLI / wheel 安装冒烟，输出 PASS·FAIL·**SKIP** 矩阵。**SKIP 与「零步骤」都不算绿**（整体判 INCOMPLETE，exit 2）——CI 只在推分支时运行（触发是 `push.branches` + `pull_request`，**推 tag 不触发**），长期不推送时这是唯一的自查手段。`--only <子串>` / `--skip-wheel` / `--pyright <路径>` | 打 tag 或推送分支前；怀疑「CI 会不会红」时 | `TODO.md`「测试基础设施」（0.1.2/0.1.3 批的实测矩阵）；`policy/release-checklist.md` §1 |
 | `check_coverage_delta.py` | 增量覆盖率（只看改动文件，几十秒） | 大改收尾看新增行是否被覆盖 | — |
 | `check_gate_efficacy.py` | 门禁有效性抽查（真实事故变异，期望门禁变红） | 怀疑门禁失灵时 | — |
 | `check_test_isolation.py` | 进程级隔离对照（每文件一进程 vs 单进程共享档；`--hashseed-scan N` 再换一维 PYTHONHASHSEED） | 排查"换跑法就变脸" | `tests/README.md` |
