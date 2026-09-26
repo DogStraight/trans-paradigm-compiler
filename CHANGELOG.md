@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **渲染/解析：注释落位四处缺陷**（在 C 包保真度闭环上暴露，**成因都在引擎**，非语言包）：
+
+  1. **列表项前的独占行注释整条丢失**：首注释由 `_claim_head_comments` 领到行首规则的
+     **最内层**节点（列表项以标识符开头时是项内的 `Identifier`），join 取用端只认项自身
+     `sub_node` 首位 → 注释静默丢弃（实测 `enum e { // c` + 首项丢掉整条）。取用端改为沿
+     项**首脊线**下钻（`renderer/primitives/join.py::_hoist_head_comments`）。
+  2. **多条首注释顺序倒置**：`_insert_gap_comments` 按行升序遍历却逐条 `insert(0, …)`
+     → 注释进 AST 就是倒序，渲染出「后一行在前」；产物再解析又回到源序 ⇒ 不幂等。
+     改为整段前插（`subs[:0] = nodes`）。
+  3. **分隔符后的行中注释多一个空格**：join 组装在注释后又补 `Text(" ")`，与紧随的
+     SoftLine 叠加 → `int a, /* mid */  b;`（flat 双空格；broken 形态则是行尾空白），
+     二次渲染逐字不同。verilog 端口表同缺陷（`input wire clk, /* port comment */ `）。
+     删去该补格（间距由 SoftLine 给）。
+  4. **硬拼列表（`join=""`）首项即注释时注释粘在代码上**：`_asm_comment_item` 把
+     「换行分隔」与「硬拼」混为一谈，硬拼列表首项即注释时不补首 Break → `//` 注释随即
+     吞掉后续片段（实测 `int f(\n// c\nint a);` → `int f// c` + 换行 + `(int a);`，二次
+     渲染整段被吃进注释 ⇒ **输出非法 C**）。补首 Break。
+
+  验证：新增引擎门禁 4 条（`tests/engine/renderer/test_renderer_primitives.py::
+  TestJoinCommentPlacementRegressions`）；C 包保真度闭环加**注释清单**与**首注释源序**
+  两条判据（`tests/languages/c/test_c_render_fidelity.py` 18 → 20 例），样本
+  `samples/edge_comments.c` 扩入枚举体首项前独占注释与声明符间行中块注释。
+  四条门禁**逐条做缺陷态变异复验**（改回缺陷 → 对应门变红 → 还原）。
+  **全量 2452 passed / 7 skipped**（与改动前持平，无回归）。
+
 ### Changed
 
 - **P3-②c-3（上）：`param_override` 共享项落地 + 逐项对拍（ADR-0019）**：把各检查原先

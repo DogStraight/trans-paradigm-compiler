@@ -76,10 +76,46 @@ class _JoinCfg:
         )
 
 
+def _hoist_head_comments(item: Node, renderer: Any) -> list[Node]:
+    """沿项的**首脊线**取首注释子节点（取到即摘除，返回源序列表；无则空）。
+
+    首注释（容器首元素前的独占行注释）由解析端 `_claim_head_comments` 领为
+    `Comment` 子节点，但**领到的是行首那条规则的最内层节点**——列表项本身以
+    标识符开头时（`Enumerator` → `Identifier`、`InitDeclarator` → `Declarator`
+    → `DirectDeclarator` → `Identifier`），注释挂在项内更深的节点上，只认项
+    自身 `sub_node` 首位会漏掉它（渲染静默丢弃，实测 `enum e { // c\n A }`
+    注释消失）。
+
+    下钻判据：沿"**首子节点**"一路向内（`iter_children` 首个：先 `sub_node`，
+    再按绑定序的属性子节点——规则节点的绑定按产生式元素序挂载，故首个即源序
+    最左），直到某节点的首子节点是 `_comment` 节点——注释在该项内容之前（项首
+    token 即该脊线起点），故提升到项级渲染为前置注释行是源序正确的位置。
+    分段节点（head/body/tail）不钻：其 sub_node 就是 body，首注释归 body 段
+    渲染（理由同 `_split_head_comments`）。
+    """
+    node = item
+    seen: set[int] = set()
+    while id(node) not in seen:
+        seen.add(id(node))
+        if any(k in renderer._layouts.get(node.node_name, {}) for k in _SEGMENT_KEYS):
+            return []
+        subs = getattr(node, "sub_node", None) or []
+        if subs and getattr(subs[0], "_comment", False):
+            cmts: list[Node] = []
+            while subs and getattr(subs[0], "_comment", False):
+                cmts.append(subs.pop(0))
+            return cmts
+        kids = [c for c in node.iter_children() if isinstance(c, Node)]
+        if not kids:
+            return []
+        node = kids[0]
+    return []
+
+
 def _split_head_comments(
     item: Node, renderer: Any
 ) -> list[tuple[Doc, list[LineSuffix], bool]]:
-    """节点 sub_node 首部 Comment 子节点 → 独立行注释条目（并从 sub_node 摘除）。
+    """节点首注释子节点 → 独立行注释条目（并从树中摘除，见 `_hoist_head_comments`）。
 
     ADR-0013 B1.3：容器首元素前独占注释挂首元素 Comment 子节点——join 布局内
     拆为注释段 + 节点主体（注释独立行渲染）。item 主体渲染不引 sub_node
@@ -91,14 +127,10 @@ def _split_head_comments(
     注释会渲染到节点 head 之前（`// 注释` 漂到 `module` 声明前；回归
     `tests/languages/verilog/test_comment_body_head.py`）。
     """
-    item_layout = renderer._layouts.get(item.node_name, {})
-    if any(k in item_layout for k in _SEGMENT_KEYS):
-        return []
-    head_cmts: list[Node] = []
-    subs = getattr(item, "sub_node", None)
-    while subs and getattr(subs[0], "_comment", False):
-        head_cmts.append(subs.pop(0))
-    return [(Text(getattr(c, "value", "")), [], True) for c in head_cmts]
+    return [
+        (Text(getattr(c, "value", "")), [], True)
+        for c in _hoist_head_comments(item, renderer)
+    ]
 
 
 def _render_join_item(
@@ -209,7 +241,12 @@ def _asm_comment_item(
             if cfg.inline_sep:
                 state.result.append(Text(cfg.sep_text))
             state.result.append(Break())
-        elif not cfg.is_newline_sep and not cfg.no_sep and not cfg.no_soft:
+        elif not cfg.is_newline_sep:
+            # 注释项在列表首位：除"父级已给换行"（join="\n"，语句/成员体）外，
+            # 行内分隔与**硬拼**（join=""、no_soft）都必须在此补 Break。硬拼列表
+            # （声明符后缀链）不补会把注释粘在前一片段之后：`//` 注释随即吞掉
+            # 后续代码（实测 `int f(\n// c\nint a);` → `int f// c` + 换行 + `(int a);`，
+            # 二次渲染整段 `(int a);` 被吃进注释 → 非法 C）。
             state.result.append(Break())
     state.result.append(body)
     if i < n_rendered - 1:
@@ -242,10 +279,12 @@ def _asm_separator(
         state.result.append(Text(cfg.sep_text))
         if state.sep_ia:
             # 分隔符后行中注释（`clk, /* c */ output`）——注释随分隔符输出
-            # （折行前）；sep 文本已 rstrip（", "→","），注释前补空格
+            # （折行前）；sep 文本已 rstrip（", "→","），故注释前补一个空格。
+            # ⚠ 注释**后**不再补空格：紧随的 SoftLine 在 flat 形态已经是空格，
+            #   再补一个就成了双空格（`int a, /* mid */  b;`，2026-09-25 实测
+            #   渲染不幂等）；broken 形态下那一个空格还会变成行尾空白。
             _t, _ = state.sep_ia.pop(0)
             state.result.append(Text(" " + _t))
-            state.result.append(Text(" "))
     if cfg.inline_sep:
         ends_line = any(
             renderer.comment_ends_line(s.text) for s in state.pending_suffix

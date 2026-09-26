@@ -332,15 +332,23 @@ def _starts_line(context: ParseContext, tok_idx: int) -> bool:
 
 
 def _insert_gap_comments(parser, subs: list, cmt_list: list[dict]) -> None:
-    """把领到的注释条目按源行序插到 sub_node 首位（逐个前插 → 最终源序）。"""
+    """把领到的注释条目按源行序插到 sub_node 首位（**整段前插，源序不变**）。
+
+    ⚠ 必须整段 `subs[:0] = nodes`：逐条 `insert(0, …)` 会把按行升序遍历到的条目
+    倒序排定（两条连续行注释领到后输出「后一行在前」，实测 `enum e { // 一\\n // 二\\n A }`
+    AST 里是「二、一」——渲染顺序错且不幂等）。
+    """
     from .block_parser import _derive_comment_node_name, _make_comment_node
 
     cmt_name = getattr(parser, "_gap_comment_node_name", None)
     if cmt_name is None:
         cmt_name = _derive_comment_node_name(parser, COMMENT_TOKEN_TYPE)
         parser._gap_comment_node_name = cmt_name
-    for e in sorted(cmt_list, key=lambda x: x.get("line", 0)):
-        subs.insert(0, _make_comment_node(cmt_name, e["text"]))
+    nodes = [
+        _make_comment_node(cmt_name, e["text"])
+        for e in sorted(cmt_list, key=lambda x: x.get("line", 0))
+    ]
+    subs[:0] = nodes
 
 
 def _claim_line_anchors(parser, subs: list, end_line: int) -> None:

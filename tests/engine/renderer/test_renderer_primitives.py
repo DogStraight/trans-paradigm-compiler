@@ -252,6 +252,56 @@ class TestJoinCommentItem:
         assert _render_expr(expr, node) == "\n    // only"
 
 
+class TestJoinCommentPlacementRegressions:
+    """注释落位三处缺陷的回归门（2026-09-25 实测成因，逐条可判死）。
+
+    三条都在 C 包保真度闭环上暴露（渲染不幂等 / 注释静默丢失 / 输出非法 C），
+    但成因都在引擎 `join`，故门设在本层（不依赖语言包与解析器）。
+    """
+
+    def test_sep_inline_comment_single_space(self):
+        """分隔符后的行中注释：注释前后各**一个**空格（缺陷：注释后又补一个
+        空格，与紧随的 SoftLine 叠加成双空格——`int a, /* mid */  b;`，二次
+        渲染逐字不同 ⇒ 不幂等；broken 形态下那个空格还成了行尾空白）。
+        """
+        a, b = _n("id", value="a"), _n("id", value="b")
+        node = _n("List", items=[a, b])
+        node.add_attr("_comment_slots", {"inline_after": {",": [("/* mid */", 1)]}})
+        expr = {"join": ", ", "items": "items"}
+        assert _render_expr(expr, node) == "a, /* mid */ b"
+
+    def test_comment_head_of_hard_concat_list_takes_own_line(self):
+        """硬拼列表（`join=""`，如声明符后缀链）首项即注释：必须补 Break。
+
+        缺陷：`_asm_comment_item` 只在"行内分隔"下补首 Break，把硬拼与换行分隔
+        混为一谈——注释**粘在**前一片段之后，`//` 注释随即吞掉后续代码（实测
+        `int f(\\n// c\\nint a);` → `int f// c` + 换行 + `(int a);`，二次渲染整段
+        被吃进注释 ⇒ 输出非法 C）。
+        """
+        c, a = _cmt("// head"), _n("id", value="(int a)")
+        node = _n("List", items=[c, a])
+        expr = {"join": "", "items": "items"}
+        assert _render_expr(expr, node) == "\n// head\n(int a)"
+
+    def test_head_comment_on_nested_node_hoisted(self):
+        """首注释挂在项内**更深**节点上时也要取到（缺陷：只认项自身 sub_node 首位
+        → 注释静默丢弃）。
+
+        成因：容器首元素前的独占行注释由 `_claim_head_comments` 领，而领到的是
+        行首那条规则的**最内层**节点——列表项本身以标识符开头时（`Enumerator`
+        → `Identifier`、`InitDeclarator` → … → `Identifier`），注释挂在项内更深
+        处（实测 `enum e { // c\\n A }` 整条注释消失）。
+        """
+        c = _cmt("// head")
+        inner = _n("Id", value="A", sub_node=[c])  # 注释在项首脊线尽头
+        item = _n("Enum", name=inner)  # 项自身 sub_node 为空，子节点在绑定属性上
+        node = _n("List", items=[item])
+        expr = {"join": ", ", "items": "items"}
+        out = _render_expr(expr, node)
+        assert out == "\n// head\nEnum", out
+        assert not inner.sub_node, "注释应已从内层节点摘除（否则会二次渲染）"
+
+
 # ═══════════════════════════════════════════════════════
 # group 原语
 # ═══════════════════════════════════════════════════════

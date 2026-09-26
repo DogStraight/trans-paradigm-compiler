@@ -181,3 +181,34 @@ class TestCommentInventory:
         assert not missing, (
             f"{name}: 以下注释未出现在渲染输出：{[c[:30] for c in missing]}"
         )
+
+
+# 同一位置领到**多条**独占行注释：源序必须保住（枚举体首项前是最小复现面）。
+_HEAD_COMMENT_ORDER_SRC = (
+    "enum color {\n"
+    "    // 第一行\n"
+    "    // 第二行\n"
+    "    RED\n"
+    "};\n"
+)
+
+
+class TestHeadCommentOrder:
+    """**首注释源序判据**：同一位置领到的多条独占行注释，渲染顺序须与源一致。
+
+    缺陷（2026-09-25 实测）：`_insert_gap_comments` 按行升序遍历却逐条
+    `insert(0, …)` → 两条连续注释进 AST 就是**倒序**，渲出「后一行在前」；
+    产物再解析又回到源序 ⇒ 二次渲染与首渲染不同（渲染不幂等）。顺序与幂等
+    两条一起守：只守其中一条时，"倒序但恰好往返一致"的实现仍可能漏过。
+    """
+
+    def test_source_order_preserved(self, c_render):
+        out = c_render(_HEAD_COMMENT_ORDER_SRC)
+        assert "// 第一行" in out and "// 第二行" in out, f"注释丢失：{out!r}"
+        assert out.index("// 第一行") < out.index("// 第二行"), (
+            f"首注释被倒序（源：第一行在前）:\n{out}"
+        )
+
+    def test_round_trip_after_reorder(self, c_render):
+        out = c_render(_HEAD_COMMENT_ORDER_SRC)
+        assert c_render(out) == out, f"渲染不幂等:\n{out}\n---\n{c_render(out)}"

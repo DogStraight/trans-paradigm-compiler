@@ -127,6 +127,12 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
 
 - **独立行注释 = Comment 节点**：`collect_line_comments` + 容器项间/首元素
   前独占注释上浮（`_claim_head_comments`）→ join 拆独立行段渲染。
+  ⚠ **取用端沿项"首脊线"下钻**（`join._hoist_head_comments`）：首注释由 claim
+  领到的是行首规则的**最内层**节点（列表项以标识符开头时是项内的 `Identifier`，
+  如 `Enumerator` → `Identifier`），只认项自身 `sub_node` 首位会漏掉它（静默丢
+  注释）；分段节点（head/body/tail）不钻，首注释归 body 段渲染。
+  另：硬拼列表（`join=""`）的首注释必须补 Break——否则注释粘在前一片段之后，
+  `//` 注释会吞掉后续片段（输出非法 C）。
 - **行内/行尾 = 节点 `_comment_slots`**：`trailing`（node_renderer →
   LineSuffix 行尾；行终止型推迟、块注释就地，见上文「行尾锚定的推迟范围
   与两类注释」）/ `inline_after`（line.py 遇锚元素插后删槽，join 消费
