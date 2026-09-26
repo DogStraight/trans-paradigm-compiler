@@ -109,8 +109,8 @@ grammar/c/
 
 **盘点工具**：`python tools/c_acceptance.py`（27 条构造逐条试解析，报"进 AST / 空 AST /
 词法抛错"）——**空洞是无声的**：不属任何语句入口 FIRST 集的构造会被整体跳过而不报错，
-只跑测试套件看不出还差哪一族。当前 **接受 21 / 空洞 6**（空洞：`.5`、逗号运算符、
-强制转换、复合字面量、预处理两项；链式后缀与字符串内转义引号已于 2026-09-25
+只跑测试套件看不出还差哪一族。当前 **接受 22 / 空洞 5**（空洞：`.5`、强制转换、
+复合字面量、预处理两项；链式后缀 / 字符串内转义引号 / **逗号运算符**已于 2026-09-25
 从空洞转为接受）。
 
 | 族 | 条目 | 阶段 | 备注 |
@@ -121,7 +121,9 @@ grammar/c/
 | 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool/_Complex`）+ 符号/无符号 | 1 | `long long`/`_Bool`/`_Complex` 是 C99 新增 |
 | 声明 | 声明符递归：多级指针、数组（含 `[]` 不定长）、函数声明符、函数指针、返回函数指针 | 1–2 | **C 语法最难点**；用 c4 的声明符规则起步 |
 | 声明 | 存储类（`typedef/extern/static/auto/register`）、类型限定符（`const/volatile/restrict`）与**函数说明符**（`inline`，C99 §6.7.4） | 2 | `restrict` 仅指针、`inline` 仅函数——都是**约束**（语义层），语法层宽进 |
-| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、强制转换 `(T)x`、逗号运算符、复合字面量 |
+| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、强制转换 `(T)x`、复合字面量 |
+| 表达式 | **逗号运算符补洞（2026-09-25）**：`a = b, c` / `(a, b)` / `for (i = 0, j = n; …;)` 此前不支持 → 已补（`CommaExpr` + `FullExpr` 选择器；**不进 pratt 表**，否则实参/初始化器/枚举体/声明符的分隔全被吞——实测枚举体 3 项塌成 1 项），见 `tests/languages/c/test_c_expressions.py::TestCommaExpr` 与 `TestCommaSeparatorsNotSwallowed` | 3 | 分层照标准（整表达式位点允许逗号；实参/初始化器/数组长度/枚举值/位宽/`case` 值保持无逗号）；参照见 `docs/references.md`「C 语言文法参照」第 4 节 |
+| 类型 | **已知边界**：**逐声明符位宽**写不出来（`int a : 3, b : 4;` 解析失败）——包内宽度绑在整个成员声明后（一个 `@DeclaratorList` 共用一个宽度），标准里位宽属声明符。单声明符位域与匿名占位可用 | 2b | 记在 `grammar/c/02_types.toml::StructMember` 注释；要支持需把宽度挪进声明符（形态改动） |
 | 词法 | **转义补洞（2026-09-25）**：字符串/字符常量内的转义引号（`"say \"hi\""`）此前让捕获提前收尾（后续文本被切成新 token）→ 已补（`[string] escape` **段级**转义声明，引擎零语言知识），门禁 `tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape` | 1 | `\` + 换行按 C99 §5.1.1.2 行拼接并入同一 token；**段内原始文本**不变（转义**语义**解码仍归后续阶段） |
 | 表达式 | **链式后缀补洞（2026-09-25）**：`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)` 此前不支持（三个后缀规则都是单级）→ 改为 `PostfixExpr{base, suffixes}`（原子 + 后缀+，同 clang 手写路径的"leading part + 后缀循环"），见 `tests/languages/c/test_c_postfix.py` 28 例 | 3 | 参照见 `docs/references.md`「C 语言文法参照」（ISO C99 §6.5.2 + clang + tree-sitter-c） |
 | 词法 | **后缀实测补洞（2026-09-25）**：整型后缀（`42u`/`1ULL`/`0x1Fu`）与浮点后缀（`1.5f`/`1e3L`）此前被切成"数字 + 标识符" → 已补（`[[number.based]] suffix` 键，DFA 之后的声明式尾段），门禁 `tests/engine/lexer/test_number_suffix.py` | 1 | 组合合法性（`1UL` 合法 / `1ff` 非法）**不在词法层判定**——C 的 pp-number 本就宽进（tree-sitter-c 同样按字符类宽进），约束归语义层 |

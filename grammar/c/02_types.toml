@@ -78,6 +78,11 @@ is_statement = true
 #   匿名位域 `int : 0;` 的声明符表**可省**，故此处沿用 `@DeclaratorList`（非可选）会让
 #   匿名位域解析失败——需要 `;` 前允许省略声明符，见下面 `@DeclaratorList?`。
 #   环安全：宽度里的 `@Expression` 不回到 `StructMember`，与数组长度同性质。
+# ⚠ **已知边界**：宽度在整个成员声明之后（一个 `@DeclaratorList` 共用一个宽度），
+#   故**逐声明符宽度**写不出来——`int a : 3, b : 4;` 解析失败（实测；标准里位宽是
+#   `declarator : constant-expression` 的一部分，可逐个不同）。单声明符位域
+#   （`unsigned int f : 3;`）与匿名占位（`int : 0;`）均可用；`tools/c_acceptance.py`
+#   的位域用例即单声明符形态。
 [StructMember.parser]
 production = [
     "@MemberSpec",

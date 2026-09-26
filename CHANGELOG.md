@@ -7,6 +7,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包逗号运算符：`CommaExpr` + `FullExpr` 选择器（ISO C99 §6.5.17）**：
+
+  - 形状：逗号**刻意不进 pratt 运算符表**——pratt 中缀项在任何 pratt 规则里都按整张表
+    解析，`,` 一旦入表，`f(a, b)` 的实参分隔、`int a = 1, b` 的声明符分隔、
+    `enum {A, B}` 的枚举项分隔、`int a[n], b` 的长度分隔**全被当成运算符吞掉**
+    （实测：枚举体 3 项塌成 1 项）。故走**语法形态**：`CommaExpr`（显式 `,` 分隔 +
+    逐项 pratt 子表达式）+ `FullExpr` 内联选择器（`@CommaExpr|@Expression`）。
+  - **分层照标准**：只在标准允许 `expression` 的位点引 `@FullExpr`（表达式语句 /
+    `return` 值 / `if`·`while`·`do`·`switch` 条件 / `for` 三段 / `( )` / `[ ]`）；
+    分隔符位点（实参表 / 初始化器 / 数组长度 / 枚举值与位宽 / `case` 值）继续引
+    `@Expression`——对应的正是标准的 assignment-expression / constant-expression 层级。
+  - **无逗号不套壳**：`FullExpr` 的选择器让普通表达式仍返回 `Expression` 本体，只有真
+    含逗号才出现 `CommaExpr`（若写成 `(...)*` 可选，每个表达式语句/条件/括号都会多一层，
+    全局 AST 形状变脸——与 `PostfixExpr` 用 `+` 避开裸原子是同一取舍）。
+  - 参照：`docs/references.md`「C 语言文法参照」新增第 4 节（标准分层 +
+    tree-sitter-c 的 `comma_expression` 分立；并记一处本包**照标准、比 tree-sitter-c 宽**：
+    下标 `[ expression ]` 允许逗号）。
+
+  连带记录：`StructMember` 补一条**已知边界**——逐声明符位宽写不出来
+  （`int a : 3, b : 4;` 解析失败，包内宽度绑在整个成员声明后），单声明符位域与匿名
+  占位可用（记在包注释 + 缺口档接受域表）。
+
+  验证：`tests/languages/c/test_c_expressions.py` 新增 `TestCommaExpr`（9 例：括号/语句/
+  return/for 三段/四类条件/下标/三项/各项是完整表达式/**无逗号不套壳**）+
+  `TestCommaSeparatorsNotSwallowed`（6 例：实参·声明符表·枚举体·初始化器·`case` 值·
+  数组长度各自不塌）；`tools/c_acceptance.py`：**接受 21 → 22 / 空洞 6 → 5**；
+  **全量 2551 passed / 7 skipped**（linter `phase-*` 缺口数保持 7——选择器没有扰动
+  原子路径，与上一轮 `AtomExpr` 的教训对照）。
+
 - **字符串/字符常量的段内转义：`[string] escape` 键**（引擎捕获层扩一项；C/c4/verilog 消费）：
 
   - 声明面：`[string] delimiters = ['"', "'"]` + `escape = "\\"`（可选**单字符**，段级；

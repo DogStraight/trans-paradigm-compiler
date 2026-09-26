@@ -64,6 +64,122 @@ class TestAssociativity:
         assert e.right.node_name == "Identifier"
 
 
+class TestCommaExpr:
+    """逗号运算符（ISO C99 §6.5.17）——**分层**判据，与分隔符位点分开守。
+
+    标准把"整个表达式"（`expression`，允许逗号）与"赋值表达式"
+    （`assignment-expression`，不含逗号）分成两层。本包把逗号做成**语法形态**
+    （`CommaExpr` = 显式 `,` 分隔 + 逐项 pratt 子表达式），不进 pratt 运算符表
+    ——一旦入表，实参/初始化器/数组长度/枚举项/声明符的逗号会被整表 pratt 吞掉
+    （见 `base/_operator.toml` §6.5.17 与 `00_expressions.toml` 的 CommaExpr 注释）。
+
+    故本类两半各守一边：**整表达式位点**必须出 `CommaExpr`；**分隔符位点**必须
+    仍是分隔符（各自 2/3 项，不被吞）。
+    """
+
+    def test_paren_comma(self, c):
+        """`(a, b)` —— 标准 `( expression )`，也是逗号表达式最常见的写法。"""
+        e = _expr("(a, b)", c)
+        assert e.node_name == "ParenthesizedExpr"
+        inner = e.expr
+        assert inner.node_name == "CommaExpr"
+        assert [i.node_name for i in inner.items] == ["Identifier", "Identifier"]
+
+    def test_expr_stmt_comma(self, c):
+        """`a = b, c;` —— 表达式语句整体是逗号表达式（首项是赋值）。"""
+        assert _expr("a = b, c", c).node_name == "CommaExpr"
+
+    def test_comma_items_are_full_expressions(self, c):
+        """逗号各项是 pratt 子表达式（这里用加法验证各项走了优先级）。"""
+        e = _expr("(a + b, c * d)", c)
+        inner = e.expr
+        assert [i.node_name for i in inner.items] == ["BinaryOp", "BinaryOp"]
+        assert inner.items[0].op == "+" and inner.items[1].op == "*"
+
+    def test_three_items(self, c):
+        assert len(_expr("(a, b, c)", c).expr.items) == 3
+
+    def test_bare_expression_has_no_comma_wrapper(self, c):
+        """**无逗号不套壳**：选择器让普通表达式仍返回 `Expression` 本体。
+
+        若把逗号层写成可选（`(...)*`），每个表达式语句/条件/括号都会多一层
+        `CommaExpr(items=[…])`，全局 AST 形状变脸——这条钉住那个取舍。
+        """
+        assert _expr("a + b", c).node_name == "BinaryOp"
+        assert _expr("a", c).node_name == "Identifier"
+
+    def test_return_value_is_comma_expression(self, c):
+        ast = _parse("int f(void) { return 1, 2; }\n", c)
+        assert ast.sub_node[0].body.body.items[0].value.node_name == "CommaExpr"
+
+    def test_for_clauses_allow_comma(self, c):
+        """`for (i = 0, j = n; i < j; i++, j--)` —— 三段都是整表达式位点。"""
+        ast = _parse(
+            "int f(int n) { int i; int j; "
+            "for (i = 0, j = n; i < j; i++, j--) { i++; } return i; }\n",
+            c,
+        )
+        f = ast.sub_node[0].body.body.items[2]
+        assert f.node_name == "ForStmt"
+        assert f.init.node_name == "CommaExpr"
+        assert f.step.node_name == "CommaExpr"
+
+    @pytest.mark.parametrize(
+        "src",
+        ["if (a, b) { c++; }", "while (a, b) { c++; }", "switch (a, b) { case 1: break; }"],
+    )
+    def test_condition_allow_comma(self, c, src):
+        """四类条件都是整表达式位点（`do` 的 while 同族，见 control_flow 测试）。"""
+        ast = _parse(f"int f(void) {{ {src} return 0; }}\n", c)
+        assert ast.sub_node[0].node_name == "FuncDef"
+
+    def test_subscript_allows_comma(self, c):
+        """`a[i, j]` —— 标准 `postfix-expression [ expression ]`（tree-sitter-c 这里
+        比标准窄，本包照标准；见 `docs/references.md`「C 语言文法参照」）。"""
+        e = _expr("a[i, j]", c)
+        assert e.suffixes[0].index.node_name == "CommaExpr"
+
+
+class TestCommaSeparatorsNotSwallowed:
+    """**分隔符位点**的逗号必须仍是分隔符（对照上一类的"整表达式位点"）。
+
+    这是逗号运算符最容易做坏的地方：pratt 运算符表里加一个 `,` 就能"支持逗号"，
+    但会让实参表/初始化器/枚举体/声明符表**全体塌成一项**（实测枚举体 3 项 → 1 项）。
+    """
+
+    def test_call_args_stay_separate(self, c):
+        e = _expr("f(a, b, c)", c)
+        assert e.suffixes[0].args.items and len(e.suffixes[0].args.items) == 3
+
+    def test_declarator_list_stays_separate(self, c):
+        ast = _parse("int a = 1, b = 2, c = 3;\n", c)
+        assert len(ast.sub_node[0].declarators.items) == 3
+
+    def test_enumerator_list_stays_separate(self, c):
+        ast = _parse("enum e { A, B, C };\n", c)
+        body = ast.sub_node[0].specs.spec.body
+        assert len(body.items) == 3
+
+    def test_initializer_list_stays_separate(self, c):
+        ast = _parse("int a[3] = {1, 2, 3};\n", c)
+        init = ast.sub_node[0].declarators.items[0].init
+        assert len(init.items) == 3
+
+    def test_case_value_is_not_comma(self, c):
+        """`case` 值是 constant-expression（标准层级更窄），故 `case 1:` 的值为单项。"""
+        ast = _parse("int f(int a) { switch (a) { case 1: return 1; } return 0; }\n", c)
+        # 找到 CaseLabel
+        from core.define import iter_nodes
+
+        labels = [n for n in iter_nodes(ast) if n.node_name == "CaseLabel"]
+        assert labels and labels[0].value.node_name != "CommaExpr"
+
+    def test_array_length_stays_single(self, c):
+        """数组长度 `[ assignment-expression? ]` —— 声明符表不被吞。"""
+        ast = _parse("int a[2], b;\n", c)
+        assert len(ast.sub_node[0].declarators.items) == 2
+
+
 class TestUnaryAndPostfix:
     @pytest.mark.parametrize("op", ["-", "+", "!", "~", "*", "&"])
     def test_prefix_operators(self, c, op):

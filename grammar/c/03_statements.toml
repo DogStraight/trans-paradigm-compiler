@@ -60,8 +60,9 @@ value = "$1"
 is_statement = true
 
 [ExprStmt.parser]
+# 整表达式位点（C99 `expression-statement: expression? ;`）→ 允许逗号
 production = [
-    "@Expression",
+    "@FullExpr",
     "symbol.base.semicolon",
 ]
 
@@ -88,7 +89,7 @@ is_statement = true
 [ReturnStmt.parser]
 production = [
     "keyword.return",
-    "@Expression?",
+    "@FullExpr?",
     "symbol.base.semicolon",
 ]
 
@@ -129,7 +130,7 @@ is_statement = true
 production = [
     "keyword.if",
     "bracket.l_parentheses",
-    "@Expression",
+    "@FullExpr",
     "bracket.r_parentheses",
     "@Stmt",
     "(keyword.else,@Stmt)?",
@@ -151,7 +152,7 @@ is_statement = true
 production = [
     "keyword.while",
     "bracket.l_parentheses",
-    "@Expression",
+    "@FullExpr",
     "bracket.r_parentheses",
     "@Stmt",
 ]
@@ -171,7 +172,7 @@ production = [
     "@Stmt",
     "keyword.while",
     "bracket.l_parentheses",
-    "@Expression",
+    "@FullExpr",
     "bracket.r_parentheses",
     "symbol.base.semicolon",
 ]
@@ -206,11 +207,11 @@ declarator = "$3"
 production = [
     "keyword.for",
     "bracket.l_parentheses",
-    "(@Expression|@ForInitDecl)?",
+    "(@FullExpr|@ForInitDecl)?",
     "symbol.base.semicolon",
-    "@Expression?",
+    "@FullExpr?",
     "symbol.base.semicolon",
-    "@Expression?",
+    "@FullExpr?",
     "bracket.r_parentheses",
     "@Stmt",
 ]
@@ -230,7 +231,7 @@ is_statement = true
 production = [
     "keyword.switch",
     "bracket.l_parentheses",
-    "@Expression",
+    "@FullExpr",
     "bracket.r_parentheses",
     "@Stmt",
 ]

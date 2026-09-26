@@ -53,9 +53,11 @@ ref = "content"
 
 
 # ParenthesizedExpr — ( Expression )（与 Expression 成环，靠 pratt + inline 截断）
+# ⚠ 括号内是**整个表达式**（C99 primary-expression: `( expression )`）→ 用 `@FullExpr`
+#   让 `(a, b)` 成立（标准里 `(a, b)` 就是逗号表达式最常见的写法）。
 [ParenthesizedExpr.parser]
 is_atom = true
-production = ["bracket.l_parentheses", "@Expression", "bracket.r_parentheses"]
+production = ["bracket.l_parentheses", "@FullExpr", "bracket.r_parentheses"]
 
 [ParenthesizedExpr.parser.node]
 expr = "$2"
@@ -102,11 +104,50 @@ value = "$1"
 
 
 # Expression — 表达式入口（pratt 接管运算符；Layer B 接 operator_defs）
+# ⚠ 本规则对应标准里的 **assignment-expression** 层级（pratt 表最低项是 `=`）：逗号
+#   不在表里，故 `Expression` 不含逗号——分隔符敏感的位点（实参 / 初始化器 /
+#   数组长度 / 枚举值 / 位宽 / case 值）引它，与 C99 的对应层级一致。
 [Expression.parser]
 production = ["@PrimaryExpr"]
 pratt = true
 
 [Expression.parser.node]
+value = "$1"
+
+
+# CommaExpr — 逗号表达式（C99 §6.5.17）
+#   expression: assignment-expression | expression , assignment-expression
+# ⚠ **刻意不进运算符表**（`base/_operator.toml` §6.5.17 节记了完整理由）：pratt 的
+#   中缀项在**任何** pratt 规则里都按整张表解析，逗号一入表，`f(a, b)` 的实参分隔、
+#   `int a = 1, b` 的声明符分隔、`enum {A, B}` 的枚举项分隔都会被当成运算符吞掉
+#   （实测：枚举体 3 项塌成 1 项）。故走**语法形态**：显式 `,` 分隔 + 逐项 pratt
+#   子表达式。
+# ⚠ **只在标准允许 `expression` 的位点使用**（其余位点引 `@Expression`）：
+#   整表达式位点 = 表达式语句 / `return` 值 / `if`·`while`·`do`·`switch` 条件 /
+#   `for` 三段 / `( expression )` / `[ expression ]`；
+#   assignment-expression 位点 = 实参表 / 初始化器 / 数组长度 / 枚举值与位宽 /
+#   `case` 值（后者是 constant-expression）——这些位置的标准层级本来就不含逗号。
+#   位点一律引 `@FullExpr`（见下），不直接引 `@CommaExpr`。
+[CommaExpr.parser]
+production = ["@Expression", "(symbol.base.comma,@Expression)+"]
+
+[CommaExpr.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+
+
+# FullExpr — 标准 `expression` 层的选择器（有逗号才成 CommaExpr）
+#   expression: assignment-expression | expression , assignment-expression
+# ⚠ 为什么用选择器而不是让逗号层自己可选（`(...)*`）：那样**没有逗号**的普通表达式
+#   也会被包一层 `CommaExpr(items=[…])`，全局 AST 形状变脸（每个表达式语句/条件/括号
+#   都多一层）。选择器让"无逗号"路径仍返回 `Expression` 本体，有逗号才出现 `CommaExpr`
+#   ——与 `PostfixExpr` 用 `+`（而非 `*`）避开裸原子是同一取舍。
+# ⚠ inline（单条交替 + 单映射）：`parse_choice` 按序试，`@CommaExpr` 在前（更具体），
+#   失配后落回 `@Expression`，故常见路径不受影响。
+[FullExpr.parser]
+inline = true
+production = ["@CommaExpr|@Expression"]
+
+[FullExpr.parser.node]
 value = "$1"
 
 
@@ -163,10 +204,12 @@ suffixes = ["$2.items[*]"]
 
 
 # IndexSuffix — [ Expression ]
+# IndexSuffix — [ Expression ]（C99 `postfix-expression [ expression ]`：下标是**整个
+# 表达式** → `@FullExpr`，`a[i, j]` 合法）
 [IndexSuffix.parser]
 production = [
     "bracket.l_square_bracket",
-    "@Expression",
+    "@FullExpr",
     "bracket.r_square_bracket",
 ]
 
@@ -289,6 +332,15 @@ line = [{ ref = "op" }, { ref = "value" }]
 ref = "value"
 
 [Expression.renderer.layout]
+ref = "value"
+
+# CommaExpr — 逐项逗号分隔（`a, b` / `i = 0, j = n`）
+[CommaExpr.renderer.layout]
+line = [
+    { intent = "compact", items = "items", sep = ", ", first_soft = false, nest = 0 },
+]
+
+[FullExpr.renderer.layout]
 ref = "value"
 
 # PostfixExpr — 原子 + 后缀链（`a.b.c` / `f(x)[i]` / `p->a[i]`）。

@@ -661,7 +661,22 @@ C 包从"声明面"走到"表达式面"时遇到的三个形状问题（后缀�
   YAML 单引号的 `''` 双写是**另一机制**，刻意不塞进本键（`_one_char` fail-fast 并注明），
   故 yaml 暂不声明——其双引号转义缺口仍在档。
 
-**4. `case` 体缩进（未闭环，参照在此）**
+**4. 逗号运算符的分层（`expression` vs `assignment-expression`）**
+
+| 来源 | 形态 |
+|---|---|
+| ISO C99 §6.5.17 + 文法 | `expression: assignment-expression \| expression , assignment-expression`——**整表达式层**才含逗号；实参表是 `argument-expression-list: assignment-expression`、数组长度是 `assignment-expression`、`case` 是 `constant-expression`，都**不含**逗号 |
+| tree-sitter-c | `comma_expression` 与 `expression` 是**两个规则**；`expression_statement`/`parenthesized_expression`/`for` 三段/`return` 显式 `choice($.expression, $.comma_expression)`；`argument_list` 只用 `$.expression` ✓ 与标准同分层 |
+| tpc（本包） | 同分层但**声明式**：`CommaExpr`（显式 `,` 分隔）+ `FullExpr` 选择器（`@CommaExpr\|@Expression`，无逗号不套壳），只在整表达式位点引用 |
+
+- 🔥 **借鉴（已落地）**：标准与 tree-sitter 都把"逗号"放在**单独一层**而不是 pratt 运算符表里
+  ——tpc 若把 `,` 加进运算符表，实参/初始化器/枚举体/声明符的分隔会被整表 pratt 吞掉
+  （实测枚举体 3 项塌成 1 项），故走语法形态（`base/_operator.toml` §6.5.17 记了完整推理）。
+- 💡 **一处**照标准、**比 tree-sitter-c 宽**：下标 `[ ]` —— 标准是 `[ expression ]`（允许逗号），
+  tree-sitter-c 的 `subscript_expression` 用 `$.expression`（不含 `comma_expression`）。
+  本包按标准用 `FullExpr`（`a[i, j]` 可解析），差异记此备查。
+
+**5. `case` 体缩进（未闭环，参照在此）**
 
 | 来源 | 形态 |
 |---|---|
@@ -674,7 +689,7 @@ C 包从"声明面"走到"表达式面"时遇到的三个形状问题（后缀�
   `docs/gaps/gap-language-pack-scope.md` §C（要修需渲染端"标签后同级子节点多缩进一级"
   的能力，或在包侧改用吸收形态）。两条路都记着，等有真实需求时再取舍。
 
-**4. 前后缀自增的节点形态（旁证）**
+**6. 前后缀自增的节点形态（旁证）**
 
 - tree-sitter-c `update_expression` = `choice(seq(op, arg), seq(arg, op))`：**同一节点名、
   按位置区分**前后缀——与 tpc 的 `UnaryOp{position}` + `when` 分发布局同构 ✓（tpc 侧
