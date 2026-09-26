@@ -239,7 +239,7 @@ def test_normalize_id_survives_cross_drive(monkeypatch) -> None:
 
 
 def test_abs_target_resolves_nodeid_relative_to_common_ancestor(tmp_path: Path) -> None:
-    """nodeid 相对**共同祖先**时也要能解析（回归：同盘/同文件系统下 rootdir = 共同祖先）。
+    r"""nodeid 相对**共同祖先**时也要能解析（回归：同盘/同文件系统下 rootdir = 共同祖先）。
 
     实测场景：仓库在 `%TEMP%\tpc-wt-x`、pytest 的 tmp_path 在 `%TEMP%\pytest-of-…`，
     两者共同祖先是 `%TEMP%` ⇒ `--collect-only` 给出的 nodeid 形如
