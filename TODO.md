@@ -328,7 +328,7 @@
 > ② pyright strict 53→0 与 R3 假红（`5cbf91e`），其中含一条真 bug（`Text.s`）；
 > ③ 单测依赖 gitignore 生成物（`5cbf91e`，改指受控样本）；
 > ④ nodeid 归一同盘退化 + `_abs_target` 共同祖先（`bf2d8e4`/`5cbf91e`）；
-> 另修 fuzz 报的非幂等（`b876c4b`：直出切片与注释槽双吐行尾注释）。
+> 另修 fuzz 报的非幂等（`238234d`：直出切片与注释槽双吐行尾注释）。
 >
 > **对照：`v0.1.2` tag（`8dca789`）本身也过不了 CI**（同日同法排练，同一 worktree 手法）：
 > pytest **4 failed / 2172 passed / 18 skipped**、shuffled smoke **1 failed**、
