@@ -101,7 +101,30 @@ arity = 2
 assoc = "left"
 ```
 
-## 7. 常见坑
+## 7. `pratt_level`：pratt 入口的优先级上限
+
+```
+[UnaryLevelExpr.parser]
+pratt = true
+pratt_level = "unary"        # "expression"（默认，吃全部中缀）/ "unary"（只到一元层级）
+production = ["@PrimaryExpr"]  # FIRST 集种子
+```
+
+**隐式规则**：`pratt = true` 的规则被引用时默认从 `rbp=0` 起（吃全部中缀）；
+声明 `pratt_level = "unary"` 则从 `max_infix_prio` 起 —— 中缀循环的准入条件是优先级
+**严格大于** rbp，故一元层级**不吃任何中缀**，只留原子 / 前缀 / 后缀。
+
+**用途**：操作数不该吞中缀的位点。典型（C 包首例）：
+- `sizeof unary-expression` —— 否则 `sizeof a * b` 被解析成 `sizeof (a*b)`；
+- `( type-name ) cast-expression` —— 否则 `(int)x * y` 被解析成 `(int)(x * y)`。
+
+**前缀一元不受影响**：`_parse_prefix_unary` 自带 `unary_prefix_rbp`，故 `sizeof *p` /
+`(unsigned)-1` 照常可用。
+
+取值非法（除 `"expression"` / `"unary"` 之外）→ parser 侧 **ConfigError**（fail-fast，
+不静默降级成默认层级）。
+
+## 8. 常见坑
 
 | 坑 | 现象 | 修法 |
 |---|---|---|
@@ -109,6 +132,8 @@ assoc = "left"
 | atom 短 production 在前 | `a[3:0]` 被吃成 `a` + 报错 | atom production 长规则在前 |
 | 三目忘 second | `? :` 只认 `?`，`:` 报错 | `arity=3` + `second=":"` |
 | 一元忘 position | `-a` 解析失败 | 一元声明加 `position="prefix"` |
+| 操作数吞中缀 | `sizeof a * b` → `sizeof (a*b)` | 操作数位点用 `pratt_level = "unary"` 的入口规则 |
+| 逗号进运算符表 | 实参/初始化器/枚举项分隔被吞（枚举体 3 项塌成 1 项） | 逗号走**语法形态**（C 包 `CommaExpr`），不进表 |
 
 ## 评估结论（2026-08-13）
 

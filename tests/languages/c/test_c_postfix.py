@@ -155,6 +155,21 @@ class TestPostfixInContext:
         assert _expr("42", c).node_name == "Number"
         assert _expr("(a)", c).node_name == "ParenthesizedExpr"
 
+    def test_postfix_follow_includes_closing_brackets(self, c):
+        """**不变式**：`PostfixExpr` 必须被某处**引用**——判据是派生 FOLLOW 里有右括号。
+
+        FOLLOW 由"谁引用本规则"推导。实测（2026-09-25）：链规则若不被任何规则引用，
+        其 FOLLOW 只剩 pratt 注入的运算符族 → 后随 `)` 的形态被 FOLLOW 硬检查拦掉，
+        `ring_buffer.c` 的 `ring_scan`（`switch (p->key)`）**整函数解析失败**。
+        故这条断言"FOLLOW 含 `bracket.r_*`"，等价于"链规则确有引用点"。
+        """
+        follows = getattr(c["parser"], "_follows", {}) or {}
+        got = set(follows.get("PostfixExpr") or ())
+        assert any(t.startswith("bracket.r_") for t in got), (
+            f"FOLLOW(PostfixExpr) 不含右括号族（{sorted(got)}）——"
+            "说明链规则没有被任何规则引用（FOLLOW 由引用推导）"
+        )
+
 
 class TestPostfixRejection:
     @pytest.mark.parametrize(

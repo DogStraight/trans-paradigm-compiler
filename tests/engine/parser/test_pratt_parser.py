@@ -83,6 +83,37 @@ def parse(pratt: tuple[Any, Any], tokens: list[Token], **kwargs):
     )
 
 
+class TestPrattLevel:
+    """`level` 参数（入口优先级上限）——语言包按规则的 `pratt_level` 声明。
+
+    动机（C 包首个消费方）：`sizeof a * b` / `(T)x * y` 的操作数是**一元层级**，
+    不该吞后续中缀——标准里 `sizeof unary-expression`、`( type-name ) cast-expression`
+    正是这个层级。默认 `"expression"`（rbp=0）吃全部中缀，行为零变化。
+    """
+
+    def test_default_level_absorbs_infix(self, pratt):
+        ast, c = parse(pratt, [T("id","a"), op("+"), T("id","b")])
+        assert ast.node_name == "BinaryOp" and c == 3
+
+    def test_unary_level_stops_before_infix(self, pratt):
+        """一元层级：只吃一个原子（+ 留给调用方）。"""
+        ast, c = parse(
+            pratt, [T("id","a"), op("+"), T("id","b")], level="unary"
+        )
+        assert ast.node_name == "Ident" and c == 1
+
+    def test_unary_level_keeps_prefix_operator(self, pratt):
+        """前缀一元仍可用（`_parse_prefix_unary` 自带 unary_prefix_rbp）。"""
+        ast, c = parse(pratt, [op("!"), T("id","a"), op("+"), T("id","b")], level="unary")
+        assert ast.node_name == "UnaryOp" and ast.op == "!"
+        assert c == 2, "前缀一元 + 一个原子后应停在中缀之前"
+
+    def test_unary_level_keeps_postfix_like_atom(self, pratt):
+        """一元层级不影响原子内形态（原子由 atom_parser 决定）。"""
+        ast, c = parse(pratt, [T("number","1"), op("+"), T("number","2")], level="unary")
+        assert ast.node_name == "Num" and c == 1
+
+
 # ═══════════════════════════════════════════════════════
 # 基本二元运算
 # ═══════════════════════════════════════════════════════

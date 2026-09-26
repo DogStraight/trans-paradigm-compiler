@@ -76,6 +76,20 @@ class TestRuleSchema:
         )
         assert rule.parser["scope"]["kind"] == "module"
 
+    def test_pratt_level_allowed_in_parser(self):
+        """`pratt_level` 是 parser 合法字段（pratt 入口的优先级上限，见 pratt_parser）。"""
+        rule = GrammarRule(
+            "Test",
+            parser={"production": ["@X"], "pratt": True, "pratt_level": "unary"},
+        )
+        assert rule.pratt_level == "unary"
+        assert rule.pratt is True
+
+    def test_pratt_level_absent_defaults_falsy(self):
+        """未声明时字段取 schema 缺省（False）——消费方按 falsy ⇒ "expression" 处理。"""
+        rule = GrammarRule("Test", parser={"production": ["@X"], "pratt": True})
+        assert not rule.pratt_level
+
     def test_node_binding_out_of_range_rejected(self):
         with pytest.raises(GrammarError, match="越界"):
             GrammarRule(

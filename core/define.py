@@ -458,6 +458,7 @@ class GrammarRule:
         "exclude",
         "inline",
         "pratt",
+        "pratt_level",
         "is_atom",
         "is_block",
         "is_statement",
@@ -477,6 +478,9 @@ class GrammarRule:
     exclude: list
     inline: bool
     pratt: bool
+    # pratt 入口的优先级上限："expression"（默认，rbp=0，吃全部中缀）/
+    # "unary"（起于 max_infix_prio，不吃中缀）——见 parser/pratt_parser.parse_with_count
+    pratt_level: str
     is_atom: bool
     is_block: bool
     parser: dict
@@ -504,7 +508,20 @@ class GrammarRule:
     # parser 阶段含 scope：_resolve_peek 会把 analyzer.scope 拷贝到 parser
     # 顶层（peek = { scope = "analyzer" }），故 scope 是 parser 合法字段。
     _STAGE_FIELDS = {
-        "parser": {"production", "node", "exclude", "peek", "inline", "is_atom", "pratt", "scope"},
+        "parser": {
+            "production",
+            "node",
+            "exclude",
+            "peek",
+            "inline",
+            "is_atom",
+            "pratt",
+            # pratt 入口的优先级上限（"expression" 默认吃全部中缀 / "unary" 只到一元层级）：
+            # 供"操作数不该吞中缀"的位点用（C 的 `sizeof unary-expression`、
+            # `( type-name ) cast-expression`）。取值由 parser 侧 fail-fast 校验。
+            "pratt_level",
+            "scope",
+        },
         "renderer": {"layout", "head", "body", "tail", "override"},
     }
     # 布尔字段（类型校验）

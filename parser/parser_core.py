@@ -249,6 +249,16 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
     start = context.token_pointer
     # 实验：stop_tokens 是否冗余（pratt 中缀循环对非运算符本来就会 break）
     stop_tokens = None
+    # 入口优先级上限：语言包按规则声明 `pratt_level = "unary"`（不吃中缀）；
+    # 非法值 fail-fast，不静默降级成默认层级（否则操作数会吞掉中缀运算符）。
+    # ⚠ 未声明时字段默认值是 False（`GrammarRule._set_field_defaults` 的非列表字段
+    #   缺省）——故 falsy 一律按 "expression" 处理，只有显式字符串才校验。
+    level = getattr(rule, "pratt_level", None) or "expression"
+    if level not in ("expression", "unary"):
+        raise ConfigError(
+            f"规则 {rule.name!r} 的 [parser] pratt_level 取值非法：{level!r}"
+            "（允许 \"expression\"（默认，吃全部中缀）/ \"unary\"（只到一元层级））"
+        )
 
     try:
         ast_node, consumed = pratt_parser.parse_with_count(
@@ -257,6 +267,7 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             self.operator_defs,
             atom_parser=lambda t, i: _atom_parser_impl(self, t, i, context),
             stop_tokens=stop_tokens,
+            level=level,
             # 前缀位置跳过的行内注释（`a + /* c */ b`）经 sink 记录（P1.5
             # 修复 pratt 吞注释；ADR-0013 阶段 A 后 operator 间隙注释已挂
             # 节点 inline_after，sink 仅收无 operator 上下文的残余前缀注释）。

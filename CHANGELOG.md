@@ -7,6 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 语义层首个切片 1a：强制转换 `(T)x` 与复合字面量 `(T){…}`（无歧义面）**，
+  连带动了引擎一项能力（`pratt_level`）：
+
+  - **范围（`ROADMAP.md`「C 语义层首个切片」切片 1a）**：只接受**类型关键字起头**的类型名
+    （`CastTypeName`，**不含 `@TypedefName`**）——`(int)x` / `(unsigned long)y` /
+    `(char *)p` / `(struct p *)q` / `(enum e)v` / `(int){1}` / `(struct p){1, 2}` /
+    `(struct p){.x = 1}`。理由：类型关键字不可能起始表达式 → 与 `(expr)` 候选集**不交**，
+    按 FIRST 集即可判定、**不需要符号表**。typedef 名起头（`(myint)x`）是真歧义
+    （`(a)*b` 是乘法还是转换），留切片 1b（需符号表），草案与判据在 ROADMAP。
+  - **引擎新能力 `[Rule.parser] pratt_level`**：pratt 入口的**优先级上限**——
+    `"expression"`（默认，rbp=0，吃全部中缀）/ `"unary"`（起于 `max_infix_prio`，
+    不吃中缀）；取值非法即 ConfigError。语义与用途见
+    `parser/expression_conventions.md` §7。**加性**：未声明的规则行为零变化。
+  - **⚠ 过程中实测出两处 `sizeof` 实现偏差并修正**（都与"操作数不该吞中缀/转换"同族）：
+    ① `sizeof a * b` 原解析成 `sizeof (a*b)`（应 `(sizeof a) * b`——`sizeof` 与一元同级）；
+    ② 引入 `CastExpr` 后 `sizeof(int) * n` 被原子**最长匹配**判成 `sizeof((int) * n)`
+    （应 `(sizeof(int)) * n`——标准 6.5.3.4 规定括号内是类型名即按类型名形式解析）。
+    修法 = `pratt_level = "unary"`（`UnaryLevelExpr`）+ `sizeof` 操作数改**有序分派**
+    （`SizeofOperand`：先试括号类型名 → 后缀 → 一元层级）。
+
+  验证：`test_c_expressions.py` 新增 `TestCastAndCompoundLiteral`（19 例：8 转换形态 +
+  嵌套 + 一元优先级 + 作操作数 + 4 复合字面量 + **4 对照负样本**（`(a)*b` 等不得判成转换）
+  + 1b 边界 `(myint)x` 仍被拒）与 `TestSizeofPrecedence`（6 例：两处偏差各带判据）；
+  引擎侧 `test_pratt_parser.py::TestPrattLevel`（4 例）+
+  `test_rule_schema.py`（`pratt_level` 合法字段/缺省）；反向守用例按纪律**转正向**
+  （`TestCastIsNotSupportedYet` 删除）。`tools/c_acceptance.py`：
+  **接受 23 → 25 / 空洞 4 → 2**（只剩预处理两项）；**全量 2618 passed / 7 skipped**。
+
 - **前导点浮点：`[[number.based]] lead_dot` 键**（引擎数字 schema 扩一项；C 包消费）：
 
   - 语义：该形态额外接受**以小数点开头**的浮点（C99 §6.4.4.3 `fractional-constant` 的

@@ -95,7 +95,7 @@ value = "$2"
 #   `sizeof` 初值处误报一条（实测 7 → 8）。加原子形态时两处都要改。
 [PrimaryExpr.parser]
 production = [
-    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@SizeofTypeExpr|@SizeofExpr|@PostfixExpr",
+    "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@SizeofTypeExpr|@SizeofExpr|@PostfixExpr|@CastExpr|@CompoundLiteral",
 ]
 inline = true
 
@@ -112,6 +112,24 @@ production = ["@PrimaryExpr"]
 pratt = true
 
 [Expression.parser.node]
+value = "$1"
+
+
+# UnaryLevelExpr — pratt 入口的**一元层级**变体（不吃中缀）
+#   `pratt_level = "unary"`：引擎把入口 rbp 起在 `max_infix_prio`（中缀循环的准入
+#   条件是优先级**严格大于** rbp），故只留原子 / 前缀 / 后缀，**不吞中缀运算符**。
+# 为什么需要它：标准里 `sizeof unary-expression` 与 `( type-name ) cast-expression`
+#   的操作数就是这个层级。直接引 `@Expression`（rbp=0）会让操作数吃掉后续中缀——
+#   实测旧写法 `[SizeofExpr] production = ["keyword.sizeof", "@UnaryExpr"]` 把
+#   `sizeof a * b` 解析成 `sizeof (a*b)`（应为 `(sizeof a) * b`，sizeof 是一元优先级）。
+# 前缀一元仍可用（`_parse_prefix_unary` 自带 `unary_prefix_rbp`）→ `(int)-x` 成立；
+#   嵌套转换靠原子最长匹配（`CastExpr` 是 is_atom）→ `(int)(char)x` 成立。
+[UnaryLevelExpr.parser]
+pratt = true
+pratt_level = "unary"
+production = ["@PrimaryExpr"]
+
+[UnaryLevelExpr.parser.node]
 value = "$1"
 
 
@@ -189,7 +207,7 @@ value = "$1"
 [PostfixExpr.parser]
 is_atom = true
 production = [
-    "(@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@SizeofTypeExpr|@SizeofExpr)",
+    "(@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@SizeofTypeExpr|@SizeofExpr|@CastExpr|@CompoundLiteral)",
     "(@IndexSuffix|@CallSuffix|@MemberSuffix)+",
 ]
 
@@ -256,9 +274,10 @@ items = ["$1", "$2.items[*].sub_node[1]"]
 #   两条规则的首 token 都是 `keyword.sizeof`，靠**候选顺序**消歧：先试"括号类型名"
 #   （更具体），失败再退到"一元表达式"。
 #
-# ⚠ **未做：强制转换 `(T)x`**（C99 §6.5.4）。它与 `(expr)` 的区分需要**类型名知识**
-#   （C 的经典歧义，标准靠"T 是否为 typedef 名"判定），属语义层信息，不能靠语法层
-#   猜。留待与 typedef 名判定同批处理（`hier`/语义层就位后）。
+# ⚠ **未做：强制转换的 typedef 名形态**（`(myint)x`）——与 `(expr)` 的区分需要
+#   **类型名知识**（C 的经典歧义，标准靠"T 是否为 typedef 名"判定），属语义层信息，
+#   不能靠语法层猜。切片 1a（关键字起头）已落地（见 `CastExpr` / `CompoundLiteral`）；
+#   1b 见 `ROADMAP.md`「C 语义层首个切片」草案。
 
 # SizeofTypeExpr — sizeof ( type-name )   例：sizeof(int) / sizeof(struct s) / sizeof(char *)
 [SizeofTypeExpr.parser]
@@ -274,22 +293,47 @@ production = [
 type_name = "$3"
 
 
-# SizeofExpr — sizeof unary-expression   例：sizeof x / sizeof a[0]
+# SizeofOperand — sizeof 的操作数形态（**按序分派**，非 pratt）
+# ⚠ 为什么不能直接引 pratt 入口：C99 §6.5.3.4 规定"括号内是类型名时按 `sizeof ( type-name )`
+#   解析"——`sizeof(int) * n` 必须是 `(sizeof(int)) * n`。而原子路径按**消费最多**取胜，
+#   pratt 操作数会把 `(int) * n` 当成**转换**（`CastExpr`），比类型名形态多消费两个 token
+#   → 实测误判成 `sizeof((int) * n)`。故这里用**有序选择**：先试括号类型名（命中即定），
+#   再退回后缀/一元层级（pratt）——顺序判定而非长度判定，与标准的消解口径一致。
+#   副作用（有意）：`sizeof(int)` 与 `SizeofTypeExpr` 消费数相同 → 原子路径**先试者胜**
+#   （严格 `>` 比较 + 按 production 数降序），`SizeofTypeExpr` 胜出，节点名不变。
+[SizeofOperand.parser]
+inline = true
+production = [
+    "(bracket.l_parentheses,@CastTypeName,bracket.r_parentheses)|@PostfixExpr|@UnaryLevelExpr",
+]
+
+[SizeofOperand.parser.node]
+value = "$1"
+
+
+# SizeofExpr — sizeof unary-expression   例：sizeof x / sizeof a[0] / sizeof a * b
 [SizeofExpr.parser]
 is_atom = true
-# ⚠ 操作数用 `@UnaryExpr`（pratt 入口）而不是 `@PrimaryExpr`：后者在 `sizeof a[0]` /
-#   `sizeof f(y)` 上只匹配到标识符就停（后缀没跟上），整个语句随后失配。
-#   `@UnaryExpr` 走 pratt 层的"最长匹配"（遍历 is_atom 规则取消费最多者），后缀链才对得上。
+# ⚠ 操作数走 `@SizeofOperand`（有序：类型名形态 → 后缀 → 一元层级）：
+#   - 比 `@PrimaryExpr` 强：后者在 `sizeof a[0]` / `sizeof f(y)` 上只匹配到标识符就停；
+#   - 比 `@UnaryExpr`（吃全部中缀）准：旧写法把 `sizeof a * b` 解析成 `sizeof (a*b)`，
+#     而 `sizeof` 是一元优先级，应为 `(sizeof a) * b`（2026-09-25 实测并修正）；
+#   - 与 `CastExpr` 的交互见 `SizeofOperand` 注释（否则 `sizeof(int) * n` 误判）。
 production = [
     "keyword.sizeof",
-    "@UnaryExpr",
+    "@SizeofOperand",
 ]
 
 [SizeofExpr.parser.node]
 operand = "$2"
 
 
-# TypeName — 类型名（说明符序列 + 指针星号），仅供 sizeof/转换等"类型作操数"的位置用
+# TypeName — 类型名（说明符序列 + 指针星号），仅供 sizeof 等"类型作操数"的位置用
+# ⚠ 含 `@TypeSpecifier`（因此**含 `@TypedefName`**）——`sizeof(myint)` 要用它。
+#   转换/复合字面量**不用本规则**：那里是经典歧义位（`(a)*b` 是乘法还是转换），
+#   语法层不得猜，故另设 `@CastTypeName`（首 token 必须类型关键字）。见 ROADMAP
+#   「C 语义层首个切片」草案：切片 1a（关键字起头，无歧义）已落地；切片 1b（typedef
+#   名起头）需符号表。
 [TypeName.parser]
 production = [
     "@TypeQualifier|@TypeSpecifier",
@@ -301,6 +345,62 @@ production = [
 first = "$1"
 rest = "$2"
 pointers = "$3"
+
+
+# ── 强制转换与复合字面量（C99 §6.5.4 / §6.5.2.5）——**切片 1a：无歧义面** ──
+# 只接受**类型关键字起头**的类型名（`CastTypeName`，不含 `@TypedefName`）：
+#   类型关键字不可能起始表达式（表达式首 token 是 id / 字面量 / `(` / 一元运算符），
+#   故与 `(expr)` 的候选集**不交**，按 FIRST 集即可判定，不需要符号表。
+#   typedef 名起头的形态（`(myint)x`）是真歧义（`(a)*b` 是乘法还是转换），
+#   归 ROADMAP 草案的切片 1b（需符号表）。
+[CastTypeName.parser]
+production = [
+    "@TypeQualifier|@SimpleType|@StructSpecifier|@AnonStructSpecifier|@EnumSpecifier|@AnonEnumSpecifier",
+    "@SpecRest*",
+    "(symbol.base.multiple)*",
+]
+
+[CastTypeName.parser.node]
+first = "$1"
+rest = "$2"
+pointers = "$3"
+
+
+# CastExpr — ( type-name ) cast-expression  例：(int)x / (char *)p / (unsigned)-1
+# ⚠ `is_atom = true`：操作数经 `@UnaryLevelExpr` 含 `@Expression`，与 `Expression`
+#   成环——环只在原子规则里被截断（同 ParenthesizedExpr/SizeofExpr 一族）。
+# ⚠ 操作数用**一元层级**入口：`(int)x * y` 必须是 `((int)x) * y`（转换是一元优先级），
+#   若引 `@Expression`（rbp=0）会吞掉 `* y`。
+[CastExpr.parser]
+is_atom = true
+production = [
+    "bracket.l_parentheses",
+    "@CastTypeName",
+    "bracket.r_parentheses",
+    "@UnaryLevelExpr",
+]
+
+[CastExpr.parser.node]
+type_name = "$2"
+operand = "$4"
+
+
+# CompoundLiteral — ( type-name ) { initializer-list }
+#   例：(int){1} / (struct p){1, 2} / (struct p){.x = 1}
+# ⚠ 与 CastExpr 同形前缀，区别在括号后是 `{` 还是操作数——靠候选顺序与 FIRST 集区分
+#   （两者都在原子路径，最长匹配取消费更多者）。
+[CompoundLiteral.parser]
+is_atom = true
+production = [
+    "bracket.l_parentheses",
+    "@CastTypeName",
+    "bracket.r_parentheses",
+    "@InitList",
+]
+
+[CompoundLiteral.parser.node]
+type_name = "$2"
+init = "$4"
 
 
 # ============================================================================
@@ -381,6 +481,30 @@ line = [
 ] } },
     { ref = "pointers" },
 ]
+
+# 转换/复合字面量：类型名与 sizeof 同形（含指针星号）；`( T )operand` 里星号后
+# 不留空格（`(char *)p` 渲染成 `(char *)p`，星号与类型之间留空格、与操作数之间不留）
+[CastTypeName.renderer.layout]
+line = [
+    { ref = "first" },
+    { opt = { group = [
+    " ",
+    { intent = "compact", items = "rest", sep = " ", first_soft = false, nest = 0 },
+] } },
+    { ref = "pointers" },
+]
+
+[CastExpr.renderer.layout]
+line = ["(", { ref = "type_name" }, ")", { ref = "operand" }]
+
+[CompoundLiteral.renderer.layout]
+line = ["(", { ref = "type_name" }, ")", { ref = "init" }]
+
+[UnaryLevelExpr.renderer.layout]
+ref = "value"
+
+[SizeofOperand.renderer.layout]
+ref = "value"
 
 # ── pratt 产物节点的布局（引擎构造，语言包声明文本形态）──
 # ⚠ UnaryOp 的 prefix/postfix **共用同一节点名**（`position` 字段区分），故按属性

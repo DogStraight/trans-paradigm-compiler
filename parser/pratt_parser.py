@@ -661,22 +661,32 @@ def parse_with_count(
     atom_parser=None,
     stop_tokens: set | None = None,
     comment_sink=None,
+    level: str = "expression",
 ) -> tuple[Node | None, int]:
     """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
 
     tokens 可包含 Token 或预解析的 Node（如 CallExpr），
     Node 作为原子表达式直接返回。
+
+    level：pratt 入口的**优先级上限**（语言包按规则的 `pratt_level` 声明）——
+      "expression"（默认）从 rbp=0 起，吃全部中缀运算符；
+      "unary" 起于 `max_infix_prio`（中缀循环的准入条件是优先级**严格大于** rbp），
+      故**不吃任何中缀**，只留原子 / 前缀 / 后缀——标准里 `sizeof unary-expression`、
+      `( type-name ) cast-expression` 的操作数正是这个层级（否则 `sizeof a * b`
+      会被解析成 `sizeof (a*b)`）。前缀一元仍可用（`_parse_prefix_unary` 自带
+      `unary_prefix_rbp`），故 `(int)-x` 成立。
     """
     prefix_priority, prefix_attrs, infix_priority, infix_attrs = _build_priority_maps(
         operator_defs
     )
     max_infix_prio = max(infix_priority.values()) if infix_priority else 0
     unary_prefix_rbp = max_infix_prio + 1
+    entry_rbp = max_infix_prio if level == "unary" else 0
 
     ast, idx = parse_expression(
         tokens,
         start_idx,
-        0,
+        entry_rbp,
         prefix_priority,
         prefix_attrs,
         infix_priority,

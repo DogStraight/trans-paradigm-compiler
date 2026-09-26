@@ -258,15 +258,143 @@ class TestSizeof:
         assert [n.node_name for n in (getattr(ast, "sub_node", []) or [])] == []
 
 
-class TestCastIsNotSupportedYet:
-    """⚠ **强制转换 `(T)x` 尚未支持**（C99 §6.5.4）——钉住"报错"而非静默误解析。
+class TestCastAndCompoundLiteral:
+    """强制转换 `(T)x` 与复合字面量 `(T){…}`（C99 §6.5.4 / §6.5.2.5）——**切片 1a**。
 
-    它与 `(expr)` 的区分需要**类型名知识**（T 是否为 typedef 名），属语义层信息；
-    语法层猜会把 `(x)` 误判成转换。故本阶段**拒收**，留待与 typedef 名判定同批处理。
-    修好后本用例会失败 → 提醒同步 `00_expressions.toml` 的"未做"清单。
+    范围（`ROADMAP.md`「C 语义层首个切片」）：只接受**类型关键字起头**的类型名
+    （`CastTypeName`，不含 `@TypedefName`）。理由：类型关键字不可能起始表达式，故与
+    `(expr)` 的候选集**不交**，按 FIRST 集即可判定、不需要符号表——这是"无歧义"的
+    实证，由本类第二组（**对照**）用例守着。typedef 名起头的形态（`(myint)x`）是真
+    歧义（`(a)*b` 是乘法还是转换），归切片 1b（需符号表），见 `test_typedef_cast_is_1b`。
     """
 
-    def test_cast_form_is_rejected(self, c):
-        ast = _parse("void f(void) { (int)x; }\n", c)
+    @pytest.mark.parametrize(
+        "src,type_first,operand_or_init",
+        [
+            ("(int)x", "SimpleType", "Identifier"),
+            ("(unsigned long)y", "SimpleType", "Identifier"),
+            ("(char *)p", "SimpleType", "Identifier"),
+            ("(struct p *)q", "StructSpecifier", "Identifier"),
+            ("(enum e)v", "EnumSpecifier", "Identifier"),
+            ("(_Bool)b", "SimpleType", "Identifier"),
+            ("(unsigned)-1", "SimpleType", "UnaryOp"),
+            ("(int)a[i]", "SimpleType", "PostfixExpr"),
+        ],
+    )
+    def test_cast_forms(self, c, src, type_first, operand_or_init):
+        e = _expr(src, c)
+        assert e.node_name == "CastExpr", f"{src!r} 未成转换节点：{e.node_name}"
+        assert e.type_name.first.node_name == type_first
+        assert e.operand.node_name == operand_or_init
+
+    def test_nested_cast(self, c):
+        """`(int)(char)z` —— 嵌套转换靠原子最长匹配（`CastExpr` 是 is_atom）。"""
+        e = _expr("(int)(char)z", c)
+        assert e.node_name == "CastExpr"
+        assert e.operand.node_name == "CastExpr"
+
+    def test_cast_is_unary_precedence(self, c):
+        """`(int)x * y` 必须是 `((int)x) * y`（转换是一元优先级，不吃中缀）。"""
+        e = _expr("(int)x * y", c)
+        assert e.node_name == "BinaryOp" and e.op == "*"
+        assert e.left.node_name == "CastExpr"
+
+    def test_cast_as_operand(self, c):
+        e = _expr("a + (int)b", c)
+        assert e.node_name == "BinaryOp"
+        assert e.right.node_name == "CastExpr"
+
+    @pytest.mark.parametrize(
+        "src",
+        ["(int){1}", "(int){1, 2}", "(struct p){1, 2}", "(struct p){.x = 1}"],
+    )
+    def test_compound_literal_forms(self, c, src):
+        e = _expr(src, c)
+        assert e.node_name == "CompoundLiteral", f"{src!r} 未成复合字面量：{e.node_name}"
+        assert e.init.node_name == "InitList"
+
+    @pytest.mark.parametrize(
+        "src,want",
+        [
+            ("(a) * b", "BinaryOp"),
+            ("(a) + b", "BinaryOp"),
+            ("(a, b)", "ParenthesizedExpr"),
+            ("(x + y) * z", "BinaryOp"),
+        ],
+    )
+    def test_paren_expression_forms_not_cast(self, c, src, want):
+        """**对照判据（无歧义的实证）**：括号里是表达式时**不得**判成转换。"""
+        assert _expr(src, c).node_name == want, f"{src!r} 被误判成转换"
+
+    def test_typedef_cast_is_1b(self, c):
+        """typedef 名起头**不在 1a 范围**（真歧义，需符号表）：不得被静默当成转换。"""
+        ast = _parse("void f(void) { (myint)x; }\n", c)
         names = [n.node_name for n in (getattr(ast, "sub_node", []) or [])]
-        assert names == [], f"形态变了（现为 {names}）——若已支持强制转换，请改断言并同步 TOML 清单"
+        # 若判定为转换说明 1a 越界引入了"猜"；当前应为解析失败（空 AST）或非转换路径
+        assert names == [], f"`(myint)x` 现被接受（{names}）——1a 只应覆盖关键字类型名"
+
+
+class TestSizeofPrecedence:
+    """`sizeof` 的**一元优先级**与"括号内是类型名"优先（C99 §6.5.3.4）。
+
+    两处都曾是实现偏差（2026-09-25 实测）：
+
+    1. `sizeof a * b` 旧写法把操作数当 pratt 全表达式 → 解析成 `sizeof (a*b)`；
+       正确是 `(sizeof a) * b`（`sizeof` 与一元运算符同级）。修法：操作数走
+       **一元层级**入口（`pratt_level = "unary"`，不吃中缀）。
+    2. 引入 `CastExpr` 后 `sizeof(int) * n` 被原子路径按"消费最多"判成
+       `sizeof((int) * n)`（转换形态多两个 token）；修法：`sizeof` 操作数用
+       **有序分派**（先试括号类型名），与标准"括号内是类型名即按类型名解析"一致。
+    """
+
+    def test_sizeof_binds_tighter_than_multiplication(self, c):
+        e = _expr("sizeof a * b", c)
+        assert e.node_name == "BinaryOp" and e.op == "*"
+        assert e.left.node_name == "SizeofExpr"
+
+    def test_sizeof_type_name_wins_over_cast_reading(self, c):
+        e = _expr("sizeof(int) * n", c)
+        assert e.node_name == "BinaryOp" and e.op == "*"
+        assert e.left.node_name == "SizeofTypeExpr", (
+            f"`sizeof(int) * n` 被解析成 {e.left.node_name}——类型名形态应优先"
+        )
+
+    def test_sizeof_struct_pointer(self, c):
+        e = _expr("sizeof(struct p) * n", c)
+        assert e.left.node_name == "SizeofTypeExpr"
+
+    def test_sizeof_prefix_operand(self, c):
+        """`sizeof *p`（常见写法）——一元层级入口允许前缀一元。"""
+        e = _expr("sizeof *p", c)
+        assert e.node_name == "SizeofExpr"
+        assert e.operand.node_name == "UnaryOp" and e.operand.op == "*"
+
+    def test_sizeof_prefix_operand_binds_tighter_than_infix(self, c):
+        """`sizeof *p * q` 必须是 `(sizeof *p) * q`——**前缀操作数也不吞中缀**。
+
+        这是 `pratt_level = "unary"` 的判据样本：若操作数按 `expression` 层级解析，
+        `*p * q` 会整体成为 sizeof 的操作数（`sizeof(*p * q)`）。
+        """
+        e = _expr("sizeof *p * q", c)
+        assert e.node_name == "BinaryOp" and e.op == "*"
+        assert e.left.node_name == "SizeofExpr"
+        assert e.left.operand.node_name == "UnaryOp"
+
+    def test_sizeof_postfix_operand(self, c):
+        e = _expr("sizeof a[0]", c)
+        assert e.operand.node_name == "PostfixExpr"
+
+    def test_sizeof_paren_expression(self, c):
+        """括号里是**明确表达式** → 一元形态。"""
+        e = _expr("sizeof (a + b)", c)
+        assert e.node_name == "SizeofExpr"
+        assert e.operand.node_name == "ParenthesizedExpr"
+
+    def test_sizeof_single_identifier_paren_is_wide_in(self, c):
+        """`sizeof (a)` 单标识符 → 判成**类型名**（宽进，属切片 1b 面）。
+
+        `TypeName` 含 `@TypedefName` 且类型名形态优先试——`sizeof(myint)` 要靠它。
+        单标识符究竟是 typedef 名还是变量，属符号表知识（切片 1b）；本阶段记为
+        **已知宽进**，由符号表落地后细化。
+        """
+        assert _expr("sizeof (a)", c).node_name == "SizeofTypeExpr"
