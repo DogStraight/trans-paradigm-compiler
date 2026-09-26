@@ -5,8 +5,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.1.3] - 2026-11-25
-
 ### Added
 
 - **收尾轮实测更正一处「接受面已闭环」的错觉：变参 `...` 从未支持**（本包文档此前把

@@ -7,7 +7,7 @@ compiler frontend; context-sensitive grammar; language workbench; DSL extension;
 model-friendly configuration; forkable pipeline
 -->
 
-![version](https://img.shields.io/badge/version-0.1.3-blue)
+![version](https://img.shields.io/badge/version-0.1.2-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11%2B-orange)
 ![status](https://img.shields.io/badge/status-experimental-yellow)
