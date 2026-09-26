@@ -236,3 +236,23 @@ def test_normalize_id_survives_cross_drive(monkeypatch) -> None:
 
     monkeypatch.setattr(cti.os.path, "relpath", raiser)
     assert cti._normalize_id("C:/tmp/iso/test_a.py::test_b") == "test_a.py::test_b"
+
+
+def test_abs_target_resolves_nodeid_relative_to_common_ancestor(tmp_path: Path) -> None:
+    """nodeid 相对**共同祖先**时也要能解析（回归：同盘/同文件系统下 rootdir = 共同祖先）。
+
+    实测场景：仓库在 `%TEMP%\tpc-wt-x`、pytest 的 tmp_path 在 `%TEMP%\pytest-of-…`，
+    两者共同祖先是 `%TEMP%` ⇒ `--collect-only` 给出的 nodeid 形如
+    `pytest-of-…/popen-gw0/test_y0/test_a.py`；只按"仓库根 + 目标目录"直拼都找不到
+    （本机跨盘时 pytest 回显绝对路径，所以这条只在同盘/CI 上现形）。
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    target = tmp_path / "pytest-of-x" / "pytest-1" / "test_y0"
+    target.mkdir(parents=True)
+    (target / "test_a.py").write_text("def test_a():\n    pass\n", encoding="utf-8")
+    rel = os.path.relpath(target / "test_a.py", tmp_path).replace(os.sep, "/")
+
+    resolved = cti._abs_target(rel, [str(repo), str(target)])
+
+    assert resolved == str(target / "test_a.py"), resolved

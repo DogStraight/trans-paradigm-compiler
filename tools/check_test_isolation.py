@@ -219,19 +219,33 @@ def _summary_line(output: str) -> str:
 def _abs_target(name: str, roots: list[str]) -> str:
     """把收集输出里的名字解析成子进程可直接使用的绝对路径。
 
-    `--collect-only -q` 给的 nodeid 是**相对 rootdir** 的，而 rootdir 不一定
-    是仓库根（目标在仓库外时 pytest 会把那个目录当 rootdir，实测直接拿
-    `test_a.py` 去跑得到 "file or directory not found"）。所以按候选根依次试
-    存在性，而不是简单拼 cwd。
+    `--collect-only -q` 给的 nodeid 是**相对 rootdir** 的，而 rootdir 不一定是仓库根：
+    - 目标在仓库外时 pytest 会把那个目录当 rootdir（实测直接拿 `test_a.py` 去跑得到
+      "file or directory not found"）；
+    - **更阴的一种**（2026-09-26 发布排练实测）：仓库与目标目录**同盘/同文件系统**时，
+      rootdir 会是两者的**共同祖先**（Windows：`%TEMP%`；Linux：`/`），于是 nodeid 形如
+      `pytest-of-x/pytest-1/popen-gw0/test_y0/test_a.py` —— 只按 `_ROOT` 与目标目录直拼
+      都找不到；而**本机跨盘时不会现形**（跨盘时 pytest 回显绝对路径）。
+
+    故：先按候选根直拼，命中即返回；否则从每个根**逐级向上**试到盘根——等价于
+    "nodeid 相对任一祖先"都能解析。
     """
     if os.path.isabs(name):
         return name
+    direct = [os.path.abspath(os.path.join(root, name)) for root in roots]
     for root in roots:
-        cand = os.path.abspath(os.path.join(root, name))
-        if os.path.exists(cand):
-            return cand
-    tried = ", ".join(os.path.abspath(os.path.join(r, name)) for r in roots)
-    return f"__NOT_FOUND__{name}（已试：{tried}）"
+        base = os.path.abspath(root)
+        while True:
+            cand = os.path.abspath(os.path.join(base, name))
+            if os.path.exists(cand):
+                return cand
+            parent = os.path.dirname(base)
+            if parent == base:
+                break
+            base = parent
+    # 报错列**各候选根的直拼路径**（人眼定位用），并注明还试过祖先目录
+    tried = ", ".join(direct)
+    return f"__NOT_FOUND__{name}（已试：{tried}；并逐级试过各候选根的祖先目录）"
 
 
 def _abs_nodeid(nodeid: str, roots: list[str]) -> str:
