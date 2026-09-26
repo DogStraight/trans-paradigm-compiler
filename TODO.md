@@ -322,6 +322,13 @@
 > **③ 单测依赖 gitignore 生成物**（下面第一条）。
 > **④ 隔离工具 nodeid 归一同盘退化**（下面第二条）。
 >
+> **→ 现状（2026-09-26 收尾）**：①②③④ **四类中的三类已修**（`489f1e9` 补 `Any` 导入 +
+> 新门禁 / `5cbf91e` pyright 53→0 与 R3 假红与 gen 夹具 / `bf2d8e4`＋`5cbf91e` nodeid 归一与
+> `_abs_target` 共同祖先），并在**全新检出**上复跑 `tools/ci_rehearsal.py` 确认：
+> **9 步 8 步 PASS**，唯一未绿的是 **fuzz smoke**——那不是门禁问题，是下面那条真 bug
+> （行尾注释每遍加倍）被 fuzz 正确抓到，且该步不固定种子 ⇒ 随机红。
+> 故 CI 是否绿**只取决于这条 bug 何时修**，不取决于门禁本身。
+>
 > **对照：`v0.1.2` tag（`8dca789`）本身也过不了 CI**（同日同法排练，同一 worktree 手法）：
 > pytest **4 failed / 2172 passed / 18 skipped**、shuffled smoke **1 failed**、
 > `check_hardcode` **R3 同 2 处**、**pyright 27 errors**、fuzz smoke **FAIL**
