@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包声明渲染风格：页宽 80 列**（`grammar/c/base/_style.toml` + `[renderer] style`）：
+  此前用引擎默认 40 列（`renderer/loader.py` 的兜底值），把正常声明与调用折成多行
+  ——`int ring_pop(struct ring_item *items, unsigned int head, …)` 被拆成 5 行。
+  页宽是渲染页宽（Doc IR 布局的宽度预算），C 社区惯例 80 列（K&R / Linux / LLVM）。
+  连带清单同步：`[engine] uses` 补 `renderer.doc_ir.v1`（`[renderer]` 段由能力清单
+  机械推导，门禁 `tests/policy/test_engine_capabilities.py` 查漏声明——协商机制在起作用）。
+  实测（三样本 `difflib`）：`ring_buffer.h` 0.9842 → **0.9926**（有效行 33 = 源 33）、
+  `ring_buffer.c` 0.9867 → **0.9907**、`edge_comments.c` 0.9822（持平）。
+  验证：C 包 231 passed；**全量 2477 passed / 7 skipped**。
+
 - **`when` 布局原语 + 保真度判据 7（token 序列）**（承接同轮 C 包保真度闭环）：
 
   - **`when` 属性分发布局**（`renderer/primitives/when.py`）：同一节点名承载多形态时

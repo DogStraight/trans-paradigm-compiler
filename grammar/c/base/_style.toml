@@ -1,0 +1,11 @@
+# _style.toml — C 包渲染风格（世界 A）
+#
+# `max_inline` = 渲染页宽（Doc IR 布局的宽度预算），非"内联阈值"：
+# 引擎默认 40 列（`renderer/loader.py::load_style` 的兜底值，verilog 包同样显式取 40）。
+# C 社区惯例是 80 列（K&R / Linux / LLVM 风格指南），40 列会把正常的声明与调用
+# 折成多行——实测本包三个样本（保真度闭环）在 40 列下多处无谓折行。
+# 注释与 token 判据不受影响（只比结构，不比空白）。
+
+[style]
+indent = 4
+max_inline = 80

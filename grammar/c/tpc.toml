@@ -11,7 +11,12 @@ uses = [
     "grammar.rules.v1",
     "lexer.token_ext.v1",
     "parser.pratt.v1",
+    "renderer.doc_ir.v1",
 ]
+
+[renderer]
+# 渲染风格（页宽/缩进）——C 惯例 80 列；理由见 base/_style.toml 头注
+style = { file = "base/_style.toml", section = "style", required = false }
 
 [lexer]
 token_base = { file = "base/_token.toml", required = true }
