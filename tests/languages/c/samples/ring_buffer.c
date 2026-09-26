@@ -35,6 +35,9 @@ int ring_marks[4] = {[0] = 1, [3] = 2};
 
 unsigned int ring_item_size = sizeof(struct ring_item);
 
+/* 字符串转义（C99 §6.4.4.4）：`\"` 不再提前收尾——`[string] escape` 段级声明 */
+const char *ring_banner = "say \"hi\"";
+
 static const struct ring_item ring_default = {.key = 0, .values = {[1] = 7}};
 
 int ring_init(struct ring *r) {

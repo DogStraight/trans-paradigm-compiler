@@ -7,6 +7,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **字符串/字符常量的段内转义：`[string] escape` 键**（引擎捕获层扩一项；C/c4/verilog 消费）：
+
+  - 声明面：`[string] delimiters = ['"', "'"]` + `escape = "\\"`（可选**单字符**，段级；
+    `[[capture]]` 条目同样可声明）。多字符转义（YAML 单引号的 `''` 双写）是**另一机制**，
+    `_one_char` fail-fast 并注明，不硬塞本键。
+  - 语义：捕获范围内 `<escape><任意字符>` 整体并入内容、**不参与终止判定**——
+    `"say \"hi\""` 不再在 `\"` 处提前收尾（后续文本被切成新 token）；`\` + 换行按
+    C99 §5.1.1.2 行拼接并入同一 token（调用方按内容里的换行记账行号，跨行捕获已支持）。
+  - **不声明 = 无转义语义**（既有行为逐字不变）→ 加性扩展；yaml 因此**不动**
+    （它的单引号转义是双写机制，双引号转义缺口仍在档）。
+  - 参照：`docs/references.md`「C 语言文法参照」新增第 3 节（ISO C99 §6.4.4.4/§5.1.1.2 +
+    tree-sitter-c 的 `string_literal`/`escape_sequence`：成熟实现都把转义放**捕获层**，
+    而非留给后续阶段）。真实代码命中率高：`printf("say \"hi\"")` 这类必撞。
+
+  验证：引擎门禁 `tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape` **8 例**
+  （转义收尾 / 转义反斜杠 / 转义符在结尾 / 转义换行 / **不声明即旧行为**对照 / 多字符
+  fail-fast / `[[capture]]` 段同样支持）；C 词法 `TestEscapes` 补 5 例 + 行拼接与裸引号
+  对照；反向守用例按纪律**转正向**（`TestRecordedLexicalGaps` 里"转义引号让捕获中断"
+  删除）。`tools/c_acceptance.py`：**接受 20 → 21 / 空洞 7 → 6**。样本
+  `ring_buffer.c` 加一条 `"say \"hi\""` 声明（`_TOP` 重记）；**全量 2551 passed / 7 skipped**
+  （本轮前 2536）。三包（verilog/c4/c）声明 escape 后**零回归**——e2e 真实语料与
+  差分门禁全绿。
+
 - **C 包后缀链：`PostfixExpr{base, suffixes}`（链式后缀，ISO C99 §6.5.2）**：
 
   - 形状：旧实现是三个**单级**规则（`CallExpr` 的 base 只能是 `@Identifier`、`IndexExpr`

@@ -109,9 +109,9 @@ grammar/c/
 
 **盘点工具**：`python tools/c_acceptance.py`（27 条构造逐条试解析，报"进 AST / 空 AST /
 词法抛错"）——**空洞是无声的**：不属任何语句入口 FIRST 集的构造会被整体跳过而不报错，
-只跑测试套件看不出还差哪一族。当前 **接受 20 / 空洞 7**（空洞：`.5`、字符串内转义引号、
-逗号运算符、强制转换、复合字面量、预处理两项；**链式后缀 `a.b.c` / `f(x)[i]` 已于
-2026-09-25 从空洞转为接受**）。
+只跑测试套件看不出还差哪一族。当前 **接受 21 / 空洞 6**（空洞：`.5`、逗号运算符、
+强制转换、复合字面量、预处理两项；链式后缀与字符串内转义引号已于 2026-09-25
+从空洞转为接受）。
 
 | 族 | 条目 | 阶段 | 备注 |
 |---|---|---|---|
@@ -121,7 +121,8 @@ grammar/c/
 | 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool/_Complex`）+ 符号/无符号 | 1 | `long long`/`_Bool`/`_Complex` 是 C99 新增 |
 | 声明 | 声明符递归：多级指针、数组（含 `[]` 不定长）、函数声明符、函数指针、返回函数指针 | 1–2 | **C 语法最难点**；用 c4 的声明符规则起步 |
 | 声明 | 存储类（`typedef/extern/static/auto/register`）、类型限定符（`const/volatile/restrict`）与**函数说明符**（`inline`，C99 §6.7.4） | 2 | `restrict` 仅指针、`inline` 仅函数——都是**约束**（语义层），语法层宽进 |
-| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、字符串内转义引号、强制转换 `(T)x`、逗号运算符、复合字面量 |
+| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、强制转换 `(T)x`、逗号运算符、复合字面量 |
+| 词法 | **转义补洞（2026-09-25）**：字符串/字符常量内的转义引号（`"say \"hi\""`）此前让捕获提前收尾（后续文本被切成新 token）→ 已补（`[string] escape` **段级**转义声明，引擎零语言知识），门禁 `tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape` | 1 | `\` + 换行按 C99 §5.1.1.2 行拼接并入同一 token；**段内原始文本**不变（转义**语义**解码仍归后续阶段） |
 | 表达式 | **链式后缀补洞（2026-09-25）**：`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)` 此前不支持（三个后缀规则都是单级）→ 改为 `PostfixExpr{base, suffixes}`（原子 + 后缀+，同 clang 手写路径的"leading part + 后缀循环"），见 `tests/languages/c/test_c_postfix.py` 28 例 | 3 | 参照见 `docs/references.md`「C 语言文法参照」（ISO C99 §6.5.2 + clang + tree-sitter-c） |
 | 词法 | **后缀实测补洞（2026-09-25）**：整型后缀（`42u`/`1ULL`/`0x1Fu`）与浮点后缀（`1.5f`/`1e3L`）此前被切成"数字 + 标识符" → 已补（`[[number.based]] suffix` 键，DFA 之后的声明式尾段），门禁 `tests/engine/lexer/test_number_suffix.py` | 1 | 组合合法性（`1UL` 合法 / `1ff` 非法）**不在词法层判定**——C 的 pp-number 本就宽进（tree-sitter-c 同样按字符类宽进），约束归语义层 |
 | 声明 | 初始化器（标量/聚合/指示符 `.field=`、`[i]=`） | 2 | 指示符是 C99 新增 |
@@ -199,23 +200,15 @@ grammar/c/
 `size`（前缀数字）/ `base_prefix` 描述，**没有"以点开头"的位置**，故 `.5` 被切成
 `.` + `5`。
 
-⚠ 同族的**整型后缀**（`42u` / `1ULL` / `0x1Fu` / `1.5f`）已于同日修好：
-`[[number.based]]` 新增 `suffix = { chars, max }` 键（**DFA 之后的声明式尾段**，由
-`number_runner` 在接受位之后消费——不做成 DFA 转移的原因见 `lexer/number_gen.py`
-的键说明：全局字符类别里 `f`/`F` 已是十六进制 digit，按类别加边会与 hex 值自环撞键）。
-对应用例已转正向（`test_c_lexer.py::TestNumberForms`），引擎侧门禁见
-`tests/engine/lexer/test_number_suffix.py`（含 `0x1FF` 撞键判据）。
+⚠ 同族两条已修好（各自的门禁在括号里）：
+- **整型/浮点后缀**（`42u` / `1ULL` / `0x1Fu` / `1.5f`）→ `[[number.based]] suffix` 键
+  （DFA 之后的声明式尾段；`tests/engine/lexer/test_number_suffix.py`）；
+- **字符串内转义引号**（`"say \"hi\""`）→ `[string] escape` 段级转义声明
+  （`tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape`；机制见
+  `lexer/capture_runner.py` 的"转义"节）。
 
-
-### 字符串内的转义引号（2026-09-25）
-
-`"a\"b"`（字符串里含转义引号）捕获**提前终止**：`[string] delimiters` 的 delim 模式按
-"下一个定界符"结束，**不识别反斜杠转义**（与 `docs/gaps/gap-lexer-capture-boundaries.md`
-记录的捕获边界同类）。真实代码里 `printf("say \"hi\"")` 很常见，故这条**有实际影响**。
-
-上面两条缺口（前导点浮点 / 字符串内转义引号）都由
-`tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：修好后对应用例
-会失败并提醒同步本档。
+上面这条缺口由 `tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：
+修好后对应用例会失败并提醒同步本档。
 
 
 ## 增量插件形态实测：**启用入口 = `[plugins] enabled`**（2026-09-25，含一处自我更正）

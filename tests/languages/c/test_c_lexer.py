@@ -101,6 +101,36 @@ class TestEscapes:
     def test_string_literal_escapes(self, c_lexer, src):
         assert _types(src, c_lexer) == ["literal.string"], f"{src!r} 未按字符串捕获"
 
+    @pytest.mark.parametrize(
+        "src",
+        [
+            r'"a\"b"',              # 转义引号（曾在此提前收尾 → 切成多个 token）
+            r'"say \"hi\""',        # 真实代码里最常见的一处
+            r"'\''",                # 字符常量里的转义单引号
+            r'"C:\\path"',          # 转义反斜杠
+            r'"a\\"',               # 以转义反斜杠结尾（转义符在结尾的边界）
+        ],
+    )
+    def test_escaped_delimiter_stays_one_token(self, c_lexer, src):
+        """段内转义（`[string] escape`）：`\\` 后的字符整体并入、不参与终止判定。
+
+        旧缺陷：delim 捕获按"下一个定界符"结束，不识别反斜杠转义 → `"a\\"b"` 在
+        `\\"` 处收尾，后续文本被当成新 token（`printf("say \\"hi\\"")` 这类真实
+        代码直接崩）。修法 = 段级声明转义字符（引擎零语言知识，见
+        `lexer/capture_runner.py`）。
+        """
+        types = _types(src, c_lexer)
+        assert types == ["literal.string"], f"{src!r} 未按单个字符串捕获：{types}"
+
+    def test_escaped_newline_is_line_splicing(self, c_lexer):
+        """`\\` + 换行 = 行拼接（C99 §5.1.1.2）：并入**同一个** token。"""
+        toks = [t for t in c_lexer.tokenize('"a\\\nb"\n') if t.type not in ("space",)]
+        assert [t.type for t in toks if t.type != "newline"] == ["literal.string"]
+
+    def test_unescaped_quote_still_terminates(self, c_lexer):
+        """对照：没有反斜杠的裸引号照旧收尾（`"a" "b"` 是两个字符串）。"""
+        assert _types('"a" "b"', c_lexer) == ["literal.string", "literal.string"]
+
 
 class TestComments:
     def test_line_comment(self, c_lexer):
@@ -113,28 +143,13 @@ class TestComments:
 class TestRecordedLexicalGaps:
     """⚠ **已知词法缺口**（钉成用例：修好后会失败 → 提醒同步缺口档与 TODO）。
 
-    1. **前导点浮点**（`.5`）：数字形态由 `size` / `base_prefix` 描述，表达不了
-       "以点开头"的浮点，故被切成"点 + 数字"。
-    2. **转义引号**（`"a\\"b"`）：delim 捕获不识别反斜杠转义。
+    **前导点浮点**（`.5`）：数字形态由 `size` / `base_prefix` 描述，表达不了
+    "以点开头"的浮点，故被切成"点 + 数字"。
 
-    ⚠ **整型后缀**（`42u` / `0xFFu` / `10L` / `1ULL`）已于 2026-09-25 修好
-    （`[[number.based]]` 新增 `suffix` 键）——按本类的用法（"修好后用例会失败并提醒
-    同步"），对应用例已**转为正向断言**（见 `TestNumberForms`）。
+    ⚠ 已修好并按纪律**转为正向断言**的两条（修好后本类用例会失败，正是它的用法）：
+    · **整型后缀**（`42u` / `0xFFu` / `10L` / `1ULL`）→ `TestNumberForms`；
+    · **转义引号**（`"a\\"b"`，`[string] escape` 段级转义）→ `TestEscapes`。
     """
-
-    def test_escaped_quote_inside_string_breaks_capture(self, c_lexer):
-        """**转义引号**（`"a\\"b"`）让字符串捕获提前终止。
-
-        delim 模式的捕获按"下一个定界符"结束，**不识别反斜杠转义**（见
-        `docs/gaps/gap-lexer-capture-boundaries.md` 的同类记录）。真实代码里
-        `printf("say \\"hi\\"")` 很常见，故这是**有实际影响**的缺口。
-        本用例钉住现状：修好后会失败并提醒同步缺口档。
-        """
-        types = _types(r'"a\"b"', c_lexer)
-        assert "literal.string" in types and len(types) > 1, (
-            f"转义引号的 token 形态变了（现为 {types}）——若已支持，"
-            "请改断言并同步缺口档"
-        )
 
     def test_leading_dot_float_still_splits(self, c_lexer):
         assert _types(".5", c_lexer) == ["symbol.base.dot", "literal.number"], (

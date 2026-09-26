@@ -261,6 +261,83 @@ class TestRunDelim:
             CaptureRunner.build_rules(td)
 
 
+class TestRunDelimEscape:
+    """delim + `escape`（段级转义声明）：转义符后的字符不参与终止判定。
+
+    动机（C/Verilog）：`"a\\"b"` 曾在 `\\"` 处提前收尾 → 后续文本被当成新 token。
+    引擎零语言知识：是不是转义、转义符是谁，全由 `[string] escape` 声明给；
+    **不声明 = 无转义语义**（旧行为，故本键是加性扩展）。
+    """
+
+    def _td(self, delimiters, escape=None):
+        section: dict = {"delimiters": delimiters}
+        if escape is not None:
+            section["escape"] = escape
+        td = _make_td()
+        td["string"] = section
+        return td
+
+    @staticmethod
+    def _run(src: str, td: dict) -> tuple[str, int, str]:
+        result = CaptureRunner.run(src, 0, td)
+        assert result is not None, f"{src!r} 未命中 capture"
+        return result
+
+    def test_escaped_close_does_not_terminate(self):
+        td = self._td(['"'], escape="\\")
+        content, pos, _ = self._run(r'"a\"b" tail', td)
+        assert content == r'"a\"b"'
+        assert pos == len(r'"a\"b"')
+
+    def test_escaped_backslash_then_close(self):
+        """`"a\\\\"`：`\\\\` 是转义的反斜杠 → 其后的 `"` 才是收尾。"""
+        src = '"a\\\\"'
+        content, pos, _ = self._run(src, self._td(['"'], escape="\\"))
+        assert content == src
+        assert pos == len(src)
+
+    def test_escape_at_end_of_text(self):
+        """转义符是最后一个字符：整体并入，不越界。"""
+        src = '"abc\\'
+        content, pos, _ = self._run(src, self._td(['"'], escape="\\"))
+        assert content == src
+        assert pos == len(src)
+
+    def test_escaped_newline_is_consumed(self):
+        """`\\` + 换行并入内容（行拼接：调用方按内容里的换行记账行号）。"""
+        src = '"a\\\nb"'
+        content, pos, _ = self._run(src, self._td(['"'], escape="\\"))
+        assert content == src
+        assert pos == len(src)
+
+    def test_without_escape_declaration_behavior_unchanged(self):
+        """**对照**：不声明 escape → 仍在 `\\"` 处收尾（旧行为，未声明时不变）。"""
+        content, _, _ = self._run(r'"a\"b"', self._td(['"']))
+        assert content == '"a\\"'
+
+    @pytest.mark.parametrize("bad", ["\\\\", "ab", 1])
+    def test_multi_char_escape_fails_fast(self, bad):
+        """多字符/非字符串转义 → fail-fast（`''` 双写是**另一机制**，不硬塞本键）。"""
+        with pytest.raises(ValueError):
+            CaptureRunner.build_rules(self._td(['"'], escape=bad))
+
+    def test_capture_section_escape_also_supported(self):
+        """`[[capture]]` 段同样可声明 escape（机制一致，避免两套语义）。"""
+        td = _make_td(
+            capture_modes=[
+                {
+                    "start": "@",
+                    "end": "@",
+                    "kind": "delim",
+                    "token_type": "literal.raw",
+                    "escape": "\\",
+                }
+            ]
+        )
+        content, _, _ = self._run(r"@a\@b@", td)
+        assert content == r"@a\@b@"
+
+
 class TestRunIndentLeq:
     """indent_leq kind：YAML 块标量（列比较终止）。"""
 

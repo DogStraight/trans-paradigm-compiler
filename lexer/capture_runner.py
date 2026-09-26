@@ -13,6 +13,7 @@
      end 标记）；token_type 固定为 "comment"。
 2. [string] delimiters（字符串定界符，引擎不再硬编码 "'/ 引号）：
    delimiters = ['"', "'"]
+   escape = "\\"            # 可选：段内转义字符（见下）
    → 每个定界符展开为 kind "delim" 规则（end = 定界符自身），
      token_type 固定为 "literal.string"。
 3. [[capture]] 段（新，语言包按需声明）：
@@ -30,6 +31,12 @@ kind 语义（终止条件）：
                 字符串不跨行）或 EOF（未闭合自然终止）
 - "line_match": 到"一行恰好等于 end"处（heredoc/围栏：`<<EOF ... EOF`
                 终止于独立成行的 EOF）；end 后的换行不消费
+
+**转义**（`escape`，段级/条目级，可选单字符）：声明后，捕获范围内的
+`<escape><任意字符>` 整体并入内容、**不参与终止判定**——C/Verilog 的
+`"say \"hi\""` 不再在 `\"` 处提前收尾；`\<换行>` 也照此并入（C 的行拼接）。
+**不声明 = 无转义语义**（既有行为不变，故本键是加性扩展）；多字符转义
+（如 YAML 单引号的 `''` 双写）是**另一机制**，本键不做（见 `_one_char`）。
 
 多行捕获的行号记账由调用方（main_lexer）处理（与既有 comment 分支一致）。
 
@@ -52,6 +59,7 @@ class CaptureRule:
         token_type: str,
         after: tuple[str, ...] = (),
         next_chars: str = "",
+        escape: str = "",
     ):
         self.start = start  # 触发标记，如 "#" / "<<EOF" / "|"
         self.end = end  # 终止标记（marker/line_match/delim 用）
@@ -59,6 +67,10 @@ class CaptureRule:
         self.token_type = token_type  # 产出 token 类型，如 "comment"
         self.start_len = len(start)
         self.end_len = len(end)
+        # 段内**转义字符**（可选，单字符）：声明的定界符捕获里 `\X` 整体并入
+        # 内容、不参与终止判定（C/Verilog 的 `"a\"b"`；`\<newline>` 的续行同理）。
+        # 引擎零语言知识：是不是转义、转义符是谁，全由声明给。
+        self.escape = escape
         # 触发上下文条件（由调用方 lexer 判定，本类不持有行状态）：
         # after = 前一个显著 token 类型须在此集合（YAML 块标量：须在
         #   ":" 或 "-" 值位置）；空 = 不限制。
@@ -123,11 +135,22 @@ def _capture_delim(
     end 按**长度**比较（与 marker/line_match 同构）：此前用 `ch == rule.end`
     单字符比较，多字符定界符（如三引号）永不匹配 → 静默吞到行尾/EOF（把后续
     token 一起吃掉）。
+
+    `rule.escape` 声明时按**转义**处理：转义符与其后一个字符整体并入内容，
+    都不参与终止判定——否则 `"a\\"b"` 会在第一个 `"` 处提前收尾（后续文本被
+    当成新 token，捕获内容截断）。行尾续行 `\\<newline>` 同理并入（C 的 line
+    splicing 正是这条；调用方按内容里的换行记账行号，跨行捕获已支持）。
     """
     text = ctx.text
     content = text[ctx.start:pos]
     end_len = rule.end_len
+    esc = rule.escape
     while pos < len(text):
+        if esc and text[pos] == esc:
+            nxt = pos + 2 if pos + 1 < len(text) else len(text)
+            content += text[pos:nxt]
+            pos = nxt
+            continue
         if text[pos : pos + end_len] == rule.end:
             content += rule.end
             pos += end_len
@@ -268,16 +291,38 @@ def _string_delim_rules(token_define: dict) -> list[CaptureRule]:
     """`[string] delimiters` → kind "delim" / token_type "literal.string"。
 
     引擎不再硬编码引号定界符（verilog 只声明 "，yaml/c4 声明 " 与 '）。
+    `escape`（可选，**段级**）声明段内转义字符：定界符内的 `\\X` 整体并入内容、
+    不参与终止判定（`"say \\"hi\\""`）。不声明 = 无转义语义（现状不变）。
     """
+    section = token_define.get("string", {}) or {}
+    escape = _one_char("string", section.get("escape", ""))
     rules: list[CaptureRule] = []
-    for delim in token_define.get("string", {}).get("delimiters", []) or []:
+    for delim in section.get("delimiters", []) or []:
         if not isinstance(delim, str) or not delim:
             raise ValueError(
                 "[lexer] [string] delimiters 含非法条目: "
                 f"{delim!r}（须为非空字符串）"
             )
-        rules.append(CaptureRule(delim, delim, "delim", "literal.string"))
+        rules.append(
+            CaptureRule(delim, delim, "delim", "literal.string", escape=escape)
+        )
     return rules
+
+
+def _one_char(section: str, value) -> str:
+    """转义字符声明校验：空串（不声明）或**单字符**；其余 fail-fast。
+
+    ⚠ 多字符转义是**另一机制**（如 YAML 单引号的 `''` 双写）——本键只表达
+    "转义下一个字符"，不硬塞进来；真需要时按机制单独加键。
+    """
+    if not value:
+        return ""
+    if not isinstance(value, str) or len(value) != 1:
+        raise ValueError(
+            f"[lexer] [{section}] escape 须为单个字符（表达'转义下一个字符'），"
+            f"实得 {value!r}"
+        )
+    return value
 
 
 def _capture_rule_from_mode(mode: dict) -> CaptureRule:
@@ -308,6 +353,7 @@ def _capture_rule_from_mode(mode: dict) -> CaptureRule:
         token_type=str(token_type),
         after=tuple(str(t) for t in after),
         next_chars=str(mode.get("next_chars", "")),
+        escape=_one_char("capture", mode.get("escape", "")),
     )
 
 

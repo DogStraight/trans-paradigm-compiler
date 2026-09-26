@@ -94,7 +94,10 @@ while = "while"
 > 注释扫描走 `lexer/capture_runner.py::CaptureRunner`——原始文本捕获模式的
 > 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture
 > mode，`token_type = "comment"`）；字符串定界符由 `[string] delimiters`
-> 声明（delim mode，`token_type = "literal.string"`，引擎不再硬编码引号）；
+> 声明（delim mode，`token_type = "literal.string"`，引擎不再硬编码引号），
+> 段内转义由同段的 `escape`（可选单字符）声明——声明后 `\X` 整体并入内容、
+> 不参与终止判定（C/Verilog 的 `"say \"hi\""`；`\<换行>` 按行拼接并入），
+> **不声明 = 无转义语义**；
 > heredoc/围栏等同类构造可声明 `[[capture]]` 段（`start`/`end`/`kind`/
 > `token_type`，kind ∈ line/marker/delim/line_match/indent_leq）。
 > indent_leq 是 YAML 块标量的列比较终止：`after`（前一显著 token 须在集合，

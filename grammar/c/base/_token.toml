@@ -73,8 +73,11 @@ pairs = [
 number = "\\d+"
 
 # 字符串定界符（CaptureRunner delim mode）：C 的双引号字符串与单引号字符常量
+# escape：段内转义（C99 §6.4.4.4 转义序列 + §5.1.1.2 行拼接）——`\"` 不再提前
+# 收尾（`printf("say \"hi\"")`），`\<换行>` 并入内容。不声明时无转义语义（旧行为）。
 [string]
 delimiters = ['"', "'"]
+escape = "\\"
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"

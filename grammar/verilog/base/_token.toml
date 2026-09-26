@@ -73,8 +73,11 @@ number = "\\d+"
 # 字符串定界符（[string] delimiters）——CaptureRunner delim mode。
 # verilog 只有双引号字符串（IEEE 1364）；' 是数字前缀/symbol.base.single_quote，
 # 不入字符串定界符。
+# escape：IEEE 1364 §3.6 的转义序列（`\"` / `\\` / `\n` 等）——不声明则 `"a\"b"`
+# 会在 `\"` 处提前收尾。
 [string]
 delimiters = ['"']
+escape = "\\"
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"

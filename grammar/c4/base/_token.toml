@@ -60,8 +60,10 @@ number = "\\d+"
 
 # 字符串定界符（[string] delimiters）——CaptureRunner delim mode。
 # c4：双引号字符串 "..." 与单引号字符 '...'（' 不入 symbol，见上注释）。
+# escape：c4 是 C 风格演示语言，两种引号都用反斜杠转义（同 grammar/c）。
 [string]
 delimiters = ['"', "'"]
+escape = "\\"
 
 [id.id]
 id = "[a-z_A-Z][a-z_A-Z0-9]*"
