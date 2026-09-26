@@ -474,6 +474,10 @@ class Lexer:
             self._scan_plain(st, tok)
         elif self._at_unsized_prefix(st):
             self._scan_unsized_number(st, tok)
+        elif self._try_declared_number_start(st, tok):
+            # 形态集**显式声明**的非数字起始字面量（C 的前导点浮点 `.5`）：先试数字
+            # 扫描，成功即消费；失败（如 `a.b` 的 `.`）返回 False，继续走常规分派。
+            pass
         elif self._at_symbol(st):
             self._scan_symbol(st, tok)
         elif self._at_bracket(st):
@@ -668,13 +672,40 @@ class Lexer:
             st.tokens.append(tok)
             return
 
-        tok.set_type("literal.number")
-        tok.set_content(number_content)
+        self._commit_number(st, tok, number_content, new_idx)
 
+    def _commit_number(
+        self, st: "_LexState", tok: Token, content: str, new_idx: int
+    ) -> None:
+        """命中数字形态：落地 token 并推进游标（`literal.number` + refine）。"""
+        self._emit_pending_dedent(st.tokens)
+        st.offset = new_idx - st.idx
+        tok.set_type("literal.number")
+        tok.set_content(content)
         st.idx = new_idx
         st.col += st.offset
         tok = self.refine_type(tok)
         st.tokens.append(tok)
+
+    def _try_declared_number_start(self, st: "_LexState", tok: Token) -> bool:
+        """形态**显式声明**非数字起始时先试扫描；真吃出 token 才算命中。
+
+        动机：C 的 `.5` 以 `.` 开头，而 `.` 同时是符号（`a.b` 成员访问）——
+        直接当数字扫（失败会产出 `id` 型单字符 token）与直接当符号扫（`.5`
+        不再是数字）都不对。故按 runner 的**实际结果**判定：没吃出东西就原样返回，
+        交回常规分派（符号路径）。
+
+        ⚠ 只认 `lead_dot` 显式声明过的形态（`starts_at_declared_non_digit`）：
+        "任何声明的起始字符都先试"会劫持同字符符号——yaml 的 `-` 前缀数字形态
+        会让序列指示符 `- 8080` 的 `-` 变成数字 token（实测 18 处测试变红）。
+        """
+        if not self._number_runner.starts_at_declared_non_digit(st.text, st.idx):
+            return False
+        content, new_idx = self._number_runner.run(st.text, st.idx)
+        if not content or new_idx <= st.idx:
+            return False
+        self._commit_number(st, tok, content, new_idx)
+        return True
 
     def _scan_symbol(self, st: "_LexState", tok: Token) -> None:
         """符号：base 字符起贪心扩展 extend 表（最长匹配）。"""

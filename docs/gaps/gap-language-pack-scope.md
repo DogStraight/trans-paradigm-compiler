@@ -109,9 +109,9 @@ grammar/c/
 
 **盘点工具**：`python tools/c_acceptance.py`（27 条构造逐条试解析，报"进 AST / 空 AST /
 词法抛错"）——**空洞是无声的**：不属任何语句入口 FIRST 集的构造会被整体跳过而不报错，
-只跑测试套件看不出还差哪一族。当前 **接受 22 / 空洞 5**（空洞：`.5`、强制转换、
-复合字面量、预处理两项；链式后缀 / 字符串内转义引号 / **逗号运算符**已于 2026-09-25
-从空洞转为接受）。
+只跑测试套件看不出还差哪一族。当前 **接受 23 / 空洞 4**（空洞只剩：强制转换 `(T)x`、
+复合字面量、预处理两项——前者两项卡在**类型名知识**（语义层），后两项是阶段 4；
+链式后缀 / 转义引号 / 逗号运算符 / 前导点浮点均已于 2026-09-25 从空洞转为接受）。
 
 | 族 | 条目 | 阶段 | 备注 |
 |---|---|---|---|
@@ -121,7 +121,8 @@ grammar/c/
 | 声明 | 基础类型（`void/char/short/int/long/long long/float/double/_Bool/_Complex`）+ 符号/无符号 | 1 | `long long`/`_Bool`/`_Complex` 是 C99 新增 |
 | 声明 | 声明符递归：多级指针、数组（含 `[]` 不定长）、函数声明符、函数指针、返回函数指针 | 1–2 | **C 语法最难点**；用 c4 的声明符规则起步 |
 | 声明 | 存储类（`typedef/extern/static/auto/register`）、类型限定符（`const/volatile/restrict`）与**函数说明符**（`inline`，C99 §6.7.4） | 2 | `restrict` 仅指针、`inline` 仅函数——都是**约束**（语义层），语法层宽进 |
-| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：前导点浮点（`.5`）、强制转换 `(T)x`、复合字面量 |
+| 声明 | **实测补洞（2026-09-25）**：`inline` / `_Complex` 此前整条解析失败（`FuncSpec` 规则缺失、`SimpleType` 未含 `_Complex`）→ 已补，见 `tests/languages/c/test_c_declarations.py::TestC99Specifiers` | — | 同批实测仍**不支持**的：强制转换 `(T)x`、复合字面量（两者都需类型名知识 → 语义层） |
+| 词法 | **前导点浮点补洞（2026-09-25）**：`.5` / `.5e3` / `.5f` 此前被切成 `.` + `5` → 已补（`[[number.based]] lead_dot` 键；点后至少一位数字，`.` 仍归符号表），门禁 `tests/engine/lexer/test_number_suffix.py::TestLeadDot*` | 1 | lexer 侧"先试数字扫描"只对**显式声明**的形态生效——否则会劫持同字符符号（yaml 的 `-` 序列指示符，实测 18 处变红） |
 | 表达式 | **逗号运算符补洞（2026-09-25）**：`a = b, c` / `(a, b)` / `for (i = 0, j = n; …;)` 此前不支持 → 已补（`CommaExpr` + `FullExpr` 选择器；**不进 pratt 表**，否则实参/初始化器/枚举体/声明符的分隔全被吞——实测枚举体 3 项塌成 1 项），见 `tests/languages/c/test_c_expressions.py::TestCommaExpr` 与 `TestCommaSeparatorsNotSwallowed` | 3 | 分层照标准（整表达式位点允许逗号；实参/初始化器/数组长度/枚举值/位宽/`case` 值保持无逗号）；参照见 `docs/references.md`「C 语言文法参照」第 4 节 |
 | 类型 | **已知边界**：**逐声明符位宽**写不出来（`int a : 3, b : 4;` 解析失败）——包内宽度绑在整个成员声明后（一个 `@DeclaratorList` 共用一个宽度），标准里位宽属声明符。单声明符位域与匿名占位可用 | 2b | 记在 `grammar/c/02_types.toml::StructMember` 注释；要支持需把宽度挪进声明符（形态改动） |
 | 词法 | **转义补洞（2026-09-25）**：字符串/字符常量内的转义引号（`"say \"hi\""`）此前让捕获提前收尾（后续文本被切成新 token）→ 已补（`[string] escape` **段级**转义声明，引擎零语言知识），门禁 `tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape` | 1 | `\` + 换行按 C99 §5.1.1.2 行拼接并入同一 token；**段内原始文本**不变（转义**语义**解码仍归后续阶段） |
@@ -194,23 +195,25 @@ grammar/c/
    struct/union/enum 后该行为自然改变——不要把它当期望行为钉住。
 
 
-### 前导点浮点 `.5`（2026-09-25）
+### C 包词法面：三条配置表达力缺口（**已全部闭环**，2026-09-25）
 
-浮点本身已可用（`3.14` / `1e10` / `1.e5` / **`0.5`** 都是单个 `literal.number`——最后
-一个靠把 `c_dec` 的 `size.digits` 从 `nonzero` 放开为 `any`，让内置浮点链作用到
-0 开头的小数）。但 **`.5`**（C99 允许的"小数点开头"形态）表达不了：数字形态由
-`size`（前缀数字）/ `base_prefix` 描述，**没有"以点开头"的位置**，故 `.5` 被切成
-`.` + `5`。
+C 包词法面曾暴露三条"配置表达不了"的缺口，现各有声明键与门禁（历史与推理在
+git log + CHANGELOG；此处只留**机制落点**，便于下个包复用）：
 
-⚠ 同族两条已修好（各自的门禁在括号里）：
-- **整型/浮点后缀**（`42u` / `1ULL` / `0x1Fu` / `1.5f`）→ `[[number.based]] suffix` 键
-  （DFA 之后的声明式尾段；`tests/engine/lexer/test_number_suffix.py`）；
-- **字符串内转义引号**（`"say \"hi\""`）→ `[string] escape` 段级转义声明
-  （`tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape`；机制见
-  `lexer/capture_runner.py` 的"转义"节）。
+| 缺口 | 落点（键） | 机制 | 门禁 |
+|---|---|---|---|
+| 整型/浮点**后缀**（`42u` / `1ULL` / `1.5f`） | `[[number.based]] suffix = { chars, max }` | DFA **之后**的声明式尾段（不做 DFA 转移：全局字符类别里 `f`/`F` 已是 hex digit，按类别加边会撞键） | `tests/engine/lexer/test_number_suffix.py` |
+| **前导点浮点**（`.5` / `.5e3`） | `[[number.based]] lead_dot = true` | 点后**至少一位**数字的子图 + lexer 侧"先试数字扫描"（只认显式声明的形态） | 同上 `TestLeadDot*`；C 侧 `test_c_lexer.py::TestNumberForms` |
+| 字符串内**转义引号**（`"say \"hi\""`） | `[string] escape = "\\"` | 段级转义字符（捕获时 `\X` 整体并入） | `tests/engine/lexer/test_capture_runner.py::TestRunDelimEscape` |
 
-上面这条缺口由 `tests/languages/c/test_c_lexer.py::TestRecordedLexicalGaps` 反向守：
-修好后对应用例会失败并提醒同步本档。
+⚠ **写包者须知（本轮实测的两条坑）**：
+1. **不要按"任何声明的起始字符"做先试**：字面量起始字符与符号同形时（yaml 的
+   `yaml_neg`（`-` 前缀）、C 的 `.`）会把符号劫持成数字 token——yaml 的序列指示符
+   `- 8080` 的 `-` 当场变成 `literal.number`（18 处测试变红）。故需 `lead_dot` 这类
+   **显式声明**才进入先试路径。
+2. **`yaml_neg` 实为不可达声明**（记载待处理）：lexer 只在数字字符上进入数字扫描，
+   故 yaml 的 `-5` 一直是 `symbol.base.minus` + `5`；该形态从未生效（门禁
+   `TestLeadDotConfig::test_starts_at_declared_non_digit_is_gated` 记了这个反例）。
 
 
 ## 增量插件形态实测：**启用入口 = `[plugins] enabled`**（2026-09-25，含一处自我更正）

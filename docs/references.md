@@ -646,6 +646,18 @@ C 包从"声明面"走到"表达式面"时遇到的三个形状问题（后缀�
 - 💡 **实现差异（有意）**：tpc 把后缀做成 **DFA 之后的声明式尾段**而不是 DFA 边——
   引擎的字符→类别映射是全局的，`f`/`F` 已是十六进制 digit 类别，按类别加边会与 hex
   值自环撞键（判据 `0x1FF` 钉在 `tests/engine/lexer/test_number_suffix.py`）。
+- 🔥 **前导点浮点对齐**（已落地）：标准 §6.4.4.3 的 `fractional-constant` 含
+  `digit-sequence? . digit-sequence` 分支（点后 digit-sequence 非空）；tree-sitter-c 的
+  `number_literal` 同样有 `seq('.', decimalDigits)` 分支 ✓ 与其一致。
+  tpc 侧键名 `lead_dot`（点后**至少一位**数字——`.` 本身仍归符号表，否则 `a.b` 的
+  成员访问会被吃掉）；lexer 的"先试数字扫描"只对**显式声明**该键的形态生效
+  （见下方"引擎侧教训"）。
+
+**引擎侧教训（本轮实测，非外部参照）**：把"任何声明的起始字符"都先交给数字扫描器会
+**劫持同字符符号**——yaml 的 `yaml_neg`（`-` 前缀形态）会让序列指示符 `- 8080` 的 `-`
+变成 `literal.number`（18 处 yaml 测试变红）。故新增能力一律**显式声明才生效**；
+顺带发现 yaml 的 `yaml_neg` 从未生效（lexer 只在数字字符上进入数字扫描，
+`-5` 一直是 `symbol.base.minus` + `5`），记在缺口档待处理。
 
 **3. 字符串内的转义（捕获边界）**
 

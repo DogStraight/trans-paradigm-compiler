@@ -45,6 +45,24 @@ class _ConfigNumberRunner:
                 best = (tok, end)
         return best
 
+    def starts_at_declared_non_digit(self, text: str, pos: int) -> bool:
+        """是否有**显式声明非数字起始**的形态（`lead_dot`）能从这里开始。
+
+        只认显式声明过的形态：把"任何声明的起始字符"都先试数字扫描会**劫持同字符
+        符号**——yaml 的 `yaml_neg`（`-` 前缀形态）会让序列指示符 `- 8080` 的 `-`
+        变成 `literal.number`（实测 18 处 yaml 测试变红）。故 C 的 `.5` 需要
+        `lead_dot = true` 显式表态，未表态的形态（含 yaml 的 `-`）行为零变化。
+        """
+        if pos >= len(text):
+            return False
+        cat = char_category(text[pos])
+        if cat is None:
+            return False
+        return any(
+            p.lead_dot and (p.start_state, cat) in p.transitions
+            for p in self.patterns
+        )
+
     @staticmethod
     def _value_states(pat: NumberPattern) -> set[int]:
         """空格跳过的目标态：仅 value 态（base 字母后的进制值态），不含 size

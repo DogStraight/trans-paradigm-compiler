@@ -102,6 +102,101 @@ class TestSuffixConfig:
             )
 
 
+class TestLeadDotConfig:
+    """`lead_dot` 键（前导点浮点 `.5`）的声明面。"""
+
+    def test_absent_key_means_no_lead_dot(self):
+        pat = compile_number_pattern({"name": "x", "size": "none", "base_prefix": "0x"})
+        assert pat.lead_dot is False
+
+    def test_lead_dot_flag_recorded(self):
+        pat = compile_number_pattern(
+            {"name": "x", "size": "none", "base_prefix": "none", "lead_dot": True}
+        )
+        assert pat.lead_dot is True
+
+    @pytest.mark.parametrize("bad", ["true", 1, None])
+    def test_non_bool_fails_fast(self, bad):
+        with pytest.raises(ConfigError):
+            compile_number_pattern(
+                {"name": "x", "size": "none", "base_prefix": "none", "lead_dot": bad}
+            )
+
+    def test_lead_dot_on_prefixed_form_fails_fast(self):
+        """有前缀形态里小数点没有"开头"位置 → 声明即错（不静默忽略）。"""
+        with pytest.raises(ConfigError):
+            compile_number_pattern(
+                {
+                    "name": "x",
+                    "size": "none",
+                    "base_prefix": "0x",
+                    "value_digits": {"x": "hex"},
+                    "lead_dot": True,
+                }
+            )
+
+
+class TestLeadDotConsumption:
+    """`lead_dot` 的消费面：点后**至少一位**数字；`.` 本身不成为数字。"""
+
+    CFG = [
+        {
+            "name": "c_dec",
+            "size": {"digits": "any"},
+            "base_prefix": "none",
+            "bases": [],
+            "value_digits": {"d": "dec"},
+            "value_allow": [],
+            "lead_dot": True,
+        }
+    ]
+
+    def test_leading_dot_float(self):
+        assert _run(".5", self.CFG) == ".5"
+        assert _run(".25", self.CFG) == ".25"
+
+    def test_leading_dot_with_exponent(self):
+        assert _run(".5e3", self.CFG) == ".5e3"
+        assert _run(".5E-3", self.CFG) == ".5E-3"
+
+    def test_dot_alone_is_not_a_number(self):
+        """**判据样本**：点后无数字 → 不吃（`.` 归符号路径，`a.b` 才不受影响）。"""
+        assert _run(".", self.CFG) == ""
+        assert _run(".b", self.CFG) == ""
+
+    def test_digits_forms_unchanged(self):
+        assert _run("0.5", self.CFG) == "0.5"
+        assert _run("5.", self.CFG) == "5."
+        assert _run("1e10", self.CFG) == "1e10"
+
+    def test_starts_at_declared_non_digit_is_gated(self):
+        """`starts_at_declared_non_digit`：只认**显式声明** lead_dot 的形态。
+
+        ⚠ 反例（引擎实测教训）：若改成"任何声明的起始字符都算"，yaml 的 `-` 前缀
+        数字形态会让序列指示符 `- 8080` 的 `-` 变成数字 token（18 处 yaml 测试变红）。
+        """
+        runner = build_number_runner(self.CFG)
+        assert runner is not None
+        assert runner.starts_at_declared_non_digit(".5", 0) is True
+        assert runner.starts_at_declared_non_digit("-5", 0) is False
+
+        yaml_like = [
+            {
+                "name": "yaml_neg",
+                "size": "none",
+                "base_prefix": "-",
+                "bases": [],
+                "value_digits": {"d": "dec"},
+                "value_allow": [],
+            }
+        ]
+        r2 = build_number_runner(yaml_like)
+        assert r2 is not None
+        assert r2.starts_at_declared_non_digit("-5", 0) is False, (
+            "未声明 lead_dot 的形态不得进入'先试数字扫描'（会劫持同字符符号）"
+        )
+
+
 class TestSuffixConsumption:
     """runner 消费：接受位之后按声明集与上限吃后缀。"""
 

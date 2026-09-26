@@ -91,6 +91,7 @@ class NumberPattern:
         allow_space_after_quote: bool = False,
         suffix_chars: frozenset[str] | None = None,
         suffix_max: int = 0,
+        lead_dot: bool = False,
     ):
         self.name = name
         self.transitions = transitions
@@ -102,6 +103,10 @@ class NumberPattern:
         # 由 runner 消费（见 `compile_number_pattern` 的 suffix 键说明）。
         self.suffix_chars = suffix_chars or frozenset()
         self.suffix_max = suffix_max
+        # 显式声明"非数字起始"（C 的前导点浮点 `.5`）：lexer 只对**声明过**的形态
+        # 做"先试数字扫描"——否则会把与符号同字符的起始字符劫持掉
+        # （yaml 的 `yaml_neg`（`-` 前缀）会让序列指示符 `-` 变成数字 token）。
+        self.lead_dot = lead_dot
 
 
 def _digit_cats_for(radix: str) -> set[str]:
@@ -141,6 +146,7 @@ class _PatternBuilder:
     sid: int = 0
     suffix_chars: frozenset[str] = frozenset()
     suffix_max: int = 0
+    lead_dot: bool = False
 
     def new_state(self) -> int:
         """取新状态号（单调递增，pattern 内独立编号）。"""
@@ -161,7 +167,7 @@ class _PatternBuilder:
         """装配结果 → NumberPattern。"""
         return NumberPattern(
             name, self.transitions, self.accepting, start, self.base_states,
-            allow_space, self.suffix_chars, self.suffix_max,
+            allow_space, self.suffix_chars, self.suffix_max, self.lead_dot,
         )
 
     def build_size(
@@ -208,6 +214,33 @@ class _PatternBuilder:
         # size 态本身是接受态：十进制整数（7 / 123 / 0 等）
         self.accepting.add(size_state)
         return size_state
+
+    def build_lead_dot(self, start: int) -> None:
+        """前导点浮点子图（C99 §6.4.4.3 的 `.5` / `.5e3`）——点后**至少一位**数字。
+
+        为什么点后必须有数字：`.` 本身必须继续归符号表（`a.b` 的成员访问），
+        只有"点 + 数字"才是数字字面量——C 文法的 `fractional-constant` 也正是
+        `digit-sequence? . digit-sequence`（点后 digit-sequence 非空）。故本子图里
+        "已吃点未吃数字"的态**不是**接受态。
+        指数链与 `build_size` 的内置浮点链同形（`e[+-]?digits`）。
+        """
+        after_dot = self.new_state()
+        digits = self.new_state()
+        self.add(start, "dot", after_dot)
+        self.digits(after_dot, digits, 0, 10)
+        self.digits(digits, digits, 0, 10)
+        self.add(digits, "underscore", digits)
+        exp_state = self.new_state()
+        exp_sign_state = self.new_state()
+        exp_digit_state = self.new_state()
+        self.add(digits, "eE", exp_state)
+        self.add(exp_state, "sign", exp_sign_state)
+        self.digits(exp_state, exp_digit_state, 0, 10)
+        self.digits(exp_sign_state, exp_digit_state, 0, 10)
+        self.digits(exp_digit_state, exp_digit_state, 0, 10)
+        self.add(exp_digit_state, "underscore", exp_digit_state)
+        self.accepting.add(digits)
+        self.accepting.add(exp_digit_state)
 
     def _prefix_entry_state(self, from_state: int, first: str) -> int:
         """前缀首字符的入口态（取已有的 `digit{first}` 转移目标，缺则新建）。"""
@@ -352,6 +385,12 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     字符→类别映射是**全局**的，而 `f`/`F` 已是十六进制 digit 类别
     （`hex_value_abc`），按类别加后缀边会与 hex 值自环**撞键**（后者被覆盖 =
     六进制数字解析崩）。未声明该键的形态（verilog）行为零变化。
+
+    **lead_dot 键**（可选布尔，`lead_dot = true`）：该形态额外接受**以小数点开头**
+    的形态（C 的 `.5` / `.5e3`）。只对无前缀形态有意义（有前缀时点没有"开头"位置），
+    声明在别处即 fail-fast。点后**至少一位**数字（`.` 本身仍归符号表，见
+    `build_lead_dot`）。字面量起始字符不止数字时，需要 lexer 侧"先试数字扫描"——
+    见 `number_runner.starts_at` 与 `main_lexer._try_number_start`。
     """
     name = cfg.get("name", "based")
     allow_space = cfg.get("value_allow_space", False)
@@ -361,6 +400,12 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     value_digits = cfg.get("value_digits", {})
     value_allow = cfg.get("value_allow", [])
     suffix_chars, suffix_max = _parse_suffix(cfg)
+    lead_dot = cfg.get("lead_dot", False)
+    if not isinstance(lead_dot, bool):
+        raise ConfigError(
+            f"[[number.based]] 的 lead_dot 须为布尔（以小数点开头的浮点，如 `.5`），"
+            f"实得 {lead_dot!r}"
+        )
     # 无前缀形态（base_prefix = "none"）：size 态即最终接受态（十进制整数/浮点），
     # 不建 quote/base 链
     no_prefix = base_prefix == "none"
@@ -376,7 +421,15 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
 
     b = _PatternBuilder()
     b.suffix_chars, b.suffix_max = suffix_chars, suffix_max
+    b.lead_dot = lead_dot
     start = b.new_state()
+    if lead_dot:
+        if not no_prefix:
+            raise ConfigError(
+                f"[[number.based]] {name!r}：lead_dot 只对**无前缀**形态有意义"
+                f"（base_prefix = {base_prefix!r}）——有前缀时小数点没有『开头』位置"
+            )
+        b.build_lead_dot(start)
     current = b.build_size(start, size_cfg, size_is_none, no_prefix, size_allow_zero)
 
     # 无前缀形态：size 态即接受态，直接返回

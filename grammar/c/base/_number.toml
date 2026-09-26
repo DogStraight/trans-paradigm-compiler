@@ -40,6 +40,9 @@ suffix = { chars = "uUlL", max = 3 }
 #   写成 `nonzero` 时的症状：`0.5` 被拆成 `0` + `.` + `5`（实测）。
 #   `3.14` / `1e10` 在两种写法下都能过（非零开头），故 `0.5` 是这条形态的**判据样本**。
 # 后缀集含 `fF`（浮点后缀）与本形态一并承载的整型后缀 `uUlL`。
+# lead_dot：额外接受**以小数点开头**的浮点（C99 §6.4.4.3 的 `.5` / `.5e3`）——
+#   点后至少一位数字（`.` 本身仍归符号表，`a.b` 不受影响）；数字形态里没有
+#   "以点开头"的位置，故由本键声明（lexer 按声明的起始转移先试数字扫描）。
 [[number.based]]
 name = "c_dec"
 size = { digits = "any" }
@@ -48,3 +51,4 @@ bases = []
 value_digits = { d = "dec" }
 value_allow = []
 suffix = { chars = "uUlLfF", max = 3 }
+lead_dot = true

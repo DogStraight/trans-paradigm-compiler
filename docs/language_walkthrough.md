@@ -89,7 +89,10 @@ while = "while"
 > 由 `lexer/number_gen.py` 编译为 FSM、`lexer/number_runner.py` 执行。形态可再声明
 > `suffix = { chars, max }`（可选**尾随后缀字符集**与长度上限，C 的 `42u` / `1ULL` /
 > `1.5f`）——它是 **DFA 之后的声明式尾段**，由 runner 在接受位之后消费，不是 DFA
-> 转移（全局字符类别里 `f`/`F` 已是十六进制 digit，按类别加边会与 hex 值自环撞键）。
+> 转移（全局字符类别里 `f`/`F` 已是十六进制 digit，按类别加边会与 hex 值自环撞键）；
+> `lead_dot = true` 表示该形态额外接受**以小数点开头**的浮点（C 的 `.5` / `.5e3`，
+> 点后至少一位数字），lexer 只对**显式声明**过它的形态做"先试数字扫描"
+> （否则会劫持同字符符号，如 yaml 的 `-` 序列指示符）。
 
 > 注释扫描走 `lexer/capture_runner.py::CaptureRunner`——原始文本捕获模式的
 > 配置驱动执行器：`[comment] pairs` 是其 legacy 输入（归一化为 capture

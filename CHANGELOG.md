@@ -7,6 +7,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **前导点浮点：`[[number.based]] lead_dot` 键**（引擎数字 schema 扩一项；C 包消费）：
+
+  - 语义：该形态额外接受**以小数点开头**的浮点（C99 §6.4.4.3 `fractional-constant` 的
+    `digit-sequence? . digit-sequence` 分支）：`.5` / `.25` / `.5e3` / `.5E-3` / `.5f`。
+  - **点后必须有数字**：`.` 本身仍归符号表（`a.b` / `p.b.c` 的成员访问不受影响）；
+    "已吃点未吃数字"的状态**不是**接受态，故 `.` 不会变成 `literal.number`。
+  - 声明面 fail-fast：非布尔、或声明在**有前缀**形态上（小数点没有"开头"位置）即报错。
+  - **lexer 侧"先试数字扫描"只对显式声明的形态生效**（`starts_at_declared_non_digit`）：
+    ⚠ 实测教训——先按"任何声明的起始字符都先试"实现，结果 yaml 的 `yaml_neg`
+    （`-` 前缀形态）把序列指示符 `- 8080` 的 `-` 变成 `literal.number`（**18 处 yaml
+    测试变红**）。故 C 的 `.5` 必须显式表态，未表态的形态行为零变化。
+  - 顺带发现（已记档）：**yaml 的 `yaml_neg` 从未生效**——lexer 只在数字字符上进入
+    数字扫描，`-5` 一直是 `symbol.base.minus` + `5`；该形态是不可达声明，待处理。
+
+  验证：`tests/engine/lexer/test_number_suffix.py` 新增 `TestLeadDotConfig`（5 例，含
+  两处 fail-fast）与 `TestLeadDotConsumption`（5 例，含 **`.`/`.b` 不吃** 的判据样本、
+  含"未声明 lead_dot 的 `-` 形态不得进入先试路径"的 gated 反例）；C 侧
+  `test_c_lexer.py::TestNumberForms` 扩到 24 例（含 `.5*` 4 例 + 成员访问对照），并把
+  「前导点浮点」从 `TestRecordedLexicalGaps` 反向守**转为正向**——**该类已随最后一条
+  缺口消失而删除**（三条缺口全部闭环）。`tools/c_acceptance.py`：
+  **接受 22 → 23 / 空洞 5 → 4**（剩余空洞：强制转换、复合字面量 = 语义层；
+  预处理两项 = 阶段 4）；**全量 2586 passed / 7 skipped**（本轮前 2568）。
+
 - **C 包逗号运算符：`CommaExpr` + `FullExpr` 选择器（ISO C99 §6.5.17）**：
 
   - 形状：逗号**刻意不进 pratt 运算符表**——pratt 中缀项在任何 pratt 规则里都按整张表

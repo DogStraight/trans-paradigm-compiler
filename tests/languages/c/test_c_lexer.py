@@ -1,8 +1,11 @@
 """tests/languages/c/test_c_lexer.py — C 包词法面（阶段 2b 收官）。
 
-覆盖：数字形态（整数三种进制 + 浮点小数/指数）、字符与字符串转义、注释。
-并把**两条残留缺口钉成用例**（整型后缀、前导点浮点）——缺口修好后对应用例会失败
-并提醒同步缺口档，而不是让"残缺"静默通过。
+覆盖：数字形态（整数三种进制 + 后缀 + **前导点浮点** `.5`）、字符与字符串转义
+（含 `[string] escape` 的段内转义）、注释。
+
+⚠ 本文件曾有 `TestRecordedLexicalGaps`（把"已知词法缺口"钉成用例，修好后失败以提醒
+同步缺口档）——**三条缺口（整型后缀 / 转义引号 / 前导点浮点）已全部修好并按纪律转为
+正向断言**，该类随之删除（不留空壳；历史在 git log 与缺口档）。
 
 ⚠ 转义样本一律用 **raw string**（`r"'\n'"`）表达"源码里就是反斜杠 n"，
 不要用会先被 Python 解释一层再被断言解释一层的写法（本轮为此踩过一次）。
@@ -48,9 +51,13 @@ class TestNumberForms:
             "123",        # 十进制
             "3.14",       # 小数
             "0.5",        # **0 开头的小数**（判据样本：digits=nonzero 时会被拆成 0 + .5）
+            "5.",         # 点后无小数位（C99 `digit-sequence .` 分支）
             "1e10",       # 指数
             "1.e5",       # 小数位为空的指数形态
-            # ── 后缀（C99 §6.4.4.1，`[[number.based]] suffix 键，2026-09-25 接上）──
+            # ── 前导点浮点（C99 §6.4.4.3 `digit-sequence? . digit-sequence`）──
+            ".5", ".25",  # 点后必须有数字（`.` 本身仍归符号表，见下）
+            ".5e3", ".5E-3", ".5f",
+            # ── 后缀（C99 §6.4.4.1，`[[number.based]] suffix 键）──
             "42u", "42U",             # unsigned-suffix
             "10L", "10l",             # long-suffix
             "1LL", "1ll", "1ULL", "1LLU",   # long-long（含与 unsigned 的组合，3 字符）
@@ -61,6 +68,28 @@ class TestNumberForms:
     )
     def test_single_number_token(self, c_lexer, src):
         assert _types(src, c_lexer) == ["literal.number"], f"{src!r} 不是单个数字 token"
+
+    def test_leading_dot_needs_digits_after(self, c_lexer):
+        """`.` 与 `.b` 仍是**符号**（成员访问）——前导点形态要求点后至少一位数字。"""
+        assert _types(".", c_lexer) == ["symbol.base.dot"]
+        assert _types("a.b", c_lexer) == ["id", "symbol.base.dot", "id"]
+        assert _types("p.b.c", c_lexer) == [
+            "id",
+            "symbol.base.dot",
+            "id",
+            "symbol.base.dot",
+            "id",
+        ]
+
+    def test_leading_dot_in_context(self, c_lexer):
+        assert _types("x = .5 + .25;", c_lexer) == [
+            "id",
+            "symbol.base.equal",
+            "literal.number",
+            "symbol.base.add",
+            "literal.number",
+            "symbol.base.semicolon",
+        ]
 
     def test_suffix_kept_in_token_content(self, c_lexer):
         """后缀进 token **正文**（不只类型对）——`42u` 不再是 `42` + `u`。"""
@@ -138,20 +167,3 @@ class TestComments:
 
     def test_block_comment(self, c_lexer):
         assert _types("/* c */ x", c_lexer) == ["id"]
-
-
-class TestRecordedLexicalGaps:
-    """⚠ **已知词法缺口**（钉成用例：修好后会失败 → 提醒同步缺口档与 TODO）。
-
-    **前导点浮点**（`.5`）：数字形态由 `size` / `base_prefix` 描述，表达不了
-    "以点开头"的浮点，故被切成"点 + 数字"。
-
-    ⚠ 已修好并按纪律**转为正向断言**的两条（修好后本类用例会失败，正是它的用法）：
-    · **整型后缀**（`42u` / `0xFFu` / `10L` / `1ULL`）→ `TestNumberForms`；
-    · **转义引号**（`"a\\"b"`，`[string] escape` 段级转义）→ `TestEscapes`。
-    """
-
-    def test_leading_dot_float_still_splits(self, c_lexer):
-        assert _types(".5", c_lexer) == ["symbol.base.dot", "literal.number"], (
-            "`.5` 的 token 形态变了——若已支持，请改断言并同步缺口档"
-        )
