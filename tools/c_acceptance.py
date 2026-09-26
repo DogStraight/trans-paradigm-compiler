@@ -33,6 +33,10 @@ if _ROOT not in sys.path:
 
 # ── 用例表：(族, 构造说明, 源码) ─────────────────────────────
 # 覆盖 C99 的各语法族；命名与缺口档接受域清单一致，便于对照。
+# ⚠ **清单会漏项**（2026-11-25 实测）：本表曾漏掉变参 `...`，于是"空洞只剩预处理
+#   两项"在工具与文档间互相印证，掩盖了真实缺口。纪律：清单必须与缺口档
+#   `docs/gaps/gap-language-pack-scope.md`「C99 接受域清单」**逐行对照**
+#   （表里有、清单无 ⇒ 漏项）；新增语言包时同一纪律适用。
 CASES: list[tuple[str, str, str]] = [
     ("词法", "整数后缀 U/L/LL", "unsigned long x = 1UL;\n"),
     ("词法", "十六进制 + 后缀", "unsigned int h = 0x1Fu;\n"),
@@ -46,6 +50,7 @@ CASES: list[tuple[str, str, str]] = [
     ("声明", "二级指针", "char **argv;\n"),
     ("声明", "多词说明符 + 限定符", "const unsigned long long v = 1ULL;\n"),
     ("声明", "函数说明符 inline", "static inline int g(void) { return 1; }\n"),
+    ("声明", "变参 `...`", "int printf(const char *fmt, ...);\n"),
     ("声明", "类型词 _Bool/_Complex", "_Bool b;\nfloat _Complex z;\n"),
     ("声明", "指示符初始化", "int a[4] = {[0] = 1, [3] = 2};\n"),
     ("类型", "struct/union/enum", "struct p { int x; };\nunion u { int i; };\nenum e { A, B, };\n"),

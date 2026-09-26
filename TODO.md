@@ -40,8 +40,13 @@
       现状与逐条构造记 `docs/gaps/gap-parser-linter-approximation.md`「C 语言包暴露的
       语句发现缺口」，回归由 `test_c_corpus.py::test_linter_gap_is_recorded_not_hidden`
       反向守（缺口修复后该用例会失败并提醒复核文档）。
-- [ ] **C 包剩余能力面**（词法面已全部闭环；语法面接受 25/27）：
+- [ ] **C 包剩余能力面**（词法面已全部闭环；语法面接受 25/28，空洞 3）：
       · **预处理两项**（`#include` / `#define`）= 阶段 4；
+      · **变参 `...`**（`int printf(const char *fmt, ...);`）：三种配置写法**均已证伪**
+        （尾随可选 / 整串交替 / 重复组内交替）——根因 = 重复组贪婪且**不回溯出中段**、
+        单串交替被当成一个 slot；**需引擎侧形态**（生产式回溯语义，或一个专收尾段的
+        规则位）。三种写法的实测结果见 `docs/gaps/gap-language-pack-scope.md`
+        「变参缺口的实锤」；
       · **typedef 名起头的强制转换**（`(myint)x`）= 语义层切片 1b（需符号表 / 作用域 /
         声明顺序），草案与判据见 `ROADMAP.md`「C 语义层切片 1b」；
       · `_Alignof` / `_Generic` / `typeof` 等标准增量中**需要"改"核心规则**的那一类
