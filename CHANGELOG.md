@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-25
+
 ### Added
 
 - **C 语义层首个切片 1a：强制转换 `(T)x` 与复合字面量 `(T){…}`（无歧义面）**，
@@ -141,6 +143,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   linter `phase-*` 缺口数**保持 7**（中途加过一层 `AtomExpr` 间接，实测在 `sizeof` 初值处
   多误报 1 条 → 7→8，故撤掉该间接、把原子清单写在两处并注明）；**全量 2536 passed / 7 skipped**。
 
+- **C 包接受面盘点工具（`tools/c_acceptance.py`）——「空洞是无声的」**：27 条构造
+  （词法 / 声明 / 类型 / 语句 / 表达式 / 预处理 / 增量）逐条试解析，报「进 AST /
+  空 AST / 词法抛错」并给接受-空洞计数（`--only-gaps` 只看空洞）。动机与
+  `render_coverage.py` 同源：**不属任何语句入口 FIRST 集的构造会被整体跳过、
+  既不解析也不诊断**——只跑测试套件看不出还差哪一族。C 包的强制转换 / 复合字面量 /
+  链式后缀 / 转义引号**都是这么量出来的**，不是靠想。
+
+  工具首跑：接受 **18 / 空洞 9**，直接定出后续补洞清单（每补一族就重记一次计数，
+  所以本节多条条目都带「接受 → 空洞」的迁移数字）。
+
+  验证：工具按**构造清单**驱动（27 条，逐条给判据：进 AST 即接受）；清单口径与
+  逐条状态记 `docs/gaps/gap-language-pack-scope.md`「C99 接受域清单」。
+
 - **字面量尾随后缀：`[[number.based]] suffix` 键**（引擎 schema 扩一项；C 包消费）：
 
   - 声明面：`suffix = { chars = "uUlL", max = 2 }`——**可选后缀字符集 + 长度上限**。
@@ -162,6 +177,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   含 `0x1FF` 撞键判据、`max` 封顶、未声明形态零变化）；C 词法改写为 21 例正向断言
   （原 4 例"仍被切开"的反向守删除）；**缺陷态变异复验**（删掉 `_consume_suffix` 调用 →
   32 例变红 → 还原）。**全量 2521 passed / 7 skipped**。
+
+- **C99 函数说明符 `inline` 与 `_Complex`——两处接受面空洞**（由草稿探针
+  `_drafts/scan_c_gaps.py`（25 条常见 C99 构造逐条试解析）量出，非推测；该探针后来升为
+  正式工具 `tools/c_acceptance.py`）：`inline` 缺席说明符规则——C99 §6.7.4 的**函数
+  说明符**是与存储类 / 类型限定符**并列的第三类**，而 `static inline int f(void)` 在真实
+  C 头文件里极常见；`_Complex` 缺席基础类型表。两处症状相同——**整条声明被整体跳过**
+  （关键字不入任何语句入口 FIRST 集 ⇒ 出空 AST，既不解析也不诊断）。
+
+  一处刻意的宽度选择：`FuncSpec` 只接 `Declaration` / `FuncDef` 的说明符位，**不接**
+  `MemberSpec` / `ParamSpec`——`struct { inline int x; }` 是**语法错误**而非"语义约束"，
+  不该留给语义层兜（与 `@TypedefName` 的宽进口径不同）。
+
+  验证：`tests/languages/c/test_c_declarations.py::TestC99Specifiers` 3 例，断言
+  **规则身份**而非"没报错"（`FuncSpec` 进 AST / `static` 在前、`inline` 进 rest /
+  `_Complex` 进 rest）；同批仍不支持的 7 条逐条记入缺口档接受域清单
+  （整数后缀 / 前导点浮点 / 转义引号 / 强制转换 / 链式后缀 / 逗号运算符 / 复合字面量
+  ——**这就是后续补洞清单的来源**）。
 
 - **C 包声明渲染风格：页宽 80 列**（`grammar/c/base/_style.toml` + `[renderer] style`）：
   此前用引擎默认 40 列（`renderer/loader.py` 的兜底值），把正常声明与调用折成多行
@@ -224,6 +256,189 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `samples/edge_comments.c` 扩入枚举体首项前独占注释与声明符间行中块注释。
   四条门禁**逐条做缺陷态变异复验**（改回缺陷 → 对应门变红 → 还原）。
   **全量 2452 passed / 7 skipped**（与改动前持平，无回归）。
+
+- **C 包保真度渲染闭环（原文打印的起点）**：先量出「缺布局是无声的」——引擎对
+  无渲染配置的规则**静默输出空串**，故加 `tools/render_coverage.py`（某包多少条
+  规则带 `layout`/`body`、哪些没有，附 node 字段与叶子 / 非叶子标记便于从叶子补起）。
+  实测本包 **70 条规则 / 1 条有渲染配置（1%）**，两样本全渲染为空串。
+
+  补齐后闭环成立（`tests/languages/c/test_c_render_fidelity.py`，3 个样本
+  `ring_buffer.h` / `ring_buffer.c` / `edge_comments.c`）：源文本 → tokenize → parse
+  → render → 与源比对，判据逐条加硬——**非空**（缺配置时静默空串，只断言「没报错」
+  抓不到）→ **行数覆盖 ≥ 80%** → **`difflib` ≥ 0.80** → **幂等** → **注释清单**
+  （源里**每一条**注释正文都必须在输出里出现——比抽样锚点强，能抓「某一条被静默
+  吞掉」）→ **首注释源序**（只守幂等时「倒序但恰好往返一致」的实现仍可能漏过）。
+
+  实测：覆盖率 **1% → 100%**（分母 70 → 80 是因为补了真规则 `Comment`、pratt 产物
+  `BinaryOp`/`UnaryOp`/`TernaryOp` 与 6 个 `bracket.*` token 节点——后两类**不补布局
+  就静默丢内容**，实测 `a[i]` 会渲染成 `ai`）；两样本 ratio 0.984 / 0.978，
+  有效行数与源一致。⚠ **分母变大必须给理由**——补的是真节点，不是把阈值调绿。
+
+- **C 包标准增量插件族三档齐备（c11 ⊂ c17 ⊂ c23）+ 档位对照实测**：这是 ROADMAP
+  「核心基线 + 标准增量插件」形态的**首次落地验证**，也是「按版本号做增量插件」
+  这一设想的可执行证据（**零引擎新机制**）。
+
+  - `plugins/c11/`：`_Static_assert`（C11 §6.7.4，文件与块作用域均合法）+ **C11 全部**
+    新关键字的词法声明（`_Generic`/`_Alignas`/`_Alignof`/`_Noreturn`/`_Thread_local`/
+    `_Atomic`；规则只引用已落地子集，未引用的关键字会被 linter 当「未期望 token」
+    ——**这正是负样本判据**）。
+  - `plugins/c17/`：**不带语法文件**——C17 是缺陷修正版，相对 C11 无新增语法。
+    「有的标准只贡献包含关系、不贡献语法面」这条反例就此落进包结构。
+  - `plugins/c23/`：小写 `static_assert` 正式关键字化（N3096 §6.4.1）——
+    **只靠插件自己**即可加（文件作用域语句规则 + `is_statement`，不动核心 `Stmt`
+    选替）。需要「改」核心规则的那一类（`typeof`/`constexpr`/`[[属性]]`/`nullptr`）
+    **明确未做**并写明原因，前置是 ROADMAP「注入机制补『改』路径」。
+  - **包含关系在加载期可执行**：组件级 `requires`（c23→c17→c11→核心基线）——
+    只启用 c17 而不启用 c11 会**响亮失败**，而不是静默少加载。本插件是**组件级
+    requires 的首个实例**（此前只有 `[[analyzer.postpasses]]` 链内时点依赖用过）。
+  - ⚠ **一处自我更正**：曾记「运行时没有启用入口、`[plugins] enabled` 只是打包面
+    清单」——**该结论已被实测推翻**：加 `enabled = ["c11"]` 之前 `_Static_assert`
+    是标识符（`_Static_assert(1, "x");` 解析成函数调用 `ExprStmt`，插件规则永不
+    匹配），加之后即 `keyword._Static_assert` → `StaticAssertDecl`；对照证据是
+    verilog 的 `nand` 无需任何 `ext_dirs` 就是关键字（其 `enabled` 列了 `gates`）。
+    真正的入口 = `load_language` 时按 `enabled` 合并声明；`Lexer(ext_dirs=…)` 与
+    `setup_grammar(ext_dirs=…)` 三种粒度**实测都无效**。
+
+  验证：`test_c_increment_plugin.py` 按**扫描文件**的方式守「增量确实住在插件里、
+  不碰基座」（`StaticAssertDecl` 不出现在核心基线 `0*_*.toml`）；
+  `test_c_standard_tiers.py` 三档对照——同进程内三档各自可加载并解析出不同规则表，
+  且「**未声明关键字 ≠ 拒绝**」（C23 关键字在 c99 档下仍可作标识符）。
+  ⚠ 档位对照当前靠 **pack 副本**：引擎级 `enabled` 覆盖参数按逐处清单实施后
+  **档位未按预期切换**（`_ensure_entries_for` 与 `_resolve` 两处缓存键是静默失效点），
+  **未经验证的改动已全部回退**（不留半成品），逐处清单与陷阱留在 `TODO.md`。
+
+- **C 包真实语料：从声明面扩到实现面（并暴露三处真问题，各自登记而非绕过）**：
+  `samples/ring_buffer.h`（声明面）+ `samples/ring_buffer.c`（实现面：控制流 /
+  表达式 / 调用 / 指示符初始化 / `sizeof`），样本随能力**长回自然写法**——
+  **不为了让测试好过而裁剪代码**。三个副产品都是真问题：
+
+  - **跨语言检查规则泄漏**（可复现）：同一进程里**先跑过 verilog linter**，再
+    `load_language("grammar/c")` 扫 C 源，结果多出 1 条 `ST003`（verilog 检查规则
+    残留；C 包自身无 `rules/`）。症状 = **检查结果依赖测试顺序**。当前由反向守
+    用例钉住（修复后该用例会失败并提醒复核文档），属 `core/global_state` 面。
+  - **C 包 linter 误报归因**（合法头文件上 17 条误报，**解析侧正常**）：定位到两个
+    **不同**机制——① `linter/checkers/matcher.py::_match_token` 严格逐 token 匹配
+    **不回溯**，规则内部的可选分支（如 `StructSpecifier` 的 `@StructBody?`）不被
+    尝试（覆盖 `{`/`[`/`(` 三类 15 条）；② `lookahead.classify()` 对 `enum` 开头
+    返回空候选 → `discovery._record_unrecognized`（2 条）。
+  - **两处语法缺口**：语料一上实现面就撞出来并修（不是靠推想），缺口数逐轮重记。
+
+  验证：`test_c_corpus.py` / `test_c_corpus_impl.py`（真实语料 + linter 缺口反向守）；
+  归因、修点与包侧兜底见 `docs/gaps/gap-parser-linter-approximation.md`。
+
+- **C 包阶段 2b：初始化器 / 位域 / 数组长度常量表达式 / `for` 声明式初值 /
+  `sizeof` / 指示符初始化**（C99 相对 C89 的新增面集中在这一段）：
+
+  - 初始化器：标量表达式 + **递归初始化列表**（`{1, {2, 3}}`）；
+  - **指示符初始化**（designated initializer，C99 §6.7.8）：`.field =` 与 `[i] =`；
+  - 数组长度改吃**常量表达式**（此前只接受数字字面量）；
+  - `for (int i = 0; …)` 声明式初值（C99 §6.8.5.3）；
+  - 位域（`int a : 3;`）——⚠ **已知边界**：**逐声明符位宽**写不出来
+    （`int a : 3, b : 4;` 解析失败），包内宽度绑在整个成员声明之后；标准里位宽属
+    **声明符**，要支持需把宽度挪进声明符（形态改动）。记在
+    `grammar/c/02_types.toml::StructMember` 注释 + 缺口档接受域表；
+  - `sizeof` 两形态（`sizeof expr` / `sizeof(T)`）——⚠ 当时**记了「强制转换未支持」**，
+    该反向守用例已随切片 1a 按纪律**转正向**（守缺口的用例不许在能力落地后继续绿）。
+
+  验证：`test_c_expressions.py`（`TestSizeof*`）、`test_c_types.py`（位域与边界）、
+  `test_c_statements.py`、`test_c_declarations.py` 逐族扩例；
+  `tools/c_acceptance.py` 同步重记接受面。
+
+- **C 包词法收官：浮点可用 + 三处配置表达力缺口记档**：接上浮点字面量后，词法面
+  暴露**三条「配置表达不了」**的缺口——整型 / 浮点**后缀**（`42u` / `1ULL` / `1.5f`）、
+  **前导点浮点**（`.5`）、字符串内**转义引号**（`"say \"hi\""`）。当轮只**记档**
+  （每条都写清「为什么现机制表达不了」），随后三条**全部闭环**（各补一个声明键，
+  见本节上方三条条目与缺口档表）——这就是「缺口先落档、再按档闭环」的走法。
+
+  验证：`tests/languages/c/test_c_lexer.py`；缺口档
+  `docs/gaps/gap-language-pack-scope.md`「C 包词法面：三条配置表达力缺口（已全部
+  闭环）」。
+
+- **C 包阶段 3 全层级（Layer A/B/B2/C）——表达式与语句族落地**：
+
+  - **Layer A**：原子（`Number`/`StringLiteral`/`Identifier`/`ParenthesizedExpr`）
+    + 选择器 `PrimaryExpr` + 表达式入口 + 最小语句（compound / 表达式 / 空 / `return`）
+    + `FuncDef`（原型与定义靠 `{` vs `;` 区分）；
+  - **Layer B**：运算符表 `base/_operator.toml`（40 项，C99 §6.5 优先级 / 结合性 /
+    一元位置；**有意不含逗号运算符**——它在实参表与枚举体里是分隔符）+ `UnaryExpr`
+    （前缀 first set）；
+  - **Layer B2**：后缀链（另见本节上方 `PostfixExpr` 条目）；
+  - **Layer C**：控制流全族（`if`/`else`/`switch`/`case`/`default`/`while`/`do`/`for`/
+    `goto`/标号/`break`/`continue`/`return`），`Stmt` 选替扩到 15 分支。
+
+  ✅ **关键形态约束（已记入 `grammar/c/00_expressions.toml` 头注）**：表达式环必须
+  **同时**满足 ① 原子 `is_atom = true`；② 入口规则 `pratt = true`；③ 选择器
+  `inline = true` 且 production 为**单条交替**——缺任一项即 `setup_grammar` 报
+  `RecursionError`（FIRST/nullable 推导遇环溢出）。本条是**一次失败换来的**：
+  上一轮委派尝试正是缺这些标记而失败（产物停在草稿区），照 c4 验证过的形态重做后
+  **一次通过**。
+
+  验证：`test_c_statements.py` 14 例 + `test_c_control_flow.py` 19 例（断言结构与
+  **顺序**，不只「能解析」）+ `test_c_expressions.py` 22 例（断言**树形**：乘高于加、
+  加减高于移位、相等高于按位与、`&&` 高于 `||`、赋值右结合、减法左结合、
+  6 前缀 + 2 后缀一元、三目嵌赋值——只断言「解析成功」抓不到优先级错）。
+
+- **功能散点治理（0.1.3 WS2）四步——从「度量先行」到「定案建 ADR」**：议题是「一处
+  功能、N 处登记 + 上游契约耦合」。四步都按「先拿数字再收敛」走，**不先发明机制**：
+
+  - **步 1 度量**：`tools/feature_sites.py` 按功能分族（加检查规则 / 语法构造 / 能力位 /
+    配置键）枚举现存实例、扫出提及它的文件并按角色归类。判据**不是「文件多」**，而是
+    **同一事实被写在 ≥2 个必须手工同步的位置**（测试 / 文档不计欠账）。四族基线：
+    `check` 24 实例 / 散点 **56**（中位 2、最大 5）、`syntax` 7 / **0**、
+    `capability` 3 / **30**（中位 9、最大 15 = formatter）、`config` 14 / **26**。
+    **结论直接定出步 2 目标**：check 族的散点是同一批 6 个文件被每条规则反复登记
+    → 由 `check_registry` 单一来源派生或校验。
+  - **步 2 试点收敛**：单一来源提取抽成 `tests/_rule_codes.py`（两门禁共用一份实现），
+    新增 `tests/policy/test_code_registry_sync.py` 校验变异注入器 / 评测基准映射 /
+    真实语料基线的码引用；收敛账 `tools/feature_sites_converged.json` 须 reason+source
+    指向门禁，并有**反向防滥用**门禁（路径真实存在、source 门禁存在、不得空转登记）。
+    **预算 56 → 16**（中位 2→1、最大 5→3）；散文类登记为**有意接受的边界**。
+  - **步 2b 变异门禁自校验**：`tests/policy/test_gate_efficacy_mutations.py`——每条
+    变异载荷必须**仍可应用**（锚点漂了就红）。动机：门禁的「有效性抽查」若载荷本身
+    已失效，抽查会静默变成空转（**门禁不该假装有效**）；同轮去掉一处码枚举。
+  - **步 3 契约协商（P-C）**：`[engine].uses` 能力清单 + `core/engine_capabilities.py`
+    能力表 + **精确缺项报错**（报「缺哪一项」而非「整条 API 线不匹配」）；旧的整条
+    `api` 线**已删**（残留由「未知键」拦下）。`uses` 由包清单机械推导，门禁查漏
+    声明 / 残留；**加性扩展不误伤**未被声明的能力（协商语义有专门用例）。
+  - **步 4 定案建 ADR**：`docs/decisions/0020-feature-scatter-governance.md`
+    （D1 度量先行 / D2 单一来源 / D3 校验·派生·接受三分 / D4 契约版本化到能力粒度 /
+    D5 不留兼容且收敛声明可审计 / D6 断言分工 + **被拒绝的 5 个备选** + 三步验证证据），
+    机制文档 `core/config_lifecycle.md` 与 `core/component_protocol.md` 同步。
+
+  验证：`tests/policy/test_feature_sites.py`（判保持登记可审计，含反向防滥用）、
+  `tests/policy/test_code_registry_sync.py`、`tests/policy/test_gate_efficacy_mutations.py`、
+  `tests/policy/test_engine_capabilities.py`、`tests/engine/core/test_engine_compat.py`。
+  ⚠ **未做完的**（留在 `TODO.md`「步 2」）：`eval_check_accuracy.py` docstring 枚举、
+  `_check_test.py`、`check_gate_efficacy.py` 接同一门禁。
+
+- **C 包阶段 1 与阶段 2a + 阶段 0 定界**（`grammar/c/` 从零到可解析声明）：
+
+  - **阶段 0 定界**：分层草案 + **C99 接受域清单**（27 条逐条标注做 / 不做 / 延后）
+    落 `docs/gaps/gap-language-pack-scope.md`——不先定界就开工，「还差哪一族」会失焦。
+    结论之一：第一个可验收切片 = **词法 + 类型与声明符**（声明符递归是后续一切的
+    地基，其形态决定 AST 形状），而不是「先把全部词法做完」。
+  - **阶段 1**：`tpc.toml`（能力清单 + lexer/parser 入口）+ `base/_token.toml` /
+    `_lexer.toml` / `_number.toml` + `token.toml`（**C99 全 37 关键字**）+
+    `00_expressions.toml`（叶子 `Identifier`）+ `01_declarations.toml`（翻译单元 +
+    声明 + 说明符序列 + 声明符：多级指针 / 数组 / 函数后缀 / 括号声明符 / 参数表）。
+    ⚠ **根因教训（写包必看）**：`Identifier` 这类叶子规则**引擎不内置**，语言包必须
+    自带（c4 / yaml / verilog 各一份）。漏定义时 `@Identifier` **匹配为空**，症状是
+    `match_length 0` / `expected ';' got 'id'`——**看起来像规则形态问题**；本轮为此
+    先后证伪了**五个形态假设**（带括号 token 组 / 说明符层级 / 后缀规则组 / 首元素带
+    量词组 / `@Rule|@Rule` 交替）才定位到「规则缺失」。已入缺口档「包作者须知」。
+  - **阶段 2a**：`02_types.toml`——`struct`/`union`（带标签与匿名）、`enum`（含带值
+    枚举项）、成员声明、**typedef 名作类型**。两条实测坑：① **token 键重复定义**
+    （`equal = "="` 与 `assign = "="` 同串两键，词法取后者 ⇒ 所有引用
+    `symbol.base.equal` 的规则**静默失配**，报错方向完全看不出是命名问题）；
+    ② **字面量正则过度转义**（TOML 里多转义一层，`\d` 变成字面反斜杠 + `d` ⇒
+    数字**从不**被识别为 `literal.number`）——因当时数组长度与枚举值都写成可选，
+    症状是「静默为空」而非报错：**可选位点会掩盖词法失效**，加可选捕获要配一条
+    非空断言。
+
+  验证：`test_c_declarations.py` 20 passed（正样本 15 含函数指针递归 `int (*fp)(int);`、
+  逗号列表、多词说明符、`typedef`；负样本 5）、`test_c_types.py` 12 例。
+
+## [0.1.2] - 2026-10-25
 
 ### Changed
 

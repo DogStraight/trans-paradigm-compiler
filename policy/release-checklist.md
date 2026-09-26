@@ -37,13 +37,24 @@ python -m build            # 需 pip install build；产出 dist/trans_paradigm_
 
 ```bash
 python -m zipfile -l dist/*.whl | Select-String 'grammar/'
-# 必须保留（顶层按语言包分目录；实测随包：verilog / c4 / yaml）：
+# 必须保留（顶层按语言包分目录；实测随包：verilog / c / c4 / yaml）：
 #   grammar/verilog/tpc.toml + 各规则 TOML + plugins/（typed_ports/formatter/checks/...）
+#   grammar/c/tpc.toml + 规则 TOML + base/ + plugins/{c11,c17,c23}/（标准增量插件）
 #   grammar/c4/tpc.toml + 规则 TOML + plugins/
 #   grammar/yaml/
 # 不要出现 data-files 扁平化（各语言包混在一起 = 失败）
 tar -tf dist/*.tar.gz | Select-String 'grammar/'   # sdist 同样核对
 ```
+
+> 各包 TOML **逐个**核对，别只看"有 grammar/ 目录"：新增语言包漏进包（`package-data`
+> 未覆盖）在 wheel 里表现为静默缺失，而我们默认语言仍是 verilog ⇒ 冒烟（下节）**跑不到**
+> 非默认包。C 包 0.1.3 实测 = 19 个 TOML（与源码树逐一对上），机制为
+> `[tool.setuptools.package-data] "grammar" = ["**/*.toml"]` 递归匹配。
+> **非 TOML / 非 `.py` 的文件不随包**（包内 `README.md`、`cases/*.sv` 用例样本、
+> `__pycache__`）——0.1.3 实测 verilog 磁盘 181 → wheel 114，差异**全是这两类**：
+> 包内文档与用例样本只服务仓库内测试，别指望它们出现在 wheel 里。
+> CLI 侧的语言选择开关仍在 ROADMAP「用户侧 CLI 形态」（触发式 backlog），
+> 故非默认包目前只做清单核对。
 
 ## 5. wheel 冒烟（独立 venv，模拟用户安装）
 

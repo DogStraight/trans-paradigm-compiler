@@ -7,7 +7,7 @@ compiler frontend; context-sensitive grammar; language workbench; DSL extension;
 model-friendly configuration; forkable pipeline
 -->
 
-![version](https://img.shields.io/badge/version-0.1.1-blue)
+![version](https://img.shields.io/badge/version-0.1.3-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11%2B-orange)
 ![status](https://img.shields.io/badge/status-experimental-yellow)
@@ -19,9 +19,10 @@ hardcoded in the engine.**
 For a Verilog user that means: format messy code, lint files that do not even
 parse (the linter runs before the parser), and cross-check module ports across
 files. Because the rules are data, the same engine serves other languages —
-`grammar/c4/` turns a C subset into VM assembly with zero engine changes — and
-a language can be extended without a second parser: the example below adds a
-`type` system to Verilog.
+`grammar/c/` is a C99-baseline pack whose C11/C17/C23 increments are loadable
+plugins, and `grammar/c4/` turns a C subset into VM assembly — all with zero
+engine changes. And a language can be extended without a second parser: the
+example below adds a `type` system to Verilog.
 
 ```verilog
 // Define a custom type with roles, then use it in a module port
@@ -183,6 +184,24 @@ the same formatter; `expand_enhanced` only controls whether the enhanced AST
 nodes are expanded (analyze + transform) or preserved (rendered directly by
 their `[Rule.renderer.layout]`).
 
+## C language pack
+
+`grammar/c/` is the C pack: a core baseline (≈ C99 syntax surface) plus
+**standard increment plugins** — `plugins/c11/`, `plugins/c17/`, `plugins/c23/`
+— whose `requires` chain (`c23` ⊇ `c17` ⊇ `c11` ⊇ core) makes "enable this
+combination = that standard's syntax surface" a **loadable configuration**
+rather than a source fork. Of the 27 tracked constructs on the C99 acceptance
+checklist, 25 parse into the AST; the two remaining gaps are
+`#include`/`#define` (preprocessing is tracked as its own stage).
+
+Source-to-source printing is round-trip verified on real samples against seven
+criteria, including line coverage, idempotence, a full comment inventory and an
+exact significant-token-sequence check (whitespace may move; token order may
+not).
+
+Structure, known boundaries and the "writing a pack" lessons are in
+[`grammar/c/README.md`](./grammar/c/README.md).
+
 ## Second language: c4
 
 The same engine, a different language pack. `grammar/c4/` defines a tiny C
@@ -283,7 +302,7 @@ zero to a working language): [docs/language_walkthrough.md](./docs/language_walk
 
 | Directory | Role |
 |-----------|------|
-| `grammar/` | Language rules as data — `verilog/`, `c4/` (and `yaml/`) TOML packs |
+| `grammar/` | Language rules as data — `verilog/`, `c/`, `c4/`, `yaml/` TOML packs |
 | `preprocessor/` | Macro expansion / reverse mapping |
 | `lexer/` | Lexing: token-definition-driven scanning |
 | `linter/` | Pre-parse, token-level lint (reverse parser, reuses the same TOML grammar) |

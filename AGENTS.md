@@ -1,7 +1,8 @@
 # TransParadigm (tpc) — 项目导览
 
 配置驱动的语言流水线：语言规则写在 TOML（`grammar/`）里，引擎是通用骨架。
-当前实例语言：Verilog（`grammar/verilog/`）与 c4（`grammar/c4/`，从零搭出的示例语言）。
+当前实例语言：Verilog（`grammar/verilog/`）、C（`grammar/c/`，核心基线 +
+标准增量插件族）与 c4（`grammar/c4/`，从零搭出的示例语言）。
 
 ## 改任何子系统前
 

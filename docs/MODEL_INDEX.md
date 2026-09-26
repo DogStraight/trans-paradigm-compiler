@@ -128,7 +128,8 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 从零搭一门语言（教程，c4 实例） | `language_walkthrough.md` | `grammar/c4/**` | `tests/languages/c4/` |
-| 语言包与插件目录约定 / 语法扩展工作流 | `language_walkthrough.md` | `grammar/{verilog,c4,yaml}/` + `plugins/` | `tests/languages/` |
+| C 语言包（核心基线 ≈ C99 语法面 + c11/c17/c23 标准增量插件族） | `grammar/c/README.md`<br>`docs/gaps/gap-language-pack-scope.md`（分层草案 / C99 接受域清单 / 渲染保真现状） | `grammar/c/**` | `tests/languages/c/` |
+| 语言包与插件目录约定 / 语法扩展工作流 | `language_walkthrough.md` | `grammar/{verilog,c,c4,yaml}/` + `plugins/` | `tests/languages/` |
 | 渲染世界 B：Verilog formatter（pass 管线） | `grammar/verilog/plugins/formatter/README.md` | `grammar/verilog/plugins/formatter/` | `tests/languages/verilog/test_formatter*.py` |
 
 ### 跨子系统（横切机制）
