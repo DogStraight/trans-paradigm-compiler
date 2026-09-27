@@ -377,3 +377,21 @@
   2026-09-19 定调“先这样”）。本机跑全量时自行显式传 `-n 4` 规避顶满核（做法与分档
   见 `tests/README.md`「改动节奏分档」）；不改仓库默认。
 
+- [ ] **工作区行尾风格不统一（审计数字见下，**需拍板**是否统一；不统一也能工作）**：
+  仓库配 `core.autocrlf=true`（**索引里一律 LF**，git 层面自洽），但**工作区**三种形态并存
+  ——全仓跟踪文件 831 个：**CRLF 653 / 仅 LF 176 / 混合 2**（2026-09-26 实测；
+  含 `AGENTS.md`、`README.md`、`analyzer/elaboration/{README.md,atoms.py,loader.py,service.py}`
+  等）。成因：不同时期由不同工具写入（编辑器/脚本/检出），`autocrlf` 只在 `git add` 时
+  归一索引、不会回写工作区。
+  · **混合的 2 个是测试夹具**：`tests/e2e/samples/check_accuracy/cases/W201_param_override_{clean,trunc}/top.sv`
+  （正文 LF + **各 1 行 CRLF**）——**先查是不是刻意造的换行样本**再动（W201 是参数覆盖
+  检查，夹具内容本身在断言范围内）。
+  · **为什么没顺手统一**：① 归一 176+653 个工作区文件会产生**巨大 diff**（且 `git blame`
+    会被搅）；② "统一成 LF 还是 CRLF"是**跨平台约定**（本机 Windows + CI Linux），
+    正确做法是加 `.gitattributes`（如 `* text=auto` / `eol=lf`）而不是逐文件改；
+    ③ 当前不影响任何门禁（CI 在 Linux 检出即 LF；本机 pytest/门禁全绿）。
+  · **候选**：(a) 加 `.gitattributes` 定死 `eol`（推荐，一次性把规则写进版本库，
+    工作区差异留待各自 `git add` 时收敛）；(b) 只修 2 个混合夹具（先证是否刻意）；
+    (c) 维持现状（记档即可）。判据：门禁 + 全量在 Windows 与 Linux 同绿，且
+    `git status` 在全新检出上干净。
+
