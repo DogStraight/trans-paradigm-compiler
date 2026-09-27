@@ -180,7 +180,8 @@
        收敛判据；作者另指出这一步**可以前移到 linter**（linter 已有候选分类/试解析）。
        若走这条路，"收敛判据"本身要单独立项（引擎侧能力，语言无关）。
   3. **typedef 收集落点**：分析器侧要新增"typedef 收集"原语（`analyzer/primitives`），
-     或按 ADR-0019 形态放进 C 包插件（若判定为语言特有）。
+     或按**精化协议**放进 C 包插件（若判定为语言特有；机制见
+     `core/component_protocol.md` §1b 与 `analyzer/elaboration/README.md`）。
 
 ### 现状实测（2026-09-26，判代价用）
 
@@ -218,7 +219,7 @@ typedef 名）因而进 AST 为 `ExprStmt` + `BinaryOp`（乘法），与真实�
 - [ ] **"候选是否收敛"要不要成为 parser 的一等判据**（raw 路径的前置；作者
       2026-09-26 指示可前移到 linter——linter 已有 `classify` 的候选分类与 Level 2
       试解析，`parse_sentence` 却只是按序取首个成功者）。当前**未立项**。
-- [ ] typedef 收集落点：`analyzer` 原语 vs C 包插件（按 ADR-0019 的"语言特有 → 插件"判据）
+- [ ] typedef 收集落点：`analyzer` 原语 vs C 包插件（按精化协议的"语言特有 → 插件"判据）
 - [ ] `sizeof (单标识符)`（`sizeof(myint)`）当前是**宽进判类型名**——也归本切片用符号表
       细化（与转换判定同一前置：都要知道标识符是不是 typedef 名）
 

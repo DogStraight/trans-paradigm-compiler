@@ -1,9 +1,14 @@
 # analyzer/elaboration — 精化协议（引擎侧）
 
-> 定位：ADR-0019 的代码落点——引擎只做**文件操作**，"世界由哪些事实构成"归语言包。
+> 定位：**精化协议的代码落点**——引擎只做**文件操作**，"世界由哪些事实构成"归语言包。
 > 本包**只提供机制**：项列表与全部语义求解在语言包插件
 > （`grammar/<lang>/plugins/elaboration/`，经 `[capabilities] elaborator` 声明）。
-> 定案与权衡：`docs/decisions/0019-elaboration-plugin-protocol.md`。
+> 为什么这样切：引擎若持有端口/参数/信号图/连接这些**语言形状**，就会随语言增删而改
+> （verilog 侧曾因此把约 1000 行语言知识放错位置）；把"最小可视单位"压到**文件**，
+> 语言知识就只剩插件一处落点（权衡过程见 git log）。
+
+> Impl: analyzer/elaboration/driver.py::Elaborator
+> Test: tests/engine/analyzer/test_elaborator_protocol.py
 
 | 文件 | 一句话 |
 |------|--------|

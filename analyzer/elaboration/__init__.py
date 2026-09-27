@@ -1,6 +1,6 @@
 """analyzer/elaboration — 精化协议（引擎侧契约 + 驱动器，语言无关）。
 
-> 定案见 `docs/decisions/0019-elaboration-plugin-protocol.md`；文件职责见 `README.md`。
+> 机制与职责见 `README.md`；契约面见 `core/component_protocol.md` §1b。
 > 本包**只提供机制**：项列表与全部语义求解都归语言包插件
 > （`grammar/<lang>/plugins/elaboration/`，`[capabilities] elaborator`）。
 Doc: core/component_protocol.md（§1b 精化器能力位）

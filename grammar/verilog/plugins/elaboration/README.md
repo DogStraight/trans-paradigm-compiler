@@ -3,7 +3,7 @@
 > **语言知识在这**：单元/实例是什么、参数在哪、怎么求值、端口什么形态、信号谁驱动谁、
 > generate 怎么判——全在本组件。引擎侧 `analyzer/elaboration/` 只驱动「定位 → 求解 →
 > 归位 → 核验」，**不认识 Verilog**。
-> 契约与定案：`docs/decisions/0019-elaboration-plugin-protocol.md`。
+> 契约（引擎侧）：`analyzer/elaboration/README.md` + `core/component_protocol.md` §1b。
 
 | 文件 | 一句话 |
 |------|--------|

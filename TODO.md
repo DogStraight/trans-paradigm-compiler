@@ -147,29 +147,15 @@
 - [ ] **步 2 剩余四处（有意保留的边界，非欠账）**：`eval_check_accuracy.py` docstring
       枚举（可改为不枚举 = 真删除）、`_check_test.py`、`check_gate_efficacy.py` 接同一门禁、
       机制文档码表（有意不接校验）
-- [ ] **ADR-0019 退场**（"完成即删"判据已满足：机制已落 `core/component_protocol.md`
-      §1b + `analyzer/elaboration/README.md`）。**前置 = 清引用**，已精确盘点（2026-09-25）：
-      **54 处 / 28 文件**。构成：
-      · **括号内溯源标签**（绝大多数，如 `（ADR-0019 P3-②c-3）` / `（ADR-0019 决策 4
-        更正节）` / `（精化产物 `port_decls`，ADR-0019）`）——同一事实在正文里**已经
-        内联解释**，标签可整段删除；注意三种写法：全角括号内、逗号后置、以及
-        `# 1a) 精化（ADR-0019）：` 这类注释前缀。
-      · **裸引用**（少数，如"本文件守 ADR-0019 **P2** 落地的…"、"已按 ADR-0019 迁入"、
-        "ADR-0019 的代码落点"）——需改写成"精化协议"+ 机制文档指针，不能只删标签。
-      · 分布：`analyzer/` 13、`grammar/verilog/` 18、`tests/engine/analyzer/` 9、
-        `docs/`（含 ADR-0019 自身）4、`core/` 3、`tools/` 1。
-      ⚠ 顺序：**先清引用 → 再删档**（否则文档里留悬空引用）；删档后跑
-      `tests/policy`（文档引用门禁）与全量确认无悬空。
-      ⚠ 本轮评估后**刻意不动手**：机械批量改 54 处的句法风险（全角/半角括号、逗号后置、
-      注释前缀三种写法混用）高于收益，留给一次专门的、逐类替换 + 逐文件复核的改动。
 
-## 架构：精化（elaboration）部件化 + 插件化（ADR-0019）——**已收口**
+## 架构：精化（elaboration）部件化 + 插件化——**已收口**
 
 > P1–P4 全部完成，含 c-3 消费方去重（`width_check` 改读 `param_override` 产物）与
 > **"引擎角色位"机制整体删除**（终态下引擎**一个插件产物都不消费**，机制已无合法值 →
 > 按"不留向后兼容"连登记槽一起删）。引擎最小可视单位 = **文件**；引擎侧净减约
-> **1000 行**语言知识。定案 / 分期 / 角色位契约表 / 实测踩坑见
-> `docs/decisions/0019-elaboration-plugin-protocol.md`（本文件不再复述，完成历史看 git log）。
+> **1000 行**语言知识。机制与契约面见 `core/component_protocol.md` §1b +
+> `analyzer/elaboration/README.md`（**为什么这样切**已内联；决策过程见 git log——
+> 按 `policy/doc-alignment.md`「引用纪律」，ADR 完成即删、正文不引 ADR 作锚）。
 > 收口时从执行面**析出两项仍未完成**的独立改进（原判据失效，各自需要新判据）：
 
 - **插件侧 AST-first 改写**：搬迁是**逐字**的，技法未变——`grammar/verilog/plugins/
@@ -295,9 +281,9 @@
   （c4/yaml 需写一小段插件或继承默认）；换来的是引擎 schema 与代码不随语言数增长。
 - **已有约束须一并遵守**：语言知识零进代码（AGENTS 硬约束）、不留兼容垫片、
   删除先证后删（`policy/doc-alignment.md`）；配置加载 fail-fast。
-- **定案与范围分界**：**精化基座**已由 ADR-0019 定案
-  （`docs/decisions/0019-elaboration-plugin-protocol.md`）；**本节保留为通用设计原则**
-  （三分法 / 两失效信号 / 普适原语清单 / 成熟解法参照），管辖 ADR-0019 范围外的待议面
+- **定案与范围分界**：**精化基座**已落地（机制与契约面见 `core/component_protocol.md`
+  §1b + `analyzer/elaboration/README.md`；决策过程见 git log）；**本节保留为通用设计原则**
+  （三分法 / 两失效信号 / 普适原语清单 / 成熟解法参照），管辖**精化范围外**的待议面
   （数字形态 `_number.toml`、analyze→transform 映射通道契约键名）——那些**仍未立项**，
   动手前同样先立 ADR。
 - **成熟解法参照（避免自造）**：

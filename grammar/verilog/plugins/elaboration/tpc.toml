@@ -1,6 +1,6 @@
 # elaboration 组件声明 — verilog 精化项与求解器（**能力组件**：无语法/分析/变换声明）
 #
-# 契约（引擎侧）：`analyzer/elaboration/`；定案：`docs/decisions/0019-elaboration-plugin-protocol.md`。
+# 契约（引擎侧）：`analyzer/elaboration/README.md` + `core/component_protocol.md` §1b。
 # 同款先例：`macro_policy`（引擎只做文本操作）、`formatter`（纯能力组件）。
 
 [capabilities]

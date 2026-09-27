@@ -89,8 +89,10 @@ handler = "_asm.py:render_asm"
 
 ## 1b. 精化器能力位（`elaborator`）
 
-> 定案与权衡：`docs/decisions/0019-elaboration-plugin-protocol.md`。
-> 引擎侧实现：`analyzer/elaboration/`；插件示例：`grammar/verilog/plugins/elaboration/`。
+> 引擎侧实现：`analyzer/elaboration/`（机制与职责见其 `README.md`）；插件示例：
+> `grammar/verilog/plugins/elaboration/`。
+> 为什么这样切：引擎若持有端口/参数/信号图/连接这些**语言形状**，就会随语言增删而改
+> ——把"最小可视单位"压到**文件**，语言知识只剩插件一处落点（权衡过程见 git log）。
 
 **引擎只做文件操作**（读源 / 宏展开 / 解析 / AST 缓存 / 行映射与宏区间 / 依赖发现编排）；
 "世界由哪些事实构成"（端口有宽度、参数有值文本、信号有驱动/负载、generate 怎么判）是
@@ -128,11 +130,12 @@ elaborator = "_elaborator.py:build_elaborator"
   `depends_on` 自引用与成环 / `locator` 与 `locator_fn` 同给 / 求解名未解析 / `scope` 非法。
 - **核验只做强方向**：求解器返回**未声明的容器键** → fail；**不**因"声明了但某原子无产物"
   报错（按原子出产物时空是常态）——**与 `pipeline/schedule.py::_verify_produced` 的刻意差异**。
-- **引擎角色位已退场**（ADR-0019 P3 收口）：曾有 `role` 字段用于"引擎消费插件产物"的寻址
+- **引擎角色位已退场**（精化收口时）：曾有 `role` 字段用于"引擎消费插件产物"的寻址
   （条目名由插件定 ⇒ 引擎无法按名寻址自己也要用的产物）。终态下引擎**不消费任何插件产物**，
   故该机制整体删除（`role` 字段 / `ROLES` 枚举 / `role_key`），**不留登记槽**——声明的项
   集合里不再有"引擎自己要用的产物"这类成员。声明 `role` 现在会被"未知键"在加载期拦下。
-  将来若确有此需求，按同一契约重新登记（判据与历史角色见 ADR-0019 角色位契约表）。
+  将来若确有此需求，按同一契约重新登记；判据：**登记项必须有引擎侧消费方**（终态下没有
+  ⇒ 连同登记槽删除），历史过程见 git log。
 
 ## 2. 加载流程（setup_grammar）
 
