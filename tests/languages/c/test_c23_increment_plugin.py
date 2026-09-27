@@ -81,6 +81,22 @@ _CASES = [
     ("_Decimal 结构成员", "struct s4 {\n    _Decimal64 x;\n};\n", "DecimalSpec"),
     ("_Decimal 参数位", "void f(_Decimal32 x);\n", "DecimalSpec"),
     ("_Decimal 类型名位（sizeof）", "int n4 = sizeof(_Decimal128);\n", "DecimalSpec"),
+    # 属性说明符（C23 §6.7.12）：说明符位 + "属性声明"两处
+    ("[[nodiscard]] 声明前缀", "[[nodiscard]] int f2(void);\n", "AttributeSpec"),
+    ("[[noreturn]] 声明前缀", "[[noreturn]] void die2(void);\n", "AttributeSpec"),
+    ("[[deprecated(实参)]]", '[[deprecated("use g")]] void h2(void);\n', "AttributeSpec"),
+    ("属性表多属性", "[[nodiscard, maybe_unused]] int g2(void);\n", "AttributeSpec"),
+    ("连续两个属性说明符", "[[nodiscard]] [[maybe_unused]] int k2(void);\n", "AttributeSpec"),
+    ("属性在说明符序列其余位", "int [[deprecated]] x2;\n", "AttributeSpec"),
+    ("属性在限定符之后", "const [[maybe_unused]] int y2 = 1;\n", "AttributeSpec"),
+    ("属性在结构成员", "struct s5 {\n    [[maybe_unused]] int x;\n};\n", "AttributeSpec"),
+    ("属性在参数位", "void f2([[maybe_unused]] int x);\n", "AttributeSpec"),
+    ("带前缀属性名 gnu::unused", "[[gnu::unused]] int q2;\n", "AttributeSpec"),
+    ("带前缀属性名带实参", "[[gnu::aligned(16)]] int r2;\n", "AttributeSpec"),
+    ("属性声明（文件作用域）", "[[fallthrough]];\n", "AttributeSpec"),
+    ("属性声明（assume）", "[[assume(x > 0)]];\n", "AttributeSpec"),
+    ("属性声明（块作用域）", "void f3(int x) {\n    [[fallthrough]];\n}\n", "AttributeSpec"),
+    ("属性在函数定义前", "[[nodiscard]] int f4(void) {\n    return 1;\n}\n", "AttributeSpec"),
 ]
 
 
@@ -196,6 +212,30 @@ class TestC23InjectionPoints:
         for name in ("BitIntSpec", "DecimalSpec"):
             assert f"@{name}" in simple, f"SimpleType 缺 @{name}：{simple}"
 
+    def test_attributes_go_through_type_qualifier(self, restore_language):
+        """`[[属性]]` 挂 `@TypeQualifier`（公共宿主）⇒ 说明符位 6 处 + 属性声明一并生效。
+
+        没有独立规则去做"属性声明"：核心 `Declaration` 的形态是"说明符 + 可选声明符表 + `;`"，
+        `[[fallthrough]];` 正好落进首说明符位、声明符表为空——**少一条规则、少一个位点**。
+        """
+        rules = _env()["rules"]
+        quals = " ".join(str(p) for p in rules["TypeQualifier"].production)
+        assert "@AttributeSpec" in quals, quals
+
+    def test_attribute_known_boundaries(self, restore_language):
+        """把属性的**未覆盖形态**钉住（实测，见 `21_attributes.toml` 头注）。
+
+        未覆盖：① 空实参 `[[deprecated()]]`；② 相邻字面量拼接 `[[deprecated("a" "b")]]`；
+        ③ 属性表尾随逗号 `[[nodiscard,]]`；④ 声明符之后 / 枚举项上的属性位点。
+        这些一旦被补上，本用例会红——提醒同步头注与 `grammar/c/README.md`。
+        """
+        env = _env()
+        for src in ("[[deprecated()]] int a;\n", '[[deprecated("a" "b")]] int b;\n',
+                    "[[nodiscard,]] int c;\n", "int d [[deprecated]];\n"):
+            ast = env["parse"](src)
+            names = {n.node_name for n in iter_nodes(ast)} if ast is not None else set()
+            assert "AttributeSpec" not in names, f"{src!r} 已能解析？请同步头注与 README"
+
     def test_decimal_literal_suffix_is_a_known_gap(self, restore_language):
         """⚠ 登记已知缺口（不是"支持"）：十进制浮点**字面量后缀** `dd` 尚未进词法面。
 
@@ -249,6 +289,7 @@ class TestC23InjectionPoints:
             "18_thread_local_alias.toml": ("@StorageClass.production[0]",),
             "19_bitint.toml": ("@SimpleType.production[0]",),
             "20_decimal.toml": ("@SimpleType.production[0]",),
+            "21_attributes.toml": ("@TypeQualifier.production[0]",),
         }
         for fname, targets in want.items():
             path = ROOT_DIR / "grammar" / "c" / "plugins" / "c23" / fname

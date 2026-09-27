@@ -250,6 +250,33 @@ class TestTierCacheHygiene:
         )
 
 
+class TestKeywordFreeIncrementsAreNotTierGated:
+    """⚠ **档位的真实边界（2026-09-26 实测，落 `[[属性]]` 时撞上）**：
+
+    档位判别目前靠"**关键字未声明 ⇒ 规则匹配不上**"（插件规则文件本身是**无条件**加载的：
+    `setup_grammar` → `load_all_components(<pack>/plugins)`，不看 `enabled`）。
+    于是**不依赖任何新关键字的纯语法增量不受档位约束**——`[[属性]]` 就是第一例：
+    `[`/`]`/标识符都在核心词法里，规则在基线档照样匹配。
+
+    本类把这个现状**钉住**：若哪天把 `enabled` 升级成"门控一切"（`TODO.md` 的候选语义 ②），
+    这条会红——那时应把属性移进真正的档位门控，并把本类改成"基线档不认属性"。
+    """
+
+    def test_attributes_parse_even_in_baseline_tier(self):
+        names = _nodes_with(_PACK, "[[nodiscard]] int f(void);\n", enabled=[])
+        assert "AttributeSpec" in names, names
+
+    def test_keyword_increments_are_gated_by_tokens(self):
+        """对照：靠关键字落地的增量在基线档**确实**进不来（档位在它们身上是有效的）。
+
+        判据 = "档位看解析成哪个节点"：基线档下 `bool` / `alignas` 只是标识符。
+        """
+        for src, node in (("bool f;\n", "BoolType"),
+                          ("alignas(16) char c;\n", "AlignasC23Spec"),
+                          ("_Atomic(int) x;\n", "AtomicSpec")):
+            assert node not in _nodes_with(_PACK, src, enabled=[]), src
+
+
 class TestEnabledOverrideValidation:
     """`enabled=` 参数的 fail-fast（写错档位必须喊出来）。"""
 

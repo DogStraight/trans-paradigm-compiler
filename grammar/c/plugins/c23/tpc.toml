@@ -47,4 +47,5 @@ files = [
     "18_thread_local_alias.toml",
     "19_bitint.toml",
     "20_decimal.toml",
+    "21_attributes.toml",
 ]

@@ -1,0 +1,121 @@
+# ============================================================================
+# c23 插件 — 属性说明符 `[[ 属性表 ]]`（C23 §6.7.12 attribute-specifier）
+# ============================================================================
+# 标准形态（N3096 §6.7.12.1）：
+#   attribute-specifier: [ [ attribute-list ] ]
+#   attribute-list: attribute-list , attribute ｜ attribute
+#   attribute: attribute-token attribute-argument-clause_opt
+#   attribute-token: identifier ｜ attribute-prefix :: identifier
+#   attribute-argument-clause: ( balanced-token-sequence_opt )
+#
+# 三条规则各担一层（照核心基线 `DeclaratorList`/`InitDeclarator` 的写法）：
+#   `AttributeSpec` = `[[ … ]]`（词法上就是两个 `[` / 两个 `]` token，**无需改词法**）；
+#   `AttributeList` = 逗号分隔的 `Attribute`（`items` 合并绑定，供 compact 渲染）；
+#   `Attribute`     = 名（可带 `前缀::`）+ 可选实参组。
+#
+# **注入点 = `@TypeQualifier`（又是那个公共宿主）**：本包说明符位由 6 条规则分别表达，
+#   `TypeQualifier` 被这 6 处共同引用 ⇒ 一次注入覆盖：
+#     · 声明/函数定义的首说明符位：`[[nodiscard]] int f(void);`
+#     · 说明符序列其余位（`SpecRest`）：`int [[deprecated]] x;`
+#     · 结构成员：`struct S { [[maybe_unused]] int x; };`
+#     · 参数位：`void f([[maybe_unused]] int x);`
+#     · 类型名位：`sizeof([[maybe_unused]] int);`
+#   **连续多个属性说明符**（`[[a]] [[b]] int x;`）也自然成立：`SpecRest*` 会继续吃 ——
+#   这正是"挂公共宿主"的收益（对照 `c11/15_alignas.toml` 逐点铺的代价）。
+#
+# **"属性声明"形态**（`[[fallthrough]];` / `[[assume(x > 0)]];`）**不需要额外规则**：
+#   核心 `Declaration` 的形态是"说明符 + 可选声明符表 + `;`"，`[[fallthrough]]` 正好落进
+#   首说明符位、声明符表为空 ⇒ 解析成 `Declaration(specs=AttributeSpec)`、渲染逐字还原。
+#   块作用域同样可用（`Declaration` 本就在核心 `Stmt` 交替里）。
+#
+# **实参收 `@Expression`（宽进口径）**：标准写的是 balanced-token-sequence（任意 token 序列），
+#   引擎没有"配平 token 序列"这一形态；收 `@Expression` 覆盖真实用法里的绝大多数
+# **实参收 `@Expression`（宽进口径 + 实测边界）**：标准写的是 balanced-token-sequence
+#   （任意 token 序列），引擎没有"配平 token 序列"这一形态；收 `@Expression` 覆盖真实用法的
+#   大多数——实测 **✓**：`[[deprecated("use g")]]` / `[[assume(x > 0)]]` /
+#   `[[gnu::aligned(16)]]` / `[[gnu::aligned(16 * 2)]]` / **嵌套括号**
+#   `[[gnu::aligned(sizeof(void *))]]`（`sizeof(type)` 本身就是表达式）。
+#   ⚠ **未覆盖（实测，如实登记，不是"看起来支持"）**：
+#     · **空实参** `[[deprecated()]]`——标准的 `balanced-token-sequence_opt` 允许空；
+#     · **相邻字面量拼接** `[[deprecated("a" "b")]]`（字符串拼接不在表达式面内）；
+#     · **属性表尾随逗号** `[[nodiscard,]]`——标准的 `attribute-list_opt , attribute_opt`
+#       允许尾随逗号，本包的可空项列表形态写不出来（写成 `(comma,@Attribute?)` 还会顺带
+#       接受 `[[a,,]]`，得不偿失）。
+#   要支持需引擎侧"配平 token 序列"形态（新形态，与 ROADMAP「注入机制」的 ③/④ 无关）。
+#
+# **属性位点（只做两处，其余如实登记）**：① **说明符位**（含 `[[a]] [[b]]` 连续、成员
+#   说明符位、参数位、类型名位）；② **属性声明** `[[…]];`（文件与块作用域）。**未做**：
+#   声明符**之后**（`int x [[deprecated]];`）与**枚举项**上（`A [[deprecated]] = 1`）——
+#   两处都要在核心 `Declarator`/`Enumerator` 的**后缀位**加分支（形态改动），
+#   按"最小可用 + 如实登记"处理。
+#
+# **属性名带前缀**（`[[gnu::unused]]`）：按标准 `attribute-prefix :: identifier` 两层收，
+#   绑定 `token = "$1"`（`gnu`）+ `qualified = "$2.…"`（`unused`）；无前缀时 `qualified` 为空。
+#   ⚠ 现状不覆盖厂商另一套拼写 `__attribute__((…))`（GNU 扩展，不在 C23 面内）。
+#
+# ⚠ **本构造不受档位门控（实测，属引擎侧语义边界，不是本插件的问题）**：属性**不依赖任何
+#   新关键字**（`[`/`]`/标识符都在核心词法里），而插件**规则文件**由 `setup_grammar` →
+#   `load_all_components` **无条件**加载 ⇒ `enabled=[]`（基线档）下
+#   `[[nodiscard]] int f(void);` 照样解析成 `AttributeSpec`（其余增量靠"关键字未声明 ⇒
+#   匹配不上"天然门控，本构造没有这道闸）。边界与两种候选语义见 `TODO.md`
+#   「`[plugins] enabled` 的语义边界」，判据见
+#   `tests/languages/c/test_c_standard_tiers.py::TestKeywordFreeIncrementsAreNotTierGated`。
+
+[AttributeSpec.parser]
+production = [
+    "bracket.l_square_bracket",
+    "bracket.l_square_bracket",
+    "@AttributeList",
+    "bracket.r_square_bracket",
+    "bracket.r_square_bracket",
+]
+
+[AttributeSpec.parser.node]
+attributes = "$3"
+
+[AttributeSpec.inject]
+targets = ["@TypeQualifier.production[0]"]
+
+[AttributeSpec.renderer.layout]
+line = ["[[", { ref = "attributes" }, "]]"]
+
+
+[AttributeList.parser]
+production = [
+    "@Attribute",
+    "(symbol.base.comma,@Attribute)*",
+]
+
+# 渲染前提同 `DeclaratorList`：列表容器用合并 `items` 字段（否则逗号分隔符拿不到形态）
+[AttributeList.parser.node]
+items = ["$1", "$2.items[*].sub_node[1]"]
+
+[AttributeList.renderer.layout]
+intent = "compact"
+items = "items"
+sep = ", "
+first_soft = false
+
+
+[Attribute.parser]
+production = [
+    "@Identifier",
+    "(symbol.base.colon,symbol.base.colon,@Identifier)?",
+    "(bracket.l_parentheses,@Expression,bracket.r_parentheses)?",
+]
+
+[Attribute.parser.node]
+# token / qualified —— 无前缀形态（`nodiscard`）：token = "nodiscard"、qualified 为空；
+# 带前缀形态（`gnu::unused`）：token = "gnu"、qualified = "unused"（C23 attribute-prefix :: id）。
+token = "$1"
+qualified = "$2.sub_node[0].sub_node[2]"
+# args —— 实参本体（绑定落到组内的 `@Expression`，理由同 `InitDeclarator.init`：
+# 包住括号的形态渲染会多印括号，而 `opt` 组要按"属性是否为空"决定整组是否输出）。
+args = "$3.sub_node[0].sub_node[1]"
+
+[Attribute.renderer.layout]
+line = [
+    { ref = "token" },
+    { opt = { group = [":", ":", { ref = "qualified" }] } },
+    { opt = { group = ["(", { ref = "args" }, ")"] } },
+]

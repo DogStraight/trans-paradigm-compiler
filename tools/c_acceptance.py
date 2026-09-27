@@ -85,6 +85,8 @@ CASES: list[tuple[str, str, str]] = [
      "alignas(16) char buf2[64];\nint a2 = alignof(int);\nthread_local int tls;\n"),
     ("增量", "c23 类型词（_BitInt(N) / _Decimal32·64·128）",
      "_BitInt(8) a3;\n_Decimal32 d1;\n_Decimal64 d2;\n_Decimal128 d3;\n"),
+    ("增量", "c23 属性说明符（[[nodiscard]] / 带前缀 / 属性声明）",
+     '[[nodiscard]] int f9(void);\n[[gnu::unused]] int q9;\n[[fallthrough]];\n'),
 ]
 
 

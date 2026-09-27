@@ -4,8 +4,10 @@
 # 就是语法错误（响亮失败，不会静默当标识符）。
 #   已有语法规则：`static_assert`（文件 + 块两作用域）、`bool`、`true`、`false`、
 #     `nullptr`、`typeof`/`typeof_unqual`、`constexpr`、`alignas`、`alignof`、
-#     `thread_local`、`_BitInt`、`_Decimal32`/`_Decimal64`/`_Decimal128`；
-#   仍无规则：`[[属性]]`（需声明/语句前缀位点设计）。
+#     `thread_local`、`_BitInt`、`_Decimal32`/`_Decimal64`/`_Decimal128`。
+#   `[[属性]]`（`21_attributes.toml`）**不依赖本表任何关键字**——它用核心词法的
+#     `[`/`]`/标识符，故**不受档位门控**（实测：基线档也解析成 `AttributeSpec`），
+#     边界见 `TODO.md`「`[plugins] enabled` 的语义边界」。
 #   ⚠ 十进制浮点**字面量后缀**（`1.5df`/`dd`/`dl`）不在词法面：那属 `base/_number.toml`
 #     （核心基线），插件侧另声明会被 `deep_merge` 的"列表后者覆盖"顶掉核心数字形态——
 #     见 `20_decimal.toml` 头注与 `TODO.md` 同项。

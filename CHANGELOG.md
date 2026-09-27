@@ -7,6 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包 c23 属性说明符 `[[…]]` 落地——c23 语法增量至此收口**。接受面 **36/38 → 37/39**；
+  档位矩阵 23 → **25**。
+  - 三条规则各担一层：`AttributeSpec` = `[[ … ]]`（词法上就是两个 `[` / 两个 `]` token，
+    **无需改词法**）、`AttributeList` = 逗号分隔（`items` 合并绑定）、`Attribute` = 名
+    （**带前缀** `gnu::unused` 按标准 `attribute-prefix :: identifier` 两层收）+ 可选实参组。
+  - **注入点 = `@TypeQualifier`**（那个公共宿主）：一次注入覆盖声明/函数定义首说明符位、
+    说明符序列其余位（`int [[deprecated]] x;`）、结构成员、参数位、类型名位；
+    **连续属性说明符**（`[[a]] [[b]] int x;`）由 `SpecRest*` 自然吃掉。
+  - **"属性声明"形态不需要额外规则**：`[[fallthrough]];` / `[[assume(x > 0)]];` 正好是
+    "说明符 + 空声明符表 + `;`"，落进核心 `Declaration` 即可（文件与块作用域都通）——
+    少一条规则、少一个位点。
+  - ⚠ **实测边界（如实登记，判据钉住）**：① 空实参 `[[deprecated()]]`、② 相邻字面量拼接
+    `[[deprecated("a" "b")]]`、③ 属性表**尾随逗号** `[[nodiscard,]]`（标准允许）——
+    都需引擎侧"配平 token 序列 / 可空项列表"形态；④ 声明符**之后**与**枚举项**上的属性位点
+    未做（要在核心 `Declarator`/`Enumerator` 后缀位加分支）。**✓ 实测可用**：嵌套括号实参
+    `[[gnu::aligned(sizeof(void *))]]`、`[[gnu::aligned(16 * 2)]]`、属性在函数定义前、
+    属性在 `const` 之后。
+  - ⚠ **顺带撞出一条真实的档位边界（本轮最有价值的发现）**：`[[属性]]` **不依赖任何新关键字**，
+    而插件**规则文件**由 `setup_grammar` → `load_all_components` **无条件**加载 ⇒
+    **基线档（`enabled=[]`）也解析出 `AttributeSpec`**：这个构造上"档位 = 接受域"不成立。
+    此前该边界只是假想（`TODO.md`「`[plugins] enabled` 的语义边界」），现在有了实测症状，
+    判据 = `test_c_standard_tiers.py::TestKeywordFreeIncrementsAreNotTierGated`
+    （含对照：靠关键字落地的增量在基线档确实进不来）。选"门控一切"语义时属性会自动被门控；
+    选"只门控声明面"则要把"纯语法增量不受档位约束"写成该语义的**代价**。
+  - **判据**：`test_c23_increment_plugin.py` 120 → 167 例（15 条属性用例进 `_CASES` 的三组
+    参数化 + 「属性走 `TypeQualifier`」+ 边界钉住用例 + 注入清单扩到 12 个文件）；
+    `test_c_standard_tiers.py` 新增 `TestKeywordFreeIncrementsAreNotTierGated`（2 例）；
+    `tools/c_acceptance.py` 38 → 39 条；15 个属性形态 token 序列不变 + 幂等 + linter 零诊断。
 - **C 包 c23 类型词落地：`_BitInt(N)` 与 `_Decimal32`/`_Decimal64`/`_Decimal128`
   ——c23 语法面只剩 `[[属性]]`**。接受面 **35/37 → 36/38**；档位矩阵 21 → **23**。
   - `_BitInt(N)`（§6.7.2.1）：标准形态**宽度必选**（`_BitInt` 单独出现不是类型说明符），
@@ -89,7 +117,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **fail-fast 两条**：`enabled` 必须是字符串列表（非列表 / 含空串 / 含非字符串 →
     `ConfigError`）；清单里的插件名**必须能解析到插件包**——此前是**静默跳过**（拼错一个
     名字就少加载一个插件，"启用组合等效某标准"直接失真）。
-  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **23 构造 × 4 档矩阵**
+  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **25 构造 × 4 档矩阵**
     （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
     判定——比"规则表里有没有"更能抓出缓存串档）+ 同进程连续切档 + `Lexer` 跟随档位 +
     `enabled=None` 回落到包默认 + 非法参数 fail-fast；`tools/check_gate_efficacy.py` 增两条

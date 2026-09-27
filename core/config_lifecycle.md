@@ -251,7 +251,7 @@ ConfigRegistry.resolve("grammar/c")                              # 跟随该包"
 - ⚠ **两处缓存键必须含档位**（都属于"静默失效"型缺陷，症状 = 改了 `enabled` 毫无变化）：
   `_ensure_entries_for` 的来源判据 `(_entries_source, _entries_enabled)`；`_resolve_cache`
   的 key（否则同包两档算同一个 key，`Lexer` 拿回上一档 token）。判据：
-  `tests/languages/c/test_c_standard_tiers.py` 的 23 构造 × 4 档矩阵。
+  `tests/languages/c/test_c_standard_tiers.py` 的 25 构造 × 4 档矩阵。
 - ⚠ **边界：`enabled` 只门控"声明面"**——插件的**规则文件与 Python 组件**由
   `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
   两种候选语义与拍板判据见 `TODO.md`「`[plugins] enabled` 的语义边界」。

@@ -313,6 +313,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": 'targets = ["@Declaration.production[0]"]\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
+    {
+        "why": "`[[属性]]` 挂 `TypeQualifier`（公共宿主）⇒ 说明符位 6 处 + \"属性声明\"一并生效。"
+               "把宿主换成单点 `@Declaration.production[0]` ⇒ 结构成员/参数/`sizeof` 三处失效"
+               "——本变异证明那三条属性用例真的握着宿主选择",
+        "file": "grammar/c/plugins/c23/21_attributes.toml",
+        "old": 'targets = ["@TypeQualifier.production[0]"]\n',
+        "new": 'targets = ["@Declaration.production[0]"]\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
 ]
 
 
