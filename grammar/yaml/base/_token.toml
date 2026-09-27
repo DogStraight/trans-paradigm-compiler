@@ -36,11 +36,8 @@ lesser = "<"
 dot = "."
 
 # 多字符符号（从 base 字符贪心最长匹配）
-# 注意：lexer 最长匹配逐字符 probe，中间形态也必须在 extend 表——
-# `---` 需 `--` 命中后才能继续 probe 到 `---`（verilog 的 >>> 同理依赖 >>）。
 [symbol.extend]
 double_dash = "--"  # 中间形态（无独立语义，仅为 --- 的 probe 链）
-double_dot = ".."   # 中间形态（无独立语义，仅为 ... 的 probe 链）
 merge = "<<"        # 合并键（merge key）：`<<: *defaults`
 doc_start = "---"   # 文档分隔符（独占一行）
 doc_end = "..."     # 文档流结束符（独占一行）

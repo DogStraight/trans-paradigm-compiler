@@ -205,3 +205,73 @@ class TestStagingBoundaries:
         """
         ast = _parse("float int x;\n", c)
         assert _node_names(ast) == ["Declaration"]
+
+
+class TestVariadicParameter:
+    """变参尾段 `...`（C99 §6.7.5.3 `parameter-type-list: parameter-list , ...`）。
+
+    ⚠ 该形态曾长期记为「**需引擎侧形态**」的缺口（三种配置写法"全部证伪"）。真根因
+    两条，**都不是形态问题**（2026-09-26 实测定位）：
+
+    1. **lexer 最长匹配缺陷**：`_scan_symbol` 逐字符 probe 时要求"每一层中间前缀自身
+       也在 extend 表里"，而 `...` 要经过未声明的 `..` ⇒ `...` 永远匹配不到、被降级成
+       三个 `.`（yaml/verilog 为此各塞了一个"仅为 probe 链"的 `..` 占位声明）；
+    2. **token 类型写错**：`ellipsis = "..."` 声明在 `[symbol.extend]` 下，完整类型是
+       `symbol.extend.ellipsis`；三份试验配置都写成 `symbol.base.ellipsis`（该元素因而
+       永不匹配，症状与"形态表达不了"一模一样）。
+
+    两条修好后本形态是**纯配置**可达的：`ParamList` 第二项写成
+    `(comma,(@ParamDecl|symbol.extend.ellipsis))*`——尾段落在重复组迭代项里，
+    `items` 绑定自然收进列表并按源序渲染。
+    """
+
+    def test_variadic_prototype_parses(self, c):
+        ast = _parse("int printf(const char *fmt, ...);\n", c)
+        assert _node_names(ast) == ["Declaration"]
+
+    def test_variadic_ellipsis_is_in_param_list(self, c):
+        """`...` 必须真进 AST（不是"解析通过但被静默丢掉"）。"""
+        ast = _parse("int printf(const char *fmt, ...);\n", c)
+        params = (
+            ast.sub_node[0]
+            .declarators.items[0]
+            .declarator.direct.suffixes.items[0]
+            .params
+        )
+        assert params.node_name == "ParamList"
+        assert [n.node_name for n in params.items] == [
+            "ParamDecl",
+            "symbol.extend.ellipsis",
+        ]
+
+    def test_variadic_after_named_param(self, c):
+        ast = _parse("void f(int a, ...);\n", c)
+        assert _node_names(ast) == ["Declaration"]
+
+    def test_non_variadic_unaffected(self, c):
+        """对照：普通参数表与 `(void)` 形态不受该改动影响。"""
+        for src in ("int g(int a, int b);\n", "int h(void);\n"):
+            assert _node_names(_parse(src, c)) == ["Declaration"]
+
+    def test_ellipsis_only_param_list_is_rejected(self, c):
+        """`int f(...);` —— C99 要求 `...` 前**至少一个具名参数**，应被拒。
+
+        （C23 放开了纯 `(...)`；本包核心基线 ≈ C99，故此处拒。归 c23 档时再评估。）
+        """
+        assert _node_names(_parse("int f(...);\n", c)) == []
+
+    def test_variadic_lints_clean(self, c_linter):
+        """**合法 C 不得被 linter 拒**——本形态此前正是"合法代码被报错"的现场：
+        修复前 `int printf(const char *fmt, ...);` 报 2 条（`unexpected '('` +
+        `expected ';', got 'keyword.const'`）。"""
+        assert _lint("int printf(const char *fmt, ...);\n", c_linter) == []
+
+    def test_variadic_render_is_faithful_and_idempotent(self, c):
+        """渲染逐字还原 `...` 并幂等（`items` 绑定漏掉尾段就会静默丢内容）。"""
+        from renderer import Renderer
+
+        renderer = Renderer(rules_dir="grammar/c")
+        src = "int printf(const char *fmt, ...);"
+        out = renderer.render(_parse(src + "\n", c))
+        assert out == src
+        assert renderer.render(_parse(out + "\n", c)) == out

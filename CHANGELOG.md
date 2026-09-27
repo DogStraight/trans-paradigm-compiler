@@ -7,6 +7,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **lexer 最长匹配要求「每一层中间前缀自身也是声明过的符号」→ 中间形态未声明的符号
+  永远匹配不到**（`lexer/main_lexer.py::_scan_symbol`）：C 的变参 `...` 要经过未声明的
+  `..`，于是被降级成三个 `.`——`int printf(const char *fmt, ...);` 整条解析失败、
+  linter 还报 2 条误报（`unexpected '('` / `expected ';', got 'keyword.const'`），
+  即**真实工程头文件里最常见的形态被合法代码检查链拒绝**。
+  该缺陷早已被两处"绕过"记录在案：yaml 与 verilog 各自声明了一个
+  `double_dot = ".."`（yaml 的注释写明"中间形态，无独立语义，仅为 `...` 的 probe 链"）
+  ——本修点落地后两处占位声明已按"删除先证后删"删除（判据：其存在理由即喂 probe 链；
+  无规则/测试引用；`..` 在两种语言里都不是符号）。
+  改为按**声明集取最长**、用真前缀集决定是否继续探（未声明前缀只前进不采纳，
+  探完回退到最长已声明候选）。判据：`tests/engine/lexer/test_lexer.py::TestSymbolLongestMatch`
+  （自建 token 表，不依赖语言包）+ 全量回归 + 真实语料误报基线不增。
+
+### Added
+
+- **C 包支持变参尾段 `...`**（`int printf(const char *fmt, ...);`）——接受面
+  **25/28 → 26/28**，空洞只剩预处理两项。改法是纯配置：
+  `ParamList` 第二项写成 `(symbol.base.comma,(@ParamDecl|symbol.extend.ellipsis))*`
+  （尾段落重复组迭代项，`items` 绑定自然收进列表并按源序渲染）。
+  ⚠ **这一项此前被记为"需引擎侧形态"的缺口（三种配置写法"全部证伪"）——结论是错的**，
+  真根因两条、都不是形态问题：① 上面那条 lexer 缺陷；② 配置里 token 类型写成
+  `symbol.base.ellipsis`，而 `ellipsis` 声明在 `[symbol.extend]` 下（完整类型
+  `symbol.extend.ellipsis`），该元素因而永不匹配——症状与"形态表达不了"一模一样。
+  两条修好后本形态是纯配置可达的。同时实测到一条易踩的坑：尾段若写成**独立可选元素**
+  （`(comma,ellipsis)?` 单独一项）也能解析，但 `items` 绑定拿不到它 ⇒ 渲染**静默丢掉**
+  `...`（输出 `int printf(const char *fmt);`）——"解析进 AST ≠ 保真"。
+  判据：`tests/languages/c/test_c_declarations.py::TestVariadicParameter`（7 例：进 AST /
+  尾段在 `ParamList.items` 里 / 对照非变参 / `int f(...);` 仍拒（C99 要求至少一个具名
+  参数）/ linter 零诊断 / 渲染逐字还原 + 幂等），`tools/c_acceptance.py` 复核。
+
+### Fixed（前一轮，linter 误报）
+
+
 - **linter 在合法 C 上大面积误报的根因（不是"匹配器不回溯"）**：`grammar/c` 的
   `ring_buffer.h` / `ring_buffer.c` / `edge_comments.c` 三份**合法**样本上，linter 分别报
   **14 / 7 / 2 条** `phase-statement`，即合法代码 100% 被报错（检查链在最基础的头文件上

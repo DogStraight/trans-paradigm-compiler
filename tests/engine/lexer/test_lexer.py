@@ -276,6 +276,76 @@ class TestTokenizeEdgeCases:
         assert types[6] == "id"
 
 
+class TestSymbolLongestMatch:
+    """多字符符号的最长匹配：判据是"候选本身声明过"，**不是**"每层前缀都声明过"。
+
+    缺陷现场（2026-09-26 修）：`_scan_symbol` 逐字符 probe 时要求中间形态也在
+    extend 表里，于是 `...`（C 的变参尾段）因为 `..` 未声明而永远匹配不到、被
+    降级成三个 `.`；yaml 与 verilog 为此各自塞了一个"无独立语义、仅为 probe 链"
+    的 `..` 占位声明来喂这条链（本修点落地后两处占位已删）。
+    用**自建 token 表**（不依赖任何语言包）钉住该语义。
+    """
+
+    _TD: dict = {
+        "space": {"blank_space": " ", "tab": "\t"},
+        "newline": {"newline": "\n"},
+        "symbol": {
+            "base": {"dot": ".", "sub": "-"},
+            "extend": {"ellipsis": "...", "arrow": "->", "dash_dash": "--"},
+        },
+        "bracket": {"pairs": [["(", ")", "parentheses"]]},
+        "id": {"id": "[a-zA-Z_][a-zA-Z0-9_]*"},
+        "literal": {},
+    }
+
+    @classmethod
+    def _lex(cls):
+        from lexer.lexer_utils import get_number_config
+        from lexer.main_lexer import Lexer
+
+        return Lexer(token_define_dict=cls._TD, number_configs=get_number_config())
+
+    @classmethod
+    def _sig(cls, src):
+        return [
+            (t.type, t.content)
+            for t in cls._lex().tokenize(src)
+            if t.type not in ("newline",)
+        ]
+
+    def test_symbol_with_undeclared_intermediate_prefix(self):
+        # `..` 未声明，但 `...` 声明了 → 必须整体成 token（旧实现只吃到单个 `.`）
+        assert self._sig("...") == [("symbol.extend.ellipsis", "...")]
+
+    def test_shorter_prefix_still_independent_symbol(self):
+        # 声明过的短符号仍是独立符号（`--` 与 `->` 各成 token）
+        assert self._sig(".") == [("symbol.base.dot", ".")]
+        assert self._sig("..") == [
+            ("symbol.base.dot", "."),
+            ("symbol.base.dot", "."),
+        ]
+        assert self._sig("--") == [("symbol.extend.dash_dash", "--")]
+        assert self._sig("->") == [("symbol.extend.arrow", "->")]
+
+    def test_longest_declared_symbol_wins(self):
+        # 取**最长已声明**者：`---` 未声明 → `--` + `-`；`....` → `...` + `.`
+        assert self._sig("---") == [
+            ("symbol.extend.dash_dash", "--"),
+            ("symbol.base.sub", "-"),
+        ]
+        assert self._sig("....") == [
+            ("symbol.extend.ellipsis", "..."),
+            ("symbol.base.dot", "."),
+        ]
+
+    def test_symbol_inside_expression(self):
+        assert self._sig("a...b") == [
+            ("id", "a"),
+            ("symbol.extend.ellipsis", "..."),
+            ("id", "b"),
+        ]
+
+
 # ═══════════════════════════════════════════════════════
 # Token classifier（Pratt 解析器分类函数）
 # ═══════════════════════════════════════════════════════

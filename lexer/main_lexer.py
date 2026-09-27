@@ -311,6 +311,14 @@ class Lexer:
             for v in self.token_define.get("symbol", {}).get("extend", {}).values()
             if isinstance(v, str) and len(v) > 1
         ]
+        # `_scan_symbol` 最长匹配用表（构造期算一次；该函数是词法热路径）：
+        #   _extend_set      — 声明过的多字符符号（判"是不是一个符号"）
+        #   _extend_prefixes — 这些符号的真前缀（长度 ≥2，判"还要不要往后看"）
+        # 两者**必须分开**：中间形态可能不是符号（见 `_scan_symbol` 注释）。
+        self._extend_set: set[str] = set(self._extend_values)
+        self._extend_prefixes: set[str] = {
+            v[:i] for v in self._extend_set for i in range(2, len(v))
+        }
 
     def _setup_brackets_and_line_state(self) -> None:
         """括号配对表 → 开闭集合 + 类型映射；行状态初值。"""
@@ -712,25 +720,30 @@ class Lexer:
         # handle possible dedent before actual token
         self._emit_pending_dedent(st.tokens)
 
-        # 最长匹配：从 base 字符起贪心扩展，extend 表里有什么就支持
-        # 多长（如 >>>/<<< 三字符，配置驱动，不硬编码符号长度）。
-        extend_values = self.token_define["symbol"]["extend"].values()
-        tok.set_content(st.text[st.idx])
-        tok.set_type("symbol.base")
-        st.idx += 1
-        st.offset += 1
-        candidate = tok.content
-        while st.idx < st.text_len:
-            probe = candidate + st.text[st.idx]
-            if probe in extend_values:
-                candidate = probe
-                st.idx += 1
-                st.offset += 1
-            else:
+        # 最长匹配：从 base 字符起在 extend 表里取**最长**者（>>>/<<</... 等
+        # 多字符符号，长度由配置决定，不硬编码）。
+        # ⚠ 判据是"候选本身是声明过的符号"，**不是**"每一层前缀都声明过"：
+        #   逐字符 probe 时中间形态可以不进 extend 表——C 的 `...` 要经过
+        #   未声明的 `..`（声明表里没有这个形态）。旧实现遇未声明前缀即 break，
+        #   于是 `...` 永远匹配不到、被降级成一串 `.`；yaml 与 verilog 为此各自
+        #   塞了一个"无独立语义、仅为 probe 链"的 `..` 占位声明来喂这条链。
+        #   现在按声明集取最长、用真前缀集决定是否继续探（未声明前缀只前进不采纳，
+        #   探完回退到最长已声明候选）。
+        start = st.idx
+        best = st.text[start]
+        best_len = 1
+        j = start + 1
+        while j < st.text_len:
+            probe = st.text[start : j + 1]
+            if probe in self._extend_set:
+                best, best_len = probe, j + 1 - start
+            elif probe not in self._extend_prefixes:
                 break
-        if len(candidate) > 1:
-            tok.set_content(candidate)
-            tok.set_type("symbol.extend")
+            j += 1
+        tok.set_content(best)
+        tok.set_type("symbol.extend" if best_len > 1 else "symbol.base")
+        st.idx = start + best_len
+        st.offset = best_len
 
         st.col += st.offset
         tok = self.refine_type(tok)

@@ -319,11 +319,24 @@ params = "$2"
 
 
 # ── 参数表 ──
+# C99 §6.7.5.3：`parameter-type-list: parameter-list | parameter-list , ...`
+# 变参尾段 `...` 走**重复组内的交替**（第二支 `symbol.extend.ellipsis`）——
+# 这样它落在重复组的迭代项里，`items` 绑定（见下）自然把它收进列表并按源序渲染。
+# ⚠ 两处实测坑（2026-09-26，此前"三种写法全部证伪"的**真根因**，都不是形态问题）：
+#   ① **token 类型写错**：`ellipsis = "..."` 声明在 `[symbol.extend]` 下，完整类型是
+#      `symbol.extend.ellipsis`；写成 `symbol.base.ellipsis` 时该元素永不匹配
+#      （对照 `arrow = "->"` → `symbol.extend.arrow`，同表同规则）；
+#   ② **lexer 最长匹配缺陷**（已修）：逐字符 probe 要求"每层前缀自身也是声明过的
+#      符号"，而 `...` 要经过未声明的 `..` ⇒ `...` 被降级成三个 `.`。修好后
+#      `..` 这类"仅为 probe 链"的占位声明（yaml/verilog 各有一个）可以删。
+# ⚠ 用**尾随可选**（`(comma,ellipsis)?` 独立成第三个元素）也能解析，但 `items`
+#   绑定拿不到它 ⇒ 渲染把 `...` 静默丢掉（实测 `int printf(const char *fmt);`）——
+#   解析进 AST 不等于保真，别只看 AST。
 
 [ParamList.parser]
 production = [
     "@ParamDecl",
-    "(symbol.base.comma,@ParamDecl)*",
+    "(symbol.base.comma,(@ParamDecl|symbol.extend.ellipsis))*",
 ]
 
 [ParamList.parser.node]

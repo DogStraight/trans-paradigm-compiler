@@ -148,6 +148,59 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "",
         "test": "tests/languages/c4/test_c4_linter.py",
     },
+    {
+        "why": "lexer 最长匹配要求「每层中间前缀自身也声明过」→ 中间形态未声明的符号永远"
+               "匹配不到：C 的 `...` 被降级成三个 `.`，变参原型整条解析失败 + linter 误报"
+               "（yaml/verilog 曾各塞一个『仅为 probe 链』的 `..` 占位声明绕开它）",
+        "file": "lexer/main_lexer.py",
+        "old": """        start = st.idx
+        best = st.text[start]
+        best_len = 1
+        j = start + 1
+        while j < st.text_len:
+            probe = st.text[start : j + 1]
+            if probe in self._extend_set:
+                best, best_len = probe, j + 1 - start
+            elif probe not in self._extend_prefixes:
+                break
+            j += 1
+        tok.set_content(best)
+        tok.set_type("symbol.extend" if best_len > 1 else "symbol.base")
+        st.idx = start + best_len
+        st.offset = best_len
+""",
+        "new": """        tok.set_content(st.text[st.idx])
+        tok.set_type("symbol.base")
+        st.idx += 1
+        st.offset += 1
+        candidate = tok.content
+        while st.idx < st.text_len:
+            probe = candidate + st.text[st.idx]
+            if probe in self._extend_set:
+                candidate = probe
+                st.idx += 1
+                st.offset += 1
+            else:
+                break
+        if len(candidate) > 1:
+            tok.set_content(candidate)
+            tok.set_type("symbol.extend")
+""",
+        "test": "tests/engine/lexer/test_lexer.py",
+    },
+    {
+        "why": "C 的变参尾段 `...` 曾被记为「需引擎侧形态」的缺口（三种配置写法全部证伪）"
+               "——真根因是 lexer 最长匹配缺陷 + token 类型写成 symbol.base.ellipsis；"
+               "去掉配置里的尾段交替后变参原型不再进 AST（且 linter 会误报合法代码）",
+        "file": "grammar/c/01_declarations.toml",
+        "old": """    "@ParamDecl",
+    "(symbol.base.comma,(@ParamDecl|symbol.extend.ellipsis))*",
+""",
+        "new": """    "@ParamDecl",
+    "(symbol.base.comma,@ParamDecl)*",
+""",
+        "test": "tests/languages/c/test_c_declarations.py",
+    },
 ]
 
 
