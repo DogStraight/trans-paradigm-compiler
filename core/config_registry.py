@@ -13,6 +13,7 @@
 Doc: core/config_lifecycle.md
 """
 
+import copy
 import os
 import json
 import re
@@ -1194,6 +1195,16 @@ _install_config_declarations()
 _CONFIG_DECLARATIONS: dict[str, list[tuple[str, str]]] = {}
 """{ "namespace.key": [("module.name", "_var_cfg"), ...], ... }"""
 
+_CONFIG_DEFAULTS: dict[str, Any] = {}
+"""{ "namespace.key": 编译期默认值 }——切语言时"本包未声明的键"要推回它。
+
+⚠ 为什么必须记默认值（2026-09-26 修跨语言串味）：`_push_loaded_config` 原先在
+`KeyError` 时"保留模块当前值"（注释写的是"保留模块默认值"，但代码没推任何东西）——
+而"当前值"可能是**上一个语言**推的。实测症状：先扫 verilog 再 `load_all("grammar/c")`，
+C 包未声明 `linter.style_check` ⇒ 模块级变量仍是 verilog 的（`max_line_width=100`）⇒
+C 源上跑起 verilog 的排版检查，长行报出 `ST003`（跨语言检查规则泄漏，见 `TODO.md`）。
+"""
+
 
 T = TypeVar("T")
 
@@ -1208,9 +1219,22 @@ def declare_cfg(key: str, default: T, module: str = "", var: str = "") -> T:
     按需 import 消费模块（否则该模块的 declare_cfg 注册晚于 _push_loaded_config，
     会一直持有默认值）。
 
+    ⚠ 编译期默认值一并登记（`_CONFIG_DEFAULTS`）：切语言时，**该语言包未声明的 key**
+    要推回默认值——否则上一个语言推的值会留着（跨语言串味，见 `_CONFIG_DEFAULTS` 头注）。
+    同一 key 的多处声明**默认值必须一致**，否则"推回默认"推哪个都错 → fail-fast。
+
     用法:
         _xxx_cfg = declare_cfg("namespace.key", {default}, __name__, "_xxx_cfg")
     """
+    if key in _CONFIG_DEFAULTS:
+        if _CONFIG_DEFAULTS[key] != default:
+            raise ConfigError(
+                f"[config] {key}: 多处 declare_cfg 的编译期默认值不一致"
+                f"（{_CONFIG_DEFAULTS[key]!r} vs {default!r}，后者来自 {module or '?'}）"
+                f"——切语言时要推回默认，必须只有一份"
+            )
+    else:
+        _CONFIG_DEFAULTS[key] = copy.deepcopy(default)
     if module and var:
         _CONFIG_DECLARATIONS.setdefault(key, []).append((module, var))
     if ConfigRegistry._resolved:
@@ -1235,7 +1259,13 @@ def config_refs_for(prefix: str) -> dict[str, str]:
 
 
 def _push_loaded_config() -> None:
-    """load_all() 完成后调用，将真实配置值推入各模块的模块级变量。"""
+    """load_all() 完成后调用，将真实配置值推入各模块的模块级变量。
+
+    ⚠ **未声明的 key 推编译期默认**（不是"保留当前值"）：当前值可能是**上一个语言**推的，
+    留着就是跨语言串味（实测：verilog 的 `linter.style_check` 落到 C 档上，长行报 `ST003`）。
+    这同时让"配置 = 该语言包的声明面 + 其余用编译期默认"这条语义在**模块级消费方**上也成立
+    （`resolve` 侧早已是自包含解析，此处补齐全局推送路径）。
+    """
     import sys
 
     for key, entries in _CONFIG_DECLARATIONS.items():
@@ -1245,8 +1275,10 @@ def _push_loaded_config() -> None:
                 continue
             try:
                 val = config.get(key)
-                setattr(mod, var_name, val)
             except (KeyError, RuntimeError):
-                # 声明制契约：语言包未声明该键（KeyError）→ 保留模块默认值；
-                # 未 load_all（RuntimeError）同理。两者都是"无配置"的正常情形。
-                pass
+                # 语言包未声明该键（KeyError）→ 推回编译期默认；未 load_all（RuntimeError）
+                # 同理（此时"默认"也是正确答案）。深拷贝：默认值不该被消费方就地改坏。
+                if key in _CONFIG_DEFAULTS:
+                    setattr(mod, var_name, copy.deepcopy(_CONFIG_DEFAULTS[key]))
+                continue
+            setattr(mod, var_name, val)

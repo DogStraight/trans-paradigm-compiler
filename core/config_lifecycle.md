@@ -163,6 +163,36 @@ resolved = ConfigRegistry.resolve("grammar/c4", plugins_dir="grammar/c4/plugins"
 
 **消费方**：`Lexer.__init__`（rules_dir 分支）一次 resolve 取 token/宏/数字形态。
 
+### 1b. 模块级消费方的语言作用域：未声明的 key **推回编译期默认**（2026-09-26）
+
+不是所有消费方都能走 `resolve`（历史原因：不少部件的配置是**模块级变量**，由
+`_push_loaded_config` 在 `load_all` 后推送）。这条路原先有一个语言作用域漏洞：
+
+```
+语言包未声明该 key → 旧行为："什么都不推" ⇒ 模块变量留着**上一个语言**推的值
+                    新行为：推回 declare_cfg 登记的**编译期默认**
+```
+
+**实测症状（修前）**：同一进程里先扫 verilog，再 `load_all("grammar/c")` 扫 C 源——
+C 包不声明 `linter.style_check`，于是模块变量仍是 verilog 的配置（`max_line_width=100`）
+⇒ **C 源上跑起 verilog 的排版检查**，长行报 `ST003`。这就是"跨语言检查规则泄漏"
+（`TODO.md` 旧项）；同一机制也影响 `linter.macro_hygiene` 与其它只被部分语言包声明的 key。
+
+**修法**：`declare_cfg` 登记编译期默认（`_CONFIG_DEFAULTS`，深拷贝保存/推送），
+`_push_loaded_config` 在 `KeyError`/`RuntimeError` 分支改为推默认值。语义因此统一成：
+
+> **配置值 = 该语言包声明的 key（+ 用户/CLI 覆盖）；未声明的 key = 编译期默认。**
+
+**纪律**：同一 key 的多处 `declare_cfg` **默认值必须一致**（否则"推回默认"推哪个都错）
+——不一致直接 fail-fast（`ConfigError`）。判据：
+`tests/engine/core/test_config_loading.py::test_switching_language_resets_undeclared_config_keys`
+（verilog → C 后配置回默认）与
+`tests/languages/c/test_c_corpus_impl.py::test_cross_language_no_check_rule_leak`
+（症状层：先 verilog 后 C，长行不得报 `ST003`）。
+
+⚠ **仍建议**：多语言共用进程里的**新**消费方优先走 `resolve`（自包含、无全局状态）；
+模块级推送这条路现在语义正确，但仍是"最后一次 load_all 的语言"作用域。
+
 ### 2. 配置来源追踪（_sources / resolve_with_sources）
 
 `load_all` 后 `ConfigRegistry._sources` 记录每个 key 的实际来源：

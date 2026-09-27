@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **跨语言配置串味：切语言时"本包未声明的 key"没有推回默认 ⇒ 上一个语言的配置留在模块级
+  变量里**（`core/config_registry.py::_push_loaded_config`）。实测症状 = `TODO.md` 那条
+  「跨语言检查规则泄漏」：同一进程里先扫 verilog、再 `load_all("grammar/c")` 扫 C 源，
+  C 包**不声明** `linter.style_check`，于是模块变量仍是 verilog 的（`max_line_width=100`）
+  ⇒ **C 源上跑起 verilog 的排版检查**，>100 列的行报出 `ST003`（此前只用白名单挡着，
+  且"干净进程 vs 先跑过 verilog"两种顺序结果不同）。
+  - **真因（本轮定位，与旧记载不同）**：泄漏不在 linter 自身（每次 `scan` 都新建
+    `CheckerRegistry`），而在**模块级 `declare_cfg` 变量**：`_push_loaded_config` 在
+    `KeyError` 分支"什么都不推"，注释写的是"保留模块默认值"，但代码没推任何东西——
+    而变量当前值可能是**上一个语言**推的。同一机制也影响 `linter.macro_hygiene`
+    与其它只被部分语言包声明的 key。
+  - **修法**：`declare_cfg` 登记**编译期默认**（`_CONFIG_DEFAULTS`，深拷贝保存/推送），
+    `_push_loaded_config` 在 `KeyError`/`RuntimeError` 分支改为**推回默认**。语义由此统一：
+    **配置值 = 该语言包声明的 key（+ 用户/CLI 覆盖）；未声明的 key = 编译期默认。**
+    同一 key 的多处 `declare_cfg` 默认值不一致 → **fail-fast**（"推回默认"必须唯一）。
+  - **判据**：`tests/engine/core/test_config_loading.py` 新增 2 例（verilog→C 后
+    `_style_check_cfg`/`_macro_hygiene_cfg` 回默认；默认值不一致 fail-fast）+
+    `tests/languages/c/test_c_corpus_impl.py` 新增 `test_cross_language_no_check_rule_leak`
+    （症状层：先 verilog 后 C，长行不得报 `ST003`），并把旧白名单
+    `others <= {"ST003"}` **收紧为"无任何非 phase 码"**。
+  - **文档**：`core/config_lifecycle.md` 新增 §1b（语义 / 真因 / 实测症状 / 判据 +
+    "多语言共进程的新消费方仍优先走 `resolve`"的建议）。
+  - ⚠ **同轮关闭两项旧 TODO**（判据达成，完成即删）：① 上面这条泄漏项（已修 + 判据）；
+    ② 「隔离测试偶发红」——判据"整仓并行 N=10 次零红"**达成**：10/10 全绿，
+    每次 **3045 passed / 7 skipped**（历史 1/3 红未再复现，N=10 按判据结案）。
+  - ⚠ **另两处"全新检出处"判据复核通过**并据此删除两条已完成 TODO：单测依赖 gitignore
+    生成物（`git worktree add` 到空目录后直接 `pytest tests -q` → **3034 passed /
+    18 skipped / 0 failed**；产物缺失时相关用例**跳过**而非失败）、隔离工具 nodeid 归一
+    （`_normalize_id` 已接 `ValueError`、始终保留 `::用例名`、路径压 posix；自测 20/20 绿）。
+
 ### Added
 
 - **引擎新能力：配置声明级合并语义 `merge = "by-name"`——插件可给核心配置"补字段"**；

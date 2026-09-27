@@ -19,15 +19,6 @@
 
 ### WS1 C 语言包
 
-- [ ] **跨语言检查规则泄漏（真实语料工作发现，可复现）**：同一进程里**先跑过
-      verilog linter**，再 `load_language("grammar/c")` 扫 C 源，结果多出 **1 条
-      `ST003`**（verilog 检查规则残留；C 包自身无 `rules/`）。症状 = **检查结果依赖
-      测试顺序**，与 `tests/README.md` 记录的"多语言同进程串味"同类，属 `core/global_state`
-      / 语言作用域面。复现：先 `LinterScanner(rules_dir="grammar/verilog").scan("module m(); endmodule")`
-      再切 C 扫 `tests/languages/c/samples/ring_buffer.c`。判据：同一份 C 源在"先跑过
-      verilog"与"干净进程"下诊断集合相同。回归守：
-      `tests/languages/c/test_c_corpus_impl.py::test_linter_reports_no_false_positives`
-      （非 phase 码白名单目前只允许 ST003，修复后应改为"无非 phase 码"）。
 - [ ] **C 块内诊断粒度粗（每块只报一条，且报文指错位置）**：块内多个错误只报一条
       （实测 `void f(void) { a + ; b + ; }` → 1 条 `expected 'bracket.r_curly_bracket',
       got 'id'`——指向 `b`、说"期望 `}`"，**真错在 `a + ;`**；c4 同位样本 → 2 条精确
@@ -343,15 +334,6 @@
 - 与精化搬迁无关（P2 只是撞上了它并被它挡住，故当时改用可解析形态写夹具）。
 
 ## 测试基础设施
-
-- [ ] **`test_check_test_isolation.py::test_compare_reports_isolated_only_failure` 在整仓
-      并行满负载下偶发红**（2026-09-26 实测，本轮 3 次整仓 `pytest tests -q -n auto` 中出现
-      1 次）：症状 = 工具内层 pytest 报 `Interrupted: 1 error during collection`，
-      工具因此返回 **2**（期望 1）→ 断言失败。**单跑该文件、以及 `tests/policy` 整目录跑
-      均连绿**（各 2 次），故判定为**负载相关**而非本次改动引入（同一提交前后各一次整仓
-      跑：一次红一次绿）。待归因候选：满负载下内层 pytest 收集超时（子进程启动/导入竞争）、
-      或临时探针目录与并发子进程的交互。判据：整仓并行跑 N=10 次零红（或给出真因）。
-      ⚠ 别用"重跑绿了就没事"收尾——**门禁偶发红与门禁失效同样危险**（会训练出"重跑"习惯）。
 
 > ⚠ **0.1.3 首次推送的阻塞项 + 完整 CI 排练结果**（作者 2026-09-26 定档：0.1.3 不单独
 > 推送，计划 **11 月直接推送并打 `v0.1.3` 标**，**打标前必须 CI 全绿**）。`origin/dev`

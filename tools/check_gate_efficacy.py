@@ -342,6 +342,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": 'number = { file = "_number_c23.toml", section = "number" }\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
+    {
+        "why": "跨语言配置串味的修点：`_push_loaded_config` 对「本包未声明的 key」必须**推回"
+               "编译期默认**（旧实现什么都不推 ⇒ 留着上一个语言的值 ⇒ C 源上跑 verilog 的"
+               "排版检查、长行报 ST003）。把默认推送去掉 ⇒ 两条新判据必红",
+        "file": "core/config_registry.py",
+        "old": "                if key in _CONFIG_DEFAULTS:\n                    setattr(mod, var_name, copy.deepcopy(_CONFIG_DEFAULTS[key]))\n                continue\n",
+        "new": "                continue\n",
+        "test": "tests/engine/core/test_config_loading.py",
+    },
 ]
 
 

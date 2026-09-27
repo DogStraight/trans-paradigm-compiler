@@ -95,13 +95,42 @@ class TestImplementationSample:
         `_container_end` / `_advance_match` 文档），故按缺口档纪律换成"零诊断"
         断言——它同时是那次修复的**回归守**。
 
-        非 `phase-*` 码白名单仍保留：`ST003` 是**跨语言状态泄漏**的产物（同一进程里
-        先跑过 verilog linter 时残留，C 包自身没有 `rules/`，见 `TODO.md`「跨语言检查
-        规则泄漏」），与 C 语法无关；那条缺口闭环后应改为"无非 phase 码"。
+        ⚠ 原先还留着 `ST003` 白名单（跨语言状态泄漏的产物）。**2026-09-26 该泄漏已修**
+        （`_push_loaded_config` 对"本包未声明的 key"推回编译期默认——旧实现留着**上一个
+        语言**推的值，于是 C 源上跑起 verilog 的排版检查），白名单随之收紧为"无任何
+        非 `phase-*` 码"；跨语言的直接判据见
+        `test_cross_language_no_check_rule_leak`。
         """
         errs = _lint(_source(), c_linter)
         phase = [e for e in errs if e.code.startswith("phase-")]
-        others = {e.code for e in errs if not e.code.startswith("phase-")}
         assert not phase, f"合法实现文件上出现结构诊断（误报）：{[e.message for e in phase]}"
-        assert others <= {"ST003"}, f"出现预期外的诊断码（非跨语言泄漏）：{others}"
+        others = {e.code for e in errs if not e.code.startswith("phase-")}
+        assert not others, f"出现非结构诊断（跨语言泄漏？）：{others}"
+
+    def test_cross_language_no_check_rule_leak(self):
+        """**先跑过 verilog linter** 再扫 C 源，诊断集合与干净进程一致（= 空）。
+
+        这条是 `TODO.md`「跨语言检查规则泄漏」给出的判据，也是那个修复的回归守：
+        泄漏的机制不在 linter 自身（每次 `scan` 都新建 `CheckerRegistry`），而在
+        **模块级 `declare_cfg` 变量**——C 包不声明 `linter.style_check` /
+        `linter.macro_hygiene`，旧实现切语言时"什么都不推"，于是留着 verilog 的配置。
+        故断言分两层：**配置层**（切到 C 后回到默认 `{}`）+ **症状层**（长行也不报 ST003）。
+        """
+        from core.define import GrammarRulesRegister
+        from linter import scanner as sc
+        from linter.scanner import LinterScanner
+
+        verilog_plugins = os.path.join("grammar", "verilog", "plugins")
+        LinterScanner(
+            rules_dir="grammar/verilog",
+            register=GrammarRulesRegister(),
+            ext_dirs=[verilog_plugins],
+        ).scan("module m();\nendmodule\n")
+        assert sc._style_check_cfg.get("enabled") is True, "前置：verilog 档应启用排版检查"
+
+        c_linter = LinterScanner(rules_dir="grammar/c", register=GrammarRulesRegister())
+        assert sc._style_check_cfg == {}, "切到 C 后排版检查配置应回到默认（未声明）"
+        long_line = "int x = 0; /* " + "y" * 110 + " */\n"
+        assert [d.code for d in c_linter.scan(long_line)] == []
+        assert _lint(_source(), c_linter) == []
 

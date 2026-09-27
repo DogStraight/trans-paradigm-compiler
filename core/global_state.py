@@ -153,6 +153,7 @@ COVERED_ELSEWHERE: dict[str, str] = {
     "core.plugin_loader._transform_slots": "快照键集合（只去新增）",
     "core.plugin_loader._PRIMITIVE_ORDER": "快照列表还原",
     "core.config_registry._CONFIG_DECLARATIONS": "declare_cfg 声明表（snapshot 遍历它覆盖 module_vars；只增）",
+    "core.config_registry._CONFIG_DEFAULTS": "declare_cfg 编译期默认表（import 期登记、只增；切语言时推回默认，见 _push_loaded_config）",
 }
 
 # ── 登记表 6/6：CONSTANT——字面量常量，永不改写（若改写即缺陷）──

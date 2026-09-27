@@ -7,6 +7,8 @@
     - 可选文件缺失 → 容忍（合法的可选缺失）
 """
 
+import os
+
 import pytest
 
 from core.errors import ConfigError
@@ -314,3 +316,47 @@ def test_user_config_grammar_wrong_type_fails_fast(tmp_path, monkeypatch):
     _write_user_config(tmp_path, '{"grammar": [1]}', monkeypatch)
     with pytest.raises(ConfigError, match="grammar 段应为字符串或对象"):
         _find_grammar_tpc_toml()
+
+
+# ── 模块级 declare_cfg 的语言作用域：切语言时未声明的键**推回编译期默认** ─────────
+# 2026-09-26 修：此前 `_push_loaded_config` 在 `KeyError`（本包未声明）时"什么都不推"，
+# 于是模块变量留着**上一个语言**推的值 ⇒ 跨语言串味。实测症状：先扫 verilog 再切 C，
+# C 源（无 `rules/`，也不声明 `linter.style_check`）上跑起 verilog 的排版检查，
+# 长行报 `ST003`（`TODO.md`「跨语言检查规则泄漏」）。
+
+
+def test_switching_language_resets_undeclared_config_keys():
+    """verilog 声明 `linter.style_check`、C 不声明 ⇒ 切到 C 后必须回到默认（`{}`）。
+
+    判据 = **同一份源在"先跑过别的语言"与"干净进程"下配置值相同**——这正是跨语言
+    串味的可证伪判据（旧实现下第二步仍是 verilog 的值）。
+    """
+    from linter import scanner as sc
+
+    root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
+
+    def _load(rel: str) -> None:
+        pack = os.path.join(root, rel)
+        ConfigRegistry.load_language(rel, plugins_dir=os.path.join(pack, "plugins"))
+
+    _load(os.path.join("grammar", "verilog"))
+    assert sc._style_check_cfg.get("enabled") is True, sc._style_check_cfg
+
+    _load(os.path.join("grammar", "c"))
+    assert sc._style_check_cfg == {}, sc._style_check_cfg
+    assert sc._macro_hygiene_cfg == {}, sc._macro_hygiene_cfg
+
+
+def test_declare_cfg_defaults_must_agree():
+    """同一 key 的多处 `declare_cfg` 默认值不一致 → fail-fast。
+
+    切语言要"推回默认"，故默认值必须唯一——两处不同时推哪个都错，只能报错。
+    """
+    from core import config_registry as cr
+
+    key = "t.mismatch_defaults"
+    cr.declare_cfg(key, {"a": 1}, "tests.fake_a", "_v_a")
+    with pytest.raises(ConfigError, match="编译期默认值不一致"):
+        cr.declare_cfg(key, {"a": 2}, "tests.fake_b", "_v_b")
