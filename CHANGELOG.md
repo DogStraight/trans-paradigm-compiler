@@ -57,9 +57,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   （typedef 名歧义，本包按既定分层宽进、真伪由语义层判），原先"报错"靠的正是上面第 1 条
   缺陷制造的假报。
 
-- **新增已知边界（记 `TODO.md`，本轮未动）**：C 的 `CompoundStmt` 是普通语句而非
-  块规则（c4 的同位规则 `BlockStmt` 是块规则），故块体没有独立语句节点、**块内多个
-  错误只报一条**（实测 `void f(void) { a + ; b + ; }` → 1 条，c4 同位样本 → 2 条）。
+- **新增已知边界（记 `TODO.md`，本轮未动）**：C 的块内诊断粒度粗——块内多个错误只报
+  一条，且报文位置被后续元素带偏（实测 `void f(void) { a + ; b + ; }` → 1 条
+  `expected 'bracket.r_curly_bracket', got 'id'`，指着 `b` 说"期望 `}`"，真错在
+  `a + ;`；c4 同位样本 → 2 条精确诊断）。**两条候选修法都已实测过代价**：包侧把
+  `CompoundStmt` 改成块规则会让块体语句改走引擎的规则选择器序（C 包里 `Declaration`
+  在 `ExprStmt` 之前）⇒ `void f(void) { x; }` 的体内语句从 `ExprStmt` 变成
+  `Declaration`，推翻本包刻意选定并锁进测试的消歧；引擎侧改 `_match_repeat` 的错误
+  恢复则改变所有语言在坏输入上的诊断面。它不影响"合法代码零误报"（本轮已闭环），
+  只是坏输入的诊断质量，故按"先落档后动手"记档待专用一轮。
 
 ### Added
 

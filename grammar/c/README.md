@@ -121,11 +121,16 @@ grammar/c/
    诊断**——补能力前后跑 `tools/c_acceptance.py` 对照，别只看测试是否绿。
 6. **缺口先落档再闭环**：本包词法面三条"配置表达不了"的缺口先记档（各写明为什么
    现机制表达不了），随后各补一个声明键全部闭环——记档不是拖延，是防止下一个包重踩。
-7. **块语句要声明成块规则**（`is_block = true`），别写成"普通语句 + `@Stmt*`"：
-   后者解析/渲染都成立，但 linter 拿不到块体（`_discover_block` / `_block_body`
-   只对块规则生效）⇒ **块内多个错误只报一条**。同位样板见 c4 的 `BlockStmt`
-   （production 只留 `{`/`}`，body 由 `parse_block_body` 循环产出，renderer 用
-   `role = "flatten"`）。本包当前正是反例（记在 `TODO.md`，待改）。
+7. **块语句"建成块规则"还是"建成普通语句"，先看包有没有自己的语句序**：c4 的
+   `BlockStmt` 是块规则（`is_block = true`，body 由 `parse_block_body` 循环产出，
+   renderer 用 `role = "flatten"`），linter 因而拿到块体（`_discover_block` /
+   `_block_body`），块内每条坏语句各报一条；本包的同位规则 `CompoundStmt` 是普通语句
+   （`@Stmt*` 由父 checker 内联匹配），块内多个错误只报一条。**但改成块规则不是免费
+   的**：块体语句随即改走**引擎的规则选择器序**（`RuleSelector` 按规则装载序排候选），
+   而本包刻意用 `Stmt` 的有序交替表达"`@ExprStmt` 先于 `@Declaration`"——实测改成块
+   规则后 `void f(void) { x; }` 的体内语句会从 `ExprStmt` 变成 `Declaration`。
+   故这条取舍的先决条件是"包能声明块体语句的候选顺序"（包侧无此表达面）。见
+   `TODO.md`「C 块内诊断粒度粗」。
 
 ## 参照
 

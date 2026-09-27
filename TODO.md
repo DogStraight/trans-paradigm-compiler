@@ -28,16 +28,33 @@
       verilog"与"干净进程"下诊断集合相同。回归守：
       `tests/languages/c/test_c_corpus_impl.py::test_linter_reports_no_false_positives`
       （非 phase 码白名单目前只允许 ST003，修复后应改为"无非 phase 码"）。
-- [ ] **C 的块语句未建模为块规则 → 块内诊断粒度粗（每块 1 条）**：C 的 `CompoundStmt`
-      （`grammar/c/03_statements.toml`）是普通语句（`production = ["{", "@Stmt*", "}"]`），
-      而 c4 的同位规则 `BlockStmt` 是**块规则**（`is_block = true`，body 由
-      `parse_block_body` 循环产出）。后果：C 的块体**没有独立语句节点**，块内多个错误
-      只报一条（实测 `void f(void) { a + ; b + ; }` → 1 条；c4 同位样本 → 2 条），
-      且 linter 的 `_discover_block` / `_block_body` 路径对 C 不生效（括号分支已能转块
-      分支，缺的只是"声明成块规则"）。判据：块内每条坏语句各报一条（与 c4 对齐）。
-      改法 = 按 c4 `BlockStmt` 形态改 `CompoundStmt`（`is_block = true` + production 只留
-      `{`/`}` + renderer `role = "flatten"`），并同步 AST / 渲染 / 测试断言。
-      前置：无——c4 是现成样板，这也是「c4 可否并入 C 包」议题的第一块拼图。
+- [ ] **C 块内诊断粒度粗（每块只报一条，且报文指错位置）**：块内多个错误只报一条
+      （实测 `void f(void) { a + ; b + ; }` → 1 条 `expected 'bracket.r_curly_bracket',
+      got 'id'`——指向 `b`、说"期望 `}`"，**真错在 `a + ;`**；c4 同位样本 → 2 条精确
+      诊断）。成因：`CompoundStmt` 的 `@Stmt*` 由父 checker 内联匹配，而
+      `matcher._match_repeat` 遇重复项出错即 `break`（防级联），于是只留第一条且位置
+      已被后续元素带偏；块体**没有独立语句节点**（`_discover_block` / `_block_body`
+      只对块规则生效）。
+      **两条候选修法，各有真实代价（本轮已实测，勿盲选）**：
+      · **(A) 包侧：按 c4 `BlockStmt` 形态把 `CompoundStmt` 改成块规则**
+        （`is_block = true` + production 只留 `{`/`}` + renderer `role = "flatten"`）——
+        **代价已实测**：块体语句的选择随之从"包的 `Stmt` 有序交替"改走
+        **引擎的规则选择器序**（`RuleSelector` 按 `statement_rule_names` 排序，C 包里
+        `Declaration` 在 `ExprStmt` 之前）⇒ `void f(void) { x; }` 的体内语句从
+        `ExprStmt` 变成 `Declaration`（实测三条：`x;` / `b;` → `Declaration`），
+        **直接推翻本包刻意选定并写进注释、锁进测试的消歧**（见
+        `grammar/c/03_statements.toml` 的 `@Declaration` 必须排在 `@ExprStmt` 之后，
+        与 `tests/languages/c/test_c_statements.py::test_expression_statement_in_body`）。
+        前置因此是**"包可声明块体语句的候选顺序"**：包侧无此表达面，引擎侧也没暴露
+        该开关（`Stmt` 有序交替只作用于 `@Stmt` 引用，块体走 `parse_sentence`）。
+      · **(B) 引擎侧：`_match_repeat` 对重复项出错做语句边界恢复**（记下诊断后跳到
+        下一个 `_stmt_ends` 继续，而不是 `break`）——不动语法、不给包加约束，但会改变
+        **所有语言**在坏输入上的诊断条数与位置，须用 `tests/e2e/eval_lint_accuracy.py`
+        （recall 33/33、类别准确率）+ `eval_diag_baseline.py`（真实语料只许减）+
+        三包 lint 测试锁住，并按 `policy/` 记录新的近似边界。
+      判据（两条共用）：块内每条坏语句各报一条**位置正确**的诊断。
+      现状：**刻意不改**——它不影响"合法代码零误报"（本轮已闭环），只是坏输入的诊断
+      质量；(A) 会换来另一种已知回归，(B) 的影响面值得单独一轮。
 - [ ] **C 包剩余能力面**（词法面已全部闭环；语法面接受 25/28，空洞 3）：
       · **预处理两项**（`#include` / `#define`）= 阶段 4；
       · **变参 `...`**（`int printf(const char *fmt, ...);`）：三种配置写法**均已证伪**
