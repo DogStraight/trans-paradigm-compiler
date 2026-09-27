@@ -65,7 +65,17 @@ CASES: list[tuple[str, str, str]] = [
     ("表达式", "复合字面量", "struct p q = (struct p){1, 2};\n"),
     ("预处理", "#include", "#include <stdio.h>\n"),
     ("预处理", "#define", "#define N 4\n"),
-    ("增量", "_Static_assert（c11 插件）", '_Static_assert(1, "x");\n'),
+    ("增量", "_Static_assert 文件作用域（c11 插件）", '_Static_assert(1, "x");\n'),
+    ("增量", "_Static_assert 块作用域（c11，注入 Stmt 交替）",
+     'void f(void) {\n    _Static_assert(1, "x");\n}\n'),
+    ("增量", "_Alignof（c11，表达式原子）", "int a = _Alignof(int);\n"),
+    ("增量", "_Generic（c11，表达式原子）", "int g = _Generic(x, int: 1, default: 0);\n"),
+    ("增量", "_Noreturn / _Thread_local（c11，说明符位）",
+     "_Noreturn void die(void);\n_Thread_local int tls;\n"),
+    ("增量", "nullptr / true / false（c23，表达式原子）",
+     "int *p = nullptr;\nbool b = true;\n"),
+    ("增量", "bool / typeof / constexpr（c23，说明符位）",
+     "typeof(int) z;\nconstexpr int n = 4;\n"),
 ]
 
 

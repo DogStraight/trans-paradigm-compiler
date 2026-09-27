@@ -1,0 +1,25 @@
+# ============================================================================
+# c23 插件 — `constexpr` 存储类说明符（C23 §6.7.1 storage-class-specifier）
+# ============================================================================
+# C23 把 `constexpr` 加入 `storage-class-specifier`（用于对象：`constexpr int n = 4;`），
+# 与 `typedef/extern/static/_Thread_local/auto/register` **同一层**。
+#
+# 注入目标是核心基线的 `StorageClass`（其 production 是一条裸交替），
+# 与 c11 插件的 `_Thread_local` 同一注入点、同一形态——两个插件各自往同一条交替
+# 加自己那一支（同 target 多次注入由 `_already_injected` 保证幂等）。
+#
+# 语义约束（归语义层，语法层宽进）：§6.7.1 对 `constexpr` 的组合限制（须与
+# `static`/`extern` 之一共现、仅用于对象、须有初始化器）不在语法层判——同 `inline`/
+# `_Noreturn` 的口径。
+
+[ConstexprSpec.parser]
+production = ["keyword.constexpr"]
+
+[ConstexprSpec.parser.node]
+base = "$1"
+
+[ConstexprSpec.inject]
+targets = ["@StorageClass.production[0]"]
+
+[ConstexprSpec.renderer.layout]
+ref = "base"

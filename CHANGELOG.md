@@ -7,6 +7,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 标准增量插件：c11 补 4 项、c23 补 6 项语法面；并更正"这类增量做不了"的旧判断**。
+  接受面 **26/28 → 32/34**（空洞仍只剩预处理两项）。落地方式**全是"声明的注入"**
+  （`[ExtRule.inject] targets = […]`），核心基线文件**一行未动**：
+
+  | 插件 | 新增 | 注入点 |
+  |---|---|---|
+  | c11 | `_Static_assert` **块作用域** | `@Stmt`（此前只支持文件作用域） |
+  | c11 | `_Alignof` / `_Generic` | 两处原子清单（`@PrimaryExpr` / `@PostfixExpr`） |
+  | c11 | `_Noreturn` / `_Thread_local` | `@FuncSpec` / `@StorageClass` |
+  | c23 | `nullptr` / `true`·`false` | 两处原子清单 |
+  | c23 | `bool` / `typeof`·`typeof_unqual` | `@SimpleType`（最窄注入点：**一次注入，声明/成员/参数/类型名四处生效**） |
+  | c23 | `constexpr` | `@StorageClass` |
+
+  - **旧判断作废（本轮实测）**：c11/c23 插件头注与 ROADMAP 都写着这些增量"要往既有规则
+    的交替里塞分支，而现役 `grammar_inject` 只能做 production 的字符串子串补丁（且软失败），
+    所以做不了，需引擎补『改』路径"。**两条都不成立**：`inject_productions` 的直接注入
+    就是**树层** `insert_choice_candidate`（把 `@ExtRule` 作为候选并进目标 production 的
+    交替），且 fail-fast——机制早在，缺的只是插件没写那几行声明。ROADMAP 该条已按实测
+    收窄为"**仍缺的是『改/删一支』**（`inject_replace_rule` 仍是软失败的子串补丁），
+    触发条件 = 出现真正需要改既有分支的标准演进"。
+  - **两条形态坑（都被 fail-fast 当场拦下，已写进包内注释与 README）**：① `production`
+    是**一条产生式的元素序列**（列表长度 = slot 数、`$N` 按元素下标），不是"多条备选
+    产生式"——备选要在**同一元素内**用 `|`；② 裸交替与逗号同现时 `|` **先结合**
+    （`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）。
+  - **判据**：`tests/languages/c/test_c_increment_plugin.py`（13 → 45 例：含
+    "原候选一支不少且序不变""注入来源可追（TOML 里声明，核心文件不含增量名）"
+    "原子增量必须注进**两处**原子清单"）+ 新 `tests/languages/c/test_c23_increment_plugin.py`
+    （45 例：13 条构造 × 解析/渲染 token 序列/幂等/lint + 注入点 + 档位判别）；
+    `test_c_standard_tiers.py` 增"**块作用域**随档位变"（基线档当普通调用、c11 档进插件节点）；
+    `tools/c_acceptance.py` 增 6 条增量用例（28 → 34 条）。
+  - **顺带更正的过期文档**：`grammar/c/README.md`（接受面数字、标准增量清单、未做表改为
+    真正剩余项）、c11 `_token_ext.toml`/`tpc.toml` 与 c23 `tpc.toml` 头注、ROADMAP
+    标准增量条与注入条、缺口档「增量插件形态实测」第 3 点（`[plugins] enabled` **是**
+    运行时启用清单——2026-09-25 曾记为"打包面装饰"，实测更正）。
+  - 另记一条**渲染偏差**（本轮实测，非本次改动引入）：类型名里的指针星号与类型词之间
+    不留空格（`sizeof(char *)` → `sizeof(char*)`、`(char *)q` → `(char*)q`）——
+    `CastTypeName` 布局的旧注释写的与实测不符，已更正；纯排版差异（token 序列不变），
+    记入缺口档渲染现状表 #7。
+
+### Fixed
+
 - **fuzz 回馈链路补齐后两步：自动最小化 + 自动沉淀**（作者 2026-09-26 指出"链路只差这两步"）。
   此前这两步是 `tests/fuzz/README.md`「迭代指南」里的**人工动作**（打开 findings → 手缩
   → 判定 → 修 → 沉淀 edge 回归）。现在四环闭环：

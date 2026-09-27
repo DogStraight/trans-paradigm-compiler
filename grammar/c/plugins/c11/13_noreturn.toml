@@ -1,0 +1,26 @@
+# ============================================================================
+# c11 插件 — `_Noreturn` 函数说明符（C11 §6.7.4 function-specifier）
+# ============================================================================
+# 标准形态：`function-specifier: inline | _Noreturn`——**与 `inline` 同一层**。
+# 故注入目标是核心基线的 `FuncSpec`（它的 production 当前只有 `keyword.inline`）：
+#   `insert_choice_candidate` 把 token 形态包成 `choice[@NoreturnSpec, keyword.inline]`，
+#   再由**传播**覆盖所有引用 `@FuncSpec` 的位点（Declaration / FuncDef / SpecRest），
+#   于是 `_Noreturn void die(void);` 与 `static _Noreturn void die(void);` 都成立。
+#
+# ⚠ 这是"往既有交替里**加一支**"而非"改一支"：核心基线文件一行未动（判据见
+#   `tests/languages/c/test_c_increment_plugin.py::TestIncrementAddsCandidateNotRewrites`）。
+#
+# 语义约束（归语义层，语法层宽进）：§6.7.4p2 要求 `_Noreturn` 只能出现在函数声明里——
+# 与 `inline` 同一处理，核心基线已按此宽进（见其 FuncSpec 头注）。
+
+[NoreturnSpec.parser]
+production = ["keyword._Noreturn"]
+
+[NoreturnSpec.parser.node]
+base = "$1"
+
+[NoreturnSpec.inject]
+targets = ["@FuncSpec.production[0]"]
+
+[NoreturnSpec.renderer.layout]
+ref = "base"

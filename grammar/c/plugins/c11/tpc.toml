@@ -17,4 +17,10 @@
 token_ext = { file = "_token_ext.toml", required = true }
 
 [grammar]
-files = ["10_static_assert.toml"]
+files = [
+    "10_static_assert.toml",
+    "11_alignof.toml",
+    "12_generic.toml",
+    "13_noreturn.toml",
+    "14_thread_local.toml",
+]

@@ -1,17 +1,28 @@
 # ============================================================================
 # c11 插件 — 静态断言 `_Static_assert ( 常量表达式 , 字面量 ) ;`（C11 §6.7.4）
 # ============================================================================
-# 文件作用域与块作用域均合法。标 `is_statement = true`：文件作用域走引擎的全局语句
-# 发现（按 is_statement + 首 token），**不依赖核心基线的 `Stmt` 选择器**——
-# 这是刻意的：增量插件不改核心规则文件（否则"增量"就变成"改基座"）。
+# 文件作用域与块作用域均合法。**两处都要，缺一档就有一半的合法代码进不来**：
+#   · 文件作用域：`is_statement = true` → 引擎的全局语句发现直接认它；
+#   · 块作用域：核心 `Stmt` 选择器里得有这一支 → 用**结构化注入**声明
+#     （`[StaticAssertDecl.inject] targets = ["@Stmt"]`），插件不必改核心规则文件。
+# ⚠ 旧注释说"块作用域需要在核心 `Stmt` 里加分支，属跨文件改动，留待注入机制补『改』
+#   路径"——**该判断是错的**（2026-09-26 实测）：现役 `inject_productions` 的**直接注入**
+#   就是把 `@ExtRule` 作为候选并进目标规则 production 的树
+#   （`insert_choice_candidate`），正是"往既有交替里加一支"；缺的只是本插件没写这行。
+#   实测（副本对照）：加了它，`void f(void) { _Static_assert(1, "x"); }` 解析出
+#   FuncDef + 块内 StaticAssertDecl、linter 0 诊断、渲染逐字还原；不加则整条函数解析
+#   失败（空 AST）。
 #
-# ⚠ 已知边界（记在此防"看起来支持"）：
-#   · 仅文件作用域可用（块作用域需要在核心 `Stmt` 选择器里加分支，属跨文件改动，
-#     留待"注入机制补『改』路径"立项后处理——见 ROADMAP 该条）；
+# ⚠ 剩余边界（记在此防"看起来支持"）：
 #   · 消息必须是字符串字面量（C11 允许任意字符串字面量拼接，此处不处理）。
 
 [StaticAssertDecl]
 is_statement = true
+
+# 注入核心 `Stmt` 的候选交替（`Stmt.production[0]` 是 choice → 插 alternatives 首），
+# 并**传播**到所有引用 `@Stmt` 的规则（if/while/for/switch/标号/复合语句的 body 位）。
+[StaticAssertDecl.inject]
+targets = ["@Stmt"]
 
 [StaticAssertDecl.parser]
 production = [

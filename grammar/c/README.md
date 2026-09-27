@@ -9,8 +9,9 @@
 
 ## 现状（0.1.3 交付面）
 
-**接受面：`python tools/c_acceptance.py` → 接受 26 / 空洞 2（共 28 条）**：
+**接受面：`python tools/c_acceptance.py` → 接受 32 / 空洞 2（共 34 条）**：
 `#include` / `#define`（预处理属阶段 4，单独立项）。
+（空洞数 2026-09-26 从 3 降到 2：变参 `...` 落地，见下「标准增量」前的说明。）
 
 已落地：
 
@@ -28,7 +29,17 @@
   **逗号运算符**（`CommaExpr` + `FullExpr` 选择器）、一元 / 后缀、
   **链式后缀**（`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)`）、`sizeof` 两形态、
   **强制转换** `(T)x` 与**复合字面量** `(T){…}`（关键字起头的类型名）。
-- **标准增量插件**：`c11` / `c17` / `c23` 三档齐备（见下「标准档位」）。
+- **标准增量插件**：`c11` / `c17` / `c23` 三档齐备（见下「标准档位」）。语法增量逐项：
+  · **c11**：`_Static_assert`（**文件与块两处作用域**）、`_Alignof`、`_Generic`、
+    `_Noreturn`、`_Thread_local`；
+  · **c17**：无新语法（缺陷修正版，只表达包含关系）；
+  · **c23**：`static_assert`（小写关键字化）、`nullptr`、`true`/`false`、`bool`、
+    `typeof`/`typeof_unqual`、`constexpr`。
+  ⚠ **落地方式全是"声明的注入"**（`[ExtRule.inject] targets = […]`，引擎侧
+  `inject_productions` 的直接注入 = 树层 `insert_choice_candidate`）：插件往核心基线的
+  **既有交替里加一支**，核心文件一行不动。此前插件注释把这类增量记为"做不了、
+  需引擎补『改』路径"——**那是错的**（机制早就有了，缺的是声明），见
+  `plugins/c23/tpc.toml` 的历史更正段。
 
 **linter**：三份样本（`ring_buffer.h` / `ring_buffer.c` / `edge_comments.c`）上**零诊断**
 （2026-09-26 实测；此前合法代码误报 14 / 7 / 2 条，成因与修点在
@@ -45,7 +56,10 @@
 | 预处理（`#include` / `#define` / `#if` / `#` / `##` / 变参宏） | 阶段 4，单独立项（引擎前置见 ROADMAP「注入机制补『改』路径」） |
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
-| VLA、`_Alignof`、`_Generic` 等 | 见缺口档接受域清单逐条标注 |
+| `_Alignas` / `_Atomic`（c11）、`[[属性]]`（c23） | 说明符位设计（"属性可出现在多处"的位点 + linter 语句区间）——独立一小项 |
+| `alignas`/`alignof`/`thread_local`（c23 无下划线拼写） | 与 c11 的 `_` 版**同构造异拼写**：跨插件引用 token 还是 c23 侧各写一条同形规则，需先定包内约定 |
+| `_BitInt` / `_Decimal32/64/128`（c23） | 形态同 `bool` 但需先定宽度参数与十进制浮点接受域 |
+| VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
 
 ⚠ **typedef 歧义的实际边界（2026-09-26 实测，判代价用）**：C 的 typedef 名与普通
@@ -77,9 +91,11 @@ grammar/c/
 ├── 03_statements.toml       # 语句族与控制流（整表达式位点引 @FullExpr）
 ├── 04_comments.toml         # Comment 规则（渲染保真需要它是真节点）
 └── plugins/
-    ├── c11/                 # _Static_assert + C11 新关键字词法扩展
+    ├── c11/                 # _Static_assert（含块作用域注入）+ _Alignof / _Generic /
+    │                        #   _Noreturn / _Thread_local + C11 新关键字词法扩展
     ├── c17/                 # 无语法文件，只声明 requires = ["c11"]（缺陷修正版）
-    └── c23/                 # 小写 static_assert + C23 新关键字词法扩展（requires c17）
+    └── c23/                 # static_assert / nullptr / true·false / bool / typeof /
+                             #   constexpr + C23 新关键字词法扩展（requires c17）
 ```
 
 ## 标准档位：启用组合 = 等效某个标准
@@ -94,10 +110,20 @@ grammar/c/
   **尚未落地**——按逐处清单实施后档位未按预期切换（两处缓存键是静默失效点），
   未经验证的改动已全部回退；逐处清单与陷阱见 `TODO.md`。三档对照测试
   （`tests/languages/c/test_c_standard_tiers.py`）在 pack 副本上成立。
-- **需要"改"核心规则的那类增量未做**（`typeof` / `constexpr` / `[[属性]]` /
-  `nullptr`）：它们要往既有规则的交替里塞分支，而现役 `grammar_inject` 只做
-  production 的字符串子串补丁（且软失败）——具体待办见 ROADMAP
-  「注入机制补『改』路径」。原因写在 `plugins/c23/tpc.toml` 头注。
+- **"加标准"= 声明式注入，不改核心文件**：各插件用
+  `[ExtRule.inject] targets = ["@核心规则.production[N]"]` 往既有交替里**加一支**
+  （c11：`_Static_assert`→`Stmt`、`_Alignof`/`_Generic`→两处原子清单、
+  `_Noreturn`→`FuncSpec`、`_Thread_local`→`StorageClass`；c23：`nullptr`/`true`/`false`
+  →原子清单、`bool`/`typeof`→`SimpleType`、`constexpr`→`StorageClass`）。
+  注入点的选择原则：**挑最窄的那条规则**——`SimpleType` 被声明/成员/参数/类型名四处引用，
+  一次注入四处生效。判据守：
+  `tests/languages/c/test_c_increment_plugin.py`（"原候选一支不少、序不变、来源可追"）+
+  `test_c23_increment_plugin.py`。
+  ⚠ 两条形态坑（都被 fail-fast 拦下，写在这防重踩）：① `production` 是**一条产生式的
+  元素序列**（列表长度 = slot 数），备选要在**同一元素内**用 `|`；② 裸交替与逗号同现时
+  `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）。
+- **仍未落地的标准增量**（各自前置见「未做」表）：`_Alignas`/`_Atomic`/`[[属性]]`、
+  c23 无下划线拼写、`_BitInt`/`_Decimal*`。
 
 ## 渲染保真（原文打印）
 

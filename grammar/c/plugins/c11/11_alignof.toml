@@ -1,0 +1,31 @@
+# ============================================================================
+# c11 插件 — `_Alignof ( 类型名 )`（C11 §6.5.3.4，unary-expression 的一支）
+# ============================================================================
+# 形态与核心基线的 `SizeofTypeExpr` **同构**（`sizeof` 与 `_Alignof` 在 C11 里是
+# 同一层级的一元运算符，操作数都是类型名）——故照它写，消歧口径也一样：
+#   · `is_atom = true`：原子规则内部含 `@TypeName`（经 `@TypeSpecifier`），与
+#     `Expression` 成环，环只在原子规则里被 pratt 截断（同 ParenthesizedExpr/SizeofExpr）；
+#   · **注入原子清单**：核心基线的原子清单写在**两处**（`PrimaryExpr` 与
+#     `PostfixExpr` 的 head，见 `grammar/c/00_expressions.toml` 头注），故两处都要注入
+#     ——只注一处会出现"`_Alignof(int)` 能当表达式、却不能当后缀链的头部"这类半通形态。
+#
+# ⚠ C23 的 `alignof`（无下划线写法）**不在本插件**：它是同一构造的另一种拼写，
+#   归 c23 插件（同一规则形态、换 token），与 `static_assert`/`_Static_assert` 同处理。
+
+[AlignofExpr.parser]
+is_atom = true
+production = [
+    "keyword._Alignof",
+    "bracket.l_parentheses",
+    "@TypeName",
+    "bracket.r_parentheses",
+]
+
+[AlignofExpr.parser.node]
+type_name = "$3"
+
+[AlignofExpr.inject]
+targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]
+
+[AlignofExpr.renderer.layout]
+line = ["_Alignof(", { ref = "type_name" }, ")"]

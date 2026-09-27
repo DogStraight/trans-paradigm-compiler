@@ -1,0 +1,25 @@
+# ============================================================================
+# c11 插件 — `_Thread_local` 存储类说明符（C11 §6.7.1 storage-class-specifier）
+# ============================================================================
+# 标准形态：`storage-class-specifier: typedef | extern | static | _Thread_local |
+# auto | register`——与其余五个**同一层**，故注入核心基线的 `StorageClass`
+# （其 production 是一条裸交替 `keyword.typedef|keyword.extern|…`）。
+#
+# ⚠ 注入后 `StorageClass` 的 production 变成 `@ThreadLocalSpec|keyword.typedef|…`
+#   （token 形态整体作为一支保留，`split_token_types` 仍在匹配期拆 `|`）——
+#   即"加一支"，原五支一个不动。
+#
+# 语义约束（归语义层，语法层宽进）：§6.7.1p3 限定"只能与 static/extern 组合、且用于
+#   对象"——与 `auto`/`register` 的组合同样不在语法层判（同核心基线口径）。
+
+[ThreadLocalSpec.parser]
+production = ["keyword._Thread_local"]
+
+[ThreadLocalSpec.parser.node]
+base = "$1"
+
+[ThreadLocalSpec.inject]
+targets = ["@StorageClass.production[0]"]
+
+[ThreadLocalSpec.renderer.layout]
+ref = "base"

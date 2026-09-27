@@ -1,0 +1,25 @@
+# ============================================================================
+# c23 插件 — `bool` 类型说明符（C23 §6.4.4.4 / §6.7.2）
+# ============================================================================
+# C23 把 `bool` 定为**关键字**（不再是 `<stdbool.h>` 的宏），语义等价 `_Bool`。
+# 语法上它是 `type-specifier`（`bool` 这一支）——**说明符位**，不是表达式原子。
+#
+# 注入目标是核心基线的 **`SimpleType`**（"内建类型词"那条规则）——这是**最窄的注入点**：
+#   `SimpleType` 被 `TypeSpecifier`（声明/类型名首说明符）、`SpecRest`（说明符序列其余位）、
+#   `MemberSpec`（结构成员）、`ParamSpec`（参数）共同引用 ⇒ **一次注入，四处生效**，
+#   正是"在正确的抽象层上加一支"的收益（比在四个位置各注一次稳）。
+#
+# ⚠ 副作用（有意）：`SimpleType` 的 FIRST 集多了 `keyword.bool`，于是 `bool x;` 在
+#   语句发现里成为合法的声明起点（linter 不会再把整行静默跳过）。
+
+[BoolType.parser]
+production = ["keyword.bool"]
+
+[BoolType.parser.node]
+base = "$1"
+
+[BoolType.inject]
+targets = ["@SimpleType.production[0]"]
+
+[BoolType.renderer.layout]
+ref = "base"

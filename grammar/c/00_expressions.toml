@@ -484,8 +484,13 @@ line = [
     { ref = "pointers" },
 ]
 
-# 转换/复合字面量：类型名与 sizeof 同形（含指针星号）；`( T )operand` 里星号后
-# 不留空格（`(char *)p` 渲染成 `(char *)p`，星号与类型之间留空格、与操作数之间不留）
+# 转换/复合字面量：类型名与 sizeof 同形（含指针星号）。
+# ⚠ **实测行为（2026-09-26）**：星号与类型词之间**不留空格**——`char *p = (char *)q;`
+#   渲染为 `char *p = (char*)q;`（`sizeof(char *)` → `sizeof(char*)`、`typeof(char *)`
+#   → `typeof(char*)` 同）。旧注释写"`(char *)p` 渲染成 `(char *)p`、星号与类型之间留
+#   空格"，**与实测不符**（注释描述的是意图）。这是**排版差异**（C 空白无关 ⇒ token
+#   序列不变、语义不变），已记缺口档渲染现状表；要改成 `char *` 需同时动
+#   `TypeName`/`CastTypeName` 两处布局并重录三份样本的保真比值，故本轮只更正注释。
 [CastTypeName.renderer.layout]
 line = [
     { ref = "first" },

@@ -225,6 +225,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    if False:  # 变异：不复检抬头登记的类别\n",
         "test": "tests/policy/test_fuzz_shrink.py",
     },
+    {
+        "why": "插件的注入声明被删（`_Alignof` 不再注进核心两处原子清单）→ 该增量静默失效"
+               "（`_Alignof(int)` 解析不出 AlignofExpr）。注入是**声明面**：删掉声明后不该"
+               "还有别的东西在背后兜着——本变异证明测试真的在守那行声明",
+        "file": "grammar/c/plugins/c11/11_alignof.toml",
+        "old": 'targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]\n',
+        "new": "",
+        "test": "tests/languages/c/test_c_increment_plugin.py",
+    },
 ]
 
 

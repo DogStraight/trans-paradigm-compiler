@@ -7,15 +7,26 @@
 #   （文件作用域的语句规则，标 `is_statement` 即被全局语句发现接手，
 #   不需要改动核心基线的 `Stmt` 选择器）。
 #
-# ⚠ **需要"改"核心规则的那一类增量本插件未做**（记在此，正是 ROADMAP
-#   「注入机制补『改』路径」要解决的问题）：
-#     · `typeof` / `typeof_unqual` —— 类型说明符，要加进核心 `TypeSpecifier` 交替；
-#     · `constexpr` —— 声明说明符，要加进核心 `DeclSpecs` 链；
-#     · `[[属性]]` —— 声明/语句前缀，要加进 `Declaration`/`Stmt`；
-#     · `nullptr` / `true` / `false` —— 表达式原子，要加进 `PrimaryExpr`。
-#   这些都不是"新增一条独立规则"，而是**往既有规则的交替里塞分支**；现役
-#   `grammar_inject` 只能做规则 **production 的字符串子串补丁**（且软失败），
-#   不够可靠——具体待办与判据见 ROADMAP 该条与缺口档。
+# **本插件落地了哪些**：`static_assert`（C23 关键字化，与 C11 的 `_Static_assert` 同形）
+#   + `nullptr` / `true` / `false`（表达式原子）+ `bool` / `typeof` / `typeof_unqual`
+#   （类型说明符，注入核心 `SimpleType` 交替）+ `constexpr`（存储类，注入 `StorageClass`）。
+#
+# ⚠ **历史更正（2026-09-26 实测）**：本文件原先写"需要『改』核心规则的那一类增量
+#   （typeof / constexpr / nullptr …）做不了，因为现役 `grammar_inject` 只能做
+#   production 的字符串子串补丁（且软失败）"——**两条都不成立**：现役 `inject_productions`
+#   的直接注入是**树层** `insert_choice_candidate`（把 `@ExtRule` 作为候选并进目标
+#   production 的交替，`parser/grammar_inject.py`），fail-fast；缺的只是插件没写那几行
+#   声明。上面四项即按此落地（各文件头注写明注入点与"为什么选那个最窄的注入点"）。
+#
+# ⚠ **仍未落地（各自有真实前置，不是"注入做不了"）**：
+#     · `[[属性]]`（attribute-specifier）——要加进**声明/语句前缀**位，涉及"属性可出现在
+#       多处"的位点设计与 linter 的语句区间判定，属独立一小项；
+#     · `alignas` / `alignof` / `thread_local`（无下划线的 C23 拼写）——与 c11 的
+#       `_Alignas`/`_Alignof`/`_Thread_local` **同构造异拼写**：要么让 c11 的规则引用
+#       c23 才声明的 token（跨插件 token 依赖，需先定规则），要么在 c23 侧各写一条
+#       同形规则（重复）。倾向后者但需先定"同构造异拼写"的包内约定，故留待下一批；
+#     · `_BitInt` / `_Decimal32/64/128`——类型说明符，形态简单（同 `bool`），
+#       但要先定"宽度参数"（`_BitInt(N)`）与十进制浮点的接受域，归接受域清单一起做。
 #
 # 词法面：C23 新增关键字**全部声明**（词法完整）；没有规则的用起来就是语法错误
 #   （响亮失败，不会静默当标识符）——与 c11 插件同一策略。
@@ -26,4 +37,11 @@ requires = ["c17"]
 token_ext = { file = "_token_ext.toml", required = true }
 
 [grammar]
-files = ["10_static_assert_alias.toml"]
+files = [
+    "10_static_assert_alias.toml",
+    "11_nullptr.toml",
+    "12_bool_literal.toml",
+    "13_bool_type.toml",
+    "14_typeof.toml",
+    "15_constexpr.toml",
+]

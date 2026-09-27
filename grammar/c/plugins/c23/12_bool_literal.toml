@@ -1,0 +1,25 @@
+# ============================================================================
+# c23 插件 — `true` / `false` 预定义常量（C23 §6.4.4.4 predefined constants）
+# ============================================================================
+# C23 把 `true`/`false` 定为**关键字**（不再是 `<stdbool.h>` 的宏），类型 `bool`。
+# 语法上它们是 `predefined-constant` → 归 `constant` → **表达式原子**，与
+# `Number`/`StringLiteral`/`nullptr` 同层。
+#
+# 落地方式同 `nullptr`：原子规则 + 注入核心两处原子清单。
+#
+# ⚠ token 形态是**裸交替** `keyword.true|keyword.false`（与本包 StorageClass 同口径）：
+#   写成带括号的组会被 FIRST 推导当成**一个** token 类型、首 token 静默缺失
+#   （见核心基线 `01_declarations.toml` 的形态约束头注）。
+
+[BoolLiteral.parser]
+is_atom = true
+production = ["keyword.true|keyword.false"]
+
+[BoolLiteral.parser.node]
+value = "$1"
+
+[BoolLiteral.inject]
+targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]
+
+[BoolLiteral.renderer.layout]
+ref = "value"

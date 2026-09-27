@@ -239,11 +239,15 @@ C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_asse
    已由 `tests/languages/c/test_c_increment_plugin.py` 按**扫描文件**的方式守住。
 2. `<pack>/plugins/` 是**随包自动发现**的：`setup_grammar(rules_dir, register, ext_dirs)`
    没有 enabled 参数；`load_language(pack, plugins_dir=…)` 传与不传都加载到同一份。
-3. 语言包 `tpc.toml` 的 `[plugins] enabled` 是**打包/分发面**清单，不是运行时开关。
+3. ⚠ **更正（2026-09-26 实测）**：语言包 `tpc.toml` 的 `[plugins] enabled` **就是运行时
+   启用清单**，不是"打包面装饰"——它决定哪些插件目录的声明被合并（含
+   `[lexer] token_ext` 的词法扩展）。对照证据：加它之前 `_Static_assert` 一直是标识符，
+   加上后立刻成为关键字；verilog 的 `nand`（plugin 关键字）在 verilog 下无需任何
+   `ext_dirs` 即为关键字，因为 verilog 的 `enabled` 列了 gates。
 
-**缺口**：ROADMAP 定调的"`enabled` 组合等效某个标准"目前**无法在一次运行里表达**
-（只能在打包面或 pack 副本上切换两档）。要做"语法接受域断言（对标各标准语法规范）"
-（ROADMAP C 包条目里的验收项），就需要一个**运行时可选的插件组合**入口。
+**缺口（范围已收窄）**：ROADMAP 定调的"`enabled` 组合等效某个标准"**在打包面可表达**
+（改这份清单即可，三档对照测试即按 pack 副本做），缺的是**同一次进程内切两档**——
+需要一个运行时可选的插件组合入口（引擎级 `enabled` 覆盖参数，逐处清单见 `TODO.md`）。
 
 **候选**：给 `load_language` / `setup_grammar` 一个显式的 `enabled` 覆盖（或 `ext_dirs`
 收敛成"插件组合"声明），语义与打包面的 `[plugins] enabled` 统一到一处清单——
@@ -368,7 +372,8 @@ test_fidelity.py`），本包不再复制门禁。
 | 3 | 注释落在**括号内首元素前**时，位置被提到括号外（`int f(\n// c\nint a)` → 注释落在 `f` 与 `(int a)` 之间） | 解析端 `_lift_gap_comments` 的项间窗口上界用"迭代**末行**"，故迭代 token 跨度**内部**的注释也被当"该项之前"上浮。**收紧窗口已验证不可行**：上界改用迭代**首行**后 6 处门禁变红（端口表/具名端口/声明符表/case 项/真实语料无丢注释）——窗口的末行容差是给"注释在本次迭代匹配中被吞、语义上属该项之前"的形态留的。要修需把归属判据从行号窗口改为**迭代 token 跨度**（跨度内 → 归跨度内部消费方） |
 | 4 | 注释项前多一个行尾空格（`int ` + 换行） | 列表折叠后注释项独占行，父布局的分隔空格留在行尾；纯空白差异（输出合法、幂等） |
 | 5 | `#include` 在**词法层直接 ValueError**（`Unexpected token: #`） | `#` 未进符号表；预处理属阶段 4（先于本次改动存在） |
-| 6 | 分隔符后的**行尾**注释在跨折行时落位漂移（首渲染 `first, /* c */` + 换行 + `second;`，次渲染 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；同一注释在分隔符**之前**时挂的是**项**节点 trailing（渲染在该行尾）。挂点取决于"分隔符与下一项是否同行" ⇒ 折行即漂移。候选方向与风险见 `TODO.md`「保真度渲染：分隔符后行尾注释随折行漂移」；样本 `edge_comments.c` 用不折行的短注释绕开该形态 |
+| 6 | 分隔符后的**行尾**注释在跨折行时落位漂移（首渲染 `first, /* c */` + 换行 + `second;`，次渲染 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；同一注释在分隔符**之前**时挂的是**项**节点 trailing（渲染在该行尾）。挂点取决于"分隔符与下一项是否同行" ⇒ 折行即漂移。候选方向与风险见 `TODO.md`「保真度渲染：分隔符后行尾注释随折行漂移」（**含 fuzz 链路自动收缩出的最小复现与折行阈值 60**）；样本 `edge_comments.c` 用不折行的短注释绕开该形态 |
+| 7 | 类型名里的指针星号**与类型词之间不留空格**：`sizeof(char *)` → `sizeof(char*)`、`(char *)q` → `(char*)q`、`typeof(char *)` → `typeof(char*)`（2026-09-26 实测；`TypeName`/`CastTypeName` 的布局把 `pointers` 直接串在 `rest` 之后） | **纯排版差异**（C 空白无关 ⇒ token 序列不变、语义不变，判据 7 照过）；`grammar/c/00_expressions.toml` 里 `CastTypeName` 的旧注释写的"星号与类型之间留空格"与实测不符，已更正。要改成 `char *` 需同时动两处布局并**重录**三份样本的保真比值，故记为已知偏差而非顺手改 |
 
 **未做（下一步）**：
 1. 上面 3/6 两处**解析侧**改动（注释归属的 token 跨度判据、行尾注释挂点名）。

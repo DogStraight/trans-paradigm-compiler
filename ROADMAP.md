@@ -102,21 +102,29 @@
 > `CHANGELOG.md` 的 `[0.1.3]` 段，分层与 C99 接受域清单见
 > `docs/gaps/gap-language-pack-scope.md`「C 语言包」节。本条只留**未完成项**。
 
-- [ ] **标准增量的剩余面**（各档**已落地**的那一项见 `grammar/c/README.md`；共同前置 =
-      下面那条「注入机制补『改』路径」）：
-      · c11 余 `_Generic` / 匿名 struct/union / 原子 / `_Alignas` / `_Noreturn` /
-        `_Thread_local`（已落地 `_Static_assert` + 全部新关键字的词法面）；
+- [ ] **标准增量的剩余面**（**大部分已落地**，见 `grammar/c/README.md`「标准增量插件」；
+      剩余项的**共同前置不再是"注入机制"**——2026-09-26 实测更正：现役
+      `inject_productions` 的直接注入（树层 `insert_choice_candidate`）**就是**"往既有
+      交替里加一支"，c11/c23 两插件已按它落地 9 项；剩下的各有**自己的**前置）：
+      · c11 余 `_Alignas` / `_Atomic`（说明符位设计）与匿名 struct/union（**已落地**——
+        核心基线本就支持匿名形态，此条作废）；
       · c17 **无新语法**（缺陷修正版；已表达包含关系，不贡献语法面——这条反例本身已落进包结构）；
-      · c23 余 `typeof` / `auto` / 属性 / `#elifdef` / `nullptr` / `constexpr`
-        （已落地小写 `static_assert`）。
+      · c23 余 `[[属性]]`（声明/语句前缀位点设计）、无下划线拼写
+        （`alignas`/`alignof`/`thread_local`：与 c11 的 `_` 版同构造异拼写，需先定
+        "跨插件引用 token"还是"c23 侧各写一条同形规则"的包内约定）、
+        `_BitInt`/`_Decimal32/64/128`（需先定宽度参数与十进制浮点接受域）。
 - [ ] 预处理器扩展（引擎侧，独立评估）：`#if` 表达式求值、参数化宏、
       `#`/`##` 粘贴、变参宏 + 条件编译反向映射精度
 - [ ] 标准等效验证：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准语法规范）——
-      **接受域盘点工具已就位**（`tools/c_acceptance.py`），缺的是按标准分档的断言面
-- [ ] **注入机制补"改"路径**（标准增量剩余面的前置）：标准演进含
-      "改"（如 C23 语义变化），现
-      inject_replace_rule 是字符串子串补丁（仅 production、软失败）——统一
-      `[inject]` 声明面（add/replace/remove），replace 升树层结构化 + fail-fast
+      **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **34 条 / 接受 32 / 空洞 2**），
+      缺的是按标准分档的断言面
+- [ ] **注入机制补"改"路径**（范围已收窄，2026-09-26 实测更正）：**"加一支"已有结构化
+      路径**（`inject_productions` 的直接注入 + 传播注入，fail-fast）。**仍缺的是
+      "改/删一支"**：现役 `inject_replace_rule` 是 production 的字符串子串补丁、且
+      **软失败**（目标规则缺失只警告跳过）。要做的是统一 `[inject]` 声明面
+      （add/replace/remove），把 replace 升成树层结构化 + fail-fast。
+      **触发条件**：出现真正需要"改既有分支"的标准演进——现有的 c11/c23 增量都属"加"，
+      不需要它。
 - [ ] **语义层切片 1b**（typedef 名起头的转换）：需符号表/作用域/声明顺序，**待旨**——
       细则见下节草案
 

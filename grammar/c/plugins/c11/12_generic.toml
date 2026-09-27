@@ -1,0 +1,72 @@
+# ============================================================================
+# c11 插件 — `_Generic ( 控制表达式 , 关联表 )`（C11 §6.5.1.1 generic-selection）
+# ============================================================================
+# 标准形态（N1570 §6.5.1.1）：
+#   generic-selection: _Generic ( assignment-expression , generic-assoc-list )
+#   generic-assoc-list: generic-association | generic-assoc-list , generic-association
+#   generic-association: type-name : assignment-expression
+#                      | default : assignment-expression
+#
+# ⚠ 关联表写成**首项 + (逗号,项)\***（不是 `@GenericAssoc+`）：`+` 量词只重复"项"本身，
+#   不含逗号分隔符，于是 `_Generic(x, int: 1, default: 0)` 的第二项没有逗号可吃 →
+#   整条解析失败（实测：单关联通过、多关联空 AST）。同核心基线 ParamList/DeclaratorList 形态。
+#
+# ⚠ 绑定用**合并 items**（同 DeclaratorList/ParamList）：直接 `ref = "associations"` 会拿到
+#   repeat 包装节点、而它没有布局 → 静默渲染成空。故按 `$5` + `$6.items[*].sub_node[1]`
+#   取（每个 `(comma,项)` 组的第二个子节点）。
+#
+# ⚠ 控制表达式用 `@Expression`（= 标准里的 assignment-expression 层级）而非
+#   `@FullExpr`（整表达式，含逗号）——逗号是关联表的分隔符，用 `@FullExpr` 会把
+#   整个关联表吞进控制表达式（同 `f(a, b)` 实参的取舍，见核心基线 CommaExpr 头注）。
+#
+# ⚠ 与 `sizeof`/`_Alignof` 一样是**原子**：注入核心的两处原子清单。
+
+[GenericSelection.parser]
+is_atom = true
+production = [
+    "keyword._Generic",
+    "bracket.l_parentheses",
+    "@Expression",
+    "symbol.base.comma",
+    "@GenericAssoc",
+    "(symbol.base.comma,@GenericAssoc)*",
+    "bracket.r_parentheses",
+]
+
+[GenericSelection.parser.node]
+controlling = "$3"
+associations = ["$5", "$6.items[*].sub_node[1]"]
+
+[GenericSelection.inject]
+targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]
+
+
+# GenericAssoc — 一条关联：`类型名 : 表达式` 或 `default : 表达式`
+# 候选顺序：类型名在前（它更具体）；`default` 是关键字 token，与 `@TypeName` 的
+# 首 token（类型词/标识符）不交，故顺序不影响正确性，只影响试错成本。
+[GenericAssoc.parser]
+production = [
+    "(@TypeName|keyword.default)",
+    "symbol.base.colon",
+    "@Expression",
+]
+
+[GenericAssoc.parser.node]
+kind = "$1"
+value = "$3"
+
+[GenericAssoc.renderer.layout]
+line = [{ ref = "kind" }, ": ", { ref = "value" }]
+
+
+# 渲染：`_Generic(控制, 关联, 关联)`。
+# ⚠ 用户写的逗号分隔由**布局**补给（关联项之间补 ", "）——`sep` 是分隔文本，
+#   `first_soft = false` 让首项不留前导分隔（同核心基线的 compact 列表口径）。
+[GenericSelection.renderer.layout]
+line = [
+    "_Generic(",
+    { ref = "controlling" },
+    ", ",
+    { intent = "compact", items = "associations", sep = ", ", first_soft = false, nest = 0 },
+    ")",
+]

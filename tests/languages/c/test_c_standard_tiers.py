@@ -26,7 +26,7 @@ import tomllib
 import pytest
 
 from core.config_registry import ConfigRegistry
-from core.define import GrammarRulesRegister
+from core.define import GrammarRulesRegister, iter_nodes
 from lexer import Lexer
 from parser import setup_grammar
 from parser.parser_core import Parser
@@ -39,6 +39,8 @@ _PACK = os.path.join(ROOT, "grammar", "c")
 
 _C11_SRC = '_Static_assert(1, "x");\n'
 _C23_SRC = 'static_assert(1, "x");\n'
+# 块作用域形态（C11 §6.7.4 两处都合法）：档位判据要看"块内那支进没进 Stmt 交替"
+_C11_BLOCK_SRC = 'void f(void) {\n    _Static_assert(1, "x");\n}\n'
 
 
 def _make_pack(tmp_path, enabled: list[str]) -> str:
@@ -73,6 +75,23 @@ def _parse_with(pack: str, src: str) -> list[str]:
     return [n.node_name for n in (getattr(ast, "sub_node", []) or [])]
 
 
+def _all_with(pack: str, src: str) -> list[str]:
+    """递归节点名（块内形态要看得到 FuncDef 里面的语句）。"""
+    ConfigRegistry.load_language(pack, plugins_dir=os.path.join(pack, "plugins"))
+    rules = setup_grammar(pack, GrammarRulesRegister())
+    stmt = [
+        n
+        for n, r in rules.items()
+        if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
+    ]
+    parser = Parser(
+        rules_dir=pack, rules=rules, rule_selector=RuleSelector(rules, stmt), log_file=""
+    )
+    lexer = Lexer(rules_dir=pack)
+    ast = parser.parse(lexer.tokenize(src))
+    return [n.node_name for n in iter_nodes(ast)] if ast is not None else []
+
+
 @pytest.fixture(autouse=True)
 def restore_language():
     yield
@@ -103,6 +122,24 @@ class TestStandardTiers:
         pack = _make_pack(tmp_path, ["c11", "c17", "c23"])
         assert _parse_with(pack, _C11_SRC) == ["StaticAssertDecl"]
         assert _parse_with(pack, _C23_SRC) == ["StaticAssertC23Decl"]
+
+    def test_block_scope_follows_the_tier(self, tmp_path):
+        """**块作用域**同样随档位变：基线档当普通调用（`ExprStmt`），c11 档进插件节点。
+
+        这是"增量脚本真的接上了核心 `Stmt` 交替"的档位级判据——只看文件作用域会漏掉
+        （文件作用域靠 `is_statement` + 全局语句发现，与注入无关）。
+        ⚠ 基线档**不是拒绝**（未声明关键字 → `_Static_assert` 只是标识符，`(1,"x")`
+        是调用）——判据仍是"解析成哪个节点"（见文件头注）。
+        """
+        base = _make_pack(tmp_path / "base", [])
+        base_nodes = _all_with(base, _C11_BLOCK_SRC)
+        assert "FuncDef" in base_nodes
+        assert "StaticAssertDecl" not in base_nodes, base_nodes
+        assert "ExprStmt" in base_nodes, base_nodes
+
+        c11 = _make_pack(tmp_path / "c11", ["c11"])
+        c11_nodes = _all_with(c11, _C11_BLOCK_SRC)
+        assert "StaticAssertDecl" in c11_nodes, c11_nodes
 
     def test_only_enabled_line_differs(self, tmp_path):
         """三档之间**只差 `enabled` 一行**——"标准 = 启用清单组合"的可机械检查证据。"""

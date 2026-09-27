@@ -1,0 +1,28 @@
+# ============================================================================
+# c23 插件 — `nullptr` 空指针常量（C23 §6.4.4.4 / §6.5.1 constant）
+# ============================================================================
+# C23 把 `nullptr` 定为**关键字**（不再是 `<stddef.h>` 的 `NULL` 宏），类型为
+# `nullptr_t`。语法上它是 `null-pointer-constant` → 归 `constant` → **表达式原子**，
+# 与核心基线的 `Number`/`StringLiteral` 同层。
+#
+# 故落地方式同 `_Alignof`：原子规则 + 注入核心的**两处**原子清单
+# （`PrimaryExpr` 与 `PostfixExpr` 的 head，见 `grammar/c/00_expressions.toml` 头注）。
+#
+# ⚠ 旧注释（本插件 tpc.toml）说这类增量"要往既有规则的交替里塞分支，现役
+#   `grammar_inject` 只能做字符串子串补丁（且软失败），不够可靠"——**该判断已作废**
+#   （2026-09-26 实测）：现役 `inject_productions` 的直接注入就是树层
+#   `insert_choice_candidate`（把 `@ExtRule` 作为候选并进目标 production 的交替），
+#   正是这条路径。缺的只是没写这几行声明。
+
+[NullptrLiteral.parser]
+is_atom = true
+production = ["keyword.nullptr"]
+
+[NullptrLiteral.parser.node]
+value = "$1"
+
+[NullptrLiteral.inject]
+targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]
+
+[NullptrLiteral.renderer.layout]
+ref = "value"

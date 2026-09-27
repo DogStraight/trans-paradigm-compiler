@@ -1,0 +1,45 @@
+# ============================================================================
+# c23 插件 — `typeof` / `typeof_unqual` 类型说明符（C23 §6.7.2.5 typeof-specifier）
+# ============================================================================
+# 标准形态（N3096 §6.7.2.5）：
+#   typeof-specifier: typeof ( expression ) | typeof ( type-name )
+#                   | typeof_unqual ( expression ) | typeof_unqual ( type-name )
+# 即**两种操作数 × 两种拼写**。`typeof_unqual` 只差"去掉顶层限定符"，语法同形。
+#
+# 落地方式：注入核心基线的 `SimpleType`（最窄注入点，四处生效，理由见 13_bool_type.toml）。
+#
+# ⚠ **操作数元素的候选顺序 = 消歧口径**：`typeof(x)` 在标准里两种读法都通
+#   （`x` 既是表达式也是类型名——`TypeName` 含 `@TypedefName` ⇒ 任何标识符）。
+#   本体无符号表，故把操作数写成 `(@Expression|@TypeName)`，**表达式在前**：命中即定；
+#   类型名形态由第二支兜底（`typeof(int)`：`int` 是关键字、表达式读不通）。
+#   与 ROADMAP「C 语义层切片 1b」同一根因——真正的判据是"该标识符是不是 typedef 名"；
+#   这里的选择是**不猜** typedef（两条都不查符号表）。
+#
+# ⚠ 操作数用 `@Expression`（= 标准的 assignment-expression 层级）而非 `@FullExpr`：
+#   逗号不属于 typeof 的操作数（同 CommaExpr 头注的位点口径）。
+
+[TypeofSpec.parser]
+# ⚠ **`production` 是"一条产生式的元素序列"，不是"多条备选产生式"**（本仓引擎的模型）：
+#   写成 4 条会被当成 4 个**顺次**元素（slot 数 = 列表长度，node 绑定 `$N` 按元素下标），
+#   于是整条匹配必然失败（实测：`match_length 0`，节点绑定还会先报 `$3` 越界 fail-fast）。
+#   备选要在**同一个元素内**用 `|` 表达：首元素 `keyword.typeof|keyword.typeof_unqual`
+#   就是"两种拼写之一"（与本包 StorageClass/SimpleType 同款裸交替；`split_token_types`
+#   在匹配期拆 `|`，FIRST 推导也认这种写法）。
+production = [
+    "keyword.typeof|keyword.typeof_unqual",
+    "bracket.l_parentheses",
+    "(@Expression|@TypeName)",
+    "bracket.r_parentheses",
+]
+
+[TypeofSpec.parser.node]
+# 关键词也绑成属性：本规则只有**一个**产生式，`$1` 即关键词元素（两种拼写之一），
+# 渲染要按源拼写回填（token 节点归一后即其原文）。
+kw = "$1"
+operand = "$3"
+
+[TypeofSpec.inject]
+targets = ["@SimpleType.production[0]"]
+
+[TypeofSpec.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "operand" }, ")"]
