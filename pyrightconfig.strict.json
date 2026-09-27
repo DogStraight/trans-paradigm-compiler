@@ -16,6 +16,7 @@
     "grammar/c4/plugins"
   ],
   "exclude": ["**/__pycache__", "**/dist"],
+  "extraPaths": ["tests/fuzz", "tests/edge"],
   "typeCheckingMode": "basic",
   "reportUnusedImport": "error",
   "reportUnusedVariable": "error",

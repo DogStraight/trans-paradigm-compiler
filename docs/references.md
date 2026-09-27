@@ -133,6 +133,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [Bifrost](https://github.com/BrokkAi/bifrost) | 设计参考 | Brokk 的多语言静态分析工具箱（Rust，Apache-2.0）：统一 IR + RQL 结构查询 + **显式证明层级**（proven/unproven）+ CLI/MCP/LSP/Python 四面；本仓用作外部审查与"换裁判"（规程 `policy/bifrost_audit.md`，自带 slopcop 诊断族） |
 | [SlopCop](https://slopcop.brokk.ai) | 概念参考 | Brokk 的托管审计服务（specialist agent + 静态分析 → 案件报告 + 可复制为 prompt 的建议）；其实现在 Bifrost 的 `slopcop` 工具集里本地可跑，故不引入托管面（详见调研节） |
 | [Spec Kit](https://github.com/github/spec-kit) | 设计参考 | GitHub 的 SDD 流程工具包（★137k，MIT，agent skills 形态）：本仓**只选择性借范式**（先成因后动手 / 收尾结论分级 / constitution 只用已成立原则），不引入 `.specify/` 目录与模板资产（详见调研节） |
+| 测试输入最小化（[ddmin](https://doi.org/10.1109/32.988498) / [Hypothesis](https://hypothesis.readthedocs.io/) / [C-Reduce](https://github.com/csmith-project/creduce) / [afl-tmin](https://github.com/AFLplusplus/AFLplusplus) / [Perses](https://www.semanticscholar.org/paper/Perses%3A-Syntax-Guided-Program-Reduction-Sun-Li/a436a67d7e8848f76fd5c47e80161c57da5d2192)） | 设计参考 | fuzz 回馈链路后两步（最小化 + 回归沉淀）的机制来源：ddmin 的"块删除 + 保补集"判据、Hypothesis 的**失败用例库**（失败重放）、Perses 的语法引导缩减（详见调研节） |
 
 ### 工程组织与后端抽象
 
@@ -2140,4 +2141,73 @@ jam 在**语言语义深度**（MVS/comptime/ABI/typed IR 内部构造）上走�
 - 可实现性：**只借范式，不引资产**——`.specify/` + 模板 + skills 会形成第二套记录体系
   （与"单一真相源、不留双路径"冲突），且 SDD 模板对单点缺陷修复/重构过重；若将来要
   对外交付"规格→任务→验证"链路，先评估只对**新语言包/新命令**这类有界新增启用。
+
+### 测试输入最小化与回归沉淀（ddmin / Hypothesis / C-Reduce / afl-tmin / Perses，2026-09-26 调研）
+
+> 触发：作者指出 fuzz 回馈链路"只差自动最小化 + 自动沉淀两步"。本仓此前这两步是
+> `tests/fuzz/README.md`「迭代指南」里的**人工动作**（"打开 findings → 最小化 → 判定
+> → 修 → 沉淀 edge 回归"）。本节评估成熟解法，落点在 `tests/fuzz/shrink.py`。
+
+**共同骨架**：所有方案都是"**最小化 + 判据（interestingness test）**"两件套——
+判据不是"这段输入是否合法/是否报错"，而是"是否仍触发**同一个**失败"。本仓的判据
+因此必须与 fuzz 共用同一份不变量（`tests/fuzz/oracle.py`），否则缩出来的不是原来那个 bug。
+
+**[ddmin](https://doi.org/10.1109/32.988498)（Zeller & Hildebrandt, *Simplifying and
+Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 🔥
+
+- 算法：把输入切成 n 块，先试"**删除**某块"（其余保留），再试"**只保留**某块"（补集）；
+  任一成功就把规模降一档（n−1）继续，全败则把粒度加倍（2n），直到 n=|c| —— 结果
+  保证 1-minimal。补集那一路是关键：输入里"大部分内容与失败无关"时，删除路会一路
+  失败，而补集路能一步跳到相关核心。
+- 本仓落点：单元取**行**（文本输入的自然粒度）+ **行内字符级**（单行 finding 只靠
+  行级缩不动——C 包非幂等个案是 86 字节**单行**，真正可缩的是注释长度即折行阈值）。
+- ⚠ 判据只比**类别**、不比 detail：detail 含计数（`in 12 → out 13 tokens`），逐字比
+  对会让最小化一步都走不动。这是 ddmin 的标准口径（同一失败模式），本仓沿用。
+
+**[Hypothesis](https://hypothesis.readthedocs.io/)（Python property-based testing）—— 借两点** 🔥 / 💡
+
+- 🔥 **缩减的对象是"选择序列"而不是值**：把随机决策序列记下来，再逐条简化/删除重放。
+  启发：最小化的判据要能**便宜地重放**同一现场；本仓的等价物是"findings 落盘 +
+  索引（类别/标签/包）"，因为判据重跑需要知道**当初是哪条不变量、哪个包、何种标签**
+  （`gen` 才断言 token 保序）——少了这三样就必须靠猜。
+- 🔥 **失败用例库（example database）**：失败样例**持久化**，后续运行先重放它，
+  修好之前每次都会再报。这正是"沉淀"的进程内版本；本仓的等价物是 edge 语料
+  （跨进程、进 CI，比 DB 更硬：它同时是门禁）。
+- 💡 缩减器与"找"的引擎解耦：Hypothesis 的 shrinking 独立于 generation。本仓照此
+  把 oracle（判据）抽成单一来源，`run_fuzz`/`shrink`/`run_edge` 三方共用。
+
+**[C-Reduce](https://github.com/csmith-project/creduce) / [afl-tmin](https://github.com/AFLplusplus/AFLplusplus) —— 借"pass 化"与"两档判据"** 🔥
+
+- 🔥 **pass 化**：C-Reduce 不是一个大算法，而是一串**各自可验证、可开关**的 reduce pass
+  （删行、删块、简化 if、数值归约…），每个 pass 都被判据守着。本仓照此分 pass：
+  行级 ddmin → 尾截 → 去前导空行 → 行内字符级（可选 token 级），每步都能单独看效果
+  （步骤日志逐条打印）。
+- 💡 **两档判据**：afl-tmin 分 crash 模式与 hang 模式（判据随失败类型变）。本仓的等价物
+  是六类 kind；沉淀时按类别登记，`run_edge.py` 复检该类别（`success=True` 的活缺陷
+  因此不会被"clean/reject 都通过"蒙过去）。
+- 💡 **预算与 partial 报告**：afl-tmin/C-Reduce 都有时间预算。本仓 `--max-tests` 封顶，
+  到顶报 `partial（预算到顶）` 而不是谎称 1-minimal。
+
+**[Perses](https://www.semanticscholar.org/paper/Perses%3A-Syntax-Guided-Program-Reduction-Sun-Li/a436a67d7e8848f76fd5c47e80161c57da5d2192)
+（Sun et al., ICSE 2018, *Syntax-Guided Program Reduction*）—— 评估后不实现** 📌
+
+- 做法：用语言的**形式文法**做缩减，在语法树上施加保持"语言成员性"的变换 ⇒ 所有中间
+  产物**都是合法程序**，对"越非法越难触发目标"的场景收敛快得多。
+- 本仓为什么先不做：① 我们的判据是**格式化管线**，它对非法输入本身就是宽容的
+  （软失败即返回），"中间产物非法"不会像编译器那样让判据失效——收益面比 C 系小；
+  ② 真正的语法引导缩减需要"按规则子树删/换"的变换集 + 保持可解析的修补，是一套新
+  机制，值得单独立项；③ 已有一个**便宜的近似**：`--require-parse`（判据加一道"仍可
+  解析"的闸），实测在本仓个案上不改变结果（缩出的 `intrst,second;` 仍是合法声明——
+  typedef 名歧义），故如实记为"有效但本例无差别"。
+- 📌 触发条件（何时回头看它）：当出现"必须保持可解析才能触发"的缺陷类别，或 C 系
+  前端接入本仓、语法树变换集已有复用面时。
+
+**沉淀（sedimentation）—— 没有直接对标物，按本仓纪律定** 💡
+
+- Hypothesis 的 DB 是进程内/本地缓存，不留审计迹；C-Reduce/afl 只产出最小文件。本仓
+  要的是**回归 + 可追溯**，故沉淀 = 最小复现 + **溯源抬头**（判定 / 类别 / 原 finding /
+  尺寸 / 修复后必须成功或失败）+ 进门禁，抬头一致性由
+  `tests/policy/test_edge_corpus_provenance.py` 守。
+- 两处闸（时序决定）：**未修不许沉淀**（否则把缺陷固化成期望行为——实测踩过：
+  `success=True` 的非幂等样本被写成 clean）；**已修不再最小化**（直接沉淀）。
 

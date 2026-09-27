@@ -201,6 +201,30 @@ _MUTATIONS: list[dict[str, str]] = [
 """,
         "test": "tests/languages/c/test_c_declarations.py",
     },
+    {
+        "why": "沉淀语料的抬头判定与所在目录不一致（把 reject 写成 clean）→ 门禁会在"
+               "错误方向锁行为：抬头是给人看的，也是 run_edge 复检不变量的登记项",
+        "file": "tests/edge/edge_corpus/reject/truncated_garbage.v",
+        "old": "// edge reject（fuzz 回归 2026-08-22）",
+        "new": "// edge clean（fuzz 回归 2026-08-22）",
+        "test": "tests/policy/test_edge_corpus_provenance.py",
+    },
+    {
+        "why": "收缩/沉淀链路的「未修不沉淀」闸被拆 → 未修缺陷会被固化成期望行为"
+               "（实测踩过：非幂等样本 success=True，只按 clean/reject 判会写进 clean/）",
+        "file": "tests/fuzz/shrink.py",
+        "old": "    if still_violates:\n",
+        "new": "    if False:  # 变异：拆掉「未修不沉淀」闸\n",
+        "test": "tests/policy/test_fuzz_shrink.py",
+    },
+    {
+        "why": "edge 门禁不再复检沉淀语料抬头登记的不变量 → 只判 clean/reject 时"
+               "「仍非幂等」这类活缺陷一路绿灯（实测踩过）",
+        "file": "tests/edge/run_edge.py",
+        "old": "    if kind in kinds:\n",
+        "new": "    if False:  # 变异：不复检抬头登记的类别\n",
+        "test": "tests/policy/test_fuzz_shrink.py",
+    },
 ]
 
 

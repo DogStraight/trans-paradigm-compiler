@@ -5,6 +5,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **fuzz 回馈链路补齐后两步：自动最小化 + 自动沉淀**（作者 2026-09-26 指出"链路只差这两步"）。
+  此前这两步是 `tests/fuzz/README.md`「迭代指南」里的**人工动作**（打开 findings → 手缩
+  → 判定 → 修 → 沉淀 edge 回归）。现在四环闭环：
+
+  ```
+  run_fuzz.py（找）→ oracle.py（判据）→ shrink.py（缩 + 沉淀）→ run_edge.py（门禁）
+  ```
+
+  - **判据单一来源**（新 `tests/fuzz/oracle.py`）：六类违反（crash / silent-fail /
+    tokenize-fail / token-corrupt / idem-crash / non-idempotent）从 `run_fuzz.py` 抽出，
+    `run_fuzz` / `shrink` / `run_edge` 三方共用——最小化若换一套判据，缩出来的就不是
+    原来那个 bug。
+  - **最小化**（新 `tests/fuzz/shrink.py`）：ddmin（Zeller TSE 2002）分 pass 跑——
+    行级块删除 + 保补集 → 尾截 → 去前导空行 → **行内字符级**（可选 token 级）。
+    判据只比**类别**不比 detail（detail 含计数，会随收缩变化）。`--max-tests` 封顶，
+    到顶如实报 `partial`。
+  - **沉淀**：最小复现 + **溯源抬头**（判定 / fuzz 类别 / 原 finding / 尺寸 / 修复后
+    必须成功或失败）写进 `edge_corpus/{clean,reject}/`，抬头里的**类别**从此成为该条
+    语料的回归判据（`run_edge.py` 复检）。抬头生成**拒绝**留 `成因待补`。
+  - **两处闸（时序决定，都实测过）**：① **未修不许沉淀**——类别仍复现则拒绝
+    （写进去等于把缺陷固化成期望行为；判别性用例是 `success=True` 的非幂等样本，
+    只按 clean/reject 判会一路写进 clean/）；② **已修不再最小化**——直接走沉淀
+    （修好前版本的分岔缺失会让"带 --sediment 永远沉淀不了"）。
+  - **链路语言包可指定**：`--pack` 一处驱动**生成器 / 词法 / 管线 / 种子**。此前
+    `--rules-dir` 只作用于前两者、管线恒用默认包（"用 A 包生成、用 B 包格式化"，
+    finding 全是假的），且 `collect_seeds` 只认 `.v`、`_content_pool` 里硬编码了
+    一串 Verilog 关键字（既重复又把语言知识写进 harness）——均已修。**C 包由此获得
+    fuzz 覆盖**（首轮 4000 轮 / 21 iter/s，0 findings）。
+  - **门禁**：`tests/policy/test_fuzz_shrink.py`（ddmin 合成谓词单测 + 注入式假管线跑
+    finding→缩→沉淀→抬头→复检的完整文件路径，19 例）、
+    `tests/policy/test_edge_corpus_provenance.py`（抬头判定须与目录一致 / 类别须是已定义
+    类别 / 不留"成因待补"；2026-09-26 起要求类别项，此前 4 条手工沉淀豁免——它们的失败
+    模式当时还没有类别名，硬凑是造假）；`run_edge.py` 增 `--corpus/--pack/--ext` 与
+    类别复检；`tools/check_gate_efficacy.py` 新增 3 条变异（逐条实测变红）。
+  - **评估落档**：`docs/references.md`「测试输入最小化与回归沉淀」——ddmin（直接采用 🔥）、
+    Hypothesis（缩减对象是**选择序列** + **失败用例库**，对应本仓的 findings 索引与 edge
+    语料 🔥）、C-Reduce/afl-tmin（pass 化 + 两档判据 + 预算报 partial 🔥）、Perses
+    （语法引导缩减：**评估后不实现**，写明三条理由与触发条件 📌）。
+  - **实测（真实路径）**：C 包注释折行漂移个案
+    `intrst/* x×60 */,second;`（86→81 字节、单行，判据 184 次、1-minimal）——行级无事可做，
+    真正可缩的是**注释长度（折行阈值 60）**；因缺陷未修，沉淀**如期被拒**。该最小复现已
+    写进 `TODO.md` 对应条目（可复现的最小输入 + 阈值 + 进入方式）。
+
 ### Fixed
 
 - **lexer 最长匹配要求「每一层中间前缀自身也是声明过的符号」→ 中间形态未声明的符号

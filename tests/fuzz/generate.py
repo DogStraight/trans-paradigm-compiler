@@ -48,9 +48,12 @@ def build_token_map(rules_dir: str) -> dict[str, str]:
 class GrammarFuzzer:
     """从 grammar 规则表随机生成（近似合法的）输入。"""
 
-    def __init__(self, rules_dir: str, rng: random.Random):
+    def __init__(self, rules_dir: str, rng: random.Random,
+                 ext_dirs: list[str] | None = None):
         register = GrammarRulesRegister.get_default()
-        self._rules = setup_grammar(rules_dir, register)
+        # ext_dirs：语言包的插件目录——带上才生成得到插件语法面（如 C 的
+        # `_Static_assert`），与管线侧同参（否则生成的输入永远只用核心基线）
+        self._rules = setup_grammar(rules_dir, register, ext_dirs=list(ext_dirs or []))
         self._tree = build_slice_tree(self._rules)
         self._tok = build_token_map(rules_dir)
         self._rng = rng
@@ -131,17 +134,22 @@ _OPS = ["delete", "duplicate", "replace", "insert", "swap", "truncate"]
 
 
 def _content_pool(token_map: dict[str, str]) -> list[str]:
+    """变异用的替换词表：**全部来自目标语言包**（token_map = 该包的关键字/符号/
+    括号字面量）+ 通用标识符池。
+
+    ⚠ 此前这里额外硬编码了一串 Verilog 关键字（begin/end/module/always/…）——
+    既与 `token_map` 重复，又把语言知识写进了 harness（换语言包后变异词表跑偏）。
+    已删：`build_token_map` 已覆盖该包全部关键字与符号。
+    """
     pool = list(token_map.values())
-    pool += ["if", "else", "begin", "end", "module", "always", "wire", "reg",
-             "input", "output", "assign", "case", "for", "parameter"]
     pool += _ID_POOL
     return pool
 
 
 def mutate_source(src: str, rng: random.Random, token_map: dict[str, str],
-                  rules_dir: str) -> str:
+                  rules_dir: str, ext_dirs: list[str] | None = None) -> str:
     """token 级变异：增/删/改/换/截断 1-3 处。"""
-    lexer = Lexer(rules_dir=rules_dir)
+    lexer = Lexer(rules_dir=rules_dir, ext_dirs=list(ext_dirs or []))
     try:
         toks = lexer.tokenize(src)
     except Exception:
@@ -163,9 +171,8 @@ def mutate_source(src: str, rng: random.Random, token_map: dict[str, str],
         elif op == "replace":
             toks[pos].content = rng.choice(_content_pool(token_map))
         elif op == "insert":
-            toks.insert(pos, cast(Token, rng.choice([_mk_tok(t) for t in
-                                                     [";", "begin", "end", "=", "module", "if",
-                                                      "always", ")", "(", "1", "clk"]])))
+            toks.insert(pos, cast(Token, rng.choice(
+                [_mk_tok(t) for t in _insert_snippets(token_map)])))
         elif op == "swap":
             j = rng.choice(idx)
             toks[pos], toks[j] = toks[j], toks[pos]
@@ -186,15 +193,22 @@ def _mk_tok(content: str) -> _FakeTok:
     return _FakeTok(content)
 
 
+def _insert_snippets(token_map: dict[str, str]) -> list[str]:
+    """插入用的短片段：该包的符号 + 少量标识符（同样不写死语言关键字）。"""
+    syms = sorted(set(token_map.values()))
+    return (syms or [";"]) + _ID_POOL[:4]
+
+
 # ── 种子收集 ────────────────────────────────
 
-def collect_seeds(*roots: str) -> list[str]:
+def collect_seeds(*roots: str, extensions: tuple[str, ...] = (".v",)) -> list[str]:
+    """收集种子文件（按语言包后缀过滤；默认 Verilog 的 `.v`）。"""
     files: list[str] = []
     for root in roots:
         if not root or not os.path.isdir(root):
             continue
         for dirpath, _, names in os.walk(root):
             for n in sorted(names):
-                if n.endswith(".v"):
+                if n.endswith(extensions):
                     files.append(os.path.join(dirpath, n))
     return files

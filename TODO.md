@@ -92,8 +92,13 @@
 - [ ] **阶段 5 标准等效验证**：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准
       语法规范），并接真实 C 语料（先小样本，规模与来源在阶段 0 定）
 - [ ] **保真度渲染：分隔符后行尾注释随折行漂移**（引擎侧，可复现）：
-      `int first /* 长注释… */, second;` 在**跨折行**时首渲染 `first, /* c */` + 换行 +
-      `second;`，次渲染 `first,` + 换行 + `second /* c */;`（第三遍起收敛 ⇒ 判据 4 不幂等）。
+      **最小复现（fuzz 链路自动收缩，2026-09-26）**：
+      `intrst/* ` + `x`×60 + ` */,second;`（82 字节**单行**）——
+      一遍渲染 `intrst, /* x… */\nsecond;`，二遍 `intrst, second /* x… */;`（第 3 遍起收敛
+      ⇒ 判据 4 不幂等）。**注释长度 60 是折行阈值**：再短一行就放得下、漂移不出现
+      （行内字符级最小化把注释从 60 缩到"恰好仍触发"的长度就是这条）。进入方式：
+      `python tests/fuzz/run_fuzz.py --pack grammar/c`（变异很难撞上该形态——4000 轮
+      0 findings；该样本是直接喂触发输入造的，见 `tests/fuzz/README.md`「回馈链路」）。
       成因：`parser/_production._attach_line_end` 把"注释后换行"的行尾注释挂
       `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，
       容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；而同一注释在分隔符**之前**时挂的是
@@ -102,7 +107,9 @@
       （leftover 回补通道已删），误路由＝丢注释，须逐形态验证；② 挂"刚结束的项节点"
       而非 `current_node`（需引入"最近完成节点"状态）。现状：`edge_comments.c` 用**不折行**的
       短注释绕开该形态（缺口记档，见 `docs/gaps/gap-language-pack-scope.md`
-      「C 包渲染/保真面现状」表 #6）
+      「C 包渲染/保真面现状」表 #6）。⚠ 修好后跑
+      `python tests/fuzz/shrink.py --all --pack grammar/c --sediment <edge 语料> --cause "…"`
+      把这条最小复现沉淀成回归（链路已自动化，见 `tests/fuzz/README.md`）。
 
 ### WS2 功能散点治理
 
