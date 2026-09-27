@@ -265,6 +265,27 @@ _MUTATIONS: list[dict[str, str]] = [
 """,
         "test": "tests/languages/c/test_c_standard_tiers.py",
     },
+    {
+        "why": "`_Atomic` 两形态**必须收在一条规则里**（可选组）。去掉那个 `?` ⇒"
+               "限定符形态 `_Atomic int x;` 不再匹配（组变成必需）——本变异证明"
+               "「两形态同环境并存」那条测试真的握着这个形态选择",
+        "file": "grammar/c/plugins/c11/16_atomic.toml",
+        "old": '    "(bracket.l_parentheses,@TypeName,bracket.r_parentheses)?",\n',
+        "new": '    "(bracket.l_parentheses,@TypeName,bracket.r_parentheses)",\n',
+        "test": "tests/languages/c/test_c_increment_plugin.py",
+    },
+    {
+        "why": "`_Alignas` 的宿主必须是**被六处说明符位共同引用的 `TypeQualifier`**："
+               "换成单点 `@Declaration.production[0]` ⇒ 结构成员/参数/类型名三处说明符位"
+               "失效（A/B 实测的空 AST）。本变异证明那三条用例真的握着注入点选择",
+        "file": "grammar/c/plugins/c11/15_alignas.toml",
+        "old": '[AlignasConstSpec.inject]\ntargets = ["@TypeQualifier.production[0]"]\n',
+        "new": (
+            '[AlignasConstSpec.inject]\n'
+            'targets = ["@Declaration.production[0]"]\n'
+        ),
+        "test": "tests/languages/c/test_c_increment_plugin.py",
+    },
 ]
 
 

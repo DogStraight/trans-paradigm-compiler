@@ -1,0 +1,71 @@
+# ============================================================================
+# c11 插件 — `_Alignas ( 常量表达式 | 类型名 )`（C11 §6.7.5 alignment-specifier）
+# ============================================================================
+# 标准形态两条（同一关键字、两种实参）：
+#   `_Alignas ( type-name )` / `_Alignas ( constant-expression )`
+# 故本文件给**两条规则**（`AlignasConstSpec` / `AlignasTypeSpec`），而不是一条规则内的
+# 两支——一条规则里写 `(k,lp,@Expression,rp)|(k,lp,@TypeName,rp)` 引擎能解析出正确的
+# choice 树，但 `node` 绑定要按"第几支"分流（`$1.$1.$3` vs `$1.$2.$3`），绑定面立刻变脆；
+# 两条独立规则各自是直白的 4 元素序列，绑定与渲染都只有一种形态。两形态的区分发生在
+# **规则内部**（`@Expression` 起不了 `int` 这类类型关键字 ⇒ 立刻落空 ⇒ 换另一支），
+# 不依赖跨元素回溯（与 16_atomic.toml 头注里那条引擎性质同源）。
+#
+# 注入点 = **`@TypeQualifier`（最窄公共点）**：本包说明符位由 6 条规则分别表达
+#   （`Declaration` / `SpecRest` / `FuncDef` / `MemberSpec` / `ParamSpec` / `TypeName`——
+#   没有统一的 declaration-specifiers 规则），而 `TypeQualifier` 被这 6 处共同引用
+#   ⇒ **一次注入六处生效**（同 `bool` 挂 `SimpleType` 的收益）。
+#
+# ⚠ **为什么不是"6 处逐个注入"（A/B 实测，2026-09-26）**：其余条件完全相同、只换
+#   `targets` 时——6 处逐点注入下，块作用域 `_Alignas(16) int x;` 被折成两行，且
+#   **结构成员 / 参数 / 类型名三处空 AST**（`struct S { _Alignas(8) int x; };` 整条不进 AST）；
+#   改挂 `TypeQualifier` 后四症全消。变量已隔离（只差 targets），**引擎内部机制未追到底**
+#   ——现象与处置记在此防重踩：**优先找"被多处共同引用的那条规则"当宿主**，别逐点铺
+#   （逐点铺还会让传播去重写 `@SpecRest` / `@TypeName` 的引用位，形态立刻复杂）。
+#
+# 语义约束（归语义层，语法层宽进）：§6.7.5p2 禁止用于 typedef / 位域 / 函数 / 参数 /
+#   register 对象——同核心基线口径（"说明符组合合法性不在语法层判"）。
+#   `_Alignas` 的实参**是不是**整型常量表达式同样归语义层（此处收 `@Expression`）。
+#
+# ⚠ 与核心基线的关系：一行未动（判据见
+#   `tests/languages/c/test_c_increment_plugin.py::TestC11SpecifierSlotIncrements`）。
+
+# ── 形态 1：常量表达式（真实代码里的绝对多数：`_Alignas(16) char buf[64];`） ──
+
+[AlignasConstSpec.parser]
+production = [
+    "keyword._Alignas",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+
+[AlignasConstSpec.parser.node]
+kw = "$1"
+arg = "$3"
+
+[AlignasConstSpec.inject]
+targets = ["@TypeQualifier.production[0]"]
+
+[AlignasConstSpec.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "arg" }, ")"]
+
+
+# ── 形态 2：类型名（`_Alignas(double) char c;`——对齐到某类型的自然对齐） ──
+
+[AlignasTypeSpec.parser]
+production = [
+    "keyword._Alignas",
+    "bracket.l_parentheses",
+    "@TypeName",
+    "bracket.r_parentheses",
+]
+
+[AlignasTypeSpec.parser.node]
+kw = "$1"
+type_name = "$3"
+
+[AlignasTypeSpec.inject]
+targets = ["@TypeQualifier.production[0]"]
+
+[AlignasTypeSpec.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "type_name" }, ")"]

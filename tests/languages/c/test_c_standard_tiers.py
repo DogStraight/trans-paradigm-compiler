@@ -63,6 +63,15 @@ _INCREMENT_MATRIX = [
     ("bool（c23）", "bool f;\n", "BoolType", "c23"),
     ("typeof（c23）", "typeof(int) z;\n", "TypeofSpec", "c23"),
     ("constexpr（c23）", "constexpr int n = 4;\n", "ConstexprSpec", "c23"),
+    # 说明符位增量（2026-09-26 批次）——判据同前：从哪一档起解析成插件节点
+    ("_Alignas（c11）", "_Alignas(16) char buf[64];\n", "AlignasConstSpec", "c11"),
+    ("_Alignas 类型名形态（c11）", "_Alignas(double) char c;\n", "AlignasTypeSpec", "c11"),
+    ("_Atomic 限定符（c11）", "_Atomic int x;\n", "AtomicSpec", "c11"),
+    ("_Atomic(T)（c11）", "_Atomic(int) x;\n", "AtomicSpec", "c11"),
+    ("_Alignas 块作用域（c11）", "void f(void) {\n    _Alignas(16) int x;\n}\n",
+     "AlignasConstSpec", "c11"),
+    ("_Atomic(T) 块作用域（c11）", "void f(void) {\n    _Atomic(int) x;\n}\n",
+     "AtomicSpec", "c11"),
 ]
 
 _TIERS = {

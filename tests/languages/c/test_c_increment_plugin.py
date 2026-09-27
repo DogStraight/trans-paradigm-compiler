@@ -21,8 +21,9 @@
 **启用入口（实测）**：语言包 `tpc.toml` 的 `[plugins] enabled` 是**运行时启用清单**——
 它决定哪些插件目录的声明被合并（含 `[lexer] token_ext`）。⚠ 曾把这份清单当成"打包面
 装饰"，是错的：加它之前 `_Static_assert` 一直是标识符；加上后立刻成为关键字。故 ROADMAP
-说的"启用组合等效某标准"**在运行时可表达**（改这份清单即可）；差异只在"同一次进程内切
-两档"需要重载或 pack 副本。
+说的"启用组合等效某标准"**在运行时可表达**；"同一次进程内切两档"也已是**一等参数**
+（`ConfigRegistry.load_language(pack, enabled=[…])`，2026-09-26 落地）——
+档位矩阵见 `test_c_standard_tiers.py`，本文件只按包默认档（= c23 全档）验证增量形态。
 """
 
 import os
@@ -253,6 +254,14 @@ _C11_INCREMENTS = [
     ("_Noreturn 在存储类之后", "static _Noreturn void die2(void);\n", "NoreturnSpec"),
     ("_Thread_local", "_Thread_local int tls;\n", "ThreadLocalSpec"),
     ("_Thread_local 与 static", "static _Thread_local int tls2;\n", "ThreadLocalSpec"),
+    # `_Alignas` / `_Atomic`（2026-09-26 批次）——说明符位增量；注入点不同于上面几项：
+    # 没有"最窄公共点"（`_Alignas`）或只有限位符位一支（`_Atomic`），见 15/16 插件头注。
+    ("_Alignas 常量表达式", "_Alignas(16) char buf[64];\n", "AlignasConstSpec"),
+    ("_Alignas 说明符序列其余位", "int _Alignas(8) x;\n", "AlignasConstSpec"),
+    ("_Alignas 类型名形态", "_Alignas(double) char c;\n", "AlignasTypeSpec"),
+    ("_Atomic 限定符在首位", "_Atomic int x;\n", "AtomicSpec"),
+    ("_Atomic 限定符在其余位", "int _Atomic x;\n", "AtomicSpec"),
+    ("_Atomic(T) 说明符形态", "_Atomic(int) x;\n", "AtomicSpec"),
 ]
 
 
@@ -337,3 +346,131 @@ class TestC11SyntaxIncrements:
         assert typed is not None
         assoc2 = next(n for n in iter_nodes(typed) if n.node_name == "GenericAssoc")
         assert assoc2.kind.node_name == "TypeName", assoc2.kind
+
+
+# ── 说明符位增量：`_Alignas` / `_Atomic`（2026-09-26）──────────────────
+# 这两个构造的注入点形态与上面几项**不同**，且都撞过引擎的一条性质（"选择器只在
+# **同一元素内**换候选，不跨元素/跨兄弟回溯"），故单独一类把经验钉成判据：
+#   · `_Alignas`：说明符位在本包由 **6 条规则**分别表达（没有统一的
+#     declaration-specifiers），共同的最窄点是 `@TypeQualifier` ⇒ 一次注入六处生效；
+#   · `_Atomic`：两种形态（限定符 / `_Atomic(T)`）**必须写在一条规则里**（可选组）。
+#     拆成两条规则时 `_Atomic(int) x;` 会先命中单 token 那条、随后元素失败且**不回头**
+#     ⇒ 整条声明解析失败（实测空 AST）——本类的 `test_both_forms_in_one_env` 是它的回归守。
+
+# 逐字还原用例：(标签, 源码, 期望节点)
+_SPECIFIER_SLOT_FAITHFUL = [
+    ("_Alignas 块作用域", "void f(void) {\n    _Alignas(16) int x;\n}\n", "AlignasConstSpec"),
+    ("_Alignas 结构成员", "struct S {\n    _Alignas(8) int x;\n};\n", "AlignasConstSpec"),
+    ("_Alignas 参数位", "void f(_Alignas(8) int x);\n", "AlignasConstSpec"),
+    ("_Alignas 类型名位 sizeof", "int n = sizeof(_Alignas(8) int);\n", "AlignasConstSpec"),
+    ("_Atomic 块作用域", "void f(void) {\n    _Atomic int x;\n}\n", "AtomicSpec"),
+    ("_Atomic(T) 块作用域", "void f(void) {\n    _Atomic(int) x;\n}\n", "AtomicSpec"),
+    ("_Atomic 结构成员", "struct S {\n    _Atomic int x;\n};\n", "AtomicSpec"),
+    ("_Atomic 参数位", "void f(_Atomic int x);\n", "AtomicSpec"),
+    ("_Atomic(T) 类型名位 sizeof", "int n = sizeof(_Atomic(int));\n", "AtomicSpec"),
+]
+
+# 说明符位六处（`_Alignas` 要覆盖全部：任一处漏掉就有一种合法写法进不来）
+_SPECIFIER_SLOT_HOSTS = [
+    "Declaration",
+    "SpecRest",
+    "FuncDef",
+    "MemberSpec",
+    "ParamSpec",
+    "TypeName",
+]
+
+
+class TestC11SpecifierSlotIncrements:
+    """`_Alignas`（C11 §6.7.5）与 `_Atomic`（§6.7.2.4/§6.7.3）——说明符位增量。"""
+
+    @pytest.mark.parametrize("label,src,node", _SPECIFIER_SLOT_FAITHFUL,
+                             ids=[c[0] for c in _SPECIFIER_SLOT_FAITHFUL])
+    def test_parses_into_expected_node(self, restore_language, label, src, node):
+        ast = _env()["parse"](src)
+        assert ast is not None, label
+        names = {n.node_name for n in iter_nodes(ast)}
+        assert node in names, f"{label}: 期望 {node}，实得 {sorted(names)}"
+
+    @pytest.mark.parametrize("label,src,node", _SPECIFIER_SLOT_FAITHFUL,
+                             ids=[c[0] for c in _SPECIFIER_SLOT_FAITHFUL])
+    def test_render_faithful_and_idempotent(self, restore_language, label, src, node):
+        del label, node
+        env = _env()
+        out = env["render"](src)
+        assert out == src.rstrip("\n"), repr(out)
+        assert env["render"](out + "\n") == out
+
+    @pytest.mark.parametrize("label,src,node", _SPECIFIER_SLOT_FAITHFUL,
+                             ids=[c[0] for c in _SPECIFIER_SLOT_FAITHFUL])
+    def test_lints_clean(self, restore_language, label, src, node):
+        del label, node
+        assert _env()["lint"](src) == []
+
+    def test_both_forms_in_one_env(self, restore_language):
+        """`_Atomic` 两种形态**同一次加载**下都要进 AST。
+
+        ⚠ 这条是"拆成两条规则就挂"的回归守：单 token 的限定符形态若排在
+        `_Atomic(T)` 之前，后者会因"命中后不回头"而整条失败（实测空 AST）。
+        三种写法各自断言，且**同一个 env**（同一份规则表）下连续跑。
+        """
+        env = _env()
+        for src in ("_Atomic int x;\n", "int _Atomic x;\n", "_Atomic(int) x;\n",
+                    "_Atomic(int *) p;\n"):
+            ast = env["parse"](src)
+            assert ast is not None, src
+            names = {n.node_name for n in iter_nodes(ast)}
+            assert "AtomicSpec" in names, f"{src} → {sorted(names)}"
+
+    def test_atomic_two_forms_live_in_one_rule(self, restore_language):
+        """形态收在一个规则里（可选组），不是"两条规则 + 两个注入点"。
+
+        结构判据（配合上一条行为判据）：`AtomicSpec` 的 production 里那组
+        `( … )?` 就是 `_Atomic(T)` 形态；`TypeQualifier` 的候选里**不应**再出现
+        被拆开的 `@AtomicQual` / `@AtomicTypeSpec`（那是撞过墙的形态）。
+        """
+        rules = _env()["rules"]
+        assert "AtomicSpec" in rules, sorted(rules)
+        prod = " ".join(str(p) for p in rules["AtomicSpec"].production)
+        assert "?" in prod, prod
+        quals = " ".join(str(p) for p in rules["TypeQualifier"].production)
+        assert "@AtomicSpec" in quals, quals
+        assert "@AtomicQual" not in quals and "@AtomicTypeSpec" not in quals, quals
+
+    def test_alignas_reaches_all_six_specifier_slots(self, restore_language):
+        """`_Alignas` 经 `@TypeQualifier` 一次注入、六处说明符位全生效。
+
+        这 6 处就是本包说明符位的全集（没有统一的 declaration-specifiers 规则）——
+        漏一处 = 某种合法写法静默进不来（成员 / 参数 / 类型名就是漏点）。
+        """
+        rules = _env()["rules"]
+        for host in _SPECIFIER_SLOT_HOSTS:
+            joined = " ".join(str(p) for p in rules[host].production)
+            assert "@AlignasConstSpec" in joined, f"{host} 缺 _Alignas：{joined}"
+
+    def test_core_baseline_files_untouched(self, restore_language):
+        """增量名不出现在核心基线文件里（"加标准 = 加插件"的可机械检查判据）。"""
+        pack = ROOT_DIR / "grammar" / "c"
+        hits = [
+            p.name
+            for p in pack.glob("*.toml")
+            if any(
+                name in p.read_text(encoding="utf-8")
+                for name in ("AlignasConstSpec", "AlignasTypeSpec", "AtomicSpec")
+            )
+        ]
+        assert hits == [], f"核心基线被增量污染：{hits}"
+
+    def test_injection_is_declared_in_plugin_files(self, restore_language):
+        """来源可追：两个插件文件各自声明注入目标，核心文件一行未动。"""
+        want = {
+            "15_alignas.toml": ("AlignasConstSpec", "AlignasTypeSpec"),
+            "16_atomic.toml": ("AtomicSpec",),
+        }
+        for fname, rule_names in want.items():
+            path = ROOT_DIR / "grammar" / "c" / "plugins" / "c11" / fname
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+            for rule in rule_names:
+                got = tuple(data[rule]["inject"]["targets"])
+                assert got == ("@TypeQualifier.production[0]",), f"{fname}:{rule} → {got}"

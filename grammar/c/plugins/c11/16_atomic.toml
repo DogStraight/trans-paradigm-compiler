@@ -1,0 +1,48 @@
+# ============================================================================
+# c11 插件 — `_Atomic`（C11 §6.7.2.4 atomic 类型说明符 + §6.7.3 类型限定符）
+# ============================================================================
+# C11 给 `_Atomic` **两种形态**：
+#   ① 类型限定符：`_Atomic int x;` / `int _Atomic x;` / `_Atomic int *p;`
+#   ② 类型说明符：`_Atomic ( type-name )`（`atomic-type-specifier`）
+# 本文件用**一条规则**同时表达两者：`_Atomic` + **可选**的 `( type-name )` 组。
+#
+# ⚠ **为什么不是"两条规则 + 两个注入点"（实测踩过）**：那样做时
+#   `@AtomicQual`（单 token）与 `@AtomicTypeSpec`（4 元素）会在同一个交替里以
+#   "谁先被注入"的顺序排定；`_Atomic(int) x;` 命中单 token 那条后，**后续元素失败
+#   不会回头试另一条**（选择器只在**同一元素内**换候选，不跨元素回溯）⇒ 整条声明
+#   解析失败（实测：空 AST）。写成一个规则里的**可选组**后，两种形态的判定发生在
+#   规则**内部**（`(` 在就吃组、不在就 0 次），根本不产生需要回溯的分岔。
+#   —— 这正是 ROADMAP「C 语义层切片 1b」里"候选路径是否收敛"的同一个引擎性质：
+#   能用"同一元素内的候选"或"可选组"表达的，就别依赖跨元素回溯。
+#
+# 注入点是**最窄的公共点 `TypeQualifier`**：该规则被 6 处说明符位共同引用
+#   （Declaration / SpecRest / FuncDef / MemberSpec / ParamSpec / TypeName，见
+#   15_alignas.toml 的清单）⇒ **一次注入六处生效**。代价是 `_Atomic` 在语法层被当作
+#   "说明符位的一支"（组合合法性/`_Atomic` 的完整类型约束归语义层，同核心基线口径）。
+#
+# ⚠ 歧义面（与哪条规则相邻）：`@TypeQualifier` 在 `Declaration.production[0]` 里排在
+#   `@TypeSpecifier` **之前**，故 `_Atomic ( int ) x ;` 走本规则（限定符位）而不是
+#   `@SimpleType`；这不影响结果——两种形态都在本规则里，且渲染都按源拼写回填。
+#   `_Atomic(x);`（当函数调用的写法）在 C 里不再是合法表达式（`_Atomic` 是关键字），
+#   落到声明位时 `x` 不是类型名 ⇒ 本规则失败，与标准的判断一致。
+
+[AtomicSpec.parser]
+production = [
+    "keyword._Atomic",
+    "(bracket.l_parentheses,@TypeName,bracket.r_parentheses)?",
+]
+
+[AtomicSpec.parser.node]
+# type_name — 可选组内的类型名（绑定落到组内的 `@TypeName`，不是包住括号的组：
+#   理由同 InitDeclarator.init——包住括号的形态渲染会多印括号，而 `opt` 组要按
+#   "属性是否为空"决定整组是否输出）。
+type_name = "$2.sub_node[0].sub_node[1]"
+
+[AtomicSpec.inject]
+targets = ["@TypeQualifier.production[0]"]
+
+[AtomicSpec.renderer.layout]
+line = [
+    "_Atomic",
+    { opt = { group = ["(", { ref = "type_name" }, ")"] } },
+]

@@ -9,9 +9,10 @@
 
 ## 现状（0.1.3 交付面）
 
-**接受面：`python tools/c_acceptance.py` → 接受 32 / 空洞 2（共 34 条）**：
+**接受面：`python tools/c_acceptance.py` → 接受 34 / 空洞 2（共 36 条）**：
 `#include` / `#define`（预处理属阶段 4，单独立项）。
-（空洞数 2026-09-26 从 3 降到 2：变参 `...` 落地，见下「标准增量」前的说明。）
+（空洞数 2026-09-26 从 3 降到 2：变参 `...` 落地；接受数同日 32 → 34：`_Alignas` /
+`_Atomic` 两条增量用例——见下「标准增量插件」。）
 
 已落地：
 
@@ -30,8 +31,9 @@
   **链式后缀**（`a.b.c` / `f(x)[i]` / `p->a[i]` / `(*fp)(x)`）、`sizeof` 两形态、
   **强制转换** `(T)x` 与**复合字面量** `(T){…}`（关键字起头的类型名）。
 - **标准增量插件**：`c11` / `c17` / `c23` 三档齐备（见下「标准档位」）。语法增量逐项：
-  · **c11**：`_Static_assert`（**文件与块两处作用域**）、`_Alignof`、`_Generic`、
-    `_Noreturn`、`_Thread_local`；
+  · **c11**（6 个新关键字**全部有规则**）：`_Static_assert`（**文件与块两处作用域**）、
+    `_Alignof`、`_Generic`、`_Noreturn`、`_Thread_local`、`_Alignas`（常量表达式与
+    类型名两形态）、`_Atomic`（限定符形态 + `_Atomic(T)` 说明符形态）；
   · **c17**：无新语法（缺陷修正版，只表达包含关系）；
   · **c23**：`static_assert`（小写关键字化）、`nullptr`、`true`/`false`、`bool`、
     `typeof`/`typeof_unqual`、`constexpr`。
@@ -53,10 +55,10 @@
 
 | 项 | 归属 |
 |---|---|
-| 预处理（`#include` / `#define` / `#if` / `#` / `##` / 变参宏） | 阶段 4，单独立项（引擎前置见 ROADMAP「注入机制补『改』路径」） |
+| 预处理（`#include` / `#define` / `#if` / `#` / `##` / 变参宏） | 阶段 4，单独立项（引擎前置见 ROADMAP「注入机制：四类注入面，按需实现」——③ 具体路径修改与 ④ 移除语法路径仍缺结构化面） |
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
-| `_Alignas` / `_Atomic`（c11）、`[[属性]]`（c23） | 说明符位设计（"属性可出现在多处"的位点 + linter 语句区间）——独立一小项 |
+| `[[属性]]`（c23） | 说明符位设计（"属性可出现在多处"的位点 + linter 语句区间）——独立一小项 |
 | `alignas`/`alignof`/`thread_local`（c23 无下划线拼写） | 与 c11 的 `_` 版**同构造异拼写**：跨插件引用 token 还是 c23 侧各写一条同形规则，需先定包内约定 |
 | `_BitInt` / `_Decimal32/64/128`（c23） | 形态同 `bool` 但需先定宽度参数与十进制浮点接受域 |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
@@ -110,7 +112,7 @@ grammar/c/
   `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
   `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
-  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **11 构造 × 4 档矩阵**（按"解析成
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **17 构造 × 4 档矩阵**（按"解析成
   哪个节点"判定，能直接抓出缓存串档）。两条静默失效根因已修（声明缓存键、解析缓存键都
   须含档位）——细节见 `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
 - ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
@@ -120,17 +122,25 @@ grammar/c/
 - **"加标准"= 声明式注入，不改核心文件**：各插件用
   `[ExtRule.inject] targets = ["@核心规则.production[N]"]` 往既有交替里**加一支**
   （c11：`_Static_assert`→`Stmt`、`_Alignof`/`_Generic`→两处原子清单、
-  `_Noreturn`→`FuncSpec`、`_Thread_local`→`StorageClass`；c23：`nullptr`/`true`/`false`
-  →原子清单、`bool`/`typeof`→`SimpleType`、`constexpr`→`StorageClass`）。
+  `_Noreturn`→`FuncSpec`、`_Thread_local`→`StorageClass`、`_Alignas`/`_Atomic`
+  →`TypeQualifier`；c23：`nullptr`/`true`/`false`→原子清单、`bool`/`typeof`→`SimpleType`、
+  `constexpr`→`StorageClass`）。
   注入点的选择原则：**挑最窄的那条规则**——`SimpleType` 被声明/成员/参数/类型名四处引用，
-  一次注入四处生效。判据守：
-  `tests/languages/c/test_c_increment_plugin.py`（"原候选一支不少、序不变、来源可追"）+
+  一次注入四处生效；`TypeQualifier` 被 **6 处说明符位**引用（`Declaration`/`SpecRest`/
+  `FuncDef`/`MemberSpec`/`ParamSpec`/`TypeName`），`_Alignas`/`_Atomic` 都挂它。
+  反例（说明"最窄点"确实存在）：`_Alignas` 本该按标准的 declaration-specifiers 走，
+  但本包**没有**统一的说明符序列规则，6 处各自列举——挂 `TypeQualifier` 是唯一
+  一次到位的点（组合合法性归语义层，同核心基线口径）。
+  判据守：`tests/languages/c/test_c_increment_plugin.py`（"原候选一支不少、序不变、
+  来源可追" + `_Alignas` 覆盖六处说明符位 + `_Atomic` 两形态同环境并存）+
   `test_c23_increment_plugin.py`。
-  ⚠ 两条形态坑（都被 fail-fast 拦下，写在这防重踩）：① `production` 是**一条产生式的
-  元素序列**（列表长度 = slot 数），备选要在**同一元素内**用 `|`；② 裸交替与逗号同现时
-  `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）。
-- **仍未落地的标准增量**（各自前置见「未做」表）：`_Alignas`/`_Atomic`/`[[属性]]`、
-  c23 无下划线拼写、`_BitInt`/`_Decimal*`。
+  ⚠ 三条形态坑（都被 fail-fast 或实测拦住，写在这防重踩）：① `production` 是**一条产生式
+  的元素序列**（列表长度 = slot 数），备选要在**同一元素内**用 `|`；② 裸交替与逗号同现时
+  `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）；③ **别依赖跨元素回溯**：
+  选择器只在**同一元素内**换候选，`_Atomic` 的两种形态若拆成两条规则，单 token 那条命中后
+  后续元素失败**不会回头**（实测整条声明空 AST）——写成一个规则里的可选组即可。
+- **仍未落地的标准增量**（各自前置见「未做」表）：`[[属性]]`、c23 无下划线拼写、
+  `_BitInt`/`_Decimal*`。
 
 ## 渲染保真（原文打印）
 

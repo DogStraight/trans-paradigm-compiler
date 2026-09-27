@@ -7,6 +7,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包 c11 说明符位增量收口：`_Alignas` / `_Atomic` 落地——c11 的 6 个新关键字全部有规则**。
+  接受面 **32/34 → 34/36**（空洞仍只剩预处理两项）；档位矩阵 11 → **17 构造 × 4 档**。
+  - **`_Alignas`（§6.7.5）**：两条规则分别表达**常量表达式**与**类型名**两种实参形态
+    （`AlignasConstSpec` / `AlignasTypeSpec`）；注入点 = `@TypeQualifier`——本包说明符位由
+    6 条规则分别表达（`Declaration`/`SpecRest`/`FuncDef`/`MemberSpec`/`ParamSpec`/`TypeName`），
+    而 `TypeQualifier` 被这 6 处共同引用 ⇒ **一次注入六处生效**。
+  - **`_Atomic`（§6.7.2.4 / §6.7.3）**：两种形态（类型限定符 `_Atomic int x;` 与类型说明符
+    `_Atomic(int) x;`）**写在一条规则里**（`AtomicSpec` = `_Atomic` + 可选组 `( type-name )`），
+    同样挂 `@TypeQualifier`。
+    ⚠ 本轮实测的**引擎性质**：选择器只在**同一元素内**换候选，**不跨元素/跨兄弟回溯**——
+    拆成两条规则（单 token 限定符 + 4 元素说明符）时，`_Atomic(int) x;` 会先命中单 token
+    那条、随后元素失败且**不回头** ⇒ 整条声明**空 AST**（渲染空串，比报错更难发现）。
+    收进一条规则的**可选组**后，两种形态都在规则内部判定，不产生需要回溯的分岔
+    ——与 ROADMAP「C 语义层切片 1b」里"候选路径是否收敛"是同一性质。
+  - ⚠ **注入点选择有实测差异（A/B）**：其余条件相同、只换 `targets` 时，"6 处逐点注入"
+    会让块作用域 `_Alignas(16) int x;` 折成两行、且**成员/参数/类型名三处空 AST**；改挂
+    `TypeQualifier` 后四症全消。变量已隔离，引擎内部机制未追到底——处置原则记进包内头注：
+    **优先找"被多处共同引用的那条规则"当宿主，别逐点铺**。
+  - **判据**：`test_c_increment_plugin.py` 62 → 95 例（6 条增量进 `_C11_INCREMENTS` 的
+    解析 / 逐字渲染 / 幂等 / lint 三组参数化 + 新 `TestC11SpecifierSlotIncrements`：
+    9 条说明符位用例、**两形态同一 env 并存**、`_Alignas` 覆盖六处说明符位、核心基线文件
+    不含增量名、注入目标可追）；`test_c_standard_tiers.py` 矩阵 11 → 17 行（4 项 + 2 条块作用域）；
+    `tools/c_acceptance.py` 34 → 36 条。19 个说明符位形态（文件/块/成员/参数/类型名/cast）
+    全部 **token 序列不变 + 逐字还原 + 幂等 + linter 零诊断**。
 - **引擎级 `enabled=` 档位覆盖参数：同一个 pack 可在同一次进程内切档**
   （`ConfigRegistry.load_language` / `load_all` / `resolve` / `resolve_with_sources(..., enabled=[…])`；
   `None` = 用包内 `[plugins] enabled`，**不是**"沿用上次"）。此前"档位对照"只能靠 pack 副本；
@@ -22,7 +46,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **fail-fast 两条**：`enabled` 必须是字符串列表（非列表 / 含空串 / 含非字符串 →
     `ConfigError`）；清单里的插件名**必须能解析到插件包**——此前是**静默跳过**（拼错一个
     名字就少加载一个插件，"启用组合等效某标准"直接失真）。
-  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **11 构造 × 4 档矩阵**
+  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **17 构造 × 4 档矩阵**
     （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
     判定——比"规则表里有没有"更能抓出缓存串档）+ 同进程连续切档 + `Lexer` 跟随档位 +
     `enabled=None` 回落到包默认 + 非法参数 fail-fast；`tools/check_gate_efficacy.py` 增两条
@@ -519,7 +543,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `plugins/c23/`：小写 `static_assert` 正式关键字化（N3096 §6.4.1）——
     **只靠插件自己**即可加（文件作用域语句规则 + `is_statement`，不动核心 `Stmt`
     选替）。需要「改」核心规则的那一类（`typeof`/`constexpr`/`[[属性]]`/`nullptr`）
-    **明确未做**并写明原因，前置是 ROADMAP「注入机制补『改』路径」。
+    **明确未做**并写明原因，前置是 ROADMAP「注入机制：四类注入面，按需实现」（③/④）。
   - **包含关系在加载期可执行**：组件级 `requires`（c23→c17→c11→核心基线）——
     只启用 c17 而不启用 c11 会**响亮失败**，而不是静默少加载。本插件是**组件级
     requires 的首个实例**（此前只有 `[[analyzer.postpasses]]` 链内时点依赖用过）。

@@ -4,14 +4,15 @@
 # 各标准增量 = 各自一个插件目录；`requires`（组件依赖）表达标准包含关系
 # （c17 requires c11、c23 requires c17）——启用组合等效某个标准的语法面。
 #
-# ⚠ 运行时**按 `<pack>/plugins/` 自动发现**（`load_language(pack, plugins_dir=...)`）：
-#   不加 plugins_dir 时只有核心基线，加了才带增量——本插件的测试即按这两档验证。
-#   `[plugins] enabled`（语言包 tpc.toml 里那份）是**打包/分发面**的清单，不是运行时开关。
+# ⚠ 运行时启用清单 = 语言包 `tpc.toml` 的 `[plugins] enabled`（2026-09-26 实测更正：
+#   此前记为"打包/分发面清单，不是运行时开关"是**错的**——它决定哪些插件目录的
+#   tpc.toml 声明被合并，含 `[lexer] token_ext` 的词法扩展）。引擎级 `enabled=`
+#   覆盖参数可把它变成**档位**（同一个 pack 同一次进程内切档），见
+#   `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
 #
-# 本插件当前落地：`_Static_assert`（C11 §6.7.4 静态断言，文件作用域与块作用域均合法）。
-# 词法面**先声明 C11 全部关键字**（`_Generic`/`_Alignas`/`_Alignof`/`_Noreturn`/
-# `_Thread_local`/`_Atomic`），语法规则按已落地的子集引用——未引用的关键字会被
-# linter 视为"未期望 token"，这正是负样本判据之一。
+# 本插件已落地：`_Static_assert`（文件 + 块作用域）、`_Alignof`、`_Generic`、
+# `_Noreturn`、`_Thread_local`、`_Alignas`、`_Atomic`——C11 的 6 个新关键字**全部有规则**。
+# 词法面在 `_token_ext.toml` 里声明全部关键字。
 
 [lexer]
 token_ext = { file = "_token_ext.toml", required = true }
@@ -23,4 +24,6 @@ files = [
     "12_generic.toml",
     "13_noreturn.toml",
     "14_thread_local.toml",
+    "15_alignas.toml",
+    "16_atomic.toml",
 ]
