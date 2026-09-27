@@ -62,10 +62,18 @@
         `_Decimal32/64/128`、`[[属性]]`、字面量后缀 `1.5dd` 均已可用。见
         `grammar/c/README.md`「标准增量插件」；⚠ **共同前置不再是"注入机制"**——2026-09-26
         实测更正：现役直接注入就是"往既有交替加一支"）：
-        **只剩 `[[属性]]` 的四个形态/位点边界**——空实参 `[[deprecated()]]`、相邻字面量
-        拼接、属性表尾随逗号（三者都需引擎侧"配平 token 序列/可空项列表"形态），
-        以及声明符之后 / 枚举项上的属性位点（要在核心 `Declarator`/`Enumerator` 后缀位
-        加分支）。判据：`test_c23_increment_plugin.py` 的 `test_attribute_known_boundaries`；
+        **只剩 `[[属性]]` 的五个形态/位点边界**（判据：
+        `test_c23_increment_plugin.py` 的 `test_attribute_known_boundaries`；
+        **其中两条位点边界需要拍板**，见下）：
+        形态三条（需引擎侧"配平 token 序列/可空项列表"形态）：空实参 `[[deprecated()]]`、
+        相邻字面量拼接、属性表尾随逗号；
+        位点两条：声明符之后 `int x [[deprecated]];`、枚举项 `A [[deprecated]] = 1`——
+        **实测注入做不到**（前者注入 `@DirectDeclarator.production[1]` 缠成
+        `choice[repeat, @Attr]`，可空 repeat 永远先"成功" ⇒ 属性支试不到；后者
+        `Enumerator` 序列中间无可注入交替点）⇒ 要么动核心形态（(a) `Declaration` 加
+        `@AttributeSpec*` 槽 / (b) 核心给后缀交替起名 `DeclaratorSuffix` 供注入，代价是
+        AST 形状变化），要么记为边界。**倾向先记边界**，细节与权衡见
+        `grammar/c/plugins/c23/21_attributes.toml` 头注；
       · **typedef 名起头的强制转换**（`(myint)x`）= 语义层切片 1b（需符号表 / 作用域 /
         声明顺序），草案与判据见 `ROADMAP.md`「C 语义层切片 1b」；
       · 逐声明符位宽（`int a : 3, b : 4;`）——已知边界，标准里位宽属声明符（形态改动）；
@@ -107,23 +115,36 @@
       `#`/`##`、变参宏 + 条件编译反向映射精度（darkriscv 嵌套位置精度教训在 C 上更严）
 - [ ] **阶段 5 标准等效验证**：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准
       语法规范），并接真实 C 语料（先小样本，规模与来源在阶段 0 定）
-- [ ] **保真度渲染：分隔符后行尾注释随折行漂移**（引擎侧，可复现）：
-      **最小复现（fuzz 链路自动收缩，2026-09-26）**：
-      `intrst/* ` + `x`×60 + ` */,second;`（82 字节**单行**）——
-      一遍渲染 `intrst, /* x… */\nsecond;`，二遍 `intrst, second /* x… */;`（第 3 遍起收敛
-      ⇒ 判据 4 不幂等）。**注释长度 60 是折行阈值**：再短一行就放得下、漂移不出现
-      （行内字符级最小化把注释从 60 缩到"恰好仍触发"的长度就是这条）。进入方式：
-      `python tests/fuzz/run_fuzz.py --pack grammar/c`（变异很难撞上该形态——4000 轮
-      0 findings；该样本是直接喂触发输入造的，见 `tests/fuzz/README.md`「回馈链路」）。
-      成因：`parser/_production._attach_line_end` 把"注释后换行"的行尾注释挂
-      `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，
-      容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；而同一注释在分隔符**之前**时挂的是
-      **项**节点 trailing（渲染在该行尾）。候选：① 紧前为符号 token 时改走
-      `inline_after[sep]`（join 的分隔符行中通道，落位即源位）——⚠ 残留锚不渲染
-      （leftover 回补通道已删），误路由＝丢注释，须逐形态验证；② 挂"刚结束的项节点"
-      而非 `current_node`（需引入"最近完成节点"状态）。现状：`edge_comments.c` 用**不折行**的
-      短注释绕开该形态（缺口记档，见 `docs/gaps/gap-language-pack-scope.md`
-      「C 包渲染/保真面现状」表 #6）。⚠ 修好后跑
+- [ ] **保真度渲染：分隔符附近的行中注释随折行漂移（不幂等）**（引擎侧，可复现）——
+      **⚠ 此项需要拍板的不是"改不改"，而是"走哪条路"**，两条候选都触及引擎概念，见下。
+      **最小复现（2026-09-26 复核，逐遍实测）**：`intrst/* ` + `x`×60 + ` */,second;`
+      （单行 80 字节）：
+      | 遍 | 输入（注释位置） | 注释挂到哪 | 输出 |
+      |---|---|---|---|
+      | 1 | 注释在 `,` **前**、同行 | `Identifier(intrst).trailing` | `intrst, /*c*/\nsecond;` |
+      | 2 | 注释在 `,` **后**、后随换行 | **`CommaExpr`（容器）.trailing** | `intrst, second /*c*/;` |
+      | 3 | 注释在 `second` 后、后随 `;` | `Identifier(second).trailing` | `intrst,\nsecond /*c*/;` |
+      | 4 | 同 3 | 同 3 | 同 3（**固定点**）——但注释已从"`intrst` 之后"漂到"语句末尾" |
+      **⚠ 更正旧记载的两点**：① 旧文写"成因 = `_attach_line_end` 把注释后换行挂 current_node"——
+      第 1 遍其实走的是 `_attach_midline_trailing`（注释后是 `,`，**同行**），`_attach_line_end`
+      只在第 2 遍生效；② 旧文写"第 3 遍起收敛" ✓ 对，但**收敛点不是源位置**（注释跨过了 `,`
+      与第二个操作数）。**注释从不丢失**（无 token 损坏），症状只是"位置漂移 + 一遍不幂等"。
+      **真根因（本轮定位）**：容器级 `trailing` 的渲染是 `LineSuffix`——它落在**其后遇到的
+      第一个换行点**上；而"哪里有换行点"又取决于**注释自身占的宽度**（60 字符刚好把行顶过
+      80 列）⇒ 同一个注释在三种邻接形态下进三个不同槽位，其中容器 `trailing` 把注释推到
+      容器**末尾**。故"注释锚点"信息（parser 已记进 `_comment_anchors`）与"渲染时落点"
+      之间没有约束关系。
+      **两条候选（都需一个引擎概念，故选哪条要拍板）**：
+        ① **锚点感知的 LineSuffix**：让容器 `trailing` 的行尾注释**贴着它的锚 token** 输出
+           （锚 = 注释前那个 token，parser 侧已有）——落到 `,` 后就是 `intrst, /*c*/\nsecond;`
+           （= 第 1 遍输出，成为固定点）。⚠ 难点：`;`/`)` 这类**终结符**锚点若也贴上去会输出
+           `…; /*c*/`（错位），故需要"哪些符号是**列表分隔符**"的**声明面**（引擎不许硬编码
+           `,`——语言知识不进代码）；join 侧已有 `inline_after[sep]` 通道可复用。
+        ② **挂"刚结束的项节点"**（不挂容器）：第 2 遍会挂到 `intrst`，渲染成 `intrst /*c*/,`
+           ——仍跨过 `,`（源序是 `,` 之后），大概率只是把漂移换个方向。
+        ③ **记为已知偏差**（现状；缺口档渲染现状表 #6）。倾向 ①，但它要新增一个声明字段
+        （分隔符锚点），且必须逐形态验证"误路由 = 丢注释"的风险（leftover 回补通道已删）。
+      **修好后**（无论选哪条）跑
       `python tests/fuzz/shrink.py --all --pack grammar/c --sediment <edge 语料> --cause "…"`
       把这条最小复现沉淀成回归（链路已自动化，见 `tests/fuzz/README.md`）。
 
@@ -388,34 +409,3 @@
   2026-09-19 定调“先这样”）。本机跑全量时自行显式传 `-n 4` 规避顶满核（做法与分档
   见 `tests/README.md`「改动节奏分档」）；不改仓库默认。
 
-- [ ] **单测依赖 gitignore 的生成物 ⇒ 全新检出/CI 必红**（打 `v0.1.2` tag 时实测发现）：
-      `tests/engine/analyzer/test_elaboration_{port_decls,signal_graph,gen_activity}.py`
-      硬编码读 `tests/e2e/samples/normal/gen/gen_generate.v`，而该目录是
-      `tests/e2e/run_all_tests.py` 的**产物**且在 `.gitignore`（`tests/e2e/samples/*/gen/`）。
-      **实测**（临时 worktree 检出 `8dca789` = 全新检出态）：
-        · 直接 `pytest tests` → **4 failed / 2172 passed / 18 skipped**（3 个是上述
-          `FileNotFoundError`）；
-        · 先跑 `run_all_tests.py` 生成产物 → **1 failed / 2175 passed / 18 skipped**
-          （精化三项转绿；余下 1 项见下条）。
-      影响：`ci.yml` 的 `pytest tests` 之前**没有生成步骤**，且 `origin/dev` 停在 v0.1.1
-      ——本批 395 提交**从未推送**，CI 从未跑过它们 ⇒ 首次推送会红。
-      修法候选：① 三项测试改用**已入库**的 ANSI 头部样本（`tests/e2e/samples/check_accuracy/
-      cases/**` 或新增 `tests/engine/analyzer/fixtures/ansi_header.sv`）；② 测试内按需用
-      `tmp_path` 自造样本（跑管线格式化 `ref/` 形态或直接写小样本再分析），**彻底去掉跨套件
-      依赖**；③ 对 `normal/gen/gen_generate.v` 单独 `!` 反忽略入库（最省事，但与
-      `.gitignore` 把 gen/ 当产物的意图冲突）。
-      **判据**：全新克隆（或 `git worktree add` 到空目录）上直接 `pytest tests -q` 全绿，
-      无需先跑 e2e harness。
-- [ ] **隔离工具 nodeid 归一只在同盘成立（Linux/CI 会红，本机跨盘"假绿"）**：
-      `tools/check_test_isolation.py::_normalize_id` 用 `os.path.relpath(path, _ROOT)`——
-      仓库根与目标目录**同盘**时算出相对路径，**丢掉 `::用例名`**；**跨盘**时 `relpath`
-      无法计算、退回原样（保留用例名）。**实测**（同一目标目录、同一脚本，只换仓位置）：
-        · 主仓（仓在 `E:`、临时目录在 `C:`）→ 报 `::test_needs`（1 条差异）；
-        · worktree（两者同在 `C:`）→ 报 `iso_probe/test_a_sets_state.py` 与
-          `iso_probe/test_b_needs_state.py`（2 条差异，用例名丢失）。
-      故自测 `tests/policy/test_check_test_isolation.py::test_compare_reports_isolated_only_failure`
-      （断言含 `test_b_needs_state.py::test_needs`）**只在跨盘通过**；Linux/macOS 上仓库与
-      `/tmp` 同属一个文件系统 ⇒ 与 worktree 同形 ⇒ **首次推送 CI 会红**。
-      修法：`_normalize_id` 显式处理 `ValueError`（跨盘/仓外），并保证**用例名始终保留**、
-      路径统一成 posix 相对形式；自测改为断言"文件名 + 用例名"两段，并补一条同盘/仓外路径
-      的直接判据（否则本机永远只能验到跨盘那一半）。

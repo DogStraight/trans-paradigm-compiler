@@ -84,7 +84,7 @@
 | 预处理（`#include` / `#define` / `#if` / `#` / `##` / 变参宏） | 阶段 4，单独立项（引擎前置见 ROADMAP「注入机制：四类注入面，按需实现」——③ 具体路径修改与 ④ 移除语法路径仍缺结构化面） |
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
-| `[[属性]]`（c23）的**未覆盖形态** | ① 空实参 `[[deprecated()]]`、② 相邻字面量拼接、③ 属性表尾随逗号 —— 标准允许，本包的可空项/配平 token 序列形态写不出来；④ 声明符**之后**与**枚举项**上的属性位点（要在核心 `Declarator`/`Enumerator` 后缀位加分支）。头注 `plugins/c23/21_attributes.toml` + 判据 `test_c23_increment_plugin.py::TestC23InjectionPoints::test_attribute_known_boundaries` |
+| `[[属性]]`（c23）的**未覆盖形态与位点** | **形态**（三条，标准允许）：空实参 `[[deprecated()]]`、相邻字面量拼接、属性表尾随逗号——需引擎侧"配平 token 序列/可空项列表"形态。**位点**（两条）：声明符之后 `int x [[deprecated]];`（实测：注入 `@DirectDeclarator.production[1]` 缠成 `choice[repeat, @Attr]`，可空 repeat 永远先"成功" ⇒ 属性支试不到）、枚举项 `A [[deprecated]] = 1`（`Enumerator` 序列中间无可注入交替点）。**位点两案 + 记边界案**（核心形态改动，**留作者拍板**）见 `plugins/c23/21_attributes.toml` 头注；判据 `test_c23_increment_plugin.py::TestC23InjectionPoints::test_attribute_known_boundaries` |
 | 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | ✅ **已落地**（2026-09-26）：走声明级合并 `merge = "by-name"`（`plugins/c23/_number_c23.toml` 只补 `c_dec` 的 `suffix`），**不是**改核心 `base/_number.toml`（那会让基线档也接受 `1.5dd`） |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |

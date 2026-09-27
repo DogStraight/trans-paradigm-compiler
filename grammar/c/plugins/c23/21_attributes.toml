@@ -43,11 +43,29 @@
 #       接受 `[[a,,]]`，得不偿失）。
 #   要支持需引擎侧"配平 token 序列"形态（新形态，与 ROADMAP「注入机制」的 ③/④ 无关）。
 #
-# **属性位点（只做两处，其余如实登记）**：① **说明符位**（含 `[[a]] [[b]]` 连续、成员
-#   说明符位、参数位、类型名位）；② **属性声明** `[[…]];`（文件与块作用域）。**未做**：
-#   声明符**之后**（`int x [[deprecated]];`）与**枚举项**上（`A [[deprecated]] = 1`）——
-#   两处都要在核心 `Declarator`/`Enumerator` 的**后缀位**加分支（形态改动），
-#   按"最小可用 + 如实登记"处理。
+# **属性位点（只做两处；另两处的实测结论 + 三案）**：
+#   已做：① **说明符位**（含 `[[a]] [[b]]` 连续、成员说明符位、参数位、类型名位）；
+#         ② **属性声明** `[[…]];`（文件与块作用域）。
+#   ⚠ **未做，且实测"注入做不到"**（2026-09-26 试过再记，不是没试）：
+#     · **声明符之后**（`int x [[deprecated]];`）：核心 `DirectDeclarator` 的后缀链是
+#       `"(@ArraySuffix|@FuncSuffix)*"`（**重复项内**的交替）。注入
+#       `@DirectDeclarator.production[1]` 实际缠成
+#       `choice[repeat(@ArraySuffix|@FuncSuffix), @DeclaratorAttr]`——**原 repeat 在前**，
+#       而可空 repeat 永远"匹配成功"（0 次）⇒ 属性那支**永远试不到** ⇒ 整条声明空 AST
+#       （同 `_Atomic` 那条教训的同一引擎性质：不在同一元素内换候选就依赖回溯）。
+#     · **枚举项**（`A [[deprecated]] = 1`）：`Enumerator` 的 production 是
+#       `[@Identifier, "(= @Expression)?"]`——**序列中间没有可注入的交替点**。
+#   **三案（各有权衡，留作者拍板）**：
+#     (a) 核心 `Declaration` 的 production 加一个 `@AttributeSpec*` 槽（声明符表与 `;` 之间）
+#         —— 位点正确，但要动核心形态文件（且该槽在基线档引用的规则不存在，需确认空引用安全）；
+#     (b) 核心给后缀交替**起个名**（`"(@ArraySuffix|@FuncSuffix)*"` → `"@DeclaratorSuffix*"`），
+#         插件即可注入 `@DeclaratorSuffix.production[0]`（裸交替 ⇒ 前置 ⇒ 试得到）——代价是
+#         **AST 形状变化**（每个后缀多包一层节点），需复核 `suffixes` 绑定、渲染布局与既有测试；
+#         `Enumerator` 同理需要一个可注入的中段规则；
+#     (c) 记为**已知边界**（现状）：两种位点不解析，判据钉在
+#         `test_attribute_known_boundaries`（补上就会红）。
+#   倾向 **(c) 先记边界**：等真实语料出现这两种写法再选 (a)/(b)——两者都是核心形态改动，
+#   不该顺手做（本包纪律：核心基线不为增量让路，除非增量确实做不了且真需求确认）。
 #
 # **属性名带前缀**（`[[gnu::unused]]`）：按标准 `attribute-prefix :: identifier` 两层收，
 #   绑定 `token = "$1"`（`gnu`）+ `qualified = "$2.…"`（`unused`）；无前缀时 `qualified` 为空。
