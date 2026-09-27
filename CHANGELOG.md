@@ -7,6 +7,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包 c23 小写拼写落地 + 修掉一条过期边界：`static_assert`（新增块作用域）、
+  `alignas` / `alignof` / `thread_local`**。接受面 **34/36 → 35/37**；档位矩阵 17 → **21**。
+  - **"同构造异拼写"的包内约定已定**（TODO 里"需先定约定"那条的答复）：
+    **c23 侧各写一条同形规则**（先例 = `static_assert`），不做跨插件 token 引用、
+    也不用 `inject_replace_rule` 去改别的插件的规则。理由：词法层 **token 类型由拼写决定**
+    （`lexer/main_lexer.py::_full_map_keywords` 用 `keyword_type(拼写)`，`[id.keyword]` 的
+    **键名只是可读名**）⇒"一个 token 类型两种拼写"在现役词法里表达不了；改别人规则的
+    production 只有软路径（ROADMAP 注入分类的 ③ 类）。**代价**：同一构造两种拼写 =
+    **两个节点名**（`AlignasConstSpec` vs `AlignasC23Spec`）——按构造匹配的分析器需同时认
+    这两个名；判据守"宿主必须与 c11 版一致"（否则两拼写的可达位点会漂移）。
+  - **宿主与 c11 版对齐**：`alignas` → `@TypeQualifier`（被 6 处说明符位共同引用，
+    一次注入六处生效）、`alignof` → 两处原子清单（`@PrimaryExpr` / `@PostfixExpr`）、
+    `thread_local` → `@StorageClass`。
+  - ⚠ **过期边界作废（实测）**：`10_static_assert_alias.toml` 原写"块作用域不可用（需在核心
+    `Stmt` 选择器加分支 → 属『改』核心，与其余增量同批待办）"——不成立，照 c11 的
+    `_Static_assert` 加一行 `targets = ["@Stmt"]` 即可（含 `if` body 位，靠传播注入）。
+  - **判据**：`test_c23_increment_plugin.py` 45 → 82 例（10 条新构造进 `_CASES` 的三组
+    参数化：解析 / token 序列 + 幂等 / lint 零诊断；新增"小写拼写复用 c11 宿主"、
+    "`static_assert` 块作用域靠注入"、注入目标清单扩到 9 个文件）；
+    `test_c_standard_tiers.py` 矩阵 17 → 21 行（`static_assert` 块作用域 + 三个拼写）；
+    `tools/c_acceptance.py` 36 → 37 条；13 个拼写形态 token 序列不变 + 幂等 + linter 零诊断。
 - **C 包 c11 说明符位增量收口：`_Alignas` / `_Atomic` 落地——c11 的 6 个新关键字全部有规则**。
   接受面 **32/34 → 34/36**（空洞仍只剩预处理两项）；档位矩阵 11 → **17 构造 × 4 档**。
   - **`_Alignas`（§6.7.5）**：两条规则分别表达**常量表达式**与**类型名**两种实参形态
@@ -46,7 +67,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **fail-fast 两条**：`enabled` 必须是字符串列表（非列表 / 含空串 / 含非字符串 →
     `ConfigError`）；清单里的插件名**必须能解析到插件包**——此前是**静默跳过**（拼错一个
     名字就少加载一个插件，"启用组合等效某标准"直接失真）。
-  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **17 构造 × 4 档矩阵**
+  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **21 构造 × 4 档矩阵**
     （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
     判定——比"规则表里有没有"更能抓出缓存串档）+ 同进程连续切档 + `Lexer` 跟随档位 +
     `enabled=None` 回落到包默认 + 非法参数 fail-fast；`tools/check_gate_efficacy.py` 增两条

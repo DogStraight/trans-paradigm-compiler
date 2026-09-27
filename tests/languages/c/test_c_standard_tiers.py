@@ -72,6 +72,12 @@ _INCREMENT_MATRIX = [
      "AlignasConstSpec", "c11"),
     ("_Atomic(T) 块作用域（c11）", "void f(void) {\n    _Atomic(int) x;\n}\n",
      "AtomicSpec", "c11"),
+    # c23 小写拼写（同构造异拼写 = c23 侧各写一条同形规则）：从 c23 档起
+    ("static_assert 块作用域（c23）", 'void f(void) {\n    static_assert(1, "x");\n}\n',
+     "StaticAssertC23Decl", "c23"),
+    ("alignas（c23）", "alignas(16) char buf[64];\n", "AlignasC23Spec", "c23"),
+    ("alignof（c23）", "int a = alignof(int);\n", "AlignofC23Expr", "c23"),
+    ("thread_local（c23）", "thread_local int t;\n", "ThreadLocalC23Spec", "c23"),
 ]
 
 _TIERS = {

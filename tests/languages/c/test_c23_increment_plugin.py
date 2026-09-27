@@ -1,8 +1,10 @@
 """tests/languages/c/test_c23_increment_plugin.py — c23 插件的语法增量验证。
 
 覆盖（2026-09-26 批次）：`nullptr` / `true`·`false`（表达式原子）、`bool` / `typeof`·
-`typeof_unqual`（类型说明符）、`constexpr`（存储类说明符）。每项都靠**声明的注入**
-落在核心基线的一个既有交替上——本文件同时是这些注入点的回归守。
+`typeof_unqual`（类型说明符）、`constexpr`（存储类说明符），以及**小写拼写族**
+（`static_assert` 文件 + 块两作用域、`alignas` / `alignof` / `thread_local`——与 c11 的
+`_` 版同构造异拼写，约定 = c23 侧各写一条同形规则，见 `16_alignas_alias.toml` 头注）。
+每项都靠**声明的注入**落在核心基线的一个既有交替上——本文件同时是这些注入点的回归守。
 
 ⚠ **历史更正**：c23 插件 tpc.toml 原写"typeof / constexpr / nullptr 这类要往既有规则
 交替里塞分支的增量做不了，因为现役 `grammar_inject` 只能做字符串子串补丁（且软失败）"。
@@ -51,6 +53,21 @@ _CASES = [
     ("typeof_unqual", "typeof_unqual(int) w;\n", "TypeofSpec"),
     ("constexpr 对象", "constexpr int n = 4;\n", "ConstexprSpec"),
     ("constexpr 与 static", "static constexpr int m = 5;\n", "ConstexprSpec"),
+    # 小写拼写（C23 关键字化）—— 约定 = "c23 侧各写一条同形规则"，见 16_alignas_alias.toml
+    ("static_assert 文件作用域", 'static_assert(1, "x");\n', "StaticAssertC23Decl"),
+    ("static_assert 块作用域", 'void f(void) {\n    static_assert(1, "x");\n}\n',
+     "StaticAssertC23Decl"),
+    ("static_assert 在 if body", 'void f(int a) {\n    if (a)\n        static_assert(1, "x");\n}\n',
+     "StaticAssertC23Decl"),
+    ("alignas 常量表达式", "alignas(16) char buf[64];\n", "AlignasC23Spec"),
+    ("alignas 说明符序列其余位", "int alignas(8) x;\n", "AlignasC23Spec"),
+    ("alignas 类型名形态", "alignas(double) char c;\n", "AlignasC23TypeSpec"),
+    ("alignas 块作用域", "void f(void) {\n    alignas(16) int x;\n}\n", "AlignasC23Spec"),
+    ("alignas 结构成员", "struct s2 {\n    alignas(8) int x;\n};\n", "AlignasC23Spec"),
+    ("alignof 表达式", "int a2 = alignof(int);\n", "AlignofC23Expr"),
+    ("alignof 参与二元运算", "int b2 = alignof(int) * 2;\n", "AlignofC23Expr"),
+    ("thread_local", "thread_local int tls;\n", "ThreadLocalC23Spec"),
+    ("thread_local 与 static", "static thread_local int tls2;\n", "ThreadLocalC23Spec"),
 ]
 
 
@@ -153,21 +170,54 @@ class TestC23InjectionPoints:
         store = " ".join(str(p) for p in rules["StorageClass"].production)
         assert "@ConstexprSpec" in store, store
 
+    def test_c23_spellings_reuse_the_c11_hosts(self, restore_language):
+        """小写拼写与 c11 的 `_` 版**挂同一个宿主**（同构造异拼写 = 各写一条同形规则）。
+
+        约定与代价（同一构造两个节点名）见 `16_alignas_alias.toml` 头注。这里守的是
+        "宿主选择与 c11 一致"——否则 `alignas` 与 `_Alignas` 的可达位点会漂移。
+        """
+        rules = _env()["rules"]
+        quals = " ".join(str(p) for p in rules["TypeQualifier"].production)
+        store = " ".join(str(p) for p in rules["StorageClass"].production)
+        for name in ("AlignasC23Spec", "AlignasC23TypeSpec"):
+            assert f"@{name}" in quals, f"TypeQualifier 缺 @{name}：{quals}"
+        assert "@ThreadLocalC23Spec" in store, store
+        for host in ("PrimaryExpr", "PostfixExpr"):
+            joined = " ".join(str(p) for p in rules[host].production)
+            assert "@AlignofC23Expr" in joined, f"{host} 的原子清单缺 @AlignofC23Expr：{joined}"
+
+    def test_static_assert_block_scope_is_injected(self, restore_language):
+        """小写 `static_assert` 的**块作用域**靠注入核心 `Stmt`（旧注说"不可用"已作废）。
+
+        ⚠ 这是本轮修掉的一条**过期边界**：c23 头注曾写块作用域要"改核心 `Stmt` 选择器"
+        因而做不了——现役直接注入就是"加一支"，与 c11 的 `_Static_assert` 同一做法。
+        """
+        rules = _env()["rules"]
+        stmt = " ".join(str(p) for p in rules["Stmt"].production)
+        assert "@StaticAssertC23Decl" in stmt, stmt
+
     def test_injections_are_declared_in_plugin_files(self, restore_language):
         want = {
+            "10_static_assert_alias.toml": ("@Stmt",),
             "11_nullptr.toml": ("@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"),
             "12_bool_literal.toml": ("@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"),
             "13_bool_type.toml": ("@SimpleType.production[0]",),
             "14_typeof.toml": ("@SimpleType.production[0]",),
             "15_constexpr.toml": ("@StorageClass.production[0]",),
+            "16_alignas_alias.toml": ("@TypeQualifier.production[0]",),
+            "17_alignof_alias.toml": ("@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"),
+            "18_thread_local_alias.toml": ("@StorageClass.production[0]",),
         }
         for fname, targets in want.items():
             path = ROOT_DIR / "grammar" / "c" / "plugins" / "c23" / fname
             with open(path, "rb") as f:
                 data = tomllib.load(f)
-            rule = next(k for k, v in data.items() if isinstance(v, dict) and "inject" in v)
-            got = tuple(data[rule]["inject"]["targets"])
-            assert got == targets, f"{fname}: {got} != {targets}"
+            rules_with_inject = [
+                k for k, v in data.items() if isinstance(v, dict) and "inject" in v
+            ]
+            for rule in rules_with_inject:
+                got = tuple(data[rule]["inject"]["targets"])
+                assert got == targets, f"{fname}:{rule} {got} != {targets}"
 
 
 class TestTierDiscrimination:

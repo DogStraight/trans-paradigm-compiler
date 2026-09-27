@@ -80,6 +80,9 @@ CASES: list[tuple[str, str, str]] = [
      "int *p = nullptr;\nbool b = true;\n"),
     ("增量", "bool / typeof / constexpr（c23，说明符位）",
      "typeof(int) z;\nconstexpr int n = 4;\n"),
+    ("增量", "c23 小写拼写（static_assert 块作用域 / alignas / alignof / thread_local）",
+     'void f(void) {\n    static_assert(1, "x");\n}\n'
+     "alignas(16) char buf2[64];\nint a2 = alignof(int);\nthread_local int tls;\n"),
 ]
 
 

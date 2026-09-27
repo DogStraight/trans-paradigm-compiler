@@ -1,0 +1,31 @@
+# ============================================================================
+# c23 插件 — 小写 `alignof ( 类型名 )`（C23 §6.5.3.4）
+# ============================================================================
+# C23 把 c11 的 `_Alignof` 关键字化为 `alignof`（保留 `_Alignof`）。形态与 c11 的
+# `AlignofExpr` **完全同形**，只换首 token 拼写——约定与代价见
+# `16_alignas_alias.toml` 头注（同构造两拼写 = 两个节点名）。
+#
+# ⚠ 与 c11 那条同形的原因（照抄它的三条口径，见 `plugins/c11/11_alignof.toml`）：
+#   · `is_atom = true`：规则内部含 `@TypeName`（经 `@TypeSpecifier`）与 `Expression`
+#     成环，环只在原子规则里被 pratt 截断；
+#   · **两处原子清单都要注**（`PrimaryExpr` 与 `PostfixExpr` 的 head）——只注一处会出现
+#     "能当表达式、却不能当后缀链头部"的半通形态。
+
+[AlignofC23Expr.parser]
+is_atom = true
+production = [
+    "keyword.alignof",
+    "bracket.l_parentheses",
+    "@TypeName",
+    "bracket.r_parentheses",
+]
+
+[AlignofC23Expr.parser.node]
+kw = "$1"
+type_name = "$3"
+
+[AlignofC23Expr.inject]
+targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]
+
+[AlignofC23Expr.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "type_name" }, ")"]

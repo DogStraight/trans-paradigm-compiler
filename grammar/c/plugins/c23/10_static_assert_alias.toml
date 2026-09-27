@@ -2,14 +2,20 @@
 # c23 插件 — 小写 `static_assert ( 常量表达式 , 字面量 ) ;`（C23 §6.7.5）
 # ============================================================================
 # 与 c11 的 `_Static_assert` 同形；C23 同时保留 `_Static_assert`（向后兼容）。
-# 文件作用域可用（同 c11 那条的理由：标 `is_statement` 即被全局语句发现接手，
-# 不需要改核心 `Stmt` 选择器）。
+# 文件作用域与**块作用域**都可用，两处各有一条通路（同 c11 那条，见其头注）：
+#   · 文件作用域：`is_statement = true` → 引擎的全局语句发现直接认它；
+#   · 块作用域：核心 `Stmt` 选择器里要有这一支 → 结构化注入 `targets = ["@Stmt"]`。
 #
-# ⚠ 已知边界：块作用域不可用（需在核心 `Stmt` 选择器加分支 → 属"改"核心，
-#   与 C23 其余语法增量同批待办）。
+# ⚠ **旧注释作废（2026-09-26 实测）**：本条曾写"块作用域不可用（需在核心 `Stmt` 选择器加
+#   分支 → 属『改』核心，与 C23 其余语法增量同批待办）"——**不成立**：现役
+#   `inject_productions` 的直接注入就是"往既有交替里加一支"（树层
+#   `insert_choice_candidate`），c11 的 `_Static_assert` 已按它落地块作用域，本条照做即可。
 
 [StaticAssertC23Decl]
 is_statement = true
+
+[StaticAssertC23Decl.inject]
+targets = ["@Stmt"]
 
 [StaticAssertC23Decl.parser]
 production = [

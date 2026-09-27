@@ -9,10 +9,10 @@
 
 ## 现状（0.1.3 交付面）
 
-**接受面：`python tools/c_acceptance.py` → 接受 34 / 空洞 2（共 36 条）**：
+**接受面：`python tools/c_acceptance.py` → 接受 35 / 空洞 2（共 37 条）**：
 `#include` / `#define`（预处理属阶段 4，单独立项）。
 （空洞数 2026-09-26 从 3 降到 2：变参 `...` 落地；接受数同日 32 → 34：`_Alignas` /
-`_Atomic` 两条增量用例——见下「标准增量插件」。）
+`_Atomic` 两条增量用例，再 34 → 35：c23 小写拼写一条——见下「标准增量插件」。）
 
 已落地：
 
@@ -35,13 +35,22 @@
     `_Alignof`、`_Generic`、`_Noreturn`、`_Thread_local`、`_Alignas`（常量表达式与
     类型名两形态）、`_Atomic`（限定符形态 + `_Atomic(T)` 说明符形态）；
   · **c17**：无新语法（缺陷修正版，只表达包含关系）；
-  · **c23**：`static_assert`（小写关键字化）、`nullptr`、`true`/`false`、`bool`、
-    `typeof`/`typeof_unqual`、`constexpr`。
+  · **c23**：`static_assert`（小写关键字化，**文件与块两处作用域**）、`nullptr`、
+    `true`/`false`、`bool`、`typeof`/`typeof_unqual`、`constexpr`，以及 **c11 三个关键字的
+    C23 拼写** `alignas` / `alignof` / `thread_local`（同构造异拼写，见下条约定）。
   ⚠ **落地方式全是"声明的注入"**（`[ExtRule.inject] targets = […]`，引擎侧
   `inject_productions` 的直接注入 = 树层 `insert_choice_candidate`）：插件往核心基线的
   **既有交替里加一支**，核心文件一行不动。此前插件注释把这类增量记为"做不了、
   需引擎补『改』路径"——**那是错的**（机制早就有了，缺的是声明），见
   `plugins/c23/tpc.toml` 的历史更正段。
+  ⚠ **同构造异拼写（如 `_Alignas` vs `alignas`）的包内约定（2026-09-26 定）**：
+  **c23 侧各写一条同形规则**（先例 = `static_assert`），不做跨插件 token 引用、也不用
+  `inject_replace_rule` 去改别的插件的规则。理由：词法层 **token 类型由拼写决定**
+  （`keyword_type(拼写)`，`[id.keyword]` 的键名只是可读名）⇒"一个 token 类型两种拼写"
+  表达不了；改别人规则的 production 只有软路径。**代价**：同一构造两种拼写 =
+  **两个节点名**（`AlignasConstSpec` / `AlignasC23Spec`）——按构造匹配的分析器需同时认。
+  判据：`test_c23_increment_plugin.py::TestC23InjectionPoints::test_c23_spellings_reuse_the_c11_hosts`
+  （宿主必须与 c11 版一致，否则两拼写的可达位点会漂移）。
 
 **linter**：三份样本（`ring_buffer.h` / `ring_buffer.c` / `edge_comments.c`）上**零诊断**
 （2026-09-26 实测；此前合法代码误报 14 / 7 / 2 条，成因与修点在
@@ -59,7 +68,6 @@
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
 | `[[属性]]`（c23） | 说明符位设计（"属性可出现在多处"的位点 + linter 语句区间）——独立一小项 |
-| `alignas`/`alignof`/`thread_local`（c23 无下划线拼写） | 与 c11 的 `_` 版**同构造异拼写**：跨插件引用 token 还是 c23 侧各写一条同形规则，需先定包内约定 |
 | `_BitInt` / `_Decimal32/64/128`（c23） | 形态同 `bool` 但需先定宽度参数与十进制浮点接受域 |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
@@ -112,7 +120,7 @@ grammar/c/
   `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
   `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
-  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **17 构造 × 4 档矩阵**（按"解析成
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **21 构造 × 4 档矩阵**（按"解析成
   哪个节点"判定，能直接抓出缓存串档）。两条静默失效根因已修（声明缓存键、解析缓存键都
   须含档位）——细节见 `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
 - ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
@@ -139,8 +147,7 @@ grammar/c/
   `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）；③ **别依赖跨元素回溯**：
   选择器只在**同一元素内**换候选，`_Atomic` 的两种形态若拆成两条规则，单 token 那条命中后
   后续元素失败**不会回头**（实测整条声明空 AST）——写成一个规则里的可选组即可。
-- **仍未落地的标准增量**（各自前置见「未做」表）：`[[属性]]`、c23 无下划线拼写、
-  `_BitInt`/`_Decimal*`。
+- **仍未落地的标准增量**（各自前置见「未做」表）：`[[属性]]`、`_BitInt`/`_Decimal*`。
 
 ## 渲染保真（原文打印）
 

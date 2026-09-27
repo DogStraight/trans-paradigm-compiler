@@ -286,6 +286,24 @@ _MUTATIONS: list[dict[str, str]] = [
         ),
         "test": "tests/languages/c/test_c_increment_plugin.py",
     },
+    {
+        "why": "小写 `static_assert` 的**块作用域**靠 `targets = [\"@Stmt\"]` 这一行（旧注曾写"
+               "『块作用域不可用，需改核心』）。删掉它 ⇒ 函数体内的 `static_assert(1,\"x\");`"
+               "不再进 Stmt 交替——本变异证明那三条块作用域用例真的握着这行声明",
+        "file": "grammar/c/plugins/c23/10_static_assert_alias.toml",
+        "old": '[StaticAssertC23Decl.inject]\ntargets = ["@Stmt"]\n',
+        "new": "",
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "`alignof` 是原子规则，必须注进**两处**原子清单（只注一处会得到「能当表达式、"
+               "不能当后缀链头」的半通形态）。去掉 PostfixExpr 那处 ⇒ 「两处都在」的断言"
+               "必须变红",
+        "file": "grammar/c/plugins/c23/17_alignof_alias.toml",
+        "old": 'targets = ["@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"]\n',
+        "new": 'targets = ["@PrimaryExpr.production[0]"]\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
 ]
 
 
@@ -344,10 +362,16 @@ def _run_mutation(m: dict[str, str]) -> tuple[bool, str]:
 
 
 def _print_mutation_list() -> None:
-    """`--list`：逐条打印变异清单（文件 / 变异 / 期望变红的测试 / 来源事故）。"""
+    """`--list`：逐条打印变异清单（文件 / 变异 / 期望变红的测试 / 来源事故）。
+
+    ⚠ 有几条变异是**纯删除**（`new` 为空串，如"删掉那行注入声明"）——
+    `"".splitlines()` 是空列表，直接取 `[0]` 会 IndexError（2026-09-26 修）。
+    """
     for i, m in enumerate(_MUTATIONS, 1):
+        old_head = (m["old"].splitlines() or [""])[0][:70]
+        new_head = (m["new"].splitlines() or [""])[0][:50] or "（删除该锚点）"
         print(f"{i}. {m['file']}")
-        print(f"   变异：{m['old'].splitlines()[0][:70]}… → {m['new'].splitlines()[0][:50]}…")
+        print(f"   变异：{old_head}… → {new_head}…")
         print(f"   期望变红：{m['test']}")
         print(f"   来源事故：{m['why']}")
 

@@ -1,0 +1,22 @@
+# ============================================================================
+# c23 插件 — 小写 `thread_local` 存储类说明符（C23 §6.7.1）
+# ============================================================================
+# C23 把 c11 的 `_Thread_local` 关键字化为 `thread_local`（保留 `_Thread_local`）。
+# 形态与 c11 的 `ThreadLocalSpec` **完全同形**（单 token 进存储类交替），只换拼写——
+# 约定与代价见 `16_alignas_alias.toml` 头注（同构造两拼写 = 两个节点名）。
+#
+# 注入点 = `@StorageClass`（与 c11 那条同宿主）：注入后该规则的 production 变成
+# `@ThreadLocalC23Spec|@ThreadLocalSpec|@ConstexprSpec|keyword.typedef|…`——
+# 即"加一支"，原候选一个不动。
+
+[ThreadLocalC23Spec.parser]
+production = ["keyword.thread_local"]
+
+[ThreadLocalC23Spec.parser.node]
+base = "$1"
+
+[ThreadLocalC23Spec.inject]
+targets = ["@StorageClass.production[0]"]
+
+[ThreadLocalC23Spec.renderer.layout]
+ref = "base"

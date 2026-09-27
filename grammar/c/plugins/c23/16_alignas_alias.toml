@@ -1,0 +1,57 @@
+# ============================================================================
+# c23 插件 — 小写 `alignas ( 常量表达式 | 类型名 )`（C23 §6.7.5）
+# ============================================================================
+# C23 把 c11 的 `_Alignas` **关键字化为 `alignas`**（同时保留 `_Alignas`）。
+# 形态与 c11 的两条规则**完全同形**（常量表达式 / 类型名两种实参），只换首 token 拼写。
+#
+# ⚠ **包内约定（本轮固化，TODO 里那条"需先定约定"的答复）**：同一构造的两种拼写
+#   **各写一条同形规则**（本包先例 = `10_static_assert_alias.toml` 的
+#   `static_assert` vs c11 的 `_Static_assert`）——**不做跨插件引用**。
+#   为什么不跨插件引用：本项目词法里 **token 类型由拼写决定**
+#   （`lexer/main_lexer.py::_full_map_keywords` 用 `keyword_type(orig)`，
+#   `[id.keyword]` 的**键名只是可读名**），故"一个 token 类型两种拼写"表达不了；
+#   而"改 c11 规则的 production"只有软路径（`inject_replace_rule` 字符串子串补丁、
+#   软失败）——都不如各写一条稳。
+#   代价（记在此，供下游权衡）：**同一构造两种拼写 = 两个节点名**
+#   （`AlignasConstSpec` vs `AlignasC23Spec`）；按构造匹配的分析器需同时认这两个名。
+#
+# 注入点 = `@TypeQualifier`（与 c11 那两条同宿主：该规则被 6 处说明符位共同引用，
+#   **一次注入六处生效**）。两条规则合起来同时挂在同一交替上，故 `alignas` 与
+#   `_Alignas` 在任一档下都是"同一批位点"可达。
+
+[AlignasC23Spec.parser]
+production = [
+    "keyword.alignas",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+
+[AlignasC23Spec.parser.node]
+kw = "$1"
+arg = "$3"
+
+[AlignasC23Spec.inject]
+targets = ["@TypeQualifier.production[0]"]
+
+[AlignasC23Spec.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "arg" }, ")"]
+
+
+[AlignasC23TypeSpec.parser]
+production = [
+    "keyword.alignas",
+    "bracket.l_parentheses",
+    "@TypeName",
+    "bracket.r_parentheses",
+]
+
+[AlignasC23TypeSpec.parser.node]
+kw = "$1"
+type_name = "$3"
+
+[AlignasC23TypeSpec.inject]
+targets = ["@TypeQualifier.production[0]"]
+
+[AlignasC23TypeSpec.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "type_name" }, ")"]
