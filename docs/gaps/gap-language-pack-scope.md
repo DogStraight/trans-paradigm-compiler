@@ -245,15 +245,10 @@ C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_asse
    加上后立刻成为关键字；verilog 的 `nand`（plugin 关键字）在 verilog 下无需任何
    `ext_dirs` 即为关键字，因为 verilog 的 `enabled` 列了 gates。
 
-**缺口（范围已收窄）**：ROADMAP 定调的"`enabled` 组合等效某个标准"**在打包面可表达**
-（改这份清单即可，三档对照测试即按 pack 副本做），缺的是**同一次进程内切两档**——
-需要一个运行时可选的插件组合入口（引擎级 `enabled` 覆盖参数，逐处清单见 `TODO.md`）。
-
-**候选**：给 `load_language` / `setup_grammar` 一个显式的 `enabled` 覆盖（或 `ext_dirs`
-收敛成"插件组合"声明），语义与打包面的 `[plugins] enabled` 统一到一处清单——
-顺带把"两处各有一份启用清单"这个潜在散点一并消除。判据：同一 pack、同一次进程内，
-两档组合各自可加载并解析出不同规则表；且 `requires` 链（c17→c11→核心）在缺前置时
-**响亮失败**（组件依赖排序已有该行为，`core/plugin_loader.py` 的 `META_REQUIRES`）。
+**收口（2026-09-26）**：运行时档位入口**已落地并验证**——`ConfigRegistry.load_language /
+load_all / resolve(..., enabled=[...])`（`None` = 用包内 `[plugins] enabled`），同一个
+pack、同一次进程内 `enabled=["c11"]` → `enabled=[]` 会真的换档（词法扩展 + 配置声明一起
+重建）。逐处实现与两处静默失效根因见下「运行时档位入口已落地」。
 
 
 ### 精化（同日实测）：规则加载与词法扩展走**两条不同**路径
@@ -267,7 +262,8 @@ C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_asse
   **`LinterScanner(rules_dir=…, ext_dirs=["…/plugins"])`**（`tests/languages/verilog/
   test_2005_batch2.py:115`）。
 
-**结论**：C 包首个增量插件目前是"**规则层已增量、词法层未接通**"的半成品。
+**结论（留作过程记录；下方「自我更正」已推翻）**：C 包首个增量插件当时是"**规则层已增量、
+词法层未接通**"的半成品。
 下一步（按"先成因后动手"）：读 `Lexer` / `LinterScanner` 对 `ext_dirs` 的消费路径
 （`core.define.DEFAULT_EXT_DIRS` 的派生链是入口），确认语言包插件目录该以什么身份
 进入词法扩展；接通后把 `test_construct_not_yet_parsed_as_plugin_node` 改为断言
@@ -289,9 +285,32 @@ C 包首个标准增量插件 `grammar/c/plugins/c11/` 已落地（`_Static_asse
   （三种粒度试过），真正生效的是 `load_language` 时按 `enabled` 合并声明。
 
 **由此**：ROADMAP 的"`enabled` 组合等效某个标准"**在运行时即可表达**（改这份清单）。
-仅剩一处待办：**同一次进程内切两档**（基线档 / c11 档）需要重载配置或 pack 副本——
-若要做"各标准接受域断言"的对照测试，需要一个显式的组合覆盖入口（`enabled` 覆盖参数），
-或按档位准备 pack 副本。这是**易用性**问题，不再是**能力缺失**。
+"同一次进程内切两档"也已支持（`enabled=` 覆盖参数，见下节）——这是**易用性**问题，
+不再是**能力缺失**。
+
+
+### 运行时档位入口已落地（2026-09-26，含两处静默失效根因）
+
+`ConfigRegistry.load_language(pack, enabled=["c11"])` / `load_all(..., enabled=…)` /
+`resolve(..., enabled=…)` 接受显式启用组合：`None` = 用包内 `[plugins] enabled`；
+显式档位会被**登记**为该包"当前档位"，故 `Lexer` 之类隐式消费方无需额外参数即可跟随。
+两处**静默失效**根因（症状统一为"改了 `enabled` 毫无变化"）：
+
+1. **声明缓存键只有目录**：`_entries_source` 曾只比 `rules_dir`，同包切档直接复用上一档的
+   `_entries`（含 `[lexer] token_ext`）⇒ 词法仍是旧档。判定改为
+   `(_entries_source, _entries_enabled)` 二元组。
+2. **解析缓存键没有档位**：`_resolve_cache` 的 key 是
+   `(目录, ext_dirs, plugins_dir, base_dirs)`——同包两档的声明不同却算同一个 key
+   ⇒ `Lexer` / 数字形态拿到上一档配置。key 里加 `tier`。
+
+另有**一处不是 bug 的边界**（已落档 `TODO.md`「`[plugins] enabled` 的语义边界」）：
+`enabled` 只决定**声明面**（`tpc.toml` 声明合并，含词法扩展）；插件的**规则文件与 Python
+组件**由 `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
+
+判据：`tests/languages/c/test_c_standard_tiers.py` 的 **11 构造 × 4 档矩阵**
+（`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
+判定），外加同进程连续切档、`Lexer` 跟随档位、非法 `enabled` 参数与清单里不可解析的插件名
+**fail-fast**（拼错档位名不许静默少加载）。
 
 
 ## C 包渲染/保真面现状（原文打印闭环已通，2026-09-25）

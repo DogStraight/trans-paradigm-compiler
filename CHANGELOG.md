@@ -7,6 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **引擎级 `enabled=` 档位覆盖参数：同一个 pack 可在同一次进程内切档**
+  （`ConfigRegistry.load_language` / `load_all` / `resolve` / `resolve_with_sources(..., enabled=[…])`；
+  `None` = 用包内 `[plugins] enabled`，**不是**"沿用上次"）。此前"档位对照"只能靠 pack 副本；
+  现在 `enabled=["c11"]` → `enabled=[]` 会把**词法扩展 + 配置声明**一起按档位重建。
+  - **两处静默失效根因**（症状统一为"改了 `enabled` 毫无变化"，也是上一轮按逐处清单实施后
+    以为没生效的原因）：① `_ensure_entries_for` 的判据只有 `rules_dir`——同包切档直接复用
+    上一档 `_entries`（含 `[lexer] token_ext`）；改为 `(_entries_source, _entries_enabled)`
+    二元组。② `_resolve_cache` 的 key 无档位——同包两档声明不同却算同一个 key，
+    `Lexer` / 数字形态拿到上一档配置；key 里加 `tier`。
+  - **隐式消费方自动跟随**：显式档位在 `load_language` / `load_all` 时**登记**为该包"当前
+    档位"，故 `resolve(pack)`（`Lexer` 走它）无需额外参数即按该档解析；未曾 load 过的包
+    回退到包内清单。
+  - **fail-fast 两条**：`enabled` 必须是字符串列表（非列表 / 含空串 / 含非字符串 →
+    `ConfigError`）；清单里的插件名**必须能解析到插件包**——此前是**静默跳过**（拼错一个
+    名字就少加载一个插件，"启用组合等效某标准"直接失真）。
+  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **11 构造 × 4 档矩阵**
+    （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
+    判定——比"规则表里有没有"更能抓出缓存串档）+ 同进程连续切档 + `Lexer` 跟随档位 +
+    `enabled=None` 回落到包默认 + 非法参数 fail-fast；`tools/check_gate_efficacy.py` 增两条
+    变异（删档位比较、删 `_resolve_cache` 的 tier key，逐条实测变红）。
+  - **边界（不是 bug，已落档 `TODO.md`）**：`enabled` 只门控**声明面**；插件的**规则文件与
+    Python 组件**由 `setup_grammar` → `load_all_components` 加载、**不看** `enabled`。
+    C 包插件是纯 TOML、c4 插件是纯 Python（且 c4 包**没有** `[plugins]` 段），两条路径当前
+    恰好正交——语义边界与两种候选语义（只门控声明面 / 门控一切）见该条。
+
 - **C 标准增量插件：c11 补 4 项、c23 补 6 项语法面；并更正"这类增量做不了"的旧判断**。
   接受面 **26/28 → 32/34**（空洞仍只剩预处理两项）。落地方式**全是"声明的注入"**
   （`[ExtRule.inject] targets = […]`），核心基线文件**一行未动**：
@@ -510,9 +535,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   不碰基座」（`StaticAssertDecl` 不出现在核心基线 `0*_*.toml`）；
   `test_c_standard_tiers.py` 三档对照——同进程内三档各自可加载并解析出不同规则表，
   且「**未声明关键字 ≠ 拒绝**」（C23 关键字在 c99 档下仍可作标识符）。
-  ⚠ 档位对照当前靠 **pack 副本**：引擎级 `enabled` 覆盖参数按逐处清单实施后
-  **档位未按预期切换**（`_ensure_entries_for` 与 `_resolve` 两处缓存键是静默失效点），
-  **未经验证的改动已全部回退**（不留半成品），逐处清单与陷阱留在 `TODO.md`。
+  ⚠ 档位对照**当时**靠 **pack 副本**（引擎级 `enabled` 覆盖参数按逐处清单实施后**档位未按
+  预期切换**，未经验证的改动已全部回退）。该参数已于 2026-09-26 落地并验证（见
+  `[Unreleased]`）——两处静默失效点都是**缓存键**（`_ensure_entries_for` 只比目录、
+  `_resolve` 的 key 无档位），各自都须含档位；归因与判据见
+  `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
 
 - **C 包真实语料：从声明面扩到实现面（并暴露三处真问题，各自登记而非绕过）**：
   `samples/ring_buffer.h`（声明面）+ `samples/ring_buffer.c`（实现面：控制流 /

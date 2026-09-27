@@ -202,6 +202,26 @@ def _validate_bare_spec(config_key: str, spec: dict) -> None:
         )
 
 
+def _validate_enabled_arg(enabled: list[str], pack: str) -> tuple[str, ...]:
+    """`enabled=` 参数校验（fail-fast）：非空字符串列表 → 元组。
+
+    写错的档位必须当场喊出来：静默忽略会让"启用组合等效某标准"变成空话
+    （少加载了插件，却看起来一切正常）。
+    """
+    if not isinstance(enabled, list):
+        raise ConfigError(
+            f"[plugins] enabled 覆盖参数必须是字符串列表，得到 "
+            f"{type(enabled).__name__}（包 {pack}）"
+        )
+    for name in enabled:
+        if not isinstance(name, str) or not name:
+            raise ConfigError(
+                f"[plugins] enabled 覆盖参数含非法项 {name!r}（须为非空字符串）"
+                f"（包 {pack}）"
+            )
+    return tuple(enabled)
+
+
 def _validate_decl_spec(config_key: str, spec: Any) -> None:
     """校验 tpc.toml 配置声明结构（fail-fast，schema 化第一步）。
 
@@ -277,13 +297,18 @@ def _plugin_tpc_index(plugins_dir: str) -> dict[str, tuple[str, str]]:
     return idx
 
 
-def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
+def _load_meta_declarations(
+    grammar_dir: str = "", enabled: list[str] | None = None
+) -> list[tuple]:
     """Read [config.*] declarations from grammar package tpc.toml files.
 
     Args:
         grammar_dir: 语言包目录（相对项目根，如 "grammar/c4"）。空时用
             默认包（config/tpc_config.json 指向的 grammar）——保持既有单语言
             行为；第二语言（c4 等）通过 ConfigRegistry.load_language 传入。
+        enabled: **启用组合覆盖**（插件名列表；`None` = 用包内 `[plugins] enabled`）。
+            这就是"档位对照"的一等入口：同一次进程内 `enabled=["c11"]` → `enabled=[]`
+            让词法/配置声明按档位重建（不必再改 pack 文件或复制 pack）。
 
     两块来源：语言包自身 tpc.toml（`_core_declarations`）+ `[plugins] enabled`
     列出的插件 tpc.toml（`_plugin_declarations`）；两块的声明元组形状由
@@ -307,8 +332,10 @@ def _load_meta_declarations(grammar_dir: str = "") -> list[tuple]:
     check_engine_compat(meta, grammar_dir or core_path)
     declarations = _core_declarations(meta)
 
-    # 2. Plugin packages — 从 [plugins] enabled 读取插件 tpc.toml
-    _plugin_declarations(os.path.dirname(core_path), meta, declarations)
+    # 2. Plugin packages — 启用组合（显式覆盖 > 包内 [plugins] enabled）
+    _plugin_declarations(
+        os.path.dirname(core_path), meta, declarations, enabled=enabled
+    )
     return declarations
 
 
@@ -353,23 +380,49 @@ def _append_plugin_spec(
     declarations.append(_bare_decl(config_key, spec))
 
 
-def _plugin_declarations(package_dir: str, meta: dict, declarations: list) -> None:
-    """`[plugins] enabled` 列出的插件 tpc.toml → 声明追加进 `declarations`。
+def _plugin_declarations(
+    package_dir: str,
+    meta: dict,
+    declarations: list,
+    enabled: list[str] | None = None,
+) -> None:
+    """启用组合列出的插件 tpc.toml → 声明追加进 `declarations`。
+
+    启用组合来源：`enabled` 显式给出时用它（**档位覆盖**），否则读包内
+    `[plugins] enabled`。两者都做**结构校验（fail-fast）**：非字符串列表 /
+    含空串 / 含非字符串 → ConfigError——写错的档位必须喊出来，不能静默少加载
+    插件（那会让"启用组合等效某标准"变成一句空话）。
 
     插件声明与语言包同形，但两处不同：base 固定 `plugins`（file 路径带插件
     相对目录前缀）、required 缺省 **False**（插件可选）；同名 config_key 的
     多插件来源**合并 file 列表**（见 `_append_plugin_file_decl`）。
+
+    ⚠ 插件的 **Python 组件与规则文件** 不在这里加载（那条路径是
+    `setup_grammar` → `load_all_components`），故本函数只决定"词法/配置声明面"。
     """
     plugins_cfg = meta.get("plugins", {})
     if not isinstance(plugins_cfg, dict):
-        return
-    enabled = plugins_cfg.get("enabled", [])
-    if not isinstance(enabled, list):
-        return
-    for name in enabled:
+        plugins_cfg = {}
+    names = enabled if enabled is not None else plugins_cfg.get("enabled", [])
+    if not isinstance(names, list):
+        raise ConfigError(
+            f"[plugins] enabled 必须是字符串列表，得到 {type(names).__name__}"
+            f"（包 {os.path.basename(package_dir)}）"
+        )
+    for name in names:
+        if not isinstance(name, str) or not name:
+            raise ConfigError(
+                f"[plugins] enabled 含非法项 {name!r}（须为非空字符串）"
+                f"（包 {os.path.basename(package_dir)}）"
+            )
         plugin_tpc, rel_dir = _find_plugin_tpc(package_dir, name)
         if not plugin_tpc:
-            continue
+            # fail-fast：清单里的名字必须能解析到插件包。此前静默跳过 ⇒ 拼错一个
+            # 名字就少加载一个插件而毫无提示（"启用组合等效某标准"直接失真）。
+            raise ConfigError(
+                f"[plugins] enabled 列了 {name!r}，但 {package_dir} 下找不到该插件包"
+                f"（需要 <plugins>/{name}/tpc.toml 或同名分类子目录）"
+            )
         with open(plugin_tpc, encoding="utf-8") as f:
             plugin_meta = tomllib.loads(f.read())
         for config_key, spec in _plugin_specs(plugin_meta):
@@ -468,6 +521,16 @@ class ConfigRegistry:
     # （import 期默认包声明）。load_all 时若 rules_dir 与来源不一致，先按该
     # 语言包 tpc.toml 重新生成声明——解决"glob 匹配用默认包、换语言失效"。
     _entries_source: str | None = None
+    # 生成 _entries 时用的**启用组合**（插件名元组）。与 _entries_source 一起构成
+    # "这份声明是按哪个 (包, 档位) 生成的"判据——少了它，同包切档会静默复用上一档
+    # 声明（症状：改了 enabled 毫无变化）。
+    _entries_enabled: tuple[str, ...] | None = None
+    # 各语言包"当前选定的启用组合"（`load_language/load_all` 登记）。隐式消费方
+    # （`resolve` → Lexer / 数字形态）按它解析，从而**无需**给每个消费方加参数就能
+    # 跟随档位；未曾 load 过的包回退到包内 `[plugins] enabled`。
+    _active_enabled: dict[str, tuple[str, ...]] = {}
+    # 包内 `[plugins] enabled` 的读取缓存（档位判定的兜底来源；包文件进程内不变）
+    _declared_enabled_cache: dict[str, tuple[str, ...]] = {}
     # 最近一次 load_all 的配置来源（name → {file, section} 或 {bare: True}）。
     # 供调试/可观测（tpc config dump）——回答"这个值从哪来"。
     _sources: dict[str, dict] = {}
@@ -509,24 +572,93 @@ class ConfigRegistry:
             "bare_value": bare_value,
         }
 
-    @classmethod
-    def _ensure_entries_for(cls, rules_dir: str) -> str:
-        """确保 _entries 声明来自指定语言包，返回规范化 rules_dir。
+    # ── 启用组合（档位）────────────────────────
 
-        若 rules_dir 存在 tpc.toml（语言包目录）且当前 _entries 来源不是该
-        语言包，按该语言包 tpc.toml 重新生成声明——glob 匹配/文件路径声明
-        都基于当前语言包，而非 import 期锁定的默认包。
-        若 rules_dir 无 tpc.toml（临时目录等低层用法），保持现有 _entries
-        不变（load_all 只换 base 目录），兼容直接 declare + load_all 的契约。
-        """
+    @staticmethod
+    def _normalize_pack(rules_dir: str) -> str:
+        """rules_dir → 语言包目录（相对项目根）；无 tpc.toml 时原样返回。"""
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidate = rules_dir
         if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
             candidate = os.path.join("grammar", rules_dir)
         if not os.path.isfile(os.path.join(root, candidate, "tpc.toml")):
+            return rules_dir  # 非语言包目录（低层契约）：保持原样
+        return candidate
+
+    @staticmethod
+    def _is_pack(candidate: str) -> bool:
+        """candidate 是否为语言包目录（含 tpc.toml）。低层契约（临时目录）返回 False。"""
+        return os.path.isfile(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                candidate,
+                "tpc.toml",
+            )
+        )
+
+    @classmethod
+    def _declared_enabled(cls, pack: str) -> tuple[str, ...]:
+        """包内 `[plugins] enabled`（读一次缓存；非语言包目录 → 空元组）。"""
+        if not cls._is_pack(pack):
+            return ()
+        hit = cls._declared_enabled_cache.get(pack)
+        if hit is not None:
+            return hit
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), pack, "tpc.toml"
+        )
+        with open(path, encoding="utf-8") as f:
+            meta = tomllib.loads(f.read())
+        plugins_cfg = meta.get("plugins", {})
+        names = plugins_cfg.get("enabled", []) if isinstance(plugins_cfg, dict) else []
+        if not isinstance(names, list):
+            raise ConfigError(f"[plugins] enabled 必须是字符串列表（包 {pack}）")
+        for name in names:
+            if not isinstance(name, str) or not name:
+                raise ConfigError(
+                    f"[plugins] enabled 含非法项 {name!r}（须为非空字符串）（包 {pack}）"
+                )
+        cls._declared_enabled_cache[pack] = tuple(names)
+        return cls._declared_enabled_cache[pack]
+
+    @classmethod
+    def _tier_for_load(cls, pack: str, enabled: list[str] | None) -> tuple[str, ...]:
+        """**加载**时的档位：显式参数 > 包内清单（None = 用包默认，非"沿用上次"）。"""
+        if enabled is None:
+            return cls._declared_enabled(pack)
+        return _validate_enabled_arg(enabled, pack)
+
+    @classmethod
+    def _tier_for_resolve(cls, pack: str, enabled: list[str] | None) -> tuple[str, ...]:
+        """**解析**（隐式消费方：Lexer / 数字形态）时的档位：
+        显式参数 > `load_language` 登记过的该包档位 > 包内清单。"""
+        if enabled is not None:
+            return _validate_enabled_arg(enabled, pack)
+        hit = cls._active_enabled.get(pack)
+        if hit is not None:
+            return hit
+        return cls._declared_enabled(pack)
+
+    @classmethod
+    def _ensure_entries_for(
+        cls, rules_dir: str, enabled: tuple[str, ...] | None = None
+    ) -> str:
+        """确保 _entries 声明来自指定语言包的**指定档位**，返回规范化 rules_dir。
+
+        判据是 `(_entries_source, _entries_enabled)` 二元组：任一变化都重新生成声明。
+        ⚠ 只比 rules_dir 会让"同包切档"静默复用上一档声明（实测症状：改了 enabled
+        毫无变化）——这正是上一轮该功能没生效的根因之一。
+        若 rules_dir 无 tpc.toml（临时目录等低层用法），保持现有 _entries
+        不变（load_all 只换 base 目录），兼容直接 declare + load_all 的契约。
+        """
+        candidate = cls._normalize_pack(rules_dir)
+        if not cls._is_pack(candidate):
             return rules_dir  # 非语言包目录：保持现有声明（低层契约）
-        if cls._entries_source != candidate:
-            decls = _load_meta_declarations(grammar_dir=candidate)
+        tier = enabled if enabled is not None else cls._tier_for_load(candidate, None)
+        if cls._entries_source != candidate or cls._entries_enabled != tier:
+            decls = _load_meta_declarations(
+                grammar_dir=candidate, enabled=list(tier)
+            )
             cls._entries.clear()
             for name, file, section, base, required, desc, bare in decls:
                 cls.declare(
@@ -539,6 +671,7 @@ class ConfigRegistry:
                     bare_value=bare,
                 )
             cls._entries_source = candidate
+            cls._entries_enabled = tier
         return candidate
 
     @classmethod
@@ -547,6 +680,7 @@ class ConfigRegistry:
         rules_dir: str,
         ext_dirs: list[str] | None = None,
         plugins_dir: str = "",
+        enabled: list[str] | None = None,
     ) -> None:
         """加载指定语言包（**单语言选择**）：从 rules_dir 的 tpc.toml 重新生成
         配置声明并加载全部配置。
@@ -561,9 +695,20 @@ class ConfigRegistry:
 
         Args:
             rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
+            ext_dirs: 额外的扩展规则目录（多语言混合的旧通道）。
+            plugins_dir: 兼容参数（当前实现按 `<pack>/plugins` 自动定位）。
+            enabled: **启用组合覆盖**（插件名列表）。`None` = 用包内
+                `[plugins] enabled`。给定时该组合被登记为该包"当前档位"，
+                后续按该包解析配置（词法/数字形态）都沿用——于是"同一 pack、
+                同一次进程内切档"成立（判据见
+                `tests/languages/c/test_c_standard_tiers.py`）。
         """
-        rules_dir = cls._ensure_entries_for(rules_dir)
-        cls.load_all(rules_dir, ext_dirs=ext_dirs, plugins_dir=plugins_dir)
+        rules_dir = cls._ensure_entries_for(rules_dir, cls._tier_for_load(
+            cls._normalize_pack(rules_dir), enabled
+        ))
+        cls.load_all(
+            rules_dir, ext_dirs=ext_dirs, plugins_dir=plugins_dir, enabled=enabled
+        )
 
     @classmethod
     def load_all(
@@ -571,6 +716,7 @@ class ConfigRegistry:
         rules_dir: str,
         ext_dirs: list[str] | None = None,
         plugins_dir: str = "",
+        enabled: list[str] | None = None,
         **base_dirs: str,
     ) -> None:
         """加载所有已声明的配置。
@@ -587,8 +733,12 @@ class ConfigRegistry:
         语言包参数化：rules_dir 与当前声明来源不一致时，先按该语言包 tpc.toml
         重新生成声明（_ensure_entries_for）——glob 匹配/文件路径声明都基于当前
         语言包，而非 import 期锁定的默认包。调用方无需先 load_language。
+        `enabled` 语义同 `load_language`（None = 包内清单；给定时登记为该包档位）。
         """
-        rules_dir = cls._ensure_entries_for(rules_dir)
+        candidate = cls._normalize_pack(rules_dir)
+        tier = cls._tier_for_load(candidate, enabled)
+        rules_dir = cls._ensure_entries_for(rules_dir, tier)
+        cls._active_enabled[candidate] = tier
         decls = [
             (
                 name,
@@ -615,6 +765,7 @@ class ConfigRegistry:
         rules_dir: str,
         ext_dirs: list[str] | None = None,
         plugins_dir: str = "",
+        enabled: list[str] | None = None,
         **base_dirs: str,
     ) -> dict:
         """按指定语言包解析配置（**无全局副作用**）。
@@ -624,10 +775,15 @@ class ConfigRegistry:
         解析 token/数字形态，不依赖最后一次 load_all 的全局状态（同一进程
         跨语言时不会串用上一语言的配置）。
 
+        `enabled`：**档位**。`None` = 沿用该包"当前档位"（`load_language` 登记过的
+        那个；没登记过则用包内清单）——这样 Lexer 之类不需要额外参数就能跟随档位。
+
         Args:
             rules_dir: 语言包目录（相对项目根，如 "grammar/c4" 或 "c4"）。
         """
-        return cls._resolve_cached(rules_dir, ext_dirs, plugins_dir, base_dirs)[0]
+        return cls._resolve_cached(
+            rules_dir, ext_dirs, plugins_dir, base_dirs, enabled
+        )[0]
 
     @classmethod
     def resolve_with_sources(
@@ -635,14 +791,17 @@ class ConfigRegistry:
         rules_dir: str,
         ext_dirs: list[str] | None = None,
         plugins_dir: str = "",
+        enabled: list[str] | None = None,
         **base_dirs: str,
     ) -> tuple[dict, dict]:
         """按指定语言包解析配置 + 来源（无全局副作用）。
 
         与 resolve 相同，但额外返回每个 key 的来源（name → {file, section}
-        或 {bare: True}），供调试/可观测（tpc config dump）。
+        或 {bare: True}），供调试/可观测（tpc config dump）。`enabled` 语义同 resolve。
         """
-        return cls._resolve_cached(rules_dir, ext_dirs, plugins_dir, base_dirs)
+        return cls._resolve_cached(
+            rules_dir, ext_dirs, plugins_dir, base_dirs, enabled
+        )
 
     @classmethod
     def _resolve_cached(
@@ -651,11 +810,15 @@ class ConfigRegistry:
         ext_dirs: list[str] | None,
         plugins_dir: str,
         base_dirs: dict,
+        enabled: list[str] | None = None,
     ) -> tuple[dict, dict]:
-        """解析语言包配置 → (配置, 来源)，按 (目录, ext, plugins, base) 缓存。
+        """解析语言包配置 → (配置, 来源)，按 (目录, ext, plugins, base, **档位**) 缓存。
 
         无全局副作用（不写 `_loaded`、不改 `_entries`、不推模块变量）——
         `resolve` / `resolve_with_sources` 共用本函数，只有返回值取用不同。
+
+        ⚠ 缓存键必须含**档位**：同包两档的声明不同，键里没有它就会串档
+        （上一轮该功能没生效的第二个根因）。
         """
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidate = rules_dir
@@ -675,14 +838,17 @@ class ConfigRegistry:
                 )
                 for name, spec in cls._entries.items()
             ]
+            tier: tuple[str, ...] = ()
             candidate = rules_dir
         else:
-            decls = _load_meta_declarations(grammar_dir=candidate)
+            tier = cls._tier_for_resolve(candidate, enabled)
+            decls = _load_meta_declarations(grammar_dir=candidate, enabled=list(tier))
         cache_key = (
             candidate,
             tuple(ext_dirs) if ext_dirs else (),
             plugins_dir,
             frozenset(base_dirs.items()),
+            tier,
         )
         if cache_key in cls._resolve_cache:
             return cls._resolve_cache[cache_key]
@@ -902,6 +1068,9 @@ class ConfigRegistry:
         cls._sources.clear()
         cls._resolved = False
         cls._entries_source = None
+        cls._entries_enabled = None
+        cls._active_enabled.clear()
+        cls._declared_enabled_cache.clear()
         cls._resolve_cache.clear()
 
 

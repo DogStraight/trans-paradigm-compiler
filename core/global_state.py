@@ -99,6 +99,11 @@ INSTALL_STATE: dict[str, tuple[str, str]] = {
     # 语言作用域（当前语言装载了哪些组件）：插件应用按它过滤，
     # **模块级**还原——逐测试清掉会让同模块后续用例的 transform 空转（实测）。
     "core.plugin_loader._active_components": ("deepcopy", "当前语言的组件作用域（插件过滤用）"),
+    # 各语言包"当前档位"（`load_language(enabled=…)` 登记）：隐式消费方
+    # （resolve → Lexer / 数字形态）按它解析。**模块级**还原——否则一个模块
+    # 切过档位会把档位泄给下一个模块的同包解析（实测同类：语言作用域串味）。
+    # 重装前提成立：下一次 load_language/load_all 会再登记。
+    "core.config_registry.ConfigRegistry._active_enabled": ("deepcopy", "各包当前启用组合（档位）"),
 }
 
 # ── 登记表 3/6：ACCUMULATED——只增的语言注册面（登记但**刻意不还原**）──
@@ -128,6 +133,7 @@ ACCUMULATED: dict[str, str] = {
 # ── 登记表 4/6：CONTENT_ADDRESSED——键 = 输入，同参结果恒定，可保留 ──
 CONTENT_ADDRESSED: dict[str, str] = {
     "core.config_registry.ConfigRegistry._resolve_cache": "键 = 语言参数元组（纯函数缓存）",
+    "core.config_registry.ConfigRegistry._declared_enabled_cache": "键 = 语言包目录（包内 [plugins] enabled 的读取缓存，纯 TOML 派生）",
     "preprocessor.macro_shape._PARSE_CACHE": "键 = 宏形态 shape 生产式字符串（纯函数缓存）",
     "lexer.comment_syntax._CACHE": "键 = rules_dir（注释形态：行注释起始/成对定界符）",
     "analyzer.checks._HANDLER_CACHE": "键 = 插件目录（handler 模块跨次复用）",
@@ -447,6 +453,7 @@ def snapshot() -> dict:
         "cfg_entries": copy.deepcopy(ConfigRegistry._entries),
         "cfg_loaded": copy.deepcopy(ConfigRegistry._loaded),
         "cfg_entries_source": ConfigRegistry._entries_source,
+        "cfg_entries_enabled": ConfigRegistry._entries_enabled,
         "cfg_sources": copy.deepcopy(ConfigRegistry._sources),
         "cfg_resolved": ConfigRegistry._resolved,
         "module_vars": module_vars,
@@ -526,6 +533,7 @@ def _restore_registries(snap: dict) -> None:
     ConfigRegistry._entries = copy.deepcopy(snap["cfg_entries"])
     ConfigRegistry._loaded = copy.deepcopy(snap["cfg_loaded"])
     ConfigRegistry._entries_source = snap["cfg_entries_source"]
+    ConfigRegistry._entries_enabled = snap["cfg_entries_enabled"]
     ConfigRegistry._sources = copy.deepcopy(snap["cfg_sources"])
     ConfigRegistry._resolved = snap["cfg_resolved"]
 

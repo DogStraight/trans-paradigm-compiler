@@ -106,10 +106,17 @@ grammar/c/
   只启用 c17 而不启用 c11 会**响亮失败**，不会静默少加载。
 - ⚠ **未声明关键字 ≠ 拒绝**：某档下未声明为关键字的词仍是合法标识符
   （词法完整、语法按已落地子集引用）——这是判据，不是缺口。
-- ⚠ **档位对照当前靠 pack 副本**：引擎级 `enabled` 覆盖参数（同一次进程内切档）
-  **尚未落地**——按逐处清单实施后档位未按预期切换（两处缓存键是静默失效点），
-  未经验证的改动已全部回退；逐处清单与陷阱见 `TODO.md`。三档对照测试
-  （`tests/languages/c/test_c_standard_tiers.py`）在 pack 副本上成立。
+- **档位可进程内切换**：引擎级 `enabled=` 覆盖参数已落地——
+  `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
+  `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
+  于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **11 构造 × 4 档矩阵**（按"解析成
+  哪个节点"判定，能直接抓出缓存串档）。两条静默失效根因已修（声明缓存键、解析缓存键都
+  须含档位）——细节见 `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
+- ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
+  （`setup_grammar` → `load_all_components(<pack>/plugins)`），不受 `enabled` 影响。
+  C 包插件是纯 TOML、c4 插件是纯 Python，两条路径当前**恰好正交**；语义边界与两种候选
+  语义（只门控声明面 / 门控一切）见 `TODO.md`。
 - **"加标准"= 声明式注入，不改核心文件**：各插件用
   `[ExtRule.inject] targets = ["@核心规则.production[N]"]` 往既有交替里**加一支**
   （c11：`_Static_assert`→`Stmt`、`_Alignof`/`_Generic`→两处原子清单、

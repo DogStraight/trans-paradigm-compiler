@@ -117,7 +117,9 @@
       `#`/`##` 粘贴、变参宏 + 条件编译反向映射精度
 - [ ] 标准等效验证：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准语法规范）——
       **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **34 条 / 接受 32 / 空洞 2**），
-      缺的是按标准分档的断言面
+      **档位入口也已就位**（`load_language/load_all/resolve(..., enabled=[…])`，同一进程内
+      切档实测成立，判据 = `tests/languages/c/test_c_standard_tiers.py` 的 11 构造 × 4 档矩阵），
+      缺的是**按标准分档的断言面**（每条构造属哪个标准、接受/拒绝各断言一条）
 - [ ] **注入机制补"改"路径**（范围已收窄，2026-09-26 实测更正）：**"加一支"已有结构化
       路径**（`inject_productions` 的直接注入 + 传播注入，fail-fast）。**仍缺的是
       "改/删一支"**：现役 `inject_replace_rule` 是 production 的字符串子串补丁、且

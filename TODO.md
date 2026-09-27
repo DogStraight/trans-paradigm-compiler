@@ -66,27 +66,29 @@
         声明顺序），草案与判据见 `ROADMAP.md`「C 语义层切片 1b」；
       · 逐声明符位宽（`int a : 3, b : 4;`）——已知边界，标准里位宽属声明符（形态改动）；
       · 结构类型与作用域语义（标签命名空间、链接、声明顺序）。
-- [ ] **引擎级 `enabled` 覆盖参数**（把"档位对照需 pack 副本"变成一等参数）：
-      目标 = `load_language(pack, plugins_dir=…, enabled=["c11"])` 显式指定启用组合。
-      **逐处清单已核实（`core/config_registry.py`，一次可做完）**：
-        1 `_plugin_declarations(…, enabled=None)`——`None` 时仍读 `meta["plugins"]["enabled"]`；
-          显式给出时用它并校验为字符串列表（非法即 ConfigError）。
-        2 `_load_meta_declarations(grammar_dir="", enabled=None)`——透传。
-        3 `_ensure_entries_for(cls, rules_dir, enabled=None)`——透传；**缓存键
-          `cls._entries_source` 须由 `candidate` 改为 `(candidate, tuple(enabled)…)`**，
-          否则切档复用上一档声明（症状：改了 enabled 毫无变化 = 静默失效）。
-        4 `load_language(…, enabled=None)`——透传给 `_ensure_entries_for` 与 `load_all`。
-        5 `load_all(…, enabled=None, **base_dirs)`——体内 `_ensure_entries_for(rules_dir)`
-          要带 `enabled`；`_resolve` 的 `cache_key`（约 681 行）**也要加** `tuple(enabled)…`
-          ——同一类缓存陷阱，两处都得改。
-      ⚠ 签名锚点：`load_all` 是 `**base_dirs: str,\n    ) -> None:`（不是 `):`）。
-      ⚠ **实测结果（0.1.3 收尾轮）**：按上述清单实施后**档位仍未按预期切换**——同一进程内
-      依次 `enabled=["c11"]` → `enabled=[]` 时第二档仍解析出 `StaticAssertDecl`
-      （说明还有一处缓存或自动发现路径绕过 `enabled`）。**改动已全部回退**（不留未经验证的
-      改动），待重新归因：先确认 `load_all` 之外还有谁在提供 `[lexer] token_ext`
-      （候选：`Lexer` 侧按 `ext_dirs` 自行读插件、或 `_resolve_cached` 的 `_resolve_cache`）。
-      **当前可用方案仍是 pack 副本**（`test_c_standard_tiers.py`，已通过）；
-      改完必须用它的**三档断言**验证（按"解析成哪个节点"判据，能直接抓出缓存串档）。
+- [ ] **`[plugins] enabled` 的语义边界：它只门控"声明面"，不管"代码面"**（2026-09-26
+      实测，落地 `enabled=` 覆盖参数时发现）：
+      · **现状**：`enabled` 决定哪些插件的 **tpc.toml 声明**（含 `[lexer] token_ext`）被合并；
+        插件的**规则文件与 Python 组件**由另一条路径**无条件**加载
+        （`setup_grammar` → `load_all_components(<pack>/plugins)`，不看 `enabled`）。
+        实测：`enabled=[]` 时词法里没有增量关键字，但**规则表里 11 条增量规则一条不少**；
+        c4 的 `asm_gen`（TransformPlugin）在其包**没有** `[plugins] enabled` 段的情况下照样装载。
+      · **为什么现在无害**：C 包的档位判别靠"关键字未声明 → 规则匹配不上"，且其插件是纯
+        TOML（无 Python 组件）；c4 的插件是纯 Python（无声明面）。两条路径**恰好正交**。
+      · **为什么是真边界**：若某插件**复用既有 token** 加规则、或带 Python 组件
+        （analyzer/lint/transform），关掉它的档位**不会**关掉它的行为——"禁用插件"
+        目前只是"不合并它的声明"。
+      · **两种候选语义**（各有代价，**需拍板，别默认选**）：
+        ① **只门控声明面**（现状）：把语义写进 `core/config_lifecycle.md` 即可，代价是
+           `enabled` 这个名字**名不副实**（更该叫 `declarations` 之类）；
+        ② **门控一切**（档位 = 真启用组合）：需同时 ⑴ 给 verilog 补齐清单——实测 `enabled`
+           14 项 vs 组件 20 个，**6 个 check 未列**（`checks/{always,case,hier,latch,unused,
+           width}_check`；它们是 `checks/semantic_check` 的**兄弟**、不是子目录，故"层级覆盖"
+           救不了）；⑵ 给 c4 补一份清单（现无 `[plugins]` 段，补了才不丢 `asm_gen`）；
+           ⑶ 对未覆盖的组件 **fail-fast**（拼错名单不许静默少加载）。判据：三包 + yaml 全量绿、
+           `c4_asm` 与 verilog 那 6 个 check 的行为不丢、且"关掉某插件 ⇒ 它的规则与组件都不生效"。
+      （`enabled=` 覆盖参数本身**已落地并验证**，档位矩阵见
+      `tests/languages/c/test_c_standard_tiers.py`；本项只针对上面这条语义边界。）
 - [ ] **阶段 3 结构类型与作用域语义**：struct/union/enum（含位域）、标签命名空间、
       作用域与链接（static/extern）、函数原型与定义
 - [ ] **阶段 4 预处理器（独立评估，最大难点）**：`#if` 表达式求值、参数化宏、

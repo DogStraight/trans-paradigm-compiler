@@ -225,3 +225,33 @@ $TPC_CONFIG env（显式） > CWD 向上 config/tpc_config.json（工作区隔�
 
 与 PostgreSQL GUC 的"来源优先级链"同构，但 tpc 的覆盖点更少（无会话级/角色级）。
 如需显式化，可扩展 `tpc config dump` 输出优先级层级。
+
+### 7. 启用组合（档位）覆盖参数 `enabled=`（2026-09-26）
+
+语言包的启用组合（`tpc.toml` 的 `[plugins] enabled`）可被**显式覆盖**，于是"同一个 pack
+在同一次进程内换档"成立，不必再复制 pack 目录：
+
+```python
+ConfigRegistry.load_language("grammar/c", enabled=["c11"])      # c11 档
+ConfigRegistry.load_language("grammar/c", enabled=[])           # 回到核心基线档
+ConfigRegistry.load_all("grammar/c", enabled=["c11", "c17", "c23"])
+ConfigRegistry.resolve("grammar/c")                              # 跟随该包"当前档位"
+```
+
+- **`None` = 用包内清单**（不是"沿用上次"）——`load_language(pack)` 因此是**回到默认档**，
+  而不是继承上一次调用的档位。
+- **登记 + 跟随**：显式档位在 `load_language` / `load_all` 时登记为该包"当前档位"
+  （`_active_enabled`）；`resolve(pack)`（`Lexer` 等隐式消费方走它）无需额外参数即按该档
+  解析；未曾 load 过的包回退到包内清单。
+- **档位来源优先级**：`enabled` 显式参数 > 该包登记过的档位（仅 resolve 侧）> 包内
+  `[plugins] enabled`。
+- **fail-fast**：`enabled` 非字符串列表 / 含空串 / 含非字符串 → `ConfigError`；清单里的
+  插件名解析不到插件包也 → `ConfigError`（**不许静默少加载**：拼错一个名字就少一个插件，
+  会让"启用组合等效某标准"变成空话）。
+- ⚠ **两处缓存键必须含档位**（都属于"静默失效"型缺陷，症状 = 改了 `enabled` 毫无变化）：
+  `_ensure_entries_for` 的来源判据 `(_entries_source, _entries_enabled)`；`_resolve_cache`
+  的 key（否则同包两档算同一个 key，`Lexer` 拿回上一档 token）。判据：
+  `tests/languages/c/test_c_standard_tiers.py` 的 11 构造 × 4 档矩阵。
+- ⚠ **边界：`enabled` 只门控"声明面"**——插件的**规则文件与 Python 组件**由
+  `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
+  两种候选语义与拍板判据见 `TODO.md`「`[plugins] enabled` 的语义边界」。

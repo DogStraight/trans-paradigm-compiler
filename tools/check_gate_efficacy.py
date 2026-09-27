@@ -234,6 +234,37 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "",
         "test": "tests/languages/c/test_c_increment_plugin.py",
     },
+    {
+        "why": "`_entries` 的来源判据只比目录、不比档位 → 同 pack 切档复用上一档声明"
+               "（实测症状：`enabled=[]` 后仍解析出 StaticAssertDecl）。本变异证明"
+               "三档矩阵真的在守那个二元判据",
+        "file": "core/config_registry.py",
+        "old": "        if cls._entries_source != candidate or cls._entries_enabled != tier:\n",
+        "new": "        if cls._entries_source != candidate:\n",
+        "test": "tests/languages/c/test_c_standard_tiers.py",
+    },
+    {
+        "why": "`_resolve_cache` 的键不含档位 → 隐式消费方（Lexer 走 `resolve`）拿回上一档"
+               "token（实测症状：切到基线档后 Lexer 仍带 `_Static_assert` 关键字）。"
+               "本变异证明「Lexer 跟随档位」那条测试真的在守缓存键",
+        "file": "core/config_registry.py",
+        "old": """        cache_key = (
+            candidate,
+            tuple(ext_dirs) if ext_dirs else (),
+            plugins_dir,
+            frozenset(base_dirs.items()),
+            tier,
+        )
+""",
+        "new": """        cache_key = (
+            candidate,
+            tuple(ext_dirs) if ext_dirs else (),
+            plugins_dir,
+            frozenset(base_dirs.items()),
+        )
+""",
+        "test": "tests/languages/c/test_c_standard_tiers.py",
+    },
 ]
 
 
