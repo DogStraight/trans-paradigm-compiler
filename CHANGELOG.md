@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包 c23 类型词落地：`_BitInt(N)` 与 `_Decimal32`/`_Decimal64`/`_Decimal128`
+  ——c23 语法面只剩 `[[属性]]`**。接受面 **35/37 → 36/38**；档位矩阵 21 → **23**。
+  - `_BitInt(N)`（§6.7.2.1）：标准形态**宽度必选**（`_BitInt` 单独出现不是类型说明符），
+    故是 4 元素序列（与 `typeof` / `_Atomic(T)` 同形）；注入 `@SimpleType`（最窄公共点）。
+  - `_Decimal32/64/128`（§6.7.2）：三者形态与位点完全相同、只差拼写 ⇒ **一条规则的裸 token
+    交替**（同核心基线 `SimpleType` 的写法），同样注入 `@SimpleType`。
+  - **接受域口径（本轮定，写进包内头注）**：`_BitInt` 的宽度收 `@Expression`——"是不是整型
+    常量表达式、是否落在 `1..BITINT_MAXWIDTH`"归语义层（同 `_Alignas` 实参、位域宽度、
+    数组长度三处既有宽进口径）；`_Decimal*` 只认"这是一个类型词"。
+  - ⚠ **登记一条真缺口（不是"支持"）**：十进制浮点**字面量后缀** `1.5df`/`1.5dd`/`1.5dl`
+    未落地，`1.5dd` 目前切成 `literal.number(1.5)` + `id(dd)` ⇒ `_Decimal64 x = 1.5dd;`
+    整条解析失败。**两条实测证据**说明它为什么不在本包顺手做：① 后缀声明在
+    `base/_number.toml`（**核心基线**），写进去会让**基线档**也接受 `1.5dd`（档位语义被污染）；
+    ② 插件侧另声明一份 `number` 会被 `deep_merge` 的**列表后者覆盖**顶掉核心三条数字形态
+    （`core/config_registry.py::deep_merge`："非 dict 值后者优先"）⇒ 要先给"数字形态列表"加
+    **跨声明合并**语义（引擎侧小项，涉及所有 list 型配置的合并语义，不顺手改）。
+    现状由 `test_decimal_literal_suffix_is_a_known_gap` 钉住（闭合时会红，提醒同步文档）。
+  - **判据**：`test_c23_increment_plugin.py` 82 → 120 例（12 条新构造进 `_CASES` 的三组
+    参数化：解析 / token 序列 + 幂等 / lint 零诊断；新增"类型词走 `SimpleType`"与上面那条
+    缺口登记用例；注入目标清单扩到 11 个文件）；`test_c_standard_tiers.py` 矩阵 21 → 23 行；
+    `tools/c_acceptance.py` 37 → 38 条；17 个类型词形态（声明/指针/成员/参数/类型名/cast）
+    token 序列不变 + 幂等 + linter 零诊断。
 - **C 包 c23 小写拼写落地 + 修掉一条过期边界：`static_assert`（新增块作用域）、
   `alignas` / `alignof` / `thread_local`**。接受面 **34/36 → 35/37**；档位矩阵 17 → **21**。
   - **"同构造异拼写"的包内约定已定**（TODO 里"需先定约定"那条的答复）：
@@ -67,7 +89,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **fail-fast 两条**：`enabled` 必须是字符串列表（非列表 / 含空串 / 含非字符串 →
     `ConfigError`）；清单里的插件名**必须能解析到插件包**——此前是**静默跳过**（拼错一个
     名字就少加载一个插件，"启用组合等效某标准"直接失真）。
-  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **21 构造 × 4 档矩阵**
+  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **23 构造 × 4 档矩阵**
     （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
     判定——比"规则表里有没有"更能抓出缓存串档）+ 同进程连续切档 + `Lexer` 跟随档位 +
     `enabled=None` 回落到包默认 + 非法参数 fail-fast；`tools/check_gate_efficacy.py` 增两条

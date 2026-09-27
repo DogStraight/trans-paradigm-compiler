@@ -304,6 +304,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": 'targets = ["@PrimaryExpr.production[0]"]\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
+    {
+        "why": "`_BitInt(N)` 是类型词，必须挂**公共宿主 `SimpleType`**（一次注入多处生效）。"
+               "换成单点 `@Declaration.production[0]` ⇒ 结构成员/参数/`sizeof` 三处失效"
+               "——本变异证明那三条用例真的握着宿主选择（同 15_alignas 那条的教训）",
+        "file": "grammar/c/plugins/c23/19_bitint.toml",
+        "old": 'targets = ["@SimpleType.production[0]"]\n',
+        "new": 'targets = ["@Declaration.production[0]"]\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
 ]
 
 

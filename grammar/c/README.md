@@ -9,10 +9,11 @@
 
 ## 现状（0.1.3 交付面）
 
-**接受面：`python tools/c_acceptance.py` → 接受 35 / 空洞 2（共 37 条）**：
+**接受面：`python tools/c_acceptance.py` → 接受 36 / 空洞 2（共 38 条）**：
 `#include` / `#define`（预处理属阶段 4，单独立项）。
 （空洞数 2026-09-26 从 3 降到 2：变参 `...` 落地；接受数同日 32 → 34：`_Alignas` /
-`_Atomic` 两条增量用例，再 34 → 35：c23 小写拼写一条——见下「标准增量插件」。）
+`_Atomic` 两条增量用例，再 34 → 35：c23 小写拼写，再 35 → 36：c23 类型词——见下
+「标准增量插件」。）
 
 已落地：
 
@@ -36,8 +37,13 @@
     类型名两形态）、`_Atomic`（限定符形态 + `_Atomic(T)` 说明符形态）；
   · **c17**：无新语法（缺陷修正版，只表达包含关系）；
   · **c23**：`static_assert`（小写关键字化，**文件与块两处作用域**）、`nullptr`、
-    `true`/`false`、`bool`、`typeof`/`typeof_unqual`、`constexpr`，以及 **c11 三个关键字的
-    C23 拼写** `alignas` / `alignof` / `thread_local`（同构造异拼写，见下条约定）。
+    `true`/`false`、`bool`、`typeof`/`typeof_unqual`、`constexpr`，**c11 三个关键字的
+    C23 拼写** `alignas` / `alignof` / `thread_local`（同构造异拼写，见下条约定），
+    以及**类型词** `_BitInt(N)`（宽度收 `@Expression`，"是不是整型常量表达式/宽度范围"
+    归语义层）与 `_Decimal32`/`_Decimal64`/`_Decimal128`。
+    ⚠ 十进制浮点**字面量后缀**（`1.5dd`）**未落地**——见「未做」表与
+    `plugins/c23/20_decimal.toml` 头注（两条证据：后缀属核心基线会污染档位语义；
+    `deep_merge` 对列表是后者覆盖，插件侧另声明会顶掉核心三条数字形态）。
   ⚠ **落地方式全是"声明的注入"**（`[ExtRule.inject] targets = […]`，引擎侧
   `inject_productions` 的直接注入 = 树层 `insert_choice_candidate`）：插件往核心基线的
   **既有交替里加一支**，核心文件一行不动。此前插件注释把这类增量记为"做不了、
@@ -68,7 +74,7 @@
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
 | `[[属性]]`（c23） | 说明符位设计（"属性可出现在多处"的位点 + linter 语句区间）——独立一小项 |
-| `_BitInt` / `_Decimal32/64/128`（c23） | 形态同 `bool` 但需先定宽度参数与十进制浮点接受域 |
+| 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | 属词法面 `base/_number.toml`（**核心基线**：写进去会让基线档也接受 `1.5dd`，污染档位语义）；插件侧另声明会被 `deep_merge` 的"列表后者覆盖"顶掉核心数字形态 ⇒ 需先给"数字形态列表"加**跨声明合并**语义（引擎侧小项）。现状与判据：`plugins/c23/20_decimal.toml` 头注 + `test_c23_increment_plugin.py::TestC23InjectionPoints::test_decimal_literal_suffix_is_a_known_gap` |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
 
@@ -120,7 +126,7 @@ grammar/c/
   `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
   `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
-  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **21 构造 × 4 档矩阵**（按"解析成
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **23 构造 × 4 档矩阵**（按"解析成
   哪个节点"判定，能直接抓出缓存串档）。两条静默失效根因已修（声明缓存键、解析缓存键都
   须含档位）——细节见 `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
 - ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
@@ -147,7 +153,8 @@ grammar/c/
   `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）；③ **别依赖跨元素回溯**：
   选择器只在**同一元素内**换候选，`_Atomic` 的两种形态若拆成两条规则，单 token 那条命中后
   后续元素失败**不会回头**（实测整条声明空 AST）——写成一个规则里的可选组即可。
-- **仍未落地的标准增量**（各自前置见「未做」表）：`[[属性]]`、`_BitInt`/`_Decimal*`。
+- **仍未落地的标准增量**：`[[属性]]`（c23，需声明/语句前缀位点设计）与十进制浮点**字面量
+  后缀**（属引擎侧"数字形态列表跨声明合并"，见「未做」表）。
 
 ## 渲染保真（原文打印）
 

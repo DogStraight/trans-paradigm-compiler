@@ -45,4 +45,6 @@ files = [
     "16_alignas_alias.toml",
     "17_alignof_alias.toml",
     "18_thread_local_alias.toml",
+    "19_bitint.toml",
+    "20_decimal.toml",
 ]

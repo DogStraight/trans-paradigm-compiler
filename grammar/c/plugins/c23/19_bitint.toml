@@ -1,0 +1,36 @@
+# ============================================================================
+# c23 插件 — 位精确整型 `_BitInt ( N )`（C23 §6.7.2.1 bit-precise-int-specifier）
+# ============================================================================
+# 标准形态只有一种：`bit-precise-int-specifier: _BitInt ( constant-expression )`
+# ——**宽度是必选**（`_BitInt` 单独出现不是类型说明符），故这里是 4 元素序列，
+# 与 `typeof` / `_Atomic(T)` 同形（不是可选组）。
+#
+# 注入点 = **`@SimpleType`**（"内建类型词"那条规则，最窄公共点）：它被 `TypeSpecifier`
+#   （声明 / 类型名首说明符）、`SpecRest`（说明符序列其余位）、`MemberSpec`（结构成员）、
+#   `ParamSpec`（参数）、`CastTypeName`（强制转换）共同引用 ⇒ **一次注入多处生效**
+#   （同 `bool`；`_Alignas` 那种"6 处点位各注一次"的代价在这里不存在）。
+#
+# **宽度参数的接受域（本轮定的口径，写在此防含糊）**：语法层收 `@Expression`，
+#   即**宽度是不是整型常量表达式、是否落在 `1..BITINT_MAXWIDTH`** 全归语义层——
+#   与本包"说明符组合合法性不在语法层判"的既有口径一致（对照 `_Alignas` 的实参、
+#   位域宽度、数组长度三处同款宽进）。故 `_BitInt(x)`（变量作宽度）在语法层也进 AST。
+#
+# ⚠ 与 c11 无关：`_BitInt` 是 C23 新增，c11/c17 档下它不是关键字（当标识符用）。
+
+[BitIntSpec.parser]
+production = [
+    "keyword._BitInt",
+    "bracket.l_parentheses",
+    "@Expression",
+    "bracket.r_parentheses",
+]
+
+[BitIntSpec.parser.node]
+kw = "$1"
+width = "$3"
+
+[BitIntSpec.inject]
+targets = ["@SimpleType.production[0]"]
+
+[BitIntSpec.renderer.layout]
+line = [{ ref = "kw" }, "(", { ref = "width" }, ")"]

@@ -68,6 +68,19 @@ _CASES = [
     ("alignof 参与二元运算", "int b2 = alignof(int) * 2;\n", "AlignofC23Expr"),
     ("thread_local", "thread_local int tls;\n", "ThreadLocalC23Spec"),
     ("thread_local 与 static", "static thread_local int tls2;\n", "ThreadLocalC23Spec"),
+    # c23 类型词：位精确整型与十进制浮点（注入 `SimpleType`，与 bool 同宿主）
+    ("_BitInt(8)", "_BitInt(8) a;\n", "BitIntSpec"),
+    ("_BitInt(64)", "_BitInt(64) b;\n", "BitIntSpec"),
+    ("_BitInt 宽度是表达式（语法层宽进）", "_BitInt(N) c;\n", "BitIntSpec"),
+    ("_BitInt 结构成员", "struct s3 {\n    _BitInt(8) x;\n};\n", "BitIntSpec"),
+    ("_BitInt 参数位", "void f(_BitInt(8) x);\n", "BitIntSpec"),
+    ("_BitInt 类型名位（sizeof）", "int n3 = sizeof(_BitInt(8));\n", "BitIntSpec"),
+    ("_Decimal32", "_Decimal32 a;\n", "DecimalSpec"),
+    ("_Decimal64", "_Decimal64 b;\n", "DecimalSpec"),
+    ("_Decimal128", "_Decimal128 c;\n", "DecimalSpec"),
+    ("_Decimal 结构成员", "struct s4 {\n    _Decimal64 x;\n};\n", "DecimalSpec"),
+    ("_Decimal 参数位", "void f(_Decimal32 x);\n", "DecimalSpec"),
+    ("_Decimal 类型名位（sizeof）", "int n4 = sizeof(_Decimal128);\n", "DecimalSpec"),
 ]
 
 
@@ -170,6 +183,33 @@ class TestC23InjectionPoints:
         store = " ".join(str(p) for p in rules["StorageClass"].production)
         assert "@ConstexprSpec" in store, store
 
+    def test_type_words_go_through_simple_type(self, restore_language):
+        """`_BitInt` / `_Decimal*` 与 `bool`/`typeof` 同宿主 `SimpleType`（最窄公共点）。
+
+        `SimpleType` 被 `TypeSpecifier`（声明 / 类型名首说明符）、`SpecRest`、`MemberSpec`
+        （结构成员）、`ParamSpec`（参数）、`CastTypeName`（强制转换）共同引用 ⇒ 一次注入
+        多处生效。⚠ 对照 `c11/15_alignas.toml` 的 A/B：那里没有公共宿主，只能逐点铺，
+        而且逐点铺还会踩到可达性/布局的坑——**能挑公共宿主就别逐点**。
+        """
+        rules = _env()["rules"]
+        simple = " ".join(str(p) for p in rules["SimpleType"].production)
+        for name in ("BitIntSpec", "DecimalSpec"):
+            assert f"@{name}" in simple, f"SimpleType 缺 @{name}：{simple}"
+
+    def test_decimal_literal_suffix_is_a_known_gap(self, restore_language):
+        """⚠ 登记已知缺口（不是"支持"）：十进制浮点**字面量后缀** `dd` 尚未进词法面。
+
+        现状：`1.5dd` 被切成 `literal.number(1.5)` + `id(dd)` ⇒ `_Decimal64 x = 1.5dd;`
+        整条声明解析失败。归属与理由（两条证据）见 `grammar/c/plugins/c23/20_decimal.toml`
+        头注与 `TODO.md`：后缀属核心基线 `base/_number.toml`（档位语义），插件侧另声明会被
+        `deep_merge` 的"列表后者覆盖"顶掉核心数字形态。本用例把现状钉住——修好后它会红，
+        提醒同步文档。
+        """
+        env = _env()
+        kinds = [t for t, _ in env["tokens"]("1.5dd")]
+        assert kinds == ["literal.number", "id"], kinds
+        assert env["lint"]("_Decimal64 x = 1.5dd;\n") != [], "缺口已闭合？请同步文档与 TODO"
+
     def test_c23_spellings_reuse_the_c11_hosts(self, restore_language):
         """小写拼写与 c11 的 `_` 版**挂同一个宿主**（同构造异拼写 = 各写一条同形规则）。
 
@@ -207,6 +247,8 @@ class TestC23InjectionPoints:
             "16_alignas_alias.toml": ("@TypeQualifier.production[0]",),
             "17_alignof_alias.toml": ("@PrimaryExpr.production[0]", "@PostfixExpr.production[0]"),
             "18_thread_local_alias.toml": ("@StorageClass.production[0]",),
+            "19_bitint.toml": ("@SimpleType.production[0]",),
+            "20_decimal.toml": ("@SimpleType.production[0]",),
         }
         for fname, targets in want.items():
             path = ROOT_DIR / "grammar" / "c" / "plugins" / "c23" / fname

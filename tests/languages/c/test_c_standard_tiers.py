@@ -78,6 +78,8 @@ _INCREMENT_MATRIX = [
     ("alignas（c23）", "alignas(16) char buf[64];\n", "AlignasC23Spec", "c23"),
     ("alignof（c23）", "int a = alignof(int);\n", "AlignofC23Expr", "c23"),
     ("thread_local（c23）", "thread_local int t;\n", "ThreadLocalC23Spec", "c23"),
+    ("_BitInt(N)（c23）", "_BitInt(8) a;\n", "BitIntSpec", "c23"),
+    ("_Decimal64（c23）", "_Decimal64 d;\n", "DecimalSpec", "c23"),
 ]
 
 _TIERS = {
