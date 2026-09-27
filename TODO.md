@@ -26,20 +26,18 @@
       / 语言作用域面。复现：先 `LinterScanner(rules_dir="grammar/verilog").scan("module m(); endmodule")`
       再切 C 扫 `tests/languages/c/samples/ring_buffer.c`。判据：同一份 C 源在"先跑过
       verilog"与"干净进程"下诊断集合相同。回归守：
-      `tests/languages/c/test_c_corpus_impl.py::test_linter_gap_is_recorded`（非 phase 码
-      白名单目前只允许 ST003，修复后应改为"无非 phase 码"）。
-- [ ] **C 包 linter 误报修正（引擎侧归因先行）**：合法头文件
-      `tests/languages/c/samples/ring_buffer.h` 上 linter 报 **17 条**误报，四类构造函数
-      （带体类型说明符 / 成员数组后缀 / 带括号声明符 / 枚举体 `=`）——解析侧正常，
-      故是 linter 跟不上 C 的声明形态。**归因已完成（2026-09-25，两个不同机制）**：
-      ① 机制 A `linter/checkers/matcher.py::_match_token` 严格逐 token 匹配**不回溯**
-      ——规则内部的可选分支（`StructSpecifier` 的 `@StructBody?`）不被尝试，覆盖
-      `{`/`[`/`(` 三类 15 条；② 机制 B `lookahead.classify()` 对 `enum` 开头返回空候选
-      → `discovery.py::_record_unrecognized`，覆盖 2 条（`struct` 同源却有候选，推导
-      只覆盖一支）。修点/判据/包侧兜底见缺口档同节；
-      现状与逐条构造记 `docs/gaps/gap-parser-linter-approximation.md`「C 语言包暴露的
-      语句发现缺口」，回归由 `test_c_corpus.py::test_linter_gap_is_recorded_not_hidden`
-      反向守（缺口修复后该用例会失败并提醒复核文档）。
+      `tests/languages/c/test_c_corpus_impl.py::test_linter_reports_no_false_positives`
+      （非 phase 码白名单目前只允许 ST003，修复后应改为"无非 phase 码"）。
+- [ ] **C 的块语句未建模为块规则 → 块内诊断粒度粗（每块 1 条）**：C 的 `CompoundStmt`
+      （`grammar/c/03_statements.toml`）是普通语句（`production = ["{", "@Stmt*", "}"]`），
+      而 c4 的同位规则 `BlockStmt` 是**块规则**（`is_block = true`，body 由
+      `parse_block_body` 循环产出）。后果：C 的块体**没有独立语句节点**，块内多个错误
+      只报一条（实测 `void f(void) { a + ; b + ; }` → 1 条；c4 同位样本 → 2 条），
+      且 linter 的 `_discover_block` / `_block_body` 路径对 C 不生效（括号分支已能转块
+      分支，缺的只是"声明成块规则"）。判据：块内每条坏语句各报一条（与 c4 对齐）。
+      改法 = 按 c4 `BlockStmt` 形态改 `CompoundStmt`（`is_block = true` + production 只留
+      `{`/`}` + renderer `role = "flatten"`），并同步 AST / 渲染 / 测试断言。
+      前置：无——c4 是现成样板，这也是「c4 可否并入 C 包」议题的第一块拼图。
 - [ ] **C 包剩余能力面**（词法面已全部闭环；语法面接受 25/28，空洞 3）：
       · **预处理两项**（`#include` / `#define`）= 阶段 4；
       · **变参 `...`**（`int printf(const char *fmt, ...);`）：三种配置写法**均已证伪**

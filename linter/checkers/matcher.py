@@ -52,16 +52,42 @@ def _is_atom_selector(info: dict, tree: dict) -> bool:
     return True
 
 
-def _no_progress_ok(feat: dict, sub_errs: list, before: int) -> bool:
-    """元素匹配成功但不推进时，是否算合法（跳过继续而非回滚）。
+def _feat_nullable(feat: dict, tree: dict, visited: set) -> bool:
+    """feature 能否推导出空串（不消费任何 token 即合法的匹配）。
 
-    optional 可不存在；全可选 call（如 TypeSpecNoReg）与 0 次 repeat（如
-    RangeBracket*）匹配成功但不消费也属合法。token/choice/plus 等失败仍回滚，
-    防止前一元素失败后后续 @Expression 在未推进位置假匹配。
+    配 `_no_progress_ok` 判定"零进展 = 匹配成功"是否成立：只有**可空**的元素
+    零进展才算成功。token 不可空；choice 任一支可空即可空；seq 全元素可空才可空;
+    optional/repeat 天然可空；call 递归查目标规则。
     """
-    if feat.get("type") == "optional":
+    if not isinstance(feat, dict):
         return True
-    return feat.get("type") in ("call", "repeat") and len(sub_errs) == before
+    typ = feat.get("type", "")
+    if typ == "token":
+        return False
+    if typ == "call":
+        return _rule_nullable(feat.get("name", ""), tree, visited)
+    if typ == "choice":
+        return any(_feat_nullable(a, tree, visited) for a in feat.get("alternatives", []))
+    if typ == "seq":
+        return all(_feat_nullable(x, tree, visited) for x in feat.get("items", []))
+    if typ in ("optional", "repeat"):
+        return True
+    if typ == "plus":
+        return _feat_nullable(feat.get("elem", {}) or {}, tree, visited)
+    return True
+
+
+def _rule_nullable(name: str, tree: dict, visited: set) -> bool:
+    """规则能否推导出空串。环上的规则按**不可空**处理（左递归规则必须消费首
+    token 才有意义）；`visited` 非空时的结果依赖进入路径，故只在顶层入口缓存。"""
+    if name in visited:
+        return False
+    info = tree.get(name)
+    if not info:
+        return True
+    return all(
+        _feat_nullable(p, tree, visited | {name}) for p in info.get("prods", [])
+    )
 
 
 class RuleMatcher:
@@ -112,6 +138,9 @@ class RuleMatcher:
             for name, info in tree.items()
             if isinstance(info, dict)
         }
+        # 规则可空性缓存（规则名 → 能否推导出空串）：`_no_progress_ok` 判定
+        # "必选 call 零进展"用。生产式树构造后不变，按名缓存只算一次。
+        self._nullable_cache: dict[str, bool] = {}
         # optional call 位置级 memo：_match_call 的 optional 分支（silent=True
         # 纯函数，无错误副作用）按 (i, name, limit) 缓存匹配结果——同一语句
         # 区间内同位置同规则的 optional 试探被反复求值（cProfile：_match_call
@@ -600,7 +629,7 @@ class RuleMatcher:
             before = len(sub_errs)
             k = self.match(tokens, j, feat, sub_errs, limit, strict)
             if k <= j:
-                if not _no_progress_ok(feat, sub_errs, before):
+                if not self._no_progress_ok(feat, sub_errs, before):
                     return start
                 continue
             j = k
@@ -609,6 +638,34 @@ class RuleMatcher:
         if j > start and self._hits_exclude(tokens, j, info, limit):
             return start
         return j
+
+    def _no_progress_ok(self, feat: dict, sub_errs: list, before: int) -> bool:
+        """元素匹配成功但不推进时，是否算合法（跳过继续而非回滚）。
+
+        optional 可不存在、repeat 可 0 次（如 `@SpecRest*`）——天然合法。call 则
+        要看**目标规则本身是否可空**（production 可整体推导出空，如全可选
+        TypeSpecNoReg）：可空 → 零进展是"匹配到了空"；不可空 → 零进展即该**必选**
+        元素失败，必须回滚整个规则。
+
+        ⚠ 此前判据是"本次没新增错误"（`len(sub_errs) == before`），把"静默失败"
+        当成了"空匹配"：失败的必选 call 被跳过，后续元素随即在错位上继续匹配。
+        C 包实测：`@StructOrUnion` 失败被跳过 → `StructSpecifier` 把裸标识符当结构
+        说明符吃掉 → `struct ring_item { … };` 的成员 `int values[4];` 解不出 →
+        整条声明报 `expected ';', got '{'`（`grammar/c` 合法头文件上 14 条误报的
+        第一因，2026-09-26 修）。回归守：`tests/languages/c/test_c_corpus.py` 与
+        `tests/engine/linter/test_linter_matcher.py::TestMatcherZeroProgressSemantics`。
+        """
+        typ = feat.get("type")
+        if typ in ("optional", "repeat"):
+            return True
+        if typ == "call":
+            name = feat.get("name", "")
+            cached = self._nullable_cache.get(name)
+            if cached is None:
+                cached = _rule_nullable(name, self._tree, set())
+                self._nullable_cache[name] = cached
+            return cached
+        return False
 
     @staticmethod
     def _hits_exclude(tokens: list[Token], j: int, info: dict, limit: int) -> bool:
@@ -835,6 +892,7 @@ class RuleMatcher:
         for idx, item in enumerate(items):
             if i >= limit:
                 break
+            before = len(errors)
             if item.get("type") == "optional":
                 # optional 的 first 与后续元素 first 重叠（如门级实例的
                 # (strength)? 与无名实例的 "("）→ 用 overlap 变体：匹配
@@ -851,10 +909,15 @@ class RuleMatcher:
             else:
                 j = self.match(tokens, i, item, errors, limit, strict)
             if j <= i:
-                # 某个元素未推进 → seq 整体失败（回滚到起点），
-                # 防止后续元素在未推进位置假匹配（如 Range 的 l_square 失败
-                # 后 @Expression 误吞 = 导致 repeat 无限推进）
-                return start
+                # 零进展：optional 不存在 / repeat 匹配 0 次（如
+                # `(@InitElement,(comma,@InitElement)*)?` 的单元素形态）/
+                # 可空 call —— 这些都合法，跳过继续；其余（token 失败、
+                # seq 内必选 call 失败）才整体回滚，防止后续元素在未推进
+                # 位置假匹配（如 Range 的 l_square 失败后 @Expression 误吞
+                # `=` 导致 repeat 无限推进）。
+                if not self._no_progress_ok(item, errors, before):
+                    return start
+                continue
             i = j
         return i
 

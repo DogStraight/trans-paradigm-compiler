@@ -121,6 +121,99 @@ class TestEofProbe:
         assert errs == []
 
 
+class TestMatcherZeroProgressSemantics:
+    """匹配器的"零进展"语义（2026-09-26 实证闭环；C 包合法语料上暴露）。
+
+    用**最小合成树**（不依赖任何语言包）把两条语义钉死——它们是 linter 在
+    "production 含可选/可空结构"的语言上不误报的前提：
+
+    ① **必选 call 零进展 = 失败** → 整个规则回滚（旧行为是"本次没报错就算空匹配
+       成功 → 跳过继续"，于是后续元素在错位上匹配，C 包合法代码被大面积误报）；
+    ② **可空 call / repeat 零进展 = 合法空匹配** → 跳过继续（如 `@SpecRest*`）。
+
+    合成树：`Pair = @Kw @Opt @Tail`（`@Opt` 可空，`@Kw`/`@Tail` 不可空）；
+    `SeqPair = (@Kw @Opt)? @Tail`（seq 内含零进展的可空 call）。
+    """
+
+    _TREE: dict = {
+        "Pair": {
+            "prods": [
+                {"type": "call", "name": "Kw"},
+                {"type": "call", "name": "Opt"},
+                {"type": "call", "name": "Tail"},
+            ]
+        },
+        "Kw": {"prods": [{"type": "token", "token_type": "kw"}]},
+        "Opt": {
+            "prods": [
+                {"type": "optional", "elem": {"type": "token", "token_type": "opt"}}
+            ]
+        },
+        "Tail": {"prods": [{"type": "token", "token_type": "tail"}]},
+        "SeqPair": {
+            "prods": [
+                {
+                    "type": "optional",
+                    "elem": {
+                        "type": "seq",
+                        "items": [
+                            {"type": "call", "name": "Kw"},
+                            {"type": "call", "name": "Opt"},
+                        ],
+                    },
+                },
+                {"type": "call", "name": "Tail"},
+            ]
+        },
+    }
+
+    @classmethod
+    def _matcher(cls):
+        from linter.checkers.matcher import RuleMatcher
+
+        return RuleMatcher(cls._TREE, None, frozenset(), frozenset())
+
+    @staticmethod
+    def _tokens(*types):
+        from core.define import Token
+
+        return [Token(content=t, type=t) for t in types]
+
+    def _call(self, m, tokens, name, strict):
+        errs: list = []
+        j = m.match(tokens, 0, {"type": "call", "name": name}, errs, len(tokens), strict)
+        return j, errs
+
+    def test_nullable_rule_recognized(self):
+        # 可空性判定本身：`Opt`（production 全可选）可空；`Kw`/`Tail`（必选 token）不可空
+        m = self._matcher()
+        assert m._no_progress_ok({"type": "call", "name": "Opt"}, [], 0) is True
+        assert m._no_progress_ok({"type": "call", "name": "Kw"}, [], 0) is False
+        assert m._no_progress_ok({"type": "call", "name": "Tail"}, [], 0) is False
+        assert m._no_progress_ok({"type": "repeat", "elem": {}}, [], 0) is True
+        assert m._no_progress_ok({"type": "optional", "elem": {}}, [], 0) is True
+
+    def test_nullable_call_zero_progress_is_legal(self):
+        # `kw tail`：@Opt 空（合法）→ @Tail 在 1 命中 → 全消费、零错误
+        m = self._matcher()
+        j, errs = self._call(m, self._tokens("kw", "tail"), "Pair", strict=False)
+        assert (j, errs) == (2, [])
+
+    def test_required_call_failure_rolls_back_whole_rule(self):
+        # `kw junk`：@Opt 空后 @Tail 在 1 失配（不可空）→ Pair 整体回滚到 0。
+        # 旧行为（"没报错就算空匹配成功"）会返回 1，把 `junk` 甩给上层。
+        m = self._matcher()
+        j, _ = self._call(m, self._tokens("kw", "junk"), "Pair", strict=False)
+        assert j == 0, f"必选 @Tail 失败应整体回滚（0），实得 {j}"
+
+    def test_seq_tolerates_zero_progress_nullable_item(self):
+        # `kw tail`：seq 内 @Opt 零进展不再让 seq 整体回滚（旧行为解不出 →
+        # "incomplete structure" 假报，对应 C 包 `{.k = 0}` / `int a[4] = {1};`）
+        m = self._matcher()
+        j, errs = self._call(m, self._tokens("kw", "tail"), "SeqPair", strict=False)
+        assert (j, errs) == (2, [])
+
+
 class TestStatementChecker:
     """StatementChecker 契约。"""
 

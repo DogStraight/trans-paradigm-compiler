@@ -84,6 +84,70 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    pass  # 变异：关掉语言作用域重置\n",
         "test": "tests/engine/core/test_language_switch.py",
     },
+    {
+        "why": "匹配器把「必选 call 零进展」当空匹配成功（旧判据 `len(sub_errs) == before`）"
+               "→ 失败的规则被静默跳过、后续元素在错位上继续匹配：C 包合法头文件上"
+               "14 条结构误报，合法代码 linter 全报（2026-09-26 定位并修复）",
+        "file": "linter/checkers/matcher.py",
+        "old": """        typ = feat.get("type")
+        if typ in ("optional", "repeat"):
+            return True
+        if typ == "call":
+            name = feat.get("name", "")
+            cached = self._nullable_cache.get(name)
+            if cached is None:
+                cached = _rule_nullable(name, self._tree, set())
+                self._nullable_cache[name] = cached
+            return cached
+        return False""",
+        "new": """        typ = feat.get("type")
+        if typ == "optional":
+            return True
+        return typ in ("call", "repeat") and len(sub_errs) == before""",
+        "test": "tests/languages/c/test_c_corpus.py",
+    },
+    {
+        "why": "seq 内「可空元素零进展」被当整体失败 → 单元素初始化列表等形态解不出："
+               "C 包 `{.k = 0}` / `int a[4] = {1};` / `{ {1} }` 报 expected ';' got '{'"
+               "（同轮定位，`_match_seq` 的零进展判据）",
+        "file": "linter/checkers/matcher.py",
+        "old": """            if j <= i:
+                # 零进展：optional 不存在 / repeat 匹配 0 次（如
+                # `(@InitElement,(comma,@InitElement)*)?` 的单元素形态）/
+                # 可空 call —— 这些都合法，跳过继续；其余（token 失败、
+                # seq 内必选 call 失败）才整体回滚，防止后续元素在未推进
+                # 位置假匹配（如 Range 的 l_square 失败后 @Expression 误吞
+                # `=` 导致 repeat 无限推进）。
+                if not self._no_progress_ok(item, errors, before):
+                    return start
+                continue""",
+        "new": """            if j <= i:
+                return start""",
+        "test": "tests/languages/c/test_c_corpus_impl.py",
+    },
+    {
+        "why": "discovery 的 `_advance_match` 对零进展元素做 `j + 1` 兜底 → 紧随其后的"
+               "元素从错位 token 起匹配：C 包函数定义的 body 起点被算到参数位，"
+               "多注册一个假子节点并误报（同轮定位）",
+        "file": "linter/discovery.py",
+        "old": "            return matcher.match(tokens, j, feat, trial, end, strict=True)\n",
+        "new": """            k = matcher.match(tokens, j, feat, trial, end, strict=True)
+            return k if k > j else j + 1
+""",
+        "test": "tests/languages/c/test_c_corpus_impl.py",
+    },
+    {
+        "why": "discovery 的括号分支不把「块规则」转块分支 → 块内语句既不解析也不诊断"
+               "（静默漏检，c4 的缺分号一度靠 `j + 1` 巧合发现才没暴露；同轮定位）",
+        "file": "linter/discovery.py",
+        "old": """        if candidates and isinstance(candidates[0], str):
+            info = self._tree.get(candidates[0], {}) or {}
+            if info.get("block_end"):
+                return self._discover_block(tokens, i, end, context, depth, nodes)
+""",
+        "new": "",
+        "test": "tests/languages/c4/test_c4_linter.py",
+    },
 ]
 
 

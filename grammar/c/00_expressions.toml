@@ -90,9 +90,11 @@ value = "$2"
 #   `ring_scan` 整函数解析失败）。
 # ⚠ 本规则的原子清单与 `PostfixExpr` 的 head 清单**同一份**（两处都写）：
 #   这是"无环"与"不扰动 linter"两个约束下的取舍——把原子清单抽成独立规则
-#   （曾试 `AtomExpr`）会多一层 inline 间接，而 linter 的 token 匹配器**不回溯**
-#   （见 `docs/gaps/gap-parser-linter-approximation.md` 机制 A），多一层就多在
-#   `sizeof` 初值处误报一条（实测 7 → 8）。加原子形态时两处都要改。
+#   （曾试 `AtomExpr`）会多一层 inline 间接，当时在 `sizeof` 初值处多出一条
+#   linter 误报（实测 7 → 8）。那一轮误报的**已证成因**是匹配器把"必选 call
+#   零进展"当空匹配（2026-09-26 已修，见 `linter/checkers/matcher.py` 的
+#   `_no_progress_ok`），故"多一层间接是否仍会误报"**未复测**——在有人实测前
+#   保守维持两处同写。加原子形态时两处都要改。
 [PrimaryExpr.parser]
 production = [
     "@Number|@StringLiteral|@Identifier|@ParenthesizedExpr|@UnaryExpr|@SizeofTypeExpr|@SizeofExpr|@PostfixExpr|@CastExpr|@CompoundLiteral",

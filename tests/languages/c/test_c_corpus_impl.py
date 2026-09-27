@@ -86,30 +86,22 @@ class TestImplementationSample:
         ast = _parse(_source(), c)
         assert len([n for n in _node_names(ast) if n == "FuncDef"]) == 9
 
-    def test_linter_gap_is_recorded(self, c_linter):
-        """⚠ **已知缺口**（引擎侧，见 `docs/gaps/gap-parser-linter-approximation.md`）：
-        解析侧完全正常，linter 的语句发现/"语句结束"判定对 C 的声明形态误报。
+    def test_linter_reports_no_false_positives(self, c_linter):
+        """实现文件上 linter **零诊断**（原 7 条结构误报缺口已闭环）。
 
-        断言分两截，各自稳定：
-        1. **`phase-*` 计数** = 缺口规模（与包状态绑定，变化须重记并复核文档）；
-        2. **非 `phase-*` 码只允许 `ST003`** —— `ST003` 是**跨语言状态泄漏**的产物（见下），
-           与 C 语法无关。
+        ⚠ 本用例 2026-09-26 前断言的是"`phase-*` 计数 = 缺口规模"（记录 7 条）。
+        缺口由四条引擎侧修点闭环（成因见 `linter/checkers/matcher.py` 的
+        `_no_progress_ok` / `_match_seq` 与 `linter/discovery.py` 的
+        `_container_end` / `_advance_match` 文档），故按缺口档纪律换成"零诊断"
+        断言——它同时是那次修复的**回归守**。
 
-        ⚠ 跨语言泄漏（2026-09-25 实测，本轮真实语料工作发现）：同一进程里**先跑过
-        verilog linter** 再切到 `grammar/c` 扫 C 源，结果会多出 1 条 `ST003`
-        （verilog 的检查规则残留，C 包自身没有 `rules/`）。即**检查结果依赖测试顺序**
-        ——与 `tests/README.md` 记录的"多语言同进程串味"同类，已登记 TODO。
-        故此处按"`phase-*` 计数 + 非 phase 码白名单"断言，而不是断言总数。
+        非 `phase-*` 码白名单仍保留：`ST003` 是**跨语言状态泄漏**的产物（同一进程里
+        先跑过 verilog linter 时残留，C 包自身没有 `rules/`，见 `TODO.md`「跨语言检查
+        规则泄漏」），与 C 语法无关；那条缺口闭环后应改为"无非 phase 码"。
         """
         errs = _lint(_source(), c_linter)
         phase = [e for e in errs if e.code.startswith("phase-")]
         others = {e.code for e in errs if not e.code.startswith("phase-")}
-        assert phase and len(phase) == _RECORDED_PHASE_GAP, (
-            f"缺口规模变了（{len(phase)} 条，记录 {_RECORDED_PHASE_GAP}）——"
-            "按缺口档纪律：重新记录并同步文档，不要随手改断言"
-        )
+        assert not phase, f"合法实现文件上出现结构诊断（误报）：{[e.message for e in phase]}"
         assert others <= {"ST003"}, f"出现预期外的诊断码（非跨语言泄漏）：{others}"
 
-
-# 实测记录（阶段 3 完成 + 本样本定稿时；数字与包状态绑定，变化须重记）
-_RECORDED_PHASE_GAP = 7

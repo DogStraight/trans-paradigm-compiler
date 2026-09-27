@@ -231,9 +231,11 @@ class Discovery:
             # 括号内容：先尝试语句分类——`{` 拼接可作赋值 lvalue（{a,b} = expr; ，
             # BlockingAssign 的 first 含 bracket.l_curly_bracket，由 keyword_map
             # 触发），命中即按语句发现；否则整体跳过括号区间（端口/参数列表等）。
-            # 仅对无 block_end 的纯语句规则走语句分支（块规则仍由块分支处理）。
+            # 仅对无 block_end 的纯语句规则走语句分支（块规则转块分支，见
+            # `_discover_bracket`——块规则在此**不能**整体跳过，否则块内语句
+            # 既不解析也不诊断）。
             if t.type in self._bracket_openers:
-                i = self._discover_bracket(tokens, i, end, context, nodes)
+                i = self._discover_bracket(tokens, i, end, context, depth, nodes)
                 continue
 
             # 块边界 → 注册块节点 + 递归 body 产出 children
@@ -258,9 +260,10 @@ class Discovery:
         i: int,
         end: int,
         context: str,
+        depth: int,
         nodes: list[DiscoveredNode],
     ) -> int:
-        """括号开启符：属性对整体跳过；否则先试语句分类，退化时跳过括号区间。
+        """括号开启符：属性对 / 块规则 / 语句分类 / 整体跳过，按序分流。
 
         Returns: 下一个扫描位置（必定 > i，防死循环）。
         """
@@ -275,10 +278,16 @@ class Discovery:
         ):
             return self._skip_balanced(tokens, i, end)
         candidates = self._lookahead.classify(tokens, i)
-        if candidates and not (
-            isinstance(candidates[0], str)
-            and (self._tree.get(candidates[0], {}) or {}).get("block_end")
-        ):
+        # 块规则（有 block_end）：括号开启符同时是块开启符（scanner 把括号并入
+        # block 起止符集），故此处**必须转块分支**注册块节点并递归 body。此前
+        # 落进下面的"整体跳过括号区间"，块内语句既不解析也不诊断（静默漏检）；
+        # c4 之所以未暴露，是因为 `_advance_match` 的 `j + 1` 兜底把 body 起点
+        # 错算到 `{` 之后一格，绕开了括号分支（偶然生效）。
+        if candidates and isinstance(candidates[0], str):
+            info = self._tree.get(candidates[0], {}) or {}
+            if info.get("block_end"):
+                return self._discover_block(tokens, i, end, context, depth, nodes)
+        if candidates:
             e = self._statement_end(tokens, i, candidates[0], end)
             if e > i:
                 nodes.append(
@@ -489,16 +498,24 @@ class Discovery:
 
         错误恢复近似（同 `_container_end` / `_skip_to_statement_end`）：匹配抛错时
         停止逐元素推进，让检查阶段报错，discovery 仍能推进。
+
+        ⚠ **零进展时返回 j 本身，不做 `j + 1` 兜底**：调用方 `_locate_stmt_body`
+        按 `for feat in prods` 逐元素推进（循环有界，无死循环风险），而
+        `@SpecRest*` / `@X?` 这类元素匹配到空是**合法且常见**的。此前的 +1 兜底
+        把"空匹配"当成"跳过一格"，于是紧随其后的 `@Declarator` 从 `SpecRest*`
+        之后的**下一个** token 起匹配——实测 C 包 `void f(void) { … }`：`f` 被跳过、
+        `(void)` 被当 ParenDeclarator 解析（内部报 `unexpected 'void'`），
+        `_locate_stmt_body` 因而把 body 起点算到参数位，FuncDef 多注册一个
+        `Declaration [3,14)` 子节点并报 `expected ';', got ')'`。
         """
         trial: list = []
         try:
             matcher = self._lookahead._matcher
             if matcher is None:  # 未装载匹配器：与既有 except 同义地放弃该元素
                 return None
-            k = matcher.match(tokens, j, feat, trial, end, strict=True)
+            return matcher.match(tokens, j, feat, trial, end, strict=True)
         except Exception:
             return None
-        return k if k > j else j + 1
 
     def _locate_stmt_body(
         self, tokens: list[Token], i: int, rule: str, end: int
@@ -527,14 +544,22 @@ class Discovery:
     def _container_end(
         self, tokens: list[Token], i: int, rule: str, end: int
     ) -> int:
-        """容器语句边界：优先用 matcher 按完整 production 匹配确定。
+        """容器语句边界：头 production 匹配 + 尾部嵌套语句/块的区间延伸。
 
-        容器（if/for/while/always 等含语句/块 body）production 末尾是变长元素
-        （optional/choice/call），结束点由 body 结构决定而非固定 token。用
-        matcher 匹配 production 可正确覆盖尾部结构（如 if 的 else chain）；
+        容器（if/for/while/always/函数定义等含语句或块 body）production 末尾是
+        变长元素（optional/choice/call），结束点由 body 结构决定而非固定 token。
+        用 matcher 匹配 production 可正确覆盖尾部结构（如 if 的 else chain）；
         回退 _stmt_ends 会在 then 块 keyword.end 处截断、把 else chain 甩出
         节点（漏检/误报）。匹配失败（无进展/有结构错误）回退 _stmt_ends——
         错误恢复近似（非语法判定）：让检查阶段报错、discovery 仍能推进。
+
+        ⚠ **匹配结果之外的补算**：matcher 对 `@Stmt` / 具体语句规则（is_statement）
+        按扁平化策略**不消费**（嵌套语句由发现阶段注册的独立 checker 负责），故
+        `match_rule` 的结果可能止于 body 之前。父 checker 的区间若照此截断，
+        production 的必选尾部元素仍在 → 报 `unexpected end of statement` 假红
+        （C 包实测：`void f(void) { … }` 的 FuncDef 区间止于 `f(void)`）。
+        verilog 的容器都经 `@Stmt` 分派器（is_statement=false → 内联匹配）绕过
+        该形态，故此前未暴露。此处用 `_stmt_tail_end` 补算尾部语句/块的终点。
         """
         matcher = self._lookahead._matcher
         if matcher is not None:
@@ -547,8 +572,33 @@ class Discovery:
                 except Exception:
                     j = i
                 if j > i and not trial:
-                    return j
+                    return max(j, self._stmt_tail_end(tokens, i, rule, end))
         return self._skip_to_end(tokens, i, self._lookahead._stmt_ends, end)
+
+    def _stmt_tail_end(self, tokens: list[Token], i: int, rule: str, end: int) -> int:
+        """规则 production 内首个语句/块引用元素的自身终点（≤ i 表示无此元素）。
+
+        区间起点严格在规则起点之后才算（body 结构上位于头部 token 之后）；
+        body 起点 == 规则起点的分派器（如 `Stmt = choice of 语句`）不补算，
+        其嵌套语句由后续扫描独立发现（扁平化策略，同 `_attach_container_body`）。
+        """
+        body = self._locate_stmt_body(tokens, i, rule, end)
+        if body is None:
+            return i
+        body_start, _, entry = body
+        if body_start <= i:
+            return i
+        return self._stmt_extent(tokens, body_start, entry, end)
+
+    def _stmt_extent(self, tokens: list[Token], pos: int, entry: str, end: int) -> int:
+        """语句/块入口在 pos 处的区间终点（块跳 block_end / 容器递归 / 其余推导）。"""
+        info = self._tree.get(entry, {}) or {}
+        be = info.get("block_end") or ""
+        if be:
+            return self._skip_to_end(tokens, pos, {be}, end)
+        if self._is_nested_container(entry):
+            return self._container_end(tokens, pos, entry, end)
+        return self._statement_end(tokens, pos, entry, end)
 
     def _statement_end(self, tokens: list[Token], i: int, rule: str, n: int) -> int:
         """确定语句的粗略边界（production 推导结束符）。

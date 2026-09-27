@@ -216,11 +216,25 @@ class TestExpressionRejection:
         [
             "void f(void) { a + ; }\n",       # 二元右操作数缺失
             "void f(void) { a ? b; }\n",      # 三目缺 `:`
-            "void f(void) { a b; }\n",        # 两个表达式相邻（缺运算符）
         ],
     )
     def test_bad_expression_reports(self, c_linter, src):
         assert _lint(src, c_linter), f"应报错但通过了：{src!r}"
+
+    def test_adjacent_identifiers_are_a_declaration_not_an_error(self, c_linter):
+        """`a b;` **不是**表达式错误，而是语法合法的**声明**（typedef 名歧义）。
+
+        C 里 `a b;` 两种读法：① `a` 是 typedef 名 → 声明"`b` 的类型是 `a`"；
+        ② 表达式 `a` 后跟 `b`（非法）。语法层判不了（要符号表），本包按既定
+        分层**宽进**：`Stmt` 候选里 `@ExprStmt` 在前、`@Declaration` 在后
+        （见 `grammar/c/03_statements.toml`），表达式解不出时落到声明。
+        真伪 typedef 由语义层按符号表判 —— 故此处断言 **linter 零诊断**。
+
+        ⚠ 本用例 2026-09-26 前在 `test_bad_expression_reports` 的负样本表里。
+        它当时变红靠的是 linter 的一条引擎侧缺陷（匹配器把失败的必选 call
+        静默跳过）制造的假报，不是真的表达式检查——修复后按分层口径归位。
+        """
+        assert _lint("void f(void) { a b; }\n", c_linter) == []
 
 
 class TestSizeof:

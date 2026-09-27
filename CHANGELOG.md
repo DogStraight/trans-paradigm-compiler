@@ -5,6 +5,62 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **linter 在合法 C 上大面积误报的根因（不是"匹配器不回溯"）**：`grammar/c` 的
+  `ring_buffer.h` / `ring_buffer.c` / `edge_comments.c` 三份**合法**样本上，linter 分别报
+  **14 / 7 / 2 条** `phase-statement`，即合法代码 100% 被报错（检查链在最基础的头文件上
+  不可用）。四条**引擎侧**近似缺陷、逐个独立可验证：
+
+  1. **匹配器把"必选 call 零进展"当空匹配成功**（`linter/checkers/matcher.py` 的
+     `_no_progress_ok`）：旧判据是"本次没新增错误"，于是失败的规则被**静默跳过**，
+     后续元素在错位上继续匹配。实测链：`@StructOrUnion` 失败被跳过 → `StructSpecifier`
+     把裸标识符当结构说明符吃掉 → `struct … { … };` 的成员 `int values[4];` 解不出 →
+     整条声明报 `expected ';', got '{'`。改为**按目标规则的可空性**判定
+     （production 可整体推导出空才允许零进展），并加规则级可空性缓存。
+  2. **`_match_seq` 把"可空元素零进展"当整体失败**：单元素初始化列表解不出
+     （`{.k = 0}` / `int a[4] = {1};` / `{ {1} }` 全报 `expected ';', got '{'`）；
+     改为按同一可空性判据放行。
+  3. **容器区间不含嵌套语句/块尾部**（`linter/discovery.py` 的 `_container_end`）：
+     matcher 对 `@Stmt` / 具体语句规则按扁平化策略**不消费**（嵌套语句由独立 checker
+     负责），故容器区间止于 body 之前，父 checker 反而在"production 仍有必选元素"处
+     报 EOF 假红（`void f(void) { … }` 全中）。新增 `_stmt_tail_end` / `_stmt_extent`
+     补算尾部；verilog 因容器都经 `@Stmt` 分派器（is_statement=false → 内联匹配）
+     绕开了该形态，故此前未暴露。
+  4. **`_advance_match` 对零进展元素做 `j + 1` 兜底**：body 起点被算到参数位
+     （`void f(void)` 的 `(void)` 被当括号声明符解析），多注册一个假子节点并误报；
+     改为返回真实匹配位置（调用方按 production 逐元素推进，循环有界，无死循环风险）。
+     连带修出一个**静默漏检**：`_discover_bracket` 此前对"块规则"也走"整体跳过括号
+     区间"，块内语句既不解析也不诊断——c4 的"块内缺分号"一度被发现，靠的正是
+     `j + 1` 兜底把 body 起点错算到 `{` 之后一格（偶然生效）；现在改为**转块分支**
+     （注册块节点 + 递归 body），c4 的块内检出从"偶然"变"必然"。
+
+  验证：三份样本诊断 **14 / 7 / 2 → 0 / 0 / 0**；`tests/e2e/eval_lint_accuracy.py`
+  recall 33/33、误报 0（不变）；`tests/e2e/eval_diag_baseline.py` 真实语料
+  **5548 → 5548**（无增长）；`tests/engine/linter` + `tests/languages/{c,c4,yaml}`
+  **620 passed**；全量 **2658 passed / 7 skipped**。
+  门禁有效性：`tools/check_gate_efficacy.py` 新增 **4 条变异**（把每条修复改回旧行为
+  ⇒ 期望的测试变红，逐条实测通过）；匹配器语义另有**最小合成树**单测
+  （`test_linter_matcher.py::TestMatcherZeroProgressSemantics`，不依赖任何语言包）。
+
+  顺带更正两处**过时归因**：① 旧缺口档把成因写成"匹配器严格逐 token 匹配**不回溯**、
+  规则内部的可选分支不被尝试"——实测不符（可选分支**有**被尝试，真正的锅是"失败的
+  必选 call 被静默跳过"），该档的 C 节已按"条目消失即删"清掉；② 旧档记的"机制 B：
+  `enum` 开头返回空候选"在本包当前状态**不可复现**（`enum e { A, B };` 等 6 例候选均为
+  `['Declaration']`、零诊断），一并删除。
+
+  同时更新三处按"缺口登记"写的测试断言（缺口档纪律：缺口闭环后换成"零诊断"断言）：
+  `test_c_corpus.py::test_linter_reports_no_false_positives`、
+  `test_c_corpus_impl.py::test_linter_reports_no_false_positives`，以及一条过期的阶段
+  边界断言（`test_function_body_is_not_supported_yet` → 阶段 3 已落地，改为"函数体
+  合法 ⇒ 零诊断"）；另把 `a b;` 从"表达式错误"负样本移出——它在 C 里语法上是**声明**
+  （typedef 名歧义，本包按既定分层宽进、真伪由语义层判），原先"报错"靠的正是上面第 1 条
+  缺陷制造的假报。
+
+- **新增已知边界（记 `TODO.md`，本轮未动）**：C 的 `CompoundStmt` 是普通语句而非
+  块规则（c4 的同位规则 `BlockStmt` 是块规则），故块体没有独立语句节点、**块内多个
+  错误只报一条**（实测 `void f(void) { a + ; b + ; }` → 1 条，c4 同位样本 → 2 条）。
+
 ### Added
 
 - **收尾轮实测更正一处「接受面已闭环」的错觉：变参 `...` 从未支持**（本包文档此前把

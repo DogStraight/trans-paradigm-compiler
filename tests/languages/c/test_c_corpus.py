@@ -70,26 +70,22 @@ class TestRingBufferHeader:
         ast = _parse(src, c)
         assert _node_names(ast) == _TOP
 
-    def test_linter_gap_is_recorded_not_hidden(self, c_linter):
-        """⚠ **已知缺口**：合法头文件上 linter 会报 17 条（解析侧完全正常）。
+    def test_linter_reports_no_false_positives(self, c_linter):
+        """合法头文件上 linter **零诊断**（原 14 条误报缺口已闭环）。
 
-        本用例**不断言"无诊断"**——那会把一个真实缺陷写成期望；也不断言"有诊断"——
-        那会把缺陷固化。它断言的是**缺口的可发现性**：诊断全部落在两类已知码上，
-        且数量与缺口档记录一致；缺口一旦修复，本用例会失败并提醒复核文档。
+        ⚠ 本用例 2026-09-26 前断言的是"缺口仍存在且规模未漂移"（14 条）。缺口
+        由**四条引擎侧修点**闭环（成因见 `linter/checkers/matcher.py` 的
+        `_no_progress_ok` / `_match_seq` 与 `linter/discovery.py` 的
+        `_container_end` / `_advance_match` 文档）：① 匹配器对"必选 call 零进展"
+        按可空性回滚；② 容器区间补算嵌套语句/块尾部；③ seq 内零进展按可空性放行；
+        ④ discovery 括号分支把块规则转块分支。故按缺口档纪律换成"零诊断"断言。
 
-        两类构造函数（`docs/gaps/gap-parser-linter-approximation.md`）：
-        ① 带成员体的类型说明符 `struct/union … { … };`（3 条）；
-        ② 带括号的声明符 `int f(struct ring *r);`（每条 2 报，共 10 条）。
-        归因 = `linter/checkers/matcher.py` 严格逐 token 匹配**不回溯**（规则内部的
-        可选分支不被尝试），属**引擎侧**修点，不在语言包侧。
-
-        ⚠ **数字与包状态绑定**：实测 14 条 = 阶段 1+2a+3A 测得（每落地一层语法面都会变：
-        13 → 14）；阶段 3 的
-        试验语法在树里时曾测得 17 条 / 4 类（多出 `enum` 体的 unrecognized 与成员数组
-        `[` 两类）。故本用例断言的是"**缺口仍存在且规模未漂移**"，任何人推进语法面后
-        数量变化都应在缺口档里重新记录并同步此处，而不是随手改断言。
+        非 `phase-*` 码白名单仍保留：`ST003` 是**跨语言状态泄漏**的产物（同进程先跑
+        过 verilog linter 时残留，见 `TODO.md`「跨语言检查规则泄漏」），与 C 语法
+        无关；那条缺口闭环后应改为"无非 phase 码"。
         """
         errs = _lint(_source(), c_linter)
-        codes = {e.code for e in errs}
-        assert codes <= {"phase-statement", "phase-unrecognized"}, codes
-        assert len(errs) == 14, f"缺口数量变了（{len(errs)} 条）——复核缺口档记录"
+        phase = [e for e in errs if e.code.startswith("phase-")]
+        others = {e.code for e in errs if not e.code.startswith("phase-")}
+        assert not phase, f"合法头文件上出现结构诊断（误报）：{[e.message for e in phase]}"
+        assert others <= {"ST003"}, f"出现预期外的诊断码（非跨语言泄漏）：{others}"

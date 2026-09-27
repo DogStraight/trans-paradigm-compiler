@@ -30,6 +30,14 @@
   **强制转换** `(T)x` 与**复合字面量** `(T){…}`（关键字起头的类型名）。
 - **标准增量插件**：`c11` / `c17` / `c23` 三档齐备（见下「标准档位」）。
 
+**linter**：三份样本（`ring_buffer.h` / `ring_buffer.c` / `edge_comments.c`）上**零诊断**
+（2026-09-26 实测；此前合法代码误报 14 / 7 / 2 条，成因与修点在
+`linter/checkers/matcher.py` 的 `_no_progress_ok` / `_match_seq` 与
+`linter/discovery.py` 的 `_container_end` / `_advance_match` 文档里，逐条回归守见
+`test_c_corpus.py`、`test_c_corpus_impl.py`、`test_c_declarations.py`，门禁有效性由
+`tools/check_gate_efficacy.py` 的 4 条变异抽查）。**已知边界**：块内诊断粒度粗——
+`CompoundStmt` 不是块规则，块内多个错误只报一条（见 `TODO.md` 同项）。
+
 未做（各自有归属，不在本包偷偷绕过）：
 
 | 项 | 归属 |
@@ -113,6 +121,11 @@ grammar/c/
    诊断**——补能力前后跑 `tools/c_acceptance.py` 对照，别只看测试是否绿。
 6. **缺口先落档再闭环**：本包词法面三条"配置表达不了"的缺口先记档（各写明为什么
    现机制表达不了），随后各补一个声明键全部闭环——记档不是拖延，是防止下一个包重踩。
+7. **块语句要声明成块规则**（`is_block = true`），别写成"普通语句 + `@Stmt*`"：
+   后者解析/渲染都成立，但 linter 拿不到块体（`_discover_block` / `_block_body`
+   只对块规则生效）⇒ **块内多个错误只报一条**。同位样板见 c4 的 `BlockStmt`
+   （production 只留 `{`/`}`，body 由 `parse_block_body` 循环产出，renderer 用
+   `role = "flatten"`）。本包当前正是反例（记在 `TODO.md`，待改）。
 
 ## 参照
 
@@ -128,6 +141,6 @@ grammar/c/
 
 - `grammar/README.md`（语言包目录约定、inject 归组）
 - `docs/gaps/gap-language-pack-scope.md`（分层草案 / 接受域清单 / 渲染保真现状）
-- `docs/gaps/gap-parser-linter-approximation.md`（本包暴露的 linter 语句发现缺口）
+- `linter/linter_architecture.md`（linter 分层与已知边界；语句发现/区间判定口径）
 - `parser/expression_conventions.md`（表达式隐式约定，含 `pratt_level`）
 - `core/component_protocol.md`（加语法结构 / 插件的工作流）

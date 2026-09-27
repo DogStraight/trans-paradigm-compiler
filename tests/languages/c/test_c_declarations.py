@@ -174,11 +174,23 @@ class TestSyntaxWideIn:
 
 
 class TestStagingBoundaries:
-    """阶段边界：明确本阶段**不**支持的面（防"看起来支持"）。"""
+    """阶段边界：随阶段推进即时更新——已落地的面把断言改成**接受**（防"看起来支持"）。
 
-    def test_function_body_is_not_supported_yet(self, c_linter):
-        """函数体属阶段 3（语句）——本阶段应被拒。"""
-        assert _lint("int main(void) { return 0; }\n", c_linter)
+    本包阶段 0–3 均已落地（词法 / 声明符 / 类型 / 语句），故以下三条都断言"接受"。
+    边界记录纪律：新增能力时**改断言并写明依据**，不保留已失效的"应被拒"断言。
+    """
+
+    def test_function_body_is_supported_after_stage_3(self, c_linter):
+        """函数体（阶段 3 语句）已落地：合法定义必须**零诊断**。
+
+        ⚠ 本用例 2026-09-26 前断言的是"函数体应被拒"（阶段 1 的边界）。阶段 3 落地
+        后该断言过期；本轮修掉 linter 的四条引擎侧近似缺陷（匹配器零进展语义 +
+        discovery 区间判定，成因见 `linter/checkers/matcher.py::_no_progress_ok`
+        与 `linter/discovery.py::_container_end` 文档）后转绿，故按"阶段边界随推进
+        更新"改为接受断言——它同时是那条修复的**回归守**：区间/匹配一退化，这里
+        立刻变红。
+        """
+        assert _lint("int main(void) { return 0; }\n", c_linter) == []
 
     def test_struct_specifier_parses_after_stage_2a(self, c):
         """阶段 2a 起 `struct point p;` 是正常声明（原"静默跳过"行为随之后退场）。"""
