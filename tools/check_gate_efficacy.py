@@ -322,6 +322,26 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": 'targets = ["@Declaration.production[0]"]\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
     },
+    {
+        "why": "`merge = \"by-name\"` 的核心是**同名条目深合并**（不是整体替换）——把"
+               "`merge_by_name` 的同名分支改成直接替换 ⇒ C23 数字形态 `c_dec` 只剩插件那一小块"
+               "（缺 size/base_prefix/value_digits）⇒ `1.5f`/`42u` 等核心后缀形态全崩。"
+               "本变异证明引擎侧那条合并语义真的被握着",
+        "file": "core/config_registry.py",
+        "old": "            if key in index:\n                out[index[key]] = merge_by_name(out[index[key]], item)\n",
+        "new": "            if key in index:\n                out[index[key]] = item\n",
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "插件声明**必须显式写** `merge = \"by-name\"` 才能与核心同名声明合并。去掉它 ⇒ "
+               "该声明退回\"后者覆盖\"：核心 `[[number.based]]` 三条数字形态被整体顶掉"
+               "（连 `1.5f` 都不再是数字 token）——本变异证明声明面的合并语义是必需的，"
+               "不是装饰",
+        "file": "grammar/c/plugins/c23/tpc.toml",
+        "old": 'number = { file = "_number_c23.toml", section = "number", merge = "by-name" }\n',
+        "new": 'number = { file = "_number_c23.toml", section = "number" }\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
 ]
 
 

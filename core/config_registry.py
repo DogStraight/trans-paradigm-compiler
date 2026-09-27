@@ -129,7 +129,10 @@ def _find_grammar_tpc_toml() -> str:
 
 
 # 文件式配置声明的合法字段（tpc.toml [xxx] 段内）
-_DECL_FIELDS = {"file", "section", "required", "base", "description"}
+_DECL_FIELDS = {"file", "section", "required", "base", "description", "merge"}
+
+# `merge` 的唯一取值：同名声明之间**按 `name` 合并命名条目列表**（见 `merge_by_name`）。
+_MERGE_BY_NAME = "by-name"
 
 
 def _flatten_config(table: dict, prefix: str = "") -> list:
@@ -168,8 +171,65 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def merge_by_name(base: Any, override: Any) -> Any:
+    """**按名合并**两个配置值（声明级 `merge = "by-name"` 的实现）。
+
+    语义（逐层）：
+      · dict + dict → 逐键递归（缺键直接取 override 的值）；
+      · list + list → **命名条目按 `name` 合并**：同名条目深合并（原位替换、**保序**），
+        新名条目**追加**；
+      · 其余 → override 覆盖（含标量、类型不一致、非命名条目列表）。
+
+    动机（2026-09-26，落 C23 十进制字面量后缀时）：C 的数字形态是
+    `[[number.based]] name = "c_dec" …` 这样的**命名条目列表**，而跨声明取值此前是
+    "后者整体覆盖"（`_resolve_decls`）⇒ 插件想给某形态**加一个后缀字符**，只能整条重抄
+    核心形态（知识重复、必然漂移）。按名合并让插件写**局部条目**即可：
+
+        [[number.based]]
+        name = "c_dec"
+        suffix = { chars = "uUlLfFd", max = 3 }   # 只补后缀位，其余字段由核心形态供给
+
+    ⚠ **只在声明显式写 `merge = "by-name"` 时生效**——默认仍是"后者覆盖"，
+    故对既有配置**零影响**（不搞隐式魔法）。
+    ⚠ 未命名条目（缺 `name` 或非字符串/空串）在**列表对列表**时 **fail-fast**：
+    按名合并的前提是"能认出同一条目"，认不出就不许猜（配置错误直接报错，
+    不静默退化成追加或覆盖）。
+    """
+    if isinstance(base, dict) and isinstance(override, dict):
+        out = dict(base)
+        for key, val in override.items():
+            out[key] = merge_by_name(base[key], val) if key in base else val
+        return out
+    if isinstance(base, list) and isinstance(override, list):
+        out = list(base)
+        index: dict[str, int] = {}
+        for i, item in enumerate(out):
+            index[_named_entry_key(item)] = i
+        for item in override:
+            key = _named_entry_key(item)
+            if key in index:
+                out[index[key]] = merge_by_name(out[index[key]], item)
+            else:
+                index[key] = len(out)
+                out.append(item)
+        return out
+    return override
+
+
+def _named_entry_key(item: Any) -> str:
+    """命名条目列表的元素 → 合入键（`name`）；不是命名条目 → fail-fast。"""
+    if isinstance(item, dict):
+        name = item.get("name")
+        if isinstance(name, str) and name:
+            return name
+    raise ConfigError(
+        "merge = \"by-name\" 要求列表元素都是**带非空字符串 name 的表**"
+        f"（按名合并的前提）；实得 {item!r}"
+    )
+
+
 def _validate_file_spec_fields(config_key: str, spec: dict) -> None:
-    """文件式声明字段校验：file / section / required / base（类型错 → fail-fast）。"""
+    """文件式声明字段校验：file / section / required / base / merge（类型错 → fail-fast）。"""
     f = spec["file"]
     if not (isinstance(f, str) or (isinstance(f, list) and all(isinstance(x, str) for x in f))):
         raise ConfigError(
@@ -189,6 +249,12 @@ def _validate_file_spec_fields(config_key: str, spec: dict) -> None:
     if not isinstance(base, str):
         raise ConfigError(
             f"[config] {config_key}: base 必须是字符串，got {type(base).__name__}"
+        )
+    merge = spec.get("merge")
+    if merge is not None and merge != _MERGE_BY_NAME:
+        raise ConfigError(
+            f"[config] {config_key}: merge 只支持 {_MERGE_BY_NAME!r}"
+            f"（同名声明按 name 合并命名条目列表；缺省 = 后者覆盖），got {merge!r}"
         )
 
 
@@ -453,6 +519,15 @@ def _append_plugin_file_decl(
         new_files = old_files + (
             [prefixed] if isinstance(prefixed, str) else prefixed
         )
+        # merge：新声明写了就用它（两个插件对同一 key 写了**不同**合并语义 → fail-fast，
+        # 不许静默取一个）；没写则沿用先到者。
+        old_merge = old[7]
+        new_merge = spec.get("merge", old_merge)
+        if old_merge and spec.get("merge") and spec["merge"] != old_merge:
+            raise ConfigError(
+                f"[config] {config_key}: 多个插件对同一 key 声明了不同的 merge"
+                f"（{old_merge!r} vs {spec['merge']!r}）——同一份取值只能有一种合并语义"
+            )
         # 保留先到者的 section/required/description（首个声明者为准）
         declarations[i] = (
             config_key,
@@ -462,6 +537,7 @@ def _append_plugin_file_decl(
             old[4],
             old[5],
             None,
+            new_merge,
         )
         return
     declarations.append(_file_decl(config_key, prefixed, spec, "plugins", False))
@@ -475,9 +551,10 @@ def _is_file_spec(spec: Any) -> bool:
 def _file_decl(
     config_key: str, file_spec: Any, spec: dict, base_key: str, required_default: bool
 ) -> tuple:
-    """文件式声明元组（7 元，供 `_resolve_decls` 消费）。
+    """文件式声明元组（8 元，供 `_resolve_decls` 消费）。
 
     语言包：base=`rules`、required 缺省 True；插件：base=`plugins`、缺省 False。
+    第 8 项 `merge` = 同名声明之间的合并语义（`None` = 后者覆盖）。
     """
     return (
         config_key,
@@ -487,19 +564,20 @@ def _file_decl(
         spec.get("required", required_default),
         spec.get("description", ""),
         None,
+        spec.get("merge"),
     )
 
 
 def _bare_decl(config_key: str, spec: Any) -> tuple:
     """非文件式（bare data）声明元组：值随声明直接给（file/section 留空）。"""
-    return (config_key, "", None, "", False, "", spec)
+    return (config_key, "", None, "", False, "", spec, None)
 
 _DECLARATIONS = _load_meta_declarations()
 
 
 def _install_config_declarations():
     """注册所有配置声明（模块导入时自动执行）。"""
-    for name, file, section, base, required, desc, bare_value in _DECLARATIONS:
+    for name, file, section, base, required, desc, bare_value, merge in _DECLARATIONS:
         config.declare(
             name,
             file=file,
@@ -508,6 +586,7 @@ def _install_config_declarations():
             required=required,
             description=desc,
             bare_value=bare_value,
+            merge=merge,
         )
 
 
@@ -549,6 +628,7 @@ class ConfigRegistry:
         base: str = "rules",
         description: str = "",
         bare_value: Any = None,
+        merge: str | None = None,
     ) -> None:
         """声明一个配置依赖。
 
@@ -560,6 +640,8 @@ class ConfigRegistry:
             base: 基准目录名
             description: 人类可读描述
             bare_value: 非文件式配置的原始值（如列表）
+            merge: 同名声明之间的合并语义（`"by-name"` = 按 `name` 合并命名条目列表；
+                `None` = 后者覆盖）。语义见 `merge_by_name`。
         """
         if name in cls._entries:
             return  # 重复声明安全无害
@@ -570,6 +652,7 @@ class ConfigRegistry:
             "base": base,
             "description": description,
             "bare_value": bare_value,
+            "merge": merge,
         }
 
     # ── 启用组合（档位）────────────────────────
@@ -660,7 +743,7 @@ class ConfigRegistry:
                 grammar_dir=candidate, enabled=list(tier)
             )
             cls._entries.clear()
-            for name, file, section, base, required, desc, bare in decls:
+            for name, file, section, base, required, desc, bare, merge in decls:
                 cls.declare(
                     name,
                     file=file,
@@ -669,6 +752,7 @@ class ConfigRegistry:
                     required=required,
                     description=desc,
                     bare_value=bare,
+                    merge=merge,
                 )
             cls._entries_source = candidate
             cls._entries_enabled = tier
@@ -748,6 +832,7 @@ class ConfigRegistry:
                 spec.get("required", True),
                 spec.get("description", ""),
                 spec.get("bare_value"),
+                spec.get("merge"),
             )
             for name, spec in cls._entries.items()
         ]
@@ -835,6 +920,7 @@ class ConfigRegistry:
                     spec.get("required", True),
                     spec.get("description", ""),
                     spec.get("bare_value"),
+                    spec.get("merge"),
                 )
                 for name, spec in cls._entries.items()
             ]
@@ -867,7 +953,7 @@ class ConfigRegistry:
     ) -> tuple[dict, dict]:
         """按声明列表解析配置（纯函数，不写 _loaded）。
 
-        decls: (name, file, section, base, required, description, bare_value) 元组列表。
+        decls: (name, file, section, base, required, description, bare_value, merge) 元组列表。
         供 load_all（用 _entries）与 resolve（用语言包 tpc.toml 声明）共用。
 
         Returns: (loaded, sources)
@@ -876,13 +962,17 @@ class ConfigRegistry:
 
         分三步：基准目录表（`_build_bases`）→ 逐声明取值（`_load_decl_value`，
         异常按三类分流，fail-fast 语义见各 except 注释）→ 汇总一次性报错。
+
+        **同名声明**：缺省**后者覆盖**（历史行为，不改）；该声明显式 `merge = "by-name"`
+        时改为 `merge_by_name` 按 `name` 合并命名条目列表（插件"局部补一条形态"的入口，
+        见 `merge_by_name` 的动机段）。
         """
         bases = cls._build_bases(rules_dir, ext_dirs, plugins_dir, base_dirs)
         loaded: dict[str, Any] = {}
         sources: dict[str, dict] = {}
         errors: list[str] = []
 
-        for name, file_spec, section, base_key, required, _, bare in decls:
+        for name, file_spec, section, base_key, required, _, bare, merge in decls:
             # bare data：非文件式配置，值已由 tpc.toml 直接提供
             if bare is not None:
                 loaded[name] = bare
@@ -898,11 +988,25 @@ class ConfigRegistry:
                 merged, src_files = cls._load_decl_value(
                     file_spec, section, base_dir, required
                 )
-                loaded[name] = merged
-                sources[name] = {
-                    "file": src_files[0] if len(src_files) == 1 else src_files,
-                    "section": section,
-                }
+                if name in loaded and merge == _MERGE_BY_NAME:
+                    # 按名合并：命名条目列表补/改，其余字段覆盖（见 merge_by_name）
+                    try:
+                        loaded[name] = merge_by_name(loaded[name], merged)
+                    except ConfigError as e:
+                        errors.append(f"  [{name}] base='{base_key}': {e}")
+                        continue
+                    prev = sources.get(name, {}).get("file")
+                    files = (prev if isinstance(prev, list) else [prev] if prev else [])
+                    sources[name] = {
+                        "file": files + src_files,
+                        "section": section,
+                    }
+                else:
+                    loaded[name] = merged
+                    sources[name] = {
+                        "file": src_files[0] if len(src_files) == 1 else src_files,
+                        "section": section,
+                    }
             except tomllib.TOMLDecodeError as e:
                 # TOML 语法损坏（重复 key / 格式错误）必须 fail-fast：即使
                 # required=False 也不能静默退化成空表——否则下游以空配置继续

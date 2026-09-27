@@ -107,9 +107,9 @@ grammar/c/
 **判据（每族都要有）**：正样本解析通过（进 AST）+ 负样本被拒（linter/parser 报错），
 两向都要断言——只有正样本会漏掉"语法过宽"。
 
-**盘点工具**：`python tools/c_acceptance.py`（39 条构造逐条试解析，报"进 AST / 空 AST /
+**盘点工具**：`python tools/c_acceptance.py`（40 条构造逐条试解析，报"进 AST / 空 AST /
 词法抛错"）——**空洞是无声的**：不属任何语句入口 FIRST 集的构造会被整体跳过而不报错，
-只跑测试套件看不出还差哪一族。当前 **接受 37 / 空洞 2**：
+只跑测试套件看不出还差哪一族。当前 **接受 38 / 空洞 2**：
 
 - `#include` / `#define`（预处理属阶段 4）。
 
@@ -148,7 +148,7 @@ grammar/c/
 | 复合字面量 | `(T){…}`（C99 新增） | 3 | 与"cast + 初始化器"消歧 |
 | 变长数组 | VLA（C99 新增） | 延后 | 与语义/求值强耦合，先记缺口 |
 | 函数 | 原型（含 `void` 参数列表）、**变参 `...`** 与定义 | 2 | 变参 2026-09-26 落地（`(comma,(@ParamDecl\|symbol.extend.ellipsis))*`）；C99 要求 `...` 前至少一个具名参数，`int f(...);` 仍拒 |
-| 增量（c11/c23 插件） | c11 **6 个新关键字全部落地**（`_Static_assert` 两作用域 / `_Alignof` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Alignas` 两形态 / `_Atomic` 两形态）+ **c23 语法增量全部落地**（`static_assert` 两作用域 / `nullptr` / `true`·`false` / `bool` / `typeof` / `constexpr` / `alignas` / `alignof` / `thread_local` / `_BitInt(N)` / `_Decimal32`·`64`·`128` / `[[属性]]`；十进制浮点**字面量后缀** `1.5dd` 属词法面，属性的四条形态/位点边界见 `TODO.md`） | 插件（核心基线不动） | 工具含 9 条增量用例；档位对照 = `tests/languages/c/test_c_standard_tiers.py` 的 **25 构造 × 4 档矩阵**（同进程 `enabled=` 切档），注入形态见 `grammar/c/README.md`「标准增量插件」 |
+| 增量（c11/c23 插件） | c11 **6 个新关键字全部落地**（`_Static_assert` 两作用域 / `_Alignof` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Alignas` 两形态 / `_Atomic` 两形态）+ **c23 语法增量全部落地**（`static_assert` 两作用域 / `nullptr` / `true`·`false` / `bool` / `typeof` / `constexpr` / `alignas` / `alignof` / `thread_local` / `_BitInt(N)` / `_Decimal32`·`64`·`128` / `[[属性]]`）+ 十进制浮点**字面量后缀**（`1.5dd`——走**声明级合并** `merge = "by-name"` 给核心数字形态补后缀，见 `core/config_lifecycle.md` §4b）；属性剩余的四条形态/位点边界见 `TODO.md` | 插件（核心基线不动） | 工具含 10 条增量用例；档位对照 = `tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**（同进程 `enabled=` 切档），注入形态见 `grammar/c/README.md`「标准增量插件」 |
 | 预处理 | `#include` / `#define`（对象宏、函数宏、变参宏、`#`/`##`）/ `#if` 表达式 / `#ifdef`/`#ifndef`/`#elif` / `#line`/`#error`/`#pragma` / 预定义宏 | **阶段 4（单独立项）** | 引擎前置见 ROADMAP「注入机制：四类注入面」；条件编译反向映射精度是最大风险 |
 | 明确不做（取舍） | 独立编译/链接、优化、完整类型推导与求值（语义层是渐进项）、实现定义行为（位宽/对齐）、K&R 老式函数定义 | — | 各自在缺口档或 ROADMAP 有归属；不做的原因：超出一致性检查工具链的定位 |
 
@@ -308,7 +308,7 @@ pack、同一次进程内 `enabled=["c11"]` → `enabled=[]` 会真的换档（�
 `enabled` 只决定**声明面**（`tpc.toml` 声明合并，含词法扩展）；插件的**规则文件与 Python
 组件**由 `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
 
-判据：`tests/languages/c/test_c_standard_tiers.py` 的 **25 构造 × 4 档矩阵**
+判据：`tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**
 （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
 判定），外加同进程连续切档、`Lexer` 跟随档位、非法 `enabled` 参数与清单里不可解析的插件名
 **fail-fast**（拼错档位名不许静默少加载）。

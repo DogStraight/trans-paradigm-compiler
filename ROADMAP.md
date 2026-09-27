@@ -117,18 +117,20 @@
       · c23 属性说明符**已落地**（`[[…]]` §6.7.12：说明符位 + `[[fallthrough]];` 这类"属性声明"
         两处，挂 `TypeQualifier`；未覆盖形态/位点四条边界见 `TODO.md` 与
         `grammar/c/plugins/c23/21_attributes.toml` 头注）——**c23 语法增量至此收口**；
-      · c23 余十进制浮点**字面量后缀**（`1.5dd`）——不是语法项：后缀属词法面核心基线
-        `base/_number.toml`，插件侧声明会被 `deep_merge` 的列表覆盖顶掉核心数字形态
-        （详见 `TODO.md` 同项）；
+      · c23 十进制浮点**字面量后缀**（`1.5dd`）**已落地**——它**不是语法增量**，走的是本轮
+        新补的**声明级合并语义** `merge = "by-name"`（同名声明按 `name` 合并命名条目列表：
+        `core/config_registry.py::merge_by_name`）：插件只给核心数字形态
+        `[[number.based]] name = "c_dec"` 补 `suffix` 字符，**不改核心文件、也不重抄形态**
+        （见 `grammar/c/plugins/c23/_number_c23.toml` 与 `core/config_lifecycle.md` §4b）；
       · ⚠ **一条档位边界（实测）**：`[[属性]]` 不依赖任何新关键字 ⇒ 插件规则文件无条件加载
         使它**在基线档也解析**——"档位 = 接受域"对纯语法增量不成立，见 `TODO.md`
         「`[plugins] enabled` 的语义边界」。
 - [ ] 预处理器扩展（引擎侧，独立评估）：`#if` 表达式求值、参数化宏、
       `#`/`##` 粘贴、变参宏 + 条件编译反向映射精度
 - [ ] 标准等效验证：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准语法规范）——
-      **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **39 条 / 接受 37 / 空洞 2**），
+      **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **40 条 / 接受 38 / 空洞 2**），
       **档位入口也已就位**（`load_language/load_all/resolve(..., enabled=[…])`，同一进程内
-      切档实测成立，判据 = `tests/languages/c/test_c_standard_tiers.py` 的 25 构造 × 4 档矩阵），
+      切档实测成立，判据 = `tests/languages/c/test_c_standard_tiers.py` 的 26 构造 × 4 档矩阵），
       缺的是**按标准分档的断言面**（每条构造属哪个标准、接受/拒绝各断言一条）
 - [ ] **注入机制：四类注入面，按需实现**（作者 2026-09-26 给出的分类——它是"注入面"的
       分型，不是实现清单；**缺哪类等真需求**）：

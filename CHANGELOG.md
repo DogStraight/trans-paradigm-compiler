@@ -7,6 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **引擎新能力：配置声明级合并语义 `merge = "by-name"`——插件可给核心配置"补字段"**；
+  C 包据此落地十进制浮点字面量后缀 `1.5df`/`1.5dd`/`1.5dl`（C 包标准增量面至此**全部收口**）。
+  接受面 **37/39 → 38/40**；档位矩阵 25 → **26**。
+  - **问题**：同名配置声明跨来源取值此前是**后者整体覆盖**（`_resolve_decls` 的
+    `loaded[name] = merged`）。C23 的十进制后缀作用在**核心基线的数字形态**上
+    （`[[number.based]] name = "c_dec"`）⇒ 插件只有两条死路：① 改核心 `base/_number.toml`
+    （会让**基线档**也接受 `1.5dd`，污染档位语义）；② 整条重抄 `c_dec`（知识重复、必然漂移）。
+  - **做法**：文件式声明可写 `merge = "by-name"`——该声明与同名声明之间改走
+    `merge_by_name`：`dict+dict` 逐键递归、`list+list` **命名条目按 `name` 合并**
+    （同名深合并·原位·保序，新名追加）、其余覆盖。于是插件只写局部条目：
+    `_number_c23.toml` = `name = "c_dec"` + `suffix = { chars = "uUlLfFd", max = 3 }`，
+    其余字段由核心形态供给（**知识的单一来源**）。
+  - **纪律三条**：① **缺省不变**（不写 `merge` 仍是后者覆盖 ⇒ 对既有配置零影响，不搞隐式
+    魔法）；② `merge` 只认 `"by-name"`，其他值 **fail-fast**；③ **认不出就不猜**——
+    按名合并要求列表元素是"带非空 `name` 的表"，否则 fail-fast；同一 key 被多个插件声明且
+    都写了 `merge` 而不一致，同样 fail-fast。
+  - **验证（档位判别一并守住）**：c23 档 `1.5dd` 合成**一个** `literal.number`，且
+    `1.5f`/`42u`/`0x1F`/`1.5e3L` 等核心后缀形态**不受影响**；**基线档仍切成 `1.5` + `dd`**
+    （若有人把 `d` 写进核心 `_number.toml`，那条用例会红）。判据：
+    `tests/engine/core/test_config_loading.py` 5 例（补/追加/保序、缺省覆盖不变、两条
+    fail-fast）+ `tests/languages/c/test_c23_increment_plugin.py` 2 例 +
+    `test_c_standard_tiers.py` 新增 1 行（`_Decimal64 e = 1.5dd;`，since=c23）。
+  - **文档**：`core/config_lifecycle.md` 新增 §4b（语义 / 边界 / 纪律 / 判据）并更新声明字段
+    清单；`grammar/c/README.md` 增「"加规则"之外还有一类：合并既有配置」一段；
+    `plugins/c23/{tpc.toml,_number_c23.toml,20_decimal.toml,_token_ext.toml}` 头注。
 - **C 包 c23 属性说明符 `[[…]]` 落地——c23 语法增量至此收口**。接受面 **36/38 → 37/39**；
   档位矩阵 23 → **25**。
   - 三条规则各担一层：`AttributeSpec` = `[[ … ]]`（词法上就是两个 `[` / 两个 `]` token，
@@ -117,7 +142,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **fail-fast 两条**：`enabled` 必须是字符串列表（非列表 / 含空串 / 含非字符串 →
     `ConfigError`）；清单里的插件名**必须能解析到插件包**——此前是**静默跳过**（拼错一个
     名字就少加载一个插件，"启用组合等效某标准"直接失真）。
-  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **25 构造 × 4 档矩阵**
+  - **判据**：`tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**
     （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
     判定——比"规则表里有没有"更能抓出缓存串档）+ 同进程连续切档 + `Lexer` 跟随档位 +
     `enabled=None` 回落到包默认 + 非法参数 fail-fast；`tools/check_gate_efficacy.py` 增两条

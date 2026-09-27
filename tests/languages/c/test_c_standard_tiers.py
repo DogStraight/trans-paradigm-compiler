@@ -80,6 +80,8 @@ _INCREMENT_MATRIX = [
     ("thread_local（c23）", "thread_local int t;\n", "ThreadLocalC23Spec", "c23"),
     ("_BitInt(N)（c23）", "_BitInt(8) a;\n", "BitIntSpec", "c23"),
     ("_Decimal64（c23）", "_Decimal64 d;\n", "DecimalSpec", "c23"),
+    # 十进制浮点**字面量后缀**：词法面的档位判别（基线档 `1.5dd` 被切成两个 token）
+    ("_Decimal64 = 1.5dd（c23）", "_Decimal64 e = 1.5dd;\n", "DecimalSpec", "c23"),
 ]
 
 _TIERS = {

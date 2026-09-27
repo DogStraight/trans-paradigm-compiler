@@ -177,6 +177,91 @@ def test_decl_valid_bare_and_file_accepted(tmp_path):
     assert "lexer.ok" in names
 
 
+# ── 声明级合并语义 `merge = "by-name"`（2026-09-26：为 C23 十进制字面量后缀补的引擎能力）──
+# 动机：跨声明曾是"后者整体覆盖"，插件想给核心的**命名条目列表**（如 C 的数字形态
+# `[[number.based]] name = "c_dec"`）补一个字段，只能整条重抄（知识重复 + 必然漂移）。
+# 语义实现见 `core/config_registry.py::merge_by_name`；默认仍是覆盖（对既有配置零影响）。
+
+
+def test_merge_field_rejects_unknown_mode(tmp_path):
+    """`merge` 只认 `"by-name"`——写别的值 → ConfigError（fail-fast，不静默当覆盖）。"""
+    _write_tpc(tmp_path, '[lexer]\nbad = { file = "x.toml", merge = "append" }\n')
+    with pytest.raises(ConfigError, match="merge 只支持"):
+        _load_meta_declarations(grammar_dir=str(tmp_path))
+
+
+def _run_decls(root, pairs):
+    """按 (name, file, section, merge) 造声明元组并解析（绕开 declare 的去重）。"""
+    decls = [
+        (name, fname, section, "temp", True, "", None, merge)
+        for name, fname, section, merge in pairs
+    ]
+    return ConfigRegistry._resolve_decls(
+        decls, str(root), None, "", {"temp": str(root)}
+    )[0]
+
+
+def test_merge_by_name_patches_and_appends(isolated_registry):
+    """按名合并：同名条目**深合并**（保序）、新名条目**追加**、dict 其他键递归合并。"""
+    root = isolated_registry
+    (root / "core.toml").write_text(
+        '[num]\nbased = [{ name = "a", v = 1 }, { name = "b", v = 2 }]\nother = 1\n',
+        encoding="utf-8",
+    )
+    (root / "ext.toml").write_text(
+        '[num]\nbased = [{ name = "a", w = 9 }, { name = "c" }]\n',
+        encoding="utf-8",
+    )
+    loaded = _run_decls(
+        root,
+        [("t.num", "core.toml", "num", None), ("t.num", "ext.toml", "num", "by-name")],
+    )
+    assert loaded["t.num"]["based"] == [
+        {"name": "a", "v": 1, "w": 9},
+        {"name": "b", "v": 2},
+        {"name": "c"},
+    ]
+    assert loaded["t.num"]["other"] == 1
+
+
+def test_same_name_without_merge_still_overrides(isolated_registry):
+    """缺省语义**不变**：同名声明仍是"后者覆盖"（不搞隐式魔法）。"""
+    root = isolated_registry
+    (root / "core.toml").write_text('[num]\nbased = [{ name = "a" }]\n', encoding="utf-8")
+    (root / "ext.toml").write_text('[num]\nbased = [{ name = "b" }]\n', encoding="utf-8")
+    loaded = _run_decls(
+        root,
+        [("t.num", "core.toml", "num", None), ("t.num", "ext.toml", "num", None)],
+    )
+    assert loaded["t.num"]["based"] == [{"name": "b"}]
+
+
+def test_merge_by_name_rejects_unnamed_entries(isolated_registry):
+    """按名合并的前提是"认得出同一条目"：无名条目 → fail-fast（不猜、不静默追加）。"""
+    root = isolated_registry
+    (root / "core.toml").write_text('[num]\nbased = [{ name = "a" }]\n', encoding="utf-8")
+    (root / "ext.toml").write_text('[num]\nbased = [{ v = 1 }]\n', encoding="utf-8")
+    with pytest.raises(ConfigError, match="by-name"):
+        _run_decls(
+            root,
+            [("t.num", "core.toml", "num", None),
+             ("t.num", "ext.toml", "num", "by-name")],
+        )
+
+
+def test_merge_by_name_requires_list_of_named_dicts(isolated_registry):
+    """列表元素不是表 / 名字为空串 → 同样 fail-fast。"""
+    root = isolated_registry
+    (root / "core.toml").write_text('[num]\nbased = [{ name = "a" }]\n', encoding="utf-8")
+    (root / "ext.toml").write_text('[num]\nbased = [1]\n', encoding="utf-8")
+    with pytest.raises(ConfigError, match="by-name"):
+        _run_decls(
+            root,
+            [("t.num", "core.toml", "num", None),
+             ("t.num", "ext.toml", "num", "by-name")],
+        )
+
+
 # ── 用户 tpc_config.json 的损坏处置（$TPC_CONFIG 注入临时配置） ──
 
 

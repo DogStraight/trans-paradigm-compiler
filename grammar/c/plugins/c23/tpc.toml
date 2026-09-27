@@ -33,6 +33,12 @@ requires = ["c17"]
 
 [lexer]
 token_ext = { file = "_token_ext.toml", required = true }
+# 十进制浮点字面量后缀（`1.5dd`）：给核心的数字形态 `c_dec` **补一个后缀字符**。
+# `merge = "by-name"` = 与核心基线**同名声明按 `name` 合并**（声明级合并语义，
+# 见 `core/config_registry.py::merge_by_name`）——本插件只写要改的字段，
+# 其余字段由核心 `base/_number.toml` 供给（不整条重抄 = 不制造第二份知识）。
+# 缺省（不写 `merge`）仍是"后者覆盖"，故对既有配置零影响。
+number = { file = "_number_c23.toml", section = "number", merge = "by-name" }
 
 [grammar]
 files = [

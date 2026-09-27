@@ -81,6 +81,9 @@ _CASES = [
     ("_Decimal 结构成员", "struct s4 {\n    _Decimal64 x;\n};\n", "DecimalSpec"),
     ("_Decimal 参数位", "void f(_Decimal32 x);\n", "DecimalSpec"),
     ("_Decimal 类型名位（sizeof）", "int n4 = sizeof(_Decimal128);\n", "DecimalSpec"),
+    ("十进制浮点字面量后缀 dd", "_Decimal64 x5 = 1.5dd;\n", "DecimalSpec"),
+    ("十进制浮点字面量后缀 df / dl", "_Decimal32 y5 = 2.5df;\n_Decimal128 z5 = 3.5dl;\n",
+     "DecimalSpec"),
     # 属性说明符（C23 §6.7.12）：说明符位 + "属性声明"两处
     ("[[nodiscard]] 声明前缀", "[[nodiscard]] int f2(void);\n", "AttributeSpec"),
     ("[[noreturn]] 声明前缀", "[[noreturn]] void die2(void);\n", "AttributeSpec"),
@@ -236,19 +239,46 @@ class TestC23InjectionPoints:
             names = {n.node_name for n in iter_nodes(ast)} if ast is not None else set()
             assert "AttributeSpec" not in names, f"{src!r} 已能解析？请同步头注与 README"
 
-    def test_decimal_literal_suffix_is_a_known_gap(self, restore_language):
-        """⚠ 登记已知缺口（不是"支持"）：十进制浮点**字面量后缀** `dd` 尚未进词法面。
+    def test_decimal_literal_suffix_merges_into_core_number_form(self, restore_language):
+        """十进制浮点**字面量后缀** `df`/`dd`/`dl`：C23 档认，基线档不认。
 
-        现状：`1.5dd` 被切成 `literal.number(1.5)` + `id(dd)` ⇒ `_Decimal64 x = 1.5dd;`
-        整条声明解析失败。归属与理由（两条证据）见 `grammar/c/plugins/c23/20_decimal.toml`
-        头注与 `TODO.md`：后缀属核心基线 `base/_number.toml`（档位语义），插件侧另声明会被
-        `deep_merge` 的"列表后者覆盖"顶掉核心数字形态。本用例把现状钉住——修好后它会红，
-        提醒同步文档。
+        ⚠ 实现路径（本轮为它补的引擎能力）：后缀作用在**核心基线的数字形态**上
+        （`base/_number.toml` 的 `[[number.based]] name = "c_dec"`），插件既不能改核心文件
+        （会让基线档也接受 `1.5dd`，污染档位语义），也不该整条重抄 `c_dec`（知识重复）。
+        故给声明加了**合并语义** `merge = "by-name"`（同名声明按 `name` 合并命名条目列表，
+        `core/config_registry.py::merge_by_name`）：`_number_c23.toml` 只写
+        `name = "c_dec"` + `suffix`，其余字段由核心形态供给。
+        本条同时守两件事：**c23 档合成一个 token**、**核心形态的其余后缀不受影响**。
         """
         env = _env()
         kinds = [t for t, _ in env["tokens"]("1.5dd")]
+        assert kinds == ["literal.number"], kinds
+        for src in ("1.5f", "42u", "0x1F", "1.5e3L"):
+            got = [t for t, _ in env["tokens"](src)]
+            assert got == ["literal.number"], (src, got)
+
+    def test_decimal_literal_suffix_is_c23_only(self, tmp_path):
+        """档位判别：基线档下 `1.5dd` 仍被切成 `1.5` + `dd`（插件声明不参与合并）。
+
+        这条把"为什么必须走 `merge = \"by-name\"` 而不是改核心文件"钉成可证伪判据
+        ——若哪天有人把 `d` 写进核心 `_number.toml`，本用例会红。
+        """
+        import re
+        import shutil
+
+        dst = tmp_path / "lang"
+        shutil.copytree(str(ROOT_DIR / "grammar" / "c"), dst, dirs_exist_ok=True)
+        tpc = dst / "tpc.toml"
+        tpc.write_text(
+            re.sub(r"enabled = \[[^\]]*\]", "enabled = []",
+                   tpc.read_text(encoding="utf-8")),
+            encoding="utf-8",
+        )
+        pack = str(dst)
+        ConfigRegistry.load_language(pack, plugins_dir=os.path.join(pack, "plugins"))
+        lexer = Lexer(rules_dir=pack)
+        kinds = [t.type for t in lexer.tokenize("1.5dd")]
         assert kinds == ["literal.number", "id"], kinds
-        assert env["lint"]("_Decimal64 x = 1.5dd;\n") != [], "缺口已闭合？请同步文档与 TODO"
 
     def test_c23_spellings_reuse_the_c11_hosts(self, restore_language):
         """小写拼写与 c11 的 `_` 版**挂同一个宿主**（同构造异拼写 = 各写一条同形规则）。

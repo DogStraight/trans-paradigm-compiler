@@ -8,9 +8,9 @@
 #   `[[属性]]`（`21_attributes.toml`）**不依赖本表任何关键字**——它用核心词法的
 #     `[`/`]`/标识符，故**不受档位门控**（实测：基线档也解析成 `AttributeSpec`），
 #     边界见 `TODO.md`「`[plugins] enabled` 的语义边界」。
-#   ⚠ 十进制浮点**字面量后缀**（`1.5df`/`dd`/`dl`）不在词法面：那属 `base/_number.toml`
-#     （核心基线），插件侧另声明会被 `deep_merge` 的"列表后者覆盖"顶掉核心数字形态——
-#     见 `20_decimal.toml` 头注与 `TODO.md` 同项。
+#   ⚠ 十进制浮点**字面量后缀**（`1.5df`/`dd`/`dl`）不在本表：那是**数字形态**的后缀位，
+#     由 `_number_c23.toml` 以声明级合并（`merge = "by-name"`）补进核心 `c_dec` 形态，
+#     见该文件头注。
 #
 # `bool` / `true` / `false` / `nullptr` / `typeof` 等在 C23 里是**关键字**（不再是
 # <stdbool.h>/<stddef.h> 的宏或标识符）。声明它们会让"把 `bool` 当 typedef 名"的

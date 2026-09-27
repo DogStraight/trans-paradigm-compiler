@@ -87,6 +87,8 @@ CASES: list[tuple[str, str, str]] = [
      "_BitInt(8) a3;\n_Decimal32 d1;\n_Decimal64 d2;\n_Decimal128 d3;\n"),
     ("增量", "c23 属性说明符（[[nodiscard]] / 带前缀 / 属性声明）",
      '[[nodiscard]] int f9(void);\n[[gnu::unused]] int q9;\n[[fallthrough]];\n'),
+    ("增量", "c23 十进制浮点字面量后缀（1.5df / 1.5dd / 1.5dl）",
+     "_Decimal32 d4 = 1.5df;\n_Decimal64 d5 = 1.5dd;\n_Decimal128 d6 = 1.5dl;\n"),
 ]
 
 

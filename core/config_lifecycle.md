@@ -192,9 +192,51 @@ python main.py config dump --json          # JSON（ensure_ascii，Windows 兼�
 `_load_meta_declarations` 解析 tpc.toml 时校验声明结构（fail-fast）：
 
 - 文件式声明：`file` 必须 str/list[str]，`section` str/None，`required` bool，
-  `base` str，无未知字段
+  `base` str，`merge` 缺省或 `"by-name"`（见 §4b），无未知字段
 - dict 含声明字段但缺 `file`（如 `{ section = "x" }`）→ 拦截（疑似忘了 file）
 - 合法 bare data（非 dict，或纯数据 dict）通过
+
+### 4b. 声明级合并语义：`merge = "by-name"`（2026-09-26）
+
+**背景**：同名配置声明跨来源取值此前是**后者整体覆盖**（`_resolve_decls` 的
+`loaded[name] = merged`）。这对"插件给核心配置**补一个字段**"是死路：C 的数字形态是
+命名条目列表（`[[number.based]] name = "c_dec" …`），插件想加一个后缀字符
+（C23 的 `1.5dd`），只能①改核心文件（会让**基线档**也接受 ⇒ 污染档位语义）或
+②整条重抄核心形态（知识重复、必然漂移）。
+
+**做法**：文件式声明可写 `merge = "by-name"`——该声明与**同名声明**之间改为
+`merge_by_name` 合并（`core/config_registry.py`）：
+
+```
+dict + dict   → 逐键递归
+list + list   → 命名条目按 name 合并：同名深合并（原位、保序）、新名追加
+其余          → override 覆盖
+```
+
+于是插件只写局部条目：
+
+```toml
+# grammar/c/plugins/c23/tpc.toml
+[lexer]
+number = { file = "_number_c23.toml", section = "number", merge = "by-name" }
+```
+
+```toml
+# grammar/c/plugins/c23/_number_c23.toml —— 只补后缀位，其余字段由核心形态供给
+[[number.based]]
+name = "c_dec"
+suffix = { chars = "uUlLfFd", max = 3 }
+```
+
+**边界与纪律**：
+- **缺省不变**：不写 `merge` 仍是后者覆盖 ⇒ 对既有配置**零影响**（不搞隐式魔法）。
+  `merge` 只认 `"by-name"`，写别的值 **fail-fast**。
+- **认不出就不猜**：按名合并要求列表元素是"带非空字符串 `name` 的表"，
+  否则 **fail-fast**（不静默退化成追加或覆盖）。
+- 同一 key 被多个插件声明且都写了 `merge` 时，两者必须一致，否则 fail-fast。
+- 判据：`tests/engine/core/test_config_loading.py`（`merge_by_name` 的补/追加/保序、
+  缺省覆盖不变、两条 fail-fast）+ `tests/languages/c/test_c23_increment_plugin.py`
+  （真实路径：C23 档 `1.5dd` 合成一个 token、核心其余后缀形态不受影响、基线档仍切两个）。
 
 ### 5. 规则字段 schema 校验（GrammarRule）
 
@@ -251,7 +293,7 @@ ConfigRegistry.resolve("grammar/c")                              # 跟随该包"
 - ⚠ **两处缓存键必须含档位**（都属于"静默失效"型缺陷，症状 = 改了 `enabled` 毫无变化）：
   `_ensure_entries_for` 的来源判据 `(_entries_source, _entries_enabled)`；`_resolve_cache`
   的 key（否则同包两档算同一个 key，`Lexer` 拿回上一档 token）。判据：
-  `tests/languages/c/test_c_standard_tiers.py` 的 25 构造 × 4 档矩阵。
+  `tests/languages/c/test_c_standard_tiers.py` 的 26 构造 × 4 档矩阵。
 - ⚠ **边界：`enabled` 只门控"声明面"**——插件的**规则文件与 Python 组件**由
   `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
   两种候选语义与拍板判据见 `TODO.md`「`[plugins] enabled` 的语义边界」。
