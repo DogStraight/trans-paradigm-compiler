@@ -56,7 +56,13 @@ def c_env(config_loaded):
         rules_dir=_RULES, rules=rules, rule_selector=RuleSelector(rules, stmt), log_file=""
     )
     lexer = Lexer(rules_dir=_RULES, ext_dirs=[_PLUGINS])
-    renderer = Renderer(rules_dir=_RULES)
+    # 接线与生产一致（pipeline/__init__.py）：把语言包声明的行终止型注释起点传给渲染器，
+    # 否则引擎不认识任何注释标点（缺省空词表）⇒"行注释吞同行后续元素"这层防呆在本层
+    # 不可见，harness 面对的 renderer 配置就≠用户路径（词表来源见
+    # Lexer.line_terminating_comment_starts；由包内 [comment] pairs 的 kind=line 推导）。
+    renderer = Renderer(
+        rules_dir=_RULES, line_comment_starts=lexer.line_terminating_comment_starts()
+    )
 
     def render(src: str) -> str:
         ast = parser.parse(lexer.tokenize(src))
@@ -358,3 +364,33 @@ class TestHeadCommentOrder:
     def test_round_trip_after_reorder(self, c_render):
         out = c_render(_HEAD_COMMENT_ORDER_SRC)
         assert c_render(out) == out, f"渲染不幂等:\n{out}\n---\n{c_render(out)}"
+
+
+# 接线判据的源：**无尾逗号** + 最后一个枚举项之后的**行注释**（同一行后面还有 `}` 与 `;`）。
+# 裸接线（缺省空词表 ⇒ 引擎不认识任何注释标点，`renderer/renderer.py::comment_ends_line`）
+# 不补硬换行 ⇒ `}` 被并入注释文本：实测输出 `enum e {A, B // note};`（不幂等、显著 token
+# 序列不同、产物已非法 C）；生产接线（词表含 `//`）⇒ `enum e {A,\nB // note\n};`（token 同、幂等）。
+# ⚠ **不要**拿"尾逗号 + 行注释"形态当本判据：那在两种接线下都红（既有缺陷，缺口档 #8）。
+_WIRING_SRC = "enum e { A, B // note\n};\n"
+
+
+class TestHarnessWiring:
+    """**接线判据**：本 harness 的渲染器必须接语言包声明的行终止型注释词表。
+
+    守"接线没被误删/退回裸 `Renderer`"——退回去本类两条用例必红（token 序列 + 幂等）。
+    引擎侧词表语义契约另由 `tests/engine/renderer/test_comment_ends_line.py` 固化
+    （声明驱动、缺省空词表 = 不认识任何标点），此处守的是**语言包 harness 的生产一致性**。
+    """
+
+    def test_line_comment_before_brace_survives(self, c_env):
+        """判据 7 定点：行注释后同行还有 `}`/`;` 时，token 序列仍逐项相同。"""
+        out = c_env["render"](_WIRING_SRC)
+        want = _significant(c_env["tokenize"](_WIRING_SRC))
+        got = _significant(c_env["tokenize"](out))
+        assert got == want, _token_diff(_WIRING_SRC.strip(), want, got)
+
+    def test_line_comment_before_brace_round_trip(self, c_env):
+        """接线后行注释前补硬换行 ⇒ 二遍渲染逐字相同（裸接线会吞 `}` ⇒ 不幂等）。"""
+        first = c_env["render"](_WIRING_SRC)
+        second = c_env["render"](first)
+        assert first == second, f"渲染不幂等（接线丢失？）:\n{first!r}\n---\n{second!r}"

@@ -270,7 +270,11 @@ class TestVariadicParameter:
         """渲染逐字还原 `...` 并幂等（`items` 绑定漏掉尾段就会静默丢内容）。"""
         from renderer import Renderer
 
-        renderer = Renderer(rules_dir="grammar/c")
+        # 接线与生产一致（pipeline/__init__.py）：词表来自词法声明，否则缺省空词表
+        renderer = Renderer(
+            rules_dir="grammar/c",
+            line_comment_starts=c["lexer"].line_terminating_comment_starts(),
+        )
         src = "int printf(const char *fmt, ...);"
         out = renderer.render(_parse(src + "\n", c))
         assert out == src

@@ -67,17 +67,26 @@ class SharedComponents:
             for n, r in rules.items()
             if hasattr(r, "has_pass_end_case") and r.has_pass_end_case()
         ]
+        # 词法组件先落到局部名：渲染器要取它的行终止型注释词表（见下）
+        lexer = Lexer(rules_dir=full_dir, ext_dirs=ext_dirs)
         shared = {
             "rules": rules,
             "rule_selector": RuleSelector(rules, stmt_names),
-            "lexer": Lexer(rules_dir=full_dir, ext_dirs=ext_dirs),
+            "lexer": lexer,
             # 独立 register 必须透传：LinterScanner 内部 setup_grammar 默认用
             # 全局单例 get_default()，跨语言（c4）检查会把 c4 规则灌进单例且
             # 无法靠 ConfigRegistry 恢复（test_c4_linter 同款坑）。
             "linter": LinterScanner(
                 rules_dir=full_dir, ext_dirs=ext_dirs, register=reg
             ),
-            "renderer": Renderer(rules_dir=full_dir),
+            # ⚠ 行终止型注释词表必须与主管线（pipeline/__init__.py 的 Renderer 构造）同口径：
+            #   缺它时引擎不认识任何注释标点，渲染**子树**（参数默认值/覆盖、宽度、
+            #   连接信号）时行注释会把同行后续元素吃进注释文本 ⇒ 产物文本静默丢 token
+            #   （实测 `param_default` 的 `4 // note + 2` vs 接线后的 `4 + 2 // note`）。
+            "renderer": Renderer(
+                rules_dir=full_dir,
+                line_comment_starts=lexer.line_terminating_comment_starts(),
+            ),
         }
         cls._CACHE[rules_dir] = shared
         return shared

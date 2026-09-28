@@ -25,6 +25,18 @@
    那一遍生效——二遍头段（行已短、不再拆）重入列对齐，重拼的补格留存
    （`{ RESMODE, 4'd0 }` → `{ RESMODE , 4'd0 }`，darkriscv 实测 2 行：
    t1 → t2）；二遍后收敛（t2 == t3，非振荡），输出合法、仅空白差异。
+6. **yaml 真实 workflow 的渲染不幂等**（摩擦，既存；**属 yaml 渲染器（世界 A）**，
+   登记在此档因同属"行行为 / 幂等"族）：`tests/languages/yaml` 的
+   `test_real_workflow_files_parse_and_roundtrip` 用本仓的
+   `.github/workflows/ci.yml`；首遍把 `shell: pwsh` 之后的注释留在该行行尾，二遍
+   把该注释**上提到前一行行尾**（实测文本 offset ≈ 2349：
+   `… shell: pwsh\n  # 防止"editable 模式可用但 wheel 安装后 CLI 失败"…` →
+   `… shell: pwsh # 防止…`）⇒ `format(format(x)) != format(x)`。
+   现状：**与渲染器接线无关**（裸 `Renderer` 与生产接线 `line_comment_starts=…`
+   下输出**逐字相同**、两遍都不幂等）；注释不丢、显著 token 序列逐项相同 ⇒ 属
+   "位置漂移 + 一遍不幂等"，与 C 包缺口档 #6（行尾注释挂点随折行变化）同型。
+   ⚠ **当前无门禁覆盖**：该用例只断言**结构往返**（`_node_names` 相等），不比对全文；
+   `tests/e2e/test_pipeline_idempotent.py` 走 verilog 语料，不覆盖 yaml 这一形态。
 
 ## 为什么是边界（影响面）
 
@@ -32,7 +44,8 @@
   期望"合并紧凑行"或"语义重排段落"时不满足，但换来源结构稳定 + 可对拍
   （vs Verible 差分门禁）。
 - 4 是空档而非缺陷（无断点超长行不折，但输出合法）；5 是空档（折行头段
-  一次性补空格，二遍收敛）。
+  一次性补空格，二遍收敛）；6 是空档（yaml 注释挂点随折行漂移，一遍不幂等；
+  输出合法、注释与 token 都不丢）。
 
 ## 成熟解法参照（见贤思齐）
 
@@ -45,6 +58,9 @@
 - 4：wrap pass 增加"拼接体无安全断点"的兜底（如逗号/运算符后强制断点）。
 - 5：init token 重拼加标点邻接规则（`{`/`,`/`}` 邻接不补空格）；改动牵动
   所有 init 行空白输出，需单独评估影响面后再动。
+- 6：修点在注释挂点 / 折行交互（渲染器侧），**本轮不修**——yaml 侧当前没有
+  全文幂等判据，且按"缺陷未修不许沉淀"的闸不先加样本；待单独一轮（先加判据
+  证明红 → 再定修法）。与 C 包缺口档 #6 同族，可与其定案一并评估。
 - 1/2/3：设计选择，不改（如需段落式重排属新能力，非修复）。
 
 ## 关联条目
@@ -55,3 +71,6 @@
   （含重组输出断言，漂移形态 `,\s{2,}<ident>`）+ `test_idempotent.py` + vs
   Verible 差分（`tests/differential/run_differential.py`）+ e2e 幂等门禁
   （`tests/e2e/test_pipeline_idempotent.py`）
+- 条目 6（yaml）：`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles`
+  （只断言结构往返 ⇒ **无全文幂等门禁**）；harness 接线判据见
+  `TestPlainRender::test_harness_renderer_keeps_line_comment_wiring`

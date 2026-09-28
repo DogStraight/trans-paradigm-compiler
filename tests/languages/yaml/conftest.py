@@ -35,7 +35,11 @@ def yaml(config_loaded):
     rs = RuleSelector(rules, stmt_names)
     parser = Parser(rules_dir="grammar/yaml", rules=rules, rule_selector=rs, log_file="")
     lexer = Lexer(rules_dir="grammar/yaml")
-    renderer = Renderer(rules_dir="grammar/yaml")
+    # 接线与生产一致（pipeline/__init__.py）：词表来自词法声明，否则缺省空词表
+    renderer = Renderer(
+        rules_dir="grammar/yaml",
+        line_comment_starts=lexer.line_terminating_comment_starts(),
+    )
     yield {"rules": rules, "parser": parser, "lexer": lexer, "renderer": renderer}
     # 恢复 verilog
     ConfigRegistry.load_language(

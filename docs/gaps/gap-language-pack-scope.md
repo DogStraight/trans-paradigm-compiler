@@ -148,7 +148,7 @@ grammar/c/
 | 复合字面量 | `(T){…}`（C99 新增） | 3 | 与"cast + 初始化器"消歧 |
 | 变长数组 | VLA（C99 新增） | 延后 | 与语义/求值强耦合，先记缺口 |
 | 函数 | 原型（含 `void` 参数列表）、**变参 `...`** 与定义 | 2 | 变参 2026-09-26 落地（`(comma,(@ParamDecl\|symbol.extend.ellipsis))*`）；C99 要求 `...` 前至少一个具名参数，`int f(...);` 仍拒 |
-| 增量（c11/c23 插件） | c11 **6 个新关键字全部落地**（`_Static_assert` 两作用域 / `_Alignof` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Alignas` 两形态 / `_Atomic` 两形态）+ **c23 语法增量全部落地**（`static_assert` 两作用域 / `nullptr` / `true`·`false` / `bool` / `typeof` / `constexpr` / `alignas` / `alignof` / `thread_local` / `_BitInt(N)` / `_Decimal32`·`64`·`128` / `[[属性]]`（**位点四类**：说明符位 / 属性声明 / 声明符内 / 枚举项——后两类走核心空槽位 `AttributeSlot`））+ 十进制浮点**字面量后缀**（`1.5dd`——走**声明级合并** `merge = "by-name"` 给核心数字形态补后缀，见 `core/config_lifecycle.md` §4b）；属性剩余的三条**形态**边界见 `TODO.md` | 插件（核心基线仅加一个空槽位声明） | 工具含 12 条增量用例；档位对照 = `tests/languages/c/test_c_standard_tiers.py` 的 **28 构造 × 4 档矩阵**（同进程 `enabled=` 切档），注入形态见 `grammar/c/README.md`「标准增量插件」 |
+| 增量（c11/c23 插件） | c11 **6 个新关键字全部落地**（`_Static_assert` 两作用域 / `_Alignof` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Alignas` 两形态 / `_Atomic` 两形态）+ **c23 语法增量全部落地**（`static_assert` 两作用域 / `nullptr` / `true`·`false` / `bool` / `typeof` / `constexpr` / `alignas` / `alignof` / `thread_local` / `_BitInt(N)` / `_Decimal32`·`64`·`128` / `[[属性]]`（**位点四类**：说明符位 / 属性声明 / 声明符内 / 枚举项——后两类走核心空槽位 `AttributeSlot`））+ 十进制浮点**字面量后缀**（`1.5dd`——走**声明级合并** `merge = "by-name"` 给核心数字形态补后缀，见 `core/config_lifecycle.md` §4b）；属性**实参形态**：多实参 `[[gnu::nonnull(1, 2)]]`（收 `@ArgumentList`）与属性表尾随逗号 `[[nodiscard,]]` 已收口；仍未覆盖 ①②④⑤ = 不做/低优先 + 触发条件，见 `TODO.md` | 插件（核心基线仅加一个空槽位声明） | 工具含 12 条增量用例；档位对照 = `tests/languages/c/test_c_standard_tiers.py` 的 **28 构造 × 4 档矩阵**（同进程 `enabled=` 切档），注入形态见 `grammar/c/README.md`「标准增量插件」 |
 | 预处理 | `#include` / `#define`（对象宏、函数宏、变参宏、`#`/`##`）/ `#if` 表达式 / `#ifdef`/`#ifndef`/`#elif` / `#line`/`#error`/`#pragma` / 预定义宏 | **阶段 4（单独立项）** | 引擎前置见 ROADMAP「注入机制：四类注入面」；条件编译反向映射精度是最大风险 |
 | 明确不做（取舍） | 独立编译/链接、优化、完整类型推导与求值（语义层是渐进项）、实现定义行为（位宽/对齐）、K&R 老式函数定义 | — | 各自在缺口档或 ROADMAP 有归属；不做的原因：超出一致性检查工具链的定位 |
 
@@ -399,9 +399,9 @@ test_fidelity.py`），本包不再复制门禁。
 | 3 | 注释落在**括号内首元素前**时，位置被提到括号外（`int f(\n// c\nint a)` → 注释落在 `f` 与 `(int a)` 之间） | 解析端 `_lift_gap_comments` 的项间窗口上界用"迭代**末行**"，故迭代 token 跨度**内部**的注释也被当"该项之前"上浮。**收紧窗口已验证不可行**：上界改用迭代**首行**后 6 处门禁变红（端口表/具名端口/声明符表/case 项/真实语料无丢注释）——窗口的末行容差是给"注释在本次迭代匹配中被吞、语义上属该项之前"的形态留的。要修需把归属判据从行号窗口改为**迭代 token 跨度**（跨度内 → 归跨度内部消费方） |
 | 4 | 注释项前多一个行尾空格（`int ` + 换行） | 列表折叠后注释项独占行，父布局的分隔空格留在行尾；纯空白差异（输出合法、幂等） |
 | 5 | `#include` 在**词法层直接 ValueError**（`Unexpected token: #`） | `#` 未进符号表；预处理属阶段 4（先于本次改动存在） |
-| 6 | 分隔符后的**行尾**注释在跨折行时落位漂移（首渲染 `first, /* c */` + 换行 + `second;`，次渲染 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；同一注释在分隔符**之前**时挂的是**项**节点 trailing（渲染在该行尾）。挂点取决于"分隔符与下一项是否同行" ⇒ 折行即漂移。**2026-09-26 作者定案：不修渲染**（否决"锚点感知 LineSuffix"与"挂刚结束的项节点"两条候选——前者要新增"哪些符号是列表分隔符"的声明字段、还要逐形态验证"误路由 = 丢注释"），**归入原始路径（raw）解决**：需要还原原文时从原文取信息，先例 = 宏（`MacroCall._macro_source_text` 直出原文，`core/define.py` §Node 元数据）；节点另有 `_tok_span` 源区间可用。**注释从不丢失**（无 token 损坏），症状只是"位置漂移 + 一遍不幂等"。最小复现（`int first /* ` + `x`×60 + ` */, second;`，收缩到 **81 字节 / 1 行**）记在 `tests/fuzz/README.md`（`findings/` 是 gitignore 草稿区，不入库）；按"缺陷未修不许沉淀"的闸**不进 edge_corpus**，样本 `edge_comments.c` 用不折行的短注释绕开该形态 |
+| 6 | 分隔符后的**行尾**注释在跨折行时落位漂移（首渲染 `first, /* c */` + 换行 + `second;`，次渲染 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；同一注释在分隔符**之前**时挂的是**项**节点 trailing（渲染在该行尾）。挂点取决于"分隔符与下一项是否同行" ⇒ 折行即漂移。**2026-09-28 作者定案：不修渲染**（否决"锚点感知 LineSuffix"与"挂刚结束的项节点"两条候选——前者要新增"哪些符号是列表分隔符"的声明字段、还要逐形态验证"误路由 = 丢注释"），**归入原始路径（raw）解决**：需要还原原文时从原文取信息，先例 = 宏（`MacroCall._macro_source_text` 直出原文，`core/define.py` §Node 元数据）；节点另有 `_tok_span` 源区间可用。**注释从不丢失**（无 token 损坏），症状只是"位置漂移 + 一遍不幂等"。最小复现（`int first /* ` + `x`×60 + ` */, second;`，收缩到 **81 字节 / 1 行**）记在 `tests/fuzz/README.md`（`findings/` 是 gitignore 草稿区，不入库）；按"缺陷未修不许沉淀"的闸**不进 edge_corpus**，样本 `edge_comments.c` 用不折行的短注释绕开该形态 |
 | 7 | 类型名里的指针星号**与类型词之间不留空格**：`sizeof(char *)` → `sizeof(char*)`、`(char *)q` → `(char*)q`、`typeof(char *)` → `typeof(char*)`（2026-09-26 实测；`TypeName`/`CastTypeName` 的布局把 `pointers` 直接串在 `rest` 之后） | **纯排版差异**（C 空白无关 ⇒ token 序列不变、语义不变，判据 7 照过）；`grammar/c/00_expressions.toml` 里 `CastTypeName` 的旧注释写的"星号与类型之间留空格"与实测不符，已更正。要改成 `char *` 需同时动两处布局并**重录**三份样本的保真比值，故记为已知偏差而非顺手改 |
-| 8 | 枚举体**尾随逗号之后的行注释**吞掉收尾 `};`：`enum e { A, B, // note` + 换行 + `};` → 首遍 `enum e {A, B,} // note;`（`;` 被并入注释），第二遍渲染为空 ⇒ 判据 4/7 均红（2026-09-26 修尾逗号时实测；**缺陷先于该修复存在**——修复前输出 `enum e {A, B} // note;`，同样不幂等） | 实测 `_comment_slots = {'trailing': ['// note']}` 挂在 **`EnumBody` 容器**上（不是最后一项）：`_attach_line_end` 把行尾注释挂 `context.current_node`，此处即容器；`EnumBody` 布局只有单行 `line`（无 tail 段）⇒ 容器 `trailing` 槽渲染在整个容器（含 `}`）之后，吞掉声明尾 `;`。与 **#6 同族**（容器 trailing 槽），但 #6 只位置漂移、这条**损坏输出**（首遍产物已非法）。**本轮未修**：修点在解析端注释归属（引擎侧）且 #6 已定案"不修渲染、归 raw 路径"，需作者拍板——⚠ 但这条**丢 token**（fuzz oracle 把"token 丢失"列为硬违规，#6 只是位置漂移），是否与 #6 一并关闭要单独判。⚠ **接线不同、结果不同（Lead 复核实测，必须分开记）**：生产路径（`pipeline/__init__.py` 传 `line_comment_starts=lexer.line_terminating_comment_starts()`）下**只有尾逗号形态坏**——无逗号形态 `enum e { A, B // note` + 换行 + `};` 会补硬换行，输出 `enum e {A,\nB // note\n};`（token 同、幂等）；而**裸 `Renderer(rules_dir)`**（= `tests/languages/c/*` 各 harness 的接线）下**两种形态都坏**，无逗号形态还会把 `}` 一起吃掉（`enum e {A, B // note};`） |
+| 8 | 枚举体**尾随逗号之后的行注释**吞掉收尾 `};`：`enum e { A, B, // note` + 换行 + `};` → 首遍 `enum e {A, B,} // note;`（`;` 被并入注释），第二遍渲染为空 ⇒ 判据 4/7 均红（2026-09-28 修尾逗号时实测；**缺陷先于该修复存在**——修复前输出 `enum e {A, B} // note;`，同样不幂等） | 实测 `_comment_slots = {'trailing': ['// note']}` 挂在 **`EnumBody` 容器**上（不是最后一项）：`_attach_line_end` 把行尾注释挂 `context.current_node`，此处即容器；`EnumBody` 布局只有单行 `line`（无 tail 段）⇒ 容器 `trailing` 槽渲染在整个容器（含 `}`）之后，吞掉声明尾 `;`。与 **#6 同族**（容器 trailing 槽），但 #6 只位置漂移、这条**损坏输出**（首遍产物已非法）。**本轮未修**：修点在解析端注释归属（引擎侧）且 #6 已定案"不修渲染、归 raw 路径"，需作者拍板——⚠ 但这条**丢 token**（fuzz oracle 把"token 丢失"列为硬违规，#6 只是位置漂移），是否与 #6 一并关闭要单独判。⚠ **接线与形态的边界（2026-09-28 实测 + 落案 (a)）**：生产路径（`pipeline/__init__.py` 传 `line_comment_starts=lexer.line_terminating_comment_starts()`）下**只有尾逗号形态坏**——无逗号形态 `enum e { A, B // note` + 换行 + `};` 会补硬换行，输出 `enum e {A,\nB // note\n};`（token 同、幂等）；裸 `Renderer(rules_dir)`（缺省空词表）下无逗号形态还会把 `}` 一起吃掉（`enum e {A, B // note};`，产物非法 C）。语言包 harness 已统一接上该词表（见「未做」条目 4），无逗号形态由 `tests/languages/c/test_c_render_fidelity.py::TestHarnessWiring` 守住（裸接线 2 红 / 接线后绿）；**本条缺陷（尾逗号形态）与接线无关——接线前后都坏**，不要拿它当接线判据 |
 
 **未做（下一步）**：
 1. 上面 **#3** 那处**解析侧**改动（注释归属的 token 跨度判据）。#6 已定案**不改渲染**
@@ -411,13 +411,17 @@ test_fidelity.py`），本包不再复制门禁。
    默认按 #6 结案，需作者单独判。本清单只标"待拍板"，未列入待办量。
 3. 外部 oracle（`clang-format`）对拍——**token 序列对拍已由判据 7 覆盖**（内容级、
    语言无关），"与外部格式化器的排版对拍"仍未做。
-4. **语言包级保真 harness 的接线与生产路径不一致（Lead 2026-09-26 实测，全仓性）**：
-   `tests/languages/c/*`（`test_c_render_fidelity.py` / `test_c_declarations.py` /
-   `test_c_increment_plugin.py` / `test_c23_increment_plugin.py`）与
-   `tests/languages/yaml/conftest.py` 都用**裸** `Renderer(rules_dir=…)`（默认
-   `line_comment_starts=()`），而生产路径（`pipeline/__init__.py`）传
-   `lexer.line_terminating_comment_starts()` ⇒ "行注释吃同行后续元素"这一类缺陷在
-   **这些 harness 里看得到、在生产路径下可能看不到**（#8 的两种表现即一例；
-   `tests/e2e/` 的真实语料闭环走 pipeline，是接线后的配置）。e2e 侧已覆盖接线后行为，
-   但语言包单测这一层没有——是否统一接线（并复核三样本 ratio 与阈值）属测试口径决策。
-   ⚠ 这条是**全仓性**发现，若要动，语言包 harness 应一起评估（不只 C）。
+4. **渲染器接线：残留一个未证问题（接线本身已全仓对齐）**（2026-09-28）：
+   生产两处构造点（`pipeline/__init__.py`、`analyzer/shared_components.py`）与 5 处语言包
+   harness 都已接 `Lexer.line_terminating_comment_starts()`；`analyzer/` 内已无其它裸接线点
+   （唯一保持裸的 `tests/engine/renderer/test_verbatim_node.py` 与注释接线无关，刻意不动）。
+   判据 = C 保真 `TestHarnessWiring` + yaml
+   `test_yaml_plain.py::TestPlainRender::test_harness_renderer_keeps_line_comment_wiring` +
+   analyzer `tests/engine/analyzer/test_shared_components_wiring.py`（三条；把接线去掉后实测
+   **3 红**，含 `param_default` 值文本 `'4 // note + 2'`）。
+   ⚠ **残留（未知）**：修复前 `tpc check` 的精化产物在"值表达式内带行注释"时会丢 token
+   （`param_default` = `'4 // note + 2'`、`param_override` = `'4 // c * 4'`；修复后为
+   `'4 + 2 // note'` / `'4 * 4 // c'`），但**"这一丢 token 是否会改变用户可见诊断"未证明**：
+   六个样本上诊断面无差异（0/0、均 exit 0），现象是**静默的产物文本退化**（下游对不可判
+   文本按保守处理），要闭环需消费方分析或更大样本轮。另：后续新增语言包 harness / 生产
+   构造点应一并接线（全仓性口径）。

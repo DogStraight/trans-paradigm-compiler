@@ -133,6 +133,18 @@ class TestPlainRender:
         out = yaml["renderer"].render(ast)
         assert "# hello" in out
 
+    def test_harness_renderer_keeps_line_comment_wiring(self, yaml):
+        """harness 渲染器的**接线**不得退回裸 `Renderer`（yaml 的 `#` 属行终止型）。
+
+        yaml 的输出面看不出接线差异（列表是换行分隔，补不补硬换行产物相同）⇒ 只能直接
+        钉接线本身：词表来自包内声明（`[comment] pairs` 的 kind=line，经
+        `Lexer.line_terminating_comment_starts()`），裸接线的缺省空词表会让本断言必红。
+        生产侧接线口径见 `pipeline/__init__.py`；引擎侧契约见
+        `tests/engine/renderer/test_comment_ends_line.py`。
+        """
+        assert yaml["renderer"].comment_ends_line("# note") is True
+        assert yaml["renderer"].comment_ends_line("key: v") is False
+
     def test_roundtrip_ci_style(self, yaml):
         """CI 风格完整往返。"""
         src = (

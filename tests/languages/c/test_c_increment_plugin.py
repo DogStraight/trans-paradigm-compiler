@@ -82,7 +82,10 @@ def _env() -> dict:
     def render(src: str) -> str:
         ast = parse(src)
         assert ast is not None, f"解析不出 AST：{src!r}"
-        return Renderer(rules_dir=_PACK).render(ast)
+        # 接线与生产一致（pipeline/__init__.py）：词表来自词法声明，否则缺省空词表
+        return Renderer(
+            rules_dir=_PACK, line_comment_starts=lexer.line_terminating_comment_starts()
+        ).render(ast)
 
     return {
         "rules": rules,
