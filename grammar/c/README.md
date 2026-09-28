@@ -42,10 +42,14 @@
     以及**类型词** `_BitInt(N)`（宽度收 `@Expression`，"是不是整型常量表达式/宽度范围"
     归语义层）与 `_Decimal32`/`_Decimal64`/`_Decimal128`（含**十进制浮点字面量后缀**
     `1.5df`/`1.5dd`/`1.5dl`），以及**属性说明符 `[[…]]`**
-    （§6.7.12：**位点三类全部落地**——说明符位、`[[fallthrough]];` 这类"属性声明"，
-    以及 **①声明符内**（`void f [[deprecated]] (void);`，§6.7.6 的 identifier 之后、
-    后缀链之前）与 **②枚举项**（`A [[deprecated]] = 1`，§6.7.2.2 的 `=` 之前）；
-    带前缀名 `[[gnu::unused]]` 也认——**剩余三条形态边界**见
+    （C23 §6.7.12；N3096 §6.7.12.1 / N3220 §6.7.13.2：**位点三类全部落地**——
+    说明符位、`[[fallthrough]];` 这类"属性声明"，以及 **①声明符内**
+    （`void f [[deprecated]] (void);`，§6.7.6 的 identifier 之后、后缀链之前）与
+    **②枚举项**（`A [[deprecated]] = 1`，§6.7.2.2 的 `=` 之前）；带前缀名
+    `[[gnu::unused]]` 也认。**实参形态**（2026-09-28 收口两条）：实参收
+    `@ArgumentList` ⇒ **多实参** `[[gnu::nonnull(1, 2)]]` / `[[gnu::format(printf, 1, 2)]]`
+    / `[[clang::no_sanitize("a", "b")]]` 可用；**属性表尾随逗号** `[[nodiscard,]]` 可用
+    （`AttributeList` 独立可选元素 + 单独绑定）。**未覆盖 ①②④⑤** 见「未做」表与
     `plugins/c23/21_attributes.toml` 头注）。
   ⚠ **"加规则"之外还有一类：合并既有配置**（2026-09-26 为十进制字面量后缀补的引擎能力）。
   它**不是**语法增量：`df`/`dd`/`dl` 作用在**核心基线的数字形态**上
@@ -62,7 +66,7 @@
   **既有交替里加一支**，核心文件一行不动。此前插件注释把这类增量记为"做不了、
   需引擎补『改』路径"——**那是错的**（机制早就有了，缺的是声明），见
   `plugins/c23/tpc.toml` 的历史更正段。
-  ⚠ **"往序列中段插元素"只有一条路：空槽位**（2026-09-26 为属性位点补的引擎能力）。
+  ⚠ **"往序列中段插元素"只有一条路：空槽位**（2026-09-28 为属性位点补的引擎能力）。
   注入只能并入**某一条既有元素**或越界追加到**末尾**，插不了中段——把中段做成一条
   **原子规则槽位**（核心侧 `production = []`，宿主写 `@Slot*`），注入就退化成"给规则
   加形态"。样板 = `01_declarations.toml` 的 `AttributeSlot`（**声明符内与枚举项共用
@@ -92,7 +96,7 @@
 | 预处理（`#include` / `#define` / `#if` / `#` / `##` / 变参宏） | 阶段 4，单独立项（引擎前置见 ROADMAP「注入机制：四类注入面，按需实现」——③ 具体路径修改与 ④ 移除语法路径仍缺结构化面） |
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
-| `[[属性]]`（c23）的**未覆盖形态** | **形态三条**（标准允许，需引擎侧"配平 token 序列/可空项列表"形态）：空实参 `[[deprecated()]]`、相邻字面量拼接 `[[deprecated("a" "b")]]`、属性表尾随逗号 `[[nodiscard,]]`。**位点已全部落地**（2026-09-26：说明符位 / 属性声明 / 声明符内 / 枚举项——后两处走**共用空槽位** `@AttributeSlot`）；另有**一处过接受**（`(f) [[deprecated]]` 也认，标准只允许紧跟 identifier 之后）如实登记在 `plugins/c23/21_attributes.toml` 头注。判据 `test_c23_increment_plugin.py::TestC23InjectionPoints::test_attribute_known_boundaries` |
+| `[[属性]]`（c23）的**实参形态** | **已收口两条（2026-09-28）**：✅ **多实参** `[[gnu::nonnull(1, 2)]]`（实参由 `@Expression` 改收 `@ArgumentList`——`Expression` 是 assignment-expression 层级、不含逗号）+ ✅ **属性表尾随逗号** `[[nodiscard,]]`（`AttributeList` 加独立可选元素 `(comma)?` + **单独绑定**，**不得塞进 `items`**：join 分隔符会叠加成 `, ,`）。**仍未覆盖 ①②④⑤**，"现状 / 为什么不做 / 触发条件"逐条登记在 `plugins/c23/21_attributes.toml` 头注与 `TODO.md`：① 空实参 `[[deprecated()]]`（**低优先**：实测可配置面实现，代价 +1 规则 +1 AST 节点层；触发 = 真实语料）；② 相邻字面量拼接 `[[deprecated("a" "b")]]`（**不做**：硬拼只能覆盖 `literal.string+` 一种形态、+2 规则；旧记的"备选写全序列会被 `parser/follow.py` 的 choice 盲区卡掉"已随该盲区修复作废）；④ 空属性表 `[[]]`（**不做**：`@Attribute?` 一行即可，但**与③合体后 `[[,]]` 会被接受**）；⑤ 配平 token 序列 `[[f(int)]]` / `[[f(1 2)]]`（**暂不做**：现役 production 微语法是闭集，需新增元素类型，改动面横跨 parser/linter/preprocessor 10+ 处分派表；触发 = 真实语料出现非表达式 token 序列）。**位点已全部落地**（2026-09-28：说明符位 / 属性声明 / 声明符内 / 枚举项——后两处走**共用空槽位** `@AttributeSlot`）；另有**一处过接受**（`(f) [[deprecated]]` 也认，标准只允许紧跟 identifier 之后）如实登记在 `plugins/c23/21_attributes.toml` 头注。判据 `test_c23_increment_plugin.py`：`test_attribute_known_boundaries`（①②④⑤ 仍须被拒）+ `test_attribute_over_acceptance_boundaries`（③ 的 `[[nodiscard,,]]` / `[[,]]` 仍须被拒）+ `test_attribute_list_binds_trailing_comma_separately` / `test_attribute_args_bind_through_argument_list` |
 | 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | ✅ **已落地**（2026-09-26）：走声明级合并 `merge = "by-name"`（`plugins/c23/_number_c23.toml` 只补 `c_dec` 的 `suffix`），**不是**改核心 `base/_number.toml`（那会让基线档也接受 `1.5dd`） |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
@@ -178,7 +182,9 @@ grammar/c/
   `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）；③ **别依赖跨元素回溯**：
   选择器只在**同一元素内**换候选，`_Atomic` 的两种形态若拆成两条规则，单 token 那条命中后
   后续元素失败**不会回头**（实测整条声明空 AST）——写成一个规则里的可选组即可。
-- **仍未落地的标准增量**：只剩 `[[属性]]` 的**三条形态边界**（见「未做」表）。
+- **仍未落地的标准增量**：只剩 `[[属性]]` 的**四条形态边界** ①②④⑤（① 空实参 = 低优先；
+  ② 相邻字面量拼接 / ④ 空属性表 = 不做；⑤ 配平 token 序列 = 暂不做）——见「未做」表。
+  ✅ ③ 尾随逗号与多实参已于 2026-09-28 收口（判据见 `test_c23_increment_plugin.py`）。
   ⚠ 另有一条**档位边界**（不是缺语法）：`[[属性]]` 不依赖新关键字 ⇒ **基线档也解析**
   （详见「标准档位」节末与 `TODO.md`）。
 

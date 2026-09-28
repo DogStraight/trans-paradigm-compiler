@@ -1,9 +1,10 @@
 # ============================================================================
 # c23 插件 — 属性说明符 `[[ 属性表 ]]`（C23 §6.7.12 attribute-specifier）
 # ============================================================================
-# 标准形态（N3096 §6.7.12.1）：
+# 标准形态（C23 §6.7.12；N3096 §6.7.12.1 / N3220 §6.7.13.2——两版同节内容，最终草案
+# 把该节整体后移为 6.7.13.2，此处双引以便日后对表）：
 #   attribute-specifier: [ [ attribute-list ] ]
-#   attribute-list: attribute-list , attribute ｜ attribute
+#   attribute-list: attribute_opt ｜ attribute-list , attribute_opt
 #   attribute: attribute-token attribute-argument-clause_opt
 #   attribute-token: identifier ｜ attribute-prefix :: identifier
 #   attribute-argument-clause: ( balanced-token-sequence_opt )
@@ -31,7 +32,7 @@
 # **属性位点（标准三类，全部落地）**：
 #   ① **说明符位**（含 `[[a]] [[b]]` 连续、成员说明符位、参数位、类型名位）——挂 `@TypeQualifier`；
 #   ② **属性声明** `[[…]];`（文件与块作用域）——落进 `Declaration` 首说明符位，无需额外规则；
-#   ③ **声明符内 / 枚举项**（2026-09-26 收口）——挂核心**空槽位** `@AttributeSlot`：
+#   ③ **声明符内 / 枚举项**（2026-09-28 收口）——挂核心**空槽位** `@AttributeSlot`：
 #      · 声明符内（C23 §6.7.6 `direct-declarator: identifier attribute-specifier-sequence_opt`）：
 #        标准例 `void f [[deprecated]] (void);`——属性紧跟**标识符之后、后缀链之前**；
 #      · 枚举项（C23 §6.7.2.2：`enumeration-constant attribute-specifier-sequence_opt
@@ -52,19 +53,47 @@
 #     inline 展平丢失——不值得，记为已知偏差。
 #   ⚠ 现状不覆盖厂商另一套拼写 `__attribute__((…))`（GNU 扩展，不在 C23 面内）。
 #
-# **实参收 `@Expression`（宽进口径 + 实测边界）**：标准的 attribute-argument-clause 是
-#   balanced-token-sequence（任意配平 token 序列），引擎没有这一形态；收 `@Expression`
-#   覆盖真实用法的大多数——实测 **✓**：`[[deprecated("use g")]]` / `[[assume(x > 0)]]` /
-#   `[[gnu::aligned(16)]]` / `[[gnu::aligned(16 * 2)]]` / **嵌套括号**
-#   `[[gnu::aligned(sizeof(void *))]]`（`sizeof(type)` 本身就是表达式）。
-#   ⚠ **仍未覆盖（实测，如实登记，不是"看起来支持"）**——三条**形态**边界：
-#     · **空实参** `[[deprecated()]]`——标准的 `balanced-token-sequence_opt` 允许空；
-#     · **相邻字面量拼接** `[[deprecated("a" "b")]]`（字符串拼接不在表达式面内）；
-#     · **属性表尾随逗号** `[[nodiscard,]]`——标准的 `attribute-list_opt , attribute_opt`
-#       允许尾随逗号，本包的可空项列表形态写不出来（写成 `(comma,@Attribute?)` 还会顺带
-#       接受 `[[a,,]]`，得不偿失）。
-#   要支持需引擎侧"配平 token 序列"形态（新形态，与 ROADMAP「注入机制」的 ③/④ 无关）。
-#   判据 = `tests/languages/c/test_c23_increment_plugin.py::test_attribute_known_boundaries`。
+# **实参收 `@ArgumentList`（宽进口径 + 实测边界）**：标准的 attribute-argument-clause 是
+#   balanced-token-sequence（任意配平 token 序列），引擎没有这一形态；实参收
+#   `@ArgumentList`（逗号分隔的**表达式列表**，语义 = "实参表"而非"逗号表达式"）。
+#   实测 **✓**：`[[deprecated("use g")]]` / `[[assume(x > 0)]]` / `[[gnu::aligned(16)]]` /
+#   `[[gnu::aligned(16 * 2)]]` / **嵌套括号** `[[gnu::aligned(sizeof(void *))]]`
+#   （`sizeof(type)` 本身就是表达式）/ **多实参** `[[gnu::nonnull(1, 2)]]` /
+#   `[[gnu::format(printf, 1, 2)]]` / `[[clang::no_sanitize("address", "thread")]]`。
+#   ⚠ 旧写法收 `@Expression`（assignment-expression 层级，**不含逗号**——见
+#   `00_expressions.toml` 头注）⇒ 多实参整条失配（实测）。改 `@ArgumentList` 后单实参形态
+#   的**渲染与显著 token 序列不变**；`args` 绑定由"表达式节点"变为 `ArgumentList` 节点
+#   （语义更贴实参表；包内无消费者依赖旧形状）。
+#
+# **本轮已覆盖**：**③ 属性表尾随逗号** `[[nodiscard,]]`——标准
+#   `attribute-list: attribute-list , attribute(opt)`，实现见下方 `AttributeList`
+#   （独立可选元素 + 单独绑定；写成 `(comma,@Attribute?)*` 会顺带接受 `[[a,,]]`）。
+#
+# **未覆盖形态（不做 / 低优先 + 触发条件，全部实测登记，不是"看起来支持"）**：
+#   · ① **空实参** `[[deprecated()]]`——标准 `balanced-token-sequence_opt` 允许空。
+#     **低优先**：实测可做（实参组抽独立规则 `(lp,<实参>?,rp)` + 自布局，代价 +1 规则
+#     +1 AST 节点层），但收益小（`[[deprecated]]` 等价）。**触发条件** = 真实语料出现。
+#     ⚠ 陷阱（实测）：只把内层元素写成可空、**不改绑定** ⇒ `{ opt }` 组以"引用字段非 None"
+#     为整组输出条件，`[[deprecated("use g")]]` 会被**静默渲成** `[[deprecated]]`（丢实参）
+#     ——要做必须同时引入有布局的容器规则。`[[deprecated()]]` 常驻反样本判据。
+#   · ② **相邻字面量拼接** `[[deprecated("a" "b")]]`（字符串拼接不在表达式面内）。
+#     **不做**：硬拼只能覆盖 `literal.string+` 一种形态（需 +2 规则：专用规则 + 选择器规则，
+#     实测可行且无过接受），换来的只是这一种拼写——按"缺哪类能力等真需求"记边界。
+#     ⚠ 旧记录曾把"多备选写全序列会被 FOLLOW 盲区卡掉"列为不做理由之一；该盲区已由
+#     `parser/follow.py` 的 `_propagate_intra` 修掉（2026-09-28），**不再是理由**。
+#     **触发条件** = 真实语料出现；届时按 ⑤ 处理，而不是再加一条 `XxxConcat` 规则。
+#   · ④ **空属性表** `[[]]`（标准 `attribute-list: attribute(opt)`）。**不做**：`@Attribute?`
+#     一行即可，但**与③合体后 `[[,]]` 会被接受**（标准语法可推导、工具链普遍不收）。
+#   · ⑤ **任意配平 token 序列** `[[f(int)]]` / `[[f(1 2)]]` / `[[f(a, b, )]]`（标准的
+#     balanced-token-sequence 本体）。**暂不做**：现役 production 微语法是**闭集**
+#     （`| , ? * + ()` + `@Rule` + token；实测 8 种候选拼写全 `GrammarError`），需新增
+#     production 元素类型，改动面横跨 `parser/` / `linter/` / `preprocessor/` 10+ 处分派表
+#     （`linter` 另有独立的一套 production 匹配器）。**触发条件** = 真实语料出现"非表达式"
+#     token 序列（关键字作实参 / 相邻 token 无运算符 / 实参表尾逗号）。
+#   判据 = `tests/languages/c/test_c23_increment_plugin.py`：正样本
+#   `test_parses_into_expected_node` 的多实参 / 尾随逗号用例（另有渲染保真与 lint 两组）；
+#   反样本 `test_attribute_known_boundaries`（①②④⑤ 必须仍被拒）+
+#   `test_attribute_over_acceptance_boundaries`（③ 的 `[[nodiscard,,]]` / `[[,]]` 必须仍被拒）。
 #
 # **属性名带前缀**（`[[gnu::unused]]`）：按标准 `attribute-prefix :: identifier` 两层收，
 #   绑定 `token = "$1"`（`gnu`）+ `qualified = "$2.…"`（`unused`）；无前缀时 `qualified` 为空。
@@ -98,28 +127,38 @@ targets = ["@TypeQualifier.production[0]", "@AttributeSlot.production[0]"]
 line = ["[[", { ref = "attributes" }, "]]"]
 
 
+# 属性表（标准 `attribute-list: attribute_opt ｜ attribute-list , attribute_opt`）。
+# ⚠ 尾随逗号是**独立可选元素** `(comma)?`（本轮收口）：可空列表项写法
+# `(comma,@Attribute?)*` 会顺带接受 `[[a,,]]`（实测拒不掉），故不用。
 [AttributeList.parser]
 production = [
     "@Attribute",
     "(symbol.base.comma,@Attribute)*",
+    "(symbol.base.comma)?",
 ]
 
 # 渲染前提同 `DeclaratorList`：列表容器用合并 `items` 字段（否则逗号分隔符拿不到形态）
 [AttributeList.parser.node]
 items = ["$1", "$2.items[*].sub_node[1]"]
+# trailing_comma —— `]]` 前的可选尾随逗号本体。**必须独立绑定、不得塞进 `items`**：
+#   items 走 join 的 `sep = ", "`，标点混进列表会渲成 `[[a, ,]]`（多印逗号）；
+#   而只加 production 元素不绑定会被渲染器静默丢（`[[nodiscard,]]` 渲成 `[[nodiscard]]`，
+#   丢一个显著 token）。两态都由 `test_attribute_list_binds_trailing_comma_separately`
+#   与三组参数化用例（尾随逗号）钉住。
+trailing_comma = "$3"
 
 [AttributeList.renderer.layout]
-intent = "compact"
-items = "items"
-sep = ", "
-first_soft = false
+line = [
+    { intent = "compact", items = "items", sep = ", ", first_soft = false },
+    { opt = { ref = "trailing_comma" } },
+]
 
 
 [Attribute.parser]
 production = [
     "@Identifier",
     "(symbol.base.colon,symbol.base.colon,@Identifier)?",
-    "(bracket.l_parentheses,@Expression,bracket.r_parentheses)?",
+    "(bracket.l_parentheses,@ArgumentList,bracket.r_parentheses)?",
 ]
 
 [Attribute.parser.node]
@@ -127,7 +166,7 @@ production = [
 # 带前缀形态（`gnu::unused`）：token = "gnu"、qualified = "unused"（C23 attribute-prefix :: id）。
 token = "$1"
 qualified = "$2.sub_node[0].sub_node[2]"
-# args —— 实参本体（绑定落到组内的 `@Expression`，理由同 `InitDeclarator.init`：
+# args —— 实参本体（绑定落到组内的 `@ArgumentList`，理由同 `InitDeclarator.init`：
 # 包住括号的形态渲染会多印括号，而 `opt` 组要按"属性是否为空"决定整组是否输出）。
 args = "$3.sub_node[0].sub_node[1]"
 

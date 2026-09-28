@@ -116,6 +116,19 @@ _CASES = [
      "enum e5 {\n    A5 [[deprecated]] = 1,\n    B5\n};\n", "AttributeSpec"),
     ("属性在枚举项（不带值）",
      "enum e6 {\n    C6 [[deprecated]],\n    D6\n};\n", "AttributeSpec"),
+    # 属性实参（C23 §6.7.12；N3096 §6.7.12.1 / N3220 §6.7.13.2）——本轮收口两条形态：
+    # ③ 属性表尾随逗号（标准 `attribute-list: attribute-list , attribute_opt`）
+    ("属性表尾随逗号", "[[nodiscard,]] int t1;\n", "AttributeSpec"),
+    ("属性表尾随逗号（多属性末项）", "[[nodiscard, maybe_unused,]] int t2;\n", "AttributeSpec"),
+    # ②′ 多实参（实参收 `@ArgumentList`；旧 `@Expression` 是 assignment-expression 层级、
+    # 不含逗号 ⇒ 多实参整条失配）
+    ("多实参属性 gnu::nonnull(1, 2)", "[[gnu::nonnull(1, 2)]] int t3;\n", "AttributeSpec"),
+    ("多实参属性 gnu::format(printf, 1, 2)",
+     "[[gnu::format(printf, 1, 2)]] int t4;\n", "AttributeSpec"),
+    ("多实参属性 clang::no_sanitize",
+     '[[clang::no_sanitize("address", "thread")]] int t5;\n', "AttributeSpec"),
+    ("多实参属性 + 尾随逗号", "[[gnu::nonnull(1, 2),]] int t6;\n", "AttributeSpec"),
+    ("多实参属性在参数位", "void f6([[gnu::nonnull(1, 2)]] int x);\n", "AttributeSpec"),
 ]
 
 
@@ -138,7 +151,10 @@ def _env() -> dict:
     def render(src: str) -> str:
         ast = parse(src)
         assert ast is not None, f"解析不出 AST：{src!r}"
-        return Renderer(rules_dir=_PACK).render(ast)
+        # 接线与生产一致（pipeline/__init__.py）：词表来自词法声明，否则缺省空词表
+        return Renderer(
+            rules_dir=_PACK, line_comment_starts=lexer.line_terminating_comment_starts()
+        ).render(ast)
 
     return {
         "rules": rules,
@@ -242,21 +258,86 @@ class TestC23InjectionPoints:
         assert "@AttributeSpec" in quals, quals
 
     def test_attribute_known_boundaries(self, restore_language):
-        """把属性的**未覆盖形态**钉住（实测，见 `21_attributes.toml` 头注）。
+        """把属性的**仍未覆盖形态**钉住（实测，见 `21_attributes.toml` 头注）。
 
-        未覆盖（三条**形态**边界，需引擎侧"配平 token 序列 / 可空项列表"形态）：
-        ① 空实参 `[[deprecated()]]`；② 相邻字面量拼接 `[[deprecated("a" "b")]]`；
-        ③ 属性表尾随逗号 `[[nodiscard,]]`。
-        **位点两条已收口**（声明符内 / 枚举项，见 `test_attribute_positions_share_one_empty_slot`）
-        ——它们曾被记为"注入做不到"，改为**共用空槽位**后成立。
+        仍未覆盖（三条**形态**边界，各自"不做/低优先 + 触发条件"已登记在
+        `21_attributes.toml` 头注、「`grammar/c/README.md` 未做表」与 `TODO.md`）：
+        ① 空实参 `[[deprecated()]]`（低优先：可配置面实现，但要 +1 规则 +1 AST 节点层）；
+        ② 相邻字面量拼接 `[[deprecated("a" "b")]]`（不做：硬拼只能覆盖一种形态，
+           且"备选写全序列"会被 FOLLOW 盲区卡掉）；
+        ④ 空属性表 `[[]]`（不做：与尾随逗号合体会接受 `[[,]]`）；
+        ⑤ 配平 token 序列 `[[f(int)]]` / `[[f(1 2)]]`（暂不做：需新增 production 元素类型，
+           改动面横跨 parser/linter/preprocessor）。
+        **已收口不必在此**：③ 尾随逗号 `[[nodiscard,]]`（本轮，判据见
+        `test_attribute_list_binds_trailing_comma_separately` 与
+        `test_attribute_over_acceptance_boundaries`）；位点两条（声明符内 / 枚举项，
+        见 `test_attribute_positions_share_one_empty_slot`）。
         这些一旦被补上，本用例会红——提醒同步头注与 `grammar/c/README.md`。
         """
         env = _env()
         for src in ("[[deprecated()]] int a;\n", '[[deprecated("a" "b")]] int b;\n',
-                    "[[nodiscard,]] int c;\n"):
+                    "[[]] int c;\n", "[[f(int)]] int d;\n", "[[f(1 2)]] int e;\n"):
             ast = env["parse"](src)
             names = {n.node_name for n in iter_nodes(ast)} if ast is not None else set()
             assert "AttributeSpec" not in names, f"{src!r} 已能解析？请同步头注与 README"
+
+    def test_attribute_over_acceptance_boundaries(self, restore_language):
+        """③ 尾随逗号的**过接受守卫**：`[[nodiscard,,]]` / `[[,]]` 必须仍被拒。
+
+        这不是"没测到"：可空列表项写法 `(comma,@Attribute?)*` 会顺带接受 `[[a,,]]`，
+        故实现取**独立可选元素** `(comma)?`（`21_attributes.toml` §AttributeList）。
+        若哪天有人把它改成可空列表项，本用例会红。
+        """
+        env = _env()
+        for src in ("[[nodiscard,,]] int a;\n", "[[,]] int b;\n",
+                    "[[nodiscard, ,]] int c;\n"):
+            ast = env["parse"](src)
+            names = {n.node_name for n in iter_nodes(ast)} if ast is not None else set()
+            assert "AttributeSpec" not in names, f"{src!r} 不该被接受（过接受）"
+
+    def test_attribute_list_binds_trailing_comma_separately(self, restore_language):
+        """③ 尾随逗号 = 独立可选元素 + **单独绑定**（不得塞进 `items`）。
+
+        两条"缺陷态会红"的判据：
+          ① 结构：`AttributeList.production` 第三元素是 `(comma)?`；`node` 里
+             `trailing_comma = "$3"`，且 `items` 的任一提取式**不含 `$3`**；
+          ② 行为：`[[nodiscard,]]` 渲染的显著 token 序列与源逐项相同
+             （丢绑定 → 尾逗号静默丢；塞进 items → join 的 `sep = ", "` 叠加成 `, ,`）。
+        """
+        env = _env()
+        rule = env["rules"]["AttributeList"]
+        assert len(rule.production) == 3, rule.production
+        assert rule.production[2] == "(symbol.base.comma)?", rule.production
+        assert rule.node["trailing_comma"] == "$3", rule.node
+        assert all("$3" not in spec for spec in rule.node["items"]), rule.node
+        for src, want in (("[[nodiscard,]] int a;\n", "[[nodiscard,]] int a;\n"),
+                          ("[[nodiscard, maybe_unused,]] int b;\n",
+                           "[[nodiscard, maybe_unused,]] int b;\n")):
+            assert env["tokens"](env["render"](src)) == env["tokens"](want), src
+
+    def test_attribute_args_bind_through_argument_list(self, restore_language):
+        """②′ 实参收 `@ArgumentList`：多实参进 AST，单实参绑定不得丢。
+
+        ⚠ 缺陷态判据（task-2 实测过的坑）：只把内层元素写成可空/不改绑定，
+        `{ opt }` 组以"引用字段非 None"为整组输出条件 ⇒ `[[deprecated("use g")]]`
+        会被静默渲成 `[[deprecated]]`（丢实参）。故这里直接断言 `Attribute.args` 存在、
+        是 `ArgumentList` 且项数正确——绑定一丢即红（渲染向的判据另有三组参数化用例）。
+        """
+        env = _env()
+        prod = env["rules"]["Attribute"].production[2]
+        assert "@ArgumentList" in prod, prod
+
+        def args_of(src: str):
+            ast = env["parse"](src)
+            attr = next(n for n in iter_nodes(ast) if n.node_name == "Attribute")
+            return getattr(attr, "args", None)
+
+        multi = args_of("[[gnu::nonnull(1, 2)]] int a;\n")
+        assert multi is not None and multi.node_name == "ArgumentList", multi
+        assert [i.node_name for i in multi.items] == ["Number", "Number"], multi.items
+        single = args_of('[[deprecated("use g")]] int b;\n')
+        assert single is not None and single.node_name == "ArgumentList", single
+        assert [i.node_name for i in single.items] == ["StringLiteral"], single.items
 
     def test_attribute_positions_share_one_empty_slot(self, restore_language):
         """声明符内 / 枚举项两个位点靠**同一个空槽位规则** `AttributeSlot`（一次注入两处生效）。
