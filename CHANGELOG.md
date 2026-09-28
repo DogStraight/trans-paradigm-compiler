@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **C 包：枚举体 `}` 前的尾随逗号被渲染静默丢弃**（`enum e { A, B, };` → `enum e {A, B};`）。
+  `EnumBody` 把尾逗号写成**独立可选元素**（`symbol.base.comma?`，`$4`），而渲染走 `items`
+  绑定 ⇒ 独立可选元素不进 `items`、静默少一个非 trivia token（与 `grammar/c/README.md`
+  「写包者须知」第 8 条同型）。C 里该逗号无语义，但违反本包渲染判据 7「显著 token 序列
+  逐项相同（只许动空白）」。
+  - **修法**（只动语言包 TOML，production 一行未改）：`EnumBody.parser.node` 增
+    `trailing_comma = "$4"`，布局在 compact 段与 `"}"` 之间插 `{ opt = { ref = … } }`
+    ——**不能混进 `items`**（join 的分隔符 `", "` 会与标点叠加、多印一个逗号）。
+  - **判据**：`tests/languages/c/test_c_render_fidelity.py` 新增 `TestEnumTrailingComma`
+    （8 个带尾逗号形态 + 5 个无尾逗号形态 × {token 序列、幂等、无逗号不得凭空多印}，31 例）；
+    **缺陷态实测 8 红 / 23 绿**，修复后 31 绿；`pytest tests/languages/c` 656 → **687 passed**；
+    三样本 ratio 0.9926/0.9925/0.9822 未降（0.992553/0.992543/0.982216，行覆盖不变）。
+  - **同轮实测到的相邻缺陷（未修，已登记）**：`enum e { A, B, // note` + 换行 + `};` 的行注释
+    被挂到 `EnumBody` **容器** `trailing` 槽 ⇒ 渲染冲掉收尾 `;`、不幂等、**产物非法 C**
+    （先于本次修复存在；#6 同族但**丢 token**）。**两种接线表现不同**（Lead 复核）：生产路径
+    （`pipeline` 传 `line_comment_starts=…`）只有尾逗号形态坏；裸 `Renderer(rules_dir)`
+    （= 各语言包 harness 的接线）两种形态都坏。已登记缺口档渲染现状表 #8 + 「未做」第 4 条
+    （语言包 harness 接线与生产路径不一致，**全仓性**）与 `TODO.md` 对应条目，待作者判。
 - **跨语言配置串味：切语言时"本包未声明的 key"没有推回默认 ⇒ 上一个语言的配置留在模块级
   变量里**（`core/config_registry.py::_push_loaded_config`）。实测症状 = `TODO.md` 那条
   「跨语言检查规则泄漏」：同一进程里先扫 verilog、再 `load_all("grammar/c")` 扫 C 源，

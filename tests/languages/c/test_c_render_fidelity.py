@@ -248,6 +248,61 @@ def _token_diff(name: str, want: list, got: list) -> str:
     )
 
 
+class TestEnumTrailingComma:
+    """枚举体 `}` 前的**尾随逗号**必须原样打印（判据 7 的定点回归门）。
+
+    成因（与写包者须知第 8 条同型）：`EnumBody` 的产生式把尾逗号写成**独立可选
+    元素**（第 4 个元素 `symbol.base.comma?`），而渲染走 `items` 绑定——独立可选
+    元素不进 `items` ⇒ 渲染静默丢一个非 trivia token（实测 `enum e { A, B, };`
+    曾渲成 `enum e {A, B};`）。C 里该逗号无语义，但判据 7 要求**显著 token 序列
+    逐项相同**，故按"有/无尾逗号 × 具名/匿名/带值/结构体成员/多行/带注释"
+    逐形态守：有尾逗号不得丢，无尾逗号不得凭空多印。
+    """
+
+    _WITH_TRAILING = [
+        "enum e { A, B, };\n",
+        "enum e { A, };\n",
+        "enum { A, B, };\n",
+        "typedef enum { RED, GREEN, } color_t;\n",
+        "enum e { A = 1, B = 2, };\n",
+        "struct s { enum e { A, B, } v; };\n",
+        "enum color {\n    RED,\n    GREEN,\n};\n",
+        "enum e { A, B, /* c */ };\n",
+    ]
+    _WITHOUT_TRAILING = [
+        "enum e { A, B };\n",
+        "enum e { A };\n",
+        "enum { A, B };\n",
+        "enum e;\n",
+        "enum color {\n    RED,\n    GREEN\n};\n",
+    ]
+
+    @pytest.mark.parametrize("src", _WITH_TRAILING + _WITHOUT_TRAILING)
+    def test_significant_tokens_identical(self, c_env, src):
+        """判据 7 定点：渲染前后显著 token 序列逐项相同（尾逗号在其中）。"""
+        out = c_env["render"](src)
+        want = _significant(c_env["tokenize"](src))
+        got = _significant(c_env["tokenize"](out))
+        assert got == want, _token_diff(src.strip(), want, got)
+
+    @pytest.mark.parametrize("src", _WITH_TRAILING + _WITHOUT_TRAILING)
+    def test_round_trip_is_idempotent(self, c_env, src):
+        """再渲染一遍逐字相同（尾逗号若只靠"凭空补一个"实现，这里会红）。"""
+        first = c_env["render"](src)
+        second = c_env["render"](first)
+        assert first == second, f"{src!r}: 渲染不幂等\n首遍: {first!r}\n二遍: {second!r}"
+
+    @pytest.mark.parametrize("src", _WITHOUT_TRAILING)
+    def test_no_trailing_comma_is_not_invented(self, c_env, src):
+        """无尾逗号形态不得在 `}` 前凭空多印一个 `,`（反向门）。"""
+        out = c_env["render"](src)
+        toks = [c for _, c in _significant(c_env["tokenize"](out))]
+        invented = any(
+            toks[i] == "," and toks[i + 1] == "}" for i in range(len(toks) - 1)
+        )
+        assert not invented, f"{src!r}: 渲染在 `}}` 前多印了逗号：{out!r}"
+
+
 class TestPostfixOrder:
     """后缀自增/自减的**顺序**判据（pratt `UnaryOp` 前缀/后缀同名，由 `when` 分发）。
 

@@ -145,8 +145,15 @@ production = [
 
 # ⚠ 合并 `items`（渲染前提，同 DeclaratorList）：`$2` 是首个枚举项、
 #   `$3.items[*].sub_node[1]` 是其余项（每个 `(comma,Enumerator)` 组的第二个子节点）。
+# ⚠ `$4`（`}` 前的尾随逗号，独立可选元素）**不进 `items`**，必须单独绑定成属性：
+#   `items` 走 join 分隔符渲染，把标点混进列表会与分隔符 ", " 叠加（多印一个逗号）；
+#   而独立可选元素不绑定就被渲染器静默丢弃（写包者须知第 8 条）——实测
+#   `enum e { A, B, };` 曾渲成 `enum e {A, B};`（少一个非 trivia token）。
 [EnumBody.parser.node]
 items = ["$2", "$3.items[*].sub_node[1]"]
+# trailing_comma — `}` 前的可选尾随逗号本体（标准允许，无 `}` 前语义，但保真判据 7
+#   要求显著 token 序列逐项相同，故必须原样打印）
+trailing_comma = "$4"
 
 
 # 枚举项：`NAME` / `NAME = 数字字面量` / `NAME attr… = 数字字面量`（一般常量表达式在阶段 3）
@@ -265,6 +272,8 @@ line = ["enum ", { ref = "body" }]
 line = [
     "{",
     { intent = "compact", items = "items", first_soft = false, nest = 0 },
+    # 尾随逗号紧贴末项之后（不进 join 列表——见上方 node 绑定注）
+    { opt = { ref = "trailing_comma" } },
     "}",
 ]
 
