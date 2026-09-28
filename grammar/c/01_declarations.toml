@@ -485,6 +485,12 @@ production = []
 [AttributeSlot.parser.node]
 attrs = "$1"
 
+# 渲染配置是**兜底**：槽位 `inline = true` ⇒ 展平后不以节点形态进 AST，布局通常不被
+# 消费；写上它是为了"每条规则都有渲染配置"这条包内自查口径不留例外
+# （`tools/render_coverage.py`：缺配置的规则渲染时静默输出空串）。
+[AttributeSlot.renderer.layout]
+ref = "attrs"
+
 
 [DirectDeclarator.renderer.layout]
 line = [

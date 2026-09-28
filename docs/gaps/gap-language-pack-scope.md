@@ -336,7 +336,7 @@ render → 与源比对，七条判据：
 
 | 项 | 布局补齐前 | 现在 |
 |---|---|---|
-| `tools/render_coverage.py grammar/c` | 70 条规则 / 1 有渲染配置（1%） | **80 条 / 80（100%）** |
+| `tools/render_coverage.py grammar/c` | 70 条规则 / 1 有渲染配置（1%） | **112 条 / 112（100%）** |
 | `samples/ring_buffer.h` ratio / 有效行 | 0.0000 / 0（渲染为空串） | **0.9926** / 33（源 33） |
 | `samples/ring_buffer.c` ratio / 有效行 | 0.0000 / 0 | **0.9925** / 119（源 119） |
 | `samples/edge_comments.c` ratio / 有效行 | — | **0.9822** / 29（源 31） |

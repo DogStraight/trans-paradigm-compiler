@@ -224,7 +224,7 @@ grammar/c/
    拿不到它 ⇒ 渲染把 `...` 静默丢掉（实测输出 `int printf(const char *fmt);`）。
    落重复组迭代项的写法（`(comma,(@ParamDecl|symbol.extend.ellipsis))*`）才会进
    `items`、按源序渲染。改参数表/列表类规则后**都要跑一次渲染对拍**。
-7. **块语句"建成块规则"还是"建成普通语句"，先看包有没有自己的语句序**：c4 的
+9. **块语句"建成块规则"还是"建成普通语句"，先看包有没有自己的语句序**：c4 的
    `BlockStmt` 是块规则（`is_block = true`，body 由 `parse_block_body` 循环产出，
    renderer 用 `role = "flatten"`），linter 因而拿到块体（`_discover_block` /
    `_block_body`），块内每条坏语句各报一条；本包的同位规则 `CompoundStmt` 是普通语句
@@ -234,6 +234,13 @@ grammar/c/
    规则后 `void f(void) { x; }` 的体内语句会从 `ExprStmt` 变成 `Declaration`。
    故这条取舍的先决条件是"包能声明块体语句的候选顺序"（包侧无此表达面）。见
    `TODO.md`「C 块内诊断粒度粗」。
+10. **要给"序列中段"加形态，别硬注——用空槽位**：注入只能并入**某一条既有元素**
+    或越界追加到**末尾**，插不了中段（实测两条死路：`choice[repeat, @Attr]` 里"可空
+    repeat 永远先成功 ⇒ 属性支试不到"、中段根本没有交替点）。做法 = 核心把中段做成
+    一条**空槽位**规则（`production = []` 的非块规则 + 宿主写 `@Slot*`），插件注进槽位
+    ——"插元素"退化成"给规则加形态"，还能让多个位点共用同一槽位。样板：本包
+    `01_declarations.toml` 的 `AttributeSlot`（声明符内 / 枚举项共用）；语义见
+    `grammar/grammar_rule_fields.md` §production、`docs/language_walkthrough.md`「规则注入」。
 
 ## 参照
 

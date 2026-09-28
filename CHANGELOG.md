@@ -39,6 +39,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **工作区行尾统一为 LF（`.gitattributes` 定死规则）**——作者 2026-09-26 拍板"可以统一"，
+  据此关闭 `TODO.md` 里那条"行尾风格不统一"的待拍板项。
+  - **背景**：仓库只有本机 `core.autocrlf=true`（只在 `git add` 时归一索引、不回写工作区）
+    ⇒ 工作区三态并存：831 个跟踪文件里 **CRLF 653 / 仅 LF 176 / 混合 2**。
+  - **做法**：`.gitattributes` = `* text=auto eol=lf`（优先于 `core.autocrlf`，本机 / 干净
+    检出 / CI 取到同一份内容），随后把本机工作区按索引重新物化 ⇒ `git ls-files --eol`
+    现为 **全部 `i/lf w/lf`**、`git status` 干净。**索引内容零变化**（`autocrlf` 早已把
+    索引归一为 LF），故这不是"改写已入库内容"的动作。
+  - **两条核实**：① 混合的 2 个 = W201 夹具各 1 行 CRLF（都落在文件末行 `endmodule`）⇒
+    判为**无意产物**；全仓无测试依赖夹具行尾（CRLF/BOM 覆盖由内联字符串用例守着）；
+    ② 无二进制资产（仅 2 个 `.ps1`，LF 可运行），不需要 per-path 例外。
+  - **判据**：全新检出 `git status` 干净 + `git ls-files --eol` 全 `i/lf w/lf` + 全量
+    `pytest tests/` 在 Windows（LF 工作区）同绿。
 - **四条"待拍板"按作者 2026-09-26 口径结案**（不再挂着当悬项；机制文档同步）：
   - **保真度渲染：注释折行漂移**（`TODO.md` 里那条带最小复现的长项）——**不修渲染**。
     否决"锚点感知 LineSuffix"（要新增"哪些符号是列表分隔符"的声明字段，且须逐形态验证
@@ -90,7 +103,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     引擎填充分支回退、`$1` 放行回退、属性宿主换单点——每条都已证明在缺陷态变红。
   - **文档**：`grammar/grammar_rule_fields.md` §production 增"空产生式两种含义 + 空槽位用法"
     （`docs/language_walkthrough.md` 新增「规则注入」一节，含三个落点与选择顺序）；
-    `grammar/c/01_declarations.toml`／`02_types.toml`／`plugins/c23/21_attributes.toml` 头注。
+    `grammar/c/01_declarations.toml`／`02_types.toml`／`plugins/c23/21_attributes.toml` 头注；
+    `grammar/c/README.md`「写包者须知」+第 10 条（"要给序列中段加形态，别硬注——用空槽位"）。
+    槽位另补了一条**兜底渲染配置**（`inline` 规则通常不走布局，但包内口径是"每条规则都有
+    渲染配置"——`tools/render_coverage.py grammar/c` 现为 **112 条 / 112（100%）**）。
 - **引擎新能力：配置声明级合并语义 `merge = "by-name"`——插件可给核心配置"补字段"**；
   C 包据此落地十进制浮点字面量后缀 `1.5df`/`1.5dd`/`1.5dl`（C 包标准增量面至此**全部收口**）。
   接受面 **37/39 → 38/40**；档位矩阵 25 → **26**。
