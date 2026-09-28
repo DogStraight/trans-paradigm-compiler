@@ -480,11 +480,17 @@ def _ensure_clean_tree() -> bool:
 
 
 def _run_mutation(m: dict[str, str]) -> tuple[bool, str]:
-    """施加变异 → 跑测试 → 还原。返回 (门禁是否如期变红, 说明)。"""
+    """施加变异 → 跑测试 → 还原。返回 (门禁是否如期变红, 说明)。
+
+    ⚠ 读写都用 `newline=""`：本工具会临时改写版本库里的源码，而本仓的 `.gitattributes`
+    约定索引与工作区**一律 LF**——Python 在 Windows 上按默认 newline 写回会把 LF 翻成
+    CRLF（`git status` 随后把这 20+ 个文件报成"已修改"、破坏行尾统一）。读写都不翻译，
+    还原就是逐字节原样。
+    """
     path = os.path.join(_ROOT, m["file"])
     if not os.path.isfile(path):
         return False, f"文件不存在（清单过时？）：{m['file']}"
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", newline="") as f:
         original = f.read()
     if m["old"] not in original:
         return False, (
@@ -495,16 +501,16 @@ def _run_mutation(m: dict[str, str]) -> tuple[bool, str]:
         return False, f"变异锚点不唯一（{original.count(m['old'])} 处）：{m['file']}"
 
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(original.replace(m["old"], m["new"], 1))
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", m["test"], "-q", "-n", "0", "--no-header"],
             cwd=_ROOT, capture_output=True, text=True, encoding="utf-8",
         )
     finally:
-        with open(path, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(original)
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8", newline="") as f:
             assert f.read() == original, f"还原失败，请手动检查 {m['file']}"
 
     if proc.returncode != 0:
