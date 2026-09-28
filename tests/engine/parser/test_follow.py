@@ -84,6 +84,81 @@ class TestChoiceAndInline:
         assert "kw.end" in follows["Y"]
 
 
+class TestNestedSeqTailPropagation:
+    """嵌套序列内的尾部 call 也要拿到"同层后续兄弟"的 FIRST。
+
+    回归背景（2026-XX，实测）：原 `_propagate_seq` 只扫规则的**顶层元素列表**，
+    元素内部的尾部 call（备选支 / 括号分组 / `?` `*` `+` 后缀组）拿不到后续兄弟的
+    FIRST ⇒ 该写法在匹配期被 FOLLOW 检查拒绝（加载期静默）。c4 `IndexExpr` 的
+    `(lsquare,@Expression,rsquare)+` 因此有 9 个下标形态解析截断。
+    修法：`_propagate_intra` 递归分派 beta（只增不减，见 follow.py 注释）。
+    """
+
+    def test_choice_alternative_seq_tail(self):
+        # 备选支是一条序列：X 同支后面就是 lit.tail
+        rules = _rules(
+            A={"parser": {"production": ["(@X,lit.tail)|(@Y,lit.tail2)"]}},
+            X={"parser": {"production": ["id"]}},
+            Y={"parser": {"production": ["kw.y"]}},
+        )
+        follows = compute_follows(rules)
+        assert "lit.tail" in follows["X"]
+        assert "lit.tail2" in follows["Y"]
+
+    def test_grouped_seq_tail(self):
+        # 括号分组同样造出嵌套 seq（无后缀也如此）：X 后跟 lit.close
+        rules = _rules(
+            A={"parser": {"production": ["(lit.open,@X,lit.close)"]}},
+            X={"parser": {"production": ["id"]}},
+        )
+        follows = compute_follows(rules)
+        assert "lit.close" in follows["X"]
+        assert "lit.open" not in follows["X"]  # 前驱兄弟不得当后继
+
+    def test_repeat_elem_seq_tail(self):
+        # `+`/`*` 组的 elem 是 seq：组内尾部 call 拿同层兄弟 + 下一次迭代 FIRST
+        rules = _rules(
+            A={
+                "parser": {
+                    "production": [
+                        "@B",
+                        "(bracket.l_square_bracket,@B,bracket.r_square_bracket)+",
+                    ]
+                }
+            },
+            B={"parser": {"production": ["id"]}},
+        )
+        follows = compute_follows(rules)
+        assert "bracket.r_square_bracket" in follows["B"]
+        assert "bracket.l_square_bracket" in follows["B"]  # 循环下一迭代 FIRST
+
+
+class TestNestedSeqNoOverApproximation:
+    """负向：互为备选的成员之间**不得**互当前继（防"递归=乱补"）。"""
+
+    def test_alternatives_do_not_follow_each_other(self):
+        rules = _rules(
+            A={"parser": {"production": ["(@X|kw.y)"]}},
+            X={"parser": {"production": ["id"]}},
+            R={"parser": {"production": ["@A", "kw.end"]}},
+        )
+        follows = compute_follows(rules)
+        assert "kw.end" in follows["X"]  # 备选外的后继照常进
+        assert "kw.y" not in follows["X"]
+
+    def test_alternative_call_first_not_a_tail(self):
+        # (@X|@Y)：X 的后继不得含 FIRST(Y)；Y 的后继不得含 FIRST(X)
+        rules = _rules(
+            A={"parser": {"production": ["(@X|@Y)"]}},
+            X={"parser": {"production": ["kw.x"]}},
+            Y={"parser": {"production": ["kw.y"]}},
+            R={"parser": {"production": ["@A", "kw.end"]}},
+        )
+        follows = compute_follows(rules)
+        assert follows["X"] == {"kw.end"}
+        assert follows["Y"] == {"kw.end"}
+
+
 class TestBlockRuleFirst:
     def test_block_rule_first_is_block_start(self):
         # 块规则剥离首尾字面后 prods 为空，FIRST 必须来自 block_start——

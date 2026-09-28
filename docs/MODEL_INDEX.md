@@ -35,7 +35,7 @@
 | 块 & 语句级解析 | `language_walkthrough.md`（块规则解析） | `parser/block_parser.py` | `tests/engine/parser/test_production_engine.py` |
 | 表达式解析（Pratt + 运算符优先级 + 注释挂载） | `language_walkthrough.md`（Pratt 表达式解析） | `parser/pratt_parser.py` | `tests/engine/parser/test_pratt_parser.py` |
 | 规则选择（候选过滤 / 语句发现） | `language_walkthrough.md`（规则选择/语句发现） | `parser/rule_selector.py` | `tests/engine/parser/`（`test_production_engine.py` 等） |
-| 规则形态分类 / FOLLOW 集派生 | `language_walkthrough.md`（规则形态分类） | `parser/follow.py` | `tests/engine/parser/test_follow.py` |
+| 规则形态分类 / FOLLOW 集派生（含嵌套元素内部的传播范围） | `language_walkthrough.md`（规则形态分类）<br>`grammar/grammar_rule_fields.md`（§边界后继：派生 FOLLOW + exclude / 「FOLLOW 传播范围」） | `parser/follow.py`（`_propagate_seq` / `_propagate_intra`） | `tests/engine/parser/test_follow.py`<br>`tests/languages/c4/test_c4_index_expr.py`（活的症状：下标形态） |
 | node 绑定捕获（$N 绑定 + 路径提取） | `language_walkthrough.md`（node 绑定捕获） | `parser/attribute_binder.py` | `tests/engine/parser/test_attribute_binder.py` |
 | EXT 注入（grammar inject：树层合并 + 传播 + 序列化；**空槽位填充**） | `language_walkthrough.md`（规则注入）<br>`grammar/README.md`（注入归组：多条规则注入同一 target 须先归组容器）<br>`grammar/grammar_rule_fields.md` §production（空产生式两种含义 / 空槽位 `$1`） | `parser/grammar_inject.py`（`_inject_direct` 的零长 append 分支）<br>`parser/rule_selector.py::serialize_production_tree`<br>`core/define.py::_check_pos_ref`（`empty_slot`） | `tests/engine/parser/test_grammar_inject.py`<br>`tests/engine/parser/test_production_serialize.py`<br>`tests/engine/core/test_rule_schema.py`（空槽位绑定）<br>`tests/languages/c/test_c23_increment_plugin.py`（C 包 `AttributeSlot` 样板） |
 

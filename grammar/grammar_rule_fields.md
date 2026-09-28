@@ -165,6 +165,30 @@ exclude = ["symbol.base.dot"]   # 负向前瞻：匹配后若后跟 . 即失败�
 - **不需要手写**: 逗号列表、分号、右括号等后继全部由 FOLLOW 推导；`exclude`
   只用于"显式拒绝某 token"的消歧场景
 
+#### FOLLOW 传播范围（嵌套元素内部已递归；仍有的旁路）
+
+- **递归到嵌套元素内部**：推导不只是扫规则顶层的 production 元素列表，而是按
+  元素树结构递归——**choice 备选支 / `(...)` 括号分组 / `?` `*` `+` 后缀组的内部
+  seq** 里，`@call` 同层的后续兄弟 FIRST 都会进它的 FOLLOW。实测：
+  `production = ["(@X,lit.tail)|(@Y,lit.tail2)"]` ⇒ `FOLLOW(X) ⊇ {lit.tail}`；
+  `["(bracket.l_square_bracket,@Expression,bracket.r_square_bracket)+"]` ⇒
+  `FOLLOW(Expression) ⊇ {bracket.r_square_bracket}`。故"多备选写全序列""组内序列"
+  都是正常写法，无需为了 FOLLOW 把序列拆到列表层级（判据见
+  `tests/engine/parser/test_follow.py::TestNestedSeqTailPropagation`）。
+- **方向是只增不减（fail-open）**：传播取"元素级（原口径，含过度包含）+ 结构级
+  （递归精确）"的并集，只会让 FOLLOW 变大 ⇒ **FOLLOW 检查这一关不会新增拒绝**
+  （原先被误拒的形态转为可继续）；分支选择仍可能因放宽而变化，由回归用例覆盖。
+  实现见 `parser/follow.py::_propagate_seq` / `_propagate_intra`。
+- **仍不覆盖的旁路**（不是缺陷，是分层事实，使用前需知道）：
+  1. **pratt 规则不做 FOLLOW 检查**——`_try_pratt_rule` 分支直接返回，不经
+     `check_end_case`；`Expression` 这类 pratt 规则自身的 FOLLOW 缺项**不产生
+     症状**，真正受检的是它下游的 atom 规则（`Identifier` / `Number` / `CallExpr` …）。
+  2. **`_prod_refs_block` 旁路**：production 直接引用块规则的规则跳过 FOLLOW
+     检查（块边界由结构决定）。
+  3. FOLLOW 是**静态下界**：从 production 结构推导，不模拟运行期回溯 / 最长匹配 /
+     `exclude` / pratt；`token_in_follow` 对 `symbol.base.` 这类**前缀族**是
+     fail-open 放行整族。
+
 ---
 
 ## 三、增强字段（可选，正交）

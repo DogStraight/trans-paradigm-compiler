@@ -213,26 +213,106 @@ def _propagate_seq(
 ) -> bool:
     """按 seq 方程传播 FOLLOW：每个 call 元素 B 的后继 = 后续元素 FIRST。
 
+    传播分两路（并集 = **只增不减**，见 `_propagate_intra`）：
+      1. 元素级（原口径）：元素内**全部** call 并入 `FIRST(elems[i+1:])`。对
+         嵌套结构这是过度包含（fail-open），保留以免收窄既有 FOLLOW；
+      2. 结构级（`_propagate_intra`）：把同一个 beta 递归分派到元素树内**尾部
+         位置**的 call——备选支 / 括号分组 / `?` `*` `+` 后缀组内部的"同层
+         后续兄弟" FIRST 由此进入 FOLLOW。原口径只扫规则顶层元素列表，这些
+         嵌套位置的 call 拿不到后继（实测 c4 `IndexExpr` 的 `]` 缺项致 9 个
+         下标形态在匹配期被 FOLLOW 检查拒绝）。
+
     body_first：块规则 body 循环（语句候选 FIRST ∪ 块结束符）的 FIRST，
     作为序列末尾的虚拟 nullable 元素参与传播。
     返回是否有变化。
     """
     changed = False
     for i, elem in enumerate(elems):
+        beta_first, beta_nullable = _seq_first_nullable(
+            elems[i + 1 :], first_map, nullable_map
+        )
+        # repeat/plus 的内部循环后继：下一次迭代的 FIRST。
+        # 注意 beta_nullable 仍由后续元素（beta 侧）决定——repeat 自身
+        # 可空（0 次迭代），owner FOLLOW 传播条件与循环无关。
+        if elem.get("type") in ("repeat", "plus"):
+            beta_first |= _elem_first(elem, first_map, nullable_map)
+        if body_first is not None:
+            beta_first |= body_first
         for member in _elem_calls(elem):
-            beta_first, beta_nullable = _seq_first_nullable(
-                elems[i + 1 :], first_map, nullable_map
-            )
-            # repeat/plus 的内部循环后继：下一次迭代的 FIRST。
-            # 注意 beta_nullable 仍由后续元素（beta 侧）决定——repeat 自身
-            # 可空（0 次迭代），owner FOLLOW 传播条件与循环无关。
-            if elem.get("type") in ("repeat", "plus"):
-                beta_first |= _elem_first(elem, first_map, nullable_map)
-            if body_first is not None:
-                beta_first |= body_first
             if _merge_follow(follows, member, owner, beta_first, beta_nullable):
                 changed = True
+        if _propagate_intra(
+            follows, elem, owner, beta_first, beta_nullable, first_map, nullable_map
+        ):
+            changed = True
     return changed
+
+
+def _propagate_intra(
+    follows: dict[str, set[str]],
+    elem: dict,
+    owner: str,
+    beta_first: set[str],
+    beta_nullable: bool,
+    first_map: dict[str, set[str]],
+    nullable_map: dict[str, bool],
+) -> bool:
+    """把元素外后继 beta 递归分派到 elem 树内**尾部位置**的 call。
+
+    "尾部位置" = 该 call 匹配完后元素剩余部分可以结束（同层后续兄弟全可空），
+    故元素外 beta 可达；同层后续兄弟的 FIRST 由本层 `_seq_first_nullable`
+    提供。beta 的 `(beta_first, beta_nullable)` 语义与 `_merge_follow` 一致
+    （可空时由它并入 owner FOLLOW）。
+
+    repeat/plus：尾部 call 还拿下一次迭代的 FIRST（与元素级同口径）。
+    返回是否有变化。
+    """
+    typ = elem.get("type")
+    if typ == "call":
+        return _merge_follow(follows, elem["name"], owner, beta_first, beta_nullable)
+    if typ == "seq":
+        changed = False
+        items = elem.get("items", [])
+        for i, item in enumerate(items):
+            f, n = _seq_first_nullable(items[i + 1 :], first_map, nullable_map)
+            changed |= _propagate_intra(
+                follows,
+                item,
+                owner,
+                (f | beta_first) if n else f,
+                beta_nullable and n,
+                first_map,
+                nullable_map,
+            )
+        return changed
+    if typ == "choice":
+        changed = False
+        for alt in elem.get("alternatives", []):
+            changed |= _propagate_intra(
+                follows, alt, owner, beta_first, beta_nullable, first_map, nullable_map
+            )
+        return changed
+    if typ in ("repeat", "plus"):
+        return _propagate_intra(
+            follows,
+            elem.get("elem", {}),
+            owner,
+            beta_first | _elem_first(elem, first_map, nullable_map),
+            beta_nullable,
+            first_map,
+            nullable_map,
+        )
+    if typ == "optional":
+        return _propagate_intra(
+            follows,
+            elem.get("elem", {}),
+            owner,
+            beta_first,
+            beta_nullable,
+            first_map,
+            nullable_map,
+        )
+    return False
 
 
 def _merge_follow(
