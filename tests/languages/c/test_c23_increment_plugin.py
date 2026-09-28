@@ -100,6 +100,22 @@ _CASES = [
     ("属性声明（assume）", "[[assume(x > 0)]];\n", "AttributeSpec"),
     ("属性声明（块作用域）", "void f3(int x) {\n    [[fallthrough]];\n}\n", "AttributeSpec"),
     ("属性在函数定义前", "[[nodiscard]] int f4(void) {\n    return 1;\n}\n", "AttributeSpec"),
+    # 属性位点：声明符内（标识符之后，C23 §6.7.6）与枚举项（`=` 之前，C23 §6.7.2.2）
+    # —— 两处共用核心的**空槽位** `AttributeSlot`（见 01_declarations.toml），一次注入两处生效
+    ("属性在声明符内（标准例 void f [[deprecated]] (void);）",
+     "void f5 [[deprecated]] (void);\n", "AttributeSpec"),
+    ("属性在声明符内（变量）", "int x5 [[deprecated]];\n", "AttributeSpec"),
+    ("属性在声明符内 + 初始化", "int y5 [[deprecated]] = 1;\n", "AttributeSpec"),
+    ("属性在声明符内 + 数组后缀（后缀链在属性之后）",
+     "int a5 [[deprecated]] [3];\n", "AttributeSpec"),
+    ("属性在声明符内（结构成员）", "struct s5c {\n    int m5 [[deprecated]];\n};\n",
+     "AttributeSpec"),
+    ("连续两个属性说明符在声明符内",
+     "int z5 [[deprecated]] [[maybe_unused]];\n", "AttributeSpec"),
+    ("属性在枚举项（带值，在 `=` 之前）",
+     "enum e5 {\n    A5 [[deprecated]] = 1,\n    B5\n};\n", "AttributeSpec"),
+    ("属性在枚举项（不带值）",
+     "enum e6 {\n    C6 [[deprecated]],\n    D6\n};\n", "AttributeSpec"),
 ]
 
 
@@ -228,16 +244,45 @@ class TestC23InjectionPoints:
     def test_attribute_known_boundaries(self, restore_language):
         """把属性的**未覆盖形态**钉住（实测，见 `21_attributes.toml` 头注）。
 
-        未覆盖：① 空实参 `[[deprecated()]]`；② 相邻字面量拼接 `[[deprecated("a" "b")]]`；
-        ③ 属性表尾随逗号 `[[nodiscard,]]`；④ 声明符之后 / 枚举项上的属性位点。
+        未覆盖（三条**形态**边界，需引擎侧"配平 token 序列 / 可空项列表"形态）：
+        ① 空实参 `[[deprecated()]]`；② 相邻字面量拼接 `[[deprecated("a" "b")]]`；
+        ③ 属性表尾随逗号 `[[nodiscard,]]`。
+        **位点两条已收口**（声明符内 / 枚举项，见 `test_attribute_positions_share_one_empty_slot`）
+        ——它们曾被记为"注入做不到"，改为**共用空槽位**后成立。
         这些一旦被补上，本用例会红——提醒同步头注与 `grammar/c/README.md`。
         """
         env = _env()
         for src in ("[[deprecated()]] int a;\n", '[[deprecated("a" "b")]] int b;\n',
-                    "[[nodiscard,]] int c;\n", "int d [[deprecated]];\n"):
+                    "[[nodiscard,]] int c;\n"):
             ast = env["parse"](src)
             names = {n.node_name for n in iter_nodes(ast)} if ast is not None else set()
             assert "AttributeSpec" not in names, f"{src!r} 已能解析？请同步头注与 README"
+
+    def test_attribute_positions_share_one_empty_slot(self, restore_language):
+        """声明符内 / 枚举项两个位点靠**同一个空槽位规则** `AttributeSlot`（一次注入两处生效）。
+
+        设计（见 `01_declarations.toml` §AttributeSlot 与 `parser/grammar_inject.py`）：
+        核心声明 `AttributeSlot` 为**空产生式**（基线无自有形态），两个宿主的 production
+        各留一个 `@AttributeSlot*` 元素；插件注 `AttributeSpec` 进去后槽位有形态。
+        为什么不是"往序列中段塞元素"：现役注入只能并入**某个元素**或越界追加到**末尾**，
+        做不到插中段——把中段做成一条原子规则，注入就只剩"给规则加形态"这一种动作。
+
+        判据三条：① 两个宿主都引用槽位；② 槽位已被填成 `@AttributeSpec`；
+        ③ 槽位 `inline` 展平 ⇒ 父节点直接拿到 `AttributeSpec`（AST 里没有 `AttributeSlot` 节点）。
+        """
+        env = _env()
+        rules = env["rules"]
+        for host in ("DirectDeclarator", "Enumerator"):
+            joined = " ".join(str(p) for p in rules[host].production)
+            assert "@AttributeSlot" in joined, f"{host} 缺属性槽：{joined}"
+        slot = " ".join(str(p) for p in rules["AttributeSlot"].production)
+        assert "@AttributeSpec" in slot, f"空槽位未被填充：{slot!r}"
+        for src in ("int x7 [[deprecated]];\n",
+                    "enum e7 {\n    A7 [[deprecated]] = 1\n};\n"):
+            ast = env["parse"](src)
+            names = {n.node_name for n in iter_nodes(ast)}
+            assert "AttributeSpec" in names, f"{src!r}: {sorted(names)}"
+            assert "AttributeSlot" not in names, "槽位应 inline 展平，不进 AST"
 
     def test_decimal_literal_suffix_merges_into_core_number_form(self, restore_language):
         """十进制浮点**字面量后缀** `df`/`dd`/`dl`：C23 档认，基线档不认。
@@ -319,7 +364,10 @@ class TestC23InjectionPoints:
             "18_thread_local_alias.toml": ("@StorageClass.production[0]",),
             "19_bitint.toml": ("@SimpleType.production[0]",),
             "20_decimal.toml": ("@SimpleType.production[0]",),
-            "21_attributes.toml": ("@TypeQualifier.production[0]",),
+            "21_attributes.toml": (
+                "@TypeQualifier.production[0]",
+                "@AttributeSlot.production[0]",
+            ),
         }
         for fname, targets in want.items():
             path = ROOT_DIR / "grammar" / "c" / "plugins" / "c23" / fname

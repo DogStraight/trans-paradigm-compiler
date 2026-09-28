@@ -37,8 +37,60 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     18 skipped / 0 failed**；产物缺失时相关用例**跳过**而非失败）、隔离工具 nodeid 归一
     （`_normalize_id` 已接 `ValueError`、始终保留 `::用例名`、路径压 posix；自测 20/20 绿）。
 
+### Changed
+
+- **四条"待拍板"按作者 2026-09-26 口径结案**（不再挂着当悬项；机制文档同步）：
+  - **保真度渲染：注释折行漂移**（`TODO.md` 里那条带最小复现的长项）——**不修渲染**。
+    否决"锚点感知 LineSuffix"（要新增"哪些符号是列表分隔符"的声明字段，且须逐形态验证
+    "误路由 = 丢注释"）与"挂刚结束的项节点"（大概率只是把漂移换个方向）两案；
+    **归入原始路径（raw）解决**：需要还原原文时从原文取信息，先例 = 宏
+    （`MacroCall._macro_source_text` 直出原文）。注释从不丢失 ⇒ 该偏差登记为
+    **已知且接受**（`docs/gaps/gap-language-pack-scope.md` 渲染现状表 #6 已改写；
+    `tests/fuzz/README.md` 增"已知 oracle 判定"一条：不沉淀、不新增登记）。
+  - **`[plugins] enabled` 的语义边界**（只门控声明面 vs 门控一切）——**不急着选**：
+    先按现状走，等真实需要出现再定；`TODO.md` 该条从"需拍板"改为"慢慢补充"并写清
+    两种语义各自的补齐方式（选 ① 就补 `core/config_lifecycle.md` 一节，选 ② 就按三条判据改造）。
+  - **切片 1b 的"候选是否收敛"要不要升为 parser 一等判据**——**按项目约束走**（能纯语法
+    判定就纯语法，判不了就记边界）；某机制在真实需要里证明非常好用之后再接受它升为一等判据
+    （`ROADMAP.md` 待决项已加口径）。
+  - **阶段 3/4/5 的顺序**（作者授权自定）：**先阶段 3**（结构类型与作用域语义——切片 1b 的
+    前置，也是"AST 之后那半段"的第一个真实入口）；阶段 4 与语法面解耦、独立评估；
+    阶段 5 随语料接入滚动做；三者排在 0.1.4（高性能组件）之后。
+
 ### Added
 
+- **引擎新能力：空槽位（empty slot）——注入可落在"序列中段的原子规则位点"上**；C 包据此收口
+  `[[属性]]` 剩下的两个位点（**声明符内** / **枚举项**）。接受面 **38/40 → 40/42**；
+  档位矩阵 26 → **28**。
+  - **问题（2026-09-26 实测，旧记载的两条死路）**：现役注入只能"并入某一条既有元素"
+    （`@Rule.production[N]`）或"越界追加到末尾"——**插不了序列中段**。故声明符内属性缠成
+    `choice[repeat, @Attr]`（可空 repeat 永远先"成功" ⇒ 属性支试不到、整条声明空 AST），
+    枚举项则"`Enumerator` 序列中间没有可注入的交替点"。
+  - **做法 = 把中段做成原子规则**：核心声明 `AttributeSlot`（`production = []` 的**非块规则**
+    = 无自有形态的共用扩展点位；`inline = true` + 单字段绑定 ⇒ 不进 AST），
+    `DirectDeclarator`（头与后缀链之间）与 `Enumerator`（`=` 之前）各留一个 `@AttributeSlot*`
+    元素；插件把 `AttributeSpec` 注进槽位即可——**一处声明，两个位点**（同"公共宿主"的收益），
+    且不依赖任何跨元素回溯。
+  - **引擎侧两处配套**（与"空槽位"同一概念，成对落地）：`parser/grammar_inject.py::_inject_direct`
+    对空产生式的**非块**规则走"零长 append"（旧实现 `if not prods: return` 静默跳过 ⇒
+    槽位永远无形态）；`core/define.py::_check_pos_ref` 为 `empty_slot` 放行 `$1`
+    （注入后它恰是唯一元素）。**块规则的空产生式（根块）语义不变**（由块机制驱动，注入 no-op）。
+  - **位点按标准落**（避免顺手改宽）：属性紧跟 identifier 之后、后缀链之前（标准例
+    `void f [[deprecated]] (void);`），故 `int a [[deprecated]] [3];` 认、`int a[3] [[deprecated]];`
+    不认；枚举项属性在 `=` 之前（§6.7.2.2）。⚠ **一处过接受如实登记**：`(f) [[deprecated]]`
+    也会被接受（标准只允许紧跟 identifier 之后）——要严格匹配需把 identifier 与属性合成一条
+    head 规则，代价是 AST 多一层包装且属性会随 inline 展平丢失，判为不值。
+  - **判据**：`tests/engine/parser/test_grammar_inject.py` 新增 `TestEmptyProductionSlot`（4 例）+
+    `tests/engine/core/test_rule_schema.py` 新增 `TestEmptyProductionSlotBinding`（3 例）+
+    `tests/languages/c/test_c23_increment_plugin.py` 8 条新形态进 `_CASES`（三组参数化各跑
+    节点/渲染保真+幂等/linter 零诊断）、「两处共用同一空槽位且 inline 展平」断言、
+    边界用例从四条收窄到**三条形态**；`test_c_standard_tiers.py` 矩阵 +2 行（`since=baseline`，
+    即"无关键字依赖 ⇒ 四档都有"）；`tools/c_acceptance.py` 40 → **42 条**（接受 40 / 空洞 2）。
+    门禁有效性（`tools/check_gate_efficacy.py`）新增 **4 条变异**：槽位 target 缺失、
+    引擎填充分支回退、`$1` 放行回退、属性宿主换单点——每条都已证明在缺陷态变红。
+  - **文档**：`grammar/grammar_rule_fields.md` §production 增"空产生式两种含义 + 空槽位用法"
+    （`docs/language_walkthrough.md` 新增「规则注入」一节，含三个落点与选择顺序）；
+    `grammar/c/01_declarations.toml`／`02_types.toml`／`plugins/c23/21_attributes.toml` 头注。
 - **引擎新能力：配置声明级合并语义 `merge = "by-name"`——插件可给核心配置"补字段"**；
   C 包据此落地十进制浮点字面量后缀 `1.5df`/`1.5dd`/`1.5dl`（C 包标准增量面至此**全部收口**）。
   接受面 **37/39 → 38/40**；档位矩阵 25 → **26**。

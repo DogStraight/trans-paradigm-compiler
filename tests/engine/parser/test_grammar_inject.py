@@ -112,6 +112,41 @@ class TestPropagateInject:
         assert rules["Other"].production == ("(@Ext|@T1),(@Ext|@T2)",)
 
 
+class TestEmptyProductionSlot:
+    """**空槽位**：非块规则的空产生式是"无自有形态的扩展点位"，注入即填充它。
+
+    两种空产生式的含义（见 `grammar/grammar_rule_fields.md` §production）：
+    - 块规则（`is_block`）：形态由块机制驱动（`block_prods`），注入无处可落 → no-op；
+    - 非块规则：空槽位 → 注入成为它**唯一的元素**（越界 append 的零长特例）。
+    宿主通常写成 `@Slot*` / `@Slot?`，故"槽位有形态"不等于"宿主变必选"。
+    """
+
+    def test_empty_production_non_block_is_filled(self):
+        rules = {"Slot": _rule("Slot", []), "Host": _rule("Host", ["@A", "@Slot*"])}
+        inject_productions(rules, {"Ext": ["@Slot.production[0]"]})
+        assert rules["Slot"].production == ("@Ext",)
+        # 传播注入照旧：宿主的引用变成 (@Ext|@Slot)——两条路径都指到填充后的 Ext
+        assert rules["Host"].production == ("@A", "(@Ext|@Slot)*")
+
+    def test_empty_production_index_is_irrelevant(self):
+        """零长 production 没有"第 N 个元素"——越界下标同样落在元素 0。"""
+        rules = {"Slot": _rule("Slot", [])}
+        inject_productions(rules, {"Ext": ["@Slot.production[7]"]})
+        assert rules["Slot"].production == ("@Ext",)
+
+    def test_empty_production_block_rule_stays_untouched(self):
+        """块规则的空产生式由块机制驱动，注入不落进去（保持 no-op）。"""
+        rules = {"Root": _rule("Root", [], is_block=True)}
+        inject_productions(rules, {"Ext": ["@Root.production[0]"]})
+        assert list(rules["Root"].production) == []
+
+    def test_non_empty_production_untouched_by_this_branch(self):
+        """对照：非空 production 仍走原语义（本分支只接管零长形态）。"""
+        rules = {"Target": _rule("Target", ["@A"])}
+        inject_productions(rules, {"Ext": ["@Target.production[0]"]})
+        assert rules["Target"].production == ("@A|@Ext",)
+
+
 class TestFailFast:
     """fail-fast（ADR-0003）：配置错误直接报错。"""
 

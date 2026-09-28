@@ -5,7 +5,7 @@
 回字符串，替代字符串正则/子串操作。fail-fast 对齐 ADR-0003：inject 路径
 target 规则缺失或 production 无法解析直接报错，不静默降级；replace 路径
 对缺失规则仅警告跳过（软，兼容旧配置）。
-Doc: docs/language_walkthrough.md（EXT 注入）
+Doc: docs/language_walkthrough.md（规则注入）
 """
 
 import re
@@ -197,6 +197,15 @@ def _inject_direct(rules: dict[str, Any], ext_rule_name: str, tgt: str) -> None:
     target_rule = rules[tgt_name]
     prods = list(target_rule.prods)
     if not prods:
+        # 空产生式两种含义（见 `grammar/grammar_rule_fields.md` §production）：
+        #   · 块规则（is_block）：形态由块机制（block_prods）驱动，无独有 production
+        #     ——注入无处可落，保持 no-op；
+        #   · 非块规则：无自有形态的**空槽位**（共用扩展点位）——注入即成为它的
+        #     唯一元素（越界 append 的零长特例）。引用处通常写成 `@Slot*`/`@Slot?`，
+        #     故"槽位有形态"不等于"宿主变必选"。
+        if getattr(target_rule, "is_block", False):
+            return
+        _write_prods(target_rule, [f"@{ext_rule_name}"])
         return
     if tgt_idx >= len(prods):
         prods.append(f"@{ext_rule_name}")

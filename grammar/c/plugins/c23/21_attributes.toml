@@ -28,48 +28,46 @@
 #   首说明符位、声明符表为空 ⇒ 解析成 `Declaration(specs=AttributeSpec)`、渲染逐字还原。
 #   块作用域同样可用（`Declaration` 本就在核心 `Stmt` 交替里）。
 #
-# **实参收 `@Expression`（宽进口径）**：标准写的是 balanced-token-sequence（任意 token 序列），
-#   引擎没有"配平 token 序列"这一形态；收 `@Expression` 覆盖真实用法里的绝大多数
-# **实参收 `@Expression`（宽进口径 + 实测边界）**：标准写的是 balanced-token-sequence
-#   （任意 token 序列），引擎没有"配平 token 序列"这一形态；收 `@Expression` 覆盖真实用法的
-#   大多数——实测 **✓**：`[[deprecated("use g")]]` / `[[assume(x > 0)]]` /
+# **属性位点（标准三类，全部落地）**：
+#   ① **说明符位**（含 `[[a]] [[b]]` 连续、成员说明符位、参数位、类型名位）——挂 `@TypeQualifier`；
+#   ② **属性声明** `[[…]];`（文件与块作用域）——落进 `Declaration` 首说明符位，无需额外规则；
+#   ③ **声明符内 / 枚举项**（2026-09-26 收口）——挂核心**空槽位** `@AttributeSlot`：
+#      · 声明符内（C23 §6.7.6 `direct-declarator: identifier attribute-specifier-sequence_opt`）：
+#        标准例 `void f [[deprecated]] (void);`——属性紧跟**标识符之后、后缀链之前**；
+#      · 枚举项（C23 §6.7.2.2：`enumeration-constant attribute-specifier-sequence_opt
+#        (= constant-expression)?`）：属性在 `=` **之前**，`A [[deprecated]] = 1`。
+#   ⚠ **为什么不是"往那两个位置注入"**（旧记载的三案 (a)/(b)/(c) 作废）：
+#     `inject` 只能把 `@Ext` 并进**某一条既有元素**（`@Rule.production[N]`）或越界追加到
+#     **末尾**，做不到"往序列中段插一个新元素"。旧实测因此得到两条死路：缠成
+#     `choice[repeat, @Attr]`（可空 repeat 永远先"成功" ⇒ 属性支试不到）与
+#     "`Enumerator` 序列中间没有可注入的交替点"。
+#     **正解 = 把中段做成一条原子规则**：核心声明 `AttributeSlot`（空产生式 = 无自有形态的
+#     槽位，见 `grammar/grammar_rule_fields.md` §production），两个宿主各留一个
+#     `@AttributeSlot*` 元素；插件把 `AttributeSpec` 注进槽位即可——注入动作退化成
+#     "给规则加形态"，不依赖任何跨元素回溯，且**一处声明覆盖两个位点**
+#     （宿主共用同一槽位规则，同 `TypeQualifier` 的公共宿主收益）。
+#   ⚠ **过接受一点（如实登记）**：槽位落在头之后、后缀链之前，故 `(f) [[deprecated]]`
+#     这类**括号声明符之后**的形态也会被接受（标准只允许紧跟 identifier 之后）。要严格
+#     匹配需把 identifier 与属性合成一条 head 规则，代价是 AST 多一层包装、且属性会随
+#     inline 展平丢失——不值得，记为已知偏差。
+#   ⚠ 现状不覆盖厂商另一套拼写 `__attribute__((…))`（GNU 扩展，不在 C23 面内）。
+#
+# **实参收 `@Expression`（宽进口径 + 实测边界）**：标准的 attribute-argument-clause 是
+#   balanced-token-sequence（任意配平 token 序列），引擎没有这一形态；收 `@Expression`
+#   覆盖真实用法的大多数——实测 **✓**：`[[deprecated("use g")]]` / `[[assume(x > 0)]]` /
 #   `[[gnu::aligned(16)]]` / `[[gnu::aligned(16 * 2)]]` / **嵌套括号**
 #   `[[gnu::aligned(sizeof(void *))]]`（`sizeof(type)` 本身就是表达式）。
-#   ⚠ **未覆盖（实测，如实登记，不是"看起来支持"）**：
+#   ⚠ **仍未覆盖（实测，如实登记，不是"看起来支持"）**——三条**形态**边界：
 #     · **空实参** `[[deprecated()]]`——标准的 `balanced-token-sequence_opt` 允许空；
 #     · **相邻字面量拼接** `[[deprecated("a" "b")]]`（字符串拼接不在表达式面内）；
 #     · **属性表尾随逗号** `[[nodiscard,]]`——标准的 `attribute-list_opt , attribute_opt`
 #       允许尾随逗号，本包的可空项列表形态写不出来（写成 `(comma,@Attribute?)` 还会顺带
 #       接受 `[[a,,]]`，得不偿失）。
 #   要支持需引擎侧"配平 token 序列"形态（新形态，与 ROADMAP「注入机制」的 ③/④ 无关）。
-#
-# **属性位点（只做两处；另两处的实测结论 + 三案）**：
-#   已做：① **说明符位**（含 `[[a]] [[b]]` 连续、成员说明符位、参数位、类型名位）；
-#         ② **属性声明** `[[…]];`（文件与块作用域）。
-#   ⚠ **未做，且实测"注入做不到"**（2026-09-26 试过再记，不是没试）：
-#     · **声明符之后**（`int x [[deprecated]];`）：核心 `DirectDeclarator` 的后缀链是
-#       `"(@ArraySuffix|@FuncSuffix)*"`（**重复项内**的交替）。注入
-#       `@DirectDeclarator.production[1]` 实际缠成
-#       `choice[repeat(@ArraySuffix|@FuncSuffix), @DeclaratorAttr]`——**原 repeat 在前**，
-#       而可空 repeat 永远"匹配成功"（0 次）⇒ 属性那支**永远试不到** ⇒ 整条声明空 AST
-#       （同 `_Atomic` 那条教训的同一引擎性质：不在同一元素内换候选就依赖回溯）。
-#     · **枚举项**（`A [[deprecated]] = 1`）：`Enumerator` 的 production 是
-#       `[@Identifier, "(= @Expression)?"]`——**序列中间没有可注入的交替点**。
-#   **三案（各有权衡，留作者拍板）**：
-#     (a) 核心 `Declaration` 的 production 加一个 `@AttributeSpec*` 槽（声明符表与 `;` 之间）
-#         —— 位点正确，但要动核心形态文件（且该槽在基线档引用的规则不存在，需确认空引用安全）；
-#     (b) 核心给后缀交替**起个名**（`"(@ArraySuffix|@FuncSuffix)*"` → `"@DeclaratorSuffix*"`），
-#         插件即可注入 `@DeclaratorSuffix.production[0]`（裸交替 ⇒ 前置 ⇒ 试得到）——代价是
-#         **AST 形状变化**（每个后缀多包一层节点），需复核 `suffixes` 绑定、渲染布局与既有测试；
-#         `Enumerator` 同理需要一个可注入的中段规则；
-#     (c) 记为**已知边界**（现状）：两种位点不解析，判据钉在
-#         `test_attribute_known_boundaries`（补上就会红）。
-#   倾向 **(c) 先记边界**：等真实语料出现这两种写法再选 (a)/(b)——两者都是核心形态改动，
-#   不该顺手做（本包纪律：核心基线不为增量让路，除非增量确实做不了且真需求确认）。
+#   判据 = `tests/languages/c/test_c23_increment_plugin.py::test_attribute_known_boundaries`。
 #
 # **属性名带前缀**（`[[gnu::unused]]`）：按标准 `attribute-prefix :: identifier` 两层收，
 #   绑定 `token = "$1"`（`gnu`）+ `qualified = "$2.…"`（`unused`）；无前缀时 `qualified` 为空。
-#   ⚠ 现状不覆盖厂商另一套拼写 `__attribute__((…))`（GNU 扩展，不在 C23 面内）。
 #
 # ⚠ **本构造不受档位门控（实测，属引擎侧语义边界，不是本插件的问题）**：属性**不依赖任何
 #   新关键字**（`[`/`]`/标识符都在核心词法里），而插件**规则文件**由 `setup_grammar` →
@@ -91,8 +89,10 @@ production = [
 [AttributeSpec.parser.node]
 attributes = "$3"
 
+# 两个 target = 标准里的两类宿主：说明符位（`TypeQualifier` 公共宿主）与
+# 声明符内 / 枚举项的共用空槽位（`AttributeSlot`）。
 [AttributeSpec.inject]
-targets = ["@TypeQualifier.production[0]"]
+targets = ["@TypeQualifier.production[0]", "@AttributeSlot.production[0]"]
 
 [AttributeSpec.renderer.layout]
 line = ["[[", { ref = "attributes" }, "]]"]

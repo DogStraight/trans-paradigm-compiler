@@ -82,6 +82,13 @@ _INCREMENT_MATRIX = [
     ("_Decimal64（c23）", "_Decimal64 d;\n", "DecimalSpec", "c23"),
     # 十进制浮点**字面量后缀**：词法面的档位判别（基线档 `1.5dd` 被切成两个 token）
     ("_Decimal64 = 1.5dd（c23）", "_Decimal64 e = 1.5dd;\n", "DecimalSpec", "c23"),
+    # 属性**位点**（声明符内 / 枚举项）：不依赖任何新关键字 ⇒ 四档都有节点
+    # （"档位 = 接受域"对纯语法增量不成立的实测样本，见
+    #  `TestKeywordFreeIncrementsAreNotTierGated` 与 `TODO.md` 的 `enabled` 语义边界）
+    ("属性在声明符内（无关键字 ⇒ 基线档就有）", "int x [[deprecated]];\n",
+     "AttributeSpec", "baseline"),
+    ("属性在枚举项（同上）", "enum e { A [[deprecated]] = 1 };\n",
+     "AttributeSpec", "baseline"),
 ]
 
 _TIERS = {
@@ -265,8 +272,11 @@ class TestKeywordFreeIncrementsAreNotTierGated:
     """
 
     def test_attributes_parse_even_in_baseline_tier(self):
-        names = _nodes_with(_PACK, "[[nodiscard]] int f(void);\n", enabled=[])
-        assert "AttributeSpec" in names, names
+        for src in ("[[nodiscard]] int f(void);\n",           # 说明符位
+                    "int x [[deprecated]];\n",                 # 声明符内（空槽位）
+                    "enum e { A [[deprecated]] = 1 };\n"):     # 枚举项（同一个空槽位）
+            names = _nodes_with(_PACK, src, enabled=[])
+            assert "AttributeSpec" in names, (src, names)
 
     def test_keyword_increments_are_gated_by_tokens(self):
         """对照：靠关键字落地的增量在基线档**确实**进不来（档位在它们身上是有效的）。

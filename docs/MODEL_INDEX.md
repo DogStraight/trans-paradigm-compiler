@@ -37,7 +37,7 @@
 | 规则选择（候选过滤 / 语句发现） | `language_walkthrough.md`（规则选择/语句发现） | `parser/rule_selector.py` | `tests/engine/parser/`（`test_production_engine.py` 等） |
 | 规则形态分类 / FOLLOW 集派生 | `language_walkthrough.md`（规则形态分类） | `parser/follow.py` | `tests/engine/parser/test_follow.py` |
 | node 绑定捕获（$N 绑定 + 路径提取） | `language_walkthrough.md`（node 绑定捕获） | `parser/attribute_binder.py` | `tests/engine/parser/test_attribute_binder.py` |
-| EXT 注入（grammar inject：树层合并 + 传播 + 序列化） | `language_walkthrough.md`（EXT 注入）<br>`grammar/README.md`（注入归组：多条规则注入同一 target 须先归组容器） | `parser/grammar_inject.py`<br>`parser/rule_selector.py::serialize_production_tree` | `tests/engine/parser/test_grammar_inject.py`<br>`tests/engine/parser/test_production_serialize.py` |
+| EXT 注入（grammar inject：树层合并 + 传播 + 序列化；**空槽位填充**） | `language_walkthrough.md`（规则注入）<br>`grammar/README.md`（注入归组：多条规则注入同一 target 须先归组容器）<br>`grammar/grammar_rule_fields.md` §production（空产生式两种含义 / 空槽位 `$1`） | `parser/grammar_inject.py`（`_inject_direct` 的零长 append 分支）<br>`parser/rule_selector.py::serialize_production_tree`<br>`core/define.py::_check_pos_ref`（`empty_slot`） | `tests/engine/parser/test_grammar_inject.py`<br>`tests/engine/parser/test_production_serialize.py`<br>`tests/engine/core/test_rule_schema.py`（空槽位绑定）<br>`tests/languages/c/test_c23_increment_plugin.py`（C 包 `AttributeSlot` 样板） |
 
 ### lexer — 词法（token 定义驱动扫描）
 
@@ -114,7 +114,7 @@
 | 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all` | `tests/engine/core/test_config_loading.py` |
 | 语言包↔引擎契约（`[engine] uses` 能力清单） | `core/config_lifecycle.md`（包↔引擎契约节） | `core/engine_compat.py`（协商）<br>`core/engine_capabilities.py`（能力表 + 推导）<br>`core/config_registry.py::_load_meta_declarations`<br>`core/define.py::_load_tpc_meta` | `tests/engine/core/test_engine_compat.py`（协商语义）<br>`tests/policy/test_engine_capabilities.py`（覆盖不变式） |
 | 配置生命周期（注册 → 解析 → 消费） | `core/config_lifecycle.md`（§4b 声明级合并语义） | `core/config_registry.py`（`_resolve_decls` / `merge_by_name`） | `tests/engine/core/test_config_loading.py` |
-| 启用组合（档位）覆盖参数 `enabled=` | `core/config_lifecycle.md`（§7 启用组合）<br>`grammar/c/README.md`（标准档位节）<br>`docs/gaps/gap-language-pack-scope.md`（运行时档位入口已落地） | `core/config_registry.py::{_tier_for_load,_tier_for_resolve,_ensure_entries_for}`<br>`core/config_registry.py::_resolve_cached`（key 含档位） | `tests/languages/c/test_c_standard_tiers.py`（26 构造 × 4 档矩阵）<br>`tools/check_gate_efficacy.py`（两条缓存键变异） |
+| 启用组合（档位）覆盖参数 `enabled=` | `core/config_lifecycle.md`（§7 启用组合）<br>`grammar/c/README.md`（标准档位节）<br>`docs/gaps/gap-language-pack-scope.md`（运行时档位入口已落地） | `core/config_registry.py::{_tier_for_load,_tier_for_resolve,_ensure_entries_for}`<br>`core/config_registry.py::_resolve_cached`（key 含档位） | `tests/languages/c/test_c_standard_tiers.py`（28 构造 × 4 档矩阵）<br>`tools/check_gate_efficacy.py`（两条缓存键变异） |
 | 组件协议 + 插件加载 | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py`<br>`core/_protocol.py`（magic string 常量） | `tests/engine/core/test_plugin_cluster.py` |
 | 插件回调能力化（P2.5：`[capabilities]`） | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py::_load_capabilities`<br>`core/plugin_loader.py::get_capability`<br>`grammar/verilog/plugins/{typed_ports,formatter}/tpc.toml`（声明） | `tests/engine/core/test_capabilities.py`（9 用例） |
 | 核心类型（Token/GrammarRule/Node） | `docs/README.md`（对齐约定） | `core/define.py` | `tests/engine/core/test_rule_schema.py` |

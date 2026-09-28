@@ -269,17 +269,6 @@ first = "$1"
 more = "$2"
 
 
-[DirectDeclarator.parser]
-production = [
-    "@Identifier|@ParenDeclarator",
-    "(@ArraySuffix|@FuncSuffix)*",
-]
-
-[DirectDeclarator.parser.node]
-head = "$1"
-suffixes = "$2"
-
-
 [ParenDeclarator.parser]
 production = [
     "bracket.l_parentheses",
@@ -456,14 +445,53 @@ line = [{ opt = { ref = "pointers" } }, { ref = "direct" }]
 [Pointer.renderer.layout]
 line = [{ ref = "first" }, { opt = { ref = "more" } }]
 
-# DirectDeclarator — 头 + 后缀链（`f(int a)` / `a[4]`）：后缀直接拼接，无分隔符。
-# ⚠ 用 `join = ""`（items 列表）而不是 `{ ref = "suffixes" }`：后缀链里可能混进
+# DirectDeclarator — 头 + 属性槽 + 后缀链（`f(int a)` / `a[4]`）：后缀直接拼接，无分隔符。
+# ⚠ **属性槽 `@AttributeSlot*`（C23 §6.7.6 `identifier attribute-specifier-sequence_opt`）**：
+#   声明符内属性只能紧跟**标识符之后**、后缀链之前（标准例 `void f [[deprecated]] (void);`），
+#   故槽位落在头与后缀之间（不是末尾）。槽位规则基线为空产生式（`AttributeSlot`），
+#   由增量插件注入填充——**两个位点（声明符内 / 枚举项）共用同一个槽位规则**，一次注入两处生效。
+# ⚠ 后缀用 `join = ""`（items 列表）而不是 `{ ref = "suffixes" }`：后缀链里可能混进
 #   **独占行注释**（引擎把 `f(\n// c\nint a)` 的注释挂进 suffixes 迭代项，
 #   见 parser/_production.py `_claim_if_line_start`）——`join` 会把 `_comment` 项
 #   拆成独立行段，`ref` 则直接顺序拼接 → 注释会把后续后缀吃掉整行
-#   （实测 `int f// c(int a);`，输出已不是合法 C）。
+#   （实测 `int f// c(int a);`，输出已不是合法 C）。属性槽同理由 `join` 渲染。
+[DirectDeclarator.parser]
+production = [
+    "@Identifier|@ParenDeclarator",
+    "@AttributeSlot*",
+    "(@ArraySuffix|@FuncSuffix)*",
+]
+
+[DirectDeclarator.parser.node]
+head = "$1"
+attrs = "$2"
+suffixes = "$3"
+
+
+# AttributeSlot — **空槽位（共用扩展点位）**：基线无自有形态，靠注入获得形态。
+# 为什么单列一条规则而不是把 `@AttributeSpec*` 直接写进宿主：核心基线不许出现增量
+#   构造名（否则 C23 知识落进 C99 层），且"往序列中段插元素"是现役注入做不到的
+#   （`@Rule.production[N]` 只能并入**某个元素**或越界追加到**末尾**，见
+#   `docs/language_walkthrough.md`）——把中段做成一条**原子规则槽位**，注入就变成
+#   "给规则加形态"，宿主与插件都不必依赖跨元素回溯。
+# 消费方：`DirectDeclarator`（声明符内）与 `Enumerator`（枚举项，见 `02_types.toml`）。
+# `inline = true`：槽位自身不进 AST，父节点拿到的是槽里的节点（如 `AttributeSpec`）。
+[AttributeSlot]
+inline = true
+
+[AttributeSlot.parser]
+production = []
+
+[AttributeSlot.parser.node]
+attrs = "$1"
+
+
 [DirectDeclarator.renderer.layout]
-line = [{ ref = "head" }, { opt = { join = "", items = "suffixes" } }]
+line = [
+    { ref = "head" },
+    { opt = { group = [" ", { join = " ", items = "attrs" }] } },
+    { opt = { join = "", items = "suffixes" } },
+]
 
 [ParenDeclarator.renderer.layout]
 line = ["(", { ref = "inner" }, ")"]

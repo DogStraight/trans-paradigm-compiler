@@ -574,6 +574,9 @@ class GrammarRule:
         块规则的 production 已剥离首尾字面 token（parser 块路径单独消费
         起止符，绑定基于剥离后的内容部分编号，见 __init__），校验使用
         同一剥离逻辑（`_stripped_prods`）。
+        例外：**空槽位**（非块规则 + 空产生式 `production = []`）允许 `$1`——
+        它预留给"注入后填入的唯一元素"（见 `parser/grammar_inject.py` 的空产生式
+        分支；两条语义同属"空槽位"概念，文档见 `grammar/grammar_rule_fields.md`）。
         不拦截：$N.path 子路径的属性存在性——choice 分支形态差异（同一
         slot 不同分支挂载不同属性）是设计语义，运行时由 Node.__getattr__
         给出友好报错 + attribute_binder 诊断。
@@ -591,9 +594,10 @@ class GrammarRule:
             kwargs.get("is_block") is True or parser_data.get("is_block") is True
         )
         max_slot = len(cls._stripped_prods(list(raw_prods), is_block))
+        empty_slot = max_slot == 0 and not is_block
         for attr, spec in node_map.items():
             for item in spec if isinstance(spec, list) else [spec]:
-                cls._check_pos_ref(name, attr, item, max_slot)
+                cls._check_pos_ref(name, attr, item, max_slot, empty_slot=empty_slot)
 
     @staticmethod
     def _stripped_prods(prods: list, is_block: bool) -> list:
@@ -610,15 +614,22 @@ class GrammarRule:
         return prods
 
     @classmethod
-    def _check_pos_ref(cls, name: str, attr: str, item, max_slot: int) -> None:
-        """单个 node 绑定值：`$N` 越界 → GrammarError（非字符串 / 非 `$N` 跳过）。"""
+    def _check_pos_ref(
+        cls, name: str, attr: str, item, max_slot: int, *, empty_slot: bool = False
+    ) -> None:
+        """单个 node 绑定值：`$N` 越界 → GrammarError（非字符串 / 非 `$N` 跳过）。
+
+        `empty_slot = True`（非块规则的空产生式）时上限按 1 算：空槽位的 `$1`
+        指向"注入后填入的唯一元素"，不是越界（详见 `_validate_node_specs`）。
+        """
         if not isinstance(item, str):
             return
         m = cls._RE_POS_REF.match(item)
         if m is None:
             return
         idx = int(m.group(1))
-        if not (1 <= idx <= max_slot):
+        limit = 1 if empty_slot else max_slot
+        if not (1 <= idx <= limit):
             raise GrammarError(
                 f"[grammar] 规则 {name} 的 node 绑定 {attr} = {item!r} 越界："
                 f"production 共 {max_slot} 个 slot"

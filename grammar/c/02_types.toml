@@ -149,17 +149,22 @@ production = [
 items = ["$2", "$3.items[*].sub_node[1]"]
 
 
-# 枚举项：`NAME` 或 `NAME = 数字字面量`（一般常量表达式在阶段 3）
+# 枚举项：`NAME` / `NAME = 数字字面量` / `NAME attr… = 数字字面量`（一般常量表达式在阶段 3）
+# ⚠ **属性槽在 `=` 之前**（C23 §6.7.2.2：`enumeration-constant attribute-specifier-sequence_opt
+#   (= constant-expression)?`）——与声明符内属性**共用**核心的 `AttributeSlot` 空槽位
+#   （见 `01_declarations.toml`），故插件只需一处注入声明。
 [Enumerator.parser]
 production = [
     "@Identifier",
+    "@AttributeSlot*",
     "(symbol.base.equal,literal.number)?",
 ]
 
 [Enumerator.parser.node]
 name = "$1"
+attrs = "$2"
 # value — 显式枚举值本体（绑定落到组内的表达式，理由同 InitDeclarator.init）
-value = "$2.sub_node[0].sub_node[1]"
+value = "$3.sub_node[0].sub_node[1]"
 
 
 # ── 简单类型说明符（内建类型词）与 typedef 名 ──
@@ -266,6 +271,7 @@ line = [
 [Enumerator.renderer.layout]
 line = [
     { ref = "name" },
+    { opt = { group = [" ", { join = " ", items = "attrs" }] } },
     { opt = { group = [
     " = ",
     { ref = "value" },

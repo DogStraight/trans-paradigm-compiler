@@ -318,9 +318,36 @@ _MUTATIONS: list[dict[str, str]] = [
                "把宿主换成单点 `@Declaration.production[0]` ⇒ 结构成员/参数/`sizeof` 三处失效"
                "——本变异证明那三条属性用例真的握着宿主选择",
         "file": "grammar/c/plugins/c23/21_attributes.toml",
-        "old": 'targets = ["@TypeQualifier.production[0]"]\n',
+        "old": 'targets = ["@TypeQualifier.production[0]", "@AttributeSlot.production[0]"]\n',
         "new": 'targets = ["@Declaration.production[0]"]\n',
         "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "声明符内 / 枚举项的属性位点靠**共用的空槽位** `@AttributeSlot`（一次注入两处生效，"
+               "2026-09-26 起）——旧记载写「注入做不到这两个位点」。去掉这条 target ⇒ 槽位"
+               "永远无形态 ⇒ 两个位点的属性整条声明解析不出来（空 AST）",
+        "file": "grammar/c/plugins/c23/21_attributes.toml",
+        "old": 'targets = ["@TypeQualifier.production[0]", "@AttributeSlot.production[0]"]\n',
+        "new": 'targets = ["@TypeQualifier.production[0]"]\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "空槽位能被填充靠 `_inject_direct` 的**零长 append 分支**（旧实现 `if not prods:"
+               " return` ⇒ 静默跳过）。把填充改回静默返回 ⇒ 空槽位永远无形态、属性两个"
+               "位点解析不出来——本变异证明那条引擎分支不是装饰",
+        "file": "parser/grammar_inject.py",
+        "old": '        _write_prods(target_rule, [f"@{ext_rule_name}"])\n        return\n',
+        "new": "        return\n",
+        "test": "tests/engine/parser/test_grammar_inject.py",
+    },
+    {
+        "why": "空槽位的 `$1` 绑定靠校验的 `empty_slot` 例外放行（上限按 1 算）。把上限改回"
+               "`max_slot` ⇒ 加载 C 包时 `AttributeSlot` 的 `attrs = \"$1\"` 被判越界"
+               "（配置 fail-fast 把空槽位当错）",
+        "file": "core/define.py",
+        "old": "        limit = 1 if empty_slot else max_slot\n",
+        "new": "        limit = max_slot\n",
+        "test": "tests/engine/core/test_rule_schema.py",
     },
     {
         "why": "`merge = \"by-name\"` 的核心是**同名条目深合并**（不是整体替换）——把"

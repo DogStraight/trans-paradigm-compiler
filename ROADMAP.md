@@ -114,8 +114,10 @@
         理由与代价见 `grammar/c/plugins/c23/16_alignas_alias.toml` 头注）；
       · c23 类型词**已落地**（`_BitInt(N)`——宽度收 `@Expression`，语义约束归语义层；
         `_Decimal32`/`_Decimal64`/`_Decimal128`——单规则三拼写交替；两者都挂 `SimpleType`）；
-      · c23 属性说明符**已落地**（`[[…]]` §6.7.12：说明符位 + `[[fallthrough]];` 这类"属性声明"
-        两处，挂 `TypeQualifier`；未覆盖形态/位点四条边界见 `TODO.md` 与
+      · c23 属性说明符**已落地**（`[[…]]` §6.7.12：说明符位、`[[fallthrough]];` 这类"属性声明"、
+        **声明符内**（`void f [[deprecated]] (void);`）与**枚举项**（`A [[deprecated]] = 1`）
+        四类位点；后两类走核心**空槽位** `AttributeSlot`——注入做不到"插序列中段"，
+        把中段做成原子规则后一处声明两处生效。未覆盖形态三条边界见 `TODO.md` 与
         `grammar/c/plugins/c23/21_attributes.toml` 头注）——**c23 语法增量至此收口**；
       · c23 十进制浮点**字面量后缀**（`1.5dd`）**已落地**——它**不是语法增量**，走的是本轮
         新补的**声明级合并语义** `merge = "by-name"`（同名声明按 `name` 合并命名条目列表：
@@ -128,9 +130,9 @@
 - [ ] 预处理器扩展（引擎侧，独立评估）：`#if` 表达式求值、参数化宏、
       `#`/`##` 粘贴、变参宏 + 条件编译反向映射精度
 - [ ] 标准等效验证：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准语法规范）——
-      **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **40 条 / 接受 38 / 空洞 2**），
+      **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **42 条 / 接受 40 / 空洞 2**），
       **档位入口也已就位**（`load_language/load_all/resolve(..., enabled=[…])`，同一进程内
-      切档实测成立，判据 = `tests/languages/c/test_c_standard_tiers.py` 的 26 构造 × 4 档矩阵），
+      切档实测成立，判据 = `tests/languages/c/test_c_standard_tiers.py` 的 28 构造 × 4 档矩阵），
       缺的是**按标准分档的断言面**（每条构造属哪个标准、接受/拒绝各断言一条）
 - [ ] **注入机制：四类注入面，按需实现**（作者 2026-09-26 给出的分类——它是"注入面"的
       分型，不是实现清单；**缺哪类等真需求**）：
@@ -138,10 +140,16 @@
         `[grammar] files` + 引擎的语句发现（`is_statement` / FIRST 集）；
       · **② 依赖点位注入**（`targets = ["@Rule.production[N]"]`，树层
         `insert_choice_candidate` 往该交替**加一支** + 传播注入替换 `@Target` 引用）——**有**
-        且 fail-fast（c11/c23 两插件 12 项增量全靠它）。代价 = **点位要列全**：
+        且 fail-fast（c11/c23 两插件 13 项增量全靠它）。代价 = **点位要列全**：
         `_Alignas` 的说明符位在本包有 6 处（`Declaration`/`SpecRest`/`FuncDef`/
         `MemberSpec`/`ParamSpec`/`TypeName`），故 2026-09-26 改挂被这 6 处共同引用的
         `TypeQualifier`（一次注入六处生效）——**找得到公共宿主就不必列点位**；
+        ⚠ **② 有一处表达力边界（2026-09-26 实测并补足）**：它只能"并入某一条既有元素"
+        或"越界追加到末尾"，**插不了序列中段**。补足的形态是**空槽位**——核心声明
+        `production = []` 的非块规则（无自有形态的共用扩展点），宿主写 `@Slot*`，插件注进
+        `@Slot.production[0]` 即填充（C 包 `AttributeSlot`：声明符内与枚举项共用，一处声明
+        两处生效）。语义见 `grammar/grammar_rule_fields.md` §production；**这不是 ③/④**，
+        而是"中段位点"在 ② 内的落地方式；
       · **③ 具体路径修改**（改既有分支的内部形态）——**只有软路径**：
         `inject_replace_rule` 是 production 的**字符串子串补丁**且软失败（目标规则缺失仅告警）；
       · **④ 移除语法路径**——**无**。
@@ -216,9 +224,12 @@ typedef 名）因而进 AST 为 `ExprStmt` + `BinaryOp`（乘法），与真实�
 ### 待决
 
 - [ ] 切片 1b 的 parser↔符号表接口选哪一种（回溯 / 查询钩子 / 两遍 / **raw 路径**）
+      ——⚠ **2026-09-26 作者口径**：先按项目约束走（能纯语法判定就纯语法，判不了就记边界），
+      **不预先为 raw 路径造一等判据**；若某机制在真实需要里证明非常好用，再接受它升为一等判据。
 - [ ] **"候选是否收敛"要不要成为 parser 的一等判据**（raw 路径的前置；作者
       2026-09-26 指示可前移到 linter——linter 已有 `classify` 的候选分类与 Level 2
-      试解析，`parse_sentence` 却只是按序取首个成功者）。当前**未立项**。
+      试解析，`parse_sentence` 却只是按序取首个成功者）。当前**未立项**；
+      同上口径：**机制先证明好用，再谈升格**（不为了 raw 路径提前改造 parser 判据面）。
 - [ ] typedef 收集落点：`analyzer` 原语 vs C 包插件（按精化协议的"语言特有 → 插件"判据）
 - [ ] `sizeof (单标识符)`（`sizeof(myint)`）当前是**宽进判类型名**——也归本切片用符号表
       细化（与转换判定同一前置：都要知道标识符是不是 typedef 名）

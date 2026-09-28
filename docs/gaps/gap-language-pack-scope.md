@@ -107,9 +107,9 @@ grammar/c/
 **判据（每族都要有）**：正样本解析通过（进 AST）+ 负样本被拒（linter/parser 报错），
 两向都要断言——只有正样本会漏掉"语法过宽"。
 
-**盘点工具**：`python tools/c_acceptance.py`（40 条构造逐条试解析，报"进 AST / 空 AST /
+**盘点工具**：`python tools/c_acceptance.py`（42 条构造逐条试解析，报"进 AST / 空 AST /
 词法抛错"）——**空洞是无声的**：不属任何语句入口 FIRST 集的构造会被整体跳过而不报错，
-只跑测试套件看不出还差哪一族。当前 **接受 38 / 空洞 2**：
+只跑测试套件看不出还差哪一族。当前 **接受 40 / 空洞 2**：
 
 - `#include` / `#define`（预处理属阶段 4）。
 
@@ -148,7 +148,7 @@ grammar/c/
 | 复合字面量 | `(T){…}`（C99 新增） | 3 | 与"cast + 初始化器"消歧 |
 | 变长数组 | VLA（C99 新增） | 延后 | 与语义/求值强耦合，先记缺口 |
 | 函数 | 原型（含 `void` 参数列表）、**变参 `...`** 与定义 | 2 | 变参 2026-09-26 落地（`(comma,(@ParamDecl\|symbol.extend.ellipsis))*`）；C99 要求 `...` 前至少一个具名参数，`int f(...);` 仍拒 |
-| 增量（c11/c23 插件） | c11 **6 个新关键字全部落地**（`_Static_assert` 两作用域 / `_Alignof` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Alignas` 两形态 / `_Atomic` 两形态）+ **c23 语法增量全部落地**（`static_assert` 两作用域 / `nullptr` / `true`·`false` / `bool` / `typeof` / `constexpr` / `alignas` / `alignof` / `thread_local` / `_BitInt(N)` / `_Decimal32`·`64`·`128` / `[[属性]]`）+ 十进制浮点**字面量后缀**（`1.5dd`——走**声明级合并** `merge = "by-name"` 给核心数字形态补后缀，见 `core/config_lifecycle.md` §4b）；属性剩余的四条形态/位点边界见 `TODO.md` | 插件（核心基线不动） | 工具含 10 条增量用例；档位对照 = `tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**（同进程 `enabled=` 切档），注入形态见 `grammar/c/README.md`「标准增量插件」 |
+| 增量（c11/c23 插件） | c11 **6 个新关键字全部落地**（`_Static_assert` 两作用域 / `_Alignof` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Alignas` 两形态 / `_Atomic` 两形态）+ **c23 语法增量全部落地**（`static_assert` 两作用域 / `nullptr` / `true`·`false` / `bool` / `typeof` / `constexpr` / `alignas` / `alignof` / `thread_local` / `_BitInt(N)` / `_Decimal32`·`64`·`128` / `[[属性]]`（**位点四类**：说明符位 / 属性声明 / 声明符内 / 枚举项——后两类走核心空槽位 `AttributeSlot`））+ 十进制浮点**字面量后缀**（`1.5dd`——走**声明级合并** `merge = "by-name"` 给核心数字形态补后缀，见 `core/config_lifecycle.md` §4b）；属性剩余的三条**形态**边界见 `TODO.md` | 插件（核心基线仅加一个空槽位声明） | 工具含 12 条增量用例；档位对照 = `tests/languages/c/test_c_standard_tiers.py` 的 **28 构造 × 4 档矩阵**（同进程 `enabled=` 切档），注入形态见 `grammar/c/README.md`「标准增量插件」 |
 | 预处理 | `#include` / `#define`（对象宏、函数宏、变参宏、`#`/`##`）/ `#if` 表达式 / `#ifdef`/`#ifndef`/`#elif` / `#line`/`#error`/`#pragma` / 预定义宏 | **阶段 4（单独立项）** | 引擎前置见 ROADMAP「注入机制：四类注入面」；条件编译反向映射精度是最大风险 |
 | 明确不做（取舍） | 独立编译/链接、优化、完整类型推导与求值（语义层是渐进项）、实现定义行为（位宽/对齐）、K&R 老式函数定义 | — | 各自在缺口档或 ROADMAP 有归属；不做的原因：超出一致性检查工具链的定位 |
 
@@ -308,7 +308,7 @@ pack、同一次进程内 `enabled=["c11"]` → `enabled=[]` 会真的换档（�
 `enabled` 只决定**声明面**（`tpc.toml` 声明合并，含词法扩展）；插件的**规则文件与 Python
 组件**由 `setup_grammar` → `load_all_components(<pack>/plugins)` 加载，**不看** `enabled`。
 
-判据：`tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**
+判据：`tests/languages/c/test_c_standard_tiers.py` 的 **28 构造 × 4 档矩阵**
 （`enabled=[]` / `["c11"]` / `["c11","c17"]` / `["c11","c17","c23"]`，按**解析成哪个节点**
 判定），外加同进程连续切档、`Lexer` 跟随档位、非法 `enabled` 参数与清单里不可解析的插件名
 **fail-fast**（拼错档位名不许静默少加载）。
@@ -392,10 +392,11 @@ test_fidelity.py`），本包不再复制门禁。
 | 3 | 注释落在**括号内首元素前**时，位置被提到括号外（`int f(\n// c\nint a)` → 注释落在 `f` 与 `(int a)` 之间） | 解析端 `_lift_gap_comments` 的项间窗口上界用"迭代**末行**"，故迭代 token 跨度**内部**的注释也被当"该项之前"上浮。**收紧窗口已验证不可行**：上界改用迭代**首行**后 6 处门禁变红（端口表/具名端口/声明符表/case 项/真实语料无丢注释）——窗口的末行容差是给"注释在本次迭代匹配中被吞、语义上属该项之前"的形态留的。要修需把归属判据从行号窗口改为**迭代 token 跨度**（跨度内 → 归跨度内部消费方） |
 | 4 | 注释项前多一个行尾空格（`int ` + 换行） | 列表折叠后注释项独占行，父布局的分隔空格留在行尾；纯空白差异（输出合法、幂等） |
 | 5 | `#include` 在**词法层直接 ValueError**（`Unexpected token: #`） | `#` 未进符号表；预处理属阶段 4（先于本次改动存在） |
-| 6 | 分隔符后的**行尾**注释在跨折行时落位漂移（首渲染 `first, /* c */` + 换行 + `second;`，次渲染 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；同一注释在分隔符**之前**时挂的是**项**节点 trailing（渲染在该行尾）。挂点取决于"分隔符与下一项是否同行" ⇒ 折行即漂移。候选方向与风险见 `TODO.md`「保真度渲染：分隔符后行尾注释随折行漂移」（**含 fuzz 链路自动收缩出的最小复现与折行阈值 60**）；样本 `edge_comments.c` 用不折行的短注释绕开该形态 |
+| 6 | 分隔符后的**行尾**注释在跨折行时落位漂移（首渲染 `first, /* c */` + 换行 + `second;`，次渲染 `first,` + 换行 + `second /* c */;`，第三遍起收敛 ⇒ **判据 4 不幂等**） | `_attach_line_end` 把行尾注释挂 `context.current_node`——分隔符后的注释在 repeat 组匹配中被吞，此刻是**列表容器**，容器 `trailing` 槽渲染在容器**末尾**（越过后续项）；同一注释在分隔符**之前**时挂的是**项**节点 trailing（渲染在该行尾）。挂点取决于"分隔符与下一项是否同行" ⇒ 折行即漂移。**2026-09-26 作者定案：不修渲染**（否决"锚点感知 LineSuffix"与"挂刚结束的项节点"两条候选——前者要新增"哪些符号是列表分隔符"的声明字段、还要逐形态验证"误路由 = 丢注释"），**归入原始路径（raw）解决**：需要还原原文时从原文取信息，先例 = 宏（`MacroCall._macro_source_text` 直出原文，`core/define.py` §Node 元数据）；节点另有 `_tok_span` 源区间可用。**注释从不丢失**（无 token 损坏），症状只是"位置漂移 + 一遍不幂等"。最小复现（`int first /* ` + `x`×60 + ` */, second;`，收缩到 **81 字节 / 1 行**）记在 `tests/fuzz/README.md`（`findings/` 是 gitignore 草稿区，不入库）；按"缺陷未修不许沉淀"的闸**不进 edge_corpus**，样本 `edge_comments.c` 用不折行的短注释绕开该形态 |
 | 7 | 类型名里的指针星号**与类型词之间不留空格**：`sizeof(char *)` → `sizeof(char*)`、`(char *)q` → `(char*)q`、`typeof(char *)` → `typeof(char*)`（2026-09-26 实测；`TypeName`/`CastTypeName` 的布局把 `pointers` 直接串在 `rest` 之后） | **纯排版差异**（C 空白无关 ⇒ token 序列不变、语义不变，判据 7 照过）；`grammar/c/00_expressions.toml` 里 `CastTypeName` 的旧注释写的"星号与类型之间留空格"与实测不符，已更正。要改成 `char *` 需同时动两处布局并**重录**三份样本的保真比值，故记为已知偏差而非顺手改 |
 
 **未做（下一步）**：
-1. 上面 3/6 两处**解析侧**改动（注释归属的 token 跨度判据、行尾注释挂点名）。
+1. 上面 **#3** 那处**解析侧**改动（注释归属的 token 跨度判据）。#6 已定案**不改渲染**
+   （raw 路径作还原参考，见该行），故不在本清单。
 2. 外部 oracle（`clang-format`）对拍——**token 序列对拍已由判据 7 覆盖**（内容级、
    语言无关），"与外部格式化器的排版对拍"仍未做。

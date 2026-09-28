@@ -145,6 +145,33 @@ class TestRuleSchema:
             )
 
 
+class TestEmptyProductionSlotBinding:
+    """**空槽位**的 `$1` 例外：非块规则 + 空产生式允许 `$1`（注入后成为唯一元素）。
+
+    语义与 `parser/grammar_inject.py` 的空产生式分支成对（同属"空槽位"概念，
+    文档见 `grammar/grammar_rule_fields.md`）：注入落地后 production 恰好 1 个元素，
+    故 `$1` 是**前瞻声明**而非越界。块规则的 `$1` 仍拦（其空 production 由块机制驱动）。
+    """
+
+    def test_non_block_empty_production_allows_dollar_one(self):
+        rule = GrammarRule(
+            "Slot", inline=True, parser={"production": [], "node": {"attrs": "$1"}}
+        )
+        assert rule.node["attrs"] == "$1"
+
+    def test_non_block_empty_production_rejects_beyond_one(self):
+        with pytest.raises(GrammarError, match="越界"):
+            GrammarRule("Slot", parser={"production": [], "node": {"attrs": "$2"}})
+
+    def test_block_empty_production_still_rejects(self):
+        with pytest.raises(GrammarError, match="越界"):
+            GrammarRule(
+                "Root",
+                is_block=True,
+                parser={"production": [], "node": {"body": "$1"}},
+            )
+
+
 class TestLoadAllTomlSkipsTpc:
     """load_all_toml 跳过 tpc.toml（配置段不污染规则集）。"""
 

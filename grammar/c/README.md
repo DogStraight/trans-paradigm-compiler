@@ -9,11 +9,11 @@
 
 ## 现状（0.1.3 交付面）
 
-**接受面：`python tools/c_acceptance.py` → 接受 38 / 空洞 2（共 40 条）**：
+**接受面：`python tools/c_acceptance.py` → 接受 40 / 空洞 2（共 42 条）**：
 `#include` / `#define`（预处理属阶段 4，单独立项）。
 （空洞数 2026-09-26 从 3 降到 2：变参 `...` 落地；接受数同日 32 → 34：`_Alignas` /
-`_Atomic` 两条增量用例，再 34 → 35：c23 小写拼写，再 35 → 36：c23 类型词——见下
-「标准增量插件」。）
+`_Atomic` 两条增量用例，再 34 → 35：c23 小写拼写，再 35 → 36：c23 类型词，
+再 36 → 38：c23 属性说明符的两条位点用例——见下「标准增量插件」。）
 
 已落地：
 
@@ -42,9 +42,11 @@
     以及**类型词** `_BitInt(N)`（宽度收 `@Expression`，"是不是整型常量表达式/宽度范围"
     归语义层）与 `_Decimal32`/`_Decimal64`/`_Decimal128`（含**十进制浮点字面量后缀**
     `1.5df`/`1.5dd`/`1.5dl`），以及**属性说明符 `[[…]]`**
-    （§6.7.12：说明符位 + `[[fallthrough]];` 这类"属性声明"两处；带前缀名
-    `[[gnu::unused]]` 也认——未覆盖形态与属性位点边界见 `plugins/c23/21_attributes.toml`
-    头注）。
+    （§6.7.12：**位点三类全部落地**——说明符位、`[[fallthrough]];` 这类"属性声明"，
+    以及 **①声明符内**（`void f [[deprecated]] (void);`，§6.7.6 的 identifier 之后、
+    后缀链之前）与 **②枚举项**（`A [[deprecated]] = 1`，§6.7.2.2 的 `=` 之前）；
+    带前缀名 `[[gnu::unused]]` 也认——**剩余三条形态边界**见
+    `plugins/c23/21_attributes.toml` 头注）。
   ⚠ **"加规则"之外还有一类：合并既有配置**（2026-09-26 为十进制字面量后缀补的引擎能力）。
   它**不是**语法增量：`df`/`dd`/`dl` 作用在**核心基线的数字形态**上
   （`base/_number.toml` 的 `[[number.based]] name = "c_dec"`）。改核心文件会让**基线档**
@@ -60,6 +62,12 @@
   **既有交替里加一支**，核心文件一行不动。此前插件注释把这类增量记为"做不了、
   需引擎补『改』路径"——**那是错的**（机制早就有了，缺的是声明），见
   `plugins/c23/tpc.toml` 的历史更正段。
+  ⚠ **"往序列中段插元素"只有一条路：空槽位**（2026-09-26 为属性位点补的引擎能力）。
+  注入只能并入**某一条既有元素**或越界追加到**末尾**，插不了中段——把中段做成一条
+  **原子规则槽位**（核心侧 `production = []`，宿主写 `@Slot*`），注入就退化成"给规则
+  加形态"。样板 = `01_declarations.toml` 的 `AttributeSlot`（**声明符内与枚举项共用
+  同一个槽位**，一处声明两处生效）；语义见 `grammar/grammar_rule_fields.md` §production
+  与 `docs/language_walkthrough.md`「规则注入」。
   ⚠ **同构造异拼写（如 `_Alignas` vs `alignas`）的包内约定（2026-09-26 定）**：
   **c23 侧各写一条同形规则**（先例 = `static_assert`），不做跨插件 token 引用、也不用
   `inject_replace_rule` 去改别的插件的规则。理由：词法层 **token 类型由拼写决定**
@@ -84,7 +92,7 @@
 | 预处理（`#include` / `#define` / `#if` / `#` / `##` / 变参宏） | 阶段 4，单独立项（引擎前置见 ROADMAP「注入机制：四类注入面，按需实现」——③ 具体路径修改与 ④ 移除语法路径仍缺结构化面） |
 | typedef 名起头的强制转换（`(myint)x`） | 语义层切片 1b（需符号表 / 作用域 / 声明顺序），草案见 ROADMAP |
 | 逐声明符位宽（`int a : 3, b : 4;`） | 已知边界：包内宽度绑在整个成员声明后；标准里位宽属声明符（形态改动） |
-| `[[属性]]`（c23）的**未覆盖形态与位点** | **形态**（三条，标准允许）：空实参 `[[deprecated()]]`、相邻字面量拼接、属性表尾随逗号——需引擎侧"配平 token 序列/可空项列表"形态。**位点**（两条）：声明符之后 `int x [[deprecated]];`（实测：注入 `@DirectDeclarator.production[1]` 缠成 `choice[repeat, @Attr]`，可空 repeat 永远先"成功" ⇒ 属性支试不到）、枚举项 `A [[deprecated]] = 1`（`Enumerator` 序列中间无可注入交替点）。**位点两案 + 记边界案**（核心形态改动，**留作者拍板**）见 `plugins/c23/21_attributes.toml` 头注；判据 `test_c23_increment_plugin.py::TestC23InjectionPoints::test_attribute_known_boundaries` |
+| `[[属性]]`（c23）的**未覆盖形态** | **形态三条**（标准允许，需引擎侧"配平 token 序列/可空项列表"形态）：空实参 `[[deprecated()]]`、相邻字面量拼接 `[[deprecated("a" "b")]]`、属性表尾随逗号 `[[nodiscard,]]`。**位点已全部落地**（2026-09-26：说明符位 / 属性声明 / 声明符内 / 枚举项——后两处走**共用空槽位** `@AttributeSlot`）；另有**一处过接受**（`(f) [[deprecated]]` 也认，标准只允许紧跟 identifier 之后）如实登记在 `plugins/c23/21_attributes.toml` 头注。判据 `test_c23_increment_plugin.py::TestC23InjectionPoints::test_attribute_known_boundaries` |
 | 十进制浮点**字面量后缀**（`1.5df`/`1.5dd`/`1.5dl`） | ✅ **已落地**（2026-09-26）：走声明级合并 `merge = "by-name"`（`plugins/c23/_number_c23.toml` 只补 `c_dec` 的 `suffix`），**不是**改核心 `base/_number.toml`（那会让基线档也接受 `1.5dd`） |
 | VLA | 与语义/求值强耦合，先记缺口（见缺口档接受域清单逐条标注） |
 | 完整类型系统 / 求值 / 实现定义行为 / K&R 老式定义 | **明确不做**（超出一致性检查工具链的定位） |
@@ -114,6 +122,7 @@ grammar/c/
 │   └── _style.toml          # 渲染风格：缩进 4、页宽 80（C 惯例）
 ├── 00_expressions.toml      # 原子 / 表达式入口 / 运算符分层 / 后缀链 / 转换 / 复合字面量 / sizeof / 逗号
 ├── 01_declarations.toml     # 翻译单元、声明、说明符序列、声明符递归、FuncSpec、Identifier
+│                            #   （含**空槽位** AttributeSlot——声明符内 / 枚举项共用）
 ├── 02_types.toml            # struct/union/enum、成员声明与位域、typedef 名作类型
 ├── 03_statements.toml       # 语句族与控制流（整表达式位点引 @FullExpr）
 ├── 04_comments.toml         # Comment 规则（渲染保真需要它是真节点）
@@ -137,7 +146,7 @@ grammar/c/
   `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
   `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
-  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**（按"解析成
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **28 构造 × 4 档矩阵**（按"解析成
   哪个节点"判定，能直接抓出缓存串档）。两条静默失效根因已修（声明缓存键、解析缓存键都
   须含档位）——细节见 `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
 - ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
@@ -152,10 +161,12 @@ grammar/c/
   （c11：`_Static_assert`→`Stmt`、`_Alignof`/`_Generic`→两处原子清单、
   `_Noreturn`→`FuncSpec`、`_Thread_local`→`StorageClass`、`_Alignas`/`_Atomic`
   →`TypeQualifier`；c23：`nullptr`/`true`/`false`→原子清单、`bool`/`typeof`→`SimpleType`、
-  `constexpr`→`StorageClass`）。
+  `constexpr`→`StorageClass`、`AttributeSpec`→`TypeQualifier` + **空槽位
+  `AttributeSlot`**）。
   注入点的选择原则：**挑最窄的那条规则**——`SimpleType` 被声明/成员/参数/类型名四处引用，
   一次注入四处生效；`TypeQualifier` 被 **6 处说明符位**引用（`Declaration`/`SpecRest`/
-  `FuncDef`/`MemberSpec`/`ParamSpec`/`TypeName`），`_Alignas`/`_Atomic` 都挂它。
+  `FuncDef`/`MemberSpec`/`ParamSpec`/`TypeName`），`_Alignas`/`_Atomic` 都挂它；
+  **中段位点则挑"空槽位"**（`AttributeSlot` 被声明符内与枚举项共用，同样一处声明两处生效）。
   反例（说明"最窄点"确实存在）：`_Alignas` 本该按标准的 declaration-specifiers 走，
   但本包**没有**统一的说明符序列规则，6 处各自列举——挂 `TypeQualifier` 是唯一
   一次到位的点（组合合法性归语义层，同核心基线口径）。
@@ -167,7 +178,7 @@ grammar/c/
   `|` **先结合**（`"a|b, X"` = `choice[a,(b,X)]`，不是 `(a|b),X`）；③ **别依赖跨元素回溯**：
   选择器只在**同一元素内**换候选，`_Atomic` 的两种形态若拆成两条规则，单 token 那条命中后
   后续元素失败**不会回头**（实测整条声明空 AST）——写成一个规则里的可选组即可。
-- **仍未落地的标准增量**：只剩 `[[属性]]` 的四个**形态/位点边界**（见「未做」表）。
+- **仍未落地的标准增量**：只剩 `[[属性]]` 的**三条形态边界**（见「未做」表）。
   ⚠ 另有一条**档位边界**（不是缺语法）：`[[属性]]` 不依赖新关键字 ⇒ **基线档也解析**
   （详见「标准档位」节末与 `TODO.md`）。
 

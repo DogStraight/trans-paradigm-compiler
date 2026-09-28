@@ -197,6 +197,28 @@ production = [
 > production 结构自动算出，语言包**无需手写后继 token 集合**。消歧用 `exclude`
 > （负向前瞻）单独声明。见 §7。
 
+### 规则注入（`inject`）——给既有规则加形态
+
+插件声明 `[ExtRule.inject] targets = [...]`，引擎做**树层结构化注入**（不是字符串补丁）：
+把 `@ExtRule` 作为一条候选并进目标元素（`analyze_production_features` →
+`insert_choice_candidate` → `serialize_production_tree`），再**传播**地把全树引用
+`@Target` 换成 `(@Ext|@Target)`。目标规则不存在 → fail-fast（`GrammarError`）。
+
+三个可用的落点（选择顺序即优先级）：
+
+1. **公共宿主**：目标是被多处共同引用的规则（如 C 的 `@TypeQualifier`）——一次注入多处生效；
+2. **既有元素**：`@Rule.production[N]`，`@Ext` 并进该元素（裸交替 → 前置；非交替 → 后缀，
+   见 `grammar/grammar_rule_fields.md` §production 的候选插入语义）；
+3. **空槽位**：`@Slot.production[0]`，槽位在核心侧是 `production = []`（非块规则）——
+   注入即成为它唯一的元素。**"往宿主序列中段插元素"只能走这一条**：注入不能插中段，
+   把中段做成一条原子规则（宿主写 `@Slot*`）后，动作退化成"给规则加形态"。
+   样板：`grammar/c/01_declarations.toml` §`AttributeSlot`（声明符内与枚举项的属性位点
+   共用它）＋ `grammar/c/plugins/c23/21_attributes.toml`。
+
+注入面的分型（① 无点位依存 / ② 依赖点位 / ③ 具体路径修改 / ④ 移除语法路径）与
+"③/④ 尚未结构化"的现状见 `ROADMAP.md`「注入机制：四类注入面」。多条规则注入同一 target
+时的归组要求见 `grammar/README.md`。
+
 ---
 
 ## 4. 语义 + 产出（analyze / transform / render）
