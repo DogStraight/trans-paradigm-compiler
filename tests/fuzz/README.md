@@ -96,7 +96,7 @@ python tests/edge/run_edge.py --corpus tests/edge/edge_corpus_c --pack grammar/c
   TOKEN-CORRUPT 检查跳过 mutation 样本（保留不崩溃/幂等检查）。
 - 判定方向：**token 丢失（in > out）是硬违规**（静默删代码）；token 增加
   （out > in）需人工确认（多为规范化）。
-- **C 包注释折行漂移（`non-idempotent`，2026-09-26 定案不修）**：分隔符后行尾注释跨折行
+- **C 包注释折行漂移（`non-idempotent`，2026-09-28 定案不修）**：分隔符后行尾注释跨折行
   时落位漂移（`int first /* x×60 */, second;` → 首遍与次遍输出不同，第三遍起收敛）。
   作者决策 = **不修渲染，归原始路径（raw）解决**（理由与先例见
   `docs/gaps/gap-language-pack-scope.md` 渲染现状表 #6）。故它**永久留在"活缺陷"一侧**：

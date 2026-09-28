@@ -7,6 +7,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`tpc check` 共享渲染器漏接线 ⇒ 精化产物文本静默丢 token**（`analyzer/shared_components.py`）。
+  同一函数第 73 行已构造 `Lexer`，但 `Renderer(...)` 没把行终止型注释词表传下去（与
+  `pipeline/__init__.py` 的既定接线不一致）⇒ 渲染**子树**时行注释把同行后续元素吃进注释文本：
+  实测 `#(parameter W = 4 // note` + 换行 + `+ 2)` 的 `param_default["lib"]["W"]`
+  = **`'4 // note + 2'`**（正确为 `'4 + 2 // note'`）、`b #(.W(4 // c` + 换行 + `* 4))` 的
+  `param_override` 覆盖值 = `'4 // c * 4'`（正确为 `'4 * 4 // c'`）。
+  - **修法**：把内联 `Lexer(...)` 提为局部名，渲染器接上 `line_comment_starts=…`（**唯一**
+    生产侧裸接线点；复扫全仓 9 个 `Renderer(` 构造点后 8 WIRED / 1 bare——剩下的
+    `test_verbatim_node.py` 与注释接线无关，刻意不动）。
+  - **判据**：`tests/engine/analyzer/test_shared_components_wiring.py`（3 例，走真实
+    `ProjectChecker.check()`；用"产物文本重新词法化后显著 token 不丢"而非钉死文本，对注释落位
+    变化稳健）。**缺陷态实测 3 红**（`'4 // note + 2'` / `'4 // c * 4'`），修复后 3 绿。
+  - **回归**：`tests/engine/analyzer` 326 → **329 passed**；golden 值（`"W / 2"` / `"W * 2"` 等）
+    原样；`tests/engine/pipeline` 130；lint recall 33/33 FP 0；diag 基线 5548 无增长；edge
+    failures 0；`-m smoke` 462。
+  - **如实残留（未证）**：这处丢 token **是否会改变用户可见诊断**仍未知——六个样本上诊断面
+    无差异（0/0、exit 0），现象是静默的产物文本退化；闭环需消费方分析或更大样本轮。
+- **引擎：FOLLOW 推导补全——备选支 / 括号分组 / 后缀组内部的"同层后续兄弟"也进后继集**
+  （`parser/follow.py::_propagate_intra`，新增）。旧口径只扫规则**顶层元素列表**，
+  `_elem_calls` 取出嵌套 call 却统一并入"元素外" beta ⇒ `(@X, lit)` 这类**备选支内的序列**
+  里 `@X` 拿不到同支的 `lit`，该支在**匹配期**被 FOLLOW 检查卡死（加载期不报错，静默）。
+  - **活的症状（c4）**：`IndexExpr` 的 `(l_square,@Expression,r_square)+` 组内 `@Expression`
+    拿不到 `]` ⇒ **9 个下标形态整条截断**：`a[(0)]` / `a[(i)]` / `a[f(1)]` / `a[f()]` /
+    `a[a[0]]` / `a[b[i]]` / `a[sizeof(int)]` / `a[0][f(1)]` / `a[f(1)][0]`（`a[0]`/`a[i]`
+    看似正常，是 pratt 内置字面量前缀绕过规则匹配、也就绕过 FOLLOW 检查掩盖的）。
+  - **只增不减（机器可证）**：对四个包算改前/改后 FOLLOW 差集 = verilog 新增 0/删除 0、
+    c（HEAD 快照）0/0、**c4 新增 11/删除 0**、yaml 0/0 ⇒ 严格 fail-open（不会新增拒绝路径；
+    元素级原口径的过度包含**原样保留**，只加一路结构级递归）。分支选择仍可能变化，
+    故仍以全量 + 语料门禁为准。
+  - **判据**：`tests/engine/parser/test_follow.py` 新增 5 例（备选支尾部 / 括号分组尾部 /
+    repeat elem 尾部 / 2 条负向"各支不得互当前继"）；新增
+    `tests/languages/c4/test_c4_index_expr.py`（9 正 + 7 对照 + 3 反 + FOLLOW 锚点）。
+    **缺陷态实测**：test_follow 3 红 / 12 绿、c4 新用例 10 红 / 10 绿；修复后 15 + 20 绿，
+    c4 9/9 翻转、7 对照 0 回归、3 反样本两态皆拒。
+  - **回归**：`tests/engine/parser + tests/languages/c4` 244、三语言包 1191、`-m smoke` 462、
+    `tests/e2e/run_all_tests.py` 102 例 FAIL 0 且与"HEAD FOLLOW 口径"**逐用例一致**、
+    lint recall 100% / FP 0、diag 基线无增长、edge 7 reject / 0 failure；pyright strict 0。
+  - **文档**：`grammar/grammar_rule_fields.md`「边界后继」增「FOLLOW 传播范围」段（已递归到
+    嵌套内部 + 只增不减 + **仍不覆盖的旁路**：pratt 规则不做 FOLLOW 检查 / `_prod_refs_block`
+    旁路 / 静态下界 + 前缀族 fail-open）。
 - **C 包：枚举体 `}` 前的尾随逗号被渲染静默丢弃**（`enum e { A, B, };` → `enum e {A, B};`）。
   `EnumBody` 把尾逗号写成**独立可选元素**（`symbol.base.comma?`，`$4`），而渲染走 `items`
   绑定 ⇒ 独立可选元素不进 `items`、静默少一个非 trivia token（与 `grammar/c/README.md`
@@ -57,7 +97,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **工作区行尾统一为 LF（`.gitattributes` 定死规则）**——作者 2026-09-26 拍板"可以统一"，
+- **测试口径：语言包保真 harness 的 renderer 对齐生产接线**（作者 2026-09-28 的 reminder 轮里
+  由 Lead 定案落案 (a)）。生产路径 `pipeline/__init__.py` 构造 `Renderer(…, line_comment_starts=
+  lexer.line_terminating_comment_starts())`（渲染器据此在行终止型注释前补硬换行，防"注释吃掉
+  同行后续元素"），而语言包 harness 一直用**裸** `Renderer(rules_dir=…)` ⇒ **harness 面对的
+  renderer 配置 ≠ 用户路径**，这一类缺陷在单测层不可见。
+  - **改动**：5 处各一行（C 的 `test_c_render_fidelity` / `test_c_declarations` /
+    `test_c_increment_plugin` / `test_c23_increment_plugin` + yaml 的 `conftest`）。
+    **例数不变、零翻转**：`tests/languages/c + tests/languages/yaml` 792 → **795 passed**
+    （+3 为新增门禁）；三样本 ratio/行覆盖**完全不变**（0.992553 / 0.992543 / 0.982216，
+    无需重录）；`tests/engine/renderer + tests/engine/pipeline` 300 passed。
+  - **新增接线门禁 3 条**：C `TestHarnessWiring`（`enum e { A, B // note` + 换行 + `};` 的
+    token 序列 + 幂等；**裸接线 2 红 / 接线绿**——尾逗号形态两接线都坏，是已登记的 #8，
+    不能当接线判据，已在注释写明）+ yaml `test_harness_renderer_keeps_line_comment_wiring`。
+  - **同轮修**：`tests/languages/c/samples/edge_comments.c` 头注把漂移缺口写成 "#8"（实际 #6）
+    的过期引用；改后三样本数字不变。
+  - **登记**：缺口档「未做」第 4 条改写为"语言包 harness 已对齐；只剩生产侧
+    `analyzer/shared_components.py` 一处"；yaml 真实 workflow 渲染不幂等登记进
+    `docs/gaps/gap-formatter-line-behavior.md`（与接线无关、当前无门禁覆盖、本轮不修）。
+- **工作区行尾统一为 LF（`.gitattributes` 定死规则）**——作者 2026-09-28 拍板"可以统一"，
   据此关闭 `TODO.md` 里那条"行尾风格不统一"的待拍板项。
   - **背景**：仓库只有本机 `core.autocrlf=true`（只在 `git add` 时归一索引、不回写工作区）
     ⇒ 工作区三态并存：831 个跟踪文件里 **CRLF 653 / 仅 LF 176 / 混合 2**。
@@ -70,7 +128,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     ② 无二进制资产（仅 2 个 `.ps1`，LF 可运行），不需要 per-path 例外。
   - **判据**：全新检出 `git status` 干净 + `git ls-files --eol` 全 `i/lf w/lf` + 全量
     `pytest tests/` 在 Windows（LF 工作区）同绿。
-- **四条"待拍板"按作者 2026-09-26 口径结案**（不再挂着当悬项；机制文档同步）：
+- **四条"待拍板"按作者 2026-09-28 口径结案**（不再挂着当悬项；机制文档同步）：
   - **保真度渲染：注释折行漂移**（`TODO.md` 里那条带最小复现的长项）——**不修渲染**。
     否决"锚点感知 LineSuffix"（要新增"哪些符号是列表分隔符"的声明字段，且须逐形态验证
     "误路由 = 丢注释"）与"挂刚结束的项节点"（大概率只是把漂移换个方向）两案；
@@ -90,10 +148,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **C 包 c23 属性：实参形态与属性表形态收口——多实参 `[[gnu::nonnull(1, 2)]]` + 尾随逗号
+  `[[nodiscard,]]`**（作者口径"慢慢补充"下按实测优先级取的两条；①空实参 / ②相邻字面量 /
+  ④空属性表 / ⑤配平 token 序列 登记"不做 / 低优先 + 触发条件"）。
+  - **多实参**：实参由 `@Expression`（assignment-expression 层级、**不含逗号**）改收
+    `@ArgumentList`（逗号分隔表达式列表，"实参表"语义）。修前 glibc/clang 头文件常见形态
+    `[[gnu::nonnull(1, 2)]]` / `[[gnu::format(printf, 1, 2)]]` /
+    `[[clang::no_sanitize("a", "b")]]` **全部解析失败**（实测），是本轮比登记三条边界更常见的
+    真实缺口（由"属性剩余形态"专项调研实测发现）。
+  - **尾随逗号**：`AttributeList` 加**独立可选元素** `(comma)?` + **单独绑定**
+    `trailing_comma`（**不得塞进 `items`**：join 的 `sep = ", "` 会叠加成 `, ,`；
+    不绑定则静默丢 token）；`[[nodiscard,,]]` / `[[,]]` **仍被拒**（不过接受）。
+  - **判据**：`tests/languages/c/test_c23_increment_plugin.py` 199 → **223 passed**
+    （7 条新形态 × parse/render/lint 三组参数化 + 3 条结构化判据）；反样本 10 条仍被拒
+    （① ② ④ ⑤ + 破损形态）；**缺陷态实测**：③整体回退 10 红、只删绑定 4 红、塞进 items 4 红、
+    ②′回退 16 红、绑定退回整组 9 红。C 包 **687 → 711 passed**；`tools/c_acceptance.py`
+    仍 **40/42**（只扩展既有"属性说明符"用例源码，不增条数）。
+  - **文档**：`plugins/c23/21_attributes.toml` 头注重写（①②④⑤ 逐条"现状 / 为什么不做 /
+    触发条件" + 节号双引 `N3096 §6.7.12.1 / N3220 §6.7.13.2`）；`grammar/c/README.md`、`TODO.md`、
+    `ROADMAP.md` 同步。
+  - **调研留档**：引擎是否需要"配平 token 序列"新形态 = **暂不做**（现役 production 微语法是
+    闭集，8 种候选拼写全 `GrammarError`；需新增元素类型、横跨 parser/linter/preprocessor
+    10+ 处分派表），触发条件 = 真实语料出现非表达式 token 序列。
 - **引擎新能力：空槽位（empty slot）——注入可落在"序列中段的原子规则位点"上**；C 包据此收口
   `[[属性]]` 剩下的两个位点（**声明符内** / **枚举项**）。接受面 **38/40 → 40/42**；
   档位矩阵 26 → **28**。
-  - **问题（2026-09-26 实测，旧记载的两条死路）**：现役注入只能"并入某一条既有元素"
+  - **问题（2026-09-28 实测，旧记载的两条死路）**：现役注入只能"并入某一条既有元素"
     （`@Rule.production[N]`）或"越界追加到末尾"——**插不了序列中段**。故声明符内属性缠成
     `choice[repeat, @Attr]`（可空 repeat 永远先"成功" ⇒ 属性支试不到、整条声明空 AST），
     枚举项则"`Enumerator` 序列中间没有可注入的交替点"。

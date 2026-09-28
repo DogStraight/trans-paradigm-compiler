@@ -324,7 +324,7 @@ _MUTATIONS: list[dict[str, str]] = [
     },
     {
         "why": "声明符内 / 枚举项的属性位点靠**共用的空槽位** `@AttributeSlot`（一次注入两处生效，"
-               "2026-09-26 起）——旧记载写「注入做不到这两个位点」。去掉这条 target ⇒ 槽位"
+               "2026-09-28 起）——旧记载写「注入做不到这两个位点」。去掉这条 target ⇒ 槽位"
                "永远无形态 ⇒ 两个位点的属性整条声明解析不出来（空 AST）",
         "file": "grammar/c/plugins/c23/21_attributes.toml",
         "old": 'targets = ["@TypeQualifier.production[0]", "@AttributeSlot.production[0]"]\n',
@@ -377,6 +377,85 @@ _MUTATIONS: list[dict[str, str]] = [
         "old": "                if key in _CONFIG_DEFAULTS:\n                    setattr(mod, var_name, copy.deepcopy(_CONFIG_DEFAULTS[key]))\n                continue\n",
         "new": "                continue\n",
         "test": "tests/engine/core/test_config_loading.py",
+    },
+    {
+        "why": "属性表尾逗号（C23 `attribute-list: attribute-list , attribute(opt)`）必须**独立"
+               "绑定**：production 里加了 `(comma)?` 却不绑定 ⇒ 渲染器静默丢一个显著 token"
+               "（`[[nodiscard,]]` 渲成 `[[nodiscard]]`）。本变异证明那条绑定判据真的握着它",
+        "file": "grammar/c/plugins/c23/21_attributes.toml",
+        "old": 'trailing_comma = "$3"\n',
+        "new": "",
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "多实参属性（`[[gnu::nonnull(1, 2)]]`，glibc/clang 头文件常见）靠实参收 "
+               "`@ArgumentList`：退回 assignment 层级的 `@Expression`（不含逗号）⇒ 多实参整条"
+               "失配。本变异证明 `@ArgumentList` 这个宿主选择不是随手写的",
+        "file": "grammar/c/plugins/c23/21_attributes.toml",
+        "old": '    "(bracket.l_parentheses,@ArgumentList,bracket.r_parentheses)?",\n',
+        "new": '    "(bracket.l_parentheses,@Expression,bracket.r_parentheses)?",\n',
+        "test": "tests/languages/c/test_c23_increment_plugin.py",
+    },
+    {
+        "why": "FOLLOW 传播必须递归进元素内部（备选支/分组/后缀组）：去掉 `_propagate_seq` 里"
+               "那次结构级调用 ⇒ 备选支内序列尾部 call 拿不到后继（c4 `IndexExpr` 的 `]` 缺项，"
+               "9 个下标形态匹配期被拒）。本变异证明那条递归不是冗余",
+        "file": "parser/follow.py",
+        "old": "        if _propagate_intra(\n            follows, elem, owner, beta_first, beta_nullable, first_map, nullable_map\n        ):\n            changed = True\n",
+        "new": "",
+        "test": "tests/engine/parser/test_follow.py",
+    },
+    {
+        "why": "同上，但收窄到 `_propagate_intra` 的 **choice 分支**：不递归进备选内部 ⇒ "
+               "备选支尾部失传（c4 下标 + `[[deprecated(\"a\" \"b\")]]` 那类写法）。"
+               "本变异证明 choice 分支单独被握着",
+        "file": "parser/follow.py",
+        "old": '    if typ == "choice":\n        changed = False\n        for alt in elem.get("alternatives", []):\n            changed |= _propagate_intra(\n                follows, alt, owner, beta_first, beta_nullable, first_map, nullable_map\n            )\n        return changed\n',
+        "new": '    if typ == "choice":\n        return False\n',
+        "test": "tests/engine/parser/test_follow.py",
+    },
+    {
+        "why": "`token_in_follow` 是 FOLLOW 的**唯一消费口**（返 True 恒通过）：把它短路 ⇒ "
+               "后继检查整体失效。本变异守的是「检查本身还在执行」",
+        "file": "parser/follow.py",
+        "old": "    for member in follow:\n",
+        "new": "    return True  # 变异：FOLLOW 检查失效\n    for member in follow:\n",
+        "test": "tests/engine/parser/test_follow.py",
+    },
+    {
+        "why": "负向守卫：choice 各支**不得**互当前继（把各支 FIRST 并进 beta 的过度包含写法）"
+               "⇒ `(@X|kw.y)` 负向用例必红。本变异证明「别过度近似」这条判据有效",
+        "file": "parser/follow.py",
+        "old": '    if typ == "choice":\n        changed = False\n        for alt in elem.get("alternatives", []):\n            changed |= _propagate_intra(\n                follows, alt, owner, beta_first, beta_nullable, first_map, nullable_map\n            )\n        return changed\n',
+        "new": '    if typ == "choice":\n        shared = set(beta_first)\n        for alt in elem.get("alternatives", []):\n            shared |= _elem_first(alt, first_map, nullable_map)\n        changed = False\n        for alt in elem.get("alternatives", []):\n            changed |= _propagate_intra(\n                follows, alt, owner, shared, beta_nullable, first_map, nullable_map\n            )\n        return changed\n',
+        "test": "tests/engine/parser/test_follow.py",
+    },
+    {
+        "why": "repeat/plus 的**循环后继**（下一次迭代 FIRST）是 c4 下标链（`a[0][f(1)]`）能解析的"
+               "关键：去掉该分支 ⇒ c4 下标用例大面积红。本变异证明循环后继分支被握着",
+        "file": "parser/follow.py",
+        "old": '    if typ in ("repeat", "plus"):\n        return _propagate_intra(\n            follows,\n            elem.get("elem", {}),\n            owner,\n            beta_first | _elem_first(elem, first_map, nullable_map),\n            beta_nullable,\n            first_map,\n            nullable_map,\n        )\n',
+        "new": '    if typ in ("repeat", "plus"):\n        return False\n',
+        "test": "tests/languages/c4/test_c4_index_expr.py",
+    },
+    {
+        "why": "语言包保真 harness 的 renderer **必须接 `line_comment_starts`**（与 pipeline 同口径），"
+               "否则 harness 面对的不是用户路径、看不见「行注释吃同行元素」这类缺陷。把接线去掉 ⇒ "
+               "新增的接线门禁必红（同一形态在裸接线下丢 `}` 与 `;`）",
+        "file": "tests/languages/c/test_c_render_fidelity.py",
+        "old": "        rules_dir=_RULES, line_comment_starts=lexer.line_terminating_comment_starts()\n",
+        "new": "        rules_dir=_RULES\n",
+        "test": "tests/languages/c/test_c_render_fidelity.py",
+    },
+    {
+        "why": "`tpc check` 的共享渲染器曾漏传行终止型注释词表（与 pipeline 同形的接线漏了参数）："
+               "渲染**子树**时行注释把同行后续元素吃进注释文本 ⇒ 精化产物文本静默丢 token"
+               "（`param_default` = `'4 // note + 2'` 而非 `'4 + 2 // note'`；`param_override` "
+               "= `'4 // c * 4'`）。本变异证明新判据真的握着那行接线",
+        "file": "analyzer/shared_components.py",
+        "old": "                line_comment_starts=lexer.line_terminating_comment_starts(),\n",
+        "new": "",
+        "test": "tests/engine/analyzer/test_shared_components_wiring.py",
     },
 ]
 
