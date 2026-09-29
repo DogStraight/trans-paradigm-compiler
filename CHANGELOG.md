@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **CI Windows 侧门禁脚本自崩（`UnicodeEncodeError`）——5 个入口脚本补 stdout 自护**。
+  GitHub 的 windows runner 不设 `PYTHONUTF8`（本机 DSH 宿主设了 `1`），Python stdout 取
+  ANSI 代码页（cp1252）⇒ 打印中文的门禁脚本**自己抛 `UnicodeEncodeError` 退出 1**：
+  实测 `ci.yml` 的 policy 步（`check_hardcode.py` / `check_doc_refs.py`）与随后的
+  `tests/edge/run_edge.py` / `tests/fuzz/run_fuzz.py`，以及 nightly 的
+  `tools/check_test_isolation.py`（它只给**子进程**设 `PYTHONIOENCODING`，自己没护）。
+  - **修法**：5 个脚本各加 `sys.stdout/stderr.reconfigure(encoding="utf-8")` 自护
+    （`hasattr` + `try/except` 守卫，与 `tests/_bootstrap.py` / `tests/conftest.py` 同一模式；
+    reconfigure 只影响本进程，比替换 `sys.stdout` 安全）；`policy/doc_sync.py` 一并补齐
+    （同目录工具一致性）。
+  - **判据**：`PYTHONIOENCODING=cp1252` 复现旧态 5 脚本全崩；加护后 5 脚本 `exit 0`、
+    无 `UnicodeEncodeError`。
+  - **回归**：`tests/policy` 300 passed；pyright strict 0 errors。
+  - **盲区**（本项为何没被本地排练发现）：`tools/ci_rehearsal.py` 在 `PYTHONUTF8=1` 的
+    开发机上跑，环境与 CI runner 不同 ⇒ 该步本地绿、CI 红。遗留项见 TODO「测试基础设施」。
+
 - **`tpc check` 共享渲染器漏接线 ⇒ 精化产物文本静默丢 token**（`analyzer/shared_components.py`）。
   同一函数第 73 行已构造 `Lexer`，但 `Renderer(...)` 没把行终止型注释词表传下去（与
   `pipeline/__init__.py` 的既定接线不一致）⇒ 渲染**子树**时行注释把同行后续元素吃进注释文本：

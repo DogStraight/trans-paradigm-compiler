@@ -378,3 +378,20 @@
   `docs/gaps/gap-formatter-line-behavior.md` 条目 6。**判据**（无论修还是先补门禁）：
   该文件两遍渲染逐字相同，且 `tests/languages/yaml` 全绿。
 
+- [ ] **CI 排练失真：开发机 `PYTHONUTF8=1` vs runner 默认非 UTF-8**（2026-09-29 实测，
+  查远端 CI 失败时定位）：远端 `origin/dev` 停在 `f66a99c`（2026-09-22）期间，Nightly
+  连续红 + 一次 push CI 红，三类失败=① R3 假红（`5cbf91e` 已修）② **Windows policy 步
+  `UnicodeEncodeError`**（5 脚本补 stdout 自护，本轮修）③ Nightly fuzz 非幂等
+  `mut:ref_serv_top.v`（`238234d` 已修；本机 5000 轮复跑 findings 0 复核）。②之所以
+  躲过本地排练：`tools/ci_rehearsal.py` 在带 `PYTHONUTF8=1` 的机器上跑 ⇒ 子进程 stdout 是
+  UTF-8，而 GitHub windows runner 无此变量（cp1252）⇒ **排练绿、CI 红**。
+  **待办**：(a) 排练加固——`_run` 的 Python 步骤注入 `PYTHONIOENCODING=cp1252`
+  （已验证该变量优先于 `PYTHONUTF8`，能逼出未自护脚本），使本地排练等价最严 CI 腿；
+  (b) 同缺陷清扫——入库脚本尚有 **18 个**未自护（`tools/` 12：`ci_rehearsal`/`config_sites`/
+  `feature_sites`/`structural_score`/`check_gate_efficacy`/`check_coverage_delta`/
+  `check_macro_coverage`/`dump_pipeline_state`/`lang_penetration`/`min_pack_probe`/
+  `render_coverage`/`c_acceptance`；`tests/` 4：`fuzz/shrink`、`e2e/eval_diag_baseline`、
+  `differential/run_differential{,_svparser}`；`packaging/build_pipeline.py`、
+  `parser/rule_selector.py` 各 1）；口径=打印非 ASCII 的独立入口脚本一律自护
+  （否则 cp1252 控制台/CI 即崩），清扫时按工具分组跑一次验证。
+

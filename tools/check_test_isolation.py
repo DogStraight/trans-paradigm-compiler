@@ -53,6 +53,16 @@ import sys
 import time
 from dataclasses import dataclass
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——CI runner 无 PYTHONUTF8，
+# 非 ASCII 输出会让本工具自己崩（子进程的 PYTHONIOENCODING 只管子进程）。
+# 本进程自护 stdout/stderr（reconfigure 只影响本进程，比替换 sys.stdout 安全）。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
+        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # nodeid 形如 `tests/x/test_y.py::test_z[参数-含 空格]`——参数 id 里可以有空格，

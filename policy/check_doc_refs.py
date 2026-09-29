@@ -45,6 +45,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Sequence
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——非 ASCII 输出会让
+# 门禁脚本自己崩（CI runner 无 PYTHONUTF8）。本进程自护 stdout/stderr：
+# reconfigure 只影响本进程，比替换 sys.stdout 安全；受限环境拒绝则忽略。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 # ── 扫描范围 ────────────────────────────────────────────────────────────────
 # 导航索引文件（D2 的验证源；相对仓库根）。
 # docs/gaps/README.md 是缺口档案登记表：gap 档在表中登记即被索引引用

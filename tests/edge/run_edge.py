@@ -29,6 +29,16 @@ for _p in (_REPO, os.path.join(_REPO, "tests", "fuzz")):
 
 import oracle  # noqa: E402  (tests/fuzz/oracle.py：不变量/管线单一来源)
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——CI runner 无
+# PYTHONUTF8，非 ASCII 输出会让门禁脚本自己崩。本进程自护 stdout/stderr
+# （reconfigure 只影响本进程，比替换 sys.stdout 安全；受限环境拒绝则忽略）。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
+        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 _CORPUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edge_corpus")
 _CLEAN = os.path.join(_CORPUS, "clean")
 _REJECT = os.path.join(_CORPUS, "reject")

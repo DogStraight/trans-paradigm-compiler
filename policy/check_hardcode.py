@@ -38,6 +38,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Sequence
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——非 ASCII 输出会让
+# 门禁脚本自己崩（CI runner 无 PYTHONUTF8）。本进程自护 stdout/stderr：
+# reconfigure 只影响本进程，比替换 sys.stdout 安全；受限环境拒绝则忽略。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 # ── 扫描范围 ────────────────────────────────────────────────────────────────
 # 引擎目录（通用骨架，语言知识禁止进入）；grammar/ 下语言插件代码不在范围。
 ENGINE_DIRS: tuple[str, ...] = (

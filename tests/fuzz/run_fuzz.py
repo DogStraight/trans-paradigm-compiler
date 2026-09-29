@@ -44,6 +44,16 @@ from generate import (  # noqa: E402
     mutate_source,
 )
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——CI runner 无
+# PYTHONUTF8，非 ASCII 输出会让 fuzz 主循环自己崩。本进程自护 stdout/stderr
+# （reconfigure 只影响本进程，比替换 sys.stdout 安全；受限环境拒绝则忽略）。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue] — hasattr 守卫的真实运行时方法
+        sys.stderr.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 DEFAULT_RULES_DIR = "grammar/verilog"
 DEFAULT_SEED_ROOTS: tuple[str, ...] = ("tests/e2e/samples", "tests/edge/edge_corpus")
 _INDEX_NAME = "index.jsonl"

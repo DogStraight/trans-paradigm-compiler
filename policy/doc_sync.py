@@ -38,6 +38,16 @@ from typing import Iterator, Sequence
 
 import check_doc_refs as gate  # 同目录复用门禁解析（同一组正则）
 
+# Windows 控制台/管道默认编码（GBK/cp1252）编不了中文——非 ASCII 输出会让
+# 同步工具自己崩。本进程自护 stdout/stderr（reconfigure 只影响本进程，
+# 比替换 sys.stdout 安全；受限环境拒绝则忽略）。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:  # noqa: BLE001 — 受限环境无 reconfigure，忽略
+        pass
+
 # ── 扫描范围 ────────────────────────────────────────────────────────────────
 # 引用点可能出现在：全部 .py（Doc: 头）/ .md（导航+正文+skills）/
 # .toml（grammar 插件注释）。跳过构建目录与 CHANGELOG（历史不篡改）。
