@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`SyntaxWarning` 门禁在 Python 3.11 上恒绿（反向自检红）**
+  （`tests/policy/test_no_syntax_warnings.py`）。非法转义的编译警告**类别随版本变**：
+  **3.12 起是 `SyntaxWarning`，3.11 及以前是 `DeprecationWarning`**（实测
+  3.11.13 → `DeprecationWarning: invalid escape sequence 'p'`；3.14.5 →
+  `SyntaxWarning: "\p" is an invalid escape sequence…`）。原判据只认
+  `issubclass(category, SyntaxWarning)` ⇒ 3.11 上 `_syntax_warnings` 恒返回空：**全仓门禁
+  恒绿**（该管的非法转义一处都扫不到）+ 反向自检 `hits == []` 红——CI `3.11 ubuntu`
+  的 `1 failed, 3202 passed` 就是这一条（前一轮被更早的红盖住，这轮才露头）。
+  - **修法**：判据改"类别**或**消息"双判（新增 `_is_invalid_escape`：任何
+    `SyntaxWarning`，或消息含 `invalid escape sequence` 的警告）——3.11 面因此被门禁
+    **真正覆盖**，不是只把自检改绿。
+  - **判据**：PyPy 3.11.13 复跑同一判据 = 全仓 `hits: 0`、自检
+    `hits: ["<self-check>:1 invalid escape sequence 'p'"]`（改前为空）；本机 3.14 三例绿。
+  - **回归**：新增 `test_escape_predicate_covers_pre_312_deprecation_warning`（跨版本判据
+    单测，与解释器版本无关）+ 自检用例保留。
+
 - **fuzz 种子集随平台/本机残留而变 ⇒ CI 报的 finding 本机复现不出**
   （`tests/fuzz/generate.py::collect_seeds`）。两个独立原因叠加：
   ① `os.walk` 的**目录遍历序**取决于文件系统（Windows ≠ Linux），顺序一变
