@@ -338,6 +338,25 @@ class TestOracleAcceptedDrift:
         assert [v.kind for v in violations] == [oracle.NON_IDEMPOTENT]
         assert advisories == []
 
+    def test_comment_repositioning_is_violation(self, monkeypatch):
+        """注释**换位**（C 包折行漂移形态）⇒ 压掉空白后不同 ⇒ 仍判违反。
+
+        现场实测：`int first /* x×60 */, second;` 首遍把注释留在 `first,` 之后、二遍
+        移到 `second` 之后（跨 token 移动）——不是"位置不动、仅邻接空白补平"，故
+        不在 advisory 面内（README 里刻着这条别并成一条）。
+        """
+        transitions = {
+            "int a, /*c*/ b;\n": "int a, /*c*/\n b;\n",     # 首遍：注释留在 `first,` 侧
+            "int a, /*c*/\n b;\n": "int a,\n b /*c*/;\n",   # 二遍：注释换位到 `second` 侧
+        }
+
+        def fake(src: str, rules_dir: str, ext_dirs=None) -> dict:
+            return {"success": True, "output": transitions.get(src, src), "error": None}
+
+        violations, advisories = self._eval(monkeypatch, fake, "int a, /*c*/ b;\n")
+        assert [v.kind for v in violations] == [oracle.NON_IDEMPOTENT]
+        assert advisories == []
+
     def test_expansion_path_is_advisory_even_when_growing(self, monkeypatch):
         """含宏/指令 marker ⇒ 镜像 `pipeline._check_idempotent`：连"每遍增长"也不判违反。"""
         def fake(src: str, rules_dir: str, ext_dirs=None) -> dict:

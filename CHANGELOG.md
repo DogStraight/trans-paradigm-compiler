@@ -19,6 +19,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **判据**：修前 `--iters 500` 本机 `findings: 0` 而 CI 报
     `[NON-IDEMPOTENT] mut:ref_comments.v`；修后本机种子数 = CI 的 **119**，且同一命令
     **逐字复现**该 finding（再据此缩小到 34 字节最小复现）。
+    **另核**：与 `PYTHONHASHSEED` 无关（`0` / `12345` 两档同为 `findings: 0` + 同一条
+    advisory），且远端 Nightly（ubuntu，5000 轮）与本地同序同结论 ⇒ 跨平台同序列。
   - **回归**：`tests/policy/test_fuzz_shrink.py::TestSeedCollection`（3 例：排除输出目录 /
     POSIX 键排序 / 目录序无关）。
 
@@ -36,6 +38,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **判据**：`--iters 5000` 由 `findings: 1` → **`findings: 0` + 1 条 advisory**；判别性
     对照 = 注入式假管线"每遍多一个 `#`"（非收敛、非空白）仍判违反
     （`test_fuzz_shrink.py::TestChain::test_refuse_sediment_for_live_nonidempotence` 原样绿）。
+  - **不在豁免面上的**（实测核对，避免把两条并成一条）：C 包注释折行漂移
+    （`int first /* x×60 */, second;`）注释是从 `first,` 之后**换位到** `second` 之后——
+    压掉空白后两遍**不相同** ⇒ 仍判违反，维持作者"永久留在活缺陷一侧"的定案。
   - **回归**：`tests/policy/test_fuzz_shrink.py` 新增 `TestOracleAcceptedDrift`（4 例）。
 
 - **跨盘 nodeid 归一只在 Windows 成立 ⇒ CI 的 Linux 腿必红**

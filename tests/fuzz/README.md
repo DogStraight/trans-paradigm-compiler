@@ -116,9 +116,12 @@ python tests/edge/run_edge.py --corpus tests/edge/edge_corpus_c --pack grammar/c
 - **C 包注释折行漂移（`non-idempotent`，2026-09-28 定案不修）**：分隔符后行尾注释跨折行
   时落位漂移（`int first /* x×60 */, second;` → 首遍与次遍输出不同，第三遍起收敛）。
   作者决策 = **不修渲染，归原始路径（raw）解决**（理由与先例见
-  `docs/gaps/gap-language-pack-scope.md` 渲染现状表 #6）。它**不判违反但不是待修项**：
-  按"未修不许沉淀"的闸不进 `edge_corpus`——这是**已知且接受**的偏差；形态正是上一条的
-  "压掉空白后逐字相同 + 一遍收敛"，故由该判据记 advisory（仍打印；不新增登记）。
+  `docs/gaps/gap-language-pack-scope.md` 渲染现状表 #6）。故它**永久留在"活缺陷"一侧**：
+  按"未修不许沉淀"的闸不进 `edge_corpus`——这是**已知且接受**的偏差，不是待修项；
+  跑 fuzz 遇到它时按已知类处理（不新增登记）。
+  ⚠ 它**不在**上一条的 advisory 判据内（实测核对过，别把两条并成一条）：注释是从
+  `first,` 之后**换位到** `second` 之后（跨 token 移动），压掉空白后两遍**不相同** ⇒
+  仍判 `non-idempotent` 违反。
 
 ## 最小化算法（为什么是 ddmin）
 
