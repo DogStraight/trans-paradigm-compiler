@@ -1,14 +1,18 @@
 """tests/policy/test_fuzz_shrink.py — fuzz 回馈链路后两步的自测。
 
 被测：`tests/fuzz/shrink.py`（ddmin 最小化 + 沉淀）、`tests/edge/run_edge.py`
-的沉淀语料不变量复检、`tests/fuzz/oracle.py` 的违反判定。
+的沉淀语料不变量复检、`tests/fuzz/oracle.py` 的违反判定、`tests/fuzz/generate.py`
+的种子收集。
 
-分三层（各证一件事，互不替代）：
+分五层（各证一件事，互不替代）：
 
 1. **算法层**：ddmin 用**合成谓词**（无管线）——证"最小 + 1-minimal + 保 interestingness"；
 2. **文本层**：`shrink_text` 的行级/行内收缩在合成谓词下逐级生效；
 3. **链路层**：注入式假管线（monkeypatch `oracle.format_source`）跑
-   finding → 最小化 → 沉淀 → 抬头 → 门禁复检的**完整文件路径**。
+   finding → 最小化 → 沉淀 → 抬头 → 门禁复检的**完整文件路径**；
+4. **判据层**：`non-idempotent` 的已接受偏差（展开路径 / 一遍收敛的空白漂移）记
+   advisory 不判违反，两道否决（不收敛、非空白改动）各自可单独推翻豁免；
+5. **种子层**：种子集只收输入语料（跳过流水线输出目录）且与文件系统遍历序无关。
 
 ⚠ 第 3 层用假管线是**刻意的**：真实链路要求"有一个当前仍在复现的缺陷"，而本轮
 实测 C 包 4000 轮 fuzz 0 findings（真实缺陷都已修），拿真实输入无法同时演示
@@ -275,3 +279,116 @@ class TestEdgeInvariantRecheck:
         src = "// edge clean（fuzz 回归 2026-09-26）: x。\n// fuzz 类别 crash；y。\nBUG\n"
         assert run_edge._kind_violation(src, "grammar/verilog", "x.v", failures) == "crash"
         assert failures == []
+
+
+# ── 4. oracle 判据面：已接受偏差（advisory）vs 真违反 ───────────────
+
+class TestOracleAcceptedDrift:
+    """`non-idempotent` 的两类已接受偏差记 advisory、不判违反（2026-09-30 判据化）。
+
+    判据来源 `docs/gaps/gap-formatter-line-behavior.md` #3（展开路径）/ #5、#7
+    （一遍收敛的空白漂移）。判别性关键：**"不收敛"与"非空白改动"各自单独就能
+    推翻豁免**，故下面既证接受侧、也证两道否决。
+    """
+
+    @staticmethod
+    def _eval(monkeypatch, fake, src: str, label: str = "gen"):
+        monkeypatch.setattr(oracle, "format_source", fake)
+        advisories: list[str] = []
+        violations = oracle.evaluate_format(
+            src, None, rules_dir="grammar/verilog", ext_dirs=[], label=label,
+            advisories=advisories,
+        )
+        return violations, advisories
+
+    def test_settled_whitespace_drift_is_advisory(self, monkeypatch):
+        """一遍补平后稳定（真实现场形态：`/**/)` → `/**/ )`）⇒ advisory，不判违反。
+
+        假管线照真实三步走：源（注释独立成行）→ 首遍把注释贴到 `)` 前 → 二遍补一格
+        → 三遍起稳定。三步用转移表写死，避免"假管线自己先收敛"把现场做没。
+        """
+        transitions = {
+            "f(a)\n": "f(a /**/);\n",          # 首遍：注释回插，贴住 `)`
+            "f(a /**/);\n": "f(a /**/ );\n",   # 二遍：formatter 补一格
+        }
+
+        def fake(src: str, rules_dir: str, ext_dirs=None) -> dict:
+            return {"success": True, "output": transitions.get(src, src), "error": None}
+
+        violations, advisories = self._eval(monkeypatch, fake, "f(a)\n")
+        assert violations == []
+        assert len(advisories) == 1 and "空白漂移" in advisories[0]
+
+    def test_whitespace_drift_without_settling_is_violation(self, monkeypatch):
+        """差异只在空白，但**不收敛**（来回补格）⇒ 仍判违反（豁免不是"空白即放过"）。"""
+        def fake(src: str, rules_dir: str, ext_dirs=None) -> dict:
+            out = src[:-1] if src.endswith("  ") else src + " "
+            return {"success": True, "output": out, "error": None}
+
+        violations, advisories = self._eval(monkeypatch, fake, "f(a)\n")
+        assert [v.kind for v in violations] == [oracle.NON_IDEMPOTENT]
+        assert advisories == []
+
+    def test_growing_output_is_violation(self, monkeypatch):
+        """非收敛 + 非空白（每遍多一个 `#`）⇒ 判违反（与链路层假管线同一形态）。"""
+        def fake(src: str, rules_dir: str, ext_dirs=None) -> dict:
+            return {"success": True, "output": src + "#", "error": None}
+
+        violations, advisories = self._eval(monkeypatch, fake, "keep\n")
+        assert [v.kind for v in violations] == [oracle.NON_IDEMPOTENT]
+        assert advisories == []
+
+    def test_expansion_path_is_advisory_even_when_growing(self, monkeypatch):
+        """含宏/指令 marker ⇒ 镜像 `pipeline._check_idempotent`：连"每遍增长"也不判违反。"""
+        def fake(src: str, rules_dir: str, ext_dirs=None) -> dict:
+            return {"success": True, "output": src + "#", "error": None}
+
+        violations, advisories = self._eval(monkeypatch, fake, "`define A 1\nkeep\n")
+        assert violations == []
+        assert len(advisories) == 1 and "展开路径" in advisories[0]
+
+
+# ── 5. 种子集：只收输入语料 + 顺序跨平台一致 ───────────────────
+
+class TestSeedCollection:
+    """`generate.collect_seeds`：种子集不得随本机产物/文件系统遍历序变化。
+
+    真实事故（2026-09-29）：本机残留 66 个 `gen/*.v` ⇒ 种子 185 个而 CI 119 个，
+    同一 `--seed` 两边抽不同序列，CI 报的 finding 本机复现不出。
+    """
+
+    @staticmethod
+    def _tree(root) -> None:
+        for rel in ("normal/a.v", "normal/gen/gen_a.v", "macro/ast/x.v",
+                    "edge/lex/lex.json", "edge/b.v", "normal/notes.txt"):
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("module m;\n", encoding="utf-8")
+
+    def test_excludes_pipeline_output_dirs(self, tmp_path):
+        import generate
+
+        self._tree(tmp_path)
+        got = [os.path.relpath(p, str(tmp_path)).replace(os.sep, "/")
+               for p in generate.collect_seeds(str(tmp_path))]
+        assert got == ["edge/b.v", "normal/a.v"]  # gen/ast/lex 不是输入语料
+
+    def test_order_independent_of_filesystem_walk_order(self, tmp_path, monkeypatch):
+        """`os.walk` 的目录序是文件系统相关的——结果必须与它无关（确定性）。"""
+        import generate
+
+        self._tree(tmp_path)
+        expected = generate.collect_seeds(str(tmp_path))
+
+        real_walk = os.walk
+
+        def reversed_walk(root, *a, **kw):
+            # 必须在**被 yield 的列表**上原地改：`os.walk` 的剪枝协议就靠这个列表
+            # （换新列表 ⇒ 子目录该不该下探的剪枝失效，测试自己会造假阳性）
+            for dirpath, dirnames, names in real_walk(root, *a, **kw):
+                dirnames.reverse()
+                names.reverse()
+                yield dirpath, dirnames, names
+
+        monkeypatch.setattr(generate.os, "walk", reversed_walk)
+        assert generate.collect_seeds(str(tmp_path)) == expected

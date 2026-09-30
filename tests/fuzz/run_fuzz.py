@@ -94,10 +94,16 @@ def seed_roots_for(pack: str) -> tuple[str, ...]:
 
 def check_one(src: str, lexer: Lexer, findings: list, label: str,
               index: int, findings_dir: str, pack: str,
-              ext_dirs: list[str], write_index: bool = True) -> None:
-    """对单个输入跑全部不变量；违反则记录（现场 + 索引）。"""
+              ext_dirs: list[str], advisories: list[str],
+              write_index: bool = True) -> None:
+    """对单个输入跑全部不变量；违反则记录（现场 + 索引）。
+
+    已接受的一遍不幂等（展开路径 / 一遍收敛的空白漂移）由 oracle 判为 advisory
+    ——不进 findings、不落盘、不影响退出码，但汇总打印（判据见 README）。
+    """
     violations = oracle.evaluate_format(
-        src, lexer, rules_dir=pack, ext_dirs=ext_dirs, label=label
+        src, lexer, rules_dir=pack, ext_dirs=ext_dirs, label=label,
+        advisories=advisories,
     )
     for v in violations:
         fname = _save(findings_dir, f"{index:05d}_{v.kind}_{label}.v", src)
@@ -144,6 +150,7 @@ def main() -> None:
 
     fuzzer = None if args.mutate_only else GrammarFuzzer(pack, rng, ext_dirs=ext_dirs)
     findings: list[str] = []
+    advisories: list[str] = []
     t0 = time.time()
 
     for i in range(args.iters):
@@ -160,11 +167,16 @@ def main() -> None:
             src = mutate_source(seed_src, rng, token_map, pack, ext_dirs=ext_dirs)
             label = f"mut:{os.path.basename(seed)}"
         check_one(src, lexer, findings, label, i, args.findings_dir, pack, ext_dirs,
-                  write_index=not args.no_index)
+                  advisories, write_index=not args.no_index)
 
     dt = time.time() - t0
     print(f"iterations: {args.iters}  findings: {len(findings)}  "
           f"elapsed: {dt:.1f}s ({args.iters / dt:.0f} iter/s)")
+    if advisories:
+        print(f"已接受的一遍不幂等（advisory，不判违反）：{len(advisories)} 条 "
+              "— 判据 tests/fuzz/README.md「已知的 oracle 判定」")
+        for a in advisories[:3]:
+            print("  · " + a)
     for f in findings[:20]:
         print("  " + f)
     if findings:

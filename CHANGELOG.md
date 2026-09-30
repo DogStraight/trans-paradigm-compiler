@@ -7,6 +7,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **fuzz 种子集随平台/本机残留而变 ⇒ CI 报的 finding 本机复现不出**
+  （`tests/fuzz/generate.py::collect_seeds`）。两个独立原因叠加：
+  ① `os.walk` 的**目录遍历序**取决于文件系统（Windows ≠ Linux），顺序一变
+  `rng.choice(seeds)` 抽到的种子就变——同一 `--seed` 在 CI 与本机跑的是**两串输入**；
+  ② 收取范围含流水线**自己的输出目录**（`out_dir/{gen,ast,symbols,lex,trans_callback}`，
+  `.gitignore` 已列明），本机因跑过 e2e 残留 66 个 `gen/*.v` ⇒ 种子 185 个而 CI 只有
+  119 个。
+  - **修法**：walk 期间原地排序目录名（并剔除输出目录），结果再按 POSIX 形式路径排序
+    （排序键不含平台分隔符）。
+  - **判据**：修前 `--iters 500` 本机 `findings: 0` 而 CI 报
+    `[NON-IDEMPOTENT] mut:ref_comments.v`；修后本机种子数 = CI 的 **119**，且同一命令
+    **逐字复现**该 finding（再据此缩小到 34 字节最小复现）。
+  - **回归**：`tests/policy/test_fuzz_shrink.py::TestSeedCollection`（3 例：排除输出目录 /
+    POSIX 键排序 / 目录序无关）。
+
+- **fuzz oracle 判据比已接受契约更严 ⇒ 拿"刻意接受的行为"当缺陷报红**
+  （`tests/fuzz/oracle.py`）。`non-idempotent` 一类此前对**一切**文本漂移判违反，与产品
+  契约和已接收档冲突：
+  - **展开路径**（源含宏/指令 marker）——`pipeline._check_idempotent` 明确跳过
+    （宏体替换/条件分支/注释锚点漂移是展开语义），oracle 却照判；
+  - **一遍收敛的空白漂移**——注释回插在格式化**之后**，注释邻接空白不是首遍不动点
+    （`module c( input n /**/);` → `… /**/ );`，三遍起稳定），与
+    `docs/gaps/gap-formatter-line-behavior.md` #5 的"一遍收敛、输出合法、仅空白差异"同型。
+  - **修法**：判据改成"**不收敛**或**改动落到非空白字符**才算违反"，上述两类记
+    **advisory**（`evaluate_format(advisories=…)`）——不进 findings、不落盘、不影响退出码，
+    但由 `run_fuzz` 汇总打印（不静默吞掉）。
+  - **判据**：`--iters 5000` 由 `findings: 1` → **`findings: 0` + 1 条 advisory**；判别性
+    对照 = 注入式假管线"每遍多一个 `#`"（非收敛、非空白）仍判违反
+    （`test_fuzz_shrink.py::TestChain::test_refuse_sediment_for_live_nonidempotence` 原样绿）。
+  - **回归**：`tests/policy/test_fuzz_shrink.py` 新增 `TestOracleAcceptedDrift`（4 例）。
+
+- **跨盘 nodeid 归一只在 Windows 成立 ⇒ CI 的 Linux 腿必红**
+  （`tools/check_test_isolation.py::_normalize_id`）。`os.path.relpath` 抛 `ValueError`
+  的跨盘分支此前把**原路径**回填给后续判据，而 `C:/tmp/...` 在 POSIX 上不以 `/` 开头、
+  `isabs` 为假 ⇒ 归一失效（同一失败在"绝对 vs 相对"两种写法下算成两条）。
+  - **修法**：跨盘即"给不出仓内相对路径"⇒ 该分支直接压 basename（Windows/POSIX 的
+    `basename` 在 `C:/a/b.py` 上都取 `b.py`）。
+  - **判据**：CI 3.11/3.13 ubuntu 的 `test_normalize_id_survives_cross_drive`
+  （`1 failed, 3195 passed, 18 skipped` 里唯一那条）转绿；本机
+  `tests/policy/test_check_test_isolation.py` 20 passed。
+
 - **CI Windows 侧门禁脚本自崩（`UnicodeEncodeError`）——5 个入口脚本补 stdout 自护**。
   GitHub 的 windows runner 不设 `PYTHONUTF8`（本机 DSH 宿主设了 `1`），Python stdout 取
   ANSI 代码页（cp1252）⇒ 打印中文的门禁脚本**自己抛 `UnicodeEncodeError` 退出 1**：

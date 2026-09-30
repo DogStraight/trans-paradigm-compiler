@@ -1,6 +1,6 @@
 # Gap — formatter（世界 B）行行为边界（宽度折行 / 保留行 / 对齐 / 幂等）
 
-- 状态：接受（设计选择 + 空档；见下各条）
+- 状态：接受（设计选择 + 空档；见下各条；#7 由 fuzz oracle 按判据记 advisory）
 - 关联：`grammar/verilog/plugins/formatter/README.md`（世界 B 架构）
 - 参照：verible-verilog-format / clang-format 的折行与对齐策略
 
@@ -13,7 +13,9 @@
    style。
 3. **幂等只在保留路径保证**（接受）：展开路径（宏表 / 占位符 / 指令行非空，
    `pipeline._check_idempotent` 判据）内容按设计变化，不幂等检查；其余路径
-   （含 transform 输出）要求可被管线再次稳定解析。
+   （含 transform 输出）要求可被管线再次稳定解析。fuzz oracle 自 2026-09-30 起
+   **镜像此契约**（含宏/指令 marker 的输入不判 `non-idempotent`），见
+   `tests/fuzz/README.md`「已知的 oracle 判定」。
 4. **宽度折行留下部分超长结构不折**（摩擦）：无顶层安全断点的超长行不折
    ——单标识符行 / 超长字符串行原样保留；续行 / 端口列表 / 注释 / 指令行
    按设计跳过（ice40 语料未折超长行以此类为主）；有 `+`/`,` 断点的超长行
@@ -37,6 +39,18 @@
    "位置漂移 + 一遍不幂等"，与 C 包缺口档 #6（行尾注释挂点随折行变化）同型。
    ⚠ **当前无门禁覆盖**：该用例只断言**结构往返**（`_node_names` 相等），不比对全文；
    `tests/e2e/test_pipeline_idempotent.py` 走 verilog 语料，不覆盖 yaml 这一形态。
+7. **注释回插在格式化之后 ⇒ 注释邻接空白不是首遍不动点**（摩擦，既存；2026-09-29
+   CI 红时由 fuzz 报出）：`_prepare_render_output` 的顺序是"渲染 → **格式化** →
+   指令行回插 → 注释回插"（顺序本身是为宏/指令原文而定的，见该函数 docstring），
+   于是回插进去的注释**没经过 formatter 的邻接空白决策**：最小复现
+   `module c(\ninput\nn/**/\n)\nendmodule` 首遍给 `module c( input n /**/);`
+   （comment 贴着 `)`），二遍 formatter 见到注释 token 补一格 ⇒
+   `module c( input n /**/ );`，三遍起稳定。同族形态：C 包分隔符后行尾注释跨折行
+   漂移（`int first /* x×60 */, second;`，见 `tests/fuzz/README.md`）。
+   - 判据面：**一遍收敛（pass3 == pass2）+ 压掉空白后逐字相同**（差异只在空白/
+     断行）；不收敛或改动落到非空白字符（如宏展开路径上注释体逐遍增长）不属此类。
+   - fuzz oracle 自 2026-09-30 起按上判据把此类记 **advisory**（仍打印、不判违反、
+     不沉淀）——即"已知接受"落到机器判据上，而不是靠人肉忽略。
 
 ## 为什么是边界（影响面）
 
@@ -45,7 +59,8 @@
   （vs Verible 差分门禁）。
 - 4 是空档而非缺陷（无断点超长行不折，但输出合法）；5 是空档（折行头段
   一次性补空格，二遍收敛）；6 是空档（yaml 注释挂点随折行漂移，一遍不幂等；
-  输出合法、注释与 token 都不丢）。
+  输出合法、注释与 token 都不丢）；7 是空档（注释邻接空白一遍补平，输出合法、
+  注释与 token 都不丢——fuzz 判据已按此收口，见 `tests/fuzz/README.md`）。
 
 ## 成熟解法参照（见贤思齐）
 
@@ -61,6 +76,11 @@
 - 6：修点在注释挂点 / 折行交互（渲染器侧），**本轮不修**——yaml 侧当前没有
   全文幂等判据，且按"缺陷未修不许沉淀"的闸不先加样本；待单独一轮（先加判据
   证明红 → 再定修法）。与 C 包缺口档 #6 同族，可与其定案一并评估。
+- 7：两条修法都不轻，本轮不修——① 把注释回插**前置**到格式化之前（顺序反过来
+  即可让 formatter 参与邻接决策，但宏/指令原文会被 formatter 误解析，正是现行
+  顺序的成因）；② 回插后再跑一遍 formatter（等价于把二遍结果当首遍输出，代价是
+  格式化 ×2，且改动全仓注释邻接空白的 golden 输出）。当前输出合法、一遍补平，
+  按 fuzz 判据记 advisory。
 - 1/2/3：设计选择，不改（如需段落式重排属新能力，非修复）。
 
 ## 关联条目
@@ -74,3 +94,6 @@
 - 条目 6（yaml）：`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles`
   （只断言结构往返 ⇒ **无全文幂等门禁**）；harness 接线判据见
   `TestPlainRender::test_harness_renderer_keeps_line_comment_wiring`
+- 条目 3/7（幂等判据面）：`tests/fuzz/oracle.py::_accepted_non_idempotent`（判据实现）+
+  `tests/fuzz/README.md`「已知的 oracle 判定」；回归
+  `tests/policy/test_fuzz_shrink.py::TestOracleAcceptedDrift`

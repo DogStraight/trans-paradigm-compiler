@@ -176,8 +176,11 @@ def _normalize_id(nodeid: str) -> str:
         return nodeid
     try:
         rel = os.path.relpath(path, _ROOT)
-    except ValueError:  # 跨盘：算不出相对路径（Windows）
-        rel = path
+    except ValueError:
+        # 跨盘（仓在 E:、目标在 C:）：根本给不出仓内相对路径 ⇒ 就是仓外，
+        # 直接压 basename。不能只把原路径塞回 `rel` 走下面的判据：`C:/…` 在
+        # Linux 上不以 `/` 开头，`isabs` 为假 ⇒ 归一失效（CI Linux 档实测）。
+        return f"{os.path.basename(path)}::{rest}"
     rel = rel.replace(os.sep, "/")
     if rel.startswith("..") or os.path.isabs(rel):
         rel = os.path.basename(rel)  # 仓外：只留文件名，保留 ::用例名

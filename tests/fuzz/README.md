@@ -21,7 +21,7 @@
 ```
 [1] 生成/变异          python tests/fuzz/run_fuzz.py --iters 800 [--pack grammar/c]
         │                 → findings/*.v + findings/index.jsonl（机器可读：类别/标签/包）
-[2] 判据（oracle.py）   不变量五类，run_fuzz 与 shrink **共用同一份**（判据一变，
+[2] 判据（oracle.py）   不变量六类，run_fuzz 与 shrink **共用同一份**（判据一变，
         │                 缩出来的就不是原来那个 bug）
 [3] 最小化（ddmin）     python tests/fuzz/shrink.py --all [--pack grammar/c]
         │                 → findings/min/*.v（行级 ddmin + 尾截 + 行内字符级）
@@ -83,7 +83,7 @@ python tests/edge/run_edge.py --corpus tests/edge/edge_corpus_c --pack grammar/c
 | `tokenize-fail` | 合法输入格式化后不可 token 化 |
 | `token-corrupt` | 格式化改变了非 trivia token 序列（仅 `gen` 标签） |
 | `idem-crash` | 二次格式化崩溃 |
-| `non-idempotent` | `format(format(x)) != format(x)` |
+| `non-idempotent` | `format(format(x)) != format(x)`；**两类已接受偏差不判违反**（展开路径 / 一遍收敛的空白漂移），见下节 |
 
 ## 已知的 oracle 判定（良性偏差类）
 
@@ -96,12 +96,29 @@ python tests/edge/run_edge.py --corpus tests/edge/edge_corpus_c --pack grammar/c
   TOKEN-CORRUPT 检查跳过 mutation 样本（保留不崩溃/幂等检查）。
 - 判定方向：**token 丢失（in > out）是硬违规**（静默删代码）；token 增加
   （out > in）需人工确认（多为规范化）。
+- **一遍不幂等的两类已接受偏差（`non-idempotent`，2026-09-30 判据化）**：判据在
+  `oracle.py::_accepted_non_idempotent`，命中的记 **advisory**——`run_fuzz` 汇总打印
+  （`已接受的一遍不幂等（advisory，不判违反）：N 条`）但不进 findings、不落盘、不影响
+  退出码（**不静默吞掉**）。**不收敛**或**改动落到非空白字符**仍判违反：
+  - **展开路径**：源含宏/指令 marker ⇒ 按设计不判幂等——镜像产品契约
+    `pipeline._check_idempotent`（宏表/占位符/指令行非空即跳过）与
+    `docs/gaps/gap-formatter-line-behavior.md` #3；
+  - **一遍收敛的空白漂移**：压掉空白后两遍**逐字相同**且第三遍已收敛（pass3 == pass2）
+    ⇒ 空档类（#5/#7）。机制：注释回插在**格式化之后**，注释邻接空白不是首遍不动点。
+    Verilog 最小复现（34 字节，2026-09-29 CI 红现场：
+    `[NON-IDEMPOTENT] mut:ref_comments.v`）：
+    `module c(\ninput\nn/**/\n)\nendmodule` → 首遍 `module c( input n /**/);`
+    → 二遍 `module c( input n /**/ );` → 三遍起稳定。
+  - 判别性对照：注入式假管线"每遍多一个 `#`"（非收敛、非空白）仍判 `non-idempotent`
+    ——`tests/policy/test_fuzz_shrink.py::TestChain::test_refuse_sediment_for_live_nonidempotence`；
+    判据单测 `TestOracleAcceptedDrift`。
+
 - **C 包注释折行漂移（`non-idempotent`，2026-09-28 定案不修）**：分隔符后行尾注释跨折行
   时落位漂移（`int first /* x×60 */, second;` → 首遍与次遍输出不同，第三遍起收敛）。
   作者决策 = **不修渲染，归原始路径（raw）解决**（理由与先例见
-  `docs/gaps/gap-language-pack-scope.md` 渲染现状表 #6）。故它**永久留在"活缺陷"一侧**：
-  按"未修不许沉淀"的闸不进 `edge_corpus`——这是**已知且接受**的偏差，不是待修项；
-  跑 fuzz 遇到它时按已知类处理（不新增登记）。
+  `docs/gaps/gap-language-pack-scope.md` 渲染现状表 #6）。它**不判违反但不是待修项**：
+  按"未修不许沉淀"的闸不进 `edge_corpus`——这是**已知且接受**的偏差；形态正是上一条的
+  "压掉空白后逐字相同 + 一遍收敛"，故由该判据记 advisory（仍打印；不新增登记）。
 
 ## 最小化算法（为什么是 ddmin）
 
@@ -122,6 +139,10 @@ python tests/edge/run_edge.py --corpus tests/edge/edge_corpus_c --pack grammar/c
 ## 纪律
 
 - fuzz 发现的 bug **最小化后沉淀为 edge 语料**（clean/ 或 reject/），成为回归。
+- **种子集 = 输入语料且顺序固定**（`generate.collect_seeds`）：跳过流水线自己的输出
+  目录（`gen/ast/symbols/lex/trans_callback`），且目录遍历序/结果序都排序（排序键不含
+  平台分隔符）⇒ 同一 `--seed` 在 CI 与本机跑**同一串输入**（否则 finding 复现不出。
+  2026-09-29 实测：本机残留 66 个 `gen/*.v` ⇒ 种子 185 vs CI 119）。
 - edge 门禁进 CI（`python tests/edge/run_edge.py`）；fuzz 在 CI 里给时间预算
   （如 60-120s）跑。
 - differential 依赖 Verible 二进制：先跑

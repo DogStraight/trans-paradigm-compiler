@@ -13,6 +13,7 @@ Doc: tests/fuzz/README.md（不变量清单与已知良性类）
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 from core.token_protocol import TRIVIA_TOKEN_TYPES
@@ -25,7 +26,7 @@ SILENT_FAIL = "silent-fail"      # success=False 且 error 为空（静默失败
 TOKENIZE_FAIL = "tokenize-fail"  # 合法输入格式化后不可 token 化
 TOKEN_CORRUPT = "token-corrupt"  # 格式化改变了非 trivia token 序列
 IDEM_CRASH = "idem-crash"        # 二次格式化崩溃
-NON_IDEMPOTENT = "non-idempotent"  # format(format(x)) != format(x)
+NON_IDEMPOTENT = "non-idempotent"  # format(format(x)) != format(x)（已接受的两类除外）
 
 ALL_KINDS = (
     CRASH,
@@ -53,6 +54,44 @@ class Violation:
 
     def __str__(self) -> str:
         return f"[{self.kind.upper()}] {self.detail}"
+
+
+def _squash_ws(text: str) -> str:
+    """压掉全部空白——差异若只落在空白/断行上，两份文本在这里相等。
+
+    注释文本是非空白字符，故"注释被删/被改"仍会露出来（不会被当成空白漂移）。
+    """
+    return re.sub(r"\s+", "", text)
+
+
+def _accepted_non_idempotent(
+    src: str, out: str, out2: str, rules_dir: str, ext_dirs: list[str] | None
+) -> str | None:
+    """一遍不幂等但属**已接受**时返回原因句，否则 None（= 真违反）。
+
+    两类，判据来源 `docs/gaps/gap-formatter-line-behavior.md`：
+
+    - **展开路径（#3）**：源含宏/指令 marker ⇒ 按设计不判幂等——镜像产品契约
+      `pipeline._check_idempotent`（宏表/占位符/指令行非空即跳过）。二遍内容按
+      展开语义变化，不是幂等性缺陷。判据用 marker 面近似 ctx 的"展开路径"。
+    - **一遍收敛的空白漂移（#5）**：压掉空白后两遍逐字相同（差异只落在空白/
+      断行上）**且**第三遍已收敛（pass3 == pass2）⇒ 空档类。机制：注释回插在
+      格式化**之后**，注释邻接空白不是首遍不动点（首遍 `n /**/)`、二遍补平），
+      补平后稳定。
+
+    不收敛、或改动落到非空白字符（如注释体逐遍增长）⇒ 返回 None，仍判违反。
+    """
+    if any(m in src for m in MACRO_MARKERS):
+        return "展开路径（宏/指令 marker）：按 pipeline._check_idempotent 契约不判幂等"
+    if _squash_ws(out) != _squash_ws(out2):
+        return None
+    try:
+        r3 = format_source(out2, rules_dir, ext_dirs)
+    except Exception:  # noqa: BLE001 — 三遍崩了不属"已接受"，交给上层判违反
+        return None
+    if r3.get("success") and r3.get("output") == out2:
+        return "一遍收敛的空白漂移（gap-formatter-line-behavior #5）"
+    return None
 
 
 def ext_dirs_for(rules_dir: str) -> list[str]:
@@ -100,12 +139,16 @@ def evaluate_format(
     rules_dir: str,
     ext_dirs: list[str] | None = None,
     label: str = "gen",
+    advisories: list[str] | None = None,
 ) -> list[Violation]:
     """跑全部不变量，返回违反清单（空 = 通过）。
 
     `label` 只影响 token 保序判据的适用范围：语法驱动生成的**合法**程序才断言
     "格式化不改内容"；变异产物多是畸形输入，容错解析路径（补分号/重构结构）会
     合法地改变 token 序列（README「已知的 oracle 判定」）。
+
+    `advisories`：可选的**非门禁**观察记录口。已接受的一遍不幂等（展开路径 /
+    一遍收敛的空白漂移）不判违反，但写进这里让调用方仍能看见它（不静默吞掉）。
     """
     violations: list[Violation] = []
     try:
@@ -145,10 +188,16 @@ def evaluate_format(
     except Exception as exc:
         violations.append(Violation(IDEM_CRASH, f"{label}: 二次格式化崩溃: {exc}"))
         return violations
-    if r2.get("success") and r2.get("output") != out:
-        violations.append(
-            Violation(NON_IDEMPOTENT, f"{label}: format(format(x)) != format(x)")
-        )
+    out2 = r2.get("output") or ""
+    if r2.get("success") and out2 != out:
+        reason = _accepted_non_idempotent(src, out, out2, rules_dir, ext_dirs)
+        if reason is not None:
+            if advisories is not None:
+                advisories.append(f"{label}: 已接受的一遍不幂等——{reason}")
+        else:
+            violations.append(
+                Violation(NON_IDEMPOTENT, f"{label}: format(format(x)) != format(x)")
+            )
     return violations
 
 

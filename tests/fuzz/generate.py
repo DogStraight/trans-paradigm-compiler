@@ -201,14 +201,34 @@ def _insert_snippets(token_map: dict[str, str]) -> list[str]:
 
 # ── 种子收集 ────────────────────────────────
 
+# 流水线自己的输出目录名（`pipeline._resolve_paths`：`out_dir/{gen,ast,symbols,lex,
+# trans_callback}`；样本布局下即 tests/e2e/samples/*/<这些>/，.gitignore 已列明）。
+# 它们**不是输入语料**：混进种子池会让种子集随"本机残留产物"变化——实测本机因
+# e2e 跑过留下 66 个 gen/*.v，种子 185 个而 CI 只有 119 个，同一 `--seed` 两边
+# 抽出不同序列（finding 无法复现）。
+_OUTPUT_SUBDIRS = frozenset({"gen", "ast", "symbols", "lex", "trans_callback"})
+
+
 def collect_seeds(*roots: str, extensions: tuple[str, ...] = (".v",)) -> list[str]:
-    """收集种子文件（按语言包后缀过滤；默认 Verilog 的 `.v`）。"""
+    """收集种子文件（按语言包后缀过滤；默认 Verilog 的 `.v`）。
+
+    两条硬性要求：
+    - **只收输入语料**：跳过流水线输出目录（`_OUTPUT_SUBDIRS`），否则种子集
+      取决于本机残留产物，CI 与本机跑的不是同一批种子；
+    - **顺序逐字节跨平台一致**：`os.walk` 的目录遍历序取决于文件系统
+      （Windows/Linux 不同），顺序一变 `rng.choice(seeds)` 抽到的种子就变──
+      同一 `--seed` 在 CI 与本机跑出**不同** finding（2026-09-29 实测：CI 报
+      `mut:ref_comments.v`，本机 5000 轮 0 findings，两边都"对"，差在种子序）。
+      故：目录名排序（walk 期间原地排序）+ 结果按 POSIX 形式路径排序。
+    """
     files: list[str] = []
     for root in roots:
         if not root or not os.path.isdir(root):
             continue
-        for dirpath, _, names in os.walk(root):
+        for dirpath, dirnames, names in os.walk(root):
+            dirnames[:] = sorted(d for d in dirnames if d not in _OUTPUT_SUBDIRS)
             for n in sorted(names):
                 if n.endswith(extensions):
                     files.append(os.path.join(dirpath, n))
+    files.sort(key=lambda p: p.replace(os.sep, "/"))  # 排序键不含平台分隔符
     return files
