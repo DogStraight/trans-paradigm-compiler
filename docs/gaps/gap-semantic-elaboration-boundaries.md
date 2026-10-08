@@ -40,6 +40,13 @@
    每模块还原语言安装态，顺序无关）；进程级隔离对照见 `tools/check_test_isolation.py`。
 4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；插件作者应把注入
    语句归组到容器规则（`plugins/syntax/sim/` 的 `SimCtrlStmt`）。
+5. **精化产物的文本面必须走生产渲染接线**（已修 + 历史影响不可追溯）：值表达式内带行注释时，
+   产物文本（`param_default` / `param_override`）曾因 `analyzer/shared_components.py` 的
+   `Renderer` 漏传 `line_comment_starts` 而丢 token（`'4 // note + 2'`，正确为 `'4 + 2 // note'`）；
+   接线现已与 `pipeline/__init__.py` 同口径，判据 `tests/engine/analyzer/test_shared_components_wiring.py`。
+   **边界（2026-10-09 判定）**：那次丢 token 曾否改变**用户可见诊断**不可追溯（六个样本诊断面
+   0/0），现象是静默的产物文本退化（下游对不可判文本按保守处理）——接受为"已修缺陷的不可追溯
+   影响"，不再跟踪；后续新增 harness / 生产构造点须一并接线（全仓性口径）。
 
 ## 为什么是边界（影响面）
 

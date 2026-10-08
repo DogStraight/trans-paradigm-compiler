@@ -88,15 +88,15 @@
   `policy/doc-alignment.md`「删除判据」）。
 - **讨论草稿/未成型中间产物** → 根目录 `_drafts/`（暂存区：**不进 git**、门禁
   排除；整理按上述分流落正式位后删原稿，不重复留档）。
-- **预期外/未定判观察** → 根目录 `DRAFT.md`（短期暂存：现象已实测但出口未定，
-  每条必写"现象 + 待判点 + 出口"；**上限 8 条 / 70 行**、清空即删，容量由
-  `tests/policy/test_planning_doc_budget.py` 守；它不是第二个 TODO）。
+- **预期外/未定判观察** → 根目录**短期草稿**（不常驻：有观察才建、每条必写"现象 +
+  待判点 + 出口"、上限 8 条 / 70 行、**清空即删**；文件名与完整纪律见
+  `policy/doc-alignment.md`「容量上限」——它不是第二个 TODO）。
 
 > 注释对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）2026-09-05
 > 就近 `policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
 > 只保留导航与分层说明。
 >
-> **规划文件容量纪律**（2026-10-08）：`TODO.md` / `ROADMAP.md` / `DRAFT.md` /
+> **规划文件容量纪律**（2026-10-08）：`TODO.md` / `ROADMAP.md` / 根目录短期草稿 /
 > `docs/gaps/gap-*.md` / `docs/decisions/NNNN-*.md` 都有行数上限，由
 > `tests/policy/test_planning_doc_budget.py` 守——**超限先删旧条目或搬出现状边界**，
 > 不靠"下次记得删"（口径见该测试 docstring）。

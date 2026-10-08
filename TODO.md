@@ -64,6 +64,11 @@
       （口径 = 打印非 ASCII 的独立入口脚本一律自护 stdout；**现测 24 个**：`tools/` 12、
       `tests/e2e` 6、`tests/differential` 2、`tests/fuzz/shrink`、`packaging/build_pipeline.py`、
       `parser/rule_selector.py`、`main.py`）。判据：cp1252 下排练全 PASS。
+- [ ] **yaml 正零小数（`key: 0.5`）静默丢内容**（2026-10-09 实测，yaml 负数修复轮发现）：
+      `0.5` 被切成 `literal.number(0)` + `literal.plain(.5)`，渲染成 `key: 0`——`.5` **静默消失**
+      （`1.5` 走 `yaml_dec` 正常；成因 = `yaml_zero` 是 `base_prefix="0"` 前缀形态、没有小数延续链）。
+      判据：`key: 0.5` 渲染非空且**显著 token 序列逐项相同**，`tests/languages/yaml` 全绿。
+      链：`grammar/yaml/base/_number.toml`
 - [ ] **Verilog 头部参数列表的"续项不带关键字"形态**：`#(parameter W = 8, D = 4)` /
       `#(W = 8, D = 4)` 被 linter 阻断（现只接受每项都重复 `parameter`）。
       判据：先扫真实语料（`tests/e2e/samples/real/`）统计该形态出现次数——有量则补语法，
