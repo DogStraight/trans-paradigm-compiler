@@ -3,9 +3,9 @@
 > 主体语言包之一。形态定调见 `ROADMAP.md`「C 语言包」：**核心基线 + 标准增量插件**，
 > c11 / c17 / c23 各为一个插件目录，`requires` 链表达标准包含关系——
 > 「启用某个组合 = 等效某个标准的语法面」，**零引擎新机制**。
-> 分层草案与 C99 接受域清单（27 条逐条标注）见
-> `docs/gaps/gap-language-pack-scope.md`「C 语言包」节；外部参照见
-> `docs/references.md`「C 语言文法参照」。
+> C 包接受域现状（`python tools/c_acceptance.py`：42 条 / 接受 40 / 空洞 2）与渲染保真
+> 现状见 `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」/「C 包渲染/保真面
+> 现状」节；外部参照见 `docs/references.md`「C 语言文法参照」。
 
 ## 现状（0.1.3 交付面）
 
@@ -150,13 +150,14 @@ grammar/c/
   `ConfigRegistry.load_language/load_all/resolve(..., enabled=[...])`（`None` = 用包内
   `[plugins] enabled`；显式档位会被登记为该包"当前档位"，`Lexer` 之类隐式消费方自动跟随）。
   于是**同一个 pack、同一次进程内** `enabled=["c11"]` → `enabled=[]` 会真的换档。
-  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **28 构造 × 4 档矩阵**（按"解析成
-  哪个节点"判定，能直接抓出缓存串档）。两条静默失效根因已修（声明缓存键、解析缓存键都
-  须含档位）——细节见 `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
+  判据：`tests/languages/c/test_c_standard_tiers.py` 的 **26 构造 × 4 档矩阵**（每构造在同
+  一进程内切 4 档断言"解析成哪个节点"，能直接抓出缓存串档；该文件共 43 例）。两条静默
+  失效根因已修（声明缓存键、解析缓存键都须含档位）——细节见
+  `docs/gaps/gap-language-pack-scope.md`「运行时档位：`enabled` 的语义边界」。
 - ⚠ **`enabled` 只门控"声明面"**：插件的**规则文件与 Python 组件**走另一条路径
   （`setup_grammar` → `load_all_components(<pack>/plugins)`），不受 `enabled` 影响。
   C 包插件是纯 TOML、c4 插件是纯 Python，两条路径当前**恰好正交**；语义边界与两种候选
-  语义（只门控声明面 / 门控一切）见 `TODO.md`。
+  语义（只门控声明面 / 门控一切）见 `docs/gaps/gap-language-pack-scope.md` 同名节。
   ⚠ **已有一个真实症状**（2026-09-26 实测）：`[[属性]]` **不依赖任何新关键字**，故
   **基线档也解析出 `AttributeSpec`**——"档位 = 接受域"在纯语法增量上不成立，判据见
   `test_c_standard_tiers.py::TestKeywordFreeIncrementsAreNotTierGated`。
@@ -195,11 +196,12 @@ grammar/c/
 `difflib` ≥ 0.80 / 幂等 / **注释清单**（源里每条注释正文必须出现）/
 **首注释源序** / **显著 token 序列逐项相同**（内容级对拍，重排只许动空白）。
 
-实测 ratio：`ring_buffer.h` 0.9926（33/33 行）、`ring_buffer.c` 0.9925（119/119）、
-`edge_comments.c` 0.9822。**已知偏差逐条记在缺口档**（`case`/标号缩进、
-`for (;;)` → `for (; ; )`、注释落在括号内首元素前的位置、分隔符后行尾注释随折行
-漂移）——都是不丢 token 的排版差异，**不在这里重复登记**：口径与成因见
-`docs/gaps/gap-language-pack-scope.md`「C 包渲染/保真面现状」表。
+实测 ratio：`ring_buffer.h` 0.9926、`ring_buffer.c` 0.9925、`edge_comments.c` 0.9822
+（判据口径 = 非空 / 行覆盖 ≥80% / ratio / 幂等 / 注释清单 / 首注释源序 / 显著 token 序列）。
+**已知偏差逐条记在缺口档**（`case`/标号缩进、`for (;;)` → `for (; ; )`、注释落在括号内
+首元素前的位置、分隔符后行尾注释随折行漂移等）——都是不丢 token 的排版差异，
+**不在这里重复登记**：口径与成因见
+`docs/gaps/gap-language-pack-scope.md`「C 包渲染/保真面现状」的「已知偏差」表。
 
 补布局前先跑 `python tools/render_coverage.py grammar/c`：**引擎对无渲染配置的规则
 静默输出空串**，缺布局是无声的保真度损失（本包最初 70 条规则只有 1 条有配置）。
@@ -261,7 +263,7 @@ grammar/c/
 ## 配套文档
 
 - `grammar/README.md`（语言包目录约定、inject 归组）
-- `docs/gaps/gap-language-pack-scope.md`（分层草案 / 接受域清单 / 渲染保真现状）
+- `docs/gaps/gap-language-pack-scope.md`（语言包范围 / C 语言包：接受域现状 / C 包渲染·保真面现状）
 - `linter/linter_architecture.md`（linter 分层与已知边界；语句发现/区间判定口径）
 - `parser/expression_conventions.md`（表达式隐式约定，含 `pratt_level`）
 - `core/component_protocol.md`（加语法结构 / 插件的工作流）

@@ -1,8 +1,7 @@
-"""tests/languages/c/test_c_declarations.py — C 包阶段 1：声明与声明符。
+"""tests/languages/c/test_c_declarations.py — C 包：声明与声明符。
 
-阶段 1 范围（`docs/gaps/gap-language-pack-scope.md`「C 语言包」）：词法 + 类型
-说明符与**声明符**；**不含表达式与语句**（初始化器、函数体、数组长度表达式在
-阶段 2/3）。故本文件的样本都是**外部声明序列**。
+范围见 `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」；本文件的样本
+都是**外部声明序列**（函数体与表达式语句在各自的测试文件里）。
 
 判据是**双向**的（阶段 0 定）：正样本必须进 AST（只测"不报错"会漏掉规则没接上），
 负样本必须被拒（只测正样本会漏掉"语法过宽"）。

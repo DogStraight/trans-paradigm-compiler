@@ -15,7 +15,7 @@ token 替换为 `` `M ``，则格式化输出必须与未替换时一致——�
 
 不进日常门禁（人工/按需跑，与 tools/ 其他自查工具同）。机制就位后本工具应给出
 高覆盖且不回退；失败面按 token 类型分布用于定位机制缺口。
-Doc: docs/decisions/0017-macro-in-syntax-position.md
+Doc: preprocessor/README.md（宏形态 / 处置策略）
 """
 
 import argparse

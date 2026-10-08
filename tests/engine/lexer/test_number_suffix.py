@@ -6,7 +6,7 @@
 而 `f`/`F` 已是十六进制 digit 类别（`hex_value_abc`），按类别加后缀边会与 hex 值
 自环**撞键**（覆盖后十六进制数字解析崩）。本文件用 `0x1FF` 把这条判据钉死。
 
-Doc: docs/gaps/gap-language-pack-scope.md（C 包词法面）
+Doc: docs/gaps/gap-language-pack-scope.md（C 语言包：接受域现状）
 """
 
 import pytest

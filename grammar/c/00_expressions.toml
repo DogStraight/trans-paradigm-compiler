@@ -489,7 +489,7 @@ line = [
 #   渲染为 `char *p = (char*)q;`（`sizeof(char *)` → `sizeof(char*)`、`typeof(char *)`
 #   → `typeof(char*)` 同）。旧注释写"`(char *)p` 渲染成 `(char *)p`、星号与类型之间留
 #   空格"，**与实测不符**（注释描述的是意图）。这是**排版差异**（C 空白无关 ⇒ token
-#   序列不变、语义不变），已记缺口档渲染现状表；要改成 `char *` 需同时动
+#   序列不变、语义不变），已记缺口档「C 包渲染/保真面现状」的「已知偏差」#7；要改成 `char *` 需同时动
 #   `TypeName`/`CastTypeName` 两处布局并重录三份样本的保真比值，故本轮只更正注释。
 [CastTypeName.renderer.layout]
 line = [

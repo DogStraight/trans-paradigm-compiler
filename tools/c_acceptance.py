@@ -1,7 +1,7 @@
 """c_acceptance.py — C 包**接受面**扫描（按构造逐条试解析，人工/按需跑，不进日常门禁）。
 
 动机：C 包的"接受面"是它对外的契约（`docs/gaps/gap-language-pack-scope.md`
-「C99 接受域清单」），而**空洞是无声的**——构造不被接受时 parser 往往给出**空 AST
+「C 语言包：接受域现状」），而**空洞是无声的**——构造不被接受时 parser 往往给出**空 AST
 而不报错**（语句发现按 FIRST 集挑候选，不属于任何语句入口的构造被整体跳过）。只跑
 测试套件看不出"还差哪一族"，逐条试解析才看得见。
 
@@ -16,7 +16,7 @@
 ⚠ 用例表是**声明式清单**（与缺口档的接受域清单同源，人工维护）：新增能力后把对应
 用例从"不支持"移出并把断言落到 `tests/languages/c/`（本工具只做盘点，不当门禁——
 按 `tools/README.md` 纪律，这些工具不进日常门禁）。
-Doc: docs/gaps/gap-language-pack-scope.md（C99 接受域清单 / C 包词法面）
+Doc: docs/gaps/gap-language-pack-scope.md（C 语言包：接受域现状）
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ if _ROOT not in sys.path:
 # 覆盖 C99 的各语法族；命名与缺口档接受域清单一致，便于对照。
 # ⚠ **清单会漏项**（2026-11-25 实测）：本表曾漏掉变参 `...`，于是"空洞只剩预处理
 #   两项"在工具与文档间互相印证，掩盖了真实缺口。纪律：清单必须与缺口档
-#   `docs/gaps/gap-language-pack-scope.md`「C99 接受域清单」**逐行对照**
+#   `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」**逐行对照**
 #   （表里有、清单无 ⇒ 漏项）；新增语言包时同一纪律适用。
 CASES: list[tuple[str, str, str]] = [
     ("词法", "整数后缀 U/L/LL", "unsigned long x = 1UL;\n"),

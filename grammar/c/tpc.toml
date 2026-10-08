@@ -1,8 +1,8 @@
 # tpc.toml — C 语言包入口（核心基线 ≈ C99 语法面；标准增量插件见 ROADMAP「C 语言包」）
 #
-# 阶段 1（0.1.3 WS1）：词法 + 类型说明符与声明符。**不含表达式与语句**——初始化器、
-# 函数体、数组长度表达式在阶段 2/3 接上（故本阶段翻译单元 = 外部声明序列）。
-# 分层与接受域清单见 docs/gaps/gap-language-pack-scope.md「C 语言包」节。
+# 覆盖：词法 / 声明与声明符 / 类型（struct·union·enum·typedef）/ 语句 / 表达式；
+# 标准增量 = `plugins/{c11,c17,c23}`（启用组合见下 `[plugins] enabled`）。
+# 接受域现状见 docs/gaps/gap-language-pack-scope.md「C 语言包：接受域现状」节。
 
 [engine]
 # 本包依赖的引擎契约面（逐项能力 + 版本）——任一项引擎不认识或版本不匹配即

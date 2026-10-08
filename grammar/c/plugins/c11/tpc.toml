@@ -8,7 +8,7 @@
 #   此前记为"打包/分发面清单，不是运行时开关"是**错的**——它决定哪些插件目录的
 #   tpc.toml 声明被合并，含 `[lexer] token_ext` 的词法扩展）。引擎级 `enabled=`
 #   覆盖参数可把它变成**档位**（同一个 pack 同一次进程内切档），见
-#   `docs/gaps/gap-language-pack-scope.md`「运行时档位入口已落地」。
+#   `docs/gaps/gap-language-pack-scope.md`「运行时档位：`enabled` 的语义边界」。
 #
 # 本插件已落地：`_Static_assert`（文件 + 块作用域）、`_Alignof`、`_Generic`、
 # `_Noreturn`、`_Thread_local`、`_Alignas`、`_Atomic`——C11 的 6 个新关键字**全部有规则**。

@@ -197,7 +197,7 @@ class TestC23Increments:
 
         不逐字比对：块体（`struct { … }`）由布局决定换行，`char *` 在类型名位置
         渲染成 `char*`（**核心基线既有行为**，实测 `sizeof(char *)` / `(char *)q`
-        同样如此——见 `docs/gaps/gap-language-pack-scope.md` 渲染现状表）。
+        同样如此——见 `docs/gaps/gap-language-pack-scope.md`「已知偏差」#7）。
         C 空白无关 ⇒ token 序列相同即内容不丢、语义不变。
         """
         del label, node

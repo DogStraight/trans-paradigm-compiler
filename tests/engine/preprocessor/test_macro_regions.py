@@ -6,7 +6,7 @@
 消费方（渲染侧 raw 拼接 / 诊断宏归因）靠它定位"哪些内容来自哪条宏"。
 
 Doc: preprocessor/_expand.py::expand_tokens
-Doc: docs/decisions/0017-macro-in-syntax-position.md（决策 3）
+Doc: preprocessor/README.md（宏形态 / 处置策略）
 """
 
 import pytest
