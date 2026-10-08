@@ -23,7 +23,7 @@
     python tools/feature_sites.py --save            # 写预算基线（需说明原因）
     python tools/feature_sites.py --compare         # 与基线比对，新增/增长 → exit 1
 
-Doc: docs/gaps/gap-feature-scatter.md（缺口现状 + 候选方案 + 拆步）
+Doc: docs/gaps/gap-feature-scatter.md（现状 + 步 2 收敛目标与接受边界）
 """
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ import json
 import re
 import sys
 import tomllib
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -387,14 +388,18 @@ def main() -> int:
 
     result = scan(args.family)
     if args.save:
+        # `recorded` = 写基线当天（原先写死日期，重录后仍显示旧日期）；`newline=""`
+        # 防 Windows 文本模式把 LF 翻成 CRLF（`.gitattributes` 定死 eol=lf，
+        # 旧写法每次 `--save` 都会把基线写脏——2026-10-08 实测）。
         BASELINE.write_text(
             json.dumps(
-                {"recorded": "2026-09-25", "families": result},
+                {"recorded": date.today().isoformat(), "families": result},
                 ensure_ascii=False,
                 indent=1,
                 sort_keys=True,
             ),
             encoding="utf-8",
+            newline="",
         )
         print(f"[feature-sites] 已写基线：{BASELINE.relative_to(ROOT)}")
         return 0
