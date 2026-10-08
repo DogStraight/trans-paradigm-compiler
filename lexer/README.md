@@ -13,3 +13,20 @@
 | `lexer_utils.py` | TOML 配置加载与合并工具 |
 
 > 入口：`Lexer.tokenize`；缩进相关（YAML）看 `[indent]` 配置与 `_indent_unit`。
+
+## `[[number.based]]` 声明字段（`base/_number.toml`）
+
+| 键 | 语义 | 消费方 |
+|---|---|---|
+| `name` / `size` / `base_prefix` / `bases` / `value_digits` / `value_allow` / `value_allow_space` | 形态本体（size→base→value 链） | `number_gen.compile_number_pattern` |
+| `suffix = { chars, max }` | 字面量**尾随后缀**（C 的 `42u` / `1.5f`）：DFA 之后的声明式尾段，由 runner 在接受位后消费 | `number_runner._consume_suffix` |
+| `lead_dot = true` | 该形态额外接受**以小数点开头**的浮点（C 的 `.5`）：点后至少一位数字，`.` 本身仍归符号表 | `number_gen.build_lead_dot` + `number_runner.starts_at_declared_non_digit` |
+| `lead_sign = true` | 该形态额外接受**以符号开头**的数（yaml 的 `-5` / `+5` / `-0.5`）：符号后至少一位数字，裸 `-` 仍归符号表（序列指示符 `- 8080` 不被劫持） | 同上（`build_lead_sign`） |
+
+- 两个前导键（`lead_dot` / `lead_sign`）都要求 **无前缀**形态，且**不可同时声明**
+  （各是独立前导子图，组合形态 `-.5` 未支持）——声明违规即 fail-fast（ConfigError）。
+- 前导键必须在词法层：换行/空格是 trivia，`key: -5` 与 `seq:` 换行后的 `- 8080`
+  化简为同一 token 对，语法层拿不到"符号与数字是否相邻"；实测语法侧方案会把
+  `seq:\n- 8080` 吞成 `seq: -8080`。
+- 未声明前导键的形态零变化（裁决点：`starts_at_declared_non_digit` 只放行**显式
+  表态**的形态，防同字符符号被劫持）。

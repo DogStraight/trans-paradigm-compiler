@@ -46,12 +46,18 @@ class _ConfigNumberRunner:
         return best
 
     def starts_at_declared_non_digit(self, text: str, pos: int) -> bool:
-        """是否有**显式声明非数字起始**的形态（`lead_dot`）能从这里开始。
+        """是否有**显式声明非数字起始**的形态（`lead_dot` / `lead_sign`）能从这里开始。
 
         只认显式声明过的形态：把"任何声明的起始字符"都先试数字扫描会**劫持同字符
-        符号**——yaml 的 `yaml_neg`（`-` 前缀形态）会让序列指示符 `- 8080` 的 `-`
-        变成 `literal.number`（实测 18 处 yaml 测试变红）。故 C 的 `.5` 需要
-        `lead_dot = true` 显式表态，未表态的形态（含 yaml 的 `-`）行为零变化。
+        符号**——`-` 既是 yaml 的前导符号（`-5`）又是序列指示符（`- 8080`）。故
+        yaml 的负数形态**显式**声明 `lead_sign = true`：它只放行"符号 + 数字"的
+        起始（符号态不是接受态，见 `number_gen.build_lead_sign`），裸 `-` 仍走
+        符号路径；C 的 `.5` 同理需要 `lead_dot = true`。未表态的形态行为零变化。
+
+        ⚠ 反例（引擎实测教训，判据见
+        `tests/engine/lexer/test_number_suffix.py::TestLeadDotConfig`）：若改成
+        "任何声明的起始字符都算"，yaml 的序列指示符 `- 8080` 的 `-` 会变成数字
+        token（实测 18 处 yaml 测试变红）。
         """
         if pos >= len(text):
             return False
@@ -59,7 +65,7 @@ class _ConfigNumberRunner:
         if cat is None:
             return False
         return any(
-            p.lead_dot and (p.start_state, cat) in p.transitions
+            (p.lead_dot or p.lead_sign) and (p.start_state, cat) in p.transitions
             for p in self.patterns
         )
 

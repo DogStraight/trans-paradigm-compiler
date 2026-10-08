@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **yaml 负数形态：`key: -5` 被当块序列、`list: [1, -2]` 整篇渲染成空串**
+  （`grammar/yaml/base/_number.toml` 的 `yaml_neg` 是**不可达声明** ⇒ 负数在词法层被切成
+  `sub` + `number`，语法层再按"块序列指示符"读走）。
+  - **实测缺陷**（Lead 探针 + 修复前基线）：`key: -5` → `'\nkey: \n- 5'`（语义变：值成了
+    序列项）；`key: -5  # c` → 注释一并丢；`list: [1, -2]` → **`''`（parse 截断，整篇渲染成
+    空串）**——内容级损失，非排版差异。
+  - **包侧不可行（实测反证）**：语法侧 `NegativeNumber = [sub, number]` 能修好同行/flow 形态，
+    但把 `seq:\n- 8080` 吞成 `seq: -8080`（序列指示符被吃）。根因：换行/空格都是 trivia，
+    `key: -5` 与换行后的 `- 8080` 化简为**同一 token 对**——"符号与数字是否相邻"只能在词法层判。
+  - **修法**：新增与 `lead_dot` 同族的声明键 **`lead_sign`**（`lexer/number_gen.py`
+    `build_lead_sign`：符号态**不接受** → 符号后至少一位数字；只对无前缀形态合法、与
+    `lead_dot` 互斥、非 bool/违规即 ConfigError），`number_runner.starts_at_declared_non_digit`
+    的放行集合加 `lead_sign`；`yaml_neg` 改为 `base_prefix="none" + size={digits="any"} +
+    lead_sign=true`（旧 `base_prefix="-"` 按"先证后删"删除：三条入口判据全不命中且全仓零功能引用）。
+  - **判据**：`key: -5` → 单 token `literal.number('-5')`、渲染 `key: -5`（相邻）、`# c` 注释
+    保住；`list: [1, -2]` / `list: [-1]` / `m: {x: -1}` / `seq:\n- -5` 同；对照
+    `seq:\n- 8080` / `- 5` / `[1, 2]` **不回归**。`tests/languages/yaml` **91 passed**
+    （改前 82，+9）、`tests/engine/lexer + tests/engine/parser` **434 passed**（改前 414，+20）、
+    smoke 462、verilog+c+c4 1153 全绿。
+  - **影响面（机器对照）**：HEAD 引擎 vs 新引擎在 29 条数字语料上，verilog / c / c4
+    **0 差异**；yaml 恰好 4 条（`-5` / `+5` / `-0.5` / `-1.5` 由拆 token 变单数字）。
+  - **缺陷态变红**：三个修复文件临时还原 HEAD → 新判据 **23 failed / 56 passed**（失败全是
+    新增判据；既有防劫持门禁 `test_starts_at_declared_non_digit_is_gated` 仍绿）。
+  - 两处已接受的行为变化：行首裸 `-8080` 变单数字 token（顶层裸标量本就不支持，非回归）；
+    `key: +5` 由词法 `ValueError` 变为可用。**另立 TODO**：`key: 0.5`（正零小数）仍截断为
+    `key: 0`（`yaml_zero` 前缀形态无小数链），不在本次范围。
 - **`tools/feature_sites.py --save` 在 Windows 把基线写成 CRLF，且 `recorded` 写死旧日期**。
   `.gitattributes` 定死 `eol=lf`，故每次重录都会把 `tools/feature_sites_baseline.json`
   写脏（本轮 `--save` 实测踩到）。修法：`write_text(..., newline="")`（与
@@ -186,6 +212,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **决策权移交 + `DRAFT.md` 暂存区清零**（作者 2026-10-09：细节决策全部交维护者，作者只参与
+  框架级；主线 = **补齐 C 包框架缺口 → 性能化改进 → 缓慢迭代**，架构基本定型）。
+  - `policy/collaboration.md` 新增「决策权归属」：**框架级**（架构方向、引擎↔插件边界、语言
+    包战略与支持范围、发布/推送/版本、跨子系统机制立项、对外定位）→ 作者拍板；**细节级**
+    （实现形态与算法、判据与门限、边界接受/不做登记、文档归位与裁剪、工具与门禁细节、命名
+    文案）→ 维护者自决并落档；四条**升级判据**（要新增契约面/配置 schema、要改对外承诺、
+    取舍不可逆且成本未知、作者点名）。`AGENTS.md`（一行指针）与 `ROADMAP.md`「当前主线」
+    （主线三段 + 架构定型声明）同步。
+  - **`DRAFT.md` 四条全部落定出口，暂存区按纪律清空删除**：① `tpc check` 产物丢 token 的
+    "用户可见影响"不可追溯 → **接受**（现状入
+    `docs/gaps/gap-semantic-elaboration-boundaries.md` 边界 5）；② `c99` 基线不再切 `c89` 层
+    → **不做**（入 `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」仍存边界表）；
+    ③ yaml `yaml_neg` → 调查落锤为**内容级缺陷**（转修复，见下 Fixed）；④ `feature_sites`
+    基线静默过期 → **立项**（入 `ROADMAP.md` P2.8「按需门禁的定期节奏」）。
 - **规划文件收口：TODO/ROADMAP 重写、gaps 十档裁剪、ADR 清空、新建 `DRAFT.md`**
   （作者 2026-10-08 要求：清理过时/已解决的缺口，把要做的事收口到 TODO 与决策文件，
   不让这些文件无限增长，**预期外的情况单独放短期草稿**）。三份规划面此前已从"待办清单"

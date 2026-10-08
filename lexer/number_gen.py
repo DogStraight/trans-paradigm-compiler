@@ -21,6 +21,12 @@
     value_digits = { x = "hex", b = "bin", o = "oct" }
     value_allow = []
 
+    [[number.based]]
+    name = "yaml_neg"             # 无前缀 + 前导符号（-5 / +5 / -0.5）
+    size = { digits = "any" }
+    base_prefix = "none"
+    lead_sign = true              # 前导符号：符号后至少一位数字（裸 `-` 不成字面量）
+
     [[number.real]]
     name = "float"
     # 浮点/科学计数：dec [. dec] [e[+-] dec]（C 风格）
@@ -92,6 +98,7 @@ class NumberPattern:
         suffix_chars: frozenset[str] | None = None,
         suffix_max: int = 0,
         lead_dot: bool = False,
+        lead_sign: bool = False,
     ):
         self.name = name
         self.transitions = transitions
@@ -103,10 +110,13 @@ class NumberPattern:
         # 由 runner 消费（见 `compile_number_pattern` 的 suffix 键说明）。
         self.suffix_chars = suffix_chars or frozenset()
         self.suffix_max = suffix_max
-        # 显式声明"非数字起始"（C 的前导点浮点 `.5`）：lexer 只对**声明过**的形态
-        # 做"先试数字扫描"——否则会把与符号同字符的起始字符劫持掉
-        # （yaml 的 `yaml_neg`（`-` 前缀）会让序列指示符 `-` 变成数字 token）。
+        # 显式声明"非数字起始"：lexer 只对**声明过**的形态做"先试数字扫描"——
+        # 否则会把与符号同字符的起始字符劫持掉（yaml 的序列指示符 `- 8080`）。
+        #   lead_dot  —— C 的前导点浮点（`.5`）
+        #   lead_sign —— yaml 的前导符号数（`-5` / `+5`），符号后**至少一位**数字
+        # 两者都会进 `number_runner.starts_at_declared_non_digit` 的放行集合。
         self.lead_dot = lead_dot
+        self.lead_sign = lead_sign
 
 
 def _digit_cats_for(radix: str) -> set[str]:
@@ -147,6 +157,7 @@ class _PatternBuilder:
     suffix_chars: frozenset[str] = frozenset()
     suffix_max: int = 0
     lead_dot: bool = False
+    lead_sign: bool = False
 
     def new_state(self) -> int:
         """取新状态号（单调递增，pattern 内独立编号）。"""
@@ -168,6 +179,7 @@ class _PatternBuilder:
         return NumberPattern(
             name, self.transitions, self.accepting, start, self.base_states,
             allow_space, self.suffix_chars, self.suffix_max, self.lead_dot,
+            self.lead_sign,
         )
 
     def build_size(
@@ -241,6 +253,17 @@ class _PatternBuilder:
         self.add(exp_digit_state, "underscore", exp_digit_state)
         self.accepting.add(digits)
         self.accepting.add(exp_digit_state)
+
+    def build_lead_sign(self, start: int) -> int:
+        """前导符号子图（yaml 的 `-5` / `+5`）——符号后**至少一位**数字。
+
+        与 `build_lead_dot` 同族：符号态**不是**接受态，故裸符号不成字面量——
+        `-` 仍归符号表（yaml 的序列指示符 `- 8080` 不被劫持）。返回体链起点
+        （符号态的下一态），由 `build_size` 继续接数字/小数链。
+        """
+        after_sign = self.new_state()
+        self.add(start, "sign", after_sign)
+        return after_sign
 
     def _prefix_entry_state(self, from_state: int, first: str) -> int:
         """前缀首字符的入口态（取已有的 `digit{first}` 转移目标，缺则新建）。"""
@@ -391,6 +414,16 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     声明在别处即 fail-fast。点后**至少一位**数字（`.` 本身仍归符号表，见
     `build_lead_dot`）。字面量起始字符不止数字时，需要 lexer 侧"先试数字扫描"——
     见 `number_runner.starts_at` 与 `main_lexer._try_number_start`。
+
+    **lead_sign 键**（可选布尔，`lead_sign = true`）：该形态额外接受**以符号开头**
+    的数（yaml 的 `-5` / `+5` / `-0.5`）。与 `lead_dot` 同族、同限制：只对无前缀
+    形态有意义，声明在别处即 fail-fast；两个前导键**不可同时声明**（各是一个独立
+    前导子图，组合形态 `-.5` 未支持，见下）。符号后**至少一位**数字——裸 `-` 不是
+    字面量，故 yaml 的序列指示符 `- 8080` 仍走符号路径（见 `build_lead_sign`）。
+    为什么必须在词法层（而不是语法层加一条"符号 + 数字"规则）：换行/空格都是
+    trivia，`key: -5` 与 `key:` 换行后的 `- 8080` 会化简成同一 token 对，语法层拿不到
+    "符号与数字是否相邻"这一事实——实测语法侧方案会把 `seq:\n- 8080` 渲染成
+    `seq: -8080`（序列指示符被吞成负数值）。邻接是词法事实，故归本层。
     """
     name = cfg.get("name", "based")
     allow_space = cfg.get("value_allow_space", False)
@@ -405,6 +438,17 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
         raise ConfigError(
             f"[[number.based]] 的 lead_dot 须为布尔（以小数点开头的浮点，如 `.5`），"
             f"实得 {lead_dot!r}"
+        )
+    lead_sign = cfg.get("lead_sign", False)
+    if not isinstance(lead_sign, bool):
+        raise ConfigError(
+            f"[[number.based]] 的 lead_sign 须为布尔（以符号开头的数，如 `-5`），"
+            f"实得 {lead_sign!r}"
+        )
+    if lead_dot and lead_sign:
+        raise ConfigError(
+            f"[[number.based]] {name!r}：lead_dot 与 lead_sign 不能同时声明"
+            "——各是一个独立前导子图，组合形态（如 `-.5`）未支持"
         )
     # 无前缀形态（base_prefix = "none"）：size 态即最终接受态（十进制整数/浮点），
     # 不建 quote/base 链
@@ -422,7 +466,11 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
     b = _PatternBuilder()
     b.suffix_chars, b.suffix_max = suffix_chars, suffix_max
     b.lead_dot = lead_dot
+    b.lead_sign = lead_sign
     start = b.new_state()
+    # 前导子图（点/符号）：都只对无前缀形态合法，且"前导字符后必须有数字"
+    # ——由各自的 build_* 建成"前导态不接受"的形状。
+    body_start = start
     if lead_dot:
         if not no_prefix:
             raise ConfigError(
@@ -430,7 +478,14 @@ def compile_number_pattern(cfg: dict) -> NumberPattern:
                 f"（base_prefix = {base_prefix!r}）——有前缀时小数点没有『开头』位置"
             )
         b.build_lead_dot(start)
-    current = b.build_size(start, size_cfg, size_is_none, no_prefix, size_allow_zero)
+    elif lead_sign:
+        if not no_prefix:
+            raise ConfigError(
+                f"[[number.based]] {name!r}：lead_sign 只对**无前缀**形态有意义"
+                f"（base_prefix = {base_prefix!r}）——有前缀时符号不在『开头』位置"
+            )
+        body_start = b.build_lead_sign(start)
+    current = b.build_size(body_start, size_cfg, size_is_none, no_prefix, size_allow_zero)
 
     # 无前缀形态：size 态即接受态，直接返回
     if no_prefix:

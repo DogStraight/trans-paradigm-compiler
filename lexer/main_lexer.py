@@ -703,9 +703,11 @@ class Lexer:
         不再是数字）都不对。故按 runner 的**实际结果**判定：没吃出东西就原样返回，
         交回常规分派（符号路径）。
 
-        ⚠ 只认 `lead_dot` 显式声明过的形态（`starts_at_declared_non_digit`）：
-        "任何声明的起始字符都先试"会劫持同字符符号——yaml 的 `-` 前缀数字形态
-        会让序列指示符 `- 8080` 的 `-` 变成数字 token（实测 18 处测试变红）。
+        ⚠ 只认 `lead_dot` / `lead_sign` 显式声明过的形态
+        （`starts_at_declared_non_digit`）："任何声明的起始字符都先试"会劫持同字符
+        符号——yaml 的 `-` 既是前导符号（`-5`，`lead_sign` 显式表态）又是序列
+        指示符（`- 8080`，符号态不接受 ⇒ 不走数字）；若不分声明一律先试，序列
+        指示符会变成数字 token（实测 18 处测试变红）。
         """
         if not self._number_runner.starts_at_declared_non_digit(st.text, st.idx):
             return False

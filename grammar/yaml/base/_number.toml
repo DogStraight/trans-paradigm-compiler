@@ -1,6 +1,18 @@
 # _number.toml — yaml（YAML 子集）数字字面量形态声明
 #
-# YAML 子集：十进制整数/小数（含负数）。无十六进制/八进制/二进制。
+# YAML 子集：十进制整数/小数（含**符号**）。无十六进制/八进制/二进制。
+#
+# 负数形态走 `lead_sign`（前导符号）：词法层把"符号 + 数字"**整体**吃成一个
+# `literal.number`（`-5` / `+5` / `-0.5`）——符号后必须有数字，裸 `-` 仍归符号表
+# （序列指示符 `- 8080` 不被劫持，判据见
+# tests/engine/lexer/test_number_suffix.py::TestLeadSignConfig 与
+# tests/languages/yaml/ 的负数用例）。
+# 为什么不在语法层加"symbol.base.sub + literal.number"规则：换行/空格是 trivia，
+# `key: -5` 与 `seq:` 换行后的 `- 8080` 化简成同一 token 对，语法层无法区分
+# （实测：语法侧方案会把 `seq:\n- 8080` 吞成 `seq: -8080`）。邻接是词法事实。
+#
+# 已知边界（不在本形态内）：`0.5` 这类**正零小数**不成立——`yaml_zero` 是前缀
+# 形态（base_prefix="0"），没有小数链；`-0.5` 由本形态覆盖（size.digits = "any"）。
 
 [[number.based]]
 name = "yaml_dec"
@@ -18,10 +30,14 @@ bases = []
 value_digits = { "0" = "dec" }
 value_allow = []
 
+# 前导符号数（yaml 的 `-5` / `+5` / `-0.5`）：
+#   size.digits = "any" —— 允许 0 开头（`-0` / `-0.5`），并带小数/指数链
+#   lead_sign = true    —— 词法放行"符号起始"，但符号态不接受 ⇒ 必须有数字
 [[number.based]]
 name = "yaml_neg"
-size = "none"
-base_prefix = "-"
+size = { digits = "any" }
+base_prefix = "none"
 bases = []
 value_digits = { d = "dec" }
 value_allow = []
+lead_sign = true

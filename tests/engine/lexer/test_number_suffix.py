@@ -170,10 +170,12 @@ class TestLeadDotConsumption:
         assert _run("1e10", self.CFG) == "1e10"
 
     def test_starts_at_declared_non_digit_is_gated(self):
-        """`starts_at_declared_non_digit`：只认**显式声明** lead_dot 的形态。
+        """`starts_at_declared_non_digit`：只认**显式声明**前导的形态（lead_dot/lead_sign）。
 
-        ⚠ 反例（引擎实测教训）：若改成"任何声明的起始字符都算"，yaml 的 `-` 前缀
-        数字形态会让序列指示符 `- 8080` 的 `-` 变成数字 token（18 处 yaml 测试变红）。
+        ⚠ 反例（引擎实测教训）：若改成"任何声明的起始字符都算"，`-` 前缀数字形态
+        会让 yaml 的序列指示符 `- 8080` 的 `-` 变成数字 token（18 处 yaml 测试变红）。
+        下方 `yaml_like` 是**未声明** lead 的 `-` 前缀形态（历史声明形状）；
+        yaml 包现已改用 `lead_sign = true`——本条判据固化的仍是"未声明不放行"。
         """
         runner = build_number_runner(self.CFG)
         assert runner is not None
@@ -193,8 +195,142 @@ class TestLeadDotConsumption:
         r2 = build_number_runner(yaml_like)
         assert r2 is not None
         assert r2.starts_at_declared_non_digit("-5", 0) is False, (
-            "未声明 lead_dot 的形态不得进入'先试数字扫描'（会劫持同字符符号）"
+            "未声明 lead（lead_dot/lead_sign）的形态不得进入'先试数字扫描'"
+            "（会劫持同字符符号）"
         )
+
+
+class TestLeadSignConfig:
+    """`lead_sign` 键（前导符号数 `-5` / `+5`）的声明面。
+
+    与 `lead_dot` 同族：词法放行"符号起始"，但符号态**不接受**（符号后至少一位
+    数字）——否则 yaml 的序列指示符 `- 8080` 会被吃成数字（见
+    `test_starts_at_declared_non_digit_is_gated`）。
+    """
+
+    def test_absent_key_means_no_lead_sign(self):
+        pat = compile_number_pattern({"name": "x", "size": "none", "base_prefix": "0x"})
+        assert pat.lead_sign is False
+
+    def test_lead_sign_flag_recorded(self):
+        pat = compile_number_pattern(
+            {
+                "name": "x",
+                "size": {"digits": "any"},
+                "base_prefix": "none",
+                "lead_sign": True,
+            }
+        )
+        assert pat.lead_sign is True
+
+    @pytest.mark.parametrize("bad", ["true", 1, None])
+    def test_non_bool_fails_fast(self, bad):
+        with pytest.raises(ConfigError):
+            compile_number_pattern(
+                {"name": "x", "size": "none", "base_prefix": "none", "lead_sign": bad}
+            )
+
+    def test_lead_sign_on_prefixed_form_fails_fast(self):
+        """有前缀形态里符号不在"开头"位置 → 声明即错（不静默忽略）。"""
+        with pytest.raises(ConfigError):
+            compile_number_pattern(
+                {
+                    "name": "x",
+                    "size": "none",
+                    "base_prefix": "0x",
+                    "value_digits": {"x": "hex"},
+                    "lead_sign": True,
+                }
+            )
+
+    def test_lead_dot_and_lead_sign_mutually_exclusive(self):
+        """两个前导键各是独立子图，组合形态（`-.5`）未支持 → 同声明即 fail-fast。"""
+        with pytest.raises(ConfigError):
+            compile_number_pattern(
+                {
+                    "name": "x",
+                    "size": {"digits": "any"},
+                    "base_prefix": "none",
+                    "lead_dot": True,
+                    "lead_sign": True,
+                }
+            )
+
+
+class TestLeadSignConsumption:
+    """`lead_sign` 的消费面：符号后**至少一位**数字；裸 `-` 不成为数字。"""
+
+    CFG = [
+        {
+            "name": "yaml_neg",
+            "size": {"digits": "any"},
+            "base_prefix": "none",
+            "bases": [],
+            "value_digits": {"d": "dec"},
+            "value_allow": [],
+            "lead_sign": True,
+        }
+    ]
+
+    @pytest.mark.parametrize("src", ["-5", "+5", "-0", "-0.5", "-1.5", "-1e3"])
+    def test_signed_number_is_one_token(self, src):
+        assert _run(src, self.CFG) == src
+
+    @pytest.mark.parametrize("src", ["-", "- 8080", "- 5", "-x"])
+    def test_bare_sign_is_not_a_number(self, src):
+        """**判据样本**：符号后无数字 → 不吃（`- 8080` 归符号路径 = 序列指示符）。"""
+        assert _run(src, self.CFG) == ""
+
+    def test_starts_at_declared_non_digit_accepts_lead_sign(self):
+        """声明 `lead_sign` 后放行符号起始（与未声明的 gated 形态对照）。"""
+        runner = build_number_runner(self.CFG)
+        assert runner is not None
+        assert runner.starts_at_declared_non_digit("-5", 0) is True
+        assert runner.starts_at_declared_non_digit("+5", 0) is True
+
+    def test_undeclared_sign_form_still_gated(self):
+        """反例固化：**未**声明 lead 的 `-` 前缀形态不得被放行。"""
+        old_yaml_neg = [
+            {
+                "name": "yaml_neg",
+                "size": "none",
+                "base_prefix": "-",
+                "bases": [],
+                "value_digits": {"d": "dec"},
+                "value_allow": [],
+            }
+        ]
+        runner = build_number_runner(old_yaml_neg)
+        assert runner is not None
+        assert runner.starts_at_declared_non_digit("-5", 0) is False
+        assert runner.patterns[0].lead_sign is False
+        assert runner.patterns[0].lead_dot is False
+
+    def test_other_patterns_unaffected(self):
+        """同一形态集里未声明 lead_sign 的形态零变化（数字起始照常）。"""
+        full = [
+            {
+                "name": "yaml_dec",
+                "size": {"digits": "nonzero"},
+                "base_prefix": "none",
+                "bases": [],
+                "value_digits": {"d": "dec"},
+                "value_allow": [],
+            },
+            {
+                "name": "yaml_zero",
+                "size": "none",
+                "base_prefix": "0",
+                "bases": [],
+                "value_digits": {"0": "dec"},
+                "value_allow": [],
+            },
+            *self.CFG,
+        ]
+        assert _run("42", full) == "42"
+        assert _run("0", full) == "0"
+        assert _run("-5", full) == "-5"
+        assert _run("- 8080", full) == ""
 
 
 class TestSuffixConsumption:
