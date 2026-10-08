@@ -22,20 +22,30 @@
       · 出口：消费方分析或更大样本轮给出"有/无可见差异"结论——有差异则立 `TODO.md` 条目，
       无差异则本条删除、现状归 `docs/gaps/gap-language-pack-scope.md`。
 
-- [ ] **D-2 `c99` 核心基线要不要再切一层 `c89` 基线**（2026-10-08 立；来源
-      `docs/gaps/gap-language-pack-scope.md`「阶段 0 结论」第 3 条——当时记为"首个待决项"，
-      至今无归属）
+- [ ] **D-2 `c99` 核心基线要不要再切一层 `c89` 基线**（2026-10-08 立）
       · 现象：`//` 注释、`long long`、`_Bool`、`for` 声明式、指示符初始化、复合字面量、
       变参 `...` **都是 C99 相对 C89 的新增**，现已全部进核心基线 ⇒ "C89 等效"不可表达。
+      · 来源：0.1.3 阶段 0 定界时记为"首个待决项"（那段一次性计划已随交付收口删除，
+      **本条是它现在的唯一落点**——不落这里就丢了）。
       · 待判点：这是**接受的范围声明**（核心基线 = C99 语法面）还是**要补的档位**？
-      · 出口：作者一句话判——要做 → `ROADMAP.md` 立"c89 基线档"；不做 → 落 gap 档的
-      既定范围声明（现状边界），本条删除。
+      · 出口：作者一句话判——要做 → `ROADMAP.md` 立"c89 基线档"；不做 → 落
+      `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」的范围声明，本条删除。
 
-- [ ] **D-3 yaml `yaml_neg` 声明的可达性**（2026-10-08 立；来源
-      `docs/gaps/gap-language-pack-scope.md` 词法面「写包者须知」第 2 条，原文记"记载待处理"）
+- [ ] **D-3 yaml `yaml_neg` 声明的可达性**（2026-10-08 立；来源 = 已裁的
+      `gap-language-pack-scope.md` 词法面「写包者须知」第 2 条"记载待处理"）
       · 现象：lexer 只在数字字符上进入数字扫描，故 yaml 的 `-5` 一直是
       `symbol.base.minus` + `5`，`yaml_neg` **从未生效**（门禁
       `TestLeadDotConfig::test_starts_at_declared_non_digit_is_gated` 记了这个反例）。
       · 待判点：这是**死声明**（应删配置，命中"删除先证后删"A1）还是要**修的 lexer 缺口**
       （yaml 负数字面量该成单 token）？
       · 出口：判死声明 → 删 `yaml_neg` 并跑 yaml 全绿；判缺口 → `TODO.md` 立条目 + 正负样本判据。
+
+- [ ] **D-4 `tools/feature_sites.py --compare` 的基线自 2026-09-25 起未更新 ⇒ 散点增长无人守**
+      （2026-10-08 立）
+      · 现象：本轮为改 `kept.json` 引用而 `--save` 重录时，吸收的**存量漂移**说明基线已过期
+      ——`formatter` total 78→80、`config scatter` 26→29（`style_check` 2→7、
+      `macro_hygiene` 4→6）；该工具的 `--compare`（增长即 exit 1）**按需跑、不在 CI**，
+      故漂移静默累积。
+      · 待判点：这是按需工具的固有代价（接受，写进 `tools/README.md`），还是要**定期接入
+      CI 节奏**（与 `ROADMAP.md` P2.8「毒配置清单化 + 定期接入 CI」同族）？
+      · 出口：接受 → 现状归 `docs/gaps/gap-feature-scatter.md`；要守 → `ROADMAP.md` P2.8 加一条。
