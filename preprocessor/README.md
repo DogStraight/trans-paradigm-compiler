@@ -61,6 +61,10 @@ verilog 的判定表见 `grammar/verilog/plugins/macro_policy/README.md`。
 引擎侧不再留任何宏相关的语言知识（前缀 / 名字位候选 / 实参形态 / 后随字面量后缀
 全部按 `[macro_recognition]` 声明取）。
 
+> 为什么策略走**插件**而不是一张纯 TOML 策略表：判定"这个调用点该怎么处置"的条件
+> 本身就是语言知识，写成表会演化成小型 DSL；且与 analyzer 已有的"L1 声明式 + L2 插件
+> handler/postpass"分工重复——引擎只负责给**文本事实**，策略判定留给语言包代码。
+
 | 文件 | 一句话 |
 |------|--------|
 | `_expand.py` | 宏展开（strip 指令 + `` `NAME `` 引用展开）+ 指令扫描的注释跨度 |

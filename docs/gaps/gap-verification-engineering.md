@@ -6,33 +6,34 @@
 
 ## 边界是什么
 
-1. **验证 sample 驱动非穷举**（接受 + 摩擦）：正确性依赖精选语料（单元/真实
-   核/recall 门禁）。差分测试存在（sv-parser 98 文件 / Verible 136 / 四工具
-   lint 共识——Verilator/Verible/svlint/slang）；fuzz harness + 生成器已进
-   CI，但随机合法程序对 Verible 的**接受域统计对拍**未做（P2.3 backlog）。
-2. **吞吐解释器受限**（接受）：31 文件 / ~5.2k token 语料实测 lexer ~183k
-   tok/s、parser ~21k tok/s、合并 ~19k tok/s——比原生编译器慢 50–500×，解释型
-   Python + 通用回溯的固有成本。适合单文件/中小工程，非整仓库/超大文件工具。
+1. **验证 sample 驱动非穷举**（接受 + 摩擦）：正确性依赖精选语料（单元/真实核/recall 门禁）。
+   差分测试存在（sv-parser / Verible / 四工具 lint 共识——Verilator/Verible/svlint/slang），
+   但 ⚠ **差分语料在仓外**（`tests/differential/` 只有 runner 与下载脚本）⇒ 历史记录的
+   "sv-parser 98 文件 / Verible 136" **不可仓内复核**，引用时须带此口径。fuzz harness +
+   生成器已进 CI（`.github/workflows/ci.yml` 500 轮 / `nightly.yml` 5000 轮），但随机合法
+   程序对 Verible 的**接受域统计对拍**未做（P2.3 backlog）。
+2. **吞吐解释器受限**（接受）：解释型 Python + 通用回溯的固有成本——适合单文件/中小工程，
+   非整仓库/超大文件工具。可仓内复核的口径 = README「Limitations」的合并吞吐 **~19k tok/s**
+   （`README.md:424`）；本档历史上记的"31 文件 / ~5.2k token、lexer ~183k、parser ~21k tok/s"
+   **无仓内复现入口**（需显式跑基准），不再沿用这些数字。
 3. **无 IDE/LSP**（接受）：CLI 管线，非编辑器插件（LSP 是另一分发形态）。
-4. **无优化 pass**（接受）：transform 是配置驱动结构重写（类型展开/宏处理），
-   非 LLVM 式优化。
-5. **无增量解析**（已跟踪）：每次运行全量重解析。span 绑定（P3.1）已实施
-   （0.1.2 阶段 0）；增量解析 + 增量检查是 ROADMAP P3.2/P3.4（v0.2 core）。
-6. **Transform 包装实例名带 hash 后缀**（摩擦）：未显式命名时
-   `u_spi_master_acb99d` 由 `md5(模块名 + 接口 + 类型 + role)[:6]` 生成
-   （`typed_ports/_transform.py`；impl 绑定可给显式实例名覆盖）——同输入可
-   复现（确定性派生名），非"不稳定"；摩擦点：golden 里出现不可读魔法串，
-   盐组成一改即全量失效。若要 golden 可读，可改派生名形态（如
-   `u_<module>_<role>`）——需求驱动、非必须。
-7. **测试/覆盖门禁真实但非穷尽**（门禁事实）：覆盖 ~83%（`fail_under` 80），
-   transform/renderer 最薄。
+4. **无优化 pass**（接受）：transform 是配置驱动结构重写（类型展开/宏处理），非 LLVM 式优化。
+5. **无增量解析**（已跟踪）：每次运行全量重解析。span 绑定（P3.1）已实施（0.1.2 阶段 0）；
+   增量解析 + 增量检查是 ROADMAP P3.2/P3.4（v0.2 core）。
+6. **Transform 包装实例名带 hash 后缀**（摩擦）：未显式命名时 `u_spi_master_acb99d` 由
+   `md5(模块名 + 接口 + 类型 + role)[:6]` 生成（`grammar/verilog/plugins/typed_ports/_transform.py`；
+   impl 绑定可给显式实例名覆盖）——同输入**可复现**（确定性派生名），非"不稳定"；摩擦点：
+   golden 里出现不可读魔法串，盐组成一改即全量失效。若要 golden 可读，可改派生名形态
+   （如 `u_<module>_<role>`）——需求驱动、非必须。
+7. **测试/覆盖门禁真实但非穷尽**（门禁事实）：门禁 = `pyproject.toml` 的 `fail_under = 80`；
+   全量覆盖 **90.39%**（2026-10-08 实测 `python -m pytest tests -q -n 4 --cov`：
+   12486 语句 / 1200 未覆盖）；仍最薄的是 transform/renderer 一带。
 8. **列对齐/折行摩擦**：见 `gap-formatter-line-behavior.md`（余为接受空档）。
 
 ## 为什么是边界（影响面）
 
-1 决定"未测即可能错"的残余风险（fuzz 统计化收窄）；2 决定工具规模定位；3/4
-是分发/范围选择；5 是大文件/重复调用场景的延迟瓶颈（v0.2 路线）；6/7 是
-对拍/覆盖的可信度摩擦。
+1 决定"未测即可能错"的残余风险（fuzz 统计化收窄）；2 决定工具规模定位；3/4 是分发/范围选择；
+5 是大文件/重复调用场景的延迟瓶颈（v0.2 路线）；6/7 是对拍/覆盖的可信度摩擦。
 
 ## 成熟解法参照（见贤思齐）
 
@@ -41,16 +42,14 @@
 
 ## 可实现性
 
-- 1：P2.3（吞吐 + 接受域统计对拍）→ 随机合法程序统计覆盖（见
-  ROADMAP/TODO 对应条目）。
-- 5：ROADMAP P3.2/P3.4（v0.2 core）——增量解析 + 增量检查（前置 P3.1 已
-  实施），非短期。
+- 1：P2.3（吞吐 + 接受域统计对拍）→ 随机合法程序统计覆盖（见 ROADMAP/TODO 对应条目）。
+- 5：ROADMAP P3.2/P3.4（v0.2 core）——增量解析 + 增量检查（前置 P3.1 已实施），非短期。
 - 2/3/4：接受（工具定位/范围）。
-- 6：命名已是确定性的——若要 golden 可读，改派生名形态即可（见条目 6）；
-  需求驱动、非必须。
+- 6：命名已是确定性的——若要 golden 可读，改派生名形态即可（见条目 6）；需求驱动、非必须。
 - 7：覆盖门禁持续收薄区（transform/renderer 测试补充），非独立缺口。
 
 ## 关联条目
 
 - ROADMAP P2.3（fuzz 吞吐）、P3.2/P3.4（增量，v0.2 core）
 - `tests/fuzz/README.md`（语法驱动 + 变异 fuzzing，动机引自此边界）
+- 与 README「Limitations」重叠的条目（1/3/4/5）以 README 为对外口径，本档只补机制与影响面

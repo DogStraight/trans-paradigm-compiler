@@ -38,8 +38,8 @@
   （analyzer 语义检查插槽已就近 `analyzer/semantic_checks.md`，见 analyzer/README）
   （renderer 世界 A 架构已就近 `renderer/renderer_architecture.md`，见 renderer/README）
   （引擎总览叙事 `engine_overview.md`：跨子系统一条线 + 全局骨架，改任何子系统前先读）
-- 决策：`decisions/README.md`（入档纪律 + 编号 + 模板；现存见 MODEL_INDEX 登记，
-  完成即删——历史 git log）
+- 决策：`decisions/README.md`（入档纪律 + 编号 + 模板；完成即删——历史 git log，
+  现存档由 `MODEL_INDEX.md` 指向的机制文档承载，不另设 ADR 清单）
 - 参考：`references.md`（外部调研/设计来源落档：静态检查器功能调研见其「静态检查器功能调研」节）
   （语法规则字段参考已就近 `grammar/grammar_rule_fields.md`，见 grammar/README）
 - 边界：`gaps/`（按部件的能力边界/缺口档案；只记当前仍成立的结论，过程/历史
@@ -88,7 +88,15 @@
   `policy/doc-alignment.md`「删除判据」）。
 - **讨论草稿/未成型中间产物** → 根目录 `_drafts/`（暂存区：**不进 git**、门禁
   排除；整理按上述分流落正式位后删原稿，不重复留档）。
+- **预期外/未定判观察** → 根目录 `DRAFT.md`（短期暂存：现象已实测但出口未定，
+  每条必写"现象 + 待判点 + 出口"；**上限 8 条 / 70 行**、清空即删，容量由
+  `tests/policy/test_planning_doc_budget.py` 守；它不是第二个 TODO）。
 
 > 注释对齐约定（`Doc:`/`Impl:`/`Test:` + MODEL_INDEX 三处同步）2026-09-05
 > 就近 `policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
 > 只保留导航与分层说明。
+>
+> **规划文件容量纪律**（2026-10-08）：`TODO.md` / `ROADMAP.md` / `DRAFT.md` /
+> `docs/gaps/gap-*.md` / `docs/decisions/NNNN-*.md` 都有行数上限，由
+> `tests/policy/test_planning_doc_budget.py` 守——**超限先删旧条目或搬出现状边界**，
+> 不靠"下次记得删"（口径见该测试 docstring）。

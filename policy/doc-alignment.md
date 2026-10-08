@@ -100,3 +100,16 @@ Doc: linter/linter_architecture.md   # 文件级引用（稳定，不随章节�
 | X2 | 历史调研/决策记录（references.md/ADR） | 落档纪律：git log 无法承载"为什么" |
 | X3 | 个人思考沉淀 | 分层纪律：不对齐不套删除约定 |
 | X4 | CHANGELOG 历史条目 | 发布记录不可篡改 |
+
+## 容量上限（规划/登记文件）
+
+`TODO.md`、`ROADMAP.md`、`DRAFT.md`、`docs/gaps/gap-*.md`、`docs/decisions/NNNN-*.md`
+各有行数上限，由 `tests/policy/test_planning_doc_budget.py` 守（口径与数字见该
+测试 docstring）。动机：这类文件的老化形态不是"写错"，而是**已完成的过程叙述
+不断沉积**，把未完成项稀释到读不出来。因此：
+
+- 超限的处理方式**只有两种**：删旧条目（判据同上表）或把内容搬到归属正确的
+  位置（现状边界 → `gaps/`；过程/结果 → CHANGELOG + 测试；机制 → 就近子包文档）。
+- 提高上限 = **显式决策**（改测试里的常量并在提交信息里说明），不是默认动作。
+- `DRAFT.md` 是短期暂存区，不是第二个 TODO：每条须在下一次相关改动/收尾轮落定
+  出口（修 → TODO；接受 → gaps；立项 → ROADMAP；判废 → 删），清空即删本文件。

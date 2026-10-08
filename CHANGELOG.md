@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`tools/feature_sites.py --save` 在 Windows 把基线写成 CRLF，且 `recorded` 写死旧日期**。
+  `.gitattributes` 定死 `eol=lf`，故每次重录都会把 `tools/feature_sites_baseline.json`
+  写脏（本轮 `--save` 实测踩到）。修法：`write_text(..., newline="")`（与
+  `check_gate_efficacy.py` 同口径）+ `recorded` 改 `date.today().isoformat()`。
+  - **顺带透明化**：重录吸收了**存量漂移**（非本轮改动所致）——`formatter` total 78 → 80
+    （多出 `tests/fuzz/README.md`、`oracle.py`）、`config scatter` 26 → 29（`style_check`
+    2 → 7、`macro_hygiene` 4 → 6），删档（ADR-0017/18/20）致 5 个实例 total 各 −1。
+  - **判据**：`python tools/feature_sites.py compare` → ✓ 无散点增长；
+    `tests/policy/test_feature_sites.py` + `test_code_registry_sync.py` 12 passed；
+    `git ls-files --eol tools/feature_sites_baseline.json` → `i/lf w/lf`。
+
 - **`SyntaxWarning` 门禁在 Python 3.11 上恒绿（反向自检红）**
   （`tests/policy/test_no_syntax_warnings.py`）。非法转义的编译警告**类别随版本变**：
   **3.12 起是 `SyntaxWarning`，3.11 及以前是 `DeprecationWarning`**（实测
@@ -175,6 +186,64 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **规划文件收口：TODO/ROADMAP 重写、gaps 十档裁剪、ADR 清空、新建 `DRAFT.md`**
+  （作者 2026-10-08 要求：清理过时/已解决的缺口，把要做的事收口到 TODO 与决策文件，
+  不让这些文件无限增长，**预期外的情况单独放短期草稿**）。三份规划面此前已从"待办清单"
+  退化成"过程档案馆"——正文大量是已完成叙述与测试/CHANGELOG 的复述。
+  - **归位口径**（本轮统一）：未完成·短期 → `TODO.md`（每项 ≤6 行 = 现状 + 判据/触发条件 +
+    链）；未完成·中长期 → `ROADMAP.md`（≤8 行）；现状边界 → `docs/gaps/`；生效决策 →
+    `docs/decisions/`（完成即删）；**预期外/未定判/影响面未知 → 根目录 `DRAFT.md`**（新建：
+    每条必写"现象 + 待判点 + 出口"，上限 8 条 / 70 行，**清空即删**）。删除判据沿用
+    `policy/doc-alignment.md`（C1 / C2 / C3 / B5 + 完成即删）。
+  - **新增容量门禁** `tests/policy/test_planning_doc_budget.py`：`TODO` ≤160 / `ROADMAP`
+    ≤320 / `DRAFT` ≤70 / 单 gap 档 ≤200 / 单 ADR ≤150 / ADR 总数 ≤10——**超限先删旧**门禁化
+    （取代"下次记得删"）；口径写进 `policy/doc-alignment.md`「容量上限」+
+    `docs/README.md`。
+  - **行数变化**：TODO 397 → **78**；ROADMAP 498 → **320**；gaps 十档 1228 → **690**
+    （索引 README 65 行）；`gap-language-pack-scope.md` 427 → **133**、
+    `gap-language-penetration.md` 193 → 85、`gap-feature-scatter.md` 194 → 83——十档均
+    ≤200、**无整档删除**（活边界本体都在，删的是过程叙述与复述）。
+  - **`docs/decisions/` 清空（保留 README 制度）**：0017 / 0018 / 0020 三档 ADR 全删——
+    决策**全部仍在生效**，但已分别被 `preprocessor/README.md` / `linter/linter_architecture.md` /
+    `core/component_protocol.md` / `core/engine_capabilities.py` / `docs/gaps/gap-feature-scatter.md`
+    与相应测试吸收（命中"完成即删"）；`check_doc_refs` 的 D4 孤儿（ADR-0020）随之为 0。
+    代码/测试里 **20 处内联历史标签按政策保留**（`（ADR-00xx 决策 N）` 作历史编号，全仓另有
+    200+ 处已删 ADR 的历史标签，只清这 20 处反而不一致）。
+  - **搬迁而非删除的知识**：① L2「引擎 vs 插件的能力边界设计原则」（三分法 / 两个可机械测的
+    失效信号 / 普适原语清单 / 取舍定位）从旧 TODO 整节搬进 `core/component_protocol.md`；
+    ② 被否备选与"为什么"内联进 `preprocessor/README.md`（宏处置策略：判定条件是语言知识，
+    纯 TOML 策略表会演化成小型 DSL）与 `renderer/renderer_architecture.md`（宏节点 raw 直出
+    的自述判据）。
+  - **数字漂移修正**（逐条现测；权威源 = 工具/测试）：`tools/c_acceptance.py` **42 条 /
+    接受 40 / 空洞 2**（旧记"40 条 · 接受 38"，同档还并存过"25/3"自相矛盾）；
+    `render_coverage` verilog **265** 条规则（旧记 258）；档位矩阵 **26** 构造 × 4 档（旧记
+    28）；C 保真 **62 例**（旧记 60）；`min_pack` 基线 `passed=1186`（旧记 1126）；渗透探针
+    **硬信号 11 处全在 parser、analyzer 0**（旧记 analyzer"183 处"、Tier A 187）；
+    generate 条件面声明键已迁插件 `gen_activity`、`test_gen_face.py` 已不存在（关联改指
+    `test_elaboration_gen_activity.py`）；不可仓内复核的历史数字（差分语料规模、
+    183k tok/s、"138 份样本"）改为标注口径而非当成现状。
+  - **引用面同步**：`docs/MODEL_INDEX.md` / `grammar/c/README.md` / `grammar/c/tpc.toml` /
+    `grammar/c/plugins/c11/tpc.toml` / `tools/README.md` / `tools/c_acceptance.py` /
+    `tests/**` 的锚点与 `Doc:` 头改指裁后标题（「C 语言包：接受域现状」/「C 包渲染/保真面
+    现状」/「运行时档位：`enabled` 的语义边界」/「已知偏差」）；`linter/linter_architecture.md`
+    删掉过时行"while/repeat 无完整语法规则"（实测 `WhileLoop`/`RepeatLoop` 已在
+    `grammar/verilog/04_statements/20_for.toml`）；移除 3 处指向 `_drafts/` 的一次性脚本引用
+    （该目录随收尾销毁，`policy/structural_budget.md` 已明令不留此类引用）。
+  - **新登记为待办**（此前只存在于审计/审计草稿）：结构欠账 `tools/structural_score.py
+    --compare` 实测 **S = 0 → 287（16 项新增）**未按 R6 逐项下结论；未自护入口脚本现测
+    **24** 个（旧记 18）；功能散点步 2b 剩余 16 点；`check_doc_refs` D3 不查 blockquote 续行
+    （悬空 `Test:` 引用不可见）；渲染偏差 #3（解析侧注释归属的 **token 跨度**判据）。
+  - **`DRAFT.md` 首批三条**：① `tpc check` 精化产物丢 token 的"用户可见影响"未证明
+    （六样本诊断面 0/0）；② `c99` 基线要不要再切一层 `c89`（0.1.3 阶段 0 记为"首个待决项"
+    后无归属）；③ yaml `yaml_neg` 声明的可达性（`-5` 实际是 `minus` + `5`，该声明从未生效）。
+  - **覆盖率远期目标已达成**：全量 `python -m pytest tests -q -n 4 --cov` 实测 **90.39%**
+    （12486 语句 / 1200 未覆盖；3218 passed / 7 skipped，290s）⇒ ROADMAP「覆盖率远期
+    目标 ≥90%」按"完成即删"移除；`pyproject.toml` / `tests/README.md` /
+    `docs/gaps/gap-verification-engineering.md` 的旧数字（89.73% / 86.81%）同步为现测值
+    （覆盖率门禁 `fail_under = 80` 不变）。
+  - **验证**：`tests/policy/test_planning_doc_budget.py` 绿（三文件在限内）；`check_doc_refs`
+    D1/D2/D3/D4 全 0；`check_hardcode --strict-doc --strict-import` 干净；policy 套件 +
+    受影响语言包/引擎套件全绿（数字见提交）。
 - **测试口径：语言包保真 harness 的 renderer 对齐生产接线**（作者 2026-09-28 的 reminder 轮里
   由 Lead 定案落案 (a)）。生产路径 `pipeline/__init__.py` 构造 `Renderer(…, line_comment_starts=
   lexer.line_terminating_comment_starts())`（渲染器据此在行终止型注释前补硬换行，防"注释吃掉

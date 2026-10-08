@@ -9,11 +9,11 @@
 | 位置 | 承载 | 与 gaps/ 的区别 |
 |------|------|----------------|
 | `gaps/` | tpc 自己的**能力边界/缺口**现状（接受项 + 未闭环项） | 焦点 = "我们现状差什么、还缺什么" |
-| `references.md` | **外部项目事实/调研**（别人怎么做的调研 + 设计来源落档） | gaps 引用它做"参照来源"，不重复外部事实 |
-| `decisions/` | **生效中的决策**（为什么这么定） | 缺口立项决策时建 ADR；本档不写决策骨架 |
+| `docs/references.md` | **外部项目事实/调研**（别人怎么做的调研 + 设计来源落档） | gaps 引用它做"参照来源"，不重复外部事实 |
+| `decisions/` | **生效中的决策**（为什么这么定） | 决策完成即删、正文不引 ADR 作锚；本档不写决策骨架 |
 | 机制文档 | 系统怎么拼（含功能缺口评估段） | 机制文档内"缺口 N"若独立成项 → 可摘出到本档 |
 
-一句话：**references 回答"别人怎么做"，gaps 回答"我们现状差什么"，ADR 回答"我们定了什么"**。
+一句话：**references 回答"别人怎么做"，gaps 回答"我们现状差什么"，机制文档回答"现在怎么拼"**。
 
 ## 档案模板
 
@@ -22,7 +22,7 @@
 
 - 状态：接受（设计选择/范围） | 未立项 | 未闭环（剩 N 项）
 - 关联：<TODO/ROADMAP 条目；相关机制文档>
-- 参照：references.md <相关调研段>（外部事实源，可选）
+- 参照：docs/references.md <相关调研段>（外部事实源，可选）
 
 ## 边界是什么（或：缺口是什么）
 当前仍成立的陈述（够详细，避免下个 session 重新考古）。
@@ -40,8 +40,12 @@
 
 ## 更新纪律
 
-- **条目消失（修好/不再成立）→ 直接删条目或整档**（历史在 git log +
-  CHANGELOG），不写"已修复/已闭环"注记。
+- **条目消失（修好/不再成立）→ 直接删条目或整档**（历史在 git log + CHANGELOG），
+  不写"已修复/已闭环"注记。已完成的一次性计划（阶段规划、交付叙述、实测教训）不留在档内。
+- **数字要可复核**：档内引用计数/比值/行数时给复现命令或指向测试；无仓内复现入口的
+  历史数字须标注口径（否则下轮无法判断是否过期）。
+- **单档行数上限 200**（`tests/policy/test_planning_doc_budget.py`）：超限先删旧条目，
+  不靠"下次记得删"。
 - 登记：本目录文件被 `docs/README` 索引引用（check_doc_refs 防孤儿）；
   新增档案本表加一行，删除同步移除。
 
@@ -54,8 +58,8 @@
 | `gap-preprocessor-comment-scan.md` | 预处理器注释扫描（行级状态机近似：字符串内定界符、注释后同行指令） |
 | `gap-parser-linter-approximation.md` | parser/linter 错误处理近似（无恢复 + 启发式） |
 | `gap-formatter-line-behavior.md` | formatter 行行为边界（宽度折行/保留行/对齐/幂等） |
-| `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/插件划分/增强语法） |
-| `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面首轮清单 + 三条判据） |
+| `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/增强语法）+ C 包接受域现状 / 渲染保真现状 / `enabled` 档位边界 |
+| `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面实测快照 + 三条判据） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
-| `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；0.1.3 WS2） |
+| `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |

@@ -1,395 +1,216 @@
 # ROADMAP（中长期目标 / backlog）
 
-> 从 `TODO.md` 拆分而来（2026-08-27）：本文件承接中长期、非发布阻塞、
-> backlog、v0.2 候选类条目；`TODO.md` 只留短期活跃待办。
-> 维护纪律同 TODO.md：只列未完成项，**完成即删**（历史在 git log，决策在
-> references.md/ADR）；立项启动的项移回 `TODO.md` 短期；调研结论落
-> `docs/references.md`，不进本文件。
+> 承接**中长期、非发布阻塞、backlog、v0.2 候选**类条目；短期活跃待办在
+> `TODO.md`。纪律同 TODO：只列未完成项、**完成即删**（历史在 git log，决策
+> 依据在机制文档），每项 ≤8 行 + 链到机制/gap 文档。容量上限由
+> `tests/policy/test_planning_doc_budget.py` 守。
 > P 编号沿用拆分前的原始编号（与 git 历史、交叉引用对应），不重新编号。
 
 ## 工具链定位 + 语言包战略（2026-08-29 定调）
 
 > **工具链定位（市场面）**：面向**整个语言生态**，不限于硬件领域——两个用例：
-> ① 在既有语言基础上做**递进式改进**（插件/增量机制即抓手，如 verilog2005
-> → SV 核心 → 新构造）；② **完整实现新语言**（c4 已验证"从零搭语言"框架，
-> 见 docs/language_walkthrough.md）。"语法即资产 + 语言知识不进代码"使引擎
-> 不绑定任何领域——Verilog 是第一个应用实例，C 是第二个，未来可服务任意
-> 语言的改进或创建。
+> ① 在既有语言上做**递进式改进**（插件/增量机制即抓手）；② **完整实现新语言**
+> （c4 已验证"从零搭语言"框架，见 `docs/language_walkthrough.md`）。
+> "语法即资产 + 语言知识不进代码"使引擎不绑定任何领域。
 >
-> **语言包战略（内置资产范围）**：**主体语言包 = 两个**：Verilog-2005
-> （已闭环，P1.8）+ C23（未来主体）。这两个是 tpc 自己深度投入的示范语言，
-> 是**资产范围**而非**能力边界**——工具链能力面向整个语言生态，主体语言包
-> 只是内置资产的选择。其他语言（如 SystemVerilog）按需以**核心 + 增量插件**
-> 形态支持（个人需求只做核心，工作需求可插件族逐步全量——见 SV 条目）。
-> c4 定位（2026-09-26 复核）：两个角色 —— **"从零搭语言"起步模板**
-> （`docs/language_walkthrough.md` 的载体，11 文件 / 821 行的最小完整骨架）
-> + **代码生成/多后端演示**（唯一的 TransformPlugin + `[plugins].render` 覆盖式
-> 渲染；P4.1 的"同语言多目标"首个验证场景）。原第三个角色「C 核心语法管线
-> 支持的子集起步（≠ C23）」**已兑现并退场**：`grammar/c/` 已独立成形并远超 c4
-> 的范畴，C 包不再需要 c4 当替身。
-> **由此，"c4 被 C 包吸收"不是正确的终点**：c4 剩下两个角色都不是"支持 C"的
-> 角色——把 c4 并进 C 包会丢掉最小骨架（模板价值）与"非源文本产出"的渲染契约
-> （C 包的目标产物是**源文本**，c4 的是 **c4 VM 汇编**，两者相反）。c4 该退场的
-> 唯一判据是**那两个角色被别处接管**（模板改由生成式骨架提供、代码生成演示移入
-> 另一语言包），届时按"删除先证后删"**整包删除**，而不是并入。
+> **语言包战略**：**主体语言包 = 两个**——Verilog-2005（已闭环）+ C23（`grammar/c/`），
+> 是**资产范围**而非**能力边界**；其他语言（如 SystemVerilog）按需以**核心 + 增量插件**
+> 形态支持。
+>
+> **c4 定位（2026-09-26 复核）**：两个角色——"从零搭语言"起步模板
+> （`docs/language_walkthrough.md` 的载体）+ 代码生成/多后端演示（P4.1 首个验证场景）。
+> **"c4 被 C 包吸收"不是正确终点**（c4 产物是 c4 VM 汇编，与 C 包目标产物相反）；退场
+> 唯一判据 = 那两个角色被别处接管，届时按"删除先证后删"**整包删除**，不并入。
 
 ## 门禁体系改进（中长期，2026-09-12 登记）
 
-> 背景：0.1.2 收尾复盘识别的门禁盲点。短期四项与"门禁有效性抽查"已落地
-> （`tests/policy/` 下的 rule_coverage / doc_stats / diag_baseline + `tools/` 下的
-> check_coverage_delta / check_gate_efficacy），此处只留剩余项。门禁改进是长期
-> 过程，按需推进，不立决议文件。
+> 短期四项与"门禁有效性抽查"已落地（`tests/policy/` 的 rule_coverage / doc_stats /
+> diag_baseline + `tools/` 的 check_coverage_delta / check_gate_efficacy）；此处只留剩余项。
 
-- [ ] **跨文件语料基座（语料侧）**：多入口 `check(paths)` 已落地（09-12），
-      缺的是语料本身——**SERV 工程只放了 top 文件**，13 个 `serv_*` 子模块的
-      定义不在语料里，故误报基线 `W101=13` 是**真未知**（实测逐条打印确认，
-      全部来自 `ref_serv_top.v`）。补齐语料文件即可下降（门禁"只许减"自动
-      放行）。待补场景：同编译单元多文件、`default_nettype` 跨文件泄漏
-      （MH001 只做单文件，svlint 同样）
-- [ ] **毒配置清单化（变异维度化）**：`tools/check_gate_efficacy.py` 现为**手写**
-      5 条真实事故变异；可扩成维度化清单（语言 × 执行顺序 × PYTHONHASHSEED ×
-      缓存状态），并定期接入 CI 节奏（shuffle smoke / 隔离对照已接入，见
-      `.github/workflows/`）。判据：每条变异必须**可复现变红**（否则它不是门禁
-      能拦的事）
+- [ ] **跨文件语料基座（语料侧）**：多入口 `check(paths)` 已落地，缺的是语料本身——
+      SERV 工程只放了 top 文件，13 个 `serv_*` 子模块的定义不在语料里，故误报基线
+      `W101=13` 是**真未知**（实测逐条打印确认，全部来自 `ref_serv_top.v`）；补齐语料即可
+      下降（门禁"只许减"自动放行）。待补场景：同编译单元多文件、`default_nettype`
+      跨文件泄漏（MH001 只做单文件，svlint 同样）
+- [ ] **毒配置清单化（变异维度化）**：`tools/check_gate_efficacy.py` 现有 **38** 条真实事故
+      变异；可扩成维度化清单（语言 × 执行顺序 × PYTHONHASHSEED × 缓存状态）并定期接入 CI
+      节奏。判据：每条变异必须**可复现变红**
 
-## 用户侧 CLI 形态（中长期，2026-09-17 登记；触发式，无需求不动）
+## 用户侧 CLI 形态（中长期，触发式，无需求不动）
 
-> 背景：语言作用域机制（`begin_language` / `active_plugin_classes` /
-> `_ensure_language_config`，2026-09-14）解决的是**同进程多语言**——目前只有
-> 测试在用（用户侧无消费者）。而 CLI 全线单文件（`format`/`expand`/`check` /
-> `transform`/`trace` 各收一个 `file`，`lint` 可 stdin；`check` 仅 `--include`
-> 目录），API 侧 `ProjectChecker.check(paths)` 已多入口——两侧不对齐。
-> **触发条件**：出现真实的批处理/多语言使用场景（不是"看着该有"）。
+> 语言作用域机制（`begin_language` / `active_plugin_classes` /
+> `_ensure_language_config`）解决**同进程多语言**，目前只有测试在用；CLI 全线单文件，
+> 而 API 侧 `ProjectChecker.check(paths)` 已多入口——两侧不对齐。
+> **触发条件**：出现真实的批处理/多语言使用场景。
 
 - [ ] 多入口/批处理：目录递归 + 多文件（拒绝清单/退出码语义需定）
 - [ ] 多语言路由：`--lang` 显式指定，或按扩展名/目录映射语言包
-      （需先定：一次调用内切换语言包 vs 拒绝混语言——与语言作用域语义对齐）
+      （需先定：一次调用内切换语言包 vs 拒绝混语言）
 - [ ] 输出聚合：多文件诊断的稳定排序 + 机器可读汇总（对齐 `--json` 现有形态）
+- 附带价值：它是 P3.4（常驻 watch + 增量 check）与 LSP 形态的**最小前置**
 
-> 附带价值：它是 P3.4（常驻 watch + 增量 check）与 LSP 形态的**最小前置**——
-> 两者都要求"一次进程处理多文件/多语言"。
+## C 语言包（主体语言包）——核心基线 + c11/c17/c23 已交付（0.1.3）
 
-## C 语言包（主体语言包；设计：标准插件族）——**核心基线 + c11/c17/c23 已交付（0.1.3）**
+> 设计定调（2026-08-29）：**按语法插件包形式逐步支持 C 各标准**——插件组合等效某个
+> 标准的语法，而非一次性做全量（`token_ext` / `directive_handlers` / `[grammar] files`
+> + `inject` + `requires` 链，零引擎新机制）。已交付面（结构/档位/已知边界）见
+> `grammar/c/README.md`，边界档案见 `docs/gaps/gap-language-pack-scope.md`。
+> **边界诚实**：语法层可完整等效，语义层是渐进项（先语法后语义）；预处理器是最大
+> 难点，作独立阶段评估。本条只留**未完成项**：
 
-> 主体需求（见上"语言包战略"）。**设计定调（2026-08-29）：按语法插件包
-> 形式逐步支持 C 各标准语法——开关语法插件组合等效某个标准的 C 语法**，
-> 而非一次性做"某个标准全量"。核心洞察：C 标准演进 = 语法增量 + 关键字
-> 增量 + 预处理指令增量的叠加，三者 tpc 均已配置驱动（token_ext /
-> directive_handlers / [grammar] files + inject），requires 依赖链表达
-> 标准包含关系（c11 包含 c99，c23 包含 c11）——**零引擎新机制**。
->
-> 结构草案：
-> ```
-> grammar/c/
-> ├── tpc.toml            # [plugins] enabled 默认 = c99 核心基线
-> ├── 00_*.toml           # 核心语法（声明/表达式/语句/类型基础，≈c4 范畴 + 常用面）
-> └── plugins/
->     ├── c11/            # 增量：_Generic/_Static_assert/匿名 struct/原子（requires 核心）
->     ├── c17/            # 增量：几乎无（bugfix 为主，requires c11）
->     └── c23/            # 增量：typeof/auto/属性/#elifdef/nullptr（requires c17）
-> ```
-> 启用"等效某标准" = `[plugins] enabled` 组合（requires 链自动带上基线）；
-> 核心包战略自然落位——默认 c99 基线即"核心包"，需要时叠加 c11/c17/c23。
-> **形态通用化（2026-08-29）**：核心 + 增量插件逐步叠加的形态对 SV 同样
-> 适用（SV 核心基线 + class/constraint/SVA 增量插件，见 SV 条目）——这是
-> "语言包 = 可组合插件集"的通用模式，C 标准插件族是其首个应用。
-> **边界诚实**：语法层增量可完整等效；语义层（类型系统/推导）是渐进项，
-> 与语法增量解耦（先语法后语义）。预处理器是最大难点（`#if` 表达式、
-> 参数化宏、`#`/`##`、变参宏），darkriscv 嵌套位置精度教训（P1.5）在 C
-> 条件编译上只会更严——作为独立阶段评估。
-> ✅ **已交付（0.1.3，2026-11-25）**：核心基线（接受面 25/27）+ c11/c17/c23 标准增量
-> 插件族落地——结构、档位与已知边界见 `grammar/c/README.md`，发布条目见
-> `CHANGELOG.md` 的 `[0.1.3]` 段，分层与 C99 接受域清单见
-> `docs/gaps/gap-language-pack-scope.md`「C 语言包」节。本条只留**未完成项**。
-
-- [ ] **标准增量的剩余面**（**大部分已落地**，见 `grammar/c/README.md`「标准增量插件」；
-      剩余项的**共同前置不再是"注入机制"**——2026-09-26 实测更正：现役
-      `inject_productions` 的直接注入（树层 `insert_choice_candidate`）**就是**"往既有
-      交替里加一支"，c11/c23 两插件已按它落地 15 项；剩下的各有**自己的**前置）：
-      · c11 **已全部落地**（`_Alignas`/`_Atomic` 于 2026-09-26 补上——`_Atomic` 的两种形态
-        写在**一条**规则里，`_Alignas` 挂最窄公共点 `TypeQualifier`）；
-      · c17 **无新语法**（缺陷修正版；已表达包含关系，不贡献语法面——这条反例本身已落进包结构）；
-      · c23 小写拼写**已落地**（`static_assert` **文件 + 块两作用域**、`alignas`、`alignof`、
-        `thread_local`；同构造异拼写的包内约定已定为"**c23 侧各写一条同形规则**"，
-        理由与代价见 `grammar/c/plugins/c23/16_alignas_alias.toml` 头注）；
-      · c23 类型词**已落地**（`_BitInt(N)`——宽度收 `@Expression`，语义约束归语义层；
-        `_Decimal32`/`_Decimal64`/`_Decimal128`——单规则三拼写交替；两者都挂 `SimpleType`）；
-      · c23 属性说明符**已落地**（`[[…]]` §6.7.12：说明符位、`[[fallthrough]];` 这类"属性声明"、
-        **声明符内**（`void f [[deprecated]] (void);`）与**枚举项**（`A [[deprecated]] = 1`）
-        四类位点；后两类走核心**空槽位** `AttributeSlot`——注入做不到"插序列中段"，
-        把中段做成原子规则后一处声明两处生效。**实参形态**：多实参
-        `[[gnu::nonnull(1, 2)]]`（收 `@ArgumentList`）与属性表尾随逗号 `[[nodiscard,]]`
-        已收口；**未覆盖 ①②④⑤ = 不做/低优先 + 触发条件**（见 `TODO.md` 与
-        `grammar/c/plugins/c23/21_attributes.toml` 头注））——**c23 语法增量至此收口**；
-      · c23 十进制浮点**字面量后缀**（`1.5dd`）**已落地**——它**不是语法增量**，走的是本轮
-        新补的**声明级合并语义** `merge = "by-name"`（同名声明按 `name` 合并命名条目列表：
-        `core/config_registry.py::merge_by_name`）：插件只给核心数字形态
-        `[[number.based]] name = "c_dec"` 补 `suffix` 字符，**不改核心文件、也不重抄形态**
-        （见 `grammar/c/plugins/c23/_number_c23.toml` 与 `core/config_lifecycle.md` §4b）；
-      · ⚠ **一条档位边界（实测）**：`[[属性]]` 不依赖任何新关键字 ⇒ 插件规则文件无条件加载
-        使它**在基线档也解析**——"档位 = 接受域"对纯语法增量不成立，见 `TODO.md`
-        「`[plugins] enabled` 的语义边界」。
-- [ ] 预处理器扩展（引擎侧，独立评估）：`#if` 表达式求值、参数化宏、
-      `#`/`##` 粘贴、变参宏 + 条件编译反向映射精度
-- [ ] 标准等效验证：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准语法规范）——
-      **接受域盘点工具已就位**（`tools/c_acceptance.py`，现 **42 条 / 接受 40 / 空洞 2**），
-      **档位入口也已就位**（`load_language/load_all/resolve(..., enabled=[…])`，同一进程内
-      切档实测成立，判据 = `tests/languages/c/test_c_standard_tiers.py` 的 28 构造 × 4 档矩阵），
-      缺的是**按标准分档的断言面**（每条构造属哪个标准、接受/拒绝各断言一条）
-- [ ] **注入机制：四类注入面，按需实现**（作者 2026-09-26 给出的分类——它是"注入面"的
-      分型，不是实现清单；**缺哪类等真需求**）：
-      · **① 无点位依存注入**（新规则靠全局发现进入，不指定点位）——**有**：插件
-        `[grammar] files` + 引擎的语句发现（`is_statement` / FIRST 集）；
-      · **② 依赖点位注入**（`targets = ["@Rule.production[N]"]`，树层
-        `insert_choice_candidate` 往该交替**加一支** + 传播注入替换 `@Target` 引用）——**有**
-        且 fail-fast（c11/c23 两插件 13 项增量全靠它）。代价 = **点位要列全**：
-        `_Alignas` 的说明符位在本包有 6 处（`Declaration`/`SpecRest`/`FuncDef`/
-        `MemberSpec`/`ParamSpec`/`TypeName`），故 2026-09-26 改挂被这 6 处共同引用的
-        `TypeQualifier`（一次注入六处生效）——**找得到公共宿主就不必列点位**；
-        ⚠ **② 有一处表达力边界（2026-09-28 实测并补足）**：它只能"并入某一条既有元素"
-        或"越界追加到末尾"，**插不了序列中段**。补足的形态是**空槽位**——核心声明
-        `production = []` 的非块规则（无自有形态的共用扩展点），宿主写 `@Slot*`，插件注进
-        `@Slot.production[0]` 即填充（C 包 `AttributeSlot`：声明符内与枚举项共用，一处声明
-        两处生效）。语义见 `grammar/grammar_rule_fields.md` §production；**这不是 ③/④**，
-        而是"中段位点"在 ② 内的落地方式；
-      · **③ 具体路径修改**（改既有分支的内部形态）——**只有软路径**：
-        `inject_replace_rule` 是 production 的**字符串子串补丁**且软失败（目标规则缺失仅告警）；
-      · **④ 移除语法路径**——**无**。
+- [ ] **阶段 3 结构类型与作用域语义**：struct/union/enum（含位域）、标签命名空间、
+      作用域与链接（static/extern）、函数原型与定义
+- [ ] **阶段 4 预处理器（独立评估，最大难点）**：`#include`/`#define`（对象宏/函数宏/
+      变参/`#`/`##`）、`#if` 表达式求值、条件编译反向映射精度（darkriscv 嵌套位置
+      精度教训在 C 上更严）。**这是接受面（`tools/c_acceptance.py`）仅剩的空洞**
+- [ ] **阶段 5 标准等效验证**：`[plugins] enabled` 组合 → 语法接受域断言（对标各标准
+      语法规范），并接真实 C 语料。**入口已就位**：`tools/c_acceptance.py`（42 条 /
+      接受 40 / 空洞 2）+ 档位参数 `resolve(..., enabled=[…])`（判据
+      `test_c_standard_tiers.py` **26 构造 × 4 档**）；缺的是**按标准分档的断言面**
+      （每条构造属哪个标准、接受/拒绝各断言一条）
+- [ ] ⚠ **三者顺序（作者 2026-09-28 授权自定）**：**先阶段 3**——它是切片 1b 的前置
+      （符号表/作用域/声明顺序），也是"AST 之后那半段"的第一个真实入口；阶段 4 与语法面
+      解耦、独立评估；阶段 5 随真实语料接入滚动做。排期：0.1.4 是**高性能组件**（作者既定），
+      这三项在其后
+- [ ] **注入机制：四类注入面，按需实现**（作者给的**分型**，不是实现清单；缺哪类等真需求）：
+      · **① 无点位依存注入**——**有**：插件 `[grammar] files` + 语句发现（`is_statement`/FIRST 集）；
+      · **② 依赖点位注入**（`targets = ["@Rule.production[N]"]`）——**有**且 fail-fast
+        （c11/c23 增量全靠它）；代价 = 点位要列全，**找得到公共宿主就不必列点位**
+        （`_Alignas` 改挂 `TypeQualifier`，一次注入六处生效）。**表达力边界已补足**：
+        只能"并入既有元素"或"越界追加到末尾"，**插不了序列中段** ⇒ 用核心**空槽位**
+        （`production = []` 的非块规则 + 宿主写 `@Slot*`）落地（见
+        `grammar/grammar_rule_fields.md` §production）；
+      · **③ 具体路径修改**——**只有软路径**：`inject_replace_rule` 是 production 的字符串
+        子串补丁且软失败（目标缺失仅告警）；**④ 移除语法路径**——**无**。
       要做的是把 ③/④ 补成与 ② 同级的**结构化、fail-fast** 声明面（统一 `[inject]` 的
-      add/replace/remove 三动作）。
-      **触发条件**：出现真正需要"改/删既有分支"的标准演进——现有 c11/c23 增量都属 ②。
-- [ ] **语义层切片 1b**（typedef 名起头的转换）：需符号表/作用域/声明顺序，**待旨**——
-      细则见下节草案
+      add/replace/remove 三动作）。**触发条件**：出现真正需要"改/删既有分支"的标准演进
 
 ## C 语义层切片 1b（typedef 名起头的强制转换）——**待旨**（2026-09-25 立）
 
 > 背景：切片 1a（**关键字起头**的类型名：`(int)x` / `(struct p *)q` / `(int){1}` …）
-> **已随 0.1.3 落地**——见 `CHANGELOG.md` 的 `[0.1.3]` 段与 `grammar/c/README.md`；
-> 其所以能"纯语法"判定，是因为类型关键字不可能起始表达式（与 `(expr)` 候选集不交）。
-> `tools/c_acceptance.py` 实测剩余空洞只剩 2 条，其中 **typedef 名起头**（`(myint)x`）
-> 卡在一处**真正的语义前置**上——"括号里那串是不是类型名"由标准按"标识符是否为
-> typedef 名"判定，属**符号表/语义层**信息。这条一旦开工，就是"AST 之后那半段"的
-> 第一个真实入口，故先立草案、不做实现。
-
-### 接受域与前置
+> **已随 0.1.3 落地**——能"纯语法"判定，因为类型关键字不可能起始表达式。
+> `tools/c_acceptance.py` 实测剩余空洞只剩 2 条（预处理），其中 **typedef 名起头**
+> （`(myint)x`）卡在一处**真正的语义前置**上——"括号里那串是不是类型名"按标准由
+> "标识符是否为 typedef 名"判定，属**符号表/语义层**信息。这条一旦开工，就是
+> "AST 之后那半段"的第一个真实入口，故先立草案、不做实现。
 
 - **接受域**：`(myint)x` / `(myint){1}`——类型名是**声明过的 typedef 名**。
-- **依赖前置（真正的语义前置）**：
-  1. **符号表/作用域**：至少要能回答"这个标识符在当前作用域是不是 typedef 名"——
-     这需要 `typedef` 声明收集、作用域栈（块作用域/函数原型作用域）、以及
-     **声明顺序敏感性**（C 的"先声明后使用"）；
-  2. **与 parser 的接口形态**（草案四选一，待评估）：
-     - 🔥 **回溯式**：`CastExpr` 候选放在 `ParenthesizedExpr` 之后，命中后再查符号表；
-       查不到就退回。代价：试解析成本 + 回溯深度（parser 已有 Level 2 试解析机制可复用）；
-     - **词法/parser 查询钩子**：给 parser 一个可插拔的"标识符种类"查询（作用域查询已在
-       `linter/rule_selector.py::select_candidates` 的 `scope_lookup_fn` 有先例）；
-     - **两遍**：先收集全文件 typedef 名再做转换判定（简单但破坏"先声明后使用"语义）；
-     - 💡 **不判型、走 raw 路径（作者 2026-09-26 指示）**：parser 在候选路径**不收敛**时
-       不选边，产出一个"原样保留"的节点，形态由后端分析器定。前提是 parser 要能判
-       "候选是否收敛"——**现状是单纯按序重试**（`parse_sentence` 取首个成功者），没有
-       收敛判据；作者另指出这一步**可以前移到 linter**（linter 已有候选分类/试解析）。
-       若走这条路，"收敛判据"本身要单独立项（引擎侧能力，语言无关）。
-  3. **typedef 收集落点**：分析器侧要新增"typedef 收集"原语（`analyzer/primitives`），
-     或按**精化协议**放进 C 包插件（若判定为语言特有；机制见
-     `core/component_protocol.md` §1b 与 `analyzer/elaboration/README.md`）。
+- **依赖前置**：① **符号表/作用域**（typedef 收集、作用域栈、**声明顺序敏感性**）；
+  ② **与 parser 的接口形态**（草案四选一，待评估）：🔥 **回溯式**（`CastExpr` 候选放
+  `ParenthesizedExpr` 之后，命中后查符号表，查不到退回；parser 已有 Level 2 试解析可复用）
+  / **词法·parser 查询钩子**（作用域查询先例：`linter/rule_selector.py::select_candidates`
+  的 `scope_lookup_fn`）/ **两遍**（破"先声明后使用"语义）/ 💡 **不判型、走 raw 路径**
+  （作者 2026-09-26 指示：候选路径**不收敛**时不选边，产出"原样保留"节点，形态由后端
+  分析器定；可前移到 linter——linter 已有候选分类与 Level 2 试解析）；
+  ③ **typedef 收集落点**：`analyzer` 原语 vs C 包插件（按精化协议"语言特有 → 插件"判据）。
+- **现状实测（2026-09-26，判代价用）**：`Stmt` 候选里 `@ExprStmt` 在 `@Declaration` 之前
+  ⇒ 标识符打头的语句一律先按表达式解（`myint *b;` 进 AST 为 `ExprStmt` + `BinaryOp`，与
+  编译器读法相反）。**但无文本损伤**：10 条歧义形态渲染前后 **token 序列逐项相同**（C 空白
+  无关 ⇒ 序列相同即语义相同）；**代价在风格/AST**：排版按乘法给空格、基于 AST 的后续分析
+  看到的形态与编译器不一致（判据在 `tests/languages/c/test_c_render_fidelity.py`）。
+- **判据（可证伪）**：① `typedef int myint; … (myint)x + (myint){1}` 进 AST 且节点为
+  `CastExpr`/`CompoundLiteral`；② **同名非 typedef 对照**（`int myint; … (myint)x`
+  必须是乘法，断言 `BinaryOp`）——同文本因符号表不同而解析不同；③ 作用域判据（内层
+  typedef 遮蔽外层、块内 typedef 出块失效各一例）；④ 声明顺序（使用在声明**之前**
+  不判为转换）；⑤ 全量回归零失败（符号表不应影响其他语言）。
+- **明确不做（本草案边界）**：完整类型系统/类型检查/求值；`_Generic`/`_Alignof`/`typeof`
+  等标准增量（走 c11/c23 插件语法面）；预处理（阶段 4 独立评估）。
+- [ ] **待决**：① parser↔符号表接口选哪一种（回溯 / 查询钩子 / 两遍 / **raw 路径**）
+      ——作者 2026-09-28 口径：先按项目约束走（能纯语法判定就纯语法，判不了就记边界），
+      **不预先为 raw 路径造一等判据**；某机制在真实需要里证明好用，再接受它升格；
+      ② **"候选是否收敛"要不要成为 parser 的一等判据**（raw 路径前置；可前移到 linter——
+      `parse_sentence` 现在只是按序取首个成功者）——当前**未立项**；③ typedef 收集落点；
+      ④ `sizeof(单标识符)` 当前**宽进判类型名**，归本切片用符号表细化
 
-### 现状实测（2026-09-26，判代价用）
+## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）
 
-**今天"按序消歧"的代价边界（实测，不是推测）**：`Stmt` 候选里 `@ExprStmt` 在
-`@Declaration` 之前，故**标识符打头**的语句一律先按表达式解；`myint *b;`（myint 为
-typedef 名）因而进 AST 为 `ExprStmt` + `BinaryOp`（乘法），与真实编译器的读法相反。
-**但**：
+> 语言包战略的兑现侧：用户把语法配置调试稳定、需求测试完成后编译打包。现状：
+> facets.json 开发者硬编码 + `_RULES_REL = "grammar/verilog"` 写死——**无"用户标定"
+> 声明面**，c4/未来 C 语言包打包不了。设计方向：打包规格跟随语言包
+> ——`grammar/<lang>/tpc.toml` 新增 `[packaging]` 段；build_pipeline 改为扫描语言包声明，
+> `_RULES_REL` 硬编码消失。**触发条件**：非 verilog 打包需求。
 
-- **无文本损伤**：10 条歧义形态（`myint *b` / `**b` / `*b = 0` / `*b, *c` / `(b)` /
-  `(b) * c` / `*b[4]` / `(*fp)(int)` / `a * b` / `a *b = c`）渲染前后**token 序列逐项
-  相同**（C 空白无关 ⇒ 序列相同即语义相同）——格式化不会改语义，这一点由
-  `tests/languages/c/test_c_render_fidelity.py` 的"显著 token 序列"判据守着；
-- **有风格/AST 代价**：排版按乘法给空格（`myint * b;`）而非指针惯例（`myint *b;`），
-  且任何基于 AST 的后续分析（语义层 / 结构查询 / 变换）看到的形态与编译器不一致。
-
-### 判据（可证伪）
-
-1. `typedef int myint; myint x; int f(void) { return (myint)x + (myint){1}; }` 进 AST
-   且节点为 `CastExpr`/`CompoundLiteral`；
-2. **同名非 typedef 对照**：`int myint; ... (myint)x` 必须是**乘法**（断言 `BinaryOp`）
-   ——同一段文本因符号表不同而解析不同，这正是本切片的存在理由；
-3. 作用域判据：内层 `typedef` 遮蔽外层、块内 typedef 出块失效各一例；
-4. 声明顺序：使用在 typedef 声明**之前** → 不判为转换（C 的语义）；
-5. 全量回归零失败（含 verilog/yaml/c4——符号表不应影响其他语言）。
-
-### 明确不做（本草案边界）
-
-- 完整类型系统 / 类型检查 / 求值（属"语义层渐进项"，各自单独立项）；
-- `_Generic`、`_Alignof`、`typeof` 等标准增量（走 c11/c23 插件的语法面，与转换判定解耦）；
-- 预处理（`#include` / `#define`）——阶段 4 独立评估。
-
-### 待决
-
-- [ ] 切片 1b 的 parser↔符号表接口选哪一种（回溯 / 查询钩子 / 两遍 / **raw 路径**）
-      ——⚠ **2026-09-28 作者口径**：先按项目约束走（能纯语法判定就纯语法，判不了就记边界），
-      **不预先为 raw 路径造一等判据**；若某机制在真实需要里证明非常好用，再接受它升为一等判据。
-- [ ] **"候选是否收敛"要不要成为 parser 的一等判据**（raw 路径的前置；作者
-      2026-09-26 指示可前移到 linter——linter 已有 `classify` 的候选分类与 Level 2
-      试解析，`parse_sentence` 却只是按序取首个成功者）。当前**未立项**；
-      同上口径：**机制先证明好用，再谈升格**（不为了 raw 路径提前改造 parser 判据面）。
-- [ ] typedef 收集落点：`analyzer` 原语 vs C 包插件（按精化协议的"语言特有 → 插件"判据）
-- [ ] `sizeof (单标识符)`（`sizeof(myint)`）当前是**宽进判类型名**——也归本切片用符号表
-      细化（与转换判定同一前置：都要知道标识符是不是 typedef 名）
-
-## 打包：规格跟随语言包（原 ADR-0010 draft，2026-09-04 收敛删除）
-
-> 语言包战略的兑现侧：用户把语法配置调试稳定、需求测试完成后编译打包的
-> 优雅方案（forkable 主张的落地）。现状：facets.json 开发者硬编码 + 
-> `_RULES_REL = "grammar/verilog"` 写死——**无"用户标定"声明面**，c4/未来
-> C 语言包打包不了。设计方向（研判原 ADR-0010 draft，2026-09-04 收敛删除）：
-> 打包规格跟随语言包——`grammar/<lang>/tpc.toml` 新增
-> `[packaging]` 段（target/description/facets，facets 缺省取 [commands]
-> 键零重复）；build_pipeline 改为扫描语言包声明（无参=全部，--lang=单个），
-> `_RULES_REL` 硬编码消失。与插件聚类/渲染插件同哲学：一切可声明、可组合、
-> 用户标定。优先级低于 C 语言包（当前单语言硬编码还能撑）。
-> 触发条件：C 核心基线立项（多语言共存）或出现"非 verilog 打包"需求。
-
-- [ ] `[packaging]` 段声明（target/description/facets，缺省取 [commands] 键）
+- [ ] `[packaging]` 段声明（target/description/facets，facets 缺省取 `[commands]` 键）
 - [ ] `bundle` 方式可选：`embedded`（语法包打进 exe，自包含单文件）/
       `external`（语法包外置，引擎原生 + 语法可换，同一二进制多语言/版本）
-- [ ] build_pipeline 扫描语言包声明（--lang / 无参=全部），去掉 `_RULES_REL` 硬编码
+- [ ] build_pipeline 扫描语言包声明（`--lang` / 无参=全部），去掉 `_RULES_REL` 硬编码
 - [ ] 入口生成用该语言包 rules_dir（与调试时 main.py 行为一致）
 - [ ] 多语言打包验证：verilog + c + c4 各自声明、各自出 exe（embedded + external 各验证）
 
-## P2 — 工程化收尾（发布准备）
+## P2 — 工程化收尾
 
-### P2.2 发布收尾
+### P2.3 验证吞吐优化（backlog，非发布阻塞）
 
-> 0.1.0 Alpha 已发布（2026-08-22，release_checklist 走完）；以下为软缺口。
-> **版本节奏（作者定 2026-09-14）**：0.1.1 = 9 月内发布（发布材料已备：CHANGELOG
-> 归拢 09-09 + tag `v0.1.1`；剩余发布动作按需执行）；**0.1.2 = 10 月版本**——
-> 本批次工作（阶段 0-9）已完成于主分支，等 10 月发布窗口；发布动作走
-> `policy/release-checklist.md`。
+> 动机：验证（fuzz/差分/edge）是"验证附着于配置驱动语言定义"的差异化能力；快速
+> 验证层是"模型写配置 → 自动验证闭环"成立的前提（详见 `tests/fuzz/README.md`）。现状：
+> linter packrat 记忆化（管线 -92%）+ 渲染器 doc 布局记忆化（单遍 -57%）+ 回归并发化
+> （`-n auto`：300s → ~78s）；fuzz 实测 ~40 iter/s。下一热点 = parser（单遍 ~50%）；
+> packrat **失败**记忆化已回退（失败尝试也递增 `sibling_counter` ⇒ path 编号变），等价
+> 实现需先重构 path 计数语义（另议）。
 
-- [ ] 覆盖率远期目标 ≥90%（当前 **89.73%**，2026-09-22 实测 `-n auto --cov`——
-      12425 语句 / 1276 未覆盖；source=引擎包真实基线，需补 transform/renderer
-      等薄弱区。⚠ 覆盖率**不必**串行跑：并行与串行 TOTAL 逐位相同，
-      wall 从 `-n 0 --cov` 645.5s 降到 173.9s）
-
-### P2.3 验证吞吐优化（backlog，非发布阻塞，2026-08-22 记录）
-
-> 动机：验证（fuzz/差分/edge）是"验证附着于配置驱动语言定义"的差异化能力；
-> 快速验证层是"模型写配置 → 自动验证闭环"成立的前提。详见 tests/fuzz/README.md。
-> 2026-08-27 更新：linter packrat 记忆化（bf8f782/db14e70，管线 -92%）后
-> fuzz 实测吞吐 ~40 iter/s（800 轮 18-19s / 3000 轮 75-86s）——远超最初
-> ~9 iter/s 基线（原测速含 linter 热点），三件套预期收益缩水，但缓存复用/
-> 关幂等/multiprocessing 仍可再叠加 ~10x。
-> 2026-08-29 更新：全量 pytest 回归并发化（pytest-xdist `-n auto`，test extra
-> 已声明；global_state 进程内隔离天然兼容，实测 1386+8 与串行一致）——
-> 300s → ~110s（~3x，16 逻辑核实测；瓶颈 = 大文件真实语料测试 + 每 worker
-> 语法加载固定开销，进一步加速需语法表跨 worker 缓存，见 fuzz 三件套）。
-> 2026-08-29 更新：渲染器 doc 布局记忆化（renderer/doc.py，per-layout 缓存
-> _flat_w/_has_hardline/_has_break——无缓存时 _best 的 Concat 兄弟预算对同一
-> 子树 O(n²) 重复全遍历，picorv32 实测 _flat_w 200 万次/_has_hardline 1000
-> 万次调用）——单遍管线 10.15s → 4.37s（-57%，渲染占单遍比从 ~60% 降至
-> ~36%），全量并发回归 110s → 78s。下一个热点 = parser（单遍 ~50%）；packrat
-> 失败记忆化尝试已回退——rule_frame 的 sibling_counter 在失败尝试也递增，
-> 缓存跳过失败子规则计数 → path 编号变化 → 渲染输出差异（picorv32 实测，
-> 93 文件对拍），等价实现
-> 需先重构 path 计数语义（改变现有输出，另行评估）。
-
-- [ ] fuzz harness 吞吐三件套：
-  - [ ] 语法表/parser 跨迭代缓存（不重建）→ ~2.5x
-  - [ ] fuzz 模式关闭管线内部幂等复跑（oracle 自管）→ ~1.8x
-  - [ ] multiprocessing 多 worker → ~8x（合计 ~30-40x：100k 轮 ~1 分钟）
-- [ ] 随机合法程序 → 对拍 Verible：接受域从人工语料推到统计意义
-      （GrammarFuzzer 生成器已由 run_fuzz.py 接线并进 CI——2026-09-09 核对，
-      原"缺接线"注已过时；剩余 = 生成大批合法程序做 Verible 接受域统计对拍）
+- [ ] fuzz harness 吞吐三件套：语法表/parser 跨迭代缓存（~2.5x）/ fuzz 模式关闭管线
+      内部幂等复跑（~1.8x）/ multiprocessing 多 worker（~8x）
+- [ ] 随机合法程序 → 对拍 Verible：接受域从人工语料推到统计意义（GrammarFuzzer 生成器
+      已由 `run_fuzz.py` 接线并进 CI；剩余 = 生成大批合法程序做 Verible 接受域统计对拍）
 - [ ] 阶段级 fuzz（lexer/parser-only 不变量，比全管线再快 10-50x）
-- [ ] CI 补强（PR 快速 fuzz ✅ / 夜间长跑 ✅ / edge 门禁 ✅ 已接入）：
-      differential 门禁未接入——需 verible 二进制（nightly.yml 已留可选 job，
-      接入时用 fetch 步骤或 VERIBLE_FORMAT）
+- [ ] CI 补强：differential 门禁未接入——需 verible 二进制（`nightly.yml` 已留可选 job，
+      接入时用 fetch 步骤或 `VERIBLE_FORMAT`）
 
-### P2.6 tpc-check 外部 checker 插件协议（2026-08-25 记录，Veryl 调研触发，非发布阻塞）
+### P2.6 tpc-check 外部 checker 插件协议（非发布阻塞）
 
-> 📎 详细缺口档案：`docs/gaps/gap-tpc-check-external-checker.md`（背景/参照/可实现性/关联条目——ROADMAP 只留待办）
-> 拿来主义 + 声明场景：语言包 plugins/ 声明**外部 checker**（官方检查，如
-> `veryl check`/verible/slang），tpc 只**声明自己的检查场景**（官方 checker 的
-> 缺口：格式化保真/变换等价/语法资产一致性）。参考 hdl_checker
-> "Repurposing existing HDL tools" 路线 + svlint 深调研（规则四件套/suppress
-> 注释对/插件，均落 docs/references.md）。
+> 📎 详细缺口档案：`docs/gaps/gap-tpc-check-external-checker.md`。拿来主义 + 声明场景：
+> 语言包 plugins/ 声明**外部 checker**（官方检查，如 `veryl check`/verible/slang），tpc 只
+> **声明自己的检查场景**（官方 checker 的缺口：格式化保真/变换等价/语法资产一致性）。
 
 - [ ] **插件声明协议**：`grammar/<lang>/plugins/checker/tpc.toml` 两段——
-      `[checker.external]`（命令 + 输出解析声明，收口稳定接口：JSON 输出/稳定
-      规则 ID，防"后端版本耦合"坑）与 `[checker.scenarios]`（tpc 自管场景：
-      format_fidelity / transform_equivalence / 语法资产一致性）
-- [ ] **诊断归一化**：外部 checker 输出（miette/JSON/文本）转 tpc 统一诊断模型——
-      对齐 P1.9 稳定规则 ID + 机器可读输出结论（verible/slang/svlint 均有 JSON 实证）
-- [ ] **场景声明语法**：检查场景 = TOML 数据（gate 引用 run_all/差分基线），
-      延续"语言知识不进代码"哲学——引擎只做通用场景执行器
-- [ ] 验证路径：`grammar/veryl/plugins/checker/` 先做 veryl 本体验证（官方检查
-      直连 + 自管场景补缺口），再推广 verible/slang
-- 关联：P1.9（诊断模型）为其前置；Veryl/svlint 调研落档 references.md（本地镜像
-      `E:\research\veryl` / `E:\research\svlint`）
+      `[checker.external]`（命令 + 输出解析声明，收口稳定接口：JSON 输出/稳定规则 ID）
+      与 `[checker.scenarios]`（tpc 自管场景：format_fidelity / transform_equivalence /
+      语法资产一致性）
+- [ ] **诊断归一化**：外部 checker 输出（miette/JSON/文本）转 tpc 统一诊断模型
+- [ ] **场景声明语法**：检查场景 = TOML 数据（gate 引用 run_all/差分基线），引擎只做
+      通用场景执行器
+- [ ] 验证路径：`grammar/veryl/plugins/checker/` 先做 veryl 本体验证，再推广 verible/slang
+- 关联：P1.9（诊断模型）为其前置；调研落 `docs/references.md`（本地镜像 `E:\research\veryl` /
+      `E:\research\svlint`）
 
 ### P2.8 门禁系统增强（长期，2026-09-11 登记）
 
-> 背景：门禁覆盖审计（2026-09-11）——门禁架构成熟（`global_state` 隔离 /
-> smoke 分层 / `tests/policy` 元门禁 / 量化评测 / 差分 oracle），但有三处
-> **隐式契约**会随规模（加语言包 / 检查族）复发；性质 = 把"记得做"门禁化。
-> 非发布阻塞，长期逐条做。
+> 门禁架构成熟（`global_state` 隔离 / smoke 分层 / `tests/policy` 元门禁 / 量化评测 /
+> 差分 oracle），但有三处**隐式契约**会随规模（加语言包 / 检查族）复发；性质 =
+> 把"记得做"门禁化。非发布阻塞，长期逐条做。
 
-- [ ] **smoke 覆盖检测**：新增/改动功能文件未标 `@pytest.mark.smoke` 时提示，
-      或输出"未进层"清单供人工判断（现状纯靠人记得标 + 顶部注释标组）
-- [ ] **检查链门禁补齐**（系统 2）：`inst_check` 功能专测（W101/W102/W103 现无
-      断言，仅 `test_plugin_cluster` 加载测试）——`eval_check_accuracy` 扩到全
-      码集一事**已完成**（已实现码均有样本，由 `test_rule_coverage.py` 守）
-- [ ] **系统 1 完整性证明**（可选）：IEEE 1364-2005 附录语法产生式 → 规则 → 测试
-      逐条对齐表（现 258 规则"已测未逐条对表"，完整性未证明）
-- [ ] **分层随规模扩展**：新语言包/检查族立项时同步定义该语言自测子集；最贵层
-      （真实语料全量 + 差分）留发布门禁；`timeout` 阈值随并行最坏耗时复核
+- [ ] **smoke 覆盖检测**：新增/改动功能文件未标 `@pytest.mark.smoke` 时提示，或输出
+      "未进层"清单供人工判断
+- [ ] **系统 1 完整性证明**（可选）：IEEE 1364-2005 附录语法产生式 → 规则 → 测试逐条
+      对齐表（现 **265** 条规则——`python tools/render_coverage.py` 口径含插件规则；
+      "已测未逐条对表"，完整性未证明）
+- [ ] **分层随规模扩展**：新语言包/检查族立项时同步定义该语言自测子集；最贵层（真实
+      语料全量 + 差分）留发布门禁；`timeout` 阈值随并行最坏耗时复核
 
 ## P3 — 增量解析（v0.2 核心，非收尾）
 
-> **0.1.2 立项项已移入 TODO**：P3.1（span 绑定）+ P3.6（宏体入树）→ `TODO.md`
-> 「0.1.2」节（均已实施；宏机制见 `preprocessor/README.md` + `pipeline/README.md`）。
+> P3.1（span 绑定）+ P3.6（宏体入树）已实施（机制见 `preprocessor/README.md` +
+> `pipeline/README.md`）。
 
 ### P3.2 失效判定 + 增量重解析
 
-> 设计思考落档（原 ADR-0009 draft，2026-09-04 收敛删除）——
-> 双向映射 / 结构锚定
-> 补头补尾 / merge 校验 + 全量回退 / 缓存选址（.code_cache 内容寻址 vs
-> temp，key 含语法版本签名）。
+> 设计思考落档（原 ADR-0009 draft 收敛删除）——双向映射 / 结构锚定 / 补头补尾 /
+> merge 校验 + 全量回退 / 缓存选址（.code_cache 内容寻址 vs temp，key 含语法版本签名）。
 
 - [ ] token 级 diff：新旧 token 流对比，标记变更 token（复用 lexer）
 - [ ] 变更 token → 延展到语法边界（沿 `is_statement`/`is_block` 规则向外，到完整可重解析单元）
 - [ ] 仅重解析受影响单元（`ParseContext` 从边界起始 token 驱动）
 - [ ] 并树：替换 AST 中对应子树（类似 `merge_segments`，下沉到语句级）
 
-### P3.4 增量 check（语义失效传播，2026-08-29 登记）
+### P3.4 增量 check（语义失效传播）
 
-> 用户需求（2026-08-29）：check 也需要类似增量解析的**激活等待机制**——对
-> 激活区域（改动）和**被涉及的链上文件**（依赖链）做局部扫描，而非全量。
-> 5 万行实测 check 45s（7k tok/s），全量在典型资产（1k-50k 行）上 5-45s，
-> 增量是"编辑→亚秒反馈"的必经路径。
->
-> 结构（非从零：**elaboration 底座（ADR-0008）的 module_index /
-> connections / signal_graph 就是失效传播的图基础**）：
-> 1. **激活**：编辑/保存激活改动区域（源文本 span）。部署形态 = 常驻
->    check 服务 + 文件监听（watch 等待触发，LSP 式），非单次命令。
-> 2. **解析层增量**：复用 P3.1/P3.2——span → 增量重解析 → 新 AST。
-> 3. **语义失效传播**（增量 check 核心）：改动文件的**影响面 = 三类链**：
->    a. 定义链——改的模块端口/参数/宽度 → 所有实例化它的文件
->       （module_index 反查 inst_sites）
->    b. 实例化链——改的实例化点 → 该文件自身（已增量重解析）+ 连接展开
->       /信号图局部更新
->    c. 信号链——信号图条目变化的信号 → 依赖它的规则（W105 多驱动 /
->       W104 未连接 / UN001）所在文件
->    失效集 = 受影响文件 × 受影响规则 → 只对失效集重跑（规则本身无状态，
->    重跑幂等；**规则声明失效键**——依赖的模块/信号/符号，改动按键传播）。
-> 4. **边界诚实**：宏展开 span 映射（P3.3 坑，激活区域在源文本、解析在
->    展开后 token，复用 preprocessor/_bridge.py 锚+原文）；失效集正确性
->    （漏失效 = 漏报，增量最危险——不能精确定位的改动**保守降级**为
->    全量该文件/该规则）；小项目阈值（文件数少时全量重建更快，增量簿记
->    开销反超——自适应切换）。
->
-> 前置：P3.1（span 绑定）→ P3.2（增量重解析）→ 本条目。与 P3.3（宏映射）
-> 共享坑位；跨文件规则（W104/W105）的增量正确性需要信号图增量更新先验证。
+> 用户需求：check 也需**激活等待机制**——只扫激活区域（改动）与**被涉及的链上文件**
+> （5 万行实测 check 45s；增量是"编辑→亚秒反馈"的必经路径）。底座非从零：elaboration 的
+> module_index / connections / signal_graph 就是失效传播的图基础。① **激活** = 编辑/保存
+> 激活改动区域（部署形态 = 常驻服务 + 文件监听）；② **解析层增量**复用 P3.1/P3.2；
+> ③ **语义失效传播** = 三类链（定义/实例化/信号，见条目），失效集 = 受影响文件 × 受影响
+> 规则（**规则声明失效键**）；④ **边界诚实**：宏展开 span 映射、**漏失效 = 漏报**（判不准
+> 的改动**保守降级**为全量）、小项目阈值（簿记开销反超时自适应全量）。
 
 - [ ] 规则失效键声明：每条规则声明依赖键（模块/信号/符号），改动→键→规则映射
 - [ ] 三类链传播：定义链/实例化链/信号链 → 失效文件集
@@ -397,18 +218,16 @@ typedef 名）因而进 AST 为 `ExprStmt` + `BinaryOp`（乘法），与真实�
 - [ ] 保守降级：无法精确定位的改动 → 全量该文件/该规则（防漏报）
 - [ ] 小项目阈值：文件数 < N 直接全量（增量簿记开销反超）
 - [ ] 部署形态：常驻服务 + watch 激活（触发式，编辑→亚秒反馈）
+- 前置：P3.1 → P3.2 → 本条目；跨文件规则（W104/W105）的增量正确性需信号图增量先验证
 
-### P3.5 Rust 热路径下沉（PyO3，远期 2026-08-29 登记）
+### P3.5 Rust 热路径下沉（PyO3，远期）
 
-> 破 Python 动态机制天花板的长期正道（Nuitka 3-5% / PyPy 短任务负收益 /
-> 官方 JIT 未转正——均实测闭环，见 references.md）。**形态 = PyO3 热路径
-> 下沉，不是全量重写**：Python 壳保留（配置驱动/插件/可模型性是差异化
-> 资产），Rust 下沉**引擎通用算法**（lexer 扫描 / 解析器骨架 / doc 布局）——
-> 语言知识仍在 TOML/插件层，`check_hardcode` 硬约束不破。
-> 前置：P3.1 span 绑定先行（解析器接口稳定后才值得下沉，否则接口跟着
-> 语义变白做）；算法层收益先吃干净（parser 记忆化 / P3.4 增量 check 是
-> 零语言风险的收益，顺序不能反）。预期：热点下沉后 5-10x（C 级常数），
-> 5 万行 check 45s → 5s 级。
+> 破 Python 动态机制天花板的长期正道（Nuitka/PyPy/官方 JIT 均实测闭环，见
+> `docs/references.md`）。**形态 = PyO3 热路径下沉，不是全量重写**：Python 壳保留（配置
+> 驱动/插件/可模型性是差异化资产），Rust 下沉**引擎通用算法**（lexer 扫描 / 解析器骨架 /
+> doc 布局）——语言知识仍在 TOML/插件层，`check_hardcode` 硬约束不破。
+> 前置：P3.1 span 绑定先行（解析器接口稳定后才值得下沉）；算法层收益先吃干净
+> （parser 记忆化 / P3.4 增量 check 是零语言风险的收益，顺序不能反）。
 
 - [ ] 解析器骨架下沉：_production token 循环 + pratt 原子匹配（单遍 ~50%）
 - [ ] doc 布局下沉：_best/_flat_w 热循环（~36%，已记忆化仍 Python 常数）
@@ -417,82 +236,79 @@ typedef 名）因而进 AST 为 `ExprStmt` + `BinaryOp`（乘法），与真实�
 
 ### P3.3 已知坑：宏展开下的双向映射
 
-- [ ] **token span 对应的是"展开后"token，不是源文本**：源文本 → 预处理器（展开）→
-      lexer → parser，AST 的 token 索引是展开后 token 流的索引
-- [ ] 编辑 diff 在**源文本**上做，但 span 在**展开后 token**上——两边对不上，需映射层
-- [ ] 预处理器已有反向资产：`preprocessor/_bridge.py`（锚 + 原文回插，marker 定位原文），
-      renderer 靠它还原源码位置——增量需要**复用这套桥**，把"展开后 token → 源文本行"打通
-- [ ] 条件编译（`ifdef/ifndef`）下编辑，会改变展开结果 → 整段缓存失效，需处理
+- [ ] **span 是"展开后"token，不是源文本**：编辑 diff 在源文本上做、span 在展开后 token 流上
+      ——需映射层；预处理器已有反向资产 `preprocessor/_bridge.py`（锚 + 原文回插），
+      增量需**复用这套桥**打通"展开后 token → 源文本行"
+- [ ] 条件编译（`ifdef/ifndef`）下编辑会改变展开结果 → 整段缓存失效
 - [ ] 宏定义本身的编辑（`define` 行改）→ 所有用到该宏的 token 全部失效，不是局部问题
 
-## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选，非收尾）
+## P4 — 多后端输出 + LLVM IR 前端桥（v0.2 商业向候选）
 
 ### P4.1 多后端输出机制 + LLVM IR 目标插件
 
-> 多后端输出（2026-08-28 立项，合并入 P4）：引擎级"换插件换目标"能力——
-> 语言包声明**多个输出插件**（如 c4: asm_gen + llvm_ir），引擎按目标参数
-> 选择后端、可并存输出。现状：c4 仅 asm_gen 一个 TransformPlugin
-> （@register_plugin 注册、process 守卫根节点按语言区分），多后端 = 引擎
-> 支持同语言多输出插件声明 + 目标选择/并存；LLVM IR 是第一个落地目标，
-> 也是"同一语言多目标并存"的首个验证场景。
+> 引擎级"换插件换目标"：语言包声明**多个输出插件**，引擎按目标参数选择后端、可并存输出。
+> 现状：c4 仅 `asm_gen` 一个 TransformPlugin；LLVM IR 是第一个落地目标，也是"同一语言
+> 多目标并存"首个验证场景。
 
-- [ ] **多后端输出机制（引擎级，设计定稿 2026-08-28）**：后端 = **同构渲染器
-      实例**——插件系统实例化特定后端的渲染器（与主管线渲染器同一个 Renderer
-      类，仅布局配置不同），语言配置留在插件目录，主管线渲染器只负责主 AST
-      原样打印。引擎补丁 3 处：① `Renderer.__init__` 加 `layout_dirs` 参数
-      （插件级布局目录后加载）；② plugin_loader 识别旁路后端插件（tpc.toml
-      `[transform] target = "llvm"`）→ 实例化同构渲染器（布局=插件目录）；
-      ③ 旁路插件 process 基于**源 AST**（transform 前，干净形态）→ 产物节点
-      交自己的渲染器 → 独立文件输出（复用 mark_extra 通道）。配置复杂度
-      = O(插件数)：主管线零改动（无旁路插件时行为与现状一致），新增后端 =
-      一个自包含插件目录（transform handler + 布局声明 + target），不给主
-      规则配后端布局（后端节点族节点名与主 AST 不重叠，布局天然隔离）
-- [ ] **c4 增加 LLVM IR 输出插件**：类比 `_asm.py`（@register_plugin），
-      c4 AST → LLVM IR 文本（define/load/store/br/icmp 等基础指令集）
+- [ ] **多后端输出机制（引擎级）**：后端 = **同构渲染器实例**（同一个 `Renderer` 类，
+      仅布局配置不同），语言配置留在插件目录，主管线渲染器只负责主 AST 原样打印。
+      引擎补丁 3 处：① `Renderer.__init__` 加 `layout_dirs`（插件级布局目录后加载）；
+      ② plugin_loader 识别旁路后端插件（`[transform] target`）→ 实例化同构渲染器；
+      ③ 旁路插件基于**源 AST**（transform 前）产出 → 交自己的渲染器 → 独立文件输出
+      （复用 mark_extra 通道）。配置复杂度 = O(插件数)，主管线零改动
+- [ ] **c4 增加 LLVM IR 输出插件**：类比 `_asm.py`（@register_plugin），c4 AST → LLVM IR
+      文本（define/load/store/br/icmp 等基础指令集）
 - [ ] 与现有 c4 VM 汇编输出并存（同一语言多目标，验证"换插件换目标"）
 - [ ] 验证：c4 小程序（if/while/函数调用）编译为 LLVM IR，`lli`/`clang` 可执行
 
 ### P4.2 对外证明能力（信任建立）
 
-- [ ] 选一个垂直场景做端到端 demo（如 DSP 专有语言 / 硬件描述子集 → LLVM IR），
-      配"配置驱动 vs 传统方案"的成本对比
+- [ ] 选一个垂直场景做端到端 demo（如 DSP 专有语言 / 硬件描述子集 → LLVM IR），配
+      "配置驱动 vs 传统方案"的成本对比
 - [ ] LLVM/MLIR 社区开源一个 tpc → LLVM IR 插件（技术背书路径）
 - [ ] 技术博客/论文："配置驱动语言→IR"（可引用的专业形象）
 - [ ] 从小而垂直的厂商切入（大厂有自研团队，小厂缺人决策快）
 
-## 渲染器后续（原 P5 六项已全部闭环，2026-08-27 评估删组）
+## 渲染器后续（原 P5 六项已全部闭环）
 
-> P5 六项改进（统一缩进模型 / Doc IR 原语升级 / 布局意图声明化 / 世界 B
-> 升级 / 保真度分级 / 兼容验收）全部落地：完成历史见 git log（4bc4b3f 起，
-> ADR-0006 阶段 1-5 + 4a/4b；Veryl 渲染层深读闭环 13f29f1 Pad 三件套）。
-> 残留缺口评估见 renderer/renderer_architecture.md「功能缺口评估」（世界 A）+
-> grammar/verilog/plugins/formatter/README.md「世界 B 边界」（世界 B）——B2/B3/B4
-> 部分解决项均明确"接受"（fits 贪心 / 锚点启发式 / indent_only 留待真实
-> 需求驱动）。唯一未闭环后续：
+> P5 六项（统一缩进模型 / Doc IR 原语升级 / 布局意图声明化 / 世界 B 升级 / 保真度分级 /
+> 兼容验收）全部落地（历史见 git log：4bc4b3f 起，ADR-0006 阶段 1-5 + 4a/4b；Veryl 渲染层
+> 深读闭环 13f29f1 Pad 三件套）。残留缺口评估见 `renderer/renderer_architecture.md`
+> 「功能缺口评估」（世界 A）+ `grammar/verilog/plugins/formatter/README.md`「世界 B 边界」。
+> 唯一未闭环后续：
 
-- [ ] **Layout TOML schema 校验**（renderer/renderer_architecture.md 缺口 5）：布局
-      表达式错误（拼错原语键/类型）静默降级为 None，与 ADR-0003 fail-fast
-      精神相悖——可加布局 schema 校验（渲染增强侧，非配置加载主路径）
+- [ ] **Layout TOML schema 校验**（`renderer/renderer_architecture.md` 缺口 5）：布局表达式
+      错误（拼错原语键/类型）静默降级为 None，与 fail-fast 精神相悖——可加布局 schema 校验
+      （渲染增强侧，非配置加载主路径）
+- [ ] **与外部格式化器的排版对拍**：token 序列对拍已由 C 包保真判据 7 覆盖（内容级、
+      语言无关），"与 clang-format/verible 的**排版**对拍"仍未做（属验证面，非缺陷）
 
-## SystemVerilog 语言包（远期 backlog，2026-08-27 评估；定位修正 2026-08-29）
+## SystemVerilog 语言包（远期 backlog）
 
-> Verilog-2005 全量（P1.8 批次 1-6 + 审查修复）后的自然延伸；当前决策：
-> **缓行**——先稳定/玩熟 verilog 全量。规模估算与分期：语法层全量对标 sv-parser
-> （IEEE 1800-2017 Annex A）≈ 净增 800-900 条规则、8-12 个月；
-> SV 核心子集（综合常用面）3-4 个月；SVA/class/constraint 是最大三块。
-> **定位修正（2026-08-29）**：SV 不在**个人**主体需求内（个人主体 =
-> verilog2005 + C 标准）——但**工作需求下会做**，形态为**核心 + 语法插件
-> 逐步全量**（与 C 标准插件族同构：SV 核心基线 + class/constraint/SVA 等
-> 增量插件叠加，需求驱动到哪叠到哪，而非一次性全量）。阶段 A 即核心包，
-> B/C 是可选的增量插件不是"移出"。
-> 触发条件：个人侧 = verilog 验证闭环稳定、P1.8 批次 7 候选缺口清完后
-> 立项；工作侧 = 出现 SV 需求时按插件族启动核心，随需叠加。
+> Verilog-2005 全量（P1.8 批次 1-6 + 审查修复）后的自然延伸；当前决策：**缓行**——先
+> 稳定/玩熟 verilog 全量。规模估算：语法层全量对标 sv-parser（IEEE 1800-2017 Annex A）
+> ≈ 净增 800-900 条规则、8-12 个月；SV 核心子集（综合常用面）3-4 个月；SVA/class/
+> constraint 是最大三块。**定位（2026-08-29 修正）**：SV 不在**个人**主体需求内，但
+> **工作需求下会做**，形态为**核心 + 语法插件**逐步全量（与 C 标准插件族同构）。
+> 触发条件：个人侧 = verilog 验证闭环稳定、P1.8 批次 7 候选缺口清完后立项；工作侧 =
+> 出现 SV 需求时按插件族启动核心，随需叠加。
 
-- [ ] 阶段 A：SV 核心（= 核心包基线）——2-state/logic、struct/enum/typedef、
-      always_comb/ff/latch、接口+modport、package+import、generate 增强、
-      `.name`/`.*` 端口、尺寸字面量
+- [ ] 阶段 A：SV 核心（= 核心包基线）——2-state/logic、struct/enum/typedef、always_comb/
+      ff/latch、接口+modport、package+import、generate 增强、`.name`/`.*` 端口、尺寸字面量
 - [ ] 阶段 B（增量插件）：OOP/约束——class、继承、constraint、rand
 - [ ] 阶段 C（增量插件）：最长尾——SVA 断言、covergroup、checker、randsequence
       （+ pratt 运算符族/引擎扩展）
-- [ ] 阶段 D：收尾——SV 预处理器扩展（宏带参/双反引号）、sv-parser 差分清零、
-      lint 精度、渲染打磨
+- [ ] 阶段 D：收尾——SV 预处理器扩展（宏带参/双反引号）、sv-parser 差分清零、lint 精度、
+      渲染打磨
+
+## 语言知识渗透复审（L1，长期方向，未见排期）
+
+> 判据三条（全表见 `docs/gaps/gap-language-penetration.md`）：① **最小语言包探针**
+> （主判据，行为面，`tools/min_pack_probe.py` + 基线；已做）；② **声明面缺失探针**
+> （临时删一段语言包声明跑测试，仍绿处 = 引擎替声明做事）；③ **弱信号面**
+> （`tools/lang_penetration.py`）。三条都只覆盖**被测路径** ⇒ 结论只能是"已知渗透面
+> 收敛"。范围：**重点 analyzer / preprocessor / linter**。**剩余面 = 精化基座之外的
+> 渗透复审**（判据 ②/③，按需在改动时顺带做）。⚠ 新增语言包作暴露法只在隔离跑
+> （每语言一进程）下可用——多语言同进程已有真实串味史，不作日常手段。
+> **引擎 vs 插件能力边界的设计原则**（三分法 / 两失效信号 / 普适原语清单）见
+> `core/component_protocol.md`。

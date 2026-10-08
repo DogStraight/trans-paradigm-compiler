@@ -2,60 +2,54 @@
 
 - 状态：接受（1/2 范围设计选择；3/4 工程摩擦——机制已备）
 - 关联：`analyzer/checker.py::ProjectChecker`（elaboration 三层）；
-  `grammar/verilog/plugins/typed_ports/`；`core/config_lifecycle.md`
+  `grammar/verilog/plugins/typed_ports/`、`grammar/verilog/plugins/elaboration/`；
+  `core/config_lifecycle.md`
 - 参照：Verilator 的 elaboration/宽度传播模型
 
 ## 边界是什么
 
 1. **Elaboration 按工程非全设计**（接受）：
-   跨模块检查（模块注册表/端口连接展开/信号驱动负载图/实例树驱动穿透）覆盖
-   被检入口 + **按实例化链发现**的依赖文件。未覆盖：
-   - 同工程但既不在依赖链、也不在「入口所在目录 / include 目录」内的文件
-     （查找策略：同名文件优先 → 目录内关键字文本扫描兜底；跨目录需多入口
-     `check(paths)` 或 include 声明）
-   - 全设计 elaboration：无未选分支的 elaboration 期 generate 语义（超出内建
-     求值器）、无全设计数值宽度传播（Verilator 式）——宽度语义按需由
-     `checks/width_check` 覆盖（W201 赋值/端口截断、W202 位选越界；参数化
-     折叠 + 层次成员宽度）；无 CDC 分析
-     - 2026-09-19 收紧口径：generate 条件面的**形态**已全部声明化
-       （`[structure]` 的 `gen_block_rule` / `gen_branch_rules` / `gen_not_ops`
-       + `[structure.fields]` 的条件/then/else 字段名；引擎零 Verilog 形态）；
-       仍属边界的是**求值能力**：只认 数字 / 参数名（含逻辑非前缀）/中性常量
-       表达式（四则与比较），多运算符/位运算/层次引用一律不可判 → 按当前活性
-       保守展开（宁可不过滤也不误删分支）。
-2. **深语义在插件代码非 TOML**（接受）：配置驱动语法/渲染/浅语义（作用域/
-   符号/名字解析）（含 elaboration 的形态面：单元/实例规则名、节点字段、
-   generate 条件面）；真正新语义能力 = 引擎原语/插件脚本；表达式树形态
-   （`UnaryOp`/`BinaryOp`）+ 内建前缀运算符是引擎约定，语言包须对齐非全自由
-   数据（2026-09-19 修正：generate 条件求值原在引擎里硬编码 Verilog 形态
-   ——`GenerateBlock`/`IfBlock`/`condition` 与 `!PARAM` 特判——已全部移入
-   `[structure]` 声明；pratt 的表达式树形态仍是引擎约定）。
-3. **全局可变单例（注册表/配置/组件表）**（工程摩擦，机制已备）：三张表进程级、
-   跨语言会累积——正确性靠**作用域过滤 + 缓存键一致性**，不靠"别的语言不引用"：
-   - 语言切换重建：`core/define.py::GrammarRulesRegister.begin_language`
-     （rules_dir 变更即 reset；否则累积规则会被 `parser/rule_selector.py`
-     当根规则选中）
+   跨模块检查（模块注册表/端口连接展开/信号驱动负载图/实例树驱动穿透）覆盖被检入口 +
+   **按实例化链发现**的依赖文件。未覆盖：
+   - 同工程但既不在依赖链、也不在「入口所在目录 / include 目录」内的文件（查找策略：
+     同名文件优先 → 目录内关键字文本扫描兜底；跨目录需多入口 `check(paths)` 或 include 声明）；
+   - 全设计 elaboration：无未选分支的 elaboration 期 generate 语义（超出内建求值器）、
+     无全设计数值宽度传播（Verilator 式）——宽度语义按需由 `checks/width_check` 覆盖
+     （W201 赋值/端口截断、W202 位选越界；参数化折叠 + 层次成员宽度）；无 CDC 分析。
+   - **generate 条件面的现状**：形态/求值**都已移入语言包插件** `gen_activity`
+     （`grammar/verilog/plugins/elaboration/`；引擎侧 `[structure]` 的
+     `gen_block_rule`/`gen_branch_rules`/`gen_not_ops` 与 `[structure.fields]` 的
+     `gen_condition`/`gen_then`/`gen_else_chain` 已退场——`grammar/verilog/base/_structure.toml`
+     注释指向插件；守门测试 `tests/engine/analyzer/test_elaboration_gen_activity.py`）。
+     仍属边界的是**求值能力**：只认 数字 / 参数名（含逻辑非前缀）/ 中性常量表达式
+     （四则与比较），多运算符/位运算/层次引用一律不可判 → 按当前活性保守展开
+     （宁可不过滤也不误删分支）。
+2. **深语义在插件代码非 TOML**（接受）：配置驱动语法/渲染/浅语义（作用域/符号/名字解析）；
+   真正新语义能力 = 引擎原语/插件脚本；表达式树形态（`UnaryOp`/`BinaryOp`）+ 内建前缀
+   运算符是引擎约定，语言包须对齐非全自由数据（generate 条件求值原在引擎里硬编码
+   Verilog 形态，现已由插件 `gen_activity` 承担，见边界 1）。
+3. **全局可变单例（注册表/配置/组件表）**（工程摩擦，机制已备）：三张表进程级、跨语言会
+   累积——正确性靠**作用域过滤 + 缓存键一致性**，不靠"别的语言不引用"：
+   - 语言切换重建：`core/define.py::GrammarRulesRegister.begin_language`（rules_dir 变更即
+     reset；否则累积规则会被 `parser/rule_selector.py` 当根规则选中）；
    - 插件作用域：`core/plugin_loader.py::_active_components`（装载时固定）→
-     `transform/engine.py::active_plugin_classes`（只跑当前语言组件）
-   - 缓存复用回切：`pipeline/__init__.py::_ensure_language_config`
-     （`_PIPELINE_SHARED` 命中时把 ConfigRegistry 切回当前语言）
-   测试侧清理走 `core/global_state.py` snapshot/restore（conftest 每测试还原
-   测试级状态、每模块还原语言安装态，顺序无关）；进程级隔离对照见
-   `tools/check_test_isolation.py`。
-4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；
-   插件作者应把注入语句归组到容器规则（`plugins/syntax/sim/` 的
-   `SimCtrlStmt`）。
+     `transform/engine.py::active_plugin_classes`（只跑当前语言组件）；
+   - 缓存复用回切：`pipeline/__init__.py::_ensure_language_config`（`_PIPELINE_SHARED` 命中时
+     把 ConfigRegistry 切回当前语言）。
+   测试侧清理走 `core/global_state.py` snapshot/restore（conftest 每测试还原测试级状态、
+   每模块还原语言安装态，顺序无关）；进程级隔离对照见 `tools/check_test_isolation.py`。
+4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；插件作者应把注入
+   语句归组到容器规则（`plugins/syntax/sim/` 的 `SimCtrlStmt`）。
 
 ## 为什么是边界（影响面）
 
-1/2 是"前端规范执行而非全设计语义"的定位延伸（elaboration 深度留给自研
-插件/外部工具）；3/4 是嵌入/多语言场景的工程摩擦。
+1/2 是"前端规范执行而非全设计语义"的定位延伸（elaboration 深度留给自研插件/外部工具）；
+3/4 是嵌入/多语言场景的工程摩擦。
 
 ## 成熟解法参照（见贤思齐）
 
-- 1 宽度传播：Verilator 数值宽度传播是参照（但属"全设计 elaboration"，tpc
-  按需覆盖（`checks/width_check`，见边界 1）——更深宽度/CDC 接外部 oracle
-  （gap-tpc-check 方向）。
+- 1 宽度传播：Verilator 数值宽度传播是参照（但属"全设计 elaboration"，tpc 按需覆盖
+  （`checks/width_check`，见边界 1）——更深宽度/CDC 接外部 oracle（gap-tpc-check 方向））。
 
 ## 可实现性
 
@@ -66,8 +60,10 @@
 ## 关联条目
 
 - `grammar/verilog/plugins/typed_ports/` + `analyzer/checker.py::ProjectChecker`
-- generate 条件面声明：`analyzer/structure.py::StructureCtx.gen_face`（引擎侧接口）
-  + `grammar/verilog/base/_structure.toml`（语言包侧声明）；守门测试
-  `tests/engine/analyzer/test_gen_face.py`
+- generate 活性（形态 + 求值均在插件）：`grammar/verilog/plugins/elaboration/`
+  （`gen_activity` 项；依赖 `param_default`）+ `grammar/verilog/base/_structure.toml`（退场注记）；
+  守门测试 `tests/engine/analyzer/test_elaboration_gen_activity.py`
+  （原 `tests/engine/analyzer/test_gen_face.py` 的声明面部分已随之退场）
 - 边界 3 机制：`tests/engine/core/test_language_switch.py`（语言切换作用域门禁）、
   `tools/check_test_isolation.py`（进程级隔离对照）
+- 档位 `enabled` 的语义边界见 `docs/gaps/gap-language-pack-scope.md`「运行时档位」节

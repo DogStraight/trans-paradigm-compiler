@@ -174,6 +174,17 @@ SensitivityList/ConcatExpr/CaseItem/AttrSpecList/TypeParamList）。迁移
   位置在此；靠锚点插值会在折叠区里定位漂移）。
 - 机制细节与测试门禁见 `docs/MODEL_INDEX.md`「注释单机制设计」知识单元。
 
+### 宏节点 raw 直出（"自述"判据）
+
+带宏文本视为**不可拆的原子文本**（Verible / clang-format 同款：无法证明可安全重排时整段
+原样输出）——宏区间映射到**最小自述包含节点**（`pipeline/__init__.py::_stage_macro_splice`），
+该节点整段按源文本输出（引擎标记 `_verbatim_text`，不替换成 MacroCall——避免影响分析遍历）。
+**"自述"判据**：节点单独渲染一遍，与其对应展开切片按空白归一比较相等 → 该节点渲染的就是
+它自己那段文本，替换它不会丢/多字面量；不等（如 `Range` 自述 `7:0`、切片 `[7:0]`，方括号由
+槽位 layout 出）则往上找父节点。不用 `is_statement` 作判据：ANSI 端口声明没标它 → 包含链无
+可停节点，一路升到 `ModuleDecl`（整个模块被冻成 verbatim）；自述判据与语言包标记无关，自动
+停在最窄的可证节点上。
+
 ### 保真度分级（阶段 5）
 
 - `fidelity` 管线参数：`full`（完全重排，默认）/ `keep_blank`（保留空行）。

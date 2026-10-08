@@ -104,7 +104,7 @@
 | 宏展开（strip 指令 + `` `NAME `` 引用展开） | `language_walkthrough.md`（预处理器） | `preprocessor/_expand.py` | `tests/engine/preprocessor/test_primitives.py` + `tests/languages/verilog/test_macro*.py` |
 | 宏形态声明（`shape` 生产式 + 名字位候选列表；带参实参形态 `call_args` / `arg_separator`；后随字面量后缀 `suffix_after_call`） | `preprocessor/README.md`（形态清单） | `preprocessor/macro_shape.py`（声明解析 + 配平/切分 + 后缀编译）<br>`lexer/main_lexer.py::_match_macro_at`（词法落地） | `tests/engine/preprocessor/test_macro_shape.py`<br>`tests/engine/preprocessor/test_macro_call_args.py`<br>`tests/engine/preprocessor/test_macro_suffix.py` |
 | 宏反向（统一位置桥：锚 + 原文回插） | `references.md`（语料前沿 M1：宏 inline+body 锚还原） | `preprocessor/_reverse.py`<br>`preprocessor/_bridge.py` | `tests/e2e/test_comment_restore.py` + 宏还原门禁 |
-| 宏处置策略（引擎定义 mode 枚举；语言包以 `[capabilities] macro_policy` 声明策略） | `docs/decisions/0018-preprocessor-plugin-policy.md` + `preprocessor/README.md`（策略契约节） | `preprocessor/macro_policy.py`（取入口/校验）<br>`grammar/verilog/plugins/macro_policy/`（判定表） | `tests/engine/preprocessor/test_macro_policy.py` |
+| 宏处置策略（引擎定义 mode 枚举；语言包以 `[capabilities] macro_policy` 声明策略） | `preprocessor/README.md`（策略契约节 + "为什么策略是语言知识"内联） | `preprocessor/macro_policy.py`（取入口/校验）<br>`grammar/verilog/plugins/macro_policy/`（判定表） | `tests/engine/preprocessor/test_macro_policy.py` |
 | tpc marker 通道（占位注释形态声明驱动 + 锚定位） | `preprocessor/README.md`（marker 书写形态） | `preprocessor/_markers.py`（书写/识别）<br>`preprocessor/_bridge.py::restore_anchors`（按锚回插） | `tests/engine/preprocessor/test_markers.py` |
 
 ### core + pipeline — 引擎骨架 / 配置 / 编排
@@ -114,7 +114,7 @@
 | 配置加载 fail-fast | `core/config_lifecycle.md` | `core/config_registry.py::ConfigRegistry.load_all` | `tests/engine/core/test_config_loading.py` |
 | 语言包↔引擎契约（`[engine] uses` 能力清单） | `core/config_lifecycle.md`（包↔引擎契约节） | `core/engine_compat.py`（协商）<br>`core/engine_capabilities.py`（能力表 + 推导）<br>`core/config_registry.py::_load_meta_declarations`<br>`core/define.py::_load_tpc_meta` | `tests/engine/core/test_engine_compat.py`（协商语义）<br>`tests/policy/test_engine_capabilities.py`（覆盖不变式） |
 | 配置生命周期（注册 → 解析 → 消费） | `core/config_lifecycle.md`（§4b 声明级合并语义） | `core/config_registry.py`（`_resolve_decls` / `merge_by_name`） | `tests/engine/core/test_config_loading.py` |
-| 启用组合（档位）覆盖参数 `enabled=` | `core/config_lifecycle.md`（§7 启用组合）<br>`grammar/c/README.md`（标准档位节）<br>`docs/gaps/gap-language-pack-scope.md`（运行时档位入口已落地） | `core/config_registry.py::{_tier_for_load,_tier_for_resolve,_ensure_entries_for}`<br>`core/config_registry.py::_resolve_cached`（key 含档位） | `tests/languages/c/test_c_standard_tiers.py`（28 构造 × 4 档矩阵）<br>`tools/check_gate_efficacy.py`（两条缓存键变异） |
+| 启用组合（档位）覆盖参数 `enabled=` | `core/config_lifecycle.md`（§7 启用组合）<br>`grammar/c/README.md`（标准档位节）<br>`docs/gaps/gap-language-pack-scope.md`（「运行时档位：`enabled` 的语义边界」节） | `core/config_registry.py::{_tier_for_load,_tier_for_resolve,_ensure_entries_for}`<br>`core/config_registry.py::_resolve_cached`（key 含档位） | `tests/languages/c/test_c_standard_tiers.py`（26 构造 × 4 档矩阵）<br>`tools/check_gate_efficacy.py`（两条缓存键变异） |
 | 组件协议 + 插件加载 | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py`<br>`core/_protocol.py`（magic string 常量） | `tests/engine/core/test_plugin_cluster.py` |
 | 插件回调能力化（P2.5：`[capabilities]`） | `core/component_protocol.md`（组件协议） | `core/plugin_loader.py::_load_capabilities`<br>`core/plugin_loader.py::get_capability`<br>`grammar/verilog/plugins/{typed_ports,formatter}/tpc.toml`（声明） | `tests/engine/core/test_capabilities.py`（9 用例） |
 | 核心类型（Token/GrammarRule/Node） | `docs/README.md`（对齐约定） | `core/define.py` | `tests/engine/core/test_rule_schema.py` |
@@ -129,7 +129,7 @@
 | 知识单元 | 文档位置 | 实现位置（Impl） | 验证位置（Test） |
 |----------|----------|------------------|------------------|
 | 从零搭一门语言（教程，c4 实例） | `language_walkthrough.md` | `grammar/c4/**` | `tests/languages/c4/` |
-| C 语言包（核心基线 ≈ C99 语法面 + c11/c17/c23 标准增量插件族） | `grammar/c/README.md`<br>`docs/gaps/gap-language-pack-scope.md`（分层草案 / C99 接受域清单 / 渲染保真现状） | `grammar/c/**` | `tests/languages/c/` |
+| C 语言包（核心基线 ≈ C99 语法面 + c11/c17/c23 标准增量插件族） | `grammar/c/README.md`<br>`docs/gaps/gap-language-pack-scope.md`（语言包范围 / C 语言包：接受域现状 / C 包渲染·保真面现状） | `grammar/c/**` | `tests/languages/c/` |
 | 语言包与插件目录约定 / 语法扩展工作流 | `language_walkthrough.md` | `grammar/{verilog,c,c4,yaml}/` + `plugins/` | `tests/languages/` |
 | 渲染世界 B：Verilog formatter（pass 管线） | `grammar/verilog/plugins/formatter/README.md` | `grammar/verilog/plugins/formatter/` | `tests/languages/verilog/test_formatter*.py` |
 

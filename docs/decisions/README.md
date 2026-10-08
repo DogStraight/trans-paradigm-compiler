@@ -21,7 +21,8 @@
 
 ## 编号规则
 
-- 文件名：`NNNN-<kebab-case-主题>.md`，`NNNN` 从 `0001` 递增，逆序展示（最新在上）。
+- 文件名：`NNNN-<kebab-case-主题>.md`，`NNNN` 从 `0001` 递增（目录内不维护清单——
+  现存条目由 `docs/README.md` 导航与 `docs/MODEL_INDEX.md` 登记体现）。
 - 状态：`accepted`（已决策/实现中）。
 
 ## 条目模板
