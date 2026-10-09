@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **yaml 正零小数 `key: 0.5` 静默丢内容**（`grammar/yaml/base/_number.toml`；循环 #1 实现项）。
+  - **成因（实测）**：`yaml_dec` 是 `size = { digits = "nonzero" }` ⇒ `number_gen.build_size`
+    只建 digit1-9 的首字符转移（`lexer/number_gen.py:192-196`），而**小数/指数链**（`dot`/`eE`）
+    挂在 size 子图上 ⇒ `0.5` 进不了该链；`yaml_zero`（`base_prefix="0"` 前缀形态）又没有小数
+    延续 ⇒ 切成 `number(0)` + `plain(.5)`，渲染 `key: 0`（`.5` 静默消失）。
+  - **修法（镜像既有解，非自创）**：`yaml_dec` 改 `size = { digits = "any" }`——C 包同族先例
+    `grammar/c/base/_number.toml` 的 `c_dec` 就是这么解的（其注释记着完全相同的症状）；同时按
+    "先证后删"删除 `yaml_zero`（语言 ⊆ `yaml_dec(any)` 且声明其后、等长取先 ⇒ 从不产出 token；
+    机器对照 24 条语料 **变化 0 条**）。**纯包侧，零引擎改动**。
+  - **判据**：`key: 0.5` / `0.25` / `0.5e3` / `0.5E-3` → 单 `literal.number`、渲染逐字、token
+    逐项相同、幂等；`0` / `017` / `00` / `1.5` / `5` / `-0.5` / `-5` / `seq:\n- 8080` /
+    `seq:\n- -5` 全不回归。`tests/languages/yaml` **91 → 110 passed**；
+    `tests/engine/lexer + parser` 434 不变（未动引擎）；smoke 462。
+  - **跨包机器对照**（HEAD 包副本 vs 工作树，逐条 token 流）：verilog **0/8**、c **0/9**
+    （`017` 八进制、`.5` 前导点逐字不变）、c4 **0/7** ⇒ 非 yaml 合计 **0 差异**；yaml 差异恰
+    6 条（全 `0.` 开头形态）。
+  - **缺陷态变红**：写回 HEAD 版声明 → **9 failed / 32 passed**（失败全在新增 `TestZeroFraction`，
+    对照全绿）；还原后 sha 一致。
+  - **残留边界（预先存在、本轮零变化）**：c4 无浮点字面量声明（`grammar/c4/README.md` 的字面量
+    集合 = 十/十六/八进制），`.5`/`0.5` 走词法报错路径——属**既定形态**，不立条目；yaml 点首
+    `.5` 仍归裸标量（未声明 `lead_dot`，渲染保真），已写进 `grammar/yaml/README.md`。
+
 - **yaml 负数形态：`key: -5` 被当块序列、`list: [1, -2]` 整篇渲染成空串**
   （`grammar/yaml/base/_number.toml` 的 `yaml_neg` 是**不可达声明** ⇒ 负数在词法层被切成
   `sub` + `number`，语法层再按"块序列指示符"读走）。
@@ -212,6 +234,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **任务循环落档**（作者 2026-10-09 定的六步循环）：`policy/collaboration.md` 新增「任务循环」
+  —— ① 取任务输入（作者输入 + 已知缺口，一次一个）；② **复述核心约束**（引擎不留语言知识、
+  只留抽象通用模式；语言能力流入插件；AST 前声明式闭环；AST 后插件驱动开放；时点管线编排；
+  可视化报告输出）；③ 先调研后计划再实现，全程留记录、前后一致（不许狗头羊尾）；④ 独立判据
+  + **全量框架测试**；⑤ 收口（声明缺口与归属、同步文档、删完成/废弃项、改动收最小）；
+  ⑥ 回起点（循环记录以 `CHANGELOG.md` 为准，不另设流水账）。`AGENTS.md` 同步一行指针。
 - **决策权移交 + `DRAFT.md` 暂存区清零**（作者 2026-10-09：细节决策全部交维护者，作者只参与
   框架级；主线 = **补齐 C 包框架缺口 → 性能化改进 → 缓慢迭代**，架构基本定型）。
   - `policy/collaboration.md` 新增「决策权归属」：**框架级**（架构方向、引擎↔插件边界、语言

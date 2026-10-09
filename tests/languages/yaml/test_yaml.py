@@ -10,8 +10,15 @@ yaml fixture / _parse / _node_names 见同目录 conftest.py。
 流式集合/锚点/多文档的补全测试见 test_yaml_flow.py。
 """
 
+import pytest
+
 from core.token_protocol import TRIVIA_TOKEN_TYPES
 from tests.languages.yaml.conftest import _parse, _node_names
+
+
+def _sig(tokens) -> list[tuple[str, str]]:
+    """显著 token 序列（排除 trivia）：用于"源 ↔ 渲染"逐项比对。"""
+    return [(t.type, t.content) for t in tokens if t.type not in TRIVIA_TOKEN_TYPES]
 
 
 class TestIndentTokens:
@@ -119,13 +126,9 @@ class TestSignedNumber:
     Doc: grammar/yaml/base/_number.toml、lexer/README.md（`[[number.based]]` 字段表）
     """
 
-    @staticmethod
-    def _sig(tokens) -> list[tuple[str, str]]:
-        return [(t.type, t.content) for t in tokens if t.type not in TRIVIA_TOKEN_TYPES]
-
     def test_negative_scalar_is_single_number_token(self, yaml):
         """`-5` 整体一个 `literal.number`（符号与数字相邻 ⇒ 词法事实）。"""
-        assert self._sig(yaml["lexer"].tokenize("key: -5\n")) == [
+        assert _sig(yaml["lexer"].tokenize("key: -5\n")) == [
             ("literal.plain", "key"),
             ("symbol.base.colon", ":"),
             ("literal.number", "-5"),
@@ -144,7 +147,7 @@ class TestSignedNumber:
         out = yaml["renderer"].render(ast)
         assert "key: -5" in out
         assert "- 5" not in out
-        assert self._sig(yaml["lexer"].tokenize(out)) == self._sig(
+        assert _sig(yaml["lexer"].tokenize(out)) == _sig(
             yaml["lexer"].tokenize(src)
         )
 
@@ -160,7 +163,7 @@ class TestSignedNumber:
         assert ast.sub_node[0].value.node_name == "FlowSeq"
         out = yaml["renderer"].render(ast)
         assert out.strip() == "list: [1, -2]"
-        assert self._sig(yaml["lexer"].tokenize(out)) == self._sig(
+        assert _sig(yaml["lexer"].tokenize(out)) == _sig(
             yaml["lexer"].tokenize(src)
         )
 
@@ -191,6 +194,68 @@ class TestSignedNumber:
             out = yaml["renderer"].render(ast)
             again = yaml["renderer"].render(_parse(out, yaml))
             assert again == out, f"{src!r} 渲染不幂等"
+
+
+class TestZeroFraction:
+    """正零小数（`yaml_dec` 的 `size.digits = "any"`）：`0.5` / `0.25` / `0.5e3`。
+
+    回归背景（2026-10-09，实测）：`yaml_dec` 原为 `digits = "nonzero"`，size 子图的
+    首位转移只有 digit1-9 ⇒ `0.5` **进不了** size 子图的内置小数链，被切成
+    `number(0)` + `plain(.5)`，渲染成 `key: 0`（`.5` 静默丢内容）；同文件的
+    `yaml_zero`（`base_prefix = "0"` 前缀形态）也没有小数链。
+    修：`yaml_dec` 改 `digits = "any"`（同族先例 = C 的 `c_dec`，见
+    `grammar/c/base/_number.toml`），并删除已证冗余的 `yaml_zero`。
+    Doc: grammar/yaml/base/_number.toml 头注（为什么 `digits = any`）
+    """
+
+    @pytest.mark.parametrize("val", ["0.5", "0.25", "0.5e3", "0.5E-3", "0.", "0e5"])
+    def test_zero_leading_fraction_is_single_number_token(self, val, yaml):
+        assert _sig(yaml["lexer"].tokenize(f"key: {val}\n")) == [
+            ("literal.plain", "key"),
+            ("symbol.base.colon", ":"),
+            ("literal.number", val),
+        ]
+
+    @pytest.mark.parametrize("val", ["0.5", "0.25", "0.5e3", "0"])
+    def test_renders_verbatim_and_idempotent(self, val, yaml):
+        """验收①：非空、渲染与源一致、显著 token 逐项相同、幂等。"""
+        src = f"key: {val}\n"
+        ast = _parse(src, yaml)
+        assert ast.sub_node[0].value.node_name == "Number"
+        out = yaml["renderer"].render(ast)
+        assert out.strip() == f"key: {val}"
+        assert _sig(yaml["lexer"].tokenize(out)) == _sig(yaml["lexer"].tokenize(src))
+        assert yaml["renderer"].render(_parse(out, yaml)) == out
+
+    @pytest.mark.parametrize("val", ["0", "017", "00", "1.5", "5", "-0.5", "-5"])
+    def test_zero_and_other_forms_not_regressed(self, val, yaml):
+        """验收②：`0`/`017`/非零小数/上一轮 lead_sign 形态逐项不变。"""
+        src = f"key: {val}\n"
+        assert _sig(yaml["lexer"].tokenize(src)) == [
+            ("literal.plain", "key"),
+            ("symbol.base.colon", ":"),
+            ("literal.number", val),
+        ]
+        ast = _parse(src, yaml)
+        assert ast.sub_node[0].value.node_name == "Number"
+        assert yaml["renderer"].render(ast).strip() == f"key: {val}"
+
+    def test_sequence_forms_not_regressed(self, yaml):
+        for src, names in (
+            ("seq:\n- 8080\n", ["MappingEntry", "SequenceItem"]),
+            ("seq:\n- -5\n", ["MappingEntry", "SequenceItem"]),
+        ):
+            assert _node_names(_parse(src, yaml)) == names
+
+    def test_dot_leading_stays_plain_scalar(self, yaml):
+        """边界固化：`.5`（点首）归裸标量——yaml 未声明 `lead_dot`，类型非 number。"""
+        assert _sig(yaml["lexer"].tokenize("key: .5\n")) == [
+            ("literal.plain", "key"),
+            ("symbol.base.colon", ":"),
+            ("literal.plain", ".5"),
+        ]
+        out = yaml["renderer"].render(_parse("key: .5\n", yaml))
+        assert out.strip() == "key: .5"
 
 
 class TestRender:

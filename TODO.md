@@ -37,6 +37,12 @@
 - [ ] **逐声明符位宽**（`int a : 3, b : 4;` 解析失败）：标准里位宽属声明符，本包宽度绑在
       整个成员声明后（一个 `DeclaratorList` 共用一个宽度）；要支持需形态改动。
       当前单声明符位域与匿名占位可用。链：`grammar/c/02_types.toml::StructMember` 注释
+- [ ] **C 语义基座·最小首片 = 声明式符号收集产物**（循环 #1 调研定稿，缺口档
+      `docs/gaps/gap-c-semantic-base.md`）：C 包纯后置 analyzer 插件收集 typedef 名 / 标签 /
+      普通标识符 + 作用域栈 + 声明顺序——**不改 parser、不依赖那 7 条框架级拍板点**。
+      判据：正样本 `myint` → typedef、负样本 `int myint` → variable、声明顺序敏感、
+      块内遮蔽与出块失效各一例；`pytest tests/` 全绿 + `tools/c_acceptance.py` 40/42。
+      后续片（`(myint)x` 判定）等拍板后开工（`ROADMAP.md`「C 语义层切片 1b」）
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须
@@ -64,11 +70,6 @@
       （口径 = 打印非 ASCII 的独立入口脚本一律自护 stdout；**现测 24 个**：`tools/` 12、
       `tests/e2e` 6、`tests/differential` 2、`tests/fuzz/shrink`、`packaging/build_pipeline.py`、
       `parser/rule_selector.py`、`main.py`）。判据：cp1252 下排练全 PASS。
-- [ ] **yaml 正零小数（`key: 0.5`）静默丢内容**（2026-10-09 实测，yaml 负数修复轮发现）：
-      `0.5` 被切成 `literal.number(0)` + `literal.plain(.5)`，渲染成 `key: 0`——`.5` **静默消失**
-      （`1.5` 走 `yaml_dec` 正常；成因 = `yaml_zero` 是 `base_prefix="0"` 前缀形态、没有小数延续链）。
-      判据：`key: 0.5` 渲染非空且**显著 token 序列逐项相同**，`tests/languages/yaml` 全绿。
-      链：`grammar/yaml/base/_number.toml`
 - [ ] **Verilog 头部参数列表的"续项不带关键字"形态**：`#(parameter W = 8, D = 4)` /
       `#(W = 8, D = 4)` 被 linter 阻断（现只接受每项都重复 `parameter`）。
       判据：先扫真实语料（`tests/e2e/samples/real/`）统计该形态出现次数——有量则补语法，

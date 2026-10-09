@@ -61,5 +61,6 @@
 | `gap-language-pack-scope.md` | 语言包范围与 yaml 边界（规模/SV/增强语法）+ C 包接受域现状 / 渲染保真现状 / `enabled` 档位边界 |
 | `gap-language-penetration.md` | 语言知识渗透（引擎里实现了语言语义；词法/结构面实测快照 + 三条判据） |
 | `gap-semantic-elaboration-boundaries.md` | 语义/插件契约（elaboration/单例/inject） |
+| `gap-c-semantic-base.md` | C 语义基座（符号表/作用域/声明顺序：`(myint)x` 截断丢内容、`myint *b;` 不可分、`sizeof` 宽进、引擎语义钩子空转；落点三案 + parser 接口四选一 + 待拍板 8 条） |
 | `gap-verification-engineering.md` | 验证与工程边界（sample-driven/吞吐/增量/覆盖） |
 | `gap-feature-scatter.md` | 功能散点与上游契约耦合（一处功能 N 处登记；P-A/P-B/P-C + 步 2 收敛目标与接受边界） |
