@@ -36,6 +36,22 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   `python tests/e2e/eval_lint_accuracy.py`（实测 `err_total 33 / detected 33 / miss 0 /
   valid_total 7 / fp 0`）。
 
+**歧义位点 raw 暂缓建树（P3）：首次落地被独立审计证伪，已回退**（2026-10-10，循环 #4）：
+第一次实现按"语句起点落在未收敛 ∧ 符号相关位点 ⇒ **整句** raw"（`RawStatement` + 渲染走
+`_verbatim_text`），四条硬闸当时全绿；但**独立对抗性审计**（838 条语料 + 55 条定向输入）发现
+**语句级 raw 会把同句里与符号歧义无关的真错一起吞掉**——最小复现 `typedef int t;\nx = (t)y + ;\n`
+（改后 `tpc lint` 0 诊断 rc0、`tpc format` rc0 直出非法 C；改前 2 条 blocking），同类 7 处
+（`+ (u)z + ;`、跨行 `+`、`+ "unterminated;`、缺 `;`、`x=((t))y;`）⇒ **已整体回退**（未发布、
+无兼容负担；代码存档 `_drafts/p3_first_attempt.patch`）。保留的前置：P2a 内部 warning 旁路、
+P2b-1 符号相关性标记、符号回滚三处。
+**重做（P3b）必须满足的三条判据**：① **替换式试解析**证明"该句唯一问题是符号歧义"（把待判定的
+`( id )` 按类型名形态试解析，整句通过才允许 raw），否则保留 blocking；② 只认 **typedef 命名
+空间**的名（`struct t{}` 的 tag 名不算）；③ **声明顺序敏感**（`x=(t)y; typedef int t;` 不得 raw）。
+**覆盖边界**：非块容器语句位（production `@Stmt*`，如 C `CompoundStmt`）不在语句级接入点内。
+**残留事实**：`_pre_scan.toml` 自述"只作提示/对比、判定用 `analyze`"，而 P2b-1 的标记已把它
+升为**行为输入**——上述三条判据正是补这个跨层缺口；位点按行/列重定位在宏展开漂移时会失配
+（届时退回既有截断路径并记 log）。
+
 ## 成熟解法参照（见贤思齐）
 
 - yacc/antlr 的 panic-mode/skip-to-sync 错误恢复——若要"一个语法错误后继续报更多错"，是参照

@@ -37,15 +37,15 @@
 - [ ] **逐声明符位宽**（`int a : 3, b : 4;` 解析失败）：标准里位宽属声明符，本包宽度绑在
       整个成员声明后（一个 `DeclaratorList` 共用一个宽度）；要支持需形态改动。
       当前单声明符位域与匿名占位可用。链：`grammar/c/02_types.toml::StructMember` 注释
-- [ ] **C 语义基座 P3（含 P2b-2）= parser 歧义位点 raw 暂缓建树 + 窄档诊断摘除**（P2a 旁路与
-      P2b-1 标记已交付；符号回滚三处已补）：parser 在该位点产出 raw/原样节点（渲染走既有
-      `_verbatim_text`，**零渲染改动**）、消费内部 warning 的 `symbol_dependent`/`region`
-      （按**行/列**在 parser 自身 token 流上重定位），并**同批**重新引入 P2b-2 的窄档诊断摘除
-      （`_apply_narrow_downgrade`，含 `_DOWNGRADABLE_CODES` 与回填字段）。
-      判据：`typedef int myint;\nx = (myint)y;` ⇒ **无 blocking + 管线 `success=True` + 输出非空**；
-      `x = (1 + )y;` 仍 blocking；`x = (int)y;` 不回归（现即通过）；`eval_lint_accuracy` 33/33、
-      diag baseline 只减不增；新增判据必须证明缺陷态会红。链：`docs/gaps/gap-c-semantic-base.md`、
-      `ROADMAP.md`「C 语义层切片 1b」
+- [ ] **C 语义基座 P3b = parser 歧义位点 raw（重做，判据收紧）**：P3 首次落地（循环 #4）四条硬闸
+      全绿后被**独立审计证伪**（语句级 raw 吞同句无关真错）⇒ **已回退**（P2a 旁路 / P2b-1 标记 /
+      符号回滚等前置保留）。三条硬判据：① **替换式试解析**证明"整句唯一问题是符号歧义"；
+      ② 只认 **typedef 命名空间**（tag 名不算）；③ **声明顺序敏感**。
+      **反例集（进判据，全部必须报真错、不得 0 诊断静默）**：`x = (t)y + ;`、`+ (u)z + ;`、跨行 `+`、
+      `+ "unterminated;`、缺 `;` 的 `x=(t)y`、`x=((t))y;`、`x=(t)y; typedef int t;`、
+      `struct t{}; x=(t)y;`；同时 `typedef int myint;\nx = (myint)y;` 仍须 0 blocking +
+      `success=True` + 输出逐字保真。覆盖边界（非块容器语句位）另评估。
+      链：`docs/gaps/gap-parser-linter-approximation.md`「raw 暂缓建树」节
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须

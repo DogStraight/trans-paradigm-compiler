@@ -109,10 +109,12 @@
   `scanner`/`discovery` 进 `lookahead`，收敛条目带 `symbol_dependent`/`symbol_names`/`region`
   （口径 = 括号紧邻 `( id )` ∧ id∈pre_scan；语料实测 0 误标）。**P2b-2（摘诊断）与 P3 同批**
   （已用一条"决定守卫"测试钉住：P3 必须显式重新引入）
-- [ ] **P3 parser：歧义位点 raw 暂缓建树 + P2b-2 诊断摘除（同批）**——前置已就绪（P2a 旁路、
-  P2b-1 标记、符号回滚三处已补）；位点按**行/列**重定位；判据：`typedef int myint;\nx = (myint)y;`
-  ⇒ 无 blocking + `success=True` + 输出非空；`x = (1 + )y;` 仍 blocking；`x = (int)y;` 不回归
-- [ ] **P4 analyzer 插件：消费 raw + 符号，实现理解路径**——`(myint)x` 判定在此闭环；
+- [ ] **P3b parser：歧义位点 raw 暂缓建树（重做，判据收紧）**——首次落地（循环 #4）四条硬闸
+  全绿后被**独立审计证伪**（语句级 raw 吞同句无关真错，7 类反例）⇒ **已整体回退**（未发布）。
+  重做判据三条：① **替换式试解析**证明"整句唯一问题是符号歧义"；② 只认 **typedef 命名空间**
+  （tag 名不算）；③ **声明顺序敏感**。覆盖边界：非块容器语句位（C `CompoundStmt` 的 `@Stmt*`）
+  需把判定提到 production 层（架构级，同批或紧随）
+- [ ] **P4 analyzer 插件：消费 raw + 符号，实现理解路径**（依赖 P3b）——`(myint)x` 判定在此闭环；
       判据见缺口档（`CastExpr` 正样本 + 同名非 typedef 负样本 + 作用域/顺序 + 全量回归）
 
 ## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）

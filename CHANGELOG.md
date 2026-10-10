@@ -31,6 +31,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **循环 #4：P3（parser 歧义位点 raw）首次落地经独立审计证伪，已整体回退（未发布）**。
+  首次实现（语句起点落在"未收敛 ∧ 符号相关"位点 ⇒ **整句** raw + 同批重新引入窄档摘诊断）
+  四条硬闸当时全绿（`(myint)y` 0 blocking + `success=True` + 输出保真；`(1 + )y` 仍 blocking；
+  `(int)y` 不回归；lint accuracy 33/33、diag baseline 无增长），但**独立对抗性审计**
+  （838 条语料 + 55 条定向输入）发现：**语句级 raw 会吞掉同句里与符号歧义无关的真错**。
+  - **最小复现**：`typedef int t;\nx = (t)y + ;\n` ⇒ 改动后 `tpc lint` **0 诊断 rc0**、
+    `tpc format` rc0 直出**非法 C**（改动前 2 条 blocking）；同类 7 处：`+ (u)z + ;`、跨行 `+`、
+    `+ "unterminated;`、缺 `;` 的 `x=(t)y`、`x=((t))y;`。
+  - **裁定**：掩盖真错比"报错但不出格式"更坏，且修复需要**新判据**而非小补丁 ⇒ **整体回退**到
+    循环 #3 状态（该实现**从未提交**，无兼容负担；代码与测试存档 `_drafts/p3_first_attempt.patch`
+    与 `_drafts/p3_test_parser_raw_site.py`）。回退后基线复绿（全量 + 目标子集 + pyright）。
+  - **重做判据（P3b，已入 `TODO.md` / `ROADMAP.md`）**：① **替换式试解析**证明"该句唯一问题是
+    符号歧义"（把待判定的 `( id )` 按类型名形态试解析，整句通过才允许 raw）；② 只认 **typedef
+    命名空间**的名（`struct t{}` 的 tag 名不算）；③ **声明顺序敏感**（`x=(t)y; typedef int t;`
+    不得 raw）。审计同时点出跨层缺口：`_pre_scan.toml` 自述"只作提示/对比、判定用 `analyze`"，
+    而 P2b-1 的标记已把它升为**行为输入**——三条判据正是补这个缺口。
+  - **过程价值**：这是"独立判据 + 全量框架测试"第一次在**提交前**拦下一个会掩盖真错的改动；
+    循环 #4 结论 = **partial（实现未采纳，已有重做判据）+ verified（回退后基线复绿）**。
 - **P2b 拆片裁决：P2b-2（摘诊断）与 P3（parser raw）同批落地**（循环 #3，Lead 裁决）。
   事实：P2b-2 单独落地后，lint 不再拦但管线换成 `parse truncated` 失败、**输出仍为空**——
   用户诊断面反而更差（原来有明确 lint 报错，现在干净 + 一句含糊的 parse truncated）。
