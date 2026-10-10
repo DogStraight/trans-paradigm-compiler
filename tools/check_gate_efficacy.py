@@ -484,6 +484,33 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    fallback = re.compile(rf\"\\b({all_kws})\\s+(\\w+)\") if all_kws else None\n",
         "test": "tests/engine/lexer/test_pre_scan_fallback.py",
     },
+    {
+        "why": "raw 资格判定（P3b-M1）的**替换式试解析**是「该句唯一问题是符号歧义」的唯一证据："
+               "去掉它（`eligible` 恒真）⇒ 语句级 raw 又会吞掉同句无关真错（上一轮被独立审计证伪的"
+               "那一类）⇒ 反例集判据必红",
+        "file": "linter/lookahead.py",
+        "old": "            eligible = eligible or bool(ev[\"trial_ok\"])\n",
+        "new": "            eligible = True  # 变异：去掉替换式试解析\n",
+        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
+    },
+    {
+        "why": "**深度守卫**（`decl_depth <= use_depth`）是关掉「块内 typedef 出块后使用」这类作用域"
+               "反例的那一层：去掉它 ⇒ `void f(void){ typedef int t; }\\nx = (t)y;` 变成 eligible，"
+               "真错被静默（审计 A 类）⇒ 判据必红",
+        "file": "linter/lookahead.py",
+        "old": "            if position_ok and scope_ok:\n",
+        "new": "            if position_ok:  # 变异：去掉深度守卫\n",
+        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
+    },
+    {
+        "why": "资格判定只认**包声明的 typedef 命名空间**（`type_name` kind）：去掉 kind 过滤 ⇒ tag 名"
+               "（`struct t{}` 后的 `(t)y`）也被标成符号相关（标记级判据必红；静默由 `trial_as` "
+               "必要性这道第二层护栏独立顶住）",
+        "file": "linter/lookahead.py",
+        "old": "                if rec.get(\"kind\") not in self._type_name_kinds:\n",
+        "new": "                if False:  # 变异：不按 kind 过滤\n",
+        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
+    },
 ]
 
 
