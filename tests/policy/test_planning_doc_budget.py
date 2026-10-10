@@ -12,7 +12,7 @@
   `_GLOB_BUDGETS` 注释），触顶说明该删旧条目，或把"现状边界"搬去
   `docs/gaps/`、"过程叙述"搬去 git log。
 - **按目录模式纳管**（gaps/*.md、decisions/*.md）：新档一进来就受同一预算
-  约束，不需要"记得加一行清单"。根文件（TODO/ROADMAP/DRAFT）显式列出。
+  约束，不需要"记得加一行清单"。根文件（TODO/ROADMAP/PROGRESS/DRAFT）显式列出。
 - **缺席不算违规**：`DRAFT.md` 清空后按纪律删除——门禁只查存在的文件。
 
 自检：`test_synthetic_violation_is_caught` 用临时目录反证"超限真的会红"
@@ -28,11 +28,12 @@ _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-# 根文件行数上限：收口后实测 + 余量（TODO 160 / ROADMAP 320 / DRAFT 70）。
+# 根文件行数上限：收口后实测 + 余量（TODO 160 / ROADMAP 320 / PROGRESS 60 / DRAFT 70）。
 # 提高这些数字 = 显式决策（改这里）。
 _ROOT_BUDGETS: tuple[tuple[str, int], ...] = (
     ("TODO.md", 160),
     ("ROADMAP.md", 320),
+    ("PROGRESS.md", 60),
     ("DRAFT.md", 70),
 )
 # 登记类目录：单档上限（gap 200 / ADR 150）。
@@ -90,7 +91,7 @@ def test_planning_docs_within_budget() -> None:
 def test_budget_targets_exist() -> None:
     """常驻规划文件路径写错会让检查静默空转（假绿）。
 
-    `DRAFT.md` 允许缺席（清空即删），故只要求 TODO/ROADMAP 在位。
+    `DRAFT.md` 允许缺席（清空即删），故只要求 TODO/ROADMAP/PROGRESS 在位。
     """
     missing = [
         rel

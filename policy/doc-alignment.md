@@ -103,7 +103,7 @@ Doc: linter/linter_architecture.md   # 文件级引用（稳定，不随章节�
 
 ## 容量上限（规划/登记文件）
 
-`TODO.md`、`ROADMAP.md`、`DRAFT.md`、`docs/gaps/gap-*.md`、`docs/decisions/NNNN-*.md`
+`TODO.md`、`ROADMAP.md`、`PROGRESS.md`、`DRAFT.md`、`docs/gaps/gap-*.md`、`docs/decisions/NNNN-*.md`
 各有行数上限，由 `tests/policy/test_planning_doc_budget.py` 守（口径与数字见该
 测试 docstring）。动机：这类文件的老化形态不是"写错"，而是**已完成的过程叙述
 不断沉积**，把未完成项稀释到读不出来。因此：

@@ -82,6 +82,8 @@
 - **外部调研/设计来源** → `references.md`——**只调研记录**（格式：定位 →
   管线对比 → 亮点 → 可实现性）；tpc 自身执行/落地/评测**不落**此。
 - **能力缺口/已知边界** → `gaps/gap-*.md`（+ `gaps/README.md` 登记表）。
+- **主线进度刻度** → 根目录 `PROGRESS.md`（到下一个版本的剩余刻度 + 退出判据状态；
+  只记状态不记过程，主线完成即整档删除或改写为下一主线）。
 - **执行记录/修复结果** → 代码 + 测试断言 + CHANGELOG（"为什么/推翻了什么"的
   结论层可留 ADR）。规则行为预期 → 测试断言，文档不重复。
 - **已删/过时内容** → git log 追，不留兼容垫片；删除先证后删（判据全表见
@@ -96,7 +98,7 @@
 > 就近 `policy/doc-alignment.md`（制度与门禁工具同层）；docs/README
 > 只保留导航与分层说明。
 >
-> **规划文件容量纪律**（2026-10-08）：`TODO.md` / `ROADMAP.md` / 根目录短期草稿 /
-> `docs/gaps/gap-*.md` / `docs/decisions/NNNN-*.md` 都有行数上限，由
+> **规划文件容量纪律**（2026-10-08）：`TODO.md` / `ROADMAP.md` / `PROGRESS.md` /
+> 根目录短期草稿 / `docs/gaps/gap-*.md` / `docs/decisions/NNNN-*.md` 都有行数上限，由
 > `tests/policy/test_planning_doc_budget.py` 守——**超限先删旧条目或搬出现状边界**，
 > 不靠"下次记得删"（口径见该测试 docstring）。
