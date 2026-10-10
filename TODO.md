@@ -43,7 +43,8 @@
       吸收延迟 raw）。**扩到语句位后遮蔽用例（外层 typedef + 内层同名变量）变为可判** ⇒ 必须同时
       引入作用域信息（与下条 M2/P4 的精确符号面校验同源）。
       判据：`void f(void) { x = (myint)y; }`（带 typedef）⇒ 与顶层同样闭环、且审计反例集仍全部报真错；
-      性能不得超改前 ~10%（含 tv80_core 类大文件）。链：`docs/gaps/gap-parser-linter-approximation.md`
+      性能不得超改前 ~10%（含 tv80_core 类大文件）。链：`docs/gaps/gap-parser-linter-approximation.md`；
+      来源：循环 #5 覆盖边界审计（派生）
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须
@@ -53,6 +54,12 @@
       `analyzer/elaboration/atoms.py`）——"形态从哪里取"没进声明面，多形态语言包会撞。
 
 ## 引擎与验证基础设施
+
+- [ ] **A/B 对拍工具缺"产物摘要"档**：`tools/ab_pipeline_compare.py` 现只对拍 `rc` / `stdout`
+      ⇒ 声明"零可见变化"时仍要临时手写脚本（M1 那次由审计方另做逐文件 SHA256）。
+      判据：工具增产物摘要档（逐文件 `lint --json` / 渲染文本摘要 PRE↔POST 对照），
+      `tools/README.md` 同步一行；零可见变化的收口证据改用该档。
+      来源：循环 #5 假红复盘（派生，见 `policy/collaboration.md`「循环执行细则」）
 
 - [ ] **`check_doc_refs` 的 D3 不查 blockquote 延续行**：`Impl:` / `Test:` 的多行续行
       （ADR/机制文档里 `> Test: a.py ·` 换行 `b.py`）在 D3 视野外 ⇒ 引用**不存在的测试
