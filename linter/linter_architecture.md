@@ -233,8 +233,31 @@ Level 2 试解析除了择一（行为不变），还判一次**候选是否收�
   **不进** `LintDiagnostic`、不进 `lsp_diagnostic`/`tpc lint --json`、不影响 exit code、
   不落盘——用户可见面与机制引入前逐字节相同（e2e 快照对照）。
 - **条目形态**（P3 可直接消费）：`{kind, reason, context, pos, line, column, token,
-  tied, allowed, all}`——`pos` 是**本次 linter token 流**下标（linter 吃展开态、
-  parser 吃锚形态，两个 token 流不同源）⇒ 跨阶段定位用 `line`/`column`。
+  tied, allowed, all, symbol_dependent, symbol_names, symbol_shape, region}`——`pos` 是
+  **本次 linter token 流**下标（linter 吃展开态、parser 吃锚形态，两个 token 流不同源）
+  ⇒ 跨阶段定位用 `line`/`column`。
+
+### 符号相关性标记（P2b-1 已落；诊断摘除与 parser raw 同批，P3）
+
+- **符号输入**：`LinterScanner.scan()` 每轮调**引擎**的 `[lexer] pre_scan`
+  （`pre_scan(source, load_pre_scan_config(rules_dir))`）取名字集合，连同引擎括号
+  token 集交给 `LookaheadTable.set_symbol_hints`。语言知识仍在包声明
+  （`grammar/*/base/_pre_scan.toml`）——引擎不解释 kind 语义、不硬编码任何语言名；
+  未声明 `[lexer] pre_scan` 的包 → 空集（零影响）。预扫描的**已知不精确**
+  （平坦/首见归属/无顺序，见 `lexer/pre_scan.py:1-5`）⇒ 只作提示、不作判据。
+- **`symbol_dependent` 口径（窄档，写死在 `_symbol_hits` docstring）**：未收敛位点的
+  **句子区间**含 `<括号开> <id> <括号闭>` **紧邻**形态，且该 id 文本 ∈ pre_scan
+  名集合 ⇒ `True`。为什么不是"区间内含 pre_scan 名"（实测）：后者会把 verilog 的
+  `module`/`function`/`task` 名算进来——lint_err 语料 2 个位点（`ref_e33_macro_redef.v`
+  等）会被误命中；`(name)` 形态在 lint_err/valid/real 三语料实测 **0 命中**，只在
+  目标形态（C 的 `(myint)x`）命中。故取更窄的一半，且无需新声明。
+- **本批只标记，不摘诊断**（用户可见面零变化）：`symbol_dependent=True` 的位点仍照常
+  报原诊断（C 的 `typedef int myint; x = (myint)y;` 实测仍是 `phase-unrecognized` +
+  `phase-statement` 两条 blocking）。原因（实测对照）：lint 摘了 blocking 后管线会前进到
+  parser，而 parser 建不出 typedef 名转换的树——`x = (int)y;`（内建类型转换）**通过**，
+  `x = (myint)y;` **`parse truncated`** ⇒ 用户可见错误从精确的 lint 报错退化成含糊的
+  parse 失败。故**诊断摘除（P2b-2）与 parser 位点 raw 暂缓建树（P3）同批落地**，
+  那时门禁为"无 blocking + `success=True` + 输出非空"。
 
 ---
 

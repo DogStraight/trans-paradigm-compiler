@@ -11,6 +11,11 @@
 #   · 捕获名只按词法形态，不判是否真为声明（`clean` 只剥注释/字符串）。
 #   ⇒ 消费方须按 `phase` 区分：`pre_scan` 记录**只作提示/对比**，判定用 `analyze` 记录。
 #
+# ⚠ **已声明 `fallback = false`**（2026-10-10）：引擎默认的"声明类别之外的关键字兜底
+#   `\b(kw)\s+(\w+)`"会把 `int x` 里的 `x` 乃至类型词本身收成符号（`int: typedef` 这类
+#   杂质），而按 `phase` 对比/据名判定的消费方需要干净符号面 ⇒ C 包显式关掉兜底；
+#   声明类别（typedef / tag）的收集不受影响。其他语言包未声明该键 = 保持原行为。
+#
 # ⚠ **不声明 `rule_hints`**（与 verilog 的 `_pre_scan.toml` 的差别）：`pre_symbols` + `pre_hints`
 #   会重排 parser 语句候选（`parser/rule_selector.py::select_candidates`）——本片纪律是
 #   "产物只增不改既有 AST/lint 行为"，故只收集、不提示。要开提示须单独评估（拍板点见缺口档）。
@@ -37,6 +42,8 @@ start = "'"
 # C 的关键字后紧跟的声明名不受 verilog 那类"语境关键词"干扰（typedef 取分号前末词、
 # 标签取关键字后首词），故显式声明为空表，避免继承其它语言包的语义。
 context_keywords = []
+# 关掉"声明类别之外的关键字兜底收集"——见文件头注（杂质面）。
+fallback = false
 
 # ── 声明类别（kind 即 `pre_symbols` 的取值，也是产物里 `phase="pre_scan"` 记录的 kind） ──
 

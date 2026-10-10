@@ -139,21 +139,32 @@ def _first_token_of_spec(spec: str, grammar_rules: dict) -> set[str]:
 # ── 规则匹配全流程 ──
 
 
+def _push_rule_scope(parser, rule: GrammarRule) -> bool:
+    """规则声明了 parser 侧 `scope` 时入栈；返回是否入栈（供 finally 配对出栈）。
+
+    scope 声明来源：`[Rule.parser] scope = { kind = ... }`（或经 `peek` 从
+    analyzer 阶段拷来）；无声明 = 不入栈。抽成独立函数是为了让 **rule_frame 与
+    pratt 分支共用同一入栈判定** —— 两处若各写一份，pratt 侧必然漂移（见
+    `try_rule_productions` 对 pratt 作用域帧的说明）。
+    """
+    rule_parser = getattr(rule, "parser", {})
+    scope_def = rule_parser.get("scope") if isinstance(rule_parser, dict) else None
+    if isinstance(scope_def, dict) and scope_def:
+        parser.scope_stack.push(rule.name, scope_def.get("kind", rule.name))
+        return True
+    return False
+
+
 @contextlib.contextmanager
 def rule_frame(self, context: ParseContext, rule: GrammarRule):
     """规则执行帧：作用域 + 语义路径推入，退出自动恢复。
 
     收敛 try_rule_productions 原先每个 return 分支的手动
     path_stack.pop()/scope_stack.pop()（~8 处重复，易漏一处致栈泄漏）。
-    pratt 规则不推帧（原语义：pratt 分支在作用域推入前 return）。
+    语义路径帧对 pratt 规则仍然不推（原语义：pratt 分支在路径推入前 return）；
+    但**作用域帧对 pratt 必须配对**，见 `try_rule_productions`。
     """
-    rule_parser = getattr(rule, "parser", {})
-    scope_def = rule_parser.get("scope") if isinstance(rule_parser, dict) else None
-    scope_pushed = False
-    if scope_def and isinstance(scope_def, dict):
-        scope_kind = scope_def.get("kind", rule.name)
-        self.scope_stack.push(rule.name, scope_kind)
-        scope_pushed = True
+    scope_pushed = _push_rule_scope(self, rule)
 
     # 语义路径
     sn = context.sibling_counter.get(rule.name, 0)
@@ -554,15 +565,26 @@ def try_rule_productions(self, context: ParseContext, rule: GrammarRule) -> Node
     三形态分派：pratt / 块（_try_block_rule）/ 普通（_try_plain_rule）。
     帧管理（作用域 + 语义路径）由 rule_frame 统一收敛——原单函数 ~180 行、
     8 处重复栈清理（path_stack.pop/scope_stack.pop）易漏，拆后各职责独立。
+
+    ⚠ **pratt 分支的作用域帧必须配对**：原实现"pratt 在作用域推入前 return"，
+    于是声明了 `scope` 的 pratt 规则**只入栈不出栈**（帧泄漏）——其作用域与其中
+    注册的符号会外泄给后续候选，且因回溯粒度是"快照位置"，这类泄漏不会被
+    任何 restore 收走。修法取最小形态：**只补作用域帧**（`_push_rule_scope` +
+    finally pop），语义路径帧对 pratt 保持原样（不推），故日志/语义路径输出不变。
     """
     # 停点/trace：按规则名或 token 位置过滤（仅真实 Parser 有此方法）
     trace_fn = getattr(self, "_maybe_trace", None)
     if trace_fn is not None:
         trace_fn(context, rule.name)
 
-    # Pratt 规则（不推帧，原语义：pratt 分支在作用域推入前 return）
+    # Pratt 规则（语义路径不推帧；作用域帧配对进出）
     if getattr(rule, "pratt", False):
-        return self._try_pratt_rule(context, rule)
+        scope_pushed = _push_rule_scope(self, rule)
+        try:
+            return self._try_pratt_rule(context, rule)
+        finally:
+            if scope_pushed:
+                self.scope_stack.pop()
 
     with self._rule_frame(context, rule):
         if getattr(rule, "is_block", False):

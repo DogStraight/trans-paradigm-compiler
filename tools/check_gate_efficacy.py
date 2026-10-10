@@ -475,6 +475,15 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "[StructSpecifier.analyzer.c_symbol_collect]\nsite = \"named\"\nname_attr = \"tag_typo\"\n",
         "test": "tests/languages/c/test_c_symbol_collection.py",
     },
+    {
+        "why": "预扫描的 `fallback` 开关（默认 true）必须被真正消费：写成无条件建兜底正则 ⇒ "
+               "声明 `fallback = false` 的包（C）重新带上 `int: typedef` 这类**非声明名**杂质，"
+               "按 `phase` 对比/据名判定的消费方被污染（新判据必红）",
+        "file": "lexer/pre_scan.py",
+        "old": "    fallback = re.compile(rf\"\\b({all_kws})\\s+(\\w+)\") if (use_fallback and all_kws) else None\n",
+        "new": "    fallback = re.compile(rf\"\\b({all_kws})\\s+(\\w+)\") if all_kws else None\n",
+        "test": "tests/engine/lexer/test_pre_scan_fallback.py",
+    },
 ]
 
 

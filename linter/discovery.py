@@ -152,6 +152,19 @@ class Discovery:
         """
         return self._lookahead.internal_warnings()
 
+    def set_symbol_hints(
+        self,
+        names: set[str],
+        bracket_openers: frozenset[str] | None = None,
+        bracket_closers: frozenset[str] | None = None,
+    ) -> None:
+        """转发符号提示给消歧表（P2b：`pre_scan` 名 + 引擎括号 token 集）。
+
+        每轮 `scan()` 由 scanner 覆盖式设置；只影响未收敛位点的
+        `symbol_dependent` 标记与窄档降级，不影响候选/诊断内容。
+        """
+        self._lookahead.set_symbol_hints(names, bracket_openers, bracket_closers)
+
     def dump_nodes(
         self,
         tokens: list[Token],

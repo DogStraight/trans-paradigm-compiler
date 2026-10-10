@@ -411,6 +411,61 @@ class LookaheadTable:
         # 按次重置 + 显式取用（同 `Discovery._unrecognized` 的模式）；
         # 不进 LintDiagnostic / --json / exit code / 落盘。
         self._internal_warnings: list[dict] = []
+        # 符号提示（P2b）：`pre_scan` 期收集的名字 + 括号 token 集（scanner 每轮设置）。
+        # 只用于给未收敛位点打"符号相关"标记（窄档降级依据），不参与候选计算。
+        self._pre_scan_names: set[str] = set()
+        self._bracket_openers: frozenset[str] = frozenset()
+        self._bracket_closers: frozenset[str] = frozenset()
+
+    # ── 符号提示（P2b：pre_scan 名 + 括号形态） ──
+
+    def set_symbol_hints(
+        self,
+        names: set[str],
+        bracket_openers: frozenset[str] | None = None,
+        bracket_closers: frozenset[str] | None = None,
+    ) -> None:
+        """设置本轮符号提示（每轮 `scan()` 由 scanner 覆盖式设置）。
+
+        `names` = `[lexer] pre_scan` 收集到的名字（语言包声明驱动，引擎不解释
+        语义）；`bracket_openers/closers` = 引擎括号 token 集（配置推导）。
+        预扫描**不是精确的**（`lexer/pre_scan.py:1-5` 自述：平坦/首见归属/无
+        顺序）⇒ 只作提示，判据见 `_symbol_hits`（窄档）。
+        """
+        self._pre_scan_names = set(names or ())
+        self._bracket_openers = bracket_openers or frozenset()
+        self._bracket_closers = bracket_closers or frozenset()
+
+    def _symbol_hits(self, tokens: list[Token], i: int) -> list[str]:
+        """位点所在句子区间里**"括号内 pre_scan 名"**形态的命中名（P2b 窄档判据）。
+
+        判据（语言无关，两半须同时成立）：
+          ① 形态：`<括号开启> <id> <括号闭合>` **紧邻**（跳过 trivia）；
+          ② 该 id 文本 ∈ `pre_scan` 名集合（语言包 `[pre_scan.decl.*]` 声明）。
+        区间 = `[i, 句子边界]`（`_find_boundary`，与 Level 2 试解析同界）。
+
+        为什么取"括号内"而非"区间内含 pre_scan 名"（实测，见 task 报告）：
+        仅按"区间内含名"会把 verilog 的 `module`/`function`/`task` 名算进来——
+        lint_err 语料实测 2 个位点命中（`ref_e33_macro_redef.v` 等）⇒ 会误降级、
+        把真错摘掉；`(name)` 形态在 lint_err/valid/real 三语料实测 **0 命中**，
+        只在目标形态（C 的 `(myint)x`）命中。故取更窄的一半，且不硬编码任何
+        kind 名（`typedef` 之类仍是包侧声明）。
+        """
+        if not self._pre_scan_names or not self._bracket_openers:
+            return []
+        end = min(self._find_boundary(tokens, i + 1, len(tokens)), len(tokens) - 1)
+        real = [t for t in tokens[i : end + 1] if t.type not in _TRIVIA]
+        hits: list[str] = []
+        for k in range(len(real) - 2):
+            left, mid, right = real[k], real[k + 1], real[k + 2]
+            if (
+                left.type in self._bracket_openers
+                and right.type in self._bracket_closers
+                and mid.type == "id"
+                and mid.content in self._pre_scan_names
+            ):
+                hits.append(mid.content)
+        return hits
 
     # ── 内部 warning 旁路（候选未收敛） ──
 
@@ -795,9 +850,14 @@ class LookaheadTable:
           · `errs == 0` 的候选 ≥2 且最大 `consumed` 并列（`(errs, consumed)`
             无法区分） ⇒ 未收敛，reason = `ambiguous_full_match`；
           · 允许集非空但全部 `errs > 0` ⇒ 未收敛，reason = `no_full_match`
-            （今天的 `[]`/未识别档；是否降级为用户可见 warning 属后续分片）。
+            （`[]`/未识别档）。
         唯一最优、可区分、或允许集为空 ⇒ 收敛。未收敛只写**内部 warning**
-        （`internal_warnings()`），不改 `_decide_best` 的择一行为、不改用户可见面。
+        （`internal_warnings()`），不改 `_decide_best` 的择一行为。
+
+        **符号相关性（P2b-1）**：条目另带 `symbol_dependent`/`symbol_names`/
+        `region`（口径见 `_record_convergence`）——**只标记，不摘诊断**；诊断摘除
+        （P2b-2）与 parser 位点 raw 暂缓建树（P3）**同批落地**（原因见
+        `LinterScanner._pre_scan_names` docstring）。
         """
         matcher = self._matcher
         if matcher is None:
@@ -824,12 +884,22 @@ class LookaheadTable:
     ) -> None:
         """收敛判定 → 未收敛时累积一条内部 warning（判据见 `_try_parse` docstring）。
 
-        条目形态（P3 可直接消费：行/列定位 + 候选集 + 理由）：
+        条目形态（P3 可直接消费：行/列定位 + 候选集 + 理由 + 符号相关性）：
             {"kind": "candidate-not-converged", "reason": ...,
              "context": ..., "pos": i, "line": .., "column": .., "token": ..,
              "tied": [并列候选名，仅 ambiguous_full_match],
              "allowed": [{"name","errs","consumed"}...],   # 参与判定的
-             "all":     [...]                              # 未过滤全集（可解释性）}
+             "all":     [...],                             # 未过滤全集（可解释性）
+             "symbol_dependent": bool,   # P2b-1：位点涉"括号内 pre_scan 名"
+             "symbol_names": [命中的名], "symbol_shape": "paren_name",
+             "region": [起, 止 token 下标]}  # 位点句子区间（P3 raw 用）
+
+        **符号相关性口径（P2b-1，写死在这里）**：位点区间含
+        `( <pre_scan 名> )` 形态（`_symbol_hits`）⇒ `symbol_dependent=True`。
+        未声明 pre_scan 的语言包、或形态不匹配 ⇒ False（缺省偏置 = 不相关）。
+        预扫描不精确是既有登记边界 ⇒ **只作提示**：只影响标记，不参与候选/诊断
+        内容计算。**诊断摘除（P2b-2）与 parser 位点 raw（P3）同批落地**——在 P3
+        之前只标记、不摘诊断（原因见 `LinterScanner._pre_scan_names` docstring）。
 
         同一 token 位点只记首条（`_try_parse` 可能在 fallback 路径被重复调用）。
         """
@@ -850,6 +920,8 @@ class LookaheadTable:
         if any(w["pos"] == i for w in self._internal_warnings):
             return
         tok = tokens[i] if 0 <= i < len(tokens) else None
+        hits = self._symbol_hits(tokens, i)
+        end = min(self._find_boundary(tokens, i + 1, len(tokens)), len(tokens))
         self._internal_warnings.append(
             {
                 "kind": "candidate-not-converged",
@@ -864,11 +936,16 @@ class LookaheadTable:
                     {"name": n, "errs": e, "consumed": c} for e, c, n in allowed
                 ],
                 "all": [{"name": n, "errs": e, "consumed": c} for e, c, n in trials],
+                "symbol_dependent": bool(hits),
+                "symbol_names": sorted(set(hits)),
+                "symbol_shape": "paren_name",
+                "region": [i, end],
             }
         )
         self._trace_out(
             f"  internal-warning {reason} @pos={i} "
-            f"allowed={[t[2] for t in allowed]} tied={tied}"
+            f"allowed={[t[2] for t in allowed]} tied={tied} "
+            f"symbol_dependent={bool(hits)} hits={sorted(set(hits))}"
         )
 
     def _trial_parse(

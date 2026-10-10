@@ -308,6 +308,16 @@ class LinterScanner:
         # scanner 实例扫多文件），新 token 流必须清空，避免跨文件位置串命中。
         self._matcher.reset_atom_memo()
 
+        # ── 符号提示（P2b-1）：把 `pre_scan` 名喂给消歧表 ──
+        # 语言知识在包声明（`[lexer] pre_scan`），引擎只做"括号内名 + 名来自
+        # pre_scan"的**中性形态**判定（判据见 `lookahead._symbol_hits`）。
+        # 预扫描不精确（`lexer/pre_scan.py:1-5` 自述）⇒ 只作提示、不作判据。
+        self._discovery.set_symbol_hints(
+            self._pre_scan_names(lex_source),
+            self._all_bracket_openers,
+            self._all_bracket_closers,
+        )
+
         registry = CheckerRegistry()
 
         # ── P1: 块边界配对 ──────────────────────
@@ -364,6 +374,23 @@ class LinterScanner:
         errors = self._discovery.unrecognized_diagnostics()
         errors += registry.validate_all(tokens)
         return errors
+
+    def _pre_scan_names(self, source: str) -> set[str]:
+        """本轮 `pre_scan` 收集到的名字（P2b-1 符号输入；**只作提示**）。
+
+        走**引擎**的 `[lexer] pre_scan`（语言知识在包声明，引擎不解释 kind 语义，
+        不硬编码任何语言名）；未声明 `[lexer] pre_scan` 的语言包 → 空集（零影响）。
+        配置错误按 fail-fast 冒泡（不静默降级）。名字只用于给未收敛位点打
+        `symbol_dependent` 标记（见 `lookahead._symbol_hits`），**不参与**诊断计算。
+
+        ⚠ 诊断摘除（P2b-2）与 parser 位点 raw 暂缓建树（P3）**同批落地**：在 P3 之前
+        本模块只标记、不摘诊断——否则 lint 不拦、管线却在 parser 处以
+        `parse truncated` 失败，用户诊断面反而变差（实测：`x = (int)y;` 通、
+        `typedef int myint; x = (myint)y;` 截断）。
+        """
+        from lexer import load_pre_scan_config, pre_scan
+
+        return set(pre_scan(source, load_pre_scan_config(self._rules_dir)))
 
     def internal_warnings(self) -> list[dict]:
         """本次 `scan()` 的内部 warning（拷贝；**用户不可见**）。

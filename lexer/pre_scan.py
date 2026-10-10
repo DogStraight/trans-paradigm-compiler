@@ -13,17 +13,24 @@ Doc: docs/language_walkthrough.md（预扫描：顶层声明收集）
 """
 
 import re
+
 from core.config_registry import declare_cfg
+from core.errors import ConfigError
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # lexer.pre_scan
 #   #sym:config = [pre_scan]
 #   格式: dict
 #     { context_keywords: list[str],
+#       fallback: bool,                       # 默认 true
 #       decl: { kind: { keyword, ... }, ... },
 #       clean: [ { kind, start, end? }, ... ] }
 # clean 条目声明预扫描前的源文本清理形态（注释/字符串剥离）——
 # 语言知识（//、/* */、" 等形态）在配置，引擎不硬编码。
+# fallback（默认 true）声明"声明类别之外的关键字也按 `\b(kw)\s+(\w+)` 兜底收集"：
+# 该兜底会带入 `int foo` 这类**非声明名**（`foo` 可能只是类型词后的普通词），
+# 只对"粗提示"用途安全；需要干净符号面（如按 phase 对比、消费方据名判定）的语言包
+# 应显式 `fallback = false`——声明类别（`[pre_scan.decl.*]`）的收集**不受它影响**。
 _pre_scan_cfg: dict = declare_cfg("lexer.pre_scan", {}, __name__, "_pre_scan_cfg")
 
 
@@ -119,7 +126,13 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
             hints[kind] = rh
 
     all_kws = "|".join(cfg.get("keyword", "") for cfg in decls.values())
-    fallback = re.compile(rf"\b({all_kws})\s+(\w+)") if all_kws else None
+    # fallback = 声明类别之外的关键字是否也兜底收集（默认 true）；非 bool ⇒ fail-fast
+    use_fallback = config.get("fallback", True)
+    if not isinstance(use_fallback, bool):
+        raise ConfigError(
+            f"[pre_scan] fallback 必须是布尔（true/false），收到 {use_fallback!r}"
+        )
+    fallback = re.compile(rf"\b({all_kws})\s+(\w+)") if (use_fallback and all_kws) else None
 
     # 源文本清理正则（[[pre_scan.clean]]，配置驱动——无声明则空列表不清理）
     clean_patterns: list[tuple[re.Pattern, str]] = []

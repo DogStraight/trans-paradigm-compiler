@@ -7,6 +7,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P2b-1：linter 符号相关性标记（零用户可见变化）**（循环 #3）。符号输入走引擎既有
+  `[lexer] pre_scan`（`linter/scanner.py::_pre_scan_names` → `set_symbol_hints` →
+  `discovery` → `lookahead`），**不 import 包侧插件、不硬编码 kind**；收敛判定条目新增
+  `symbol_dependent` / `symbol_names` / `symbol_shape` / `region`。
+  - **口径（实测收窄）**：位点句子区间含**括号紧邻**的 `( id )` ∧ `id ∈ pre_scan` 名集合。
+    只按"区间含名"会把 verilog 的 `module/function/task` 名算进来（lint_err 语料实测 **2 个
+    位点误命中**，会误降级）；收窄后在 lint_err 47 / valid 64 / real 18 文件（2314 个未收敛
+    位点）**0 命中**，只在目标形态（C 的 `(myint)x`）命中。
+  - **判据**：`typedef int myint;\nx = (myint)y;` ⇒ 条目 `symbol_dependent=True`、
+    `symbol_names=['myint']`，而**用户诊断面逐字节不变**（仍 2 条 blocking、管线仍
+    `lint failed: 2 error(s)`；90 个 tracked 样本 lint JSON 0 差异、lint accuracy 逐项不变、
+    diag baseline 5548 无增长）；`x = (1 + )y;` 与同名非 typedef 均**不标**；缺陷态（去掉
+    pre_scan 名判定）**1 failed / 9 passed**。
+  - **诊断摘除（P2b-2）刻意推迟到与 P3 同批**（见下「Changed」）；测试内含一条**决定守卫**
+    （断言无降级字段/常量/方法），P3 重新引入时必须显式改它。
+- **`[pre_scan] fallback = bool`（默认 `true`）**：预扫描的"声明类别之外的关键字兜底收集"
+  现在可关。C 包已声明 `fallback = false` —— 引擎原先无条件建 `\b(kw)\s+(\w+)` 兜底，会
+  `typedef int myint;` 里把 `int` 也收成 `typedef`（按 `phase` 对比/据名判定的消费方被污染），
+  而包侧无法关闭。声明类别的收集不受该键影响；非 bool 即 `ConfigError`（fail-fast）。
+  判据：`tests/engine/lexer/test_pre_scan_fallback.py`（4 例，含 C 包符号面干净）+
+  `check_gate_efficacy` 新变异（无条件建兜底 ⇒ 必红）。
+
+### Changed
+
+- **P2b 拆片裁决：P2b-2（摘诊断）与 P3（parser raw）同批落地**（循环 #3，Lead 裁决）。
+  事实：P2b-2 单独落地后，lint 不再拦但管线换成 `parse truncated` 失败、**输出仍为空**——
+  用户诊断面反而更差（原来有明确 lint 报错，现在干净 + 一句含糊的 parse truncated）。
+  故本轮只落 **P2b-1 标记**（零用户可见变化），把"摘 blocking"与"raw 暂缓建树"**原子耦合**。
+  对照事实已写进 `linter/linter_architecture.md` 供 P3 当判据：`x = (int)y;`（内建类型转换）
+  **通过**，`typedef int myint;\nx = (myint)y;` 当前 **parse truncated**。
+
+### Fixed
+
+- **符号回滚三处洞 + 跨 parse 残留**（循环 #3；P3 前置，**行为零变化**）：
+  ① `ParseContext` 快照**纳入符号 store**（`bind_symbol_store()` + 快照末位带 `_ScopeStack.snapshot()`，
+  既有 6 个快照点自动覆盖）；② `_ScopeStack` 加**撤销日志**，`restore` 截栈后按日志精确还原
+  （含**同深度** register；原先 `restore(2)` 后 `lookup('leaked')=='typedef'`）；③ pratt 分支
+  补作用域帧配对（抽 `_push_rule_scope()` 共用；**语义路径**帧仍不推 ⇒ 日志/路径输出不变）；
+  ④ `Parser.parse()` 每轮重建 store 并绑定 context（跨 parse 复用不再读到 root 残留）。
+  - **判据**：新增 `tests/engine/parser/test_symbol_rollback.py`（9 例）；**四处缺陷注入分别
+    2 / 5 / 1 / 1 failed**（恢复后 9 passed）；`tests/engine/parser` 212、四语言包 1272、
+    `tests/engine` 1596 全绿。
+  - **行为零变化**：`tests/e2e/run_all_tests.py` FAIL 0（102 例），与"四处修复全回退"的对照
+    **逐用例结论行全同**（仅耗时不同）；`eval_diag_baseline` 5548 → 5548；`run_edge` clean 6 /
+    reject 7 / failures 0。
+  - **剩余边界（已登记缺口档）**：`sibling_counter` 与簿记集合（trailing/anchor/repeat/fail_sites）
+    不在快照内（只影响 `path=`/观测面）；`restore` 仍"只截不补"（回滚到更深快照未支持）。
+
+### Added
+
 - **C 语义基座 P1：声明式符号收集产物（作用域 + 声明序 + 分期标注）**（循环 #2 实现项；方向为
   作者 2026-10-10 拍板）。
   - **产物**：`{name, kind, scope, scope_kind, decl_order, decl_line, phase}`，

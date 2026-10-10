@@ -114,9 +114,9 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 - **raw 暂缓建树的承载**：渲染侧对任何带 `_verbatim_text` 的节点整段直出（`node_renderer.py`），
   先例 = 宏 splice ⇒ **渲染零改动**；AST 侧照 `MacroCall` 形态（内容 + 源文本 + token 区间），
   但必须**消费整个区间**（否则走 truncation 会被判失败、停管线）。
-- **符号回滚两个洞**（"提前注册"的前置）：`ParseContext.create_snapshot` 的六元组**不含符号
-  store**；且 `restore(depth)` **不撤销同深度** register、pratt 分支**不推 rule_frame**
-  ⇒ 提前注册会泄漏符号（P3 前必须补）。
+- **符号回滚（循环 #3 已补）**：快照纳入符号 store、`restore` 按撤销日志精确还原（含**同深度**
+  register）、pratt 分支补作用域帧、`Parser.parse()` 每轮重建 store；**剩余** = `sibling_counter`
+  与簿记集合不在快照内（只影响 `path=`/观测面）、`restore` 只截不补（更深快照回滚未支持）。
 - **两侧 token 流不同源**：linter 吃展开态、parser 吃词法 tokens ⇒ 位点传递不能用 token 索引，
   须用**行/列**（作者裁决）并由 parser 侧重定位。
 - **`phase` 落法（作者裁决）**：先走 `Symbol` 的 `attrs`（零引擎改动、`to_dict` 自然带出），

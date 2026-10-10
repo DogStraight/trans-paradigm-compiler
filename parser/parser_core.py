@@ -65,6 +65,21 @@ class ParseContext:
         self.sibling_counter: dict[str, int] = {}  # 规则名 → 自然序
         self.path_stack: list[str] = []  # 当前语义路径栈
 
+        # 符号 store（作用域栈；可选绑定，见 bind_symbol_store）
+        self._symbol_store: _ScopeStack | None = None
+
+    def bind_symbol_store(self, store: "_ScopeStack") -> None:
+        """绑定符号 store（作用域栈），使快照/回滚**连带**覆盖它。
+
+        ⚠ **为什么快照必须含符号 store**：回溯的语义是"回到快照那一刻的**全部**
+        解析状态"。符号注册（"提前注册"路径）写进 store 后，若快照只记 token/
+        节点/规则指针，失败候选注册的名字会留在符号表里，被后续候选的
+        `lookup` 读到（依序尝试候选 ⇒ 静默错解，且现场看不出是回滚漏项）。
+        绑定后由 `_ScopeStack` 的撤销日志保证**同深度 register 也撤销**
+        （栈深度不变、只在当前作用域里注册，正是"失败候选提前注册"的形态）。
+        """
+        self._symbol_store = store
+
     def __enter__(self):
         # 进入 with 块时自动创建快照，异常时自动回滚
         snapshot = self.create_snapshot()
@@ -85,7 +100,11 @@ class ParseContext:
         self.match_length += count
 
     def create_snapshot(self):
-        """创建解析状态快照，用于回溯（tuple 比 dict 快 3x）"""
+        """创建解析状态快照，用于回溯（tuple 比 dict 快 3x）。
+
+        末位 = 符号 store 快照（`_ScopeStack.snapshot()`：栈深度 + 撤销日志长度，
+        两次 `len()` 的 O(1) 代价）；未绑定 store（纯词法/单测场景）为 None。
+        """
         return (
             self.token_pointer,
             self.match_length,
@@ -93,6 +112,7 @@ class ParseContext:
             self.current_rule,
             self.production_pointer,
             self.production_start_ptr,
+            self._symbol_store.snapshot() if self._symbol_store is not None else None,
         )
 
     def restore_snapshot(self, snapshot):
@@ -101,7 +121,10 @@ class ParseContext:
          self.current_node,
          self.current_rule,
          self.production_pointer,
-         self.production_start_ptr) = snapshot
+         self.production_start_ptr,
+         symbol_state) = snapshot
+        if symbol_state is not None and self._symbol_store is not None:
+            self._symbol_store.restore(symbol_state)
 
     def update_current_node(self, node: Node | None) -> None:
         # current_node 允许 None（畸形输入恢复 old_node 可为 None——
@@ -137,22 +160,49 @@ class _ScopeStack:
     回溯时需配合 snapshot/restore 回滚。
 
     scope 声明来源：规则 TOML 中的 [RuleName.analyzer] scope = { ... }。
+
+    ⚠ **为什么 restore 必须撤销"同深度"的 register**：回溯的粒度是"快照位置"，
+    不是"作用域深度"——失败候选完全可能在**当前作用域**（栈深度不变）里注册符号
+    （"提前注册"路径的典型形态：候选先登记 typedef 名，匹配失败后回滚）。
+    只截栈的话同深度注册会留在符号表里，后续候选的 `lookup` 读到失败候选留下的
+    名字 ⇒ 依序尝试候选的机制下静默错解。故每次 register 落一条**撤销日志**
+    （含被覆盖的原值，供"改过再回滚"精确还原），restore 既截栈也按日志恢复内容。
     """
 
     def __init__(self) -> None:
         # 根作用域（全局）
         self._stack: list[_ScopeEntry] = [_ScopeEntry("__global__", "global")]
+        # 撤销日志：(register 时该作用域在 _stack 中的下标, 名字, 注册前的原值/None)
+        self._register_log: list[tuple[int, str, str | None]] = []
 
     # ── 快照/恢复（配合 parser 回溯） ──
 
-    def snapshot(self) -> int:
-        """返回当前栈深度作为快照。"""
-        return len(self._stack)
+    def snapshot(self) -> tuple[int, int]:
+        """返回可回滚快照 `(栈深度, 撤销日志长度)`——不复制符号表（O(1)）。
 
-    def restore(self, depth: int) -> None:
-        """恢复到指定栈深度（丢弃上层作用域）。"""
+        ⚠ 快照是**不透明凭据**，调用方原样交回 `restore`；不要再当作 int 深度用。
+        """
+        return (len(self._stack), len(self._register_log))
+
+    def restore(self, state: tuple[int, int]) -> None:
+        """回滚到 snapshot：截到快照深度 + 撤销快照之后的全部 register。
+
+        "快照之后"按**日志长度**判定而非栈深度，故同深度（未 push/pop）的 register
+        同样被撤销；日志里指向已随截栈丢弃的作用域的条目直接跳过（其符号已随
+        作用域消失），仍存在的作用域则按"原值/无原值"精确还原。
+        """
+        depth, log_len = state
         while len(self._stack) > depth:
             self._stack.pop()
+        for scope_idx, name, prev in reversed(self._register_log[log_len:]):
+            if scope_idx >= len(self._stack):
+                continue  # 条目所属作用域已随截栈丢弃
+            symbols = self._stack[scope_idx].symbols
+            if prev is None:
+                symbols.pop(name, None)
+            else:
+                symbols[name] = prev
+        del self._register_log[log_len:]
 
     # ── 作用域管理 ──
 
@@ -166,7 +216,10 @@ class _ScopeStack:
     # ── 符号注册与查找 ──
 
     def register(self, name: str, kind: str) -> None:
-        self._stack[-1].symbols[name] = kind
+        """在当前作用域注册符号（留撤销日志，供 `restore` 精确回滚）。"""
+        entry = self._stack[-1]
+        self._register_log.append((len(self._stack) - 1, name, entry.symbols.get(name)))
+        entry.symbols[name] = kind
 
     def lookup(self, name: str) -> str | None:
         """沿作用域链查找符号，返回其 kind，未找到返回 None。"""
@@ -736,7 +789,13 @@ class Parser:
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False
+        # 符号 store（作用域栈）每次 parse 重建：跨 parse 复用 Parser 时，上一轮
+        # 留在 root 作用域里的注册（同深度、不会随 pop 消失）会让本轮 `lookup`
+        # 读到过期符号。重建 + 绑定给 context ⇒ 快照/回滚连带覆盖符号（见
+        # `ParseContext.bind_symbol_store` 与 `_ScopeStack.restore`）。
+        self.scope_stack = _ScopeStack()
         context = ParseContext(tokens)
+        context.bind_symbol_store(self.scope_stack)
 
         try:
             # 语义路径：根规则路径入栈（根块规则名从语法树自推导——

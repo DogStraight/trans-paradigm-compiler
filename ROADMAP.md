@@ -105,12 +105,13 @@
 - **P2a linter 候选收敛判定 + 内部 warning 旁路** ✅ **已交付**（循环 #2，用户可见面逐字节零变化）：
   判据 `tests/engine/linter/test_linter_lookahead.py::TestConvergenceJudgment` +
   `tests/engine/pipeline/test_lint_internal_warnings.py`；载体 `_PipelineContext.internal_warnings`
-- [ ] **P2b 把符号接进 linter 判定 + 窄档"未识别 ⇒ 内部 warning ⇒ 不再 blocking"**——前置 = P1
-  符号产物 + P2a 旁路；判据：`x = (myint)y;`（有 typedef 时）不再 blocking、真语法错仍 blocking、
-      lint accuracy / diag baseline 不退化
-- [ ] **P3 parser：歧义位点 raw 暂缓建树**（内部机制，不升格为公开判据）——前置 = P2b（否则
-      管线在 lint 阶段就被 blocking 截断）+ 补符号回滚两洞；位点按**行/列**重定位；判据：该位点
-      不再"整函数截断丢内容"，raw 保留原文且渲染保真
+- **P2b-1 linter 符号相关性标记** ✅ **已交付**（循环 #3，零用户可见变化）：`pre_scan` 符号经
+  `scanner`/`discovery` 进 `lookahead`，收敛条目带 `symbol_dependent`/`symbol_names`/`region`
+  （口径 = 括号紧邻 `( id )` ∧ id∈pre_scan；语料实测 0 误标）。**P2b-2（摘诊断）与 P3 同批**
+  （已用一条"决定守卫"测试钉住：P3 必须显式重新引入）
+- [ ] **P3 parser：歧义位点 raw 暂缓建树 + P2b-2 诊断摘除（同批）**——前置已就绪（P2a 旁路、
+  P2b-1 标记、符号回滚三处已补）；位点按**行/列**重定位；判据：`typedef int myint;\nx = (myint)y;`
+  ⇒ 无 blocking + `success=True` + 输出非空；`x = (1 + )y;` 仍 blocking；`x = (int)y;` 不回归
 - [ ] **P4 analyzer 插件：消费 raw + 符号，实现理解路径**——`(myint)x` 判定在此闭环；
       判据见缺口档（`CastExpr` 正样本 + 同名非 typedef 负样本 + 作用域/顺序 + 全量回归）
 
