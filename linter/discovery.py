@@ -154,16 +154,27 @@ class Discovery:
 
     def set_symbol_hints(
         self,
-        names: set[str],
+        symbols: dict[str, dict] | None,
         bracket_openers: frozenset[str] | None = None,
         bracket_closers: frozenset[str] | None = None,
+        *,
+        type_name_kinds: frozenset[str] | None = None,
+        trial_as: dict[str, str] | None = None,
+        depth_pair: tuple[str, str] | None = None,
     ) -> None:
-        """转发符号提示给消歧表（P2b：`pre_scan` 名 + 引擎括号 token 集）。
+        """转发符号提示给消歧表（P2b/P3b：`pre_scan` 名与位置 + kind 语义 + 括号集）。
 
-        每轮 `scan()` 由 scanner 覆盖式设置；只影响未收敛位点的
-        `symbol_dependent` 标记与窄档降级，不影响候选/诊断内容。
+        每轮 `scan()` 由 scanner 覆盖式设置；只影响未收敛位点的 `symbol_dependent`
+        标记与 `eligible` 资格判定（三条判据），不影响候选/诊断内容。
         """
-        self._lookahead.set_symbol_hints(names, bracket_openers, bracket_closers)
+        self._lookahead.set_symbol_hints(
+            symbols,
+            bracket_openers,
+            bracket_closers,
+            type_name_kinds=type_name_kinds,
+            trial_as=trial_as,
+            depth_pair=depth_pair,
+        )
 
     def dump_nodes(
         self,

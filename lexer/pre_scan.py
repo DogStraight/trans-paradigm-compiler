@@ -13,6 +13,7 @@ Doc: docs/language_walkthrough.md（预扫描：顶层声明收集）
 """
 
 import re
+from bisect import bisect_right
 
 from core.config_registry import declare_cfg
 from core.errors import ConfigError
@@ -31,6 +32,11 @@ from core.errors import ConfigError
 # 该兜底会带入 `int foo` 这类**非声明名**（`foo` 可能只是类型词后的普通词），
 # 只对"粗提示"用途安全；需要干净符号面（如按 phase 对比、消费方据名判定）的语言包
 # 应显式 `fallback = false`——声明类别（`[pre_scan.decl.*]`）的收集**不受它影响**。
+# decl 条目可另声明两个**语义面**（引擎只搬运、不解释）：
+#   type_name = true        # 该类 kind 算"类型名命名空间"（如 typedef；tag_* 不声明）
+#   trial_as  = "<token 型>" # 该类名的"类型名形态"试解析替换 token 型（需要
+#                           # type_name=true 时必填；非 bool/缺 trial_as ⇒ fail-fast）
+# 二者供消费方（linter 资格判定）使用：语言知识在配置，引擎不硬编码任何 kind 名。
 _pre_scan_cfg: dict = declare_cfg("lexer.pre_scan", {}, __name__, "_pre_scan_cfg")
 
 
@@ -112,6 +118,8 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
 
     patterns: list[tuple[str, re.Pattern]] = []
     hints: dict[str, list[str]] = {}
+    type_name_kinds: set[str] = set()
+    trial_as: dict[str, str] = {}
     for kind, cfg in decls.items():
         keyword = cfg.get("keyword", "")
         capture = cfg.get("name_capture", "next_word")
@@ -124,6 +132,23 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
         rh = cfg.get("rule_hints", [])
         if rh:
             hints[kind] = rh
+        # 类型名语义面（消费方按 kind 过滤；引擎不解释语义）：声明了 type_name 的
+        # 类别必须同时给出"类型名形态"试解析替换 token 型（fail-fast，不静默降级）。
+        type_name = cfg.get("type_name", False)
+        if not isinstance(type_name, bool):
+            raise ConfigError(
+                f"[pre_scan.decl.{kind}] type_name 必须是布尔（true/false），"
+                f"收到 {type_name!r}"
+            )
+        if type_name:
+            probe = cfg.get("trial_as")
+            if not isinstance(probe, str) or not probe:
+                raise ConfigError(
+                    f"[pre_scan.decl.{kind}] 声明了 type_name = true，"
+                    "必须同时声明 trial_as = \"<类型名形态 token 型>\"（试解析替换用）"
+                )
+            type_name_kinds.add(kind)
+            trial_as[kind] = probe
 
     all_kws = "|".join(cfg.get("keyword", "") for cfg in decls.values())
     # fallback = 声明类别之外的关键字是否也兜底收集（默认 true）；非 bool ⇒ fail-fast
@@ -149,6 +174,9 @@ def _compile(config: dict, rules_dir: str | None = None) -> dict:
         "context_keywords": context_kws,
         "hints": hints,
         "clean_patterns": clean_patterns,
+        # 类型名语义面（供消费方按 kind 过滤 / 取试解析替换 token 型）
+        "type_name_kinds": frozenset(type_name_kinds),
+        "trial_as": trial_as,
     }
     if rules_dir is not None:
         _CACHE[rules_dir] = result
@@ -207,29 +235,134 @@ def _clean_text(text: str, clean_patterns: list) -> str:
     return text
 
 
+class _CleanMap:
+    """按序清理文本 + 记录每遍替换，`original(cleaned_offset)` 逐遍反查回原文。
+
+    只记**替换区间**（注释/字符串段），不建逐字符映射表——tv80_core（4755 行）实测
+    逐字符表版本让 `tpc lint` 慢 +13.7%，段表版回到噪声内。反查成本 =
+    O(遍数 × log(每遍替换数))，与文本长度无关。
+    每遍记录一条：`(cleaned_start, cleaned_end, orig_start, orig_end, repl_len)`。
+    """
+
+    def __init__(self) -> None:
+        self._passes: list[list[tuple[int, int, int, int, int]]] = []
+
+    def apply(self, text: str, pattern: re.Pattern, replacement: str) -> str:
+        out: list[str] = []
+        records: list[tuple[int, int, int, int, int]] = []
+        cursor = 0
+        cleaned_len = 0
+        for m in pattern.finditer(text):
+            head = text[cursor : m.start()]
+            out.append(head)
+            cleaned_len += len(head)
+            out.append(replacement)
+            records.append(
+                (cleaned_len, cleaned_len + len(replacement), m.start(), m.end(), len(replacement))
+            )
+            cleaned_len += len(replacement)
+            cursor = m.end()
+        out.append(text[cursor:])
+        self._passes.append(records)
+        return "".join(out)
+
+    def original(self, offset: int) -> int:
+        """cleaned 偏移 → 原文偏移（逐遍逆序反查；替换段内映射到段首）。"""
+        pos = offset
+        for records in reversed(self._passes):
+            starts = [r[0] for r in records]
+            idx = bisect_right(starts, pos) - 1
+            if idx < 0:
+                continue  # 该遍此位置之前无替换 ⇒ 偏移不变
+            c_start, c_end, o_start, o_end, repl_len = records[idx]
+            if pos < c_start:
+                continue
+            if pos >= c_end:
+                pos += (o_end - o_start) - repl_len
+                continue
+            return o_start if repl_len else o_start  # 替换段内（含空替换）映射到段首
+        return pos
+
+
+def _clean_text_mapped(
+    text: str, clean_patterns: list
+) -> tuple[str, _CleanMap]:
+    """`_clean_text` 的同序同替换版本，额外返回可反查原文的 `_CleanMap`。
+
+    逐模式顺序应用（与 `_clean_text` 完全一致，保证收集结果同口径）；注释/字符串
+    清理会删改长度（块注释可跨行）⇒ 行号必须靠映射回原文，不能在 cleaned 上数换行。
+    """
+    current = text
+    cmap = _CleanMap()
+    for pattern, replacement in clean_patterns:
+        current = cmap.apply(current, pattern, replacement)
+    return current, cmap
+
+
 def _is_decl_name(name: str, context_kws: frozenset) -> bool:
     return not (name in context_kws or name.startswith("$"))
 
 
-def _collect_kind_patterns(
-    sym: dict[str, str], cleaned: str, patterns: list, context_kws: frozenset
-) -> None:
-    """逐类别模式收集：组 1 = 声明名，类别 = 模式自带的 kind（首见归属）。"""
-    for kind, pattern in patterns:
+def _brace_depth(text: str, offset: int) -> int:
+    """`{`/`}` 深度：文本前 `offset` 个字符里 `{` 数减 `}` 数（下限 0）。
+
+    只数**字符** `{`/`}`（与 `core/utils.square_bracket_types` 同判据：字符是词法
+    数据，不依赖配对命名）。调用方传的是**已清理**文本（`clean` 已剥注释/字符串），
+    故串内花括号不会误计。深度供"声明顺序"判据的**作用域守卫**用：块内声明
+    （`void f(void){ typedef int t; }`）不得给块外使用点（`x = (t)y;`）发资格。
+    """
+    depth = 0
+    for ch in text[: max(offset, 0)]:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth = max(depth - 1, 0)
+    return depth
+
+
+def _collect_symbols(
+    text: str, config: dict, *, with_lines: bool
+) -> dict[str, dict]:
+    """共用收集循环：`{name: {"kind": ..., "line": ..., "column": ..., "depth": ...}}`。
+
+    `pre_scan()` 与 `pre_scan_with_lines()` 同口径走这里——单一实现，避免两份
+    "首见归属/上下文关键词过滤"逻辑漂移。`with_lines=True` 时行号 = **原文**
+    1-based 行（经清理偏移映射回原文，不猜、不在 cleaned 上数换行），`depth` =
+    该声明名之前的 `{`/`}` 深度（**清理后**文本上计）。
+    """
+    context_kws = config.get("context_keywords", frozenset())
+    cmap: _CleanMap | None = None
+    if with_lines:
+        cleaned, cmap = _clean_text_mapped(text, config.get("clean_patterns", []))
+    else:
+        cleaned = _clean_text(text, config.get("clean_patterns", []))
+
+    out: dict[str, dict] = {}
+
+    def add(name: str, kind: str, offset: int) -> None:
+        if not _is_decl_name(name, context_kws) or name in out:
+            return
+        line: int | None = None
+        column: int | None = None
+        if cmap is not None:
+            orig = cmap.original(offset)
+            line = text.count("\n", 0, orig) + 1
+            column = orig - text.rfind("\n", 0, orig) - 1
+        out[name] = {
+            "kind": kind,
+            "line": line,
+            "column": column,
+            "depth": _brace_depth(cleaned, offset),
+        }
+
+    for kind, pattern in config.get("patterns", []):
         for m in pattern.finditer(cleaned):
-            name = m.group(1)
-            if _is_decl_name(name, context_kws) and name not in sym:
-                sym[name] = kind
-
-
-def _collect_fallback(
-    sym: dict[str, str], cleaned: str, fallback, context_kws: frozenset
-) -> None:
-    """兜底模式收集：组 1 = 类别、组 2 = 声明名（首见归属）。"""
-    for m in fallback.finditer(cleaned):
-        kind, name = m.group(1), m.group(2)
-        if _is_decl_name(name, context_kws) and name not in sym:
-            sym[name] = kind
+            add(m.group(1), kind, m.start(1))
+    fallback = config.get("fallback")
+    if fallback:
+        for m in fallback.finditer(cleaned):
+            add(m.group(2), m.group(1), m.start(2))
+    return out
 
 
 def pre_scan(
@@ -248,14 +381,27 @@ def pre_scan(
     """
     if config is None:
         config = load_pre_scan_config()
+    return {
+        name: rec["kind"] for name, rec in _collect_symbols(text, config, with_lines=False).items()
+    }
 
-    context_kws = config.get("context_keywords", frozenset())
-    cleaned = _clean_text(text, config.get("clean_patterns", []))
-    sym: dict[str, str] = {}
 
-    _collect_kind_patterns(sym, cleaned, config.get("patterns", []), context_kws)
-    fallback = config.get("fallback")
-    if fallback:
-        _collect_fallback(sym, cleaned, fallback, context_kws)
+def pre_scan_with_lines(
+    text: str,
+    config: dict | None = None,
+) -> dict[str, dict]:
+    """**并行读取面**（带声明位置）：`{name: {"kind":..., "line":..., "column":...}}`。
 
-    return sym
+    与 `pre_scan()` 同一次收集口径（首见归属、同序清理、同过滤），只是额外给出
+    声明名在**原文**中的 1-based 行与 0-based 列——供消费方做"声明顺序敏感"判定
+    （如 linter 要求声明位置 ≤ 使用位置）。行号必须经清理偏移映射回原文：注释清理
+    会删改长度（块注释可跨行），在 cleaned 文本上数换行会漂移。
+
+    ⚠ **同行声明**（`x=(t)y; typedef int t;`）只比行号分不出先后 ⇒ 同时给
+    `column`，调用方按 `(line, column)` 字典序比较（行号不够，实测反例 7）。
+
+    ⚠ 既有 `pre_scan()` 的签名/行为**不变**（本函数是新增面，旧调用方零影响）。
+    """
+    if config is None:
+        config = load_pre_scan_config()
+    return _collect_symbols(text, config, with_lines=True)

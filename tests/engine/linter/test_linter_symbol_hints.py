@@ -103,13 +103,18 @@ class TestSymbolDependentMarking:
 
 
 class TestMarkingIsNotSuppression:
-    """本批**不摘诊断**（P2b-2 与 P3 同批）——锁定"零用户可见变化"。"""
+    """M1 交付面：**不摘诊断、不接 raw**——M2 与 P4 原子落地（见架构文档）。
+
+    本条是**决定守卫**：M2 落地时必须显式改这里（加回降级字段/常量/方法的断言），
+    避免"悄悄接上 raw/降级"。
+    """
 
     def test_gate1_diagnostics_unchanged(self, c_scanner):
-        """门禁①位点仍是 2 条 blocking（`phase-unrecognized` + `phase-statement`）。"""
-        diags, _warns_ = _warns(c_scanner, "typedef int myint;\nx = (myint)y;\n")
+        """门禁①位点（资格 True）仍 2 条 blocking：`phase-unrecognized` + `phase-statement`。"""
+        diags, warns = _warns(c_scanner, "typedef int myint;\nx = (myint)y;\n")
         assert [d.code for d in diags] == ["phase-unrecognized", "phase-statement"]
         assert all(d.blocking for d in diags)
+        assert warns[0]["eligible"] is True  # 资格判定已生效（仅内部证据）
 
     def test_gate2_diagnostics_unchanged(self, c_scanner):
         """门禁②位点仍是 3 条 blocking（真语法错不因符号面变化）。"""
@@ -121,7 +126,7 @@ class TestMarkingIsNotSuppression:
         ]
 
     def test_record_has_no_downgrade_fields(self, c_scanner):
-        """条目**不含**降级字段（P2b-2 推迟 ⇒ 不留死字段/死配置）。"""
+        """条目**不含**降级字段、模块**无**降级常量/方法（M2 未上线）。"""
         _diags, warns = _warns(c_scanner, "typedef int myint;\nx = (myint)y;\n")
         assert "downgraded" not in warns[0]
         assert "suppressed" not in warns[0]
@@ -129,3 +134,11 @@ class TestMarkingIsNotSuppression:
 
         assert not hasattr(scanner_mod, "_DOWNGRADABLE_CODES")
         assert not hasattr(scanner_mod.LinterScanner, "_apply_narrow_downgrade")
+
+    def test_verilog_untouched(self, scanner):
+        """verilog 侧：无类型名 kind 声明 ⇒ 标记/资格均不生效、诊断照旧。"""
+        diags = scanner.scan("module m; always @(*) begin a = 1; end endmodule\n")
+        assert diags == []
+        warns = scanner.internal_warnings()
+        assert all(w["symbol_dependent"] is False for w in warns)
+        assert all(w["eligible"] is False for w in warns)

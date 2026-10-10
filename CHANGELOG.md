@@ -7,6 +7,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`tools/ab_pipeline_compare.py`：只读 A/B 对拍**（`git archive HEAD` → 临时目录跑 PRE、当前树跑
+  POST，逐输入 diff 诊断 / `success` / `error` / `output`，`--expect-changed N` 判"零变化 / 仅预期
+  变化"；`finally` 删临时目录、**任何时候不写工作树**）。用途：每轮收尾的"零用户可见变化"证据。
+  - **动机（实测教训）**：本轮验证脚本原以"把 HEAD 版本**写回工作树**再恢复"实现，**在共享工作区
+    会与并发的全量测试互撞**（worker 里已 import 的模块是新版、未 import 的是 HEAD 版）⇒ 制造出
+    **5 条假红**（同文件单跑 17 passed / `tests/engine` 1638 passed / 全量 5 failed）；受控实验在
+    `git archive` 副本上复现了该失败族（32 failed/23 passed）。改为只读实现后，全量在 **并行 /
+    单进程 / 顺序巡检**三档均 **3359 passed / 7 skipped**。`tools/README.md` 已登记该纪律。
+
+- **P3b-M1：raw 资格判定（三条判据 + 深度守卫，零用户可见变化）**（循环 #5）。为"歧义位点走
+  raw"先做**资格判定**基础设施——**只判资格、不接 raw、不摘诊断**（用户诊断面逐字节不变）。
+  - **三条判据**：① **替换式试解析**（`_substitution_trial`）——把待判定 `( id )` 的标识符按其
+    "类型名形态"替换后**重跑同一候选集**，整句通过（`errs==0 ∧ consumed==limit-i`）才算"该句
+    唯一问题是符号歧义"；② **只认 typedef 命名空间**（kind 语义由包声明）；③ **声明位置先后
+    （行 + 列）** + **深度守卫**（`decl_depth ≤ use_depth`，文本级计 `{}` 深度）——`order_ok` /
+    `depth_ok` 分别记录，`eligible = ①∧②∧order_ok∧depth_ok`。
+  - **声明面（语言知识在 TOML）**：`grammar/c/base/_pre_scan.toml` 的 `[pre_scan.decl.typedef]` 加
+    `type_name = true` + `trial_as = "keyword.int"`；`type_name=true` 却不给 `trial_as` ⇒
+    `load_pre_scan_config` **fail-fast**。新增带行/列/深度的**并行**读取面 `pre_scan_with_lines`
+    （`pre_scan()` 的签名与行为不变）。
+  - **踩到并修的引擎坑**：packrat memo **以 token 位置为键** ⇒ 改型后旧结果被命中（目标句被误判
+    `errs=1`）⇒ 新增 `RuleMatcher.memo_suspended()`（快照/清空/还原），试解析在干净缓存上求值。
+  - **独立审计（另派对抗性复审）**：旧 8 条"语句级 raw 吞真错"反例**全部堵住**、951 条输入
+    **0 新增误报**、`tpc lint --json` 209 文件 SHA256 与 rc **逐文件相同**、lint accuracy 33/33
+    FP 0、真实语料误报基线 5548 无增长。仍有两类落在判据外：**A 作用域**
+    （`void f(void) { typedef int t; }\nx = (t)y;`）——**已由深度守卫关掉**（`depth_ok=False`）；
+    **B 赋值链**（`x = (t)y + z = 1;`）——引擎**既有**宽松（`(int)` 版在改前也通过），单列给
+    M2+P4（见「Changed」）。
+  - **性能**（真实语料 tv80_core 4755 行 / 2314 个未收敛位点）：初测 `tpc lint` **+13.7%** 超
+    阈值 ⇒ 定位**不是试解析**（verilog 无 trial），而是逐字符偏移映射表 + 按位点重扫前缀深度
+    ⇒ 改**段表 + 二分反查**与**前缀深度缓存**后复测 **+0.0%**（`format` −0.1%）；C 压力样本
+    （200 个 eligible 位点）+6.8%/+7.6% ⇒ 未超 ~10%，按裁定**不加**试解析次数上限。
+
+### Changed
+
+- **M2（raw + 窄档摘诊断）推迟到与 P4 原子落地**（循环 #5，Lead 裁定；本轮实现已撤出）。
+  理由：独立复审证明 M1 的资格判定在**作用域遮蔽**上不健全（`pre_scan` 无作用域，且块内语句位
+  尚不产生位点）⇒ raw 段的合法性必须由 analyzer 用 `phase="analyze"` 的**精确符号面校验**
+  （**校验不过 ⇒ 报错，不静默**）。同批判据：审计 **A**（作用域/遮蔽）、**B**（引擎既有赋值链
+  宽松，单列）、`tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0/syntax=[]` 的自相矛盾。
+  - **覆盖边界单独立项 P3c**：资格判定目前只覆盖**块体语句位**；C 函数体内（`CompoundStmt` 的
+    `@Stmt*` 由 production 展开）不产生位点 ⇒ 接入点已调研
+    （`parser/_production.py::_repeat_loop` 的 `result is None` 分支）。
+  - 守卫测试改回"**M2 未上线**"（条目无降级字段/常量/方法），M2 落地时必须显式改它。
+
+### Added
+
 - **P2b-1：linter 符号相关性标记（零用户可见变化）**（循环 #3）。符号输入走引擎既有
   `[lexer] pre_scan`（`linter/scanner.py::_pre_scan_names` → `set_symbol_hints` →
   `discovery` → `lookahead`），**不 import 包侧插件、不硬编码 kind**；收敛判定条目新增

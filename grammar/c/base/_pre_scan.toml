@@ -46,11 +46,22 @@ context_keywords = []
 fallback = false
 
 # ── 声明类别（kind 即 `pre_symbols` 的取值，也是产物里 `phase="pre_scan"` 记录的 kind） ──
+#
+# 类型名语义面（供 linter 的 raw 资格判定消费；引擎只搬运、不解释语义）：
+#   `type_name = true` → 该类 kind 算"类型名命名空间"。C 里只有 **typedef 名**
+#                        算（`(myint)x` 的转换歧义源）；`tag_*` 是标签命名空间，
+#                        `(t)x` 里的 `t` 若是 tag 名不构成类型名形态 ⇒ **不声明**。
+#   `trial_as = "<token 型>"` → 该 kind 名的"类型名形态"：试解析时把待判标识符的
+#                        token 型**临时换成它**、重跑同一候选集，整句通过才算
+#                        "该句唯一问题是符号歧义"。这里选 `keyword.int`（内建类型
+#                        说明符，语法层与 typedef 名同处类型说明符位）。
 
 # typedef 名：`typedef … name;`（已知不精确见文件头注）
 [pre_scan.decl.typedef]
 keyword = "typedef"
 name_capture = "last_word_before_semicolon"
+type_name = true
+trial_as = "keyword.int"
 
 # 标签（tag）命名空间：struct / union / enum 关键字后的首词
 [pre_scan.decl.tag_struct]

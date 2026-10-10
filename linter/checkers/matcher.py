@@ -18,6 +18,7 @@ strict 语境约定：
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Any, cast
 
 from core.define import Token
 from core.token_protocol import TRIVIA_TOKEN_TYPES, skip_trivia, split_token_types
@@ -170,6 +171,33 @@ class RuleMatcher:
             yield
         finally:
             self._probe_eof = old
+
+    @contextmanager
+    def memo_suspended(self):
+        """暂停 packrat 记忆化：进入时**快照并清空**三层 memo，退出时还原快照。
+
+        用途：**替换式试解析**（`lookahead._substitution_trial`）临时改一个 token 的
+        `type` 后重跑同一候选集。三层 memo 都以 **token 位置** 为键，改型前的旧结果
+        会被直接命中（实测：目标句试解析被旧 memo 判 `errs=1/consumed=6` 失败；
+        清空后 `errs=0/consumed=7` 整句通过）。进入即清空 ⇒ 试解析在干净缓存上
+        求值；退出还原 ⇒ 主扫描既有缓存不受损、也不被改型期间的条目污染。
+        """
+        entries = (
+            (self._atom_memo, "_memo_tokens"),
+            (self._optional_call_memo, "_memo_tokens_opt"),
+            (self._call_impl_memo, "_memo_tokens_impl"),
+        )
+        saved = [(memo, dict(memo), getattr(self, attr)) for memo, attr in entries]
+        for memo, _attr in entries:
+            cast(dict[Any, Any], memo).clear()
+        try:
+            yield
+        finally:
+            for (memo, attr), (_memo, old_items, old_tokens) in zip(entries, saved):
+                plain = cast(dict[Any, Any], memo)
+                plain.clear()
+                plain.update(old_items)
+                setattr(self, attr, old_tokens)
 
     def _memo_for(self, memo_attr: str, tokens_attr: str, tokens: list[Token]) -> dict:
         """按 token 流身份返回 memo dict（token 流切换即清空）。

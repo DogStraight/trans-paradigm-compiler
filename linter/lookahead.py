@@ -411,61 +411,179 @@ class LookaheadTable:
         # 按次重置 + 显式取用（同 `Discovery._unrecognized` 的模式）；
         # 不进 LintDiagnostic / --json / exit code / 落盘。
         self._internal_warnings: list[dict] = []
-        # 符号提示（P2b）：`pre_scan` 期收集的名字 + 括号 token 集（scanner 每轮设置）。
-        # 只用于给未收敛位点打"符号相关"标记（窄档降级依据），不参与候选计算。
-        self._pre_scan_names: set[str] = set()
+        # 符号提示（P2b/P3b）：`pre_scan` 期收集的名字（含 kind/声明位置）+ 包声明的
+        # 类型名 kind 语义 + 括号 token 集（scanner 每轮设置）。只用于给未收敛位点
+        # 做"符号相关性 / 资格"判定，不参与候选计算。
+        self._pre_scan_symbols: dict[str, dict] = {}
+        self._type_name_kinds: frozenset[str] = frozenset()
+        self._trial_as: dict[str, str] = {}
         self._bracket_openers: frozenset[str] = frozenset()
         self._bracket_closers: frozenset[str] = frozenset()
+        # 深度守卫用：`{`/`}` 的 token 型（scanner 按字符定位配对后传入）；None ⇒ 空转
+        self._depth_pair: tuple[str, str] | None = None
+        # 前缀深度表缓存（按 token 流身份；见 `_depth_before`）
+        self._depth_prefix: list[int] | None = None
+        self._depth_prefix_tokens: list[Token] | None = None
 
-    # ── 符号提示（P2b：pre_scan 名 + 括号形态） ──
+    # ── 符号提示（P2b/P3b：pre_scan 名 + kind 语义 + 括号形态 + 深度配对） ──
 
     def set_symbol_hints(
         self,
-        names: set[str],
+        symbols: dict[str, dict] | None,
         bracket_openers: frozenset[str] | None = None,
         bracket_closers: frozenset[str] | None = None,
+        *,
+        type_name_kinds: frozenset[str] | None = None,
+        trial_as: dict[str, str] | None = None,
+        depth_pair: tuple[str, str] | None = None,
     ) -> None:
         """设置本轮符号提示（每轮 `scan()` 由 scanner 覆盖式设置）。
 
-        `names` = `[lexer] pre_scan` 收集到的名字（语言包声明驱动，引擎不解释
-        语义）；`bracket_openers/closers` = 引擎括号 token 集（配置推导）。
-        预扫描**不是精确的**（`lexer/pre_scan.py:1-5` 自述：平坦/首见归属/无
-        顺序）⇒ 只作提示，判据见 `_symbol_hits`（窄档）。
+        `symbols` = 并行读取面 `pre_scan_with_lines()` 的产物（`{name: {kind,
+        line, column, depth}}`；语言包声明驱动，引擎不解释语义）；`type_name_kinds` /
+        `trial_as` = 包侧在 `[pre_scan.decl.*]` 上声明的"类型名 kind"与"类型名形态
+        试解析替换 token 型"；`depth_pair` = `{`/`}` 的 token 型（深度守卫）；
+        `bracket_openers/closers` = 引擎括号 token 集。
+
+        预扫描**不是精确的**（`lexer/pre_scan.py:1-5` 自述：平坦/首见归属/无顺序）
+        ⇒ 只作提示：命中只进内部证据字段与资格判定，不作语法判据。
         """
-        self._pre_scan_names = set(names or ())
+        self._pre_scan_symbols = dict(symbols or {})
+        self._type_name_kinds = type_name_kinds or frozenset()
+        self._trial_as = dict(trial_as or {})
         self._bracket_openers = bracket_openers or frozenset()
         self._bracket_closers = bracket_closers or frozenset()
+        self._depth_pair = depth_pair
 
-    def _symbol_hits(self, tokens: list[Token], i: int) -> list[str]:
-        """位点所在句子区间里**"括号内 pre_scan 名"**形态的命中名（P2b 窄档判据）。
+    def _type_name_hits(self, tokens: list[Token], i: int) -> list[dict]:
+        """位点区间里**"括号内类型名"**形态的命中（P3b 判据①②；带位置与下标）。
 
-        判据（语言无关，两半须同时成立）：
+        判据（语言无关）：
           ① 形态：`<括号开启> <id> <括号闭合>` **紧邻**（跳过 trivia）；
-          ② 该 id 文本 ∈ `pre_scan` 名集合（语言包 `[pre_scan.decl.*]` 声明）。
+          ② 该 id 的 kind ∈ 包声明的"类型名 kind"（`[pre_scan.decl.*].type_name`；
+             如 C 只认 `typedef`，`tag_*` 不算 ⇒ 标签命名空间不进资格）。
         区间 = `[i, 句子边界]`（`_find_boundary`，与 Level 2 试解析同界）。
 
-        为什么取"括号内"而非"区间内含 pre_scan 名"（实测，见 task 报告）：
-        仅按"区间内含名"会把 verilog 的 `module`/`function`/`task` 名算进来——
-        lint_err 语料实测 2 个位点命中（`ref_e33_macro_redef.v` 等）⇒ 会误降级、
-        把真错摘掉；`(name)` 形态在 lint_err/valid/real 三语料实测 **0 命中**，
-        只在目标形态（C 的 `(myint)x`）命中。故取更窄的一半，且不硬编码任何
-        kind 名（`typedef` 之类仍是包侧声明）。
+        为什么取"括号内"而非"区间内含名"（实测）：后者会把 verilog 的
+        `module`/`function`/`task` 名算进来——lint_err 语料 2 个位点会被误命中；
+        `(name)` 形态在 lint_err/valid/real 三语料实测 **0 命中**。
         """
-        if not self._pre_scan_names or not self._bracket_openers:
+        if not self._pre_scan_symbols or not self._bracket_openers:
             return []
         end = min(self._find_boundary(tokens, i + 1, len(tokens)), len(tokens) - 1)
-        real = [t for t in tokens[i : end + 1] if t.type not in _TRIVIA]
-        hits: list[str] = []
+        real = [
+            (k, t) for k, t in enumerate(tokens[i : end + 1], i) if t.type not in _TRIVIA
+        ]
+        hits: list[dict] = []
         for k in range(len(real) - 2):
-            left, mid, right = real[k], real[k + 1], real[k + 2]
+            (_, left), (mid_idx, mid), (_, right) = real[k], real[k + 1], real[k + 2]
             if (
                 left.type in self._bracket_openers
                 and right.type in self._bracket_closers
                 and mid.type == "id"
-                and mid.content in self._pre_scan_names
+                and mid.content in self._pre_scan_symbols
             ):
-                hits.append(mid.content)
+                rec = self._pre_scan_symbols[mid.content]
+                if rec.get("kind") not in self._type_name_kinds:
+                    continue
+                hits.append(
+                    {
+                        "name": mid.content,
+                        "index": mid_idx,
+                        "kind": rec.get("kind"),
+                        "decl_line": rec.get("line"),
+                        "decl_column": rec.get("column"),
+                        "decl_depth": rec.get("depth"),
+                    }
+                )
         return hits
+
+    def _depth_before(self, tokens: list[Token], i: int) -> int:
+        """位点前的 `{`/`}` 深度（token 级；深度守卫用）。
+
+        `self._depth_pair` 为 None（语言包未声明该配对）⇒ 返回 0（守卫空转，不误判）。
+        用 **token** 而非文本计：字符串/注释内的花括号是单 token，不会被误计。
+        按 token 流身份缓存**前缀深度表**（O(n) 建一次、之后 O(1) 查）——逐位点重扫
+        前缀在 tv80_core（2314 个未收敛位点）上把 `tpc lint` 拖出阈值。
+        """
+        if self._depth_pair is None or i <= 0:
+            return 0
+        if self._depth_prefix_tokens is not tokens or self._depth_prefix is None:
+            opener, closer = self._depth_pair
+            prefix = [0] * (len(tokens) + 1)
+            depth = 0
+            for k, t in enumerate(tokens):
+                if t.type == opener:
+                    depth += 1
+                elif t.type == closer:
+                    depth = max(depth - 1, 0)
+                prefix[k + 1] = depth
+            self._depth_prefix = prefix
+            self._depth_prefix_tokens = tokens
+        prefix_arr = self._depth_prefix
+        return prefix_arr[i] if 0 <= i < len(prefix_arr) else 0
+
+    def _substitution_trial(
+        self,
+        entries: list[dict],
+        tokens: list[Token],
+        i: int,
+        limit: int,
+        hit: dict,
+    ) -> dict:
+        """判据①：**替换式试解析**——换一个 token 的 type 后重跑同一候选集（P3b）。
+
+        把命中 id 的 token 型**临时**换成包声明的"类型名形态"（`trial_as[kind]`），
+        用**同一候选集、同一 limit** 重跑 Level 2 试解析；**整句通过**判据 =
+        `errs == 0 且 consumed == limit - i`（消费到语句边界为止）。
+
+        通过 ⇒ 该句唯一问题是"这个 id 的类型名身份无法在语法层解析"（符号歧义），
+        位点才可进 raw/降级档；否则（句子里还有别的真问题）保持 blocking。
+        临时改型必定还原（try/finally）——引擎只提供"换一个 token 的 type 后重跑
+        试解析"的通用能力，不解释任何语言语义。
+        """
+        matcher = self._matcher
+        subst = self._trial_as.get(str(hit.get("kind")))
+        out = {
+            "trial_ok": False,
+            "trial_errs": None,
+            "trial_consumed": None,
+            "trial_limit": limit - i,
+            "substitute_type": subst or "",
+            "trial_rule": "",
+        }
+        if matcher is None or not subst:
+            return out
+        idx = int(hit["index"])
+        if not (0 <= idx < len(tokens)):
+            return out
+        token = tokens[idx]
+        original = token.type
+        best: tuple[int, int, str] | None = None
+        try:
+            token.type = subst
+            # 三层 packrat memo 以 token 位置为键：改型前的旧结果会被命中 ⇒ 试解析
+            # 必须在干净缓存上求值（实测：不清 memo 时目标句试解析被误判失败）。
+            with matcher.memo_suspended():
+                for entry in entries:
+                    trial = self._trial_parse(matcher, entry, tokens, i, limit)
+                    if trial is None:
+                        continue
+                    errs, consumed = trial
+                    if best is None or (errs, -consumed) < (best[0], -best[1]):
+                        best = (errs, consumed, entry["name"])
+        finally:
+            token.type = original
+        if best is None:
+            return out
+        errs, consumed, rule = best
+        out.update(
+            trial_errs=errs,
+            trial_consumed=consumed,
+            trial_rule=rule,
+            trial_ok=(errs == 0 and consumed == limit - i),
+        )
+        return out
 
     # ── 内部 warning 旁路（候选未收敛） ──
 
@@ -872,7 +990,7 @@ class LookaheadTable:
             trials.append((errs, consumed, entry["name"]))
             if _prefer_trial(best, errs, consumed):
                 best = (errs, consumed, entry["name"])
-        self._record_convergence(tokens, i, trials, context)
+        self._record_convergence(tokens, i, trials, context, entries, limit)
         return self._decide_best(best, allow_partial)
 
     def _record_convergence(
@@ -881,25 +999,35 @@ class LookaheadTable:
         i: int,
         trials: list[tuple[int, int, str]],
         context: str,
+        entries: list[dict],
+        limit: int,
     ) -> None:
         """收敛判定 → 未收敛时累积一条内部 warning（判据见 `_try_parse` docstring）。
 
-        条目形态（P3 可直接消费：行/列定位 + 候选集 + 理由 + 符号相关性）：
+        条目形态（内部旁路消费：行/列定位 + 候选集 + 理由 + 符号资格证据）：
             {"kind": "candidate-not-converged", "reason": ...,
              "context": ..., "pos": i, "line": .., "column": .., "token": ..,
              "tied": [并列候选名，仅 ambiguous_full_match],
-             "allowed": [{"name","errs","consumed"}...],   # 参与判定的
-             "all":     [...],                             # 未过滤全集（可解释性）
-             "symbol_dependent": bool,   # P2b-1：位点涉"括号内 pre_scan 名"
+             "allowed": [...], "all": [...],
+             "symbol_dependent": bool,   # ②：位点涉"括号内**类型名 kind**"
              "symbol_names": [命中的名], "symbol_shape": "paren_name",
-             "region": [起, 止 token 下标]}  # 位点句子区间（P3 raw 用）
+             "region": [起, 止],          # 位点句子区间
+             "eligible": bool,            # 三条判据全过（M1 只写证据、不接 raw）
+             "decl_line"/"decl_column"/"decl_depth": 声明位置与深度（③）
+             "use_line"/"use_column"/"use_depth": 使用时点位置与深度（③）
+             "order_ok"/"depth_ok": ③ 的两个子判据（位置先后 / 作用域深度）
+             "trial_ok"/"trial_errs"/"trial_consumed"/"trial_limit"/
+             "substitute_type"/"trial_rule": ① 替换式试解析证据}
 
-        **符号相关性口径（P2b-1，写死在这里）**：位点区间含
-        `( <pre_scan 名> )` 形态（`_symbol_hits`）⇒ `symbol_dependent=True`。
-        未声明 pre_scan 的语言包、或形态不匹配 ⇒ False（缺省偏置 = 不相关）。
-        预扫描不精确是既有登记边界 ⇒ **只作提示**：只影响标记，不参与候选/诊断
-        内容计算。**诊断摘除（P2b-2）与 parser 位点 raw（P3）同批落地**——在 P3
-        之前只标记、不摘诊断（原因见 `LinterScanner._pre_scan_names` docstring）。
+        **三条判据（P3b M1，写死在这里）**：
+          ① `_substitution_trial` 整句通过（换类型名形态后重跑同一候选集）；
+          ② 命中名 kind ∈ 包声明"类型名 kind"（`_type_name_hits` 已过滤）；
+          ③ **声明可用**：`(decl_line, decl_column) <= (use_line, use_column)`
+             （同行按列）**且** `decl_depth <= use_depth`（**深度守卫**——块内声明
+             不得给块外使用点发资格，如 `void f(void){ typedef int t; }` 之后的
+             `x = (t)y;`；否则真错会被静默，独立审计 A 类）。
+        `eligible` = ①∧②∧③。**只作内部证据**：不参与候选/诊断内容计算。
+        预扫描不精确是既有登记边界 ⇒ 只作提示、不作语法判据。
 
         同一 token 位点只记首条（`_try_parse` 可能在 fallback 路径被重复调用）。
         """
@@ -920,7 +1048,36 @@ class LookaheadTable:
         if any(w["pos"] == i for w in self._internal_warnings):
             return
         tok = tokens[i] if 0 <= i < len(tokens) else None
-        hits = self._symbol_hits(tokens, i)
+        use_line = getattr(tok, "line", 0)
+        use_column = getattr(tok, "column", 0)
+        use_depth = self._depth_before(tokens, i)
+        hits = self._type_name_hits(tokens, i)
+        # ③ 的两个子判据分别记录（证据字段必须各自成真，别用合取冒充其一）：
+        #   位置先后（同行按列） / 深度守卫（`decl_depth <= use_depth`）。
+        pos_ok = False
+        depth_ok = False
+        ordered: list[dict] = []
+        for h in hits:
+            position_ok = h.get("decl_line") is not None and (
+                int(h["decl_line"]),
+                int(h.get("decl_column") or 0),
+            ) <= (int(use_line), int(use_column))
+            scope_ok = (
+                h.get("decl_depth") is not None
+                and int(h["decl_depth"]) <= use_depth
+            )
+            pos_ok = pos_ok or position_ok
+            depth_ok = depth_ok or scope_ok
+            if position_ok and scope_ok:
+                ordered.append(h)
+        # ① 替换式试解析：对通过 ③ 的命中逐个试（任一整句通过即 eligible）。
+        trials_evidence: list[dict] = []
+        eligible = False
+        for h in ordered:
+            ev = self._substitution_trial(entries, tokens, i, limit, h)
+            trials_evidence.append({"name": h["name"], **ev})
+            eligible = eligible or bool(ev["trial_ok"])
+        first = trials_evidence[0] if trials_evidence else {}
         end = min(self._find_boundary(tokens, i + 1, len(tokens)), len(tokens))
         self._internal_warnings.append(
             {
@@ -928,24 +1085,48 @@ class LookaheadTable:
                 "reason": reason,
                 "context": context,
                 "pos": i,
-                "line": getattr(tok, "line", 0),
-                "column": getattr(tok, "column", 0),
+                "line": use_line,
+                "column": use_column,
                 "token": getattr(tok, "content", ""),
                 "tied": tied,
                 "allowed": [
                     {"name": n, "errs": e, "consumed": c} for e, c, n in allowed
                 ],
                 "all": [{"name": n, "errs": e, "consumed": c} for e, c, n in trials],
+                # ② 类型名 kind 命中（`_type_name_hits` 已过滤）
                 "symbol_dependent": bool(hits),
-                "symbol_names": sorted(set(hits)),
+                "symbol_names": sorted({h["name"] for h in hits}),
+                "symbol_kinds": sorted({str(h.get("kind")) for h in hits}),
                 "symbol_shape": "paren_name",
+                # ③ 声明可用性证据（位置先后 + 深度守卫）+ ① 试解析证据
+                "decl_line": first.get("decl_line", hits[0].get("decl_line") if hits else None),
+                "decl_column": (
+                    first.get("decl_column", hits[0].get("decl_column") if hits else None)
+                ),
+                "decl_depth": first.get(
+                    "decl_depth", hits[0].get("decl_depth") if hits else None
+                ),
+                "use_line": use_line,
+                "use_column": use_column,
+                "use_depth": use_depth,
+                "order_ok": pos_ok,
+                "depth_ok": depth_ok,
+                "trial_ok": bool(first.get("trial_ok", False)),
+                "trial_errs": first.get("trial_errs"),
+                "trial_consumed": first.get("trial_consumed"),
+                "trial_limit": first.get("trial_limit"),
+                "trial_rule": first.get("trial_rule", ""),
+                "substitute_type": first.get("substitute_type", ""),
+                "trial_evidence": trials_evidence,
+                "eligible": eligible,
                 "region": [i, end],
             }
         )
         self._trace_out(
             f"  internal-warning {reason} @pos={i} "
             f"allowed={[t[2] for t in allowed]} tied={tied} "
-            f"symbol_dependent={bool(hits)} hits={sorted(set(hits))}"
+            f"symbol_dependent={bool(hits)} eligible={eligible} "
+            f"names={sorted({h['name'] for h in hits})} trial={first.get('trial_ok')}"
         )
 
     def _trial_parse(

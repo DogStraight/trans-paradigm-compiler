@@ -20,6 +20,7 @@
 | `c_acceptance.py` | **C 包接受面扫描**：42 条构造（词法/声明/类型/语句/表达式/预处理/增量）逐条试解析，报"进 AST / 空 AST / 词法抛错"并给接受-空洞计数（`--only-gaps` 只看空洞）。当前 **接受 40 / 空洞 2**（仅剩预处理两项）。动机同 `render_coverage.py`：**空洞是无声的**——不属任何语句入口 FIRST 集的构造会被整体跳过、不报错，只跑测试套件看不出还差哪一族 | 阶段收尾对照接受域清单；补 C 能力前后 | `docs/gaps/gap-language-pack-scope.md`「C 语言包：接受域现状」 |
 | `lang_penetration.py` | 语言知识渗透探针（弱信号）：引擎里出现语言包规则/节点名（硬信号）+ 语言对象词作标识符（弱信号，需人工判） | L1 渗透复审 / 动 analyzer 语义面前后对照 | `docs/gaps/gap-language-penetration.md`（「判据（三条）」+「当前实测快照」） |
 | `min_pack_probe.py` | **最小语言包探针（行为面基线）**：把默认语言包换成迷你包跑引擎测试，记录"哪些引擎测试仍绿"（仍绿 = 引擎通用面）；`--record` 写基线，默认比对并「有回归即 exit 1」。机制 = `$TPC_CONFIG` 指向临时配置（**零引擎改动**）。⚠ **强制串行**（默认补 `-n 0`）——探针故意混跑双语，并行结果随 worker 分配漂移，不可作判据 | 动精化基座 / analyzer 语义面前后对照（机制见 `analyzer/elaboration/README.md`）；判"某测试是不是靠语言包声明才成立" | `docs/gaps/gap-language-penetration.md` 判据 1；基线 `tools/min_pack_baseline.json`（与探针包绑定，换包须重记；**必须串行重记**） |
+| `ab_pipeline_compare.py` | **PRE(HEAD)/POST(工作树) 对拍**：`git archive HEAD` 解到临时目录跑 PRE、当前树跑 POST，逐输入 diff 诊断/`success`/`error`/`output`（CLI 档另比 stdout+exit code），支持 `--expect-changed N`（0 = 零用户可见变化）。**只读**：不写工作树、不提交、临时目录用完即删；⚠ 共享工作区里**不要**用"写回 HEAD 版本再恢复"的做法 | 每轮改动收口证明"零变化 / 只有预期变化" | — |
 
 另有非本目录的按需门禁：
 

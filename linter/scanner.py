@@ -26,7 +26,7 @@ from core.token_protocol import (
     bracket_left,
     bracket_right,
 )
-from lexer import Lexer
+from lexer import Lexer, load_pre_scan_config
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
@@ -162,12 +162,18 @@ class LinterScanner:
         # 使 BoundaryChecker 的栈式配对与 matcher 的括号上下文检查正常生效。
         _raw_pairs = ConfigRegistry._loaded.get("lexer.bracket_map", {}).get("pairs", [])
         _bracket_pairs: dict[str, set[str]] = {}
-        for _, _, _name in _raw_pairs:
+        # 深度守卫（资格判定 ③ 的**作用域**面）用：`{`/`}` 的 token 型。按**字符**
+        # 定位配对（同 `core/utils.square_bracket_types` 判据：字符是词法数据，
+        # 不依赖配对命名）。语言包未声明该配对 ⇒ None，守卫空转（不误判）。
+        self._depth_pair: tuple[str, str] | None = None
+        for _open_char, _close_char, _name in _raw_pairs:
             _lt = bracket_left(_name)
             _rt = bracket_right(_name)
             _openers.add(_lt)
             _closers.add(_rt)
             _bracket_pairs.setdefault(_rt, set()).add(_lt)
+            if _open_char == "{":
+                self._depth_pair = (_lt, _rt)
 
         self._block_openers = frozenset(_openers)
         self._block_closers = frozenset(_closers)
@@ -308,14 +314,19 @@ class LinterScanner:
         # scanner 实例扫多文件），新 token 流必须清空，避免跨文件位置串命中。
         self._matcher.reset_atom_memo()
 
-        # ── 符号提示（P2b-1）：把 `pre_scan` 名喂给消歧表 ──
-        # 语言知识在包声明（`[lexer] pre_scan`），引擎只做"括号内名 + 名来自
-        # pre_scan"的**中性形态**判定（判据见 `lookahead._symbol_hits`）。
-        # 预扫描不精确（`lexer/pre_scan.py:1-5` 自述）⇒ 只作提示、不作判据。
+        # ── 符号提示（P2b/P3b）：把 `pre_scan` 名（含 kind/声明位置）喂给消歧表 ──
+        # 语言知识在包声明（`[lexer] pre_scan`：`[pre_scan.decl.*].type_name` /
+        # `trial_as`），引擎只做"括号内类型名形态 + 换 token 型重跑试解析"的
+        # **中性能力**（判据见 `lookahead._type_name_hits` / `_substitution_trial`）。
+        # 预扫描不精确（`lexer/pre_scan.py:1-5` 自述）⇒ 只作提示、不作语法判据。
+        pre_cfg = load_pre_scan_config(self._rules_dir)
         self._discovery.set_symbol_hints(
-            self._pre_scan_names(lex_source),
+            self._pre_scan_symbols(lex_source, pre_cfg),
             self._all_bracket_openers,
             self._all_bracket_closers,
+            type_name_kinds=pre_cfg.get("type_name_kinds", frozenset()),
+            trial_as=pre_cfg.get("trial_as", {}),
+            depth_pair=self._depth_pair,
         )
 
         registry = CheckerRegistry()
@@ -373,24 +384,28 @@ class LinterScanner:
         # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
         errors = self._discovery.unrecognized_diagnostics()
         errors += registry.validate_all(tokens)
+        # ⚠ M1 交付面：**不摘诊断、不接 raw**（资格判定只写内部证据字段）。
+        # M2（raw + 窄档摘诊断）与 P4（analyzer 用 `phase="analyze"` 精确符号面校验
+        # "该名在此处确实是 typedef"）**原子落地**——原因见 linter_architecture.md
+        # 「raw 资格判定（M1）」节的 M2 路线与已知边界。
         return errors
 
-    def _pre_scan_names(self, source: str) -> set[str]:
-        """本轮 `pre_scan` 收集到的名字（P2b-1 符号输入；**只作提示**）。
+    def _pre_scan_symbols(self, source: str, config: dict | None = None) -> dict[str, dict]:
+        """本轮 `pre_scan` 名字（含 kind + 声明位置；**只作提示**）。
 
-        走**引擎**的 `[lexer] pre_scan`（语言知识在包声明，引擎不解释 kind 语义，
-        不硬编码任何语言名）；未声明 `[lexer] pre_scan` 的语言包 → 空集（零影响）。
-        配置错误按 fail-fast 冒泡（不静默降级）。名字只用于给未收敛位点打
-        `symbol_dependent` 标记（见 `lookahead._symbol_hits`），**不参与**诊断计算。
+        走**并行读取面** `pre_scan_with_lines`（引擎 `[lexer] pre_scan`；语言知识在
+        包声明，引擎不解释 kind 语义、不硬编码任何语言名）；未声明 `[lexer]
+        pre_scan` 的语言包 → 空表（零影响）。配置错误按 fail-fast 冒泡（不静默降级）。
 
-        ⚠ 诊断摘除（P2b-2）与 parser 位点 raw 暂缓建树（P3）**同批落地**：在 P3 之前
-        本模块只标记、不摘诊断——否则 lint 不拦、管线却在 parser 处以
-        `parse truncated` 失败，用户诊断面反而变差（实测：`x = (int)y;` 通、
-        `typedef int myint; x = (myint)y;` 截断）。
+        消费点：未收敛位点的 ② 类型名 kind 过滤与 ③ 声明顺序判定
+        （见 `lookahead._type_name_hits` / `_record_convergence`），**不参与**诊断计算。
+        既有 `pre_scan()` 签名/行为不变（并行面，旧调用方零影响）。
         """
-        from lexer import load_pre_scan_config, pre_scan
+        from lexer import load_pre_scan_config
+        from lexer.pre_scan import pre_scan_with_lines
 
-        return set(pre_scan(source, load_pre_scan_config(self._rules_dir)))
+        cfg = config if config is not None else load_pre_scan_config(self._rules_dir)
+        return pre_scan_with_lines(source, cfg)
 
     def internal_warnings(self) -> list[dict]:
         """本次 `scan()` 的内部 warning（拷贝；**用户不可见**）。

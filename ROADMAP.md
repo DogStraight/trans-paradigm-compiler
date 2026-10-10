@@ -109,12 +109,18 @@
   `scanner`/`discovery` 进 `lookahead`，收敛条目带 `symbol_dependent`/`symbol_names`/`region`
   （口径 = 括号紧邻 `( id )` ∧ id∈pre_scan；语料实测 0 误标）。**P2b-2（摘诊断）与 P3 同批**
   （已用一条"决定守卫"测试钉住：P3 必须显式重新引入）
-- [ ] **P3b parser：歧义位点 raw 暂缓建树（重做，判据收紧）**——首次落地（循环 #4）四条硬闸
-  全绿后被**独立审计证伪**（语句级 raw 吞同句无关真错，7 类反例）⇒ **已整体回退**（未发布）。
-  重做判据三条：① **替换式试解析**证明"整句唯一问题是符号歧义"；② 只认 **typedef 命名空间**
-  （tag 名不算）；③ **声明顺序敏感**。覆盖边界：非块容器语句位（C `CompoundStmt` 的 `@Stmt*`）
-  需把判定提到 production 层（架构级，同批或紧随）
-- [ ] **P4 analyzer 插件：消费 raw + 符号，实现理解路径**（依赖 P3b）——`(myint)x` 判定在此闭环；
+- **P3b-M1 资格判定** ✅ **已交付**（循环 #5，**零用户可见变化**）：① 替换式试解析（改型后重跑候选集，
+  整句通过才算"唯一问题是符号歧义"）② 只认 **typedef 命名空间** ③ 声明位置先后（行+列）+
+  **深度守卫**；`pre_scan_with_lines` 并行面 + `RuleMatcher.memo_suspended`（packrat memo 以 token
+  位置为键，改型试解析必须挂起缓存）；**性能**：tv80_core `tpc lint` 由 +13.7% 优化回 **+0.0%**
+- [ ] **P3c parser：把资格判定 + raw 提到 production 层语句位**（**架构级**；C 函数体内
+  `CompoundStmt` 的 `@Stmt*` 当前不产生位点 ⇒ 主用例没收益）——接入点已调研
+  （`parser/_production.py::_repeat_loop` 的 `result is None` 分支，(a) 就地 raw 追加 (b) 容器层兜底）；
+  扩到语句位后**遮蔽用例变为可判** ⇒ 必须同时引入作用域信息
+- [ ] **M2 = raw + 窄档摘诊断（与 P4 原子落地）**——raw 段由 analyzer 用 `analyze` 精确符号面
+  **校验**"该名在此处确实是 typedef"，**校验不过 ⇒ 报错不静默**；同批判据 = 作用域遮蔽 / 引擎既有
+  赋值链宽松（单列）/ `tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0`
+- [ ] **P4 analyzer 插件：消费 raw + 符号校验 + 理解路径**——`(myint)x` 判定在此闭环；
       判据见缺口档（`CastExpr` 正样本 + 同名非 typedef 负样本 + 作用域/顺序 + 全量回归）
 
 ## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）

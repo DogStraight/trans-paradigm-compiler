@@ -36,21 +36,23 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   `python tests/e2e/eval_lint_accuracy.py`（实测 `err_total 33 / detected 33 / miss 0 /
   valid_total 7 / fp 0`）。
 
-**歧义位点 raw 暂缓建树（P3）：首次落地被独立审计证伪，已回退**（2026-10-10，循环 #4）：
-第一次实现按"语句起点落在未收敛 ∧ 符号相关位点 ⇒ **整句** raw"（`RawStatement` + 渲染走
-`_verbatim_text`），四条硬闸当时全绿；但**独立对抗性审计**（838 条语料 + 55 条定向输入）发现
-**语句级 raw 会把同句里与符号歧义无关的真错一起吞掉**——最小复现 `typedef int t;\nx = (t)y + ;\n`
-（改后 `tpc lint` 0 诊断 rc0、`tpc format` rc0 直出非法 C；改前 2 条 blocking），同类 7 处
-（`+ (u)z + ;`、跨行 `+`、`+ "unterminated;`、缺 `;`、`x=((t))y;`）⇒ **已整体回退**（未发布、
-无兼容负担；代码存档 `_drafts/p3_first_attempt.patch`）。保留的前置：P2a 内部 warning 旁路、
-P2b-1 符号相关性标记、符号回滚三处。
-**重做（P3b）必须满足的三条判据**：① **替换式试解析**证明"该句唯一问题是符号歧义"（把待判定的
-`( id )` 按类型名形态试解析，整句通过才允许 raw），否则保留 blocking；② 只认 **typedef 命名
-空间**的名（`struct t{}` 的 tag 名不算）；③ **声明顺序敏感**（`x=(t)y; typedef int t;` 不得 raw）。
-**覆盖边界**：非块容器语句位（production `@Stmt*`，如 C `CompoundStmt`）不在语句级接入点内。
-**残留事实**：`_pre_scan.toml` 自述"只作提示/对比、判定用 `analyze`"，而 P2b-1 的标记已把它
-升为**行为输入**——上述三条判据正是补这个跨层缺口；位点按行/列重定位在宏展开漂移时会失配
-（届时退回既有截断路径并记 log）。
+**歧义位点 raw 暂缓建树（P3/P3b）：先做"资格判定"，raw 与 P4 原子落地**（2026-10-10，循环 #4–#5）：
+- **P3 首次实现（整句 raw）已被独立审计证伪**（语句级 raw 吞同句无关真错，7 类反例）⇒ 整体回退。
+- **P3b-M1 已落地（零用户可见变化）**：只做**资格判定**——① **替换式试解析**（把 `( id )` 的
+  标识符按类型名形态替换后**重跑同一候选集**，整句通过才算"该句唯一问题是符号歧义"）；
+  ② **只认 typedef 命名空间**（kind 语义由包声明）；③ **声明位置先后（行+列）+ 深度守卫**
+  （`decl_depth ≤ use_depth`）。判据与实测见 `CHANGELOG.md`；`pre_scan_with_lines` 是并行读取面。
+- **M2（raw + 窄档摘诊断）与 P4 原子落地**：raw 段的合法性由 analyzer 用 `phase="analyze"` 的
+  **精确符号面校验**（该校验正是本档接受的近似面之外的一层），校验不过 ⇒ 报错、不静默。同批判据：
+  **作用域遮蔽**（`typedef int t; void f(void){ int t; x=(t)y; }`——`pre_scan` 无作用域，M1 判不了）、
+  **引擎既有赋值链宽松**（`x = (t)y + z = 1;` / `(int)` 版在改前也通过 ⇒ 单列的既有近似）、
+  `tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0/syntax=[]` 的自相矛盾。
+- **覆盖边界**：资格判定目前只在**块体语句位**（根块 / `is_block` 规则体）生效；C 函数体内
+  （`CompoundStmt` 的 `@Stmt*` 由 production 展开）**不产生位点** ⇒ 单独立项 P3c，接入点已调研
+  （`parser/_production.py::_repeat_loop` 的 `result is None` 分支）。该边界内的构造**仍照旧
+  blocking（不静默）**。
+- **性能**：真实语料 tv80_core（4755 行 / 2314 未收敛位点）`tpc lint` 由初测 **+13.7%** 经
+  "段表 + 二分反查 + 前缀深度缓存"优化后回到 **+0.0%**（试解析本身不是热点，verilog 无 trial）。
 
 ## 成熟解法参照（见贤思齐）
 

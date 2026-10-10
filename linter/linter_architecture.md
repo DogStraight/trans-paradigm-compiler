@@ -237,27 +237,56 @@ Level 2 试解析除了择一（行为不变），还判一次**候选是否收�
   **本次 linter token 流**下标（linter 吃展开态、parser 吃锚形态，两个 token 流不同源）
   ⇒ 跨阶段定位用 `line`/`column`。
 
-### 符号相关性标记（P2b-1 已落；诊断摘除与 parser raw 同批，P3）
+### raw 资格判定（P3b **M1 已落**：替换式试解析 + typedef 命名空间 + 声明可用性）
 
-- **符号输入**：`LinterScanner.scan()` 每轮调**引擎**的 `[lexer] pre_scan`
-  （`pre_scan(source, load_pre_scan_config(rules_dir))`）取名字集合，连同引擎括号
-  token 集交给 `LookaheadTable.set_symbol_hints`。语言知识仍在包声明
-  （`grammar/*/base/_pre_scan.toml`）——引擎不解释 kind 语义、不硬编码任何语言名；
-  未声明 `[lexer] pre_scan` 的包 → 空集（零影响）。预扫描的**已知不精确**
-  （平坦/首见归属/无顺序，见 `lexer/pre_scan.py:1-5`）⇒ 只作提示、不作判据。
-- **`symbol_dependent` 口径（窄档，写死在 `_symbol_hits` docstring）**：未收敛位点的
-  **句子区间**含 `<括号开> <id> <括号闭>` **紧邻**形态，且该 id 文本 ∈ pre_scan
-  名集合 ⇒ `True`。为什么不是"区间内含 pre_scan 名"（实测）：后者会把 verilog 的
-  `module`/`function`/`task` 名算进来——lint_err 语料 2 个位点（`ref_e33_macro_redef.v`
-  等）会被误命中；`(name)` 形态在 lint_err/valid/real 三语料实测 **0 命中**，只在
-  目标形态（C 的 `(myint)x`）命中。故取更窄的一半，且无需新声明。
-- **本批只标记，不摘诊断**（用户可见面零变化）：`symbol_dependent=True` 的位点仍照常
-  报原诊断（C 的 `typedef int myint; x = (myint)y;` 实测仍是 `phase-unrecognized` +
-  `phase-statement` 两条 blocking）。原因（实测对照）：lint 摘了 blocking 后管线会前进到
-  parser，而 parser 建不出 typedef 名转换的树——`x = (int)y;`（内建类型转换）**通过**，
-  `x = (myint)y;` **`parse truncated`** ⇒ 用户可见错误从精确的 lint 报错退化成含糊的
-  parse 失败。故**诊断摘除（P2b-2）与 parser 位点 raw 暂缓建树（P3）同批落地**，
-  那时门禁为"无 blocking + `success=True` + 输出非空"。
+未收敛位点只有在**三条判据全过**（`eligible=True`）时才**够格**进 raw/降级档。
+**M1 只写内部证据字段，不接 raw、不摘诊断 ⇒ 用户可见面逐字节不变**（`--json` 快照
+SHA256 / lint accuracy / diag baseline 三证）。判据实现在
+`lookahead._record_convergence`（组装）/ `_type_name_hits`（②）/
+`_substitution_trial`（①），证据字段随条目写进内部旁路（`trial_ok`/`decl_line`/
+`decl_depth`/`use_depth`/`substitute_type`/`eligible`…）。
+
+- **① 替换式试解析**（`_substitution_trial`）：把 `( id )` 里那个 id 的 token `type`
+  **临时**换成包声明的"类型名形态"（`[pre_scan.decl.*].trial_as`，C = `keyword.int`），
+  用**同一候选集、同一 limit** 重跑 Level 2 试解析；判据 = `errs == 0 且
+  consumed == limit - i`（**整句**通过）。通过 ⇒ 该句唯一问题是"这个 id 的类型名身份
+  语法层解析不了"；否则句子里还有别的真问题 ⇒ 不 eligible。
+  ⚠ 试解析必须在**干净 packrat 缓存**上求值：三层 memo 以 token 位置为键，改型前的
+  旧结果会被命中（实测：不清 memo 时目标句判 `errs=1/consumed=6` 失败；清空后
+  `errs=0/consumed=7` 通过）⇒ `RuleMatcher.memo_suspended()` 快照/清空/还原。
+  引擎只提供"换一个 token 的 type 后重跑试解析"的通用能力，不解释语言语义。
+- **② typedef 命名空间**（`_type_name_hits`）：命中名 kind ∈ 包声明 `type_name = true`
+  的 kind（C 只 `typedef`；`tag_*` 不算 ⇒ `struct t{}; x=(t)y;` 不进档）。包声明
+  `type_name = true` 必须同时给 `trial_as`，否则 `load_pre_scan_config` **fail-fast**。
+- **③ 声明可用**（两个子判据各自记录：`order_ok`/`depth_ok`）：
+  · **位置先后** `(decl_line, decl_column) <= (use_line, use_column)`——同行也要比列
+    （`x=(t)y; typedef int t;` 同行声明在后，只比行号分不出先后，实测反例 7）；
+  · **深度守卫** `decl_depth <= use_depth`——**块内声明不得给块外使用点发资格**
+    （`void f(void) { typedef int t; }` 之后的 `x = (t)y;`：位置先后成立但
+    `decl_depth=1 > use_depth=0` ⇒ 不 eligible；无守卫时真错被静默，独立审计 A 类）。
+  两者位置数据都来自**并行读取面** `pre_scan_with_lines`（`lexer/pre_scan.py`；既有
+  `pre_scan()` 签名/行为不变）：行/列经清理偏移映射回原文，深度 = 清理后文本里 `{`/`}`
+  计数；使用侧深度按 **token** 计（字符串/注释里的花括号是单 token，不会误计）。
+- **两层独立护栏**（都不是单点）：kind 过滤护住 `symbol_dependent` 标记；
+  `trial_as` 必要性护住 `eligible`——去掉任一，另一层仍挡住对应反例。
+- **反例集（八条，必须仍报真错）**：`x = (t)y + ;`、`+ (u)z + ;`、跨行 `+`、
+  `+ "unterminated;`、缺 `;` 的 `x=(t)y`、`x=((t))y;`、`x=(t)y; typedef int t;`、
+  `struct t{}; x=(t)y;`；另加审计 A 类及其同族（块内声明→块外使用，深度守卫）。
+  诊断与收紧前**逐条相同**（PRE/POST 快照对拍）。
+- **M2（raw + 窄档摘诊断）路线 = 与 P4 原子落地**：raw 段由 analyzer 用
+  `phase="analyze"` 的**精确符号面**校验"该名在此处确实是 typedef"；校验不过 ⇒ 报错
+  （**不静默**）。因此下列问题归 **M2+P4 判据**、不属 P3b：
+  · **作用域遮蔽**：`typedef int t;\nvoid f(void) { int t; x = (t)y; }` —— pre_scan 无
+    作用域 ⇒ M1 判不出"此处 `t` 已被局部变量遮蔽"；M2 **不得只依赖 M1**。
+  · **引擎既有赋值链宽松**（审计 B 类，如 `x = (t)y + z = 1;`）——既有宽松面，不混入
+    P3b 判据。
+  · `tpc check` 的 `parse_ok=False` 而 `exit_code=0` 观察——归 M2+P4 的收口判据。
+- **已知边界（M1）**：① 遮蔽不可分（见上，已如实登记）；② 位点只来自**块体语句位**
+  （根块 / `is_block` 规则体）——非块容器内由 production `@Stmt*` 展开的语句位
+  （C `CompoundStmt`：函数体内语句）不产生未收敛位点 ⇒ 也无资格判定（P3c 立项处理）；
+  ③ `pre_scan` 首见归属 ⇒ 同名多处声明以**首次**声明位置为准。
+- **为什么不升格为公开判据**：`symbol_dependent`/`eligible` 是内部证据字段，不进
+  `LintDiagnostic`/`--json`/exit code。
 
 ---
 
