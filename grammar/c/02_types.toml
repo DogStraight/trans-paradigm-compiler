@@ -36,6 +36,13 @@ kind = "$1"
 tag = "$2"
 body = "$3"
 
+# 标签命名空间（`struct/union/enum tag`）：名挂在 `tag` 属性上；匿名形态走
+# `AnonStructSpecifier`（无 tag 属性）⇒ 不产生记录。产物用途见 `plugins/semantics/_symbols.py`。
+[StructSpecifier.analyzer.c_symbol_collect]
+site = "named"
+name_attr = "tag"
+kind = "tag"
+
 
 [AnonStructSpecifier.parser]
 production = [
@@ -123,6 +130,12 @@ production = [
 tag = "$2"
 body = "$3"
 
+# 标签命名空间（enum tag）——匿名形态走 `AnonEnumSpecifier`，不产生记录。
+[EnumSpecifier.analyzer.c_symbol_collect]
+site = "named"
+name_attr = "tag"
+kind = "tag"
+
 
 [AnonEnumSpecifier.parser]
 production = [
@@ -172,6 +185,12 @@ name = "$1"
 attrs = "$2"
 # value — 显式枚举值本体（绑定落到组内的表达式，理由同 InitDeclarator.init）
 value = "$3.sub_node[0].sub_node[1]"
+
+# 枚举常量进所在作用域（C 里枚举常量是普通标识符命名空间的一员）。
+[Enumerator.analyzer.c_symbol_collect]
+site = "named"
+name_attr = "name"
+kind = "enumerator"
 
 
 # ── 简单类型说明符（内建类型词）与 typedef 名 ──

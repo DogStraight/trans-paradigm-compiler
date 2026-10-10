@@ -32,6 +32,8 @@ from core.define import Token
 from core.utils import square_bracket_types
 from core.token_protocol import TRIVIA_TOKEN_TYPES, split_token_types
 
+from .checker import CTX_TOP
+
 # trivia token 集合（引擎 token 协议，单一事实源 core/token_protocol.py）
 _TRIVIA = TRIVIA_TOKEN_TYPES
 from .grammar_slicer import _collect_first_start_tokens
@@ -295,6 +297,87 @@ def _is_inline_dispatcher(info: dict, prods: list[dict]) -> bool:
     )
 
 
+def _elem_called_rules(feat: dict | None) -> set[str]:
+    """元素树里出现的所有 `@call` 规则名（递归 seq/choice/repeat/optional）。"""
+    if not isinstance(feat, dict):
+        return set()
+    typ = feat.get("type")
+    if typ == "call":
+        name = feat.get("name", "")
+        return {name} if name else set()
+    if typ == "seq":
+        out: set[str] = set()
+        for item in feat.get("items") or []:
+            out |= _elem_called_rules(item)
+        return out
+    if typ == "choice":
+        out = set()
+        for alt in feat.get("alternatives") or []:
+            out |= _elem_called_rules(alt)
+        return out
+    if typ in ("repeat", "plus", "optional"):
+        return _elem_called_rules(feat.get("elem"))
+    return set()
+
+
+def _tree_callers(tree: dict) -> dict[str, set[str]]:
+    """被调用规则 → **直接** `@call` 它的规则名集合（production 级调用图）。"""
+    callers: dict[str, set[str]] = {}
+    for name, info in tree.items():
+        if not isinstance(info, dict):
+            continue
+        for prod in info.get("prods") or []:
+            for callee in _elem_called_rules(prod):
+                callers.setdefault(callee, set()).add(name)
+    return callers
+
+
+def _inline_dispatchers(tree: dict) -> set[str]:
+    """inline 语句分派器名集合（判据同 `_is_inline_dispatcher`，语言无关）。"""
+    out: set[str] = set()
+    for name, info in tree.items():
+        if isinstance(info, dict) and _is_inline_dispatcher(
+            info, info.get("prods") or []
+        ):
+            out.add(name)
+    return out
+
+
+def _collect_member_only(tree: dict) -> set[str]:
+    """「容器成员专用语句」集合——上下文允许候选集的判据核心（语言无关）。
+
+    R 入集当且仅当三条同时成立：
+      ① `is_statement(R)` —— 语法声明它是语句；
+      ② 存在 caller（有规则在 production 里 `@call` 它）；
+      ③ **没有** caller 是 inline 语句分派器（`inline=true` + 单 choice，如
+         C 的 `Stmt`）。
+    ⇒ R 只能作为**某个具体容器的成员**出现（例：C 的 `StructMember` 只被
+    `StructBody` 的 `@StructMember*` 调用，从不出现在语句序列里），故在
+    **语句位**判定"候选是否收敛"时它不算候选——否则顶层 `myint v;` 会被
+    这个伪候选带成"未收敛"（实测：`Declaration` 与 `StructMember` 都
+    `errs=0/consumed=3`）。
+
+    不受影响的反例（留在集合外，仍是合法候选）：
+      · `FuncDef`：无任何 caller（顶层直接以语句形式出现）；
+      · `Declaration` / `ExprStmt`：由语句分派器 `Stmt` `@call`。
+
+    已知限制（写在此防"看起来支持"）：只识别"直接被分派器调用"的一层——
+    若某语言把语句分派器再包一层（分派器调用分派器），成员判定仍以**直接**
+    caller 为准；当前 4 个语言包（verilog/c/c4/yaml）均满足该前提。
+    """
+    callers = _tree_callers(tree)
+    dispatchers = _inline_dispatchers(tree)
+    out: set[str] = set()
+    for name, info in tree.items():
+        if not isinstance(info, dict) or not info.get("is_statement"):
+            continue
+        cs = callers.get(name)
+        if not cs or (cs & dispatchers):
+            continue
+        out.add(name)
+    return out
+
+
 class LookaheadTable:
     """从规则树预计算的前瞻消歧表。"""
 
@@ -321,6 +404,44 @@ class LookaheadTable:
         # 试解析精确筛选，context 参数不参与筛选）
         self.ident_candidates: list[dict] = []
         self._build()
+        # 上下文允许候选集：容器成员专用语句（判据见 `_collect_member_only`）。
+        # 只用于「候选是否收敛」判定，**不**改变 classify 返回的候选（用户可见面零变化）。
+        self._member_only: set[str] = _collect_member_only(tree)
+        # 内部 warning 旁路（用户不可见）：候选未收敛位点。
+        # 按次重置 + 显式取用（同 `Discovery._unrecognized` 的模式）；
+        # 不进 LintDiagnostic / --json / exit code / 落盘。
+        self._internal_warnings: list[dict] = []
+
+    # ── 内部 warning 旁路（候选未收敛） ──
+
+    def reset_internal_warnings(self) -> None:
+        """清空内部 warning（每次 discover/scan 开始时调用——按次重置）。"""
+        self._internal_warnings = []
+
+    def internal_warnings(self) -> list[dict]:
+        """本次扫描累积的内部 warning（拷贝）。
+
+        消费链：`LookaheadTable` → `Discovery` → `LinterScanner.scan()` →
+        `pipeline._stage_lint` → `_PipelineContext.internal_warnings`（供后续
+        "歧义位点 raw 暂缓建树"消费）。条目形态见 `_record_convergence`。
+        """
+        return list(self._internal_warnings)
+
+    def _allowed_in_context(self, name: str, context: str) -> bool:
+        """候选是否属于该上下文**允许的语句集**（判据见 `_collect_member_only`）。
+
+        `context` 是预留的上下文钩子（位点后续按上下文/行列表述）：今天
+        discovery 的语句位上下文恒为 `CTX_TOP`（块内递归沿用同一值，
+        `checker.py:22` 记着"context 仅作归属标记"），故各取值共用同一判据；
+        容器级上下文细化留给后续分片。
+
+        非语句候选（块规则等）不参与"语句位收敛"判定 ⇒ 返回 False。
+        """
+        del context  # 预留：容器级上下文细化在后续分片
+        info = self._tree.get(name)
+        if not isinstance(info, dict) or not info.get("is_statement"):
+            return False
+        return name not in self._member_only
 
     @staticmethod
     def _rule_end_tokens(info: dict) -> set[str]:
@@ -425,7 +546,7 @@ class LookaheadTable:
         if self._trace:
             print(f"[lint-trace] {msg}", file=sys.stderr)
 
-    def classify(self, tokens: list[Token], i: int) -> list[str] | None:
+    def classify(self, tokens: list[Token], i: int, context: str = CTX_TOP) -> list[str] | None:
         """统一两级消歧：A/B 类候选都走同一套管线。
 
         Level 1（变长前瞻）：首 token 相同逐 token 预视缩小候选，直到唯一。
@@ -435,6 +556,9 @@ class LookaheadTable:
             [name, ..] = 候选命中（注册节点供检查）。
             []         = 有语句起点特征但无任何已知规则匹配（拼错关键字/残缺
                          结构头）——discovery 据此报"未识别语句"，不静默吞错。
+
+        `context` 只用于 Level 2 的**内部收敛判定**（`_allowed_in_context`），
+        不改变候选/返回值——用户可见面与传入值无关。
         """
         tok_type = tokens[i].type
         # 收集候选 entries（A 类 keyword_map / B 类 ident_candidates，结构一致）
@@ -455,7 +579,7 @@ class LookaheadTable:
             f"classify pos={i} tok={tok_type} entries={[e['name'] for e in entries]}"
         )
         result = self._resolve_ident(
-            tokens, i, entries, is_keyword=tok_type in self.keyword_map
+            tokens, i, entries, is_keyword=tok_type in self.keyword_map, context=context
         )
         self._trace_out(f"classify pos={i} tok={tok_type} -> {result}")
         return result
@@ -467,6 +591,7 @@ class LookaheadTable:
         entries: list[dict],
         *,
         is_keyword: bool = False,
+        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1：变长前瞻逐 token 淘汰候选，直到唯一且完整路径验证。
 
@@ -483,12 +608,21 @@ class LookaheadTable:
         # 淘汰，循环内提前决策）与循环后决策（按 seen/l2_only/path 存活状态
         # 分表）分离，替代原单函数 ~110 行的分支串。
         early = self._level1_scan(
-            tokens, i, n, limit, entries, l2_only, path_entries, seen
+            tokens, i, n, limit, entries, l2_only, path_entries, seen, context
         )
         if early is not None:
             return early  # 循环内已决策（fallback L2 / 唯一命中）
         return self._level1_decide(
-            tokens, i, n, limit, entries, l2_only, path_entries, seen, is_keyword
+            tokens,
+            i,
+            n,
+            limit,
+            entries,
+            l2_only,
+            path_entries,
+            seen,
+            is_keyword,
+            context,
         )
 
     def _level1_scan(
@@ -501,6 +635,7 @@ class LookaheadTable:
         l2_only: list[dict],
         path_entries: list[dict],
         seen: list[str],
+        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1 变长前瞻扫描：逐 token 淘汰候选。
 
@@ -526,7 +661,7 @@ class LookaheadTable:
                 + (f" dropped={dropped}" if dropped else "")
             )
             if not path_entries and not l2_only:
-                return self._fallback_l2(tokens, i, entries, limit, n)
+                return self._fallback_l2(tokens, i, entries, limit, n, context)
             if _is_unique_path_hit(path_entries, seen, l2_only):
                 self._trace_out(f"  L1 -> unique path hit {path_entries[0]['name']}")
                 return [path_entries[0]["name"]]
@@ -550,7 +685,13 @@ class LookaheadTable:
         return end if end > pos else pos
 
     def _fallback_l2(
-        self, tokens: list[Token], i: int, entries: list[dict], limit: int, n: int
+        self,
+        tokens: list[Token],
+        i: int,
+        entries: list[dict],
+        limit: int,
+        n: int,
+        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1 判别路径被挡 → Level 2 对原始候选完整 production 试解析。
 
@@ -560,7 +701,7 @@ class LookaheadTable:
         门禁基线）。
         """
         self._trace_out("  L1 -> all path candidates dropped, fallback L2")
-        return self._try_parse(tokens, i, entries, min(limit + 1, n))
+        return self._try_parse(tokens, i, entries, min(limit + 1, n), context=context)
 
     def _level1_decide(
         self,
@@ -573,6 +714,7 @@ class LookaheadTable:
         path_entries: list[dict],
         seen: list[str],
         is_keyword: bool,
+        context: str = CTX_TOP,
     ) -> list[str] | None:
         """Level 1 循环后决策（C2 重构）：按 seen/l2_only/path 存活状态分表。
 
@@ -593,7 +735,7 @@ class LookaheadTable:
                     "  L1 -> no discriminant token (keyword), L2 allow_partial"
                 )
                 return self._try_parse(
-                    tokens, i, entries, t_limit, allow_partial=True
+                    tokens, i, entries, t_limit, allow_partial=True, context=context
                 )
             self._trace_out("  L1 -> no discriminant token (bare id) -> None")
             return None
@@ -619,6 +761,7 @@ class LookaheadTable:
                 entries,
                 t_limit,
                 allow_partial=is_keyword,
+                context=context,
             )
         if len(path_entries) == 1:
             self._trace_out(
@@ -633,7 +776,7 @@ class LookaheadTable:
         # 是"有语句特征但结构残缺"，未识别诊断比精确诊断更贴近根因
         # （e09/e17 门禁基线）。仅 l2_only 分支（静态前缀无法判别的候选，
         # 如 wire 声明的 WireDecl/NetDecl 双候选）允许部分匹配报精确诊断。
-        return self._try_parse(tokens, i, path_entries, t_limit)
+        return self._try_parse(tokens, i, path_entries, t_limit, context=context)
 
     def _try_parse(
         self,
@@ -643,20 +786,90 @@ class LookaheadTable:
         limit: int,
         *,
         allow_partial: bool = False,
+        context: str = CTX_TOP,
     ) -> list[str] | None:
-        """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。"""
+        """Level 2：对每个候选完整 production 试解析，取错误最少且消费最多者。
+
+        **收敛判定（内部，用户不可见）**：在 `_decide_best` 择一之外，对
+        "上下文允许的候选"（`_allowed_in_context`）另算一次：
+          · `errs == 0` 的候选 ≥2 且最大 `consumed` 并列（`(errs, consumed)`
+            无法区分） ⇒ 未收敛，reason = `ambiguous_full_match`；
+          · 允许集非空但全部 `errs > 0` ⇒ 未收敛，reason = `no_full_match`
+            （今天的 `[]`/未识别档；是否降级为用户可见 warning 属后续分片）。
+        唯一最优、可区分、或允许集为空 ⇒ 收敛。未收敛只写**内部 warning**
+        （`internal_warnings()`），不改 `_decide_best` 的择一行为、不改用户可见面。
+        """
         matcher = self._matcher
         if matcher is None:
             return None
         best: tuple[int, int, str] | None = None
+        trials: list[tuple[int, int, str]] = []
         for entry in entries:
             trial = self._trial_parse(matcher, entry, tokens, i, limit)
             if trial is None:
                 continue
             errs, consumed = trial
+            trials.append((errs, consumed, entry["name"]))
             if _prefer_trial(best, errs, consumed):
                 best = (errs, consumed, entry["name"])
+        self._record_convergence(tokens, i, trials, context)
         return self._decide_best(best, allow_partial)
+
+    def _record_convergence(
+        self,
+        tokens: list[Token],
+        i: int,
+        trials: list[tuple[int, int, str]],
+        context: str,
+    ) -> None:
+        """收敛判定 → 未收敛时累积一条内部 warning（判据见 `_try_parse` docstring）。
+
+        条目形态（P3 可直接消费：行/列定位 + 候选集 + 理由）：
+            {"kind": "candidate-not-converged", "reason": ...,
+             "context": ..., "pos": i, "line": .., "column": .., "token": ..,
+             "tied": [并列候选名，仅 ambiguous_full_match],
+             "allowed": [{"name","errs","consumed"}...],   # 参与判定的
+             "all":     [...]                              # 未过滤全集（可解释性）}
+
+        同一 token 位点只记首条（`_try_parse` 可能在 fallback 路径被重复调用）。
+        """
+        allowed = [t for t in trials if self._allowed_in_context(t[2], context)]
+        if not allowed:
+            return
+        full = [t for t in allowed if t[0] == 0]
+        tied: list[str] = []
+        if full:
+            top = max(t[1] for t in full)
+            ties = [t for t in full if t[1] == top]
+            if len(ties) < 2:
+                return
+            reason = "ambiguous_full_match"
+            tied = [t[2] for t in ties]
+        else:
+            reason = "no_full_match"
+        if any(w["pos"] == i for w in self._internal_warnings):
+            return
+        tok = tokens[i] if 0 <= i < len(tokens) else None
+        self._internal_warnings.append(
+            {
+                "kind": "candidate-not-converged",
+                "reason": reason,
+                "context": context,
+                "pos": i,
+                "line": getattr(tok, "line", 0),
+                "column": getattr(tok, "column", 0),
+                "token": getattr(tok, "content", ""),
+                "tied": tied,
+                "allowed": [
+                    {"name": n, "errs": e, "consumed": c} for e, c, n in allowed
+                ],
+                "all": [{"name": n, "errs": e, "consumed": c} for e, c, n in trials],
+            }
+        )
+        self._trace_out(
+            f"  internal-warning {reason} @pos={i} "
+            f"allowed={[t[2] for t in allowed]} tied={tied}"
+        )
 
     def _trial_parse(
         self, matcher, entry: dict, tokens: list[Token], i: int, limit: int

@@ -212,6 +212,8 @@ class LinterScanner:
         self.enable_phase0 = enable_phase0
         self.enable_phase1 = enable_phase1
         self.enable_phase2 = enable_phase2
+        # 内部 warning 旁路（用户不可见；scan() 每次按次重置后填充）
+        self._internal_warnings: list[dict] = []
 
     # ── 动态 block delimiter 收集 ─────────────────
 
@@ -254,7 +256,13 @@ class LinterScanner:
         predefined: dict[str, str] | None = None,
         undefine: set[str] | None = None,
     ) -> list[LintDiagnostic]:
-        """扫源文本产出诊断。"""
+        """扫源文本产出诊断。
+
+        ⚠ **返回值只含用户诊断**。另有一路**内部 warning 旁路**（候选未收敛位点，
+        用户不可见、不进 `--json`/exit code/落盘）：每次 scan 开头按次重置，
+        由 `internal_warnings()` 取用（消费链见该方法 docstring）。
+        """
+        self._internal_warnings = []
         errors: list = []
         macro_defs, func_macros, _, _, _, clean_source, _ = scan_directives(
             source, self._rules_dir, predefined=predefined, undefine=undefine
@@ -349,7 +357,24 @@ class LinterScanner:
             for node in self._discovery.discover(tokens):
                 register(node)
 
+        # 内部 warning 旁路快照（用户不可见）：候选未收敛位点，供 pipeline → P3 消费。
+        self._internal_warnings = self._discovery.internal_warnings()
+
         # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
         errors = self._discovery.unrecognized_diagnostics()
         errors += registry.validate_all(tokens)
         return errors
+
+    def internal_warnings(self) -> list[dict]:
+        """本次 `scan()` 的内部 warning（拷贝；**用户不可见**）。
+
+        消费链：`LookaheadTable`（Level 2 收敛判定，按次重置）→ `Discovery` →
+        `LinterScanner.scan()` → `pipeline._stage_lint` → `_PipelineContext.
+        internal_warnings`（后续"歧义位点 raw 暂缓建树"按行/列消费）。
+
+        与 `scan()` 返回值的边界：本列表**不进** `LintDiagnostic`、不进
+        `tpc lint --json` / LSP 输出、不影响 exit code、不落盘——用户可见面
+        与本次机制引入前逐字节相同。条目形态见
+        `lookahead.LookaheadTable._record_convergence`。
+        """
+        return list(self._internal_warnings)

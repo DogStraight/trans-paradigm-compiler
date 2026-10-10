@@ -134,11 +134,23 @@ class Discovery:
     def discover(self, tokens: list[Token]) -> list[DiscoveredNode]:
         """扫描 token 流，递归发现嵌套节点，返回树（children 填充）。"""
         self._unrecognized = []
+        # 内部 warning 按次重置（同 _unrecognized 的"每次 discover 清空"纪律）
+        self._lookahead.reset_internal_warnings()
         return self._discover_range(tokens, 0, len(tokens), CTX_TOP, 0)
 
     def unrecognized_diagnostics(self) -> list[LintDiagnostic]:
         """本次 discover 期间记录的"未识别语句"诊断。"""
         return list(self._unrecognized)
+
+    def internal_warnings(self) -> list[dict]:
+        """本次 discover 累积的**内部 warning**（候选未收敛；用户不可见）。
+
+        与 `unrecognized_diagnostics()` 的分工：后者是**用户诊断**（最终并入
+        `LinterScanner.scan()` 返回值）；本方法只服务内部机制（pipeline →
+        后续"歧义位点 raw 暂缓建树"），不进 `LintDiagnostic` / `--json`。
+        条目形态见 `lookahead._record_convergence`。
+        """
+        return self._lookahead.internal_warnings()
 
     def dump_nodes(
         self,
@@ -277,7 +289,7 @@ class Discovery:
             and self._next_type(tokens, i + 1, end) == self._attr_openers[1]
         ):
             return self._skip_balanced(tokens, i, end)
-        candidates = self._lookahead.classify(tokens, i)
+        candidates = self._lookahead.classify(tokens, i, context)
         # 块规则（有 block_end）：括号开启符同时是块开启符（scanner 把括号并入
         # block 起止符集），故此处**必须转块分支**注册块节点并递归 body。此前
         # 落进下面的"整体跳过括号区间"，块内语句既不解析也不诊断（静默漏检）；
@@ -310,7 +322,7 @@ class Discovery:
         块头 production 不匹配 → 未识别块诊断；块结束符缺失 → 只跳过关键字。
         Returns: 下一个扫描位置（必定 > i）。
         """
-        candidates = self._lookahead.classify(tokens, i)
+        candidates = self._lookahead.classify(tokens, i, context)
         end_idx = i + 1
         if candidates is None:
             return end_idx
@@ -347,7 +359,7 @@ class Discovery:
         容器式语句（production 含 @Stmt/@BeginEnd）定位 body 后递归；普通语句
         只注册区间不深入（表达式黑盒）。Returns: 下一个扫描位置（必定 > i）。
         """
-        candidates = self._lookahead.classify(tokens, i)
+        candidates = self._lookahead.classify(tokens, i, context)
         if candidates is None:
             return i + 1
         if not candidates:

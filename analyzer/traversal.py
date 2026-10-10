@@ -190,6 +190,16 @@ class AnalysisTraversal:
     def diagnostics(self) -> list[Diagnostic]:
         return self._context.diagnostics
 
+    @property
+    def context(self) -> AnalysisContext:
+        """最近一次 `analyze` 的上下文。
+
+        postpass 的产物写在 `context.extra`（见 `analyzer/semantic_checks.md`
+        「postpass 产物写在符号表/context 上」）——本属性是消费方读取产物的
+        **公开入口**（如 C 包的 `c_symbols`）。
+        """
+        return self._context
+
     # ── 递归遍历核心 ──
 
     def _walk(self, node: Any) -> None:

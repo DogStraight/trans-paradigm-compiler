@@ -38,6 +38,10 @@
      把 ConfigRegistry 切回当前语言）。
    测试侧清理走 `core/global_state.py` snapshot/restore（conftest 每测试还原测试级状态、
    每模块还原语言安装态，顺序无关）；进程级隔离对照见 `tools/check_test_isolation.py`。
+   ⚠ **两套 scope 的关系（作者 2026-10-10 定）**：parser 侧 `_ScopeStack`（parse 期）与
+   analyzer 侧 `Scope/Symbol`（post-parse）**本质是同一套识别系统在不同时期的表现**、能力
+   不同——**不合并**，但任何一侧的语义变更都按同一套规则理解；符号须带**分期标注**
+   （名称来自哪个时期可区分），C 语义基座现状见 `docs/gaps/gap-c-semantic-base.md`。
 4. **Inject 多规则同目标加深传播嵌套**（工程指引）：逐规则注入每次包一层；插件作者应把注入
    语句归组到容器规则（`plugins/syntax/sim/` 的 `SimCtrlStmt`）。
 5. **精化产物的文本面必须走生产渲染接线**（已修 + 历史影响不可追溯）：值表达式内带行注释时，

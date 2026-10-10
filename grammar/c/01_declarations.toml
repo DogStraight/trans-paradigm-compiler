@@ -43,6 +43,20 @@ specs = "$1"
 rest = "$2"
 declarators = "$3"
 
+# ── 符号收集（`docs/gaps/gap-c-semantic-base.md` 首片；原语与产物见
+#    `plugins/semantics/_symbols.py`）：声明符位的声明名（typedef 名 / 变量名 / 函数声明名）。
+# 语言知识全在参数里：`item_path`/`name_path` 是 AST 路径，`*_marker` 是"出现即该类声明"的
+# 节点名（`keyword.typedef` / `FuncSuffix`）——引擎侧不含 C 语法知识。
+[Declaration.analyzer.c_symbol_collect]
+site = "declarator"
+item_path = "declarators.items"
+name_path = "declarator.direct.head.content"
+typedef_marker = "keyword.typedef"
+function_marker = "FuncSuffix"
+kind = "variable"
+typedef_kind = "typedef"
+function_kind = "function"
+
 
 # ── 说明符三层规则（存储类 / 类型限定符 / 类型说明符） ──
 # ⚠ **形态约束（实测得出，勿随意改）**：本仓的语句发现/FIRST 集推导按
@@ -346,6 +360,12 @@ production = [
 [ParamDecl.parser.node]
 type_spec = "$1"
 declarator = "$2"
+
+# 形参名进所在作用域（函数作用域）——未署名形参 `declarator` 缺省，路径取空自动跳过。
+[ParamDecl.analyzer.c_symbol_collect]
+site = "declarator"
+name_path = "declarator.direct.head.content"
+kind = "variable"
 
 
 [ParamSpec.parser]

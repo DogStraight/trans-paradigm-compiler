@@ -5,6 +5,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **C 语义基座 P1：声明式符号收集产物（作用域 + 声明序 + 分期标注）**（循环 #2 实现项；方向为
+  作者 2026-10-10 拍板）。
+  - **产物**：`{name, kind, scope, scope_kind, decl_order, decl_line, phase}`，
+    `kind ∈ {typedef, tag, variable, function, enumerator}`；读取入口
+    `AnalysisTraversal.context` → `_api.product_from(at)`（analyze 期）/
+    `_api.two_phase_product(at, src, "grammar/c")`（两期合并，**每条自带 `phase`**）。
+  - **声明面分工（语言知识全在 TOML）**：核心包 `[Rule.analyzer.c_symbol_collect]`（收集点 /
+    AST 路径 / typedef·函数标记）+ `base/_pre_scan.toml`（`phase="pre_scan"`，**不声明
+    `rule_hints`** ⇒ 不重排 parser 候选）+ `plugins/semantics/`（原语注册 + 后置产物 + 纯查询
+    `_api.py`）。默认偏置**显式化**：未声明标识符 = `not typedef`（`DEFAULT_TYPEDEF_BIAS`）。
+  - **分期语义**：`pre_scan` 只作提示/对比（粗收集、无作用域/顺序），判定只看 `analyze` 期。
+  - **判据**：`tests/languages/c/test_c_symbol_collection.py` 9 例（正 / 负 / 声明顺序 /
+    出块失效 / 内层遮蔽 / 分期可区分 / kind 覆盖 / 产物写 context / 无新诊断）；
+    **6 条缺陷态变红**（3 / 4 / 1 / 1 / 1 / 1 failed，恢复后 9 passed）。
+  - **回归**：`tests/languages/c + tests/engine/analyzer` 1042 → **1051 passed**；smoke 462；
+    `tools/c_acceptance.py` 40/42；pyright strict 0（新增/改动 4 个 py）。
+  - **唯一引擎侧改动**：`analyzer/traversal.py` 公开 `context` 属性（+10 行，无行为变化——
+    `check()` 的结果面刻意不收窄）。
+  - **遗留（已入 `TODO.md`）**：引擎 `lexer/pre_scan.py` 的兜底正则会带入 `int: typedef` 这类
+    **非声明名**（包侧无法关闭；消费方按"pre_scan 只作提示"处理）。
+
+- **P2a：linter「候选是否收敛」判定 + 内部 warning 旁路**（循环 #2；作者"关键在 linter"的
+  落地第一步，**用户可见面零变化**）。
+  - **判定口径**（`linter/lookahead.py::_try_parse` + `_record_convergence`）：**上下文允许
+    候选**里 `errs == 0` 的 ≥2 且最大 `consumed` 并列 ⇒ `ambiguous_full_match`；允许集非空但
+    全败 ⇒ `no_full_match`；唯一最优或可区分 ⇒ 收敛。`_decide_best` 的既有择一行为**不改**。
+  - **上下文允许集**：`_collect_member_only`（语言无关推导：`is_statement` ∧ 有 caller ∧
+    caller 不是 inline 语句分派器）⇒ 排除"容器成员专用语句"（C 的 `StructMember`），
+    `myint v;` 不再被伪候选带偏；只作用于判定，**不**改 `classify` 返回值。
+  - **旁路载体**：`LookaheadTable`（按次重置）→ `Discovery` → `LinterScanner` → `_stage_lint` →
+    `_PipelineContext.internal_warnings`（条目含 `line`/`column`，供 P3 跨阶段定位）；
+    **不进**诊断、不进 `--json`、不影响 exit code（先例 `Discovery._unrecognized`）。
+  - **零变化三证**：lint accuracy 逐项相同（err 33 / detected 33 / hit 33 / fp 0 / valid 7）；
+    真实语料误报基线 5548 → **5548**（无增长）；`tpc lint --json`（144 文件 in-process +
+    15 文件真 CLI）stdout/rc **SHA256 逐字节相同**。
+  - **判据**：`tests/engine/linter/test_linter_lookahead.py::TestConvergenceJudgment`（7 例）+
+    新 `tests/engine/pipeline/test_lint_internal_warnings.py`（3 例）；缺陷态（去掉上下文过滤）
+    **7 failed / 23 passed**（恢复后 sha 一致）。回归 linter+pipeline 330 → **340 passed**。
+
 ### Fixed
 
 - **yaml 正零小数 `key: 0.5` 静默丢内容**（`grammar/yaml/base/_number.toml`；循环 #1 实现项）。
@@ -234,6 +275,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **C 语义基座方向落档（作者 2026-10-10 裁决 8 条）**：`docs/gaps/gap-c-semantic-base.md`
+  「待拍板」→「**已拍板**」。关键设计 = **不走 parser 谓词键/运行期钩子**（延后），改为
+  **linter 先过歧义路径**——路径不收敛时出**内部 warning** → parser 走 **raw 暂缓建树** →
+  **analyzer 插件**补理解路径；符号**提前注册 + 分期标注**；未声明标识符默认偏置**显式化**；
+  raw 作**内部机制**（先例 = 宏体 raw 源区间）；parser `_ScopeStack` 与 analyzer `Scope/Symbol`
+  **不合并**但机制文档写明**本质是一套识别系统的不同时期**；两遍只允许 pre-scan 重排候选。
+  - **机制现状实测落档**：linter "平手静默择一"与"候选全败 ⇒ blocking ⇒ 输出空串"、
+    `ident_candidates` 全局无上下文（伪候选）→ `docs/gaps/gap-parser-linter-approximation.md`；
+    内部 warning 载体、raw 承载（`_verbatim_text`，渲染零改动）、**符号回滚两个洞**
+    （快照不含符号 store；`restore(depth)` 不撤销同深度、pratt 不推 `rule_frame`）、**两侧
+    token 流不同源**（位点须用行/列）、`phase` 走 `attrs` 两步法 → `gap-c-semantic-base.md`。
+  - `ROADMAP.md`「C 语义层切片 1b」改为 **P1→P4 分片**（P1 已交付、P2a 已交付）。
 - **任务循环落档**（作者 2026-10-09 定的六步循环）：`policy/collaboration.md` 新增「任务循环」
   —— ① 取任务输入（作者输入 + 已知缺口，一次一个）；② **复述核心约束**（引擎不留语言知识、
   只留抽象通用模式；语言能力流入插件；AST 前声明式闭环；AST 后插件驱动开放；时点管线编排；

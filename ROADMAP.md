@@ -89,24 +89,30 @@
       要做的是把 ③/④ 补成与 ② 同级的**结构化、fail-fast** 声明面（统一 `[inject]` 的
       add/replace/remove 三动作）。**触发条件**：出现真正需要"改/删既有分支"的标准演进
 
-## C 语义层切片 1b / 语义基座（typedef 名起头的转换）——**待作者拍板**
+## C 语义层切片 1b / 语义基座（typedef 名起头的转换）——**已拍板，分片实施**
 
 > 切片 1a（**关键字起头**的类型名 `(int)x` / `(struct p *)q` / `(int){1}`）**已随 0.1.3 落地**。
 > 切片 1b 与**阶段 3**共用前置 = **语义基座**（符号表：typedef 名 / 标签 / 普通标识符 +
-> 作用域栈 + 声明顺序敏感性）。调研定稿（循环 #1）已落正式档
-> **`docs/gaps/gap-c-semantic-base.md`**（现状实测 / 成熟解法参照 / 落点三案 / 接口四选一 /
-> 最小首片与判据）——本节只留**未完成项**。
+> 作用域栈 + 声明顺序敏感性）。**作者 2026-10-10 拍板的方向**（裁决全表与现状实测见
+> **`docs/gaps/gap-c-semantic-base.md`**）：**不走 parser 谓词键/运行期钩子**（延后），
+> 改为 **linter 先过歧义路径**——路径不收敛时出**内部 warning** → parser 走 **raw 暂缓建树**
+> → **analyzer 插件**实现理解路径；符号**提前注册 + 分期标注**；默认偏置**显式化**；
+> raw 作**内部机制**（先例 = 宏体）；两套 scope **不合并**但文档写明本质一体。
 
-- [ ] **待作者拍板 7 条（框架级；逐条影响面见缺口档「待拍板」节）**：① `[Rule.parser]` 声明式
-      谓词键（新契约面）；② 运行期查询钩子；③ 符号注册时机（parse 期注册须扩回溯快照，否则
-      回溯泄漏符号）；④ 未声明标识符的默认偏置是否显式化；⑤ raw 路径是否升格（含"候选收敛"
-      信号）；⑥ parser `_ScopeStack` 与 analyzer `Scope/Symbol` 是否合并（**现状两套并存**）；
-      ⑦ 两遍是否允许影响形态（hint→判据）
-- [ ] **调研推荐（拍板后即开工）**：落点 = C 包插件做语言特有判定 + 复用 analyzer
-      `Scope/Symbol` 骨架（配置字段不做）；接口 = **回溯式 + 声明式谓词**（raw 路径作兜底、
-      不升格；两遍只取 pre-scan 重排候选）
-- [ ] **最小首片（不依赖拍板点，可先做）**：C 包**声明式符号收集产物**（纯后置 analyzer 插件、
-      不改 parser）——已入 `TODO.md`，判据在缺口档「可实现性」节
+- **P1 C 包声明式符号收集产物** ✅ **已交付**（循环 #2）：`{name, kind, scope, scope_kind,
+  decl_order, decl_line, phase}`；读取入口 `AnalysisTraversal.context` → `_api.two_phase_product`；
+  判据 `tests/languages/c/test_c_symbol_collection.py`（9 例 + 6 条缺陷态变红）
+- **P2a linter 候选收敛判定 + 内部 warning 旁路** ✅ **已交付**（循环 #2，用户可见面逐字节零变化）：
+  判据 `tests/engine/linter/test_linter_lookahead.py::TestConvergenceJudgment` +
+  `tests/engine/pipeline/test_lint_internal_warnings.py`；载体 `_PipelineContext.internal_warnings`
+- [ ] **P2b 把符号接进 linter 判定 + 窄档"未识别 ⇒ 内部 warning ⇒ 不再 blocking"**——前置 = P1
+  符号产物 + P2a 旁路；判据：`x = (myint)y;`（有 typedef 时）不再 blocking、真语法错仍 blocking、
+      lint accuracy / diag baseline 不退化
+- [ ] **P3 parser：歧义位点 raw 暂缓建树**（内部机制，不升格为公开判据）——前置 = P2b（否则
+      管线在 lint 阶段就被 blocking 截断）+ 补符号回滚两洞；位点按**行/列**重定位；判据：该位点
+      不再"整函数截断丢内容"，raw 保留原文且渲染保真
+- [ ] **P4 analyzer 插件：消费 raw + 符号，实现理解路径**——`(myint)x` 判定在此闭环；
+      判据见缺口档（`CastExpr` 正样本 + 同名非 typedef 负样本 + 作用域/顺序 + 全量回归）
 
 ## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）
 

@@ -1,0 +1,22 @@
+# semantics — C 符号收集产物（声明式；`phase = "analyze"`）
+#
+# 定位：`docs/gaps/gap-c-semantic-base.md` 的最小首片——**不改 parser**、不做 `(myint)x`
+# 判定，只产出"带作用域 / 声明序 / 分期标注"的只读符号记录表（形状与查询 API 见
+# `grammar/c/README.md`「符号收集产物」节与 `_symbols.py` 头注）。
+#
+# 声明面分工：
+#   · 本组件 = analyzer handler（`c_symbol_collect` 原语 + `c_symbols` 后置产物）；
+#   · 收集点与提取路径 = 核心包的 `[Rule.analyzer.c_symbol_collect]` 声明
+#     （`01_declarations.toml` / `02_types.toml` / `03_statements.toml`——**语言知识在 TOML**）；
+#   · `phase = "pre_scan"` 的另一半 = `base/_pre_scan.toml`（核心 `[lexer] pre_scan`）。
+#
+# ⚠ 不声明 `[grammar] files`（本组件无新规则）；不声明任何 rule_hints / 解析期行为。
+
+[analyzer]
+handlers = ["_symbols.py"]
+
+# 遍历结束后把符号表物化为只读产物（写 `AnalysisContext.extra["c_symbols"]`）。
+# 无 requires（只读符号表）；produces 与 `_symbols.PRODUCT_KEY` 同名。
+[[analyzer.postpasses]]
+run = "_symbols.py:run_symbol_product"
+produces = ["c_symbols"]

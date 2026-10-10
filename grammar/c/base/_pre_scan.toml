@@ -1,0 +1,59 @@
+# _pre_scan.toml — C 包预扫描配置（lexer 阶段之后、parser 之前的声明式名称收集）
+#
+# 定位（见 `docs/gaps/gap-c-semantic-base.md`）：符号基座**第一阶段**（`phase = "pre_scan"`）——
+# 只做"文本级、平坦、首见归属"的粗收集，为 parser 候选提示与分期对比提供输入；
+# 精确作用域/声明顺序由后置 analyzer 插件（`plugins/semantics/`，`phase = "analyze"`）给出。
+#
+# ⚠ 本文件的**已知不精确**（刻意接受，勿当 bug 修；引擎自述见 `lexer/pre_scan.py:1-5`）：
+#   · 无作用域（全文件平坦）、无声明顺序（同一名只保留首见）、不跨行；
+#   · `typedef` 用"分号前最后一个词"捕获 ⇒ `typedef struct { int x; } point_t;` 会先命中
+#     体内的 `x;`（多行 typedef 则不命中）；
+#   · 捕获名只按词法形态，不判是否真为声明（`clean` 只剥注释/字符串）。
+#   ⇒ 消费方须按 `phase` 区分：`pre_scan` 记录**只作提示/对比**，判定用 `analyze` 记录。
+#
+# ⚠ **不声明 `rule_hints`**（与 verilog 的 `_pre_scan.toml` 的差别）：`pre_symbols` + `pre_hints`
+#   会重排 parser 语句候选（`parser/rule_selector.py::select_candidates`）——本片纪律是
+#   "产物只增不改既有 AST/lint 行为"，故只收集、不提示。要开提示须单独评估（拍板点见缺口档）。
+
+# ── 源文本清理形态（扫描前的注释/字符串剥离；形态是语言知识，在此声明） ──
+[[pre_scan.clean]]
+kind = "line"
+start = "//"
+
+[[pre_scan.clean]]
+kind = "block"
+start = "/*"
+end = "*/"
+
+[[pre_scan.clean]]
+kind = "string"
+start = '"'
+
+[[pre_scan.clean]]
+kind = "string"
+start = "'"
+
+[pre_scan]
+# C 的关键字后紧跟的声明名不受 verilog 那类"语境关键词"干扰（typedef 取分号前末词、
+# 标签取关键字后首词），故显式声明为空表，避免继承其它语言包的语义。
+context_keywords = []
+
+# ── 声明类别（kind 即 `pre_symbols` 的取值，也是产物里 `phase="pre_scan"` 记录的 kind） ──
+
+# typedef 名：`typedef … name;`（已知不精确见文件头注）
+[pre_scan.decl.typedef]
+keyword = "typedef"
+name_capture = "last_word_before_semicolon"
+
+# 标签（tag）命名空间：struct / union / enum 关键字后的首词
+[pre_scan.decl.tag_struct]
+keyword = "struct"
+name_capture = "next_word"
+
+[pre_scan.decl.tag_union]
+keyword = "union"
+name_capture = "next_word"
+
+[pre_scan.decl.tag_enum]
+keyword = "enum"
+name_capture = "next_word"

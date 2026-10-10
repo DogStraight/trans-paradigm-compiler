@@ -113,6 +113,10 @@ class _PipelineContext:
     # `` `NAME ``），不做替身替换——空体宏由占位阶段改 trivia，非空体宏由
     # 解析器通配当元素。锚机制由此退到只剩渲染/诊断的旧路径用途。
     parse_raw: bool = False
+    # 内部 warning 旁路（用户不可见）：`_stage_lint` 的语法扫描判出的
+    # "候选未收敛"位点（行/列 + 候选集 + 理由），供后续"歧义位点 raw 暂缓
+    # 建树"按位点消费。不进诊断 / `--json` / exit code / 落盘。
+    internal_warnings: list[dict] = field(default_factory=list)
     # 展开行→源行映射（诊断回源）：由 `_stage_expand` 的语义展开填充。
     line_map: list[int] = field(default_factory=list)
     # clean 行→原始源行映射（由 `_stage_macro_scan` 的 scan_directives 填充；
@@ -563,6 +567,9 @@ def _stage_lint(ctx: _PipelineContext) -> bool:
     if ctx.no_lint:
         return True
     lint_errors = ctx.linter.scan(ctx.lint_source or ctx.source)
+    # 内部 warning 旁路（用户不可见）：取走本次 scan 的"候选未收敛"位点，
+    # 供后续阶段（歧义位点 raw 暂缓建树）消费；不进诊断/`--json`/exit code。
+    ctx.internal_warnings = ctx.linter.internal_warnings()
     if not lint_errors:
         return True
     blocking = [e for e in lint_errors if e.blocking]

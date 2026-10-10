@@ -12,6 +12,8 @@ uses = [
     "lexer.token_ext.v1",
     "parser.pratt.v1",
     "renderer.doc_ir.v1",
+    # 语义基座 P1（`plugins/semantics/`）：analyzer handler + 语义原语注册 + 后置产物
+    "analyzer.primitives.v1",
 ]
 
 [renderer]
@@ -24,6 +26,9 @@ lexer_base = { file = "base/_lexer.toml", required = true }
 token_lang = { file = "token.toml", required = true }
 bracket_map = { file = "base/_token.toml", section = "bracket", required = false }
 number = { file = "base/_number.toml", section = "number", required = false }
+# 声明式名称预扫描（`phase = "pre_scan"` 的符号来源；只收集、不声明 rule_hints——
+# 见 base/_pre_scan.toml 头注与 docs/gaps/gap-c-semantic-base.md）
+pre_scan = { file = "base/_pre_scan.toml", section = "pre_scan", required = false }
 
 [parser]
 # 运算符表（优先级 / 结合性 / 一元位置，C99 §6.5）——Layer B 起生效

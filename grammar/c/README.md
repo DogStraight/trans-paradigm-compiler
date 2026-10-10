@@ -206,6 +206,52 @@ grammar/c/
 补布局前先跑 `python tools/render_coverage.py grammar/c`：**引擎对无渲染配置的规则
 静默输出空串**，缺布局是无声的保真度损失（本包最初 70 条规则只有 1 条有配置）。
 
+## 符号收集产物（`phase` 分期）
+
+符号基座首片（`docs/gaps/gap-c-semantic-base.md`）：**只收集、不改 parser**、不做
+`(myint)x` 形态判定。每条记录（JSON 可序列化）：
+
+| 字段 | 含义 |
+|---|---|
+| `name` | 符号名 |
+| `kind` | `typedef` / `tag`（struct·union·enum 标签）/ `variable` / `function` / `enumerator` |
+| `scope` / `scope_kind` | 作用域路径与种类（`<global>` / `<global>/FuncDef` / `<global>/FuncDef/CompoundStmt`） |
+| `decl_order` | 收集序（≈ 源序，供"先声明后使用"判定）；`pre_scan` 期无（`None`） |
+| `decl_line` | 声明所在源行（parser 挂的 `_pos_line`） |
+| `phase` | 名称来自哪个时期：`analyze`（后置分析器，精确）｜`pre_scan`（词法预扫描，粗） |
+
+**分期语义（作者硬要求）**：`pre_scan` 期是**文本级、平坦、首见归属**的粗收集
+（`base/_pre_scan.toml`；无作用域/无声明序，引擎兜底正则还会带入类型词等杂质——头注有
+逐条实测）——**只作提示与分期对比**；`analyze` 期由后置 analyzer 插件给出精确作用域 +
+声明序。同一位点两期都有记录时**两条都保留**（`phases_for` 可判），形态判定只看
+`analyze`（`is_typedef` 内已过滤）。
+
+**默认偏置（显式化）**：未声明标识符 = `_api.DEFAULT_TYPEDEF_BIAS`（`"not typedef"`）——
+`is_typedef()` 的缺省即此值，调用点勿再各自硬编码。
+
+**落点与读取入口**（声明式：收集点/路径全在 TOML，插件只做通用原语）：
+
+| 位置 | 作用 |
+|---|---|
+| `01_declarations.toml` / `02_types.toml` / `03_statements.toml` 的 `[Rule.analyzer.c_symbol_collect]` | 收集点 + AST 路径 + `typedef`/函数标记（语言知识全在参数里） |
+| `base/_pre_scan.toml` + `tpc.toml` 的 `[lexer] pre_scan` | `phase="pre_scan"` 的来源（**只收集、不声明 `rule_hints`** ⇒ 不重排 parser 候选） |
+| `plugins/semantics/_{symbols,_api}.py` | 原语/产物装配 + 只读查询 API（`phase`/`is_typedef`/`records_for`） |
+
+```python
+# 复跑（仓库根；`rules`/`parser`/`lexer` 按 tests/languages/c/conftest.py 的 `c` fixture 构造）
+from analyzer.traversal import AnalysisTraversal
+from grammar.c.plugins.semantics import _api
+
+at = AnalysisTraversal(rules, rules_dir="grammar/c")
+at.analyze(parser.parse(lexer.tokenize(src)))
+_api.product_from(at)                      # 仅 analyze 期产物（读 context.extra["c_symbols"]）
+_api.two_phase_product(at, src, "grammar/c")  # 两期合并（逐条带 phase）
+```
+
+⚠ `ProjectChecker.check()` 的公开结果不含 `extra`（刻意的结果面收窄）——需要产物时直接
+用 `AnalysisTraversal`（上例）。判据：`tests/languages/c/test_c_symbol_collection.py`
+（正/负/声明顺序/作用域遮蔽/分期/只增不改六条，另附缺陷态变红证明见 `CHANGELOG`）。
+
 ## 写包者须知（本包实测教训，写新包必看）
 
 1. **叶子规则要语言包自己定义**：`Identifier` 这类规则**引擎不内置**，漏定义时

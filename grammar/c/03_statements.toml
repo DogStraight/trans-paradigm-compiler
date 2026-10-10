@@ -32,6 +32,11 @@ production = [
 [CompoundStmt.parser.node]
 body = "$2"
 
+# 块作用域（`analyzer/scope.py::Scope` 骨架）：C 的块内声明只在本块可见。
+# 不声明 `name_attr` ⇒ 只进作用域、不自动声明符号（收集由 c_symbol_collect 负责）。
+[CompoundStmt.analyzer]
+scope = { kind = "block" }
+
 
 # ── Stmt — 语句选择器（Layer A 候选集 + Layer C 控制流） ──
 # ⚠ **必须含 `@Declaration`**：C 里"块内声明"也是语句（`{ int n; … }`）。漏掉它的症状
@@ -115,6 +120,15 @@ specs = "$1"
 rest = "$2"
 declarator = "$3"
 body = "$4"
+
+# 函数名进函数作用域（形参同名收集点在 `01_declarations.toml` 的 `[ParamDecl...]`）。
+[FuncDef.analyzer]
+scope = { kind = "function" }
+
+[FuncDef.analyzer.c_symbol_collect]
+site = "declarator"
+name_path = "declarator.direct.head.content"
+kind = "function"
 
 
 # ── 控制流（Layer C）──

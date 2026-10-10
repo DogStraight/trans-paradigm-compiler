@@ -213,6 +213,29 @@ flowchart TD
   match 前需前置），`limit` 含终止符（多取一个 token 消费分号，否则 TaskDeclOld 的
   `;` 超出区间而失败）。
 
+### 候选收敛判定与「内部 warning」旁路
+
+Level 2 试解析除了择一（行为不变），还判一次**候选是否收敛**：
+
+- **判据**：只统计**上下文允许的候选**（`LookaheadTable._allowed_in_context`）——
+  `errs == 0` 的 ≥2 且最大 `consumed` 并列 ⇒ 未收敛（`ambiguous_full_match`）；
+  允许集非空但全部 `errs > 0` ⇒ 未收敛（`no_full_match`）。唯一最优/可区分 ⇒ 收敛。
+- **上下文允许集**（`_collect_member_only`，语言无关推导）：**容器成员专用语句**
+  不算语句位候选——即 `is_statement` 且被某规则 `@call`、但**没有** caller 是
+  inline 语句分派器（如 C 的 `StructMember` 只被 `StructBody` 的 `@StructMember*`
+  调用）。没有这层过滤时，顶层 `typedef int myint; myint v;` 会被 `StructMember`
+  这个伪候选带成"未收敛"（实测 `Declaration`/`StructMember` 同 `errs=0`）。
+- **载体 = 旁路，不升格为诊断**：未收敛位点写入 `LookaheadTable` 的内部列表
+  （按次重置，先例 = `Discovery._unrecognized` 的重置/取用模式）→
+  `Discovery.internal_warnings()` → `LinterScanner.internal_warnings()` →
+  `pipeline._stage_lint` 存入 `_PipelineContext.internal_warnings`，供后续
+  "歧义位点 raw 暂缓建树"按**行/列**消费。
+  **不进** `LintDiagnostic`、不进 `lsp_diagnostic`/`tpc lint --json`、不影响 exit code、
+  不落盘——用户可见面与机制引入前逐字节相同（e2e 快照对照）。
+- **条目形态**（P3 可直接消费）：`{kind, reason, context, pos, line, column, token,
+  tied, allowed, all}`——`pos` 是**本次 linter token 流**下标（linter 吃展开态、
+  parser 吃锚形态，两个 token 流不同源）⇒ 跨阶段定位用 `line`/`column`。
+
 ---
 
 ## 4. 配置驱动（语法规则字段 + TOML 规则）

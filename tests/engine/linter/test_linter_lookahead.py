@@ -171,6 +171,92 @@ class TestNonStatement:
         raise AssertionError("no '+' token found")
 
 
+@pytest.fixture
+def c_scanner(config_loaded):
+    """C 包 LinterScanner（P2a 收敛判定的语言相关判据用；用完切回 verilog）。
+
+    ⚠ 语言作用域是全局态（同 `tests/languages/c/conftest.py` 纪律）：切走必须切回。
+    """
+    del config_loaded  # fixture 依赖声明（配置加载）
+    from core.config_registry import ConfigRegistry
+    from linter.scanner import LinterScanner
+
+    ConfigRegistry.load_language("grammar/c", plugins_dir="grammar/c/plugins")
+    try:
+        yield LinterScanner("grammar/c", ext_dirs=["grammar/c/plugins"])
+    finally:
+        ConfigRegistry.load_language(
+            DEFAULT_RULES_DIR, plugins_dir="grammar/verilog/plugins"
+        )
+
+
+class TestConvergenceJudgment:
+    """候选「是否收敛」判定 + 内部 warning 旁路（P2a）。
+
+    判据（见 `lookahead._try_parse` / `_record_convergence` docstring）：
+    **上下文允许候选**里 `errs==0` 的 ≥2 且最大 `consumed` 并列 ⇒
+    `ambiguous_full_match`；允许集非空但全败 ⇒ `no_full_match`。
+    只写**内部 warning**（`scanner.internal_warnings()`）——不进诊断 /
+    `--json` / exit code（用户可见面零变化，e2e 逐字节对照另证）。
+    """
+
+    def test_ambiguous_full_match_recorded(self, c_scanner):
+        """验收①：`int myint;\\nmyint *b;` 该位点 1 条未收敛记录 + 取值形态。"""
+        c_scanner.scan("int myint;\nmyint *b;\n")
+        warns = c_scanner.internal_warnings()
+        assert len(warns) == 1
+        w = warns[0]
+        assert w["kind"] == "candidate-not-converged"
+        assert w["reason"] == "ambiguous_full_match"
+        assert (w["line"], w["column"], w["token"]) == (2, 0, "myint")
+        assert set(w["tied"]) == {"Declaration", "ExprStmt"}
+        # 未过滤全集含容器成员专用的 StructMember；逐条判定集不含它（对照）
+        assert "StructMember" in {c["name"] for c in w["all"]}
+        assert "StructMember" not in {c["name"] for c in w["allowed"]}
+
+    def test_member_only_candidate_filtered(self, c_scanner):
+        """验收②（上下文过滤正面判据）：typedef 后正常使用 ⇒ 0 条内部 warning。"""
+        c_scanner.scan("typedef int myint;\nmyint v;\n")
+        assert c_scanner.internal_warnings() == []
+
+    def test_member_only_set_derivation(self, c_scanner):
+        """过滤依据（语言无关推导）：StructMember 是容器成员专用；Declaration 由
+        语句分派器 `Stmt` `@call` ⇒ 不入集。"""
+        member_only = c_scanner._discovery._lookahead._member_only
+        assert "StructMember" in member_only
+        assert "Declaration" not in member_only
+        assert "ExprStmt" not in member_only
+
+    def test_no_full_match_recorded(self, c_scanner):
+        """候选全败档：仍记内部 warning；用户诊断/blocking 语义不变（降级属 P2b）。"""
+        diags = c_scanner.scan("int x;\nint y;\nx = (myint)y;\n")
+        assert [w["reason"] for w in c_scanner.internal_warnings()] == [
+            "no_full_match"
+        ]
+        assert sorted(d.code for d in diags) == [
+            "phase-statement",
+            "phase-unrecognized",
+        ]
+        assert all(d.blocking for d in diags)
+
+    def test_warnings_reset_per_scan(self, c_scanner):
+        """旁路按次重置（同 `Discovery._unrecognized` 纪律）：第二次干净输入归零。"""
+        c_scanner.scan("int myint;\nmyint *b;\n")
+        assert len(c_scanner.internal_warnings()) == 1
+        c_scanner.scan("typedef int myint;\nmyint v;\n")
+        assert c_scanner.internal_warnings() == []
+
+    def test_no_warning_when_unique_best(self, c_scanner):
+        """唯一最优 ⇒ 收敛（`int *p;` 过滤掉块内 `StructMember` 后仅 Declaration）。"""
+        c_scanner.scan("int *p;\n")
+        assert c_scanner.internal_warnings() == []
+
+    def test_verilog_side_no_noise(self, scanner):
+        """verilog 对照：机制不产生噪声、用户诊断照旧为空。"""
+        assert scanner.scan("module m; always @(*) begin a = 1; end endmodule\n") == []
+        assert scanner.internal_warnings() == []
+
+
 class TestTryParseProbe:
     """Level 2 试解析（_try_parse）的 probe 模式：截断 limit 不因 EOF 误判失败。
 

@@ -16,6 +16,17 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
 少数兜底（语句结束 = 派生 `_stmt_ends` ∪ 行尾 newline 惯例；容器结束 = 匹配失败回退派生
 `_stmt_ends`）是显式标注的"语言约定近似"，不能完全从语法推导——已在源码标注。
 
+**候选歧义面（2026-10-10 实测，C 语义基座调研带出）**：linter 的候选分类在 L2 试解析后只保留
+`best=(errs, consumed, name)`，**全匹配候选集被丢弃** ⇒ 两类现状：
+① **平手静默择一**：`int myint;\nmyint *b;` 该位点 `Declaration`/`StructMember`/`ExprStmt`
+三者 `errs=0/consumed=4`，按注册序取一、**0 条诊断**；
+② **候选全败 ⇒ 阻断**：`x = (myint)y;` 五候选全 `errs≥1` ⇒ 2 条 blocking 诊断 ⇒ 管线
+`success=False`、**输出空串**（真正丢内容的是这一档）。
+另：`ident_candidates` 是**全局单一集合**、上下文只用于 discovery 扫描 ⇒ 顶层 `StructMember`
+这类伪候选也会算进"全匹配"（判定收敛必须先按上下文过滤）。
+⇒ 相应能力面（判"候选是否收敛"、内部 warning、raw 暂缓建树、analyzer 理解路径）见
+`docs/gaps/gap-c-semantic-base.md`；本节只记这条**近似边界**本身。
+
 ## 为什么接受（影响面）
 
 - 语法错误由 linter 单点拦截 + truncation 双保险阻断，"无恢复"不会静默产出坏输出；

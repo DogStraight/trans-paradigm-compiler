@@ -1,6 +1,8 @@
 # Gap — C 语义基座（符号表 / 作用域 / 声明顺序）（ROADMAP「C 语义层切片 1b」）
 
-- 状态：未立项（设计输入已备：框架级拍板点 1-7 见末节 `## 待拍板`，8 为细节级）
+- 状态：**已拍板（作者 2026-10-10）**——方向 = linter 判"候选是否收敛"（不收敛出**内部
+  warning**）→ parser 歧义位点走 **raw 暂缓建树** → **analyzer 插件**补理解路径；
+  **P1→P4 分片实施**（P1 = C 包符号收集产物，含**分期标注**）。裁决全表见末节 `## 已拍板`
 - 关联：`ROADMAP.md`「C 语义层切片 1b」（与 C 包阶段 3「结构类型与作用域语义」共用前置）；
   `docs/gaps/gap-semantic-elaboration-boundaries.md`（两套 scope 并存）；`grammar/c/**`
 - 参照：`docs/references.md`「C 语言文法参照」；GCC `gcc/c/c-parser.h`；
@@ -103,6 +105,26 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
   💡 **启发**：允许"不判"也能出可用 CST（对应本仓 raw 路径）；📌 **不实现**：GLR/冲突体系
   （等于换解析器，成本与收益不成比例）。
 
+## 机制现状（循环 #2 调研实测；P2–P4 的前置事实）
+
+- **内部 warning 载体**：今天**没有**非用户通道（`LintDiagnostic` 的 severity/blocking 都进用户
+  输出与 `--json`；`_trace_out` 只是 stderr 文本）⇒ 需一条**旁路**（`lookahead` 记录 →
+  `scanner.scan()` 按次取走 → pipeline 上下文新字段；先例 `Discovery._unrecognized`）。
+  **作者裁决：内部机制，不进诊断 / `--json` / exit code**。
+- **raw 暂缓建树的承载**：渲染侧对任何带 `_verbatim_text` 的节点整段直出（`node_renderer.py`），
+  先例 = 宏 splice ⇒ **渲染零改动**；AST 侧照 `MacroCall` 形态（内容 + 源文本 + token 区间），
+  但必须**消费整个区间**（否则走 truncation 会被判失败、停管线）。
+- **符号回滚两个洞**（"提前注册"的前置）：`ParseContext.create_snapshot` 的六元组**不含符号
+  store**；且 `restore(depth)` **不撤销同深度** register、pratt 分支**不推 rule_frame**
+  ⇒ 提前注册会泄漏符号（P3 前必须补）。
+- **两侧 token 流不同源**：linter 吃展开态、parser 吃词法 tokens ⇒ 位点传递不能用 token 索引，
+  须用**行/列**（作者裁决）并由 parser 侧重定位。
+- **`phase` 落法（作者裁决）**：先走 `Symbol` 的 `attrs`（零引擎改动、`to_dict` 自然带出），
+  将来需要升一等字段时单独立项。
+- **收敛判定口径（P2a）**：上下文过滤后 `errs == 0` 的候选 ≥2 且 `(errs, consumed)` 无法区分
+  ⇒ **未收敛**；唯一最优或可区分 ⇒ 收敛（伪候选问题见
+  `docs/gaps/gap-parser-linter-approximation.md`）。
+
 ## 可实现性
 
 **落点三案**（判据 = `core/component_protocol.md` §1c：普适性 / 配置 vs 代码 / 增量）：
@@ -113,26 +135,41 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 | (b) 引擎原语（把符号能力前移到 parse 期） | 引擎已有两套 scope 模型（parser `_ScopeStack` 空转 / analyzer `Scope` post-parse）⇒ 不是从零造；verilog 已用同族声明（`typed_ports`/elaboration）⇒ 非单语言。但"parse 期可查"是**新契约面** | **待拍板**（拍板点 1/2/3/6） |
 | (c) 引擎配置字段 | "是不是 typedef 名"需作用域+顺序（状态/算法），不可表单穷举 ⇒ 命中 §1c 反例；且会把复杂度搬进契约面 | **不做** |
 
-**接口四选一**（形态 → 结论）：
-- **① 回溯式**（`ROADMAP.md` 原首选）：`(` 后试解析类型名并**问符号谓词**，否即回滚按 `ParenthesizedExpr`。
-  倚仗既有机制：atom 路径已是"多候选 + 快照 + 取最长消费"，`CastExpr` 天然消费更多
-  ⇒ 只缺"谓词闸门"这一个声明式键。**方向推荐**（拍板点 1）。
-- **② 查询钩子**：引擎在决策点调用 pack 提供的 `is_type_name`。与①**不互斥**（①=何时问、
-  ②=怎么问）；倾向先用**数据**（声明式谓词）而非 callable（拍板点 2）。
-- **③ 两遍**：真两遍（parse→建表→重解析）破 C 的"先声明后使用"语义且成本翻倍 ⇒ 不做；
-  只取**既有 `[lexer] pre_scan` 的候选重排**（可改善 `myint *b;` 形态，纯包内配置），
-  但预扫描自述"不是精确的"（`lexer/pre_scan.py:1-5`）⇒ 必须连带登记不精确偏差（拍板点 7/8）。
-- **④ raw 路径**（作者 2026-09-26 指示）：不选边、保留原样节点交后端定，渲染走引擎既有
-  `_verbatim_text`（`renderer/node_renderer.py:309`）。**作兜底但不升格**——它能立刻把
-  "整函数截断丢内容"变成"完整保留"，且不碰契约面（拍板点 5）。
+**已拍板方向（作者 2026-10-10）——三层接力，不走 parser 谓词键 / 运行期钩子**：
 
-**最小首片**：C 包的**声明式符号收集产物**（纯后置 analyzer 插件，不改 parser）——
-用既有 `[*.analyzer.scope/symbol]` 机制收集 typedef 名 / 标签 / 普通标识符 / 枚举常量，
-产出带作用域与声明序的只读查询。判据：正 `typedef int myint; myint v;` ⇒ `myint`=typedef、
-`v`=variable；负 `int myint; myint *b;` ⇒ `myint`=variable（**不得** typedef）；
-声明顺序 `myint v; typedef int myint;` ⇒ 使用点为 None；作用域：块内 `typedef int t;` 出块失效；
-回归 `pytest tests/ -q` 零失败 + `python tools/c_acceptance.py` 仍 40/42 + `pytest -m smoke` 绿。
-**`(myint)x` 不在首片**（依赖拍板点 1/2/5）。
+> ① 声明式谓词键、② 运行期查询钩子：**延后**（现在不做）。**关键在 linter**——linter 先过
+> 歧义路径；**路径无法收敛时 linter 给出内部 warning**；之后 **parser 经过此处走 raw 路径、
+> 暂缓建树**；之后由**分析器插件**实现理解路径。作者原话要点："raw 路径是把问题**上移一层**
+> 解决的好方法——宏体我们就是这么解决的"，故 raw 作为**内部机制**存在（不升格为公开判据）。
+> ③ 两遍：只允许 **pre-scan 重排候选**、不允许影响形态（保持 fail-open）。④ 未声明标识符
+> 默认偏置**显式化**。⑤ 符号**提前注册**且**分期标注**（名称来自哪个时期必须可区分）。
+> ⑥ parser `_ScopeStack` 与 analyzer `Scope/Symbol` **不合并**——但两者**本质是一套识别系统
+> 在不同时期的表现**（能力不同），机制文档须写明这层关系。⑦ 两遍影响形态：非核心问题，
+> 按上述 fail-open 处理。⑧ C 包 `pre_scan` 落地：落（含"预扫描不精确"偏差登记）。
+
+**原四选一评估**（保留作背景，结论已被上面的拍板取代）：
+- **① 回溯式 + 声明式谓词闸门**：曾为首选（`(` 后试解析类型名 → 问符号谓词），现**延后**——
+  谓词键是 parser 契约面，作者要求先由 linter 承担"收敛与否"的判定。
+- **② 查询钩子**（pack 提供 `is_type_name` callable）：**延后**（与①同缺口，且倾向先用数据）。
+- **③ 两遍**：真两遍破"先声明后使用"语义 ⇒ 不做；只保留既有 `[lexer] pre_scan` 的候选重排
+  （自述"不是精确的"，`lexer/pre_scan.py:1-5` ⇒ 必须连带登记不精确偏差）。
+- **④ raw 路径**：**采纳为内部机制**——不选边、保留原样节点交后端定，渲染走引擎既有
+  raw 直出（先例 `_verbatim_text`）。它能立刻把"整函数截断丢内容"变成"完整保留"，且不碰
+  契约面。
+
+**分片实施顺序**（每片独立可验证；细节计划见 `ROADMAP.md`「C 语义层切片 1b」）：
+**P1** C 包声明式符号收集产物（作用域 + 声明序 + **分期标注**，纯包侧）→
+**P2** linter 歧义路径收敛判定 + **内部 warning**（引擎侧通道，机制调研中）→
+**P3** parser 歧义位点 raw、暂缓建树（内部机制）→
+**P4** analyzer 插件消费 raw + 符号，实现理解路径（`(myint)x` 判定在此闭环）。
+
+**最小首片（P1）**：C 包的**声明式符号收集产物**——每条符号
+`{name, kind（typedef/标签/变量/枚举常量）, scope, decl_order, phase（pre_scan/analyze）}`，
+未声明标识符默认 `not typedef`（显式化）。判据：正 `typedef int myint; myint v;` ⇒
+`myint`=typedef、`v`=variable；负 `int myint; myint *b;` ⇒ `myint`=variable（**不得** typedef）；
+声明顺序 `myint v; typedef int myint;` ⇒ 使用点处不在作用域；作用域：块内 typedef 出块失效、
+内层遮蔽外层各一例；**分期**：同名在两期的记录可区分；回归 `pytest tests/` 零失败 +
+`tools/c_acceptance.py` 仍 40/42 + smoke 绿。
 
 ## 关联条目
 
@@ -144,27 +181,19 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
   （`scope_lookup_fn`/`pre_hints`）、`parser/block_parser.py`、`lexer/pre_scan.py`、
   `analyzer/scope.py`、`core/define.py`（`peek`）
 
-## 待拍板
+## 已拍板（作者 2026-10-10）
 
-**框架级（1-7，命中 `policy/collaboration.md`「升级回作者的判据」①：新增/改动引擎↔插件契约面）**：
+| # | 问题 | 作者裁决 |
+|---|---|---|
+| 1 | `[Rule.parser]` 声明式谓词键（新契约面） | **延后**——先由 linter 承担"候选是否收敛"的判定 |
+| 2 | 运行期查询钩子（callable 注入） | **延后**（按 Lead 表述：能不用 callable 就不用） |
+| 3 | 符号注册时机 | **提前注册**；但注册须**分期标注**——"什么名称来自什么时期"要能区别 |
+| 4 | 未声明标识符默认偏置 | **显式化**（默认 `not typedef`，可声明覆盖） |
+| 5 | raw 路径是否升格 | **作为内部机制存在**，不升格为公开一等判据；先例 = 宏体（raw 源区间），"把问题上移一层" |
+| 6 | 两套 scope 是否合并 | **不合并**；但机制文档须写明两者**本质是一套识别系统的不同时期**、能力不同 |
+| 7 | 两遍是否允许影响形态 | 非核心问题——**只允许 pre-scan 重排候选、不允许影响形态**（fail-open） |
+| 8 | C 包 `pre_scan` 是否落地 | **落**（细节级自决；须登记"预扫描不精确"偏差） |
 
-1. **是否给 `[Rule.parser]` 引入声明式谓词键**（如 `requires = "<谓词名>"`，候选需先过符号判定）
-   ——影响面：`core/define.py` 阶段字段校验 + capability 面；不做的后果 = 无法在纯语法层表达
-   "这是类型名"，只能继续宽进。
-2. **是否允许 pack 向 parser 提供运行期查询钩子**（`is_type_name` 类 callable）——影响面：契约面 +
-   加载顺序/跨语言隔离/fail-fast；倾向先只用案①的数据式闸门。
-3. **符号注册时机**：parse 期注册（须同时扩 `ParseContext.create_snapshot`，现有快照不含符号
-   store ⇒ 失败候选会**泄漏符号**）vs 复用 analyzer `symbol_declare`（post-parse）。
-4. **未声明标识符的默认偏置是否显式化**（GCC `c_lookahead_kind` 式，逐位点 `prefer_type`/`prefer_id`）
-   ——影响面：新配置面；倾向先看真实语料误判面再定。
-5. **raw 路径是否升格为一等能力**（含"候选是否收敛"信号成为 parser 一等判据）——影响面：
-   parser 返回值契约 + 新节点类别语义；倾向先做"不截断"的最小兜底，不升格。
-6. **parser 侧 `_ScopeStack` 与 analyzer 侧 `Scope/Symbol` 是否合并/共享**——影响面：引擎内部架构 +
-   verilog/elaboration；不定的后果 = 同一份规则声明两处解释、长期漂移。
-7. **两遍（`pre_scan`）是否允许影响解析形态**（现在只重排候选）——影响面：把 hint 升级为判据 ⇒
-   预扫描的**不精确性**进入语义判定；倾向"允许重排、不允许过滤"（保持 fail-open）。
-
-**细节级（8，维护者可自决 + 登记偏差）**：
-
-8. **C 包 `[lexer] pre_scan` 声明是否落地**（typedef/标签两类 + `rule_hints`）：纯包内配置；
-   落地须同步登记"预扫描不精确"（块内遮蔽、使用先于声明）为已知偏差。
+**关键设计句（作者原话要点）**：关键在 **linter** —— linter 先过歧义路径；路径**无法收敛**
+时 linter 给出**内部 warning**；之后 parser 经过此处**走 raw 路径、暂缓建树**；之后由
+**分析器插件**实现**理解路径**。

@@ -457,6 +457,24 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "",
         "test": "tests/engine/analyzer/test_shared_components_wiring.py",
     },
+    {
+        "why": "linter 的「候选是否收敛」判定必须**先按上下文过滤候选**（排除容器成员专用语句，"
+               "如 C 的 `StructMember`）：去掉过滤 ⇒ `typedef int myint; myint v;` 这类无歧义位点"
+               "被伪候选判成 `ambiguous_full_match` ⇒ 内部 warning 假报（P2a 判据必红）",
+        "file": "linter/lookahead.py",
+        "old": "        return name not in self._member_only\n",
+        "new": "        return True  # 变异：去掉上下文候选过滤\n",
+        "test": "tests/engine/linter/test_linter_lookahead.py",
+    },
+    {
+        "why": "C 符号收集（P1）的标签命名空间来自规则声明的 `name_attr`：把 `StructSpecifier` 的"
+               "属性名写坏 ⇒ `struct` 标签记录消失（kind=tag 档必红）；证明这条路确实由声明面"
+               "驱动，而不是引擎侧猜规则名",
+        "file": "grammar/c/02_types.toml",
+        "old": "[StructSpecifier.analyzer.c_symbol_collect]\nsite = \"named\"\nname_attr = \"tag\"\n",
+        "new": "[StructSpecifier.analyzer.c_symbol_collect]\nsite = \"named\"\nname_attr = \"tag_typo\"\n",
+        "test": "tests/languages/c/test_c_symbol_collection.py",
+    },
 ]
 
 

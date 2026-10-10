@@ -37,12 +37,17 @@
 - [ ] **逐声明符位宽**（`int a : 3, b : 4;` 解析失败）：标准里位宽属声明符，本包宽度绑在
       整个成员声明后（一个 `DeclaratorList` 共用一个宽度）；要支持需形态改动。
       当前单声明符位域与匿名占位可用。链：`grammar/c/02_types.toml::StructMember` 注释
-- [ ] **C 语义基座·最小首片 = 声明式符号收集产物**（循环 #1 调研定稿，缺口档
-      `docs/gaps/gap-c-semantic-base.md`）：C 包纯后置 analyzer 插件收集 typedef 名 / 标签 /
-      普通标识符 + 作用域栈 + 声明顺序——**不改 parser、不依赖那 7 条框架级拍板点**。
-      判据：正样本 `myint` → typedef、负样本 `int myint` → variable、声明顺序敏感、
-      块内遮蔽与出块失效各一例；`pytest tests/` 全绿 + `tools/c_acceptance.py` 40/42。
-      后续片（`(myint)x` 判定）等拍板后开工（`ROADMAP.md`「C 语义层切片 1b」）
+- [ ] **C 语义基座 P2b = 符号接进 linter 判定 + 窄档"未识别 ⇒ 内部 warning ⇒ 不再 blocking"**
+      （P1 符号产物与 P2a 旁路均已交付）：把 typedef 谓词喂进收敛判定/候选排序，并**只**对
+      "符号歧义导致候选全败"这一窄档把 blocking 摘成内部 warning（真语法错仍 blocking）。
+      判据：`x = (myint)y;`（有 typedef 时）不再 blocking、`x = (1 + )y;` 仍 blocking、
+      lint accuracy 与真实语料误报基线不退化。链：`docs/gaps/gap-c-semantic-base.md`、
+      `ROADMAP.md`「C 语义层切片 1b」
+- [ ] **`pre_scan` 引擎兜底正则杂质**（2026-10-10 登记，P1 遗留）：`lexer/pre_scan.py::_compile`
+      对任何声明关键字**无条件**建 `\b(kw)\s+(\w+)` 兜底正则 ⇒ C 下产出 `int: typedef` 这类
+      **非声明名**，包侧无法关闭（已登记在 `grammar/c/base/_pre_scan.toml` 头注，消费方按
+      "pre_scan 只作提示"处理）。判据：认一个 `[pre_scan] fallback = false` 键（默认 `true`
+      ⇒ 其他包零影响），C 包声明后 `pre_scan` 期记录无杂质；回归 verilog/yaml/c4 的 pre_scan 面
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须
