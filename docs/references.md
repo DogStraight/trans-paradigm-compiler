@@ -113,7 +113,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [desugar](https://github.com/michaelmillar/desugar) | 概念参考 | 逐步 pass 可视化（编译器模拟器方向） |
 | [rascal](https://github.com/usethesource/rascal) | 深度参考 | 元编程语言：完整 REPL + GLR 解析 + 具体语法模式匹配（详见深调研） |
 | [Koine](https://github.com/chrsbats/koine) | 深度参考 | 语法即数据（YAML/JSON/TOML）+ 管道式 + subgrammar 多文件组织；聚焦快速 DSL 原型（详见深调研） |
-| [K framework](https://github.com/runtimeverification/k) | 概念参考 | **语义也进配置**（`.k` 定义语法 + 重写规则）→ 自动生成解释器/符号执行/验证器；"语言定义即数据"的最激进端（目标是执行与验证，不含格式化/渲染） |
+| [K framework](https://github.com/runtimeverification/k) | 深度参考 | **语义也进配置**（`.k`：`syntax` 属性 + `configuration` cell + 重写规则）→ `kompile` 出 **KORE** → 多后端派生执行器/符号执行器/验证器/文档（含 unparse 与 `format`/`color` 属性）；"语言定义即数据"的最激进端，但目标是**执行与证明**（详见深调研） |
 
 > **谱系定位：tpc 属哪一档（2026-10-11）**——本表与「解析引擎与语法技术」节的同类可分三档：
 > **① 数据驱动 + 运行时消费**（Koine / Ohm / Lark / textX：无代码生成，但只覆盖解析或 transpile）；
@@ -2246,4 +2246,138 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
   `tests/policy/test_edge_corpus_provenance.py` 守。
 - 两处闸（时序决定）：**未修不许沉淀**（否则把缺陷固化成期望行为——实测踩过：
   `success=True` 的非幂等样本被写成 clean）；**已修不再最小化**（直接沉淀）。
+
+### K framework（Runtime Verification, Inc.）— 语言定义即数据 + 单定义多工具（2026-10-11 深调研）
+
+> 调研动因：回答"纯配置化前端的语言工具链有谁和我们一样"，K 是最激进的一端（连**语义**都在
+> 配置里）。采集：agent-reach（github / hacker_news 渠道）+ 官方文档与 tutorial 页 +
+> pl-tutorial 源码实测。本章按作者要求分三节：**定义方式 / 框架解构 / 易用性引导**，
+> 每节末尾给"对 tpc 的可参考点"。
+
+- 定位：语言**建模与语义**框架（BSD-3-Clause，2016-01 起，**595★ / 164 fork**，当前 release
+  **v7.1.337**（2026-06-18，滚动发布）；`.k` 被 GitHub 识别为 KCL）。核心主张 **one
+  definition, many tools**——README 原文："tools for compiling K specifications to build
+  **interpreters, model checkers, verifiers, associated documentation, and more**"。
+- 与 tpc 同为"语言定义即数据"，但**目标面不同**：K 要**执行与证明**，tpc 要**格式化 / lint /
+  结构变换**。案例规模：c-semantics 332★（2013-07 起）、evm-semantics/KEVM 593★/157 fork
+  （2016-10 起）、javascript-semantics（KJS 18 分 HN）。
+
+#### 1. 定义方式（`.k`）
+
+- **语法与语义分模块**：`module X-SYNTAX … endmodule` + `module X … endmodule`，语义模块
+  `imports` 语法模块（pl-tutorial LAMBDA lesson 1/2 源码一手）。
+- **语法声明带属性**（属性即语义开关）：`[left]`/`[right]`/`[nonassoc]` 结合性、`[bracket]`
+  （纯括号不建节点）、`[function]`（函数在 `syntax` 声明、用 `rule` 定义）、**`[strict]` /
+  `[seqstrict]` / `[strict(1)]`（求值顺序声明）**、`[owise]`（兜底）、`>` 分块写优先级
+  （IMP lesson 1 一手：`> AExp "+" AExp [left, strict]`）。
+- **重写规则**：`rule LHS => RHS requires 条件`，可带规则标签 `rule [test]: …`；`context`
+  声明加热/冷却（求值顺序的另一条路，官方课 1.14 / 2.11）。
+- **`configuration <k> … </k>`**：嵌套 cell 声明执行状态（官方课 1.15 "Configuration
+  Declarations and Cell Nesting"；`ktools` 页有一手最小例，含 `rule [test]`）。
+- **`KResult`**：`syntax KResult ::= Int | Bool` 声明"结果形态"＝重写停止点（IMP lesson 1 一手）。
+- 内建层：`DOMAINS`/`INT`… builtin 模块 + **hook**（函数绑定后端实现，GDB 里 `rbreak hook_INT`）；
+  内建语法宏 `#let/#in/#if/#then/#else/#fi`、`#fun`、`:=K`/`:/=K`。
+- **literate 定义**：定义可写成 Markdown（官方课 1.8）；pl-tutorial 的 SIMPLE 就是
+  `simple-untyped.md`（53KB）+ Makefile，**目录内无 `.k` 文件**（一手实测）。
+- 展示属性：`format` / `color` / `latex`（官方课 1.9 "Unparsing and the format and color
+  attributes"）⇒ K **有** unparse 与格式属性，**不是**"不含格式化"（本档旧索引行已修正）。
+
+  **对 tpc 的可参考点：**
+  - 🔥 **求值顺序声明化**（`strict`/`seqstrict`/`context`）：tpc 的遍历/展开顺序由引擎固定，
+    语言包只能间接影响；若将来出现"语言自定义展开或求值时机"的需求（宏展开时机、端口解析
+    时机），K 的"属性声明 + 引擎派生加热规则"是可抄形态——**插件不必写遍历代码**。
+  - 🔥 **`KResult` 式"稳定形态声明"**：把"什么样的项算结果（不再重写）"从代码判定提升为
+    **声明面**——与 tpc 的"候选收敛判定"同族，且更符合"引擎只留抽象通用模式"。
+  - 💡 **`[owise]` 与规则标签**：`[owise]` 与作者裁决的"默认偏置显式化"同构；规则标签
+    （`rule [test]`）可给"变换/校验规则"稳定标识（诊断、追踪、profile 定位都用得上）。
+  - 📌 **literate 定义**：tpc 已是"配置即数据"，让教程片段可跑有价值；但**不实现**"定义写在
+    文档里"——会造定义与文档**双源**，违反单一真源。
+  - ❌ **不实现**：`configuration`/cell（tpc 非执行语义工具，无运行状态）、matching logic、cast。
+
+#### 2. 框架解构（前端 → KORE → 多后端）
+
+- **前端/后端分离**：`kompile` 把 `.k` 编译成 **KORE**（K 的中间语言），后端消费 KORE。
+  **LLVM 后端**（默认）= 编译成 LLVM bitcode → 机器码，优化**具体执行与搜索**；**Haskell 后端**
+  = **解释器**（读 KORE，优化**形式推理**，具体执行较慢）；**Java 后端** = legacy / deprecated。
+- 产物：`<name>-kompiled/` 目录 + `definition.kore`。
+- 工具矩阵（`ktools` 页）：`krun` 执行 / `kprove` **演绎验证** / `kast`（KORE↔JSON 解析反解析）/
+  `kore-repl`（Haskell 后端 REPL，调试证明）/ `pyk`（Python API；`pyk print` 压缩配置）/
+  `kserver`（Nailgun 复用 JVM：32 线程 regression-new **8m → 2m**，但与 Java 18+ 不兼容）。
+- **可观察性**（tpc 最该抄的一块）：`krun --debugger` + `kompile --enable-llvm-debug` →
+  GDB/LLDB；断点维度分层 = **规则标签**（`TEST.test.rhs` / `TEST.test.sc`）、**源码行**
+  （`test.k:4`）、**函数**（`Lblfoo'LParUndsRParUnds'TEST'UndsUnds'Int`）、**hook**
+  （`rbreak hook_INT`）、单步（`k_step`）。
+- **性能剖析**：`perf record -g --`；**规则序号 → 源码位置**反查
+  （`llvm-kompile-compute-loc <ordinal> <kompiled>`）；生成的符号命名本身就是维度
+  （`step_1234` / `side_condition_1234` / `apply_rule_1234`）。
+- 验证路径：官方课 1.21（合一与符号执行）/ 1.22（演绎验证）+ `kprove`；2.17 用 Haskell 后端
+  REPL 调试证明。
+
+  **对 tpc 的可参考点：**
+  - 🔥 **"一份定义 → 中立 IR → 多消费方"**：tpc 的 P4.1（多后端输出 + LLVM IR 目标插件）正缺
+    这层参照。K 证明它可行且是核心卖点；若要"同一语言多输出插件"，**先落中立表示、再让后端
+    消费**比"每个后端各自读 AST"更可扩展（tpc 渲染侧 Doc IR 已是这个形状，可上移到输出层）。
+  - 🔥 **规则序号 ↔ 源码位置反查**：tpc 的 profile/诊断同样需要"内部编号 → 源码位点"（与本轮
+    M1 的行/列位点定位同族）——可抄这种**可核对的可观察性**。
+  - 🔥 **追踪维度分层（规则名 / 源码行 / 插件函数 / hook）**：tpc 现场转储与追踪过滤可照此
+    设维度表，而不是只有"全量 dump"。
+  - 💡 **kserver 式进程复用**：tpc 每次 CLI 都要加载配置与语法包，批处理场景（P2.6 多入口）可
+    参考"常驻复用编译产物"；但 tpc 零依赖、启动快 ⇒ 📌 观察，非当前需求。
+  - 📌 **多后端并存**（同一语言 LLVM + Haskell 两后端）：与 tpc"换插件换目标"同构，是 P4.1 的
+    可行性旁证。
+  - ❌ **不实现**：KORE（tpc 无形式语义需求；引入 IR 层属架构级改动，而作者已定"架构基本定型"）。
+
+#### 3. 易用性引导
+
+- **最短路径**（官方明写）：`bash <(curl https://kframework.org/install)` → `kup install k`
+  （kup 基于 Nix，但"无需懂 Nix"）；写 `x.k` → `kompile x.k`（产出 `x-kompiled/`）→ `krun prog`；
+  输出形态是**配置回显**（`<k> Yellow ( ) ~> .K </k>`）。
+- **引导资产**：两套教程——K Tutorial（基础 22 课 + 中级 17 课）与 K PL Tutorial（LAMBDA 9 /
+  IMP 5 / LAMBDA++ 6 / IMP++ 8 / 类型系统 9 / SIMPLE·KOOL·FUN·LOGIK）；文档站可导出
+  PDF/EPUB/MOBI；Cheat Sheet；builtins 源码即文档；编辑器支持清单（Vim/Emacs/IntelliJ/Atom/
+  Notepad++/Pygments/第三方 VS Code），官方承认部分脚本 out of date。
+- **版本与分发**：`vX.Y.PATCH` 滚动发布（近期间隔 ≈1 周）；五种分发 = kup(Nix) /
+  Ubuntu deb(Jammy+Noble) / Homebrew / Docker / 源码（Maven 或 Nix flake）；deb 约 **1.4GB 依赖**；
+  源码 Nix 构建 "up to an hour"。
+- **硬门槛**：**不支持 Windows 原生**（须 WSL2 / Linux VM）、不支持 32 位、仅 x86-64 类 Linux；
+  源码构建需 LLVM≥15 + Haskell Stack + JDK≥17 + Maven + Z3（**README 要 4.12.1、INSTALL.md 与
+  release notes 要 4.8.15 ⇒ 官方文档自相矛盾**）；macOS Apple Silicon 有已知坑
+  （`--no-haskell-binary`）。
+- **软门槛**：优先级/歧义要反复试（官方自述"不是真 parser 的替代品"）；configuration / strict /
+  KORE / 证明曲线陡；教程开篇即要求 CS + 函数式基础；错误信息偏裸（`Inner Parser: Parse error:
+  unexpected token 'foo'.`；函数无匹配规则时 `krun` 只回显配置）。
+- **文档自身债**（如实记）：User Manual 自述"仍在建设中"；**教程 2.16（KORE）正文实测为空**；
+  仓库 description 仍写 "K Framework Tools **7.0**"（实际 7.1.337）；CHANGELOG 最后实质更新
+  2024-06（7.1.0）；主语言字段标 Python（实际 Java/Scala 前端 + Haskell/LLVM 后端）。
+- **社区**：Discord（官方称"最直接"）/ Matrix `#k:matrix.org` / Telegram（偏公告）/ GitHub issue
+  （324 open 含 PR；模板要求最小复现 + `kompile --version` + OS）；**无 Discussions**；HN 热度低
+  （最高 64 分：Serokell 谈 Haskell 后端）。活跃度：最近新 issue 2026-10-06。
+
+  **对 tpc 的可参考点：**
+  - 🔥 **"最短 5 分钟上手"段落**：K 的一键安装 + 循序教程（22 课从 hello world 到证明）是同类里
+    做得好的引导。tpc 有 `language_walkthrough.md` 与 `tests/e2e`，但**缺一条"最快跑起来"的
+    路径**（用户得先知道语言包目录与子命令）。可抄：首屏给"装什么 → 写什么 → 跑什么"三步。
+  - 💡 **文档腐烂的代价（反向印证）**：K 的 User Manual 自述建设中、2.16 空页、description 与
+    CHANGELOG 滞后 ⇒ 印证 tpc 的**容量门禁 + `check_doc_refs` + 完成即删**守的正是这类腐烂。
+  - 📌 **可执行教程**：K 让定义写在 md 里、学习者边读边改；tpc 的对应做法是让教程片段**在
+    `tests/` 里可跑**，而不是把定义搬进文档。
+  - 📌 **重依赖是门槛主因**：K 要 Nix/LLVM/Haskell/JDK 全套（1.4GB）；tpc **零第三方依赖**是
+    明确差异化，值得在定位里保持，别为单个功能引入重依赖。
+
+**来源**：官方 [README](https://raw.githubusercontent.com/runtimeverification/k/master/README.md)
+与 [INSTALL.md](https://raw.githubusercontent.com/runtimeverification/k/master/k-distribution/INSTALL.md) ·
+[Lesson 1.20 K Backends](https://kframework.org/k-distribution/k-tutorial/1_basic/20_backends/) ·
+[K Tools](https://kframework.org/docs/ktools/) ·
+[教程目录](https://kframework.org/k-distribution/k-tutorial/) ·
+[releases/latest](https://api.github.com/repos/runtimeverification/k/releases/latest) ·
+pl-tutorial 源码一手（[LAMBDA lesson 1/2、IMP lesson 1](https://github.com/runtimeverification/pl-tutorial)）·
+HN：[C semantics 48 分](https://news.ycombinator.com/item?id=25395934) /
+[Haskell 后端 64 分](https://news.ycombinator.com/item?id=34892908) /
+[KJS 18 分](https://news.ycombinator.com/item?id=46180273)
+
+**未证实 / 存疑**：`kdist` 的具体用途（未一手证实，故本节未写）· **`claim`/claims 的确切语法**
+（只证实存在演绎验证课 1.22 与 `kprove`，未读到 `claim` 声明形态，不写）· `pushed_at`
+(2026-09-14) 与默认分支最新提交(2026-06-18)不一致的原因 · Z3 版本官方自相矛盾（4.12.1 vs
+4.8.15）· 是否有官方在线 playground（未在官网发现）· Lesson 2.16 正文为空（多次导航一致，
+但可能是抓取时机或页面态问题）。
 
