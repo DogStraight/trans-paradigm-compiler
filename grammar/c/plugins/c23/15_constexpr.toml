@@ -8,9 +8,12 @@
 # 与 c11 插件的 `_Thread_local` 同一注入点、同一形态——两个插件各自往同一条交替
 # 加自己那一支（同 target 多次注入由 `_already_injected` 保证幂等）。
 #
-# 语义约束（归语义层，语法层宽进）：§6.7.1 对 `constexpr` 的组合限制（须与
-# `static`/`extern` 之一共现、仅用于对象、须有初始化器）不在语法层判——同 `inline`/
-# `_Noreturn` 的口径。
+# 语义约束（归语义层，语法层宽进）：§6.7.1 对 `constexpr` 的约束（**仅用于对象、
+# 须有初始化器**）不在语法层判——同 `inline`/`_Noreturn` 的口径。
+# ⚠ 本条曾自述"须与 `static`/`extern` 之一共现"，**2026-10-11 经反证判定不成立**：
+# 裸 `constexpr int n = 4;`（即 storage-class 层的合法形态）与 cppreference 的
+# constexpr 示例均如此，且其自述"linkage appropriate to its declaration"。
+# 约束登记见 `plugins/checks/storage_class/rules/storage.toml` 的 CSC005/006（不实现）。
 
 [ConstexprSpec.parser]
 production = ["keyword.constexpr"]

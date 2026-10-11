@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 3 首片落地：C 包首个 check 组件——存储类说明符语义约束**（循环 #10）：新建
+  `grammar/c/plugins/checks/storage_class/`（规则-only 组件 + L2 handler），补上"**语法宽进、语义未判**"
+  的存储类约束（此前实测 24 例电池**全部 0 诊断**，即 `typedef static int x;`、裸 `constexpr`、
+  文件域 `auto` 等全被静默接受）。
+  - **组件与输入面**：`rules/storage.toml`（规则表 + 头注条款引文/档位）+ `rules/_storage_check.py`
+    （handler `fn(symbol, rule, context)`，读 attrs + 按声明去重）；输入面走**包侧 capture**
+    （`01_declarations.toml` / `03_statements.toml` 的 `capture` 键 + `_api.py::spec_capture` 归一为
+    `sc`/`fs`/`is_function`/`has_init`/声明起点）。**未改 `decl_node`**（保持 P1 产物语义）。
+  - **条款分档（本轮纪律：无原文句 ⇒ 不得默认开）**：
+    **A 档（取得原文 ⇒ `default=true`）** CSC001（至多一个存储类，C99+TC §6.7.1p2；例外对 =
+    `_Thread_local` × {`static`,`extern`}，C11 §6.7.1p2）、CSC002（`typedef` 共现，p3）、
+    CSC003（`_Thread_local` 不得与 auto/register 共现）；
+    **B 档（仅权威转述 ⇒ `default=false` opt-in）** CSC004/007/008/009/010/011/012（7 条）；
+    **C 档（有反证 ⇒ 不实现）** CSC005/006（"constexpr 须与 static/extern 共现"——cppreference 的
+    constexpr 示例即**裸用**且自述 linkage 随声明 ⇒ 该约束不成立；已同步修正 `plugins/c23/15_constexpr.toml`
+    里那条**错误自述**，避免将来按它实现）。
+  - **CSC001 禁止朴素计数**（硬要求）：按节点名分类 `sc`/`fs` + **例外表** + **按声明去重** ⇒
+    `static inline int f(void){}`（头文件高频**合法**形态）0 报；`static extern int a, b;` 只报 1 条。
+    实现期被判据抓到的两个真缺陷已修（允许对写成"两种 thread_local 拼写并集" ⇒ `static _Thread_local`
+    误报；`FuncDef` 位 `is_function` 恒 False ⇒ CSC007 漏报）。
+  - **实测**：正/负样本 **35 passed**（12 组负样本断码 + warning + 位置；13 组正样本全规则启用下 0 报）；
+    **真实语料零误报**（8 个 C 语料在 default 与 all 档均 0 条）；**语法宽进不回归**（`tests/languages/c`
+    **768 passed**，负样本仍解析出 AST 且无 error 级）；`tests/engine/analyzer` **387 passed**；
+    pyright strict **0**；缺陷态变红（去例外表 4 red、去去重 1 red）。
+  - **门禁有效性 49 → 51 条**（两条守护：CSC001 例外表、按声明去重）。
+  - **不实现（登记 `TODO.md`）**：跨 TU 链接性、重复 `inline` 定义、`register` 取址、`constexpr`
+    常量求值、声明/定义一致性、**参数位 `register` 的语法缺口**（`void f(register int x);` 是合法 C
+    却被 lint 拒——属语法面，另立）、成员位（语法层已拒）、**CSC001 函数位覆盖**（一条规则 id 只能绑
+    一个 `kind` ⇒ `static extern int f(void);` 的函数位组合未覆盖；闭合需"一 id 多 kind"或组件 postpass，
+    属引擎机制变更）。
+
 - **P4 理解路径落地：analyzer「理解」+ transform「改树」两段协作**（循环 #9）：
   `typedef int myint;\nvoid f(void) { x = (myint)y; }` 的 raw 段现在有**确定结构**——
   `RawStatement > ExprStmt > BinaryOp(=) > CastExpr`（类型叶子文本 `myint`），而渲染仍由

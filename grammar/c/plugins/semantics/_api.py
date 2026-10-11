@@ -46,6 +46,17 @@ KIND_VARIABLE = "variable"
 KIND_FUNCTION = "function"
 KIND_ENUMERATOR = "enumerator"
 
+#: **包声明的说明符分类**（C 语言知识；引擎不认识任何说明符名）：
+#: 存储类说明符集合 ⊆ §6.7.1（含 c11/c23 增量注入的宿主节点名）；
+#: 函数说明符集合 = §6.7.4（`inline` 核心 + c11 `_Noreturn`）。
+SC_NODE_NAMES = frozenset(
+    {"StorageClass", "ThreadLocalSpec", "ThreadLocalC23Spec", "ConstexprSpec"}
+)
+FS_NODE_NAMES = frozenset({"FuncSpec", "NoreturnSpec"})
+#: `ConstexprSpec` 的共现规则**未经核实**（C23 原文未见；权威转述与示例反证"须与 static/extern 共现"），
+#: 故 CSC001/CSC002 对它**保守放行**（宁可漏报不误报）：不计入"至多一个存储类"的计数、也不算"其他存储类"。
+CSC_PERMISSIVE_SPECS = frozenset({"ConstexprSpec"})
+
 
 def scope_path(scope: Scope | None) -> str:
     """作用域 → 路径字符串（自根到当前，走 `Scope` 骨架自带的 parent 链）。"""
@@ -105,7 +116,9 @@ def _subtree_has(node: Node, marker: Any) -> bool:
     return marker_matches(node, marker)
 
 
-def _declare(analyzer: Any, node: Node, name: str, kind: str) -> None:
+def _declare(
+    analyzer: Any, node: Node, name: str, kind: str, attrs: dict | None = None
+) -> None:
     """登记一条 `analyze` 期符号（复用 `Scope.declare`；**不报诊断**）。
 
     与引擎 `symbol_declare` 原语的差别：同作用域重名时**不报 E001**——本片纪律
@@ -116,16 +129,21 @@ def _declare(analyzer: Any, node: Node, name: str, kind: str) -> None:
     `(decl_order, line, column)` 判"**最近声明**遮蔽"与"同作用域重声明"
     （`typedef int t; int t;` 与 `typedef int t; typedef int t;` 只有保留历史才可区分；
     折叠成首条会让 `int t` 后的使用点被误判为 typedef）。
+
+    `attrs`：额外捕获（说明符摘要 / 是否函数 / 有无初始化器 / 声明起点）——供 L1 检查
+    组件读取（**不改 `decl_node` 语义**，见 task-36 拍板 ④）。
     """
     scope = getattr(analyzer, "_current_scope", None)
     if scope is None:
         return
-    attrs = {"phase": PHASE_ANALYZE, "decl_line": getattr(node, "_pos_line", None)}
+    merged = {"phase": PHASE_ANALYZE, "decl_line": getattr(node, "_pos_line", None)}
+    if attrs:
+        merged.update(attrs)
     if name in scope.symbols:
         # 同作用域重声明：查找语义不变（首见），仅补一条**声明历史**记录
-        sym = Symbol(name=name, kind=kind, decl_node=node, scope=scope, attrs=attrs)
+        sym = Symbol(name=name, kind=kind, decl_node=node, scope=scope, attrs=merged)
     else:
-        sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
+        sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=merged)
     analyzer._all_symbols.append(sym)
 
 
@@ -147,20 +165,29 @@ def collect_declarator_site(analyzer: Any, node: Node, config: dict) -> None:
         config.get("typedef_marker") and _subtree_has(node, config["typedef_marker"])
     )
     fn_marker = config.get("function_marker")
+    # 说明符摘要（声明级，一次算好；检查组件读符号 attrs 判定存储类约束）
+    decl_attrs = _decl_attrs(node, spec_capture(node, config))
     for item in items:
         if not isinstance(item, Node):
             continue
         names = [n for n in (_as_name(v) for v in _walk(item, name_path)) if n]
         if not names:
             continue
+        fn_kind = config.get("function_kind", KIND_FUNCTION)
         if fn_marker and _subtree_has(item, fn_marker):
-            kind = config.get("function_kind", KIND_FUNCTION)
+            kind = fn_kind
         elif has_typedef:
             kind = config.get("typedef_kind", KIND_TYPEDEF)
         else:
             kind = config.get("kind", KIND_VARIABLE)
+        # `is_function`：声明符带函数标记（函数声明）**或**规则声明 kind 即函数（`FuncDef` 位）
+        item_attrs = {
+            **decl_attrs,
+            "is_function": kind == fn_kind,
+            "has_init": getattr(item, "init", None) is not None,
+        }
         for name in names:
-            _declare(analyzer, item, name, kind)
+            _declare(analyzer, item, name, kind, item_attrs)
 
 
 def collect_named_site(analyzer: Any, node: Node, config: dict) -> None:
@@ -171,6 +198,71 @@ def collect_named_site(analyzer: Any, node: Node, config: dict) -> None:
     name = _as_name(getattr(node, name_attr, None))
     if name:
         _declare(analyzer, node, name, config.get("kind", KIND_VARIABLE))
+
+
+# ── 说明符 capture（包侧；CSC 检查的输入面） ───────────────────────
+
+
+def _spec_short(spec: Node) -> str:
+    """说明符节点 → 短串（normalize 后取 `base`；无则回落节点名）。
+
+    实测形状：`StorageClass{base="static"}`、`ThreadLocalSpec{base="_Thread_local"}`、
+    `ThreadLocalC23Spec{base="thread_local"}`、`ConstexprSpec{base="constexpr"}`、
+    `FuncSpec{base="inline"}`、`NoreturnSpec{base="_Noreturn"}`。
+    """
+    base = getattr(spec, "base", None)
+    if isinstance(base, str) and base:
+        return base
+    return spec.node_name
+
+
+def _spec_nodes(node: Node, config: dict) -> list[Node]:
+    """按 TOML 声明的路径取该声明的**全部说明符节点**。
+
+    路径来自 `[Rule.analyzer.c_symbol_collect] capture = { specs = "specs", specs_rest = "rest" }`：
+    `specs` = 首个说明符；`rest` = 其余（`SpecRest` 节点或列表，其 `.spec` 才是说明符节点）。
+    """
+    capture = config.get("capture") or {}
+    out: list[Node] = []
+    for key in ("specs", "specs_rest"):
+        path = capture.get(key)
+        if not path:
+            continue
+        for val in _walk(node, path):
+            if not isinstance(val, Node):
+                continue
+            inner = getattr(val, "spec", None)
+            out.append(inner if isinstance(inner, Node) else val)
+    return out
+
+
+def spec_capture(node: Node, config: dict) -> dict:
+    """声明节点的说明符摘要 → 符号 attrs（检查组件按此判定）。
+
+    返回：`{"sc": [...存储类短串...], "fs": [...函数说明符短串...], "spec_other": [...]}`。
+    分类用包侧常量（`SC_NODE_NAMES` / `FS_NODE_NAMES`）；未分类的说明符进 `spec_other`（取证用，不判定）。
+    """
+    sc: list[str] = []
+    fs: list[str] = []
+    other: list[str] = []
+    for spec in _spec_nodes(node, config):
+        short = _spec_short(spec)
+        if spec.node_name in SC_NODE_NAMES:
+            sc.append(short)
+        elif spec.node_name in FS_NODE_NAMES:
+            fs.append(short)
+        else:
+            other.append(short)
+    return {"sc": sc, "fs": fs, "spec_other": other}
+
+
+def _decl_attrs(node: Node, capture: dict) -> dict:
+    """声明级 attrs（声明起点身份：多声明符去重的键）。"""
+    return {
+        "decl_start_line": getattr(node, "_pos_line", None),
+        "decl_start_col": getattr(node, "_pos_col", None),
+        **capture,
+    }
 
 
 # ── 后置产物（postpass 体） ──────────────────────────────────────────

@@ -41,6 +41,17 @@
       **承载期建候选失败** ⇒ 不提升、不报错（记 `not_understood: candidate_missing`，用户面不变）。
       触发条件 = 真实语料 / check 规则出现对该结构的需求（届时补承载期的候选建法，属 parser 写面）。
       链：`docs/gaps/gap-c-semantic-base.md`（P4）；来源：循环 #9 交付边界
+- [ ] **参数位 `register` 的语法缺口**：`void f(register int x);` 是**合法 C**（§6.7.1p4 允许
+      register 用于参数表），但 C 包 lint 报 **2 条 blocking**（参数说明符位不接受存储类）⇒ 属**语法面**
+      缺口（与本批语义检查不同层）。触发条件 = 真实语料/头文件出现该形态。来源：循环 #10 实测
+- [ ] **CSC001 函数位覆盖**（一 id 一 kind 的机制限制）：一条 check 规则 id 只能绑一个 `sym.kind` ⇒
+      CSC001 只覆盖对象位（`kind=variable`），`static extern int f(void);` 的**函数位组合未覆盖**。
+      闭合需"一 id 多 kind"或组件自带 postpass（属引擎检查分发面变更）。触发条件 = 出现该形态真实需求，
+      或"一 id 多 kind"被别的规则一并需要。来源：循环 #10 交付边界
+- [ ] **CSC B 档 7 条转默认开**（CSC004/007/008/009/010/011/012）：当前 `default=false`（opt-in）——
+      仅有权威转述、未取得标准原文句。触发条件 = 取得原文句（C11/C23 §6.7.1 各段）**或**更大真实语料
+      实测零误报（本轮仅 8 个 C 语料）。同批可议：CSC001（A 档）是否从 warning 升 `error`。
+      来源：循环 #10 保守裁定
 - [ ] **normalize 跨形态判据上移为引擎通用面**（循环 #8 做）：`transform/normalizer.py` 把
       `keyword.*`/`symbol.*`/`literal.*` token 叶子抽成**字符串属性** ⇒ "子树含某 token"的判据在生产
       口径下失效（P1 在 C 包踩中：typedef 恒被收成 variable ⇒ P4 误拒合法输入）。现修法落在 C 包

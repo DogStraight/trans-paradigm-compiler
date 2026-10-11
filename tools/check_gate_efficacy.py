@@ -554,6 +554,21 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        structure, type_text = \"\", \"\"  # 变异：不做结构选定\n",
         "test": "tests/engine/analyzer/test_p4_raw_understanding.py",
     },
+    {
+        "why": "CSC001 丢掉**例外表**（退化为朴素计数）⇒ 合法共现形态被误报（`static _Thread_local` / "
+               "`extern _Thread_local` / `static thread_local`），handler 单元判据同时红",
+        "file": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+        "old": "        if len(counted) > 1 and frozenset(counted) not in _ALLOWED_PAIRS:\n",
+        "new": "        if len(counted) > 1:  # 变异：朴素计数（丢例外表）\n",
+        "test": "tests/languages/c/test_c_storage_class_checks.py",
+    },
+    {
+        "why": "丢掉**按声明去重** ⇒ 多声明符声明（`static extern int a, b;`）重复报（一条声明报多次）",
+        "file": "grammar/c/plugins/checks/storage_class/rules/_storage_check.py",
+        "old": "    if key in seen:\n        return False\n",
+        "new": "    if False:  # 变异：不去重\n        return False\n",
+        "test": "tests/languages/c/test_c_storage_class_checks.py",
+    },
 ]
 
 

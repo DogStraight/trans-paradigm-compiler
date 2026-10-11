@@ -129,6 +129,9 @@ scope = { kind = "function" }
 site = "declarator"
 name_path = "declarator.direct.head.content"
 kind = "function"
+# 同 `Declaration`：说明符 capture（函数位也要判"存储类/函数说明符用于对象还是函数"，
+# 见 task-36 拍板 ⑤：FuncDef 与函数声明两条都挂）。
+capture = { specs = "specs", specs_rest = "rest" }
 
 
 # ── 控制流（Layer C）──

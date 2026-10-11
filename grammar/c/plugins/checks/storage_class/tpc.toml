@@ -1,0 +1,20 @@
+# storage_class — C 存储类说明符语义约束（阶段 3 切片；本包首个 check 组件）
+#
+# 定位：语法层**宽进**（`StorageClass` 是裸交替，c11/c23 各注入一支），语义层在此判
+# `§6.7.1 / §6.7.4` 的组合与位置约束。判定在 `rules/_storage_check.py`（L2 handler），
+# 输入面 = 符号 attrs（包侧 capture：`sc` = 存储类短串表、`fs` = 函数说明符短串表、
+# `is_function`、`has_init`、声明起点）——见 `grammar/c/plugins/semantics/_api.py::spec_capture`。
+#
+# 本组件是**规则-only 组件**（形态同 verilog `checks/name_check`）：无语法规则、无
+# postpass 声明；`core/check_registry.discover_rule_files` 递归扫 `plugins/**/rules/*.toml`
+# 自动装载，`analyzer/checks.py::check_rules_pass` 在遍历后按符号 kind 分发执行。
+#
+# 默认开关的判据（Lead 拍板 ②：默认开/关是数据决策）：
+#   · **只有取得条款原文引文（A 档）且真实语料零误报**的规则才 `default = true`（warning 级、不阻断）；
+#   · 条款位置明确但未取得原文句（B 档）⇒ `default = false`（opt-in，待抽查后一行开启）；
+#   · 条款有反证 ⇒ **不实现**（见文末 CSC005/CSC006 登记）。
+#
+# 条款核实来源（可访问）：
+#   · C99+TC 原文（WG14 N1124 §6.7.1）：https://c0x.shape-of-code.com/6.7.1.html
+#   · cppreference「Storage-class specifiers」（C11/C23 版本标注）：https://docs.w3cub.com/c/language/storage_duration.html
+#   · cppreference「constexpr specifier」「inline function specifier」同上镜像

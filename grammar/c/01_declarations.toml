@@ -56,6 +56,10 @@ function_marker = "FuncSuffix"
 kind = "variable"
 typedef_kind = "typedef"
 function_kind = "function"
+# 说明符 capture（CSC 存储类约束检查的输入面；包侧 `_api.spec_capture` 读这两个路径）：
+# `specs` = 首个说明符；`specs_rest` = 其余（SpecRest 节点或列表，其 `.spec` 是说明符节点）。
+# 归一为短串（`base`，回落节点名）后挂符号 attrs —— `sc`（存储类）/ `fs`（函数说明符）。
+capture = { specs = "specs", specs_rest = "rest" }
 
 
 # ── 说明符三层规则（存储类 / 类型限定符 / 类型说明符） ──

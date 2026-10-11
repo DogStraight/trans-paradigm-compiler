@@ -1,0 +1,160 @@
+# ============================================================================
+# storage_class 规则表 — C 存储类说明符语义约束（CSC001–CSC012）
+# ============================================================================
+# 规则=数据：id / kind / severity / message / default 全在此；判定逻辑在
+# `_storage_check.py`（L2 handler，签名 fn(symbol, rule, context) -> str | None）。
+#
+# **引文档位**（Lead 拍板 ①：条款必须先核对原文并给引文；无法确认 ⇒ default=false）：
+#   A 档（取得原文或原文+权威一致引文）⇒ 可默认开
+#   B 档（条款位置明确、未取得原文句）  ⇒ default=false（opt-in）
+#
+# 已取得的原文：
+#   · C99 原文（WG14 N1124 §6.7.1，c0x 镜像逐字）：
+#       "At most, one storage-class specifier may be given in the declaration specifiers
+#        in a declaration."
+#   · C11 §6.7.1p2 例外从句（Lead 提供 + cppreference 同述）：
+#       "… except that `_Thread_local` may appear with `static` or `extern`."
+#   · cppreference「Storage-class specifiers」（版本标注 + 逐条语义）：
+#       "At most one specifier may be used, except that _Thread_local … may be combined
+#        with static or extern to adjust linkage (since C11)."
+#       "_Thread_local … It cannot be used with function declarations."
+#       "The auto specifier is only allowed for objects declared at block scope
+#        (except function parameter lists)."
+#       "The register specifier is only allowed for objects declared at block scope,
+#        including function parameter lists."
+#       "Function parameters cannot use any storage-class specifiers other than register."
+#       "Function declarations at block scope can use extern or none at all.
+#        Function declarations at file scope can use extern or static."
+#   · cppreference「constexpr specifier (since C23)」：
+#       "It must be fully and explicitly initialized according to the static
+#        initialization rules."（支持"须有初始化器"，未提"须与 static/extern 共现"）
+# ============================================================================
+
+# ── CSC001 · 一条声明至多一个存储类说明符（例外：_Thread_local 与 static/extern 共现）──
+# 档位 A：N1124 原文 "At most, one storage-class specifier may be given …" + C11 例外从句。
+# 默认开（实测真实语料零误报，见 tests/languages/c/test_c_storage_class_checks.py）。
+# ⚠ 禁止朴素计数：判定按**节点名分类**（sc/fs 两张表）后用**例外表**比对，
+#   故 `static inline int f(void){}`（头文件高频合法形态）不会误报（判据锁定）。
+[[checks]]
+id = "CSC001"
+kind = "variable"
+category = "storage-class"
+severity = "warning"
+default = true
+message = "{name}: 一条声明至多一个存储类说明符（例外仅 '_Thread_local/thread_local' 与 static/extern 共现）"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC002 · typedef 不得与其他存储类说明符共现 ──
+# 档位 A：同 §6.7.1p2 的"至多一个"（typedef 是存储类说明符；例外从句未含 typedef）。
+# kind = typedef（`typedef static int x;` 的符号 kind 是 typedef）。
+[[checks]]
+id = "CSC002"
+kind = "typedef"
+category = "storage-class"
+severity = "warning"
+default = true
+message = "{name}: typedef 不得与其他存储类说明符共现"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC003 · _Thread_local 不得与 auto/register 共现 ──
+# 档位 A：C11 §6.7.1p2 例外从句**穷举**了允许的同伴（static/extern）⇒ auto/register 不在其中。
+[[checks]]
+id = "CSC003"
+kind = "variable"
+category = "storage-class"
+severity = "warning"
+default = true
+message = "{name}: '_Thread_local/thread_local' 只能与 static 或 extern 共现（不得与 auto/register 同用）"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC004 · _Thread_local 用于函数 ⇒ 违规 ──
+# 档位 B：cppreference 明确 "It cannot be used with function declarations."，但未取得
+# §6.7.1p3 原文句 ⇒ **默认关**（opt-in）。
+[[checks]]
+id = "CSC004"
+kind = "function"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: '_Thread_local/thread_local' 只能用于对象，不得用于函数声明"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC007 · constexpr 用于函数 ⇒ 违规（constexpr 仅对象）──
+# 档位 B：cppreference「constexpr」只描述对象；未取得原文句 ⇒ 默认关。
+[[checks]]
+id = "CSC007"
+kind = "function"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: constexpr 只能用于对象，不得用于函数声明"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC008 · constexpr 声明无初始化器 ⇒ 违规 ──
+# 档位 B：cppreference "must be fully and explicitly initialized"（权威转述，非原文句）⇒ 默认关。
+[[checks]]
+id = "CSC008"
+kind = "variable"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: constexpr 声明必须有初始化器"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC009 · auto 只允许块作用域对象 ⇒ 文件域违规 ──
+# 档位 B：cppreference "only allowed for objects declared at block scope" ⇒ 默认关。
+[[checks]]
+id = "CSC009"
+kind = "variable"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: auto 只允许块作用域对象（文件域/函数名不得使用）"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC010 · register 只允许块作用域对象 ⇒ 文件域违规 ──
+# 档位 B：同上（register 仅块作用域对象/函数参数）⇒ 默认关。
+[[checks]]
+id = "CSC010"
+kind = "variable"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: register 只允许块作用域对象（文件域不得使用）"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC011 · register 用于函数 ⇒ 违规 ──
+# 档位 B：register 仅对象（"only allowed for objects"）⇒ 默认关。
+[[checks]]
+id = "CSC011"
+kind = "function"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: register 只能用于对象，不得用于函数声明"
+handler = "_storage_check.py:check_storage"
+
+# ── CSC012 · 函数说明符（inline/_Noreturn）用于对象 ⇒ 违规 ──
+# 档位 B：§6.7.4 的函数说明符语义（cppreference「inline」语法位 = function_declaration；
+# "Any function with internal linkage may be declared static inline"）⇒ 默认关。
+[[checks]]
+id = "CSC012"
+kind = "variable"
+category = "storage-class"
+severity = "warning"
+default = false
+message = "{name}: inline/_Noreturn 只能用于函数声明"
+handler = "_storage_check.py:check_storage"
+
+# ============================================================================
+# **不实现**（登记；Lead 拍板 ① 的"有反证 ⇒ 不默认开"进一步收紧）：
+#   CSC005 `constexpr` 须与 static/extern 之一共现
+#   CSC006 `constexpr` 与 typedef/auto/register/_Thread_local 组合限制
+#   反证：cppreference「constexpr specifier (C23)」示例即块作用域裸用
+#         （`constexpr float f = 23.0f;`，无 static/extern），且明言
+#         "It still has linkage appropriate to its declaration"；
+#       本包 `c23/15_constexpr.toml` 自述的标准形态也是裸 `constexpr int n = 4;`。
+#   ⇒ 这两条若实现会把**正常 C23 用法**全量误报。原文未能取得，作出反证 ⇒ 待作者核实后
+#     再决定（报告已列为拍板点）。`_api.CSC_PERMISSIVE_SPECS` 让 CSC001/CSC002 对
+#     `constexpr` 保守放行（宁可漏报不误报）。
+# ============================================================================

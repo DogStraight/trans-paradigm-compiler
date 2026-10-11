@@ -252,6 +252,32 @@ _api.two_phase_product(at, src, "grammar/c")  # 两期合并（逐条带 phase�
 用 `AnalysisTraversal`（上例）。判据：`tests/languages/c/test_c_symbol_collection.py`
 （正/负/声明顺序/作用域遮蔽/分期/只增不改六条，另附缺陷态变红证明见 `CHANGELOG`）。
 
+## 存储类语义约束（CSC · 本包首个 check 组件）
+
+**分工**：语法层**宽进**（`StorageClass` 是裸交替：`typedef|extern|static|auto|register` +
+c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数说明符 `inline`/`_Noreturn`
+另在 `FuncSpec`）；语义层在本组件判**组合与位置**约束，诊断 `severity = "warning"`（**不阻断管线**）。
+
+| 落点 | 作用 |
+|---|---|
+| `plugins/semantics/_api.py::spec_capture` | 收集期按 TOML `capture`（`specs` + `specs_rest`）把说明符归一成短串，按**包声明分类**（`SC_NODE_NAMES` / `FS_NODE_NAMES`）挂符号 attrs：`sc` / `fs` / `is_function` / `has_init` / 声明起点 |
+| `plugins/checks/storage_class/rules/storage.toml` | 规则=数据：`id`/`kind`/`severity`/`default`/`message`（**条款引文与档位写在头注**） |
+| `plugins/checks/storage_class/rules/_storage_check.py` | L2 handler：`fn(symbol, rule, context)`，只读 attrs；**按声明去重**（多声明符只报一条） |
+
+**默认开关按"条款档位"**（Lead 拍板 ①：无法确认原文 ⇒ `default = false`）：
+`CSC001/002/003` 默认开（取得原文/原文+权威一致引文；真实语料零误报）；
+`CSC004/007/008/009/010/011/012` 默认关（条款位置明确但未取得原文句，opt-in）；
+`CSC005/006`（C23 `constexpr` 共现要求）**不实现**——权威转述与示例反证"须与 static/extern 共现"
+（`constexpr float f = 23.0f;` 即裸用），实现会全量误报；`CSC001/002` 对 `constexpr` 保守放行
+（`CSC_PERMISSIVE_SPECS`，宁可漏报不误报）。
+
+**CSC001 禁止朴素计数**：判定 = 分类出的 `sc` 表 + **例外表**（`{static|extern} × {_Thread_local|thread_local}`）
+比对，故头文件高频合法形态 `static inline int f(void){}` 不报（判据锁定）。**已知边界**：一条规则 id
+只能绑一个 `kind`，故 CSC001 只覆盖对象声明；`static extern int f(void);`（函数位）**未覆盖**（登记）。
+
+判据：`tests/languages/c/test_c_storage_class_checks.py`（正/负样本逐条 × 默认开关 + 多声明符去重 +
+真实语料零误报 + 语法宽进不回归）；缺陷态变红（去例外表 / 去去重）见 `_drafts/task36_defect.py`。
+
 ## P4 理解路径（两段协作）
 
 歧义路径（`x = (myint)y;`：`myint` 是不是类型名）走**两段协作**，能力都必须有：
