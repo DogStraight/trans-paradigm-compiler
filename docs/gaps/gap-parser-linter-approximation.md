@@ -62,7 +62,9 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
 - **循环 #7 交付后的现状与已知偏差（2026-10-11）**：
   - **raw 承载 + M2 窄档 + P4 校验已落地**：`(myint)x` 在**顶层**与 **`CompoundStmt` 直接子语句**
     闭环（0 blocking + `success=True` + `_verbatim_text` 直出保真）；**安全网 = P4 的 analyze 校验**
-    （遮蔽例被 `E002` 拒绝、不静默）。**理解路径（raw → `CastExpr`）未做**（登记 `TODO.md`）。
+    （遮蔽例被 `E002` 拒绝、不静默）。**理解路径（raw → `CastExpr`）转触发条件式**（循环 #8）：
+    实测 `CastExpr` 在 `grammar/c/plugins/`（全部 C 包 check 规则）与 `analyzer/` 中**零引用**
+    ⇒ **当前无消费方**；触发条件见 `TODO.md`。
   - **已知偏差（本批不做）**：① `x = (t)y + z = 1;`（gcc 判 `lvalue required`）现与 `(int)` 版
     **对齐放行**——引擎既有宽松，非本批引入；② `void f(int t);` 的**原型参数泄漏到文件作用域**
     （`t @ <global>`）⇒ "有全局 typedef 时的原型参数"会被 P4 误拒（修法在 `grammar/c/*.toml`

@@ -530,12 +530,13 @@ _MUTATIONS: list[dict[str, str]] = [
         "test": "tests/engine/parser/test_parser_raw_site.py",
     },
     {
-        "why": "`_subtree_has` 退回**只按节点名**判（P1 的生产缺陷原形态）⇒ normalize 后 token 变字符串、"
-               "命中恒 False ⇒ typedef 全被收成 variable ⇒ P4 误拒合法 `(t)y`（生产口径判据必红）",
-        "file": "grammar/c/plugins/semantics/_api.py",
-        "old": "            return _named_hit(node, text) or _scalar_value_hit(node, short)\n",
-        "new": "            return _named_hit(node, text)  # 变异：只按节点名判（生产口径失效）\n",
-        "test": "tests/engine/analyzer/test_c_symbol_collection_production.py",
+        "why": "`marker_matches` 退回**只按节点名**判（P1 的生产缺陷原形态）⇒ normalize 后 token 变字符串、"
+               "命中恒 False ⇒ typedef 全被收成 variable ⇒ P4 误拒合法 `(t)y`（引擎侧 + 生产口径判据必红）。"
+               "循环 #8 把该判据从 C 包上移至 `core/define.py`，锚点随之换家",
+        "file": "core/define.py",
+        "old": "    for prefix in _MARKER_TOKEN_PREFIXES:\n        if text.startswith(prefix):\n            short = text[len(prefix) :]\n            return _marker_named_hit(node, text) or _marker_scalar_hit(node, short)\n    return _marker_named_hit(node, text)\n",
+        "new": "    return _marker_named_hit(node, text)  # 变异：退化只按节点名判\n",
+        "test": "tests/engine/core/test_marker_matches.py",
     },
 ]
 

@@ -22,6 +22,7 @@ from core.errors import (
     LintInternalError,
 )
 from core.engine_compat import check_engine_compat
+from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, LITERAL_PREFIX
 
 # 错误类 re-export：`from core.define import ParseError` 兼容（见 core/errors.py）
 __all__ = [
@@ -288,6 +289,97 @@ def unwrap_optional(node: Node | None) -> Node | None:
 def collect_nodes(root: Node, node_name: str) -> list[Node]:
     """某 `node_name` 的全部节点（先根序）。"""
     return [n for n in iter_nodes(root) if n.node_name == node_name]
+
+
+# ── 跨形态标记判定（token 叶子在 normalize 后变成字符串属性值） ──
+
+#: 会被 `transform/normalizer.py` 抽成字符串属性值的 token 叶子前缀（引擎 token 协议）
+_MARKER_TOKEN_PREFIXES: tuple[str, ...] = (KEYWORD_PREFIX, SYMBOL_PREFIX, LITERAL_PREFIX)
+#: 结构元数据属性：不是源文本内容，不参与"字符串值命中"判定
+_MARKER_META_ATTRS = frozenset({"node_name", "start", "end"})
+
+
+def _marker_named_hit(node: Node, marker: str) -> bool:
+    """子树里是否存在该**节点名**。"""
+    if node.node_name == marker:
+        return True
+    return any(_marker_named_hit(child, marker) for child in node.iter_children())
+
+
+def _marker_scalar_values(node: Node) -> list[str]:
+    """节点的标量字符串属性值（含标量列表项）；排除结构元数据与节点名。"""
+    values: list[str] = []
+    for key, val in vars(node).items():
+        if key in _MARKER_META_ATTRS:
+            continue
+        if isinstance(val, str):
+            values.append(val)
+        elif isinstance(val, (list, tuple)):
+            for item in val:
+                if isinstance(item, str):
+                    values.append(item)
+                elif isinstance(item, (list, tuple)):
+                    values.extend(x for x in item if isinstance(x, str))
+    return values
+
+
+def _marker_scalar_hit(node: Node, value: str) -> bool:
+    """子树里是否存在**标量属性值**等于 `value`（normalize 后 token 叶子的落点）。"""
+    if any(v == value for v in _marker_scalar_values(node)):
+        return True
+    return any(_marker_scalar_hit(child, value) for child in node.iter_children())
+
+
+def _marker_slot_hit(node: Node, carrier: str, attr: str, value: object) -> bool:
+    """子树里是否存在"节点名 = carrier 且其 `attr` 属性值 = value"的槽位（钉槽位精确形式）。"""
+    if attr and getattr(node, attr, None) == value and (not carrier or node.node_name == carrier):
+        return True
+    return any(_marker_slot_hit(child, carrier, attr, value) for child in node.iter_children())
+
+
+def marker_matches(node: Node, marker: object) -> bool:
+    """子树内是否出现指定标记——**跨两种 AST 形态**判定（引擎与语言包共用）。
+
+    形态差异来自 `transform/normalizer.py`：`keyword.*` / `symbol.*` / `literal.*`
+    的 token 叶子被抽成**字符串属性值**（并消除 `optional/repeat/seq` 包装）。同一份
+    `typedef int myint;` 因此有两条形态：
+
+      · 直接 parse（未 normalize）：token 是**节点** ⇒ `StorageClass > keyword.typedef`
+      · 生产管线（normalize 后）：token 变**父节点的字符串属性** ⇒ `StorageClass.base = "typedef"`
+
+    只按节点名判会在**生产口径**下恒不命中（C 包符号收集曾因此在管线里把 typedef 全收成
+    variable，直到 raw 校验误报才暴露）。故对带引擎 token 前缀的 marker（如 `keyword.typedef`）
+    同时接受：
+
+      1. 子树里存在**同名节点**（未 normalize 形态）；
+      2. 子树里存在**标量属性值 == 去前缀短名**（normalize 后形态，`typedef`）。
+
+    **为什么 2 不会误命中（逐条有判据：tests/engine/core/test_marker_matches.py）**：
+      · 只扫标量属性值，且排除结构元数据（`node_name`/`start`/`end`）——"有个节点叫 typedef"
+        本身不构成命中；
+      · `literal.*` 抽取**保留原文**（字符串字面量归一为 `'"typedef"'`，含引号）⇒ 不等于裸短名；
+      · 注释不是声明子树的成员（独立节点/锚点；三种注释形态实测均不落入声明子树）；
+      · 关键字不可能作标识符（词法 token 类型决定）⇒ `Identifier.content` 不会等于关键字短名。
+
+    另支持**钉槽位**的显式形式（必须精确到词法槽位时用）：`"载体.属性=值"`
+    （如 `"StorageClass.base=typedef"`）或 dict `{"node": ..., "attr": ..., "value": ...}`。
+    非 token 前缀的 marker（语法结构名，如 `FuncSuffix`）仍**只**按节点名判——语法节点不会被
+    normalize 抹掉，限制得更精确。
+    """
+    if isinstance(marker, dict):
+        return _marker_slot_hit(
+            node, str(marker.get("node", "")), str(marker.get("attr", "")), marker.get("value")
+        )
+    text = str(marker)
+    if "=" in text:
+        path, _, want = text.partition("=")
+        carrier, _, attr = path.rpartition(".")
+        return _marker_slot_hit(node, carrier, attr, want)
+    for prefix in _MARKER_TOKEN_PREFIXES:
+        if text.startswith(prefix):
+            short = text[len(prefix) :]
+            return _marker_named_hit(node, text) or _marker_scalar_hit(node, short)
+    return _marker_named_hit(node, text)
 
 
 def block_end_of(rule) -> str:

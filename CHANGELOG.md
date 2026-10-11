@@ -7,6 +7,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **跨形态标记判据上移为引擎通用面**（循环 #8）：`transform/normalizer.py` 会把 `keyword.*` / `symbol.*` /
+  `literal.*` 的 token 叶子抽成**字符串属性**（`StorageClass.base = "typedef"`）⇒ 任何"子树里含某
+  token **节点**"的判据在**生产口径**下失效（P1 曾因此把 typedef 全收成 `variable`，P4 误拒合法输入）。
+  - `core/define.py` 新增公开 `marker_matches(node, marker)`（与 `iter_nodes`/`collect_nodes` 同族；
+    前缀取自 `core.token_protocol`，**无语言词法名**）：带 token 前缀的 marker ⇒ 同名节点 **∨** 标量
+    属性值 == 去前缀短名（排除 `node_name`/`start`/`end`）；非 token 前缀 ⇒ **只**按节点名；另支持
+    钉槽位（`"StorageClass.base=typedef"` / dict）。**通用面不留语言侧副本**：C 包 `_api._subtree_has`
+    变薄封装（**+9/−90**，4 个 helper 与 2 个常量删除；marker 取值/kind 等语言知识仍在包侧）。
+  - **判据**：引擎侧新增 `tests/engine/core/test_marker_matches.py`（**11 条**：三形态 + 安全反例——
+    `node_name` 不参与值扫描、`literal.*` 保引号（`"typedef"` 字面量不命中）、注释不在声明子树内、
+    真实 C AST 上 4 组注释/字面量反例零命中）；生产口径 `test_c_symbol_collection_production.py`
+    **22 条全绿不改**（3 处改走公开面）。
+  - **缺陷态变红**：把 `marker_matches` 退回"只按节点名" ⇒ **8 failed**（引擎侧 2 + 生产口径 6）；
+    门禁有效性第 47 条变异**换家**到 `core/define.py`（旧锚随上移失效，已同步）。
+  - **范围裁定（本轮）**：**P4 理解路径（raw 段 → `CastExpr`）转触发条件式，不做**——实测 `CastExpr`
+    在 `grammar/c/plugins/`（全部 C 包 check 规则）与 `analyzer/` 中**零引用** ⇒ **当前无消费方**，
+    且它需要"分析期重建 AST"这一新机制（与"架构基本定型"定调相冲）。触发条件 = 出现第一个需要
+    转换结构的消费方。raw 已闭环（0 blocking + success + 保真输出 + P4 校验），**缺位不影响任何现有行为**。
+  - **实测**：`pytest tests/engine tests/languages/c -q -n 4` **2446 passed**；pyright strict **0**；
+    端到端探针 **0/13**。
+
 - **P4 安全网 + raw 承载 + M2 窄档摘诊断（原子批次）**（循环 #7）：`typedef int myint;\nvoid f(void) { x = (myint)y; }`
   ⇒ **0 blocking + `success=True` + 输出保真**（此前 2 条 blocking、输出为空），且**不静默掩盖真错**。
   - **三件同批**（依据：两轮实现前对抗证明单独上 raw 会新增掩盖）：① **raw 承载**

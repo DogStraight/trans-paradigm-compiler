@@ -16,6 +16,7 @@ import os
 import pytest
 
 from analyzer.traversal import AnalysisTraversal
+from core.define import marker_matches
 from grammar.c.plugins.semantics import _api
 from transform.normalizer import normalize_ast
 
@@ -144,7 +145,12 @@ class TestProductionForm:
 
 
 class TestMarkerForms:
-    """`_subtree_has` 的跨形态标记判定（单元级，直接钉住修法）。"""
+    """跨形态标记判定（**引擎通用面** `core.define.marker_matches` 的 C 生产口径用法）。
+
+    说明：判定实现已上移到 `core/define.py`（服务所有语言包），故这里直接调**公开面**；
+    引擎侧语义与安全反例另有 `tests/engine/core/test_marker_matches.py`——本类只验 C 包
+    声明的 marker（`keyword.typedef` / `FuncSuffix`）与槽位形式在**真实 AST** 上的表现。
+    """
 
     def _normalized_decl(self, c_env, src: str):
         from core.define import iter_nodes
@@ -161,20 +167,20 @@ class TestMarkerForms:
         assert raw_ast is not None
         raw_decl = next(n for n in iter_nodes(raw_ast) if n.node_name == "Declaration")
         norm_decl = self._normalized_decl(c_env, "typedef int myint;\n")
-        assert _api._subtree_has(raw_decl, "keyword.typedef") is True
-        assert _api._subtree_has(norm_decl, "keyword.typedef") is True
+        assert marker_matches(raw_decl, "keyword.typedef") is True
+        assert marker_matches(norm_decl, "keyword.typedef") is True
 
     def test_syntax_node_marker_is_node_name_only(self, c_env):
         """非 token 前缀的 marker（`FuncSuffix`）仍只认节点名：不给"值扫描"开口子。"""
         decl = self._normalized_decl(c_env, "typedef int myint;\n")
         # 子树里存在字符串值 "typedef"（token 槽），但 marker 不是 token 前缀 ⇒ 不命中
-        assert _api._subtree_has(decl, "typedef") is False
-        assert _api._subtree_has(decl, "keyword.typedef") is True
+        assert marker_matches(decl, "typedef") is False
+        assert marker_matches(decl, "keyword.typedef") is True
 
     def test_explicit_slot_marker_form(self, c_env):
         """钉槽位形式：`载体.属性=值` 与 dict 两种写法都只认该槽位。"""
         decl = self._normalized_decl(c_env, "typedef int myint;\n")
-        assert _api._subtree_has(decl, "StorageClass.base=typedef") is True
-        assert _api._subtree_has(decl, "StorageClass.base=int") is False
-        assert _api._subtree_has(decl, {"node": "StorageClass", "attr": "base", "value": "typedef"}) is True
-        assert _api._subtree_has(decl, {"node": "SimpleType", "attr": "base", "value": "typedef"}) is False
+        assert marker_matches(decl, "StorageClass.base=typedef") is True
+        assert marker_matches(decl, "StorageClass.base=int") is False
+        assert marker_matches(decl, {"node": "StorageClass", "attr": "base", "value": "typedef"}) is True
+        assert marker_matches(decl, {"node": "SimpleType", "attr": "base", "value": "typedef"}) is False

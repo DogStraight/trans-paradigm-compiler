@@ -115,7 +115,8 @@
   整句通过才算"唯一问题是符号歧义"）② 只认 **typedef 命名空间** ③ 声明位置先后（行+列）+
   **深度守卫**；`pre_scan_with_lines` 并行面 + `RuleMatcher.memo_suspended`（packrat memo 以 token
   位置为键，改型试解析必须挂起缓存）；**性能**：tv80_core `tpc lint` 由 +13.7% 优化回 **+0.0%**
-> **切片 1b 的下一批（raw 承载 + M2 + P4，原子批次）已移回 `TODO.md`**（启动在即，不再留 backlog）。
+> **切片 1b 的下一批（raw 承载 + M2 + P4）已交付**（循环 #7：`(myint)x` 闭环 + P4 校验安全网）；
+> 其中"理解路径（raw → `CastExpr`）"转**触发条件式**（实测无消费方），见 `TODO.md`。
 
 ## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）
 
