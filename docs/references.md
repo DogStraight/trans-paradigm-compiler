@@ -2437,6 +2437,33 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
 - 一句话：**同一起点（语言即数据），不同目标函数**——K 走到形式验证的极限，tpc 走轻量、
   可移植、边界诚实的那一半。
 
+#### K 能否"完全代替" tpc？（2026-10-11，结论：不能；边界说清楚）
+
+按 tpc 的每个工作面逐块判：
+
+| tpc 工作面 | K 能替代？ | 依据 |
+|---|---|---|
+| lexer / parser | ✅ 能 | K 有 lexer + `--gen-bison-parser`/GLR AOT 或 inner parser；代价 = 用 `.k` 重写语法 |
+| preprocessor | ⚠ 部分 | K 的 macro/alias 是**编译期静态展开**；tpc 的宏 + **反向映射**（注释/诊断还原）是保真导向 |
+| linter（token 级反解析器 + 规则族） | ❌ 不能 | K 无 lint 规则生态；K 的诊断是解析/执行/证明错误 |
+| analyze（浅语义检查） | ⚠ 理论能、**成本高** | K 要写完整语义（c-semantics 310 `.k` / 1.84MB / 十余年），tpc 只写检查规则 |
+| transform（源到源结构变换） | ❌ 不能 | K 的规则是**执行语义**重写，不是源到源保真变换 |
+| renderer / formatter（**保真**格式化） | ❌ **完全不能** | K 只有 unparse + `format`/`color` 属性；无宽度折行/对齐/幂等/注释归属/与外部格式化器对拍 |
+| 多语言包 + 标准档位插件 | ⚠ 部分 | K 有 module 复用，无 c11/c17/c23 式"标准增量 + 档位组合" |
+| 打包（引擎 + 语言包 → 可分发） | ⚠ 部分 | K 有 `kdist`（打包**定义**），但 tpc 的打包是"引擎 + 语言包"整体 |
+| 量化门禁 / 文档治理 | ❌ 不能（且与工具无关） | 这是工程方法，不是 K 的能力 |
+| 零依赖 / 跨平台 | ❌ 不能 | K 需约 1.4GB 依赖、**不支持 Windows 原生** |
+
+- **反方向**（K 能做而 tpc 结构性做不到）：执行语义、符号执行、演绎证明、模型检查——tpc 全无。
+- 净结论：**不是替代关系，是不同目标函数**——K 给语言做数学（formality）与执行；tpc 给语言做
+  工程工具链（保真格式化 / lint / 源到源变换 / 多语言包）。
+- **tpc 的护城河**：① 保真渲染（K 没有这一环）② 零依赖 + Windows 可跑 ③ 语言增量插件与多语言
+  实例（verilog + c + c4）④ **一份语法驱动三处消费**（linter 反解析 + parser + renderer 布局）。
+- **威胁在哪（诚实）**：若需求是"新语言要能跑、要能证明性质"，tpc 直接出局；若 tpc 为追这些能力
+  去做 IR / 验证，会同时丢掉"零依赖"与"低门槛"两个差异——那是**定位漂移**，不是能力升级。
+- 📌 触发条件（何时重估）：出现"必须在 tpc 里执行/证明"的真实需求时，先评估"**交给 K/pyk 协同**"
+  而不是在引擎里造 IR。
+
 **来源**：官方 [README](https://raw.githubusercontent.com/runtimeverification/k/master/README.md)
 与 [INSTALL.md](https://raw.githubusercontent.com/runtimeverification/k/master/k-distribution/INSTALL.md) ·
 [Lesson 1.20 K Backends](https://kframework.org/k-distribution/k-tutorial/1_basic/20_backends/) ·
