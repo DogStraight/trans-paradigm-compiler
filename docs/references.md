@@ -50,6 +50,7 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [pyverilog](https://github.com/PyHDI/Pyverilog) | 概念参考 | Takamaeda-Yamazaki（日本学者）的 Python HDL 工具包：PLY（Lex/Yacc 风格）LALR 文法声明做 Verilog 解析——"语法即声明、Verilog 工具不必手写解析器"的早期代表（与 Veryl 同作者国别、同 HDL 工具窄域；设计来源追溯见深调研「路线亲缘」） |
 | [ISO C99 标准文法](https://port70.net/~nsz/c/c99/n1256.html)（n1256，WG14 草案） | 设计参考 | C 包的**权威依据**：左递归的 `postfix-expression` 六形态（§6.5.2）、`integer-suffix`/`floating-suffix`（§6.4.4.1）、说明符分层（§6.7.1–6.7.4）——凡"C 到底怎么规定"的问题先查标准再决定取舍（详见深调研「C 语言文法参照」） |
 | [tree-sitter-c](https://github.com/tree-sitter/tree-sitter-c)（grammar.js） | 设计参考 | 生产级 C 文法（GLR）：后缀**各自成规则 + 显式优先级**（SUBSCRIPT 17 / FIELD 16 / CALL 15 > UNARY 14）、`number_literal` 后缀按**字符类宽进**、`case_statement` **吸收**后续语句、前缀/后缀自增按位置区分——C 包三处取舍的直接参照（详见深调研「C 语言文法参照」） |
+| 延迟消歧对照（[slang](https://github.com/MikePopoloski/slang) / SGLR-SDF / Roslyn） | 深度参考 | "语法阶段不判、语义阶段再判"的项目谱系：slang 的 **CST/AST 分离两步**（解析期 documented "no name resolution"）、SGLR 解析森林后期消歧过滤、Roslyn 的语法树中性 + `SemanticModel`——tpc raw 机制（P3/P4）在成熟解法中的位置参照（详见深调研「C 语言文法参照」§7） |
 
 | 宏处理机制对照（[Lean 4](https://github.com/leanprover/lean4) / [Clang](https://github.com/llvm/llvm-project) / Verible / GLR） | 深度参考 | 结构宏进树（Lean syntax + macro scope 卫生）/ 编辑/格式化不展开宏 + raw 进 CST（Verible）/ 全展开 + 双位置 + 旁路记录表（Clang）——宏体入树（ADR-0016）的机制输入（详见深调研） |
 
@@ -707,6 +708,32 @@ C 包从"声明面"走到"表达式面"时遇到的三个形状问题（后缀�
 - tree-sitter-c `update_expression` = `choice(seq(op, arg), seq(arg, op))`：**同一节点名、
   按位置区分**前后缀——与 tpc 的 `UnaryOp{position}` + `when` 分发布局同构 ✓（tpc 侧
   `when` 原语的动机即"同节点名两形态"，见 `renderer/renderer_architecture.md`）。
+
+**7. 延迟消歧（raw → 语义阶段展开）的项目谱系（2026-10-11 补充）**
+
+tpc 的"linter 粗筛 → parser 位点留 raw → analyzer 用符号面精判并展开"属于
+**two-phase parsing + 延迟消歧**；它在成熟项目里的位置：
+
+- **[slang](https://github.com/MikePopoloski/slang)（SystemVerilog 前端）** — 🔥 **结构最贴近**：
+  官方文档明确 **CST 与 AST 是分离的两步**——解析层只产 `SyntaxNode` 树（原文：
+  "In this mode there is no `Compilation` and no name resolution"），名字解析 / 参数求值 /
+  类型检查 / 建 AST 全在 `Compilation`（elaboration）阶段。与 tpc 的三段同构。
+  **差异**：slang parser **容错**（"no matter how poorly formed… consume the text and
+  continue"，未知 token 收进 skipped trivia），tpc parser **不恢复**（linter 前置单点 +
+  truncation 双保险阻断）；slang 建**完整 CST**（不消歧但建树），tpc raw 是**该段不建子树、
+  留原文**（`_verbatim_text`，先例 = 宏 splice，渲染零改动）。
+  来源：<https://sv-lang.com/overview.html> · <https://sv-lang.com/parsing.html>
+- **SGLR / SDF 解析森林 + 消歧过滤（Eelco Visser）** — 💡 **思想源头**："保留歧义、后期裁剪"
+  （disambiguation filters）。差异：tpc 保留**一份原文**，不是**多份候选**（DAG 森林）——
+  本档「GLR 解析森林」节已判"仅思想来源"。
+- **Roslyn（C#）/ swift-syntax** — 💡 工业界主流的"**语法树中性 + 语义模型判定**"
+  （`SyntaxTree` 不绑语义，`SemanticModel` 回答名字/类型）；但它是**全建中性节点**，不是 raw。
+- **术语**：delayed / deferred disambiguation · context-sensitive lexing（**lexer hack**，
+  GCC `c_id_kind` 令牌自带符号类别）· **island parsing / unparsed island**（把难以解析的
+  片段当不透明 token 序列交给后续阶段，宏/`asm`/pragma 常用——tpc raw 即"语句位上的 island"）。
+- 📌 **不实现**（既有裁决）：parser↔sema 运行期回调（clang `Actions.ClassifyName` 式）与
+  GLR/解析森林（等于换解析器，成本与收益不成比例）；tpc 走"文本级 raw + analyzer 精判 +
+  **判不过即报错**（不静默）"。
 
 ### vbcc（C）— 1989 年起的可移植 C 编译器（2026-08 深调研）
 
