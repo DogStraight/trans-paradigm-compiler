@@ -640,6 +640,10 @@ def _stage_parse(
                 # raw_order = use 在 token 流中的序位（同行先后不能只靠 line 判）；
                 # 缺 `pos` 时传 None（parser 侧写 None，不写 -1 —— 见 block_parser）
                 "order": w.get("pos"),
+                # P4 理解路径素材（B③）：M1 已算出的替换配方（internal warning 本就有
+                # 这两字段，产出面未改），parser 按它试建候选子树（不重新试解析）
+                "substitute_type": str(w.get("substitute_type", "")),
+                "trial_rule": str(w.get("trial_rule", "")),
             }
             for w in ctx.internal_warnings
             if w.get("eligible") and w.get("region")

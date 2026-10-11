@@ -252,6 +252,30 @@ _api.two_phase_product(at, src, "grammar/c")  # 两期合并（逐条带 phase�
 用 `AnalysisTraversal`（上例）。判据：`tests/languages/c/test_c_symbol_collection.py`
 （正/负/声明顺序/作用域遮蔽/分期/只增不改六条，另附缺陷态变红证明见 `CHANGELOG`）。
 
+## P4 理解路径（两段协作）
+
+歧义路径（`x = (myint)y;`：`myint` 是不是类型名）走**两段协作**，能力都必须有：
+
+| 段 | 落点 | 做什么 |
+|---|---|---|
+| **承载** | `parser/block_parser.py`（引擎，P4 第一步） | raw 节点：`_verbatim_text`（渲染权威）+ `raw_names`/`raw_line`/`raw_column`/`raw_order` + **`raw_candidate`**（候选子树，已还原源码原文）+ `raw_substituted`（取证）。承载期 `sub_node == []` |
+| **理解** | `plugins/semantics/_raw_understand.py`（analyzer postpass） | 语义二次确认（不绕过遍历期 P4 校验 `validate_raw_statement`）+ **结构选定**（候选里出现 `UNDERSTOOD_STRUCTURES`）⇒ 结论挂 `raw_understand`，摘要进 `context.extra["c_raw_understanding"]` |
+| **改树** | `plugins/semantics/_raw_transform.py`（transform 插件） | 按结论把 `raw_candidate` 提升为 `sub_node`（`RawStatement > ExprStmt > … > CastExpr`），**保留 `_verbatim_text`** |
+
+**契约 A3 的有意升级 + 不变式**（承载期 → 提升后）：
+
+> **渲染权威 = `_verbatim_text`**（`renderer/node_renderer.py` 对带该标记的节点整段直出、
+> 不遍历子节点）；**子树只是分析的确定结构，其显著 token 序列必须与 `_verbatim_text` 等价**。
+
+三条推论（都有判据）：① 提升**不改渲染**（直出早返回）；② `Node.iter_children()` 含属性挂载的
+子节点 ⇒ 提升后候选同时挂在 `sub_node` 与 `raw_candidate`，按 `id` 去重 ⇒ 遍历**恰好一次**；
+③ 提升幂等（`sub_node` 非空即跳过）。
+
+**诚实边界**：`(t){1}` 复合字面量在承载期建候选失败 ⇒ 不提升、不报错（raw 仍直出，
+行为与本批之前一致）；该形态要进入理解路径需先补承载期。判据：
+`tests/languages/c/test_c_raw_understanding.py`（管线级：结构/保真/幂等/负样本/边界）、
+`tests/engine/analyzer/test_p4_raw_understanding.py`（两段单元判据，含去重与幂等）。
+
 ## 写包者须知（本包实测教训，写新包必看）
 
 1. **叶子规则要语言包自己定义**：`Identifier` 这类规则**引擎不内置**，漏定义时

@@ -798,6 +798,11 @@ def parse_token(self, node: dict, context: ParseContext) -> Node | None:
 
     parsed_node = Node(token_type)
     parsed_node.add_attr("value", current_token.content)
+    # 台账（P4 理解路径判据③）：试建期记录"建了叶子"的 token 下标
+    # （无 sink = 非试建期，零开销）
+    leaf_sink = getattr(context, "_trial_leaf_indices", None)
+    if leaf_sink is not None:
+        leaf_sink.add(context.token_pointer)
     context.advance_token()
 
     # 收集紧随当前 token 的 inline comment（注释节点模型 2b-2，C5 重构提取）

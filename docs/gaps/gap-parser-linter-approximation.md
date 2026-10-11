@@ -62,9 +62,11 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
 - **循环 #7 交付后的现状与已知偏差（2026-10-11）**：
   - **raw 承载 + M2 窄档 + P4 校验已落地**：`(myint)x` 在**顶层**与 **`CompoundStmt` 直接子语句**
     闭环（0 blocking + `success=True` + `_verbatim_text` 直出保真）；**安全网 = P4 的 analyze 校验**
-    （遮蔽例被 `E002` 拒绝、不静默）。**理解路径（raw → 确定结构）＝必做**（作者 2026-10-11 纠正）：
-    依据 = C 的**测试完备性**要求歧义路径有确定解答（否则该路径行为不确定、测试无从固化）；
-    **形态 = 变换插件改树**（既有 `TransformPlugin.transform(ast, root_scope)` 接口）。
+    （遮蔽例被 `E002` 拒绝、不静默）。**理解路径已落地**（循环 #9，**两段协作**）：analyzer 段做
+    语义二次确认 + 结构选定（结论挂 `raw_understand`；不一致报 `E003`，不与 `E002` 叠加），transform 段
+    把候选提升为 `sub_node`（保留 `_verbatim_text` ⇒ 渲染仍直出）。**不变式**：渲染权威 = `_verbatim_text`；
+    子树只是分析的确定结构，其显著 token 序列须与 verbatim 等价。**边界**：复合字面量 `(t){1}` 承载期
+    建候选失败（不提升、不报错）；赋值链 `x=(t)y+z=1;` 也被提升（成功面不变，与既有宽松一致）。
   - **已知偏差（本批不做）**：① `x = (t)y + z = 1;`（gcc 判 `lvalue required`）现与 `(int)` 版
     **对齐放行**——引擎既有宽松，非本批引入；② `void f(int t);` 的**原型参数泄漏到文件作用域**
     （`t @ <global>`）⇒ "有全局 typedef 时的原型参数"会被 P4 误拒（修法在 `grammar/c/*.toml`

@@ -14,6 +14,8 @@ uses = [
     "renderer.doc_ir.v1",
     # 语义基座 P1（`plugins/semantics/`）：analyzer handler + 语义原语注册 + 后置产物
     "analyzer.primitives.v1",
+    # P4 理解路径（`plugins/semantics/`）：transform 插件（把 raw 提升为确定结构）
+    "transform.slots.v1",
 ]
 
 [renderer]

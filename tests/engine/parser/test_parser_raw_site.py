@@ -71,6 +71,9 @@ def _sites_from_linter(source: str) -> tuple[list[dict], list[dict]]:
             "names": list(w.get("symbol_names") or []),
             "reason": str(w.get("reason", "")),
             "order": int(w.get("pos", -1)),
+            # P4 理解路径素材（与两处注入点同形）
+            "substitute_type": str(w.get("substitute_type", "")),
+            "trial_rule": str(w.get("trial_rule", "")),
         }
         for w in warns
         if w.get("eligible") and w.get("region")
@@ -104,8 +107,13 @@ class TestRawNodeContract:
         assert len(raw) == 1, "应产出且仅产出一个 RawStatement"
         node = raw[0]
         assert node.node_name == "RawStatement"
-        # A3：**无子节点**（否则渲染不遍历子节点、分析遍历子节点 ⇒ 两套真值）
-        assert list(node.iter_children()) == []
+        # A3（承载期）：**结构子节点为空**——候选只走属性通道。
+        # ⚠ `iter_children()` 会连**属性挂载的节点**一起产出（引擎既有语义），
+        # 故"无子节点"要按 `sub_nodes` 判结构面，属性面则唯一是 `raw_candidate`。
+        assert getattr(node, "sub_nodes", []) == []
+        assert [getattr(c, "node_name", None) for c in node.iter_children()] == [
+            "ExprStmt"
+        ], "属性挂载的候选子树是 `iter_children()` 的唯一产出"
         # A2：`_verbatim_text` = 渲染权威（源码切片，逐字节保真）
         assert getattr(node, "_verbatim_text") == "x = (myint)y;"
         # A4–A6、A8：契约字段
@@ -182,3 +190,113 @@ class TestSiteEnableConditions:
         parser, ast, _ = _parse(rules, lexer, TARGET, [])
         assert parser._raw_sites_consumed == [] and _find_raw(ast) == []
         assert parser._parse_truncated is True
+
+
+class TestRawCandidate:
+    """P4 理解路径第一步：承载期按位点给的替换方案建**候选子树**（只挂属性）。
+
+    契约：`raw_candidate` = 候选子树根（**已还原源码原文**的确定结构）；
+    `raw_substituted` = 取证；建失败/异常 ⇒ **不挂**；不改 children、不改渲染。
+    """
+
+    def test_candidate_structure_and_restoration(self, c_env):
+        """判据 1+2：候选含 `CastExpr`；被替换叶子**还原为原文** `myint`（不是 `int`）。"""
+        rules, lexer = c_env
+        sites, _ = _sites_from_linter(TARGET)
+        parser, ast, _ = _parse(rules, lexer, TARGET, sites)
+        raw = _find_raw(ast)[0]
+        candidate = getattr(raw, "raw_candidate", None)
+        assert candidate is not None, "候选子树应已建（位点带替换配方）"
+        assert candidate.node_name == "ExprStmt"
+
+        names: list[str] = []
+        values: list[str] = []
+        stack = [candidate]
+        while stack:
+            cur = stack.pop()
+            names.append(cur.node_name)
+            val = getattr(cur, "value", None)
+            if val is None:
+                val = getattr(cur, "content", None)
+            if val is not None:
+                values.append(str(val))
+            stack.extend(cur.iter_children())
+        assert "CastExpr" in names, names
+        assert "myint" in values, values
+        assert "int" not in values and "keyword.int" not in names, (
+            "替换型 token 必须还原为源码原文（否则 dump/ast_json 会看到源码里没有的 int）"
+        )
+
+        evidence = getattr(raw, "raw_substituted", None)
+        assert isinstance(evidence, list) and evidence, evidence
+        assert evidence[0]["original_text"] == "myint"
+        assert evidence[0]["substituted_as"] == "keyword.int"
+        assert evidence[0]["restored_leaves"] == 1
+        # 判据③（Lead 补严）：显著 token 里"未建叶子"的必须**全部落在 pratt 消费位**
+        # ——把"允许缺什么"钉成引擎可验证的事实（不引语言知识）。fail-closed：
+        # 不满足时 `build_raw_candidate` 直接**不挂**候选（故本断言同时是守门）。
+        missing = evidence[0]["missing_indices"]
+        pratt = evidence[0]["pratt_consumed_indices"]
+        assert set(missing) <= set(pratt), (
+            f"未建叶子的显著 token {missing} 不都在 pratt 消费位 {pratt}"
+        )
+        assert missing, "本形态应至少有一个 pratt 消费的运算符未建叶子（`=`）"
+        # 候选消费区间与位点 region 一致（结构与 verbatim 同覆盖）
+        assert getattr(candidate, "_tok_span", None) is None or True  # 见下断言
+        lo, hi = sites[0]["region"]
+        assert parser._raw_sites_consumed[0]["span"] == (lo, hi + 1)
+        # 渲染权威不变：verbatim 仍是源切片
+        assert getattr(raw, "_verbatim_text") == "x = (myint)y;"
+
+    def test_candidate_leaf_sequence_is_ordered_subsequence_of_verbatim(self, c_env):
+        """判据 1（等价口径）：候选**叶子文本**是 verbatim 显著 token 的**有序子序列**。
+
+        为什么不是"逐项相等"：pratt 运算符（`=` 等）由 pratt 引擎消费、**不建叶子**
+        （实测 `BinaryOp` 的子节点只有两侧操作数）⇒ 严格逐项相等不可得。等价性由两条
+        合成：① 候选与 verbatim **覆盖同一 token 区间**（区间等式，见上）；
+        ② 叶子文本按序出现（不丢不改名）。
+        """
+        rules, lexer = c_env
+        sites, _ = _sites_from_linter(TARGET)
+        _parser, ast, _ = _parse(rules, lexer, TARGET, sites)
+        raw = _find_raw(ast)[0]
+        candidate = getattr(raw, "raw_candidate")
+
+        leaves: list[str] = []
+
+        def walk(cur) -> None:
+            kids = [c for c in cur.iter_children()]
+            val = getattr(cur, "value", None)
+            if val is None:
+                val = getattr(cur, "content", None)
+            if not kids:
+                if val is not None:
+                    leaves.append(str(val))
+                return
+            for child in kids:
+                walk(child)
+
+        walk(candidate)
+        verbatim = str(getattr(raw, "_verbatim_text"))
+        vtokens = [t.content for t in lexer.tokenize(verbatim) if t.type != "newline"]
+
+        it = iter(vtokens)
+        assert all(any(tok == leaf for tok in it) for leaf in leaves), (
+            f"候选叶子 {leaves} 不是 {vtokens} 的有序子序列"
+        )
+
+    def test_trial_build_does_not_leak_parser_state(self, c_env):
+        """⚠ 实测结论：试建会碰 **Parser 级簿记**（不在 `ParseContext` 快照内）
+        ——注释锚点/行尾簿记/失败现场/截断标志/消费记录 ⇒ 必须显式快照回滚。"""
+        rules, lexer = c_env
+        sites, _ = _sites_from_linter(TARGET)
+        parser, ast, _ = _parse(rules, lexer, TARGET, sites)
+        # 试建后：消费记录只有 1 条（试建不得污染）、未截断、候选已挂
+        assert len(parser._raw_sites_consumed) == 1
+        assert parser._parse_truncated is False
+        raw = _find_raw(ast)[0]
+        assert getattr(raw, "raw_candidate", None) is not None
+        # 注释锚点/行尾簿记保持"试建前"状态：目标句无涉及注释 ⇒ 均为空
+        assert list(getattr(parser, "_line_comment_anchors", [])) == []
+        assert list(getattr(parser, "_comment_anchors", [])) == []
+        assert set(getattr(parser, "_trailing_seen", set())) == set()

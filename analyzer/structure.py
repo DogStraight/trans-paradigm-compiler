@@ -297,6 +297,9 @@ class FilePipeline:
                 "names": list(w.get("symbol_names") or []),
                 "reason": str(w.get("reason", "")),
                 "order": w.get("pos"),
+                # P4 理解路径素材（B③）：同 pipeline 侧（M1 已算出的替换配方）
+                "substitute_type": str(w.get("substitute_type", "")),
+                "trial_rule": str(w.get("trial_rule", "")),
             }
             for w in internal_warnings
             if w.get("eligible") and w.get("region")

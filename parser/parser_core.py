@@ -68,6 +68,12 @@ class ParseContext:
         # 符号 store（作用域栈；可选绑定，见 bind_symbol_store）
         self._symbol_store: _ScopeStack | None = None
 
+        # 试建期台账（P4 理解路径判据③；见 block_parser.build_raw_candidate）：
+        # 建了叶子的 token 下标 / pratt 消费但不建叶子的下标。只在试建窗口内非 None
+        # （其余时刻零开销）。**不在快照面内** ⇒ 由试建的 finally 显式复位。
+        self._trial_leaf_indices: set[int] | None = None
+        self._trial_pratt_sink: set[int] | None = None
+
     def bind_symbol_store(self, store: "_ScopeStack") -> None:
         """绑定符号 store（作用域栈），使快照/回滚**连带**覆盖它。
 
@@ -325,6 +331,9 @@ def try_pratt_rule(self, context: ParseContext, rule: GrammarRule) -> Node | Non
             # 修复 pratt 吞注释；ADR-0013 阶段 A 后 operator 间隙注释已挂
             # 节点 inline_after，sink 仅收无 operator 上下文的残余前缀注释）。
             comment_sink=lambda c: self._record_anchor(c, "inline"),
+            # 台账（理解路径判据③）：试建期传入 sink ⇒ 记录 pratt 消费但不建叶子的
+            # 运算符 token 下标；非试建期为 None（零开销）
+            consumed_sink=getattr(context, "_trial_pratt_sink", None),
         )
     except ValueError as e:
         self._record_fail_site(context, rule=rule.name, reason=f"pratt: {e}")
@@ -509,6 +518,8 @@ class Parser:
         self.raw_sites: list[dict] = []
         self.raw_source: str = ""
         self._raw_sites_consumed: list[dict] = []
+        # 试建期标志（候选子树试建期间抑制 raw 钩子自身，防递归自噬）
+        self._raw_trial_active: bool = False
 
     def _load_brackets(self) -> None:
         """加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）。"""
@@ -805,6 +816,7 @@ class Parser:
         self._parse_truncated = False
         # raw 位点本轮消费记录（每次 parse 重置；供 pipeline 幂等复跑按同一条件重放）
         self._raw_sites_consumed = []
+        self._raw_trial_active = False
         # 符号 store（作用域栈）每次 parse 重建：跨 parse 复用 Parser 时，上一轮
         # 留在 root 作用域里的注册（同深度、不会随 pop 消失）会让本轮 `lookup`
         # 读到过期符号。重建 + 绑定给 context ⇒ 快照/回滚连带覆盖符号（见

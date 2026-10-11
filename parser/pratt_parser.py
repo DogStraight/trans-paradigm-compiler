@@ -277,6 +277,9 @@ class _PrattCtx:
     atom_parser: Any = None
     stop_tokens: set | None = None
     comment_sink: Any = None
+    #: 台账（P4 理解路径判据③）：pratt **消费但不会建叶子**的运算符 token 下标集合。
+    #: 只由试建期传入（默认 None = 零开销）；引擎不解释语义，仅记录"谁被 pratt 吃掉"。
+    consumed_sink: set[int] | None = None
 
 
 def parse_expression(
@@ -292,6 +295,7 @@ def parse_expression(
     atom_parser=None,
     stop_tokens: set | None = None,
     comment_sink=None,
+    consumed_sink: set[int] | None = None,
 ) -> tuple[Node, int]:
     """递归解析表达式，返回 (Node, 新索引)
 
@@ -319,6 +323,7 @@ def parse_expression(
             atom_parser=atom_parser,
             stop_tokens=stop_tokens,
             comment_sink=comment_sink,
+            consumed_sink=consumed_sink,
         ),
         tokens,
         idx,
@@ -515,6 +520,8 @@ def _led_loop(
         if op_idx is None:
             break  # 停止符 / 非运算符 / 优先级不高于 rbp → 表达式到此结束
         idx = op_idx
+        if ctx.consumed_sink is not None:
+            ctx.consumed_sink.add(idx)  # 台账：pratt 消费的运算符 token（不建叶子）
         op = tokens[idx].content
         props = ctx.infix_attrs[op]
         arity = props.get("arity", 2)
@@ -662,6 +669,7 @@ def parse_with_count(
     stop_tokens: set | None = None,
     comment_sink=None,
     level: str = "expression",
+    consumed_sink: set[int] | None = None,
 ) -> tuple[Node | None, int]:
     """解析 token 列表，返回 (AST 节点, 实际消费的 token 数量)
 
@@ -696,6 +704,7 @@ def parse_with_count(
         atom_parser,
         stop_tokens,
         comment_sink,
+        consumed_sink=consumed_sink,
     )
     if ast is None:
         return None, 0

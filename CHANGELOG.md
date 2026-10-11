@@ -7,6 +7,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P4 理解路径落地：analyzer「理解」+ transform「改树」两段协作**（循环 #9）：
+  `typedef int myint;\nvoid f(void) { x = (myint)y; }` 的 raw 段现在有**确定结构**——
+  `RawStatement > ExprStmt > BinaryOp(=) > CastExpr`（类型叶子文本 `myint`），而渲染仍由
+  `_verbatim_text` 直出（保真不回归）。
+  - **作者定调（本轮纠正了维护者的错判）**：理解路径**必做**——依据 = **C 的测试完备性**要求歧义路径
+    有**确定解答**（否则该路径没有确定行为、测试无从固化）；**形态 = 两段协作**（理解 = analyzer 插件 /
+    改树 = transform 插件，**两者能力都必须有**）；并澄清 **"架构基本定型"指部件结构稳定**（子系统划分
+    与接口边界），**插件形态与插件能力是架构中持续增长的位置**（已写入 `ROADMAP.md`）。
+  - **承载段**（`parser/block_parser.py::build_raw_candidate`）：按位点给的替换配方
+    （`substitute_type`/`trial_rule`，两处注入点 **+2 键**——internal warning 本就有这两个字段）在
+    **原始 token 对象**上试建候选，挂 **`raw_candidate`**（**已还原为源码原文**）+ **`raw_substituted`**
+    （取证），**不改 children**（A3 在承载期仍成立）。**fail-closed 等价约束**：试建期开两张台账
+    （`_trial_leaf_indices` / `_trial_pratt_sink`），**`missing ⊄ pratt` ⇒ 直接丢弃候选**——实测目标句
+    `missing=[12]`（即 `=`）、`pratt=[12]`、叶子 `[11,13,14,15,16,17]`。
+    另修两处实现期坑：**试建期递归自噬**（内层解析再命中 raw 钩子 ⇒ `_raw_trial_active` 抑制）、
+    **Parser 级簿记不在 `ParseContext` 快照内**（`_comment_anchors`/`_line_comment_anchors`/
+    `_trailing_seen`/`_fail_sites`/`_parse_truncated`/`_raw_sites_consumed` ⇒ 就地还原 + `finally` 统一回滚）。
+  - **理解段**（`grammar/c/plugins/semantics/_raw_understand.py`，postpass，`requires=["c_symbols"]`）：
+    语义二次确认（**不绕过**遍历期 P4 校验）+ 结构选定（白名单 = 包侧常量 `UNDERSTOOD_STRUCTURES`），
+    结论挂 `raw_understand`、摘要进 `extra["c_raw_understanding"]`；不一致报 `E003`（**不与 E002 叠加**）；
+    候选缺失/无确定结构只记 `not_understood`（用户面不变）。
+  - **改树段**（`_raw_transform.py`，`@register_plugin("c.raw_promote")`）：`sub_node = [raw_candidate]`
+    + **保留 `_verbatim_text` 与取证属性**；**幂等**（非空即跳过）；`iter_children()` 按 `id` 去重 ⇒
+    候选**恰好遍历一次**。
+  - **通道 = 节点属性**（analyze 与 transform 共享**同一个 `state.ast` 对象**；`context.extra` 不外传）
+    ⇒ **无新能力名、无新引擎入口**（不触发升级判据 ①）。
+  - **实测**：判据 1–7 全过——结构确定 / 渲染保真（显著 token 逐项相同 + `format` 幂等 + 对拍
+    **0/144**（verilog）与 **0/8**（C））/ 负样本仍拒（遮蔽 `E002`、声明在后、tag；赋值链维持既有宽松）/
+    **用户可见面零变化**（4 条 AST 提升只发生在内部）/ 性能 tv80_core `lint` 1.31→**1.24s（−5.3%）**
+    且 verilog 语言域实测**不加载**该插件 / 缺陷态各自变红；
+    `pytest tests/engine/analyzer tests/languages/c` **1120 passed**、`tests/engine/{parser,linter,pipeline}`
+    **634 passed**、`tests/languages/c` **733 passed**；pyright strict **0**。
+  - **契约 A3 有意升级**（不变式落 `grammar/c/README.md`）：**渲染权威 = `_verbatim_text`；子树只是分析的
+    确定结构，其显著 token 序列须与 verbatim 等价**；renderer/pipeline/analyzer **无需改**（早返回直出、
+    宏拼接按标记跳过、校验只看属性且幂等）。
+  - **门禁有效性 47 → 49 条**：两段各一条守护（去 transform 提升 / 去 analyzer 结构选定）。
+  - **收口修复**：C 包新增 transform handler 后**漏声明 `transform.slots.v1`**（`grammar/c/tpc.toml`），
+    被 `tests/policy/test_engine_capabilities.py` 抓到（verilog/c4 早已声明）⇒ 已补，修复后该面 **742 passed**。
+  - **已知边界（登记 `TODO.md`）**：① 复合字面量 `(t){1}` 承载期建候选失败 ⇒ 不提升、不报错
+    （记 `not_understood: candidate_missing`）；② 赋值链 `x=(t)y+z=1;` 也被提升（成功面不变，
+    与该形态的既有宽松一致）。
+
 - **跨形态标记判据上移为引擎通用面**（循环 #8）：`transform/normalizer.py` 会把 `keyword.*` / `symbol.*` /
   `literal.*` 的 token 叶子抽成**字符串属性**（`StorageClass.base = "typedef"`）⇒ 任何"子树里含某
   token **节点**"的判据在**生产口径**下失效（P1 曾因此把 typedef 全收成 `variable`，P4 误拒合法输入）。
