@@ -79,18 +79,17 @@ class TestEligibilityTarget:
         assert w["substitute_type"] == "keyword.int"
         assert w["eligible"] is True
 
-    def test_m1_user_visible_unchanged(self, c_scanner):
-        """M1 零用户可见变化：目标句**仍** 2 条 blocking，且不含 M2 回填字段。
+    def test_m2_downgrade_enabled(self, c_scanner):
+        """M2 已接（与 raw 同批）：资格位点 region 内的结构类诊断摘成内部 warning。
 
-        （PRE=HEAD / POST 快照 SHA256 相同的完整证据见
-        `_drafts/verify_task25_zerochange.py`；M2 与 P4 原子落地，见
-        `linter/linter_architecture.md`。）
+        ⚠ 安全网 = P4 的 analyze 精确符号面校验（raw 校验不过 ⇒ 报错，不静默）；
+        本断言只覆盖 linter 侧摘除面（端到端闭环另有管线测试）。
         """
         diags, warns = _scan(c_scanner, TARGET)
-        assert [d.code for d in diags] == ["phase-unrecognized", "phase-statement"]
-        assert all(d.blocking for d in diags)
-        assert "downgraded" not in warns[0]
-        assert "suppressed" not in warns[0]
+        assert diags == []  # 2 条结构类诊断按窄档摘除
+        assert warns[0]["eligible"] is True
+        assert warns[0]["downgraded"] is True
+        assert warns[0]["suppressed"] == 2
 
 
 class TestDepthGuard:
@@ -142,13 +141,16 @@ class TestShadowingBoundary:
 
     def test_shadowed_use_site_exists_and_m1_unsound(self, c_scanner):
         diags, warns = _scan(c_scanner, self.SHADOWED)
-        assert len(diags) == 1 and all(d.blocking for d in diags)
+        assert diags == []  # M2：该位点诊断被摘（安全网 = P4 校验，见下）
         # P3c 前：warns == []（函数体语句位不可达）；P3c 后：位点可达
         assert len(warns) == 1
         w = warns[0]
         assert (w["symbol_names"], w["line"], w["column"]) == (["t"], 2, 22)
-        # ⚠ M1 在遮蔽上**不健全**（不是"判对了"）：资格三判据各自成立，但符号身份错
+        # ⚠ M1 在遮蔽上**不健全**（不是"判对了"）：资格判据各自成立，但符号身份错。
+        # M2 后该位点被摘诊断（downgraded=1）⇒ **唯一安全网是 P4 精确符号面校验**：
+        # P4 必须判 `t` 此处为局部变量 ⇒ 报错（task-31 的查询负责）。
         assert w["eligible"] is True, "边界变化时必须重新登记（M2 不得只依赖 M1）"
+        assert w["downgraded"] is True and diags == []
 
 
 class TestProductionLevelSites:
@@ -160,57 +162,40 @@ class TestProductionLevelSites:
     """
 
     # 位点扩展新增可达的输入：期望 (诊断冻结值, 位点 line/column)
+    # 期望 = M2 后实测（诊断, 位点 line/column）。可摘 = 诊断起点落在 site region 内。
     FN_BODY = (
         "typedef int myint;\nvoid f(void) { x = (myint)y; }\n",
-        [("phase-statement", 1, 15)],
+        [],
         (2, 15),
     )
     IF_IN_FN = (
         "typedef int myint;\nvoid f(void){ if (c) x = (myint)y; }\n",
-        [("phase-statement", 1, 14)],
+        [("phase-statement", 1, 14)],  # 诊断报在**容器起点**、不在 site region ⇒ 不摘
         (2, 21),
     )
     IF_TOP = (
         "typedef int myint;\nif (c) x = (myint)y;\n",
-        [
-            ("phase-unrecognized", 1, 7),
-            ("phase-statement", 1, 7),
-            ("phase-statement", 1, 18),
-        ],
+        [],
         (2, 7),
     )
     WHILE_TOP = (
         "typedef int myint;\nwhile (c) x = (myint)y;\n",
-        [
-            ("phase-unrecognized", 1, 10),
-            ("phase-statement", 1, 10),
-            ("phase-statement", 1, 21),
-        ],
+        [],
         (2, 10),
     )
     FOR_TOP = (
         "typedef int myint;\nfor (;;) x = (myint)y;\n",
-        [
-            ("phase-unrecognized", 1, 9),
-            ("phase-statement", 1, 9),
-            ("phase-statement", 1, 20),
-        ],
+        [],
         (2, 9),
     )
     DO_WHILE_TOP = (
         "typedef int myint;\ndo x = (myint)y; while (c);\n",
-        [
-            ("phase-unrecognized", 1, 3),
-            ("phase-statement", 1, 3),
-            ("phase-statement", 1, 5),
-            ("phase-statement", 1, 14),
-            ("phase-statement", 1, 14),
-        ],
+        [],
         (2, 3),
     )
     NESTED_FN = (
         "typedef int myint;\nvoid f(void) { if (c) { x = (myint)y; } }\n",
-        [("phase-statement", 1, 15)],
+        [("phase-statement", 1, 15)],  # 同上：报在容器起点 ⇒ 不摘
         (2, 24),
     )
 
@@ -254,9 +239,10 @@ class TestProductionLevelSites:
         diags, warns = _scan(
             c_scanner, "void f(void) { typedef int t; x = (t)y; }\n"
         )
-        assert [d.code for d in diags] == ["phase-statement"]  # 诊断不变
+        assert diags == []  # M2：该诊断落在 site region 内 ⇒ 摘除
         hits = [w for w in warns if w["eligible"]]
         assert len(hits) == 1 and (hits[0]["line"], hits[0]["column"]) == (1, 30)
+        assert hits[0]["suppressed"] == 1
 
     def test_builtin_cast_no_site(self, c_scanner):
         """内建转换 `(int)`：不产生位点（无未收敛候选）⇒ 无内部噪音。"""

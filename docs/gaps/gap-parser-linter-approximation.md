@@ -59,8 +59,19 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   元素起点`——"同行 `col ≥ site.col`"式 fallback 会把行/列漂移变成**错位消费**，应删；raw 消费区间
   **必须等于** linter `region`（与 `_stmt_ends`/`_block_ends`/`_derived_end_case` **单一来源**——P3 首次
   尝试曾自写 `derive_stmt_end_types`，已随回退删除）。
-- **作用域判据成立**（审计实测：遮蔽输入上三条判据全过）⇒ 单独上 raw 会**新增掩盖**（赋值链与遮蔽例
-  静默）⇒ **raw 承载必须与 M2+P4 同批**（原子批次，见 `ROADMAP.md`）。
+- **循环 #7 交付后的现状与已知偏差（2026-10-11）**：
+  - **raw 承载 + M2 窄档 + P4 校验已落地**：`(myint)x` 在**顶层**与 **`CompoundStmt` 直接子语句**
+    闭环（0 blocking + `success=True` + `_verbatim_text` 直出保真）；**安全网 = P4 的 analyze 校验**
+    （遮蔽例被 `E002` 拒绝、不静默）。**理解路径（raw → `CastExpr`）未做**（登记 `TODO.md`）。
+  - **已知偏差（本批不做）**：① `x = (t)y + z = 1;`（gcc 判 `lvalue required`）现与 `(int)` 版
+    **对齐放行**——引擎既有宽松，非本批引入；② `void f(int t);` 的**原型参数泄漏到文件作用域**
+    （`t @ <global>`）⇒ "有全局 typedef 时的原型参数"会被 P4 误拒（修法在 `grammar/c/*.toml`
+    的原型作用域声明）。
+  - **一条引擎级陷阱（P1 曾被它害，值得记住）**：`transform/normalizer.py` 会把 `keyword.*` /
+    `symbol.*` / `literal.*` 的 token 叶子抽成**字符串属性**（`StorageClass.base = "typedef"`）⇒
+    任何"子树里含某 token **节点**"的判据在**生产口径**下失效（P1 因此把 typedef 全收成 `variable`，
+    P4 误拒合法输入；而 P1 测试走的是未 normalize 的口径，**掩盖了它**）。现 C 包 `_api._subtree_has`
+    已做成**跨形态判据**，并补了生产口径判据；"上移为引擎通用面"已登记 `TODO.md`。
 - **性能**：真实语料 tv80_core（4755 行 / 2314 未收敛位点）`tpc lint` 由初测 **+13.7%** 经
   "段表 + 二分反查 + 前缀深度缓存"优化后回到 **+0.0%**（试解析本身不是热点，verilog 无 trial）。
 

@@ -18,7 +18,7 @@ Doc: linter/linter_architecture.md
 
 import os
 
-from core.define import GrammarRule
+from core.define import GrammarRule, Token
 from core.config_registry import ConfigRegistry, declare_cfg
 from core.token_protocol import (
     BRACKET_L_PREFIX,
@@ -30,7 +30,7 @@ from lexer import Lexer, load_pre_scan_config
 from parser import setup_grammar
 from preprocessor._expand import scan_directives, expand_tokens, _load_config
 
-from . import LintDiagnostic, Position
+from . import LintDiagnostic, Position, token_pos
 from .grammar_slicer import build_slice_tree
 from .discovery import Discovery
 from .checker import CheckerRegistry
@@ -40,6 +40,11 @@ from .checkers.macro_token import MacroTokenChecker
 from .checkers.statement import StatementChecker
 from .checkers.expression import ExpressionChecker
 from .checkers.style import StyleChecker
+
+# M2 窄档可摘的**结构类**诊断码（判据见 `LinterScanner._apply_narrow_downgrade`）：
+# 只这两类"语句/未识别"结构码；`phase1-boundary`（块配对）、`lexer-error`、宏卫生与
+# ST* 样式码一律保留 ⇒ 真错不被摘（R6/R7 反例锁定）。
+_DOWNGRADABLE_CODES = frozenset({"phase-statement", "phase-unrecognized"})
 
 # linter.macro_hygiene
 #   #sym:config = [macro_hygiene]
@@ -320,6 +325,9 @@ class LinterScanner:
         # **中性能力**（判据见 `lookahead._type_name_hits` / `_substitution_trial`）。
         # 预扫描不精确（`lexer/pre_scan.py:1-5` 自述）⇒ 只作提示、不作语法判据。
         pre_cfg = load_pre_scan_config(self._rules_dir)
+        # raw 互斥（P3c/M2）：包侧 `[pre_scan] raw_exclude_rules`（声明类规则名）。
+        # 走与 `lexer.bracket_map` 同一条既有读取面（`ConfigRegistry._loaded` 的合并表）
+        # ——`load_pre_scan_config` 只搬运它认识的键，该键不经引擎编译，引擎只做集合交。
         self._discovery.set_symbol_hints(
             self._pre_scan_symbols(lex_source, pre_cfg),
             self._all_bracket_openers,
@@ -327,6 +335,7 @@ class LinterScanner:
             type_name_kinds=pre_cfg.get("type_name_kinds", frozenset()),
             trial_as=pre_cfg.get("trial_as", {}),
             depth_pair=self._depth_pair,
+            raw_exclude_rules=self._raw_exclude_rules(),
         )
 
         registry = CheckerRegistry()
@@ -384,11 +393,62 @@ class LinterScanner:
         # 未识别语句诊断（发现阶段记录）与各 Checker 诊断合并输出。
         errors = self._discovery.unrecognized_diagnostics()
         errors += registry.validate_all(tokens)
-        # ⚠ M1 交付面：**不摘诊断、不接 raw**（资格判定只写内部证据字段）。
-        # M2（raw + 窄档摘诊断）与 P4（analyzer 用 `phase="analyze"` 精确符号面校验
-        # "该名在此处确实是 typedef"）**原子落地**——原因见 linter_architecture.md
-        # 「raw 资格判定（M1）」节的 M2 路线与已知边界。
-        return errors
+        # M2 窄档摘诊断（与 parser 侧 raw 承载**同批**）：只摘 `eligible` 位点 region
+        # 内的两类**结构类**码；其余码（phase1-boundary / lexer-error / 宏卫生 / ST*）
+        # 一律保留 ⇒ 真错不被静默。两批缺一不可（只摘不 raw ⇒ 更差的含糊截断报错）。
+        return self._apply_narrow_downgrade(errors, tokens)
+
+    def _apply_narrow_downgrade(
+        self, errors: list[LintDiagnostic], tokens: list[Token]
+    ) -> list[LintDiagnostic]:
+        """窄档摘诊断：`eligible` 位点 region 内的**结构类**诊断摘成内部 warning。
+
+        三条同时成立才摘（缺一不摘 ⇒ 保持 blocking）：
+          ① 位点条目 `eligible=True`（资格判定，见 `lookahead._record_convergence`；
+             含 raw 互斥 ④：关键字触发的声明类候选句一律不 eligible）；
+          ② 诊断码 ∈ `_DOWNGRADABLE_CODES`（结构类；样式/宏卫生/边界/lexer 一律不动）；
+          ③ 诊断起点落在该位点的**句子区间** `region` 内（token 下标；`region` 由
+             `lookahead._find_boundary` → `_stmt_ends` 推导——与 parser 侧区间等式同源）。
+        被摘的诊断不返回 ⇒ 不再阻断管线；位点由内部 warning 旁路承载（`downgraded`/
+        `suppressed` 回填），pipeline 同批把位点交给 parser 走 raw 暂缓建树。安全网 =
+        P4 的 analyze 精确符号面校验（校验不过 ⇒ 报错，不静默）。
+        """
+        sites = [w for w in self._internal_warnings if w.get("eligible") and w.get("region")]
+        if not sites:
+            return errors
+        kept: list[LintDiagnostic] = []
+        for diag in errors:
+            hit = None
+            if diag.code in _DOWNGRADABLE_CODES:
+                start_pos = diag.range[0]
+                for w in sites:
+                    start, end = int(w["region"][0]), int(w["region"][1])
+                    # 位置比对统一走 `token_pos`（token 1-based → LSP 0-based）。
+                    if any(
+                        token_pos(t) == start_pos
+                        for t in tokens[start : min(end + 1, len(tokens))]
+                    ):
+                        hit = w
+                        break
+            if hit is None:
+                kept.append(diag)
+            else:
+                hit["downgraded"] = True
+                hit["suppressed"] = int(hit.get("suppressed", 0)) + 1
+        return kept
+
+    def _raw_exclude_rules(self) -> frozenset[str]:
+        """包侧 `[pre_scan] raw_exclude_rules`（声明类规则名；raw 互斥用）。
+
+        读法与 `lexer.bracket_map` 同一既有面（`ConfigRegistry._loaded` 的合并表）：
+        `load_pre_scan_config` 只搬运引擎认识的键，该键由语言包声明、引擎只做集合交
+        （语言知识不进代码）。未声明 ⇒ 空集（互斥不生效，行为与声明前一致）。
+        """
+        table = ConfigRegistry._loaded.get("lexer.pre_scan", {}) or {}
+        declared = table.get("raw_exclude_rules", [])
+        if not isinstance(declared, list):
+            return frozenset()
+        return frozenset(str(x) for x in declared)
 
     def _pre_scan_symbols(self, source: str, config: dict | None = None) -> dict[str, dict]:
         """本轮 `pre_scan` 名字（含 kind + 声明位置；**只作提示**）。

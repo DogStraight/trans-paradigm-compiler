@@ -521,6 +521,22 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "                if False:  # 变异：不按 kind 过滤\n",
         "test": "tests/engine/linter/test_linter_raw_eligibility.py",
     },
+    {
+        "why": "raw 兜底接入点被禁（`parse_call` 里的 `_try_raw_at_statement_start`）⇒ production 层"
+               "语句位不再产出 raw 节点：本批用户可见能力整体消失（契约测试必红）",
+        "file": "parser/_production.py",
+        "old": "        raw_node = self._try_raw_at_statement_start(context)\n",
+        "new": "        raw_node = None  # 变异：禁 raw 兜底\n",
+        "test": "tests/engine/parser/test_parser_raw_site.py",
+    },
+    {
+        "why": "`_subtree_has` 退回**只按节点名**判（P1 的生产缺陷原形态）⇒ normalize 后 token 变字符串、"
+               "命中恒 False ⇒ typedef 全被收成 variable ⇒ P4 误拒合法 `(t)y`（生产口径判据必红）",
+        "file": "grammar/c/plugins/semantics/_api.py",
+        "old": "            return _named_hit(node, text) or _scalar_value_hit(node, short)\n",
+        "new": "            return _named_hit(node, text)  # 变异：只按节点名判（生产口径失效）\n",
+        "test": "tests/engine/analyzer/test_c_symbol_collection_production.py",
+    },
 ]
 
 

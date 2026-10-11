@@ -128,6 +128,7 @@ ACCUMULATED: dict[str, str] = {
     "analyzer.primitives._symbol._capture_hooks": "符号捕获钩子表（同上）",
     "preprocessor.primitives.registry._registry": "指令处理原语注册表（同上）",
     "transform.primitives.registry._registry": "变换原语注册表（同上）",
+    "analyzer.raw_contract._QUERIES": "raw「类型名查询」注册表（语言包 import 期注册，只增；引擎按名解析）",
 }
 
 # ── 登记表 4/6：CONTENT_ADDRESSED——键 = 输入，同参结果恒定，可保留 ──
@@ -171,6 +172,7 @@ CONSTANT: dict[str, str] = {
     "core.define.GrammarRule._TOP_LEVEL_FIELDS": "规则字段 schema 字面量",
     "core.define.GrammarRule._KNOWN_FIELDS": "规则字段 schema 字面量",
     "analyzer.report_html._SEVERITY_META": "严重度展示元数据字面量",
+    "analyzer.raw_contract.BUILTIN_RAW_ANALYZER_CONFIG": "raw 校验的内建 analyzer 配置字面量（规则表查不到时回落，只读）",
     "lexer.main_lexer.Lexer.token_define": "类级默认模板（实例构造即重绑 self.token_define）",
     "lexer.capture_runner._CAPTURE_HANDLERS": "capture kind → 终止条件 handler 分发表（只读，`_VALID_KINDS` 由它派生）",
     "lexer.number_gen._CHAR_CATEGORY": "字符类别字面量表",

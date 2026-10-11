@@ -424,6 +424,10 @@ class LookaheadTable:
         # 前缀深度表缓存（按 token 流身份；见 `_depth_before`）
         self._depth_prefix: list[int] | None = None
         self._depth_prefix_tokens: list[Token] | None = None
+        # raw 互斥（P3c/M2）：包声明的"声明类规则名"（`[pre_scan] raw_exclude_rules`）。
+        # 语句起点**关键字触发**且候选命中该集合 ⇒ 该句不得进 raw 档（raw 会暂缓建树
+        # ⇒ 该句声明不进符号表 ⇒ 后置精确校验看不到遮蔽）。引擎只做集合交。
+        self._raw_exclude_rules: frozenset[str] = frozenset()
 
     # ── 符号提示（P2b/P3b：pre_scan 名 + kind 语义 + 括号形态 + 深度配对） ──
 
@@ -436,6 +440,7 @@ class LookaheadTable:
         type_name_kinds: frozenset[str] | None = None,
         trial_as: dict[str, str] | None = None,
         depth_pair: tuple[str, str] | None = None,
+        raw_exclude_rules: frozenset[str] | None = None,
     ) -> None:
         """设置本轮符号提示（每轮 `scan()` 由 scanner 覆盖式设置）。
 
@@ -443,7 +448,8 @@ class LookaheadTable:
         line, column, depth}}`；语言包声明驱动，引擎不解释语义）；`type_name_kinds` /
         `trial_as` = 包侧在 `[pre_scan.decl.*]` 上声明的"类型名 kind"与"类型名形态
         试解析替换 token 型"；`depth_pair` = `{`/`}` 的 token 型（深度守卫）；
-        `bracket_openers/closers` = 引擎括号 token 集。
+        `raw_exclude_rules` = 包侧 `[pre_scan] raw_exclude_rules`（声明类规则名，
+        raw 互斥用）；`bracket_openers/closers` = 引擎括号 token 集。
 
         预扫描**不是精确的**（`lexer/pre_scan.py:1-5` 自述：平坦/首见归属/无顺序）
         ⇒ 只作提示：命中只进内部证据字段与资格判定，不作语法判据。
@@ -454,6 +460,7 @@ class LookaheadTable:
         self._bracket_openers = bracket_openers or frozenset()
         self._bracket_closers = bracket_closers or frozenset()
         self._depth_pair = depth_pair
+        self._raw_exclude_rules = raw_exclude_rules or frozenset()
 
     def _type_name_hits(self, tokens: list[Token], i: int) -> list[dict]:
         """位点区间里**"括号内类型名"**形态的命中（P3b 判据①②；带位置与下标）。
@@ -1078,6 +1085,16 @@ class LookaheadTable:
             trials_evidence.append({"name": h["name"], **ev})
             eligible = eligible or bool(ev["trial_ok"])
         first = trials_evidence[0] if trials_evidence else {}
+        # ④ raw 互斥（P3c/M2）：语句起点**关键字触发**且候选命中包声明的"声明类规则"
+        # ⇒ 该句不得进 raw 档。理由：raw 整段暂缓建树 ⇒ 该句声明的名字不进符号表 ⇒
+        # 后置精确校验看不到遮蔽（联合反例 `int t = (u)v;` 被 raw 后 `(t)y` 被误接受）。
+        # 只用**关键字触发**的候选集：标识符触发的候选句（如 `x = (myint)y;`）候选里
+        # 也有 Declaration，但那是"可能"——按它排除会把目标句一起误杀。
+        decl_trigger = self.keyword_map.get(tokens[i].type, []) if 0 <= i < len(tokens) else []
+        exclude_hits = sorted(
+            {str(e.get("name")) for e in decl_trigger} & self._raw_exclude_rules
+        )
+        eligible = eligible and not exclude_hits
         end = min(self._find_boundary(tokens, i + 1, len(tokens)), len(tokens))
         self._internal_warnings.append(
             {
@@ -1119,6 +1136,8 @@ class LookaheadTable:
                 "substitute_type": first.get("substitute_type", ""),
                 "trial_evidence": trials_evidence,
                 "eligible": eligible,
+                # ④ raw 互斥证据：关键字触发的候选里命中的"声明类规则"（空 = 未触发）
+                "raw_exclude_hits": exclude_hits,
                 "region": [i, end],
             }
         )

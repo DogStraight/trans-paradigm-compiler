@@ -380,6 +380,10 @@ from .block_parser import (
     parse_block_body,
     parse_block,
     collect_line_comments,
+    # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）
+    match_raw_site,
+    try_raw_sentence,
+    try_raw_at_statement_start,
 )
 
 
@@ -434,6 +438,10 @@ class Parser:
     _parse_block_body = parse_block_body
     parse_block = parse_block
     _collect_line_comments = collect_line_comments
+    # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）
+    match_raw_site = match_raw_site
+    try_raw_sentence = try_raw_sentence
+    _try_raw_at_statement_start = try_raw_at_statement_start
 
     def __init__(
         self,
@@ -495,6 +503,12 @@ class Parser:
         self.pre_hints: dict[str, list[str]] = {}
         # 解析时作用域栈（可选，配合 peek scope 使用）
         self.scope_stack = _ScopeStack()
+        # 歧义位点 raw 暂缓建树（P3c/M2，内部机制）：位点表与源文本由 pipeline 注入
+        # （最小通道：纯 dict 列表 + 一段文本，不把 pipeline context 塞进 parser）。
+        # 默认空表 ⇒ 机制关闭（零影响）。
+        self.raw_sites: list[dict] = []
+        self.raw_source: str = ""
+        self._raw_sites_consumed: list[dict] = []
 
     def _load_brackets(self) -> None:
         """加载括号映射（配置驱动，命名逻辑集中在 core/utils.py）。"""
@@ -789,6 +803,8 @@ class Parser:
         self._fail_sites = {}
         self._last_failure_report = None
         self._parse_truncated = False
+        # raw 位点本轮消费记录（每次 parse 重置；供 pipeline 幂等复跑按同一条件重放）
+        self._raw_sites_consumed = []
         # 符号 store（作用域栈）每次 parse 重建：跨 parse 复用 Parser 时，上一轮
         # 留在 root 作用域里的注册（同深度、不会随 pop 消失）会让本轮 `lookup`
         # 读到过期符号。重建 + 绑定给 context ⇒ 快照/回滚连带覆盖符号（见

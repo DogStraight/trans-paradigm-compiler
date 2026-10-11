@@ -44,6 +44,12 @@ start = "'"
 context_keywords = []
 # 关掉"声明类别之外的关键字兜底收集"——见文件头注（杂质面）。
 fallback = false
+# raw 互斥（P3c/M2）：语句起点是**关键字触发**且候选含下列规则时，该句**不得**进
+# raw 档——raw 会整段暂缓建树 ⇒ 该句声明的名字不进符号表 ⇒ 后置精确校验看不到遮蔽
+# （联合反例：`int t = (u)v;` 被 raw 后 `(t)y` 会被误接受）。取值是**规则名**（语言
+# 知识在本文件；引擎只做集合交，不解释语义）。标识符触发的候选句不在内（如
+# `x = (myint)y;` 的候选中也有 Declaration，但那是"可能"而非"确定"）。
+raw_exclude_rules = ["Declaration", "FuncDef"]
 
 # ── 声明类别（kind 即 `pre_symbols` 的取值，也是产物里 `phase="pre_scan"` 记录的 kind） ──
 #

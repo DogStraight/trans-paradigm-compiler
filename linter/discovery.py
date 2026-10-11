@@ -161,11 +161,13 @@ class Discovery:
         type_name_kinds: frozenset[str] | None = None,
         trial_as: dict[str, str] | None = None,
         depth_pair: tuple[str, str] | None = None,
+        raw_exclude_rules: frozenset[str] | None = None,
     ) -> None:
         """转发符号提示给消歧表（P2b/P3b：`pre_scan` 名与位置 + kind 语义 + 括号集）。
 
         每轮 `scan()` 由 scanner 覆盖式设置；只影响未收敛位点的 `symbol_dependent`
-        标记与 `eligible` 资格判定（三条判据），不影响候选/诊断内容。
+        标记与 `eligible` 资格判定（判据条数见 `lookahead._record_convergence`），
+        不影响候选/诊断内容。`raw_exclude_rules` = 包声明的声明类规则（raw 互斥）。
         """
         self._lookahead.set_symbol_hints(
             symbols,
@@ -174,6 +176,7 @@ class Discovery:
             type_name_kinds=type_name_kinds,
             trial_as=trial_as,
             depth_pair=depth_pair,
+            raw_exclude_rules=raw_exclude_rules,
         )
 
     def dump_nodes(

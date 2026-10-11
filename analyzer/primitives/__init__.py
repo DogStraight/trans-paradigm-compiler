@@ -1,6 +1,6 @@
 """analyzer/primitives/ — primitive registry and built-in primitives.
 
-Built-in analyzer primitives (scope, symbol, identifier) are
+Built-in analyzer primitives (scope, symbol, identifier, raw 校验) are
 loaded here as regular imports — not through the component system.
 Language-specific primitives are injected via components.
 Doc: analyzer/semantic_checks.md（分析原语注册表）
@@ -21,8 +21,9 @@ from .registry import (
 from . import _scope
 from . import _symbol
 from . import _identifier
+from . import _raw_validate
 
-_PRIMITIVE_MODULES = (_scope, _symbol, _identifier)
+_PRIMITIVE_MODULES = (_scope, _symbol, _identifier, _raw_validate)
 
 __all__ = [
     "register_primitive",

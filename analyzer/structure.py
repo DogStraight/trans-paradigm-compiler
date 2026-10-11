@@ -267,6 +267,11 @@ class FilePipeline:
         # （用户决策——保留原语义“语法错则语义不可靠”）；卫生/风格类
         # （blocking=False，如 ST 族排版提示）不影响解析，继续跑。
         fr.lint_diags = shared["linter"].scan(source)
+        # raw 位点（P3c/M2，**内部机制**）：紧接 scan 取走本轮"合格位点"，与
+        # pipeline 侧**同形**接线（最小通道：纯 dict + 一份源文本，不传 context）。
+        # 这里 lint 与词法都作用在**同一份 `source`**（上面的宏展开后文本）⇒ 位点
+        # region 的 token 下标与 parser token 流可比，无需额外同源门。
+        internal_warnings = shared["linter"].internal_warnings()
         if any(d.blocking for d in fr.lint_diags):
             return fr
 
@@ -284,6 +289,19 @@ class FilePipeline:
             rule_selector=shared["rule_selector"],
         )
         parser.pre_hints = pre_scan_config.get("hints", {})
+        parser.raw_sites = [
+            {
+                "line": int(w.get("line", 0)),
+                "column": int(w.get("column", 0)),
+                "region": (int(w["region"][0]), int(w["region"][1])),
+                "names": list(w.get("symbol_names") or []),
+                "reason": str(w.get("reason", "")),
+                "order": w.get("pos"),
+            }
+            for w in internal_warnings
+            if w.get("eligible") and w.get("region")
+        ]
+        parser.raw_source = source
         try:
             tokens = shared["lexer"].tokenize(source)
             ast = parser.parse(tokens)

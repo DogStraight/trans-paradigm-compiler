@@ -37,12 +37,16 @@
 - [ ] **逐声明符位宽**（`int a : 3, b : 4;` 解析失败）：标准里位宽属声明符，本包宽度绑在
       整个成员声明后（一个 `DeclaratorList` 共用一个宽度）；要支持需形态改动。
       当前单声明符位域与匿名占位可用。链：`grammar/c/02_types.toml::StructMember` 注释
-- [ ] **C 语义基座下一批 = raw 承载 + M2 窄档摘诊断 + P4 analyzer 校验（原子批次，不许拆）**：
-      位点发现面已交付（循环 #6，linter 侧）；raw 承载须与 P4 的 `analyze` 精确符号面校验同批
-      （审计：作用域判据成立 ⇒ 单独上 raw 会新增掩盖）。接入点**不止** `_repeat_loop`（单元素
-      `@Stmt` 走 `_parse_call`）；位点生效须精确 (line,col)、消费区间 == linter `region`。
-      判据：`void f(void) { x = (myint)y; }` 闭环 + 遮蔽/赋值链 + `tpc check` 自相矛盾修复 +
-      反例集仍报真错。链：`docs/gaps/gap-parser-linter-approximation.md`（task-29）
+- [ ] **P4 理解路径（raw 段 → `CastExpr`）**：循环 #7 已落地 raw 承载 + M2 + **校验安全网**（目标句
+      现 0 blocking + success + 输出保真，raw 走 `_verbatim_text` 直出）；**analyzer 尚未把 raw 段
+      理解为 `CastExpr` 子树** ⇒ 后续语义分析看不到转换结构。判据：raw 段在 analyze 后产出等价
+      `CastExpr`（正样本通过 + 遮蔽负样本仍被拒），渲染保真不回归。
+      链：`docs/gaps/gap-c-semantic-base.md`（P4）；来源：循环 #7（派生）
+- [ ] **normalize 跨形态判据上移为引擎通用面**：`transform/normalizer.py` 把 `keyword.*`/`symbol.*`/
+      `literal.*` token 叶子抽成**字符串属性** ⇒ "子树含某 token"的判据在生产口径下失效（P1 在 C 包
+      踩中：typedef 恒被收成 variable ⇒ P4 误拒合法输入）。现修法落在 C 包 `_api._subtree_has`，
+      别的语言包要判 token 标记会重复踩。判据：引擎提供通用面（如 `marker_matches(node, marker)`），
+      C 包改为调用它且两形态判据全绿。来源：循环 #7 实现者建议（派生）
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须

@@ -6,7 +6,7 @@ _parse_block_body, parse_block。
 Doc: docs/language_walkthrough.md（块规则解析）
 """
 
-from core.define import Node, GrammarRule, block_end_of
+from core.define import Node, GrammarRule, Token, block_end_of
 from .parser_core import ParseContext
 from ._constants import (
     COMMENT_NODE_NAME,
@@ -14,9 +14,142 @@ from ._constants import (
     NEWLINE_TOKEN_TYPE,
 )
 
+# ── 歧义位点 raw 暂缓建树（**引擎内部机制**；契约见 linter/linter_architecture.md） ──
+# 位置：语句起点命中 pipeline 注入的"合格位点"（按**精确 (line, column)**），且该起点
+# 的所有语句候选都匹配失败（能建树就不 raw ⇒ 真语法错照旧）⇒ 不建树、按位点 region
+# 的 **token 下标等式**消费整句，产出带 `_verbatim_text` 的节点；渲染走既有直出
+# （`renderer/node_renderer.py` 先查 `_verbatim_text`），**渲染零改动**。
+# 节点**无子节点**：属性承载全部信息（否则渲染（不遍历子节点）与分析（iter_children）
+# 会形成两套真值）。空位点表 ⇒ 机制关闭（默认零影响）。
+RAW_NODE_NAME = "RawStatement"
 
-def parse_sentence(self, context: ParseContext) -> Node | None:
-    """解析一条语句：根据当前 token 选择候选规则并尝试匹配。"""
+
+def _char_offset(source: str, line: int, column: int) -> int:
+    """（1-based 行，0-based 列）→ 字符偏移（口径同 `pipeline._token_offsets`）。"""
+    starts = [0]
+    for ln in source.split("\n"):
+        starts.append(starts[-1] + len(ln) + 1)
+    if 1 <= line < len(starts):
+        return starts[line - 1] + column
+    return len(source)
+
+
+def _verbatim_slice(source: str, first: Token, last: Token) -> str:
+    """首/末 token 之间的**源文本切片**（含末 token 全文）——保真直出的唯一来源。"""
+    if not source:
+        return ""
+    lo = _char_offset(source, first.line, first.column)
+    hi = _char_offset(source, last.line, last.column) + len(str(last.content))
+    return source[lo:hi]
+
+
+def match_raw_site(self, token: Token | None) -> dict | None:
+    """按**精确 (line, column)** 找该 token 的位点；无 → None。
+
+    **无 fallback**：曾有的"同行内第一个 column ≥ 位点列"退化会把列漂移变成**错位
+    消费**（消费到别的语句），故删掉——对不上即不 raw，走既有失败路径（不静默）。
+    位点表为空（默认）⇒ 恒 None，机制关闭。
+    """
+    if not self.raw_sites or token is None:
+        return None
+    line, column = token.line, token.column
+    for site in self.raw_sites:
+        if line == site.get("line") and column == site.get("column"):
+            return site
+    return None
+
+
+def try_raw_sentence(
+    self, context: ParseContext, site: dict, block_end_token: str | None = None
+) -> Node | None:
+    """按位点 region 的 **token 下标等式**消费整句，产出 raw 节点（契约 C）。
+
+    等式（冻结）：`consumed == region` —— 位点 region `[lo, hi]` 的 **token 下标**
+    （含 trivia）必须与 parser 实际消费的区间逐位相同：入口 `token_pointer` 必须等于
+    `lo`，消费后必须到达 `hi + 1`。**不靠"找结束符"重推边界**（那会引入第二份语句
+    结束推导，与 linter 的 `_stmt_ends` 漂移）。不满足（下标错位/超界/块结束符在区间
+    内）⇒ 返回 None，交回既有失败路径（**不得静默**）。
+
+    `block_end_token`：所在块体的结束符——区间不得吞掉它（块结束符归父块）。
+    """
+    tokens = context.tokens
+    region = site.get("region")
+    if not region or len(region) != 2:
+        return None
+    lo, hi = int(region[0]), int(region[1])
+    start = context.token_pointer
+    end = hi + 1
+    # 区间等式的前半：位点下标必须与 parser 当前位置逐位一致（两侧 token 流同源）
+    if lo != start or end <= start or end > len(tokens):
+        return None
+    if block_end_token and any(t.type == block_end_token for t in tokens[start:end]):
+        return None  # 区间吞掉了块结束符 ⇒ 交给既有失败路径（不静默改判）
+    text = _verbatim_slice(self.raw_source, tokens[start], tokens[end - 1])
+    if not text.strip():
+        return None
+    node = Node(RAW_NODE_NAME)
+    # 契约 A：无子节点；全部信息走属性（渲染直出 + 分析取证）
+    node.add_attr("_verbatim_text", text)
+    node.add_attr("_tok_span", (start, end))
+    node.add_attr("raw_names", list(site.get("names") or []))
+    node.add_attr("raw_line", int(site.get("line", 0)))
+    node.add_attr("raw_column", int(site.get("column", 0)))
+    # `raw_order`：使用点的 token 流序位（同行先后不能只靠 line 判）。**缺省写 None**
+    # （不写 -1）：-1 是"有效的极小序位"，会让"照数比"的判定把合法位点误判为"声明在后"。
+    order = site.get("order")
+    node.add_attr("raw_order", int(order) if isinstance(order, int) else None)
+    node.add_attr("raw_reason", str(site.get("reason", "")))
+    node.add_attr("raw_eligible", True)
+    # 契约 C 的后半：消费位必须等于 region 上界 +1（逐位相等，不"找到即止"）
+    context.token_pointer = end
+    if context.token_pointer != hi + 1:
+        return None
+    # 消费记录（按 (line, column) 去重）：候选回溯会让同一位置被重试多次，
+    # 记录是"哪些位点被本轮流采用"的集合语义（pipeline 用它报未重定位数）。
+    if not any(
+        c["line"] == site.get("line") and c["column"] == site.get("column")
+        for c in self._raw_sites_consumed
+    ):
+        self._raw_sites_consumed.append(
+            {
+                "line": site.get("line"),
+                "column": site.get("column"),
+                "names": list(site.get("names") or []),
+                "reason": site.get("reason", ""),
+                "span": (start, end),
+                "text": text,
+            }
+        )
+    self._log_state(
+        lambda: f"raw 位点暂缓建树: L{site.get('line')}:{site.get('column')} "
+        f"span={start}..{end}"
+    )
+    return node
+
+
+def try_raw_at_statement_start(
+    self, context: ParseContext, block_end_token: str | None = None
+) -> Node | None:
+    """语句元素起点兜底：当前位置命中位点（精确行列）才尝试 raw。
+
+    调用点两处（**都必须**）：① `parse_sentence` 的"全部候选失败"之后；② `parse_call`
+    的规则调用失败之后（单元素 `@Stmt` 与 `@Stmt*` 迭代项都走它，不经 `parse_sentence`）。
+    只在**正常建树失败之后**尝试 ⇒ "能建树就不 raw"（真语法错照旧）。
+    """
+    site = self.match_raw_site(context.peek_token())
+    if site is None:
+        return None
+    return self.try_raw_sentence(context, site, block_end_token)
+
+
+def parse_sentence(
+    self, context: ParseContext, block_end_token: str | None = None
+) -> Node | None:
+    """解析一条语句：根据当前 token 选择候选规则并尝试匹配。
+
+    `block_end_token`：所在块体的结束符（`parse_block_body` 传入）——raw 暂缓建树的
+    区间**不得**吞掉它（块结束符归父块）。
+    """
     if not context.has_more_tokens():
         return None
 
@@ -42,6 +175,11 @@ def parse_sentence(self, context: ParseContext) -> Node | None:
             return node
         self.scope_stack.restore(scope_depth)
         context.restore_snapshot(snapshot)
+
+    # 所有候选规则都匹配失败 → raw 位点兜底（机制关闭时恒 None）；仍失败才记现场。
+    raw_node = try_raw_at_statement_start(self, context)
+    if raw_node is not None:
+        return raw_node
 
     # 所有候选规则都匹配失败 → 记录失败现场（供最终报告）+ 简略警告
     rule_hint = ", ".join(r.name for r in candidates[:5])
@@ -205,7 +343,7 @@ def parse_block_body(
         if current.type == end_token:
             break
 
-        stmt_node = parse_sentence(self, context)
+        stmt_node = parse_sentence(self, context, end_token)
         if stmt_node is None:
             _stop_on_sentence_failure(self, context, end_token)
             break

@@ -961,6 +961,11 @@ def parse_call(self, node: dict, context: ParseContext) -> Node | None:
     result_node = self._try_rule_productions(context, target_rule)
     if result_node is None:
         context.restore_snapshot(snapshot)
+        # 歧义位点 raw 兜底（内部机制；位点表为空 ⇒ 恒 None）：单元素 `@Stmt` 与
+        # `@Stmt*` 迭代项都经这里（不走 `parse_sentence`）。只在正常建树失败后尝试。
+        raw_node = self._try_raw_at_statement_start(context)
+        if raw_node is not None:
+            return raw_node
         return None
 
     return result_node

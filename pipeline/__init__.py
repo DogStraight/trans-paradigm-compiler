@@ -623,6 +623,30 @@ def _stage_parse(
         rule_selector=ctx.rule_selector,
     )
     parser.pre_hints = pre_scan_config.get("hints", {})
+    # 歧义位点 raw 暂缓建树（P3c/M2，**内部机制**）：把"合格位点"按**最小通道**
+    # 交给 parser（纯 dict 列表 + 一份源文本，不把 pipeline context 塞进 parser）。
+    # 启用条件（冻结）：`eligible` ∧ 两侧**同源**——`_stage_lex` 词法化的是 `ctx.source`，
+    # lint 只有宏展开路径才会拿 `lint_source`（展开态文本，下标不可比）⇒ 非空且不同于
+    # `source` 时不启用。位点 region 是 **token 下标**，只有同一 token 流才可比。
+    # 空表 ⇒ 机制关闭（默认零影响）。
+    if not ctx.lint_source or ctx.lint_source == ctx.source:
+        parser.raw_sites = [
+            {
+                "line": int(w.get("line", 0)),
+                "column": int(w.get("column", 0)),
+                "region": (int(w["region"][0]), int(w["region"][1])),
+                "names": list(w.get("symbol_names") or []),
+                "reason": str(w.get("reason", "")),
+                # raw_order = use 在 token 流中的序位（同行先后不能只靠 line 判）；
+                # 缺 `pos` 时传 None（parser 侧写 None，不写 -1 —— 见 block_parser）
+                "order": w.get("pos"),
+            }
+            for w in ctx.internal_warnings
+            if w.get("eligible") and w.get("region")
+        ]
+        parser.raw_source = ctx.source
+    else:
+        ctx.log("[parser] 位点与词法文本不同源（展开路径）⇒ 本批不接 raw")
     try:
         ast = parser.parse(tokens)
     except ParseError as e:
@@ -638,6 +662,13 @@ def _stage_parse(
     # 丢内容还报 success=True**（fuzz 发现的真实缺陷，2026-08-22）。
     # formatter wrap pass 与幂等检查本就认 _parse_truncated，入口应一致。
     if getattr(parser, "_parse_truncated", False):
+        unmatched = len(getattr(parser, "raw_sites", []) or []) - len(
+            getattr(parser, "_raw_sites_consumed", []) or []
+        )
+        if unmatched > 0:
+            # 有合格位点没能在 parser token 流上按 region 下标等式重定位——如实记日志
+            # （不静默）：此时错误表现为普通截断，诊断面与机制引入前一致。
+            ctx.log(f"[parser] {unmatched} 个 raw 位点未按 region 下标重定位")
         ctx.result["error"] = "parse truncated (unconsumed tokens) — pipeline stopped"
         ctx.log("[parser] parse truncated, stopping pipeline")
         return None
@@ -828,7 +859,7 @@ def _narrowest_verbatim_node(
     return None
 
 
-def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
+def _check_idempotent(ctx: _PipelineContext, content: str, parser: Any = None) -> bool:
     """幂等检查：生成文本再走一遍管线（跳过 analyze/transform——生成
     文本已是最终形态，无增强节点），能再次被完整管线稳定处理则幂等。
 
@@ -839,12 +870,17 @@ def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
     展开路径（宏表/占位符/指令行任一非空）跳过：宏体替换、条件分支选择、
     注释锚点漂移都使第二遍内容必然不同——那是展开语义，不是幂等性问题。
     只有非展开路径（内容应稳定）才检查。
+
+    **raw 位点特例（P3c/M2）**：raw 决策依赖 lint 位点（而默认复跑 `no_lint=True`
+    ⇒ 位点表空）⇒ 生成文本里的原样区间再解析必然截断（**假非幂等**）。故本轮确有
+    raw 消费时，复跑按**同一条件**重放（启用 lint）——决策可复现即幂等。
     """
     expanded_path = bool(ctx.macro_table) or bool(ctx.func_macros) or bool(
         ctx.placeholders
     ) or bool(ctx.directive_lines)
     if not ctx.check_idempotent or expanded_path or not content.strip():
         return True
+    raw_used = bool(getattr(parser, "_raw_sites_consumed", None))
     ctx.log("[idempotency] re-running pipeline on generated output")
     r2 = run_pipeline_on_source(
         source=content,
@@ -854,7 +890,7 @@ def _check_idempotent(ctx: _PipelineContext, content: str) -> bool:
         analyzer_enabled=False,
         transform_enabled=False,
         renderer_enabled=True,
-        no_lint=True,
+        no_lint=not raw_used,
         format_output=ctx.format_output,
         expand_enhanced=False,
         rules_dir=ctx.rules_dir,
@@ -911,7 +947,7 @@ def _stage_render(ctx: _PipelineContext, ast: Any, parser: Any) -> None:
     ctx.result["extra_asts"] = extra_asts
     ctx.result["extra_outputs"] = _render_extra_asts(ctx, extra_asts)
     ctx.result["success"] = True
-    ctx.result["idempotent"] = _check_idempotent(ctx, content)
+    ctx.result["idempotent"] = _check_idempotent(ctx, content, parser)
 
 
 def _write_gen_file(ctx: _PipelineContext, content: str) -> None:

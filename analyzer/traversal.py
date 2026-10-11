@@ -15,6 +15,7 @@ from .diagnostic import Diagnostic
 from .primitives import (
     get_primitive,
 )
+from .raw_contract import BUILTIN_RAW_ANALYZER_CONFIG, RAW_STATEMENT_NODE_NAME
 
 # ── 配置需求（来自 tpc.toml） ──────────────────────────
 # analyzer.root_scope
@@ -215,9 +216,20 @@ class AnalysisTraversal:
         原语执行序 = 声明序（`_primitive_order`）；`scope_exit` 必须最后跑
         （子节点走完才退出作用域），故从标准循环里排除、单独收尾。
         自定义原语来自两条声明路径，合并去重见 `_custom_primitive_names`。
+
+        ⚠ **raw 节点的内建配置回落**：`RawStatement` 不是任何语言的语法规则（契约 A1
+        由引擎定义节点），规则表里没有它的 analyzer 配置——若这里返回空配置，raw 校验
+        **静默不跑**，M2 摘诊断后就没有安全网了。故对该节点名回落到
+        `BUILTIN_RAW_ANALYZER_CONFIG`（语言包若在规则表里声明了 `RawStatement` 的
+        analyzer 段，则用语言包自己的）。
         """
         rule = self._rules.get(node.node_name)
-        config = getattr(rule, "analyzer", {}) if rule else {}
+        if rule is not None:
+            config = getattr(rule, "analyzer", {}) or {}
+        elif node.node_name == RAW_STATEMENT_NODE_NAME:
+            config = dict(BUILTIN_RAW_ANALYZER_CONFIG)
+        else:
+            config = {}
         self._context.node = node
         self._context.config = config
 

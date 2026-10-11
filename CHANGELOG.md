@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P4 安全网 + raw 承载 + M2 窄档摘诊断（原子批次）**（循环 #7）：`typedef int myint;\nvoid f(void) { x = (myint)y; }`
+  ⇒ **0 blocking + `success=True` + 输出保真**（此前 2 条 blocking、输出为空），且**不静默掩盖真错**。
+  - **三件同批**（依据：两轮实现前对抗证明单独上 raw 会新增掩盖）：① **raw 承载**
+    （`parser/block_parser.py` 的 `match_raw_site`/`try_raw_sentence`/`try_raw_at_statement_start`，
+    8 条契约字段、**无子节点**、`_verbatim_text` 直出 ⇒ 渲染零改动）；② **M2 窄档摘诊断**
+    （`linter/scanner.py::_apply_narrow_downgrade`：`{phase-statement, phase-unrecognized}` ∧
+    `eligible` ∧ **诊断起点 ∈ site region**）；③ **P4 analyzer 校验**（`analyzer/raw_contract.py` +
+    `analyzer/primitives/_raw_validate.py` + `analyzer/traversal.py:229` **内建回落** ⇒ 规则表查不到也跑，
+    否则安全网静默失效；C 包 `_raw_bridge.py` 注册类型名查询，**kind 语义只在包侧**）。
+  - **raw 与声明互斥**：新增包声明 `[pre_scan] raw_exclude_rules = ["Declaration", "FuncDef"]` ⇒
+    声明句不得 raw（否则其声明不进符号表、遮蔽记录消失 ⇒ P4 会**误接受**非法代码，联合反例已实测）。
+  - **顺带修掉一个既有生产缺陷（P1）**：`transform/normalizer.py` 会把 `keyword.*` token 叶子抽成
+    **字符串属性**（`StorageClass.base = "typedef"`），而 `_api._subtree_has` 只按节点名判 ⇒
+    **生产路径下 typedef 恒被收成 `variable`**（P4 因此误拒合法输入）。已改为**跨两形态判据**
+    （带 token 前缀的 marker：同名节点 **∨** 标量属性值 == 去前缀短名；非 token marker 仍只按节点名），
+    并补**生产口径判据** `test_c_symbol_collection_production.py`（22 条，含"两形态逐条等价"+ 安全反例）。
+  - **`tpc check` 第二消费方接线**：`analyzer/structure.py` 取 `internal_warnings`（在 blocking 早退
+    **之前**取走，避免丢位点）+ 注入 `raw_sites`/`raw_source` ⇒ 判据 4 的
+    "`parse_ok=False` 却 `exit_code=0/syntax=[]`"自相矛盾消除（目标输入现 `parse_ok:true` 与
+    `exit_code:0` 一致；反例仍报 syntax 且非 0）。
+  - **实测**：全量 `pytest tests` **3446 passed / 7 skipped**；`eval_lint_accuracy` 33/33 fp 0；
+    `eval_diag_baseline` **5548 → 5548**；回归档对拍（verilog）**0/144**；功能档 23 输入 **8 条变化**
+    （6 条 `success=True` + 输出保真；**遮蔽例被 P4 拒绝：`E002`** ⇒ 安全网实证）；pyright strict **0**。
+  - **缺陷态变红**：去 raw / 去互斥 / 去精确 (line,col) / 去 region 等式 / 去 `tpc check` 接线 /
+    `node_name_only`（P1 原形态）/ 值比较去引号 —— 各自变红；**门禁有效性 45 → 47 条**（新增两条守护：
+    raw 兜底接入点、`_subtree_has` 跨形态判据）。
+  - **已知偏差（本批不做，登记）**：① `x = (t)y + z = 1;`（gcc 判 `lvalue required`）现与 `(int)` 版
+    **对齐放行**（引擎既有宽松，非本批引入）；② `void f(int t);` 的原型参数泄漏到文件作用域
+    （`t @ <global>` ⇒ "有全局 typedef 时的原型参数"会被 P4 误拒）。
+  - **剩余**：P4 的**理解路径**（把 raw 段理解为 `CastExpr` 子树供后续分析消费）未做，已登记 `TODO.md`。
+
 - **P3c 前置切片：位点发现面扩到 production 层语句位（linter 侧，零用户可见变化）**（循环 #6）。
   原计划形态（parser 侧 raw 承载 + `_repeat_loop` 接入点）经**实现前判据对抗**（task-27，只读实测）
   证伪 ⇒ 任务重定义，细节见 `docs/gaps/gap-parser-linter-approximation.md`。

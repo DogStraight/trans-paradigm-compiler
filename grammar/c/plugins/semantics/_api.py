@@ -28,7 +28,8 @@ from __future__ import annotations
 from typing import Any, Iterable, Sequence
 
 from core.define import Node
-from analyzer.scope import Scope
+from core.token_protocol import KEYWORD_PREFIX, SYMBOL_PREFIX, LITERAL_PREFIX
+from analyzer.scope import Scope, Symbol
 
 # ── 期别 / 偏置 / 产物键（调用方只读这些常量，勿在别处硬编码） ──
 PHASE_PRE_SCAN = "pre_scan"
@@ -45,6 +46,12 @@ KIND_TAG = "tag"
 KIND_VARIABLE = "variable"
 KIND_FUNCTION = "function"
 KIND_ENUMERATOR = "enumerator"
+
+#: 引擎 token 叶子前缀——`transform/normalizer.py` 会把这些 token 抽成**字符串属性值**
+#: （`keyword.typedef` → `StorageClass.base = "typedef"`），故标记判定必须跨两形态（见 `_subtree_has`）。
+_TOKEN_LEAF_PREFIXES: tuple[str, ...] = (KEYWORD_PREFIX, SYMBOL_PREFIX, LITERAL_PREFIX)
+#: 结构元数据属性：不是源文本内容，不参与"字符串值命中"判定
+_STRUCT_META_ATTRS = frozenset({"node_name", "start", "end"})
 
 
 def scope_path(scope: Scope | None) -> str:
@@ -94,30 +101,112 @@ def _as_name(val: Any) -> str | None:
     return str(val) if val is not None else None
 
 
-def _subtree_has(node: Node, marker: str) -> bool:
-    """子树内是否出现指定节点名（如 `keyword.typedef` / `FuncSuffix`）。
+def _subtree_has(node: Node, marker: Any) -> bool:
+    """子树内是否出现指定标记——**跨两种 AST 形态**判定（生产口径必须走这条）。
 
-    用 `Node.iter_children()`（引擎通用子节点迭代），"哪个标记代表 typedef/函数"由
-    语言包 TOML 声明（见 `01_declarations.toml`）——本模块不含 C 语法知识。
+    形态差异来自 `transform/normalizer.py`：`keyword.*` / `symbol.*` / `literal.*`
+    的 token 叶子被抽成**字符串值**（并消除 `optional/repeat/seq` 包装）。故同一份
+    `typedef int myint;` 有两条形态：
+
+      · 直接 parse（未 normalize）：token 是**节点** ⇒ `Declaration → StorageClass > keyword.typedef`
+      · pipeline（normalize 后）：token 变**父节点的字符串属性** ⇒ `StorageClass.base = "typedef"`
+
+    只按节点名判会在生产口径下**恒不命中**（P1 曾因此把 typedef 全收成 variable）。
+    故对带引擎 token 前缀的 marker（`keyword.typedef`）同时接受：
+
+      1. 子树里存在同名节点（未 normalize 形态）；
+      2. 子树里存在**标量属性值 == 去前缀短名**（normalize 后形态，`typedef`）。
+
+    **为什么 2 不会误命中（逐条实测，见 tests/engine/analyzer/test_c_symbol_collection_production.py）**：
+      · 只扫**标量属性值**且排除结构元数据（`node_name`/`start`/`end`）——节点名不参与，
+        "有个节点叫 typedef" 不会命中；
+      · `literal.*` 抽取**保留原文**（实测字符串字面量归一为 `'"typedef"'`，含引号）
+        ⇒ `char *s = "typedef";` 不会等于裸短名 `typedef`；
+      · 注释文本不在声明子树内（独立节点/锚点；行注释、行尾块注释、独立块注释三形态实测均不命中）；
+      · 关键字不可能作标识符（词法 token 类型决定）⇒ `Identifier.content` 不会等于关键字短名。
+
+    另支持**钉槽位**的显式形式（用于必须精确的词法标记）：`"载体.属性=值"`
+    （如 `"StorageClass.base=typedef"`）或 dict `{"node": ..., "attr": ..., "value": ...}`；
+    非 token 前缀的 marker（语法结构名，如 `FuncSuffix`）仍**只**按节点名判（更精确，
+    语法节点不会被 normalize 抹掉）。
     """
+    if isinstance(marker, dict):
+        return _slot_hit(node, str(marker.get("node", "")), str(marker.get("attr", "")), marker.get("value"))
+    text = str(marker)
+    if "=" in text:
+        path, _, want = text.partition("=")
+        carrier, _, attr = path.rpartition(".")
+        return _slot_hit(node, carrier, attr, want)
+    for prefix in _TOKEN_LEAF_PREFIXES:
+        if text.startswith(prefix):
+            short = text[len(prefix) :]
+            return _named_hit(node, text) or _scalar_value_hit(node, short)
+    return _named_hit(node, text)
+
+
+def _named_hit(node: Node, marker: str) -> bool:
+    """子树里是否存在该**节点名**。"""
     if node.node_name == marker:
         return True
-    return any(_subtree_has(child, marker) for child in node.iter_children())
+    return any(_named_hit(child, marker) for child in node.iter_children())
+
+
+def _scalar_value_hit(node: Node, value: str) -> bool:
+    """子树里是否存在**标量属性值**等于 `value`（normalize 后 token 叶子的落点）。"""
+    if any(v == value for v in _scalar_values(node)):
+        return True
+    return any(_scalar_value_hit(child, value) for child in node.iter_children())
+
+
+def _slot_hit(node: Node, carrier: str, attr: str, value: Any) -> bool:
+    """子树里是否存在"节点名 = carrier 且其 `attr` 属性值 = value"的槽位（精确形式）。"""
+    if node.node_name == carrier and attr:
+        if getattr(node, attr, None) == value:
+            return True
+    if not carrier and attr:  # 允许只写 `属性=值`（任意载体）
+        if getattr(node, attr, None) == value:
+            return True
+    return any(_slot_hit(child, carrier, attr, value) for child in node.iter_children())
+
+
+def _scalar_values(node: Node) -> list[str]:
+    """节点的标量字符串属性值（含标量列表项）；排除结构元数据与节点名。"""
+    values: list[str] = []
+    for key, val in vars(node).items():
+        if key in _STRUCT_META_ATTRS:
+            continue
+        if isinstance(val, str):
+            values.append(val)
+        elif isinstance(val, (list, tuple)):
+            for item in val:
+                if isinstance(item, str):
+                    values.append(item)
+                elif isinstance(item, (list, tuple)):
+                    values.extend(x for x in item if isinstance(x, str))
+    return values
 
 
 def _declare(analyzer: Any, node: Node, name: str, kind: str) -> None:
     """登记一条 `analyze` 期符号（复用 `Scope.declare`；**不报诊断**）。
 
-    与引擎 `symbol_declare` 原语的差别：同作用域重名时**静默跳过**（保持首见）而不报
-    E001——本片纪律"产物只增不改既有行为"，不得因收集而新增诊断。
+    与引擎 `symbol_declare` 原语的差别：同作用域重名时**不报 E001**——本片纪律
+    "产物只增不改既有行为"，不得因收集而新增诊断。
+
+    ⚠ **重名仍要进 `records`（声明历史）**：作用域查找语义保持"首见"（`scope.symbols`
+    不覆盖），但 `analyzer._all_symbols` 保留**每一条声明**——P4 查询要按
+    `(decl_order, line, column)` 判"**最近声明**遮蔽"与"同作用域重声明"
+    （`typedef int t; int t;` 与 `typedef int t; typedef int t;` 只有保留历史才可区分；
+    折叠成首条会让 `int t` 后的使用点被误判为 typedef）。
     """
     scope = getattr(analyzer, "_current_scope", None)
     if scope is None:
         return
-    if name in scope.symbols:
-        return
     attrs = {"phase": PHASE_ANALYZE, "decl_line": getattr(node, "_pos_line", None)}
-    sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
+    if name in scope.symbols:
+        # 同作用域重声明：查找语义不变（首见），仅补一条**声明历史**记录
+        sym = Symbol(name=name, kind=kind, decl_node=node, scope=scope, attrs=attrs)
+    else:
+        sym = scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
     analyzer._all_symbols.append(sym)
 
 

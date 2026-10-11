@@ -1,8 +1,8 @@
 """_symbols.py — C 符号收集的**引擎装配面**（analyzer handler 入口）。
 
-⚠ 本文件只做注册与装配：`@register("c_symbol_collect")` + postpass 入口。
-查询/产物逻辑在 `_api.py`（**无注册副作用**，测试与消费方直接
-`from grammar.c.plugins.semantics._api import ...`，避免二次 exec 重复注册）。
+⚠ 本文件只做注册与装配：`@register("c_symbol_collect")` + postpass 入口 +
+raw 校验查询桥（`_raw_bridge`，其导入即注册，见下）。查询/产物逻辑在 `_api.py` /
+`_p4_query.py`（**无注册副作用**，测试与消费方直接按包路径 import，避免二次 exec 重复注册）。
 Doc: grammar/c/README.md（符号收集产物：形状 / 分期语义 / 默认偏置）
 """
 from __future__ import annotations
@@ -12,11 +12,16 @@ from typing import Any
 from core.define import Node
 from analyzer.primitives.registry import register
 
+from grammar.c.plugins.semantics import _raw_bridge
 from grammar.c.plugins.semantics._api import (
     collect_declarator_site,
     collect_named_site,
     build_product,
 )
+
+# 导入即注册 raw 校验查询（`register_raw_name_query`）；用模块级引用表达
+# "这是有意为之的副作用导入"（同 analyzer/primitives/__init__ 的 _PRIMITIVE_MODULES）。
+_REGISTERED_QUERIES = (_raw_bridge,)
 
 
 @register("c_symbol_collect")
