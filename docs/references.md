@@ -2259,24 +2259,36 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
   definition, many tools**——README 原文："tools for compiling K specifications to build
   **interpreters, model checkers, verifiers, associated documentation, and more**"。
 - 与 tpc 同为"语言定义即数据"，但**目标面不同**：K 要**执行与证明**，tpc 要**格式化 / lint /
-  结构变换**。案例规模：c-semantics 332★（2013-07 起）、evm-semantics/KEVM 593★/157 fork
-  （2016-10 起）、javascript-semantics（KJS 18 分 HN）。
+  结构变换**。案例规模：c-semantics **310 个 `.k` / 1.84 MB**（332★，2013-07 起）、
+  evm-semantics/KEVM **283 个 `.k` / 7.4 MB**（593★/157 fork，2016-10 起）、javascript-semantics
+  （KJS 18 分 HN）；wasm-semantics 仅 17 个 `.k`（语义已迁入 pykwasm 的 kdist 插件）。
 
 #### 1. 定义方式（`.k`）
 
 - **语法与语义分模块**：`module X-SYNTAX … endmodule` + `module X … endmodule`，语义模块
   `imports` 语法模块（pl-tutorial LAMBDA lesson 1/2 源码一手）。
-- **语法声明带属性**（属性即语义开关）：`[left]`/`[right]`/`[nonassoc]` 结合性、`[bracket]`
-  （纯括号不建节点）、`[function]`（函数在 `syntax` 声明、用 `rule` 定义）、**`[strict]` /
-  `[seqstrict]` / `[strict(1)]`（求值顺序声明）**、`[owise]`（兜底）、`>` 分块写优先级
-  （IMP lesson 1 一手：`> AExp "+" AExp [left, strict]`）。
+- **语法声明带属性**（属性即语义开关）：`[left]`/`[right]`/**`[non-assoc]`** 结合性（拼写带连字符）、
+  `[bracket]`（纯括号不建节点）、`[function]`/`[total]`（函数在 `syntax` 声明、用 `rule` 定义）、
+  **`[strict]` / `[seqstrict]` / `[strict(1)]`**、`[owise]`（兜底），以及 `[klabel]`/`[symbol]`/
+  `[overload]`/`[prec]`/`[hook]`/`[macro]`/`[alias]`/`[freshGenerator]`/`[deprecated]`/`[unused]`；
+  `>` 分块写优先级（IMP lesson 1 一手：`> AExp "+" AExp [left, strict]`）。
+- **`strict` 不是"纯声明"而是"引擎派生"**（最值得看的一点）：`[strict]`/`[seqstrict]` 由前端
+  **自动注入 heating/cooling 规则与 `[]` 求值洞**，`seqstrict(2,1)` 定序；`context foo(HOLE:Bar)`
+  同理自动生成 `foo-heat`/`foo-cool`。**要终止加热必须扩展 `KResult`**（如 `syntax KResult ::= Int`）
+  ——即"声明求值策略 + 显式声明终止形态"，引擎负责派生加热规则。
 - **重写规则**：`rule LHS => RHS requires 条件`，可带规则标签 `rule [test]: …`；`context`
   声明加热/冷却（求值顺序的另一条路，官方课 1.14 / 2.11）。
 - **`configuration <k> … </k>`**：嵌套 cell 声明执行状态（官方课 1.15 "Configuration
   Declarations and Cell Nesting"；`ktools` 页有一手最小例，含 `rule [test]`）。
 - **`KResult`**：`syntax KResult ::= Int | Bool` 声明"结果形态"＝重写停止点（IMP lesson 1 一手）。
-- 内建层：`DOMAINS`/`INT`… builtin 模块 + **hook**（函数绑定后端实现，GDB 里 `rbreak hook_INT`）；
+- 内建层：`DOMAINS`/`INT`… builtin 模块（`include/kframework/builtin`）+ **hook**（函数绑定后端
+  实现，如 `INT.add`/`IO.putc`，GDB 里 `rbreak hook_INT`；`--hook-namespaces` 限定命名空间）；
   内建语法宏 `#let/#in/#if/#then/#else/#fi`、`#fun`、`:=K`/`:/=K`。
+- **复用机制**（与 tpc 对比鲜明）：只有 `requires "x.k"`（文件顶层、递归加载、`-I` 前置 include
+  路径）+ `imports`（默认 public；模块可标 `private`，其 imports 与 syntax 随之私有、可逐条覆盖）
+  + 内建库，**没有包管理器**；主语义模块默认取文件名大写，主语法模块取 `<MAIN>-SYNTAX`
+  （`--main-module`/`--syntax-module` 可覆盖）。⇒ tpc 的插件 `requires` 链 + `[inject]` 点位挂载
+  在这条上反而更结构化（K 的复用是"文件 + 模块"级）。
 - **literate 定义**：定义可写成 Markdown（官方课 1.8）；pl-tutorial 的 SIMPLE 就是
   `simple-untyped.md`（53KB）+ Makefile，**目录内无 `.k` 文件**（一手实测）。
 - 展示属性：`format` / `color` / `latex`（官方课 1.9 "Unparsing and the format and color
@@ -2296,13 +2308,24 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
 
 #### 2. 框架解构（前端 → KORE → 多后端）
 
-- **前端/后端分离**：`kompile` 把 `.k` 编译成 **KORE**（K 的中间语言），后端消费 KORE。
-  **LLVM 后端**（默认）= 编译成 LLVM bitcode → 机器码，优化**具体执行与搜索**；**Haskell 后端**
-  = **解释器**（读 KORE，优化**形式推理**，具体执行较慢）；**Java 后端** = legacy / deprecated。
-- 产物：`<name>-kompiled/` 目录 + `definition.kore`。
-- 工具矩阵（`ktools` 页）：`krun` 执行 / `kprove` **演绎验证** / `kast`（KORE↔JSON 解析反解析）/
-  `kore-repl`（Haskell 后端 REPL，调试证明）/ `pyk`（Python API；`pyk print` 压缩配置）/
-  `kserver`（Nailgun 复用 JVM：32 线程 regression-new **8m → 2m**，但与 Java 18+ 不兼容）。
+- **kompile 五步**（pyk 文档口径）：outer parsing（JavaCC）→ inner parsing（解析 rule bubble）→
+  **32 个 `Definition→Definition` pass**（`--kore-backend-steps` 可只跑指定步）→ Kore emission →
+  后端编译。
+- **前端/后端分离**：`kompile` 产出 **KORE**（匹配逻辑中间表示），后端消费之。**LLVM 后端**
+  （默认）= 编译成 LLVM bitcode → 机器码，优化**具体执行与搜索**；**Haskell 后端** = **解释器**
+  （读 KORE，**用合一而非匹配**、委托 Z3 判可满足性；优化**形式推理**，具体执行较慢）；**Java
+  后端** = legacy / deprecated（手册属性索引的 Backend 列只出现 llvm/haskell）。
+- 产物：`<name>-kompiled/`（`--output-definition` 可覆盖），内含 `parsed.txt` / `compiled.txt` /
+  `allRules.txt` / `cache.bin` / `mainModule.txt` / `backend.txt` 等，加后端写的 `definition.kore`
+  与 `syntaxDefinition.kore`；`--backend` 取值 `[llvm|haskell|kore]`。
+- 工具矩阵：`krun` 执行与符号执行（`--search` / `--depth`）/ `kprove` **演绎验证** / `kast`
+  （定义与项 ↔ JSON）/ `kparse` 独立解析器 / `kore-print` / `kdep` / `kcovr` 覆盖率 / `klsp` /
+  `kore-repl`（Haskell 后端 REPL，调试证明）/ `kserver`（Nailgun 常驻 JVM：32 线程 regression-new
+  **8m → 2m**，但与 Java 18+ 不兼容）/ `pyk`（Python API；`pyk print` 压缩配置）/ **`kdist`**
+  （pyk 模块 `kdist list|build|which`：靠 `[project.entry-points.kdist]` + 继承 `Target` 打包定义，
+  底层 `kompile --emit-json --backend X --output-definition DIR`，缓存 `~/.cache/kdist-<digest>/`）。
+- ⚠ **不存在的工具**（避免下轮再去找）：`ksearch` / `kcfg` 在 `scripts/bin` 中**没有**——状态空间
+  搜索由 `krun --search` + `kompile --enable-search` 承担。
 - **可观察性**（tpc 最该抄的一块）：`krun --debugger` + `kompile --enable-llvm-debug` →
   GDB/LLDB；断点维度分层 = **规则标签**（`TEST.test.rhs` / `TEST.test.sc`）、**源码行**
   （`test.k:4`）、**函数**（`Lblfoo'LParUndsRParUnds'TEST'UndsUnds'Int`）、**hook**
@@ -2310,8 +2333,13 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
 - **性能剖析**：`perf record -g --`；**规则序号 → 源码位置**反查
   （`llvm-kompile-compute-loc <ordinal> <kompiled>`）；生成的符号命名本身就是维度
   （`step_1234` / `side_condition_1234` / `apply_rule_1234`）。
-- 验证路径：官方课 1.21（合一与符号执行）/ 1.22（演绎验证）+ `kprove`；2.17 用 Haskell 后端
-  REPL 调试证明。
+- **验证声明**（官方）：规格另立 `<name>-spec.k`（`requires` 主定义 + `domains.md`，模块惯例
+  `X-SPEC-SYNTAX`/`VERIFICATION`/`X-SPEC`）；性质用 `claim <k> 程序 => 结果 … </k>`（可带
+  `requires`/`ensures`）声明；`kprove x-spec.k` **返回 `#Top` 即通过**，失败打印
+  `(InfoReachability)` 与匹配逻辑约束，靠补 `[simplification]` 规则收敛（该属性**按匹配而非
+  合一**应用、顺序不保证、**不检查可靠性**）；其他属性：`[concrete]`/`[symbolic]`（可带变量表）、
+  `[trusted]`、`all-path`/`one-path`。官方课 1.21（合一与符号执行）/ 1.22（演绎验证）；2.17 用
+  Haskell 后端 REPL 调试证明。
 
   **对 tpc 的可参考点：**
   - 🔥 **"一份定义 → 中立 IR → 多消费方"**：tpc 的 P4.1（多后端输出 + LLVM IR 目标插件）正缺
@@ -2387,7 +2415,7 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
 | 扩展面 | 插件代码 + `[inject]` 点到点挂载 + `[pipeline]` 时点槽位 | `syntax` 属性 + `rule` + builtin hook + module 组合 |
 | 运行状态 | 无（纯静态处理） | **configuration cells**（执行状态是一等数据） |
 | 依赖 | **零第三方依赖**（纯 Python；引擎 220 文件 / 53.9k 行） | LLVM≥15 + Haskell Stack + JDK≥17 + Z3…（deb 约 1.4GB） |
-| 规模 | 语言包 137 TOML / 13.3k 行（verilog + c + c4） | 单语言定义可上千条规则 + 证明脚本 |
+| 规模 | 语言包 137 TOML / 13.3k 行（verilog + c + c4 三实例） | c-semantics **310 个 `.k` / 1.84 MB**；evm-semantics 283 个 `.k` / 7.4 MB |
 
 - 最值得对照的一点：K 的"**前端 → 中立 IR → 多后端**"正对 tpc 的 P4.1（多后端输出）；tpc 现在
   是"AST 直接被 renderer 消费"，若要支持多输出目标，**先落中立表示**比"每个后端各读 AST"更可扩展。
@@ -2420,9 +2448,12 @@ HN：[C semantics 48 分](https://news.ycombinator.com/item?id=25395934) /
 [Haskell 后端 64 分](https://news.ycombinator.com/item?id=34892908) /
 [KJS 18 分](https://news.ycombinator.com/item?id=46180273)
 
-**未证实 / 存疑**：`kdist` 的具体用途（未一手证实，故本节未写）· **`claim`/claims 的确切语法**
-（只证实存在演绎验证课 1.22 与 `kprove`，未读到 `claim` 声明形态，不写）· `pushed_at`
-(2026-09-14) 与默认分支最新提交(2026-06-18)不一致的原因 · Z3 版本官方自相矛盾（4.12.1 vs
-4.8.15）· 是否有官方在线 playground（未在官网发现）· Lesson 2.16 正文为空（多次导航一致，
-但可能是抓取时机或页面态问题）。
+**未证实 / 存疑**（2026-10-11 二轮采集后更新）：`pushed_at`(2026-09-14) 与默认分支最新提交
+(2026-06-18) 不一致的原因 · Z3 版本官方自相矛盾（README 4.12.1 vs INSTALL/release notes 4.8.15）·
+是否有官方在线 playground（未在官网发现）· Lesson 2.16（KORE）正文为空（多次导航一致，可能是
+抓取时机或页面态问题）· `--backend kore` 的实际作用 · `circularity` 属性（pyk `AttKey` 有、
+手册未列）· `KResult` 是否由前端内建声明（`kast.md`/`domains.md` 均未见）· `--superheat` /
+`--supercool`（仅见于 PL 教程课名，未在 `KompileOptions.java` 核实）。
+**二轮采集已证实并补入上文**：`kdist` 是 pyk 的打包模块 · `claim` 的声明形态 ·
+`ksearch` / `kcfg` **不存在**。
 
