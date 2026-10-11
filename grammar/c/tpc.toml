@@ -16,6 +16,8 @@ uses = [
     "analyzer.primitives.v1",
     # P4 理解路径（`plugins/semantics/`）：transform 插件（把 raw 提升为确定结构）
     "transform.slots.v1",
+    # 存储类语义约束（`plugins/checks/storage_class/`，循环 #10）：check 规则表 + L2 handler
+    "checks.rules.v1",
 ]
 
 [renderer]
