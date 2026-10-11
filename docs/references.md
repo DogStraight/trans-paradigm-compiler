@@ -113,6 +113,15 @@ provenance 类项目；含"同龄人"（同期同理念项目，作为参照系�
 | [desugar](https://github.com/michaelmillar/desugar) | 概念参考 | 逐步 pass 可视化（编译器模拟器方向） |
 | [rascal](https://github.com/usethesource/rascal) | 深度参考 | 元编程语言：完整 REPL + GLR 解析 + 具体语法模式匹配（详见深调研） |
 | [Koine](https://github.com/chrsbats/koine) | 深度参考 | 语法即数据（YAML/JSON/TOML）+ 管道式 + subgrammar 多文件组织；聚焦快速 DSL 原型（详见深调研） |
+| [K framework](https://github.com/runtimeverification/k) | 概念参考 | **语义也进配置**（`.k` 定义语法 + 重写规则）→ 自动生成解释器/符号执行/验证器；"语言定义即数据"的最激进端（目标是执行与验证，不含格式化/渲染） |
+
+> **谱系定位：tpc 属哪一档（2026-10-11）**——本表与「解析引擎与语法技术」节的同类可分三档：
+> **① 数据驱动 + 运行时消费**（Koine / Ohm / Lark / textX：无代码生成，但只覆盖解析或 transpile）；
+> **② 语言工作台**（Spoofax / Xtext / MPS / Langium：端到端，但**编译期生成**、语义写宿主语言）；
+> **③ 单环工具**（dprint 的 printer 必须手写 / tree-sitter 生成 C / MLIR ODS 生成 C++）。
+> tpc 站在 ①，但把 ① 推到"覆盖**渲染格式化** + lint + 多语言实例"——同档项目都没有
+> "**布局意图声明化**"这一环。因此"和我们一样"的判据不是"语法是否数据"，而是
+> **新语言不改引擎**（语言知识锁在语言包目录内；深语义允许在**语言包插件**里，仍不进引擎）。
 
 ### 源到源转换（transpiler）
 
