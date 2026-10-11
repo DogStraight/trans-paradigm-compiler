@@ -2364,6 +2364,51 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
   - 📌 **重依赖是门槛主因**：K 要 Nix/LLVM/Haskell/JDK 全套（1.4GB）；tpc **零第三方依赖**是
     明确差异化，值得在定位里保持，别为单个功能引入重依赖。
 
+#### 与 tpc 的异同（2026-10-11，按 目的 / 架构 / 核心思想 三面）
+
+**1. 目的上**
+
+- 同：都把"语言知识"从工具代码里剥离成**可复用的定义资产**，都主张"一份定义驱动多种消费方"
+  （K 原文 one definition → interpreters / model checkers / verifiers / docs；tpc → format /
+  lint / check / transform / 多后端）。
+- 异（本质）：**K 的定义含语义**（重写规则 + 执行状态 config），**tpc 的定义含语法 + 布局 +
+  检查规则**。K 回答"程序怎么跑、满足什么性质"；tpc 回答"代码长什么样、哪里可疑"。
+- 成本结构因此不同：K 的投入在**语义定义**（c-semantics 2013 起至今活跃，人年量级）；tpc 的
+  投入在**语法 + 布局配置**（人日量级）——因为 tpc 只要求"有语法即可干活"。
+- 一句话：**K 把语言当数学对象（无语义不能干活），tpc 把语言当文本资产（有语法就能干活）**。
+
+**2. 架构上**
+
+| 维度 | tpc | K |
+|---|---|---|
+| 输入 → 产物 | 源程序 + TOML 语言包 → 格式化文本 / 诊断 / 目标代码 | `.k` 定义 → 解释器 / 验证器 / 文档 |
+| 中间表示 | **无**语言中立 IR；渲染侧有 Doc IR | **KORE**（语言中立，多后端消费） |
+| 阶段 | 8 段：预处理→lexer→linter→parser→normalize→(analyze→transform)→renderer→format? | kompile（前端 → KORE）→ 后端（LLVM / Haskell / Java） |
+| 扩展面 | 插件代码 + `[inject]` 点到点挂载 + `[pipeline]` 时点槽位 | `syntax` 属性 + `rule` + builtin hook + module 组合 |
+| 运行状态 | 无（纯静态处理） | **configuration cells**（执行状态是一等数据） |
+| 依赖 | **零第三方依赖**（纯 Python；引擎 220 文件 / 53.9k 行） | LLVM≥15 + Haskell Stack + JDK≥17 + Z3…（deb 约 1.4GB） |
+| 规模 | 语言包 137 TOML / 13.3k 行（verilog + c + c4） | 单语言定义可上千条规则 + 证明脚本 |
+
+- 最值得对照的一点：K 的"**前端 → 中立 IR → 多后端**"正对 tpc 的 P4.1（多后端输出）；tpc 现在
+  是"AST 直接被 renderer 消费"，若要支持多输出目标，**先落中立表示**比"每个后端各读 AST"更可扩展。
+- 依赖结构相反：K 用重依赖换能力上限（任意语言可执行、可证明）；tpc 用零依赖换可移植与可预测。
+
+**3. 核心思想上**
+
+- 共有的三条信仰：① **语言知识即数据**（可 diff、可复用、可组合）；② **一份定义多消费方**；
+  ③ **声明式优先、代码兜底**（K：`syntax` 属性 + `rule`，只有 builtin 落代码；tpc：AST 前
+  声明式，AST 后原语 + 插件）。
+- 真正的分歧（三条）：
+  - **"语言是什么"**：K = 形式系统（重写语义 + 状态配置，须先有语义）；tpc = 文本结构 + 约定
+    （有语法即可干活，语义渐进）。
+  - **"可判定性"的立场**：K 追求**数学可证**（matching logic / claims / 符号执行）；tpc 追求
+    **零误报 + 边界诚实**（量化门禁 + 已知偏差登记，不做证明）。
+  - **"代码放哪一层"**：两者都承认深层能力需要代码——K 把 builtin/hook 放在**后端**（跨语言共享
+    的实现），tpc 把语言特有逻辑放在**语言包插件**（每语言自己的），引擎侧由
+    `check_hardcode --strict` 守"零语言知识"。
+- 一句话：**同一起点（语言即数据），不同目标函数**——K 走到形式验证的极限，tpc 走轻量、
+  可移植、边界诚实的那一半。
+
 **来源**：官方 [README](https://raw.githubusercontent.com/runtimeverification/k/master/README.md)
 与 [INSTALL.md](https://raw.githubusercontent.com/runtimeverification/k/master/k-distribution/INSTALL.md) ·
 [Lesson 1.20 K Backends](https://kframework.org/k-distribution/k-tutorial/1_basic/20_backends/) ·
