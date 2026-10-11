@@ -47,10 +47,20 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   **作用域遮蔽**（`typedef int t; void f(void){ int t; x=(t)y; }`——`pre_scan` 无作用域，M1 判不了）、
   **引擎既有赋值链宽松**（`x = (t)y + z = 1;` / `(int)` 版在改前也通过 ⇒ 单列的既有近似）、
   `tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0/syntax=[]` 的自相矛盾。
-- **覆盖边界**：资格判定目前只在**块体语句位**（根块 / `is_block` 规则体）生效；C 函数体内
-  （`CompoundStmt` 的 `@Stmt*` 由 production 展开）**不产生位点** ⇒ 单独立项 P3c，接入点已调研
-  （`parser/_production.py::_repeat_loop` 的 `result is None` 分支）。该边界内的构造**仍照旧
-  blocking（不静默）**。
+- **覆盖边界（2026-10-11 循环 #6「实现前判据对抗」修正）**：资格判定目前只在**块体语句位**（根块 /
+  `is_block` 规则体）产生位点；C 函数体（`CompoundStmt` 的 `@Stmt*`）与 if/while/for/do 单语句体
+  **今天零位点**（`void f(void){ x=(t)y; }` 的 `internal_warnings == []`，实测）⇒ 位点发现面扩展是
+  **linter 侧**改动；原计划的接入点 `_repeat_loop` 覆盖的是 `CompoundStmt`，**功能面 = 空集**
+  （单元素 `@Stmt` 走 `_parse_call`，不过 `_repeat_loop`）。该边界内的构造**仍照旧 blocking（不静默）**。
+- **可达性与消费者现状（同上，实测）**：`eligible` 目前**零消费方**；默认路径 lint 阻断；`no_lint=True`
+  时 `_stage_lint` 在 `if ctx.no_lint: return True` **之后**才收 `internal_warnings` ⇒ 位点表为空
+  （`--no-lint` 不是入口）；`tpc check`（`analyzer/structure.py`）同样 blocking 短路。
+- **位点匹配与区间（审计给出的判据形态）**：生效条件须 `eligible ∧ 精确 (line,col) ∧ 该 token 是语句
+  元素起点`——"同行 `col ≥ site.col`"式 fallback 会把行/列漂移变成**错位消费**，应删；raw 消费区间
+  **必须等于** linter `region`（与 `_stmt_ends`/`_block_ends`/`_derived_end_case` **单一来源**——P3 首次
+  尝试曾自写 `derive_stmt_end_types`，已随回退删除）。
+- **作用域判据成立**（审计实测：遮蔽输入上三条判据全过）⇒ 单独上 raw 会**新增掩盖**（赋值链与遮蔽例
+  静默）⇒ **raw 承载必须与 M2+P4 同批**（原子批次，见 `ROADMAP.md`）。
 - **性能**：真实语料 tv80_core（4755 行 / 2314 未收敛位点）`tpc lint` 由初测 **+13.7%** 经
   "段表 + 二分反查 + 前缀深度缓存"优化后回到 **+0.0%**（试解析本身不是热点，verilog 无 trial）。
 
