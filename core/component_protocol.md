@@ -87,6 +87,27 @@ handler = "_asm.py:render_asm"
 | `formatter` | `BoundaryScanner`（扫描器）、`build_engine`（pass 引擎）、`pre_scan_passes`（**扫描前的前置文本遍列表**，按声明序；语言包决定有几遍、叫什么——引擎不知道每遍的语义，缺省 = 不跑） |
 | `macro_policy` | `plan`（宏调用点事实 → 处置方案；见 `preprocessor/macro_policy.py`） |
 
+## 跨阶段组合形式选型（四种，**语义分工不同，别混用**）
+
+| 形式 | 引擎消费方式 | 典型用途 | 现役例子 |
+|---|---|---|---|
+| **能力面**（`[capabilities]` + `get_capability[_in]`） | 引擎在**固定查找点**按名取 `file.py:fn`，fn 返回 dict 聚合多个函数 | 引擎要"问语言包要一个**行为实现**" | `formatter`、`macro_policy`、`elaborator` |
+| **产物通道**（analyzer 把结果挂**符号 attrs**，transform 按 `source.attr` 读） | transform 经声明式映射读**数据** | analyzer 算出的数据供变换消费 | `resolved_ports`（typed_ports） |
+| **槽位契约**（`[[transform.slots]]`） | `slot_runner` 按声明触发 / 遍历 / ctx / 结果接回 | "在**某类节点**上执行一次声明式变换" | typed_ports 的 4 个槽位 |
+| **节点属性通道**（结论长在**同一个 AST 对象**上） | 双方读写节点属性（analyze 与 transform 共享同一 `state.ast`） | 结论**与节点一一对应**、无需按位置回配 | P4 理解路径（`raw_understand` / `raw_candidate`） |
+
+选型判据（按"传的是函数还是数据、要不要绑定节点"三问）：
+- 引擎要一个**函数**且查找点是引擎固定的 ⇒ **能力面**；跨语言限定用 `get_capability_in(name, rules_dir)`。
+- 传的是**数据**、消费方按声明式映射取用 ⇒ **产物通道**（挂符号 attrs）。
+- 触发点在**某类节点**上、且要可声明/可枚举 ⇒ **槽位契约**。
+- 结论**一一对应到某个 AST 节点** ⇒ **节点属性通道**（最省 plumbing；⚠ `context.extra` **不外传**到
+  transform，别指望它当通道）。
+
+⚠ **历史（勿复活）**：`resolve_refs` 原语 → `_ref_callbacks` → `_semantic_mapping._apply_refs` 的旧回调链
+（连带 `transform_callbacks` 能力与 `capture_hooks` 扩展点）已随 P1.5 step 2 删除；2026-10-11 清理了当时
+漏下的残留消费者——`trans_callback/` 输出目录（含 `cb_dir`/`cb_json` 字段与 `_OUTPUT_SUBDIRS` 条目）
+与 `_capture_hooks` 死扩展点（无任何注册方）。新增跨阶段协作请按上表选型，不要再引入"通用回调收集"。
+
 ## 1b. 精化器能力位（`elaborator`）
 
 > 引擎侧实现：`analyzer/elaboration/`（机制与职责见其 `README.md`）；插件示例：

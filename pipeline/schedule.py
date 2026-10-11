@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, cast
 
 from core.plugin_loader import (
-    get_capability,
     get_pipeline_pass_decls,
     get_pipeline_schedules,
 )
@@ -585,11 +584,10 @@ class _ScheduleStop(Exception):
 
 
 def _dump_analyze_artifacts(ctx, analyzer) -> None:
-    """符号表 / 变换回调转储（非 quiet 时）。
+    """符号表转储（非 quiet 时）。
 
-    Dump transform callbacks (_ref_callbacks) to trans_callback/ —— 经能力查找
-    （P2.5）接入：typed_ports 声明 `[capabilities] transform_callbacks`；其他
-    语言无此能力时 get_capability 返回 None，回调收集降级为空。
+    变换回调转储（`trans_callback/`）已随旧回调链删除：`transform_callbacks` 能力
+    自 P1.5 step 2 起**无任何包声明** ⇒ 该通道恒空，2026-10-11 连同目录与字段一并清理。
     """
     if ctx.quiet:
         return
@@ -598,10 +596,6 @@ def _dump_analyze_artifacts(ctx, analyzer) -> None:
             analyzer.root_scope.to_dict(), ctx.sym_json, "symbols",
             log_fn=ctx.log
         )
-    collect_cbs = get_capability("transform_callbacks")
-    callbacks = collect_cbs(analyzer.root_scope) if collect_cbs else {}
-    if callbacks and ctx.cb_json:
-        save_json(callbacks, ctx.cb_json, "callbacks", log_fn=ctx.log)
 
 
 def _raise_on_analyze_errors(ctx, analyzer) -> None:

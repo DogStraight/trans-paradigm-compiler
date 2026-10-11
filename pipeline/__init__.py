@@ -129,12 +129,10 @@ class _PipelineContext:
     ast_dir: str | None = None
     sym_dir: str | None = None
     lex_dir: str | None = None
-    cb_dir: str | None = None
     base_name: str = "input"
     gen_file: str | None = None
     ast_json: str | None = None
     sym_json: str | None = None
-    cb_json: str | None = None
 
     # 共享组件（由 _ensure_shared 填充）
     rules: Any = None
@@ -326,11 +324,10 @@ def _resolve_paths(ctx: _PipelineContext) -> None:
         ctx.ast_dir = os.path.join(ctx.out_dir, "ast")
         ctx.sym_dir = os.path.join(ctx.out_dir, "symbols")
         ctx.lex_dir = os.path.join(ctx.out_dir, "lex")
-        ctx.cb_dir = os.path.join(ctx.out_dir, "trans_callback")
     else:
-        ctx.gen_dir = ctx.ast_dir = ctx.sym_dir = ctx.lex_dir = ctx.cb_dir = None
+        ctx.gen_dir = ctx.ast_dir = ctx.sym_dir = ctx.lex_dir = None
 
-    for d in (ctx.gen_dir, ctx.ast_dir, ctx.sym_dir, ctx.lex_dir, ctx.cb_dir):
+    for d in (ctx.gen_dir, ctx.ast_dir, ctx.sym_dir, ctx.lex_dir):
         if d:
             ensure_dir(d)
 
@@ -343,7 +340,6 @@ def _resolve_paths(ctx: _PipelineContext) -> None:
     ctx.gen_file = os.path.join(ctx.gen_dir, f"gen_{ctx.base_name}.v") if ctx.gen_dir else None
     ctx.ast_json = os.path.join(ctx.ast_dir, f"{ctx.base_name}.json") if ctx.ast_dir else None
     ctx.sym_json = os.path.join(ctx.sym_dir, f"{ctx.base_name}.json") if ctx.sym_dir else None
-    ctx.cb_json = os.path.join(ctx.cb_dir, f"{ctx.base_name}.json") if ctx.cb_dir else None
 
 
 def _shared_key(ctx: _PipelineContext) -> tuple:

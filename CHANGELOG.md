@@ -189,6 +189,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **机制卫生清理：旧回调链的两处残留**（2026-10-11，作者提问起子）。判据 = "删除先证后删"：
+  - **`transform_callbacks` 死消费链**：该能力自 **P1.5 step 2** 起**无任何包声明**（`component_protocol.md`
+    已注记删除）⇒ `get_capability` 恒 None ⇒ 回调恒空 ⇒ **`trans_callback/` 目录与 `cb_json` 字段
+    永远为空**。已删：`pipeline/schedule.py::_dump_analyze_artifacts` 的消费路径（+ 未使用的
+    `get_capability` import）、`pipeline/__init__.py` 的 `cb_dir`/`cb_json`（字段 + `_resolve_paths`
+    三处引用）、`tests/fuzz/generate.py` 的 `_OUTPUT_SUBDIRS` 条目。
+  - **`_capture_hooks` 死扩展点**：`analyzer/primitives/_symbol.py` 自述"**目前未使用，保留扩展点**"，
+    全仓**无注册方**、**无 TOML 声明** ⇒ `hook` 恒 None。已删：定义、hooks 循环、`capture_hooks`
+    配置读取、`Callable` import、docstring 示例与措辞，以及 `core/global_state.py` 的登记。
+  - **验证**：`capture_hooks` / `resolve_invert` / `cb_dir` / `cb_json` **全仓零匹配**；按影响范围
+    `pytest tests/engine/analyzer tests/engine/pipeline tests/policy` **880 passed**；pyright strict
+    **0**；`check_doc_refs` / `check_hardcode --strict-*` 干净。
+- **`core/component_protocol.md` 补「跨阶段组合形式选型」表**：能力面（`[capabilities]` +
+  `get_capability[_in]`）/ 产物通道（挂符号 attrs）/ 槽位契约（`[[transform.slots]]`）/ 节点属性通道
+  （跨阶段结论长在同一 AST 对象）四者的**判据**（传函数还是数据、要不要绑定节点）+ "⚠ 勿复活旧回调链"
+  警示。结论：**四者语义分工不同，不建议统一**；P4 理解路径选的节点属性通道是最省 plumbing 的一种。
+
 - **M2（raw + 窄档摘诊断）推迟到与 P4 原子落地**（循环 #5，Lead 裁定；本轮实现已撤出）。
   理由：独立复审证明 M1 的资格判定在**作用域遮蔽**上不健全（`pre_scan` 无作用域，且块内语句位
   尚不产生位点）⇒ raw 段的合法性必须由 analyzer 用 `phase="analyze"` 的**精确符号面校验**

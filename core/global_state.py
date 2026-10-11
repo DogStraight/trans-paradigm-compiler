@@ -125,7 +125,6 @@ ACCUMULATED: dict[str, str] = {
     "transform.engine._plugin_shapes": "插件产物形状声明（同上，校验用）",
     "renderer.primitives.registry._PRIMITIVE_REGISTRY": "渲染原语注册表（原语模块 import 期注册）",
     "analyzer.primitives.registry._primitives": "分析原语注册表（原语模块 import 期注册）",
-    "analyzer.primitives._symbol._capture_hooks": "符号捕获钩子表（同上）",
     "preprocessor.primitives.registry._registry": "指令处理原语注册表（同上）",
     "transform.primitives.registry._registry": "变换原语注册表（同上）",
     "analyzer.raw_contract._QUERIES": "raw「类型名查询」注册表（语言包 import 期注册，只增；引擎按名解析）",

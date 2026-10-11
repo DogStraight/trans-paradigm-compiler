@@ -10,7 +10,6 @@
         kind = "role",
         name_attr = "role_name",
         capture = { ports = "ports" },
-        capture_hooks = ["resolve_invert"],
     }
 
 capture 配置:
@@ -20,12 +19,9 @@ capture 配置:
 Doc: analyzer/semantic_checks.md（符号收集原语）
 """
 
-from typing import Any, Callable
+from typing import Any
 from core.define import Node
 from analyzer.primitives.registry import register
-
-# ── Capture 后处理器中心（目前未使用，保留扩展点）──
-_capture_hooks: dict[str, Callable] = {}
 
 
 # ── 原语: symbol_declare ──
@@ -58,9 +54,8 @@ def _declare_one(
     kind: str,
     sym_meta: dict,
     capture: dict,
-    hooks: list,
 ) -> None:
-    """单名声明：重名检查 → capture 属性 → capture_hooks 后处理 → 落表。"""
+    """单名声明：重名检查 → capture 属性 → 落表。"""
     if name in current_scope.symbols:
         # 允许重名作用域（由 [analyzer.scope] allow_duplicate 规则字段声明，如
         # generate 条件生成分支互斥——elaboration 只展开一个，各分支同名声明
@@ -72,10 +67,6 @@ def _declare_one(
         return
 
     attrs: dict = _build_capture_attrs(node, capture)
-    for hook_name in hooks:
-        hook = _capture_hooks.get(hook_name)
-        if hook:
-            attrs = hook(node, sym_meta, current_scope, name, attrs) or attrs
 
     sym = current_scope.declare(name=name, kind=kind, decl_node=node, attrs=attrs)
     analyzer._all_symbols.append(sym)
@@ -86,7 +77,7 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
     """声明符号
 
     根据 TOML symbol 配置从节点提取名称、捕获属性、注册符号到当前作用域。
-    支持: 单名 / 多项声明 / capture 属性提取 / capture_hooks 后处理
+    支持: 单名 / 多项声明 / capture 属性提取
 
     无显式 symbol 时的 scope 推断见 `_symbol_meta_from_config`。
     """
@@ -103,15 +94,10 @@ def symbol_declare(analyzer, node: Node, config: dict) -> None:
         return
 
     capture = sym_meta.get("capture", {})
-    hooks = sym_meta.get("capture_hooks", [])
-    if isinstance(hooks, str):
-        hooks = [hooks]
 
     for name in _extract_names(analyzer, node, name_attr):
         if name:
-            _declare_one(
-                analyzer, node, current_scope, name, kind, sym_meta, capture, hooks
-            )
+            _declare_one(analyzer, node, current_scope, name, kind, sym_meta, capture)
 
 
 # ── 内部辅助函数 ──

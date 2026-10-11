@@ -201,12 +201,12 @@ def _insert_snippets(token_map: dict[str, str]) -> list[str]:
 
 # ── 种子收集 ────────────────────────────────
 
-# 流水线自己的输出目录名（`pipeline._resolve_paths`：`out_dir/{gen,ast,symbols,lex,
-# trans_callback}`；样本布局下即 tests/e2e/samples/*/<这些>/，.gitignore 已列明）。
+# 流水线自己的输出目录名（`pipeline._resolve_paths`：`out_dir/{gen,ast,symbols,lex}`；
+# 样本布局下即 tests/e2e/samples/*/<这些>/，.gitignore 已列明）。
 # 它们**不是输入语料**：混进种子池会让种子集随"本机残留产物"变化——实测本机因
 # e2e 跑过留下 66 个 gen/*.v，种子 185 个而 CI 只有 119 个，同一 `--seed` 两边
 # 抽出不同序列（finding 无法复现）。
-_OUTPUT_SUBDIRS = frozenset({"gen", "ast", "symbols", "lex", "trans_callback"})
+_OUTPUT_SUBDIRS = frozenset({"gen", "ast", "symbols", "lex"})
 
 
 def collect_seeds(*roots: str, extensions: tuple[str, ...] = (".v",)) -> list[str]:
