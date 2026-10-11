@@ -2464,6 +2464,41 @@ Isolating Failure-Inducing Input*, IEEE TSE 28(2), 2002）—— 直接采用** 
 - 📌 触发条件（何时重估）：出现"必须在 tpc 里执行/证明"的真实需求时，先评估"**交给 K/pyk 协同**"
   而不是在引擎里造 IR。
 
+#### K 的 AI agent 参与痕迹（2026-10-11 实测，全部可核查）
+
+- **有，明确且可核查**：仓库根有 **`CLAUDE.md`**（自称 "K Framework — Agent Guide"：项目结构 +
+  构建 + 三套 lint + **四个测试面** + regression baseline 更新规范），由 RV 联合创始人
+  **ehildenb** 经 PR #4912 于 **2026-04-27** 引入，标题直写 "**Support Claude as developer**,
+  add `--top-cell` flag to `pyk kompile`"；PR body 原文："After a Claude analysis of the tests
+  skipped in `pyk/regression-new`…"。
+- **署名可查**：commit trailer 为 `Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>`；
+  `gh search commits` 计数 **13 条**（`Copilot` / `cursor` / `devin-ai` / `claude.ai` 均为 **0**
+  ⇒ 只用 Claude）。
+- **参与度低且集中在外围**：13 条落在 **2026-04-27 → 06-18**，其中 **11 条由 ehildenb 提交**、
+  2 条是依赖机器人的 PR 描述；主题全是 **pyk（Python 子项目）/ CI / Nix / 依赖升级**——
+  **K 核心（Java/Scala 前端、Haskell/LLVM 后端）零 agent 痕迹**。
+- **组织级实践**：RV 名下 **6 个仓库有 `CLAUDE.md`**（k、evm-semantics、haskell-backend、kontrol、
+  mir-semantics、linux-isolation-spike）；**无公开 AI 政策**（CONTRIBUTING.md 未提 AI，org 内
+  无 `AGENTS.md`）⇒ 属"**工具性采用 + 署名透明**"，不是"AI 驱动开发"的对外主张。
+- 与 tpc 的对照（tpc = agent 是**主要生产者**，人类定方向 + 门禁验收；K = agent 是**受控助手**，
+  人类写核心 + maintainer review）：
+
+  | 维度 | tpc | K |
+  |---|---|---|
+  | agent 角色 | 主要生产者（绝大部分代码） | 受控助手（外围增量） |
+  | 约束载体 | `AGENTS.md` + `policy/collaboration.md`（六步循环 / 决策权归属 / 升级判据）+ 门禁体系 | `CLAUDE.md`（结构 + 命令 + baseline 规范），单文件自包含 |
+  | 署名 | **不留 trailer** | `Co-authored-by: Claude` 可查 |
+  | agent 触碰面 | 全栈（引擎 / 语言包 / 文档 / 门禁） | pyk / CI / Nix（核心语义零参与） |
+
+- 💡 **可借鉴**：① **co-author 署名**——让 agent 参与可追溯（tpc 目前不可查）；② `CLAUDE.md`
+  的"**命令一览**"写法——四测试面 + baseline 规范一次给全，与 tpc"细节迁出、AGENTS 只留指针"
+  是两种取舍（tpc 的代价是 agent 要多跳几个文件）；③ **baseline 更新独立 commit** 纪律，与
+  tpc"未修不许沉淀"同族。
+- 📌 **可观察规律**（对本项目有意义）：K 的 agent 参与集中在 **pyk**，原因大概率是**反馈闭环
+  差异**——Java/Haskell 侧 `mvn verify` ~30 分钟、四个测试面；pyk 侧 pytest 快、改动局部。
+  tpc 的技术栈（纯 Python / 零依赖 / 并行全量 ~78s）**天然适合 agent 高频迭代**，这可能是
+  "tpc 绝大部分代码由模型生成"能成立的结构性原因。
+
 **来源**：官方 [README](https://raw.githubusercontent.com/runtimeverification/k/master/README.md)
 与 [INSTALL.md](https://raw.githubusercontent.com/runtimeverification/k/master/k-distribution/INSTALL.md) ·
 [Lesson 1.20 K Backends](https://kframework.org/k-distribution/k-tutorial/1_basic/20_backends/) ·
