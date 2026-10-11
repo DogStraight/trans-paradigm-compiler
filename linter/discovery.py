@@ -235,6 +235,8 @@ class Discovery:
         end: int,
         context: str,
         depth: int,
+        *,
+        record: bool = True,
     ) -> list[DiscoveredNode]:
         """在 [start, end) 区间内扫描语句；块容器递归产出 children。
 
@@ -244,6 +246,10 @@ class Discovery:
 
         主循环只做分派（按 token 类型四路），每路一个 `_discover_*` 方法：
         括号开启符 / 块开启符 / 闭合与延续关键字 / 语句。
+
+        `record=False`（P3c 前置切片）：**只跑收敛判定**（位点发现）——仍走同一套
+        分类/边界/递归，但不产出 `DiscoveredNode`、不报未识别诊断、不填 children
+        ⇒ 供容器体语句位复用本实现，用户可见面零变化。
         """
         # 递归深度上限（纵深防御，2026-08-28 坏输入收敛）：容器递归与自身
         # 区间重叠等病态输入曾触发 ~978 层递归（受 Python 递归上限约束，
@@ -271,12 +277,16 @@ class Discovery:
             # `_discover_bracket`——块规则在此**不能**整体跳过，否则块内语句
             # 既不解析也不诊断）。
             if t.type in self._bracket_openers:
-                i = self._discover_bracket(tokens, i, end, context, depth, nodes)
+                i = self._discover_bracket(
+                    tokens, i, end, context, depth, nodes, record=record
+                )
                 continue
 
             # 块边界 → 注册块节点 + 递归 body 产出 children
             if t.type in self._block_openers:
-                i = self._discover_block(tokens, i, end, context, depth, nodes)
+                i = self._discover_block(
+                    tokens, i, end, context, depth, nodes, record=record
+                )
                 continue
 
             # 块闭合符（end/`}` 等）与容器结构延续关键字（else/default 等，
@@ -287,7 +297,9 @@ class Discovery:
                 i += 1
                 continue
 
-            i = self._discover_statement(tokens, i, end, context, depth, nodes)
+            i = self._discover_statement(
+                tokens, i, end, context, depth, nodes, record=record
+            )
         return nodes
 
     def _discover_bracket(
@@ -298,9 +310,12 @@ class Discovery:
         context: str,
         depth: int,
         nodes: list[DiscoveredNode],
+        *,
+        record: bool = True,
     ) -> int:
         """括号开启符：属性对 / 块规则 / 语句分类 / 整体跳过，按序分流。
 
+        `record=False` 只做分类与推进（位点发现），不注册节点、不报诊断。
         Returns: 下一个扫描位置（必定 > i，防死循环）。
         """
         t = tokens[i]
@@ -322,15 +337,49 @@ class Discovery:
         if candidates and isinstance(candidates[0], str):
             info = self._tree.get(candidates[0], {}) or {}
             if info.get("block_end"):
-                return self._discover_block(tokens, i, end, context, depth, nodes)
+                return self._discover_block(
+                    tokens, i, end, context, depth, nodes, record=record
+                )
         if candidates:
             e = self._statement_end(tokens, i, candidates[0], end)
             if e > i:
-                nodes.append(
-                    self._make_stmt_node(self._rule_of(candidates), i, e, context)
-                )
+                if record:
+                    nodes.append(
+                        self._make_stmt_node(self._rule_of(candidates), i, e, context)
+                    )
+                # P3c 前置切片：括号定界容器体（C `CompoundStmt = { @Stmt* }`）的
+                # **位点发现**——体区间走 record=False（不注册节点 ⇒ 诊断面不变）。
+                self._scan_container_sites(tokens, i, e, candidates[0], context, depth)
                 return e
         return self._skip_balanced(tokens, i, end)
+
+    def _scan_container_sites(
+        self,
+        tokens: list[Token],
+        i: int,
+        e: int,
+        rule: "str | list",
+        context: str,
+        depth: int,
+    ) -> None:
+        """括号定界容器体的位点发现（P3c 前置切片；只记内部 warning）。
+
+        触发（两条同时成立）：
+          ① `rule` 是**引用式容器**（`_is_nested_container`：production 含语句/块
+             引用——配置驱动，如 C `CompoundStmt = { @Stmt* }`）；
+          ② 该语句以**括号开启符**起始 ⇒ 括号配对直接给出体区间 `[i+1, close)`，
+             语言无关、不依赖 production 匹配（不必区分 `{`/`begin`）。
+        体区间交给 `_discover_range(record=False)`：分类/边界/递归仍是**同一套**
+        实现，只是不产出节点、不报未识别 ⇒ 诊断面零变化；句子结束仍由既有
+        `_statement_end`（→ `_derived_end_case` → `_lookahead._stmt_ends`）推导，
+        与位点条目的 `region`（`_find_boundary`）**同源**。
+        """
+        if not isinstance(rule, str) or not self._is_nested_container(rule):
+            return
+        close = self._skip_balanced(tokens, i, e)
+        if close - 1 <= i + 1:
+            return
+        self._discover_range(tokens, i + 1, close - 1, context, depth + 1, record=False)
 
     def _discover_block(
         self,
@@ -340,10 +389,13 @@ class Discovery:
         context: str,
         depth: int,
         nodes: list[DiscoveredNode],
+        *,
+        record: bool = True,
     ) -> int:
         """块开启符：注册块节点 + 递归 body 产出 children。
 
         块头 production 不匹配 → 未识别块诊断；块结束符缺失 → 只跳过关键字。
+        `record=False` 只递归 body 做位点发现（不注册节点、不报诊断）。
         Returns: 下一个扫描位置（必定 > i）。
         """
         candidates = self._lookahead.classify(tokens, i, context)
@@ -352,21 +404,27 @@ class Discovery:
             return end_idx
         if not candidates:
             # 块关键字存在但块头 production 不匹配 → 未识别块
-            self._record_unrecognized(tokens, i)
+            if record:
+                self._record_unrecognized(tokens, i)
             return end_idx
         rule = self._rule_of(candidates)
         be = (self._tree.get(candidates[0], {}) or {}).get("block_end") or ""
         end_idx = self._skip_to_end(tokens, i, {be}, end) if be else i + 1
         if end_idx > i:
-            node = self._make_stmt_node(rule, i, end_idx, context)
             body_start, body_end = self._block_body(
                 tokens, i, end_idx, candidates[0], end
             )
-            if body_start < body_end:
-                node.children = self._discover_range(
-                    tokens, body_start, body_end, context, depth + 1
+            children = (
+                self._discover_range(
+                    tokens, body_start, body_end, context, depth + 1, record=record
                 )
-            nodes.append(node)
+                if body_start < body_end
+                else []
+            )
+            if record:
+                node = self._make_stmt_node(rule, i, end_idx, context)
+                node.children = children
+                nodes.append(node)
         return end_idx
 
     def _discover_statement(
@@ -377,11 +435,15 @@ class Discovery:
         context: str,
         depth: int,
         nodes: list[DiscoveredNode],
+        *,
+        record: bool = True,
     ) -> int:
         """语句发现：动态两级消歧（引用式容器 / 普通语句），必要时递归 body。
 
         容器式语句（production 含 @Stmt/@BeginEnd）定位 body 后递归；普通语句
-        只注册区间不深入（表达式黑盒）。Returns: 下一个扫描位置（必定 > i）。
+        只注册区间不深入（表达式黑盒）。
+        `record=False` 只做分类/边界/容器体递归（位点发现），不注册节点、不报
+        未识别诊断。Returns: 下一个扫描位置（必定 > i）。
         """
         candidates = self._lookahead.classify(tokens, i, context)
         if candidates is None:
@@ -389,7 +451,8 @@ class Discovery:
         if not candidates:
             # 有语句起点特征但无任何已知语句规则匹配（拼错关键字/残缺结构头）
             # → 记录未识别诊断，不静默吞错。
-            self._record_unrecognized(tokens, i)
+            if record:
+                self._record_unrecognized(tokens, i)
             return i + 1
         rule_name = candidates[0]
         nested = isinstance(rule_name, str) and self._is_nested_container(rule_name)
@@ -399,6 +462,13 @@ class Discovery:
             e = self._statement_end(tokens, i, rule_name, end)
         if e <= i:
             return i + 1
+        if not record:
+            # 位点发现（P3c 前置切片）：容器体仍需递归（record=False），不建节点。
+            if nested:
+                self._attach_container_body(
+                    None, tokens, i, rule_name, e, context, depth, record=False
+                )
+            return e
         node = self._make_stmt_node(self._rule_of(candidates), i, e, context)
         if nested:
             self._attach_container_body(node, tokens, i, rule_name, e, context, depth)
@@ -407,15 +477,20 @@ class Discovery:
 
     def _attach_container_body(
         self,
-        node: DiscoveredNode,
+        node: DiscoveredNode | None,
         tokens: list[Token],
         i: int,
         rule_name: str,
         e: int,
         context: str,
         depth: int,
+        *,
+        record: bool = True,
     ) -> None:
-        """引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归填 children。"""
+        """引用式容器（production 含 @Stmt/@BeginEnd）→ 定位 body 递归填 children。
+
+        `record=False` 时 `node` 为 None：只递归 body 做位点发现，不填 children。
+        """
         body = self._locate_stmt_body(tokens, i, rule_name, e)
         if body is None:
             return
@@ -430,7 +505,11 @@ class Discovery:
         # 上限（`assign a = ;` 977 条重复诊断）。语义上语句分派器的嵌套语句由
         # 后续扫描独立发现（扁平化策略），不递归。
         if i < bs < e:
-            node.children = self._discover_range(tokens, bs, e, bctx, depth + 1)
+            children = self._discover_range(
+                tokens, bs, e, bctx, depth + 1, record=record
+            )
+            if record and node is not None:
+                node.children = children
 
     @staticmethod
     def _rule_of(candidates: list) -> "str | list":

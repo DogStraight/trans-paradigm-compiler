@@ -129,20 +129,139 @@ class TestDepthGuard:
 
 
 class TestShadowingBoundary:
-    """**已知边界**：pre_scan 无作用域 ⇒ 遮蔽分不出；本用例当前**不** eligible。
+    """**已知边界**：pre_scan 无作用域 ⇒ 遮蔽分不出。
 
-    实测原因不是"遮蔽判对了"，而是**使用点在块内**（`CompoundStmt` 的语句位）本就不
-    产生未收敛位点 ⇒ 无位点可判。P3c 若把覆盖扩到 production 层语句位，此用例会变成
-    可判 ⇒ 必须同时引入作用域信息（M2+P4 的 analyze 精确符号面校验）。
+    P3c 前置切片把位点发现面扩到 production 层语句位（函数体/单语句体）后，遮蔽
+    用例**变成可达**：`typedef int t;\\nvoid f(void){ int t; x = (t)y; }` 产生的位点
+    `eligible=True`——M1 判不出"此处 `t` 已被局部变量遮蔽"。这是**已登记边界**，
+    不是回归：M2（raw）**不得只依赖 M1 资格**，必须与 P4（analyzer
+    `phase="analyze"` 精确符号面校验）同批落地（见 `linter/linter_architecture.md`）。
     """
 
     SHADOWED = "typedef int t;\nvoid f(void) { int t; x = (t)y; }\n"
 
-    def test_shadowed_use_not_eligible(self, c_scanner):
+    def test_shadowed_use_site_exists_and_m1_unsound(self, c_scanner):
         diags, warns = _scan(c_scanner, self.SHADOWED)
         assert len(diags) == 1 and all(d.blocking for d in diags)
-        assert warns == []  # 块内语句位不产生未收敛记录（覆盖边界，非遮蔽判定）
-        assert all(w["eligible"] is False for w in warns)
+        # P3c 前：warns == []（函数体语句位不可达）；P3c 后：位点可达
+        assert len(warns) == 1
+        w = warns[0]
+        assert (w["symbol_names"], w["line"], w["column"]) == (["t"], 2, 22)
+        # ⚠ M1 在遮蔽上**不健全**（不是"判对了"）：资格三判据各自成立，但符号身份错
+        assert w["eligible"] is True, "边界变化时必须重新登记（M2 不得只依赖 M1）"
+
+
+class TestProductionLevelSites:
+    """P3c 前置切片（task-28）：位点发现面扩到 production 层语句位。
+
+    判据 1/2：函数体（`CompoundStmt` 的 `@Stmt*`）与 if/while/for/do 单语句体都要
+    产出 `eligible=true` 位点。判据 3/4（本类同批冻结）：这些输入的**用户可见诊断
+    逐条不变**——位点只进内部通道（`internal_warnings`）。
+    """
+
+    # 位点扩展新增可达的输入：期望 (诊断冻结值, 位点 line/column)
+    FN_BODY = (
+        "typedef int myint;\nvoid f(void) { x = (myint)y; }\n",
+        [("phase-statement", 1, 15)],
+        (2, 15),
+    )
+    IF_IN_FN = (
+        "typedef int myint;\nvoid f(void){ if (c) x = (myint)y; }\n",
+        [("phase-statement", 1, 14)],
+        (2, 21),
+    )
+    IF_TOP = (
+        "typedef int myint;\nif (c) x = (myint)y;\n",
+        [
+            ("phase-unrecognized", 1, 7),
+            ("phase-statement", 1, 7),
+            ("phase-statement", 1, 18),
+        ],
+        (2, 7),
+    )
+    WHILE_TOP = (
+        "typedef int myint;\nwhile (c) x = (myint)y;\n",
+        [
+            ("phase-unrecognized", 1, 10),
+            ("phase-statement", 1, 10),
+            ("phase-statement", 1, 21),
+        ],
+        (2, 10),
+    )
+    FOR_TOP = (
+        "typedef int myint;\nfor (;;) x = (myint)y;\n",
+        [
+            ("phase-unrecognized", 1, 9),
+            ("phase-statement", 1, 9),
+            ("phase-statement", 1, 20),
+        ],
+        (2, 9),
+    )
+    DO_WHILE_TOP = (
+        "typedef int myint;\ndo x = (myint)y; while (c);\n",
+        [
+            ("phase-unrecognized", 1, 3),
+            ("phase-statement", 1, 3),
+            ("phase-statement", 1, 5),
+            ("phase-statement", 1, 14),
+            ("phase-statement", 1, 14),
+        ],
+        (2, 3),
+    )
+    NESTED_FN = (
+        "typedef int myint;\nvoid f(void) { if (c) { x = (myint)y; } }\n",
+        [("phase-statement", 1, 15)],
+        (2, 24),
+    )
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "FN_BODY",
+            "IF_IN_FN",
+            "IF_TOP",
+            "WHILE_TOP",
+            "FOR_TOP",
+            "DO_WHILE_TOP",
+            "NESTED_FN",
+        ],
+    )
+    def test_site_eligible_and_diagnostics_frozen(self, c_scanner, label):
+        src, expected_diags, use_pos = getattr(self, label)
+        diags, warns = _scan(c_scanner, src)
+        assert [
+            (d.code, d.range[0].line, d.range[0].character) for d in diags
+        ] == expected_diags, f"{label}: 用户可见诊断变了"
+        hits = [w for w in warns if w["eligible"]]
+        assert len(hits) == 1, f"{label}: 应有且仅有 1 个 eligible 位点"
+        w = hits[0]
+        assert (w["line"], w["column"]) == use_pos, f"{label}: 位点未指向使用点"
+        assert w["symbol_names"] == ["myint"]
+        assert w["symbol_dependent"] is True
+        assert (w["order_ok"], w["depth_ok"], w["trial_ok"]) == (True, True, True)
+
+    def test_fn_true_error_not_eligible(self, c_scanner):
+        """函数体内**真语法错**（非符号歧义）不得 eligible（位点可达≠放宽判据）。"""
+        diags, warns = _scan(
+            c_scanner, "typedef int myint;\nvoid f(void) { x = (1 + )y; }\n"
+        )
+        assert [d.code for d in diags] == ["phase-statement"]
+        assert len(warns) == 1
+        assert warns[0]["eligible"] is False and warns[0]["symbol_dependent"] is False
+
+    def test_fn_declared_inside_then_used_eligible(self, c_scanner):
+        """函数体内"声明后使用"同深度 ⇒ eligible（深度守卫不误伤同深度）。"""
+        diags, warns = _scan(
+            c_scanner, "void f(void) { typedef int t; x = (t)y; }\n"
+        )
+        assert [d.code for d in diags] == ["phase-statement"]  # 诊断不变
+        hits = [w for w in warns if w["eligible"]]
+        assert len(hits) == 1 and (hits[0]["line"], hits[0]["column"]) == (1, 30)
+
+    def test_builtin_cast_no_site(self, c_scanner):
+        """内建转换 `(int)`：不产生位点（无未收敛候选）⇒ 无内部噪音。"""
+        diags, warns = _scan(c_scanner, "void f(void) { x = (int)y; }\n")
+        assert diags == [] and warns == []
 
 
 class TestCounterExamples:

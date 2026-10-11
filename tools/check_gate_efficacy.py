@@ -143,10 +143,20 @@ _MUTATIONS: list[dict[str, str]] = [
         "old": """        if candidates and isinstance(candidates[0], str):
             info = self._tree.get(candidates[0], {}) or {}
             if info.get("block_end"):
-                return self._discover_block(tokens, i, end, context, depth, nodes)
+                return self._discover_block(
+                    tokens, i, end, context, depth, nodes, record=record
+                )
 """,
         "new": "",
         "test": "tests/languages/c4/test_c4_linter.py",
+    },
+    {
+        "why": "括号定界容器体的位点发现被摘掉（P3c 前置切片）→ production 层语句位"
+               "（C 函数体 / 块内语句位）不再产生未收敛位点 ⇒ raw 承载将无位点可消费",
+        "file": "linter/discovery.py",
+        "old": "                self._scan_container_sites(tokens, i, e, candidates[0], context, depth)\n",
+        "new": "",
+        "test": "tests/engine/linter/test_linter_raw_eligibility.py",
     },
     {
         "why": "lexer 最长匹配要求「每层中间前缀自身也声明过」→ 中间形态未声明的符号永远"

@@ -281,10 +281,19 @@ SHA256 / lint accuracy / diag baseline 三证）。判据实现在
   · **引擎既有赋值链宽松**（审计 B 类，如 `x = (t)y + z = 1;`）——既有宽松面，不混入
     P3b 判据。
   · `tpc check` 的 `parse_ok=False` 而 `exit_code=0` 观察——归 M2+P4 的收口判据。
-- **已知边界（M1）**：① 遮蔽不可分（见上，已如实登记）；② 位点只来自**块体语句位**
-  （根块 / `is_block` 规则体）——非块容器内由 production `@Stmt*` 展开的语句位
-  （C `CompoundStmt`：函数体内语句）不产生未收敛位点 ⇒ 也无资格判定（P3c 立项处理）；
-  ③ `pre_scan` 首见归属 ⇒ 同名多处声明以**首次**声明位置为准。
+- **已知边界（M1）**：① 遮蔽不可分（见上，已如实登记）；② `pre_scan` 首见归属 ⇒ 同名
+  多处声明以**首次**声明位置为准。
+- **位点发现面（P3c 前置切片，task-28 已落）**：位点由 discovery 的扫描面决定，此前
+  **只到块体语句位**（根块 / `is_block` 规则体）——非块容器的 production 语句位
+  （C `CompoundStmt = { @Stmt* }`：函数体、以及其中的 if/while/for 单语句体）不产生
+  位点。现于 `discovery._discover_bracket` 的语句分支接入
+  `_scan_container_sites`：分类命中的规则是**引用式容器**（`_is_nested_container`，
+  配置驱动）且语句以括号开启符起始 ⇒ 用括号配对取体区间 `[i+1, close)`，交给
+  `_discover_range(record=False)` 走**同一套**扫描逻辑（分类/边界/递归单实现），
+  只记内部 warning：不注册节点、不报未识别诊断 ⇒ 诊断/`--json`/exit code 零变化。
+- **单一来源**：位点条目的 `region` 由 `lookahead._find_boundary` → `_stmt_ends`/
+  `_block_ends` 推导；扫描面推进用 `_statement_end` → `_derived_end_case` →
+  同一 `_stmt_ends`（不引入第二份语句结束推导）。扩容为**逐语句**推进，无逐 token 重扫。
 - **为什么不升格为公开判据**：`symbol_dependent`/`eligible` 是内部证据字段，不进
   `LintDiagnostic`/`--json`/exit code。
 

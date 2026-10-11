@@ -111,6 +111,27 @@ def _corpus() -> list[str]:
     return files
 
 
+def _seed_untracked_inputs(dst: Path, files: list[str]) -> int:
+    """把 HEAD 副本里缺失的输入文件从工作树补进副本（未跟踪 / 生成的语料）。
+
+    否则 PRE 会因"文件不存在"一律 rc=1，与 POST 比出**假差异**（实测 54 条
+    `samples/**/gen/*.v`）——本工具测的是"同一份输入在两个引擎状态下的产物"，
+    **输入本身必须两边一致**；缺了就把输入补上，而不是把假差异算进结论。
+    """
+    n = 0
+    for rel in files:
+        target = dst / rel
+        if target.is_file():
+            continue
+        src = ROOT / rel
+        if not src.is_file():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, target)
+        n += 1
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="PRE(HEAD)/POST(工作树) 对拍；只读，不写工作树")
     ap.add_argument("--mode", choices=("cli", "inproc"), default="cli")
@@ -137,6 +158,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "cli":
             files = args.files or _corpus()
             print(f"[cli] 输入 {len(files)} 个（verilog 用户可见面）")
+            seeded = _seed_untracked_inputs(tmp, files)
+            if seeded:
+                print(f"[pre] 补入 HEAD 副本缺失的输入 {seeded} 个（未跟踪/生成语料）")
             pre = _cli_snapshot(tmp, files)
             post = _cli_snapshot(ROOT, files)
         else:

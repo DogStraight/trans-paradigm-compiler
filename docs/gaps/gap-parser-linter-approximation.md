@@ -47,11 +47,11 @@ linter，parser truncation **也阻断管线**（2026-08-22 fuzz 发现：截断
   **作用域遮蔽**（`typedef int t; void f(void){ int t; x=(t)y; }`——`pre_scan` 无作用域，M1 判不了）、
   **引擎既有赋值链宽松**（`x = (t)y + z = 1;` / `(int)` 版在改前也通过 ⇒ 单列的既有近似）、
   `tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0/syntax=[]` 的自相矛盾。
-- **覆盖边界（2026-10-11 循环 #6「实现前判据对抗」修正）**：资格判定目前只在**块体语句位**（根块 /
-  `is_block` 规则体）产生位点；C 函数体（`CompoundStmt` 的 `@Stmt*`）与 if/while/for/do 单语句体
-  **今天零位点**（`void f(void){ x=(t)y; }` 的 `internal_warnings == []`，实测）⇒ 位点发现面扩展是
-  **linter 侧**改动；原计划的接入点 `_repeat_loop` 覆盖的是 `CompoundStmt`，**功能面 = 空集**
-  （单元素 `@Stmt` 走 `_parse_call`，不过 `_repeat_loop`）。该边界内的构造**仍照旧 blocking（不静默）**。
+- **覆盖边界（2026-10-11 循环 #6）**：资格判定原本只在**块体语句位**（根块 / `is_block` 规则体）
+  产生位点；**循环 #6 已把位点发现面扩到 production 层语句位**（`linter/discovery.py::
+  _scan_container_sites`，`record=False` 只扫不建节点）⇒ C 函数体（`CompoundStmt`）与块内语句位
+  **现已产生位点**（`void f(void){ x=(t)y; }` → 1 个 `eligible=true` (2,15)），且该扩展**零用户可见
+  变化**（诊断 / `--json` / exit code 逐字节不变；对拍 0/144）。**raw 承载仍未做**（并入 M2+P4 原子批次）。
 - **可达性与消费者现状（同上，实测）**：`eligible` 目前**零消费方**；默认路径 lint 阻断；`no_lint=True`
   时 `_stage_lint` 在 `if ctx.no_lint: return True` **之后**才收 `internal_warnings` ⇒ 位点表为空
   （`--no-lint` 不是入口）；`tpc check`（`analyzer/structure.py`）同样 blocking 短路。

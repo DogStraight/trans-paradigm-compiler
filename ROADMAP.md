@@ -115,15 +115,7 @@
   整句通过才算"唯一问题是符号歧义"）② 只认 **typedef 命名空间** ③ 声明位置先后（行+列）+
   **深度守卫**；`pre_scan_with_lines` 并行面 + `RuleMatcher.memo_suspended`（packrat memo 以 token
   位置为键，改型试解析必须挂起缓存）；**性能**：tv80_core `tpc lint` 由 +13.7% 优化回 **+0.0%**
-- [ ] **P3c（审计后收窄）= 位点发现面扩到 production 层语句位**（linter 侧、零可见变化）：C 函数体
-  与 if/while/for/do 单语句体今天**零位点**；原计划的 parser hook 面 = **空集**（单元素 `@Stmt` 走
-  `_parse_call`、不过 `_repeat_loop`）。**raw 承载与 M2+P4 同批**（判据对抗证明作用域判据成立 ⇒
-  必须带 analyze 校验）。来源：循环 #6 实现前判据对抗（task-27）
-- [ ] **M2 = raw + 窄档摘诊断（与 P4 原子落地）**——raw 段由 analyzer 用 `analyze` 精确符号面
-  **校验**"该名在此处确实是 typedef"，**校验不过 ⇒ 报错不静默**；同批判据 = 作用域遮蔽 / 引擎既有
-  赋值链宽松（单列）/ `tpc check` 对静默输入 `parse_ok=False` 却 `exit_code=0`
-- [ ] **P4 analyzer 插件：消费 raw + 符号校验 + 理解路径**——`(myint)x` 判定在此闭环；
-      判据见缺口档（`CastExpr` 正样本 + 同名非 typedef 负样本 + 作用域/顺序 + 全量回归）
+> **切片 1b 的下一批（raw 承载 + M2 + P4，原子批次）已移回 `TODO.md`**（启动在即，不再留 backlog）。
 
 ## 打包：规格跟随语言包（原 ADR-0010 draft 收敛删除）
 

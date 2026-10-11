@@ -37,13 +37,12 @@
 - [ ] **逐声明符位宽**（`int a : 3, b : 4;` 解析失败）：标准里位宽属声明符，本包宽度绑在
       整个成员声明后（一个 `DeclaratorList` 共用一个宽度）；要支持需形态改动。
       当前单声明符位域与匿名占位可用。链：`grammar/c/02_types.toml::StructMember` 注释
-- [ ] **C 语义基座 P3c = 位点发现面扩到 production 层语句位**（审计后收窄；linter 侧、零可见变化）：
-      C 函数体与 if/while/for/do 单语句体**今天零位点**（`void f(void){ x = (myint)y; }` 的
-      `internal_warnings == []`）⇒ 原计划只改 parser hook 的功能面 = **空集**（单元素 `@Stmt` 走
-      `_parse_call`、不过 `_repeat_loop`）。判据：上述输入出现 `eligible=true` 位点 + 用户面逐字节
-      不变 + `region` 与既有 `_stmt_ends` 单一来源。**raw 承载与 M2+P4 同批**（作用域判据成立 ⇒
-      必须带 analyze 校验）。链：`docs/gaps/gap-parser-linter-approximation.md`；
-      来源：循环 #6 实现前判据对抗（task-27）
+- [ ] **C 语义基座下一批 = raw 承载 + M2 窄档摘诊断 + P4 analyzer 校验（原子批次，不许拆）**：
+      位点发现面已交付（循环 #6，linter 侧）；raw 承载须与 P4 的 `analyze` 精确符号面校验同批
+      （审计：作用域判据成立 ⇒ 单独上 raw 会新增掩盖）。接入点**不止** `_repeat_loop`（单元素
+      `@Stmt` 走 `_parse_call`）；位点生效须精确 (line,col)、消费区间 == linter `region`。
+      判据：`void f(void) { x = (myint)y; }` 闭环 + 遮蔽/赋值链 + `tpc check` 自相矛盾修复 +
+      反例集仍报真错。链：`docs/gaps/gap-parser-linter-approximation.md`（task-29）
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须

@@ -7,6 +7,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **P3c 前置切片：位点发现面扩到 production 层语句位（linter 侧，零用户可见变化）**（循环 #6）。
+  原计划形态（parser 侧 raw 承载 + `_repeat_loop` 接入点）经**实现前判据对抗**（task-27，只读实测）
+  证伪 ⇒ 任务重定义，细节见 `docs/gaps/gap-parser-linter-approximation.md`。
+  - **机制**：`linter/discovery.py::_discover_bracket` 语句分支新增 `_scan_container_sites`——
+    分类命中"引用式容器"（`_is_nested_container`，配置驱动）且语句以括号开启符起始 ⇒ 括号配对取体
+    区间，交给**同一套** `_discover_range(record=False)` 扫描：只记内部 warning，**不注册节点、不报
+    未识别诊断**（"建节点"与"跑扫描"用 `record` 关键字解耦）。
+  - **实测**：`typedef int myint;\nvoid f(void) { x = (myint)y; }` 位点 `[]` → **1 个
+    `eligible=true`（line 2 / col 15）**、`symbol_names=['myint']`（Lead 独立复核一致）；`region`
+    仍出自同一份 `_stmt_ends`（全仓无第二份语句结束推导）；扩容为逐语句推进、**无逐 token 重扫**。
+  - **零用户可见变化（产物证据）**：`tools/ab_pipeline_compare.py --mode cli --expect-changed 0`
+    → **0/144 差异**；`tpc lint --json` 144 文件逐文件 rc+stdout SHA256 与 HEAD 一致；
+    `eval_lint_accuracy` 33/33 fp 0；`eval_diag_baseline` **5548 → 5548**；全量 `pytest tests`
+    **3381 passed / 7 skipped**（基线 3359 + 22 条新判据）；pyright strict **0**；`c_acceptance`
+    仍 40/42。
+  - **性能**：tv80_core（4621 行）`tpc lint` 中位 **1098 → 1063 ms（−3.2%）**。
+  - **边界诚实**：`TestShadowingBoundary` 原断言"函数体不产生位点"随覆盖扩展失效 ⇒ 改为**冻结新
+    事实**（遮蔽例现产生 `eligible=True` 位点）并登记 **M1 在作用域遮蔽上不健全**：raw 承载必须与
+    M2+P4 的 `analyze` 精确符号面校验**同批**。
+
+- **agent 协作面（循环 #6）**：新增 `CLAUDE.md`（兼容指针 → `AGENTS.md`——后者由 Linux Foundation
+  的 Agentic AI Foundation 托管、60k+ 项目在用，而 K framework 用的是私有的 `CLAUDE.md`）；新增
+  `parser/AGENTS.md` / `linter/AGENTS.md`（目录级注意事项，遵循"最近的 AGENTS.md 优先"）；
+  `policy/collaboration.md`「循环执行细则」新增**审计要给反例**（只报"已检查"的审计按 `partial` 计）。
+  `.agents/skills/task-cycle/SKILL.md`（循环执行包）是**本地能力文件**——`.agents/` 在 `.gitignore`，
+  与既有 3 个 skill 一致，不进版本库。
+
+- **`tools/ab_pipeline_compare.py` 修输入种子缺陷**：HEAD 副本缺**未跟踪/生成**输入
+  （`tests/e2e/samples/**/gen/*.v` **54 个**）时 PRE 一律 rc=1 ⇒ 报出 54 条**假差异**；现于对拍前把
+  缺失输入从工作树补进副本（工具测"同一输入在两个引擎状态下的产物"，**输入必须两边一致**）。
+  实证：修复后该档打印 `[pre] 补入 HEAD 副本缺失的输入 54 个`，差异 **0/144**。
+
+- **门禁有效性 44 → 45 条**：新增"括号定界容器体位点发现被摘掉 ⇒ production 层位点消失"变异
+  （守护 P3c 新能力）；同步一条既有变异的锚点（`discovery` 块分支调用改为多行后原 `old` 失配 ⇒
+  该 payload 曾失效、门禁抽查变红）。
+
 - **`PROGRESS.md`：到 0.1.4 的进度刻度**（作者 2026-10-11 立；根目录单一视图）。分母 = 主线 1
   「C 包框架缺口补齐」的 **9 个主块**（现 **4/9**，工作量加权约 40–45%），加 5 条**可核对退出判据**
   （全过 = 主线 1 完成、可进性能化组件）；只记刻度与判据状态，主线完成即整档删除或改写为下一
