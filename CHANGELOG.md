@@ -300,6 +300,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **世界 B 列对齐重组丢端口方向 ⇒ 格式化静默改写语义**
+  （`grammar/verilog/plugins/formatter/passes/column_align.py::_unit_cols`）。
+  多声明行的逐单元对齐（P1.5）按"**共享类型头**"模型工作：非首单元的头 token 一律
+  丢弃。但 ANSI 端口表里**每个端口自带方向**（`output awvalid, input awready, …`），
+  这些头不是共享头——一丢就把方向**继承改写**了。
+  - **实测（PicoRV32 真实核 94.6 KB）**：3 个模块共 **30 处**方向改写——`picorv32_axi` 11 个
+    `input→output`、`picorv32_axi_adapter` 8 个 `input→output`、`picorv32_wb` 11 个
+    `output→input`；全文件方向关键字 **61/146 → 34/107**。输出
+    **语法合法**（Verible 对 `module m(output a, b);` exit 0）⇒ 不报错、静默：仿真/
+    综合看到的是**另一个接口**。
+  - **定位**：`format_output=False`（只跑世界 A）关键字完好 (12,38)，开 formatter 变
+    (2,23) ⇒ 落在世界 B；最小复现 216 字节（单模块 + 含注释的 ANSI 端口表）。
+  - **修法**：`_unit_cols` 在"后续单元自带头部"时返回 None ⇒ **整行跳过、保留原文**。
+    共享头情形（`reg a, b;`）后续单元本无头 token ⇒ 行为不变。不选"把方向塞进类型列"
+    是因为那会让首端口名字列被推开十余格，且列对齐的共享头假设本就不成立。
+  - **判据**：整份 picorv32 方向关键字 **(61,146) → (61,146)**、逐模块方向表 **0 改写**、
+    幂等成立；`tests/languages/verilog/test_column_align.py` 新增 4 例（跳过 2 + 对照 1
+    + 端到端 1）。
+  - **回归**：`tests/languages/verilog` 403 passed。
+  - **门禁盲区（记档）**：Verilog 往返判据只比注释清单/行覆盖/幂等，**没有"端口方向 /
+    显著 token 序列"这一项** ⇒ 这类缺陷可长期静默（本次靠人工核对端口表才发现）。
+
 - **符号回滚三处洞 + 跨 parse 残留**（循环 #3；P3 前置，**行为零变化**）：
   ① `ParseContext` 快照**纳入符号 store**（`bind_symbol_store()` + 快照末位带 `_ScopeStack.snapshot()`，
   既有 6 个快照点自动覆盖）；② `_ScopeStack` 加**撤销日志**，`restore` 截栈后按日志精确还原

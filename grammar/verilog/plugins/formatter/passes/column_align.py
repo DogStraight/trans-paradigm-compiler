@@ -387,11 +387,18 @@ def _has_comment_token(units: list[list[str]]) -> bool:
 def _unit_cols(
     unit: list[str], first: str, ui: int, n: int, indent: str, term: str
 ) -> list[str] | None:
-    """单声明单元 → 8 列语义行；解析失败 → None。
+    """单声明单元 → 8 列语义行；解析失败/不适用 → None（调用方跳过整行）。
 
-    类型头（first/opt_type）只挂首单元；单元间 term 为逗号、行尾终结符归末
-    单元；非首单元 indent 置空（重组时不重复缩进）。空单元（连续逗号）→
-    None（保守跳过整行）。
+    行级头（`first`）只挂首单元；单元间 term 为逗号、行尾终结符归末单元；
+    非首单元 indent 置空（重组时不重复缩进）。空单元（连续逗号）→ None
+    （保守跳过整行）。
+
+    ⚠ **后续单元自带头部时整行跳过**（不重组、保留原文）：ANSI 端口表里每个
+    端口自带方向（`output awvalid, input awready`），列对齐的"共享类型头"
+    假设不成立——把后续单元的头当共享头丢掉会**改写方向继承**（格式化静默
+    改语义：picorv32 的 AXI 端口表 11 个 input→output、wishbone 接口 11 个
+    output→input，2026-10-12 实测）。共享头的情形（`reg a, b;`）后续单元本
+    就没有头 token ⇒ `opt_type` 为空，行为不变。
     """
     if not unit:
         return None
@@ -399,6 +406,8 @@ def _unit_cols(
     if parts is None:
         return None
     opt_type, opt_range, name, init = parts
+    if ui > 0 and opt_type:
+        return None
     return [
         indent if ui == 0 else "",
         first if ui == 0 else "",

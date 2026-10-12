@@ -45,13 +45,28 @@
    - fuzz oracle 自 2026-09-30 起按上判据把此类记 **advisory**（仍打印、不判违反、不沉淀）
      ——即"已知接受"落到机器判据上，而不是靠人肉忽略。
 
+8. **"语义保持"没有语料级判据**（空档；2026-10-12 由列对齐丢端口方向暴露）：Verilog
+   往返判据（`tests/e2e/run_all_tests.py`）比注释清单 / 行覆盖 / 幂等 / 显著 token 面中
+   的**一部分**，**不比逐模块端口方向，也不比"重组后 token 无一丢失"**。暴露过程：
+   多声明逐单元对齐（P1.5）按"**共享类型头**"模型工作，非首单元的头 token 一律丢弃——
+   对 `reg a, b;` 正确，对 ANSI 端口表（`output awvalid, input awready, …`，每端口自带
+   方向）就把方向**继承改写**了：PicoRV32 实测 **30 处**（`picorv32_axi` 11 个
+   input→output、`picorv32_axi_adapter` 8 个 input→output、`picorv32_wb` 11 个
+   output→input），输出**语法合法**（Verible 对
+   `module m(output a, b);` exit 0）⇒ 全程静默，靠人工核对端口表才发现。
+   - **已修**（本档只登记判据面空档，缺陷本身见 CHANGELOG）：`_unit_cols` 在"后续单元
+     自带头部"时返回 None ⇒ 整行跳过、保留原文；共享头情形行为不变。
+   - **仍缺**：语料级"端口方向表逐模块一致"判据。加它要改门禁口径（框架级）⇒ 待作者
+     拍板；当前只有单测面（`tests/languages/verilog/test_column_align.py` 的 4 例）。
+
 ## 为什么是边界（影响面）
 
 - 1/2/3 是刻意设计（保真优先：输出结构跟随输入行，折行只在安全点）——用户期望"合并紧凑行"
   或"语义重排段落"时不满足，但换来源结构稳定 + 可对拍（vs Verible 差分门禁）。
 - 4 是空档而非缺陷（无断点超长行不折，但输出合法）；5 是空档（折行头段一次性补空格，二遍
   收敛）；6 是空档（yaml 注释挂点随折行漂移，一遍不幂等；输出合法、注释与 token 都不丢）；
-  7 是空档（注释邻接空白一遍补平，输出合法、注释与 token 都不丢——fuzz 判据已按此收口）。
+  7 是空档（注释邻接空白一遍补平，输出合法、注释与 token 都不丢——fuzz 判据已按此收口）；
+  8 是**判据面空档**（"逐模块端口方向/重组不丢 token"没有语料级判据；缺陷本身已修）。
 
 ## 成熟解法参照（见贤思齐）
 
@@ -71,6 +86,8 @@
   参与邻接决策，但宏/指令原文会被 formatter 误解析，正是现行顺序的成因）；② 回插后再跑一遍
   formatter（代价是格式化 ×2，且改动全仓注释邻接空白的 golden 输出）。当前输出合法、一遍补平，
   按 fuzz 判据记 advisory。
+- 8：加语料级"逐模块端口方向一致"判据（判据面空档），改动门禁口径 ⇒ 框架级，待作者拍板；
+  当前单测面见下（`test_column_align.py` 的方向保留 4 例）。
 - 1/2/3：设计选择，不改（如需段落式重排属新能力，非修复）。
 
 ## 关联条目
@@ -78,8 +95,9 @@
 - `grammar/verilog/plugins/formatter/README.md`（世界 B：数据流/带结构行/引擎内建遍）
 - 实现：`grammar/verilog/plugins/formatter/passes/column_align.py::run_category_pass`
 - 门禁：`tests/languages/verilog/test_wrap.py`（折行）+ `test_column_align.py`（含重组输出断言，
-  漂移形态 `,\s{2,}<ident>`）+ `test_idempotent.py` + vs Verible 差分
-  （`tests/differential/run_differential.py`）+ e2e 幂等门禁（`tests/e2e/test_pipeline_idempotent.py`）
+  漂移形态 `,\s{2,}<ident>`；**多端口行"单元自带头部"⇒ 整行跳过、方向保留**的 4 例）+
+  `test_idempotent.py` + vs Verible 差分（`tests/differential/run_differential.py`）+
+  e2e 幂等门禁（`tests/e2e/test_pipeline_idempotent.py`）
 - 条目 6（yaml）：`tests/languages/yaml/test_yaml_plain.py::TestRealWorkflowFiles`（只断言结构
   往返 ⇒ **无全文幂等门禁**）；harness 接线判据见
   `TestPlainRender::test_harness_renderer_keeps_line_comment_wiring`

@@ -7,6 +7,9 @@
   3. **重组输出**：多声明行的后续声明符以 `, ` 单分隔紧跟（不参与列填充/
      不累积漂移——ref 基准风格 `reg dout, din_0, din_1;`；旧实现逐单元补
      `width+1` 前缀致 226 处漂移，e2e `_strip_all` 抹空白天然失明）
+  4. **多端口行每个单元自带的头不得丢**：`output a, input b` 里 `input` 不是共享
+     类型头——丢了会改写方向继承（格式化静默改语义；2026-10-12 picorv32 实测
+     11+11 个端口方向被改写）
 """
 
 import re
@@ -160,11 +163,50 @@ def test_multi_shared_type_header_first_only():
     units = _extract_multi("output reg [31:0] mem_addr, mem_wdata;")
     assert units is not None
     assert len(units) == 2
-    # 类型头（first/opt_type/opt_range）只挂首单元
+    # 行级头（first `output`）与共享类型（opt_type `reg`，首单元才有）只挂首单元；
+    # ⚠ 单元**自带**的头不在此列——它必须保留（见下面方向保留用例）
     assert units[0][1] == "output"
     assert units[0][2] == "reg"
     assert units[0][3] == "[31:0]"
     assert units[1][1] == "" and units[1][2] == "" and units[1][3] == ""
+
+
+def test_multi_port_own_direction_skips_line():
+    """ANSI 端口表：后续单元**自带方向**⇒ 共享头假设不成立 ⇒ 整行跳过（保留原文）。
+
+    现场（2026-10-12）：picorv32 的 AXI 端口表 `output awvalid, input awready, …`
+    经 port_dir 品类对齐后掉 `input` ⇒ 方向继承被改写（awready 变 output）。
+    跳过是防丢/防改写的保守口径：宁可不对齐，不可改语义。
+    """
+    assert _extract_multi("output mem_axi_awvalid, input mem_axi_awready,") is None
+
+
+def test_multi_port_all_directions_skip():
+    """三种方向任一出现在后续单元都要跳过（input/output 两侧都被实测改写）。"""
+    assert _extract_multi("input wbm_dat_i, output wbm_adr_o, inout pad,") is None
+
+
+def test_multi_port_shared_direction_still_aligned():
+    """对照：后续单元**不带**头部（共享方向）⇒ 仍走对齐（原行为不变）。"""
+    units = _extract_multi("output clk, resetn,")
+    assert units is not None
+    assert [u[4] for u in units] == ["clk", "resetn"]
+
+
+def test_multidecl_port_direction_preserved_in_output():
+    """端到端：格式化后 `input` 关键字仍在（方向继承没被改写）+ 幂等。
+
+    判据取"输出里两个方向都出现且端口名都在"——不钉死空白（列对齐会调间距）。
+    """
+    src = ("module m(\n"
+           "    output mem_axi_awvalid,\n"
+           "    input mem_axi_awready\n"
+           ");\n"
+           "endmodule\n")
+    out = _fmt(src)
+    assert "input" in out, f"方向被吞：{out!r}"
+    assert "mem_axi_awready" in out and "mem_axi_awvalid" in out
+    assert _fmt(out) == out, "格式化后不再幂等"
 
 
 def test_multi_single_decl_returns_one_group():
