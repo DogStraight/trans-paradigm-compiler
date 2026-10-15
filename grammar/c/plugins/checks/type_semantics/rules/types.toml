@@ -1,0 +1,89 @@
+# ============================================================================
+# type_semantics 规则表 — C tag 与枚举常量语义（TAG001/TAG002/ENUM001–003）
+# ============================================================================
+# 规则=数据：id / kind / severity / message / default 全在此；判定逻辑在
+# `_tag_check.py`（L2 handler，签名 fn(symbol, rule, context) -> str | None）。
+#
+# **default 由条款档位自动定**（Lead 拍板 ①）：A 档原文 ⇒ true；脚注/转述 ⇒ false。
+#
+# 已取得原文（C99+TC，WG14 N1124，c0x 镜像逐字；C11/C23 同名节句子稳定）：
+#   §6.7.2.3 Tags：
+#     "A specific type shall have its content defined at most once."                 → TAG001（A）
+#     "Where two declarations that use the same tag declare the same type, they shall
+#      both use the same choice of struct, union, or enum."                          → TAG002（A）
+#     "A type specifier of the form `enum identifier` without an enumerator list shall
+#      only appear after the type it specifies is complete."                         → ENUM003（A）
+#     "… and a declaration of the identifier as a tag is visible, then it specifies the same
+#      type as that other declaration, and does not redeclare the tag."              → 免误报依据
+#        （TAG001/TAG002 只在**同作用域**、且 TAG001 只在**双方都带体**时报）
+#   §6.7.2.2 Enumeration specifiers：
+#     "The identifiers in an enumerator list are declared as constants that have type int
+#      and may appear wherever such are permitted."（正文，非约束句）
+#     脚注 107："… the identifiers of enumeration constants declared in the same scope shall
+#      all be distinct from each other and from other identifiers declared in ordinary
+#      declarators."                                                                → ENUM001/ENUM002
+#     ⚠ 依据是**脚注**（非规范性内容）⇒ 按纪律 `default = false`（opt-in）。
+#     正文 note："The use of enumerators with `=` may produce enumeration constants with values
+#      that duplicate other values in the same enumeration."                        → 反证：
+#       **"枚举值必须互不相同"永不实现**（标准明确允许值重复）。
+# ============================================================================
+
+# ── TAG001 · 同一作用域内同一 tag 的类型内容至多定义一次（**只在冲突双方都带体**时报）──
+# A 档原文 §6.7.2.3。⚠ 禁止"同 tag ≥2 次即报"：实测语料 9 条带体定义 + 24 条无体引用，
+# naive 实现会一次误报 24 条（`ring_buffer.c` 里 `ring` 出现 10 次、9 次是 `struct ring *` 引用）。
+[[checks]]
+id = "TAG001"
+kind = "tag"
+category = "type-semantics"
+severity = "warning"
+default = true
+message = "{name}: 同一作用域内该 tag 的类型内容至多定义一次（此处为第二次带体定义）"
+handler = "_tag_check.py:check_tag"
+
+# ── TAG002 · 同一 tag 的多次声明必须同用 struct / union / enum ──
+# A 档原文 §6.7.2.3。判据：同作用域首例与本例的 `tag_kind` 不同即报（引用也参与，因为
+# `struct S; union S;` 正是原文违例）；语料实测 0 例。
+[[checks]]
+id = "TAG002"
+kind = "tag"
+category = "type-semantics"
+severity = "warning"
+default = true
+message = "{name}: 同一 tag 的声明必须同用 struct / union / enum"
+handler = "_tag_check.py:check_tag"
+
+# ── ENUM003 · `enum E;`（无枚举列表）只能出现在该类型完整之后 ──
+# A 档原文 §6.7.2.3；C23（N2963）仅把"**固定底层类型**的枚举"规定为总是完整 ⇒ 本条在 C23 下仍成立
+# （无枚举列表且无底层类型的形态仍受约束）。判据：无体 enum tag，且在该作用域链上**可见**位置
+# （先前声明行 ≤ 本声明行）没有**带体**的同名 enum ⇒ 报。
+[[checks]]
+id = "ENUM003"
+kind = "tag"
+category = "type-semantics"
+severity = "warning"
+default = true
+message = "{name}: 'enum {name}' 无枚举列表，只能出现在该类型完整之后"
+handler = "_tag_check.py:check_tag"
+
+# ── ENUM001 · 同一作用域的枚举常量标识符必须互不相同（含跨 enum）──
+# 依据 = §6.7.2.2 **脚注 107**（非规范性）⇒ **default = false**（opt-in；Lead 拍板 ①）。
+# tag 命名空间独立 ⇒ 与同名 tag 不冲突（handler 显式跳过 `kind == "tag"` 的首例）。
+[[checks]]
+id = "ENUM001"
+kind = "enumerator"
+category = "type-semantics"
+severity = "warning"
+default = false
+message = "{name}: 同一作用域的枚举常量标识符必须互不相同（与先前 {prev_kind} 声明冲突）"
+handler = "_tag_check.py:check_tag"
+
+# ── ENUM002 · 反向：普通标识符与同作用域已有枚举常量同名（`enum { A }; int A;`）──
+# 与 ENUM001 同一依据（脚注 107 的"与 ordinary declarators 里的标识符也不得重复"）⇒ default = false。
+[[checks]]
+id = "ENUM002"
+kind = "variable"
+category = "type-semantics"
+severity = "warning"
+default = false
+message = "{name}: 与同作用域的枚举常量同名（枚举常量占普通标识符命名空间）"
+handler = "_tag_check.py:check_tag"

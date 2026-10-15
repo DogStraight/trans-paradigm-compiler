@@ -7,6 +7,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 3 续 S1-a 落地：C 包第二个 check 组件 `type_semantics`（tag 与枚举常量的同作用域语义）**（循环 #11）：
+  新建 `grammar/c/plugins/checks/type_semantics/`，复用循环 #10 的组件形态。
+  - **5 条约束（档位决定 default）**：**A 档原文 ⇒ `default=true`** —— TAG001（同一作用域同一 tag 的内容
+    至多定义一次，§6.7.2.3「A specific type shall have its content defined at most once.」）、
+    TAG002（同 tag 的多次声明须同用 struct/union/enum，同条后半句）、**ENUM003**（`enum E;` 无枚举列表
+    只能出现在该类型完整之后，同条）；**脚注档 ⇒ `default=false`（opt-in）** —— ENUM001 / ENUM002
+    （同作用域枚举常量互不相同 / 反向，依据是 §6.7.2.2 的**脚注 107**，而**脚注不是规范性内容**）。
+  - **硬要求落实（免 24 条误报）**：TAG001 **只在冲突双方都带体**时才报（依据 §6.7.2.3「可见声明存在时
+    该类型说明符**不重声明 tag**」）——实测语料 **9 条带体定义 vs 24 条无体引用**，naive"同作用域同 tag
+    ≥2 次即报"会**一次误报 24 条**（`ring` 在 `ring_buffer.c` 出现 10 次、9 次是 `struct ring *` 引用）。
+  - **输入面**：`grammar/c/02_types.toml:48/:145` 加 `tag_capture`（`kind_path`/`body_path`）⇒
+    `plugins/semantics/_api.py:193-238` 的 `collect_named_site` 经 `_named_attrs` 挂 `tag_kind`/`has_body`/
+    声明起点。**未改 `decl_node`**（与循环 #10 一致）。
+  - **实测**：正样本 13 例全 0 报；负样本逐条断码 + warning + 位置（`_pos_line == 2`）+ **三次带体定义仍只
+    报 1 条**；**真实语料零误报**（8 个 C 语料 default/all 两档均 0 条）；**TAG001 硬要求反例**
+    `struct ring; struct ring *p; struct ring { int a; };` ⇒ **0 报**（attrs 取证 `has_body=[F,F,T]`）；
+    语法宽进不回归（`tests/languages/c` **800 passed**、`tests/engine/analyzer` **387 passed**、
+    `tests/policy` **350 passed**）；pyright strict **0**；`test_engine_capabilities` **9 passed** ⇒
+    本片**无需**改 `[engine] uses`（与方案预测一致）。
+  - **缺陷态变红**：去掉"双方带体" ⇒ **11 failed**（语料复现误报）；去掉作用域限定（改看父作用域）⇒ 2 failed。
+  - **不实现（登记）**：**枚举值重复**（§6.7.2.2 的 note 明确允许枚举常量值重复 ⇒ **C 档反证，永不实现**）；
+    S2 链接性 / S3 函数原型一致性（需类型模型）/ S4 标签（需 postpass 形态）/ S5；成员重名、不完整类型使用、
+    位域宽度、跨 TU。
+  - **边界（登记）**：`enum E : int;`（固定底层类型枚举）本包语法尚不支持 ⇒ ENUM003 的 C23 豁免暂不适用，
+    将来支持时须加"带底层类型 ⇒ 恒完整"豁免（否则误报）；同作用域"普通标识符占位遮蔽 tag"
+    （`int S; struct S { … };`）会**漏报不误报**（闭合需"一 id 多 kind"）。
+  - **一处既有断言随新组件调整**：`test_c_storage_class_checks.py::test_rule_defaults` 原断言**全表**相等 ⇒
+    被新规则打破，改为按 `CSC` 前缀过滤（该断言本意只覆盖 CSC001–CSC012）。
+  - **门禁有效性 51 → 53 条**（两条守护：TAG001 双方带体、同作用域限定）。
+
 - **阶段 3 首片落地：C 包首个 check 组件——存储类说明符语义约束**（循环 #10）：新建
   `grammar/c/plugins/checks/storage_class/`（规则-only 组件 + L2 handler），补上"**语法宽进、语义未判**"
   的存储类约束（此前实测 24 例电池**全部 0 诊断**，即 `typedef static int x;`、裸 `constexpr`、

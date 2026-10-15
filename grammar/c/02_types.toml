@@ -42,6 +42,10 @@ body = "$3"
 site = "named"
 name_attr = "tag"
 kind = "tag"
+# tag 语义采集（S1-a，组件 `plugins/checks/type_semantics/`）：`kind_path` 取 `StructOrUnion`
+# （其 `base` = struct|union）；`body_path` 存在 = 该声明**带体**（定义；C99 §6.7.2.3 称"内容"）。
+# 缺 `body_path` 的记录是**引用/前向声明**——判据必须放行（§6.7.2.3：可见声明存在时不重声明 tag）。
+tag_capture = { kind_path = "kind", body_path = "body" }
 
 
 [AnonStructSpecifier.parser]
@@ -135,6 +139,10 @@ body = "$3"
 site = "named"
 name_attr = "tag"
 kind = "tag"
+# 同上：enum 说明符**没有** kind 子节点 ⇒ 种类用字面 `default_kind`；
+# `body_path` = 枚举列表（存在 = 完整定义）。C23 固定底层类型形态（`enum E : int;`）视语法面支持情况
+# 另判（若该形态解析成功，它**总是完整**，不属"无枚举列表须在完整之后"的违规）。
+tag_capture = { body_path = "body", default_kind = "enum" }
 
 
 [AnonEnumSpecifier.parser]

@@ -569,6 +569,21 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    if False:  # 变异：不去重\n        return False\n",
         "test": "tests/languages/c/test_c_storage_class_checks.py",
     },
+    {
+        "why": "TAG001 丢掉**双方都带体**条件 ⇒ naive 判定把\"同作用域同 tag ≥2 次\"全报（实测语料一次"
+               "误报 24 条无体引用：`ring` 出现 10 次、9 次是 `struct ring *`）",
+        "file": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+        "old": "        if not (_has_body(symbol) and _has_body(prev)):\n",
+        "new": "        if False:  # 变异：不看双方带体\n",
+        "test": "tests/languages/c/test_c_type_semantics_checks.py",
+    },
+    {
+        "why": "丢掉**同作用域限定**（改看父作用域）⇒ 内层同名 tag 与跨作用域同名枚举常量被误报",
+        "file": "grammar/c/plugins/checks/type_semantics/rules/_tag_check.py",
+        "old": "    prev = getattr(scope, \"symbols\", {}).get(symbol.name)\n",
+        "new": "    prev = getattr(getattr(scope, \"parent\", None), \"symbols\", {}).get(symbol.name)  # 变异：只看父作用域\n",
+        "test": "tests/languages/c/test_c_type_semantics_checks.py",
+    },
 ]
 
 

@@ -203,7 +203,11 @@ class TestDefaultSwitch:
     """判据：默认开关按"条款档位"（Lead 拍板 ①②）——A 档默认开、B 档 opt-in。"""
 
     def test_rule_defaults(self):
-        table = {str(r["id"]): bool(r.get("default", True)) for r in get_check_rules(plugins_dir=_PLUGINS)}
+        table = {
+            str(r["id"]): bool(r.get("default", True))
+            for r in get_check_rules(plugins_dir=_PLUGINS)
+            if str(r["id"]).startswith("CSC")
+        }
         assert table == {
             "CSC001": True,
             "CSC002": True,

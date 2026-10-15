@@ -278,6 +278,37 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 判据：`tests/languages/c/test_c_storage_class_checks.py`（正/负样本逐条 × 默认开关 + 多声明符去重 +
 真实语料零误报 + 语法宽进不回归）；缺陷态变红（去例外表 / 去去重）见 `_drafts/task36_defect.py`。
 
+## 结构类型语义（TAG/ENUM · 本包第二个 check 组件）
+
+**范围（S1-a 片）**：`struct`/`union`/`enum` 的 **tag** 与**枚举常量**在同作用域内的约束。
+语法层宽进（`struct`/`union` 共用 `StructSpecifier`、`enum` 走 `EnumSpecifier`，都按 `site="named"` 采 tag），
+语义层在本组件判定；诊断 `severity = "warning"`（不阻断管线）。
+
+| 落点 | 作用 |
+|---|---|
+| `02_types.toml:48`（`StructSpecifier`）/ `:145`（`EnumSpecifier`） | `tag_capture = { kind_path/body_path/default_kind }`：种类（`struct`/`union`/`enum`）与**有无体**（定义 vs 引用/前向声明）——语言知识在 TOML |
+| `plugins/semantics/_api.py::_named_attrs` | `site="named"` 采集：把 `tag_kind`/`has_body` + 声明起点挂符号 attrs（`collect_named_site` 统一入口） |
+| `plugins/checks/type_semantics/rules/types.toml` | 规则=数据（`id`/`kind`/`severity`/`default`/`message`；**条款引文与档位写在头注**） |
+| `plugins/checks/type_semantics/rules/_tag_check.py` | L2 handler：只读 attrs + 同作用域符号表 `scope.symbols`；**按 `(规则, 名, 作用域)` 去重** |
+
+**规则与档位**（`default` 由条款档位自动定）：
+`TAG001` 同一 tag 内容至多定义一次（§6.7.2.3 原文；**只在冲突双方都带体**时报）、
+`TAG002` 同一 tag 必须同用 struct/union/enum（§6.7.2.3 原文）、
+`ENUM003` `enum E;` 无枚举列表只能出现在完整之后（§6.7.2.3 原文）⇒ 三条 **`default = true`**；
+`ENUM001` 同作用域枚举常量重名、`ENUM002` 反向（普通标识符撞枚举常量）——依据是 §6.7.2.2 **脚注 107**
+（非规范性）⇒ **`default = false`**（opt-in）。**枚举值重复永不实现**（§6.7.2.2 note 明确允许）。
+
+**免误报两条硬约束**：① TAG001 只在**双方都带体**时报（§6.7.2.3：可见声明存在时该类型说明符
+**不重声明 tag**）；② 全部判定限定**同作用域**（`scope.symbols` 只含首例，第二例用 `is not` 区分）。
+实测：真实语料 **9 条带体定义 + 24 条无体引用**，naive"同 tag ≥2 次即报"会误报（未去重 24 条；
+本实现的去重口径下缺陷态复现 3 条）。
+
+判据：`tests/languages/c/test_c_type_semantics_checks.py`（13 正样本 × 全规则启用 + 9 负样本逐条 +
+位置 + 三次定义去重 + 两档语料零误报 + 默认开关按档位）；缺陷态变红（去"双方带体" / 去作用域判定）
+见 `_drafts/task38_defect.py`。**边界**：成员重名（C99 原文无约束句）、不完整类型使用、位域宽度、
+枚举值 representable-as-int、跨 TU；C23 固定底层类型枚举（`enum E : int;`）本包语法面**尚未支持**
+（lint 拒）⇒ ENUM003 的"固定底层类型恒完整"豁免暂不适用，将来支持时需同步。
+
 ## P4 理解路径（两段协作）
 
 歧义路径（`x = (myint)y;`：`myint` 是不是类型名）走**两段协作**，能力都必须有：

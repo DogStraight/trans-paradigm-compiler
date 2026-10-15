@@ -191,13 +191,51 @@ def collect_declarator_site(analyzer: Any, node: Node, config: dict) -> None:
 
 
 def collect_named_site(analyzer: Any, node: Node, config: dict) -> None:
-    """`site="named"`：名在节点属性上（标签 `tag` / 枚举常量 `name`）；缺属性 = 匿名，跳过。"""
+    """`site="named"`：名在节点属性上（标签 `tag` / 枚举常量 `name`）；缺属性 = 匿名，跳过。
+
+    额外采集（`tag_capture`，S1-a）：tag **种类**与**有无体**——判据要区分"定义"与"引用/前向声明"
+    （§6.7.2.3：可见声明存在时该类型说明符不重声明 tag），故二者必须进 attrs。
+    """
     name_attr = config.get("name_attr", "")
     if not name_attr:
         return
     name = _as_name(getattr(node, name_attr, None))
     if name:
-        _declare(analyzer, node, name, config.get("kind", KIND_VARIABLE))
+        _declare(
+            analyzer, node, name, config.get("kind", KIND_VARIABLE), _named_attrs(node, config)
+        )
+
+
+def _named_attrs(node: Node, config: dict) -> dict:
+    """`site="named"` 的采集结果（声明起点 + `tag_capture`）。
+
+    `tag_capture` 声明键（全在 TOML；包内不含语言名）：
+      `kind_path`    取种类子节点（`StructOrUnion.base` → `struct`/`union`）
+      `body_path`    取"体"子节点；存在 ⇒ `has_body=True`（定义），缺失 ⇒ 引用/前向声明
+      `default_kind` 无 `kind_path` 时的字面种类（enum 说明符没有种类子节点）
+    """
+    attrs: dict = {
+        "decl_start_line": getattr(node, "_pos_line", None),
+        "decl_start_col": getattr(node, "_pos_col", None),
+    }
+    capture = config.get("tag_capture") or {}
+    tag_kind: str | None = None
+    kind_path = capture.get("kind_path")
+    if kind_path:
+        for val in _walk(node, kind_path):
+            base = getattr(val, "base", None)
+            tag_kind = base if isinstance(base, str) and base else getattr(val, "node_name", None)
+            if tag_kind:
+                break
+    if not tag_kind:
+        default_kind = capture.get("default_kind")
+        tag_kind = default_kind if isinstance(default_kind, str) and default_kind else None
+    if tag_kind:
+        attrs["tag_kind"] = tag_kind
+    body_path = capture.get("body_path")
+    if body_path:
+        attrs["has_body"] = any(isinstance(v, Node) for v in _walk(node, body_path))
+    return attrs
 
 
 # ── 说明符 capture（包侧；CSC 检查的输入面） ───────────────────────

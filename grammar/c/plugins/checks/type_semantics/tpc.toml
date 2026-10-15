@@ -1,0 +1,24 @@
+# type_semantics — C 结构类型语义约束（阶段 3 续 S1-a：tag 与枚举常量）
+#
+# 定位：语法层**宽进**（`struct`/`union` 共用 `StructSpecifier`、`enum` 走 `EnumSpecifier`；
+# 两者都走 `site = "named"` 的 tag 采集），语义层在此判 §6.7.2.3/§6.7.2.2 的**同作用域**约束。
+# 判定在 `rules/_tag_check.py`（L2 handler）；输入面 = 符号 attrs（包侧 `tag_capture`：
+# `tag_kind` = struct|union|enum、`has_body` = 该声明是否带体、声明起点）+ `scope.symbols`
+# （同作用域首例；第二例与本符号可用 `is not` 区分 ⇒ 无需新机制）。
+#
+# 本组件是**规则-only 组件**（形态同 `checks/storage_class/`）：无语法规则、无 postpass；
+# `core/check_registry.discover_rule_files` 递归扫 `plugins/**/rules/*.toml` 自动装载，
+# `analyzer/checks.py::check_rules_pass` 遍历后按符号 kind 分发。
+# **不新增能力**：`[analyzer]` 段（含 postpasses）⇒ `analyzer.primitives.v1`、
+# `rules/*.toml` ⇒ `checks.rules.v1`，两者 `grammar/c/tpc.toml [engine] uses` 均已声明。
+#
+# default 开关纪律（Lead 拍板 ①：按条款档位自动定）：
+#   A 档（取得原文句）⇒ `default = true`；脚注/转述档（非规范性）⇒ `default = false`（opt-in）。
+#
+# 条款核实来源（可访问）：
+#   · C99+TC 原文逐字（WG14 N1124）经 c0x 镜像：https://c0x.shape-of-code.com/6.7.2.3.html
+#     （Tags）、https://c0x.shape-of-code.com/6.7.2.2.html（Enumeration specifiers）
+#   · C23 枚举改动（WG14 N2963「Enhancements to Enumerations」，HTML）：
+#     http://isocpp.open-std.org/JTC1/SC22/WG14/www/docs/n2963.htm
+#     —— 固定底层类型枚举「are always complete」；无枚举列表且无底层类型的形态**仍受**
+#     §6.7.2.3「须在该类型完整之后」约束（ENUM003 在 C23 下依然成立）。

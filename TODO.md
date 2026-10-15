@@ -52,12 +52,16 @@
       仅有权威转述、未取得标准原文句。触发条件 = 取得原文句（C11/C23 §6.7.1 各段）**或**更大真实语料
       实测零误报（本轮仅 8 个 C 语料）。同批可议：CSC001（A 档）是否从 warning 升 `error`。
       来源：循环 #10 保守裁定
-- [ ] **normalize 跨形态判据上移为引擎通用面**（循环 #8 做）：`transform/normalizer.py` 把
-      `keyword.*`/`symbol.*`/`literal.*` token 叶子抽成**字符串属性** ⇒ "子树含某 token"的判据在生产
-      口径下失效（P1 在 C 包踩中：typedef 恒被收成 variable ⇒ P4 误拒合法输入）。现修法落在 C 包
-      `_api._subtree_has` ⇒ 别的语言包会重复踩。判据：`core/define.py`（与 `iter_nodes`/`collect_nodes`
-      同族）提供通用面 `marker_matches(node, marker)`，C 包改为调用它且两形态判据全绿。
-      来源：循环 #7 实现者建议（派生）
+- [ ] **阶段 3 剩余片**（S2/S3/S4/S5；循环 #11 侦察实测，**均"当前静默"**）：
+      **S2 链接性**（同 TU 同时具 internal+external linkage = UB，§6.2.2 原文；机制最省，但
+      **FP 风险中高**——头文件 `extern`/`static` 模式，须实现作用域链继承判定）｜**S4 标签**
+      （§6.8.1「Label names shall be unique within a function.」+ §6.8.6.1 goto 目标，**A 档原文、
+      FP≈0**，但需 **postpass 形态**、label 当前不进符号表）｜**S3 函数原型/定义一致性**（需
+      **类型模型**，代价最大）｜S5（case/default 部分条款未取得原文；**枚举值重复是 C 档反证 ⇒
+      永不实现**）。触发条件 = 按价值/代价逐片立项。链：`_drafts/p3_next_plan.md`；来源：循环 #11 侦察
+- [ ] **ENUM003 的 C23 豁免缺口**：`enum E : int;`（固定底层类型枚举）按 N2963 **总是完整**，但本包
+      语法面尚不支持该形态（实测 lint 拒）⇒ 现无影响；**将来实现该语法时** ENUM003 必须加
+      "带底层类型 ⇒ 恒完整"豁免，否则误报。来源：循环 #11 交付边界（已记 `grammar/c/README.md` 与规则表头注）
 - [ ] **插件侧 AST-first 改写**（精化搬迁析出项）：搬迁是**逐字**的，插件侧仍有文本模式
       技法——`grammar/verilog/plugins/elaboration/_graph.py::_is_signal_expr` 正则判"简单
       信号名"、`render_subtree` 渲染后**字符串比较**。动机已是**插件代码质量**，故须
