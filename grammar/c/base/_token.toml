@@ -36,6 +36,9 @@ colon = ":"
 semicolon = ";"
 comma = ","
 dot = "."
+# 预处理指令引导符 / 字符串化算子（`#`，C99 §6.10.1 / §6.10.3.2）。此前未声明 ⇒
+# 残留 `#` 走 "Unexpected token: #"（`tools/c_acceptance.py` 两条空洞的直接根因）。
+hash = "#"
 
 # 多字符符号（最长匹配；C99 的复合赋值与箭头运算符）
 [symbol.extend]
@@ -61,6 +64,9 @@ xor_assign = "^="
 l_shift_assign = "<<="
 r_shift_assign = ">>="
 ellipsis = "..."
+# 令牌粘贴算子（`##`，C99 §6.10.3.3）：宏体由预处理器文本层处理不经过这里，
+# 但**残留 `##`**（未声明指令/错误输入）须能词法化，否则仍抛 Unexpected token。
+hash_hash = "##"
 
 [bracket]
 pairs = [

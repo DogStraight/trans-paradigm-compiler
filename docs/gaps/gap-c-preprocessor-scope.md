@@ -115,6 +115,11 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 ⑨ **`#include` 缺文件/循环由 `print` 改诊断**（不静默降级）但**放在 A2**，须附 **verilog 侧对拍 + 同步现役断言**；
 ⑩ **A1 完成按 `partial` 报**（拆步判据：`--only-gaps` 在 A1 后只剩 `#include` 一条；E.0-1 只能在 A2 收口）。
 
+**首片实施期裁定**（2026-10-17，承 task-49 中途汇报）：
+⑪ **E.0 口径修正 = (a)+(c)**：`tools/c_acceptance.py::_try`（`:123-136`）**不走预处理**（直接 `parser.parse(lexer.tokenize(src))`）且要求 AST 非空 ⇒ 对预处理样本判定**失真**——`#define N 4` 的**正确**预处理结果本就是**空翻译单元** ⇒ 该样本**永远是"空 AST 空洞"**，原判据（"只剩 `#include`"）**不可达**。修正：**(a)** 改 `_try` 走"预处理→词法→解析"（与管线同路、开宏扫描）+ **对预处理样本接受条件放宽为"无异常"**（纯指令样本 AST 可空）；**非预处理样本仍须 AST 非空**（否则掩盖解析失败）；**(c)** 管线级测试补"指令被消费 + 无异常 + 输出保真"作双保险。**不采 (b)**（只改口径不修路径）。
+⑫ **判据设计教训**：定"工具指标归零"类判据前**必须核实该工具的**真实执行路径**——本轮 Lead 未核实导致判据不可达（由实现方中途拦下）。
+⑬ **待实测登记**：`run_pipeline_on_source` 的 `expand_macros` **默认 False**（`pipeline/__init__.py:1161` + `config/tpc_config.json:12`）而 `tpc check` 默认 True（`analyzer/checker.py:57`、`main.py:132`）⇒ 疑似**又一处两路径不一致**，要求给用户可见影响实测后登记。
+
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 
 - ISO C 条款号（§6.10.x）为**记忆级**；**C23 子条编号未核实**（本机无标准正文；`cppreference`、`gcc.gnu.org` 均 403）。

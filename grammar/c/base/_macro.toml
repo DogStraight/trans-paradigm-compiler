@@ -1,0 +1,42 @@
+# _macro.toml — C 预处理声明面（宏形态 / 指令处理器）
+#
+# 形态与机制的分工见 `preprocessor/README.md`：**语言知识声明在这里**（前缀 token、
+# 指令关键字候选、路径形态），**引擎只做文本操作**（替换 / 锚 / 还原）。
+# 范围基线见 `docs/gaps/gap-c-preprocessor-scope.md`（阶段 4 首片 A）。
+#
+# ⚠ C 的指令引导符 `#` 是 [symbol.base].hash（base/_token.toml）；前缀写法与
+#   verilog 的 `symbol.base.backtick` 同款——引擎不硬编码语言字符。
+# ⚠ C 的宏**调用**是**裸标识符**（无前缀），由 call_shape 显式声明"无前缀"；
+#   未声明该形态的语言包（verilog 等）语义不变。
+
+# ── [macro_recognition] 形态声明 ──
+[macro_recognition]
+# 指令形态：前缀 token + 名字位（命中候选 → 产出对应 macro.* token）
+shape = "symbol.base.hash,name"
+directive = [
+    "macro.define",
+    "macro.undef",
+    "macro.include",
+]
+# 调用形态 = **显式声明"无前缀"**（单元素生产式；引擎不提供默认空前缀）。
+# ⚠ 待引擎侧 schema 落地后启用（`macro_shape.py` 新增 `call_shape` 键 + 单元素
+#   生产式解析 + `_expand.py` 三态前缀）；**先行保留注释占位，不写未消费的键**
+#   ——写了会被 lexer 当成"`#` 前缀的调用形态"，与 C 的裸标识符调用语义相反。
+# call_shape = "name"
+# call = []
+
+# 带参宏实参形态：C 的 `(` / `)` / `,`（声明名见 base/_token.toml 的 [bracket].pairs
+# 与 [symbol.base].comma）——定义侧与调用侧同形。
+call_args = "bracket.l_parentheses,args,bracket.r_parentheses"
+arg_separator = "symbol.base.comma"
+
+# ── [expand] 展开器参数 ──
+[expand]
+# rescan/自引用抑制由展开算法保证（hideset）；本值只是**资源上限守卫**
+# （同一算法上的预算，不是第二套算法）。
+max_iterations = 128
+
+# ── [directive_handlers] 指令关键字 → 处理器（op）绑定 ──
+[directive_handlers]
+define = { op = "define", enabled = true }
+undef = { op = "undef", enabled = true }
