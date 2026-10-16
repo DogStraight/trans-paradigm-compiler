@@ -132,3 +132,8 @@
       `lexer/main_lexer.py:1033 refine_type`：lint 路径有兜底、`_stage_lex` 没有）⇒ 同一输入两种表现。
       **并入阶段 4 首片**（正是阶段 4 的指令面），首片验收加一条"**同一输入两条路径都给诊断、都不抛异常**"；
       **不单独**加 `_stage_lex` 守卫（随首片一起做）。链：`docs/gaps/gap-c-preprocessor-scope.md`
+- [ ] **循环纪律的机械化（4 项，派生自 task-52 审计的反例）**：① 判据色产物门禁（`PRE=<rc>/POST=<rc>` +
+      命令，复用 `ab_pipeline_compare.py` 的 PRE 机制）；② `tools/cycle_triggers.py`（`git diff --name-only`
+      → 触发规则表，**须过种子集自检**才可当门禁）；③ 审计反例入库重跑（`tests/policy/data/cycle_audit/`
+      + `--check`）；④ `policy/*.md` **逐文件**行数上限（**禁用通配**：实测 223/181/153/115/100 五档超 90；
+      数字待压缩收口后按实测留余量定）。触发条件 = 认为"循环纪律须机器化"时逐项立项。来源：循环 #14 审计
