@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 4 范围基线落档：`docs/gaps/gap-c-preprocessor-scope.md`（新建，93 行）**（2026-10-17）：
+  按作者裁定（**只做 C 标准中的宏**、编译器专属扩展不做；预处理**只做文本级**；**先满足 C**）把调研落成
+  正式档，并登记 `docs/gaps/README.md` 索引（D4 无孤儿）。
+  - **范围三表**：指令 / 宏算子与语义 / 预定义宏——每条含名称 + 标准档（C99 原有 / C11 / C23 新增）+
+    依据档位（A/B/C）+ 一句话判据。**关键归位**：`__has_include` / `#warning` / `#elifdef` / `#elifndef` /
+    `#embed` / `__VA_OPT__` 属 **C23 标准项**（**不是**扩展）；GNU `, ## __VA_ARGS__` 与 C23 `__VA_OPT__`
+    **是两件事**（语法糖 vs 标准算子，C23 对应写法 `__VA_OPT__(,)`）；`__STDC_VERSION__` 四档**实测值**
+    （`199901L` / `201112L` / `201710L` / `202311L`）。
+  - **扩展排除表**：`#pragma once` / `#include_next` / `__COUNTER__` / GNU 命名变参 `args...` /
+    GNU `, ## __VA_ARGS__` + 逐条依据（哪档 GCC 报什么）。
+  - **方法（可复跑，本轮的复用资产）**：GCC 逐档 `-std=<c99|c11|c17|c23> -pedantic-errors`——**GCC 会
+    点名标准版本**，据此机械区分"标准项 vs 编译器扩展"（`__VA_OPT__`/`#warning`/`#embed` 被点名
+    "until C23"；`, ##`/`#include_next` 被点名 "GCC extension"）。被测版本 **GCC 16.1.0**；档内含一行
+    `python -c` 复跑样例。**局限**：编译器**不表态**的项（`__has_include`/`#elifdef`/`#pragma once`/
+    `__COUNTER__`）此法**判不了**，只能靠标准正文 ⇒ 档内统一标"待抽检"。
+  - **承载面与 4 处机制级缺口**：现有原语 8 个（`define`/`undef`/`include`/`ifdef`/`ifndef`/`else`/
+    `elsif`/`endif`）；`grammar/c/` **无任何宏声明面**（全仓仅 verilog）；缺口 = ① C **裸标识符宏调用**
+    （`shape` 要求"前缀 token + 名字位"**两位**、前缀位**不能空**）② `#`/`##` + **重扫描/自引用抑制**
+    （现为文本替换 + `max_iterations=128`）③ `#if` 整型常量表达式求值 ④ 预定义宏注入。
+    **根因**：`grammar/c/base/_token.toml` 的 `[symbol.base]`（16 项）**无 `#`**（`##` 亦无）⇒ 即
+    `tools/c_acceptance.py` 报 `Unexpected token: #` 的原因。
+  - **首片 A / B**：**A**（`#define` 对象+函数宏 + `#` + `##` + `__VA_ARGS__` + rescan、`#include`、
+    `#undef`、裸标识符调用识别）⇒ **验收现成 = `tools/c_acceptance.py --only-gaps` 两条空洞归零**；
+    **B** = `#if` 家族 + `#line`/`#error`。
+  - **已定裁定**：C23 档 C 项不进首片（保留清单）；GNU `, ## __VA_ARGS__` 排除但**登记触发条件**；
+    `preprocessor/primitives/define.py` 形参表未闭合**改 fail-fast**。**待作者确认**：`__STDC_VERSION__`
+    声明位置与 `#if` 整型求值语义（**同一待决点**，涉新增声明键 ⇒ 升级判据 ①）；**另报**：C 裸标识符宏调用
+    需扩 `[macro_recognition]` schema（允许空前缀）⇒ 同命中 ①。
+  - **诚实边界**：ISO §6.10.x 条款号为**记忆级**、**C23 子条编号未核实**、编译器静默接受项属**引用级**
+    ⇒ 档内统一标"待抽检"，**不得当实测结论用**。验收：`tests/policy/test_planning_doc_budget.py` +
+    `test_check_doc_refs.py` **25 passed**、`check_doc_refs` **D1–D4 全 0**。
+
 - **阶段 3 续 S4 落地：C 包第三个 check 组件 `checks/labels`（标签与 switch 标签语义）**（循环 #12）：
   形态与前两个组件不同——**走 `[[analyzer.postpasses]]` 遍历 AST**（实测：`[[checks]]` handler 不可行，
   因 label 不进符号表、无 `kind` 可承接；AST 入口是 **`analyzer._ast`**，`AnalysisContext` 并**无** `ast` 字段）。
