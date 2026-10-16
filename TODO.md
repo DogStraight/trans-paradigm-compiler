@@ -112,3 +112,18 @@
       结论 **今天不上提**——按"多语言共有且形态稳定"判据，实测只有 verilog 一个声明方。
       触发条件 = 第二个语言包出现**同形**判定 ⇒ 以"既有 `call_site` 事实**合取** → mode"的小表上提，
       **替代而非并存**（两处同声明 ⇒ 加载期 `ConfigError`）。链：`preprocessor/README.md`「跨语言文本能力原型」
+- [ ] **符号基座两处错位**（**影响任何"文件域 / 作用域"语义检查**，非仅链接性；2026-10-17 实测）：
+      ① `void f(int x);` 的**形参符号落 `<global>`**（`decl_node=ParamDecl`、`is_file=True`）⇒ 文件域判定误判；
+      ② `void f(void){}` 的**函数定义符号落 `<FunctionScope>`**（`scope_kind=function`）⇒
+      `void f(void); static void f(void){}` 这类真 UB **漏报**、"定义后的 `extern`"继承链断。
+      修法与影响面（**含是否触 P1 公开产物契约面**）评估中（task-46）。**已确认应优先修**——它是语义检查的地基。
+      链：`docs/gaps/gap-c-semantic-base.md`
+- [ ] **S2 链接性片：不采（判据不足；触发条件式）**：task-45 实测 ⇒ ① **无真阳样本**（可解析真实 C 语料
+      仅 8 个小文件、冲突命中 0；大语料 503 个 `.c/.h` 抽样 **40/40 抛 `ValueError`**）② 朴素实现 **4/19 误报**，
+      含**高频合法形态**（`static int x; extern int x;` 依 §6.2.2p423 **继承 internal ⇒ 合法**）③ **基座两处
+      错位**未修 ④ 条款是 **UB 而非约束**、GCC/clang 本就诊断 ⇒ 价值低于 tags/labels 两片。
+      **触发条件** = 基座两处错位修完 **且** 出现可解析的真实 C 语料（含真阳样本）。
+      若届时做：最小形态 = 文件域 + 排除形参位/FuncDef 位 + **必须实现 p423 继承** + `default=false`（覆盖率约一半）。
+- [ ] **预处理指令的两条路径行为不一致**：`#include` 在 CLI lint 给 `lexer-error`（blocking），
+      而在**管线段抛 `ValueError`** ⇒ 同一输入两种表现。**并入阶段 4 首片**（正是阶段 4 的指令面）。
+      链：`docs/gaps/gap-c-preprocessor-scope.md`
