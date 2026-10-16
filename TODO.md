@@ -117,7 +117,8 @@
       ② `void f(void){}` 的**函数定义符号落 `<FunctionScope>`**（`scope_kind=function`）⇒
       `void f(void); static void f(void){}` 这类真 UB **漏报**、"定义后的 `extern`"继承链断。
       修法与影响面（**含是否触 P1 公开产物契约面**）评估中（task-46）。**已确认应优先修**——它是语义检查的地基。
-      链：`docs/gaps/gap-c-semantic-base.md`
+      ⚠ 基座档 `docs/gaps/gap-c-semantic-base.md` **已 199/200 行（满）** ⇒ 本偏差暂登记于此 +
+      `grammar/c/README.md`，**待该档裁剪时并入**。链：`docs/gaps/gap-c-semantic-base.md`
 - [ ] **S2 链接性片：不采（判据不足；触发条件式）**：task-45 实测 ⇒ ① **无真阳样本**（可解析真实 C 语料
       仅 8 个小文件、冲突命中 0；大语料 503 个 `.c/.h` 抽样 **40/40 抛 `ValueError`**）② 朴素实现 **4/19 误报**，
       含**高频合法形态**（`static int x; extern int x;` 依 §6.2.2p423 **继承 internal ⇒ 合法**）③ **基座两处
@@ -125,5 +126,7 @@
       **触发条件** = 基座两处错位修完 **且** 出现可解析的真实 C 语料（含真阳样本）。
       若届时做：最小形态 = 文件域 + 排除形参位/FuncDef 位 + **必须实现 p423 继承** + `default=false`（覆盖率约一半）。
 - [ ] **预处理指令的两条路径行为不一致**：`#include` 在 CLI lint 给 `lexer-error`（blocking），
-      而在**管线段抛 `ValueError`** ⇒ 同一输入两种表现。**并入阶段 4 首片**（正是阶段 4 的指令面）。
-      链：`docs/gaps/gap-c-preprocessor-scope.md`
+      而在**管线段抛 `ValueError`**（调用栈 `pipeline/__init__.py:538 _stage_lex` →
+      `lexer/main_lexer.py:1033 refine_type`：lint 路径有兜底、`_stage_lex` 没有）⇒ 同一输入两种表现。
+      **并入阶段 4 首片**（正是阶段 4 的指令面），首片验收加一条"**同一输入两条路径都给诊断、都不抛异常**"；
+      **不单独**加 `_stage_lex` 守卫（随首片一起做）。链：`docs/gaps/gap-c-preprocessor-scope.md`
