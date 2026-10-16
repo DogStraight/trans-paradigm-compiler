@@ -116,7 +116,9 @@
       ① `void f(int x);` 的**形参符号落 `<global>`**（`decl_node=ParamDecl`、`is_file=True`）⇒ 文件域判定误判；
       ② `void f(void){}` 的**函数定义符号落 `<FunctionScope>`**（`scope_kind=function`）⇒
       `void f(void); static void f(void){}` 这类真 UB **漏报**、"定义后的 `extern`"继承链断。
-      修法与影响面（**含是否触 P1 公开产物契约面**）评估中（task-46）。**已确认应优先修**——它是语义检查的地基。
+      评估完成（task-46）：**F1/F2 会改 P1 公开产物 ⇒ 命中升级判据 ①、另立**；已落 **N1/N2 派生视图**
+      （`_api.declaration_view()` 给 `decl_scope`/`is_file_decl`/`is_param`，**产物逐字节不变**
+      = 11 源/76 记录全同、`test_c_symbol_collection.py` **零改动**）。**派生视图是"声明位置"唯一入口**。
       ⚠ 基座档 `docs/gaps/gap-c-semantic-base.md` **已 199/200 行（满）** ⇒ 本偏差暂登记于此 +
       `grammar/c/README.md`，**待该档裁剪时并入**。链：`docs/gaps/gap-c-semantic-base.md`
 - [ ] **S2 链接性片：不采（判据不足；触发条件式）**：task-45 实测 ⇒ ① **无真阳样本**（可解析真实 C 语料

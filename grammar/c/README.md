@@ -246,11 +246,48 @@ at = AnalysisTraversal(rules, rules_dir="grammar/c")
 at.analyze(parser.parse(lexer.tokenize(src)))
 _api.product_from(at)                      # 仅 analyze 期产物（读 context.extra["c_symbols"]）
 _api.two_phase_product(at, src, "grammar/c")  # 两期合并（逐条带 phase）
+_api.declaration_view(at)                  # **声明位置派生视图**（见下：声明位置问题的唯一入口）
 ```
 
 ⚠ `ProjectChecker.check()` 的公开结果不含 `extra`（刻意的结果面收窄）——需要产物时直接
 用 `AnalysisTraversal`（上例）。判据：`tests/languages/c/test_c_symbol_collection.py`
 （正/负/声明顺序/作用域遮蔽/分期/只增不改六条，另附缺陷态变红证明见 `CHANGELOG`）。
+
+**「声明位置」问题一律走 `_api.declaration_view(at)`（唯一入口）**：产物记录的 `scope`/`scope_kind`
+是**分析作用域**（P1 公开面，语义不变），而"这条声明在哪声明 / 算不算文件域声明"要用派生视图：
+
+| 字段 | 语义 |
+|---|---|
+| `decl_scope` | **声明位置**：`FuncDef` 位取**父作用域**；`ParamDecl` 位为 `"param"`；其余同 `scope` |
+| `is_file_decl` | 是否**文件域声明**（形参位恒 False） |
+| `is_param` | 是否形参（无 linkage、不参与文件域） |
+| `scope` / `scope_kind` | 原分析作用域（取证用，**语义不变**） |
+
+两处**当前仍成立**的基座偏差（下节）正是该视图存在的原因；N2 同时把三元组写进 `Symbol.attrs`
+（**不进产物**，先例 = `phase` 落 attrs 的作者裁决）。判据 `tests/languages/c/test_c_declaration_view.py`
++ 逐字节对照 `_drafts/probe_n1n2_view.py --compare`（11 源 76 记录 IDENTICAL）。
+
+## 符号基座两处错位（**当前仍成立的偏差**）
+
+> 登记位置说明：基座缺口档 `docs/gaps/gap-c-semantic-base.md` 已满（199/200 行）⇒ 本偏差
+> **暂登记于本节 + `TODO.md`**，待该档裁剪时并入。**处置 = 派生视图，不改 P1 公开产物**。
+
+- **事实**：`is_file` **不是存储字段**——P1 产物 7 字段（`{name,kind,scope,scope_kind,decl_order,
+  decl_line,phase}`）与 `Symbol.attrs` 都没有它；消费者各自用 `scope.parent is None` 推导，而
+  C 包**没有任何文件域谓词**（只有 pre_scan 哨兵 `SCOPE_FILE_UNKNOWN = "<file>"`）。
+- **形态①（原型形参落 `<global>`）**：`void f(int x);` 的 `x` 与文件域对象声明**同形**
+  （`kind=variable`、`scope=<global>`、`is_file=True`、`decl_node=ParamDecl`）⇒ 任何"文件域"检查
+  都会把形参当声明（链接性片 S2 的 `static int x; void f(int x);` 误报即由此而来）。
+  成因：`[ParamDecl.analyzer.c_symbol_collect]`（`01_declarations.toml:369`）无 `scope` 配置，
+  原型外层 `Declaration` 也无 ⇒ 收集时当前作用域仍是 `<global>`。
+- **形态②（函数定义符号落自己的作用域）**：`void defn(void){}` 的符号 `scope=<global>/FuncDef`、
+  `scope_kind=function` ⇒ 与它的 `<global>` 声明**不同 scope**；后果：`void f(void); static void f(void){}`
+  这类真 UB **漏报**、"定义后的 `extern`"继承链断。
+  成因：标准原语先于自定义原语（`analyzer/traversal.py:236-237`）⇒ `scope_enter` 已压栈
+  （`03_statements.toml:126`），随后 `c_symbol_collect`（`:128`）把函数名声明进自己的作用域。
+- **处置**：`_api.declaration_view()`（`decl_scope`/`is_file_decl`/`is_param`）**派生视图**；
+  **不改 P1 公开产物**（改 `scope`/`scope_kind` 值或记录集命中升级判据 ①，需作者按契约面流程裁，
+  已另立）；**派生视图是"声明位置"唯一入口**（避免两套真相漂移）。
 
 ## 存储类语义约束（CSC · 本包首个 check 组件）
 

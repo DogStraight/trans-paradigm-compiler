@@ -7,6 +7,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **符号基座两处错位的「零契约面」处置：C 包「声明位置派生视图」**（2026-10-17，承 task-45/46）：
+  task-45（S2 链接性方案）在评估时实测出**两处符号基座错位**，影响**任何"文件域 / 作用域"语义检查**：
+  ① `void f(int x);` 的**原型形参落 `<global>`**（`decl_node=ParamDecl`）——与文件域对象声明**完全同形**；
+  ② `void f(void){}` 的**函数定义符号落自己的作用域**（`scope_kind=function`）——与它的 `<global>` 声明
+  **scope 不同**，且使 `void f(void); static void f(void){}` 这类真 UB **漏报**、"定义后 `extern`"继承链断。
+  **根因**：`is_file` **不是存储字段**（P1 产物 7 字段与 `Symbol.attrs` 都没有）⇒ 消费者各自用
+  `scope.parent is None` 推导，而 C 包**无任何文件域谓词**。
+  - **处置（N1+N2，零契约面风险）**：`grammar/c/plugins/semantics/_api.py` 新增 **`decl_position(node, scope)`**
+    （**单一判定点**：FuncDef 位取**父作用域**、ParamDecl 位标 `"param"`、其余沿用原 scope）+
+    **`declaration_view(analyzer)`**（10 字段：`name/kind/decl_scope/is_file_decl/is_param/scope/scope_kind/
+    decl_line/decl_order/phase`）；`_declare` 把三元组 `setdefault` 进 **attrs**（先例 = `phase`）。
+  - **不改 P1 公开产物**：F1/F2（真改 `scope`/`scope_kind`）**命中升级判据 ①** ⇒ **另立**走作者流程。
+    **硬证据**：`probe_n1n2_view.py --compare` ⇒ **源 11 个 / 逐字节相同 11 / 不同 0，记录总数 76**
+    （同时比对 analyze 与 two_phase 两路）+ 测试冻结"产物记录恰好 7 字段"与快照 +
+    `test_c_symbol_collection.py` **diff 0 行**。
+  - **纪律**：**派生视图是"声明位置"唯一入口**（防"两套真相"漂移）；原 `scope` 语义不变（仍是分析作用域）。
+    README 新增小节登记这两处**当前仍成立**的偏差（基座档 `gap-c-semantic-base.md` 已 **199/200 满** ⇒
+    暂登记 README + `TODO.md`，**待该档裁剪时并入**）。
+  - **实测**：视图语义正断言（`proto`/`defn`/`stat_def` ⇒ 文件域、`is_file_decl=True`；`px`/`arg` ⇒
+    `"param"`/`is_param=True`/非文件域；`local` ⇒ 块）；**缺陷态变红 2 条**（去"FuncDef 归父" ⇒ 3 failed
+    含 S2 场景漏报；去形参排除 ⇒ 3 failed 含误报）；`tests/languages/c` **834 passed**、
+    `tests/engine/analyzer` **387**、`tests/policy` **362**；pyright strict **0**。
+  - **门禁有效性 55 → 57 条**（两条守护：FuncDef 归父、形参排除）。
+
 - **阶段 4 范围基线落档：`docs/gaps/gap-c-preprocessor-scope.md`（新建，93 行）**（2026-10-17）：
   按作者裁定（**只做 C 标准中的宏**、编译器专属扩展不做；预处理**只做文本级**；**先满足 C**）把调研落成
   正式档，并登记 `docs/gaps/README.md` 索引（D4 无孤儿）。

@@ -46,6 +46,16 @@ KIND_VARIABLE = "variable"
 KIND_FUNCTION = "function"
 KIND_ENUMERATOR = "enumerator"
 
+# ── 声明位置派生视图（N1/N2，task-47）────────────────────────────────
+#: 「声明位置」判定用到的节点名（包侧语言知识；先例 `SC_NODE_NAMES`）：
+#: `FuncDef` 位的符号被声明进**它自己的**作用域（标准原语 `scope_enter` 先于自定义原语执行），
+#: 对"文件域/声明位置"语义而言它的声明位置是**父作用域**；
+#: `ParamDecl` 位的符号是**形参**（无 linkage、不参与文件域，原型形参当前落在 `<global>`）。
+FUNC_DEF_NODE = "FuncDef"
+PARAM_DECL_NODE = "ParamDecl"
+#: 形参在派生视图里的 `decl_scope` 标签（**不是**真实作用域名：形参不占文件域/块声明位置）
+PARAM_SCOPE_LABEL = "param"
+
 #: **包声明的说明符分类**（C 语言知识；引擎不认识任何说明符名）：
 #: 存储类说明符集合 ⊆ §6.7.1（含 c11/c23 增量注入的宿主节点名）；
 #: 函数说明符集合 = §6.7.4（`inline` 核心 + c11 `_Noreturn`）。
@@ -116,6 +126,29 @@ def _subtree_has(node: Node, marker: Any) -> bool:
     return marker_matches(node, marker)
 
 
+def decl_position(node: Node | None, scope: Scope | None) -> tuple[str, bool, bool]:
+    """一条声明的**声明位置**（N1/N2 的单一判定点）：`(decl_scope, is_file_decl, is_param)`。
+
+    ⚠ **派生视图是"声明位置"的唯一入口**（task-47 拍板 ④）：`record["scope"]` 是**分析作用域**
+    （语义不变），凡"它在哪声明 / 算不算文件域声明"的问题一律走本函数 / `declaration_view()`。
+
+    判定（当前符号基座事实；两处**已登记偏差**见 `grammar/c/README.md`「符号基座两处错位」）：
+      · `ParamDecl` 位 ⇒ `("param", False, True)`——形参无 linkage、**不是**文件域声明
+        （原型形参当前落在 `<global>`，与文件域对象声明同形，故必须在此排除）；
+      · `FuncDef` 位 ⇒ 取**父作用域**（函数定义符号被声明进自己的作用域）：
+        `(scope_path(parent), parent 是根作用域, False)`；
+      · 其余 ⇒ `(scope_path(scope), scope 是根作用域, False)`。
+    """
+    if getattr(node, "node_name", None) == PARAM_DECL_NODE:
+        return PARAM_SCOPE_LABEL, False, True
+    if getattr(node, "node_name", None) == FUNC_DEF_NODE:
+        parent = getattr(scope, "parent", None)
+        if parent is None:
+            return scope_path(scope), False, False
+        return scope_path(parent), getattr(parent, "parent", None) is None, False
+    return scope_path(scope), scope is not None and getattr(scope, "parent", None) is None, False
+
+
 def _declare(
     analyzer: Any, node: Node, name: str, kind: str, attrs: dict | None = None
 ) -> None:
@@ -132,6 +165,10 @@ def _declare(
 
     `attrs`：额外捕获（说明符摘要 / 是否函数 / 有无初始化器 / 声明起点）——供 L1 检查
     组件读取（**不改 `decl_node` 语义**，见 task-36 拍板 ④）。
+
+    本函数另外把**声明位置三元组**（`decl_scope` / `is_file_decl` / `is_param`，见
+    `decl_position`）写入 `attrs`（N2；先例 = 作者对 `phase` 落 attrs 的裁决）——
+    **不进 P1 产物**，故产物形状/语义零变化（task-47 判据 2）。
     """
     scope = getattr(analyzer, "_current_scope", None)
     if scope is None:
@@ -139,6 +176,10 @@ def _declare(
     merged = {"phase": PHASE_ANALYZE, "decl_line": getattr(node, "_pos_line", None)}
     if attrs:
         merged.update(attrs)
+    decl_scope, is_file_decl, is_param = decl_position(node, scope)
+    merged.setdefault("decl_scope", decl_scope)
+    merged.setdefault("is_file_decl", is_file_decl)
+    merged.setdefault("is_param", is_param)
     if name in scope.symbols:
         # 同作用域重声明：查找语义不变（首见），仅补一条**声明历史**记录
         sym = Symbol(name=name, kind=kind, decl_node=node, scope=scope, attrs=merged)
@@ -362,6 +403,52 @@ def product_from(analyzer: Any, context: Any = None) -> dict:
         if isinstance(product, dict):
             return product
     return _product_dict(analyzer)
+
+
+def declaration_view(analyzer: Any) -> list[dict[str, Any]]:
+    """**声明位置派生视图**（N1）：「这条声明在哪声明 / 算不算文件域声明」的唯一入口。
+
+    ⚠ **纪律（task-47 拍板 ④）**：`product_from()["records"]` 的 `scope`/`scope_kind` 是
+    **分析作用域**（P1 公开产物，语义不变、**不得**在此改）；凡声明位置问题（文件域判定、
+    形参排除、函数定义归属）一律走本视图——避免"两套真相"漂移。
+
+    字段：
+      `name`/`kind`/`decl_line`/`decl_order`/`phase`  ← 与产物记录同源（便于对照）
+      `scope`/`scope_kind`                          ← 原分析作用域（**语义不变**，仅供诊断/取证）
+      `decl_scope`                                  ← **声明位置**：FuncDef 位取父作用域；
+                                                       形参位为 `"param"`；其余同 `scope`
+      `is_file_decl`                                ← 是否**文件域声明**（形参位恒 False）
+      `is_param`                                    ← 是否形参（无 linkage、不参与文件域）
+
+    处置的两处**当前仍成立的基座偏差**见 `grammar/c/README.md`「符号基座两处错位」。
+    attrs 缺三元组时（例如引擎 `symbol_declare` 建的符号）**现场用 `decl_position` 推导**。
+    """
+    view: list[dict[str, Any]] = []
+    for order, sym in enumerate(getattr(analyzer, "all_symbols", None) or []):
+        scope = getattr(sym, "scope", None)
+        attrs = getattr(sym, "attrs", None) or {}
+        node = getattr(sym, "decl_node", None)
+        if "decl_scope" in attrs and "is_param" in attrs and "is_file_decl" in attrs:
+            decl_scope = str(attrs.get("decl_scope"))
+            is_param = bool(attrs.get("is_param"))
+            is_file_decl = bool(attrs.get("is_file_decl"))
+        else:
+            decl_scope, is_file_decl, is_param = decl_position(node, scope)
+        view.append(
+            {
+                "name": sym.name,
+                "kind": sym.kind,
+                "decl_scope": decl_scope,
+                "is_file_decl": is_file_decl,
+                "is_param": is_param,
+                "scope": scope_path(scope),
+                "scope_kind": getattr(scope, "kind", None),
+                "decl_line": attrs.get("decl_line"),
+                "decl_order": order,
+                "phase": attrs.get("phase", PHASE_ANALYZE),
+            }
+        )
+    return view
 
 
 def two_phase_product(analyzer: Any, source: str, rules_dir: str, context: Any = None) -> dict:

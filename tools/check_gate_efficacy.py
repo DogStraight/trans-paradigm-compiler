@@ -599,6 +599,21 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "        for label, nodes in {}.items():  # 变异：不判重复 label\n",
         "test": "tests/languages/c/test_c_label_checks.py",
     },
+    {
+        "why": "派生视图去掉**FuncDef 归父作用域** ⇒ 函数定义符号与它的声明**不再同为文件域**"
+               "（S2 场景 `void f(void); static void f(void){}` 判不出冲突 ⇒ 漏报）",
+        "file": "grammar/c/plugins/semantics/_api.py",
+        "old": "    if getattr(node, \"node_name\", None) == FUNC_DEF_NODE:\n        parent = getattr(scope, \"parent\", None)\n",
+        "new": "    if getattr(node, \"node_name\", None) == FUNC_DEF_NODE:\n        parent = None  # 变异：不归父作用域\n",
+        "test": "tests/languages/c/test_c_declaration_view.py",
+    },
+    {
+        "why": "派生视图去掉**形参排除** ⇒ 原型形参被当文件域声明（`static int x; void f(int x);` 误报）",
+        "file": "grammar/c/plugins/semantics/_api.py",
+        "old": "    if getattr(node, \"node_name\", None) == PARAM_DECL_NODE:\n",
+        "new": "    if False:  # 变异：不排除形参位\n",
+        "test": "tests/languages/c/test_c_declaration_view.py",
+    },
 ]
 
 
