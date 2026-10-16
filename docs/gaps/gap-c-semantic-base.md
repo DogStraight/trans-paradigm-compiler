@@ -169,7 +169,8 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 `myint`=typedef、`v`=variable；负 `int myint; myint *b;` ⇒ `myint`=variable（**不得** typedef）；
 声明顺序 `myint v; typedef int myint;` ⇒ 使用点处不在作用域；作用域：块内 typedef 出块失效、
 内层遮蔽外层各一例；**分期**：同名在两期的记录可区分；回归 `pytest tests/` 零失败 +
-`tools/c_acceptance.py` 仍 40/42 + smoke 绿。
+`tools/c_acceptance.py` 仍 42/42（**口径**：两条预处理用例按"被消费且无异常"接受，**不代表已真实
+实现**，见 `docs/gaps/gap-c-preprocessor-scope.md` ⑭）+ smoke 绿。
 
 ## 关联条目
 

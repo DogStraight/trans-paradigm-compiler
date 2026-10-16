@@ -2,7 +2,9 @@
 
 - 状态：未立项（**范围基线已定**：作者 2026-10-17 裁定"**只考虑 C 标准中的宏**"——特定编译器才需求实现的宏不考虑；文本级宏处理，卫生宏=语法结构、过程宏=能力位，均不在此范围；未开工）
 - 关联：`ROADMAP.md`「C 语言包」阶段 4；`preprocessor/README.md`（跨语言文本能力原型）
-- 接受面证据：`tools/c_acceptance.py`（当前 **接受 40 / 空洞 2**，空洞 = `#include` / `#define`）
+- 接受面证据：`tools/c_acceptance.py`（当前 **42 条 / 接受 42 / 空洞 0**）——**口径注**：两条预处理
+  用例按"**被消费且无异常**"接受（指令行被替换为整行 marker 注释），**不代表 `#include` / `#define`
+  已真实实现**；拆步信号以本节 ⑭ 为准
 
 ## 方法（可复跑：机械区分"标准项 vs 编译器扩展"）
 
@@ -95,7 +97,10 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 ## 可实现性：首片 A / B（可独立验证）
 
 - **首片 A（闭合两个空洞）**：`#define`（对象 + 函数宏 + `#` + `##` + `__VA_ARGS__` + 重扫描消解）、`#include`（`""`/`<>` + `-I` + 缺文件报错）、`#undef`、**裸标识符调用识别**。
-  **验收面（现成）**：`python tools/c_acceptance.py --only-gaps` 的两条空洞（`#include` / `#define`）**归零**。
+  **验收面（口径已修正，见 ⑭）**：`python tools/c_acceptance.py --only-gaps` 的计数**不再是拆步信号**
+（放宽后已被"被消费 ⇒ 空 TU ⇒ 接受"掩盖）——**A1 信号 = 引擎核判据**（与 GCC 对拍的正样本 +
+预处理器缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** +
+内容确实被消费进流），**不是"空洞归零"**。
 - **首片 B**：`#if` 家族（`defined` 两写法 + 整型常量表达式）+ `#line` + `#error`。
 - **不做**：C23 档 C 项（`#warning`/`#elifdef`/`#elifndef`/`#embed`/`__VA_OPT__`/`__has_*`）不进首片（保留在清单）；全部 GNU 扩展（见排除表）。
 - **正/负样本（与 GCC 对拍）**：正 = `#define x x`→`x`、`CAT(EMPTY,x)`→`EMPTYx`、`F(1)`→`f(1, )`；负 = 未闭合 `#if`、多余 `#endif`、`#include` 缺文件、`#define` 形参表未闭合（须报错）。
@@ -120,6 +125,7 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 ⑫ **判据设计教训**：定"工具指标归零"类判据前**必须核实该工具的**真实执行路径**——本轮 Lead 未核实导致判据不可达（由实现方中途拦下）。
 ⑬ **已实测确认（真不一致、用户可见）**：`run_pipeline_on_source` 的 `expand_macros` **默认 False**（`pipeline/__init__.py:1161` + `config/tpc_config.json:12`）而 `tpc check` 默认 True（`analyzer/checker.py:57`、`main.py:132`）。实测（同输入 `#define N 4\nint x = N;`、同 API 只差该 flag）：**False ⇒ `error="parse truncated (unconsumed tokens)"`；True ⇒ `error=""`** ⇒ **verdict 差异**（非风格）。CLI 侧同文件对照：`tpc lint` rc=1 报 `phase-unrecognized`（line 0 col 8-9）｜`tpc check` rc=1 报 `parse_ok: false` 且 **`parse_error` 为空串** ⇒ 两条用户可见路径**彼此诊断形态也不同**。**归属 = 管线配置口径（非 C 专有，verilog 同样受"库默认 False"影响）**；**裁定 = 修（统一为"开"）**，归 **A2 步**（与"C 端到端可用"绑定），**必须附 verilog 对拍 + 行为变化清单**。
 ⑭ **拆步信号修正（因 ⑪ 放宽判据）**：`--only-gaps` 计数在放宽后**不可再用**作拆步信号——`#include <stdio.h>` 在 A1 阶段（`include` 未接线、只 `print` 警告）会因"被消费 ⇒ 空 TU ⇒ 接受"而**显示 0 空洞**，**掩盖"未实现"**。修正：**A1 信号 = 引擎核判据**（E.1 与 GCC 对拍的正样本 + E.4 的 5 条缺陷态变红）；**A2 信号 = `#include` 被真实处理**（`path_forms` 解析生效 + 缺文件**报诊断** + 内容确实被消费进流），**不是"空洞归零"**。
+⑮ **文档漂移待 A1/A2 收口统一更新**（task-50 附带发现；**不现在改**，以免与在途结论打架）：A1 落地后以下**现状陈述已不成立**——① 本档状态行仍写"未开工"；② 本档缺口表 ①② 列"**不能**"（`call_shape` / hideset rescan 正在实现）；③ 本档"`[symbol.base]` **无 `#`** ⇒ acceptance 报 `Unexpected token: #` 的根因"（**根因已消除**：`#`/`##` 已声明；直连词法 `tokenize('#include <stdio.h>\n')` 已能切出 `macro.include` 且**不抛**）；④ 本档"首片 A（**闭合两个空洞**）"（按 ⑭ 不宜用计数表述）；⑤ `docs/gaps/gap-language-pack-scope.md` 已知偏差 #5 的复现命令与现象（"`#include` 在词法层直接 ValueError"）**已随 A1 失效**。⇒ **A2 收口时逐条复核并更新**。
 
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 
@@ -129,8 +135,8 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 
 ## 关联条目
 
-- 路线：`ROADMAP.md`「C 语言包」阶段 4（预处理器，接受面仅剩空洞）
+- 路线：`ROADMAP.md`「C 语言包」阶段 4（预处理器；能力面缺口仍在，工具计数口径见 ⑭）
 - 机制：`preprocessor/README.md`（宏形态声明 / 三机制 / 位置桥）、`grammar/verilog/base/_macro.toml`（声明面先例）
-- 接受面：`tools/c_acceptance.py`（2 条预处理空洞）
+- 接受面：`tools/c_acceptance.py`（**42 条 / 接受 42 / 空洞 0**；两条预处理用例按"被消费且无异常"接受，**不代表已真实实现**——口径见 ⑭）
 - 门禁：`tests/engine/preprocessor/`（预处理器面）、`tests/languages/c/`（C 包）
 - 相邻档：`docs/gaps/gap-c-semantic-base.md`（C 语义基座）、`docs/gaps/gap-language-pack-scope.md`（C 包接受域/档位）
