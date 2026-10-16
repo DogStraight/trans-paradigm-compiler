@@ -120,8 +120,26 @@ def _load(pack: str):
     return parser, Lexer(rules_dir=pack, ext_dirs=[plugins])
 
 
-def _try(parser, lexer, src: str) -> tuple[bool, str]:
-    """尝试解析 → (是否被接受, 描述)。异常与空 AST 都算"不被接受"。
+def _preprocess(src: str, pack: str) -> str:
+    """预处理器面（与管线同路）：指令消费 + 清理文本。
+
+    直接喂 lexer 会绕过预处理 ⇒ 指令样本（`#define`/`#include`）判不出"指令是否
+    被正确消费"。这里走 `scan_directives` 的**真实**路径（与
+    `pipeline._stage_macro_scan` 同一入口），返回清理后的文本。
+    """
+    from preprocessor import scan_directives
+
+    # 返回序见 pipeline/__init__.py::_stage_macro_scan：第 6 项 = 清理后文本
+    return scan_directives(src, pack)[5]
+
+
+def _try(parser, lexer, src: str, pack: str, family: str) -> tuple[bool, str]:
+    """尝试解析 → (是否被接受, 描述)。
+
+    路径 = **预处理 → 词法 → 解析**（与管线同路）。接受条件分族：
+      · `预处理` 族：**无异常**即可（`#define N 4` 的正确预处理结果就是空翻译
+        单元 ⇒ AST 可空；要求非空会把已正确消费的指令误判成空洞）；
+      · 其余族：**仍要求 AST 非空**（否则解析失败也会被当成"接受"＝掩盖缺陷）。
 
     解析失败时 parser 会往 stdout/stderr 打 failure-report（几十行）——盘点工具自己
     报告结论即可，故整段重定向掉（同 `tests/e2e/test_real_fidelity.py` 的做法）。
@@ -129,10 +147,13 @@ def _try(parser, lexer, src: str) -> tuple[bool, str]:
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-            ast = parser.parse(lexer.tokenize(src))
+            cleaned = _preprocess(src, pack)
+            ast = parser.parse(lexer.tokenize(cleaned))
     except Exception as exc:  # noqa: BLE001 —— 盘点工具：任何异常都算"该构造不被接受"
         return False, f"EXC {type(exc).__name__}: {str(exc).splitlines()[0][:60]}"
     names = [n.node_name for n in getattr(ast, "sub_node", []) or []]
+    if family == "预处理":
+        return True, "OK " + (",".join(names) if names else "空 TU（指令已消费）")
     return (bool(names), "OK " + ",".join(names) if names else "空 AST")
 
 
@@ -148,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     for family, label, src in CASES:
         if args.filter and args.filter not in label:
             continue
-        accepted, desc = _try(parser, lexer, src)
+        accepted, desc = _try(parser, lexer, src, args.pack, family)
         if accepted:
             ok += 1
         else:

@@ -18,6 +18,8 @@ uses = [
     "transform.slots.v1",
     # 存储类语义约束（`plugins/checks/storage_class/`，循环 #10）：check 规则表 + L2 handler
     "checks.rules.v1",
+    # 预处理器（`base/_macro.toml` + 本文件 `[preprocessor]` 挂载，循环 #14）：宏形态声明 + 指令处理器 + 展开配置
+    "preprocessor.pipeline.v1",
 ]
 
 [renderer]
