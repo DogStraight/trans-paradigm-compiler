@@ -109,6 +109,12 @@ python -c "import subprocess,tempfile,pathlib,sys; d=pathlib.Path(tempfile.mkdte
 
 **待决**：无（原"④ `__STDC_VERSION__` 声明位置 / `#if` 求值语义档"已按 ⑥ 归位）。
 
+**首片方案期追加裁定**（2026-10-17，承 task-48）：
+⑦ **`call_shape = "name"`**（单元素生产式 = 显式"无前缀"；三态 `None`／`""`／非空；`shape` 仍两位 ⇒ **verilog 语义不变**）；
+⑧ **`__DATE__`/`__TIME__` 永久排除**——**破坏幂等**（同输入两次运行展开不同），与 tpc 保真/复跑纪律冲突；
+⑨ **`#include` 缺文件/循环由 `print` 改诊断**（不静默降级）但**放在 A2**，须附 **verilog 侧对拍 + 同步现役断言**；
+⑩ **A1 完成按 `partial` 报**（拆步判据：`--only-gaps` 在 A1 后只剩 `#include` 一条；E.0-1 只能在 A2 收口）。
+
 ## 诚实边界（统一"待抽检"，不得当实测结论用）
 
 - ISO C 条款号（§6.10.x）为**记忆级**；**C23 子条编号未核实**（本机无标准正文；`cppreference`、`gcc.gnu.org` 均 403）。
