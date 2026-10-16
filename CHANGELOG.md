@@ -7,6 +7,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **阶段 3 续 S4 落地：C 包第三个 check 组件 `checks/labels`（标签与 switch 标签语义）**（循环 #12）：
+  形态与前两个组件不同——**走 `[[analyzer.postpasses]]` 遍历 AST**（实测：`[[checks]]` handler 不可行，
+  因 label 不进符号表、无 `kind` 可承接；AST 入口是 **`analyzer._ast`**，`AnalysisContext` 并**无** `ast` 字段）。
+  - **三条约束均 A 档原文 ⇒ `default=true`**：LAB001（同函数内 label 名唯一，§6.8.1「Label names shall be
+    unique within a function.」；第 2..n 处**各一条**）、LAB002（`goto` 目标须在所属函数内，§6.8.6.1；
+    **两遍扫描** ⇒ 前向 goto 合法）、**LAB003**（`case`/`default` 只能出现在 switch 内，§6.8.1；按"存在
+    外层 `SwitchStmt` 体"判，Duff's device 合法）。severity 统一 `warning`；报告同时写
+    `context.extra["c_labels"]`。
+  - **硬要求（免误报）**：**只收 `LabelStmt`**——语料 `ring_buffer.c` 同文件里既有 `done:`（LabelStmt）
+    又有 `default:`（DefaultLabel）⇒ 混收会立刻误报。
+  - **实测**：正样本 11 例（含 Duff 形态）全 0 报；负样本 7 例逐条断码 + 位置（重复 label 三处 ⇒ **2 条**、
+    跨函数 goto、case/default 无 switch）；**语料零误报**（`ring_buffer.c` 实测 FuncDef 9 / LabelStmt 1 /
+    GotoStmt 1 / CaseLabel 2 / DefaultLabel 1 ⇒ default 与 all **两档 0 条**）；语法宽进不回归
+    （`tests/languages/c` **827 passed**）；`tests/engine/analyzer` **387**、`tests/policy` **356**；
+    pyright strict **0**；**无需改 `[engine] uses`/`[plugins] enabled`**（`test_engine_capabilities` 9 passed）。
+  - **缺陷态变红**：把 `case`/`default` 当普通 label 收 ⇒ **8 failed** + 语料复现 LAB001 误报；
+    不做两遍扫描 ⇒ **8 failed** + 语料复现 LAB002 误报。
+  - **实现期实测三坑（已落文档）**：① `get_check_rules()` 的**默认目录不是本包目录**（返回空表）⇒
+    postpass 必须显式用 `_plugins_dir_of(analyzer)`，否则**判定静默失效**（"看起来 0 报其实是没跑"）；
+    ② `plugin_loader._loaded_components` 是**测试级全局态**（逐测试还原）⇒ 测试须逐测试装载；
+    ③ `iter_children` 是 **Node 方法**而非 `core.define` 函数。
+  - **门禁有效性 53 → 55 条**（两条守护：LAB003 的 switch 判据、LAB001 重复判定）。
+
+- **阶段 4 档位已定 + 「跨语言文本能力原型」评估落档**（2026-10-17；作者指示"档位不要问他、改调研常见 C 工具精度"）：
+  - **调研**（`_drafts/p4_preprocessor_survey.md`，8 类工具 × 7 维，证据分实测/引用/推断三级）结论：
+    **分界不在宏算法**（各实现都收敛到 Prosser/hideset），而在**搜索路径模型 / C23 新面 / 输出保真策略**；
+    三大件（`#include`/`#define`/`#if`）**缺一不可用**；**没有任何工具提供 `-E` 字节保真**（POSIX 只要求
+    "表示预处理结果"）。
+  - **档位裁定**：**档 2「标准完整」（ISO C11 §6.10 + POSIX `c99 -E`）为基线，另取三件** ——
+    `#pragma once`、`__has_include`、**"保留宏引用"输出档**（对齐 `gcc -E -fdirectives-only`，对 tpc
+    反向保真价值最高）；**不取** `#include_next`、`__COUNTER__`（顺序敏感全局态与幂等/复跑纪律冲突）、
+    C23 新面。已写入 `ROADMAP.md`。
+  - **原型设想评估**（`_drafts/preprocessor_prototype_assessment.md`）：作者"在预处理器里实现原型、语言
+    接上去"**正是本仓已采纳的原则**（`core/component_protocol.md`「引擎 vs 插件的能力边界」的"占位 +
+    简单实现"），**且三类文本能力已原型化**——原型注册面 `primitives/registry.py`（`register(name, kind)`）
+    已注册 **替换** `define`/`undef`、**包含** `include`、**条件** `ifdef`；语言包经**声明**接入
+    （`[macro_recognition]`、`[directive_handlers.include] path_forms`）。唯一仍在代码侧的"处置判定"
+    （`macro_policy`）**今天不上提**：按上提判据实测只有 verilog 一个声明方；"**不用依赖插件**"的准确
+    表述是"**加语言不写代码**"（6 项成本 5 项不免除，真收益 2 项）。已落 `preprocessor/README.md`
+    「跨语言文本能力原型」节 + `TODO.md` 触发条件项（第二个语言包出现同形判定 ⇒ 以
+    `[macro_policy] when` 小表上提，**替代而非并存**）。
+
 - **阶段 3 续 S1-a 落地：C 包第二个 check 组件 `type_semantics`（tag 与枚举常量的同作用域语义）**（循环 #11）：
   新建 `grammar/c/plugins/checks/type_semantics/`，复用循环 #10 的组件形态。
   - **5 条约束（档位决定 default）**：**A 档原文 ⇒ `default=true`** —— TAG001（同一作用域同一 tag 的内容

@@ -584,6 +584,21 @@ _MUTATIONS: list[dict[str, str]] = [
         "new": "    prev = getattr(getattr(scope, \"parent\", None), \"symbols\", {}).get(symbol.name)  # 变异：只看父作用域\n",
         "test": "tests/languages/c/test_c_type_semantics_checks.py",
     },
+    {
+        "why": "LAB003 丢掉\"**只在 switch 内**\"判据 ⇒ 语料 `ring_buffer.c` 的 CaseLabel 2 + DefaultLabel 1 "
+               "全部被误报为\"switch 之外的 case/default\"",
+        "file": "grammar/c/plugins/checks/labels/rules/_label_check.py",
+        "old": "        elif name in (CASE_NODE, DEFAULT_NODE) and not inside_switch:\n",
+        "new": "        elif name in (CASE_NODE, DEFAULT_NODE):  # 变异：不看是否在 switch 内\n",
+        "test": "tests/languages/c/test_c_label_checks.py",
+    },
+    {
+        "why": "LAB001 的重复判定空转 ⇒ 同函数内重复 label **漏报**（负样本与语料判据同时红）",
+        "file": "grammar/c/plugins/checks/labels/rules/_label_check.py",
+        "old": "        for label, nodes in labels.items():\n",
+        "new": "        for label, nodes in {}.items():  # 变异：不判重复 label\n",
+        "test": "tests/languages/c/test_c_label_checks.py",
+    },
 ]
 
 

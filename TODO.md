@@ -107,3 +107,8 @@
       链：`policy/structural_budget.md`（口径与停止规则）
 - [ ] **功能散点步 2b：剩余 16 个未收敛登记点**（属有意保留的边界，非欠账——收敛一个删一个）。
       清单与判据见 `docs/gaps/gap-feature-scatter.md`「步 2 收敛目标与接受边界」
+- [ ] **`[macro_policy] when` 声明表上提**（触发条件式）：现役"宏处置判定"走能力插件
+      （`[capabilities] macro_policy`）。评估（`_drafts/preprocessor_prototype_assessment.md`，2026-10-17）
+      结论 **今天不上提**——按"多语言共有且形态稳定"判据，实测只有 verilog 一个声明方。
+      触发条件 = 第二个语言包出现**同形**判定 ⇒ 以"既有 `call_site` 事实**合取** → mode"的小表上提，
+      **替代而非并存**（两处同声明 ⇒ 加载期 `ConfigError`）。链：`preprocessor/README.md`「跨语言文本能力原型」

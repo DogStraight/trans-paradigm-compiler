@@ -1,0 +1,21 @@
+# labels — C 标签与 switch 标签语义（LAB001–LAB003）
+#
+# 定位：**postpass 走 AST**（不是 `[[checks]]` 的符号 kind 分发）——实测 label/goto **不进符号表**
+# （`all_symbols` 只有函数），故没有 kind 可承接；`[[analyzer.postpasses]]` 是引擎既有形态
+# （先例：verilog `checks/unused_check`；C 包 `semantics` 的 `c_symbols`/`c_raw_understanding`）。
+#
+# AST 入口：`analyzer._ast`（⚠ `AnalysisContext` **没有** `ast` 字段，实测 `vars(context)` 无 `ast`）。
+# 节点名/字段名 = 包侧常量（`rules/_label_check.py` 头注；先例 `SC_NODE_NAMES`）——
+# 组件 `tpc.toml` 的自定义段不会被引擎读取，故不写自定义段。
+#
+# 规则数据表在 `rules/labels.toml`（id/severity/default/message + 条款引文与档位）；
+# 本 postpass 用 `analyzer.checks.active_rule_ids(analyzer)`（引擎为 postpass 插件预留的同一激活逻辑）
+# 只跑激活规则，并把函数内标签/跳转摘要写 `context.extra["c_labels"]`（可观测）。
+#
+# 能力声明：`[analyzer]` 段 ⇒ `analyzer.primitives.v1`、`rules/*.toml` ⇒ `checks.rules.v1`，
+# 两者 `grammar/c/tpc.toml [engine] uses` 均已声明 ⇒ **本组件不需要新的 uses/enabled 条目**。
+
+[analyzer]
+[[analyzer.postpasses]]
+run = "rules/_label_check.py:run_label_checks"
+produces = ["c_labels"]

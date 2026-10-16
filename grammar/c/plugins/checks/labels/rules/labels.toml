@@ -1,0 +1,51 @@
+# ============================================================================
+# labels 规则表 — C 标签与 switch 标签语义（LAB001–LAB003）
+# ============================================================================
+# 本表是**数据**：判定在 `_label_check.py`（postpass 走 AST）。三条约束均 **A 档原文** ⇒
+# `default = true`（Lead 拍板；severity 统一 `warning`，不阻断管线）。
+#
+# ⚠ `kind` 值（`label`/`goto`/`switch_label`）**永不会被符号 kind 命中** ⇒ 引擎的
+# `check_rules_pass` 按 kind 分发时天然 no-op；本表仅供 postpass 读取（
+# `core/check_registry._validate_rule` 只强制 id/kind/severity，pattern/handler/message 可选）。
+#
+# 已取得原文（C99+TC，WG14 N1124，c0x 镜像逐字；C11/C23 同名节句子稳定）：
+#   §6.8.1 Labeled statements：
+#     "Label names shall be unique within a function."                        → LAB001（A）
+#     "A case or default label shall appear only in a switch statement."      → LAB003（A）
+#   §6.8.6.1 The goto statement：
+#     "The identifier in a goto statement shall name a label located somewhere
+#      in the enclosing function."                                            → LAB002（A）
+#   §6.2.1（解释性）：label 是**唯一**具"函数作用域"的标识符、由语法出现隐式声明
+#     ⇒ 判定必须"按函数收集、跨块可见"（嵌套块内的 label 对外层 goto 合法）。
+# ============================================================================
+
+# ── LAB001 · 同函数内 label 名唯一（第 2..n 处**各报一条**：每处重复都是独立违例）──
+# 只收 `LabelStmt`（`case`/`default` 是 `CaseLabel`/`DefaultLabel` 独立节点 ⇒ 天然不混入；
+# 语料 `ring_buffer.c` 同文件既有 `done:` 又有 `default:`，是该规避的实测依据）。
+[[checks]]
+id = "LAB001"
+kind = "label"
+category = "labels"
+severity = "warning"
+default = true
+message = "{name}: 同一函数内 label 名必须唯一（此处为重复定义）"
+
+# ── LAB002 · `goto` 目标必须是本函数内的 label（前向 goto 合法 ⇒ 两遍扫描）──
+[[checks]]
+id = "LAB002"
+kind = "goto"
+category = "labels"
+severity = "warning"
+default = true
+message = "{name}: goto 目标必须是所属函数内的 label"
+
+# ── LAB003 · `case`/`default` 只能出现在 switch 语句内 ──
+# 判据 = "**存在外层 `SwitchStmt` 体**"（不是"直接位于 switch 的语句表"）⇒ Duff's device
+# （switch 体 → do/while → case）合法（实测 walk 标志判定：`CaseLabel:in`）。
+[[checks]]
+id = "LAB003"
+kind = "switch_label"
+category = "labels"
+severity = "warning"
+default = true
+message = "{name}: case/default 标签只能出现在 switch 语句内"

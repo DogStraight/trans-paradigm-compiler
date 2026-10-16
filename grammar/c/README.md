@@ -309,6 +309,44 @@ c11 `_Thread_local` + c23 `thread_local`/`constexpr`，各注入一支；函数�
 枚举值 representable-as-int、跨 TU；C23 固定底层类型枚举（`enum E : int;`）本包语法面**尚未支持**
 （lint 拒）⇒ ENUM003 的"固定底层类型恒完整"豁免暂不适用，将来支持时需同步。
 
+## 标签与 goto 语义（LAB · 本包第三个 check 组件，走 **postpass**）
+
+**范围（S4 片）**：① 同函数内 label 名唯一 ② `goto` 目标必须是所属函数内的 label
+③ `case`/`default` 只能出现在 switch 语句内。三条均 **A 档原文**（§6.8.1 ×2、§6.8.6.1 ×1）
+⇒ `default = true`、`severity = "warning"`（不阻断管线）。
+
+**形态与其他两个 check 组件不同**：label/goto **不进符号表**（`analyzer.all_symbols` 只有函数）⇒
+没有 `sym.kind` 可供 `[[checks]]` 分发；本组件用 **`[[analyzer.postpasses]]` 走 AST**
+（先例：verilog `checks/unused_check`）。**AST 入口 = `analyzer._ast`**
+（⚠ `AnalysisContext` **没有** `ast` 字段，实测 `vars(context)` 无 `ast`）；规则仍为数据
+（`rules/labels.toml`，其 `kind` 永不被符号命中 ⇒ 引擎按 kind 分发天然 no-op），postpass 用
+`analyzer.checks.active_rule_ids(analyzer)`（引擎为该类插件预留的同一激活逻辑）只跑激活规则，
+并把函数内标签/跳转摘要 + 违规清单写 `context.extra["c_labels"]`（观测产物）。
+
+| 落点 | 作用 |
+|---|---|
+| `plugins/checks/labels/tpc.toml` | `[analyzer] + [[analyzer.postpasses]] run = "rules/_label_check.py:run_label_checks"`、`produces = ["c_labels"]`（组件判定键之一 = 有 postpass ⇒ 本组件是**真组件**，与两个规则-only 组件形态不同） |
+| `plugins/checks/labels/rules/labels.toml` | 规则数据：`LAB001`/`LAB002`/`LAB003` 的 `id`/`kind`/`severity`/`default`/`message` + 条款引文与档位头注 |
+| `plugins/checks/labels/rules/_label_check.py` | postpass：按 `FuncDef` 分组收 `LabelStmt.name` / `GotoStmt.label` / switch 之外的 `CaseLabel`/`DefaultLabel`；节点名/字段名 = **包侧常量**（先例 `SC_NODE_NAMES`；组件 tpc.toml 自定义段会被引擎忽略） |
+
+**三条硬要求（误报面实测驱动）**：
+1. **只收 `LabelStmt`**——`case`/`default` 是 `CaseLabel`/`DefaultLabel` 独立节点；语料
+   `ring_buffer.c` **同一文件**里既有 `done:`（LabelStmt）又有 `default:`（DefaultLabel），
+   实测整文件 LabelStmt=1（缺陷态把它们当 label 收 ⇒ 该文件必报 `LAB001` 1 条）；
+2. **前向 goto 用两遍扫描**（先收全函数内 label，再判 goto 目标；缺陷态单遍 ⇒ 合法
+   `goto done;` 在该文件报 `LAB002` 1 条）；
+3. **按函数分组**（label 具函数作用域、跨块可见）⇒ 不同函数同名 label 合法、嵌套块 label + 外层
+   goto 合法；LAB003 按"**存在外层 `SwitchStmt` 体**"判 ⇒ Duff's device（switch→do/while→case）合法。
+
+判据：`tests/languages/c/test_c_label_checks.py`（11 正样本 × 全规则启用 + 7 负样本逐条 + 位置 +
+三次重复去重口径"第 2..n 处各一条" + 两档语料零误报 + `c_labels` 产物 + postpass 轨迹）；缺陷态变红
+见 `_drafts/task41_defect.py`。**测试注意**：`plugin_loader._loaded_components` 是**测试级全局态**
+（`tests/conftest.py` 逐测试还原）⇒ 依赖 postpass 的测试须逐测试 `load_all_components(plugins_dir)`。
+**能力声明**：`[analyzer]` 段 ⇒ `analyzer.primitives.v1`、`rules/*.toml` ⇒ `checks.rules.v1`，
+均已声明 ⇒ **本组件不需要新的 `[engine] uses` / `[plugins] enabled` 条目**。
+**边界**：VLA 跳入（需类型面）、`case` 值重复 / 多个 `default`（原文未取得 + 需常量求值）、
+label 未使用（无条款约束，风格）、宏展开产生的标签、扩展语法（`__label__`/`asm goto`）、跨 TU。
+
 ## P4 理解路径（两段协作）
 
 歧义路径（`x = (myint)y;`：`myint` 是不是类型名）走**两段协作**，能力都必须有：
