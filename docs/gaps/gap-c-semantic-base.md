@@ -3,7 +3,7 @@
 - 状态：**已拍板（作者 2026-10-10）**——方向 = linter 判"候选是否收敛"（不收敛出**内部
   warning**）→ parser 歧义位点走 **raw 暂缓建树** → **analyzer 插件**补理解路径；
   **P1→P4 分片实施**（P1 = C 包符号收集产物，含**分期标注**）。裁决全表见末节 `## 已拍板`
-- 关联：`ROADMAP.md`「C 语义层切片 1b」（与 C 包阶段 3「结构类型与作用域语义」共用前置）；
+- 关联：`ROADMAP.md`「C 语义层切片 1b」（与 C 包阶段 3 共用前置；阶段 3 已交付，残片见 `TODO.md`「五、搁置」）；
   `docs/gaps/gap-semantic-elaboration-boundaries.md`（两套 scope 并存）；`grammar/c/**`
 - 参照：`docs/references.md`「C 语言文法参照」；GCC `gcc/c/c-parser.h`；
   clang `clang/lib/Parse/ParseTentative.cpp`；tree-sitter-c `grammar.js`
@@ -174,7 +174,7 @@ print("scope_stack:", parser.scope_stack.dump(), "pre_symbols:", parser.pre_symb
 
 ## 关联条目
 
-- `ROADMAP.md`「C 语义层切片 1b」（含判据 ①-⑤ 与待决 ①-④）+「C 语言包」阶段 3
+- `ROADMAP.md`「C 语义层切片 1b」（含判据 ①-⑤ 与待决 ①-④）+ C 包阶段 3（已交付，残片见 `TODO.md`「五、搁置」）
 - 两套 scope 并存的工程事实：`docs/gaps/gap-semantic-elaboration-boundaries.md`
 - C 包接受域现状（含 `(myint)x` 行）：`docs/gaps/gap-language-pack-scope.md`
 - 保真判据：`tests/languages/c/test_c_render_fidelity.py`；接受面盘点：`tools/c_acceptance.py`
